@@ -564,5 +564,87 @@ class TestMotorePacchetti(unittest.TestCase):
         self.assertEqual(len(nuove), 1)
 
 
+class TestGeneratoreProposta(unittest.TestCase):
+    """Generatore di proposte commerciali (V6): scrive .md sotto una BASE_DIR
+    temporanea, legge pacchetti e DB verticali in sola lettura."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = self._tmp.name
+        self.audit = ag.AuditLog(os.path.join(self.tmp, "audit.jsonl"))
+        self.gestori = {
+            cat: ag.GestoreRisorseVerticali(
+                os.path.join(self.tmp, f"db_{cat}.sqlite3"), self.audit)
+            for cat in ag.RISORSA_VERTICALI}
+        self.motore = ag.MotoreComposizionePacchetti(
+            self.audit, os.path.join(self.tmp, "pacchetti.sqlite3"), self.gestori)
+        self.gen = ag.GeneratorePropostaCommerciale(
+            self.audit, self.tmp, self.motore, self.gestori)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _pacchetto_confermato(self, destinazione="Como", prezzo=100):
+        with redirect_stdout(io.StringIO()):
+            for cat in ag.RISORSA_VERTICALI:
+                rid = self.gestori[cat].inserisci(
+                    f"{cat}-{destinazione}", "contatto", destinazione,
+                    {"prezzo_giorno": prezzo, "tipo": "premium"})
+                self.gestori[cat].approva(rid, "test")
+        res = self.motore.componi(destinazione, 4000, "2026-07-01", "2026-07-05")
+        pid = res["id"]
+        self.motore.invia_richieste_partner(pid)
+        for req in self.motore.get_richieste(pid):
+            self.motore.registra_risposta_partner(req["id"], "confermata", "ok")
+        return pid
+
+    def test_genera_proposta_ok(self):
+        pid = self._pacchetto_confermato()
+        esito = self.gen.genera(pid)
+        self.assertTrue(os.path.exists(esito["percorso"]))
+        self.assertEqual(esito["totale"], 400.0)
+        self.assertEqual(esito["commissione"], 40.0)
+        self.assertEqual(esito["totale_cliente"], 440.0)
+        # Salvata sotto Proposte_Clienti/2026/07/
+        self.assertIn(os.path.join("Proposte_Clienti", "2026", "07"),
+                      esito["percorso"])
+
+    def test_genera_proposta_non_confermato(self):
+        # Pacchetto non confermato (solo composto)
+        with redirect_stdout(io.StringIO()):
+            for cat in ag.RISORSA_VERTICALI:
+                rid = self.gestori[cat].inserisci(f"{cat}-1", "c", "Como",
+                                                  {"prezzo_giorno": 100})
+                self.gestori[cat].approva(rid, "test")
+        res = self.motore.componi("Como", 4000, "2026-07-01", "2026-07-05")
+        with self.assertRaises(ValueError):
+            self.gen.genera(res["id"])
+
+    def test_lista_proposte(self):
+        p1 = self._pacchetto_confermato("Como")
+        p2 = self._pacchetto_confermato("Roma")
+        self.gen.genera(p1)
+        self.gen.genera(p2)
+        lista = self.gen.lista_proposte()
+        self.assertEqual(len(lista), 2)
+        # Ordine per data decrescente: la piu' recente (Roma) per prima.
+        self.assertGreaterEqual(lista[0]["data"], lista[1]["data"])
+
+    def test_lista_proposte_filtro(self):
+        self.gen.genera(self._pacchetto_confermato("Como"))
+        self.gen.genera(self._pacchetto_confermato("Roma"))
+        solo_como = self.gen.lista_proposte("Como")
+        self.assertEqual(len(solo_como), 1)
+        self.assertEqual(solo_como[0]["destinazione"], "Como")
+
+    def test_leggi_proposta(self):
+        pid = self._pacchetto_confermato("Como")
+        percorso = self.gen.genera(pid)["percorso"]
+        contenuto = self.gen.leggi_proposta(percorso)
+        self.assertIn("Proposta Commerciale Tavola Privé", contenuto)
+        self.assertIn("Destinazione: Como", contenuto)
+        self.assertIn("Totale Cliente", contenuto)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

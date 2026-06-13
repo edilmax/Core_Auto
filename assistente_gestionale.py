@@ -2540,6 +2540,168 @@ class MotoreComposizionePacchetti:
 
 
 # ---------------------------------------------------------------------------
+# Generatore di proposte commerciali (V6 - intelligenza creativa)
+# ---------------------------------------------------------------------------
+# Genera un documento Markdown professionale per i pacchetti 'confermato',
+# leggendo (in SOLA LETTURA) pacchetti.sqlite3 e i 4 DB verticali. Non crea
+# nuovi DB: scrive solo file .md in Proposte_Clienti/AAAA/MM/.
+
+
+class GeneratorePropostaCommerciale:
+    """Crea proposte commerciali su misura per pacchetti confermati.
+    Sola lettura su DB; scrive documenti Markdown su filesystem."""
+
+    COMMISSIONE = 0.10
+    ETICHETTE = {"immobili": "Immobili", "mezzi": "Mezzi",
+                 "talento": "Talento", "esperienze": "Esperienze"}
+
+    def __init__(self, audit: AuditLog, base_dir: str,
+                 motore_pacchetti: "MotoreComposizionePacchetti", gestori: dict):
+        self.audit = audit
+        self.base_dir = base_dir
+        self.motore = motore_pacchetti
+        self.gestori = dict(gestori)
+        # La cartella si crea LAZY (solo alla prima genera()): cosi' la sola
+        # istanza dell'orchestratore non scrive nulla su disco (test isolati).
+        self.cartella = os.path.join(base_dir, "Proposte_Clienti")
+
+    def _cartella_periodo(self, data_inizio: str) -> str:
+        """Sottocartella AAAA/MM ricavata da data_inizio (fallback: oggi)."""
+        try:
+            data = datetime.date.fromisoformat(data_inizio)
+        except (TypeError, ValueError):
+            data = datetime.date.today()
+        percorso = os.path.join(self.cartella, f"{data.year:04d}",
+                                f"{data.month:02d}")
+        os.makedirs(percorso, exist_ok=True)
+        return percorso
+
+    def genera(self, pacchetto_id: int) -> dict:
+        pac = self.motore.get_pacchetto(pacchetto_id)
+        if pac is None or pac["stato"] != "confermato":
+            raise ValueError("Pacchetto non confermato o inesistente")
+        risorse = json.loads(pac["risorse_json"] or "{}")
+
+        voci, totale = [], 0.0
+        for categoria in MotoreComposizionePacchetti.CATEGORIE:
+            if categoria not in risorse:
+                continue
+            gestore = self.gestori.get(categoria)
+            riga = gestore.get(risorse[categoria]) if gestore else None
+            if riga is None:
+                voci.append((categoria, "(risorsa non trovata)", "-", 0.0, ""))
+                continue
+            try:
+                meta = json.loads(riga.get("metadati_json") or "{}")
+            except json.JSONDecodeError:
+                meta = {}
+            prezzo = _prezzo_da_metadati(meta)
+            totale += prezzo
+            servizi = ", ".join(f"{k}: {v}" for k, v in meta.items()
+                                if k not in _CHIAVI_PREZZO)
+            voci.append((categoria, riga.get("nome", ""),
+                         riga.get("area_geografica", ""), prezzo, servizi))
+
+        commissione = round(totale * self.COMMISSIONE, 2)
+        totale_cliente = round(totale + commissione, 2)
+        adesso = datetime.datetime.now()
+        ts_file = adesso.strftime("%Y%m%d_%H%M%S_%f")
+        ts_display = adesso.isoformat(timespec="seconds")
+        nome_file = f"PROPOSTA_{pac['codice']}_{ts_file}.md"
+
+        contenuto = self._markdown(pac, voci, totale, commissione,
+                                   totale_cliente, ts_display)
+        cartella = self._cartella_periodo(pac["data_inizio"])
+        percorso = os.path.join(cartella, nome_file)
+        try:
+            with open(percorso, "w", encoding="utf-8") as f:
+                f.write(contenuto)
+        except OSError as e:
+            self.audit.registra("proposta_errore",
+                                {"pacchetto_id": pacchetto_id, "errore": str(e)})
+            raise
+        self.audit.registra("proposta_generata",
+                            {"pacchetto_id": pacchetto_id, "codice": pac["codice"],
+                             "percorso": percorso, "totale_cliente": totale_cliente})
+        return {"percorso": percorso, "totale": round(totale, 2),
+                "commissione": commissione, "totale_cliente": totale_cliente}
+
+    def _markdown(self, pac, voci, totale, commissione, totale_cliente,
+                  ts_display) -> str:
+        righe = [
+            "# Proposta Commerciale Tavola Privé",
+            f"## Codice: {pac['codice']}",
+            f"## Destinazione: {pac['destinazione']}",
+            f"## Periodo: {pac['data_inizio']} → {pac['data_fine']}",
+            "",
+            "### Riepilogo Risorse",
+            "",
+            "| Categoria | Risorsa | Area | Prezzo |",
+            "|-----------|---------|------|--------|",
+        ]
+        for categoria, nome, area, prezzo, servizi in voci:
+            etichetta = self.ETICHETTE.get(categoria, categoria.capitalize())
+            righe.append(f"| {etichetta} | {nome} | {area} | €{prezzo:.2f} |")
+            if servizi:
+                righe.append(f"| | _{servizi}_ | | |")
+        righe += [
+            "",
+            f"### Totale: €{totale:.2f}",
+            f"### Commissione Tavola Privé (10%): €{commissione:.2f}",
+            f"### Totale Cliente: €{totale_cliente:.2f}",
+            "",
+            "*Proposta generata automaticamente dal sistema Tavola Privé*",
+            f"*Data: {ts_display}*",
+            "",
+        ]
+        return "\n".join(righe)
+
+    def lista_proposte(self, destinazione_filter: Optional[str] = None) -> list:
+        """Scansiona Proposte_Clienti/ per i file .md, estrae i metadati dall'
+        intestazione e restituisce la lista ordinata per data decrescente."""
+        proposte = []
+        try:
+            for radice, _, files in os.walk(self.cartella):
+                for nome in files:
+                    if not nome.endswith(".md"):
+                        continue
+                    percorso = os.path.join(radice, nome)
+                    meta = self._estrai_intestazione(percorso)
+                    if meta is None:
+                        continue
+                    if (destinazione_filter and destinazione_filter.lower()
+                            not in meta["destinazione"].lower()):
+                        continue
+                    proposte.append(meta)
+        except OSError as e:
+            logging.warning("Scansione proposte fallita (%s).", e)
+        proposte.sort(key=lambda m: m["data"], reverse=True)
+        return proposte
+
+    @staticmethod
+    def _estrai_intestazione(percorso: str) -> Optional[dict]:
+        try:
+            with open(percorso, "r", encoding="utf-8") as f:
+                testo = f.read(2000)
+        except OSError:
+            return None
+        def _cerca(etichetta):
+            trovato = re.search(rf"{etichetta}:\s*(.+)", testo)
+            # rimuove eventuali marcatori Markdown di chiusura (es. '*')
+            return trovato.group(1).strip().rstrip("*").strip() if trovato else ""
+        return {"codice": _cerca("Codice"),
+                "destinazione": _cerca("Destinazione"),
+                "data": _cerca(r"\*Data"),
+                "percorso": percorso}
+
+    def leggi_proposta(self, percorso_file: str) -> str:
+        if not os.path.exists(percorso_file):
+            raise FileNotFoundError(f"Proposta non trovata: {percorso_file}")
+        with open(percorso_file, "r", encoding="utf-8") as f:
+            return f.read()
+
+
+# ---------------------------------------------------------------------------
 # Orchestratore
 # ---------------------------------------------------------------------------
 class AssistenteGestionale:
@@ -2608,6 +2770,10 @@ class AssistenteGestionale:
         self.motore_pacchetti = MotoreComposizionePacchetti(
             self.audit, os.path.join(cartella_db, "pacchetti.sqlite3"),
             self.risorse_per_tipo)
+        # Generatore proposte (V6): scrive .md in BASE_DIR/Proposte_Clienti
+        # (cartella creata lazy alla prima generazione).
+        self.generatore = GeneratorePropostaCommerciale(
+            self.audit, BASE_DIR, self.motore_pacchetti, self.risorse_per_tipo)
         self.audit.registra("avvio", {"progetto": self.config.get("progetto")})
 
     def componi_pacchetto(self, area: str, budget_max: float) -> dict:
@@ -2693,6 +2859,9 @@ class AssistenteGestionale:
             "26": "Pacchetto Pronto: invia richieste partner",
             "27": "Pacchetto Pronto: verifica scadenze",
             "28": "Pacchetto Pronto: registra risposta partner",
+            "29": "Genera proposta commerciale",
+            "30": "Elenca proposte generate",
+            "31": "Leggi proposta (percorso)",
             "0": "Esci",
         }
         while True:
@@ -2754,6 +2923,12 @@ class AssistenteGestionale:
                 self._flow_pp_scadenze()
             elif scelta == "28":
                 self._flow_pp_risposta()
+            elif scelta == "29":
+                self._flow_genera_proposta()
+            elif scelta == "30":
+                self._flow_elenca_proposte()
+            elif scelta == "31":
+                self._flow_leggi_proposta()
             else:
                 print("Scelta non valida.")
 
@@ -3048,6 +3223,37 @@ class AssistenteGestionale:
         ok = self.motore_pacchetti.registra_risposta_partner(rid, esito, nota)
         print("[OK] Risposta registrata." if ok else "[INFO] Richiesta inesistente.")
 
+    # ------------------- Proposte commerciali (V6) -------------------
+    def _flow_genera_proposta(self) -> None:
+        pid = chiedi_int("ID pacchetto (confermato): ", default=0)
+        if pid <= 0:
+            return
+        try:
+            esito = self.generatore.genera(pid)
+            print(f"[OK] Proposta generata: {esito['percorso']}")
+            print(f"     Totale cliente: €{esito['totale_cliente']:.2f}")
+        except ValueError as e:
+            print(f"[INFO] {e}")
+        except OSError as e:
+            print(f"[ERRORE] Scrittura proposta non riuscita: {e}")
+
+    def _flow_elenca_proposte(self) -> None:
+        filtro = input("Filtra per destinazione (vuoto = tutte): ").strip() or None
+        proposte = self.generatore.lista_proposte(filtro)
+        if not proposte:
+            print("Nessuna proposta trovata.")
+            return
+        for p in proposte:
+            print(f"  {p['data']}  [{p['codice']}]  {p['destinazione']}")
+            print(f"     {p['percorso']}")
+
+    def _flow_leggi_proposta(self) -> None:
+        percorso = input("Percorso file proposta: ").strip()
+        try:
+            print("\n" + self.generatore.leggi_proposta(percorso))
+        except (FileNotFoundError, OSError) as e:
+            print(f"[ERRORE] {e}")
+
     # ----------------------- Dashboard (sola lettura) -----------------------
     def _conta_errori_audit_recenti(self, ore: int = 24):
         """Conta gli eventi di errore nelle ultime 'ore' leggendo l'audit log
@@ -3233,6 +3439,31 @@ def esegui_risorse_cli(argomenti) -> int:
         return 1
 
 
+def esegui_proposte_cli(argomenti) -> int:
+    """Entry-point non interattivo per il generatore di proposte (V6).
+    Exit 0 se ok, 1 su errore."""
+    try:
+        assistente = AssistenteGestionale()
+        gen = assistente.generatore
+        if argomenti.genera_proposta:
+            print(json.dumps(gen.genera(int(argomenti.genera_proposta)),
+                             indent=2, ensure_ascii=False))
+        if argomenti.elenca_proposte is not None:
+            filtro = argomenti.elenca_proposte or None
+            print(json.dumps(gen.lista_proposte(filtro),
+                             indent=2, ensure_ascii=False))
+        if argomenti.leggi_proposta:
+            print(gen.leggi_proposta(argomenti.leggi_proposta))
+        return 0
+    except ValueError as e:
+        print(f"[INFO] {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        logging.exception("Comando proposte da CLI fallito")
+        print(f"[ERRORE] {e}", file=sys.stderr)
+        return 1
+
+
 def esegui_pacchetti_cli(argomenti) -> int:
     """Entry-point non interattivo per il motore Pacchetto Pronto (V5).
     Exit 0 se ok, 1 su errore."""
@@ -3345,6 +3576,12 @@ def main() -> None:
     parser.add_argument("--registra-risposta", nargs=3,
                         metavar=("RICHIESTA_ID", "ESITO", "NOTA"),
                         help="registra la risposta di un partner a una richiesta")
+    parser.add_argument("--genera-proposta", metavar="PACCHETTO_ID",
+                        help="genera la proposta commerciale di un pacchetto confermato")
+    parser.add_argument("--elenca-proposte", nargs="?", const="", metavar="DESTINAZIONE",
+                        help="elenca le proposte generate (filtro destinazione opz.)")
+    parser.add_argument("--leggi-proposta", metavar="PERCORSO_FILE",
+                        help="stampa il contenuto Markdown di una proposta")
     parser.add_argument("--dashboard", action="store_true",
                         help="mostra un pannello di sintesi (sola lettura) ed esce")
     parser.add_argument("--menu", action="store_true",
@@ -3362,6 +3599,9 @@ def main() -> None:
     if (argomenti.crea_pacchetto or argomenti.invia_richieste
             or argomenti.verifica_scadenze or argomenti.registra_risposta):
         raise SystemExit(esegui_pacchetti_cli(argomenti))
+    if (argomenti.genera_proposta or argomenti.elenca_proposte is not None
+            or argomenti.leggi_proposta):
+        raise SystemExit(esegui_proposte_cli(argomenti))
     if argomenti.esegui_campagna:
         raise SystemExit(esegui_campagna_cli(argomenti.esegui_campagna))
     if (argomenti.ingesta_vip or argomenti.flash_host or argomenti.sync_ical
