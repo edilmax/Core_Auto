@@ -1952,6 +1952,203 @@ class iCalSyncEngine:
 
 
 # ---------------------------------------------------------------------------
+# Database verticali "Solo Professionisti" (4 file SQLite indipendenti)
+# ---------------------------------------------------------------------------
+# Ogni verticale (immobili, mezzi, talento, esperienze) e' un file SQLite a se',
+# separato dal DB dei candidati: nessuna interferenza con la tabella 'candidati'.
+# Schema identico per tutti; i campi specifici del verticale vivono in
+# 'metadati_json'. Stati: da_approvare -> attivo | sospeso | rifiutato.
+
+STATI_RISORSA = ("da_approvare", "attivo", "sospeso", "rifiutato")
+RISORSA_VERTICALI = ("immobili", "mezzi", "talento", "esperienze")
+# Chiavi di prezzo riconosciute nei metadati, in ordine di priorita'.
+_CHIAVI_PREZZO = ("prezzo_giorno", "tariffa_giorno", "prezzo_persona", "prezzo")
+
+
+def _prezzo_da_metadati(metadati: dict) -> float:
+    """Estrae il prezzo da un dict di metadati verticali (le chiavi variano per
+    categoria). 0.0 se nessuna chiave nota o valore non numerico."""
+    for chiave in _CHIAVI_PREZZO:
+        if chiave in metadati:
+            try:
+                return float(metadati[chiave])
+            except (TypeError, ValueError):
+                return 0.0
+    return 0.0
+
+
+class GestoreRisorseVerticali:
+    """Gestore riutilizzabile di un singolo DB verticale di risorse
+    professionali. Ogni operazione di scrittura e' una transazione atomica
+    (BEGIN IMMEDIATE -> COMMIT/ROLLBACK) e viene registrata nell'audit.
+    Il gate (se fornito) protegge l'approvazione; senza gate, si approva diretto."""
+
+    def __init__(self, db_path: str, audit: AuditLog,
+                 gate: Optional[ApprovalGate] = None):
+        self.db_path = db_path
+        self.audit = audit
+        self.gate = gate
+        self._init_schema()
+
+    def _init_schema(self) -> None:
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        con = sqlite3.connect(self.db_path)
+        try:
+            con.execute("PRAGMA journal_mode=WAL;")
+            con.execute("PRAGMA foreign_keys=ON;")
+            with con:
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS risorse (
+                        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                        nome              TEXT NOT NULL,
+                        contatto_diretto  TEXT NOT NULL,
+                        area_geografica   TEXT NOT NULL,
+                        stato             TEXT DEFAULT 'da_approvare',
+                        data_creazione    TEXT,
+                        data_approvazione TEXT,
+                        approvato_da      TEXT,
+                        note              TEXT,
+                        metadati_json     TEXT)""")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_risorse_stato ON risorse(stato)")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_risorse_area ON risorse(area_geografica)")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_risorse_contatto ON risorse(contatto_diretto)")
+        finally:
+            con.close()
+
+    def _scrivi(self, sql: str, parametri: tuple) -> Optional[int]:
+        """Esegue una scrittura in transazione atomica BEGIN IMMEDIATE.
+        Restituisce lastrowid (utile per gli INSERT) o None su rowcount 0."""
+        con = sqlite3.connect(self.db_path)
+        con.isolation_level = None  # transazione gestita a mano
+        con.execute("PRAGMA foreign_keys=ON;")
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            cur = con.execute(sql, parametri)
+            esito = cur.lastrowid if cur.rowcount else (cur.lastrowid or None)
+            con.execute("COMMIT")
+            return esito
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
+        finally:
+            con.close()
+
+    def _modifica(self, sql: str, parametri: tuple) -> bool:
+        """Come _scrivi ma per UPDATE: True se almeno una riga e' stata toccata."""
+        con = sqlite3.connect(self.db_path)
+        con.isolation_level = None
+        con.execute("PRAGMA foreign_keys=ON;")
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            cur = con.execute(sql, parametri)
+            toccate = cur.rowcount
+            con.execute("COMMIT")
+            return toccate > 0
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
+        finally:
+            con.close()
+
+    def _leggi(self, sql: str, parametri: tuple = ()) -> List[dict]:
+        con = sqlite3.connect(self.db_path)
+        con.row_factory = sqlite3.Row
+        try:
+            righe = con.execute(sql, parametri).fetchall()
+        finally:
+            con.close()
+        return [dict(r) for r in righe]
+
+    def inserisci(self, nome: str, contatto: str, area: str, metadati) -> int:
+        """Inserisce una risorsa in stato 'da_approvare'. 'metadati' puo' essere
+        un dict o una stringa JSON: viene SEMPRE validato con json.loads/dumps
+        (FASE 5.5/5.6). Se non e' JSON valido, rifiuta l'insert, logga e -1."""
+        if isinstance(metadati, str):
+            try:
+                metadati = json.loads(metadati)
+            except (json.JSONDecodeError, TypeError):
+                self.audit.registra("risorsa_insert_rifiutato",
+                                    {"db": self.db_path, "nome": nome,
+                                     "motivo": "metadati JSON non valido"})
+                print("[ERRORE] metadati non in JSON valido: insert rifiutato.")
+                return -1
+        if not isinstance(metadati, dict):
+            self.audit.registra("risorsa_insert_rifiutato",
+                                {"db": self.db_path, "nome": nome,
+                                 "motivo": "metadati non e' un oggetto JSON"})
+            return -1
+        adesso = datetime.datetime.now().isoformat(timespec="seconds")
+        nuovo_id = self._scrivi(
+            "INSERT INTO risorse (nome, contatto_diretto, area_geografica, "
+            "stato, data_creazione, metadati_json) VALUES (?,?,?,?,?,?)",
+            (nome, contatto, area, "da_approvare", adesso,
+             json.dumps(metadati, ensure_ascii=False)))
+        self.audit.registra("risorsa_inserita",
+                            {"db": self.db_path, "id": nuovo_id, "nome": nome})
+        return nuovo_id or -1
+
+    def approva(self, id_risorsa: int, approvatore: str,
+                usa_gate: bool = True) -> bool:
+        """Porta la risorsa allo stato 'attivo'. Se un gate e' disponibile e
+        usa_gate=True, richiede l'approvazione umana ('approvazione_risorsa');
+        altrimenti approva diretto (FASE 5.7 - automazione/CLI)."""
+        risorsa = self.get(id_risorsa)
+        if risorsa is None:
+            print(f"[INFO] Risorsa {id_risorsa} inesistente.")
+            return False
+        if self.gate is not None and usa_gate:
+            anteprima = (f"Risorsa #{id_risorsa}: {risorsa['nome']} "
+                         f"({risorsa['area_geografica']}) - {risorsa['contatto_diretto']}")
+            if not self.gate.richiedi_approvazione("approvazione_risorsa", anteprima):
+                self.audit.registra("risorsa_approvazione_negata",
+                                    {"db": self.db_path, "id": id_risorsa})
+                return False
+        adesso = datetime.datetime.now().isoformat(timespec="seconds")
+        ok = self._modifica(
+            "UPDATE risorse SET stato='attivo', data_approvazione=?, "
+            "approvato_da=? WHERE id=?", (adesso, approvatore, id_risorsa))
+        self.audit.registra("risorsa_approvata",
+                            {"db": self.db_path, "id": id_risorsa,
+                             "approvato_da": approvatore, "esito": ok})
+        return ok
+
+    def sospendi(self, id_risorsa: int, motivo: str) -> bool:
+        ok = self._modifica(
+            "UPDATE risorse SET stato='sospeso', note=? WHERE id=?",
+            (motivo, id_risorsa))
+        self.audit.registra("risorsa_sospesa",
+                            {"db": self.db_path, "id": id_risorsa, "motivo": motivo})
+        return ok
+
+    def rifiuta(self, id_risorsa: int, motivo: str) -> bool:
+        ok = self._modifica(
+            "UPDATE risorse SET stato='rifiutato', note=? WHERE id=?",
+            (motivo, id_risorsa))
+        self.audit.registra("risorsa_rifiutata",
+                            {"db": self.db_path, "id": id_risorsa, "motivo": motivo})
+        return ok
+
+    def elenca_attive(self) -> List[dict]:
+        return self._leggi("SELECT * FROM risorse WHERE stato='attivo' ORDER BY id")
+
+    def elenca_da_approvare(self) -> List[dict]:
+        return self._leggi(
+            "SELECT * FROM risorse WHERE stato='da_approvare' ORDER BY id")
+
+    def cerca_per_area(self, area: str) -> List[dict]:
+        return self._leggi(
+            "SELECT * FROM risorse WHERE area_geografica LIKE ? ORDER BY id",
+            (f"%{area}%",))
+
+    def get(self, id_risorsa: int) -> Optional[dict]:
+        righe = self._leggi("SELECT * FROM risorse WHERE id=?", (id_risorsa,))
+        return righe[0] if righe else None
+
+
+# ---------------------------------------------------------------------------
 # Orchestratore
 # ---------------------------------------------------------------------------
 class AssistenteGestionale:
@@ -2000,7 +2197,65 @@ class AssistenteGestionale:
         self.flash = FlashHostManager(self.db, self.audit)
         self.link_engine = LinkMagiciEngine(self.db, self.audit)
         self.ical_engine = iCalSyncEngine(self.db, self.audit)
+        # Database verticali "Solo Professionisti": 4 file SQLite SEPARATI, nella
+        # stessa cartella del DB candidati (cosi' i test restano in temp).
+        cartella_db = os.path.dirname(db_candidati)
+        self.db_immobili = GestoreRisorseVerticali(
+            os.path.join(cartella_db, "db_immobili.sqlite3"), self.audit, self.gate)
+        self.db_mezzi = GestoreRisorseVerticali(
+            os.path.join(cartella_db, "db_mezzi.sqlite3"), self.audit, self.gate)
+        self.db_talento = GestoreRisorseVerticali(
+            os.path.join(cartella_db, "db_talento.sqlite3"), self.audit, self.gate)
+        self.db_esperienze = GestoreRisorseVerticali(
+            os.path.join(cartella_db, "db_esperienze.sqlite3"), self.audit, self.gate)
+        # Mappa tipo->gestore per menu e CLI.
+        self.risorse_per_tipo = {
+            "immobili": self.db_immobili, "mezzi": self.db_mezzi,
+            "talento": self.db_talento, "esperienze": self.db_esperienze}
         self.audit.registra("avvio", {"progetto": self.config.get("progetto")})
+
+    def componi_pacchetto(self, area: str, budget_max: float) -> dict:
+        """Compone un pacchetto combinando 1 risorsa ATTIVA per categoria
+        (immobile + mezzo + talento + esperienza) nell'area indicata, scegliendo
+        la piu' economica di ciascuna. Restituisce il pacchetto se il totale
+        rientra in budget_max, altrimenti {'esito': 'budget_insufficiente'}.
+        Accede SOLO a risorse in stato 'attivo'."""
+        area_l = area.lower()
+        selezione = {}
+        totale = 0.0
+        for categoria, gestore in self.risorse_per_tipo.items():
+            candidate = [r for r in gestore.elenca_attive()
+                         if area_l in (r.get("area_geografica") or "").lower()]
+            migliore, prezzo_migliore = None, None
+            for r in candidate:
+                try:
+                    meta = json.loads(r.get("metadati_json") or "{}")
+                except json.JSONDecodeError:
+                    meta = {}
+                prezzo = _prezzo_da_metadati(meta)
+                if prezzo_migliore is None or prezzo < prezzo_migliore:
+                    migliore, prezzo_migliore = r, prezzo
+            if migliore is not None:
+                selezione[categoria] = {"id": migliore["id"],
+                                        "nome": migliore["nome"],
+                                        "contatto": migliore["contatto_diretto"],
+                                        "prezzo": prezzo_migliore}
+                totale += prezzo_migliore
+        if not selezione:
+            esito = {"esito": "nessuna_risorsa_attiva", "area": area,
+                     "pacchetto": {}, "totale": 0.0}
+            self.audit.registra("pacchetto_composto", esito)
+            return esito
+        if totale > budget_max:
+            esito = {"esito": "budget_insufficiente", "area": area,
+                     "totale_minimo": round(totale, 2), "budget_max": budget_max}
+            self.audit.registra("pacchetto_composto", esito)
+            return esito
+        esito = {"esito": "ok", "area": area, "pacchetto": selezione,
+                 "totale": round(totale, 2), "budget_max": budget_max}
+        self.audit.registra("pacchetto_composto",
+                            {"esito": "ok", "area": area, "totale": esito["totale"]})
+        return esito
 
     def _esecutore_email(self) -> Optional[Callable[["Bozza"], None]]:
         """Costruisce l'esecutore SMTP solo quando serve. Se le credenziali
@@ -2031,6 +2286,13 @@ class AssistenteGestionale:
             "15": "Risolvi/usa un link magico",
             "16": "Sincronizza calendario iCal (import)",
             "17": "Genera feed iCal (export)",
+            "18": "Inserisci risorsa (Immobili)",
+            "19": "Inserisci risorsa (Mezzi)",
+            "20": "Inserisci risorsa (Talento)",
+            "21": "Inserisci risorsa (Esperienze)",
+            "22": "Approva risorsa in attesa",
+            "23": "Elenca risorse attive",
+            "24": "Componi pacchetto (solo risorse Attive)",
             "0": "Esci",
         }
         while True:
@@ -2074,6 +2336,16 @@ class AssistenteGestionale:
                 self._flow_sync_ical()
             elif scelta == "17":
                 self._flow_genera_ical()
+            elif scelta in ("18", "19", "20", "21"):
+                tipo = {"18": "immobili", "19": "mezzi",
+                        "20": "talento", "21": "esperienze"}[scelta]
+                self._flow_inserisci_risorsa(tipo)
+            elif scelta == "22":
+                self._flow_approva_risorsa()
+            elif scelta == "23":
+                self._flow_elenca_attive()
+            elif scelta == "24":
+                self._flow_componi_pacchetto()
             else:
                 print("Scelta non valida.")
 
@@ -2282,6 +2554,61 @@ class AssistenteGestionale:
             f.write(feed)
         print(f"[OK] Feed iCal salvato in {percorso}")
 
+    # ----------------- Risorse verticali "Solo Professionisti" -----------------
+    def _flow_inserisci_risorsa(self, tipo: str) -> None:
+        gestore = self.risorse_per_tipo[tipo]
+        nome = input(f"Nome risorsa ({tipo}): ").strip()
+        contatto = input("Contatto diretto: ").strip()
+        area = input("Area geografica: ").strip()
+        meta = input('Metadati JSON (es. {"tipo":"villa","prezzo_giorno":150}): ').strip()
+        nuovo_id = gestore.inserisci(nome, contatto, area, meta or "{}")
+        if nuovo_id > 0:
+            print(f"[OK] Risorsa #{nuovo_id} inserita (stato: da_approvare).")
+        else:
+            print("[ERRORE] Inserimento non riuscito (metadati JSON non validi?).")
+
+    def _flow_approva_risorsa(self) -> None:
+        tipo = input(f"Tipo {RISORSA_VERTICALI}: ").strip().lower()
+        gestore = self.risorse_per_tipo.get(tipo)
+        if gestore is None:
+            print("Tipo non valido.")
+            return
+        in_attesa = gestore.elenca_da_approvare()
+        if not in_attesa:
+            print("Nessuna risorsa in attesa.")
+            return
+        for r in in_attesa:
+            print(f"  #{r['id']}  {r['nome']} - {r['area_geografica']} "
+                  f"- {r['contatto_diretto']}")
+        id_ris = chiedi_int("ID da approvare [0 = annulla]: ", default=0)
+        if id_ris <= 0:
+            return
+        # invia() del gate chiede 'APPROVO' prima di attivare.
+        if gestore.approva(id_ris, approvatore="operatore_menu"):
+            print(f"[OK] Risorsa #{id_ris} attivata.")
+        else:
+            print("[INFO] Approvazione non completata.")
+
+    def _flow_elenca_attive(self) -> None:
+        tipo = input(f"Tipo {RISORSA_VERTICALI}: ").strip().lower()
+        gestore = self.risorse_per_tipo.get(tipo)
+        if gestore is None:
+            print("Tipo non valido.")
+            return
+        attive = gestore.elenca_attive()
+        if not attive:
+            print("Nessuna risorsa attiva.")
+            return
+        for r in attive:
+            print(f"  #{r['id']}  {r['nome']} - {r['area_geografica']} "
+                  f"- {r['contatto_diretto']}  {r['metadati_json']}")
+
+    def _flow_componi_pacchetto(self) -> None:
+        area = input("Area geografica: ").strip()
+        budget = chiedi_float("Budget massimo: ")
+        print(json.dumps(self.componi_pacchetto(area, budget),
+                         indent=2, ensure_ascii=False))
+
     # ----------------------- Dashboard (sola lettura) -----------------------
     def _conta_errori_audit_recenti(self, ore: int = 24):
         """Conta gli eventi di errore nelle ultime 'ore' leggendo l'audit log
@@ -2414,6 +2741,59 @@ def esegui_campagna_cli(nome: str) -> int:
         return 1
 
 
+def esegui_risorse_cli(argomenti) -> int:
+    """Entry-point non interattivo per i database verticali (Task Scheduler ready).
+    L'approvazione via CLI avviene SENZA gate (usa_gate=False): in automazione
+    non c'e' un umano al prompt. Exit 0 se ok, 1 su errore."""
+    try:
+        assistente = AssistenteGestionale()
+        if argomenti.inserisci_risorsa:
+            tipo, dati = argomenti.inserisci_risorsa
+            gestore = assistente.risorse_per_tipo.get(tipo.lower())
+            if gestore is None:
+                print(f"[ERRORE] Tipo '{tipo}' sconosciuto "
+                      f"{RISORSA_VERTICALI}.", file=sys.stderr)
+                return 1
+            parti = dati.split("|", 3)
+            if len(parti) < 4:
+                print("[ERRORE] Formato atteso: 'nome|contatto|area|metadati_json'.",
+                      file=sys.stderr)
+                return 1
+            nome, contatto, area, meta = (p.strip() for p in parti)
+            nuovo_id = gestore.inserisci(nome, contatto, area, meta)
+            if nuovo_id <= 0:
+                return 1
+            print(json.dumps({"inserita": nuovo_id, "tipo": tipo.lower()},
+                             ensure_ascii=False))
+        if argomenti.approva_risorsa:
+            tipo, id_str = argomenti.approva_risorsa
+            gestore = assistente.risorse_per_tipo.get(tipo.lower())
+            if gestore is None:
+                print(f"[ERRORE] Tipo '{tipo}' sconosciuto.", file=sys.stderr)
+                return 1
+            ok = gestore.approva(int(id_str), approvatore="cli", usa_gate=False)
+            print(json.dumps({"approvata": int(id_str), "esito": ok},
+                             ensure_ascii=False))
+            if not ok:
+                return 1
+        if argomenti.elenca_attive:
+            gestore = assistente.risorse_per_tipo.get(argomenti.elenca_attive.lower())
+            if gestore is None:
+                print(f"[ERRORE] Tipo '{argomenti.elenca_attive}' sconosciuto.",
+                      file=sys.stderr)
+                return 1
+            print(json.dumps(gestore.elenca_attive(), indent=2, ensure_ascii=False))
+        if argomenti.componi_pacchetto:
+            area, budget = argomenti.componi_pacchetto
+            print(json.dumps(assistente.componi_pacchetto(area, float(budget)),
+                             indent=2, ensure_ascii=False))
+        return 0
+    except Exception as e:
+        logging.exception("Comando risorse da CLI fallito")
+        print(f"[ERRORE] {e}", file=sys.stderr)
+        return 1
+
+
 def esegui_moduli_cli(argomenti) -> int:
     """Entry-point non interattivo per i moduli FASE 7 (Task Scheduler ready).
     Stampa l'esito su stdout. Exit code 0 se ok, 1 in caso di errore."""
@@ -2471,6 +2851,15 @@ def main() -> None:
                         help="genera il feed iCal del candidato su stdout")
     parser.add_argument("--risolvi-link", metavar="TOKEN",
                         help="risolve un link magico e stampa i dati in JSON")
+    parser.add_argument("--inserisci-risorsa", nargs=2,
+                        metavar=("TIPO", "nome|contatto|area|metadati_json"),
+                        help="inserisce una risorsa verticale (stato da_approvare)")
+    parser.add_argument("--approva-risorsa", nargs=2, metavar=("TIPO", "ID"),
+                        help="approva (attiva) una risorsa verticale")
+    parser.add_argument("--elenca-attive", metavar="TIPO",
+                        help="elenca le risorse attive di un verticale (JSON)")
+    parser.add_argument("--componi-pacchetto", nargs=2, metavar=("AREA", "BUDGET"),
+                        help="compone un pacchetto di risorse attive entro budget")
     parser.add_argument("--dashboard", action="store_true",
                         help="mostra un pannello di sintesi (sola lettura) ed esce")
     parser.add_argument("--menu", action="store_true",
@@ -2482,6 +2871,9 @@ def main() -> None:
         assistente = AssistenteGestionale()
         assistente.mostra_dashboard()
         sys.exit(0)
+    if (argomenti.inserisci_risorsa or argomenti.approva_risorsa
+            or argomenti.elenca_attive or argomenti.componi_pacchetto):
+        raise SystemExit(esegui_risorse_cli(argomenti))
     if argomenti.esegui_campagna:
         raise SystemExit(esegui_campagna_cli(argomenti.esegui_campagna))
     if (argomenti.ingesta_vip or argomenti.flash_host or argomenti.sync_ical
