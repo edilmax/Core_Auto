@@ -980,6 +980,75 @@ class DatabaseCandidati:
                         percorso_file   TEXT,
                         timestamp       TEXT,
                         dati_json       TEXT DEFAULT '')""")
+                # --- Distribuzione a Cascata SQLite (PARTE 1: infrastruttura) ---
+                # partner_distribuzione: canali/partner verso cui distribuire.
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS partner_distribuzione (
+                        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                        nome           TEXT UNIQUE NOT NULL,
+                        tipo           TEXT DEFAULT '',
+                        endpoint       TEXT DEFAULT '',
+                        attivo         INTEGER DEFAULT 1,
+                        config_json    TEXT DEFAULT '{}',
+                        data_creazione TEXT)""")
+                # template_contenuti: modelli di contenuto per canale.
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS template_contenuti (
+                        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                        nome           TEXT UNIQUE NOT NULL,
+                        canale         TEXT DEFAULT '',
+                        oggetto        TEXT DEFAULT '',
+                        corpo          TEXT DEFAULT '',
+                        variabili_json TEXT DEFAULT '{}',
+                        data_creazione TEXT)""")
+                # coda_distribuzione: la coda di job. FK su partner/template
+                # nullable (NULL = esente da check FK), cosi' la coda e'
+                # testabile prima di popolare partner/template.
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS coda_distribuzione (
+                        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                        candidato_url       TEXT DEFAULT '',
+                        partner_id          INTEGER
+                                            REFERENCES partner_distribuzione(id),
+                        template_id         INTEGER
+                                            REFERENCES template_contenuti(id),
+                        payload_json        TEXT DEFAULT '{}',
+                        stato               TEXT DEFAULT 'in_coda',
+                        priorita            INTEGER DEFAULT 0,
+                        tentativi           INTEGER DEFAULT 0,
+                        max_tentativi       INTEGER DEFAULT 3,
+                        lock_worker         TEXT DEFAULT '',
+                        lock_scadenza       TEXT DEFAULT '',
+                        programmato_per     TEXT DEFAULT '',
+                        ultimo_errore       TEXT DEFAULT '',
+                        data_creazione      TEXT,
+                        data_aggiornamento  TEXT)""")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_coda_stato ON coda_distribuzione(stato)")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_coda_priorita ON coda_distribuzione(priorita, id)")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_coda_lock ON coda_distribuzione(lock_scadenza)")
+                # log_distribuzione: storico dei tentativi di distribuzione.
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS log_distribuzione (
+                        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                        coda_id    INTEGER REFERENCES coda_distribuzione(id),
+                        partner_id INTEGER REFERENCES partner_distribuzione(id),
+                        esito      TEXT DEFAULT '',
+                        dettaglio  TEXT DEFAULT '',
+                        timestamp  TEXT)""")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_log_coda ON log_distribuzione(coda_id)")
+                # metriche_partner: contatori aggregati per partner.
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS metriche_partner (
+                        partner_id   INTEGER PRIMARY KEY
+                                     REFERENCES partner_distribuzione(id),
+                        inviati      INTEGER DEFAULT 0,
+                        successi     INTEGER DEFAULT 0,
+                        fallimenti   INTEGER DEFAULT 0,
+                        ultimo_invio TEXT DEFAULT '')""")
         finally:
             con.close()
 
@@ -2702,6 +2771,516 @@ class GeneratorePropostaCommerciale:
 
 
 # ---------------------------------------------------------------------------
+# Distribuzione a Cascata SQLite - PARTE 1: coda dei job
+# ---------------------------------------------------------------------------
+# Gestore della coda 'coda_distribuzione'. Il prelievo di un job (dequeue) usa
+# BEGIN IMMEDIATE per garantire che, anche con piu' worker concorrenti, ogni job
+# venga assegnato a UN solo worker (lock atomico). Connessione-per-operazione:
+# ogni chiamata apre/chiude la propria connessione -> thread-safe.
+
+
+class DistribuzioneQueueManager:
+    """Coda di distribuzione su SQLite. PARTE 1: accodamento e lock atomico.
+    Niente worker, niente load balancer (parti successive)."""
+
+    LOCK_TIMEOUT_DEFAULT = 300  # secondi di validita' del lock di un job
+
+    def __init__(self, database: "DatabaseCandidati", audit: Optional[AuditLog] = None):
+        self.db = database
+        self.audit = audit
+
+    def _con(self) -> sqlite3.Connection:
+        """Connessione in modalita' transazione manuale (per BEGIN IMMEDIATE),
+        con row_factory=Row e foreign_keys attive."""
+        con = sqlite3.connect(self.db.db_path)
+        con.row_factory = sqlite3.Row
+        con.isolation_level = None
+        con.execute("PRAGMA foreign_keys=ON;")
+        return con
+
+    def _log(self, evento: str, dettagli: dict) -> None:
+        if self.audit is not None:
+            self.audit.registra(evento, dettagli)
+
+    def accoda(self, candidato_url: str = "", partner_id: Optional[int] = None,
+               template_id: Optional[int] = None, payload: Optional[dict] = None,
+               priorita: int = 0, programmato_per: str = "") -> int:
+        """Inserisce un job in stato 'in_coda'. Restituisce l'id del job."""
+        adesso = datetime.datetime.now().isoformat(timespec="seconds")
+        con = self._con()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            cur = con.execute(
+                "INSERT INTO coda_distribuzione (candidato_url, partner_id, "
+                "template_id, payload_json, stato, priorita, programmato_per, "
+                "data_creazione, data_aggiornamento) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (candidato_url, partner_id, template_id,
+                 json.dumps(payload or {}, ensure_ascii=False), "in_coda",
+                 priorita, programmato_per, adesso, adesso))
+            job_id = cur.lastrowid
+            con.execute("COMMIT")
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
+        finally:
+            con.close()
+        self._log("distribuzione_accodato",
+                  {"job_id": job_id, "partner_id": partner_id,
+                   "priorita": priorita})
+        return job_id
+
+    def preleva(self, worker_id: str,
+                lock_timeout: int = LOCK_TIMEOUT_DEFAULT) -> Optional[dict]:
+        """Preleva e BLOCCA il prossimo job disponibile in modo atomico
+        (BEGIN IMMEDIATE): seleziona il job 'in_coda' a priorita' piu' alta (id
+        crescente a parita') la cui finestra di programmazione e' arrivata, lo
+        marca 'in_elaborazione' con lock_worker e lock_scadenza. Restituisce il
+        job (dict) o None se la coda non ha job disponibili.
+        Recupera prima i lock scaduti, cosi' i job orfani tornano disponibili."""
+        adesso_dt = datetime.datetime.now()
+        adesso = adesso_dt.isoformat(timespec="seconds")
+        scadenza = (adesso_dt + datetime.timedelta(
+            seconds=lock_timeout)).isoformat(timespec="seconds")
+        con = self._con()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            # Recupero lock scaduti: job 'in_elaborazione' con lock scaduto
+            # tornano 'in_coda' (worker morto/lento).
+            con.execute(
+                "UPDATE coda_distribuzione SET stato='in_coda', lock_worker='', "
+                "lock_scadenza='', data_aggiornamento=? "
+                "WHERE stato='in_elaborazione' AND lock_scadenza != '' "
+                "AND lock_scadenza < ?", (adesso, adesso))
+            riga = con.execute(
+                "SELECT id FROM coda_distribuzione WHERE stato='in_coda' "
+                "AND (programmato_per = '' OR programmato_per <= ?) "
+                "ORDER BY priorita DESC, id ASC LIMIT 1", (adesso,)).fetchone()
+            if riga is None:
+                con.execute("COMMIT")
+                return None
+            job_id = riga["id"]
+            con.execute(
+                "UPDATE coda_distribuzione SET stato='in_elaborazione', "
+                "lock_worker=?, lock_scadenza=?, tentativi=tentativi+1, "
+                "data_aggiornamento=? WHERE id=?",
+                (worker_id, scadenza, adesso, job_id))
+            job = dict(con.execute(
+                "SELECT * FROM coda_distribuzione WHERE id=?", (job_id,)).fetchone())
+            con.execute("COMMIT")
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
+        finally:
+            con.close()
+        self._log("distribuzione_prelevato",
+                  {"job_id": job_id, "worker": worker_id})
+        return job
+
+    def completa(self, job_id: int) -> bool:
+        """Marca un job come 'completato'."""
+        return self._aggiorna_stato(job_id, "completato")
+
+    def fallisci(self, job_id: int, motivo: str = "") -> bool:
+        """Registra un fallimento: se restano tentativi, il job torna 'in_coda';
+        altrimenti diventa 'fallito'."""
+        adesso = datetime.datetime.now().isoformat(timespec="seconds")
+        con = self._con()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            riga = con.execute(
+                "SELECT tentativi, max_tentativi FROM coda_distribuzione "
+                "WHERE id=?", (job_id,)).fetchone()
+            if riga is None:
+                con.execute("COMMIT")
+                return False
+            nuovo_stato = ("in_coda" if riga["tentativi"] < riga["max_tentativi"]
+                           else "fallito")
+            con.execute(
+                "UPDATE coda_distribuzione SET stato=?, lock_worker='', "
+                "lock_scadenza='', ultimo_errore=?, data_aggiornamento=? "
+                "WHERE id=?", (nuovo_stato, motivo, adesso, job_id))
+            con.execute("COMMIT")
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
+        finally:
+            con.close()
+        self._log("distribuzione_fallito",
+                  {"job_id": job_id, "stato": nuovo_stato, "motivo": motivo})
+        return True
+
+    def _aggiorna_stato(self, job_id: int, stato: str) -> bool:
+        adesso = datetime.datetime.now().isoformat(timespec="seconds")
+        con = self._con()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            cur = con.execute(
+                "UPDATE coda_distribuzione SET stato=?, lock_worker='', "
+                "lock_scadenza='', data_aggiornamento=? WHERE id=?",
+                (stato, adesso, job_id))
+            con.execute("COMMIT")
+            return cur.rowcount > 0
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
+        finally:
+            con.close()
+
+    def get(self, job_id: int) -> Optional[dict]:
+        con = self._con()
+        try:
+            riga = con.execute("SELECT * FROM coda_distribuzione WHERE id=?",
+                               (job_id,)).fetchone()
+        finally:
+            con.close()
+        return dict(riga) if riga else None
+
+    def conta_per_stato(self) -> dict:
+        con = self._con()
+        try:
+            righe = con.execute("SELECT stato, COUNT(*) AS n FROM "
+                                "coda_distribuzione GROUP BY stato").fetchall()
+        finally:
+            con.close()
+        return {r["stato"]: r["n"] for r in righe}
+
+    def registra_log(self, coda_id: int, partner_id: Optional[int],
+                     esito: str, dettaglio: str = "") -> None:
+        """Scrive una riga in log_distribuzione (storico dei tentativi)."""
+        adesso = datetime.datetime.now().isoformat(timespec="seconds")
+        con = self._con()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            con.execute(
+                "INSERT INTO log_distribuzione (coda_id, partner_id, esito, "
+                "dettaglio, timestamp) VALUES (?,?,?,?,?)",
+                (coda_id, partner_id, esito, dettaglio, adesso))
+            con.execute("COMMIT")
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
+        finally:
+            con.close()
+
+
+# ---------------------------------------------------------------------------
+# Distribuzione a Cascata SQLite - PARTE 2: bilanciamento e template
+# ---------------------------------------------------------------------------
+
+
+class PartnerLoadBalancer:
+    """Seleziona il partner a cui inviare con Weighted Round Robin (variante
+    'smooth' deterministica): il peso effettivo combina il peso base del partner
+    (config_json['peso']) con il tasso di successo storico. I partner inattivi
+    sono esclusi. Connessione-per-operazione su SQLite. Lo stato WRR
+    (current_weight) vive in memoria nell'istanza."""
+
+    def __init__(self, database: "DatabaseCandidati", audit: Optional[AuditLog] = None):
+        self.db = database
+        self.audit = audit
+        self._current: dict = {}  # partner_id -> current_weight (stato SWRR)
+
+    def _con(self) -> sqlite3.Connection:
+        con = sqlite3.connect(self.db.db_path)
+        con.row_factory = sqlite3.Row
+        con.isolation_level = None
+        con.execute("PRAGMA foreign_keys=ON;")
+        return con
+
+    def registra_partner(self, nome: str, tipo: str = "", peso: int = 1,
+                         attivo: bool = True, endpoint: str = "") -> int:
+        """Crea un partner e la sua riga di metriche. Restituisce l'id."""
+        adesso = datetime.datetime.now().isoformat(timespec="seconds")
+        con = self._con()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            cur = con.execute(
+                "INSERT INTO partner_distribuzione (nome, tipo, endpoint, attivo, "
+                "config_json, data_creazione) VALUES (?,?,?,?,?,?)",
+                (nome, tipo, endpoint, int(attivo),
+                 json.dumps({"peso": peso}), adesso))
+            partner_id = cur.lastrowid
+            con.execute("INSERT OR IGNORE INTO metriche_partner (partner_id) "
+                        "VALUES (?)", (partner_id,))
+            con.execute("COMMIT")
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
+        finally:
+            con.close()
+        return partner_id
+
+    def _partner_attivi(self) -> List[dict]:
+        """Partner attivi con peso effettivo = peso_base * (1 + tasso_successo)."""
+        con = self._con()
+        try:
+            righe = con.execute(
+                "SELECT p.id, p.nome, p.tipo, p.config_json, "
+                "COALESCE(m.inviati,0) AS inviati, COALESCE(m.successi,0) AS successi "
+                "FROM partner_distribuzione p "
+                "LEFT JOIN metriche_partner m ON m.partner_id = p.id "
+                "WHERE p.attivo = 1 ORDER BY p.id").fetchall()
+        finally:
+            con.close()
+        partner = []
+        for r in righe:
+            try:
+                peso_base = float(json.loads(r["config_json"] or "{}").get("peso", 1))
+            except (json.JSONDecodeError, TypeError, ValueError):
+                peso_base = 1.0
+            tasso = (r["successi"] / r["inviati"]) if r["inviati"] else 0.0
+            partner.append({"id": r["id"], "nome": r["nome"], "tipo": r["tipo"],
+                            "peso_base": peso_base, "tasso_successo": tasso,
+                            "peso_eff": peso_base * (1.0 + tasso)})
+        return partner
+
+    def seleziona_partner(self) -> Optional[dict]:
+        """Restituisce il partner scelto (dict) o None se nessun partner attivo.
+        Smooth WRR: la prima selezione e' il partner col peso effettivo maggiore;
+        su N=somma_pesi chiamate la distribuzione rispetta i pesi."""
+        partner = self._partner_attivi()
+        if not partner:
+            return None
+        presenti = {p["id"] for p in partner}
+        for pid in list(self._current):
+            if pid not in presenti:
+                del self._current[pid]  # partner non piu' attivo: scartato
+        totale = sum(p["peso_eff"] for p in partner)
+        if totale <= 0:
+            return partner[0]  # tutti peso 0: fallback al primo (id minore)
+        for p in partner:
+            self._current[p["id"]] = self._current.get(p["id"], 0.0) + p["peso_eff"]
+        migliore = max(partner, key=lambda p: self._current[p["id"]])
+        self._current[migliore["id"]] -= totale
+        if self.audit is not None:
+            self.audit.registra("partner_selezionato",
+                                {"partner_id": migliore["id"],
+                                 "nome": migliore["nome"]})
+        return migliore
+
+    def aggiorna_metriche(self, partner_id: int, successo: bool) -> None:
+        """Aggiorna i contatori del partner dopo un invio (successo/fallimento)."""
+        adesso = datetime.datetime.now().isoformat(timespec="seconds")
+        con = self._con()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            con.execute("INSERT OR IGNORE INTO metriche_partner (partner_id) "
+                        "VALUES (?)", (partner_id,))
+            con.execute(
+                "UPDATE metriche_partner SET inviati = inviati + 1, "
+                "successi = successi + ?, fallimenti = fallimenti + ?, "
+                "ultimo_invio = ? WHERE partner_id = ?",
+                (1 if successo else 0, 0 if successo else 1, adesso, partner_id))
+            con.execute("COMMIT")
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
+        finally:
+            con.close()
+        if self.audit is not None:
+            self.audit.registra("metriche_aggiornate",
+                                {"partner_id": partner_id, "successo": successo})
+
+    def tasso_successo(self, partner_id: int) -> float:
+        con = self._con()
+        try:
+            riga = con.execute("SELECT inviati, successi FROM metriche_partner "
+                               "WHERE partner_id = ?", (partner_id,)).fetchone()
+        finally:
+            con.close()
+        if not riga or not riga["inviati"]:
+            return 0.0
+        return riga["successi"] / riga["inviati"]
+
+
+class TemplateEngine:
+    """Legge i template da 'template_contenuti' e sostituisce le variabili nella
+    sintassi {{nome_variabile}}. Le variabili sconosciute restano invariate
+    (nessun crash). Connessione-per-operazione su SQLite."""
+
+    _VAR_RE = re.compile(r"\{\{\s*(\w+)\s*\}\}")
+
+    def __init__(self, database: "DatabaseCandidati"):
+        self.db = database
+
+    def _con(self) -> sqlite3.Connection:
+        con = sqlite3.connect(self.db.db_path)
+        con.row_factory = sqlite3.Row
+        con.execute("PRAGMA foreign_keys=ON;")
+        return con
+
+    def registra_template(self, nome: str, canale: str = "", oggetto: str = "",
+                          corpo: str = "", variabili: Optional[dict] = None) -> int:
+        adesso = datetime.datetime.now().isoformat(timespec="seconds")
+        con = self._con()
+        try:
+            with con:
+                cur = con.execute(
+                    "INSERT INTO template_contenuti (nome, canale, oggetto, corpo, "
+                    "variabili_json, data_creazione) VALUES (?,?,?,?,?,?)",
+                    (nome, canale, oggetto, corpo,
+                     json.dumps(variabili or {}, ensure_ascii=False), adesso))
+                return cur.lastrowid
+        finally:
+            con.close()
+
+    def get_template(self, nome: str) -> Optional[dict]:
+        con = self._con()
+        try:
+            riga = con.execute("SELECT * FROM template_contenuti WHERE nome = ?",
+                               (nome,)).fetchone()
+        finally:
+            con.close()
+        return dict(riga) if riga else None
+
+    @classmethod
+    def render_testo(cls, testo: str, variabili: dict) -> str:
+        """Sostituisce {{var}} con variabili[var]; lascia intatte le variabili
+        non fornite."""
+        def _sost(match):
+            chiave = match.group(1)
+            return (str(variabili[chiave]) if chiave in variabili
+                    else match.group(0))
+        return cls._VAR_RE.sub(_sost, testo or "")
+
+    def render(self, nome: str, variabili: Optional[dict] = None) -> dict:
+        """Carica il template 'nome' e restituisce oggetto/corpo renderizzati.
+        Solleva KeyError se il template non esiste."""
+        template = self.get_template(nome)
+        if template is None:
+            raise KeyError(f"Template inesistente: {nome}")
+        variabili = variabili or {}
+        return {"oggetto": self.render_testo(template["oggetto"], variabili),
+                "corpo": self.render_testo(template["corpo"], variabili)}
+
+    def render_id(self, template_id: int,
+                  variabili: Optional[dict] = None) -> Optional[dict]:
+        """Come render() ma per id; None se il template non esiste."""
+        con = self._con()
+        try:
+            riga = con.execute("SELECT oggetto, corpo FROM template_contenuti "
+                               "WHERE id = ?", (template_id,)).fetchone()
+        finally:
+            con.close()
+        if riga is None:
+            return None
+        variabili = variabili or {}
+        return {"oggetto": self.render_testo(riga["oggetto"], variabili),
+                "corpo": self.render_testo(riga["corpo"], variabili)}
+
+
+# ---------------------------------------------------------------------------
+# Distribuzione a Cascata SQLite - PARTE 3: worker
+# ---------------------------------------------------------------------------
+
+
+class DistribuzioneWorker:
+    """Worker della coda di distribuzione. Preleva un job, sceglie il partner
+    (via load balancer se non specificato), formatta il testo (template engine),
+    simula l'invio e chiude il job (completa/fallisci) aggiornando le metriche.
+
+    Esecuzione: 'elabora_uno()' processa un singolo job in modo SINCRONO (per i
+    test); 'esegui_ciclo()' svuota la coda; 'start_async()' avvia un thread che
+    cicla finche' non viene fermato con 'stop()'."""
+
+    def __init__(self, coda: "DistribuzioneQueueManager",
+                 load_balancer: "PartnerLoadBalancer",
+                 template_engine: "TemplateEngine",
+                 audit: Optional[AuditLog] = None,
+                 worker_id: Optional[str] = None,
+                 esecutore: Optional[Callable] = None):
+        self.coda = coda
+        self.load_balancer = load_balancer
+        self.template_engine = template_engine
+        self.audit = audit
+        self.worker_id = worker_id or f"worker-{secrets.token_hex(4)}"
+        # Esecutore d'invio: callable(job, partner_id, contenuto) -> bool.
+        # Default: invio SIMULATO con successo (nessuna azione esterna reale).
+        self.esecutore = esecutore or (lambda job, partner_id, contenuto: True)
+        self._running = False
+        self._thread = None
+
+    def _invia(self, job, partner_id, contenuto):
+        try:
+            ok = self.esecutore(job, partner_id, contenuto)
+            return bool(ok), ("inviato" if ok else "invio rifiutato dal partner")
+        except Exception as e:
+            return False, f"eccezione invio: {e}"
+
+    def elabora_uno(self) -> Optional[dict]:
+        """Processa al piu' un job. Restituisce un riepilogo dict o None se la
+        coda non ha job disponibili."""
+        job = self.coda.preleva(self.worker_id)
+        if job is None:
+            return None
+        job_id = job["id"]
+        try:
+            partner_id = job["partner_id"]
+            if not partner_id:
+                partner = self.load_balancer.seleziona_partner()
+                if partner is None:
+                    self.coda.fallisci(job_id, "nessun partner disponibile")
+                    self.coda.registra_log(job_id, None, "errore",
+                                           "nessun partner disponibile")
+                    return {"job_id": job_id, "esito": "fallito",
+                            "motivo": "nessun partner disponibile"}
+                partner_id = partner["id"]
+            payload = json.loads(job["payload_json"] or "{}")
+            contenuto = None
+            if job["template_id"]:
+                contenuto = self.template_engine.render_id(job["template_id"], payload)
+            successo, dettaglio = self._invia(job, partner_id, contenuto)
+            self.load_balancer.aggiorna_metriche(partner_id, successo)
+            if successo:
+                self.coda.completa(job_id)
+                self.coda.registra_log(job_id, partner_id, "successo", dettaglio)
+                esito = "completato"
+            else:
+                self.coda.fallisci(job_id, dettaglio)
+                self.coda.registra_log(job_id, partner_id, "errore", dettaglio)
+                esito = "fallito"
+            if self.audit is not None:
+                self.audit.registra("distribuzione_elaborato",
+                                    {"job_id": job_id, "partner_id": partner_id,
+                                     "esito": esito})
+            return {"job_id": job_id, "partner_id": partner_id, "esito": esito}
+        except Exception as e:
+            self.coda.fallisci(job_id, f"errore worker: {e}")
+            return {"job_id": job_id, "esito": "fallito", "motivo": str(e)}
+
+    def esegui_ciclo(self, max_job: Optional[int] = None) -> int:
+        """Svuota la coda (o al massimo 'max_job' job). Restituisce quanti job
+        sono stati processati."""
+        processati = 0
+        while max_job is None or processati < max_job:
+            if self.elabora_uno() is None:
+                break
+            processati += 1
+        return processati
+
+    def start_async(self, intervallo_secondi: float = 1.0):
+        """Avvia un thread che cicla sulla coda finche' non viene fermato."""
+        self._running = True
+
+        def loop():
+            while self._running:
+                try:
+                    if self.elabora_uno() is None:
+                        time.sleep(intervallo_secondi)  # coda vuota: attende
+                except Exception:
+                    time.sleep(intervallo_secondi)
+
+        self._thread = threading.Thread(target=loop, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=5)
+
+
+# ---------------------------------------------------------------------------
 # Orchestratore
 # ---------------------------------------------------------------------------
 class AssistenteGestionale:
@@ -2774,7 +3353,29 @@ class AssistenteGestionale:
         # (cartella creata lazy alla prima generazione).
         self.generatore = GeneratorePropostaCommerciale(
             self.audit, BASE_DIR, self.motore_pacchetti, self.risorse_per_tipo)
+        # Distribuzione a Cascata (PARTE 3): coda + bilanciamento + template +
+        # worker. Il worker NON parte da solo (niente thread in __init__): si
+        # avvia con start_async() o si usa in modo sincrono (elabora_uno).
+        self.coda_marketing = DistribuzioneQueueManager(self.db, self.audit)
+        self.load_balancer = PartnerLoadBalancer(self.db, self.audit)
+        self.template_engine = TemplateEngine(self.db)
+        self.distribuzione_worker = DistribuzioneWorker(
+            self.coda_marketing, self.load_balancer, self.template_engine,
+            self.audit)
         self.audit.registra("avvio", {"progetto": self.config.get("progetto")})
+
+    def distribuisci_proposta(self, candidato_url: str, payload: dict,
+                              priorita: int = 0,
+                              partner_id: Optional[int] = None,
+                              template_id: Optional[int] = None) -> int:
+        """Inserisce una proposta nella coda di marketing. Restituisce l'id del
+        job. L'elaborazione effettiva avviene tramite il worker."""
+        job_id = self.coda_marketing.accoda(
+            candidato_url=candidato_url, partner_id=partner_id,
+            template_id=template_id, payload=payload, priorita=priorita)
+        self.audit.registra("proposta_distribuita",
+                            {"job_id": job_id, "candidato_url": candidato_url})
+        return job_id
 
     def componi_pacchetto(self, area: str, budget_max: float) -> dict:
         """Compone un pacchetto combinando 1 risorsa ATTIVA per categoria

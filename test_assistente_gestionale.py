@@ -646,5 +646,186 @@ class TestGeneratoreProposta(unittest.TestCase):
         self.assertIn("Totale Cliente", contenuto)
 
 
+class TestDistribuzioneQueue(unittest.TestCase):
+    """Distribuzione a Cascata SQLite - PARTE 1: accodamento e lock atomico."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.db = ag.DatabaseCandidati(os.path.join(self._tmp.name, "db.sqlite3"))
+        self.coda = ag.DistribuzioneQueueManager(self.db)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_accoda_e_get(self):
+        job_id = self.coda.accoda(candidato_url="http://x/1",
+                                  payload={"k": "v"}, priorita=5)
+        self.assertGreater(job_id, 0)
+        job = self.coda.get(job_id)
+        self.assertEqual(job["stato"], "in_coda")
+        self.assertEqual(job["candidato_url"], "http://x/1")
+        self.assertEqual(job["priorita"], 5)
+        self.assertEqual(json.loads(job["payload_json"]), {"k": "v"})
+
+    def test_preleva_blocca_il_job(self):
+        job_id = self.coda.accoda(candidato_url="http://x/1")
+        job = self.coda.preleva("worker-A")
+        self.assertIsNotNone(job)
+        self.assertEqual(job["id"], job_id)
+        self.assertEqual(job["stato"], "in_elaborazione")
+        self.assertEqual(job["lock_worker"], "worker-A")
+        self.assertEqual(job["tentativi"], 1)
+        self.assertNotEqual(job["lock_scadenza"], "")
+
+    def test_preleva_non_assegna_due_volte(self):
+        # Un solo job in coda: il primo preleva lo blocca, il secondo trova None.
+        self.coda.accoda(candidato_url="http://x/1")
+        primo = self.coda.preleva("worker-A")
+        secondo = self.coda.preleva("worker-B")
+        self.assertIsNotNone(primo)
+        self.assertIsNone(secondo)
+
+    def test_preleva_coda_vuota(self):
+        self.assertIsNone(self.coda.preleva("worker-A"))
+
+    def test_preleva_rispetta_priorita(self):
+        self.coda.accoda(candidato_url="bassa", priorita=1)
+        alta_id = self.coda.accoda(candidato_url="alta", priorita=10)
+        job = self.coda.preleva("worker-A")
+        self.assertEqual(job["id"], alta_id)
+        self.assertEqual(job["candidato_url"], "alta")
+
+
+class TestPartnerLoadBalancer(unittest.TestCase):
+    """PARTE 2: Weighted Round Robin, metriche, esclusione inattivi."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.db = ag.DatabaseCandidati(os.path.join(self._tmp.name, "db.sqlite3"))
+        self.lb = ag.PartnerLoadBalancer(self.db)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_seleziona_peso_migliore(self):
+        self.lb.registra_partner("debole", peso=1)
+        forte = self.lb.registra_partner("forte", peso=5)
+        scelto = self.lb.seleziona_partner()  # prima scelta SWRR = peso maggiore
+        self.assertEqual(scelto["id"], forte)
+        self.assertEqual(scelto["nome"], "forte")
+
+    def test_esclude_inattivi(self):
+        attivo = self.lb.registra_partner("attivo", peso=1, attivo=True)
+        self.lb.registra_partner("spento", peso=100, attivo=False)
+        for _ in range(5):
+            scelto = self.lb.seleziona_partner()
+            self.assertEqual(scelto["id"], attivo)  # mai il partner spento
+
+    def test_nessun_partner_attivo_restituisce_none(self):
+        self.lb.registra_partner("spento", peso=1, attivo=False)
+        self.assertIsNone(self.lb.seleziona_partner())
+
+    def test_wrr_distribuzione_rispetta_pesi(self):
+        a = self.lb.registra_partner("A", peso=3)
+        b = self.lb.registra_partner("B", peso=1)
+        conteggi = {a: 0, b: 0}
+        for _ in range(4):  # somma pesi = 4 -> distribuzione esatta 3:1
+            conteggi[self.lb.seleziona_partner()["id"]] += 1
+        self.assertEqual(conteggi[a], 3)
+        self.assertEqual(conteggi[b], 1)
+
+    def test_aggiorna_metriche_tasso_successo(self):
+        pid = self.lb.registra_partner("p", peso=1)
+        self.lb.aggiorna_metriche(pid, True)
+        self.lb.aggiorna_metriche(pid, True)
+        self.lb.aggiorna_metriche(pid, False)
+        self.assertAlmostEqual(self.lb.tasso_successo(pid), 2 / 3)
+
+
+class TestTemplateEngine(unittest.TestCase):
+    """PARTE 2: rendering dei template con variabili {{...}}."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.db = ag.DatabaseCandidati(os.path.join(self._tmp.name, "db.sqlite3"))
+        self.engine = ag.TemplateEngine(self.db)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_render_sostituisce_variabili(self):
+        self.engine.registra_template(
+            "benvenuto", canale="email", oggetto="Ciao {{nome_candidato}}",
+            corpo="Proposta per {{citta}} a {{prezzo}} EUR.")
+        reso = self.engine.render("benvenuto", {"nome_candidato": "Mario",
+                                                "citta": "Como", "prezzo": 150})
+        self.assertEqual(reso["oggetto"], "Ciao Mario")
+        self.assertEqual(reso["corpo"], "Proposta per Como a 150 EUR.")
+
+    def test_variabile_mancante_resta_invariata(self):
+        testo = "Gentile {{nome}}, codice {{codice}}"
+        reso = ag.TemplateEngine.render_testo(testo, {"nome": "Lia"})
+        self.assertEqual(reso, "Gentile Lia, codice {{codice}}")
+
+    def test_template_inesistente_solleva(self):
+        with self.assertRaises(KeyError):
+            self.engine.render("non_esiste", {})
+
+
+class TestDistribuzioneIntegrazione(unittest.TestCase):
+    """PARTE 3: flusso completo distribuzione attraverso l'orchestratore."""
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.config = config_di_prova(self._tmpdir.name)
+        with redirect_stdout(io.StringIO()):
+            self.assistente = ag.AssistenteGestionale(config=self.config)
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def _metriche(self, partner_id):
+        con = sqlite3.connect(self.assistente.db.db_path)
+        try:
+            return con.execute(
+                "SELECT inviati, successi, fallimenti FROM metriche_partner "
+                "WHERE partner_id = ?", (partner_id,)).fetchone()
+        finally:
+            con.close()
+
+    def test_distribuisci_proposta_accoda(self):
+        job_id = self.assistente.distribuisci_proposta(
+            "http://x/1", {"titolo": "Villa"}, priorita=2)
+        job = self.assistente.coda_marketing.get(job_id)
+        self.assertEqual(job["stato"], "in_coda")
+        self.assertEqual(job["priorita"], 2)
+
+    def test_flusso_completo_completato_e_metriche(self):
+        pid = self.assistente.load_balancer.registra_partner(
+            "Instagram", tipo="social", peso=1)
+        job_id = self.assistente.distribuisci_proposta("http://x/1", {"titolo": "Villa"})
+        res = self.assistente.distribuzione_worker.elabora_uno()
+        self.assertEqual(res["esito"], "completato")
+        self.assertEqual(res["partner_id"], pid)
+        self.assertEqual(
+            self.assistente.coda_marketing.get(job_id)["stato"], "completato")
+        self.assertEqual(tuple(self._metriche(pid)), (1, 1, 0))  # inviati/successi/fall.
+        self.assertEqual(self.assistente.load_balancer.tasso_successo(pid), 1.0)
+
+    def test_worker_coda_vuota_restituisce_none(self):
+        self.assertIsNone(self.assistente.distribuzione_worker.elabora_uno())
+
+    def test_worker_fallimento_aggiorna_metriche(self):
+        pid = self.assistente.load_balancer.registra_partner("Email", peso=1)
+        self.assistente.distribuisci_proposta("http://x/2", {"a": 1})
+        worker = ag.DistribuzioneWorker(
+            self.assistente.coda_marketing, self.assistente.load_balancer,
+            self.assistente.template_engine,
+            esecutore=lambda job, partner_id, contenuto: False)
+        res = worker.elabora_uno()
+        self.assertEqual(res["esito"], "fallito")
+        self.assertEqual(tuple(self._metriche(pid)), (1, 0, 1))  # 1 fallimento
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
