@@ -2149,6 +2149,397 @@ class GestoreRisorseVerticali:
 
 
 # ---------------------------------------------------------------------------
+# Motore di composizione "Pacchetto Pronto" (V5)
+# ---------------------------------------------------------------------------
+# Compone un pacchetto selezionando 1 risorsa ATTIVA per categoria dai 4 DB
+# verticali (in SOLA LETTURA, Vincolo 1), traccia le richieste ai partner con
+# timer 24h e applica fallback automatico (max 3 tentativi). Lo stato mutabile
+# vive in un DB separato 'pacchetti.sqlite3': i DB verticali non si toccano.
+#
+# Nota su schema reale: la tabella 'risorse' non ha colonne 'area'/'prezzo'
+# (sono 'area_geografica' e il prezzo sta in metadati_json), quindi il filtro
+# prezzo<=budget/4 e l'ordinamento avvengono lato Python via _prezzo_da_metadati.
+#
+# Nota su Vincolo 1 (DB verticali read-only): il passo "UPDATE risorse SET
+# stato='in_attesa_conferma'" della specifica scriverebbe su un DB verticale;
+# per rispettare il vincolo, la conferma e' tracciata in richieste_partner
+# (stato='confermata') invece che mutando la risorsa.
+
+
+class MotoreComposizionePacchetti:
+    """Orchestratore del ciclo di vita di un pacchetto: composizione, invio
+    richieste partner, scadenze/fallback e conferma. Ogni scrittura su
+    pacchetti.sqlite3 e' una transazione atomica (BEGIN IMMEDIATE) e ogni
+    operazione e' tracciata nell'audit."""
+
+    CATEGORIE = ("immobili", "mezzi", "talento", "esperienze")
+    DURATA_ATTESA_ORE = 24
+    MAX_TENTATIVI_FALLBACK = 3
+
+    def __init__(self, audit: AuditLog, db_path: str, gestori: dict):
+        """'gestori' = {categoria: GestoreRisorseVerticali} usati in SOLA LETTURA."""
+        self.audit = audit
+        self.db_path = db_path
+        self.gestori = dict(gestori)
+        self._init_schema()
+
+    def _init_schema(self) -> None:
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        con = sqlite3.connect(self.db_path)
+        try:
+            con.execute("PRAGMA journal_mode=WAL;")
+            con.execute("PRAGMA foreign_keys=ON;")
+            with con:
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS pacchetti (
+                        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                        codice              TEXT UNIQUE NOT NULL,
+                        destinazione        TEXT NOT NULL,
+                        budget_max          REAL,
+                        data_inizio         TEXT,
+                        data_fine           TEXT,
+                        stato               TEXT DEFAULT 'in_composizione',
+                        risorse_json        TEXT,
+                        totale_prezzo       REAL DEFAULT 0,
+                        data_creazione      TEXT,
+                        data_scadenza       TEXT,
+                        tentativi_fallback  INTEGER DEFAULT 0)""")
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS richieste_partner (
+                        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                        pacchetto_id    INTEGER NOT NULL,
+                        risorsa_db      TEXT NOT NULL,
+                        risorsa_id      INTEGER NOT NULL,
+                        stato           TEXT DEFAULT 'inviata',
+                        data_invio      TEXT,
+                        data_risposta   TEXT,
+                        risposta_partner TEXT,
+                        FOREIGN KEY (pacchetto_id) REFERENCES pacchetti(id))""")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_pacchetti_stato ON pacchetti(stato)")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_pacchetti_scadenza ON pacchetti(data_scadenza)")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_richieste_pacchetto ON richieste_partner(pacchetto_id)")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_richieste_stato ON richieste_partner(stato)")
+        finally:
+            con.close()
+
+    def _apri(self) -> sqlite3.Connection:
+        con = sqlite3.connect(self.db_path)
+        con.row_factory = sqlite3.Row
+        con.isolation_level = None  # transazioni gestite a mano (BEGIN IMMEDIATE)
+        con.execute("PRAGMA foreign_keys=ON;")
+        return con
+
+    @staticmethod
+    def _adesso() -> str:
+        return datetime.datetime.now().isoformat(timespec="seconds")
+
+    # ----------------------- lettura DB verticali (read-only) -----------------------
+    def _risorse_attive_ordinate(self, categoria: str, area: str,
+                                 escludi: tuple = ()) -> List[tuple]:
+        """Risorse ATTIVE della categoria nell'area, come (riga, prezzo),
+        ordinate per prezzo crescente. Sola lettura sul DB verticale."""
+        gestore = self.gestori.get(categoria)
+        if gestore is None:
+            return []
+        area_l = (area or "").lower()
+        out = []
+        for r in gestore.cerca_per_area(area):
+            if r.get("stato") != "attivo" or r["id"] in escludi:
+                continue
+            if area_l not in (r.get("area_geografica") or "").lower():
+                continue
+            try:
+                meta = json.loads(r.get("metadati_json") or "{}")
+            except json.JSONDecodeError:
+                meta = {}
+            out.append((r, _prezzo_da_metadati(meta)))
+        out.sort(key=lambda t: t[1])
+        return out
+
+    @staticmethod
+    def _soddisfa(riga: dict, esigenze_cat: Optional[dict]) -> bool:
+        if not esigenze_cat:
+            return True
+        try:
+            meta = json.loads(riga.get("metadati_json") or "{}")
+        except json.JSONDecodeError:
+            meta = {}
+        return all(str(meta.get(k)) == str(v) for k, v in esigenze_cat.items())
+
+    def _trova_alternativa(self, categoria: str, area: str,
+                           escludi_id: int) -> Optional[int]:
+        attive = self._risorse_attive_ordinate(categoria, area, escludi=(escludi_id,))
+        return attive[0][0]["id"] if attive else None
+
+    # ----------------------- letture pacchetti -----------------------
+    def get_pacchetto(self, pacchetto_id: int) -> Optional[dict]:
+        con = self._apri()
+        try:
+            riga = con.execute("SELECT * FROM pacchetti WHERE id=?",
+                               (pacchetto_id,)).fetchone()
+        finally:
+            con.close()
+        return dict(riga) if riga else None
+
+    def elenca_pacchetti(self, stato: Optional[str] = None) -> List[dict]:
+        con = self._apri()
+        try:
+            if stato:
+                righe = con.execute("SELECT * FROM pacchetti WHERE stato=? "
+                                    "ORDER BY id", (stato,)).fetchall()
+            else:
+                righe = con.execute("SELECT * FROM pacchetti ORDER BY id").fetchall()
+        finally:
+            con.close()
+        return [dict(r) for r in righe]
+
+    def get_richieste(self, pacchetto_id: int) -> List[dict]:
+        con = self._apri()
+        try:
+            righe = con.execute("SELECT * FROM richieste_partner WHERE "
+                                "pacchetto_id=? ORDER BY id", (pacchetto_id,)).fetchall()
+        finally:
+            con.close()
+        return [dict(r) for r in righe]
+
+    # ----------------------- composizione -----------------------
+    def componi(self, destinazione: str, budget_max, data_inizio: str,
+                data_fine: str, esigenze_json=None) -> dict:
+        """Compone un pacchetto: 1 risorsa attiva (la piu' economica che
+        soddisfa le esigenze) per categoria, con prezzo <= budget_max/4."""
+        if not destinazione or not destinazione.strip():
+            return {"esito": "errore", "motivo": "destinazione vuota"}
+        try:
+            budget_max = float(budget_max)
+        except (TypeError, ValueError):
+            return {"esito": "errore", "motivo": "budget non numerico"}
+        if budget_max <= 0:
+            return {"esito": "errore", "motivo": "budget non valido"}
+        for d in (data_inizio, data_fine):
+            try:
+                datetime.date.fromisoformat(d)
+            except (TypeError, ValueError):
+                return {"esito": "errore", "motivo": "date non valide (ISO AAAA-MM-GG)"}
+
+        esigenze = {}
+        if esigenze_json:
+            if isinstance(esigenze_json, dict):
+                esigenze = esigenze_json
+            else:
+                try:
+                    esigenze = json.loads(esigenze_json)
+                except (json.JSONDecodeError, TypeError):
+                    return {"esito": "errore", "motivo": "esigenze JSON non valido"}
+
+        tetto = budget_max / 4
+        risorse, mancanti, totale = {}, [], 0.0
+        for categoria in self.CATEGORIE:
+            scelta = None
+            for riga, prezzo in self._risorse_attive_ordinate(categoria, destinazione):
+                if prezzo > tetto:
+                    continue
+                if not self._soddisfa(riga, esigenze.get(categoria)):
+                    continue
+                scelta = (riga, prezzo)
+                break  # gia' ordinate per prezzo crescente: la prima e' la migliore
+            if scelta is None:
+                mancanti.append(categoria)
+            else:
+                risorse[categoria] = scelta[0]["id"]
+                totale += scelta[1]
+
+        codice = ("PAC-" + datetime.date.today().strftime("%Y%m%d") + "-"
+                  + secrets.token_hex(3).upper())
+        stato = "in_attesa" if not mancanti else "in_composizione"
+        adesso = self._adesso()
+        con = self._apri()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            cur = con.execute(
+                "INSERT INTO pacchetti (codice, destinazione, budget_max, "
+                "data_inizio, data_fine, stato, risorse_json, totale_prezzo, "
+                "data_creazione) VALUES (?,?,?,?,?,?,?,?,?)",
+                (codice, destinazione, budget_max, data_inizio, data_fine,
+                 stato, json.dumps(risorse), round(totale, 2), adesso))
+            pacchetto_id = cur.lastrowid
+            con.execute("COMMIT")
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
+        finally:
+            con.close()
+        esito = {"esito": "ok" if not mancanti else "incompleto",
+                 "id": pacchetto_id, "codice": codice, "stato": stato,
+                 "risorse": risorse, "mancanti": mancanti,
+                 "totale": round(totale, 2)}
+        self.audit.registra("pacchetto_creato",
+                            {"id": pacchetto_id, "codice": codice,
+                             "stato": stato, "mancanti": mancanti,
+                             "totale": round(totale, 2)})
+        return esito
+
+    # ----------------------- invio richieste -----------------------
+    def invia_richieste_partner(self, pacchetto_id: int) -> dict:
+        pac = self.get_pacchetto(pacchetto_id)
+        if pac is None:
+            return {"esito": "inesistente"}
+        risorse = json.loads(pac["risorse_json"] or "{}")
+        if not risorse:
+            return {"esito": "nessuna_risorsa"}
+        adesso_dt = datetime.datetime.now()
+        adesso = adesso_dt.isoformat(timespec="seconds")
+        scadenza = (adesso_dt + datetime.timedelta(hours=self.DURATA_ATTESA_ORE)
+                    ).isoformat(timespec="seconds")
+        con = self._apri()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            for categoria, risorsa_id in risorse.items():
+                con.execute(
+                    "INSERT INTO richieste_partner (pacchetto_id, risorsa_db, "
+                    "risorsa_id, stato, data_invio) VALUES (?,?,?,?,?)",
+                    (pacchetto_id, categoria, risorsa_id, "inviata", adesso))
+                # Placeholder invio reale (email/API): per ora solo simulazione.
+            con.execute("UPDATE pacchetti SET stato='in_attesa', data_scadenza=? "
+                        "WHERE id=?", (scadenza, pacchetto_id))
+            con.execute("COMMIT")
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
+        finally:
+            con.close()
+        self.audit.registra("richieste_inviate",
+                            {"pacchetto_id": pacchetto_id,
+                             "inviate": len(risorse), "scadenza": scadenza})
+        return {"esito": "ok", "pacchetto_id": pacchetto_id,
+                "inviate": len(risorse), "data_scadenza": scadenza}
+
+    # ----------------------- scadenze e fallback -----------------------
+    def verifica_scadenze(self) -> list:
+        adesso_dt = datetime.datetime.now()
+        adesso = adesso_dt.isoformat(timespec="seconds")
+        risultati = []
+        con = self._apri()
+        try:
+            scaduti = con.execute(
+                "SELECT * FROM pacchetti WHERE stato='in_attesa' "
+                "AND data_scadenza IS NOT NULL AND data_scadenza < ?",
+                (adesso,)).fetchall()
+            for pac in scaduti:
+                risorse = json.loads(pac["risorse_json"] or "{}")
+                inviate = con.execute(
+                    "SELECT * FROM richieste_partner WHERE pacchetto_id=? "
+                    "AND stato='inviata'", (pac["id"],)).fetchall()
+                fallback_fallito = False
+                con.execute("BEGIN IMMEDIATE")
+                try:
+                    for req in inviate:
+                        con.execute("UPDATE richieste_partner SET stato='scaduta', "
+                                    "data_risposta=? WHERE id=?", (adesso, req["id"]))
+                        alt = self._trova_alternativa(
+                            req["risorsa_db"], pac["destinazione"], req["risorsa_id"])
+                        if alt is not None:
+                            risorse[req["risorsa_db"]] = alt
+                        else:
+                            fallback_fallito = True
+                    nuovo_tent = pac["tentativi_fallback"] + (1 if fallback_fallito else 0)
+                    if nuovo_tent >= self.MAX_TENTATIVI_FALLBACK:
+                        con.execute("UPDATE pacchetti SET stato='scaduto', "
+                                    "tentativi_fallback=? WHERE id=?",
+                                    (nuovo_tent, pac["id"]))
+                        esito_tipo = "pacchetto_scaduto"
+                    else:
+                        nuova_scad = (adesso_dt + datetime.timedelta(
+                            hours=self.DURATA_ATTESA_ORE)).isoformat(timespec="seconds")
+                        con.execute("UPDATE pacchetti SET risorse_json=?, "
+                                    "tentativi_fallback=?, data_scadenza=? WHERE id=?",
+                                    (json.dumps(risorse), nuovo_tent, nuova_scad,
+                                     pac["id"]))
+                        for categoria, risorsa_id in risorse.items():
+                            con.execute(
+                                "INSERT INTO richieste_partner (pacchetto_id, "
+                                "risorsa_db, risorsa_id, stato, data_invio) "
+                                "VALUES (?,?,?,?,?)",
+                                (pac["id"], categoria, risorsa_id, "inviata", adesso))
+                        esito_tipo = "fallback_eseguito"
+                    con.execute("COMMIT")
+                except Exception:
+                    con.execute("ROLLBACK")
+                    raise
+                self.audit.registra(esito_tipo,
+                                    {"pacchetto_id": pac["id"], "codice": pac["codice"],
+                                     "tentativi": nuovo_tent})
+                risultati.append({"pacchetto_id": pac["id"], "codice": pac["codice"],
+                                  "esito": esito_tipo, "tentativi": nuovo_tent})
+        finally:
+            con.close()
+        return risultati
+
+    # ----------------------- risposta partner -----------------------
+    def registra_risposta_partner(self, richiesta_id: int, esito: str,
+                                  nota: str = "") -> bool:
+        adesso = self._adesso()
+        con = self._apri()
+        try:
+            req = con.execute("SELECT * FROM richieste_partner WHERE id=?",
+                              (richiesta_id,)).fetchone()
+            if req is None:
+                return False
+            pacchetto_id = req["pacchetto_id"]
+            con.execute("BEGIN IMMEDIATE")
+            try:
+                con.execute("UPDATE richieste_partner SET stato=?, data_risposta=?, "
+                            "risposta_partner=? WHERE id=?",
+                            (esito, adesso, nota, richiesta_id))
+                if esito == "rifiutata":
+                    # Fallback automatico per la risorsa rifiutata (read-only sui
+                    # DB verticali: si cerca un'alternativa, non si muta la risorsa).
+                    pac = con.execute("SELECT * FROM pacchetti WHERE id=?",
+                                      (pacchetto_id,)).fetchone()
+                    risorse = json.loads(pac["risorse_json"] or "{}")
+                    alt = self._trova_alternativa(
+                        req["risorsa_db"], pac["destinazione"], req["risorsa_id"])
+                    if alt is not None:
+                        risorse[req["risorsa_db"]] = alt
+                        con.execute("UPDATE pacchetti SET risorse_json=? WHERE id=?",
+                                    (json.dumps(risorse), pacchetto_id))
+                        con.execute(
+                            "INSERT INTO richieste_partner (pacchetto_id, risorsa_db, "
+                            "risorsa_id, stato, data_invio) VALUES (?,?,?,?,?)",
+                            (pacchetto_id, req["risorsa_db"], alt, "inviata", adesso))
+                    else:
+                        con.execute("UPDATE pacchetti SET tentativi_fallback="
+                                    "tentativi_fallback+1 WHERE id=?", (pacchetto_id,))
+                # Pacchetto confermato se non restano richieste 'inviata' e ogni
+                # categoria del risorse_json ha una richiesta 'confermata'.
+                rimaste = con.execute(
+                    "SELECT COUNT(*) FROM richieste_partner WHERE pacchetto_id=? "
+                    "AND stato='inviata'", (pacchetto_id,)).fetchone()[0]
+                pac2 = con.execute("SELECT risorse_json FROM pacchetti WHERE id=?",
+                                   (pacchetto_id,)).fetchone()
+                risorse2 = json.loads(pac2["risorse_json"] or "{}")
+                confermate = {r["risorsa_db"] for r in con.execute(
+                    "SELECT DISTINCT risorsa_db FROM richieste_partner WHERE "
+                    "pacchetto_id=? AND stato='confermata'", (pacchetto_id,)).fetchall()}
+                if rimaste == 0 and risorse2 and set(risorse2).issubset(confermate):
+                    con.execute("UPDATE pacchetti SET stato='confermato' WHERE id=?",
+                                (pacchetto_id,))
+                con.execute("COMMIT")
+            except Exception:
+                con.execute("ROLLBACK")
+                raise
+        finally:
+            con.close()
+        self.audit.registra("risposta_partner",
+                            {"richiesta_id": richiesta_id, "esito": esito,
+                             "pacchetto_id": pacchetto_id})
+        return True
+
+
+# ---------------------------------------------------------------------------
 # Orchestratore
 # ---------------------------------------------------------------------------
 class AssistenteGestionale:
@@ -2212,6 +2603,11 @@ class AssistenteGestionale:
         self.risorse_per_tipo = {
             "immobili": self.db_immobili, "mezzi": self.db_mezzi,
             "talento": self.db_talento, "esperienze": self.db_esperienze}
+        # Motore "Pacchetto Pronto" (V5): DB pacchetti separato; legge i 4
+        # verticali in sola lettura tramite i gestori gia' cablati.
+        self.motore_pacchetti = MotoreComposizionePacchetti(
+            self.audit, os.path.join(cartella_db, "pacchetti.sqlite3"),
+            self.risorse_per_tipo)
         self.audit.registra("avvio", {"progetto": self.config.get("progetto")})
 
     def componi_pacchetto(self, area: str, budget_max: float) -> dict:
@@ -2293,6 +2689,10 @@ class AssistenteGestionale:
             "22": "Approva risorsa in attesa",
             "23": "Elenca risorse attive",
             "24": "Componi pacchetto (solo risorse Attive)",
+            "25": "Pacchetto Pronto: componi (motore V5)",
+            "26": "Pacchetto Pronto: invia richieste partner",
+            "27": "Pacchetto Pronto: verifica scadenze",
+            "28": "Pacchetto Pronto: registra risposta partner",
             "0": "Esci",
         }
         while True:
@@ -2346,6 +2746,14 @@ class AssistenteGestionale:
                 self._flow_elenca_attive()
             elif scelta == "24":
                 self._flow_componi_pacchetto()
+            elif scelta == "25":
+                self._flow_pp_componi()
+            elif scelta == "26":
+                self._flow_pp_invia()
+            elif scelta == "27":
+                self._flow_pp_scadenze()
+            elif scelta == "28":
+                self._flow_pp_risposta()
             else:
                 print("Scelta non valida.")
 
@@ -2609,6 +3017,37 @@ class AssistenteGestionale:
         print(json.dumps(self.componi_pacchetto(area, budget),
                          indent=2, ensure_ascii=False))
 
+    # ------------------- Pacchetto Pronto (motore V5) -------------------
+    def _flow_pp_componi(self) -> None:
+        destinazione = input("Destinazione: ").strip()
+        budget = chiedi_float("Budget massimo: ")
+        data_inizio = input("Data inizio (AAAA-MM-GG): ").strip()
+        data_fine = input("Data fine (AAAA-MM-GG): ").strip()
+        esigenze = input("Esigenze JSON (opz., Invio per saltare): ").strip()
+        print(json.dumps(self.motore_pacchetti.componi(
+            destinazione, budget, data_inizio, data_fine, esigenze or None),
+            indent=2, ensure_ascii=False))
+
+    def _flow_pp_invia(self) -> None:
+        pid = chiedi_int("ID pacchetto: ", default=0)
+        if pid <= 0:
+            return
+        print(json.dumps(self.motore_pacchetti.invia_richieste_partner(pid),
+                         indent=2, ensure_ascii=False))
+
+    def _flow_pp_scadenze(self) -> None:
+        print(json.dumps(self.motore_pacchetti.verifica_scadenze(),
+                         indent=2, ensure_ascii=False))
+
+    def _flow_pp_risposta(self) -> None:
+        rid = chiedi_int("ID richiesta partner: ", default=0)
+        if rid <= 0:
+            return
+        esito = input("Esito [confermata/rifiutata]: ").strip().lower()
+        nota = input("Nota (opz.): ").strip()
+        ok = self.motore_pacchetti.registra_risposta_partner(rid, esito, nota)
+        print("[OK] Risposta registrata." if ok else "[INFO] Richiesta inesistente.")
+
     # ----------------------- Dashboard (sola lettura) -----------------------
     def _conta_errori_audit_recenti(self, ore: int = 24):
         """Conta gli eventi di errore nelle ultime 'ore' leggendo l'audit log
@@ -2794,6 +3233,35 @@ def esegui_risorse_cli(argomenti) -> int:
         return 1
 
 
+def esegui_pacchetti_cli(argomenti) -> int:
+    """Entry-point non interattivo per il motore Pacchetto Pronto (V5).
+    Exit 0 se ok, 1 su errore."""
+    try:
+        assistente = AssistenteGestionale()
+        motore = assistente.motore_pacchetti
+        if argomenti.crea_pacchetto:
+            dest, budget, d_in, d_fine = argomenti.crea_pacchetto
+            print(json.dumps(motore.componi(dest, budget, d_in, d_fine),
+                             indent=2, ensure_ascii=False))
+        if argomenti.invia_richieste:
+            print(json.dumps(
+                motore.invia_richieste_partner(int(argomenti.invia_richieste)),
+                indent=2, ensure_ascii=False))
+        if argomenti.verifica_scadenze:
+            print(json.dumps(motore.verifica_scadenze(),
+                             indent=2, ensure_ascii=False))
+        if argomenti.registra_risposta:
+            rid, esito, nota = argomenti.registra_risposta
+            ok = motore.registra_risposta_partner(int(rid), esito, nota)
+            print(json.dumps({"registrata": int(rid), "esito": esito, "ok": ok},
+                             ensure_ascii=False))
+        return 0
+    except Exception as e:
+        logging.exception("Comando pacchetti da CLI fallito")
+        print(f"[ERRORE] {e}", file=sys.stderr)
+        return 1
+
+
 def esegui_moduli_cli(argomenti) -> int:
     """Entry-point non interattivo per i moduli FASE 7 (Task Scheduler ready).
     Stampa l'esito su stdout. Exit code 0 se ok, 1 in caso di errore."""
@@ -2829,6 +3297,13 @@ def esegui_moduli_cli(argomenti) -> int:
 
 
 def main() -> None:
+    # Output UTF-8 difensivo: i contenuti (proposte .md, dashboard, €, →) usano
+    # caratteri non rappresentabili nella code page di default di Windows.
+    for flusso in (sys.stdout, sys.stderr):
+        try:
+            flusso.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+        except (AttributeError, ValueError):
+            pass
     parser = argparse.ArgumentParser(
         description="Assistente Gestionale - Progetto TavolaVIP")
     parser.add_argument("--esegui-campagna", metavar="NOME",
@@ -2860,6 +3335,16 @@ def main() -> None:
                         help="elenca le risorse attive di un verticale (JSON)")
     parser.add_argument("--componi-pacchetto", nargs=2, metavar=("AREA", "BUDGET"),
                         help="compone un pacchetto di risorse attive entro budget")
+    parser.add_argument("--crea-pacchetto", nargs=4,
+                        metavar=("DESTINAZIONE", "BUDGET", "DATA_INIZIO", "DATA_FINE"),
+                        help="motore V5: compone un Pacchetto Pronto")
+    parser.add_argument("--invia-richieste", metavar="PACCHETTO_ID",
+                        help="invia le richieste partner di un pacchetto (timer 24h)")
+    parser.add_argument("--verifica-scadenze", action="store_true",
+                        help="verifica i pacchetti scaduti ed esegue il fallback")
+    parser.add_argument("--registra-risposta", nargs=3,
+                        metavar=("RICHIESTA_ID", "ESITO", "NOTA"),
+                        help="registra la risposta di un partner a una richiesta")
     parser.add_argument("--dashboard", action="store_true",
                         help="mostra un pannello di sintesi (sola lettura) ed esce")
     parser.add_argument("--menu", action="store_true",
@@ -2874,6 +3359,9 @@ def main() -> None:
     if (argomenti.inserisci_risorsa or argomenti.approva_risorsa
             or argomenti.elenca_attive or argomenti.componi_pacchetto):
         raise SystemExit(esegui_risorse_cli(argomenti))
+    if (argomenti.crea_pacchetto or argomenti.invia_richieste
+            or argomenti.verifica_scadenze or argomenti.registra_risposta):
+        raise SystemExit(esegui_pacchetti_cli(argomenti))
     if argomenti.esegui_campagna:
         raise SystemExit(esegui_campagna_cli(argomenti.esegui_campagna))
     if (argomenti.ingesta_vip or argomenti.flash_host or argomenti.sync_ical

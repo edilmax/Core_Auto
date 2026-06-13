@@ -17,6 +17,7 @@ Garanzie dei test:
 import io
 import json
 import os
+import sqlite3
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -450,6 +451,117 @@ class TestOrchestratore(BaseTemp):
         self.assertEqual(eventi[-1]["evento"], "avvio")
         self.assertEqual(assistente.ricerca.percorso_file,
                          self.config["percorsi"]["file_candidati"])
+
+
+class TestMotorePacchetti(unittest.TestCase):
+    """Motore di composizione 'Pacchetto Pronto' (V5): DB pacchetti separato,
+    4 DB verticali in sola lettura, tutto in cartelle temporanee."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        tmp = self._tmp.name
+        self.audit = ag.AuditLog(os.path.join(tmp, "audit.jsonl"))
+        self.gestori = {
+            cat: ag.GestoreRisorseVerticali(
+                os.path.join(tmp, f"db_{cat}.sqlite3"), self.audit)
+            for cat in ag.RISORSA_VERTICALI}
+        self.motore = ag.MotoreComposizionePacchetti(
+            self.audit, os.path.join(tmp, "pacchetti.sqlite3"), self.gestori)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _risorsa(self, categoria, nome, area, prezzo, extra=None):
+        meta = {"prezzo_giorno": prezzo}
+        if extra:
+            meta.update(extra)
+        with redirect_stdout(io.StringIO()):
+            rid = self.gestori[categoria].inserisci(nome, "contatto", area, meta)
+            self.gestori[categoria].approva(rid, "test")
+        return rid
+
+    def _scadi(self, pacchetto_id):
+        """Forza la scadenza nel passato (simula trascorrere delle 24h)."""
+        con = sqlite3.connect(self.motore.db_path)
+        with con:
+            con.execute("UPDATE pacchetti SET data_scadenza='2000-01-01T00:00:00' "
+                        "WHERE id=?", (pacchetto_id,))
+        con.close()
+
+    def _pacchetto_completo(self, area="Como", prezzo=100):
+        for cat in ag.RISORSA_VERTICALI:
+            self._risorsa(cat, f"{cat}-1", area, prezzo)
+
+    def test_composizione_pacchetto_ok(self):
+        self._pacchetto_completo()
+        res = self.motore.componi("Como", 2000, "2026-07-01", "2026-07-05")
+        self.assertEqual(res["esito"], "ok")
+        self.assertTrue(res["codice"].startswith("PAC-"))
+        self.assertEqual(res["stato"], "in_attesa")
+        self.assertEqual(len(res["risorse"]), 4)
+        self.assertEqual(res["mancanti"], [])
+
+    def test_composizione_budget_insufficiente(self):
+        for cat in ag.RISORSA_VERTICALI:
+            self._risorsa(cat, f"{cat}-1", "Como", 1000)
+        # tetto = 400/4 = 100 < 1000 -> tutte le categorie mancanti
+        res = self.motore.componi("Como", 400, "2026-07-01", "2026-07-05")
+        self.assertNotEqual(res["esito"], "ok")
+        self.assertEqual(sorted(res["mancanti"]), sorted(ag.RISORSA_VERTICALI))
+        self.assertEqual(res["stato"], "in_composizione")
+
+    def test_fallback_scadenza_24h(self):
+        self._risorsa("immobili", "imm-cheap", "Como", 100)   # id 1 (scelto)
+        self._risorsa("immobili", "imm-alt", "Como", 150)     # id 2 (alternativa)
+        for cat in ("mezzi", "talento", "esperienze"):
+            self._risorsa(cat, f"{cat}-1", "Como", 100)
+        res = self.motore.componi("Como", 2000, "2026-07-01", "2026-07-05")
+        self.assertEqual(res["risorse"]["immobili"], 1)
+        pid = res["id"]
+        self.motore.invia_richieste_partner(pid)
+        self._scadi(pid)
+        self.motore.verifica_scadenze()
+        risorse = json.loads(self.motore.get_pacchetto(pid)["risorse_json"])
+        self.assertEqual(risorse["immobili"], 2)  # passato all'alternativa
+
+    def test_fallback_max_tentativi(self):
+        # Una sola risorsa per categoria: nessuna alternativa possibile.
+        self._pacchetto_completo()
+        res = self.motore.componi("Como", 2000, "2026-07-01", "2026-07-05")
+        pid = res["id"]
+        self.motore.invia_richieste_partner(pid)
+        for _ in range(3):
+            self._scadi(pid)
+            self.motore.verifica_scadenze()
+        self.assertEqual(self.motore.get_pacchetto(pid)["stato"], "scaduto")
+
+    def test_registra_risposta_confermata(self):
+        self._pacchetto_completo()
+        res = self.motore.componi("Como", 2000, "2026-07-01", "2026-07-05")
+        pid = res["id"]
+        self.motore.invia_richieste_partner(pid)
+        for req in self.motore.get_richieste(pid):
+            self.motore.registra_risposta_partner(req["id"], "confermata", "ok")
+        self.assertEqual(self.motore.get_pacchetto(pid)["stato"], "confermato")
+
+    def test_registra_risposta_rifiutata(self):
+        self._risorsa("immobili", "imm-cheap", "Como", 100)   # id 1
+        self._risorsa("immobili", "imm-alt", "Como", 150)     # id 2 (alternativa)
+        for cat in ("mezzi", "talento", "esperienze"):
+            self._risorsa(cat, f"{cat}-1", "Como", 100)
+        res = self.motore.componi("Como", 2000, "2026-07-01", "2026-07-05")
+        pid = res["id"]
+        self.motore.invia_richieste_partner(pid)
+        imm = next(r for r in self.motore.get_richieste(pid)
+                   if r["risorsa_db"] == "immobili")
+        self.assertTrue(self.motore.registra_risposta_partner(
+            imm["id"], "rifiutata", "non disponibile"))
+        risorse = json.loads(self.motore.get_pacchetto(pid)["risorse_json"])
+        self.assertEqual(risorse["immobili"], 2)  # fallback all'alternativa
+        nuove = [r for r in self.motore.get_richieste(pid)
+                 if r["risorsa_db"] == "immobili" and r["risorsa_id"] == 2
+                 and r["stato"] == "inviata"]
+        self.assertEqual(len(nuove), 1)
 
 
 if __name__ == "__main__":
