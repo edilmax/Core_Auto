@@ -40,6 +40,7 @@ import urllib.request
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from email.message import EmailMessage
+from email.mime.text import MIMEText
 from dataclasses import dataclass, field, fields, asdict
 from typing import Callable, List, Optional
 
@@ -386,6 +387,64 @@ def crea_esecutore_smtp(credenziali: CredenzialiSMTP) -> Callable[["Bozza"], Non
         print(f"[INVIATO] Email recapitata a {bozza.destinatario} via {credenziali.host}.")
 
     return _invia
+
+
+# Segnaposto della password Mailtrap nel .env: se ancora presente, la notifica
+# non parte (evita login con un valore fittizio).
+_SMTP_PASS_SEGNAPOSTO = "tuo_password_mailtrap_qui"
+
+
+def invia_notifica_email(oggetto: str, corpo: str) -> bool:
+    """Invia una email di NOTIFICA di sistema (es. i link magici generati a fine
+    ciclo di scraping) tramite la configurazione SMTP del .env. Pensata per
+    Mailtrap (STARTTLS su porta 2525) ma valida per qualsiasi server STARTTLS.
+    Usa solo la libreria standard (smtplib + email.mime).
+
+    Variabili d'ambiente lette:
+      SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, NOTIFICA_EMAIL.
+
+    NON solleva eccezioni: una notifica non deve mai interrompere il ciclo.
+    Restituisce True se l'email parte, False se la config manca o l'invio fallisce.
+    A differenza di GestoreBozze.invia(), questo e' un canale di servizio interno
+    (verso il proprietario) e non passa dal gate di approvazione umana.
+    """
+    host = os.environ.get("SMTP_HOST", "").strip()
+    porta = os.environ.get("SMTP_PORT", "").strip()
+    utente = os.environ.get("SMTP_USER", "").strip()
+    password = os.environ.get("SMTP_PASS", "").strip()
+    mittente = os.environ.get("SMTP_FROM", "").strip() or utente
+    destinatario = os.environ.get("NOTIFICA_EMAIL", "").strip()
+
+    mancanti = [nome for nome, valore in (
+        ("SMTP_HOST", host), ("SMTP_PORT", porta), ("SMTP_USER", utente),
+        ("SMTP_PASS", password), ("NOTIFICA_EMAIL", destinatario)) if not valore]
+    if mancanti:
+        print(f"[NOTIFICA] Config SMTP incompleta ({', '.join(mancanti)}): "
+              "notifica non inviata.")
+        return False
+    if password == _SMTP_PASS_SEGNAPOSTO:
+        print("[NOTIFICA] SMTP_PASS e' ancora un segnaposto nel .env: "
+              "notifica non inviata.")
+        return False
+
+    messaggio = MIMEText(corpo, _charset="utf-8")
+    messaggio["Subject"] = oggetto
+    messaggio["From"] = mittente
+    messaggio["To"] = destinatario
+
+    try:
+        with smtplib.SMTP(host, int(porta), timeout=30) as server:
+            server.ehlo()
+            if server.has_extn("starttls"):
+                server.starttls()  # crea da sola un contesto SSL sicuro di default
+                server.ehlo()
+            server.login(utente, password)
+            server.send_message(messaggio)
+        print(f"[NOTIFICA] Email '{oggetto}' inviata a {destinatario} via {host}.")
+        return True
+    except (OSError, smtplib.SMTPException) as e:
+        print(f"[NOTIFICA] Invio fallito ({e}).")
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -825,6 +884,12 @@ class DatabaseCandidati:
         con.execute("PRAGMA foreign_keys=ON;")
         return con
 
+    def connessione(self) -> sqlite3.Connection:
+        """Connessione pubblica (con foreign_keys attive) per i moduli che
+        scrivono direttamente sul DB: ingest VIP, flash host, link magici, iCal.
+        Evita l'accesso al membro protetto _apri da fuori dalla classe."""
+        return self._apri()
+
     def _init_schema(self) -> None:
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         con = self._apri()
@@ -899,6 +964,15 @@ class DatabaseCandidati:
                             "idx_link_magici_token ON link_magici_log(token)")
                 con.execute("CREATE INDEX IF NOT EXISTS "
                             "idx_ical_sync_candidato ON ical_sync_log(candidato_url)")
+                # Indici di performance su candidati: ORDER BY punteggio (top
+                # opportunita'/migliori), WHERE stato (pulizia flash), GROUP BY
+                # paese/localita (report globale e dashboard).
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_candidati_punteggio ON candidati(punteggio DESC)")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_candidati_stato ON candidati(stato)")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_candidati_paese_localita ON candidati(paese, localita)")
                 # FASE 3: cache dello scraping HTML su filesystem + indice DB.
                 con.execute("""
                     CREATE TABLE IF NOT EXISTS cache_scraping (
@@ -1053,7 +1127,41 @@ class DatabaseCandidati:
                      json.dumps(dati, ensure_ascii=False)))
         finally:
             con.close()
+        # Pulizia opportunistica delle voci scadute: tiene la cache snella.
+        self.cache_pulisci_scaduti()
         return percorso
+
+    def cache_pulisci_scaduti(self, validita_secondi: int = 86400) -> int:
+        """Cancella i file HTML e le righe di cache piu' vecchi di
+        'validita_secondi' (default 24h). Robusto: gli errori su singolo file
+        non interrompono la pulizia. Restituisce il numero di voci rimosse."""
+        soglia = datetime.datetime.now() - datetime.timedelta(seconds=validita_secondi)
+        rimossi = 0
+        con = self._apri()
+        try:
+            with con:
+                righe = con.execute(
+                    "SELECT url, percorso_file, timestamp FROM cache_scraping"
+                ).fetchall()
+                for url, percorso_file, ts in righe:
+                    try:
+                        scaduto = (not ts or
+                                   datetime.datetime.fromisoformat(ts) < soglia)
+                    except ValueError:
+                        scaduto = True  # timestamp illeggibile: meglio rimuovere
+                    if not scaduto:
+                        continue
+                    if percorso_file and os.path.exists(percorso_file):
+                        try:
+                            os.remove(percorso_file)
+                        except OSError as e:
+                            logging.warning("Cache: file %s non rimosso (%s).",
+                                            percorso_file, e)
+                    con.execute("DELETE FROM cache_scraping WHERE url = ?", (url,))
+                    rimossi += 1
+        finally:
+            con.close()
+        return rimossi
 
 
 class IFonteRicerca(ABC):
@@ -1567,7 +1675,7 @@ class IngestoreVIP:
         indirizzo, testo, url. Inserisce ognuno come candidato VIP."""
         adesso = datetime.datetime.now().isoformat(timespec="seconds")
         inseriti, errori = 0, 0
-        con = self.database._apri()
+        con = self.database.connessione()
         try:
             for annuncio in annunci:
                 try:
@@ -1631,7 +1739,7 @@ class FlashHostManager:
         scadenza = (adesso + datetime.timedelta(days=self.DURATA_GIORNI)
                     ).date().isoformat()
         url = dati.get("url") or f"flash://{secrets.token_hex(8)}"
-        con = self.database._apri()
+        con = self.database.connessione()
         try:
             with con:
                 con.execute(
@@ -1657,7 +1765,7 @@ class FlashHostManager:
         """Cancella gli annunci flash con data_scadenza passata. Restituisce
         il numero di annunci rimossi."""
         oggi = datetime.date.today().isoformat()
-        con = self.database._apri()
+        con = self.database.connessione()
         try:
             with con:
                 cur = con.execute(
@@ -1684,7 +1792,7 @@ class LinkMagiciEngine:
     def _genera(self, candidato_url: str, ruolo: str) -> str:
         token = secrets.token_urlsafe(24)
         adesso = datetime.datetime.now().isoformat(timespec="seconds")
-        con = self.database._apri()
+        con = self.database.connessione()
         try:
             with con:
                 con.execute(
@@ -1707,7 +1815,7 @@ class LinkMagiciEngine:
         """Estrae il token dalla URL completa o accetta il token nudo;
         restituisce i dati del link (o None se inesistente)."""
         token = token.rsplit("/", 1)[-1]
-        con = self.database._apri()
+        con = self.database.connessione()
         try:
             riga = con.execute(
                 "SELECT candidato_url, ruolo, azione, usato FROM "
@@ -1727,7 +1835,7 @@ class LinkMagiciEngine:
         if dati is None or dati["usato"]:
             return False
         adesso = datetime.datetime.now().isoformat(timespec="seconds")
-        con = self.database._apri()
+        con = self.database.connessione()
         try:
             with con:
                 con.execute(
@@ -1775,7 +1883,7 @@ class iCalSyncEngine:
             self.audit.registra("ical_sync", {"candidato": candidato_url,
                                               "esito": f"parse fallito: {e}"})
             return {"letti": 0, "importati": 0, "esito": "parse fallito"}
-        con = self.database._apri()
+        con = self.database.connessione()
         try:
             with con:
                 for componente in calendario.walk("VEVENT"):
@@ -1821,7 +1929,7 @@ class iCalSyncEngine:
         except ImportError:
             logging.warning("icalendar non installato: feed non generato.")
             return ""
-        con = self.database._apri()
+        con = self.database.connessione()
         try:
             righe = con.execute(
                 "SELECT check_in, check_out, ospite_nome, uid_ical FROM "
@@ -2052,7 +2160,7 @@ class AssistenteGestionale:
         nome = input("Nome campagna: ").strip()
         if not nome:
             return
-        mercati = []
+        mercati: List[MercatoTarget] = []
         while True:
             citta = input(f"Mercato {len(mercati) + 1} - citta' "
                           "(vuoto = fine): ").strip()
@@ -2174,6 +2282,118 @@ class AssistenteGestionale:
             f.write(feed)
         print(f"[OK] Feed iCal salvato in {percorso}")
 
+    # ----------------------- Dashboard (sola lettura) -----------------------
+    def _conta_errori_audit_recenti(self, ore: int = 24):
+        """Conta gli eventi di errore nelle ultime 'ore' leggendo l'audit log
+        (JSONL via self.audit). In questo progetto l'audit NON e' una tabella
+        SQLite con colonna 'livello': e' un file JSONL, quindi si conta dal
+        file gli eventi il cui nome inizia per 'errore'. Su problemi di lettura
+        si restituisce 'N/A'."""
+        try:
+            soglia = datetime.datetime.now() - datetime.timedelta(hours=ore)
+            quanti = 0
+            with open(self.audit.percorso, "r", encoding="utf-8") as f:
+                for riga in f:
+                    riga = riga.strip()
+                    if not riga:
+                        continue
+                    try:
+                        evento = json.loads(riga)
+                        quando = datetime.datetime.fromisoformat(
+                            evento.get("timestamp", ""))
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+                    if (quando >= soglia
+                            and str(evento.get("evento", "")).startswith("errore")):
+                        quanti += 1
+            return quanti
+        except OSError:
+            return "N/A"
+
+    def mostra_dashboard(self) -> None:
+        """Pannello di sintesi a SOLA LETTURA del progetto. Usa solo self.db e
+        self.audit gia' presenti: query SQLite dirette su candidati e
+        campagne_stato (ogni blocco protetto da OperationalError -> 'N/A' se la
+        tabella non esiste ancora) ed errori recenti dall'audit. Nessuna azione
+        esterna, nessuna scrittura: solo print formattato."""
+        # I caratteri box-drawing richiedono stdout UTF-8 (su Windows la code
+        # page di default potrebbe non gestirli): riconfiguriamo in modo difensivo.
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+        except (AttributeError, ValueError):
+            pass
+
+        NA = "N/A"
+        # --- Candidati: totale, ultimo trovato, top mercati per localita ---
+        try:
+            con = sqlite3.connect(self.db.db_path)
+            try:
+                totale, ultimo = con.execute(
+                    "SELECT COUNT(*), MAX(data_trovato) FROM candidati").fetchone()
+                per_localita = con.execute(
+                    "SELECT localita, COUNT(*) FROM candidati "
+                    "GROUP BY localita ORDER BY COUNT(*) DESC, localita LIMIT 5"
+                ).fetchall()
+            finally:
+                con.close()
+            tot_candidati = totale or 0
+            ultimo_trovato = ultimo or "-"
+        except sqlite3.OperationalError:
+            tot_candidati, ultimo_trovato, per_localita = NA, NA, []
+
+        # --- Campagne autorizzate: nome, eseguiti_oggi, ultimo_eseguito ---
+        try:
+            con = sqlite3.connect(self.db.db_path)
+            try:
+                campagne = con.execute(
+                    "SELECT nome, eseguiti_oggi, ultimo_eseguito "
+                    "FROM campagne_stato WHERE autorizzata = 1 ORDER BY nome"
+                ).fetchall()
+            finally:
+                con.close()
+        except sqlite3.OperationalError:
+            campagne = NA
+
+        # --- Errori nelle ultime 24h (dall'audit log JSONL) ---
+        errori_24h = self._conta_errori_audit_recenti(24)
+
+        # --- Disegno della tabella ASCII (box drawing) ---
+        W = 56  # larghezza dell'area di contenuto
+        def riga(testo: str = "") -> str:
+            return f"│ {testo:<{W}} │"
+        bordo_top = "┌" + "─" * (W + 2) + "┐"
+        bordo_mid = "├" + "─" * (W + 2) + "┤"
+        bordo_bot = "└" + "─" * (W + 2) + "┘"
+
+        righe = [bordo_top, riga(f"{'DASHBOARD - TavolaVIP':^{W}}"), bordo_mid]
+        righe.append(riga(f"Candidati totali     : {tot_candidati}"))
+        righe.append(riga(f"Ultimo trovato       : {str(ultimo_trovato)[:33]}"))
+        righe.append(riga(f"Errori (ultime 24h)  : {errori_24h}"))
+        righe.append(bordo_mid)
+
+        righe.append(riga("Top mercati (per n. candidati)"))
+        if per_localita == [] and tot_candidati == NA:
+            righe.append(riga(f"  {NA}"))
+        elif not per_localita:
+            righe.append(riga("  (nessun candidato)"))
+        else:
+            for localita, quanti in per_localita:
+                righe.append(riga(f"  {str(localita)[:34]:<36}{quanti:>5}"))
+        righe.append(bordo_mid)
+
+        righe.append(riga("Campagne attive"))
+        if campagne == NA:
+            righe.append(riga(f"  {NA}"))
+        elif not campagne:
+            righe.append(riga("  (nessuna campagna autorizzata)"))
+        else:
+            for nome, eseguiti, ultimo_eseguito in campagne:
+                ts = (str(ultimo_eseguito)[:16] if ultimo_eseguito else "mai")
+                righe.append(riga(f"  {str(nome)[:22]:<24}oggi:{eseguiti or 0:<4}{ts}"))
+        righe.append(bordo_bot)
+
+        print("\n".join(righe))
+
 
 def esegui_campagna_cli(nome: str) -> int:
     """Entry-point non interattivo (Task Scheduler): nessun prompt.
@@ -2251,11 +2471,17 @@ def main() -> None:
                         help="genera il feed iCal del candidato su stdout")
     parser.add_argument("--risolvi-link", metavar="TOKEN",
                         help="risolve un link magico e stampa i dati in JSON")
+    parser.add_argument("--dashboard", action="store_true",
+                        help="mostra un pannello di sintesi (sola lettura) ed esce")
     parser.add_argument("--menu", action="store_true",
                         help="avvia il menu interattivo (default)")
     argomenti = parser.parse_args()
     logging.basicConfig(level=logging.ERROR)  # traceback degli errori su stderr
 
+    if argomenti.dashboard:
+        assistente = AssistenteGestionale()
+        assistente.mostra_dashboard()
+        sys.exit(0)
     if argomenti.esegui_campagna:
         raise SystemExit(esegui_campagna_cli(argomenti.esegui_campagna))
     if (argomenti.ingesta_vip or argomenti.flash_host or argomenti.sync_ical
@@ -2283,14 +2509,14 @@ def main() -> None:
         except Exception as e:
             logging.exception("Comando di report fallito")
             print(f"[ERRORE] {e}", file=sys.stderr)
-            raise SystemExit(1)
+            raise SystemExit(1) from e
     try:
         AssistenteGestionale().menu()
     except (KeyboardInterrupt, EOFError):
         print("\nUscita.")
-    except Exception:
+    except Exception as exc:
         logging.exception("Errore non gestito nel menu")
-        raise SystemExit(1)
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":
