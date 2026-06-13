@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_48eb1ef3ac5e967761c37acdd35ea9c8 {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+
+            <style>html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            </style>
+
+            <style>#map {
+                position:absolute;
+                top:0;
+                bottom:0;
+                right:0;
+                left:0;
+                }
+            </style>
+
+            <script>
+                L_NO_TOUCH = false;
+                L_DISABLE_3D = false;
+            </script>
+
+        
+</head>
+<body>
+    
+    
+            <div class="folium-map" id="map_48eb1ef3ac5e967761c37acdd35ea9c8" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_48eb1ef3ac5e967761c37acdd35ea9c8 = L.map(
+                "map_48eb1ef3ac5e967761c37acdd35ea9c8",
+                {
+                    center: [42.8256, 8.8521],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 12,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
+
+                }
+            );
+
+            
+
+        
+    
+            var tile_layer_3c5272ebbb7a17576459e3d77feff19b = L.tileLayer(
+                "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                {
+  "minZoom": 0,
+  "maxZoom": 18,
+  "maxNativeZoom": 18,
+  "noWrap": false,
+  "attribution": "\u00a9 \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_3c5272ebbb7a17576459e3d77feff19b.addTo(map_48eb1ef3ac5e967761c37acdd35ea9c8);
+        
+    
+            var marker_3cba6b47577f137b4b5b05d9e8de0bdb = L.marker(
+                [42.8256, 8.8521],
+                {
+}
+            ).addTo(map_48eb1ef3ac5e967761c37acdd35ea9c8);
+        
+    
+            var icon_4ed63063f6c638caffb0931d9e477de1 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "red",
+  "iconColor": "white",
+  "icon": "cloud",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_b0476f1ccfe3d6b5007fac7ec7de6f53 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_3d8693185588fdeb1691b56607a66157 = $(`<div id="html_3d8693185588fdeb1691b56607a66157" style="width: 100.0%; height: 100.0%;"><b>KING LOCATOR PRO 2.1</b><br><b>number:</b> +39 351 575 4072<br><b>country:</b> IT<br><b>coordinates:</b> [42.8256, 8.8521]<br><b>carrier:</b> SIMULATED DATA<br></div>`)[0];
+                popup_b0476f1ccfe3d6b5007fac7ec7de6f53.setContent(html_3d8693185588fdeb1691b56607a66157);
+            
+        
+
+        marker_3cba6b47577f137b4b5b05d9e8de0bdb.bindPopup(popup_b0476f1ccfe3d6b5007fac7ec7de6f53)
+        ;
+
+        
+    
+    
+                marker_3cba6b47577f137b4b5b05d9e8de0bdb.setIcon(icon_4ed63063f6c638caffb0931d9e477de1);
+            
+</script>
+</html>

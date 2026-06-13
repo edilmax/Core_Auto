@@ -1,0 +1,2297 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Assistente Gestionale - Progetto TavolaVIP
+==========================================
+
+Strumento LOCALE di supporto. Aiuta a:
+  1. Organizzare la ricerca di alloggi (criteri, query, confronto candidati).
+  2. Preparare BOZZE di email e di testi per i social.
+
+Principio di sicurezza fondamentale (NON negoziabile):
+  - Lo strumento NON ha autonomia completa.
+  - Ogni azione verso l'esterno (invio email, pubblicazione social, richiesta web)
+    richiede l'APPROVAZIONE UMANA ESPLICITA tramite il "gate" di approvazione.
+  - Di default le azioni esterne non sono collegate ad alcun servizio reale:
+    sono stub che vanno integrati consapevolmente dall'utente con credenziali proprie.
+
+Questo modulo e' volutamente ISOLATO: non importa ne' richiama nessuno degli altri
+script presenti nella cartella.
+"""
+
+import os
+import re
+import csv
+import sys
+import json
+import ssl
+import time
+import queue
+import random
+import secrets
+import sqlite3
+import smtplib
+import logging
+import argparse
+import datetime
+import threading
+import urllib.parse
+import urllib.request
+from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
+from email.message import EmailMessage
+from dataclasses import dataclass, field, fields, asdict
+from typing import Callable, List, Optional
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.path.join(BASE_DIR, "config_assistente.json")
+
+# Carica le variabili d'ambiente da un file .env locale (se presente).
+# Le credenziali NON vivono nel codice: stanno nel .env (escluso da git).
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(BASE_DIR, ".env"))
+except ImportError:
+    # python-dotenv non installato: si possono comunque usare le env var di sistema.
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Configurazione
+# ---------------------------------------------------------------------------
+def carica_config(percorso: str = CONFIG_PATH) -> dict:
+    """Carica la configurazione di sicurezza dal file JSON."""
+    if not os.path.exists(percorso):
+        raise FileNotFoundError(
+            f"Config non trovata: {percorso}. "
+            "Crea config_assistente.json prima di avviare."
+        )
+    with open(percorso, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+# ---------------------------------------------------------------------------
+# Audit log
+# ---------------------------------------------------------------------------
+class AuditLog:
+    """Registro append-only di tutte le richieste e decisioni umane."""
+
+    def __init__(self, percorso: str):
+        self.percorso = percorso
+        os.makedirs(os.path.dirname(percorso), exist_ok=True)
+
+    def registra(self, evento: str, dettagli: dict) -> None:
+        riga = {
+            "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+            "evento": evento,
+            "dettagli": dettagli,
+        }
+        with open(self.percorso, "a", encoding="utf-8") as f:
+            f.write(json.dumps(riga, ensure_ascii=False) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Gate di approvazione umana (cuore della sicurezza)
+# ---------------------------------------------------------------------------
+class ApprovalGate:
+    """
+    Intercetta ogni azione verso l'esterno e la blocca finche' un umano
+    non la approva esplicitamente. Nessuna azione esterna passa altrove.
+    """
+
+    def __init__(self, config: dict, audit: AuditLog,
+                 prompt: Callable[[str], str] = input):
+        sicurezza = config["sicurezza"]
+        self.autonomia_completa = sicurezza.get("autonomia_completa", False)
+        self.azioni_consentite = set(sicurezza.get("azioni_esterne_consentite", []))
+        self.azioni_vietate = set(sicurezza.get("azioni_sempre_vietate", []))
+        self.audit = audit
+        self._prompt = prompt  # iniettabile per i test
+
+    def richiedi_approvazione(self, tipo_azione: str, anteprima: str) -> bool:
+        """Restituisce True solo se un umano approva esplicitamente."""
+        if self.autonomia_completa:
+            # Salvaguardia: questo strumento non deve mai girare in piena autonomia.
+            raise RuntimeError(
+                "autonomia_completa=true non e' supportato per motivi di sicurezza."
+            )
+
+        if tipo_azione in self.azioni_vietate:
+            self.audit.registra("azione_vietata_bloccata", {"tipo": tipo_azione})
+            print(f"\n[BLOCCATO] L'azione '{tipo_azione}' e' sempre vietata.")
+            return False
+
+        if tipo_azione not in self.azioni_consentite:
+            self.audit.registra("azione_fuori_ambito", {"tipo": tipo_azione})
+            print(f"\n[BLOCCATO] '{tipo_azione}' non e' tra le azioni consentite.")
+            return False
+
+        print("\n" + "=" * 60)
+        print(f"RICHIESTA DI APPROVAZIONE -> {tipo_azione}")
+        print("-" * 60)
+        print(anteprima)
+        print("=" * 60)
+        risposta = self._prompt("Approvi questa azione? Scrivi 'APPROVO' per confermare: ").strip()
+        approvato = risposta == "APPROVO"
+
+        self.audit.registra(
+            "decisione_approvazione",
+            {"tipo": tipo_azione, "approvato": approvato, "risposta": risposta},
+        )
+        print("[APPROVATO]" if approvato else "[ANNULLATO]")
+        return approvato
+
+
+# ---------------------------------------------------------------------------
+# Ricerca alloggi
+# ---------------------------------------------------------------------------
+@dataclass
+class CriteriRicerca:
+    citta: str = ""
+    check_in: str = ""
+    check_out: str = ""
+    ospiti: int = 2
+    budget_max_notte: float = 0.0
+    note: str = ""
+
+
+@dataclass
+class Alloggio:
+    titolo: str
+    prezzo_notte: float
+    url: str = ""
+    note: str = ""
+
+
+class RicercaAlloggi:
+    """
+    Organizza la ricerca alloggi. NON esegue richieste web da sola:
+    costruisce query e confronta candidati. Qualsiasi chiamata verso
+    l'esterno deve passare dal gate di approvazione.
+    """
+
+    def __init__(self, gate: ApprovalGate, audit: AuditLog,
+                 percorso_file: Optional[str] = None):
+        self.gate = gate
+        self.audit = audit
+        self.percorso_file = percorso_file  # se None, i candidati restano in memoria
+        self.candidati: list[Alloggio] = []
+        self._carica()
+
+    def _carica(self) -> None:
+        """Ricarica dal disco i candidati salvati nelle sessioni precedenti."""
+        if not self.percorso_file or not os.path.exists(self.percorso_file):
+            return
+        try:
+            with open(self.percorso_file, "r", encoding="utf-8") as f:
+                dati = json.load(f)
+            self.candidati = [Alloggio(**d) for d in dati]
+            print(f"[OK] Ripresi {len(self.candidati)} candidati alloggio salvati.")
+        except (json.JSONDecodeError, TypeError, OSError) as e:
+            print(f"[ATTENZIONE] Candidati salvati illeggibili, si riparte da zero ({e}).")
+
+    def _salva(self) -> None:
+        if not self.percorso_file:
+            return
+        os.makedirs(os.path.dirname(self.percorso_file), exist_ok=True)
+        with open(self.percorso_file, "w", encoding="utf-8") as f:
+            json.dump([asdict(a) for a in self.candidati], f,
+                      ensure_ascii=False, indent=2)
+
+    def costruisci_query(self, criteri: CriteriRicerca) -> str:
+        parti = [criteri.citta, criteri.check_in, criteri.check_out,
+                 f"{criteri.ospiti} ospiti"]
+        if criteri.budget_max_notte:
+            parti.append(f"max {criteri.budget_max_notte}/notte")
+        query = " | ".join(p for p in parti if p)
+        self.audit.registra("query_costruita", {"query": query})
+        return query
+
+    def aggiungi_candidato(self, alloggio: Alloggio) -> None:
+        """Aggiunge un alloggio (inserito a mano o importato) e salva su disco."""
+        self.candidati.append(alloggio)
+        self._salva()
+        self.audit.registra("candidato_aggiunto", {"titolo": alloggio.titolo,
+                                                   "prezzo_notte": alloggio.prezzo_notte})
+
+    def classifica(self, budget_max: float) -> list[Alloggio]:
+        """Ordina i candidati per prezzo, evidenziando chi rispetta il budget."""
+        return sorted(
+            self.candidati,
+            key=lambda a: (budget_max and a.prezzo_notte > budget_max, a.prezzo_notte),
+        )
+
+    def cerca_online(self, query: str, esecutore: Optional[Callable[[str], str]] = None) -> Optional[str]:
+        """
+        Ricerca web reale: SOLO previa approvazione umana.
+        'esecutore' e' la funzione (fornita dall'utente) che effettua davvero
+        la richiesta. Se assente, l'azione resta una bozza.
+        """
+        if not self.gate.richiedi_approvazione("richiesta_web", f"Query: {query}"):
+            return None
+        if esecutore is None:
+            print("[INFO] Nessun esecutore web collegato: ricerca non eseguita.")
+            return None
+        risultato = esecutore(query)
+        self.audit.registra("azione_eseguita", {"tipo": "richiesta_web",
+                                                "query": query})
+        return risultato
+
+
+# ---------------------------------------------------------------------------
+# Gestione bozze (email + social)
+# ---------------------------------------------------------------------------
+@dataclass
+class Bozza:
+    tipo: str            # "email" | "social"
+    destinatario: str    # email o nome piattaforma
+    oggetto: str
+    corpo: str
+    creata_il: str = field(
+        default_factory=lambda: datetime.datetime.now().isoformat(timespec="seconds")
+    )
+
+
+class GestoreBozze:
+    """Crea e salva LOCALMENTE bozze. L'invio reale passa dal gate."""
+
+    def __init__(self, cartella: str, gate: ApprovalGate, audit: AuditLog):
+        self.cartella = cartella
+        self.gate = gate
+        self.audit = audit
+        os.makedirs(cartella, exist_ok=True)
+
+    def crea_email(self, destinatario: str, oggetto: str, corpo: str) -> Bozza:
+        bozza = Bozza("email", destinatario, oggetto, corpo)
+        self._salva(bozza)
+        return bozza
+
+    def crea_social(self, piattaforma: str, testo: str) -> Bozza:
+        bozza = Bozza("social", piattaforma, oggetto="(post social)", corpo=testo)
+        self._salva(bozza)
+        return bozza
+
+    def _salva(self, bozza: Bozza) -> str:
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        nome = f"bozza_{bozza.tipo}_{ts}.json"
+        percorso = os.path.join(self.cartella, nome)
+        with open(percorso, "w", encoding="utf-8") as f:
+            json.dump(asdict(bozza), f, ensure_ascii=False, indent=2)
+        self.audit.registra("bozza_creata", {"file": nome, "tipo": bozza.tipo})
+        print(f"[OK] Bozza salvata: {percorso}")
+        return percorso
+
+    def elenca_salvate(self) -> list[tuple[str, Bozza]]:
+        """Rilegge dal disco le bozze salvate, dalla piu' recente alla piu' vecchia.
+        I file illeggibili vengono saltati con un avviso, senza interrompere."""
+        bozze: list[tuple[str, Bozza]] = []
+        for nome in sorted(os.listdir(self.cartella), reverse=True):
+            if not (nome.startswith("bozza_") and nome.endswith(".json")):
+                continue
+            percorso = os.path.join(self.cartella, nome)
+            try:
+                with open(percorso, "r", encoding="utf-8") as f:
+                    dati = json.load(f)
+                bozze.append((nome, Bozza(**dati)))
+            except (json.JSONDecodeError, TypeError, OSError) as e:
+                print(f"[ATTENZIONE] Bozza illeggibile, saltata: {nome} ({e})")
+        return bozze
+
+    def invia(self, bozza: Bozza,
+              esecutore: Optional[Callable[[Bozza], None]] = None) -> bool:
+        """
+        Invio/pubblicazione reale: SOLO previa approvazione umana.
+        Senza 'esecutore' collegato, l'azione resta una simulazione.
+        """
+        tipo_azione = "invio_email" if bozza.tipo == "email" else "pubblicazione_social"
+        anteprima = (f"A: {bozza.destinatario}\n"
+                     f"Oggetto: {bozza.oggetto}\n\n{bozza.corpo}")
+        if not self.gate.richiedi_approvazione(tipo_azione, anteprima):
+            return False
+        if esecutore is None:
+            print("[INFO] Nessun esecutore collegato: invio simulato, niente inviato.")
+            return False
+        esecutore(bozza)
+        self.audit.registra("azione_eseguita", {"tipo": tipo_azione,
+                                                 "destinatario": bozza.destinatario})
+        return True
+
+
+# ---------------------------------------------------------------------------
+# Esecutore SMTP Gmail
+# ---------------------------------------------------------------------------
+@dataclass
+class CredenzialiSMTP:
+    """Credenziali SMTP. La password NON viene mai loggata ne' stampata."""
+    utente: str
+    password: str
+    host: str = "smtp.gmail.com"
+    porta: int = 465
+
+    def __repr__(self) -> str:  # evita di esporre la password in stack/trace
+        return f"CredenzialiSMTP(utente={self.utente!r}, host={self.host!r}, password=***)"
+
+
+def carica_credenziali_smtp(config: dict) -> CredenzialiSMTP:
+    """
+    Carica le credenziali in modo sicuro, con questa precedenza:
+      1. Variabili d'ambiente (consigliato):
+           GMAIL_USER          -> indirizzo email mittente
+           GMAIL_APP_PASSWORD  -> "password per le app" Google (16 caratteri)
+      2. Sezione "smtp" di config_assistente.json (sconsigliato per la password).
+
+    Le credenziali NON sono mai scritte in chiaro nel codice. Se mancano,
+    viene sollevato un errore esplicito senza esporre alcun segreto.
+    """
+    smtp_cfg = config.get("smtp", {}) or {}
+
+    utente = os.environ.get("GMAIL_USER") or smtp_cfg.get("utente", "")
+    password = os.environ.get("GMAIL_APP_PASSWORD") or smtp_cfg.get("app_password", "")
+    host = os.environ.get("GMAIL_SMTP_HOST") or smtp_cfg.get("host", "smtp.gmail.com")
+    porta = int(os.environ.get("GMAIL_SMTP_PORT") or smtp_cfg.get("porta", 465))
+
+    if not utente or not password:
+        raise RuntimeError(
+            "Credenziali SMTP mancanti. Imposta le variabili d'ambiente "
+            "GMAIL_USER e GMAIL_APP_PASSWORD (consigliato), oppure compila la "
+            "sezione \"smtp\" in config_assistente.json. "
+            "Usa una 'password per le app' Google, non la password dell'account."
+        )
+    return CredenzialiSMTP(utente=utente.strip(), password=password.strip(),
+                           host=host.strip(), porta=porta)
+
+
+def crea_esecutore_smtp(credenziali: CredenzialiSMTP) -> Callable[["Bozza"], None]:
+    """
+    Restituisce un esecutore che invia DAVVERO l'email via SMTP su SSL.
+    Va passato a GestoreBozze.invia(), che lo chiama SOLO dopo l'approvazione
+    umana ('APPROVO') del gate. Questa funzione non contiene alcuna logica di
+    approvazione: e' un puro trasporto, invocato solo a valle del gate.
+    """
+    def _invia(bozza: "Bozza") -> None:
+        if bozza.tipo != "email":
+            raise ValueError("L'esecutore SMTP gestisce solo bozze di tipo 'email'.")
+
+        msg = EmailMessage()
+        msg["From"] = credenziali.utente
+        msg["To"] = bozza.destinatario
+        msg["Subject"] = bozza.oggetto
+        msg.set_content(bozza.corpo)
+
+        contesto = ssl.create_default_context()
+        with smtplib.SMTP_SSL(credenziali.host, credenziali.porta,
+                              context=contesto, timeout=30) as server:
+            server.login(credenziali.utente, credenziali.password)
+            server.send_message(msg)
+        print(f"[INVIATO] Email recapitata a {bozza.destinatario} via {credenziali.host}.")
+
+    return _invia
+
+
+# ---------------------------------------------------------------------------
+# Input utente
+# ---------------------------------------------------------------------------
+def chiedi_int(messaggio: str, default: int = 0) -> int:
+    """Chiede un intero. Input vuoto -> default; input non numerico -> riprova."""
+    while True:
+        testo = input(messaggio).strip()
+        if not testo:
+            return default
+        try:
+            return int(testo)
+        except ValueError:
+            print("Valore non valido: inserisci un numero intero.")
+
+
+def chiedi_float(messaggio: str, default: float = 0.0) -> float:
+    """Chiede un numero. Input vuoto -> default; input non numerico -> riprova."""
+    while True:
+        testo = input(messaggio).strip()
+        if not testo:
+            return default
+        try:
+            return float(testo.replace(",", "."))
+        except ValueError:
+            print("Valore non valido: inserisci un numero (es. 85 o 85.50).")
+
+
+# ---------------------------------------------------------------------------
+# Motore di ricerca globale a campagne
+# ---------------------------------------------------------------------------
+# Il controllo umano si sposta dal singolo passaggio alla CAMPAGNA: il gate
+# approva una volta l'intero piano (mercati, budget, limiti, scadenza) e da
+# li' in poi il motore esegue i cicli da solo, dentro i limiti dichiarati.
+# Ogni ciclo resta tracciato nell'audit log; le campagne si possono sospendere.
+
+STATO_ATTESA = "in_attesa_approvazione"
+STATO_ATTIVA = "attiva"
+STATO_SOSPESA = "sospesa"
+
+_PREZZO_RE = re.compile(
+    r"(?:€|\$|£|EUR|USD|GBP)\s*(\d{1,5}(?:[.,]\d{1,2})?)"
+    r"|(\d{1,5}(?:[.,]\d{1,2})?)\s*(?:€|\$|£|EUR|USD|GBP|euro)",
+    re.IGNORECASE,
+)
+
+
+def estrai_prezzo(testo: str) -> float:
+    """Estrae il primo prezzo in euro da un testo libero; 0.0 se assente."""
+    trovato = _PREZZO_RE.search(testo or "")
+    if not trovato:
+        return 0.0
+    valore = trovato.group(1) or trovato.group(2)
+    return float(valore.replace(",", "."))
+
+
+@dataclass
+class MercatoTarget:
+    """Un mercato della campagna: citta', localizzazione e criteri di filtro."""
+    citta: str
+    check_in: str = ""
+    check_out: str = ""
+    ospiti: int = 2
+    budget_max_notte: float = 0.0
+    soglia_punteggio: float = 0.4
+    parole_escluse: list = field(default_factory=list)
+    paese: str = ""          # codice ISO: IT, FR, US...
+    lingua: str = "it"       # lingua delle query: it, en, fr, es, de
+    fuso_orario: str = ""    # es. Europe/Rome (per lo scheduling locale)
+    valuta: str = "EUR"      # EUR, USD, GBP...
+
+    def query(self) -> str:
+        parti = [f"alloggio {self.citta}", self.check_in, self.check_out,
+                 f"{self.ospiti} ospiti"]
+        if self.budget_max_notte:
+            parti.append(f"max {self.budget_max_notte:g} {self.valuta} a notte")
+        return " ".join(p for p in parti if p)
+
+
+# Catalogo predefinito dei mercati globali: la query viene localizzata
+# automaticamente (lingua) e il filtro prezzo usa la valuta del mercato.
+CATALOGO_MERCATI = {
+    # EUROPA
+    "Milano":    {"paese": "IT", "lingua": "it", "fuso_orario": "Europe/Rome",      "valuta": "EUR"},
+    "Roma":      {"paese": "IT", "lingua": "it", "fuso_orario": "Europe/Rome",      "valuta": "EUR"},
+    "Parigi":    {"paese": "FR", "lingua": "fr", "fuso_orario": "Europe/Paris",     "valuta": "EUR"},
+    "Madrid":    {"paese": "ES", "lingua": "es", "fuso_orario": "Europe/Madrid",    "valuta": "EUR"},
+    "Berlino":   {"paese": "DE", "lingua": "de", "fuso_orario": "Europe/Berlin",    "valuta": "EUR"},
+    "Amsterdam": {"paese": "NL", "lingua": "en", "fuso_orario": "Europe/Amsterdam", "valuta": "EUR"},
+    "Lisbona":   {"paese": "PT", "lingua": "en", "fuso_orario": "Europe/Lisbon",    "valuta": "EUR"},
+    # USA
+    "New York":    {"paese": "US", "lingua": "en", "fuso_orario": "America/New_York",    "valuta": "USD"},
+    "Los Angeles": {"paese": "US", "lingua": "en", "fuso_orario": "America/Los_Angeles", "valuta": "USD"},
+    "Miami":       {"paese": "US", "lingua": "en", "fuso_orario": "America/New_York",    "valuta": "USD"},
+    "Chicago":     {"paese": "US", "lingua": "en", "fuso_orario": "America/Chicago",     "valuta": "USD"},
+    # ASIA
+    "Tokyo":     {"paese": "JP", "lingua": "en", "fuso_orario": "Asia/Tokyo",     "valuta": "JPY"},
+    "Bangkok":   {"paese": "TH", "lingua": "en", "fuso_orario": "Asia/Bangkok",   "valuta": "THB"},
+    "Singapore": {"paese": "SG", "lingua": "en", "fuso_orario": "Asia/Singapore", "valuta": "SGD"},
+    # LATAM
+    "Buenos Aires":      {"paese": "AR", "lingua": "es", "fuso_orario": "America/Argentina/Buenos_Aires", "valuta": "ARS"},
+    "Rio de Janeiro":    {"paese": "BR", "lingua": "en", "fuso_orario": "America/Sao_Paulo",              "valuta": "BRL"},
+    "Citta del Messico": {"paese": "MX", "lingua": "es", "fuso_orario": "America/Mexico_City",            "valuta": "MXN"},
+}
+
+
+def mercato_da_catalogo(citta: str, **parametri) -> MercatoTarget:
+    """Crea un MercatoTarget dal catalogo globale; i parametri espliciti
+    hanno la precedenza. Citta' fuori catalogo: default generici."""
+    base = dict(CATALOGO_MERCATI.get(citta, {}))
+    base.update(parametri)
+    return MercatoTarget(citta=citta, **base)
+
+
+class QueryExpander:
+    """Espande la query base in varianti semantiche nella lingua del mercato.
+    La 'traduzione' avviene tramite dizionari statici locali (nessuna chiamata
+    esterna); lingua sconosciuta -> fallback inglese."""
+
+    TERMINI = {
+        "it": ["affitto breve", "appartamento vacanze", "affitto turistico",
+               "casa vacanze", "alloggio economico"],
+        "en": ["short term rental", "vacation apartment", "holiday let",
+               "serviced apartment", "furnished apartment"],
+        "fr": ["location courte duree", "appartement de vacances",
+               "location saisonniere", "logement touristique", "appart hotel"],
+        "es": ["alquiler corta estancia", "apartamento vacacional",
+               "alquiler turistico", "piso turistico", "alojamiento vacacional"],
+        "de": ["Kurzzeitmiete", "Ferienwohnung", "Apartment auf Zeit",
+               "moeblierte Wohnung", "Unterkunft guenstig"],
+    }
+    KEYWORD_LOCALI = {
+        "US": "Airbnb alternative",
+        "IT": "affitto turistico",
+        "FR": "meuble de tourisme",
+        "ES": "vivienda turistica",
+        "DE": "Ferienwohnung privat",
+    }
+
+    def espandi(self, mercato: MercatoTarget, max_varianti: int = 5) -> List[str]:
+        termini = list(self.TERMINI.get(mercato.lingua, self.TERMINI["en"]))
+        locale = self.KEYWORD_LOCALI.get(mercato.paese)
+        if locale and locale not in termini:
+            termini[-1] = locale  # l'ultima variante diventa la keyword locale
+        suffisso = ""
+        if mercato.budget_max_notte:
+            suffisso = f" max {mercato.budget_max_notte:g} {mercato.valuta}"
+        return [f"{termine} {mercato.citta}{suffisso}"
+                for termine in termini[:max_varianti]]
+
+
+@dataclass
+class CampagnaRicerca:
+    """Piano di ricerca approvato in blocco. Lo stato e' il kill switch."""
+    nome: str
+    mercati: list  # list[MercatoTarget]
+    max_richieste_giorno: int = 30
+    pausa_secondi: float = 2.0
+    scadenza: str = ""            # "AAAA-MM-GG"; vuota = senza scadenza
+    stato: str = STATO_ATTESA
+    approvata_il: str = ""
+    contatore_giorno: str = ""    # data a cui si riferisce richieste_giorno
+    richieste_giorno: int = 0
+
+    @classmethod
+    def da_dict(cls, dati: dict) -> "CampagnaRicerca":
+        # Ignora le chiavi sconosciute: il JSON puo' provenire da versioni vecchie.
+        noti = {f.name for f in fields(cls)}
+        dati = {k: v for k, v in dati.items() if k in noti}
+        dati["mercati"] = [MercatoTarget(**m) for m in dati.get("mercati", [])]
+        return cls(**dati)
+
+    def scaduta(self) -> bool:
+        return bool(self.scadenza) and datetime.date.today().isoformat() > self.scadenza
+
+    def anteprima(self) -> str:
+        righe = [
+            f"Campagna: {self.nome}",
+            f"Limiti: max {self.max_richieste_giorno} richieste/giorno, "
+            f"pausa {self.pausa_secondi:g}s tra le richieste",
+            f"Scadenza: {self.scadenza or 'nessuna'}",
+            "Mercati target:",
+        ]
+        for m in self.mercati:
+            righe.append(
+                f"  - {m.citta} | {m.check_in or '?'} -> {m.check_out or '?'} | "
+                f"{m.ospiti} ospiti | budget {m.budget_max_notte:g}/notte | "
+                f"escluse: {', '.join(m.parole_escluse) or '-'}")
+        righe.append("Approvando, i cicli futuri verranno eseguiti "
+                     "SENZA ulteriori conferme (finche' non sospendi la campagna).")
+        return "\n".join(righe)
+
+
+class ICampagnaProvider(ABC):
+    """Contratto di accesso alle campagne per il MotoreRicerca (Regola 1).
+    Il motore conosce SOLO questi quattro metodi, mai gli interni del gestore."""
+
+    @abstractmethod
+    def get_campagna(self, nome: str) -> Optional["CampagnaRicerca"]:
+        ...
+
+    @abstractmethod
+    def aggiorna_contatori(self, nome: str, eseguiti: int, trovati: int,
+                           timestamp: str) -> None:
+        ...
+
+    @abstractmethod
+    def get_stato_autorizzazione(self, nome: str) -> bool:
+        ...
+
+    @abstractmethod
+    def elenca_campagne_attive(self) -> List["CampagnaRicerca"]:
+        ...
+
+
+class GestoreCampagne(ICampagnaProvider):
+    """Campagne su SQLite (tabella campagne_stato, stesso file dei candidati):
+    unica fonte di verita' (Regola 2). Il vecchio campagne.json e' solo
+    bootstrap: migrato una volta, mai piu' riscritto.
+    L'approvazione umana resta UNA per campagna, tramite gate."""
+
+    def __init__(self, db_path: str, file_json_bootstrap: str,
+                 gate: ApprovalGate, audit: AuditLog):
+        self.db_path = db_path
+        self.file_json_bootstrap = file_json_bootstrap
+        self.gate = gate
+        self.audit = audit
+        self._init_schema()
+        self._migra_json_se_necessario()
+
+    def _connetti(self) -> sqlite3.Connection:
+        return sqlite3.connect(self.db_path)
+
+    def _init_schema(self) -> None:
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        con = self._connetti()
+        try:
+            with con:
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS campagne_stato (
+                        nome                TEXT PRIMARY KEY,
+                        eseguiti_oggi       INTEGER DEFAULT 0,
+                        ultimo_eseguito     TEXT,
+                        autorizzata         BOOLEAN DEFAULT 0,
+                        data_creazione      TEXT,
+                        configurazione_json TEXT)""")
+        finally:
+            con.close()
+
+    def _migra_json_se_necessario(self) -> None:
+        """Bootstrap una tantum dal vecchio campagne.json (Regola 2):
+        migra solo se la tabella e' vuota; le migrate NON sono autorizzate
+        (l'autorizzazione si riottiene dal gate, non si eredita)."""
+        if not os.path.exists(self.file_json_bootstrap):
+            return
+        con = self._connetti()
+        try:
+            if con.execute("SELECT COUNT(*) FROM campagne_stato").fetchone()[0]:
+                return  # migrazione gia' avvenuta
+            with open(self.file_json_bootstrap, "r", encoding="utf-8") as f:
+                elenco = json.load(f)
+            adesso = datetime.datetime.now().isoformat(timespec="seconds")
+            with con:
+                for dati in elenco:
+                    con.execute(
+                        "INSERT OR IGNORE INTO campagne_stato VALUES (?,?,?,?,?,?)",
+                        (dati["nome"], 0, None, 0, adesso,
+                         json.dumps(dati, ensure_ascii=False)))
+            self.audit.registra("campagne_migrate_da_json", {"quante": len(elenco)})
+        except (json.JSONDecodeError, TypeError, KeyError, OSError) as e:
+            print(f"[ATTENZIONE] Bootstrap da campagne.json non riuscito ({e}).")
+        finally:
+            con.close()
+
+    # ------------------------- ICampagnaProvider -------------------------
+    def get_campagna(self, nome: str) -> Optional[CampagnaRicerca]:
+        con = self._connetti()
+        try:
+            riga = con.execute(
+                "SELECT configurazione_json, eseguiti_oggi, ultimo_eseguito "
+                "FROM campagne_stato WHERE nome = ?", (nome,)).fetchone()
+        finally:
+            con.close()
+        if riga is None:
+            return None
+        campagna = CampagnaRicerca.da_dict(json.loads(riga[0]))
+        oggi = datetime.date.today().isoformat()
+        stesso_giorno = bool(riga[2]) and riga[2][:10] == oggi
+        campagna.contatore_giorno = oggi
+        campagna.richieste_giorno = riga[1] if stesso_giorno else 0
+        return campagna
+
+    def aggiorna_contatori(self, nome: str, eseguiti: int, trovati: int,
+                           timestamp: str) -> None:
+        con = self._connetti()
+        try:
+            with con:
+                riga = con.execute(
+                    "SELECT eseguiti_oggi, ultimo_eseguito FROM campagne_stato "
+                    "WHERE nome = ?", (nome,)).fetchone()
+                if riga is None:
+                    return
+                stesso_giorno = bool(riga[1]) and riga[1][:10] == timestamp[:10]
+                totale = (riga[0] if stesso_giorno else 0) + eseguiti
+                con.execute(
+                    "UPDATE campagne_stato SET eseguiti_oggi = ?, "
+                    "ultimo_eseguito = ? WHERE nome = ?",
+                    (totale, timestamp, nome))
+        finally:
+            con.close()
+        self.audit.registra("contatori_aggiornati", {
+            "nome": nome, "eseguiti": eseguiti, "trovati": trovati})
+
+    def get_stato_autorizzazione(self, nome: str) -> bool:
+        con = self._connetti()
+        try:
+            riga = con.execute(
+                "SELECT autorizzata FROM campagne_stato WHERE nome = ?",
+                (nome,)).fetchone()
+            return bool(riga and riga[0])
+        finally:
+            con.close()
+
+    def elenca_campagne_attive(self) -> List[CampagnaRicerca]:
+        con = self._connetti()
+        try:
+            righe = con.execute(
+                "SELECT configurazione_json FROM campagne_stato "
+                "WHERE autorizzata = 1").fetchall()
+        finally:
+            con.close()
+        return [CampagnaRicerca.da_dict(json.loads(r[0])) for r in righe]
+
+    # ----------------------- gestione (fuori interfaccia) -----------------------
+    def crea_campagna(self, campagna: CampagnaRicerca) -> bool:
+        """Inserisce la campagna; autorizzata=1 SOLO se il gate approva il piano.
+        Se il gate nega, resta registrata ma non autorizzata (approvabile dopo)."""
+        if self.get_campagna(campagna.nome) is not None:
+            print(f"Esiste gia' una campagna '{campagna.nome}'.")
+            return False
+        approvata = self.gate.richiedi_approvazione("campagna_ricerca_web",
+                                                    campagna.anteprima())
+        adesso = datetime.datetime.now().isoformat(timespec="seconds")
+        con = self._connetti()
+        try:
+            with con:
+                con.execute(
+                    "INSERT INTO campagne_stato VALUES (?,?,?,?,?,?)",
+                    (campagna.nome, 0, None, int(approvata), adesso,
+                     json.dumps(asdict(campagna), ensure_ascii=False)))
+        finally:
+            con.close()
+        self.audit.registra("campagna_creata",
+                            {"nome": campagna.nome, "autorizzata": approvata})
+        return approvata
+
+    def approva(self, nome: str) -> bool:
+        """Autorizza una campagna esistente, sempre passando dal gate."""
+        campagna = self.get_campagna(nome)
+        if campagna is None:
+            print(f"Campagna '{nome}' inesistente.")
+            return False
+        if self.get_stato_autorizzazione(nome):
+            return True
+        if not self.gate.richiedi_approvazione("campagna_ricerca_web",
+                                               campagna.anteprima()):
+            return False
+        self._imposta_autorizzazione(nome, True)
+        return True
+
+    def revoca(self, nome: str) -> None:
+        """Kill switch: la campagna smette di girare al prossimo ciclo."""
+        self._imposta_autorizzazione(nome, False)
+
+    def _imposta_autorizzazione(self, nome: str, autorizzata: bool) -> None:
+        con = self._connetti()
+        try:
+            with con:
+                con.execute(
+                    "UPDATE campagne_stato SET autorizzata = ? WHERE nome = ?",
+                    (int(autorizzata), nome))
+        finally:
+            con.close()
+        self.audit.registra("campagna_autorizzazione",
+                            {"nome": nome, "autorizzata": autorizzata})
+
+
+class DatabaseCandidati:
+    """Archivio SQLite dei candidati. L'unicita' per URL la garantisce il
+    database (UNIQUE INDEX + ON CONFLICT, Regola 4): nessun dedup in Python."""
+
+    _UPSERT_SQL = """
+        INSERT INTO candidati
+        (url_candidato, titolo, descrizione, prezzo, localita, fonte,
+         punteggio, data_trovato, campagna_origine, paese)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(url_candidato) DO UPDATE SET
+            titolo = excluded.titolo,
+            descrizione = excluded.descrizione,
+            prezzo = excluded.prezzo,
+            localita = excluded.localita,
+            fonte = excluded.fonte,
+            punteggio = excluded.punteggio,
+            data_trovato = excluded.data_trovato,
+            campagna_origine = excluded.campagna_origine,
+            paese = excluded.paese"""
+
+    # FASE 5: colonne aggiunte via ALTER TABLE (idempotente). Tutte con DEFAULT
+    # cosi' gli INSERT esistenti (lista colonne esplicita) restano validi e i
+    # test che leggono colonne specifiche non vengono toccati.
+    _COLONNE_ESTESE = [
+        ("tipo_struttura",    "TEXT DEFAULT ''"),
+        ("servizi_json",      "TEXT DEFAULT ''"),
+        ("capienza_persone",  "INTEGER DEFAULT 0"),
+        ("camere",            "INTEGER DEFAULT 0"),
+        ("bagni",             "INTEGER DEFAULT 0"),
+        ("host_email",        "TEXT DEFAULT ''"),
+        ("host_telefono",     "TEXT DEFAULT ''"),
+        ("host_nome",         "TEXT DEFAULT ''"),
+        ("stato",             "TEXT DEFAULT 'candidato'"),
+        ("modalita_ingresso", "TEXT DEFAULT 'scraping'"),
+        ("data_scadenza",     "TEXT DEFAULT ''"),
+        ("ical_url",          "TEXT DEFAULT ''"),
+        ("ical_last_sync",    "TEXT DEFAULT ''"),
+        ("link_magico",       "TEXT DEFAULT ''"),
+    ]
+
+    def __init__(self, db_path: str):
+        self.db_path = db_path
+        self._init_schema()
+
+    def _apri(self) -> sqlite3.Connection:
+        """Connessione con foreign_keys attive (Regola 2/6): l'enforcement
+        delle FK e' per-connessione, quindi va riattivato a ogni apertura."""
+        con = sqlite3.connect(self.db_path)
+        con.execute("PRAGMA foreign_keys=ON;")
+        return con
+
+    def _init_schema(self) -> None:
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        con = self._apri()
+        try:
+            # FASE 1: WAL (persistente sul file) + foreign_keys (per-connessione).
+            con.execute("PRAGMA journal_mode=WAL;")
+            con.execute("PRAGMA foreign_keys=ON;")
+            with con:
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS candidati (
+                        url_candidato    TEXT,
+                        titolo           TEXT NOT NULL,
+                        descrizione      TEXT DEFAULT '',
+                        prezzo           REAL DEFAULT 0,
+                        localita         TEXT NOT NULL,
+                        fonte            TEXT DEFAULT '',
+                        punteggio        REAL DEFAULT 0,
+                        data_trovato     TEXT NOT NULL,
+                        campagna_origine TEXT DEFAULT '',
+                        paese            TEXT DEFAULT '')""")
+                con.execute("CREATE UNIQUE INDEX IF NOT EXISTS "
+                            "idx_candidati_url ON candidati(url_candidato)")
+                # Migrazione per i database creati prima del multi-mercato.
+                colonne = [r[1] for r in
+                           con.execute("PRAGMA table_info(candidati)")]
+                if "paese" not in colonne:
+                    con.execute("ALTER TABLE candidati "
+                                "ADD COLUMN paese TEXT DEFAULT ''")
+                # FASE 5: ALTER TABLE idempotente per le colonne estese.
+                for nome_col, ddl in self._COLONNE_ESTESE:
+                    if nome_col not in colonne:
+                        con.execute(f"ALTER TABLE candidati "
+                                    f"ADD COLUMN {nome_col} {ddl}")
+                # FASE 6: tabelle nuove con FK su candidati(url_candidato) +
+                # indici su ogni foreign key.
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS prenotazioni (
+                        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                        candidato_url   TEXT REFERENCES candidati(url_candidato),
+                        ospite_nome     TEXT DEFAULT '',
+                        ospite_email    TEXT DEFAULT '',
+                        check_in        TEXT DEFAULT '',
+                        check_out       TEXT DEFAULT '',
+                        stato           TEXT DEFAULT 'richiesta',
+                        origine         TEXT DEFAULT '',
+                        uid_ical        TEXT DEFAULT '',
+                        data_creazione  TEXT)""")
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS link_magici_log (
+                        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                        candidato_url   TEXT REFERENCES candidati(url_candidato),
+                        token           TEXT,
+                        ruolo           TEXT DEFAULT '',
+                        azione          TEXT DEFAULT '',
+                        usato           INTEGER DEFAULT 0,
+                        data_creazione  TEXT,
+                        data_uso        TEXT DEFAULT '')""")
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS ical_sync_log (
+                        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                        candidato_url   TEXT REFERENCES candidati(url_candidato),
+                        ical_url        TEXT DEFAULT '',
+                        eventi_letti    INTEGER DEFAULT 0,
+                        eventi_importati INTEGER DEFAULT 0,
+                        esito           TEXT DEFAULT '',
+                        timestamp       TEXT)""")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_prenotazioni_candidato ON prenotazioni(candidato_url)")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_link_magici_candidato ON link_magici_log(candidato_url)")
+                con.execute("CREATE UNIQUE INDEX IF NOT EXISTS "
+                            "idx_link_magici_token ON link_magici_log(token)")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_ical_sync_candidato ON ical_sync_log(candidato_url)")
+                # FASE 3: cache dello scraping HTML su filesystem + indice DB.
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS cache_scraping (
+                        url             TEXT PRIMARY KEY,
+                        percorso_file   TEXT,
+                        timestamp       TEXT,
+                        dati_json       TEXT DEFAULT '')""")
+        finally:
+            con.close()
+
+    def upsert(self, candidato: dict,
+               conn: Optional[sqlite3.Connection] = None) -> None:
+        """Inserisce o aggiorna per URL (decide il database, non Python).
+        Con 'conn' usa la connessione/transazione del chiamante (Regola 3);
+        senza, apre e chiude una connessione propria."""
+        parametri = (candidato["url_candidato"], candidato["titolo"],
+                     candidato.get("descrizione", ""),
+                     candidato.get("prezzo", 0.0), candidato["localita"],
+                     candidato.get("fonte", ""), candidato.get("punteggio", 0.0),
+                     candidato["data_trovato"],
+                     candidato.get("campagna_origine", ""),
+                     candidato.get("paese", ""))
+        if conn is not None:
+            conn.execute(self._UPSERT_SQL, parametri)
+            return
+        con = self._apri()
+        try:
+            with con:
+                con.execute(self._UPSERT_SQL, parametri)
+        finally:
+            con.close()
+
+    def migliori(self, limite: int = 15) -> list:
+        con = self._apri()
+        try:
+            return con.execute(
+                "SELECT localita, punteggio, prezzo, titolo, url_candidato "
+                "FROM candidati ORDER BY punteggio DESC, "
+                "CASE WHEN prezzo > 0 THEN prezzo ELSE 999999 END "
+                "LIMIT ?", (limite,)).fetchall()
+        finally:
+            con.close()
+
+    def conta(self) -> int:
+        con = self._apri()
+        try:
+            return con.execute("SELECT COUNT(*) FROM candidati").fetchone()[0]
+        finally:
+            con.close()
+
+    # ------------------------- reporting globale -------------------------
+    def report_globale(self) -> dict:
+        """Statistiche aggregate per paese e mercato."""
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT COALESCE(NULLIF(paese, ''), '?'), localita, COUNT(*), "
+                "ROUND(AVG(punteggio), 2), "
+                "ROUND(AVG(CASE WHEN prezzo > 0 THEN prezzo END), 2) "
+                "FROM candidati GROUP BY 1, 2 ORDER BY 1, 2").fetchall()
+        finally:
+            con.close()
+        report = {"totale_candidati": 0, "paesi": {}}
+        for paese, localita, quanti, punteggio_medio, prezzo_medio in righe:
+            report["totale_candidati"] += quanti
+            voce = report["paesi"].setdefault(paese, {"candidati": 0,
+                                                      "mercati": {}})
+            voce["candidati"] += quanti
+            voce["mercati"][localita] = {"candidati": quanti,
+                                         "punteggio_medio": punteggio_medio,
+                                         "prezzo_medio": prezzo_medio}
+        return report
+
+    def top_opportunita(self, quanti: int) -> list:
+        """I migliori N candidati mondiali per punteggio (prezzo a parita')."""
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT paese, localita, punteggio, prezzo, titolo, "
+                "url_candidato, fonte FROM candidati "
+                "ORDER BY punteggio DESC, "
+                "CASE WHEN prezzo > 0 THEN prezzo ELSE 999999 END "
+                "LIMIT ?", (quanti,)).fetchall()
+        finally:
+            con.close()
+        chiavi = ("paese", "localita", "punteggio", "prezzo", "titolo",
+                  "url", "fonte")
+        return [dict(zip(chiavi, r)) for r in righe]
+
+    def esporta_csv(self, percorso: str) -> int:
+        """Esporta tutti i candidati in CSV leggibile da Excel
+        (UTF-8 con BOM, separatore ';'). Restituisce il numero di righe."""
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT url_candidato, titolo, descrizione, prezzo, localita, "
+                "paese, fonte, punteggio, data_trovato, campagna_origine "
+                "FROM candidati ORDER BY punteggio DESC").fetchall()
+        finally:
+            con.close()
+        with open(percorso, "w", encoding="utf-8-sig", newline="") as f:
+            scrittore = csv.writer(f, delimiter=";")
+            scrittore.writerow(["url", "titolo", "descrizione", "prezzo",
+                                "localita", "paese", "fonte", "punteggio",
+                                "data_trovato", "campagna_origine"])
+            scrittore.writerows(righe)
+        return len(righe)
+
+    # ------------------------- FASE 3: cache scraping -------------------------
+    def cache_leggi(self, url: str, validita_secondi: int = 3600) -> Optional[dict]:
+        """Restituisce i dati JSON in cache per 'url' se piu' recenti di
+        'validita_secondi' (default 1 ora), altrimenti None."""
+        con = self._apri()
+        try:
+            riga = con.execute(
+                "SELECT timestamp, dati_json FROM cache_scraping WHERE url = ?",
+                (url,)).fetchone()
+        finally:
+            con.close()
+        if riga is None or not riga[0]:
+            return None
+        try:
+            quando = datetime.datetime.fromisoformat(riga[0])
+        except ValueError:
+            return None
+        if (datetime.datetime.now() - quando).total_seconds() > validita_secondi:
+            return None
+        try:
+            return json.loads(riga[1]) if riga[1] else {}
+        except json.JSONDecodeError:
+            return None
+
+    def cache_scrivi(self, url: str, html: str, dati: dict,
+                     cartella: str) -> str:
+        """Salva l'HTML fisicamente in 'cartella' e indicizza url->file+dati
+        nella tabella cache_scraping. Restituisce il percorso del file."""
+        os.makedirs(cartella, exist_ok=True)
+        nome = secrets.token_hex(16) + ".html"
+        percorso = os.path.join(cartella, nome)
+        with open(percorso, "w", encoding="utf-8") as f:
+            f.write(html or "")
+        adesso = datetime.datetime.now().isoformat(timespec="seconds")
+        con = self._apri()
+        try:
+            with con:
+                con.execute(
+                    "INSERT INTO cache_scraping (url, percorso_file, timestamp, "
+                    "dati_json) VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(url) DO UPDATE SET percorso_file = excluded.percorso_file, "
+                    "timestamp = excluded.timestamp, dati_json = excluded.dati_json",
+                    (url, percorso, adesso,
+                     json.dumps(dati, ensure_ascii=False)))
+        finally:
+            con.close()
+        return percorso
+
+
+class IFonteRicerca(ABC):
+    """Contratto comune delle fonti di ricerca. Pure trasporto: il motore le
+    usa solo per campagne gia' approvate. 'intervallo_minimo' e' la distanza
+    minima in secondi tra due richieste alla stessa fonte (rate limit)."""
+
+    nome = "?"
+    intervallo_minimo = 1.0
+
+    @abstractmethod
+    def cerca(self, query: str, mercato: Optional[MercatoTarget] = None,
+              lingua: str = "") -> List[dict]:
+        ...
+
+
+class FonteBraveSearch(IFonteRicerca):
+    """Brave Search API (chiave BRAVE_API_KEY nel .env). Supporta la
+    localizzazione: paese e lingua del mercato passati all'API."""
+
+    nome = "brave_search"
+    intervallo_minimo = 1.1  # piano Free: 1 richiesta/secondo
+    ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
+
+    def __init__(self, api_key: str, timeout: int = 20,
+                 risultati_per_query: int = 20):
+        self.api_key = api_key
+        self.timeout = timeout
+        self.risultati_per_query = risultati_per_query
+
+    def cerca(self, query: str, mercato: Optional[MercatoTarget] = None,
+              lingua: str = "") -> List[dict]:
+        parametri = {"q": query, "count": self.risultati_per_query}
+        if mercato is not None and mercato.paese:
+            parametri["country"] = mercato.paese.lower()
+        if lingua:
+            parametri["search_lang"] = lingua
+        url = self.ENDPOINT + "?" + urllib.parse.urlencode(parametri)
+        richiesta = urllib.request.Request(url, headers={
+            "Accept": "application/json",
+            "X-Subscription-Token": self.api_key,
+        })
+        with urllib.request.urlopen(richiesta, timeout=self.timeout) as risposta:
+            dati = json.loads(risposta.read().decode("utf-8"))
+        return [{"titolo": r.get("title", ""),
+                 "url": r.get("url", ""),
+                 "descrizione": r.get("description", "")}
+                for r in (dati.get("web", {}) or {}).get("results", []) or []]
+
+
+class FonteDuckDuckGo(IFonteRicerca):
+    """API 'Instant Answer' di DuckDuckGo: gratuita, senza chiave.
+    Limite onesto: e' pensata per risposte enciclopediche, quindi per query
+    commerciali rende spesso pochi o zero risultati. Fonte di rinforzo."""
+
+    nome = "duckduckgo"
+    intervallo_minimo = 1.0
+    ENDPOINT = "https://api.duckduckgo.com/"
+
+    def __init__(self, timeout: int = 20):
+        self.timeout = timeout
+
+    def cerca(self, query: str, mercato: Optional[MercatoTarget] = None,
+              lingua: str = "") -> List[dict]:
+        url = self.ENDPOINT + "?" + urllib.parse.urlencode(
+            {"q": query, "format": "json", "no_html": 1, "no_redirect": 1})
+        richiesta = urllib.request.Request(url, headers={
+            "User-Agent": "AssistenteGestionale/0.1 (uso personale)"})
+        with urllib.request.urlopen(richiesta, timeout=self.timeout) as risposta:
+            dati = json.loads(risposta.read().decode("utf-8"))
+        risultati = []
+        voci = list(dati.get("RelatedTopics", []) or [])
+        for voce in voci:
+            if isinstance(voce, dict) and "Topics" in voce:  # categorie annidate
+                voci.extend(voce.get("Topics", []) or [])
+                continue
+            if isinstance(voce, dict) and voce.get("FirstURL") and voce.get("Text"):
+                risultati.append({"titolo": voce["Text"][:80],
+                                  "url": voce["FirstURL"],
+                                  "descrizione": voce["Text"]})
+        return risultati
+
+
+class FonteSerpApi(IFonteRicerca):
+    """Stub pronto per integrazione futura (https://serpapi.com).
+    Inattiva finche' SERPAPI_KEY non e' impostata e il metodo completato."""
+
+    nome = "serpapi"
+    intervallo_minimo = 1.0
+
+    def __init__(self, api_key: str = ""):
+        self.api_key = api_key
+
+    @property
+    def attiva(self) -> bool:
+        return bool(self.api_key)
+
+    def cerca(self, query: str, mercato: Optional[MercatoTarget] = None,
+              lingua: str = "") -> List[dict]:
+        if not self.api_key:
+            return []
+        raise NotImplementedError(
+            "FonteSerpApi: integrazione da completare prima dell'uso.")
+
+
+# Cartella di destinazione per l'HTML salvato dalla cache di scraping (FASE 3).
+CACHE_SCRAPING_DIR = os.path.join(BASE_DIR, "cache_scraping")
+
+_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
+    "(KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+]
+
+
+class FontePlaywrightStealth(IFonteRicerca):
+    """FASE 2 - Fonte di scraping headless con maschera anti-bot.
+
+    Playwright e playwright_stealth sono importati DENTRO cerca() (non a livello
+    di modulo): cosi' l'assistente e i 32 test girano anche senza il browser
+    installato. Se le librerie mancano o lo scraping fallisce, cerca() logga e
+    restituisce [], lasciando che il motore prosegua con Brave/DuckDuckGo (FASE 4).
+
+    sync_playwright() viene avviato per ogni chiamata, cosi' ogni thread del
+    ThreadPool del motore ha la sua istanza isolata (thread-safe)."""
+
+    nome = "playwright_stealth"
+    intervallo_minimo = 3.0
+    ENDPOINT = "https://duckduckgo.com/html/"
+
+    def __init__(self, database: Optional["DatabaseCandidati"] = None,
+                 cartella_cache: str = CACHE_SCRAPING_DIR,
+                 max_pagine: int = 1, headless: bool = True):
+        self.database = database
+        self.cartella_cache = cartella_cache
+        self.max_pagine = max_pagine
+        self.headless = headless
+
+    def cerca(self, query: str, mercato: Optional[MercatoTarget] = None,
+              lingua: str = "") -> List[dict]:
+        url = self.ENDPOINT + "?" + urllib.parse.urlencode({"q": query})
+
+        # FASE 3: se la cache su DB e' fresca (< 1 ora) si evita lo scraping.
+        if self.database is not None:
+            in_cache = self.database.cache_leggi(url)
+            if in_cache and in_cache.get("risultati"):
+                return in_cache["risultati"]
+
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            logging.warning("Playwright non installato: fonte stealth saltata "
+                            "(fallback su altre fonti).")
+            return []
+
+        # playwright_stealth ha due API a seconda della versione:
+        #   - >= 2.0: classe Stealth().apply_stealth_sync(page)
+        #   - < 2.0:  funzione stealth_sync(page)
+        # Risolviamo un unico callable applica_stealth(page) (o None se assente).
+        applica_stealth = None
+        try:
+            from playwright_stealth import Stealth
+            applica_stealth = Stealth().apply_stealth_sync
+        except ImportError:
+            try:
+                from playwright_stealth import stealth_sync as applica_stealth
+            except ImportError:
+                applica_stealth = None
+
+        try:
+            html, risultati = self._scrape(sync_playwright, applica_stealth,
+                                           url, mercato)
+        except Exception as e:  # qualsiasi errore -> fallback, non blocca il ciclo
+            logging.warning("Scraping Playwright fallito (%s): fallback.", e)
+            return []
+
+        if self.database is not None:
+            try:
+                self.database.cache_scrivi(url, html, {"risultati": risultati},
+                                           self.cartella_cache)
+            except Exception:
+                logging.warning("Salvataggio cache scraping non riuscito.")
+        return risultati
+
+    def _scrape(self, sync_playwright, applica_stealth, url: str,
+                mercato: Optional[MercatoTarget]):
+        """Esegue lo scraping vero. Isolato per rendere cerca() leggibile e per
+        contenere la logica che dipende dal browser. 'applica_stealth' e' il
+        callable di evasione (o None se la libreria non e' disponibile)."""
+        timezone = (mercato.fuso_orario if mercato and mercato.fuso_orario
+                    else "Europe/Rome")
+        viewport = {"width": random.choice([1280, 1366, 1440, 1920]),
+                    "height": random.choice([720, 768, 900, 1080])}
+        user_agent = random.choice(_USER_AGENTS)
+        risultati: List[dict] = []
+        html = ""
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=self.headless,
+                args=["--disable-blink-features=AutomationControlled"])
+            try:
+                contesto = browser.new_context(
+                    user_agent=user_agent, viewport=viewport,
+                    locale=(mercato.lingua if mercato else "it"),
+                    timezone_id=timezone)
+                page = contesto.new_page()
+                if applica_stealth is not None:
+                    applica_stealth(page)
+                # Maschera esplicita di navigator.webdriver.
+                page.add_init_script(
+                    "Object.defineProperty(navigator, 'webdriver', "
+                    "{get: () => undefined});")
+                # Route abort per media pesanti: piu' veloce e meno tracciabile.
+                page.route(
+                    re.compile(r"\.(png|jpg|jpeg|gif|svg|css|woff2?|ttf)$"),
+                    lambda route: route.abort())
+                page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                html = page.content()
+                risultati = self._estrai(page)
+                time.sleep(3)  # pausa tra le pagine (cortesia + anti-bot)
+            finally:
+                browser.close()
+        return html, risultati
+
+    def _estrai(self, page) -> List[dict]:
+        """Estrae candidati da JSON-LD e microdata schema.org della pagina."""
+        risultati: List[dict] = []
+        # JSON-LD
+        for blocco in page.query_selector_all('script[type="application/ld+json"]'):
+            try:
+                dati = json.loads(blocco.inner_text())
+            except (json.JSONDecodeError, AttributeError):
+                continue
+            for voce in (dati if isinstance(dati, list) else [dati]):
+                if not isinstance(voce, dict):
+                    continue
+                url_voce = voce.get("url") or voce.get("@id") or ""
+                if not url_voce:
+                    continue
+                risultati.append({
+                    "titolo": str(voce.get("name", ""))[:120],
+                    "url": url_voce,
+                    "descrizione": str(voce.get("description", ""))})
+        # Microdata (itemscope/itemprop)
+        for nodo in page.query_selector_all('[itemtype*="schema.org"]'):
+            try:
+                link = nodo.query_selector('[itemprop="url"] , a')
+                href = link.get_attribute("href") if link else None
+            except Exception:
+                href = None
+            if not href:
+                continue
+            nome_el = nodo.query_selector('[itemprop="name"]')
+            risultati.append({
+                "titolo": (nome_el.inner_text()[:120] if nome_el else ""),
+                "url": href,
+                "descrizione": ""})
+        return risultati
+
+
+class MotoreRicerca:
+    """
+    Esegue il ciclo di una campagna AUTORIZZATA. Parla con le campagne SOLO
+    tramite ICampagnaProvider (Regola 1) e scrive i candidati in un'unica
+    transazione SQLite: BEGIN IMMEDIATE -> COMMIT, ROLLBACK su qualsiasi
+    errore (Regola 3). Nessun prompt: il controllo umano e' avvenuto a monte,
+    approvando la campagna. Ogni ciclo finisce nell'audit log.
+    """
+
+    def __init__(self, provider: ICampagnaProvider, database: DatabaseCandidati,
+                 fonti, audit: AuditLog,
+                 sleep: Callable[[float], None] = time.sleep):
+        self.provider = provider
+        self.database = database
+        self.fonti = list(fonti) if isinstance(fonti, (list, tuple)) else [fonti]
+        self.audit = audit
+        self.expander = QueryExpander()
+        self._sleep = sleep      # iniettabile per i test
+        self._rate: dict = {}    # nome fonte -> [lock, istante ultima richiesta]
+
+    def _cerca_rate_limited(self, fonte: IFonteRicerca, query: str,
+                            mercato: MercatoTarget, pausa_campagna: float) -> List[dict]:
+        """Serializza le richieste verso la stessa fonte rispettando il suo
+        intervallo minimo (i thread paralleli non aggirano il rate limit)."""
+        stato = self._rate.setdefault(fonte.nome, [threading.Lock(), 0.0])
+        intervallo = max(getattr(fonte, "intervallo_minimo", 0.0), pausa_campagna)
+        with stato[0]:
+            attesa = intervallo - (time.monotonic() - stato[1])
+            if attesa > 0:
+                self._sleep(attesa)
+            stato[1] = time.monotonic()
+        return fonte.cerca(query, mercato, mercato.lingua)
+
+    def esegui(self, nome: str) -> dict:
+        riepilogo = {"campagna": nome, "eseguito": False, "richieste": 0,
+                     "archiviati": 0, "scartati": 0, "errori_fonti": 0,
+                     "archiviati_per_paese": {}, "motivo": ""}
+        if not self.provider.get_stato_autorizzazione(nome):
+            riepilogo["motivo"] = "campagna inesistente o non autorizzata"
+            self.audit.registra("ciclo_ricerca", riepilogo)
+            return riepilogo
+        campagna = self.provider.get_campagna(nome)
+        if campagna is None:
+            riepilogo["motivo"] = "campagna inesistente"
+            self.audit.registra("ciclo_ricerca", riepilogo)
+            return riepilogo
+        if campagna.scaduta():
+            riepilogo["motivo"] = "campagna scaduta"
+            self.audit.registra("ciclo_ricerca", riepilogo)
+            return riepilogo
+        disponibili = campagna.max_richieste_giorno - campagna.richieste_giorno
+        if disponibili <= 0:
+            riepilogo["motivo"] = "limite giornaliero di richieste gia' raggiunto"
+            self.audit.registra("ciclo_ricerca", riepilogo)
+            return riepilogo
+
+        adesso = datetime.datetime.now().isoformat(timespec="seconds")
+        coda: "queue.Queue" = queue.Queue()   # raccolta thread-safe
+        lucchetto = threading.Lock()
+        contatori = {"richieste": 0, "scartati": 0, "errori": 0}
+
+        def prenota_richiesta() -> bool:
+            with lucchetto:
+                if contatori["richieste"] >= disponibili:
+                    return False
+                contatori["richieste"] += 1
+                return True
+
+        def processa_mercato(mercato: MercatoTarget) -> None:
+            """Un thread per mercato: tutte le varianti su tutte le fonti."""
+            for query in self.expander.espandi(mercato):
+                for fonte in self.fonti:
+                    if not prenota_richiesta():
+                        return
+                    try:
+                        risultati = self._cerca_rate_limited(
+                            fonte, query, mercato, campagna.pausa_secondi)
+                    except Exception:
+                        # FASE 4: una fonte che fallisce (rete, Playwright assente,
+                        # parsing) non blocca le altre: si logga e si prosegue.
+                        with lucchetto:
+                            contatori["errori"] += 1
+                        continue
+                    for risultato in risultati:
+                        candidato = self._valuta(risultato, mercato)
+                        if candidato is None:
+                            with lucchetto:
+                                contatori["scartati"] += 1
+                        else:
+                            coda.put((candidato, fonte.nome))
+
+        # Ricerche in parallelo: rete fuori dalla transazione, max 5 thread.
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            list(pool.map(processa_mercato, campagna.mercati))
+        if contatori["richieste"] >= disponibili:
+            riepilogo["motivo"] = "limite giornaliero di richieste raggiunto"
+
+        # Aggregazione: stesso URL da piu' fonti -> punteggio combinato
+        # (+0.1, tetto 1.0) e fonti concatenate. L'unicita' su disco resta
+        # garantita dall'indice UNIQUE.
+        aggregati: dict = {}
+        while not coda.empty():
+            candidato, nome_fonte = coda.get()
+            noto = aggregati.get(candidato["url_candidato"])
+            if noto is None:
+                candidato["fonte"] = nome_fonte
+                aggregati[candidato["url_candidato"]] = candidato
+            elif nome_fonte not in noto["fonte"]:
+                noto["fonte"] += "+" + nome_fonte
+                noto["punteggio"] = round(
+                    min(1.0, max(noto["punteggio"],
+                                 candidato["punteggio"]) + 0.1), 2)
+
+        # Unica transazione finale per TUTTI i candidati (Regola 3).
+        conn = sqlite3.connect(self.database.db_path)
+        conn.isolation_level = None  # transazione gestita a mano
+        conn.execute("PRAGMA foreign_keys=ON;")
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            for candidato in aggregati.values():
+                candidato["data_trovato"] = adesso
+                candidato["campagna_origine"] = nome
+                self.database.upsert(candidato, conn=conn)
+            conn.execute("COMMIT")
+            riepilogo["eseguito"] = True
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.close()
+
+        riepilogo["richieste"] = contatori["richieste"]
+        riepilogo["scartati"] = contatori["scartati"]
+        riepilogo["errori_fonti"] = contatori["errori"]
+        riepilogo["archiviati"] = len(aggregati)
+        for candidato in aggregati.values():
+            paese = candidato.get("paese") or "?"
+            riepilogo["archiviati_per_paese"][paese] = \
+                riepilogo["archiviati_per_paese"].get(paese, 0) + 1
+
+        # Contatori via provider DOPO il COMMIT: l'interfaccia non accetta una
+        # connessione esterna e una seconda connessione in scrittura resterebbe
+        # bloccata dal lock EXCLUSIVE. In caso di ROLLBACK non si arriva qui,
+        # quindi il ciclo resta atomico: o tutto (candidati + contatori) o niente.
+        self.provider.aggiorna_contatori(nome, eseguiti=riepilogo["richieste"],
+                                         trovati=riepilogo["archiviati"],
+                                         timestamp=adesso)
+        self.audit.registra("ciclo_ricerca", riepilogo)
+        return riepilogo
+
+    def _valuta(self, risultato: dict, mercato: MercatoTarget) -> Optional[dict]:
+        """Filtri automatici invariati (budget, parole escluse, punteggio).
+        None = scartato; altrimenti il candidato pronto per l'upsert."""
+        if not risultato.get("url"):
+            return None
+        testo = f"{risultato.get('titolo', '')} {risultato.get('descrizione', '')}"
+        minuscolo = testo.lower()
+        if any(p.lower() in minuscolo for p in mercato.parole_escluse if p):
+            return None
+        prezzo = estrai_prezzo(testo)
+        if mercato.budget_max_notte and prezzo > mercato.budget_max_notte:
+            return None
+        punteggio = 0.4
+        if prezzo:
+            punteggio += 0.3
+        if mercato.citta.lower() in minuscolo:
+            punteggio += 0.3
+        if punteggio < mercato.soglia_punteggio:
+            return None
+        return {"url_candidato": risultato["url"],
+                "titolo": risultato.get("titolo", ""),
+                "descrizione": risultato.get("descrizione", ""),
+                "prezzo": prezzo,
+                "localita": mercato.citta,
+                "paese": mercato.paese,
+                "punteggio": round(punteggio, 2)}
+
+
+def stampa_riepilogo_ciclo(riepilogo: dict) -> None:
+    if not riepilogo["eseguito"]:
+        print(f"[NON ESEGUITO] {riepilogo['motivo']}")
+        return
+    extra = f" ({riepilogo['motivo']})" if riepilogo["motivo"] else ""
+    paesi = riepilogo.get("archiviati_per_paese") or {}
+    dettaglio_paesi = (", paesi: " + ", ".join(f"{p}={n}" for p, n in
+                                               sorted(paesi.items()))
+                       if paesi else "")
+    print(f"[CICLO COMPLETATO] richieste: {riepilogo['richieste']}, "
+          f"archiviati: {riepilogo['archiviati']}, "
+          f"scartati: {riepilogo['scartati']}, "
+          f"errori fonti: {riepilogo.get('errori_fonti', 0)}"
+          f"{dettaglio_paesi}{extra}")
+
+
+# ---------------------------------------------------------------------------
+# FASE 7: moduli operativi (ingest VIP, flash host, link magici, iCal)
+# ---------------------------------------------------------------------------
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+_TEL_RE = re.compile(r"(?:\+?\d[\d\s().\-]{7,}\d)")
+
+
+def _estrai_contatti(testo: str) -> dict:
+    """Estrae la prima email e il primo telefono plausibili da un testo libero."""
+    email = _EMAIL_RE.search(testo or "")
+    tel = _TEL_RE.search(testo or "")
+    return {"email": email.group(0) if email else "",
+            "telefono": re.sub(r"\s+", " ", tel.group(0)).strip() if tel else ""}
+
+
+class IngestoreVIP:
+    """Inserisce manualmente candidati 'VIP' di alto valore. Geocodifica gli
+    indirizzi con geopy/Nominatim (sleep 1.1s tra le chiamate, rispettando le
+    policy d'uso), estrae i contatti via regex e forza il punteggio a 2.0 cosi'
+    che i VIP emergano sempre in cima alle classifiche. geopy e' importato dentro
+    il metodo: l'assistente parte anche senza la libreria installata."""
+
+    PUNTEGGIO_VIP = 2.0
+
+    def __init__(self, database: "DatabaseCandidati", audit: AuditLog,
+                 user_agent: str = "TavolaVIP-Ingestore/1.0"):
+        self.database = database
+        self.audit = audit
+        self.user_agent = user_agent
+
+    def _geolocalizza(self, indirizzo: str):
+        """Restituisce (lat, lon, indirizzo_normalizzato) oppure (None, None, '').
+        Se geopy non c'e' o la chiamata fallisce, degrada senza interrompere."""
+        if not indirizzo:
+            return (None, None, "")
+        try:
+            from geopy.geocoders import Nominatim
+        except ImportError:
+            logging.warning("geopy non installato: geocodifica saltata.")
+            return (None, None, "")
+        try:
+            geocoder = Nominatim(user_agent=self.user_agent)
+            time.sleep(1.1)  # rate limit Nominatim: max 1 richiesta/secondo
+            posizione = geocoder.geocode(indirizzo)
+        except Exception as e:
+            logging.warning("Geocodifica fallita per %r (%s).", indirizzo, e)
+            return (None, None, "")
+        if posizione is None:
+            return (None, None, "")
+        return (posizione.latitude, posizione.longitude, posizione.address)
+
+    def ingesta(self, annunci: List[dict]) -> dict:
+        """'annunci' = lista di dict con chiavi opzionali: titolo, citta,
+        indirizzo, testo, url. Inserisce ognuno come candidato VIP."""
+        adesso = datetime.datetime.now().isoformat(timespec="seconds")
+        inseriti, errori = 0, 0
+        con = self.database._apri()
+        try:
+            for annuncio in annunci:
+                try:
+                    testo = annuncio.get("testo", "")
+                    contatti = _estrai_contatti(
+                        f"{testo} {annuncio.get('email', '')} "
+                        f"{annuncio.get('telefono', '')}")
+                    lat, lon, indirizzo_norm = self._geolocalizza(
+                        annuncio.get("indirizzo", ""))
+                    citta = (annuncio.get("citta")
+                             or indirizzo_norm.split(",")[0] if indirizzo_norm
+                             else annuncio.get("citta", "")) or "VIP"
+                    url = (annuncio.get("url")
+                           or f"vip://{secrets.token_hex(8)}")
+                    servizi = {"lat": lat, "lon": lon,
+                               "indirizzo": indirizzo_norm}
+                    with con:
+                        con.execute(
+                            "INSERT INTO candidati "
+                            "(url_candidato, titolo, descrizione, prezzo, "
+                            "localita, fonte, punteggio, data_trovato, "
+                            "campagna_origine, paese, host_email, host_telefono, "
+                            "host_nome, modalita_ingresso, servizi_json, stato) "
+                            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                            "ON CONFLICT(url_candidato) DO UPDATE SET "
+                            "punteggio=excluded.punteggio, "
+                            "modalita_ingresso=excluded.modalita_ingresso",
+                            (url, annuncio.get("titolo", "Annuncio VIP"),
+                             testo, float(annuncio.get("prezzo", 0.0) or 0.0),
+                             citta, "ingest_vip", self.PUNTEGGIO_VIP, adesso,
+                             "", annuncio.get("paese", ""),
+                             contatti["email"], contatti["telefono"],
+                             annuncio.get("host_nome", ""), "vip",
+                             json.dumps(servizi, ensure_ascii=False),
+                             "vip"))
+                    inseriti += 1
+                except Exception as e:
+                    logging.warning("Ingest VIP fallito per un annuncio (%s).", e)
+                    errori += 1
+        finally:
+            con.close()
+        riepilogo = {"inseriti": inseriti, "errori": errori}
+        self.audit.registra("ingest_vip", riepilogo)
+        return riepilogo
+
+
+class FlashHostManager:
+    """Annunci 'flash' a tempo: nascono con scadenza a 7 giorni e vengono
+    rimossi quando scadono. Utili per disponibilita' last-minute."""
+
+    DURATA_GIORNI = 7
+
+    def __init__(self, database: "DatabaseCandidati", audit: AuditLog):
+        self.database = database
+        self.audit = audit
+
+    def crea_flash(self, dati: dict) -> str:
+        """Crea un annuncio flash. 'dati' come per IngestoreVIP. Restituisce
+        l'url_candidato generato."""
+        adesso = datetime.datetime.now()
+        scadenza = (adesso + datetime.timedelta(days=self.DURATA_GIORNI)
+                    ).date().isoformat()
+        url = dati.get("url") or f"flash://{secrets.token_hex(8)}"
+        con = self.database._apri()
+        try:
+            with con:
+                con.execute(
+                    "INSERT INTO candidati "
+                    "(url_candidato, titolo, descrizione, prezzo, localita, "
+                    "fonte, punteggio, data_trovato, paese, stato, "
+                    "modalita_ingresso, data_scadenza) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) "
+                    "ON CONFLICT(url_candidato) DO UPDATE SET "
+                    "data_scadenza=excluded.data_scadenza, stato='flash'",
+                    (url, dati.get("titolo", "Flash host"),
+                     dati.get("testo", ""),
+                     float(dati.get("prezzo", 0.0) or 0.0),
+                     dati.get("citta", "Flash"), "flash_host", 1.0,
+                     adesso.isoformat(timespec="seconds"),
+                     dati.get("paese", ""), "flash", "flash", scadenza))
+        finally:
+            con.close()
+        self.audit.registra("flash_creato", {"url": url, "scadenza": scadenza})
+        return url
+
+    def pulisci_scaduti(self) -> int:
+        """Cancella gli annunci flash con data_scadenza passata. Restituisce
+        il numero di annunci rimossi."""
+        oggi = datetime.date.today().isoformat()
+        con = self.database._apri()
+        try:
+            with con:
+                cur = con.execute(
+                    "DELETE FROM candidati WHERE stato = 'flash' "
+                    "AND data_scadenza != '' AND data_scadenza < ?", (oggi,))
+                rimossi = cur.rowcount
+        finally:
+            con.close()
+        self.audit.registra("flash_puliti", {"rimossi": rimossi})
+        return rimossi
+
+
+class LinkMagiciEngine:
+    """Link 'magici' monouso per host e ospiti: un token opaco mappa a un
+    candidato e a un ruolo. risolvi_link() li valida, esegui_azione() compie
+    l'azione e aggiorna lo stato del candidato in DB."""
+
+    def __init__(self, database: "DatabaseCandidati", audit: AuditLog,
+                 base_url: str = "https://tavolavip.local/m/"):
+        self.database = database
+        self.audit = audit
+        self.base_url = base_url
+
+    def _genera(self, candidato_url: str, ruolo: str) -> str:
+        token = secrets.token_urlsafe(24)
+        adesso = datetime.datetime.now().isoformat(timespec="seconds")
+        con = self.database._apri()
+        try:
+            with con:
+                con.execute(
+                    "INSERT INTO link_magici_log "
+                    "(candidato_url, token, ruolo, data_creazione) "
+                    "VALUES (?,?,?,?)", (candidato_url, token, ruolo, adesso))
+        finally:
+            con.close()
+        self.audit.registra("link_magico_creato",
+                            {"candidato": candidato_url, "ruolo": ruolo})
+        return self.base_url + token
+
+    def genera_link_host(self, candidato_url: str) -> str:
+        return self._genera(candidato_url, "host")
+
+    def genera_link_ospite(self, candidato_url: str) -> str:
+        return self._genera(candidato_url, "ospite")
+
+    def risolvi_link(self, token: str) -> Optional[dict]:
+        """Estrae il token dalla URL completa o accetta il token nudo;
+        restituisce i dati del link (o None se inesistente)."""
+        token = token.rsplit("/", 1)[-1]
+        con = self.database._apri()
+        try:
+            riga = con.execute(
+                "SELECT candidato_url, ruolo, azione, usato FROM "
+                "link_magici_log WHERE token = ?", (token,)).fetchone()
+        finally:
+            con.close()
+        if riga is None:
+            return None
+        return {"token": token, "candidato_url": riga[0], "ruolo": riga[1],
+                "azione": riga[2], "usato": bool(riga[3])}
+
+    def esegui_azione(self, token: str, azione: str,
+                      nuovo_stato: str = "") -> bool:
+        """Marca il link come usato, registra l'azione e (se indicato) aggiorna
+        lo stato del candidato collegato. Un link gia' usato viene rifiutato."""
+        dati = self.risolvi_link(token)
+        if dati is None or dati["usato"]:
+            return False
+        adesso = datetime.datetime.now().isoformat(timespec="seconds")
+        con = self.database._apri()
+        try:
+            with con:
+                con.execute(
+                    "UPDATE link_magici_log SET usato = 1, azione = ?, "
+                    "data_uso = ? WHERE token = ?",
+                    (azione, adesso, dati["token"]))
+                if nuovo_stato and dati["candidato_url"]:
+                    con.execute(
+                        "UPDATE candidati SET stato = ? WHERE url_candidato = ?",
+                        (nuovo_stato, dati["candidato_url"]))
+        finally:
+            con.close()
+        self.audit.registra("link_magico_azione",
+                            {"token": dati["token"], "azione": azione,
+                             "nuovo_stato": nuovo_stato})
+        return True
+
+
+class iCalSyncEngine:
+    """Sincronizzazione calendari iCal: importa le prenotazioni da un feed
+    esterno (ignorando eventi piu' vecchi di 90 giorni) e genera un feed iCal
+    di uscita dalle prenotazioni in DB. 'icalendar' e' importato dentro i metodi
+    cosi' l'assistente parte anche senza la libreria."""
+
+    GIORNI_IGNORA = 90
+
+    def __init__(self, database: "DatabaseCandidati", audit: AuditLog):
+        self.database = database
+        self.audit = audit
+
+    def sync_da_ical(self, candidato_url: str, contenuto_ical: str) -> dict:
+        """Importa le prenotazioni dal testo iCal fornito. Eventi piu' vecchi
+        di 90 giorni vengono ignorati. Restituisce un riepilogo."""
+        try:
+            from icalendar import Calendar
+        except ImportError:
+            logging.warning("icalendar non installato: sync iCal saltato.")
+            return {"letti": 0, "importati": 0, "esito": "icalendar assente"}
+        limite = datetime.date.today() - datetime.timedelta(days=self.GIORNI_IGNORA)
+        adesso = datetime.datetime.now().isoformat(timespec="seconds")
+        letti, importati = 0, 0
+        try:
+            calendario = Calendar.from_ical(contenuto_ical)
+        except Exception as e:
+            self.audit.registra("ical_sync", {"candidato": candidato_url,
+                                              "esito": f"parse fallito: {e}"})
+            return {"letti": 0, "importati": 0, "esito": "parse fallito"}
+        con = self.database._apri()
+        try:
+            with con:
+                for componente in calendario.walk("VEVENT"):
+                    letti += 1
+                    inizio = componente.get("DTSTART")
+                    data_inizio = inizio.dt if inizio is not None else None
+                    if isinstance(data_inizio, datetime.datetime):
+                        data_inizio = data_inizio.date()
+                    if isinstance(data_inizio, datetime.date) and data_inizio < limite:
+                        continue  # evento troppo vecchio: ignorato
+                    fine = componente.get("DTEND")
+                    data_fine = fine.dt if fine is not None else None
+                    if isinstance(data_fine, datetime.datetime):
+                        data_fine = data_fine.date()
+                    uid = str(componente.get("UID", "") or "")
+                    con.execute(
+                        "INSERT INTO prenotazioni (candidato_url, check_in, "
+                        "check_out, stato, origine, uid_ical, data_creazione) "
+                        "VALUES (?,?,?,?,?,?,?)",
+                        (candidato_url,
+                         data_inizio.isoformat() if data_inizio else "",
+                         data_fine.isoformat() if data_fine else "",
+                         "occupato", "ical", uid, adesso))
+                    importati += 1
+                con.execute(
+                    "INSERT INTO ical_sync_log (candidato_url, eventi_letti, "
+                    "eventi_importati, esito, timestamp) VALUES (?,?,?,?,?)",
+                    (candidato_url, letti, importati, "ok", adesso))
+                con.execute(
+                    "UPDATE candidati SET ical_last_sync = ? "
+                    "WHERE url_candidato = ?", (adesso, candidato_url))
+        finally:
+            con.close()
+        riepilogo = {"letti": letti, "importati": importati, "esito": "ok"}
+        self.audit.registra("ical_sync",
+                            {"candidato": candidato_url, **riepilogo})
+        return riepilogo
+
+    def genera_ical_uscita(self, candidato_url: str) -> str:
+        """Genera un feed iCal (stringa) dalle prenotazioni del candidato."""
+        try:
+            from icalendar import Calendar, Event
+        except ImportError:
+            logging.warning("icalendar non installato: feed non generato.")
+            return ""
+        con = self.database._apri()
+        try:
+            righe = con.execute(
+                "SELECT check_in, check_out, ospite_nome, uid_ical FROM "
+                "prenotazioni WHERE candidato_url = ?", (candidato_url,)).fetchall()
+        finally:
+            con.close()
+        calendario = Calendar()
+        calendario.add("prodid", "-//TavolaVIP//iCalSyncEngine//IT")
+        calendario.add("version", "2.0")
+        for check_in, check_out, ospite, uid in righe:
+            evento = Event()
+            evento.add("summary", f"Prenotazione {ospite}".strip())
+            if check_in:
+                evento.add("dtstart", datetime.date.fromisoformat(check_in))
+            if check_out:
+                evento.add("dtend", datetime.date.fromisoformat(check_out))
+            evento.add("uid", uid or secrets.token_hex(8))
+            calendario.add_component(evento)
+        return calendario.to_ical().decode("utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Orchestratore
+# ---------------------------------------------------------------------------
+class AssistenteGestionale:
+    def __init__(self, config: Optional[dict] = None):
+        self.config = config or carica_config()
+        percorsi = self.config["percorsi"]
+        cartella_bozze = os.path.join(BASE_DIR, percorsi["cartella_bozze"])
+        file_audit = os.path.join(BASE_DIR, percorsi["file_log_audit"])
+        file_candidati = os.path.join(BASE_DIR, percorsi.get(
+            "file_candidati",
+            os.path.join(percorsi["cartella_bozze"], "candidati_alloggi.json")))
+        file_campagne = os.path.join(BASE_DIR, percorsi.get(
+            "file_campagne",
+            os.path.join(percorsi["cartella_bozze"], "campagne.json")))
+        db_candidati = os.path.join(BASE_DIR, percorsi.get(
+            "db_candidati",
+            os.path.join(percorsi["cartella_bozze"], "candidati.sqlite3")))
+
+        # Cablaggio nell'ordine prescritto: audit, gate, db, campagne
+        # (stesso file SQLite del db), fonte, motore.
+        self.audit = AuditLog(file_audit)
+        self.gate = ApprovalGate(self.config, self.audit)
+        self.db = DatabaseCandidati(db_candidati)
+        self.campagne = GestoreCampagne(db_candidati, file_campagne,
+                                        self.gate, self.audit)
+        api_key = os.environ.get("BRAVE_API_KEY", "").strip()
+        if not api_key:
+            print("[ATTENZIONE] BRAVE_API_KEY assente nel .env: i cicli di "
+                  "ricerca falliranno finche' non la imposti.")
+        serpapi_key = os.environ.get("SERPAPI_KEY", "").strip()
+        # FASE 4: ordine delle fonti con fallback. Playwright (stealth) prima;
+        # se assente/fallisce il motore prosegue su Brave e poi DuckDuckGo.
+        self.fonti: List[IFonteRicerca] = [
+            FontePlaywrightStealth(self.db),
+            FonteBraveSearch(api_key),
+            FonteDuckDuckGo()]
+        # SerpApi: stub non ancora implementato, si aggiunge solo quando lo sara'.
+        self.fonte_serpapi = FonteSerpApi(serpapi_key)
+        self.motore = MotoreRicerca(self.campagne, self.db, self.fonti,
+                                    self.audit)
+        self.ricerca = RicercaAlloggi(self.gate, self.audit,
+                                      percorso_file=file_candidati)
+        self.bozze = GestoreBozze(cartella_bozze, self.gate, self.audit)
+        # FASE 7/8: moduli operativi cablati sull'unica fonte di verita' (il DB).
+        self.ingestore = IngestoreVIP(self.db, self.audit)
+        self.flash = FlashHostManager(self.db, self.audit)
+        self.link_engine = LinkMagiciEngine(self.db, self.audit)
+        self.ical_engine = iCalSyncEngine(self.db, self.audit)
+        self.audit.registra("avvio", {"progetto": self.config.get("progetto")})
+
+    def _esecutore_email(self) -> Optional[Callable[["Bozza"], None]]:
+        """Costruisce l'esecutore SMTP solo quando serve. Se le credenziali
+        non ci sono, avvisa e restituisce None (l'invio resta simulato)."""
+        try:
+            credenziali = carica_credenziali_smtp(self.config)
+        except RuntimeError as e:
+            print(f"[ATTENZIONE] {e}")
+            return None
+        return crea_esecutore_smtp(credenziali)
+
+    def menu(self) -> None:
+        opzioni = {
+            "1": "Imposta criteri e costruisci query alloggi",
+            "2": "Aggiungi candidato alloggio",
+            "3": "Mostra classifica candidati",
+            "4": "Prepara bozza email",
+            "5": "Prepara bozza testo social",
+            "6": "Elenca e invia bozze esistenti",
+            "7": "Esegui campagna per NOME (Task Scheduler ready)",
+            "8": "Crea nuova campagna di ricerca",
+            "9": "Report globale",
+            "10": "Esporta CSV",
+            "11": "Ingesta candidato VIP (geocodifica + contatti)",
+            "12": "Crea annuncio Flash (scadenza 7 giorni)",
+            "13": "Pulisci annunci Flash scaduti",
+            "14": "Genera link magico (host/ospite)",
+            "15": "Risolvi/usa un link magico",
+            "16": "Sincronizza calendario iCal (import)",
+            "17": "Genera feed iCal (export)",
+            "0": "Esci",
+        }
+        while True:
+            print("\n=== ASSISTENTE GESTIONALE - TavolaVIP ===")
+            for k, v in opzioni.items():
+                print(f"  {k}. {v}")
+            scelta = input("> ").strip()
+            if scelta == "0":
+                break
+            elif scelta == "1":
+                self._flow_query()
+            elif scelta == "2":
+                self._flow_aggiungi_candidato()
+            elif scelta == "3":
+                self._flow_classifica()
+            elif scelta == "4":
+                self._flow_email()
+            elif scelta == "5":
+                self._flow_social()
+            elif scelta == "6":
+                self._flow_bozze_salvate()
+            elif scelta == "7":
+                self._flow_esegui_campagna()
+            elif scelta == "8":
+                self._flow_crea_campagna()
+            elif scelta == "9":
+                self._flow_report_globale()
+            elif scelta == "10":
+                self._flow_esporta_csv()
+            elif scelta == "11":
+                self._flow_ingesta_vip()
+            elif scelta == "12":
+                self._flow_flash_crea()
+            elif scelta == "13":
+                self._flow_flash_pulisci()
+            elif scelta == "14":
+                self._flow_link_genera()
+            elif scelta == "15":
+                self._flow_link_risolvi()
+            elif scelta == "16":
+                self._flow_sync_ical()
+            elif scelta == "17":
+                self._flow_genera_ical()
+            else:
+                print("Scelta non valida.")
+
+    def _flow_query(self) -> None:
+        c = CriteriRicerca(
+            citta=input("Citta': ").strip(),
+            check_in=input("Check-in (AAAA-MM-GG): ").strip(),
+            check_out=input("Check-out (AAAA-MM-GG): ").strip(),
+            ospiti=chiedi_int("Ospiti [2]: ", default=2),
+            budget_max_notte=chiedi_float("Budget max/notte [0]: "),
+        )
+        print("Query suggerita:", self.ricerca.costruisci_query(c))
+
+    def _flow_aggiungi_candidato(self) -> None:
+        self.ricerca.aggiungi_candidato(Alloggio(
+            titolo=input("Titolo alloggio: ").strip(),
+            prezzo_notte=chiedi_float("Prezzo/notte: "),
+            url=input("URL (opz.): ").strip(),
+        ))
+        print(f"[OK] Candidato aggiunto. Totale: {len(self.ricerca.candidati)}")
+
+    def _flow_classifica(self) -> None:
+        if not self.ricerca.candidati:
+            print("Nessun candidato salvato: aggiungine prima uno (opzione 2).")
+            return
+        budget = chiedi_float("Budget per la classifica [0]: ")
+        print("\n-- Classifica --")
+        for a in self.ricerca.classifica(budget):
+            fuori = " (FUORI BUDGET)" if budget and a.prezzo_notte > budget else ""
+            print(f"  {a.prezzo_notte:>7.2f}  {a.titolo}{fuori}")
+
+    def _flow_email(self) -> None:
+        b = self.bozze.crea_email(
+            destinatario=input("Destinatario: ").strip(),
+            oggetto=input("Oggetto: ").strip(),
+            corpo=input("Corpo: ").strip(),
+        )
+        if input("Procedere all'invio reale? [s/N] ").strip().lower() == "s":
+            # invia() richiede comunque l'approvazione 'APPROVO' dal gate
+            # PRIMA di chiamare l'esecutore SMTP.
+            self.bozze.invia(b, esecutore=self._esecutore_email())
+
+    def _flow_social(self) -> None:
+        b = self.bozze.crea_social(
+            piattaforma=input("Piattaforma: ").strip(),
+            testo=input("Testo del post: ").strip(),
+        )
+        if input("Procedere alla pubblicazione reale? [s/N] ").strip().lower() == "s":
+            self.bozze.invia(b)
+
+    def _flow_bozze_salvate(self) -> None:
+        salvate = self.bozze.elenca_salvate()
+        if not salvate:
+            print("Nessuna bozza salvata nella cartella.")
+            return
+        print("\n-- Bozze salvate --")
+        for i, (nome, b) in enumerate(salvate, start=1):
+            print(f"  {i}. [{b.tipo:6}] {b.creata_il}  A: {b.destinatario}  -  {b.oggetto}")
+        indice = chiedi_int("Numero della bozza da inviare [0 = annulla]: ", default=0)
+        if indice == 0:
+            return
+        if not 1 <= indice <= len(salvate):
+            print("Numero fuori elenco.")
+            return
+        nome, bozza = salvate[indice - 1]
+        print(f"\nBozza selezionata: {nome}")
+        esecutore = self._esecutore_email() if bozza.tipo == "email" else None
+        # invia() richiede comunque l'approvazione 'APPROVO' dal gate.
+        self.bozze.invia(bozza, esecutore=esecutore)
+
+    def _flow_esegui_campagna(self) -> None:
+        nome = input("Nome campagna: ").strip()
+        if not nome:
+            return
+        try:
+            stampa_riepilogo_ciclo(self.motore.esegui(nome))
+        except Exception as e:
+            logging.exception("Ciclo campagna '%s' fallito", nome)
+            self.audit.registra("errore_ciclo",
+                                {"campagna": nome, "errore": str(e)})
+            print(f"[ERRORE] Ciclo non completato: {e}")
+
+    def _flow_crea_campagna(self) -> None:
+        nome = input("Nome campagna: ").strip()
+        if not nome:
+            return
+        mercati = []
+        while True:
+            citta = input(f"Mercato {len(mercati) + 1} - citta' "
+                          "(vuoto = fine): ").strip()
+            if not citta:
+                break
+            mercati.append(MercatoTarget(
+                citta=citta,
+                check_in=input("  Check-in (AAAA-MM-GG, opz.): ").strip(),
+                check_out=input("  Check-out (AAAA-MM-GG, opz.): ").strip(),
+                ospiti=chiedi_int("  Ospiti [2]: ", default=2),
+                budget_max_notte=chiedi_float("  Budget max/notte [0 = nessuno]: "),
+                parole_escluse=[p.strip() for p in
+                                input("  Parole da escludere (virgole): ").split(",")
+                                if p.strip()]))
+        if not mercati:
+            print("Nessun mercato: campagna annullata.")
+            return
+        campagna = CampagnaRicerca(
+            nome=nome, mercati=mercati,
+            max_richieste_giorno=chiedi_int("Max richieste/giorno [30]: ",
+                                            default=30),
+            scadenza=input("Scadenza (AAAA-MM-GG, vuoto = nessuna): ").strip())
+        try:
+            if self.campagne.crea_campagna(campagna):
+                print(f"[OK] Campagna '{nome}' autorizzata: i cicli girano "
+                      "senza ulteriori conferme (kill switch: revoca).")
+        except Exception as e:
+            logging.exception("Creazione campagna '%s' fallita", nome)
+            self.audit.registra("errore_campagna",
+                                {"nome": nome, "errore": str(e)})
+            print(f"[ERRORE] {e}")
+
+    def _flow_report_globale(self) -> None:
+        try:
+            print(json.dumps(self.db.report_globale(), indent=2,
+                             ensure_ascii=False))
+        except Exception as e:
+            logging.exception("Report globale fallito")
+            self.audit.registra("errore_report", {"errore": str(e)})
+            print(f"[ERRORE] {e}")
+
+    def _flow_esporta_csv(self) -> None:
+        nome = input("Nome file CSV [candidati.csv]: ").strip() or "candidati.csv"
+        try:
+            quanti = self.db.esporta_csv(os.path.join(BASE_DIR, nome))
+            print(f"[OK] Esportati {quanti} candidati in {nome}")
+        except Exception as e:
+            logging.exception("Export CSV fallito")
+            self.audit.registra("errore_export", {"errore": str(e)})
+            print(f"[ERRORE] {e}")
+
+    # ----------------------- FASE 8: flussi dei moduli nuovi -----------------------
+    def _flow_ingesta_vip(self) -> None:
+        annuncio = {
+            "titolo": input("Titolo annuncio VIP: ").strip(),
+            "citta": input("Citta' (opz.): ").strip(),
+            "indirizzo": input("Indirizzo da geocodificare (opz.): ").strip(),
+            "testo": input("Testo/descrizione (con email/telefono): ").strip(),
+            "prezzo": chiedi_float("Prezzo/notte [0]: "),
+        }
+        try:
+            print(self.ingestore.ingesta([annuncio]))
+        except Exception as e:
+            logging.exception("Ingest VIP fallito")
+            print(f"[ERRORE] {e}")
+
+    def _flow_flash_crea(self) -> None:
+        url = self.flash.crea_flash({
+            "titolo": input("Titolo flash: ").strip(),
+            "citta": input("Citta': ").strip(),
+            "prezzo": chiedi_float("Prezzo/notte [0]: "),
+        })
+        print(f"[OK] Flash creato: {url} (scade tra {self.flash.DURATA_GIORNI} giorni)")
+
+    def _flow_flash_pulisci(self) -> None:
+        rimossi = self.flash.pulisci_scaduti()
+        print(f"[OK] Annunci flash scaduti rimossi: {rimossi}")
+
+    def _flow_link_genera(self) -> None:
+        url = input("URL candidato: ").strip()
+        ruolo = input("Ruolo [host/ospite]: ").strip().lower()
+        if ruolo == "ospite":
+            print("Link:", self.link_engine.genera_link_ospite(url))
+        else:
+            print("Link:", self.link_engine.genera_link_host(url))
+
+    def _flow_link_risolvi(self) -> None:
+        token = input("Token o URL del link magico: ").strip()
+        dati = self.link_engine.risolvi_link(token)
+        if dati is None:
+            print("[INFO] Link inesistente.")
+            return
+        print(dati)
+        if input("Eseguire un'azione? [s/N] ").strip().lower() == "s":
+            azione = input("Azione: ").strip()
+            stato = input("Nuovo stato candidato (opz.): ").strip()
+            ok = self.link_engine.esegui_azione(token, azione, stato)
+            print("[OK] Azione eseguita." if ok else "[INFO] Link gia' usato o invalido.")
+
+    def _flow_sync_ical(self) -> None:
+        url = input("URL candidato: ").strip()
+        percorso = input("Percorso file .ics da importare: ").strip()
+        try:
+            with open(percorso, "r", encoding="utf-8") as f:
+                contenuto = f.read()
+            print(self.ical_engine.sync_da_ical(url, contenuto))
+        except OSError as e:
+            print(f"[ERRORE] File iCal non leggibile: {e}")
+
+    def _flow_genera_ical(self) -> None:
+        url = input("URL candidato: ").strip()
+        feed = self.ical_engine.genera_ical_uscita(url)
+        if not feed:
+            print("[INFO] Nessun feed generato (icalendar assente?).")
+            return
+        nome = input("Salva come [uscita.ics]: ").strip() or "uscita.ics"
+        percorso = os.path.join(BASE_DIR, nome)
+        with open(percorso, "w", encoding="utf-8") as f:
+            f.write(feed)
+        print(f"[OK] Feed iCal salvato in {percorso}")
+
+
+def esegui_campagna_cli(nome: str) -> int:
+    """Entry-point non interattivo (Task Scheduler): nessun prompt.
+    Stampa il riepilogo del ciclo come JSON su stdout.
+    Exit code 0 se il ciclo e' stato eseguito, 1 altrimenti."""
+    assistente = None
+    try:
+        assistente = AssistenteGestionale()
+        riepilogo = assistente.motore.esegui(nome)
+        print(json.dumps(riepilogo, ensure_ascii=False))
+        return 0 if riepilogo["eseguito"] else 1
+    except Exception as e:
+        logging.exception("Esecuzione campagna '%s' da CLI fallita", nome)
+        if assistente is not None:
+            assistente.audit.registra("errore_ciclo",
+                                      {"campagna": nome, "errore": str(e)})
+        print(f"[ERRORE] {e}", file=sys.stderr)
+        return 1
+
+
+def esegui_moduli_cli(argomenti) -> int:
+    """Entry-point non interattivo per i moduli FASE 7 (Task Scheduler ready).
+    Stampa l'esito su stdout. Exit code 0 se ok, 1 in caso di errore."""
+    try:
+        assistente = AssistenteGestionale()
+        if argomenti.ingesta_vip:
+            with open(argomenti.ingesta_vip, "r", encoding="utf-8") as f:
+                annunci = json.load(f)
+            print(json.dumps(assistente.ingestore.ingesta(annunci),
+                             ensure_ascii=False))
+        if argomenti.flash_host:
+            with open(argomenti.flash_host, "r", encoding="utf-8") as f:
+                dati = json.load(f)
+            print(assistente.flash.crea_flash(dati))
+        if argomenti.sync_ical:
+            url_candidato, file_ics = argomenti.sync_ical
+            with open(file_ics, "r", encoding="utf-8") as f:
+                contenuto = f.read()
+            print(json.dumps(
+                assistente.ical_engine.sync_da_ical(url_candidato, contenuto),
+                ensure_ascii=False))
+        if argomenti.genera_ical:
+            print(assistente.ical_engine.genera_ical_uscita(argomenti.genera_ical))
+        if argomenti.risolvi_link:
+            print(json.dumps(
+                assistente.link_engine.risolvi_link(argomenti.risolvi_link),
+                ensure_ascii=False))
+        return 0
+    except Exception as e:
+        logging.exception("Comando modulo da CLI fallito")
+        print(f"[ERRORE] {e}", file=sys.stderr)
+        return 1
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Assistente Gestionale - Progetto TavolaVIP")
+    parser.add_argument("--esegui-campagna", metavar="NOME",
+                        help="esegue un ciclo della campagna ed esce "
+                             "(riepilogo JSON su stdout)")
+    parser.add_argument("--report-globale", action="store_true",
+                        help="statistiche per paese/mercato in JSON")
+    parser.add_argument("--top-opportunita", type=int, metavar="N",
+                        help="i migliori N candidati mondiali per punteggio")
+    parser.add_argument("--esporta-csv", metavar="NOME",
+                        help="esporta i candidati in CSV per Excel")
+    parser.add_argument("--ingesta-vip", metavar="FILE_JSON",
+                        help="ingesta candidati VIP da un file JSON (lista di annunci)")
+    parser.add_argument("--flash-host", metavar="FILE_JSON",
+                        help="crea un annuncio flash da un file JSON")
+    parser.add_argument("--sync-ical", nargs=2,
+                        metavar=("URL_CANDIDATO", "FILE_ICS"),
+                        help="importa le prenotazioni da un file .ics")
+    parser.add_argument("--genera-ical", metavar="URL_CANDIDATO",
+                        help="genera il feed iCal del candidato su stdout")
+    parser.add_argument("--risolvi-link", metavar="TOKEN",
+                        help="risolve un link magico e stampa i dati in JSON")
+    parser.add_argument("--menu", action="store_true",
+                        help="avvia il menu interattivo (default)")
+    argomenti = parser.parse_args()
+    logging.basicConfig(level=logging.ERROR)  # traceback degli errori su stderr
+
+    if argomenti.esegui_campagna:
+        raise SystemExit(esegui_campagna_cli(argomenti.esegui_campagna))
+    if (argomenti.ingesta_vip or argomenti.flash_host or argomenti.sync_ical
+            or argomenti.genera_ical or argomenti.risolvi_link):
+        raise SystemExit(esegui_moduli_cli(argomenti))
+    if (argomenti.report_globale or argomenti.top_opportunita
+            or argomenti.esporta_csv):
+        try:
+            assistente = AssistenteGestionale()
+            if argomenti.report_globale:
+                print(json.dumps(assistente.db.report_globale(),
+                                 indent=2, ensure_ascii=False))
+            if argomenti.top_opportunita:
+                print(json.dumps(
+                    assistente.db.top_opportunita(argomenti.top_opportunita),
+                    indent=2, ensure_ascii=False))
+            if argomenti.esporta_csv:
+                quanti = assistente.db.esporta_csv(
+                    os.path.join(BASE_DIR, argomenti.esporta_csv))
+                print(f"[OK] Esportati {quanti} candidati "
+                      f"in {argomenti.esporta_csv}")
+            raise SystemExit(0)
+        except SystemExit:
+            raise
+        except Exception as e:
+            logging.exception("Comando di report fallito")
+            print(f"[ERRORE] {e}", file=sys.stderr)
+            raise SystemExit(1)
+    try:
+        AssistenteGestionale().menu()
+    except (KeyboardInterrupt, EOFError):
+        print("\nUscita.")
+    except Exception:
+        logging.exception("Errore non gestito nel menu")
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()

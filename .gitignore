@@ -1,0 +1,23 @@
+# --- Esclusioni Originali ---
+.env
+config_assistente.json
+*.sqlite3
+cache_scraping/
+TavolaVIP_Bozze/
+
+# --- Nuove Esclusioni (File e Log di sistema/altri progetti) ---
+__pycache__/
+*.pyc
+*.backup
+*.pre_quantum
+*.pre_repair
+ricombinato_*.py
+*.log
+*.json
+forensic_logs/
+quantum_linker.log
+super_linker_logs/
+PIANI_GENERATI/
+*.txt
+desktop.ini
+AI_Recombined_Clean/
