@@ -21,7 +21,7 @@ import signal
 import sys
 from functools import wraps
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List, Dict, Any, Callable, Tuple
+from typing import Optional, List, Dict, Any, Callable, Tuple, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from collections import OrderedDict, deque
@@ -92,6 +92,30 @@ class Config:
 
     # Audit
     AUDIT_ENABLED = os.environ.get('AUDIT_ENABLED', 'true').lower() == 'true'
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CANONICALIZZAZIONE FIRMA (H2): anti-collisione via length-prefix
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _canonical_string(parts: Sequence[Any]) -> bytes:
+    """Serializza in modo non ambiguo una sequenza di campi per la firma HMAC.
+
+    Concatenare i campi senza delimitatori espone a collisioni (es. "ab"+"c"
+    == "a"+"bc"). Qui ogni campo e' preceduto dalla sua lunghezza in byte
+    ("<len>:" + valore), rendendo la stringa canonica iniettiva.
+
+    Args:
+        parts: sequenza di campi (stringhe o convertibili in stringa).
+
+    Returns:
+        La stringa canonica come bytes UTF-8.
+    """
+    encoded = []
+    for part in parts:
+        p = part if isinstance(part, bytes) else str(part).encode("utf-8")
+        encoded.append(f"{len(p)}:".encode("utf-8") + p)
+    return b":".join(encoded)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

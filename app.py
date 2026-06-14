@@ -32,6 +32,7 @@ from fase13_protocollo_finale import (
     Config,
     DBCircuitBreaker,
     SelfHealingManager,
+    _canonical_string,
     get_rate_limiter,
     get_security_manager,
 )
@@ -207,7 +208,12 @@ def _verifica_fortress() -> Tuple[bool, int]:
     expected_body = hashlib.sha256(request.get_data()).hexdigest()
     if not _hmac.compare_digest(expected_body, body_hash):
         return False, 403
-    payload = request.method + request.path + request_id + timestamp + nonce + body_hash
+    # H2: canonicalizzazione con length-prefix (anti-collisione) e full_path
+    # (firma anche la query string, non solo il path).
+    payload = _canonical_string([
+        request.method, request.full_path, request_id,
+        timestamp, nonce, body_hash,
+    ]).decode("utf-8")
     if not sm.verify_signature(payload, timestamp, signature):
         return False, 403
     return True, 200
@@ -271,12 +277,53 @@ def fortress_readonly(func: Callable) -> Callable:
     return wrapper
 
 
+# H1: classificazione degli errori DB per il circuit breaker.
+# - INFRA (transitori/infrastrutturali) -> aprono il breaker, 503.
+# - CLIENT (input/programmazione) -> NON aprono il breaker, 400.
+# - altro -> 500. NB: IntegrityError/ProgrammingError sottoclassi di
+#   DatabaseError: vanno intercettate PRIMA di DB_INFRA_ERRORS.
+DB_INFRA_ERRORS = (sqlite3.OperationalError, sqlite3.DatabaseError)
+DB_CLIENT_ERRORS = (sqlite3.IntegrityError, sqlite3.ProgrammingError)
+
+
+def _is_db_infra_error(exc: BaseException) -> bool:
+    """True se l'errore DB e' infrastrutturale/transitorio.
+
+    Args:
+        exc: eccezione catturata.
+
+    Returns:
+        True se il messaggio indica contesa/indisponibilita' (busy/locked/timeout).
+    """
+    msg = str(exc).lower()
+    return any(k in msg for k in ("busy", "locked", "timeout"))
+
+
+def _cb_record_failure(cb: DBCircuitBreaker) -> None:
+    """Conta un fallimento infra sul breaker e lo apre oltre la soglia."""
+    with cb._lock:
+        cb.failures += 1
+        cb.last_failure = time.time()
+        if cb.failures >= cb.failure_threshold:
+            cb.state = DBCircuitBreaker.State.OPEN
+
+
+def _cb_record_success(cb: DBCircuitBreaker) -> None:
+    """Registra un successo: chiude il breaker (da HALF_OPEN) e azzera i fail."""
+    with cb._lock:
+        if cb.state == DBCircuitBreaker.State.HALF_OPEN:
+            cb.state = DBCircuitBreaker.State.CLOSED
+        cb.failures = 0
+
+
 def with_circuit_breaker(func: Callable) -> Callable:
     """Decoratore: protegge l'accesso al DB con il circuit breaker.
 
     - OPEN (entro il timeout): 503 + Retry-After, senza toccare il DB.
     - HALF_OPEN: ammette solo metodi sicuri (GET) per testare il recupero.
-    - CLOSED / OPEN scaduto: esegue la route tramite `DBCircuitBreaker.call`.
+    - CLOSED / OPEN scaduto: esegue la route. Il breaker si APRE solo su errori
+      DB infrastrutturali (`_is_db_infra_error`); gli errori client danno 400,
+      gli altri 500 — senza falsare lo stato del breaker.
     """
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -292,15 +339,28 @@ def with_circuit_breaker(func: Callable) -> Callable:
             logger.warning("Circuit breaker HALF_OPEN: scrittura rifiutata path=%s",
                            request.path)
             return _error(503, "service_unavailable", {"Retry-After": "5"})
+        if stato == DBCircuitBreaker.State.OPEN and scaduto:
+            with cb._lock:  # finestra di test di recupero
+                cb.state = DBCircuitBreaker.State.HALF_OPEN
         try:
-            return cb.call(func, *args, **kwargs)
+            result = func(*args, **kwargs)
+        except DB_CLIENT_ERRORS:
+            logger.warning("Errore DB client path=%s", request.path)
+            return _error(400, "bad_request")
+        except DB_INFRA_ERRORS as exc:
+            if _is_db_infra_error(exc):
+                _cb_record_failure(cb)
+                logger.error("Errore DB infra (breaker++) path=%s",
+                             request.path, exc_info=True)
+                return _error(503, "service_unavailable",
+                              {"Retry-After": str(cb.timeout)})
+            logger.critical("Errore DB non-infra path=%s", request.path, exc_info=True)
+            return _error(500, "internal_error")
         except Exception:
-            # Se il breaker e' passato OPEN per i fallimenti, rispondi 503;
-            # altrimenti e' un errore applicativo -> 500 generico.
-            if cb.state == DBCircuitBreaker.State.OPEN:
-                return _error(503, "service_unavailable", {"Retry-After": str(cb.timeout)})
             logger.critical("Errore route path=%s", request.path, exc_info=True)
             return _error(500, "internal_error")
+        _cb_record_success(cb)
+        return result
     return wrapper
 
 
@@ -610,6 +670,11 @@ def _registra_error_handlers(app: Flask) -> None:
         logger.info("404 path=%s", request.path)
         return _error(404, "not_found")
 
+    @app.errorhandler(413)
+    def _payload_too_large(_e: Exception) -> Any:
+        logger.warning("413 path=%s ip=%s", request.path, _client_ip())
+        return _error(413, "payload_too_large")
+
     @app.errorhandler(429)
     def _too_many(_e: Exception) -> Any:
         return _error(429, "rate_limited")
@@ -659,6 +724,9 @@ def create_app(config_name: str = "production") -> Flask:
     app = Flask(__name__)
     app.config["ENV_NAME"] = config_name
     app.config["JSON_SORT_KEYS"] = False
+    # H3: limite dimensione body (anti-DoS). Default 1 MiB, override via env.
+    app.config["MAX_CONTENT_LENGTH"] = int(
+        os.environ.get("MAX_BODY_BYTES", str(1024 * 1024)))
 
     logging.basicConfig(
         level=logging.INFO,

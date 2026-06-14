@@ -880,10 +880,18 @@ class DatabaseCandidati:
         self._init_schema()
 
     def _apri(self) -> sqlite3.Connection:
-        """Connessione con foreign_keys attive (Regola 2/6): l'enforcement
-        delle FK e' per-connessione, quindi va riattivato a ogni apertura."""
-        con = sqlite3.connect(self.db_path)
+        """Connessione resiliente alla concorrenza (H4).
+
+        `timeout` + `busy_timeout` fanno attendere/ritentare su SQLITE_BUSY
+        invece di fallire subito; WAL + synchronous=NORMAL ottimizzano la
+        concorrenza lettori/scrittore; wal_autocheckpoint contiene la crescita
+        del file -wal. Le FK sono per-connessione, quindi riattivate qui."""
+        con = sqlite3.connect(self.db_path, timeout=30.0)
+        con.execute("PRAGMA busy_timeout=30000;")
+        con.execute("PRAGMA journal_mode=WAL;")
+        con.execute("PRAGMA synchronous=NORMAL;")
         con.execute("PRAGMA foreign_keys=ON;")
+        con.execute("PRAGMA wal_autocheckpoint=1000;")
         return con
 
     def connessione(self) -> sqlite3.Connection:
