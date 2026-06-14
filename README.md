@@ -7,6 +7,29 @@ operazioni mutanti.
 > Convenzioni: identificatori in inglese, commenti/log/documentazione in italiano.
 > Runtime: **Python 3.9**. Test con `unittest` (pytest non installato).
 
+## Indice
+
+- [Struttura](#struttura)
+- [Avvio e test](#avvio-e-test)
+- [Variabili d'ambiente](#variabili-dambiente)
+  - [Segreti — obbligatori in produzione](#segreti--obbligatori-in-produzione)
+  - [Applicazione e database](#applicazione-e-database)
+  - [Sicurezza e reverse proxy](#sicurezza-e-reverse-proxy)
+  - [Idempotenza (Fase 15)](#idempotenza-fase-15)
+  - [Gunicorn e runtime](#gunicorn-e-runtime-gunicornconfpy)
+  - [Watchdog, alerting e feature flag](#watchdog-alerting-e-feature-flag)
+  - [Email e ricerca esterna](#email-e-ricerca-esterna-assistente_gestionalepy)
+- [Sicurezza — Audit Red Team](#sicurezza--audit-red-team)
+  - [Gruppo 1 — CRITICAL](#gruppo-1--critical-3961c48)
+  - [Gruppo 2 — HIGH](#gruppo-2--high-b38acc7)
+  - [Gruppo 3 — MEDIUM](#gruppo-3--medium-70743b8)
+- [Fase 15 — Idempotency Manager](#fase-15--idempotency-manager-exactly-once)
+  - [Uso lato client](#uso-lato-client)
+  - [Architettura](#architettura)
+  - [Manutenzione (su 3 livelli)](#manutenzione-su-3-livelli)
+  - [API del manager](#api-del-manager-per-integrazioni)
+  - [Test](#test)
+
 ## Struttura
 
 | File | Ruolo |
