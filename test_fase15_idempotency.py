@@ -5,12 +5,15 @@ Copre: acquisizione/lock, conflitto fingerprint, replay in cache, scoping per
 token, concorrenza (exactly-once), sweep lock morti, TTL/purge, e l'integrazione
 del decoratore con Flask (replay, conflitto, passthrough, no-cache sui 5xx).
 """
+import hashlib
 import os
 import shutil
 import sqlite3
 import tempfile
 import threading
+import time
 import unittest
+import uuid
 
 from flask import Flask, jsonify
 
@@ -218,6 +221,61 @@ class TestDecoratore(_BaseIdem):
         self.assertEqual(r1.status_code, 500)
         self.assertEqual(r2.status_code, 500)
         self.assertEqual(contatore["n"], 2)  # 5xx rilascia il lock -> retry esegue
+
+
+class TestIntegrazionePagamenti(unittest.TestCase):
+    """End-to-end: fortress (HMAC) + @idempotent sulla route reale /payments/split."""
+
+    def setUp(self):
+        from app import create_app
+        IdempotencyManager._reset_instance()
+        self.app = create_app()
+        self.client = self.app.test_client()
+
+    def tearDown(self):
+        IdempotencyManager._reset_instance()
+
+    def _headers(self, method, path, body, idem_key):
+        """Costruisce header fortress validi (nonce/timestamp freschi) + key."""
+        from fase13_protocollo_finale import SecurityManager, _canonical_string
+        ts = str(int(time.time()))
+        nonce = uuid.uuid4().hex
+        rid = uuid.uuid4().hex
+        body_hash = hashlib.sha256(body).hexdigest()
+        full_path = path + "?"  # Werkzeug.full_path aggiunge sempre '?'
+        canonical = _canonical_string(
+            [method, full_path, rid, ts, nonce, body_hash]).decode("utf-8")
+        sig = SecurityManager.generate_signature(canonical, ts)
+        return {
+            "X-Request-ID": rid, "X-Timestamp": ts, "X-Nonce": nonce,
+            "X-Body-Hash": body_hash, "X-Signature": sig,
+            "Idempotency-Key": idem_key, "Content-Type": "application/json",
+        }
+
+    def test_payments_split_replay_idempotente(self):
+        path = "/api/v1/payments/split"
+        body = b"{}"  # payload incompleto -> 400 deterministico
+        key = "it-" + uuid.uuid4().hex
+        r1 = self.client.post(path, data=body, headers=self._headers("POST", path, body, key))
+        r2 = self.client.post(path, data=body, headers=self._headers("POST", path, body, key))
+        self.assertEqual(r1.status_code, 400)
+        self.assertEqual(r2.status_code, 400)
+        self.assertEqual(r2.headers.get("Idempotent-Replay"), "true")
+        self.assertEqual(r1.get_json(), r2.get_json())
+
+    def test_payments_split_conflitto_body_diverso(self):
+        path = "/api/v1/payments/split"
+        key = "it-" + uuid.uuid4().hex
+        b1, b2 = b"{}", b'{"x":1}'
+        self.client.post(path, data=b1, headers=self._headers("POST", path, b1, key))
+        r2 = self.client.post(path, data=b2, headers=self._headers("POST", path, b2, key))
+        self.assertEqual(r2.status_code, 422)  # stessa key, fingerprint diverso
+
+    def test_fortress_attivo_senza_header(self):
+        # Senza header fortress la route resta protetta (401), idempotenza a parte.
+        r = self.client.post("/api/v1/payments/split", data=b"{}",
+                             headers={"Content-Type": "application/json"})
+        self.assertEqual(r.status_code, 401)
 
 
 if __name__ == "__main__":

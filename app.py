@@ -643,6 +643,7 @@ def escrow_list() -> Any:
 @api.route("/payments/split", methods=["POST"])
 @fortress
 @with_circuit_breaker
+@idempotent
 def payments_split() -> Any:
     """Registra un pagamento con ripartizione (split).
 
