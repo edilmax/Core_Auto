@@ -25,7 +25,7 @@ import time
 from functools import wraps
 from typing import Any, Callable, Dict, Optional, Tuple
 
-from flask import Blueprint, Flask, current_app, g, jsonify, request
+from flask import Blueprint, Flask, current_app, g, jsonify, make_response, request
 from flask.wrappers import Response
 
 from fase13_protocollo_finale import (
@@ -36,6 +36,7 @@ from fase13_protocollo_finale import (
     get_rate_limiter,
     get_security_manager,
 )
+from fase15_idempotency import EsitoAcquisizione, IdempotencyManager
 from assistente_gestionale import (
     AuditManager,
     AzioneAudit,
@@ -460,12 +461,73 @@ def health_system() -> Any:
         return _error(500, "internal_error")
 
 
+def idempotent(func: Callable) -> Callable:
+    """Decoratore: rende idempotente una route mutante via header Idempotency-Key.
+
+    Se l'header e' assente la route prosegue normale (idempotenza opzionale).
+    Altrimenti:
+      - CONFLITTO (stessa key, body diverso) -> 422.
+      - IN_CORSO (altro worker) -> 409 + Retry-After.
+      - IN_CACHE -> replay della risposta memorizzata (header Idempotent-Replay).
+      - ACQUISITO -> esegue, poi memorizza la risposta (solo status < 500;
+        i 5xx e le eccezioni rilasciano il lock per consentire un retry).
+
+    Va posto come decoratore PIU' INTERNO (sotto fortress/with_circuit_breaker),
+    cosi' gira dopo auth e protezione DB.
+    """
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        key = request.headers.get("Idempotency-Key", "").strip()
+        if not key:
+            return func(*args, **kwargs)
+
+        mgr: IdempotencyManager = _services()["idempotency"]
+        fp = mgr.fingerprint(request.method, request.full_path, request.get_data())
+        corr = request.headers.get("X-Request-ID") or request.headers.get(
+            "X-Correlation-ID")
+        res = mgr.acquire(key, fp, corr)
+
+        if res.esito == EsitoAcquisizione.CONFLITTO:
+            logger.warning("Idempotency-Key riusata con body diverso key=%s", key)
+            return _error(422, "idempotency_key_reused")
+        if res.esito == EsitoAcquisizione.IN_CORSO:
+            return _error(409, "request_in_progress",
+                          {"Retry-After": str(res.retry_after or 1)})
+        if res.esito == EsitoAcquisizione.IN_CACHE:
+            r = res.risposta or {}
+            replay = make_response(r.get("body") or "", r.get("status") or 200)
+            ctype = (r.get("headers") or {}).get("Content-Type")
+            if ctype:
+                replay.headers["Content-Type"] = ctype
+            replay.headers["Idempotent-Replay"] = "true"
+            return replay
+
+        # ACQUISITO: eseguiamo l'operazione possedendo il lock.
+        token = res.token or ""
+        try:
+            resp = make_response(func(*args, **kwargs))
+        except Exception:
+            # Errore non gestito: libera il lock cosi' il client puo' ritentare.
+            mgr.release(key, token)
+            raise
+        if resp.status_code >= 500:
+            # Errore server transitorio: non memorizzare, consenti il retry.
+            mgr.release(key, token)
+            return resp
+        body_txt = resp.get_data(as_text=True)
+        mgr.store(key, token, resp.status_code, body_txt,
+                  {"Content-Type": resp.content_type})
+        return resp
+    return wrapper
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Route: ESCROW
 # ═══════════════════════════════════════════════════════════════════════════
 @api.route("/escrow/create", methods=["POST"])
 @fortress
 @with_circuit_breaker
+@idempotent
 def escrow_create() -> Any:
     """Crea una transazione escrow (pagamento split + fondi bloccati).
 
@@ -515,6 +577,7 @@ def escrow_detail(escrow_id: int) -> Any:
 @api.route("/escrow/<int:escrow_id>/release", methods=["POST"])
 @fortress
 @with_circuit_breaker
+@idempotent
 def escrow_release(escrow_id: int) -> Any:
     """Rilascia i fondi al venditore (solo da stato 'DA_APPROVARE_ADMIN').
 
@@ -535,6 +598,7 @@ def escrow_release(escrow_id: int) -> Any:
 @api.route("/escrow/<int:escrow_id>/refund", methods=["POST"])
 @fortress
 @with_circuit_breaker
+@idempotent
 def escrow_refund(escrow_id: int) -> Any:
     """Rimborsa l'acquirente (consentito se i fondi non sono gia' sbloccati).
 
@@ -777,6 +841,7 @@ def create_app(config_name: str = "production") -> Flask:
         "dashboard": DashboardManager(db),
         "circuit": DBCircuitBreaker(),
         "watchdog": watchdog,
+        "idempotency": IdempotencyManager(Config.DB_PATH),  # FASE 15
     }
 
     app.register_blueprint(api)
