@@ -12,7 +12,8 @@ import time
 import unittest
 
 from fase16_outbox import (OutboxDispatcher, OutboxMessage, OutboxPublisher,
-                           _connessione, _url_sicuro)
+                           _connessione, _url_sicuro, _ip_non_instradabile,
+                           _verifica_peer)
 
 
 class _Base(unittest.TestCase):
@@ -224,6 +225,32 @@ class TestAntiSSRF(_Base):
             self.assertFalse(_url_sicuro("https://8.8.8.8/x"))  # fuori allowlist
         finally:
             os.environ.pop("OUTBOX_WEBHOOK_ALLOWLIST", None)
+
+    def test_ip_non_instradabile(self):
+        for blocco in ("127.0.0.1", "10.0.0.1", "192.168.1.1", "169.254.169.254",
+                       "::1", "non-un-ip"):
+            self.assertTrue(_ip_non_instradabile(blocco), blocco)
+        for ok in ("1.1.1.1", "8.8.8.8"):
+            self.assertFalse(_ip_non_instradabile(ok), ok)
+
+    def test_verifica_peer_blocca_interno_al_connect(self):
+        # FASE 20: chiusura DNS-rebinding -> valida l'IP REALE del peer.
+        class _FakeSock:
+            def __init__(self, ip):
+                self.ip, self.closed = ip, False
+            def getpeername(self):
+                return (self.ip, 443)
+            def close(self):
+                self.closed = True
+
+        interno = _FakeSock("10.0.0.5")
+        with self.assertRaises(OSError):
+            _verifica_peer(interno)
+        self.assertTrue(interno.closed)  # socket chiuso
+
+        pubblico = _FakeSock("1.1.1.1")
+        _verifica_peer(pubblico)          # non solleva
+        self.assertFalse(pubblico.closed)
 
 
 if __name__ == "__main__":

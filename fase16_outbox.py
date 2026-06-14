@@ -24,6 +24,7 @@ l'handler Telegram usa `Config.TELEGRAM_*` via `requests` (come `fase13`).
 """
 from __future__ import annotations
 
+import http.client
 import ipaddress
 import json
 import logging
@@ -225,7 +226,11 @@ def _url_sicuro(url: str) -> bool:
 
     Difese anti-SSRF: solo http(s); host nell'eventuale allowlist; nessun IP
     risolto privato/loopback/link-local/riservato (blocca metadata cloud,
-    localhost, reti interne). Residuo noto: DNS rebinding tra check e fetch.
+    localhost, reti interne).
+
+    FASE 20: questo e' solo il pre-check; il DNS rebinding (risoluzione diversa
+    tra check e connect) e' chiuso ri-validando l'IP REALE del peer al momento
+    del connect (vedi _SafeHTTPConnection/_verifica_peer).
     """
     try:
         p = urlparse(url)
@@ -242,12 +247,64 @@ def _url_sicuro(url: str) -> bool:
     except socket.gaierror:
         return False
     for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
-        if (ip.is_private or ip.is_loopback or ip.is_link_local
-                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
-            logger.warning("Webhook verso IP non instradabile/interno bloccato: %s", ip)
+        if _ip_non_instradabile(info[4][0]):
+            logger.warning("Webhook verso IP non instradabile/interno bloccato: %s",
+                           info[4][0])
             return False
     return True
+
+
+def _ip_non_instradabile(ip_str: str) -> bool:
+    """True se l'IP non e' un indirizzo pubblico instradabile (privato, loopback,
+    link-local, riservato, multicast, unspecified) -> da bloccare per anti-SSRF."""
+    try:
+        ip = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return True  # non parsabile -> blocca per sicurezza
+    return (ip.is_private or ip.is_loopback or ip.is_link_local
+            or ip.is_reserved or ip.is_multicast or ip.is_unspecified)
+
+
+def _verifica_peer(sock) -> None:
+    """Valida l'IP REALE del peer connesso (chiusura DNS-rebinding, FASE 20).
+
+    Chiamata subito dopo il connect: se il socket e' attestato verso un IP
+    interno/non instradabile, lo chiude e solleva, indipendentemente da cosa
+    aveva restituito la risoluzione DNS in fase di pre-check.
+    """
+    try:
+        ip = sock.getpeername()[0]
+    except OSError as exc:  # pragma: no cover - difensivo
+        raise OSError("peer IP non determinabile") from exc
+    if _ip_non_instradabile(ip):
+        sock.close()
+        raise OSError(f"connessione bloccata verso IP non instradabile: {ip}")
+
+
+class _SafeHTTPConnection(http.client.HTTPConnection):
+    """HTTPConnection che valida il peer IP al connect (anti DNS-rebinding)."""
+    def connect(self) -> None:
+        super().connect()
+        _verifica_peer(self.sock)
+
+
+class _SafeHTTPSConnection(http.client.HTTPSConnection):
+    """HTTPSConnection che valida il peer IP al connect (anti DNS-rebinding)."""
+    def connect(self) -> None:
+        super().connect()
+        _verifica_peer(self.sock)
+
+
+class _SafeHTTPHandler(urllib.request.HTTPHandler):
+    def http_open(self, req):
+        return self.do_open(_SafeHTTPConnection, req)
+
+
+class _SafeHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(_SafeHTTPSConnection, req,
+                            context=self._context,
+                            check_hostname=self._check_hostname)
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -330,7 +387,9 @@ class OutboxDispatcher:
             req = urllib.request.Request(
                 url, data=data, method="POST",
                 headers={"Content-Type": "application/json"})
-            opener = urllib.request.build_opener(_NoRedirect())
+            # FASE 20: no-redirect + validazione del peer IP al connect.
+            opener = urllib.request.build_opener(
+                _NoRedirect(), _SafeHTTPHandler(), _SafeHTTPSHandler())
             with opener.open(req, timeout=self._wh_timeout) as r:
                 r.read(1024)  # drena una quota limitata della risposta
                 return 200 <= r.status < 300
