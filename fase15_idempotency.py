@@ -32,6 +32,7 @@ import logging
 import os
 import sqlite3
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -97,6 +98,12 @@ class IdempotencyManager:
             # Soglia oltre la quale un lock e' considerato "morto" (worker crashato).
             self._lock_timeout_min = int(
                 os.environ.get("IDEMPOTENCY_LOCK_TIMEOUT_MIN", "5"))
+            # Retry difensivo su SQLITE_BUSY residuo (oltre busy_timeout/BEGIN
+            # IMMEDIATE): tentativi e backoff lineare base (secondi).
+            self._acquire_retries = int(
+                os.environ.get("IDEMPOTENCY_ACQUIRE_RETRIES", "3"))
+            self._acquire_backoff = float(
+                os.environ.get("IDEMPOTENCY_ACQUIRE_BACKOFF", "0.05"))
             self._init_schema()
             self._initialized = True
             logger.info("IdempotencyManager inizializzato (db=%s, ttl=%sh, "
@@ -190,6 +197,10 @@ class IdempotencyManager:
     ) -> RisultatoIdempotenza:
         """Acquisisce il lock per `key` o restituisce lo stato corrente.
 
+        Wrapper difensivo: `busy_timeout` + `BEGIN IMMEDIATE` gia' serializzano i
+        writer, ma su `SQLITE_BUSY` residuo (es. snapshot WAL) ritenta con backoff
+        lineare prima di propagare l'errore. La logica resta in `_acquire_once`.
+
         Args:
             key: Idempotency-Key fornita dal client.
             fingerprint: impronta del corpo richiesta (vedi self.fingerprint).
@@ -198,6 +209,27 @@ class IdempotencyManager:
         Returns:
             RisultatoIdempotenza con l'esito (ACQUISITO/IN_CORSO/IN_CACHE/CONFLITTO).
         """
+        for tentativo in range(1, self._acquire_retries + 1):
+            try:
+                return self._acquire_once(key, fingerprint, correlation_id)
+            except sqlite3.OperationalError as exc:
+                if not _is_locked_error(exc) or tentativo == self._acquire_retries:
+                    raise
+                attesa = self._acquire_backoff * tentativo
+                logger.warning("Idempotency acquire: DB occupato key=%s, retry "
+                               "%s/%s tra %.3fs", key, tentativo,
+                               self._acquire_retries, attesa)
+                time.sleep(attesa)
+        # irraggiungibile: l'ultimo tentativo o ritorna o rilancia.
+        raise RuntimeError("acquire: stato irraggiungibile")  # pragma: no cover
+
+    def _acquire_once(
+        self,
+        key: str,
+        fingerprint: str,
+        correlation_id: Optional[str] = None,
+    ) -> RisultatoIdempotenza:
+        """Singolo tentativo di acquisizione (RMW atomico in BEGIN IMMEDIATE)."""
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
         exp_iso = (now + timedelta(hours=self._ttl_hours)).isoformat()
@@ -291,12 +323,17 @@ class IdempotencyManager:
                     "body": row["response_body"],
                     "headers": _json_loads_safe(row["response_headers"]),
                 })
-        except sqlite3.Error:
+        except sqlite3.Error as exc:
             try:
                 conn.execute("ROLLBACK")
             except sqlite3.Error:  # pragma: no cover - difensivo
                 pass
-            logger.error("Idempotency acquire fallita key=%s", key, exc_info=True)
+            # I busy transitori sono gestiti (con retry) dal wrapper acquire():
+            # qui niente ERROR per non sporcare i log dei casi recuperabili.
+            if _is_locked_error(exc):
+                logger.debug("Idempotency acquire: DB occupato key=%s (%s)", key, exc)
+            else:
+                logger.error("Idempotency acquire fallita key=%s", key, exc_info=True)
             raise
         finally:
             conn.close()
@@ -407,3 +444,9 @@ def _eq_const(a: Optional[str], b: Optional[str]) -> bool:
     """Confronto timing-safe dei fingerprint (entrambi gia' hash esadecimali)."""
     import hmac
     return hmac.compare_digest(str(a or ""), str(b or ""))
+
+
+def _is_locked_error(exc: BaseException) -> bool:
+    """True se l'errore SQLite e' un SQLITE_BUSY/locked transitorio (retriabile)."""
+    return (isinstance(exc, sqlite3.OperationalError)
+            and any(k in str(exc).lower() for k in ("locked", "busy")))

@@ -7,6 +7,7 @@ del decoratore con Flask (replay, conflitto, passthrough, no-cache sui 5xx).
 """
 import os
 import shutil
+import sqlite3
 import tempfile
 import threading
 import unittest
@@ -131,6 +132,31 @@ class TestManager(_BaseIdem):
         self.assertEqual(a, b)
         self.assertNotEqual(a, c)
         self.assertEqual(len(a), 64)  # SHA-256 esadecimale completo
+
+    def test_acquire_ritenta_su_busy_poi_riesce(self):
+        from unittest import mock
+        self.mgr._acquire_backoff = 0.0  # niente attese nel test
+        chiamate = {"n": 0}
+        reale = self.mgr._acquire_once
+
+        def flaky(*a, **k):
+            chiamate["n"] += 1
+            if chiamate["n"] < 3:
+                raise sqlite3.OperationalError("database is locked")
+            return reale(*a, **k)
+
+        with mock.patch.object(self.mgr, "_acquire_once", side_effect=flaky):
+            r = self.mgr.acquire("retry", self.fp)
+        self.assertEqual(r.esito, EsitoAcquisizione.ACQUISITO)
+        self.assertEqual(chiamate["n"], 3)  # ha ritentato fino al successo
+
+    def test_acquire_non_ritenta_errori_non_busy(self):
+        from unittest import mock
+        self.mgr._acquire_backoff = 0.0
+        with mock.patch.object(self.mgr, "_acquire_once",
+                               side_effect=sqlite3.OperationalError("no such table")):
+            with self.assertRaises(sqlite3.OperationalError):
+                self.mgr.acquire("x", self.fp)
 
 
 class TestDecoratore(_BaseIdem):
