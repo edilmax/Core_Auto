@@ -67,8 +67,20 @@ Ogni blocco/mattone DEVE rispettare:
       (AUTOINCREMENT→BIGSERIAL), `now_expr` (datetime('now')→now()), `sql()`
       (placeholder ?→%s), `insert_returning_id` (lastrowid→RETURNING id), tutto
       via Datastore; `DB_BACKEND` seleziona il backend. 29 test Outbox immobili +
-      2 test portabilità PG hermetici. *Da portare ancora: idempotency (fase15)
-      e core (assistente_gestionale).*
+      2 test portabilità PG hermetici.
+- [x] 1.3b **idempotency (fase15)** parla il dialetto Datastore: `_conn`→
+      `raw_connection`, `_acquire_once` via `ds.transaction()`+`upsert_ignore_sql`+
+      `ds.execute`, schema con `now_expr`. 29 test immobili + 2 portabilità PG.
+- [ ] 1.3c **core (assistente_gestionale)** — DEDICATO, da fare con **PG live**.
+      Motivo (evidenza nel codice): trigger SQLite-only dell'audit immutabile
+      (`trg_audit_prevent_*`) → richiedono riscrittura plpgsql NON testabile senza
+      PG; ~12 connessioni ad-hoc (no factory unico) con isolation/row_factory
+      diversi dal datastore; 315 `execute/connect` + 51 costrutti dialetto. Port
+      "alla cieca" = rischio prod inaccettabile. Sotto-passi:
+      1.3c.1 unificare le connessioni del core dietro il Datastore (con un backend
+      SQLite a config compatibile col core: default-isolation, no Row);
+      1.3c.2 portare schema+query dei manager finanziari al dialetto;
+      1.3c.3 trigger audit immutabile in versione PG (plpgsql) — validare su PG.
 - [ ] 1.4 Postgres **live** (richiede server) + pool connessioni concorrenti.
 - [ ] 1.5 Migrazione dati SQLite→Postgres + cutover a rischio zero.
 
