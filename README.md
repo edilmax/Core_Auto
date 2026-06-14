@@ -33,6 +33,91 @@ gunicorn -c gunicorn.conf.py "app:create_app()"
 In produzione (`FLASK_ENV=production`) sono **obbligatori** `HMAC_SECRET`,
 `API_KEY`, `BEARER_TOKEN` (fail-fast all'avvio se mancanti).
 
+## Variabili d'ambiente
+
+Riferimento completo delle variabili lette dal codice (le costanti non
+configurabili come `RATE_LIMIT_IP`, `NONCE_TTL`, `CB_*` non sono incluse).
+
+### Segreti — obbligatori in produzione
+
+| Variabile | Default | Descrizione |
+|-----------|---------|-------------|
+| `HMAC_SECRET` | *generato effimero* | Chiave per la firma HMAC delle richieste `fortress`. |
+| `API_KEY` | *generato effimero* | Auth read-only via header `X-API-Key`. |
+| `BEARER_TOKEN` | *generato effimero* | Auth read-only via `Authorization: Bearer`. |
+
+> ⚠️ I valori generati sono **diversi per ogni processo**: con più worker (o in
+> produzione) vanno impostati esplicitamente, altrimenti le firme non combaciano
+> tra worker. In `FLASK_ENV=production` l'avvio fallisce se mancano.
+
+### Applicazione e database
+
+| Variabile | Default | Descrizione |
+|-----------|---------|-------------|
+| `DB_PATH` | `/tmp/marketplace.db` | DB principale (`Config.DB_PATH`), usato anche dall'idempotenza. |
+| `CORE_AUTO_DB` | `core_auto.db` | DB di default del manager idempotenza se istanziato senza path. |
+| `FLASK_ENV` | *(vuoto)* | `production` abilita il fail-fast sui segreti e il controllo XFF privato. |
+| `PORT` | `8000` | Porta (`app.run` di sviluppo). |
+| `MAX_BODY_BYTES` | `1048576` | Limite dimensione body (oltre → `413`). |
+
+### Sicurezza e reverse proxy
+
+| Variabile | Default | Descrizione |
+|-----------|---------|-------------|
+| `TRUSTED_PROXIES` | `127.0.0.1,::1` | Proxy fidati da cui accettare `X-Forwarded-For`. |
+| `XFF_MODE` | `first` | Quale elemento dell'XFF usare (`first`/`last`). |
+| `FORWARDED_ALLOW_IPS` | `127.0.0.1` | IP da cui Gunicorn accetta gli header forwarded. |
+| `TIMESTAMP_WINDOW` | `60` | Finestra anti-replay del timestamp (s). |
+
+### Idempotenza (Fase 15)
+
+| Variabile | Default | Descrizione |
+|-----------|---------|-------------|
+| `IDEMPOTENCY_TTL_HOURS` | `24` | Validità della risposta in cache. |
+| `IDEMPOTENCY_LOCK_TIMEOUT_MIN` | `5` | Soglia oltre cui un lock è "morto". |
+| `IDEMPOTENCY_ACQUIRE_RETRIES` | `3` | Tentativi su `SQLITE_BUSY` in `acquire()`. |
+| `IDEMPOTENCY_ACQUIRE_BACKOFF` | `0.05` | Base (s) del backoff lineare. |
+| `IDEMPOTENCY_MAINTENANCE_INTERVAL` | `300` | Intervallo (s) della manutenzione runtime. |
+
+### Gunicorn e runtime (`gunicorn.conf.py`)
+
+| Variabile | Default | Descrizione |
+|-----------|---------|-------------|
+| `BIND` | `0.0.0.0:8000` | Indirizzo di bind (o `PORT` se impostata). |
+| `WEB_CONCURRENCY` | `cpu*2+1` | Numero di worker. |
+| `WORKER_CLASS` | `sync` | Tipo di worker (`gthread` con `THREADS`). |
+| `THREADS` | `4` | Thread per worker (solo con `gthread`, commentato). |
+| `TIMEOUT` | `30` | Timeout worker (s). |
+| `GRACEFUL_TIMEOUT` | `60` | Drain dei worker allo shutdown (s). |
+| `KEEPALIVE` | `5` | Keep-alive connessioni (s). |
+| `MAX_REQUESTS` | `1000` | Richieste per worker prima del riciclo. |
+| `MAX_REQUESTS_JITTER` | `100` | Jitter sul riciclo worker. |
+| `LOGLEVEL` | `info` | Livello di log. |
+| `MASTER_MEM_WARNING_MB` | `400` | Soglia RSS master per il warning. |
+| `WORKER_FAILURE_THRESHOLD` | `5` | Worker falliti prima dell'alert. |
+| `GUNICORN_USER` / `GUNICORN_GROUP` | *(commentati)* | Utente/gruppo di esecuzione. |
+| `SSL_CERTFILE` / `SSL_KEYFILE` | *(commentati)* | TLS diretto (di norma terminato dal proxy). |
+
+### Watchdog, alerting e feature flag
+
+| Variabile | Default | Descrizione |
+|-----------|---------|-------------|
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | *(vuoto)* | Alert del `SelfHealingManager` via Telegram. |
+| `WEBHOOK_URL` | *(vuoto)* | Alert via webhook generico. |
+| `AUDIT_ENABLED` | `true` | Abilita il logging d'audit. |
+| `DEEPSEEK_INDEXING` | `true` | Abilita l'indicizzazione DeepSeek. |
+
+### Email e ricerca esterna (`assistente_gestionale.py`)
+
+| Variabile | Default | Descrizione |
+|-----------|---------|-------------|
+| `GMAIL_USER` / `GMAIL_APP_PASSWORD` | *(vuoto)* | Invio email via Gmail. |
+| `GMAIL_SMTP_HOST` / `GMAIL_SMTP_PORT` | `smtp.gmail.com` / `465` | Host/porta SMTP Gmail. |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | *(vuoto)* | SMTP generico. |
+| `SMTP_FROM` / `NOTIFICA_EMAIL` | *(vuoto)* | Mittente / destinatario delle notifiche. |
+| `BRAVE_API_KEY` | *(vuoto)* | Motore di ricerca Brave. |
+| `SERPAPI_KEY` | *(vuoto)* | Motore di ricerca SerpAPI. |
+
 ---
 
 # Sicurezza — Audit Red Team
@@ -175,15 +260,8 @@ indice parziale sui lock e indice su `expires_at`.
 
 ## Configurazione (variabili d'ambiente)
 
-| Variabile | Default | Descrizione |
-|-----------|---------|-------------|
-| `DB_PATH` | `/tmp/marketplace.db` | DB usato da app e idempotenza (`Config.DB_PATH`). |
-| `CORE_AUTO_DB` | `core_auto.db` | DB di default del manager se istanziato senza path. |
-| `IDEMPOTENCY_TTL_HOURS` | `24` | validità della risposta in cache. |
-| `IDEMPOTENCY_LOCK_TIMEOUT_MIN` | `5` | soglia oltre cui un lock è "morto". |
-| `IDEMPOTENCY_ACQUIRE_RETRIES` | `3` | tentativi su `SQLITE_BUSY` in `acquire()`. |
-| `IDEMPOTENCY_ACQUIRE_BACKOFF` | `0.05` | base (s) del backoff lineare. |
-| `IDEMPOTENCY_MAINTENANCE_INTERVAL` | `300` | intervallo (s) della manutenzione runtime. |
+Vedi la sezione [Idempotenza (Fase 15)](#idempotenza-fase-15) nel riferimento
+completo delle variabili d'ambiente (`IDEMPOTENCY_*`, `DB_PATH`, `CORE_AUTO_DB`).
 
 ## API del manager (per integrazioni)
 
