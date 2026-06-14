@@ -22,6 +22,7 @@ import logging
 import os
 import sqlite3
 import time
+import uuid
 from functools import wraps
 from typing import Any, Callable, Dict, Optional, Tuple
 
@@ -140,6 +141,19 @@ def _sanitize_log(val: str) -> str:
     s = str(val)
     s = s.replace("\r", "\\r").replace("\n", "\\n")
     return s[:200]
+
+
+def _correlation_id() -> str:
+    """ID di correlazione per il tracing (FASE 19).
+
+    Riusa il `X-Request-ID` del client se presente, ma SANITIZZATO al solo set
+    [A-Za-z0-9-_] (max 64) per impedire log-injection e header-injection;
+    altrimenti ne genera uno nuovo. Mai un valore non fidato grezzo nei log o
+    negli header di risposta.
+    """
+    raw = request.headers.get("X-Request-ID", "")
+    cid = "".join(c for c in raw if c.isalnum() or c in "-_")[:64]
+    return cid or uuid.uuid4().hex
 
 
 def _error(status: int, code: str,
@@ -812,13 +826,15 @@ def _registra_middleware_logging(app: Flask) -> None:
     @app.before_request
     def _start_timer() -> None:
         g.start_time = time.time()
+        g.correlation_id = _correlation_id()  # FASE 19: tracing per richiesta
 
     @app.after_request
     def _log_request(response: Response) -> Response:
         duration_ms = round((time.time() - getattr(g, "start_time", time.time())) * 1000, 2)
         logger.info(
-            "request method=%s path=%s status=%s duration_ms=%s ip=%s ua=%s",
-            request.method, request.path, response.status_code, duration_ms,
+            "request cid=%s method=%s path=%s status=%s duration_ms=%s ip=%s ua=%s",
+            getattr(g, "correlation_id", "-"), request.method, request.path,
+            response.status_code, duration_ms,
             _client_ip(), _sanitize_log(request.headers.get("User-Agent", "-")))
         return response
 
@@ -835,6 +851,8 @@ def _registra_middleware_logging(app: Flask) -> None:
         if request.is_secure:
             response.headers["Strict-Transport-Security"] = \
                 "max-age=63072000; includeSubDomains"
+        # FASE 19: restituisce il correlation-id per il tracing lato client.
+        response.headers["X-Correlation-ID"] = getattr(g, "correlation_id", "")
         return response
 
     @app.teardown_appcontext

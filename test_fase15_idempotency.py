@@ -334,6 +334,21 @@ class TestIntegrazionePagamenti(unittest.TestCase):
         self.assertIn("default-src 'none'",
                       r.headers.get("Content-Security-Policy", ""))
 
+    def test_correlation_id_generato_se_assente(self):
+        r = self.client.get("/api/v1/health")
+        cid = r.headers.get("X-Correlation-ID")
+        self.assertTrue(cid)            # generato
+        self.assertGreaterEqual(len(cid), 16)
+
+    def test_correlation_id_propagato_dal_client(self):
+        r = self.client.get("/api/v1/health", headers={"X-Request-ID": "abc123-XYZ_9"})
+        self.assertEqual(r.headers.get("X-Correlation-ID"), "abc123-XYZ_9")
+
+    def test_correlation_id_sanitizzato(self):
+        # Caratteri non sicuri rimossi (anti log/header injection).
+        r = self.client.get("/api/v1/health", headers={"X-Request-ID": "abc def!@#x"})
+        self.assertEqual(r.headers.get("X-Correlation-ID"), "abcdefx")
+
 
 if __name__ == "__main__":
     unittest.main()
