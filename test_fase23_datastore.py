@@ -63,6 +63,25 @@ class TestSqlite(unittest.TestCase):
         self.assertEqual(self.ds.now_expr(), "datetime('now')")
         self.assertIn("AUTOINCREMENT", self.ds.autoincrement_pk())
 
+    def test_execute_rowcount_e_fetchall(self):
+        with self.ds.transaction() as c:
+            self.ds.execute(c, "INSERT INTO t (k) VALUES (?)", ("a",))
+        with self.ds.connection() as c:
+            rows = self.ds.execute(c, "SELECT * FROM t").fetchall()
+            self.assertEqual(len(rows), 1)
+        with self.ds.transaction() as c:
+            cur = self.ds.execute(c, "UPDATE t SET k=? WHERE k=?", ("z", "a"))
+            self.assertEqual(cur.rowcount, 1)
+
+    def test_insert_returning_id_lastrowid(self):
+        with self.ds.transaction() as c:
+            i1 = self.ds.insert_returning_id(c, "INSERT INTO t (k) VALUES (?)", ("x",))
+            i2 = self.ds.insert_returning_id(c, "INSERT INTO t (k) VALUES (?)", ("y",))
+        self.assertEqual((i1, i2), (1, 2))
+
+    def test_sql_identita_sqlite(self):
+        self.assertEqual(self.ds.sql("WHERE a=? AND b=?"), "WHERE a=? AND b=?")
+
 
 class TestDialettoPostgres(unittest.TestCase):
     """Primitive di dialetto PG verificabili senza connessione/driver."""
@@ -80,6 +99,9 @@ class TestDialettoPostgres(unittest.TestCase):
         sql = self.pg.upsert_ignore_sql("t", ["k", "v"], "k")
         self.assertIn("INSERT INTO t (k, v) VALUES (%s, %s)", sql)
         self.assertIn("ON CONFLICT (k) DO NOTHING", sql)
+
+    def test_sql_traduce_placeholder(self):
+        self.assertEqual(self.pg.sql("WHERE a=? AND b=?"), "WHERE a=%s AND b=%s")
 
 
 class TestFactory(unittest.TestCase):

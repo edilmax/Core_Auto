@@ -63,8 +63,12 @@ Ogni blocco/mattone DEVE rispettare:
 - [x] 1.1 Seam `Datastore` Postgres-ready (`fase23_datastore.py`) — SQLite completo,
       Postgres skeleton (psycopg2 presente; manca server), dialetto astratto.
 - [x] 1.2 Outbox adotta il Datastore (connessioni centralizzate, 29 test immobili).
-- [ ] 1.3 Traduzione schema/SQL al dialetto (AUTOINCREMENT→BIGSERIAL, INSERT OR
-      IGNORE→ON CONFLICT, BEGIN IMMEDIATE→BEGIN) per i moduli persistenti.
+- [x] 1.3 Dialetto SQL/schema portabile **sull'Outbox**: `autoincrement_pk`
+      (AUTOINCREMENT→BIGSERIAL), `now_expr` (datetime('now')→now()), `sql()`
+      (placeholder ?→%s), `insert_returning_id` (lastrowid→RETURNING id), tutto
+      via Datastore; `DB_BACKEND` seleziona il backend. 29 test Outbox immobili +
+      2 test portabilità PG hermetici. *Da portare ancora: idempotency (fase15)
+      e core (assistente_gestionale).*
 - [ ] 1.4 Postgres **live** (richiede server) + pool connessioni concorrenti.
 - [ ] 1.5 Migrazione dati SQLite→Postgres + cutover a rischio zero.
 

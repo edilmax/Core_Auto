@@ -12,9 +12,11 @@ import threading
 import time
 import unittest
 
+import fase16_outbox as ob
 from fase16_outbox import (OutboxDispatcher, OutboxMessage, OutboxPublisher,
                            _connessione, _url_sicuro, _ip_non_instradabile,
                            _verifica_peer)
+from fase23_datastore import PostgresDatastore
 
 
 class _Base(unittest.TestCase):
@@ -307,6 +309,67 @@ class TestAntiSSRF(_Base):
         pubblico = _FakeSock("1.1.1.1")
         _verifica_peer(pubblico)          # non solleva
         self.assertFalse(pubblico.closed)
+
+
+class TestPortabilitaPostgres(unittest.TestCase):
+    """BLOCCO 1.3: l'Outbox genera SQL dialetto-Postgres corretta quando il
+    backend e' PG. Hermetico: datastore-spia, nessun server reale."""
+
+    def setUp(self):
+        outer = self
+        self.captured = []
+
+        class _Cur:
+            rowcount = 1
+            def execute(self, q, p=()):
+                outer.captured.append(q)
+            def fetchone(self):
+                return {"id": 7}
+            def fetchall(self):
+                return []
+
+        class _Conn:
+            def cursor(self):
+                return _Cur()
+            def close(self):
+                pass
+
+        class _SpyPG(PostgresDatastore):
+            def __init__(self):
+                pass  # niente psycopg2/DSN
+            def _connect_raw(self):
+                return _Conn()
+            def _begin(self, c):
+                pass
+            def _commit(self, c):
+                pass
+            def _rollback(self, c):
+                pass
+
+        self.spy = _SpyPG()
+        ob._DATASTORES["__backend__:postgres"] = self.spy
+        os.environ["DB_BACKEND"] = "postgres"
+
+    def tearDown(self):
+        os.environ.pop("DB_BACKEND", None)
+        ob._DATASTORES.pop("__backend__:postgres", None)
+
+    def test_schema_dialetto_postgres(self):
+        ob.inizializza_schema("ignorato_per_pg")
+        ddl = " ".join(self.captured)
+        self.assertIn("BIGSERIAL PRIMARY KEY", ddl)
+        self.assertIn("now()", ddl)
+        self.assertNotIn("datetime('now')", ddl)
+        self.assertNotIn("AUTOINCREMENT", ddl)
+
+    def test_insert_returning_id_postgres(self):
+        rid = self.spy.insert_returning_id(
+            self.spy._connect_raw(),
+            "INSERT INTO outbox (topic) VALUES (?)", ("t",))
+        self.assertEqual(rid, 7)
+        self.assertTrue(self.captured[-1].endswith("RETURNING id"))
+        self.assertIn("%s", self.captured[-1])
+        self.assertNotIn("?", self.captured[-1])
 
 
 if __name__ == "__main__":

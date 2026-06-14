@@ -43,7 +43,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
-from fase23_datastore import SqliteDatastore  # BLOCCO 1: persistenza via seam
+from fase23_datastore import Datastore, get_datastore  # BLOCCO 1: persistenza via seam
 
 logger = logging.getLogger("core_auto.outbox")
 
@@ -58,18 +58,15 @@ def _now_iso() -> str:
 
 
 def inizializza_schema(db_path: str) -> None:
-    """Crea (idempotente) la tabella `outbox` e gli indici. Va chiamata prima di
-    qualsiasi publish() poiche' l'insert avviene nella transazione del chiamante."""
-    cartella = os.path.dirname(db_path)
-    if cartella:
-        os.makedirs(cartella, exist_ok=True)
-    conn = sqlite3.connect(db_path, timeout=30.0)
-    try:
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA busy_timeout=30000")
-        conn.execute(
-            """CREATE TABLE IF NOT EXISTS outbox (
-                   id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    """Crea (idempotente) la tabella `outbox` e gli indici in modo PORTABILE.
+
+    Dialetto via Datastore: PK auto-incrementante (AUTOINCREMENT/BIGSERIAL) e
+    default 'ora' (datetime('now')/now()). Indici parziali supportati sia da
+    SQLite sia da Postgres. Va chiamata prima di qualsiasi publish()."""
+    ds = _datastore_for(db_path)
+    with ds.transaction() as conn:
+        ds.execute(conn, f"""CREATE TABLE IF NOT EXISTS outbox (
+                   id             {ds.autoincrement_pk()},
                    topic          TEXT NOT NULL,
                    partition_key  TEXT,
                    payload        TEXT NOT NULL,
@@ -83,20 +80,15 @@ def inizializza_schema(db_path: str) -> None:
                    last_error     TEXT,
                    correlation_id TEXT,
                    causation_id   TEXT,
-                   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+                   created_at     TEXT NOT NULL DEFAULT ({ds.now_expr()}),
                    processed_at   TEXT
                )""")
         # Fetch dei messaggi pronti (status + scadenza retry, ordine FIFO).
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_outbox_due "
-            "ON outbox(status, next_retry_at, id)")
-        # Reclaim dei lock morti: solo i record in lavorazione.
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_outbox_processing "
-            "ON outbox(locked_at) WHERE status='processing'")
-        conn.commit()
-    finally:
-        conn.close()
+        ds.execute(conn, "CREATE INDEX IF NOT EXISTS idx_outbox_due "
+                         "ON outbox(status, next_retry_at, id)")
+        # Reclaim dei lock morti: solo i record in lavorazione (indice parziale).
+        ds.execute(conn, "CREATE INDEX IF NOT EXISTS idx_outbox_processing "
+                         "ON outbox(locked_at) WHERE status='processing'")
 
 
 @dataclass
@@ -140,8 +132,10 @@ class OutboxPublisher:
                 return
             self._db_path = db_path or os.environ.get("CORE_AUTO_DB", "core_auto.db")
             inizializza_schema(self._db_path)
+            self._ds = _datastore_for(self._db_path)
             self._initialized = True
-            logger.info("OutboxPublisher inizializzato (db=%s)", self._db_path)
+            logger.info("OutboxPublisher inizializzato (db=%s, backend=%s)",
+                        self._db_path, self._ds.backend)
 
     def publish(self, conn: sqlite3.Connection, msg: OutboxMessage) -> int:
         """Inserisce un messaggio nella transazione ATTIVA del chiamante.
@@ -167,7 +161,9 @@ class OutboxPublisher:
             raise ValueError("payload non serializzabile in JSON: %s" % exc)
         if len(payload_txt.encode("utf-8")) > self._MAX_PAYLOAD_BYTES:
             raise ValueError("payload oltre il limite (%s byte)" % self._MAX_PAYLOAD_BYTES)
-        cur = conn.execute(
+        # insert_returning_id astrae lastrowid (SQLite) vs RETURNING id (Postgres).
+        return self._ds.insert_returning_id(
+            conn,
             """INSERT INTO outbox
                    (topic, partition_key, payload, headers, status, max_retries,
                     created_at, correlation_id, causation_id)
@@ -176,25 +172,12 @@ class OutboxPublisher:
              json.dumps(msg.headers) if msg.headers else None,
              max(0, int(msg.max_retries)), _now_iso(),
              msg.correlation_id, msg.causation_id))
-        return cur.lastrowid
 
     def publish_standalone(self, msg: OutboxMessage) -> int:
         """Pubblica aprendo una transazione propria (quando non c'e' un effetto
         di business da accorpare)."""
-        conn = _connessione(self._db_path)
-        try:
-            conn.execute("BEGIN IMMEDIATE")
-            mid = self.publish(conn, msg)
-            conn.execute("COMMIT")
-            return mid
-        except Exception:
-            try:
-                conn.execute("ROLLBACK")
-            except sqlite3.Error:  # pragma: no cover - difensivo
-                pass
-            raise
-        finally:
-            conn.close()
+        with self._ds.transaction() as conn:
+            return self.publish(conn, msg)
 
     @classmethod
     def _reset_instance(cls) -> None:
@@ -206,19 +189,25 @@ class OutboxPublisher:
 # BLOCCO 1 (Fase 23): la persistenza dell'Outbox passa per l'astrazione
 # Datastore -> il passaggio a Postgres sara' uno swap del backend. Cache per
 # path (thread-safe) per non re-inizializzare il datastore (WAL) ad ogni connessione.
-_DATASTORES: Dict[str, SqliteDatastore] = {}
+_DATASTORES: Dict[str, Datastore] = {}
 _DATASTORES_LOCK = threading.Lock()
 
 
-def _datastore_for(db_path: str) -> SqliteDatastore:
-    """Restituisce (cache per path) il Datastore che provvede le connessioni."""
-    ds = _DATASTORES.get(db_path)
+def _datastore_for(db_path: str) -> Datastore:
+    """Restituisce (cache) il Datastore che provvede connessioni e SQL portabile.
+
+    Onora DB_BACKEND (default 'sqlite' -> usa db_path; 'postgres' -> usa
+    DATABASE_URL). Cosi' dopo la portabilita' SQL flippare backend e' uno switch
+    di env, senza toccare l'Outbox."""
+    backend = os.environ.get("DB_BACKEND", "sqlite").strip().lower()
+    key = db_path if backend == "sqlite" else f"__backend__:{backend}"
+    ds = _DATASTORES.get(key)
     if ds is None:
         with _DATASTORES_LOCK:
-            ds = _DATASTORES.get(db_path)
+            ds = _DATASTORES.get(key)
             if ds is None:
-                ds = SqliteDatastore(db_path)
-                _DATASTORES[db_path] = ds
+                ds = get_datastore(db_path if backend == "sqlite" else None)
+                _DATASTORES[key] = ds
     return ds
 
 
@@ -366,6 +355,7 @@ class OutboxDispatcher:
         self._pool: Optional[concurrent.futures.ThreadPoolExecutor] = None
         self._handlers: Dict[str, Handler] = {}
         inizializza_schema(self._db_path)
+        self._ds = _datastore_for(self._db_path)  # BLOCCO 1: SQL portabile
         self._register_defaults()
 
     # --- Registrazione handler ---
@@ -446,7 +436,8 @@ class OutboxDispatcher:
     def _fetch(self) -> List[sqlite3.Row]:
         conn = _connessione(self._db_path)
         try:
-            return conn.execute(
+            return self._ds.execute(
+                conn,
                 """SELECT * FROM outbox
                        WHERE status IN ('pending','failed')
                          AND (next_retry_at IS NULL OR next_retry_at <= ?)
@@ -465,7 +456,8 @@ class OutboxDispatcher:
         conn = _connessione(self._db_path)
         try:
             # Lock atomico (CAS): solo uno tra i dispatcher acquisisce il record.
-            cur = conn.execute(
+            cur = self._ds.execute(
+                conn,
                 "UPDATE outbox SET status='processing', locked_by=?, locked_at=? "
                 "WHERE id=? AND status IN ('pending','failed')",
                 (self._worker_id, _now_iso(), mid))
@@ -489,7 +481,8 @@ class OutboxDispatcher:
                 logger.error("Handler '%s' ha sollevato (id=%s)", topic, mid, exc_info=True)
 
             if ok:
-                conn.execute(
+                self._ds.execute(
+                    conn,
                     "UPDATE outbox SET status='completed', processed_at=?, "
                     "locked_by=NULL, locked_at=NULL WHERE id=? AND locked_by=?",
                     (_now_iso(), mid, self._worker_id))
@@ -498,7 +491,8 @@ class OutboxDispatcher:
             # Fallimento: incremento atomico + DLQ oltre max_retries.
             rc = row["retry_count"] + 1
             if rc >= row["max_retries"]:
-                conn.execute(
+                self._ds.execute(
+                    conn,
                     "UPDATE outbox SET status='dead_letter', retry_count=?, "
                     "last_error=?, locked_by=NULL, locked_at=NULL "
                     "WHERE id=? AND locked_by=?",
@@ -507,7 +501,8 @@ class OutboxDispatcher:
             else:
                 nxt = (datetime.now(timezone.utc)
                        + timedelta(seconds=self._backoff(rc))).isoformat()
-                conn.execute(
+                self._ds.execute(
+                    conn,
                     "UPDATE outbox SET status='failed', retry_count=?, "
                     "next_retry_at=?, last_error=?, locked_by=NULL, locked_at=NULL "
                     "WHERE id=? AND locked_by=?",
@@ -525,7 +520,8 @@ class OutboxDispatcher:
                   - timedelta(seconds=self._lease_timeout_s)).isoformat()
         conn = _connessione(self._db_path)
         try:
-            cur = conn.execute(
+            cur = self._ds.execute(
+                conn,
                 "UPDATE outbox SET status='failed', locked_by=NULL, locked_at=NULL "
                 "WHERE status='processing' AND locked_at < ?", (cutoff,))
             if cur.rowcount:
@@ -539,11 +535,13 @@ class OutboxDispatcher:
         conn = _connessione(self._db_path)
         try:
             if message_id is None:
-                cur = conn.execute(
+                cur = self._ds.execute(
+                    conn,
                     "UPDATE outbox SET status='pending', retry_count=0, "
                     "next_retry_at=NULL, last_error=NULL WHERE status='dead_letter'")
             else:
-                cur = conn.execute(
+                cur = self._ds.execute(
+                    conn,
                     "UPDATE outbox SET status='pending', retry_count=0, "
                     "next_retry_at=NULL, last_error=NULL "
                     "WHERE status='dead_letter' AND id=?", (message_id,))
@@ -557,7 +555,8 @@ class OutboxDispatcher:
                   - timedelta(hours=retention_hours)).isoformat()
         conn = _connessione(self._db_path)
         try:
-            cur = conn.execute(
+            cur = self._ds.execute(
+                conn,
                 "DELETE FROM outbox WHERE status='completed' AND processed_at < ?",
                 (cutoff,))
             if cur.rowcount:
@@ -599,7 +598,8 @@ class OutboxDispatcher:
         """Conteggio dei messaggi per stato (per health/monitoring)."""
         conn = _connessione(self._db_path)
         try:
-            righe = conn.execute(
+            righe = self._ds.execute(
+                conn,
                 "SELECT status, COUNT(*) c FROM outbox GROUP BY status").fetchall()
             return {r["status"]: r["c"] for r in righe}
         finally:

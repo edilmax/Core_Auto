@@ -84,6 +84,27 @@ class Datastore(ABC):
         finally:
             conn.close()
 
+    # --- esecuzione portabile (placeholder / cursore / last-insert-id) ---
+    def sql(self, query: str) -> str:
+        """Traduce i placeholder CANONICI '?' al dialetto del backend.
+
+        Si scrive la SQL una volta sola con '?'; SQLite la usa cosi', Postgres
+        ottiene '%s'. NB: valido perche' la SQL del progetto non contiene '?'
+        dentro letterali stringa."""
+        return query if self.placeholder == "?" else query.replace("?", self.placeholder)
+
+    def execute(self, conn: Any, query: str, params: Sequence = ()) -> Any:
+        """Esegue una query (placeholder tradotti) tramite cursore e lo
+        restituisce (.rowcount/.fetchall()). Uniforma sqlite (Connection.execute)
+        e postgres (Connection.cursor().execute)."""
+        cur = conn.cursor()
+        cur.execute(self.sql(query), params)
+        return cur
+
+    def insert_returning_id(self, conn: Any, query: str, params: Sequence = ()) -> int:
+        """INSERT che restituisce l'id generato. Base: lastrowid (SQLite)."""
+        return self.execute(conn, query, params).lastrowid
+
     # --- primitive di dialetto (override nei backend) ---
     @abstractmethod
     def now_expr(self) -> str: ...
@@ -190,6 +211,12 @@ class PostgresDatastore(Datastore):
 
     def _upsert_ignore_tail(self, base: str, conflict_col: str) -> str:
         return f"{base} ON CONFLICT ({conflict_col}) DO NOTHING"
+
+    def insert_returning_id(self, conn: Any, query: str, params: Sequence = ()) -> int:
+        """Postgres non ha lastrowid: usa RETURNING id."""
+        cur = self.execute(conn, query + " RETURNING id", params)
+        row = cur.fetchone()
+        return row["id"] if isinstance(row, dict) else row[0]
 
 
 def get_datastore(location: str = None) -> Datastore:
