@@ -1132,6 +1132,43 @@ class DatabaseCandidati:
                         dettaglio  TEXT,
                         ip_address TEXT,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+                # --- FASE 7: pagamenti split, escrow, voucher ---
+                # (foreign_keys=ON gia' impostato a inizio _init_schema; le FK
+                # puntano a prenotazioni(id), tabella creata sopra.)
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS pagamenti_split (
+                        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                        prenotazione_id    INTEGER NOT NULL,
+                        importo_totale     NUMERIC(10,2) NOT NULL,
+                        commissione_tavola NUMERIC(10,2) NOT NULL,
+                        quota_partner      NUMERIC(10,2) NOT NULL,
+                        status             TEXT DEFAULT 'pending',
+                        created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (prenotazione_id)
+                            REFERENCES prenotazioni(id) ON DELETE CASCADE)""")
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS escrow_fondi (
+                        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                        pagamento_id INTEGER NOT NULL,
+                        stato        TEXT DEFAULT 'bloccato',
+                        data_sblocco TIMESTAMP,
+                        FOREIGN KEY (pagamento_id)
+                            REFERENCES pagamenti_split(id) ON DELETE CASCADE)""")
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS voucher_prenotazioni (
+                        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                        prenotazione_id INTEGER UNIQUE,
+                        codice_voucher  TEXT UNIQUE,
+                        pdf_path        TEXT,
+                        emesso_il       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (prenotazione_id)
+                            REFERENCES prenotazioni(id) ON DELETE CASCADE)""")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_split_prenotazione ON pagamenti_split(prenotazione_id)")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_escrow_pagamento ON escrow_fondi(pagamento_id)")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_voucher_prenotazione ON voucher_prenotazioni(prenotazione_id)")
         finally:
             con.close()
 
@@ -4062,6 +4099,138 @@ class PartnerOnboardingEngine:
 
 
 # ---------------------------------------------------------------------------
+# FASE 7: motore di brokeraggio (split pagamenti, escrow, voucher)
+# ---------------------------------------------------------------------------
+# Ogni classe gestisce transazioni atomiche: commit su successo, rollback su
+# errore, connessione chiusa in finally.
+
+
+def _risolvi_connessione(db):
+    """Accetta un DatabaseCandidati (usa il metodo .connessione) oppure una
+    connection factory (callable). Restituisce sempre un callable che apre una
+    connessione SQLite."""
+    if hasattr(db, "connessione"):
+        return db.connessione
+    if callable(db):
+        return db
+    raise TypeError("Serve un DatabaseCandidati o una connection factory.")
+
+
+class PagamentoSplitManager:
+    """Registra la ripartizione di un pagamento (commissione Tavola + quota
+    partner) nella tabella pagamenti_split."""
+
+    def __init__(self, db):
+        self.connessione = _risolvi_connessione(db)
+
+    def registra_pagamento(self, prenotazione_id: int, importo_totale: float,
+                           commissione_tavola: float,
+                           quota_partner: float) -> int:
+        """Inserisce un pagamento con status 'pending'. Restituisce l'id creato."""
+        conn = self.connessione()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO pagamenti_split (prenotazione_id, importo_totale, "
+                "commissione_tavola, quota_partner, status) "
+                "VALUES (?, ?, ?, ?, 'pending')",
+                (prenotazione_id, importo_totale, commissione_tavola,
+                 quota_partner))
+            conn.commit()
+            return cursor.lastrowid
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+
+class EscrowManager:
+    """Gestisce il blocco/sblocco dei fondi in escrow (escrow_fondi)."""
+
+    def __init__(self, db):
+        self.connessione = _risolvi_connessione(db)
+
+    def inizializza_escrow(self, pagamento_id: int) -> int:
+        """Crea il record di escrow in stato 'bloccato'. Restituisce l'id."""
+        conn = self.connessione()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO escrow_fondi (pagamento_id, stato) "
+                "VALUES (?, 'bloccato')", (pagamento_id,))
+            conn.commit()
+            return cursor.lastrowid
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def sblocca_fondi(self, pagamento_id: int) -> bool:
+        """Sblocca i fondi: stato -> 'sbloccato', data_sblocco = CURRENT_TIMESTAMP.
+        Restituisce True se almeno un record e' stato aggiornato."""
+        conn = self.connessione()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE escrow_fondi SET stato = 'sbloccato', "
+                "data_sblocco = CURRENT_TIMESTAMP WHERE pagamento_id = ?",
+                (pagamento_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+
+class VoucherGenerator:
+    """Emette voucher univoci per le prenotazioni (voucher_prenotazioni)."""
+
+    PREFISSO = "TVP-"
+
+    def __init__(self, db):
+        self.connessione = _risolvi_connessione(db)
+
+    def _genera_codice(self) -> str:
+        return self.PREFISSO + uuid.uuid4().hex[:12].upper()
+
+    def emetti_voucher(self, prenotazione_id: int) -> str:
+        """Genera un codice voucher univoco, lo inserisce in
+        voucher_prenotazioni e restituisce il codice. In caso di collisione del
+        codice (UNIQUE) ritenta una volta con un nuovo codice."""
+        conn = self.connessione()
+        try:
+            cursor = conn.cursor()
+            for _ in range(2):
+                codice = self._genera_codice()
+                try:
+                    cursor.execute(
+                        "INSERT INTO voucher_prenotazioni "
+                        "(prenotazione_id, codice_voucher) VALUES (?, ?)",
+                        (prenotazione_id, codice))
+                    conn.commit()
+                    return codice
+                except sqlite3.IntegrityError:
+                    conn.rollback()
+                    # collisione codice o prenotazione gia' con voucher:
+                    # se il vincolo violato e' il codice, ritenta; altrimenti rilancia.
+                    esistente = cursor.execute(
+                        "SELECT codice_voucher FROM voucher_prenotazioni "
+                        "WHERE prenotazione_id = ?", (prenotazione_id,)).fetchone()
+                    if esistente:
+                        raise
+            raise RuntimeError("Impossibile generare un codice voucher univoco.")
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+
+# ---------------------------------------------------------------------------
 # Orchestratore
 # ---------------------------------------------------------------------------
 class AssistenteGestionale:
@@ -4148,6 +4317,10 @@ class AssistenteGestionale:
         self.sentinella = SentinellaV8(self.db.connessione)
         self.onboarding = PartnerOnboardingEngine(self.db.connessione,
                                                   self.sentinella)
+        # FASE 7: motore di brokeraggio (split, escrow, voucher).
+        self.split_manager = PagamentoSplitManager(self.db)
+        self.escrow_manager = EscrowManager(self.db)
+        self.voucher_generator = VoucherGenerator(self.db)
         self.audit.registra("avvio", {"progetto": self.config.get("progetto")})
 
     def distribuisci_proposta(self, candidato_url: str, payload: dict,
