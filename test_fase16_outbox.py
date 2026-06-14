@@ -8,6 +8,7 @@ anti-SSRF del webhook, ciclo di vita start/stop.
 import os
 import shutil
 import tempfile
+import threading
 import time
 import unittest
 
@@ -207,6 +208,43 @@ class TestDispatcher(_Base):
         time.sleep(0.2)
         self.disp.stop()
         self.assertFalse(self.disp._running)
+
+    def test_dispatch_concorrente_prova_barrier(self):
+        # FASE 22: prova DETERMINISTICA di parallelismo. Una Barrier(N) richiede
+        # N handler simultanei: se il dispatch fosse sequenziale andrebbe in
+        # timeout -> handler raise -> messaggi non 'completed'. Quindi
+        # completed == N dimostra il dispatch concorrente.
+        n = 4
+        self.assertGreaterEqual(self.disp._concurrency, n)  # default 4
+        barriera = threading.Barrier(n, timeout=4)
+
+        def handler_parallelo(_p):
+            barriera.wait()
+            return True
+
+        self.disp.register("para", handler_parallelo)
+        for i in range(n):
+            self.pub.publish_standalone(OutboxMessage("para", {"i": i}))
+        self.disp.start()
+        try:
+            deadline = time.time() + 5
+            while time.time() < deadline:
+                if self.disp.status().get("completed", 0) >= n:
+                    break
+                time.sleep(0.05)
+        finally:
+            self.disp.stop()
+        self.assertEqual(self.disp.status().get("completed", 0), n)
+
+    def test_dispatch_batch_sequenziale_se_concorrenza_1(self):
+        # Con pool assente (concorrenza 1 / non avviato) il batch va in sequenza.
+        self.disp._concurrency = 1
+        self.disp._running = True  # simula loop attivo (per il break graceful)
+        self.disp.register("seq", lambda p: True)
+        for i in range(3):
+            self.pub.publish_standalone(OutboxMessage("seq", {"i": i}))
+        self.disp._dispatch_batch(self.disp._fetch())
+        self.assertEqual(self.disp.status().get("completed", 0), 3)
 
     def test_backoff_limiti_e_cap(self):
         # NB: con full jitter la monotonicita' per-campione NON e' garantita

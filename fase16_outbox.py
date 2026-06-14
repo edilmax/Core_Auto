@@ -24,6 +24,7 @@ l'handler Telegram usa `Config.TELEGRAM_*` via `requests` (come `fase13`).
 """
 from __future__ import annotations
 
+import concurrent.futures
 import http.client
 import ipaddress
 import json
@@ -338,6 +339,11 @@ class OutboxDispatcher:
             os.environ.get("OUTBOX_DLQ_ALERT_INTERVAL_S", "3600"))
         self._last_reclaim = 0.0
         self._last_dlq_alert = 0.0
+        # FASE 22: dispatch concorrente. Ogni messaggio ha il suo lock CAS, quindi
+        # il parallelismo e' sicuro; le scritture SQLite serializzano sul
+        # write-lock (busy_timeout), ma l'I/O degli handler va in parallelo.
+        self._concurrency = max(1, int(os.environ.get("OUTBOX_CONCURRENCY", "4")))
+        self._pool: Optional[concurrent.futures.ThreadPoolExecutor] = None
         self._handlers: Dict[str, Handler] = {}
         inizializza_schema(self._db_path)
         self._register_defaults()
@@ -584,19 +590,38 @@ class OutboxDispatcher:
         with self._ctl_lock:
             if self._running:
                 return
+            if self._concurrency > 1:
+                self._pool = concurrent.futures.ThreadPoolExecutor(
+                    max_workers=self._concurrency, thread_name_prefix="outbox-wk")
             self._running = True
             self._thread = threading.Thread(
                 target=self._run, daemon=True, name="outbox-dispatcher")
             self._thread.start()
-            logger.info("Outbox Dispatcher avviato (worker=%s)", self._worker_id)
+            logger.info("Outbox Dispatcher avviato (worker=%s, concorrenza=%s)",
+                        self._worker_id, self._concurrency)
 
     def stop(self, timeout: float = 5.0) -> None:
         with self._ctl_lock:
             self._running = False
-            t = self._thread
+            t, pool = self._thread, self._pool
+            self._pool = None
         if t is not None:
             t.join(timeout=timeout)
+        if pool is not None:
+            pool.shutdown(wait=True)
         logger.info("Outbox Dispatcher fermato")
+
+    def _dispatch_batch(self, righe: List[sqlite3.Row]) -> None:
+        """Processa il batch in parallelo (pool) se concorrenza>1, sequenziale
+        altrimenti. Sicuro: ogni riga ha il proprio lock CAS in _process."""
+        if self._pool is not None and len(righe) > 1:
+            futures = [self._pool.submit(self._process, row) for row in righe]
+            concurrent.futures.wait(futures)  # _process non solleva (gestito dentro)
+        else:
+            for row in righe:
+                if not self._running:
+                    break
+                self._process(row)
 
     def _run(self) -> None:
         while self._running:
@@ -609,10 +634,7 @@ class OutboxDispatcher:
                     self.check_dlq_alert()
                     self._last_dlq_alert = now
                 righe = self._fetch()
-                for row in righe:
-                    if not self._running:
-                        break
-                    self._process(row)
+                self._dispatch_batch(righe)
                 # Se il batch e' pieno c'e' probabilmente altro lavoro: non dormire.
                 if len(righe) < self._batch:
                     time.sleep(self._poll)
