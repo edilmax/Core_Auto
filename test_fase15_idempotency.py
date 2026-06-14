@@ -18,6 +18,7 @@ import uuid
 from flask import Flask, jsonify
 
 from fase15_idempotency import IdempotencyManager, EsitoAcquisizione
+from fase23_datastore import PostgresDatastore
 
 
 class _BaseIdem(unittest.TestCase):
@@ -348,6 +349,61 @@ class TestIntegrazionePagamenti(unittest.TestCase):
         # Caratteri non sicuri rimossi (anti log/header injection).
         r = self.client.get("/api/v1/health", headers={"X-Request-ID": "abc def!@#x"})
         self.assertEqual(r.headers.get("X-Correlation-ID"), "abcdefx")
+
+
+class TestPortabilitaPostgres(unittest.TestCase):
+    """BLOCCO 1.3: idempotency genera SQL dialetto-Postgres corretta col backend
+    PG. Hermetico: datastore-spia + monkeypatch, nessun server reale."""
+
+    def _spy(self, captured):
+        class _Cur:
+            rowcount = 1
+            def execute(self, q, p=()):
+                captured.append(q)
+            def fetchone(self):
+                return {"id": 1}
+            def fetchall(self):
+                return []
+        class _Conn:
+            def cursor(self):
+                return _Cur()
+            def close(self):
+                pass
+        class _SpyPG(PostgresDatastore):
+            def __init__(self):
+                pass
+            def _connect_raw(self):
+                return _Conn()
+            def _begin(self, c):
+                pass
+            def _commit(self, c):
+                pass
+            def _rollback(self, c):
+                pass
+        return _SpyPG()
+
+    def test_schema_dialetto_postgres(self):
+        from unittest import mock
+        captured = []
+        spy = self._spy(captured)
+        IdempotencyManager._reset_instance()
+        try:
+            with mock.patch("fase15_idempotency.get_datastore", return_value=spy):
+                IdempotencyManager("ignorato_per_pg")  # _init_schema via spy PG
+            ddl = " ".join(captured)
+            self.assertIn("now()", ddl)
+            self.assertNotIn("datetime('now')", ddl)
+        finally:
+            IdempotencyManager._reset_instance()
+
+    def test_upsert_acquire_on_conflict_postgres(self):
+        spy = self._spy([])
+        sql = spy.upsert_ignore_sql(
+            "idempotency_keys",
+            ["idempotency_key", "request_fingerprint"], "idempotency_key")
+        self.assertIn("ON CONFLICT (idempotency_key) DO NOTHING", sql)
+        self.assertIn("%s", sql)
+        self.assertNotIn("?", sql)
 
 
 if __name__ == "__main__":

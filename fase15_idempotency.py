@@ -31,6 +31,7 @@ import json
 import logging
 import os
 import sqlite3
+from fase23_datastore import get_datastore  # BLOCCO 1: persistenza via seam
 import threading
 import time
 import uuid
@@ -104,6 +105,9 @@ class IdempotencyManager:
                 os.environ.get("IDEMPOTENCY_ACQUIRE_RETRIES", "3"))
             self._acquire_backoff = float(
                 os.environ.get("IDEMPOTENCY_ACQUIRE_BACKOFF", "0.05"))
+            # BLOCCO 1: persistenza via Datastore (SQL/dialetto portabile).
+            backend = os.environ.get("DB_BACKEND", "sqlite").strip().lower()
+            self._ds = get_datastore(self._db_path if backend == "sqlite" else None)
             self._init_schema()
             self._initialized = True
             logger.info("IdempotencyManager inizializzato (db=%s, ttl=%sh, "
@@ -114,27 +118,18 @@ class IdempotencyManager:
     # Connessione / schema
     # ─────────────────────────────────────────────────────────────────────────
     def _conn(self) -> sqlite3.Connection:
-        """Connessione resiliente (H4) in autocommit per gestire le transazioni
-        manualmente (BEGIN IMMEDIATE in acquire)."""
-        conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level=None)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA busy_timeout=30000")
-        # NB: journal_mode=WAL e' persistente (impostato in _init_schema), qui
-        # non si ripete; synchronous/foreign_keys sono per-connessione.
-        conn.execute("PRAGMA synchronous=NORMAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        return conn
+        """Connessione fornita dal Datastore (BLOCCO 1): autocommit, config
+        identica a prima (Row, busy_timeout/synchronous/foreign_keys; WAL una
+        tantum lato datastore). Le transazioni si gestiscono con ds.transaction()."""
+        return self._ds.raw_connection()
 
     def _init_schema(self) -> None:
-        """Crea (idempotente) tabella e indici per chiavi/lock/scadenze."""
+        """Crea (idempotente) tabella e indici (dialetto via Datastore)."""
         cartella = os.path.dirname(self._db_path)
         if cartella:
             os.makedirs(cartella, exist_ok=True)
-        conn = self._conn()
-        try:
-            conn.execute("PRAGMA journal_mode=WAL")  # una tantum (persistente)
-            conn.execute(
-                """CREATE TABLE IF NOT EXISTS idempotency_keys (
+        with self._ds.transaction() as conn:
+            self._ds.execute(conn, f"""CREATE TABLE IF NOT EXISTS idempotency_keys (
                        idempotency_key      TEXT PRIMARY KEY,
                        request_fingerprint  TEXT NOT NULL,
                        locked_by            TEXT,
@@ -144,18 +139,14 @@ class IdempotencyManager:
                        response_status      INTEGER,
                        response_body        TEXT,
                        response_headers     TEXT,
-                       created_at           TEXT NOT NULL DEFAULT (datetime('now'))
+                       created_at           TEXT NOT NULL DEFAULT ({self._ds.now_expr()})
                    )""")
             # Sweep dei lock morti: indice parziale sui soli record bloccati.
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_idem_locked "
-                "ON idempotency_keys(locked_at) WHERE locked_by IS NOT NULL")
+            self._ds.execute(conn, "CREATE INDEX IF NOT EXISTS idx_idem_locked "
+                             "ON idempotency_keys(locked_at) WHERE locked_by IS NOT NULL")
             # Purge delle cache scadute.
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_idem_expires "
-                "ON idempotency_keys(expires_at)")
-        finally:
-            conn.close()
+            self._ds.execute(conn, "CREATE INDEX IF NOT EXISTS idx_idem_expires "
+                             "ON idempotency_keys(expires_at)")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Helper
@@ -231,105 +222,95 @@ class IdempotencyManager:
         fingerprint: str,
         correlation_id: Optional[str] = None,
     ) -> RisultatoIdempotenza:
-        """Singolo tentativo di acquisizione (RMW atomico in BEGIN IMMEDIATE)."""
+        """Singolo tentativo di acquisizione (RMW atomico in ds.transaction()).
+
+        BLOCCO 1: SQL dialetto-portabile (upsert_ignore_sql, ds.execute con
+        placeholder tradotti, ds.transaction = BEGIN IMMEDIATE/BEGIN)."""
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
         exp_iso = (now + timedelta(hours=self._ttl_hours)).isoformat()
         lock_timeout = timedelta(minutes=self._lock_timeout_min)
         token = self._nuovo_token()
-        conn = self._conn()
         try:
-            conn.execute("BEGIN IMMEDIATE")  # un solo writer: RMW atomico
+            with self._ds.transaction() as conn:  # commit a fine blocco, rollback su errore
+                # 1) Fast path: prima volta che vediamo la chiave.
+                insert_ignore = self._ds.upsert_ignore_sql(
+                    "idempotency_keys",
+                    ["idempotency_key", "request_fingerprint", "locked_by",
+                     "locked_at", "expires_at", "correlation_id"],
+                    "idempotency_key")
+                cur = self._ds.execute(conn, insert_ignore,
+                    (key, fingerprint, token, now_iso, exp_iso, correlation_id))
+                if cur.rowcount == 1:
+                    return RisultatoIdempotenza(EsitoAcquisizione.ACQUISITO, token=token)
 
-            # 1) Fast path: prima volta che vediamo la chiave.
-            cur = conn.execute(
-                """INSERT OR IGNORE INTO idempotency_keys
-                       (idempotency_key, request_fingerprint, locked_by, locked_at,
-                        expires_at, correlation_id)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                (key, fingerprint, token, now_iso, exp_iso, correlation_id))
-            if cur.rowcount == 1:
-                conn.execute("COMMIT")
-                return RisultatoIdempotenza(EsitoAcquisizione.ACQUISITO, token=token)
+                # 2) La chiave esiste: ne ispezioniamo lo stato.
+                row = self._ds.execute(conn,
+                    "SELECT * FROM idempotency_keys WHERE idempotency_key = ?",
+                    (key,)).fetchone()
+                if row is None:  # difensivo: eliminata tra INSERT e SELECT
+                    return RisultatoIdempotenza(EsitoAcquisizione.IN_CORSO, retry_after=1)
 
-            # 2) La chiave esiste: ne ispezioniamo lo stato.
-            row = conn.execute(
-                "SELECT * FROM idempotency_keys WHERE idempotency_key = ?",
-                (key,)).fetchone()
-            if row is None:  # difensivo: eliminata tra INSERT e SELECT
-                conn.execute("COMMIT")
-                return RisultatoIdempotenza(EsitoAcquisizione.IN_CORSO, retry_after=1)
+                # 2a) Stessa key, body diverso -> conflitto (anti-abuso).
+                if not _eq_const(row["request_fingerprint"], fingerprint):
+                    logger.warning("Idempotency CONFLITTO key=%s (fingerprint diverso)", key)
+                    return RisultatoIdempotenza(EsitoAcquisizione.CONFLITTO)
 
-            # 2a) Stessa key, body diverso -> conflitto (anti-abuso).
-            if not _eq_const(row["request_fingerprint"], fingerprint):
-                conn.execute("COMMIT")
-                logger.warning("Idempotency CONFLITTO key=%s (fingerprint diverso)", key)
-                return RisultatoIdempotenza(EsitoAcquisizione.CONFLITTO)
+                # 2b) Lock attivo.
+                if row["locked_by"] is not None:
+                    locked_at = self._parse_dt(row["locked_at"])
+                    if locked_at is not None and (now - locked_at) < lock_timeout:
+                        retry = int((lock_timeout - (now - locked_at)).total_seconds()) + 1
+                        return RisultatoIdempotenza(
+                            EsitoAcquisizione.IN_CORSO, retry_after=retry)
+                    # Lock morto -> steal via compare-and-swap.
+                    steal = self._ds.execute(conn,
+                        "UPDATE idempotency_keys SET locked_by=?, locked_at=?, "
+                        "expires_at=? WHERE idempotency_key=? AND locked_by=? "
+                        "AND locked_at IS ?",
+                        (token, now_iso, exp_iso, key, row["locked_by"],
+                         row["locked_at"]))
+                    if steal.rowcount == 1:
+                        logger.info("Idempotency lock morto recuperato key=%s", key)
+                        return RisultatoIdempotenza(
+                            EsitoAcquisizione.ACQUISITO, token=token)
+                    return RisultatoIdempotenza(EsitoAcquisizione.IN_CORSO, retry_after=1)
 
-            # 2b) Lock attivo.
-            if row["locked_by"] is not None:
-                locked_at = self._parse_dt(row["locked_at"])
-                if locked_at is not None and (now - locked_at) < lock_timeout:
-                    retry = int((lock_timeout - (now - locked_at)).total_seconds()) + 1
-                    conn.execute("COMMIT")
-                    return RisultatoIdempotenza(
-                        EsitoAcquisizione.IN_CORSO, retry_after=retry)
-                # Lock morto -> steal via compare-and-swap.
-                steal = conn.execute(
-                    "UPDATE idempotency_keys SET locked_by=?, locked_at=?, "
-                    "expires_at=? WHERE idempotency_key=? AND locked_by=? "
-                    "AND locked_at IS ?",
-                    (token, now_iso, exp_iso, key, row["locked_by"],
-                     row["locked_at"]))
-                conn.execute("COMMIT")
-                if steal.rowcount == 1:
-                    logger.info("Idempotency lock morto recuperato key=%s", key)
-                    return RisultatoIdempotenza(
-                        EsitoAcquisizione.ACQUISITO, token=token)
-                return RisultatoIdempotenza(EsitoAcquisizione.IN_CORSO, retry_after=1)
+                # 2c) Nessun lock ma nessuna risposta (release senza store) -> ri-acquisisci.
+                if row["response_status"] is None:
+                    reacq = self._ds.execute(conn,
+                        "UPDATE idempotency_keys SET locked_by=?, locked_at=?, "
+                        "expires_at=? WHERE idempotency_key=? AND locked_by IS NULL "
+                        "AND response_status IS NULL",
+                        (token, now_iso, exp_iso, key))
+                    if reacq.rowcount == 1:
+                        return RisultatoIdempotenza(
+                            EsitoAcquisizione.ACQUISITO, token=token)
+                    return RisultatoIdempotenza(EsitoAcquisizione.IN_CORSO, retry_after=1)
 
-            # 2c) Nessun lock ma nessuna risposta (release senza store) -> ri-acquisisci.
-            if row["response_status"] is None:
-                reacq = conn.execute(
-                    "UPDATE idempotency_keys SET locked_by=?, locked_at=?, "
-                    "expires_at=? WHERE idempotency_key=? AND locked_by IS NULL "
-                    "AND response_status IS NULL",
-                    (token, now_iso, exp_iso, key))
-                conn.execute("COMMIT")
-                if reacq.rowcount == 1:
-                    return RisultatoIdempotenza(
-                        EsitoAcquisizione.ACQUISITO, token=token)
-                return RisultatoIdempotenza(EsitoAcquisizione.IN_CORSO, retry_after=1)
+                # 2d) Risposta presente: valida solo se non scaduta (TTL).
+                expires_at = self._parse_dt(row["expires_at"])
+                if expires_at is not None and now > expires_at:
+                    reacq = self._ds.execute(conn,
+                        "UPDATE idempotency_keys SET request_fingerprint=?, "
+                        "locked_by=?, locked_at=?, expires_at=?, response_status=NULL, "
+                        "response_body=NULL, response_headers=NULL "
+                        "WHERE idempotency_key=? AND expires_at=?",
+                        (fingerprint, token, now_iso, exp_iso, key, row["expires_at"]))
+                    if reacq.rowcount == 1:
+                        return RisultatoIdempotenza(
+                            EsitoAcquisizione.ACQUISITO, token=token)
+                    return RisultatoIdempotenza(EsitoAcquisizione.IN_CORSO, retry_after=1)
 
-            # 2d) Risposta presente: valida solo se non scaduta (TTL).
-            expires_at = self._parse_dt(row["expires_at"])
-            if expires_at is not None and now > expires_at:
-                reacq = conn.execute(
-                    "UPDATE idempotency_keys SET request_fingerprint=?, "
-                    "locked_by=?, locked_at=?, expires_at=?, response_status=NULL, "
-                    "response_body=NULL, response_headers=NULL "
-                    "WHERE idempotency_key=? AND expires_at=?",
-                    (fingerprint, token, now_iso, exp_iso, key, row["expires_at"]))
-                conn.execute("COMMIT")
-                if reacq.rowcount == 1:
-                    return RisultatoIdempotenza(
-                        EsitoAcquisizione.ACQUISITO, token=token)
-                return RisultatoIdempotenza(EsitoAcquisizione.IN_CORSO, retry_after=1)
-
-            # 2e) Cache hit valida -> replay.
-            conn.execute("COMMIT")
-            return RisultatoIdempotenza(
-                EsitoAcquisizione.IN_CACHE,
-                risposta={
-                    "status": row["response_status"],
-                    "body": row["response_body"],
-                    "headers": _json_loads_safe(row["response_headers"]),
-                })
+                # 2e) Cache hit valida -> replay.
+                return RisultatoIdempotenza(
+                    EsitoAcquisizione.IN_CACHE,
+                    risposta={
+                        "status": row["response_status"],
+                        "body": row["response_body"],
+                        "headers": _json_loads_safe(row["response_headers"]),
+                    })
         except sqlite3.Error as exc:
-            try:
-                conn.execute("ROLLBACK")
-            except sqlite3.Error:  # pragma: no cover - difensivo
-                pass
             # I busy transitori sono gestiti (con retry) dal wrapper acquire():
             # qui niente ERROR per non sporcare i log dei casi recuperabili.
             if _is_locked_error(exc):
@@ -337,8 +318,6 @@ class IdempotencyManager:
             else:
                 logger.error("Idempotency acquire fallita key=%s", key, exc_info=True)
             raise
-        finally:
-            conn.close()
 
     def store(
         self,
@@ -357,7 +336,8 @@ class IdempotencyManager:
         """
         conn = self._conn()
         try:
-            cur = conn.execute(
+            cur = self._ds.execute(
+                conn,
                 """UPDATE idempotency_keys
                        SET response_status=?, response_body=?, response_headers=?,
                            locked_by=NULL, locked_at=NULL
@@ -380,7 +360,8 @@ class IdempotencyManager:
         """
         conn = self._conn()
         try:
-            cur = conn.execute(
+            cur = self._ds.execute(
+                conn,
                 "UPDATE idempotency_keys SET locked_by=NULL, locked_at=NULL "
                 "WHERE idempotency_key=? AND locked_by=?", (key, token))
             return cur.rowcount > 0
@@ -397,7 +378,8 @@ class IdempotencyManager:
         cutoff = (datetime.now(timezone.utc) - timedelta(minutes=minuti)).isoformat()
         conn = self._conn()
         try:
-            cur = conn.execute(
+            cur = self._ds.execute(
+                conn,
                 "UPDATE idempotency_keys SET locked_by=NULL, locked_at=NULL "
                 "WHERE locked_by IS NOT NULL AND locked_at < ?", (cutoff,))
             if cur.rowcount:
@@ -412,7 +394,8 @@ class IdempotencyManager:
         now_iso = datetime.now(timezone.utc).isoformat()
         conn = self._conn()
         try:
-            cur = conn.execute(
+            cur = self._ds.execute(
+                conn,
                 "DELETE FROM idempotency_keys "
                 "WHERE expires_at < ? AND locked_by IS NULL", (now_iso,))
             if cur.rowcount:
