@@ -116,6 +116,30 @@ def _alert(server: Any, message: str) -> None:
             logger.error("Invio alert fallito", exc_info=True)
 
 
+def _idempotency_maintenance(fase: str) -> None:
+    """Sweep dei lock idempotenza morti + purge delle cache scadute (best-effort).
+
+    Complementa la manutenzione periodica del SelfHealingManager: al boot
+    recupera lo stato orfano lasciato da un processo precedente crashato, allo
+    shutdown fa pulizia finale. Import lazy + try/except: non deve mai far
+    fallire un hook di Gunicorn.
+
+    Args:
+        fase: etichetta dell'hook chiamante (per il log).
+    """
+    try:
+        from fase13_protocollo_finale import Config
+        from fase15_idempotency import IdempotencyManager
+        mgr = IdempotencyManager(Config.DB_PATH)
+        liberati = mgr.sweep()
+        rimossi = mgr.purge_expired()
+        logger.info("[Gunicorn] %s: idempotency maintenance (%s lock liberati, "
+                    "%s chiavi scadute rimosse)", fase, liberati, rimossi)
+    except Exception:  # pragma: no cover - difensivo
+        logger.error("[Gunicorn] %s: idempotency maintenance fallita", fase,
+                     exc_info=True)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Hook di lifecycle
 # ═══════════════════════════════════════════════════════════════════════════
@@ -127,6 +151,8 @@ def on_starting(server: Any) -> None:
     """
     try:
         server._worker_failures = 0
+        # Recupero stato idempotenza orfano da un eventuale run precedente.
+        _idempotency_maintenance("on_starting")
         logger.info("[Gunicorn] on_starting: master in inizializzazione")
     except Exception:  # pragma: no cover - difensivo
         logger.error("on_starting fallito", exc_info=True)
@@ -246,6 +272,7 @@ def on_exit(server: Any) -> None:
         monitor = _get_self_healing(server)
         if monitor is not None:
             monitor.stop_monitoring()
+        _idempotency_maintenance("on_exit")  # housekeeping finale
         _alert(server, "ℹ️ CORE_AUTO: shutdown completato")
         logger.info("[Gunicorn] on_exit: shutdown completato")
     except Exception:  # pragma: no cover - difensivo
