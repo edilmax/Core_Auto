@@ -28,6 +28,11 @@ logger = logging.getLogger("core_auto.gunicorn")
 # accessibile. Usato per inviare alert di timeout dal worker in abort.
 _MONITOR: Optional[Any] = None
 
+# Riferimento globale all'OutboxDispatcher: gira come thread nel solo processo
+# master (i thread non sopravvivono al fork), quindi un'unica istanza consegna i
+# messaggi. Tenuto qui per poterlo fermare in on_exit.
+_OUTBOX_DISPATCHER: Optional[Any] = None
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Configurazione base
 # ═══════════════════════════════════════════════════════════════════════════
@@ -175,6 +180,20 @@ def when_ready(server: Any) -> None:
     except Exception:  # pragma: no cover - difensivo
         logger.error("when_ready fallito (monitor non avviato)", exc_info=True)
 
+    # OutboxDispatcher: indipendente dal monitor (un fallimento qui non deve
+    # impedire l'avvio del watchdog e viceversa). Gira solo nel master.
+    try:
+        global _OUTBOX_DISPATCHER
+        from fase13_protocollo_finale import Config
+        from fase16_outbox import OutboxDispatcher
+        dispatcher = OutboxDispatcher(db_path=Config.DB_PATH)
+        dispatcher.start()
+        server.outbox_dispatcher = dispatcher
+        _OUTBOX_DISPATCHER = dispatcher
+        logger.info("[Gunicorn] when_ready: OutboxDispatcher avviato (master)")
+    except Exception:  # pragma: no cover - difensivo
+        logger.error("when_ready: OutboxDispatcher non avviato", exc_info=True)
+
 
 def pre_fork(server: Any, worker: Any) -> None:
     """Prima di forkare un worker: avvisa se il circuit breaker e' OPEN.
@@ -269,6 +288,9 @@ def on_exit(server: Any) -> None:
         server: istanza del server Gunicorn.
     """
     try:
+        dispatcher = getattr(server, "outbox_dispatcher", None) or _OUTBOX_DISPATCHER
+        if dispatcher is not None:
+            dispatcher.stop()
         monitor = _get_self_healing(server)
         if monitor is not None:
             monitor.stop_monitoring()
