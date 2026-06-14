@@ -4489,6 +4489,38 @@ class DashboardManager:
 
 
 # ---------------------------------------------------------------------------
+# FASE 11: motore di esportazione dati (reportistica admin)
+# ---------------------------------------------------------------------------
+
+
+class ReportManager:
+    """Esporta report finanziari in CSV per l'amministrazione (commercialista)."""
+
+    INTESTAZIONE = ["ID_Pagamento", "Data", "Commissione_Piattaforma",
+                    "Quota_Partner", "Stato"]
+
+    def __init__(self, db):
+        self.db = db
+
+    def esporta_commissioni_csv(self, file_path: str) -> int:
+        """Esporta in CSV i pagamenti i cui fondi sono stati SBLOCCATI
+        (ef.stato='sbloccato'). Restituisce il numero di record esportati."""
+        with self.db.connessione() as conn:
+            cursor = conn.cursor()
+            righe = cursor.execute(
+                "SELECT ps.id, ps.created_at, ps.commissione_tavola, "
+                "ps.quota_partner, ef.stato "
+                "FROM pagamenti_split ps "
+                "INNER JOIN escrow_fondi ef ON ef.pagamento_id = ps.id "
+                "WHERE ef.stato = 'sbloccato'").fetchall()
+        with open(file_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(self.INTESTAZIONE)
+            writer.writerows(righe)
+        return len(righe)
+
+
+# ---------------------------------------------------------------------------
 # Orchestratore
 # ---------------------------------------------------------------------------
 class AssistenteGestionale:
@@ -4586,6 +4618,8 @@ class AssistenteGestionale:
                                                 self.notifiche_manager)
         # FASE 10: dashboard finanziaria (sola lettura).
         self.dashboard_manager = DashboardManager(self.db)
+        # FASE 11: motore di esportazione report (CSV).
+        self.report_manager = ReportManager(self.db)
         self.audit.registra("avvio", {"progetto": self.config.get("progetto")})
 
     def distribuisci_proposta(self, candidato_url: str, payload: dict,
