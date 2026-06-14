@@ -43,6 +43,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
+from fase23_datastore import SqliteDatastore  # BLOCCO 1: persistenza via seam
+
 logger = logging.getLogger("core_auto.outbox")
 
 Handler = Callable[[Dict[str, Any]], bool]
@@ -201,15 +203,33 @@ class OutboxPublisher:
             cls._instance = None
 
 
+# BLOCCO 1 (Fase 23): la persistenza dell'Outbox passa per l'astrazione
+# Datastore -> il passaggio a Postgres sara' uno swap del backend. Cache per
+# path (thread-safe) per non re-inizializzare il datastore (WAL) ad ogni connessione.
+_DATASTORES: Dict[str, SqliteDatastore] = {}
+_DATASTORES_LOCK = threading.Lock()
+
+
+def _datastore_for(db_path: str) -> SqliteDatastore:
+    """Restituisce (cache per path) il Datastore che provvede le connessioni."""
+    ds = _DATASTORES.get(db_path)
+    if ds is None:
+        with _DATASTORES_LOCK:
+            ds = _DATASTORES.get(db_path)
+            if ds is None:
+                ds = SqliteDatastore(db_path)
+                _DATASTORES[db_path] = ds
+    return ds
+
+
 def _connessione(db_path: str) -> sqlite3.Connection:
-    """Connessione resiliente (H4) in autocommit (transazioni gestite a mano)."""
-    conn = sqlite3.connect(db_path, timeout=30.0, isolation_level=None)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA busy_timeout=30000")
-    # journal_mode=WAL e' persistente (impostato in inizializza_schema): qui no.
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
+    """Connessione resiliente dell'Outbox, ora FORNITA DAL DATASTORE (BLOCCO 1).
+
+    Config identica a prima (autocommit, row_factory=Row, busy_timeout/
+    synchronous/foreign_keys per-connessione; WAL una-tantum lato datastore):
+    comportamento immutato, ma il provisioning e' centralizzato nel seam
+    Postgres-ready. Il chiamante chiude la connessione."""
+    return _datastore_for(db_path).raw_connection()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

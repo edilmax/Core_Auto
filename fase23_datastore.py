@@ -52,6 +52,12 @@ class Datastore(ABC):
     @abstractmethod
     def _rollback(self, conn: Any) -> None: ...
 
+    def raw_connection(self) -> Any:
+        """Connessione nativa configurata; il CHIAMANTE la chiude (pattern
+        connessione-per-operazione). Per transazioni esplicite usare transaction().
+        Utile ai consumer che gestiscono il ciclo della connessione a mano."""
+        return self._connect_raw()
+
     @contextmanager
     def connection(self) -> Iterator[Any]:
         """Connessione-per-operazione: aperta, restituita, sempre chiusa."""
