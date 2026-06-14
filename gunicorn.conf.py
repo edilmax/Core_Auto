@@ -22,6 +22,12 @@ import psutil
 
 logger = logging.getLogger("core_auto.gunicorn")
 
+# M1: riferimento globale al SelfHealingManager. worker_abort gira nel processo
+# worker (non ha l'oggetto `server`), quindi non puo' raggiungere il monitor via
+# `server.self_healing`; con preload_app il global ereditato dal master e' invece
+# accessibile. Usato per inviare alert di timeout dal worker in abort.
+_MONITOR: Optional[Any] = None
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Configurazione base
 # ═══════════════════════════════════════════════════════════════════════════
@@ -34,7 +40,7 @@ worker_class: str = os.environ.get("WORKER_CLASS", "sync")
 # worker_class = "gthread"; threads = int(os.environ.get("THREADS", "4"))
 
 timeout: int = int(os.environ.get("TIMEOUT", "30"))
-graceful_timeout: int = int(os.environ.get("GRACEFUL_TIMEOUT", "30"))
+graceful_timeout: int = int(os.environ.get("GRACEFUL_TIMEOUT", "60"))  # K5: worker drain
 keepalive: int = int(os.environ.get("KEEPALIVE", "5"))
 
 max_requests: int = int(os.environ.get("MAX_REQUESTS", "1000"))
@@ -133,10 +139,12 @@ def when_ready(server: Any) -> None:
         server: istanza del server Gunicorn.
     """
     try:
+        global _MONITOR
         from fase13_protocollo_finale import Config, SelfHealingManager
         monitor = SelfHealingManager(db_path=Config.DB_PATH)
         monitor.start_monitoring()
         server.self_healing = monitor
+        _MONITOR = monitor  # M1: visibile ai worker (preload_app)
         logger.info("[Gunicorn] when_ready: SelfHealingManager avviato (master)")
     except Exception:  # pragma: no cover - difensivo
         logger.error("when_ready fallito (monitor non avviato)", exc_info=True)
@@ -197,9 +205,11 @@ def worker_abort(worker: Any) -> None:
     """
     try:
         logger.critical("[Gunicorn] worker_abort: timeout worker pid=%s", worker.pid)
-        # Il worker sta morendo: nessun cleanup, solo notifica best-effort.
-        _alert(getattr(worker, "app", None) and worker.app or worker,
-               f"🚨 Worker timeout abort (pid={worker.pid})")
+        # M1: il worker sta morendo: nessun cleanup, solo notifica best-effort
+        # tramite il monitor globale (ereditato dal master via preload_app).
+        # NB: SelfHealingManager espone `_send_alert` (non esiste `alert`).
+        if _MONITOR is not None:
+            _MONITOR._send_alert(f"🚨 Worker timeout: {worker.pid}")
     except Exception:  # pragma: no cover - difensivo
         logger.error("worker_abort fallito", exc_info=True)
 

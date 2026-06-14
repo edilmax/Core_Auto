@@ -66,6 +66,9 @@ class Config:
     NONCE_TTL = 60               # secondi
     NONCE_MAX_SIZE = 10000       # max nonce in cache
 
+    # Timestamp anti-replay (M2): finestra ridotta da 300 a 60 secondi.
+    TIMESTAMP_WINDOW = int(os.environ.get('TIMESTAMP_WINDOW', '60'))
+
     # Circuit Breaker
     CB_FAILURE_THRESHOLD = 3     # fallimenti prima di aprire
     CB_TIMEOUT = 10              # secondi prima di half-open
@@ -734,7 +737,7 @@ def require_fortress_auth(f: Callable) -> Callable:
         if not all([request_id, timestamp, nonce, body_hash, signature]):
             abort(401, description="Missing authentication headers")
 
-        if not security.is_timestamp_valid(timestamp, window=5):
+        if not security.is_timestamp_valid(timestamp, window=Config.TIMESTAMP_WINDOW):
             abort(401, description="Invalid or expired timestamp")
 
         if not security.is_nonce_valid(nonce):

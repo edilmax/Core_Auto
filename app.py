@@ -123,6 +123,23 @@ def _client_ip() -> str:
     return ip
 
 
+def _sanitize_log(val: str) -> str:
+    """Neutralizza l'input non fidato prima del logging (K3 - log injection).
+
+    Sostituisce CR/LF (usati per forgiare righe di log fasulle) con escape
+    visibili e tronca a 200 caratteri per limitare il rumore/abuso.
+
+    Args:
+        val: valore non fidato (es. User-Agent, header arbitrari).
+
+    Returns:
+        Stringa sicura da loggare.
+    """
+    s = str(val)
+    s = s.replace("\r", "\\r").replace("\n", "\\n")
+    return s[:200]
+
+
 def _error(status: int, code: str,
            headers: Optional[Dict[str, str]] = None) -> Tuple[Response, int]:
     """Costruisce una risposta JSON di errore generica (nessun dettaglio interno).
@@ -201,7 +218,7 @@ def _verifica_fortress() -> Tuple[bool, int]:
 
     if not all([request_id, timestamp, nonce, body_hash, signature]):
         return False, 401
-    if not sm.is_timestamp_valid(timestamp, window=300):  # ±5 minuti
+    if not sm.is_timestamp_valid(timestamp, window=Config.TIMESTAMP_WINDOW):  # M2
         return False, 401
     if not sm.is_nonce_valid(nonce):
         return False, 401
@@ -416,16 +433,16 @@ def health_circuit() -> Any:
 
 
 @api.route("/health/system", methods=["GET"])
+@fortress_readonly
 def health_system() -> Any:
     """Metriche di sistema (RSS, uptime, stato circuito, heartbeat).
+
+    M3: route autenticata (fortress_readonly) per evitare information
+    disclosure. La `/health` pubblica resta minimale.
 
     Returns:
         JSON con lo stato di salute calcolato dal SelfHealingManager.
     """
-    ip = _client_ip()
-    allowed, headers = get_rate_limiter().is_allowed(ip)
-    if not allowed:
-        return _error(429, "rate_limited", headers)
     try:
         watchdog: SelfHealingManager = _services()["watchdog"]
         salute = watchdog._check_health()  # snapshot corrente (no polling attivo)
@@ -703,7 +720,15 @@ def _registra_middleware_logging(app: Flask) -> None:
         logger.info(
             "request method=%s path=%s status=%s duration_ms=%s ip=%s ua=%s",
             request.method, request.path, response.status_code, duration_ms,
-            _client_ip(), request.headers.get("User-Agent", "-"))
+            _client_ip(), _sanitize_log(request.headers.get("User-Agent", "-")))
+        return response
+
+    @app.after_request
+    def _security_headers(response: Response) -> Response:
+        # K4: header di sicurezza su ogni risposta.
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Cache-Control"] = "no-store, max-age=0"
         return response
 
     @app.teardown_appcontext
@@ -721,6 +746,14 @@ def create_app(config_name: str = "production") -> Flask:
     Returns:
         L'istanza Flask pronta, con servizi, route, error handler e middleware.
     """
+    # M4: fail-fast sui segreti obbligatori in produzione.
+    if os.environ.get("FLASK_ENV") == "production":
+        mancanti = [k for k in ("HMAC_SECRET", "API_KEY", "BEARER_TOKEN")
+                    if not os.environ.get(k)]
+        if mancanti:
+            raise RuntimeError(
+                "Segreti obbligatori mancanti in produzione: " + ", ".join(mancanti))
+
     app = Flask(__name__)
     app.config["ENV_NAME"] = config_name
     app.config["JSON_SORT_KEYS"] = False
