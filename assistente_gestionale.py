@@ -30,6 +30,7 @@ import queue
 import random
 import secrets
 import sqlite3
+import uuid
 import smtplib
 import logging
 import argparse
@@ -1049,6 +1050,88 @@ class DatabaseCandidati:
                         successi     INTEGER DEFAULT 0,
                         fallimenti   INTEGER DEFAULT 0,
                         ultimo_invio TEXT DEFAULT '')""")
+                # --- Sentinella V8 (reintrodotta per FASE 6) ---
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS lock_alloggi (
+                        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                        alloggio_id  INTEGER NOT NULL,
+                        data_inizio  DATE NOT NULL,
+                        data_fine    DATE NOT NULL,
+                        session_id   TEXT NOT NULL,
+                        locked_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        expires_at   TIMESTAMP NOT NULL,
+                        UNIQUE(alloggio_id, data_inizio, data_fine))""")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_lock_expires ON lock_alloggi(expires_at)")
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS rate_limit_buckets (
+                        key            TEXT PRIMARY KEY,
+                        window_start   TIMESTAMP NOT NULL,
+                        count          INTEGER DEFAULT 1,
+                        max_count      INTEGER NOT NULL,
+                        window_seconds INTEGER NOT NULL)""")
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS token_revoked (
+                        jti        TEXT PRIMARY KEY,
+                        revoked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        reason     TEXT DEFAULT 'used',
+                        expires_at TIMESTAMP NOT NULL)""")
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS health_checks (
+                        component         TEXT PRIMARY KEY,
+                        status            TEXT NOT NULL,
+                        last_heartbeat    TIMESTAMP,
+                        error_count       INTEGER DEFAULT 0,
+                        last_error        TEXT,
+                        recovery_attempts INTEGER DEFAULT 0,
+                        updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+                # --- FASE 6: Onboarding partner ---
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS partner_candidates (
+                        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                        sender_id         TEXT UNIQUE NOT NULL,
+                        raw_data          TEXT,
+                        nome              TEXT,
+                        email             TEXT,
+                        telefono          TEXT,
+                        tipo_skill        TEXT,
+                        status            TEXT DEFAULT 'pending'
+                            CHECK(status IN ('pending','parsing_ok','verifying',
+                                'verified','probation','active','banned','rejected')),
+                        trust_score       REAL DEFAULT 0.0,
+                        verification_token TEXT,
+                        token_expiry      TIMESTAMP,
+                        last_attempt      TIMESTAMP,
+                        attempts          INTEGER DEFAULT 0,
+                        created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_partner_status ON partner_candidates(status)")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_partner_sender ON partner_candidates(sender_id)")
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS partner_score_history (
+                        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                        partner_id  INTEGER NOT NULL
+                            REFERENCES partner_candidates(id) ON DELETE CASCADE,
+                        evento      TEXT NOT NULL,
+                        delta_score REAL,
+                        score_nuovo REAL,
+                        motivazione TEXT,
+                        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+                con.execute("CREATE INDEX IF NOT EXISTS "
+                            "idx_score_partner ON partner_score_history(partner_id)")
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS partner_verification_log (
+                        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                        partner_id INTEGER NOT NULL,
+                        evento     TEXT NOT NULL
+                            CHECK(evento IN ('enqueue','token_generated','token_sent',
+                                'code_submitted','verified','rejected','banned',
+                                'retry_scheduled')),
+                        dettaglio  TEXT,
+                        ip_address TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
         finally:
             con.close()
 
@@ -3281,6 +3364,704 @@ class DistribuzioneWorker:
 
 
 # ---------------------------------------------------------------------------
+# Sentinella V8 (reintrodotta per FASE 6) - primitive di resilienza
+# ---------------------------------------------------------------------------
+# Tutte basate su una "connection factory": un callable che restituisce una
+# connessione SQLite. Ogni metodo normalizza la connessione (row_factory=Row,
+# isolation_level=None per BEGIN IMMEDIATE) e la chiude in finally.
+
+
+def _normalizza_conn(conn_factory) -> sqlite3.Connection:
+    con = conn_factory()
+    con.row_factory = sqlite3.Row
+    con.isolation_level = None  # transazioni manuali (BEGIN IMMEDIATE)
+    con.execute("PRAGMA foreign_keys=ON;")
+    return con
+
+
+class DistributedLockManager:
+    """Lock distribuito su (alloggio_id, data_inizio, data_fine) via UNIQUE +
+    scadenza. BEGIN IMMEDIATE garantisce mutua esclusione tra processi/thread."""
+
+    def __init__(self, conn_factory, lock_timeout: int = 30):
+        self.conn_factory = conn_factory
+        self.lock_timeout = lock_timeout
+
+    def acquire_lock(self, alloggio_id, data_inizio, data_fine,
+                     session_id: Optional[str] = None):
+        if session_id is None:
+            session_id = uuid.uuid4().hex
+        expires_at = (datetime.datetime.now()
+                      + datetime.timedelta(seconds=self.lock_timeout)).isoformat()
+        con = _normalizza_conn(self.conn_factory)
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            con.execute("DELETE FROM lock_alloggi WHERE expires_at < ?",
+                        (datetime.datetime.now().isoformat(),))
+            con.execute(
+                "INSERT INTO lock_alloggi (alloggio_id, data_inizio, data_fine, "
+                "session_id, expires_at) VALUES (?,?,?,?,?)",
+                (alloggio_id, data_inizio, data_fine, session_id, expires_at))
+            con.execute("COMMIT")
+            return True, session_id
+        except sqlite3.IntegrityError:
+            con.execute("ROLLBACK")
+            return False, session_id
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
+        finally:
+            con.close()
+
+    def release_lock(self, session_id) -> bool:
+        con = _normalizza_conn(self.conn_factory)
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            cur = con.execute("DELETE FROM lock_alloggi WHERE session_id = ?",
+                              (session_id,))
+            con.execute("COMMIT")
+            return cur.rowcount > 0
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
+        finally:
+            con.close()
+
+
+class RateLimiter:
+    """Rate limiting a finestra fissa su rate_limit_buckets."""
+
+    def __init__(self, conn_factory):
+        self.conn_factory = conn_factory
+
+    def check_limit(self, key: str, max_requests: int,
+                    window_seconds: int) -> bool:
+        now = datetime.datetime.now()
+        window_start = now - datetime.timedelta(seconds=window_seconds)
+        con = _normalizza_conn(self.conn_factory)
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            con.execute("DELETE FROM rate_limit_buckets WHERE window_start < ?",
+                        (window_start.isoformat(),))
+            row = con.execute("SELECT count FROM rate_limit_buckets WHERE key = ?",
+                              (key,)).fetchone()
+            if row:
+                count = row["count"] + 1
+                if count > max_requests:
+                    con.execute("COMMIT")
+                    return False
+                con.execute("UPDATE rate_limit_buckets SET count = ? WHERE key = ?",
+                            (count, key))
+            else:
+                con.execute(
+                    "INSERT INTO rate_limit_buckets (key, window_start, count, "
+                    "max_count, window_seconds) VALUES (?, ?, 1, ?, ?)",
+                    (key, now.isoformat(), max_requests, window_seconds))
+            con.execute("COMMIT")
+            return True
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
+        finally:
+            con.close()
+
+
+class TokenRevocationManager:
+    """Lista di revoca dei token (anti-replay) su token_revoked."""
+
+    def __init__(self, conn_factory):
+        self.conn_factory = conn_factory
+
+    def revoke_token(self, jti: str, reason: str = "used",
+                     expires_days: int = 7) -> bool:
+        expires_at = (datetime.datetime.now()
+                      + datetime.timedelta(days=expires_days)).isoformat()
+        con = _normalizza_conn(self.conn_factory)
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            con.execute(
+                "INSERT OR REPLACE INTO token_revoked (jti, revoked_at, reason, "
+                "expires_at) VALUES (?, ?, ?, ?)",
+                (jti, datetime.datetime.now().isoformat(), reason, expires_at))
+            con.execute("COMMIT")
+            return True
+        except sqlite3.Error:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            return False
+        finally:
+            con.close()
+
+    def is_revoked(self, jti: str) -> bool:
+        con = _normalizza_conn(self.conn_factory)
+        try:
+            return con.execute("SELECT 1 FROM token_revoked WHERE jti = ? LIMIT 1",
+                               (jti,)).fetchone() is not None
+        finally:
+            con.close()
+
+
+class HealthMonitor:
+    """Monitoraggio salute componenti (heartbeat + check). Orari in ora locale
+    per coerenza con check_health (niente CURRENT_TIMESTAMP UTC)."""
+
+    COMPONENTS = ["scraper", "ai_engine", "onboarding", "distribuzione",
+                  "notification_router"]
+    HEARTBEAT_TIMEOUT = 180
+
+    def __init__(self, conn_factory):
+        self.conn_factory = conn_factory
+        try:
+            self._init_components()
+        except sqlite3.Error:
+            pass
+
+    def _init_components(self):
+        con = _normalizza_conn(self.conn_factory)
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            for comp in self.COMPONENTS:
+                con.execute(
+                    "INSERT OR IGNORE INTO health_checks (component, status, "
+                    "last_heartbeat) VALUES (?, 'healthy', ?)",
+                    (comp, datetime.datetime.now().isoformat()))
+            con.execute("COMMIT")
+        finally:
+            con.close()
+
+    def heartbeat(self, component: str, status: str = "healthy",
+                  error_message: Optional[str] = None) -> None:
+        adesso = datetime.datetime.now().isoformat()
+        con = _normalizza_conn(self.conn_factory)
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            con.execute("INSERT OR IGNORE INTO health_checks (component, status, "
+                        "last_heartbeat) VALUES (?, ?, ?)",
+                        (component, status, adesso))
+            if error_message:
+                con.execute("UPDATE health_checks SET status=?, last_heartbeat=?, "
+                            "error_count=error_count+1, last_error=?, "
+                            "updated_at=? WHERE component=?",
+                            (status, adesso, error_message, adesso, component))
+            else:
+                con.execute("UPDATE health_checks SET status=?, last_heartbeat=?, "
+                            "updated_at=? WHERE component=?",
+                            (status, adesso, adesso, component))
+            con.execute("COMMIT")
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+        finally:
+            con.close()
+
+    def check_health(self) -> dict:
+        con = _normalizza_conn(self.conn_factory)
+        try:
+            righe = con.execute(
+                "SELECT component, status, last_heartbeat FROM health_checks"
+            ).fetchall()
+        finally:
+            con.close()
+        return {r["component"]: dict(r) for r in righe}
+
+
+class SentinellaV8:
+    """Contenitore delle primitive di resilienza, costruite su una connection
+    factory condivisa. Espone lock_manager, rate_limiter, token_revocation,
+    health_monitor (le dipendenze richieste dalla FASE 6)."""
+
+    def __init__(self, conn_factory):
+        self.conn_factory = conn_factory
+        self.lock_manager = DistributedLockManager(conn_factory)
+        self.rate_limiter = RateLimiter(conn_factory)
+        self.token_revocation = TokenRevocationManager(conn_factory)
+        self.health_monitor = HealthMonitor(conn_factory)
+
+
+# ---------------------------------------------------------------------------
+# FASE 6: Onboarding partner automato
+# ---------------------------------------------------------------------------
+
+
+class PartnerVerificationTemplate:
+    """Genera i messaggi di verifica/conferma/rifiuto per i vari canali."""
+
+    @staticmethod
+    def genera_messaggio_verifica(canale: str, token: str, nome: str) -> str:
+        canale = (canale or "").lower()
+        if canale == "sms":
+            return (f"Tavola Prive: il tuo codice di verifica e {token}. "
+                    "Valido 24h. Rispondi con il codice.")
+        if canale == "telegram":
+            return (f"Ciao {nome}! \U0001F3A9\n"
+                    f"Codice verifica Tavola Prive: {token}\n"
+                    "Scade tra 24 ore.")
+        # default / whatsapp
+        return (f"Ciao {nome}! \U0001F44B\n"
+                "Benvenuto in Tavola Prive.\n"
+                "Per completare la verifica, rispondi con questo codice:\n\n"
+                f"\U0001F510 *{token}*\n\n"
+                "Valido per 24 ore.")
+
+    @staticmethod
+    def genera_messaggio_conferma(nome: str, score, status: str) -> str:
+        return (f"Complimenti {nome}! ✅\n"
+                f"Sei stato verificato con score {score}/100.\n"
+                f"Stato: {status}.\n"
+                "Pronto per operare con Tavola Prive.")
+
+    @staticmethod
+    def genera_messaggio_rifiuto(nome: str, motivo: str) -> str:
+        return (f"Ciao {nome}.\n"
+                f"La verifica non e andata a buon fine: {motivo}.\n"
+                "Puoi riprovare tra 24 ore.")
+
+
+class PartnerScoreEvolutivo:
+    """Aggiorna lo score del partner dopo ogni transazione con media mobile
+    esponenziale (EMA): score_nuovo = score_attuale*0.8 + delta*0.2."""
+
+    ALPHA = 0.2
+
+    def __init__(self, conn_factory):
+        self.conn_factory = conn_factory
+
+    def calcola_delta(self, puntualita, qualita, dispute, completamento) -> float:
+        delta = 0.0
+        delta += 10 if puntualita else -15
+        if qualita is not None:
+            if qualita >= 4:
+                delta += 10
+            elif qualita < 3:
+                delta -= 20
+        # 'dispute' True = disputa aperta; 'risolta'/altro gestito dal chiamante
+        if dispute is True:
+            delta -= 30
+        elif dispute == "risolta":
+            delta += 5
+        if completamento:
+            delta += 5
+        return delta
+
+    def get_score(self, partner_id: int) -> float:
+        con = _normalizza_conn(self.conn_factory)
+        try:
+            riga = con.execute("SELECT trust_score FROM partner_candidates "
+                               "WHERE id = ?", (partner_id,)).fetchone()
+        finally:
+            con.close()
+        return float(riga["trust_score"]) if riga else 0.0
+
+    def registra_evento(self, partner_id: int, evento: str, delta: float,
+                        score_nuovo: float, motivazione: str = "") -> None:
+        con = _normalizza_conn(self.conn_factory)
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            con.execute(
+                "INSERT INTO partner_score_history (partner_id, evento, "
+                "delta_score, score_nuovo, motivazione) VALUES (?,?,?,?,?)",
+                (partner_id, evento, delta, score_nuovo, motivazione))
+            con.execute("COMMIT")
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
+        finally:
+            con.close()
+
+    def aggiorna_score_post_transazione(self, partner_id: int,
+                                        transazione_data: dict) -> float:
+        delta = self.calcola_delta(
+            transazione_data.get("puntualita"),
+            transazione_data.get("qualita"),
+            transazione_data.get("dispute"),
+            transazione_data.get("completamento"))
+        attuale = self.get_score(partner_id)
+        nuovo = round(min(max(attuale * (1 - self.ALPHA) + delta * self.ALPHA,
+                              0.0), 100.0), 2)
+        con = _normalizza_conn(self.conn_factory)
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            con.execute("UPDATE partner_candidates SET trust_score=?, "
+                        "updated_at=? WHERE id=?",
+                        (nuovo, datetime.datetime.now().isoformat(), partner_id))
+            con.execute("COMMIT")
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
+        finally:
+            con.close()
+        self.registra_evento(partner_id, "transazione", delta, nuovo,
+                             "EMA post-transazione")
+        return nuovo
+
+
+class PartnerOnboardingEngine:
+    """Flusso di onboarding zero-friction integrato con la Sentinella V8."""
+
+    BONUS_VELOCE = 40    # risposta entro 5 minuti
+    BONUS_MEDIO = 20     # risposta entro 1 ora
+    SOGLIA_VERIFICA = 50
+
+    def __init__(self, db_connection_func, sentinella_v8):
+        self.connessione = db_connection_func
+        self.sentinella = sentinella_v8
+
+    # --------------------------- helper DB ---------------------------
+    def _con(self) -> sqlite3.Connection:
+        return _normalizza_conn(self.connessione)
+
+    def _get_partner(self, sender_id: str) -> Optional[dict]:
+        con = self._con()
+        try:
+            riga = con.execute("SELECT * FROM partner_candidates WHERE sender_id=?",
+                               (sender_id,)).fetchone()
+        finally:
+            con.close()
+        return dict(riga) if riga else None
+
+    def _sender_exists(self, sender_id: str) -> bool:
+        con = self._con()
+        try:
+            return con.execute("SELECT 1 FROM partner_candidates WHERE sender_id=? "
+                               "LIMIT 1", (sender_id,)).fetchone() is not None
+        finally:
+            con.close()
+
+    def _scrivi(self, sql: str, parametri: tuple) -> None:
+        con = self._con()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            con.execute(sql, parametri)
+            con.execute("COMMIT")
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
+        finally:
+            con.close()
+
+    def _update_status(self, sender_id: str, status: str) -> None:
+        self._scrivi("UPDATE partner_candidates SET status=?, updated_at=? "
+                     "WHERE sender_id=?",
+                     (status, datetime.datetime.now().isoformat(), sender_id))
+
+    def _update_attempts(self, sender_id: str, attempts: int) -> None:
+        self._scrivi("UPDATE partner_candidates SET attempts=?, last_attempt=?, "
+                     "updated_at=? WHERE sender_id=?",
+                     (attempts, datetime.datetime.now().isoformat(),
+                      datetime.datetime.now().isoformat(), sender_id))
+
+    def _update_token(self, sender_id: str, token: str, expiry) -> None:
+        exp = expiry.isoformat() if hasattr(expiry, "isoformat") else expiry
+        self._scrivi("UPDATE partner_candidates SET verification_token=?, "
+                     "token_expiry=?, updated_at=? WHERE sender_id=?",
+                     (token, exp, datetime.datetime.now().isoformat(), sender_id))
+
+    def _update_score(self, sender_id: str, score: float,
+                      motivazione: str) -> None:
+        partner = self._get_partner(sender_id)
+        if partner is None:
+            return
+        old = partner.get("trust_score") or 0.0
+        delta = round(score - old, 2)
+        self._scrivi("UPDATE partner_candidates SET trust_score=?, updated_at=? "
+                     "WHERE sender_id=?",
+                     (score, datetime.datetime.now().isoformat(), sender_id))
+        try:
+            self._scrivi(
+                "INSERT INTO partner_score_history (partner_id, evento, "
+                "delta_score, score_nuovo, motivazione) VALUES (?,?,?,?,?)",
+                (partner["id"], motivazione, delta, score, motivazione))
+        except sqlite3.Error:
+            pass
+
+    def _log_verifica(self, partner_id: int, evento: str, dettaglio: str = "",
+                      ip: str = "") -> None:
+        try:
+            self._scrivi(
+                "INSERT INTO partner_verification_log (partner_id, evento, "
+                "dettaglio, ip_address) VALUES (?,?,?,?)",
+                (partner_id, evento, dettaglio, ip))
+        except sqlite3.Error:
+            pass
+
+    # --------------------------- parsing / validazione ---------------------------
+    @staticmethod
+    def _valida_email(email: str) -> bool:
+        return bool(email) and bool(_EMAIL_RE.fullmatch(email.strip()))
+
+    @staticmethod
+    def _valida_telefono(telefono: str) -> bool:
+        return bool(telefono) and bool(_TEL_RE.search(telefono))
+
+    SKILL_KEYS = ("chef", "guida", "musicista", "butler", "autista", "barca",
+                  "moto", "yacht", "villa", "baita", "appartamento")
+
+    def _parse_message(self, message_data: str) -> dict:
+        testo = message_data if isinstance(message_data, str) else str(message_data)
+        contatti = _estrai_contatti(testo)
+        nome = ""
+        m = re.search(r"(?:sono|mi chiamo)\s+([A-Z][\w']+)", testo, re.IGNORECASE)
+        if m:
+            nome = m.group(1).strip()
+        elif testo.strip():
+            nome = testo.strip().split(",")[0][:60]
+        skill = ""
+        minus = testo.lower()
+        for chiave in self.SKILL_KEYS:
+            if chiave in minus:
+                skill = chiave
+                break
+        return {"nome": nome, "email": contatti["email"],
+                "telefono": contatti["telefono"], "tipo_skill": skill,
+                "referral": bool(re.search(r"referral|invitato|raccomand", minus))}
+
+    def _dati_sufficienti(self, data: dict) -> bool:
+        return bool(data.get("nome") or data.get("email") or data.get("telefono"))
+
+    def _check_duplicati(self, data: dict) -> bool:
+        """True se email o telefono risultano gia' presenti in altri candidati."""
+        email = data.get("email")
+        tel = data.get("telefono")
+        if not email and not tel:
+            return False
+        con = self._con()
+        try:
+            riga = con.execute(
+                "SELECT 1 FROM partner_candidates WHERE "
+                "(email != '' AND email = ?) OR (telefono != '' AND telefono = ?) "
+                "LIMIT 1", (email or "", tel or "")).fetchone()
+        finally:
+            con.close()
+        return riga is not None
+
+    @staticmethod
+    def _genera_token() -> str:
+        return secrets.token_hex(4).upper()
+
+    def _invia_codice(self, sender_id: str, token: str) -> None:
+        # Invio SIMULATO (placeholder per integrazione canale reale).
+        partner = self._get_partner(sender_id)
+        if partner:
+            self._log_verifica(partner["id"], "token_sent",
+                               f"token inviato a {sender_id}")
+
+    # --------------------------- scoring ---------------------------
+    def _calcola_score_iniziale(self, data: dict) -> float:
+        score = 0.0
+        if data.get("email") and self._valida_email(data["email"]):
+            score += 20
+        if data.get("telefono") and self._valida_telefono(data["telefono"]):
+            score += 20
+        campi = [k for k, v in data.items() if v]
+        score += min(len(campi) * 5, 30)
+        if not self._check_duplicati(data):
+            score += 20
+        if data.get("referral"):
+            score += 10
+        return min(score, 100)
+
+    def _calcola_score_finale(self, partner: dict) -> float:
+        base = partner.get("trust_score") or 0.0
+        try:
+            if partner.get("last_attempt") and partner.get("created_at"):
+                delta = (datetime.datetime.fromisoformat(partner["last_attempt"])
+                         - datetime.datetime.fromisoformat(partner["created_at"]))
+                secondi = delta.total_seconds()
+                if secondi < 300:
+                    base += self.BONUS_VELOCE
+                elif secondi < 3600:
+                    base += self.BONUS_MEDIO
+        except (TypeError, ValueError):
+            pass
+        return min(base, 100)
+
+    # --------------------------- inserimento ---------------------------
+    def _insert_candidate(self, sender_id: str, data: dict,
+                          message_data) -> None:
+        adesso = datetime.datetime.now().isoformat()
+        self._scrivi(
+            "INSERT INTO partner_candidates (sender_id, raw_data, nome, email, "
+            "telefono, tipo_skill, status, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?, 'pending', ?, ?)",
+            (sender_id, str(message_data), data.get("nome", ""),
+             data.get("email", ""), data.get("telefono", ""),
+             data.get("tipo_skill", ""), adesso, adesso))
+
+    def _avvia_verifica(self, sender_id: str) -> dict:
+        token = self._genera_token()
+        expiry = datetime.datetime.now() + datetime.timedelta(hours=24)
+        self._update_token(sender_id, token, expiry)
+        self._update_status(sender_id, "verifying")
+        partner = self._get_partner(sender_id)
+        if partner:
+            self._log_verifica(partner["id"], "token_generated")
+        self._invia_codice(sender_id, token)
+        messaggio = PartnerVerificationTemplate.genera_messaggio_verifica(
+            "whatsapp", token, (partner or {}).get("nome", ""))
+        return {"status": "verifying", "token": token, "message": messaggio}
+
+    # --------------------------- API pubblica ---------------------------
+    def processa_nuovo_partner(self, sender_id: str, message_data) -> dict:
+        try:
+            self.sentinella.health_monitor.heartbeat("onboarding")
+        except Exception:
+            pass
+        try:
+            # 1. Rate limiting onboarding
+            if not self.sentinella.rate_limiter.check_limit(
+                    f"onboarding:{sender_id}", 3, 3600):
+                if self._sender_exists(sender_id):
+                    self._update_status(sender_id, "banned")
+                return {"error": "rate_limit_exceeded",
+                        "message": "Troppi tentativi. Contatto bloccato."}
+
+            # 2. Parsing
+            data = self._parse_message(message_data)
+
+            # 3. Lock distribuito su sender_id
+            lock_manager = DistributedLockManager(self.connessione)
+            acquired, session_id = lock_manager.acquire_lock(
+                0, "1970-01-01", "2099-12-31", f"onboard_{sender_id}")
+            if not acquired:
+                return {"error": "concurrent_request",
+                        "message": "Richiesta in elaborazione"}
+            try:
+                # 4. Duplicati
+                if self._sender_exists(sender_id):
+                    return {"error": "duplicate",
+                            "message": "Sender gia' registrato"}
+                # 5. Inserimento
+                self._insert_candidate(sender_id, data, message_data)
+                # 6. Score iniziale
+                score = self._calcola_score_iniziale(data)
+                self._update_score(sender_id, score, "inherent_trust")
+                # 7-8. Verifica o rifiuto
+                if self._dati_sufficienti(data):
+                    self._update_status(sender_id, "parsing_ok")
+                    return self._avvia_verifica(sender_id)
+                self._update_status(sender_id, "rejected")
+                return {"error": "dati_insufficienti",
+                        "message": "Dati forniti non sufficienti"}
+            finally:
+                lock_manager.release_lock(session_id)
+        except Exception as e:
+            logging.exception("Onboarding fallito per %s", sender_id)
+            return {"error": "errore_interno", "message": str(e)}
+
+    def verifica_codice(self, sender_id: str, user_code: str) -> dict:
+        try:
+            partner = self._get_partner(sender_id)
+            if not partner:
+                return {"error": "not_found"}
+            # last_attempt = adesso (serve allo scoring velocita')
+            self._scrivi("UPDATE partner_candidates SET last_attempt=? "
+                         "WHERE sender_id=?",
+                         (datetime.datetime.now().isoformat(), sender_id))
+            partner["last_attempt"] = datetime.datetime.now().isoformat()
+            # 1. Token scaduto
+            if partner.get("token_expiry"):
+                try:
+                    scaduto = datetime.datetime.now() > \
+                        datetime.datetime.fromisoformat(partner["token_expiry"])
+                except (TypeError, ValueError):
+                    scaduto = False
+                if scaduto:
+                    self._update_status(sender_id, "rejected")
+                    return {"error": "token_scaduto", "message": "Codice scaduto"}
+            # 2. Token revocato
+            if partner.get("verification_token") and \
+                    self.sentinella.token_revocation.is_revoked(
+                        partner["verification_token"]):
+                return {"error": "token_revocato"}
+            # 3. Confronto codice
+            if user_code == partner.get("verification_token"):
+                score = self._calcola_score_finale(partner)
+                if score >= self.SOGLIA_VERIFICA:
+                    self._update_status(sender_id, "verified")
+                    self._update_score(sender_id, score, "verification_complete")
+                    self._log_verifica(partner["id"], "verified",
+                                       f"score {score}")
+                    self._promuovi_a_probation(sender_id)
+                    self.sentinella.token_revocation.revoke_token(
+                        partner["verification_token"], "verification_used")
+                    return {"success": True, "status": "probation", "score": score}
+                self._update_status(sender_id, "rejected")
+                return {"error": "score_insufficiente", "score": score}
+            # 4. Codice errato
+            return self._handle_codice_errato(sender_id, partner)
+        except Exception as e:
+            logging.exception("Verifica codice fallita per %s", sender_id)
+            return {"error": "errore_interno", "message": str(e)}
+
+    def _handle_codice_errato(self, sender_id: str, partner: dict) -> dict:
+        attempts = (partner.get("attempts") or 0) + 1
+        self._update_attempts(sender_id, attempts)
+        if attempts >= 3:
+            self._update_status(sender_id, "banned")
+            self._log_verifica(partner["id"], "banned", "troppi tentativi")
+            return {"error": "banned", "message": "Troppi tentativi falliti"}
+        backoff_hours = [1, 4, 24][attempts - 1] if attempts <= 3 else 24
+        retry_at = datetime.datetime.now() + datetime.timedelta(hours=backoff_hours)
+        new_token = self._genera_token()
+        self._update_token(sender_id, new_token, retry_at)
+        self._invia_codice(sender_id, new_token)
+        self._log_verifica(partner["id"], "retry_scheduled",
+                           f"retry tra {backoff_hours}h")
+        return {"error": "codice_errato", "retry_after": backoff_hours * 3600,
+                "attempts_left": 3 - attempts}
+
+    def _promuovi_a_probation(self, sender_id: str) -> None:
+        self._update_status(sender_id, "probation")
+        self._provision_db_verticali(sender_id)
+
+    def _promuovi_a_active(self, sender_id: str) -> None:
+        partner = self._get_partner(sender_id)
+        if partner is None:
+            return
+        self._update_status(sender_id, "active")
+        self._update_score(sender_id, min((partner.get("trust_score") or 0) + 10,
+                                          100), "probation_complete")
+
+    def _provision_db_verticali(self, sender_id: str) -> None:
+        # Provisioning best-effort nei DB verticali in base alle skill.
+        partner = self._get_partner(sender_id)
+        if partner is None:
+            return
+        skills = (partner.get("tipo_skill") or "").lower()
+        try:
+            if any(s in skills for s in ("chef", "guida", "musicista", "butler")):
+                self._log_verifica(partner["id"], "enqueue", "provision: talento")
+            if any(s in skills for s in ("autista", "barca", "moto", "yacht")):
+                self._log_verifica(partner["id"], "enqueue", "provision: mezzi")
+            if any(s in skills for s in ("villa", "baita", "appartamento")):
+                self._log_verifica(partner["id"], "enqueue", "provision: immobili")
+        except sqlite3.Error:
+            pass
+
+
+# ---------------------------------------------------------------------------
 # Orchestratore
 # ---------------------------------------------------------------------------
 class AssistenteGestionale:
@@ -3362,6 +4143,11 @@ class AssistenteGestionale:
         self.distribuzione_worker = DistribuzioneWorker(
             self.coda_marketing, self.load_balancer, self.template_engine,
             self.audit)
+        # FASE 6: Sentinella V8 (resilienza) + onboarding partner automato.
+        # Le primitive usano la connection factory del DB candidati.
+        self.sentinella = SentinellaV8(self.db.connessione)
+        self.onboarding = PartnerOnboardingEngine(self.db.connessione,
+                                                  self.sentinella)
         self.audit.registra("avvio", {"progetto": self.config.get("progetto")})
 
     def distribuisci_proposta(self, candidato_url: str, payload: dict,
