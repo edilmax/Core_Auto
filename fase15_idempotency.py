@@ -119,7 +119,8 @@ class IdempotencyManager:
         conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level=None)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout=30000")
-        conn.execute("PRAGMA journal_mode=WAL")
+        # NB: journal_mode=WAL e' persistente (impostato in _init_schema), qui
+        # non si ripete; synchronous/foreign_keys sono per-connessione.
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA foreign_keys=ON")
         return conn
@@ -131,6 +132,7 @@ class IdempotencyManager:
             os.makedirs(cartella, exist_ok=True)
         conn = self._conn()
         try:
+            conn.execute("PRAGMA journal_mode=WAL")  # una tantum (persistente)
             conn.execute(
                 """CREATE TABLE IF NOT EXISTS idempotency_keys (
                        idempotency_key      TEXT PRIMARY KEY,

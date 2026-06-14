@@ -883,12 +883,13 @@ class DatabaseCandidati:
         """Connessione resiliente alla concorrenza (H4).
 
         `timeout` + `busy_timeout` fanno attendere/ritentare su SQLITE_BUSY
-        invece di fallire subito; WAL + synchronous=NORMAL ottimizzano la
-        concorrenza lettori/scrittore; wal_autocheckpoint contiene la crescita
-        del file -wal. Le FK sono per-connessione, quindi riattivate qui."""
+        invece di fallire subito; synchronous=NORMAL ottimizza la concorrenza
+        lettori/scrittore. NB: journal_mode=WAL e' PERSISTENTE nell'header del
+        file e viene impostato una sola volta in _init_schema, quindi qui NON si
+        ripete (PRAGMA ridondante per-connessione). Le FK sono per-connessione,
+        quindi riattivate qui; wal_autocheckpoint contiene la crescita di -wal."""
         con = sqlite3.connect(self.db_path, timeout=30.0)
         con.execute("PRAGMA busy_timeout=30000;")
-        con.execute("PRAGMA journal_mode=WAL;")
         con.execute("PRAGMA synchronous=NORMAL;")
         con.execute("PRAGMA foreign_keys=ON;")
         con.execute("PRAGMA wal_autocheckpoint=1000;")

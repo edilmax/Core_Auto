@@ -19,6 +19,7 @@ import psutil
 import requests
 import signal
 import sys
+import tempfile
 from functools import wraps
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any, Callable, Tuple, Sequence
@@ -56,7 +57,13 @@ class Config:
     BEARER_TOKEN = _env_o_genera('BEARER_TOKEN', lambda: secrets.token_urlsafe(32))
 
     # Database
-    DB_PATH = os.environ.get('DB_PATH', '/tmp/marketplace.db')
+    # Default su storage persistente del progetto (NON /tmp, che e' volatile/
+    # tmpfs e si svuota al reboot): un DB finanziario non deve vivere in /tmp.
+    DB_PATH = os.environ.get('DB_PATH', 'data/marketplace.db')
+    if DB_PATH.startswith('/tmp') or DB_PATH.startswith(tempfile.gettempdir()):
+        logging.warning(
+            "[Config] DB_PATH in area temporanea (%s): rischio di PERDITA DATI. "
+            "Imposta DB_PATH su storage persistente in produzione.", DB_PATH)
 
     # Rate Limiting (60 req/min per IP)
     RATE_LIMIT_IP = 60           # richieste per minuto

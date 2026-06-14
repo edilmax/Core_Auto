@@ -204,7 +204,7 @@ def _connessione(db_path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path, timeout=30.0, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout=30000")
-    conn.execute("PRAGMA journal_mode=WAL")
+    # journal_mode=WAL e' persistente (impostato in inizializza_schema): qui no.
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
@@ -274,7 +274,13 @@ class OutboxDispatcher:
         self._reclaim_every_s = int(os.environ.get("OUTBOX_RECLAIM_INTERVAL_S", "60"))
         self._backoff_cap_s = int(os.environ.get("OUTBOX_BACKOFF_CAP_S", "300"))
         self._wh_timeout = int(os.environ.get("OUTBOX_WEBHOOK_TIMEOUT_S", "10"))
+        # Alert su profondita' DLQ (audit): soglia + throttling dell'allarme.
+        self._dlq_alert_threshold = int(
+            os.environ.get("OUTBOX_DLQ_ALERT_THRESHOLD", "10"))
+        self._dlq_alert_every_s = int(
+            os.environ.get("OUTBOX_DLQ_ALERT_INTERVAL_S", "3600"))
         self._last_reclaim = 0.0
+        self._last_dlq_alert = 0.0
         self._handlers: Dict[str, Handler] = {}
         inizializza_schema(self._db_path)
         self._register_defaults()
@@ -457,6 +463,35 @@ class OutboxDispatcher:
         finally:
             conn.close()
 
+    def _invia_alert(self, message: str) -> None:
+        """Alert best-effort via Config.TELEGRAM_*/WEBHOOK_URL (come fase13)."""
+        try:
+            import requests  # lazy
+            from fase13_protocollo_finale import Config
+            if Config.TELEGRAM_BOT_TOKEN and Config.TELEGRAM_CHAT_ID:
+                requests.post(
+                    f"https://api.telegram.org/bot{Config.TELEGRAM_BOT_TOKEN}/sendMessage",
+                    json={"chat_id": Config.TELEGRAM_CHAT_ID, "text": message},
+                    timeout=self._wh_timeout)
+            if Config.WEBHOOK_URL:
+                requests.post(Config.WEBHOOK_URL,
+                              json={"source": "core_auto_outbox", "message": message},
+                              timeout=self._wh_timeout)
+        except Exception:  # pragma: no cover - difensivo
+            logger.error("Outbox: invio alert DLQ fallito", exc_info=True)
+
+    def check_dlq_alert(self) -> int:
+        """Se la profondita' DLQ supera la soglia, logga CRITICAL e invia un
+        alert best-effort. Ritorna la profondita' corrente della DLQ."""
+        depth = self.status().get("dead_letter", 0)
+        if depth >= self._dlq_alert_threshold:
+            logger.critical("Outbox DLQ depth=%s >= soglia=%s", depth,
+                            self._dlq_alert_threshold)
+            self._invia_alert(
+                f"🚨 CORE_AUTO Outbox: {depth} messaggi in dead-letter "
+                f"(soglia {self._dlq_alert_threshold})")
+        return depth
+
     def status(self) -> Dict[str, int]:
         """Conteggio dei messaggi per stato (per health/monitoring)."""
         conn = _connessione(self._db_path)
@@ -493,6 +528,9 @@ class OutboxDispatcher:
                 if now - self._last_reclaim >= self._reclaim_every_s:
                     self.reclaim_stuck()
                     self._last_reclaim = now
+                if now - self._last_dlq_alert >= self._dlq_alert_every_s:
+                    self.check_dlq_alert()
+                    self._last_dlq_alert = now
                 righe = self._fetch()
                 for row in righe:
                     if not self._running:

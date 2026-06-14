@@ -2,6 +2,10 @@
 .env
 config_assistente.json
 *.sqlite3
+*.db
+*.db-wal
+*.db-shm
+data/
 cache_scraping/
 TavolaVIP_Bozze/
 
