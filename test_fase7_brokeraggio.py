@@ -61,20 +61,20 @@ class TestFase7Brokeraggio(unittest.TestCase):
 
     def test_registra_pagamento_split(self):
         pid = self.split_manager.registra_pagamento(
-            self.prenotazione_id, 1000.0, 100.0, 900.0)
+            self.prenotazione_id, 100000, 10000, 90000)  # centesimi: 1000/100/900 EUR
         self.assertGreater(pid, 0)
         righe = self._query("SELECT * FROM pagamenti_split WHERE id = ?", (pid,))
         self.assertEqual(len(righe), 1)
         r = righe[0]
         self.assertEqual(r["prenotazione_id"], self.prenotazione_id)
-        self.assertEqual(r["importo_totale"], 1000.0)
-        self.assertEqual(r["commissione_tavola"], 100.0)
-        self.assertEqual(r["quota_partner"], 900.0)
+        self.assertEqual(r["importo_totale"], 100000)
+        self.assertEqual(r["commissione_tavola"], 10000)
+        self.assertEqual(r["quota_partner"], 90000)
         self.assertEqual(r["status"], "pending")
 
     def test_inizializza_escrow(self):
         pid = self.split_manager.registra_pagamento(
-            self.prenotazione_id, 500.0, 50.0, 450.0)
+            self.prenotazione_id, 50000, 5000, 45000)  # 500/50/450 EUR in centesimi
         eid = self.escrow_manager.inizializza_escrow(pid)
         self.assertGreater(eid, 0)
         righe = self._query(
@@ -85,7 +85,7 @@ class TestFase7Brokeraggio(unittest.TestCase):
 
     def test_sblocca_fondi_escrow(self):
         pid = self.split_manager.registra_pagamento(
-            self.prenotazione_id, 800.0, 80.0, 720.0)
+            self.prenotazione_id, 80000, 8000, 72000)  # 800/80/720 EUR in centesimi
         self.escrow_manager.inizializza_escrow(pid)
         self.assertTrue(self.escrow_manager.sblocca_fondi(pid))
         righe = self._query(
@@ -107,7 +107,7 @@ class TestFase7Brokeraggio(unittest.TestCase):
         # prenotazione_id inesistente -> viola la FK -> IntegrityError + rollback.
         prima = self._query("SELECT COUNT(*) AS n FROM pagamenti_split")[0]["n"]
         with self.assertRaises(sqlite3.IntegrityError):
-            self.split_manager.registra_pagamento(999999, 100.0, 10.0, 90.0)
+            self.split_manager.registra_pagamento(999999, 10000, 1000, 9000)
         dopo = self._query("SELECT COUNT(*) AS n FROM pagamenti_split")[0]["n"]
         self.assertEqual(prima, dopo)  # nessuna riga scritta (rollback ok)
 

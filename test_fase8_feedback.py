@@ -52,7 +52,7 @@ class TestFase8Feedback(unittest.TestCase):
         finally:
             conn.close()
         pagamento_id = self.split_manager.registra_pagamento(
-            prenotazione_id, 1000.0, 100.0, 900.0)
+            prenotazione_id, 100000, 10000, 90000)  # centesimi: 1000/100/900 EUR
         escrow_id = self.escrow_manager.inizializza_escrow(pagamento_id)
         return prenotazione_id, pagamento_id, escrow_id
 

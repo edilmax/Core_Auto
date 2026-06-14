@@ -1162,9 +1162,10 @@ class DatabaseCandidati:
                     CREATE TABLE IF NOT EXISTS pagamenti_split (
                         id                 INTEGER PRIMARY KEY AUTOINCREMENT,
                         prenotazione_id    INTEGER NOT NULL,
-                        importo_totale     NUMERIC(10,2) NOT NULL,
-                        commissione_tavola NUMERIC(10,2) NOT NULL,
-                        quota_partner      NUMERIC(10,2) NOT NULL,
+                        -- FASE 17: importi in CENTESIMI interi (zero float).
+                        importo_totale     INTEGER NOT NULL,
+                        commissione_tavola INTEGER NOT NULL,
+                        quota_partner      INTEGER NOT NULL,
                         status             TEXT DEFAULT 'pending',
                         created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (prenotazione_id)
@@ -4303,10 +4304,16 @@ class PagamentoSplitManager:
     def __init__(self, db):
         self.connessione = _risolvi_connessione(db)
 
-    def registra_pagamento(self, prenotazione_id: int, importo_totale: float,
-                           commissione_tavola: float,
-                           quota_partner: float) -> int:
-        """Inserisce un pagamento con status 'pending'. Restituisce l'id creato."""
+    def registra_pagamento(self, prenotazione_id: int, importo_totale: int,
+                           commissione_tavola: int,
+                           quota_partner: int) -> int:
+        """Inserisce un pagamento con status 'pending'. Restituisce l'id creato.
+
+        FASE 17: tutti gli importi sono in CENTESIMI interi (no float). Valida
+        gli invarianti (interi non negativi, commissione + quota == totale)
+        prima di scrivere, cosi' i conti non possono mai divergere."""
+        from fase17_money import valida_split  # modulo isolato: import lazy
+        valida_split(importo_totale, commissione_tavola, quota_partner)
         conn = self.connessione()
         try:
             cursor = conn.cursor()
@@ -4592,8 +4599,9 @@ class NotificheManager:
 
 @dataclass(frozen=True)
 class MetricheFinanziarie:
-    commissioni_nette: float
-    fondi_partner_bloccati: float
+    # FASE 17: importi monetari in CENTESIMI interi (no float).
+    commissioni_nette: int
+    fondi_partner_bloccati: int
     escrow_in_disputa: int
     notifiche_non_lette: int
 
@@ -4613,13 +4621,13 @@ class DashboardManager:
             cursor = conn.cursor()
             # A) Commissioni nette = somma commissione_tavola degli escrow sbloccati
             commissioni_nette = cursor.execute(
-                "SELECT COALESCE(SUM(ps.commissione_tavola), 0.0) "
+                "SELECT COALESCE(SUM(ps.commissione_tavola), 0) "
                 "FROM pagamenti_split ps "
                 "INNER JOIN escrow_fondi ef ON ef.pagamento_id = ps.id "
                 "WHERE ef.stato = 'sbloccato'").fetchone()[0]
             # B) Fondi partner ancora bloccati (non sbloccati)
             fondi_partner_bloccati = cursor.execute(
-                "SELECT COALESCE(SUM(ps.quota_partner), 0.0) "
+                "SELECT COALESCE(SUM(ps.quota_partner), 0) "
                 "FROM pagamenti_split ps "
                 "INNER JOIN escrow_fondi ef ON ef.pagamento_id = ps.id "
                 "WHERE ef.stato IN ('bloccato', 'DA_APPROVARE_ADMIN', 'DISPUTA')"
@@ -4664,10 +4672,15 @@ class ReportManager:
                 "FROM pagamenti_split ps "
                 "INNER JOIN escrow_fondi ef ON ef.pagamento_id = ps.id "
                 "WHERE ef.stato = 'sbloccato'").fetchall()
+        # FASE 17: importi memorizzati in centesimi -> in CSV come euro esatti
+        # (stringa "150.00") per leggibilita' del commercialista, senza float.
+        from fase17_money import cents_to_str  # modulo isolato: import lazy
+        righe_fmt = [(r[0], r[1], cents_to_str(r[2]), cents_to_str(r[3]), r[4])
+                     for r in righe]
         with open(file_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(self.INTESTAZIONE)
-            writer.writerows(righe)
+            writer.writerows(righe_fmt)
         return len(righe)
 
 

@@ -37,6 +37,7 @@ from fase13_protocollo_finale import (
     get_security_manager,
 )
 from fase15_idempotency import EsitoAcquisizione, IdempotencyManager
+from fase17_money import parse_cent, valida_split
 from assistente_gestionale import (
     AuditManager,
     AzioneAudit,
@@ -531,7 +532,8 @@ def idempotent(func: Callable) -> Callable:
 def escrow_create() -> Any:
     """Crea una transazione escrow (pagamento split + fondi bloccati).
 
-    Body JSON: prenotazione_id, importo_totale, commissione_tavola, quota_partner.
+    Body JSON: prenotazione_id, importo_totale, commissione_tavola, quota_partner
+    (FASE 17: importi in CENTESIMI interi; i float vengono rifiutati con 400).
 
     Returns:
         201 con escrow_id/pagamento_id; 400 se il payload non e' valido.
@@ -539,9 +541,10 @@ def escrow_create() -> Any:
     data = request.get_json(silent=True) or {}
     try:
         prenotazione_id = int(data["prenotazione_id"])
-        importo = float(data["importo_totale"])
-        commissione = float(data["commissione_tavola"])
-        quota = float(data["quota_partner"])
+        importo = parse_cent(data["importo_totale"], "importo_totale")
+        commissione = parse_cent(data["commissione_tavola"], "commissione_tavola")
+        quota = parse_cent(data["quota_partner"], "quota_partner")
+        valida_split(importo, commissione, quota)
     except (KeyError, TypeError, ValueError):
         return _error(400, "invalid_payload")
 
@@ -551,7 +554,7 @@ def escrow_create() -> Any:
     escrow_id = svc["escrow"].inizializza_escrow(pagamento_id)
     svc["audit"].registra_azione(
         "ESCROW", escrow_id, AzioneAudit.ESCROW_CREATO,
-        {"pagamento_id": pagamento_id, "importo": importo})
+        {"pagamento_id": pagamento_id, "importo_cent": importo})
     return jsonify({"escrow_id": escrow_id, "pagamento_id": pagamento_id,
                     "stato": "bloccato"}), 201
 
@@ -647,7 +650,8 @@ def escrow_list() -> Any:
 def payments_split() -> Any:
     """Registra un pagamento con ripartizione (split).
 
-    Body JSON: prenotazione_id, importo_totale, commissione_tavola, quota_partner.
+    Body JSON: prenotazione_id, importo_totale, commissione_tavola, quota_partner
+    (FASE 17: importi in CENTESIMI interi; i float vengono rifiutati con 400).
 
     Returns:
         201 con pagamento_id; 400 se il payload non e' valido.
@@ -655,9 +659,10 @@ def payments_split() -> Any:
     data = request.get_json(silent=True) or {}
     try:
         prenotazione_id = int(data["prenotazione_id"])
-        importo = float(data["importo_totale"])
-        commissione = float(data["commissione_tavola"])
-        quota = float(data["quota_partner"])
+        importo = parse_cent(data["importo_totale"], "importo_totale")
+        commissione = parse_cent(data["commissione_tavola"], "commissione_tavola")
+        quota = parse_cent(data["quota_partner"], "quota_partner")
+        valida_split(importo, commissione, quota)
     except (KeyError, TypeError, ValueError):
         return _error(400, "invalid_payload")
     pagamento_id = _services()["payments"].registra_pagamento(

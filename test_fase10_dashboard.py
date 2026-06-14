@@ -32,7 +32,7 @@ class TestFase10Dashboard(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
-    def _crea_catena(self, importo=1000.0, commissione=100.0, quota=900.0):
+    def _crea_catena(self, importo=100000, commissione=10000, quota=90000):
         conn = self.db.connessione()
         try:
             cur = conn.cursor()
@@ -61,30 +61,30 @@ class TestFase10Dashboard(unittest.TestCase):
 
     def test_dashboard_db_vuoto(self):
         m = self.dash.get_riepilogo_finanziario()
-        self.assertEqual(m.commissioni_nette, 0.0)
-        self.assertEqual(m.fondi_partner_bloccati, 0.0)
+        self.assertEqual(m.commissioni_nette, 0)
+        self.assertEqual(m.fondi_partner_bloccati, 0)
         self.assertEqual(m.escrow_in_disputa, 0)
         self.assertEqual(m.notifiche_non_lette, 0)
 
     def test_dashboard_fondi_bloccati(self):
-        _, _, escrow = self._crea_catena(quota=900.0)
+        _, _, escrow = self._crea_catena(quota=90000)  # 900 EUR in centesimi
         # Stato 'bloccato' (iniziale): quota partner conteggiata, commissioni 0.
         m = self.dash.get_riepilogo_finanziario()
-        self.assertEqual(m.fondi_partner_bloccati, 900.0)
-        self.assertEqual(m.commissioni_nette, 0.0)
+        self.assertEqual(m.fondi_partner_bloccati, 90000)
+        self.assertEqual(m.commissioni_nette, 0)
         # Stato 'DA_APPROVARE_ADMIN': resta tra i fondi bloccati.
         self._forza_stato(escrow, "DA_APPROVARE_ADMIN")
         m2 = self.dash.get_riepilogo_finanziario()
-        self.assertEqual(m2.fondi_partner_bloccati, 900.0)
-        self.assertEqual(m2.commissioni_nette, 0.0)
+        self.assertEqual(m2.fondi_partner_bloccati, 90000)
+        self.assertEqual(m2.commissioni_nette, 0)
 
     def test_dashboard_commissioni_incassate(self):
-        _, _, escrow = self._crea_catena(commissione=100.0, quota=900.0)
+        _, _, escrow = self._crea_catena(commissione=10000, quota=90000)
         self._forza_stato(escrow, "DA_APPROVARE_ADMIN")
         self.assertTrue(self.ass.escrow_manager.approva_sblocco_admin(escrow))
         m = self.dash.get_riepilogo_finanziario()
-        self.assertEqual(m.commissioni_nette, 100.0)
-        self.assertEqual(m.fondi_partner_bloccati, 0.0)
+        self.assertEqual(m.commissioni_nette, 10000)
+        self.assertEqual(m.fondi_partner_bloccati, 0)
 
     def test_dashboard_allarmi_dispute(self):
         _, _, escrow = self._crea_catena()

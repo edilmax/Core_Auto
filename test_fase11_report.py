@@ -37,7 +37,7 @@ class TestFase11Report(unittest.TestCase):
             os.remove(self.csv_path)
         self._tmp.cleanup()
 
-    def _crea_catena(self, commissione=100.0, quota=900.0):
+    def _crea_catena(self, commissione=10000, quota=90000):  # centesimi
         conn = self.db.connessione()
         try:
             cur = conn.cursor()
@@ -51,7 +51,7 @@ class TestFase11Report(unittest.TestCase):
         finally:
             conn.close()
         pagamento_id = self.ass.split_manager.registra_pagamento(
-            prenotazione_id, 1000.0, commissione, quota)
+            prenotazione_id, 100000, commissione, quota)  # 1000 EUR in centesimi
         escrow_id = self.ass.escrow_manager.inizializza_escrow(pagamento_id)
         return pagamento_id, escrow_id
 
@@ -86,7 +86,7 @@ class TestFase11Report(unittest.TestCase):
         self.assertEqual(n, 1)  # solo il record sbloccato
 
     def test_export_csv_dati_corretti(self):
-        pagamento_id, escrow = self._crea_catena(commissione=150.0, quota=850.0)
+        pagamento_id, escrow = self._crea_catena(commissione=15000, quota=85000)
         self._forza_stato(escrow, "sbloccato")
         n = self.report.esporta_commissioni_csv(self.csv_path)
         self.assertEqual(n, 1)
@@ -94,8 +94,9 @@ class TestFase11Report(unittest.TestCase):
         self.assertEqual(len(righe), 2)  # intestazione + 1 record
         dati = righe[1]  # saltata l'intestazione
         self.assertEqual(int(dati[0]), pagamento_id)        # ID_Pagamento
-        self.assertEqual(float(dati[2]), 150.0)             # Commissione_Piattaforma
-        self.assertEqual(float(dati[3]), 850.0)             # Quota_Partner
+        # FASE 17: importi esportati come euro esatti (stringa), da centesimi.
+        self.assertEqual(dati[2], "150.00")                 # Commissione_Piattaforma
+        self.assertEqual(dati[3], "850.00")                 # Quota_Partner
         self.assertEqual(dati[4], "sbloccato")              # Stato
 
 
