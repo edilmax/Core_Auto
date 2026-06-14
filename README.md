@@ -23,7 +23,7 @@ operazioni mutanti.
   - [Gruppo 1 — CRITICAL](#gruppo-1--critical-3961c48)
   - [Gruppo 2 — HIGH](#gruppo-2--high-b38acc7)
   - [Gruppo 3 — MEDIUM](#gruppo-3--medium-70743b8)
-  - [Hardening incrementale (Fasi 18–21)](#hardening-incrementale-fasi-1821)
+  - [Hardening incrementale (Fasi 18–22)](#hardening-incrementale-fasi-1822)
 - [Fase 15 — Idempotency Manager](#fase-15--idempotency-manager-exactly-once)
   - [Uso lato client](#uso-lato-client)
   - [Architettura](#architettura)
@@ -184,7 +184,7 @@ Dopo ogni gruppo la suite core (89 test) è rimasta verde.
 | **K4** | Header di sicurezza assenti | `after_request`: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Cache-Control: no-store` |
 | **K5** | Drain dei worker troppo breve | `graceful_timeout` portato a 60 s |
 
-## Hardening incrementale (Fasi 18–21)
+## Hardening incrementale (Fasi 18–22)
 
 | Fase | Intervento | Beneficio |
 |------|-----------|-----------|
@@ -192,6 +192,7 @@ Dopo ogni gruppo la suite core (89 test) è rimasta verde.
 | **19** | Correlation-ID per richiesta (da `X-Request-ID` sanitizzato o generato) nei log e in `X-Correlation-ID` | Tracciabilità end-to-end |
 | **20** | Chiusura SSRF DNS-rebinding: validazione dell'IP **reale del peer al connect** sui webhook | Niente bypass via rebinding tra check e fetch |
 | **21** | `Idempotency-Key` stabile in uscita sui webhook (`outbox-<id>`, costante sui retry) | Consegne at-least-once deduplicabili dai partner |
+| **22** | Dispatch Outbox **concorrente** (`OUTBOX_CONCURRENCY`, default 4) con thread pool | Niente head-of-line blocking: gli handler lenti non bloccano gli altri |
 
 ---
 
