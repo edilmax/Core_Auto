@@ -4435,6 +4435,60 @@ class NotificheManager:
 
 
 # ---------------------------------------------------------------------------
+# FASE 10: Dashboard finanziaria
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class MetricheFinanziarie:
+    commissioni_nette: float
+    fondi_partner_bloccati: float
+    escrow_in_disputa: int
+    notifiche_non_lette: int
+
+
+class DashboardManager:
+    """Riepilogo finanziario aggregato per la dashboard admin (sola lettura)."""
+
+    def __init__(self, db):
+        self.db = db
+
+    def get_riepilogo_finanziario(self) -> MetricheFinanziarie:
+        """Calcola le 4 metriche finanziarie con query aggregate.
+        NB: query A/B adattate allo schema reale (commissione_tavola al posto di
+        quota_piattaforma; join escrow_fondi.pagamento_id = pagamenti_split.id,
+        perche' pagamenti_split non ha la colonna escrow_id)."""
+        with self.db.connessione() as conn:
+            cursor = conn.cursor()
+            # A) Commissioni nette = somma commissione_tavola degli escrow sbloccati
+            commissioni_nette = cursor.execute(
+                "SELECT COALESCE(SUM(ps.commissione_tavola), 0.0) "
+                "FROM pagamenti_split ps "
+                "INNER JOIN escrow_fondi ef ON ef.pagamento_id = ps.id "
+                "WHERE ef.stato = 'sbloccato'").fetchone()[0]
+            # B) Fondi partner ancora bloccati (non sbloccati)
+            fondi_partner_bloccati = cursor.execute(
+                "SELECT COALESCE(SUM(ps.quota_partner), 0.0) "
+                "FROM pagamenti_split ps "
+                "INNER JOIN escrow_fondi ef ON ef.pagamento_id = ps.id "
+                "WHERE ef.stato IN ('bloccato', 'DA_APPROVARE_ADMIN', 'DISPUTA')"
+            ).fetchone()[0]
+            # C) Escrow in disputa
+            escrow_in_disputa = cursor.execute(
+                "SELECT COUNT(*) FROM escrow_fondi WHERE stato = 'DISPUTA'"
+            ).fetchone()[0]
+            # D) Notifiche admin non lette
+            notifiche_non_lette = cursor.execute(
+                "SELECT COUNT(*) FROM notifiche_admin WHERE letto = 0"
+            ).fetchone()[0]
+        return MetricheFinanziarie(
+            commissioni_nette=commissioni_nette,
+            fondi_partner_bloccati=fondi_partner_bloccati,
+            escrow_in_disputa=escrow_in_disputa,
+            notifiche_non_lette=notifiche_non_lette)
+
+
+# ---------------------------------------------------------------------------
 # Orchestratore
 # ---------------------------------------------------------------------------
 class AssistenteGestionale:
@@ -4530,6 +4584,8 @@ class AssistenteGestionale:
         # FASE 8: motore di feedback (human-in-the-loop), ora con notifiche.
         self.feedback_manager = FeedbackManager(self.db, self.escrow_manager,
                                                 self.notifiche_manager)
+        # FASE 10: dashboard finanziaria (sola lettura).
+        self.dashboard_manager = DashboardManager(self.db)
         self.audit.registra("avvio", {"progetto": self.config.get("progetto")})
 
     def distribuisci_proposta(self, candidato_url: str, payload: dict,
