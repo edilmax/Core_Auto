@@ -53,6 +53,17 @@ class TestPublisher(_Base):
         mid = self.pub.publish_standalone(OutboxMessage("audit_external", {"a": 1}))
         self.assertEqual(self._row(mid)["status"], "pending")
 
+    def test_publish_rollback_non_persiste(self):
+        # Promessa transazionale: se la txn del chiamante fa rollback, il
+        # messaggio outbox NON deve restare persistito.
+        c = _connessione(self.db)
+        c.execute("BEGIN IMMEDIATE")
+        self.pub.publish(c, OutboxMessage("test", {"a": 1}))
+        c.execute("ROLLBACK")
+        n = c.execute("SELECT COUNT(*) FROM outbox").fetchone()[0]
+        c.close()
+        self.assertEqual(n, 0)
+
     def test_publish_payload_non_serializzabile(self):
         c = _connessione(self.db)
         c.execute("BEGIN IMMEDIATE")
@@ -177,6 +188,17 @@ class TestDispatcher(_Base):
         time.sleep(0.2)
         self.disp.stop()
         self.assertFalse(self.disp._running)
+
+    def test_backoff_limiti_e_cap(self):
+        # NB: con full jitter la monotonicita' per-campione NON e' garantita
+        # (specie attorno al cap); si verificano gli invarianti reali: ogni
+        # delay sta in [1, min(2**i, cap)] e a retry alti e' limitato dal cap.
+        cap = self.disp._backoff_cap_s
+        for i in range(14):
+            d = self.disp._backoff(i)
+            self.assertGreaterEqual(d, 1)
+            self.assertLessEqual(d, min(2 ** i, cap))
+        self.assertLessEqual(self.disp._backoff(50), cap)
 
 
 class TestAntiSSRF(_Base):
