@@ -377,6 +377,17 @@ class OutboxDispatcher:
             logger.error("Telegram dispatch fallito", exc_info=True)
             return False
 
+    @staticmethod
+    def _webhook_headers(payload: Dict[str, Any]) -> Dict[str, str]:
+        """Header per la consegna webhook, con Idempotency-Key stabile in uscita
+        (FASE 21) derivata dall'id outbox: il partner puo' deduplicare i retry."""
+        headers = {"Content-Type": "application/json"}
+        did = (payload.get("_outbox") or {}).get("message_id")
+        if did is not None:
+            headers["Idempotency-Key"] = f"outbox-{did}"
+            headers["X-Outbox-Delivery-Id"] = str(did)
+        return headers
+
     def _h_webhook(self, payload: Dict[str, Any]) -> bool:
         url = payload.get("url", "")
         if not _url_sicuro(url):
@@ -386,7 +397,7 @@ class OutboxDispatcher:
             data = json.dumps(payload.get("body", {})).encode("utf-8")
             req = urllib.request.Request(
                 url, data=data, method="POST",
-                headers={"Content-Type": "application/json"})
+                headers=self._webhook_headers(payload))
             # FASE 20: no-redirect + validazione del peer IP al connect.
             opener = urllib.request.build_opener(
                 _NoRedirect(), _SafeHTTPHandler(), _SafeHTTPSHandler())
@@ -437,7 +448,14 @@ class OutboxDispatcher:
 
             # Esecuzione handler FUORI transazione; mai deve lasciare 'processing'.
             try:
-                ok = bool(handler(json.loads(row["payload"])))
+                payload = json.loads(row["payload"])
+                # FASE 21: meta per la consegna idempotente in uscita. La chiave
+                # e' stabile su TUTTI i retry (deriva dall'id), cosi' il consumer
+                # puo' deduplicare. Iniettata nel wrapper, NON nel body inviato.
+                if isinstance(payload, dict):
+                    payload["_outbox"] = {"message_id": mid,
+                                          "retry_count": row["retry_count"]}
+                ok = bool(handler(payload))
                 errore = None if ok else "handler ha restituito False"
             except Exception as exc:  # handler difettoso -> trattato come fallimento
                 ok = False

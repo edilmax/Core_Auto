@@ -184,6 +184,24 @@ class TestDispatcher(_Base):
         s = self.disp.status()
         self.assertEqual(s.get("pending"), 1)
 
+    def test_process_inietta_meta_outbox(self):
+        # FASE 21: l'handler riceve _outbox.message_id (chiave delivery stabile),
+        # ma il body resta intatto.
+        captured = {}
+        self.disp.register("meta", lambda p: captured.update(p) or True)
+        mid = self.pub.publish_standalone(OutboxMessage("meta", {"body": {"x": 1}}))
+        self._process_per_id(mid)
+        self.assertEqual(captured.get("_outbox", {}).get("message_id"), mid)
+        self.assertEqual(captured.get("body"), {"x": 1})       # body non inquinato
+        self.assertNotIn("_outbox", captured.get("body", {}))
+
+    def test_webhook_headers_idempotency_key(self):
+        h = OutboxDispatcher._webhook_headers({"_outbox": {"message_id": 42}})
+        self.assertEqual(h["Idempotency-Key"], "outbox-42")
+        self.assertEqual(h["X-Outbox-Delivery-Id"], "42")
+        # senza meta: nessuna idempotency-key in uscita
+        self.assertNotIn("Idempotency-Key", OutboxDispatcher._webhook_headers({}))
+
     def test_start_stop(self):
         self.disp.start()
         time.sleep(0.2)
