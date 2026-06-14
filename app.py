@@ -296,6 +296,28 @@ def fortress_readonly(func: Callable) -> Callable:
     return wrapper
 
 
+def require_admin(func: Callable) -> Callable:
+    """Decoratore di AUTORIZZAZIONE per le operazioni che muovono denaro.
+
+    Va posto SOTTO @fortress (autenticazione) e SOPRA with_circuit_breaker/
+    idempotent: l'autenticazione prova *chi* sei, questo verifica il *privilegio*
+    (header `X-Admin-Token`, confronto timing-safe con `Config.ADMIN_TOKEN`).
+    Separa lo sblocco/rimborso fondi dalle semplici scritture autenticate: un
+    credenziale partner/cliente NON puo' rilasciare denaro. 403 se non admin.
+    """
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        import hmac as _hmac
+        token = request.headers.get("X-Admin-Token", "")
+        atteso = Config.ADMIN_TOKEN
+        if not atteso or not _hmac.compare_digest(str(token), str(atteso)):
+            logger.warning("Privilegio admin negato ip=%s path=%s",
+                           _client_ip(), request.path)
+            return _error(403, "forbidden")
+        return func(*args, **kwargs)
+    return wrapper
+
+
 # H1: classificazione degli errori DB per il circuit breaker.
 # - INFRA (transitori/infrastrutturali) -> aprono il breaker, 503.
 # - CLIENT (input/programmazione) -> NON aprono il breaker, 400.
@@ -462,6 +484,11 @@ def health_system() -> Any:
         return _error(500, "internal_error")
 
 
+# Header da preservare nel replay idempotente: oltre al Content-Type, il
+# `Location` di un 201 Created fa parte del contratto API e va restituito uguale.
+_REPLAY_SAFE_HEADERS = ("Content-Type", "Location")
+
+
 def idempotent(func: Callable) -> Callable:
     """Decoratore: rende idempotente una route mutante via header Idempotency-Key.
 
@@ -497,9 +524,8 @@ def idempotent(func: Callable) -> Callable:
         if res.esito == EsitoAcquisizione.IN_CACHE:
             r = res.risposta or {}
             replay = make_response(r.get("body") or "", r.get("status") or 200)
-            ctype = (r.get("headers") or {}).get("Content-Type")
-            if ctype:
-                replay.headers["Content-Type"] = ctype
+            for nome, valore in (r.get("headers") or {}).items():
+                replay.headers[nome] = valore  # ripristina Content-Type/Location
             replay.headers["Idempotent-Replay"] = "true"
             return replay
 
@@ -516,8 +542,9 @@ def idempotent(func: Callable) -> Callable:
             mgr.release(key, token)
             return resp
         body_txt = resp.get_data(as_text=True)
-        mgr.store(key, token, resp.status_code, body_txt,
-                  {"Content-Type": resp.content_type})
+        headers_salvati = {h: resp.headers[h] for h in _REPLAY_SAFE_HEADERS
+                           if h in resp.headers}
+        mgr.store(key, token, resp.status_code, body_txt, headers_salvati)
         return resp
     return wrapper
 
@@ -579,6 +606,7 @@ def escrow_detail(escrow_id: int) -> Any:
 
 @api.route("/escrow/<int:escrow_id>/release", methods=["POST"])
 @fortress
+@require_admin
 @with_circuit_breaker
 @idempotent
 def escrow_release(escrow_id: int) -> Any:
@@ -600,6 +628,7 @@ def escrow_release(escrow_id: int) -> Any:
 
 @api.route("/escrow/<int:escrow_id>/refund", methods=["POST"])
 @fortress
+@require_admin
 @with_circuit_breaker
 @idempotent
 def escrow_refund(escrow_id: int) -> Any:
@@ -795,10 +824,17 @@ def _registra_middleware_logging(app: Flask) -> None:
 
     @app.after_request
     def _security_headers(response: Response) -> Response:
-        # K4: header di sicurezza su ogni risposta.
+        # K4 + FASE 18: header di sicurezza su ogni risposta.
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Cache-Control"] = "no-store, max-age=0"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+        # HSTS solo su connessione sicura (dietro proxy TLS): inutile/sconsigliato su HTTP.
+        if request.is_secure:
+            response.headers["Strict-Transport-Security"] = \
+                "max-age=63072000; includeSubDomains"
         return response
 
     @app.teardown_appcontext
@@ -818,7 +854,7 @@ def create_app(config_name: str = "production") -> Flask:
     """
     # M4: fail-fast sui segreti obbligatori in produzione.
     if os.environ.get("FLASK_ENV") == "production":
-        mancanti = [k for k in ("HMAC_SECRET", "API_KEY", "BEARER_TOKEN")
+        mancanti = [k for k in ("HMAC_SECRET", "API_KEY", "BEARER_TOKEN", "ADMIN_TOKEN")
                     if not os.environ.get(k)]
         if mancanti:
             raise RuntimeError(

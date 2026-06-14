@@ -222,6 +222,32 @@ class TestDecoratore(_BaseIdem):
         self.assertEqual(r2.status_code, 500)
         self.assertEqual(contatore["n"], 2)  # 5xx rilascia il lock -> retry esegue
 
+    def test_replay_preserva_location_header(self):
+        # FASE 18: il replay deve restituire anche il Location di un 201 Created.
+        from app import idempotent
+        app = Flask(__name__)
+        app.extensions["core_auto"] = {"idempotency": self.mgr}
+        cont = {"n": 0}
+
+        @app.route("/crea", methods=["POST"])
+        @idempotent
+        def crea():
+            cont["n"] += 1
+            resp = jsonify({"id": 7})
+            resp.headers["Location"] = "/escrow/7"
+            return resp, 201
+
+        c = app.test_client()
+        h = {"Idempotency-Key": "loc-" + uuid.uuid4().hex}
+        r1 = c.post("/crea", headers=h, json={"a": 1})
+        r2 = c.post("/crea", headers=h, json={"a": 1})
+        self.assertEqual(r1.status_code, 201)
+        self.assertEqual(r2.status_code, 201)
+        self.assertEqual(r1.headers.get("Location"), "/escrow/7")
+        self.assertEqual(r2.headers.get("Location"), "/escrow/7")  # preservato!
+        self.assertEqual(r2.headers.get("Idempotent-Replay"), "true")
+        self.assertEqual(cont["n"], 1)
+
 
 class TestIntegrazionePagamenti(unittest.TestCase):
     """End-to-end: fortress (HMAC) + @idempotent sulla route reale /payments/split."""
@@ -276,6 +302,37 @@ class TestIntegrazionePagamenti(unittest.TestCase):
         r = self.client.post("/api/v1/payments/split", data=b"{}",
                              headers={"Content-Type": "application/json"})
         self.assertEqual(r.status_code, 401)
+
+    def test_release_senza_admin_token_403(self):
+        # FASE 18: autenticato (fortress) ma SENZA privilegio admin -> 403.
+        path = "/api/v1/escrow/999999/release"
+        h = self._headers("POST", path, b"", "adm-" + uuid.uuid4().hex)
+        r = self.client.post(path, data=b"", headers=h)
+        self.assertEqual(r.status_code, 403)
+
+    def test_refund_senza_admin_token_403(self):
+        path = "/api/v1/escrow/999999/refund"
+        h = self._headers("POST", path, b"", "adm-" + uuid.uuid4().hex)
+        r = self.client.post(path, data=b"", headers=h)
+        self.assertEqual(r.status_code, 403)
+
+    def test_release_con_admin_token_supera_authz(self):
+        from fase13_protocollo_finale import Config
+        path = "/api/v1/escrow/999999/release"
+        h = self._headers("POST", path, b"", "adm-" + uuid.uuid4().hex)
+        h["X-Admin-Token"] = Config.ADMIN_TOKEN
+        r = self.client.post(path, data=b"", headers=h)
+        self.assertNotEqual(r.status_code, 403)   # privilegio concesso
+        self.assertEqual(r.status_code, 409)      # escrow inesistente
+
+    def test_security_headers_presenti(self):
+        r = self.client.get("/api/v1/health")
+        self.assertEqual(r.headers.get("X-Content-Type-Options"), "nosniff")
+        self.assertEqual(r.headers.get("X-Frame-Options"), "DENY")
+        self.assertEqual(r.headers.get("Referrer-Policy"), "no-referrer")
+        self.assertIn("geolocation=()", r.headers.get("Permissions-Policy", ""))
+        self.assertIn("default-src 'none'",
+                      r.headers.get("Content-Security-Policy", ""))
 
 
 if __name__ == "__main__":

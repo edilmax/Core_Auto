@@ -55,6 +55,9 @@ class Config:
     HMAC_SECRET = _env_o_genera('HMAC_SECRET', lambda: secrets.token_hex(32))
     API_KEY = _env_o_genera('API_KEY', lambda: secrets.token_hex(16))
     BEARER_TOKEN = _env_o_genera('BEARER_TOKEN', lambda: secrets.token_urlsafe(32))
+    # FASE 18: credenziale di privilegio per le operazioni che muovono denaro
+    # (sblocco/rimborso escrow). Separa l'autorizzazione dall'autenticazione.
+    ADMIN_TOKEN = _env_o_genera('ADMIN_TOKEN', lambda: secrets.token_urlsafe(32))
 
     # Database
     # Default su storage persistente del progetto (NON /tmp, che e' volatile/
