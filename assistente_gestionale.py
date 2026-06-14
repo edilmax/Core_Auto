@@ -1244,6 +1244,11 @@ class DatabaseCandidati:
                     "BEFORE DELETE ON audit_logs BEGIN "
                     "SELECT RAISE(ABORT, 'ERRORE CRITICO: I log di audit non "
                     "possono essere eliminati.'); END;")
+                # --- C1: nonce store anti-replay (cross-worker, durevole) ---
+                con.execute("CREATE TABLE IF NOT EXISTS nonce_usati ("
+                            "nonce TEXT PRIMARY KEY, expires_at TEXT NOT NULL)")
+                con.execute("CREATE INDEX IF NOT EXISTS idx_nonce_exp "
+                            "ON nonce_usati(expires_at)")
         finally:
             con.close()
 

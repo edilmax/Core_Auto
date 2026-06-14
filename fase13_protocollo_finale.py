@@ -20,7 +20,7 @@ import requests
 import signal
 import sys
 from functools import wraps
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any, Callable, Tuple
 from dataclasses import dataclass
 from enum import Enum
@@ -33,13 +33,27 @@ import logging
 # CONFIGURAZIONE CENTRALIZZATA
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _env_o_genera(nome: str, generatore: Callable[[], str]) -> str:
+    """Legge un segreto dall'ambiente; se assente ne genera uno EFFIMERO e
+    avvisa. ATTENZIONE: un valore generato e' diverso per ogni processo, quindi
+    in produzione (e con piu' worker Gunicorn) DEVE arrivare dall'ambiente."""
+    valore = os.environ.get(nome)
+    if valore:
+        return valore
+    logging.warning(
+        "[Config] %s non impostato: uso un valore effimero generato. "
+        "In produzione impostalo via variabile d'ambiente (condivisa tra i worker).",
+        nome)
+    return generatore()
+
+
 class Config:
     """Configurazione centralizzata del sistema."""
 
-    # Sicurezza
-    HMAC_SECRET = os.environ.get('HMAC_SECRET', secrets.token_hex(32))
-    API_KEY = os.environ.get('API_KEY', secrets.token_hex(16))
-    BEARER_TOKEN = os.environ.get('BEARER_TOKEN', secrets.token_urlsafe(32))
+    # Sicurezza (in produzione: SEMPRE da variabili d'ambiente condivise)
+    HMAC_SECRET = _env_o_genera('HMAC_SECRET', lambda: secrets.token_hex(32))
+    API_KEY = _env_o_genera('API_KEY', lambda: secrets.token_hex(16))
+    BEARER_TOKEN = _env_o_genera('BEARER_TOKEN', lambda: secrets.token_urlsafe(32))
 
     # Database
     DB_PATH = os.environ.get('DB_PATH', '/tmp/marketplace.db')
@@ -95,11 +109,10 @@ class SecurityManager:
     • Timestamp validation (±5 secondi)
     """
 
-    def __init__(self):
-        self._nonce_cache = OrderedDict()
-        self._nonce_lock = threading.Lock()
-        self._cleanup_thread = threading.Thread(target=self._cleanup_nonce_loop, daemon=True)
-        self._cleanup_thread.start()
+    def __init__(self, conn_factory: Optional[Callable[[], sqlite3.Connection]] = None):
+        # Nonce store SQLite (cross-worker, durevole): la factory apre una
+        # connessione al DB condiviso. Default: il DB configurato in Config.
+        self._conn_factory = conn_factory or (lambda: sqlite3.connect(Config.DB_PATH))
 
     @staticmethod
     def generate_signature(payload: str, timestamp: str) -> str:
@@ -114,41 +127,51 @@ class SecurityManager:
     @staticmethod
     def verify_signature(payload: str, timestamp: str, signature: str) -> bool:
         """Verifica firma HMAC-SHA256 con timing-safe comparison."""
-        expected = SecurityManager.generate_signature(payload, timestamp)
-        return hmac.compare_digest(expected, signature or "")
+        try:
+            expected = SecurityManager.generate_signature(payload, timestamp)
+            return hmac.compare_digest(expected, signature or "")
+        except TypeError:
+            return False
 
     # ─── NONCE MANAGEMENT (Anti-Replay) ───
 
-    def is_nonce_valid(self, nonce: str) -> bool:
+    def is_nonce_valid(self, nonce: str,
+                       conn: Optional[sqlite3.Connection] = None) -> bool:
+        """Verifica (e consuma) un nonce su store SQLite condiviso tra worker.
+
+        Inserimento atomico sulla PRIMARY KEY: se il nonce esiste gia' e' un
+        replay -> False. I nonce scaduti vengono potati ad ogni chiamata.
+
+        Args:
+            nonce: valore del nonce.
+            conn: connessione opzionale (per riuso nella stessa transazione).
+
+        Returns:
+            True se il nonce e' nuovo (accettato); False se gia' usato.
         """
-        Verifica se il nonce è valido (non riutilizzato).
-
-        Pattern: Cache LRU con TTL. Se il nonce è già nella cache,
-        la richiesta è un replay attack e viene rifiutata.
-        """
-        with self._nonce_lock:
-            if nonce in self._nonce_cache:
-                return False
-
-            # Aggiungi nonce con timestamp
-            self._nonce_cache[nonce] = time.time()
-
-            # Limita dimensione cache
-            while len(self._nonce_cache) > Config.NONCE_MAX_SIZE:
-                self._nonce_cache.popitem(last=False)
-
-            return True
-
-    def _cleanup_nonce_loop(self):
-        """Pulizia periodica nonce scaduti."""
-        while True:
-            time.sleep(Config.NONCE_TTL)
-            with self._nonce_lock:
-                now = time.time()
-                expired = [n for n, t in self._nonce_cache.items()
-                          if now - t > Config.NONCE_TTL]
-                for n in expired:
-                    del self._nonce_cache[n]
+        now = datetime.now(timezone.utc)
+        exp = (now + timedelta(seconds=Config.NONCE_TTL)).isoformat()
+        should_close = conn is None
+        con = conn or self._conn_factory()
+        try:
+            with con:
+                con.execute("DELETE FROM nonce_usati WHERE expires_at < ?",
+                            (now.isoformat(),))
+                try:
+                    con.execute(
+                        "INSERT INTO nonce_usati (nonce, expires_at) VALUES (?,?)",
+                        (nonce, exp))
+                    return True
+                except sqlite3.IntegrityError:
+                    return False
+        except sqlite3.OperationalError as e:
+            if "database is locked" in str(e):
+                time.sleep(0.01)
+                return self.is_nonce_valid(nonce, conn)
+            raise
+        finally:
+            if should_close:
+                con.close()
 
     # ─── TIMESTAMP VALIDATION ───
 
@@ -159,20 +182,30 @@ class SecurityManager:
             ts_int = int(ts)
             now = int(time.time())
             return abs(now - ts_int) <= window
-        except ValueError:
+        except (ValueError, TypeError):
             return False
 
     # ─── API KEY / BEARER ───
 
     @staticmethod
     def verify_api_key(key: str) -> bool:
-        """Verifica API key con timing-safe comparison."""
-        return hmac.compare_digest(key, Config.API_KEY)
+        """Verifica API key con timing-safe comparison (False se vuota/non valida)."""
+        if not key or not Config.API_KEY:
+            return False
+        try:
+            return hmac.compare_digest(str(key), Config.API_KEY)
+        except TypeError:
+            return False
 
     @staticmethod
     def verify_bearer_token(token: str) -> bool:
-        """Verifica Bearer token con timing-safe comparison."""
-        return hmac.compare_digest(token, Config.BEARER_TOKEN)
+        """Verifica Bearer token con timing-safe comparison (False se vuoto/non valido)."""
+        if not token or not Config.BEARER_TOKEN:
+            return False
+        try:
+            return hmac.compare_digest(str(token), Config.BEARER_TOKEN)
+        except TypeError:
+            return False
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -188,8 +221,31 @@ class RateLimiter:
     """
 
     def __init__(self):
-        self._ip_windows: Dict[str, deque] = {}
-        self._lock = threading.Lock()
+        # OrderedDict ordinato per RECENZA (move_to_end a ogni accesso): il
+        # fronte e' l'IP meno recente -> pruning O(k) con break + hard limit.
+        self._ip_windows: "OrderedDict[str, deque]" = OrderedDict()
+        self._lock = threading.RLock()
+        self._last_prune = time.time()
+        self._prune_interval = 60.0
+        self._max_entries = 100000
+
+    def _prune_lazy(self, now: float) -> None:
+        """Pota le finestre scadute e applica un hard limit (anti memory-leak).
+
+        Sfrutta l'ordinamento per recenza: itera dal fronte (IP piu' vecchi) e
+        si ferma (break) al primo IP ancora attivo, evitando il costo O(n)."""
+        cutoff = now - Config.RATE_LIMIT_WINDOW
+        morti = []
+        for chiave, finestra in self._ip_windows.items():
+            if finestra and finestra[-1] >= cutoff:
+                break  # da qui in poi gli IP sono recenti
+            morti.append(chiave)
+        for chiave in morti:
+            del self._ip_windows[chiave]
+        # Hard limit: scarta i meno recenti se si supera il tetto.
+        while len(self._ip_windows) > self._max_entries:
+            self._ip_windows.popitem(last=False)
+        self._last_prune = now
 
     def is_allowed(self, ip: str) -> Tuple[bool, Dict]:
         """
@@ -201,9 +257,14 @@ class RateLimiter:
         now = time.time()
 
         with self._lock:
-            # Ottieni o crea finestra per l'IP
+            # Pruning condizionato (al massimo ogni _prune_interval secondi).
+            if now - self._last_prune > self._prune_interval:
+                self._prune_lazy(now)
+
+            # Ottieni o crea finestra per l'IP, mantenendo l'ordine per recenza.
             if ip not in self._ip_windows:
                 self._ip_windows[ip] = deque()
+            self._ip_windows.move_to_end(ip)
 
             window = self._ip_windows[ip]
 
@@ -359,9 +420,15 @@ class SelfHealingManager:
         self._request_lock = threading.Lock()
         self._circuit_breaker = DBCircuitBreaker()
 
-        # Signal handlers per graceful shutdown
-        signal.signal(signal.SIGTERM, self._handle_sigterm)
-        signal.signal(signal.SIGINT, self._handle_sigterm)
+        # Signal handlers per graceful shutdown. signal.signal() funziona solo
+        # nel main thread: sotto Gunicorn (worker) o se istanziato altrove
+        # solleverebbe ValueError -> lo gestiamo senza far cadere l'app.
+        try:
+            signal.signal(signal.SIGTERM, self._handle_sigterm)
+            signal.signal(signal.SIGINT, self._handle_sigterm)
+        except (ValueError, OSError, RuntimeError) as e:
+            logging.warning(
+                "[SelfHealing] Signal handlers non registrati (non main thread?): %s", e)
 
     def _handle_sigterm(self, signum, frame):
         """Graceful shutdown su SIGTERM."""
@@ -474,14 +541,15 @@ class SelfHealingManager:
             return False
 
     def _db_ping(self) -> bool:
-        """Ping leggero al DB."""
+        """Ping leggero al DB. La connessione e' sempre chiusa (anche su errore)."""
         conn = sqlite3.connect(self.db_path, timeout=Config.DB_TIMEOUT)
-        conn.execute("PRAGMA query_only = ON")
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1")
-        result = cursor.fetchone()
-        conn.close()
-        return result is not None
+        try:
+            conn.execute("PRAGMA query_only = ON")
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            return cursor.fetchone() is not None
+        finally:
+            conn.close()
 
     def _get_rps(self) -> float:
         """Calcola RPS."""
@@ -544,57 +612,80 @@ class DeepSeekIndexing:
 
     @staticmethod
     def init_advanced_indices(db_path: str = Config.DB_PATH):
-        """Crea indici avanzati."""
+        """Crea indici avanzati. La connessione e' chiusa anche in caso di errore."""
         conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+        try:
+            cursor = conn.cursor()
 
-        cursor.execute("PRAGMA journal_mode = WAL")
-        cursor.execute("PRAGMA synchronous = NORMAL")
+            cursor.execute("PRAGMA journal_mode = WAL")
+            cursor.execute("PRAGMA synchronous = NORMAL")
 
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_audit_entita_data
-            ON audit_logs(entita_tipo, entita_id, data_creazione DESC)
-        """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_audit_entita_data
+                ON audit_logs(entita_tipo, entita_id, data_creazione DESC)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_audit_azione_data
+                ON audit_logs(azione, data_creazione DESC)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_audit_utente_data
+                ON audit_logs(utente_id, data_creazione DESC)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_audit_covering
+                ON audit_logs(entita_tipo, entita_id, data_creazione DESC, azione, dettagli)
+            """)
+            # NB: niente WHERE con datetime('now') (funzione non deterministica,
+            # vietata negli indici parziali SQLite) -> indice normale.
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_audit_recent
+                ON audit_logs(data_creazione, entita_tipo, entita_id)
+            """)
+            # escrow_fondi ha 'data_sblocco' (non 'data_creazione').
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_escrow_stato_data
+                ON escrow_fondi(stato, data_sblocco DESC)
+            """)
+            # pagamenti_split non ha 'escrow_id'/'quota_piattaforma': indice
+            # coprente per id (chiave di join) + importi usati nelle aggregazioni.
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_pagamenti_escrow
+                ON pagamenti_split(id, commissione_tavola, quota_partner)
+            """)
 
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_audit_azione_data
-            ON audit_logs(azione, data_creazione DESC)
-        """)
+            cursor.execute("ANALYZE")
+            conn.commit()
+            logging.info("[DeepSeekIndexing] Indici avanzati creati")
+        finally:
+            conn.close()
 
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_audit_utente_data
-            ON audit_logs(utente_id, data_creazione DESC)
-        """)
 
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_audit_covering
-            ON audit_logs(entita_tipo, entita_id, data_creazione DESC, azione, dettagli)
-        """)
+# ═══════════════════════════════════════════════════════════════════════════════
+# ISTANZE CONDIVISE (SINGLETON)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Evita di creare un SecurityManager (e il suo thread di cleanup nonce) a ogni
+# richiesta, e mantiene il rate limiting realmente globale tra tutte le route.
 
-        # NB: niente WHERE con datetime('now') (funzione non deterministica,
-        # vietata negli indici parziali SQLite) -> indice normale.
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_audit_recent
-            ON audit_logs(data_creazione, entita_tipo, entita_id)
-        """)
+_security_manager_singleton: Optional[SecurityManager] = None
+_security_manager_lock = threading.Lock()
+_rate_limiter_singleton = RateLimiter()
 
-        # escrow_fondi ha 'data_sblocco' (non 'data_creazione').
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_escrow_stato_data
-            ON escrow_fondi(stato, data_sblocco DESC)
-        """)
 
-        # pagamenti_split non ha 'escrow_id'/'quota_piattaforma': indice
-        # coprente per id (chiave di join) + importi usati nelle aggregazioni.
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_pagamenti_escrow
-            ON pagamenti_split(id, commissione_tavola, quota_partner)
-        """)
+def get_security_manager() -> SecurityManager:
+    """Restituisce il SecurityManager condiviso (creato una volta sola,
+    thread-safe con double-checked locking)."""
+    global _security_manager_singleton
+    if _security_manager_singleton is None:
+        with _security_manager_lock:
+            if _security_manager_singleton is None:
+                _security_manager_singleton = SecurityManager()
+    return _security_manager_singleton
 
-        cursor.execute("ANALYZE")
-        conn.commit()
-        conn.close()
-        logging.info("[DeepSeekIndexing] Indici avanzati creati")
+
+def get_rate_limiter() -> RateLimiter:
+    """Restituisce il RateLimiter condiviso."""
+    return _rate_limiter_singleton
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -608,7 +699,7 @@ def require_fortress_auth(f: Callable) -> Callable:
     """
     @wraps(f)
     def decorated(*args, **kwargs):
-        security = SecurityManager()
+        security = get_security_manager()
 
         request_id = request.headers.get('X-Request-ID', '')
         timestamp = request.headers.get('X-Timestamp', '')
@@ -643,7 +734,7 @@ def require_api_key_or_bearer(f: Callable) -> Callable:
     """Decorator per API key o Bearer token."""
     @wraps(f)
     def decorated(*args, **kwargs):
-        security = SecurityManager()
+        security = get_security_manager()
 
         api_key = request.headers.get('X-API-Key', '')
         if api_key and security.verify_api_key(api_key):
@@ -660,28 +751,34 @@ def require_api_key_or_bearer(f: Callable) -> Callable:
 
 
 def rate_limit_middleware(f: Callable) -> Callable:
-    """Middleware per rate limiting."""
-    limiter = RateLimiter()
+    """Middleware per rate limiting (usa il RateLimiter condiviso)."""
 
     @wraps(f)
     def decorated(*args, **kwargs):
+        from flask import make_response  # import lazy (Flask solo a runtime)
+        limiter = get_rate_limiter()
         ip = request.remote_addr or 'unknown'
 
         allowed, headers = limiter.is_allowed(ip)
         if not allowed:
-            response = jsonify({"error": "Rate limit exceeded", "retry_after": headers.get("Retry-After", "60")})
+            response = jsonify({"error": "Rate limit exceeded",
+                                "retry_after": headers.get("Retry-After", "60")})
             for key, value in headers.items():
                 response.headers[key] = value
             return response, 429
 
-        # Aggiungi headers rate limit anche per richieste consentite
-        response = f(*args, **kwargs)
-        if isinstance(response, tuple):
-            response_obj, status = response
+        # Normalizza qualsiasi forma di ritorno Flask (Response, dict, str,
+        # tupla (body, status)) e aggiunge gli header di rate limit.
+        risultato = f(*args, **kwargs)
+        try:
+            response = make_response(risultato)
             for key, value in headers.items():
-                response_obj.headers[key] = value
-            return response_obj, status
-        return response
+                response.headers[key] = value
+            return response
+        except Exception:
+            # Fallback ultra-difensivo: non far mai fallire la richiesta solo
+            # per gli header informativi di rate limit.
+            return risultato
     return decorated
 
 
@@ -701,7 +798,12 @@ def create_fortress_app() -> Flask:
     )
 
     if Config.DEEPSEEK_INDEXING:
-        DeepSeekIndexing.init_advanced_indices()
+        try:
+            DeepSeekIndexing.init_advanced_indices()
+        except Exception as e:
+            # Gli indici sono un'ottimizzazione: un loro errore non deve
+            # impedire l'avvio dell'applicazione.
+            logging.error("[DeepSeekIndexing] init fallita, l'app parte comunque: %s", e)
 
     watchdog = SelfHealingManager()
     watchdog.start_monitoring()
