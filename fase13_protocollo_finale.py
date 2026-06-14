@@ -79,6 +79,9 @@ class Config:
     MEMORY_WARNING = 0.7
     MEMORY_CRITICAL = 0.9
     DB_TIMEOUT = 0.5
+    # Manutenzione idempotenza (sweep lock morti + purge cache scadute).
+    IDEMPOTENCY_MAINTENANCE_INTERVAL = int(
+        os.environ.get('IDEMPOTENCY_MAINTENANCE_INTERVAL', '300'))  # secondi
 
     # Telegram
     TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
@@ -446,6 +449,9 @@ class SelfHealingManager:
         self._request_times = deque(maxlen=100)
         self._request_lock = threading.Lock()
         self._circuit_breaker = DBCircuitBreaker()
+        # Manutenzione idempotenza: timestamp dell'ultimo tick + manager lazy.
+        self._last_idem_maint = 0.0
+        self._idempotency = None
 
         # Signal handlers per graceful shutdown. signal.signal() funziona solo
         # nel main thread: sotto Gunicorn (worker) o se istanziato altrove
@@ -486,6 +492,25 @@ class SelfHealingManager:
         with self._request_lock:
             self._request_times.append(duration)
 
+    def _idempotency_maintenance(self) -> None:
+        """Sweep dei lock idempotenza morti + purge delle cache scadute.
+
+        Best-effort: un errore di manutenzione NON deve interrompere il watchdog.
+        Import lazy per non accoppiare fase13 a fase15 al caricamento del modulo.
+        """
+        try:
+            if self._idempotency is None:
+                from fase15_idempotency import IdempotencyManager
+                self._idempotency = IdempotencyManager(self.db_path)
+            liberati = self._idempotency.sweep()
+            rimossi = self._idempotency.purge_expired()
+            if liberati or rimossi:
+                logging.info("[SelfHealing] Idempotency maintenance: %s lock "
+                             "liberati, %s chiavi scadute rimosse", liberati, rimossi)
+        except Exception:  # pragma: no cover - difensivo
+            logging.error("[SelfHealing] Idempotency maintenance fallita",
+                          exc_info=True)
+
     def _monitor_loop(self):
         """Loop principale."""
         while not self._stop_event.is_set():
@@ -511,6 +536,12 @@ class SelfHealingManager:
 
             except Exception as e:
                 logging.error(f"[SelfHealing] Errore: {e}")
+
+            # Manutenzione idempotenza throttled (indipendente dall'health check).
+            now = time.time()
+            if now - self._last_idem_maint >= Config.IDEMPOTENCY_MAINTENANCE_INTERVAL:
+                self._idempotency_maintenance()
+                self._last_idem_maint = now
 
             self._stop_event.wait(Config.WATCHDOG_INTERVAL)
 
