@@ -22,3 +22,7 @@ PIANI_GENERATI/
 desktop.ini
 AI_Recombined_Clean/
 Proposte_Clienti/
+
+# --- FASE 13: file di deployment da versionare (eccezioni alle regole sopra) ---
+!requirements.txt
+!.env.example
