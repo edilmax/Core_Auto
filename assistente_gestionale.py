@@ -1169,6 +1169,21 @@ class DatabaseCandidati:
                             "idx_escrow_pagamento ON escrow_fondi(pagamento_id)")
                 con.execute("CREATE INDEX IF NOT EXISTS "
                             "idx_voucher_prenotazione ON voucher_prenotazioni(prenotazione_id)")
+                # --- FASE 8: recensioni clienti (human-in-the-loop) ---
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS recensioni_clienti (
+                        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                        prenotazione_id INTEGER UNIQUE NOT NULL,
+                        escrow_id       INTEGER NOT NULL,
+                        esito           TEXT NOT NULL,
+                        commento        TEXT,
+                        data_recensione TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (prenotazione_id)
+                            REFERENCES prenotazioni(id) ON DELETE CASCADE,
+                        FOREIGN KEY (escrow_id)
+                            REFERENCES escrow_fondi(id) ON DELETE CASCADE)""")
+                con.execute("CREATE INDEX IF NOT EXISTS idx_recensioni_prenotazione "
+                            "ON recensioni_clienti(prenotazione_id)")
         finally:
             con.close()
 
@@ -4185,6 +4200,27 @@ class EscrowManager:
         finally:
             conn.close()
 
+    def approva_sblocco_admin(self, escrow_id: int) -> bool:
+        """FASE 8 - Unico metodo autorizzato a sbloccare i fondi: converte lo
+        stato da 'DA_APPROVARE_ADMIN' a 'sbloccato' (registrando data_sblocco).
+        Restituisce True solo se l'escrow era effettivamente in attesa di
+        approvazione admin (altrimenti nessun aggiornamento -> niente sblocco
+        automatico)."""
+        conn = self.connessione()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE escrow_fondi SET stato = 'sbloccato', "
+                "data_sblocco = CURRENT_TIMESTAMP "
+                "WHERE id = ? AND stato = 'DA_APPROVARE_ADMIN'", (escrow_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
 
 class VoucherGenerator:
     """Emette voucher univoci per le prenotazioni (voucher_prenotazioni)."""
@@ -4228,6 +4264,85 @@ class VoucherGenerator:
             raise
         finally:
             conn.close()
+
+
+# ---------------------------------------------------------------------------
+# FASE 8: motore di feedback (human-in-the-loop)
+# ---------------------------------------------------------------------------
+# Principio: il sistema NON sblocca mai i fondi in automatico. Il feedback (o il
+# silenzio-assenso) porta l'escrow al massimo a 'DA_APPROVARE_ADMIN' (o
+# 'DISPUTA' se negativo). Solo EscrowManager.approva_sblocco_admin puo' poi
+# convertire 'DA_APPROVARE_ADMIN' -> 'sbloccato'.
+
+
+class FeedbackManager:
+    """Registra le recensioni dei clienti e prepara l'escrow per la decisione
+    dell'admin (mai sblocco automatico)."""
+
+    STATO_POSITIVO = "DA_APPROVARE_ADMIN"
+    STATO_NEGATIVO = "DISPUTA"
+
+    def __init__(self, db, escrow_manager):
+        self.connessione = _risolvi_connessione(db)
+        self.escrow_manager = escrow_manager
+
+    def inserisci_recensione(self, prenotazione_id: int, escrow_id: int,
+                             esito: str, commento: Optional[str] = None) -> dict:
+        """Inserisce la recensione e porta l'escrow correlato a
+        'DA_APPROVARE_ADMIN' (esito non negativo) o 'DISPUTA' (NEGATIVO), in
+        un'unica transazione atomica."""
+        nuovo_stato = (self.STATO_NEGATIVO
+                       if str(esito).strip().upper() == "NEGATIVO"
+                       else self.STATO_POSITIVO)
+        conn = self.connessione()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO recensioni_clienti (prenotazione_id, escrow_id, "
+                "esito, commento) VALUES (?, ?, ?, ?)",
+                (prenotazione_id, escrow_id, esito, commento))
+            recensione_id = cursor.lastrowid
+            cursor.execute("UPDATE escrow_fondi SET stato = ? WHERE id = ?",
+                           (nuovo_stato, escrow_id))
+            conn.commit()
+            return {"recensione_id": recensione_id, "escrow_stato": nuovo_stato}
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def esegui_silenzio_assenso(self, ore_limite: int = 48) -> int:
+        """Per gli escrow ancora 'bloccato' la cui prenotazione e' terminata da
+        oltre 'ore_limite' senza recensione, inserisce una recensione automatica
+        'SILENZIO_ASSENSO' e porta l'escrow a 'DA_APPROVARE_ADMIN'. Restituisce
+        quanti escrow sono stati processati. NON sblocca i fondi."""
+        conn = self.connessione()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT e.id AS escrow_id, pr.id AS prenotazione_id "
+                "FROM escrow_fondi e "
+                "JOIN pagamenti_split p ON p.id = e.pagamento_id "
+                "JOIN prenotazioni pr ON pr.id = p.prenotazione_id "
+                "WHERE e.stato = 'bloccato' "
+                "AND pr.check_out IS NOT NULL AND pr.check_out != '' "
+                "AND datetime(pr.check_out) <= datetime('now', ?) "
+                "AND NOT EXISTS (SELECT 1 FROM recensioni_clienti rc "
+                "WHERE rc.prenotazione_id = pr.id)",
+                (f"-{int(ore_limite)} hours",))
+            candidati = cursor.fetchall()
+        finally:
+            conn.close()
+
+        processati = 0
+        for riga in candidati:
+            escrow_id, prenotazione_id = riga[0], riga[1]
+            self.inserisci_recensione(
+                prenotazione_id, escrow_id, "SILENZIO_ASSENSO",
+                "Recensione automatica: nessun feedback entro i termini.")
+            processati += 1
+        return processati
 
 
 # ---------------------------------------------------------------------------
@@ -4321,6 +4436,8 @@ class AssistenteGestionale:
         self.split_manager = PagamentoSplitManager(self.db)
         self.escrow_manager = EscrowManager(self.db)
         self.voucher_generator = VoucherGenerator(self.db)
+        # FASE 8: motore di feedback (human-in-the-loop).
+        self.feedback_manager = FeedbackManager(self.db, self.escrow_manager)
         self.audit.registra("avvio", {"progetto": self.config.get("progetto")})
 
     def distribuisci_proposta(self, candidato_url: str, payload: dict,
