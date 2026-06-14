@@ -39,6 +39,7 @@ import threading
 import urllib.parse
 import urllib.request
 from abc import ABC, abstractmethod
+from enum import Enum
 from concurrent.futures import ThreadPoolExecutor
 from email.message import EmailMessage
 from email.mime.text import MIMEText
@@ -891,6 +892,19 @@ class DatabaseCandidati:
         Evita l'accesso al membro protetto _apri da fuori dalla classe."""
         return self._apri()
 
+    def esegui_query(self, sql: str, parametri: tuple = ()):
+        """Helper generico: esegue una query (commit su scrittura) e chiude la
+        connessione. Per i SELECT restituisce le righe, altrimenti None.
+        Eventuali eccezioni SQLite (es. trigger di immutabilita') si propagano."""
+        con = self._apri()
+        try:
+            cur = con.execute(sql, parametri)
+            righe = cur.fetchall() if cur.description is not None else None
+            con.commit()
+            return righe
+        finally:
+            con.close()
+
     def _init_schema(self) -> None:
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         con = self._apri()
@@ -1198,6 +1212,38 @@ class DatabaseCandidati:
                             REFERENCES escrow_fondi(id) ON DELETE CASCADE)""")
                 con.execute("CREATE INDEX IF NOT EXISTS idx_notifiche_letto "
                             "ON notifiche_admin(letto)")
+                # --- FASE 12: Audit log immutabile (tabella + indici + trigger) ---
+                con.execute(
+                    "CREATE TABLE IF NOT EXISTS audit_logs ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "entita_tipo TEXT NOT NULL, "
+                    "entita_id INTEGER NOT NULL, "
+                    "azione TEXT NOT NULL, "
+                    "dettagli TEXT NOT NULL, "
+                    "utente_id INTEGER, "
+                    "utente_tipo TEXT NOT NULL DEFAULT 'SYSTEM', "
+                    "ip_address TEXT, "
+                    "session_id TEXT, "
+                    "data_creazione TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+                con.execute("CREATE INDEX IF NOT EXISTS idx_audit_entita "
+                            "ON audit_logs(entita_tipo, entita_id)")
+                con.execute("CREATE INDEX IF NOT EXISTS idx_audit_azione "
+                            "ON audit_logs(azione)")
+                con.execute("CREATE INDEX IF NOT EXISTS idx_audit_utente "
+                            "ON audit_logs(utente_id)")
+                con.execute("CREATE INDEX IF NOT EXISTS idx_audit_data "
+                            "ON audit_logs(data_creazione)")
+                # Immutabilita' assoluta: niente UPDATE, niente DELETE.
+                con.execute(
+                    "CREATE TRIGGER IF NOT EXISTS trg_audit_prevent_update "
+                    "BEFORE UPDATE ON audit_logs BEGIN "
+                    "SELECT RAISE(ABORT, 'ERRORE CRITICO: I log di audit sono "
+                    "immutabili.'); END;")
+                con.execute(
+                    "CREATE TRIGGER IF NOT EXISTS trg_audit_prevent_delete "
+                    "BEFORE DELETE ON audit_logs BEGIN "
+                    "SELECT RAISE(ABORT, 'ERRORE CRITICO: I log di audit non "
+                    "possono essere eliminati.'); END;")
         finally:
             con.close()
 
@@ -4128,6 +4174,97 @@ class PartnerOnboardingEngine:
 
 
 # ---------------------------------------------------------------------------
+# FASE 12: Audit log immutabile (tipi)
+# ---------------------------------------------------------------------------
+
+
+class AzioneAudit(Enum):
+    ESCROW_CREATO = "ESCROW_CREATO"
+    ESCROW_SBLOCCATO = "ESCROW_SBLOCCATO"
+    ESCROW_DISPUTA = "ESCROW_DISPUTA"
+    PAGAMENTO_SPLIT_CREATO = "PAGAMENTO_SPLIT_CREATO"
+    FEEDBACK_POSITIVO = "FEEDBACK_POSITIVO"
+    FEEDBACK_NEGATIVO = "FEEDBACK_NEGATIVO"
+    DISPUTA_APERTA = "DISPUTA_APERTA"
+    DISPUTA_RISOLTA = "DISPUTA_RISOLTA"
+    ADMIN_RISOLUZIONE_MANUALE = "ADMIN_RISOLUZIONE_MANUALE"
+    TIMEOUT_SILENZIO_ASSENSO = "TIMEOUT_SILENZIO_ASSENSO"
+    CRON_JOB_ESEGUITO = "CRON_JOB_ESEGUITO"
+
+
+@dataclass(frozen=True)
+class AuditRecord:
+    id: int
+    entita_tipo: str
+    entita_id: int
+    azione: str
+    dettagli: str
+    utente_id: int = None
+    utente_tipo: str = "SYSTEM"
+    ip_address: str = None
+    session_id: str = None
+    data_creazione: str = None
+
+
+class AuditManager:
+    """Scrittura immutabile e lettura dell'audit log (tabella audit_logs).
+    L'immutabilita' assoluta e' garantita dai trigger SQL: qui si fa solo
+    INSERT e SELECT."""
+
+    def __init__(self, db):
+        self.db = db
+        self.connessione = _risolvi_connessione(db)
+
+    def registra_azione(self, entita_tipo: str, entita_id: int,
+                        azione: "AzioneAudit", dettagli: dict,
+                        utente_id: int = None, utente_tipo: str = "SYSTEM",
+                        ip_address: str = None, session_id: str = None) -> int:
+        """Registra un'azione nell'audit log (INSERT immutabile). 'dettagli' e'
+        serializzato in JSON, 'azione' accetta un AzioneAudit (usa .value) o una
+        stringa. Restituisce l'id generato."""
+        dettagli_json = json.dumps(dettagli, ensure_ascii=False)
+        azione_val = azione.value if isinstance(azione, AzioneAudit) else str(azione)
+        conn = self.connessione()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO audit_logs (entita_tipo, entita_id, azione, "
+                "dettagli, utente_id, utente_tipo, ip_address, session_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (entita_tipo, entita_id, azione_val, dettagli_json, utente_id,
+                 utente_tipo, ip_address, session_id))
+            conn.commit()
+            return cursor.lastrowid
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def get_cronologia_entita(self, entita_tipo: str,
+                              entita_id: int) -> List[AuditRecord]:
+        """Cronologia (dalla piu' recente) delle azioni su un'entita',
+        mappata in oggetti AuditRecord."""
+        conn = self.connessione()
+        conn.row_factory = sqlite3.Row
+        try:
+            righe = conn.execute(
+                "SELECT id, entita_tipo, entita_id, azione, dettagli, utente_id, "
+                "utente_tipo, ip_address, session_id, data_creazione "
+                "FROM audit_logs WHERE entita_tipo = ? AND entita_id = ? "
+                "ORDER BY data_creazione DESC, id DESC",
+                (entita_tipo, entita_id)).fetchall()
+        finally:
+            conn.close()
+        return [AuditRecord(
+            id=r["id"], entita_tipo=r["entita_tipo"], entita_id=r["entita_id"],
+            azione=r["azione"], dettagli=r["dettagli"], utente_id=r["utente_id"],
+            utente_tipo=r["utente_tipo"], ip_address=r["ip_address"],
+            session_id=r["session_id"], data_creazione=r["data_creazione"])
+            for r in righe]
+
+
+# ---------------------------------------------------------------------------
 # FASE 7: motore di brokeraggio (split pagamenti, escrow, voucher)
 # ---------------------------------------------------------------------------
 # Ogni classe gestisce transazioni atomiche: commit su successo, rollback su
@@ -4620,6 +4757,8 @@ class AssistenteGestionale:
         self.dashboard_manager = DashboardManager(self.db)
         # FASE 11: motore di esportazione report (CSV).
         self.report_manager = ReportManager(self.db)
+        # FASE 12: audit log immutabile.
+        self.audit_manager = AuditManager(self.db)
         self.audit.registra("avvio", {"progetto": self.config.get("progetto")})
 
     def distribuisci_proposta(self, candidato_url: str, payload: dict,
