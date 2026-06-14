@@ -68,6 +68,7 @@ configurabili come `RATE_LIMIT_IP`, `NONCE_TTL`, `CB_*` non sono incluse).
 | `HMAC_SECRET` | *generato effimero* | Chiave per la firma HMAC delle richieste `fortress`. |
 | `API_KEY` | *generato effimero* | Auth read-only via header `X-API-Key`. |
 | `BEARER_TOKEN` | *generato effimero* | Auth read-only via `Authorization: Bearer`. |
+| `ADMIN_TOKEN` | *generato effimero* | Privilegio (header `X-Admin-Token`) richiesto per **muovere fondi** (escrow release/refund). |
 
 > ⚠️ I valori generati sono **diversi per ogni processo**: con più worker (o in
 > produzione) vanno impostati esplicitamente, altrimenti le firme non combaciano
@@ -220,15 +221,21 @@ Content-Type:  application/json
 
 ### Route protette da `@idempotent`
 
-| Route | Metodo |
-|-------|--------|
-| `/api/v1/escrow/create` | POST |
-| `/api/v1/escrow/<id>/release` | POST |
-| `/api/v1/escrow/<id>/refund` | POST |
-| `/api/v1/payments/split` | POST |
+| Route | Metodo | Privilegio |
+|-------|--------|-----------|
+| `/api/v1/escrow/create` | POST | autenticato (`fortress`) |
+| `/api/v1/escrow/<id>/release` | POST | **admin** (`X-Admin-Token`) — Fase 18 |
+| `/api/v1/escrow/<id>/refund` | POST | **admin** (`X-Admin-Token`) — Fase 18 |
+| `/api/v1/payments/split` | POST | autenticato (`fortress`) |
 
-> L'header è **opzionale**: se assente, la route procede normalmente (nessuna
-> idempotenza). Le route `GET` non sono interessate.
+> L'header `Idempotency-Key` è **opzionale**: se assente, la route procede
+> normalmente (nessuna idempotenza). Le route `GET` non sono interessate.
+>
+> **Separazione dei privilegi (Fase 18):** le operazioni che *muovono denaro*
+> (`release`/`refund`) richiedono, oltre all'autenticazione `fortress`, l'header
+> `X-Admin-Token` valido (confronto timing-safe); altrimenti **403**. Un
+> credenziale partner/cliente può creare escrow/pagamenti ma **non** rilasciare
+> o rimborsare fondi.
 
 ### Esiti e risposte HTTP
 
