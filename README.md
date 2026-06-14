@@ -77,7 +77,7 @@ configurabili come `RATE_LIMIT_IP`, `NONCE_TTL`, `CB_*` non sono incluse).
 
 | Variabile | Default | Descrizione |
 |-----------|---------|-------------|
-| `DB_PATH` | `/tmp/marketplace.db` | DB principale (`Config.DB_PATH`), usato anche dall'idempotenza. |
+| `DB_PATH` | `data/marketplace.db` | DB principale (`Config.DB_PATH`), usato anche da idempotenza/outbox. **Non** usare `/tmp` (volatile): un warning viene loggato se il path è in area temporanea. |
 | `CORE_AUTO_DB` | `core_auto.db` | DB di default del manager idempotenza se istanziato senza path. |
 | `FLASK_ENV` | *(vuoto)* | `production` abilita il fail-fast sui segreti e il controllo XFF privato. |
 | `PORT` | `8000` | Porta (`app.run` di sviluppo). |
@@ -129,6 +129,8 @@ configurabili come `RATE_LIMIT_IP`, `NONCE_TTL`, `CB_*` non sono incluse).
 | `WEBHOOK_URL` | *(vuoto)* | Alert via webhook generico. |
 | `AUDIT_ENABLED` | `true` | Abilita il logging d'audit. |
 | `DEEPSEEK_INDEXING` | `true` | Abilita l'indicizzazione DeepSeek. |
+| `OUTBOX_DLQ_ALERT_THRESHOLD` | `10` | Soglia profondità DLQ oltre cui scatta l'alert. |
+| `OUTBOX_DLQ_ALERT_INTERVAL_S` | `3600` | Intervallo (s) di throttling dell'alert DLQ. |
 
 ### Email e ricerca esterna (`assistente_gestionale.py`)
 
@@ -205,8 +207,16 @@ X-Body-Hash:   ...
 X-Signature:   ...
 Content-Type:  application/json
 
-{"prenotazione_id": 1, "importo_totale": 100, "commissione_tavola": 10, "quota_partner": 90}
+{"prenotazione_id": 1, "importo_totale": 10000, "commissione_tavola": 1000, "quota_partner": 9000}
 ```
+
+> **Importi in centesimi interi (Fase 17).** Tutti gli importi monetari viaggiano
+> come **centesimi interi** (es. `10000` = €100,00); i **float sono rifiutati con
+> `400`**. Deve valere l'invariante `commissione_tavola + quota_partner ==
+> importo_totale`, altrimenti `400`. Internamente non si usa mai la virgola
+> mobile per il denaro (storage `INTEGER`, presentazione via `Decimal`). Nota:
+> i prezzi dei listing scrapati e il preventivo commerciale restano informativi
+> e fuori da questo contratto.
 
 ### Route protette da `@idempotent`
 
