@@ -1184,6 +1184,20 @@ class DatabaseCandidati:
                             REFERENCES escrow_fondi(id) ON DELETE CASCADE)""")
                 con.execute("CREATE INDEX IF NOT EXISTS idx_recensioni_prenotazione "
                             "ON recensioni_clienti(prenotazione_id)")
+                # --- FASE 9: notifiche per l'admin ---
+                # (tabella non presente in precedenza: aggiunta qui per la CRUD.)
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS notifiche_admin (
+                        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                        tipo_alert     TEXT NOT NULL,
+                        messaggio      TEXT NOT NULL,
+                        escrow_id      INTEGER,
+                        letto          INTEGER DEFAULT 0,
+                        data_creazione TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (escrow_id)
+                            REFERENCES escrow_fondi(id) ON DELETE CASCADE)""")
+                con.execute("CREATE INDEX IF NOT EXISTS idx_notifiche_letto "
+                            "ON notifiche_admin(letto)")
         finally:
             con.close()
 
@@ -4282,17 +4296,20 @@ class FeedbackManager:
     STATO_POSITIVO = "DA_APPROVARE_ADMIN"
     STATO_NEGATIVO = "DISPUTA"
 
-    def __init__(self, db, escrow_manager):
+    def __init__(self, db, escrow_manager, notifiche_manager=None):
         self.connessione = _risolvi_connessione(db)
         self.escrow_manager = escrow_manager
+        self.notifiche_manager = notifiche_manager
 
     def inserisci_recensione(self, prenotazione_id: int, escrow_id: int,
                              esito: str, commento: Optional[str] = None) -> dict:
         """Inserisce la recensione e porta l'escrow correlato a
         'DA_APPROVARE_ADMIN' (esito non negativo) o 'DISPUTA' (NEGATIVO), in
-        un'unica transazione atomica."""
-        nuovo_stato = (self.STATO_NEGATIVO
-                       if str(esito).strip().upper() == "NEGATIVO"
+        un'unica transazione atomica. Genera la notifica admin per i casi
+        espliciti POSITIVO/NEGATIVO (il silenzio-assenso ha la sua notifica,
+        emessa da esegui_silenzio_assenso)."""
+        esito_u = str(esito).strip().upper()
+        nuovo_stato = (self.STATO_NEGATIVO if esito_u == "NEGATIVO"
                        else self.STATO_POSITIVO)
         conn = self.connessione()
         try:
@@ -4305,12 +4322,23 @@ class FeedbackManager:
             cursor.execute("UPDATE escrow_fondi SET stato = ? WHERE id = ?",
                            (nuovo_stato, escrow_id))
             conn.commit()
-            return {"recensione_id": recensione_id, "escrow_stato": nuovo_stato}
         except Exception:
             conn.rollback()
             raise
         finally:
             conn.close()
+        # Notifica admin (dopo il commit): solo per recensioni esplicite.
+        if self.notifiche_manager is not None:
+            if esito_u == "POSITIVO":
+                self.notifiche_manager.crea_notifica(
+                    "SBLOCCO_RICHIESTO",
+                    "Recensione positiva: fondi pronti per lo sblocco.", escrow_id)
+            elif esito_u == "NEGATIVO":
+                self.notifiche_manager.crea_notifica(
+                    "DISPUTA_APERTA",
+                    "Recensione negativa: blocco fondi e risoluzione manuale "
+                    "richiesta.", escrow_id)
+        return {"recensione_id": recensione_id, "escrow_stato": nuovo_stato}
 
     def esegui_silenzio_assenso(self, ore_limite: int = 48) -> int:
         """Per gli escrow ancora 'bloccato' la cui prenotazione e' terminata da
@@ -4341,8 +4369,69 @@ class FeedbackManager:
             self.inserisci_recensione(
                 prenotazione_id, escrow_id, "SILENZIO_ASSENSO",
                 "Recensione automatica: nessun feedback entro i termini.")
+            if self.notifiche_manager is not None:
+                self.notifiche_manager.crea_notifica(
+                    "SILENZIO_ASSENSO",
+                    "Timeout recensione scaduto: fondi pronti per lo sblocco.",
+                    escrow_id)
             processati += 1
         return processati
+
+
+# ---------------------------------------------------------------------------
+# FASE 9: notifiche per l'admin (CRUD)
+# ---------------------------------------------------------------------------
+
+
+class NotificheManager:
+    """CRUD delle notifiche destinate all'admin (tabella notifiche_admin)."""
+
+    def __init__(self, db):
+        self.connessione = _risolvi_connessione(db)
+
+    def crea_notifica(self, tipo_alert: str, messaggio: str,
+                      escrow_id: Optional[int] = None) -> int:
+        """Inserisce una notifica. Restituisce l'id creato."""
+        conn = self.connessione()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO notifiche_admin (tipo_alert, messaggio, escrow_id) "
+                "VALUES (?, ?, ?)", (tipo_alert, messaggio, escrow_id))
+            conn.commit()
+            return cursor.lastrowid
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def get_notifiche_non_lette(self) -> list:
+        """Restituisce le notifiche con letto=0, dalla piu' recente."""
+        conn = self.connessione()
+        conn.row_factory = sqlite3.Row
+        try:
+            righe = conn.execute(
+                "SELECT * FROM notifiche_admin WHERE letto = 0 "
+                "ORDER BY data_creazione DESC, id DESC").fetchall()
+        finally:
+            conn.close()
+        return [dict(r) for r in righe]
+
+    def segna_come_letta(self, notifica_id: int) -> bool:
+        """Marca una notifica come letta (letto=1). True se aggiornata."""
+        conn = self.connessione()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE notifiche_admin SET letto = 1 WHERE id = ?",
+                           (notifica_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -4436,8 +4525,11 @@ class AssistenteGestionale:
         self.split_manager = PagamentoSplitManager(self.db)
         self.escrow_manager = EscrowManager(self.db)
         self.voucher_generator = VoucherGenerator(self.db)
-        # FASE 8: motore di feedback (human-in-the-loop).
-        self.feedback_manager = FeedbackManager(self.db, self.escrow_manager)
+        # FASE 9: notifiche admin (creato prima del feedback che le usa).
+        self.notifiche_manager = NotificheManager(self.db)
+        # FASE 8: motore di feedback (human-in-the-loop), ora con notifiche.
+        self.feedback_manager = FeedbackManager(self.db, self.escrow_manager,
+                                                self.notifiche_manager)
         self.audit.registra("avvio", {"progetto": self.config.get("progetto")})
 
     def distribuisci_proposta(self, candidato_url: str, payload: dict,
