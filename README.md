@@ -35,6 +35,45 @@ In produzione (`FLASK_ENV=production`) sono **obbligatori** `HMAC_SECRET`,
 
 ---
 
+# Sicurezza — Audit Red Team
+
+È stato eseguito un audit di sicurezza in stile Red Team con remediation
+suddivisa per severità in tre gruppi, tutti implementati, testati e committati.
+Dopo ogni gruppo la suite core (89 test) è rimasta verde.
+
+## Gruppo 1 — CRITICAL (`3961c48`)
+
+| ID | Vulnerabilità | Remediation |
+|----|---------------|-------------|
+| **C1** | Nonce anti-replay in memoria per-processo → replay tra worker Gunicorn | Nonce store su SQLite condiviso (tabella `nonce_usati`), inserimento atomico sulla PK cross-worker |
+| **C2** | Bypass del rate-limit tramite spoofing di `X-Forwarded-For` | `forwarded_allow_ips="127.0.0.1"`; `_client_ip()` si fida dell'XFF solo da proxy fidati (`TRUSTED_PROXIES`, `XFF_MODE`) |
+| **C3** | Memory-leak del `RateLimiter` (crescita illimitata per IP) | `OrderedDict` + pruning lazy + tetto massimo voci (100000) |
+
+## Gruppo 2 — HIGH (`b38acc7`)
+
+| ID | Vulnerabilità | Remediation |
+|----|---------------|-------------|
+| **H1** | Il circuit breaker contava *qualsiasi* eccezione come guasto DB → DoS del breaker | Apre solo su errori DB infrastrutturali (`busy`/`locked`/`timeout`); errori client → 400, infra → 503, altro → 500 |
+| **H2** | Firma HMAC per concatenazione senza delimitatori (collisioni) + query string non firmata | Canonicalizzazione con **length-prefix** (`_canonical_string`) e firma su `full_path` |
+| **H3** | Nessun limite sul body → DoS | `MAX_CONTENT_LENGTH` (1 MiB, env `MAX_BODY_BYTES`) + handler `413` |
+| **H4** | SQLite poco resiliente sotto concorrenza | `_apri()` con `busy_timeout`, WAL, `synchronous=NORMAL`, `foreign_keys=ON`, `wal_autocheckpoint` |
+| **K1** | Confronto firma non timing-safe | Confermato uso di `hmac.compare_digest` |
+| **K2** | Possibile race nelle transizioni escrow | Confermate atomiche: `UPDATE ... WHERE id=? AND stato=?` (rowcount), nessun read-then-update |
+
+## Gruppo 3 — MEDIUM (`70743b8`)
+
+| ID | Vulnerabilità | Remediation |
+|----|---------------|-------------|
+| **M1** | `worker_abort` non raggiungeva il monitor → alert di timeout mai inviati | Monitor globale di modulo (`_MONITOR`) accessibile dal worker |
+| **M2** | Finestra timestamp anti-replay troppo larga (±5 min) | `Config.TIMESTAMP_WINDOW` ridotta a **60 s** |
+| **M3** | `/health/system` anonimo → information disclosure | Protetta con `@fortress_readonly`; `/health` resta pubblica e minimale |
+| **M4** | Nessun fail-fast sui segreti mancanti in produzione | `create_app()` solleva `RuntimeError` se `FLASK_ENV=production` e mancano `HMAC_SECRET`/`API_KEY`/`BEARER_TOKEN` |
+| **K3** | Log injection via header non fidati | `_sanitize_log()` neutralizza CR/LF e tronca a 200 caratteri (applicato all'User-Agent) |
+| **K4** | Header di sicurezza assenti | `after_request`: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Cache-Control: no-store` |
+| **K5** | Drain dei worker troppo breve | `graceful_timeout` portato a 60 s |
+
+---
+
 # Fase 15 — Idempotency Manager (exactly-once)
 
 Garantisce che un'operazione mutante (creazione escrow, sblocco, rimborso,
