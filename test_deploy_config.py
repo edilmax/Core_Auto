@@ -113,5 +113,29 @@ class TestDockerignoreEReq(unittest.TestCase):
             self.assertIn(pkg, req.lower())
 
 
+class TestEnvEDeploy(unittest.TestCase):
+
+    def test_env_example_copre_le_var_del_compose(self):
+        # Anti-drift: ogni ${VAR} referenziata nel compose deve essere documentata.
+        import re
+        compose = _read("docker-compose.yml")
+        env_ex = _read(".env.example")
+        referenziate = set(re.findall(r"\$\{([A-Z_][A-Z0-9_]*)", compose))
+        for var in referenziate:
+            self.assertIn(var, env_ex, f"{var} non documentata in .env.example")
+
+    def test_env_example_segreti_e_db(self):
+        env_ex = _read(".env.example")
+        for v in ("HMAC_SECRET", "API_KEY", "BEARER_TOKEN", "ADMIN_TOKEN",
+                  "POSTGRES_PASSWORD"):
+            self.assertIn(v, env_ex)
+
+    def test_deploy_md(self):
+        md = _read("DEPLOY.md")
+        for s in ("docker compose up -d", "cp .env.example .env",
+                  "/api/v1/health", "down -v"):
+            self.assertIn(s, md)
+
+
 if __name__ == "__main__":
     unittest.main()
