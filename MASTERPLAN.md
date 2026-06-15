@@ -167,6 +167,18 @@ Ogni blocco/mattone DEVE rispettare:
       **Rivalutazione integrata**: 200 chat concorrenti su tutto lo stack (provider
       caotico) → 0 crash, quota mai sforata, memoria limitata, backpressure attiva.
       12 test fase32 + invarianti di sistema verificate. Suite **328 verde**.
+- [x] 3.6 `fase33_persistenza.py`: **stato conversazionale DUREVOLE e cross-worker**.
+      Chiude l'anello debole esposto dalla rivalutazione: la memoria FASE 31 e'
+      in-RAM per-processo → sotto gunicorn multi-worker/restart l'agente ha amnesia.
+      **Variante C "cache + append durevole"** (benchmark a 4 sotto carico estremo
+      multi-worker — write-through-RMW / write-behind / cache+append / append+ricostr):
+      vince con durabilita' piena (il write-behind PERDE la coda su crash → scartato),
+      correttezza cross-worker (append committato, ricostruzione dal DB su worker
+      fresco) e letture O(1) via cache LRU (Variante D). Datastore-backed (portabile
+      PG, condiviso come Outbox/idempotency); potatura durevole (ancora + ring).
+      `MemoriaConversazioniDurevole` e' DROP-IN per `AgenteConversazionale`; factory
+      `crea_memoria_conversazioni` feature-flag `CONV_MEMORY_DURABLE` **default-off**.
+      12 test (incl. continuita' della chat DOPO restart) eseguiti 10×. Suite **340 verde**.
 
 **BLOCCO 2 — Interfaccia visiva**
 - [x] 2.0 `fase28_gateway.py`: API Gateway. `ClientRegistry` (auth **per-cliente**
