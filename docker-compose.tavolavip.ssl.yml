@@ -1,0 +1,58 @@
+# CORE_AUTO / Tavola VIP - Stack di lancio HTTPS (go-live pubblico, BLOCCO 5.1).
+# Variante TLS dello stack standalone: nginx termina HTTPS (porte 80+443) con
+# certificati Let's Encrypt montati da /etc/letsencrypt; redirect 80 -> 443.
+# Usalo AL POSTO del compose base quando hai dominio + certificati:
+#   docker compose -f docker-compose.tavolavip.ssl.yml up -d --build
+# I segreti arrivano da .env (gitignored): se mancano, compose FALLISCE (${VAR:?}).
+name: tavolavip
+
+services:
+  booking:
+    build: .
+    container_name: tavolavip_booking
+    command: ["gunicorn", "-b", "0.0.0.0:8000", "-w", "2", "--timeout", "30",
+              "fase36_booking_api:crea_app_da_env()"]
+    environment:
+      DB_PATH: /data/tavolavip.db
+      BOOKING_API_KEY: "${BOOKING_API_KEY:?BOOKING_API_KEY mancante - configura .env}"
+      STRIPE_API_KEY: "${STRIPE_API_KEY:?STRIPE_API_KEY mancante - configura .env}"
+      STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:?STRIPE_WEBHOOK_SECRET mancante - configura .env}"
+      BOOKING_SUCCESS_URL: "${BOOKING_SUCCESS_URL:-https://tavolavip.example/pagamento/ok}"
+      BOOKING_CANCEL_URL: "${BOOKING_CANCEL_URL:-https://tavolavip.example/pagamento/annullato}"
+      WHATSAPP_ENABLED: ${WHATSAPP_ENABLED:-false}
+      FORWARDED_ALLOW_IPS: "*"
+    volumes:
+      - tavolavip_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health',timeout=4).status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: tavolavip_nginx
+    depends_on:
+      booking:
+        condition: service_healthy
+    ports:
+      - "80:80"                            # redirect ACME -> HTTPS
+      - "443:443"                          # servizio pubblico TLS
+    volumes:
+      - ./deploy/nginx.tavolavip.ssl.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro        # certificati host (certbot)
+      - tavolavip_certbot:/var/www/certbot          # webroot rinnovo cert
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz || wget -qO- --no-check-certificate https://127.0.0.1/healthz || exit 1"]
+      interval: 15s
+      timeout: 4s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  tavolavip_data:
+    name: tavolavip_data
+  tavolavip_certbot:
+    name: tavolavip_certbot

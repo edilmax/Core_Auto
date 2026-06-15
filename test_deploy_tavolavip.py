@@ -88,6 +88,38 @@ class TestNginxTavolaVIP(unittest.TestCase):
         self.assertIn("location = /api/v1/payments/webhook", self.conf)
 
 
+class TestSSL(unittest.TestCase):
+    """Stack HTTPS (BLOCCO 5.1): TLS + redirect + HSTS, pronto da attivare."""
+    def setUp(self):
+        self.conf = _read(os.path.join("deploy", "nginx.tavolavip.ssl.conf"))
+        import yaml
+        self.raw = _read("docker-compose.tavolavip.ssl.yml")
+        self.doc = yaml.safe_load(self.raw)
+        self.svc = self.doc["services"]
+
+    def test_conf_tls_e_redirect(self):
+        self.assertIn("listen 443 ssl", self.conf)
+        self.assertIn("ssl_certificate", self.conf)
+        self.assertIn("return 301 https://", self.conf)              # 80 -> 443
+        self.assertIn("Strict-Transport-Security", self.conf)        # HSTS
+        self.assertIn("acme-challenge", self.conf)                   # rinnovo cert
+        self.assertIn("server booking:8000", self.conf)
+
+    def test_compose_espone_443_e_monta_certificati(self):
+        ports = " ".join(str(p) for p in self.svc["nginx"]["ports"])
+        self.assertIn("443", ports)
+        self.assertIn("80", ports)
+        vols = " ".join(self.svc["nginx"]["volumes"])
+        self.assertIn("/etc/letsencrypt", vols)
+        self.assertIn("nginx.tavolavip.ssl.conf", vols)
+
+    def test_compose_binding_sicuro_e_no_segreti(self):
+        env = self.svc["booking"]["environment"]
+        for chiave in ("STRIPE_API_KEY", "STRIPE_WEBHOOK_SECRET", "BOOKING_API_KEY"):
+            self.assertIn(":?", str(env[chiave]))
+        self.assertNotRegex(self.raw, r"sk_(test|live)_[A-Za-z0-9]{6}")
+
+
 class TestSmokeEFortezzaIntatta(unittest.TestCase):
     def test_smoke_copre_le_chiamate_chiave(self):
         s = _read(SMOKE)

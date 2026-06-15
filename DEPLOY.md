@@ -136,3 +136,28 @@ docker compose -f docker-compose.tavolavip.yml down -v   # stop + CANCELLA il DB
 Webhook Stripe: su Dashboard crea l'endpoint verso `https://<host>/api/v1/payments/webhook`
 (evento `checkout.session.completed`), copia il signing secret in `STRIPE_WEBHOOK_SECRET`
 e riavvia (`up -d`). Se i segreti mancano in `.env`, il deploy si FERMA (fail-fast).
+
+### HTTPS / SSL — go-live pubblico (BLOCCO 5.1)
+
+Prerequisito: un **dominio** che punta all'IP del server (record A).
+
+```bash
+# 1) metti il TUO dominio in deploy/nginx.tavolavip.ssl.conf (sostituisci tavolavip.example)
+sed -i 's/tavolavip.example/tavolavip.tuodominio.it/g' deploy/nginx.tavolavip.ssl.conf
+
+# 2) ottieni i certificati Let's Encrypt (porta 80 libera durante l'emissione)
+docker run --rm -p 80:80 -v /etc/letsencrypt:/etc/letsencrypt \
+  certbot/certbot certonly --standalone -d tavolavip.tuodominio.it --agree-tos -m tu@email.it -n
+
+# 3) avvia lo stack HTTPS (al posto del compose base)
+docker compose -f docker-compose.tavolavip.ssl.yml up -d --build
+
+# 4) smoke su HTTPS
+BASE_URL=https://tavolavip.tuodominio.it BOOKING_API_KEY=<la_tua> bash deploy/smoke_tavolavip.sh
+
+# 5) rinnovo automatico (cron mensile)
+#   docker run --rm -v /etc/letsencrypt:/etc/letsencrypt certbot/certbot renew \
+#     && docker compose -f docker-compose.tavolavip.ssl.yml exec nginx nginx -s reload
+```
+HTTP (80) reindirizza a HTTPS (443); HSTS attivo. Aggiorna l'URL del webhook Stripe a
+`https://tavolavip.tuodominio.it/api/v1/payments/webhook`.
