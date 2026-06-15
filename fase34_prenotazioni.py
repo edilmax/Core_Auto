@@ -32,9 +32,12 @@ from fase17_money import valida_split
 
 logger = logging.getLogger("core_auto.prenotazioni")
 
-# Stati che OCCUPANO il tavolo (bloccano la disponibilita'). 'annullata' libera.
-STATI_BLOCCANTI = ("in_attesa_pagamento", "confermata", "pagata", "occupato")
+# Stati che OCCUPANO SEMPRE il tavolo. L'hold 'in_attesa_pagamento' occupa solo
+# finche' NON e' scaduto (vedi hold_ttl_secondi); 'annullata'/'scaduta' liberano.
+STATI_SEMPRE_BLOCCANTI = ("confermata", "pagata", "occupato")
 STATO_INIZIALE = "in_attesa_pagamento"
+STATO_SCADUTA = "scaduta"
+HOLD_TTL_SECONDI_DEFAULT = 1800  # 30 minuti: un hold non pagato libera il tavolo
 
 
 @dataclass(frozen=True)
@@ -63,8 +66,15 @@ class MotorePrenotazioni:
     """Crea/annulla/conferma prenotazioni con guardia overlap e atomicita'.
     Connessione-per-operazione via `conn_factory` (come DistributedLockManager)."""
 
-    def __init__(self, conn_factory: Callable[[], sqlite3.Connection]) -> None:
+    def __init__(self, conn_factory: Callable[[], sqlite3.Connection],
+                 hold_ttl_secondi: int = HOLD_TTL_SECONDI_DEFAULT) -> None:
         self._conn_factory = conn_factory
+        self._hold_ttl = hold_ttl_secondi
+
+    def _cutoff_hold(self) -> str:
+        """Timestamp di taglio: un hold creato PRIMA di questo e' scaduto."""
+        scad = datetime.datetime.now() - datetime.timedelta(seconds=self._hold_ttl)
+        return scad.isoformat(timespec="seconds")
 
     # --- schema autonomo (idempotente, allineato al monolite) ---
     def inizializza_schema(self) -> None:
@@ -128,17 +138,23 @@ class MotorePrenotazioni:
         return ci < co  # almeno una notte; intervallo semi-aperto
 
     def disponibile(self, con: sqlite3.Connection, alloggio_id: str,
-                    check_in: str, check_out: str) -> bool:
+                    check_in: str, check_out: str,
+                    escludi_id: Optional[int] = None) -> bool:
         """True se NESSUNA prenotazione bloccante si sovrappone a [check_in,
-        check_out). Overlap fra [a_ci,a_co) e [b_ci,b_co): a_ci < b_co AND b_ci < a_co.
-        Il turnover in giornata (co == ci) NON e' conflitto."""
-        segnaposto = ",".join("?" * len(STATI_BLOCCANTI))
-        row = con.execute(
-            f"SELECT 1 FROM prenotazioni WHERE candidato_url=? "
-            f"AND stato IN ({segnaposto}) "
-            f"AND check_in < ? AND ? < check_out LIMIT 1",
-            (alloggio_id, *STATI_BLOCCANTI, check_out, check_in)).fetchone()
-        return row is None
+        check_out). Overlap fra [a_ci,a_co) e [b_ci,b_co): a_ci < b_co AND b_ci < a_co
+        (turnover in giornata NON e' conflitto). Un hold 'in_attesa_pagamento'
+        SCADUTO non blocca. `escludi_id` ignora una prenotazione (per la conferma)."""
+        sempre = ",".join("?" * len(STATI_SEMPRE_BLOCCANTI))
+        sql = (f"SELECT 1 FROM prenotazioni WHERE candidato_url=? "
+               f"AND check_in < ? AND ? < check_out "
+               f"AND ( stato IN ({sempre}) "
+               f"      OR (stato=? AND data_creazione >= ?) )")  # hold non scaduto
+        params = [alloggio_id, check_out, check_in, *STATI_SEMPRE_BLOCCANTI,
+                  STATO_INIZIALE, self._cutoff_hold()]
+        if escludi_id is not None:
+            sql += " AND id <> ?"
+            params.append(escludi_id)
+        return con.execute(sql + " LIMIT 1", params).fetchone() is None
 
     # --- creazione ATOMICA ---
     def crea(self, r: RichiestaPrenotazione) -> EsitoPrenotazione:
@@ -198,6 +214,22 @@ class MotorePrenotazioni:
                 con.execute("ROLLBACK")
                 return None
             pren_id = row["prenotazione_id"]
+            prow = con.execute("SELECT stato, candidato_url, check_in, check_out "
+                               "FROM prenotazioni WHERE id=?", (pren_id,)).fetchone()
+            if prow is None:
+                con.execute("ROLLBACK")
+                return None
+            if prow["stato"] == "pagata":
+                con.execute("ROLLBACK")        # gia' confermata: idempotente
+                return pren_id
+            # L'hold poteva scadere: confermo solo se il tavolo e' ANCORA libero
+            # (escludendo me stesso). Altrimenti il pagamento va rimborsato a parte.
+            if not self.disponibile(con, prow["candidato_url"], prow["check_in"],
+                                    prow["check_out"], escludi_id=pren_id):
+                con.execute("ROLLBACK")
+                logger.warning("Conferma su tavolo gia' occupato (pren=%s): "
+                               "pagamento da RIMBORSARE", pren_id)
+                return None
             con.execute("UPDATE pagamenti_split SET status='paid' WHERE id=?",
                         (pagamento_id,))
             con.execute("UPDATE prenotazioni SET stato='pagata' WHERE id=?", (pren_id,))
@@ -223,6 +255,28 @@ class MotorePrenotazioni:
                 "WHERE id=? AND stato=?", (prenotazione_id, STATO_INIZIALE))
             con.execute("COMMIT")
             return cur.rowcount > 0
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
+        finally:
+            con.close()
+
+    def libera_hold_scaduti(self) -> int:
+        """Housekeeping: marca 'scaduta' gli hold non pagati piu' vecchi del TTL
+        (cosi' il conteggio resta pulito; la disponibilita' li ignora gia'). Da
+        chiamare periodicamente. Ritorna quante prenotazioni ha liberato."""
+        con = self._apri()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            cur = con.execute(
+                "UPDATE prenotazioni SET stato=? "
+                "WHERE stato=? AND data_creazione < ?",
+                (STATO_SCADUTA, STATO_INIZIALE, self._cutoff_hold()))
+            con.execute("COMMIT")
+            return cur.rowcount
         except Exception:
             try:
                 con.execute("ROLLBACK")

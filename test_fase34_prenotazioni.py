@@ -147,6 +147,50 @@ class TestConfermaEAnnulla(_Base):
         self.assertFalse(self.motore.annulla(e.prenotazione_id))  # non annullabile
 
 
+class TestScadenzaHold(_Base):
+    """Un hold non pagato libera il tavolo dopo il TTL (niente blocco a vita)."""
+    def _invecchia(self, pren_id, iso="2000-01-01T00:00:00"):
+        c = sqlite3.connect(self.path)
+        c.execute("UPDATE prenotazioni SET data_creazione=? WHERE id=?", (iso, pren_id))
+        c.commit(); c.close()
+
+    def test_hold_scaduto_non_blocca(self):
+        e = self.motore.crea(_richiesta("2027-01-10", "2027-01-15"))
+        self.assertEqual(self.motore.crea(_richiesta("2027-01-10", "2027-01-15")).motivo,
+                         "non_disponibile")          # hold fresco: blocca
+        self._invecchia(e.prenotazione_id)
+        self.assertTrue(self.motore.crea(_richiesta("2027-01-10", "2027-01-15")).ok)  # scaduto: libero
+
+    def test_libera_hold_scaduti(self):
+        e = self.motore.crea(_richiesta("2027-02-10", "2027-02-12"))
+        self._invecchia(e.prenotazione_id)
+        self.assertEqual(self.motore.libera_hold_scaduti(), 1)
+        self.assertEqual(self.motore.stato(e.prenotazione_id)["stato"], "scaduta")
+        self.assertEqual(self.motore.libera_hold_scaduti(), 0)  # idempotente
+
+    def test_pagato_non_scade(self):
+        e = self.motore.crea(_richiesta("2027-03-10", "2027-03-12"))
+        self.motore.conferma_pagamento(e.pagamento_id)
+        self._invecchia(e.prenotazione_id)
+        self.assertEqual(self.motore.libera_hold_scaduti(), 0)   # i pagati non scadono
+        self.assertEqual(self.motore.crea(_richiesta("2027-03-10", "2027-03-12")).motivo,
+                         "non_disponibile")
+
+    def test_conferma_hold_scaduto_ma_libero(self):
+        e = self.motore.crea(_richiesta("2027-04-10", "2027-04-12"))
+        self._invecchia(e.prenotazione_id)              # scaduto ma slot ancora libero
+        self.assertEqual(self.motore.conferma_pagamento(e.pagamento_id), e.prenotazione_id)
+        self.assertEqual(self.motore.stato(e.prenotazione_id)["stato"], "pagata")
+
+    def test_conferma_su_conflitto_ritorna_none(self):
+        a = self.motore.crea(_richiesta("2027-05-10", "2027-05-12"))
+        self._invecchia(a.prenotazione_id)
+        b = self.motore.crea(_richiesta("2027-05-10", "2027-05-12"))  # slot libero -> ok
+        self.assertTrue(b.ok)
+        self.motore.conferma_pagamento(b.pagamento_id)               # B paga e blocca
+        self.assertIsNone(self.motore.conferma_pagamento(a.pagamento_id))  # A in conflitto
+
+
 class TestConcorrenza(_Base):
     def test_doppia_prenotazione_stesso_tavolo_solo_una_passa(self):
         risultati = []
