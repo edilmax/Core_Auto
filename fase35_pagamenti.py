@@ -224,7 +224,8 @@ class ServizioPagamenti:
         try:
             st = self._motore.stato(pren_id) or {}
             self._notifiche.invia_voucher(
-                recapiti={"email": st.get("ospite_email", "")},
+                recapiti={"email": st.get("ospite_email", ""),
+                          "whatsapp": st.get("ospite_telefono", "")},
                 codice_voucher=voucher, alloggio=st.get("candidato_url", ""),
                 check_in=st.get("check_in", ""), check_out=st.get("check_out", ""))
         except Exception:

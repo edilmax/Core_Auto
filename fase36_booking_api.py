@@ -63,6 +63,7 @@ def registra_rotte(target: Any, motore: Any, servizio: Any, *,
                 alloggio_id=str(d["alloggio_id"]),
                 ospite_nome=str(d.get("ospite_nome", "")),
                 ospite_email=str(d.get("ospite_email", "")),
+                ospite_telefono=str(d.get("ospite_telefono", "")),
                 check_in=str(d["check_in"]), check_out=str(d["check_out"]),
                 importo_totale_cents=parse_cent(d["importo_totale_cents"], "importo_totale_cents"),
                 commissione_cents=parse_cent(d["commissione_cents"], "commissione_cents"))
@@ -161,9 +162,9 @@ def crea_app_da_env() -> Any:
     provider = crea_provider_pagamenti(
         success_url=os.environ.get("BOOKING_SUCCESS_URL"),
         cancel_url=os.environ.get("BOOKING_CANCEL_URL"))
-    from fase37_notifiche import crea_servizio_notifiche
+    from fase39_whatsapp import crea_servizio_notifiche_completo
     servizio = ServizioPagamenti(motore, provider,
-                                 notifiche=crea_servizio_notifiche())
+                                 notifiche=crea_servizio_notifiche_completo())
     return crea_app_booking(motore, servizio,
                             api_key=os.environ.get("BOOKING_API_KEY"),
                             admin_key=os.environ.get("BOOKING_ADMIN_KEY"))

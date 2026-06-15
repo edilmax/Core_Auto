@@ -55,6 +55,7 @@ class RichiestaPrenotazione:
     importo_totale_cents: int
     commissione_cents: int     # quota Tavola; quota_partner = totale - commissione
     origine: str = "diretto"
+    ospite_telefono: str = ""  # opzionale; abilita la consegna voucher via WhatsApp
 
 
 @dataclass(frozen=True)
@@ -89,10 +90,15 @@ class MotorePrenotazioni:
                     CREATE TABLE IF NOT EXISTS prenotazioni (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         candidato_url TEXT, ospite_nome TEXT DEFAULT '',
-                        ospite_email TEXT DEFAULT '', check_in TEXT DEFAULT '',
-                        check_out TEXT DEFAULT '', stato TEXT DEFAULT 'richiesta',
-                        origine TEXT DEFAULT '', uid_ical TEXT DEFAULT '',
-                        data_creazione TEXT)""")
+                        ospite_email TEXT DEFAULT '', ospite_telefono TEXT DEFAULT '',
+                        check_in TEXT DEFAULT '', check_out TEXT DEFAULT '',
+                        stato TEXT DEFAULT 'richiesta', origine TEXT DEFAULT '',
+                        uid_ical TEXT DEFAULT '', data_creazione TEXT)""")
+                pc = [r[1] for r in
+                      con.execute("PRAGMA table_info(prenotazioni)").fetchall()]
+                if "ospite_telefono" not in pc:   # idempotente (DB monolite)
+                    con.execute("ALTER TABLE prenotazioni "
+                                "ADD COLUMN ospite_telefono TEXT DEFAULT ''")
                 con.execute("""
                     CREATE TABLE IF NOT EXISTS pagamenti_split (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -188,10 +194,10 @@ class MotorePrenotazioni:
             adesso = datetime.datetime.now().isoformat(timespec="seconds")
             cur = con.execute(
                 "INSERT INTO prenotazioni (candidato_url, ospite_nome, ospite_email,"
-                " check_in, check_out, stato, origine, data_creazione) "
-                "VALUES (?,?,?,?,?,?,?,?)",
-                (r.alloggio_id, r.ospite_nome, r.ospite_email, r.check_in,
-                 r.check_out, STATO_INIZIALE, r.origine, adesso))
+                " ospite_telefono, check_in, check_out, stato, origine, data_creazione) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (r.alloggio_id, r.ospite_nome, r.ospite_email, r.ospite_telefono,
+                 r.check_in, r.check_out, STATO_INIZIALE, r.origine, adesso))
             pren_id = cur.lastrowid
             cur = con.execute(
                 "INSERT INTO pagamenti_split (prenotazione_id, importo_totale, "
@@ -405,7 +411,7 @@ class MotorePrenotazioni:
         try:
             row = con.execute(
                 "SELECT p.id, p.candidato_url, p.ospite_nome, p.ospite_email, "
-                "p.check_in, p.check_out, p.stato, s.id AS pagamento_id, "
+                "p.ospite_telefono, p.check_in, p.check_out, p.stato, s.id AS pagamento_id, "
                 "s.importo_totale, s.commissione_tavola, s.quota_partner, s.status "
                 "FROM prenotazioni p LEFT JOIN pagamenti_split s "
                 "ON s.prenotazione_id = p.id WHERE p.id=?",
