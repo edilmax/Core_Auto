@@ -406,6 +406,23 @@ class MotorePrenotazioni:
         finally:
             con.close()
 
+    def elenco(self, stato: Optional[str] = None, limite: int = 200) -> list:
+        """Elenco prenotazioni (read-only) per la dashboard admin; filtro opzionale
+        per stato, ordinato per data di check-in. Ritorna una lista di dict."""
+        limite = max(1, min(int(limite), 1000))
+        con = self._apri()
+        try:
+            base = ("SELECT id, candidato_url, ospite_email, ospite_telefono, "
+                    "check_in, check_out, stato FROM prenotazioni ")
+            if stato:
+                cur = con.execute(base + "WHERE stato=? ORDER BY check_in, id LIMIT ?",
+                                  (stato, limite))
+            else:
+                cur = con.execute(base + "ORDER BY check_in, id LIMIT ?", (limite,))
+            return [dict(r) for r in cur.fetchall()]
+        finally:
+            con.close()
+
     def stato(self, prenotazione_id: int) -> Optional[dict]:
         con = self._apri()
         try:

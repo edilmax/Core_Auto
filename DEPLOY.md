@@ -180,3 +180,15 @@ docker compose -f docker-compose.tavolavip.yml exec -T booking \
 # ripristino di un backup:
 python -c "import fase38_backup as b; b.ripristina('/data/backup/tavolavip-XXENGINE.db.gz','/data/tavolavip.db')"
 ```
+
+### Pannello Admin web (ponte di comando)
+
+UI minimale e sicura (Basic auth + CSRF) per vedere prenotazioni, vista calendario e
+APPROVARE i rimborsi senza terminale/curl. Servire SEMPRE dietro HTTPS.
+
+```bash
+# avvio (servizio dedicato, stessa immagine)
+gunicorn -b 0.0.0.0:8002 'fase41_admin_panel:crea_app_admin_da_env()'
+# poi apri  https://<host>/admin  e autenticati (ADMIN_PANEL_USER/ADMIN_PANEL_PASSWORD)
+```
+Senza `ADMIN_PANEL_USER`/`ADMIN_PANEL_PASSWORD` il pannello e' disabilitato (503).
