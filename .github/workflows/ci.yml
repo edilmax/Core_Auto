@@ -1,0 +1,23 @@
+# CORE_AUTO / Tavola VIP - CI: l'intera suite gira ad ogni push e PR.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Installa dipendenze
+        run: pip install -r requirements.txt
+      - name: Suite di test (gate di regressione)
+        run: python -m unittest discover -p "test_*.py"

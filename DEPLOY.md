@@ -192,3 +192,12 @@ gunicorn -b 0.0.0.0:8002 'fase41_admin_panel:crea_app_admin_da_env()'
 # poi apri  https://<host>/admin  e autenticati (ADMIN_PANEL_USER/ADMIN_PANEL_PASSWORD)
 ```
 Senza `ADMIN_PANEL_USER`/`ADMIN_PANEL_PASSWORD` il pannello e' disabilitato (503).
+
+### Observability (log JSON + metriche) e CI
+
+- **Log JSON**: chiama `fase42_observability.configura_logging_json("INFO")` all'avvio
+  (o nel gunicorn.conf) -> ogni riga di log diventa un oggetto JSON interrogabile.
+- **Metriche Prometheus**: l'app booking espone `GET /api/v1/metrics`... in realta'
+  `GET /metrics` (richieste + latenze). Esponilo SOLO alla rete interna dello scraper.
+- **CI**: `.github/workflows/ci.yml` lancia l'intera suite di test (matrice Python
+  3.9 e 3.11) ad ogni push e pull request -> gate di regressione automatico.

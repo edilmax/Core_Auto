@@ -165,6 +165,11 @@ def crea_app_da_env() -> Any:
     from fase39_whatsapp import crea_servizio_notifiche_completo
     servizio = ServizioPagamenti(motore, provider,
                                  notifiche=crea_servizio_notifiche_completo())
-    return crea_app_booking(motore, servizio,
-                            api_key=os.environ.get("BOOKING_API_KEY"),
-                            admin_key=os.environ.get("BOOKING_ADMIN_KEY"))
+    app = crea_app_booking(motore, servizio,
+                           api_key=os.environ.get("BOOKING_API_KEY"),
+                           admin_key=os.environ.get("BOOKING_ADMIN_KEY"))
+    # Observability (FASE 42): strumenta le richieste + espone /metrics (Prometheus).
+    from fase42_observability import strumenta_app, registra_metriche
+    strumenta_app(app)
+    registra_metriche(app)
+    return app
