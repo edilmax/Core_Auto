@@ -1,0 +1,31 @@
+# Riduce il contesto di build e la superficie d'attacco dell'immagine.
+.git/
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+# test e doc non servono nel runtime
+test_*.py
+*.md
+# dati locali / DB / log
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+*.log
+forensic_logs/
+super_linker_logs/
+PIANI_GENERATI/
+# cruft legacy/sperimentale (non parte del runtime di produzione)
+ricombinato_*.py
+_spike_*.py
+_verifica_*.py
+# segreti/ambiente
+.env
+config_assistente.json
+# infra (non serve dentro l'immagine app)
+Dockerfile
+docker-compose*.yml
+deploy/
+pg.ps1

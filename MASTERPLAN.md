@@ -139,9 +139,17 @@ Ogni blocco/mattone DEVE rispettare:
 - [x] 5.0a Isola **Postgres di sviluppo** (`docker-compose.postgres.yml` + `pg.ps1`):
       servizio separato, volume dedicato persistente, up/down con un comando,
       nessun impatto sulla sandbox. Validata strutturalmente (4 test).
-- [ ] 5.0b Dockerfile dell'app + compose completo (app + postgres + nginx).
-- [ ] 5.1 Nginx + domini + SSL (Let's Encrypt).
-- [ ] 5.2 Fail-safe orchestration (health/readiness/liveness split).
+- [x] 5.0b **Stack completo** (Variante C, benchmark Dockerfile 7/7 + self-healing
+      4/4): `Dockerfile` multi-stage/slim/non-root/healthcheck (0 build-tools nel
+      finale), `docker-compose.yml` (nginx→app→postgres, **self-healing**:
+      `restart: unless-stopped` + healthcheck + `depends_on: service_healthy`;
+      Postgres su volume persistente; SOLO nginx esposto), `deploy/nginx.conf`
+      (reverse proxy + security headers + rate-limit + /healthz), `.dockerignore`,
+      `psycopg2-binary` in requirements. 17 test strutturali (no Docker richiesto).
+- [~] 5.1 Nginx pronto (reverse proxy + security). Manca solo: dominio + SSL
+      Let's Encrypt (`server { listen 443 ssl }` + redirect) → richiede dominio/host.
+- [x] 5.2 Self-healing a livello orchestrazione (restart+healthcheck+depends-healthy);
+      readiness/liveness split avanzato (k8s) rimandato se servirà.
 
 ### Dipendenze esterne (da fornire per l'integrazione "live")
 Server PostgreSQL · credenziali WhatsApp Business / Instagram Graph · chiave LLM

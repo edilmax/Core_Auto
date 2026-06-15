@@ -1,0 +1,80 @@
+# CORE_AUTO - BLOCCO 5.0b: stack completo a compartimenti stagni.
+#   nginx (reverse proxy, unico esposto) -> app (gunicorn) -> postgres
+# Self-healing: restart unless-stopped + healthcheck + depends_on healthy.
+#
+# Avvio:  docker compose up -d        | Stop: docker compose down
+# Wipe:   docker compose down -v      | Log:  docker compose logs -f
+#
+# SICUREZZA: cambia i segreti prima della produzione (usa un .env o secret).
+name: core_auto
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: core_auto_pg
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-core}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-core}
+      POSTGRES_DB: ${POSTGRES_DB:-core_auto}
+    volumes:
+      - core_auto_pgdata:/var/lib/postgresql/data   # volume PERSISTENTE
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-core} -d ${POSTGRES_DB:-core_auto}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    # NB: nessuna porta pubblicata sull'host -> Postgres raggiungibile SOLO
+    # dalla rete interna (app). Minore superficie d'attacco.
+
+  app:
+    build: .
+    container_name: core_auto_app
+    depends_on:
+      postgres:
+        condition: service_healthy        # parte solo quando Postgres e' pronto
+    environment:
+      FLASK_ENV: production
+      # Segreti obbligatori in produzione (fail-fast). CAMBIALI.
+      HMAC_SECRET: ${HMAC_SECRET:-dev_hmac_change_me}
+      API_KEY: ${API_KEY:-dev_api_change_me}
+      BEARER_TOKEN: ${BEARER_TOKEN:-dev_bearer_change_me}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev_admin_change_me}
+      DB_PATH: /data/marketplace.db       # core su SQLite (volume) finche' 1.3c non porta il core su PG
+      DATABASE_URL: postgresql://${POSTGRES_USER:-core}:${POSTGRES_PASSWORD:-core}@postgres:5432/${POSTGRES_DB:-core_auto}
+      # Outbox/idempotency possono gia' usare Postgres: DB_BACKEND=postgres (cutover core dopo 1.3c).
+      # Dietro nginx interno: l'app accetta gli header forwarded dal proxy.
+      FORWARDED_ALLOW_IPS: "*"
+    volumes:
+      - core_auto_appdata:/data           # DB SQLite + WAL persistenti
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health',timeout=4).status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      start_period: 25s
+      retries: 3
+    restart: unless-stopped
+    # Nessuna porta sull'host: l'app e' raggiungibile solo da nginx (rete interna).
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: core_auto_nginx
+    depends_on:
+      app:
+        condition: service_healthy        # instrada solo quando l'app e' sana
+    ports:
+      - "${HTTP_PORT:-80}:80"             # UNICO punto esposto all'esterno
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz || exit 1"]
+      interval: 15s
+      timeout: 4s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  core_auto_pgdata:
+    name: core_auto_pgdata
+  core_auto_appdata:
+    name: core_auto_appdata
