@@ -25,6 +25,7 @@ from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from typing import Any, Deque, List, Optional
 
+from fase29_backpressure import Priorita
 from fase30_llm import Messaggio
 
 logger = logging.getLogger("core_auto.conversazione")
@@ -126,17 +127,18 @@ class AgenteConversazionale:
         self._memoria = memoria or MemoriaConversazioni()
         self._system = system_prompt
 
-    def rispondi(self, destinatario: str, testo: str,
-                 intento: Any = None) -> RispostaConversazione:
+    def rispondi(self, destinatario: str, testo: str, intento: Any = None,
+                 priorita: Priorita = Priorita.NORMALE) -> RispostaConversazione:
         """Registra il turno utente, genera la risposta budget-aware sull'intero
         storico (compresso al volo) e memorizza la risposta SOLO se valida (un
         fallback non inquina il contesto futuro). `intento` puo' essere passato
-        gia' calcolato (es. dal gateway) per non rianalizzare."""
+        gia' calcolato (es. dal gateway) per non rianalizzare; `priorita` governa
+        la quota globale (i critici hanno la precedenza sotto carico)."""
         self._memoria.registra(destinatario, "user", testo)
         if intento is None:
             intento = self._agente.analizza_intento(testo)
         msgs = self._memoria.cronologia(destinatario, system=self._system)
-        r = self._client.chat(msgs)
+        r = self._client.chat(msgs, priorita)
         if r.ok:
             self._memoria.registra(destinatario, "assistant", r.testo)
         return RispostaConversazione(

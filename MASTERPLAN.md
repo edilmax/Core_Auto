@@ -149,6 +149,24 @@ Ogni blocco/mattone DEVE rispettare:
       `AgenteIA(client=…)` instrada la risposta nel budget; `GatewayAgente(
       conversazione=…)` abilita il multi-turno con memoria per-destinatario. 15 test.
       *Wiring in `create_app` quando ci sara' un LLMProvider reale + chiavi (no infra).*
+- [x] 3.5 `fase32_governatore.py`: **Governatore globale token/quota** (costo LLM).
+      Chiude l'asimmetria budget-per-richiesta vs quota-globale: tetto condiviso
+      tokens-per-finestra, thread-safe, su tutte le chat. **Variante D** (benchmark
+      a 4: finestra-fissa / token-bucket / sliding-log / sliding-log+priorita') su
+      due assi avversi: GARANZIA DURA (nessuna finestra mobile supera mai il limite
+      — finestra-fissa e token-bucket lo VIOLANO con ~2x; lo sliding-window log no)
+      + RISERVE per-priorita' (i critici ottengono token mentre la bassa e' differita).
+      Cablato in `ClientLLM(governatore=…)`: acquisisce input+riserva-output PRIMA di
+      chiamare l'IA; quota negata ⇒ DIFFERITO senza bruciare quota (`differito_quota`).
+      Priorita' propagata in `AgenteConversazionale.rispondi(priorita=…)`. Default-off → 316 immobili.
+      **Hardening (CLAUDE.md, benchmark estremo)**: struttura interna = **V2 bucket-
+      conservativo** (vince un 2° benchmark a 4 sotto carico estremo 120k req x10): i
+      bucket per-secondo coalescono gli eventi → memoria O(W) LIMITATA (vs deque
+      O(eventi-in-finestra) che cresce col throughput, ~34x meno) SENZA perdere la
+      garanzia dura (purge conservativo). + warning one-shot su richiesta>limite.
+      **Rivalutazione integrata**: 200 chat concorrenti su tutto lo stack (provider
+      caotico) → 0 crash, quota mai sforata, memoria limitata, backpressure attiva.
+      12 test fase32 + invarianti di sistema verificate. Suite **328 verde**.
 
 **BLOCCO 2 — Interfaccia visiva**
 - [x] 2.0 `fase28_gateway.py`: API Gateway. `ClientRegistry` (auth **per-cliente**

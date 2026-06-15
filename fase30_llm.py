@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from typing import Callable, List, Optional, Sequence
 
 from fase25_brain import LLMProvider, ResilientBrain
+from fase29_backpressure import Priorita  # solo-stdlib: nessun ciclo
 
 logger = logging.getLogger("core_auto.llm")
 
@@ -208,15 +209,25 @@ class ClientLLM:
     def __init__(self, provider: LLMProvider, budget: BudgetToken, *,
                  stimatore: Optional[StimatoreToken] = None,
                  riassuntore: Optional[Riassuntore] = None,
+                 governatore: Optional[Any] = None,
+                 messaggio_quota: str = "Sistema molto richiesto: riprova tra poco.",
                  **brain_kw) -> None:
         self._brain = ResilientBrain(provider, **brain_kw)
         self._budget = budget
         self._st = stimatore or StimatoreEuristico()
         self._compressore = CompressoreContesto(self._st, riassuntore)
+        # Opzionale (default None => comportamento identico): un GovernatoreToken
+        # (FASE 32) che impone la quota GLOBALE tokens-per-finestra. Duck-typed
+        # (.acquisisci(token, priorita)->EsitoGovernatore).
+        self._governatore = governatore
+        self._messaggio_quota = messaggio_quota
 
-    def chat(self, messaggi: Sequence[Messaggio]) -> RispostaChat:
+    def chat(self, messaggi: Sequence[Messaggio],
+             priorita: Priorita = Priorita.NORMALE) -> RispostaChat:
         """Assembla il contesto entro il budget (comprimendo se serve) e chiama
-        l'IA in isolamento totale. Ritorna SEMPRE un RispostaChat."""
+        l'IA in isolamento totale. Se c'e' un governatore, ACQUISISCE prima la
+        quota globale (input + riserva output); se negata, DIFFERISCE senza
+        chiamare l'IA (la quota non viene MAI sforata). Ritorna SEMPRE RispostaChat."""
         originali = self._st.conta_messaggi(messaggi)
         compressi = self._compressore.comprimi(messaggi, self._budget.input_max)
         finale = self._st.conta_messaggi(compressi)
@@ -226,6 +237,16 @@ class ClientLLM:
             compressi = self._compressore._forza_budget(
                 list(compressi), self._budget.input_max)
             finale = self._st.conta_messaggi(compressi)
+
+        # Quota globale: il costo prudente = input + riserva output (peggior caso).
+        if self._governatore is not None:
+            costo = finale + self._budget.riserva_output
+            esito = self._governatore.acquisisci(costo, priorita)
+            if not esito.concesso:
+                return RispostaChat(
+                    testo=self._messaggio_quota, ok=False, esito="differito_quota",
+                    token_input=finale, token_originali=originali,
+                    compresso=finale < originali)
 
         prompt = self._serializza(compressi)
         r = self._brain.genera(prompt)
