@@ -1,0 +1,61 @@
+# CORE_AUTO / Tavola VIP - Stack di LANCIO autonomo (servizio booking standalone).
+#   nginx (unico esposto) -> booking (gunicorn, WSGI fase36_booking_api:crea_app_da_env())
+# Riusa la STESSA immagine della fortezza (build: .) con command override -> niente
+# Dockerfile nuovo. DB su SQLite in volume persistente. Self-healing: restart +
+# healthcheck + depends_on healthy.
+#
+# Avvio:  docker compose -f docker-compose.tavolavip.yml up -d
+# Stop:   docker compose -f docker-compose.tavolavip.yml down
+# Wipe:   docker compose -f docker-compose.tavolavip.yml down -v   (cancella il DB!)
+#
+# I SEGRETI arrivano da .env (gitignored): se mancano, compose FALLISCE (${VAR:?}).
+name: tavolavip
+
+services:
+  booking:
+    build: .                              # riusa il Dockerfile multi-stage esistente
+    container_name: tavolavip_booking
+    command: ["gunicorn", "-b", "0.0.0.0:8000", "-w", "2", "--timeout", "30",
+              "fase36_booking_api:crea_app_da_env()"]
+    environment:
+      DB_PATH: /data/tavolavip.db         # DB SQLite del prodotto sul volume persistente
+      # Binding SICURO: i segreti non sono in chiaro qui; vengono da .env e se
+      # mancano il deploy si FERMA (fail-fast, niente default insicuro).
+      BOOKING_API_KEY: "${BOOKING_API_KEY:?BOOKING_API_KEY mancante - configura .env}"
+      STRIPE_API_KEY: "${STRIPE_API_KEY:?STRIPE_API_KEY mancante - configura .env}"
+      STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:?STRIPE_WEBHOOK_SECRET mancante - configura .env}"
+      BOOKING_SUCCESS_URL: "${BOOKING_SUCCESS_URL:-https://tavolavip.example/pagamento/ok}"
+      BOOKING_CANCEL_URL: "${BOOKING_CANCEL_URL:-https://tavolavip.example/pagamento/annullato}"
+      WHATSAPP_ENABLED: ${WHATSAPP_ENABLED:-false}
+      FORWARDED_ALLOW_IPS: "*"            # dietro nginx interno
+    volumes:
+      - tavolavip_data:/data              # DB SQLite + WAL persistenti
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health',timeout=4).status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped
+    # Nessuna porta sull'host: raggiungibile SOLO da nginx (rete interna).
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: tavolavip_nginx
+    depends_on:
+      booking:
+        condition: service_healthy        # instrada solo quando il booking e' sano
+    ports:
+      - "${HTTP_PORT:-80}:80"             # UNICO punto esposto
+    volumes:
+      - ./deploy/nginx.tavolavip.conf:/etc/nginx/nginx.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz || exit 1"]
+      interval: 15s
+      timeout: 4s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  tavolavip_data:
+    name: tavolavip_data

@@ -106,3 +106,33 @@ Lo schema (prenotazioni/pagamenti_split/escrow/voucher) viene creato al boot.
 Su Stripe Dashboard crea un endpoint webhook verso `https://<host>/api/v1/payments/webhook`
 per l'evento `checkout.session.completed`, e copia il signing secret in `STRIPE_WEBHOOK_SECRET`.
 > La firma del webhook e verificata: una notifica non firmata NON conferma nulla.
+
+## Go-live Tavola VIP — stack dedicato (servizio standalone)
+
+Stack isolato `nginx -> booking` (gunicorn), DB su SQLite in volume persistente.
+Riusa la stessa immagine della fortezza (nessun Dockerfile nuovo).
+
+```bash
+# 1) configura i segreti (file .env, gitignored)
+cp .env.example .env        # se non esiste gia'
+#   compila almeno: STRIPE_API_KEY, STRIPE_WEBHOOK_SECRET, BOOKING_API_KEY,
+#   BOOKING_SUCCESS_URL, BOOKING_CANCEL_URL, HTTP_PORT
+nano .env
+
+# 2) build + avvio (un comando)
+docker compose -f docker-compose.tavolavip.yml up -d --build
+docker compose -f docker-compose.tavolavip.yml ps      # colonna health
+
+# 3) SMOKE TEST: raggiungibilita' + risposte API (prima del lancio vero)
+BASE_URL=http://127.0.0.1 BOOKING_API_KEY=<la_tua_BOOKING_API_KEY> \
+  bash deploy/smoke_tavolavip.sh
+
+# 4) operazioni
+docker compose -f docker-compose.tavolavip.yml logs -f booking
+docker compose -f docker-compose.tavolavip.yml down      # stop
+docker compose -f docker-compose.tavolavip.yml down -v   # stop + CANCELLA il DB
+```
+
+Webhook Stripe: su Dashboard crea l'endpoint verso `https://<host>/api/v1/payments/webhook`
+(evento `checkout.session.completed`), copia il signing secret in `STRIPE_WEBHOOK_SECRET`
+e riavvia (`up -d`). Se i segreti mancano in `.env`, il deploy si FERMA (fail-fast).

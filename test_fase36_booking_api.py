@@ -41,6 +41,11 @@ class _Base(unittest.TestCase):
 
 
 class TestBookingAPI(_Base):
+    def test_health(self):
+        r = self.c.get("/api/v1/health")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json()["status"], "ok")
+
     def test_crea_ritorna_link(self):
         r = self._crea()
         self.assertEqual(r.status_code, 201)

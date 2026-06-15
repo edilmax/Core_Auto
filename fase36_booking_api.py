@@ -40,6 +40,11 @@ def registra_rotte(target: Any, motore: Any, servizio: Any, *,
             return True
         return hmac.compare_digest(request.headers.get("X-Booking-Key", ""), api_key)
 
+    @target.route("/health", methods=["GET"], endpoint="tv_health")
+    def _health():
+        # Liveness/readiness per healthcheck Docker/nginx (no auth).
+        return jsonify({"status": "ok", "service": "tavolavip"}), 200
+
     @target.route("/reservations", methods=["POST"], endpoint="tv_crea")
     def _crea():
         if not _auth_ok():
