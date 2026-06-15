@@ -161,7 +161,9 @@ def crea_app_da_env() -> Any:
     provider = crea_provider_pagamenti(
         success_url=os.environ.get("BOOKING_SUCCESS_URL"),
         cancel_url=os.environ.get("BOOKING_CANCEL_URL"))
-    servizio = ServizioPagamenti(motore, provider)
+    from fase37_notifiche import crea_servizio_notifiche
+    servizio = ServizioPagamenti(motore, provider,
+                                 notifiche=crea_servizio_notifiche())
     return crea_app_booking(motore, servizio,
                             api_key=os.environ.get("BOOKING_API_KEY"),
                             admin_key=os.environ.get("BOOKING_ADMIN_KEY"))

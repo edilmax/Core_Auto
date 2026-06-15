@@ -190,9 +190,13 @@ class ServizioPagamenti:
     """Cuce il PSP al MotorePrenotazioni: crea il link e, al webhook 'pagato',
     conferma la prenotazione ed emette il voucher (entrambi idempotenti)."""
 
-    def __init__(self, motore: Any, provider: PagamentoProvider) -> None:
+    def __init__(self, motore: Any, provider: PagamentoProvider,
+                 notifiche: Any = None) -> None:
         self._motore = motore
         self._provider = provider
+        # Opzionale: ServizioNotifiche (FASE 37). Consegna il voucher al cliente
+        # in modo ISOLATO -> un guasto della notifica non rompe la conferma.
+        self._notifiche = notifiche
 
     def crea_link_pagamento(self, *, pagamento_id: int, importo_cents: int,
                             email: str = "",
@@ -209,7 +213,22 @@ class ServizioPagamenti:
         if pren_id is None:
             return EsitoWebhook("pagamento_sconosciuto")
         voucher = self._motore.emetti_voucher(pren_id)
+        self._notifica_voucher(pren_id, voucher)   # best-effort, isolato
         return EsitoWebhook("confermato", pren_id, voucher)
+
+    def _notifica_voucher(self, pren_id: int, voucher: Optional[str]) -> None:
+        """Consegna il voucher al cliente in ISOLAMENTO TOTALE: qualsiasi errore
+        (o notifiche assenti) NON intacca la conferma del pagamento."""
+        if self._notifiche is None or not voucher:
+            return
+        try:
+            st = self._motore.stato(pren_id) or {}
+            self._notifiche.invia_voucher(
+                recapiti={"email": st.get("ospite_email", "")},
+                codice_voucher=voucher, alloggio=st.get("candidato_url", ""),
+                check_in=st.get("check_in", ""), check_out=st.get("check_out", ""))
+        except Exception:
+            logger.warning("Notifica voucher fallita (ignorata)", exc_info=True)
 
     def richiedi_rimborso(self, prenotazione_id: int) -> bool:
         """Apre la richiesta di rimborso (nessun denaro mosso; serve l'admin)."""
