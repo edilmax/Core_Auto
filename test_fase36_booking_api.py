@@ -24,7 +24,8 @@ class _Base(unittest.TestCase):
         self.motore.inizializza_schema()
         self.provider = StubPagamentoProvider(segreto="whsec")
         self.servizio = ServizioPagamenti(self.motore, self.provider)
-        self.app = crea_app_booking(self.motore, self.servizio, api_key="K1")
+        self.app = crea_app_booking(self.motore, self.servizio, api_key="K1",
+                                    admin_key="ADM")
         self.c = self.app.test_client()
     def tearDown(self):
         for ext in ("", "-wal", "-shm", "-journal"):
@@ -115,6 +116,41 @@ class TestBookingAPI(_Base):
         st = self.c.get(f"/api/v1/reservations/{d['prenotazione_id']}",
                         headers={"X-Booking-Key": "K1"}).get_json()
         self.assertEqual(st["stato"], "in_attesa_pagamento")  # invariato
+
+
+class TestRimborsoAPI(_Base):
+    """Route rimborso: richiesta (booking) vs approva/rifiuta (ADMIN)."""
+    def _crea_e_paga(self):
+        b = self._crea().get_json()
+        payload, firma = self.provider.firma_evento(b["pagamento_id"], pagato=True)
+        self.c.post("/api/v1/payments/webhook", data=payload,
+                    headers={"X-Pagamento-Firma": firma,
+                             "Content-Type": "application/json"})
+        return b["prenotazione_id"]
+
+    def test_flusso_rimborso_admin(self):
+        pren = self._crea_e_paga()
+        self.assertEqual(self.c.post(f"/api/v1/reservations/{pren}/refund-request",
+                                     headers={"X-Booking-Key": "K1"}).status_code, 200)
+        # approvare richiede la chiave ADMIN: senza -> 403 (niente denaro mosso)
+        self.assertEqual(self.c.post(f"/api/v1/reservations/{pren}/refund-approve",
+                                     headers={"X-Booking-Key": "K1"}).status_code, 403)
+        r = self.c.post(f"/api/v1/reservations/{pren}/refund-approve",
+                        headers={"X-Admin-Key": "ADM"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json()["esito"], "rimborsata")
+
+    def test_rifiuta_admin(self):
+        pren = self._crea_e_paga()
+        self.c.post(f"/api/v1/reservations/{pren}/refund-request",
+                    headers={"X-Booking-Key": "K1"})
+        self.assertEqual(self.c.post(f"/api/v1/reservations/{pren}/refund-reject",
+                                     headers={"X-Admin-Key": "ADM"}).status_code, 200)
+
+    def test_approva_non_richiesto_409(self):
+        pren = self._crea_e_paga()       # pagata, rimborso NON richiesto
+        self.assertEqual(self.c.post(f"/api/v1/reservations/{pren}/refund-approve",
+                                     headers={"X-Admin-Key": "ADM"}).status_code, 409)
 
 
 class TestBootstrapDaEnv(unittest.TestCase):

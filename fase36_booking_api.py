@@ -28,17 +28,23 @@ logger = logging.getLogger("core_auto.booking_api")
 
 
 def registra_rotte(target: Any, motore: Any, servizio: Any, *,
-                   api_key: Optional[str] = None,
+                   api_key: Optional[str] = None, admin_key: Optional[str] = None,
                    firma_header: str = "X-Pagamento-Firma") -> None:
-    """Registra le route su un Blueprint/app Flask. `api_key`: se impostata,
-    le route di prenotazione richiedono l'header `X-Booking-Key` (timing-safe).
-    Il webhook resta autenticato dalla sola firma del PSP."""
+    """Registra le route su un Blueprint/app Flask. `api_key`: se impostata, le
+    route di prenotazione richiedono `X-Booking-Key`. `admin_key`: richiesta da
+    `X-Admin-Key` per APPROVARE/RIFIUTARE i rimborsi (movimento di denaro). Il
+    webhook e' autenticato dalla sola firma del PSP."""
     from flask import request, jsonify
 
     def _auth_ok() -> bool:
         if not api_key:
             return True
         return hmac.compare_digest(request.headers.get("X-Booking-Key", ""), api_key)
+
+    def _admin_ok() -> bool:
+        # Niente admin_key configurata => nessuno puo' muovere denaro (fail-closed).
+        return bool(admin_key) and hmac.compare_digest(
+            request.headers.get("X-Admin-Key", ""), admin_key)
 
     @target.route("/health", methods=["GET"], endpoint="tv_health")
     def _health():
@@ -86,6 +92,35 @@ def registra_rotte(target: Any, motore: Any, servizio: Any, *,
         return ((jsonify({"annullata": True}), 200) if motore.annulla(pid)
                 else (jsonify({"error": "non_annullabile"}), 409))
 
+    @target.route("/reservations/<int:pid>/refund-request", methods=["POST"],
+                  endpoint="tv_refund_req")
+    def _refund_req(pid: int):
+        if not _auth_ok():
+            return jsonify({"error": "unauthorized"}), 401
+        return ((jsonify({"rimborso_richiesto": True}), 200)
+                if servizio.richiedi_rimborso(pid)
+                else (jsonify({"error": "non_rimborsabile"}), 409))
+
+    @target.route("/reservations/<int:pid>/refund-approve", methods=["POST"],
+                  endpoint="tv_refund_approve")
+    def _refund_approve(pid: int):
+        if not _admin_ok():                    # SOLO admin: muove denaro reale
+            return jsonify({"error": "forbidden"}), 403
+        r = servizio.approva_rimborso(pid)
+        codici = {"rimborsata": 200, "non_trovata": 404,
+                  "stato_non_valido": 409, "refund_psp_fallito": 502}
+        return jsonify({"esito": r.esito, "riferimento": r.riferimento}), \
+            codici.get(r.esito, 500)
+
+    @target.route("/reservations/<int:pid>/refund-reject", methods=["POST"],
+                  endpoint="tv_refund_reject")
+    def _refund_reject(pid: int):
+        if not _admin_ok():
+            return jsonify({"error": "forbidden"}), 403
+        return ((jsonify({"rifiutato": True}), 200)
+                if servizio.rifiuta_rimborso(pid)
+                else (jsonify({"error": "stato_non_valido"}), 409))
+
     @target.route("/payments/webhook", methods=["POST"], endpoint="tv_webhook")
     def _webhook():
         firma = request.headers.get(firma_header, "")
@@ -98,13 +133,14 @@ def registra_rotte(target: Any, motore: Any, servizio: Any, *,
 
 
 def crea_app_booking(motore: Any, servizio: Any, *, api_key: Optional[str] = None,
+                     admin_key: Optional[str] = None,
                      prefisso: str = "/api/v1") -> Any:
     """Crea un'app Flask standalone per il prodotto Tavola VIP (utile per il
     deploy autonomo e per i test). Le route sono montate sotto `prefisso`."""
     from flask import Flask, Blueprint
     app = Flask("tavola_vip")
     bp = Blueprint("tavola_vip", __name__, url_prefix=prefisso)
-    registra_rotte(bp, motore, servizio, api_key=api_key)
+    registra_rotte(bp, motore, servizio, api_key=api_key, admin_key=admin_key)
     app.register_blueprint(bp)
     return app
 
@@ -127,4 +163,5 @@ def crea_app_da_env() -> Any:
         cancel_url=os.environ.get("BOOKING_CANCEL_URL"))
     servizio = ServizioPagamenti(motore, provider)
     return crea_app_booking(motore, servizio,
-                            api_key=os.environ.get("BOOKING_API_KEY"))
+                            api_key=os.environ.get("BOOKING_API_KEY"),
+                            admin_key=os.environ.get("BOOKING_ADMIN_KEY"))

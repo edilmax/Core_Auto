@@ -22,6 +22,7 @@ services:
       # Binding SICURO: i segreti non sono in chiaro qui; vengono da .env e se
       # mancano il deploy si FERMA (fail-fast, niente default insicuro).
       BOOKING_API_KEY: "${BOOKING_API_KEY:?BOOKING_API_KEY mancante - configura .env}"
+      BOOKING_ADMIN_KEY: "${BOOKING_ADMIN_KEY:-}"   # vuoto => rimborsi disabilitati (403)
       STRIPE_API_KEY: "${STRIPE_API_KEY:?STRIPE_API_KEY mancante - configura .env}"
       STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:?STRIPE_WEBHOOK_SECRET mancante - configura .env}"
       BOOKING_SUCCESS_URL: "${BOOKING_SUCCESS_URL:-https://tavolavip.example/pagamento/ok}"

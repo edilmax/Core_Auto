@@ -41,10 +41,17 @@ class LinkPagamento:
 class EventoPagamento:
     tipo: str                 # "pagato" | "ignorato" | "non_valido"
     pagamento_id: Optional[int] = None
+    riferimento_psp: str = ""  # ref del pagamento PSP (serve al refund)
+
+
+@dataclass(frozen=True)
+class EsitoRimborso:
+    ok: bool
+    riferimento: str = ""     # id del rimborso PSP (se ok)
 
 
 class PagamentoProvider(ABC):
-    """Contratto di un PSP: crea un link di pagamento e verifica i suoi webhook."""
+    """Contratto di un PSP: link di pagamento, verifica webhook, rimborso."""
 
     @abstractmethod
     def crea_link(self, *, pagamento_id: int, importo_cents: int,
@@ -52,6 +59,9 @@ class PagamentoProvider(ABC):
 
     @abstractmethod
     def verifica_webhook(self, payload: bytes, firma: str) -> EventoPagamento: ...
+
+    @abstractmethod
+    def rimborsa(self, riferimento: str, importo_cents: int) -> EsitoRimborso: ...
 
 
 class StubPagamentoProvider(PagamentoProvider):
@@ -70,8 +80,8 @@ class StubPagamentoProvider(PagamentoProvider):
 
     def firma_evento(self, pagamento_id: int, pagato: bool = True) -> "tuple[bytes, str]":
         """Helper di test: produce (payload, firma) come farebbe il PSP."""
-        payload = json.dumps({"pagamento_id": pagamento_id,
-                              "pagato": bool(pagato)}).encode()
+        payload = json.dumps({"pagamento_id": pagamento_id, "pagato": bool(pagato),
+                              "riferimento_psp": f"pi_stub_{pagamento_id}"}).encode()
         firma = hmac.new(self._segreto, payload, hashlib.sha256).hexdigest()
         return payload, firma
 
@@ -86,9 +96,13 @@ class StubPagamentoProvider(PagamentoProvider):
         if not dati.get("pagato"):
             return EventoPagamento("ignorato")
         try:
-            return EventoPagamento("pagato", int(dati["pagamento_id"]))
+            return EventoPagamento("pagato", int(dati["pagamento_id"]),
+                                   str(dati.get("riferimento_psp", "")))
         except (KeyError, ValueError, TypeError):
             return EventoPagamento("non_valido")
+
+    def rimborsa(self, riferimento: str, importo_cents: int) -> EsitoRimborso:
+        return EsitoRimborso(True, f"re_stub_{riferimento}")
 
 
 class StripeProvider(PagamentoProvider):
@@ -143,10 +157,20 @@ class StripeProvider(PagamentoProvider):
             return EventoPagamento("ignorato")
         ref = (sess.get("metadata") or {}).get("pagamento_id") \
             or sess.get("client_reference_id")
+        psp = str(sess.get("payment_intent") or "")  # serve per il rimborso
         try:
-            return EventoPagamento("pagato", int(ref))
+            return EventoPagamento("pagato", int(ref), psp)
         except (TypeError, ValueError):
             return EventoPagamento("non_valido")
+
+    def rimborsa(self, riferimento: str, importo_cents: int) -> EsitoRimborso:
+        stripe = self._stripe()
+        try:
+            ref = stripe.Refund.create(payment_intent=riferimento, amount=importo_cents)
+        except Exception:
+            logger.error("Stripe: rimborso fallito (rif=%s)", riferimento, exc_info=True)
+            return EsitoRimborso(False)
+        return EsitoRimborso(True, getattr(ref, "id", ""))
 
 
 @dataclass(frozen=True)
@@ -154,6 +178,12 @@ class EsitoWebhook:
     esito: str                # "confermato"|"ignorato"|"non_valido"|"pagamento_sconosciuto"
     prenotazione_id: Optional[int] = None
     voucher: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class EsitoRimborsoServizio:
+    esito: str                # "rimborsata"|"non_trovata"|"stato_non_valido"|"refund_psp_fallito"
+    riferimento: str = ""
 
 
 class ServizioPagamenti:
@@ -175,11 +205,35 @@ class ServizioPagamenti:
         ev = self._provider.verifica_webhook(payload, firma)
         if ev.tipo != "pagato":
             return EsitoWebhook(ev.tipo)  # "non_valido" | "ignorato"
-        pren_id = self._motore.conferma_pagamento(ev.pagamento_id)
+        pren_id = self._motore.conferma_pagamento(ev.pagamento_id, ev.riferimento_psp)
         if pren_id is None:
             return EsitoWebhook("pagamento_sconosciuto")
         voucher = self._motore.emetti_voucher(pren_id)
         return EsitoWebhook("confermato", pren_id, voucher)
+
+    def richiedi_rimborso(self, prenotazione_id: int) -> bool:
+        """Apre la richiesta di rimborso (nessun denaro mosso; serve l'admin)."""
+        return self._motore.richiedi_rimborso(prenotazione_id)
+
+    def rifiuta_rimborso(self, prenotazione_id: int) -> bool:
+        """ADMIN rifiuta la richiesta: torna 'pagata'."""
+        return self._motore.rifiuta_rimborso(prenotazione_id)
+
+    def approva_rimborso(self, prenotazione_id: int) -> EsitoRimborsoServizio:
+        """ADMIN approva: esegue il refund PSP (FUORI dal lock DB) e, solo se
+        riuscito, chiude il rimborso (escrow + stato). Sicuro: muove denaro solo
+        se la prenotazione e' davvero in 'rimborso_richiesto'."""
+        d = self._motore.dettaglio_per_rimborso(prenotazione_id)
+        if d is None:
+            return EsitoRimborsoServizio("non_trovata")
+        if d["stato_prenotazione"] != "rimborso_richiesto":
+            return EsitoRimborsoServizio("stato_non_valido")
+        esito = self._provider.rimborsa(d["riferimento_psp"], int(d["importo_totale"]))
+        if not esito.ok:
+            return EsitoRimborsoServizio("refund_psp_fallito")
+        if self._motore.completa_rimborso(prenotazione_id):
+            return EsitoRimborsoServizio("rimborsata", esito.riferimento)
+        return EsitoRimborsoServizio("stato_non_valido")
 
 
 def crea_provider_pagamenti(*, success_url: Optional[str] = None,

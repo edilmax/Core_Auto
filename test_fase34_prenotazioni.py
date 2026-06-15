@@ -191,6 +191,56 @@ class TestScadenzaHold(_Base):
         self.assertIsNone(self.motore.conferma_pagamento(a.pagamento_id))  # A in conflitto
 
 
+class TestRimborso(_Base):
+    """Workflow rimborso gated: richiesta -> (admin) completa/rifiuta."""
+    def _paga(self, ci="2028-01-10", co="2028-01-12"):
+        e = self.motore.crea(_richiesta(ci, co))
+        self.motore.conferma_pagamento(e.pagamento_id, riferimento_psp="pi_X")
+        return e
+
+    def test_richiedi_solo_se_pagata(self):
+        e = self.motore.crea(_richiesta("2028-02-10", "2028-02-12"))  # non pagata
+        self.assertFalse(self.motore.richiedi_rimborso(e.prenotazione_id))
+        self.motore.conferma_pagamento(e.pagamento_id)
+        self.assertTrue(self.motore.richiedi_rimborso(e.prenotazione_id))
+        self.assertEqual(self.motore.stato(e.prenotazione_id)["stato"], "rimborso_richiesto")
+
+    def test_rimborso_richiesto_blocca_ancora(self):
+        e = self._paga()
+        self.motore.richiedi_rimborso(e.prenotazione_id)
+        # finche' l'admin non approva, il tavolo resta occupato
+        self.assertEqual(self.motore.crea(_richiesta("2028-01-10", "2028-01-12")).motivo,
+                         "non_disponibile")
+
+    def test_completa_rimborso_libera_e_aggiorna(self):
+        e = self._paga()
+        self.motore.richiedi_rimborso(e.prenotazione_id)
+        self.assertTrue(self.motore.completa_rimborso(e.prenotazione_id))
+        self.assertEqual(self.motore.stato(e.prenotazione_id)["stato"], "rimborsata")
+        c = sqlite3.connect(self.path)
+        self.assertEqual(c.execute("SELECT status FROM pagamenti_split").fetchone()[0], "refunded")
+        self.assertEqual(c.execute("SELECT stato FROM escrow_fondi").fetchone()[0], "rimborsato")
+        c.close()
+        # tavolo di nuovo libero
+        self.assertTrue(self.motore.crea(_richiesta("2028-01-10", "2028-01-12")).ok)
+
+    def test_completa_solo_da_richiesto(self):
+        e = self._paga()
+        self.assertFalse(self.motore.completa_rimborso(e.prenotazione_id))  # non richiesto
+
+    def test_rifiuta_torna_pagata(self):
+        e = self._paga()
+        self.motore.richiedi_rimborso(e.prenotazione_id)
+        self.assertTrue(self.motore.rifiuta_rimborso(e.prenotazione_id))
+        self.assertEqual(self.motore.stato(e.prenotazione_id)["stato"], "pagata")
+
+    def test_dettaglio_per_rimborso(self):
+        e = self._paga()
+        d = self.motore.dettaglio_per_rimborso(e.prenotazione_id)
+        self.assertEqual(d["riferimento_psp"], "pi_X")
+        self.assertEqual(d["importo_totale"], 10000)
+
+
 class TestConcorrenza(_Base):
     def test_doppia_prenotazione_stesso_tavolo_solo_una_passa(self):
         risultati = []

@@ -34,9 +34,13 @@ logger = logging.getLogger("core_auto.prenotazioni")
 
 # Stati che OCCUPANO SEMPRE il tavolo. L'hold 'in_attesa_pagamento' occupa solo
 # finche' NON e' scaduto (vedi hold_ttl_secondi); 'annullata'/'scaduta' liberano.
-STATI_SEMPRE_BLOCCANTI = ("confermata", "pagata", "occupato")
+# 'rimborso_richiesto' tiene il tavolo OCCUPATO finche' l'admin non approva il
+# rimborso; 'rimborsata' (post-approvazione) libera. 'annullata'/'scaduta' liberano.
+STATI_SEMPRE_BLOCCANTI = ("confermata", "pagata", "occupato", "rimborso_richiesto")
 STATO_INIZIALE = "in_attesa_pagamento"
 STATO_SCADUTA = "scaduta"
+STATO_RIMBORSO_RICHIESTO = "rimborso_richiesto"
+STATO_RIMBORSATA = "rimborsata"
 HOLD_TTL_SECONDI_DEFAULT = 1800  # 30 minuti: un hold non pagato libera il tavolo
 
 
@@ -97,9 +101,16 @@ class MotorePrenotazioni:
                         commissione_tavola INTEGER NOT NULL,
                         quota_partner INTEGER NOT NULL,
                         status TEXT DEFAULT 'pending',
+                        riferimento_psp TEXT DEFAULT '',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (prenotazione_id)
                             REFERENCES prenotazioni(id) ON DELETE CASCADE)""")
+                # idempotente: se la tabella e' del monolite puo' mancare la colonna.
+                cols = [r[1] for r in
+                        con.execute("PRAGMA table_info(pagamenti_split)").fetchall()]
+                if "riferimento_psp" not in cols:
+                    con.execute("ALTER TABLE pagamenti_split "
+                                "ADD COLUMN riferimento_psp TEXT DEFAULT ''")
                 con.execute("""
                     CREATE TABLE IF NOT EXISTS escrow_fondi (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -202,7 +213,8 @@ class MotorePrenotazioni:
             con.close()
 
     # --- conferma pagamento (chiamata dal webhook PSP) ---
-    def conferma_pagamento(self, pagamento_id: int) -> Optional[int]:
+    def conferma_pagamento(self, pagamento_id: int,
+                           riferimento_psp: str = "") -> Optional[int]:
         """Marca pagamento 'paid' e prenotazione 'pagata' (atomico). Idempotente:
         se gia' pagata, non cambia nulla. Ritorna l'id prenotazione (per il voucher)."""
         con = self._apri()
@@ -230,8 +242,8 @@ class MotorePrenotazioni:
                 logger.warning("Conferma su tavolo gia' occupato (pren=%s): "
                                "pagamento da RIMBORSARE", pren_id)
                 return None
-            con.execute("UPDATE pagamenti_split SET status='paid' WHERE id=?",
-                        (pagamento_id,))
+            con.execute("UPDATE pagamenti_split SET status='paid', riferimento_psp=? "
+                        "WHERE id=?", (riferimento_psp or "", pagamento_id))
             con.execute("UPDATE prenotazioni SET stato='pagata' WHERE id=?", (pren_id,))
             con.execute("COMMIT")
             return pren_id
@@ -277,6 +289,77 @@ class MotorePrenotazioni:
                 (STATO_SCADUTA, STATO_INIZIALE, self._cutoff_hold()))
             con.execute("COMMIT")
             return cur.rowcount
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
+        finally:
+            con.close()
+
+    # --- Workflow RIMBORSO (gated da admin; il denaro lo muove il servizio) ---
+    def _transizione(self, prenotazione_id: int, da: str, a: str) -> bool:
+        con = self._apri()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            cur = con.execute("UPDATE prenotazioni SET stato=? WHERE id=? AND stato=?",
+                              (a, prenotazione_id, da))
+            con.execute("COMMIT")
+            return cur.rowcount > 0
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
+        finally:
+            con.close()
+
+    def richiedi_rimborso(self, prenotazione_id: int) -> bool:
+        """Apre una richiesta di rimborso su una prenotazione PAGATA (il tavolo
+        resta occupato finche' l'admin non approva). NON muove denaro."""
+        return self._transizione(prenotazione_id, "pagata", STATO_RIMBORSO_RICHIESTO)
+
+    def rifiuta_rimborso(self, prenotazione_id: int) -> bool:
+        """Admin RIFIUTA: la prenotazione torna 'pagata' (nessun denaro mosso)."""
+        return self._transizione(prenotazione_id, STATO_RIMBORSO_RICHIESTO, "pagata")
+
+    def dettaglio_per_rimborso(self, prenotazione_id: int) -> Optional[dict]:
+        """Dati per il refund: stato, id pagamento, riferimento PSP, importo."""
+        con = self._apri()
+        try:
+            row = con.execute(
+                "SELECT p.stato AS stato_prenotazione, s.id AS pagamento_id, "
+                "s.riferimento_psp, s.importo_totale "
+                "FROM prenotazioni p JOIN pagamenti_split s ON s.prenotazione_id=p.id "
+                "WHERE p.id=?", (prenotazione_id,)).fetchone()
+            return dict(row) if row else None
+        finally:
+            con.close()
+
+    def completa_rimborso(self, prenotazione_id: int) -> bool:
+        """Chiude il rimborso DOPO il refund PSP riuscito (lo chiama il servizio):
+        pagamento 'refunded' + escrow 'rimborsato' + prenotazione 'rimborsata'
+        (libera il tavolo). Atomico, niente rete qui. Idempotente sullo stato."""
+        con = self._apri()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            row = con.execute("SELECT id FROM prenotazioni WHERE id=? AND stato=?",
+                              (prenotazione_id, STATO_RIMBORSO_RICHIESTO)).fetchone()
+            if row is None:
+                con.execute("ROLLBACK")
+                return False
+            adesso = datetime.datetime.now().isoformat(timespec="seconds")
+            con.execute("UPDATE pagamenti_split SET status='refunded' "
+                        "WHERE prenotazione_id=?", (prenotazione_id,))
+            con.execute("UPDATE escrow_fondi SET stato='rimborsato', data_sblocco=? "
+                        "WHERE pagamento_id IN (SELECT id FROM pagamenti_split "
+                        "WHERE prenotazione_id=?)", (adesso, prenotazione_id))
+            con.execute("UPDATE prenotazioni SET stato=? WHERE id=?",
+                        (STATO_RIMBORSATA, prenotazione_id))
+            con.execute("COMMIT")
+            return True
         except Exception:
             try:
                 con.execute("ROLLBACK")

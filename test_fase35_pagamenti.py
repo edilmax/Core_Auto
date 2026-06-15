@@ -14,7 +14,18 @@ import unittest
 from fase34_prenotazioni import MotorePrenotazioni, RichiestaPrenotazione
 from fase35_pagamenti import (StubPagamentoProvider, StripeProvider,
                               ServizioPagamenti, EventoPagamento, LinkPagamento,
-                              crea_provider_pagamenti)
+                              EsitoRimborso, crea_provider_pagamenti)
+
+
+class _SpyProvider(StubPagamentoProvider):
+    """Stub che registra le chiamate di rimborso (e puo' farle fallire)."""
+    def __init__(self, *a, fallisci=False, **k):
+        super().__init__(*a, **k)
+        self.fallisci = fallisci
+        self.rimborsi = []
+    def rimborsa(self, riferimento, importo_cents):
+        self.rimborsi.append((riferimento, importo_cents))
+        return EsitoRimborso(False) if self.fallisci else EsitoRimborso(True, "re_x")
 
 
 def _richiesta(ci="2026-09-01", co="2026-09-05"):
@@ -47,7 +58,7 @@ class TestProvider(_Base):
     def test_webhook_firma_valida(self):
         payload, firma = self.provider.firma_evento(42, pagato=True)
         ev = self.provider.verifica_webhook(payload, firma)
-        self.assertEqual(ev, EventoPagamento("pagato", 42))
+        self.assertEqual(ev, EventoPagamento("pagato", 42, "pi_stub_42"))
 
     def test_webhook_firma_contraffatta(self):
         payload, _ = self.provider.firma_evento(42)
@@ -130,6 +141,58 @@ class TestFactory(unittest.TestCase):
         self._set_env(STRIPE_API_KEY="sk_test_xyz")
         p = crea_provider_pagamenti(success_url="https://ok", cancel_url="https://ko")
         self.assertIsInstance(p, StripeProvider)  # nessuna chiamata di rete qui
+
+
+class TestRimborsoServizio(unittest.TestCase):
+    """Approvazione admin: il denaro si muove SOLO da 'rimborso_richiesto'."""
+    def setUp(self):
+        fd, self.path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.motore = MotorePrenotazioni(lambda: sqlite3.connect(self.path, timeout=30))
+        self.motore.inizializza_schema()
+        self.provider = _SpyProvider(segreto="s")
+        self.servizio = ServizioPagamenti(self.motore, self.provider)
+    def tearDown(self):
+        for ext in ("", "-wal", "-shm", "-journal"):
+            try:
+                os.remove(self.path + ext)
+            except OSError:
+                pass
+    def _paga(self):
+        e = self.motore.crea(_richiesta())
+        payload, firma = self.provider.firma_evento(e.pagamento_id, pagato=True)
+        self.servizio.gestisci_webhook(payload, firma)   # memorizza il riferimento PSP
+        return e
+
+    def test_approva_completa_e_chiama_refund(self):
+        e = self._paga()
+        self.assertTrue(self.servizio.richiedi_rimborso(e.prenotazione_id))
+        r = self.servizio.approva_rimborso(e.prenotazione_id)
+        self.assertEqual(r.esito, "rimborsata")
+        self.assertEqual(self.provider.rimborsi,
+                         [(f"pi_stub_{e.pagamento_id}", 20000)])   # ref + importo esatto
+        self.assertEqual(self.motore.stato(e.prenotazione_id)["stato"], "rimborsata")
+
+    def test_approva_senza_richiesta_non_muove_denaro(self):
+        e = self._paga()                       # pagata ma NON richiesto rimborso
+        r = self.servizio.approva_rimborso(e.prenotazione_id)
+        self.assertEqual(r.esito, "stato_non_valido")
+        self.assertEqual(self.provider.rimborsi, [])   # refund MAI chiamato
+
+    def test_refund_psp_fallito_non_chiude(self):
+        self.provider.fallisci = True
+        e = self._paga()
+        self.servizio.richiedi_rimborso(e.prenotazione_id)
+        r = self.servizio.approva_rimborso(e.prenotazione_id)
+        self.assertEqual(r.esito, "refund_psp_fallito")
+        self.assertEqual(self.motore.stato(e.prenotazione_id)["stato"],
+                         "rimborso_richiesto")   # stato invariato: niente chiusura
+
+    def test_rifiuta_torna_pagata(self):
+        e = self._paga()
+        self.servizio.richiedi_rimborso(e.prenotazione_id)
+        self.assertTrue(self.servizio.rifiuta_rimborso(e.prenotazione_id))
+        self.assertEqual(self.motore.stato(e.prenotazione_id)["stato"], "pagata")
 
 
 if __name__ == "__main__":
