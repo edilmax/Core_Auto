@@ -56,6 +56,10 @@ Ogni blocco/mattone DEVE rispettare:
 - **Idempotenza exactly-once** (in entrata) + **Outbox at-least-once** (in uscita),
   dispatch **concorrente**, anti-SSRF con validazione peer al connect, correlation-id.
 - Self-healing watchdog + manutenzione su 3 livelli.
+- **Backpressure & code di priorita'** (`fase29_backpressure.py`, Variante C):
+  ammissione a soglie per-priorita' (load shedding) -> sotto picco estremo la
+  coda resta LIMITATA (sopravvive) e i task critici sono protetti al 100% (vs
+  coda illimitata che esplode / bounded cieca che perde i critici). 8 test.
 
 ### Roadmap per blocco (stato mattone per mattone)
 
