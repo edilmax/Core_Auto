@@ -88,11 +88,16 @@ Ogni blocco/mattone DEVE rispettare:
       lanciare `./pg.ps1 test`. Pool connessioni: da fare dopo la validazione.
 - [ ] 1.5 Migrazione dati SQLite→Postgres + cutover a rischio zero.
 
-**BLOCCO 4 — Tentacoli social** *(parzialmente pronto via Outbox)*
-- [ ] 4.0 Interfaccia `ChannelAdapter` (ABC) + registry + adapter stub testabile.
-- [ ] 4.1 Adapter Telegram (già presente come handler outbox: formalizzare).
-- [ ] 4.2 Adapter WhatsApp (richiede credenziali Business API).
-- [ ] 4.3 Adapter Instagram (richiede credenziali Graph API).
+**BLOCCO 4 — Tentacoli social** *(fondamenta posate)*
+- [x] 4.0 `fase24_channels.py`: `ChannelAdapter` (ABC) + `ChannelRegistry`
+      (routing per canale, fail-safe: ignoto/solleva → False → retry/DLQ) +
+      `StubChannelAdapter` + integrazione Outbox (`collega_a_outbox`,
+      `pubblica_messaggio`, topic `channel_send`, delivery-id stabile). 12 test
+      (routing, fail-safe, end-to-end Outbox→canale, DLQ, concorrenza).
+- [x] 4.1 `TelegramAdapter` reale (via Config.TELEGRAM_*); no-op se non configurato.
+- [ ] 4.2 Adapter WhatsApp (richiede credenziali Business API) — solo l'impl. di
+      `send()`; struttura/registry/Outbox già pronti.
+- [ ] 4.3 Adapter Instagram (richiede credenziali Graph API) — idem.
 > Gli adapter sono I/O isolati: passano per l'Outbox (retry/DLQ/idempotency in
 > uscita già pronti). Se un social cade, core e resto continuano (fail-safe).
 
