@@ -5,5 +5,6 @@ psutil==5.9.6
 requests==2.31.0
 psycopg2-binary==2.9.9
 stripe==11.4.0
+anthropic==0.69.0   # LLM reale dell'agente booking (import LAZY; adatta alla versione installata)
 # WhatsApp Cloud API (via SCELTA): usa 'requests' (gia' sopra) -> NESSUNA dipendenza nuova.
 # twilio==9.3.0   # opzionale: SOLO se usi Twilio come BSP WhatsApp (vedi .env.example)
