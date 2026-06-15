@@ -30,12 +30,18 @@ class TestRoadmapMango(unittest.TestCase):
         for c in ("Rana Inversa", "compliant", "non importano"):
             self.assertIn(c, self.doc, c)
 
-    def test_i_numeri_mango_sono_liberi(self):
-        # i mattoni Mango (fase43..fase49) NON devono collidere con file esistenti
-        for n in range(43, 50):
-            esiste = any(f.startswith("fase{}_".format(n)) and f.endswith(".py")
-                         for f in os.listdir("."))
-            self.assertFalse(esiste, "fase%d gia' occupata: rinumerare" % n)
+    def _esiste(self, n):
+        return any(f.startswith("fase{}_".format(n)) and f.endswith(".py")
+                   for f in os.listdir("."))
+
+    def test_m1_fase43_costruita(self):
+        # M1 (motore commissionale del Core) e' stato costruito: fase43 ORA esiste.
+        self.assertTrue(self._esiste(43), "fase43 (M1) mancante")
+
+    def test_i_numeri_mango_futuri_sono_liberi(self):
+        # i mattoni Mango futuri (fase44..fase49) NON devono collidere con file esistenti
+        for n in range(44, 50):
+            self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
 if __name__ == "__main__":
