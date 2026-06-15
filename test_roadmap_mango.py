@@ -34,13 +34,14 @@ class TestRoadmapMango(unittest.TestCase):
         return any(f.startswith("fase{}_".format(n)) and f.endswith(".py")
                    for f in os.listdir("."))
 
-    def test_m1_fase43_costruita(self):
-        # M1 (motore commissionale del Core) e' stato costruito: fase43 ORA esiste.
+    def test_m1_m2_costruite(self):
+        # M1 (commissione) e M2 (prezzo) del Core sono costruite: fase43 e fase44 esistono.
         self.assertTrue(self._esiste(43), "fase43 (M1) mancante")
+        self.assertTrue(self._esiste(44), "fase44 (M2) mancante")
 
     def test_i_numeri_mango_futuri_sono_liberi(self):
-        # i mattoni Mango futuri (fase44..fase49) NON devono collidere con file esistenti
-        for n in range(44, 50):
+        # i mattoni Mango futuri (fase45..fase49) NON devono collidere con file esistenti
+        for n in range(45, 50):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
