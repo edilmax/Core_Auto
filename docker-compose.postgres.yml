@@ -1,0 +1,42 @@
+# CORE_AUTO - BLOCCO 5: Postgres di SVILUPPO come isola indipendente.
+#
+# Servizio separato, attivabile/disattivabile con un singolo comando, con volume
+# dedicato (i dati sopravvivono a 'down', si cancellano solo con 'down -v').
+# NON usare queste credenziali in produzione.
+#
+# Comandi (un solo comando ciascuno):
+#   AVVIO:        docker compose -f docker-compose.postgres.yml up -d
+#   STOP:         docker compose -f docker-compose.postgres.yml down
+#   STOP+WIPE:    docker compose -f docker-compose.postgres.yml down -v
+#   LOG:          docker compose -f docker-compose.postgres.yml logs -f
+#   PSQL:         docker exec -it core_auto_postgres psql -U core -d core_auto
+#
+# Per l'app:  DB_BACKEND=postgres  DATABASE_URL=postgresql://core:core@localhost:5432/core_auto
+#
+# Isolamento: progetto compose dedicato (name) + volume con nome esplicito ->
+# non tocca altri container/volumi della sandbox.
+
+name: core_auto_dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: core_auto_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-core}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-core}
+      POSTGRES_DB: ${POSTGRES_DB:-core_auto}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - core_auto_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-core} -d ${POSTGRES_DB:-core_auto}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: "no"
+
+volumes:
+  core_auto_pgdata:
+    name: core_auto_pgdata

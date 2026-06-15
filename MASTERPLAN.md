@@ -81,7 +81,11 @@ Ogni blocco/mattone DEVE rispettare:
       SQLite a config compatibile col core: default-isolation, no Row);
       1.3c.2 portare schema+query dei manager finanziari al dialetto;
       1.3c.3 trigger audit immutabile in versione PG (plpgsql) — validare su PG.
-- [ ] 1.4 Postgres **live** (richiede server) + pool connessioni concorrenti.
+- [~] 1.4 Postgres **live** + pool. Harness di validazione PRONTO: isola
+      `docker-compose.postgres.yml` + `test_postgres_live.py` (round-trip dialetto
+      reale: insert_returning_id/upsert/rollback) che si **auto-salta** se PG
+      spento (181 sempre verdi). Manca solo: avviare docker (`./pg.ps1 up`) e
+      lanciare `./pg.ps1 test`. Pool connessioni: da fare dopo la validazione.
 - [ ] 1.5 Migrazione dati SQLite→Postgres + cutover a rischio zero.
 
 **BLOCCO 4 — Tentacoli social** *(parzialmente pronto via Outbox)*
@@ -103,7 +107,10 @@ Ogni blocco/mattone DEVE rispettare:
 - [ ] 2.2 App mobile / push notifications.
 
 **BLOCCO 5 — Infrastruttura & deploy**
-- [ ] 5.0 Dockerfile per modulo + docker-compose.
+- [x] 5.0a Isola **Postgres di sviluppo** (`docker-compose.postgres.yml` + `pg.ps1`):
+      servizio separato, volume dedicato persistente, up/down con un comando,
+      nessun impatto sulla sandbox. Validata strutturalmente (4 test).
+- [ ] 5.0b Dockerfile dell'app + compose completo (app + postgres + nginx).
 - [ ] 5.1 Nginx + domini + SSL (Let's Encrypt).
 - [ ] 5.2 Fail-safe orchestration (health/readiness/liveness split).
 
