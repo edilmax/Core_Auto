@@ -102,8 +102,14 @@ Ogni blocco/mattone DEVE rispettare:
 > uscita già pronti). Se un social cade, core e resto continuano (fail-safe).
 
 **BLOCCO 3 — Cervello IA**
-- [ ] 3.0 Interfaccia `LLMProvider` (ABC) + provider stub deterministico testabile.
-- [ ] 3.1 Motore intento + ricerca alloggi (riusa l'engine TavolaVIP esistente).
+- [x] 3.0 `fase25_brain.py`: `LLMProvider` (ABC) + `StubLLMProvider` deterministico +
+      **`ResilientBrain`** (Variante C, scelta via benchmark a 3 varianti:
+      circuit breaker + cache LRU + timeout duro + fallback — sotto guasto 5 vs 50
+      vs 150 chiamate, 0 eccezioni trapelate) + `AgenteIA` (analizza_intento /
+      genera_risposta in **isolamento totale**: LLM giù → SCONOSCIUTO + fallback,
+      mai un crash). Loop agente `rispondi_su_canale` (brain→Outbox→canale).
+      10 test (cache/breaker/timeout/isolamento/intento/concorrenza/loop).
+- [ ] 3.1 Aggancio intento → motore ricerca alloggi (engine TavolaVIP esistente).
 - [ ] 3.2 Generatore proposte (commissione già su Decimal nel preventivo).
 
 **BLOCCO 2 — Interfaccia visiva**
