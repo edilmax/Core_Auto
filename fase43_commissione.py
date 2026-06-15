@@ -30,6 +30,7 @@ Denaro: SEMPRE centesimi interi, mai float, mai delegato all'LLM (estende fase17
 from __future__ import annotations
 
 import os
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
@@ -38,6 +39,12 @@ from typing import Dict, Optional
 from fase17_money import valida_split
 
 BPS_DENOM = 10000  # 100% = 10000 basis point
+
+
+class CircuitBreakerFinanziario(Exception):
+    """Autopreservazione: la transazione viola i parametri di sicurezza finanziaria
+    (perdita della piattaforma oltre il limite configurato). Il motore si BLOCCA
+    (fail-closed) invece di processare in silenzio una perdita fuori controllo."""
 
 
 def _int_non_neg(valore, nome: str) -> int:
@@ -90,8 +97,17 @@ class MetricheHost:
 @dataclass(frozen=True)
 class StatoCommissione:
     """Stato persistito del cricchetto: il miglior (piu' basso) tasso di lealta'
-    mai raggiunto, in bps. E' il cuore della garanzia 'non sale mai'."""
+    mai raggiunto, in bps. E' il cuore della garanzia 'non sale mai'.
+
+    Chaos Proof: lo stato e' persistito (DB) e potrebbe tornare CORROTTO. La
+    validazione in costruzione rifiuta uno stato fuori dominio (fail-closed):
+    meglio bloccare la transazione che calcolare denaro su uno stato corrotto."""
     bps_lealta: int
+
+    def __post_init__(self):
+        _int_non_neg(self.bps_lealta, "bps_lealta")
+        if self.bps_lealta > BPS_DENOM:
+            raise ValueError(f"stato corrotto: bps_lealta {self.bps_lealta} > {BPS_DENOM}")
 
 
 # ───────────────────────── PSP pass-through ─────────────────────────────────
@@ -264,10 +280,13 @@ class ConfigMotore:
     giurisdizione: Giurisdizione = Giurisdizione()
     psp: Optional[PSP] = None
     datastore_namespace: str = ""
+    limite_perdita_cents: Optional[int] = None   # circuit breaker finanziario per transazione
 
     def __post_init__(self):
         if not self.motore_id:
             raise ValueError("motore_id obbligatorio")
+        if self.limite_perdita_cents is not None:
+            _int_non_neg(self.limite_perdita_cents, "limite_perdita_cents")
 
 
 def ripartisci(cfg: ConfigMotore, totale_cents: int, stato: StatoCommissione,
@@ -282,6 +301,12 @@ def ripartisci(cfg: ConfigMotore, totale_cents: int, stato: StatoCommissione,
     tassa = commissione_cents(comm, cfg.giurisdizione.tassa_commissione_bps)
     netto_piattaforma = comm - costo_psp - tassa
     valida_split(totale_cents, comm, netto_host)   # invariante duro: comm+netto==totale
+    # Circuit breaker finanziario: perdita oltre il limite -> BLOCCO (autopreservazione)
+    if (cfg.limite_perdita_cents is not None
+            and netto_piattaforma < -cfg.limite_perdita_cents):
+        raise CircuitBreakerFinanziario(
+            f"perdita {-netto_piattaforma}c oltre il limite {cfg.limite_perdita_cents}c "
+            f"per motore {cfg.motore_id}: transazione bloccata")
     return Ripartizione(totale_cents, comm, costo_psp, tassa, netto_host, netto_piattaforma)
 
 
@@ -295,24 +320,28 @@ class RegistroMotori:
 
     def __init__(self):
         self._motori: Dict[str, ConfigMotore] = {}
+        self._lock = threading.Lock()      # atomicita': check-and-insert sotto concorrenza
 
     def registra(self, cfg: ConfigMotore) -> None:
-        if cfg.motore_id in self._motori:
-            raise ValueError(f"motore gia' registrato: {cfg.motore_id}")
-        if cfg.datastore_namespace:
-            for altro in self._motori.values():
-                if altro.datastore_namespace == cfg.datastore_namespace:
-                    raise ValueError(
-                        f"namespace datastore in conflitto: {cfg.datastore_namespace}")
-        self._motori[cfg.motore_id] = cfg
+        with self._lock:                   # TOCTOU-safe: il controllo unicita' e l'insert
+            if cfg.motore_id in self._motori:               # sono un'unica sezione critica
+                raise ValueError(f"motore gia' registrato: {cfg.motore_id}")
+            if cfg.datastore_namespace:
+                for altro in self._motori.values():
+                    if altro.datastore_namespace == cfg.datastore_namespace:
+                        raise ValueError(
+                            f"namespace datastore in conflitto: {cfg.datastore_namespace}")
+            self._motori[cfg.motore_id] = cfg
 
     def ottieni(self, motore_id: str) -> ConfigMotore:
-        if motore_id not in self._motori:
-            raise KeyError(f"motore non registrato: {motore_id}")
-        return self._motori[motore_id]
+        with self._lock:
+            if motore_id not in self._motori:
+                raise KeyError(f"motore non registrato: {motore_id}")
+            return self._motori[motore_id]
 
     def motori(self) -> tuple:
-        return tuple(self._motori.keys())
+        with self._lock:
+            return tuple(self._motori.keys())
 
 
 # ───────────────────────── Factory da config/env ────────────────────────────
