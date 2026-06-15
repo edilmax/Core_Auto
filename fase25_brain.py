@@ -161,8 +161,13 @@ class AgenteIA:
     in isolamento totale (LLM giu' -> intento SCONOSCIUTO + risposta di fallback,
     mai un crash). Costruito sopra il ResilientBrain (Variante C)."""
 
-    def __init__(self, provider: LLMProvider, **brain_kw: Any) -> None:
+    def __init__(self, provider: LLMProvider, *, client: Optional[Any] = None,
+                 **brain_kw: Any) -> None:
         self._brain = ResilientBrain(provider, **brain_kw)
+        # Opzionale (default None => comportamento identico): un ClientLLM (FASE 30)
+        # che impone Token Budget + compressione sulla risposta. Duck-typed
+        # (.chat(msgs)->RispostaChat) per non creare un ciclo di import con fase30.
+        self._client = client
 
     def analizza_intento(self, testo: str) -> Intento:
         """Ritorna l'intento; se il cervello non e' affidabile -> SCONOSCIUTO."""
@@ -173,12 +178,29 @@ class AgenteIA:
 
     def genera_risposta(self, testo: str,
                         contesto: Optional[str] = None) -> RispostaAgente:
-        """Genera la risposta; `ok=False` => e' il fallback sicuro (LLM giu')."""
+        """Genera la risposta; `ok=False` => e' il fallback sicuro (LLM giu').
+        Se e' stato iniettato un ClientLLM, la risposta passa per il suo Token
+        Budget spietato + compressione del contesto (il contesto diventa un
+        messaggio `system`)."""
+        if self._client is not None:
+            from fase30_llm import Messaggio  # import lazy (evita ciclo con fase30)
+            msgs = []
+            if contesto:
+                msgs.append(Messaggio("system", contesto))
+            msgs.append(Messaggio("user", testo))
+            rc = self._client.chat(msgs)
+            return RispostaAgente(testo=rc.testo, ok=rc.ok, esito=rc.esito)
         r = self._brain.genera(self._prompt_risposta(testo, contesto))
         return RispostaAgente(testo=r.testo, ok=r.ok, esito=r.esito)
 
     def stop(self) -> None:
         self._brain.stop()
+        if self._client is not None:  # ferma anche il client iniettato (idempotente)
+            try:
+                self._client.stop()
+            except Exception:
+                logger.warning("AgenteIA: stop del client fallito (ignorato)",
+                               exc_info=True)
 
     # --- prompt e parsing (deterministici) ---
     @staticmethod

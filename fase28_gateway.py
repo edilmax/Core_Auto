@@ -110,12 +110,16 @@ class GatewayAgente:
     l'Agente -> risposta standardizzata. `processa` non solleva MAI."""
 
     def __init__(self, clients: ClientRegistry, agente: Any, motore: Any = None,
-                 generatore: Any = None, publisher: Any = None) -> None:
+                 generatore: Any = None, publisher: Any = None,
+                 conversazione: Any = None) -> None:
         self._clients = clients
         self._agente = agente
         self._motore = motore
         self._generatore = generatore
         self._publisher = publisher
+        # Opzionale (default None => comportamento identico): un AgenteConversazionale
+        # (FASE 31) per risposte MULTI-TURNO budget-aware con memoria per-chat.
+        self._conversazione = conversazione
 
     def processa(self, api_key: Any, data: Any) -> RispostaGateway:
         client = self._clients.autentica(api_key)
@@ -142,6 +146,11 @@ class GatewayAgente:
                 self._motore, self._generatore,
                 CriteriRicerca(ric.localita, ric.budget_max))
             risposta = offerta.testo
+        elif self._conversazione is not None:
+            # Risposta MULTI-TURNO budget-aware (memoria per-destinatario);
+            # passo l'intento gia' calcolato per non rianalizzarlo (1 sola chiamata).
+            risposta = self._conversazione.rispondi(
+                ric.recipient, ric.text, intento=intento).testo
         else:
             risposta = self._agente.genera_risposta(ric.text).testo
         accodato = False

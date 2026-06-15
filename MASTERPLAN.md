@@ -132,6 +132,23 @@ Ogni blocco/mattone DEVE rispettare:
       sbaglia i conti 1/3 + crolla se giù). Isolamento totale → nota di attesa.
       `componi_offerta` (ricerca protetta → offerta). 9 test + 5 test money. ✅
       **BLOCCO 3 COMPLETO** (3.0 cervello, 3.1 ricerca, 3.2 proposte).
+- [x] 3.3 `fase30_llm.py`: **Client LLM reale** enterprise (sopra `ResilientBrain`).
+      Due garanzie dure, ciascuna scelta via benchmark: **Token Budget SPIETATO**
+      (mai uno sforo della finestra, nemmeno con un messaggio piu' grande della
+      finestra → troncamento duro; vince su rifiuta/comprimi-senza-floor) +
+      **Compressione contesto Variante C** (ancora-intento + riassunto-del-mezzo +
+      coda-recente; vince su tronca-vecchi/ultimi-N). `StimatoreToken` astratto
+      (euristico nei test → tokenizer reale in prod), `BudgetToken`, `ClientLLM.chat`.
+      19 test (incl. stress a proprieta': 300 conversazioni avverse, mai uno sforo).
+- [x] 3.4 `fase31_conversazione.py`: **cablaggio multi-turno budget-aware**.
+      `MemoriaConversazioni` (**Variante D**, benchmark a 4: vince come unica
+      LIMITATA su DUE dimensioni — ring per-chat + LRU globale — E con ANCORA-intento
+      immune allo scorrimento) + `AgenteConversazionale` (compone `AgenteIA` per
+      l'intento e `ClientLLM` per la risposta, senza modificarli; fallback non
+      memorizzato). **Aganci DEFAULT-OFF** (301 immobili per costruzione):
+      `AgenteIA(client=…)` instrada la risposta nel budget; `GatewayAgente(
+      conversazione=…)` abilita il multi-turno con memoria per-destinatario. 15 test.
+      *Wiring in `create_app` quando ci sara' un LLMProvider reale + chiavi (no infra).*
 
 **BLOCCO 2 — Interfaccia visiva**
 - [x] 2.0 `fase28_gateway.py`: API Gateway. `ClientRegistry` (auth **per-cliente**
