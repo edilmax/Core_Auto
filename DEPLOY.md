@@ -75,3 +75,34 @@ Oggi il **core** gira su **SQLite** (volume `core_auto_appdata`); **Postgres è 
 provvisto e pronto**. Outbox e idempotenza sono già Postgres-ready. Il *cutover*
 del core a Postgres (`DB_BACKEND=postgres`) avverrà dopo il porting `1.3c`
 (vedi `MASTERPLAN.md`), validandolo con `test_postgres_live` sullo stack vivo.
+
+## Modulo Tavola VIP (prenotazioni + pagamenti Stripe)
+
+Prodotto autonomo per prenotare un "tavolo" (alloggio/risorsa) con pagamento reale.
+
+### Configurazione (`.env`)
+```
+STRIPE_API_KEY=sk_test_...           # chiave segreta Stripe (RUOTALA se esposta)
+STRIPE_WEBHOOK_SECRET=whsec_...       # Dashboard Stripe > Developers > Webhooks
+BOOKING_API_KEY=...                   # header X-Booking-Key per le route prenotazione
+BOOKING_SUCCESS_URL=https://.../ok
+BOOKING_CANCEL_URL=https://.../ko
+```
+Senza `STRIPE_API_KEY` il servizio usa uno stub di sviluppo (NON per produzione).
+
+### Avvio (servizio standalone)
+```bash
+gunicorn -b 0.0.0.0:8001 'fase36_booking_api:crea_app_da_env()'
+```
+Lo schema (prenotazioni/pagamenti_split/escrow/voucher) viene creato al boot.
+
+### Endpoint (`/api/v1`)
+- `POST /reservations` (header `X-Booking-Key`) -> 201 + `payment_url` (link Stripe)
+- `GET  /reservations/<id>` -> stato
+- `POST /reservations/<id>/cancel` -> libera il tavolo
+- `POST /payments/webhook` -> notifica Stripe (autenticata dalla FIRMA, non da X-Booking-Key)
+
+### Webhook Stripe
+Su Stripe Dashboard crea un endpoint webhook verso `https://<host>/api/v1/payments/webhook`
+per l'evento `checkout.session.completed`, e copia il signing secret in `STRIPE_WEBHOOK_SECRET`.
+> La firma del webhook e verificata: una notifica non firmata NON conferma nulla.
