@@ -125,7 +125,13 @@ Ogni blocco/mattone DEVE rispettare:
       **BLOCCO 3 COMPLETO** (3.0 cervello, 3.1 ricerca, 3.2 proposte).
 
 **BLOCCO 2 — Interfaccia visiva**
-- [ ] 2.0 API Gateway (estensione del Blueprint `/api/v1` + auth per-cliente).
+- [x] 2.0 `fase28_gateway.py`: API Gateway. `ClientRegistry` (auth **per-cliente**
+      timing-safe, `X-Client-Key`), `valida_messaggio` (Variante C blindata:
+      batteria ostile → 0 eccezioni vs 7/4, oversize/DoS rifiutato),
+      `GatewayAgente.processa` (auth→validazione→evento agente, 401/400/200,
+      isolamento totale → 503, mai leak verso il nucleo), `registra_gateway`
+      (route `POST /api/v1/agent/message`). 14 test. *Wiring in `create_app`
+      quando ci sarà un LLMProvider reale + chiavi per-cliente (no infra ora).*
 - [ ] 2.1 Web app (React/Vue) — stack separato, richiede toolchain frontend.
 - [ ] 2.2 App mobile / push notifications.
 
