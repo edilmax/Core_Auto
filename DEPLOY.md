@@ -161,3 +161,22 @@ BASE_URL=https://tavolavip.tuodominio.it BOOKING_API_KEY=<la_tua> bash deploy/sm
 ```
 HTTP (80) reindirizza a HTTPS (443); HSTS attivo. Aggiorna l'URL del webhook Stripe a
 `https://tavolavip.tuodominio.it/api/v1/payments/webhook`.
+
+### Backup automatico del DB (Tavola VIP)
+
+Snapshot **consistente** (Online Backup API, cattura anche il WAL) + retention
+**size-cap** (lo spazio totale non supera mai `BACKUP_MAX_BYTES` -> il disco non si
+riempie). I backup sono gzippati nel volume persistente.
+
+```bash
+# manuale (dentro il container, scrive in /data/backup sul volume persistente)
+docker compose -f docker-compose.tavolavip.yml exec -T booking \
+  env BACKUP_DIR=/data/backup bash deploy/backup_tavolavip.sh
+
+# CRON host (ogni 6 ore):
+0 */6 * * * cd /percorso/repo && docker compose -f docker-compose.tavolavip.yml \
+  exec -T booking env BACKUP_DIR=/data/backup bash deploy/backup_tavolavip.sh >> /var/log/tavolavip-backup.log 2>&1
+
+# ripristino di un backup:
+python -c "import fase38_backup as b; b.ripristina('/data/backup/tavolavip-XXENGINE.db.gz','/data/tavolavip.db')"
+```
