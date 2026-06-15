@@ -101,5 +101,43 @@ class TestBombProof(unittest.TestCase):
         self.assertEqual(cents_to_str(cents), "10.00")
 
 
+class TestEuroToCents(unittest.TestCase):
+
+    def test_conversioni(self):
+        from fase17_money import euro_to_cents
+        self.assertEqual(euro_to_cents(80.0), 8000)
+        self.assertEqual(euro_to_cents("80.50"), 8050)
+        self.assertEqual(euro_to_cents(0), 0)
+        self.assertEqual(euro_to_cents(80), 8000)
+
+    def test_arrotondamento_half_up(self):
+        from fase17_money import euro_to_cents
+        self.assertEqual(euro_to_cents("0.005"), 1)   # 0.5 cent -> 1 (HALF_UP)
+        self.assertEqual(euro_to_cents("0.004"), 0)
+
+    def test_rifiuta_invalidi(self):
+        from fase17_money import euro_to_cents
+        with self.assertRaises(ValueError):
+            euro_to_cents("abc")
+        with self.assertRaises(ValueError):
+            euro_to_cents(True)
+
+
+class TestApplicaPercentuale(unittest.TestCase):
+
+    def test_commissione_esatta(self):
+        from decimal import Decimal
+        from fase17_money import applica_percentuale
+        self.assertEqual(applica_percentuale(8000, Decimal("0.10")), 800)
+        self.assertEqual(applica_percentuale(333, Decimal("0.10")), 33)   # 33.3 -> 33
+        self.assertEqual(applica_percentuale(8050, Decimal("0.10")), 805)
+
+    def test_rifiuta_non_int(self):
+        from decimal import Decimal
+        from fase17_money import applica_percentuale
+        with self.assertRaises(ValueError):
+            applica_percentuale(80.0, Decimal("0.10"))
+
+
 if __name__ == "__main__":
     unittest.main()

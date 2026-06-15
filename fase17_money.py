@@ -10,9 +10,37 @@ conti. Le conversioni per la presentazione usano Decimal (esatto), mai float.
 from __future__ import annotations
 
 import re
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 
 _SOLO_CIFRE = re.compile(r"^-?\d+$")
+
+
+def euro_to_cents(value) -> int:
+    """Converte un importo in EURO (es. 80.0 / '80.50' / 80) in CENTESIMI interi.
+
+    Passa per Decimal(str(value)) (mai aritmetica float) con arrotondamento
+    HALF_UP. Serve per portare prezzi informativi (es. listing scrapati, float)
+    nel dominio esatto dei centesimi prima di qualunque calcolo di commissione.
+
+    Raises:
+        ValueError: valore non interpretabile come importo.
+    """
+    if isinstance(value, bool):
+        raise ValueError("euro non valido (bool)")
+    try:
+        d = Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        raise ValueError(f"euro non valido: {value!r}")
+    return int((d * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def applica_percentuale(cents: int, percentuale: Decimal) -> int:
+    """Applica una percentuale (Decimal, es. Decimal('0.10')) a un importo in
+    centesimi, restituendo centesimi interi (HALF_UP). Aritmetica esatta."""
+    if not isinstance(cents, int) or isinstance(cents, bool):
+        raise ValueError("cents deve essere int")
+    return int((Decimal(cents) * Decimal(percentuale)).quantize(
+        Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def parse_cent(value, campo: str = "importo") -> int:

@@ -116,7 +116,13 @@ Ogni blocco/mattone DEVE rispettare:
       1 vs 50 e 5 vs 50 chiamate DB, 0 leak) + orchestrazione
       `gestisci_richiesta_alloggio` (intento RICERCA → proposte reali; motore giù
       → [] + messaggio di cortesia, mai crash). 12 test (stub + DB reale).
-- [ ] 3.2 Generatore proposte commerciali (commissione già su Decimal nel preventivo).
+- [x] 3.2 `fase27_proposte.py`: `GeneratoreProposte` (Variante C vincente:
+      template deterministico + rifinitura IA opzionale che degrada). Commissioni
+      a **precisione decimale assoluta** (centesimi via `euro_to_cents`/
+      `applica_percentuale` in Fase 17, mai float, mai delegate all'IA: la IA-only
+      sbaglia i conti 1/3 + crolla se giù). Isolamento totale → nota di attesa.
+      `componi_offerta` (ricerca protetta → offerta). 9 test + 5 test money. ✅
+      **BLOCCO 3 COMPLETO** (3.0 cervello, 3.1 ricerca, 3.2 proposte).
 
 **BLOCCO 2 — Interfaccia visiva**
 - [ ] 2.0 API Gateway (estensione del Blueprint `/api/v1` + auth per-cliente).
