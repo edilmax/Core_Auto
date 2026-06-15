@@ -109,8 +109,14 @@ Ogni blocco/mattone DEVE rispettare:
       genera_risposta in **isolamento totale**: LLM giù → SCONOSCIUTO + fallback,
       mai un crash). Loop agente `rispondi_su_canale` (brain→Outbox→canale).
       10 test (cache/breaker/timeout/isolamento/intento/concorrenza/loop).
-- [ ] 3.1 Aggancio intento → motore ricerca alloggi (engine TavolaVIP esistente).
-- [ ] 3.2 Generatore proposte (commissione già su Decimal nel preventivo).
+- [x] 3.1 `fase26_ricerca.py`: aggancio intento → motore ricerca alloggi REALE.
+      `RicercaProvider` (ABC) + `RicercaTavolaVIP` (SELECT read-only su `candidati`,
+      riusa l'engine) + **`MotoreRicercaProtetto`** (Variante C vincente: cache
+      LRU+TTL + circuit breaker + isolamento totale — vince su CARICO *e* GUASTO,
+      1 vs 50 e 5 vs 50 chiamate DB, 0 leak) + orchestrazione
+      `gestisci_richiesta_alloggio` (intento RICERCA → proposte reali; motore giù
+      → [] + messaggio di cortesia, mai crash). 12 test (stub + DB reale).
+- [ ] 3.2 Generatore proposte commerciali (commissione già su Decimal nel preventivo).
 
 **BLOCCO 2 — Interfaccia visiva**
 - [ ] 2.0 API Gateway (estensione del Blueprint `/api/v1` + auth per-cliente).
