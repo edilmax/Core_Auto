@@ -88,6 +88,24 @@ class TestMetriche(unittest.TestCase):
         self.reg.reset()
         self.assertNotIn("\nx ", "\n" + self.reg.esporre())
 
+    def test_bucket_ordinati_in_esposizione(self):
+        reg = RegistroMetriche(buckets=(1.0, 0.1, 0.5))   # forniti NON ordinati
+        reg.osserva("d_secondi", 0.2)
+        out = reg.esporre()
+        self.assertLess(out.index('le="0.1"'), out.index('le="0.5"'))
+        self.assertLess(out.index('le="0.5"'), out.index('le="1.0"'))   # ascendente
+
+    def test_bucket_invalidi_errore(self):
+        with self.assertRaises(ValueError):
+            RegistroMetriche(buckets=())
+        with self.assertRaises(ValueError):
+            RegistroMetriche(buckets=(-1, 0))
+
+    def test_help_prometheus(self):
+        self.reg.descrivi("ordini", "Numero totale di ordini")
+        self.reg.incrementa("ordini")
+        self.assertIn("# HELP ordini Numero totale di ordini", self.reg.esporre())
+
 
 class TestFlask(unittest.TestCase):
     def setUp(self):
@@ -115,6 +133,12 @@ class TestFlask(unittest.TestCase):
         self.assertIn('endpoint="_ping"', out)
         self.assertIn("http_durata_secondi_count", out)
 
+    def test_metrics_non_auto_misurato(self):
+        self.c.get("/metrics")
+        self.c.get("/metrics")
+        # l'endpoint /metrics non deve generare metriche su se stesso
+        self.assertNotIn('endpoint="metrics_export"', self.reg.esporre())
+
 
 class TestCIWorkflow(unittest.TestCase):
     def test_workflow_esiste_e_lancia_la_suite(self):
@@ -130,6 +154,14 @@ class TestCIWorkflow(unittest.TestCase):
         self.assertIn("actions/checkout", testo)
         self.assertIn("actions/setup-python", testo)
         self.assertIn("unittest discover", testo)
+
+    def test_workflow_hardening(self):
+        import yaml
+        with open(os.path.join(".github", "workflows", "ci.yml"), encoding="utf-8") as f:
+            doc = yaml.safe_load(f)
+        self.assertEqual(doc["permissions"]["contents"], "read")        # least-privilege
+        self.assertFalse(doc["jobs"]["test"]["strategy"]["fail-fast"])   # entrambe le versioni
+        self.assertIn("cache", json.dumps(doc["jobs"]["test"]["steps"])) # cache pip
 
 
 if __name__ == "__main__":

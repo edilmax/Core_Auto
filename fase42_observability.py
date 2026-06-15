@@ -97,10 +97,21 @@ class RegistroMetriche:
     formato testo Prometheus 0.0.4."""
 
     def __init__(self, buckets: Sequence[float] = BUCKETS_DEFAULT) -> None:
+        # Bucket ORDINATI + dedup + positivi: l'esposizione Prometheus richiede `le`
+        # ascendente; cosi' e' corretta qualunque sia l'ordine in ingresso.
+        puliti = sorted({float(b) for b in buckets if b is not None and float(b) > 0})
+        if not puliti:
+            raise ValueError("buckets deve contenere almeno un valore > 0")
         self._lock = threading.Lock()
         self._contatori: Dict[Tuple[str, Tuple], int] = {}
         self._isto: Dict[Tuple[str, Tuple], Dict[str, Any]] = {}
-        self._buckets = tuple(buckets)
+        self._aiuti: Dict[str, str] = {}
+        self._buckets = tuple(puliti)
+
+    def descrivi(self, nome: str, aiuto: str) -> None:
+        """Registra la riga `# HELP` di una metrica (standard Prometheus)."""
+        with self._lock:
+            self._aiuti[nome] = str(aiuto).replace("\n", " ")
 
     def incrementa(self, nome: str, etichette: Optional[Dict[str, str]] = None,
                    valore: int = 1) -> None:
@@ -136,28 +147,40 @@ class RegistroMetriche:
             self._isto.clear()
 
     def esporre(self) -> str:
+        with self._lock:                       # copia rapida sotto lock, render fuori
+            contatori = list(self._contatori.items())
+            isto = [(k, v["conteggio"], v["somma"], list(v["bucket"]))
+                    for k, v in self._isto.items()]
+            aiuti = dict(self._aiuti)
+        # Raggruppa per nome in UN passo (O(n), non O(n^2)).
+        c_per_nome: Dict[str, list] = {}
+        for (n, et), val in contatori:
+            c_per_nome.setdefault(n, []).append((et, val))
+        i_per_nome: Dict[str, list] = {}
+        for (n, et), cnt, somma, bk in isto:
+            i_per_nome.setdefault(n, []).append((et, cnt, somma, bk))
+
         righe = []
-        with self._lock:
-            contatori = dict(self._contatori)
-            isto = {k: {"conteggio": v["conteggio"], "somma": v["somma"],
-                        "bucket": list(v["bucket"])} for k, v in self._isto.items()}
-        for nome in sorted({n for n, _ in contatori}):
-            righe.append("# TYPE {} counter".format(nome))
-            for (n, et), val in sorted(contatori.items()):
-                if n == nome:
-                    righe.append("{}{} {}".format(n, _rendi_etichette(et), val))
-        for nome in sorted({n for n, _ in isto}):
-            righe.append("# TYPE {} histogram".format(nome))
-            for (n, et), h in sorted(isto.items()):
-                if n != nome:
-                    continue
+
+        def intesta(nome: str, tipo: str) -> None:
+            if nome in aiuti:
+                righe.append("# HELP {} {}".format(nome, aiuti[nome]))
+            righe.append("# TYPE {} {}".format(nome, tipo))
+
+        for nome in sorted(c_per_nome):
+            intesta(nome, "counter")
+            for et, val in sorted(c_per_nome[nome], key=lambda x: x[0]):
+                righe.append("{}{} {}".format(nome, _rendi_etichette(et), val))
+        for nome in sorted(i_per_nome):
+            intesta(nome, "histogram")
+            for et, cnt, somma, bk in sorted(i_per_nome[nome], key=lambda x: x[0]):
                 for i, b in enumerate(self._buckets):
                     et_b = _rendi_etichette(et, 'le="{}"'.format(b))
-                    righe.append("{}_bucket{} {}".format(n, et_b, h["bucket"][i]))
+                    righe.append("{}_bucket{} {}".format(nome, et_b, bk[i]))
                 et_inf = _rendi_etichette(et, 'le="+Inf"')
-                righe.append("{}_bucket{} {}".format(n, et_inf, h["conteggio"]))
-                righe.append("{}_sum{} {}".format(n, _rendi_etichette(et), h["somma"]))
-                righe.append("{}_count{} {}".format(n, _rendi_etichette(et), h["conteggio"]))
+                righe.append("{}_bucket{} {}".format(nome, et_inf, cnt))
+                righe.append("{}_sum{} {}".format(nome, _rendi_etichette(et), somma))
+                righe.append("{}_count{} {}".format(nome, _rendi_etichette(et), cnt))
         return "\n".join(righe) + "\n"
 
 
@@ -174,6 +197,9 @@ def registra_metriche(target: Any, registro: Optional[RegistroMetriche] = None,
     va raggiunto solo dalla rete interna dello scraper."""
     from flask import Response
     reg = registro or metriche
+    if getattr(target, "_metrics_registrato", False):
+        return                              # idempotente: niente endpoint duplicato
+    target._metrics_registrato = True
 
     @target.route(path, methods=["GET"], endpoint="metrics_export")
     def _metrics():
@@ -192,8 +218,10 @@ def strumenta_app(app: Any, registro: Optional[RegistroMetriche] = None) -> Any:
 
     @app.after_request
     def _fine(resp):
-        durata = time.perf_counter() - getattr(g, "_obs_t0", time.perf_counter())
         endpoint = request.endpoint or "ignoto"
+        if endpoint == "metrics_export":     # non auto-misurare l'endpoint /metrics
+            return resp
+        durata = time.perf_counter() - getattr(g, "_obs_t0", time.perf_counter())
         reg.incrementa("http_richieste_totale",
                        {"metodo": request.method, "endpoint": endpoint,
                         "stato": str(resp.status_code)})

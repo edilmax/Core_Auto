@@ -5,10 +5,20 @@ on:
   push:
   pull_request:
 
+# Least-privilege: il workflow legge soltanto il codice.
+permissions:
+  contents: read
+
+# Annulla le run superate sullo stesso ref (risparmia minuti CI).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false          # esegui entrambe le versioni anche se una fallisce
       matrix:
         python-version: ["3.9", "3.11"]
     steps:
@@ -17,6 +27,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip            # cache delle dipendenze tra le run
       - name: Installa dipendenze
         run: pip install -r requirements.txt
       - name: Suite di test (gate di regressione)
