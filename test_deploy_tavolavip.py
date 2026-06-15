@@ -87,6 +87,10 @@ class TestNginxTavolaVIP(unittest.TestCase):
     def test_webhook_location_dedicata(self):
         self.assertIn("location = /api/v1/payments/webhook", self.conf)
 
+    def test_metrics_negato_dall_esterno(self):
+        self.assertIn("location = /metrics", self.conf)
+        self.assertIn("deny all", self.conf)
+
 
 class TestSSL(unittest.TestCase):
     """Stack HTTPS (BLOCCO 5.1): TLS + redirect + HSTS, pronto da attivare."""
@@ -118,6 +122,10 @@ class TestSSL(unittest.TestCase):
         for chiave in ("STRIPE_API_KEY", "STRIPE_WEBHOOK_SECRET", "BOOKING_API_KEY"):
             self.assertIn(":?", str(env[chiave]))
         self.assertNotRegex(self.raw, r"sk_(test|live)_[A-Za-z0-9]{6}")
+
+    def test_ssl_metrics_negato(self):
+        self.assertIn("location = /metrics", self.conf)
+        self.assertIn("deny all", self.conf)
 
 
 class TestSmokeEFortezzaIntatta(unittest.TestCase):
