@@ -147,15 +147,17 @@ def collega_a_outbox(dispatcher: Any, registry: ChannelRegistry,
 
 def pubblica_messaggio(publisher: Any, channel: str, recipient: str, text: str,
                        metadata: Optional[Dict[str, Any]] = None,
-                       max_retries: int = 3) -> int:
+                       max_retries: int = 3, priorita: Optional[int] = None) -> int:
     """Accoda un messaggio social sull'Outbox (consegna at-least-once).
 
-    Ritorna l'id outbox. La consegna effettiva avviene dal dispatcher, con
-    retry/DLQ/concorrenza gia' garantiti dall'Outbox."""
+    `priorita` (FASE 29): se data, instrada il messaggio in corsia preferenziale
+    (es. eventi escrow ALTA vs risposte social NORMALE). Default = NORMALE.
+    Ritorna l'id outbox; la consegna avviene dal dispatcher (retry/DLQ/priorita')."""
     from fase16_outbox import OutboxMessage  # import lazy (isolamento)
+    kw = {} if priorita is None else {"priorita": int(priorita)}
     return publisher.publish_standalone(OutboxMessage(
         topic=TOPIC_CHANNEL_SEND,
         payload={"channel": channel, "recipient": recipient, "text": text,
                  "metadata": metadata or {}},
         partition_key=channel,
-        max_retries=max_retries))
+        max_retries=max_retries, **kw))

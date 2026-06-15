@@ -44,6 +44,7 @@ from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
 from fase23_datastore import Datastore, get_datastore  # BLOCCO 1: persistenza via seam
+from fase29_backpressure import Priorita                 # FASE 29: priorita' messaggi
 
 logger = logging.getLogger("core_auto.outbox")
 
@@ -80,15 +81,23 @@ def inizializza_schema(db_path: str) -> None:
                    last_error     TEXT,
                    correlation_id TEXT,
                    causation_id   TEXT,
+                   priorita       INTEGER NOT NULL DEFAULT 1,
                    created_at     TEXT NOT NULL DEFAULT ({ds.now_expr()}),
                    processed_at   TEXT
                )""")
-        # Fetch dei messaggi pronti (status + scadenza retry, ordine FIFO).
+        # Fetch dei messaggi pronti (status, priorita', scadenza, id).
         ds.execute(conn, "CREATE INDEX IF NOT EXISTS idx_outbox_due "
-                         "ON outbox(status, next_retry_at, id)")
+                         "ON outbox(status, priorita, next_retry_at, id)")
         # Reclaim dei lock morti: solo i record in lavorazione (indice parziale).
         ds.execute(conn, "CREATE INDEX IF NOT EXISTS idx_outbox_processing "
                          "ON outbox(locked_at) WHERE status='processing'")
+        # FASE 29: migrazione idempotente per DB SQLite preesistenti (la colonna
+        # priorita' va aggiunta se manca). Su Postgres il CREATE la include gia'.
+        if ds.backend == "sqlite":
+            colonne = [r[1] for r in ds.execute(conn, "PRAGMA table_info(outbox)").fetchall()]
+            if "priorita" not in colonne:
+                ds.execute(conn, "ALTER TABLE outbox ADD COLUMN "
+                                 "priorita INTEGER NOT NULL DEFAULT 1")
 
 
 @dataclass
@@ -101,6 +110,8 @@ class OutboxMessage:
     max_retries: int = 3
     correlation_id: Optional[str] = None
     causation_id: Optional[str] = None
+    # FASE 29: priorita' di consegna (ALTA=0 servita per prima; default NORMALE=1).
+    priorita: int = int(Priorita.NORMALE)
 
 
 class OutboxPublisher:
@@ -166,12 +177,12 @@ class OutboxPublisher:
             conn,
             """INSERT INTO outbox
                    (topic, partition_key, payload, headers, status, max_retries,
-                    created_at, correlation_id, causation_id)
-               VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)""",
+                    created_at, correlation_id, causation_id, priorita)
+               VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)""",
             (msg.topic, msg.partition_key, payload_txt,
              json.dumps(msg.headers) if msg.headers else None,
              max(0, int(msg.max_retries)), _now_iso(),
-             msg.correlation_id, msg.causation_id))
+             msg.correlation_id, msg.causation_id, int(msg.priorita)))
 
     def publish_standalone(self, msg: OutboxMessage) -> int:
         """Pubblica aprendo una transazione propria (quando non c'e' un effetto
@@ -341,6 +352,11 @@ class OutboxDispatcher:
         self._reclaim_every_s = int(os.environ.get("OUTBOX_RECLAIM_INTERVAL_S", "60"))
         self._backoff_cap_s = int(os.environ.get("OUTBOX_BACKOFF_CAP_S", "300"))
         self._wh_timeout = int(os.environ.get("OUTBOX_WEBHOOK_TIMEOUT_S", "10"))
+        # FASE 29 backpressure: max messaggi processati per ciclo (in-flight cap).
+        # Default = batch (nessun cambiamento); abbassalo via env per il throttling.
+        # L'eccesso NON viene scartato: resta pending (durevole) e si riprende al
+        # ciclo dopo, in ordine di priorita' (critici sempre per primi).
+        self._max_in_flight = int(os.environ.get("OUTBOX_MAX_INFLIGHT", str(batch)))
         # Alert su profondita' DLQ (audit): soglia + throttling dell'allarme.
         self._dlq_alert_threshold = int(
             os.environ.get("OUTBOX_DLQ_ALERT_THRESHOLD", "10"))
@@ -441,7 +457,7 @@ class OutboxDispatcher:
                 """SELECT * FROM outbox
                        WHERE status IN ('pending','failed')
                          AND (next_retry_at IS NULL OR next_retry_at <= ?)
-                       ORDER BY id ASC LIMIT ?""",
+                       ORDER BY priorita ASC, id ASC LIMIT ?""",
                 (_now_iso(), self._batch)).fetchall()
         finally:
             conn.close()
@@ -633,12 +649,18 @@ class OutboxDispatcher:
 
     def _dispatch_batch(self, righe: List[sqlite3.Row]) -> None:
         """Processa il batch in parallelo (pool) se concorrenza>1, sequenziale
-        altrimenti. Sicuro: ogni riga ha il proprio lock CAS in _process."""
-        if self._pool is not None and len(righe) > 1:
-            futures = [self._pool.submit(self._process, row) for row in righe]
+        altrimenti. Sicuro: ogni riga ha il proprio lock CAS in _process.
+
+        FASE 29 backpressure: processa al massimo `_max_in_flight` righe per ciclo
+        (le righe arrivano gia' in ordine di PRIORITA' da _fetch -> i critici sono
+        in testa). L'eccesso NON viene toccato: resta pending (durevole) e si
+        riprende al ciclo successivo -> load shedding ELEGANTE, zero perdite."""
+        finestra = righe[:self._max_in_flight]
+        if self._pool is not None and len(finestra) > 1:
+            futures = [self._pool.submit(self._process, row) for row in finestra]
             concurrent.futures.wait(futures)  # _process non solleva (gestito dentro)
         else:
-            for row in righe:
+            for row in finestra:
                 if not self._running:
                     break
                 self._process(row)

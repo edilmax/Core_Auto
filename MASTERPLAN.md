@@ -60,6 +60,11 @@ Ogni blocco/mattone DEVE rispettare:
   ammissione a soglie per-priorita' (load shedding) -> sotto picco estremo la
   coda resta LIMITATA (sopravvive) e i task critici sono protetti al 100% (vs
   coda illimitata che esplode / bounded cieca che perde i critici). 8 test.
+- **Priorita' + backpressure CABLATE nell'Outbox** (Fase 29 → fase16): colonna
+  `priorita` + fetch ordinato per priorita' (critici per primi) + `_max_in_flight`
+  (in-flight limitato; l'eccesso e' DIFFERITO al ciclo dopo, MAI scartato →
+  at-least-once preservato sui messaggi durevoli/finanziari). 31 test Outbox
+  immobili + 4 nuovi. `pubblica_messaggio` accetta `priorita`.
 
 ### Roadmap per blocco (stato mattone per mattone)
 

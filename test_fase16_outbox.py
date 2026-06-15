@@ -17,6 +17,7 @@ from fase16_outbox import (OutboxDispatcher, OutboxMessage, OutboxPublisher,
                            _connessione, _url_sicuro, _ip_non_instradabile,
                            _verifica_peer)
 from fase23_datastore import PostgresDatastore
+from fase29_backpressure import Priorita
 
 
 class _Base(unittest.TestCase):
@@ -370,6 +371,66 @@ class TestPortabilitaPostgres(unittest.TestCase):
         self.assertTrue(self.captured[-1].endswith("RETURNING id"))
         self.assertIn("%s", self.captured[-1])
         self.assertNotIn("?", self.captured[-1])
+
+
+class TestPrioritaBackpressure(_Base):
+    """FASE 29 cablata nell'Outbox: priorita' (critici per primi) + backpressure
+    (in-flight limitato, eccesso DIFFERITO e mai perso)."""
+
+    import json as _json
+
+    def _payload_x(self, row):
+        import json
+        return json.loads(row["payload"]).get("x")
+
+    def test_priorita_default_normale(self):
+        mid = self.pub.publish_standalone(OutboxMessage("audit_external", {"x": "a"}))
+        self.assertEqual(self._row(mid)["priorita"], int(Priorita.NORMALE))
+
+    def test_fetch_ordine_per_priorita(self):
+        self.pub.publish_standalone(OutboxMessage("t", {"x": "bassa"},
+                                                  priorita=int(Priorita.BASSA)))
+        self.pub.publish_standalone(OutboxMessage("t", {"x": "alta"},
+                                                  priorita=int(Priorita.ALTA)))
+        self.pub.publish_standalone(OutboxMessage("t", {"x": "normale"},
+                                                  priorita=int(Priorita.NORMALE)))
+        ordine = [self._payload_x(r) for r in self.disp._fetch()]
+        self.assertEqual(ordine, ["alta", "normale", "bassa"])
+
+    def test_backpressure_differisce_eccesso_senza_perdita(self):
+        visti = []
+        self.disp._max_in_flight = 1
+        self.disp._running = True   # chiamiamo _dispatch_batch a mano
+        self.disp.register("t", lambda p: visti.append(p.get("x")) or True)
+        self.pub.publish_standalone(OutboxMessage("t", {"x": "b1"}, priorita=int(Priorita.BASSA)))
+        self.pub.publish_standalone(OutboxMessage("t", {"x": "CRIT"}, priorita=int(Priorita.ALTA)))
+        self.pub.publish_standalone(OutboxMessage("t", {"x": "b2"}, priorita=int(Priorita.BASSA)))
+        self.disp._dispatch_batch(self.disp._fetch())
+        self.assertEqual(visti, ["CRIT"])              # solo il critico, per primo
+        self.assertEqual(self._conta_pending(), 2)     # 2 bassa differite (durevoli)
+        # cicli successivi: le differite vengono riprese, nessuna persa
+        self.disp._dispatch_batch(self.disp._fetch())
+        self.disp._dispatch_batch(self.disp._fetch())
+        self.assertEqual(set(visti), {"CRIT", "b1", "b2"})
+        self.assertEqual(self._conta_pending(), 0)
+
+    def test_critico_in_testa_sotto_picco(self):
+        for i in range(30):
+            self.pub.publish_standalone(OutboxMessage("t", {"x": f"n{i}"},
+                                                      priorita=int(Priorita.BASSA)))
+        crit = self.pub.publish_standalone(OutboxMessage("t", {"x": "CRIT"},
+                                                         priorita=int(Priorita.ALTA)))
+        primo = self.disp._fetch()[0]
+        self.assertEqual(primo["id"], crit)            # il critico e' in testa
+        self.assertEqual(self._payload_x(primo), "CRIT")
+
+    def _conta_pending(self):
+        c = _connessione(self.db)
+        try:
+            return c.execute(
+                "SELECT COUNT(*) AS n FROM outbox WHERE status='pending'").fetchone()["n"]
+        finally:
+            c.close()
 
 
 if __name__ == "__main__":
