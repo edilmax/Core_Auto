@@ -35,13 +35,14 @@ class TestRoadmapMango(unittest.TestCase):
                    for f in os.listdir("."))
 
     def test_mattoni_core_costruiti(self):
-        # M1-M6: commissione, prezzo, split, esploratore, venditore, advertising: fase43-48.
-        for n in (43, 44, 45, 46, 47, 48):
+        # M1-M7: commissione, prezzo, split, esploratore, venditore, advertising,
+        # ponte booking: fase43-49 (tutti i 7 mattoni Mango ora costruiti).
+        for n in (43, 44, 45, 46, 47, 48, 49):
             self.assertTrue(self._esiste(n), "fase%d mancante" % n)
 
     def test_i_numeri_mango_futuri_sono_liberi(self):
-        # il mattone Mango finale (fase49 Ponte) NON deve ancora collidere
-        for n in range(49, 50):
+        # i 7 mattoni si fermano a fase49 (Ponte): il blocco 50+ resta libero.
+        for n in range(50, 53):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
