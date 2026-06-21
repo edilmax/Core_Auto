@@ -63,8 +63,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 74=sensory engine (sensory score);
         # 75=guardian engine (rilevamento pericoli+risposta);
         # 76=viral loop engine (crediti non-cashabili);
-        # 77=portability import (GDPR/DMA data-portability). Blocco 78+ libero.
-        for n in range(78, 81):
+        # 77=portability import (GDPR/DMA data-portability);
+        # 78=sleep guarantee (sleep-as-a-service money-back). Blocco 79+ libero.
+        for n in range(79, 82):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
