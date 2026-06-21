@@ -57,8 +57,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 68=niche profiler (niche stacking);
         # 69=trasparenza commissionale (noi vs OTA);
         # 70=automated turnover (pulizie check-out->check-in);
-        # 71=commitment engine (anti-cancellazione+cleaning+chargeback). Blocco 72+ libero.
-        for n in range(72, 75):
+        # 71=commitment engine (anti-cancellazione+cleaning+chargeback);
+        # 72=digital twin (telemetria+manutenzione predittiva). Blocco 73+ libero.
+        for n in range(73, 76):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
