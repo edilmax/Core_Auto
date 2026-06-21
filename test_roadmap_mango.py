@@ -68,8 +68,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 79=dichiarazione vincolante (host dichiara, escrow paga);
         # 80=sentinel FIM+canary+catena integrita';
         # 81=bootstrap casa vip (composition root lodging);
-        # 82=ical sync (portabilita' reale cross-canale). Blocco 83+ libero.
-        for n in range(83, 86):
+        # 82=ical sync (portabilita' reale cross-canale);
+        # 83=server HTTP (API + frontend, fase81+fase61). Blocco 84+ libero.
+        for n in range(84, 87):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Casa VIP · Host</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#f4f6fa;color:#1a1e2b;padding:1.5rem;line-height:1.5}
+  .container{max-width:760px;margin:0 auto}
+  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:2px solid #dce1ed;flex-wrap:wrap;gap:1rem}
+  .logo{font-weight:700;font-size:1.6rem;background:linear-gradient(135deg,#1e3c72,#2a5298);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  select,input{padding:.5rem .7rem;border-radius:.7rem;border:1px solid #dce1ed;font-size:1rem;width:100%}
+  .card{background:#fff;border-radius:1.25rem;box-shadow:0 6px 18px rgba(0,0,0,.05);padding:1.5rem;margin-bottom:1.5rem}
+  .card h2{font-size:1.2rem;margin-bottom:1rem;color:#1e3c72}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem 1rem}
+  .grid label{display:flex;flex-direction:column;font-size:.72rem;font-weight:600;text-transform:uppercase;color:#4a5b7a;gap:.25rem}
+  .full{grid-column:1/-1}
+  button{background:#1e3c72;color:#fff;border:none;padding:.65rem 1.5rem;border-radius:2rem;font-weight:600;font-size:1rem;cursor:pointer;margin-top:1rem}
+  button:hover{background:#2a5298}
+  .msg{padding:.7rem 1rem;border-radius:.7rem;margin-top:.8rem;font-size:.9rem}
+  .msg.ok{background:#d4edda;color:#155724}.msg.err{background:#f8d7da;color:#842029}
+  .key{background:#fff;border-radius:1rem;padding:1rem 1.5rem;margin-bottom:1.5rem;display:flex;gap:1rem;align-items:end}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo" id="lTitolo">Casa VIP · Host</div>
+    <select id="lang" style="width:auto">
+      <option value="it">🇮🇹 IT</option><option value="en">🇬🇧 EN</option>
+      <option value="es">🇪🇸 ES</option><option value="fr">🇫🇷 FR</option>
+      <option value="de">🇩🇪 DE</option>
+    </select>
+  </header>
+
+  <div class="key">
+    <label style="flex:1;display:flex;flex-direction:column;font-size:.72rem;font-weight:600;color:#4a5b7a;gap:.25rem">X-Host-Key
+      <input type="password" id="hostkey" placeholder="chiave host"></label>
+  </div>
+
+  <div class="card">
+    <h2 id="hPubblica">Pubblica alloggio</h2>
+    <div class="grid">
+      <label>Host ID<input id="p_host" value="host1"></label>
+      <label>Slug<input id="p_slug" value="casa-roma"></label>
+      <label class="full">Titolo<input id="p_titolo" value="Casa a Roma"></label>
+      <label>Citta<input id="p_citta" value="Roma"></label>
+      <label id="lPrezzo">Prezzo/notte (cent)<input type="number" id="p_prezzo" value="9500"></label>
+      <label>Capacita<input type="number" id="p_cap" value="4"></label>
+      <label>Servizi (csv)<input id="p_serv" value="wifi,piscina"></label>
+    </div>
+    <button id="btnPubblica">Pubblica</button>
+    <div id="msgPub"></div>
+  </div>
+
+  <div class="card">
+    <h2 id="hDisp">Disponibilita</h2>
+    <div class="grid">
+      <label>Slug<input id="d_slug" value="casa-roma"></label>
+      <label>Giorno<input type="date" id="d_giorno" value="2026-09-01"></label>
+      <label>Unita<input type="number" id="d_unita" value="1"></label>
+      <label id="lPrezzo2">Prezzo/notte (cent)<input type="number" id="d_prezzo" value="9500"></label>
+    </div>
+    <button id="btnDisp">Salva</button>
+    <div id="msgDisp"></div>
+  </div>
+</div>
+
+<script>
+const API = location.origin.startsWith('http') ? '' : 'http://127.0.0.1:8080';
+let UI = {}, LANG='it';
+function t(k){ return UI[k]||k; }
+function key(){ return document.getElementById('hostkey').value; }
+
+async function caricaI18N(lang){
+  try{ const d = await (await fetch(API+'/api/i18n?lang='+lang)).json(); UI=d.ui||{}; }catch(e){ UI={}; }
+  document.getElementById('lTitolo').textContent='Casa VIP · '+t('pannello_host');
+  document.getElementById('hPubblica').textContent=t('pubblica');
+  document.getElementById('hDisp').textContent=t('salva_disp');
+  document.getElementById('btnPubblica').textContent=t('pubblica');
+  document.getElementById('btnDisp').textContent=t('salva_disp');
+}
+
+async function post(path, body){
+  const res = await fetch(API+path, {method:'POST',
+    headers:{'Content-Type':'application/json','X-Host-Key':key()},
+    body:JSON.stringify(body)});
+  return {status:res.status, data:await res.json()};
+}
+
+document.getElementById('btnPubblica').onclick = async ()=>{
+  const m = document.getElementById('msgPub');
+  const serv = document.getElementById('p_serv').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const r = await post('/api/host/pubblica', {
+    host_id:document.getElementById('p_host').value, slug:document.getElementById('p_slug').value,
+    titolo:document.getElementById('p_titolo').value, citta:document.getElementById('p_citta').value,
+    prezzo_notte_cents:parseInt(document.getElementById('p_prezzo').value),
+    capacita:parseInt(document.getElementById('p_cap').value), servizi:serv});
+  m.className='msg '+(r.status===201?'ok':'err');
+  m.textContent = r.status===201 ? '✅ '+(r.data.slug||'') : '❌ '+(r.data.dettaglio||r.data.errore||r.status);
+};
+
+document.getElementById('btnDisp').onclick = async ()=>{
+  const m = document.getElementById('msgDisp');
+  const r = await post('/api/host/disponibilita', {
+    alloggio_id:document.getElementById('d_slug').value, giorno:document.getElementById('d_giorno').value,
+    unita_totali:parseInt(document.getElementById('d_unita').value),
+    prezzo_netto_cents:parseInt(document.getElementById('d_prezzo').value)});
+  m.className='msg '+(r.status===200?'ok':'err');
+  m.textContent = r.status===200 ? '✅ OK' : '❌ '+(r.data.errore||r.status);
+};
+
+document.getElementById('lang').onchange = e=>{ LANG=e.target.value; document.documentElement.lang=LANG; caricaI18N(LANG); };
+caricaI18N(LANG);
+</script>
+</body>
+</html>
