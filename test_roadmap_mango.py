@@ -67,8 +67,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 78=sleep guarantee (sleep-as-a-service money-back);
         # 79=dichiarazione vincolante (host dichiara, escrow paga);
         # 80=sentinel FIM+canary+catena integrita';
-        # 81=bootstrap casa vip (composition root lodging). Blocco 82+ libero.
-        for n in range(82, 85):
+        # 81=bootstrap casa vip (composition root lodging);
+        # 82=ical sync (portabilita' reale cross-canale). Blocco 83+ libero.
+        for n in range(83, 86):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
