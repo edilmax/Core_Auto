@@ -41,8 +41,9 @@ class TestRoadmapMango(unittest.TestCase):
             self.assertTrue(self._esiste(n), "fase%d mancante" % n)
 
     def test_i_numeri_mango_futuri_sono_liberi(self):
-        # i 7 mattoni si fermano a fase49 (Ponte): il blocco 50+ resta libero.
-        for n in range(50, 53):
+        # i 7 mattoni si fermano a fase49 (Ponte); fase50 = capstone orchestratore.
+        # Il blocco 51+ resta libero.
+        for n in range(51, 54):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
