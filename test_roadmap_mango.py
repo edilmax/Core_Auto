@@ -50,8 +50,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 61=localizzazione i18n a costo zero;
         # 62=predictive no-show + overbooking controllato;
         # 63=recensioni verificate (anti-fake);
-        # 64=smart-pass d'ingresso/self check-in. Blocco 65+ libero.
-        for n in range(65, 68):
+        # 64=smart-pass d'ingresso/self check-in;
+        # 65=split-payment di gruppo. Blocco 66+ libero.
+        for n in range(66, 69):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
