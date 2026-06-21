@@ -64,8 +64,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 75=guardian engine (rilevamento pericoli+risposta);
         # 76=viral loop engine (crediti non-cashabili);
         # 77=portability import (GDPR/DMA data-portability);
-        # 78=sleep guarantee (sleep-as-a-service money-back). Blocco 79+ libero.
-        for n in range(79, 82):
+        # 78=sleep guarantee (sleep-as-a-service money-back);
+        # 79=dichiarazione vincolante (host dichiara, escrow paga). Blocco 80+ libero.
+        for n in range(80, 83):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
