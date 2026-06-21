@@ -58,8 +58,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 69=trasparenza commissionale (noi vs OTA);
         # 70=automated turnover (pulizie check-out->check-in);
         # 71=commitment engine (anti-cancellazione+cleaning+chargeback);
-        # 72=digital twin (telemetria+manutenzione predittiva). Blocco 73+ libero.
-        for n in range(73, 76):
+        # 72=digital twin (telemetria+manutenzione predittiva);
+        # 73=firma agile (crypto-agility+anti-downgrade). Blocco 74+ libero.
+        for n in range(74, 77):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
