@@ -53,8 +53,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 64=smart-pass d'ingresso/self check-in;
         # 65=split-payment di gruppo;
         # 66=tassa di soggiorno jurisdiction-agnostic;
-        # 67=coda intelligente + cancellazione garantita. Blocco 68+ libero.
-        for n in range(68, 71):
+        # 67=coda intelligente + cancellazione garantita;
+        # 68=niche profiler (niche stacking). Blocco 69+ libero.
+        for n in range(69, 72):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
