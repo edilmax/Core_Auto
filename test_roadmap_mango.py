@@ -66,8 +66,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 77=portability import (GDPR/DMA data-portability);
         # 78=sleep guarantee (sleep-as-a-service money-back);
         # 79=dichiarazione vincolante (host dichiara, escrow paga);
-        # 80=sentinel FIM+canary+catena integrita'. Blocco 81+ libero.
-        for n in range(81, 84):
+        # 80=sentinel FIM+canary+catena integrita';
+        # 81=bootstrap casa vip (composition root lodging). Blocco 82+ libero.
+        for n in range(82, 85):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 

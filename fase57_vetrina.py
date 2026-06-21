@@ -462,8 +462,10 @@ class CatalogoVetrina:
             "lat_micro": r["lat_micro"],
             "lon_micro": r["lon_micro"],
         }
+        # passa lo SLUG (identificatore pubblico stabile, lo stesso usato da inventario
+        # fase58 / concierge fase59), NON l'id interno della riga
         card["disponibile"] = self._verifica_disponibilita(
-            int(r["id"]), criteri.check_in, criteri.check_out)
+            r["slug"], criteri.check_in, criteri.check_out)
         return card
 
     def _dettaglio_json(self, a: sqlite3.Row, imgs: Sequence[sqlite3.Row]) -> Dict[str, Any]:
@@ -487,7 +489,7 @@ class CatalogoVetrina:
             "tavolo_id": a["slug"],
         }
 
-    def _verifica_disponibilita(self, alloggio_id: int, check_in: Optional[str],
+    def _verifica_disponibilita(self, alloggio_id: str, check_in: Optional[str],
                                 check_out: Optional[str]) -> Optional[bool]:
         """Annotazione disponibilita' ISOLATA: provider assente/eccezione -> None (ignoto)."""
         if self._disp is None or not check_in or not check_out:

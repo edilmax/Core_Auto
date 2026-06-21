@@ -239,11 +239,12 @@ class TestRicerca(unittest.TestCase):
 
 class TestDisponibilita(unittest.TestCase):
     def test_annotazione(self):
-        cat = crea_catalogo(disponibilita=lambda aid, ci, co: aid % 2 == 0)
+        # il provider riceve lo SLUG (string), come fase58/concierge
+        cat = crea_catalogo(disponibilita=lambda slug, ci, co: slug == "a")
         cat.pubblica(_scheda("a"))
         r = cat.cerca(CriteriRicerca(check_in="2026-07-01", check_out="2026-07-03"))
         card = r["risultati"][0]
-        self.assertIn(card["disponibile"], (True, False))
+        self.assertTrue(card["disponibile"])
 
     def test_senza_date_ignoto(self):
         cat = crea_catalogo(disponibilita=lambda aid, ci, co: True)
