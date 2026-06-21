@@ -47,8 +47,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 58=channel manager/inventario host tempo reale;
         # 59=protocollo concierge AI (agent-discoverable);
         # 60=MCP server (Model Context Protocol);
-        # 61=localizzazione i18n a costo zero. Blocco 62+ libero.
-        for n in range(62, 65):
+        # 61=localizzazione i18n a costo zero;
+        # 62=predictive no-show + overbooking controllato. Blocco 63+ libero.
+        for n in range(63, 66):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
