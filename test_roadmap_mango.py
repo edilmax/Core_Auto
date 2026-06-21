@@ -54,8 +54,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 65=split-payment di gruppo;
         # 66=tassa di soggiorno jurisdiction-agnostic;
         # 67=coda intelligente + cancellazione garantita;
-        # 68=niche profiler (niche stacking). Blocco 69+ libero.
-        for n in range(69, 72):
+        # 68=niche profiler (niche stacking);
+        # 69=trasparenza commissionale (noi vs OTA). Blocco 70+ libero.
+        for n in range(70, 73):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
