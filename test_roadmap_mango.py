@@ -55,8 +55,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 66=tassa di soggiorno jurisdiction-agnostic;
         # 67=coda intelligente + cancellazione garantita;
         # 68=niche profiler (niche stacking);
-        # 69=trasparenza commissionale (noi vs OTA). Blocco 70+ libero.
-        for n in range(70, 73):
+        # 69=trasparenza commissionale (noi vs OTA);
+        # 70=automated turnover (pulizie check-out->check-in). Blocco 71+ libero.
+        for n in range(71, 74):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
