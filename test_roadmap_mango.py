@@ -49,8 +49,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 60=MCP server (Model Context Protocol);
         # 61=localizzazione i18n a costo zero;
         # 62=predictive no-show + overbooking controllato;
-        # 63=recensioni verificate (anti-fake). Blocco 64+ libero.
-        for n in range(64, 67):
+        # 63=recensioni verificate (anti-fake);
+        # 64=smart-pass d'ingresso/self check-in. Blocco 65+ libero.
+        for n in range(65, 68):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
