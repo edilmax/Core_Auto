@@ -44,8 +44,9 @@ class TestRoadmapMango(unittest.TestCase):
         # mattoni a fase49; 50=orchestratore; 51=scheduler; 52=persistenza+metriche;
         # 53=health-guard; 54=loop; 55=bootstrap; 56=gateway tavoli;
         # 57=vetrina/catalogo pubblico (storefront);
-        # 58=channel manager/inventario host tempo reale. Blocco 59+ libero.
-        for n in range(59, 62):
+        # 58=channel manager/inventario host tempo reale;
+        # 59=protocollo concierge AI (agent-discoverable). Blocco 60+ libero.
+        for n in range(60, 63):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
