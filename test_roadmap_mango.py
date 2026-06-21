@@ -42,8 +42,8 @@ class TestRoadmapMango(unittest.TestCase):
 
     def test_i_numeri_mango_futuri_sono_liberi(self):
         # mattoni a fase49; 50=orchestratore; 51=scheduler; 52=persistenza+metriche;
-        # 53=health-guard/circuit. Il blocco 54+ resta libero.
-        for n in range(54, 57):
+        # 53=health-guard/circuit; 54=loop/daemon. Il blocco 55+ resta libero.
+        for n in range(55, 58):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
