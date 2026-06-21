@@ -61,8 +61,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 72=digital twin (telemetria+manutenzione predittiva);
         # 73=firma agile (crypto-agility+anti-downgrade);
         # 74=sensory engine (sensory score);
-        # 75=guardian engine (rilevamento pericoli+risposta). Blocco 76+ libero.
-        for n in range(76, 79):
+        # 75=guardian engine (rilevamento pericoli+risposta);
+        # 76=viral loop engine (crediti non-cashabili). Blocco 77+ libero.
+        for n in range(77, 80):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
