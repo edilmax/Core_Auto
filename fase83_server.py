@@ -335,6 +335,8 @@ class RouterHTTP:
             return self._host_ical(body, headers)
         if metodo == "GET" and path == "/api/host/metriche":
             return self._host_metriche(query, headers)
+        if metodo == "GET" and path == "/api/host/calendario":
+            return self._host_calendario(query, headers)
         if metodo == "GET" and path == "/api/admin/prenotazioni":
             return self._admin_prenotazioni(query, headers)
         if metodo == "POST" and path == "/api/admin/rimborso":
@@ -650,6 +652,21 @@ class RouterHTTP:
 
     def _valuta_sys(self) -> str:
         return getattr(getattr(self._sys, "config", None), "valuta", "EUR")
+
+    def _host_calendario(self, query, headers):
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        alloggio = query.get("alloggio")
+        da, a = query.get("da"), query.get("a")
+        if not (isinstance(alloggio, str) and alloggio and isinstance(da, str)
+                and isinstance(a, str)):
+            return 422, {"errore": "campi_non_validi"}
+        try:
+            cal = self._sys.inventario.calendario(alloggio, da, a)
+        except Exception:
+            logger.error("host calendario: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        return 200, {"giorni": cal}
 
     def _host_ical(self, body, headers):
         """Importa il calendario iCal (Airbnb/Booking/Vrbo): blocca le date occupate

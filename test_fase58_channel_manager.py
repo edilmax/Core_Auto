@@ -248,6 +248,23 @@ class TestMetriche(unittest.TestCase):
         self.assertEqual(m["occupazione_bps"], 0)
 
 
+class TestCalendario(unittest.TestCase):
+    def test_stati(self):
+        cm = _cm()
+        cm.imposta_disponibilita("a", "2026-07-01", unita_totali=1, prezzo_netto_cents=9000)
+        cm.imposta_disponibilita("a", "2026-07-02", unita_totali=1, prezzo_netto_cents=9000)
+        cm.applica_comando("CHIUDI a 2026-07-02")
+        cm.blocca("a", "2026-07-01", "2026-07-02", idem_key="k1")    # 01 pieno
+        cal = cm.calendario("a", "2026-07-01", "2026-07-04")
+        stati = {c["giorno"]: c["stato"] for c in cal}
+        self.assertEqual(stati["2026-07-01"], "pieno")
+        self.assertEqual(stati["2026-07-02"], "chiuso")
+        self.assertEqual(stati["2026-07-03"], "non_caricato")
+
+    def test_date_invalide(self):
+        self.assertEqual(_cm().calendario("a", "2026-07-03", "2026-07-01"), [])
+
+
 class TestComandi(unittest.TestCase):
     def setUp(self):
         self.cm = _cm()

@@ -204,6 +204,24 @@ class TestDashboardHost(unittest.TestCase):
         s, _ = self.r.gestisci("GET", "/api/host/metriche")
         self.assertEqual(s, 401)
 
+    def test_calendario(self):
+        q = self.r.gestisci("POST", "/api/concierge/quote", body=json.dumps(
+            {"alloggio_id": "casa", "check_in": "2026-09-01", "check_out": "2026-09-02"}))
+        self.r.gestisci("POST", "/api/concierge/book", body=json.dumps(
+            {"quote_token": q[1]["quote_token"], "email": "g@x.it"}))
+        s, c = self.r.gestisci("GET", "/api/host/calendario",
+                               {"alloggio": "casa", "da": "2026-09-01", "a": "2026-09-03"},
+                               headers=self.h)
+        self.assertEqual(s, 200)
+        stati = {g["giorno"]: g["stato"] for g in c["giorni"]}
+        self.assertEqual(stati["2026-09-01"], "pieno")        # prenotato
+        self.assertEqual(stati["2026-09-02"], "libero")       # caricato da _popola
+
+    def test_calendario_campi(self):
+        s, _ = self.r.gestisci("GET", "/api/host/calendario", {"alloggio": "casa"},
+                               headers=self.h)
+        self.assertEqual(s, 422)
+
 
 class TestOnboarding(unittest.TestCase):
     def setUp(self):

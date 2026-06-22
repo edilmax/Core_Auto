@@ -339,6 +339,39 @@ class ChannelManager:
             "revenue_cents": int(r["revenue"]),
         }
 
+    def calendario(self, alloggio_id: str, da: str, a: str) -> List[Dict[str, Any]]:
+        """Stato giorno-per-giorno [da, a) per la vista calendario dell'host:
+        libero | pieno | chiuso | non_caricato. Read-only."""
+        elenco_notti = notti(da, a)
+        if elenco_notti is None:
+            return []
+        out: List[Dict[str, Any]] = []
+        con = self._apri()
+        try:
+            for g in elenco_notti:
+                row = con.execute(
+                    "SELECT unita_totali, unita_occupate, chiuso, prezzo_netto_cents "
+                    "FROM inventario WHERE alloggio_id=? AND giorno=?",
+                    (str(alloggio_id), g)).fetchone()
+                if row is None:
+                    out.append({"giorno": g, "stato": "non_caricato"})
+                    continue
+                if row["chiuso"]:
+                    stato = "chiuso"
+                elif row["unita_occupate"] >= row["unita_totali"]:
+                    stato = "pieno"
+                else:
+                    stato = "libero"
+                out.append({
+                    "giorno": g, "stato": stato,
+                    "unita_totali": int(row["unita_totali"]),
+                    "unita_occupate": int(row["unita_occupate"]),
+                    "prezzo_netto_cents": int(row["prezzo_netto_cents"]),
+                })
+        finally:
+            con.close()
+        return out
+
     # ── BLOCCO atomico anti-overbooking (idempotente) ──────────────────────────
     def blocca(self, alloggio_id: str, check_in: str, check_out: str, *,
                idem_key: str, origine: str = "centrale") -> EsitoPrenotazione:

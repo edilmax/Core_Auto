@@ -58,6 +58,24 @@
   </div>
 
   <div class="card">
+    <h2>🗓️ Calendario disponibilita</h2>
+    <div class="grid">
+      <label>Slug<input id="c_slug" value="casa-roma"></label>
+      <label>Da<input type="date" id="c_da" value="2026-09-01"></label>
+      <label>A<input type="date" id="c_a" value="2026-09-15"></label>
+      <label>&nbsp;<button id="btnCal" style="margin-top:0">Vedi</button></label>
+    </div>
+    <div id="cal" style="display:flex;flex-wrap:wrap;gap:.3rem;margin-top:1rem"></div>
+    <div style="margin-top:.6rem;font-size:.78rem;color:#5e6f8d">
+      <span style="display:inline-block;width:12px;height:12px;background:#d4edda;border-radius:3px"></span> libero
+      <span style="display:inline-block;width:12px;height:12px;background:#f8d7da;border-radius:3px;margin-left:.6rem"></span> pieno
+      <span style="display:inline-block;width:12px;height:12px;background:#e2e3e5;border-radius:3px;margin-left:.6rem"></span> chiuso
+      <span style="display:inline-block;width:12px;height:12px;background:#fff;border:1px solid #dce1ed;border-radius:3px;margin-left:.6rem"></span> non caricato
+    </div>
+    <div id="msgCal"></div>
+  </div>
+
+  <div class="card">
     <h2 id="hPubblica">Pubblica alloggio</h2>
     <div class="grid">
       <label>Host ID<input id="p_host" value="host1"></label>
@@ -207,6 +225,26 @@ document.getElementById('btnMetriche').onclick = async ()=>{
     document.getElementById('d_pren').textContent = d.prenotazioni_attive + (d.prenotazioni_rimborsate?(' (+'+d.prenotazioni_rimborsate+' rimb.)'):'');
     document.getElementById('d_rating').textContent = (d.recensioni && d.recensioni.conteggio) ? ('★ '+(d.recensioni.media_centesimi/100).toFixed(1)) : '—';
     m.className='msg ok'; m.textContent='Aggiornato.';
+  }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
+};
+
+document.getElementById('btnCal').onclick = async ()=>{
+  const m = document.getElementById('msgCal');
+  const p = new URLSearchParams({alloggio:document.getElementById('c_slug').value,
+    da:document.getElementById('c_da').value, a:document.getElementById('c_a').value});
+  try{
+    const res = await fetch(API+'/api/host/calendario?'+p.toString(), {headers:{'X-Host-Key':key()}});
+    if(res.status===401){ m.className='msg err'; m.textContent='Chiave host errata.'; return; }
+    const d = await res.json();
+    const col = {libero:'#d4edda', pieno:'#f8d7da', chiuso:'#e2e3e5', non_caricato:'#fff'};
+    document.getElementById('cal').innerHTML = (d.giorni||[]).map(g=>{
+      const gg = g.giorno.slice(8);
+      const bg = col[g.stato]||'#fff';
+      const bord = g.stato==='non_caricato'?'border:1px solid #dce1ed;':'';
+      const pr = g.prezzo_netto_cents?(' €'+(g.prezzo_netto_cents/100).toFixed(0)):'';
+      return `<div title="${g.giorno} ${g.stato}${pr}" style="width:42px;height:42px;background:${bg};${bord}border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:600">${gg}</div>`;
+    }).join('');
+    m.className='msg ok'; m.textContent=(d.giorni||[]).length+' giorni.';
   }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
 };
 
