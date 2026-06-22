@@ -277,6 +277,28 @@ def crea_router(sistema: Any, *, host_key: Optional[str] = None) -> RouterHTTP:
     return RouterHTTP(sistema, host_key=host_key)
 
 
+def percorso_statico_sicuro(path: str, cartella: str) -> Optional[str]:
+    """Risolve un path statico DENTRO `cartella`, neutralizzando il path-traversal.
+    Ritorna un percorso contenuto in `cartella`, o None (dotfile / fuori radice).
+    PURO e testabile -> la difesa anti-`../`/`%00` e' un invariante, non uno slogan."""
+    import os
+    if not isinstance(path, str):
+        return None
+    nome = "index.html" if path in ("/", "") else path.lstrip("/")
+    base = os.path.basename(nome)          # strip di ogni componente di directory
+    if not base or base.startswith(".") or "\x00" in base:
+        return None                         # niente dotfile (.env, .git...), niente NUL
+    candidato = os.path.join(cartella, base)
+    cart_real = os.path.realpath(cartella)
+    cand_real = os.path.realpath(candidato)
+    try:
+        if os.path.commonpath([cart_real, cand_real]) != cart_real:
+            return None                     # doppia cintura: mai fuori dalla radice
+    except ValueError:
+        return None
+    return candidato
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Server HTTP stdlib (thin wrapper, NON testato - I/O)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -304,9 +326,8 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             self.wfile.write(dati)
 
         def _statico(self, path):
-            nome = "index.html" if path in ("/", "") else path.lstrip("/")
-            fpath = os.path.join(cartella_statica, os.path.basename(nome))
-            if not os.path.isfile(fpath):
+            fpath = percorso_statico_sicuro(path, cartella_statica)
+            if fpath is None or not os.path.isfile(fpath):
                 self._scrivi(404, {"errore": "file_non_trovato"})
                 return
             with open(fpath, "rb") as f:

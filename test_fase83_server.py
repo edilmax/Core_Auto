@@ -10,7 +10,7 @@ import json
 import unittest
 
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
-from fase83_server import RouterHTTP, crea_router
+from fase83_server import RouterHTTP, crea_router, percorso_statico_sicuro
 
 SEG = b"0123456789abcdef0123456789abcdef"
 
@@ -174,6 +174,38 @@ class TestHost(unittest.TestCase):
         s, c = self.r.gestisci("POST", "/api/host/pubblica",
                                body=json.dumps({"slug": "x"}), headers=h)
         self.assertEqual(s, 422)
+
+
+class TestPathStatico(unittest.TestCase):
+    def test_normali(self):
+        import os
+        for p, atteso in (("/", "index.html"), ("", "index.html"),
+                          ("/host.html", "host.html"), ("/sw.js", "sw.js"),
+                          ("/manifest.json", "manifest.json")):
+            r = percorso_statico_sicuro(p, "deploy")
+            self.assertIsNotNone(r)
+            self.assertEqual(os.path.basename(r), atteso)
+
+    def test_traversal_neutralizzato(self):
+        import os
+        # qualunque '../' o path assoluto -> resta DENTRO la cartella (mai /etc/passwd)
+        for bad in ("/../../etc/passwd", "/../../../secret", "/..\\..\\windows"):
+            r = percorso_statico_sicuro(bad, "deploy")
+            if r is not None:
+                self.assertTrue(os.path.realpath(r).startswith(
+                    os.path.realpath("deploy")))
+                self.assertNotIn("etc", os.path.dirname(r))
+
+    def test_dotfile_e_nul_negati(self):
+        import os
+        # un basename che inizia con '.' (dotfile) e' negato
+        self.assertIsNone(percorso_statico_sicuro("/.env", "deploy"))
+        self.assertIsNone(percorso_statico_sicuro("/.htaccess", "deploy"))
+        self.assertIsNone(percorso_statico_sicuro("/x\x00.html", "deploy"))
+        self.assertIsNone(percorso_statico_sicuro(123, "deploy"))
+        # '/.git/config' -> basename 'config' (benigno): resta DENTRO deploy/ (poi 404)
+        r = percorso_statico_sicuro("/.git/config", "deploy")
+        self.assertTrue(os.path.realpath(r).startswith(os.path.realpath("deploy")))
 
 
 class TestRobustezza(unittest.TestCase):

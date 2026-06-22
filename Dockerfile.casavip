@@ -1,6 +1,6 @@
 # CORE_AUTO / Casa VIP - immagine di produzione.
-# Casa VIP gira su PURA STDLIB Python (zero dipendenze): niente pip install, niente
-# build-tools, immagine minuscola, non-root. Server HTTP stdlib (fase83) dietro Nginx.
+# Casa VIP gira su PURA STDLIB Python (zero dipendenze): nessuna installazione di
+# pacchetti, niente build-tools, immagine minuscola, non-root. Server stdlib (fase83).
 
 FROM python:3.11-slim
 
