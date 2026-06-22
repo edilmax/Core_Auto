@@ -71,8 +71,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 82=ical sync (portabilita' reale cross-canale);
         # 83=server HTTP (API + frontend, fase81+fase61);
         # 84=LIBERO (coordinatore multi-agente valutato e SCARTATO);
-        # 85=provider pagamento Stripe (money-path). Blocco 86+ libero.
-        for n in range(86, 89):
+        # 85=provider pagamento Stripe (money-path);
+        # 86=provider email voucher SMTP (gated). Blocco 87+ libero.
+        for n in range(87, 90):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 

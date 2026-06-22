@@ -50,6 +50,11 @@ class ConfigCasaVIP:
     stripe_secret_key: str = ""        # gated: se vuoto, niente link di pagamento
     stripe_success_url: str = ""
     stripe_cancel_url: str = ""
+    smtp_host: str = ""                 # gated: se vuoto, niente email
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    email_mittente: str = ""
     con_mcp: bool = True
     con_recensioni: bool = True
     con_smartpass: bool = True
@@ -71,6 +76,7 @@ class SistemaCasaVIP:
     emettitore_recensioni: Any = None
     firma: Any = None
     emettitore_pass: Any = None
+    email_provider: Any = None
 
     @property
     def attivo(self) -> bool:
@@ -131,6 +137,15 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         emettitore_pass = EmettitorePass(firma)
         componenti.append("smartpass(64)")
 
+    # 3d) email del voucher (GATED da SMTP): senza host -> nessuna email (come oggi)
+    from fase86_email import crea_provider_email
+    email_provider = crea_provider_email(cfg.smtp_host, cfg.smtp_port, cfg.smtp_user,
+                                         cfg.smtp_password, cfg.email_mittente)
+    if email_provider is not None:
+        componenti.append("email(86)")
+    else:
+        avvisi.append("SMTP non configurato -> nessuna email voucher (gated)")
+
     # 3b) recensioni verificate (opzionale): registro + emettitore del diritto
     recensioni = None
     emettitore = None
@@ -166,4 +181,5 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     return SistemaCasaVIP(cfg, report, catalogo=catalogo, inventario=inventario,
                           concierge=concierge, mcp=mcp, sentinel=sentinel,
                           recensioni=recensioni, emettitore_recensioni=emettitore,
-                          firma=firma, emettitore_pass=emettitore_pass)
+                          firma=firma, emettitore_pass=emettitore_pass,
+                          email_provider=email_provider)

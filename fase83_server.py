@@ -314,10 +314,11 @@ class RouterHTTP:
     """Router PURO (testabile): cabla il SistemaCasaVIP (fase81) sulle rotte HTTP."""
 
     def __init__(self, sistema: Any, *, host_key: Optional[str] = None,
-                 admin_key: Optional[str] = None) -> None:
+                 admin_key: Optional[str] = None, base_url: str = "") -> None:
         self._sys = sistema
         self._host_key = host_key
         self._admin_key = admin_key
+        self._base_url = base_url or ""
         self._loc = Localizzatore()
 
     def gestisci(self, metodo: str, path: str, query: Optional[Dict[str, str]] = None,
@@ -551,6 +552,20 @@ class RouterHTTP:
                 except Exception:
                     logger.warning("emissione diritto recensione fallita (ignorata)",
                                    exc_info=True)
+            # email del voucher all'ospite (best-effort, isolata)
+            email = dati.get("email")
+            if getattr(self._sys, "email_provider", None) is not None \
+                    and isinstance(email, str) and "@" in email:
+                try:
+                    from fase86_email import corpo_voucher_html
+                    vurl = (self._base_url + "/voucher/" + corpo["voucher_token"]) \
+                        if corpo.get("voucher_token") else ""
+                    html = corpo_voucher_html(allog, ref, ci, co, vurl)
+                    self._sys.email_provider.invia(
+                        email, "BookinVIP - Prenotazione confermata", html)
+                except Exception:
+                    logger.warning("invio email voucher fallito (ignorato)",
+                                   exc_info=True)
         return status, corpo
 
     def _trasparenza(self, query):
@@ -774,8 +789,8 @@ class RouterHTTP:
 
 
 def crea_router(sistema: Any, *, host_key: Optional[str] = None,
-                admin_key: Optional[str] = None) -> RouterHTTP:
-    return RouterHTTP(sistema, host_key=host_key, admin_key=admin_key)
+                admin_key: Optional[str] = None, base_url: str = "") -> RouterHTTP:
+    return RouterHTTP(sistema, host_key=host_key, admin_key=admin_key, base_url=base_url)
 
 
 def percorso_statico_sicuro(path: str, cartella: str) -> Optional[str]:
@@ -811,7 +826,8 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from urllib.parse import urlparse, parse_qs, unquote
 
-    router = crea_router(sistema, host_key=host_key, admin_key=admin_key)
+    router = crea_router(sistema, host_key=host_key, admin_key=admin_key,
+                         base_url=base_url)
 
     class Handler(BaseHTTPRequestHandler):
         def _cors(self):

@@ -409,6 +409,28 @@ class TestRecensioni(unittest.TestCase):
         _, corpo = self._prenota()
         self.assertIn("diritto_recensione", corpo)
 
+    def test_book_invia_email_voucher(self):
+        # inietto un provider email con send-stub e una base_url
+        from fase86_email import ProviderEmail
+        inviate = []
+        self.sys.email_provider = ProviderEmail(
+            "smtp.x", 587, "u", "pw", "no-reply@bookinvip.com",
+            send=lambda dest, ogg, html: (inviate.append((dest, ogg, html)) or True))
+        r = crea_router(self.sys, base_url="https://bookinvip.com")
+        q = r.gestisci("POST", "/api/concierge/quote", body=json.dumps(
+            {"alloggio_id": "casa", "check_in": "2026-09-01", "check_out": "2026-09-02"}))
+        r.gestisci("POST", "/api/concierge/book", body=json.dumps(
+            {"quote_token": q[1]["quote_token"], "email": "g@x.it"}))
+        self.assertEqual(len(inviate), 1)
+        self.assertEqual(inviate[0][0], "g@x.it")
+        self.assertIn("https://bookinvip.com/voucher/", inviate[0][2])  # link nel corpo
+
+    def test_book_senza_email_provider_non_crasha(self):
+        # nessun provider email -> book funziona uguale (default)
+        self.sys.email_provider = None
+        _, corpo = self._prenota()
+        self.assertEqual(corpo["stato"], "confermata")
+
     def test_book_emette_voucher_e_pass(self):
         _, corpo = self._prenota()
         self.assertIn("voucher_token", corpo)
