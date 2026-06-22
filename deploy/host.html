@@ -96,6 +96,7 @@
       <label id="lPrezzo">Prezzo/notte (cent)<input type="number" id="p_prezzo" value="9500"></label>
       <label>Capacita<input type="number" id="p_cap" value="4"></label>
       <label>Servizi (csv)<input id="p_serv" value="wifi,piscina"></label>
+      <label class="full">Foto (URL, una per riga)<textarea id="p_img" rows="3" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid #dce1ed;font-size:.85rem" placeholder="https://...jpg"></textarea></label>
     </div>
     <button id="btnPubblica">Pubblica</button>
     <div id="msgPub"></div>
@@ -173,11 +174,12 @@ async function post(path, body){
 document.getElementById('btnPubblica').onclick = async ()=>{
   const m = document.getElementById('msgPub');
   const serv = document.getElementById('p_serv').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const imgs = document.getElementById('p_img').value.split('\n').map(s=>s.trim()).filter(Boolean);
   const r = await post('/api/host/pubblica', {
     host_id:document.getElementById('p_host').value, slug:document.getElementById('p_slug').value,
     titolo:document.getElementById('p_titolo').value, citta:document.getElementById('p_citta').value,
     prezzo_notte_cents:parseInt(document.getElementById('p_prezzo').value),
-    capacita:parseInt(document.getElementById('p_cap').value), servizi:serv});
+    capacita:parseInt(document.getElementById('p_cap').value), servizi:serv, immagini:imgs});
   m.className='msg '+(r.status===201?'ok':'err');
   m.textContent = r.status===201 ? '✅ '+(r.data.slug||'') : '❌ '+(r.data.dettaglio||r.data.errore||r.status);
 };

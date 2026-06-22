@@ -30,7 +30,11 @@
   .risultati{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.5rem}
   .card{background:#fff;border-radius:1.25rem;box-shadow:0 8px 24px rgba(0,0,0,.05);transition:transform .15s;padding:1.25rem;display:flex;flex-direction:column}
   .card:hover{transform:translateY(-4px)}
+  .card img.thumb{width:100%;height:170px;object-fit:cover;border-radius:.9rem;margin-bottom:.6rem;background:#eef2f7}
+  .card .ph{width:100%;height:170px;border-radius:.9rem;margin-bottom:.6rem;background:linear-gradient(135deg,#eef2f7,#dce1ed);display:flex;align-items:center;justify-content:center;color:#a9b4c9;font-size:2rem}
   .card h3{font-size:1.2rem;margin-bottom:.25rem}
+  .gallery{display:flex;gap:.4rem;overflow-x:auto;margin:.5rem 0;padding-bottom:.3rem}
+  .gallery img{height:140px;border-radius:.8rem;object-fit:cover;flex:0 0 auto}
   .card .prezzo{font-size:1.5rem;font-weight:700;color:#1e3c72}
   .card .badge{display:inline-block;background:#eef2f7;padding:.15rem .7rem;border-radius:1rem;font-size:.72rem;font-weight:600;color:#2a5298;margin:.15rem .2rem 0 0}
   .card .badge.green{background:#d4edda;color:#155724}.card .badge.red{background:#f8d7da;color:#842029}
@@ -95,6 +99,7 @@
 <div class="modal" id="modal">
   <div class="modal-content">
     <span class="close" id="close">&times;</span>
+    <div class="gallery" id="mGallery"></div>
     <h2 id="mTitolo"></h2>
     <div class="prezzo-grande" id="mPrezzo"></div>
     <div id="mBadge"></div>
@@ -142,7 +147,8 @@ function cardHtml(a){
   const serv = (a.servizi_label||a.servizi||[]).slice(0,4).map(s=>`<span class="badge">${s}</span>`).join('');
   let disp=''; if(a.disponibile===true) disp=`<span class="badge green">✓</span>`;
   else if(a.disponibile===false) disp=`<span class="badge red">${t('non_disp')}</span>`;
-  return `<div class="card"><h3>${a.titolo}</h3>
+  const foto = a.thumbnail ? `<img class="thumb" src="${a.thumbnail}" alt="${a.titolo}" loading="lazy" onerror="this.outerHTML='<div class=ph>🏠</div>'">` : '<div class="ph">🏠</div>';
+  return `<div class="card">${foto}<h3>${a.titolo}</h3>
     <div class="prezzo">${eur(a.prezzo_notte_cents)} <span style="font-size:.85rem;font-weight:400;color:#5e6f8d">/ ${t('notte')}</span></div>
     <div style="margin:.2rem 0">${stelle(a.recensioni)}</div>
     <div style="margin:.3rem 0">${serv} ${disp}</div>
@@ -171,6 +177,10 @@ async function apri(slug){
   try{
     const a = await api('/api/catalogo/'+encodeURIComponent(slug)+'?lang='+LANG);
     if(a.errore){ alert(t('errore')); return; }
+    const imgs = (a.immagini||[]).map(i=>i.url).filter(Boolean);
+    document.getElementById('mGallery').innerHTML = imgs.length
+      ? imgs.map(u=>`<img src="${u}" alt="" loading="lazy" onerror="this.style.display='none'">`).join('')
+      : '';
     document.getElementById('mTitolo').textContent = a.titolo;
     document.getElementById('mPrezzo').textContent = eur(a.prezzo_notte_cents)+' / '+t('notte');
     document.getElementById('mBadge').innerHTML = (a.servizi_label||a.servizi||[]).map(s=>`<span class="badge">${s}</span>`).join('');
