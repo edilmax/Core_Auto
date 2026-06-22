@@ -118,10 +118,12 @@ def _euro(cents: Any) -> str:
     return "%d.%02d" % (cents // 100, cents % 100)        # no float, deterministico
 
 
-def jsonld_alloggio(dettaglio: Dict[str, Any], base_url: str = "") -> Dict[str, Any]:
-    """Schema.org per un alloggio (rich results Google + leggibile dagli agenti)."""
+def jsonld_alloggio(dettaglio: Dict[str, Any], base_url: str = "",
+                    recensioni: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Schema.org per un alloggio (rich results Google + leggibile dagli agenti).
+    Se ci sono recensioni, aggiunge aggregateRating (stelle nei risultati Google)."""
     servizi = dettaglio.get("servizi", []) or []
-    return {
+    ld = {
         "@context": "https://schema.org",
         "@type": "Apartment",
         "name": dettaglio.get("titolo", ""),
@@ -139,6 +141,15 @@ def jsonld_alloggio(dettaglio: Dict[str, Any], base_url: str = "") -> Dict[str, 
                    "price": _euro(dettaglio.get("prezzo_notte_cents", 0)),
                    "priceCurrency": dettaglio.get("valuta", "EUR")},
     }
+    if isinstance(recensioni, dict) and recensioni.get("conteggio", 0) > 0:
+        media = recensioni.get("media_centesimi", 0)
+        ld["aggregateRating"] = {
+            "@type": "AggregateRating",
+            "ratingValue": "%d.%02d" % (media // 100, media % 100),  # es. 4.25, no float
+            "reviewCount": int(recensioni["conteggio"]),
+            "bestRating": "5", "worstRating": "1",
+        }
+    return ld
 
 
 def pagina_alloggio_html(sistema: Any, slug: str, base_url: str = "") -> Optional[str]:
@@ -152,8 +163,15 @@ def pagina_alloggio_html(sistema: Any, slug: str, base_url: str = "") -> Optiona
     if d is None:
         return None
     e = html.escape
+    rie = None
+    if getattr(sistema, "recensioni", None) is not None:
+        try:
+            rr = sistema.recensioni.riepilogo(slug)
+            rie = {"conteggio": rr["conteggio"], "media_centesimi": rr["media_centesimi"]}
+        except Exception:
+            rie = None
     servizi = "".join("<li>%s</li>" % e(str(s)) for s in d.get("servizi", []) or [])
-    ld = json.dumps(jsonld_alloggio(d, base_url), ensure_ascii=False)
+    ld = json.dumps(jsonld_alloggio(d, base_url, rie), ensure_ascii=False)
     # neutralizza la chiusura del tag <script> dentro il JSON-LD (anti-XSS): unicode-escape
     ld = ld.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
     return (
@@ -241,7 +259,11 @@ class RouterHTTP:
         if metodo == "POST" and path == "/api/concierge/quote":
             return self._concierge(self._sys.concierge.quota, body)
         if metodo == "POST" and path == "/api/concierge/book":
-            return self._concierge(self._sys.concierge.prenota, body)
+            return self._book(body)
+        if metodo == "GET" and path.startswith("/api/recensioni/"):
+            return self._recensioni(path[len("/api/recensioni/"):])
+        if metodo == "POST" and path == "/api/recensioni":
+            return self._invia_recensione(body)
         if metodo == "POST" and path == "/api/mcp":
             return self._mcp(body)
         if metodo == "POST" and path == "/api/host/pubblica":
@@ -299,9 +321,65 @@ class RouterHTTP:
             check_out=query.get("check_out") or None)
         res = self._sys.catalogo.cerca(criteri)
         res = dict(res)
-        res["risultati"] = [self._traduci_servizi(r, lingua) for r in res["risultati"]]
+        cards = []
+        for r in res["risultati"]:
+            card = self._traduci_servizi(r, lingua)
+            rie = self._riepilogo_recensioni(card.get("slug"))
+            if rie:
+                card["recensioni"] = rie
+            cards.append(card)
+        res["risultati"] = cards
         res["lingua"] = lingua
         return 200, res
+
+    # --- recensioni verificate (fase63) ---
+    def _riepilogo_recensioni(self, slug: Any) -> Optional[Dict[str, Any]]:
+        if self._sys.recensioni is None or not isinstance(slug, str):
+            return None
+        try:
+            r = self._sys.recensioni.riepilogo(slug)
+            return {"conteggio": r["conteggio"], "media_centesimi": r["media_centesimi"]}
+        except Exception:
+            return None
+
+    def _recensioni(self, slug):
+        if self._sys.recensioni is None:
+            return 503, {"errore": "recensioni_disattivate"}
+        try:
+            rie = self._sys.recensioni.riepilogo(slug)
+            elenco = self._sys.recensioni.elenco(slug, 20)
+        except Exception:
+            logger.error("recensioni: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        return 200, {"riepilogo": rie, "recensioni": elenco}
+
+    def _invia_recensione(self, body):
+        if self._sys.recensioni is None:
+            return 503, {"errore": "recensioni_disattivate"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        e = self._sys.recensioni.invia(dati.get("token"), dati.get("voto"),
+                                       dati.get("testo", ""), dati.get("lingua", "en"))
+        status = 201 if e.ok else (409 if e.motivo == "gia_recensita" else 400)
+        return status, {"ok": e.ok, "motivo": e.motivo, "verificata": e.verificata}
+
+    def _book(self, body):
+        """Prenotazione (fase59) + emissione del DIRITTO di recensione (fase63)."""
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        r = self._sys.concierge.prenota(dati)
+        status = int(getattr(r, "status", 200))
+        corpo = dict(getattr(r, "corpo", {}) or {})
+        if status == 201 and self._sys.emettitore_recensioni is not None:
+            try:
+                corpo["diritto_recensione"] = self._sys.emettitore_recensioni.emetti(
+                    corpo.get("riferimento", ""), corpo.get("alloggio_id", ""))
+            except Exception:
+                logger.warning("emissione diritto recensione fallita (ignorata)",
+                               exc_info=True)
+        return status, corpo
 
     def _trasparenza(self, query):
         """Confronto noi-vs-OTA (fase69): 'con Booking incassi X, con noi Y'."""
@@ -317,7 +395,11 @@ class RouterHTTP:
         d = self._sys.catalogo.dettaglio(slug)
         if d is None:
             return 404, {"errore": "not_found"}
-        return 200, self._traduci_servizi(d, lingua)
+        d = self._traduci_servizi(d, lingua)
+        rie = self._riepilogo_recensioni(slug)
+        if rie:
+            d["recensioni"] = rie
+        return 200, d
 
     def _concierge(self, fn, body):
         dati = self._json(body)

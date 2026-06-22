@@ -88,7 +88,9 @@
     <h2 id="mTitolo"></h2>
     <div class="prezzo-grande" id="mPrezzo"></div>
     <div id="mBadge"></div>
+    <div id="mRating" style="margin:.3rem 0;font-weight:600;color:#8a6d0b"></div>
     <p id="mDescr" style="color:#4a5b7a;margin:.5rem 0"></p>
+    <div id="mRecensioni"></div>
     <div id="mQuote"></div>
     <button class="prenota-btn" id="btnPrenota">Prenota</button>
     <div id="mMsg"></div>
@@ -121,12 +123,18 @@ async function caricaI18N(lang){
   renderChips();
 }
 
+function stelle(rie){
+  if(!rie || !rie.conteggio) return '';
+  const m=(rie.media_centesimi/100).toFixed(1);
+  return `<span style="color:#e0a800">★ ${m}</span> <span style="color:#5e6f8d;font-size:.8rem">(${rie.conteggio})</span>`;
+}
 function cardHtml(a){
   const serv = (a.servizi_label||a.servizi||[]).slice(0,4).map(s=>`<span class="badge">${s}</span>`).join('');
   let disp=''; if(a.disponibile===true) disp=`<span class="badge green">✓</span>`;
   else if(a.disponibile===false) disp=`<span class="badge red">${t('non_disp')}</span>`;
   return `<div class="card"><h3>${a.titolo}</h3>
     <div class="prezzo">${eur(a.prezzo_notte_cents)} <span style="font-size:.85rem;font-weight:400;color:#5e6f8d">/ ${t('notte')}</span></div>
+    <div style="margin:.2rem 0">${stelle(a.recensioni)}</div>
     <div style="margin:.3rem 0">${serv} ${disp}</div>
     <div class="meta">📍 ${a.citta}${a.paese?', '+a.paese:''}</div>
     <button data-slug="${a.slug}">${t('dettaglio')}</button></div>`;
@@ -156,8 +164,21 @@ async function apri(slug){
     document.getElementById('mTitolo').textContent = a.titolo;
     document.getElementById('mPrezzo').textContent = eur(a.prezzo_notte_cents)+' / '+t('notte');
     document.getElementById('mBadge').innerHTML = (a.servizi_label||a.servizi||[]).map(s=>`<span class="badge">${s}</span>`).join('');
+    document.getElementById('mRating').innerHTML = stelle(a.recensioni);
     document.getElementById('mDescr').textContent = a.descrizione||'';
     document.getElementById('mMsg').innerHTML='';
+    // recensioni verificate (solo chi ha pagato)
+    const rec = document.getElementById('mRecensioni'); rec.innerHTML='';
+    try{
+      const rr = await api('/api/recensioni/'+encodeURIComponent(slug));
+      if(rr.recensioni && rr.recensioni.length){
+        rec.innerHTML = '<div style="margin:.5rem 0;font-size:.9rem">'+
+          rr.recensioni.slice(0,4).map(x=>{
+            const txt=(x.testo&&x.testo.text)?x.testo.text:'';
+            return `<div style="border-top:1px solid #eef2f7;padding:.4rem 0">★ ${x.voto} <span style="color:#155724;font-size:.72rem">✓ verificata</span><br><span style="color:#4a5b7a">${txt.replace(/[<>]/g,'')}</span></div>`;
+          }).join('')+'</div>';
+      }
+    }catch(e){}
     const q = await api('/api/concierge/quote', {method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({alloggio_id:slug, check_in:document.getElementById('checkin').value,
         check_out:document.getElementById('checkout').value, party:parseInt(document.getElementById('ospiti').value)||1})});

@@ -48,6 +48,8 @@ class ConfigCasaVIP:
     db_inventario: str = ":memory:"
     valuta: str = "EUR"
     con_mcp: bool = True
+    con_recensioni: bool = True
+    db_recensioni: str = ":memory:"
     con_sentinel: bool = False
     cartella_sentinel: Optional[str] = None
 
@@ -61,6 +63,8 @@ class SistemaCasaVIP:
     concierge: Any = None
     mcp: Any = None
     sentinel: Any = None
+    recensioni: Any = None
+    emettitore_recensioni: Any = None
 
     @property
     def attivo(self) -> bool:
@@ -103,6 +107,16 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                                 valuta=cfg.valuta)
     componenti.append("concierge(59)")
 
+    # 3b) recensioni verificate (opzionale): registro + emettitore del diritto
+    recensioni = None
+    emettitore = None
+    if cfg.con_recensioni:
+        from fase59_concierge import FirmaQuote
+        from fase63_recensioni import EmettitoreDiritto, crea_registro_recensioni
+        recensioni = crea_registro_recensioni(cfg.db_recensioni, bytes(cfg.segreto_hmac))
+        emettitore = EmettitoreDiritto(FirmaQuote(bytes(cfg.segreto_hmac)))
+        componenti.append("recensioni(63)")
+
     # 4) server MCP (opzionale)
     mcp = None
     if cfg.con_mcp:
@@ -126,4 +140,5 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     report = {"abilitato": True, "componenti": componenti, "avvisi": avvisi,
               "money_path_pronto": True, "valuta": cfg.valuta}
     return SistemaCasaVIP(cfg, report, catalogo=catalogo, inventario=inventario,
-                          concierge=concierge, mcp=mcp, sentinel=sentinel)
+                          concierge=concierge, mcp=mcp, sentinel=sentinel,
+                          recensioni=recensioni, emettitore_recensioni=emettitore)

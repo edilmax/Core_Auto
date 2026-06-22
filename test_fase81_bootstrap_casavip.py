@@ -39,8 +39,11 @@ class TestAccensione(unittest.TestCase):
         self.assertIsNotNone(self.s.inventario)
         self.assertIsNotNone(self.s.concierge)
         self.assertIsNotNone(self.s.mcp)
+        self.assertIsNotNone(self.s.recensioni)
+        self.assertIsNotNone(self.s.emettitore_recensioni)
         self.assertTrue(self.s.money_path_pronto)
         self.assertIn("concierge(59)", self.s.report["componenti"])
+        self.assertIn("recensioni(63)", self.s.report["componenti"])
 
     def test_segreto_debole_errore(self):
         with self.assertRaises(BootstrapError):

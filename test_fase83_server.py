@@ -257,6 +257,64 @@ class TestPathStatico(unittest.TestCase):
         self.assertTrue(os.path.realpath(r).startswith(os.path.realpath("deploy")))
 
 
+class TestRecensioni(unittest.TestCase):
+    def setUp(self):
+        self.sys = _sistema()
+        _popola(self.sys)
+        self.r = crea_router(self.sys)
+
+    def _prenota(self):
+        q = self.r.gestisci("POST", "/api/concierge/quote", body=json.dumps(
+            {"alloggio_id": "casa", "check_in": "2026-09-01", "check_out": "2026-09-02"}))
+        b = self.r.gestisci("POST", "/api/concierge/book", body=json.dumps(
+            {"quote_token": q[1]["quote_token"], "email": "g@x.it"}))
+        return b
+
+    def test_book_emette_diritto(self):
+        _, corpo = self._prenota()
+        self.assertIn("diritto_recensione", corpo)
+
+    def test_flusso_completo(self):
+        _, corpo = self._prenota()
+        diritto = corpo["diritto_recensione"]
+        # invia recensione con il diritto firmato
+        s, c = self.r.gestisci("POST", "/api/recensioni", body=json.dumps(
+            {"token": diritto, "voto": 5, "testo": "Ottimo", "lingua": "it"}))
+        self.assertEqual(s, 201)
+        self.assertTrue(c["verificata"])
+        # riepilogo + elenco
+        s2, c2 = self.r.gestisci("GET", "/api/recensioni/casa")
+        self.assertEqual(c2["riepilogo"]["conteggio"], 1)
+        self.assertEqual(c2["riepilogo"]["media_centesimi"], 500)
+        self.assertEqual(len(c2["recensioni"]), 1)
+        # la scheda in vetrina ora porta il riepilogo
+        s3, c3 = self.r.gestisci("GET", "/api/catalogo", {"citta": "Roma"})
+        self.assertEqual(c3["risultati"][0]["recensioni"]["conteggio"], 1)
+
+    def test_recensione_senza_diritto(self):
+        s, c = self.r.gestisci("POST", "/api/recensioni", body=json.dumps(
+            {"token": "falso.token", "voto": 5}))
+        self.assertEqual(s, 400)
+        self.assertFalse(c["ok"])
+
+    def test_jsonld_aggregate_rating(self):
+        _, corpo = self._prenota()
+        self.r.gestisci("POST", "/api/recensioni", body=json.dumps(
+            {"token": corpo["diritto_recensione"], "voto": 4}))
+        from fase83_server import pagina_alloggio_html
+        h = pagina_alloggio_html(self.sys, "casa")
+        self.assertIn("aggregateRating", h)
+        self.assertIn("4.00", h)
+
+    def test_disattivate(self):
+        from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
+        sys = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG,
+                                         con_recensioni=False))
+        r = crea_router(sys)
+        s, _ = r.gestisci("GET", "/api/recensioni/casa")
+        self.assertEqual(s, 503)
+
+
 class TestSEO(unittest.TestCase):
     def setUp(self):
         self.sys = _sistema()
