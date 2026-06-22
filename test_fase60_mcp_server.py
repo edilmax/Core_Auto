@@ -70,9 +70,39 @@ class TestToolsList(unittest.TestCase):
         _, srv = _stack()
         r = srv.processa({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
         nomi = {t["name"] for t in r["result"]["tools"]}
-        self.assertEqual(nomi, {"cerca_alloggi", "ottieni_preventivo", "prenota"})
+        self.assertEqual(nomi, {"cerca_alloggi", "ottieni_preventivo", "prenota",
+                                "dettaglio_alloggio", "lingue", "confronto_ota"})
         for t in r["result"]["tools"]:
             self.assertEqual(t["inputSchema"]["type"], "object")
+
+
+class TestToolNuovi(unittest.TestCase):
+    def setUp(self):
+        self.inv, self.srv = _stack(unita=1)
+
+    def test_dettaglio_alloggio(self):
+        r = _call(self.srv, "dettaglio_alloggio", {"alloggio_id": "casa"})
+        self.assertFalse(r["result"]["isError"])
+        self.assertEqual(r["result"]["structuredContent"]["slug"], "casa")
+
+    def test_dettaglio_404(self):
+        r = _call(self.srv, "dettaglio_alloggio", {"alloggio_id": "mai-vista"})
+        self.assertTrue(r["result"]["isError"])
+
+    def test_lingue(self):
+        r = _call(self.srv, "lingue", {})
+        self.assertFalse(r["result"]["isError"])
+        self.assertIn("it", r["result"]["structuredContent"]["lingue"])
+
+    def test_confronto_ota(self):
+        r = _call(self.srv, "confronto_ota", {"prezzo_cents": 10000, "ota": "booking"})
+        self.assertFalse(r["result"]["isError"])
+        self.assertGreater(
+            r["result"]["structuredContent"]["guadagno_extra_host_cents"], 0)
+
+    def test_confronto_prezzo_invalido(self):
+        r = _call(self.srv, "confronto_ota", {"prezzo_cents": 0})
+        self.assertTrue(r["result"]["isError"])
 
 
 class TestToolsCall(unittest.TestCase):
@@ -162,7 +192,7 @@ class TestRobustezzaJsonRpc(unittest.TestCase):
         _, srv = _stack()
         out = srv.gestisci_raw(json.dumps({"jsonrpc": "2.0", "id": 1,
                                            "method": "tools/list"}))
-        self.assertEqual(len(json.loads(out)["result"]["tools"]), 3)
+        self.assertEqual(len(json.loads(out)["result"]["tools"]), 6)
 
     def test_non_solleva_mai(self):
         _, srv = _stack()

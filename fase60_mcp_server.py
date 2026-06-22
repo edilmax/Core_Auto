@@ -101,6 +101,35 @@ def _schema_tools() -> List[Dict[str, Any]]:
                 "required": ["quote_token", "email"],
             },
         },
+        {
+            "name": "dettaglio_alloggio",
+            "description": ("Scheda completa di un alloggio (descrizione, servizi, "
+                            "immagini, prezzo in centesimi). Read-only."),
+            "inputSchema": {
+                "type": "object",
+                "properties": {"alloggio_id": {"type": "string"}},
+                "required": ["alloggio_id"],
+            },
+        },
+        {
+            "name": "lingue",
+            "description": "Lingue supportate per localizzare l'offerta. Read-only.",
+            "inputSchema": {"type": "object", "properties": {}},
+        },
+        {
+            "name": "confronto_ota",
+            "description": ("Confronto trasparente noi-vs-OTA in centesimi interi: "
+                            "quanto incassa l'host con noi vs Booking/Airbnb/Expedia. "
+                            "Read-only, utile per convincere un host."),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "prezzo_cents": {"type": "integer", "minimum": 1},
+                    "ota": {"type": "string", "description": "booking|airbnb|expedia"},
+                },
+                "required": ["prezzo_cents"],
+            },
+        },
     ]
 
 
@@ -122,6 +151,9 @@ class ServerMCP:
             "cerca_alloggi": lambda a: self._proto.scopri(a),
             "ottieni_preventivo": lambda a: self._proto.quota(a),
             "prenota": lambda a: self._proto.prenota(a),
+            "dettaglio_alloggio": lambda a: self._proto.dettaglio(a),
+            "lingue": lambda a: self._proto.lingue(a),
+            "confronto_ota": lambda a: self._proto.confronto(a),
         }
 
     # ── dispatcher JSON-RPC ────────────────────────────────────────────────────

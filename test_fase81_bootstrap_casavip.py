@@ -87,7 +87,7 @@ class TestEndToEnd(unittest.TestCase):
                               "params": {}})
         self.assertEqual(man["result"]["serverInfo"]["name"], "core_auto.hospitality")
         tl = s.mcp.processa({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
-        self.assertEqual(len(tl["result"]["tools"]), 3)
+        self.assertEqual(len(tl["result"]["tools"]), 6)
 
     def test_vetrina_non_disponibile_se_inventario_vuoto(self):
         s = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG))

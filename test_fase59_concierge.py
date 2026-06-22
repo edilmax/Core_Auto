@@ -216,6 +216,40 @@ class TestPrenota(unittest.TestCase):
         self.assertNotIn("payment_url", rb.corpo)
 
 
+class TestToolAggiuntivi(unittest.TestCase):
+    def test_dettaglio(self):
+        _, _, proto = _setup()
+        r = proto.dettaglio({"alloggio_id": "casa"})
+        self.assertEqual(r.status, 200)
+        self.assertEqual(r.corpo["slug"], "casa")
+
+    def test_dettaglio_404(self):
+        _, _, proto = _setup()
+        self.assertEqual(proto.dettaglio({"alloggio_id": "mai"}).status, 404)
+
+    def test_dettaglio_senza_catalogo(self):
+        inv, _, _ = _setup()
+        from fase59_concierge import ProtocolloConcierge, FirmaQuote
+        proto = ProtocolloConcierge(inv, FirmaQuote(SEGRETO))   # no catalogo
+        self.assertEqual(proto.dettaglio({"alloggio_id": "casa"}).status, 501)
+
+    def test_lingue(self):
+        _, _, proto = _setup()
+        r = proto.lingue({})
+        self.assertEqual(r.status, 200)
+        self.assertIn("en", r.corpo["lingue"])
+
+    def test_confronto(self):
+        _, _, proto = _setup()
+        r = proto.confronto({"prezzo_cents": 10000, "ota": "booking"})
+        self.assertEqual(r.status, 200)
+        self.assertGreater(r.corpo["guadagno_extra_host_cents"], 0)
+
+    def test_confronto_prezzo_invalido(self):
+        _, _, proto = _setup()
+        self.assertEqual(proto.confronto({"prezzo_cents": -5}).status, 400)
+
+
 class TestStressConcierge(unittest.TestCase):
     def test_anti_overbooking_via_protocollo_10x(self):
         """10 ripetizioni: 1 unita', molti agenti quotano+prenotano la stessa notte;

@@ -124,7 +124,7 @@ class TestMCP(unittest.TestCase):
         s, c = r.gestisci("POST", "/api/mcp", body=json.dumps(
             {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}))
         self.assertEqual(s, 200)
-        self.assertEqual(len(c["result"]["tools"]), 3)
+        self.assertEqual(len(c["result"]["tools"]), 6)
 
 
 class TestTrasparenza(unittest.TestCase):

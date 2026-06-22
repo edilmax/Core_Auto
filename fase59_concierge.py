@@ -305,6 +305,43 @@ class ProtocolloConcierge:
             corpo["payment_url"] = payment_url
         return RispostaConcierge(201, corpo)
 
+    # ── tool agent-facing aggiuntivi (read-only, deterministici) ───────────────
+    def dettaglio(self, richiesta: Any) -> RispostaConcierge:
+        """Scheda completa di un alloggio (per l'agente esterno). Read-only."""
+        if not isinstance(richiesta, dict):
+            return RispostaConcierge(400, {"errore": "payload_non_oggetto"})
+        if self._cat is None:
+            return RispostaConcierge(501, {"errore": "catalogo_non_disponibile"})
+        slug = _stringa(richiesta.get("alloggio_id"))
+        if slug is None:
+            return RispostaConcierge(400, {"errore": "alloggio_id_non_valido"})
+        try:
+            d = self._cat.dettaglio(slug)
+        except Exception:
+            logger.error("dettaglio: eccezione ISOLATA", exc_info=True)
+            return RispostaConcierge(503, {"errore": "service_unavailable"})
+        if d is None:
+            return RispostaConcierge(404, {"errore": "not_found"})
+        return RispostaConcierge(200, {"money_unit": "cents_integer", **d})
+
+    def lingue(self, richiesta: Any = None) -> RispostaConcierge:
+        """Lingue supportate (l'agente sa che puo' localizzare l'offerta)."""
+        from fase61_localizzazione import LINGUE_SUPPORTATE
+        return RispostaConcierge(200, {"lingue": list(LINGUE_SUPPORTATE)})
+
+    def confronto(self, richiesta: Any) -> RispostaConcierge:
+        """Confronto noi-vs-OTA (fase69) per aiutare un agente a convincere un host.
+        Read-only, denaro in centesimi interi, nessun effetto."""
+        if not isinstance(richiesta, dict):
+            return RispostaConcierge(400, {"errore": "payload_non_oggetto"})
+        from fase69_trasparenza import confronta_piattaforma
+        prezzo = richiesta.get("prezzo_cents")
+        if not _intero(prezzo) or prezzo <= 0:
+            return RispostaConcierge(400, {"errore": "prezzo_non_valido"})
+        ota = richiesta.get("ota", "booking")
+        ota = ota if isinstance(ota, str) else "booking"
+        return RispostaConcierge(200, confronta_piattaforma(prezzo, ota).as_dict())
+
     def _link_isolato(self, dati: Dict[str, Any]) -> Optional[str]:
         if self._link is None:
             return None
