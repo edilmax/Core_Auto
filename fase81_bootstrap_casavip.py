@@ -50,6 +50,7 @@ class ConfigCasaVIP:
     stripe_secret_key: str = ""        # gated: se vuoto, niente link di pagamento
     stripe_success_url: str = ""
     stripe_cancel_url: str = ""
+    stripe_webhook_secret: str = ""    # gated: per verificare i webhook di Stripe
     smtp_host: str = ""                 # gated: se vuoto, niente email
     smtp_port: int = 587
     smtp_user: str = ""

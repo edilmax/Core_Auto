@@ -121,6 +121,36 @@ class TestConcierge(unittest.TestCase):
         self.assertEqual(s, 400)
 
 
+class TestWebhookStripe(unittest.TestCase):
+    def test_webhook_valido(self):
+        from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
+        from fase87_stripe_webhook import firma_di_test
+        sys = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG,
+                                         stripe_webhook_secret="whsec_x"))
+        r = crea_router(sys)
+        payload = json.dumps({"type": "checkout.session.completed",
+                              "data": {"object": {"metadata": {"riferimento": "R1"}}}})
+        import time
+        h = {"Stripe-Signature": firma_di_test(payload, "whsec_x", int(time.time()))}
+        s, c = r.gestisci("POST", "/api/payments/webhook", body=payload, headers=h)
+        self.assertEqual(s, 200)
+        self.assertEqual(c["tipo"], "checkout.session.completed")
+
+    def test_webhook_firma_invalida(self):
+        from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
+        sys = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG,
+                                         stripe_webhook_secret="whsec_x"))
+        r = crea_router(sys)
+        s, _ = r.gestisci("POST", "/api/payments/webhook", body="{}",
+                          headers={"Stripe-Signature": "t=1,v1=falso"})
+        self.assertEqual(s, 400)
+
+    def test_webhook_non_configurato(self):
+        r = crea_router(_sistema())     # nessun webhook secret
+        s, _ = r.gestisci("POST", "/api/payments/webhook", body="{}")
+        self.assertEqual(s, 503)
+
+
 class TestMCP(unittest.TestCase):
     def test_jsonrpc(self):
         r = crea_router(_sistema())

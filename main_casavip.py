@@ -46,6 +46,7 @@ def main() -> None:  # pragma: no cover
         stripe_secret_key=os.environ.get("STRIPE_SECRET_KEY", ""),
         stripe_success_url=os.environ.get("STRIPE_SUCCESS_URL", ""),
         stripe_cancel_url=os.environ.get("STRIPE_CANCEL_URL", ""),
+        stripe_webhook_secret=os.environ.get("STRIPE_WEBHOOK_SECRET", ""),
         smtp_host=os.environ.get("SMTP_HOST", ""),
         smtp_port=int(os.environ.get("SMTP_PORT", "587")),
         smtp_user=os.environ.get("SMTP_USER", ""),

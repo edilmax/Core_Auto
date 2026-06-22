@@ -72,8 +72,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 83=server HTTP (API + frontend, fase81+fase61);
         # 84=LIBERO (coordinatore multi-agente valutato e SCARTATO);
         # 85=provider pagamento Stripe (money-path);
-        # 86=provider email voucher SMTP (gated). Blocco 87+ libero.
-        for n in range(87, 90):
+        # 86=provider email voucher SMTP (gated);
+        # 87=webhook Stripe (verifica firma + conferma pagamento). Blocco 88+ libero.
+        for n in range(88, 91):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 

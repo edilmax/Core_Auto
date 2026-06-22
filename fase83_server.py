@@ -357,6 +357,8 @@ class RouterHTTP:
             return self._invia_recensione(body)
         if metodo == "POST" and path == "/api/mcp":
             return self._mcp(body)
+        if metodo == "POST" and path == "/api/payments/webhook":
+            return self._webhook_stripe(body, headers)
         if metodo == "POST" and path == "/api/host/pubblica":
             return self._host_pubblica(body, headers)
         if metodo == "POST" and path == "/api/host/disponibilita":
@@ -594,6 +596,27 @@ class RouterHTTP:
             return 400, {"errore": "json_non_valido"}
         r = fn(dati)
         return int(getattr(r, "status", 200)), getattr(r, "corpo", {}) or {}
+
+    def _webhook_stripe(self, body, headers):
+        """Webhook Stripe (conferma pagamento): verifica la FIRMA sul body GREZZO prima di
+        credere all'evento. GATED dal webhook secret."""
+        secret = getattr(getattr(self._sys, "config", None), "stripe_webhook_secret", "")
+        if not secret:
+            return 503, {"errore": "webhook_non_configurato"}
+        from fase87_stripe_webhook import gestisci_webhook
+        sig = headers.get("Stripe-Signature", "") or headers.get("stripe-signature", "")
+        ok, tipo, dati = gestisci_webhook(body or "", sig, secret)
+        if not ok:
+            return 400, {"errore": "firma_non_valida"}
+        if tipo == "checkout.session.completed":
+            rif = ""
+            try:
+                rif = (dati or {}).get("object", {}).get("metadata", {}).get(
+                    "riferimento", "")
+            except Exception:
+                rif = ""
+            logger.info("Stripe: pagamento CONFERMATO per riferimento '%s'", rif)
+        return 200, {"ricevuto": True, "tipo": tipo}
 
     def _mcp(self, body):
         if self._sys.mcp is None:
