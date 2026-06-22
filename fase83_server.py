@@ -108,6 +108,102 @@ def _lingua(query: Dict[str, str]) -> str:
     return lng if lng in LINGUE_SUPPORTATE else "en"
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# SEO / discoverability (gratis): pagina crawlabile per alloggio + JSON-LD + sitemap.
+# Funzioni PURE e testabili. base_url = dominio (vuoto = relativo finche' non c'e').
+# ─────────────────────────────────────────────────────────────────────────────
+def _euro(cents: Any) -> str:
+    if not isinstance(cents, int) or isinstance(cents, bool) or cents < 0:
+        return "0.00"
+    return "%d.%02d" % (cents // 100, cents % 100)        # no float, deterministico
+
+
+def jsonld_alloggio(dettaglio: Dict[str, Any], base_url: str = "") -> Dict[str, Any]:
+    """Schema.org per un alloggio (rich results Google + leggibile dagli agenti)."""
+    servizi = dettaglio.get("servizi", []) or []
+    return {
+        "@context": "https://schema.org",
+        "@type": "Apartment",
+        "name": dettaglio.get("titolo", ""),
+        "description": dettaglio.get("descrizione", ""),
+        "url": base_url + "/alloggio/" + str(dettaglio.get("slug", "")),
+        "address": {"@type": "PostalAddress",
+                    "addressLocality": dettaglio.get("citta", ""),
+                    "addressCountry": dettaglio.get("paese", "")},
+        "numberOfRooms": dettaglio.get("camere", 1),
+        "occupancy": {"@type": "QuantitativeValue",
+                      "maxValue": dettaglio.get("capacita", 1)},
+        "amenityFeature": [{"@type": "LocationFeatureSpecification",
+                            "name": s, "value": True} for s in servizi],
+        "offers": {"@type": "Offer",
+                   "price": _euro(dettaglio.get("prezzo_notte_cents", 0)),
+                   "priceCurrency": dettaglio.get("valuta", "EUR")},
+    }
+
+
+def pagina_alloggio_html(sistema: Any, slug: str, base_url: str = "") -> Optional[str]:
+    """Pagina HTML crawlabile (server-rendered) con JSON-LD. None se assente. Le SPA
+    sono indicizzate male: questa rende il contenuto a Google e agli agenti SENZA JS."""
+    import html
+    try:
+        d = sistema.catalogo.dettaglio(slug)
+    except Exception:
+        return None
+    if d is None:
+        return None
+    e = html.escape
+    servizi = "".join("<li>%s</li>" % e(str(s)) for s in d.get("servizi", []) or [])
+    ld = json.dumps(jsonld_alloggio(d, base_url), ensure_ascii=False)
+    # neutralizza la chiusura del tag <script> dentro il JSON-LD (anti-XSS): unicode-escape
+    ld = ld.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+    return (
+        "<!DOCTYPE html><html lang=\"it\"><head><meta charset=\"UTF-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "<title>%s - Casa VIP</title>"
+        "<meta name=\"description\" content=\"%s\">"
+        "<link rel=\"canonical\" href=\"%s/alloggio/%s\">"
+        "<script type=\"application/ld+json\">%s</script></head><body>"
+        "<h1>%s</h1><p><strong>%s</strong>%s</p><p>%s</p>"
+        "<p>Prezzo: %s %s / notte</p><ul>%s</ul>"
+        "<p><a href=\"/?slug=%s\">Prenota su Casa VIP</a></p></body></html>"
+    ) % (
+        e(d.get("titolo", "")), e(d.get("descrizione", ""))[:160],
+        e(base_url), e(slug), ld,
+        e(d.get("titolo", "")), e(d.get("citta", "")),
+        ", " + e(d.get("paese", "")) if d.get("paese") else "",
+        e(d.get("descrizione", "")),
+        e(_euro(d.get("prezzo_notte_cents", 0))), e(d.get("valuta", "EUR")),
+        servizi, e(slug),
+    )
+
+
+def sitemap_xml(sistema: Any, base_url: str = "") -> str:
+    """sitemap.xml con tutte le schede pubblicate (per Google)."""
+    from fase57_vetrina import CriteriRicerca, PAGINA_MAX
+    slugs: List[str] = []
+    offset = 0
+    try:
+        while offset < 10000:
+            res = sistema.catalogo.cerca(CriteriRicerca(limit=PAGINA_MAX, offset=offset))
+            righe = res.get("risultati", [])
+            if not righe:
+                break
+            slugs.extend(str(r.get("slug", "")) for r in righe if r.get("slug"))
+            if len(righe) < PAGINA_MAX:
+                break
+            offset += PAGINA_MAX
+    except Exception:
+        pass
+    urls = "".join("<url><loc>%s/alloggio/%s</loc></url>" % (base_url, s) for s in slugs)
+    return ('<?xml version="1.0" encoding="UTF-8"?>'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            '<url><loc>%s/</loc></url>%s</urlset>' % (base_url, urls))
+
+
+def robots_txt(base_url: str = "") -> str:
+    return "User-agent: *\nAllow: /\nSitemap: %s/sitemap.xml\n" % base_url
+
+
 class RouterHTTP:
     """Router PURO (testabile): cabla il SistemaCasaVIP (fase81) sulle rotte HTTP."""
 
@@ -353,8 +449,8 @@ def percorso_statico_sicuro(path: str, cartella: str) -> Optional[str]:
 # Server HTTP stdlib (thin wrapper, NON testato - I/O)
 # ─────────────────────────────────────────────────────────────────────────────
 def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
-          cartella_statica: str = "deploy", host_key: Optional[str] = None
-          ) -> None:  # pragma: no cover
+          cartella_statica: str = "deploy", host_key: Optional[str] = None,
+          base_url: str = "") -> None:  # pragma: no cover
     import os
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from urllib.parse import urlparse, parse_qs
@@ -395,6 +491,14 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             self.end_headers()
             self.wfile.write(dati)
 
+        def _testo(self, status, ctype, testo):
+            dati = testo.encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", ctype + "; charset=utf-8")
+            self._cors()
+            self.end_headers()
+            self.wfile.write(dati)
+
         def do_OPTIONS(self):
             self.send_response(204)
             self._cors()
@@ -406,6 +510,16 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 query = {k: v[0] for k, v in parse_qs(u.query).items()}
                 s, c = router.gestisci("GET", u.path, query, None, dict(self.headers))
                 self._scrivi(s, c)
+            elif u.path == "/sitemap.xml":
+                self._testo(200, "application/xml", sitemap_xml(sistema, base_url))
+            elif u.path == "/robots.txt":
+                self._testo(200, "text/plain", robots_txt(base_url))
+            elif u.path.startswith("/alloggio/"):
+                html = pagina_alloggio_html(sistema, u.path[len("/alloggio/"):], base_url)
+                if html is None:
+                    self._scrivi(404, {"errore": "not_found"})
+                else:
+                    self._testo(200, "text/html", html)
             else:
                 self._statico(u.path)
 

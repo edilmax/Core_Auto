@@ -10,7 +10,10 @@ import json
 import unittest
 
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
-from fase83_server import RouterHTTP, crea_router, percorso_statico_sicuro
+from fase83_server import (
+    RouterHTTP, crea_router, percorso_statico_sicuro,
+    jsonld_alloggio, pagina_alloggio_html, sitemap_xml, robots_txt, _euro,
+)
 
 SEG = b"0123456789abcdef0123456789abcdef"
 
@@ -252,6 +255,55 @@ class TestPathStatico(unittest.TestCase):
         # '/.git/config' -> basename 'config' (benigno): resta DENTRO deploy/ (poi 404)
         r = percorso_statico_sicuro("/.git/config", "deploy")
         self.assertTrue(os.path.realpath(r).startswith(os.path.realpath("deploy")))
+
+
+class TestSEO(unittest.TestCase):
+    def setUp(self):
+        self.sys = _sistema()
+        _popola(self.sys)
+
+    def test_euro_no_float(self):
+        self.assertEqual(_euro(9500), "95.00")
+        self.assertEqual(_euro(9999), "99.99")
+        self.assertEqual(_euro(5), "0.05")
+        self.assertEqual(_euro(-1), "0.00")
+
+    def test_jsonld(self):
+        d = self.sys.catalogo.dettaglio("casa")
+        ld = jsonld_alloggio(d, "https://x.it")
+        self.assertEqual(ld["@type"], "Apartment")
+        self.assertEqual(ld["name"], "Casa")
+        self.assertEqual(ld["offers"]["price"], "100.00")     # 10000 cents
+        self.assertEqual(ld["url"], "https://x.it/alloggio/casa")
+        self.assertTrue(any(a["name"] == "piscina" for a in ld["amenityFeature"]))
+
+    def test_pagina_html(self):
+        h = pagina_alloggio_html(self.sys, "casa", "https://x.it")
+        self.assertIn("<title>Casa - Casa VIP</title>", h)
+        self.assertIn("application/ld+json", h)
+        self.assertIn("100.00", h)
+        self.assertIn('rel="canonical"', h)
+
+    def test_pagina_html_404(self):
+        self.assertIsNone(pagina_alloggio_html(self.sys, "mai-vista"))
+
+    def test_html_escaping(self):
+        from fase57_vetrina import SchedaAlloggio
+        self.sys.catalogo.pubblica(SchedaAlloggio(host_id="h", slug="xss",
+            titolo="<script>alert(1)</script>", citta="Roma",
+            prezzo_notte_cents=5000, capacita=2))
+        h = pagina_alloggio_html(self.sys, "xss")
+        self.assertNotIn("<script>alert(1)</script>", h)      # iniezione neutralizzata
+        self.assertIn("&lt;script&gt;", h)
+
+    def test_sitemap(self):
+        xml = sitemap_xml(self.sys, "https://x.it")
+        self.assertIn("https://x.it/alloggio/casa", xml)
+        self.assertIn("urlset", xml)
+
+    def test_robots(self):
+        r = robots_txt("https://x.it")
+        self.assertIn("Sitemap: https://x.it/sitemap.xml", r)
 
 
 class TestRobustezza(unittest.TestCase):

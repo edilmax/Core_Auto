@@ -57,7 +57,8 @@ def main() -> None:  # pragma: no cover
           host=os.environ.get("HOST", "127.0.0.1"),
           porta=int(os.environ.get("PORTA", "8080")),
           cartella_statica=os.environ.get("STATIC_DIR", "deploy"),
-          host_key=os.environ.get("HOST_KEY") or None)
+          host_key=os.environ.get("HOST_KEY") or None,
+          base_url=os.environ.get("BASE_URL", "").rstrip("/"))
 
 
 if __name__ == "__main__":  # pragma: no cover
