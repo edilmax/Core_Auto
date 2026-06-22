@@ -78,6 +78,30 @@
     <button id="btnDisp">Salva</button>
     <div id="msgDisp"></div>
   </div>
+
+  <div class="card">
+    <h2>📅 Apri un periodo (onboarding rapido)</h2>
+    <div class="grid">
+      <label>Slug<input id="r_slug" value="casa-roma"></label>
+      <label>Unita<input type="number" id="r_unita" value="1"></label>
+      <label>Da<input type="date" id="r_da" value="2026-09-01"></label>
+      <label>A<input type="date" id="r_a" value="2026-10-01"></label>
+      <label class="full">Prezzo/notte (cent)<input type="number" id="r_prezzo" value="9000"></label>
+    </div>
+    <button id="btnRange">Apri periodo</button>
+    <div id="msgRange"></div>
+  </div>
+
+  <div class="card">
+    <h2>🔁 Importa calendario iCal (Airbnb / Booking / Vrbo)</h2>
+    <p style="color:#5e6f8d;font-size:.9rem;margin-bottom:.6rem">Incolla il contenuto del file .ics o l'export del calendario: le date gia' occupate verranno bloccate (anti-overbooking).</p>
+    <div class="grid">
+      <label class="full">Slug<input id="i_slug" value="casa-roma"></label>
+      <label class="full">Calendario iCal<textarea id="i_ical" rows="5" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid #dce1ed;font-family:monospace;font-size:.85rem" placeholder="BEGIN:VCALENDAR..."></textarea></label>
+    </div>
+    <button id="btnIcal">Importa e sincronizza</button>
+    <div id="msgIcal"></div>
+  </div>
 </div>
 
 <script>
@@ -135,6 +159,24 @@ document.getElementById('btnTrasp').onclick = async ()=>{
     m.className='msg ok';
     m.innerHTML = `Con ${ota} incassi <b>€ ${(loro/100).toFixed(2)}</b> · con noi <b>€ ${(noi/100).toFixed(2)}</b> · guadagni <b>+€ ${(extra/100).toFixed(2)}</b> a notte`;
   }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
+};
+
+document.getElementById('btnRange').onclick = async ()=>{
+  const m = document.getElementById('msgRange');
+  const r = await post('/api/host/disponibilita_range', {
+    alloggio_id:document.getElementById('r_slug').value, da:document.getElementById('r_da').value,
+    a:document.getElementById('r_a').value, unita_totali:parseInt(document.getElementById('r_unita').value),
+    prezzo_netto_cents:parseInt(document.getElementById('r_prezzo').value)});
+  m.className='msg '+(r.status===200?'ok':'err');
+  m.textContent = r.status===200 ? '✅ '+r.data.giorni_impostati+' giorni aperti' : '❌ '+(r.data.errore||r.status);
+};
+
+document.getElementById('btnIcal').onclick = async ()=>{
+  const m = document.getElementById('msgIcal');
+  const r = await post('/api/host/ical', {
+    alloggio_id:document.getElementById('i_slug').value, ical:document.getElementById('i_ical').value});
+  m.className='msg '+(r.status===200?'ok':'err');
+  m.textContent = r.status===200 ? '✅ '+r.data.eventi+' eventi, '+r.data.giorni_bloccati+' giorni bloccati' : '❌ '+(r.data.errore||r.status);
 };
 
 document.getElementById('lang').onchange = e=>{ LANG=e.target.value; document.documentElement.lang=LANG; caricaI18N(LANG); };

@@ -176,6 +176,52 @@ class TestHost(unittest.TestCase):
         self.assertEqual(s, 422)
 
 
+class TestOnboarding(unittest.TestCase):
+    def setUp(self):
+        self.sys = _sistema()
+        self.r = crea_router(self.sys, host_key="hk")
+        self.h = {"X-Host-Key": "hk"}
+
+    def test_apri_periodo(self):
+        s, c = self.r.gestisci("POST", "/api/host/disponibilita_range", headers=self.h,
+                               body=json.dumps({"alloggio_id": "casa", "da": "2026-09-01",
+                                                "a": "2026-09-05", "unita_totali": 1,
+                                                "prezzo_netto_cents": 9000}))
+        self.assertEqual(s, 200)
+        self.assertEqual(c["giorni_impostati"], 4)        # 01..04 (05 escluso)
+        self.assertTrue(self.sys.inventario.disponibile("casa", "2026-09-01",
+                                                        "2026-09-03"))
+
+    def test_range_invalido(self):
+        s, _ = self.r.gestisci("POST", "/api/host/disponibilita_range", headers=self.h,
+                               body=json.dumps({"alloggio_id": "casa", "da": "2026-09-05",
+                                                "a": "2026-09-01", "unita_totali": 1,
+                                                "prezzo_netto_cents": 9000}))
+        self.assertEqual(s, 422)
+
+    def test_ical_blocca_dopo_apertura(self):
+        # 1) apri il periodo
+        self.r.gestisci("POST", "/api/host/disponibilita_range", headers=self.h,
+                        body=json.dumps({"alloggio_id": "casa", "da": "2026-09-01",
+                                         "a": "2026-09-05", "unita_totali": 1,
+                                         "prezzo_netto_cents": 9000}))
+        # 2) importa iCal: il 02-03 e' occupato su Airbnb
+        ics = ("BEGIN:VEVENT\nDTSTART;VALUE=DATE:20260902\nDTEND;VALUE=DATE:20260903\n"
+               "END:VEVENT")
+        s, c = self.r.gestisci("POST", "/api/host/ical", headers=self.h,
+                               body=json.dumps({"alloggio_id": "casa", "ical": ics}))
+        self.assertEqual(s, 200)
+        self.assertEqual(c["giorni_bloccati"], 1)
+        # il 02 ora NON e' disponibile; il 01 si'
+        self.assertFalse(self.sys.inventario.disponibile("casa", "2026-09-02", "2026-09-03"))
+        self.assertTrue(self.sys.inventario.disponibile("casa", "2026-09-01", "2026-09-02"))
+
+    def test_ical_auth(self):
+        s, _ = self.r.gestisci("POST", "/api/host/ical",
+                               body=json.dumps({"alloggio_id": "casa", "ical": "x"}))
+        self.assertEqual(s, 401)
+
+
 class TestPathStatico(unittest.TestCase):
     def test_normali(self):
         import os

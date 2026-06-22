@@ -152,6 +152,10 @@ class RouterHTTP:
             return self._host_pubblica(body, headers)
         if metodo == "POST" and path == "/api/host/disponibilita":
             return self._host_disponibilita(body, headers)
+        if metodo == "POST" and path == "/api/host/disponibilita_range":
+            return self._host_disponibilita_range(body, headers)
+        if metodo == "POST" and path == "/api/host/ical":
+            return self._host_ical(body, headers)
         return 404, {"errore": "rotta_non_trovata"}
 
     # --- helper ---
@@ -271,6 +275,52 @@ class RouterHTTP:
             alloggio, giorno, unita_totali=unita, prezzo_netto_cents=prezzo,
             chiuso=bool(dati.get("chiuso", False)))
         return (200 if ok else 422), {"stato": "ok" if ok else "rifiutato"}
+
+    def _host_disponibilita_range(self, body, headers):
+        """Apre un INTERO periodo (onboarding): imposta unita+prezzo per ogni notte
+        [da, a). Max 366 giorni."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        import datetime
+        alloggio = dati.get("alloggio_id")
+        da, a = dati.get("da"), dati.get("a")
+        unita, prezzo = dati.get("unita_totali"), dati.get("prezzo_netto_cents")
+        if not (isinstance(alloggio, str) and isinstance(da, str) and isinstance(a, str)
+                and isinstance(unita, int) and not isinstance(unita, bool)
+                and isinstance(prezzo, int) and not isinstance(prezzo, bool)):
+            return 422, {"errore": "campi_non_validi"}
+        try:
+            d0 = datetime.date.fromisoformat(da)
+            d1 = datetime.date.fromisoformat(a)
+        except (ValueError, TypeError):
+            return 422, {"errore": "date_non_valide"}
+        n = (d1 - d0).days
+        if n <= 0 or n > 366:
+            return 422, {"errore": "intervallo_non_valido"}
+        impostati = 0
+        for i in range(n):
+            g = (d0 + datetime.timedelta(days=i)).isoformat()
+            if self._sys.inventario.imposta_disponibilita(
+                    alloggio, g, unita_totali=unita, prezzo_netto_cents=prezzo):
+                impostati += 1
+        return 200, {"giorni_impostati": impostati}
+
+    def _host_ical(self, body, headers):
+        """Importa il calendario iCal (Airbnb/Booking/Vrbo): blocca le date occupate
+        sull'inventario (fase82). La vera portabilita' cross-canale."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        alloggio, ical = dati.get("alloggio_id"), dati.get("ical")
+        if not (isinstance(alloggio, str) and alloggio and isinstance(ical, str)):
+            return 422, {"errore": "campi_non_validi"}
+        from fase82_ical_sync import sincronizza
+        return 200, sincronizza(self._sys.inventario, alloggio, ical)
 
 
 def crea_router(sistema: Any, *, host_key: Optional[str] = None) -> RouterHTTP:
