@@ -235,6 +235,37 @@ def robots_txt(base_url: str = "") -> str:
     return "User-agent: *\nAllow: /\nSitemap: %s/sitemap.xml\n" % base_url
 
 
+def _notti_count(ci: Any, co: Any) -> int:
+    import datetime
+    try:
+        return (datetime.date.fromisoformat(str(co))
+                - datetime.date.fromisoformat(str(ci))).days
+    except (ValueError, TypeError):
+        return 0
+
+
+def genera_csv_prenotazioni(righe: Any) -> str:
+    """CSV delle prenotazioni per la contabilita' (stdlib csv, niente dipendenze)."""
+    import csv
+    import io
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["alloggio", "check_in", "check_out", "notti", "origine", "stato",
+                "revenue_eur", "riferimento"])
+    for r in (righe or []):
+        if not isinstance(r, dict):
+            continue
+        rev = r.get("revenue_cents", 0)
+        rev = rev if isinstance(rev, int) and not isinstance(rev, bool) else 0
+        w.writerow([
+            r.get("alloggio_id", ""), r.get("check_in", ""), r.get("check_out", ""),
+            _notti_count(r.get("check_in"), r.get("check_out")),
+            r.get("origine", ""), "rimborsata" if r.get("rimborsato") else "attiva",
+            "%d.%02d" % (rev // 100, rev % 100), str(r.get("idem_key", ""))[:16],
+        ])
+    return buf.getvalue()
+
+
 def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optional[str]:
     """Voucher di conferma (server-rendered, stampabile, multilingua). Verifica la firma
     del token (non falsificabile). None se assente/manomesso/non un voucher."""
@@ -337,6 +368,8 @@ class RouterHTTP:
             return self._host_metriche(query, headers)
         if metodo == "GET" and path == "/api/host/calendario":
             return self._host_calendario(query, headers)
+        if metodo == "GET" and path == "/api/host/export":
+            return self._host_export(query, headers)
         if metodo == "GET" and path == "/api/admin/prenotazioni":
             return self._admin_prenotazioni(query, headers)
         if metodo == "POST" and path == "/api/admin/rimborso":
@@ -652,6 +685,34 @@ class RouterHTTP:
 
     def _valuta_sys(self) -> str:
         return getattr(getattr(self._sys, "config", None), "valuta", "EUR")
+
+    def _revenue_prenotazione(self, p: Dict[str, Any]) -> int:
+        if p.get("rimborsato"):
+            return 0
+        try:
+            cal = self._sys.inventario.calendario(p.get("alloggio_id", ""),
+                                                  p.get("check_in", ""),
+                                                  p.get("check_out", ""))
+            return sum(g.get("prezzo_netto_cents", 0) for g in cal
+                       if isinstance(g.get("prezzo_netto_cents"), int))
+        except Exception:
+            return 0
+
+    def _host_export(self, query, headers):
+        """Export CSV delle prenotazioni (contabilita'). Il CSV viaggia come stringa nel
+        JSON; il frontend lo scarica come file."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        alloggio = query.get("alloggio") or None
+        try:
+            righe = self._sys.inventario.elenco_prenotazioni(alloggio_id=alloggio,
+                                                             limit=500)
+        except Exception:
+            logger.error("host export: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        for r in righe:
+            r["revenue_cents"] = self._revenue_prenotazione(r)
+        return 200, {"csv": genera_csv_prenotazioni(righe), "righe": len(righe)}
 
     def _host_calendario(self, query, headers):
         if not self._auth_host(headers):

@@ -222,6 +222,24 @@ class TestDashboardHost(unittest.TestCase):
                                headers=self.h)
         self.assertEqual(s, 422)
 
+    def test_export_csv(self):
+        q = self.r.gestisci("POST", "/api/concierge/quote", body=json.dumps(
+            {"alloggio_id": "casa", "check_in": "2026-09-01", "check_out": "2026-09-02"}))
+        self.r.gestisci("POST", "/api/concierge/book", body=json.dumps(
+            {"quote_token": q[1]["quote_token"], "email": "g@x.it"}))
+        s, c = self.r.gestisci("GET", "/api/host/export", {"alloggio": "casa"},
+                               headers=self.h)
+        self.assertEqual(s, 200)
+        csv = c["csv"]
+        self.assertIn("alloggio,check_in,check_out,notti", csv)   # header
+        self.assertIn("casa,2026-09-01,2026-09-02,1", csv)        # riga
+        self.assertIn("100.00", csv)                              # revenue (1 notte x 10000)
+        self.assertIn("attiva", csv)
+
+    def test_export_auth(self):
+        s, _ = self.r.gestisci("GET", "/api/host/export")
+        self.assertEqual(s, 401)
+
 
 class TestOnboarding(unittest.TestCase):
     def setUp(self):

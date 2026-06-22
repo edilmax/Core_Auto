@@ -48,6 +48,7 @@
       <label>Slug (vuoto = tutti)<input id="m_slug" value=""></label>
       <label>&nbsp;<button id="btnMetriche" style="margin-top:0">Carica metriche</button></label>
     </div>
+    <button id="btnExport" style="background:#155724">📥 Esporta CSV prenotazioni</button>
     <div id="dash" style="display:none;margin-top:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.8rem">
       <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#1e3c72" id="d_revenue">—</div><div style="font-size:.75rem;color:#5e6f8d">REVENUE</div></div>
       <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#1e3c72" id="d_occ">—</div><div style="font-size:.75rem;color:#5e6f8d">OCCUPAZIONE</div></div>
@@ -225,6 +226,21 @@ document.getElementById('btnMetriche').onclick = async ()=>{
     document.getElementById('d_pren').textContent = d.prenotazioni_attive + (d.prenotazioni_rimborsate?(' (+'+d.prenotazioni_rimborsate+' rimb.)'):'');
     document.getElementById('d_rating').textContent = (d.recensioni && d.recensioni.conteggio) ? ('★ '+(d.recensioni.media_centesimi/100).toFixed(1)) : '—';
     m.className='msg ok'; m.textContent='Aggiornato.';
+  }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
+};
+
+document.getElementById('btnExport').onclick = async ()=>{
+  const m = document.getElementById('msgMetriche');
+  const slug = document.getElementById('m_slug').value.trim();
+  try{
+    const res = await fetch(API+'/api/host/export'+(slug?('?alloggio='+encodeURIComponent(slug)):''), {headers:{'X-Host-Key':key()}});
+    if(res.status===401){ m.className='msg err'; m.textContent='Chiave host errata.'; return; }
+    const d = await res.json();
+    const blob = new Blob([d.csv], {type:'text/csv'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'prenotazioni_bookinvip.csv';
+    a.click(); URL.revokeObjectURL(a.href);
+    m.className='msg ok'; m.textContent=d.righe+' prenotazioni esportate.';
   }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
 };
 
