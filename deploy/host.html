@@ -59,6 +59,16 @@
   </div>
 
   <div class="card">
+    <h2>🏠 I miei alloggi</h2>
+    <div class="grid">
+      <label>Host ID<input id="ma_host" value="host1"></label>
+      <label>&nbsp;<button id="btnMiei" style="margin-top:0">Carica</button></label>
+    </div>
+    <div id="miei" style="margin-top:1rem"></div>
+    <div id="msgMiei"></div>
+  </div>
+
+  <div class="card">
     <h2>🗓️ Calendario disponibilita</h2>
     <div class="grid">
       <label>Slug<input id="c_slug" value="casa-roma"></label>
@@ -228,6 +238,31 @@ document.getElementById('btnMetriche').onclick = async ()=>{
     m.className='msg ok'; m.textContent='Aggiornato.';
   }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
 };
+
+async function caricaMiei(){
+  const m=document.getElementById('msgMiei');
+  try{
+    const res=await fetch(API+'/api/host/alloggi?host_id='+encodeURIComponent(document.getElementById('ma_host').value),{headers:{'X-Host-Key':key()}});
+    if(res.status===401){ m.className='msg err'; m.textContent='Chiave host errata.'; return; }
+    const d=await res.json();
+    if(!d.alloggi||!d.alloggi.length){ document.getElementById('miei').innerHTML='<div style="color:#5e6f8d">Nessun alloggio.</div>'; return; }
+    document.getElementById('miei').innerHTML='<table style="width:100%;border-collapse:collapse"><thead><tr style="text-align:left;font-size:.72rem;color:#4a5b7a"><th>Titolo</th><th>Citta</th><th>€/notte</th><th>Stato</th><th></th></tr></thead><tbody>'+
+      d.alloggi.map(a=>{
+        const azione = a.stato==='pubblicato'
+          ? `<button data-s="${a.slug}" data-st="sospeso" style="background:#b02a37;padding:.3rem .9rem">Sospendi</button>`
+          : `<button data-s="${a.slug}" data-st="pubblicato" style="background:#155724;padding:.3rem .9rem">Pubblica</button>`;
+        return `<tr style="border-top:1px solid #eef2f7"><td>${a.titolo}</td><td>${a.citta}</td><td>${(a.prezzo_notte_cents/100).toFixed(2)}</td><td>${a.stato}</td><td>${azione}</td></tr>`;
+      }).join('')+'</tbody></table>';
+    document.querySelectorAll('#miei button').forEach(b=>b.onclick=()=>cambiaStato(b.dataset.s,b.dataset.st));
+    m.className='msg ok'; m.textContent=d.alloggi.length+' alloggi.';
+  }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
+}
+async function cambiaStato(slug,stato){
+  const r=await post('/api/host/stato',{slug,stato});
+  if(r.status===200) caricaMiei();
+  else { const m=document.getElementById('msgMiei'); m.className='msg err'; m.textContent='❌ '+(r.data.errore||r.status); }
+}
+document.getElementById('btnMiei').onclick = caricaMiei;
 
 document.getElementById('btnExport').onclick = async ()=>{
   const m = document.getElementById('msgMetriche');

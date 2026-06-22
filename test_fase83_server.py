@@ -240,6 +240,30 @@ class TestDashboardHost(unittest.TestCase):
         s, _ = self.r.gestisci("GET", "/api/host/export")
         self.assertEqual(s, 401)
 
+    def test_alloggi_host_e_stato(self):
+        # _popola pubblica slug 'casa' con host_id 'h'
+        s, c = self.r.gestisci("GET", "/api/host/alloggi", {"host_id": "h"},
+                               headers=self.h)
+        self.assertEqual(s, 200)
+        self.assertEqual({a["slug"] for a in c["alloggi"]}, {"casa"})
+        self.assertEqual(c["alloggi"][0]["stato"], "pubblicato")
+        # sospendi
+        s2, _ = self.r.gestisci("POST", "/api/host/stato", headers=self.h,
+                                body=json.dumps({"slug": "casa", "stato": "sospeso"}))
+        self.assertEqual(s2, 200)
+        # ora non e' piu' in vetrina
+        cat = self.r.gestisci("GET", "/api/catalogo", {"citta": "Roma"})
+        self.assertEqual(cat[1]["totale"], 0)
+        # ma resta tra i miei alloggi
+        _, c3 = self.r.gestisci("GET", "/api/host/alloggi", {"host_id": "h"},
+                                headers=self.h)
+        self.assertEqual(c3["alloggi"][0]["stato"], "sospeso")
+
+    def test_stato_invalido(self):
+        s, _ = self.r.gestisci("POST", "/api/host/stato", headers=self.h,
+                               body=json.dumps({"slug": "casa", "stato": "online"}))
+        self.assertEqual(s, 422)
+
 
 class TestOnboarding(unittest.TestCase):
     def setUp(self):

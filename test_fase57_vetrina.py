@@ -171,6 +171,16 @@ class TestPubblicazione(unittest.TestCase):
         self.cat.pubblica(_scheda())
         self.assertFalse(self.cat.imposta_stato("casa-mare", "online"))
 
+    def test_alloggi_host(self):
+        self.cat.pubblica(_scheda("a", host_id="h1"))
+        self.cat.pubblica(_scheda("b", host_id="h1", stato="bozza"))
+        self.cat.pubblica(_scheda("c", host_id="h2"))
+        miei = self.cat.alloggi_host("h1")
+        self.assertEqual({m["slug"] for m in miei}, {"a", "b"})   # anche la bozza
+        stati = {m["slug"]: m["stato"] for m in miei}
+        self.assertEqual(stati["b"], "bozza")
+        self.assertEqual(self.cat.alloggi_host("ignoto"), [])
+
 
 class TestRicerca(unittest.TestCase):
     def setUp(self):

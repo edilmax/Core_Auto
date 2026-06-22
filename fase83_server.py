@@ -370,6 +370,10 @@ class RouterHTTP:
             return self._host_calendario(query, headers)
         if metodo == "GET" and path == "/api/host/export":
             return self._host_export(query, headers)
+        if metodo == "GET" and path == "/api/host/alloggi":
+            return self._host_alloggi(query, headers)
+        if metodo == "POST" and path == "/api/host/stato":
+            return self._host_stato(body, headers)
         if metodo == "GET" and path == "/api/admin/prenotazioni":
             return self._admin_prenotazioni(query, headers)
         if metodo == "POST" and path == "/api/admin/rimborso":
@@ -713,6 +717,31 @@ class RouterHTTP:
         for r in righe:
             r["revenue_cents"] = self._revenue_prenotazione(r)
         return 200, {"csv": genera_csv_prenotazioni(righe), "righe": len(righe)}
+
+    def _host_alloggi(self, query, headers):
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        host_id = query.get("host_id")
+        if not (isinstance(host_id, str) and host_id):
+            return 422, {"errore": "host_id_mancante"}
+        try:
+            el = self._sys.catalogo.alloggi_host(host_id, limit=200)
+        except Exception:
+            logger.error("host alloggi: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        return 200, {"alloggi": el}
+
+    def _host_stato(self, body, headers):
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        slug, stato = dati.get("slug"), dati.get("stato")
+        if not (isinstance(slug, str) and slug and isinstance(stato, str)):
+            return 422, {"errore": "campi_non_validi"}
+        ok = self._sys.catalogo.imposta_stato(slug, stato)
+        return (200 if ok else 422), {"stato": stato if ok else "rifiutato"}
 
     def _host_calendario(self, query, headers):
         if not self._auth_host(headers):

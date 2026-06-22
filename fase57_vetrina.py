@@ -372,6 +372,23 @@ class CatalogoVetrina:
         finally:
             con.close()
 
+    def alloggi_host(self, host_id: str, *, limit: int = 100) -> List[Dict[str, Any]]:
+        """Tutti gli alloggi di un host (ogni stato: pubblicato/bozza/sospeso) per il
+        pannello 'i miei alloggi'. Read-only."""
+        limit = limit if (isinstance(limit, int) and not isinstance(limit, bool)
+                          and 0 < limit <= 500) else 100
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT slug, titolo, citta, prezzo_notte_cents, stato FROM alloggi "
+                "WHERE host_id=? ORDER BY aggiornato_ts DESC LIMIT ?",
+                (str(host_id), limit)).fetchall()
+        finally:
+            con.close()
+        return [{"slug": r["slug"], "titolo": r["titolo"], "citta": r["citta"],
+                 "prezzo_notte_cents": int(r["prezzo_notte_cents"]),
+                 "stato": r["stato"]} for r in righe]
+
     # --- READ: ricerca paginata (solo 'pubblicato') ---
     def cerca(self, criteri: CriteriRicerca) -> Dict[str, Any]:
         """Ritorna {'totale', 'limit', 'offset', 'risultati':[scheda_card...]}.
