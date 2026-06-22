@@ -278,6 +278,32 @@ class ChannelManager:
         finally:
             con.close()
 
+    def elenco_prenotazioni(self, *, alloggio_id: Optional[str] = None,
+                            limit: int = 50) -> List[Dict[str, Any]]:
+        """Prenotazioni attive (blocco occupato) per la dashboard admin, con lo stato di
+        rilascio (rimborso). Read-only."""
+        limit = limit if (isinstance(limit, int) and not isinstance(limit, bool)
+                          and 0 < limit <= 500) else 50
+        sql = ("SELECT m.idem_key, m.alloggio_id, m.check_in, m.check_out, m.origine, "
+               "m.ts, (SELECT COUNT(*) FROM movimenti r WHERE r.idem_key = "
+               "'rilascio:' || m.idem_key) AS rilasciato "
+               "FROM movimenti m WHERE m.tipo='blocco' AND m.esito='occupato'")
+        par: List[Any] = []
+        if isinstance(alloggio_id, str) and alloggio_id:
+            sql += " AND m.alloggio_id=?"
+            par.append(alloggio_id)
+        sql += " ORDER BY m.ts DESC, m.rowid DESC LIMIT ?"
+        par.append(limit)
+        con = self._apri()
+        try:
+            righe = con.execute(sql, par).fetchall()
+        finally:
+            con.close()
+        return [{"idem_key": r["idem_key"], "alloggio_id": r["alloggio_id"],
+                 "check_in": r["check_in"], "check_out": r["check_out"],
+                 "origine": r["origine"], "ts": r["ts"],
+                 "rimborsato": bool(r["rilasciato"])} for r in righe]
+
     # ── BLOCCO atomico anti-overbooking (idempotente) ──────────────────────────
     def blocca(self, alloggio_id: str, check_in: str, check_out: str, *,
                idem_key: str, origine: str = "centrale") -> EsitoPrenotazione:

@@ -225,9 +225,11 @@ def robots_txt(base_url: str = "") -> str:
 class RouterHTTP:
     """Router PURO (testabile): cabla il SistemaCasaVIP (fase81) sulle rotte HTTP."""
 
-    def __init__(self, sistema: Any, *, host_key: Optional[str] = None) -> None:
+    def __init__(self, sistema: Any, *, host_key: Optional[str] = None,
+                 admin_key: Optional[str] = None) -> None:
         self._sys = sistema
         self._host_key = host_key
+        self._admin_key = admin_key
         self._loc = Localizzatore()
 
     def gestisci(self, metodo: str, path: str, query: Optional[Dict[str, str]] = None,
@@ -274,6 +276,10 @@ class RouterHTTP:
             return self._host_disponibilita_range(body, headers)
         if metodo == "POST" and path == "/api/host/ical":
             return self._host_ical(body, headers)
+        if metodo == "GET" and path == "/api/admin/prenotazioni":
+            return self._admin_prenotazioni(query, headers)
+        if metodo == "POST" and path == "/api/admin/rimborso":
+            return self._admin_rimborso(body, headers)
         return 404, {"errore": "rotta_non_trovata"}
 
     # --- helper ---
@@ -291,6 +297,49 @@ class RouterHTTP:
         import hmac
         fornita = headers.get("X-Host-Key", "") or headers.get("x-host-key", "")
         return hmac.compare_digest(str(fornita), str(self._host_key))
+
+    def _auth_admin(self, headers: Dict[str, str]) -> bool:
+        if self._admin_key is None:
+            return True            # nessuna chiave configurata = aperto (dev)
+        import hmac
+        fornita = headers.get("X-Admin-Key", "") or headers.get("x-admin-key", "")
+        return hmac.compare_digest(str(fornita), str(self._admin_key))
+
+    # --- admin: dashboard rimborsi ---
+    def _admin_prenotazioni(self, query, headers):
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        alloggio = query.get("alloggio") or None
+        try:
+            el = self._sys.inventario.elenco_prenotazioni(alloggio_id=alloggio, limit=100)
+        except Exception:
+            logger.error("admin prenotazioni: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        return 200, {"prenotazioni": el}
+
+    def _admin_rimborso(self, body, headers):
+        """Rimborso = cancellazione: libera le date sull'inventario (fase58.rilascia).
+        Il rimborso Stripe vero si esegue quando il PSP e' attivo (gated)."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        alloggio = dati.get("alloggio_id")
+        ci, co = dati.get("check_in"), dati.get("check_out")
+        idem = dati.get("idem_key")
+        if not all(isinstance(x, str) and x for x in (alloggio, ci, co, idem)):
+            return 422, {"errore": "campi_non_validi"}
+        try:
+            e = self._sys.inventario.rilascia(alloggio, ci, co, idem_key=idem)
+        except Exception:
+            logger.error("admin rimborso: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        if not getattr(e, "ok", False):
+            return 409, {"stato": "rifiutato", "motivo": getattr(e, "motivo", "")}
+        return 200, {"stato": "rimborsato", "date_liberate": True,
+                     "idempotente": bool(getattr(e, "idempotente", False)),
+                     "nota": "date liberate; rimborso PSP da eseguire quando Stripe e' live"}
 
     def _traduci_servizi(self, item: Dict[str, Any], lingua: str) -> Dict[str, Any]:
         if isinstance(item.get("servizi"), list):
@@ -501,8 +550,9 @@ class RouterHTTP:
         return 200, sincronizza(self._sys.inventario, alloggio, ical)
 
 
-def crea_router(sistema: Any, *, host_key: Optional[str] = None) -> RouterHTTP:
-    return RouterHTTP(sistema, host_key=host_key)
+def crea_router(sistema: Any, *, host_key: Optional[str] = None,
+                admin_key: Optional[str] = None) -> RouterHTTP:
+    return RouterHTTP(sistema, host_key=host_key, admin_key=admin_key)
 
 
 def percorso_statico_sicuro(path: str, cartella: str) -> Optional[str]:
@@ -532,12 +582,13 @@ def percorso_statico_sicuro(path: str, cartella: str) -> Optional[str]:
 # ─────────────────────────────────────────────────────────────────────────────
 def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
           cartella_statica: str = "deploy", host_key: Optional[str] = None,
-          base_url: str = "") -> None:  # pragma: no cover
+          base_url: str = "", admin_key: Optional[str] = None
+          ) -> None:  # pragma: no cover
     import os
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from urllib.parse import urlparse, parse_qs
 
-    router = crea_router(sistema, host_key=host_key)
+    router = crea_router(sistema, host_key=host_key, admin_key=admin_key)
 
     class Handler(BaseHTTPRequestHandler):
         def _cors(self):

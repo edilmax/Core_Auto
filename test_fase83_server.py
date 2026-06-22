@@ -257,6 +257,55 @@ class TestPathStatico(unittest.TestCase):
         self.assertTrue(os.path.realpath(r).startswith(os.path.realpath("deploy")))
 
 
+class TestAdmin(unittest.TestCase):
+    def setUp(self):
+        self.sys = _sistema()
+        _popola(self.sys)
+        self.r = crea_router(self.sys, admin_key="adm")
+        self.h = {"X-Admin-Key": "adm"}
+
+    def _prenota(self):
+        q = self.r.gestisci("POST", "/api/concierge/quote", body=json.dumps(
+            {"alloggio_id": "casa", "check_in": "2026-09-01", "check_out": "2026-09-02"}))
+        b = self.r.gestisci("POST", "/api/concierge/book", body=json.dumps(
+            {"quote_token": q[1]["quote_token"], "email": "g@x.it"}))
+        return b[1]
+
+    def test_elenco_e_rimborso(self):
+        self._prenota()
+        s, c = self.r.gestisci("GET", "/api/admin/prenotazioni", headers=self.h)
+        self.assertEqual(s, 200)
+        self.assertEqual(len(c["prenotazioni"]), 1)
+        pren = c["prenotazioni"][0]
+        self.assertFalse(pren["rimborsato"])
+        # rimborsa (libera le date)
+        s2, c2 = self.r.gestisci("POST", "/api/admin/rimborso", headers=self.h,
+            body=json.dumps({"alloggio_id": pren["alloggio_id"],
+                             "check_in": pren["check_in"], "check_out": pren["check_out"],
+                             "idem_key": pren["idem_key"]}))
+        self.assertEqual(s2, 200)
+        self.assertEqual(c2["stato"], "rimborsato")
+        # le date sono di nuovo disponibili
+        self.assertTrue(self.sys.inventario.disponibile("casa", "2026-09-01",
+                                                        "2026-09-02"))
+        # ora risulta rimborsato nell'elenco
+        _, c3 = self.r.gestisci("GET", "/api/admin/prenotazioni", headers=self.h)
+        self.assertTrue(c3["prenotazioni"][0]["rimborsato"])
+
+    def test_auth_mancante(self):
+        s, _ = self.r.gestisci("GET", "/api/admin/prenotazioni")
+        self.assertEqual(s, 401)
+        s2, _ = self.r.gestisci("POST", "/api/admin/rimborso",
+                                body=json.dumps({"alloggio_id": "x", "check_in": "a",
+                                                 "check_out": "b", "idem_key": "k"}))
+        self.assertEqual(s2, 401)
+
+    def test_rimborso_campi_invalidi(self):
+        s, _ = self.r.gestisci("POST", "/api/admin/rimborso", headers=self.h,
+                               body=json.dumps({"alloggio_id": "x"}))
+        self.assertEqual(s, 422)
+
+
 class TestRecensioni(unittest.TestCase):
     def setUp(self):
         self.sys = _sistema()

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1e3c72">
+<link rel="icon" href="/icon.svg">
+<title>BookinVIP · Admin</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#f4f6fa;color:#1a1e2b;padding:1.5rem;line-height:1.5}
+  .container{max-width:980px;margin:0 auto}
+  header{display:flex;justify-content:space-between;align-items:end;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:2px solid #dce1ed;flex-wrap:wrap;gap:1rem}
+  .logo{font-weight:700;font-size:1.6rem;background:linear-gradient(135deg,#1e3c72,#2a5298);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  input{padding:.5rem .7rem;border-radius:.7rem;border:1px solid #dce1ed;font-size:1rem}
+  button{background:#1e3c72;color:#fff;border:none;padding:.55rem 1.3rem;border-radius:2rem;font-weight:600;cursor:pointer}
+  button:hover{background:#2a5298}
+  button.danger{background:#b02a37}.button.danger:hover{background:#842029}
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:1rem;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,.05)}
+  th,td{padding:.7rem .9rem;text-align:left;font-size:.9rem;border-bottom:1px solid #eef2f7}
+  th{background:#f0f4fe;color:#4a5b7a;text-transform:uppercase;font-size:.72rem;letter-spacing:.03em}
+  .tag{display:inline-block;padding:.1rem .6rem;border-radius:1rem;font-size:.72rem;font-weight:600}
+  .tag.ok{background:#d4edda;color:#155724}.tag.attiva{background:#eef2f7;color:#2a5298}
+  .msg{padding:.7rem 1rem;border-radius:.7rem;margin:.8rem 0;font-size:.9rem}
+  .msg.ok{background:#d4edda;color:#155724}.msg.err{background:#f8d7da;color:#842029}
+  .key{display:flex;gap:.6rem;align-items:center;margin-bottom:1.2rem}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo">BookinVIP · Admin</div>
+    <div class="key">
+      <input type="password" id="adminkey" placeholder="X-Admin-Key" style="width:220px">
+      <button id="btnCarica">Carica prenotazioni</button>
+    </div>
+  </header>
+
+  <div id="msg"></div>
+  <table>
+    <thead><tr><th>Alloggio</th><th>Check-in</th><th>Check-out</th><th>Origine</th><th>Stato</th><th></th></tr></thead>
+    <tbody id="tbody"><tr><td colspan="6" style="text-align:center;color:#5e6f8d;padding:2rem">Inserisci la chiave e carica.</td></tr></tbody>
+  </table>
+</div>
+
+<script>
+const API = location.origin.startsWith('http') ? '' : 'http://127.0.0.1:8080';
+function key(){ return document.getElementById('adminkey').value; }
+function msg(t,ok){ const m=document.getElementById('msg'); m.className='msg '+(ok?'ok':'err'); m.textContent=t; }
+
+async function carica(){
+  try{
+    const res = await fetch(API+'/api/admin/prenotazioni', {headers:{'X-Admin-Key':key()}});
+    if(res.status===401){ msg('Chiave admin errata.',false); return; }
+    const d = await res.json();
+    const tb = document.getElementById('tbody');
+    if(!d.prenotazioni || !d.prenotazioni.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:#5e6f8d;padding:2rem">Nessuna prenotazione.</td></tr>'; return; }
+    tb.innerHTML = d.prenotazioni.map(p=>{
+      const stato = p.rimborsato ? '<span class="tag ok">rimborsato</span>' : '<span class="tag attiva">attiva</span>';
+      const btn = p.rimborsato ? '' : `<button class="danger" data-a="${p.alloggio_id}" data-ci="${p.check_in}" data-co="${p.check_out}" data-k="${p.idem_key}">Rimborsa</button>`;
+      return `<tr><td>${p.alloggio_id}</td><td>${p.check_in}</td><td>${p.check_out}</td><td>${p.origine||''}</td><td>${stato}</td><td>${btn}</td></tr>`;
+    }).join('');
+    tb.querySelectorAll('button.danger').forEach(b=>b.onclick=()=>rimborsa(b.dataset));
+    msg(d.prenotazioni.length+' prenotazioni.', true);
+  }catch(e){ msg('Errore: '+e.message,false); }
+}
+
+async function rimborsa(d){
+  if(!confirm('Rimborsare e liberare le date '+d.ci+' → '+d.co+'?')) return;
+  try{
+    const res = await fetch(API+'/api/admin/rimborso', {method:'POST',
+      headers:{'Content-Type':'application/json','X-Admin-Key':key()},
+      body:JSON.stringify({alloggio_id:d.a, check_in:d.ci, check_out:d.co, idem_key:d.k})});
+    const r = await res.json();
+    if(res.status===200){ msg('✅ Rimborsato. '+(r.nota||''), true); carica(); }
+    else msg('❌ '+(r.motivo||r.errore||res.status), false);
+  }catch(e){ msg('Errore: '+e.message,false); }
+}
+
+document.getElementById('btnCarica').onclick = carica;
+</script>
+</body>
+</html>

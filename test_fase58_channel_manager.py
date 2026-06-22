@@ -188,6 +188,40 @@ class TestRilascioEsterno(unittest.TestCase):
         self.assertEqual(self.cm.stato_giorno("a", "2026-07-01")["unita_occupate"], 1)
 
 
+class TestElencoPrenotazioni(unittest.TestCase):
+    def setUp(self):
+        self.cm = _cm()
+        _carica(self.cm, unita=2)
+
+    def test_elenco_e_rimborso(self):
+        self.cm.blocca("a", "2026-07-01", "2026-07-02", idem_key="k1")
+        self.cm.blocca("a", "2026-07-02", "2026-07-03", idem_key="k2")
+        el = self.cm.elenco_prenotazioni()
+        self.assertEqual(len(el), 2)
+        self.assertFalse(el[0]["rimborsato"])
+        self.assertIn("idem_key", el[0])
+        # rimborso (rilascio) -> ora risulta rimborsato
+        self.cm.rilascia("a", "2026-07-01", "2026-07-02", idem_key="k1")
+        el2 = self.cm.elenco_prenotazioni()
+        rim = {e["idem_key"]: e["rimborsato"] for e in el2}
+        self.assertTrue(rim["k1"])
+        self.assertFalse(rim["k2"])
+
+    def test_filtro_alloggio(self):
+        self.cm.imposta_disponibilita("b", "2026-07-01", unita_totali=1,
+                                      prezzo_netto_cents=100)
+        self.cm.blocca("a", "2026-07-01", "2026-07-02", idem_key="ka")
+        self.cm.blocca("b", "2026-07-01", "2026-07-02", idem_key="kb")
+        self.assertEqual(len(self.cm.elenco_prenotazioni(alloggio_id="b")), 1)
+
+    def test_solo_occupati(self):
+        # un rifiuto (pieno) non deve comparire
+        self.cm.blocca("a", "2026-07-01", "2026-07-02", idem_key="k1")
+        self.cm.blocca("a", "2026-07-01", "2026-07-02", idem_key="k2")  # ok (2 unita)
+        self.cm.blocca("a", "2026-07-01", "2026-07-02", idem_key="k3")  # pieno -> rifiutato
+        self.assertEqual(len(self.cm.elenco_prenotazioni()), 2)
+
+
 class TestComandi(unittest.TestCase):
     def setUp(self):
         self.cm = _cm()
