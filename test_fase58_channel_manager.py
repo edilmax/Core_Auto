@@ -222,6 +222,32 @@ class TestElencoPrenotazioni(unittest.TestCase):
         self.assertEqual(len(self.cm.elenco_prenotazioni()), 2)
 
 
+class TestMetriche(unittest.TestCase):
+    def test_revenue_e_occupazione(self):
+        cm = _cm()
+        # 3 notti a 10000, capienza 1 ciascuna
+        for g in ("2026-07-01", "2026-07-02", "2026-07-03"):
+            cm.imposta_disponibilita("a", g, unita_totali=1, prezzo_netto_cents=10000)
+        cm.blocca("a", "2026-07-01", "2026-07-03", idem_key="k1")   # occupa 2 notti
+        m = cm.metriche(alloggio_id="a")
+        self.assertEqual(m["notti_totali"], 3)
+        self.assertEqual(m["notti_occupate"], 2)
+        self.assertEqual(m["revenue_cents"], 20000)                  # 2 x 10000
+        self.assertEqual(m["occupazione_bps"], 2 * 10000 // 3)       # ~66.6%
+
+    def test_periodo(self):
+        cm = _cm()
+        for g in ("2026-07-01", "2026-08-01"):
+            cm.imposta_disponibilita("a", g, unita_totali=1, prezzo_netto_cents=5000)
+        m = cm.metriche(alloggio_id="a", da="2026-07-01", a="2026-07-31")
+        self.assertEqual(m["giorni"], 1)                             # solo luglio
+
+    def test_vuoto(self):
+        m = _cm().metriche(alloggio_id="mai")
+        self.assertEqual(m["revenue_cents"], 0)
+        self.assertEqual(m["occupazione_bps"], 0)
+
+
 class TestComandi(unittest.TestCase):
     def setUp(self):
         self.cm = _cm()

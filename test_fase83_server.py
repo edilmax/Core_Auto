@@ -179,6 +179,32 @@ class TestHost(unittest.TestCase):
         self.assertEqual(s, 422)
 
 
+class TestDashboardHost(unittest.TestCase):
+    def setUp(self):
+        self.sys = _sistema()
+        _popola(self.sys)
+        self.r = crea_router(self.sys, host_key="hk")
+        self.h = {"X-Host-Key": "hk"}
+
+    def test_metriche(self):
+        # prenota 1 notte
+        q = self.r.gestisci("POST", "/api/concierge/quote", body=json.dumps(
+            {"alloggio_id": "casa", "check_in": "2026-09-01", "check_out": "2026-09-02"}))
+        self.r.gestisci("POST", "/api/concierge/book", body=json.dumps(
+            {"quote_token": q[1]["quote_token"], "email": "g@x.it"}))
+        s, c = self.r.gestisci("GET", "/api/host/metriche", {"alloggio": "casa"},
+                               headers=self.h)
+        self.assertEqual(s, 200)
+        self.assertEqual(c["revenue_cents"], 10000)        # 1 notte x 10000
+        self.assertEqual(c["prenotazioni_attive"], 1)
+        self.assertEqual(c["money_unit"], "cents_integer")
+        self.assertGreater(c["occupazione_bps"], 0)
+
+    def test_auth(self):
+        s, _ = self.r.gestisci("GET", "/api/host/metriche")
+        self.assertEqual(s, 401)
+
+
 class TestOnboarding(unittest.TestCase):
     def setUp(self):
         self.sys = _sistema()

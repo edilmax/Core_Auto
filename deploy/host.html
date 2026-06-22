@@ -43,6 +43,21 @@
   </div>
 
   <div class="card">
+    <h2>📊 Dashboard</h2>
+    <div class="grid">
+      <label>Slug (vuoto = tutti)<input id="m_slug" value=""></label>
+      <label>&nbsp;<button id="btnMetriche" style="margin-top:0">Carica metriche</button></label>
+    </div>
+    <div id="dash" style="display:none;margin-top:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.8rem">
+      <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#1e3c72" id="d_revenue">—</div><div style="font-size:.75rem;color:#5e6f8d">REVENUE</div></div>
+      <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#1e3c72" id="d_occ">—</div><div style="font-size:.75rem;color:#5e6f8d">OCCUPAZIONE</div></div>
+      <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#1e3c72" id="d_pren">—</div><div style="font-size:.75rem;color:#5e6f8d">PRENOTAZIONI</div></div>
+      <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#e0a800" id="d_rating">—</div><div style="font-size:.75rem;color:#5e6f8d">RATING</div></div>
+    </div>
+    <div id="msgMetriche"></div>
+  </div>
+
+  <div class="card">
     <h2 id="hPubblica">Pubblica alloggio</h2>
     <div class="grid">
       <label>Host ID<input id="p_host" value="host1"></label>
@@ -177,6 +192,22 @@ document.getElementById('btnIcal').onclick = async ()=>{
     alloggio_id:document.getElementById('i_slug').value, ical:document.getElementById('i_ical').value});
   m.className='msg '+(r.status===200?'ok':'err');
   m.textContent = r.status===200 ? '✅ '+r.data.eventi+' eventi, '+r.data.giorni_bloccati+' giorni bloccati' : '❌ '+(r.data.errore||r.status);
+};
+
+document.getElementById('btnMetriche').onclick = async ()=>{
+  const m = document.getElementById('msgMetriche');
+  const slug = document.getElementById('m_slug').value.trim();
+  try{
+    const res = await fetch(API+'/api/host/metriche'+(slug?('?alloggio='+encodeURIComponent(slug)):''), {headers:{'X-Host-Key':key()}});
+    if(res.status===401){ m.className='msg err'; m.textContent='Chiave host errata.'; return; }
+    const d = await res.json();
+    document.getElementById('dash').style.display='grid';
+    document.getElementById('d_revenue').textContent = '€ '+(d.revenue_cents/100).toFixed(2);
+    document.getElementById('d_occ').textContent = (d.occupazione_bps/100).toFixed(0)+'%';
+    document.getElementById('d_pren').textContent = d.prenotazioni_attive + (d.prenotazioni_rimborsate?(' (+'+d.prenotazioni_rimborsate+' rimb.)'):'');
+    document.getElementById('d_rating').textContent = (d.recensioni && d.recensioni.conteggio) ? ('★ '+(d.recensioni.media_centesimi/100).toFixed(1)) : '—';
+    m.className='msg ok'; m.textContent='Aggiornato.';
+  }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
 };
 
 document.getElementById('lang').onchange = e=>{ LANG=e.target.value; document.documentElement.lang=LANG; caricaI18N(LANG); };

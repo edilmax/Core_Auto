@@ -333,6 +333,8 @@ class RouterHTTP:
             return self._host_disponibilita_range(body, headers)
         if metodo == "POST" and path == "/api/host/ical":
             return self._host_ical(body, headers)
+        if metodo == "GET" and path == "/api/host/metriche":
+            return self._host_metriche(query, headers)
         if metodo == "GET" and path == "/api/admin/prenotazioni":
             return self._admin_prenotazioni(query, headers)
         if metodo == "POST" and path == "/api/admin/rimborso":
@@ -616,6 +618,38 @@ class RouterHTTP:
                     alloggio, g, unita_totali=unita, prezzo_netto_cents=prezzo):
                 impostati += 1
         return 200, {"giorni_impostati": impostati}
+
+    def _host_metriche(self, query, headers):
+        """Dashboard host: revenue/occupazione (fase58) + prenotazioni + recensioni."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        alloggio = query.get("alloggio") or None
+        da, a = query.get("da") or None, query.get("a") or None
+        try:
+            inv = self._sys.inventario.metriche(alloggio_id=alloggio, da=da, a=a)
+            pren = self._sys.inventario.elenco_prenotazioni(alloggio_id=alloggio,
+                                                            limit=500)
+        except Exception:
+            logger.error("host metriche: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        attive = sum(1 for p in pren if not p["rimborsato"])
+        out = {
+            "revenue_cents": inv["revenue_cents"],
+            "occupazione_bps": inv["occupazione_bps"],
+            "notti_occupate": inv["notti_occupate"],
+            "notti_totali": inv["notti_totali"],
+            "prenotazioni_attive": attive,
+            "prenotazioni_rimborsate": len(pren) - attive,
+            "valuta": self._valuta_sys(),
+            "money_unit": "cents_integer",
+        }
+        rie = self._riepilogo_recensioni(alloggio) if alloggio else None
+        if rie:
+            out["recensioni"] = rie
+        return 200, out
+
+    def _valuta_sys(self) -> str:
+        return getattr(getattr(self._sys, "config", None), "valuta", "EUR")
 
     def _host_ical(self, body, headers):
         """Importa il calendario iCal (Airbnb/Booking/Vrbo): blocca le date occupate

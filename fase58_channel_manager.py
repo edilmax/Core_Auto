@@ -304,6 +304,41 @@ class ChannelManager:
                  "origine": r["origine"], "ts": r["ts"],
                  "rimborsato": bool(r["rilasciato"])} for r in righe]
 
+    def metriche(self, *, alloggio_id: Optional[str] = None,
+                 da: Optional[str] = None, a: Optional[str] = None) -> Dict[str, int]:
+        """Metriche per la dashboard host (aggregati SQL O(1)): revenue (occupate x
+        prezzo), occupazione, notti. Denaro in CENTESIMI interi. Periodo [da, a)."""
+        where: List[str] = []
+        par: List[Any] = []
+        if isinstance(alloggio_id, str) and alloggio_id:
+            where.append("alloggio_id=?")
+            par.append(alloggio_id)
+        if isinstance(da, str) and da:
+            where.append("giorno>=?")
+            par.append(da)
+        if isinstance(a, str) and a:
+            where.append("giorno<?")          # semi-aperto, coerente con le notti
+            par.append(a)
+        clausola = (" WHERE " + " AND ".join(where)) if where else ""
+        con = self._apri()
+        try:
+            r = con.execute(
+                "SELECT COUNT(*) AS giorni, COALESCE(SUM(unita_totali),0) AS tot, "
+                "COALESCE(SUM(unita_occupate),0) AS occ, "
+                "COALESCE(SUM(unita_occupate*prezzo_netto_cents),0) AS revenue "
+                "FROM inventario" + clausola, par).fetchone()
+        finally:
+            con.close()
+        tot = r["tot"]
+        occ = r["occ"]
+        return {
+            "giorni": int(r["giorni"]),
+            "notti_totali": int(tot),
+            "notti_occupate": int(occ),
+            "occupazione_bps": (occ * 10000 // tot) if tot else 0,
+            "revenue_cents": int(r["revenue"]),
+        }
+
     # ── BLOCCO atomico anti-overbooking (idempotente) ──────────────────────────
     def blocca(self, alloggio_id: str, check_in: str, check_out: str, *,
                idem_key: str, origine: str = "centrale") -> EsitoPrenotazione:
