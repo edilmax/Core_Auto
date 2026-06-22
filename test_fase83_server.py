@@ -337,7 +337,7 @@ class TestSEO(unittest.TestCase):
 
     def test_pagina_html(self):
         h = pagina_alloggio_html(self.sys, "casa", "https://x.it")
-        self.assertIn("<title>Casa - Casa VIP</title>", h)
+        self.assertIn("<title>Casa - BookinVIP</title>", h)
         self.assertIn("application/ld+json", h)
         self.assertIn("100.00", h)
         self.assertIn('rel="canonical"', h)

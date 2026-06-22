@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#1e3c72">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon.svg">
-<title>Casa VIP · Host</title>
+<title>BookinVIP · Host</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#f4f6fa;color:#1a1e2b;padding:1.5rem;line-height:1.5}
@@ -29,7 +29,7 @@
 <body>
 <div class="container">
   <header>
-    <div class="logo" id="lTitolo">Casa VIP · Host</div>
+    <div class="logo" id="lTitolo">BookinVIP · Host</div>
     <select id="lang" style="width:auto">
       <option value="it">🇮🇹 IT</option><option value="en">🇬🇧 EN</option>
       <option value="es">🇪🇸 ES</option><option value="fr">🇫🇷 FR</option>
@@ -112,7 +112,7 @@ function key(){ return document.getElementById('hostkey').value; }
 
 async function caricaI18N(lang){
   try{ const d = await (await fetch(API+'/api/i18n?lang='+lang)).json(); UI=d.ui||{}; }catch(e){ UI={}; }
-  document.getElementById('lTitolo').textContent='Casa VIP · '+t('pannello_host');
+  document.getElementById('lTitolo').textContent='BookinVIP · '+t('pannello_host');
   document.getElementById('hPubblica').textContent=t('pubblica');
   document.getElementById('hDisp').textContent=t('salva_disp');
   document.getElementById('btnPubblica').textContent=t('pubblica');

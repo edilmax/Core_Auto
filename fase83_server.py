@@ -177,13 +177,13 @@ def pagina_alloggio_html(sistema: Any, slug: str, base_url: str = "") -> Optiona
     return (
         "<!DOCTYPE html><html lang=\"it\"><head><meta charset=\"UTF-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-        "<title>%s - Casa VIP</title>"
+        "<title>%s - BookinVIP</title>"
         "<meta name=\"description\" content=\"%s\">"
         "<link rel=\"canonical\" href=\"%s/alloggio/%s\">"
         "<script type=\"application/ld+json\">%s</script></head><body>"
         "<h1>%s</h1><p><strong>%s</strong>%s</p><p>%s</p>"
         "<p>Prezzo: %s %s / notte</p><ul>%s</ul>"
-        "<p><a href=\"/?slug=%s\">Prenota su Casa VIP</a></p></body></html>"
+        "<p><a href=\"/?slug=%s\">Prenota su BookinVIP</a></p></body></html>"
     ) % (
         e(d.get("titolo", "")), e(d.get("descrizione", ""))[:160],
         e(base_url), e(slug), ld,
@@ -616,5 +616,5 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             pass
 
     srv = ThreadingHTTPServer((host, porta), Handler)
-    logger.info("Casa VIP server su http://%s:%d", host, porta)
+    logger.info("BookinVIP server su http://%s:%d", host, porta)
     srv.serve_forever()

@@ -32,7 +32,7 @@ curl -i http://localhost/healthz        # 200 ok (healthcheck proxy)
 ```bash
 # 1) ottieni i certificati (porta 80 libera durante l'emissione)
 docker run --rm -p 80:80 -v /etc/letsencrypt:/etc/letsencrypt \
-  certbot/certbot certonly --standalone -d casa.tuodominio.it --agree-tos -m tu@email.it -n
+  certbot/certbot certonly --standalone -d bookinvip.com --agree-tos -m tu@email.it -n
 
 # 2) in deploy/nginx.casavip.conf: scommenta i due blocchi HTTPS e metti il tuo dominio
 # 3) in docker-compose.casavip.yml: scommenta '443:443' e il volume /etc/letsencrypt
