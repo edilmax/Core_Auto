@@ -69,8 +69,10 @@ class TestRoadmapMango(unittest.TestCase):
         # 80=sentinel FIM+canary+catena integrita';
         # 81=bootstrap casa vip (composition root lodging);
         # 82=ical sync (portabilita' reale cross-canale);
-        # 83=server HTTP (API + frontend, fase81+fase61). Blocco 84+ libero.
-        for n in range(84, 87):
+        # 83=server HTTP (API + frontend, fase81+fase61);
+        # 84=LIBERO (coordinatore multi-agente valutato e SCARTATO);
+        # 85=provider pagamento Stripe (money-path). Blocco 86+ libero.
+        for n in range(86, 89):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 

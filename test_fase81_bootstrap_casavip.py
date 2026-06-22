@@ -49,6 +49,15 @@ class TestAccensione(unittest.TestCase):
         with self.assertRaises(BootstrapError):
             crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=b"corto"))
 
+    def test_stripe_gated(self):
+        # senza chiave: nessun componente stripe, niente link
+        self.assertNotIn("stripe(85)", self.s.report["componenti"])
+        # con chiave: componente presente e link cablato nel concierge
+        s = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG,
+                                       stripe_secret_key="sk_test_xyz"))
+        self.assertIn("stripe(85)", s.report["componenti"])
+        self.assertIsNotNone(s.concierge._link)
+
     def test_mcp_opzionale(self):
         s = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG, con_mcp=False))
         self.assertIsNone(s.mcp)

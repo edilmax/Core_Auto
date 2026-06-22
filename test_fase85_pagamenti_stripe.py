@@ -1,0 +1,84 @@
+"""
+Test Fase 85 - Provider Pagamento Stripe.
+
+Copre: creazione link (con fetch STUB, niente chiamata reale), request ben formata
+(unit_amount in cents, auth Bearer, mode payment, metadata), no-url -> None, fetch che
+solleva -> None (isolato), cents invalidi -> None, factory gated (no chiave -> None).
+"""
+import unittest
+
+from fase85_pagamenti_stripe import ProviderStripe, crea_provider_stripe
+
+
+class FetchSpy:
+    """Cattura la richiesta e ritorna una risposta finta (no Stripe reale)."""
+    def __init__(self, risposta=None, solleva=False):
+        self.url = None
+        self.body = None
+        self.headers = None
+        self._risp = risposta if risposta is not None else {"url": "https://checkout.stripe.com/c/sess_123"}
+        self._solleva = solleva
+
+    def __call__(self, url, body, headers):
+        if self._solleva:
+            raise RuntimeError("stripe giu'")
+        self.url, self.body, self.headers = url, body.decode(), headers
+        return self._risp
+
+
+DATI = {"prezzo_guest_cents": 9500, "riferimento": "ABC123", "email": "g@x.it"}
+
+
+class TestProvider(unittest.TestCase):
+    def test_crea_link(self):
+        spy = FetchSpy()
+        p = ProviderStripe("sk_test_x", "https://ok", "https://ko", fetch=spy)
+        url = p.crea_link(DATI)
+        self.assertEqual(url, "https://checkout.stripe.com/c/sess_123")
+
+    def test_request_ben_formata(self):
+        spy = FetchSpy()
+        ProviderStripe("sk_test_xyz", "https://ok", "https://ko", fetch=spy).crea_link(DATI)
+        self.assertIn("api.stripe.com", spy.url)
+        self.assertEqual(spy.headers["Authorization"], "Bearer sk_test_xyz")
+        self.assertIn("unit_amount%5D=9500", spy.body)       # cents interi (chiave Stripe)
+        self.assertIn("mode=payment", spy.body)
+        self.assertIn("ABC123", spy.body)                    # riferimento nei metadata
+        self.assertIn("customer_email", spy.body)
+
+    def test_no_url_in_risposta(self):
+        p = ProviderStripe("sk", "o", "k", fetch=FetchSpy(risposta={"error": "x"}))
+        self.assertIsNone(p.crea_link(DATI))
+
+    def test_fetch_solleva_isolato(self):
+        p = ProviderStripe("sk", "o", "k", fetch=FetchSpy(solleva=True))
+        self.assertIsNone(p.crea_link(DATI))                 # None, non crash
+
+    def test_cents_invalidi(self):
+        spy = FetchSpy()
+        p = ProviderStripe("sk", "o", "k", fetch=spy)
+        for bad in ({"prezzo_guest_cents": 0}, {"prezzo_guest_cents": -5},
+                    {"prezzo_guest_cents": 95.0}, {}, None):
+            self.assertIsNone(p.crea_link(bad))
+
+    def test_valuta(self):
+        spy = FetchSpy()
+        ProviderStripe("sk", "o", "k", valuta="USD", fetch=spy).crea_link(DATI)
+        self.assertIn("currency%5D=usd", spy.body)
+
+
+class TestFactoryGated(unittest.TestCase):
+    def test_senza_chiave_none(self):
+        self.assertIsNone(crea_provider_stripe(None))
+        self.assertIsNone(crea_provider_stripe(""))
+        self.assertIsNone(crea_provider_stripe("   "))
+
+    def test_con_chiave(self):
+        spy = FetchSpy()
+        p = crea_provider_stripe("sk_live_x", "https://ok", "https://ko", fetch=spy)
+        self.assertIsNotNone(p)
+        self.assertEqual(p.crea_link(DATI), "https://checkout.stripe.com/c/sess_123")
+
+
+if __name__ == "__main__":
+    unittest.main()

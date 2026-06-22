@@ -47,6 +47,9 @@ class ConfigCasaVIP:
     db_catalogo: str = ":memory:"
     db_inventario: str = ":memory:"
     valuta: str = "EUR"
+    stripe_secret_key: str = ""        # gated: se vuoto, niente link di pagamento
+    stripe_success_url: str = ""
+    stripe_cancel_url: str = ""
     con_mcp: bool = True
     con_recensioni: bool = True
     con_smartpass: bool = True
@@ -107,8 +110,18 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     # 3) concierge: prezzo firmato HMAC, sopra catalogo+inventario
     from fase59_concierge import FirmaQuote, crea_protocollo
     firma = FirmaQuote(bytes(cfg.segreto_hmac))      # firma di sistema (voucher, ecc.)
+    # pagamento Stripe (GATED da chiave): senza chiave -> link None (come oggi)
+    link_pagamento = None
+    from fase85_pagamenti_stripe import crea_provider_stripe
+    provider = crea_provider_stripe(cfg.stripe_secret_key, cfg.stripe_success_url,
+                                    cfg.stripe_cancel_url, valuta=cfg.valuta.lower())
+    if provider is not None:
+        link_pagamento = provider.crea_link
+        componenti.append("stripe(85)")
+    else:
+        avvisi.append("Stripe non configurato -> nessun link di pagamento (gated)")
     concierge = crea_protocollo(inventario, bytes(cfg.segreto_hmac), catalogo=catalogo,
-                                valuta=cfg.valuta)
+                                valuta=cfg.valuta, link_pagamento=link_pagamento)
     componenti.append("concierge(59)")
 
     # 3c) smart-pass per il self check-in (incluso nel voucher)
