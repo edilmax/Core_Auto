@@ -136,6 +136,8 @@ class RouterHTTP:
             return 200, {"lingue": list(LINGUE_SUPPORTATE)}
         if metodo == "GET" and path == "/api/i18n":
             return 200, _dizionario_i18n(_lingua(query))
+        if metodo == "GET" and path == "/api/trasparenza":
+            return self._trasparenza(query)
         if metodo == "GET" and path == "/api/catalogo":
             return self._catalogo(query)
         if metodo == "GET" and path.startswith("/api/catalogo/"):
@@ -200,6 +202,16 @@ class RouterHTTP:
         res["risultati"] = [self._traduci_servizi(r, lingua) for r in res["risultati"]]
         res["lingua"] = lingua
         return 200, res
+
+    def _trasparenza(self, query):
+        """Confronto noi-vs-OTA (fase69): 'con Booking incassi X, con noi Y'."""
+        from fase69_trasparenza import confronta_piattaforma
+        try:
+            prezzo = int(query.get("prezzo_cents", "0"))
+        except (ValueError, TypeError):
+            prezzo = 0
+        ota = query.get("ota", "booking")
+        return 200, confronta_piattaforma(prezzo, ota).as_dict()
 
     def _dettaglio(self, slug, lingua):
         d = self._sys.catalogo.dettaglio(slug)
@@ -299,8 +311,15 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 return
             with open(fpath, "rb") as f:
                 dati = f.read()
+            import mimetypes
+            ctype = mimetypes.guess_type(fpath)[0] or "application/octet-stream"
+            if ctype.startswith("text/") or ctype in ("application/json",
+                                                       "application/javascript",
+                                                       "image/svg+xml"):
+                ctype += "; charset=utf-8"
             self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Type", ctype)
+            self.send_header("Service-Worker-Allowed", "/")
             self._cors()
             self.end_headers()
             self.wfile.write(dati)

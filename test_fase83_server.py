@@ -127,6 +127,23 @@ class TestMCP(unittest.TestCase):
         self.assertEqual(len(c["result"]["tools"]), 3)
 
 
+class TestTrasparenza(unittest.TestCase):
+    def test_confronto(self):
+        r = crea_router(_sistema())
+        s, c = r.gestisci("GET", "/api/trasparenza",
+                          {"prezzo_cents": "10000", "ota": "booking"})
+        self.assertEqual(s, 200)
+        self.assertEqual(c["money_unit"], "cents_integer")
+        # con Booking l'host netta meno che con noi -> guadagno extra positivo
+        self.assertGreater(c["guadagno_extra_host_cents"], 0)
+
+    def test_prezzo_invalido(self):
+        r = crea_router(_sistema())
+        s, c = r.gestisci("GET", "/api/trasparenza", {"prezzo_cents": "abc"})
+        self.assertEqual(s, 200)
+        self.assertEqual(c["guadagno_extra_host_cents"], 0)
+
+
 class TestHost(unittest.TestCase):
     def setUp(self):
         self.sys = _sistema()

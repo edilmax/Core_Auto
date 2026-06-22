@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1e3c72">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg">
 <title>Casa VIP · Host</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
@@ -52,6 +55,16 @@
     </div>
     <button id="btnPubblica">Pubblica</button>
     <div id="msgPub"></div>
+  </div>
+
+  <div class="card">
+    <h2>💰 Quanto guadagni in più (vs Booking)</h2>
+    <div class="grid">
+      <label>Prezzo notte (cent)<input type="number" id="tr_prezzo" value="10000"></label>
+      <label>OTA<select id="tr_ota"><option>booking</option><option>airbnb</option><option>expedia</option></select></label>
+    </div>
+    <button id="btnTrasp">Calcola</button>
+    <div id="msgTrasp"></div>
   </div>
 
   <div class="card">
@@ -111,8 +124,22 @@ document.getElementById('btnDisp').onclick = async ()=>{
   m.textContent = r.status===200 ? '✅ OK' : '❌ '+(r.data.errore||r.status);
 };
 
+document.getElementById('btnTrasp').onclick = async ()=>{
+  const m = document.getElementById('msgTrasp');
+  const p = parseInt(document.getElementById('tr_prezzo').value)||0;
+  const ota = document.getElementById('tr_ota').value;
+  try{
+    const d = await (await fetch(API+'/api/trasparenza?prezzo_cents='+p+'&ota='+ota)).json();
+    const noi = d.scenario_nostro.host_netto_cents, loro = d.scenario_ota.host_netto_cents;
+    const extra = d.guadagno_extra_host_cents;
+    m.className='msg ok';
+    m.innerHTML = `Con ${ota} incassi <b>€ ${(loro/100).toFixed(2)}</b> · con noi <b>€ ${(noi/100).toFixed(2)}</b> · guadagni <b>+€ ${(extra/100).toFixed(2)}</b> a notte`;
+  }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
+};
+
 document.getElementById('lang').onchange = e=>{ LANG=e.target.value; document.documentElement.lang=LANG; caricaI18N(LANG); };
 caricaI18N(LANG);
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(()=>{}); }
 </script>
 </body>
 </html>
