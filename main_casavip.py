@@ -47,7 +47,10 @@ def main() -> None:  # pragma: no cover
         con_sentinel=os.environ.get("SENTINEL", "").lower() in ("1", "true", "yes"),
         cartella_sentinel=os.environ.get("SENTINEL_DIR") or ".",
     )
-    os.makedirs("data", exist_ok=True)
+    for p in (config.db_catalogo, config.db_inventario):
+        d = os.path.dirname(p)
+        if d:
+            os.makedirs(d, exist_ok=True)
     sistema = crea_sistema(config)
     logging.info("Composizione: %s", sistema.report)
     servi(sistema,

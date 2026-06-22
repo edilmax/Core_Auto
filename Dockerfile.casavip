@@ -1,0 +1,36 @@
+# CORE_AUTO / Casa VIP - immagine di produzione.
+# Casa VIP gira su PURA STDLIB Python (zero dipendenze): niente pip install, niente
+# build-tools, immagine minuscola, non-root. Server HTTP stdlib (fase83) dietro Nginx.
+
+FROM python:3.11-slim
+
+# Niente .pyc, output non bufferato (log immediati)
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOST=0.0.0.0 \
+    PORTA=8080 \
+    DB_CATALOGO=/data/catalogo.db \
+    DB_INVENTARIO=/data/inventario.db \
+    STATIC_DIR=/app/deploy
+
+WORKDIR /app
+
+# Solo i file di runtime (i moduli fase*.py sono puro Python; i test NON entrano).
+COPY main_casavip.py ./
+COPY fase*.py ./
+COPY deploy ./deploy
+
+# Utente non-root + volume dati
+RUN useradd -r -u 10001 -m -d /home/app app \
+    && mkdir -p /data \
+    && chown -R app:app /app /data
+USER app
+
+EXPOSE 8080
+VOLUME ["/data"]
+
+# Healthcheck senza curl (slim non ce l'ha): urllib stdlib
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/api/health',timeout=4).status==200 else 1)"
+
+CMD ["python", "main_casavip.py"]

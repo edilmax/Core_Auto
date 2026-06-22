@@ -1,0 +1,46 @@
+# Casa VIP - stack di produzione: nginx (unico esposto) -> app (stdlib).
+# Self-healing: restart automatico + healthcheck + depends_on service_healthy.
+name: casavip
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.casavip
+    image: casavip-app
+    container_name: casavip_app
+    restart: unless-stopped
+    env_file: .env.casavip            # crea da .env.casavip.example (segreti)
+    environment:
+      HOST: "0.0.0.0"
+      PORTA: "8080"
+      DB_CATALOGO: /data/catalogo.db
+      DB_INVENTARIO: /data/inventario.db
+      STATIC_DIR: /app/deploy
+    volumes:
+      - casavip_data:/data            # SQLite persistente
+    expose:
+      - "8080"                        # solo rete interna, NON esposto sull'host
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/api/health',timeout=4).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  nginx:
+    image: nginx:alpine
+    container_name: casavip_nginx
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      # - "443:443"                   # abilita con SSL (vedi DEPLOY_CASAVIP.md)
+    volumes:
+      - ./deploy/nginx.casavip.conf:/etc/nginx/conf.d/default.conf:ro
+      # - /etc/letsencrypt:/etc/letsencrypt:ro   # certificati Let's Encrypt
+
+volumes:
+  casavip_data:
