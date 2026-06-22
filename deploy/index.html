@@ -211,7 +211,10 @@ async function prenota(){
   try{
     const r = await api('/api/concierge/book', {method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({quote_token:QUOTE, email:email})});
-    if(r.stato==='confermata'){ msg.innerHTML=`<div class="msg ok">✅ ${t('conferma')} (${r.riferimento||''})</div>`; document.getElementById('btnPrenota').style.display='none'; }
+    if(r.stato==='confermata'){
+      const voucher = r.voucher_token ? ` · <a href="/voucher/${encodeURIComponent(r.voucher_token)}?lang=${LANG}" target="_blank" style="color:#155724;font-weight:700">📄 Voucher</a>` : '';
+      msg.innerHTML=`<div class="msg ok">✅ ${t('conferma')} (${r.riferimento||''})${voucher}</div>`; document.getElementById('btnPrenota').style.display='none';
+    }
     else { msg.innerHTML=`<div class="msg err">❌ ${r.motivo||r.errore||t('errore')}</div>`; }
   }catch(e){ msg.innerHTML=`<div class="msg err">${t('errore')}: ${e.message}</div>`; }
 }

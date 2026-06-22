@@ -49,6 +49,7 @@ class ConfigCasaVIP:
     valuta: str = "EUR"
     con_mcp: bool = True
     con_recensioni: bool = True
+    con_smartpass: bool = True
     db_recensioni: str = ":memory:"
     con_sentinel: bool = False
     cartella_sentinel: Optional[str] = None
@@ -65,6 +66,8 @@ class SistemaCasaVIP:
     sentinel: Any = None
     recensioni: Any = None
     emettitore_recensioni: Any = None
+    firma: Any = None
+    emettitore_pass: Any = None
 
     @property
     def attivo(self) -> bool:
@@ -102,10 +105,18 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     componenti.append("vetrina(57)<-inventario")
 
     # 3) concierge: prezzo firmato HMAC, sopra catalogo+inventario
-    from fase59_concierge import crea_protocollo
+    from fase59_concierge import FirmaQuote, crea_protocollo
+    firma = FirmaQuote(bytes(cfg.segreto_hmac))      # firma di sistema (voucher, ecc.)
     concierge = crea_protocollo(inventario, bytes(cfg.segreto_hmac), catalogo=catalogo,
                                 valuta=cfg.valuta)
     componenti.append("concierge(59)")
+
+    # 3c) smart-pass per il self check-in (incluso nel voucher)
+    emettitore_pass = None
+    if cfg.con_smartpass:
+        from fase64_smartpass import EmettitorePass
+        emettitore_pass = EmettitorePass(firma)
+        componenti.append("smartpass(64)")
 
     # 3b) recensioni verificate (opzionale): registro + emettitore del diritto
     recensioni = None
@@ -141,4 +152,5 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
               "money_path_pronto": True, "valuta": cfg.valuta}
     return SistemaCasaVIP(cfg, report, catalogo=catalogo, inventario=inventario,
                           concierge=concierge, mcp=mcp, sentinel=sentinel,
-                          recensioni=recensioni, emettitore_recensioni=emettitore)
+                          recensioni=recensioni, emettitore_recensioni=emettitore,
+                          firma=firma, emettitore_pass=emettitore_pass)

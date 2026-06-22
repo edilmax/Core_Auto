@@ -323,6 +323,30 @@ class TestRecensioni(unittest.TestCase):
         _, corpo = self._prenota()
         self.assertIn("diritto_recensione", corpo)
 
+    def test_book_emette_voucher_e_pass(self):
+        _, corpo = self._prenota()
+        self.assertIn("voucher_token", corpo)
+        self.assertIn("smart_pass", corpo)
+        # lo smart-pass e' un vero pass d'ingresso verificabile (fase64)
+        from fase64_smartpass import VerificatorePass
+        from fase83_server import _euro  # noqa
+        ver = VerificatorePass(self.sys.firma, orologio=lambda: __import__(
+            "fase64_smartpass")._epoch_da_data_ora("2026-09-01", 16))
+        self.assertTrue(ver.verifica(corpo["smart_pass"], "casa").consentito)
+
+    def test_pagina_voucher(self):
+        from fase83_server import pagina_voucher_html
+        _, corpo = self._prenota()
+        h = pagina_voucher_html(self.sys, corpo["voucher_token"], "it")
+        self.assertIn("Prenotazione confermata", h)
+        self.assertIn(corpo["riferimento"], h)
+        self.assertIn("BookinVIP", h)
+
+    def test_voucher_manomesso_404(self):
+        from fase83_server import pagina_voucher_html
+        self.assertIsNone(pagina_voucher_html(self.sys, "falso.token"))
+        self.assertIsNone(pagina_voucher_html(self.sys, "non-token"))
+
     def test_flusso_completo(self):
         _, corpo = self._prenota()
         diritto = corpo["diritto_recensione"]

@@ -84,6 +84,19 @@ ETICHETTE_UI: Dict[str, Dict[str, str]] = {
                    "es": "Guardar disponibilidad", "fr": "Enregistrer", "de": "Speichern"},
     "prezzo_notte": {"it": "Prezzo/notte (cent)", "en": "Price/night (cents)",
                      "es": "Precio/noche", "fr": "Prix/nuit", "de": "Preis/Nacht"},
+    # voucher
+    "voucher_ok": {"it": "Prenotazione confermata", "en": "Booking confirmed",
+                   "es": "Reserva confirmada", "fr": "Reservation confirmee",
+                   "de": "Buchung bestatigt"},
+    "rif": {"it": "Riferimento", "en": "Reference", "es": "Referencia",
+            "fr": "Reference", "de": "Referenz"},
+    "dal": {"it": "Dal", "en": "From", "es": "Desde", "fr": "Du", "de": "Von"},
+    "al": {"it": "Al", "en": "To", "es": "Hasta", "fr": "Au", "de": "Bis"},
+    "self_pass": {"it": "Check-in autonomo: mostra questo codice alla serratura",
+                  "en": "Self check-in: show this code at the lock",
+                  "es": "Auto check-in: muestra este codigo en la cerradura",
+                  "fr": "Auto check-in : montrez ce code a la serrure",
+                  "de": "Self-Check-in: diesen Code am Schloss zeigen"},
 }
 
 
@@ -220,6 +233,50 @@ def sitemap_xml(sistema: Any, base_url: str = "") -> str:
 
 def robots_txt(base_url: str = "") -> str:
     return "User-agent: *\nAllow: /\nSitemap: %s/sitemap.xml\n" % base_url
+
+
+def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optional[str]:
+    """Voucher di conferma (server-rendered, stampabile, multilingua). Verifica la firma
+    del token (non falsificabile). None se assente/manomesso/non un voucher."""
+    import html
+    firma = getattr(sistema, "firma", None)
+    if firma is None:
+        return None
+    dati = firma.decodifica(token)
+    if not isinstance(dati, dict) or dati.get("tipo") != "voucher":
+        return None
+    lng = lingua if lingua in LINGUE_SUPPORTATE else "it"
+    e = html.escape
+    prezzo = "%d.%02d" % (dati.get("prezzo_guest_cents", 0) // 100,
+                          dati.get("prezzo_guest_cents", 0) % 100)
+    pass_code = e(str(dati.get("smart_pass", "")))
+    blocco_pass = ("<div style='margin-top:1.2rem;padding:1rem;background:#f0f4fe;"
+                   "border-radius:1rem'><strong>%s</strong><br>"
+                   "<code style='word-break:break-all;font-size:.8rem'>%s</code></div>"
+                   ) % (e(_ui("self_pass", lng)), pass_code) if pass_code else ""
+    return (
+        "<!DOCTYPE html><html lang=\"%s\"><head><meta charset=\"UTF-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "<title>Voucher BookinVIP</title><style>body{font-family:system-ui,sans-serif;"
+        "background:#f4f6fa;color:#1a1e2b;padding:2rem;max-width:480px;margin:0 auto}"
+        ".v{background:#fff;border-radius:1.5rem;padding:2rem;box-shadow:0 8px 24px "
+        "rgba(0,0,0,.06)}h1{color:#1e3c72}.r{display:flex;justify-content:space-between;"
+        "padding:.3rem 0;border-bottom:1px solid #eef2f7}</style></head><body><div class=\"v\">"
+        "<div style=\"font-weight:700;color:#1e3c72;font-size:1.3rem\">BookinVIP</div>"
+        "<h1>✓ %s</h1>"
+        "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
+        "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
+        "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
+        "<div class=\"r\"><span>%s</span><strong>%s %s</strong></div>"
+        "%s</div></body></html>"
+    ) % (
+        e(lng), e(_ui("voucher_ok", lng)),
+        e(_ui("rif", lng)), e(str(dati.get("riferimento", ""))),
+        e(_ui("dal", lng)), e(str(dati.get("check_in", ""))),
+        e(_ui("al", lng)), e(str(dati.get("check_out", ""))),
+        e(_ui("totale", lng)), e(prezzo), e(str(dati.get("valuta", "EUR"))),
+        blocco_pass,
+    )
 
 
 class RouterHTTP:
@@ -421,13 +478,38 @@ class RouterHTTP:
         r = self._sys.concierge.prenota(dati)
         status = int(getattr(r, "status", 200))
         corpo = dict(getattr(r, "corpo", {}) or {})
-        if status == 201 and self._sys.emettitore_recensioni is not None:
-            try:
-                corpo["diritto_recensione"] = self._sys.emettitore_recensioni.emetti(
-                    corpo.get("riferimento", ""), corpo.get("alloggio_id", ""))
-            except Exception:
-                logger.warning("emissione diritto recensione fallita (ignorata)",
-                               exc_info=True)
+        if status == 201:
+            ref = corpo.get("riferimento", "")
+            allog = corpo.get("alloggio_id", "")
+            ci, co = corpo.get("check_in", ""), corpo.get("check_out", "")
+            # smart-pass per il self check-in (incluso nel voucher)
+            pass_token = None
+            if self._sys.emettitore_pass is not None:
+                try:
+                    pass_token = self._sys.emettitore_pass.emetti(ref, allog, ci, co)
+                    corpo["smart_pass"] = pass_token
+                except Exception:
+                    logger.warning("emissione smart-pass fallita (ignorata)",
+                                   exc_info=True)
+            # voucher firmato (conferma + entry pass)
+            if getattr(self._sys, "firma", None) is not None:
+                try:
+                    corpo["voucher_token"] = self._sys.firma.codifica({
+                        "tipo": "voucher", "riferimento": ref, "alloggio_id": allog,
+                        "check_in": ci, "check_out": co,
+                        "prezzo_guest_cents": corpo.get("prezzo_guest_cents", 0),
+                        "valuta": corpo.get("valuta", "EUR"),
+                        "smart_pass": pass_token or ""})
+                except Exception:
+                    logger.warning("emissione voucher fallita (ignorata)", exc_info=True)
+            # diritto di recensione
+            if self._sys.emettitore_recensioni is not None:
+                try:
+                    corpo["diritto_recensione"] = self._sys.emettitore_recensioni.emetti(
+                        ref, allog)
+                except Exception:
+                    logger.warning("emissione diritto recensione fallita (ignorata)",
+                                   exc_info=True)
         return status, corpo
 
     def _trasparenza(self, query):
@@ -586,7 +668,7 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
           ) -> None:  # pragma: no cover
     import os
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-    from urllib.parse import urlparse, parse_qs
+    from urllib.parse import urlparse, parse_qs, unquote
 
     router = crea_router(sistema, host_key=host_key, admin_key=admin_key)
 
@@ -648,9 +730,18 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             elif u.path == "/robots.txt":
                 self._testo(200, "text/plain", robots_txt(base_url))
             elif u.path.startswith("/alloggio/"):
-                html = pagina_alloggio_html(sistema, u.path[len("/alloggio/"):], base_url)
+                slug = unquote(u.path[len("/alloggio/"):])
+                html = pagina_alloggio_html(sistema, slug, base_url)
                 if html is None:
                     self._scrivi(404, {"errore": "not_found"})
+                else:
+                    self._testo(200, "text/html", html)
+            elif u.path.startswith("/voucher/"):
+                query = {k: v[0] for k, v in parse_qs(u.query).items()}
+                lng = query.get("lang", "it")
+                html = pagina_voucher_html(sistema, unquote(u.path[len("/voucher/"):]), lng)
+                if html is None:
+                    self._scrivi(404, {"errore": "voucher_non_valido"})
                 else:
                     self._testo(200, "text/html", html)
             else:
