@@ -1,7 +1,7 @@
 # STATO FINALE — Dove siamo e cosa manca per FINIRE BookinVIP
 
 > Punto di ripristino. Se si interrompe, riparti da qui. Aggiornato: 2026-06-23.
-> Suite: **1691 test**, zero regressioni (baseline errori=48 = live PG/Playwright).
+> Suite: **1698 test**, zero regressioni (baseline errori=48 = live PG/Playwright).
 > **CODICE CHIUSO + DEPLOY HTTPS PRONTO + ACQUISIZIONE + ARCHITETTURA FINANZIARIA.** Resta
 > solo il "DA FARE TU": VPS + DNS + chiavi .env + numeri fiscali col commercialista + deploy.
 
@@ -62,6 +62,8 @@
   + riscatto sconto, idempotente, SQLite durevole).
 - fase139 chatbot AI assistenza guest pre-prenotazione (router intento deterministico, prezzo
   SEMPRE dal concierge mai dall'IA, LLM opzionale solo fallback).
+- fase141 host onboarding wizard guidato (macchina a stati passi+validazione+gate pubblicazione
+  fail-closed, % completamento, SQLite durevole).
 
 ## ✅ FATTO (prodotto funzionante)
 - Prodotto BookinVIP (alloggi): vetrina(57), inventario realtime(58), concierge prezzo-firmato(59),
