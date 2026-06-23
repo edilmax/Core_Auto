@@ -90,8 +90,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 102=motore autonomo vendi+incassa (orchestra concierge59+inventario58+pagamento101+split65, duck-typed, isolato);
         # 103=adempimento reverse-charge (gated, autofattura TD17/TD18 + IVA 22% configurabile + scadenza F24 + registro durevole);
         # 104=gateway Asia (Alipay/WeChat Pay agganciati allo split 15% Stripe Connect fase101 + canale Weibo, gated);
-        # 105=W3C identity gate (Verifiable Credential firmate HMAC per annunci host e recensioni guest, anti-truffa, puro). Blocco 106+ libero.
-        for n in range(106, 108):
+        # 105=W3C identity gate (Verifiable Credential firmate HMAC per annunci host e recensioni guest, anti-truffa, puro);
+        # 106=dynamic pricing (occupazione/domanda + stagionalità mese + weekend + last-minute/anticipo, bps interi, floor/cap, puro). Blocco 107+ libero.
+        for n in range(107, 109):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
