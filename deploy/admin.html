@@ -41,6 +41,20 @@
     <thead><tr><th>Alloggio</th><th>Check-in</th><th>Check-out</th><th>Origine</th><th>Stato</th><th></th></tr></thead>
     <tbody id="tbody"><tr><td colspan="6" style="text-align:center;color:#5e6f8d;padding:2rem">Inserisci la chiave e carica.</td></tr></tbody>
   </table>
+
+  <div style="background:#fff;border-radius:1rem;padding:1.5rem;box-shadow:0 6px 18px rgba(0,0,0,.05);margin-top:1.5rem">
+    <h2 style="color:#1e3c72;font-size:1.2rem;margin-bottom:.8rem">📣 Marketing — pubblica campagna</h2>
+    <p style="font-size:.85rem;color:#5e6f8d;margin-bottom:.8rem">Genera post multilingua + immagini promo e li pubblica sui canali configurati nel server (Telegram/Facebook). Senza canali nel <code>.env</code>, i post sono generati ma non pubblicati.</p>
+    <div style="margin-bottom:.9rem;font-size:.9rem">Lingue:
+      <label style="margin-left:.5rem"><input type="checkbox" class="lng" value="it" checked> IT</label>
+      <label style="margin-left:.5rem"><input type="checkbox" class="lng" value="en" checked> EN</label>
+      <label style="margin-left:.5rem"><input type="checkbox" class="lng" value="es"> ES</label>
+      <label style="margin-left:.5rem"><input type="checkbox" class="lng" value="fr"> FR</label>
+      <label style="margin-left:.5rem"><input type="checkbox" class="lng" value="de"> DE</label>
+    </div>
+    <button id="btnCampagna" style="background:#155724">📣 Pubblica campagna</button>
+    <div id="msgCampagna"></div>
+  </div>
 </div>
 
 <script>
@@ -76,6 +90,26 @@ async function rimborsa(d){
     else msg('❌ '+(r.motivo||r.errore||res.status), false);
   }catch(e){ msg('Errore: '+e.message,false); }
 }
+
+async function pubblicaCampagna(){
+  const m=document.getElementById('msgCampagna');
+  const lingue=[...document.querySelectorAll('.lng:checked')].map(c=>c.value);
+  if(!lingue.length){ m.className='msg err'; m.textContent='Seleziona almeno una lingua.'; return; }
+  m.className='msg'; m.textContent='Pubblico…';
+  try{
+    const res=await fetch(API+'/api/marketing/campagna',{method:'POST',
+      headers:{'Content-Type':'application/json','X-Admin-Key':key()},
+      body:JSON.stringify({lingue})});
+    if(res.status===401){ m.className='msg err'; m.textContent='Chiave admin errata.'; return; }
+    const r=await res.json();
+    if(res.status===200){
+      const canali=(r.canali_configurati||[]);
+      m.className='msg ok';
+      m.innerHTML=`✅ ${r.post_generati} post generati · <b>${r.pubblicati}</b> pubblicati · ${r.saltati} saltati.<br>Canali: ${canali.join(', ')||'<b>nessuno</b> — configura TELEGRAM_*/META_* nel .env del server per pubblicare davvero'}.`;
+    } else { m.className='msg err'; m.textContent='❌ '+(r.errore||res.status); }
+  }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
+}
+document.getElementById('btnCampagna').onclick = pubblicaCampagna;
 
 document.getElementById('btnCarica').onclick = carica;
 </script>
