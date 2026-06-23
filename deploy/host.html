@@ -37,9 +37,32 @@
     </select>
   </header>
 
+  <div class="card" id="cardAuth">
+    <h2>👤 Accedi o Registrati</h2>
+    <div id="authIn">
+      <div class="grid">
+        <label class="full">Email<input id="au_email" type="email" placeholder="tua@email.it"></label>
+        <label class="full">Password (min 8)<input id="au_pw" type="password"></label>
+        <label class="full">Ragione sociale / nome struttura (per registrarti)<input id="au_rs" placeholder="B&B Il Sole"></label>
+      </div>
+      <label style="display:flex;gap:.5rem;font-size:.85rem;margin-top:.7rem;text-transform:none">
+        <input type="checkbox" id="au_terms" style="width:auto;margin-top:.2rem">
+        <span>Accetto i <a href="/termini" target="_blank">Termini</a> e la <a href="/privacy" target="_blank">Privacy</a></span></label>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+        <button id="btnLogin">Accedi</button>
+        <button id="btnRegister" style="background:#155724">Registrati</button>
+      </div>
+    </div>
+    <div id="authOut" style="display:none">
+      <p>✅ Collegato come <strong id="au_who"></strong>. Carichi e gestisci <strong>solo i tuoi</strong> alloggi.</p>
+      <button id="btnLogout" style="background:#b02a37">Esci</button>
+    </div>
+    <div id="msgAuth"></div>
+  </div>
+
   <div class="key">
-    <label style="flex:1;display:flex;flex-direction:column;font-size:.72rem;font-weight:600;color:#4a5b7a;gap:.25rem">X-Host-Key
-      <input type="password" id="hostkey" placeholder="chiave host"></label>
+    <label style="flex:1;display:flex;flex-direction:column;font-size:.72rem;font-weight:600;color:#4a5b7a;gap:.25rem">X-Host-Key (solo operatore, avanzato)
+      <input type="password" id="hostkey" placeholder="chiave host (non serve se sei loggato)"></label>
   </div>
 
   <div class="card">
@@ -154,6 +177,9 @@ const API = location.origin.startsWith('http') ? '' : 'http://127.0.0.1:8080';
 let UI = {}, LANG='it';
 function t(k){ return UI[k]||k; }
 function key(){ return document.getElementById('hostkey').value; }
+function hostToken(){ return localStorage.getItem('bookinvip_host_token') || ''; }
+// auth: usa il token self-service se presente, altrimenti la chiave operatore
+function authHeaders(){ const tk = hostToken(); return tk ? {'X-Host-Token':tk} : {'X-Host-Key':key()}; }
 
 async function caricaI18N(lang){
   try{ const d = await (await fetch(API+'/api/i18n?lang='+lang)).json(); UI=d.ui||{}; }catch(e){ UI={}; }
@@ -166,10 +192,39 @@ async function caricaI18N(lang){
 
 async function post(path, body){
   const res = await fetch(API+path, {method:'POST',
-    headers:{'Content-Type':'application/json','X-Host-Key':key()},
+    headers:Object.assign({'Content-Type':'application/json'}, authHeaders()),
     body:JSON.stringify(body)});
   return {status:res.status, data:await res.json()};
 }
+
+function aggiornaAuthUI(){
+  const tk = hostToken();
+  document.getElementById('authIn').style.display = tk ? 'none' : 'block';
+  document.getElementById('authOut').style.display = tk ? 'block' : 'none';
+  if(tk){ document.getElementById('au_who').textContent = localStorage.getItem('bookinvip_host_email') || 'host'; }
+}
+async function authPost(path, body, msgEl, okText){
+  // login/registrazione NON usano il token: invio senza authHeaders
+  const res = await fetch(API+path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  const data = await res.json();
+  if(res.ok && data.token){
+    localStorage.setItem('bookinvip_host_token', data.token);
+    localStorage.setItem('bookinvip_host_email', document.getElementById('au_email').value);
+    msgEl.className='msg ok'; msgEl.textContent=okText; aggiornaAuthUI();
+  } else { msgEl.className='msg err'; msgEl.textContent='❌ '+(data.errore||res.status); }
+}
+document.getElementById('btnRegister').onclick = ()=>{
+  const m=document.getElementById('msgAuth');
+  if(!document.getElementById('au_terms').checked){ m.className='msg err'; m.textContent='Devi accettare Termini e Privacy.'; return; }
+  authPost('/api/host/registrazione', {email:document.getElementById('au_email').value, password:document.getElementById('au_pw').value, ragione_sociale:document.getElementById('au_rs').value, accetta_termini:true}, m, 'Registrato! Ora carichi i tuoi alloggi qui sotto.');
+};
+document.getElementById('btnLogin').onclick = ()=>{
+  authPost('/api/host/login', {email:document.getElementById('au_email').value, password:document.getElementById('au_pw').value}, document.getElementById('msgAuth'), 'Accesso effettuato.');
+};
+document.getElementById('btnLogout').onclick = ()=>{
+  localStorage.removeItem('bookinvip_host_token'); localStorage.removeItem('bookinvip_host_email'); aggiornaAuthUI();
+};
+aggiornaAuthUI();
 
 document.getElementById('btnPubblica').onclick = async ()=>{
   const m = document.getElementById('msgPub');
@@ -229,7 +284,7 @@ document.getElementById('btnMetriche').onclick = async ()=>{
   const m = document.getElementById('msgMetriche');
   const slug = document.getElementById('m_slug').value.trim();
   try{
-    const res = await fetch(API+'/api/host/metriche'+(slug?('?alloggio='+encodeURIComponent(slug)):''), {headers:{'X-Host-Key':key()}});
+    const res = await fetch(API+'/api/host/metriche'+(slug?('?alloggio='+encodeURIComponent(slug)):''), {headers:authHeaders()});
     if(res.status===401){ m.className='msg err'; m.textContent='Chiave host errata.'; return; }
     const d = await res.json();
     document.getElementById('dash').style.display='grid';
@@ -244,7 +299,7 @@ document.getElementById('btnMetriche').onclick = async ()=>{
 async function caricaMiei(){
   const m=document.getElementById('msgMiei');
   try{
-    const res=await fetch(API+'/api/host/alloggi?host_id='+encodeURIComponent(document.getElementById('ma_host').value),{headers:{'X-Host-Key':key()}});
+    const res=await fetch(API+'/api/host/alloggi?host_id='+encodeURIComponent(document.getElementById('ma_host').value),{headers:authHeaders()});
     if(res.status===401){ m.className='msg err'; m.textContent='Chiave host errata.'; return; }
     const d=await res.json();
     if(!d.alloggi||!d.alloggi.length){ document.getElementById('miei').innerHTML='<div style="color:#5e6f8d">Nessun alloggio.</div>'; return; }
@@ -270,7 +325,7 @@ document.getElementById('btnExport').onclick = async ()=>{
   const m = document.getElementById('msgMetriche');
   const slug = document.getElementById('m_slug').value.trim();
   try{
-    const res = await fetch(API+'/api/host/export'+(slug?('?alloggio='+encodeURIComponent(slug)):''), {headers:{'X-Host-Key':key()}});
+    const res = await fetch(API+'/api/host/export'+(slug?('?alloggio='+encodeURIComponent(slug)):''), {headers:authHeaders()});
     if(res.status===401){ m.className='msg err'; m.textContent='Chiave host errata.'; return; }
     const d = await res.json();
     const blob = new Blob([d.csv], {type:'text/csv'});
@@ -286,7 +341,7 @@ document.getElementById('btnCal').onclick = async ()=>{
   const p = new URLSearchParams({alloggio:document.getElementById('c_slug').value,
     da:document.getElementById('c_da').value, a:document.getElementById('c_a').value});
   try{
-    const res = await fetch(API+'/api/host/calendario?'+p.toString(), {headers:{'X-Host-Key':key()}});
+    const res = await fetch(API+'/api/host/calendario?'+p.toString(), {headers:authHeaders()});
     if(res.status===401){ m.className='msg err'; m.textContent='Chiave host errata.'; return; }
     const d = await res.json();
     const col = {libero:'#d4edda', pieno:'#f8d7da', chiuso:'#e2e3e5', non_caricato:'#fff'};

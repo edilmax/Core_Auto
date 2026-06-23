@@ -365,6 +365,10 @@ class RouterHTTP:
             return self._host_disponibilita(body, headers)
         if metodo == "POST" and path == "/api/host/disponibilita_range":
             return self._host_disponibilita_range(body, headers)
+        if metodo == "POST" and path == "/api/host/registrazione":
+            return self._host_registrazione(body)
+        if metodo == "POST" and path == "/api/host/login":
+            return self._host_login(body)
         if metodo == "POST" and path == "/api/host/ical":
             return self._host_ical(body, headers)
         if metodo == "GET" and path == "/api/host/metriche":
@@ -392,9 +396,26 @@ class RouterHTTP:
         except (ValueError, TypeError):
             return None
 
+    def _host_id_da_token(self, headers: Dict[str, str]) -> Optional[str]:
+        """host_id se la richiesta porta un token host self-service valido, altrimenti None."""
+        reg = getattr(self._sys, "registro_host", None)
+        if reg is None:
+            return None
+        tok = headers.get("X-Host-Token", "") or headers.get("x-host-token", "")
+        if not tok:
+            return None
+        try:
+            return reg.verifica_token(tok)
+        except Exception:
+            return None
+
     def _auth_host(self, headers: Dict[str, str]) -> bool:
+        # 1) token host self-service valido
+        if self._host_id_da_token(headers):
+            return True
+        # 2) chiave condivisa dell'operatore (o dev aperto se non configurata)
         if self._host_key is None:
-            return True            # nessuna chiave configurata = aperto (dev)
+            return True
         import hmac
         fornita = headers.get("X-Host-Key", "") or headers.get("x-host-key", "")
         return hmac.compare_digest(str(fornita), str(self._host_key))
@@ -630,12 +651,40 @@ class RouterHTTP:
             return 200, {"raw": out}
 
     # --- rotte host ---
+    def _host_registrazione(self, body):
+        """L'host crea il proprio account DA SOLO (self-service): niente onboarding manuale."""
+        reg = getattr(self._sys, "registro_host", None)
+        if reg is None:
+            return 503, {"errore": "registrazione_non_attiva"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        e = reg.registra(dati.get("email"), dati.get("password"),
+                         accetta_termini=bool(dati.get("accetta_termini")),
+                         ragione_sociale=str(dati.get("ragione_sociale", "")))
+        return (201 if e.ok else 422), e.as_dict()
+
+    def _host_login(self, body):
+        reg = getattr(self._sys, "registro_host", None)
+        if reg is None:
+            return 503, {"errore": "registrazione_non_attiva"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        e = reg.login(dati.get("email"), dati.get("password"))
+        return (200 if e.ok else 401), e.as_dict()
+
     def _host_pubblica(self, body, headers):
         if not self._auth_host(headers):
             return 401, {"errore": "unauthorized"}
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
+        # se autenticato con token self-service, l'host pubblica SOLO sotto il proprio id
+        hid = self._host_id_da_token(headers)
+        if hid:
+            dati = dict(dati)
+            dati["host_id"] = hid
         from fase57_vetrina import Immagine, SchedaAlloggio, valida_scheda
         ok, codice, scheda = valida_scheda(dati)
         if not ok:

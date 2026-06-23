@@ -295,6 +295,55 @@ class TestDashboardHost(unittest.TestCase):
         self.assertEqual(s, 422)
 
 
+class TestSelfServiceHost(unittest.TestCase):
+    def setUp(self):
+        self.sys = _sistema()
+        self.r = crea_router(self.sys, host_key="operatore")
+
+    def test_registra_login_pubblica_solo_miei(self):
+        s, c = self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(
+            {"email": "mario@bnb.it", "password": "passwordlunga",
+             "accetta_termini": True, "ragione_sociale": "B&B Mario"}))
+        self.assertEqual(s, 201)
+        token, hid = c["token"], c["host_id"]
+        h = {"X-Host-Token": token}
+        # col token pubblica: host_id forzato al suo anche se ne passa un altro
+        s2, _ = self.r.gestisci("POST", "/api/host/pubblica", headers=h, body=json.dumps(
+            {"host_id": "IMPOSTORE", "slug": "casa-mario", "titolo": "Casa Mario",
+             "citta": "Bari", "prezzo_notte_cents": 8000, "capacita": 2}))
+        self.assertEqual(s2, 201)
+        _, miei = self.r.gestisci("GET", "/api/host/alloggi", {"host_id": hid}, headers=h)
+        self.assertEqual({a["slug"] for a in miei["alloggi"]}, {"casa-mario"})
+        _, imp = self.r.gestisci("GET", "/api/host/alloggi", {"host_id": "IMPOSTORE"},
+                                 headers=h)
+        self.assertEqual(imp["alloggi"], [])      # NON pubblicato sotto l'impostore
+
+    def test_token_invalido_bloccato(self):
+        s, _ = self.r.gestisci("POST", "/api/host/pubblica",
+                               headers={"X-Host-Token": "falso.token"},
+                               body=json.dumps({"slug": "x", "titolo": "x", "citta": "x",
+                                                "prezzo_notte_cents": 1000, "capacita": 1,
+                                                "host_id": "h"}))
+        self.assertEqual(s, 401)
+
+    def test_login(self):
+        self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(
+            {"email": "l@b.it", "password": "passwordlunga", "accetta_termini": True}))
+        s, c = self.r.gestisci("POST", "/api/host/login", body=json.dumps(
+            {"email": "l@b.it", "password": "passwordlunga"}))
+        self.assertEqual(s, 200)
+        self.assertTrue(c["token"])
+        s2, _ = self.r.gestisci("POST", "/api/host/login", body=json.dumps(
+            {"email": "l@b.it", "password": "sbagliata"}))
+        self.assertEqual(s2, 401)
+
+    def test_registrazione_termini(self):
+        s, c = self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(
+            {"email": "x@b.it", "password": "passwordlunga", "accetta_termini": False}))
+        self.assertEqual(s, 422)
+        self.assertEqual(c["errore"], "termini_non_accettati")
+
+
 class TestOnboarding(unittest.TestCase):
     def setUp(self):
         self.sys = _sistema()
