@@ -1,9 +1,27 @@
 # STATO FINALE — Dove siamo e cosa manca per FINIRE BookinVIP
 
 > Punto di ripristino. Se si interrompe, riparti da qui. Aggiornato: 2026-06-23.
-> Suite: **1449 test**, zero regressioni (baseline errori=48 = live PG/Playwright).
-> **Tutti gli item di CODICE sono CHIUSI + stack DEPLOY HTTPS PRONTO.** Resta solo il
-> "DA FARE TU": VPS + DNS + chiavi .env + lanciare lo script (nessun codice da scrivere).
+> Suite: **1527 test**, zero regressioni (baseline errori=48 = live PG/Playwright).
+> **CODICE CHIUSO + DEPLOY HTTPS PRONTO + ACQUISIZIONE + ARCHITETTURA FINANZIARIA.** Resta
+> solo il "DA FARE TU": VPS + DNS + chiavi .env + numeri fiscali col commercialista + deploy.
+
+## ✅ ACQUISIZIONE (fase96-97)
+- fase96 lead discovery MONDIALE da dati aperti OpenStreetMap/Overpass (gratis, no proxy,
+  innesto in outreach compliant 89/95); fase97 inbound SEO/AEO (landing /affitta/<città> +
+  FAQ JSON-LD + /llms.txt + /sitemap-host.xml, 5 lingue, XSS-safe).
+
+## ✅ ARCHITETTURA FINANZIARIA (fase98-102 — piano M1-M6/R1-R3 completo)
+- fase98 policy commissione: primi-1000-host (fase88 +numero_host/conta_host) + split
+  asimmetrico 3%host/12%ospite=15% + fattura_startup_cents (tutela forfettario).
+- fase99 multi-currency like-for-like ledger: Denaro tipizzato per valuta (no mix),
+  conversione trasparente anti-DCC (markup esplicito), ProviderTassi OXR gated.
+- fase100 DAC7 gate (gated EU default-off, 28pren/1800€ → sospendi+blocca payout, durevole).
+- fase101 Stripe Connect split-all'origine (destination charge: 85% al conto host,
+  application_fee = nostra 15%) — gated.
+- fase102 motore autonomo vendi+incassa (orchestra concierge59+inventario58+pagamento101+
+  split65, duck-typed, isolato).
+- concierge host-aware (fase59 commissione_alloggio cablata in fase81); 15% BLINDATO nei
+  default (fase81/69).
 
 ## ✅ FATTO (prodotto funzionante)
 - Prodotto BookinVIP (alloggi): vetrina(57), inventario realtime(58), concierge prezzo-firmato(59),
