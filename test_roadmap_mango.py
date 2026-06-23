@@ -100,8 +100,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 117=wishlist/preferiti guest (liste nominate per slug, idempotente, SQLite durevole);
         # 119=calendario prezzi visuale host (griglia giorno-per-giorno: stato + prezzo base + prezzo dinamico fase106, provider iniettato, HTML XSS-safe);
         # 121=mappa interattiva + geo-ricerca (microgradi interi, bbox+haversine+cluster+GeoJSON, puro);
-        # 123=notifiche web push guest (subscription durevoli SQLite + invio VAPID gated, fetch/firma iniettabili). Blocco 108,110,112,114,116,118,120,122,124+ libero.
-        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124):
+        # 123=notifiche web push guest (subscription durevoli SQLite + invio VAPID gated, fetch/firma iniettabili);
+        # 125=confronto OTA risparmio GUEST (prezzo finale ospite OTA markup+fee+DCC vs noi, puro cents/bps). Blocco 108,110,112,114,116,118,120,122,124,126+ libero.
+        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124, 126):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
