@@ -95,6 +95,7 @@ class SistemaCasaVIP:
     guardian: Any = None
     dichiarazione: Any = None
     noshow: Any = None
+    marketing: Any = None
 
     @property
     def attivo(self) -> bool:
@@ -207,6 +208,13 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     else:
         avvisi.append("SMTP non configurato -> nessuna email voucher (gated)")
 
+    # 3i) marketing 360 + canali social reali (GATED da env: senza chiavi, nessun canale)
+    from fase90_marketing import crea_motore_marketing
+    from fase91_canali_social import crea_canali_da_env
+    marketing = crea_motore_marketing(canali=crea_canali_da_env(),
+                                      email_provider=email_provider)
+    componenti.append("marketing(90,91)")
+
     # 3b) recensioni verificate (opzionale): registro + emettitore del diritto
     recensioni = None
     emettitore = None
@@ -247,4 +255,4 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           viral=viral, tasse=tasse, sensory=sensory, sleep=sleep,
                           split=split, coda=coda, turnover=turnover,
                           digital_twin=digital_twin, guardian=guardian,
-                          dichiarazione=dichiarazione, noshow=noshow)
+                          dichiarazione=dichiarazione, noshow=noshow, marketing=marketing)

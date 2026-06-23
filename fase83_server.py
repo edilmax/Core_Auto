@@ -359,6 +359,8 @@ class RouterHTTP:
             return self._mcp(body)
         if metodo == "POST" and path == "/api/payments/webhook":
             return self._webhook_stripe(body, headers)
+        if metodo == "POST" and path == "/api/marketing/campagna":
+            return self._marketing_campagna(body, headers)
         if metodo == "GET" and path == "/api/tassa":
             return self._tassa(query)
         if metodo == "POST" and path == "/api/split/crea":
@@ -627,6 +629,23 @@ class RouterHTTP:
             return 400, {"errore": "json_non_valido"}
         r = fn(dati)
         return int(getattr(r, "status", 200)), getattr(r, "corpo", {}) or {}
+
+    def _marketing_campagna(self, body, headers):
+        """Genera + pubblica una campagna sui canali configurati (gated da env).
+        Admin-only. Senza canali -> report con tutti saltati (niente rete)."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        mk = getattr(self._sys, "marketing", None)
+        if mk is None:
+            return 503, {"errore": "marketing_non_attivo"}
+        d = self._json(body) or {}
+        lingue = d.get("lingue") if isinstance(d.get("lingue"), list) else ["it", "en"]
+        try:
+            rep = mk.esegui_campagna([str(l) for l in lingue][:5])
+        except Exception:
+            logger.error("marketing campagna: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        return 200, rep
 
     # --- motori: tassa di soggiorno (66) + split-payment (65) ---
     def _tassa(self, query):

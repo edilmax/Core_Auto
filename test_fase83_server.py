@@ -121,6 +121,27 @@ class TestConcierge(unittest.TestCase):
         self.assertEqual(s, 400)
 
 
+class TestMarketing(unittest.TestCase):
+    def setUp(self):
+        self.sys = _sistema()
+        self.r = crea_router(self.sys, admin_key="adm")
+
+    def test_campagna_admin(self):
+        # senza canali env -> genera ma salta (niente rete); con stub -> pubblica
+        from fase90_marketing import CanaleStub
+        self.sys.marketing._canali = {"telegram": CanaleStub(), "instagram": CanaleStub()}
+        s, c = self.r.gestisci("POST", "/api/marketing/campagna",
+                               headers={"X-Admin-Key": "adm"},
+                               body=json.dumps({"lingue": ["it", "en"]}))
+        self.assertEqual(s, 200)
+        self.assertEqual(c["post_generati"], 6)        # 3 temi x 2 lingue
+        self.assertEqual(c["pubblicati"], 6)
+
+    def test_campagna_auth(self):
+        s, _ = self.r.gestisci("POST", "/api/marketing/campagna", body="{}")
+        self.assertEqual(s, 401)
+
+
 class TestMotori(unittest.TestCase):
     def setUp(self):
         self.r = crea_router(_sistema())

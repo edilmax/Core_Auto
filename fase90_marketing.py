@@ -241,6 +241,18 @@ class MotoreMarketing:
                 rep["saltati"] += 1
         return rep
 
+    def esegui_campagna(self, lingue: Sequence[str] = LINGUE, *,
+                        partenza: str = "2026-01-01") -> Dict[str, Any]:
+        """Genera la campagna completa -> pianifica -> pubblica sui canali configurati."""
+        lng = [l for l in lingue if l in LINGUE] or list(LINGUE)
+        post = self._gen.campagna_completa(lng)
+        piano = calendario_editoriale(post, list(self._canali.keys()) or ["telegram"],
+                                      partenza=partenza)
+        rep = self.pubblica_piano(piano)
+        rep["post_generati"] = len(post)
+        rep["canali_configurati"] = list(self._canali.keys())
+        return rep
+
     def invia_email_campagna(self, destinatari: Sequence[str], oggetto: str,
                              post: Post) -> int:
         """Manda il post come email (gated: senza email_provider, 0)."""
