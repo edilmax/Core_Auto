@@ -147,9 +147,29 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         avvisi.append("Stripe non configurato -> nessun link di pagamento (gated)")
     _bps = cfg.commissione_bps if isinstance(cfg.commissione_bps, int) and \
         0 <= cfg.commissione_bps <= 10000 else 1500   # fallback 15%, mai 0/5% per errore
+    _ctx_host: Dict[str, Any] = {}    # holder late-bound: registro_host nasce piu' sotto
+
+    def _comm_alloggio(netto: int, slug: str) -> int:
+        # host-aware: primi 1000 host -> 15%; oltre -> tariffa post (oggi == 15%).
+        try:
+            reg = _ctx_host.get("reg")
+            if reg is not None and catalogo is not None:
+                d = catalogo.dettaglio(slug)
+                hid = d.get("host_id") if isinstance(d, dict) else None
+                if hid:
+                    from fase98_policy_commissione import (commissione_bps_per_host,
+                                                           commissione_cents)
+                    bps = commissione_bps_per_host(reg.numero_host(hid),
+                                                   bps_fondatori=_bps, bps_dopo=_bps)
+                    return commissione_cents(netto, bps)
+        except Exception:
+            pass
+        return max(0, netto * _bps // 10000)
+
     concierge = crea_protocollo(inventario, bytes(cfg.segreto_hmac), catalogo=catalogo,
                                 valuta=cfg.valuta, link_pagamento=link_pagamento,
-                                commissione=lambda netto: max(0, netto * _bps // 10000))
+                                commissione=lambda netto: max(0, netto * _bps // 10000),
+                                commissione_alloggio=_comm_alloggio)
     componenti.append("concierge(59)")
 
     # 3c) smart-pass per il self check-in (incluso nel voucher)
@@ -164,6 +184,7 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     if cfg.con_registrazione_host:
         from fase88_registro_host import crea_registro_host
         registro_host = crea_registro_host(cfg.db_registro_host, bytes(cfg.segreto_hmac))
+        _ctx_host["reg"] = registro_host        # attiva il resolver host-aware del concierge
         componenti.append("registro_host(88)")
 
     # 3f) viral loop: un host iscritto ne porta altri (referral, crediti non-cashabili)

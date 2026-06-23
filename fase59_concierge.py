@@ -127,6 +127,7 @@ class ProtocolloConcierge:
     def __init__(self, inventario: Any, firma: FirmaQuote, *,
                  catalogo: Any = None,
                  commissione: Optional[Callable[[int], int]] = None,
+                 commissione_alloggio: Optional[Callable[[int, str], int]] = None,
                  link_pagamento: Optional[Callable[[Dict[str, Any]], Optional[str]]] = None,
                  ttl_quote_sec: int = 900, valuta: str = "EUR",
                  orologio: Optional[Callable[[], int]] = None) -> None:
@@ -134,6 +135,7 @@ class ProtocolloConcierge:
         self._firma = firma
         self._cat = catalogo
         self._commissione = commissione or (lambda netto: 0)
+        self._commissione_all = commissione_alloggio   # host-aware: (netto, slug)->comm
         self._link = link_pagamento
         self._ttl = max(60, int(ttl_quote_sec))
         self._valuta = valuta
@@ -220,7 +222,11 @@ class ProtocolloConcierge:
                 if not _intero(p) or p <= 0:
                     return RispostaConcierge(422, {"errore": "non_quotabile"})
                 netto += p
-            comm = self._commissione(netto)
+            try:
+                comm = (self._commissione_all(netto, alloggio)
+                        if self._commissione_all else self._commissione(netto))
+            except Exception:
+                comm = self._commissione(netto)
             if not _intero(comm) or comm < 0:
                 comm = 0
             guest = netto + comm
