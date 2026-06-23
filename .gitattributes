@@ -1,0 +1,9 @@
+# Gli script di shell DEVONO restare LF: con CRLF Linux fallisce ("bad interpreter: ^M").
+*.sh        text eol=lf
+deploy/init-letsencrypt.sh text eol=lf
+deploy/backup_casavip.sh   text eol=lf
+
+# File di config Docker/nginx: LF (vengono usati dentro container Linux).
+Dockerfile*          text eol=lf
+*.yml                text eol=lf
+*.conf               text eol=lf
