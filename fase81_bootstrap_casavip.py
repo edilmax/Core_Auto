@@ -47,6 +47,7 @@ class ConfigCasaVIP:
     db_catalogo: str = ":memory:"
     db_inventario: str = ":memory:"
     valuta: str = "EUR"
+    commissione_bps: int = 500          # commissione CORE in basis-point (500=5%); = mostrata
     stripe_secret_key: str = ""        # gated: se vuoto, niente link di pagamento
     stripe_success_url: str = ""
     stripe_cancel_url: str = ""
@@ -133,8 +134,11 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         componenti.append("stripe(85)")
     else:
         avvisi.append("Stripe non configurato -> nessun link di pagamento (gated)")
+    _bps = cfg.commissione_bps if isinstance(cfg.commissione_bps, int) and \
+        0 <= cfg.commissione_bps <= 10000 else 500
     concierge = crea_protocollo(inventario, bytes(cfg.segreto_hmac), catalogo=catalogo,
-                                valuta=cfg.valuta, link_pagamento=link_pagamento)
+                                valuta=cfg.valuta, link_pagamento=link_pagamento,
+                                commissione=lambda netto: max(0, netto * _bps // 10000))
     componenti.append("concierge(59)")
 
     # 3c) smart-pass per il self check-in (incluso nel voucher)

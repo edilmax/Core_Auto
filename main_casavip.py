@@ -45,6 +45,7 @@ def main() -> None:  # pragma: no cover
         db_registro_host=os.environ.get("DB_REGISTRO_HOST", "data/registro_host.db"),
         db_viral=os.environ.get("DB_VIRAL", "data/viral.db"),
         valuta=os.environ.get("VALUTA", "EUR"),
+        commissione_bps=int(os.environ.get("COMMISSIONE_BPS", "500")),
         stripe_secret_key=os.environ.get("STRIPE_SECRET_KEY", ""),
         stripe_success_url=os.environ.get("STRIPE_SUCCESS_URL", ""),
         stripe_cancel_url=os.environ.get("STRIPE_CANCEL_URL", ""),
