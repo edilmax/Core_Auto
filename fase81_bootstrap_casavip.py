@@ -94,6 +94,7 @@ class SistemaCasaVIP:
     digital_twin: Any = None
     guardian: Any = None
     dichiarazione: Any = None
+    noshow: Any = None
 
     @property
     def attivo(self) -> bool:
@@ -186,6 +187,7 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     from fase70_turnover import crea_gestore_turnover
     from fase72_digital_twin import crea_digital_twin
     from fase75_guardian_engine import crea_guardian
+    from fase62_predictive_noshow import crea_gestore_noshow
     from fase79_dichiarazione import crea_dichiarazione
     split = crea_gestore_split(":memory:")
     coda = crea_gestore_coda(":memory:")
@@ -193,7 +195,8 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     digital_twin = crea_digital_twin(":memory:")
     guardian = crea_guardian()
     dichiarazione = crea_dichiarazione(":memory:")
-    componenti.append("motori(65,67,70,72,75,79)")
+    noshow = crea_gestore_noshow(":memory:")
+    componenti.append("motori(62,65,67,70,72,75,79)")
 
     # 3d) email del voucher (GATED da SMTP): senza host -> nessuna email (come oggi)
     from fase86_email import crea_provider_email
@@ -244,4 +247,4 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           viral=viral, tasse=tasse, sensory=sensory, sleep=sleep,
                           split=split, coda=coda, turnover=turnover,
                           digital_twin=digital_twin, guardian=guardian,
-                          dichiarazione=dichiarazione)
+                          dichiarazione=dichiarazione, noshow=noshow)
