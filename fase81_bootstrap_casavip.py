@@ -85,6 +85,9 @@ class SistemaCasaVIP:
     email_provider: Any = None
     registro_host: Any = None
     viral: Any = None
+    tasse: Any = None
+    sensory: Any = None
+    sleep: Any = None
 
     @property
     def attivo(self) -> bool:
@@ -162,6 +165,15 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         viral = crea_viral_loop(cfg.db_viral, bytes(cfg.segreto_hmac))
         componenti.append("viral(76)")
 
+    # 3g) motori stateless cablati (calcolatori puri, default sicuri)
+    from fase66_tassa_soggiorno import crea_registro_tasse
+    from fase74_sensory_engine import crea_sensory_engine
+    from fase78_sleep_guarantee import crea_sleep_guarantee
+    tasse = crea_registro_tasse()
+    sensory = crea_sensory_engine()
+    sleep = crea_sleep_guarantee()
+    componenti.append("motori(66,74,78)")
+
     # 3d) email del voucher (GATED da SMTP): senza host -> nessuna email (come oggi)
     from fase86_email import crea_provider_email
     email_provider = crea_provider_email(cfg.smtp_host, cfg.smtp_port, cfg.smtp_user,
@@ -208,4 +220,4 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           recensioni=recensioni, emettitore_recensioni=emettitore,
                           firma=firma, emettitore_pass=emettitore_pass,
                           email_provider=email_provider, registro_host=registro_host,
-                          viral=viral)
+                          viral=viral, tasse=tasse, sensory=sensory, sleep=sleep)
