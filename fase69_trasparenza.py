@@ -60,7 +60,7 @@ def _bps(v: Any) -> int:
 @dataclass(frozen=True)
 class PoliticaConfronto:
     commissione_ota_bps: int = 1800     # quanto trattiene l'OTA
-    commissione_nostra_bps: int = 500   # quanto tratteniamo noi (Rana Inversa)
+    commissione_nostra_bps: int = 1500  # 15% BLINDATO (coerente con fase81/fase98)
     psp_bps: int = 0                    # fee del payment provider (pass-through esplicito)
 
 

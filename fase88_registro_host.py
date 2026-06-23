@@ -201,6 +201,39 @@ class RegistroHost:
         finally:
             con.close()
 
+    def conta_host(self) -> int:
+        """Quanti host censiti (per la Regola dei primi 1000 e per DAC7/metriche)."""
+        con = self._apri()
+        try:
+            r = con.execute("SELECT COUNT(*) FROM host").fetchone()
+            return int(r[0]) if r else 0
+        except Exception:
+            logger.warning("conta_host fallita (ISOLATA -> 0)", exc_info=True)
+            return 0
+        finally:
+            con.close()
+
+    def numero_host(self, host_id: str) -> int:
+        """Ordinale 1-based dell'host per ordine di registrazione (creato_ts, host_id).
+        0 se l'host non esiste. Serve a sapere se è tra i 'fondatori' (primi 1000)."""
+        con = self._apri()
+        try:
+            row = con.execute("SELECT creato_ts FROM host WHERE host_id=?",
+                              (str(host_id),)).fetchone()
+            if not row:
+                return 0
+            ts = row[0]
+            n = con.execute(
+                "SELECT COUNT(*) FROM host WHERE creato_ts < ? "
+                "OR (creato_ts = ? AND host_id <= ?)",
+                (ts, ts, str(host_id))).fetchone()
+            return int(n[0]) if n else 0
+        except Exception:
+            logger.warning("numero_host fallita (ISOLATA -> 0)", exc_info=True)
+            return 0
+        finally:
+            con.close()
+
 
 class _ConnCondivisa:
     def __init__(self, con: sqlite3.Connection) -> None:
