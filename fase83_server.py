@@ -369,6 +369,8 @@ class RouterHTTP:
             return self._host_registrazione(body)
         if metodo == "POST" and path == "/api/host/login":
             return self._host_login(body)
+        if metodo == "GET" and path == "/api/host/referral":
+            return self._host_referral(query, headers)
         if metodo == "POST" and path == "/api/host/ical":
             return self._host_ical(body, headers)
         if metodo == "GET" and path == "/api/host/metriche":
@@ -662,7 +664,20 @@ class RouterHTTP:
         e = reg.registra(dati.get("email"), dati.get("password"),
                          accetta_termini=bool(dati.get("accetta_termini")),
                          ragione_sociale=str(dati.get("ragione_sociale", "")))
-        return (201 if e.ok else 422), e.as_dict()
+        out = e.as_dict()
+        # viral loop: se è arrivato con un codice referral, accredita referente+referee
+        if e.ok:
+            codice = dati.get("codice_referral")
+            viral = getattr(self._sys, "viral", None)
+            if viral is not None and isinstance(codice, str) and codice:
+                try:
+                    r = viral.registra_referee(codice, e.host_id)
+                    out["referral"] = {"ok": r.ok,
+                                       "credito_cents": r.credito_referee_cents if r.ok else 0}
+                except Exception:
+                    logger.warning("referral su registrazione fallito (ignorato)",
+                                   exc_info=True)
+        return (201 if e.ok else 422), out
 
     def _host_login(self, body):
         reg = getattr(self._sys, "registro_host", None)
@@ -673,6 +688,28 @@ class RouterHTTP:
             return 400, {"errore": "json_non_valido"}
         e = reg.login(dati.get("email"), dati.get("password"))
         return (200 if e.ok else 401), e.as_dict()
+
+    def _host_referral(self, query, headers):
+        """Link di invito dell'host + credito disponibile (viral loop fase76)."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        viral = getattr(self._sys, "viral", None)
+        if viral is None:
+            return 503, {"errore": "viral_non_attivo"}
+        host_id = self._host_id_da_token(headers) or query.get("host_id")
+        if not (isinstance(host_id, str) and host_id):
+            return 422, {"errore": "host_id_mancante"}
+        try:
+            codice = viral.genera_codice(host_id, tipo="host")
+            credito = viral.credito_disponibile(host_id)
+        except Exception:
+            logger.error("host referral: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        if not codice:
+            return 503, {"errore": "codice_non_generato"}
+        from urllib.parse import quote
+        link = self._base_url + "/diventa-host.html?ref=" + quote(codice)
+        return 200, {"codice": codice, "link": link, "credito_cents": int(credito)}
 
     def _host_pubblica(self, body, headers):
         if not self._auth_host(headers):

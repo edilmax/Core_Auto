@@ -43,6 +43,7 @@ def main() -> None:  # pragma: no cover
         db_catalogo=os.environ.get("DB_CATALOGO", "data/catalogo.db"),
         db_inventario=os.environ.get("DB_INVENTARIO", "data/inventario.db"),
         db_registro_host=os.environ.get("DB_REGISTRO_HOST", "data/registro_host.db"),
+        db_viral=os.environ.get("DB_VIRAL", "data/viral.db"),
         valuta=os.environ.get("VALUTA", "EUR"),
         stripe_secret_key=os.environ.get("STRIPE_SECRET_KEY", ""),
         stripe_success_url=os.environ.get("STRIPE_SUCCESS_URL", ""),
@@ -57,7 +58,8 @@ def main() -> None:  # pragma: no cover
         con_sentinel=os.environ.get("SENTINEL", "").lower() in ("1", "true", "yes"),
         cartella_sentinel=os.environ.get("SENTINEL_DIR") or ".",
     )
-    for p in (config.db_catalogo, config.db_inventario, config.db_registro_host):
+    for p in (config.db_catalogo, config.db_inventario, config.db_registro_host,
+              config.db_viral):
         d = os.path.dirname(p)
         if d:
             os.makedirs(d, exist_ok=True)

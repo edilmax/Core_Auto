@@ -60,8 +60,10 @@ class ConfigCasaVIP:
     con_recensioni: bool = True
     con_smartpass: bool = True
     con_registrazione_host: bool = True
+    con_viral: bool = True
     db_recensioni: str = ":memory:"
     db_registro_host: str = ":memory:"
+    db_viral: str = ":memory:"
     con_sentinel: bool = False
     cartella_sentinel: Optional[str] = None
 
@@ -81,6 +83,7 @@ class SistemaCasaVIP:
     emettitore_pass: Any = None
     email_provider: Any = None
     registro_host: Any = None
+    viral: Any = None
 
     @property
     def attivo(self) -> bool:
@@ -148,6 +151,13 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         registro_host = crea_registro_host(cfg.db_registro_host, bytes(cfg.segreto_hmac))
         componenti.append("registro_host(88)")
 
+    # 3f) viral loop: un host iscritto ne porta altri (referral, crediti non-cashabili)
+    viral = None
+    if cfg.con_viral:
+        from fase76_viral_loop import crea_viral_loop
+        viral = crea_viral_loop(cfg.db_viral, bytes(cfg.segreto_hmac))
+        componenti.append("viral(76)")
+
     # 3d) email del voucher (GATED da SMTP): senza host -> nessuna email (come oggi)
     from fase86_email import crea_provider_email
     email_provider = crea_provider_email(cfg.smtp_host, cfg.smtp_port, cfg.smtp_user,
@@ -193,4 +203,5 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           concierge=concierge, mcp=mcp, sentinel=sentinel,
                           recensioni=recensioni, emettitore_recensioni=emettitore,
                           firma=firma, emettitore_pass=emettitore_pass,
-                          email_provider=email_provider, registro_host=registro_host)
+                          email_provider=email_provider, registro_host=registro_host,
+                          viral=viral)

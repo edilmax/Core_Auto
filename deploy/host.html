@@ -60,6 +60,16 @@
     <div id="msgAuth"></div>
   </div>
 
+  <div class="card" id="cardReferral" style="display:none">
+    <h2>🎁 Invita altri host</h2>
+    <p style="font-size:.9rem;color:#5e6f8d">Condividi il tuo link: quando un host si registra, <strong>tu e lui ricevete un credito</strong>.</p>
+    <div style="display:flex;gap:.5rem;margin-top:.8rem">
+      <input id="ref_link" readonly style="font-size:.82rem">
+      <button id="btnCopiaRef" style="margin-top:0">Copia</button>
+    </div>
+    <div id="ref_credito" style="margin-top:.8rem;font-weight:600;color:#155724"></div>
+  </div>
+
   <div class="key">
     <label style="flex:1;display:flex;flex-direction:column;font-size:.72rem;font-weight:600;color:#4a5b7a;gap:.25rem">X-Host-Key (solo operatore, avanzato)
       <input type="password" id="hostkey" placeholder="chiave host (non serve se sei loggato)"></label>
@@ -201,8 +211,24 @@ function aggiornaAuthUI(){
   const tk = hostToken();
   document.getElementById('authIn').style.display = tk ? 'none' : 'block';
   document.getElementById('authOut').style.display = tk ? 'block' : 'none';
-  if(tk){ document.getElementById('au_who').textContent = localStorage.getItem('bookinvip_host_email') || 'host'; }
+  document.getElementById('cardReferral').style.display = tk ? 'block' : 'none';
+  if(tk){ document.getElementById('au_who').textContent = localStorage.getItem('bookinvip_host_email') || 'host'; caricaReferral(); }
 }
+async function caricaReferral(){
+  try{
+    const d = await (await fetch(API+'/api/host/referral', {headers:authHeaders()})).json();
+    if(d.link){
+      document.getElementById('ref_link').value = d.link;
+      document.getElementById('ref_credito').textContent = 'Credito disponibile: €'+((d.credito_cents||0)/100).toFixed(2);
+    }
+  }catch(e){}
+}
+document.getElementById('btnCopiaRef').onclick = ()=>{
+  const i=document.getElementById('ref_link'); i.select();
+  navigator.clipboard?.writeText(i.value);
+  document.getElementById('btnCopiaRef').textContent='Copiato!';
+  setTimeout(()=>document.getElementById('btnCopiaRef').textContent='Copia',1500);
+};
 async function authPost(path, body, msgEl, okText){
   // login/registrazione NON usano il token: invio senza authHeaders
   const res = await fetch(API+path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});

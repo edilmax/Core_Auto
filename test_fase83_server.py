@@ -337,6 +337,26 @@ class TestSelfServiceHost(unittest.TestCase):
             {"email": "l@b.it", "password": "sbagliata"}))
         self.assertEqual(s2, 401)
 
+    def test_viral_referral(self):
+        # host A si registra e prende il suo link
+        a = self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(
+            {"email": "a@b.it", "password": "passwordlunga", "accetta_termini": True}))[1]
+        ha = {"X-Host-Token": a["token"]}
+        s, ref = self.r.gestisci("GET", "/api/host/referral", headers=ha)
+        self.assertEqual(s, 200)
+        self.assertIn("ref=", ref["link"])
+        self.assertEqual(ref["credito_cents"], 0)
+        codice = ref["codice"]
+        # host B si registra COL codice di A -> entrambi accreditati
+        b = self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(
+            {"email": "b@b.it", "password": "passwordlunga", "accetta_termini": True,
+             "codice_referral": codice}))[1]
+        self.assertTrue(b["referral"]["ok"])
+        self.assertGreater(b["referral"]["credito_cents"], 0)
+        # ora A ha credito
+        _, ref2 = self.r.gestisci("GET", "/api/host/referral", headers=ha)
+        self.assertGreater(ref2["credito_cents"], 0)
+
     def test_registrazione_termini(self):
         s, c = self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(
             {"email": "x@b.it", "password": "passwordlunga", "accetta_termini": False}))
