@@ -97,8 +97,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 111=cancellazione flessibile + rimborso automatico (scaglioni giorni->bps, fee pulizia sempre resa, puro cents);
         # 113=messaggistica host-guest in-app (thread per prenotazione, solo partecipanti, mascheramento PII, SQLite durevole);
         # 115=dashboard host metriche avanzate (revenue/occupazione/ADR/RevPAR/lead-time/cancellazione/rating, puro cents/bps);
-        # 117=wishlist/preferiti guest (liste nominate per slug, idempotente, SQLite durevole). Blocco 108,110,112,114,116,118+ libero.
-        for n in (108, 110, 112, 114, 116, 118):
+        # 117=wishlist/preferiti guest (liste nominate per slug, idempotente, SQLite durevole);
+        # 119=calendario prezzi visuale host (griglia giorno-per-giorno: stato + prezzo base + prezzo dinamico fase106, provider iniettato, HTML XSS-safe). Blocco 108,110,112,114,116,118,120+ libero.
+        for n in (108, 110, 112, 114, 116, 118, 120):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
