@@ -1,0 +1,111 @@
+"""Test Fase 97 - Inbound SEO/AEO. Funzioni PURE: deterministico, nessun I/O."""
+import json
+import unittest
+
+from fase97_inbound_seo import (CITTA_SEED, citta_da_slug, faq_jsonld,
+                                genera_landing_host, llms_txt, risparmio_notte,
+                                sitemap_inbound, slug_citta)
+
+
+class TestSlug(unittest.TestCase):
+    def test_slug_ascii_trattini(self):
+        self.assertEqual(slug_citta("Mexico City"), "mexico-city")
+        self.assertEqual(slug_citta("São Paulo"), "sao-paulo")
+        self.assertEqual(slug_citta(""), "")
+
+    def test_reverse_solo_citta_note(self):
+        self.assertEqual(citta_da_slug("roma"), "Roma")
+        self.assertEqual(citta_da_slug("new-york"), "New York")
+        self.assertIsNone(citta_da_slug("citta-inventata-spam"))  # anti thin-content
+
+
+class TestRisparmio(unittest.TestCase):
+    def test_math_cents_interi(self):
+        r = risparmio_notte(10000, 1500, 2500)        # €100, noi 15%, OTA 25%
+        self.assertEqual(r["commissione_noi"], 1500)
+        self.assertEqual(r["commissione_ota"], 2500)
+        self.assertEqual(r["netto_noi"], 8500)
+        self.assertEqual(r["netto_ota"], 7500)
+        self.assertEqual(r["risparmio"], 1000)         # +€10 a notte
+
+    def test_invarianti_non_negativi(self):
+        r = risparmio_notte(-5, -10, 999999)
+        self.assertGreaterEqual(r["prezzo"], 0)
+        self.assertGreaterEqual(r["netto_noi"], 0)
+
+
+class TestLanding(unittest.TestCase):
+    def test_contiene_seo_essenziale(self):
+        h = genera_landing_host("Austin", lingua="en", base_url="https://bookinvip.com")
+        self.assertIn("<title>", h)
+        self.assertIn("Austin", h)
+        self.assertIn('rel="canonical"', h)
+        self.assertIn("/affitta/austin", h)
+        self.assertIn("/diventa-host.html?ref=seo-austin", h)   # CTA con referral
+        self.assertIn("application/ld+json", h)                  # FAQ strutturata
+
+    def test_calcolo_risparmio_in_pagina(self):
+        h = genera_landing_host("Roma", lingua="it", commissione_bps=1500, ota_bps=2500,
+                                prezzo_demo_cents=10000)
+        self.assertIn("85.00", h)        # netto noi
+        self.assertIn("75.00", h)        # netto OTA
+        self.assertIn("10.00", h)        # risparmio
+
+    def test_xss_safe(self):
+        h = genera_landing_host('Roma"><script>alert(1)</script>', lingua="it")
+        self.assertNotIn("<script>alert(1)", h)        # escapato
+        self.assertIn("&lt;script&gt;", h)
+
+    def test_link_interni_correlati(self):
+        h = genera_landing_host("Roma", citta_correlate=["Milano", "Roma", "Napoli"])
+        self.assertIn("/affitta/milano", h)
+        self.assertIn("/affitta/napoli", h)
+        # non si auto-linka nel nav (il canonical href="/affitta/roma" è invece legittimo)
+        self.assertNotIn('/affitta/roma">Roma</a>', h)
+
+    def test_tutte_le_lingue(self):
+        for lng in ("it", "en", "es", "fr", "de"):
+            h = genera_landing_host("Paris", lingua=lng)
+            self.assertIn('lang="%s"' % lng, h)
+            self.assertIn("<title>", h)
+
+
+class TestFaqJsonld(unittest.TestCase):
+    def test_jsonld_valido_e_faqpage(self):
+        raw = (faq_jsonld("it", commissione_bps=1500, ota_bps=2500)
+               .replace("\\u003c", "<").replace("\\u003e", ">").replace("\\u0026", "&"))
+        d = json.loads(raw)
+        self.assertEqual(d["@type"], "FAQPage")
+        self.assertGreaterEqual(len(d["mainEntity"]), 3)
+        self.assertEqual(d["mainEntity"][0]["@type"], "Question")
+
+    def test_percentuali_iniettate(self):
+        raw = faq_jsonld("en", commissione_bps=1500, ota_bps=2500)
+        self.assertIn("15%", raw)
+        self.assertIn("25%", raw)
+
+
+class TestLlmsTxt(unittest.TestCase):
+    def test_contenuto_aeo(self):
+        t = llms_txt("https://bookinvip.com", commissione_bps=1500)
+        self.assertIn("# BookinVIP", t)
+        self.assertIn("/api/mcp", t)                    # agent-discoverable
+        self.assertIn("/diventa-host.html", t)
+        self.assertIn("15%", t)
+
+
+class TestSitemap(unittest.TestCase):
+    def test_sitemap_xml_valido(self):
+        xml = sitemap_inbound("https://bookinvip.com", citta=["Roma", "Tokyo"],
+                              lingue=["it", "en"])
+        self.assertIn("<urlset", xml)
+        self.assertIn("/affitta/roma", xml)
+        self.assertIn("/affitta/tokyo?lang=en", xml)
+        self.assertEqual(xml.count("<url>"), 4)         # 2 città × 2 lingue
+
+    def test_seed_non_vuoto(self):
+        self.assertGreater(len(CITTA_SEED), 10)
+
+
+if __name__ == "__main__":
+    unittest.main()

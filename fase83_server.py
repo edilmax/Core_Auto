@@ -232,7 +232,9 @@ def sitemap_xml(sistema: Any, base_url: str = "") -> str:
 
 
 def robots_txt(base_url: str = "") -> str:
-    return "User-agent: *\nAllow: /\nSitemap: %s/sitemap.xml\n" % base_url
+    # Due sitemap: alloggi (vetrina) + landing host inbound SEO (fase97).
+    return ("User-agent: *\nAllow: /\nSitemap: %s/sitemap.xml\n"
+            "Sitemap: %s/sitemap-host.xml\n" % (base_url, base_url))
 
 
 def _notti_count(ci: Any, co: Any) -> int:
@@ -1119,6 +1121,31 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     self._scrivi(404, {"errore": "voucher_non_valido"})
                 else:
                     self._testo(200, "text/html", html)
+            elif u.path.startswith("/affitta/"):
+                # Inbound SEO/AEO (fase97): landing host per città (server-rendered,
+                # crawlabile). Solo città note → niente thin-content da slug arbitrari.
+                try:
+                    from fase97_inbound_seo import (CITTA_SEED, citta_da_slug,
+                                                    genera_landing_host)
+                    query = {k: v[0] for k, v in parse_qs(u.query).items()}
+                    citta = citta_da_slug(unquote(u.path[len("/affitta/"):]))
+                    if citta is None:
+                        self._scrivi(404, {"errore": "citta_non_trovata"})
+                    else:
+                        bps = int(os.environ.get("COMMISSIONE_BPS", "1500"))
+                        self._testo(200, "text/html", genera_landing_host(
+                            citta, lingua=query.get("lang", "it"), base_url=base_url,
+                            commissione_bps=bps, citta_correlate=CITTA_SEED[:8]))
+                except Exception:
+                    self._scrivi(500, {"errore": "interno"})
+            elif u.path == "/llms.txt":
+                from fase97_inbound_seo import llms_txt
+                bps = int(os.environ.get("COMMISSIONE_BPS", "1500"))
+                self._testo(200, "text/plain",
+                            llms_txt(base_url, commissione_bps=bps))
+            elif u.path == "/sitemap-host.xml":
+                from fase97_inbound_seo import sitemap_inbound
+                self._testo(200, "application/xml", sitemap_inbound(base_url))
             elif u.path == "/stop":
                 # Disiscrizione PUBBLICA (link nelle email outreach). Nessuna auth: il
                 # destinatario deve poter dire stop. Opt-out scritto in modo DUREVOLE.
