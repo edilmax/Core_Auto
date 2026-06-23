@@ -107,8 +107,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 131=host payout dashboard (tracciamento incassi/payout per valuta, stati maturato->in_transito->pagato/trattenuto, SQLite durevole);
         # 133=split-payment gruppo a quote uguali (largest-remainder conservazione esatta + pagamenti/completamento durevoli);
         # 135=iCal sync bidirezionale (export feed .ics DTEND-esclusivo RFC5545 + import fase82, roundtrip, puro);
-        # 137=programma fedeltà guest (punti per soggiorno + livelli bronze/silver/gold/platinum moltiplicatore + riscatto sconto, idempotente, SQLite durevole). Blocco pari 108..136 + 138+ libero.
-        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138):
+        # 137=programma fedeltà guest (punti per soggiorno + livelli bronze/silver/gold/platinum moltiplicatore + riscatto sconto, idempotente, SQLite durevole);
+        # 139=chatbot AI assistenza guest pre-prenotazione (router intento deterministico, prezzo SEMPRE dal concierge mai dall'IA, LLM opzionale solo fallback). Blocco pari 108..138 + 140+ libero.
+        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 140):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
