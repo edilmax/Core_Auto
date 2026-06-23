@@ -2,7 +2,10 @@
 
 > Spiegazione completa e onesta. Diviso in: **A) cosa fa OGGI** (acceso nel prodotto
 > live), **B) motori pronti** (costruiti e testati, da collegare alla UI), **C) principi**.
-> Software: 84 fasi, 1365 test verdi, zero dipendenze esterne, su github.com/edilmax/Core_Auto.
+> Software: 93 fasi, 1429 test verdi, zero dipendenze esterne, su github.com/edilmax/Core_Auto.
+>
+> **Commissione: 15%** (configurabile via `COMMISSIONE_BPS`, default live 1500 = 15% —
+> sotto il 18–25% delle OTA). Strategia: 15% per i primi 1000 alloggi iscritti.
 
 ## In una frase
 BookinVIP è una **piattaforma di prenotazione alloggi** (come Booking/Airbnb) ma
@@ -61,9 +64,31 @@ con denaro sempre in centesimi interi (zero errori di arrotondamento).
 - **Trasparenza vs OTA**: *"con Booking incassi €82, con noi €95 → +€13 a notte"*.
 
 ## 7. Per l'ADMIN (pagina `/admin.html`)
-- **Elenco prenotazioni** (attive / rimborsate).
+- **Elenco prenotazioni AUTOMATICO**: la chiave admin è ricordata nel browser, le
+  prenotazioni si caricano **da sole** all'apertura e si aggiornano ogni 60s (nessun
+  click "carica").
 - **Rimborsa**: libera le date (cancellazione). Il rimborso del denaro su Stripe si
   esegue quando Stripe è collegato.
+- **📣 Pubblica campagna marketing** (un bottone): genera post multilingua + immagini
+  promo (card SVG) e li pubblica sui canali configurati nel server (vedi §11).
+
+## 11. Marketing & canali social — *attivi quando metti le chiavi*
+- **Motore marketing 360°**: genera post (host/ospite/referral) in 5 lingue + immagini
+  promo SVG + calendario editoriale, e li manda anche via email.
+- **Canali di pubblicazione** (adapter "gated", si accendono dal `.env`):
+  **Telegram** (gratis), **Facebook + Instagram** (Meta Graph), **X/Twitter** (OAuth1,
+  API a pagamento), **TikTok** (video-first). Senza chiavi i post si **generano** ma non
+  si pubblicano (zero errori).
+- **Tassa di soggiorno** (`/api/tassa`) e **split-payment di gruppo**
+  (`/api/split/crea|paga|stato`): calcolo per città (default 0, jurisdiction-agnostic) e
+  divisione del costo tra più ospiti con conservazione esatta al centesimo — **già esposti
+  come API**.
+
+## 12. Outreach B2B compliant (acquisizione host — opt-in)
+- Motore **"Jurisdiction Radar & Outreach"**: contatta host/strutture **solo dove è
+  legale** (allow-list fail-closed, UE esclusa di default), **solo dati pubblici di
+  aziende**, con email "Prima Emilia" multilingua e **opt-out obbligatorio**. **Niente
+  scraping, niente proxy, niente aggiramento blocchi** (illegale e autodistruttivo).
 
 ## 8. Per gli AGENTI IA (`/api/mcp`) — il futuro 2026-2030
 - BookinVIP espone un **server MCP** (Model Context Protocol): qualsiasi agente IA
@@ -94,8 +119,8 @@ attivano collegandoli quando servono:
 
 | Motore | Cosa fa |
 |---|---|
-| **Tassa di soggiorno** | Calcolo per città (jurisdiction-agnostic, default 0), voce separata e visibile. |
-| **Split-payment di gruppo** | Più ospiti dividono il costo, ognuno paga la sua quota (conservazione esatta al centesimo). |
+| **Tassa di soggiorno** | Calcolo per città (jurisdiction-agnostic, default 0). ✅ **Ora con API** `/api/tassa` (§11). |
+| **Split-payment di gruppo** | Più ospiti dividono il costo, ognuno la sua quota (esatta al centesimo). ✅ **Ora con API** `/api/split/*` (§11). |
 | **Coda intelligente** | Lista d'attesa con deposito: se si libera, prenoti; se no, voucher maggiorato. |
 | **Predictive no-show** | Stima i mancati arrivi e consiglia overbooking controllato (conservativo). |
 | **Commitment engine** | Deposito anti-cancellazione + cleaning fee trasparente + scudo anti-chargeback. |
@@ -132,7 +157,7 @@ evoluzione "alloggi".
    mai l'IA".
 4. **Multilingua** per costruzione (clienti e host).
 5. **Isolamento**: ogni modulo è a sé; se un pezzo cade, il resto vive.
-6. **Testato fino in fondo**: 1365 test verdi, zero regressioni, ogni funzione verificata
+6. **Testato fino in fondo**: 1429 test verdi, zero regressioni, ogni funzione verificata
    anche "live" sul server reale.
 7. **Pronto all'accensione**: pagamenti, email e webhook sono "gated" — il sistema gira
    identico senza credenziali, e si accende mettendo le chiavi nel `.env`, **zero modifiche

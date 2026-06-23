@@ -78,8 +78,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 89=jurisdiction B2B radar & outreach (gate giurisdizioni + email Prima Emilia);
         # 90=marketing & growth engine 360 (post multilingua + immagini SVG + calendario + canali);
         # 91=canali social reali (Telegram gratis + Meta FB/IG gated, da env, fetch iniettabile);
-        # 92=canale X/Twitter (OAuth1 stdlib, gated, a pagamento); 93=canale TikTok (video-first, gated). Blocco 94+ libero.
-        for n in range(94, 97):
+        # 92=canale X/Twitter (OAuth1 stdlib, gated, a pagamento); 93=canale TikTok (video-first, gated);
+        # 94=scheduler auto-pubblicazione campagna (clock+store iniettabili, stato-file atomico, no-burst). Blocco 95+ libero.
+        for n in range(95, 97):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 

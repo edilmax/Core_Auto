@@ -32,14 +32,15 @@
     <div class="logo">BookinVIP · Admin</div>
     <div class="key">
       <input type="password" id="adminkey" placeholder="X-Admin-Key" style="width:220px">
-      <button id="btnCarica">Carica prenotazioni</button>
+      <button id="btnCarica">🔄 Aggiorna</button>
+      <span id="autostat" style="font-size:.78rem;color:#5e6f8d"></span>
     </div>
   </header>
 
   <div id="msg"></div>
   <table>
     <thead><tr><th>Alloggio</th><th>Check-in</th><th>Check-out</th><th>Origine</th><th>Stato</th><th></th></tr></thead>
-    <tbody id="tbody"><tr><td colspan="6" style="text-align:center;color:#5e6f8d;padding:2rem">Inserisci la chiave e carica.</td></tr></tbody>
+    <tbody id="tbody"><tr><td colspan="6" style="text-align:center;color:#5e6f8d;padding:2rem">Inserisci la chiave admin: si carica da solo.</td></tr></tbody>
   </table>
 
   <div style="background:#fff;border-radius:1rem;padding:1.5rem;box-shadow:0 6px 18px rgba(0,0,0,.05);margin-top:1.5rem">
@@ -59,13 +60,16 @@
 
 <script>
 const API = location.origin.startsWith('http') ? '' : 'http://127.0.0.1:8080';
+const LS = 'bookinvip_admin_key';
 function key(){ return document.getElementById('adminkey').value; }
 function msg(t,ok){ const m=document.getElementById('msg'); m.className='msg '+(ok?'ok':'err'); m.textContent=t; }
+function stat(t){ document.getElementById('autostat').textContent = t; }
 
 async function carica(){
+  if(!key()){ stat(''); return; }
   try{
     const res = await fetch(API+'/api/admin/prenotazioni', {headers:{'X-Admin-Key':key()}});
-    if(res.status===401){ msg('Chiave admin errata.',false); return; }
+    if(res.status===401){ msg('Chiave admin errata.',false); stat(''); return; }
     const d = await res.json();
     const tb = document.getElementById('tbody');
     if(!d.prenotazioni || !d.prenotazioni.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:#5e6f8d;padding:2rem">Nessuna prenotazione.</td></tr>'; return; }
@@ -76,6 +80,7 @@ async function carica(){
     }).join('');
     tb.querySelectorAll('button.danger').forEach(b=>b.onclick=()=>rimborsa(b.dataset));
     msg(d.prenotazioni.length+' prenotazioni.', true);
+    stat('aggiornato '+new Date().toLocaleTimeString());
   }catch(e){ msg('Errore: '+e.message,false); }
 }
 
@@ -110,8 +115,22 @@ async function pubblicaCampagna(){
   }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
 }
 document.getElementById('btnCampagna').onclick = pubblicaCampagna;
-
 document.getElementById('btnCarica').onclick = carica;
+
+// --- AUTOMATICO: chiave ricordata, auto-load all'apertura, su cambio chiave, ogni 60s ---
+const inp = document.getElementById('adminkey');
+let _t;
+function salvaECarica(){
+  try{ localStorage.setItem(LS, inp.value); }catch(e){}
+  clearTimeout(_t); _t = setTimeout(carica, 400);   // debounce mentre si digita
+}
+inp.addEventListener('input', salvaECarica);
+inp.addEventListener('change', carica);
+window.addEventListener('DOMContentLoaded', ()=>{
+  try{ const k = localStorage.getItem(LS); if(k){ inp.value = k; } }catch(e){}
+  if(inp.value) carica();                            // si carica DA SOLO se la chiave c'è
+});
+setInterval(()=>{ if(inp.value && !document.hidden) carica(); }, 60000);  // refresh auto
 </script>
 </body>
 </html>

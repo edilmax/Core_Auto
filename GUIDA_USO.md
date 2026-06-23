@@ -118,12 +118,22 @@ Se hai acceso l'email (Parte 5), il cliente riceve tutto questo anche **via emai
 
 ---
 
-# PARTE 4 — IL PANNELLO ADMIN (rimborsi)
+# PARTE 4 — IL PANNELLO ADMIN (rimborsi + marketing)
 
-Apri `https://bookinvip.com/admin.html`. Metti la tua **ADMIN_KEY**, premi **Carica
-prenotazioni**. Vedi tutte le prenotazioni.
+Apri `https://bookinvip.com/admin.html`. Metti la tua **ADMIN_KEY** **una sola volta**: il
+browser la **ricorda** e le prenotazioni **si caricano da sole** (e si aggiornano ogni 60
+secondi). Niente più bottone "carica": è **automatico**. Il bottone **🔄 Aggiorna** serve
+solo se vuoi forzare subito.
 - Premi **Rimborsa** su una prenotazione → le date si **liberano** (la prenotazione viene
   annullata). Se Stripe è acceso, il rimborso dei soldi parte di conseguenza.
+
+## 4.1 Pubblicare una campagna marketing  📣
+In fondo al pannello admin c'è il riquadro **"📣 Marketing — pubblica campagna"**:
+1. Spunta le **lingue** che vuoi (IT/EN/ES/FR/DE).
+2. Premi **Pubblica campagna**.
+Il sistema **genera i post** (per host, ospiti, referral) + le **immagini promo** e li
+**pubblica sui canali** che hai configurato nel `.env` (vedi 5.5). Se non hai ancora messo
+i canali, i post vengono **generati ma non pubblicati** (te lo dice il messaggio).
 
 ---
 
@@ -167,15 +177,48 @@ SENTINEL=1
 ```
 **Cosa cambia:** il sistema sorveglia i propri file: se qualcuno li modifica, lo segnala.
 
-## 5.4 Le chiavi delle pagine
+## 5.4 Le chiavi delle pagine + la COMMISSIONE
 Sempre nel `.env.casavip`:
 ```
 HOST_KEY=una-password-lunga-per-te
 ADMIN_KEY=un-altra-password-per-i-rimborsi
 BASE_URL=https://bookinvip.com
+COMMISSIONE_BPS=1500
 ```
+> `COMMISSIONE_BPS` è la **tua commissione** in "punti base": **1500 = 15%** (1000 = 10%,
+> 300 = 3%). Default live: **15%** (sotto il 18–25% delle OTA). Strategia: 15% per i primi
+> 1000 alloggi.
+>
 > Se lasci HOST_KEY o ADMIN_KEY **vuote**, i pannelli restano **aperti** (va bene solo per
 > fare prove sul tuo computer, **mai** online). Online: mettile sempre, lunghe e diverse.
+
+## 5.5 Accendere i CANALI SOCIAL (la campagna pubblica davvero)
+Per far sì che il bottone "Pubblica campagna" (4.1) pubblichi sul serio, metti nel
+`.env.casavip` **solo i canali che vuoi** (ognuno è indipendente; quelli che lasci vuoti
+restano spenti):
+```
+# Telegram (GRATIS — il più facile)
+TELEGRAM_BOT_TOKEN=...        # lo dà @BotFather su Telegram
+TELEGRAM_CHAT_ID=...          # l'id del tuo canale/gruppo
+
+# Facebook + Instagram (Meta Graph)
+META_PAGE_ID=...
+META_PAGE_TOKEN=...           # token della Pagina (rigeneralo se è mai stato esposto!)
+META_IG_USER_ID=...           # solo per Instagram
+
+# X / Twitter (ATTENZIONE: l'API di scrittura è a PAGAMENTO)
+X_API_KEY=...
+X_API_SECRET=...
+X_ACCESS_TOKEN=...
+X_ACCESS_SECRET=...
+
+# TikTok (video-first: serve l'app approvata + un video)
+TIKTOK_ACCESS_TOKEN=...
+```
+**Cosa cambia:** la campagna viene **pubblicata** sui canali che hai compilato. Consiglio:
+parti da **Telegram** (gratis e immediato), poi Facebook/Instagram.
+> 🔒 **Sicurezza:** se un token è mai finito in una chat/screenshot, **rigeneralo** dal
+> sito del provider prima di usarlo. I segreti vivono **solo** nel `.env` del server.
 
 ---
 
@@ -210,8 +253,9 @@ Se questi 5 passi vanno, **tutto funziona**.
 - I prezzi si scrivono in **centesimi** (€95 = 9500).
 - **Host** = `/host.html` con la **HOST_KEY**: pubblica → apri le date → e sei prenotabile.
 - **Cliente** = `/` : cerca → prenota → voucher.
-- **Admin** = `/admin.html` con la **ADMIN_KEY**: rimborsi.
-- Le funzioni extra (pagamenti, email) si **accendono scrivendo le chiavi nel `.env`** e
-  riavviando — niente codice.
+- **Admin** = `/admin.html` con la **ADMIN_KEY**: si carica **da solo**, rimborsi +
+  bottone **campagna marketing**.
+- Le funzioni extra (pagamenti, email, **canali social**, commissione) si **accendono
+  scrivendo le chiavi nel `.env`** e riavviando — niente codice.
 
 Buon lavoro! 🥭

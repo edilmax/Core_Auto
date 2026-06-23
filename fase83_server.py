@@ -1029,6 +1029,24 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
     router = crea_router(sistema, host_key=host_key, admin_key=admin_key,
                          base_url=base_url)
 
+    # --- Auto-pubblicazione campagna (GATED, default-off): parte solo se nel .env c'è
+    #     CAMPAGNA_AUTO_GIORNI e il sistema ha un motore marketing. Isolato: se fallisce,
+    #     il server parte lo stesso.
+    _giorni = os.environ.get("CAMPAGNA_AUTO_GIORNI", "").strip()
+    if _giorni and getattr(sistema, "marketing", None) is not None:
+        try:
+            from fase94_scheduler_campagna import crea_scheduler_campagna
+            sched = crea_scheduler_campagna(
+                sistema.marketing, percorso=os.environ.get(
+                    "CAMPAGNA_STATO_FILE", ".campagna_stato.json"),
+                cadenza_giorni=int(_giorni))
+            sched.avvia_in_thread(intervallo_sec=3600.0)
+            logging.getLogger("core_auto.server").info(
+                "Scheduler campagna AVVIATO: ogni %s giorni", _giorni)
+        except Exception:
+            logging.getLogger("core_auto.server").warning(
+                "Scheduler campagna NON avviato (ISOLATO)", exc_info=True)
+
     class Handler(BaseHTTPRequestHandler):
         def _cors(self):
             self.send_header("Access-Control-Allow-Origin", "*")
