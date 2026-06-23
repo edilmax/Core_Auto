@@ -92,8 +92,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 104=gateway Asia (Alipay/WeChat Pay agganciati allo split 15% Stripe Connect fase101 + canale Weibo, gated);
         # 105=W3C identity gate (Verifiable Credential firmate HMAC per annunci host e recensioni guest, anti-truffa, puro);
         # 106=dynamic pricing (occupazione/domanda + stagionalità mese + weekend + last-minute/anticipo, bps interi, floor/cap, puro);
-        # 107=i18n auto-traduzione annunci (default pass-through fase61 + backend LibreTranslate gratuito iniettabile + cache, isolato). Blocco 108+ libero.
-        for n in range(108, 110):
+        # 107=i18n auto-traduzione annunci (default pass-through fase61 + backend LibreTranslate gratuito iniettabile + cache, isolato);
+        # 109=referral host-porta-host (codice firmato + bonus crediti non-cashabili a scaglioni, anti-frode, durevole). Blocco 108,110+ libero.
+        for n in (108, 110, 111):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
