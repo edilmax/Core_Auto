@@ -4,13 +4,19 @@
 
 FROM python:3.11-slim
 
-# Niente .pyc, output non bufferato (log immediati)
+# Niente .pyc, output non bufferato (log immediati). TUTTI i dati durevoli su /data
+# (il volume): DB + stato scheduler + opt-out outreach. Senza questo, account host,
+# crediti referral e disiscrizioni andrebbero persi a ogni redeploy.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HOST=0.0.0.0 \
     PORTA=8080 \
     DB_CATALOGO=/data/catalogo.db \
     DB_INVENTARIO=/data/inventario.db \
+    DB_REGISTRO_HOST=/data/registro_host.db \
+    DB_VIRAL=/data/viral.db \
+    CAMPAGNA_STATO_FILE=/data/campagna_stato.json \
+    OUTREACH_OPTOUT_FILE=/data/outreach_optout.json \
     STATIC_DIR=/app/deploy
 
 WORKDIR /app

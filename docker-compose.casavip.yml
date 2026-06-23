@@ -16,6 +16,10 @@ services:
       PORTA: "8080"
       DB_CATALOGO: /data/catalogo.db
       DB_INVENTARIO: /data/inventario.db
+      DB_REGISTRO_HOST: /data/registro_host.db   # account host self-service (durevole)
+      DB_VIRAL: /data/viral.db                   # crediti referral (durevole)
+      CAMPAGNA_STATO_FILE: /data/campagna_stato.json   # scheduler no-burst (durevole)
+      OUTREACH_OPTOUT_FILE: /data/outreach_optout.json # opt-out (durevole = obbligo legale)
       STATIC_DIR: /app/deploy
     volumes:
       - casavip_data:/data            # SQLite persistente
