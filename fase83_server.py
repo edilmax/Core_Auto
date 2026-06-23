@@ -1119,6 +1119,27 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     self._scrivi(404, {"errore": "voucher_non_valido"})
                 else:
                     self._testo(200, "text/html", html)
+            elif u.path == "/stop":
+                # Disiscrizione PUBBLICA (link nelle email outreach). Nessuna auth: il
+                # destinatario deve poter dire stop. Opt-out scritto in modo DUREVOLE.
+                query = {k: v[0] for k, v in parse_qs(u.query).items()}
+                email = (query.get("e") or query.get("email") or "").strip()
+                fatto = False
+                try:
+                    from fase95_outreach_email import StoreOptOut
+                    StoreOptOut(os.environ.get("OUTREACH_OPTOUT_FILE",
+                                               ".outreach_optout.json")).aggiungi(email)
+                    fatto = bool(email)
+                except Exception:
+                    logging.getLogger("core_auto.server").warning(
+                        "opt-out /stop fallito (ISOLATO)", exc_info=True)
+                msg = ("✅ Disiscritto. Non riceverai più nostre email." if fatto
+                       else "Indirizzo email mancante o non valido.")
+                self._testo(200, "text/html",
+                            "<!doctype html><meta charset=utf-8><title>BookinVIP</title>"
+                            "<body style='font-family:system-ui;max-width:32rem;margin:4rem "
+                            "auto;text-align:center'><h1>BookinVIP</h1><p style='font-size:"
+                            "1.1rem'>%s</p></body>" % msg)
             else:
                 self._statico(u.path)
 

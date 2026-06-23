@@ -79,8 +79,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 90=marketing & growth engine 360 (post multilingua + immagini SVG + calendario + canali);
         # 91=canali social reali (Telegram gratis + Meta FB/IG gated, da env, fetch iniettabile);
         # 92=canale X/Twitter (OAuth1 stdlib, gated, a pagamento); 93=canale TikTok (video-first, gated);
-        # 94=scheduler auto-pubblicazione campagna (clock+store iniettabili, stato-file atomico, no-burst). Blocco 95+ libero.
-        for n in range(95, 97):
+        # 94=scheduler auto-pubblicazione campagna (clock+store iniettabili, stato-file atomico, no-burst);
+        # 95=outreach durevole (opt-out persistente file-atomico + adattatore invio email reale fase86). Blocco 96+ libero.
+        for n in range(96, 98):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
