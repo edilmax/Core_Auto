@@ -1,7 +1,7 @@
 # STATO FINALE — Dove siamo e cosa manca per FINIRE BookinVIP
 
 > Punto di ripristino. Se si interrompe, riparti da qui. Aggiornato: 2026-06-23.
-> Suite: **1705 test**, zero regressioni (baseline errori=48 = live PG/Playwright).
+> Suite: **1713 test**, zero regressioni (baseline errori=48 = live PG/Playwright).
 > **CODICE CHIUSO + DEPLOY HTTPS PRONTO + ACQUISIZIONE + ARCHITETTURA FINANZIARIA.** Resta
 > solo il "DA FARE TU": VPS + DNS + chiavi .env + numeri fiscali col commercialista + deploy.
 
@@ -66,6 +66,8 @@
   fail-closed, % completamento, SQLite durevole).
 - fase143 verifica identità host KYC (handoff provider esterno, no PII sui ns server,
   transizioni validate, gate payout, SQLite durevole).
+- fase145 contratto locazione PDF precompilato (PDF 1.4 stdlib zero-dipendenze, xref corretti,
+  IT/EN, cents interi, deterministico).
 
 ## ✅ FATTO (prodotto funzionante)
 - Prodotto BookinVIP (alloggi): vetrina(57), inventario realtime(58), concierge prezzo-firmato(59),
