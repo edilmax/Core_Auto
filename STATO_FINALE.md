@@ -2,7 +2,8 @@
 
 > Punto di ripristino. Se si interrompe, riparti da qui. Aggiornato: 2026-06-23.
 > Suite: **1449 test**, zero regressioni (baseline errori=48 = live PG/Playwright).
-> **Tutti gli item di CODICE [ME]/[AGENTE] sono CHIUSI.** Resta solo il "DA FARE TU" (chiavi/deploy).
+> **Tutti gli item di CODICE sono CHIUSI + stack DEPLOY HTTPS PRONTO.** Resta solo il
+> "DA FARE TU": VPS + DNS + chiavi .env + lanciare lo script (nessun codice da scrivere).
 
 ## ✅ FATTO (prodotto funzionante)
 - Prodotto BookinVIP (alloggi): vetrina(57), inventario realtime(58), concierge prezzo-firmato(59),
@@ -15,6 +16,17 @@
 - Outreach compliance-first(89): FonteAPIUfficiale gated + gate giurisdizioni + email Prima Emilia.
 - Marketing 360(90): post multilingua + immagini SVG + calendario; canali(91) Telegram+Meta;
   endpoint POST /api/marketing/campagna + bottone "Pubblica campagna" nel pannello admin.
+
+## ✅ DEPLOY — STACK PRONTO (codice/infra fatti)
+- **Docker**: `Dockerfile.casavip` (python:3.11-slim, ZERO dipendenze=pura stdlib, non-root
+  uid 10001, healthcheck urllib). TUTTI i dati durevoli su volume `/data`: catalogo,
+  inventario, registro_host, viral, campagna_stato, **outreach_optout** (fix redeploy-loss,
+  commit 44d6167). Verificato LIVE: entrypoint avvia, composizione completa, /api/health→200.
+- **HTTPS PRONTO** (commit 53c0fd7): `docker-compose.casavip.ssl.yml` (app+nginx-443+
+  **certbot auto-renew 12h**+backup) + `deploy/nginx.casavip.ssl.conf` (80→443, ACME, HSTS,
+  rate-limit, WAF-lite) + `deploy/init-letsencrypt.sh` (bootstrap 1-comando, risolve
+  uovo-e-gallina, STAGING per test). `.gitattributes` forza LF (no 'bad interpreter ^M').
+  Compose SOLO-HTTP `docker-compose.casavip.yml` resta per test locali.
 
 ## ✅ DA FINIRE (codice) — TUTTO CHIUSO
 1. [x] Pannello admin AUTOMATICO: chiave in localStorage, auto-load all'apertura + ogni 60s,
@@ -30,11 +42,18 @@
 8. [x] Outreach: invio email reale (adatta_invio_email→fase86) + opt-out DUREVOLE
    (fase95, file atomico) + endpoint pubblico **/stop** + 10 test. → commit a4ea73e.
 
-## 🔑 DA FARE TU (gated, fuori dal codice)
-- `.env.casavip` sul server: `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`, `SMTP_*`,
-  `META_PAGE_ID`/`META_PAGE_TOKEN`(+IG), `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`.
-- **Rigenera il token Facebook** (quello incollato in chat è compromesso).
-- DNS bookinvip.com -> VPS + `docker compose -f docker-compose.casavip.yml up -d` + HTTPS.
+## 🔑 DA FARE TU (gated, fuori dal codice — l'unica cosa rimasta)
+1. **VPS + DNS**: record A di `bookinvip.com` E `www.bookinvip.com` → IP del VPS; porte 80/443 aperte.
+2. **Segreti** in `.env.casavip` (da `.env.casavip.example`): `CASAVIP_SEGRETO` (genera con
+   `python -c "import secrets;print(secrets.token_hex(32))"`), `HOST_KEY`, `ADMIN_KEY`,
+   `BASE_URL=https://bookinvip.com`; gated: `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`, `SMTP_*`,
+   `META_PAGE_ID`/`META_PAGE_TOKEN`(+IG), `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`, opz. `X_*`/`TIKTOK_*`.
+3. **Rigenera il token Facebook** (quello incollato in chat è compromesso — revocalo prima di usarlo).
+4. **Go-live HTTPS** (un comando, vedi DEPLOY_CASAVIP.md §4):
+   `chmod +x deploy/init-letsencrypt.sh && ./deploy/init-letsencrypt.sh`
+   poi `docker compose -f docker-compose.casavip.ssl.yml up -d --build`.
+   (Suggerito: prima `STAGING=1` per provare, poi `STAGING=0` per il cert vero.)
+5. **Go-to-market**: primi host (il software è pronto; il valore ora è acquisizione, non codice).
 
 ## Regole codice (per tutti gli agenti)
 Python 3.9, `unittest` (no pytest), ZERO dipendenze terze (solo stdlib), docstring italiano +
