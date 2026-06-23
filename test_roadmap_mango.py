@@ -80,8 +80,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 91=canali social reali (Telegram gratis + Meta FB/IG gated, da env, fetch iniettabile);
         # 92=canale X/Twitter (OAuth1 stdlib, gated, a pagamento); 93=canale TikTok (video-first, gated);
         # 94=scheduler auto-pubblicazione campagna (clock+store iniettabili, stato-file atomico, no-burst);
-        # 95=outreach durevole (opt-out persistente file-atomico + adattatore invio email reale fase86). Blocco 96+ libero.
-        for n in range(96, 98):
+        # 95=outreach durevole (opt-out persistente file-atomico + adattatore invio email reale fase86);
+        # 96=lead discovery mondiale da dati aperti OpenStreetMap/Overpass (no scraping/no proxy, innesto in fase89). Blocco 97+ libero.
+        for n in range(97, 99):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
