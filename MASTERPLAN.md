@@ -46,6 +46,20 @@ Ogni blocco/mattone DEVE rispettare:
 - Poi il **gate di regressione**: la suite completa deve restare verde.
 - Solo allora si integra e si committa (un mattone = un commit chiaro).
 
+## Evoluzione prodotto: BookinVIP (alloggi) — fasi 57–90
+
+Lo stack è evoluto nel prodotto live **BookinVIP** (vetrina, inventario realtime,
+concierge prezzo-firmato, MCP, voucher+smart-pass, recensioni verificate, Stripe+webhook,
+email, registro host self-service, viral loop, 14 motori geniali cablati). Commissione
+**15%** (auto −5% sui colossi, configurabile). **Crescita autonoma e legale**:
+- **Fase 89 — Jurisdiction B2B Radar & Outreach**: trova contatti da fonti LECITE
+  (`FonteAPIUfficiale`, gated, no scraping/evasione), gate giurisdizioni fail-closed
+  (UE esclusa di default), email "Prima Emilia" localizzata + opt-out sovrano.
+- **Fase 90 — Marketing & Growth Engine 360°**: genera da solo post social multilingua +
+  **immagini promo SVG da codice** + calendario editoriale + pubblicazione multi-canale
+  (Telegram gratis; IG/FB/X via API ufficiali gated, ToS-rispettosi, niente fake-engagement)
+  + email di campagna (fase86). Cuore gratis e autonomo; canali a pagamento solo se vuoi.
+
 ## Stato attuale (aggiornato: 2026-06-15)
 
 **Fondamenta già blindate (suite: 173 test verdi):**

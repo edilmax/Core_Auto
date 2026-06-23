@@ -75,8 +75,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 86=provider email voucher SMTP (gated);
         # 87=webhook Stripe (verifica firma + conferma pagamento);
         # 88=registro host self-service (registrazione/login/token firmato);
-        # 89=jurisdiction B2B radar & outreach (gate giurisdizioni + email Prima Emilia). Blocco 90+ libero.
-        for n in range(90, 93):
+        # 89=jurisdiction B2B radar & outreach (gate giurisdizioni + email Prima Emilia);
+        # 90=marketing & growth engine 360 (post multilingua + immagini SVG + calendario + canali). Blocco 91+ libero.
+        for n in range(91, 94):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
