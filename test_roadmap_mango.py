@@ -111,8 +111,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 139=chatbot AI assistenza guest pre-prenotazione (router intento deterministico, prezzo SEMPRE dal concierge mai dall'IA, LLM opzionale solo fallback);
         # 141=host onboarding wizard guidato (macchina a stati passi+validazione+gate pubblicazione fail-closed, % completamento, SQLite durevole);
         # 143=verifica identità host KYC (handoff provider esterno, no PII sui ns server, stati con transizioni validate, gate payout, SQLite durevole);
-        # 145=contratto locazione PDF precompilato (PDF 1.4 stdlib zero-dipendenze, xref corretti, IT/EN, cents interi, deterministico). Blocco pari 108..144 + 146+ libero.
-        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146):
+        # 145=contratto locazione PDF precompilato (PDF 1.4 stdlib zero-dipendenze, xref corretti, IT/EN, cents interi, deterministico);
+        # 147=tassa soggiorno comunale automatica (registro regole per-comune + calcolo + ledger riscossioni rendicontazione, comune-ignoto->0, SQLite durevole). Blocco pari 108..146 + 148+ libero.
+        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
