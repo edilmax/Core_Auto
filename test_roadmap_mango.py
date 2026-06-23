@@ -105,8 +105,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 127=check-in digitale guest (pre-registrazione ospiti+documenti validati, sblocco smart-pass fase64 solo se completato, SQLite durevole);
         # 129=traduzione recensioni multilingua (riusa fase107 pass-through+LibreTranslate gated + rileva-lingua euristica + conserva originale);
         # 131=host payout dashboard (tracciamento incassi/payout per valuta, stati maturato->in_transito->pagato/trattenuto, SQLite durevole);
-        # 133=split-payment gruppo a quote uguali (largest-remainder conservazione esatta + pagamenti/completamento durevoli). Blocco 108,110,112,114,116,118,120,122,124,126,128,130,132,134+ libero.
-        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134):
+        # 133=split-payment gruppo a quote uguali (largest-remainder conservazione esatta + pagamenti/completamento durevoli);
+        # 135=iCal sync bidirezionale (export feed .ics DTEND-esclusivo RFC5545 + import fase82, roundtrip, puro). Blocco 108,110,112,114,116,118,120,122,124,126,128,130,132,134,136+ libero.
+        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
