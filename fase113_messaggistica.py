@@ -1,0 +1,139 @@
+"""
+CORE_AUTO - Fase 113: Messaggistica host-guest in-app (thread per prenotazione).
+
+Thread di messaggi legato a una prenotazione: solo i due partecipanti (host, guest) scrivono
+e leggono. Store DUREVOLE (SQLite WAL, conn-per-op + _ConnCondivisa per :memory:). Anti-abuso:
+mittente deve appartenere al thread; testo limitato; mascheramento PII (email/telefono) per
+spostare lo scambio fuori-piattaforma. BLINDATO: errore → False/[]. Orologio iniettabile.
+"""
+from __future__ import annotations
+
+import logging
+import re
+import sqlite3
+import time
+from typing import Any, Callable, Dict, List, Optional
+
+logger = logging.getLogger("core_auto.messaggistica")
+
+MAX_TESTO = 4000
+_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+_TEL = re.compile(r"(?:(?:\+|00)\d[\d\s().-]{6,}\d)|(?:\b\d[\d\s().-]{7,}\d\b)")
+
+
+def maschera_pii(testo: str) -> str:
+    t = _EMAIL.sub("[email rimossa]", testo)
+    return _TEL.sub("[contatto rimosso]", t)
+
+
+class _ConnCondivisa:
+    def __init__(self, con: sqlite3.Connection) -> None:
+        object.__setattr__(self, "_con", con)
+
+    def close(self) -> None:
+        pass
+
+    def __enter__(self):
+        return self._con.__enter__()
+
+    def __exit__(self, *a):
+        return self._con.__exit__(*a)
+
+    def __getattr__(self, n):
+        return getattr(self._con, n)
+
+
+class Messaggistica:
+    def __init__(self, conn_factory: Callable[[], sqlite3.Connection], *,
+                 orologio: Optional[Callable[[], int]] = None) -> None:
+        self._cf = conn_factory
+        self._now = orologio or (lambda: int(time.time()))
+
+    def _apri(self) -> sqlite3.Connection:
+        con = self._cf()
+        try:
+            con.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.Error:
+            pass
+        return con
+
+    def inizializza_schema(self) -> None:
+        con = self._apri()
+        try:
+            with con:
+                con.execute("""CREATE TABLE IF NOT EXISTS messaggi (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    prenotazione_id TEXT NOT NULL, host_id TEXT NOT NULL,
+                    guest_id TEXT NOT NULL, mittente TEXT NOT NULL,
+                    testo TEXT NOT NULL, ts INTEGER NOT NULL,
+                    letto INTEGER NOT NULL DEFAULT 0)""")
+                con.execute("CREATE INDEX IF NOT EXISTS ix_msg_pren "
+                            "ON messaggi(prenotazione_id, id)")
+        finally:
+            con.close()
+
+    def invia(self, prenotazione_id: str, host_id: str, guest_id: str,
+              mittente: str, testo: Any) -> bool:
+        if not (prenotazione_id and host_id and guest_id and mittente):
+            return False
+        if mittente not in (host_id, guest_id):
+            return False                                  # mittente fuori dal thread
+        if not isinstance(testo, str) or not testo.strip():
+            return False
+        corpo = maschera_pii(testo.strip()[:MAX_TESTO])
+        con = self._apri()
+        try:
+            with con:
+                con.execute("INSERT INTO messaggi (prenotazione_id, host_id, guest_id, "
+                            "mittente, testo, ts) VALUES (?,?,?,?,?,?)",
+                            (str(prenotazione_id), str(host_id), str(guest_id),
+                             str(mittente), corpo, self._now()))
+            return True
+        except Exception:
+            logger.warning("invia messaggio fallita (ISOLATA)", exc_info=True)
+            return False
+        finally:
+            con.close()
+
+    def thread(self, prenotazione_id: str, richiedente: str) -> List[Dict[str, Any]]:
+        if not (prenotazione_id and richiedente):
+            return []
+        con = self._apri()
+        try:
+            rows = con.execute(
+                "SELECT mittente, testo, ts, host_id, guest_id FROM messaggi "
+                "WHERE prenotazione_id=? ORDER BY id",
+                (str(prenotazione_id),)).fetchall()
+            out = []
+            for m, t, ts, h, g in rows:
+                if richiedente not in (h, g):
+                    return []                             # estraneo: niente accesso
+                out.append({"mittente": m, "testo": t, "ts": ts})
+            return out
+        except Exception:
+            logger.warning("thread fallita (ISOLATA)", exc_info=True)
+            return []
+        finally:
+            con.close()
+
+    def segna_letti(self, prenotazione_id: str, lettore: str) -> int:
+        if not (prenotazione_id and lettore):
+            return 0
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("UPDATE messaggi SET letto=1 WHERE prenotazione_id=? "
+                                  "AND mittente!=? AND letto=0",
+                                  (str(prenotazione_id), str(lettore)))
+            return cur.rowcount
+        except Exception:
+            return 0
+        finally:
+            con.close()
+
+
+def crea_messaggistica(percorso: str, *, orologio: Any = None) -> Messaggistica:
+    if percorso == ":memory:":
+        con = sqlite3.connect(":memory:", check_same_thread=False)
+        return Messaggistica(lambda: _ConnCondivisa(con), orologio=orologio)
+    return Messaggistica(lambda: sqlite3.connect(percorso), orologio=orologio)

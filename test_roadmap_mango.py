@@ -94,8 +94,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 106=dynamic pricing (occupazione/domanda + stagionalità mese + weekend + last-minute/anticipo, bps interi, floor/cap, puro);
         # 107=i18n auto-traduzione annunci (default pass-through fase61 + backend LibreTranslate gratuito iniettabile + cache, isolato);
         # 109=referral host-porta-host (codice firmato + bonus crediti non-cashabili a scaglioni, anti-frode, durevole);
-        # 111=cancellazione flessibile + rimborso automatico (scaglioni giorni->bps, fee pulizia sempre resa, puro cents). Blocco 108,110,112+ libero.
-        for n in (108, 110, 112):
+        # 111=cancellazione flessibile + rimborso automatico (scaglioni giorni->bps, fee pulizia sempre resa, puro cents);
+        # 113=messaggistica host-guest in-app (thread per prenotazione, solo partecipanti, mascheramento PII, SQLite durevole). Blocco 108,110,112,114+ libero.
+        for n in (108, 110, 112, 114):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
