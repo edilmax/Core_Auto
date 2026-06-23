@@ -96,7 +96,7 @@ class Wishlist:
         con = self._apri()
         try:
             rows = con.execute("SELECT slug FROM wishlist WHERE guest_id=? AND lista=? "
-                               "ORDER BY ts, slug",
+                               "ORDER BY rowid",
                                (str(guest_id), str(lista or LISTA_DEFAULT))).fetchall()
             return [r[0] for r in rows]
         except Exception:
