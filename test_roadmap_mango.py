@@ -77,8 +77,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 88=registro host self-service (registrazione/login/token firmato);
         # 89=jurisdiction B2B radar & outreach (gate giurisdizioni + email Prima Emilia);
         # 90=marketing & growth engine 360 (post multilingua + immagini SVG + calendario + canali);
-        # 91=canali social reali (Telegram gratis + Meta FB/IG gated, da env, fetch iniettabile). Blocco 92+ libero.
-        for n in range(92, 95):
+        # 91=canali social reali (Telegram gratis + Meta FB/IG gated, da env, fetch iniettabile);
+        # 92=canale X/Twitter (OAuth1 stdlib, gated, a pagamento); 93=canale TikTok (video-first, gated). Blocco 94+ libero.
+        for n in range(94, 97):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 

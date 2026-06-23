@@ -125,4 +125,18 @@ def crea_canali_da_env(env: Optional[Dict[str, str]] = None, *,
         canali["meta"] = CanaleMetaGraph(e["META_PAGE_ID"], e["META_PAGE_TOKEN"],
                                          ig_user_id=e.get("META_IG_USER_ID", ""),
                                          fetch=fetch)
+    try:
+        from fase92_canale_x import crea_canale_x_da_env
+        cx = crea_canale_x_da_env(e, fetch=fetch)
+        if cx is not None:
+            canali["x"] = cx
+    except Exception:
+        pass
+    try:
+        from fase93_canale_tiktok import crea_canale_tiktok_da_env
+        ct = crea_canale_tiktok_da_env(e, fetch=fetch)
+        if ct is not None:
+            canali["tiktok"] = ct
+    except Exception:
+        pass
     return canali
