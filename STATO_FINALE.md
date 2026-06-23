@@ -1,7 +1,7 @@
 # STATO FINALE — Dove siamo e cosa manca per FINIRE BookinVIP
 
 > Punto di ripristino. Se si interrompe, riparti da qui. Aggiornato: 2026-06-23.
-> Suite: **1552 test**, zero regressioni (baseline errori=48 = live PG/Playwright).
+> Suite: **1570 test**, zero regressioni (baseline errori=48 = live PG/Playwright).
 > **CODICE CHIUSO + DEPLOY HTTPS PRONTO + ACQUISIZIONE + ARCHITETTURA FINANZIARIA.** Resta
 > solo il "DA FARE TU": VPS + DNS + chiavi .env + numeri fiscali col commercialista + deploy.
 
@@ -27,6 +27,10 @@
 - fase104 gateway Asia (Alipay/WeChat Pay sullo split 15% Stripe Connect + canale Weibo, gated).
 - fase105 W3C identity gate (Verifiable Credential firmate HMAC per annunci host + recensioni
   guest, anti-truffa, gratis).
+- fase106 dynamic pricing (occupazione/domanda + stagionalità + weekend + last-minute/anticipo,
+  bps interi, floor/cap, puro).
+- fase107 i18n auto-traduzione annunci (default pass-through fase61 + backend LibreTranslate
+  gratuito iniettabile + cache, isolato).
 
 ## ✅ FATTO (prodotto funzionante)
 - Prodotto BookinVIP (alloggi): vetrina(57), inventario realtime(58), concierge prezzo-firmato(59),
