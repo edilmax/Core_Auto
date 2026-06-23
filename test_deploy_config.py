@@ -15,15 +15,11 @@ def _read(path):
 
 
 class TestDockerfile(unittest.TestCase):
+    # Il Dockerfile principale e' ora quello di BookinVIP (= Dockerfile.casavip): pura
+    # stdlib Python, single-stage (niente deps da compilare), non-root, server fase83.
 
     def setUp(self):
         self.df = _read("Dockerfile")
-
-    def test_multi_stage(self):
-        self.assertGreaterEqual(self.df.count("FROM "), 2)
-
-    def test_non_root(self):
-        self.assertIn("USER appuser", self.df)
 
     def test_base_slim_e_pinnata(self):
         self.assertIn("slim", self.df)
@@ -32,15 +28,27 @@ class TestDockerfile(unittest.TestCase):
                 self.assertIn(":", riga)
                 self.assertNotIn(":latest", riga)
 
-    def test_no_build_tools_nel_finale(self):
-        finale = self.df.split("FROM ")[-1]
-        for t in ("gcc", "build-essential", "apt-get install"):
-            self.assertNotIn(t, finale)
+    def test_non_root(self):
+        # BookinVIP gira come utente non privilegiato 'app' (uid 10001).
+        self.assertIn("USER app", self.df)
+        self.assertIn("10001", self.df)
 
-    def test_pip_no_cache_e_healthcheck_e_cmd(self):
-        self.assertIn("--no-cache-dir", self.df)
+    def test_zero_dipendenze_stdlib(self):
+        # Pura stdlib: niente pip/requirements/gunicorn nell'immagine (zero superficie deps).
+        for t in ("pip install", "requirements.txt", "gunicorn"):
+            self.assertNotIn(t, self.df)
+
+    def test_no_build_tools(self):
+        for t in ("gcc", "build-essential", "apt-get install"):
+            self.assertNotIn(t, self.df)
+
+    def test_healthcheck_e_cmd_stdlib(self):
         self.assertIn("HEALTHCHECK", self.df)
-        self.assertIn("gunicorn", self.df)
+        self.assertIn("/api/health", self.df)        # endpoint sondato dall'healthcheck
+        self.assertIn("main_casavip.py", self.df)    # entrypoint stdlib
+
+    def test_dati_durevoli_su_volume(self):
+        self.assertIn('VOLUME ["/data"]', self.df)
 
 
 class TestComposeStack(unittest.TestCase):
