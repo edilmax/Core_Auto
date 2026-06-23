@@ -88,8 +88,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 100=DAC7 gate (gated EU default-off, soglie configurabili 28pren/1800€ -> sospendi annuncio+blocca payout, registro durevole);
         # 101=Stripe Connect split-all'origine (destination charge: 85% al conto host, application_fee=nostra commissione; gated, fetch iniettabile);
         # 102=motore autonomo vendi+incassa (orchestra concierge59+inventario58+pagamento101+split65, duck-typed, isolato);
-        # 103=adempimento reverse-charge (gated, autofattura TD17/TD18 + IVA 22% configurabile + scadenza F24 + registro durevole). Blocco 104+ libero.
-        for n in range(104, 106):
+        # 103=adempimento reverse-charge (gated, autofattura TD17/TD18 + IVA 22% configurabile + scadenza F24 + registro durevole);
+        # 104=gateway Asia (Alipay/WeChat Pay agganciati allo split 15% Stripe Connect fase101 + canale Weibo, gated). Blocco 105+ libero.
+        for n in range(105, 107):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
