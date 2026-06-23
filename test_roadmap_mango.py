@@ -84,8 +84,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 96=lead discovery mondiale da dati aperti OpenStreetMap/Overpass (no scraping/no proxy, innesto in fase89);
         # 97=inbound SEO/AEO (landing host per città + FAQ JSON-LD + llms.txt + sitemap, puro/XSS-safe, rotte /affitta /llms.txt);
         # 98=policy commissione (primi-1000-host via fase88.numero_host + split asimmetrico 3%host/12%ospite=15%, puro cents);
-        # 99=multi-currency like-for-like ledger (Denaro tipizzato per valuta, no mix, split nella valuta annuncio, conversione trasparente anti-DCC). Blocco 100+ libero.
-        for n in range(100, 102):
+        # 99=multi-currency like-for-like ledger (Denaro tipizzato per valuta, no mix, split nella valuta annuncio, conversione trasparente anti-DCC);
+        # 100=DAC7 gate (gated EU default-off, soglie configurabili 28pren/1800€ -> sospendi annuncio+blocca payout, registro durevole). Blocco 101+ libero.
+        for n in range(101, 103):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
