@@ -28,21 +28,29 @@ curl -i http://localhost/api/health     # 200 {"status":"ok"} via nginx
 curl -i http://localhost/healthz        # 200 ok (healthcheck proxy)
 ```
 
-## 4. HTTPS / dominio (quando hai il dominio)
-```bash
-# 1) ottieni i certificati (porta 80 libera durante l'emissione)
-docker run --rm -p 80:80 -v /etc/letsencrypt:/etc/letsencrypt \
-  certbot/certbot certonly --standalone -d bookinvip.com --agree-tos -m tu@email.it -n
+## 4. HTTPS / dominio — PRONTO, un comando (Let's Encrypt automatico)
+Usa lo stack TLS già pronto: `docker-compose.casavip.ssl.yml` + `deploy/nginx.casavip.ssl.conf`
++ lo script di bootstrap che ottiene il certificato e risolve l'uovo-e-gallina da solo.
 
-# 2) in deploy/nginx.casavip.conf: scommenta i due blocchi HTTPS e metti il tuo dominio
-# 3) in docker-compose.casavip.yml: scommenta '443:443' e il volume /etc/letsencrypt
-docker compose -f docker-compose.casavip.yml up -d
-```
-Rinnovo automatico (cron mensile):
+**Prerequisiti:** DNS di `bookinvip.com` **e** `www.bookinvip.com` (record A) → IP del VPS;
+porte 80 e 443 aperte; `.env.casavip` già creato (passo 1).
+
 ```bash
-0 3 1 * * docker run --rm -v /etc/letsencrypt:/etc/letsencrypt certbot/certbot renew \
-  && docker compose -f docker-compose.casavip.yml exec nginx nginx -s reload
+# (se cambi dominio/email: modificali in cima a deploy/init-letsencrypt.sh
+#  e i 3 'bookinvip.com' in deploy/nginx.casavip.ssl.conf)
+
+chmod +x deploy/init-letsencrypt.sh
+./deploy/init-letsencrypt.sh        # cert finto -> nginx su -> certbot ottiene il vero -> reload
 ```
+Da qui in poi avvii/aggiorni così (rinnovo automatico: certbot ogni 12h, nginx reload ogni 6h):
+```bash
+docker compose -f docker-compose.casavip.ssl.yml up -d --build
+```
+> 💡 Per provare senza consumare il rate-limit di Let's Encrypt, metti `STAGING=1` in cima
+> allo script (cert di test), poi rimetti `STAGING=0` e rilancia per quello vero.
+> Verifica: `https://bookinvip.com` (lucchetto verde) e `https://bookinvip.com/api/health`.
+
+*(Il vecchio compose `docker-compose.casavip.yml` resta valido per test SOLO-HTTP in locale.)*
 
 ## 5. Operazioni
 | Azione | Comando |
