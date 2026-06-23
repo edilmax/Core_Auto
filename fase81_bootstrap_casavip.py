@@ -88,6 +88,12 @@ class SistemaCasaVIP:
     tasse: Any = None
     sensory: Any = None
     sleep: Any = None
+    split: Any = None
+    coda: Any = None
+    turnover: Any = None
+    digital_twin: Any = None
+    guardian: Any = None
+    dichiarazione: Any = None
 
     @property
     def attivo(self) -> bool:
@@ -174,6 +180,21 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     sleep = crea_sleep_guarantee()
     componenti.append("motori(66,74,78)")
 
+    # 3h) motori con stato (factory dedicate); niche/commitment/portability = librerie pure
+    from fase65_split_payment import crea_gestore_split
+    from fase67_coda_intelligente import crea_gestore_coda
+    from fase70_turnover import crea_gestore_turnover
+    from fase72_digital_twin import crea_digital_twin
+    from fase75_guardian_engine import crea_guardian
+    from fase79_dichiarazione import crea_dichiarazione
+    split = crea_gestore_split(":memory:")
+    coda = crea_gestore_coda(":memory:")
+    turnover = crea_gestore_turnover(":memory:")
+    digital_twin = crea_digital_twin(":memory:")
+    guardian = crea_guardian()
+    dichiarazione = crea_dichiarazione(":memory:")
+    componenti.append("motori(65,67,70,72,75,79)")
+
     # 3d) email del voucher (GATED da SMTP): senza host -> nessuna email (come oggi)
     from fase86_email import crea_provider_email
     email_provider = crea_provider_email(cfg.smtp_host, cfg.smtp_port, cfg.smtp_user,
@@ -220,4 +241,7 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           recensioni=recensioni, emettitore_recensioni=emettitore,
                           firma=firma, emettitore_pass=emettitore_pass,
                           email_provider=email_provider, registro_host=registro_host,
-                          viral=viral, tasse=tasse, sensory=sensory, sleep=sleep)
+                          viral=viral, tasse=tasse, sensory=sensory, sleep=sleep,
+                          split=split, coda=coda, turnover=turnover,
+                          digital_twin=digital_twin, guardian=guardian,
+                          dichiarazione=dichiarazione)
