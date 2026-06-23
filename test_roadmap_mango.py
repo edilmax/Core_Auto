@@ -98,8 +98,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 113=messaggistica host-guest in-app (thread per prenotazione, solo partecipanti, mascheramento PII, SQLite durevole);
         # 115=dashboard host metriche avanzate (revenue/occupazione/ADR/RevPAR/lead-time/cancellazione/rating, puro cents/bps);
         # 117=wishlist/preferiti guest (liste nominate per slug, idempotente, SQLite durevole);
-        # 119=calendario prezzi visuale host (griglia giorno-per-giorno: stato + prezzo base + prezzo dinamico fase106, provider iniettato, HTML XSS-safe). Blocco 108,110,112,114,116,118,120+ libero.
-        for n in (108, 110, 112, 114, 116, 118, 120):
+        # 119=calendario prezzi visuale host (griglia giorno-per-giorno: stato + prezzo base + prezzo dinamico fase106, provider iniettato, HTML XSS-safe);
+        # 121=mappa interattiva + geo-ricerca (microgradi interi, bbox+haversine+cluster+GeoJSON, puro). Blocco 108,110,112,114,116,118,120,122+ libero.
+        for n in (108, 110, 112, 114, 116, 118, 120, 122):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
