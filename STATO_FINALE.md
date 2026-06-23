@@ -1,7 +1,8 @@
 # STATO FINALE — Dove siamo e cosa manca per FINIRE BookinVIP
 
 > Punto di ripristino. Se si interrompe, riparti da qui. Aggiornato: 2026-06-23.
-> Suite: ~1419 test, zero regressioni (baseline errori=48 = live PG/Playwright).
+> Suite: **1449 test**, zero regressioni (baseline errori=48 = live PG/Playwright).
+> **Tutti gli item di CODICE [ME]/[AGENTE] sono CHIUSI.** Resta solo il "DA FARE TU" (chiavi/deploy).
 
 ## ✅ FATTO (prodotto funzionante)
 - Prodotto BookinVIP (alloggi): vetrina(57), inventario realtime(58), concierge prezzo-firmato(59),
@@ -15,15 +16,19 @@
 - Marketing 360(90): post multilingua + immagini SVG + calendario; canali(91) Telegram+Meta;
   endpoint POST /api/marketing/campagna + bottone "Pubblica campagna" nel pannello admin.
 
-## 🔧 DA FINIRE (codice)
-1. [ME] Pannelli AUTOMATICI: admin/host auto-load (niente click "Carica"); chiave salvata + auto-refresh.
-2. [AGENTE] Adapter **X/Twitter** (fase92, gated, pattern fase91) + test.
-3. [AGENTE] Adapter **TikTok** (fase93, gated, pattern fase91) + test.
-4. [AGENTE] **Pulizia** ~150 file `ricombinato_*.py` + super_ai_creator/linker (spazzatura).
-5. [AGENTE] **Docs** aggiornati (COSA_FA, GUIDA_USO) con commissione 15%, marketing, canali, outreach.
-6. [ME] Wiring nuovi adapter in `crea_canali_da_env` (fase91) + bump roadmap test.
-7. [ME] **Scheduler** auto-pubblicazione campagna ogni N giorni.
-8. [ME] Outreach: invio email reale (fase86) + opt-out DUREVOLE + endpoint admin.
+## ✅ DA FINIRE (codice) — TUTTO CHIUSO
+1. [x] Pannello admin AUTOMATICO: chiave in localStorage, auto-load all'apertura + ogni 60s,
+   bottone "🔄 Aggiorna" (host.html già auto-load via token). → commit d29f86f.
+2. [x] Adapter **X/Twitter** (fase92, OAuth1 stdlib, gated) + 5 test. → commit a317dad.
+3. [x] Adapter **TikTok** (fase93, video-first, gated) + 5 test. → commit a317dad.
+4. [x] **Pulizia**: 94 file `ricombinato_*` + super_ai_creator/linker rimossi. → commit a317dad.
+5. [x] **Docs** (COSA_FA, GUIDA_USO) con commissione 15%, tassa/split API, marketing, canali,
+   outreach, admin automatico. → commit d29f86f.
+6. [x] Wiring fase92/93 in `crea_canali_da_env` + bump roadmap test. → a317dad/d29f86f.
+7. [x] **Scheduler** auto-pubblicazione campagna ogni N giorni (fase94, gated
+   CAMPAGNA_AUTO_GIORNI, stato-file atomico no-burst) + 10 test. → commit d29f86f.
+8. [x] Outreach: invio email reale (adatta_invio_email→fase86) + opt-out DUREVOLE
+   (fase95, file atomico) + endpoint pubblico **/stop** + 10 test. → commit a4ea73e.
 
 ## 🔑 DA FARE TU (gated, fuori dal codice)
 - `.env.casavip` sul server: `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`, `SMTP_*`,
