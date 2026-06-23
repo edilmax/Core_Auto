@@ -87,8 +87,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 99=multi-currency like-for-like ledger (Denaro tipizzato per valuta, no mix, split nella valuta annuncio, conversione trasparente anti-DCC);
         # 100=DAC7 gate (gated EU default-off, soglie configurabili 28pren/1800€ -> sospendi annuncio+blocca payout, registro durevole);
         # 101=Stripe Connect split-all'origine (destination charge: 85% al conto host, application_fee=nostra commissione; gated, fetch iniettabile);
-        # 102=motore autonomo vendi+incassa (orchestra concierge59+inventario58+pagamento101+split65, duck-typed, isolato). Blocco 103+ libero.
-        for n in range(103, 105):
+        # 102=motore autonomo vendi+incassa (orchestra concierge59+inventario58+pagamento101+split65, duck-typed, isolato);
+        # 103=adempimento reverse-charge (gated, autofattura TD17/TD18 + IVA 22% configurabile + scadenza F24 + registro durevole). Blocco 104+ libero.
+        for n in range(104, 106):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
