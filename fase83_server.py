@@ -359,6 +359,14 @@ class RouterHTTP:
             return self._mcp(body)
         if metodo == "POST" and path == "/api/payments/webhook":
             return self._webhook_stripe(body, headers)
+        if metodo == "GET" and path == "/api/tassa":
+            return self._tassa(query)
+        if metodo == "POST" and path == "/api/split/crea":
+            return self._split_crea(body)
+        if metodo == "POST" and path == "/api/split/paga":
+            return self._split_paga(body)
+        if metodo == "GET" and path == "/api/split/stato":
+            return self._split_stato(query)
         if metodo == "POST" and path == "/api/host/pubblica":
             return self._host_pubblica(body, headers)
         if metodo == "POST" and path == "/api/host/disponibilita":
@@ -619,6 +627,70 @@ class RouterHTTP:
             return 400, {"errore": "json_non_valido"}
         r = fn(dati)
         return int(getattr(r, "status", 200)), getattr(r, "corpo", {}) or {}
+
+    # --- motori: tassa di soggiorno (66) + split-payment (65) ---
+    def _tassa(self, query):
+        eng = getattr(self._sys, "tasse", None)
+        if eng is None:
+            return 503, {"errore": "tassa_non_attiva"}
+        try:
+            notti = int(query.get("notti", "0"))
+            ospiti = int(query.get("ospiti", "0"))
+            imp = int(query.get("imponibile_cents", "0"))
+            esenti = int(query.get("esenti", "0"))
+        except (ValueError, TypeError):
+            return 422, {"errore": "parametri_non_validi"}
+        giur = query.get("giurisdizione") or query.get("citta") or ""
+        return 200, eng.calcola(giur, notti=notti, ospiti=ospiti,
+                                imponibile_cents=imp, esenti=esenti).as_dict()
+
+    def _split_crea(self, body):
+        eng = getattr(self._sys, "split", None)
+        if eng is None:
+            return 503, {"errore": "split_non_attivo"}
+        d = self._json(body)
+        if d is None:
+            return 400, {"errore": "json_non_valido"}
+        try:
+            cid = eng.crea_conto(
+                str(d.get("prenotazione_id", "")), str(d.get("alloggio_id", "")),
+                d.get("totale_cents"), d.get("partecipanti") or [],
+                metodo=str(d.get("metodo", "equo")), importi=d.get("importi"))
+        except Exception:
+            logger.error("split crea: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        if not cid:
+            return 422, {"errore": "conto_non_valido"}
+        return 201, {"conto_id": cid, "stato": eng.stato_conto(cid)}
+
+    def _split_paga(self, body):
+        eng = getattr(self._sys, "split", None)
+        if eng is None:
+            return 503, {"errore": "split_non_attivo"}
+        d = self._json(body)
+        if d is None:
+            return 400, {"errore": "json_non_valido"}
+        conto = str(d.get("conto_id", ""))
+        part = str(d.get("partecipante_id", ""))
+        idem = d.get("idem_key") or (conto + ":" + part)   # idempotente per partecipante
+        try:
+            e = eng.registra_pagamento(conto, part, idem_key=str(idem))
+        except Exception:
+            logger.error("split paga: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        if not e.ok:
+            return 409, {"stato": "rifiutato", "motivo": e.motivo}
+        return 200, {"stato": "pagato", "completato": bool(e.completato),
+                     "idempotente": bool(getattr(e, "idempotente", False))}
+
+    def _split_stato(self, query):
+        eng = getattr(self._sys, "split", None)
+        if eng is None:
+            return 503, {"errore": "split_non_attivo"}
+        st = eng.stato_conto(query.get("conto_id", ""))
+        if st is None:
+            return 404, {"errore": "conto_inesistente"}
+        return 200, st
 
     def _webhook_stripe(self, body, headers):
         """Webhook Stripe (conferma pagamento): verifica la FIRMA sul body GREZZO prima di

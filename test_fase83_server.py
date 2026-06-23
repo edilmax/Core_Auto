@@ -121,6 +121,49 @@ class TestConcierge(unittest.TestCase):
         self.assertEqual(s, 400)
 
 
+class TestMotori(unittest.TestCase):
+    def setUp(self):
+        self.r = crea_router(_sistema())
+
+    def test_tassa_zero_default(self):
+        s, c = self.r.gestisci("GET", "/api/tassa",
+                               {"citta": "roma", "notti": "3", "ospiti": "2"})
+        self.assertEqual(s, 200)
+        self.assertEqual(c["tassa_cents"], 0)          # nessuna regola env -> 0
+        self.assertEqual(c["money_unit"], "cents_integer")
+
+    def test_split_crea_paga_completa(self):
+        # conto da 9000 diviso fra 3 -> 3000 ciascuno
+        s, c = self.r.gestisci("POST", "/api/split/crea", body=json.dumps(
+            {"prenotazione_id": "p1", "alloggio_id": "casa", "totale_cents": 9000,
+             "partecipanti": ["a", "b", "c"]}))
+        self.assertEqual(s, 201)
+        cid = c["conto_id"]
+        # a e b pagano
+        for p in ("a", "b"):
+            sp, cp = self.r.gestisci("POST", "/api/split/paga", body=json.dumps(
+                {"conto_id": cid, "partecipante_id": p}))
+            self.assertEqual(sp, 200)
+            self.assertFalse(cp["completato"])
+        # c paga -> completato
+        sp, cp = self.r.gestisci("POST", "/api/split/paga", body=json.dumps(
+            {"conto_id": cid, "partecipante_id": "c"}))
+        self.assertTrue(cp["completato"])
+        # replay idempotente
+        sp2, cp2 = self.r.gestisci("POST", "/api/split/paga", body=json.dumps(
+            {"conto_id": cid, "partecipante_id": "c"}))
+        self.assertTrue(cp2["idempotente"])
+        # stato
+        ss, st = self.r.gestisci("GET", "/api/split/stato", {"conto_id": cid})
+        self.assertEqual(st["totale_cents"], 9000)
+
+    def test_split_conto_invalido(self):
+        s, _ = self.r.gestisci("POST", "/api/split/crea", body=json.dumps(
+            {"prenotazione_id": "p", "alloggio_id": "c", "totale_cents": 1000,
+             "partecipanti": []}))
+        self.assertEqual(s, 422)
+
+
 class TestWebhookStripe(unittest.TestCase):
     def test_webhook_valido(self):
         from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema

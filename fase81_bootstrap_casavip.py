@@ -173,10 +173,10 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         componenti.append("viral(76)")
 
     # 3g) motori stateless cablati (calcolatori puri, default sicuri)
-    from fase66_tassa_soggiorno import crea_registro_tasse
+    from fase66_tassa_soggiorno import RegistroTasse
     from fase74_sensory_engine import crea_sensory_engine
     from fase78_sleep_guarantee import crea_sleep_guarantee
-    tasse = crea_registro_tasse()
+    tasse = RegistroTasse.da_env()       # città->regola da env TASSE_SOGGIORNO (default 0)
     sensory = crea_sensory_engine()
     sleep = crea_sleep_guarantee()
     componenti.append("motori(66,74,78)")
