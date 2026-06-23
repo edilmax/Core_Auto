@@ -86,8 +86,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 98=policy commissione (primi-1000-host via fase88.numero_host + split asimmetrico 3%host/12%ospite=15%, puro cents);
         # 99=multi-currency like-for-like ledger (Denaro tipizzato per valuta, no mix, split nella valuta annuncio, conversione trasparente anti-DCC);
         # 100=DAC7 gate (gated EU default-off, soglie configurabili 28pren/1800€ -> sospendi annuncio+blocca payout, registro durevole);
-        # 101=Stripe Connect split-all'origine (destination charge: 85% al conto host, application_fee=nostra commissione; gated, fetch iniettabile). Blocco 102+ libero.
-        for n in range(102, 104):
+        # 101=Stripe Connect split-all'origine (destination charge: 85% al conto host, application_fee=nostra commissione; gated, fetch iniettabile);
+        # 102=motore autonomo vendi+incassa (orchestra concierge59+inventario58+pagamento101+split65, duck-typed, isolato). Blocco 103+ libero.
+        for n in range(103, 105):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
