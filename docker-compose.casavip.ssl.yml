@@ -26,10 +26,12 @@ services:
       CAMPAGNA_STATO_FILE: /data/campagna_stato.json
       OUTREACH_OPTOUT_FILE: /data/outreach_optout.json
       STATIC_DIR: /app/deploy
+    labels:
+      autoheal: "true"                    # sorvegliato da autoheal (riavvio se unhealthy)
     volumes:
       - casavip_data:/data
     networks:
-      - interna
+      - isolated
     expose:
       - "8080"
     healthcheck:
@@ -50,7 +52,9 @@ services:
       - "80:80"
       - "443:443"
     networks:
-      - interna
+      - isolated
+    labels:
+      autoheal: "true"
     volumes:
       - ./deploy/nginx.casavip.ssl.conf:/etc/nginx/conf.d/default.conf:ro
       - ./certbot/conf:/etc/letsencrypt:ro          # certificati (scritti da certbot)
@@ -68,6 +72,19 @@ services:
       - ./certbot/www:/var/www/certbot
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done'"
 
+  # Autoheal REALE: riavvia i container marcati 'unhealthy' (restart:unless-stopped NON lo fa
+  # sui fallimenti di healthcheck). Sorveglia solo i container con label autoheal=true.
+  autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: casavip_autoheal
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: "30"
+      AUTOHEAL_START_PERIOD: "60"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
   # Backup automatico (snapshot consistente + retention) ogni 6 ore.
   backup:
     image: casavip-app
@@ -84,11 +101,11 @@ services:
     volumes:
       - casavip_data:/data
     networks:
-      - interna
+      - isolated
 
 networks:
-  interna:
-    driver: bridge
+  isolated:
+    driver: bridge            # rete blindata: app raggiungibile SOLO da nginx (no porte host)
 
 volumes:
   casavip_data:

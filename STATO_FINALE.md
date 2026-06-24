@@ -114,6 +114,13 @@
 8. [x] Outreach: invio email reale (adatta_invio_email→fase86) + opt-out DUREVOLE
    (fase95, file atomico) + endpoint pubblico **/stop** + 10 test. → commit a4ea73e.
 
+## 📌 GO-TO-MARKET — REALTÀ 2026 (critica Kimi integrata)
+L'importazione host avviene via **iCal sincronizzato standard (fase82/135, bidirezionale)**,
+NON via API chiuse di Booking/Airbnb (host inventory API invite-only/inesistenti). È l'unico
+canale reale, legale e universale: l'host incolla il link iCal e le date si bloccano cross-canale.
+Sicurezza deploy: app blindata dietro nginx su rete docker **isolated** (nessuna porta su host)
++ **autoheal** reale (riavvio container unhealthy).
+
 ## 🔑 DA FARE TU (gated, fuori dal codice — l'unica cosa rimasta)
 1. **VPS + DNS**: record A di `bookinvip.com` E `www.bookinvip.com` → IP del VPS; porte 80/443 aperte.
 2. **Segreti** in `.env.casavip` (da `.env.casavip.example`): `CASAVIP_SEGRETO` (genera con
