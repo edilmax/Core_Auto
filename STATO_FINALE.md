@@ -121,6 +121,35 @@ canale reale, legale e universale: l'host incolla il link iCal e le date si bloc
 Sicurezza deploy: app blindata dietro nginx su rete docker **isolated** (nessuna porta su host)
 + **autoheal** reale (riavvio container unhealthy).
 
+## 🏛️ QUADRO DEFINITIVO BookinVIP
+> Numeri fiscali/societari = da confermare col commercialista; qui registrati come quadro di lancio.
+
+- **P.IVA 11795700969** in periodo di prova → **locazione occasionale, max 4 case**; se
+  funziona, sblocco **ATECO 62.01.00** (software) **/ 79.90.19** (servizi turistici).
+- **Stripe Connect Destination Charge (fase101)** con **`on_behalf_of`** per pagamenti
+  esteri/asiatici **multivaluta in centesimi (fase99)** — 85% al conto host, application_fee
+  = nostro 15%; valuta dell'annuncio, niente conversione forzata (anti-DCC).
+- **Gate mercati a 150 listings** con **isteresi 0.85** (anti-flapping accensione/spegnimento).
+- **Watchdog iCal 24h** (fase82/135, sync cross-canale) + **geo-rebalance attivo** (fase121).
+
+### ✉️ Email Killer (Loss Aversion) + PDF in lingua (fase89)
+**Oggetto:** "Stai regalando il 25% a Booking — riprenditelo (Prima Emilia)"
+**Corpo:**
+"Ciao {nome}, ogni prenotazione dei TUOI clienti (repeat, Instagram, passaparola) su Booking
+ti costa fino al 25%: su {fatturato} sono **€{perdita}/anno** che regali. Con BookinVIP paghi
+**15%**, hai sito di prenotazione + pagamento + voucher + check-in automatico, e tieni i tuoi
+clienti. Nessuna esclusiva: sincronizzi il calendario iCal e li gestisci ovunque. Entri nella
+classe fondatrice **Prima Emilia** (15% bloccato a vita). In allegato il PDF con il calcolo
+nella tua lingua. Rispondi a questa email. — BookinVIP · Per non ricevere più: {optout}"
+(Localizzata 5 lingue via fase89; PDF allegato generato da codice, calcolo perdita in cents.)
+
+### 🎬 Script video "I traumi del 2026" (host)
+1) HOOK <2s: "Hai perso €4.200 quest'anno. E non te ne sei accorto." 2) TRAUMA: overbooking,
+recensione ingiusta, commissione 25%, reception alle 2 di notte. 3) SVOLTA: "C'è chi affitta
+le stesse case e ne tiene il 10% in più." 4) PROVA: schermata calcolo +€/notte, voucher,
+self check-in. 5) CTA unica: "BookinVIP — riprenditi i tuoi clienti." Formato 9:16, 15–30s,
+sottotitoli burned-in, taglio 1.5–2.5s, loop-friendly.
+
 ## ⚙️ PARAMETRI DI LANCIO (config + contenuti)
 > Nota onesta: i flag sotto sono **proposti/da cablare** (il runtime NON li legge ancora);
 > qui registrati come parametri definitivi del lancio. Lo "stack psicologico" e i parametri
