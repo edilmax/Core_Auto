@@ -165,9 +165,9 @@ Nel `.env.casavip` scrivi i dati del tuo provider email:
 ```
 SMTP_HOST=smtp.tuoprovider.com
 SMTP_PORT=587
-SMTP_USER=no-reply@bookinvip.com
+SMTP_USER=info@bookinvip.com
 SMTP_PASSWORD=la-password-della-casella
-EMAIL_MITTENTE=no-reply@bookinvip.com
+EMAIL_MITTENTE=info@bookinvip.com
 ```
 **Cosa cambia:** a ogni prenotazione confermata, l'ospite riceve **l'email** col voucher.
 (Se l'email cade, la prenotazione resta valida lo stesso.)

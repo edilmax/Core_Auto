@@ -149,7 +149,7 @@ sed -i 's/tavolavip.example/tavolavip.tuodominio.it/g' deploy/nginx.tavolavip.ss
 
 # 2) ottieni i certificati Let's Encrypt (porta 80 libera durante l'emissione)
 docker run --rm -p 80:80 -v /etc/letsencrypt:/etc/letsencrypt \
-  certbot/certbot certonly --standalone -d tavolavip.tuodominio.it --agree-tos -m tu@email.it -n
+  certbot/certbot certonly --standalone -d tavolavip.tuodominio.it --agree-tos -m info@bookinvip.com -n
 
 # 3) avvia lo stack HTTPS (al posto del compose base)
 docker compose -f docker-compose.tavolavip.ssl.yml up -d --build

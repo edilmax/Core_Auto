@@ -21,7 +21,7 @@ contatti). Con una casella + alias copri tutto.
 - [ ] **1 mailbox reale** su `@bookinvip.com` (Google Workspace ~€5/mese, **Zoho Mail
       gratis** fino a pochi utenti, o quella inclusa col dominio).
 - Indirizzi consigliati (bastano alias sulla stessa casella):
-  - [ ] `no-reply@bookinvip.com` → **mittente automatico dei voucher** (va in EMAIL_MITTENTE)
+  - [ ] `info@bookinvip.com` → **mittente automatico dei voucher** (va in EMAIL_MITTENTE)
   - [ ] `info@bookinvip.com` (o `hello@`) → contatto pubblico / supporto
   - [ ] `admin@bookinvip.com` → tuo, per avvisi/gestione
 - Dal provider email prendi: **SMTP_HOST, SMTP_PORT (587), SMTP_USER, SMTP_PASSWORD**

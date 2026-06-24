@@ -145,9 +145,9 @@ Dal tuo provider email (Zoho/Google Workspace) prendi i dati SMTP e mettili nel 
 ```
 SMTP_HOST=smtp.tuoprovider.com
 SMTP_PORT=587
-SMTP_USER=no-reply@bookinvip.com
+SMTP_USER=info@bookinvip.com
 SMTP_PASSWORD=...
-EMAIL_MITTENTE=no-reply@bookinvip.com
+EMAIL_MITTENTE=info@bookinvip.com
 ```
 ```bash
 docker compose -f docker-compose.casavip.yml up -d

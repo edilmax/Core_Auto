@@ -13,7 +13,7 @@ set -e
 # ── CONFIG (cambia se usi un altro dominio/email) ─────────────────────────────
 DOMAIN="bookinvip.com"
 WWW="www.bookinvip.com"
-EMAIL="roxincubo@gmail.com"     # avvisi di scadenza Let's Encrypt
+EMAIL="info@bookinvip.com"     # avvisi di scadenza Let's Encrypt
 STAGING=0                        # 1 = certificati di TEST (per provare senza consumare il
                                  #     rate-limit di LE). Metti 0 per il certificato VERO.
 # ──────────────────────────────────────────────────────────────────────────────
