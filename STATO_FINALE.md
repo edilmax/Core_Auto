@@ -1,7 +1,9 @@
 # STATO FINALE — Dove siamo e cosa manca per FINIRE BookinVIP
 
 > Punto di ripristino. Se si interrompe, riparti da qui. Aggiornato: 2026-06-23.
-> Suite: **1731 test**, zero regressioni (baseline errori=48 = live PG/Playwright).
+> Suite: **1740 test superati** con successo, zero regressioni (baseline errori=48 = live
+> PG/Playwright). Include lo scudo fiscale reverse-charge (fase103), i gateway QR asiatici
+> Alipay/WeChat (fase104) e il modulo Alloggiati Web Questura (fase151).
 > **CODICE CHIUSO + DEPLOY HTTPS PRONTO + ACQUISIZIONE + ARCHITETTURA FINANZIARIA.** Resta
 > solo il "DA FARE TU": VPS + DNS + chiavi .env + numeri fiscali col commercialista + deploy.
 
@@ -72,6 +74,8 @@
   riscossioni rendicontazione, comune-ignoto→0, SQLite durevole).
 - fase149 deposito cauzionale pre-autorizzazione (hold no-addebito, cattura danno≤autorizzato
   + rilascio resto, conservazione esatta, PSP capture/release gated, SQLite durevole).
+- fase151 export Alloggiati Web Questura (file larghezza-fissa 168char IT-gated, schedine
+  ospiti, capo-con-documento, ASCII uppercase, deterministico).
 
 ## ✅ FATTO (prodotto funzionante)
 - Prodotto BookinVIP (alloggi): vetrina(57), inventario realtime(58), concierge prezzo-firmato(59),
