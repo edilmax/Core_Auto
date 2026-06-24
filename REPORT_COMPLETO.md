@@ -1,123 +1,125 @@
-> 🔄 Aggiornato 2026-06-24 · **BookinVIP** · suite **1740 test** (0 regressioni) · moduli `faseNN`→151 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
+> 🔄 Aggiornato 2026-06-24 · **BookinVIP** · suite **1740 test** (failures=0) · moduli `faseNN` 13→151 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
 
-# REPORT COMPLETO — Cosa c'è davvero nella cartella Core_Auto
+# REPORT COMPLETO — Stato reale di Core_Auto (verità assoluta)
 
-> Audit onesto e completo (2026-06-23). Esaminati: 69 moduli `fase*.py` (17.161 righe),
-> 89 file di test (15.223 righe), 14 documenti, cartella `deploy/`, infrastruttura.
-> Obiettivo: capire cosa fa REALMENTE ogni cosa, i parametri scelti, cosa è collegato.
+> Audit onesto, allineato al codice in questo momento. Quello che leggi qui è ciò che ESISTE
+> ed è TESTATO, distinguendo sempre "cablato nel prodotto live" da "modulo testato da cablare".
 
-## 0. Riepilogo in 5 righe
-- Il codice serio = **69 moduli `fase*.py` + 89 test**, tutti documentati e testati.
-- Sono cresciuti **4 "mondi" diversi** nel tempo (vedi §2): fondamenta, ristoranti, funnel
-  acquisizione, e il prodotto attuale **BookinVIP (alloggi)**.
-- Del totale, **solo 17 moduli sono collegati al prodotto live**; ~52 sono **costruiti e
-  testati ma NON collegati** (non persi: da ricucire).
-- C'è **~150 file `ricombinato_*.py` = SPAZZATURA** (output di un vecchio generatore, giu 2025).
-- **BUG trovato**: la commissione mostrata (5%) ≠ quella incassata (0%). Va sistemata.
+## 0. Riepilogo in 6 righe
+- Codice serio = **110 moduli `fase*.py` (13→151) + 131 file di test**; **1740 test, failures=0**
+  (i **48 "errors" sono PREESISTENTI** = test che richiedono Postgres/Playwright/credenziali live,
+  non regressioni; verificato col baseline).
+- Prodotto attuale = **BookinVIP (alloggi)**, brand definitivo, dominio **bookinvip.com**,
+  email ufficiale **info@bookinvip.com**.
+- **Commissione 15% BLINDATA e cablata** (il vecchio bug "0% incassato ≠ 5% mostrato" è RISOLTO).
+- **Spazzatura RIMOSSA** (~1.2 GB di artefatti esperimenti + ~150 `ricombinato_*` già eliminati).
+- **Infrastruttura PRONTA**: Docker stdlib + HTTPS Let's Encrypt + rete isolata + autoheal;
+  VPS Aruba attivo, DNS agganciato. Manca solo: caricare via SSH e lanciare il container.
 
 ---
 
-## 1. Inventario della cartella
+## 1. Inventario reale della cartella
 | Tipo | Quantità | Note |
 |---|---|---|
-| Moduli `fase*.py` | 69 (17.161 righe) | il sistema vero, documentato + testato |
-| Test `test_*.py` | 89 (15.223 righe) | 1740 test, zero regressioni |
-| `ricombinato_*.py` | ~150 | **SPAZZATURA** (vecchio generatore automatico, giu 2025) — da cancellare |
-| `super_ai_creator.py`, `super_linker.py` | 2 | vecchi strumenti generatori — non usati dal prodotto |
-| `app.py`, `assistente_gestionale.py` | 2 | vecchio core "Tavola VIP" (Flask + motore ricerca) |
-| Documenti `.md` | 14 | masterplan, guide, report, legale |
-| `deploy/` | 15 file | vetrina, host, admin, voucher, PWA, nginx, Docker |
+| Moduli `fase*.py` | **110** (13→151) | il sistema vero, ognuno documentato + testato |
+| Test `test_*.py` | **131** | **1740 test**, failures=0, errors=48 preesistenti |
+| Documenti `.md` | 15 | report, guide, manuali, masterplan, legale |
+| `deploy/` | vetrina, host, admin, voucher, PWA, nginx (HTTP+SSL), Docker, init-LE, backup |
+| `legale/` | privacy policy + termini di servizio |
+| `app.py`, `gunicorn.conf.py`, `assistente_gestionale.py` | core legacy Flask/ricerca (tenuti: coperti da test) |
+| Spazzatura | **0** | rimossa il 2026-06-24 (AI_Recombined ~1.2GB, Quantum_*, forensic, ecc.) |
 
 ---
 
-## 2. I 4 "MONDI" nel codice (importante da capire)
-Il progetto ha accumulato 4 stack diversi. **Solo il D è il prodotto attuale.**
+## 2. I 4 "MONDI" nel codice
+### A) Fondamenta CORE_AUTO (fase 13–33) + marketplace fortress (app.py)
+Cassaforte transazionale (money centesimi-interi, idempotency, outbox, datastore PG-ready) +
+cervello IA conversazionale (client LLM, multi-turno, governatore costi, memoria durevole) +
+canali social. **Testato; non cablato a BookinVIP** (l'agente social usa un LLM a pagamento).
 
-### A) Fondamenta CORE_AUTO (fase 13–33) — il motore profondo
-Cassaforte transazionale + cervello IA. **Tutto costruito e testato, NON collegato a BookinVIP.**
-- `17` money (centesimi interi), `15` idempotency, `16` outbox, `23` datastore (PG-ready)
-- `24` canali social (Telegram ok, WhatsApp/IG da credenziali), `25` cervello/AgenteIA,
-  `26` ricerca, `27` proposte, `28` gateway, `29` backpressure
-- `30` client LLM, `31` conversazione multi-turno, `32` governatore costi LLM, `33` memoria durevole
-- **➡️ QUI sta l'agente conversazionale social che cercavi.** È reale, ma usa un LLM (costo)
-  ed è cablato al vecchio motore ristoranti, non agli alloggi.
+### B) Tavola VIP — booking ristoranti (fase 34–42)
+Stack "prenota un tavolo" (prenotazioni, pagamenti PSP+webhook, notifiche, backup, admin Flask).
+**Superato dal lodging; testato.** I 48 errors preesistenti vengono in gran parte da qui (Flask/PG).
 
-### B) Tavola VIP — booking ristoranti (fase 34–42) — prodotto VECCHIO
-Lo stack "prenota un tavolo". **Costruito/testato, superato dal lodging.**
-- `34` prenotazioni, `35` pagamenti (PSP+webhook), `36` API booking, `37` notifiche/voucher,
-  `38` backup, `39` WhatsApp, `40` agente booking IA, `41` pannello admin, `42` observability
+### C) Funnel Mango — acquisizione B2B autonoma (fase 43–56)
+Esplora host, calcola le perdite OTA, contatta, converte. **Spento di default**, testato.
 
-### C) Funnel Mango — acquisizione B2B autonoma (fase 43–56) — SPENTO
-La macchina che cerca host, calcola quanto perdono, li contatta, converte. **Spenta di default.**
-- `43` commissione, `44` prezzo, `45` split a 3 vie, `46` esploratore (pain-score),
-  `47` venditore/outreach, `48` advertising, `49` ponte booking, `50` orchestratore,
-  `51` scheduler, `52` persistenza+metriche, `53` health-guard, `54` loop, `55` bootstrap,
-  `56` gateway tavoli
-- **➡️ Contattare host a freddo: limite legale + ban (vedi memoria strategia).**
-
-### D) BookinVIP — il PRODOTTO ATTUALE (alloggi, fase 57–88) ✅ LIVE
-- `57` vetrina, `58` inventario realtime anti-overbooking, `59` concierge prezzo-firmato,
-  `60` MCP (agenti IA), `61` i18n 5 lingue, `62` no-show*, `63` recensioni verificate,
-  `64` smart-pass check-in, `65` split-payment gruppo*, `66` tassa soggiorno*, `67` coda*,
-  `68` niche*, `69` trasparenza vs OTA, `70` turnover*, `71` commitment*, `72` digital twin*,
-  `73` firma agile, `74` sensory*, `75` guardian*, `76` viral loop, `77` portability*,
-  `78` sleep guarantee*, `79` dichiarazione vincolante*, `80` sentinel, `81` bootstrap,
-  `82` iCal sync, `83` server HTTP, `85` Stripe, `86` email, `87` webhook Stripe, `88` registro host
-- `*` = **costruito e testato ma NON collegato all'interfaccia** (i "geniali" da ricucire).
+### D) BookinVIP — PRODOTTO ATTUALE (alloggi, fase 57–151) ✅
+Il prodotto vivo + tutta l'evoluzione recente. Dettaglio in §3.
 
 ---
 
-## 3. Cosa è COLLEGATO al prodotto live vs no
-**Collegati (17)**: 57, 58, 59, 60, 61, 63, 64, 69, 76, 80, 81, 82, 83, 85, 86, 87, 88.
-→ vetrina, inventario, concierge, MCP, lingue, recensioni, smart-pass, trasparenza, viral,
-sentinel, bootstrap, iCal, server, Stripe, email, webhook, registro host self-service.
+## 3. BookinVIP — cosa c'è (fase 57–151)
+**Core prodotto (cablato in fase81/fase83 → live):** 57 vetrina · 58 inventario realtime
+anti-overbooking · 59 concierge prezzo-firmato (host-aware) · 60 MCP agenti IA · 61 i18n 5 lingue ·
+63 recensioni verificate · 64 smart-pass/self check-in · 69 trasparenza vs OTA · 76 viral loop ·
+80 sentinel · 81 bootstrap/composition-root · 82 iCal · 83 server HTTP+frontend.
 
-**Costruiti ma NON collegati (~52)** — i due gruppi che valgono:
-- **Motori "geniali" del lodging (14)**: 62 no-show, 65 split-payment, 66 tassa, 67 coda,
-  68 niche, 70 turnover, 71 commitment, 72 digital-twin, 73 firma-agile, 74 sensory,
-  75 guardian, 77 portability, 78 sleep, 79 dichiarazione. **➡️ Da cablare = lavoro reale.**
-- **Agente IA social (BLOCCO 3+4)**: 24–33. **➡️ Il tuo "agente sulle chat" è qui.**
+**Money-path (gated da env):** 85 Stripe link · 86 email voucher · 87 webhook Stripe ·
+101 Stripe Connect split-all'origine (85% host / 15% noi, `on_behalf_of`) · 99 multi-currency
+like-for-like anti-DCC · 104 gateway Asia Alipay/WeChat.
+
+**14 motori "geniali" — CABLATI nel sistema (fase81):** 62 no-show, 65 split-payment,
+66 tassa soggiorno, 67 coda, 70 turnover, 72 digital-twin, 74 sensory, 75 guardian, 78 sleep,
+79 dichiarazione (+ 68 niche, 71 commitment, 77 portability = librerie pure). Endpoint live:
+`/api/tassa`, `/api/split/*`.
+
+**Architettura fiscale/commissioni (configurabile, da confermare col commercialista):**
+98 policy commissione (primi-1000-host + split 3% host/12% ospite = 15%) · 100 DAC7 gate ·
+103 reverse-charge (autofattura TD17/18 + F24) · 147 tassa comunale · 151 Alloggiati Web Questura.
+
+**Acquisizione host (legale, gratis):** 89 outreach compliant (gate giurisdizioni + opt-out) ·
+96 lead discovery mondiale da OpenStreetMap (no proxy/scraping) · 97 inbound SEO/AEO
+(`/affitta/<città>`, `llms.txt`, sitemap) · 90/91/92/93 marketing + canali Telegram/Meta/X/TikTok ·
+94 scheduler campagna · 95 outreach durevole + `/stop` · 109 referral host-porta-host.
+
+**Operatività host/guest (moduli testati, alcuni via endpoint, altri da cablare alla UI):**
+73 firma agile · 105 W3C identity gate · 106 dynamic pricing · 107 i18n traduzione annunci ·
+111 cancellazione/rimborso · 113 messaggistica · 115 dashboard metriche · 117 wishlist ·
+119 calendario prezzi · 121 geo-ricerca/mappa · 123 web push · 125 confronto OTA guest ·
+127 check-in digitale · 129 traduzione recensioni · 131 payout dashboard · 133 split quote uguali ·
+135 iCal bidirezionale · 137 fedeltà guest · 139 chatbot pre-prenotazione (prezzo sempre dal CORE) ·
+141 onboarding wizard · 143 KYC host · 145 contratto PDF · 149 deposito cauzionale.
+
+> Onestà: il **core + money-path + 14 motori** sono cablati nel sistema (fase81). I moduli
+> operativi 105→151 sono **costruiti e testati**; parte è esposta via endpoint/server, parte è
+> da agganciare al frontend (lavoro di integrazione, non d'invenzione).
 
 ---
 
-## 4. PARAMETRI SCELTI (i numeri che governano i soldi)
-| Cosa | Dove | Valore attuale | Note |
+## 4. PARAMETRI che governano i soldi (valori reali ORA)
+| Cosa | Dove | Valore | Note |
 |---|---|---|---|
-| **Commissione mostrata** (vetrina/host) | fase69 | **5%** (500 bps) | quella della calcolatrice "vs Booking" |
-| **Commissione INCASSATA** (concierge) | fase59/81 | **0%** ⚠️ | NON cablata → **BUG: mostrato≠incassato** |
-| Commissione OTA (confronto) | fase69 | 18% (1800 bps) | benchmark Booking indicativo |
-| Fee PSP (Stripe) | fase69 | 0 (pass-through) | configurabile |
-| Credito referral | fase76 | **€50** a testa (5000 cents) | referente + nuovo host |
-| Validità credito | fase76 | 365 giorni | non-cashabile |
-| Check-in / Check-out | fase64 | **15:00 / 11:00** | orari dello smart-pass |
-| Tassa di soggiorno | fase66 | **0** (default) | jurisdiction-agnostic, da impostare per città |
-| Token host (login) | fase88 | 30 giorni, PBKDF2 200k | sicurezza self-service |
-
-**⚠️ Decisione tua in sospeso: la percentuale di commissione.** Oggi è incoerente (0 incassato,
-5% mostrato). Va resa UN parametro e impostata al valore che decidi (3/5/15/20%).
+| **Commissione CORE** | fase81/59/98 | **15%** (1500 bps) BLINDATO | default + env `COMMISSIONE_BPS`; primi-1000-host |
+| Split asimmetrico | fase98 | host **3%** + ospite **12%** = 15% | conservazione esatta cents |
+| Stripe Connect | fase101 | destination charge, `on_behalf_of` | 85% host, application_fee 15% |
+| Commissione OTA (confronto) | fase69 | 15% nostra vs ~18–25% OTA | benchmark |
+| Denaro | ovunque | **centesimi interi per valuta** | mai float (fase99) |
+| Tassa soggiorno | fase66/147 | **0** default, per-comune | jurisdiction-agnostic |
+| Check-in/out | fase64 | 15:00 / 11:00 | smart-pass |
+| Token host | fase88 | 30 gg, PBKDF2 200k | self-service + contatore primi-1000 |
 
 ---
 
-## 5. Documenti presenti
-- **MASTERPLAN.md** = la VISIONE originale (agente IA su chat social, 5 blocchi). **Il tuo file.**
-- ARCHITETTURA.md, ROADMAP_MANGO.md, MANUALE_MACCHINA_TOTALE.md, LIBRO_OPERATIVO_TOTALE.md = design storico
-- COSA_FA_BOOKINVIP.md, GUIDA_USO.md, GUIDA_DEPLOY.md, LISTA_GO_LIVE.md, DEPLOY_CASAVIP.md = operativi
-- legale/ (privacy + termini, bozze)
+## 5. Infrastruttura & lancio (stato reale)
+- **Docker**: `Dockerfile`(= casavip) python:3.11-slim, **zero dipendenze** (stdlib), non-root,
+  TUTTI i dati durevoli su volume `/data`, healthcheck `/api/health`.
+- **HTTPS**: `docker-compose.casavip.ssl.yml` + `init-letsencrypt.sh` (1 comando, auto-renew),
+  app dietro nginx su rete docker **isolated**, **autoheal** reale, backup ogni 6h.
+- **VPS Aruba O2A4** (4GB, Docker) **ATTIVO** — IP **89.46.65.6**; **DNS Hostinger** record A
+  agganciato (TTL 14400); **.env.casavip** compilato (P.IVA 11795700969, IBAN, Stripe live) —
+  git-ignored, segreti MAI nel repo.
+- **PROSSIMO PASSO**: caricare la cartella via **SSH** + `./deploy/init-letsencrypt.sh` +
+  `docker compose -f docker-compose.casavip.ssl.yml up -d --build`.
 
 ---
 
-## 6. Pulizia consigliata (igiene del progetto)
-- **Cancellare i ~150 `ricombinato_*.py`** + `super_ai_creator.py` + `super_linker.py`: spazzatura
-  che confonde (non importati da nessun modulo del prodotto). Riduce la cartella del ~70% dei file.
-
----
-
-## 7. Verdetto onesto
-1. Il prodotto **BookinVIP è reale, completo e testato** sul nucleo (prenota→paga→voucher→
-   check-in→recensione, + self-service host + viral loop).
-2. **Le "funzioni geniali" NON sono perse**: 14 motori del lodging + l'intero agente IA social
-   sono costruiti e testati, solo **da ricucire** all'interfaccia.
-3. C'è **un bug commissione** (incassato 0 ≠ mostrato 5%) e una **decisione tua** sulla %.
-4. C'è **spazzatura da rimuovere** (~150 file).
-5. La strada per "più potente dei colossi" = **cablare i 14 motori + l'agente social** (Telegram
-   gratis subito), non riscrivere. È lavoro di integrazione, non di invenzione.
+## 6. Verdetto onesto
+1. **BookinVIP è reale, completo e testato** sul nucleo (cerca→prenota→paga→voucher→check-in→
+   recensione) + self-service host + money-path Stripe Connect multivaluta.
+2. **Architettura finanziaria/fiscale** costruita e testata (split 3/12, multi-currency anti-DCC,
+   DAC7, reverse-charge, tassa comunale, Alloggiati Web) — numeri fiscali da confermare col commercialista.
+3. **Acquisizione legale** pronta (lead OSM + inbound SEO/AEO + outreach compliant).
+4. **Il vecchio bug commissione è RISOLTO**; la spazzatura è RIMOSSA; i doc sono allineati.
+5. Cosa resta = **non-codice**: SSH+deploy del container, conferma fiscale, **ruotare la Stripe
+   secret key** (transitata in chat), e l'integrazione UI dei moduli operativi 105→151.

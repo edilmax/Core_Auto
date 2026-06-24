@@ -1,9 +1,11 @@
 # STATO FINALE — Dove siamo e cosa manca per FINIRE BookinVIP
 
-> Punto di ripristino. Se si interrompe, riparti da qui. Aggiornato: 2026-06-23.
+> Punto di ripristino. Se si interrompe, riparti da qui. Aggiornato: 2026-06-24.
 > Suite: **1740 test superati** con successo, zero regressioni (baseline errori=48 = live
 > PG/Playwright). Include lo scudo fiscale reverse-charge (fase103), i gateway QR asiatici
 > Alipay/WeChat (fase104) e il modulo Alloggiati Web Questura (fase151).
+> Manutenzione 2026-06-24: spazzatura rimossa (~1.2GB artefatti esperimenti), email ufficiale
+> unica = **info@bookinvip.com**, doc allineati (vedi REPORT_COMPLETO.md). 110 moduli fase 13→151.
 > **CODICE CHIUSO + DEPLOY HTTPS PRONTO + ACQUISIZIONE + ARCHITETTURA FINANZIARIA.** Resta
 > solo il "DA FARE TU": VPS + DNS + chiavi .env + numeri fiscali col commercialista + deploy.
 
