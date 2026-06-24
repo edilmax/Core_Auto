@@ -121,6 +121,15 @@ canale reale, legale e universale: l'host incolla il link iCal e le date si bloc
 Sicurezza deploy: app blindata dietro nginx su rete docker **isolated** (nessuna porta su host)
 + **autoheal** reale (riavvio container unhealthy).
 
+## 🟢 INFRASTRUTTURA — COMPLETATA
+- **VPS Aruba O2A4** (4GB RAM, Docker) **ATTIVO** — IP **89.46.65.6**.
+- **DNS**: record **A** su Hostinger **agganciato** (TTL 14400).
+- **.env.casavip** compilato (P.IVA, IBAN, chiavi Stripe Live) — git-ignored, segreti NON nel repo.
+  ⚠️ ruotare la Stripe secret key (esposta in chat) + correggere prefisso doppio `pk_live_pk_live`/`sk_live_sk_live`.
+- **PROSSIMO PASSO ASSOLUTO (al rientro):** caricare la cartella sul server via **SSH** e
+  **lanciare il container Docker** (`./deploy/init-letsencrypt.sh` poi
+  `docker compose -f docker-compose.casavip.ssl.yml up -d --build`).
+
 ## 🏛️ QUADRO DEFINITIVO BookinVIP
 > Numeri fiscali/societari = da confermare col commercialista; qui registrati come quadro di lancio.
 
