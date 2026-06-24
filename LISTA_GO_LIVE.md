@@ -1,6 +1,8 @@
+> 🔄 Aggiornato 2026-06-24 · **BookinVIP** · suite **1740 test** (0 regressioni) · moduli `faseNN`→151 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
+
 # BookinVIP — Lista per andare LIVE
 
-Tutto ciò che serve procurare. Il **software è gratis e pronto** (1365 test, tag
+Tutto ciò che serve procurare. Il **software è gratis e pronto** (1740 test, tag
 v1.0-bookinvip). Qui sotto solo le cose che dipendono da te.
 
 ## 1. DOMINIO  ✅ (lo hai: bookinvip.com)

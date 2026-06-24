@@ -1,8 +1,10 @@
+> 🔄 Aggiornato 2026-06-24 · **BookinVIP** · suite **1740 test** (0 regressioni) · moduli `faseNN`→151 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
+
 # BookinVIP — Cosa fa la macchina (tutte le funzioni)
 
 > Spiegazione completa e onesta. Diviso in: **A) cosa fa OGGI** (acceso nel prodotto
 > live), **B) motori pronti** (costruiti e testati, da collegare alla UI), **C) principi**.
-> Software: 93 fasi, 1429 test verdi, zero dipendenze esterne, su github.com/edilmax/Core_Auto.
+> Software: 110 moduli fase (→151), 1740 test verdi, zero dipendenze esterne, su github.com/edilmax/Core_Auto.
 >
 > **Commissione: 15%** (configurabile via `COMMISSIONE_BPS`, default live 1500 = 15% —
 > sotto il 18–25% delle OTA). Strategia: 15% per i primi 1000 alloggi iscritti.
@@ -157,7 +159,7 @@ evoluzione "alloggi".
    mai l'IA".
 4. **Multilingua** per costruzione (clienti e host).
 5. **Isolamento**: ogni modulo è a sé; se un pezzo cade, il resto vive.
-6. **Testato fino in fondo**: 1429 test verdi, zero regressioni, ogni funzione verificata
+6. **Testato fino in fondo**: 1740 test verdi, zero regressioni, ogni funzione verificata
    anche "live" sul server reale.
 7. **Pronto all'accensione**: pagamenti, email e webhook sono "gated" — il sistema gira
    identico senza credenziali, e si accende mettendo le chiavi nel `.env`, **zero modifiche

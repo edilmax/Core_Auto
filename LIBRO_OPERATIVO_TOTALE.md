@@ -1,3 +1,5 @@
+> 🔄 Aggiornato 2026-06-24 · **BookinVIP** · suite **1740 test** (0 regressioni) · moduli `faseNN`→151 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
+
 # LIBRO OPERATIVO TOTALE: CORE_AUTO (Fase 56)
 
 ## 1. VISIONE D'INSIEME (Architettura)

@@ -1,3 +1,5 @@
+> 🔄 Aggiornato 2026-06-24 · **BookinVIP** · suite **1740 test** (0 regressioni) · moduli `faseNN`→151 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
+
 # REPORT COMPLETO — Cosa c'è davvero nella cartella Core_Auto
 
 > Audit onesto e completo (2026-06-23). Esaminati: 69 moduli `fase*.py` (17.161 righe),
@@ -19,7 +21,7 @@
 | Tipo | Quantità | Note |
 |---|---|---|
 | Moduli `fase*.py` | 69 (17.161 righe) | il sistema vero, documentato + testato |
-| Test `test_*.py` | 89 (15.223 righe) | 1382 test, zero regressioni |
+| Test `test_*.py` | 89 (15.223 righe) | 1740 test, zero regressioni |
 | `ricombinato_*.py` | ~150 | **SPAZZATURA** (vecchio generatore automatico, giu 2025) — da cancellare |
 | `super_ai_creator.py`, `super_linker.py` | 2 | vecchi strumenti generatori — non usati dal prodotto |
 | `app.py`, `assistente_gestionale.py` | 2 | vecchio core "Tavola VIP" (Flask + motore ricerca) |
