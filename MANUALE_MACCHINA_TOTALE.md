@@ -96,7 +96,6 @@ a sé stante che rispetta 5 regole:
 | `MASTERPLAN.md` | La bussola: dove si va e stato mattone-per-mattone. | Per capire la roadmap. |
 | `ROADMAP_MANGO.md` | Piano del satellite commerciale Mango. | Per capire Mango. |
 | `DEPLOY.md` | Guida operativa al deploy (comandi pronti). | Quando pubblichi. |
-| `contratti_frontend_tavoli.md` | I contratti JSON per il sito/app frontend. | Per chi costruisce la UI. |
 | `Quantum_Security_Engine/`, `Guardian_Module/`, `AI_Recombined/` | **Esperimenti vecchi (legacy)**, NON collegati al prodotto. | Mai (storico). |
 
 > ⚠️ Nota importante: nei vecchi appunti queste tre ultime cartelle erano descritte
@@ -227,7 +226,6 @@ approvazione admin.**
 | Cambiare **chi contattare e come** (host) | `fase47_venditore.py` | Regole GDPR/cadenza/dedup. |
 | Cambiare le **campagne pubblicitarie** | `fase48_advertising.py` | Budget dal core, contenuti dall'IA. |
 | Accendere/spegnere **Mango** | `fase55_bootstrap.py` + variabili `MANGO_*` nel `.env` | Default-OFF: di base Mango è spento. |
-| Cambiare i **contratti col sito** (frontend) | `fase56_gateway_tavoli.py` + `contratti_frontend_tavoli.md` | Importi solo in `*_cents` interi. |
 | Cambiare **configurazione/segreti** | `.env` | Mai nel codice, mai su Git. |
 | Cambiare **dominio / SSL / server** | `deploy/nginx*.conf` + `docker-compose*.yml` + `DEPLOY.md` | Vedi sezione 8. |
 | Capire **perché si è bloccato** | Sezione 9 + i log dei moduli | Spesso è un circuito/health-guard che ha protetto il sistema. |

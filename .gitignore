@@ -31,3 +31,20 @@ Proposte_Clienti/
 # --- FASE 13: file di deployment da versionare (eccezioni alle regole sopra) ---
 !requirements.txt
 !.env.example
+
+# --- Pulizia 2026-06-24: artefatti esperimenti autonomi (mai versionare) ---
+AI_Recombined/
+Guardian_Module/
+Quantum_Security_Engine/
+Quantum_Repair_Reports/
+Quantum_Surgery_Reports/
+CodiciCreati/
+LOG_PROTEZIONE/
+MemoriaLog/
+ModuloFinale_Permanente/
+Output_Interpretazioni/
+ai_evolutions/
+darknet_archive/
+quarantine_forensic/
+*.pre_quantum
+*.pre_repair
