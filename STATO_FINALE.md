@@ -121,6 +121,29 @@ canale reale, legale e universale: l'host incolla il link iCal e le date si bloc
 Sicurezza deploy: app blindata dietro nginx su rete docker **isolated** (nessuna porta su host)
 + **autoheal** reale (riavvio container unhealthy).
 
+## ⚙️ PARAMETRI DI LANCIO (config + contenuti)
+> Nota onesta: i flag sotto sono **proposti/da cablare** (il runtime NON li legge ancora);
+> qui registrati come parametri definitivi del lancio. Lo "stack psicologico" e i parametri
+> video sono **linee-guida di contenuto**, non config consumata dal codice.
+
+**.env.casavip (parametri di lancio):**
+```
+GATED_MARKETS_THRESHOLD=150      # soglia mercati gated (host attivi per accendere un mercato)
+GATED_MARKETS_HYSTERESIS=0.85    # isteresi anti-flapping accensione/spegnimento mercato
+ICAL_WATCHDOG_ENABLED=true       # watchdog sync iCal (fase82/135) cross-canale
+GEO_REBALANCE_ENABLED=true       # ribilanciamento geo dei lead/offerta (fase121)
+```
+
+**Email killer — stack psicologico (Loss Aversion):** leva primaria = la PERDITA già in
+corso, non il guadagno. Sequenza: 1) quantifica la perdita ("stai regalando il 25% a Booking
+= €X/anno sui TUOI clienti"); 2) ancora al concreto già posseduto (repeat/Instagram/passaparola);
+3) reversibilità a costo zero ("la riprendi gratis, niente esclusiva, iCal sincronizzato");
+4) urgenza non-finta (classe fondatrice Prima Emilia, 15% bloccato); 5) opt-out sovrano.
+
+**Parametri montaggio video 2026:** vertical 9:16, hook < 2s, durata 15–30s, sottotitoli
+burned-in, taglio ogni 1.5–2.5s, 1 sola CTA finale, audio-trend con testo on-screen
+indipendente dall'audio, safe-margins 14%, loop-friendly.
+
 ## 🔑 DA FARE TU (gated, fuori dal codice — l'unica cosa rimasta)
 1. **VPS + DNS**: record A di `bookinvip.com` E `www.bookinvip.com` → IP del VPS; porte 80/443 aperte.
 2. **Segreti** in `.env.casavip` (da `.env.casavip.example`): `CASAVIP_SEGRETO` (genera con
