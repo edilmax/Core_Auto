@@ -180,6 +180,20 @@
     <button id="btnIcal">Importa e sincronizza</button>
     <div id="msgIcal"></div>
   </div>
+
+  <div class="card">
+    <h2>💬 Messaggi con l'ospite</h2>
+    <p style="color:#5e6f8d;font-size:.9rem;margin-bottom:.6rem">Scrivi all'ospite di una prenotazione (orari arrivo, citofono, istruzioni). Email e telefoni vengono oscurati automaticamente.</p>
+    <div class="grid">
+      <label>Riferimento prenotazione<input id="msg_pren" placeholder="es. REF123"></label>
+      <label>Email ospite<input id="msg_guest" placeholder="ospite@email.it"></label>
+      <label class="full">Messaggio<textarea id="msg_testo" rows="2" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid #dce1ed"></textarea></label>
+    </div>
+    <button id="btnMsgInvia">Invia</button>
+    <button id="btnMsgCarica" style="background:#5e6f8d">Carica conversazione</button>
+    <div id="msgMsg"></div>
+    <div id="msgThread" style="margin-top:.6rem"></div>
+  </div>
 </div>
 
 <script>
@@ -381,6 +395,24 @@ document.getElementById('btnCal').onclick = async ()=>{
     m.className='msg ok'; m.textContent=(d.giorni||[]).length+' giorni.';
   }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
 };
+
+// --- Messaggi host-guest ---
+async function caricaThread(){
+  const pren=document.getElementById('msg_pren').value.trim(); if(!pren) return;
+  try{
+    const d=await (await fetch(API+'/api/messaggi?prenotazione_id='+encodeURIComponent(pren),{headers:authHeaders()})).json();
+    const box=document.getElementById('msgThread');
+    if(!d.messaggi||!d.messaggi.length){ box.innerHTML='<div style="color:#5e6f8d;font-size:.85rem">Nessun messaggio.</div>'; return; }
+    box.innerHTML=d.messaggi.map(m=>`<div style="padding:.4rem .7rem;margin:.3rem 0;border-radius:.7rem;background:${m.mittente==='host'?'#eef6ff':'#f4f6fa'}"><b style="font-size:.72rem;color:#4a5b7a">${m.mittente==='host'?'Tu':'Ospite'}</b><br>${(m.testo||'').replace(/</g,'&lt;')}</div>`).join('');
+  }catch(e){}
+}
+document.getElementById('btnMsgInvia').onclick = async ()=>{
+  const m=document.getElementById('msgMsg');
+  const r=await post('/api/messaggi',{prenotazione_id:document.getElementById('msg_pren').value.trim(),guest_id:document.getElementById('msg_guest').value.trim(),testo:document.getElementById('msg_testo').value.trim()});
+  if(r.status===201){ m.className='msg ok'; m.textContent='✅ Inviato.'; document.getElementById('msg_testo').value=''; caricaThread(); }
+  else { m.className='msg err'; m.textContent='❌ '+(r.data.errore||r.status); }
+};
+document.getElementById('btnMsgCarica').onclick = caricaThread;
 
 document.getElementById('lang').onchange = e=>{ LANG=e.target.value; document.documentElement.lang=LANG; caricaI18N(LANG); };
 caricaI18N(LANG);

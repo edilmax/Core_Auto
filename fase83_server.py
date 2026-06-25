@@ -371,6 +371,10 @@ class RouterHTTP:
             return self._split_paga(body)
         if metodo == "GET" and path == "/api/split/stato":
             return self._split_stato(query)
+        if metodo == "POST" and path == "/api/messaggi":
+            return self._msg_invia(body, headers)
+        if metodo == "GET" and path == "/api/messaggi":
+            return self._msg_thread(query, headers)
         if metodo == "POST" and path == "/api/host/pubblica":
             return self._host_pubblica(body, headers)
         if metodo == "POST" and path == "/api/host/disponibilita":
@@ -803,6 +807,34 @@ class RouterHTTP:
         from urllib.parse import quote
         link = self._base_url + "/diventa-host.html?ref=" + quote(codice)
         return 200, {"codice": codice, "link": link, "credito_cents": int(credito)}
+
+    def _msg_invia(self, body, headers):
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        msg = getattr(self._sys, "messaggistica", None)
+        if msg is None:
+            return 503, {"errore": "messaggistica_non_attiva"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        pren = dati.get("prenotazione_id")
+        guest = dati.get("guest_id")
+        testo = dati.get("testo")
+        mittente = self._host_id_da_token(headers) or "host"
+        if not (isinstance(pren, str) and isinstance(guest, str) and isinstance(testo, str)):
+            return 422, {"errore": "campi_non_validi"}
+        ok = msg.invia(pren, mittente, guest, mittente, testo)
+        return (201, {"stato": "inviato"}) if ok else (422, {"errore": "non_inviato"})
+
+    def _msg_thread(self, query, headers):
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        msg = getattr(self._sys, "messaggistica", None)
+        if msg is None:
+            return 503, {"errore": "messaggistica_non_attiva"}
+        pren = query.get("prenotazione_id", "")
+        richiedente = self._host_id_da_token(headers) or "host"
+        return 200, {"messaggi": msg.thread(pren, richiedente)}
 
     def _host_pubblica(self, body, headers):
         if not self._auth_host(headers):

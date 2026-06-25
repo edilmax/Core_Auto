@@ -65,6 +65,7 @@ class ConfigCasaVIP:
     db_recensioni: str = ":memory:"
     db_registro_host: str = ":memory:"
     db_viral: str = ":memory:"
+    db_messaggi: str = ":memory:"
     con_sentinel: bool = False
     cartella_sentinel: Optional[str] = None
 
@@ -96,6 +97,7 @@ class SistemaCasaVIP:
     dichiarazione: Any = None
     noshow: Any = None
     marketing: Any = None
+    messaggistica: Any = None
 
     @property
     def attivo(self) -> bool:
@@ -194,6 +196,12 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         viral = crea_viral_loop(cfg.db_viral, bytes(cfg.segreto_hmac))
         componenti.append("viral(76)")
 
+    # 3f-bis) messaggistica host-guest (thread per prenotazione, mascheramento PII)
+    from fase113_messaggistica import crea_messaggistica
+    messaggistica = crea_messaggistica(cfg.db_messaggi)
+    messaggistica.inizializza_schema()
+    componenti.append("messaggistica(113)")
+
     # 3g) motori stateless cablati (calcolatori puri, default sicuri)
     from fase66_tassa_soggiorno import RegistroTasse
     from fase74_sensory_engine import crea_sensory_engine
@@ -276,4 +284,5 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           viral=viral, tasse=tasse, sensory=sensory, sleep=sleep,
                           split=split, coda=coda, turnover=turnover,
                           digital_twin=digital_twin, guardian=guardian,
-                          dichiarazione=dichiarazione, noshow=noshow, marketing=marketing)
+                          dichiarazione=dichiarazione, noshow=noshow, marketing=marketing,
+                          messaggistica=messaggistica)
