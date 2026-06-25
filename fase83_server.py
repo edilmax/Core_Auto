@@ -377,6 +377,8 @@ class RouterHTTP:
             return self._msg_thread(query, headers)
         if metodo == "GET" and path == "/api/host/invito":
             return self._host_invito(headers)
+        if metodo == "GET" and path == "/api/host/prezzo_suggerito":
+            return self._prezzo_suggerito(query, headers)
         if metodo == "POST" and path == "/api/host/invito/registra":
             return self._host_invito_registra(body)
         if metodo == "POST" and path == "/api/host/invito/qualifica":
@@ -813,6 +815,23 @@ class RouterHTTP:
         from urllib.parse import quote
         link = self._base_url + "/diventa-host.html?ref=" + quote(codice)
         return 200, {"codice": codice, "link": link, "credito_cents": int(credito)}
+
+    def _prezzo_suggerito(self, query, headers):
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        import fase106_dynamic_pricing as dyn
+
+        def _qi(k, d):
+            try:
+                return int(query.get(k, d))
+            except (TypeError, ValueError):
+                return d
+        base = _qi("prezzo_base_cents", 0)
+        if base <= 0:
+            return 422, {"errore": "prezzo_base_non_valido"}
+        return 200, dyn.calcola_prezzo(
+            base, occupazione_bps=_qi("occupazione_bps", 5000),
+            data=query.get("data", ""), giorni_all_arrivo=_qi("giorni", 30))
 
     def _host_invito(self, headers):
         if not self._auth_host(headers):

@@ -203,6 +203,19 @@
     <button id="btnInvCopia" style="margin-top:.5rem;background:#5e6f8d">Copia link</button>
     <div id="invCrediti" style="margin-top:.5rem;font-weight:600;color:#155724"></div>
   </div>
+
+  <div class="card">
+    <h2>📈 Prezzo dinamico suggerito</h2>
+    <p style="color:#5e6f8d;font-size:.9rem;margin-bottom:.6rem">Calcola il prezzo ottimale per una data in base a occupazione, stagione, weekend e anticipo. Guadagni di più senza pensarci.</p>
+    <div class="grid">
+      <label>Prezzo base €/notte<input id="dp_base" type="number" value="95"></label>
+      <label>Occupazione %<input id="dp_occ" type="number" value="50" min="0" max="100"></label>
+      <label>Data<input id="dp_data" type="date"></label>
+      <label>Giorni all'arrivo<input id="dp_giorni" type="number" value="30"></label>
+    </div>
+    <button id="btnDp">Calcola prezzo suggerito</button>
+    <div id="dpRis" style="margin-top:.6rem;font-weight:600"></div>
+  </div>
 </div>
 
 <script>
@@ -434,6 +447,22 @@ async function caricaInvito(){
 }
 document.getElementById('btnInvito').onclick = caricaInvito;
 document.getElementById('btnInvCopia').onclick = ()=>{ const i=document.getElementById('invLink'); i.select(); document.execCommand('copy'); };
+
+// --- Prezzo dinamico suggerito ---
+document.getElementById('btnDp').onclick = async ()=>{
+  const ris=document.getElementById('dpRis');
+  const base=Math.round(parseFloat(document.getElementById('dp_base').value||'0')*100);
+  const occ=Math.round(parseFloat(document.getElementById('dp_occ').value||'0')*100);
+  const q='prezzo_base_cents='+base+'&occupazione_bps='+occ+'&data='+encodeURIComponent(document.getElementById('dp_data').value)+'&giorni='+(document.getElementById('dp_giorni').value||30);
+  try{
+    const r=await fetch(API+'/api/host/prezzo_suggerito?'+q,{headers:authHeaders()});
+    if(r.status===401){ ris.textContent='Accedi come host.'; return; }
+    const d=await r.json();
+    if(d.prezzo_cents){ const f=d.fattori||{};
+      ris.innerHTML='💶 Prezzo suggerito: <b>€'+(d.prezzo_cents/100).toFixed(2)+'</b> /notte <span style="color:#5e6f8d;font-size:.8rem">(moltiplicatore '+((d.moltiplicatore_bps||10000)/100).toFixed(0)+'% · occupazione/stagione/weekend/anticipo)</span>'; }
+    else { ris.textContent='❌ '+(d.errore||'prezzo non valido'); }
+  }catch(e){ ris.textContent='Errore: '+e.message; }
+};
 
 document.getElementById('lang').onchange = e=>{ LANG=e.target.value; document.documentElement.lang=LANG; caricaI18N(LANG); };
 caricaI18N(LANG);
