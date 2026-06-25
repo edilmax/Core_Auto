@@ -45,6 +45,7 @@ def main() -> None:  # pragma: no cover
         db_registro_host=os.environ.get("DB_REGISTRO_HOST", "data/registro_host.db"),
         db_viral=os.environ.get("DB_VIRAL", "data/viral.db"),
         db_messaggi=os.environ.get("DB_MESSAGGI", "data/messaggi.db"),
+        file_referral=os.environ.get("FILE_REFERRAL", "data/referral.json"),
         valuta=os.environ.get("VALUTA", "EUR"),
         commissione_bps=int(os.environ.get("COMMISSIONE_BPS", "1500")),  # 15% (primi 1000)
         stripe_secret_key=os.environ.get("STRIPE_SECRET_KEY", ""),
@@ -61,7 +62,7 @@ def main() -> None:  # pragma: no cover
         cartella_sentinel=os.environ.get("SENTINEL_DIR") or ".",
     )
     for p in (config.db_catalogo, config.db_inventario, config.db_registro_host,
-              config.db_viral, config.db_messaggi):
+              config.db_viral, config.db_messaggi, config.file_referral):
         d = os.path.dirname(p)
         if d:
             os.makedirs(d, exist_ok=True)

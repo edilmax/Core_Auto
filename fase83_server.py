@@ -375,6 +375,12 @@ class RouterHTTP:
             return self._msg_invia(body, headers)
         if metodo == "GET" and path == "/api/messaggi":
             return self._msg_thread(query, headers)
+        if metodo == "GET" and path == "/api/host/invito":
+            return self._host_invito(headers)
+        if metodo == "POST" and path == "/api/host/invito/registra":
+            return self._host_invito_registra(body)
+        if metodo == "POST" and path == "/api/host/invito/qualifica":
+            return self._host_invito_qualifica(body, headers)
         if metodo == "POST" and path == "/api/host/pubblica":
             return self._host_pubblica(body, headers)
         if metodo == "POST" and path == "/api/host/disponibilita":
@@ -807,6 +813,49 @@ class RouterHTTP:
         from urllib.parse import quote
         link = self._base_url + "/diventa-host.html?ref=" + quote(codice)
         return 200, {"codice": codice, "link": link, "credito_cents": int(credito)}
+
+    def _host_invito(self, headers):
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        ref = getattr(self._sys, "referral", None)
+        if ref is None:
+            return 503, {"errore": "referral_non_attivo"}
+        hid = self._host_id_da_token(headers) or "host"
+        codice = ref.genera_codice(hid)
+        if not codice:
+            return 422, {"errore": "codice_non_generato"}
+        from urllib.parse import quote
+        link = (self._base_url or "") + "/diventa-host.html?ref=" + quote(codice)
+        return 200, {"codice": codice, "link": link, "crediti_cents": ref.crediti(hid)}
+
+    def _host_invito_registra(self, body):
+        ref = getattr(self._sys, "referral", None)
+        if ref is None:
+            return 503, {"errore": "referral_non_attivo"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        codice = dati.get("codice")
+        nuovo = dati.get("nuovo_host_id")
+        if not (isinstance(codice, str) and isinstance(nuovo, str)):
+            return 422, {"errore": "campi_non_validi"}
+        ok = ref.registra_referral(codice, nuovo)
+        return (201, {"stato": "registrato"}) if ok else (409, {"errore": "non_registrabile"})
+
+    def _host_invito_qualifica(self, body, headers):
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        ref = getattr(self._sys, "referral", None)
+        if ref is None:
+            return 503, {"errore": "referral_non_attivo"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        nuovo = dati.get("nuovo_host_id")
+        if not isinstance(nuovo, str):
+            return 422, {"errore": "campi_non_validi"}
+        bonus = ref.conferma_qualifica(nuovo)
+        return 200, {"bonus_cents": bonus}
 
     def _msg_invia(self, body, headers):
         if not self._auth_host(headers):

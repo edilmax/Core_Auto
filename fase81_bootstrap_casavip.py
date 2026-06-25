@@ -66,6 +66,7 @@ class ConfigCasaVIP:
     db_registro_host: str = ":memory:"
     db_viral: str = ":memory:"
     db_messaggi: str = ":memory:"
+    file_referral: str = ""            # path JSON referral host-porta-host (vuoto = in RAM)
     con_sentinel: bool = False
     cartella_sentinel: Optional[str] = None
 
@@ -98,6 +99,7 @@ class SistemaCasaVIP:
     noshow: Any = None
     marketing: Any = None
     messaggistica: Any = None
+    referral: Any = None
 
     @property
     def attivo(self) -> bool:
@@ -202,6 +204,11 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     messaggistica.inizializza_schema()
     componenti.append("messaggistica(113)")
 
+    # 3f-ter) referral host-porta-host (codice firmato + bonus crediti non-cashabili)
+    from fase109_referral_host import crea_referral_host
+    referral = crea_referral_host(bytes(cfg.segreto_hmac), cfg.file_referral)
+    componenti.append("referral_host(109)")
+
     # 3g) motori stateless cablati (calcolatori puri, default sicuri)
     from fase66_tassa_soggiorno import RegistroTasse
     from fase74_sensory_engine import crea_sensory_engine
@@ -285,4 +292,4 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           split=split, coda=coda, turnover=turnover,
                           digital_twin=digital_twin, guardian=guardian,
                           dichiarazione=dichiarazione, noshow=noshow, marketing=marketing,
-                          messaggistica=messaggistica)
+                          messaggistica=messaggistica, referral=referral)
