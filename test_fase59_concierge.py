@@ -95,10 +95,12 @@ class TestQuota(unittest.TestCase):
         r = proto.quota({"alloggio_id": "casa", "check_in": "2026-09-01",
                          "check_out": "2026-09-03"})
         self.assertEqual(r.status, 200)
-        # 2 notti x 10000 = 20000 netto; commissione 10% = 2000; guest = 22000
+        # 2 notti x 10000 = 20000 listino; commissione 10% = 2000 DEDOTTA dall'host.
+        # 0% ospite: l'ospite paga il prezzo pulito (20000); l'host riceve 18000.
         self.assertEqual(r.corpo["prezzo_netto_cents"], 20000)
         self.assertEqual(r.corpo["commissione_cents"], 2000)
-        self.assertEqual(r.corpo["prezzo_guest_cents"], 22000)
+        self.assertEqual(r.corpo["prezzo_guest_cents"], 20000)   # pulito, no guest fee
+        self.assertEqual(r.corpo["netto_host_cents"], 18000)     # host riceve listino - comm
         self.assertIn("quote_token", r.corpo)
 
     def test_quota_non_disponibile(self):

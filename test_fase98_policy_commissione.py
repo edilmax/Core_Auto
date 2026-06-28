@@ -2,11 +2,28 @@
 import unittest
 
 from fase88_registro_host import crea_registro_host
-from fase98_policy_commissione import (commissione_bps_per_host, commissione_cents,
-                                       e_fondatore, fattura_startup_cents,
-                                       ripartisci_host_guest)
+from fase98_policy_commissione import (commissione_bps_fonte, commissione_bps_per_host,
+                                       commissione_cents, e_fondatore,
+                                       fattura_startup_cents, ripartisci_host_guest)
 
 SEG = b"x" * 32
+
+
+class TestPerFonte(unittest.TestCase):
+    def test_diretto_5_marketplace_15(self):
+        self.assertEqual(commissione_bps_fonte("diretto"), 500)
+        self.assertEqual(commissione_bps_fonte("diretto", 5000), 500)   # sempre 5%
+        self.assertEqual(commissione_bps_fonte("marketplace", 1), 1500)
+        self.assertEqual(commissione_bps_fonte("marketplace", 2000), 1500)
+
+    def test_default_e_ignoto_marketplace(self):
+        self.assertEqual(commissione_bps_fonte(""), 1500)
+        self.assertEqual(commissione_bps_fonte(None), 1500)
+        self.assertEqual(commissione_bps_fonte("xyz"), 1500)
+
+    def test_no_loss_diretto_su_100eur(self):
+        # 5% su 100€ = 500 cents; Stripe peggiore 2.9%+0.25 = 315; resta margine positivo
+        self.assertGreater(commissione_cents(10000, commissione_bps_fonte("diretto")), 315)
 
 
 class TestPolicyPrimi1000(unittest.TestCase):

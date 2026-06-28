@@ -26,6 +26,9 @@ BPS_FONDATORI = 1500             # 15% per i fondatori
 BPS_DOPO = 1500                  # post-fondatori: default uguale (l'utente deciderà)
 HOST_BPS = 300                   # 3% trattenuto all'host
 GUEST_BPS = 1200                 # 12% aggiunto all'ospite  (3% + 12% = 15%)
+# Tariffa PER FONTE (modello 0% ospite, commissione DEDOTTA dall'host):
+BPS_DIRETTO = 500                # 5% sulle prenotazioni DIRETTE dell'host (no-loss: copre Stripe)
+BPS_MARKETPLACE = 1500           # 15% sulle prenotazioni portate da BookinVIP (vetrina/SEO)
 
 
 def _intero(v: Any, default: int = 0) -> int:
@@ -45,6 +48,19 @@ def commissione_bps_per_host(numero_host: Any, *, bps_fondatori: int = BPS_FONDA
     if n < 1:
         return bd
     return bf if n <= s else bd
+
+
+def commissione_bps_fonte(fonte: Any, numero_host: Any = 0, *,
+                          bps_diretto: int = BPS_DIRETTO,
+                          bps_marketplace: int = BPS_MARKETPLACE,
+                          soglia: int = SOGLIA_FONDATORI) -> int:
+    """bps secondo la FONTE della prenotazione (modello 0% ospite):
+    'diretto' (cliente dell'host) → 5% (copre solo i costi di pagamento, no-loss);
+    altro/'marketplace' (cliente portato da BookinVIP) → 15% (primi-1000 = 15%)."""
+    if str(fonte).lower() == "diretto":
+        return max(0, min(10000, _intero(bps_diretto, BPS_DIRETTO)))
+    bm = max(0, min(10000, _intero(bps_marketplace, BPS_MARKETPLACE)))
+    return commissione_bps_per_host(numero_host, bps_fondatori=bm, bps_dopo=bm, soglia=soglia)
 
 
 def e_fondatore(numero_host: Any, *, soglia: int = SOGLIA_FONDATORI) -> bool:

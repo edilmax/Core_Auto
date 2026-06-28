@@ -25,7 +25,7 @@ class TestHostAware(unittest.TestCase):
     def test_priorita_su_flat(self):
         visti = {}
         p = proto(commissione=lambda n: 9999,
-                  commissione_alloggio=lambda n, slug: visti.update(slug=slug) or n * 3 // 100)
+                  commissione_alloggio=lambda n, slug, fonte: visti.update(slug=slug, fonte=fonte) or n * 3 // 100)
         r = p.quota(self.REQ)
         self.assertEqual(r.corpo["commissione_cents"], 300)   # 3% host-aware, non 9999
         self.assertEqual(visti["slug"], "casa-1")
@@ -35,7 +35,7 @@ class TestHostAware(unittest.TestCase):
         self.assertEqual(r.corpo["commissione_cents"], 1500)  # flat 15%
 
     def test_resolver_solleva_usa_flat(self):
-        def boom(n, slug):
+        def boom(n, slug, fonte):
             raise RuntimeError("x")
         r = proto(commissione=lambda n: 1500, commissione_alloggio=boom).quota(self.REQ)
         self.assertEqual(r.corpo["commissione_cents"], 1500)  # isolato -> flat

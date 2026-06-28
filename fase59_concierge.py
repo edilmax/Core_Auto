@@ -207,6 +207,7 @@ class ProtocolloConcierge:
         party = richiesta.get("party", 1)
         if not _intero(party) or not (1 <= party <= PARTY_MAX):
             return RispostaConcierge(400, {"errore": "party_non_valido"})
+        fonte = _stringa(richiesta.get("fonte")) or "marketplace"   # diretto | marketplace
 
         try:
             from fase58_channel_manager import notti
@@ -223,13 +224,18 @@ class ProtocolloConcierge:
                     return RispostaConcierge(422, {"errore": "non_quotabile"})
                 netto += p
             try:
-                comm = (self._commissione_all(netto, alloggio)
+                comm = (self._commissione_all(netto, alloggio, fonte)
                         if self._commissione_all else self._commissione(netto))
             except Exception:
                 comm = self._commissione(netto)
             if not _intero(comm) or comm < 0:
                 comm = 0
-            guest = netto + comm
+            if comm > netto:
+                comm = netto
+            # MODELLO 0% OSPITE: l'ospite paga il prezzo PULITO (netto = listino);
+            # la commissione e' DEDOTTA dal pagamento dell'host (host riceve netto - comm).
+            guest = netto
+            netto_host = netto - comm
             if guest <= 0 or guest > MAX_CENTS:
                 return RispostaConcierge(422, {"errore": "prezzo_fuori_banda"})
         except Exception:
@@ -240,7 +246,8 @@ class ProtocolloConcierge:
         payload = {
             "alloggio_id": alloggio, "check_in": ci, "check_out": co, "party": party,
             "prezzo_netto_cents": netto, "commissione_cents": comm,
-            "prezzo_guest_cents": guest, "exp": scade_a, "valuta": self._valuta,
+            "prezzo_guest_cents": guest, "netto_host_cents": netto_host,
+            "fonte": fonte, "exp": scade_a, "valuta": self._valuta,
             # nonce: ogni preventivo e' UNICO -> due clienti distinti per la stessa
             # stanza/date competono davvero (idem-key distinte); un retry dello stesso
             # token resta idempotente (stesso nonce -> stessa firma -> stessa idem-key).
@@ -251,9 +258,11 @@ class ProtocolloConcierge:
             "quote_token": token,
             "alloggio_id": alloggio,
             "check_in": ci, "check_out": co, "party": party, "notti": len(elenco_notti),
-            "prezzo_netto_cents": netto,        # int
-            "commissione_cents": comm,          # int
-            "prezzo_guest_cents": guest,        # int
+            "prezzo_netto_cents": netto,        # prezzo di listino (lordo)
+            "commissione_cents": comm,          # int (dedotta dall'host)
+            "prezzo_guest_cents": guest,        # l'ospite paga QUESTO (pulito, 0% guest fee)
+            "netto_host_cents": netto_host,     # l'host riceve QUESTO
+            "fonte": fonte,
             "valuta": self._valuta,
             "scade_a": scade_a,
             "money_unit": "cents_integer",
