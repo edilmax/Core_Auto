@@ -196,15 +196,6 @@
   </div>
 
   <div class="card">
-    <h2>🎁 Invita altri host — guadagna crediti</h2>
-    <p style="color:#5e6f8d;font-size:.9rem;margin-bottom:.6rem">Condividi il tuo link: quando un host che inviti si iscrive e riceve la prima prenotazione, guadagni crediti (sconto sulla commissione, a scaglioni: più ne porti, più valgono).</p>
-    <button id="btnInvito">Mostra il mio link invito</button>
-    <input id="invLink" readonly placeholder="il tuo link comparirà qui" style="width:100%;margin-top:.5rem;padding:.5rem;border-radius:.7rem;border:1px solid #dce1ed;font-size:.85rem">
-    <button id="btnInvCopia" style="margin-top:.5rem;background:#5e6f8d">Copia link</button>
-    <div id="invCrediti" style="margin-top:.5rem;font-weight:600;color:#155724"></div>
-  </div>
-
-  <div class="card">
     <h2>📈 Prezzo dinamico suggerito</h2>
     <p style="color:#5e6f8d;font-size:.9rem;margin-bottom:.6rem">Calcola il prezzo ottimale per una data in base a occupazione, stagione, weekend e anticipo. Guadagni di più senza pensarci.</p>
     <div class="grid">
@@ -435,18 +426,6 @@ document.getElementById('btnMsgInvia').onclick = async ()=>{
   else { m.className='msg err'; m.textContent='❌ '+(r.data.errore||r.status); }
 };
 document.getElementById('btnMsgCarica').onclick = caricaThread;
-
-// --- Invita un host (referral) ---
-async function caricaInvito(){
-  try{
-    const d=await (await fetch(API+'/api/host/invito',{headers:authHeaders()})).json();
-    if(d.link){ document.getElementById('invLink').value=d.link;
-      document.getElementById('invCrediti').textContent='💶 '+((d.crediti_cents||0)/100).toFixed(2)+' € di crediti accumulati'; }
-    else { document.getElementById('invCrediti').textContent='Accedi come host per ottenere il tuo link.'; }
-  }catch(e){}
-}
-document.getElementById('btnInvito').onclick = caricaInvito;
-document.getElementById('btnInvCopia').onclick = ()=>{ const i=document.getElementById('invLink'); i.select(); document.execCommand('copy'); };
 
 // --- Prezzo dinamico suggerito ---
 document.getElementById('btnDp').onclick = async ()=>{
