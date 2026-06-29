@@ -12,9 +12,41 @@ import unittest
 from fase61_localizzazione import Localizzatore
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
-from fase152_notifiche_prenotazione import (CanaleWhatsApp, NotificatorePrenotazione,
-                                            componi_avviso_host,
+from fase152_notifiche_prenotazione import (CanaleLine, CanaleWeChat, CanaleWhatsApp,
+                                            NotificatorePrenotazione, componi_avviso_host,
                                             crea_notificatore_prenotazione)
+
+
+class TestCanaliAsia(unittest.TestCase):
+    def test_line_notify_invia(self):
+        visti = {}
+        def fake(url, headers, data):
+            visti.update(url=url, headers=headers, data=data); return 200, "ok"
+        c = CanaleLine(fetch=fake)
+        self.assertEqual(c.campo_contatto, "line_token")
+        self.assertTrue(c.invia("TOK123", "ogg", "ciao"))
+        self.assertIn("Bearer TOK123", visti["headers"]["Authorization"])
+        self.assertFalse(c.invia("", "o", "t"))                 # niente token -> no
+
+    def test_wechat_webhook_invia(self):
+        visti = {}
+        c = CanaleWeChat(fetch=lambda u, h, b: visti.update(u=u, b=b) or (200, "ok"))
+        self.assertEqual(c.campo_contatto, "wechat_webhook")
+        self.assertTrue(c.invia("https://qyapi.weixin.qq.com/x", "ogg", "ciao"))
+        self.assertEqual(visti["b"]["msgtype"], "text")
+        self.assertFalse(c.invia("non-un-url", "o", "t"))       # non http -> no
+
+    def test_dispatcher_instrada_su_line(self):
+        inviati = []
+        line = CanaleLine(fetch=lambda u, h, d: inviati.append(d) or (200, "ok"))
+        n = NotificatorePrenotazione([line])
+        rep = n.avvisa({"line_token": "TK", "email": "h@x.it"}, "o", "t")
+        self.assertEqual(rep["inviati"], 1)                     # usa line_token, non email
+        self.assertTrue(inviati)
+
+    def test_factory_include_canali_asia(self):
+        n = crea_notificatore_prenotazione(email_provider=None)
+        self.assertTrue(n.attivo())                             # LINE+WeChat sempre presenti
 
 SEG = b"n" * 32
 HK = {"X-Host-Key": "hk"}
@@ -105,9 +137,9 @@ class TestDispatcher(unittest.TestCase):
         self.assertEqual(rep, {"inviati": 0, "falliti": 0})
         self.assertEqual(cap.inviate, [])
 
-    def test_factory_email_only_quando_no_whatsapp(self):
+    def test_factory_attivo(self):
         self.assertTrue(crea_notificatore_prenotazione(email_provider=CaptureEmail()).attivo())
-        self.assertFalse(crea_notificatore_prenotazione().attivo())   # nessun canale
+        self.assertTrue(crea_notificatore_prenotazione().attivo())   # LINE+WeChat sempre presenti
 
 
 # ───────────────────────────── E2E reale ─────────────────────────────

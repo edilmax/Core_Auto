@@ -920,7 +920,9 @@ class RouterHTTP:
         e = reg.registra(dati.get("email"), dati.get("password"),
                          accetta_termini=bool(dati.get("accetta_termini")),
                          ragione_sociale=str(dati.get("ragione_sociale", "")),
-                         telefono=str(dati.get("telefono", "")))
+                         telefono=str(dati.get("telefono", "")),
+                         line_token=str(dati.get("line_token", "")),
+                         wechat_webhook=str(dati.get("wechat_webhook", "")))
         out = e.as_dict()
         # viral loop: se è arrivato con un codice referral, accredita referente+referee
         if e.ok:

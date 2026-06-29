@@ -70,6 +70,57 @@ class CanaleWhatsApp:
             return False
 
 
+def _fetch_form(url: str, headers: Dict[str, str], data: Dict[str, Any]):
+    import urllib.parse
+    body = urllib.parse.urlencode(data).encode("utf-8")
+    h = dict(headers); h["Content-Type"] = "application/x-www-form-urlencoded"
+    req = urllib.request.Request(url, data=body, method="POST", headers=h)
+    with urllib.request.urlopen(req, timeout=10) as r:    # pragma: no cover (rete)
+        return r.status, r.read().decode("utf-8", "replace")
+
+
+class CanaleLine:
+    """LINE Notify (Giappone/Thailandia/Taiwan/Indonesia): l'host genera un token personale e
+    riceve gli avvisi su LINE. campo_contatto='line_token'."""
+    campo_contatto = "line_token"
+    API = "https://notify-api.line.me/api/notify"
+
+    def __init__(self, *, fetch: Optional[Callable] = None):
+        self._fetch = fetch or _fetch_form
+
+    def invia(self, destinatario: str, oggetto: str, testo: str) -> bool:
+        if not destinatario:
+            return False
+        try:
+            st, _ = self._fetch(self.API, {"Authorization": "Bearer " + str(destinatario)},
+                                {"message": "\n" + str(oggetto) + "\n" + str(testo)})
+            return 200 <= int(st) < 300
+        except Exception:
+            logger.warning("line notify fallito (ISOLATO)", exc_info=True)
+            return False
+
+
+class CanaleWeChat:
+    """WeChat Work robot webhook (Cina): avvisa l'host nel suo canale aziendale WeChat.
+    campo_contatto='wechat_webhook' (l'URL del robot, fornito dall'host)."""
+    campo_contatto = "wechat_webhook"
+
+    def __init__(self, *, fetch: Optional[Callable] = None):
+        self._fetch = fetch or _fetch_post
+
+    def invia(self, destinatario: str, oggetto: str, testo: str) -> bool:
+        if not (isinstance(destinatario, str) and destinatario.startswith("http")):
+            return False
+        try:
+            st, _ = self._fetch(destinatario, {"Content-Type": "application/json"},
+                                {"msgtype": "text",
+                                 "text": {"content": str(oggetto) + "\n" + str(testo)}})
+            return 200 <= int(st) < 300
+        except Exception:
+            logger.warning("wechat fallito (ISOLATO)", exc_info=True)
+            return False
+
+
 class NotificatorePrenotazione:
     """Dispatcher multi-canale. Ogni canale espone `.invia(dest, oggetto, testo)->bool` e
     `.campo_contatto` ('email' | 'telefono'). Best-effort isolato."""
@@ -128,6 +179,9 @@ def crea_notificatore_prenotazione(*, email_provider: Any = None,
     wa = CanaleWhatsApp(whatsapp_token, whatsapp_phone_id, fetch=fetch)
     if wa.attivo():
         canali.append(wa)
+    # LINE/WeChat: sempre disponibili, scattano solo se l'host ha fornito il proprio contatto
+    canali.append(CanaleLine(fetch=fetch))
+    canali.append(CanaleWeChat(fetch=fetch))
     if canali_extra:
         canali.extend([c for c in canali_extra if c is not None])
     return NotificatorePrenotazione(canali)
