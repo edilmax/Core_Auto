@@ -48,10 +48,22 @@ class TestGiurisdizioni(unittest.TestCase):
         for p in ("HK", "TW", "JP"):
             self.assertTrue(puo_contattare_a_freddo(p, "email")[0], p)
 
-    def test_asia_est_opt_in_bloccata(self):
-        # Cina, Corea, Thailandia, Indonesia, Vietnam, Malaysia: opt-in -> cold BLOCCATO
-        for p in ("CN", "KR", "TH", "ID", "VN", "MY", "PH"):
+    def test_sud_est_asiatico_turismo_aperto(self):
+        # mercati turistici in boom: B2B pubblico + opt-out -> cold email LECITO
+        for p in ("TH", "VN", "PH", "ID", "MY", "KH", "LA"):
+            self.assertTrue(puo_contattare_a_freddo(p, "email")[0], p)
+
+    def test_trappole_reali_restano_bloccate(self):
+        # Cina/Corea/Canada/Israele: puniscono anche il B2B -> cold BLOCCATO
+        for p in ("CN", "KR", "CA", "IL"):
             self.assertFalse(puo_contattare_a_freddo(p, "email")[0], p)
+
+    def test_strategia_altri_mezzi_sempre_anche_dove_bloccato(self):
+        from fase154_giurisdizioni_marketing import strategia_paese
+        cn = strategia_paese("CN")
+        self.assertFalse(cn["cold_email_lecito"])           # CN: niente email a freddo
+        self.assertIn("inbound_seo", cn["altri_mezzi_sempre"])   # ma SEO/social/link sempre ok
+        self.assertTrue(strategia_paese("TH")["cold_email_lecito"])
 
     def test_lista_include_asia_e_americhe_opt_out(self):
         lst = giurisdizioni_consentite("email")
