@@ -397,6 +397,12 @@ class RouterHTTP:
             return self._book(body)
         if metodo == "POST" and path == "/api/concierge/cancella":
             return self._cancella_prenotazione(body)
+        if metodo == "POST" and path == "/api/garanzia/conferma":
+            return self._garanzia_conferma(body)
+        if metodo == "POST" and path == "/api/garanzia/contesta":
+            return self._garanzia_contesta(body)
+        if metodo == "GET" and path == "/api/garanzia/stato":
+            return self._garanzia_stato(query, headers)
         if metodo == "GET" and path.startswith("/api/recensioni/"):
             return self._recensioni(path[len("/api/recensioni/"):])
         if metodo == "POST" and path == "/api/recensioni":
@@ -689,7 +695,70 @@ class RouterHTTP:
                                    exc_info=True)
             # avviso all'HOST su piu' canali (email sempre, WhatsApp se configurato) - ISOLATO
             self._avvisa_host_prenotazione(allog, ref, ci, co, corpo.get("fonte", ""))
+            # ESCROW DI GARANZIA: i fondi dell'host restano bloccati fino alla conferma ospite
+            self._apri_garanzia(ref, corpo.get("netto_host_cents", 0), allog, ci)
         return status, corpo
+
+    def _apri_garanzia(self, ref, netto_host_cents, allog, ci):
+        try:
+            g = getattr(self._sys, "garanzia", None)
+            if g is None or not ref:
+                return
+            import datetime
+            try:
+                ts = int(datetime.datetime.fromisoformat(ci + "T15:00:00").timestamp())
+            except Exception:
+                ts = None
+            g.apri(ref, netto_host_cents, alloggio_id=allog, ora_checkin_ts=ts)
+        except Exception:
+            logger.warning("apertura garanzia fallita (ignorata)", exc_info=True)
+
+    def _garanzia_da_voucher(self, body):
+        dati = self._json(body)
+        if dati is None:
+            return None, (400, {"errore": "json_non_valido"})
+        token = dati.get("voucher_token")
+        firma = getattr(self._sys, "firma", None)
+        if firma is None or not isinstance(token, str) or not token:
+            return None, (400, {"errore": "voucher_mancante"})
+        v = firma.decodifica(token)
+        if not isinstance(v, dict) or v.get("tipo") != "voucher":
+            return None, (400, {"errore": "voucher_non_valido"})
+        ref = v.get("riferimento", "")
+        if not ref:
+            return None, (422, {"errore": "riferimento_mancante"})
+        return (ref, dati), None
+
+    def _garanzia_conferma(self, body):
+        """L'ospite e' entrato e conferma 'tutto come dichiarato' -> i soldi vanno all'host."""
+        res, err = self._garanzia_da_voucher(body)
+        if err:
+            return err
+        g = getattr(self._sys, "garanzia", None)
+        if g is None:
+            return 503, {"errore": "garanzia_non_attiva"}
+        out = g.conferma_ospite(res[0])
+        return (200 if out.get("ok") else 409), out
+
+    def _garanzia_contesta(self, body):
+        """Servizio dichiarato mancante / non conforme -> i fondi NON vanno all'host (apre disputa)."""
+        res, err = self._garanzia_da_voucher(body)
+        if err:
+            return err
+        g = getattr(self._sys, "garanzia", None)
+        if g is None:
+            return 503, {"errore": "garanzia_non_attiva"}
+        out = g.contesta(res[0], str(res[1].get("motivo", "")))
+        return (200 if out.get("ok") else 409), out
+
+    def _garanzia_stato(self, query, headers):
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        g = getattr(self._sys, "garanzia", None)
+        if g is None:
+            return 503, {"errore": "garanzia_non_attiva"}
+        st = g.stato(query.get("ref"))
+        return (200, st) if st else (404, {"errore": "non_trovata"})
 
     def _cancella_prenotazione(self, body):
         """Cancellazione SELF-SERVICE dell'ospite: presenta il voucher firmato -> il sistema

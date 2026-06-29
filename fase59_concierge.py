@@ -337,6 +337,7 @@ class ProtocolloConcierge:
             "riferimento": riferimento,
             "alloggio_id": alloggio, "check_in": ci, "check_out": co,
             "prezzo_guest_cents": guest,         # int (quello firmato, immutabile)
+            "netto_host_cents": dati.get("netto_host_cents", guest),   # l'host riceve QUESTO
             "valuta": dati.get("valuta", self._valuta),
             "idempotente": bool(getattr(esito, "idempotente", False)),
             "money_unit": "cents_integer",
