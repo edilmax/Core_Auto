@@ -129,6 +129,7 @@ class ProtocolloConcierge:
                  commissione: Optional[Callable[[int], int]] = None,
                  commissione_alloggio: Optional[Callable[[int, str], int]] = None,
                  tassa_alloggio: Optional[Callable[..., int]] = None,
+                 tasso_cambio: Optional[Callable[[str, str], Any]] = None,
                  link_pagamento: Optional[Callable[[Dict[str, Any]], Optional[str]]] = None,
                  ttl_quote_sec: int = 900, valuta: str = "EUR",
                  orologio: Optional[Callable[[], int]] = None) -> None:
@@ -138,6 +139,7 @@ class ProtocolloConcierge:
         self._commissione = commissione or (lambda netto: 0)
         self._commissione_all = commissione_alloggio   # host-aware: (netto, slug)->comm
         self._tassa_all = tassa_alloggio               # (slug, notti, ospiti, imponibile)->cents
+        self._tasso = tasso_cambio                     # (da, a)->tasso mid (solo display indicativo)
         self._link = link_pagamento
         self._ttl = max(60, int(ttl_quote_sec))
         self._valuta = valuta
@@ -272,6 +274,9 @@ class ProtocolloConcierge:
             "nonce": secrets.token_hex(8),
         }
         token = self._firma.codifica(payload)
+        # INDICATIVO (solo display): l'ospite vede ~la sua valuta, ma l'addebito resta in `valuta`
+        v_osp = _stringa(richiesta.get("valuta_ospite"))
+        tot_ind = self._converti_indicativo(valuta, v_osp, totale)
         return RispostaConcierge(200, {
             "quote_token": token,
             "alloggio_id": alloggio,
@@ -284,10 +289,26 @@ class ProtocolloConcierge:
             "tassa_soggiorno_cents": tassa,     # tassa citta' (pass-through, voce separata visibile)
             "totale_cents": totale,             # quello che l'ospite paga DAVVERO = soggiorno + tassa
             "fonte": fonte,
-            "valuta": valuta,
+            "valuta": valuta,                   # valuta dell'ADDEBITO (like-for-like)
+            "valuta_indicativa": (v_osp if tot_ind else ""),
+            "totale_indicativo_cents": tot_ind,  # display ~valuta ospite (la sua banca converte)
             "scade_a": scade_a,
             "money_unit": "cents_integer",
         })
+
+    def _converti_indicativo(self, da: str, a: Any, importo: int) -> int:
+        """Stima indicativa nella valuta dell'ospite (tasso MID, nessun markup occulto). Solo
+        display: l'addebito resta in `da`. 0 se manca il tasso o la valuta e' la stessa."""
+        if not (self._tasso and isinstance(a, str) and a and a != da and _intero(importo)):
+            return 0
+        try:
+            tasso = self._tasso(da, a)
+            if tasso is None:
+                return 0
+            val = int(round(importo * float(tasso)))
+            return val if 0 < val <= MAX_CENTS else 0
+        except Exception:
+            return 0
 
     def _valuta_alloggio(self, slug: Any) -> str:
         """LIKE-FOR-LIKE: valuta dell'annuncio (l'host prezza in X -> ospite paga X -> host

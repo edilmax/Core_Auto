@@ -61,6 +61,7 @@ def main() -> None:  # pragma: no cover
         email_mittente=os.environ.get("EMAIL_MITTENTE", ""),
         whatsapp_token=os.environ.get("WHATSAPP_TOKEN", ""),
         whatsapp_phone_id=os.environ.get("WHATSAPP_PHONE_ID", ""),
+        oxr_app_id=os.environ.get("OXR_APP_ID", ""),
         con_mcp=True,
         con_sentinel=os.environ.get("SENTINEL", "").lower() in ("1", "true", "yes"),
         cartella_sentinel=os.environ.get("SENTINEL_DIR") or ".",

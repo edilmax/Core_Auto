@@ -59,6 +59,7 @@ class ConfigCasaVIP:
     email_mittente: str = ""
     whatsapp_token: str = ""            # gated: avvisi prenotazione all'host via WhatsApp
     whatsapp_phone_id: str = ""         # gated: id numero mittente WhatsApp Cloud API
+    oxr_app_id: str = ""                # gated: Open Exchange Rates (display indicativo valuta ospite)
     con_mcp: bool = True
     con_recensioni: bool = True
     con_smartpass: bool = True
@@ -189,11 +190,21 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         except Exception:
             return 0
 
+    _tasso = None
+    if cfg.oxr_app_id:
+        try:
+            from fase99_multicurrency import crea_provider_tassi
+            _tassi = crea_provider_tassi(cfg.oxr_app_id)
+            _tasso = lambda da, a: _tassi.tasso(da, a)   # noqa: E731
+            componenti.append("cambio_indicativo(99)")
+        except Exception:
+            _tasso = None
+
     concierge = crea_protocollo(inventario, bytes(cfg.segreto_hmac), catalogo=catalogo,
                                 valuta=cfg.valuta, link_pagamento=link_pagamento,
                                 commissione=lambda netto: max(0, netto * _bps // 10000),
                                 commissione_alloggio=_comm_alloggio,
-                                tassa_alloggio=_tassa_alloggio)
+                                tassa_alloggio=_tassa_alloggio, tasso_cambio=_tasso)
     componenti.append("concierge(59)")
 
     # 3c) smart-pass per il self check-in (incluso nel voucher)
