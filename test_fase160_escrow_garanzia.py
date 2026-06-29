@@ -58,11 +58,23 @@ class TestModulo(unittest.TestCase):
         self.assertFalse(self.g.conferma_ospite("P6")["ok"])           # gia' rilasciata
 
     def test_annulla_blocca_auto_rilascio(self):
-        # prenotazione cancellata -> garanzia annullata -> MAI payout all'host (no auto-rilascio)
+        # prenotazione cancellata SENZA penale -> garanzia annullata -> MAI payout (no auto-rilascio)
         self.g.apri("P7", 5000, ora_checkin_ts=1000)
         self.assertEqual(self.g.annulla("P7")["stato"], "annullato")
         self.clock["t"] = 10 ** 9
         self.assertEqual(self.g.auto_rilascia(), 0)
+
+    def test_chiudi_proporzionale_host_tiene_penale(self):
+        # cancellazione CON penale: l'host tiene la sua quota, il resto torna all'ospite (conservazione)
+        self.g.apri("P8", 10000, ora_checkin_ts=1000)
+        self.assertTrue(self.g.chiudi_proporzionale("P8", 8500)["ok"])
+        st = self.g.stato("P8")
+        self.assertEqual(st["stato"], "risolto")
+        self.assertEqual(st["host_riceve_cents"], 8500)
+        self.assertEqual(st["ospite_rimborso_cents"], 1500)
+        self.assertEqual(st["host_riceve_cents"] + st["ospite_rimborso_cents"], 10000)
+        self.clock["t"] = 10 ** 9
+        self.assertEqual(self.g.auto_rilascia(), 0)               # risolta -> mai auto-rilascio
 
 
 class TestE2E(unittest.TestCase):

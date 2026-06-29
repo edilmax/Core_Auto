@@ -821,12 +821,19 @@ class RouterHTTP:
         # CREDITO VIAGGIO ANTI-RIMPIANTO: se hai perso qualcosa, una parte torna come credito
         # (non-cashabile, riscattabile su una prossima prenotazione; ci costa solo margine futuro).
         cv_cents, cv_token = self._credito_anti_rimpianto(r.get("trattenuto_cents", 0))
-        try:                                      # chiude l'escrow: niente payout su cancellata
+        try:                                      # escrow: l'host TIENE la sua penale, il resto torna all'ospite
             gz = getattr(self._sys, "garanzia", None)
             if gz is not None:
-                gz.annulla(rif)
+                st = gz.stato(rif)
+                imp = st.get("importo_host_cents", 0) if isinstance(st, dict) else 0
+                tratt = r.get("trattenuto_cents", 0)
+                host_tiene = (imp * tratt // pagato) if (imp and pagato and tratt) else 0
+                if host_tiene > 0:
+                    gz.chiudi_proporzionale(rif, host_tiene)
+                else:
+                    gz.annulla(rif)               # rimborso pieno -> host 0
         except Exception:
-            logger.warning("annulla garanzia su cancellazione fallito (ignorato)", exc_info=True)
+            logger.warning("chiusura garanzia su cancellazione fallita (ignorato)", exc_info=True)
         return 200, {"stato": "cancellata", "riferimento": rif,
                      "giorni_all_arrivo": giorni, "date_liberate": True,
                      "rimborso_cents": r["rimborso_cents"],
@@ -1610,4 +1617,19 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
 
     srv = ThreadingHTTPServer((host, porta), Handler)
     logger.info("BookinVIP server su http://%s:%d", host, porta)
+
+    # auto-rilascio escrow: ogni ora sblocca le garanzie con finestra post check-in scaduta
+    gz = getattr(sistema, "garanzia", None)
+    if gz is not None and hasattr(gz, "auto_rilascia"):
+        import threading as _th
+
+        def _tick_garanzia():
+            while True:
+                try:
+                    gz.auto_rilascia()
+                except Exception:
+                    logger.warning("auto_rilascia garanzia fallito (ignorato)", exc_info=True)
+                __import__("time").sleep(3600)
+        _th.Thread(target=_tick_garanzia, daemon=True).start()
+
     srv.serve_forever()

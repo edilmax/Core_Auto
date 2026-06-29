@@ -136,10 +136,22 @@ class EscrowGaranzia:
         return self._muta(prenotazione_id, ("in_garanzia",), "contestato", motivo=str(motivo))
 
     def annulla(self, prenotazione_id: Any) -> Dict[str, Any]:
-        """Prenotazione cancellata: chiude la garanzia (niente auto-rilascio all'host)."""
+        """Prenotazione cancellata SENZA penale (rimborso pieno): host 0, niente auto-rilascio."""
         if not isinstance(prenotazione_id, str):
             return {"ok": False, "motivo": "id_non_valido"}
         return self._muta(prenotazione_id, ("in_garanzia", "contestato"), "annullato")
+
+    def chiudi_proporzionale(self, prenotazione_id: Any, host_tiene_cents: Any) -> Dict[str, Any]:
+        """Cancellazione CON penale: l'host TIENE la sua quota (tutela host), il resto torna
+        all'ospite. Conservazione esatta. Dal solo stato 'in_garanzia'."""
+        if not isinstance(prenotazione_id, str):
+            return {"ok": False, "motivo": "id_non_valido"}
+        imp = self._importo(prenotazione_id)
+        if imp <= 0:
+            return {"ok": False, "motivo": "non_trovata"}
+        host = max(0, min(_cent(host_tiene_cents), imp))
+        return self._muta(prenotazione_id, ("in_garanzia",), "risolto",
+                          host=host, rimborso=imp - host)
 
     def risolvi(self, prenotazione_id: Any, *, rimborso_ospite_cents: Any) -> Dict[str, Any]:
         """Risoluzione (admin/giudice): rimborsa N all'ospite, il resto all'host. Conservazione
