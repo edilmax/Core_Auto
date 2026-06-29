@@ -1,7 +1,7 @@
 # STATO FINALE — Dove siamo e cosa manca per FINIRE BookinVIP
 
 > Punto di ripristino. Se si interrompe, riparti da qui. Aggiornato: 2026-06-29.
-> Suite: **1850 test superati** con successo, zero regressioni (baseline errori=48 = live
+> Suite: **1851 test superati** con successo, zero regressioni (baseline errori=48 = live
 > PG/Playwright). Include lo scudo fiscale reverse-charge (fase103), i gateway QR asiatici
 > Alipay/WeChat (fase104) e il modulo Alloggiati Web Questura (fase151).
 > Email ufficiale = **info@bookinvip.com**. Moduli fase 13→160 (~116 moduli).
