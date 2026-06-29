@@ -325,6 +325,26 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
         "m.textContent='Cancellata. Rimborso '+(d.rimborso_cents/100).toFixed(2)+' EUR';"
         "this.style.display='none';}else{m.style.color='#b00020';"
         "m.textContent='Cancellazione non riuscita';}};</script>")
+    # Escrow di garanzia: l'ospite conferma "tutto ok" (sblocca il pagamento) o segnala un problema
+    blocco_pass = blocco_pass + (
+        "<div style='margin-top:1rem;padding-top:1rem;border-top:1px solid #eef2f7'>"
+        "<div style='font-size:.82rem;color:#5e6f8d;margin-bottom:.5rem'>Dopo il check-in:</div>"
+        "<button id='btnOk' style='width:100%;padding:.8rem;border:0;border-radius:.8rem;"
+        "background:#155724;color:#fff;font-weight:700;cursor:pointer'>&#10003; Confermo: tutto "
+        "come descritto</button>"
+        "<button id='btnProblema' style='width:100%;margin-top:.5rem;padding:.7rem;border:0;"
+        "border-radius:.8rem;background:#e0a800;color:#1e3c72;font-weight:700;cursor:pointer'>"
+        "&#9888; Segnala un problema</button>"
+        "<div id='gMsg' style='margin-top:.6rem;font-size:.85rem'></div></div>"
+        "<script>(function(){var tk=decodeURIComponent((location.pathname.split('/voucher/')[1]||''));"
+        "function call(p,btn,ok){return async function(){btn.disabled=true;"
+        "var r=await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},"
+        "body:JSON.stringify({voucher_token:tk})});var d=await r.json();var m=document.getElementById('gMsg');"
+        "if(d&&d.ok){m.style.color='#155724';m.textContent=ok;}else{m.style.color='#b00020';"
+        "m.textContent='Operazione non riuscita';btn.disabled=false;}};}"
+        "document.getElementById('btnOk').onclick=call('/api/garanzia/conferma',document.getElementById('btnOk'),'Grazie! Pagamento sbloccato per l host.');"
+        "document.getElementById('btnProblema').onclick=call('/api/garanzia/contesta',document.getElementById('btnProblema'),'Segnalazione ricevuta: pagamento sospeso, ti ricontattiamo.');"
+        "})();</script>")
     return (
         "<!DOCTYPE html><html lang=\"%s\"><head><meta charset=\"UTF-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
@@ -801,6 +821,12 @@ class RouterHTTP:
         # CREDITO VIAGGIO ANTI-RIMPIANTO: se hai perso qualcosa, una parte torna come credito
         # (non-cashabile, riscattabile su una prossima prenotazione; ci costa solo margine futuro).
         cv_cents, cv_token = self._credito_anti_rimpianto(r.get("trattenuto_cents", 0))
+        try:                                      # chiude l'escrow: niente payout su cancellata
+            gz = getattr(self._sys, "garanzia", None)
+            if gz is not None:
+                gz.annulla(rif)
+        except Exception:
+            logger.warning("annulla garanzia su cancellazione fallito (ignorato)", exc_info=True)
         return 200, {"stato": "cancellata", "riferimento": rif,
                      "giorni_all_arrivo": giorni, "date_liberate": True,
                      "rimborso_cents": r["rimborso_cents"],

@@ -57,6 +57,13 @@ class TestModulo(unittest.TestCase):
         self.g.conferma_ospite("P6")
         self.assertFalse(self.g.conferma_ospite("P6")["ok"])           # gia' rilasciata
 
+    def test_annulla_blocca_auto_rilascio(self):
+        # prenotazione cancellata -> garanzia annullata -> MAI payout all'host (no auto-rilascio)
+        self.g.apri("P7", 5000, ora_checkin_ts=1000)
+        self.assertEqual(self.g.annulla("P7")["stato"], "annullato")
+        self.clock["t"] = 10 ** 9
+        self.assertEqual(self.g.auto_rilascia(), 0)
+
 
 class TestE2E(unittest.TestCase):
     def test_book_apre_garanzia_e_ospite_conferma(self):

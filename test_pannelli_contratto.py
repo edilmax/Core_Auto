@@ -47,6 +47,15 @@ ENDPOINT = [
     ("admin", "GET", "/api/admin/prenotazioni", AK),
     ("admin", "POST", "/api/admin/rimborso", AK),
     ("admin", "POST", "/api/marketing/campagna", AK),
+    ("admin", "POST", "/api/admin/cancella_attivita", AK),
+    # voucher / cold-start / escrow garanzia (chiamati da pagine pubbliche)
+    ("index", "POST", "/api/domanda", {}),
+    ("index", "GET", "/api/domanda/conta", {}),
+    ("voucher", "POST", "/api/concierge/cancella", {}),
+    ("voucher", "POST", "/api/garanzia/conferma", {}),
+    ("voucher", "POST", "/api/garanzia/contesta", {}),
+    ("admin", "GET", "/api/garanzia/stato", AK),
+    ("host", "GET", "/api/host/link_diretto", HK),
 ]
 
 
