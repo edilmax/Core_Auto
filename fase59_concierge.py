@@ -210,6 +210,7 @@ class ProtocolloConcierge:
         if not _intero(party) or not (1 <= party <= PARTY_MAX):
             return RispostaConcierge(400, {"errore": "party_non_valido"})
         fonte = _stringa(richiesta.get("fonte")) or "marketplace"   # diretto | marketplace
+        valuta = self._valuta_alloggio(alloggio)   # LIKE-FOR-LIKE: si addebita nella valuta dell'host
 
         try:
             from fase58_channel_manager import notti
@@ -264,7 +265,7 @@ class ProtocolloConcierge:
             "prezzo_guest_cents": guest, "netto_host_cents": netto_host,
             "sconto_credito_cents": sconto,
             "tassa_soggiorno_cents": tassa, "totale_cents": totale,
-            "fonte": fonte, "exp": scade_a, "valuta": self._valuta,
+            "fonte": fonte, "exp": scade_a, "valuta": valuta,
             # nonce: ogni preventivo e' UNICO -> due clienti distinti per la stessa
             # stanza/date competono davvero (idem-key distinte); un retry dello stesso
             # token resta idempotente (stesso nonce -> stessa firma -> stessa idem-key).
@@ -283,10 +284,23 @@ class ProtocolloConcierge:
             "tassa_soggiorno_cents": tassa,     # tassa citta' (pass-through, voce separata visibile)
             "totale_cents": totale,             # quello che l'ospite paga DAVVERO = soggiorno + tassa
             "fonte": fonte,
-            "valuta": self._valuta,
+            "valuta": valuta,
             "scade_a": scade_a,
             "money_unit": "cents_integer",
         })
+
+    def _valuta_alloggio(self, slug: Any) -> str:
+        """LIKE-FOR-LIKE: valuta dell'annuncio (l'host prezza in X -> ospite paga X -> host
+        incassa X -> commissione X). Nessuna conversione forzata = ZERO rischio cambio per noi."""
+        try:
+            if self._cat is not None:
+                d = self._cat.dettaglio(slug)
+                v = d.get("valuta") if isinstance(d, dict) else None
+                if isinstance(v, str) and 1 <= len(v) <= 8:
+                    return v
+        except Exception:
+            pass
+        return self._valuta
 
     def _sconto_credito(self, token: Any, netto: int, comm: int) -> int:
         """Sconto Credito Fondatore: verifica il token firmato e applica al MASSIMO quanto la

@@ -66,6 +66,22 @@ class TestTassaPreAcquisto(unittest.TestCase):
         from fase66_tassa_soggiorno import REGOLA_ZERO
         self.assertIs(self.sis.catalogo.regola_tassa_di("inesistente"), REGOLA_ZERO)
 
+    def test_like_for_like_valuta_dellannuncio(self):
+        # l'host prezza in USD -> il preventivo (e l'addebito) e' in USD -> zero rischio cambio
+        self._pubblica(valuta="USD")
+        q = self._quote()
+        self.assertEqual(q["valuta"], "USD")
+        # annuncio EUR (default) -> preventivo EUR
+        self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casa2",
+                "titolo": "C2", "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 9000,
+                "capacita": 2, "servizi": [], "immagini": [], "valuta": "EUR"}, HK)
+        self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa2",
+                "da": "2027-01-01", "a": "2027-01-31", "unita_totali": 1,
+                "prezzo_netto_cents": 9000}, HK)
+        _, q2 = self.g("POST", "/api/concierge/quote", {"alloggio_id": "casa2",
+                       "check_in": "2027-01-10", "check_out": "2027-01-12", "party": 1})
+        self.assertEqual(q2["valuta"], "EUR")
+
 
 if __name__ == "__main__":
     unittest.main()
