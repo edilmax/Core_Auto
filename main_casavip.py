@@ -57,6 +57,8 @@ def main() -> None:  # pragma: no cover
         smtp_user=os.environ.get("SMTP_USER", ""),
         smtp_password=os.environ.get("SMTP_PASSWORD", ""),
         email_mittente=os.environ.get("EMAIL_MITTENTE", ""),
+        whatsapp_token=os.environ.get("WHATSAPP_TOKEN", ""),
+        whatsapp_phone_id=os.environ.get("WHATSAPP_PHONE_ID", ""),
         con_mcp=True,
         con_sentinel=os.environ.get("SENTINEL", "").lower() in ("1", "true", "yes"),
         cartella_sentinel=os.environ.get("SENTINEL_DIR") or ".",

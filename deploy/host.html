@@ -44,6 +44,7 @@
         <label class="full">Email<input id="au_email" type="email" placeholder="info@bookinvip.com"></label>
         <label class="full">Password (min 8)<input id="au_pw" type="password"></label>
         <label class="full">Ragione sociale / nome struttura (per registrarti)<input id="au_rs" placeholder="B&B Il Sole"></label>
+        <label class="full">Telefono/WhatsApp (per gli avvisi prenotazione) <span style="font-weight:400;color:#5e6f8d;font-size:.72rem">— opzionale, con prefisso es. +39</span><input id="au_tel" type="tel" placeholder="+39 333 1234567"></label>
       </div>
       <label style="display:flex;gap:.5rem;font-size:.85rem;margin-top:.7rem;text-transform:none">
         <input type="checkbox" id="au_terms" style="width:auto;margin-top:.2rem">
@@ -294,7 +295,7 @@ async function authPost(path, body, msgEl, okText){
 document.getElementById('btnRegister').onclick = ()=>{
   const m=document.getElementById('msgAuth');
   if(!document.getElementById('au_terms').checked){ m.className='msg err'; m.textContent='Devi accettare Termini e Privacy.'; return; }
-  authPost('/api/host/registrazione', {email:document.getElementById('au_email').value, password:document.getElementById('au_pw').value, ragione_sociale:document.getElementById('au_rs').value, accetta_termini:true, codice_referral:(new URLSearchParams(location.search).get('ref')||'')}, m, 'Registrato! Ora carichi i tuoi alloggi qui sotto.');
+  authPost('/api/host/registrazione', {email:document.getElementById('au_email').value, password:document.getElementById('au_pw').value, ragione_sociale:document.getElementById('au_rs').value, telefono:document.getElementById('au_tel').value, accetta_termini:true, codice_referral:(new URLSearchParams(location.search).get('ref')||'')}, m, 'Registrato! Ora carichi i tuoi alloggi qui sotto.');
 };
 document.getElementById('btnLogin').onclick = ()=>{
   authPost('/api/host/login', {email:document.getElementById('au_email').value, password:document.getElementById('au_pw').value}, document.getElementById('msgAuth'), 'Accesso effettuato.');

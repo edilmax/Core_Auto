@@ -57,6 +57,8 @@ class ConfigCasaVIP:
     smtp_user: str = ""
     smtp_password: str = ""
     email_mittente: str = ""
+    whatsapp_token: str = ""            # gated: avvisi prenotazione all'host via WhatsApp
+    whatsapp_phone_id: str = ""         # gated: id numero mittente WhatsApp Cloud API
     con_mcp: bool = True
     con_recensioni: bool = True
     con_smartpass: bool = True
@@ -100,6 +102,7 @@ class SistemaCasaVIP:
     marketing: Any = None
     messaggistica: Any = None
     referral: Any = None
+    notificatore_prenotazione: Any = None
 
     @property
     def attivo(self) -> bool:
@@ -244,6 +247,16 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     else:
         avvisi.append("SMTP non configurato -> nessuna email voucher (gated)")
 
+    # 3e) notifiche prenotazione all'HOST (email sempre se SMTP c'e'; WhatsApp se gated)
+    from fase152_notifiche_prenotazione import crea_notificatore_prenotazione
+    notificatore_prenotazione = crea_notificatore_prenotazione(
+        email_provider=email_provider,
+        whatsapp_token=cfg.whatsapp_token, whatsapp_phone_id=cfg.whatsapp_phone_id)
+    if notificatore_prenotazione.attivo():
+        componenti.append("avvisi_host(152)")
+    else:
+        avvisi.append("nessun canale avviso host -> l'host non riceve notifiche prenotazione")
+
     # 3i) marketing 360 + canali social reali (GATED da env: senza chiavi, nessun canale)
     from fase90_marketing import crea_motore_marketing
     from fase91_canali_social import crea_canali_da_env
@@ -292,4 +305,5 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           split=split, coda=coda, turnover=turnover,
                           digital_twin=digital_twin, guardian=guardian,
                           dichiarazione=dichiarazione, noshow=noshow, marketing=marketing,
-                          messaggistica=messaggistica, referral=referral)
+                          messaggistica=messaggistica, referral=referral,
+                          notificatore_prenotazione=notificatore_prenotazione)

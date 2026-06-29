@@ -372,6 +372,18 @@ class CatalogoVetrina:
         finally:
             con.close()
 
+    def host_di_alloggio(self, slug: Any) -> Optional[str]:
+        """host_id proprietario dell'alloggio (per notifiche prenotazione/payout).
+        Non esposto nel dettaglio pubblico. None se lo slug non esiste."""
+        if not (isinstance(slug, str) and slug):
+            return None
+        con = self._apri()
+        try:
+            r = con.execute("SELECT host_id FROM alloggi WHERE slug=?", (slug,)).fetchone()
+        finally:
+            con.close()
+        return r["host_id"] if r is not None else None
+
     def alloggi_host(self, host_id: str, *, limit: int = 100) -> List[Dict[str, Any]]:
         """Tutti gli alloggi di un host (ogni stato: pubblicato/bozza/sospeso) per il
         pannello 'i miei alloggi'. Read-only."""

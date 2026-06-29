@@ -617,7 +617,36 @@ class RouterHTTP:
                 except Exception:
                     logger.warning("invio email voucher fallito (ignorato)",
                                    exc_info=True)
+            # avviso all'HOST su piu' canali (email sempre, WhatsApp se configurato) - ISOLATO
+            self._avvisa_host_prenotazione(allog, ref, ci, co, corpo.get("fonte", ""))
         return status, corpo
+
+    def _avvisa_host_prenotazione(self, allog, ref, ci, co, origine):
+        """Notifica l'host della nuova prenotazione (email + WhatsApp gated). Best-effort:
+        ogni errore e' ISOLATO, non blocca mai la prenotazione gia' confermata."""
+        try:
+            notif = getattr(self._sys, "notificatore_prenotazione", None)
+            reg = getattr(self._sys, "registro_host", None)
+            if notif is None or not notif.attivo() or reg is None:
+                return
+            hid = self._sys.catalogo.host_di_alloggio(allog)
+            contatti = reg.info_host(hid) if hid else None
+            if not contatti:
+                return
+            d = self._sys.catalogo.dettaglio(allog) or {}
+            from fase152_notifiche_prenotazione import componi_avviso_host
+            from fase61_localizzazione import Localizzatore, lingua_da_telefono
+            lingua = (lingua_da_telefono(contatti.get("telefono"))
+                      if contatti.get("telefono") else "it")
+            titolo = (d.get("titolo") if isinstance(d, dict) else None) or allog
+            ogg, testo = componi_avviso_host(
+                Localizzatore(), alloggio=titolo, ci=ci, co=co, origine=origine,
+                riferimento=ref,
+                link_pannello=(self._base_url or "https://bookinvip.com") + "/host.html",
+                lingua=lingua)
+            notif.avvisa(contatti, ogg, testo)
+        except Exception:
+            logger.warning("avviso host prenotazione fallito (ignorato)", exc_info=True)
 
     def _trasparenza(self, query):
         """Confronto noi-vs-OTA (fase69): 'con Booking incassi X, con noi Y'."""
@@ -770,7 +799,8 @@ class RouterHTTP:
             return 400, {"errore": "json_non_valido"}
         e = reg.registra(dati.get("email"), dati.get("password"),
                          accetta_termini=bool(dati.get("accetta_termini")),
-                         ragione_sociale=str(dati.get("ragione_sociale", "")))
+                         ragione_sociale=str(dati.get("ragione_sociale", "")),
+                         telefono=str(dati.get("telefono", "")))
         out = e.as_dict()
         # viral loop: se è arrivato con un codice referral, accredita referente+referee
         if e.ok:

@@ -96,10 +96,16 @@ class RegistroHost:
                         salt TEXT NOT NULL,
                         pw_hash TEXT NOT NULL,
                         ragione_sociale TEXT NOT NULL DEFAULT '',
+                        telefono TEXT NOT NULL DEFAULT '',
                         termini_versione TEXT NOT NULL,
                         termini_ts INTEGER NOT NULL,
                         stato TEXT NOT NULL DEFAULT 'attivo',
                         creato_ts INTEGER NOT NULL)""")
+                # migrazione idempotente per DB esistenti: aggiunge 'telefono' se manca
+                try:
+                    con.execute("ALTER TABLE host ADD COLUMN telefono TEXT NOT NULL DEFAULT ''")
+                except sqlite3.OperationalError:
+                    pass
         finally:
             con.close()
 
@@ -108,7 +114,7 @@ class RegistroHost:
                                      "email": email, "exp": self._now() + self._ttl})
 
     def registra(self, email: Any, password: Any, *, accetta_termini: bool = False,
-                 ragione_sociale: str = "",
+                 ragione_sociale: str = "", telefono: str = "",
                  versione_termini: str = TERMINI_VERSIONE_CORRENTE) -> EsitoHost:
         """L'host crea il proprio account. Fail-closed su ogni requisito mancante."""
         if not accetta_termini:
@@ -129,11 +135,11 @@ class RegistroHost:
                 con.execute("COMMIT")
                 return EsitoHost(False, errore="email_gia_registrata")
             con.execute(
-                "INSERT INTO host (host_id, email, salt, pw_hash, ragione_sociale, "
+                "INSERT INTO host (host_id, email, salt, pw_hash, ragione_sociale, telefono, "
                 "termini_versione, termini_ts, stato, creato_ts) "
-                "VALUES (?,?,?,?,?,?,?, 'attivo', ?)",
+                "VALUES (?,?,?,?,?,?,?,?, 'attivo', ?)",
                 (host_id, email_n, salt.hex(), pw_hash, str(ragione_sociale or ""),
-                 str(versione_termini), self._now(), self._now()))
+                 str(telefono or "").strip(), str(versione_termini), self._now(), self._now()))
             con.execute("COMMIT")
             return EsitoHost(True, host_id=host_id, token=self._token(host_id, email_n))
         except Exception:
@@ -188,6 +194,22 @@ class RegistroHost:
         if r is None or r["stato"] != "attivo":
             return None
         return host_id
+
+    def info_host(self, host_id: Any) -> Optional[Dict[str, str]]:
+        """Contatti dell'host per le notifiche di prenotazione (email + telefono).
+        None se l'host non esiste. Usato da fase152 per avvisare l'host."""
+        if not (isinstance(host_id, str) and host_id):
+            return None
+        con = self._apri()
+        try:
+            r = con.execute("SELECT email, telefono, ragione_sociale FROM host "
+                            "WHERE host_id=?", (host_id,)).fetchone()
+        finally:
+            con.close()
+        if r is None:
+            return None
+        return {"email": r["email"] or "", "telefono": (r["telefono"] or ""),
+                "ragione_sociale": (r["ragione_sociale"] or "")}
 
     def imposta_stato(self, host_id: str, stato: str) -> bool:
         if stato not in ("attivo", "sospeso"):
