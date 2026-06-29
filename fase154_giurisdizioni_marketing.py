@@ -53,6 +53,11 @@ def _ue(paese: str) -> RegoleMarketing:
                            "GDPR + ePrivacy (consenso preventivo)", 10)
 
 
+def _restr(paese: str, legge: str, intensita: int = 10) -> RegoleMarketing:
+    """Paese NOTO ma a regime opt-in (niente cold). Usato per Asia/MO/altri."""
+    return RegoleMarketing(paese, OPT_IN, OPT_IN, OPT_IN, False, True, legge, intensita)
+
+
 REGOLE: Dict[str, RegoleMarketing] = {p: _ue(p) for p in _UE_EEA}
 REGOLE.update({
     # Regimi 'opt-out' (cold B2B lecito con disiscrizione) = le tecniche piu' potenti.
@@ -65,9 +70,36 @@ REGOLE.update({
     "JP": RegoleMarketing("JP", OPT_OUT, OPT_IN, OPT_IN, True, True, "Anti-Spam (B2B published)", 45),
     "IN": RegoleMarketing("IN", OPT_OUT, OPT_IN, OPT_IN, True, True, "IT Act (DLT per SMS)", 50),
     # Regimi 'opt-in' espliciti (niente cold).
+    # --- ASIA EST: opt-out (tecniche piu' forti dove lecito) ---
+    "HK": RegoleMarketing("HK", OPT_OUT, OPT_IN, OPT_IN, True, True, "PDPO + UEMO (opt-out)", 58),
+    "TW": RegoleMarketing("TW", OPT_OUT, OPT_IN, OPT_IN, True, True, "PDPA Taiwan", 48),
+    # --- AMERICHE: opt-out ---
+    "MX": RegoleMarketing("MX", OPT_OUT, OPT_IN, OPT_IN, True, True, "LFPDPPP (opt-out)", 50),
+    "AR": RegoleMarketing("AR", OPT_OUT, OPT_IN, OPT_IN, True, True, "Ley 25.326 (opt-out)", 38),
+    "CL": RegoleMarketing("CL", OPT_OUT, OPT_IN, OPT_IN, True, True, "Ley 19.628 (opt-out)", 38),
+    # --- ASIA EST/SUD-EST: opt-in (cold BLOCCATO) ---
+    "CN": _restr("CN", "PIPL + Advertising Law (consenso)", 5),
+    "KR": _restr("KR", "PIPA + Network Act (opt-in stretto + label pubblicita')", 5),
+    "TH": _restr("TH", "PDPA Thailand", 10),
+    "ID": _restr("ID", "PDP Law 2022", 10),
+    "PH": _restr("PH", "Data Privacy Act", 12),
+    "VN": _restr("VN", "Decreto anti-spam + PDPD", 10),
+    "MY": _restr("MY", "PDPA Malaysia", 12),
+    "PK": _restr("PK", "regolato", 8),
+    "BD": _restr("BD", "regolato", 8),
+    "LK": _restr("LK", "PDPA Sri Lanka", 8),
+    # --- MEDIO ORIENTE / AFRICA / AMERICHE: opt-in ---
     "CA": RegoleMarketing("CA", OPT_IN, OPT_IN, OPT_IN, False, True, "CASL (consenso espresso)", 10),
     "BR": RegoleMarketing("BR", OPT_IN, OPT_IN, OPT_IN, False, True, "LGPD", 15),
     "AE": RegoleMarketing("AE", OPT_IN, OPT_IN, OPT_IN, False, True, "TDRA / regolato", 15),
+    "IL": _restr("IL", "Spam Law (Amend. 40)", 8),
+    "SA": _restr("SA", "CITC anti-spam", 8),
+    "TR": _restr("TR", "KVKK + registro IYS", 8),
+    "QA": _restr("QA", "regolato", 8),
+    "CO": _restr("CO", "Habeas Data", 10),
+    "NG": _restr("NG", "NDPR", 12),
+    "KE": _restr("KE", "DPA 2019", 10),
+    "EG": _restr("EG", "PDPL", 8),
 })
 
 

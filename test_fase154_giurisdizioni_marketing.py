@@ -43,6 +43,23 @@ class TestGiurisdizioni(unittest.TestCase):
     def test_nessun_paese_per_canale_inesistente(self):
         self.assertEqual(giurisdizioni_consentite("piccione"), [])
 
+    def test_asia_est_opt_out_dove_lecito(self):
+        # Hong Kong (UEMO) e Taiwan: opt-out -> cold email lecito
+        for p in ("HK", "TW", "JP"):
+            self.assertTrue(puo_contattare_a_freddo(p, "email")[0], p)
+
+    def test_asia_est_opt_in_bloccata(self):
+        # Cina, Corea, Thailandia, Indonesia, Vietnam, Malaysia: opt-in -> cold BLOCCATO
+        for p in ("CN", "KR", "TH", "ID", "VN", "MY", "PH"):
+            self.assertFalse(puo_contattare_a_freddo(p, "email")[0], p)
+
+    def test_lista_include_asia_e_americhe_opt_out(self):
+        lst = giurisdizioni_consentite("email")
+        for p in ("US", "HK", "TW", "MX", "SG", "JP"):
+            self.assertIn(p, lst)
+        for p in ("CN", "KR", "IT"):
+            self.assertNotIn(p, lst)
+
 
 if __name__ == "__main__":
     unittest.main()
