@@ -14,7 +14,12 @@
 - **Ospite avvisato + Credito Fondatore**: se cerca e non trova, lascia l'email e ottiene un
   credito di benvenuto (non-cashabile, ci costa solo parte della commissione → mai in perdita).
 - **Host avvisato di ogni prenotazione** via email + WhatsApp (gated); conferma e calendario automatici.
-- **Cancellazione self-service ospite** con rimborso per politica (dalla pagina voucher).
+- **Cancellazione modello Booking**: l'host sceglie la politica per ogni alloggio (gratuita
+  24h/5gg/14gg/non-rimborsabile), l'ospite la vede prima di prenotare, è bloccata nel voucher
+  (l'ospite non può barare). **Unico al mondo: "Credito Viaggio Anti-Rimpianto"** — sulla penale
+  metà torna come credito per il prossimo soggiorno (host intero, noi mai in perdita).
+- **Avvisi host anche in Asia**: WeChat (Cina) e LINE (Giappone/Thailandia/Taiwan) oltre a email/WhatsApp.
+- **Home page** con logo e hero grafico, cancellazione gratuita in evidenza.
 - **Outreach operativo** (`outreach_runner.py`): trova host nel mondo e manda email, solo dove
   legale (DB leggi 50 nazioni, Sud-Est asiatico aperto, UE/Cina/Corea bloccate).
 - **Admin: "cancella attività host" + verifica ovunque** (diritto all'oblio / pulizia dati test).

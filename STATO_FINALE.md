@@ -30,8 +30,16 @@
   (destinazione) + **Credito Fondatore** non-cashabile, riscattato nel concierge con guardia floor
   (finanziato dalla NOSTRA commissione, host invariato, mai in perdita). La domanda raccolta =
   prova sociale per gli host ("N cercano a <destinazione>").
+- **CANCELLAZIONE modello Booking** (`fase57`+`fase111`): l'HOST sceglie la politica per OGNI
+  alloggio (flessibile/moderata/rigida/non_rimborsabile), l'ospite la VEDE prima di prenotare,
+  è BLOCCATA nel voucher firmato (anti-furbata). **Arma unica "Credito Viaggio Anti-Rimpianto"**:
+  sulla penale il 50% torna come credito non-cashabile (host tiene tutto, noi floor-guarded → mai
+  in perdita, ospite riprenota).
+- **HOME PAGE cliente rifatta**: logo SVG (`deploy/logo.svg`) + hero (gradiente + skyline) coi
+  punti forza: 0% commissioni ospite · **cancellazione gratuita** · pagamenti sicuri · Anti-Rimpianto.
+- **Avvisi host Asia**: `fase152` +LINE (JP/TH/TW) +WeChat (Cina) oltre a email/WhatsApp.
 - **Test E2E/contratto**: flusso reale, varianti avversariali, chi-manda/chi-riceve, contratto
-  pannelli↔backend (no rotte fantasma). Copertura 110/110 moduli storici + i nuovi.
+  pannelli↔backend (no rotte fantasma). Server live HTTP 26/26. Suite 1843. 110/110 storici + i nuovi.
 
 ## ✅ ACQUISIZIONE (fase96-97)
 - fase96 lead discovery MONDIALE da dati aperti OpenStreetMap/Overpass (gratis, no proxy,

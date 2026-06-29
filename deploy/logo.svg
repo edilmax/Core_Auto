@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 372 90" width="372" height="90" role="img" aria-label="BookinVIP">
+  <g transform="translate(5,13) scale(0.125)">
+    <rect width="512" height="512" rx="96" fill="#1e3c72"/>
+    <path d="M256 104 L400 224 L368 224 L368 392 L296 392 L296 296 L216 296 L216 392 L144 392 L144 224 L112 224 Z" fill="#fff"/>
+    <circle cx="256" cy="200" r="26" fill="#f9c846"/>
+  </g>
+  <text x="84" y="59" font-family="system-ui,'Segoe UI',Roboto,Arial,sans-serif" font-size="42" font-weight="800" letter-spacing="-1" fill="#1e3c72">Bookin<tspan fill="#2a5298">V</tspan><tspan fill="#f9c846">I</tspan><tspan fill="#2a5298">P</tspan></text>
+</svg>
