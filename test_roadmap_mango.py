@@ -114,8 +114,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 145=contratto locazione PDF precompilato (PDF 1.4 stdlib zero-dipendenze, xref corretti, IT/EN, cents interi, deterministico);
         # 147=tassa soggiorno comunale automatica (registro regole per-comune + calcolo + ledger riscossioni rendicontazione, comune-ignoto->0, SQLite durevole);
         # 149=deposito cauzionale pre-autorizzazione (hold no-addebito, cattura danno<=autorizzato + rilascio resto, conservazione esatta, PSP capture/release gated, SQLite durevole);
-        # 151=export Alloggiati Web Questura (file larghezza-fissa 168char IT-gated, schedine ospiti, capo-con-documento, ASCII uppercase, deterministico). Blocco pari 108..150 + 152+ libero.
-        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148, 150, 152):
+        # 151=export Alloggiati Web Questura (file larghezza-fissa 168char IT-gated, schedine ospiti, capo-con-documento, ASCII uppercase, deterministico).
+        # 152=AVVISO PRENOTAZIONE ALL'HOST (notifica multi-canale email sempre + WhatsApp Cloud API gated, testo localizzato fase61, dispatcher isolato; +fase88 telefono/info_host, +fase57 host_di_alloggio). Blocco pari 108..152 + 154+ libero.
+        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148, 150, 154):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
