@@ -1,10 +1,10 @@
-> 🔄 Aggiornato 2026-06-29 · **BookinVIP** · suite **1835 test** (0 regressioni) · moduli `faseNN`→158 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
+> 🔄 Aggiornato 2026-06-29 · **BookinVIP** · suite **1850 test** (0 regressioni) · moduli `faseNN`→160 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
 
 # BookinVIP — Cosa fa la macchina (tutte le funzioni)
 
 > Spiegazione completa e onesta. Diviso in: **A) cosa fa OGGI** (acceso nel prodotto
 > live), **B) motori pronti** (costruiti e testati, da collegare alla UI), **C) principi**.
-> Software: ~115 moduli fase (→158), 1835 test verdi, zero dipendenze esterne, su github.com/edilmax/Core_Auto.
+> Software: ~115 moduli fase (→158), 1850 test verdi, zero dipendenze esterne, su github.com/edilmax/Core_Auto.
 >
 > **Commissione PER FONTE, 0% OSPITE**: l'ospite paga il prezzo PULITO; la commissione è DEDOTTA
 > dall'host — **5% sui suoi clienti diretti** (link condivisibile), **15% sui clienti portati da
@@ -20,6 +20,9 @@
   metà torna come credito per il prossimo soggiorno (host intero, noi mai in perdita).
 - **Avvisi host anche in Asia**: WeChat (Cina) e LINE (Giappone/Thailandia/Taiwan) oltre a email/WhatsApp.
 - **Home page** con logo e hero grafico, cancellazione gratuita in evidenza.
+- **Escrow di Garanzia** (unico vs colossi): i soldi dell'host restano bloccati finché l'ospite
+  entra e conferma "tutto come descritto" (bottone sul voucher). Se manca un servizio dichiarato o
+  non corrisponde → l'host NON viene pagato. Tutela ospite e piattaforma.
 - **Outreach operativo** (`outreach_runner.py`): trova host nel mondo e manda email, solo dove
   legale (DB leggi 50 nazioni, Sud-Est asiatico aperto, UE/Cina/Corea bloccate).
 - **Admin: "cancella attività host" + verifica ovunque** (diritto all'oblio / pulizia dati test).
@@ -174,7 +177,7 @@ evoluzione "alloggi".
    mai l'IA".
 4. **Multilingua** per costruzione (clienti e host).
 5. **Isolamento**: ogni modulo è a sé; se un pezzo cade, il resto vive.
-6. **Testato fino in fondo**: 1835 test verdi, zero regressioni, ogni funzione verificata
+6. **Testato fino in fondo**: 1850 test verdi, zero regressioni, ogni funzione verificata
    anche "live" sul server reale.
 7. **Pronto all'accensione**: pagamenti, email e webhook sono "gated" — il sistema gira
    identico senza credenziali, e si accende mettendo le chiavi nel `.env`, **zero modifiche

@@ -1,10 +1,10 @@
 # STATO FINALE — Dove siamo e cosa manca per FINIRE BookinVIP
 
 > Punto di ripristino. Se si interrompe, riparti da qui. Aggiornato: 2026-06-29.
-> Suite: **1835 test superati** con successo, zero regressioni (baseline errori=48 = live
+> Suite: **1850 test superati** con successo, zero regressioni (baseline errori=48 = live
 > PG/Playwright). Include lo scudo fiscale reverse-charge (fase103), i gateway QR asiatici
 > Alipay/WeChat (fase104) e il modulo Alloggiati Web Questura (fase151).
-> Email ufficiale = **info@bookinvip.com**. Moduli fase 13→158 (~115 moduli).
+> Email ufficiale = **info@bookinvip.com**. Moduli fase 13→160 (~116 moduli).
 > **CODICE CHIUSO + DEPLOY HTTPS PRONTO + ACQUISIZIONE OPERATIVA + ARCHITETTURA FINANZIARIA.** Resta
 > solo il "DA FARE TU": VPS + DNS + chiavi .env + numeri fiscali col commercialista + deploy.
 
@@ -38,8 +38,15 @@
 - **HOME PAGE cliente rifatta**: logo SVG (`deploy/logo.svg`) + hero (gradiente + skyline) coi
   punti forza: 0% commissioni ospite · **cancellazione gratuita** · pagamenti sicuri · Anti-Rimpianto.
 - **Avvisi host Asia**: `fase152` +LINE (JP/TH/TW) +WeChat (Cina) oltre a email/WhatsApp.
+- **ESCROW DI GARANZIA** (`fase160`, differenziatore vs colossi): i fondi dell'host sono BLOCCATI
+  al book; rilasciati solo se l'ospite conferma "come dichiarato" (`/api/garanzia/conferma`, bottone
+  sul voucher) o passa la finestra 24h post check-in; **servizio mancante/non conforme → host NON
+  pagato** (`/api/garanzia/contesta` → disputa, `risolvi` conservazione esatta). La cancellazione
+  ANNULLA la garanzia (niente payout su cancellata). `auto_rilascia` va schedulato (cron, da fare).
+- **FIX LINGUA**: `sw.js` ora RETE-PRIMA per le pagine (il sito mostra sempre l'ultima versione dopo
+  un deploy; era cache-first = stale). host.html i18n traduce davvero (data-ui + 10 chiavi, 5 lingue).
 - **Test E2E/contratto**: flusso reale, varianti avversariali, chi-manda/chi-riceve, contratto
-  pannelli↔backend (no rotte fantasma). Server live HTTP 26/26. Suite 1843. 110/110 storici + i nuovi.
+  pannelli↔backend (no rotte fantasma). Server live HTTP verde. **Suite 1850, 0 errori.**
 
 ## ✅ ACQUISIZIONE (fase96-97)
 - fase96 lead discovery MONDIALE da dati aperti OpenStreetMap/Overpass (gratis, no proxy,
