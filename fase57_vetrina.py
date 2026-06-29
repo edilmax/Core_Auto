@@ -384,6 +384,30 @@ class CatalogoVetrina:
             con.close()
         return r["host_id"] if r is not None else None
 
+    def cancella_alloggi_host(self, host_id: Any) -> int:
+        """CANCELLAZIONE TOTALE annunci+immagini di un host (diritto all'oblio / pulizia)."""
+        if not (isinstance(host_id, str) and host_id):
+            return 0
+        con = self._apri()
+        try:
+            with con:
+                con.execute("DELETE FROM alloggio_immagini WHERE alloggio_id IN "
+                            "(SELECT slug FROM alloggi WHERE host_id=?)", (host_id,))
+                cur = con.execute("DELETE FROM alloggi WHERE host_id=?", (host_id,))
+            return cur.rowcount if (cur.rowcount and cur.rowcount > 0) else 0
+        finally:
+            con.close()
+
+    def conta_alloggi_host(self, host_id: Any) -> int:
+        if not (isinstance(host_id, str) and host_id):
+            return 0
+        con = self._apri()
+        try:
+            r = con.execute("SELECT COUNT(*) FROM alloggi WHERE host_id=?", (host_id,)).fetchone()
+            return int(r[0]) if r else 0
+        finally:
+            con.close()
+
     def alloggi_host(self, host_id: str, *, limit: int = 100) -> List[Dict[str, Any]]:
         """Tutti gli alloggi di un host (ogni stato: pubblicato/bozza/sospeso) per il
         pannello 'i miei alloggi'. Read-only."""

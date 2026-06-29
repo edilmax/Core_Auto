@@ -160,6 +160,30 @@ class ChannelManager:
         finally:
             con.close()
 
+    def cancella_alloggio(self, alloggio_id: Any) -> int:
+        """CANCELLAZIONE TOTALE inventario+movimenti di un alloggio (oblio/pulizia)."""
+        if not (isinstance(alloggio_id, str) and alloggio_id):
+            return 0
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("DELETE FROM inventario WHERE alloggio_id=?", (alloggio_id,))
+                con.execute("DELETE FROM movimenti WHERE alloggio_id=?", (alloggio_id,))
+            return cur.rowcount if (cur.rowcount and cur.rowcount > 0) else 0
+        finally:
+            con.close()
+
+    def conta_alloggio(self, alloggio_id: Any) -> int:
+        if not (isinstance(alloggio_id, str) and alloggio_id):
+            return 0
+        con = self._apri()
+        try:
+            r = con.execute("SELECT COUNT(*) FROM inventario WHERE alloggio_id=?",
+                            (alloggio_id,)).fetchone()
+            return int(r[0]) if r else 0
+        finally:
+            con.close()
+
     # ── WRITE host: set completo di un giorno ──────────────────────────────────
     def imposta_disponibilita(self, alloggio_id: str, giorno: str, *,
                               unita_totali: int, prezzo_netto_cents: int,

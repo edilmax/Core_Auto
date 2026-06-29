@@ -211,6 +211,28 @@ class RegistroHost:
         return {"email": r["email"] or "", "telefono": (r["telefono"] or ""),
                 "ragione_sociale": (r["ragione_sociale"] or "")}
 
+    def cancella_host(self, host_id: Any) -> int:
+        """CANCELLAZIONE TOTALE dell'account host (diritto all'oblio / pulizia)."""
+        if not (isinstance(host_id, str) and host_id):
+            return 0
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("DELETE FROM host WHERE host_id=?", (host_id,))
+            return cur.rowcount if (cur.rowcount and cur.rowcount > 0) else 0
+        finally:
+            con.close()
+
+    def esiste_host(self, host_id: Any) -> bool:
+        if not (isinstance(host_id, str) and host_id):
+            return False
+        con = self._apri()
+        try:
+            r = con.execute("SELECT 1 FROM host WHERE host_id=?", (host_id,)).fetchone()
+            return r is not None
+        finally:
+            con.close()
+
     def imposta_stato(self, host_id: str, stato: str) -> bool:
         if stato not in ("attivo", "sospeso"):
             return False

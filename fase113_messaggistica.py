@@ -72,6 +72,29 @@ class Messaggistica:
         finally:
             con.close()
 
+    def cancella_messaggi_host(self, host_id: Any) -> int:
+        """CANCELLAZIONE TOTALE dei messaggi di un host (oblio/pulizia)."""
+        if not (isinstance(host_id, str) and host_id):
+            return 0
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("DELETE FROM messaggi WHERE host_id=?", (host_id,))
+            return cur.rowcount if (cur.rowcount and cur.rowcount > 0) else 0
+        finally:
+            con.close()
+
+    def conta_messaggi_host(self, host_id: Any) -> int:
+        if not (isinstance(host_id, str) and host_id):
+            return 0
+        con = self._apri()
+        try:
+            r = con.execute("SELECT COUNT(*) FROM messaggi WHERE host_id=?",
+                            (host_id,)).fetchone()
+            return int(r[0]) if r else 0
+        finally:
+            con.close()
+
     def invia(self, prenotazione_id: str, host_id: str, guest_id: str,
               mittente: str, testo: Any) -> bool:
         if not (prenotazione_id and host_id and guest_id and mittente):

@@ -56,6 +56,16 @@
     <button id="btnCampagna" style="background:#155724">📣 Pubblica campagna</button>
     <div id="msgCampagna"></div>
   </div>
+
+  <div style="background:#fff;border-radius:1rem;padding:1.5rem;box-shadow:0 6px 18px rgba(0,0,0,.05);margin-top:1.5rem;border:1px solid #f3d6d6">
+    <h2 style="color:#b00020;font-size:1.2rem;margin-bottom:.8rem">🗑️ Cancella attività host (diritto all'oblio)</h2>
+    <p style="font-size:.85rem;color:#5e6f8d;margin-bottom:.8rem">Rimuove un host e TUTTI i suoi dati da ogni archivio (annunci, inventario, messaggi, referral, account) e <strong>verifica che non resti nulla da nessuna parte</strong>. Irreversibile.</p>
+    <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+      <input id="del_host" placeholder="host_id (es. h_xxxxxxxx)" style="width:240px">
+      <button id="btnCancellaHost" style="background:#b00020">🗑️ Cancella e verifica</button>
+    </div>
+    <div id="msgCancella" style="margin-top:.8rem;font-size:.88rem"></div>
+  </div>
 </div>
 
 <script>
@@ -116,6 +126,26 @@ async function pubblicaCampagna(){
 }
 document.getElementById('btnCampagna').onclick = pubblicaCampagna;
 document.getElementById('btnCarica').onclick = carica;
+async function cancellaHost(){
+  const hid = document.getElementById('del_host').value.trim();
+  const m = document.getElementById('msgCancella');
+  if(!hid){ m.style.color='#b00020'; m.textContent='Inserisci un host_id.'; return; }
+  if(!confirm('CANCELLAZIONE IRREVERSIBILE di tutti i dati di '+hid+'. Procedere?')) return;
+  m.style.color='#5e6f8d'; m.textContent='Cancellazione in corso…';
+  try{
+    const res = await fetch(API+'/api/admin/cancella_attivita', {method:'POST',
+      headers:{'Content-Type':'application/json','X-Admin-Key':key()},
+      body:JSON.stringify({host_id:hid})});
+    const d = await res.json();
+    const canc = Object.entries(d.cancellati||{}).map(([k,v])=>k+':'+v).join(', ');
+    const res2 = Object.entries(d.residui||{}).map(([k,v])=>k+':'+v).join(', ');
+    if(d.ok){ m.style.color='#155724';
+      m.innerHTML='✅ Cancellato OVUNQUE. Rimossi → '+canc+'<br>Verifica residui (tutti 0): '+res2; }
+    else { m.style.color='#b00020';
+      m.innerHTML='⚠️ Residui rimasti: '+res2+'<br>Rimossi → '+canc; }
+  }catch(e){ m.style.color='#b00020'; m.textContent='Errore di rete.'; }
+}
+document.getElementById('btnCancellaHost').onclick = cancellaHost;
 
 // --- AUTOMATICO: chiave ricordata, auto-load all'apertura, su cambio chiave, ogni 60s ---
 const inp = document.getElementById('adminkey');

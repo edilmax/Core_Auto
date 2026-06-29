@@ -431,6 +431,8 @@ class RouterHTTP:
             return self._admin_prenotazioni(query, headers)
         if metodo == "POST" and path == "/api/admin/rimborso":
             return self._admin_rimborso(body, headers)
+        if metodo == "POST" and path == "/api/admin/cancella_attivita":
+            return self._admin_cancella_attivita(body, headers)
         return 404, {"errore": "rotta_non_trovata"}
 
     # --- helper ---
@@ -484,6 +486,25 @@ class RouterHTTP:
             logger.error("admin prenotazioni: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
         return 200, {"prenotazioni": el}
+
+    def _admin_cancella_attivita(self, body, headers):
+        """TASTO 'cancella tutto': rimuove un host da OGNI archivio (fase156) e VERIFICA che
+        non resti nulla. 200 se ok (0 residui), 409 se qualcosa e' rimasto (con il dettaglio)."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        host_id = dati.get("host_id")
+        if not (isinstance(host_id, str) and host_id):
+            return 422, {"errore": "host_id_mancante"}
+        try:
+            from fase156_erasure import cancella_attivita_host
+            rep = cancella_attivita_host(self._sys, host_id)
+        except Exception:
+            logger.error("admin cancella attivita: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        return (200 if rep.get("ok") else 409), rep
 
     def _admin_rimborso(self, body, headers):
         """Rimborso = cancellazione: libera le date sull'inventario (fase58.rilascia).
