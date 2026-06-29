@@ -69,10 +69,18 @@ def main(argv=None):
     p.add_argument("--paese", required=True, help="ISO-2 (es. US). UE esclusa di default.")
     p.add_argument("--limit", type=int, default=50)
     p.add_argument("--settore", default="hospitality")
+    p.add_argument("--canale", default="email", choices=("email", "sms", "whatsapp"))
     p.add_argument("--invia", action="store_true", help="invia davvero (default: DRY-RUN)")
     a = p.parse_args(argv)
-    giuris = [x.strip().upper() for x in
-              os.environ.get("OUTREACH_GIURISDIZIONI", "US").split(",") if x.strip()]
+    # giurisdizioni: da env, altrimenti il DB leggi-mondiali (fase154) decide dove e' lecito
+    from fase154_giurisdizioni_marketing import giurisdizioni_consentite, puo_contattare_a_freddo
+    env_g = os.environ.get("OUTREACH_GIURISDIZIONI", "").strip()
+    giuris = ([x.strip().upper() for x in env_g.split(",") if x.strip()]
+              if env_g else giurisdizioni_consentite(a.canale))
+    ok_paese, motivo = puo_contattare_a_freddo(a.paese, a.canale)
+    if not ok_paese:
+        print("[OUTREACH BLOCCATO] %s su %s NON lecito a freddo: %s" % (a.paese, a.canale, motivo))
+        return {"modalita": "BLOCCATO", "motivo": motivo, "inviati": 0, "trovati": 0}
     conc = [int(x) for x in os.environ.get("OUTREACH_CONCORRENTI_BPS", "2500").split(",")
             if x.strip().isdigit()] or [2500]
     base = os.environ.get("BASE_URL", "https://bookinvip.com")

@@ -115,8 +115,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 147=tassa soggiorno comunale automatica (registro regole per-comune + calcolo + ledger riscossioni rendicontazione, comune-ignoto->0, SQLite durevole);
         # 149=deposito cauzionale pre-autorizzazione (hold no-addebito, cattura danno<=autorizzato + rilascio resto, conservazione esatta, PSP capture/release gated, SQLite durevole);
         # 151=export Alloggiati Web Questura (file larghezza-fissa 168char IT-gated, schedine ospiti, capo-con-documento, ASCII uppercase, deterministico).
-        # 152=AVVISO PRENOTAZIONE ALL'HOST (notifica multi-canale email sempre + WhatsApp Cloud API gated, testo localizzato fase61, dispatcher isolato; +fase88 telefono/info_host, +fase57 host_di_alloggio). Blocco pari 108..152 + 154+ libero.
-        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148, 150, 154):
+        # 152=AVVISO PRENOTAZIONE ALL'HOST (notifica multi-canale email sempre + WhatsApp Cloud API gated, testo localizzato fase61, dispatcher isolato; +fase88 telefono/info_host, +fase57 host_di_alloggio).
+        # 154=DB GIURISDIZIONI MARKETING mondiale (regime per nazione email/sms/whatsapp, opt-out lecito vs opt-in, fail-closed sconosciuto; cablato in outreach_runner). Blocco pari 108..154 + 156+ libero.
+        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148, 150, 156):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
