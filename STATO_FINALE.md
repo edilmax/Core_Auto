@@ -45,6 +45,11 @@
   ANNULLA la garanzia (niente payout su cancellata). `auto_rilascia` va schedulato (cron, da fare).
 - **FIX LINGUA**: `sw.js` ora RETE-PRIMA per le pagine (il sito mostra sempre l'ultima versione dopo
   un deploy; era cache-first = stale). host.html i18n traduce davvero (data-ui + 10 chiavi, 5 lingue).
+- **TASSA DI SOGGIORNO pre-acquisto + precisa** (`fase57`+`fase66`+`fase59`): l'HOST dichiara la
+  regola della sua città sull'annuncio (per-persona/notte + cap notti + %, tutela: lui è responsabile);
+  il preventivo la calcola PRECISA (`calcola_tassa`) e la mostra **separata + totale PRIMA dell'acquisto**
+  (`tassa_soggiorno_cents`, `totale_cents`); città senza regola → **0, mai inventare** (fail-safe).
+  Pass-through alla città (non è nostra commissione né ricavo host). host.html: campi tassa in pubblica.
 - **Test E2E/contratto**: flusso reale, varianti avversariali, chi-manda/chi-riceve, contratto
   pannelli↔backend (no rotte fantasma). Server live HTTP verde. **Suite 1850, 0 errori.**
 

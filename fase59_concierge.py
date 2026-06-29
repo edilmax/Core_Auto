@@ -128,6 +128,7 @@ class ProtocolloConcierge:
                  catalogo: Any = None,
                  commissione: Optional[Callable[[int], int]] = None,
                  commissione_alloggio: Optional[Callable[[int, str], int]] = None,
+                 tassa_alloggio: Optional[Callable[..., int]] = None,
                  link_pagamento: Optional[Callable[[Dict[str, Any]], Optional[str]]] = None,
                  ttl_quote_sec: int = 900, valuta: str = "EUR",
                  orologio: Optional[Callable[[], int]] = None) -> None:
@@ -136,6 +137,7 @@ class ProtocolloConcierge:
         self._cat = catalogo
         self._commissione = commissione or (lambda netto: 0)
         self._commissione_all = commissione_alloggio   # host-aware: (netto, slug)->comm
+        self._tassa_all = tassa_alloggio               # (slug, notti, ospiti, imponibile)->cents
         self._link = link_pagamento
         self._ttl = max(60, int(ttl_quote_sec))
         self._valuta = valuta
@@ -240,6 +242,17 @@ class ProtocolloConcierge:
             guest = netto - sconto
             if guest <= 0 or guest > MAX_CENTS:
                 return RispostaConcierge(422, {"errore": "prezzo_fuori_banda"})
+            # TASSA DI SOGGIORNO (pass-through alla citta', mostrata PRIMA dell'acquisto).
+            # Calcolata dalla regola dichiarata dall'host; ignota -> 0 (mai inventare). Isolata.
+            tassa = 0
+            try:
+                if self._tassa_all:
+                    t = self._tassa_all(alloggio, notti=len(elenco_notti),
+                                        ospiti=party, imponibile=netto)
+                    tassa = t if (_intero(t) and t >= 0) else 0
+            except Exception:
+                tassa = 0
+            totale = guest + tassa
         except Exception:
             logger.error("quota: eccezione ISOLATA", exc_info=True)
             return RispostaConcierge(503, {"errore": "service_unavailable"})
@@ -250,6 +263,7 @@ class ProtocolloConcierge:
             "prezzo_netto_cents": netto, "commissione_cents": comm,
             "prezzo_guest_cents": guest, "netto_host_cents": netto_host,
             "sconto_credito_cents": sconto,
+            "tassa_soggiorno_cents": tassa, "totale_cents": totale,
             "fonte": fonte, "exp": scade_a, "valuta": self._valuta,
             # nonce: ogni preventivo e' UNICO -> due clienti distinti per la stessa
             # stanza/date competono davvero (idem-key distinte); un retry dello stesso
@@ -263,9 +277,11 @@ class ProtocolloConcierge:
             "check_in": ci, "check_out": co, "party": party, "notti": len(elenco_notti),
             "prezzo_netto_cents": netto,        # prezzo di listino (lordo)
             "commissione_cents": comm,          # int (dedotta dall'host)
-            "prezzo_guest_cents": guest,        # l'ospite paga QUESTO (pulito, 0% guest fee)
+            "prezzo_guest_cents": guest,        # il soggiorno (pulito, 0% guest fee)
             "netto_host_cents": netto_host,     # l'host riceve QUESTO
             "sconto_credito_cents": sconto,     # credito fondatore applicato (da nostra commissione)
+            "tassa_soggiorno_cents": tassa,     # tassa citta' (pass-through, voce separata visibile)
+            "totale_cents": totale,             # quello che l'ospite paga DAVVERO = soggiorno + tassa
             "fonte": fonte,
             "valuta": self._valuta,
             "scade_a": scade_a,
@@ -338,6 +354,8 @@ class ProtocolloConcierge:
             "alloggio_id": alloggio, "check_in": ci, "check_out": co,
             "prezzo_guest_cents": guest,         # int (quello firmato, immutabile)
             "netto_host_cents": dati.get("netto_host_cents", guest),   # l'host riceve QUESTO
+            "tassa_soggiorno_cents": dati.get("tassa_soggiorno_cents", 0),
+            "totale_cents": dati.get("totale_cents", guest),   # soggiorno + tassa
             "valuta": dati.get("valuta", self._valuta),
             "idempotente": bool(getattr(esito, "idempotente", False)),
             "money_unit": "cents_integer",

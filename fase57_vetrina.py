@@ -121,6 +121,9 @@ class SchedaAlloggio:
     lat_micro: Optional[int] = None   # microgradi interi (lat*1e6), mai float
     lon_micro: Optional[int] = None
     politica_cancellazione: str = "flessibile"   # scelta dall'host per QUESTO alloggio
+    tassa_pp_notte_cents: int = 0      # tassa di soggiorno per persona/notte (l'host la dichiara)
+    tassa_max_notti: int = 0           # notti massime tassabili (0 = nessun cap)
+    tassa_perc_bps: int = 0            # % sul prezzo (alcune nazioni; alternativa al per-persona)
 
 
 # Politiche di cancellazione che l'host puo' scegliere (coerenti con fase111).
@@ -222,13 +225,21 @@ def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
     if not isinstance(pol, str) or pol not in POLITICHE_CANCELLAZIONE:
         pol = "flessibile"
 
+    def _tax(nome: str, tetto: int) -> int:
+        x = data.get(nome, 0)
+        return x if (_intero(x) and 0 <= x <= tetto) else 0
+    t_pp = _tax("tassa_pp_notte_cents", MAX_CENTS)
+    t_max = _tax("tassa_max_notti", 366)
+    t_perc = _tax("tassa_perc_bps", 10000)
+
     return True, "", SchedaAlloggio(
         host_id=host_id, slug=slug, titolo=titolo, citta=citta,
         prezzo_notte_cents=prezzo, capacita=int(data["capacita"]),
         descrizione=descr.strip(), paese=paese.strip(),
         camere=int(data.get("camere", 1)), bagni=int(data.get("bagni", 1)),
         servizi=servizi, valuta=valuta, stato=stato,
-        lat_micro=lat, lon_micro=lon, politica_cancellazione=pol)
+        lat_micro=lat, lon_micro=lon, politica_cancellazione=pol,
+        tassa_pp_notte_cents=t_pp, tassa_max_notti=t_max, tassa_perc_bps=t_perc)
 
 
 def _valida_immagini(imgs: Any) -> List[Immagine]:
@@ -298,13 +309,19 @@ class CatalogoVetrina:
                         lat_micro INTEGER,
                         lon_micro INTEGER,
                         politica_cancellazione TEXT NOT NULL DEFAULT 'flessibile',
+                        tassa_pp_notte_cents INTEGER NOT NULL DEFAULT 0,
+                        tassa_max_notti INTEGER NOT NULL DEFAULT 0,
+                        tassa_perc_bps INTEGER NOT NULL DEFAULT 0,
                         creato_ts TEXT NOT NULL,
                         aggiornato_ts TEXT NOT NULL)""")
-                try:
-                    con.execute("ALTER TABLE alloggi ADD COLUMN politica_cancellazione "
-                                "TEXT NOT NULL DEFAULT 'flessibile'")
-                except sqlite3.OperationalError:
-                    pass
+                for _c, _d in (("politica_cancellazione", "TEXT NOT NULL DEFAULT 'flessibile'"),
+                               ("tassa_pp_notte_cents", "INTEGER NOT NULL DEFAULT 0"),
+                               ("tassa_max_notti", "INTEGER NOT NULL DEFAULT 0"),
+                               ("tassa_perc_bps", "INTEGER NOT NULL DEFAULT 0")):
+                    try:
+                        con.execute("ALTER TABLE alloggi ADD COLUMN %s %s" % (_c, _d))
+                    except sqlite3.OperationalError:
+                        pass
                 con.execute("""
                     CREATE TABLE IF NOT EXISTS alloggio_immagini (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -339,12 +356,14 @@ class CatalogoVetrina:
                     "INSERT INTO alloggi (host_id, slug, titolo, descrizione, citta, "
                     "paese, prezzo_notte_cents, capacita, camere, bagni, servizi_mask, "
                     "valuta, stato, lat_micro, lon_micro, politica_cancellazione, "
+                    "tassa_pp_notte_cents, tassa_max_notti, tassa_perc_bps, "
                     "creato_ts, aggiornato_ts) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (scheda.host_id, scheda.slug, scheda.titolo, scheda.descrizione,
                      scheda.citta, scheda.paese, scheda.prezzo_notte_cents, scheda.capacita,
                      scheda.camere, scheda.bagni, mask, scheda.valuta, scheda.stato,
                      scheda.lat_micro, scheda.lon_micro, scheda.politica_cancellazione,
+                     scheda.tassa_pp_notte_cents, scheda.tassa_max_notti, scheda.tassa_perc_bps,
                      ora, ora))
                 alloggio_id = cur.lastrowid
             else:
@@ -353,11 +372,14 @@ class CatalogoVetrina:
                     "UPDATE alloggi SET host_id=?, titolo=?, descrizione=?, citta=?, "
                     "paese=?, prezzo_notte_cents=?, capacita=?, camere=?, bagni=?, "
                     "servizi_mask=?, valuta=?, stato=?, lat_micro=?, lon_micro=?, "
-                    "politica_cancellazione=?, aggiornato_ts=? WHERE id=?",
+                    "politica_cancellazione=?, tassa_pp_notte_cents=?, tassa_max_notti=?, "
+                    "tassa_perc_bps=?, aggiornato_ts=? WHERE id=?",
                     (scheda.host_id, scheda.titolo, scheda.descrizione, scheda.citta,
                      scheda.paese, scheda.prezzo_notte_cents, scheda.capacita, scheda.camere,
                      scheda.bagni, mask, scheda.valuta, scheda.stato, scheda.lat_micro,
-                     scheda.lon_micro, scheda.politica_cancellazione, ora, alloggio_id))
+                     scheda.lon_micro, scheda.politica_cancellazione,
+                     scheda.tassa_pp_notte_cents, scheda.tassa_max_notti, scheda.tassa_perc_bps,
+                     ora, alloggio_id))
             con.execute("DELETE FROM alloggio_immagini WHERE alloggio_id=?", (alloggio_id,))
             if imgs:
                 con.executemany(
@@ -388,6 +410,29 @@ class CatalogoVetrina:
             return cur.rowcount > 0
         finally:
             con.close()
+
+    def regola_tassa_di(self, slug: Any) -> Any:
+        """Regola di tassa di soggiorno dichiarata dall'host per l'alloggio (fase66.RegolaTassa).
+        Citta'/alloggio senza regola dichiarata -> REGOLA_ZERO (tassa 0, mai inventare)."""
+        from fase66_tassa_soggiorno import RegolaTassa, REGOLA_ZERO
+        if not (isinstance(slug, str) and slug):
+            return REGOLA_ZERO
+        con = self._apri()
+        try:
+            r = con.execute("SELECT tassa_pp_notte_cents, tassa_max_notti, tassa_perc_bps, valuta "
+                            "FROM alloggi WHERE slug=?", (slug,)).fetchone()
+        finally:
+            con.close()
+        if r is None:
+            return REGOLA_ZERO
+        pp = int(r["tassa_pp_notte_cents"]) if "tassa_pp_notte_cents" in r.keys() else 0
+        mx = int(r["tassa_max_notti"]) if "tassa_max_notti" in r.keys() else 0
+        pc = int(r["tassa_perc_bps"]) if "tassa_perc_bps" in r.keys() else 0
+        if pp <= 0 and pc <= 0:
+            return REGOLA_ZERO
+        return RegolaTassa(per_persona_notte_cents=pp, percentuale_bps=pc,
+                           max_notti_tassabili=(mx if mx > 0 else None),
+                           valuta=r["valuta"] or "EUR")
 
     def politica_cancellazione_di(self, slug: Any) -> str:
         """Politica di cancellazione scelta dall'host per l'alloggio (default flessibile)."""
@@ -568,6 +613,10 @@ class CatalogoVetrina:
             "servizi": servizi_da_maschera(a["servizi_mask"]),
             "politica_cancellazione": (a["politica_cancellazione"]
                                        if "politica_cancellazione" in a.keys() else "flessibile"),
+            "tassa_pp_notte_cents": (int(a["tassa_pp_notte_cents"])
+                                     if "tassa_pp_notte_cents" in a.keys() else 0),
+            "tassa_max_notti": int(a["tassa_max_notti"]) if "tassa_max_notti" in a.keys() else 0,
+            "tassa_perc_bps": int(a["tassa_perc_bps"]) if "tassa_perc_bps" in a.keys() else 0,
             "lat_micro": a["lat_micro"],
             "lon_micro": a["lon_micro"],
             "immagini": [{"url": i["url"], "ordine": int(i["ordine"]), "alt": i["alt"]}

@@ -254,8 +254,11 @@ async function apri(slug){
     const mq = document.getElementById('mQuote');
     if(q.quote_token){
       QUOTE = q.quote_token;
-      // 0% ospite: mostra SOLO il prezzo finale pulito (la commissione e' tra noi e l'host)
-      mq.innerHTML = `<div class="riga-prezzo tot"><span>${t('totale')} (${q.notti||''} x ${t('notte')})</span><span>${eur(q.prezzo_guest_cents)}</span></div>`;
+      // 0% ospite: soggiorno pulito + tassa di soggiorno separata (pass-through citta') = totale
+      let righe = `<div class="riga-prezzo"><span>${t('totale')} (${q.notti||''} x ${t('notte')})</span><span>${eur(q.prezzo_guest_cents)}</span></div>`;
+      if(q.tassa_soggiorno_cents>0) righe += `<div class="riga-prezzo"><span>${t('tassa')}</span><span>${eur(q.tassa_soggiorno_cents)}</span></div>`;
+      righe += `<div class="riga-prezzo tot"><span>Totale</span><span>${eur(q.totale_cents||q.prezzo_guest_cents)}</span></div>`;
+      mq.innerHTML = righe;
       document.getElementById('btnPrenota').style.display='';
     } else { QUOTE=null; mq.innerHTML=`<div class="msg err">${t('non_disp')}</div>`; document.getElementById('btnPrenota').style.display='none'; }
     document.getElementById('modal').classList.add('open');

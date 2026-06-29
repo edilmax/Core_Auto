@@ -19,7 +19,9 @@ Pattern: endpoint `fase83` + handler + pannello + test.
 - [ ] **`confronto_guest` (fase125)** in vetrina → "risparmi €X vs Booking" (più conversioni). ⭐ consigliato primo.
 - [ ] **payout dashboard (fase131)** nel pannello host (incassi/payout per valuta).
 - [ ] **alloggiati_web (fase151)** — invio schedine Questura (obbligo host IT).
-- [ ] **tassa_comunale (fase147)** nel checkout.
+- [x] ~~tassa di soggiorno nel checkout~~ ✅ FATTO: l'host dichiara la regola della sua città
+  sull'annuncio, il preventivo la calcola PRECISA e la mostra separata + totale PRIMA dell'acquisto
+  (default 0 = mai inventare). Resta `fase147` (ledger riscossioni/rendicontazione) da cablare.
 - [ ] **deposito_cauzionale (fase149)**.
 - [ ] **contratto_pdf (fase145)** scaricabile.
 - [ ] **checkin_digitale (fase127)** (pre-registrazione ospiti + documenti).

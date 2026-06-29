@@ -177,10 +177,23 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
             pass
         return max(0, netto * _bps // 10000)
 
+    def _tassa_alloggio(slug, *, notti, ospiti, imponibile):
+        # tassa di soggiorno dichiarata dall'host per la sua citta'; ignota -> 0 (mai inventare)
+        try:
+            from fase66_tassa_soggiorno import calcola_tassa
+            regola = catalogo.regola_tassa_di(slug) if catalogo is not None else None
+            if regola is None:
+                return 0
+            return calcola_tassa(regola, notti=notti, ospiti=ospiti,
+                                 imponibile_cents=imponibile).tassa_cents
+        except Exception:
+            return 0
+
     concierge = crea_protocollo(inventario, bytes(cfg.segreto_hmac), catalogo=catalogo,
                                 valuta=cfg.valuta, link_pagamento=link_pagamento,
                                 commissione=lambda netto: max(0, netto * _bps // 10000),
-                                commissione_alloggio=_comm_alloggio)
+                                commissione_alloggio=_comm_alloggio,
+                                tassa_alloggio=_tassa_alloggio)
     componenti.append("concierge(59)")
 
     # 3c) smart-pass per il self check-in (incluso nel voucher)

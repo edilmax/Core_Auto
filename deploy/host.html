@@ -143,6 +143,8 @@
           <option value="rigida">Gratuita fino a 14 giorni prima (poi 50%)</option>
           <option value="non_rimborsabile">Non rimborsabile (prezzo più basso)</option>
         </select></label>
+      <label class="full">Tassa di soggiorno — per persona/notte (cent) <span style="font-weight:400;color:#5e6f8d;font-size:.72rem">— la dichiari TU per la tua città (0 se non c'è). Es. 200 = €2,00/persona/notte</span><input type="number" id="p_tax_pp" value="0" min="0"></label>
+      <label class="full">Tassa — notti massime tassabili <span style="font-weight:400;color:#5e6f8d;font-size:.72rem">— 0 = nessun limite</span><input type="number" id="p_tax_max" value="0" min="0"></label>
       <label>Capacita<input type="number" id="p_cap" value="4"></label>
       <label>Servizi (csv)<input id="p_serv" value="wifi,piscina"></label>
       <label class="full">Foto (URL, una per riga)<textarea id="p_img" rows="3" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid #dce1ed;font-size:.85rem" placeholder="https://...jpg"></textarea></label>
@@ -323,6 +325,8 @@ document.getElementById('btnPubblica').onclick = async ()=>{
     titolo:document.getElementById('p_titolo').value, citta:document.getElementById('p_citta').value,
     prezzo_notte_cents:parseInt(document.getElementById('p_prezzo').value),
     politica_cancellazione:document.getElementById('p_pol').value,
+    tassa_pp_notte_cents:parseInt(document.getElementById('p_tax_pp').value)||0,
+    tassa_max_notti:parseInt(document.getElementById('p_tax_max').value)||0,
     capacita:parseInt(document.getElementById('p_cap').value), servizi:serv, immagini:imgs});
   m.className='msg '+(r.status===201?'ok':'err');
   m.textContent = r.status===201 ? '✅ '+(r.data.slug||'') : '❌ '+(r.data.dettaglio||r.data.errore||r.status);
