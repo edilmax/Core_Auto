@@ -754,10 +754,11 @@ class RouterHTTP:
             return 422, {"errore": "email_o_citta_non_validi"}
         from fase158_domanda import CREDITO_FONDATORE_CENTS
         credito = dom.emette_credito_fondatore(email, citta)
+        dest = str(citta).strip() if isinstance(citta, str) and citta.strip() else "questa destinazione"
         return 201, {"ok": True, "credito_token": credito or "",
                      "credito_cents": CREDITO_FONDATORE_CENTS,
-                     "messaggio": "Ti avvisiamo appena apriamo nella tua zona. Hai un Credito "
-                                  "Fondatore da usare sulla tua prima prenotazione."}
+                     "messaggio": ("Ti avvisiamo appena ci sono alloggi a %s. Hai un Credito "
+                                   "Fondatore per la tua prima prenotazione." % dest)}
 
     def _domanda_conta(self, query):
         """Prova sociale per gli host: quante persone cercano (totale o per citta)."""

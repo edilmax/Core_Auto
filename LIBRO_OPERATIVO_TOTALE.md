@@ -1,6 +1,10 @@
-> 🔄 Aggiornato 2026-06-24 · **BookinVIP** · suite **1740 test** (0 regressioni) · moduli `faseNN`→151 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
+> 🔄 Aggiornato 2026-06-29 · **BookinVIP** · suite **1835 test** (0 regressioni) · moduli `faseNN`→158 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
 
 # LIBRO OPERATIVO TOTALE: CORE_AUTO (Fase 56)
+
+> ⚠️ **DOCUMENTO STORICO / NON ATTUALE.** Le cartelle citate (AI_Recombined, Guardian_Module,
+> Quantum_Security_Engine) **non esistono** nel prodotto attuale. BookinVIP è server stdlib
+> (`main_casavip.py` → `fase83_server`), moduli `faseNN` 57→158. Stato reale: **`STATO_FINALE.md`**.
 
 ## 1. VISIONE D'INSIEME (Architettura)
 - .github/workflows/: Automazione sicurezza e test (CI/CD).

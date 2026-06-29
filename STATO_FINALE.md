@@ -1,13 +1,37 @@
 # STATO FINALE — Dove siamo e cosa manca per FINIRE BookinVIP
 
-> Punto di ripristino. Se si interrompe, riparti da qui. Aggiornato: 2026-06-24.
-> Suite: **1740 test superati** con successo, zero regressioni (baseline errori=48 = live
+> Punto di ripristino. Se si interrompe, riparti da qui. Aggiornato: 2026-06-29.
+> Suite: **1835 test superati** con successo, zero regressioni (baseline errori=48 = live
 > PG/Playwright). Include lo scudo fiscale reverse-charge (fase103), i gateway QR asiatici
 > Alipay/WeChat (fase104) e il modulo Alloggiati Web Questura (fase151).
-> Manutenzione 2026-06-24: spazzatura rimossa (~1.2GB artefatti esperimenti), email ufficiale
-> unica = **info@bookinvip.com**, doc allineati (vedi REPORT_COMPLETO.md). 110 moduli fase 13→151.
-> **CODICE CHIUSO + DEPLOY HTTPS PRONTO + ACQUISIZIONE + ARCHITETTURA FINANZIARIA.** Resta
+> Email ufficiale = **info@bookinvip.com**. Moduli fase 13→158 (~115 moduli).
+> **CODICE CHIUSO + DEPLOY HTTPS PRONTO + ACQUISIZIONE OPERATIVA + ARCHITETTURA FINANZIARIA.** Resta
 > solo il "DA FARE TU": VPS + DNS + chiavi .env + numeri fiscali col commercialista + deploy.
+
+## 🆕 NOVITÀ 2026-06-29 (modello + acquisizione + operatività)
+- **COMMISSIONE PER FONTE + 0% OSPITE** (sostituisce il vecchio 3%/12%): l'ospite paga il prezzo
+  PULITO; la commissione è DEDOTTA dall'host — **5% sui clienti diretti dell'host** (link
+  `/?fonte=diretto&apri=slug`, endpoint `/api/host/link_diretto`) / **15% sui clienti portati da
+  noi**. `fase98.commissione_bps_fonte`, `fase59` dedotto (+`netto_host_cents`), `fase81` resolver.
+  No-loss: 5% > costi Stripe. Coerenza ripulita anche in fase69/fase125 (guest fee → 0).
+- **AVVISO PRENOTAZIONE ALL'HOST** (`fase152`): email sempre + WhatsApp Cloud API gated, testo
+  localizzato, isolato. `fase88` raccoglie il telefono host. Instant-book: conferma + calendario
+  automatici, l'avviso lo comunica.
+- **CANCELLAZIONE self-service ospite** (`/api/concierge/cancella`, `fase111`): rimborso per
+  politica (flessibile/moderata/rigida) + libera le date + bottone sulla pagina voucher.
+- **OUTREACH OPERATIVO** (`outreach_runner.py`): trova host via OSM → gate giurisdizioni → email
+  Prima Emilia + opt-out. DRY-RUN default, `--invia` per spedire (SMTP gated).
+- **DB GIURISDIZIONI MARKETING mondiale** (`fase154`): ~50 paesi, email cold lecita (opt-out) in
+  27 mercati inc. Sud-Est asiatico (TH/VN/PH/ID/MY/KH/LA) + US/UK/HK/JP/SG…; BLOCCATA dove serve
+  consenso (UE/CN/KR/CA…); SEO/social/link sempre leciti ovunque. Non consulenza legale.
+- **CANCELLA TUTTO + VERIFICA OVUNQUE** (`fase156`, `/api/admin/cancella_attivita` + tasto admin):
+  rimuove un host da OGNI archivio e ri-verifica residui=0 (diritto oblio / pulizia pre-lancio).
+- **COLD-START anti-vuoto** (`fase158`): ricerca senza risultati → empty-state cattura email+città
+  (destinazione) + **Credito Fondatore** non-cashabile, riscattato nel concierge con guardia floor
+  (finanziato dalla NOSTRA commissione, host invariato, mai in perdita). La domanda raccolta =
+  prova sociale per gli host ("N cercano a <destinazione>").
+- **Test E2E/contratto**: flusso reale, varianti avversariali, chi-manda/chi-riceve, contratto
+  pannelli↔backend (no rotte fantasma). Copertura 110/110 moduli storici + i nuovi.
 
 ## ✅ ACQUISIZIONE (fase96-97)
 - fase96 lead discovery MONDIALE da dati aperti OpenStreetMap/Overpass (gratis, no proxy,
@@ -15,8 +39,9 @@
   FAQ JSON-LD + /llms.txt + /sitemap-host.xml, 5 lingue, XSS-safe).
 
 ## ✅ ARCHITETTURA FINANZIARIA (fase98-102 — piano M1-M6/R1-R3 completo)
-- fase98 policy commissione: primi-1000-host (fase88 +numero_host/conta_host) + split
-  asimmetrico 3%host/12%ospite=15% + fattura_startup_cents (tutela forfettario).
+- fase98 policy commissione: primi-1000-host (fase88) + **commissione_bps_fonte** (5% diretto /
+  15% marketplace, 0% ospite — vedi NOVITÀ). Il vecchio split 3%/12% (`ripartisci_host_guest`) è
+  ora libreria DORMIENTE (non nel flusso live).
 - fase99 multi-currency like-for-like ledger: Denaro tipizzato per valuta (no mix),
   conversione trasparente anti-DCC (markup esplicito), ProviderTassi OXR gated.
 - fase100 DAC7 gate (gated EU default-off, 28pren/1800€ → sospendi+blocca payout, durevole).

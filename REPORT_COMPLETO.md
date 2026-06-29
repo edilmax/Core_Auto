@@ -1,4 +1,4 @@
-> 🔄 Aggiornato 2026-06-24 · **BookinVIP** · suite **1740 test** (failures=0) · moduli `faseNN` 13→151 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
+> 🔄 Aggiornato 2026-06-29 · **BookinVIP** · suite **1835 test** (failures=0) · moduli `faseNN` 13→158 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
 
 # REPORT COMPLETO — Stato reale di Core_Auto (verità assoluta)
 
@@ -6,7 +6,7 @@
 > ed è TESTATO, distinguendo sempre "cablato nel prodotto live" da "modulo testato da cablare".
 
 ## 0. Riepilogo in 6 righe
-- Codice serio = **110 moduli `fase*.py` (13→151) + 131 file di test**; **1740 test, failures=0**
+- Codice serio = **110 moduli `fase*.py` (13→151) + 131 file di test**; **1835 test, failures=0**
   (i **48 "errors" sono PREESISTENTI** = test che richiedono Postgres/Playwright/credenziali live,
   non regressioni; verificato col baseline).
 - Prodotto attuale = **BookinVIP (alloggi)**, brand definitivo, dominio **bookinvip.com**,
@@ -22,7 +22,7 @@
 | Tipo | Quantità | Note |
 |---|---|---|
 | Moduli `fase*.py` | **110** (13→151) | il sistema vero, ognuno documentato + testato |
-| Test `test_*.py` | **131** | **1740 test**, failures=0, errors=48 preesistenti |
+| Test `test_*.py` | **131** | **1835 test**, failures=0, errors=48 preesistenti |
 | Documenti `.md` | 15 | report, guide, manuali, masterplan, legale |
 | `deploy/` | vetrina, host, admin, voucher, PWA, nginx (HTTP+SSL), Docker, init-LE, backup |
 | `legale/` | privacy policy + termini di servizio |
@@ -82,7 +82,7 @@ like-for-like anti-DCC · 104 gateway Asia Alipay/WeChat.
 141 onboarding wizard · 143 KYC host · 145 contratto PDF · 149 deposito cauzionale.
 
 > Onestà: il **core + money-path + 14 motori** sono cablati nel sistema (fase81). I moduli
-> operativi 105→151 sono **costruiti e testati**; parte è esposta via endpoint/server, parte è
+> operativi 105→158 sono **costruiti e testati**; parte è esposta via endpoint/server, parte è
 > da agganciare al frontend (lavoro di integrazione, non d'invenzione).
 
 ---

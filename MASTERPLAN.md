@@ -1,4 +1,4 @@
-> 🔄 Aggiornato 2026-06-24 · **BookinVIP** · suite **1740 test** (0 regressioni) · moduli `faseNN`→151 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
+> 🔄 Aggiornato 2026-06-29 · **BookinVIP** · suite **1835 test** (0 regressioni) · moduli `faseNN`→158 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
 
 # CORE_AUTO — MASTERPLAN (North Star)
 
@@ -64,7 +64,7 @@ email, registro host self-service, viral loop, 14 motori geniali cablati). Commi
 
 ## Stato attuale (aggiornato: 2026-06-15)
 
-**Fondamenta già blindate (suite: 1740 test verdi):**
+**Fondamenta già blindate (suite: 1835 test verdi):**
 - Core marketplace escrow/split, audit immutabile, dashboard/report.
 - Sicurezza: HMAC fortress, nonce cross-worker, rate-limit, circuit breaker,
   audit Red Team (3 gruppi) + hardening Fasi 18–22.

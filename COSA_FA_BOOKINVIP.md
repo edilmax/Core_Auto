@@ -1,13 +1,23 @@
-> 🔄 Aggiornato 2026-06-24 · **BookinVIP** · suite **1740 test** (0 regressioni) · moduli `faseNN`→151 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
+> 🔄 Aggiornato 2026-06-29 · **BookinVIP** · suite **1835 test** (0 regressioni) · moduli `faseNN`→158 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
 
 # BookinVIP — Cosa fa la macchina (tutte le funzioni)
 
 > Spiegazione completa e onesta. Diviso in: **A) cosa fa OGGI** (acceso nel prodotto
 > live), **B) motori pronti** (costruiti e testati, da collegare alla UI), **C) principi**.
-> Software: 110 moduli fase (→151), 1740 test verdi, zero dipendenze esterne, su github.com/edilmax/Core_Auto.
+> Software: ~115 moduli fase (→158), 1835 test verdi, zero dipendenze esterne, su github.com/edilmax/Core_Auto.
 >
-> **Commissione: 15%** (configurabile via `COMMISSIONE_BPS`, default live 1500 = 15% —
-> sotto il 18–25% delle OTA). Strategia: 15% per i primi 1000 alloggi iscritti.
+> **Commissione PER FONTE, 0% OSPITE**: l'ospite paga il prezzo PULITO; la commissione è DEDOTTA
+> dall'host — **5% sui suoi clienti diretti** (link condivisibile), **15% sui clienti portati da
+> noi**. No-loss garantito (5% > costi). Strategia: 15% bloccato per i primi 1000.
+
+## 🆕 Novità (acceso nel prodotto)
+- **Ospite avvisato + Credito Fondatore**: se cerca e non trova, lascia l'email e ottiene un
+  credito di benvenuto (non-cashabile, ci costa solo parte della commissione → mai in perdita).
+- **Host avvisato di ogni prenotazione** via email + WhatsApp (gated); conferma e calendario automatici.
+- **Cancellazione self-service ospite** con rimborso per politica (dalla pagina voucher).
+- **Outreach operativo** (`outreach_runner.py`): trova host nel mondo e manda email, solo dove
+  legale (DB leggi 50 nazioni, Sud-Est asiatico aperto, UE/Cina/Corea bloccate).
+- **Admin: "cancella attività host" + verifica ovunque** (diritto all'oblio / pulizia dati test).
 
 ## In una frase
 BookinVIP è una **piattaforma di prenotazione alloggi** (come Booking/Airbnb) ma
@@ -159,7 +169,7 @@ evoluzione "alloggi".
    mai l'IA".
 4. **Multilingua** per costruzione (clienti e host).
 5. **Isolamento**: ogni modulo è a sé; se un pezzo cade, il resto vive.
-6. **Testato fino in fondo**: 1740 test verdi, zero regressioni, ogni funzione verificata
+6. **Testato fino in fondo**: 1835 test verdi, zero regressioni, ogni funzione verificata
    anche "live" sul server reale.
 7. **Pronto all'accensione**: pagamenti, email e webhook sono "gated" — il sistema gira
    identico senza credenziali, e si accende mettendo le chiavi nel `.env`, **zero modifiche
