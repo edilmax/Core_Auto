@@ -17,7 +17,7 @@ class PoliticaConfrontoGuest:
     ota_markup_host_bps: int = 1500   # quanto l'OTA carica sopra il netto host
     ota_guest_fee_bps: int = 1400     # guest service fee dell'OTA (su netto+markup)
     ota_dcc_bps: int = 400            # markup valutario occulto (se cambio valuta)
-    nostra_guest_fee_bps: int = 1200  # la NOSTRA guest fee (12%, vedi fase98)
+    nostra_guest_fee_bps: int = 0     # 0% OSPITE: l'ospite paga il prezzo PULITO (strategia BookinVIP)
 
 
 def _i(v: Any) -> int:
@@ -37,6 +37,7 @@ def confronta_guest(netto_host_cents: Any, *, valuta_diversa: bool = False,
     ota_dcc = (base_ota + ota_fee) * _i(pol.ota_dcc_bps) // 10000 if valuta_diversa else 0
     ota_tot = base_ota + ota_fee + ota_dcc
     # Noi: netto host + nostra guest fee (no markup nascosto, no DCC occulto)
+    # Noi: prezzo PULITO (0% ospite di default); no markup nascosto, no DCC occulto
     nostra_fee = netto * _i(pol.nostra_guest_fee_bps) // 10000
     nostro_tot = netto + nostra_fee
     risparmio = max(0, ota_tot - nostro_tot)

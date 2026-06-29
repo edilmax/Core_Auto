@@ -4,8 +4,8 @@ CORE_AUTO - Fase 69: Trasparenza Commissionale (la matematica che converte l'hos
 I colossi nascondono la matematica: l'host non sa quanto perde, il guest non sa quanto
 paga di commissione. E' la loro arma (dark pattern). La nostra arma e' l'opposto:
 mostrare TUTTO in centesimi, in chiaro. All'host: "Con Booking incassi 8200, con noi
-9500: guadagni 1300 in piu'." Al guest: "Alloggio 10000 + nostra commissione 500 +
-tassa 600, tutto visibile" (invece del prezzo opaco dell'OTA).
+9500: guadagni 1300 in piu'." Al guest: "Paghi 10000 PULITO (0% commissione ospite) +
+tassa 600 visibile" (la commissione e' DEDOTTA dall'host, non aggiunta al guest).
 
 L'INVARIANTE ONESTO (il cuore): il SURPLUS liberato disintermediando l'OTA
   surplus = commissione_OTA - (nostra_commissione + PSP)

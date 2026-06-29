@@ -11,9 +11,9 @@ class TestConfrontoGuest(unittest.TestCase):
         self.assertEqual(c["ota_base_cents"], 11500)
         self.assertEqual(c["ota_guest_fee_cents"], 1610)
         self.assertEqual(c["ota_totale_cents"], 13110)
-        # noi: 100 + 12% = 112
-        self.assertEqual(c["nostro_totale_cents"], 11200)
-        self.assertEqual(c["risparmio_guest_cents"], 1910)
+        # noi: 100 PULITO (0% ospite) -> l'ospite paga 10000
+        self.assertEqual(c["nostro_totale_cents"], 10000)
+        self.assertEqual(c["risparmio_guest_cents"], 3110)     # risparmio reale vs OTA
 
     def test_dcc_solo_se_valuta_diversa(self):
         senza = confronta_guest(10000, valuta_diversa=False)
@@ -24,7 +24,7 @@ class TestConfrontoGuest(unittest.TestCase):
 
     def test_risparmio_bps(self):
         c = confronta_guest(10000)
-        self.assertEqual(c["risparmio_bps"], 1910 * 10000 // 13110)
+        self.assertEqual(c["risparmio_bps"], 3110 * 10000 // 13110)   # 0% ospite -> risparmio maggiore
 
     def test_zero_failclosed(self):
         c = confronta_guest(0)
