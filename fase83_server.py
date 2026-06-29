@@ -395,6 +395,8 @@ class RouterHTTP:
             return self._host_login(body)
         if metodo == "GET" and path == "/api/host/referral":
             return self._host_referral(query, headers)
+        if metodo == "GET" and path == "/api/host/link_diretto":
+            return self._host_link_diretto(query, headers)
         if metodo == "POST" and path == "/api/host/ical":
             return self._host_ical(body, headers)
         if metodo == "GET" and path == "/api/host/metriche":
@@ -1034,6 +1036,32 @@ class RouterHTTP:
         for r in righe:
             r["revenue_cents"] = self._revenue_prenotazione(r)
         return 200, {"csv": genera_csv_prenotazioni(righe), "righe": len(righe)}
+
+    def _host_link_diretto(self, query, headers):
+        """Link di prenotazione DIRETTA dell'host (fonte=diretto -> 5%). Da condividere sui
+        propri canali: le prenotazioni che arrivano da qui pagano solo il 5%, non il 15%."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        host_id = self._host_id_da_token(headers) or query.get("host_id")
+        if not (isinstance(host_id, str) and host_id):
+            return 422, {"errore": "host_id_mancante"}
+        base = self._base_url or "https://bookinvip.com"
+        try:
+            el = self._sys.catalogo.alloggi_host(host_id, limit=200)
+        except Exception:
+            logger.error("host link diretto: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        from urllib.parse import quote
+        alloggi = []
+        for a in (el or []):
+            slug = a.get("slug") if isinstance(a, dict) else None
+            if slug:
+                alloggi.append({
+                    "slug": slug,
+                    "titolo": (a.get("titolo") if isinstance(a, dict) else None) or slug,
+                    "link": base + "/?fonte=diretto&apri=" + quote(slug)})
+        return 200, {"link_generale": base + "/?fonte=diretto",
+                     "alloggi": alloggi, "commissione_bps": 500, "commissione": "5%"}
 
     def _host_alloggi(self, query, headers):
         if not self._auth_host(headers):

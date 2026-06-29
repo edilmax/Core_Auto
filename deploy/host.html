@@ -70,6 +70,12 @@
     <div id="ref_credito" style="margin-top:.8rem;font-weight:600;color:#155724"></div>
   </div>
 
+  <div class="card" id="cardDiretto" style="display:none">
+    <h2>🔗 Il tuo link prenotazione diretta — solo 5%</h2>
+    <p style="font-size:.9rem;color:#5e6f8d">Condividilo su Instagram/Google/WhatsApp: le prenotazioni che arrivano da qui pagano <strong>solo il 5%</strong> (i tuoi clienti), non il 15%. L'ospite paga sempre il prezzo pulito.</p>
+    <div id="dir_links" style="margin-top:.8rem"></div>
+  </div>
+
   <div class="key">
     <label style="flex:1;display:flex;flex-direction:column;font-size:.72rem;font-weight:600;color:#4a5b7a;gap:.25rem">X-Host-Key (solo operatore, avanzato)
       <input type="password" id="hostkey" placeholder="chiave host (non serve se sei loggato)"></label>
@@ -239,7 +245,25 @@ function aggiornaAuthUI(){
   document.getElementById('authIn').style.display = tk ? 'none' : 'block';
   document.getElementById('authOut').style.display = tk ? 'block' : 'none';
   document.getElementById('cardReferral').style.display = tk ? 'block' : 'none';
-  if(tk){ document.getElementById('au_who').textContent = localStorage.getItem('bookinvip_host_email') || 'host'; caricaReferral(); }
+  document.getElementById('cardDiretto').style.display = tk ? 'block' : 'none';
+  if(tk){ document.getElementById('au_who').textContent = localStorage.getItem('bookinvip_host_email') || 'host'; caricaReferral(); caricaLinkDiretto(); }
+}
+async function caricaLinkDiretto(){
+  try{
+    const d = await (await fetch(API+'/api/host/link_diretto', {headers:authHeaders()})).json();
+    const abs = u => (u && u.charAt(0)==='/') ? location.origin + u : u;
+    const lst = (d.alloggi&&d.alloggi.length) ? d.alloggi
+              : [{titolo:'Tutti i miei alloggi', link:d.link_generale}];
+    document.getElementById('dir_links').innerHTML = lst.map((a,i)=>
+      `<div style="margin-bottom:.7rem"><div style="font-size:.78rem;color:#5e6f8d;margin-bottom:.2rem">${a.titolo}</div>
+       <div style="display:flex;gap:.5rem"><input id="dl_${i}" readonly value="${abs(a.link)}" style="flex:1;font-size:.78rem">
+       <button data-i="${i}" class="btnDlCopy" style="margin-top:0">Copia</button></div></div>`).join('');
+    document.querySelectorAll('.btnDlCopy').forEach(b=>b.onclick=()=>{
+      const i=document.getElementById('dl_'+b.dataset.i); i.select();
+      navigator.clipboard&&navigator.clipboard.writeText(i.value);
+      b.textContent='Copiato!'; setTimeout(()=>b.textContent='Copia',1500);
+    });
+  }catch(e){}
 }
 async function caricaReferral(){
   try{

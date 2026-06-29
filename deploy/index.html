@@ -199,15 +199,16 @@ async function apri(slug){
           }).join('')+'</div>';
       }
     }catch(e){}
+    const FONTE = new URLSearchParams(location.search).get('fonte')||'marketplace';
     const q = await api('/api/concierge/quote', {method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({alloggio_id:slug, check_in:document.getElementById('checkin').value,
-        check_out:document.getElementById('checkout').value, party:parseInt(document.getElementById('ospiti').value)||1})});
+        check_out:document.getElementById('checkout').value, party:parseInt(document.getElementById('ospiti').value)||1,
+        fonte:FONTE})});
     const mq = document.getElementById('mQuote');
     if(q.quote_token){
       QUOTE = q.quote_token;
-      mq.innerHTML = `<div class="riga-prezzo"><span>${t('netto')}</span><span>${eur(q.prezzo_netto_cents)}</span></div>
-        <div class="riga-prezzo"><span>${t('commissione')}</span><span>${eur(q.commissione_cents)}</span></div>
-        <div class="riga-prezzo tot"><span>${t('totale')} (${q.notti||''} x ${t('notte')})</span><span>${eur(q.prezzo_guest_cents)}</span></div>`;
+      // 0% ospite: mostra SOLO il prezzo finale pulito (la commissione e' tra noi e l'host)
+      mq.innerHTML = `<div class="riga-prezzo tot"><span>${t('totale')} (${q.notti||''} x ${t('notte')})</span><span>${eur(q.prezzo_guest_cents)}</span></div>`;
       document.getElementById('btnPrenota').style.display='';
     } else { QUOTE=null; mq.innerHTML=`<div class="msg err">${t('non_disp')}</div>`; document.getElementById('btnPrenota').style.display='none'; }
     document.getElementById('modal').classList.add('open');
@@ -234,6 +235,8 @@ document.getElementById('form').onsubmit = e=>{ e.preventDefault(); cerca(); };
 document.getElementById('close').onclick = ()=>document.getElementById('modal').classList.remove('open');
 document.getElementById('modal').onclick = e=>{ if(e.target.id==='modal') e.target.classList.remove('open'); };
 document.getElementById('btnPrenota').onclick = prenota;
+// link diretto host: ?apri=<slug> apre l'alloggio; ?fonte=diretto applica il 5% al preventivo
+(function(){ const a=new URLSearchParams(location.search).get('apri'); if(a) apri(a); })();
 document.getElementById('lang').onchange = async e=>{ LANG=e.target.value; document.documentElement.lang=LANG; await caricaI18N(LANG); cerca(); };
 
 // PWA: installazione + service worker

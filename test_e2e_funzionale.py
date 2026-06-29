@@ -125,6 +125,16 @@ class TestE2EFunzionale(unittest.TestCase):
         self.assertEqual(self.g("POST", "/api/mcp",
                          {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})[0], 200)
 
+    def test_10_link_diretto_host_5pct(self):
+        s, c = self.g("GET", "/api/host/link_diretto", headers=HK, query={"host_id": "demo"})
+        self.assertEqual(s, 200)
+        self.assertIn("?fonte=diretto", c["link_generale"])     # link generale -> 5%
+        self.assertTrue(c["alloggi"])
+        link = c["alloggi"][0]["link"]
+        self.assertIn("fonte=diretto", link)
+        self.assertIn("apri=casa-roma", link)                   # apre l'alloggio specifico
+        self.assertEqual(c["commissione_bps"], 500)
+
 
 if __name__ == "__main__":
     unittest.main()
