@@ -169,8 +169,34 @@ async function cerca(){
     if(data.risultati && data.risultati.length){
       ris.innerHTML = data.risultati.map(cardHtml).join('');
       ris.querySelectorAll('button[data-slug]').forEach(b=>b.onclick=()=>apri(b.dataset.slug));
-    } else { ris.innerHTML = `<div class="vuoto">${t('nessun_risultato')}</div>`; }
+    } else { ris.innerHTML = emptyStateHtml(params.citta); bindWaitlist(params.citta); }
   }catch(e){ ris.innerHTML = `<div class="msg err">${t('errore')}: ${e.message}</div>`; }
+}
+function emptyStateHtml(citta){
+  const c = citta ? (' a <b>'+String(citta).replace(/[<>]/g,'')+'</b>') : '';
+  return `<div class="vuoto" style="text-align:center;padding:1.5rem">
+    <div style="font-size:2rem">🌱</div>
+    <h3 style="color:#1e3c72;margin:.5rem 0">Stiamo aprendo${c}!</h3>
+    <p style="color:#5e6f8d;max-width:44ch;margin:.3rem auto 1rem">Lascia la tua email: ti avvisiamo appena ci sono alloggi e ricevi un <b>Credito Fondatore di benvenuto</b> per la tua prima prenotazione.</p>
+    <div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;max-width:420px;margin:0 auto">
+      <input id="wl_email" type="email" placeholder="latua@email.com" style="flex:1;min-width:200px;padding:.7rem;border-radius:.7rem;border:1px solid #dce1ed">
+      <button id="wl_btn" style="background:#1e3c72;color:#fff;border:0;border-radius:.7rem;padding:.7rem 1.2rem;font-weight:700;cursor:pointer">Avvisami</button>
+    </div>
+    <div id="wl_msg" style="margin-top:.7rem;font-size:.9rem"></div>
+    <p style="margin-top:1.4rem;font-size:.9rem;color:#5e6f8d">Sei un host? <a href="/diventa-host.html" style="color:#155724;font-weight:700">Pubblica il primo alloggio${c} →</a></p>
+  </div>`;
+}
+function bindWaitlist(citta){
+  const b=document.getElementById('wl_btn'); if(!b) return;
+  b.onclick=async ()=>{
+    const em=(document.getElementById('wl_email').value||'').trim();
+    const m=document.getElementById('wl_msg');
+    if(!em||em.indexOf('@')<1){ m.style.color='#b00020'; m.textContent='Inserisci una email valida.'; return; }
+    const d=await api('/api/domanda',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:em,citta:citta||'',check_in:document.getElementById('checkin').value,check_out:document.getElementById('checkout').value})});
+    if(d && d.ok){ m.style.color='#155724'; m.innerHTML='✅ '+d.messaggio+' <b>(€'+((d.credito_cents||0)/100).toFixed(0)+')</b>'; b.style.display='none'; }
+    else { m.style.color='#b00020'; m.textContent='Riprova con una email valida.'; }
+  };
 }
 
 async function apri(slug){

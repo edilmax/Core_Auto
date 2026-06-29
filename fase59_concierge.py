@@ -232,10 +232,12 @@ class ProtocolloConcierge:
                 comm = 0
             if comm > netto:
                 comm = netto
-            # MODELLO 0% OSPITE: l'ospite paga il prezzo PULITO (netto = listino);
-            # la commissione e' DEDOTTA dal pagamento dell'host (host riceve netto - comm).
-            guest = netto
+            # MODELLO 0% OSPITE: l'ospite paga il PULITO; commissione DEDOTTA dall'host.
             netto_host = netto - comm
+            # CREDITO FONDATORE: sconto all'ospite finanziato dalla NOSTRA commissione, con
+            # guardia floor (la nostra presa resta sopra i costi) -> ZERO perdita. Host invariato.
+            sconto = self._sconto_credito(richiesta.get("credito_token"), netto, comm)
+            guest = netto - sconto
             if guest <= 0 or guest > MAX_CENTS:
                 return RispostaConcierge(422, {"errore": "prezzo_fuori_banda"})
         except Exception:
@@ -247,6 +249,7 @@ class ProtocolloConcierge:
             "alloggio_id": alloggio, "check_in": ci, "check_out": co, "party": party,
             "prezzo_netto_cents": netto, "commissione_cents": comm,
             "prezzo_guest_cents": guest, "netto_host_cents": netto_host,
+            "sconto_credito_cents": sconto,
             "fonte": fonte, "exp": scade_a, "valuta": self._valuta,
             # nonce: ogni preventivo e' UNICO -> due clienti distinti per la stessa
             # stanza/date competono davvero (idem-key distinte); un retry dello stesso
@@ -262,11 +265,33 @@ class ProtocolloConcierge:
             "commissione_cents": comm,          # int (dedotta dall'host)
             "prezzo_guest_cents": guest,        # l'ospite paga QUESTO (pulito, 0% guest fee)
             "netto_host_cents": netto_host,     # l'host riceve QUESTO
+            "sconto_credito_cents": sconto,     # credito fondatore applicato (da nostra commissione)
             "fonte": fonte,
             "valuta": self._valuta,
             "scade_a": scade_a,
             "money_unit": "cents_integer",
         })
+
+    def _sconto_credito(self, token: Any, netto: int, comm: int) -> int:
+        """Sconto Credito Fondatore: verifica il token firmato e applica al MASSIMO quanto la
+        nostra commissione puo' assorbire restando sopra i costi (Stripe ~2.9%+0.25 + buffer).
+        Non falsificabile, non scaduto. Se non c'e' margine -> 0 (mai in perdita)."""
+        if not (isinstance(token, str) and token):
+            return 0
+        try:
+            v = self._firma.decodifica(token)
+            if not isinstance(v, dict) or v.get("tipo") != "credito_fondatore":
+                return 0
+            exp = v.get("exp")
+            if not (isinstance(exp, int) and not isinstance(exp, bool) and exp >= self._now()):
+                return 0
+            cr = v.get("credito_cents", 0)
+            cr = cr if (_intero(cr) and cr > 0) else 0
+            costo = netto * 290 // 10000 + 25 + 200      # Stripe stimato + buffer prudenziale
+            margine_disponibile = max(0, comm - costo)   # quanto possiamo regalare senza perdere
+            return max(0, min(cr, margine_disponibile))
+        except Exception:
+            return 0
 
     # ── ATTO 3: prenotazione (verifica firma -> blocco atomico idempotente) ────
     def prenota(self, payload: Any) -> RispostaConcierge:

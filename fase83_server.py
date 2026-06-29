@@ -361,6 +361,10 @@ class RouterHTTP:
             return 200, _dizionario_i18n(_lingua(query))
         if metodo == "GET" and path == "/api/trasparenza":
             return self._trasparenza(query)
+        if metodo == "POST" and path == "/api/domanda":
+            return self._domanda_registra(body)
+        if metodo == "GET" and path == "/api/domanda/conta":
+            return self._domanda_conta(query)
         if metodo == "GET" and path == "/api/catalogo":
             return self._catalogo(query)
         if metodo == "GET" and path.startswith("/api/catalogo/"):
@@ -733,6 +737,35 @@ class RouterHTTP:
             notif.avvisa(contatti, ogg, testo)
         except Exception:
             logger.warning("avviso host prenotazione fallito (ignorato)", exc_info=True)
+
+    def _domanda_registra(self, body):
+        """Lista d'attesa anti-vuoto: l'ospite lascia email+citta quando non trova nulla ->
+        riceve il Credito Fondatore (token firmato). Pubblico (nessuna auth)."""
+        dom = getattr(self._sys, "domanda", None)
+        if dom is None:
+            return 503, {"errore": "domanda_non_attiva"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        email, citta = dati.get("email"), dati.get("citta")
+        if not dom.registra(email, citta, check_in=str(dati.get("check_in", "")),
+                            check_out=str(dati.get("check_out", "")),
+                            party=dati.get("party", 1)):
+            return 422, {"errore": "email_o_citta_non_validi"}
+        from fase158_domanda import CREDITO_FONDATORE_CENTS
+        credito = dom.emette_credito_fondatore(email, citta)
+        return 201, {"ok": True, "credito_token": credito or "",
+                     "credito_cents": CREDITO_FONDATORE_CENTS,
+                     "messaggio": "Ti avvisiamo appena apriamo nella tua zona. Hai un Credito "
+                                  "Fondatore da usare sulla tua prima prenotazione."}
+
+    def _domanda_conta(self, query):
+        """Prova sociale per gli host: quante persone cercano (totale o per citta)."""
+        dom = getattr(self._sys, "domanda", None)
+        if dom is None:
+            return 503, {"errore": "domanda_non_attiva"}
+        citta = query.get("citta")
+        return 200, {"citta": citta or "", "richieste": dom.conta(citta)}
 
     def _trasparenza(self, query):
         """Confronto noi-vs-OTA (fase69): 'con Booking incassi X, con noi Y'."""

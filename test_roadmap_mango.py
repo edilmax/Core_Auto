@@ -117,8 +117,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 151=export Alloggiati Web Questura (file larghezza-fissa 168char IT-gated, schedine ospiti, capo-con-documento, ASCII uppercase, deterministico).
         # 152=AVVISO PRENOTAZIONE ALL'HOST (notifica multi-canale email sempre + WhatsApp Cloud API gated, testo localizzato fase61, dispatcher isolato; +fase88 telefono/info_host, +fase57 host_di_alloggio).
         # 154=DB GIURISDIZIONI MARKETING mondiale (regime per nazione email/sms/whatsapp, opt-out lecito vs opt-in, fail-closed sconosciuto; cablato in outreach_runner).
-        # 156=CANCELLAZIONE TOTALE host + verifica "da pertutto" (diritto oblio: rimuove annunci/inventario/messaggi/referral/account da OGNI store e ri-verifica residui 0; endpoint POST /api/admin/cancella_attivita + tasto admin.html; +cancella/conta in fase57/58/88/113). Blocco pari 108..156 + 158+ libero.
-        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148, 150, 158):
+        # 156=CANCELLAZIONE TOTALE host + verifica "da pertutto" (diritto oblio).
+        # 158=DOMANDA/waitlist + CREDITO FONDATORE (cold-start anti-vuoto: empty-state cattura email+citta->credito non-cashabile riscattato nel concierge con guardia floor finanziato dalla nostra commissione, host invariato; +endpoint /api/domanda; prova sociale per host). Blocco pari 108..158 + 160+ libero.
+        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148, 150, 160):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 

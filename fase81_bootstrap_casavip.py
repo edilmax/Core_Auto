@@ -68,6 +68,7 @@ class ConfigCasaVIP:
     db_registro_host: str = ":memory:"
     db_viral: str = ":memory:"
     db_messaggi: str = ":memory:"
+    db_domanda: str = ":memory:"       # lista d'attesa + credito fondatore (anti-vuoto)
     file_referral: str = ""            # path JSON referral host-porta-host (vuoto = in RAM)
     con_sentinel: bool = False
     cartella_sentinel: Optional[str] = None
@@ -103,6 +104,7 @@ class SistemaCasaVIP:
     messaggistica: Any = None
     referral: Any = None
     notificatore_prenotazione: Any = None
+    domanda: Any = None
 
     @property
     def attivo(self) -> bool:
@@ -207,6 +209,11 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     messaggistica.inizializza_schema()
     componenti.append("messaggistica(113)")
 
+    from fase158_domanda import crea_gestore_domanda
+    domanda = crea_gestore_domanda(cfg.db_domanda, firma=firma)
+    domanda.inizializza_schema()
+    componenti.append("domanda/waitlist(158)")
+
     # 3f-ter) referral host-porta-host (codice firmato + bonus crediti non-cashabili)
     from fase109_referral_host import crea_referral_host
     referral = crea_referral_host(bytes(cfg.segreto_hmac), cfg.file_referral)
@@ -306,4 +313,5 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           digital_twin=digital_twin, guardian=guardian,
                           dichiarazione=dichiarazione, noshow=noshow, marketing=marketing,
                           messaggistica=messaggistica, referral=referral,
-                          notificatore_prenotazione=notificatore_prenotazione)
+                          notificatore_prenotazione=notificatore_prenotazione,
+                          domanda=domanda)
