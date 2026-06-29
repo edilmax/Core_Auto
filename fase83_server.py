@@ -287,6 +287,22 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
                    "border-radius:1rem'><strong>%s</strong><br>"
                    "<code style='word-break:break-all;font-size:.8rem'>%s</code></div>"
                    ) % (e(_ui("self_pass", lng)), pass_code) if pass_code else ""
+    # cancellazione self-service (token preso dall'URL, niente da incollare)
+    blocco_pass = blocco_pass + (
+        "<button id='btnCanc' style='margin-top:1.2rem;width:100%;padding:.8rem;border:0;"
+        "border-radius:.8rem;background:#b00020;color:#fff;font-weight:700;cursor:pointer'>"
+        "Cancella prenotazione</button>"
+        "<div id='cancMsg' style='margin-top:.6rem;font-size:.85rem'></div>"
+        "<script>document.getElementById('btnCanc').onclick=async function(){"
+        "if(!confirm('Cancellare la prenotazione?'))return;"
+        "var tk=decodeURIComponent((location.pathname.split('/voucher/')[1]||''));"
+        "var r=await fetch('/api/concierge/cancella',{method:'POST',"
+        "headers:{'Content-Type':'application/json'},body:JSON.stringify({voucher_token:tk})});"
+        "var d=await r.json();var m=document.getElementById('cancMsg');"
+        "if(d.stato==='cancellata'){m.style.color='#155724';"
+        "m.textContent='Cancellata. Rimborso '+(d.rimborso_cents/100).toFixed(2)+' EUR';"
+        "this.style.display='none';}else{m.style.color='#b00020';"
+        "m.textContent='Cancellazione non riuscita';}};</script>")
     return (
         "<!DOCTYPE html><html lang=\"%s\"><head><meta charset=\"UTF-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
@@ -353,6 +369,8 @@ class RouterHTTP:
             return self._concierge(self._sys.concierge.quota, body)
         if metodo == "POST" and path == "/api/concierge/book":
             return self._book(body)
+        if metodo == "POST" and path == "/api/concierge/cancella":
+            return self._cancella_prenotazione(body)
         if metodo == "GET" and path.startswith("/api/recensioni/"):
             return self._recensioni(path[len("/api/recensioni/"):])
         if metodo == "POST" and path == "/api/recensioni":
@@ -587,12 +605,15 @@ class RouterHTTP:
             # voucher firmato (conferma + entry pass)
             if getattr(self._sys, "firma", None) is not None:
                 try:
+                    qt = dati.get("quote_token", "")
                     corpo["voucher_token"] = self._sys.firma.codifica({
                         "tipo": "voucher", "riferimento": ref, "alloggio_id": allog,
                         "check_in": ci, "check_out": co,
                         "prezzo_guest_cents": corpo.get("prezzo_guest_cents", 0),
                         "valuta": corpo.get("valuta", "EUR"),
-                        "smart_pass": pass_token or ""})
+                        "smart_pass": pass_token or "",
+                        # idem_key del blocco: serve alla cancellazione self-service per liberare
+                        "idem_key": (qt.split(".")[-1] if isinstance(qt, str) and qt else "")})
                 except Exception:
                     logger.warning("emissione voucher fallita (ignorata)", exc_info=True)
             # diritto di recensione
@@ -620,6 +641,50 @@ class RouterHTTP:
             # avviso all'HOST su piu' canali (email sempre, WhatsApp se configurato) - ISOLATO
             self._avvisa_host_prenotazione(allog, ref, ci, co, corpo.get("fonte", ""))
         return status, corpo
+
+    def _cancella_prenotazione(self, body):
+        """Cancellazione SELF-SERVICE dell'ospite: presenta il voucher firmato -> il sistema
+        calcola il rimborso secondo la politica (fase111, in cents) e LIBERA le date
+        (fase58.rilascia). Il rimborso PSP vero parte quando Stripe e' live (gated)."""
+        import datetime
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        token = dati.get("voucher_token")
+        firma = getattr(self._sys, "firma", None)
+        if firma is None or not isinstance(token, str) or not token:
+            return 400, {"errore": "voucher_mancante"}
+        v = firma.decodifica(token)
+        if not isinstance(v, dict) or v.get("tipo") != "voucher":
+            return 400, {"errore": "voucher_non_valido"}
+        allog = v.get("alloggio_id", "")
+        ci, co = v.get("check_in", ""), v.get("check_out", "")
+        rif = v.get("riferimento", "")
+        pagato = v.get("prezzo_guest_cents", 0)
+        if not all(isinstance(x, str) and x for x in (allog, ci, co)):
+            return 422, {"errore": "voucher_incompleto"}
+        try:
+            giorni = (datetime.date.fromisoformat(ci) - datetime.date.today()).days
+        except Exception:
+            giorni = 0
+        giorni = giorni if giorni > 0 else 0
+        politica = str(dati.get("politica", "flessibile"))
+        try:
+            from fase111_cancellazione import calcola_rimborso
+            r = calcola_rimborso(pagato, giorni, politica=politica)
+            idem = v.get("idem_key") or ("cancel_" + (rif or token[-16:]))
+            e = self._sys.inventario.rilascia(allog, ci, co, idem_key=idem)
+        except Exception:
+            logger.error("cancella prenotazione: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        if not getattr(e, "ok", False):
+            return 409, {"stato": "rifiutato", "motivo": getattr(e, "motivo", "")}
+        return 200, {"stato": "cancellata", "riferimento": rif,
+                     "giorni_all_arrivo": giorni, "date_liberate": True,
+                     "rimborso_cents": r["rimborso_cents"],
+                     "trattenuto_cents": r["trattenuto_cents"],
+                     "politica": r["politica"], "money_unit": "cents_integer",
+                     "nota": "date liberate; rimborso PSP da eseguire quando Stripe e' live"}
 
     def _avvisa_host_prenotazione(self, allog, ref, ci, co, origine):
         """Notifica l'host della nuova prenotazione (email + WhatsApp gated). Best-effort:
