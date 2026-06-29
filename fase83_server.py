@@ -813,7 +813,7 @@ class RouterHTTP:
         if not codice:
             return 503, {"errore": "codice_non_generato"}
         from urllib.parse import quote
-        link = self._base_url + "/diventa-host.html?ref=" + quote(codice)
+        link = (self._base_url or "https://bookinvip.com") + "/diventa-host.html?ref=" + quote(codice)
         return 200, {"codice": codice, "link": link, "credito_cents": int(credito)}
 
     def _prezzo_suggerito(self, query, headers):
@@ -844,7 +844,7 @@ class RouterHTTP:
         if not codice:
             return 422, {"errore": "codice_non_generato"}
         from urllib.parse import quote
-        link = (self._base_url or "") + "/diventa-host.html?ref=" + quote(codice)
+        link = (self._base_url or "https://bookinvip.com") + "/diventa-host.html?ref=" + quote(codice)
         return 200, {"codice": codice, "link": link, "crediti_cents": ref.crediti(hid)}
 
     def _host_invito_registra(self, body):
