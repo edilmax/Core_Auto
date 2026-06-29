@@ -245,7 +245,8 @@ async function caricaReferral(){
   try{
     const d = await (await fetch(API+'/api/host/referral', {headers:authHeaders()})).json();
     if(d.link){
-      document.getElementById('ref_link').value = d.link;
+      // link SEMPRE assoluto: se BASE_URL e' vuoto il backend ritorna un path relativo
+      document.getElementById('ref_link').value = (d.link.charAt(0)==='/') ? location.origin + d.link : d.link;
       document.getElementById('ref_credito').textContent = 'Credito disponibile: €'+((d.credito_cents||0)/100).toFixed(2);
     }
   }catch(e){}
@@ -269,7 +270,7 @@ async function authPost(path, body, msgEl, okText){
 document.getElementById('btnRegister').onclick = ()=>{
   const m=document.getElementById('msgAuth');
   if(!document.getElementById('au_terms').checked){ m.className='msg err'; m.textContent='Devi accettare Termini e Privacy.'; return; }
-  authPost('/api/host/registrazione', {email:document.getElementById('au_email').value, password:document.getElementById('au_pw').value, ragione_sociale:document.getElementById('au_rs').value, accetta_termini:true}, m, 'Registrato! Ora carichi i tuoi alloggi qui sotto.');
+  authPost('/api/host/registrazione', {email:document.getElementById('au_email').value, password:document.getElementById('au_pw').value, ragione_sociale:document.getElementById('au_rs').value, accetta_termini:true, codice_referral:(new URLSearchParams(location.search).get('ref')||'')}, m, 'Registrato! Ora carichi i tuoi alloggi qui sotto.');
 };
 document.getElementById('btnLogin').onclick = ()=>{
   authPost('/api/host/login', {email:document.getElementById('au_email').value, password:document.getElementById('au_pw').value}, document.getElementById('msgAuth'), 'Accesso effettuato.');
