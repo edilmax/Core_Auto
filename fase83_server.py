@@ -637,6 +637,8 @@ class RouterHTTP:
                         "prezzo_guest_cents": corpo.get("prezzo_guest_cents", 0),
                         "valuta": corpo.get("valuta", "EUR"),
                         "smart_pass": pass_token or "",
+                        # politica di cancellazione dell'host BLOCCATA al booking (anti-furbata)
+                        "politica": self._politica_alloggio(allog),
                         # idem_key del blocco: serve alla cancellazione self-service per liberare
                         "idem_key": (qt.split(".")[-1] if isinstance(qt, str) and qt else "")})
                 except Exception:
@@ -693,7 +695,8 @@ class RouterHTTP:
         except Exception:
             giorni = 0
         giorni = giorni if giorni > 0 else 0
-        politica = str(dati.get("politica", "flessibile"))
+        # POLITICA dal VOUCHER FIRMATO (scelta dall'host, anti-furbata) - NON dalla richiesta
+        politica = v.get("politica") or self._politica_alloggio(allog)
         try:
             from fase111_cancellazione import calcola_rimborso
             r = calcola_rimborso(pagato, giorni, politica=politica)
@@ -704,12 +707,40 @@ class RouterHTTP:
             return 503, {"errore": "service_unavailable"}
         if not getattr(e, "ok", False):
             return 409, {"stato": "rifiutato", "motivo": getattr(e, "motivo", "")}
+        # CREDITO VIAGGIO ANTI-RIMPIANTO: se hai perso qualcosa, una parte torna come credito
+        # (non-cashabile, riscattabile su una prossima prenotazione; ci costa solo margine futuro).
+        cv_cents, cv_token = self._credito_anti_rimpianto(r.get("trattenuto_cents", 0))
         return 200, {"stato": "cancellata", "riferimento": rif,
                      "giorni_all_arrivo": giorni, "date_liberate": True,
                      "rimborso_cents": r["rimborso_cents"],
                      "trattenuto_cents": r["trattenuto_cents"],
                      "politica": r["politica"], "money_unit": "cents_integer",
-                     "nota": "date liberate; rimborso PSP da eseguire quando Stripe e' live"}
+                     "credito_viaggio_cents": cv_cents, "credito_viaggio_token": cv_token,
+                     "nota": ("date liberate; rimborso PSP da eseguire quando Stripe e' live."
+                              + (" Hai un Credito Viaggio per la prossima prenotazione."
+                                 if cv_cents else ""))}
+
+    def _politica_alloggio(self, slug):
+        try:
+            return self._sys.catalogo.politica_cancellazione_di(slug)
+        except Exception:
+            return "flessibile"
+
+    def _credito_anti_rimpianto(self, trattenuto_cents):
+        """Trasforma il 50% della penale in un Credito Viaggio firmato (tetto 5000 cents).
+        Riusa il riscatto floor-guarded del concierge (tipo 'credito_fondatore')."""
+        import time
+        firma = getattr(self._sys, "firma", None)
+        t = trattenuto_cents if isinstance(trattenuto_cents, int) and trattenuto_cents > 0 else 0
+        cv = min(5000, t // 2)
+        if firma is None or cv <= 0:
+            return 0, ""
+        try:
+            tok = firma.codifica({"tipo": "credito_fondatore", "email": "", "citta": "",
+                                  "credito_cents": cv, "exp": int(time.time()) + 365 * 86400})
+            return cv, tok
+        except Exception:
+            return 0, ""
 
     def _avvisa_host_prenotazione(self, allog, ref, ci, co, origine):
         """Notifica l'host della nuova prenotazione (email + WhatsApp gated). Best-effort:

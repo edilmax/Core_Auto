@@ -23,6 +23,7 @@ POLITICHE = {
     "flessibile": PoliticaCancellazione("flessibile", ((1, 10000), (0, 5000))),
     "moderata": PoliticaCancellazione("moderata", ((5, 10000), (1, 5000), (0, 0))),
     "rigida": PoliticaCancellazione("rigida", ((14, 10000), (7, 5000), (0, 0))),
+    "non_rimborsabile": PoliticaCancellazione("non_rimborsabile", ((0, 0),)),
 }
 
 

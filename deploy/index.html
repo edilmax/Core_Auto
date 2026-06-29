@@ -105,6 +105,7 @@
     <div id="mBadge"></div>
     <div id="mRating" style="margin:.3rem 0;font-weight:600;color:#8a6d0b"></div>
     <p id="mDescr" style="color:#4a5b7a;margin:.5rem 0"></p>
+    <p id="mPolitica" style="color:#155724;font-weight:600;font-size:.9rem;margin:.3rem 0"></p>
     <div id="mRecensioni"></div>
     <div id="mQuote"></div>
     <button class="prenota-btn" id="btnPrenota">Prenota</button>
@@ -212,6 +213,8 @@ async function apri(slug){
     document.getElementById('mBadge').innerHTML = (a.servizi_label||a.servizi||[]).map(s=>`<span class="badge">${s}</span>`).join('');
     document.getElementById('mRating').innerHTML = stelle(a.recensioni);
     document.getElementById('mDescr').textContent = a.descrizione||'';
+    const POL={flessibile:'✓ Cancellazione gratuita fino a 24h prima',moderata:'✓ Cancellazione gratuita fino a 5 giorni prima',rigida:'Cancellazione gratuita fino a 14 giorni prima (poi 50%)',non_rimborsabile:'Tariffa non rimborsabile'};
+    document.getElementById('mPolitica').textContent = POL[a.politica_cancellazione]||POL.flessibile;
     document.getElementById('mMsg').innerHTML='';
     // recensioni verificate (solo chi ha pagato)
     const rec = document.getElementById('mRecensioni'); rec.innerHTML='';

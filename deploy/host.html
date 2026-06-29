@@ -136,6 +136,13 @@
       <label class="full">Titolo<input id="p_titolo" value="Casa a Roma"></label>
       <label>Citta<input id="p_citta" value="Roma"></label>
       <label id="lPrezzo">Prezzo/notte che vede l'ospite (cent) <span style="font-weight:400;color:#5e6f8d;font-size:.72rem">— ricevi questo meno la commissione (5% diretto / 15% marketplace), 0% all'ospite</span><input type="number" id="p_prezzo" value="9500"></label>
+      <label class="full">Politica di cancellazione <span style="font-weight:400;color:#5e6f8d;font-size:.72rem">— la sceglie l'host, l'ospite la vede prima di prenotare</span>
+        <select id="p_pol">
+          <option value="flessibile">Gratuita fino a 24h prima (consigliata)</option>
+          <option value="moderata">Gratuita fino a 5 giorni prima</option>
+          <option value="rigida">Gratuita fino a 14 giorni prima (poi 50%)</option>
+          <option value="non_rimborsabile">Non rimborsabile (prezzo più basso)</option>
+        </select></label>
       <label>Capacita<input type="number" id="p_cap" value="4"></label>
       <label>Servizi (csv)<input id="p_serv" value="wifi,piscina"></label>
       <label class="full">Foto (URL, una per riga)<textarea id="p_img" rows="3" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid #dce1ed;font-size:.85rem" placeholder="https://...jpg"></textarea></label>
@@ -315,6 +322,7 @@ document.getElementById('btnPubblica').onclick = async ()=>{
     host_id:document.getElementById('p_host').value, slug:document.getElementById('p_slug').value,
     titolo:document.getElementById('p_titolo').value, citta:document.getElementById('p_citta').value,
     prezzo_notte_cents:parseInt(document.getElementById('p_prezzo').value),
+    politica_cancellazione:document.getElementById('p_pol').value,
     capacita:parseInt(document.getElementById('p_cap').value), servizi:serv, immagini:imgs});
   m.className='msg '+(r.status===201?'ok':'err');
   m.textContent = r.status===201 ? '✅ '+(r.data.slug||'') : '❌ '+(r.data.dettaglio||r.data.errore||r.status);

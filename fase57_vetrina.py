@@ -120,6 +120,11 @@ class SchedaAlloggio:
     stato: str = "pubblicato"
     lat_micro: Optional[int] = None   # microgradi interi (lat*1e6), mai float
     lon_micro: Optional[int] = None
+    politica_cancellazione: str = "flessibile"   # scelta dall'host per QUESTO alloggio
+
+
+# Politiche di cancellazione che l'host puo' scegliere (coerenti con fase111).
+POLITICHE_CANCELLAZIONE = ("flessibile", "moderata", "rigida", "non_rimborsabile")
 
 
 @dataclass(frozen=True)
@@ -213,13 +218,17 @@ def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
     if lon is not None and not (-180_000_000 <= lon <= 180_000_000):
         return False, "lon_micro_fuori_range", None
 
+    pol = data.get("politica_cancellazione", "flessibile")
+    if not isinstance(pol, str) or pol not in POLITICHE_CANCELLAZIONE:
+        pol = "flessibile"
+
     return True, "", SchedaAlloggio(
         host_id=host_id, slug=slug, titolo=titolo, citta=citta,
         prezzo_notte_cents=prezzo, capacita=int(data["capacita"]),
         descrizione=descr.strip(), paese=paese.strip(),
         camere=int(data.get("camere", 1)), bagni=int(data.get("bagni", 1)),
         servizi=servizi, valuta=valuta, stato=stato,
-        lat_micro=lat, lon_micro=lon)
+        lat_micro=lat, lon_micro=lon, politica_cancellazione=pol)
 
 
 def _valida_immagini(imgs: Any) -> List[Immagine]:
@@ -288,8 +297,14 @@ class CatalogoVetrina:
                         stato TEXT NOT NULL DEFAULT 'pubblicato',
                         lat_micro INTEGER,
                         lon_micro INTEGER,
+                        politica_cancellazione TEXT NOT NULL DEFAULT 'flessibile',
                         creato_ts TEXT NOT NULL,
                         aggiornato_ts TEXT NOT NULL)""")
+                try:
+                    con.execute("ALTER TABLE alloggi ADD COLUMN politica_cancellazione "
+                                "TEXT NOT NULL DEFAULT 'flessibile'")
+                except sqlite3.OperationalError:
+                    pass
                 con.execute("""
                     CREATE TABLE IF NOT EXISTS alloggio_immagini (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -323,12 +338,14 @@ class CatalogoVetrina:
                 cur = con.execute(
                     "INSERT INTO alloggi (host_id, slug, titolo, descrizione, citta, "
                     "paese, prezzo_notte_cents, capacita, camere, bagni, servizi_mask, "
-                    "valuta, stato, lat_micro, lon_micro, creato_ts, aggiornato_ts) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "valuta, stato, lat_micro, lon_micro, politica_cancellazione, "
+                    "creato_ts, aggiornato_ts) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (scheda.host_id, scheda.slug, scheda.titolo, scheda.descrizione,
                      scheda.citta, scheda.paese, scheda.prezzo_notte_cents, scheda.capacita,
                      scheda.camere, scheda.bagni, mask, scheda.valuta, scheda.stato,
-                     scheda.lat_micro, scheda.lon_micro, ora, ora))
+                     scheda.lat_micro, scheda.lon_micro, scheda.politica_cancellazione,
+                     ora, ora))
                 alloggio_id = cur.lastrowid
             else:
                 alloggio_id = row["id"]
@@ -336,11 +353,11 @@ class CatalogoVetrina:
                     "UPDATE alloggi SET host_id=?, titolo=?, descrizione=?, citta=?, "
                     "paese=?, prezzo_notte_cents=?, capacita=?, camere=?, bagni=?, "
                     "servizi_mask=?, valuta=?, stato=?, lat_micro=?, lon_micro=?, "
-                    "aggiornato_ts=? WHERE id=?",
+                    "politica_cancellazione=?, aggiornato_ts=? WHERE id=?",
                     (scheda.host_id, scheda.titolo, scheda.descrizione, scheda.citta,
                      scheda.paese, scheda.prezzo_notte_cents, scheda.capacita, scheda.camere,
                      scheda.bagni, mask, scheda.valuta, scheda.stato, scheda.lat_micro,
-                     scheda.lon_micro, ora, alloggio_id))
+                     scheda.lon_micro, scheda.politica_cancellazione, ora, alloggio_id))
             con.execute("DELETE FROM alloggio_immagini WHERE alloggio_id=?", (alloggio_id,))
             if imgs:
                 con.executemany(
@@ -371,6 +388,21 @@ class CatalogoVetrina:
             return cur.rowcount > 0
         finally:
             con.close()
+
+    def politica_cancellazione_di(self, slug: Any) -> str:
+        """Politica di cancellazione scelta dall'host per l'alloggio (default flessibile)."""
+        if not (isinstance(slug, str) and slug):
+            return "flessibile"
+        con = self._apri()
+        try:
+            r = con.execute("SELECT politica_cancellazione FROM alloggi WHERE slug=?",
+                            (slug,)).fetchone()
+        finally:
+            con.close()
+        if r is None:
+            return "flessibile"
+        pol = r["politica_cancellazione"] if "politica_cancellazione" in r.keys() else None
+        return pol if pol in POLITICHE_CANCELLAZIONE else "flessibile"
 
     def host_di_alloggio(self, slug: Any) -> Optional[str]:
         """host_id proprietario dell'alloggio (per notifiche prenotazione/payout).
@@ -534,6 +566,8 @@ class CatalogoVetrina:
             "camere": int(a["camere"]),
             "bagni": int(a["bagni"]),
             "servizi": servizi_da_maschera(a["servizi_mask"]),
+            "politica_cancellazione": (a["politica_cancellazione"]
+                                       if "politica_cancellazione" in a.keys() else "flessibile"),
             "lat_micro": a["lat_micro"],
             "lon_micro": a["lon_micro"],
             "immagini": [{"url": i["url"], "ordine": int(i["ordine"]), "alt": i["alt"]}

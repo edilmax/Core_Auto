@@ -67,12 +67,15 @@ class TestCancellazioneGuest(unittest.TestCase):
         self.assertEqual(self.g("POST", "/api/concierge/cancella",
                                 {"voucher_token": b["voucher_token"][:-3] + "xxx"})[0], 400)
 
-    def test_politica_rigida_meno_rimborso(self):
+    def test_politica_dal_voucher_non_dalla_richiesta(self):
+        # ANTI-FURBATA: l'alloggio e' flessibile (default); l'ospite passa 'rigida' nella
+        # richiesta -> IGNORATA, vince la politica dell'host bloccata nel voucher.
         s, b = self._book()
         sc, c = self.g("POST", "/api/concierge/cancella",
                        {"voucher_token": b["voucher_token"], "politica": "rigida"})
         self.assertEqual(sc, 200)
-        self.assertLess(c["rimborso_cents"], 20000)         # rigida: penale a ~11 giorni
+        self.assertEqual(c["politica"], "flessibile")
+        self.assertEqual(c["rimborso_cents"], 20000)        # piena, la richiesta non conta
 
 
 if __name__ == "__main__":
