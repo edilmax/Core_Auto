@@ -718,7 +718,30 @@ class RouterHTTP:
             self._avvisa_host_prenotazione(allog, ref, ci, co, corpo.get("fonte", ""))
             # ESCROW DI GARANZIA: i fondi dell'host restano bloccati fino alla conferma ospite
             self._apri_garanzia(ref, corpo.get("netto_host_cents", 0), allog, ci)
+            # HOLD: se serve pagare, la prenotazione e' IN ATTESA (lo sweeper libera i non pagati);
+            # senza Stripe (nessun payment_url) resta confermata subito, come oggi.
+            self._registra_hold(corpo, allog, ref, ci, co, dati.get("quote_token", ""))
         return status, corpo
+
+    def _registra_hold(self, corpo, allog, ref, ci, co, qt):
+        if not corpo.get("payment_url"):
+            return
+        try:
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            if pp is None or not ref:
+                return
+            comune = ""
+            try:
+                d = self._sys.catalogo.dettaglio(allog)
+                comune = d.get("citta", "") if isinstance(d, dict) else ""
+            except Exception:
+                pass
+            idem = qt.split(".")[-1] if isinstance(qt, str) and qt else ""
+            pp.registra(ref, alloggio_id=allog, check_in=ci, check_out=co, idem_key=idem,
+                        tassa_cents=corpo.get("tassa_soggiorno_cents", 0), comune=comune)
+            corpo["stato"] = "in_attesa_pagamento"   # confermata SOLO dopo il webhook di pagamento
+        except Exception:
+            logger.warning("registrazione hold pagamento fallita (ignorata)", exc_info=True)
 
     def _apri_garanzia(self, ref, netto_host_cents, allog, ci):
         try:
@@ -1057,7 +1080,23 @@ class RouterHTTP:
             except Exception:
                 rif = ""
             logger.info("Stripe: pagamento CONFERMATO per riferimento '%s'", rif)
+            self._conferma_pagamento(rif)
         return 200, {"ricevuto": True, "tipo": tipo}
+
+    def _conferma_pagamento(self, rif):
+        """Pagamento riuscito: toglie l'hold (la prenotazione e' pagata) e registra la tassa
+        di soggiorno incassata nel ledger (rendicontazione alla citta'). Isolato."""
+        if not (isinstance(rif, str) and rif):
+            return
+        try:
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            rec = pp.conferma(rif) if pp is not None else None
+            if rec and rec.get("tassa_cents", 0) > 0:
+                led = getattr(self._sys, "tassa_comunale", None)
+                if led is not None:
+                    led.registra_riscossione(rif, rec.get("comune", ""), rec["tassa_cents"])
+        except Exception:
+            logger.warning("conferma pagamento/ledger tassa fallita (ignorata)", exc_info=True)
 
     def _mcp(self, body):
         if self._sys.mcp is None:
@@ -1638,5 +1677,28 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     logger.warning("auto_rilascia garanzia fallito (ignorato)", exc_info=True)
                 __import__("time").sleep(3600)
         _th.Thread(target=_tick_garanzia, daemon=True).start()
+
+    # sweeper HOLD: libera le stanze delle prenotazioni non pagate entro la scadenza
+    pp = getattr(sistema, "pagamenti_pendenti", None)
+    inv = getattr(sistema, "inventario", None)
+    if pp is not None and inv is not None:
+        import threading as _th2
+
+        def _tick_hold():
+            while True:
+                try:
+                    for rec in pp.scaduti():
+                        try:
+                            inv.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"],
+                                         idem_key=(rec.get("idem_key") or ("hold_" + rec["riferimento"])))
+                            if gz is not None:
+                                gz.annulla(rec["riferimento"])
+                            pp.rimuovi(rec["riferimento"])
+                        except Exception:
+                            logger.warning("sweep hold singolo fallito (ignorato)", exc_info=True)
+                except Exception:
+                    logger.warning("sweep hold fallito (ignorato)", exc_info=True)
+                __import__("time").sleep(120)
+        _th2.Thread(target=_tick_hold, daemon=True).start()
 
     srv.serve_forever()

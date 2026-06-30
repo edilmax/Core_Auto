@@ -119,8 +119,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 154=DB GIURISDIZIONI MARKETING mondiale (regime per nazione email/sms/whatsapp, opt-out lecito vs opt-in, fail-closed sconosciuto; cablato in outreach_runner).
         # 156=CANCELLAZIONE TOTALE host + verifica "da pertutto" (diritto oblio).
         # 158=DOMANDA/waitlist + CREDITO FONDATORE (cold-start anti-vuoto).
-        # 160=ESCROW DI GARANZIA (i soldi all'host solo se l'ospite conferma 'come dichiarato' o passa la finestra post check-in; contestazione->disputa; risoluzione a conservazione esatta; endpoint /api/garanzia/conferma|contesta|stato; aperto a ogni book col netto host). Blocco pari 108..160 + 162+ libero.
-        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148, 150, 162):
+        # 160=ESCROW DI GARANZIA (i soldi all'host solo se l'ospite conferma o passa la finestra; endpoint garanzia/*).
+        # 162=PAGAMENTI PENDENTI / hold prima del pagamento (book con Stripe -> in_attesa_pagamento + HOLD; webhook conferma->pagato + registra tassa nel ledger fase147; sweeper libera gli hold scaduti non pagati; senza Stripe resta confermata subito). Blocco pari 108..162 + 164+ libero.
+        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148, 150, 164):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 

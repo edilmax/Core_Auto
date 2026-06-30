@@ -71,6 +71,8 @@ class ConfigCasaVIP:
     db_messaggi: str = ":memory:"
     db_domanda: str = ":memory:"       # lista d'attesa + credito fondatore (anti-vuoto)
     db_garanzia: str = ":memory:"      # escrow di garanzia (soldi all'host solo se conforme)
+    db_pendenti: str = ":memory:"      # pagamenti in attesa (hold prima del pagamento)
+    db_tassa_comunale: str = ":memory:"  # ledger riscossioni tassa di soggiorno (rendicontazione)
     file_referral: str = ""            # path JSON referral host-porta-host (vuoto = in RAM)
     con_sentinel: bool = False
     cartella_sentinel: Optional[str] = None
@@ -108,6 +110,8 @@ class SistemaCasaVIP:
     notificatore_prenotazione: Any = None
     domanda: Any = None
     garanzia: Any = None
+    pagamenti_pendenti: Any = None
+    tassa_comunale: Any = None
 
     @property
     def attivo(self) -> bool:
@@ -245,6 +249,16 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     garanzia.inizializza_schema()
     componenti.append("escrow_garanzia(160)")
 
+    from fase162_pagamenti_pendenti import crea_pagamenti_pendenti
+    pagamenti_pendenti = crea_pagamenti_pendenti(cfg.db_pendenti)
+    pagamenti_pendenti.inizializza_schema()
+    componenti.append("pagamenti_pendenti(162)")
+
+    from fase147_tassa_comunale import crea_tassa_comunale
+    tassa_comunale = crea_tassa_comunale(cfg.db_tassa_comunale)
+    tassa_comunale.inizializza_schema()
+    componenti.append("ledger_tassa(147)")
+
     # 3f-ter) referral host-porta-host (codice firmato + bonus crediti non-cashabili)
     from fase109_referral_host import crea_referral_host
     referral = crea_referral_host(bytes(cfg.segreto_hmac), cfg.file_referral)
@@ -345,4 +359,5 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           dichiarazione=dichiarazione, noshow=noshow, marketing=marketing,
                           messaggistica=messaggistica, referral=referral,
                           notificatore_prenotazione=notificatore_prenotazione,
-                          domanda=domanda, garanzia=garanzia)
+                          domanda=domanda, garanzia=garanzia,
+                          pagamenti_pendenti=pagamenti_pendenti, tassa_comunale=tassa_comunale)

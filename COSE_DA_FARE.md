@@ -2,6 +2,13 @@
 
 > Aggiornato 2026-06-29 · suite 1851 test (0 errori) · stato reale: `STATO_FINALE.md`. Spunta man mano.
 
+## ✅ CHIUSI ORA (buchi logici di integrità)
+- [x] **Hold prima del pagamento** (`fase162`): con Stripe il book va `in_attesa_pagamento`, il
+  webhook conferma (`pagato`), e uno **sweeper libera le stanze non pagate** entro 20 min. Niente
+  più prenotazioni fantasma che bloccano la stanza. (Senza Stripe resta confermata subito.)
+- [x] **Ledger tassa** (`fase147` cablato): al pagamento confermato la tassa incassata è registrata
+  per comune (rendicontazione alla città). `totale_riscosso(comune)`.
+
 ## 🔴 1. DA FARE TU (non è codice — serve per andare ONLINE)
 - [ ] **VPS**: `cd /var/www/bookinvip && git pull && systemctl restart bookinvip` (ogni volta che aggiorniamo).
 - [ ] **`.env.casavip` sul server** (mai su Git):
