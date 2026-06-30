@@ -202,6 +202,32 @@ class TestSplitPreview(unittest.TestCase):
         self.assertEqual(s, 400)
 
 
+class TestContratto(unittest.TestCase):
+    """Contratto PDF (fase145) precompilato dal voucher firmato."""
+    def setUp(self):
+        self.sys = _sistema()
+        _popola(self.sys)
+        self.r = crea_router(self.sys)
+
+    def test_contratto_da_voucher(self):
+        s, c = self.r.gestisci("POST", "/api/concierge/quote", body=json.dumps(
+            {"alloggio_id": "casa", "check_in": "2026-09-01", "check_out": "2026-09-02"}))
+        s2, c2 = self.r.gestisci("POST", "/api/concierge/book", body=json.dumps(
+            {"quote_token": c["quote_token"], "email": "g@x.it"}))
+        self.assertEqual(s2, 201)
+        vt = c2.get("voucher_token")
+        self.assertTrue(vt)
+        s3, c3 = self.r.gestisci("POST", "/api/contratto", body=json.dumps({"voucher_token": vt}))
+        self.assertEqual(s3, 200)
+        self.assertTrue(c3["pdf_base64"].startswith("JVBER"))   # '%PDF' in base64
+        self.assertTrue(any("BookinVIP" in r for r in c3["righe"]))
+
+    def test_contratto_voucher_invalido(self):
+        s, c = self.r.gestisci("POST", "/api/contratto",
+                               body=json.dumps({"voucher_token": "x.y"}))
+        self.assertEqual(s, 400)
+
+
 class TestConcierge(unittest.TestCase):
     def setUp(self):
         self.sys = _sistema()

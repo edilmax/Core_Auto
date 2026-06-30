@@ -419,6 +419,8 @@ class RouterHTTP:
             return self._cancella_prenotazione(body)
         if metodo == "POST" and path == "/api/split/preview":
             return self._split_preview(body)
+        if metodo == "POST" and path == "/api/contratto":
+            return self._contratto(body)
         if metodo == "POST" and path == "/api/garanzia/conferma":
             return self._garanzia_conferma(body)
         if metodo == "POST" and path == "/api/garanzia/contesta":
@@ -1181,6 +1183,42 @@ class RouterHTTP:
         if rie:
             d["recensioni"] = rie
         return 200, d
+
+    def _contratto(self, body):
+        """Contratto di locazione breve PDF (fase145) precompilato dal VOUCHER FIRMATO: il
+        prezzo e le date vengono dalla firma (non manomettibili). Ritorna le righe + il PDF in
+        base64 (download lato client). Isolato/fail-safe."""
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        firma = getattr(self._sys, "firma", None)
+        token = dati.get("voucher_token")
+        v = firma.decodifica(token) if (firma and isinstance(token, str) and token) else None
+        if not isinstance(v, dict) or v.get("tipo") != "voucher":
+            return 400, {"errore": "voucher_non_valido"}
+        allog = v.get("alloggio_id", "")
+        host, citta = "", ""
+        try:
+            d = self._sys.catalogo.dettaglio(allog)
+            citta = d.get("citta", "") if isinstance(d, dict) else ""
+            host = self._sys.catalogo.host_di_alloggio(allog) or ""
+        except Exception:
+            pass
+        lingua = dati.get("lingua") if dati.get("lingua") in ("it", "en") else "it"
+        info = {"host": host, "alloggio": allog, "citta": citta,
+                "check_in": v.get("check_in", ""), "check_out": v.get("check_out", ""),
+                "prezzo_cents": v.get("prezzo_guest_cents", 0), "valuta": v.get("valuta", "EUR"),
+                "riferimento": v.get("riferimento", "")}
+        try:
+            from fase145_contratto_pdf import genera_pdf, componi_contratto
+            import base64
+            pdf = genera_pdf(info, lingua=lingua)
+            return 200, {"righe": componi_contratto(info, lingua=lingua),
+                         "pdf_base64": base64.b64encode(pdf).decode("ascii"),
+                         "filename": "contratto_%s.pdf" % (info["riferimento"] or "bookinvip")}
+        except Exception:
+            logger.error("contratto: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
 
     def _split_preview(self, body):
         """Dividi un totale fra N amici in quote UGUALI a conservazione esatta (fase133).

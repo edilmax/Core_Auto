@@ -35,13 +35,20 @@ Pattern: endpoint `fase83` + handler + pannello + test.
   sull'annuncio, il preventivo la calcola PRECISA e la mostra separata + totale PRIMA dell'acquisto
   (default 0 = mai inventare). Resta `fase147` (ledger riscossioni/rendicontazione) da cablare.
 - [ ] **deposito_cauzionale (fase149)**.
-- [ ] **contratto_pdf (fase145)** scaricabile.
+- [x] ~~**contratto_pdf (fase145)** scaricabile~~ ✅ FATTO: `POST /api/contratto` decodifica il
+  voucher FIRMATO (prezzo/date non manomettibili) → PDF stdlib (IT/EN) in base64; bottone
+  "📑 Contratto PDF" alla conferma prenotazione. Test 2.
 - [ ] **checkin_digitale (fase127)** (pre-registrazione ospiti + documenti).
 - [ ] **KYC host (fase143)** + onboarding wizard (fase141).
 - [x] ~~geo_ricerca (121)~~ ✅ FATTO: **"Vicino a me"** in vetrina — il cliente condivide la
   posizione (browser) → il CORE calcola bbox + distanza haversine reale (`fase121`), filtra al
   raggio e ordina per vicinanza (card con "a X km"). Coord fuori Terra → ricerca normale. Test 4.
-- [ ] calendario_prezzi (119), wishlist (117), fedeltà (137), chatbot (139), web_push (123), traduzione annunci/recensioni (107/129), dashboard metriche (115), split a quote uguali (133).
+- [x] ~~split a quote uguali (133)~~ ✅ FATTO ("Dividi tra amici" nel preventivo).
+- [ ] **Richiedono prima una scelta/infrastruttura (non semplice cablaggio):** dashboard metriche (115,
+  serve uno store prenotazioni-per-host) · wishlist (117)/fedeltà (137)/web_push (123) (serve identità
+  guest / subscription) · traduzione annunci-recensioni (107/129, no-op senza backend LibreTranslate;
+  per filosofia la fa l'agente del guest) · chatbot (139, LLM gated) · calendario_prezzi (119, valutare
+  sovrapposizione con inventario fase58) · deposito_cauzionale (149, cattura gated PSP + campo su fase57).
 
 ## 🟡 3. STRATEGIA TRUST da completare (abbiamo i pezzi)
 - [ ] **Migrazione 1-clic dai colossi** in onboarding (iCal `fase82/135` reso prominente).

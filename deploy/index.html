@@ -292,7 +292,10 @@ async function prenota(){
     if(r.stato==='confermata'){
       if(r.payment_url){ window.location.href = r.payment_url; return; }   // redirect al checkout Stripe
       const voucher = r.voucher_token ? ` · <a href="/voucher/${encodeURIComponent(r.voucher_token)}?lang=${LANG}" target="_blank" style="color:#155724;font-weight:700">📄 Voucher</a>` : '';
-      msg.innerHTML=`<div class="msg ok">✅ ${t('conferma')} (${r.riferimento||''})${voucher}</div>`; document.getElementById('btnPrenota').style.display='none';
+      const contr = r.voucher_token ? ` · <a href="#" id="dlContr" style="color:#1e3c72;font-weight:700">📑 Contratto PDF</a>` : '';
+      msg.innerHTML=`<div class="msg ok">✅ ${t('conferma')} (${r.riferimento||''})${voucher}${contr}</div>`; document.getElementById('btnPrenota').style.display='none';
+      const dl = document.getElementById('dlContr'); const _vt = r.voucher_token;
+      if(dl) dl.onclick = async (e)=>{ e.preventDefault(); try{ const cr = await api('/api/contratto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({voucher_token:_vt, lingua:LANG})}); if(cr.pdf_base64){ const a=document.createElement('a'); a.href='data:application/pdf;base64,'+cr.pdf_base64; a.download=cr.filename||'contratto.pdf'; a.click(); } }catch(err){} };
     }
     else { msg.innerHTML=`<div class="msg err">❌ ${r.motivo||r.errore||t('errore')}</div>`; }
   }catch(e){ msg.innerHTML=`<div class="msg err">${t('errore')}: ${e.message}</div>`; }
