@@ -10,7 +10,7 @@
   per comune (rendicontazione alla città). `totale_riscosso(comune)`.
 
 ## 🔴 1. DA FARE TU (non è codice — serve per andare ONLINE)
-- [ ] **VPS**: `cd /var/www/bookinvip && git pull && systemctl restart bookinvip` (ogni volta che aggiorniamo).
+- [ ] **VPS Hostinger (Docker)**: `cd /opt/bookinvip && git pull && docker compose -f docker-compose.casavip.yml up -d --build` (ogni volta che aggiorniamo da GitHub). Reload solo-nginx: `docker compose -f docker-compose.casavip.yml exec nginx nginx -s reload`.
 - [ ] **`.env.casavip` sul server** (mai su Git):
   - [ ] `STRIPE_SECRET_KEY` LIVE — **RUOTARE** la chiave esposta in chat (era compromessa, prefisso doppiato).
   - [ ] `STRIPE_WEBHOOK_SECRET`, `STRIPE_SUCCESS_URL`, `STRIPE_CANCEL_URL`.
