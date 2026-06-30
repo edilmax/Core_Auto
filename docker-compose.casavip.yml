@@ -18,6 +18,13 @@ services:
       DB_INVENTARIO: /data/inventario.db
       DB_REGISTRO_HOST: /data/registro_host.db   # account host self-service (durevole)
       DB_VIRAL: /data/viral.db                   # crediti referral (durevole)
+      DB_DOMANDA: /data/domanda.db               # waitlist cold-start (durevole) - ERA MANCANTE -> scritture KO
+      DB_MESSAGGI: /data/messaggi.db             # messaggistica (durevole)
+      DB_GARANZIA: /data/garanzia.db             # escrow di garanzia (durevole)
+      DB_PENDENTI: /data/pendenti.db             # hold pagamento / su-richiesta (durevole)
+      DB_TASSA_COMUNALE: /data/tassa_comunale.db # ledger tassa di soggiorno (durevole)
+      DB_PAYOUT: /data/payout.db                 # dashboard payout host (durevole)
+      FILE_REFERRAL: /data/referral.json         # referral host (durevole)
       CAMPAGNA_STATO_FILE: /data/campagna_stato.json   # scheduler no-burst (durevole)
       OUTREACH_OPTOUT_FILE: /data/outreach_optout.json # opt-out (durevole = obbligo legale)
       STATIC_DIR: /app/deploy
