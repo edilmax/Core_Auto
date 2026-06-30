@@ -1,9 +1,9 @@
-> 🔄 Aggiornato 2026-06-29 · **BookinVIP** · suite **1851 test** (0 regressioni) · moduli `faseNN`→160 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
+> 🔄 Aggiornato 2026-06-29 · **BookinVIP** · suite **1875 test** (0 regressioni) · moduli `faseNN`→162 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
 
 # MANUALE DELLA MACCHINA — CORE_AUTO (Fase 56)
 
 > ⚠️ **DOCUMENTO STORICO.** Descrive la macchina **legacy fino a fase 56** (Tavola VIP/Mango,
-> `app.py`/gunicorn). **NON** è il prodotto attuale **BookinVIP** (alloggi, fase 57→158, server
+> `app.py`/gunicorn). **NON** è il prodotto attuale **BookinVIP** (alloggi, fase 57→162, server
 > stdlib `main_casavip.py`). Per lo stato reale e aggiornato: **`STATO_FINALE.md`** e
 > **`COSA_FA_BOOKINVIP.md`**. Conservato come storia del nucleo.
 

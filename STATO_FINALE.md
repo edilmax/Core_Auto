@@ -1,14 +1,32 @@
 # STATO FINALE — Dove siamo e cosa manca per FINIRE BookinVIP
 
 > Punto di ripristino. Se si interrompe, riparti da qui. Aggiornato: 2026-06-29.
-> Suite: **1851 test superati** con successo, zero regressioni (baseline errori=48 = live
+> Suite: **1875 test superati** con successo, zero regressioni (baseline errori=48 = live
 > PG/Playwright). Include lo scudo fiscale reverse-charge (fase103), i gateway QR asiatici
 > Alipay/WeChat (fase104) e il modulo Alloggiati Web Questura (fase151).
-> Email ufficiale = **info@bookinvip.com**. Moduli fase 13→160 (~116 moduli).
+> Email ufficiale = **info@bookinvip.com**. Moduli fase 13→162 (~116 moduli).
 > **CODICE CHIUSO + DEPLOY HTTPS PRONTO + ACQUISIZIONE OPERATIVA + ARCHITETTURA FINANZIARIA.** Resta
 > solo il "DA FARE TU": VPS + DNS + chiavi .env + numeri fiscali col commercialista + deploy.
 
-## 🆕 NOVITÀ 2026-06-29 (modello + acquisizione + operatività)
+## 🆕 NOVITÀ 2026-06-30 (integrità denaro + su-richiesta + geo)
+- **PRENOTAZIONE SU RICHIESTA** (`fase162` + `fase83`): l'host sceglie per alloggio
+  `immediata` | `su_richiesta` (`fase57.modalita_prenotazione`). Su richiesta il book → `in_attesa_host`
+  (stanza TENUTA, NIENTE voucher/escrow/pagamento/email finché l'host non approva); l'host vede le
+  richieste (`GET /api/host/richieste`) e approva (→ finalizza tutto) o rifiuta (→ libera la stanza);
+  sweeper auto-rifiuta a 24h. Immediata invariata. Estratto `_finalizza_prenotazione` (riusato).
+- **HOLD PRIMA DEL PAGAMENTO** (`fase162`): con Stripe il book → `in_attesa_pagamento` + registra hold;
+  il webhook conferma → `pagato` + registra la tassa nel ledger (`fase147`); **sweeper orario libera le
+  stanze non pagate** (20 min). Senza Stripe: confermata subito (zero impatto). Chiude le prenotazioni
+  fantasma. **Lo sweeper NON tocca mai una prenotazione `pagato`** (verificato sotto carico 50k).
+- **GEO "VICINO A ME"** (`fase121` cablato in `fase83._catalogo` + `index.html`): il cliente condivide la
+  posizione (browser → microgradi interi); il CORE calcola bbox + distanza haversine reale, filtra al
+  raggio (cerchio) e ordina per vicinanza (card "a X km"). Coord fuori Terra → ricerca normale. Test 4.
+- **INVARIANTI DENARO VERIFICATI SOTTO CARICO (50k casi/ciascuno, 0 violazioni)**: escrow conserva
+  esatto (`host_riceve+ospite_rimborso==importo`), nessun doppio payout, commissione mai > netto,
+  preventivo firmato a prova di manomissione, stanza pagata mai liberata. **Binari denaro reali OGGI
+  SPENTI** (Stripe/SMTP/payout gated da chiavi env assenti → nessun movimento di denaro vero).
+- **DA FARE PRIMA DI ACCENDERE STRIPE**: spostare l'emissione voucher/smart-pass/escrow/email DENTRO il
+  webhook "pagamento riuscito" (oggi avviene al book; inerte perché Stripe è spento, ma va sistemato).
 - **COMMISSIONE PER FONTE + 0% OSPITE** (sostituisce il vecchio 3%/12%): l'ospite paga il prezzo
   PULITO; la commissione è DEDOTTA dall'host — **5% sui clienti diretti dell'host** (link
   `/?fonte=diretto&apri=slug`, endpoint `/api/host/link_diretto`) / **15% sui clienti portati da
@@ -51,7 +69,7 @@
   (`tassa_soggiorno_cents`, `totale_cents`); città senza regola → **0, mai inventare** (fail-safe).
   Pass-through alla città (non è nostra commissione né ricavo host). host.html: campi tassa in pubblica.
 - **Test E2E/contratto**: flusso reale, varianti avversariali, chi-manda/chi-riceve, contratto
-  pannelli↔backend (no rotte fantasma). Server live HTTP verde. **Suite 1850, 0 errori.**
+  pannelli↔backend (no rotte fantasma). Server live HTTP verde. **Suite 1875, 0 errori.**
 
 ## ✅ ACQUISIZIONE (fase96-97)
 - fase96 lead discovery MONDIALE da dati aperti OpenStreetMap/Overpass (gratis, no proxy,

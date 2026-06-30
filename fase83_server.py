@@ -597,7 +597,7 @@ class RouterHTTP:
 
     # --- rotte cliente ---
     def _catalogo(self, query):
-        from fase57_vetrina import CriteriRicerca
+        from fase57_vetrina import CriteriRicerca, PAGINA_MAX
         lingua = _lingua(query)
 
         def _int(k):
@@ -606,13 +606,30 @@ class RouterHTTP:
             except (ValueError, TypeError):
                 return None
         servizi = tuple(s for s in query.get("servizi", "").split(",") if s)
+        # "VICINO A ME": il cliente passa la SUA posizione (microgradi interi) + raggio km.
+        # Il CORE calcola un bounding-box (fase121), filtra in SQL, poi ordina per distanza
+        # haversine REALE (cerchio, non quadrato) e taglia. La geo non si delega: l'IA/frontend
+        # propone la posizione, il CORE decide cosa e' "vicino". Geo SEMPRE intera.
+        geo = self._centro_geo(query)
+        bbox_t = None
+        if geo is not None:
+            from fase121_geo_ricerca import bbox as _bbox
+            b = _bbox(geo[0], geo[1], geo[2])
+            if b is not None:
+                bbox_t = (b["lat_min"], b["lat_max"], b["lon_min"], b["lon_max"])
+            else:
+                geo = None
+        limit_req = _int("limit") or 24
         criteri = CriteriRicerca(
             citta=query.get("citta") or None,
             prezzo_min_cents=_int("prezzo_min_cents"),
             prezzo_max_cents=_int("prezzo_max_cents"),
             capacita_min=_int("capacita_min"), servizi=servizi,
             ordine=query.get("ordine", "recente"),
-            limit=_int("limit") or 24, offset=_int("offset") or 0,
+            # con geo prendo TUTTO il box (poi riordino per distanza qui sotto)
+            limit=(PAGINA_MAX if geo is not None else limit_req),
+            offset=(0 if geo is not None else (_int("offset") or 0)),
+            bbox=bbox_t,
             check_in=query.get("check_in") or None,
             check_out=query.get("check_out") or None)
         res = self._sys.catalogo.cerca(criteri)
@@ -624,9 +641,61 @@ class RouterHTTP:
             if rie:
                 card["recensioni"] = rie
             cards.append(card)
+        if geo is not None:
+            vicini = self._entro_raggio(cards, geo)   # filtrati+ordinati, NON tagliati
+            res["totale"] = len(vicini)
+            cards = vicini[:limit_req]
+            res["ordine"] = "vicinanza"
         res["risultati"] = cards
         res["lingua"] = lingua
         return 200, res
+
+    @staticmethod
+    def _centro_geo(query):
+        """(lat_micro, lon_micro, raggio_km) se la query chiede 'vicino a me', altrimenti None.
+        Geo in microgradi INTERI; coordinate fuori dalla Terra -> None (ricerca normale).
+        raggio default 5km, clamp [0.1, 200] (niente query assurde che scaricano il DB)."""
+        def _int(k):
+            try:
+                v = query.get(k)
+                return int(v) if v not in (None, "") else None
+            except (ValueError, TypeError):
+                return None
+        lat, lon = _int("lat_micro"), _int("lon_micro")
+        if lat is None or lon is None:
+            return None
+        if not (-90_000_000 <= lat <= 90_000_000) or not (-180_000_000 <= lon <= 180_000_000):
+            return None
+        try:
+            raggio = float(query.get("raggio_km") or 5)
+        except (ValueError, TypeError):
+            raggio = 5.0
+        if raggio != raggio or raggio <= 0:          # NaN o non positivo -> default
+            raggio = 5.0
+        return (lat, lon, max(0.1, min(200.0, raggio)))
+
+    @staticmethod
+    def _entro_raggio(cards, geo):
+        """Filtra le card entro il raggio (cerchio REALE, haversine fase121) e le ordina per
+        distanza crescente, aggiungendo 'distanza_m' (metri interi). Card senza coordinate o
+        oltre il raggio -> escluse: 'vicino a me' mostra solo cio' che e' davvero vicino."""
+        from fase121_geo_ricerca import distanza_m
+        lat, lon, raggio = geo
+        raggio_m = int(raggio * 1000)
+        out = []
+        for c in cards:
+            la, lo = c.get("lat_micro"), c.get("lon_micro")
+            if not isinstance(la, int) or isinstance(la, bool):
+                continue
+            if not isinstance(lo, int) or isinstance(lo, bool):
+                continue
+            d = distanza_m(lat, lon, la, lo)
+            if 0 <= d <= raggio_m:
+                c = dict(c)
+                c["distanza_m"] = d
+                out.append(c)
+        out.sort(key=lambda x: x["distanza_m"])
+        return out
 
     # --- recensioni verificate (fase63) ---
     def _riepilogo_recensioni(self, slug: Any) -> Optional[Dict[str, Any]]:

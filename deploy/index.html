@@ -96,7 +96,9 @@
       <label data-ui="checkout">Check-out<input type="date" id="checkout" value="2026-09-03"></label>
       <label data-ui="ospiti">Ospiti<input type="number" id="ospiti" value="2" min="1" max="20"></label>
       <label>Max €<input type="number" id="prezzomax" placeholder="es. 150" min="0"></label>
+      <label id="lblRaggio">Raggio<select id="raggio"><option value="2">2 km</option><option value="5" selected>5 km</option><option value="10">10 km</option><option value="25">25 km</option><option value="50">50 km</option></select></label>
       <button type="submit" id="btnCerca">Cerca</button>
+      <button type="button" id="btnVicino" title="Trova alloggi vicino a dove ti trovi ora">📍 Vicino a me</button>
     </div>
     <div class="chips" id="chips"></div>
   </form>
@@ -134,11 +136,12 @@
 <script>
 const API = location.origin.startsWith('http') ? '' : 'http://127.0.0.1:8080';
 const SERVIZI = ['wifi','piscina','parcheggio','aria_condizionata','animali_ammessi','colazione'];
-let I18N = {ui:{},servizi:{}}, LANG = 'it', QUOTE = null, attivi = new Set();
+let I18N = {ui:{},servizi:{}}, LANG = 'it', QUOTE = null, attivi = new Set(), GEO = null;
 
 function t(k){ return (I18N.ui && I18N.ui[k]) || k; }
 function srv(c){ return (I18N.servizi && I18N.servizi[c]) || c; }
 function eur(c){ return '€ ' + ((c||0)/100).toFixed(2); }
+function fmtDist(m){ if(m==null) return ''; return m<1000 ? Math.round(m)+' m' : (m/1000).toFixed(1)+' km'; }
 async function api(path, opts){ const r = await fetch(API+path, opts); return r.json(); }
 
 function renderChips(){
@@ -171,7 +174,7 @@ function cardHtml(a){
     <div class="prezzo">${eur(a.prezzo_notte_cents)} <span style="font-size:.85rem;font-weight:400;color:#5e6f8d">/ ${t('notte')}</span></div>
     <div style="margin:.2rem 0">${stelle(a.recensioni)}</div>
     <div style="margin:.3rem 0">${serv} ${disp}</div>
-    <div class="meta">📍 ${a.citta}${a.paese?', '+a.paese:''}</div>
+    <div class="meta">📍 ${a.citta}${a.paese?', '+a.paese:''}${a.distanza_m!=null?' · <b>a '+fmtDist(a.distanza_m)+'</b>':''}</div>
     <button data-slug="${a.slug}">${t('dettaglio')}</button></div>`;
 }
 
@@ -183,11 +186,18 @@ async function cerca(){
   const pmax = parseInt(document.getElementById('prezzomax').value);
   if(pmax>0) params.prezzo_max_cents = pmax*100;
   if(attivi.size) params.servizi = [...attivi].join(',');
+  if(GEO){ params.citta=''; params.lat_micro=GEO.lat_micro; params.lon_micro=GEO.lon_micro;
+           params.raggio_km=document.getElementById('raggio').value; }
   try{
     const data = await api('/api/catalogo?'+new URLSearchParams(params).toString());
     if(data.risultati && data.risultati.length){
       ris.innerHTML = data.risultati.map(cardHtml).join('');
       ris.querySelectorAll('button[data-slug]').forEach(b=>b.onclick=()=>apri(b.dataset.slug));
+    } else if(GEO){
+      ris.innerHTML = `<div class="vuoto" style="text-align:center;padding:1.5rem">
+        <div style="font-size:2rem">📍</div>
+        <h3 style="color:#1e3c72;margin:.5rem 0">Nessun alloggio entro ${document.getElementById('raggio').value} km</h3>
+        <p style="color:#5e6f8d;max-width:44ch;margin:.3rem auto">Allarga il raggio qui sopra, oppure cerca per città.</p></div>`;
     } else { ris.innerHTML = emptyStateHtml(params.citta); bindWaitlist(params.citta); }
   }catch(e){ ris.innerHTML = `<div class="msg err">${t('errore')}: ${e.message}</div>`; }
 }
@@ -282,6 +292,25 @@ async function prenota(){
   }catch(e){ msg.innerHTML=`<div class="msg err">${t('errore')}: ${e.message}</div>`; }
 }
 
+// "Vicino a me": chiede la posizione al browser, la converte in microgradi interi e cerca.
+function vicinoAMe(){
+  const ris = document.getElementById('risultati');
+  if(!navigator.geolocation){ ris.innerHTML = `<div class="msg err">Geolocalizzazione non supportata dal browser</div>`; return; }
+  const btn = document.getElementById('btnVicino'); const old = btn.textContent;
+  btn.textContent = '📍 …'; btn.disabled = true;
+  navigator.geolocation.getCurrentPosition(p=>{
+    GEO = { lat_micro: Math.round(p.coords.latitude*1e6), lon_micro: Math.round(p.coords.longitude*1e6) };
+    document.getElementById('citta').value = '';   // 'vicino a me' ignora il filtro citta
+    btn.textContent = old; btn.disabled = false; cerca();
+  }, ()=>{ btn.textContent = old; btn.disabled = false;
+           ris.innerHTML = `<div class="msg err">Posizione non disponibile (permesso negato?)</div>`; },
+  { enableHighAccuracy:false, timeout:10000, maximumAge:300000 });
+}
+document.getElementById('btnVicino').onclick = vicinoAMe;
+// cambiare il raggio mentre si e' 'vicino a me' ri-cerca subito
+document.getElementById('raggio').onchange = ()=>{ if(GEO) cerca(); };
+// digitare una citta esce dalla modalita 'vicino a me'
+document.getElementById('citta').oninput = ()=>{ GEO = null; };
 document.getElementById('form').onsubmit = e=>{ e.preventDefault(); cerca(); };
 document.getElementById('close').onclick = ()=>document.getElementById('modal').classList.remove('open');
 document.getElementById('modal').onclick = e=>{ if(e.target.id==='modal') e.target.classList.remove('open'); };

@@ -1,4 +1,4 @@
-> 🔄 Aggiornato 2026-06-29 · **BookinVIP** · suite **1851 test** (0 regressioni) · moduli `faseNN`→160 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
+> 🔄 Aggiornato 2026-06-29 · **BookinVIP** · suite **1875 test** (0 regressioni) · moduli `faseNN`→162 · infra VPS Aruba 89.46.65.6 ATTIVO · fonte di verità: **STATO_FINALE.md**
 
 # BookinVIP — Guida primo deploy (passo-passo)
 

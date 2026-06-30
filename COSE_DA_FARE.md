@@ -1,6 +1,6 @@
 # ✅ COSE DA FARE — BookinVIP (così non dimentico)
 
-> Aggiornato 2026-06-29 · suite 1851 test (0 errori) · stato reale: `STATO_FINALE.md`. Spunta man mano.
+> Aggiornato 2026-06-29 · suite 1875 test (0 errori) · stato reale: `STATO_FINALE.md`. Spunta man mano.
 
 ## ✅ CHIUSI ORA (buchi logici di integrità)
 - [x] **Hold prima del pagamento** (`fase162`): con Stripe il book va `in_attesa_pagamento`, il
@@ -33,7 +33,10 @@ Pattern: endpoint `fase83` + handler + pannello + test.
 - [ ] **contratto_pdf (fase145)** scaricabile.
 - [ ] **checkin_digitale (fase127)** (pre-registrazione ospiti + documenti).
 - [ ] **KYC host (fase143)** + onboarding wizard (fase141).
-- [ ] calendario_prezzi (119), geo_ricerca (121), wishlist (117), fedeltà (137), chatbot (139), web_push (123), traduzione annunci/recensioni (107/129), dashboard metriche (115), split a quote uguali (133).
+- [x] ~~geo_ricerca (121)~~ ✅ FATTO: **"Vicino a me"** in vetrina — il cliente condivide la
+  posizione (browser) → il CORE calcola bbox + distanza haversine reale (`fase121`), filtra al
+  raggio e ordina per vicinanza (card con "a X km"). Coord fuori Terra → ricerca normale. Test 4.
+- [ ] calendario_prezzi (119), wishlist (117), fedeltà (137), chatbot (139), web_push (123), traduzione annunci/recensioni (107/129), dashboard metriche (115), split a quote uguali (133).
 
 ## 🟡 3. STRATEGIA TRUST da completare (abbiamo i pezzi)
 - [ ] **Migrazione 1-clic dai colossi** in onboarding (iCal `fase82/135` reso prominente).
@@ -48,4 +51,4 @@ Pattern: endpoint `fase83` + handler + pannello + test.
 - [ ] Lanciare outreach: `python outreach_runner.py --paese US --limit 50` (anteprima) → `--invia`.
 
 ## ✔️ GIÀ FATTO (per memoria)
-0% ospite · commissione 5%/15% per-fonte · cancellazione modello Booking + Anti-Rimpianto · **escrow di garanzia** (auto-rilascio schedulato) · avvisi host email/WhatsApp/LINE/WeChat · Credito Fondatore (cold-start) · outreach legale 27 paesi (DB giurisdizioni) · cancella-tutto+verifica (oblio) · home con logo · fix lingua (sw.js rete-prima) · 1851 test verdi.
+0% ospite · commissione 5%/15% per-fonte · cancellazione modello Booking + Anti-Rimpianto · **escrow di garanzia** (auto-rilascio schedulato) · avvisi host email/WhatsApp/LINE/WeChat · Credito Fondatore (cold-start) · outreach legale 27 paesi (DB giurisdizioni) · cancella-tutto+verifica (oblio) · home con logo · fix lingua (sw.js rete-prima) · 1875 test verdi.

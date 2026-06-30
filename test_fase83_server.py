@@ -100,6 +100,64 @@ class TestCatalogo(unittest.TestCase):
         self.assertEqual(s, 404)
 
 
+def _popola_geo(sys):
+    """3 alloggi a Roma: uno vicino (~0.7km), uno lontano (~33km), uno senza coordinate."""
+    from fase57_vetrina import SchedaAlloggio
+    sys.catalogo.pubblica(SchedaAlloggio(host_id="h", slug="vicino", titolo="Vicino",
+        citta="Roma", prezzo_notte_cents=10000, capacita=2,
+        lat_micro=41905000, lon_micro=12505000))
+    sys.catalogo.pubblica(SchedaAlloggio(host_id="h", slug="lontano", titolo="Lontano",
+        citta="Roma", prezzo_notte_cents=10000, capacita=2,
+        lat_micro=42200000, lon_micro=12500000))
+    sys.catalogo.pubblica(SchedaAlloggio(host_id="h", slug="senzageo", titolo="SenzaGeo",
+        citta="Roma", prezzo_notte_cents=10000, capacita=2))
+
+
+class TestGeoVicino(unittest.TestCase):
+    """'Vicino a me': centro ~Piazza (41.90, 12.50), ordina per distanza, taglia al raggio."""
+    def setUp(self):
+        self.sys = _sistema()
+        _popola_geo(self.sys)
+        self.r = crea_router(self.sys)
+
+    def _q(self, **kw):
+        base = {"lat_micro": "41900000", "lon_micro": "12500000"}
+        base.update({k: str(v) for k, v in kw.items()})
+        return self.r.gestisci("GET", "/api/catalogo", base)
+
+    def test_vicino_entro_raggio(self):
+        s, c = self._q(raggio_km="5")
+        self.assertEqual(s, 200)
+        self.assertEqual(c["ordine"], "vicinanza")
+        self.assertEqual([x["slug"] for x in c["risultati"]], ["vicino"])
+        self.assertGreater(c["risultati"][0]["distanza_m"], 0)
+
+    def test_raggio_ampio_ordina_per_distanza(self):
+        s, c = self._q(raggio_km="60")
+        slugs = [x["slug"] for x in c["risultati"]]
+        self.assertEqual(slugs[0], "vicino")             # il piu' vicino in cima
+        self.assertIn("lontano", slugs)
+        self.assertNotIn("senzageo", slugs)              # senza coordinate -> escluso
+        d = [x["distanza_m"] for x in c["risultati"]]
+        self.assertEqual(d, sorted(d))                   # distanze crescenti
+        self.assertEqual(c["totale"], 2)
+
+    def test_senza_geo_ricerca_normale(self):
+        s, c = self.r.gestisci("GET", "/api/catalogo", {"citta": "Roma"})
+        self.assertEqual(c["totale"], 3)
+        self.assertNotIn("ordine", c)
+        for x in c["risultati"]:
+            self.assertNotIn("distanza_m", x)
+
+    def test_coord_invalide_ignorate(self):
+        s, c = self.r.gestisci("GET", "/api/catalogo",
+                               {"lat_micro": "999999999", "lon_micro": "12500000"})
+        self.assertEqual(s, 200)
+        self.assertEqual(c["totale"], 3)                 # geo fuori Terra -> ricerca normale
+        for x in c["risultati"]:
+            self.assertNotIn("distanza_m", x)
+
+
 class TestConcierge(unittest.TestCase):
     def setUp(self):
         self.sys = _sistema()
