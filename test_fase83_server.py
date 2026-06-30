@@ -184,6 +184,24 @@ class TestPayout(unittest.TestCase):
         self.assertEqual(s, 422)
 
 
+class TestSplitPreview(unittest.TestCase):
+    """Dividi tra amici (fase133): quote uguali a conservazione esatta."""
+    def setUp(self):
+        self.r = crea_router(_sistema())
+
+    def test_split_conservazione(self):
+        s, c = self.r.gestisci("POST", "/api/split/preview",
+                               body=json.dumps({"totale_cents": 10000, "n": 3}))
+        self.assertEqual(s, 200)
+        self.assertEqual(sum(c["quote"]), 10000)        # conservazione esatta
+        self.assertEqual(c["quote"], [3334, 3333, 3333])
+
+    def test_split_invalido(self):
+        s, c = self.r.gestisci("POST", "/api/split/preview",
+                               body=json.dumps({"totale_cents": 100, "n": 0}))
+        self.assertEqual(s, 400)
+
+
 class TestConcierge(unittest.TestCase):
     def setUp(self):
         self.sys = _sistema()

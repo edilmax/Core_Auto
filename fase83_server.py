@@ -417,6 +417,8 @@ class RouterHTTP:
             return self._book(body)
         if metodo == "POST" and path == "/api/concierge/cancella":
             return self._cancella_prenotazione(body)
+        if metodo == "POST" and path == "/api/split/preview":
+            return self._split_preview(body)
         if metodo == "POST" and path == "/api/garanzia/conferma":
             return self._garanzia_conferma(body)
         if metodo == "POST" and path == "/api/garanzia/contesta":
@@ -1179,6 +1181,20 @@ class RouterHTTP:
         if rie:
             d["recensioni"] = rie
         return 200, d
+
+    def _split_preview(self, body):
+        """Dividi un totale fra N amici in quote UGUALI a conservazione esatta (fase133).
+        Puro/read-only: nessun denaro mosso, solo anteprima."""
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        from fase133_split_quote_uguali import riparti_uguale
+        quote = riparti_uguale(dati.get("totale_cents"), dati.get("n"))
+        if not quote:
+            return 400, {"errore": "parametri_non_validi"}
+        return 200, {"quote": quote, "n": len(quote), "totale_cents": sum(quote),
+                     "per_persona_min_cents": min(quote),
+                     "per_persona_max_cents": max(quote), "money_unit": "cents_integer"}
 
     def _concierge(self, fn, body):
         dati = self._json(body)
