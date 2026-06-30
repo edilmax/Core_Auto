@@ -26,7 +26,10 @@ Pattern: endpoint `fase83` + handler + pannello + test.
 - [x] ~~**`confronto_guest` (fase125)** in vetrina~~ ✅ FATTO: il preventivo mostra "Su un OTA pagheresti
   ~€X · risparmi €Y" (badge verde). Server `_concierge_quote` arricchisce la quote (isolato/fail-safe),
   base = soggiorno pulito, DCC se valuta ospite diversa. Test nel quote.
-- [ ] **payout dashboard (fase131)** nel pannello host (incassi/payout per valuta).
+- [x] ~~**payout dashboard (fase131)**~~ ✅ FATTO: card "💰 I tuoi incassi" nel pannello host
+  (`GET /api/host/payout`), riepilogo per valuta/stato (maturato/in-transito/pagato/trattenuto).
+  Il book registra il `netto_host` come 'maturato'; la cancellazione lo porta a 'trattenuto'.
+  Cablato in `fase81` (`db_payout`). Payout vero gated (Stripe Connect). Test 2.
 - [ ] **alloggiati_web (fase151)** — invio schedine Questura (obbligo host IT).
 - [x] ~~tassa di soggiorno nel checkout~~ ✅ FATTO: l'host dichiara la regola della sua città
   sull'annuncio, il preventivo la calcola PRECISA e la mostra separata + totale PRIMA dell'acquisto

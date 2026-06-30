@@ -73,6 +73,7 @@ class ConfigCasaVIP:
     db_garanzia: str = ":memory:"      # escrow di garanzia (soldi all'host solo se conforme)
     db_pendenti: str = ":memory:"      # pagamenti in attesa (hold prima del pagamento)
     db_tassa_comunale: str = ":memory:"  # ledger riscossioni tassa di soggiorno (rendicontazione)
+    db_payout: str = ":memory:"        # dashboard payout host (incassi attesi per valuta/stato)
     file_referral: str = ""            # path JSON referral host-porta-host (vuoto = in RAM)
     con_sentinel: bool = False
     cartella_sentinel: Optional[str] = None
@@ -112,6 +113,7 @@ class SistemaCasaVIP:
     garanzia: Any = None
     pagamenti_pendenti: Any = None
     tassa_comunale: Any = None
+    payout: Any = None
 
     @property
     def attivo(self) -> bool:
@@ -259,6 +261,11 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     tassa_comunale.inizializza_schema()
     componenti.append("ledger_tassa(147)")
 
+    from fase131_payout_dashboard import crea_payout_dashboard
+    payout = crea_payout_dashboard(cfg.db_payout)
+    payout.inizializza_schema()
+    componenti.append("payout_dashboard(131)")
+
     # 3f-ter) referral host-porta-host (codice firmato + bonus crediti non-cashabili)
     from fase109_referral_host import crea_referral_host
     referral = crea_referral_host(bytes(cfg.segreto_hmac), cfg.file_referral)
@@ -360,4 +367,5 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           messaggistica=messaggistica, referral=referral,
                           notificatore_prenotazione=notificatore_prenotazione,
                           domanda=domanda, garanzia=garanzia,
-                          pagamenti_pendenti=pagamenti_pendenti, tassa_comunale=tassa_comunale)
+                          pagamenti_pendenti=pagamenti_pendenti, tassa_comunale=tassa_comunale,
+                          payout=payout)

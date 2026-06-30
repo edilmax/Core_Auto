@@ -469,6 +469,8 @@ class RouterHTTP:
             return self._host_link_diretto(query, headers)
         if metodo == "GET" and path == "/api/host/richieste":
             return self._host_richieste(query, headers)
+        if metodo == "GET" and path == "/api/host/payout":
+            return self._host_payout(query, headers)
         if metodo == "POST" and path == "/api/host/richieste/approva":
             return self._host_richiesta_decisione(body, headers, True)
         if metodo == "POST" and path == "/api/host/richieste/rifiuta":
@@ -803,6 +805,7 @@ class RouterHTTP:
                 logger.warning("invio email voucher fallito (ignorato)", exc_info=True)
         self._avvisa_host_prenotazione(allog, ref, ci, co, corpo.get("fonte", ""))
         self._apri_garanzia(ref, corpo.get("netto_host_cents", 0), allog, ci)
+        self._registra_payout(ref, allog, corpo)
         self._registra_hold(corpo, allog, ref, ci, co, dati.get("quote_token", ""))
         return corpo
 
@@ -915,6 +918,51 @@ class RouterHTTP:
         except Exception:
             logger.warning("apertura garanzia fallita (ignorata)", exc_info=True)
 
+    def _registra_payout(self, ref, allog, corpo):
+        """Registra l'incasso ATTESO dell'host (stato 'maturato') nella dashboard payout
+        (fase131), per valuta. Solo tracciamento per l'host; il payout vero e' gated (Stripe
+        Connect). Isolato/fail-safe: se salta, la prenotazione resta intatta."""
+        try:
+            pd = getattr(self._sys, "payout", None)
+            if pd is None or not (isinstance(ref, str) and ref):
+                return
+            netto = corpo.get("netto_host_cents", 0)
+            if not isinstance(netto, int) or isinstance(netto, bool) or netto <= 0:
+                return
+            host = ""
+            try:
+                host = self._sys.catalogo.host_di_alloggio(allog) or ""
+            except Exception:
+                host = ""
+            if not host:
+                return
+            valuta = corpo.get("valuta", "EUR")
+            pd.registra_maturato(ref, host, netto, valuta if isinstance(valuta, str) else "EUR")
+        except Exception:
+            logger.warning("registra payout fallito (ignorato)", exc_info=True)
+
+    def _payout_trattieni(self, rif):
+        """Prenotazione cancellata -> il payout atteso passa a 'trattenuto' (l'host non vede piu'
+        un incasso che non arrivera'). Isolato."""
+        try:
+            pd = getattr(self._sys, "payout", None)
+            if pd is not None and isinstance(rif, str) and rif:
+                pd.aggiorna_stato(rif, "trattenuto")
+        except Exception:
+            logger.warning("payout trattieni fallito (ignorato)", exc_info=True)
+
+    def _host_payout(self, query, headers):
+        """Dashboard payout dell'host: incassi attesi/in-transito/pagati PER VALUTA (fase131)."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        pd = getattr(self._sys, "payout", None)
+        if pd is None:
+            return 200, {"payout": {}}
+        host_id = self._host_id_da_token(headers) or query.get("host_id")
+        if not (isinstance(host_id, str) and host_id):
+            return 422, {"errore": "host_id_mancante"}
+        return 200, {"payout": pd.riepilogo(host_id)}
+
     def _garanzia_da_voucher(self, body):
         dati = self._json(body)
         if dati is None:
@@ -1000,6 +1048,7 @@ class RouterHTTP:
             return 503, {"errore": "service_unavailable"}
         if not getattr(e, "ok", False):
             return 409, {"stato": "rifiutato", "motivo": getattr(e, "motivo", "")}
+        self._payout_trattieni(rif)            # cancellata -> niente payout all'host
         # CREDITO VIAGGIO ANTI-RIMPIANTO: se hai perso qualcosa, una parte torna come credito
         # (non-cashabile, riscattabile su una prossima prenotazione; ci costa solo margine futuro).
         # la tassa di soggiorno (pass-through) si rimborsa SEMPRE per intero: niente soggiorno = niente tassa

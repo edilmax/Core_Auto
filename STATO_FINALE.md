@@ -8,7 +8,14 @@
 > **CODICE CHIUSO + DEPLOY HTTPS PRONTO + ACQUISIZIONE OPERATIVA + ARCHITETTURA FINANZIARIA.** Resta
 > solo il "DA FARE TU": VPS + DNS + chiavi .env + numeri fiscali col commercialista + deploy.
 
-## 🆕 NOVITÀ 2026-06-30 (integrità denaro + su-richiesta + geo)
+## 🆕 NOVITÀ 2026-06-30 (integrità denaro + su-richiesta + geo + payout)
+- **PAYOUT DASHBOARD HOST** (`fase131` cablato in `fase81`/`fase83` + `host.html`): card "💰 I tuoi
+  incassi" (`GET /api/host/payout`), riepilogo PER VALUTA e stato (maturato/in-transito/pagato/
+  trattenuto). Il book registra il `netto_host` come 'maturato'; la cancellazione → 'trattenuto'
+  (l'host non vede incassi che non arriveranno). Solo tracciamento: il payout vero è gated (Stripe
+  Connect `fase101`). Isolato/fail-safe. Test 2.
+- **CONFRONTO OTA nel preventivo** (`fase125` cablato): la quote mostra "su un OTA pagheresti ~€X ·
+  risparmi €Y" (markup+fee+DCC OTA vs nostro 0% ospite). Solo display, fail-safe. Test 1.
 - **PRENOTAZIONE SU RICHIESTA** (`fase162` + `fase83`): l'host sceglie per alloggio
   `immediata` | `su_richiesta` (`fase57.modalita_prenotazione`). Su richiesta il book → `in_attesa_host`
   (stanza TENUTA, NIENTE voucher/escrow/pagamento/email finché l'host non approva); l'host vede le

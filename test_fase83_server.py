@@ -158,6 +158,32 @@ class TestGeoVicino(unittest.TestCase):
             self.assertNotIn("distanza_m", x)
 
 
+class TestPayout(unittest.TestCase):
+    """Dashboard payout host (fase131 cablato): un book registra il maturato per l'host."""
+    def setUp(self):
+        self.sys = _sistema()
+        _popola(self.sys)
+        self.r = crea_router(self.sys)
+
+    def _book(self):
+        s, c = self.r.gestisci("POST", "/api/concierge/quote", body=json.dumps(
+            {"alloggio_id": "casa", "check_in": "2026-09-01", "check_out": "2026-09-02"}))
+        s2, c2 = self.r.gestisci("POST", "/api/concierge/book", body=json.dumps(
+            {"quote_token": c["quote_token"], "email": "g@x.it"}))
+        self.assertEqual(s2, 201)
+
+    def test_payout_dopo_book(self):
+        self._book()
+        s, c = self.r.gestisci("GET", "/api/host/payout", {"host_id": "h"})
+        self.assertEqual(s, 200)
+        self.assertIn("EUR", c["payout"])
+        self.assertGreater(c["payout"]["EUR"].get("maturato", 0), 0)   # netto host atteso
+
+    def test_payout_host_id_mancante(self):
+        s, c = self.r.gestisci("GET", "/api/host/payout", {})
+        self.assertEqual(s, 422)
+
+
 class TestConcierge(unittest.TestCase):
     def setUp(self):
         self.sys = _sistema()
