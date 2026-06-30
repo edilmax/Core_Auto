@@ -174,6 +174,16 @@ class TestConcierge(unittest.TestCase):
         self.assertEqual(s2, 201)
         self.assertEqual(c2["stato"], "confermata")
 
+    def test_quote_confronto_ota(self):
+        s, c = self.r.gestisci("POST", "/api/concierge/quote", body=json.dumps(
+            {"alloggio_id": "casa", "check_in": "2026-09-01", "check_out": "2026-09-02"}))
+        self.assertEqual(s, 200)
+        co = c.get("confronto_ota")
+        self.assertIsNotNone(co)                                  # confronto presente
+        self.assertEqual(co["nostro_totale_cents"], c["prezzo_guest_cents"])
+        self.assertGreater(co["ota_totale_cents"], co["nostro_totale_cents"])
+        self.assertGreater(co["risparmio_guest_cents"], 0)
+
     def test_json_invalido(self):
         s, c = self.r.gestisci("POST", "/api/concierge/quote", body="{rotto")
         self.assertEqual(s, 400)

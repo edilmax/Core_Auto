@@ -412,7 +412,7 @@ class RouterHTTP:
         if metodo == "GET" and path.startswith("/api/catalogo/"):
             return self._dettaglio(path[len("/api/catalogo/"):], _lingua(query))
         if metodo == "POST" and path == "/api/concierge/quote":
-            return self._concierge(self._sys.concierge.quota, body)
+            return self._concierge_quote(body)
         if metodo == "POST" and path == "/api/concierge/book":
             return self._book(body)
         if metodo == "POST" and path == "/api/concierge/cancella":
@@ -1137,6 +1137,29 @@ class RouterHTTP:
             return 400, {"errore": "json_non_valido"}
         r = fn(dati)
         return int(getattr(r, "status", 200)), getattr(r, "corpo", {}) or {}
+
+    def _concierge_quote(self, body):
+        """Preventivo firmato (fase59) + CONFRONTO OTA lato ospite (fase125): a parita' di
+        soggiorno, quanto pagherebbe su un OTA (markup host + guest fee + DCC). Voce 'risparmio'
+        per piu' conversioni. Isolato e fail-safe: se salta, la quote resta intatta."""
+        status, corpo = self._concierge(self._sys.concierge.quota, body)
+        if status == 200 and isinstance(corpo, dict):
+            try:
+                from fase125_confronto_guest import confronta_guest
+                base = corpo.get("prezzo_guest_cents")
+                if isinstance(base, int) and not isinstance(base, bool) and base > 0:
+                    valuta = corpo.get("valuta", "EUR")
+                    vi = corpo.get("valuta_indicativa") or ""
+                    c = confronta_guest(base, valuta_diversa=bool(vi and vi != valuta))
+                    if c.get("risparmio_guest_cents", 0) > 0:
+                        corpo["confronto_ota"] = {
+                            "ota_totale_cents": c["ota_totale_cents"],
+                            "nostro_totale_cents": c["nostro_totale_cents"],
+                            "risparmio_guest_cents": c["risparmio_guest_cents"],
+                            "risparmio_bps": c["risparmio_bps"]}
+            except Exception:
+                logger.warning("confronto OTA quote fallito (ignorato)", exc_info=True)
+        return status, corpo
 
     def _marketing_campagna(self, body, headers):
         """Genera + pubblica una campagna sui canali configurati (gated da env).

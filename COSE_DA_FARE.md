@@ -23,7 +23,9 @@
 
 ## 🟠 2. DA CABLARE (codice già pronto + testato, manca solo l'aggancio alla UI/endpoint)
 Pattern: endpoint `fase83` + handler + pannello + test.
-- [ ] **`confronto_guest` (fase125)** in vetrina → "risparmi €X vs Booking" (più conversioni). ⭐ consigliato primo.
+- [x] ~~**`confronto_guest` (fase125)** in vetrina~~ ✅ FATTO: il preventivo mostra "Su un OTA pagheresti
+  ~€X · risparmi €Y" (badge verde). Server `_concierge_quote` arricchisce la quote (isolato/fail-safe),
+  base = soggiorno pulito, DCC se valuta ospite diversa. Test nel quote.
 - [ ] **payout dashboard (fase131)** nel pannello host (incassi/payout per valuta).
 - [ ] **alloggiati_web (fase151)** — invio schedine Questura (obbligo host IT).
 - [x] ~~tassa di soggiorno nel checkout~~ ✅ FATTO: l'host dichiara la regola della sua città

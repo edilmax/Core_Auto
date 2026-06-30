@@ -269,6 +269,8 @@ async function apri(slug){
       if(q.tassa_soggiorno_cents>0) righe += `<div class="riga-prezzo"><span>${t('tassa')}</span><span>${eur(q.tassa_soggiorno_cents)}</span></div>`;
       righe += `<div class="riga-prezzo tot"><span>Totale</span><span>${eur(q.totale_cents||q.prezzo_guest_cents)} ${q.valuta||''}</span></div>`;
       if(q.totale_indicativo_cents>0 && q.valuta_indicativa) righe += `<div style="font-size:.78rem;color:#5e6f8d;margin-top:.2rem">≈ ${(q.totale_indicativo_cents/100).toFixed(2)} ${q.valuta_indicativa} (indicativo · la tua banca applica il suo cambio)</div>`;
+      if(q.confronto_ota && q.confronto_ota.risparmio_guest_cents>0){ const co=q.confronto_ota;
+        righe += `<div style="margin-top:.5rem;padding:.5rem .7rem;background:#eafaf0;border-radius:.6rem;font-size:.85rem;color:#155724">Su un OTA pagheresti ~<b>${eur(co.ota_totale_cents)}</b> · <b>risparmi ${eur(co.risparmio_guest_cents)}</b> (-${(co.risparmio_bps/100).toFixed(0)}%)</div>`; }
       mq.innerHTML = righe;
       document.getElementById('btnPrenota').style.display='';
     } else { QUOTE=null; mq.innerHTML=`<div class="msg err">${t('non_disp')}</div>`; document.getElementById('btnPrenota').style.display='none'; }
