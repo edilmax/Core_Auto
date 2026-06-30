@@ -56,6 +56,9 @@ ENDPOINT = [
     ("voucher", "POST", "/api/garanzia/contesta", {}),
     ("admin", "GET", "/api/garanzia/stato", AK),
     ("host", "GET", "/api/host/link_diretto", HK),
+    ("host", "GET", "/api/host/richieste", HK),
+    ("host", "POST", "/api/host/richieste/approva", HK),
+    ("host", "POST", "/api/host/richieste/rifiuta", HK),
 ]
 
 

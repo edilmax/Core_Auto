@@ -467,6 +467,12 @@ class RouterHTTP:
             return self._host_referral(query, headers)
         if metodo == "GET" and path == "/api/host/link_diretto":
             return self._host_link_diretto(query, headers)
+        if metodo == "GET" and path == "/api/host/richieste":
+            return self._host_richieste(query, headers)
+        if metodo == "POST" and path == "/api/host/richieste/approva":
+            return self._host_richiesta_decisione(body, headers, True)
+        if metodo == "POST" and path == "/api/host/richieste/rifiuta":
+            return self._host_richiesta_decisione(body, headers, False)
         if metodo == "POST" and path == "/api/host/ical":
             return self._host_ical(body, headers)
         if metodo == "GET" and path == "/api/host/metriche":
@@ -663,65 +669,148 @@ class RouterHTTP:
         status = int(getattr(r, "status", 200))
         corpo = dict(getattr(r, "corpo", {}) or {})
         if status == 201:
-            ref = corpo.get("riferimento", "")
             allog = corpo.get("alloggio_id", "")
-            ci, co = corpo.get("check_in", ""), corpo.get("check_out", "")
-            # smart-pass per il self check-in (incluso nel voucher)
-            pass_token = None
-            if self._sys.emettitore_pass is not None:
-                try:
-                    pass_token = self._sys.emettitore_pass.emetti(ref, allog, ci, co)
-                    corpo["smart_pass"] = pass_token
-                except Exception:
-                    logger.warning("emissione smart-pass fallita (ignorata)",
-                                   exc_info=True)
-            # voucher firmato (conferma + entry pass)
-            if getattr(self._sys, "firma", None) is not None:
-                try:
-                    qt = dati.get("quote_token", "")
-                    corpo["voucher_token"] = self._sys.firma.codifica({
-                        "tipo": "voucher", "riferimento": ref, "alloggio_id": allog,
-                        "check_in": ci, "check_out": co,
-                        "prezzo_guest_cents": corpo.get("prezzo_guest_cents", 0),
-                        "valuta": corpo.get("valuta", "EUR"),
-                        "smart_pass": pass_token or "",
-                        "tassa_soggiorno_cents": corpo.get("tassa_soggiorno_cents", 0),
-                        # politica di cancellazione dell'host BLOCCATA al booking (anti-furbata)
-                        "politica": self._politica_alloggio(allog),
-                        # idem_key del blocco: serve alla cancellazione self-service per liberare
-                        "idem_key": (qt.split(".")[-1] if isinstance(qt, str) and qt else "")})
-                except Exception:
-                    logger.warning("emissione voucher fallita (ignorata)", exc_info=True)
-            # diritto di recensione
-            if self._sys.emettitore_recensioni is not None:
-                try:
-                    corpo["diritto_recensione"] = self._sys.emettitore_recensioni.emetti(
-                        ref, allog)
-                except Exception:
-                    logger.warning("emissione diritto recensione fallita (ignorata)",
-                                   exc_info=True)
-            # email del voucher all'ospite (best-effort, isolata)
-            email = dati.get("email")
-            if getattr(self._sys, "email_provider", None) is not None \
-                    and isinstance(email, str) and "@" in email:
-                try:
-                    from fase86_email import corpo_voucher_html
-                    vurl = (self._base_url + "/voucher/" + corpo["voucher_token"]) \
-                        if corpo.get("voucher_token") else ""
-                    html = corpo_voucher_html(allog, ref, ci, co, vurl)
-                    self._sys.email_provider.invia(
-                        email, "BookinVIP - Prenotazione confermata", html)
-                except Exception:
-                    logger.warning("invio email voucher fallito (ignorato)",
-                                   exc_info=True)
-            # avviso all'HOST su piu' canali (email sempre, WhatsApp se configurato) - ISOLATO
-            self._avvisa_host_prenotazione(allog, ref, ci, co, corpo.get("fonte", ""))
-            # ESCROW DI GARANZIA: i fondi dell'host restano bloccati fino alla conferma ospite
-            self._apri_garanzia(ref, corpo.get("netto_host_cents", 0), allog, ci)
-            # HOLD: se serve pagare, la prenotazione e' IN ATTESA (lo sweeper libera i non pagati);
-            # senza Stripe (nessun payment_url) resta confermata subito, come oggi.
-            self._registra_hold(corpo, allog, ref, ci, co, dati.get("quote_token", ""))
+            if self._modalita_alloggio(allog) == "su_richiesta":
+                # SU RICHIESTA: la stanza e' tenuta, l'host deve APPROVARE. Niente voucher/
+                # escrow/pagamento/email finche' non approva -> cliente e host rispettati.
+                self._registra_richiesta(corpo, dati)
+                corpo["stato"] = "in_attesa_host"
+                corpo.pop("payment_url", None)
+                return status, corpo
+            corpo = self._finalizza_prenotazione(corpo, dati)
         return status, corpo
+
+    def _modalita_alloggio(self, slug):
+        try:
+            m = self._sys.catalogo.modalita_prenotazione_di(slug)
+            return m if m in ("immediata", "su_richiesta") else "immediata"
+        except Exception:
+            return "immediata"
+
+    def _finalizza_prenotazione(self, corpo, dati):
+        """Emette voucher/smart-pass/diritto, apre l'escrow, avvisa l'host, gestisce l'hold
+        pagamento. Usato dall'instant-book E dopo l'approvazione su-richiesta. Idempotente
+        sui token (rigenera dagli stessi dati)."""
+        ref = corpo.get("riferimento", "")
+        allog = corpo.get("alloggio_id", "")
+        ci, co = corpo.get("check_in", ""), corpo.get("check_out", "")
+        pass_token = None
+        if self._sys.emettitore_pass is not None:
+            try:
+                pass_token = self._sys.emettitore_pass.emetti(ref, allog, ci, co)
+                corpo["smart_pass"] = pass_token
+            except Exception:
+                logger.warning("emissione smart-pass fallita (ignorata)", exc_info=True)
+        if getattr(self._sys, "firma", None) is not None:
+            try:
+                qt = dati.get("quote_token", "")
+                corpo["voucher_token"] = self._sys.firma.codifica({
+                    "tipo": "voucher", "riferimento": ref, "alloggio_id": allog,
+                    "check_in": ci, "check_out": co,
+                    "prezzo_guest_cents": corpo.get("prezzo_guest_cents", 0),
+                    "valuta": corpo.get("valuta", "EUR"),
+                    "smart_pass": pass_token or "",
+                    "tassa_soggiorno_cents": corpo.get("tassa_soggiorno_cents", 0),
+                    "politica": self._politica_alloggio(allog),
+                    "idem_key": (qt.split(".")[-1] if isinstance(qt, str) and qt else "")})
+            except Exception:
+                logger.warning("emissione voucher fallita (ignorata)", exc_info=True)
+        if self._sys.emettitore_recensioni is not None:
+            try:
+                corpo["diritto_recensione"] = self._sys.emettitore_recensioni.emetti(ref, allog)
+            except Exception:
+                logger.warning("emissione diritto recensione fallita (ignorata)", exc_info=True)
+        email = dati.get("email")
+        if getattr(self._sys, "email_provider", None) is not None \
+                and isinstance(email, str) and "@" in email:
+            try:
+                from fase86_email import corpo_voucher_html
+                vurl = (self._base_url + "/voucher/" + corpo["voucher_token"]) \
+                    if corpo.get("voucher_token") else ""
+                html = corpo_voucher_html(allog, ref, ci, co, vurl)
+                self._sys.email_provider.invia(
+                    email, "BookinVIP - Prenotazione confermata", html)
+            except Exception:
+                logger.warning("invio email voucher fallito (ignorato)", exc_info=True)
+        self._avvisa_host_prenotazione(allog, ref, ci, co, corpo.get("fonte", ""))
+        self._apri_garanzia(ref, corpo.get("netto_host_cents", 0), allog, ci)
+        self._registra_hold(corpo, allog, ref, ci, co, dati.get("quote_token", ""))
+        return corpo
+
+    def _registra_richiesta(self, corpo, dati):
+        """Su-richiesta: registra la prenotazione 'in_attesa_host' (stanza tenuta) col corpo
+        completo, cosi' l'approvazione puo' finalizzarla. Best-effort isolato."""
+        try:
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            if pp is None:
+                return
+            import json as _j
+            import time as _t
+            allog = corpo.get("alloggio_id", "")
+            ref = corpo.get("riferimento", "")
+            host, comune = "", ""
+            try:
+                host = self._sys.catalogo.host_di_alloggio(allog) or ""
+                d = self._sys.catalogo.dettaglio(allog)
+                comune = d.get("citta", "") if isinstance(d, dict) else ""
+            except Exception:
+                pass
+            qt = dati.get("quote_token", "")
+            idem = qt.split(".")[-1] if isinstance(qt, str) and qt else ""
+            pp.registra(ref, alloggio_id=allog, check_in=corpo.get("check_in", ""),
+                        check_out=corpo.get("check_out", ""), idem_key=idem,
+                        tassa_cents=corpo.get("tassa_soggiorno_cents", 0), comune=comune,
+                        host_id=host, email=str(dati.get("email", "")), quote_token=qt,
+                        corpo_json=_j.dumps(corpo), stato="in_attesa_host",
+                        scadenza_ts=int(_t.time()) + 86400)   # 24h per approvare
+        except Exception:
+            logger.warning("registra richiesta su-richiesta fallita (ignorata)", exc_info=True)
+
+    def _host_richieste(self, query, headers):
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        if pp is None:
+            return 200, {"richieste": []}
+        host_id = self._host_id_da_token(headers) or query.get("host_id")
+        if not (isinstance(host_id, str) and host_id):
+            return 422, {"errore": "host_id_mancante"}
+        return 200, {"richieste": pp.da_approvare(host_id)}
+
+    def _host_richiesta_decisione(self, body, headers, approva):
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        if pp is None:
+            return 503, {"errore": "richieste_non_attive"}
+        ref = dati.get("riferimento")
+        rec = pp.info(ref) if isinstance(ref, str) else None
+        if rec is None or rec.get("stato") != "in_attesa_host":
+            return 404, {"errore": "richiesta_non_trovata"}
+        host_id = self._host_id_da_token(headers) or dati.get("host_id")
+        if rec.get("host_id") and host_id and rec["host_id"] != host_id:
+            return 403, {"errore": "non_tua"}
+        import json as _j
+        if approva:
+            pp.rimuovi(ref)                       # tolgo la richiesta, poi finalizzo
+            try:
+                corpo = _j.loads(rec.get("corpo_json") or "{}")
+            except Exception:
+                corpo = {}
+            corpo["stato"] = "confermata"
+            corpo = self._finalizza_prenotazione(
+                corpo, {"email": rec.get("email", ""), "quote_token": rec.get("quote_token", "")})
+            return 200, {"stato": "approvata", "riferimento": ref, "prenotazione": corpo}
+        try:                                       # rifiuto: libero la stanza, zero addebito
+            self._sys.inventario.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"],
+                                          idem_key=rec.get("idem_key") or ("hold_" + str(ref)))
+        except Exception:
+            logger.warning("rilascio su rifiuto richiesta fallito (ignorato)", exc_info=True)
+        pp.rimuovi(ref)
+        return 200, {"stato": "rifiutata", "riferimento": ref}
 
     def _registra_hold(self, corpo, allog, ref, ci, co, qt):
         if not corpo.get("payment_url"):

@@ -124,10 +124,12 @@ class SchedaAlloggio:
     tassa_pp_notte_cents: int = 0      # tassa di soggiorno per persona/notte (l'host la dichiara)
     tassa_max_notti: int = 0           # notti massime tassabili (0 = nessun cap)
     tassa_perc_bps: int = 0            # % sul prezzo (alcune nazioni; alternativa al per-persona)
+    modalita_prenotazione: str = "immediata"   # immediata | su_richiesta (l'host sceglie)
 
 
 # Politiche di cancellazione che l'host puo' scegliere (coerenti con fase111).
 POLITICHE_CANCELLAZIONE = ("flessibile", "moderata", "rigida", "non_rimborsabile")
+MODALITA_PRENOTAZIONE = ("immediata", "su_richiesta")
 
 
 @dataclass(frozen=True)
@@ -231,6 +233,9 @@ def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
     t_pp = _tax("tassa_pp_notte_cents", MAX_CENTS)
     t_max = _tax("tassa_max_notti", 366)
     t_perc = _tax("tassa_perc_bps", 10000)
+    modal = data.get("modalita_prenotazione", "immediata")
+    if not isinstance(modal, str) or modal not in MODALITA_PRENOTAZIONE:
+        modal = "immediata"
 
     return True, "", SchedaAlloggio(
         host_id=host_id, slug=slug, titolo=titolo, citta=citta,
@@ -239,7 +244,8 @@ def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
         camere=int(data.get("camere", 1)), bagni=int(data.get("bagni", 1)),
         servizi=servizi, valuta=valuta, stato=stato,
         lat_micro=lat, lon_micro=lon, politica_cancellazione=pol,
-        tassa_pp_notte_cents=t_pp, tassa_max_notti=t_max, tassa_perc_bps=t_perc)
+        tassa_pp_notte_cents=t_pp, tassa_max_notti=t_max, tassa_perc_bps=t_perc,
+        modalita_prenotazione=modal)
 
 
 def _valida_immagini(imgs: Any) -> List[Immagine]:
@@ -312,12 +318,14 @@ class CatalogoVetrina:
                         tassa_pp_notte_cents INTEGER NOT NULL DEFAULT 0,
                         tassa_max_notti INTEGER NOT NULL DEFAULT 0,
                         tassa_perc_bps INTEGER NOT NULL DEFAULT 0,
+                        modalita_prenotazione TEXT NOT NULL DEFAULT 'immediata',
                         creato_ts TEXT NOT NULL,
                         aggiornato_ts TEXT NOT NULL)""")
                 for _c, _d in (("politica_cancellazione", "TEXT NOT NULL DEFAULT 'flessibile'"),
                                ("tassa_pp_notte_cents", "INTEGER NOT NULL DEFAULT 0"),
                                ("tassa_max_notti", "INTEGER NOT NULL DEFAULT 0"),
-                               ("tassa_perc_bps", "INTEGER NOT NULL DEFAULT 0")):
+                               ("tassa_perc_bps", "INTEGER NOT NULL DEFAULT 0"),
+                               ("modalita_prenotazione", "TEXT NOT NULL DEFAULT 'immediata'")):
                     try:
                         con.execute("ALTER TABLE alloggi ADD COLUMN %s %s" % (_c, _d))
                     except sqlite3.OperationalError:
@@ -357,14 +365,14 @@ class CatalogoVetrina:
                     "paese, prezzo_notte_cents, capacita, camere, bagni, servizi_mask, "
                     "valuta, stato, lat_micro, lon_micro, politica_cancellazione, "
                     "tassa_pp_notte_cents, tassa_max_notti, tassa_perc_bps, "
-                    "creato_ts, aggiornato_ts) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "modalita_prenotazione, creato_ts, aggiornato_ts) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (scheda.host_id, scheda.slug, scheda.titolo, scheda.descrizione,
                      scheda.citta, scheda.paese, scheda.prezzo_notte_cents, scheda.capacita,
                      scheda.camere, scheda.bagni, mask, scheda.valuta, scheda.stato,
                      scheda.lat_micro, scheda.lon_micro, scheda.politica_cancellazione,
                      scheda.tassa_pp_notte_cents, scheda.tassa_max_notti, scheda.tassa_perc_bps,
-                     ora, ora))
+                     scheda.modalita_prenotazione, ora, ora))
                 alloggio_id = cur.lastrowid
             else:
                 alloggio_id = row["id"]
@@ -373,13 +381,13 @@ class CatalogoVetrina:
                     "paese=?, prezzo_notte_cents=?, capacita=?, camere=?, bagni=?, "
                     "servizi_mask=?, valuta=?, stato=?, lat_micro=?, lon_micro=?, "
                     "politica_cancellazione=?, tassa_pp_notte_cents=?, tassa_max_notti=?, "
-                    "tassa_perc_bps=?, aggiornato_ts=? WHERE id=?",
+                    "tassa_perc_bps=?, modalita_prenotazione=?, aggiornato_ts=? WHERE id=?",
                     (scheda.host_id, scheda.titolo, scheda.descrizione, scheda.citta,
                      scheda.paese, scheda.prezzo_notte_cents, scheda.capacita, scheda.camere,
                      scheda.bagni, mask, scheda.valuta, scheda.stato, scheda.lat_micro,
                      scheda.lon_micro, scheda.politica_cancellazione,
                      scheda.tassa_pp_notte_cents, scheda.tassa_max_notti, scheda.tassa_perc_bps,
-                     ora, alloggio_id))
+                     scheda.modalita_prenotazione, ora, alloggio_id))
             con.execute("DELETE FROM alloggio_immagini WHERE alloggio_id=?", (alloggio_id,))
             if imgs:
                 con.executemany(
@@ -410,6 +418,21 @@ class CatalogoVetrina:
             return cur.rowcount > 0
         finally:
             con.close()
+
+    def modalita_prenotazione_di(self, slug: Any) -> str:
+        """immediata (default) | su_richiesta — scelta dall'host per l'alloggio."""
+        if not (isinstance(slug, str) and slug):
+            return "immediata"
+        con = self._apri()
+        try:
+            r = con.execute("SELECT modalita_prenotazione FROM alloggi WHERE slug=?",
+                            (slug,)).fetchone()
+        finally:
+            con.close()
+        if r is None:
+            return "immediata"
+        m = r["modalita_prenotazione"] if "modalita_prenotazione" in r.keys() else None
+        return m if m in MODALITA_PRENOTAZIONE else "immediata"
 
     def regola_tassa_di(self, slug: Any) -> Any:
         """Regola di tassa di soggiorno dichiarata dall'host per l'alloggio (fase66.RegolaTassa).
@@ -617,6 +640,8 @@ class CatalogoVetrina:
                                      if "tassa_pp_notte_cents" in a.keys() else 0),
             "tassa_max_notti": int(a["tassa_max_notti"]) if "tassa_max_notti" in a.keys() else 0,
             "tassa_perc_bps": int(a["tassa_perc_bps"]) if "tassa_perc_bps" in a.keys() else 0,
+            "modalita_prenotazione": (a["modalita_prenotazione"]
+                                      if "modalita_prenotazione" in a.keys() else "immediata"),
             "lat_micro": a["lat_micro"],
             "lon_micro": a["lon_micro"],
             "immagini": [{"url": i["url"], "ordine": int(i["ordine"]), "alt": i["alt"]}

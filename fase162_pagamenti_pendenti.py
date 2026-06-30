@@ -58,19 +58,32 @@ class PagamentiPendenti:
                     alloggio_id TEXT NOT NULL, check_in TEXT NOT NULL, check_out TEXT NOT NULL,
                     idem_key TEXT NOT NULL DEFAULT '',
                     tassa_cents INTEGER NOT NULL DEFAULT 0, comune TEXT NOT NULL DEFAULT '',
+                    host_id TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '',
+                    quote_token TEXT NOT NULL DEFAULT '', corpo_json TEXT NOT NULL DEFAULT '',
                     scadenza_ts INTEGER NOT NULL, stato TEXT NOT NULL DEFAULT 'in_attesa',
                     creato_ts INTEGER NOT NULL)""")
+                for _c in ("host_id", "email", "quote_token", "corpo_json"):
+                    try:
+                        con.execute("ALTER TABLE pendenti ADD COLUMN %s TEXT NOT NULL DEFAULT ''" % _c)
+                    except sqlite3.OperationalError:
+                        pass
         finally:
             con.close()
 
     def _riga(self, r: sqlite3.Row) -> Dict[str, Any]:
+        k = r.keys()
+        g = lambda n, d="": (r[n] if n in k else d)
         return {"riferimento": r["riferimento"], "alloggio_id": r["alloggio_id"],
                 "check_in": r["check_in"], "check_out": r["check_out"],
                 "idem_key": r["idem_key"], "tassa_cents": int(r["tassa_cents"]),
-                "comune": r["comune"], "stato": r["stato"], "scadenza_ts": int(r["scadenza_ts"])}
+                "comune": r["comune"], "stato": r["stato"], "scadenza_ts": int(r["scadenza_ts"]),
+                "host_id": g("host_id"), "email": g("email"),
+                "quote_token": g("quote_token"), "corpo_json": g("corpo_json")}
 
     def registra(self, riferimento: Any, *, alloggio_id: str, check_in: str, check_out: str,
                  idem_key: str = "", tassa_cents: int = 0, comune: str = "",
+                 host_id: str = "", email: str = "", quote_token: str = "",
+                 corpo_json: str = "", stato: str = "in_attesa",
                  scadenza_ts: Optional[int] = None) -> bool:
         if not (isinstance(riferimento, str) and riferimento and alloggio_id):
             return False
@@ -79,17 +92,33 @@ class PagamentiPendenti:
             else now + HOLD_SECONDI_DEFAULT
         t = tassa_cents if isinstance(tassa_cents, int) and not isinstance(tassa_cents, bool) \
             and tassa_cents > 0 else 0
+        st = stato if stato in ("in_attesa", "in_attesa_host") else "in_attesa"
         con = self._apri()
         try:
             with con:
                 con.execute(
                     "INSERT INTO pendenti (riferimento, alloggio_id, check_in, check_out, "
-                    "idem_key, tassa_cents, comune, scadenza_ts, stato, creato_ts) "
-                    "VALUES (?,?,?,?,?,?,?,?, 'in_attesa', ?) "
+                    "idem_key, tassa_cents, comune, host_id, email, quote_token, corpo_json, "
+                    "scadenza_ts, stato, creato_ts) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                     "ON CONFLICT(riferimento) DO NOTHING",
                     (riferimento, alloggio_id, check_in, check_out, str(idem_key or ""),
-                     t, str(comune or ""), sca, now))
+                     t, str(comune or ""), str(host_id or ""), str(email or ""),
+                     str(quote_token or ""), str(corpo_json or ""), sca, st, now))
             return True
+        finally:
+            con.close()
+
+    def da_approvare(self, host_id: Any, *, limit: int = 100) -> List[Dict[str, Any]]:
+        """Richieste 'in_attesa_host' per il pannello dell'host."""
+        if not (isinstance(host_id, str) and host_id):
+            return []
+        lim = limit if isinstance(limit, int) and 0 < limit <= 500 else 100
+        con = self._apri()
+        try:
+            righe = con.execute("SELECT * FROM pendenti WHERE stato='in_attesa_host' AND "
+                                "host_id=? ORDER BY creato_ts LIMIT ?", (host_id, lim)).fetchall()
+            return [self._riga(r) for r in righe]
         finally:
             con.close()
 
@@ -114,8 +143,9 @@ class PagamentiPendenti:
         ora = ora_ts if isinstance(ora_ts, int) and not isinstance(ora_ts, bool) else self._now()
         con = self._apri()
         try:
-            righe = con.execute("SELECT * FROM pendenti WHERE stato='in_attesa' AND "
-                                "scadenza_ts<=?", (ora,)).fetchall()
+            righe = con.execute("SELECT * FROM pendenti WHERE stato IN "
+                                "('in_attesa','in_attesa_host') AND scadenza_ts<=?",
+                                (ora,)).fetchall()
             return [self._riga(r) for r in righe]
         finally:
             con.close()
