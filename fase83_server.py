@@ -685,6 +685,7 @@ class RouterHTTP:
                         "prezzo_guest_cents": corpo.get("prezzo_guest_cents", 0),
                         "valuta": corpo.get("valuta", "EUR"),
                         "smart_pass": pass_token or "",
+                        "tassa_soggiorno_cents": corpo.get("tassa_soggiorno_cents", 0),
                         # politica di cancellazione dell'host BLOCCATA al booking (anti-furbata)
                         "politica": self._politica_alloggio(allog),
                         # idem_key del blocco: serve alla cancellazione self-service per liberare
@@ -820,6 +821,10 @@ class RouterHTTP:
             return 409, {"stato": "rifiutato", "motivo": getattr(e, "motivo", "")}
         # CREDITO VIAGGIO ANTI-RIMPIANTO: se hai perso qualcosa, una parte torna come credito
         # (non-cashabile, riscattabile su una prossima prenotazione; ci costa solo margine futuro).
+        # la tassa di soggiorno (pass-through) si rimborsa SEMPRE per intero: niente soggiorno = niente tassa
+        tassa = v.get("tassa_soggiorno_cents", 0)
+        tassa = tassa if (isinstance(tassa, int) and not isinstance(tassa, bool) and tassa > 0) else 0
+        rimborso_totale = r.get("rimborso_cents", 0) + tassa
         cv_cents, cv_token = self._credito_anti_rimpianto(r.get("trattenuto_cents", 0))
         try:                                      # escrow: l'host TIENE la sua penale, il resto torna all'ospite
             gz = getattr(self._sys, "garanzia", None)
@@ -836,7 +841,9 @@ class RouterHTTP:
             logger.warning("chiusura garanzia su cancellazione fallita (ignorato)", exc_info=True)
         return 200, {"stato": "cancellata", "riferimento": rif,
                      "giorni_all_arrivo": giorni, "date_liberate": True,
-                     "rimborso_cents": r["rimborso_cents"],
+                     "rimborso_cents": rimborso_totale,                 # soggiorno + tassa
+                     "rimborso_soggiorno_cents": r["rimborso_cents"],
+                     "tassa_rimborsata_cents": tassa,
                      "trattenuto_cents": r["trattenuto_cents"],
                      "politica": r["politica"], "money_unit": "cents_integer",
                      "credito_viaggio_cents": cv_cents, "credito_viaggio_token": cv_token,

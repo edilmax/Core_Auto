@@ -50,7 +50,17 @@
 - **Anti-rimpianto (ospite):** "Cambi idea? I soldi tornano come credito."
 
 ## 7. Come ci distinguiamo dai colossi (claim difendibile)
-- Booking/Airbnb: fee nascoste all'ospite, host paga 15-25%, soldi all'host poco protetti.
-- **BookinVIP: 0% ospite, host 5-15%, soldi in escrow + dichiarazioni vincolanti + anti-rimpianto.** Più giusto per entrambi.
+**IL MOAT VERO (#1): la struttura di costo.** I colossi hanno migliaia di dipendenti → il loro
+costo più grosso è il PERSONALE → SONO OBBLIGATI a prendere il 15-25%. Noi siamo **automatici,
+costi fissi quasi zero** → prendiamo **5-15% e guadagniamo lo stesso**. **Loro NON possono
+abbassarsi al nostro livello senza fallire.** È un vantaggio strutturale **non copiabile**, non un
+trucco. → Per l'host significa **10+ punti di commissione in meno**, sostenibili solo da noi.
+
+Sopra a questo, i termini più giusti: **0% ospite, escrow di garanzia, dichiarazioni vincolanti,
+cancellazione anti-rimpianto.** Più giusto per entrambi.
+
+> ⚠️ Onestà interna: il "−3-5% sul cambio" (no DCC) è una **ciliegina** di nicchia (solo valuta
+> estera), NON l'arma principale. Non venderlo come fosse il piatto forte. E ricorda: il prezzo
+> basso NON basta a vincere — la battaglia vera è l'**acquisizione** (vedi §5), non il costo.
 
 > ⚠️ Marketing onesto sempre: niente claim falsi (è la nostra forza). Outreach solo dove legale (`fase154`). Niente spam.

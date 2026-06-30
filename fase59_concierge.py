@@ -380,9 +380,13 @@ class ProtocolloConcierge:
             return RispostaConcierge(status, {"stato": "rifiutata", "motivo": motivo})
 
         riferimento = idem[:24]
+        # l'ospite paga il TOTALE (soggiorno + tassa di soggiorno) -> la tassa viene incassata
+        totale_charge = dati.get("totale_cents")
+        totale_charge = totale_charge if _intero(totale_charge) and totale_charge > 0 else guest
         payment_url = self._link_isolato({
-            "alloggio_id": alloggio, "check_in": ci, "check_out": co,
-            "email": email, "prezzo_guest_cents": guest, "riferimento": riferimento})
+            "alloggio_id": alloggio, "check_in": ci, "check_out": co, "email": email,
+            "prezzo_guest_cents": guest, "totale_cents": totale_charge,
+            "riferimento": riferimento})
         corpo: Dict[str, Any] = {
             "stato": "confermata",
             "riferimento": riferimento,

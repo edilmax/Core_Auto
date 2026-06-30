@@ -58,7 +58,10 @@ class ProviderStripe:
         try:
             if not isinstance(dati, dict):
                 return None
-            cents = dati.get("prezzo_guest_cents")
+            # addebita il TOTALE (soggiorno + tassa di soggiorno); fallback al solo soggiorno
+            cents = dati.get("totale_cents")
+            if not _intero_pos(cents):
+                cents = dati.get("prezzo_guest_cents")
             if not _intero_pos(cents):
                 return None
             ref = str(dati.get("riferimento", ""))

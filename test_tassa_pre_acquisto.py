@@ -57,6 +57,26 @@ class TestTassaPreAcquisto(unittest.TestCase):
         self.assertEqual(q["tassa_soggiorno_cents"], 0)     # mai inventare
         self.assertEqual(q["totale_cents"], q["prezzo_guest_cents"])
 
+    def test_pagamento_addebita_il_totale_con_tassa(self):
+        # il book riporta totale_cents (= soggiorno + tassa): e' quello che Stripe addebita
+        self._pubblica(tassa_pp_notte_cents=200)
+        _, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": "casa",
+                      "check_in": "2027-01-10", "check_out": "2027-01-12", "party": 2})
+        _, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "o@x.it"})
+        self.assertEqual(b["totale_cents"], 20800)            # 20000 soggiorno + 800 tassa
+        self.assertEqual(b["tassa_soggiorno_cents"], 800)
+
+    def test_cancellazione_rimborsa_anche_la_tassa(self):
+        self._pubblica(tassa_pp_notte_cents=200)              # flessibile (default) + tassa
+        _, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": "casa",
+                      "check_in": "2027-01-10", "check_out": "2027-01-12", "party": 2})
+        _, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "o@x.it"})
+        _, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
+        self.assertEqual(c["tassa_rimborsata_cents"], 800)    # tassa SEMPRE resa per intero
+        self.assertEqual(c["rimborso_cents"], 20800)          # soggiorno pieno (flessibile) + tassa
+
     def test_cap_notti_tassabili(self):
         self._pubblica(tassa_pp_notte_cents=200, tassa_max_notti=1)   # max 1 notte
         q = self._quote(party=2)
