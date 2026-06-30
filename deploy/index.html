@@ -221,10 +221,11 @@ function bindWaitlist(citta){
     const em=(document.getElementById('wl_email').value||'').trim();
     const m=document.getElementById('wl_msg');
     if(!em||em.indexOf('@')<1){ m.style.color='#b00020'; m.textContent='Inserisci una email valida.'; return; }
+    const cittaLive=(document.getElementById('citta').value||'').trim()||citta||'';
     const d=await api('/api/domanda',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({email:em,citta:citta||'',check_in:document.getElementById('checkin').value,check_out:document.getElementById('checkout').value})});
+      body:JSON.stringify({email:em,citta:cittaLive,check_in:document.getElementById('checkin').value,check_out:document.getElementById('checkout').value})});
     if(d && d.ok){ m.style.color='#155724'; m.innerHTML='✅ '+d.messaggio+' <b>(€'+((d.credito_cents||0)/100).toFixed(0)+')</b>'; b.style.display='none'; }
-    else { m.style.color='#b00020'; m.textContent='Riprova con una email valida.'; }
+    else { m.style.color='#b00020'; m.textContent='Controlla l\'email e riprova.'; }
   };
 }
 

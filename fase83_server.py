@@ -1144,13 +1144,17 @@ class RouterHTTP:
         if dati is None:
             return 400, {"errore": "json_non_valido"}
         email, citta = dati.get("email"), dati.get("citta")
-        if not dom.registra(email, citta, check_in=str(dati.get("check_in", "")),
+        # città mancante NON deve bloccare la cattura email (è il cuore del cold-start):
+        # fallback "(qualsiasi)" -> una email valida si registra SEMPRE. Fallisce solo se l'email
+        # è davvero invalida (errore onesto, non più "email_o_citta").
+        citta_eff = citta.strip() if isinstance(citta, str) and citta.strip() else "(qualsiasi)"
+        if not dom.registra(email, citta_eff, check_in=str(dati.get("check_in", "")),
                             check_out=str(dati.get("check_out", "")),
                             party=dati.get("party", 1)):
-            return 422, {"errore": "email_o_citta_non_validi"}
+            return 422, {"errore": "email_non_valida"}
         from fase158_domanda import CREDITO_FONDATORE_CENTS
-        credito = dom.emette_credito_fondatore(email, citta)
-        dest = str(citta).strip() if isinstance(citta, str) and citta.strip() else "questa destinazione"
+        credito = dom.emette_credito_fondatore(email, citta_eff)
+        dest = citta_eff if citta_eff != "(qualsiasi)" else "questa destinazione"
         return 201, {"ok": True, "credito_token": credito or "",
                      "credito_cents": CREDITO_FONDATORE_CENTS,
                      "messaggio": ("Ti avvisiamo appena ci sono alloggi a %s. Hai un Credito "

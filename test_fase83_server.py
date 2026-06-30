@@ -228,6 +228,29 @@ class TestContratto(unittest.TestCase):
         self.assertEqual(s, 400)
 
 
+class TestDomandaWaitlist(unittest.TestCase):
+    """Cold-start: una email valida si registra SEMPRE; città vuota non blocca; errore onesto."""
+    def setUp(self):
+        self.r = crea_router(_sistema())
+
+    def test_email_valida_citta_vuota_ok(self):       # regressione del bug live
+        s, c = self.r.gestisci("POST", "/api/domanda",
+                               body=json.dumps({"email": "roxincubo@gmail.com", "citta": ""}))
+        self.assertEqual(s, 201)
+        self.assertTrue(c["ok"])
+
+    def test_email_valida_con_citta_ok(self):
+        s, c = self.r.gestisci("POST", "/api/domanda",
+                               body=json.dumps({"email": "a@b.com", "citta": "Torino"}))
+        self.assertEqual(s, 201)
+
+    def test_email_invalida_422(self):
+        s, c = self.r.gestisci("POST", "/api/domanda",
+                               body=json.dumps({"email": "nonvalida", "citta": "Torino"}))
+        self.assertEqual(s, 422)
+        self.assertEqual(c["errore"], "email_non_valida")
+
+
 class TestConcierge(unittest.TestCase):
     def setUp(self):
         self.sys = _sistema()
