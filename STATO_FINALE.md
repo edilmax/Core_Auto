@@ -16,6 +16,16 @@
   Connect `fase101`). Isolato/fail-safe. Test 2.
 - **CONFRONTO OTA nel preventivo** (`fase125` cablato): la quote mostra "su un OTA pagheresti ~€X ·
   risparmi €Y" (markup+fee+DCC OTA vs nostro 0% ospite). Solo display, fail-safe. Test 1.
+- **DIVIDI TRA AMICI** (`fase133` cablato): `POST /api/split/preview` → quote uguali a conservazione
+  esatta; selettore nel preventivo "= €X a testa". Puro/read-only, nessun denaro mosso. Test 2.
+- **CONTRATTO PDF** (`fase145` cablato): `POST /api/contratto` decodifica il voucher FIRMATO
+  (prezzo/date immutabili) → contratto locazione breve PDF stdlib (IT/EN) in base64; bottone alla
+  conferma. Test 2.
+- **DA CABLARE = scelte, non codice mancante**: dashboard metriche (115, serve store
+  prenotazioni-per-host) · wishlist/fedeltà/web-push (117/137/123, serve identità guest) · traduzione
+  (107/129, no-op senza backend; la fa l'agente guest) · chatbot (139, LLM gated) · calendario_prezzi
+  (119, sovrapposizione inventario) · deposito (149, capture gated PSP) · KYC/onboarding/Questura
+  (143/141/151, documenti + integrazioni gated). Vedi `COSE_DA_FARE.md`.
 - **PRENOTAZIONE SU RICHIESTA** (`fase162` + `fase83`): l'host sceglie per alloggio
   `immediata` | `su_richiesta` (`fase57.modalita_prenotazione`). Su richiesta il book → `in_attesa_host`
   (stanza TENUTA, NIENTE voucher/escrow/pagamento/email finché l'host non approva); l'host vede le
