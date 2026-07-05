@@ -27,5 +27,6 @@ config_assistente.json
 # infra (non serve dentro l'immagine app)
 Dockerfile
 docker-compose*.yml
-deploy/
 pg.ps1
+# NB: 'deploy/' NON va escluso: contiene il frontend statico (index.html, host.html) che
+# l'app serve (STATIC_DIR=/app/deploy) e che il Dockerfile copia con 'COPY deploy ./deploy'.
