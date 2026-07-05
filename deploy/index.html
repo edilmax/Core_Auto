@@ -221,7 +221,7 @@ function bindWaitlist(citta){
     const em=(document.getElementById('wl_email').value||'').trim();
     const m=document.getElementById('wl_msg');
     // Regex email standard: accetta i PUNTI nel nome e nel dominio (es. massimo.foli@protonmail.com)
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){ m.style.color='#b00020'; m.textContent='Inserisci una email valida (es. nome.cognome@dominio.com).'; return; }
+    if(!em || em.indexOf('@')<1){ m.style.color='#b00020'; m.textContent='Inserisci la tua email.'; return; }
     const cittaLive=(document.getElementById('citta').value||'').trim()||citta||'';
     let d=null;
     try{ d=await api('/api/domanda',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -335,7 +335,8 @@ document.getElementById('lang').onchange = async e=>{ LANG=e.target.value; docum
 let deferred=null;
 window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); deferred=e; document.getElementById('btnInstall').style.display='inline-block'; });
 document.getElementById('btnInstall').onclick = async ()=>{ if(!deferred) return; deferred.prompt(); await deferred.userChoice; deferred=null; document.getElementById('btnInstall').style.display='none'; };
-if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(()=>{}); }
+// niente piu' service worker: disinstalla eventuali SW vecchi e svuota le cache -> sito sempre fresco
+if('serviceWorker' in navigator){ navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>r.unregister())).catch(()=>{}); if(window.caches) caches.keys().then(ks=>ks.forEach(k=>caches.delete(k))).catch(()=>{}); }
 
 (async()=>{ await caricaI18N(LANG); cerca(); })();
 </script>
