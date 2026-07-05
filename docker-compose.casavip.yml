@@ -1,6 +1,6 @@
 # Casa VIP - stack di produzione: nginx (unico esposto) -> app (stdlib).
 # Self-healing: restart automatico + healthcheck + depends_on service_healthy.
-name: casavip
+version: "2.4"          # compatibile con docker-compose v1 (la chiave 'name:' e' solo v2 -> rendeva il file invalido)
 
 services:
   app:
