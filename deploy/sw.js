@@ -1,6 +1,6 @@
 /* BookinVIP - Service Worker. PAGINE/navigazioni: RETE PRIMA (il sito mostra SEMPRE l'ultima
    versione, niente piu' contenuti vecchi dopo un deploy); asset statici: cache; API: rete. */
-const CACHE = 'bookinvip-v2';
+const CACHE = 'bookinvip-v3';   // bump -> invalida la cache vecchia su tutti i dispositivi al prossimo accesso
 const SHELL = ['/', '/index.html', '/host.html', '/manifest.json', '/icon.svg', '/logo.svg'];
 
 self.addEventListener('install', (e) => {
