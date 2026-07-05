@@ -1,7 +1,7 @@
-/* BookinVIP - Service Worker KILL-SWITCH.
-   Il vecchio SW teneva in cache versioni obsolete della pagina (causa di messaggi vecchi anche
-   dopo un deploy). Questo SW NON fa piu' caching: si installa, cancella TUTTE le cache, si
-   DISINSTALLA e ricarica le schede aperte -> da qui in poi il sito e' SEMPRE fresco dal server. */
+/* BookinVIP - Service Worker KILL-SWITCH (senza reload -> niente loop).
+   Il vecchio SW teneva in cache versioni obsolete. Questo NON fa caching e NON ricarica la
+   pagina: si installa, svuota TUTTE le cache, si DISINSTALLA e basta. Al PROSSIMO refresh manuale
+   dell'utente il sito arriva fresco dal server (e nessun SW si re-installa: index.html non lo registra). */
 self.addEventListener('install', () => self.skipWaiting());
 
 self.addEventListener('activate', (e) => {
@@ -9,10 +9,8 @@ self.addEventListener('activate', (e) => {
     caches.keys()
       .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))   // svuota ogni cache
       .then(() => self.registration.unregister())                        // rimuove il SW
-      .then(() => self.clients.matchAll({ type: 'window' }))
-      .then((clients) => clients.forEach((c) => c.navigate(c.url)))      // ricarica le schede -> fresco
       .catch(() => {})
   );
 });
 
-/* Finche' e' attivo (una sola volta), NON intercetta nulla: ogni richiesta va diretta alla rete. */
+/* Nessun handler 'fetch': ogni richiesta va diretta alla rete. Nessun reload automatico. */
