@@ -228,6 +228,18 @@ class ProtocolloConcierge:
                 if not _intero(p) or p <= 0:
                     return RispostaConcierge(422, {"errore": "non_quotabile"})
                 netto += p
+            # SCONTO NON-RIMBORSABILE (onesto, finanziato dall'HOST come Booking/Airbnb): se l'host
+            # ha scelto 'non_rimborsabile', accetta -12% sul netto in cambio della CERTEZZA (nessun
+            # rimborso) -> l'ospite paga meno; noi prendiamo comm sul netto scontato -> mai in perdita.
+            netto_listino = netto
+            sconto_nr = 0
+            try:
+                if self._cat is not None and \
+                        self._cat.politica_cancellazione_di(alloggio) == "non_rimborsabile":
+                    sconto_nr = netto_listino * 1200 // 10000        # 12%
+                    netto = netto_listino - sconto_nr
+            except Exception:
+                sconto_nr = 0
             try:
                 comm = (self._commissione_all(netto, alloggio, fonte)
                         if self._commissione_all else self._commissione(netto))
@@ -266,6 +278,7 @@ class ProtocolloConcierge:
             "prezzo_netto_cents": netto, "commissione_cents": comm,
             "prezzo_guest_cents": guest, "netto_host_cents": netto_host,
             "sconto_credito_cents": sconto,
+            "sconto_non_rimborsabile_cents": sconto_nr, "prezzo_listino_cents": netto_listino,
             "tassa_soggiorno_cents": tassa, "totale_cents": totale,
             "fonte": fonte, "exp": scade_a, "valuta": valuta,
             # nonce: ogni preventivo e' UNICO -> due clienti distinti per la stessa
@@ -286,6 +299,8 @@ class ProtocolloConcierge:
             "prezzo_guest_cents": guest,        # il soggiorno (pulito, 0% guest fee)
             "netto_host_cents": netto_host,     # l'host riceve QUESTO
             "sconto_credito_cents": sconto,     # credito fondatore applicato (da nostra commissione)
+            "sconto_non_rimborsabile_cents": sconto_nr,   # -12% se non-rimborsabile (finanziato host)
+            "prezzo_listino_cents": netto_listino,        # prezzo pieno (per mostrare il risparmio)
             "tassa_soggiorno_cents": tassa,     # tassa citta' (pass-through, voce separata visibile)
             "totale_cents": totale,             # quello che l'ospite paga DAVVERO = soggiorno + tassa
             "fonte": fonte,

@@ -105,6 +105,22 @@ class TestPoliticaCancellazione(unittest.TestCase):
         _, solo = self.g("GET", "/api/catalogo", q={"citta": "Roma", "solo_gratuita": "1"})
         self.assertEqual([r for r in solo.get("risultati", []) if r.get("slug") == "casa"], [])
 
+    def test_non_rimborsabile_sconto_12_onesto_nel_preventivo(self):
+        # sconto -12% VERO dentro il preventivo firmato (finanziato dall'host), non un finto sconto
+        self._pubblica("non_rimborsabile")
+        _, q = self.g("POST", "/api/concierge/quote", {
+            "alloggio_id": "casa", "check_in": self._d(10), "check_out": self._d(12), "party": 1})
+        self.assertEqual(q["prezzo_listino_cents"], 20000)              # 2 notti x 10000
+        self.assertEqual(q["sconto_non_rimborsabile_cents"], 2400)     # -12%
+        self.assertEqual(q["prezzo_guest_cents"], 17600)              # l'ospite paga meno DAVVERO
+
+    def test_flessibile_nessuno_sconto_non_rimborsabile(self):
+        self._pubblica("flessibile")
+        _, q = self.g("POST", "/api/concierge/quote", {
+            "alloggio_id": "casa", "check_in": self._d(10), "check_out": self._d(12), "party": 1})
+        self.assertEqual(q["sconto_non_rimborsabile_cents"], 0)
+        self.assertEqual(q["prezzo_guest_cents"], 20000)
+
 
 if __name__ == "__main__":
     unittest.main()

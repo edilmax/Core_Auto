@@ -54,6 +54,7 @@ ETICHETTE_UI: Dict[str, Dict[str, str]] = {
     "raggio": {"it": "Raggio", "en": "Radius", "es": "Radio", "fr": "Rayon", "de": "Umkreis", "pt": "Raio", "ja": "範囲", "zh": "范围"},
     "vicino_a_me": {"it": "Vicino a me", "en": "Near me", "es": "Cerca de mí", "fr": "Près de moi", "de": "In meiner Nähe", "pt": "Perto de mim", "ja": "現在地周辺", "zh": "附近"},
     "filtro_gratuita": {"it": "Solo cancellazione gratuita", "en": "Only free cancellation", "es": "Solo cancelación gratuita", "fr": "Uniquement annulation gratuite", "de": "Nur kostenlose Stornierung", "pt": "Só cancelamento grátis", "ja": "無料キャンセルのみ", "zh": "仅限免费取消"},
+    "non_rimb": {"it": "Non rimborsabile −12%", "en": "Non-refundable −12%", "es": "No reembolsable −12%", "fr": "Non remboursable −12%", "de": "Nicht erstattbar −12%", "pt": "Não reembolsável −12%", "ja": "返金不可 −12%", "zh": "不可退款 −12%"},
     "vicino_title": {"it": "Trova alloggi vicino a dove ti trovi ora", "en": "Find stays near where you are now", "es": "Encuentra alojamientos cerca de donde estás", "fr": "Trouvez des logements près de vous", "de": "Unterkünfte in deiner Nähe finden", "pt": "Encontre acomodações perto de você", "ja": "現在地周辺の宿泊施設を探す", "zh": "查找您当前位置附近的住宿"},
     "notte": {"it": "notte", "en": "night", "es": "noche", "fr": "nuit", "de": "Nacht", "pt": "noite", "ja": "泊", "zh": "晚"},
     "dettaglio": {"it": "Vedi dettaglio", "en": "View details", "es": "Ver detalles", "fr": "Voir détails", "de": "Details ansehen", "pt": "Ver detalhes", "ja": "詳細を見る", "zh": "查看详情"},

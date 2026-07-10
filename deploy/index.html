@@ -200,7 +200,7 @@ function cardHtml(a){
     <div class="prezzo">${eur(a.prezzo_notte_cents)} <span style="font-size:.85rem;font-weight:400;color:#5e6f8d">/ ${t('notte')}</span></div>
     <div style="margin:.2rem 0">${stelle(a.recensioni)}</div>
     <div style="margin:.3rem 0">${serv} ${disp}</div>
-    ${a.cancellazione_gratuita ? `<div style="margin:.15rem 0"><span class="badge green">✔ ${t('badge_cancellazione')}</span></div>` : ''}
+    ${a.cancellazione_gratuita ? `<div style="margin:.15rem 0"><span class="badge green">✔ ${t('badge_cancellazione')}</span></div>` : (a.politica_cancellazione==='non_rimborsabile' ? `<div style="margin:.15rem 0"><span class="badge" style="background:#fff3cd;color:#8a6d0b">🔒 ${t('non_rimb')}</span></div>` : '')}
     <div class="meta">📍 ${a.citta}${a.paese?', '+a.paese:''}${a.distanza_m!=null?' · <b>'+fmtDist(a.distanza_m)+'</b>':''}</div>
     <button data-slug="${a.slug}">${t('dettaglio')}</button></div>`;
 }
@@ -303,6 +303,7 @@ async function apri(slug){
       if(q.totale_indicativo_cents>0 && q.valuta_indicativa) righe += `<div style="font-size:.78rem;color:#5e6f8d;margin-top:.2rem">≈ ${(q.totale_indicativo_cents/100).toFixed(2)} ${q.valuta_indicativa} (${t('indicativo')})</div>`;
       if(q.confronto_ota && q.confronto_ota.risparmio_guest_cents>0){ const co=q.confronto_ota;
         righe += `<div style="margin-top:.5rem;padding:.5rem .7rem;background:#eafaf0;border-radius:.6rem;font-size:.85rem;color:#155724">${t('ota_pre')}<b>${eur(co.ota_totale_cents)}</b> · <b>${t('risparmi')} ${eur(co.risparmio_guest_cents)}</b> (-${(co.risparmio_bps/100).toFixed(0)}%)</div>`; }
+      if(q.sconto_non_rimborsabile_cents>0) righe += `<div style="margin-top:.4rem;font-size:.85rem;color:#8a6d0b">🔒 ${t('non_rimb')} · ${t('risparmi')} ${eur(q.sconto_non_rimborsabile_cents)}</div>`;
       const _tot = q.totale_cents||q.prezzo_guest_cents;
       righe += `<div style="margin-top:.5rem;font-size:.85rem">👥 ${t('dividi_amici')} <select id="splitN" style="padding:.2rem .3rem">${[2,3,4,5,6].map(n=>`<option value="${n}">${n}</option>`).join('')}</select> <span id="splitOut" style="color:#155724;font-weight:600"></span></div>`;
       mq.innerHTML = righe;
