@@ -46,6 +46,17 @@ Nei primi 3 mesi (0% commissione) **paghiamo NOI Stripe** → NON è "costo zero
   **da scegliere col commercialista**; qui uso 67% prudente). Es. €50k commissione → base €33.500 →
   imposta 5% = **€1.675/anno**.
 
+## 5-bis. ⭐ NEL CASO DEL FONDATORE (P.IVA edilizia aperta da ~5 anni) — VERIFICATO
+- **Imposta: 15%, NON 5%.** Il solo cambio di codice ATECO su una P.IVA già aperta non fa ripartire il
+  quinquennio agevolato; inoltre avendo esercitato attività d'impresa (edilizia) nei 3 anni precedenti
+  si perde il requisito del 5% (vale anche chiudendo e riaprendo). Il 5% spetterebbe solo riprendendo
+  un'attività **cessata da diversi anni** — non è il caso.
+- **INPS: il fisso RESTA.** Piattaforma turismo/terziario = **Gestione Commercianti** → contributo fisso
+  **€4.611,64/anno** (−35% forfettari = **€2.997,57**) dovuto **a prescindere dal fatturato**. NON si passa
+  a "solo % sul fatturato": la Gestione Separata (26,07%, senza minimo) è per professionisti senza cassa,
+  non per un imprenditore commerciale. **Da confermare col commercialista**, ma realisticamente il fisso resta.
+- **INAIL: cancellabile** (piattaforma digitale, zero dipendenti, no rischio manuale).
+
 ## 6. PERCHÉ GUADAGNIAMO (struttura super-lean: ZERO dipendenti, tutto automatico)
 Con **zero dipendenti**, **nessun ufficio**, **zero spesa marketing** (crescita virale) e **tutto
 automatico**, il nostro **costo marginale per prenotazione ≈ 0**. Quindi:
@@ -73,13 +84,13 @@ non perché il modello è peggiore.
   **profittevoli da subito** e ogni euro di crescita rende **più a noi**. Obiettivo: scalare il volume
   tenendo il margine super-lean.
 
-## 7. Esempio conti annui (a regime 10%, dopo il lancio) — con numeri 2026
+## 7. Esempio conti annui (a regime 10%, dopo il lancio) — TUO CASO: imposta 15%
 GMV **€300k** → commissione **€30k** (lo Stripe lo paga l'host). Coeff. 67% → base €20.100:
-- Imposta sostitutiva 5% = **€1.005**
-- INPS Commercianti −35% ≈ €2.997,57 + 24,48%×(20.100−18.808)×0,65 ≈ **€3.203** (o Gest. Separata ≈ €5.240)
+- Imposta sostitutiva **15%** = **€3.015** (nel tuo caso; NON il 5%)
+- INPS Commercianti −35% ≈ €2.997,57 + 24,48%×(20.100−18.808)×0,65 ≈ **€3.203**
 - Commercialista + camera ≈ **€1.000**
-- **Utile netto ≈ €24.800/anno.** Sotto il tetto €85k (GMV consentito ≈ €850k @10%).
-- **Pareggio**: al 10% bastano **~€45–58k di GMV/anno** per coprire i soli costi fissi.
+- **Utile netto ≈ €22.800/anno.** Sotto il tetto €85k (GMV consentito ≈ €850k @10%).
+- **Pareggio**: al 10% bastano **~€45–60k di GMV/anno** per coprire i soli costi fissi.
 Lancio (0%, 3 mesi, GMV €50k) → **investimento Stripe ~€1.800** a nostro carico (minimo, non deducibile in forfettario).
 
 ## 8. Fisco: ora Italia, poi trasferimento
