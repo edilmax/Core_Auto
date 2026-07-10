@@ -1266,6 +1266,14 @@ class RouterHTTP:
             return 422, {"errore": "email_non_valida"}
         from fase158_domanda import CREDITO_FONDATORE_CENTS
         credito = dom.emette_credito_fondatore(email, citta_eff)
+        # ALLARME DOMANDA: se la città supera la soglia, avvisa gli host (UNA volta, best-effort)
+        try:
+            if citta_eff != "(qualsiasi)":
+                n_att = dom.conta(citta_eff)
+                if self._allarme_domanda().controlla(citta_eff, n_att):
+                    self._notifica_host_domanda(citta_eff, n_att)
+        except Exception:
+            logger.warning("allarme domanda fallito (ignorato)", exc_info=True)
         lang = dati.get("lang")
         lang = lang if lang in LINGUE_SUPPORTATE else "it"
         dest = citta_eff if citta_eff != "(qualsiasi)" else _ui("wl_dest_generica", lang)
@@ -1291,7 +1299,53 @@ class RouterHTTP:
             limit = max(1, min(100, int(query.get("limit", "20"))))
         except (ValueError, TypeError):
             limit = 20
-        return 200, {"citta": dom.per_citta(limit=limit)}
+        soglia = self._allarme_domanda().soglia
+        citta = dom.per_citta(limit=limit)
+        for c in citta:
+            c["oltre_soglia"] = bool(c.get("richieste", 0) >= soglia)
+        return 200, {"soglia": soglia, "citta": citta}
+
+    def _allarme_domanda(self):
+        a = getattr(self, "_allarme_cache", None)
+        if a is None:
+            import os
+            from domanda_allarme import AllarmeDomanda
+            try:
+                soglia = int(os.environ.get("DOMANDA_SOGLIA", "5"))
+            except (ValueError, TypeError):
+                soglia = 5
+            a = AllarmeDomanda(os.environ.get("DOMANDA_ALLARME_FILE", ""), soglia=soglia)
+            self._allarme_cache = a
+        return a
+
+    def _notifica_host_domanda(self, citta, conteggio):
+        """Best-effort: soglia domanda superata in 'citta' -> avvisa gli host con alloggi lì
+        ('N cercano casa, aggiorna disponibilità'). ISOLATO, gated all'email (no-op se spento)."""
+        try:
+            notif = getattr(self._sys, "notificatore_prenotazione", None)
+            reg = getattr(self._sys, "registro_host", None)
+            if notif is None or not notif.attivo() or reg is None:
+                return
+            from fase57_vetrina import CriteriRicerca
+            res = self._sys.catalogo.cerca(CriteriRicerca(citta=citta, limit=50)) or {}
+            visti = set()
+            nome = str(citta).title()
+            base = self._base_url or "https://bookinvip.com"
+            for card in (res.get("risultati") or []):
+                hid = self._sys.catalogo.host_di_alloggio(card.get("slug"))
+                if not hid or hid in visti:
+                    continue
+                visti.add(hid)
+                contatti = reg.info_host(hid)
+                if not contatti:
+                    continue
+                ogg = "🔥 Domanda in crescita a %s" % nome
+                testo = ("%d persone stanno cercando casa a %s proprio ora su BookinVIP. "
+                         "Aggiorna disponibilità e prezzi per ricevere prenotazioni: %s/host.html"
+                         % (int(conteggio), nome, base))
+                notif.avvisa(contatti, ogg, testo)
+        except Exception:
+            logger.warning("notifica domanda host fallita (ignorata)", exc_info=True)
 
     def _trasparenza(self, query):
         """Confronto noi-vs-OTA (fase69): 'con Booking incassi X, con noi Y'."""

@@ -126,6 +126,21 @@ class TestPoliticaCancellazione(unittest.TestCase):
         _, cc = self.g("GET", "/api/domanda/conta", q={"citta": "Roma"})
         self.assertEqual(cc["richieste"], 2)
 
+    def test_allarme_domanda_oltre_soglia(self):
+        import os
+        os.environ["DOMANDA_SOGLIA"] = "2"
+        try:
+            self.g("POST", "/api/domanda", {"email": "a@x.com", "citta": "Roma"})
+            self.g("POST", "/api/domanda", {"email": "b@x.com", "citta": "Roma"})   # raggiunge 2
+            self.g("POST", "/api/domanda", {"email": "c@x.com", "citta": "Milano"})  # 1
+            _, m = self.g("GET", "/api/domanda/citta")
+            self.assertEqual(m["soglia"], 2)
+            d = {r["citta"]: r["oltre_soglia"] for r in m["citta"]}
+            self.assertTrue(d.get("roma"))       # 2 >= soglia -> evidenziata
+            self.assertFalse(d.get("milano"))    # 1 < soglia
+        finally:
+            os.environ.pop("DOMANDA_SOGLIA", None)
+
     def test_flessibile_nessuno_sconto_non_rimborsabile(self):
         self._pubblica("flessibile")
         _, q = self.g("POST", "/api/concierge/quote", {

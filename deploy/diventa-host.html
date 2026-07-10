@@ -101,9 +101,10 @@
       const lista = (d && d.citta) || [];
       if(!lista.length) return;
       const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
-      document.getElementById('mappaDomanda').innerHTML = lista.map(c =>
-        `<a href="/host.html" style="background:#eef2f7;border:1px solid #dce1ed;border-radius:1rem;padding:.6rem 1rem;color:#1e3c72;font-weight:700">📍 ${cap(c.citta)} <span style="color:#c0392b">· ${c.richieste} in attesa</span></a>`
-      ).join('');
+      document.getElementById('mappaDomanda').innerHTML = lista.map(c => {
+        const hot = c.oltre_soglia;
+        return `<a href="/host.html" style="background:${hot?'#fff3cd':'#eef2f7'};border:1px solid ${hot?'#f0c674':'#dce1ed'};border-radius:1rem;padding:.6rem 1rem;color:#1e3c72;font-weight:700">${hot?'🔥 ':'📍 '}${cap(c.citta)} <span style="color:#c0392b">· ${c.richieste} in attesa${hot?' · pubblica ora!':''}</span></a>`;
+      }).join('');
       document.getElementById('domandaWrap').style.display = '';
     }catch(e){}
   })();
