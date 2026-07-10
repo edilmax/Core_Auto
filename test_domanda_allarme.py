@@ -4,7 +4,7 @@ import shutil
 import tempfile
 import unittest
 
-from domanda_allarme import AllarmeDomanda
+from fase161_domanda_allarme import AllarmeDomanda
 
 
 class TestAllarmeDomanda(unittest.TestCase):

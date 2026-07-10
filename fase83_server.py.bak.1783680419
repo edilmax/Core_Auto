@@ -43,91 +43,82 @@ logger = logging.getLogger("core_auto.server")
 
 # Stringhe UI per il frontend (chrome), multilingua. Fallback -> 'en' -> chiave.
 ETICHETTE_UI: Dict[str, Dict[str, str]] = {
-    # --- ricerca / risultati ---
-    "cerca": {"it": "Cerca", "en": "Search", "es": "Buscar", "fr": "Rechercher", "de": "Suchen", "pt": "Buscar", "ja": "検索", "zh": "搜索"},
-    "citta": {"it": "Città", "en": "City", "es": "Ciudad", "fr": "Ville", "de": "Stadt", "pt": "Cidade", "ja": "都市", "zh": "城市"},
-    "checkin": {"it": "Check-in", "en": "Check-in", "es": "Entrada", "fr": "Arrivée", "de": "Anreise", "pt": "Entrada", "ja": "チェックイン", "zh": "入住"},
-    "checkout": {"it": "Check-out", "en": "Check-out", "es": "Salida", "fr": "Départ", "de": "Abreise", "pt": "Saída", "ja": "チェックアウト", "zh": "退房"},
-    "ospiti": {"it": "Ospiti", "en": "Guests", "es": "Huéspedes", "fr": "Voyageurs", "de": "Gäste", "pt": "Hóspedes", "ja": "人数", "zh": "入住人数"},
-    "max_prezzo": {"it": "Max €", "en": "Max €", "es": "Máx €", "fr": "Max €", "de": "Max €", "pt": "Máx €", "ja": "上限 €", "zh": "最高 €"},
-    "ph_prezzomax": {"it": "es. 150", "en": "e.g. 150", "es": "ej. 150", "fr": "ex. 150", "de": "z. B. 150", "pt": "ex. 150", "ja": "例: 150", "zh": "如 150"},
-    "raggio": {"it": "Raggio", "en": "Radius", "es": "Radio", "fr": "Rayon", "de": "Umkreis", "pt": "Raio", "ja": "範囲", "zh": "范围"},
-    "vicino_a_me": {"it": "Vicino a me", "en": "Near me", "es": "Cerca de mí", "fr": "Près de moi", "de": "In meiner Nähe", "pt": "Perto de mim", "ja": "現在地周辺", "zh": "附近"},
-    "filtro_gratuita": {"it": "Solo cancellazione gratuita", "en": "Only free cancellation", "es": "Solo cancelación gratuita", "fr": "Uniquement annulation gratuite", "de": "Nur kostenlose Stornierung", "pt": "Só cancelamento grátis", "ja": "無料キャンセルのみ", "zh": "仅限免费取消"},
-    "non_rimb": {"it": "Non rimborsabile −12%", "en": "Non-refundable −12%", "es": "No reembolsable −12%", "fr": "Non remboursable −12%", "de": "Nicht erstattbar −12%", "pt": "Não reembolsável −12%", "ja": "返金不可 −12%", "zh": "不可退款 −12%"},
-    "gia_cercano": {"it": "persone cercano già a", "en": "people are already searching in", "es": "personas ya buscan en", "fr": "personnes cherchent déjà à", "de": "Personen suchen bereits in", "pt": "pessoas já procuram em", "ja": "人がすでに探しています：", "zh": "人已经在这里寻找："},
-    "vicino_title": {"it": "Trova alloggi vicino a dove ti trovi ora", "en": "Find stays near where you are now", "es": "Encuentra alojamientos cerca de donde estás", "fr": "Trouvez des logements près de vous", "de": "Unterkünfte in deiner Nähe finden", "pt": "Encontre acomodações perto de você", "ja": "現在地周辺の宿泊施設を探す", "zh": "查找您当前位置附近的住宿"},
-    "notte": {"it": "notte", "en": "night", "es": "noche", "fr": "nuit", "de": "Nacht", "pt": "noite", "ja": "泊", "zh": "晚"},
-    "dettaglio": {"it": "Vedi dettaglio", "en": "View details", "es": "Ver detalles", "fr": "Voir détails", "de": "Details ansehen", "pt": "Ver detalhes", "ja": "詳細を見る", "zh": "查看详情"},
-    "prenota": {"it": "Prenota ora", "en": "Book now", "es": "Reservar", "fr": "Réserver", "de": "Buchen", "pt": "Reservar", "ja": "今すぐ予約", "zh": "立即预订"},
-    "totale": {"it": "Totale", "en": "Total", "es": "Total", "fr": "Total", "de": "Gesamt", "pt": "Total", "ja": "合計", "zh": "总计"},
-    "netto": {"it": "Alloggio", "en": "Lodging", "es": "Alojamiento", "fr": "Logement", "de": "Unterkunft", "pt": "Hospedagem", "ja": "宿泊", "zh": "住宿"},
-    "commissione": {"it": "Commissione", "en": "Fee", "es": "Comisión", "fr": "Commission", "de": "Gebühr", "pt": "Taxa", "ja": "手数料", "zh": "手续费"},
-    "tassa": {"it": "Tassa soggiorno", "en": "City tax", "es": "Tasa turística", "fr": "Taxe de séjour", "de": "Kurtaxe", "pt": "Taxa de turismo", "ja": "宿泊税", "zh": "城市税"},
-    "nessun_risultato": {"it": "Nessun alloggio trovato", "en": "No lodging found", "es": "Sin resultados", "fr": "Aucun résultat", "de": "Keine Treffer", "pt": "Nenhum resultado", "ja": "宿泊施設が見つかりません", "zh": "未找到住宿"},
-    "caricamento": {"it": "Caricamento...", "en": "Loading...", "es": "Cargando...", "fr": "Chargement...", "de": "Laden...", "pt": "Carregando...", "ja": "読み込み中...", "zh": "加载中..."},
-    "errore": {"it": "Errore", "en": "Error", "es": "Error", "fr": "Erreur", "de": "Fehler", "pt": "Erro", "ja": "エラー", "zh": "错误"},
-    "email": {"it": "Email", "en": "Email", "es": "Correo", "fr": "E-mail", "de": "E-Mail", "pt": "E-mail", "ja": "メール", "zh": "邮箱"},
-    "conferma": {"it": "Prenotazione confermata!", "en": "Booking confirmed!", "es": "¡Reserva confirmada!", "fr": "Réservation confirmée !", "de": "Buchung bestätigt!", "pt": "Reserva confirmada!", "ja": "予約が確定しました！", "zh": "预订已确认！"},
-    "non_disp": {"it": "Non disponibile", "en": "Not available", "es": "No disponible", "fr": "Indisponible", "de": "Nicht verfügbar", "pt": "Indisponível", "ja": "空きなし", "zh": "不可预订"},
-    "verificata": {"it": "verificata", "en": "verified", "es": "verificada", "fr": "vérifiée", "de": "verifiziert", "pt": "verificada", "ja": "確認済み", "zh": "已验证"},
-    "dividi_amici": {"it": "Dividi tra amici:", "en": "Split with friends:", "es": "Divide con amigos:", "fr": "Partager entre amis :", "de": "Mit Freunden teilen:", "pt": "Dividir com amigos:", "ja": "友達と割り勘：", "zh": "与好友分摊："},
-    "a_testa": {"it": "a testa", "en": "each", "es": "por persona", "fr": "par personne", "de": "pro Person", "pt": "por pessoa", "ja": "1人あたり", "zh": "每人"},
-    "indicativo": {"it": "indicativo · la tua banca applica il suo cambio", "en": "approx. · your bank applies its own rate", "es": "aprox. · tu banco aplica su cambio", "fr": "indicatif · votre banque applique son taux", "de": "ca. · deine Bank nutzt ihren Kurs", "pt": "aprox. · seu banco aplica o câmbio dele", "ja": "目安 · 実際のレートは銀行によります", "zh": "约 · 以银行汇率为准"},
-    "ota_pre": {"it": "Su un OTA pagheresti ~", "en": "On an OTA you'd pay ~", "es": "En una OTA pagarías ~", "fr": "Sur une OTA vous paieriez ~", "de": "Bei einem OTA zahltest du ~", "pt": "Numa OTA você pagaria ~", "ja": "OTAなら約", "zh": "在OTA上你要付约"},
-    "risparmi": {"it": "risparmi", "en": "you save", "es": "ahorras", "fr": "vous économisez", "de": "du sparst", "pt": "você economiza", "ja": "お得", "zh": "省下"},
-    # --- hero / slogan ---
-    "hero_titolo": {"it": "Il tuo viaggio, senza sorprese", "en": "Your trip, no surprises", "es": "Tu viaje, sin sorpresas", "fr": "Votre voyage, sans surprises", "de": "Deine Reise, ohne Überraschungen", "pt": "Sua viagem, sem surpresas", "ja": "サプライズのない、あなたの旅", "zh": "你的旅行，没有意外"},
-    "hero_sub": {"it": "Alloggi certificati · paghi il prezzo pulito · cancellazione gratuita", "en": "Certified stays · pay the clean price · free cancellation", "es": "Alojamientos certificados · pagas el precio limpio · cancelación gratuita", "fr": "Logements certifiés · payez le prix net · annulation gratuite", "de": "Zertifizierte Unterkünfte · fairer Endpreis · kostenlose Stornierung", "pt": "Acomodações certificadas · pague o preço limpo · cancelamento grátis", "ja": "認証済みの宿泊施設 · 追加料金なしの価格 · 無料キャンセル", "zh": "认证住宿 · 支付透明价格 · 免费取消"},
-    "badge_commissioni": {"it": "0% commissioni all'ospite", "en": "0% guest fees", "es": "0% comisiones al huésped", "fr": "0% de frais pour le voyageur", "de": "0% Gästegebühren", "pt": "0% de taxas para o hóspede", "ja": "ゲスト手数料0%", "zh": "房客0手续费"},
-    "badge_cancellazione": {"it": "Cancellazione gratuita", "en": "Free cancellation", "es": "Cancelación gratuita", "fr": "Annulation gratuite", "de": "Kostenlose Stornierung", "pt": "Cancelamento grátis", "ja": "無料キャンセル", "zh": "免费取消"},
-    "badge_pagamenti": {"it": "Pagamenti sicuri", "en": "Secure payments", "es": "Pagos seguros", "fr": "Paiements sécurisés", "de": "Sichere Zahlungen", "pt": "Pagamentos seguros", "ja": "安全な決済", "zh": "安全支付"},
-    "badge_antirimpianto": {"it": "Anti-Rimpianto: i soldi tornano come credito", "en": "Regret-free: money back as credit", "es": "Sin arrepentimiento: dinero de vuelta como crédito", "fr": "Sans regret : argent rendu en crédit", "de": "Ohne Reue: Geld zurück als Guthaben", "pt": "Sem arrependimento: dinheiro de volta como crédito", "ja": "後悔なし：返金はクレジットで", "zh": "无悔保障：退款以积分返还"},
-    "footer_slogan": {"it": "zero commissioni nascoste", "en": "zero hidden fees", "es": "cero comisiones ocultas", "fr": "zéro frais cachés", "de": "keine versteckten Gebühren", "pt": "zero taxas ocultas", "ja": "隠れた手数料はゼロ", "zh": "零隐藏费用"},
-    # --- stato vuoto / lista d'attesa ---
-    "empty_titolo": {"it": "Stiamo aprendo presto!", "en": "Opening soon!", "es": "¡Abrimos pronto!", "fr": "Bientôt disponible !", "de": "Bald verfügbar!", "pt": "Em breve!", "ja": "まもなくオープン！", "zh": "即将开通！"},
-    "empty_lascia": {"it": "Lascia la tua email: ti avvisiamo appena ci sono alloggi e ricevi un Credito Fondatore di benvenuto per la tua prima prenotazione.", "en": "Leave your email: we'll notify you as soon as stays are available and you'll get a welcome Founder Credit for your first booking.", "es": "Deja tu correo: te avisaremos en cuanto haya alojamientos y recibirás un Crédito Fundador de bienvenida para tu primera reserva.", "fr": "Laissez votre e-mail : nous vous préviendrons dès que des logements seront disponibles et vous recevrez un Crédit Fondateur de bienvenue pour votre première réservation.", "de": "Hinterlasse deine E-Mail: Wir benachrichtigen dich, sobald Unterkünfte verfügbar sind, und du erhältst ein Willkommens-Gründerguthaben für deine erste Buchung.", "pt": "Deixe o seu e-mail: avisamos assim que houver acomodações e você ganha um Crédito Fundador de boas-vindas para a sua primeira reserva.", "ja": "メールアドレスを登録してください。宿泊施設が利用可能になり次第お知らせし、初回予約に使える創設者クレジットをプレゼントします。", "zh": "留下您的邮箱：一旦有房源我们会立即通知您，并赠送创始人礼遇积分用于您的首次预订。"},
-    "ph_email": {"it": "latua@email.com", "en": "you@email.com", "es": "tu@email.com", "fr": "vous@email.com", "de": "du@email.com", "pt": "voce@email.com", "ja": "you@email.com", "zh": "you@email.com"},
-    "avvisami": {"it": "Avvisami", "en": "Notify me", "es": "Avísame", "fr": "Prévenez-moi", "de": "Benachrichtige mich", "pt": "Avise-me", "ja": "通知を受け取る", "zh": "通知我"},
-    "inserisci_email": {"it": "Inserisci la tua email.", "en": "Enter your email.", "es": "Introduce tu correo.", "fr": "Saisissez votre e-mail.", "de": "Gib deine E-Mail ein.", "pt": "Digite o seu e-mail.", "ja": "メールアドレスを入力してください。", "zh": "请输入您的邮箱。"},
-    "sei_host": {"it": "Sei un host?", "en": "Are you a host?", "es": "¿Eres anfitrión?", "fr": "Vous êtes hôte ?", "de": "Bist du Gastgeber?", "pt": "É anfitrião?", "ja": "ホストの方はこちら", "zh": "您是房东吗？"},
-    "pubblica_primo": {"it": "Pubblica il primo alloggio", "en": "Publish the first listing", "es": "Publica el primer alojamiento", "fr": "Publiez le premier logement", "de": "Veröffentliche die erste Unterkunft", "pt": "Publique a primeira acomodação", "ja": "最初の宿泊施設を掲載", "zh": "发布第一个房源"},
-    "errore_server": {"it": "Errore server:", "en": "Server error:", "es": "Error del servidor:", "fr": "Erreur serveur :", "de": "Serverfehler:", "pt": "Erro do servidor:", "ja": "サーバーエラー：", "zh": "服务器错误："},
-    "servizio_non_ragg": {"it": "Servizio non raggiungibile, riprova.", "en": "Service unavailable, please try again.", "es": "Servicio no disponible, inténtalo de nuevo.", "fr": "Service indisponible, réessayez.", "de": "Dienst nicht erreichbar, bitte erneut versuchen.", "pt": "Serviço indisponível, tente novamente.", "ja": "サービスに接続できません。もう一度お試しください。", "zh": "服务暂不可用，请重试。"},
-    "nessun_raggio_pre": {"it": "Nessun alloggio entro", "en": "No stays within", "es": "Sin alojamientos en un radio de", "fr": "Aucun logement dans un rayon de", "de": "Keine Unterkünfte im Umkreis von", "pt": "Nenhuma acomodação num raio de", "ja": "この範囲内に宿泊施設はありません：", "zh": "该范围内没有住宿："},
-    "allarga_raggio": {"it": "Allarga il raggio qui sopra, oppure cerca per città.", "en": "Widen the radius above, or search by city.", "es": "Amplía el radio arriba, o busca por ciudad.", "fr": "Élargissez le rayon ci-dessus, ou cherchez par ville.", "de": "Erweitere oben den Umkreis oder suche nach Stadt.", "pt": "Aumente o raio acima, ou pesquise por cidade.", "ja": "上で範囲を広げるか、都市名で検索してください。", "zh": "请在上方扩大范围，或按城市搜索。"},
-    "geo_non_supp": {"it": "Geolocalizzazione non supportata dal browser", "en": "Geolocation not supported by the browser", "es": "Geolocalización no compatible con el navegador", "fr": "Géolocalisation non prise en charge par le navigateur", "de": "Standortbestimmung vom Browser nicht unterstützt", "pt": "Geolocalização não suportada pelo navegador", "ja": "お使いのブラウザは位置情報に対応していません", "zh": "浏览器不支持定位"},
-    "geo_non_disp": {"it": "Posizione non disponibile (permesso negato?)", "en": "Location unavailable (permission denied?)", "es": "Ubicación no disponible (¿permiso denegado?)", "fr": "Position indisponible (autorisation refusée ?)", "de": "Standort nicht verfügbar (Zugriff verweigert?)", "pt": "Localização indisponível (permissão negada?)", "ja": "位置情報を取得できません（許可が拒否された可能性）", "zh": "无法获取位置（是否拒绝了权限？）"},
-    # --- politiche di cancellazione ---
-    "pol_flessibile": {"it": "✓ Cancellazione gratuita fino a 24h prima", "en": "✓ Free cancellation up to 24h before", "es": "✓ Cancelación gratuita hasta 24 h antes", "fr": "✓ Annulation gratuite jusqu'à 24 h avant", "de": "✓ Kostenlose Stornierung bis 24 Std. vorher", "pt": "✓ Cancelamento grátis até 24h antes", "ja": "✓ 24時間前まで無料キャンセル", "zh": "✓ 入住前24小时可免费取消"},
-    "pol_moderata": {"it": "✓ Cancellazione gratuita fino a 5 giorni prima", "en": "✓ Free cancellation up to 5 days before", "es": "✓ Cancelación gratuita hasta 5 días antes", "fr": "✓ Annulation gratuite jusqu'à 5 jours avant", "de": "✓ Kostenlose Stornierung bis 5 Tage vorher", "pt": "✓ Cancelamento grátis até 5 dias antes", "ja": "✓ 5日前まで無料キャンセル", "zh": "✓ 入住前5天可免费取消"},
-    "pol_rigida": {"it": "Cancellazione gratuita fino a 14 giorni prima (poi 50%)", "en": "Free cancellation up to 14 days before (then 50%)", "es": "Cancelación gratuita hasta 14 días antes (luego 50%)", "fr": "Annulation gratuite jusqu'à 14 jours avant (puis 50 %)", "de": "Kostenlose Stornierung bis 14 Tage vorher (danach 50%)", "pt": "Cancelamento grátis até 14 dias antes (depois 50%)", "ja": "14日前まで無料キャンセル（以降50%）", "zh": "入住前14天可免费取消（之后收取50%）"},
-    "pol_non_rimborsabile": {"it": "Tariffa non rimborsabile", "en": "Non-refundable rate", "es": "Tarifa no reembolsable", "fr": "Tarif non remboursable", "de": "Nicht erstattbarer Tarif", "pt": "Tarifa não reembolsável", "ja": "返金不可の料金", "zh": "不可退款价格"},
-    # --- host ---
-    "pannello_host": {"it": "Pannello Host", "en": "Host Panel", "es": "Panel Anfitrión", "fr": "Espace Hôte", "de": "Gastgeber-Panel", "pt": "Painel do Anfitrião", "ja": "ホストパネル", "zh": "房东面板"},
-    "pubblica": {"it": "Pubblica alloggio", "en": "Publish listing", "es": "Publicar", "fr": "Publier", "de": "Veröffentlichen", "pt": "Publicar", "ja": "宿泊施設を掲載", "zh": "发布房源"},
-    "salva_disp": {"it": "Salva disponibilità", "en": "Save availability", "es": "Guardar disponibilidad", "fr": "Enregistrer", "de": "Speichern", "pt": "Guardar disponibilidade", "ja": "空き状況を保存", "zh": "保存可预订情况"},
-    "prezzo_notte": {"it": "Prezzo/notte (cent)", "en": "Price/night (cents)", "es": "Precio/noche", "fr": "Prix/nuit", "de": "Preis/Nacht", "pt": "Preço/noite", "ja": "1泊の料金", "zh": "每晚价格"},
-    "accedi_registrati": {"it": "Accedi o Registrati", "en": "Log in or Sign up", "es": "Entrar o Registrarse", "fr": "Connexion ou Inscription", "de": "Anmelden oder Registrieren", "pt": "Entrar ou Registar", "ja": "ログインまたは登録", "zh": "登录或注册"},
-    "accedi": {"it": "Accedi", "en": "Log in", "es": "Entrar", "fr": "Connexion", "de": "Anmelden", "pt": "Entrar", "ja": "ログイン", "zh": "登录"},
-    "registrati": {"it": "Registrati", "en": "Sign up", "es": "Registrarse", "fr": "S'inscrire", "de": "Registrieren", "pt": "Registar", "ja": "登録", "zh": "注册"},
-    "esci": {"it": "Esci", "en": "Log out", "es": "Salir", "fr": "Déconnexion", "de": "Abmelden", "pt": "Sair", "ja": "ログアウト", "zh": "退出"},
-    "miei_alloggi": {"it": "I miei alloggi", "en": "My listings", "es": "Mis alojamientos", "fr": "Mes logements", "de": "Meine Unterkünfte", "pt": "As minhas acomodações", "ja": "マイリスティング", "zh": "我的房源"},
-    "invita_host": {"it": "Invita altri host", "en": "Invite other hosts", "es": "Invita anfitriones", "fr": "Inviter des hôtes", "de": "Andere Gastgeber einladen", "pt": "Convide outros anfitriões", "ja": "他のホストを招待", "zh": "邀请其他房东"},
-    "link_diretto": {"it": "Il tuo link prenotazione diretta", "en": "Your direct booking link", "es": "Tu enlace de reserva directa", "fr": "Votre lien de réservation directe", "de": "Dein Direktbuchungs-Link", "pt": "O seu link de reserva direta", "ja": "直接予約リンク", "zh": "您的直接预订链接"},
-    "messaggi_ospite": {"it": "Messaggi con l'ospite", "en": "Messages with the guest", "es": "Mensajes con el huésped", "fr": "Messages avec le voyageur", "de": "Nachrichten mit dem Gast", "pt": "Mensagens com o hóspede", "ja": "ゲストとのメッセージ", "zh": "与房客的消息"},
-    "prezzo_dinamico": {"it": "Prezzo dinamico suggerito", "en": "Suggested dynamic price", "es": "Precio dinámico", "fr": "Prix dynamique", "de": "Dynamischer Preis", "pt": "Preço dinâmico sugerido", "ja": "推奨ダイナミック価格", "zh": "建议动态价格"},
-    # --- voucher ---
-    "voucher_ok": {"it": "Prenotazione confermata", "en": "Booking confirmed", "es": "Reserva confirmada", "fr": "Réservation confirmée", "de": "Buchung bestätigt", "pt": "Reserva confirmada", "ja": "予約確定", "zh": "预订已确认"},
-    "rif": {"it": "Riferimento", "en": "Reference", "es": "Referencia", "fr": "Référence", "de": "Referenz", "pt": "Referência", "ja": "予約番号", "zh": "参考号"},
-    "dal": {"it": "Dal", "en": "From", "es": "Desde", "fr": "Du", "de": "Von", "pt": "De", "ja": "から", "zh": "从"},
-    "al": {"it": "Al", "en": "To", "es": "Hasta", "fr": "Au", "de": "Bis", "pt": "Até", "ja": "まで", "zh": "至"},
-    "self_pass": {"it": "Check-in autonomo: mostra questo codice alla serratura", "en": "Self check-in: show this code at the lock", "es": "Auto check-in: muestra este código en la cerradura", "fr": "Auto check-in : montrez ce code à la serrure", "de": "Self-Check-in: diesen Code am Schloss zeigen", "pt": "Check-in autónomo: mostre este código na fechadura", "ja": "セルフチェックイン：このコードを鍵に提示してください", "zh": "自助入住：向门锁出示此代码"},
-    # --- lista d'attesa (messaggio server) + link post-prenotazione ---
-    "wl_dest_generica": {"it": "questa destinazione", "en": "this destination", "es": "este destino", "fr": "cette destination", "de": "dieses Ziel", "pt": "este destino", "ja": "ご希望の目的地", "zh": "该目的地"},
-    "wl_msg_tpl": {"it": "Ti avvisiamo appena ci sono alloggi a %s. Hai un Credito Fondatore per la tua prima prenotazione.", "en": "We'll notify you as soon as stays are available in %s. You have a Founder Credit for your first booking.", "es": "Te avisaremos en cuanto haya alojamientos en %s. Tienes un Crédito Fundador para tu primera reserva.", "fr": "Nous vous préviendrons dès que des logements seront disponibles à %s. Vous avez un Crédit Fondateur pour votre première réservation.", "de": "Wir benachrichtigen dich, sobald in %s Unterkünfte verfügbar sind. Du hast ein Gründerguthaben für deine erste Buchung.", "pt": "Avisamos assim que houver acomodações em %s. Você tem um Crédito Fundador para a sua primeira reserva.", "ja": "%sに宿泊施設が用意でき次第お知らせします。初回予約に使える創設者クレジットをご利用いただけます。", "zh": "一旦%s有房源，我们会立即通知您。您可享创始人礼遇积分用于首次预订。"},
-    "contratto_pdf": {"it": "Contratto PDF", "en": "PDF contract", "es": "Contrato PDF", "fr": "Contrat PDF", "de": "PDF-Vertrag", "pt": "Contrato PDF", "ja": "契約書（PDF）", "zh": "合同PDF"},
-    "voucher_label": {"it": "Voucher", "en": "Voucher", "es": "Voucher", "fr": "Bon", "de": "Voucher", "pt": "Voucher", "ja": "バウチャー", "zh": "预订凭证"},
+    "cerca": {"it": "Cerca", "en": "Search", "es": "Buscar", "fr": "Rechercher",
+              "de": "Suchen"},
+    "citta": {"it": "Citta", "en": "City", "es": "Ciudad", "fr": "Ville", "de": "Stadt"},
+    "checkin": {"it": "Check-in", "en": "Check-in", "es": "Entrada", "fr": "Arrivee",
+                "de": "Anreise"},
+    "checkout": {"it": "Check-out", "en": "Check-out", "es": "Salida", "fr": "Depart",
+                 "de": "Abreise"},
+    "ospiti": {"it": "Ospiti", "en": "Guests", "es": "Huespedes", "fr": "Voyageurs",
+               "de": "Gaste"},
+    "notte": {"it": "notte", "en": "night", "es": "noche", "fr": "nuit", "de": "Nacht"},
+    "dettaglio": {"it": "Vedi dettaglio", "en": "View details", "es": "Ver detalles",
+                  "fr": "Voir details", "de": "Details ansehen"},
+    "prenota": {"it": "Prenota ora", "en": "Book now", "es": "Reservar", "fr": "Reserver",
+                "de": "Buchen"},
+    "totale": {"it": "Totale", "en": "Total", "es": "Total", "fr": "Total", "de": "Gesamt"},
+    "netto": {"it": "Alloggio", "en": "Lodging", "es": "Alojamiento", "fr": "Logement",
+              "de": "Unterkunft"},
+    "commissione": {"it": "Commissione", "en": "Fee", "es": "Comision", "fr": "Commission",
+                    "de": "Gebuhr"},
+    "tassa": {"it": "Tassa soggiorno", "en": "City tax", "es": "Tasa turistica",
+              "fr": "Taxe de sejour", "de": "Kurtaxe"},
+    "nessun_risultato": {"it": "Nessun alloggio trovato", "en": "No lodging found",
+                         "es": "Sin resultados", "fr": "Aucun resultat", "de": "Keine Treffer"},
+    "caricamento": {"it": "Caricamento...", "en": "Loading...", "es": "Cargando...",
+                    "fr": "Chargement...", "de": "Laden..."},
+    "errore": {"it": "Errore", "en": "Error", "es": "Error", "fr": "Erreur", "de": "Fehler"},
+    "email": {"it": "Email", "en": "Email", "es": "Correo", "fr": "E-mail", "de": "E-Mail"},
+    "conferma": {"it": "Prenotazione confermata!", "en": "Booking confirmed!",
+                 "es": "Reserva confirmada!", "fr": "Reservation confirmee!",
+                 "de": "Buchung bestatigt!"},
+    "non_disp": {"it": "Non disponibile", "en": "Not available", "es": "No disponible",
+                 "fr": "Indisponible", "de": "Nicht verfugbar"},
+    # host
+    "pannello_host": {"it": "Pannello Host", "en": "Host Panel", "es": "Panel Anfitrion",
+                      "fr": "Espace Hote", "de": "Gastgeber-Panel"},
+    "pubblica": {"it": "Pubblica alloggio", "en": "Publish listing",
+                 "es": "Publicar", "fr": "Publier", "de": "Veroffentlichen"},
+    "salva_disp": {"it": "Salva disponibilita", "en": "Save availability",
+                   "es": "Guardar disponibilidad", "fr": "Enregistrer", "de": "Speichern"},
+    "prezzo_notte": {"it": "Prezzo/notte (cent)", "en": "Price/night (cents)",
+                     "es": "Precio/noche", "fr": "Prix/nuit", "de": "Preis/Nacht"},
+    "accedi_registrati": {"it": "Accedi o Registrati", "en": "Log in or Sign up",
+                          "es": "Entrar o Registrarse", "fr": "Connexion ou Inscription",
+                          "de": "Anmelden oder Registrieren"},
+    "accedi": {"it": "Accedi", "en": "Log in", "es": "Entrar", "fr": "Connexion",
+               "de": "Anmelden"},
+    "registrati": {"it": "Registrati", "en": "Sign up", "es": "Registrarse",
+                   "fr": "S'inscrire", "de": "Registrieren"},
+    "esci": {"it": "Esci", "en": "Log out", "es": "Salir", "fr": "Deconnexion",
+             "de": "Abmelden"},
+    "miei_alloggi": {"it": "I miei alloggi", "en": "My listings", "es": "Mis alojamientos",
+                     "fr": "Mes logements", "de": "Meine Unterkunfte"},
+    "invita_host": {"it": "Invita altri host", "en": "Invite other hosts",
+                    "es": "Invita anfitriones", "fr": "Inviter des hotes",
+                    "de": "Andere Gastgeber einladen"},
+    "link_diretto": {"it": "Il tuo link prenotazione diretta", "en": "Your direct booking link",
+                     "es": "Tu enlace de reserva directa", "fr": "Votre lien de reservation directe",
+                     "de": "Dein Direktbuchungs-Link"},
+    "messaggi_ospite": {"it": "Messaggi con l'ospite", "en": "Messages with the guest",
+                        "es": "Mensajes con el huesped", "fr": "Messages avec le voyageur",
+                        "de": "Nachrichten mit dem Gast"},
+    "prezzo_dinamico": {"it": "Prezzo dinamico suggerito", "en": "Suggested dynamic price",
+                       "es": "Precio dinamico", "fr": "Prix dynamique", "de": "Dynamischer Preis"},
+    # voucher
+    "voucher_ok": {"it": "Prenotazione confermata", "en": "Booking confirmed",
+                   "es": "Reserva confirmada", "fr": "Reservation confirmee",
+                   "de": "Buchung bestatigt"},
+    "rif": {"it": "Riferimento", "en": "Reference", "es": "Referencia",
+            "fr": "Reference", "de": "Referenz"},
+    "dal": {"it": "Dal", "en": "From", "es": "Desde", "fr": "Du", "de": "Von"},
+    "al": {"it": "Al", "en": "To", "es": "Hasta", "fr": "Au", "de": "Bis"},
+    "self_pass": {"it": "Check-in autonomo: mostra questo codice alla serratura",
+                  "en": "Self check-in: show this code at the lock",
+                  "es": "Auto check-in: muestra este codigo en la cerradura",
+                  "fr": "Auto check-in : montrez ce code a la serrure",
+                  "de": "Self-Check-in: diesen Code am Schloss zeigen"},
 }
 
 
@@ -266,82 +257,6 @@ def robots_txt(base_url: str = "") -> str:
     # Due sitemap: alloggi (vetrina) + landing host inbound SEO (fase97).
     return ("User-agent: *\nAllow: /\nSitemap: %s/sitemap.xml\n"
             "Sitemap: %s/sitemap-host.xml\n" % (base_url, base_url))
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SUPERFICIE AI-AGENT (scoperta standard): oltre a /api/mcp (MCP JSON-RPC, fase60) e
-# /llms.txt (fase97), esponiamo il manifest di scoperta /.well-known/ai-plugin.json e
-# uno spec OpenAPI /openapi.json -> QUALSIASI agente (Claude/Gemini/ChatGPT/browser
-# agentici) trova e usa il flusso 'cerca -> preventivo firmato -> prenota' senza integrazione
-# custom. Il prezzo e' FIRMATO: il modello non puo' alterarlo. Funzioni PURE (testabili).
-# ─────────────────────────────────────────────────────────────────────────────
-def ai_plugin_manifest(base_url: str = "") -> Dict[str, Any]:
-    b = base_url or "https://bookinvip.com"
-    return {
-        "schema_version": "v1",
-        "name_for_human": "BookinVIP",
-        "name_for_model": "bookinvip",
-        "description_for_human": ("Prenota alloggi certificati: prezzo pulito tutto-incluso, "
-                                  "0% commissioni all'ospite, cancellazione gratuita."),
-        "description_for_model": ("Cerca e prenota alloggi. JSON machine-clean, prezzi in CENTESIMI "
-                                  "interi, preventivi FIRMATI (il modello non puo' alterare il prezzo). "
-                                  "Flusso: cerca GET /api/catalogo -> preventivo POST /api/concierge/quote "
-                                  "-> prenota POST /api/concierge/book. Anche via MCP JSON-RPC su /api/mcp."),
-        "auth": {"type": "none"},
-        "api": {"type": "openapi", "url": b + "/openapi.json"},
-        "mcp": {"type": "jsonrpc", "url": b + "/api/mcp"},
-        "logo_url": b + "/icon.svg",
-        "contact_email": "info@bookinvip.com",
-        "legal_info_url": b + "/",
-    }
-
-
-def openapi_agent_spec(base_url: str = "") -> Dict[str, Any]:
-    b = base_url or "https://bookinvip.com"
-    _q = lambda n, t="string", d=None: {"name": n, "in": "query",
-                                        "schema": {"type": t}, "description": d or ""}
-    return {
-        "openapi": "3.0.3",
-        "info": {"title": "BookinVIP Booking API", "version": "1.0.0",
-                 "description": ("Prenotazione alloggi machine-clean. Prezzi in centesimi interi. "
-                                 "Flusso: cerca -> preventivo (quote firmato) -> prenota. Il modello "
-                                 "NON puo' alterare il prezzo. 0% commissioni ospite, prezzo pulito.")},
-        "servers": [{"url": b}],
-        "paths": {
-            "/api/catalogo": {"get": {"operationId": "cercaAlloggi",
-                "summary": "Cerca alloggi disponibili (JSON machine-clean)",
-                "parameters": [_q("citta"), _q("check_in", "string", "YYYY-MM-DD"),
-                               _q("check_out", "string", "YYYY-MM-DD"),
-                               _q("prezzo_max_cents", "integer", "tetto prezzo in centesimi"),
-                               _q("servizi", "string", "codici separati da virgola"),
-                               _q("solo_gratuita", "string", "1 = solo cancellazione gratuita"),
-                               _q("lang", "string", "it,en,es,fr,de,pt,ja,zh")],
-                "responses": {"200": {"description": "Elenco schede alloggio"}}}},
-            "/api/concierge/quote": {"post": {"operationId": "preventivo",
-                "summary": "Preventivo FIRMATO (prezzo bloccato in un token)",
-                "requestBody": {"required": True, "content": {"application/json": {"schema": {
-                    "type": "object", "required": ["alloggio_id", "check_in", "check_out"],
-                    "properties": {"alloggio_id": {"type": "string"}, "check_in": {"type": "string"},
-                                   "check_out": {"type": "string"}, "party": {"type": "integer"}}}}}},
-                "responses": {"200": {"description": "quote_token + prezzo_guest_cents + totale_cents"}}}},
-            "/api/concierge/book": {"post": {"operationId": "prenota",
-                "summary": "Prenota col quote_token (prezzo gia' firmato, non alterabile)",
-                "requestBody": {"required": True, "content": {"application/json": {"schema": {
-                    "type": "object", "required": ["quote_token", "email"],
-                    "properties": {"quote_token": {"type": "string"}, "email": {"type": "string"}}}}}},
-                "responses": {"201": {"description": "confermata + voucher_token"}}}},
-            "/api/i18n": {"get": {"operationId": "traduzioni",
-                "summary": "Dizionario UI per lingua",
-                "parameters": [_q("lang", "string", "it,en,es,fr,de,pt,ja,zh")],
-                "responses": {"200": {"description": "ui + servizi + stati"}}}},
-            "/api/domanda/citta": {"get": {"operationId": "mappaDomanda",
-                "summary": "Citta con piu' persone in attesa (domanda aggregata)",
-                "responses": {"200": {"description": "elenco citta/richieste"}}}},
-            "/api/mcp": {"post": {"operationId": "mcp",
-                "summary": "Endpoint MCP (JSON-RPC 2.0) per agenti IA",
-                "responses": {"200": {"description": "risposta JSON-RPC"}}}},
-        },
-    }
 
 
 def _notti_count(ci: Any, co: Any) -> int:
@@ -492,8 +407,6 @@ class RouterHTTP:
             return self._domanda_registra(body)
         if metodo == "GET" and path == "/api/domanda/conta":
             return self._domanda_conta(query)
-        if metodo == "GET" and path == "/api/domanda/citta":
-            return self._domanda_per_citta(query)
         if metodo == "GET" and path == "/api/catalogo":
             return self._catalogo(query)
         if metodo == "GET" and path.startswith("/api/catalogo/"):
@@ -734,16 +647,6 @@ class RouterHTTP:
             if rie:
                 card["recensioni"] = rie
             cards.append(card)
-        # Politica di cancellazione + badge "cancellazione gratuita" (leva di conversione, come i
-        # colossi). 'gratuita' = flessibile/moderata (annullabile con rimborso pieno per tempo).
-        for card in cards:
-            pol = card.get("politica_cancellazione") or self._politica_alloggio(card.get("slug"))
-            card["politica_cancellazione"] = pol
-            card["cancellazione_gratuita"] = pol in ("flessibile", "moderata")
-        if str(query.get("solo_gratuita", "")).lower() in ("1", "true", "yes", "on"):
-            cards = [c for c in cards if c.get("cancellazione_gratuita")]
-            if geo is None:
-                res["totale"] = len(cards)
         if geo is not None:
             vicini = self._entro_raggio(cards, geo)   # filtrati+ordinati, NON tagliati
             res["totale"] = len(vicini)
@@ -875,7 +778,6 @@ class RouterHTTP:
                 logger.warning("emissione smart-pass fallita (ignorata)", exc_info=True)
         if getattr(self._sys, "firma", None) is not None:
             try:
-                import datetime as _dt
                 qt = dati.get("quote_token", "")
                 corpo["voucher_token"] = self._sys.firma.codifica({
                     "tipo": "voucher", "riferimento": ref, "alloggio_id": allog,
@@ -885,7 +787,6 @@ class RouterHTTP:
                     "smart_pass": pass_token or "",
                     "tassa_soggiorno_cents": corpo.get("tassa_soggiorno_cents", 0),
                     "politica": self._politica_alloggio(allog),
-                    "prenotato_data": _dt.date.today().isoformat(),   # per il ripensamento 48h
                     "idem_key": (qt.split(".")[-1] if isinstance(qt, str) and qt else "")})
             except Exception:
                 logger.warning("emissione voucher fallita (ignorata)", exc_info=True)
@@ -1141,21 +1042,9 @@ class RouterHTTP:
         giorni = giorni if giorni > 0 else 0
         # POLITICA dal VOUCHER FIRMATO (scelta dall'host, anti-furbata) - NON dalla richiesta
         politica = v.get("politica") or self._politica_alloggio(allog)
-        # RIPENSAMENTO 48h: se annulli entro 2 giorni dall'acquisto e l'arrivo è >=72h -> 100%
-        # (copre e SUPERA California SB 644 [24h] + diritto di pentimento Brasile art.49). Vince
-        # su qualunque politica; NON si applica a soggiorni imminenti/passati (arrivo < 3 giorni).
-        ripensamento = False
-        try:
-            _pren = v.get("prenotato_data")
-            if isinstance(_pren, str) and _pren:
-                _gg_pren = (datetime.date.today() - datetime.date.fromisoformat(_pren)).days
-                ripensamento = (0 <= _gg_pren <= 2) and (giorni >= 3)
-        except Exception:
-            ripensamento = False
         try:
             from fase111_cancellazione import calcola_rimborso
-            r = calcola_rimborso(pagato, giorni, politica=politica,
-                                 entro_ripensamento=ripensamento)
+            r = calcola_rimborso(pagato, giorni, politica=politica)
             idem = v.get("idem_key") or ("cancel_" + (rif or token[-16:]))
             e = self._sys.inventario.rilascia(allog, ci, co, idem_key=idem)
         except Exception:
@@ -1191,7 +1080,6 @@ class RouterHTTP:
                      "tassa_rimborsata_cents": tassa,
                      "trattenuto_cents": r["trattenuto_cents"],
                      "politica": r["politica"], "money_unit": "cents_integer",
-                     "ripensamento": bool(r.get("ripensamento")),
                      "credito_viaggio_cents": cv_cents, "credito_viaggio_token": cv_token,
                      "nota": ("date liberate; rimborso PSP da eseguire quando Stripe e' live."
                               + (" Hai un Credito Viaggio per la prossima prenotazione."
@@ -1266,20 +1154,11 @@ class RouterHTTP:
             return 422, {"errore": "email_non_valida"}
         from fase158_domanda import CREDITO_FONDATORE_CENTS
         credito = dom.emette_credito_fondatore(email, citta_eff)
-        # ALLARME DOMANDA: se la città supera la soglia, avvisa gli host (UNA volta, best-effort)
-        try:
-            if citta_eff != "(qualsiasi)":
-                n_att = dom.conta(citta_eff)
-                if self._allarme_domanda().controlla(citta_eff, n_att):
-                    self._notifica_host_domanda(citta_eff, n_att)
-        except Exception:
-            logger.warning("allarme domanda fallito (ignorato)", exc_info=True)
-        lang = dati.get("lang")
-        lang = lang if lang in LINGUE_SUPPORTATE else "it"
-        dest = citta_eff if citta_eff != "(qualsiasi)" else _ui("wl_dest_generica", lang)
+        dest = citta_eff if citta_eff != "(qualsiasi)" else "questa destinazione"
         return 201, {"ok": True, "credito_token": credito or "",
                      "credito_cents": CREDITO_FONDATORE_CENTS,
-                     "messaggio": _ui("wl_msg_tpl", lang) % dest}
+                     "messaggio": ("Ti avvisiamo appena ci sono alloggi a %s. Hai un Credito "
+                                   "Fondatore per la tua prima prenotazione." % dest)}
 
     def _domanda_conta(self, query):
         """Prova sociale per gli host: quante persone cercano (totale o per citta)."""
@@ -1288,64 +1167,6 @@ class RouterHTTP:
             return 503, {"errore": "domanda_non_attiva"}
         citta = query.get("citta")
         return 200, {"citta": citta or "", "richieste": dom.conta(citta)}
-
-    def _domanda_per_citta(self, query):
-        """Mappa della DOMANDA: città con più persone in attesa. Arma cold-start per gli host
-        ('N persone cercano già a X') e prova sociale per gli ospiti. Pubblico (aggregato, no email)."""
-        dom = getattr(self._sys, "domanda", None)
-        if dom is None:
-            return 503, {"errore": "domanda_non_attiva"}
-        try:
-            limit = max(1, min(100, int(query.get("limit", "20"))))
-        except (ValueError, TypeError):
-            limit = 20
-        soglia = self._allarme_domanda().soglia
-        citta = dom.per_citta(limit=limit)
-        for c in citta:
-            c["oltre_soglia"] = bool(c.get("richieste", 0) >= soglia)
-        return 200, {"soglia": soglia, "citta": citta}
-
-    def _allarme_domanda(self):
-        a = getattr(self, "_allarme_cache", None)
-        if a is None:
-            import os
-            from fase161_domanda_allarme import AllarmeDomanda
-            try:
-                soglia = int(os.environ.get("DOMANDA_SOGLIA", "5"))
-            except (ValueError, TypeError):
-                soglia = 5
-            a = AllarmeDomanda(os.environ.get("DOMANDA_ALLARME_FILE", ""), soglia=soglia)
-            self._allarme_cache = a
-        return a
-
-    def _notifica_host_domanda(self, citta, conteggio):
-        """Best-effort: soglia domanda superata in 'citta' -> avvisa gli host con alloggi lì
-        ('N cercano casa, aggiorna disponibilità'). ISOLATO, gated all'email (no-op se spento)."""
-        try:
-            notif = getattr(self._sys, "notificatore_prenotazione", None)
-            reg = getattr(self._sys, "registro_host", None)
-            if notif is None or not notif.attivo() or reg is None:
-                return
-            from fase57_vetrina import CriteriRicerca
-            res = self._sys.catalogo.cerca(CriteriRicerca(citta=citta, limit=50)) or {}
-            visti = set()
-            nome = str(citta).title()
-            base = self._base_url or "https://bookinvip.com"
-            for card in (res.get("risultati") or []):
-                hid = self._sys.catalogo.host_di_alloggio(card.get("slug"))
-                if not hid or hid in visti:
-                    continue
-                visti.add(hid)
-                contatti = reg.info_host(hid)
-                if not contatti:
-                    continue
-                ogg = "🔥 Domanda in crescita a %s" % nome
-                testo = ("%d persone stanno cercando casa a %s proprio ora su BookinVIP. "
-                         "Aggiorna disponibilità e prezzi per ricevere prenotazioni: %s/host.html"
-                         % (int(conteggio), nome, base))
-                notif.avvisa(contatti, ogg, testo)
-        except Exception:
-            logger.warning("notifica domanda host fallita (ignorata)", exc_info=True)
 
     def _trasparenza(self, query):
         """Confronto noi-vs-OTA (fase69): 'con Booking incassi X, con noi Y'."""
@@ -2091,10 +1912,6 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 bps = int(os.environ.get("COMMISSIONE_BPS", "1500"))
                 self._testo(200, "text/plain",
                             llms_txt(base_url, commissione_bps=bps))
-            elif u.path == "/.well-known/ai-plugin.json":
-                self._scrivi(200, ai_plugin_manifest(base_url))   # scoperta agenti IA
-            elif u.path == "/openapi.json":
-                self._scrivi(200, openapi_agent_spec(base_url))   # spec per agenti non-MCP
             elif u.path == "/sitemap-host.xml":
                 from fase97_inbound_seo import sitemap_inbound
                 self._testo(200, "application/xml", sitemap_inbound(base_url))
