@@ -50,12 +50,13 @@ services:
         condition: service_healthy
     ports:
       - "80:80"
-      # - "443:443"                   # abilita con SSL (vedi DEPLOY_CASAVIP.md)
+      - "443:443"
     networks:
       - interna
     volumes:
-      - ./deploy/nginx.casavip.conf:/etc/nginx/conf.d/default.conf:ro
-      # - /etc/letsencrypt:/etc/letsencrypt:ro   # certificati Let's Encrypt
+      - ./deploy/nginx.casavip.ssl.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
 
   # Backup automatico (snapshot consistente + retention) ogni 6 ore. Riusa l'immagine app.
   backup:

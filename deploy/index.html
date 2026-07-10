@@ -61,12 +61,15 @@
     <div class="logo"><img src="/logo.svg" alt="BookinVIP" style="height:38px;display:block"></div>
     <div class="headright">
       <button id="btnInstall">⬇ App</button>
-      <select id="lang">
+      <select id="lang" aria-label="Language">
         <option value="it">🇮🇹 Italiano</option>
         <option value="en">🇬🇧 English</option>
-        <option value="es">🇪🇸 Espanol</option>
-        <option value="fr">🇫🇷 Francais</option>
+        <option value="es">🇪🇸 Español</option>
+        <option value="fr">🇫🇷 Français</option>
         <option value="de">🇩🇪 Deutsch</option>
+        <option value="pt">🇵🇹 Português</option>
+        <option value="ja">🇯🇵 日本語</option>
+        <option value="zh">🇨🇳 中文</option>
       </select>
     </div>
   </header>
@@ -78,27 +81,27 @@
     </svg>
     <div style="position:relative">
       <img src="/logo.svg" alt="BookinVIP" style="height:46px;filter:brightness(0) invert(1);margin-bottom:.6rem">
-      <h1 style="font-size:1.9rem;font-weight:800;margin:.2rem auto .5rem;max-width:20ch;line-height:1.15">Il tuo viaggio, senza sorprese</h1>
-      <p style="opacity:.95;max-width:46ch;margin:0 auto 1.1rem;font-size:1.02rem">Alloggi certificati · paghi il prezzo pulito · <b>cancellazione gratuita</b></p>
+      <h1 data-t="hero_titolo" style="font-size:1.9rem;font-weight:800;margin:.2rem auto .5rem;max-width:20ch;line-height:1.15">Il tuo viaggio, senza sorprese</h1>
+      <p data-t="hero_sub" style="opacity:.95;max-width:46ch;margin:0 auto 1.1rem;font-size:1.02rem">Alloggi certificati · paghi il prezzo pulito · cancellazione gratuita</p>
       <div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;font-size:.84rem">
-        <span style="background:rgba(255,255,255,.18);padding:.4rem .8rem;border-radius:2rem">✓ 0% commissioni all'ospite</span>
-        <span style="background:rgba(255,255,255,.18);padding:.4rem .8rem;border-radius:2rem">✓ Cancellazione gratuita</span>
-        <span style="background:rgba(255,255,255,.18);padding:.4rem .8rem;border-radius:2rem">✓ Pagamenti sicuri</span>
-        <span style="background:rgba(249,200,70,.95);color:#1e3c72;font-weight:700;padding:.4rem .8rem;border-radius:2rem">★ Anti-Rimpianto: i soldi tornano come credito</span>
+        <span style="background:rgba(255,255,255,.18);padding:.4rem .8rem;border-radius:2rem">✓ <span data-t="badge_commissioni">0% commissioni all'ospite</span></span>
+        <span style="background:rgba(255,255,255,.18);padding:.4rem .8rem;border-radius:2rem">✓ <span data-t="badge_cancellazione">Cancellazione gratuita</span></span>
+        <span style="background:rgba(255,255,255,.18);padding:.4rem .8rem;border-radius:2rem">✓ <span data-t="badge_pagamenti">Pagamenti sicuri</span></span>
+        <span style="background:rgba(249,200,70,.95);color:#1e3c72;font-weight:700;padding:.4rem .8rem;border-radius:2rem">★ <span data-t="badge_antirimpianto">Anti-Rimpianto: i soldi tornano come credito</span></span>
       </div>
     </div>
   </section>
 
   <form class="filtri" id="form">
     <div class="riga">
-      <label data-ui="citta">Citta<input type="text" id="citta" value="Roma"></label>
-      <label data-ui="checkin">Check-in<input type="date" id="checkin" value="2026-09-01"></label>
-      <label data-ui="checkout">Check-out<input type="date" id="checkout" value="2026-09-03"></label>
-      <label data-ui="ospiti">Ospiti<input type="number" id="ospiti" value="2" min="1" max="20"></label>
-      <label>Max €<input type="number" id="prezzomax" placeholder="es. 150" min="0"></label>
-      <label id="lblRaggio">Raggio<select id="raggio"><option value="2">2 km</option><option value="5" selected>5 km</option><option value="10">10 km</option><option value="25">25 km</option><option value="50">50 km</option></select></label>
+      <label data-t="citta">Città<input type="text" id="citta" value="Roma"></label>
+      <label data-t="checkin">Check-in<input type="date" id="checkin" value="2026-09-01"></label>
+      <label data-t="checkout">Check-out<input type="date" id="checkout" value="2026-09-03"></label>
+      <label data-t="ospiti">Ospiti<input type="number" id="ospiti" value="2" min="1" max="20"></label>
+      <label data-t="max_prezzo">Max €<input type="number" id="prezzomax" data-tph="ph_prezzomax" placeholder="es. 150" min="0"></label>
+      <label id="lblRaggio" data-t="raggio">Raggio<select id="raggio"><option value="2">2 km</option><option value="5" selected>5 km</option><option value="10">10 km</option><option value="25">25 km</option><option value="50">50 km</option></select></label>
       <button type="submit" id="btnCerca">Cerca</button>
-      <button type="button" id="btnVicino" title="Trova alloggi vicino a dove ti trovi ora">📍 Vicino a me</button>
+      <button type="button" id="btnVicino" data-ttitle="vicino_title" title="Trova alloggi vicino a dove ti trovi ora">📍 <span data-t="vicino_a_me">Vicino a me</span></button>
     </div>
     <div class="chips" id="chips"></div>
   </form>
@@ -112,7 +115,7 @@
       <a href="https://tiktok.com/@bookinvip" target="_blank" rel="noopener" style="color:#1e3c72;text-decoration:none">🎵 TikTok</a>
       <a href="https://x.com/bookinvip" target="_blank" rel="noopener" style="color:#1e3c72;text-decoration:none">𝕏 (Twitter)</a>
     </div>
-    <div>© BookinVIP · bookinvip.com · zero commissioni nascoste</div>
+    <div>© BookinVIP · bookinvip.com · <span data-t="footer_slogan">zero commissioni nascoste</span></div>
   </footer>
 </div>
 
@@ -136,6 +139,7 @@
 <script>
 const API = location.origin.startsWith('http') ? '' : 'http://127.0.0.1:8080';
 const SERVIZI = ['wifi','piscina','parcheggio','aria_condizionata','animali_ammessi','colazione'];
+const SUPP = ['it','en','es','fr','de','pt','ja','zh'];
 let I18N = {ui:{},servizi:{}}, LANG = 'it', QUOTE = null, attivi = new Set(), GEO = null;
 
 function t(k){ return (I18N.ui && I18N.ui[k]) || k; }
@@ -143,6 +147,14 @@ function srv(c){ return (I18N.servizi && I18N.servizi[c]) || c; }
 function eur(c){ return '€ ' + ((c||0)/100).toFixed(2); }
 function fmtDist(m){ if(m==null) return ''; return m<1000 ? Math.round(m)+' m' : (m/1000).toFixed(1)+' km'; }
 async function api(path, opts){ const r = await fetch(API+path, opts); return r.json(); }
+
+// Lingua iniziale: 1) scelta salvata  2) lingua del browser  3) inglese (default globale).
+function linguaIniziale(){
+  try{ const s=localStorage.getItem('lang'); if(s && SUPP.includes(s)) return s; }catch(e){}
+  const cand = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language||'en'];
+  for(const l of cand){ const b=String(l||'').slice(0,2).toLowerCase(); if(SUPP.includes(b)) return b; }
+  return 'en';
+}
 
 function renderChips(){
   document.getElementById('chips').innerHTML = SERVIZI.map(c=>
@@ -152,12 +164,25 @@ function renderChips(){
   });
 }
 
-async function caricaI18N(lang){
-  try{ I18N = await api('/api/i18n?lang='+lang); }catch(e){ I18N={ui:{},servizi:{}}; }
-  document.querySelectorAll('[data-ui]').forEach(el=>{ el.childNodes[0].nodeValue = t(el.getAttribute('data-ui')); });
-  document.getElementById('btnCerca').textContent = '🔍 '+t('cerca');
-  document.getElementById('btnPrenota').textContent = '📅 '+t('prenota');
+// Applica le traduzioni a TUTTI gli elementi marcati (testo, placeholder, title).
+function applicaTraduzioni(){
+  if(!I18N.ui || !Object.keys(I18N.ui).length) return;   // dizionario non caricato -> lascia i testi statici
+  document.querySelectorAll('[data-t]').forEach(el=>{
+    const k=el.getAttribute('data-t'); const f=el.firstChild;
+    if(f && f.nodeType===3){ f.nodeValue=t(k); } else { el.textContent=t(k); }
+  });
+  document.querySelectorAll('[data-tph]').forEach(el=> el.setAttribute('placeholder', t(el.getAttribute('data-tph'))));
+  document.querySelectorAll('[data-ttitle]').forEach(el=> el.setAttribute('title', t(el.getAttribute('data-ttitle'))));
+  const bc=document.getElementById('btnCerca'); if(bc) bc.textContent='🔍 '+t('cerca');
+  const bp=document.getElementById('btnPrenota'); if(bp) bp.textContent='📅 '+t('prenota');
   renderChips();
+}
+
+async function caricaI18N(lang){
+  LANG = lang; document.documentElement.lang = lang;
+  try{ localStorage.setItem('lang', lang); }catch(e){}
+  try{ I18N = await api('/api/i18n?lang='+lang); }catch(e){ I18N={ui:{},servizi:{}}; }
+  applicaTraduzioni();
 }
 
 function stelle(rie){
@@ -174,7 +199,7 @@ function cardHtml(a){
     <div class="prezzo">${eur(a.prezzo_notte_cents)} <span style="font-size:.85rem;font-weight:400;color:#5e6f8d">/ ${t('notte')}</span></div>
     <div style="margin:.2rem 0">${stelle(a.recensioni)}</div>
     <div style="margin:.3rem 0">${serv} ${disp}</div>
-    <div class="meta">📍 ${a.citta}${a.paese?', '+a.paese:''}${a.distanza_m!=null?' · <b>a '+fmtDist(a.distanza_m)+'</b>':''}</div>
+    <div class="meta">📍 ${a.citta}${a.paese?', '+a.paese:''}${a.distanza_m!=null?' · <b>'+fmtDist(a.distanza_m)+'</b>':''}</div>
     <button data-slug="${a.slug}">${t('dettaglio')}</button></div>`;
 }
 
@@ -196,23 +221,25 @@ async function cerca(){
     } else if(GEO){
       ris.innerHTML = `<div class="vuoto" style="text-align:center;padding:1.5rem">
         <div style="font-size:2rem">📍</div>
-        <h3 style="color:#1e3c72;margin:.5rem 0">Nessun alloggio entro ${document.getElementById('raggio').value} km</h3>
-        <p style="color:#5e6f8d;max-width:44ch;margin:.3rem auto">Allarga il raggio qui sopra, oppure cerca per città.</p></div>`;
+        <h3 style="color:#1e3c72;margin:.5rem 0">${t('nessun_raggio_pre')} ${document.getElementById('raggio').value} km</h3>
+        <p style="color:#5e6f8d;max-width:44ch;margin:.3rem auto">${t('allarga_raggio')}</p></div>`;
     } else { ris.innerHTML = emptyStateHtml(params.citta); bindWaitlist(params.citta); }
   }catch(e){ ris.innerHTML = `<div class="msg err">${t('errore')}: ${e.message}</div>`; }
 }
 function emptyStateHtml(citta){
-  const c = citta ? (' a <b>'+String(citta).replace(/[<>]/g,'')+'</b>') : '';
+  const c = citta ? String(citta).replace(/[<>]/g,'') : '';
+  const cityLine = c ? `<div style="color:#1e3c72;font-weight:600;margin:.2rem 0">📍 ${c}</div>` : '';
   return `<div class="vuoto" style="text-align:center;padding:1.5rem">
     <div style="font-size:2rem">🌱</div>
-    <h3 style="color:#1e3c72;margin:.5rem 0">Stiamo aprendo${c}!</h3>
-    <p style="color:#5e6f8d;max-width:44ch;margin:.3rem auto 1rem">Lascia la tua email: ti avvisiamo appena ci sono alloggi e ricevi un <b>Credito Fondatore di benvenuto</b> per la tua prima prenotazione.</p>
+    <h3 style="color:#1e3c72;margin:.5rem 0">${t('empty_titolo')}</h3>
+    ${cityLine}
+    <p style="color:#5e6f8d;max-width:44ch;margin:.3rem auto 1rem">${t('empty_lascia')}</p>
     <div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;max-width:420px;margin:0 auto">
-      <input id="wl_email" type="email" placeholder="latua@email.com" style="flex:1;min-width:200px;padding:.7rem;border-radius:.7rem;border:1px solid #dce1ed">
-      <button id="wl_btn" style="background:#1e3c72;color:#fff;border:0;border-radius:.7rem;padding:.7rem 1.2rem;font-weight:700;cursor:pointer">Avvisami</button>
+      <input id="wl_email" type="email" placeholder="${t('ph_email')}" style="flex:1;min-width:200px;padding:.7rem;border-radius:.7rem;border:1px solid #dce1ed">
+      <button id="wl_btn" style="background:#1e3c72;color:#fff;border:0;border-radius:.7rem;padding:.7rem 1.2rem;font-weight:700;cursor:pointer">${t('avvisami')}</button>
     </div>
     <div id="wl_msg" style="margin-top:.7rem;font-size:.9rem"></div>
-    <p style="margin-top:1.4rem;font-size:.9rem;color:#5e6f8d">Sei un host? <a href="/diventa-host.html" style="color:#155724;font-weight:700">Pubblica il primo alloggio${c} →</a></p>
+    <p style="margin-top:1.4rem;font-size:.9rem;color:#5e6f8d">${t('sei_host')} <a href="/diventa-host.html" style="color:#155724;font-weight:700">${t('pubblica_primo')} →</a></p>
   </div>`;
 }
 function bindWaitlist(citta){
@@ -220,14 +247,13 @@ function bindWaitlist(citta){
   b.onclick=async ()=>{
     const em=(document.getElementById('wl_email').value||'').trim();
     const m=document.getElementById('wl_msg');
-    // Regex email standard: accetta i PUNTI nel nome e nel dominio (es. massimo.foli@protonmail.com)
-    if(!em || em.indexOf('@')<1){ m.style.color='#b00020'; m.textContent='Inserisci la tua email.'; return; }
+    if(!em || em.indexOf('@')<1){ m.style.color='#b00020'; m.textContent=t('inserisci_email'); return; }
     const cittaLive=(document.getElementById('citta').value||'').trim()||citta||'';
     let d=null;
     try{ d=await api('/api/domanda',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({email:em,citta:cittaLive,check_in:document.getElementById('checkin').value,check_out:document.getElementById('checkout').value})}); }catch(e){}
+      body:JSON.stringify({email:em,citta:cittaLive,lang:LANG,check_in:document.getElementById('checkin').value,check_out:document.getElementById('checkout').value})}); }catch(e){}
     if(d && d.ok){ m.style.color='#155724'; m.innerHTML='✅ '+d.messaggio+' <b>(€'+((d.credito_cents||0)/100).toFixed(0)+')</b>'; b.style.display='none'; }
-    else { m.style.color='#b00020'; m.textContent = (d && d.errore) ? ('Errore server: '+d.errore) : 'Servizio non raggiungibile, riprova.'; }
+    else { m.style.color='#b00020'; m.textContent = (d && d.errore) ? (t('errore_server')+' '+d.errore) : t('servizio_non_ragg'); }
   };
 }
 
@@ -244,7 +270,7 @@ async function apri(slug){
     document.getElementById('mBadge').innerHTML = (a.servizi_label||a.servizi||[]).map(s=>`<span class="badge">${s}</span>`).join('');
     document.getElementById('mRating').innerHTML = stelle(a.recensioni);
     document.getElementById('mDescr').textContent = a.descrizione||'';
-    const POL={flessibile:'✓ Cancellazione gratuita fino a 24h prima',moderata:'✓ Cancellazione gratuita fino a 5 giorni prima',rigida:'Cancellazione gratuita fino a 14 giorni prima (poi 50%)',non_rimborsabile:'Tariffa non rimborsabile'};
+    const POL={flessibile:t('pol_flessibile'),moderata:t('pol_moderata'),rigida:t('pol_rigida'),non_rimborsabile:t('pol_non_rimborsabile')};
     document.getElementById('mPolitica').textContent = POL[a.politica_cancellazione]||POL.flessibile;
     document.getElementById('mMsg').innerHTML='';
     // recensioni verificate (solo chi ha pagato)
@@ -255,7 +281,7 @@ async function apri(slug){
         rec.innerHTML = '<div style="margin:.5rem 0;font-size:.9rem">'+
           rr.recensioni.slice(0,4).map(x=>{
             const txt=(x.testo&&x.testo.text)?x.testo.text:'';
-            return `<div style="border-top:1px solid #eef2f7;padding:.4rem 0">★ ${x.voto} <span style="color:#155724;font-size:.72rem">✓ verificata</span><br><span style="color:#4a5b7a">${txt.replace(/[<>]/g,'')}</span></div>`;
+            return `<div style="border-top:1px solid #eef2f7;padding:.4rem 0">★ ${x.voto} <span style="color:#155724;font-size:.72rem">✓ ${t('verificata')}</span><br><span style="color:#4a5b7a">${txt.replace(/[<>]/g,'')}</span></div>`;
           }).join('')+'</div>';
       }
     }catch(e){}
@@ -270,15 +296,15 @@ async function apri(slug){
       // 0% ospite: soggiorno pulito + tassa di soggiorno separata (pass-through citta') = totale
       let righe = `<div class="riga-prezzo"><span>${t('totale')} (${q.notti||''} x ${t('notte')})</span><span>${eur(q.prezzo_guest_cents)}</span></div>`;
       if(q.tassa_soggiorno_cents>0) righe += `<div class="riga-prezzo"><span>${t('tassa')}</span><span>${eur(q.tassa_soggiorno_cents)}</span></div>`;
-      righe += `<div class="riga-prezzo tot"><span>Totale</span><span>${eur(q.totale_cents||q.prezzo_guest_cents)} ${q.valuta||''}</span></div>`;
-      if(q.totale_indicativo_cents>0 && q.valuta_indicativa) righe += `<div style="font-size:.78rem;color:#5e6f8d;margin-top:.2rem">≈ ${(q.totale_indicativo_cents/100).toFixed(2)} ${q.valuta_indicativa} (indicativo · la tua banca applica il suo cambio)</div>`;
+      righe += `<div class="riga-prezzo tot"><span>${t('totale')}</span><span>${eur(q.totale_cents||q.prezzo_guest_cents)} ${q.valuta||''}</span></div>`;
+      if(q.totale_indicativo_cents>0 && q.valuta_indicativa) righe += `<div style="font-size:.78rem;color:#5e6f8d;margin-top:.2rem">≈ ${(q.totale_indicativo_cents/100).toFixed(2)} ${q.valuta_indicativa} (${t('indicativo')})</div>`;
       if(q.confronto_ota && q.confronto_ota.risparmio_guest_cents>0){ const co=q.confronto_ota;
-        righe += `<div style="margin-top:.5rem;padding:.5rem .7rem;background:#eafaf0;border-radius:.6rem;font-size:.85rem;color:#155724">Su un OTA pagheresti ~<b>${eur(co.ota_totale_cents)}</b> · <b>risparmi ${eur(co.risparmio_guest_cents)}</b> (-${(co.risparmio_bps/100).toFixed(0)}%)</div>`; }
+        righe += `<div style="margin-top:.5rem;padding:.5rem .7rem;background:#eafaf0;border-radius:.6rem;font-size:.85rem;color:#155724">${t('ota_pre')}<b>${eur(co.ota_totale_cents)}</b> · <b>${t('risparmi')} ${eur(co.risparmio_guest_cents)}</b> (-${(co.risparmio_bps/100).toFixed(0)}%)</div>`; }
       const _tot = q.totale_cents||q.prezzo_guest_cents;
-      righe += `<div style="margin-top:.5rem;font-size:.85rem">👥 Dividi tra amici: <select id="splitN" style="padding:.2rem .3rem">${[2,3,4,5,6].map(n=>`<option value="${n}">${n}</option>`).join('')}</select> <span id="splitOut" style="color:#155724;font-weight:600"></span></div>`;
+      righe += `<div style="margin-top:.5rem;font-size:.85rem">👥 ${t('dividi_amici')} <select id="splitN" style="padding:.2rem .3rem">${[2,3,4,5,6].map(n=>`<option value="${n}">${n}</option>`).join('')}</select> <span id="splitOut" style="color:#155724;font-weight:600"></span></div>`;
       mq.innerHTML = righe;
       const sb = document.getElementById('splitN');
-      if(sb){ const calc = async ()=>{ try{ const r = await api('/api/split/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({totale_cents:_tot,n:parseInt(sb.value)})}); if(r.quote){ const mn=r.per_persona_min_cents,mx=r.per_persona_max_cents; document.getElementById('splitOut').textContent = (mn===mx?('= '+eur(mn)):('= '+eur(mn)+'–'+eur(mx)))+' a testa'; } }catch(e){} }; sb.onchange=calc; calc(); }
+      if(sb){ const calc = async ()=>{ try{ const r = await api('/api/split/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({totale_cents:_tot,n:parseInt(sb.value)})}); if(r.quote){ const mn=r.per_persona_min_cents,mx=r.per_persona_max_cents; document.getElementById('splitOut').textContent = (mn===mx?('= '+eur(mn)):('= '+eur(mn)+'–'+eur(mx)))+' '+t('a_testa'); } }catch(e){} }; sb.onchange=calc; calc(); }
       document.getElementById('btnPrenota').style.display='';
     } else { QUOTE=null; mq.innerHTML=`<div class="msg err">${t('non_disp')}</div>`; document.getElementById('btnPrenota').style.display='none'; }
     document.getElementById('modal').classList.add('open');
@@ -294,8 +320,8 @@ async function prenota(){
       body:JSON.stringify({quote_token:QUOTE, email:email})});
     if(r.stato==='confermata'){
       if(r.payment_url){ window.location.href = r.payment_url; return; }   // redirect al checkout Stripe
-      const voucher = r.voucher_token ? ` · <a href="/voucher/${encodeURIComponent(r.voucher_token)}?lang=${LANG}" target="_blank" style="color:#155724;font-weight:700">📄 Voucher</a>` : '';
-      const contr = r.voucher_token ? ` · <a href="#" id="dlContr" style="color:#1e3c72;font-weight:700">📑 Contratto PDF</a>` : '';
+      const voucher = r.voucher_token ? ` · <a href="/voucher/${encodeURIComponent(r.voucher_token)}?lang=${LANG}" target="_blank" style="color:#155724;font-weight:700">📄 ${t('voucher_label')}</a>` : '';
+      const contr = r.voucher_token ? ` · <a href="#" id="dlContr" style="color:#1e3c72;font-weight:700">📑 ${t('contratto_pdf')}</a>` : '';
       msg.innerHTML=`<div class="msg ok">✅ ${t('conferma')} (${r.riferimento||''})${voucher}${contr}</div>`; document.getElementById('btnPrenota').style.display='none';
       const dl = document.getElementById('dlContr'); const _vt = r.voucher_token;
       if(dl) dl.onclick = async (e)=>{ e.preventDefault(); try{ const cr = await api('/api/contratto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({voucher_token:_vt, lingua:LANG})}); if(cr.pdf_base64){ const a=document.createElement('a'); a.href='data:application/pdf;base64,'+cr.pdf_base64; a.download=cr.filename||'contratto.pdf'; a.click(); } }catch(err){} };
@@ -307,15 +333,15 @@ async function prenota(){
 // "Vicino a me": chiede la posizione al browser, la converte in microgradi interi e cerca.
 function vicinoAMe(){
   const ris = document.getElementById('risultati');
-  if(!navigator.geolocation){ ris.innerHTML = `<div class="msg err">Geolocalizzazione non supportata dal browser</div>`; return; }
-  const btn = document.getElementById('btnVicino'); const old = btn.textContent;
+  if(!navigator.geolocation){ ris.innerHTML = `<div class="msg err">${t('geo_non_supp')}</div>`; return; }
+  const btn = document.getElementById('btnVicino'); const old = btn.innerHTML;
   btn.textContent = '📍 …'; btn.disabled = true;
   navigator.geolocation.getCurrentPosition(p=>{
     GEO = { lat_micro: Math.round(p.coords.latitude*1e6), lon_micro: Math.round(p.coords.longitude*1e6) };
     document.getElementById('citta').value = '';   // 'vicino a me' ignora il filtro citta
-    btn.textContent = old; btn.disabled = false; cerca();
-  }, ()=>{ btn.textContent = old; btn.disabled = false;
-           ris.innerHTML = `<div class="msg err">Posizione non disponibile (permesso negato?)</div>`; },
+    btn.innerHTML = old; btn.disabled = false; cerca();
+  }, ()=>{ btn.innerHTML = old; btn.disabled = false;
+           ris.innerHTML = `<div class="msg err">${t('geo_non_disp')}</div>`; },
   { enableHighAccuracy:false, timeout:10000, maximumAge:300000 });
 }
 document.getElementById('btnVicino').onclick = vicinoAMe;
@@ -329,7 +355,7 @@ document.getElementById('modal').onclick = e=>{ if(e.target.id==='modal') e.targ
 document.getElementById('btnPrenota').onclick = prenota;
 // link diretto host: ?apri=<slug> apre l'alloggio; ?fonte=diretto applica il 5% al preventivo
 (function(){ const a=new URLSearchParams(location.search).get('apri'); if(a) apri(a); })();
-document.getElementById('lang').onchange = async e=>{ LANG=e.target.value; document.documentElement.lang=LANG; await caricaI18N(LANG); cerca(); };
+document.getElementById('lang').onchange = async e=>{ await caricaI18N(e.target.value); cerca(); };
 
 // PWA: installazione + service worker
 let deferred=null;
@@ -338,6 +364,9 @@ document.getElementById('btnInstall').onclick = async ()=>{ if(!deferred) return
 // niente piu' service worker: disinstalla eventuali SW vecchi e svuota le cache -> sito sempre fresco
 if('serviceWorker' in navigator){ navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>r.unregister())).catch(()=>{}); if(window.caches) caches.keys().then(ks=>ks.forEach(k=>caches.delete(k))).catch(()=>{}); }
 
+// avvio: rileva la lingua, allinea il menù e carica tutto
+LANG = linguaIniziale();
+document.getElementById('lang').value = LANG;
 (async()=>{ await caricaI18N(LANG); cerca(); })();
 </script>
 </body>

@@ -1,44 +1,60 @@
-# 🔴 RIPRENDI QUI — punto di ripristino deploy (aggiornato 2026-07-10)
+# ✅ RISOLTO — il sito è ONLINE con HTTPS (aggiornato 2026-07-10)
 
-> Se ci si interrompe (riavvio PC, ecc.), si riparte da questo file. Tutto il codice è su GitHub
-> (`edilmax/Core_Auto`, branch `master`, ultimo commit **ec8f1b6**). **Niente è perso.**
+> `https://bookinvip.com` e `https://www.bookinvip.com` funzionano con il **lucchetto verde** 🔒.
+> La lista d'attesa registra le email anche in HTTPS. Il certificato si **rinnova da solo**.
 
-## ✅ VERITÀ FONDAMENTALE: il codice e il server FUNZIONANO
-Verificato più volte sul VPS:
-- `curl -sS -X POST http://localhost/api/domanda -H 'Content-Type: application/json' -d '{"email":"a@b.com","citta":"pavia"}'` → **`{"ok": true, ...}`** (la lista d'attesa registra le email).
-- `curl -s http://localhost/ | grep -i inserisci` → mostra il codice NUOVO (`'Inserisci la tua email.'`), quindi **il server serve la versione aggiornata**.
+## 🎯 QUAL ERA IL VERO PROBLEMA (dopo giorni di caccia)
+Il codice, il server e i dati erano SEMPRE stati a posto. Il vero problema era **uno solo**:
+- Il sito girava **solo in HTTP (porta 80)**; la **porta 443 (HTTPS) era spenta** → i browser, che oggi
+  pretendono l'HTTPS, non si connettevano e mostravano "errore" (e il vecchio service worker in cache
+  faceva apparire "offline").
+- **NON era**: né il codice, né la cache, né "Aruba vs Hostinger". I vecchi documenti che parlavano di
+  **Aruba 89.46.65.6 erano SBAGLIATI**: quello è un server-fantasma con un Flask morto. Il dominio punta
+  al **VPS Hostinger `76.13.44.167`** (`srv1781683.hstgr.cloud`), dove gira davvero l'app.
 
-**Il problema NON è mai stato il codice.** Erano problemi di **deploy/infrastruttura** e di **cache del browser**.
+Perché l'HTTPS non era mai partito: (1) sul VPS c'è solo `docker-compose` **v1.29.2**, ma il file SSL e
+lo script `init-letsencrypt.sh` usano i comandi della **v2** (`docker compose`) → davano errore; (2) il
+certificato Let's Encrypt esisteva già in `/etc/letsencrypt` ma il file SSL lo cercava in `certbot/conf`.
 
-## 🧩 I VERI PROBLEMI TROVATI E RISOLTI (perché "prima andava e adesso no" per 10 giorni)
-1. **`docker-compose` v1 rifiutava il compose** per la chiave `name: casavip` (solo v2) → ogni `up --build` falliva in silenzio, restava il container vecchio. → FIX: `version: "2.4"` (commit af5d0cb).
-2. **`.dockerignore` escludeva `deploy/`** → la build falliva a `COPY deploy ./deploy`. → FIX: rimosso `deploy/` dal .dockerignore (commit c9f2fd5).
-3. **`docker-compose v1.29.2` bug `KeyError: 'ContainerConfig'`** nel RI-creare container con volumi. → WORKAROUND: rimuovere TUTTI i container e poi `up` (li crea da zero). Comando:
-   `docker ps -aq --filter name=casavip | xargs -r docker rm -f`
-4. **Processo Python FANTASMA sull'host** (`PID 41091`, `127.0.0.1:8080`) con codice vecchio, avviato a mano fuori Docker → ogni `curl 127.0.0.1:8080` colpiva LUI, non il container. Il vero test è via nginx: `curl http://localhost/...` (porta 80). → DA FARE: `kill 41091` (poi verifica con `ss -ltnp | grep :8080`).
-5. **Service worker (PWA) serviva la index.html vecchia dalla cache** → il browser mostrava messaggi obsoleti. → FIX: `sw.js` reso "kill-switch" senza reload (commit ec8f1b6), `index.html` non registra più SW + validazione email permissiva (basta `@`, decide il server).
+## 🔧 COSA È STATO FATTO (2026-07-10, direttamente sul VPS)
+1. In `docker-compose.casavip.yml`, servizio **nginx**, ora attivi (prima commentati):
+   - `- "443:443"`
+   - conf: `./deploy/nginx.casavip.ssl.conf:/etc/nginx/conf.d/default.conf:ro`
+   - `- /etc/letsencrypt:/etc/letsencrypt:ro`   (il certificato vero)
+   - `- ./certbot/www:/var/www/certbot:ro`      (per la sfida di rinnovo)
+   - Backup del file originale: `docker-compose.casavip.yml.bak.*` nella stessa cartella.
+2. Rinnovo automatico corretto per funzionare con nginx-in-Docker: in
+   `/etc/letsencrypt/renewal/bookinvip.com.conf` cambiato `authenticator = nginx` → **`webroot`**
+   (webroot = `/var/www/bookinvip/certbot/www`) + `renew_hook = docker exec casavip_nginx nginx -s reload`.
+   Collaudato con `certbot renew --dry-run` → **success**. `certbot.timer` è enabled+active.
 
-## ⛔ ULTIMO OSTACOLO (dove eravamo bloccati)
-Il **browser del fondatore** ha ancora attivo il **vecchio service worker** (quello che risponde `{"errore":"offline"}` quando la fetch fallisce → in pagina appare "Errore server: offline") e la **index.html vecchia in cache**. Il SERVER è giusto; è solo il browser che tiene la roba vecchia.
+## ▶️ COME AGGIORNARE IL SITO D'ORA IN POI (procedura SICURA)
+Dalla cartella del VPS `/var/www/bookinvip`:
+```bash
+git pull                                   # NON usare 'git reset --hard': cancellerebbe la config HTTPS!
+docker rm -f casavip_nginx                 # evita il bug KeyError:ContainerConfig di compose v1.29.2
+docker-compose -f docker-compose.casavip.yml up -d
+```
+> ⚠️ La modifica che accende l'HTTPS è **solo nel working tree del VPS**, non ancora su GitHub.
+> Un `git reset --hard origin/master` la CANCELLA (→ addio 443). Per renderla permanente: fare commit +
+> push su GitHub (`edilmax/Core_Auto`) del `docker-compose.casavip.yml` modificato, poi allineare il VPS.
+> (Meglio ancora, a lungo termine: installare `docker compose` v2 e usare `docker-compose.casavip.ssl.yml`.)
 
-## ▶️ COSA FARE PER FINIRE (in ordine, quando si riprende)
-1. **VPS — assicura deploy aggiornato + pulisci il fantasma:**
-   ```bash
-   cd /var/www/bookinvip
-   git fetch origin && git reset --hard origin/master
-   kill 41091 2>/dev/null; docker ps -aq --filter name=casavip | xargs -r docker rm -f
-   docker-compose -f docker-compose.casavip.yml up -d --build
-   ```
-   (se `kill 41091` dà "no such process", trova il nuovo PID con `ss -ltnp | grep :8080` e killa quello)
-2. **VPS — conferma che funziona (deve dare `{"ok": true...}`):**
-   ```bash
-   curl -sS -X POST http://localhost/api/domanda -H 'Content-Type: application/json' -d '{"email":"a@b.com","citta":"roma"}'; echo
-   ```
-3. **BROWSER — sblocca la cache (UNA volta):** apri il sito in **INCOGNITO** → scrivi email → "Avvisami" → deve uscire il **✅ verde**. Sul browser normale: F12 → Application → Clear site data (oppure telefono: impostazioni sito → Cancella dati).
-4. Se in incognito appare ANCORA "offline": la fetch `/api/domanda` dal browser fallisce → controllare che nginx instradi `/api/` verso l'app anche per il dominio pubblico (non solo `localhost`). Vedi `deploy/nginx.casavip.conf` (già corretto: `location /` → `proxy_pass http://casavip_app` su `app:8080`).
+## 📌 CONTROLLI RAPIDI (dal proprio PC)
+```bash
+curl -sS -o /dev/null -w "HTTP %{http_code} cert=%{ssl_verify_result}\n" https://bookinvip.com/   # atteso: HTTP 200 cert=0
+curl -sS -X POST https://bookinvip.com/api/domanda -H 'Content-Type: application/json' -d '{"email":"a@b.com","citta":"roma"}'  # atteso: {"ok": true,...}
+```
 
-## 📌 NOTE
-- Comando aggiornamento VPS d'ora in poi: `cd /var/www/bookinvip && git pull && docker-compose -f docker-compose.casavip.yml up -d --build` (se dà `KeyError ContainerConfig`, prima `docker ps -aq --filter name=casavip | xargs -r docker rm -f`).
-- Consiglio permanente: installare `docker compose` v2 (elimina i bug di v1.29.2):
-  `sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose && sudo chmod +x /usr/local/bin/docker-compose && hash -r`
+## 🧹 COSE MINORI (non urgenti)
+- Container `casavip_backup` risulta **unhealthy**: è solo estetico (usa l'immagine app ma non avvia il
+  server, quindi l'healthcheck fallisce sempre). Il backup gira lo stesso. Si può ignorare o disabilitare
+  l'healthcheck del solo container backup.
+- Server **fantasma Aruba `89.46.65.6`** (Flask/Werkzeug morto): non c'entra col sito. Se lo si paga, si
+  può dismettere; se non lo si controlla, ignorarlo.
+
+## 🔑 ACCESSO
+- VPS: `ssh root@76.13.44.167` (Hostinger, Ubuntu 24.04). La chiave pubblica `edilmax` (id_ed25519) è
+  installata in `/root/.ssh/authorized_keys`. Fallback sempre disponibile: **hPanel Hostinger → VPS →
+  Terminale del browser** (root, senza password).
 - Fonte di verità funzionalità: `STATO_FINALE.md`. Cose da fare prodotto: `COSE_DA_FARE.md`.
