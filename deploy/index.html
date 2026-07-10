@@ -104,6 +104,7 @@
       <button type="button" id="btnVicino" data-ttitle="vicino_title" title="Trova alloggi vicino a dove ti trovi ora">📍 <span data-t="vicino_a_me">Vicino a me</span></button>
     </div>
     <div class="chips" id="chips"></div>
+    <label style="display:flex;align-items:center;gap:.4rem;margin-top:.7rem;font-size:.85rem;color:#155724;font-weight:600;cursor:pointer;text-transform:none;flex-direction:row"><input type="checkbox" id="soloGratuita" style="min-width:0;width:auto"> <span data-t="filtro_gratuita">Solo cancellazione gratuita</span></label>
   </form>
 
   <div id="risultati" class="risultati"><div class="loading">…</div></div>
@@ -199,6 +200,7 @@ function cardHtml(a){
     <div class="prezzo">${eur(a.prezzo_notte_cents)} <span style="font-size:.85rem;font-weight:400;color:#5e6f8d">/ ${t('notte')}</span></div>
     <div style="margin:.2rem 0">${stelle(a.recensioni)}</div>
     <div style="margin:.3rem 0">${serv} ${disp}</div>
+    ${a.cancellazione_gratuita ? `<div style="margin:.15rem 0"><span class="badge green">✔ ${t('badge_cancellazione')}</span></div>` : ''}
     <div class="meta">📍 ${a.citta}${a.paese?', '+a.paese:''}${a.distanza_m!=null?' · <b>'+fmtDist(a.distanza_m)+'</b>':''}</div>
     <button data-slug="${a.slug}">${t('dettaglio')}</button></div>`;
 }
@@ -211,6 +213,7 @@ async function cerca(){
   const pmax = parseInt(document.getElementById('prezzomax').value);
   if(pmax>0) params.prezzo_max_cents = pmax*100;
   if(attivi.size) params.servizi = [...attivi].join(',');
+  const sg=document.getElementById('soloGratuita'); if(sg && sg.checked) params.solo_gratuita='1';
   if(GEO){ params.citta=''; params.lat_micro=GEO.lat_micro; params.lon_micro=GEO.lon_micro;
            params.raggio_km=document.getElementById('raggio').value; }
   try{
@@ -347,6 +350,7 @@ function vicinoAMe(){
 document.getElementById('btnVicino').onclick = vicinoAMe;
 // cambiare il raggio mentre si e' 'vicino a me' ri-cerca subito
 document.getElementById('raggio').onchange = ()=>{ if(GEO) cerca(); };
+document.getElementById('soloGratuita').onchange = ()=>cerca();
 // digitare una citta esce dalla modalita 'vicino a me'
 document.getElementById('citta').oninput = ()=>{ GEO = null; };
 document.getElementById('form').onsubmit = e=>{ e.preventDefault(); cerca(); };

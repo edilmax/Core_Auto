@@ -53,6 +53,7 @@ ETICHETTE_UI: Dict[str, Dict[str, str]] = {
     "ph_prezzomax": {"it": "es. 150", "en": "e.g. 150", "es": "ej. 150", "fr": "ex. 150", "de": "z. B. 150", "pt": "ex. 150", "ja": "例: 150", "zh": "如 150"},
     "raggio": {"it": "Raggio", "en": "Radius", "es": "Radio", "fr": "Rayon", "de": "Umkreis", "pt": "Raio", "ja": "範囲", "zh": "范围"},
     "vicino_a_me": {"it": "Vicino a me", "en": "Near me", "es": "Cerca de mí", "fr": "Près de moi", "de": "In meiner Nähe", "pt": "Perto de mim", "ja": "現在地周辺", "zh": "附近"},
+    "filtro_gratuita": {"it": "Solo cancellazione gratuita", "en": "Only free cancellation", "es": "Solo cancelación gratuita", "fr": "Uniquement annulation gratuite", "de": "Nur kostenlose Stornierung", "pt": "Só cancelamento grátis", "ja": "無料キャンセルのみ", "zh": "仅限免费取消"},
     "vicino_title": {"it": "Trova alloggi vicino a dove ti trovi ora", "en": "Find stays near where you are now", "es": "Encuentra alojamientos cerca de donde estás", "fr": "Trouvez des logements près de vous", "de": "Unterkünfte in deiner Nähe finden", "pt": "Encontre acomodações perto de você", "ja": "現在地周辺の宿泊施設を探す", "zh": "查找您当前位置附近的住宿"},
     "notte": {"it": "notte", "en": "night", "es": "noche", "fr": "nuit", "de": "Nacht", "pt": "noite", "ja": "泊", "zh": "晚"},
     "dettaglio": {"it": "Vedi dettaglio", "en": "View details", "es": "Ver detalles", "fr": "Voir détails", "de": "Details ansehen", "pt": "Ver detalhes", "ja": "詳細を見る", "zh": "查看详情"},
@@ -653,6 +654,16 @@ class RouterHTTP:
             if rie:
                 card["recensioni"] = rie
             cards.append(card)
+        # Politica di cancellazione + badge "cancellazione gratuita" (leva di conversione, come i
+        # colossi). 'gratuita' = flessibile/moderata (annullabile con rimborso pieno per tempo).
+        for card in cards:
+            pol = card.get("politica_cancellazione") or self._politica_alloggio(card.get("slug"))
+            card["politica_cancellazione"] = pol
+            card["cancellazione_gratuita"] = pol in ("flessibile", "moderata")
+        if str(query.get("solo_gratuita", "")).lower() in ("1", "true", "yes", "on"):
+            cards = [c for c in cards if c.get("cancellazione_gratuita")]
+            if geo is None:
+                res["totale"] = len(cards)
         if geo is not None:
             vicini = self._entro_raggio(cards, geo)   # filtrati+ordinati, NON tagliati
             res["totale"] = len(vicini)
@@ -784,6 +795,7 @@ class RouterHTTP:
                 logger.warning("emissione smart-pass fallita (ignorata)", exc_info=True)
         if getattr(self._sys, "firma", None) is not None:
             try:
+                import datetime as _dt
                 qt = dati.get("quote_token", "")
                 corpo["voucher_token"] = self._sys.firma.codifica({
                     "tipo": "voucher", "riferimento": ref, "alloggio_id": allog,
@@ -793,6 +805,7 @@ class RouterHTTP:
                     "smart_pass": pass_token or "",
                     "tassa_soggiorno_cents": corpo.get("tassa_soggiorno_cents", 0),
                     "politica": self._politica_alloggio(allog),
+                    "prenotato_data": _dt.date.today().isoformat(),   # per il ripensamento 48h
                     "idem_key": (qt.split(".")[-1] if isinstance(qt, str) and qt else "")})
             except Exception:
                 logger.warning("emissione voucher fallita (ignorata)", exc_info=True)
@@ -1048,9 +1061,21 @@ class RouterHTTP:
         giorni = giorni if giorni > 0 else 0
         # POLITICA dal VOUCHER FIRMATO (scelta dall'host, anti-furbata) - NON dalla richiesta
         politica = v.get("politica") or self._politica_alloggio(allog)
+        # RIPENSAMENTO 48h: se annulli entro 2 giorni dall'acquisto e l'arrivo è >=72h -> 100%
+        # (copre e SUPERA California SB 644 [24h] + diritto di pentimento Brasile art.49). Vince
+        # su qualunque politica; NON si applica a soggiorni imminenti/passati (arrivo < 3 giorni).
+        ripensamento = False
+        try:
+            _pren = v.get("prenotato_data")
+            if isinstance(_pren, str) and _pren:
+                _gg_pren = (datetime.date.today() - datetime.date.fromisoformat(_pren)).days
+                ripensamento = (0 <= _gg_pren <= 2) and (giorni >= 3)
+        except Exception:
+            ripensamento = False
         try:
             from fase111_cancellazione import calcola_rimborso
-            r = calcola_rimborso(pagato, giorni, politica=politica)
+            r = calcola_rimborso(pagato, giorni, politica=politica,
+                                 entro_ripensamento=ripensamento)
             idem = v.get("idem_key") or ("cancel_" + (rif or token[-16:]))
             e = self._sys.inventario.rilascia(allog, ci, co, idem_key=idem)
         except Exception:
@@ -1086,6 +1111,7 @@ class RouterHTTP:
                      "tassa_rimborsata_cents": tassa,
                      "trattenuto_cents": r["trattenuto_cents"],
                      "politica": r["politica"], "money_unit": "cents_integer",
+                     "ripensamento": bool(r.get("ripensamento")),
                      "credito_viaggio_cents": cv_cents, "credito_viaggio_token": cv_token,
                      "nota": ("date liberate; rimborso PSP da eseguire quando Stripe e' live."
                               + (" Hai un Credito Viaggio per la prossima prenotazione."

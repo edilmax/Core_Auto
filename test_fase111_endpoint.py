@@ -1,6 +1,10 @@
 """Test endpoint cancellazione self-service ospite (fase111 cablata nel server): book ->
 voucher -> cancella -> rimborso calcolato (cents) + date liberate -> riprenotabile. Edge:
-voucher mancante/manomesso -> 400. Chiude un buco grave (prima solo l'admin rimborsava)."""
+voucher mancante/manomesso -> 400. Chiude un buco grave (prima solo l'admin rimborsava).
+
+Date RELATIVE a oggi (niente 'bombe a tempo'): l'arrivo è a +5 giorni, quindi l'annullamento
+immediato ricade nel RIPENSAMENTO 48h -> rimborso 100% (copre California SB 644 e simili)."""
+import datetime
 import json
 import shutil
 import tempfile
@@ -17,6 +21,9 @@ class TestCancellazioneGuest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
         d = self.dir
+        oggi = datetime.date.today()
+        self.ci = (oggi + datetime.timedelta(days=5)).isoformat()    # arrivo +5gg -> ripensamento
+        self.co = (oggi + datetime.timedelta(days=7)).isoformat()    # 2 notti
         self.sis = crea_sistema(ConfigCasaVIP(
             abilitato=True, segreto_hmac=SEG, db_catalogo=f"{d}/c.db",
             db_inventario=f"{d}/i.db", db_registro_host=f"{d}/r.db", db_viral=f"{d}/v.db",
@@ -27,7 +34,8 @@ class TestCancellazioneGuest(unittest.TestCase):
             "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
             "servizi": [], "immagini": []}, HK)
         self.g("POST", "/api/host/disponibilita_range", {
-            "alloggio_id": "casa", "da": "2026-07-01", "a": "2026-07-31",
+            "alloggio_id": "casa", "da": oggi.isoformat(),
+            "a": (oggi + datetime.timedelta(days=40)).isoformat(),
             "unita_totali": 1, "prezzo_netto_cents": 10000}, HK)
 
     def tearDown(self):
@@ -39,24 +47,26 @@ class TestCancellazioneGuest(unittest.TestCase):
 
     def _book(self):
         _, q = self.g("POST", "/api/concierge/quote",
-                      {"alloggio_id": "casa", "check_in": "2026-07-10",
-                       "check_out": "2026-07-12", "party": 1})
+                      {"alloggio_id": "casa", "check_in": self.ci,
+                       "check_out": self.co, "party": 1})
         return self.g("POST", "/api/concierge/book",
                       {"quote_token": q["quote_token"], "email": "ospite@x.it"})
 
-    def test_cancella_calcola_rimborso_e_libera(self):
+    def test_cancella_ripensamento_100_e_libera(self):
         s, b = self._book()
         self.assertEqual(s, 201)
         sc, c = self.g("POST", "/api/concierge/cancella",
                        {"voucher_token": b["voucher_token"]})
         self.assertEqual(sc, 200)
         self.assertEqual(c["stato"], "cancellata")
-        self.assertEqual(c["rimborso_cents"], 20000)        # >1 giorno -> flessibile 100%
+        self.assertTrue(c["ripensamento"])                  # entro 48h dall'acquisto -> 100%
+        self.assertEqual(c["rimborso_cents"], 20000)        # rimborso PIENO (2 notti x 10000)
+        self.assertEqual(c["trattenuto_cents"], 0)
         self.assertTrue(c["date_liberate"])
         # date liberate -> di nuovo prenotabili
         s2, q2 = self.g("POST", "/api/concierge/quote",
-                        {"alloggio_id": "casa", "check_in": "2026-07-10",
-                         "check_out": "2026-07-12", "party": 1})
+                        {"alloggio_id": "casa", "check_in": self.ci,
+                         "check_out": self.co, "party": 1})
         self.assertEqual(s2, 200)
         self.assertEqual(self.g("POST", "/api/concierge/book",
                                 {"quote_token": q2["quote_token"], "email": "due@x.it"})[0], 201)
@@ -74,8 +84,8 @@ class TestCancellazioneGuest(unittest.TestCase):
         sc, c = self.g("POST", "/api/concierge/cancella",
                        {"voucher_token": b["voucher_token"], "politica": "rigida"})
         self.assertEqual(sc, 200)
-        self.assertEqual(c["politica"], "flessibile")
-        self.assertEqual(c["rimborso_cents"], 20000)        # piena, la richiesta non conta
+        self.assertEqual(c["politica"], "flessibile")       # NON la 'rigida' passata dall'ospite
+        self.assertEqual(c["rimborso_cents"], 20000)        # ripensamento 48h -> pieno
 
 
 if __name__ == "__main__":

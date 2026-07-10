@@ -20,9 +20,11 @@ class PoliticaCancellazione:
 
 
 POLITICHE = {
+    # Soglie allineate agli standard mondiali (Airbnb/Booking/Vrbo) e PROPORZIONATE
+    # (niente clausole vessatorie UE/UK): 100% -> 50% -> 0% a scaglioni di giorni.
     "flessibile": PoliticaCancellazione("flessibile", ((1, 10000), (0, 5000))),
     "moderata": PoliticaCancellazione("moderata", ((5, 10000), (1, 5000), (0, 0))),
-    "rigida": PoliticaCancellazione("rigida", ((14, 10000), (7, 5000), (0, 0))),
+    "rigida": PoliticaCancellazione("rigida", ((30, 10000), (7, 5000), (0, 0))),
     "non_rimborsabile": PoliticaCancellazione("non_rimborsabile", ((0, 0),)),
 }
 
@@ -36,9 +38,15 @@ def _bps_per_giorni(giorni: int, scaglioni: Tuple[Tuple[int, int], ...]) -> int:
 
 def calcola_rimborso(prezzo_pagato_cents: Any, giorni_all_arrivo: Any, *,
                      politica: Any = "flessibile",
-                     fee_pulizia_cents: int = 0) -> Dict[str, Any]:
+                     fee_pulizia_cents: int = 0,
+                     entro_ripensamento: bool = False) -> Dict[str, Any]:
     """Rimborso in cents. La fee pulizia (se presente) è SEMPRE rimborsata se non c'è stato
-    soggiorno (non maturata); il resto segue gli scaglioni. fail-closed su input invalido."""
+    soggiorno (non maturata); il resto segue gli scaglioni. fail-closed su input invalido.
+
+    entro_ripensamento=True: RIMBORSO 100% a prescindere dalla politica. È la finestra di
+    'ripensamento' universale (48h dall'acquisto se l'arrivo è ≥72h): copre e supera la legge
+    California SB 644 (24h obbligatorie), il diritto di pentimento Brasile (art.49) e vince
+    sempre sulla politica dell'host. fail-safe: non si applica a soggiorni già iniziati."""
     pol = politica if isinstance(politica, PoliticaCancellazione) \
         else POLITICHE.get(str(politica), POLITICHE["flessibile"])
     pagato = prezzo_pagato_cents if isinstance(prezzo_pagato_cents, int) and \
@@ -46,6 +54,9 @@ def calcola_rimborso(prezzo_pagato_cents: Any, giorni_all_arrivo: Any, *,
     if pagato == 0:
         return {"rimborso_cents": 0, "trattenuto_cents": 0, "bps": 0,
                 "politica": pol.nome}
+    if entro_ripensamento is True:                          # finestra di ripensamento -> 100%
+        return {"rimborso_cents": pagato, "trattenuto_cents": 0, "bps": 10000,
+                "politica": pol.nome, "ripensamento": True}
     g = giorni_all_arrivo if isinstance(giorni_all_arrivo, int) and \
         not isinstance(giorni_all_arrivo, bool) and giorni_all_arrivo >= 0 else 0
     fee = max(0, int(fee_pulizia_cents)) if isinstance(fee_pulizia_cents, int) and \

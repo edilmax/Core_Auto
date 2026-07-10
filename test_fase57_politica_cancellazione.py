@@ -1,6 +1,11 @@
 """Test politica di cancellazione scelta dall'HOST per alloggio (modello Booking) + sicurezza:
 la politica è BLOCCATA nel voucher firmato, la cancellazione la usa (NON quella passata
-dall'ospite furbo) + Credito Viaggio anti-rimpianto sulla penale."""
+dall'ospite furbo) + Credito Viaggio anti-rimpianto sulla penale.
+
+Date RELATIVE a oggi (niente 'bombe a tempo'). Il RIPENSAMENTO 48h (arrivo >=72h + annullo
+entro 2 giorni) dà 100% a prescindere dalla politica; per testare la PENALE si usa un arrivo
+imminente (<3 giorni) fuori dal ripensamento."""
+import datetime
 import json
 import shutil
 import tempfile
@@ -16,6 +21,7 @@ HK = {"X-Host-Key": "hk"}
 class TestPoliticaCancellazione(unittest.TestCase):
     def setUp(self):
         d = self.dir = tempfile.mkdtemp()
+        self.oggi = datetime.date.today()
         self.sis = crea_sistema(ConfigCasaVIP(
             abilitato=True, segreto_hmac=SEG, db_catalogo=f"{d}/c.db",
             db_inventario=f"{d}/i.db", db_registro_host=f"{d}/r.db", db_viral=f"{d}/v.db",
@@ -30,13 +36,16 @@ class TestPoliticaCancellazione(unittest.TestCase):
         return self.r.gestisci(m, p, q or {},
                                json.dumps(body) if body is not None else None, h or {})
 
+    def _d(self, giorni):
+        return (self.oggi + datetime.timedelta(days=giorni)).isoformat()
+
     def _pubblica(self, politica):
         self.g("POST", "/api/host/pubblica", {
             "host_id": "demo", "slug": "casa", "titolo": "Casa", "citta": "Roma",
             "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
             "servizi": [], "immagini": [], "politica_cancellazione": politica}, HK)
         self.g("POST", "/api/host/disponibilita_range", {
-            "alloggio_id": "casa", "da": "2026-07-01", "a": "2026-07-31",
+            "alloggio_id": "casa", "da": self.oggi.isoformat(), "a": self._d(60),
             "unita_totali": 1, "prezzo_netto_cents": 10000}, HK)
 
     def test_host_sceglie_e_ospite_la_vede(self):
@@ -52,27 +61,49 @@ class TestPoliticaCancellazione(unittest.TestCase):
     def test_ANTIFURBATA_ospite_non_puo_scegliersi_la_politica(self):
         self._pubblica("rigida")                                  # host: RIGIDA
         _, q = self.g("POST", "/api/concierge/quote", {
-            "alloggio_id": "casa", "check_in": "2026-07-08", "check_out": "2026-07-10",
-            "party": 1})                                          # ~9 giorni all'arrivo
+            "alloggio_id": "casa", "check_in": self._d(9), "check_out": self._d(11),
+            "party": 1})                                          # arrivo +9gg
         _, b = self.g("POST", "/api/concierge/book",
                       {"quote_token": q["quote_token"], "email": "o@x.it"})
         # l'ospite prova a barare passando 'flessibile' nella richiesta di cancellazione
         _, c = self.g("POST", "/api/concierge/cancella",
                       {"voucher_token": b["voucher_token"], "politica": "flessibile"})
         self.assertEqual(c["politica"], "rigida")                 # ha VINTO quella dell'host
-        self.assertEqual(c["rimborso_cents"], 10000)              # 50% (rigida a 9gg), non 100%
-        self.assertEqual(c["trattenuto_cents"], 10000)
+        # annullo immediato con arrivo +9gg -> RIPENSAMENTO 48h -> 100% (e non ci si guadagna
+        # a mentire: la politica resta 'rigida', il 100% viene dal ripensamento universale)
+        self.assertTrue(c["ripensamento"])
+        self.assertEqual(c["rimborso_cents"], 20000)
+        self.assertEqual(c["trattenuto_cents"], 0)
 
     def test_credito_viaggio_anti_rimpianto_sulla_penale(self):
-        self._pubblica("rigida")
+        # Fuori dal ripensamento (arrivo imminente +1gg): scatta la PENALE -> parte torna in credito.
+        self._pubblica("moderata")                                # moderata: a +1gg -> 50%
         _, q = self.g("POST", "/api/concierge/quote", {
-            "alloggio_id": "casa", "check_in": "2026-07-08", "check_out": "2026-07-10",
+            "alloggio_id": "casa", "check_in": self._d(1), "check_out": self._d(3),
             "party": 1})
         _, b = self.g("POST", "/api/concierge/book",
                       {"quote_token": q["quote_token"], "email": "o@x.it"})
         _, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
-        self.assertEqual(c["credito_viaggio_cents"], 5000)        # 50% di 10000 trattenuti
+        self.assertFalse(c["ripensamento"])                       # arrivo <3gg -> niente ripensamento
+        self.assertEqual(c["trattenuto_cents"], 10000)            # 50% di 20000
+        self.assertEqual(c["credito_viaggio_cents"], 5000)        # 50% della penale torna in credito
         self.assertTrue(c["credito_viaggio_token"])               # token firmato, riscattabile
+
+    def test_catalogo_badge_cancellazione_gratuita(self):
+        # in RICERCA: flessibile/moderata -> badge "cancellazione gratuita" (leva di conversione)
+        self._pubblica("flessibile")
+        _, c = self.g("GET", "/api/catalogo", q={"citta": "Roma"})
+        cards = [r for r in c.get("risultati", []) if r.get("slug") == "casa"]
+        self.assertTrue(cards)
+        self.assertEqual(cards[0]["politica_cancellazione"], "flessibile")
+        self.assertTrue(cards[0]["cancellazione_gratuita"])
+
+    def test_filtro_solo_gratuita_esclude_rigida(self):
+        self._pubblica("rigida")                                   # non è "gratuita"
+        _, tutti = self.g("GET", "/api/catalogo", q={"citta": "Roma"})
+        self.assertTrue([r for r in tutti.get("risultati", []) if r.get("slug") == "casa"])
+        _, solo = self.g("GET", "/api/catalogo", q={"citta": "Roma", "solo_gratuita": "1"})
+        self.assertEqual([r for r in solo.get("risultati", []) if r.get("slug") == "casa"], [])
 
 
 if __name__ == "__main__":
