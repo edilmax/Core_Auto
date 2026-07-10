@@ -55,6 +55,13 @@
       <div class="card"><span class="ico">🛠️</span><h3>Pannello completo</h3><p>Pubblica, gestisci calendario e disponibilità, messaggi con l'ospite, dashboard e iCal Airbnb/Booking.</p></div>
     </section>
 
+    <section class="strip" id="domandaWrap" style="display:none">
+      <h2>🔥 La gente sta già cercando casa</h2>
+      <p>Ecco le città con più richieste <b>in attesa proprio ora</b>. Pubblica dove c'è già domanda: i clienti stanno aspettando te.</p>
+      <div id="mappaDomanda" style="display:flex;flex-wrap:wrap;gap:.7rem;justify-content:center;margin-bottom:1.6rem"></div>
+      <a class="cta" style="background:linear-gradient(135deg,#1e3c72,#2a5298);color:#fff" href="/host.html">Pubblica dove c'è domanda</a>
+    </section>
+
     <section class="strip">
       <h2>Pronto in 2 minuti. Gratis.</h2>
       <p>Crea il tuo account host, pubblica il primo alloggio e inizia a ricevere prenotazioni dirette — senza regalare commissioni alle OTA.</p>
@@ -84,6 +91,21 @@
     var q = '/host.html?ref=' + encodeURIComponent(ref);
     var a = document.getElementById('ctaTop'), b = document.getElementById('ctaMid');
     if(a) a.href = q; if(b) b.href = q;
+  })();
+  // MAPPA DELLA DOMANDA (live): mostra dove la gente cerca casa -> converte i visitatori in host
+  (async function(){
+    try{
+      const base = location.origin.startsWith('http') ? '' : 'http://127.0.0.1:8080';
+      const r = await fetch(base + '/api/domanda/citta?limit=12');
+      const d = await r.json();
+      const lista = (d && d.citta) || [];
+      if(!lista.length) return;
+      const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+      document.getElementById('mappaDomanda').innerHTML = lista.map(c =>
+        `<a href="/host.html" style="background:#eef2f7;border:1px solid #dce1ed;border-radius:1rem;padding:.6rem 1rem;color:#1e3c72;font-weight:700">📍 ${cap(c.citta)} <span style="color:#c0392b">· ${c.richieste} in attesa</span></a>`
+      ).join('');
+      document.getElementById('domandaWrap').style.display = '';
+    }catch(e){}
   })();
 </script>
 </body>
