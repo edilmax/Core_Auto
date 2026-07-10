@@ -63,6 +63,35 @@ def commissione_bps_fonte(fonte: Any, numero_host: Any = 0, *,
     return commissione_bps_per_host(numero_host, bps_fondatori=bm, bps_dopo=bm, soglia=soglia)
 
 
+# --- RAMPA DI LANCIO (land-grab): riempire SUBITO la copertura host globale ---
+LANCIO_GIORNI_GRATIS = 90        # primi ~3 mesi: 0% (l'host pubblica gratis e tiene tutto)
+LANCIO_BPS_FASE1 = 800           # poi 8%
+LANCIO_GIORNI_FASE1 = 365        # fino a 1 anno di anzianità
+LANCIO_BPS_REGIME = 1000         # oltre: 10% a regime (sempre < 15,5% dei colossi)
+
+
+def commissione_bps_lancio(giorni_da_registrazione: Any, *,
+                           giorni_gratis: int = LANCIO_GIORNI_GRATIS,
+                           bps_fase1: int = LANCIO_BPS_FASE1,
+                           giorni_fase1: int = LANCIO_GIORNI_FASE1,
+                           bps_regime: int = LANCIO_BPS_REGIME) -> int:
+    """Commissione marketplace a RAMPA per anzianità dell'host (giorni da registrazione):
+    0% i primi ~3 mesi → 8% fino a 1 anno → 10% a regime. Strategia land-grab SENZA perdita:
+    riempi ora (0%, host tiene tutto), recuperi nel tempo. Fail-safe: giorni ignoti/non validi
+    → tariffa a regime (non si regala lo 0% per errore)."""
+    g = giorni_da_registrazione if isinstance(giorni_da_registrazione, int) and \
+        not isinstance(giorni_da_registrazione, bool) and giorni_da_registrazione >= 0 else 10**9
+    gg = max(0, _intero(giorni_gratis, LANCIO_GIORNI_GRATIS))
+    gf = max(gg, _intero(giorni_fase1, LANCIO_GIORNI_FASE1))
+    b1 = max(0, min(10000, _intero(bps_fase1, LANCIO_BPS_FASE1)))
+    br = max(0, min(10000, _intero(bps_regime, LANCIO_BPS_REGIME)))
+    if g < gg:
+        return 0
+    if g < gf:
+        return b1
+    return br
+
+
 def e_fondatore(numero_host: Any, *, soglia: int = SOGLIA_FONDATORI) -> bool:
     n = _intero(numero_host, 0)
     return 1 <= n <= max(0, _intero(soglia, SOGLIA_FONDATORI))

@@ -286,6 +286,25 @@ class RegistroHost:
         finally:
             con.close()
 
+    def giorni_da_registrazione(self, host_id: Any, *, ora_ts: Any = None) -> int:
+        """Giorni interi dalla registrazione dell'host (per la RAMPA di lancio della commissione).
+        Host ignoto/errore -> numero molto grande (nessuno sconto lancio per sbaglio)."""
+        import time as _t
+        now = int(ora_ts) if isinstance(ora_ts, int) and not isinstance(ora_ts, bool) \
+            else int(_t.time())
+        con = self._apri()
+        try:
+            row = con.execute("SELECT creato_ts FROM host WHERE host_id=?",
+                              (str(host_id),)).fetchone()
+            if not row or not isinstance(row[0], int):
+                return 10**9
+            return max(0, (now - int(row[0])) // 86400)
+        except Exception:
+            logger.warning("giorni_da_registrazione fallita (ISOLATA -> grande)", exc_info=True)
+            return 10**9
+        finally:
+            con.close()
+
 
 class _ConnCondivisa:
     def __init__(self, con: sqlite3.Connection) -> None:

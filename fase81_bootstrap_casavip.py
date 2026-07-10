@@ -48,6 +48,7 @@ class ConfigCasaVIP:
     db_inventario: str = ":memory:"
     valuta: str = "EUR"
     commissione_bps: int = 1500         # commissione CORE in basis-point: 15% BLINDATO (primi 1000 host)
+    promo_lancio_attiva: bool = False   # rampa di lancio 0%->8%->10% per anzianità host (land-grab; attivare al go-live)
     stripe_secret_key: str = ""        # gated: se vuoto, niente link di pagamento
     stripe_success_url: str = ""
     stripe_cancel_url: str = ""
@@ -170,15 +171,19 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     def _comm_alloggio(netto: int, slug: str, fonte: str = "marketplace") -> int:
         # per-fonte: 'diretto' (cliente dell'host) -> 5%; 'marketplace' -> 15% (primi-1000).
         try:
-            from fase98_policy_commissione import (commissione_bps_fonte, commissione_cents)
+            from fase98_policy_commissione import (commissione_bps_fonte, commissione_cents,
+                                                   commissione_bps_lancio)
             numero = 0
+            bps_mkt = _bps                       # default 15% (fail-safe, mai regalare per errore)
             reg = _ctx_host.get("reg")
             if reg is not None and catalogo is not None:
                 d = catalogo.dettaglio(slug)
                 hid = d.get("host_id") if isinstance(d, dict) else None
                 if hid:
                     numero = reg.numero_host(hid)
-            bps = commissione_bps_fonte(fonte, numero, bps_marketplace=_bps)
+                    if getattr(cfg, "promo_lancio_attiva", False):   # rampa lancio per anzianità
+                        bps_mkt = commissione_bps_lancio(reg.giorni_da_registrazione(hid))
+            bps = commissione_bps_fonte(fonte, numero, bps_marketplace=bps_mkt)
             return commissione_cents(netto, bps)
         except Exception:
             pass
