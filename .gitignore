@@ -48,3 +48,7 @@ darknet_archive/
 quarantine_forensic/
 *.pre_quantum
 *.pre_repair
+
+# backup locali e file temporanei
+*.bak
+*.bak.*
