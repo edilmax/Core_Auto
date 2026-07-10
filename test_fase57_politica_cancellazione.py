@@ -114,6 +114,18 @@ class TestPoliticaCancellazione(unittest.TestCase):
         self.assertEqual(q["sconto_non_rimborsabile_cents"], 2400)     # -12%
         self.assertEqual(q["prezzo_guest_cents"], 17600)              # l'ospite paga meno DAVVERO
 
+    def test_mappa_domanda_e_prova_sociale(self):
+        # motore cold-start: la lista d'attesa aggregata per città ("N cercano già a X")
+        self.g("POST", "/api/domanda", {"email": "a@x.com", "citta": "Roma"})
+        self.g("POST", "/api/domanda", {"email": "b@x.com", "citta": "Roma"})
+        self.g("POST", "/api/domanda", {"email": "c@x.com", "citta": "Milano"})
+        _, m = self.g("GET", "/api/domanda/citta")
+        d = {r["citta"]: r["richieste"] for r in m["citta"]}
+        self.assertEqual(d.get("roma"), 2)
+        self.assertEqual(d.get("milano"), 1)
+        _, cc = self.g("GET", "/api/domanda/conta", q={"citta": "Roma"})
+        self.assertEqual(cc["richieste"], 2)
+
     def test_flessibile_nessuno_sconto_non_rimborsabile(self):
         self._pubblica("flessibile")
         _, q = self.g("POST", "/api/concierge/quote", {

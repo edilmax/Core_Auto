@@ -55,6 +55,7 @@ ETICHETTE_UI: Dict[str, Dict[str, str]] = {
     "vicino_a_me": {"it": "Vicino a me", "en": "Near me", "es": "Cerca de mí", "fr": "Près de moi", "de": "In meiner Nähe", "pt": "Perto de mim", "ja": "現在地周辺", "zh": "附近"},
     "filtro_gratuita": {"it": "Solo cancellazione gratuita", "en": "Only free cancellation", "es": "Solo cancelación gratuita", "fr": "Uniquement annulation gratuite", "de": "Nur kostenlose Stornierung", "pt": "Só cancelamento grátis", "ja": "無料キャンセルのみ", "zh": "仅限免费取消"},
     "non_rimb": {"it": "Non rimborsabile −12%", "en": "Non-refundable −12%", "es": "No reembolsable −12%", "fr": "Non remboursable −12%", "de": "Nicht erstattbar −12%", "pt": "Não reembolsável −12%", "ja": "返金不可 −12%", "zh": "不可退款 −12%"},
+    "gia_cercano": {"it": "persone cercano già a", "en": "people are already searching in", "es": "personas ya buscan en", "fr": "personnes cherchent déjà à", "de": "Personen suchen bereits in", "pt": "pessoas já procuram em", "ja": "人がすでに探しています：", "zh": "人已经在这里寻找："},
     "vicino_title": {"it": "Trova alloggi vicino a dove ti trovi ora", "en": "Find stays near where you are now", "es": "Encuentra alojamientos cerca de donde estás", "fr": "Trouvez des logements près de vous", "de": "Unterkünfte in deiner Nähe finden", "pt": "Encontre acomodações perto de você", "ja": "現在地周辺の宿泊施設を探す", "zh": "查找您当前位置附近的住宿"},
     "notte": {"it": "notte", "en": "night", "es": "noche", "fr": "nuit", "de": "Nacht", "pt": "noite", "ja": "泊", "zh": "晚"},
     "dettaglio": {"it": "Vedi dettaglio", "en": "View details", "es": "Ver detalles", "fr": "Voir détails", "de": "Details ansehen", "pt": "Ver detalhes", "ja": "詳細を見る", "zh": "查看详情"},
@@ -415,6 +416,8 @@ class RouterHTTP:
             return self._domanda_registra(body)
         if metodo == "GET" and path == "/api/domanda/conta":
             return self._domanda_conta(query)
+        if metodo == "GET" and path == "/api/domanda/citta":
+            return self._domanda_per_citta(query)
         if metodo == "GET" and path == "/api/catalogo":
             return self._catalogo(query)
         if metodo == "GET" and path.startswith("/api/catalogo/"):
@@ -1201,6 +1204,18 @@ class RouterHTTP:
             return 503, {"errore": "domanda_non_attiva"}
         citta = query.get("citta")
         return 200, {"citta": citta or "", "richieste": dom.conta(citta)}
+
+    def _domanda_per_citta(self, query):
+        """Mappa della DOMANDA: città con più persone in attesa. Arma cold-start per gli host
+        ('N persone cercano già a X') e prova sociale per gli ospiti. Pubblico (aggregato, no email)."""
+        dom = getattr(self._sys, "domanda", None)
+        if dom is None:
+            return 503, {"errore": "domanda_non_attiva"}
+        try:
+            limit = max(1, min(100, int(query.get("limit", "20"))))
+        except (ValueError, TypeError):
+            limit = 20
+        return 200, {"citta": dom.per_citta(limit=limit)}
 
     def _trasparenza(self, query):
         """Confronto noi-vs-OTA (fase69): 'con Booking incassi X, con noi Y'."""

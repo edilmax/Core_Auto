@@ -236,6 +236,7 @@ function emptyStateHtml(citta){
     <div style="font-size:2rem">🌱</div>
     <h3 style="color:#1e3c72;margin:.5rem 0">${t('empty_titolo')}</h3>
     ${cityLine}
+    <div id="wl_proof" style="margin:.3rem 0;font-weight:700;color:#c0392b"></div>
     <p style="color:#5e6f8d;max-width:44ch;margin:.3rem auto 1rem">${t('empty_lascia')}</p>
     <div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;max-width:420px;margin:0 auto">
       <input id="wl_email" type="email" placeholder="${t('ph_email')}" style="flex:1;min-width:200px;padding:.7rem;border-radius:.7rem;border:1px solid #dce1ed">
@@ -258,6 +259,15 @@ function bindWaitlist(citta){
     if(d && d.ok){ m.style.color='#155724'; m.innerHTML='✅ '+d.messaggio+' <b>(€'+((d.credito_cents||0)/100).toFixed(0)+')</b>'; b.style.display='none'; }
     else { m.style.color='#b00020'; m.textContent = (d && d.errore) ? (t('errore_server')+' '+d.errore) : t('servizio_non_ragg'); }
   };
+  // prova sociale live: quante persone cercano già in questa città (cold-start / FOMO)
+  (async ()=>{
+    const cittaP=(document.getElementById('citta').value||'').trim()||citta||'';
+    if(!cittaP) return;
+    try{ const r=await api('/api/domanda/conta?citta='+encodeURIComponent(cittaP));
+      const n=(r&&r.richieste)||0; const el=document.getElementById('wl_proof');
+      if(el && n>0) el.textContent='🔥 '+n+' '+t('gia_cercano')+' '+cittaP;
+    }catch(e){}
+  })();
 }
 
 async function apri(slug){
