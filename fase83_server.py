@@ -268,6 +268,82 @@ def robots_txt(base_url: str = "") -> str:
             "Sitemap: %s/sitemap-host.xml\n" % (base_url, base_url))
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# SUPERFICIE AI-AGENT (scoperta standard): oltre a /api/mcp (MCP JSON-RPC, fase60) e
+# /llms.txt (fase97), esponiamo il manifest di scoperta /.well-known/ai-plugin.json e
+# uno spec OpenAPI /openapi.json -> QUALSIASI agente (Claude/Gemini/ChatGPT/browser
+# agentici) trova e usa il flusso 'cerca -> preventivo firmato -> prenota' senza integrazione
+# custom. Il prezzo e' FIRMATO: il modello non puo' alterarlo. Funzioni PURE (testabili).
+# ─────────────────────────────────────────────────────────────────────────────
+def ai_plugin_manifest(base_url: str = "") -> Dict[str, Any]:
+    b = base_url or "https://bookinvip.com"
+    return {
+        "schema_version": "v1",
+        "name_for_human": "BookinVIP",
+        "name_for_model": "bookinvip",
+        "description_for_human": ("Prenota alloggi certificati: prezzo pulito tutto-incluso, "
+                                  "0% commissioni all'ospite, cancellazione gratuita."),
+        "description_for_model": ("Cerca e prenota alloggi. JSON machine-clean, prezzi in CENTESIMI "
+                                  "interi, preventivi FIRMATI (il modello non puo' alterare il prezzo). "
+                                  "Flusso: cerca GET /api/catalogo -> preventivo POST /api/concierge/quote "
+                                  "-> prenota POST /api/concierge/book. Anche via MCP JSON-RPC su /api/mcp."),
+        "auth": {"type": "none"},
+        "api": {"type": "openapi", "url": b + "/openapi.json"},
+        "mcp": {"type": "jsonrpc", "url": b + "/api/mcp"},
+        "logo_url": b + "/icon.svg",
+        "contact_email": "info@bookinvip.com",
+        "legal_info_url": b + "/",
+    }
+
+
+def openapi_agent_spec(base_url: str = "") -> Dict[str, Any]:
+    b = base_url or "https://bookinvip.com"
+    _q = lambda n, t="string", d=None: {"name": n, "in": "query",
+                                        "schema": {"type": t}, "description": d or ""}
+    return {
+        "openapi": "3.0.3",
+        "info": {"title": "BookinVIP Booking API", "version": "1.0.0",
+                 "description": ("Prenotazione alloggi machine-clean. Prezzi in centesimi interi. "
+                                 "Flusso: cerca -> preventivo (quote firmato) -> prenota. Il modello "
+                                 "NON puo' alterare il prezzo. 0% commissioni ospite, prezzo pulito.")},
+        "servers": [{"url": b}],
+        "paths": {
+            "/api/catalogo": {"get": {"operationId": "cercaAlloggi",
+                "summary": "Cerca alloggi disponibili (JSON machine-clean)",
+                "parameters": [_q("citta"), _q("check_in", "string", "YYYY-MM-DD"),
+                               _q("check_out", "string", "YYYY-MM-DD"),
+                               _q("prezzo_max_cents", "integer", "tetto prezzo in centesimi"),
+                               _q("servizi", "string", "codici separati da virgola"),
+                               _q("solo_gratuita", "string", "1 = solo cancellazione gratuita"),
+                               _q("lang", "string", "it,en,es,fr,de,pt,ja,zh")],
+                "responses": {"200": {"description": "Elenco schede alloggio"}}}},
+            "/api/concierge/quote": {"post": {"operationId": "preventivo",
+                "summary": "Preventivo FIRMATO (prezzo bloccato in un token)",
+                "requestBody": {"required": True, "content": {"application/json": {"schema": {
+                    "type": "object", "required": ["alloggio_id", "check_in", "check_out"],
+                    "properties": {"alloggio_id": {"type": "string"}, "check_in": {"type": "string"},
+                                   "check_out": {"type": "string"}, "party": {"type": "integer"}}}}}},
+                "responses": {"200": {"description": "quote_token + prezzo_guest_cents + totale_cents"}}}},
+            "/api/concierge/book": {"post": {"operationId": "prenota",
+                "summary": "Prenota col quote_token (prezzo gia' firmato, non alterabile)",
+                "requestBody": {"required": True, "content": {"application/json": {"schema": {
+                    "type": "object", "required": ["quote_token", "email"],
+                    "properties": {"quote_token": {"type": "string"}, "email": {"type": "string"}}}}}},
+                "responses": {"201": {"description": "confermata + voucher_token"}}}},
+            "/api/i18n": {"get": {"operationId": "traduzioni",
+                "summary": "Dizionario UI per lingua",
+                "parameters": [_q("lang", "string", "it,en,es,fr,de,pt,ja,zh")],
+                "responses": {"200": {"description": "ui + servizi + stati"}}}},
+            "/api/domanda/citta": {"get": {"operationId": "mappaDomanda",
+                "summary": "Citta con piu' persone in attesa (domanda aggregata)",
+                "responses": {"200": {"description": "elenco citta/richieste"}}}},
+            "/api/mcp": {"post": {"operationId": "mcp",
+                "summary": "Endpoint MCP (JSON-RPC 2.0) per agenti IA",
+                "responses": {"200": {"description": "risposta JSON-RPC"}}}},
+        },
+    }
+
+
 def _notti_count(ci: Any, co: Any) -> int:
     import datetime
     try:
@@ -1961,6 +2037,10 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 bps = int(os.environ.get("COMMISSIONE_BPS", "1500"))
                 self._testo(200, "text/plain",
                             llms_txt(base_url, commissione_bps=bps))
+            elif u.path == "/.well-known/ai-plugin.json":
+                self._scrivi(200, ai_plugin_manifest(base_url))   # scoperta agenti IA
+            elif u.path == "/openapi.json":
+                self._scrivi(200, openapi_agent_spec(base_url))   # spec per agenti non-MCP
             elif u.path == "/sitemap-host.xml":
                 from fase97_inbound_seo import sitemap_inbound
                 self._testo(200, "application/xml", sitemap_inbound(base_url))
