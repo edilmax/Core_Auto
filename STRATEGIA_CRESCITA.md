@@ -1,9 +1,10 @@
 # 🚀 STRATEGIA DI CRESCITA + CONTI PRECISI BookinVIP (2026-07-10)
 
 > Land-grab globale, **noi mai in perdita a regime**, con i **conti veri** (tasse, INPS, INAIL,
-> commercialista, Stripe). ⚠️ Le CIFItalia 2026 sono **stime prudenti (a favore del fondatore = costi
-> più alti), DA CONFERMARE COL COMMERCIALISTA**: non verificabili online ora (limite sessione).
-> La LOGICA e le FORMULE sono esatte; i numeri esatti li mette il commercialista.
+> commercialista, Stripe). ✅ I numeri **forfettario e INPS 2026 sono VERIFICATI** (fonti Agenzia
+> Entrate + INPS Circolare 14/2026). Restano da confermare col commercialista solo: **codice ATECO/
+> coefficiente** e la **classificazione** (impresa Gestione Commercianti vs professionale Gestione
+> Separata). Stripe = stima prudente.
 
 ## 1. Rampa commissione (per anzianità host) — `fase98.commissione_bps_lancio`
 | Anzianità | Commissione marketplace | Chi paga Stripe |
@@ -26,21 +27,24 @@ Nei primi 3 mesi (0% commissione) **paghiamo NOI Stripe** → NON è "costo zero
 - **Reverse-charge IVA**: da forfettari l'IVA 22% sulle fee UE (Stripe Irlanda) è **indeducibile**
   (`fase103`) → costo Stripe effettivo **~3,0% × 1,22 ≈ 3,6%**. Uso **~3,6%** (prudente).
 
-## 4. Costi FISSI annui (Italia, forfettario) — stime prudenti da confermare
-| Voce | Stima prudente/anno | Note |
+## 4. Costi FISSI annui (Italia) — NUMERI 2026 VERIFICATI (INPS/AdE)
+| Voce | Importo 2026 | Note |
 |---|---|---|
-| **INPS** Gestione Commercianti (minimale) | **~€4.300** fisso (o **~€2.800** con −35% forfettari) | dovuto ANCHE a ricavo basso; se attività "professionale" → Gestione Separata ~26% sul reddito, **senza minimo** (più economico a inizio) → **DA DECIDERE col commercialista** |
-| **INAIL** | **~€0–200** | solo se artigiano/dipendenti; piattaforma digitale solo → di norma non dovuto |
-| **Commercialista** | **~€1.000** | forfettario |
-| **Diritto Camerale** | **~€100** | se impresa |
-| **Totale fisso prudente** | **~€5.400/anno** (o ~€3.900 con riduzioni) | soglia di pareggio |
+| **INPS Gestione Commercianti** (minimale) | **€4.611,64/anno** fisso — **€2.997,57 con −35% forfettari** | dovuto anche a reddito basso; copre reddito fino al **minimale €18.808**. Oltre: **+24,48%** (fino €56.224), poi 25,48% |
+| — *alternativa* **Gestione Separata** (se professionale) | **~26,07%** sul reddito, **SENZA minimo fisso** | più conveniente a INIZIO (reddito basso); niente riduzione 35% |
+| **INAIL** | **~€0** | non dovuto per piattaforma digitale solo (no dipendenti / rischio manuale) |
+| **Commercialista** | **~€800–1.200** | forfettario |
+| **Diritto camerale** | **~€53–120** | se impresa |
+| **Floor fisso realistico** | **~€4.100 (Commercianti −35%) → ~€5.800 (pieno)** | soglia di pareggio |
 
-## 5. Tasse (forfettario)
-- IVA: **esente** (non si addebita). Ricavo = **solo la nostra commissione** (`fattura_startup_cents`),
-  non il lordo → tetto €85k = commissione, GMV enorme.
-- **Imposta sostitutiva**: **5% i primi 5 anni** (startup), poi **15%**, su base = commissione ×
-  **coefficiente ~67%** (ATECO da confermare: intermediari 62% / servizi 67% / professionale 78%).
-  Es. su €50k di commissione: base 33.500 → imposta 5% = **~€1.675/anno**.
+## 5. Tasse (forfettario 2026) — VERIFICATE
+- Cap ricavi **€85.000**. **IVA esente**. Ricavo = **solo la nostra commissione** (`fattura_startup_cents`),
+  non il lordo → GMV consentito enorme.
+- **Imposta sostitutiva 5% i primi 5 anni** (startup: nessuna attività nei 3 anni prima; NON mera
+  prosecuzione di lavoro dipendente/autonomo), poi **15%**. Base = commissione × **coefficiente
+  redditività** (dipende dall'ATECO: intermediari **62%** / servizi-portali **67%** / professionale 78% —
+  **da scegliere col commercialista**; qui uso 67% prudente). Es. €50k commissione → base €33.500 →
+  imposta 5% = **€1.675/anno**.
 
 ## 6. PERCHÉ GUADAGNIAMO (struttura super-lean: ZERO dipendenti, tutto automatico)
 Con **zero dipendenti**, **nessun ufficio**, **zero spesa marketing** (crescita virale) e **tutto
@@ -69,10 +73,14 @@ non perché il modello è peggiore.
   **profittevoli da subito** e ogni euro di crescita rende **più a noi**. Obiettivo: scalare il volume
   tenendo il margine super-lean.
 
-## 7. Esempio conti annui (prudente, a regime 10%, dopo il lancio)
-GMV €300k → commissione €30k − Stripe (host la paga) → ricavo €30k − fissi €5.400 − imposta (5% su
-30k×67%=€1.005) ≈ **utile ~€23.600**. Sotto il tetto €85k (GMV consentito ~€850k @10%).
-Nel lancio (0%, 3 mesi) con GMV €50k → **investimento Stripe ~€1.800** (a nostro carico) + fissi pro-quota.
+## 7. Esempio conti annui (a regime 10%, dopo il lancio) — con numeri 2026
+GMV **€300k** → commissione **€30k** (lo Stripe lo paga l'host). Coeff. 67% → base €20.100:
+- Imposta sostitutiva 5% = **€1.005**
+- INPS Commercianti −35% ≈ €2.997,57 + 24,48%×(20.100−18.808)×0,65 ≈ **€3.203** (o Gest. Separata ≈ €5.240)
+- Commercialista + camera ≈ **€1.000**
+- **Utile netto ≈ €24.800/anno.** Sotto il tetto €85k (GMV consentito ≈ €850k @10%).
+- **Pareggio**: al 10% bastano **~€45–58k di GMV/anno** per coprire i soli costi fissi.
+Lancio (0%, 3 mesi, GMV €50k) → **investimento Stripe ~€1.800** a nostro carico (minimo, non deducibile in forfettario).
 
 ## 8. Fisco: ora Italia, poi trasferimento
 Al decollo/soglia → **trasferimento nella giurisdizione più conveniente** (piano del fondatore).
