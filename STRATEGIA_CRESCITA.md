@@ -56,6 +56,13 @@ Nei primi 3 mesi (0% commissione) **paghiamo NOI Stripe** → NON è "costo zero
   a "solo % sul fatturato": la Gestione Separata (26,07%, senza minimo) è per professionisti senza cassa,
   non per un imprenditore commerciale. **Da confermare col commercialista**, ma realisticamente il fisso resta.
 - **INAIL: cancellabile** (piattaforma digitale, zero dipendenti, no rischio manuale).
+- ⚠️ **"Non sarò commerciante, pago solo sul fatturato" — ATTENZIONE (legalità):** l'INPS classifica per
+  **SOSTANZA**, non per etichetta. Un marketplace che incassa commissioni = di norma **impresa commerciale
+  → Gestione Commercianti (fisso)**. Dichiararlo come attività "professionale" (Gestione Separata, senza
+  fisso) **solo per pagare meno** è una **misclassificazione**: l'INPS può **riqualificare** con
+  **arretrati + sanzioni**. Legittimo scegliere la gestione corretta più favorevole; **illegittimo/rischioso**
+  travestire un'impresa da professione. **Decide il commercialista** sull'ATECO/struttura reali; nel piano
+  teniamo **prudente il fisso (~€2.997)** — il ~€3k di risparmio non vale il rischio di contenzioso.
 
 ## 6. PERCHÉ GUADAGNIAMO (struttura super-lean: ZERO dipendenti, tutto automatico)
 Con **zero dipendenti**, **nessun ufficio**, **zero spesa marketing** (crescita virale) e **tutto
