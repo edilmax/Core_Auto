@@ -93,7 +93,7 @@ class TestServiziStati(unittest.TestCase):
         self.assertEqual(out, ["Wi-Fi", "Cucina"])
 
     def test_stato(self):
-        self.assertEqual(self.loc.stato("confermata", "fr"), "Confirmee")
+        self.assertEqual(self.loc.stato("confermata", "fr"), "Confirmée")
         self.assertEqual(self.loc.stato("ignoto", "it"), "ignoto")
 
 
