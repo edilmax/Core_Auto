@@ -102,6 +102,6 @@ def corpo_voucher_html(titolo_alloggio: str, riferimento: str, check_in: str,
         "<h2 style=\"color:#1e3c72\">BookinVIP - Prenotazione confermata</h2>"
         "<p>%s</p><p>Riferimento: <strong>%s</strong><br>"
         "Dal %s al %s</p>%s"
-        "<p style=\"color:#5e6f8d;font-size:.85rem\">Il voucher contiene il codice per il "
-        "check-in autonomo.</p></div>"
+        "<p style=\"color:#5e6f8d;font-size:.85rem\">Conserva questa email: dal voucher puoi "
+        "vedere la prenotazione e, se serve, annullarla.</p></div>"
     ) % (e(titolo_alloggio), e(riferimento), e(check_in), e(check_out), link)

@@ -375,6 +375,12 @@ def genera_csv_prenotazioni(righe: Any) -> str:
     return buf.getvalue()
 
 
+# Mostrare il codice "serratura smart" sul voucher? OFF finché non c'è integrazione hardware
+# reale (nessun host ha serrature smart al lancio): evita di confondere il cliente con un codice
+# lungo e inutile. Riattivare (True) quando esisterà una vera serratura/QR per l'ospite.
+MOSTRA_PASS_SERRATURA = False
+
+
 def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optional[str]:
     """Voucher di conferma (server-rendered, stampabile, multilingua). Verifica la firma
     del token (non falsificabile). None se assente/manomesso/non un voucher."""
@@ -389,11 +395,16 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
     e = html.escape
     prezzo = "%d.%02d" % (dati.get("prezzo_guest_cents", 0) // 100,
                           dati.get("prezzo_guest_cents", 0) % 100)
+    # Codice "serratura smart" (self check-in): NASCOSTO di default. È un pass firmato utile
+    # SOLO se l'host ha una serratura elettronica compatibile (hardware, che al lancio nessuno
+    # ha) -> mostrarlo confonderebbe il cliente. Resta emesso nel token (riattivabile in futuro,
+    # es. QR sull'app della serratura). Per riattivare la visualizzazione: MOSTRA_PASS_SERRATURA=True.
     pass_code = e(str(dati.get("smart_pass", "")))
     blocco_pass = ("<div style='margin-top:1.2rem;padding:1rem;background:#f0f4fe;"
                    "border-radius:1rem'><strong>%s</strong><br>"
                    "<code style='word-break:break-all;font-size:.8rem'>%s</code></div>"
-                   ) % (e(_ui("self_pass", lng)), pass_code) if pass_code else ""
+                   ) % (e(_ui("self_pass", lng)), pass_code) \
+        if (MOSTRA_PASS_SERRATURA and pass_code) else ""
     # cancellazione self-service (token preso dall'URL, niente da incollare)
     blocco_pass = blocco_pass + (
         "<button id='btnCanc' style='margin-top:1.2rem;width:100%;padding:.8rem;border:0;"
