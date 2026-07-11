@@ -41,6 +41,32 @@ In entrambe: **non anticipiamo mai denaro**; la carta-garanzia copre no-show e l
   convertirebbero (loro spingono il prepagato).
 - Etico: nessun addebito a sorpresa — la garanzia e la penale sono **mostrate chiaramente prima** di prenotare.
 
+## 4-bis. 💰 Monetizzazione EVOLUTA (doppia presa, più dei colossi) — VINCENTE
+Chi paga in struttura riceve un **servizio premium** (rischio-zero + ci accolliamo il no-show):
+è giusto farci pagare di più. Non un costo nascosto, ma un **menù di scelta trasparente**:
+
+| Opzione (il cliente sceglie) | Cliente | Host | Noi incassiamo |
+|---|---|---|---|
+| **Prepaga online** (la più economica) | prezzo pulito, **0%** | ~10% | **~10%** — resta il nostro differenziatore lean |
+| **Paga in struttura "SICURO"** (rischio zero) | prezzo + tariffa Sicuro **~5%** | ~10% | **~15% (DOPPIA presa: host + cliente)** |
+
+**Perché è più evoluta dei colossi:** loro spingono il prepagato (meno rischio per loro) e il
+"paga in struttura" è gratis/default; **noi lo rendiamo un centro di profitto e monetizziamo la
+DIFFIDENZA che loro non convertono** → guadagniamo di più proprio sui clienti che loro perdono.
+Choice architecture: il cliente si auto-seleziona, **noi vinciamo in entrambi i casi**.
+
+**Regole perché sia serio e legale:**
+1. **Trasparenza**: la tariffa Sicuro è **nel totale mostrato PRIMA** di prenotare (FTC/UE vietano
+   costi a sorpresa). Il prepagato resta **0% cliente**.
+2. **Solo su scelta**: chi vuole risparmiare ha sempre l'opzione 0%.
+3. **Rischio-zero PURO**: se il posto non esiste, il cliente non paga NULLA — **nemmeno la tariffa
+   Sicuro** (addebitata solo a check-in avvenuto, sulla carta a garanzia). Incassiamo solo sui soggiorni veri.
+4. **% calibrabile dal fondatore** (consiglio: host 10% + cliente ~5% = ~15% totale sul "Sicuro",
+   pari ai colossi ma con in più fiducia + rischio-zero che loro non danno).
+
+**Mai in perdita:** tutto garantito dalla carta-su-file; niente addebito se il soggiorno non avviene;
+non anticipiamo mai denaro. La "doppia presa" è ricavo su un servizio reale (premium), non un balzello.
+
 ## 5. Aggiornare la logica ovunque (coerenza)
 - **Preventivo/prenotazione** (`fase59`): aggiungere `modalita_pagamento` = `online` | `in_struttura`.
 - **Voucher**: memorizzare la modalità + il SetupIntent id (garanzia).
