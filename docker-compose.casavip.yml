@@ -14,6 +14,7 @@ services:
     environment:
       HOST: "0.0.0.0"
       PORTA: "8080"
+      PAGAMENTO_BPS: "300"           # costo carta 3% a carico host (copre Stripe -> noi mai in perdita)
       DB_CATALOGO: /data/catalogo.db
       DB_INVENTARIO: /data/inventario.db
       DB_REGISTRO_HOST: /data/registro_host.db   # account host self-service (durevole)
