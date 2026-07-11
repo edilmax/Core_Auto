@@ -546,6 +546,8 @@ class RouterHTTP:
             return self._host_invito_qualifica(body, headers)
         if metodo == "POST" and path == "/api/host/pubblica":
             return self._host_pubblica(body, headers)
+        if metodo == "POST" and path == "/api/host/upload_foto":
+            return self._upload_foto(body, headers)
         if metodo == "POST" and path == "/api/host/disponibilita":
             return self._host_disponibilita(body, headers)
         if metodo == "POST" and path == "/api/host/disponibilita_range":
@@ -618,6 +620,47 @@ class RouterHTTP:
         import hmac
         fornita = headers.get("X-Host-Key", "") or headers.get("x-host-key", "")
         return hmac.compare_digest(str(fornita), str(self._host_key))
+
+    def _upload_foto(self, body, headers):
+        """Upload foto alloggio (base64) -> salva su UPLOAD_DIR -> ritorna l'URL /uploads/<nome>,
+        che il catalogo/vetrina mostra come qualsiasi immagine. Host-auth. BLINDATO: valida il
+        TIPO dai byte (mai fidarsi del content_type), tetto 5MB, nome casuale (no path/collisioni)."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        dati = self._json(body)
+        if not isinstance(dati, dict):
+            return 400, {"errore": "json_non_valido"}
+        import base64 as _b64, os as _os, secrets as _sec
+        raw64 = dati.get("image_base64") or ""
+        if isinstance(raw64, str) and raw64.startswith("data:") and "," in raw64:
+            raw64 = raw64.split(",", 1)[1]        # data URI -> tieni solo il payload base64
+        try:
+            raw = _b64.b64decode(raw64, validate=True)
+        except Exception:
+            return 422, {"errore": "immagine_non_valida"}
+        if not raw or len(raw) > 5 * 1024 * 1024:
+            return 422, {"errore": "dimensione_non_valida"}      # vuota o > 5MB
+        ext = None                                                # tipo dai MAGIC BYTES
+        if raw[:3] == b"\xff\xd8\xff":
+            ext = "jpg"
+        elif raw[:8] == b"\x89PNG\r\n\x1a\n":
+            ext = "png"
+        elif raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+            ext = "webp"
+        elif raw[:6] in (b"GIF87a", b"GIF89a"):
+            ext = "gif"
+        if ext is None:
+            return 422, {"errore": "formato_non_supportato"}
+        updir = _os.environ.get("UPLOAD_DIR", "data/uploads")
+        try:
+            _os.makedirs(updir, exist_ok=True)
+            nome = _sec.token_hex(16) + "." + ext
+            with open(_os.path.join(updir, nome), "wb") as f:
+                f.write(raw)
+        except Exception:
+            logger.error("upload foto: salvataggio fallito (ISOLATO)", exc_info=True)
+            return 503, {"errore": "storage_non_disponibile"}
+        return 201, {"url": "/uploads/" + nome}
 
     def _auth_admin(self, headers: Dict[str, str]) -> bool:
         if self._admin_key is None:
@@ -2011,6 +2054,23 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             self.end_headers()
             self.wfile.write(dati)
 
+        def _serve_upload(self, path):
+            updir = os.environ.get("UPLOAD_DIR", "data/uploads")
+            fpath = percorso_statico_sicuro(path, updir)   # anti-traversal (basename only)
+            if fpath is None or not os.path.isfile(fpath):
+                self._scrivi(404, {"errore": "file_non_trovato"})
+                return
+            with open(fpath, "rb") as f:
+                dati = f.read()
+            import mimetypes
+            ctype = mimetypes.guess_type(fpath)[0] or "application/octet-stream"
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Cache-Control", "public, max-age=31536000")
+            self._cors()
+            self.end_headers()
+            self.wfile.write(dati)
+
         def _statico(self, path):
             fpath = percorso_statico_sicuro(path, cartella_statica)
             if fpath is None or not os.path.isfile(fpath):
@@ -2095,6 +2155,8 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 self._scrivi(200, ai_plugin_manifest(base_url))   # scoperta agenti IA
             elif u.path == "/openapi.json":
                 self._scrivi(200, openapi_agent_spec(base_url))   # spec per agenti non-MCP
+            elif u.path.startswith("/uploads/"):
+                self._serve_upload(u.path)                        # foto alloggi caricate
             elif u.path == "/sitemap-host.xml":
                 from fase97_inbound_seo import sitemap_inbound
                 self._testo(200, "application/xml", sitemap_inbound(base_url))

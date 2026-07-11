@@ -23,6 +23,7 @@ services:
       DB_GARANZIA: /data/garanzia.db             # escrow di garanzia (durevole)
       DB_PENDENTI: /data/pendenti.db             # hold pagamento / su-richiesta (durevole)
       DB_TASSA_COMUNALE: /data/tassa_comunale.db # ledger tassa di soggiorno (durevole)
+      UPLOAD_DIR: /data/uploads                  # foto alloggi caricate dagli host (durevole)
       DB_PAYOUT: /data/payout.db                 # dashboard payout host (durevole)
       FILE_REFERRAL: /data/referral.json         # referral host (durevole)
       CAMPAGNA_STATO_FILE: /data/campagna_stato.json   # scheduler no-burst (durevole)
