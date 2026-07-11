@@ -65,8 +65,11 @@ class ProviderStripe:
             if not _intero_pos(cents):
                 return None
             ref = str(dati.get("riferimento", ""))
+            import time as _t
+            scade_at = int(_t.time()) + 1800   # 30 min (minimo Stripe): mostra il countdown all'ospite
             params: List[Tuple[str, str]] = [
                 ("mode", "payment"),
+                ("expires_at", str(scade_at)),   # urgenza + auto-scadenza allineata all'hold stanza
                 ("success_url", self._ok or "https://bookinvip.com/ok"),
                 ("cancel_url", self._ko or "https://bookinvip.com/ko"),
                 ("line_items[0][quantity]", "1"),

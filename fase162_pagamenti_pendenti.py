@@ -15,7 +15,7 @@ import sqlite3
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-HOLD_SECONDI_DEFAULT = 1200          # 20 minuti per pagare, poi la stanza si libera
+HOLD_SECONDI_DEFAULT = 1800          # 30 minuti per pagare (allineato a Stripe), poi la stanza si libera
 
 
 class _ConnCondivisa:

@@ -70,6 +70,9 @@ ETICHETTE_UI: Dict[str, Dict[str, str]] = {
     "email": {"it": "Email", "en": "Email", "es": "Correo", "fr": "E-mail", "de": "E-Mail", "pt": "E-mail", "ja": "メール", "zh": "邮箱"},
     "conferma": {"it": "Prenotazione confermata!", "en": "Booking confirmed!", "es": "¡Reserva confirmada!", "fr": "Réservation confirmée !", "de": "Buchung bestätigt!", "pt": "Reserva confirmada!", "ja": "予約が確定しました！", "zh": "预订已确认！"},
         "richiesta_inviata": {"it": "Richiesta inviata: l'host conferma entro 24h", "en": "Request sent: the host confirms within 24h", "es": "Solicitud enviada: el anfitrión confirma en 24h", "fr": "Demande envoyée : l'hôte confirme sous 24h", "de": "Anfrage gesendet: der Gastgeber bestätigt innerhalb von 24h", "pt": "Pedido enviado: o anfitrião confirma em 24h", "ja": "リクエストを送信しました：ホストが24時間以内に確定します", "zh": "请求已发送：房东将在24小时内确认"},
+        "prezzo_bloccato": {"it": "Prezzo e disponibilità bloccati per te ancora", "en": "Price & availability locked for you for", "es": "Precio y disponibilidad reservados para ti aún", "fr": "Prix et disponibilité bloqués pour vous encore", "de": "Preis & Verfügbarkeit für dich reserviert noch", "pt": "Preço e disponibilidade reservados para si ainda", "ja": "価格と空室をあと", "zh": "价格与空房为您锁定还剩"},
+        "affrettati": {"it": "affrettati!", "en": "hurry!", "es": "¡date prisa!", "fr": "dépêchez-vous !", "de": "beeil dich!", "pt": "despache-se!", "ja": "お急ぎください！", "zh": "抓紧！"},
+        "offerta_scaduta": {"it": "Offerta scaduta — aggiorna la ricerca", "en": "Offer expired — refresh your search", "es": "Oferta caducada — actualiza la búsqueda", "fr": "Offre expirée — actualisez la recherche", "de": "Angebot abgelaufen — Suche aktualisieren", "pt": "Oferta expirada — atualize a pesquisa", "ja": "オファーの有効期限が切れました — 検索を更新してください", "zh": "优惠已过期 — 请刷新搜索"},
     "non_disp": {"it": "Non disponibile", "en": "Not available", "es": "No disponible", "fr": "Indisponible", "de": "Nicht verfügbar", "pt": "Indisponível", "ja": "空きなし", "zh": "不可预订"},
     "verificata": {"it": "verificata", "en": "verified", "es": "verificada", "fr": "vérifiée", "de": "verifiziert", "pt": "verificada", "ja": "確認済み", "zh": "已验证"},
     "dividi_amici": {"it": "Dividi tra amici:", "en": "Split with friends:", "es": "Divide con amigos:", "fr": "Partager entre amis :", "de": "Mit Freunden teilen:", "pt": "Dividir com amigos:", "ja": "友達と割り勘：", "zh": "与好友分摊："},
@@ -1116,7 +1119,14 @@ class RouterHTTP:
             if not host:
                 return
             valuta = corpo.get("valuta", "EUR")
-            pd.registra_maturato(ref, host, netto, valuta if isinstance(valuta, str) else "EUR")
+            valuta = valuta if isinstance(valuta, str) else "EUR"
+            # Se c'è un pagamento online pendente -> payout 'in_attesa' (NON conta come guadagno
+            # finché non paga; se l'hold scade viene rimosso). Senza pagamento online (conferma
+            # immediata / su-richiesta approvata) -> 'maturato'. Fine dei "guadagni" fantasma.
+            if corpo.get("payment_url"):
+                pd.registra_in_attesa(ref, host, netto, valuta)
+            else:
+                pd.registra_maturato(ref, host, netto, valuta)
         except Exception:
             logger.warning("registra payout fallito (ignorato)", exc_info=True)
 
@@ -1641,6 +1651,10 @@ class RouterHTTP:
                 led = getattr(self._sys, "tassa_comunale", None)
                 if led is not None:
                     led.registra_riscossione(rif, rec.get("comune", ""), rec["tassa_cents"])
+            # PAGATO: il payout dell'host passa da 'in_attesa' a 'maturato' (ora è un guadagno vero)
+            pd = getattr(self._sys, "payout", None)
+            if pd is not None:
+                pd.aggiorna_stato(rif, "maturato")
         except Exception:
             logger.warning("conferma pagamento/ledger tassa fallita (ignorata)", exc_info=True)
 
@@ -2334,6 +2348,11 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                                          idem_key=(rec.get("idem_key") or ("hold_" + rec["riferimento"])))
                             if gz is not None:
                                 gz.annulla(rec["riferimento"])
+                            # non pagato entro la scadenza -> via anche il payout 'in_attesa'
+                            # (niente guadagno fantasma per l'host) + libera le date
+                            _pd = getattr(sistema, "payout", None)
+                            if _pd is not None:
+                                _pd.rimuovi(rec["riferimento"])
                             pp.rimuovi(rec["riferimento"])
                         except Exception:
                             logger.warning("sweep hold singolo fallito (ignorato)", exc_info=True)

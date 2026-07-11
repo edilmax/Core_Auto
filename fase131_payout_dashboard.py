@@ -15,8 +15,9 @@ from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("core_auto.payout_dashboard")
 
-STATI = ("maturato", "in_transito", "pagato", "trattenuto")
+STATI = ("in_attesa", "maturato", "in_transito", "pagato", "trattenuto")
 _TRANSIZIONI = {
+    "in_attesa": {"maturato", "trattenuto"},   # in attesa di pagamento -> pagato(maturato) o trattenuto
     "maturato": {"in_transito", "trattenuto"},
     "in_transito": {"pagato", "trattenuto"},
     "trattenuto": {"in_transito"},
@@ -86,6 +87,42 @@ class PayoutDashboard:
             return True
         except Exception:
             logger.warning("registra_maturato fallita (ISOLATA)", exc_info=True)
+            return False
+        finally:
+            con.close()
+
+    def registra_in_attesa(self, prenotazione_id: str, host_id: str, minori: int,
+                            valuta: str) -> bool:
+        """Payout di una prenotazione NON ancora pagata (hold): stato 'in_attesa'. NON conta
+        come guadagno finché il pagamento non è confermato (poi -> 'maturato') o l'hold scade
+        (-> rimosso). Evita di mostrare all'host incassi da prenotazioni mai pagate."""
+        if not (prenotazione_id and host_id and _valuta(valuta)) or _pos(minori) < 0:
+            return False
+        con = self._apri()
+        try:
+            with con:
+                con.execute("INSERT OR IGNORE INTO payout (prenotazione_id, host_id, "
+                            "minori, valuta, stato, ts) VALUES (?,?,?,?, 'in_attesa', ?)",
+                            (str(prenotazione_id), str(host_id), int(minori),
+                             valuta.upper(), self._now()))
+            return True
+        except Exception:
+            logger.warning("registra_in_attesa fallita (ISOLATA)", exc_info=True)
+            return False
+        finally:
+            con.close()
+
+    def rimuovi(self, prenotazione_id: str) -> bool:
+        """Elimina il payout di una prenotazione (hold scaduto/non pagato -> niente incasso).
+        Idempotente."""
+        con = self._apri()
+        try:
+            with con:
+                con.execute("DELETE FROM payout WHERE prenotazione_id=?",
+                            (str(prenotazione_id),))
+            return True
+        except Exception:
+            logger.warning("rimuovi payout fallita (ISOLATA)", exc_info=True)
             return False
         finally:
             con.close()

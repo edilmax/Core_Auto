@@ -316,10 +316,19 @@ async function apri(slug){
       if(q.sconto_non_rimborsabile_cents>0) righe += `<div style="margin-top:.4rem;font-size:.85rem;color:#8a6d0b">🔒 ${t('non_rimb')} · ${t('risparmi')} ${eur(q.sconto_non_rimborsabile_cents)}</div>`;
       const _tot = q.totale_cents||q.prezzo_guest_cents;
       righe += `<div style="margin-top:.5rem;font-size:.85rem">👥 ${t('dividi_amici')} <select id="splitN" style="padding:.2rem .3rem">${[2,3,4,5,6].map(n=>`<option value="${n}">${n}</option>`).join('')}</select> <span id="splitOut" style="color:#155724;font-weight:600"></span></div>`;
+      righe += `<div id="cd" style="margin-top:.6rem;padding:.5rem .7rem;background:#fff4e5;border:1px solid #ffd9a8;border-radius:.6rem;font-size:.85rem;color:#8a5200;font-weight:600;text-align:center"></div>`;
       mq.innerHTML = righe;
       const sb = document.getElementById('splitN');
       if(sb){ const calc = async ()=>{ try{ const r = await api('/api/split/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({totale_cents:_tot,n:parseInt(sb.value)})}); if(r.quote){ const mn=r.per_persona_min_cents,mx=r.per_persona_max_cents; document.getElementById('splitOut').textContent = (mn===mx?('= '+eur(mn)):('= '+eur(mn)+'–'+eur(mx)))+' '+t('a_testa'); } }catch(e){} }; sb.onchange=calc; calc(); }
       document.getElementById('btnPrenota').style.display='';
+      // CONTO ALLA ROVESCIA ONESTO: il preventivo (prezzo+stanza) è bloccato per te fino a scade_a.
+      if(window.__cdTimer) clearInterval(window.__cdTimer);
+      const _scade = (q.scade_a||0)*1000; const _cd = document.getElementById('cd');
+      const _tick = ()=>{ const ms=_scade-Date.now();
+        if(ms<=0){ _cd.textContent='⌛ '+t('offerta_scaduta'); _cd.style.background='#fdecec'; _cd.style.color='#b00020'; document.getElementById('btnPrenota').style.display='none'; clearInterval(window.__cdTimer); return; }
+        const s=Math.floor(ms/1000), mm=String(Math.floor(s/60)).padStart(2,'0'), ss=String(s%60).padStart(2,'0');
+        _cd.textContent='⏳ '+t('prezzo_bloccato')+' '+mm+':'+ss+(s<120?(' · '+t('affrettati')):''); };
+      _tick(); window.__cdTimer=setInterval(_tick,1000);
     } else { QUOTE=null; mq.innerHTML=`<div class="msg err">${t('non_disp')}</div>`; document.getElementById('btnPrenota').style.display='none'; }
     document.getElementById('modal').classList.add('open');
   }catch(e){ alert(t('errore')+': '+e.message); }
