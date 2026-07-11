@@ -49,6 +49,7 @@ class ConfigCasaVIP:
     valuta: str = "EUR"
     commissione_bps: int = 1000         # commissione CORE marketplace in basis-point: 10% a regime
     promo_lancio_attiva: bool = False   # rampa di lancio 0%->8%->10% per anzianità host (land-grab; attivare al go-live)
+    psp_bps: int = 0                    # costo carta a carico HOST (bps); default 0, la PROD lo mette a 300 (3%) via main
     stripe_secret_key: str = ""        # gated: se vuoto, niente link di pagamento
     stripe_success_url: str = ""
     stripe_cancel_url: str = ""
@@ -218,7 +219,8 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                                 valuta=cfg.valuta, link_pagamento=link_pagamento,
                                 commissione=lambda netto: max(0, netto * _bps // 10000),
                                 commissione_alloggio=_comm_alloggio,
-                                tassa_alloggio=_tassa_alloggio, tasso_cambio=_tasso)
+                                tassa_alloggio=_tassa_alloggio, tasso_cambio=_tasso,
+                                psp_bps=cfg.psp_bps)
     componenti.append("concierge(59)")
 
     # 3c) smart-pass per il self check-in (incluso nel voucher)

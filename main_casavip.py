@@ -56,6 +56,8 @@ def main() -> None:  # pragma: no cover
         commissione_bps=int(os.environ.get("COMMISSIONE_BPS", "1000")),  # 10% a regime (marketplace)
         # rampa di lancio (land-grab): nuovi host 0% per ~3 mesi -> 8% fino a 1 anno -> 10% a regime
         promo_lancio_attiva=os.environ.get("PROMO_LANCIO", "true").lower() in ("1", "true", "yes", "si"),
+        # costo carta a carico host (copre Stripe -> noi mai in perdita); 300 bps = 3% (come Vrbo)
+        psp_bps=int(os.environ.get("PAGAMENTO_BPS", "300")),
         stripe_secret_key=os.environ.get("STRIPE_SECRET_KEY", ""),
         stripe_success_url=os.environ.get("STRIPE_SUCCESS_URL", ""),
         stripe_cancel_url=os.environ.get("STRIPE_CANCEL_URL", ""),

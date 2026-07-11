@@ -132,6 +132,7 @@ class ProtocolloConcierge:
                  tasso_cambio: Optional[Callable[[str, str], Any]] = None,
                  link_pagamento: Optional[Callable[[Dict[str, Any]], Optional[str]]] = None,
                  ttl_quote_sec: int = 900, valuta: str = "EUR",
+                 psp_bps: int = 0,
                  orologio: Optional[Callable[[], int]] = None) -> None:
         self._inv = inventario
         self._firma = firma
@@ -139,6 +140,10 @@ class ProtocolloConcierge:
         self._commissione = commissione or (lambda netto: 0)
         self._commissione_all = commissione_alloggio   # host-aware: (netto, slug)->comm
         self._tassa_all = tassa_alloggio               # (slug, notti, ospiti, imponibile)->cents
+        # COSTO SERVIZIO PAGAMENTI (carta): a carico dell'HOST, dedotto dal suo incasso; l'ospite
+        # paga sempre il prezzo pulito (0%). Copre la fee Stripe -> noi MAI in perdita. bps, cap 20%.
+        self._psp_bps = max(0, min(2000, int(psp_bps))) if isinstance(psp_bps, int) \
+            and not isinstance(psp_bps, bool) else 0
         self._tasso = tasso_cambio                     # (da, a)->tasso mid (solo display indicativo)
         self._link = link_pagamento
         self._ttl = max(60, int(ttl_quote_sec))
@@ -268,6 +273,11 @@ class ProtocolloConcierge:
             except Exception:
                 tassa = 0
             totale = guest + tassa
+            # COSTO SERVIZIO PAGAMENTI (carta): a carico dell'HOST, dedotto dal suo incasso.
+            # Copre la fee Stripe sul TOTALE addebitato -> noi MAI in perdita. L'ospite paga
+            # SEMPRE il prezzo pulito (0%): il totale non cambia, cambia solo il netto host.
+            costo_pagamento = (totale * self._psp_bps) // 10000
+            netto_host = max(0, netto_host - costo_pagamento)
         except Exception:
             logger.error("quota: eccezione ISOLATA", exc_info=True)
             return RispostaConcierge(503, {"errore": "service_unavailable"})
@@ -280,6 +290,7 @@ class ProtocolloConcierge:
             "sconto_credito_cents": sconto,
             "sconto_non_rimborsabile_cents": sconto_nr, "prezzo_listino_cents": netto_listino,
             "tassa_soggiorno_cents": tassa, "totale_cents": totale,
+            "costo_pagamento_cents": costo_pagamento,
             "fonte": fonte, "exp": scade_a, "valuta": valuta,
             # nonce: ogni preventivo e' UNICO -> due clienti distinti per la stessa
             # stanza/date competono davvero (idem-key distinte); un retry dello stesso
@@ -297,7 +308,8 @@ class ProtocolloConcierge:
             "prezzo_netto_cents": netto,        # prezzo di listino (lordo)
             "commissione_cents": comm,          # int (dedotta dall'host)
             "prezzo_guest_cents": guest,        # il soggiorno (pulito, 0% guest fee)
-            "netto_host_cents": netto_host,     # l'host riceve QUESTO
+            "netto_host_cents": netto_host,     # l'host riceve QUESTO (gia' al netto del costo carta)
+            "costo_pagamento_cents": costo_pagamento,  # costo carta a carico host (copre Stripe; ns 0 margine)
             "sconto_credito_cents": sconto,     # credito fondatore applicato (da nostra commissione)
             "sconto_non_rimborsabile_cents": sconto_nr,   # -12% se non-rimborsabile (finanziato host)
             "prezzo_listino_cents": netto_listino,        # prezzo pieno (per mostrare il risparmio)
