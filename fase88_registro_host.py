@@ -254,7 +254,7 @@ class RegistroHost:
             con.close()
 
     def conta_host(self) -> int:
-        """Quanti host censiti (per la Regola dei primi 1000 e per DAC7/metriche)."""
+        """Quanti host censiti (per metriche e DAC7)."""
         con = self._apri()
         try:
             r = con.execute("SELECT COUNT(*) FROM host").fetchone()
@@ -267,7 +267,8 @@ class RegistroHost:
 
     def numero_host(self, host_id: str) -> int:
         """Ordinale 1-based dell'host per ordine di registrazione (creato_ts, host_id).
-        0 se l'host non esiste. Serve a sapere se è tra i 'fondatori' (primi 1000)."""
+        0 se l'host non esiste. Solo per metriche: la tariffa NON dipende dall'ordine
+        (la leva è la rampa temporale di lancio, non l'ordinale)."""
         con = self._apri()
         try:
             row = con.execute("SELECT creato_ts FROM host WHERE host_id=?",

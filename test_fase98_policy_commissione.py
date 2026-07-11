@@ -1,4 +1,4 @@
-"""Test Fase 98 - Policy commissione: primi-1000-host + split 3%/12%. Puro + integra fase88."""
+"""Test Fase 98 - Policy commissione: rampa di lancio + split 2%/8% (10% a regime). Puro + integra fase88."""
 import unittest
 
 from fase88_registro_host import crea_registro_host
@@ -10,26 +10,28 @@ SEG = b"x" * 32
 
 
 class TestPerFonte(unittest.TestCase):
-    def test_diretto_5_marketplace_15(self):
+    def test_diretto_5_marketplace_10(self):
         self.assertEqual(commissione_bps_fonte("diretto"), 500)
         self.assertEqual(commissione_bps_fonte("diretto", 5000), 500)   # sempre 5%
-        self.assertEqual(commissione_bps_fonte("marketplace", 1), 1500)
-        self.assertEqual(commissione_bps_fonte("marketplace", 2000), 1500)
+        self.assertEqual(commissione_bps_fonte("marketplace", 1), 1000)
+        self.assertEqual(commissione_bps_fonte("marketplace", 2000), 1000)
 
     def test_default_e_ignoto_marketplace(self):
-        self.assertEqual(commissione_bps_fonte(""), 1500)
-        self.assertEqual(commissione_bps_fonte(None), 1500)
-        self.assertEqual(commissione_bps_fonte("xyz"), 1500)
+        self.assertEqual(commissione_bps_fonte(""), 1000)
+        self.assertEqual(commissione_bps_fonte(None), 1000)
+        self.assertEqual(commissione_bps_fonte("xyz"), 1000)
 
     def test_no_loss_diretto_su_100eur(self):
         # 5% su 100€ = 500 cents; Stripe peggiore 2.9%+0.25 = 315; resta margine positivo
         self.assertGreater(commissione_cents(10000, commissione_bps_fonte("diretto")), 315)
 
 
-class TestPolicyPrimi1000(unittest.TestCase):
-    def test_fondatore_15(self):
-        self.assertEqual(commissione_bps_per_host(1), 1500)
-        self.assertEqual(commissione_bps_per_host(1000), 1500)
+class TestPolicyLegacyOrdinale(unittest.TestCase):
+    # La regola ordinale "primi 1000" è LEGACY e NEUTRA: con i default a 10% non concede
+    # sconti ordinali (la leva strategica è la rampa temporale, non l'ordine d'iscrizione).
+    def test_default_10(self):
+        self.assertEqual(commissione_bps_per_host(1), 1000)
+        self.assertEqual(commissione_bps_per_host(1000), 1000)
         self.assertTrue(e_fondatore(1))
         self.assertTrue(e_fondatore(1000))
 
@@ -38,25 +40,25 @@ class TestPolicyPrimi1000(unittest.TestCase):
         self.assertFalse(e_fondatore(1001))
 
     def test_ordinale_ignoto_e_invalido_failsafe(self):
-        # ignoto/non valido -> tariffa standard (post), MAI sconto fondatori, MAI 0
+        # ignoto/non valido -> tariffa standard (post), MAI 0
         self.assertEqual(commissione_bps_per_host(0, bps_dopo=1800), 1800)
         self.assertEqual(commissione_bps_per_host(-5, bps_dopo=1800), 1800)
         self.assertEqual(commissione_bps_per_host("x", bps_dopo=1800), 1800)
-        self.assertEqual(commissione_bps_per_host(None), 1500)   # default post=1500
+        self.assertEqual(commissione_bps_per_host(None), 1000)   # default post=10%
 
     def test_soglia_configurabile(self):
         self.assertEqual(commissione_bps_per_host(50, soglia=10, bps_dopo=2000), 2000)
-        self.assertEqual(commissione_bps_per_host(5, soglia=10), 1500)
+        self.assertEqual(commissione_bps_per_host(5, soglia=10), 1000)
 
 
 class TestSplitAsimmetrico(unittest.TestCase):
-    def test_3_piu_12_uguale_15(self):
+    def test_2_piu_8_uguale_10(self):
         r = ripartisci_host_guest(10000)               # €100
-        self.assertEqual(r["host_fee"], 300)           # 3%
-        self.assertEqual(r["guest_fee"], 1200)         # 12%
-        self.assertEqual(r["nostra_commissione"], 1500)  # 15% totale
-        self.assertEqual(r["netto_host"], 9700)        # incassa 100 - 3
-        self.assertEqual(r["totale_ospite"], 11200)    # paga 100 + 12
+        self.assertEqual(r["host_fee"], 200)           # 2%
+        self.assertEqual(r["guest_fee"], 800)          # 8%
+        self.assertEqual(r["nostra_commissione"], 1000)  # 10% totale
+        self.assertEqual(r["netto_host"], 9800)        # incassa 100 - 2
+        self.assertEqual(r["totale_ospite"], 10800)    # paga 100 + 8
 
     def test_conservazione_esatta_fuzz(self):
         for p in (1, 99, 100, 333, 10000, 12345, 999999):
@@ -73,13 +75,13 @@ class TestSplitAsimmetrico(unittest.TestCase):
             self.assertIsInstance(v, int)
 
     def test_commissione_cents_floor_e_clamp(self):
-        self.assertEqual(commissione_cents(10000, 1500), 1500)
-        self.assertEqual(commissione_cents(-5, 1500), 0)        # mai negativa
+        self.assertEqual(commissione_cents(10000, 1000), 1000)
+        self.assertEqual(commissione_cents(-5, 1000), 0)        # mai negativa
         self.assertEqual(commissione_cents(10000, 99999), 10000)  # clamp 100%
 
     def test_fattura_startup_solo_commissione(self):
-        # tutela forfettario: solo il 15% è nostro fatturato, non i 100
-        self.assertEqual(fattura_startup_cents(10000), 1500)
+        # tutela forfettario: solo il 10% è nostro fatturato, non i 100
+        self.assertEqual(fattura_startup_cents(10000), 1000)
 
 
 class TestIntegrazioneFase88Counter(unittest.TestCase):
@@ -93,12 +95,12 @@ class TestIntegrazioneFase88Counter(unittest.TestCase):
             self.assertTrue(e.ok, e.errore)
             ids.append(e.host_id)
         self.assertEqual(reg.conta_host(), 3)
-        # ogni host ha un ordinale 1..3, unico, e i primi 1000 sono fondatori
+        # ogni host ha un ordinale 1..3, unico; la tariffa a regime è 10% per tutti
         ordinali = sorted(reg.numero_host(h) for h in ids)
         self.assertEqual(ordinali, [1, 2, 3])
         for h in ids:
             self.assertTrue(e_fondatore(reg.numero_host(h)))
-            self.assertEqual(commissione_bps_per_host(reg.numero_host(h)), 1500)
+            self.assertEqual(commissione_bps_per_host(reg.numero_host(h)), 1000)
 
     def test_host_inesistente_ordinale_zero(self):
         reg = crea_registro_host(":memory:", SEG)

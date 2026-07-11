@@ -1,8 +1,8 @@
 """
 CORE_AUTO - Fase 104: Gateway Asia (Alipay + WeChat Pay) + adattatore Weibo.
 
-Aggancia Alipay e WeChat Pay allo split 15% di Stripe Connect (fase101): stessa destination
-charge (85% al conto host) + application_fee (nostra 15%), cambia solo il payment_method.
+Aggancia Alipay e WeChat Pay allo split 10% di Stripe Connect (fase101): stessa destination
+charge (90% al conto host) + application_fee (nostra 10%), cambia solo il payment_method.
 GATED da STRIPE_SECRET_KEY. Weibo = CanalePubblicazione (fase90) gated da access_token.
 `fetch` iniettabile → test senza rete. ISOLATO: errore → None/False.
 """

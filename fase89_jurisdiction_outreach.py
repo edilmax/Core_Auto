@@ -50,7 +50,7 @@ def _bps_valido(v: Any) -> bool:
 
 def commissione_sotto_concorrenza(concorrenti_bps: Any, *, margine_bps: int = 500,
                                   floor_bps: int = 300, cap_bps: int = 2000,
-                                  default_bps: int = 1500) -> int:
+                                  default_bps: int = 1000) -> int:
     """La NOSTRA commissione = min(colossi) − margine, dentro [floor, cap]. Se non ci sono
     benchmark validi -> default. Tutto in basis-point interi (mai float)."""
     validi = []

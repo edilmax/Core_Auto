@@ -53,7 +53,9 @@ def main() -> None:  # pragma: no cover
         db_accettazioni=os.environ.get("DB_ACCETTAZIONI", "data/accettazioni.db"),
         file_referral=os.environ.get("FILE_REFERRAL", "data/referral.json"),
         valuta=os.environ.get("VALUTA", "EUR"),
-        commissione_bps=int(os.environ.get("COMMISSIONE_BPS", "1500")),  # 15% (primi 1000)
+        commissione_bps=int(os.environ.get("COMMISSIONE_BPS", "1000")),  # 10% a regime (marketplace)
+        # rampa di lancio (land-grab): nuovi host 0% per ~3 mesi -> 8% fino a 1 anno -> 10% a regime
+        promo_lancio_attiva=os.environ.get("PROMO_LANCIO", "true").lower() in ("1", "true", "yes", "si"),
         stripe_secret_key=os.environ.get("STRIPE_SECRET_KEY", ""),
         stripe_success_url=os.environ.get("STRIPE_SUCCESS_URL", ""),
         stripe_cancel_url=os.environ.get("STRIPE_CANCEL_URL", ""),

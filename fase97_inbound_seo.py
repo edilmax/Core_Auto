@@ -190,7 +190,7 @@ def _jsonld(obj: object) -> str:
             .replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026"))
 
 
-def faq_jsonld(lingua: str = "it", *, commissione_bps: int = 1500,
+def faq_jsonld(lingua: str = "it", *, commissione_bps: int = 1000,
                ota_bps: int = 2500) -> str:
     lng = lingua if lingua in _FAQ else "en"
     noi, ota = _pct(commissione_bps), _pct(ota_bps)

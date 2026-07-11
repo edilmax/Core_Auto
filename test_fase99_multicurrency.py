@@ -53,11 +53,11 @@ class TestDenaro(unittest.TestCase):
 class TestLikeForLike(unittest.TestCase):
     def test_split_nella_valuta_annuncio(self):
         r = ripartisci_pagamento(Denaro(10000, "USD"))     # $100, no conversione
-        self.assertEqual(r["host_fee"].formatta(), "3.00 USD")
-        self.assertEqual(r["guest_fee"].formatta(), "12.00 USD")
-        self.assertEqual(r["nostra_commissione"].minori, 1500)
-        self.assertEqual(r["netto_host"].minori, 9700)
-        self.assertEqual(r["totale_ospite"].minori, 11200)
+        self.assertEqual(r["host_fee"].formatta(), "2.00 USD")
+        self.assertEqual(r["guest_fee"].formatta(), "8.00 USD")
+        self.assertEqual(r["nostra_commissione"].minori, 1000)
+        self.assertEqual(r["netto_host"].minori, 9800)
+        self.assertEqual(r["totale_ospite"].minori, 10800)
         for v in r.values():
             self.assertEqual(v.valuta, "USD")              # tutto USD, like-for-like
 

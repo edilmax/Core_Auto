@@ -47,7 +47,7 @@ class ConfigCasaVIP:
     db_catalogo: str = ":memory:"
     db_inventario: str = ":memory:"
     valuta: str = "EUR"
-    commissione_bps: int = 1500         # commissione CORE in basis-point: 15% BLINDATO (primi 1000 host)
+    commissione_bps: int = 1000         # commissione CORE marketplace in basis-point: 10% a regime
     promo_lancio_attiva: bool = False   # rampa di lancio 0%->8%->10% per anzianità host (land-grab; attivare al go-live)
     stripe_secret_key: str = ""        # gated: se vuoto, niente link di pagamento
     stripe_success_url: str = ""
@@ -167,16 +167,17 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     else:
         avvisi.append("Stripe non configurato -> nessun link di pagamento (gated)")
     _bps = cfg.commissione_bps if isinstance(cfg.commissione_bps, int) and \
-        0 <= cfg.commissione_bps <= 10000 else 1500   # fallback 15%, mai 0/5% per errore
+        0 <= cfg.commissione_bps <= 10000 else 1000   # fallback 10% (regime), mai 0 per errore
     _ctx_host: Dict[str, Any] = {}    # holder late-bound: registro_host nasce piu' sotto
 
     def _comm_alloggio(netto: int, slug: str, fonte: str = "marketplace") -> int:
-        # per-fonte: 'diretto' (cliente dell'host) -> 5%; 'marketplace' -> 15% (primi-1000).
+        # per-fonte: 'diretto' (cliente dell'host) -> 5%; 'marketplace' -> 10% a regime
+        # (rampa di lancio per anzianita' host quando promo_lancio_attiva: 0% -> 8% -> 10%).
         try:
             from fase98_policy_commissione import (commissione_bps_fonte, commissione_cents,
                                                    commissione_bps_lancio)
             numero = 0
-            bps_mkt = _bps                       # default 15% (fail-safe, mai regalare per errore)
+            bps_mkt = _bps                       # default 10% regime (fail-safe se anzianita' ignota)
             reg = _ctx_host.get("reg")
             if reg is not None and catalogo is not None:
                 d = catalogo.dettaglio(slug)

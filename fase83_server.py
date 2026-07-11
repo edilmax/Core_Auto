@@ -1978,7 +1978,7 @@ class RouterHTTP:
 
     def _host_link_diretto(self, query, headers):
         """Link di prenotazione DIRETTA dell'host (fonte=diretto -> 5%). Da condividere sui
-        propri canali: le prenotazioni che arrivano da qui pagano solo il 5%, non il 15%."""
+        propri canali: le prenotazioni che arrivano da qui pagano solo il 5%, non il 10%."""
         if not self._auth_host(headers):
             return 401, {"errore": "unauthorized"}
         host_id = self._host_id_da_token(headers) or query.get("host_id")
@@ -2216,7 +2216,7 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     if citta is None:
                         self._scrivi(404, {"errore": "citta_non_trovata"})
                     else:
-                        bps = int(os.environ.get("COMMISSIONE_BPS", "1500"))
+                        bps = int(os.environ.get("COMMISSIONE_BPS", "1000"))
                         self._testo(200, "text/html", genera_landing_host(
                             citta, lingua=query.get("lang", "it"), base_url=base_url,
                             commissione_bps=bps, citta_correlate=CITTA_SEED[:8]))
@@ -2224,7 +2224,7 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     self._scrivi(500, {"errore": "interno"})
             elif u.path == "/llms.txt":
                 from fase97_inbound_seo import llms_txt
-                bps = int(os.environ.get("COMMISSIONE_BPS", "1500"))
+                bps = int(os.environ.get("COMMISSIONE_BPS", "1000"))
                 self._testo(200, "text/plain",
                             llms_txt(base_url, commissione_bps=bps))
             elif u.path == "/.well-known/ai-plugin.json":

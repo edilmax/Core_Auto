@@ -69,8 +69,8 @@ class TestCommissioneSottoConcorrenza(unittest.TestCase):
         self.assertEqual(commissione_sotto_concorrenza({"x": 9000}, cap_bps=2000), 2000)
 
     def test_nessun_benchmark_default(self):
-        self.assertEqual(commissione_sotto_concorrenza({}), 1500)
-        self.assertEqual(commissione_sotto_concorrenza({"x": "abc"}), 1500)
+        self.assertEqual(commissione_sotto_concorrenza({}), 1000)        # default = 10% a regime
+        self.assertEqual(commissione_sotto_concorrenza({"x": "abc"}), 1000)
 
 
 class TestEmailLocalizzata(unittest.TestCase):

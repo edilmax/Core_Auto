@@ -1,9 +1,9 @@
 """
 CORE_AUTO - Fase 101: Stripe Connect split-all'origine (Modulo 3 - tutela forfettario).
 
-Lo split avviene NEL gateway al checkout: l'85% (netto host) va DIRETTO al conto connesso
+Lo split avviene NEL gateway al checkout: il 90% (netto host) va DIRETTO al conto connesso
 dell'host (destination charge), solo la nostra commissione (application_fee) resta a noi →
-legalmente solo il 15% è nostro fatturato (intermediario puro, soglia 85k tutelata).
+legalmente solo il 10% è nostro fatturato (intermediario puro, soglia 85k tutelata).
 ZERO dipendenze (REST via urllib stdlib). GATED da STRIPE_SECRET_KEY + host_account.
 `fetch` iniettabile → test senza rete. ISOLATO: errore → None, mai solleva.
 """

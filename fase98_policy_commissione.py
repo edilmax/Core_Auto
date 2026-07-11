@@ -1,34 +1,36 @@
 """
-CORE_AUTO - Fase 98: Policy commissione (Regola primi-1000-host + split asimmetrico 3%/12%).
+CORE_AUTO - Fase 98: Policy commissione (RAMPA DI LANCIO per anzianità + split asimmetrico 2%/8%).
 
-Esegue due moduli dello studio finanziario [[bookinvip-architettura-finanziaria]]:
-  - REGOLA 1 (primi 1000 host): la commissione dipende dall'ORDINALE di registrazione
-    dell'host (da fase88.numero_host). I primi `soglia` (1000) host = tariffa fondatori
-    (15%); oltre = tariffa post-fondatori (configurabile; default ANCORA 15% finché non si
-    decide). Funzione PURA + blindata: input ignoto/non valido → tariffa standard (mai 0).
-  - MODULO 4 (commissione asimmetrica): il 15% totale si ripartisce host 3% + ospite 12%.
+STRATEGIA VINCENTE: batti i colossi (~15-20% tutto incluso) con ~10% a regime, e conquista
+copertura SUBITO con una rampa temporale (land-grab), NON con un privilegio ordinale.
+  - RAMPA DI LANCIO (`commissione_bps_lancio`): la commissione marketplace dipende
+    dall'ANZIANITÀ dell'host (giorni da registrazione): 0% i primi ~3 mesi → 8% fino a 1 anno
+    → 10% a regime. Vale per TUTTI (non solo i "primi 1000"). Fail-safe: anzianità ignota →
+    tariffa a regime (non si regala lo 0% per errore).
+  - MODULO 4 (commissione asimmetrica): il 10% totale si ripartisce host 2% + ospite 8%.
     L'host trattiene poco (copre i costi carta, bassa barriera d'ingresso), l'ospite paga la
     guest service fee (stile Airbnb). CONSERVAZIONE ESATTA al centesimo: quanto incassiamo =
     host_fee + guest_fee; quanto paga l'ospite = prezzo + guest_fee; quanto prende l'host =
     prezzo - host_fee. Niente float, solo centesimi interi (per-valuta, valuta-agnostico).
+  - LEGACY (`commissione_bps_per_host`): la vecchia regola ordinale "primi 1000" è mantenuta
+    per compatibilità ma NEUTRA (default = 10% come il resto): la leva strategica è la rampa.
 
-PURO (nessun I/O, nessuna dipendenza): tutto testabile. La % totale resta 15% sia come
-commissione piatta (`commissione_bps_per_host`) sia come split (`ripartisci_host_guest`,
-host_bps+guest_bps=1500). Nessuna regola fiscale qui (quelle sono gated altrove).
+PURO (nessun I/O, nessuna dipendenza): tutto testabile. La % a regime è 10% sia piatta sia
+come split (`ripartisci_host_guest`, host_bps+guest_bps=1000). Nessuna regola fiscale qui.
 """
 from __future__ import annotations
 
 from typing import Any, Dict
 
 # Parametri della strategia (configurabili dal chiamante; default = blindatura 15%).
-SOGLIA_FONDATORI = 1000          # i primi N host
-BPS_FONDATORI = 1500             # 15% per i fondatori
-BPS_DOPO = 1500                  # post-fondatori: default uguale (l'utente deciderà)
-HOST_BPS = 300                   # 3% trattenuto all'host
-GUEST_BPS = 1200                 # 12% aggiunto all'ospite  (3% + 12% = 15%)
+SOGLIA_FONDATORI = 1000          # (legacy) soglia ordinale storica; la strategia ora e' a rampa temporale
+BPS_FONDATORI = 1000             # 10% (nessuno sconto ordinale: la leva e' la rampa di lancio per anzianita')
+BPS_DOPO = 1000                  # 10% a regime
+HOST_BPS = 200                   # 2% trattenuto all'host
+GUEST_BPS = 800                  # 8% aggiunto all'ospite  (2% + 8% = 10%)
 # Tariffa PER FONTE (modello 0% ospite, commissione DEDOTTA dall'host):
 BPS_DIRETTO = 500                # 5% sulle prenotazioni DIRETTE dell'host (no-loss: copre Stripe)
-BPS_MARKETPLACE = 1500           # 15% sulle prenotazioni portate da BookinVIP (vetrina/SEO)
+BPS_MARKETPLACE = 1000           # 10% a regime sulle prenotazioni portate da BookinVIP (vetrina/SEO)
 
 
 def _intero(v: Any, default: int = 0) -> int:
@@ -38,9 +40,9 @@ def _intero(v: Any, default: int = 0) -> int:
 def commissione_bps_per_host(numero_host: Any, *, bps_fondatori: int = BPS_FONDATORI,
                              soglia: int = SOGLIA_FONDATORI,
                              bps_dopo: int = BPS_DOPO) -> int:
-    """bps della commissione totale per un host dato il suo ORDINALE (1-based).
-    <= soglia → fondatori; oltre → post. Ordinale ignoto/non valido (<1) → tariffa standard
-    (post): fail-safe, non si regala lo sconto fondatori a chi non risulta censito."""
+    """(LEGACY, ordinale) bps della commissione per un host dato il suo ORDINALE (1-based).
+    Mantenuta per compatibilità: con i default a 10% NON concede alcuno sconto ordinale.
+    La leva strategica attuale è la rampa temporale (`commissione_bps_lancio`)."""
     n = _intero(numero_host, 0)
     bf = max(0, min(10000, _intero(bps_fondatori, BPS_FONDATORI)))
     bd = max(0, min(10000, _intero(bps_dopo, BPS_DOPO)))
@@ -56,7 +58,7 @@ def commissione_bps_fonte(fonte: Any, numero_host: Any = 0, *,
                           soglia: int = SOGLIA_FONDATORI) -> int:
     """bps secondo la FONTE della prenotazione (modello 0% ospite):
     'diretto' (cliente dell'host) → 5% (copre solo i costi di pagamento, no-loss);
-    altro/'marketplace' (cliente portato da BookinVIP) → 15% (primi-1000 = 15%)."""
+    altro/'marketplace' (cliente portato da BookinVIP) → 10% a regime (o rampa lancio)."""
     if str(fonte).lower() == "diretto":
         return max(0, min(10000, _intero(bps_diretto, BPS_DIRETTO)))
     bm = max(0, min(10000, _intero(bps_marketplace, BPS_MARKETPLACE)))
@@ -106,7 +108,7 @@ def commissione_cents(prezzo_cents: Any, bps: Any) -> int:
 
 def ripartisci_host_guest(prezzo_cents: Any, *, host_bps: int = HOST_BPS,
                           guest_bps: int = GUEST_BPS) -> Dict[str, int]:
-    """MODULO 4. Ripartisce il 15% in host_bps (trattenuto) + guest_bps (aggiunto).
+    """MODULO 4. Ripartisce il 10% in host_bps (trattenuto) + guest_bps (aggiunto).
     Tutto in centesimi interi; conservazione esatta:
         totale_ospite = prezzo + guest_fee   (quanto paga l'ospite)
         netto_host    = prezzo - host_fee     (quanto incassa l'host)
@@ -117,9 +119,9 @@ def ripartisci_host_guest(prezzo_cents: Any, *, host_bps: int = HOST_BPS,
     fee_guest = commissione_cents(p, guest_bps)
     return {
         "prezzo": p,
-        "host_fee": fee_host,                 # 3% trattenuto all'host
-        "guest_fee": fee_guest,               # 12% pagato dall'ospite
-        "nostra_commissione": fee_host + fee_guest,   # il nostro 15% totale
+        "host_fee": fee_host,                 # 2% trattenuto all'host
+        "guest_fee": fee_guest,               # 8% pagato dall'ospite
+        "nostra_commissione": fee_host + fee_guest,   # il nostro 10% totale
         "netto_host": p - fee_host,           # l'host incassa
         "totale_ospite": p + fee_guest,       # l'ospite paga
     }
@@ -129,6 +131,6 @@ def fattura_startup_cents(prezzo_cents: Any, *, host_bps: int = HOST_BPS,
                           guest_bps: int = GUEST_BPS) -> int:
     """MODULO 3 (tutela forfettario): SOLO la nostra commissione è fatturato della startup
     (intermediario puro). NON il lordo. Serve a calcolare il consumo della soglia 85k:
-    GMV_max ≈ 85k / (15%) ≈ €566k. L'85% non transita come nostro ricavo."""
+    GMV_max ≈ 85k / (10%) ≈ €850k. Il 90% non transita come nostro ricavo."""
     r = ripartisci_host_guest(prezzo_cents, host_bps=host_bps, guest_bps=guest_bps)
     return r["nostra_commissione"]
