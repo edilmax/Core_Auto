@@ -24,6 +24,7 @@
   .msg{padding:.7rem 1rem;border-radius:.7rem;margin-top:.8rem;font-size:.9rem}
   .msg.ok{background:#d4edda;color:#155724}.msg.err{background:#f8d7da;color:#842029}
   .key{background:#fff;border-radius:1rem;padding:1rem 1.5rem;margin-bottom:1.5rem;display:flex;gap:1rem;align-items:end}
+  .hint{font-weight:400;color:#5e6f8d;font-size:.72rem}
 </style>
 </head>
 <body>
@@ -33,233 +34,248 @@
     <select id="lang" style="width:auto">
       <option value="it">🇮🇹 IT</option><option value="en">🇬🇧 EN</option>
       <option value="es">🇪🇸 ES</option><option value="fr">🇫🇷 FR</option>
-      <option value="de">🇩🇪 DE</option>
+      <option value="de">🇩🇪 DE</option><option value="pt">🇵🇹 PT</option>
+      <option value="ja">🇯🇵 JA</option><option value="zh">🇨🇳 ZH</option>
     </select>
   </header>
 
   <div class="card" id="cardAuth">
-    <h2>👤 <span data-ui="accedi_registrati">Accedi o Registrati</span></h2>
+    <h2>👤 <span data-i18n="auth_h">Accedi o Registrati</span></h2>
     <div id="authIn">
       <div class="grid">
-        <label class="full">Email<input id="au_email" type="email" placeholder="info@bookinvip.com"></label>
-        <label class="full">Password (min 8)<input id="au_pw" type="password"></label>
-        <label class="full">Ragione sociale / nome struttura (per registrarti)<input id="au_rs" placeholder="B&B Il Sole"></label>
-        <label class="full">Telefono/WhatsApp (per gli avvisi prenotazione) <span style="font-weight:400;color:#5e6f8d;font-size:.72rem">— opzionale, con prefisso es. +39</span><input id="au_tel" type="tel" placeholder="+39 333 1234567"></label>
-        <label class="full">LINE Notify token <span style="font-weight:400;color:#5e6f8d;font-size:.72rem">— opzionale (Asia: Giappone/Thailandia/Taiwan)</span><input id="au_line" placeholder="token LINE Notify"></label>
-        <label class="full">WeChat Work webhook <span style="font-weight:400;color:#5e6f8d;font-size:.72rem">— opzionale (Cina)</span><input id="au_wechat" placeholder="https://qyapi.weixin.qq.com/..."></label>
+        <label class="full"><span data-i18n="f_email">Email</span><input id="au_email" type="email" placeholder="info@bookinvip.com"></label>
+        <label class="full"><span data-i18n="f_pw">Password (min 8)</span><input id="au_pw" type="password"></label>
+        <label class="full"><span data-i18n="f_rs">Ragione sociale / nome struttura (per registrarti)</span><input id="au_rs" placeholder="B&B Il Sole"></label>
+        <label class="full"><span data-i18n="f_tel">Telefono/WhatsApp (per gli avvisi prenotazione)</span> <span class="hint" data-i18n="h_tel">— opzionale, con prefisso es. +39</span><input id="au_tel" type="tel" placeholder="+39 333 1234567"></label>
+        <label class="full"><span data-i18n="f_line">LINE Notify token</span> <span class="hint" data-i18n="h_asia">— opzionale (Asia: Giappone/Thailandia/Taiwan)</span><input id="au_line" placeholder="token LINE Notify"></label>
+        <label class="full"><span data-i18n="f_wechat">WeChat Work webhook</span> <span class="hint" data-i18n="h_cina">— opzionale (Cina)</span><input id="au_wechat" placeholder="https://qyapi.weixin.qq.com/..."></label>
       </div>
       <label style="display:flex;gap:.5rem;font-size:.85rem;margin-top:.7rem;text-transform:none">
         <input type="checkbox" id="au_terms" style="width:auto;margin-top:.2rem">
-        <span>Accetto i <a href="/termini" target="_blank">Termini</a> e la <a href="/privacy" target="_blank">Privacy</a></span></label>
+        <span><span data-i18n="accetto_pre">Accetto i</span> <a href="/termini" target="_blank" data-i18n="termini">Termini</a> <span data-i18n="accetto_e">e la</span> <a href="/privacy" target="_blank" data-i18n="privacy">Privacy</a></span></label>
       <div style="display:flex;gap:.6rem;flex-wrap:wrap">
-        <button id="btnLogin" data-ui="accedi">Accedi</button>
-        <button id="btnRegister" data-ui="registrati" style="background:#155724">Registrati</button>
+        <button id="btnLogin" data-i18n="b_login">Accedi</button>
+        <button id="btnRegister" data-i18n="b_register" style="background:#155724">Registrati</button>
       </div>
     </div>
     <div id="authOut" style="display:none">
-      <p>✅ Collegato come <strong id="au_who"></strong>. Carichi e gestisci <strong>solo i tuoi</strong> alloggi.</p>
-      <button id="btnLogout" data-ui="esci" style="background:#b02a37">Esci</button>
+      <p><span data-i18n="loggato_pre">✅ Collegato come</span> <strong id="au_who"></strong>. <span data-i18n="loggato_post">Carichi e gestisci solo i tuoi alloggi.</span></p>
+      <button id="btnLogout" data-i18n="b_logout" style="background:#b02a37">Esci</button>
     </div>
     <div id="msgAuth"></div>
   </div>
 
   <div class="card" id="cardReferral" style="display:none">
-    <h2>🎁 <span data-ui="invita_host">Invita altri host</span></h2>
-    <p style="font-size:.9rem;color:#5e6f8d">Condividi il tuo link: quando un host si registra, <strong>tu e lui ricevete un credito</strong>.</p>
+    <h2>🎁 <span data-i18n="ref_h">Invita altri host</span></h2>
+    <p class="hint" style="font-size:.9rem" data-i18n="ref_p">Condividi il tuo link: quando un host si registra, tu e lui ricevete un credito.</p>
     <div style="display:flex;gap:.5rem;margin-top:.8rem">
       <input id="ref_link" readonly style="font-size:.82rem">
-      <button id="btnCopiaRef" style="margin-top:0">Copia</button>
+      <button id="btnCopiaRef" data-i18n="b_copia" style="margin-top:0">Copia</button>
     </div>
     <div id="ref_credito" style="margin-top:.8rem;font-weight:600;color:#155724"></div>
   </div>
 
   <div class="card" id="cardDiretto" style="display:none">
-    <h2>🔗 <span data-ui="link_diretto">Il tuo link prenotazione diretta</span> — solo 5%</h2>
-    <p style="font-size:.9rem;color:#5e6f8d">Condividilo su Instagram/Google/WhatsApp: le prenotazioni che arrivano da qui pagano <strong>solo il 5%</strong> (i tuoi clienti), non il 15%. L'ospite paga sempre il prezzo pulito.</p>
+    <h2>🔗 <span data-i18n="dir_h">Il tuo link prenotazione diretta — solo 5%</span></h2>
+    <p class="hint" style="font-size:.9rem" data-i18n="dir_p">Condividilo su Instagram/Google/WhatsApp: le prenotazioni che arrivano da qui pagano solo il 5% (i tuoi clienti), non il 15%. L'ospite paga sempre il prezzo pulito.</p>
     <div id="dir_links" style="margin-top:.8rem"></div>
   </div>
 
   <div class="card" id="cardRichieste" style="display:none">
-    <h2>📋 Richieste da approvare</h2>
-    <p style="font-size:.9rem;color:#5e6f8d">Prenotazioni in attesa della tua approvazione (alloggi "su richiesta"). Hai 24h: oltre, la stanza si libera da sola.</p>
-    <div id="richieste_lista" style="margin-top:.8rem;font-size:.9rem">Nessuna richiesta.</div>
+    <h2>📋 <span data-i18n="req_h">Richieste da approvare</span></h2>
+    <p class="hint" style="font-size:.9rem" data-i18n="req_p">Prenotazioni in attesa della tua approvazione (alloggi "su richiesta"). Hai 24h: oltre, la stanza si libera da sola.</p>
+    <div id="richieste_lista" style="margin-top:.8rem;font-size:.9rem"></div>
   </div>
 
   <div class="card" id="cardPayout" style="display:none">
-    <h2>💰 I tuoi incassi</h2>
-    <p style="font-size:.9rem;color:#5e6f8d">Riepilogo per valuta. <b>In maturazione</b> = prenotazioni confermate, soldi tuoi a fine soggiorno · <b>In transito</b> = in pagamento · <b>Pagato</b> = già versato.</p>
-    <div id="payout_lista" style="margin-top:.8rem;font-size:.9rem">Nessun incasso ancora.</div>
+    <h2>💰 <span data-i18n="pay_h">I tuoi incassi</span></h2>
+    <p class="hint" style="font-size:.9rem" data-i18n="pay_p">Riepilogo per valuta. In maturazione = prenotazioni confermate, soldi tuoi a fine soggiorno · In transito = in pagamento · Pagato = già versato.</p>
+    <div id="payout_lista" style="margin-top:.8rem;font-size:.9rem"></div>
   </div>
 
   <div class="key">
-    <label style="flex:1;display:flex;flex-direction:column;font-size:.72rem;font-weight:600;color:#4a5b7a;gap:.25rem">X-Host-Key (solo operatore, avanzato)
-      <input type="password" id="hostkey" placeholder="chiave host (non serve se sei loggato)"></label>
+    <label style="flex:1;display:flex;flex-direction:column;font-size:.72rem;font-weight:600;color:#4a5b7a;gap:.25rem"><span data-i18n="hostkey_l">X-Host-Key (solo operatore, avanzato)</span>
+      <input type="password" id="hostkey" placeholder="chiave host"></label>
   </div>
 
   <div class="card">
-    <h2>📊 Dashboard</h2>
+    <h2>📊 <span data-i18n="dash_h">Dashboard</span></h2>
     <div class="grid">
-      <label>Slug (vuoto = tutti)<input id="m_slug" value=""></label>
-      <label>&nbsp;<button id="btnMetriche" style="margin-top:0">Carica metriche</button></label>
+      <label><span data-i18n="m_slug_l">Slug (vuoto = tutti)</span><input id="m_slug" value=""></label>
+      <label>&nbsp;<button id="btnMetriche" data-i18n="b_metriche" style="margin-top:0">Carica metriche</button></label>
     </div>
-    <button id="btnExport" style="background:#155724">📥 Esporta CSV prenotazioni</button>
+    <button id="btnExport" data-i18n="b_export" style="background:#155724">📥 Esporta CSV prenotazioni</button>
     <div id="dash" style="display:none;margin-top:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.8rem">
-      <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#1e3c72" id="d_revenue">—</div><div style="font-size:.75rem;color:#5e6f8d">REVENUE</div></div>
-      <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#1e3c72" id="d_occ">—</div><div style="font-size:.75rem;color:#5e6f8d">OCCUPAZIONE</div></div>
-      <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#1e3c72" id="d_pren">—</div><div style="font-size:.75rem;color:#5e6f8d">PRENOTAZIONI</div></div>
-      <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#e0a800" id="d_rating">—</div><div style="font-size:.75rem;color:#5e6f8d">RATING</div></div>
+      <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#1e3c72" id="d_revenue">—</div><div style="font-size:.75rem;color:#5e6f8d" data-i18n="k_revenue">REVENUE</div></div>
+      <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#1e3c72" id="d_occ">—</div><div style="font-size:.75rem;color:#5e6f8d" data-i18n="k_occ">OCCUPAZIONE</div></div>
+      <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#1e3c72" id="d_pren">—</div><div style="font-size:.75rem;color:#5e6f8d" data-i18n="k_pren">PRENOTAZIONI</div></div>
+      <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#e0a800" id="d_rating">—</div><div style="font-size:.75rem;color:#5e6f8d" data-i18n="k_rating">RATING</div></div>
     </div>
     <div id="msgMetriche"></div>
   </div>
 
   <div class="card">
-    <h2>🏠 I miei alloggi</h2>
+    <h2>🏠 <span data-i18n="miei_h">I miei alloggi</span></h2>
     <div class="grid">
-      <label>Host ID<input id="ma_host" value="host1"></label>
-      <label>&nbsp;<button id="btnMiei" style="margin-top:0">Carica</button></label>
+      <label><span data-i18n="host_id">Host ID</span><input id="ma_host" value="host1"></label>
+      <label>&nbsp;<button id="btnMiei" data-i18n="b_carica" style="margin-top:0">Carica</button></label>
     </div>
     <div id="miei" style="margin-top:1rem"></div>
     <div id="msgMiei"></div>
   </div>
 
   <div class="card">
-    <h2>🗓️ Calendario disponibilita</h2>
+    <h2>🗓️ <span data-i18n="cal_h">Calendario disponibilità</span></h2>
     <div class="grid">
-      <label>Slug<input id="c_slug" value="casa-roma"></label>
-      <label>Da<input type="date" id="c_da" value="2026-09-01"></label>
-      <label>A<input type="date" id="c_a" value="2026-09-15"></label>
-      <label>&nbsp;<button id="btnCal" style="margin-top:0">Vedi</button></label>
+      <label><span data-i18n="l_slug">Slug</span><input id="c_slug" value="casa-roma"></label>
+      <label><span data-i18n="l_da">Da</span><input type="date" id="c_da" value="2026-09-01"></label>
+      <label><span data-i18n="l_a">A</span><input type="date" id="c_a" value="2026-09-15"></label>
+      <label>&nbsp;<button id="btnCal" data-i18n="b_vedi" style="margin-top:0">Vedi</button></label>
     </div>
     <div id="cal" style="display:flex;flex-wrap:wrap;gap:.3rem;margin-top:1rem"></div>
     <div style="margin-top:.6rem;font-size:.78rem;color:#5e6f8d">
-      <span style="display:inline-block;width:12px;height:12px;background:#d4edda;border-radius:3px"></span> libero
-      <span style="display:inline-block;width:12px;height:12px;background:#f8d7da;border-radius:3px;margin-left:.6rem"></span> pieno
-      <span style="display:inline-block;width:12px;height:12px;background:#e2e3e5;border-radius:3px;margin-left:.6rem"></span> chiuso
-      <span style="display:inline-block;width:12px;height:12px;background:#fff;border:1px solid #dce1ed;border-radius:3px;margin-left:.6rem"></span> non caricato
+      <span style="display:inline-block;width:12px;height:12px;background:#d4edda;border-radius:3px"></span> <span data-i18n="cal_libero">libero</span>
+      <span style="display:inline-block;width:12px;height:12px;background:#f8d7da;border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_pieno">pieno</span>
+      <span style="display:inline-block;width:12px;height:12px;background:#e2e3e5;border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_chiuso">chiuso</span>
+      <span style="display:inline-block;width:12px;height:12px;background:#fff;border:1px solid #dce1ed;border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_nc">non caricato</span>
     </div>
     <div id="msgCal"></div>
   </div>
 
   <div class="card">
-    <h2 id="hPubblica">Pubblica alloggio</h2>
+    <h2 id="hPubblica" data-i18n="pub_h">Pubblica alloggio</h2>
     <div class="grid">
-      <label>Host ID<input id="p_host" value="host1"></label>
-      <label>Slug<input id="p_slug" value="casa-roma"></label>
-      <label class="full">Titolo<input id="p_titolo" value="Casa a Roma"></label>
-      <label>Citta<input id="p_citta" value="Roma"></label>
-      <label id="lPrezzo">Prezzo/notte che vede l'ospite (cent) <span style="font-weight:400;color:#5e6f8d;font-size:.72rem">— ricevi questo meno la commissione (5% diretto / 15% marketplace), 0% all'ospite</span><input type="number" id="p_prezzo" value="9500"></label>
-      <label class="full">Politica di cancellazione <span style="font-weight:400;color:#5e6f8d;font-size:.72rem">— la sceglie l'host, l'ospite la vede prima di prenotare</span>
+      <label><span data-i18n="host_id">Host ID</span><input id="p_host" value="host1"></label>
+      <label><span data-i18n="l_slug">Slug</span><input id="p_slug" value="casa-roma"></label>
+      <label class="full"><span data-i18n="l_titolo">Titolo</span><input id="p_titolo" value="Casa a Roma"></label>
+      <label><span data-i18n="l_citta">Città</span><input id="p_citta" value="Roma"></label>
+      <label id="lPrezzo"><span data-i18n="l_prezzo_osp">Prezzo/notte che vede l'ospite (cent)</span> <span class="hint" data-i18n="h_prezzo_osp">— ricevi questo meno la commissione (5% diretto / 15% marketplace), 0% all'ospite</span><input type="number" id="p_prezzo" value="9500"></label>
+      <label class="full"><span data-i18n="l_pol">Politica di cancellazione</span> <span class="hint" data-i18n="h_pol">— la sceglie l'host, l'ospite la vede prima di prenotare</span>
         <select id="p_pol">
-          <option value="flessibile">Gratuita fino a 24h prima (consigliata)</option>
-          <option value="moderata">Gratuita fino a 5 giorni prima</option>
-          <option value="rigida">Gratuita fino a 14 giorni prima (poi 50%)</option>
-          <option value="non_rimborsabile">Non rimborsabile (prezzo più basso)</option>
+          <option value="flessibile" data-i18n="pol_fles">Gratuita fino a 24h prima (consigliata)</option>
+          <option value="moderata" data-i18n="pol_mod">Gratuita fino a 5 giorni prima</option>
+          <option value="rigida" data-i18n="pol_rig">Gratuita fino a 30 giorni prima (poi 50%)</option>
+          <option value="non_rimborsabile" data-i18n="pol_nr">Non rimborsabile (prezzo più basso)</option>
         </select></label>
-      <label class="full">Tassa di soggiorno — per persona/notte (cent) <span style="font-weight:400;color:#5e6f8d;font-size:.72rem">— la dichiari TU per la tua città (0 se non c'è). Es. 200 = €2,00/persona/notte</span><input type="number" id="p_tax_pp" value="0" min="0"></label>
-      <label class="full">Tassa — notti massime tassabili <span style="font-weight:400;color:#5e6f8d;font-size:.72rem">— 0 = nessun limite</span><input type="number" id="p_tax_max" value="0" min="0"></label>
-      <label class="full">Modalità prenotazione <span style="font-weight:400;color:#5e6f8d;font-size:.72rem">— immediata = più prenotazioni; su richiesta = approvi tu (24h)</span>
+      <label class="full"><span data-i18n="l_tax">Tassa di soggiorno — per persona/notte (cent)</span> <span class="hint" data-i18n="h_tax">— la dichiari TU per la tua città (0 se non c'è). Es. 200 = €2,00/persona/notte</span><input type="number" id="p_tax_pp" value="0" min="0"></label>
+      <label class="full"><span data-i18n="l_tax_max">Tassa — notti massime tassabili</span> <span class="hint" data-i18n="h_tax_max">— 0 = nessun limite</span><input type="number" id="p_tax_max" value="0" min="0"></label>
+      <label class="full"><span data-i18n="l_modal">Modalità prenotazione</span> <span class="hint" data-i18n="h_modal">— immediata = più prenotazioni; su richiesta = approvi tu (24h)</span>
         <select id="p_modal">
-          <option value="immediata">Immediata (consigliata)</option>
-          <option value="su_richiesta">Su richiesta (approvo io)</option>
+          <option value="immediata" data-i18n="modal_imm">Immediata (consigliata)</option>
+          <option value="su_richiesta" data-i18n="modal_req">Su richiesta (approvo io)</option>
         </select></label>
-      <label>Capacita<input type="number" id="p_cap" value="4"></label>
-      <label>Servizi (csv)<input id="p_serv" value="wifi,piscina"></label>
-      <label class="full">Foto (URL, una per riga)<textarea id="p_img" rows="3" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid #dce1ed;font-size:.85rem" placeholder="https://...jpg"></textarea></label>
+      <label><span data-i18n="l_cap">Capacità</span><input type="number" id="p_cap" value="4"></label>
+      <label><span data-i18n="l_serv">Servizi (csv)</span><input id="p_serv" value="wifi,piscina"></label>
+      <label class="full"><span data-i18n="l_foto">Foto (URL, una per riga)</span><textarea id="p_img" rows="3" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid #dce1ed;font-size:.85rem" placeholder="https://...jpg"></textarea></label>
     </div>
-    <button id="btnPubblica">Pubblica</button>
+    <button id="btnPubblica" data-i18n="b_pubblica">Pubblica</button>
     <div id="msgPub"></div>
   </div>
 
   <div class="card">
-    <h2>💰 Quanto guadagni in più (vs Booking)</h2>
+    <h2>💰 <span data-i18n="trasp_h">Quanto guadagni in più (vs Booking)</span></h2>
     <div class="grid">
-      <label>Prezzo notte (cent)<input type="number" id="tr_prezzo" value="10000"></label>
+      <label><span data-i18n="l_prezzo_notte">Prezzo notte (cent)</span><input type="number" id="tr_prezzo" value="10000"></label>
       <label>OTA<select id="tr_ota"><option>booking</option><option>airbnb</option><option>expedia</option></select></label>
     </div>
-    <button id="btnTrasp">Calcola</button>
+    <button id="btnTrasp" data-i18n="b_calcola">Calcola</button>
     <div id="msgTrasp"></div>
   </div>
 
   <div class="card">
-    <h2 id="hDisp">Disponibilita</h2>
+    <h2 id="hDisp" data-i18n="disp_h">Disponibilità</h2>
     <div class="grid">
-      <label>Slug<input id="d_slug" value="casa-roma"></label>
-      <label>Giorno<input type="date" id="d_giorno" value="2026-09-01"></label>
-      <label>Unita<input type="number" id="d_unita" value="1"></label>
-      <label id="lPrezzo2">Prezzo/notte (cent)<input type="number" id="d_prezzo" value="9500"></label>
+      <label><span data-i18n="l_slug">Slug</span><input id="d_slug" value="casa-roma"></label>
+      <label><span data-i18n="l_giorno">Giorno</span><input type="date" id="d_giorno" value="2026-09-01"></label>
+      <label><span data-i18n="l_unita">Unità</span><input type="number" id="d_unita" value="1"></label>
+      <label id="lPrezzo2"><span data-i18n="l_prezzo_notte">Prezzo/notte (cent)</span><input type="number" id="d_prezzo" value="9500"></label>
     </div>
-    <button id="btnDisp">Salva</button>
+    <button id="btnDisp" data-i18n="b_salva">Salva</button>
     <div id="msgDisp"></div>
   </div>
 
   <div class="card">
-    <h2>📅 Apri un periodo (onboarding rapido)</h2>
+    <h2>📅 <span data-i18n="range_h">Apri un periodo (onboarding rapido)</span></h2>
     <div class="grid">
-      <label>Slug<input id="r_slug" value="casa-roma"></label>
-      <label>Unita<input type="number" id="r_unita" value="1"></label>
-      <label>Da<input type="date" id="r_da" value="2026-09-01"></label>
-      <label>A<input type="date" id="r_a" value="2026-10-01"></label>
-      <label class="full">Prezzo/notte (cent)<input type="number" id="r_prezzo" value="9000"></label>
+      <label><span data-i18n="l_slug">Slug</span><input id="r_slug" value="casa-roma"></label>
+      <label><span data-i18n="l_unita">Unità</span><input type="number" id="r_unita" value="1"></label>
+      <label><span data-i18n="l_da">Da</span><input type="date" id="r_da" value="2026-09-01"></label>
+      <label><span data-i18n="l_a">A</span><input type="date" id="r_a" value="2026-10-01"></label>
+      <label class="full"><span data-i18n="l_prezzo_notte">Prezzo/notte (cent)</span><input type="number" id="r_prezzo" value="9000"></label>
     </div>
-    <button id="btnRange">Apri periodo</button>
+    <button id="btnRange" data-i18n="b_apri">Apri periodo</button>
     <div id="msgRange"></div>
   </div>
 
   <div class="card">
-    <h2>🔁 Importa calendario iCal (Airbnb / Booking / Vrbo)</h2>
-    <p style="color:#5e6f8d;font-size:.9rem;margin-bottom:.6rem">Incolla il contenuto del file .ics o l'export del calendario: le date gia' occupate verranno bloccate (anti-overbooking).</p>
+    <h2>🔁 <span data-i18n="ical_h">Importa calendario iCal (Airbnb / Booking / Vrbo)</span></h2>
+    <p class="hint" style="font-size:.9rem;margin-bottom:.6rem" data-i18n="ical_p">Incolla il contenuto del file .ics o l'export del calendario: le date già occupate verranno bloccate (anti-overbooking).</p>
     <div class="grid">
-      <label class="full">Slug<input id="i_slug" value="casa-roma"></label>
-      <label class="full">Calendario iCal<textarea id="i_ical" rows="5" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid #dce1ed;font-family:monospace;font-size:.85rem" placeholder="BEGIN:VCALENDAR..."></textarea></label>
+      <label class="full"><span data-i18n="l_slug">Slug</span><input id="i_slug" value="casa-roma"></label>
+      <label class="full"><span data-i18n="l_ical">Calendario iCal</span><textarea id="i_ical" rows="5" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid #dce1ed;font-family:monospace;font-size:.85rem" placeholder="BEGIN:VCALENDAR..."></textarea></label>
     </div>
-    <button id="btnIcal">Importa e sincronizza</button>
+    <button id="btnIcal" data-i18n="b_ical">Importa e sincronizza</button>
     <div id="msgIcal"></div>
   </div>
 
   <div class="card">
-    <h2>💬 <span data-ui="messaggi_ospite">Messaggi con l'ospite</span></h2>
-    <p style="color:#5e6f8d;font-size:.9rem;margin-bottom:.6rem">Scrivi all'ospite di una prenotazione (orari arrivo, citofono, istruzioni). Email e telefoni vengono oscurati automaticamente.</p>
+    <h2>💬 <span data-i18n="msg_h">Messaggi con l'ospite</span></h2>
+    <p class="hint" style="font-size:.9rem;margin-bottom:.6rem" data-i18n="msg_p">Scrivi all'ospite di una prenotazione (orari arrivo, citofono, istruzioni). Email e telefoni vengono oscurati automaticamente.</p>
     <div class="grid">
-      <label>Riferimento prenotazione<input id="msg_pren" placeholder="es. REF123"></label>
-      <label>Email ospite<input id="msg_guest" placeholder="ospite@email.it"></label>
-      <label class="full">Messaggio<textarea id="msg_testo" rows="2" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid #dce1ed"></textarea></label>
+      <label><span data-i18n="l_rif">Riferimento prenotazione</span><input id="msg_pren" placeholder="es. REF123"></label>
+      <label><span data-i18n="l_email_osp">Email ospite</span><input id="msg_guest" placeholder="ospite@email.it"></label>
+      <label class="full"><span data-i18n="l_msg">Messaggio</span><textarea id="msg_testo" rows="2" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid #dce1ed"></textarea></label>
     </div>
-    <button id="btnMsgInvia">Invia</button>
-    <button id="btnMsgCarica" style="background:#5e6f8d">Carica conversazione</button>
+    <button id="btnMsgInvia" data-i18n="b_invia">Invia</button>
+    <button id="btnMsgCarica" data-i18n="b_conv" style="background:#5e6f8d">Carica conversazione</button>
     <div id="msgMsg"></div>
     <div id="msgThread" style="margin-top:.6rem"></div>
   </div>
 
   <div class="card">
-    <h2>📈 <span data-ui="prezzo_dinamico">Prezzo dinamico suggerito</span></h2>
-    <p style="color:#5e6f8d;font-size:.9rem;margin-bottom:.6rem">Calcola il prezzo ottimale per una data in base a occupazione, stagione, weekend e anticipo. Guadagni di più senza pensarci.</p>
+    <h2>📈 <span data-i18n="dp_h">Prezzo dinamico suggerito</span></h2>
+    <p class="hint" style="font-size:.9rem;margin-bottom:.6rem" data-i18n="dp_p">Calcola il prezzo ottimale per una data in base a occupazione, stagione, weekend e anticipo. Guadagni di più senza pensarci.</p>
     <div class="grid">
-      <label>Prezzo base €/notte<input id="dp_base" type="number" value="95"></label>
-      <label>Occupazione %<input id="dp_occ" type="number" value="50" min="0" max="100"></label>
-      <label>Data<input id="dp_data" type="date"></label>
-      <label>Giorni all'arrivo<input id="dp_giorni" type="number" value="30"></label>
+      <label><span data-i18n="l_base">Prezzo base €/notte</span><input id="dp_base" type="number" value="95"></label>
+      <label><span data-i18n="l_occ">Occupazione %</span><input id="dp_occ" type="number" value="50" min="0" max="100"></label>
+      <label><span data-i18n="l_data">Data</span><input id="dp_data" type="date"></label>
+      <label><span data-i18n="l_giorni">Giorni all'arrivo</span><input id="dp_giorni" type="number" value="30"></label>
     </div>
-    <button id="btnDp">Calcola prezzo suggerito</button>
+    <button id="btnDp" data-i18n="b_dp">Calcola prezzo suggerito</button>
     <div id="dpRis" style="margin-top:.6rem;font-weight:600"></div>
   </div>
 </div>
 
 <script>
 const API = location.origin.startsWith('http') ? '' : 'http://127.0.0.1:8080';
-let UI = {}, LANG='it';
-function t(k){ return UI[k]||k; }
+const TR = {
+  it:{pannello:"Pannello Host",auth_h:"Accedi o Registrati",f_email:"Email",f_pw:"Password (min 8)",f_rs:"Ragione sociale / nome struttura (per registrarti)",f_tel:"Telefono/WhatsApp (per gli avvisi prenotazione)",h_tel:"— opzionale, con prefisso es. +39",f_line:"LINE Notify token",h_asia:"— opzionale (Asia: Giappone/Thailandia/Taiwan)",f_wechat:"WeChat Work webhook",h_cina:"— opzionale (Cina)",accetto_pre:"Accetto i",termini:"Termini",accetto_e:"e la",privacy:"Privacy",b_login:"Accedi",b_register:"Registrati",b_logout:"Esci",loggato_pre:"✅ Collegato come",loggato_post:"Carichi e gestisci solo i tuoi alloggi.",ref_h:"Invita altri host",ref_p:"Condividi il tuo link: quando un host si registra, tu e lui ricevete un credito.",b_copia:"Copia",b_copiato:"Copiato!",dir_h:"Il tuo link prenotazione diretta — solo 5%",dir_p:"Condividilo su Instagram/Google/WhatsApp: le prenotazioni che arrivano da qui pagano solo il 5% (i tuoi clienti), non il 15%. L'ospite paga sempre il prezzo pulito.",req_h:"Richieste da approvare",req_p:"Prenotazioni in attesa della tua approvazione (alloggi \"su richiesta\"). Hai 24h: oltre, la stanza si libera da sola.",no_req:"Nessuna richiesta.",b_approva:"✓ Approva",b_rifiuta:"✗ Rifiuta",pay_h:"I tuoi incassi",pay_p:"Riepilogo per valuta. In maturazione = prenotazioni confermate, soldi tuoi a fine soggiorno · In transito = in pagamento · Pagato = già versato.",no_pay:"Nessun incasso ancora.",st_mat:"In maturazione",st_tra:"In transito",st_pag:"Pagato",st_trat:"Trattenuto (cancellata)",hostkey_l:"X-Host-Key (solo operatore, avanzato)",dash_h:"Dashboard",m_slug_l:"Slug (vuoto = tutti)",b_metriche:"Carica metriche",b_export:"📥 Esporta CSV prenotazioni",k_revenue:"INCASSO",k_occ:"OCCUPAZIONE",k_pren:"PRENOTAZIONI",k_rating:"VALUTAZIONE",miei_h:"I miei alloggi",host_id:"Host ID",b_carica:"Carica",no_all:"Nessun alloggio.",th_titolo:"Titolo",th_citta:"Città",th_prezzo:"€/notte",th_stato:"Stato",b_sospendi:"Sospendi",b_pubblica2:"Pubblica",cal_h:"Calendario disponibilità",l_slug:"Slug",l_da:"Da",l_a:"A",b_vedi:"Vedi",cal_libero:"libero",cal_pieno:"pieno",cal_chiuso:"chiuso",cal_nc:"non caricato",pub_h:"Pubblica alloggio",l_titolo:"Titolo",l_citta:"Città",l_prezzo_osp:"Prezzo/notte che vede l'ospite (cent)",h_prezzo_osp:"— ricevi questo meno la commissione (5% diretto / 15% marketplace), 0% all'ospite",l_pol:"Politica di cancellazione",h_pol:"— la sceglie l'host, l'ospite la vede prima di prenotare",pol_fles:"Gratuita fino a 24h prima (consigliata)",pol_mod:"Gratuita fino a 5 giorni prima",pol_rig:"Gratuita fino a 30 giorni prima (poi 50%)",pol_nr:"Non rimborsabile (prezzo più basso)",l_tax:"Tassa di soggiorno — per persona/notte (cent)",h_tax:"— la dichiari TU per la tua città (0 se non c'è). Es. 200 = €2,00/persona/notte",l_tax_max:"Tassa — notti massime tassabili",h_tax_max:"— 0 = nessun limite",l_modal:"Modalità prenotazione",h_modal:"— immediata = più prenotazioni; su richiesta = approvi tu (24h)",modal_imm:"Immediata (consigliata)",modal_req:"Su richiesta (approvo io)",l_cap:"Capacità",l_serv:"Servizi (csv)",l_foto:"Foto (URL, una per riga)",b_pubblica:"Pubblica",trasp_h:"Quanto guadagni in più (vs Booking)",l_prezzo_notte:"Prezzo/notte (cent)",b_calcola:"Calcola",disp_h:"Disponibilità",l_giorno:"Giorno",l_unita:"Unità",b_salva:"Salva",range_h:"Apri un periodo (onboarding rapido)",b_apri:"Apri periodo",ical_h:"Importa calendario iCal (Airbnb / Booking / Vrbo)",ical_p:"Incolla il contenuto del file .ics o l'export del calendario: le date già occupate verranno bloccate (anti-overbooking).",l_ical:"Calendario iCal",b_ical:"Importa e sincronizza",msg_h:"Messaggi con l'ospite",msg_p:"Scrivi all'ospite di una prenotazione (orari arrivo, citofono, istruzioni). Email e telefoni vengono oscurati automaticamente.",l_rif:"Riferimento prenotazione",l_email_osp:"Email ospite",l_msg:"Messaggio",b_invia:"Invia",b_conv:"Carica conversazione",no_msg:"Nessun messaggio.",tu:"Tu",ospite:"Ospite",inviato:"✅ Inviato.",dp_h:"Prezzo dinamico suggerito",dp_p:"Calcola il prezzo ottimale per una data in base a occupazione, stagione, weekend e anticipo. Guadagni di più senza pensarci.",l_base:"Prezzo base €/notte",l_occ:"Occupazione %",l_data:"Data",l_giorni:"Giorni all'arrivo",b_dp:"Calcola prezzo suggerito",credito_disp:"Credito disponibile:",tutti_miei:"Tutti i miei alloggi",err_key:"Chiave host errata.",aggiornato:"Aggiornato.",errore:"Errore:",accedi_host:"Accedi come host.",dev_terms:"Devi accettare Termini e Privacy.",registrato:"Registrato! Ora carichi i tuoi alloggi qui sotto.",accesso_ok:"Accesso effettuato.",giorni_aperti:"giorni aperti",eventi:"eventi,",giorni_bloccati:"giorni bloccati",pren_esportate:"prenotazioni esportate.",giorni:"giorni.",alloggi_n:"alloggi.",dp_sugg:"Prezzo suggerito:",dp_mult:"moltiplicatore",vs_con:"Con",vs_incassi:"incassi",vs_connoi:"· con noi",vs_guadagni:"· guadagni",vs_anotte:"a notte"},
+  en:{pannello:"Host Panel",auth_h:"Log in or Sign up",f_email:"Email",f_pw:"Password (min 8)",f_rs:"Business/property name (to sign up)",f_tel:"Phone/WhatsApp (for booking alerts)",h_tel:"— optional, with prefix e.g. +39",f_line:"LINE Notify token",h_asia:"— optional (Asia: Japan/Thailand/Taiwan)",f_wechat:"WeChat Work webhook",h_cina:"— optional (China)",accetto_pre:"I accept the",termini:"Terms",accetto_e:"and",privacy:"Privacy",b_login:"Log in",b_register:"Sign up",b_logout:"Log out",loggato_pre:"✅ Signed in as",loggato_post:"You upload and manage only your own listings.",ref_h:"Invite other hosts",ref_p:"Share your link: when a host signs up, you both get a credit.",b_copia:"Copy",b_copiato:"Copied!",dir_h:"Your direct booking link — only 5%",dir_p:"Share it on Instagram/Google/WhatsApp: bookings coming from here pay only 5% (your clients), not 15%. The guest always pays the clean price.",req_h:"Requests to approve",req_p:"Bookings awaiting your approval (\"request to book\" listings). You have 24h; after that the room frees itself.",no_req:"No requests.",b_approva:"✓ Approve",b_rifiuta:"✗ Decline",pay_h:"Your earnings",pay_p:"Summary by currency. Accruing = confirmed bookings, yours at the end of stay · In transit = being paid · Paid = already paid out.",no_pay:"No earnings yet.",st_mat:"Accruing",st_tra:"In transit",st_pag:"Paid",st_trat:"Withheld (cancelled)",hostkey_l:"X-Host-Key (operator only, advanced)",dash_h:"Dashboard",m_slug_l:"Slug (empty = all)",b_metriche:"Load metrics",b_export:"📥 Export bookings CSV",k_revenue:"REVENUE",k_occ:"OCCUPANCY",k_pren:"BOOKINGS",k_rating:"RATING",miei_h:"My listings",host_id:"Host ID",b_carica:"Load",no_all:"No listings.",th_titolo:"Title",th_citta:"City",th_prezzo:"€/night",th_stato:"Status",b_sospendi:"Suspend",b_pubblica2:"Publish",cal_h:"Availability calendar",l_slug:"Slug",l_da:"From",l_a:"To",b_vedi:"View",cal_libero:"free",cal_pieno:"full",cal_chiuso:"closed",cal_nc:"not set",pub_h:"Publish a listing",l_titolo:"Title",l_citta:"City",l_prezzo_osp:"Price/night the guest sees (cents)",h_prezzo_osp:"— you receive this minus the fee (5% direct / 15% marketplace), 0% to the guest",l_pol:"Cancellation policy",h_pol:"— the host chooses it, the guest sees it before booking",pol_fles:"Free up to 24h before (recommended)",pol_mod:"Free up to 5 days before",pol_rig:"Free up to 30 days before (then 50%)",pol_nr:"Non-refundable (lower price)",l_tax:"Tourist tax — per person/night (cents)",h_tax:"— YOU declare it for your city (0 if none). E.g. 200 = €2.00/person/night",l_tax_max:"Tax — max taxable nights",h_tax_max:"— 0 = no limit",l_modal:"Booking mode",h_modal:"— instant = more bookings; request = you approve (24h)",modal_imm:"Instant (recommended)",modal_req:"On request (I approve)",l_cap:"Capacity",l_serv:"Amenities (csv)",l_foto:"Photos (URL, one per line)",b_pubblica:"Publish",trasp_h:"How much more you earn (vs Booking)",l_prezzo_notte:"Price/night (cents)",b_calcola:"Calculate",disp_h:"Availability",l_giorno:"Day",l_unita:"Units",b_salva:"Save",range_h:"Open a period (quick onboarding)",b_apri:"Open period",ical_h:"Import iCal calendar (Airbnb / Booking / Vrbo)",ical_p:"Paste the .ics file content or the calendar export: already-booked dates will be blocked (anti-overbooking).",l_ical:"iCal calendar",b_ical:"Import and sync",msg_h:"Messages with the guest",msg_p:"Write to the guest of a booking (arrival times, entry, instructions). Emails and phone numbers are masked automatically.",l_rif:"Booking reference",l_email_osp:"Guest email",l_msg:"Message",b_invia:"Send",b_conv:"Load conversation",no_msg:"No messages.",tu:"You",ospite:"Guest",inviato:"✅ Sent.",dp_h:"Suggested dynamic price",dp_p:"Compute the optimal price for a date based on occupancy, season, weekend and lead time. Earn more without thinking.",l_base:"Base price €/night",l_occ:"Occupancy %",l_data:"Date",l_giorni:"Days to arrival",b_dp:"Compute suggested price",credito_disp:"Available credit:",tutti_miei:"All my listings",err_key:"Wrong host key.",aggiornato:"Updated.",errore:"Error:",accedi_host:"Log in as host.",dev_terms:"You must accept the Terms and Privacy.",registrato:"Registered! Now upload your listings below.",accesso_ok:"Signed in.",giorni_aperti:"days opened",eventi:"events,",giorni_bloccati:"days blocked",pren_esportate:"bookings exported.",giorni:"days.",alloggi_n:"listings.",dp_sugg:"Suggested price:",dp_mult:"multiplier",vs_con:"With",vs_incassi:"you get",vs_connoi:"· with us",vs_guadagni:"· you earn",vs_anotte:"per night"},
+  es:{pannello:"Panel Anfitrión",auth_h:"Entrar o Registrarse",f_email:"Correo",f_pw:"Contraseña (mín. 8)",f_rs:"Razón social / nombre del alojamiento (para registrarte)",f_tel:"Teléfono/WhatsApp (para los avisos de reserva)",h_tel:"— opcional, con prefijo p. ej. +39",f_line:"Token LINE Notify",h_asia:"— opcional (Asia: Japón/Tailandia/Taiwán)",f_wechat:"Webhook WeChat Work",h_cina:"— opcional (China)",accetto_pre:"Acepto los",termini:"Términos",accetto_e:"y la",privacy:"Privacidad",b_login:"Entrar",b_register:"Registrarse",b_logout:"Salir",loggato_pre:"✅ Conectado como",loggato_post:"Subes y gestionas solo tus alojamientos.",ref_h:"Invita anfitriones",ref_p:"Comparte tu enlace: cuando un anfitrión se registra, ambos recibís un crédito.",b_copia:"Copiar",b_copiato:"¡Copiado!",dir_h:"Tu enlace de reserva directa — solo 5%",dir_p:"Compártelo en Instagram/Google/WhatsApp: las reservas que llegan de aquí pagan solo el 5% (tus clientes), no el 15%. El huésped siempre paga el precio limpio.",req_h:"Solicitudes por aprobar",req_p:"Reservas a la espera de tu aprobación (alojamientos \"a petición\"). Tienes 24h; después la habitación se libera sola.",no_req:"Sin solicitudes.",b_approva:"✓ Aprobar",b_rifiuta:"✗ Rechazar",pay_h:"Tus ingresos",pay_p:"Resumen por moneda. En curso = reservas confirmadas, tuyas al final de la estancia · En tránsito = en pago · Pagado = ya abonado.",no_pay:"Aún sin ingresos.",st_mat:"En curso",st_tra:"En tránsito",st_pag:"Pagado",st_trat:"Retenido (cancelada)",hostkey_l:"X-Host-Key (solo operador, avanzado)",dash_h:"Panel",m_slug_l:"Slug (vacío = todos)",b_metriche:"Cargar métricas",b_export:"📥 Exportar CSV de reservas",k_revenue:"INGRESOS",k_occ:"OCUPACIÓN",k_pren:"RESERVAS",k_rating:"VALORACIÓN",miei_h:"Mis alojamientos",host_id:"Host ID",b_carica:"Cargar",no_all:"Sin alojamientos.",th_titolo:"Título",th_citta:"Ciudad",th_prezzo:"€/noche",th_stato:"Estado",b_sospendi:"Suspender",b_pubblica2:"Publicar",cal_h:"Calendario de disponibilidad",l_slug:"Slug",l_da:"Desde",l_a:"Hasta",b_vedi:"Ver",cal_libero:"libre",cal_pieno:"completo",cal_chiuso:"cerrado",cal_nc:"sin cargar",pub_h:"Publicar alojamiento",l_titolo:"Título",l_citta:"Ciudad",l_prezzo_osp:"Precio/noche que ve el huésped (cent.)",h_prezzo_osp:"— recibes esto menos la comisión (5% directo / 15% marketplace), 0% al huésped",l_pol:"Política de cancelación",h_pol:"— la elige el anfitrión, el huésped la ve antes de reservar",pol_fles:"Gratis hasta 24h antes (recomendada)",pol_mod:"Gratis hasta 5 días antes",pol_rig:"Gratis hasta 30 días antes (luego 50%)",pol_nr:"No reembolsable (precio más bajo)",l_tax:"Tasa turística — por persona/noche (cent.)",h_tax:"— la declaras TÚ para tu ciudad (0 si no hay). Ej. 200 = €2,00/persona/noche",l_tax_max:"Tasa — noches máx. gravables",h_tax_max:"— 0 = sin límite",l_modal:"Modo de reserva",h_modal:"— inmediata = más reservas; a petición = apruebas tú (24h)",modal_imm:"Inmediata (recomendada)",modal_req:"A petición (apruebo yo)",l_cap:"Capacidad",l_serv:"Servicios (csv)",l_foto:"Fotos (URL, una por línea)",b_pubblica:"Publicar",trasp_h:"Cuánto ganas de más (vs Booking)",l_prezzo_notte:"Precio/noche (cent.)",b_calcola:"Calcular",disp_h:"Disponibilidad",l_giorno:"Día",l_unita:"Unidades",b_salva:"Guardar",range_h:"Abrir un periodo (alta rápida)",b_apri:"Abrir periodo",ical_h:"Importar calendario iCal (Airbnb / Booking / Vrbo)",ical_p:"Pega el contenido del archivo .ics o el export del calendario: las fechas ya ocupadas se bloquearán (anti-overbooking).",l_ical:"Calendario iCal",b_ical:"Importar y sincronizar",msg_h:"Mensajes con el huésped",msg_p:"Escribe al huésped de una reserva (horarios de llegada, portero, instrucciones). Correos y teléfonos se ocultan automáticamente.",l_rif:"Referencia de reserva",l_email_osp:"Correo del huésped",l_msg:"Mensaje",b_invia:"Enviar",b_conv:"Cargar conversación",no_msg:"Sin mensajes.",tu:"Tú",ospite:"Huésped",inviato:"✅ Enviado.",dp_h:"Precio dinámico sugerido",dp_p:"Calcula el precio óptimo para una fecha según ocupación, temporada, fin de semana y antelación. Ganas más sin pensarlo.",l_base:"Precio base €/noche",l_occ:"Ocupación %",l_data:"Fecha",l_giorni:"Días hasta la llegada",b_dp:"Calcular precio sugerido",credito_disp:"Crédito disponible:",tutti_miei:"Todos mis alojamientos",err_key:"Clave de anfitrión incorrecta.",aggiornato:"Actualizado.",errore:"Error:",accedi_host:"Entra como anfitrión.",dev_terms:"Debes aceptar los Términos y la Privacidad.",registrato:"¡Registrado! Ahora sube tus alojamientos abajo.",accesso_ok:"Sesión iniciada.",giorni_aperti:"días abiertos",eventi:"eventos,",giorni_bloccati:"días bloqueados",pren_esportate:"reservas exportadas.",giorni:"días.",alloggi_n:"alojamientos.",dp_sugg:"Precio sugerido:",dp_mult:"multiplicador",vs_con:"Con",vs_incassi:"recibes",vs_connoi:"· con nosotros",vs_guadagni:"· ganas",vs_anotte:"por noche"},
+  fr:{pannello:"Espace Hôte",auth_h:"Connexion ou Inscription",f_email:"E-mail",f_pw:"Mot de passe (min. 8)",f_rs:"Raison sociale / nom de l'établissement (pour s'inscrire)",f_tel:"Téléphone/WhatsApp (pour les alertes de réservation)",h_tel:"— facultatif, avec préfixe ex. +39",f_line:"Token LINE Notify",h_asia:"— facultatif (Asie : Japon/Thaïlande/Taïwan)",f_wechat:"Webhook WeChat Work",h_cina:"— facultatif (Chine)",accetto_pre:"J'accepte les",termini:"Conditions",accetto_e:"et la",privacy:"Confidentialité",b_login:"Connexion",b_register:"S'inscrire",b_logout:"Déconnexion",loggato_pre:"✅ Connecté en tant que",loggato_post:"Vous gérez uniquement vos propres logements.",ref_h:"Inviter des hôtes",ref_p:"Partagez votre lien : quand un hôte s'inscrit, vous recevez tous les deux un crédit.",b_copia:"Copier",b_copiato:"Copié !",dir_h:"Votre lien de réservation directe — seulement 5%",dir_p:"Partagez-le sur Instagram/Google/WhatsApp : les réservations qui arrivent d'ici paient seulement 5% (vos clients), pas 15%. Le voyageur paie toujours le prix net.",req_h:"Demandes à approuver",req_p:"Réservations en attente de votre approbation (logements « sur demande »). Vous avez 24h ; ensuite la chambre se libère seule.",no_req:"Aucune demande.",b_approva:"✓ Approuver",b_rifiuta:"✗ Refuser",pay_h:"Vos revenus",pay_p:"Résumé par devise. En cours = réservations confirmées, à vous en fin de séjour · En transit = en paiement · Payé = déjà versé.",no_pay:"Pas encore de revenus.",st_mat:"En cours",st_tra:"En transit",st_pag:"Payé",st_trat:"Retenu (annulée)",hostkey_l:"X-Host-Key (opérateur uniquement, avancé)",dash_h:"Tableau de bord",m_slug_l:"Slug (vide = tous)",b_metriche:"Charger les stats",b_export:"📥 Exporter CSV des réservations",k_revenue:"REVENUS",k_occ:"OCCUPATION",k_pren:"RÉSERVATIONS",k_rating:"NOTE",miei_h:"Mes logements",host_id:"Host ID",b_carica:"Charger",no_all:"Aucun logement.",th_titolo:"Titre",th_citta:"Ville",th_prezzo:"€/nuit",th_stato:"Statut",b_sospendi:"Suspendre",b_pubblica2:"Publier",cal_h:"Calendrier de disponibilité",l_slug:"Slug",l_da:"Du",l_a:"Au",b_vedi:"Voir",cal_libero:"libre",cal_pieno:"complet",cal_chiuso:"fermé",cal_nc:"non défini",pub_h:"Publier un logement",l_titolo:"Titre",l_citta:"Ville",l_prezzo_osp:"Prix/nuit que voit le voyageur (cent.)",h_prezzo_osp:"— vous recevez ceci moins la commission (5% direct / 15% marketplace), 0% pour le voyageur",l_pol:"Politique d'annulation",h_pol:"— l'hôte la choisit, le voyageur la voit avant de réserver",pol_fles:"Gratuite jusqu'à 24h avant (recommandée)",pol_mod:"Gratuite jusqu'à 5 jours avant",pol_rig:"Gratuite jusqu'à 30 jours avant (puis 50%)",pol_nr:"Non remboursable (prix plus bas)",l_tax:"Taxe de séjour — par personne/nuit (cent.)",h_tax:"— c'est VOUS qui la déclarez pour votre ville (0 si aucune). Ex. 200 = €2,00/personne/nuit",l_tax_max:"Taxe — nuits max. taxables",h_tax_max:"— 0 = sans limite",l_modal:"Mode de réservation",h_modal:"— immédiate = plus de réservations ; sur demande = vous approuvez (24h)",modal_imm:"Immédiate (recommandée)",modal_req:"Sur demande (j'approuve)",l_cap:"Capacité",l_serv:"Équipements (csv)",l_foto:"Photos (URL, une par ligne)",b_pubblica:"Publier",trasp_h:"Combien vous gagnez en plus (vs Booking)",l_prezzo_notte:"Prix/nuit (cent.)",b_calcola:"Calculer",disp_h:"Disponibilité",l_giorno:"Jour",l_unita:"Unités",b_salva:"Enregistrer",range_h:"Ouvrir une période (mise en route rapide)",b_apri:"Ouvrir la période",ical_h:"Importer un calendrier iCal (Airbnb / Booking / Vrbo)",ical_p:"Collez le contenu du fichier .ics ou l'export du calendrier : les dates déjà occupées seront bloquées (anti-surréservation).",l_ical:"Calendrier iCal",b_ical:"Importer et synchroniser",msg_h:"Messages avec le voyageur",msg_p:"Écrivez au voyageur d'une réservation (heures d'arrivée, interphone, instructions). E-mails et téléphones sont masqués automatiquement.",l_rif:"Référence de réservation",l_email_osp:"E-mail du voyageur",l_msg:"Message",b_invia:"Envoyer",b_conv:"Charger la conversation",no_msg:"Aucun message.",tu:"Vous",ospite:"Voyageur",inviato:"✅ Envoyé.",dp_h:"Prix dynamique suggéré",dp_p:"Calculez le prix optimal pour une date selon l'occupation, la saison, le week-end et l'anticipation. Gagnez plus sans y penser.",l_base:"Prix de base €/nuit",l_occ:"Occupation %",l_data:"Date",l_giorni:"Jours avant l'arrivée",b_dp:"Calculer le prix suggéré",credito_disp:"Crédit disponible :",tutti_miei:"Tous mes logements",err_key:"Clé hôte incorrecte.",aggiornato:"Mis à jour.",errore:"Erreur :",accedi_host:"Connectez-vous en tant qu'hôte.",dev_terms:"Vous devez accepter les Conditions et la Confidentialité.",registrato:"Inscrit ! Ajoutez vos logements ci-dessous.",accesso_ok:"Connecté.",giorni_aperti:"jours ouverts",eventi:"événements,",giorni_bloccati:"jours bloqués",pren_esportate:"réservations exportées.",giorni:"jours.",alloggi_n:"logements.",dp_sugg:"Prix suggéré :",dp_mult:"multiplicateur",vs_con:"Avec",vs_incassi:"vous recevez",vs_connoi:"· avec nous",vs_guadagni:"· vous gagnez",vs_anotte:"par nuit"},
+  de:{pannello:"Gastgeber-Panel",auth_h:"Anmelden oder Registrieren",f_email:"E-Mail",f_pw:"Passwort (min. 8)",f_rs:"Firmen-/Unterkunftsname (zur Registrierung)",f_tel:"Telefon/WhatsApp (für Buchungshinweise)",h_tel:"— optional, mit Vorwahl z. B. +39",f_line:"LINE-Notify-Token",h_asia:"— optional (Asien: Japan/Thailand/Taiwan)",f_wechat:"WeChat-Work-Webhook",h_cina:"— optional (China)",accetto_pre:"Ich akzeptiere die",termini:"AGB",accetto_e:"und die",privacy:"Datenschutz",b_login:"Anmelden",b_register:"Registrieren",b_logout:"Abmelden",loggato_pre:"✅ Angemeldet als",loggato_post:"Du verwaltest nur deine eigenen Unterkünfte.",ref_h:"Andere Gastgeber einladen",ref_p:"Teile deinen Link: Wenn sich ein Gastgeber registriert, erhaltet ihr beide ein Guthaben.",b_copia:"Kopieren",b_copiato:"Kopiert!",dir_h:"Dein Direktbuchungs-Link — nur 5%",dir_p:"Teile ihn auf Instagram/Google/WhatsApp: Buchungen von hier zahlen nur 5% (deine Kunden), nicht 15%. Der Gast zahlt immer den fairen Preis.",req_h:"Anfragen zur Freigabe",req_p:"Buchungen, die auf deine Freigabe warten (Unterkünfte \"auf Anfrage\"). Du hast 24h; danach wird das Zimmer automatisch frei.",no_req:"Keine Anfragen.",b_approva:"✓ Freigeben",b_rifiuta:"✗ Ablehnen",pay_h:"Deine Einnahmen",pay_p:"Übersicht nach Währung. Auflaufend = bestätigte Buchungen, deine am Ende des Aufenthalts · Unterwegs = in Zahlung · Bezahlt = bereits ausgezahlt.",no_pay:"Noch keine Einnahmen.",st_mat:"Auflaufend",st_tra:"Unterwegs",st_pag:"Bezahlt",st_trat:"Einbehalten (storniert)",hostkey_l:"X-Host-Key (nur Betreiber, fortgeschritten)",dash_h:"Dashboard",m_slug_l:"Slug (leer = alle)",b_metriche:"Kennzahlen laden",b_export:"📥 Buchungen als CSV",k_revenue:"UMSATZ",k_occ:"AUSLASTUNG",k_pren:"BUCHUNGEN",k_rating:"BEWERTUNG",miei_h:"Meine Unterkünfte",host_id:"Host ID",b_carica:"Laden",no_all:"Keine Unterkünfte.",th_titolo:"Titel",th_citta:"Stadt",th_prezzo:"€/Nacht",th_stato:"Status",b_sospendi:"Pausieren",b_pubblica2:"Veröffentlichen",cal_h:"Verfügbarkeitskalender",l_slug:"Slug",l_da:"Von",l_a:"Bis",b_vedi:"Ansehen",cal_libero:"frei",cal_pieno:"belegt",cal_chiuso:"geschlossen",cal_nc:"nicht gesetzt",pub_h:"Unterkunft veröffentlichen",l_titolo:"Titel",l_citta:"Stadt",l_prezzo_osp:"Preis/Nacht, den der Gast sieht (Cent)",h_prezzo_osp:"— du erhältst dies abzüglich der Gebühr (5% direkt / 15% Marketplace), 0% für den Gast",l_pol:"Stornierungsrichtlinie",h_pol:"— der Gastgeber wählt sie, der Gast sieht sie vor der Buchung",pol_fles:"Kostenlos bis 24h vorher (empfohlen)",pol_mod:"Kostenlos bis 5 Tage vorher",pol_rig:"Kostenlos bis 30 Tage vorher (dann 50%)",pol_nr:"Nicht erstattbar (günstigerer Preis)",l_tax:"Kurtaxe — pro Person/Nacht (Cent)",h_tax:"— DU gibst sie für deine Stadt an (0 wenn keine). Z. B. 200 = €2,00/Person/Nacht",l_tax_max:"Steuer — max. steuerbare Nächte",h_tax_max:"— 0 = keine Grenze",l_modal:"Buchungsmodus",h_modal:"— sofort = mehr Buchungen; auf Anfrage = du bestätigst (24h)",modal_imm:"Sofort (empfohlen)",modal_req:"Auf Anfrage (ich bestätige)",l_cap:"Kapazität",l_serv:"Ausstattung (csv)",l_foto:"Fotos (URL, eine pro Zeile)",b_pubblica:"Veröffentlichen",trasp_h:"Wie viel mehr du verdienst (vs Booking)",l_prezzo_notte:"Preis/Nacht (Cent)",b_calcola:"Berechnen",disp_h:"Verfügbarkeit",l_giorno:"Tag",l_unita:"Einheiten",b_salva:"Speichern",range_h:"Zeitraum öffnen (schnelles Onboarding)",b_apri:"Zeitraum öffnen",ical_h:"iCal-Kalender importieren (Airbnb / Booking / Vrbo)",ical_p:"Füge den Inhalt der .ics-Datei oder den Kalender-Export ein: bereits belegte Daten werden gesperrt (Anti-Overbooking).",l_ical:"iCal-Kalender",b_ical:"Importieren und synchronisieren",msg_h:"Nachrichten mit dem Gast",msg_p:"Schreibe dem Gast einer Buchung (Ankunftszeiten, Türsprechanlage, Anweisungen). E-Mails und Telefonnummern werden automatisch maskiert.",l_rif:"Buchungsreferenz",l_email_osp:"E-Mail des Gastes",l_msg:"Nachricht",b_invia:"Senden",b_conv:"Konversation laden",no_msg:"Keine Nachrichten.",tu:"Du",ospite:"Gast",inviato:"✅ Gesendet.",dp_h:"Vorgeschlagener dynamischer Preis",dp_p:"Berechne den optimalen Preis für ein Datum nach Auslastung, Saison, Wochenende und Vorlaufzeit. Mehr verdienen ohne Aufwand.",l_base:"Basispreis €/Nacht",l_occ:"Auslastung %",l_data:"Datum",l_giorni:"Tage bis zur Ankunft",b_dp:"Vorgeschlagenen Preis berechnen",credito_disp:"Verfügbares Guthaben:",tutti_miei:"Alle meine Unterkünfte",err_key:"Falscher Host-Schlüssel.",aggiornato:"Aktualisiert.",errore:"Fehler:",accedi_host:"Als Gastgeber anmelden.",dev_terms:"Du musst die AGB und den Datenschutz akzeptieren.",registrato:"Registriert! Lade deine Unterkünfte unten hoch.",accesso_ok:"Angemeldet.",giorni_aperti:"Tage geöffnet",eventi:"Ereignisse,",giorni_bloccati:"Tage gesperrt",pren_esportate:"Buchungen exportiert.",giorni:"Tage.",alloggi_n:"Unterkünfte.",dp_sugg:"Vorgeschlagener Preis:",dp_mult:"Multiplikator",vs_con:"Mit",vs_incassi:"erhältst du",vs_connoi:"· mit uns",vs_guadagni:"· du verdienst",vs_anotte:"pro Nacht"},
+  pt:{pannello:"Painel do Anfitrião",auth_h:"Entrar ou Registar",f_email:"E-mail",f_pw:"Palavra-passe (mín. 8)",f_rs:"Nome da empresa/alojamento (para registar)",f_tel:"Telefone/WhatsApp (para os avisos de reserva)",h_tel:"— opcional, com prefixo ex. +39",f_line:"Token LINE Notify",h_asia:"— opcional (Ásia: Japão/Tailândia/Taiwan)",f_wechat:"Webhook WeChat Work",h_cina:"— opcional (China)",accetto_pre:"Aceito os",termini:"Termos",accetto_e:"e a",privacy:"Privacidade",b_login:"Entrar",b_register:"Registar",b_logout:"Sair",loggato_pre:"✅ Ligado como",loggato_post:"Você carrega e gere apenas os seus alojamentos.",ref_h:"Convide outros anfitriões",ref_p:"Partilhe o seu link: quando um anfitrião se regista, ambos recebem um crédito.",b_copia:"Copiar",b_copiato:"Copiado!",dir_h:"O seu link de reserva direta — só 5%",dir_p:"Partilhe no Instagram/Google/WhatsApp: as reservas que chegam daqui pagam só 5% (os seus clientes), não 15%. O hóspede paga sempre o preço limpo.",req_h:"Pedidos por aprovar",req_p:"Reservas à espera da sua aprovação (alojamentos \"sob pedido\"). Tem 24h; depois o quarto liberta-se sozinho.",no_req:"Sem pedidos.",b_approva:"✓ Aprovar",b_rifiuta:"✗ Recusar",pay_h:"Os seus ganhos",pay_p:"Resumo por moeda. A acumular = reservas confirmadas, suas no fim da estadia · Em trânsito = em pagamento · Pago = já pago.",no_pay:"Ainda sem ganhos.",st_mat:"A acumular",st_tra:"Em trânsito",st_pag:"Pago",st_trat:"Retido (cancelada)",hostkey_l:"X-Host-Key (só operador, avançado)",dash_h:"Painel",m_slug_l:"Slug (vazio = todos)",b_metriche:"Carregar métricas",b_export:"📥 Exportar CSV de reservas",k_revenue:"RECEITA",k_occ:"OCUPAÇÃO",k_pren:"RESERVAS",k_rating:"AVALIAÇÃO",miei_h:"Os meus alojamentos",host_id:"Host ID",b_carica:"Carregar",no_all:"Sem alojamentos.",th_titolo:"Título",th_citta:"Cidade",th_prezzo:"€/noite",th_stato:"Estado",b_sospendi:"Suspender",b_pubblica2:"Publicar",cal_h:"Calendário de disponibilidade",l_slug:"Slug",l_da:"De",l_a:"Até",b_vedi:"Ver",cal_libero:"livre",cal_pieno:"cheio",cal_chiuso:"fechado",cal_nc:"não definido",pub_h:"Publicar alojamento",l_titolo:"Título",l_citta:"Cidade",l_prezzo_osp:"Preço/noite que o hóspede vê (cent.)",h_prezzo_osp:"— recebe isto menos a comissão (5% direto / 15% marketplace), 0% ao hóspede",l_pol:"Política de cancelamento",h_pol:"— o anfitrião escolhe-a, o hóspede vê-a antes de reservar",pol_fles:"Grátis até 24h antes (recomendada)",pol_mod:"Grátis até 5 dias antes",pol_rig:"Grátis até 30 dias antes (depois 50%)",pol_nr:"Não reembolsável (preço mais baixo)",l_tax:"Taxa de turismo — por pessoa/noite (cent.)",h_tax:"— declara-a VOCÊ para a sua cidade (0 se não houver). Ex. 200 = €2,00/pessoa/noite",l_tax_max:"Taxa — noites máx. tributáveis",h_tax_max:"— 0 = sem limite",l_modal:"Modo de reserva",h_modal:"— imediata = mais reservas; sob pedido = aprova você (24h)",modal_imm:"Imediata (recomendada)",modal_req:"Sob pedido (aprovo eu)",l_cap:"Capacidade",l_serv:"Comodidades (csv)",l_foto:"Fotos (URL, uma por linha)",b_pubblica:"Publicar",trasp_h:"Quanto ganha a mais (vs Booking)",l_prezzo_notte:"Preço/noite (cent.)",b_calcola:"Calcular",disp_h:"Disponibilidade",l_giorno:"Dia",l_unita:"Unidades",b_salva:"Guardar",range_h:"Abrir um período (integração rápida)",b_apri:"Abrir período",ical_h:"Importar calendário iCal (Airbnb / Booking / Vrbo)",ical_p:"Cole o conteúdo do ficheiro .ics ou o export do calendário: as datas já ocupadas serão bloqueadas (anti-overbooking).",l_ical:"Calendário iCal",b_ical:"Importar e sincronizar",msg_h:"Mensagens com o hóspede",msg_p:"Escreva ao hóspede de uma reserva (horas de chegada, campainha, instruções). E-mails e telefones são ocultados automaticamente.",l_rif:"Referência da reserva",l_email_osp:"E-mail do hóspede",l_msg:"Mensagem",b_invia:"Enviar",b_conv:"Carregar conversa",no_msg:"Sem mensagens.",tu:"Você",ospite:"Hóspede",inviato:"✅ Enviado.",dp_h:"Preço dinâmico sugerido",dp_p:"Calcula o preço ótimo para uma data conforme ocupação, época, fim de semana e antecedência. Ganhe mais sem pensar.",l_base:"Preço base €/noite",l_occ:"Ocupação %",l_data:"Data",l_giorni:"Dias até à chegada",b_dp:"Calcular preço sugerido",credito_disp:"Crédito disponível:",tutti_miei:"Todos os meus alojamentos",err_key:"Chave de anfitrião errada.",aggiornato:"Atualizado.",errore:"Erro:",accedi_host:"Entre como anfitrião.",dev_terms:"Tem de aceitar os Termos e a Privacidade.",registrato:"Registado! Agora carregue os seus alojamentos abaixo.",accesso_ok:"Sessão iniciada.",giorni_aperti:"dias abertos",eventi:"eventos,",giorni_bloccati:"dias bloqueados",pren_esportate:"reservas exportadas.",giorni:"dias.",alloggi_n:"alojamentos.",dp_sugg:"Preço sugerido:",dp_mult:"multiplicador",vs_con:"Com",vs_incassi:"recebe",vs_connoi:"· connosco",vs_guadagni:"· ganha",vs_anotte:"por noite"},
+  ja:{pannello:"ホストパネル",auth_h:"ログインまたは登録",f_email:"メール",f_pw:"パスワード（8文字以上）",f_rs:"会社名／施設名（登録用）",f_tel:"電話/WhatsApp（予約通知用）",h_tel:"— 任意、国番号付き 例 +39",f_line:"LINE Notify トークン",h_asia:"— 任意（アジア：日本/タイ/台湾）",f_wechat:"WeChat Work Webhook",h_cina:"— 任意（中国）",accetto_pre:"同意します：",termini:"利用規約",accetto_e:"と",privacy:"プライバシー",b_login:"ログイン",b_register:"登録",b_logout:"ログアウト",loggato_pre:"✅ ログイン中：",loggato_post:"自分の物件のみ管理できます。",ref_h:"他のホストを招待",ref_p:"リンクを共有：ホストが登録すると、あなたと相手の双方がクレジットを獲得します。",b_copia:"コピー",b_copiato:"コピー済み！",dir_h:"あなたの直接予約リンク — わずか5%",dir_p:"Instagram/Google/WhatsAppで共有：ここからの予約は15%ではなく5%のみ（あなたの顧客）。ゲストは常に追加料金なしの価格を支払います。",req_h:"承認待ちのリクエスト",req_p:"あなたの承認待ちの予約（「リクエスト制」物件）。24時間以内に対応。過ぎると部屋は自動的に解放されます。",no_req:"リクエストはありません。",b_approva:"✓ 承認",b_rifiuta:"✗ 却下",pay_h:"あなたの収益",pay_p:"通貨別サマリー。獲得予定＝確定予約、滞在終了後にあなたのもの・送金中＝支払処理中・支払済＝入金済み。",no_pay:"まだ収益はありません。",st_mat:"獲得予定",st_tra:"送金中",st_pag:"支払済",st_trat:"留保（キャンセル）",hostkey_l:"X-Host-Key（運営者専用・上級）",dash_h:"ダッシュボード",m_slug_l:"スラッグ（空＝すべて）",b_metriche:"指標を読み込む",b_export:"📥 予約CSVを書き出す",k_revenue:"売上",k_occ:"稼働率",k_pren:"予約数",k_rating:"評価",miei_h:"マイ物件",host_id:"ホストID",b_carica:"読み込む",no_all:"物件がありません。",th_titolo:"タイトル",th_citta:"都市",th_prezzo:"€/泊",th_stato:"状態",b_sospendi:"停止",b_pubblica2:"公開",cal_h:"空室カレンダー",l_slug:"スラッグ",l_da:"開始",l_a:"終了",b_vedi:"表示",cal_libero:"空き",cal_pieno:"満室",cal_chiuso:"停止",cal_nc:"未設定",pub_h:"物件を公開",l_titolo:"タイトル",l_citta:"都市",l_prezzo_osp:"ゲストに表示される料金/泊（セント）",h_prezzo_osp:"— この金額から手数料（直接5%／マーケット15%）を差し引いて受け取り、ゲストは0%",l_pol:"キャンセルポリシー",h_pol:"— ホストが選択、ゲストは予約前に確認",pol_fles:"24時間前まで無料（推奨）",pol_mod:"5日前まで無料",pol_rig:"30日前まで無料（以降50%）",pol_nr:"返金不可（より安い料金）",l_tax:"宿泊税 — 1人1泊あたり（セント）",h_tax:"— あなたの都市について申告（なければ0）。例 200 = €2.00/人/泊",l_tax_max:"税 — 課税対象の最大泊数",h_tax_max:"— 0 = 上限なし",l_modal:"予約方式",h_modal:"— 即時＝予約増；リクエスト制＝あなたが承認（24時間）",modal_imm:"即時（推奨）",modal_req:"リクエスト制（承認する）",l_cap:"定員",l_serv:"設備（csv）",l_foto:"写真（URL、1行に1つ）",b_pubblica:"公開",trasp_h:"いくら多く稼げるか（Booking比）",l_prezzo_notte:"料金/泊（セント）",b_calcola:"計算",disp_h:"空室",l_giorno:"日付",l_unita:"数",b_salva:"保存",range_h:"期間を開く（かんたん初期設定）",b_apri:"期間を開く",ical_h:"iCalカレンダーを取り込む（Airbnb / Booking / Vrbo）",ical_p:".icsファイルの内容またはカレンダーのエクスポートを貼り付け：予約済みの日付はブロックされます（ダブルブッキング防止）。",l_ical:"iCalカレンダー",b_ical:"取り込んで同期",msg_h:"ゲストとのメッセージ",msg_p:"予約のゲストにメッセージ（到着時間、インターホン、案内）。メールと電話番号は自動的にマスクされます。",l_rif:"予約番号",l_email_osp:"ゲストのメール",l_msg:"メッセージ",b_invia:"送信",b_conv:"会話を読み込む",no_msg:"メッセージはありません。",tu:"あなた",ospite:"ゲスト",inviato:"✅ 送信しました。",dp_h:"おすすめダイナミック料金",dp_p:"稼働率・季節・週末・予約リードタイムに基づき最適料金を計算。考えずに収益アップ。",l_base:"基本料金 €/泊",l_occ:"稼働率 %",l_data:"日付",l_giorni:"到着までの日数",b_dp:"おすすめ料金を計算",credito_disp:"利用可能クレジット：",tutti_miei:"すべての物件",err_key:"ホストキーが違います。",aggiornato:"更新しました。",errore:"エラー：",accedi_host:"ホストとしてログインしてください。",dev_terms:"利用規約とプライバシーに同意が必要です。",registrato:"登録完了！下で物件を掲載してください。",accesso_ok:"ログインしました。",giorni_aperti:"日分を開放",eventi:"件のイベント、",giorni_bloccati:"日をブロック",pren_esportate:"件の予約を書き出しました。",giorni:"日。",alloggi_n:"件の物件。",dp_sugg:"おすすめ料金：",dp_mult:"乗数",vs_con:"",vs_incassi:"では受取",vs_connoi:"・当社では",vs_guadagni:"・差額",vs_anotte:"／泊"},
+  zh:{pannello:"房东面板",auth_h:"登录或注册",f_email:"邮箱",f_pw:"密码（至少8位）",f_rs:"公司/房源名称（用于注册）",f_tel:"电话/WhatsApp（用于预订提醒）",h_tel:"— 选填，带区号 如 +39",f_line:"LINE Notify 令牌",h_asia:"— 选填（亚洲：日本/泰国/台湾）",f_wechat:"企业微信 Webhook",h_cina:"— 选填（中国）",accetto_pre:"我接受",termini:"条款",accetto_e:"和",privacy:"隐私政策",b_login:"登录",b_register:"注册",b_logout:"退出",loggato_pre:"✅ 已登录：",loggato_post:"您只能上传和管理自己的房源。",ref_h:"邀请其他房东",ref_p:"分享您的链接：房东注册后，你们双方都会获得积分。",b_copia:"复制",b_copiato:"已复制！",dir_h:"您的直接预订链接 — 仅5%",dir_p:"在Instagram/Google/WhatsApp分享：从这里来的预订只收5%（您的客户），而非15%。房客始终支付透明价格。",req_h:"待批准的请求",req_p:"等待您批准的预订（\"待确认\"房源）。您有24小时；超时房间将自动释放。",no_req:"暂无请求。",b_approva:"✓ 批准",b_rifiuta:"✗ 拒绝",pay_h:"您的收入",pay_p:"按币种汇总。累积中＝已确认预订，入住结束后归您·转账中＝付款中·已支付＝已到账。",no_pay:"暂无收入。",st_mat:"累积中",st_tra:"转账中",st_pag:"已支付",st_trat:"扣留（已取消）",hostkey_l:"X-Host-Key（仅运营方，高级）",dash_h:"仪表盘",m_slug_l:"标识（空=全部）",b_metriche:"加载指标",b_export:"📥 导出预订CSV",k_revenue:"收入",k_occ:"入住率",k_pren:"预订数",k_rating:"评分",miei_h:"我的房源",host_id:"房东ID",b_carica:"加载",no_all:"暂无房源。",th_titolo:"标题",th_citta:"城市",th_prezzo:"€/晚",th_stato:"状态",b_sospendi:"暂停",b_pubblica2:"发布",cal_h:"可订日历",l_slug:"标识",l_da:"从",l_a:"至",b_vedi:"查看",cal_libero:"空闲",cal_pieno:"满",cal_chiuso:"关闭",cal_nc:"未设置",pub_h:"发布房源",l_titolo:"标题",l_citta:"城市",l_prezzo_osp:"房客看到的每晚价格（分）",h_prezzo_osp:"— 您收到此金额减去佣金（直接5%／平台15%），房客0%",l_pol:"取消政策",h_pol:"— 由房东选择，房客在预订前可见",pol_fles:"入住前24小时免费（推荐）",pol_mod:"入住前5天免费",pol_rig:"入住前30天免费（之后50%）",pol_nr:"不可退款（价格更低）",l_tax:"住宿税 — 每人每晚（分）",h_tax:"— 由您为所在城市申报（无则填0）。例 200 = €2.00/人/晚",l_tax_max:"税 — 最多计税晚数",h_tax_max:"— 0 = 不限",l_modal:"预订方式",h_modal:"— 即时=更多预订；待确认=由您批准（24小时）",modal_imm:"即时（推荐）",modal_req:"待确认（我来批准）",l_cap:"可住人数",l_serv:"设施（csv）",l_foto:"照片（网址，每行一个）",b_pubblica:"发布",trasp_h:"比Booking多赚多少",l_prezzo_notte:"每晚价格（分）",b_calcola:"计算",disp_h:"可订情况",l_giorno:"日期",l_unita:"数量",b_salva:"保存",range_h:"开放一段时间（快速上线）",b_apri:"开放时段",ical_h:"导入iCal日历（Airbnb / Booking / Vrbo）",ical_p:"粘贴 .ics 文件内容或日历导出：已被预订的日期将被锁定（防止超订）。",l_ical:"iCal日历",b_ical:"导入并同步",msg_h:"与房客的消息",msg_p:"给某预订的房客留言（到达时间、门铃、说明）。邮箱和电话会自动隐藏。",l_rif:"预订编号",l_email_osp:"房客邮箱",l_msg:"消息",b_invia:"发送",b_conv:"加载对话",no_msg:"暂无消息。",tu:"您",ospite:"房客",inviato:"✅ 已发送。",dp_h:"建议动态价格",dp_p:"根据入住率、季节、周末和预订提前期计算某日期的最优价格。无需操心也能多赚。",l_base:"基础价 €/晚",l_occ:"入住率 %",l_data:"日期",l_giorni:"距入住天数",b_dp:"计算建议价格",credito_disp:"可用积分：",tutti_miei:"我的所有房源",err_key:"房东密钥错误。",aggiornato:"已更新。",errore:"错误：",accedi_host:"请以房东身份登录。",dev_terms:"您必须接受条款和隐私政策。",registrato:"注册成功！现在在下方上传您的房源。",accesso_ok:"已登录。",giorni_aperti:"天已开放",eventi:"个事件，",giorni_bloccati:"天已锁定",pren_esportate:"个预订已导出。",giorni:"天。",alloggi_n:"个房源。",dp_sugg:"建议价格：",dp_mult:"倍数",vs_con:"在",vs_incassi:"上您得",vs_connoi:"· 在我们这里",vs_guadagni:"· 您多赚",vs_anotte:"每晚"}
+};
+const SUPP = Object.keys(TR);
+function pickLang(){
+  try{ const s=localStorage.getItem('lang'); if(s && SUPP.includes(s)) return s; }catch(e){}
+  const cand=(navigator.languages&&navigator.languages.length)?navigator.languages:[navigator.language||'en'];
+  for(const l of cand){ const b=String(l||'').slice(0,2).toLowerCase(); if(SUPP.includes(b)) return b; }
+  return 'en';
+}
+let LANG = pickLang();
+function T(k){ return (TR[LANG]&&TR[LANG][k])!=null ? TR[LANG][k] : (TR.en[k]!=null?TR.en[k]:k); }
 function key(){ return document.getElementById('hostkey').value; }
 function hostToken(){ return localStorage.getItem('bookinvip_host_token') || ''; }
-// auth: usa il token self-service se presente, altrimenti la chiave operatore
 function authHeaders(){ const tk = hostToken(); return tk ? {'X-Host-Token':tk} : {'X-Host-Key':key()}; }
 
-async function caricaI18N(lang){
-  try{ const d = await (await fetch(API+'/api/i18n?lang='+lang)).json(); UI=d.ui||{}; }catch(e){ UI={}; }
-  document.querySelectorAll('[data-ui]').forEach(el=>{ el.textContent = t(el.getAttribute('data-ui')); });
-  const set=(id,txt)=>{ const el=document.getElementById(id); if(el) el.textContent=txt; };
-  set('lTitolo','BookinVIP · '+t('pannello_host'));
-  set('hPubblica',t('pubblica')); set('hDisp',t('salva_disp'));
-  set('btnPubblica',t('pubblica')); set('btnDisp',t('salva_disp'));
+function applica(){
+  document.documentElement.lang = LANG;
+  document.querySelectorAll('[data-i18n]').forEach(el=>{ const k=el.getAttribute('data-i18n'); const v=T(k); if(v!=null) el.textContent=v; });
+  document.getElementById('lTitolo').textContent = 'BookinVIP · '+T('pannello');
+  const sel=document.getElementById('lang'); if(sel) sel.value=LANG;
 }
 
 async function post(path, body){
@@ -279,15 +295,15 @@ function aggiornaAuthUI(){
   document.getElementById('cardPayout').style.display = tk ? 'block' : 'none';
   if(tk){ document.getElementById('au_who').textContent = localStorage.getItem('bookinvip_host_email') || 'host'; caricaReferral(); caricaLinkDiretto(); caricaRichieste(); caricaPayout(); }
 }
-const STATO_LABEL = {maturato:'In maturazione', in_transito:'In transito', pagato:'Pagato', trattenuto:'Trattenuto (cancellata)'};
 async function caricaPayout(){
   try{
     const d = await (await fetch(API+'/api/host/payout', {headers:authHeaders()})).json();
     const box = document.getElementById('payout_lista');
     const p = d.payout||{}; const valute = Object.keys(p);
-    if(!valute.length){ box.textContent='Nessun incasso ancora.'; return; }
+    if(!valute.length){ box.textContent=T('no_pay'); return; }
+    const LBL={maturato:T('st_mat'),in_transito:T('st_tra'),pagato:T('st_pag'),trattenuto:T('st_trat')};
     box.innerHTML = valute.map(v=>{
-      const righe = Object.keys(p[v]).map(s=>`<div style="display:flex;justify-content:space-between"><span>${STATO_LABEL[s]||s}</span><b>${(p[v][s]/100).toFixed(2)} ${v}</b></div>`).join('');
+      const righe = Object.keys(p[v]).map(s=>`<div style="display:flex;justify-content:space-between"><span>${LBL[s]||s}</span><b>${(p[v][s]/100).toFixed(2)} ${v}</b></div>`).join('');
       return `<div style="border-top:1px solid #eef2f7;padding:.6rem 0">${righe}</div>`;
     }).join('');
   }catch(e){}
@@ -297,12 +313,12 @@ async function caricaRichieste(){
     const d = await (await fetch(API+'/api/host/richieste', {headers:authHeaders()})).json();
     const box = document.getElementById('richieste_lista');
     const lst = d.richieste||[];
-    if(!lst.length){ box.textContent='Nessuna richiesta.'; return; }
+    if(!lst.length){ box.textContent=T('no_req'); return; }
     box.innerHTML = lst.map(r=>`<div style="border-top:1px solid #eef2f7;padding:.6rem 0">
       <b>${r.alloggio_id}</b> · ${r.check_in} → ${r.check_out}
       <div style="margin-top:.4rem;display:flex;gap:.5rem">
-        <button class="rApp" data-r="${r.riferimento}" style="margin-top:0;background:#155724">✓ Approva</button>
-        <button class="rRif" data-r="${r.riferimento}" style="margin-top:0;background:#b02a37">✗ Rifiuta</button>
+        <button class="rApp" data-r="${r.riferimento}" style="margin-top:0;background:#155724">${T('b_approva')}</button>
+        <button class="rRif" data-r="${r.riferimento}" style="margin-top:0;background:#b02a37">${T('b_rifiuta')}</button>
       </div></div>`).join('');
     const dec = async (rif, ok)=>{ await fetch(API+'/api/host/richieste/'+(ok?'approva':'rifiuta'),
         {method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),
@@ -316,15 +332,15 @@ async function caricaLinkDiretto(){
     const d = await (await fetch(API+'/api/host/link_diretto', {headers:authHeaders()})).json();
     const abs = u => (u && u.charAt(0)==='/') ? location.origin + u : u;
     const lst = (d.alloggi&&d.alloggi.length) ? d.alloggi
-              : [{titolo:'Tutti i miei alloggi', link:d.link_generale}];
+              : [{titolo:T('tutti_miei'), link:d.link_generale}];
     document.getElementById('dir_links').innerHTML = lst.map((a,i)=>
       `<div style="margin-bottom:.7rem"><div style="font-size:.78rem;color:#5e6f8d;margin-bottom:.2rem">${a.titolo}</div>
        <div style="display:flex;gap:.5rem"><input id="dl_${i}" readonly value="${abs(a.link)}" style="flex:1;font-size:.78rem">
-       <button data-i="${i}" class="btnDlCopy" style="margin-top:0">Copia</button></div></div>`).join('');
+       <button data-i="${i}" class="btnDlCopy" style="margin-top:0">${T('b_copia')}</button></div></div>`).join('');
     document.querySelectorAll('.btnDlCopy').forEach(b=>b.onclick=()=>{
       const i=document.getElementById('dl_'+b.dataset.i); i.select();
       navigator.clipboard&&navigator.clipboard.writeText(i.value);
-      b.textContent='Copiato!'; setTimeout(()=>b.textContent='Copia',1500);
+      b.textContent=T('b_copiato'); setTimeout(()=>b.textContent=T('b_copia'),1500);
     });
   }catch(e){}
 }
@@ -332,40 +348,37 @@ async function caricaReferral(){
   try{
     const d = await (await fetch(API+'/api/host/referral', {headers:authHeaders()})).json();
     if(d.link){
-      // link SEMPRE assoluto: se BASE_URL e' vuoto il backend ritorna un path relativo
       document.getElementById('ref_link').value = (d.link.charAt(0)==='/') ? location.origin + d.link : d.link;
-      document.getElementById('ref_credito').textContent = 'Credito disponibile: €'+((d.credito_cents||0)/100).toFixed(2);
+      document.getElementById('ref_credito').textContent = T('credito_disp')+' €'+((d.credito_cents||0)/100).toFixed(2);
     }
   }catch(e){}
 }
 document.getElementById('btnCopiaRef').onclick = ()=>{
   const i=document.getElementById('ref_link'); i.select();
   navigator.clipboard?.writeText(i.value);
-  document.getElementById('btnCopiaRef').textContent='Copiato!';
-  setTimeout(()=>document.getElementById('btnCopiaRef').textContent='Copia',1500);
+  const b=document.getElementById('btnCopiaRef'); b.textContent=T('b_copiato');
+  setTimeout(()=>b.textContent=T('b_copia'),1500);
 };
-async function authPost(path, body, msgEl, okText){
-  // login/registrazione NON usano il token: invio senza authHeaders
+async function authPost(path, body, msgEl, okKey){
   const res = await fetch(API+path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   const data = await res.json();
   if(res.ok && data.token){
     localStorage.setItem('bookinvip_host_token', data.token);
     localStorage.setItem('bookinvip_host_email', document.getElementById('au_email').value);
-    msgEl.className='msg ok'; msgEl.textContent=okText; aggiornaAuthUI();
+    msgEl.className='msg ok'; msgEl.textContent=T(okKey); aggiornaAuthUI();
   } else { msgEl.className='msg err'; msgEl.textContent='❌ '+(data.errore||res.status); }
 }
 document.getElementById('btnRegister').onclick = ()=>{
   const m=document.getElementById('msgAuth');
-  if(!document.getElementById('au_terms').checked){ m.className='msg err'; m.textContent='Devi accettare Termini e Privacy.'; return; }
-  authPost('/api/host/registrazione', {email:document.getElementById('au_email').value, password:document.getElementById('au_pw').value, ragione_sociale:document.getElementById('au_rs').value, telefono:document.getElementById('au_tel').value, line_token:document.getElementById('au_line').value, wechat_webhook:document.getElementById('au_wechat').value, accetta_termini:true, codice_referral:(new URLSearchParams(location.search).get('ref')||'')}, m, 'Registrato! Ora carichi i tuoi alloggi qui sotto.');
+  if(!document.getElementById('au_terms').checked){ m.className='msg err'; m.textContent=T('dev_terms'); return; }
+  authPost('/api/host/registrazione', {email:document.getElementById('au_email').value, password:document.getElementById('au_pw').value, ragione_sociale:document.getElementById('au_rs').value, telefono:document.getElementById('au_tel').value, line_token:document.getElementById('au_line').value, wechat_webhook:document.getElementById('au_wechat').value, accetta_termini:true, codice_referral:(new URLSearchParams(location.search).get('ref')||'')}, m, 'registrato');
 };
 document.getElementById('btnLogin').onclick = ()=>{
-  authPost('/api/host/login', {email:document.getElementById('au_email').value, password:document.getElementById('au_pw').value}, document.getElementById('msgAuth'), 'Accesso effettuato.');
+  authPost('/api/host/login', {email:document.getElementById('au_email').value, password:document.getElementById('au_pw').value}, document.getElementById('msgAuth'), 'accesso_ok');
 };
 document.getElementById('btnLogout').onclick = ()=>{
   localStorage.removeItem('bookinvip_host_token'); localStorage.removeItem('bookinvip_host_email'); aggiornaAuthUI();
 };
-aggiornaAuthUI();
 
 document.getElementById('btnPubblica').onclick = async ()=>{
   const m = document.getElementById('msgPub');
@@ -383,7 +396,6 @@ document.getElementById('btnPubblica').onclick = async ()=>{
   m.className='msg '+(r.status===201?'ok':'err');
   m.textContent = r.status===201 ? '✅ '+(r.data.slug||'') : '❌ '+(r.data.dettaglio||r.data.errore||r.status);
 };
-
 document.getElementById('btnDisp').onclick = async ()=>{
   const m = document.getElementById('msgDisp');
   const r = await post('/api/host/disponibilita', {
@@ -393,7 +405,6 @@ document.getElementById('btnDisp').onclick = async ()=>{
   m.className='msg '+(r.status===200?'ok':'err');
   m.textContent = r.status===200 ? '✅ OK' : '❌ '+(r.data.errore||r.status);
 };
-
 document.getElementById('btnTrasp').onclick = async ()=>{
   const m = document.getElementById('msgTrasp');
   const p = parseInt(document.getElementById('tr_prezzo').value)||0;
@@ -403,10 +414,9 @@ document.getElementById('btnTrasp').onclick = async ()=>{
     const noi = d.scenario_nostro.host_netto_cents, loro = d.scenario_ota.host_netto_cents;
     const extra = d.guadagno_extra_host_cents;
     m.className='msg ok';
-    m.innerHTML = `Con ${ota} incassi <b>€ ${(loro/100).toFixed(2)}</b> · con noi <b>€ ${(noi/100).toFixed(2)}</b> · guadagni <b>+€ ${(extra/100).toFixed(2)}</b> a notte`;
-  }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
+    m.innerHTML = `${T('vs_con')} ${ota} ${T('vs_incassi')} <b>€ ${(loro/100).toFixed(2)}</b> ${T('vs_connoi')} <b>€ ${(noi/100).toFixed(2)}</b> ${T('vs_guadagni')} <b>+€ ${(extra/100).toFixed(2)}</b> ${T('vs_anotte')}`;
+  }catch(e){ m.className='msg err'; m.textContent=T('errore')+' '+e.message; }
 };
-
 document.getElementById('btnRange').onclick = async ()=>{
   const m = document.getElementById('msgRange');
   const r = await post('/api/host/disponibilita_range', {
@@ -414,50 +424,47 @@ document.getElementById('btnRange').onclick = async ()=>{
     a:document.getElementById('r_a').value, unita_totali:parseInt(document.getElementById('r_unita').value),
     prezzo_netto_cents:parseInt(document.getElementById('r_prezzo').value)});
   m.className='msg '+(r.status===200?'ok':'err');
-  m.textContent = r.status===200 ? '✅ '+r.data.giorni_impostati+' giorni aperti' : '❌ '+(r.data.errore||r.status);
+  m.textContent = r.status===200 ? '✅ '+r.data.giorni_impostati+' '+T('giorni_aperti') : '❌ '+(r.data.errore||r.status);
 };
-
 document.getElementById('btnIcal').onclick = async ()=>{
   const m = document.getElementById('msgIcal');
   const r = await post('/api/host/ical', {
     alloggio_id:document.getElementById('i_slug').value, ical:document.getElementById('i_ical').value});
   m.className='msg '+(r.status===200?'ok':'err');
-  m.textContent = r.status===200 ? '✅ '+r.data.eventi+' eventi, '+r.data.giorni_bloccati+' giorni bloccati' : '❌ '+(r.data.errore||r.status);
+  m.textContent = r.status===200 ? '✅ '+r.data.eventi+' '+T('eventi')+' '+r.data.giorni_bloccati+' '+T('giorni_bloccati') : '❌ '+(r.data.errore||r.status);
 };
-
 document.getElementById('btnMetriche').onclick = async ()=>{
   const m = document.getElementById('msgMetriche');
   const slug = document.getElementById('m_slug').value.trim();
   try{
     const res = await fetch(API+'/api/host/metriche'+(slug?('?alloggio='+encodeURIComponent(slug)):''), {headers:authHeaders()});
-    if(res.status===401){ m.className='msg err'; m.textContent='Chiave host errata.'; return; }
+    if(res.status===401){ m.className='msg err'; m.textContent=T('err_key'); return; }
     const d = await res.json();
     document.getElementById('dash').style.display='grid';
     document.getElementById('d_revenue').textContent = '€ '+(d.revenue_cents/100).toFixed(2);
     document.getElementById('d_occ').textContent = (d.occupazione_bps/100).toFixed(0)+'%';
-    document.getElementById('d_pren').textContent = d.prenotazioni_attive + (d.prenotazioni_rimborsate?(' (+'+d.prenotazioni_rimborsate+' rimb.)'):'');
+    document.getElementById('d_pren').textContent = d.prenotazioni_attive + (d.prenotazioni_rimborsate?(' (+'+d.prenotazioni_rimborsate+')'):'');
     document.getElementById('d_rating').textContent = (d.recensioni && d.recensioni.conteggio) ? ('★ '+(d.recensioni.media_centesimi/100).toFixed(1)) : '—';
-    m.className='msg ok'; m.textContent='Aggiornato.';
-  }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
+    m.className='msg ok'; m.textContent=T('aggiornato');
+  }catch(e){ m.className='msg err'; m.textContent=T('errore')+' '+e.message; }
 };
-
 async function caricaMiei(){
   const m=document.getElementById('msgMiei');
   try{
     const res=await fetch(API+'/api/host/alloggi?host_id='+encodeURIComponent(document.getElementById('ma_host').value),{headers:authHeaders()});
-    if(res.status===401){ m.className='msg err'; m.textContent='Chiave host errata.'; return; }
+    if(res.status===401){ m.className='msg err'; m.textContent=T('err_key'); return; }
     const d=await res.json();
-    if(!d.alloggi||!d.alloggi.length){ document.getElementById('miei').innerHTML='<div style="color:#5e6f8d">Nessun alloggio.</div>'; return; }
-    document.getElementById('miei').innerHTML='<table style="width:100%;border-collapse:collapse"><thead><tr style="text-align:left;font-size:.72rem;color:#4a5b7a"><th>Titolo</th><th>Citta</th><th>€/notte</th><th>Stato</th><th></th></tr></thead><tbody>'+
+    if(!d.alloggi||!d.alloggi.length){ document.getElementById('miei').innerHTML='<div style="color:#5e6f8d">'+T('no_all')+'</div>'; return; }
+    document.getElementById('miei').innerHTML='<table style="width:100%;border-collapse:collapse"><thead><tr style="text-align:left;font-size:.72rem;color:#4a5b7a"><th>'+T('th_titolo')+'</th><th>'+T('th_citta')+'</th><th>'+T('th_prezzo')+'</th><th>'+T('th_stato')+'</th><th></th></tr></thead><tbody>'+
       d.alloggi.map(a=>{
         const azione = a.stato==='pubblicato'
-          ? `<button data-s="${a.slug}" data-st="sospeso" style="background:#b02a37;padding:.3rem .9rem">Sospendi</button>`
-          : `<button data-s="${a.slug}" data-st="pubblicato" style="background:#155724;padding:.3rem .9rem">Pubblica</button>`;
+          ? `<button data-s="${a.slug}" data-st="sospeso" style="background:#b02a37;padding:.3rem .9rem">${T('b_sospendi')}</button>`
+          : `<button data-s="${a.slug}" data-st="pubblicato" style="background:#155724;padding:.3rem .9rem">${T('b_pubblica2')}</button>`;
         return `<tr style="border-top:1px solid #eef2f7"><td>${a.titolo}</td><td>${a.citta}</td><td>${(a.prezzo_notte_cents/100).toFixed(2)}</td><td>${a.stato}</td><td>${azione}</td></tr>`;
       }).join('')+'</tbody></table>';
     document.querySelectorAll('#miei button').forEach(b=>b.onclick=()=>cambiaStato(b.dataset.s,b.dataset.st));
-    m.className='msg ok'; m.textContent=d.alloggi.length+' alloggi.';
-  }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
+    m.className='msg ok'; m.textContent=d.alloggi.length+' '+T('alloggi_n');
+  }catch(e){ m.className='msg err'; m.textContent=T('errore')+' '+e.message; }
 }
 async function cambiaStato(slug,stato){
   const r=await post('/api/host/stato',{slug,stato});
@@ -465,29 +472,27 @@ async function cambiaStato(slug,stato){
   else { const m=document.getElementById('msgMiei'); m.className='msg err'; m.textContent='❌ '+(r.data.errore||r.status); }
 }
 document.getElementById('btnMiei').onclick = caricaMiei;
-
 document.getElementById('btnExport').onclick = async ()=>{
   const m = document.getElementById('msgMetriche');
   const slug = document.getElementById('m_slug').value.trim();
   try{
     const res = await fetch(API+'/api/host/export'+(slug?('?alloggio='+encodeURIComponent(slug)):''), {headers:authHeaders()});
-    if(res.status===401){ m.className='msg err'; m.textContent='Chiave host errata.'; return; }
+    if(res.status===401){ m.className='msg err'; m.textContent=T('err_key'); return; }
     const d = await res.json();
     const blob = new Blob([d.csv], {type:'text/csv'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = 'prenotazioni_bookinvip.csv';
     a.click(); URL.revokeObjectURL(a.href);
-    m.className='msg ok'; m.textContent=d.righe+' prenotazioni esportate.';
-  }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
+    m.className='msg ok'; m.textContent=d.righe+' '+T('pren_esportate');
+  }catch(e){ m.className='msg err'; m.textContent=T('errore')+' '+e.message; }
 };
-
 document.getElementById('btnCal').onclick = async ()=>{
   const m = document.getElementById('msgCal');
   const p = new URLSearchParams({alloggio:document.getElementById('c_slug').value,
     da:document.getElementById('c_da').value, a:document.getElementById('c_a').value});
   try{
     const res = await fetch(API+'/api/host/calendario?'+p.toString(), {headers:authHeaders()});
-    if(res.status===401){ m.className='msg err'; m.textContent='Chiave host errata.'; return; }
+    if(res.status===401){ m.className='msg err'; m.textContent=T('err_key'); return; }
     const d = await res.json();
     const col = {libero:'#d4edda', pieno:'#f8d7da', chiuso:'#e2e3e5', non_caricato:'#fff'};
     document.getElementById('cal').innerHTML = (d.giorni||[]).map(g=>{
@@ -497,29 +502,25 @@ document.getElementById('btnCal').onclick = async ()=>{
       const pr = g.prezzo_netto_cents?(' €'+(g.prezzo_netto_cents/100).toFixed(0)):'';
       return `<div title="${g.giorno} ${g.stato}${pr}" style="width:42px;height:42px;background:${bg};${bord}border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:600">${gg}</div>`;
     }).join('');
-    m.className='msg ok'; m.textContent=(d.giorni||[]).length+' giorni.';
-  }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
+    m.className='msg ok'; m.textContent=(d.giorni||[]).length+' '+T('giorni');
+  }catch(e){ m.className='msg err'; m.textContent=T('errore')+' '+e.message; }
 };
-
-// --- Messaggi host-guest ---
 async function caricaThread(){
   const pren=document.getElementById('msg_pren').value.trim(); if(!pren) return;
   try{
     const d=await (await fetch(API+'/api/messaggi?prenotazione_id='+encodeURIComponent(pren),{headers:authHeaders()})).json();
     const box=document.getElementById('msgThread');
-    if(!d.messaggi||!d.messaggi.length){ box.innerHTML='<div style="color:#5e6f8d;font-size:.85rem">Nessun messaggio.</div>'; return; }
-    box.innerHTML=d.messaggi.map(m=>`<div style="padding:.4rem .7rem;margin:.3rem 0;border-radius:.7rem;background:${m.mittente==='host'?'#eef6ff':'#f4f6fa'}"><b style="font-size:.72rem;color:#4a5b7a">${m.mittente==='host'?'Tu':'Ospite'}</b><br>${(m.testo||'').replace(/</g,'&lt;')}</div>`).join('');
+    if(!d.messaggi||!d.messaggi.length){ box.innerHTML='<div style="color:#5e6f8d;font-size:.85rem">'+T('no_msg')+'</div>'; return; }
+    box.innerHTML=d.messaggi.map(m=>`<div style="padding:.4rem .7rem;margin:.3rem 0;border-radius:.7rem;background:${m.mittente==='host'?'#eef6ff':'#f4f6fa'}"><b style="font-size:.72rem;color:#4a5b7a">${m.mittente==='host'?T('tu'):T('ospite')}</b><br>${(m.testo||'').replace(/</g,'&lt;')}</div>`).join('');
   }catch(e){}
 }
 document.getElementById('btnMsgInvia').onclick = async ()=>{
   const m=document.getElementById('msgMsg');
   const r=await post('/api/messaggi',{prenotazione_id:document.getElementById('msg_pren').value.trim(),guest_id:document.getElementById('msg_guest').value.trim(),testo:document.getElementById('msg_testo').value.trim()});
-  if(r.status===201){ m.className='msg ok'; m.textContent='✅ Inviato.'; document.getElementById('msg_testo').value=''; caricaThread(); }
+  if(r.status===201){ m.className='msg ok'; m.textContent=T('inviato'); document.getElementById('msg_testo').value=''; caricaThread(); }
   else { m.className='msg err'; m.textContent='❌ '+(r.data.errore||r.status); }
 };
 document.getElementById('btnMsgCarica').onclick = caricaThread;
-
-// --- Prezzo dinamico suggerito ---
 document.getElementById('btnDp').onclick = async ()=>{
   const ris=document.getElementById('dpRis');
   const base=Math.round(parseFloat(document.getElementById('dp_base').value||'0')*100);
@@ -527,16 +528,17 @@ document.getElementById('btnDp').onclick = async ()=>{
   const q='prezzo_base_cents='+base+'&occupazione_bps='+occ+'&data='+encodeURIComponent(document.getElementById('dp_data').value)+'&giorni='+(document.getElementById('dp_giorni').value||30);
   try{
     const r=await fetch(API+'/api/host/prezzo_suggerito?'+q,{headers:authHeaders()});
-    if(r.status===401){ ris.textContent='Accedi come host.'; return; }
+    if(r.status===401){ ris.textContent=T('accedi_host'); return; }
     const d=await r.json();
-    if(d.prezzo_cents){ const f=d.fattori||{};
-      ris.innerHTML='💶 Prezzo suggerito: <b>€'+(d.prezzo_cents/100).toFixed(2)+'</b> /notte <span style="color:#5e6f8d;font-size:.8rem">(moltiplicatore '+((d.moltiplicatore_bps||10000)/100).toFixed(0)+'% · occupazione/stagione/weekend/anticipo)</span>'; }
-    else { ris.textContent='❌ '+(d.errore||'prezzo non valido'); }
-  }catch(e){ ris.textContent='Errore: '+e.message; }
+    if(d.prezzo_cents){
+      ris.innerHTML='💶 '+T('dp_sugg')+' <b>€'+(d.prezzo_cents/100).toFixed(2)+'</b> /'+T('vs_anotte').replace('per ','').replace('／','')+' <span style="color:#5e6f8d;font-size:.8rem">('+T('dp_mult')+' '+((d.moltiplicatore_bps||10000)/100).toFixed(0)+'%)</span>'; }
+    else { ris.textContent='❌ '+(d.errore||''); }
+  }catch(e){ ris.textContent=T('errore')+' '+e.message; }
 };
 
-document.getElementById('lang').onchange = e=>{ LANG=e.target.value; document.documentElement.lang=LANG; caricaI18N(LANG); };
-caricaI18N(LANG);
+document.getElementById('lang').onchange = e=>{ LANG=e.target.value; try{localStorage.setItem('lang',LANG);}catch(_){} applica(); aggiornaAuthUI(); };
+applica();
+aggiornaAuthUI();
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(()=>{}); }
 </script>
 </body>
