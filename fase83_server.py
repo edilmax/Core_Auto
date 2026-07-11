@@ -946,8 +946,10 @@ class RouterHTTP:
                 and isinstance(email, str) and "@" in email:
             try:
                 from fase86_email import corpo_voucher_html
-                vurl = (self._base_url + "/voucher/" + corpo["voucher_token"]) \
-                    if corpo.get("voucher_token") else ""
+                # SEMPRE assoluto: un link relativo (/voucher/...) NON è cliccabile da un'email.
+                # Fallback al dominio se BASE_URL non è configurato (come altri link, es. host.html).
+                vurl = ((self._base_url or "https://bookinvip.com") + "/voucher/"
+                        + corpo["voucher_token"]) if corpo.get("voucher_token") else ""
                 html = corpo_voucher_html(allog, ref, ci, co, vurl)
                 # IN BACKGROUND: l'SMTP (rete) non deve MAI rallentare la conferma prenotazione.
                 # Il provider e' gia' fail-safe (non solleva); il thread e' daemon (isolato).

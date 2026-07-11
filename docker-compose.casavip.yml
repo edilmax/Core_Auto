@@ -14,6 +14,7 @@ services:
     environment:
       HOST: "0.0.0.0"
       PORTA: "8080"
+      BASE_URL: "https://bookinvip.com"   # dominio assoluto per link email/voucher/sitemap/SEO
       PAGAMENTO_BPS: "300"           # costo carta 3% a carico host (copre Stripe -> noi mai in perdita)
       DB_CATALOGO: /data/catalogo.db
       DB_INVENTARIO: /data/inventario.db
