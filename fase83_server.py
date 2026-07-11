@@ -949,8 +949,13 @@ class RouterHTTP:
                 vurl = (self._base_url + "/voucher/" + corpo["voucher_token"]) \
                     if corpo.get("voucher_token") else ""
                 html = corpo_voucher_html(allog, ref, ci, co, vurl)
-                self._sys.email_provider.invia(
-                    email, "BookinVIP - Prenotazione confermata", html)
+                # IN BACKGROUND: l'SMTP (rete) non deve MAI rallentare la conferma prenotazione.
+                # Il provider e' gia' fail-safe (non solleva); il thread e' daemon (isolato).
+                import threading
+                threading.Thread(
+                    target=self._sys.email_provider.invia,
+                    args=(email, "BookinVIP - Prenotazione confermata", html),
+                    daemon=True).start()
             except Exception:
                 logger.warning("invio email voucher fallito (ignorato)", exc_info=True)
         self._avvisa_host_prenotazione(allog, ref, ci, co, corpo.get("fonte", ""))

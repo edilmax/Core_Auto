@@ -61,14 +61,22 @@ class ProviderEmail:
         msg["Subject"] = oggetto
         msg["From"] = self._mittente
         msg["To"] = destinatario
-        with smtplib.SMTP(self._host, self._port, timeout=15) as s:
-            try:
-                s.starttls()
-            except smtplib.SMTPException:
-                pass
-            if self._user:
-                s.login(self._user, self._password)
-            s.sendmail(self._mittente, [destinatario], msg.as_string())
+        # Porta 465 = SSL IMPLICITO (SMTPS) -> serve SMTP_SSL (con SMTP normale la connessione
+        # appende fino al timeout). Porta 587/25 = SMTP + STARTTLS. Timeout corto: mai bloccare.
+        if int(self._port) == 465:
+            with smtplib.SMTP_SSL(self._host, self._port, timeout=10) as s:
+                if self._user:
+                    s.login(self._user, self._password)
+                s.sendmail(self._mittente, [destinatario], msg.as_string())
+        else:
+            with smtplib.SMTP(self._host, self._port, timeout=10) as s:
+                try:
+                    s.starttls()
+                except smtplib.SMTPException:
+                    pass
+                if self._user:
+                    s.login(self._user, self._password)
+                s.sendmail(self._mittente, [destinatario], msg.as_string())
         return True
 
 
