@@ -771,7 +771,11 @@ class TestRecensioni(unittest.TestCase):
         _, corpo = self._prenota()
         h = pagina_voucher_html(self.sys, corpo["voucher_token"], "it")
         self.assertIn("Prenotazione confermata", h)
-        self.assertIn(corpo["riferimento"], h)
+        # ora mostra il codice LEGGIBILE (BVIP-XXXX-XXXX) + PIN, non il riferimento grezzo
+        from fase59_concierge import codice_prenotazione
+        self.assertIn(codice_prenotazione(corpo["riferimento"]), h)
+        self.assertIn("PIN check-in", h)
+        self.assertIn(self.sys.firma.pin_checkin(corpo["riferimento"]), h)
         self.assertIn("BookinVIP", h)
 
     def test_voucher_manomesso_404(self):

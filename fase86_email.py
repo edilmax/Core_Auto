@@ -89,19 +89,22 @@ def crea_provider_email(host: Optional[str], port: int = 587, user: str = "",
     return ProviderEmail(host.strip(), port, user, password, mittente or user, send=send)
 
 
-def corpo_voucher_html(titolo_alloggio: str, riferimento: str, check_in: str,
-                       check_out: str, voucher_url: str) -> str:
-    """Corpo HTML dell'email di conferma (semplice, robusto). XSS-safe."""
+def corpo_voucher_html(titolo_alloggio: str, codice: str, check_in: str,
+                       check_out: str, voucher_url: str, pin: str = "") -> str:
+    """Corpo HTML dell'email di conferma (semplice, robusto). XSS-safe. `codice` = codice
+    prenotazione leggibile (BVIP-XXXX-XXXX); `pin` = PIN check-in (4 cifre), uguali all'host."""
     import html
     e = html.escape
     link = ('<p><a href="%s" style="background:#1e3c72;color:#fff;padding:.6rem 1.2rem;'
             'border-radius:8px;text-decoration:none">Apri il tuo voucher</a></p>'
             % e(voucher_url)) if voucher_url else ""
+    blocco_pin = ('<br>PIN check-in: <strong style="font-size:1.1rem;color:#1e3c72">%s</strong>'
+                  % e(str(pin))) if pin else ""
     return (
         "<div style=\"font-family:sans-serif;max-width:480px\">"
         "<h2 style=\"color:#1e3c72\">BookinVIP - Prenotazione confermata</h2>"
-        "<p>%s</p><p>Riferimento: <strong>%s</strong><br>"
+        "<p>%s</p><p>Codice prenotazione: <strong style=\"letter-spacing:.05em\">%s</strong>%s<br>"
         "Dal %s al %s</p>%s"
-        "<p style=\"color:#5e6f8d;font-size:.85rem\">Conserva questa email: dal voucher puoi "
-        "vedere la prenotazione e, se serve, annullarla.</p></div>"
-    ) % (e(titolo_alloggio), e(riferimento), e(check_in), e(check_out), link)
+        "<p style=\"color:#5e6f8d;font-size:.85rem\">Conserva questa email: mostra il codice "
+        "(e il PIN) all'arrivo. Dal voucher puoi vedere o annullare la prenotazione.</p></div>"
+    ) % (e(titolo_alloggio), e(codice), blocco_pin, e(check_in), e(check_out), link)

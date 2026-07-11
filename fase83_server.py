@@ -395,6 +395,11 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
     e = html.escape
     prezzo = "%d.%02d" % (dati.get("prezzo_guest_cents", 0) // 100,
                           dati.get("prezzo_guest_cents", 0) % 100)
+    # CODICE prenotazione leggibile (BVIP-XXXX-XXXX) + PIN check-in, uguali per cliente e host
+    from fase59_concierge import codice_prenotazione
+    _ref = str(dati.get("riferimento", ""))
+    _codice_pren = codice_prenotazione(_ref)
+    _pin_checkin = firma.pin_checkin(_ref)
     # Codice "serratura smart" (self check-in): NASCOSTO di default. È un pass firmato utile
     # SOLO se l'host ha una serratura elettronica compatibile (hardware, che al lancio nessuno
     # ha) -> mostrarlo confonderebbe il cliente. Resta emesso nel token (riattivabile in futuro,
@@ -451,14 +456,16 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
         "padding:.3rem 0;border-bottom:1px solid #eef2f7}</style></head><body><div class=\"v\">"
         "<div style=\"font-weight:700;color:#1e3c72;font-size:1.3rem\">BookinVIP</div>"
         "<h1>✓ %s</h1>"
-        "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
+        "<div class=\"r\"><span>%s</span><strong style=\"letter-spacing:.05em\">%s</strong></div>"
+        "<div class=\"r\"><span>PIN check-in</span><strong style=\"font-size:1.15rem;color:#1e3c72\">%s</strong></div>"
         "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
         "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
         "<div class=\"r\"><span>%s</span><strong>%s %s</strong></div>"
         "%s</div></body></html>"
     ) % (
         e(lng), e(_ui("voucher_ok", lng)),
-        e(_ui("rif", lng)), e(str(dati.get("riferimento", ""))),
+        e(_ui("rif", lng)), e(_codice_pren),
+        e(_pin_checkin),
         e(_ui("dal", lng)), e(str(dati.get("check_in", ""))),
         e(_ui("al", lng)), e(str(dati.get("check_out", ""))),
         e(_ui("totale", lng)), e(prezzo), e(str(dati.get("valuta", "EUR"))),
@@ -957,11 +964,14 @@ class RouterHTTP:
                 and isinstance(email, str) and "@" in email:
             try:
                 from fase86_email import corpo_voucher_html
+                from fase59_concierge import codice_prenotazione
                 # SEMPRE assoluto: un link relativo (/voucher/...) NON è cliccabile da un'email.
                 # Fallback al dominio se BASE_URL non è configurato (come altri link, es. host.html).
                 vurl = ((self._base_url or "https://bookinvip.com") + "/voucher/"
                         + corpo["voucher_token"]) if corpo.get("voucher_token") else ""
-                html = corpo_voucher_html(allog, ref, ci, co, vurl)
+                _codice = codice_prenotazione(ref)
+                _pin = self._sys.firma.pin_checkin(ref) if getattr(self._sys, "firma", None) else ""
+                html = corpo_voucher_html(allog, _codice, ci, co, vurl, pin=_pin)
                 # IN BACKGROUND: l'SMTP (rete) non deve MAI rallentare la conferma prenotazione.
                 # Il provider e' gia' fail-safe (non solleva); il thread e' daemon (isolato).
                 import threading
@@ -1299,12 +1309,15 @@ class RouterHTTP:
             d = self._sys.catalogo.dettaglio(allog) or {}
             from fase152_notifiche_prenotazione import componi_avviso_host
             from fase61_localizzazione import Localizzatore, lingua_da_telefono
+            from fase59_concierge import codice_prenotazione
             lingua = (lingua_da_telefono(contatti.get("telefono"))
                       if contatti.get("telefono") else "it")
             titolo = (d.get("titolo") if isinstance(d, dict) else None) or allog
+            # stesso codice + PIN che vede il cliente (per il check-in)
+            _pin = self._sys.firma.pin_checkin(ref) if getattr(self._sys, "firma", None) else ""
             ogg, testo = componi_avviso_host(
                 Localizzatore(), alloggio=titolo, ci=ci, co=co, origine=origine,
-                riferimento=ref,
+                riferimento=codice_prenotazione(ref), pin=_pin,
                 link_pannello=(self._base_url or "https://bookinvip.com") + "/host.html",
                 lingua=lingua)
             notif.avvisa(contatti, ogg, testo)

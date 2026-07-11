@@ -149,9 +149,10 @@ class NotificatorePrenotazione:
 
 
 def componi_avviso_host(localizzatore: Any, *, alloggio: str, ci: str, co: str,
-                        origine: str = "", riferimento: str = "",
+                        origine: str = "", riferimento: str = "", pin: str = "",
                         link_pannello: str = "", lingua: str = "it"):
-    """Testo LOCALIZZATO dell'avviso host (riusa fase61 'nuova_prenotazione')."""
+    """Testo LOCALIZZATO dell'avviso host (riusa fase61 'nuova_prenotazione'). `riferimento`
+    = codice prenotazione leggibile (BVIP-XXXX-XXXX), `pin` = PIN check-in, uguali al cliente."""
     try:
         testo = localizzatore.notifica("nuova_prenotazione", lingua, alloggio=alloggio,
                                        ci=ci, co=co, origine=origine or "—")
@@ -159,9 +160,10 @@ def componi_avviso_host(localizzatore: Any, *, alloggio: str, ci: str, co: str,
         testo = "Nuova prenotazione: %s dal %s al %s." % (alloggio, ci, co)
     oggetto = "BookinVIP - Nuova prenotazione"
     corpo = (testo +
-             (("\n\nRif: %s" % riferimento) if riferimento else "") +
+             (("\n\nCodice prenotazione: %s" % riferimento) if riferimento else "") +
+             (("\nPIN check-in: %s" % pin) if pin else "") +
              "\n\nLa prenotazione e' gia' CONFERMATA e segnata a calendario: "
-             "nessuna azione richiesta." +
+             "nessuna azione richiesta. Al check-in verifica il codice (e il PIN) del cliente." +
              (("\nDettagli e calendario: %s" % link_pannello) if link_pannello else ""))
     return oggetto, corpo
 

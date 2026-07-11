@@ -78,6 +78,15 @@ class RispostaConcierge:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+def codice_prenotazione(riferimento: Any) -> str:
+    """Codice prenotazione LEGGIBILE stile Booking, dal riferimento interno.
+    Es. 'a5d660df6d99...' -> 'BVIP-A5D6-60DF'. Solo display (l'ID interno resta il riferimento);
+    stesso codice per cliente e host. Fallback robusto se il riferimento è corto/strano."""
+    pulito = "".join(c for c in str(riferimento) if c.isalnum()).upper()
+    base = (pulito + "00000000")[:8]        # sempre almeno 8 caratteri
+    return "BVIP-%s-%s" % (base[:4], base[4:8])
+
+
 # Quote firmata (stateless): payload JSON -> base64url . HMAC
 # ─────────────────────────────────────────────────────────────────────────────
 class FirmaQuote:
@@ -90,6 +99,12 @@ class FirmaQuote:
 
     def _mac(self, msg: bytes) -> str:
         return hmac.new(self._segreto, msg, hashlib.sha256).hexdigest()
+
+    def pin_checkin(self, riferimento: Any) -> str:
+        """PIN a 4 cifre per il check-in: deterministico (stesso per cliente e host) ma NON
+        indovinabile (HMAC del riferimento col segreto di sistema). Come il PIN di Booking."""
+        h = self._mac(("pin:" + str(riferimento)).encode("utf-8"))
+        return str(int(h[:8], 16) % 10000).zfill(4)
 
     def codifica(self, dati: Dict[str, Any]) -> str:
         raw = json.dumps(dati, separators=(",", ":"), sort_keys=True).encode("utf-8")
