@@ -25,6 +25,7 @@ services:
       DB_TASSA_COMUNALE: /data/tassa_comunale.db # ledger tassa di soggiorno (durevole)
       UPLOAD_DIR: /data/uploads                  # foto alloggi caricate dagli host (durevole)
       DB_PAYOUT: /data/payout.db                 # dashboard payout host (durevole)
+      DB_ACCETTAZIONI: /data/accettazioni.db     # prove FIRMATE d'accettazione contratto host (durevole = valore legale)
       FILE_REFERRAL: /data/referral.json         # referral host (durevole)
       CAMPAGNA_STATO_FILE: /data/campagna_stato.json   # scheduler no-burst (durevole)
       OUTREACH_OPTOUT_FILE: /data/outreach_optout.json # opt-out (durevole = obbligo legale)

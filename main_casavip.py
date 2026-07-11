@@ -50,6 +50,7 @@ def main() -> None:  # pragma: no cover
         db_pendenti=os.environ.get("DB_PENDENTI", "data/pendenti.db"),
         db_tassa_comunale=os.environ.get("DB_TASSA_COMUNALE", "data/tassa_comunale.db"),
         db_payout=os.environ.get("DB_PAYOUT", "data/payout.db"),
+        db_accettazioni=os.environ.get("DB_ACCETTAZIONI", "data/accettazioni.db"),
         file_referral=os.environ.get("FILE_REFERRAL", "data/referral.json"),
         valuta=os.environ.get("VALUTA", "EUR"),
         commissione_bps=int(os.environ.get("COMMISSIONE_BPS", "1500")),  # 15% (primi 1000)

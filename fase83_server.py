@@ -486,6 +486,8 @@ class RouterHTTP:
             return 200, {"lingue": list(LINGUE_SUPPORTATE)}
         if metodo == "GET" and path == "/api/i18n":
             return 200, _dizionario_i18n(_lingua(query))
+        if metodo == "GET" and path == "/api/legale/contratto-host":
+            return self._contratto_host(query)
         if metodo == "GET" and path == "/api/trasparenza":
             return self._trasparenza(query)
         if metodo == "POST" and path == "/api/domanda":
@@ -553,7 +555,7 @@ class RouterHTTP:
         if metodo == "POST" and path == "/api/host/disponibilita_range":
             return self._host_disponibilita_range(body, headers)
         if metodo == "POST" and path == "/api/host/registrazione":
-            return self._host_registrazione(body)
+            return self._host_registrazione(body, headers)
         if metodo == "POST" and path == "/api/host/login":
             return self._host_login(body)
         if metodo == "GET" and path == "/api/host/referral":
@@ -578,6 +580,8 @@ class RouterHTTP:
             return self._host_export(query, headers)
         if metodo == "GET" and path == "/api/host/alloggi":
             return self._host_alloggi(query, headers)
+        if metodo == "GET" and path == "/api/host/accettazioni":
+            return self._host_accettazioni(query, headers)
         if metodo == "POST" and path == "/api/host/stato":
             return self._host_stato(body, headers)
         if metodo == "GET" and path == "/api/admin/prenotazioni":
@@ -1620,14 +1624,69 @@ class RouterHTTP:
             return 200, {"raw": out}
 
     # --- rotte host ---
-    def _host_registrazione(self, body):
-        """L'host crea il proprio account DA SOLO (self-service): niente onboarding manuale."""
+    @staticmethod
+    def _client_ip(headers):
+        """IP reale dell'host dietro nginx (X-Forwarded-For ha priorita', primo hop)."""
+        h = headers or {}
+        xff = h.get("X-Forwarded-For") or h.get("x-forwarded-for") or ""
+        if xff:
+            return xff.split(",")[0].strip()[:64]
+        return (h.get("X-Real-IP") or h.get("x-real-ip") or "")[:64]
+
+    @staticmethod
+    def _user_agent(headers):
+        h = headers or {}
+        return (h.get("User-Agent") or h.get("user-agent") or "")[:400]
+
+    def _contratto_host(self, query):
+        """Serve il testo VIVO del contratto host + versione + hash vincolante (per l'accettazione)."""
+        try:
+            from fase163_accettazioni import documento_corrente
+            return 200, documento_corrente(_lingua(query))
+        except Exception:
+            logger.error("contratto host: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+
+    def _host_accettazioni(self, query, headers):
+        """Le prove d'accettazione dell'host (ognuna con flag `integra` = non manomessa)."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        acc = getattr(self._sys, "accettazioni", None)
+        if acc is None:
+            return 200, {"accettazioni": []}
+        host_id = self._host_id_da_token(headers) or query.get("host_id")
+        if not (isinstance(host_id, str) and host_id):
+            return 422, {"errore": "host_id_mancante"}
+        try:
+            return 200, {"accettazioni": acc.elenco(host_id)}
+        except Exception:
+            logger.error("host accettazioni: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+
+    def _host_registrazione(self, body, headers=None):
+        """L'host crea il proprio account DA SOLO (self-service): niente onboarding manuale.
+        Registra ANCHE la PROVA d'accettazione del contratto (versione+hash+IP+dispositivo+
+        approvazione clausole vessatorie) nel registro firmato fase163 -> opponibile in causa."""
+        headers = headers or {}
         reg = getattr(self._sys, "registro_host", None)
         if reg is None:
             return 503, {"errore": "registrazione_non_attiva"}
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
+        # ANTI-MANOMISSIONE: se il client dichiara l'hash del contratto letto, deve combaciare
+        # con quello VIVO (altrimenti ha letto una versione diversa/vecchia -> 409, rileggi).
+        hash_vivo, ver_viva = "", ""
+        try:
+            from fase163_accettazioni import doc_sha256 as _doc_hash, CONTRATTO_HOST_VERSIONE
+            hash_vivo, ver_viva = _doc_hash(), CONTRATTO_HOST_VERSIONE
+        except Exception:
+            pass
+        hash_client = dati.get("doc_sha256")
+        if isinstance(hash_client, str) and hash_client and hash_vivo \
+                and hash_client != hash_vivo:
+            return 409, {"errore": "contratto_aggiornato",
+                         "doc_sha256": hash_vivo, "versione": ver_viva}
         e = reg.registra(dati.get("email"), dati.get("password"),
                          accetta_termini=bool(dati.get("accetta_termini")),
                          ragione_sociale=str(dati.get("ragione_sociale", "")),
@@ -1635,6 +1694,23 @@ class RouterHTTP:
                          line_token=str(dati.get("line_token", "")),
                          wechat_webhook=str(dati.get("wechat_webhook", "")))
         out = e.as_dict()
+        # PROVA D'ACCETTAZIONE firmata (best-effort MA loggata: l'account e' gia' creato con
+        # versione+ts nel registro host; qui aggiungiamo la prova forte hash+IP+dispositivo).
+        if e.ok:
+            acc = getattr(self._sys, "accettazioni", None)
+            if acc is not None:
+                try:
+                    r = acc.registra(
+                        e.host_id, lang=str(dati.get("lang", "it")),
+                        ip=self._client_ip(headers),
+                        user_agent=self._user_agent(headers),
+                        vessatorie=bool(dati.get("accetta_clausole")))
+                    out["accettazione"] = {"registrata": bool(r.get("ok")),
+                                           "versione": r.get("versione"),
+                                           "vessatorie": r.get("vessatorie")}
+                except Exception:
+                    logger.error("PROVA accettazione contratto FALLITA per host %s",
+                                 getattr(e, "host_id", "?"), exc_info=True)
         # viral loop: se è arrivato con un codice referral, accredita referente+referee
         if e.ok:
             codice = dati.get("codice_referral")
