@@ -96,7 +96,7 @@ class TestNginx(unittest.TestCase):
 
     def test_reverse_proxy(self):
         self.assertIn("upstream core_auto_app", self.conf)
-        self.assertIn("server app:8000", self.conf)
+        self.assertIn("server app:8080", self.conf)
         self.assertIn("proxy_pass", self.conf)
 
     def test_sicurezza_e_limiti(self):
