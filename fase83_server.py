@@ -69,6 +69,7 @@ ETICHETTE_UI: Dict[str, Dict[str, str]] = {
     "errore": {"it": "Errore", "en": "Error", "es": "Error", "fr": "Erreur", "de": "Fehler", "pt": "Erro", "ja": "エラー", "zh": "错误"},
     "email": {"it": "Email", "en": "Email", "es": "Correo", "fr": "E-mail", "de": "E-Mail", "pt": "E-mail", "ja": "メール", "zh": "邮箱"},
     "conferma": {"it": "Prenotazione confermata!", "en": "Booking confirmed!", "es": "¡Reserva confirmada!", "fr": "Réservation confirmée !", "de": "Buchung bestätigt!", "pt": "Reserva confirmada!", "ja": "予約が確定しました！", "zh": "预订已确认！"},
+        "richiesta_inviata": {"it": "Richiesta inviata: l'host conferma entro 24h", "en": "Request sent: the host confirms within 24h", "es": "Solicitud enviada: el anfitrión confirma en 24h", "fr": "Demande envoyée : l'hôte confirme sous 24h", "de": "Anfrage gesendet: der Gastgeber bestätigt innerhalb von 24h", "pt": "Pedido enviado: o anfitrião confirma em 24h", "ja": "リクエストを送信しました：ホストが24時間以内に確定します", "zh": "请求已发送：房东将在24小时内确认"},
     "non_disp": {"it": "Non disponibile", "en": "Not available", "es": "No disponible", "fr": "Indisponible", "de": "Nicht verfügbar", "pt": "Indisponível", "ja": "空きなし", "zh": "不可预订"},
     "verificata": {"it": "verificata", "en": "verified", "es": "verificada", "fr": "vérifiée", "de": "verifiziert", "pt": "verificada", "ja": "確認済み", "zh": "已验证"},
     "dividi_amici": {"it": "Dividi tra amici:", "en": "Split with friends:", "es": "Divide con amigos:", "fr": "Partager entre amis :", "de": "Mit Freunden teilen:", "pt": "Dividir com amigos:", "ja": "友達と割り勘：", "zh": "与好友分摊："},

@@ -332,8 +332,12 @@ async function prenota(){
   try{
     const r = await api('/api/concierge/book', {method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({quote_token:QUOTE, email:email})});
-    if(r.stato==='confermata'){
-      if(r.payment_url){ window.location.href = r.payment_url; return; }   // redirect al checkout Stripe
+    // 1) se c'è un link di pagamento -> vai al checkout Stripe (stato 'in_attesa_pagamento')
+    if(r.payment_url){ window.location.href = r.payment_url; return; }
+    // 2) alloggio 'su richiesta' -> l'host deve approvare (24h): NON è un errore
+    if(r.stato==='in_attesa_host'){ msg.innerHTML=`<div class="msg ok">⏳ ${t('richiesta_inviata')} (${r.riferimento||''})</div>`; document.getElementById('btnPrenota').style.display='none'; return; }
+    // 3) confermata (senza pagamento online) -> mostra voucher
+    if(r.stato==='confermata' || r.voucher_token){
       const voucher = r.voucher_token ? ` · <a href="/voucher/${encodeURIComponent(r.voucher_token)}?lang=${LANG}" target="_blank" style="color:#155724;font-weight:700">📄 ${t('voucher_label')}</a>` : '';
       const contr = r.voucher_token ? ` · <a href="#" id="dlContr" style="color:#1e3c72;font-weight:700">📑 ${t('contratto_pdf')}</a>` : '';
       msg.innerHTML=`<div class="msg ok">✅ ${t('conferma')} (${r.riferimento||''})${voucher}${contr}</div>`; document.getElementById('btnPrenota').style.display='none';
