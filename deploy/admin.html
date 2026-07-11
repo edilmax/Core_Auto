@@ -12,7 +12,7 @@
   .container{max-width:980px;margin:0 auto}
   header{display:flex;justify-content:space-between;align-items:end;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:2px solid #dce1ed;flex-wrap:wrap;gap:1rem}
   .logo{font-weight:700;font-size:1.6rem;background:linear-gradient(135deg,#1e3c72,#2a5298);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-  input{padding:.5rem .7rem;border-radius:.7rem;border:1px solid #dce1ed;font-size:1rem}
+  input,select{padding:.5rem .7rem;border-radius:.7rem;border:1px solid #dce1ed;font-size:1rem}
   button{background:#1e3c72;color:#fff;border:none;padding:.55rem 1.3rem;border-radius:2rem;font-weight:600;cursor:pointer}
   button:hover{background:#2a5298}
   button.danger{background:#b02a37}.button.danger:hover{background:#842029}
@@ -23,7 +23,7 @@
   .tag.ok{background:#d4edda;color:#155724}.tag.attiva{background:#eef2f7;color:#2a5298}
   .msg{padding:.7rem 1rem;border-radius:.7rem;margin:.8rem 0;font-size:.9rem}
   .msg.ok{background:#d4edda;color:#155724}.msg.err{background:#f8d7da;color:#842029}
-  .key{display:flex;gap:.6rem;align-items:center;margin-bottom:1.2rem}
+  .key{display:flex;gap:.6rem;align-items:center;margin-bottom:1.2rem;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -31,38 +31,42 @@
   <header>
     <div class="logo">BookinVIP · Admin</div>
     <div class="key">
+      <select id="lang" style="width:auto">
+        <option value="it">🇮🇹 IT</option><option value="en">🇬🇧 EN</option><option value="es">🇪🇸 ES</option><option value="fr">🇫🇷 FR</option>
+        <option value="de">🇩🇪 DE</option><option value="pt">🇵🇹 PT</option><option value="ja">🇯🇵 JA</option><option value="zh">🇨🇳 ZH</option>
+      </select>
       <input type="password" id="adminkey" placeholder="X-Admin-Key" style="width:220px">
-      <button id="btnCarica">🔄 Aggiorna</button>
+      <button id="btnCarica" data-i18n="b_agg">🔄 Aggiorna</button>
       <span id="autostat" style="font-size:.78rem;color:#5e6f8d"></span>
     </div>
   </header>
 
   <div id="msg"></div>
   <table>
-    <thead><tr><th>Alloggio</th><th>Check-in</th><th>Check-out</th><th>Origine</th><th>Stato</th><th></th></tr></thead>
-    <tbody id="tbody"><tr><td colspan="6" style="text-align:center;color:#5e6f8d;padding:2rem">Inserisci la chiave admin: si carica da solo.</td></tr></tbody>
+    <thead><tr><th data-i18n="th_all">Alloggio</th><th data-i18n="th_ci">Check-in</th><th data-i18n="th_co">Check-out</th><th data-i18n="th_orig">Origine</th><th data-i18n="th_stato">Stato</th><th></th></tr></thead>
+    <tbody id="tbody"><tr><td colspan="6" style="text-align:center;color:#5e6f8d;padding:2rem" data-i18n="empty_key">Inserisci la chiave admin: si carica da solo.</td></tr></tbody>
   </table>
 
   <div style="background:#fff;border-radius:1rem;padding:1.5rem;box-shadow:0 6px 18px rgba(0,0,0,.05);margin-top:1.5rem">
-    <h2 style="color:#1e3c72;font-size:1.2rem;margin-bottom:.8rem">📣 Marketing — pubblica campagna</h2>
-    <p style="font-size:.85rem;color:#5e6f8d;margin-bottom:.8rem">Genera post multilingua + immagini promo e li pubblica sui canali configurati nel server (Telegram/Facebook). Senza canali nel <code>.env</code>, i post sono generati ma non pubblicati.</p>
-    <div style="margin-bottom:.9rem;font-size:.9rem">Lingue:
+    <h2 style="color:#1e3c72;font-size:1.2rem;margin-bottom:.8rem" data-i18n="mk_h">📣 Marketing — pubblica campagna</h2>
+    <p style="font-size:.85rem;color:#5e6f8d;margin-bottom:.8rem" data-i18n="mk_p">Genera post multilingua + immagini promo e li pubblica sui canali configurati nel server (Telegram/Facebook). Senza canali nel .env, i post sono generati ma non pubblicati.</p>
+    <div style="margin-bottom:.9rem;font-size:.9rem"><span data-i18n="mk_lingue">Lingue:</span>
       <label style="margin-left:.5rem"><input type="checkbox" class="lng" value="it" checked> IT</label>
       <label style="margin-left:.5rem"><input type="checkbox" class="lng" value="en" checked> EN</label>
       <label style="margin-left:.5rem"><input type="checkbox" class="lng" value="es"> ES</label>
       <label style="margin-left:.5rem"><input type="checkbox" class="lng" value="fr"> FR</label>
       <label style="margin-left:.5rem"><input type="checkbox" class="lng" value="de"> DE</label>
     </div>
-    <button id="btnCampagna" style="background:#155724">📣 Pubblica campagna</button>
+    <button id="btnCampagna" data-i18n="b_camp" style="background:#155724">📣 Pubblica campagna</button>
     <div id="msgCampagna"></div>
   </div>
 
   <div style="background:#fff;border-radius:1rem;padding:1.5rem;box-shadow:0 6px 18px rgba(0,0,0,.05);margin-top:1.5rem;border:1px solid #f3d6d6">
-    <h2 style="color:#b00020;font-size:1.2rem;margin-bottom:.8rem">🗑️ Cancella attività host (diritto all'oblio)</h2>
-    <p style="font-size:.85rem;color:#5e6f8d;margin-bottom:.8rem">Rimuove un host e TUTTI i suoi dati da ogni archivio (annunci, inventario, messaggi, referral, account) e <strong>verifica che non resti nulla da nessuna parte</strong>. Irreversibile.</p>
+    <h2 style="color:#b00020;font-size:1.2rem;margin-bottom:.8rem" data-i18n="del_h">🗑️ Cancella attività host (diritto all'oblio)</h2>
+    <p style="font-size:.85rem;color:#5e6f8d;margin-bottom:.8rem" data-i18n="del_p">Rimuove un host e TUTTI i suoi dati da ogni archivio (annunci, inventario, messaggi, referral, account) e verifica che non resti nulla da nessuna parte. Irreversibile.</p>
     <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
-      <input id="del_host" placeholder="host_id (es. h_xxxxxxxx)" style="width:240px">
-      <button id="btnCancellaHost" style="background:#b00020">🗑️ Cancella e verifica</button>
+      <input id="del_host" data-i18n-ph="del_ph" placeholder="host_id (es. h_xxxxxxxx)" style="width:240px">
+      <button id="btnCancellaHost" data-i18n="b_del" style="background:#b00020">🗑️ Cancella e verifica</button>
     </div>
     <div id="msgCancella" style="margin-top:.8rem;font-size:.88rem"></div>
   </div>
@@ -71,6 +75,21 @@
 <script>
 const API = location.origin.startsWith('http') ? '' : 'http://127.0.0.1:8080';
 const LS = 'bookinvip_admin_key';
+const TR={
+ it:{b_agg:"🔄 Aggiorna",th_all:"Alloggio",th_ci:"Check-in",th_co:"Check-out",th_orig:"Origine",th_stato:"Stato",empty_key:"Inserisci la chiave admin: si carica da solo.",mk_h:"📣 Marketing — pubblica campagna",mk_p:"Genera post multilingua + immagini promo e li pubblica sui canali configurati nel server (Telegram/Facebook). Senza canali nel .env, i post sono generati ma non pubblicati.",mk_lingue:"Lingue:",b_camp:"📣 Pubblica campagna",del_h:"🗑️ Cancella attività host (diritto all'oblio)",del_p:"Rimuove un host e TUTTI i suoi dati da ogni archivio (annunci, inventario, messaggi, referral, account) e verifica che non resti nulla da nessuna parte. Irreversibile.",del_ph:"host_id (es. h_xxxxxxxx)",b_del:"🗑️ Cancella e verifica",err_key:"Chiave admin errata.",no_pren:"Nessuna prenotazione.",t_rimb:"rimborsato",t_att:"attiva",b_rimb:"Rimborsa",n_pren:"prenotazioni.",agg:"aggiornato",errore:"Errore:",conf_rimb:"Rimborsare e liberare le date",rimb_ok:"✅ Rimborsato.",sel_lingua:"Seleziona almeno una lingua.",pubblico:"Pubblico…",post_gen:"post generati",pubblicati:"pubblicati",saltati:"saltati.",canali:"Canali:",no_canale:"nessuno — configura TELEGRAM_*/META_* nel .env del server per pubblicare davvero",ins_hid:"Inserisci un host_id.",conf_del:"CANCELLAZIONE IRREVERSIBILE di tutti i dati di",proc:"Procedere?",canc_corso:"Cancellazione in corso…",canc_ok:"✅ Cancellato OVUNQUE. Rimossi →",verif_res:"Verifica residui (tutti 0):",res_rim:"⚠️ Residui rimasti:",rimossi:"Rimossi →",err_rete:"Errore di rete."},
+ en:{b_agg:"🔄 Refresh",th_all:"Listing",th_ci:"Check-in",th_co:"Check-out",th_orig:"Source",th_stato:"Status",empty_key:"Enter the admin key: it loads by itself.",mk_h:"📣 Marketing — publish campaign",mk_p:"Generates multilingual posts + promo images and publishes them on the channels configured on the server (Telegram/Facebook). Without channels in .env, posts are generated but not published.",mk_lingue:"Languages:",b_camp:"📣 Publish campaign",del_h:"🗑️ Erase host activity (right to be forgotten)",del_p:"Removes a host and ALL their data from every store (listings, inventory, messages, referral, account) and verifies nothing remains anywhere. Irreversible.",del_ph:"host_id (e.g. h_xxxxxxxx)",b_del:"🗑️ Erase and verify",err_key:"Wrong admin key.",no_pren:"No bookings.",t_rimb:"refunded",t_att:"active",b_rimb:"Refund",n_pren:"bookings.",agg:"updated",errore:"Error:",conf_rimb:"Refund and free the dates",rimb_ok:"✅ Refunded.",sel_lingua:"Select at least one language.",pubblico:"Publishing…",post_gen:"posts generated",pubblicati:"published",saltati:"skipped.",canali:"Channels:",no_canale:"none — configure TELEGRAM_*/META_* in the server .env to actually publish",ins_hid:"Enter a host_id.",conf_del:"IRREVERSIBLE DELETION of all data of",proc:"Proceed?",canc_corso:"Deleting…",canc_ok:"✅ Erased EVERYWHERE. Removed →",verif_res:"Residual check (all 0):",res_rim:"⚠️ Residuals left:",rimossi:"Removed →",err_rete:"Network error."},
+ es:{b_agg:"🔄 Actualizar",th_all:"Alojamiento",th_ci:"Entrada",th_co:"Salida",th_orig:"Origen",th_stato:"Estado",empty_key:"Introduce la clave admin: se carga solo.",mk_h:"📣 Marketing — publicar campaña",mk_p:"Genera publicaciones multilingües + imágenes promo y las publica en los canales configurados en el servidor (Telegram/Facebook). Sin canales en .env, se generan pero no se publican.",mk_lingue:"Idiomas:",b_camp:"📣 Publicar campaña",del_h:"🗑️ Borrar actividad del anfitrión (derecho al olvido)",del_p:"Elimina un anfitrión y TODOS sus datos de cada archivo (anuncios, inventario, mensajes, referidos, cuenta) y verifica que no quede nada. Irreversible.",del_ph:"host_id (p. ej. h_xxxxxxxx)",b_del:"🗑️ Borrar y verificar",err_key:"Clave admin incorrecta.",no_pren:"Sin reservas.",t_rimb:"reembolsado",t_att:"activa",b_rimb:"Reembolsar",n_pren:"reservas.",agg:"actualizado",errore:"Error:",conf_rimb:"¿Reembolsar y liberar las fechas",rimb_ok:"✅ Reembolsado.",sel_lingua:"Selecciona al menos un idioma.",pubblico:"Publicando…",post_gen:"publicaciones generadas",pubblicati:"publicadas",saltati:"omitidas.",canali:"Canales:",no_canale:"ninguno — configura TELEGRAM_*/META_* en el .env del servidor para publicar de verdad",ins_hid:"Introduce un host_id.",conf_del:"ELIMINACIÓN IRREVERSIBLE de todos los datos de",proc:"¿Continuar?",canc_corso:"Eliminando…",canc_ok:"✅ Borrado EN TODAS PARTES. Eliminados →",verif_res:"Verificación de residuos (todos 0):",res_rim:"⚠️ Residuos restantes:",rimossi:"Eliminados →",err_rete:"Error de red."},
+ fr:{b_agg:"🔄 Actualiser",th_all:"Logement",th_ci:"Arrivée",th_co:"Départ",th_orig:"Source",th_stato:"Statut",empty_key:"Saisissez la clé admin : ça se charge tout seul.",mk_h:"📣 Marketing — publier une campagne",mk_p:"Génère des posts multilingues + images promo et les publie sur les canaux configurés sur le serveur (Telegram/Facebook). Sans canaux dans .env, les posts sont générés mais non publiés.",mk_lingue:"Langues :",b_camp:"📣 Publier la campagne",del_h:"🗑️ Effacer l'activité de l'hôte (droit à l'oubli)",del_p:"Supprime un hôte et TOUTES ses données de chaque archive (annonces, inventaire, messages, parrainage, compte) et vérifie qu'il ne reste rien. Irréversible.",del_ph:"host_id (ex. h_xxxxxxxx)",b_del:"🗑️ Effacer et vérifier",err_key:"Clé admin incorrecte.",no_pren:"Aucune réservation.",t_rimb:"remboursé",t_att:"active",b_rimb:"Rembourser",n_pren:"réservations.",agg:"mis à jour",errore:"Erreur :",conf_rimb:"Rembourser et libérer les dates",rimb_ok:"✅ Remboursé.",sel_lingua:"Sélectionnez au moins une langue.",pubblico:"Publication…",post_gen:"posts générés",pubblicati:"publiés",saltati:"ignorés.",canali:"Canaux :",no_canale:"aucun — configurez TELEGRAM_*/META_* dans le .env du serveur pour publier vraiment",ins_hid:"Saisissez un host_id.",conf_del:"SUPPRESSION IRRÉVERSIBLE de toutes les données de",proc:"Continuer ?",canc_corso:"Suppression…",canc_ok:"✅ Effacé PARTOUT. Supprimés →",verif_res:"Vérification des résidus (tous 0) :",res_rim:"⚠️ Résidus restants :",rimossi:"Supprimés →",err_rete:"Erreur réseau."},
+ de:{b_agg:"🔄 Aktualisieren",th_all:"Unterkunft",th_ci:"Anreise",th_co:"Abreise",th_orig:"Quelle",th_stato:"Status",empty_key:"Admin-Schlüssel eingeben: lädt von selbst.",mk_h:"📣 Marketing — Kampagne veröffentlichen",mk_p:"Erzeugt mehrsprachige Posts + Promo-Bilder und veröffentlicht sie auf den im Server konfigurierten Kanälen (Telegram/Facebook). Ohne Kanäle in .env werden Posts erzeugt, aber nicht veröffentlicht.",mk_lingue:"Sprachen:",b_camp:"📣 Kampagne veröffentlichen",del_h:"🗑️ Gastgeber-Aktivität löschen (Recht auf Vergessenwerden)",del_p:"Entfernt einen Gastgeber und ALLE seine Daten aus jedem Speicher (Inserate, Inventar, Nachrichten, Referral, Konto) und prüft, dass nirgends etwas bleibt. Unumkehrbar.",del_ph:"host_id (z. B. h_xxxxxxxx)",b_del:"🗑️ Löschen und prüfen",err_key:"Falscher Admin-Schlüssel.",no_pren:"Keine Buchungen.",t_rimb:"erstattet",t_att:"aktiv",b_rimb:"Erstatten",n_pren:"Buchungen.",agg:"aktualisiert",errore:"Fehler:",conf_rimb:"Erstatten und Daten freigeben",rimb_ok:"✅ Erstattet.",sel_lingua:"Mindestens eine Sprache wählen.",pubblico:"Veröffentliche…",post_gen:"Posts erzeugt",pubblicati:"veröffentlicht",saltati:"übersprungen.",canali:"Kanäle:",no_canale:"keine — konfiguriere TELEGRAM_*/META_* in der Server-.env, um wirklich zu veröffentlichen",ins_hid:"Gib eine host_id ein.",conf_del:"UNUMKEHRBARE LÖSCHUNG aller Daten von",proc:"Fortfahren?",canc_corso:"Lösche…",canc_ok:"✅ ÜBERALL gelöscht. Entfernt →",verif_res:"Restprüfung (alle 0):",res_rim:"⚠️ Reste übrig:",rimossi:"Entfernt →",err_rete:"Netzwerkfehler."},
+ pt:{b_agg:"🔄 Atualizar",th_all:"Alojamento",th_ci:"Check-in",th_co:"Check-out",th_orig:"Origem",th_stato:"Estado",empty_key:"Introduza a chave admin: carrega sozinho.",mk_h:"📣 Marketing — publicar campanha",mk_p:"Gera posts multilíngues + imagens promo e publica-os nos canais configurados no servidor (Telegram/Facebook). Sem canais no .env, os posts são gerados mas não publicados.",mk_lingue:"Idiomas:",b_camp:"📣 Publicar campanha",del_h:"🗑️ Apagar atividade do anfitrião (direito ao esquecimento)",del_p:"Remove um anfitrião e TODOS os seus dados de cada arquivo (anúncios, inventário, mensagens, referral, conta) e verifica que nada resta. Irreversível.",del_ph:"host_id (ex. h_xxxxxxxx)",b_del:"🗑️ Apagar e verificar",err_key:"Chave admin errada.",no_pren:"Sem reservas.",t_rimb:"reembolsado",t_att:"ativa",b_rimb:"Reembolsar",n_pren:"reservas.",agg:"atualizado",errore:"Erro:",conf_rimb:"Reembolsar e libertar as datas",rimb_ok:"✅ Reembolsado.",sel_lingua:"Selecione pelo menos um idioma.",pubblico:"A publicar…",post_gen:"posts gerados",pubblicati:"publicados",saltati:"ignorados.",canali:"Canais:",no_canale:"nenhum — configure TELEGRAM_*/META_* no .env do servidor para publicar de verdade",ins_hid:"Introduza um host_id.",conf_del:"ELIMINAÇÃO IRREVERSÍVEL de todos os dados de",proc:"Continuar?",canc_corso:"A eliminar…",canc_ok:"✅ Apagado EM TODO O LADO. Removidos →",verif_res:"Verificação de resíduos (todos 0):",res_rim:"⚠️ Resíduos restantes:",rimossi:"Removidos →",err_rete:"Erro de rede."},
+ ja:{b_agg:"🔄 更新",th_all:"物件",th_ci:"チェックイン",th_co:"チェックアウト",th_orig:"経路",th_stato:"状態",empty_key:"管理キーを入力：自動で読み込みます。",mk_h:"📣 マーケティング — キャンペーン公開",mk_p:"多言語の投稿＋プロモ画像を生成し、サーバーで設定したチャネル（Telegram/Facebook）に公開します。.env にチャネルがない場合、生成のみで公開されません。",mk_lingue:"言語：",b_camp:"📣 キャンペーンを公開",del_h:"🗑️ ホストの活動を削除（忘れられる権利）",del_p:"ホストとその全データを各ストア（掲載・在庫・メッセージ・紹介・アカウント）から削除し、どこにも残っていないことを検証します。取り消し不可。",del_ph:"host_id（例 h_xxxxxxxx）",b_del:"🗑️ 削除して検証",err_key:"管理キーが違います。",no_pren:"予約はありません。",t_rimb:"返金済",t_att:"有効",b_rimb:"返金",n_pren:"件の予約。",agg:"更新",errore:"エラー：",conf_rimb:"返金して日付を解放しますか",rimb_ok:"✅ 返金しました。",sel_lingua:"言語を1つ以上選択してください。",pubblico:"公開中…",post_gen:"件の投稿を生成",pubblicati:"件公開",saltati:"件スキップ。",canali:"チャネル：",no_canale:"なし — 実際に公開するにはサーバーの .env に TELEGRAM_*/META_* を設定",ins_hid:"host_id を入力してください。",conf_del:"すべてのデータを取り消し不可で削除します：",proc:"続行しますか？",canc_corso:"削除中…",canc_ok:"✅ すべて削除。削除 →",verif_res:"残存確認（すべて0）：",res_rim:"⚠️ 残存あり：",rimossi:"削除 →",err_rete:"ネットワークエラー。"},
+ zh:{b_agg:"🔄 刷新",th_all:"房源",th_ci:"入住",th_co:"退房",th_orig:"来源",th_stato:"状态",empty_key:"输入管理密钥：会自动加载。",mk_h:"📣 营销 — 发布活动",mk_p:"生成多语言帖子+推广图片，并发布到服务器上配置的渠道（Telegram/Facebook）。若 .env 中没有渠道，仅生成不发布。",mk_lingue:"语言：",b_camp:"📣 发布活动",del_h:"🗑️ 删除房东活动（被遗忘权）",del_p:"从每个存储（房源、库存、消息、推荐、账户）删除某房东及其全部数据，并验证任何地方均无残留。不可逆。",del_ph:"host_id（如 h_xxxxxxxx）",b_del:"🗑️ 删除并验证",err_key:"管理密钥错误。",no_pren:"暂无预订。",t_rimb:"已退款",t_att:"有效",b_rimb:"退款",n_pren:"个预订。",agg:"已更新",errore:"错误：",conf_rimb:"退款并释放日期",rimb_ok:"✅ 已退款。",sel_lingua:"请至少选择一种语言。",pubblico:"发布中…",post_gen:"个帖子已生成",pubblicati:"个已发布",saltati:"个已跳过。",canali:"渠道：",no_canale:"无 — 在服务器 .env 中配置 TELEGRAM_*/META_* 才能真正发布",ins_hid:"请输入 host_id。",conf_del:"不可逆删除以下的全部数据：",proc:"继续吗？",canc_corso:"删除中…",canc_ok:"✅ 已全部删除。已移除 →",verif_res:"残留检查（全为0）：",res_rim:"⚠️ 有残留：",rimossi:"已移除 →",err_rete:"网络错误。"}
+};
+const SUPP=Object.keys(TR);
+function pick(){try{const s=localStorage.getItem('lang');if(s&&SUPP.includes(s))return s;}catch(e){}for(const l of (navigator.languages||[navigator.language||'en'])){const b=String(l||'').slice(0,2).toLowerCase();if(SUPP.includes(b))return b;}return 'en';}
+let LANG=pick();
+function T(k){const d=TR[LANG]||TR.en;return d[k]!=null?d[k]:(TR.en[k]!=null?TR.en[k]:k);}
+function applica(){document.documentElement.lang=LANG;document.querySelectorAll('[data-i18n]').forEach(el=>{const k=el.getAttribute('data-i18n');const v=T(k);if(v!=null)el.textContent=v;});document.querySelectorAll('[data-i18n-ph]').forEach(el=>el.setAttribute('placeholder',T(el.getAttribute('data-i18n-ph'))));const s=document.getElementById('lang');if(s)s.value=LANG;}
 function key(){ return document.getElementById('adminkey').value; }
 function msg(t,ok){ const m=document.getElementById('msg'); m.className='msg '+(ok?'ok':'err'); m.textContent=t; }
 function stat(t){ document.getElementById('autostat').textContent = t; }
@@ -79,59 +98,57 @@ async function carica(){
   if(!key()){ stat(''); return; }
   try{
     const res = await fetch(API+'/api/admin/prenotazioni', {headers:{'X-Admin-Key':key()}});
-    if(res.status===401){ msg('Chiave admin errata.',false); stat(''); return; }
+    if(res.status===401){ msg(T('err_key'),false); stat(''); return; }
     const d = await res.json();
     const tb = document.getElementById('tbody');
-    if(!d.prenotazioni || !d.prenotazioni.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:#5e6f8d;padding:2rem">Nessuna prenotazione.</td></tr>'; return; }
+    if(!d.prenotazioni || !d.prenotazioni.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:#5e6f8d;padding:2rem">'+T('no_pren')+'</td></tr>'; return; }
     tb.innerHTML = d.prenotazioni.map(p=>{
-      const stato = p.rimborsato ? '<span class="tag ok">rimborsato</span>' : '<span class="tag attiva">attiva</span>';
-      const btn = p.rimborsato ? '' : `<button class="danger" data-a="${p.alloggio_id}" data-ci="${p.check_in}" data-co="${p.check_out}" data-k="${p.idem_key}">Rimborsa</button>`;
+      const stato = p.rimborsato ? '<span class="tag ok">'+T('t_rimb')+'</span>' : '<span class="tag attiva">'+T('t_att')+'</span>';
+      const btn = p.rimborsato ? '' : `<button class="danger" data-a="${p.alloggio_id}" data-ci="${p.check_in}" data-co="${p.check_out}" data-k="${p.idem_key}">${T('b_rimb')}</button>`;
       return `<tr><td>${p.alloggio_id}</td><td>${p.check_in}</td><td>${p.check_out}</td><td>${p.origine||''}</td><td>${stato}</td><td>${btn}</td></tr>`;
     }).join('');
     tb.querySelectorAll('button.danger').forEach(b=>b.onclick=()=>rimborsa(b.dataset));
-    msg(d.prenotazioni.length+' prenotazioni.', true);
-    stat('aggiornato '+new Date().toLocaleTimeString());
-  }catch(e){ msg('Errore: '+e.message,false); }
+    msg(d.prenotazioni.length+' '+T('n_pren'), true);
+    stat(T('agg')+' '+new Date().toLocaleTimeString());
+  }catch(e){ msg(T('errore')+' '+e.message,false); }
 }
-
 async function rimborsa(d){
-  if(!confirm('Rimborsare e liberare le date '+d.ci+' → '+d.co+'?')) return;
+  if(!confirm(T('conf_rimb')+' '+d.ci+' → '+d.co+'?')) return;
   try{
     const res = await fetch(API+'/api/admin/rimborso', {method:'POST',
       headers:{'Content-Type':'application/json','X-Admin-Key':key()},
       body:JSON.stringify({alloggio_id:d.a, check_in:d.ci, check_out:d.co, idem_key:d.k})});
     const r = await res.json();
-    if(res.status===200){ msg('✅ Rimborsato. '+(r.nota||''), true); carica(); }
+    if(res.status===200){ msg(T('rimb_ok')+' '+(r.nota||''), true); carica(); }
     else msg('❌ '+(r.motivo||r.errore||res.status), false);
-  }catch(e){ msg('Errore: '+e.message,false); }
+  }catch(e){ msg(T('errore')+' '+e.message,false); }
 }
-
 async function pubblicaCampagna(){
   const m=document.getElementById('msgCampagna');
   const lingue=[...document.querySelectorAll('.lng:checked')].map(c=>c.value);
-  if(!lingue.length){ m.className='msg err'; m.textContent='Seleziona almeno una lingua.'; return; }
-  m.className='msg'; m.textContent='Pubblico…';
+  if(!lingue.length){ m.className='msg err'; m.textContent=T('sel_lingua'); return; }
+  m.className='msg'; m.textContent=T('pubblico');
   try{
     const res=await fetch(API+'/api/marketing/campagna',{method:'POST',
       headers:{'Content-Type':'application/json','X-Admin-Key':key()},
       body:JSON.stringify({lingue})});
-    if(res.status===401){ m.className='msg err'; m.textContent='Chiave admin errata.'; return; }
+    if(res.status===401){ m.className='msg err'; m.textContent=T('err_key'); return; }
     const r=await res.json();
     if(res.status===200){
       const canali=(r.canali_configurati||[]);
       m.className='msg ok';
-      m.innerHTML=`✅ ${r.post_generati} post generati · <b>${r.pubblicati}</b> pubblicati · ${r.saltati} saltati.<br>Canali: ${canali.join(', ')||'<b>nessuno</b> — configura TELEGRAM_*/META_* nel .env del server per pubblicare davvero'}.`;
+      m.innerHTML=`✅ ${r.post_generati} ${T('post_gen')} · <b>${r.pubblicati}</b> ${T('pubblicati')} · ${r.saltati} ${T('saltati')}<br>${T('canali')} ${canali.join(', ')||'<b>'+T('no_canale')+'</b>'}.`;
     } else { m.className='msg err'; m.textContent='❌ '+(r.errore||res.status); }
-  }catch(e){ m.className='msg err'; m.textContent='Errore: '+e.message; }
+  }catch(e){ m.className='msg err'; m.textContent=T('errore')+' '+e.message; }
 }
 document.getElementById('btnCampagna').onclick = pubblicaCampagna;
 document.getElementById('btnCarica').onclick = carica;
 async function cancellaHost(){
   const hid = document.getElementById('del_host').value.trim();
   const m = document.getElementById('msgCancella');
-  if(!hid){ m.style.color='#b00020'; m.textContent='Inserisci un host_id.'; return; }
-  if(!confirm('CANCELLAZIONE IRREVERSIBILE di tutti i dati di '+hid+'. Procedere?')) return;
-  m.style.color='#5e6f8d'; m.textContent='Cancellazione in corso…';
+  if(!hid){ m.style.color='#b00020'; m.textContent=T('ins_hid'); return; }
+  if(!confirm(T('conf_del')+' '+hid+'. '+T('proc'))) return;
+  m.style.color='#5e6f8d'; m.textContent=T('canc_corso');
   try{
     const res = await fetch(API+'/api/admin/cancella_attivita', {method:'POST',
       headers:{'Content-Type':'application/json','X-Admin-Key':key()},
@@ -140,27 +157,28 @@ async function cancellaHost(){
     const canc = Object.entries(d.cancellati||{}).map(([k,v])=>k+':'+v).join(', ');
     const res2 = Object.entries(d.residui||{}).map(([k,v])=>k+':'+v).join(', ');
     if(d.ok){ m.style.color='#155724';
-      m.innerHTML='✅ Cancellato OVUNQUE. Rimossi → '+canc+'<br>Verifica residui (tutti 0): '+res2; }
+      m.innerHTML=T('canc_ok')+' '+canc+'<br>'+T('verif_res')+' '+res2; }
     else { m.style.color='#b00020';
-      m.innerHTML='⚠️ Residui rimasti: '+res2+'<br>Rimossi → '+canc; }
-  }catch(e){ m.style.color='#b00020'; m.textContent='Errore di rete.'; }
+      m.innerHTML=T('res_rim')+' '+res2+'<br>'+T('rimossi')+' '+canc; }
+  }catch(e){ m.style.color='#b00020'; m.textContent=T('err_rete'); }
 }
 document.getElementById('btnCancellaHost').onclick = cancellaHost;
 
-// --- AUTOMATICO: chiave ricordata, auto-load all'apertura, su cambio chiave, ogni 60s ---
 const inp = document.getElementById('adminkey');
 let _t;
 function salvaECarica(){
   try{ localStorage.setItem(LS, inp.value); }catch(e){}
-  clearTimeout(_t); _t = setTimeout(carica, 400);   // debounce mentre si digita
+  clearTimeout(_t); _t = setTimeout(carica, 400);
 }
 inp.addEventListener('input', salvaECarica);
 inp.addEventListener('change', carica);
+document.getElementById('lang').onchange=e=>{LANG=e.target.value;try{localStorage.setItem('lang',LANG);}catch(_){}applica();};
+applica();
 window.addEventListener('DOMContentLoaded', ()=>{
   try{ const k = localStorage.getItem(LS); if(k){ inp.value = k; } }catch(e){}
-  if(inp.value) carica();                            // si carica DA SOLO se la chiave c'è
+  if(inp.value) carica();
 });
-setInterval(()=>{ if(inp.value && !document.hidden) carica(); }, 60000);  // refresh auto
+setInterval(()=>{ if(inp.value && !document.hidden) carica(); }, 60000);
 </script>
 </body>
 </html>
