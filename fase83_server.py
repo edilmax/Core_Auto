@@ -484,6 +484,42 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
     )
 
 
+def pagina_voucher_non_valido_html(lingua: str = "it") -> str:
+    """Pagina GENTILE quando un link voucher non è valido/scaduto/manomesso (invece di un
+    errore tecnico): rassicura e indirizza il cliente. Bilingue it/en."""
+    en = str(lingua).lower().startswith("en")
+    lng = "en" if en else "it"
+    tit = "Link not valid" if en else "Link non valido"
+    h1 = "This voucher link isn't valid" if en else "Questo link del voucher non è valido"
+    p1 = ("The link may be old, incomplete or expired." if en else
+          "Il link potrebbe essere vecchio, incompleto o scaduto.")
+    p2 = ("Please open the link from your latest confirmation email, "
+          "or contact us and we'll help right away." if en else
+          "Apri il link dall'ultima email di conferma che hai ricevuto, "
+          "oppure scrivici e ti aiutiamo subito.")
+    mail = "info@bookinvip.com"
+    home = "Back to BookinVIP" if en else "Torna su BookinVIP"
+    return (
+        "<!DOCTYPE html><html lang=\"%s\"><head><meta charset=\"UTF-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "<title>%s · BookinVIP</title><style>body{font-family:system-ui,-apple-system,"
+        "Segoe UI,sans-serif;background:#f4f6fb;color:#1e2b45;margin:0;min-height:100vh;"
+        "display:flex;align-items:center;justify-content:center;padding:1.2rem}"
+        ".c{background:#fff;border-radius:1.5rem;box-shadow:0 12px 40px rgba(20,40,80,.1);"
+        "padding:2.4rem 2rem;max-width:460px;text-align:center}"
+        ".logo{font-weight:800;font-size:1.4rem;color:#1e3c72;margin-bottom:1rem}"
+        ".i{width:74px;height:74px;border-radius:50%%;background:#fff4e5;color:#8a5200;"
+        "display:flex;align-items:center;justify-content:center;font-size:2.3rem;margin:0 auto 1rem}"
+        "h1{font-size:1.35rem;margin:.2rem 0 .6rem}p{color:#5e6f8d;line-height:1.6;margin:.4rem 0}"
+        "a.b{display:inline-block;margin-top:1.2rem;background:#1e3c72;color:#fff;"
+        "text-decoration:none;padding:.7rem 1.5rem;border-radius:2rem;font-weight:600}"
+        "a.m{color:#1e3c72;font-weight:600}</style></head><body><div class=\"c\">"
+        "<div class=\"logo\">BookinVIP</div><div class=\"i\">🔎</div><h1>%s</h1>"
+        "<p>%s</p><p>%s</p><p><a class=\"m\" href=\"mailto:%s\">%s</a></p>"
+        "<a class=\"b\" href=\"/\">%s</a></div></body></html>"
+    ) % (lng, tit, h1, p1, p2, mail, mail, home)
+
+
 class RouterHTTP:
     """Router PURO (testabile): cabla il SistemaCasaVIP (fase81) sulle rotte HTTP."""
 
@@ -2452,7 +2488,8 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 lng = query.get("lang", "it")
                 html = pagina_voucher_html(sistema, unquote(u.path[len("/voucher/"):]), lng)
                 if html is None:
-                    self._scrivi(404, {"errore": "voucher_non_valido"})
+                    # link non valido/scaduto -> pagina GENTILE (non un errore tecnico)
+                    self._testo(404, "text/html", pagina_voucher_non_valido_html(lng))
                 else:
                     self._testo(200, "text/html", html)
             elif u.path.startswith("/affitta/"):

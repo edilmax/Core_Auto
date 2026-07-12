@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guida operativa — BookinVIP</title>
+<style>
+  :root{--blu:#1e3c72;--blu2:#2a5298;--bg:#f4f6fb;--card:#fff;--tx:#1e2b45;--mut:#5e6f8d;--bd:#dce1ed;--verde:#155724;--rosso:#b00020;--giallo:#8a5200}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--tx);line-height:1.65}
+  .wrap{max-width:820px;margin:0 auto;padding:1.5rem 1.1rem 4rem}
+  h1{background:linear-gradient(135deg,var(--blu),var(--blu2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-size:1.9rem;margin:.2rem 0}
+  .sub{color:var(--mut);margin:0 0 1.4rem}
+  .card{background:var(--card);border-radius:1.1rem;box-shadow:0 6px 20px rgba(20,40,80,.06);border:1px solid var(--bd);padding:1.3rem 1.4rem;margin-bottom:1.2rem}
+  .card h2{font-size:1.2rem;margin:0 0 .6rem;display:flex;align-items:center;gap:.5rem}
+  ol{margin:.4rem 0 .2rem;padding-left:1.3rem}
+  ol li{margin:.35rem 0}
+  .tag{display:inline-block;font-size:.72rem;font-weight:700;padding:.15rem .6rem;border-radius:1rem;vertical-align:middle}
+  .t-blu{background:#e7eefb;color:var(--blu)}.t-verde{background:#e7f6ec;color:var(--verde)}.t-rosso{background:#fdecec;color:var(--rosso)}.t-giallo{background:#fff4e5;color:var(--giallo)}
+  .box{border-radius:.7rem;padding:.7rem .9rem;margin:.6rem 0;font-size:.92rem}
+  .box.v{background:#e7f6ec;color:var(--verde)}.box.g{background:#fff4e5;color:var(--giallo)}.box.r{background:#fdecec;color:var(--rosso)}
+  code{background:#eef2f7;padding:.1rem .4rem;border-radius:.4rem;font-size:.88rem}
+  .flow{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;font-size:.85rem;color:var(--mut);margin:.5rem 0}
+  .flow span{background:#f0f4fe;border-radius:.6rem;padding:.35rem .6rem;color:var(--blu);font-weight:600}
+  a{color:var(--blu);font-weight:600}
+  .print{margin-top:.6rem}
+  .print button{border:none;background:var(--blu);color:#fff;border-radius:2rem;padding:.55rem 1.2rem;font-weight:600;cursor:pointer}
+  @media print{.print{display:none}body{background:#fff}.card{box-shadow:none;border:1px solid #ccc}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📘 Guida operativa BookinVIP</h1>
+  <p class="sub">Cosa fare, passo per passo, quando succede qualcosa. Tienila a portata di mano.</p>
+  <div class="print"><button onclick="window.print()">🖨️ Stampa / Salva PDF</button></div>
+
+  <div class="card">
+    <h2>💰 Come girano i soldi (in breve)</h2>
+    <div class="flow"><span>Cliente paga</span>→<span>Soldi in garanzia</span>→<span>Cliente soggiorna</span>→<span>+24h o "OK"</span>→<span>Host pagato</span></div>
+    <p>Il cliente paga tutto sul <b>tuo conto Stripe</b>. La quota dell'host resta <b>bloccata in garanzia</b>: l'host la riceve <b>solo dopo il soggiorno</b> (quando il cliente conferma "tutto ok", oppure in automatico 24h dopo il check-in se nessuno segnala problemi).</p>
+    <div class="box v">✅ Vantaggio: quando serve un rimborso, i soldi sono <b>ancora da te</b> → semplice e sicuro.</div>
+  </div>
+
+  <div class="card">
+    <h2>🧳 Il CLIENTE cancella <span class="tag t-blu">frequente</span></h2>
+    <ol>
+      <li>Il cliente cancella <b>da solo</b> dal suo voucher. Non devi fare niente per liberare le date: si liberano da sole.</li>
+      <li>Il sistema <b>calcola l'importo del rimborso</b> secondo la politica di cancellazione (te lo mostra).</li>
+      <li>Vai su <b>Stripe → Pagamenti</b>, cerca il pagamento (per il <b>codice prenotazione</b>), e clicca <b>"Rimborsa"</b> di quell'importo.</li>
+    </ol>
+    <div class="box g">Manuale = più sicuro: controlli tu prima di ridare i soldi (blocca i furbi).</div>
+  </div>
+
+  <div class="card">
+    <h2>⚖️ CONTROVERSIA — il cliente segnala un problema <span class="tag t-giallo">delicato</span></h2>
+    <ol>
+      <li>Il cliente preme <b>"Segnala un problema"</b> sul voucher → i soldi restano <b>congelati</b>.</li>
+      <li>Senti <b>le due parti</b> (cliente e host) come preferisci (messaggi, telefono).</li>
+      <li>Apri il <b>pannello admin</b> (<code>/admin.html</code>) → sezione <b>"⚖️ Controversie"</b> → "Carica controversie".</li>
+      <li>Scegli la <b>% da rimborsare al cliente</b> (0–100). Il pannello ti mostra <b>subito</b> quanto va al cliente e quanto all'host.</li>
+      <li>Clicca <b>"Risolvi"</b> → la garanzia si sblocca con lo split deciso.</li>
+      <li>Esegui il <b>rimborso su Stripe</b> dell'importo deciso per il cliente.</li>
+    </ol>
+    <div class="box g">Esempi di split: colpa host → <b>100% al cliente</b> · disguido → <b>30/70</b> · reclamo infondato → <b>0% al cliente</b>.</div>
+  </div>
+
+  <div class="card">
+    <h2>🏠 L'HOST vuole annullare <span class="tag t-rosso">raro</span></h2>
+    <ol>
+      <li>L'host annulla dal suo pannello (sezione <b>"Annulla prenotazione"</b>), inserendo il codice.</li>
+      <li>Regola automatica (come Booking): <b>cliente rimborsato al 100%</b> + <b>host paga il 15% di penale</b>. Le date si liberano.</li>
+      <li>Tu esegui il <b>rimborso al cliente su Stripe</b> (100%). La penale la <b>trattieni</b> dal prossimo pagamento all'host.</li>
+    </ol>
+    <div class="box r">La penale serve a scoraggiare le cancellazioni: chi accetta una prenotazione la deve onorare.</div>
+  </div>
+
+  <div class="card">
+    <h2>💸 Pagare l'HOST la sua quota <span class="tag t-blu">dopo il soggiorno</span></h2>
+    <ol>
+      <li>Apri il <b>pannello host</b> o il tuo cruscotto: la <b>dashboard payout</b> ti dice, per ogni host, quanto ha <b>maturato</b> (soggiorni conclusi e confermati).</li>
+      <li>Fai un <b>bonifico</b> all'host dell'importo maturato (meno l'eventuale penale se ha cancellato).</li>
+      <li>Segna come pagato. (In futuro, con Stripe Connect, questo diventa automatico.)</li>
+    </ol>
+    <div class="box v">Ricorda: paghi l'host <b>solo dopo</b> che il soggiorno è confermato (garanzia sbloccata). Mai prima.</div>
+  </div>
+
+  <div class="card">
+    <h2>🔑 Come fare un rimborso su Stripe (pratico)</h2>
+    <ol>
+      <li>Vai su <b>dashboard.stripe.com</b> → <b>Pagamenti</b>.</li>
+      <li>Cerca il pagamento con il <b>codice prenotazione</b> (es. <code>BVIP-A5D6-60DF</code> → cerca <code>a5d6...</code>).</li>
+      <li>Apri il pagamento → <b>"Rimborsa"</b> → inserisci l'importo che il sistema ti ha indicato → conferma.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>📌 Regole d'oro</h2>
+    <ol>
+      <li><b>Non pagare mai l'host prima del soggiorno.</b> La garanzia esiste apposta.</li>
+      <li><b>Rimborsi sempre controllati da te</b> (mai automatici): eviti i furbi.</li>
+      <li>In una controversia, <b>senti sempre le due parti</b> prima di decidere lo split.</li>
+      <li>Il sistema fa i <b>conti esatti</b>: tu approvi ed esegui su Stripe.</li>
+    </ol>
+  </div>
+
+  <p style="color:var(--mut);font-size:.85rem;text-align:center">BookinVIP · guida operativa interna · <a href="/admin.html">Pannello admin</a> · <a href="/host.html">Pannello host</a></p>
+</div>
+</body>
+</html>
