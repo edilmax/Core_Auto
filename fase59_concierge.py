@@ -435,6 +435,7 @@ class ProtocolloConcierge:
             "alloggio_id": alloggio, "check_in": ci, "check_out": co,
             "prezzo_guest_cents": guest,         # int (quello firmato, immutabile)
             "netto_host_cents": dati.get("netto_host_cents", guest),   # l'host riceve QUESTO
+            "commissione_cents": dati.get("commissione_cents", 0),     # per scalare il credito referral
             "tassa_soggiorno_cents": dati.get("tassa_soggiorno_cents", 0),
             "totale_cents": dati.get("totale_cents", guest),   # soggiorno + tassa
             "valuta": dati.get("valuta", self._valuta),

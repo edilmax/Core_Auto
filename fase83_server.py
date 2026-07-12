@@ -1215,6 +1215,7 @@ class RouterHTTP:
             corpo_min = _j2.dumps({"netto_host_cents": corpo.get("netto_host_cents", 0),
                                    "prezzo_guest_cents": corpo.get("prezzo_guest_cents", 0),
                                    "totale_cents": corpo.get("totale_cents", 0),
+                                   "commissione_cents": corpo.get("commissione_cents", 0),
                                    "valuta": corpo.get("valuta", "EUR"),
                                    "host_id": host_id,
                                    "voucher_token": corpo.get("voucher_token", ""),
@@ -1267,6 +1268,9 @@ class RouterHTTP:
                 pd.registra_in_attesa(ref, host, netto, valuta)
             else:
                 pd.registra_maturato(ref, host, netto, valuta)
+                # conferma immediata (no Stripe): scala subito il credito referral dell'host
+                self._applica_credito_host(ref, host, corpo.get("commissione_cents", 0))
+                self._forse_qualifica_referral(host, pd)
         except Exception:
             logger.warning("registra payout fallito (ignorato)", exc_info=True)
 
@@ -1898,9 +1902,41 @@ class RouterHTTP:
                 pd.aggiorna_stato(rif, "maturato")        # in_attesa -> maturato (guadagno vero)
             # REFERRAL: se l'host di questa prenotazione è stato INVITATO e raggiunge la soglia
             # di prenotazioni pagate -> premia il referente (una volta sola, mai in perdita).
-            self._forse_qualifica_referral(rec.get("host_id") if isinstance(rec, dict) else None, pd)
+            hid_pag = rec.get("host_id") if isinstance(rec, dict) else None
+            # scala il credito referral dell'host sulla commissione di questa prenotazione
+            try:
+                import json as _jc
+                dj = _jc.loads(rec.get("corpo_json") or "{}") if isinstance(rec, dict) else {}
+            except Exception:
+                dj = {}
+            self._applica_credito_host(rif, hid_pag, dj.get("commissione_cents", 0))
+            self._forse_qualifica_referral(hid_pag, pd)
         except Exception:
             logger.warning("conferma pagamento/ledger tassa fallita (ignorata)", exc_info=True)
+
+    def _applica_credito_host(self, ref, host_id, commissione_cents):
+        """Scala il credito referral dell'host sulla commissione di questa prenotazione:
+        meno commissione paga l'host -> più incassa. Il credito è non-cashabile, si consuma qui.
+        Ritorna quanti cent sono stati scalati."""
+        try:
+            viral = getattr(self._sys, "viral", None)
+            pd = getattr(self._sys, "payout", None)
+            if viral is None or pd is None or not (isinstance(host_id, str) and host_id):
+                return 0
+            comm = commissione_cents if isinstance(commissione_cents, int) and \
+                not isinstance(commissione_cents, bool) and commissione_cents > 0 else 0
+            if comm <= 0:
+                return 0
+            res = viral.usa_credito(host_id, comm)
+            used = int(res.get("scontato_cents", 0)) if isinstance(res, dict) else 0
+            if used > 0:
+                pd.aumenta_payout(ref, used)         # commissione ridotta -> host incassa di più
+                logger.info("Credito referral scalato: host %s -%d di commissione su %s",
+                            host_id, used, ref)
+            return used
+        except Exception:
+            logger.warning("applicazione credito host fallita (ignorata)", exc_info=True)
+            return 0
 
     def _forse_qualifica_referral(self, host_id, pd):
         """Alla N-esima prenotazione pagata dell'invitato, premia chi l'ha invitato."""

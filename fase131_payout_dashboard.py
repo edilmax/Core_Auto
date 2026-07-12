@@ -174,6 +174,24 @@ class PayoutDashboard:
         finally:
             con.close()
 
+    def aumenta_payout(self, prenotazione_id: str, delta_cents: int) -> bool:
+        """Aumenta l'incasso dell'host per una prenotazione (es. credito referral scalato ->
+        meno commissione -> l'host riceve di più). delta>0. Idempotente NO: chiamare una volta."""
+        d = _pos(delta_cents)
+        if d <= 0:
+            return False
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("UPDATE payout SET minori=minori+?, ts=? WHERE prenotazione_id=?",
+                                  (d, self._now(), str(prenotazione_id)))
+            return bool(cur.rowcount)
+        except Exception:
+            logger.warning("aumenta_payout fallita (ISOLATA)", exc_info=True)
+            return False
+        finally:
+            con.close()
+
     def da_pagare(self, host_id: str, valuta: str) -> int:
         rie = self.riepilogo(host_id).get(str(valuta).upper(), {})
         return rie.get("maturato", 0) + rie.get("in_transito", 0)

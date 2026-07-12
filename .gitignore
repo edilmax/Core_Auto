@@ -1,6 +1,8 @@
 # --- Esclusioni Originali ---
 .env
 .env.casavip
+contatti/
+*_SEGRETI_*.bak
 config_assistente.json
 *.sqlite3
 *.db
