@@ -161,6 +161,19 @@ class PayoutDashboard:
         finally:
             con.close()
 
+    def conta_pagati(self, host_id: str) -> int:
+        """Quante prenotazioni PAGATE ha ricevuto l'host (stati maturato/in_transito/pagato).
+        Usato per la qualifica referral (l'invitato produce -> premio al referente)."""
+        con = self._apri()
+        try:
+            r = con.execute("SELECT COUNT(*) FROM payout WHERE host_id=? AND stato IN "
+                            "('maturato','in_transito','pagato')", (str(host_id),)).fetchone()
+            return int(r[0]) if r else 0
+        except Exception:
+            return 0
+        finally:
+            con.close()
+
     def da_pagare(self, host_id: str, valuta: str) -> int:
         rie = self.riepilogo(host_id).get(str(valuta).upper(), {})
         return rie.get("maturato", 0) + rie.get("in_transito", 0)

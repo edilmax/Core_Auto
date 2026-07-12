@@ -577,10 +577,11 @@ class TestSelfServiceHost(unittest.TestCase):
             {"email": "b@b.it", "password": "passwordlunga", "accetta_termini": True,
              "codice_referral": codice}))[1]
         self.assertTrue(b["referral"]["ok"])
-        self.assertGreater(b["referral"]["credito_cents"], 0)
-        # ora A ha credito
+        self.assertGreater(b["referral"]["credito_cents"], 0)   # B: credito di benvenuto al signup
+        # A NON prende credito al signup di B: lo riceve solo quando B si QUALIFICA (3 prenotazioni).
+        # Mai in perdita: prima l'invitato produce, poi il referente viene premiato.
         _, ref2 = self.r.gestisci("GET", "/api/host/referral", headers=ha)
-        self.assertGreater(ref2["credito_cents"], 0)
+        self.assertEqual(ref2["credito_cents"], 0)
 
     def test_registrazione_termini(self):
         s, c = self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(

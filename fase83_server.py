@@ -1896,8 +1896,30 @@ class RouterHTTP:
             pd = getattr(self._sys, "payout", None)
             if pd is not None:
                 pd.aggiorna_stato(rif, "maturato")        # in_attesa -> maturato (guadagno vero)
+            # REFERRAL: se l'host di questa prenotazione è stato INVITATO e raggiunge la soglia
+            # di prenotazioni pagate -> premia il referente (una volta sola, mai in perdita).
+            self._forse_qualifica_referral(rec.get("host_id") if isinstance(rec, dict) else None, pd)
         except Exception:
             logger.warning("conferma pagamento/ledger tassa fallita (ignorata)", exc_info=True)
+
+    def _forse_qualifica_referral(self, host_id, pd):
+        """Alla N-esima prenotazione pagata dell'invitato, premia chi l'ha invitato."""
+        try:
+            viral = getattr(self._sys, "viral", None)
+            cfg = getattr(self._sys, "config", None)
+            if viral is None or pd is None or cfg is None or not (isinstance(host_id, str) and host_id):
+                return
+            soglia = getattr(cfg, "referral_soglia_prenotazioni", 3)
+            premio = getattr(cfg, "referral_premio_cents", 4000)
+            # scatta ESATTAMENTE alla soglia (una volta): il conteggio è già aggiornato a 'maturato'
+            if pd.conta_pagati(host_id) == max(1, int(soglia)):
+                out = viral.qualifica_referee(host_id, premio_cents=int(premio))
+                if out.get("ok"):
+                    logger.info("Referral qualificato: host %s ha raggiunto %d prenotazioni -> "
+                                "premio %d al referente %s", host_id, soglia, premio,
+                                out.get("referente_id"))
+        except Exception:
+            logger.warning("qualifica referral fallita (ignorata)", exc_info=True)
 
     def _mcp(self, body):
         if self._sys.mcp is None:

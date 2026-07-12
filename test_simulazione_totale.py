@@ -391,6 +391,40 @@ class TestSimulazioneTotale(unittest.TestCase):
         s, lst2 = self.g("GET", "/api/admin/controversie", headers=self.AK)
         self.assertNotIn(rif, [x["prenotazione_id"] for x in lst2["controversie"]])
 
+    def test_15_referral_premio_dopo_3_prenotazioni(self):
+        # A invita B (B riceve €10 benvenuto, A €0). Solo quando B riceve 3 prenotazioni PAGATE
+        # -> A riceve €40. Mai in perdita: prima B produce, poi A viene premiato.
+        import urllib.parse as _u
+        aid, atok, _ = self._registra_host(80)
+        s, link = self.g("GET", "/api/host/referral", headers={"X-Host-Token": atok},
+                         query={"host_id": aid})
+        self.assertEqual(s, 200)
+        code = _u.parse_qs(_u.urlparse(link["link"]).query).get("ref", [""])[0]
+        self.assertTrue(code)
+        # B si iscrive col codice di A
+        s, b = self.g("POST", "/api/host/registrazione",
+                      {"email": "refB@sim.it", "password": "password1",
+                       "accetta_termini": True, "accetta_clausole": True,
+                       "doc_sha256": doc_sha256(), "codice_referral": code})
+        self.assertEqual(s, 201)
+        bid, btok = b["host_id"], b["token"]
+        self.assertEqual(b["referral"]["credito_cents"], 1000)      # B: €10 benvenuto
+        self.assertEqual(self.sis.viral.credito_disponibile(aid), 0)   # A: €0 al signup
+        self._pubblica(btok, bid, "casa-refB", prezzo=10000)
+        # 3 clienti prenotano+pagano l'alloggio di B
+        for i, (ci, co) in enumerate([("2026-09-03", "2026-09-04"), ("2026-09-06", "2026-09-07"),
+                                      ("2026-09-09", "2026-09-10")]):
+            s, q = self._quote("casa-refB", ci=ci, co=co, party=1)
+            self.assertEqual(s, 200, q)
+            s, bk = self.g("POST", "/api/concierge/book",
+                           {"quote_token": q["quote_token"], "email": f"g{i}@sim.it"})
+            self._webhook_pagato(bk["riferimento"])
+            got = self.sis.viral.credito_disponibile(aid)
+            if i < 2:
+                self.assertEqual(got, 0, f"A premiato troppo presto ({i+1} prenotazioni)")
+            else:
+                self.assertEqual(got, 4000, "A doveva ricevere €40 alla 3a prenotazione di B")
+
     def test_12_no_overbooking(self):
         # due clienti sulle STESSE date: il secondo NON deve poter tenere la stanza pagata del primo
         h = type(self).hosts[6]

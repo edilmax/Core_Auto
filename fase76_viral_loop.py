@@ -186,6 +186,47 @@ class ViralLoopEngine:
         finally:
             con.close()
 
+    def qualifica_referee(self, referee_id: Any, *, premio_cents: int,
+                          tipo: str = "host") -> Dict[str, Any]:
+        """L'invitato (referee) ha raggiunto la soglia di prenotazioni -> premia il REFERENTE
+        con `premio_cents`, UNA SOLA VOLTA. Mai in perdita: il premio scatta solo dopo che
+        l'invitato ha già prodotto (chiamato a valle del conteggio prenotazioni)."""
+        if not (isinstance(referee_id, str) and referee_id.strip()) or \
+                not _intero_pos(premio_cents):
+            return {"ok": False, "motivo": "input_non_valido"}
+        motivo = "referral_qualifica:" + str(referee_id)
+        ora = self._now()
+        scad = ora + self._validita
+        con = self._apri()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            ev = con.execute("SELECT codice FROM referral_eventi WHERE referee_id=? AND tipo=?",
+                             (str(referee_id), tipo)).fetchone()
+            if ev is None:
+                con.execute("ROLLBACK")
+                return {"ok": False, "motivo": "non_referito"}      # non arrivato da un invito
+            gia = con.execute("SELECT 1 FROM crediti WHERE motivo=?", (motivo,)).fetchone()
+            if gia is not None:
+                con.execute("ROLLBACK")
+                return {"ok": False, "motivo": "gia_qualificato"}    # premio già dato (dedup)
+            rec = con.execute("SELECT referente_id FROM referral_codici WHERE codice=?",
+                              (ev["codice"],)).fetchone()
+            referente = rec["referente_id"] if rec is not None else ""
+            if not referente:
+                con.execute("ROLLBACK")
+                return {"ok": False, "motivo": "referente_ignoto"}
+            self._accredita(con, referente, int(premio_cents), scad, ora, motivo)
+            con.execute("COMMIT")
+            return {"ok": True, "referente_id": referente, "premio_cents": int(premio_cents)}
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
+        finally:
+            con.close()
+
     @staticmethod
     def _accredita(con: sqlite3.Connection, utente: str, importo: int, scad: int,
                    ora: int, motivo: str) -> None:

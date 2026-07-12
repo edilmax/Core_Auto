@@ -50,6 +50,10 @@ class ConfigCasaVIP:
     commissione_bps: int = 1000         # commissione CORE marketplace in basis-point: 10% a regime
     promo_lancio_attiva: bool = False   # rampa di lancio 0%->8%->10% per anzianità host (land-grab; attivare al go-live)
     psp_bps: int = 0                    # costo carta a carico HOST (bps); default 0, la PROD lo mette a 300 (3%) via main
+    # Referral host-porta-host: premio al referente SOLO dopo che l'invitato produce (mai in perdita)
+    referral_benvenuto_cents: int = 1000        # €10 di benvenuto al nuovo host all'iscrizione
+    referral_premio_cents: int = 4000           # €40 al referente quando l'invitato si qualifica
+    referral_soglia_prenotazioni: int = 3       # l'invitato si qualifica dopo 3 prenotazioni pagate
     stripe_secret_key: str = ""        # gated: se vuoto, niente link di pagamento
     stripe_success_url: str = ""
     stripe_cancel_url: str = ""
@@ -242,7 +246,10 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     viral = None
     if cfg.con_viral:
         from fase76_viral_loop import crea_viral_loop
-        viral = crea_viral_loop(cfg.db_viral, bytes(cfg.segreto_hmac))
+        # signup: €10 al NUOVO host (referee), €0 al referente (che prende €40 alla QUALIFICA)
+        viral = crea_viral_loop(cfg.db_viral, bytes(cfg.segreto_hmac),
+                                credito_referente_cents=0,
+                                credito_referee_cents=cfg.referral_benvenuto_cents)
         componenti.append("viral(76)")
 
     # 3f-bis) messaggistica host-guest (thread per prenotazione, mascheramento PII)
