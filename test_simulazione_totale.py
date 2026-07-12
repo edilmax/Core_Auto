@@ -337,6 +337,31 @@ class TestSimulazioneTotale(unittest.TestCase):
         s, c = self.g("POST", "/api/domanda", {"email": "vuoi@sim.it", "citta": "Milano"})
         self.assertIn(s, (200, 201))
 
+    def test_13_host_cancella_con_penale(self):
+        # l'host annulla una prenotazione PAGATA: cliente rimborsato 100%, host paga penale 15%,
+        # date liberate (ri-prenotabili). Come Booking/Airbnb.
+        h = type(self).hosts[7]                            # immediata, flessibile
+        s, q = self._quote(h["slug"], ci="2026-10-25", co="2026-10-27")
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "cliente9@sim.it"})
+        rif = b["riferimento"]
+        guest = q["totale_cents"]
+        self._webhook_pagato(rif)                          # pagata
+        s, canc = self.g("POST", "/api/host/cancella", {"riferimento": rif},
+                         {"X-Host-Token": h["tok"]})
+        self.assertEqual(s, 200, canc)
+        self.assertEqual(canc["stato"], "cancellata_host")
+        self.assertEqual(canc["rimborso_cliente_cents"], guest)     # cliente rimborsato 100%
+        self.assertEqual(canc["penale_host_cents"], guest * 15 // 100)  # penale 15% all'host
+        # date di nuovo prenotabili
+        s, q2 = self._quote(h["slug"], ci="2026-10-25", co="2026-10-27")
+        self.assertTrue(q2.get("quote_token"))
+        # non è la prenotazione di un altro host
+        altro = type(self).hosts[8]
+        s, r = self.g("POST", "/api/host/cancella", {"riferimento": rif},
+                      {"X-Host-Token": altro["tok"]})
+        self.assertIn(s, (403, 409))                       # non tua / già cancellata
+
     def test_12_no_overbooking(self):
         # due clienti sulle STESSE date: il secondo NON deve poter tenere la stanza pagata del primo
         h = type(self).hosts[6]

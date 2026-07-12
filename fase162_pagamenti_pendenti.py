@@ -192,6 +192,31 @@ class PagamentiPendenti:
         finally:
             con.close()
 
+    def marca_cancellata_host(self, riferimento: Any, penale_cents: int = 0) -> bool:
+        """L'host ha annullato: marca 'cancellata_host' e registra la penale nel corpo_json."""
+        if not (isinstance(riferimento, str) and riferimento):
+            return False
+        con = self._apri()
+        try:
+            with con:
+                r = con.execute("SELECT corpo_json FROM pendenti WHERE riferimento=?",
+                                (riferimento,)).fetchone()
+                cj = {}
+                if r and r["corpo_json"]:
+                    try:
+                        import json as _j
+                        cj = _j.loads(r["corpo_json"])
+                    except Exception:
+                        cj = {}
+                cj["penale_host_cents"] = int(penale_cents) if isinstance(penale_cents, int) else 0
+                import json as _j2
+                cur = con.execute(
+                    "UPDATE pendenti SET stato='cancellata_host', corpo_json=? WHERE riferimento=?",
+                    (_j2.dumps(cj), riferimento))
+            return bool(cur.rowcount)
+        finally:
+            con.close()
+
     def pulisci_vecchi(self, *, eta_sec: int = 3600, ora_ts: Optional[int] = None) -> int:
         """Elimina i record 'scaduto'/'rimborsato' più vecchi di eta_sec (default 1h, ben oltre
         i 30 min di vita del link Stripe): housekeeping. Ritorna quanti rimossi."""

@@ -384,6 +384,10 @@ def genera_csv_prenotazioni(righe: Any) -> str:
 # lungo e inutile. Riattivare (True) quando esisterà una vera serratura/QR per l'ospite.
 MOSTRA_PASS_SERRATURA = False
 
+# Penale a carico dell'HOST se annulla una prenotazione già pagata (deterrente, come i colossi):
+# 15% del valore. Il cliente è comunque rimborsato al 100%.
+PENALE_HOST_BPS = 1500
+
 
 def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optional[str]:
     """Voucher di conferma (server-rendered, stampabile, multilingua). Verifica la firma
@@ -606,6 +610,8 @@ class RouterHTTP:
             return self._host_accettazioni(query, headers)
         if metodo == "POST" and path == "/api/host/stato":
             return self._host_stato(body, headers)
+        if metodo == "POST" and path == "/api/host/cancella":
+            return self._host_cancella(body, headers)
         if metodo == "GET" and path == "/api/admin/prenotazioni":
             return self._admin_prenotazioni(query, headers)
         if metodo == "POST" and path == "/api/admin/rimborso":
@@ -1088,6 +1094,8 @@ class RouterHTTP:
             import json as _j2
             # salvo i dati minimi per gestire un pagamento TARDIVO (re-blocco + payout) in sicurezza
             corpo_min = _j2.dumps({"netto_host_cents": corpo.get("netto_host_cents", 0),
+                                   "prezzo_guest_cents": corpo.get("prezzo_guest_cents", 0),
+                                   "totale_cents": corpo.get("totale_cents", 0),
                                    "valuta": corpo.get("valuta", "EUR"),
                                    "host_id": host_id})
             pp.registra(ref, alloggio_id=allog, check_in=ci, check_out=co, idem_key=idem,
@@ -1140,6 +1148,65 @@ class RouterHTTP:
                 pd.registra_maturato(ref, host, netto, valuta)
         except Exception:
             logger.warning("registra payout fallito (ignorato)", exc_info=True)
+
+    def _host_cancella(self, body, headers):
+        """L'HOST annulla una prenotazione. Come i colossi (Booking/Airbnb): è colpa dell'host,
+        quindi il CLIENTE è rimborsato al 100% e l'HOST paga una PENALE (deterrente contro le
+        cancellazioni: se accetti una prenotazione la devi onorare). Le date si liberano."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        ref = dati.get("riferimento")
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        if pp is None or not (isinstance(ref, str) and ref):
+            return 400, {"errore": "riferimento_mancante"}
+        rec = pp.info(ref)
+        if rec is None:
+            return 404, {"errore": "prenotazione_non_trovata"}
+        host_id = self._host_id_da_token(headers) or dati.get("host_id")
+        if rec.get("host_id") and host_id and rec["host_id"] != host_id:
+            return 403, {"errore": "non_tua"}       # solo il proprietario può cancellare la sua
+        if rec.get("stato") in ("cancellata_host", "rimborsato"):
+            return 409, {"errore": "gia_cancellata"}
+        import json as _j
+        try:
+            dj = _j.loads(rec.get("corpo_json") or "{}")
+        except Exception:
+            dj = {}
+        guest = int(dj.get("totale_cents", 0)) or int(dj.get("prezzo_guest_cents", 0))
+        valuta = dj.get("valuta", "EUR")
+        pagata = rec.get("stato") == "pagato"
+        # PENALE host = 15% del valore prenotazione (solo se il cliente aveva PAGATO: se non
+        # aveva ancora pagato, nessun danno al cliente -> nessuna penale).
+        from fase98_policy_commissione import commissione_cents
+        penale = commissione_cents(guest, PENALE_HOST_BPS) if pagata else 0
+        try:
+            self._sys.inventario.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"],
+                                          idem_key=(rec.get("idem_key") or ("hcanc_" + ref)))
+        except Exception:
+            logger.warning("host cancella: rilascio date fallito (ignorato)", exc_info=True)
+        pd = getattr(self._sys, "payout", None)
+        if pd is not None:
+            pd.rimuovi(ref)                          # l'host non incassa (il cliente è rimborsato)
+        gz = getattr(self._sys, "garanzia", None)
+        if gz is not None:
+            try:
+                gz.annulla(ref)
+            except Exception:
+                pass
+        try:
+            pp.marca_cancellata_host(ref, penale)
+        except Exception:
+            logger.warning("host cancella: marcatura fallita (ignorata)", exc_info=True)
+        logger.info("HOST ha cancellato %s: cliente rimborso %d, penale host %d %s",
+                    ref, guest if pagata else 0, penale, valuta)
+        return 200, {"stato": "cancellata_host", "riferimento": ref,
+                     "rimborso_cliente_cents": (guest if pagata else 0),
+                     "penale_host_cents": penale, "valuta": valuta,
+                     "nota": ("cliente rimborsato al 100%; penale a carico host; date liberate"
+                              if pagata else "cliente non aveva pagato: nessuna penale; date liberate")}
 
     def _payout_trattieni(self, rif):
         """Prenotazione cancellata -> il payout atteso passa a 'trattenuto' (l'host non vede piu'
