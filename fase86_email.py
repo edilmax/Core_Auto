@@ -108,3 +108,25 @@ def corpo_voucher_html(titolo_alloggio: str, codice: str, check_in: str,
         "<p style=\"color:#5e6f8d;font-size:.85rem\">Conserva questa email: mostra il codice "
         "(e il PIN) all'arrivo. Dal voucher puoi vedere o annullare la prenotazione.</p></div>"
     ) % (e(titolo_alloggio), e(codice), blocco_pin, e(check_in), e(check_out), link)
+
+
+def corpo_promemoria_checkin_html(titolo_alloggio: str, voucher_url: str) -> str:
+    """Email post-check-in: 'com'è andata?'. Se tutto ok, il cliente non deve fare nulla
+    (l'host viene pagato). Se c'è un problema, lo segnala ENTRO 24h dal voucher. XSS-safe."""
+    import html
+    e = html.escape
+    link = ('<p><a href="%s" style="background:#1e3c72;color:#fff;padding:.6rem 1.2rem;'
+            'border-radius:8px;text-decoration:none">Apri il voucher</a></p>'
+            % e(voucher_url)) if voucher_url else ""
+    return (
+        "<div style=\"font-family:sans-serif;max-width:480px\">"
+        "<h2 style=\"color:#1e3c72\">BookinVIP - Com'è andata?</h2>"
+        "<p>Ciao! Speriamo che il tuo soggiorno a <strong>%s</strong> stia andando bene.</p>"
+        "<p style=\"background:#e7f6ec;border-radius:10px;padding:.7rem 1rem;color:#155724\">"
+        "✅ <strong>Se è tutto come descritto, non devi fare nulla.</strong></p>"
+        "<p style=\"background:#fff4e5;border-radius:10px;padding:.7rem 1rem;color:#8a5200\">"
+        "⚠️ <strong>Se c'è un problema, segnalalo ENTRO 24 ore</strong> dall'arrivo, dal tuo "
+        "voucher (pulsante \"Segnala un problema\"). Passate le 24h senza segnalazioni, il "
+        "soggiorno è considerato regolare.</p>%s"
+        "<p style=\"color:#5e6f8d;font-size:.82rem\">Grazie per aver scelto BookinVIP.</p></div>"
+    ) % (e(titolo_alloggio), link)

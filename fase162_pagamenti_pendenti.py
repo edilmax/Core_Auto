@@ -61,12 +61,17 @@ class PagamentiPendenti:
                     host_id TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '',
                     quote_token TEXT NOT NULL DEFAULT '', corpo_json TEXT NOT NULL DEFAULT '',
                     scadenza_ts INTEGER NOT NULL, stato TEXT NOT NULL DEFAULT 'in_attesa',
+                    promemoria_ts INTEGER NOT NULL DEFAULT 0,
                     creato_ts INTEGER NOT NULL)""")
                 for _c in ("host_id", "email", "quote_token", "corpo_json"):
                     try:
                         con.execute("ALTER TABLE pendenti ADD COLUMN %s TEXT NOT NULL DEFAULT ''" % _c)
                     except sqlite3.OperationalError:
                         pass
+                try:      # colonna INTEGER separata (promemoria check-in inviato)
+                    con.execute("ALTER TABLE pendenti ADD COLUMN promemoria_ts INTEGER NOT NULL DEFAULT 0")
+                except sqlite3.OperationalError:
+                    pass
         finally:
             con.close()
 
@@ -228,6 +233,37 @@ class PagamentiPendenti:
                     "DELETE FROM pendenti WHERE stato IN ('scaduto','rimborsato') AND creato_ts<?",
                     (ora - max(60, int(eta_sec)),))
             return cur.rowcount
+        finally:
+            con.close()
+
+    def da_promemoriare(self, *, oggi: str, limit: int = 200) -> List[Dict[str, Any]]:
+        """Prenotazioni PAGATE il cui check-in è arrivato (check_in <= oggi) e a cui non è
+        ancora stato inviato il promemoria (promemoria_ts=0) e con email presente. Per il
+        promemoria post-check-in ('tutto ok? / segnala un problema entro 24h')."""
+        if not (isinstance(oggi, str) and oggi):
+            return []
+        lim = limit if isinstance(limit, int) and not isinstance(limit, bool) \
+            and 0 < limit <= 500 else 200
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT * FROM pendenti WHERE stato='pagato' AND check_in<=? "
+                "AND promemoria_ts=0 AND email!='' ORDER BY check_in LIMIT ?",
+                (oggi, lim)).fetchall()
+            return [self._riga(r) for r in righe]
+        finally:
+            con.close()
+
+    def segna_promemoria(self, riferimento: Any, ts: Optional[int] = None) -> bool:
+        if not (isinstance(riferimento, str) and riferimento):
+            return False
+        t = ts if isinstance(ts, int) and not isinstance(ts, bool) else self._now()
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("UPDATE pendenti SET promemoria_ts=? WHERE riferimento=?",
+                                  (t, riferimento))
+            return bool(cur.rowcount)
         finally:
             con.close()
 

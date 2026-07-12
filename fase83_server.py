@@ -1069,7 +1069,8 @@ class RouterHTTP:
         self._avvisa_host_prenotazione(allog, ref, ci, co, corpo.get("fonte", ""))
         self._apri_garanzia(ref, corpo.get("netto_host_cents", 0), allog, ci)
         self._registra_payout(ref, allog, corpo)
-        self._registra_hold(corpo, allog, ref, ci, co, dati.get("quote_token", ""))
+        self._registra_hold(corpo, allog, ref, ci, co, dati.get("quote_token", ""),
+                            dati.get("email", ""))
         return corpo
 
     def _registra_richiesta(self, corpo, dati):
@@ -1147,7 +1148,7 @@ class RouterHTTP:
         pp.rimuovi(ref)
         return 200, {"stato": "rifiutata", "riferimento": ref}
 
-    def _registra_hold(self, corpo, allog, ref, ci, co, qt):
+    def _registra_hold(self, corpo, allog, ref, ci, co, qt, email=""):
         if not corpo.get("payment_url"):
             return
         try:
@@ -1168,14 +1169,22 @@ class RouterHTTP:
                 host_id = ""
             import json as _j2
             # salvo i dati minimi per gestire un pagamento TARDIVO (re-blocco + payout) in sicurezza
+            titolo = allog
+            try:
+                _d = self._sys.catalogo.dettaglio(allog)
+                titolo = (_d.get("titolo") if isinstance(_d, dict) else None) or allog
+            except Exception:
+                titolo = allog
             corpo_min = _j2.dumps({"netto_host_cents": corpo.get("netto_host_cents", 0),
                                    "prezzo_guest_cents": corpo.get("prezzo_guest_cents", 0),
                                    "totale_cents": corpo.get("totale_cents", 0),
                                    "valuta": corpo.get("valuta", "EUR"),
-                                   "host_id": host_id})
+                                   "host_id": host_id,
+                                   "voucher_token": corpo.get("voucher_token", ""),
+                                   "titolo": titolo})
             pp.registra(ref, alloggio_id=allog, check_in=ci, check_out=co, idem_key=idem,
                         tassa_cents=corpo.get("tassa_soggiorno_cents", 0), comune=comune,
-                        host_id=host_id, corpo_json=corpo_min)
+                        host_id=host_id, email=str(email or ""), corpo_json=corpo_min)
             corpo["stato"] = "in_attesa_pagamento"   # confermata SOLO dopo il webhook di pagamento
         except Exception:
             logger.warning("registrazione hold pagamento fallita (ignorata)", exc_info=True)
@@ -2560,5 +2569,38 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     logger.warning("sweep hold fallito (ignorato)", exc_info=True)
                 __import__("time").sleep(120)
         _th2.Thread(target=_tick_hold, daemon=True).start()
+
+    # PROMEMORIA post-check-in al cliente ('tutto ok? / segnala un problema entro 24h'):
+    # aumenta la fiducia e dà al cliente il momento chiaro per agire prima dell'auto-rilascio.
+    email_prov = getattr(sistema, "email_provider", None)
+    if pp is not None and email_prov is not None:
+        import threading as _th3, datetime as _dt3, json as _j3
+
+        def _tick_promemoria():
+            base = getattr(getattr(sistema, "config", None), "base_url", "") or "https://bookinvip.com"
+            while True:
+                try:
+                    oggi = _dt3.date.today().isoformat()
+                    for rec in pp.da_promemoriare(oggi=oggi):
+                        try:
+                            dj = _j3.loads(rec.get("corpo_json") or "{}")
+                        except Exception:
+                            dj = {}
+                        vt = dj.get("voucher_token", "")
+                        vurl = (base + "/voucher/" + vt) if vt else ""
+                        titolo = dj.get("titolo") or rec.get("alloggio_id", "")
+                        try:
+                            from fase86_email import corpo_promemoria_checkin_html
+                            html = corpo_promemoria_checkin_html(titolo, vurl)
+                            email_prov.invia(rec.get("email", ""),
+                                             "BookinVIP - Com'è andata? (24h per segnalare problemi)",
+                                             html)
+                        except Exception:
+                            logger.warning("invio promemoria fallito (ignorato)", exc_info=True)
+                        pp.segna_promemoria(rec["riferimento"])
+                except Exception:
+                    logger.warning("sweep promemoria fallito (ignorato)", exc_info=True)
+                __import__("time").sleep(3600)     # ogni ora
+        _th3.Thread(target=_tick_promemoria, daemon=True).start()
 
     srv.serve_forever()
