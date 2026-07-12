@@ -25,7 +25,7 @@ import re
 import unicodedata
 from typing import Dict, List, Optional, Sequence, Tuple
 
-LINGUE = ("it", "en", "es", "fr", "de")
+LINGUE = ("it", "en", "es", "fr", "de", "pt", "ja", "zh")
 
 # Città-seme: mercati ampi (incl. dove l'outbound è legale, ma l'inbound è globale).
 CITTA_SEED = (
@@ -148,6 +148,47 @@ _T: Dict[str, Dict[str, str]] = {
         "rel": "Vermieten in anderen Städten",
         "faqh": "Häufige Fragen",
     },
+    "pt": {
+        "title": "Alugue o seu imóvel em {citta} sem comissões altas | BookinVIP",
+        "desc": "Anfitriões em {citta}: pare de dar {ota}% ao Booking/Airbnb. Com a BookinVIP "
+                "paga apenas {noi}% e fica com mais em cada reserva. Grátis, self-service.",
+        "h1": "Aluga em {citta}? Fique com mais em cada noite.",
+        "intro": "As OTA ficam com até {ota}% — muitas vezes com clientes que já são SEUS "
+                 "(boca a boca, Instagram, recorrentes). A BookinVIP cobra {noi}% e dá-lhe site "
+                 "de reservas, pagamento, voucher e check-in automático — grátis.",
+        "calc": "Numa noite de €{prezzo}: com a OTA fica com €{netto_ota}, connosco €{netto_noi} "
+                "→ <b>+€{risparmio} por noite</b>.",
+        "cta": "Publique o seu alojamento grátis",
+        "rel": "Alugueres noutras cidades",
+        "faqh": "Perguntas frequentes",
+    },
+    "ja": {
+        "title": "{citta}で高い手数料なしに貸し出す | BookinVIP",
+        "desc": "{citta}のホストの皆様：Booking/Airbnbに{ota}%を払うのはやめましょう。BookinVIPなら"
+                "手数料は{noi}%だけ、予約ごとに手元に多く残ります。無料・セルフサービス。",
+        "h1": "{citta}で貸していますか？1泊ごとに手元に多く残しましょう。",
+        "intro": "OTAは最大{ota}%を取ります——多くは口コミ・Instagram・リピーターなど、すでに"
+                 "あなたの顧客からです。BookinVIPの手数料は{noi}%で、予約サイト・決済・バウチャー・"
+                 "セルフチェックインが無料で使えます。",
+        "calc": "1泊€{prezzo}の場合：OTAでは手元に€{netto_ota}、当社なら€{netto_noi} "
+                "→ <b>+€{risparmio}/泊</b>。",
+        "cta": "無料で掲載する",
+        "rel": "他の都市で貸す",
+        "faqh": "よくある質問",
+    },
+    "zh": {
+        "title": "在{citta}出租，无高额佣金 | BookinVIP",
+        "desc": "{citta}的房东：不要再把{ota}%交给Booking/Airbnb。用BookinVIP只需支付{noi}%，"
+                "每笔预订留存更多。免费、自助。",
+        "h1": "在{citta}出租？每晚留存更多。",
+        "intro": "OTA最高抽取{ota}%——往往还是你自己的客户（口碑、Instagram、回头客）。"
+                 "BookinVIP只收{noi}%，并免费提供预订网站、支付、凭证和自助入住。",
+        "calc": "以每晚€{prezzo}为例：通过OTA你留存€{netto_ota}，通过我们€{netto_noi} "
+                "→ <b>每晚+€{risparmio}</b>。",
+        "cta": "免费发布你的房源",
+        "rel": "在其他城市出租",
+        "faqh": "常见问题",
+    },
 }
 
 _FAQ: Dict[str, List[Tuple[str, str]]] = {
@@ -181,6 +222,23 @@ _FAQ: Dict[str, List[Tuple[str, str]]] = {
             "importieren, Daten bleiben synchron, keine Überbuchung."),
            ("Wie werde ich bezahlt?", "Über sichere Zahlung; Sie erhalten einen signierten "
             "Voucher, der zugleich der Self-Check-in-Schlüssel ist. Voll automatisch.")],
+    "pt": [("Quanto custa a BookinVIP?", "Publicar é grátis. Paga apenas uma comissão de "
+            "{noi}% por reserva — abaixo dos {ota}% das grandes OTA."),
+           ("Tenho de deixar o Booking/Airbnb?", "Não. Use em paralelo: importa o calendário "
+            "iCal e as datas ficam sincronizadas, sem overbooking."),
+           ("Como recebo os pagamentos?", "Por pagamento seguro; recebe um voucher assinado "
+            "que é também a chave do check-in automático. Tudo automático.")],
+    "ja": [("BookinVIPの利用料は？", "掲載は無料です。予約ごとに{noi}%の手数料のみ——"
+            "大手OTAの{ota}%より低い料金です。"),
+           ("Booking/Airbnbをやめる必要は？", "いいえ。併用できます：iCalカレンダーを取り込めば"
+            "日程は同期され、ダブルブッキングを防ぎます。"),
+           ("支払いはどう受け取りますか？", "安全な決済を通じて。署名付きバウチャー"
+            "（セルフチェックインの鍵も兼ねる）を受け取ります。すべて自動です。")],
+    "zh": [("使用BookinVIP要多少钱？", "发布免费。每笔预订只需支付{noi}%的佣金——"
+            "低于大型OTA的{ota}%。"),
+           ("我必须离开Booking/Airbnb吗？", "不必。可同时使用：导入iCal日历，日期自动同步，"
+            "避免超额预订。"),
+           ("我如何收款？", "通过安全支付；你会收到签名凭证，它也是自助入住的钥匙。全部自动。")],
 }
 
 
@@ -239,6 +297,13 @@ def genera_landing_host(citta: str, *, lingua: str = "it", base_url: str = "",
         + "<title>" + fmt(t["title"]) + "</title>"
         + "<meta name=\"description\" content=\"" + fmt(t["desc"]) + "\">"
         + "<link rel=\"canonical\" href=\"" + e(canonical) + "\">"
+        # hreflang: la stessa pagina in tutte le lingue -> Google la posiziona in ogni Paese
+        + "".join(
+            "<link rel=\"alternate\" hreflang=\"%s\" href=\"%s\">"
+            % (L, e(base + "/affitta/" + slug + ("" if L == "it" else "?lang=" + L)))
+            for L in _T)
+        + "<link rel=\"alternate\" hreflang=\"x-default\" href=\""
+        + e(base + "/affitta/" + slug) + "\">"
         + "<meta property=\"og:title\" content=\"" + fmt(t["title"]) + "\">"
         + "<meta property=\"og:type\" content=\"website\">"
         + "<script type=\"application/ld+json\">"
