@@ -1080,8 +1080,19 @@ class RouterHTTP:
             except Exception:
                 pass
             idem = qt.split(".")[-1] if isinstance(qt, str) and qt else ""
+            host_id = ""
+            try:
+                host_id = self._sys.catalogo.host_di_alloggio(allog) or ""
+            except Exception:
+                host_id = ""
+            import json as _j2
+            # salvo i dati minimi per gestire un pagamento TARDIVO (re-blocco + payout) in sicurezza
+            corpo_min = _j2.dumps({"netto_host_cents": corpo.get("netto_host_cents", 0),
+                                   "valuta": corpo.get("valuta", "EUR"),
+                                   "host_id": host_id})
             pp.registra(ref, alloggio_id=allog, check_in=ci, check_out=co, idem_key=idem,
-                        tassa_cents=corpo.get("tassa_soggiorno_cents", 0), comune=comune)
+                        tassa_cents=corpo.get("tassa_soggiorno_cents", 0), comune=comune,
+                        host_id=host_id, corpo_json=corpo_min)
             corpo["stato"] = "in_attesa_pagamento"   # confermata SOLO dopo il webhook di pagamento
         except Exception:
             logger.warning("registrazione hold pagamento fallita (ignorata)", exc_info=True)
@@ -1640,21 +1651,63 @@ class RouterHTTP:
         return 200, {"ricevuto": True, "tipo": tipo}
 
     def _conferma_pagamento(self, rif):
-        """Pagamento riuscito: toglie l'hold (la prenotazione e' pagata) e registra la tassa
-        di soggiorno incassata nel ledger (rendicontazione alla citta'). Isolato."""
+        """Pagamento riuscito. Gestisce la GARA (chi paga prima se la prende):
+        - hold ancora attivo ('in_attesa') -> conferma normale (stanza già bloccata).
+        - hold SCADUTO (pagamento tardivo, oltre i 2 min) -> ri-tenta il blocco stanza:
+            * se libera -> ancora sua (conferma + ricrea payout/garanzia);
+            * se presa da chi ha pagato prima -> NON conferma, segnala il RIMBORSO (mai
+              'soldi senza stanza', mai doppia prenotazione)."""
         if not (isinstance(rif, str) and rif):
             return
         try:
             pp = getattr(self._sys, "pagamenti_pendenti", None)
-            rec = pp.conferma(rif) if pp is not None else None
-            if rec and rec.get("tassa_cents", 0) > 0:
+            rec = pp.info(rif) if pp is not None else None
+            if rec is None:
+                logger.warning("pagamento per riferimento sconosciuto '%s' (ignorato)", rif)
+                return
+            stato = rec.get("stato", "")
+            if stato == "pagato":
+                return                                    # webhook duplicato: idempotente
+            if stato == "scaduto":
+                # PAGAMENTO TARDIVO: la stanza era stata liberata. Ri-tento il blocco.
+                inv = getattr(self._sys, "inventario", None)
+                idem = rec.get("idem_key") or ("hold_" + rif)
+                esito = None
+                try:
+                    esito = inv.blocca(rec["alloggio_id"], rec["check_in"], rec["check_out"],
+                                       idem_key=idem, origine="pagamento_tardivo") if inv else None
+                except Exception:
+                    esito = None
+                if not getattr(esito, "ok", False):
+                    logger.error("RIMBORSARE: pagamento tardivo su stanza già presa - rif '%s' "
+                                 "(alloggio %s %s->%s). Il cliente va rimborsato.",
+                                 rif, rec.get("alloggio_id"), rec.get("check_in"), rec.get("check_out"))
+                    try:
+                        pp.marca_da_rimborsare(rif)
+                    except Exception:
+                        pass
+                    return
+                # ri-bloccata con successo: ricreo payout maturato + garanzia dai dati salvati
+                import json as _j3
+                try:
+                    dj = _j3.loads(rec.get("corpo_json") or "{}")
+                except Exception:
+                    dj = {}
+                pd = getattr(self._sys, "payout", None)
+                if pd is not None and dj.get("host_id") and int(dj.get("netto_host_cents", 0)) > 0:
+                    pd.registra_maturato(rif, dj["host_id"], int(dj["netto_host_cents"]),
+                                         dj.get("valuta", "EUR"))
+                self._apri_garanzia(rif, int(dj.get("netto_host_cents", 0)),
+                                    rec.get("alloggio_id", ""), rec.get("check_in", ""))
+            # comune a 'in_attesa' e 'scaduto-ribloccato': segna pagato + tassa + payout maturato
+            pp.conferma(rif)
+            if rec.get("tassa_cents", 0) > 0:
                 led = getattr(self._sys, "tassa_comunale", None)
                 if led is not None:
                     led.registra_riscossione(rif, rec.get("comune", ""), rec["tassa_cents"])
-            # PAGATO: il payout dell'host passa da 'in_attesa' a 'maturato' (ora è un guadagno vero)
             pd = getattr(self._sys, "payout", None)
             if pd is not None:
-                pd.aggiorna_stato(rif, "maturato")
+                pd.aggiorna_stato(rif, "maturato")        # in_attesa -> maturato (guadagno vero)
         except Exception:
             logger.warning("conferma pagamento/ledger tassa fallita (ignorata)", exc_info=True)
 
@@ -2348,14 +2401,19 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                                          idem_key=(rec.get("idem_key") or ("hold_" + rec["riferimento"])))
                             if gz is not None:
                                 gz.annulla(rec["riferimento"])
-                            # non pagato entro la scadenza -> via anche il payout 'in_attesa'
-                            # (niente guadagno fantasma per l'host) + libera le date
+                            # non pagato entro i 2 min -> via il payout 'in_attesa' (niente guadagno
+                            # fantasma) + libera le date. NON cancello il record: lo marco 'scaduto'
+                            # per gestire un eventuale pagamento tardivo (re-blocco/rimborso).
                             _pd = getattr(sistema, "payout", None)
                             if _pd is not None:
                                 _pd.rimuovi(rec["riferimento"])
-                            pp.rimuovi(rec["riferimento"])
+                            pp.scadi(rec["riferimento"])
                         except Exception:
                             logger.warning("sweep hold singolo fallito (ignorato)", exc_info=True)
+                    try:
+                        pp.pulisci_vecchi()      # housekeeping: via i record scaduti vecchi (>1h)
+                    except Exception:
+                        pass
                 except Exception:
                     logger.warning("sweep hold fallito (ignorato)", exc_info=True)
                 __import__("time").sleep(120)

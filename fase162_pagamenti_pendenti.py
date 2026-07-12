@@ -15,7 +15,7 @@ import sqlite3
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-HOLD_SECONDI_DEFAULT = 1800          # 30 minuti per pagare (allineato a Stripe), poi la stanza si libera
+HOLD_SECONDI_DEFAULT = 120           # 2 minuti per pagare, poi la stanza si libera (urgenza tipo Agoda: chi paga prima se la prende)
 
 
 class _ConnCondivisa:
@@ -158,6 +158,51 @@ class PagamentiPendenti:
             with con:
                 cur = con.execute("DELETE FROM pendenti WHERE riferimento=?", (riferimento,))
             return bool(cur.rowcount)
+        finally:
+            con.close()
+
+    def scadi(self, riferimento: Any) -> bool:
+        """Hold scaduto (non pagato entro i 2 min): NON cancella il record, lo marca 'scaduto'
+        conservando i dati. Serve a gestire un eventuale pagamento TARDIVO (link Stripe ancora
+        vivo): al pagamento si ri-tenta il blocco stanza; se libera -> ancora sua, se presa da
+        chi ha pagato prima -> rimborso. Evita 'soldi senza stanza'."""
+        if not (isinstance(riferimento, str) and riferimento):
+            return False
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute(
+                    "UPDATE pendenti SET stato='scaduto' WHERE riferimento=? AND "
+                    "stato IN ('in_attesa','in_attesa_host')", (riferimento,))
+            return bool(cur.rowcount)
+        finally:
+            con.close()
+
+    def marca_da_rimborsare(self, riferimento: Any) -> bool:
+        """Pagamento tardivo su stanza già presa: marca 'rimborsato' (il cliente va rimborsato).
+        Non riappare negli scaduti; verrà ripulito da pulisci_vecchi."""
+        if not (isinstance(riferimento, str) and riferimento):
+            return False
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("UPDATE pendenti SET stato='rimborsato' WHERE riferimento=?",
+                                  (riferimento,))
+            return bool(cur.rowcount)
+        finally:
+            con.close()
+
+    def pulisci_vecchi(self, *, eta_sec: int = 3600, ora_ts: Optional[int] = None) -> int:
+        """Elimina i record 'scaduto'/'rimborsato' più vecchi di eta_sec (default 1h, ben oltre
+        i 30 min di vita del link Stripe): housekeeping. Ritorna quanti rimossi."""
+        ora = ora_ts if isinstance(ora_ts, int) and not isinstance(ora_ts, bool) else self._now()
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute(
+                    "DELETE FROM pendenti WHERE stato IN ('scaduto','rimborsato') AND creato_ts<?",
+                    (ora - max(60, int(eta_sec)),))
+            return cur.rowcount
         finally:
             con.close()
 
