@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 FINESTRA_ORE_DEFAULT = 24          # ore dopo il check-in per l'auto-rilascio
 
@@ -191,6 +191,24 @@ class EscrowGaranzia:
             return int(r["importo_host_cents"]) if r else 0
         finally:
             con.close()
+
+    def contestate(self, *, limit: int = 100) -> List[Dict[str, Any]]:
+        """Elenco delle garanzie CONTESTATE (controversie aperte) per il pannello admin:
+        l'operatore le vede e decide lo split del rimborso. Read-only."""
+        lim = limit if isinstance(limit, int) and not isinstance(limit, bool) \
+            and 0 < limit <= 500 else 100
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT prenotazione_id, alloggio_id, importo_host_cents, motivo, aggiornato_ts "
+                "FROM garanzia WHERE stato='contestato' ORDER BY aggiornato_ts DESC LIMIT ?",
+                (lim,)).fetchall()
+        finally:
+            con.close()
+        return [{"prenotazione_id": r["prenotazione_id"], "alloggio_id": r["alloggio_id"],
+                 "importo_host_cents": int(r["importo_host_cents"]),
+                 "motivo": r["motivo"], "ts": int(r["aggiornato_ts"]),
+                 "money_unit": "cents_integer"} for r in righe]
 
     def stato(self, prenotazione_id: Any) -> Optional[Dict[str, Any]]:
         if not isinstance(prenotazione_id, str):

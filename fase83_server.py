@@ -616,6 +616,10 @@ class RouterHTTP:
             return self._admin_prenotazioni(query, headers)
         if metodo == "POST" and path == "/api/admin/rimborso":
             return self._admin_rimborso(body, headers)
+        if metodo == "GET" and path == "/api/admin/controversie":
+            return self._admin_controversie(query, headers)
+        if metodo == "POST" and path == "/api/admin/controversia/risolvi":
+            return self._admin_controversia_risolvi(body, headers)
         if metodo == "POST" and path == "/api/admin/cancella_attivita":
             return self._admin_cancella_attivita(body, headers)
         return 404, {"errore": "rotta_non_trovata"}
@@ -755,6 +759,74 @@ class RouterHTTP:
         return 200, {"stato": "rimborsato", "date_liberate": True,
                      "idempotente": bool(getattr(e, "idempotente", False)),
                      "nota": "date liberate; rimborso PSP da eseguire quando Stripe e' live"}
+
+    def _admin_controversie(self, query, headers):
+        """Elenco delle CONTROVERSIE aperte (garanzie contestate): l'operatore le vede, sente
+        le parti, e decide lo split del rimborso. Read-only."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        g = getattr(self._sys, "garanzia", None)
+        if g is None:
+            return 200, {"controversie": []}
+        try:
+            lista = g.contestate()
+        except Exception:
+            logger.error("admin controversie: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        # arricchisco col titolo alloggio (best-effort)
+        for c in lista:
+            try:
+                d = self._sys.catalogo.dettaglio(c.get("alloggio_id", ""))
+                c["titolo"] = d.get("titolo", "") if isinstance(d, dict) else ""
+            except Exception:
+                c["titolo"] = ""
+        return 200, {"controversie": lista}
+
+    def _admin_controversia_risolvi(self, body, headers):
+        """Risolve una controversia con lo SPLIT deciso dall'operatore: `percentuale_ospite`
+        (0-100) della somma in garanzia va rimborsata al cliente, il resto all'host. In
+        alternativa `rimborso_ospite_cents` esatto. Il movimento reale dei soldi resta manuale
+        (rimborso Stripe controllato) — qui si registra la DECISIONE e si sblocca la garanzia."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        rif = dati.get("riferimento")
+        g = getattr(self._sys, "garanzia", None)
+        if g is None or not (isinstance(rif, str) and rif):
+            return 400, {"errore": "riferimento_mancante"}
+        st = g.stato(rif)
+        if not isinstance(st, dict):
+            return 404, {"errore": "controversia_non_trovata"}
+        if st.get("stato") != "contestato":
+            return 409, {"errore": "non_in_controversia", "stato": st.get("stato")}
+        importo = int(st.get("importo_host_cents", 0))
+        # calcolo il rimborso: da percentuale (0-100) oppure importo esatto
+        rimborso = dati.get("rimborso_ospite_cents")
+        if not (isinstance(rimborso, int) and not isinstance(rimborso, bool)):
+            pct = dati.get("percentuale_ospite")
+            if not (isinstance(pct, (int, float)) and not isinstance(pct, bool) and 0 <= pct <= 100):
+                return 422, {"errore": "percentuale_o_importo_mancante"}
+            rimborso = int(importo * pct / 100)
+        rimborso = max(0, min(int(rimborso), importo))
+        try:
+            out = g.risolvi(rif, rimborso_ospite_cents=rimborso)
+        except Exception:
+            logger.error("admin controversia risolvi: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        if not out.get("ok"):
+            return 409, out
+        # payout dell'host: azzerato se il cliente prende tutto, altrimenti resta (parziale)
+        if rimborso >= importo:
+            pd = getattr(self._sys, "payout", None)
+            if pd is not None:
+                pd.rimuovi(rif)
+        return 200, {"stato": "risolta", "riferimento": rif,
+                     "rimborso_cliente_cents": out.get("ospite_rimborso_cents", rimborso),
+                     "va_all_host_cents": out.get("host_riceve_cents", importo - rimborso),
+                     "nota": "decisione registrata + garanzia sbloccata; esegui il rimborso "
+                             "Stripe di questo importo (manuale, controllato)"}
 
     def _traduci_servizi(self, item: Dict[str, Any], lingua: str) -> Dict[str, Any]:
         if isinstance(item.get("servizi"), list):

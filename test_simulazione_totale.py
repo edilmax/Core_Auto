@@ -362,6 +362,35 @@ class TestSimulazioneTotale(unittest.TestCase):
                       {"X-Host-Token": altro["tok"]})
         self.assertIn(s, (403, 409))                       # non tua / già cancellata
 
+    def test_14_controversia_admin_risolve_split(self):
+        # cliente prenota, paga, entra e SEGNALA un problema -> l'admin vede la controversia
+        # e decide lo split (60% al cliente, 40% all'host). La garanzia si sblocca.
+        h = type(self).hosts[6]
+        s, q = self._quote(h["slug"], ci="2026-10-15", co="2026-10-17")
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "cliente10@sim.it"})
+        rif = b["riferimento"]; vt = b["voucher_token"]
+        self._webhook_pagato(rif)
+        # il cliente contesta
+        s, c = self.g("POST", "/api/garanzia/contesta", {"voucher_token": vt})
+        self.assertEqual(s, 200, c)
+        # l'admin vede la controversia
+        s, lst = self.g("GET", "/api/admin/controversie", headers=self.AK)
+        self.assertEqual(s, 200)
+        refs = [x["prenotazione_id"] for x in lst["controversie"]]
+        self.assertIn(rif, refs)
+        importo = next(x["importo_host_cents"] for x in lst["controversie"]
+                       if x["prenotazione_id"] == rif)
+        # l'admin risolve: 60% al cliente
+        s, r = self.g("POST", "/api/admin/controversia/risolvi",
+                      {"riferimento": rif, "percentuale_ospite": 60}, self.AK)
+        self.assertEqual(s, 200, r)
+        self.assertEqual(r["rimborso_cliente_cents"], int(importo * 60 / 100))
+        self.assertEqual(r["va_all_host_cents"], importo - int(importo * 60 / 100))
+        # non è più in controversia
+        s, lst2 = self.g("GET", "/api/admin/controversie", headers=self.AK)
+        self.assertNotIn(rif, [x["prenotazione_id"] for x in lst2["controversie"]])
+
     def test_12_no_overbooking(self):
         # due clienti sulle STESSE date: il secondo NON deve poter tenere la stanza pagata del primo
         h = type(self).hosts[6]
