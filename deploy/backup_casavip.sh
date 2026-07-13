@@ -11,7 +11,10 @@ TS="$(date +%Y%m%d-%H%M%S)"
 
 mkdir -p "$BACKUP_DIR"
 
-for db in catalogo inventario; do
+# TUTTI gli archivi durevoli col valore vero (non solo catalogo/inventario): account host,
+# accettazioni firmate (valore legale), payout, crediti referral, hold, escrow, tasse, ecc.
+# I DB assenti vengono saltati ([ -f ] più sotto).
+for db in catalogo inventario registro_host accettazioni payout viral pendenti garanzia tassa_comunale domanda messaggi; do
   src="$DATA_DIR/$db.db"
   [ -f "$src" ] || continue
   dst="$BACKUP_DIR/$db-$TS.db"
