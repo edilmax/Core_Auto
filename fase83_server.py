@@ -392,6 +392,11 @@ MOSTRA_PASS_SERRATURA = False
 # 15% del valore. Il cliente è comunque rimborsato al 100%.
 PENALE_HOST_BPS = 1500
 
+# Su-richiesta APPROVATA: quanto tempo ha il cliente per pagare (dall'email). ~24h come i
+# colossi (Airbnb request-to-book), dentro il massimo Stripe (sessione <= 24h): 23h55m.
+# L'hold stanza e la sessione Stripe scadono INSIEME (niente "link vivo, stanza persa").
+HOLD_APPROVAZIONE_SEC = 86100
+
 
 def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optional[str]:
     """Voucher di conferma (server-rendered, stampabile, multilingua). Verifica la firma
@@ -539,6 +544,11 @@ def pagina_azione_html(esito: Dict[str, Any]) -> str:
         motivo = esito.get("motivo", "")
         if motivo == "link_scaduto":
             h1, p1 = "Link scaduto", "Questo link non è più valido (oltre le 24h)."
+        elif motivo == "pagamento_non_disponibile":
+            h1 = "Riprova tra qualche minuto"
+            p1 = ("Non siamo riusciti a preparare il pagamento per il cliente (servizio "
+                  "momentaneamente non disponibile). La richiesta è ancora lì: riapri il "
+                  "link e riprova tra poco.")
         elif motivo == "richiesta_non_trovata":
             h1, p1 = "Richiesta già gestita", "Questa richiesta è già stata approvata, rifiutata o è scaduta."
         elif motivo == "non_tua":
@@ -1165,10 +1175,10 @@ class RouterHTTP:
         except Exception:
             return "immediata"
 
-    def _finalizza_prenotazione(self, corpo, dati):
+    def _finalizza_prenotazione(self, corpo, dati, hold_sec=None):
         """Emette voucher/smart-pass/diritto, apre l'escrow, avvisa l'host, gestisce l'hold
         pagamento. Usato dall'instant-book E dopo l'approvazione su-richiesta. Idempotente
-        sui token (rigenera dagli stessi dati)."""
+        sui token (rigenera dagli stessi dati). `hold_sec` = durata custom dell'hold."""
         ref = corpo.get("riferimento", "")
         allog = corpo.get("alloggio_id", "")
         ci, co = corpo.get("check_in", ""), corpo.get("check_out", "")
@@ -1212,13 +1222,19 @@ class RouterHTTP:
                         + corpo["voucher_token"]) if corpo.get("voucher_token") else ""
                 _codice = codice_prenotazione(ref)
                 _pin = self._sys.firma.pin_checkin(ref) if getattr(self._sys, "firma", None) else ""
-                html = corpo_voucher_html(allog, _codice, ci, co, vurl, pin=_pin)
+                # se c'è un pagamento da completare, l'email DEVE contenere il link (per il
+                # su-richiesta è l'unico canale: il cliente non è sul sito) + oggetto onesto.
+                _purl = corpo.get("payment_url", "") or ""
+                html = corpo_voucher_html(allog, _codice, ci, co, vurl, pin=_pin,
+                                          payment_url=_purl)
+                _ogg = ("BookinVIP - Approvata! Completa il pagamento" if _purl
+                        else "BookinVIP - Prenotazione confermata")
                 # IN BACKGROUND: l'SMTP (rete) non deve MAI rallentare la conferma prenotazione.
                 # Il provider e' gia' fail-safe (non solleva); il thread e' daemon (isolato).
                 import threading
                 threading.Thread(
                     target=self._sys.email_provider.invia,
-                    args=(email, "BookinVIP - Prenotazione confermata", html),
+                    args=(email, _ogg, html),
                     daemon=True).start()
             except Exception:
                 logger.warning("invio email voucher fallito (ignorato)", exc_info=True)
@@ -1226,7 +1242,7 @@ class RouterHTTP:
         self._apri_garanzia(ref, corpo.get("netto_host_cents", 0), allog, ci)
         self._registra_payout(ref, allog, corpo)
         self._registra_hold(corpo, allog, ref, ci, co, dati.get("quote_token", ""),
-                            dati.get("email", ""))
+                            dati.get("email", ""), hold_sec=hold_sec)
         return corpo
 
     def _registra_richiesta(self, corpo, dati):
@@ -1359,14 +1375,39 @@ class RouterHTTP:
             return 403, {"errore": "non_tua"}
         import json as _j
         if approva:
-            pp.rimuovi(ref)                       # tolgo la richiesta, poi finalizzo
             try:
                 corpo = _j.loads(rec.get("corpo_json") or "{}")
             except Exception:
                 corpo = {}
+            # PAGAMENTO: il link Stripe creato alla RICHIESTA scade in 30 min, ma l'host ha
+            # 24h per approvare -> qui va rigenerato FRESCO. Il cliente non è sul sito: paga
+            # dall'email, quindi hold e sessione Stripe durano entrambi ~24h (allineati).
+            hold_sec = None
+            stripe = getattr(self._sys, "stripe", None)
+            if stripe is not None:
+                nuovo = None
+                try:
+                    nuovo = stripe.crea_link({
+                        "totale_cents": corpo.get("totale_cents"),
+                        "prezzo_guest_cents": corpo.get("prezzo_guest_cents"),
+                        "riferimento": ref, "email": rec.get("email", ""),
+                        "scade_secondi": HOLD_APPROVAZIONE_SEC})
+                except Exception:
+                    nuovo = None
+                if not nuovo:
+                    # FAIL-SAFE: niente conferma senza un link di pagamento valido. La
+                    # richiesta RESTA in_attesa_host: l'host può ricliccare tra poco.
+                    logger.error("approvazione %s: link pagamento NON creato -> riprovare", ref)
+                    return 503, {"errore": "pagamento_non_disponibile"}
+                corpo["payment_url"] = nuovo
+                hold_sec = HOLD_APPROVAZIONE_SEC
+            else:
+                corpo.pop("payment_url", None)   # niente Stripe: conferma diretta (no link morto)
+            pp.rimuovi(ref)                       # tolgo la richiesta SOLO ora (dopo il fail-safe)
             corpo["stato"] = "confermata"
             corpo = self._finalizza_prenotazione(
-                corpo, {"email": rec.get("email", ""), "quote_token": rec.get("quote_token", "")})
+                corpo, {"email": rec.get("email", ""), "quote_token": rec.get("quote_token", "")},
+                hold_sec=hold_sec)
             return 200, {"stato": "approvata", "riferimento": ref, "prenotazione": corpo}
         try:                                       # rifiuto: libero la stanza, zero addebito
             self._sys.inventario.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"],
@@ -1376,7 +1417,9 @@ class RouterHTTP:
         pp.rimuovi(ref)
         return 200, {"stato": "rifiutata", "riferimento": ref}
 
-    def _registra_hold(self, corpo, allog, ref, ci, co, qt, email=""):
+    def _registra_hold(self, corpo, allog, ref, ci, co, qt, email="", hold_sec=None):
+        """`hold_sec`: durata custom dell'hold (es. su-richiesta approvata = ~24h, il cliente
+        paga dall'email); None = default fase162 (2 min, instant-book col cliente sul checkout)."""
         if not corpo.get("payment_url"):
             return
         try:
@@ -1411,9 +1454,13 @@ class RouterHTTP:
                                    "host_id": host_id,
                                    "voucher_token": corpo.get("voucher_token", ""),
                                    "titolo": titolo})
+            import time as _t83
+            scad = (int(_t83.time()) + hold_sec) if isinstance(hold_sec, int) \
+                and not isinstance(hold_sec, bool) and hold_sec > 0 else None
             pp.registra(ref, alloggio_id=allog, check_in=ci, check_out=co, idem_key=idem,
                         tassa_cents=corpo.get("tassa_soggiorno_cents", 0), comune=comune,
-                        host_id=host_id, email=str(email or ""), corpo_json=corpo_min)
+                        host_id=host_id, email=str(email or ""), corpo_json=corpo_min,
+                        scadenza_ts=scad)
             corpo["stato"] = "in_attesa_pagamento"   # confermata SOLO dopo il webhook di pagamento
         except Exception:
             logger.warning("registrazione hold pagamento fallita (ignorata)", exc_info=True)
@@ -1619,6 +1666,21 @@ class RouterHTTP:
         except Exception:
             giorni = 0
         giorni = giorni if giorni > 0 else 0
+        # CONSAPEVOLE DEL PAGAMENTO: se il record pendenti esiste e NON è 'pagato', il cliente
+        # non ha versato nulla -> NIENTE rimborso/penale/credito su soldi mai incassati.
+        # Il record va comunque invalidato: il link di pagamento può restare vivo fino a 24h
+        # e un pagamento su prenotazione cancellata non deve MAI confermarla.
+        _pp = getattr(self._sys, "pagamenti_pendenti", None)
+        _rec = None
+        pagato_davvero = True
+        try:
+            _rec = _pp.info(rif) if (_pp is not None and rif) else None
+            if _rec is not None and _rec.get("stato") != "pagato":
+                pagato_davvero = False
+        except Exception:
+            pagato_davvero = True     # in dubbio, comportamento storico (il voucher fa fede)
+        if not pagato_davvero:
+            pagato = 0
         # POLITICA dal VOUCHER FIRMATO (scelta dall'host, anti-furbata) - NON dalla richiesta
         politica = v.get("politica") or self._politica_alloggio(allog)
         # RIPENSAMENTO 48h: se annulli entro 2 giorni dall'acquisto e l'arrivo è >=72h -> 100%
@@ -1644,11 +1706,21 @@ class RouterHTTP:
         if not getattr(e, "ok", False):
             return 409, {"stato": "rifiutato", "motivo": getattr(e, "motivo", "")}
         self._payout_trattieni(rif)            # cancellata -> niente payout all'host
+        try:
+            if _pp is not None and _rec is not None and _rec.get("stato") != "rimborsato":
+                # invalida il pendente (stato 'rimborsato'): se era pagata = rimborso manuale
+                # in corso; se NON pagata = il link morto non potrà mai più confermarla.
+                _pp.marca_da_rimborsare(rif)
+        except Exception:
+            logger.warning("invalidazione pendente su cancellazione fallita (ignorata)",
+                           exc_info=True)
         # CREDITO VIAGGIO ANTI-RIMPIANTO: se hai perso qualcosa, una parte torna come credito
         # (non-cashabile, riscattabile su una prossima prenotazione; ci costa solo margine futuro).
         # la tassa di soggiorno (pass-through) si rimborsa SEMPRE per intero: niente soggiorno = niente tassa
         tassa = v.get("tassa_soggiorno_cents", 0)
         tassa = tassa if (isinstance(tassa, int) and not isinstance(tassa, bool) and tassa > 0) else 0
+        if not pagato_davvero:
+            tassa = 0                          # mai versata -> niente da rimborsare
         rimborso_totale = r.get("rimborso_cents", 0) + tassa
         cv_cents, cv_token = self._credito_anti_rimpianto(r.get("trattenuto_cents", 0))
         try:                                      # escrow: l'host TIENE la sua penale, il resto torna all'ospite
@@ -1672,10 +1744,13 @@ class RouterHTTP:
                      "trattenuto_cents": r["trattenuto_cents"],
                      "politica": r["politica"], "money_unit": "cents_integer",
                      "ripensamento": bool(r.get("ripensamento")),
+                     "pagamento_mai_effettuato": (not pagato_davvero),
                      "credito_viaggio_cents": cv_cents, "credito_viaggio_token": cv_token,
-                     "nota": ("date liberate; rimborso PSP da eseguire quando Stripe e' live."
-                              + (" Hai un Credito Viaggio per la prossima prenotazione."
-                                 if cv_cents else ""))}
+                     "nota": (("nessun addebito: non avevi ancora pagato, non c'e' nulla da "
+                               "rimborsare.") if not pagato_davvero else
+                              ("date liberate; rimborso PSP da eseguire quando Stripe e' live."
+                               + (" Hai un Credito Viaggio per la prossima prenotazione."
+                                  if cv_cents else "")))}
 
     def _politica_alloggio(self, slug):
         try:
@@ -2051,6 +2126,15 @@ class RouterHTTP:
             stato = rec.get("stato", "")
             if stato == "pagato":
                 return                                    # webhook duplicato: idempotente
+            # WHITELIST: si conferma SOLO 'in_attesa' (hold vivo) o 'scaduto' (re-block sotto).
+            # Ogni altro stato (cancellata dal cliente/host, rimborsata, richiesta NON ancora
+            # approvata) NON è confermabile: senza questa guardia un pagamento tardivo su una
+            # prenotazione cancellata diventava 'pagato' -> soldi senza stanza + payout indebito.
+            if stato not in ("in_attesa", "scaduto"):
+                logger.error("RIMBORSARE: pagamento ricevuto per '%s' in stato '%s' (non "
+                             "confermabile: prenotazione cancellata/non approvata). Rimborsare "
+                             "manualmente dal dashboard Stripe.", rif, stato)
+                return
             if stato == "scaduto":
                 # PAGAMENTO TARDIVO: la stanza era stata liberata. Ri-tento il blocco.
                 inv = getattr(self._sys, "inventario", None)

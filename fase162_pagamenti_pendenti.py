@@ -222,9 +222,11 @@ class PagamentiPendenti:
         finally:
             con.close()
 
-    def pulisci_vecchi(self, *, eta_sec: int = 3600, ora_ts: Optional[int] = None) -> int:
-        """Elimina i record 'scaduto'/'rimborsato' più vecchi di eta_sec (default 1h, ben oltre
-        i 30 min di vita del link Stripe): housekeeping. Ritorna quanti rimossi."""
+    def pulisci_vecchi(self, *, eta_sec: int = 93600, ora_ts: Optional[int] = None) -> int:
+        """Elimina i record 'scaduto'/'rimborsato' più vecchi di eta_sec (default 26h: una
+        sessione Stripe può vivere fino a 24h — su-richiesta approvata — e finché il link è
+        vivo il record DEVE esistere, così un pagamento su una prenotazione cancellata/scaduta
+        viene riconosciuto e mai confermato alla cieca). Ritorna quanti rimossi."""
         ora = ora_ts if isinstance(ora_ts, int) and not isinstance(ora_ts, bool) else self._now()
         con = self._apri()
         try:

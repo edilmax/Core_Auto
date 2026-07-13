@@ -122,6 +122,7 @@ class SistemaCasaVIP:
     tassa_comunale: Any = None
     payout: Any = None
     accettazioni: Any = None
+    stripe: Any = None      # ProviderStripe (fase85) o None: per rigenerare link (su-richiesta)
 
     @property
     def attivo(self) -> bool:
@@ -401,4 +402,4 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           notificatore_prenotazione=notificatore_prenotazione,
                           domanda=domanda, garanzia=garanzia,
                           pagamenti_pendenti=pagamenti_pendenti, tassa_comunale=tassa_comunale,
-                          payout=payout, accettazioni=accettazioni)
+                          payout=payout, accettazioni=accettazioni, stripe=provider)

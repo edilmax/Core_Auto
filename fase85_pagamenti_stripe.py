@@ -66,7 +66,14 @@ class ProviderStripe:
                 return None
             ref = str(dati.get("riferimento", ""))
             import time as _t
-            scade_at = int(_t.time()) + 1800   # 30 min (minimo Stripe): mostra il countdown all'ospite
+            # scadenza sessione: default 30 min (instant-book, minimo Stripe). Il chiamante può
+            # chiedere di più via 'scade_secondi' (es. su-richiesta approvata: il cliente non è
+            # online, gli si dà fino a ~24h — massimo Stripe). Clamp nei limiti Stripe.
+            scade_sec = dati.get("scade_secondi")
+            if not (isinstance(scade_sec, int) and not isinstance(scade_sec, bool)):
+                scade_sec = 1800
+            scade_sec = max(1800, min(86100, scade_sec))
+            scade_at = int(_t.time()) + scade_sec
             params: List[Tuple[str, str]] = [
                 ("mode", "payment"),
                 ("expires_at", str(scade_at)),   # urgenza + auto-scadenza allineata all'hold stanza

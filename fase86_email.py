@@ -90,9 +90,12 @@ def crea_provider_email(host: Optional[str], port: int = 587, user: str = "",
 
 
 def corpo_voucher_html(titolo_alloggio: str, codice: str, check_in: str,
-                       check_out: str, voucher_url: str, pin: str = "") -> str:
+                       check_out: str, voucher_url: str, pin: str = "",
+                       payment_url: str = "") -> str:
     """Corpo HTML dell'email di conferma (semplice, robusto). XSS-safe. `codice` = codice
-    prenotazione leggibile (BVIP-XXXX-XXXX); `pin` = PIN check-in (4 cifre), uguali all'host."""
+    prenotazione leggibile (BVIP-XXXX-XXXX); `pin` = PIN check-in (4 cifre), uguali all'host.
+    `payment_url`: se presente, la prenotazione è RISERVATA ma da pagare -> bottone di
+    pagamento in cima (per il su-richiesta approvato è l'unico canale del cliente)."""
     import html
     e = html.escape
     link = ('<p><a href="%s" style="background:#1e3c72;color:#fff;padding:.6rem 1.2rem;'
@@ -100,14 +103,27 @@ def corpo_voucher_html(titolo_alloggio: str, codice: str, check_in: str,
             % e(voucher_url)) if voucher_url else ""
     blocco_pin = ('<br>PIN check-in: <strong style="font-size:1.1rem;color:#1e3c72">%s</strong>'
                   % e(str(pin))) if pin else ""
+    if payment_url:
+        titolo_email = "BookinVIP - Approvata! Completa il pagamento"
+        blocco_pagamento = (
+            '<p style="background:#fff4e5;border-radius:10px;padding:.7rem 1rem;color:#8a5200">'
+            "La tua prenotazione &egrave; stata <strong>approvata e riservata</strong>: "
+            "completa il pagamento per confermarla.</p>"
+            '<p><a href="%s" style="background:#155724;color:#fff;padding:.7rem 1.4rem;'
+            'border-radius:8px;text-decoration:none;font-weight:bold">'
+            "&#128179; Completa il pagamento</a></p>" % e(payment_url))
+    else:
+        titolo_email = "BookinVIP - Prenotazione confermata"
+        blocco_pagamento = ""
     return (
         "<div style=\"font-family:sans-serif;max-width:480px\">"
-        "<h2 style=\"color:#1e3c72\">BookinVIP - Prenotazione confermata</h2>"
+        "<h2 style=\"color:#1e3c72\">%s</h2>%s"
         "<p>%s</p><p>Codice prenotazione: <strong style=\"letter-spacing:.05em\">%s</strong>%s<br>"
         "Dal %s al %s</p>%s"
         "<p style=\"color:#5e6f8d;font-size:.85rem\">Conserva questa email: mostra il codice "
         "(e il PIN) all'arrivo. Dal voucher puoi vedere o annullare la prenotazione.</p></div>"
-    ) % (e(titolo_alloggio), e(codice), blocco_pin, e(check_in), e(check_out), link)
+    ) % (e(titolo_email), blocco_pagamento, e(titolo_alloggio), e(codice), blocco_pin,
+         e(check_in), e(check_out), link)
 
 
 def corpo_promemoria_checkin_html(titolo_alloggio: str, voucher_url: str) -> str:

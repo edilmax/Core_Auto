@@ -1,6 +1,8 @@
 # --- Esclusioni Originali ---
 .env
 .env.casavip
+.env.casavip*
+!.env.casavip.example
 contatti/
 *_SEGRETI_*.bak
 config_assistente.json
@@ -51,6 +53,7 @@ quarantine_forensic/
 *.pre_quantum
 *.pre_repair
 
-# backup locali e file temporanei
+# backup locali e file temporanei (incluse le copie datate tipo x.bak-1783927524)
 *.bak
 *.bak.*
+*.bak-*
