@@ -521,6 +521,47 @@ def pagina_voucher_non_valido_html(lingua: str = "it") -> str:
     ) % (lng, tit, h1, p1, p2, mail, mail, home)
 
 
+def _ext_da_magic(raw: bytes) -> Optional[str]:
+    """Tipo immagine dai MAGIC BYTES (mai fidarsi del content-type/estensione). None se
+    non e' un'immagine supportata."""
+    if not raw:
+        return None
+    if raw[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if raw[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return "webp"
+    if raw[:6] in (b"GIF87a", b"GIF89a"):
+        return "gif"
+    return None
+
+
+def _ip_host_pubblico(host: str) -> bool:
+    """True SOLO se tutti gli indirizzi risolti dell'host sono PUBBLICI. Blocca loopback/
+    privati/link-local/riservati (anti-SSRF: niente fetch verso servizi interni o metadata
+    cloud). Risoluzione fallita -> False (fail-closed)."""
+    import ipaddress
+    import socket
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        return False
+    if not infos:
+        return False
+    for info in infos:
+        sockaddr = info[4]
+        ip = sockaddr[0].split("%", 1)[0]            # via eventuale zona IPv6
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            return False
+        if (addr.is_private or addr.is_loopback or addr.is_link_local
+                or addr.is_reserved or addr.is_multicast or addr.is_unspecified):
+            return False
+    return True
+
+
 class RouterHTTP:
     """Router PURO (testabile): cabla il SistemaCasaVIP (fase81) sulle rotte HTTP."""
 
@@ -722,15 +763,7 @@ class RouterHTTP:
             return 422, {"errore": "immagine_non_valida"}
         if not raw or len(raw) > 5 * 1024 * 1024:
             return 422, {"errore": "dimensione_non_valida"}      # vuota o > 5MB
-        ext = None                                                # tipo dai MAGIC BYTES
-        if raw[:3] == b"\xff\xd8\xff":
-            ext = "jpg"
-        elif raw[:8] == b"\x89PNG\r\n\x1a\n":
-            ext = "png"
-        elif raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
-            ext = "webp"
-        elif raw[:6] in (b"GIF87a", b"GIF89a"):
-            ext = "gif"
+        ext = _ext_da_magic(raw)                                  # tipo dai MAGIC BYTES
         if ext is None:
             return 422, {"errore": "formato_non_supportato"}
         updir = _os.environ.get("UPLOAD_DIR", "data/uploads")
@@ -2257,7 +2290,7 @@ class RouterHTTP:
             try:
                 rep = _imp(item, sorgente=sorgente, catalogo=self._sys.catalogo,
                            inventario=self._sys.inventario, host_id=hid,
-                           genera_slug=self._slug_unico)
+                           genera_slug=self._slug_unico, rehost=self._scarica_immagine)
             except Exception:
                 logger.error("import portability: eccezione ISOLATA su un annuncio",
                              exc_info=True)
@@ -2273,6 +2306,68 @@ class RouterHTTP:
                 "errori": rep.errori,
             })
         return 200, {"importati": importati, "totale": len(lista), "risultati": risultati}
+
+    def _scarica_immagine(self, url, hop=0):
+        """Scarica una foto da un URL (import dai colossi) e la salva su UPLOAD_DIR ->
+        /uploads/<nome>. ANTI-SSRF (solo host pubblici), tetto 5MB, tipo dai MAGIC BYTES,
+        timeout 10s. Redirect seguiti a mano (max 3) ri-validando l'host ogni volta.
+        None se non affidabile (l'import scarta quella foto e prosegue)."""
+        import urllib.error
+        import urllib.request
+        from urllib.parse import urljoin, urlparse
+        if not (isinstance(url, str) and url) or hop > 3:
+            return None
+        try:
+            p = urlparse(url)
+        except Exception:
+            return None
+        if p.scheme not in ("http", "https") or not p.hostname:
+            return None
+        if not _ip_host_pubblico(p.hostname):
+            return None                               # anti-SSRF: niente host interni
+
+        class _NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                return None                           # non seguire in automatico (TOCTOU)
+
+        opener = urllib.request.build_opener(_NoRedirect)
+        req = urllib.request.Request(url, headers={"User-Agent": "BookinVIP-Import/1.0",
+                                                   "Accept": "image/*"})
+        try:
+            resp = opener.open(req, timeout=10)
+        except urllib.error.HTTPError as e:
+            if 300 <= e.code < 400:                   # redirect: ri-valida l'host al prossimo hop
+                loc = e.headers.get("Location")
+                return self._scarica_immagine(urljoin(url, loc), hop + 1) if loc else None
+            return None
+        except Exception:
+            return None
+        try:
+            raw = resp.read(5 * 1024 * 1024 + 1)      # tetto: legge al massimo 5MB+1
+        except Exception:
+            raw = b""
+        finally:
+            try:
+                resp.close()
+            except Exception:
+                pass
+        if not raw or len(raw) > 5 * 1024 * 1024:
+            return None
+        ext = _ext_da_magic(raw)
+        if ext is None:
+            return None                               # non e' un'immagine valida
+        import os as _os
+        import secrets as _sec
+        updir = _os.environ.get("UPLOAD_DIR", "data/uploads")
+        try:
+            _os.makedirs(updir, exist_ok=True)
+            nome = _sec.token_hex(16) + "." + ext
+            with open(_os.path.join(updir, nome), "wb") as f:
+                f.write(raw)
+        except Exception:
+            logger.warning("rehost foto: salvataggio fallito (ISOLATO)", exc_info=True)
+            return None
+        return "/uploads/" + nome
 
     def _slug_unico(self, titolo, citta):
         """Genera uno slug pubblico pulito dal titolo (o città), garantito UNIVOCO nel catalogo.

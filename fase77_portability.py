@@ -203,12 +203,15 @@ def _normalizza(canonico: Dict[str, Any]) -> Tuple[List[str], Optional[Dict[str,
 
 def importa(raw: Any, *, sorgente: str = "canonico", catalogo: Any = None,
             inventario: Any = None, host_id: Optional[str] = None,
-            genera_slug: Any = None) -> ReportImport:
+            genera_slug: Any = None, rehost: Any = None) -> ReportImport:
     """Importa una proprieta' da un export (data-portability). Dry-run se catalogo/
     inventario non forniti; altrimenti applica (isolato).
     `host_id`: se fornito, FORZA il proprietario (dal token del pannello) invece di fidarsi
     dell'export. `genera_slug(titolo,citta)->slug`: se fornito, genera SEMPRE uno slug pulito
-    e univoco (niente collisioni / furto di annuncio; ignora lo slug dell'export)."""
+    e univoco (niente collisioni / furto di annuncio; ignora lo slug dell'export).
+    `rehost(url)->nuovo_url|None`: se fornito (solo in apply), RI-OSPITA ogni foto sui nostri
+    server (scarica e salva) invece di lasciarla sulla CDN del colosso; le foto che falliscono
+    vengono scartate. Iniettato -> il modulo resta puro/testabile."""
     adapter = _ADAPTER.get(sorgente, _ADAPTER["canonico"])
     canonico = adapter(raw)
     if not isinstance(canonico, dict):
@@ -228,6 +231,20 @@ def importa(raw: Any, *, sorgente: str = "canonico", catalogo: Any = None,
     rep = ReportImport(True, slug=scheda["slug"], scheda=scheda, immagini=immagini,
                        notti=notti)
     if catalogo is not None:
+        # RI-OSPITA le foto sui nostri server (no dipendenza dalla CDN del colosso). Le foto
+        # che non si scaricano vengono scartate; l'import prosegue comunque (isolato).
+        if callable(rehost):
+            nuove = []
+            for u in immagini:
+                try:
+                    nu = rehost(u)
+                except Exception:
+                    logger.warning("import: rehost foto ISOLATO ha sollevato", exc_info=True)
+                    nu = None
+                if isinstance(nu, str) and nu:
+                    nuove.append(nu)
+            immagini = nuove
+            rep.immagini = nuove
         try:
             from fase57_vetrina import Immagine, SchedaAlloggio
             sch = SchedaAlloggio(host_id=scheda["host_id"], slug=scheda["slug"],

@@ -259,6 +259,69 @@ class TestHostUX(unittest.TestCase):
                                body=json.dumps({"url": "/uploads/x.png"}))
         self.assertEqual(s, 401)
 
+    # ── RI-OSPITARE le foto importate sui nostri server (anti-SSRF) ────────────
+    def test_ssrf_guard_ip_host_pubblico(self):
+        from fase83_server import _ip_host_pubblico
+        for interno in ("127.0.0.1", "localhost", "10.0.0.1", "192.168.1.1",
+                        "169.254.169.254", "::1", "0.0.0.0"):
+            self.assertFalse(_ip_host_pubblico(interno), f"{interno} doveva essere bloccato")
+        self.assertTrue(_ip_host_pubblico("8.8.8.8"))       # pubblico ok (nessuna connessione)
+
+    def test_ext_da_magic(self):
+        from fase83_server import _ext_da_magic
+        self.assertEqual(_ext_da_magic(base64.b64decode(PNG1x1)), "png")
+        self.assertIsNone(_ext_da_magic(b"non e' un'immagine"))
+        self.assertIsNone(_ext_da_magic(b""))
+
+    def test_scarica_immagine_salva_da_server_locale(self):
+        import http.server
+        import threading
+        import fase83_server
+        png = base64.b64decode(PNG1x1)
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.end_headers()
+                self.wfile.write(png)
+
+            def log_message(self, *a):
+                pass
+
+        srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+        port = srv.server_address[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        orig = fase83_server._ip_host_pubblico
+        fase83_server._ip_host_pubblico = lambda h: True     # consenti loopback SOLO nel test
+        try:
+            u = self.r._scarica_immagine("http://127.0.0.1:%d/x.png" % port)
+        finally:
+            fase83_server._ip_host_pubblico = orig
+            srv.shutdown()
+        self.assertTrue(u and u.startswith("/uploads/"), u)
+        nome = u.rsplit("/", 1)[-1]
+        with open(os.path.join(os.environ["UPLOAD_DIR"], nome), "rb") as f:
+            self.assertEqual(f.read(), png)                  # salvata identica sul nostro server
+
+    def test_scarica_immagine_blocca_host_interni(self):
+        # anti-SSRF: host interni/metadata -> None senza connettersi; schema non-http -> None
+        self.assertIsNone(self.r._scarica_immagine("http://169.254.169.254/latest/meta-data/"))
+        self.assertIsNone(self.r._scarica_immagine("http://127.0.0.1/x.png"))
+        self.assertIsNone(self.r._scarica_immagine("ftp://host/y.png"))
+        self.assertIsNone(self.r._scarica_immagine("http://10.0.0.1/z.png"))
+
+    def test_import_rehost_scarta_foto_interne(self):
+        export = {"titolo": "Con Foto", "citta": "Roma", "prezzo_notte": "80.00",
+                  "capacita": 2, "immagini": ["http://10.0.0.1/evil.jpg",
+                                              "http://169.254.169.254/x.png"]}
+        s, r = self.r.gestisci("POST", "/api/host/importa", headers=self.h,
+                               body=json.dumps({"sorgente": "canonico", "dati": export}))
+        self.assertEqual(s, 200, r)
+        slug = r["risultati"][0]["slug"]
+        _, d = self.r.gestisci("GET", "/api/host/alloggio", {"slug": slug}, headers=self.h)
+        self.assertEqual(d["immagini"], [])                  # nessun URL esterno/interno salvato
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

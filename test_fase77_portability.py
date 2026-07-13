@@ -184,6 +184,27 @@ class TestOverrideSicuro(unittest.TestCase):
         self.assertEqual(src["slug"], "casa-roma")
 
 
+class TestRehost(unittest.TestCase):
+    def test_rehost_ri_ospita_e_scarta_falliti(self):
+        cat = _FakeCatalogo()
+        raw = dict(CANONICO, immagini=["https://x/1.jpg", "https://x/2.jpg"])
+        # rehost: la 1 va bene (nuovo URL nostro), la 2 fallisce (None) -> scartata
+        reh = lambda u: "/uploads/ok.jpg" if u.endswith("1.jpg") else None
+        r = importa(raw, catalogo=cat, rehost=reh)
+        self.assertTrue(r.catalogo_applicato)
+        _, immagini = cat.pubblicati[0]
+        self.assertEqual([im.url for im in immagini], ["/uploads/ok.jpg"])   # solo la ri-ospitata
+        self.assertEqual(r.immagini, ["/uploads/ok.jpg"])
+
+    def test_rehost_che_solleva_non_rompe(self):
+        cat = _FakeCatalogo()
+        def reh(u): raise RuntimeError("rete giu'")
+        r = importa(dict(CANONICO), catalogo=cat, rehost=reh)
+        self.assertTrue(r.catalogo_applicato)             # import prosegue
+        _, immagini = cat.pubblicati[0]
+        self.assertEqual(immagini, [])                    # nessuna foto (tutte scartate)
+
+
 class TestRobustezza(unittest.TestCase):
     def test_mai_solleva(self):
         for bad in (None, 123, "x", [], {}):
