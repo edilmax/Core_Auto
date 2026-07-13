@@ -598,6 +598,23 @@ class CatalogoVetrina:
             con.close()
         return self._dettaglio_json(a, imgs)
 
+    def tutti_alloggi(self, *, limit: int = 500) -> List[Dict[str, Any]]:
+        """TUTTI gli alloggi di TUTTI gli host (ogni stato) per la vista admin. Read-only.
+        Include l'id NUMERICO e l'host_id (per gestione/cancellazione dal pannello admin)."""
+        limit = limit if (isinstance(limit, int) and not isinstance(limit, bool)
+                          and 0 < limit <= 2000) else 500
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT id, host_id, slug, titolo, citta, prezzo_notte_cents, valuta, stato "
+                "FROM alloggi ORDER BY aggiornato_ts DESC LIMIT ?", (limit,)).fetchall()
+        finally:
+            con.close()
+        return [{"id": int(r["id"]), "host_id": r["host_id"], "slug": r["slug"],
+                 "titolo": r["titolo"], "citta": r["citta"],
+                 "prezzo_notte_cents": int(r["prezzo_notte_cents"]),
+                 "valuta": r["valuta"] or "EUR", "stato": r["stato"]} for r in righe]
+
     def dettaglio_owner(self, slug: str) -> Optional[Dict[str, Any]]:
         """Come dettaglio() ma per il PROPRIETARIO nel pannello: ritorna l'alloggio in
         QUALSIASI stato (anche bozza/sospeso), per poterlo MODIFICARE. Nessun filtro sullo

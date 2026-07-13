@@ -701,6 +701,10 @@ class RouterHTTP:
             return self._host_cancella(body, headers)
         if metodo == "GET" and path == "/api/admin/prenotazioni":
             return self._admin_prenotazioni(query, headers)
+        if metodo == "GET" and path == "/api/admin/alloggi":
+            return self._admin_alloggi(query, headers)
+        if metodo == "POST" and path == "/api/admin/alloggio_stato":
+            return self._admin_alloggio_stato(body, headers)
         if metodo == "POST" and path == "/api/admin/rimborso":
             return self._admin_rimborso(body, headers)
         if metodo == "GET" and path == "/api/admin/controversie":
@@ -795,6 +799,30 @@ class RouterHTTP:
             logger.error("admin prenotazioni: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
         return 200, {"prenotazioni": el}
+
+    def _admin_alloggi(self, query, headers):
+        """Vista admin: TUTTI gli annunci (ogni host, ogni stato) con id numerico + host_id."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        try:
+            el = self._sys.catalogo.tutti_alloggi(limit=1000)
+        except Exception:
+            logger.error("admin alloggi: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        return 200, {"alloggi": el}
+
+    def _admin_alloggio_stato(self, body, headers):
+        """Admin: cambia lo stato di QUALSIASI annuncio (sospendi/ripubblica) per slug."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        slug, stato = dati.get("slug"), dati.get("stato")
+        if not (isinstance(slug, str) and slug and isinstance(stato, str)):
+            return 422, {"errore": "campi_non_validi"}
+        ok = self._sys.catalogo.imposta_stato(slug, stato)
+        return (200 if ok else 422), {"stato": stato if ok else "rifiutato"}
 
     def _admin_cancella_attivita(self, body, headers):
         """TASTO 'cancella tutto': rimuove un host da OGNI archivio (fase156) e VERIFICA che
