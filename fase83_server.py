@@ -2977,6 +2977,28 @@ class RouterHTTP:
         except Exception:
             logger.error("host calendario: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
+        # IN TRATTATIVA (arancione): giorni tenuti da un hold VIVO (in attesa di pagamento
+        # o di approvazione) — non ancora una prenotazione confermata. Isolato: se fallisce,
+        # il calendario resta valido coi soli stati base.
+        try:
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            if pp is not None and cal:
+                import datetime as _dtc
+                gg_hold = set()
+                for h in pp.attivi_per_alloggio(alloggio):
+                    try:
+                        d0 = _dtc.date.fromisoformat(h.get("check_in", ""))
+                        d1 = _dtc.date.fromisoformat(h.get("check_out", ""))
+                        for i in range(max(0, (d1 - d0).days)):
+                            gg_hold.add((d0 + _dtc.timedelta(days=i)).isoformat())
+                    except Exception:
+                        continue
+                for g in cal:
+                    if isinstance(g, dict) and g.get("giorno") in gg_hold \
+                            and g.get("stato") == "pieno":
+                        g["stato"] = "in_trattativa"
+        except Exception:
+            logger.warning("marcatura in_trattativa fallita (ignorata)", exc_info=True)
         return 200, {"giorni": cal}
 
     def _host_ical(self, body, headers):

@@ -187,6 +187,29 @@ class TestSuRichiestaStripe(unittest.TestCase):
         self.assertNotIn("Completa il pagamento", html2)
         self.assertIn("Prenotazione confermata", html2)
 
+    def test_calendario_mostra_in_trattativa(self):
+        # richiesta in attesa dell'host -> quei giorni sono ARANCIONI (in_trattativa),
+        # non "pieno": l'host capisce che non è ancora una prenotazione confermata.
+        ref = self._richiedi("2026-10-01", "2026-10-03")
+        s, cal = self.g("GET", "/api/host/calendario", headers={"X-Host-Token": self.tok},
+                        query={"alloggio": "casa-sr", "da": "2026-09-30", "a": "2026-10-05"})
+        self.assertEqual(s, 200, cal)
+        stati = {g["giorno"]: g["stato"] for g in cal["giorni"]}
+        self.assertEqual(stati.get("2026-10-01"), "in_trattativa")
+        self.assertEqual(stati.get("2026-10-02"), "in_trattativa")
+        self.assertEqual(stati.get("2026-10-03"), "libero")     # check-out escluso
+        self.assertEqual(stati.get("2026-09-30"), "libero")
+        # approva + paga -> diventa OCCUPATO (pieno), non più in trattativa
+        s, _ = self.g("POST", "/api/host/richieste/approva", {"riferimento": ref},
+                      {"X-Host-Token": self.tok})
+        self.assertEqual(s, 200)
+        self._webhook(ref)
+        s, cal2 = self.g("GET", "/api/host/calendario", headers={"X-Host-Token": self.tok},
+                         query={"alloggio": "casa-sr", "da": "2026-09-30", "a": "2026-10-05"})
+        stati2 = {g["giorno"]: g["stato"] for g in cal2["giorni"]}
+        self.assertEqual(stati2.get("2026-10-01"), "pieno")
+        self.assertEqual(stati2.get("2026-10-02"), "pieno")
+
     def test_scade_secondi_clamp_fase85(self):
         catture = []
 

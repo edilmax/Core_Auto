@@ -222,6 +222,24 @@ class PagamentiPendenti:
         finally:
             con.close()
 
+    def attivi_per_alloggio(self, alloggio_id: Any, *,
+                            ora_ts: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Hold/richieste ANCORA VIVI per un alloggio ('in_attesa' = in attesa di pagamento,
+        'in_attesa_host' = in attesa di approvazione). Per il calendario host: quei giorni
+        sono 'in trattativa' (arancione), non prenotazioni confermate."""
+        if not (isinstance(alloggio_id, str) and alloggio_id):
+            return []
+        ora = ora_ts if isinstance(ora_ts, int) and not isinstance(ora_ts, bool) else self._now()
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT * FROM pendenti WHERE alloggio_id=? AND stato IN "
+                "('in_attesa','in_attesa_host') AND scadenza_ts>?",
+                (alloggio_id, ora)).fetchall()
+            return [self._riga(r) for r in righe]
+        finally:
+            con.close()
+
     def pulisci_vecchi(self, *, eta_sec: int = 93600, ora_ts: Optional[int] = None) -> int:
         """Elimina i record 'scaduto'/'rimborsato' più vecchi di eta_sec (default 26h: una
         sessione Stripe può vivere fino a 24h — su-richiesta approvata — e finché il link è
