@@ -106,6 +106,70 @@ class TestHostUX(unittest.TestCase):
         self.assertEqual(s, 200, q)
         self.assertEqual(q["valuta"], "THB")          # l'ospite paga in THB, non convertito a EUR
 
+    # ── MODIFICA annuncio esistente (upsert, no duplicati) ────────────────────
+    def test_dettaglio_owner_per_modifica(self):
+        s, c = self._pubblica(valuta="EUR", prezzo_notte_cents=9500)
+        slug = c["slug"]
+        s, d = self.r.gestisci("GET", "/api/host/alloggio", {"slug": slug}, headers=self.h)
+        self.assertEqual(s, 200, d)
+        self.assertEqual(d["slug"], slug)
+        self.assertEqual(d["prezzo_notte_cents"], 9500)
+        self.assertIn("modalita_prenotazione", d)     # campi per pre-riempire il form
+        # un altro host non può leggerne il dettaglio
+        hL = {"X-Host-Token": self._registra("luigi@bnb.it")}
+        s2, _ = self.r.gestisci("GET", "/api/host/alloggio", {"slug": slug}, headers=hL)
+        self.assertEqual(s2, 403)
+        # slug inesistente -> 404
+        s3, _ = self.r.gestisci("GET", "/api/host/alloggio", {"slug": "non-esiste"}, headers=self.h)
+        self.assertEqual(s3, 404)
+
+    def test_modifica_aggiorna_stesso_id_no_duplicato(self):
+        s, c = self._pubblica(titolo="Casa Uno", prezzo_notte_cents=9000)
+        slug, id0 = c["slug"], c["id"]
+        # ri-pubblico con LO STESSO slug (modifica) -> stesso id, dati aggiornati, 1 solo annuncio
+        s, c2 = self._pubblica(slug=slug, titolo="Casa Uno Rinnovata", prezzo_notte_cents=12000)
+        self.assertEqual(s, 201, c2)
+        self.assertEqual(c2["id"], id0)               # stesso id, non un duplicato
+        _, miei = self.r.gestisci("GET", "/api/host/alloggi", {}, headers=self.h)
+        self.assertEqual(len(miei["alloggi"]), 1)
+        a = miei["alloggi"][0]
+        self.assertEqual(a["prezzo_notte_cents"], 12000)
+
+    def test_pubblica_su_slug_altrui_bloccata_no_furto(self):
+        s, c = self._pubblica(prezzo_notte_cents=9000)   # mario
+        slug = c["slug"]
+        # luigi prova a pubblicare SULLO STESSO slug -> 403 (niente furto/riassegnazione host)
+        hL = {"X-Host-Token": self._registra("luigi@bnb.it")}
+        s2, r = self.r.gestisci("POST", "/api/host/pubblica", headers=hL, body=json.dumps(
+            {"slug": slug, "titolo": "RUBATO", "citta": "X", "prezzo_notte_cents": 1, "capacita": 1}))
+        self.assertEqual(s2, 403, r)
+        # l'annuncio è ancora di mario, invariato
+        _, d = self.r.gestisci("GET", "/api/host/alloggio", {"slug": slug}, headers=self.h)
+        self.assertEqual(d["prezzo_notte_cents"], 9000)
+
+    # ── PROPRIETÀ: non puoi modificare l'alloggio di un ALTRO host ────────────
+    def test_ownership_scrittura_altrui_bloccata(self):
+        s, c = self._pubblica()
+        slug = c["slug"]
+        hL = {"X-Host-Token": self._registra("luigi@bnb.it")}     # secondo host
+        casi = [
+            ("/api/host/stato", {"slug": slug, "stato": "sospeso"}),
+            ("/api/host/disponibilita", {"alloggio_id": slug, "giorno": "2026-09-01",
+                                         "unita_totali": 1, "prezzo_netto_cents": 100}),
+            ("/api/host/disponibilita_range", {"alloggio_id": slug, "da": "2026-09-01",
+                                               "a": "2026-09-05", "unita_totali": 1,
+                                               "prezzo_netto_cents": 100}),
+            ("/api/host/ical", {"alloggio_id": slug,
+                                "ical": "BEGIN:VCALENDAR\nEND:VCALENDAR"}),
+        ]
+        for path, corpo in casi:
+            s, r = self.r.gestisci("POST", path, headers=hL, body=json.dumps(corpo))
+            self.assertEqual(s, 403, f"{path} doveva essere 403 (non tuo), invece {s} {r}")
+        # il proprietario invece SÌ
+        s, r = self.r.gestisci("POST", "/api/host/stato", headers=self.h,
+                               body=json.dumps({"slug": slug, "stato": "sospeso"}))
+        self.assertEqual(s, 200, r)
+
     # ── CANCELLA FOTO ─────────────────────────────────────────────────────────
     def _carica_foto(self):
         s, c = self.r.gestisci("POST", "/api/host/upload_foto", headers=self.h,

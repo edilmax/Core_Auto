@@ -648,6 +648,8 @@ class RouterHTTP:
             return self._host_export(query, headers)
         if metodo == "GET" and path == "/api/host/alloggi":
             return self._host_alloggi(query, headers)
+        if metodo == "GET" and path == "/api/host/alloggio":
+            return self._host_alloggio_dettaglio(query, headers)
         if metodo == "GET" and path == "/api/host/accettazioni":
             return self._host_accettazioni(query, headers)
         if metodo == "POST" and path == "/api/host/stato":
@@ -2208,6 +2210,11 @@ class RouterHTTP:
         if not (isinstance(dati.get("slug"), str) and dati.get("slug").strip()):
             dati = dict(dati)
             dati["slug"] = self._slug_unico(dati.get("titolo"), dati.get("citta"))
+        # SICUREZZA: la pubblicazione è un UPSERT per slug che RIASSEGNA host_id. In modalità
+        # self-service (token) impedisci di pubblicare su uno slug ALTRUI (furto di annuncio).
+        # slug nuovo/auto -> proprietario None -> consentito; slug proprio -> aggiorna.
+        if not self._verifica_proprieta(headers, dati.get("slug")):
+            return 403, {"errore": "non_tuo"}
         from fase57_vetrina import Immagine, SchedaAlloggio, valida_scheda
         ok, codice, scheda = valida_scheda(dati)
         if not ok:
@@ -2275,6 +2282,8 @@ class RouterHTTP:
                 and isinstance(unita, int) and not isinstance(unita, bool)
                 and isinstance(prezzo, int) and not isinstance(prezzo, bool)):
             return 422, {"errore": "campi_non_validi"}
+        if not self._verifica_proprieta(headers, alloggio):
+            return 403, {"errore": "non_tuo"}
         ok = self._sys.inventario.imposta_disponibilita(
             alloggio, giorno, unita_totali=unita, prezzo_netto_cents=prezzo,
             chiuso=bool(dati.get("chiuso", False)))
@@ -2296,6 +2305,8 @@ class RouterHTTP:
                 and isinstance(unita, int) and not isinstance(unita, bool)
                 and isinstance(prezzo, int) and not isinstance(prezzo, bool)):
             return 422, {"errore": "campi_non_validi"}
+        if not self._verifica_proprieta(headers, alloggio):
+            return 403, {"errore": "non_tuo"}
         try:
             d0 = datetime.date.fromisoformat(da)
             d1 = datetime.date.fromisoformat(a)
@@ -2412,6 +2423,38 @@ class RouterHTTP:
             return 503, {"errore": "service_unavailable"}
         return 200, {"alloggi": el}
 
+    def _verifica_proprieta(self, headers, slug) -> bool:
+        """Self-service (token): l'host può modificare SOLO i propri alloggi. Operatore
+        (X-Host-Key senza token): consentito (back-office piattaforma). Slug inesistente
+        o errore infrastrutturale: non blocca qui (l'operazione a valle valida/no-op)."""
+        hid = self._host_id_da_token(headers)
+        if not hid:
+            return True
+        try:
+            owner = self._sys.catalogo.host_di_alloggio(slug)
+        except Exception:
+            return True
+        return owner is None or owner == hid
+
+    def _host_alloggio_dettaglio(self, query, headers):
+        """Dettaglio COMPLETO di un alloggio del proprietario (per pre-riempire il form di
+        modifica). Host-auth + verifica proprietà."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        slug = query.get("slug")
+        if not (isinstance(slug, str) and slug):
+            return 422, {"errore": "slug_mancante"}
+        if not self._verifica_proprieta(headers, slug):
+            return 403, {"errore": "non_tuo"}
+        try:
+            d = self._sys.catalogo.dettaglio_owner(slug)
+        except Exception:
+            logger.error("host alloggio dettaglio: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        if d is None:
+            return 404, {"errore": "non_trovato"}
+        return 200, d
+
     def _host_stato(self, body, headers):
         if not self._auth_host(headers):
             return 401, {"errore": "unauthorized"}
@@ -2421,6 +2464,8 @@ class RouterHTTP:
         slug, stato = dati.get("slug"), dati.get("stato")
         if not (isinstance(slug, str) and slug and isinstance(stato, str)):
             return 422, {"errore": "campi_non_validi"}
+        if not self._verifica_proprieta(headers, slug):
+            return 403, {"errore": "non_tuo"}
         ok = self._sys.catalogo.imposta_stato(slug, stato)
         return (200 if ok else 422), {"stato": stato if ok else "rifiutato"}
 
@@ -2450,6 +2495,8 @@ class RouterHTTP:
         alloggio, ical = dati.get("alloggio_id"), dati.get("ical")
         if not (isinstance(alloggio, str) and alloggio and isinstance(ical, str)):
             return 422, {"errore": "campi_non_validi"}
+        if not self._verifica_proprieta(headers, alloggio):
+            return 403, {"errore": "non_tuo"}
         from fase82_ical_sync import sincronizza
         return 200, sincronizza(self._sys.inventario, alloggio, ical)
 

@@ -598,6 +598,22 @@ class CatalogoVetrina:
             con.close()
         return self._dettaglio_json(a, imgs)
 
+    def dettaglio_owner(self, slug: str) -> Optional[Dict[str, Any]]:
+        """Come dettaglio() ma per il PROPRIETARIO nel pannello: ritorna l'alloggio in
+        QUALSIASI stato (anche bozza/sospeso), per poterlo MODIFICARE. Nessun filtro sullo
+        stato. La chiamata a valle (fase83) verifica la proprietà prima di esporlo."""
+        con = self._apri()
+        try:
+            a = con.execute("SELECT * FROM alloggi WHERE slug=?", (slug,)).fetchone()
+            if a is None:
+                return None
+            imgs = con.execute(
+                "SELECT url, ordine, alt FROM alloggio_immagini WHERE alloggio_id=? "
+                "ORDER BY ordine, id", (a["id"],)).fetchall()
+        finally:
+            con.close()
+        return self._dettaglio_json(a, imgs)
+
     # --- contratti JSON (tutti gli importi int cents; tassi/geo interi) ---
     def _card_json(self, r: sqlite3.Row, criteri: CriteriRicerca) -> Dict[str, Any]:
         card: Dict[str, Any] = {
