@@ -539,9 +539,11 @@ class TestSelfServiceHost(unittest.TestCase):
         self.assertEqual(s2, 201)
         _, miei = self.r.gestisci("GET", "/api/host/alloggi", {"host_id": hid}, headers=h)
         self.assertEqual({a["slug"] for a in miei["alloggi"]}, {"casa-mario"})
+        # col token il parametro host_id è IGNORATO (il token vince): non puoi vedere gli
+        # alloggi di un ALTRO host passando il suo id -> vedi sempre e solo i TUOI.
         _, imp = self.r.gestisci("GET", "/api/host/alloggi", {"host_id": "IMPOSTORE"},
                                  headers=h)
-        self.assertEqual(imp["alloggi"], [])      # NON pubblicato sotto l'impostore
+        self.assertEqual({a["slug"] for a in imp["alloggi"]}, {"casa-mario"})
 
     def test_token_invalido_bloccato(self):
         s, _ = self.r.gestisci("POST", "/api/host/pubblica",

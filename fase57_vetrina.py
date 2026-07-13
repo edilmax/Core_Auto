@@ -516,13 +516,13 @@ class CatalogoVetrina:
         con = self._apri()
         try:
             righe = con.execute(
-                "SELECT slug, titolo, citta, prezzo_notte_cents, stato FROM alloggi "
+                "SELECT id, slug, titolo, citta, prezzo_notte_cents, stato FROM alloggi "
                 "WHERE host_id=? ORDER BY aggiornato_ts DESC LIMIT ?",
                 (str(host_id), limit)).fetchall()
         finally:
             con.close()
-        return [{"slug": r["slug"], "titolo": r["titolo"], "citta": r["citta"],
-                 "prezzo_notte_cents": int(r["prezzo_notte_cents"]),
+        return [{"id": int(r["id"]), "slug": r["slug"], "titolo": r["titolo"],
+                 "citta": r["citta"], "prezzo_notte_cents": int(r["prezzo_notte_cents"]),
                  "stato": r["stato"]} for r in righe]
 
     # --- READ: ricerca paginata (solo 'pubblicato') ---

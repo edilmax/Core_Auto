@@ -616,6 +616,8 @@ class RouterHTTP:
             return self._host_pubblica(body, headers)
         if metodo == "POST" and path == "/api/host/upload_foto":
             return self._upload_foto(body, headers)
+        if metodo == "POST" and path == "/api/host/foto_elimina":
+            return self._foto_elimina(body, headers)
         if metodo == "POST" and path == "/api/host/disponibilita":
             return self._host_disponibilita(body, headers)
         if metodo == "POST" and path == "/api/host/disponibilita_range":
@@ -2201,14 +2203,63 @@ class RouterHTTP:
         if hid:
             dati = dict(dati)
             dati["host_id"] = hid
+        # AUTO-ID: l'host NON deve inventarsi uno slug. Se non lo fornisce (nuovo alloggio),
+        # lo generiamo noi dal titolo/città, numerato e UNIVOCO -> zero errori/collisioni.
+        if not (isinstance(dati.get("slug"), str) and dati.get("slug").strip()):
+            dati = dict(dati)
+            dati["slug"] = self._slug_unico(dati.get("titolo"), dati.get("citta"))
         from fase57_vetrina import Immagine, SchedaAlloggio, valida_scheda
         ok, codice, scheda = valida_scheda(dati)
         if not ok:
             return 422, {"errore": "scheda_non_valida", "dettaglio": codice}
         imgs = [Immagine(u, i) for i, u in enumerate(dati.get("immagini", []))
                 if isinstance(u, str)]
-        self._sys.catalogo.pubblica(scheda, imgs)
-        return 201, {"stato": "pubblicato", "slug": scheda.slug}
+        id_num = self._sys.catalogo.pubblica(scheda, imgs)
+        return 201, {"stato": "pubblicato", "slug": scheda.slug, "id": id_num}
+
+    def _slug_unico(self, titolo, citta):
+        """Genera uno slug pubblico pulito dal titolo (o città), garantito UNIVOCO nel catalogo.
+        L'host non lo vede/digita mai: serve solo come indirizzo interno stabile."""
+        import re as _re, unicodedata as _ud, secrets as _s
+        base = str(titolo or citta or "casa")
+        base = _ud.normalize("NFKD", base).encode("ascii", "ignore").decode()
+        base = _re.sub(r"[^a-zA-Z0-9]+", "-", base).strip("-").lower()[:40] or "casa"
+        cat = getattr(self._sys, "catalogo", None)
+        candidati = [base] + ["%s-%d" % (base, i) for i in range(2, 80)]
+        for cand in candidati:
+            try:
+                if cat is None or cat.host_di_alloggio(cand) is None:
+                    return cand
+            except Exception:
+                break
+        return base + "-" + _s.token_hex(3)
+
+    def _foto_elimina(self, body, headers):
+        """Cancella una foto caricata per errore (file in UPLOAD_DIR). Host-auth. Path-safe:
+        accetta solo /uploads/<nome> dentro la cartella upload; idempotente."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        dati = self._json(body)
+        if not isinstance(dati, dict):
+            return 400, {"errore": "json_non_valido"}
+        import os as _os, posixpath as _pp
+        url = dati.get("url") or ""
+        if not (isinstance(url, str) and url.startswith("/uploads/")):
+            return 422, {"errore": "url_non_valido"}
+        nome = _pp.basename(url)
+        if not nome or nome in (".", ".."):
+            return 422, {"errore": "url_non_valido"}
+        updir = _os.environ.get("UPLOAD_DIR", "data/uploads")
+        percorso = _os.path.abspath(_os.path.join(updir, nome))
+        try:
+            if _os.path.commonpath([percorso, _os.path.abspath(updir)]) != _os.path.abspath(updir):
+                return 422, {"errore": "url_non_valido"}       # fuori dalla cartella: rifiuta
+            if _os.path.isfile(percorso):
+                _os.remove(percorso)
+            return 200, {"eliminata": True}
+        except Exception:
+            logger.warning("foto elimina fallita (ISOLATA)", exc_info=True)
+            return 200, {"eliminata": False}
 
     def _host_disponibilita(self, body, headers):
         if not self._auth_host(headers):
@@ -2350,7 +2401,8 @@ class RouterHTTP:
     def _host_alloggi(self, query, headers):
         if not self._auth_host(headers):
             return 401, {"errore": "unauthorized"}
-        host_id = query.get("host_id")
+        # host ricavato dal TOKEN (l'host non deve digitare il proprio id): vede solo i SUOI
+        host_id = self._host_id_da_token(headers) or query.get("host_id")
         if not (isinstance(host_id, str) and host_id):
             return 422, {"errore": "host_id_mancante"}
         try:
