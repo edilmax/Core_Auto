@@ -521,6 +521,52 @@ def pagina_voucher_non_valido_html(lingua: str = "it") -> str:
     ) % (lng, tit, h1, p1, p2, mail, mail, home)
 
 
+def pagina_azione_html(esito: Dict[str, Any]) -> str:
+    """Pagina GENTILE dopo che l'host clicca Approva/Rifiuta da un messaggio. Verde=approvata,
+    rossa=rifiutata, arancio=link scaduto/già gestito."""
+    ok = bool(esito.get("ok"))
+    stato = esito.get("stato")
+    if ok and stato == "approvata":
+        col, bg, ic, h1 = "#155724", "#d4edda", "✅", "Prenotazione approvata"
+        p1 = "Ottimo! Il calendario e il tuo pannello si aggiornano da soli."
+        p2 = "Il cliente riceve la conferma. Non devi fare altro."
+    elif ok and stato == "rifiutata":
+        col, bg, ic, h1 = "#842029", "#f8d7da", "✖️", "Prenotazione rifiutata"
+        p1 = "La richiesta è stata rifiutata e le date sono di nuovo libere."
+        p2 = "Puoi gestire tutto dal tuo pannello host quando vuoi."
+    else:
+        col, bg, ic = "#8a5200", "#fff4e5", "⚠️"
+        motivo = esito.get("motivo", "")
+        if motivo == "link_scaduto":
+            h1, p1 = "Link scaduto", "Questo link non è più valido (oltre le 24h)."
+        elif motivo == "richiesta_non_trovata":
+            h1, p1 = "Richiesta già gestita", "Questa richiesta è già stata approvata, rifiutata o è scaduta."
+        elif motivo == "non_tua":
+            h1, p1 = "Non autorizzato", "Questo link non corrisponde al tuo account."
+        else:
+            h1, p1 = "Link non valido", "Non riusciamo a leggere questo link."
+        p2 = "Apri il pannello host per gestire le tue prenotazioni."
+    pannello = "https://bookinvip.com/host.html"
+    return (
+        "<!DOCTYPE html><html lang=\"it\"><head><meta charset=\"UTF-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "<title>%s · BookinVIP</title><style>body{font-family:system-ui,-apple-system,"
+        "Segoe UI,sans-serif;background:#f4f6fb;color:#1e2b45;margin:0;min-height:100vh;"
+        "display:flex;align-items:center;justify-content:center;padding:1.2rem}"
+        ".c{background:#fff;border-radius:1.5rem;box-shadow:0 12px 40px rgba(20,40,80,.1);"
+        "padding:2.4rem 2rem;max-width:460px;text-align:center}"
+        ".logo{font-weight:800;font-size:1.4rem;color:#1e3c72;margin-bottom:1rem}"
+        ".i{width:74px;height:74px;border-radius:50%%;background:%s;color:%s;"
+        "display:flex;align-items:center;justify-content:center;font-size:2.3rem;margin:0 auto 1rem}"
+        "h1{font-size:1.35rem;margin:.2rem 0 .6rem}p{color:#5e6f8d;line-height:1.6;margin:.4rem 0}"
+        "a.b{display:inline-block;margin-top:1.2rem;background:#1e3c72;color:#fff;"
+        "text-decoration:none;padding:.7rem 1.5rem;border-radius:2rem;font-weight:600}"
+        "</style></head><body><div class=\"c\"><div class=\"logo\">BookinVIP</div>"
+        "<div class=\"i\">%s</div><h1>%s</h1><p>%s</p><p>%s</p>"
+        "<a class=\"b\" href=\"%s\">Vai al pannello host</a></div></body></html>"
+    ) % (h1, bg, col, ic, h1, p1, p2, pannello)
+
+
 def _ext_da_magic(raw: bytes) -> Optional[str]:
     """Tipo immagine dai MAGIC BYTES (mai fidarsi del content-type/estensione). None se
     non e' un'immagine supportata."""
@@ -1203,8 +1249,37 @@ class RouterHTTP:
                         host_id=host, email=str(dati.get("email", "")), quote_token=qt,
                         corpo_json=_j.dumps(corpo), stato="in_attesa_host",
                         scadenza_ts=int(_t.time()) + 86400)   # 24h per approvare
+            # avvisa l'host SUBITO col link Approva/Rifiuta (un tocco, da qualsiasi messaggio)
+            self._avvisa_host_richiesta(allog, ref, corpo.get("check_in", ""),
+                                        corpo.get("check_out", ""), host)
         except Exception:
             logger.warning("registra richiesta su-richiesta fallita (ignorata)", exc_info=True)
+
+    def _avvisa_host_richiesta(self, allog, ref, ci, co, host_id):
+        """Avvisa l'host di una richiesta DA APPROVARE con i link Approva/Rifiuta (un tocco,
+        da qualsiasi canale) + il link al pannello. Best-effort isolato: non blocca mai."""
+        try:
+            notif = getattr(self._sys, "notificatore_prenotazione", None)
+            reg = getattr(self._sys, "registro_host", None)
+            if notif is None or not notif.attivo() or reg is None:
+                return
+            contatti = reg.info_host(host_id) if host_id else None
+            if not contatti:
+                return
+            d = self._sys.catalogo.dettaglio(allog) or {}
+            titolo = (d.get("titolo") if isinstance(d, dict) else None) or allog
+            link_ok = self._link_azione(ref, host_id, "approva")
+            link_no = self._link_azione(ref, host_id, "rifiuta")
+            pannello = (self._base_url or "https://bookinvip.com") + "/host.html"
+            ogg = "Nuova richiesta di prenotazione: %s (%s -> %s)" % (titolo, ci, co)
+            testo = ("Hai una nuova richiesta per \"%s\" dal %s al %s.\n\n"
+                     "APPROVA:  %s\nRIFIUTA:  %s\n\n"
+                     "Hai 24 ore. Approvando, il calendario si aggiorna da solo.\n"
+                     "Gestisci tutto anche dal pannello: %s"
+                     % (titolo, ci, co, link_ok, link_no, pannello))
+            notif.avvisa(contatti, ogg, testo)
+        except Exception:
+            logger.warning("avviso host richiesta fallito (ignorato)", exc_info=True)
 
     def _host_richieste(self, query, headers):
         if not self._auth_host(headers):
@@ -1223,15 +1298,58 @@ class RouterHTTP:
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
+        ref = dati.get("riferimento")
+        host_id = self._host_id_da_token(headers) or dati.get("host_id")
+        return self._decidi_richiesta(ref, host_id, approva)
+
+    def _link_azione(self, ref, host_id, azione):
+        """URL FIRMATO per approvare/rifiutare una richiesta da QUALSIASI messaggio (email/
+        Telegram/WhatsApp): un tocco, niente login. Firmato HMAC (fase59.firma), scade 3gg."""
+        firma = getattr(self._sys, "firma", None)
+        if firma is None or not ref:
+            return ""
+        import time as _t
+        try:
+            tok = firma.codifica({"k": "az_richiesta", "rif": str(ref),
+                                  "hid": str(host_id or ""), "az": azione,
+                                  "exp": int(_t.time()) + 3 * 86400})
+        except Exception:
+            return ""
+        from urllib.parse import quote as _q
+        return (self._base_url or "https://bookinvip.com") + "/host/azione?t=" + _q(tok)
+
+    def _azione_richiesta(self, token):
+        """Verifica il link firmato ed esegue la decisione. Ritorna un esito per la pagina."""
+        firma = getattr(self._sys, "firma", None)
+        d = firma.decodifica(token) if (firma and token) else None
+        if not (isinstance(d, dict) and d.get("k") == "az_richiesta"):
+            return {"ok": False, "motivo": "link_non_valido"}
+        import time as _t
+        if int(d.get("exp", 0) or 0) < int(_t.time()):
+            return {"ok": False, "motivo": "link_scaduto"}
+        az = d.get("az")
+        if az not in ("approva", "rifiuta"):
+            return {"ok": False, "motivo": "link_non_valido"}
+        status, esito = self._decidi_richiesta(d.get("rif"), d.get("hid") or None,
+                                               az == "approva")
+        if status == 200:
+            return {"ok": True, "azione": az, "stato": esito.get("stato"),
+                    "riferimento": d.get("rif")}
+        return {"ok": False, "azione": az,
+                "motivo": esito.get("errore", "richiesta_non_trovata")}
+
+    def _decidi_richiesta(self, ref, host_id_atteso, approva):
+        """Nucleo approva/rifiuta di una richiesta 'in_attesa_host'. Riusato dall'endpoint
+        autenticato E dal link firmato. Se `host_id_atteso` è dato, verifica la proprietà.
+        Approva -> finalizza (blocca le date: calendario+pannello si aggiornano). Rifiuta ->
+        libera la stanza. Idempotente-ish: una richiesta già decisa -> 404 (già evasa)."""
         pp = getattr(self._sys, "pagamenti_pendenti", None)
         if pp is None:
             return 503, {"errore": "richieste_non_attive"}
-        ref = dati.get("riferimento")
         rec = pp.info(ref) if isinstance(ref, str) else None
         if rec is None or rec.get("stato") != "in_attesa_host":
             return 404, {"errore": "richiesta_non_trovata"}
-        host_id = self._host_id_da_token(headers) or dati.get("host_id")
-        if rec.get("host_id") and host_id and rec["host_id"] != host_id:
+        if rec.get("host_id") and host_id_atteso and rec["host_id"] != host_id_atteso:
             return 403, {"errore": "non_tua"}
         import json as _j
         if approva:
@@ -2830,6 +2948,12 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     self._testo(404, "text/html", pagina_voucher_non_valido_html(lng))
                 else:
                     self._testo(200, "text/html", html)
+            elif u.path == "/host/azione":
+                # APPROVA/RIFIUTA una richiesta da un messaggio (link firmato, un tocco).
+                query = {k: v[0] for k, v in parse_qs(u.query).items()}
+                esito = router._azione_richiesta(query.get("t", ""))
+                self._testo(200 if esito.get("ok") else 400, "text/html",
+                            pagina_azione_html(esito))
             elif u.path.startswith("/affitta/"):
                 # Inbound SEO/AEO (fase97): landing host per città (server-rendered,
                 # crawlabile). Solo città note → niente thin-content da slug arbitrari.
