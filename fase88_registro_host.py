@@ -99,12 +99,13 @@ class RegistroHost:
                         telefono TEXT NOT NULL DEFAULT '',
                         line_token TEXT NOT NULL DEFAULT '',
                         wechat_webhook TEXT NOT NULL DEFAULT '',
+                        telegram_chat_id TEXT NOT NULL DEFAULT '',
                         termini_versione TEXT NOT NULL,
                         termini_ts INTEGER NOT NULL,
                         stato TEXT NOT NULL DEFAULT 'attivo',
                         creato_ts INTEGER NOT NULL)""")
                 # migrazione idempotente per DB esistenti (canali contatto host)
-                for col in ("telefono", "line_token", "wechat_webhook"):
+                for col in ("telefono", "line_token", "wechat_webhook", "telegram_chat_id"):
                     try:
                         con.execute("ALTER TABLE host ADD COLUMN %s TEXT NOT NULL DEFAULT ''" % col)
                     except sqlite3.OperationalError:
@@ -209,7 +210,8 @@ class RegistroHost:
         con = self._apri()
         try:
             r = con.execute("SELECT email, telefono, line_token, wechat_webhook, "
-                            "ragione_sociale FROM host WHERE host_id=?", (host_id,)).fetchone()
+                            "telegram_chat_id, ragione_sociale FROM host WHERE host_id=?",
+                            (host_id,)).fetchone()
         finally:
             con.close()
         if r is None:
@@ -217,7 +219,24 @@ class RegistroHost:
         return {"email": r["email"] or "", "telefono": (r["telefono"] or ""),
                 "line_token": (r["line_token"] or ""),
                 "wechat_webhook": (r["wechat_webhook"] or ""),
+                "telegram_chat_id": (r["telegram_chat_id"] or ""),
                 "ragione_sociale": (r["ragione_sociale"] or "")}
+
+    def imposta_telegram_chat(self, host_id: Any, chat_id: Any) -> bool:
+        """Collega (o scollega, con chat_id vuoto) il Telegram dell'host per gli avvisi."""
+        if not (isinstance(host_id, str) and host_id):
+            return False
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("UPDATE host SET telegram_chat_id=? WHERE host_id=?",
+                                  (str(chat_id or ""), host_id))
+            return bool(cur.rowcount)
+        except Exception:
+            logger.warning("imposta_telegram_chat fallita (ISOLATA)", exc_info=True)
+            return False
+        finally:
+            con.close()
 
     def cancella_host(self, host_id: Any) -> int:
         """CANCELLAZIONE TOTALE dell'account host (diritto all'oblio / pulizia)."""

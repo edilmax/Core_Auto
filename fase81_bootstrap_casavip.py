@@ -328,11 +328,13 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     else:
         avvisi.append("SMTP non configurato -> nessuna email voucher (gated)")
 
-    # 3e) notifiche prenotazione all'HOST (email sempre se SMTP c'e'; WhatsApp se gated)
+    # 3e) notifiche prenotazione all'HOST (email sempre se SMTP c'e'; WhatsApp/Telegram se gated)
     from fase152_notifiche_prenotazione import crea_notificatore_prenotazione
+    import os as _os152
     notificatore_prenotazione = crea_notificatore_prenotazione(
         email_provider=email_provider,
-        whatsapp_token=cfg.whatsapp_token, whatsapp_phone_id=cfg.whatsapp_phone_id)
+        whatsapp_token=cfg.whatsapp_token, whatsapp_phone_id=cfg.whatsapp_phone_id,
+        telegram_bot_token=_os152.environ.get("TELEGRAM_BOT_TOKEN", ""))
     if notificatore_prenotazione.attivo():
         componenti.append("avvisi_host(152)")
     else:

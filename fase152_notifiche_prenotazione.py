@@ -121,6 +121,33 @@ class CanaleWeChat:
             return False
 
 
+class CanaleTelegram:
+    """Telegram DM all'host: avvisi prenotazione (con link Approva/Rifiuta). L'host collega il
+    suo Telegram dal pannello (salviamo il chat_id). campo_contatto='telegram_chat_id'."""
+    campo_contatto = "telegram_chat_id"
+
+    def __init__(self, bot_token: str, *, fetch: Optional[Callable] = None):
+        self._token = bot_token or ""
+        self._fetch = fetch or _fetch_post
+
+    def attivo(self) -> bool:
+        return bool(self._token)
+
+    def invia(self, destinatario: str, oggetto: str, testo: str) -> bool:
+        if not (self._token and destinatario):
+            return False
+        try:
+            url = "https://api.telegram.org/bot%s/sendMessage" % self._token
+            st, _ = self._fetch(url, {"Content-Type": "application/json"},
+                                {"chat_id": str(destinatario),
+                                 "text": (str(oggetto) + "\n" + str(testo))[:4000],
+                                 "disable_web_page_preview": True})
+            return 200 <= int(st) < 300
+        except Exception:
+            logger.warning("telegram host alert fallito (ISOLATO)", exc_info=True)
+            return False
+
+
 class NotificatorePrenotazione:
     """Dispatcher multi-canale. Ogni canale espone `.invia(dest, oggetto, testo)->bool` e
     `.campo_contatto` ('email' | 'telefono'). Best-effort isolato."""
@@ -171,16 +198,21 @@ def componi_avviso_host(localizzatore: Any, *, alloggio: str, ci: str, co: str,
 def crea_notificatore_prenotazione(*, email_provider: Any = None,
                                    whatsapp_token: str = "",
                                    whatsapp_phone_id: str = "",
+                                   telegram_bot_token: str = "",
                                    fetch: Optional[Callable] = None,
                                    canali_extra: Optional[List[Any]] = None
                                    ) -> NotificatorePrenotazione:
-    """Factory: canale email (se provider) + WhatsApp (se gated-config) + extra iniettabili."""
+    """Factory: email (se provider) + WhatsApp/Telegram (se gated-config) + LINE/WeChat
+    (sempre, scattano se l'host ha fornito il contatto) + extra iniettabili."""
     canali: List[Any] = []
     if email_provider is not None:
         canali.append(CanaleEmailHost(email_provider))
     wa = CanaleWhatsApp(whatsapp_token, whatsapp_phone_id, fetch=fetch)
     if wa.attivo():
         canali.append(wa)
+    tg = CanaleTelegram(telegram_bot_token, fetch=fetch)
+    if tg.attivo():
+        canali.append(tg)
     # LINE/WeChat: sempre disponibili, scattano solo se l'host ha fornito il proprio contatto
     canali.append(CanaleLine(fetch=fetch))
     canali.append(CanaleWeChat(fetch=fetch))

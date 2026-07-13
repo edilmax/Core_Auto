@@ -618,6 +618,7 @@ class RouterHTTP:
         self._admin_key = admin_key
         self._base_url = base_url or ""
         self._loc = Localizzatore()
+        self._tg_codici = {}      # codice one-time -> (host_id, scadenza) per collegare Telegram
 
     def gestisci(self, metodo: str, path: str, query: Optional[Dict[str, str]] = None,
                  body: Optional[str] = None,
@@ -719,6 +720,10 @@ class RouterHTTP:
             return self._host_referral(query, headers)
         if metodo == "GET" and path == "/api/host/link_diretto":
             return self._host_link_diretto(query, headers)
+        if metodo == "GET" and path == "/api/host/telegram_link":
+            return self._host_telegram_link(headers)
+        if metodo == "POST" and path == "/api/telegram/webhook":
+            return self._telegram_webhook(body, headers)
         if metodo == "GET" and path == "/api/host/richieste":
             return self._host_richieste(query, headers)
         if metodo == "GET" and path == "/api/host/payout":
@@ -2699,6 +2704,74 @@ class RouterHTTP:
                     "link": base + "/?fonte=diretto&apri=" + quote(slug)})
         return 200, {"link_generale": base + "/?fonte=diretto",
                      "alloggi": alloggi, "commissione_bps": 500, "commissione": "5%"}
+
+    def _host_telegram_link(self, headers):
+        """Link per COLLEGARE il Telegram dell'host: aprendolo e premendo Start, il bot salva
+        il suo chat_id -> riceve lì gli avvisi di prenotazione (coi tasti Approva/Rifiuta)."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        hid = self._host_id_da_token(headers)
+        if not hid:
+            return 422, {"errore": "host_id_mancante"}
+        import os as _os
+        import secrets as _sec
+        import time as _t
+        now = int(_t.time())
+        for k in [k for k, v in list(self._tg_codici.items()) if v[1] < now]:
+            self._tg_codici.pop(k, None)                # housekeeping codici scaduti
+        code = _sec.token_hex(8)
+        self._tg_codici[code] = (hid, now + 900)        # valido 15 minuti
+        bot = (_os.environ.get("TELEGRAM_BOT_USERNAME") or "BookinVipInfo_bot").lstrip("@")
+        return 200, {"link": "https://t.me/%s?start=%s" % (bot, code)}
+
+    def _tg_reply(self, chat_id, testo):
+        """Risposta best-effort all'host su Telegram (isolata)."""
+        import json as _j
+        import os as _os
+        import urllib.request as _u
+        tokb = _os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if not (tokb and chat_id):
+            return
+        try:
+            corpo = _j.dumps({"chat_id": chat_id, "text": testo}).encode("utf-8")
+            req = _u.Request("https://api.telegram.org/bot%s/sendMessage" % tokb, data=corpo,
+                             method="POST", headers={"Content-Type": "application/json"})
+            _u.urlopen(req, timeout=8).read()
+        except Exception:
+            logger.warning("telegram reply fallita (ISOLATA)", exc_info=True)
+
+    def _telegram_webhook(self, body, headers):
+        """Webhook Telegram: quando l'host preme Start col codice, salva il suo chat_id.
+        GATED dal segreto TELEGRAM_WEBHOOK_SECRET se impostato. Risponde sempre 200 a Telegram."""
+        import os as _os
+        import time as _t
+        segreto = _os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
+        if segreto:
+            fornito = (headers or {}).get("X-Telegram-Bot-Api-Secret-Token", "") or \
+                (headers or {}).get("x-telegram-bot-api-secret-token", "")
+            if fornito != segreto:
+                return 403, {"errore": "forbidden"}
+        dati = self._json(body)
+        if not isinstance(dati, dict):
+            return 200, {"ok": True}
+        msg = dati.get("message") or dati.get("edited_message") or {}
+        chat = msg.get("chat") or {}
+        chat_id = chat.get("id")
+        testo = str(msg.get("text") or "").strip()
+        if chat_id and testo.startswith("/start"):
+            parti = testo.split(maxsplit=1)
+            code = parti[1].strip() if len(parti) > 1 else ""
+            v = self._tg_codici.pop(code, None) if code else None
+            if v and v[1] >= int(_t.time()):
+                reg = getattr(self._sys, "registro_host", None)
+                ok = reg.imposta_telegram_chat(v[0], str(chat_id)) if reg is not None else False
+                self._tg_reply(chat_id, "✅ Telegram collegato! Qui riceverai gli avvisi di "
+                               "prenotazione, coi tasti Approva/Rifiuta." if ok else
+                               "Non sono riuscito a collegare. Riprova dal pannello host.")
+            else:
+                self._tg_reply(chat_id, "Link scaduto o non valido. Genera un nuovo "
+                               "collegamento dal pannello host (\"Collega Telegram\").")
+        return 200, {"ok": True}
 
     def _host_alloggi(self, query, headers):
         if not self._auth_host(headers):
