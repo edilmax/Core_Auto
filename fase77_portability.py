@@ -33,6 +33,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from typing import Any, Dict, List, Optional, Tuple
 
+from fase99_multicurrency import esponente
+
 logger = logging.getLogger("core_auto.portability")
 
 MAX_CENTS = 1_000_000_00
@@ -51,9 +53,11 @@ def _intero_pos(v: Any) -> bool:
     return isinstance(v, int) and not isinstance(v, bool) and v > 0
 
 
-def prezzo_a_cents(valore: Any) -> Optional[int]:
-    """Converte un prezzo in unita' valuta (stringa decimale, es. '82.00') in centesimi
-    interi (Decimal HALF_UP). float/negativi/non-stringa -> None (fail-closed)."""
+def prezzo_a_cents(valore: Any, valuta: str = "EUR") -> Optional[int]:
+    """Converte un prezzo in unita' valuta (stringa decimale, es. '82.00') in UNITA' MINORI
+    intere, con l'esponente CORRETTO della valuta (EUR/THB=2, JPY/KRW=0, BHD=3): niente
+    ×100 fisso -> import PRECISO anche per valute non-EUR. Decimal HALF_UP.
+    float/negativi/non-stringa -> None (fail-closed)."""
     if not isinstance(valore, str):
         return None
     try:
@@ -62,7 +66,8 @@ def prezzo_a_cents(valore: Any) -> Optional[int]:
         return None
     if d < 0:
         return None
-    cents = int((d * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    exp = esponente(valuta)
+    cents = int((d * (Decimal(10) ** exp)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
     return cents if 0 <= cents <= MAX_CENTS else None
 
 
@@ -85,6 +90,7 @@ def da_booking(raw: Any) -> Dict[str, Any]:
         "slug": _primo(raw, "slug", "property_id", "hotel_id"),
         "titolo": _primo(raw, "property_name", "name", "title"),
         "citta": _primo(raw, "city", "address_city", "town"),
+        "valuta": _primo(raw, "currency", "currency_code", "curr", "valuta"),
         "prezzo_notte": _primo(raw, "base_rate", "rate", "base_price", "price"),
         "capacita": _primo(raw, "max_occupancy", "capacity", "max_guests"),
         "descrizione": _primo(raw, "description", "summary"),
@@ -103,6 +109,7 @@ def da_airbnb(raw: Any) -> Dict[str, Any]:
         "slug": _primo(raw, "slug", "listing_id", "id"),
         "titolo": _primo(raw, "listing_title", "name", "title"),
         "citta": _primo(raw, "city", "location_city"),
+        "valuta": _primo(raw, "currency", "listing_currency", "curr", "valuta"),
         "prezzo_notte": _primo(raw, "nightly_price", "price", "base_price"),
         "capacita": _primo(raw, "accommodates", "guests", "capacity"),
         "descrizione": _primo(raw, "description", "summary"),
@@ -137,7 +144,10 @@ def _normalizza(canonico: Dict[str, Any]) -> Tuple[List[str], Optional[Dict[str,
     slug = _stringa(canonico.get("slug"))
     titolo = _stringa(canonico.get("titolo"))
     citta = _stringa(canonico.get("citta"))
-    prezzo = prezzo_a_cents(canonico.get("prezzo_notte"))
+    valuta_in = _stringa(canonico.get("valuta"))
+    valuta = (valuta_in.upper() if valuta_in and len(valuta_in) == 3
+              and valuta_in.isalpha() else "EUR")   # valuta dell'annuncio importato (default EUR)
+    prezzo = prezzo_a_cents(canonico.get("prezzo_notte"), valuta)
     capacita = canonico.get("capacita")
     if host_id is None:
         errori.append("host_id_mancante")
@@ -175,7 +185,7 @@ def _normalizza(canonico: Dict[str, Any]) -> Tuple[List[str], Optional[Dict[str,
             unita = d.get("unita", d.get("units", 1))
             if not _intero_pos(unita):
                 continue
-            p = prezzo_a_cents(d.get("prezzo", d.get("price"))) if (
+            p = prezzo_a_cents(d.get("prezzo", d.get("price")), valuta) if (
                 d.get("prezzo") or d.get("price")) is not None else prezzo
             if p is None or p <= 0:
                 continue
@@ -185,20 +195,32 @@ def _normalizza(canonico: Dict[str, Any]) -> Tuple[List[str], Optional[Dict[str,
         return errori, None, immagini, notti
     scheda = {
         "host_id": host_id, "slug": slug, "titolo": titolo, "citta": citta,
-        "prezzo_notte_cents": prezzo, "capacita": int(capacita),
+        "prezzo_notte_cents": prezzo, "capacita": int(capacita), "valuta": valuta,
         "descrizione": descr.strip()[:LIMITE_TESTO], "servizi": servizi,
     }
     return errori, scheda, immagini, notti
 
 
 def importa(raw: Any, *, sorgente: str = "canonico", catalogo: Any = None,
-            inventario: Any = None) -> ReportImport:
+            inventario: Any = None, host_id: Optional[str] = None,
+            genera_slug: Any = None) -> ReportImport:
     """Importa una proprieta' da un export (data-portability). Dry-run se catalogo/
-    inventario non forniti; altrimenti applica (isolato)."""
+    inventario non forniti; altrimenti applica (isolato).
+    `host_id`: se fornito, FORZA il proprietario (dal token del pannello) invece di fidarsi
+    dell'export. `genera_slug(titolo,citta)->slug`: se fornito, genera SEMPRE uno slug pulito
+    e univoco (niente collisioni / furto di annuncio; ignora lo slug dell'export)."""
     adapter = _ADAPTER.get(sorgente, _ADAPTER["canonico"])
     canonico = adapter(raw)
     if not isinstance(canonico, dict):
         return ReportImport(False, errori=["payload_non_valido"])
+    canonico = dict(canonico)                       # non mutare l'input del chiamante
+    if isinstance(host_id, str) and host_id:
+        canonico["host_id"] = host_id               # proprietario dal token (sicurezza)
+    if callable(genera_slug):
+        try:
+            canonico["slug"] = genera_slug(canonico.get("titolo"), canonico.get("citta"))
+        except Exception:
+            logger.warning("import: genera_slug ha sollevato (ISOLATO)", exc_info=True)
     errori, scheda, immagini, notti = _normalizza(canonico)
     if errori or scheda is None:
         return ReportImport(False, errori=errori, immagini=immagini, notti=notti)
@@ -213,7 +235,8 @@ def importa(raw: Any, *, sorgente: str = "canonico", catalogo: Any = None,
                                  prezzo_notte_cents=scheda["prezzo_notte_cents"],
                                  capacita=scheda["capacita"],
                                  descrizione=scheda["descrizione"],
-                                 servizi=scheda["servizi"])
+                                 servizi=scheda["servizi"],
+                                 valuta=scheda.get("valuta", "EUR"))
             imgs = [Immagine(u, i) for i, u in enumerate(immagini)]
             catalogo.pubblica(sch, imgs)
             rep.catalogo_applicato = True

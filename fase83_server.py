@@ -618,6 +618,8 @@ class RouterHTTP:
             return self._upload_foto(body, headers)
         if metodo == "POST" and path == "/api/host/foto_elimina":
             return self._foto_elimina(body, headers)
+        if metodo == "POST" and path == "/api/host/importa":
+            return self._host_importa(body, headers)
         if metodo == "POST" and path == "/api/host/disponibilita":
             return self._host_disponibilita(body, headers)
         if metodo == "POST" and path == "/api/host/disponibilita_range":
@@ -2223,6 +2225,54 @@ class RouterHTTP:
                 if isinstance(u, str)]
         id_num = self._sys.catalogo.pubblica(scheda, imgs)
         return 201, {"stato": "pubblicato", "slug": scheda.slug, "id": id_num}
+
+    def _host_importa(self, body, headers):
+        """Porta gli annunci dai colossi (Booking/Airbnb) DA NOI: ingerisce l'export
+        machine-readable dell'host (suo diritto GDPR Art.20, NON scraping) e lo pubblica.
+        Sicuro: proprietario dal TOKEN, slug generato da noi (no collisioni/furto), valuta
+        preservata. Accetta un annuncio (dict) o una lista di annunci. Isolato per-annuncio."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        dati = self._json(body)
+        if not isinstance(dati, dict):
+            return 400, {"errore": "json_non_valido"}
+        sorgente = dati.get("sorgente") or "canonico"
+        if sorgente not in ("booking", "airbnb", "canonico"):
+            sorgente = "canonico"
+        payload = dati.get("dati")
+        lista = payload if isinstance(payload, list) else [payload]
+        if not lista or not all(isinstance(x, dict) for x in lista):
+            return 422, {"errore": "export_non_valido"}
+        if len(lista) > 200:
+            return 422, {"errore": "troppi_annunci"}
+        hid = self._host_id_da_token(headers)
+        try:
+            from fase77_portability import importa as _imp
+        except Exception:
+            logger.error("import portability: modulo non disponibile", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        risultati = []
+        importati = 0
+        for item in lista:
+            try:
+                rep = _imp(item, sorgente=sorgente, catalogo=self._sys.catalogo,
+                           inventario=self._sys.inventario, host_id=hid,
+                           genera_slug=self._slug_unico)
+            except Exception:
+                logger.error("import portability: eccezione ISOLATA su un annuncio",
+                             exc_info=True)
+                risultati.append({"ok": False, "slug": "", "errori": ["errore_interno"]})
+                continue
+            ok = bool(rep.ok and rep.catalogo_applicato)
+            if ok:
+                importati += 1
+            risultati.append({
+                "ok": ok, "slug": rep.slug,
+                "titolo": (rep.scheda or {}).get("titolo"),
+                "notti_applicate": rep.notti_applicate,
+                "errori": rep.errori,
+            })
+        return 200, {"importati": importati, "totale": len(lista), "risultati": risultati}
 
     def _slug_unico(self, titolo, citta):
         """Genera uno slug pubblico pulito dal titolo (o città), garantito UNIVOCO nel catalogo.

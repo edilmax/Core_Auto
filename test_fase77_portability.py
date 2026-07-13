@@ -141,6 +141,49 @@ class TestIntegrazioneReale(unittest.TestCase):
         self.assertTrue(e.ok)
 
 
+class TestValuta(unittest.TestCase):
+    def test_prezzo_per_valuta(self):
+        self.assertEqual(prezzo_a_cents("82.00", "EUR"), 8200)   # exp 2
+        self.assertEqual(prezzo_a_cents("8000", "JPY"), 8000)    # exp 0 (no ×100)
+        self.assertEqual(prezzo_a_cents("3500.50", "THB"), 350050)
+        self.assertEqual(prezzo_a_cents("82.00"), 8200)          # default EUR invariato
+
+    def test_valuta_preservata_nell_import(self):
+        raw = dict(CANONICO, valuta="THB", prezzo_notte="3500.00",
+                   disponibilita=[{"giorno": "2026-07-01", "unita": 1}])
+        r = importa(raw)
+        self.assertTrue(r.ok, r.errori)
+        self.assertEqual(r.scheda["valuta"], "THB")
+        self.assertEqual(r.scheda["prezzo_notte_cents"], 350000)
+        self.assertEqual(r.notti[0]["prezzo_cents"], 350000)     # notte eredita in THB
+
+    def test_valuta_jpy_esponente_zero(self):
+        raw = dict(CANONICO, valuta="JPY", prezzo_notte="12000",
+                   disponibilita=[])
+        r = importa(raw)
+        self.assertEqual(r.scheda["prezzo_notte_cents"], 12000)  # NON 1.200.000
+
+    def test_valuta_invalida_default_eur(self):
+        r = importa(dict(CANONICO, valuta="ZZZZ"))
+        self.assertEqual(r.scheda["valuta"], "EUR")
+
+
+class TestOverrideSicuro(unittest.TestCase):
+    def test_host_id_e_slug_forzati(self):
+        # il pannello forza il proprietario (dal token) e lo slug (auto) -> no furto/collisioni
+        r = importa(dict(CANONICO, host_id="EXPORT_HOST", slug="export-slug"),
+                    host_id="OWNER_TOKEN", genera_slug=lambda t, c: "auto-" + (t or "x")[:4].lower())
+        self.assertTrue(r.ok, r.errori)
+        self.assertEqual(r.scheda["host_id"], "OWNER_TOKEN")     # dal token, non dall'export
+        self.assertEqual(r.scheda["slug"], "auto-casa")          # generato, non dall'export
+
+    def test_non_muta_input_chiamante(self):
+        src = dict(CANONICO)
+        importa(src, host_id="X", genera_slug=lambda t, c: "y")
+        self.assertEqual(src["host_id"], "h1")                   # input invariato
+        self.assertEqual(src["slug"], "casa-roma")
+
+
 class TestRobustezza(unittest.TestCase):
     def test_mai_solleva(self):
         for bad in (None, 123, "x", [], {}):

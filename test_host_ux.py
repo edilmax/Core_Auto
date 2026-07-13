@@ -170,6 +170,52 @@ class TestHostUX(unittest.TestCase):
                                body=json.dumps({"slug": slug, "stato": "sospeso"}))
         self.assertEqual(s, 200, r)
 
+    # ── IMPORT DAI COLOSSI (portability) ──────────────────────────────────────
+    def test_import_booking_end_to_end(self):
+        export = {"property_name": "Villa Sole", "city": "Roma", "base_rate": "120.00",
+                  "currency": "EUR", "max_occupancy": 4, "property_id": "BK-999",
+                  "photos": ["https://img/1.jpg"],
+                  "availability": [{"date": "2026-09-01", "units": 1, "price": "120.00"}]}
+        s, r = self.r.gestisci("POST", "/api/host/importa", headers=self.h,
+                               body=json.dumps({"sorgente": "booking", "dati": export}))
+        self.assertEqual(s, 200, r)
+        self.assertEqual(r["importati"], 1)
+        res = r["risultati"][0]
+        self.assertTrue(res["ok"], res)
+        # l'annuncio è sotto l'host del TOKEN (non l'host dell'export), con slug generato da noi
+        _, miei = self.r.gestisci("GET", "/api/host/alloggi", {}, headers=self.h)
+        a = next(x for x in miei["alloggi"] if x["slug"] == res["slug"])
+        self.assertEqual(a["titolo"], "Villa Sole")
+        self.assertEqual(a["prezzo_notte_cents"], 12000)
+        self.assertNotEqual(a["slug"], "BK-999")           # slug nostro, non quello dell'export
+
+    def test_import_valuta_locale_preservata(self):
+        export = {"listing_title": "Bangkok Loft", "city": "Bangkok",
+                  "nightly_price": "3500.00", "currency": "THB", "accommodates": 2}
+        s, r = self.r.gestisci("POST", "/api/host/importa", headers=self.h,
+                               body=json.dumps({"sorgente": "airbnb", "dati": export}))
+        self.assertEqual(s, 200, r)
+        slug = r["risultati"][0]["slug"]
+        _, miei = self.r.gestisci("GET", "/api/host/alloggi", {}, headers=self.h)
+        a = next(x for x in miei["alloggi"] if x["slug"] == slug)
+        self.assertEqual(a["valuta"], "THB")               # valuta preservata
+        self.assertEqual(a["prezzo_notte_cents"], 350000)
+
+    def test_import_lista_multipla_e_auth(self):
+        # senza auth -> 401
+        s, _ = self.r.gestisci("POST", "/api/host/importa",
+                               body=json.dumps({"dati": {}}))
+        self.assertEqual(s, 401)
+        # lista di 2 annunci canonici -> 2 importati
+        lista = [
+            {"titolo": "Uno", "citta": "Roma", "prezzo_notte": "80.00", "capacita": 2},
+            {"titolo": "Due", "citta": "Milano", "prezzo_notte": "90.00", "capacita": 3},
+        ]
+        s, r = self.r.gestisci("POST", "/api/host/importa", headers=self.h,
+                               body=json.dumps({"sorgente": "canonico", "dati": lista}))
+        self.assertEqual(s, 200, r)
+        self.assertEqual(r["importati"], 2)
+
     # ── CANCELLA FOTO ─────────────────────────────────────────────────────────
     def _carica_foto(self):
         s, c = self.r.gestisci("POST", "/api/host/upload_foto", headers=self.h,
