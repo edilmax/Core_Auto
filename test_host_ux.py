@@ -147,6 +147,21 @@ class TestHostUX(unittest.TestCase):
         _, d = self.r.gestisci("GET", "/api/host/alloggio", {"slug": slug}, headers=self.h)
         self.assertEqual(d["prezzo_notte_cents"], 9000)
 
+    def test_token_di_host_cancellato_rifiutato(self):
+        # dopo la cancellazione dell'account, il vecchio token NON funziona più (401):
+        # niente pannello "fantasma" con un token morto.
+        s, c = self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(
+            {"email": "temp@x.it", "password": "passwordlunga", "accetta_termini": True,
+             "accetta_clausole": True, "doc_sha256": doc_sha256(),
+             "versione": CONTRATTO_HOST_VERSIONE}))
+        self.assertEqual(s, 201, c)
+        h = {"X-Host-Token": c["token"]}
+        s, _ = self.r.gestisci("GET", "/api/host/alloggi", {}, headers=h)
+        self.assertEqual(s, 200)                          # token valido prima
+        self.assertTrue(self.sys.registro_host.cancella_host(c["host_id"]))
+        s, _ = self.r.gestisci("GET", "/api/host/alloggi", {}, headers=h)
+        self.assertEqual(s, 401)                          # dopo la cancellazione: respinto
+
     # ── PROPRIETÀ: non puoi modificare l'alloggio di un ALTRO host ────────────
     def test_ownership_scrittura_altrui_bloccata(self):
         s, c = self._pubblica()
