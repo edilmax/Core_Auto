@@ -416,9 +416,9 @@ function organizzaPannello(){
   const box=document.getElementById('avanzate_box'); if(!cont||!av||!box) return;
   const cardDi=id=>{const e=document.getElementById(id); return e?(e.classList.contains('card')?e:(e.closest?e.closest('.card'):null)):null;};
   ['cardReferral','cardDiretto','cardCancella'].forEach(id=>{const e=document.getElementById(id); if(e) box.appendChild(e);});
-  ['btnMetriche','btnCal','btnDisp','btnImporta','btnTrasp','btnIcal','btnMsgInvia','btnDp'].forEach(id=>{const c=cardDi(id); if(c) box.appendChild(c);});
-  ['cardGuida','cardRichieste','cardPrenotazioni','cardAllog','__miei','__pubblica','__range','cardTelegram','cardPayout'].forEach(k=>{
-    let el = k==='__miei'?cardDi('btnMiei') : k==='__pubblica'?cardDi('btnPubblica') : k==='__range'?cardDi('btnRange') : document.getElementById(k);
+  ['btnMetriche','btnDisp','btnImporta','btnTrasp','btnIcal','btnMsgInvia','btnDp'].forEach(id=>{const c=cardDi(id); if(c) box.appendChild(c);});
+  ['cardGuida','cardRichieste','cardPrenotazioni','cardAllog','__miei','__pubblica','__range','__cal','cardTelegram','cardPayout'].forEach(k=>{
+    let el = k==='__miei'?cardDi('btnMiei') : k==='__pubblica'?cardDi('btnPubblica') : k==='__range'?cardDi('btnRange') : k==='__cal'?cardDi('btnCal') : document.getElementById(k);
     if(el) cont.insertBefore(el, av);
   });
 }
@@ -449,7 +449,7 @@ function aggiornaAuthUI(){
   document.getElementById('cardKey').style.display = tk ? 'none' : 'flex';   // chiave operatore solo se NON loggato
   ['cardGuida','cardPrenotazioni','cardAvanzate'].forEach(id=>{const e=document.getElementById(id); if(e) e.style.display = tk ? 'block' : 'none';});
   // le card essenziali "anonime" (pubblica/apri periodo/i miei alloggi): visibili solo loggato
-  ['btnPubblica','btnRange','btnMiei'].forEach(id=>{const b=document.getElementById(id); const c=b&&b.closest('.card'); if(c) c.style.display = tk ? 'block' : 'none';});
+  ['btnPubblica','btnRange','btnMiei','btnCal'].forEach(id=>{const b=document.getElementById(id); const c=b&&b.closest('.card'); if(c) c.style.display = tk ? 'block' : 'none';});
   if(tk){ document.getElementById('au_who').textContent = localStorage.getItem('bookinvip_host_email') || 'host'; verificaSessione(); }
 }
 // Se il token non è più valido (account cancellato/scaduto), il server risponde 401:
