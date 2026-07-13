@@ -741,6 +741,8 @@ class RouterHTTP:
             return self._host_export(query, headers)
         if metodo == "GET" and path == "/api/host/alloggi":
             return self._host_alloggi(query, headers)
+        if metodo == "GET" and path == "/api/host/prenotazioni":
+            return self._host_prenotazioni(query, headers)
         if metodo == "GET" and path == "/api/host/alloggio":
             return self._host_alloggio_dettaglio(query, headers)
         if metodo == "GET" and path == "/api/host/accettazioni":
@@ -2791,6 +2793,32 @@ class RouterHTTP:
                 self._tg_reply(chat_id, "Link non valido. Genera un nuovo collegamento dal "
                                "pannello host (\"Collega Telegram\").")
         return 200, {"ok": True}
+
+    def _host_prenotazioni(self, query, headers):
+        """Le prenotazioni CONFERMATE dell'host (su tutti i suoi alloggi), per la lista
+        semplice 'Le mie prenotazioni'. Le richieste ancora DA approvare sono in /richieste."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        hid = self._host_id_da_token(headers) or query.get("host_id")
+        if not (isinstance(hid, str) and hid):
+            return 422, {"errore": "host_id_mancante"}
+        try:
+            listings = self._sys.catalogo.alloggi_host(hid, limit=200)
+            out = []
+            for a in listings:
+                slug = a.get("slug") if isinstance(a, dict) else None
+                if not slug:
+                    continue
+                titolo = (a.get("titolo") if isinstance(a, dict) else None) or slug
+                for p in self._sys.inventario.elenco_prenotazioni(alloggio_id=slug, limit=200):
+                    out.append({"alloggio": titolo, "slug": slug,
+                                "check_in": p.get("check_in"), "check_out": p.get("check_out"),
+                                "stato": "rimborsata" if p.get("rilasciato") else "confermata"})
+        except Exception:
+            logger.error("host prenotazioni: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        out.sort(key=lambda x: (x.get("check_in") or ""), reverse=True)
+        return 200, {"prenotazioni": out}
 
     def _host_alloggi(self, query, headers):
         if not self._auth_host(headers):

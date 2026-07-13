@@ -147,6 +147,15 @@ class TestHostUX(unittest.TestCase):
         _, d = self.r.gestisci("GET", "/api/host/alloggio", {"slug": slug}, headers=self.h)
         self.assertEqual(d["prezzo_notte_cents"], 9000)
 
+    def test_host_prenotazioni_endpoint(self):
+        # "Le mie prenotazioni": lista (anche vuota) per l'host loggato; richiede auth
+        s, pr = self.r.gestisci("GET", "/api/host/prenotazioni", {}, headers=self.h)
+        self.assertEqual(s, 200, pr)
+        self.assertIn("prenotazioni", pr)
+        self.assertIsInstance(pr["prenotazioni"], list)
+        s, _ = self.r.gestisci("GET", "/api/host/prenotazioni")
+        self.assertEqual(s, 401)
+
     def test_token_di_host_cancellato_rifiutato(self):
         # dopo la cancellazione dell'account, il vecchio token NON funziona più (401):
         # niente pannello "fantasma" con un token morto.
