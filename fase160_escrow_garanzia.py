@@ -165,9 +165,10 @@ class EscrowGaranzia:
         return self._muta(prenotazione_id, ("contestato",), "risolto",
                           host=imp - rimb, rimborso=rimb)
 
-    def auto_rilascia(self, *, ora_ts: Any = None) -> int:
+    def auto_rilascia(self, *, ora_ts: Any = None, dettagli: bool = False) -> Any:
         """Rilascia all'host tutte le garanzie 'in_garanzia' con finestra scaduta e nessuna
-        contestazione. Ritorna quante ne ha rilasciate."""
+        contestazione. Ritorna quante ne ha rilasciate; con dettagli=True la LISTA
+        [{prenotazione_id, host_riceve_cents}] (per i bonifici automatici Connect)."""
         ora = ora_ts if isinstance(ora_ts, int) and not isinstance(ora_ts, bool) else self._now()
         con = self._apri()
         try:
@@ -179,6 +180,9 @@ class EscrowGaranzia:
                     con.execute("UPDATE garanzia SET stato='rilasciato', host_riceve_cents=?, "
                                 "aggiornato_ts=? WHERE prenotazione_id=?",
                                 (r["importo_host_cents"], ora, r["prenotazione_id"]))
+            if dettagli:
+                return [{"prenotazione_id": r["prenotazione_id"],
+                         "host_riceve_cents": int(r["importo_host_cents"])} for r in righe]
             return len(righe)
         finally:
             con.close()

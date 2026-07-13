@@ -731,6 +731,8 @@ class RouterHTTP:
             return self._host_link_diretto(query, headers)
         if metodo == "GET" and path == "/api/host/telegram_link":
             return self._host_telegram_link(headers)
+        if metodo == "GET" and path == "/api/host/stripe_link":
+            return self._host_stripe_link(headers)
         if metodo == "POST" and path == "/api/telegram/webhook":
             return self._telegram_webhook(body, headers)
         if metodo == "GET" and path == "/api/host/richieste":
@@ -991,6 +993,9 @@ class RouterHTTP:
             pd = getattr(self._sys, "payout", None)
             if pd is not None:
                 pd.rimuovi(rif)
+        else:
+            # la parte che spetta all'host parte da sola verso il suo conto (Connect)
+            self._trasferisci_all_host(rif, out.get("host_riceve_cents", importo - rimborso))
         return 200, {"stato": "risolta", "riferimento": rif,
                      "rimborso_cliente_cents": out.get("ospite_rimborso_cents", rimborso),
                      "va_all_host_cents": out.get("host_riceve_cents", importo - rimborso),
@@ -1512,6 +1517,76 @@ class RouterHTTP:
         except Exception:
             logger.warning("registra payout fallito (ignorato)", exc_info=True)
 
+    def _trasferisci_all_host(self, rif, importo_cents):
+        """SOLDI ALL'HOST IN AUTOMATICO (strategia fondatore): allo sblocco dell'escrow
+        (ok cliente / 24h di silenzio / esito controversia), se l'host ha Stripe collegato
+        e la prenotazione era PAGATA online, il netto parte da solo verso il suo conto.
+        GATED (senza Connect/account: resta manuale, tracciato), IDEMPOTENTE (Idempotency-Key
+        per riferimento + guardia stato payout), ISOLATO (mai blocca il rilascio)."""
+        try:
+            connect = getattr(self._sys, "connect", None)
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            reg = getattr(self._sys, "registro_host", None)
+            pd = getattr(self._sys, "payout", None)
+            if connect is None or pp is None or reg is None:
+                return
+            if not (isinstance(importo_cents, int) and not isinstance(importo_cents, bool)
+                    and importo_cents > 0):
+                return
+            rec = pp.info(rif)
+            if rec is None or rec.get("stato") != "pagato":
+                return                                # nessun incasso online -> niente transfer
+            host_id = rec.get("host_id") or ""
+            info = reg.info_host(host_id) if host_id else None
+            acct = (info or {}).get("stripe_account_id", "")
+            if not acct:
+                return                                # host non collegato -> bonifico manuale
+            if pd is not None and pd.stato_di(rif) in ("in_transito", "pagato"):
+                return                                # gia' partito (guardia anti-doppio)
+            import json as _jt
+            try:
+                valuta = _jt.loads(rec.get("corpo_json") or "{}").get("valuta") or "EUR"
+            except Exception:
+                valuta = "EUR"
+            tid = connect.trasferisci(acct, int(importo_cents), valuta, str(rif))
+            if tid:
+                if pd is not None:
+                    pd.aggiorna_stato(rif, "in_transito")     # soldi partiti verso l'host
+                logger.info("Connect: transfer %s -> host %s (%d %s) per %s",
+                            tid, host_id, importo_cents, valuta, rif)
+            else:
+                logger.error("BONIFICO MANUALE RICHIESTO: transfer Connect fallito per '%s' "
+                             "(%d %s a %s). Il payout resta tracciato.",
+                             rif, importo_cents, valuta, acct)
+        except Exception:
+            logger.warning("trasferimento automatico host fallito (ISOLATO)", exc_info=True)
+
+    def _host_stripe_link(self, headers):
+        """L'host collega il suo conto Stripe (Connect standard, GRATIS): da lì i suoi
+        incassi arrivano IN AUTOMATICO allo sblocco della garanzia. Crea l'account se manca
+        e ritorna il link di onboarding + lo stato (pronto = riceve i bonifici)."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        hid = self._host_id_da_token(headers)
+        if not hid:
+            return 422, {"errore": "host_id_mancante"}
+        connect = getattr(self._sys, "connect", None)
+        reg = getattr(self._sys, "registro_host", None)
+        if connect is None or reg is None:
+            return 503, {"errore": "pagamenti_automatici_non_attivi"}
+        info = reg.info_host(hid) or {}
+        acct = info.get("stripe_account_id", "")
+        if not acct:
+            acct = connect.crea_account(info.get("email", ""))
+            if not acct:
+                return 503, {"errore": "stripe_non_disponibile"}
+            reg.imposta_stripe_account(hid, acct)
+        ritorno = (self._base_url or "https://bookinvip.com") + "/host.html"
+        link = connect.link_onboarding(acct, ritorno)
+        stato = connect.stato_account(acct)
+        return 200, {"account_id": acct, "link": link or "",
+                     "pronto": bool(stato.get("pronto"))}
+
     def _host_cancella(self, body, headers):
         """L'HOST annulla una prenotazione. Come i colossi (Booking/Airbnb): è colpa dell'host,
         quindi il CLIENTE è rimborsato al 100% e l'HOST paga una PENALE (deterrente contro le
@@ -1618,6 +1693,9 @@ class RouterHTTP:
         if g is None:
             return 503, {"errore": "garanzia_non_attiva"}
         out = g.conferma_ospite(res[0])
+        if out.get("ok"):
+            # sblocco confermato dal cliente -> il netto parte da solo verso l'host (Connect)
+            self._trasferisci_all_host(res[0], out.get("host_riceve_cents", 0))
         return (200 if out.get("ok") else 409), out
 
     def _garanzia_contesta(self, body):
@@ -3256,7 +3334,14 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
         def _tick_garanzia():
             while True:
                 try:
-                    gz.auto_rilascia()
+                    # 24h di silenzio = tutto ok -> rilascio + bonifico AUTOMATICO all'host
+                    for _r in (gz.auto_rilascia(dettagli=True) or []):
+                        try:
+                            router._trasferisci_all_host(_r["prenotazione_id"],
+                                                         _r["host_riceve_cents"])
+                        except Exception:
+                            logger.warning("transfer su auto-rilascio fallito (ignorato)",
+                                           exc_info=True)
                 except Exception:
                     logger.warning("auto_rilascia garanzia fallito (ignorato)", exc_info=True)
                 __import__("time").sleep(3600)

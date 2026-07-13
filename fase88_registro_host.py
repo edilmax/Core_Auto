@@ -100,12 +100,14 @@ class RegistroHost:
                         line_token TEXT NOT NULL DEFAULT '',
                         wechat_webhook TEXT NOT NULL DEFAULT '',
                         telegram_chat_id TEXT NOT NULL DEFAULT '',
+                        stripe_account_id TEXT NOT NULL DEFAULT '',
                         termini_versione TEXT NOT NULL,
                         termini_ts INTEGER NOT NULL,
                         stato TEXT NOT NULL DEFAULT 'attivo',
                         creato_ts INTEGER NOT NULL)""")
                 # migrazione idempotente per DB esistenti (canali contatto host)
-                for col in ("telefono", "line_token", "wechat_webhook", "telegram_chat_id"):
+                for col in ("telefono", "line_token", "wechat_webhook", "telegram_chat_id",
+                            "stripe_account_id"):
                     try:
                         con.execute("ALTER TABLE host ADD COLUMN %s TEXT NOT NULL DEFAULT ''" % col)
                     except sqlite3.OperationalError:
@@ -210,7 +212,8 @@ class RegistroHost:
         con = self._apri()
         try:
             r = con.execute("SELECT email, telefono, line_token, wechat_webhook, "
-                            "telegram_chat_id, ragione_sociale FROM host WHERE host_id=?",
+                            "telegram_chat_id, stripe_account_id, ragione_sociale "
+                            "FROM host WHERE host_id=?",
                             (host_id,)).fetchone()
         finally:
             con.close()
@@ -220,7 +223,24 @@ class RegistroHost:
                 "line_token": (r["line_token"] or ""),
                 "wechat_webhook": (r["wechat_webhook"] or ""),
                 "telegram_chat_id": (r["telegram_chat_id"] or ""),
+                "stripe_account_id": (r["stripe_account_id"] or ""),
                 "ragione_sociale": (r["ragione_sociale"] or "")}
+
+    def imposta_stripe_account(self, host_id: Any, account_id: Any) -> bool:
+        """Collega il conto Stripe Connect dell'host (per i bonifici automatici)."""
+        if not (isinstance(host_id, str) and host_id):
+            return False
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("UPDATE host SET stripe_account_id=? WHERE host_id=?",
+                                  (str(account_id or ""), host_id))
+            return bool(cur.rowcount)
+        except Exception:
+            logger.warning("imposta_stripe_account fallita (ISOLATA)", exc_info=True)
+            return False
+        finally:
+            con.close()
 
     def imposta_telegram_chat(self, host_id: Any, chat_id: Any) -> bool:
         """Collega (o scollega, con chat_id vuoto) il Telegram dell'host per gli avvisi."""

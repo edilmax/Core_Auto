@@ -123,6 +123,7 @@ class SistemaCasaVIP:
     payout: Any = None
     accettazioni: Any = None
     stripe: Any = None      # ProviderStripe (fase85) o None: per rigenerare link (su-richiesta)
+    connect: Any = None     # ProviderConnect (fase101) o None: bonifici automatici agli host
 
     @property
     def attivo(self) -> bool:
@@ -172,6 +173,11 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         componenti.append("stripe(85)")
     else:
         avvisi.append("Stripe non configurato -> nessun link di pagamento (gated)")
+    # Connect (fase101): bonifici AUTOMATICI agli host allo sblocco escrow (gated stessa chiave)
+    from fase101_stripe_connect import crea_provider_connect
+    _connect = crea_provider_connect(cfg.stripe_secret_key)
+    if _connect is not None:
+        componenti.append("connect(101)")
     _bps = cfg.commissione_bps if isinstance(cfg.commissione_bps, int) and \
         0 <= cfg.commissione_bps <= 10000 else 1000   # fallback 10% (regime), mai 0 per errore
     _ctx_host: Dict[str, Any] = {}    # holder late-bound: registro_host nasce piu' sotto
@@ -402,4 +408,5 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           notificatore_prenotazione=notificatore_prenotazione,
                           domanda=domanda, garanzia=garanzia,
                           pagamenti_pendenti=pagamenti_pendenti, tassa_comunale=tassa_comunale,
-                          payout=payout, accettazioni=accettazioni, stripe=provider)
+                          payout=payout, accettazioni=accettazioni, stripe=provider,
+                          connect=_connect)

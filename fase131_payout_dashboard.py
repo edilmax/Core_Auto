@@ -174,6 +174,21 @@ class PayoutDashboard:
         finally:
             con.close()
 
+    def stato_di(self, prenotazione_id: Any) -> str:
+        """Stato del payout di UNA prenotazione ('' se assente). Per la guardia anti-doppio
+        del bonifico automatico Connect."""
+        if not (isinstance(prenotazione_id, str) and prenotazione_id):
+            return ""
+        con = self._apri()
+        try:
+            r = con.execute("SELECT stato FROM payout WHERE prenotazione_id=?",
+                            (prenotazione_id,)).fetchone()
+            return r[0] if r else ""
+        except Exception:
+            return ""
+        finally:
+            con.close()
+
     def aumenta_payout(self, prenotazione_id: str, delta_cents: int) -> bool:
         """Aumenta l'incasso dell'host per una prenotazione (es. credito referral scalato ->
         meno commissione -> l'host riceve di più). delta>0. Idempotente NO: chiamare una volta."""
