@@ -65,9 +65,12 @@ class TestCostoPagamento(unittest.TestCase):
                          .corpo["costo_pagamento_cents"], 0)
 
     def test_netto_host_mai_negativo(self):
-        # costo carta enorme + commissione: il netto host non va sotto zero (guardia)
-        q = proto(commissione=lambda n: n, psp_bps=2000).quota(REQ).corpo
-        self.assertGreaterEqual(q["netto_host_cents"], 0)
+        # commissione che assorbe tutto + costo carta: il preventivo viene RIFIUTATO
+        # onestamente (422 prezzo_non_sostenibile) invece di far sparire la differenza
+        # a nostro carico ("mai in perdita"). Con prezzi/fee reali non scatta mai.
+        r = proto(commissione=lambda n: n, psp_bps=2000).quota(REQ)
+        self.assertEqual(r.status, 422)
+        self.assertEqual(r.corpo["errore"], "prezzo_non_sostenibile")
 
 
 if __name__ == "__main__":

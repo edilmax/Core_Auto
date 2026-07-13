@@ -292,6 +292,12 @@ class ProtocolloConcierge:
             # Copre la fee Stripe sul TOTALE addebitato -> noi MAI in perdita. L'ospite paga
             # SEMPRE il prezzo pulito (0%): il totale non cambia, cambia solo il netto host.
             costo_pagamento = (totale * self._psp_bps) // 10000
+            # PREZZO NON SOSTENIBILE: se il costo carta supera quel che resta all'host
+            # (prezzi da centesimi + tassa alta), NESSUNO deve rimetterci: il preventivo
+            # viene rifiutato onestamente invece di far "sparire" la differenza a nostro
+            # carico ("mai in perdita"). Con prezzi reali non scatta mai.
+            if netto_host < costo_pagamento:
+                return RispostaConcierge(422, {"errore": "prezzo_non_sostenibile"})
             netto_host = max(0, netto_host - costo_pagamento)
         except Exception:
             logger.error("quota: eccezione ISOLATA", exc_info=True)
