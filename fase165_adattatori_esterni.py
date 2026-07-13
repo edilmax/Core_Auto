@@ -29,6 +29,10 @@ logger = logging.getLogger("core_auto.adattatori_esterni")
 
 _Fetch = Callable[..., Tuple[int, Any]]
 
+# User-Agent "da browser": alcuni provider (Groq dietro Cloudflare) bloccano il default
+# `Python-urllib` con 403/1010. Sempre presente salvo override esplicito.
+_USER_AGENT = "Mozilla/5.0 (compatible; BookinVIP/1.0; +https://bookinvip.com)"
+
 
 def _fetch_reale(url: str, *, metodo: str = "GET", intestazioni: Optional[Dict[str, str]] = None,
                  corpo: Optional[bytes] = None, timeout: float = 30.0) -> Tuple[int, Any]:
@@ -36,8 +40,10 @@ def _fetch_reale(url: str, *, metodo: str = "GET", intestazioni: Optional[Dict[s
     bytes. status 0 = errore di rete (nessuna risposta). Non solleva."""
     import urllib.error
     import urllib.request
-    req = urllib.request.Request(url, data=corpo, method=metodo,
-                                 headers=intestazioni or {})
+    testa = dict(intestazioni or {})
+    if not any(k.lower() == "user-agent" for k in testa):
+        testa["User-Agent"] = _USER_AGENT      # evita il blocco Cloudflare 1010
+    req = urllib.request.Request(url, data=corpo, method=metodo, headers=testa)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             raw = r.read()

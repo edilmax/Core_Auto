@@ -157,5 +157,36 @@ class TestFactory(unittest.TestCase):
             {"YT_CLIENT_ID": "c", "YT_CLIENT_SECRET": "s", "YT_REFRESH_TOKEN": "r"}))
 
 
+class TestUserAgent(unittest.TestCase):
+    def test_user_agent_default_e_override(self):
+        import urllib.request
+        from fase165_adattatori_esterni import _fetch_reale
+        catturati = {}
+
+        class _Resp:
+            status = 200
+            def read(self):
+                return b'{"ok": true}'
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+
+        def fake_urlopen(req, timeout=None):
+            catturati["ua"] = req.get_header("User-agent")
+            return _Resp()
+
+        orig = urllib.request.urlopen
+        urllib.request.urlopen = fake_urlopen
+        try:
+            st, obj = _fetch_reale("https://x/y")
+            self.assertEqual(st, 200)
+            self.assertIn("BookinVIP", catturati["ua"] or "")     # UA di default anti-Cloudflare
+            _fetch_reale("https://x/y", intestazioni={"User-Agent": "Custom/9"})
+            self.assertEqual(catturati["ua"], "Custom/9")          # override rispettato
+        finally:
+            urllib.request.urlopen = orig
+
+
 if __name__ == "__main__":
     unittest.main()
