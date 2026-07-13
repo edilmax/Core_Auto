@@ -64,12 +64,20 @@ class TestTelegramHost(unittest.TestCase):
         self.assertEqual(s, 200)
         self.assertEqual(self.sys.registro_host.info_host(self.hid)["telegram_chat_id"], "")
 
-    def test_codice_usa_e_getta(self):
+    def test_payload_riusabile_ricollega(self):
+        # payload FIRMATO e durevole (sopravvive ai riavvii): ri-cliccare il link ricollega
+        # (es. nuovo telefono) aggiornando il chat_id.
         code = self._codice_link()
         self.g("POST", "/api/telegram/webhook", self._update_start(code, 111))
-        # riusare lo stesso codice non ricollega (è stato consumato)
-        self.g("POST", "/api/telegram/webhook", self._update_start(code, 222))
         self.assertEqual(self.sys.registro_host.info_host(self.hid)["telegram_chat_id"], "111")
+        self.g("POST", "/api/telegram/webhook", self._update_start(code, 222))
+        self.assertEqual(self.sys.registro_host.info_host(self.hid)["telegram_chat_id"], "222")
+
+    def test_payload_firma_errata_rifiutato(self):
+        code = self._codice_link()
+        manomesso = code[:-1] + ("a" if code[-1] != "a" else "b")   # firma alterata
+        self.g("POST", "/api/telegram/webhook", self._update_start(manomesso, 888))
+        self.assertEqual(self.sys.registro_host.info_host(self.hid)["telegram_chat_id"], "")
 
     def test_webhook_segreto(self):
         os.environ["TELEGRAM_WEBHOOK_SECRET"] = "s3cr3t"

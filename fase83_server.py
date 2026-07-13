@@ -618,7 +618,6 @@ class RouterHTTP:
         self._admin_key = admin_key
         self._base_url = base_url or ""
         self._loc = Localizzatore()
-        self._tg_codici = {}      # codice one-time -> (host_id, scadenza) per collegare Telegram
 
     def gestisci(self, metodo: str, path: str, query: Optional[Dict[str, str]] = None,
                  body: Optional[str] = None,
@@ -2705,6 +2704,33 @@ class RouterHTTP:
         return 200, {"link_generale": base + "/?fonte=diretto",
                      "alloggi": alloggi, "commissione_bps": 500, "commissione": "5%"}
 
+    def _tg_firma_payload(self, host_id):
+        """Payload FIRMATO per il deep-link Telegram (start): host_id + HMAC corto. Compatto
+        (<64 char, solo [a-z0-9_-] ammessi da Telegram) e DUREVOLE (non serve stato in memoria
+        -> sopravvive ai riavvii del server). Ricavabile SOLO via endpoint autenticato."""
+        import hashlib
+        import hmac as _h
+        seg = getattr(getattr(self._sys, "config", None), "segreto_hmac", b"") or b""
+        if isinstance(seg, str):
+            seg = seg.encode("utf-8")
+        sig = _h.new(seg, str(host_id).encode("utf-8"), hashlib.sha256).hexdigest()[:16]
+        return "%s-%s" % (host_id, sig)
+
+    def _tg_verifica_payload(self, payload):
+        """host_id se il payload è firmato correttamente, altrimenti None."""
+        import hashlib
+        import hmac as _h
+        if not (isinstance(payload, str) and "-" in payload):
+            return None
+        hid, _, sig = payload.rpartition("-")
+        if not (hid and sig):
+            return None
+        seg = getattr(getattr(self._sys, "config", None), "segreto_hmac", b"") or b""
+        if isinstance(seg, str):
+            seg = seg.encode("utf-8")
+        atteso = _h.new(seg, hid.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
+        return hid if _h.compare_digest(sig, atteso) else None
+
     def _host_telegram_link(self, headers):
         """Link per COLLEGARE il Telegram dell'host: aprendolo e premendo Start, il bot salva
         il suo chat_id -> riceve lì gli avvisi di prenotazione (coi tasti Approva/Rifiuta)."""
@@ -2714,15 +2740,8 @@ class RouterHTTP:
         if not hid:
             return 422, {"errore": "host_id_mancante"}
         import os as _os
-        import secrets as _sec
-        import time as _t
-        now = int(_t.time())
-        for k in [k for k, v in list(self._tg_codici.items()) if v[1] < now]:
-            self._tg_codici.pop(k, None)                # housekeeping codici scaduti
-        code = _sec.token_hex(8)
-        self._tg_codici[code] = (hid, now + 900)        # valido 15 minuti
         bot = (_os.environ.get("TELEGRAM_BOT_USERNAME") or "BookinVipInfo_bot").lstrip("@")
-        return 200, {"link": "https://t.me/%s?start=%s" % (bot, code)}
+        return 200, {"link": "https://t.me/%s?start=%s" % (bot, self._tg_firma_payload(hid))}
 
     def _tg_reply(self, chat_id, testo):
         """Risposta best-effort all'host su Telegram (isolata)."""
@@ -2760,17 +2779,17 @@ class RouterHTTP:
         testo = str(msg.get("text") or "").strip()
         if chat_id and testo.startswith("/start"):
             parti = testo.split(maxsplit=1)
-            code = parti[1].strip() if len(parti) > 1 else ""
-            v = self._tg_codici.pop(code, None) if code else None
-            if v and v[1] >= int(_t.time()):
+            payload = parti[1].strip() if len(parti) > 1 else ""
+            hid = self._tg_verifica_payload(payload)
+            if hid:
                 reg = getattr(self._sys, "registro_host", None)
-                ok = reg.imposta_telegram_chat(v[0], str(chat_id)) if reg is not None else False
+                ok = reg.imposta_telegram_chat(hid, str(chat_id)) if reg is not None else False
                 self._tg_reply(chat_id, "✅ Telegram collegato! Qui riceverai gli avvisi di "
                                "prenotazione, coi tasti Approva/Rifiuta." if ok else
                                "Non sono riuscito a collegare. Riprova dal pannello host.")
             else:
-                self._tg_reply(chat_id, "Link scaduto o non valido. Genera un nuovo "
-                               "collegamento dal pannello host (\"Collega Telegram\").")
+                self._tg_reply(chat_id, "Link non valido. Genera un nuovo collegamento dal "
+                               "pannello host (\"Collega Telegram\").")
         return 200, {"ok": True}
 
     def _host_alloggi(self, query, headers):
