@@ -85,6 +85,26 @@ class TestHostUX(unittest.TestCase):
         a = miei["alloggi"][0]
         self.assertIsInstance(a["id"], int)
         self.assertIn("slug", a); self.assertIn("titolo", a)
+        self.assertEqual(a["valuta"], "EUR")          # default
+
+    def test_valuta_locale_round_trip(self):
+        # host prezza in THB -> l'elenco e il preventivo restano in THB (like-for-like)
+        s, c = self._pubblica(valuta="THB", prezzo_notte_cents=350000)   # ฿3500
+        self.assertEqual(s, 201, c)
+        slug = c["slug"]
+        _, miei = self.r.gestisci("GET", "/api/host/alloggi", {}, headers=self.h)
+        a = next(x for x in miei["alloggi"] if x["slug"] == slug)
+        self.assertEqual(a["valuta"], "THB")
+        self.assertEqual(a["prezzo_notte_cents"], 350000)
+        # apro disponibilità e chiedo un preventivo: la valuta dell'addebito è THB, non EUR
+        for g in ("2026-09-01", "2026-09-02"):
+            self.r.gestisci("POST", "/api/host/disponibilita", headers=self.h, body=json.dumps(
+                {"alloggio_id": slug, "giorno": g, "unita_totali": 1,
+                 "prezzo_netto_cents": 350000}))
+        s, q = self.r.gestisci("POST", "/api/concierge/quote", body=json.dumps(
+            {"alloggio_id": slug, "check_in": "2026-09-01", "check_out": "2026-09-02", "party": 2}))
+        self.assertEqual(s, 200, q)
+        self.assertEqual(q["valuta"], "THB")          # l'ospite paga in THB, non convertito a EUR
 
     # ── CANCELLA FOTO ─────────────────────────────────────────────────────────
     def _carica_foto(self):

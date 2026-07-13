@@ -156,7 +156,24 @@ let I18N = {ui:{},servizi:{}}, LANG = 'it', QUOTE = null, attivi = new Set(), GE
 
 function t(k){ return (I18N.ui && I18N.ui[k]) || k; }
 function srv(c){ return (I18N.servizi && I18N.servizi[c]) || c; }
-function eur(c){ return '€ ' + ((c||0)/100).toFixed(2); }
+function eur(c){ return '€ ' + ((c||0)/100).toFixed(2); }   // solo importi in EUR (es. crediti piattaforma)
+// VALUTA-CONSAPEVOLE: l'annuncio è prezzato nella valuta dell'host -> l'ospite la vede REALE
+// (come i colossi, ma senza ricarichi occulti). Esponente 0 per JPY/KRW/… ; simbolo per valuta.
+const VEXP={JPY:0,KRW:0,VND:0,CLP:0,ISK:0};
+const VSYM={EUR:'€',USD:'$',GBP:'£',CHF:'CHF',THB:'฿',JPY:'¥',AUD:'A$',CAD:'C$',AED:'AED',SGD:'S$',CNY:'CN¥',HKD:'HK$',MXN:'MX$',BRL:'R$',ZAR:'R',IDR:'Rp',KRW:'₩',INR:'₹',NZD:'NZ$',SEK:'kr',NOK:'kr',DKK:'kr',PLN:'zł',TRY:'₺'};
+function vexp(v){ return VEXP[v]!=null?VEXP[v]:2; }
+function vsym(v){ return VSYM[v]||v||''; }
+function money(c,v){ v=v||'EUR'; const e=vexp(v); return vsym(v)+' '+((c||0)/Math.pow(10,e)).toFixed(e); }
+// valuta stimata del VISITATORE (dalla regione del browser) -> mostra "≈ nella tua moneta"
+// (indicativo, tasso reale; l'addebito resta nella valuta dell'annuncio). Attivo se il server
+// ha la chiave cambi (OXR); altrimenti l'ospite vede comunque la valuta reale dell'annuncio.
+function valutaOspite(){
+  const reg=((navigator.language||'').split('-')[1]||'').toUpperCase();
+  const M={IT:'EUR',DE:'EUR',FR:'EUR',ES:'EUR',NL:'EUR',PT:'EUR',IE:'EUR',AT:'EUR',BE:'EUR',GR:'EUR',FI:'EUR',
+    GB:'GBP',US:'USD',CH:'CHF',TH:'THB',JP:'JPY',AU:'AUD',CA:'CAD',AE:'AED',SG:'SGD',CN:'CNY',HK:'HKD',
+    MX:'MXN',BR:'BRL',ZA:'ZAR',ID:'IDR',KR:'KRW',IN:'INR',NZ:'NZD',SE:'SEK',NO:'NOK',DK:'DKK',PL:'PLN',TR:'TRY'};
+  return M[reg]||'';
+}
 function fmtDist(m){ if(m==null) return ''; return m<1000 ? Math.round(m)+' m' : (m/1000).toFixed(1)+' km'; }
 async function api(path, opts){ const r = await fetch(API+path, opts); return r.json(); }
 
@@ -208,7 +225,7 @@ function cardHtml(a){
   else if(a.disponibile===false) disp=`<span class="badge red">${t('non_disp')}</span>`;
   const foto = a.thumbnail ? `<img class="thumb" src="${a.thumbnail}" alt="${a.titolo}" loading="lazy" onerror="this.outerHTML='<div class=ph>🏠</div>'">` : '<div class="ph">🏠</div>';
   return `<div class="card">${foto}<h3>${a.titolo}</h3>
-    <div class="prezzo">${eur(a.prezzo_notte_cents)} <span style="font-size:.85rem;font-weight:400;color:#5e6f8d">/ ${t('notte')}</span></div>
+    <div class="prezzo">${money(a.prezzo_notte_cents,a.valuta)} <span style="font-size:.85rem;font-weight:400;color:#5e6f8d">/ ${t('notte')}</span></div>
     <div style="margin:.2rem 0">${stelle(a.recensioni)}</div>
     <div style="margin:.3rem 0">${serv} ${disp}</div>
     ${a.cancellazione_gratuita ? `<div style="margin:.15rem 0"><span class="badge green">✔ ${t('badge_cancellazione')}</span></div>` : (a.politica_cancellazione==='non_rimborsabile' ? `<div style="margin:.15rem 0"><span class="badge" style="background:#fff3cd;color:#8a6d0b">🔒 ${t('non_rimb')}</span></div>` : '')}
@@ -290,7 +307,7 @@ async function apri(slug){
       ? imgs.map(u=>`<img src="${u}" alt="" loading="lazy" onerror="this.style.display='none'">`).join('')
       : '';
     document.getElementById('mTitolo').textContent = a.titolo;
-    document.getElementById('mPrezzo').textContent = eur(a.prezzo_notte_cents)+' / '+t('notte');
+    document.getElementById('mPrezzo').textContent = money(a.prezzo_notte_cents,a.valuta)+' / '+t('notte');
     document.getElementById('mBadge').innerHTML = (a.servizi_label||a.servizi||[]).map(s=>`<span class="badge">${s}</span>`).join('');
     document.getElementById('mRating').innerHTML = stelle(a.recensioni);
     document.getElementById('mDescr').textContent = a.descrizione||'';
@@ -313,24 +330,25 @@ async function apri(slug){
     const q = await api('/api/concierge/quote', {method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({alloggio_id:slug, check_in:document.getElementById('checkin').value,
         check_out:document.getElementById('checkout').value, party:parseInt(document.getElementById('ospiti').value)||1,
-        fonte:FONTE})});
+        fonte:FONTE, valuta_ospite:valutaOspite()})});
     const mq = document.getElementById('mQuote');
     if(q.quote_token){
       QUOTE = q.quote_token;
       // 0% ospite: soggiorno pulito + tassa di soggiorno separata (pass-through citta') = totale
-      let righe = `<div class="riga-prezzo"><span>${t('totale')} (${q.notti||''} x ${t('notte')})</span><span>${eur(q.prezzo_guest_cents)}</span></div>`;
-      if(q.tassa_soggiorno_cents>0) righe += `<div class="riga-prezzo"><span>${t('tassa')}</span><span>${eur(q.tassa_soggiorno_cents)}</span></div>`;
-      righe += `<div class="riga-prezzo tot"><span>${t('totale')}</span><span>${eur(q.totale_cents||q.prezzo_guest_cents)} ${q.valuta||''}</span></div>`;
-      if(q.totale_indicativo_cents>0 && q.valuta_indicativa) righe += `<div style="font-size:.78rem;color:#5e6f8d;margin-top:.2rem">≈ ${(q.totale_indicativo_cents/100).toFixed(2)} ${q.valuta_indicativa} (${t('indicativo')})</div>`;
+      const V=q.valuta;
+      let righe = `<div class="riga-prezzo"><span>${t('totale')} (${q.notti||''} x ${t('notte')})</span><span>${money(q.prezzo_guest_cents,V)}</span></div>`;
+      if(q.tassa_soggiorno_cents>0) righe += `<div class="riga-prezzo"><span>${t('tassa')}</span><span>${money(q.tassa_soggiorno_cents,V)}</span></div>`;
+      righe += `<div class="riga-prezzo tot"><span>${t('totale')}</span><span>${money(q.totale_cents||q.prezzo_guest_cents,V)} ${V||''}</span></div>`;
+      if(q.totale_indicativo_cents>0 && q.valuta_indicativa) righe += `<div style="font-size:.78rem;color:#5e6f8d;margin-top:.2rem">≈ ${money(q.totale_indicativo_cents,q.valuta_indicativa)} (${t('indicativo')})</div>`;
       if(q.confronto_ota && q.confronto_ota.risparmio_guest_cents>0){ const co=q.confronto_ota;
-        righe += `<div style="margin-top:.5rem;padding:.5rem .7rem;background:#eafaf0;border-radius:.6rem;font-size:.85rem;color:#155724">${t('ota_pre')}<b>${eur(co.ota_totale_cents)}</b> · <b>${t('risparmi')} ${eur(co.risparmio_guest_cents)}</b> (-${(co.risparmio_bps/100).toFixed(0)}%)</div>`; }
-      if(q.sconto_non_rimborsabile_cents>0) righe += `<div style="margin-top:.4rem;font-size:.85rem;color:#8a6d0b">🔒 ${t('non_rimb')} · ${t('risparmi')} ${eur(q.sconto_non_rimborsabile_cents)}</div>`;
+        righe += `<div style="margin-top:.5rem;padding:.5rem .7rem;background:#eafaf0;border-radius:.6rem;font-size:.85rem;color:#155724">${t('ota_pre')}<b>${money(co.ota_totale_cents,V)}</b> · <b>${t('risparmi')} ${money(co.risparmio_guest_cents,V)}</b> (-${(co.risparmio_bps/100).toFixed(0)}%)</div>`; }
+      if(q.sconto_non_rimborsabile_cents>0) righe += `<div style="margin-top:.4rem;font-size:.85rem;color:#8a6d0b">🔒 ${t('non_rimb')} · ${t('risparmi')} ${money(q.sconto_non_rimborsabile_cents,V)}</div>`;
       const _tot = q.totale_cents||q.prezzo_guest_cents;
       righe += `<div style="margin-top:.5rem;font-size:.85rem">👥 ${t('dividi_amici')} <select id="splitN" style="padding:.2rem .3rem">${[2,3,4,5,6].map(n=>`<option value="${n}">${n}</option>`).join('')}</select> <span id="splitOut" style="color:#155724;font-weight:600"></span></div>`;
       righe += `<div id="cd" style="margin-top:.6rem;padding:.5rem .7rem;background:#fff4e5;border:1px solid #ffd9a8;border-radius:.6rem;font-size:.85rem;color:#8a5200;font-weight:600;text-align:center"></div>`;
       mq.innerHTML = righe;
       const sb = document.getElementById('splitN');
-      if(sb){ const calc = async ()=>{ try{ const r = await api('/api/split/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({totale_cents:_tot,n:parseInt(sb.value)})}); if(r.quote){ const mn=r.per_persona_min_cents,mx=r.per_persona_max_cents; document.getElementById('splitOut').textContent = (mn===mx?('= '+eur(mn)):('= '+eur(mn)+'–'+eur(mx)))+' '+t('a_testa'); } }catch(e){} }; sb.onchange=calc; calc(); }
+      if(sb){ const calc = async ()=>{ try{ const r = await api('/api/split/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({totale_cents:_tot,n:parseInt(sb.value)})}); if(r.quote){ const mn=r.per_persona_min_cents,mx=r.per_persona_max_cents; document.getElementById('splitOut').textContent = (mn===mx?('= '+money(mn,V)):('= '+money(mn,V)+'–'+money(mx,V)))+' '+t('a_testa'); } }catch(e){} }; sb.onchange=calc; calc(); }
       document.getElementById('btnPrenota').style.display='';
       // CONTO ALLA ROVESCIA ONESTO: il preventivo (prezzo+stanza) è bloccato per te fino a scade_a.
       if(window.__cdTimer) clearInterval(window.__cdTimer);
