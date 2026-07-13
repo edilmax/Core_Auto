@@ -338,11 +338,20 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     else:
         avvisi.append("nessun canale avviso host -> l'host non riceve notifiche prenotazione")
 
-    # 3i) marketing 360 + canali social reali (GATED da env: senza chiavi, nessun canale)
+    # 3i) marketing 360 + canali social reali (GATED da env: senza chiavi, nessun canale).
+    #     Testi scritti dall'AI a rotazione (Groq/Gemini, fase164/165) se le chiavi ci sono,
+    #     con fallback SICURO al deterministico. Pool inerte senza chiavi.
     from fase90_marketing import crea_motore_marketing
     from fase91_canali_social import crea_canali_da_env
+    import os as _os
+    try:
+        from fase165_adattatori_esterni import crea_pool_testo_da_env
+        _pool_testo = crea_pool_testo_da_env(
+            _os.environ, percorso_stato=_os.environ.get("POOL_AI_STATO") or None)
+    except Exception:
+        _pool_testo = None
     marketing = crea_motore_marketing(canali=crea_canali_da_env(),
-                                      email_provider=email_provider)
+                                      email_provider=email_provider, pool_testo=_pool_testo)
     componenti.append("marketing(90,91)")
 
     # 3b) recensioni verificate (opzionale): registro + emettitore del diritto

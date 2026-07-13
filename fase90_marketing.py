@@ -138,21 +138,46 @@ def _lng(l: Any) -> str:
     return l if l in LINGUE else "it"
 
 
-class GeneratoreContenuti:
-    """Produce i Post (testo + hashtag + immagine SVG) in modo deterministico e gratuito."""
+_LINGUE_NOME = {"it": "italiano", "en": "English", "es": "español", "fr": "français",
+                "de": "Deutsch", "pt": "português", "ja": "日本語", "zh": "中文"}
 
-    def __init__(self, base_url: str = "https://bookinvip.com") -> None:
+
+class GeneratoreContenuti:
+    """Produce i Post (testo + hashtag + immagine SVG). Il testo è deterministico e gratuito;
+    se è iniettato un `pool_testo` (AI a rotazione fase164), il testo viene RISCRITTO in modo
+    più accattivante con FALLBACK SICURO al deterministico (AI giù/quota -> testo di base)."""
+
+    def __init__(self, base_url: str = "https://bookinvip.com", *, pool_testo: Any = None) -> None:
         self._base = (base_url or "").rstrip("/")
+        self._pool = pool_testo
 
     def _link(self, tema: str) -> str:
         return self._base + ("/diventa-host.html" if tema in ("host", "referral") else "/")
+
+    def _ai_testo(self, base: str, lng: str) -> str:
+        """Riscrive il testo base via AI (pool). Isolato: qualunque problema -> testo base."""
+        if self._pool is None:
+            return base
+        nome = _LINGUE_NOME.get(lng, lng)
+        prompt = ("Riscrivi questo come UN solo post social breve e accattivante in %s, "
+                  "massimo 40 parole, con 1 emoji, fedele ai fatti, SENZA link, SENZA hashtag, "
+                  "SENZA elenchi e SENZA virgolette. Testo base: %s" % (nome, base))
+        try:
+            out = self._pool.genera({"prompt": prompt, "max_token": 160})
+            if isinstance(out, dict) and out.get("ok"):
+                t = str(out.get("risultato") or "").strip().strip('"').strip("«»").strip()
+                if 10 <= len(t) <= 600:
+                    return t
+        except Exception:
+            pass
+        return base
 
     def crea(self, tema: str, lingua: str = "it", *, sottotitolo: str = "") -> Optional[Post]:
         if tema not in _TESTI:
             return None
         lng = _lng(lingua)
         link = self._link(tema)
-        testo = _TESTI[tema][lng] + "\n" + link
+        testo = self._ai_testo(_TESTI[tema][lng], lng) + "\n" + link
         sub = sottotitolo or {"host": "0% sorprese · commissione bassa",
                               "guest": "Voucher + check-in con un codice",
                               "referral": "Credito per te e per chi inviti"}[tema]
@@ -272,6 +297,7 @@ class MotoreMarketing:
 
 def crea_motore_marketing(base_url: str = "https://bookinvip.com", *,
                           canali: Optional[Dict[str, CanalePubblicazione]] = None,
-                          email_provider: Any = None) -> MotoreMarketing:
-    return MotoreMarketing(GeneratoreContenuti(base_url), canali or {},
+                          email_provider: Any = None,
+                          pool_testo: Any = None) -> MotoreMarketing:
+    return MotoreMarketing(GeneratoreContenuti(base_url, pool_testo=pool_testo), canali or {},
                            email_provider=email_provider)
