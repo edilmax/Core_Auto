@@ -120,8 +120,9 @@ class TestRoadmapMango(unittest.TestCase):
         # 156=CANCELLAZIONE TOTALE host + verifica "da pertutto" (diritto oblio).
         # 158=DOMANDA/waitlist + CREDITO FONDATORE (cold-start anti-vuoto).
         # 160=ESCROW DI GARANZIA (i soldi all'host solo se l'ospite conferma o passa la finestra; endpoint garanzia/*).
-        # 162=PAGAMENTI PENDENTI / hold prima del pagamento (book con Stripe -> in_attesa_pagamento + HOLD; webhook conferma->pagato + registra tassa nel ledger fase147; sweeper libera gli hold scaduti non pagati; senza Stripe resta confermata subito). Blocco pari 108..162 + 164+ libero.
-        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148, 150, 164):
+        # 162=PAGAMENTI PENDENTI / hold prima del pagamento (book con Stripe -> in_attesa_pagamento + HOLD; webhook conferma->pagato + registra tassa nel ledger fase147; sweeper libera gli hold scaduti non pagati; senza Stripe resta confermata subito).
+        # 164=POOL AI a rotazione con failover ("una funziona sempre": provider AI gratis usati a giro, cooldown+quota, stato durevole; libreria pura, adapter iniettati). Blocco pari 108..150 + 166+ libero.
+        for n in (108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148, 150, 166):
             self.assertFalse(self._esiste(n), "fase%d gia' occupata: rinumerare" % n)
 
 
