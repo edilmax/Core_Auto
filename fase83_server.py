@@ -2726,9 +2726,16 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 sistema.marketing, percorso=os.environ.get(
                     "CAMPAGNA_STATO_FILE", ".campagna_stato.json"),
                 cadenza_giorni=int(_giorni))
-            sched.avvia_in_thread(intervallo_sec=3600.0)
+            # lingue dei post (CAMPAGNA_LINGUE="it,en"); vuoto -> default del motore (tutte).
+            _lng = [x.strip() for x in os.environ.get("CAMPAGNA_LINGUE", "").split(",")
+                    if x.strip()]
+            _kw = {"intervallo_sec": 3600.0}
+            if _lng:
+                _kw["lingue"] = _lng
+            sched.avvia_in_thread(**_kw)
             logging.getLogger("core_auto.server").info(
-                "Scheduler campagna AVVIATO: ogni %s giorni", _giorni)
+                "Scheduler campagna AVVIATO: ogni %s giorni, lingue=%s",
+                _giorni, _lng or "tutte")
         except Exception:
             logging.getLogger("core_auto.server").warning(
                 "Scheduler campagna NON avviato (ISOLATO)", exc_info=True)
