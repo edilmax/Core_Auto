@@ -21,7 +21,7 @@ Money-path completo (prenota → hold/pagamento → escrow → payout), pannelli
 | Inventario realtime (anti-overbooking) | 58, 62, 67, 70 | |
 | Concierge (preventivo firmato) + prezzo/commissione | 59, 43, 44, 98, 69, 125 | rampa lancio 0→8→10% |
 | Pagamenti Stripe + webhook + hold pendenti | 85, 87, 162 | **Stripe LIVE (soldi veri)** |
-| Escrow garanzia + **Connect (bonifici auto)** | 160, 101 | Connect ON in codice; il fondatore deve **abilitare Connect nel dashboard Stripe** |
+| Escrow garanzia + **Connect (bonifici auto)** | 160, 101 | **Connect VERIFICATO ATTIVO** su Stripe live (2026-07-14). Modello: charge alla piattaforma + transfer separato all'host al rilascio 24h (solo la commissione è ricavo). Manca solo che l'host prema "Collega Stripe" |
 | Payout dashboard | 131 | |
 | Multi-valuta like-for-like | 99 | OXR spento (stima "≈ tua moneta" off) |
 | Cancellazioni + tassa soggiorno | 111, 66, 147 | |
@@ -73,6 +73,30 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 | — | **Video AI multilingua** (YouTube/Reels/TikTok) | pool 164/165 pronto; serve generazione video (ffmpeg o AI a pagamento) | marketing video |
 | — | **Instagram/WhatsApp** | bloccati lato Meta (App Review / numero WhatsApp Manager) | canali |
 | — | **OXR** (cambio valuta stima ospite) | `OXR_APP_ID` gratis nel .env | UX prezzo |
+
+## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
+Regola: ogni volta che si completa qualcosa, aggiornare questa lista (togliere il fatto,
+aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre insieme.
+
+**Prerequisiti del FONDATORE (sbloccano funzioni già pronte):**
+- Stripe Connect: **niente da fare** (già attivo); serve solo che gli host premano "Collega Stripe".
+- **Instagram**: App Review Meta + IG business collegato alla Pagina + `instagram_content_publish`.
+- **WhatsApp**: registrare il numero 3515754072 nel WhatsApp Manager (Cloud API) → phone_id.
+- **TikTok**: access token OAuth (+ i video). **X**: token a pagamento.
+- **OXR_APP_ID** (gratis, openexchangerates) → accende la stima "≈ nella tua moneta" all'ospite.
+- **Deposito cauzionale reale**: decidere pre-autorizzazione Stripe (SetupIntent/manual capture) → poi cablo fase149.
+- **KYC "Host verificato"**: scegliere provider (Stripe Identity/Veriff) + chiave → poi cablo fase143.
+- **Contratto host**: revisione legale prima di volumi seri (Stripe è LIVE, soldi veri).
+
+**Lavori tecnici (fattibili da me, senza prerequisiti):**
+- Rifiniture/fix reali a caccia di buchi (come il filtro Ospiti).
+- Recupero preventivi abbandonati (utile appena c'è traffico; usa email esistente).
+- Accendere funzioni gratis senza dipendenze: auto-traduzione annunci/recensioni (107/129),
+  calendario prezzi host (119), web push (123, genera chiavi VAPID).
+- Import (fase77): far arrivare anche l'indirizzo/coordinate precise.
+- Mappa: pin trascinabile per l'host (precisione al civico anche senza digitare l'indirizzo).
+- Split-payment REALE (link per amico, all-or-nothing) — PARCHEGGIATO dal fondatore.
+- Video AI multilingua (pool 164/165 pronto; manca la generazione video).
 
 ## 3) 🔵 LIBRERIE / INTERNI (non "si accendono": li usano altri moduli)
 17 money, 15 idempotency, 16 outbox, 23 datastore, 73 firma-agile, 133/65 split (calcolo),
