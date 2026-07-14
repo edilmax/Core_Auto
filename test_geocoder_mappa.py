@@ -67,9 +67,11 @@ class _FakeGeocoder:
     def __init__(self, coord=(41902784, 12496366)):
         self.coord = coord
         self.chiamate = 0
+        self.ultimo = None      # (citta, indirizzo, paese) dell'ultima chiamata
 
     def geocodifica(self, citta, indirizzo="", paese=""):
         self.chiamate += 1
+        self.ultimo = (citta, indirizzo, paese)
         return self.coord
 
 
@@ -152,6 +154,48 @@ class TestAutoGeocodeEMappa(unittest.TestCase):
         self.assertIn("titolo", f0["properties"])
         self.assertEqual(f0["properties"]["valuta"], "EUR")
         self.assertEqual(f0["properties"]["prezzo_cents"], 9000)
+
+    def test_indirizzo_geocodifica_precisa(self):
+        fake = _FakeGeocoder((41894560, 12482500))
+        self.sys.geocoder = fake
+        self._pubblica("con-via", "Con via", "Roma",
+                       extra={"indirizzo": "Via del Corso 12"})
+        self.assertEqual(fake.ultimo[1], "Via del Corso 12", "geocode deve usare l'indirizzo")
+        d = self.sys.catalogo.dettaglio_owner("con-via")
+        self.assertEqual(d["lat_micro"], 41894560)
+        self.assertEqual(d["indirizzo"], "Via del Corso 12")   # privato, vista owner
+
+    def test_indirizzo_e_privato(self):
+        self.sys.geocoder = _FakeGeocoder((41894560, 12482500))
+        self._pubblica("priv", "Privacy", "Roma", extra={"indirizzo": "Via Segreta 9"})
+        # PUBBLICO (dettaglio + card di ricerca + mappa): niente indirizzo
+        s, det = self.g("GET", "/api/catalogo/priv")
+        self.assertEqual(s, 200, det)
+        self.assertNotIn("indirizzo", det)
+        s, cat = self.g("GET", "/api/catalogo", query={"citta": "Roma"})
+        for c in cat.get("risultati", []):
+            self.assertNotIn("indirizzo", c)
+        s, fc = self.g("GET", "/api/mappa", query={"citta": "Roma"})
+        for f in fc["features"]:
+            self.assertNotIn("indirizzo", f["properties"])
+
+    def test_modifica_senza_indirizzo_preserva_coordinate(self):
+        # pubblico con coordinate esplicite (precise), poi "modifico" senza indirizzo ma
+        # ripassando le coordinate -> NON deve degradare a centro-città (geocoder non chiamato)
+        fake = _FakeGeocoder((45000000, 9000000))    # coord "sbagliate" se venisse chiamato
+        self.sys.geocoder = fake
+        self._pubblica("mod", "Mod", "Roma",
+                       extra={"lat_micro": 41894560, "lon_micro": 12482500})
+        self.assertEqual(fake.chiamate, 0)
+        # ri-pubblico (edit) stesso slug con le coordinate, senza indirizzo
+        s, _ = self.g("POST", "/api/host/pubblica",
+                      {"slug": "mod", "titolo": "Mod 2", "citta": "Roma",
+                       "prezzo_notte_cents": 9000, "capacita": 2,
+                       "lat_micro": 41894560, "lon_micro": 12482500}, {"X-Host-Token": self.tok})
+        self.assertEqual(s, 201)
+        self.assertEqual(fake.chiamate, 0, "coord presenti + no indirizzo -> niente geocode")
+        d = self.sys.catalogo.dettaglio_owner("mod")
+        self.assertEqual(d["lat_micro"], 41894560)
 
     def test_mappa_filtra_per_citta(self):
         self.sys.geocoder = _FakeGeocoder((41902784, 12496366))

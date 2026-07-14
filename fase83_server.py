@@ -2623,12 +2623,17 @@ class RouterHTTP:
                 return dati
             def _ok(x):
                 return isinstance(x, int) and not isinstance(x, bool)
-            if _ok(dati.get("lat_micro")) and _ok(dati.get("lon_micro")):
-                return dati                       # coordinate già presenti -> non tocco
             citta = dati.get("citta")
-            if not (isinstance(citta, str) and citta.strip()):
+            indir = str(dati.get("indirizzo", "") or "").strip()
+            ha_coord = _ok(dati.get("lat_micro")) and _ok(dati.get("lon_micro"))
+            # con INDIRIZZO -> geocodifica sempre da lì (fonte PRECISA, anche in modifica);
+            # senza indirizzo -> solo se mancano le coordinate (non degradare una posizione
+            # già precisa a centro-città). Cache-hit se l'indirizzo non è cambiato: istantaneo.
+            if ha_coord and not indir:
                 return dati
-            coord = gc.geocodifica(citta, indirizzo=str(dati.get("indirizzo", "") or ""),
+            if not ((isinstance(citta, str) and citta.strip()) or indir):
+                return dati
+            coord = gc.geocodifica(citta, indirizzo=indir,
                                    paese=str(dati.get("paese", "") or ""))
             if coord:
                 dati = dict(dati)

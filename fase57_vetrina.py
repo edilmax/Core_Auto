@@ -113,6 +113,7 @@ class SchedaAlloggio:
     capacita: int
     descrizione: str = ""
     paese: str = ""
+    indirizzo: str = ""           # via+civico (PRIVATO: solo per geocodifica precisa, mai pubblico)
     camere: int = 1
     bagni: int = 1
     servizi: Tuple[str, ...] = ()
@@ -204,6 +205,9 @@ def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
     paese = data.get("paese", "")
     if not isinstance(paese, str) or len(paese) > LIMITE_CAMPO:
         return False, "paese_non_valido", None
+    indirizzo = data.get("indirizzo", "")
+    if not isinstance(indirizzo, str) or len(indirizzo) > LIMITE_CAMPO:
+        return False, "indirizzo_non_valido", None
     valuta = data.get("valuta", "EUR")
     if not isinstance(valuta, str) or not (1 <= len(valuta) <= 8):
         return False, "valuta_non_valida", None
@@ -240,7 +244,7 @@ def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
     return True, "", SchedaAlloggio(
         host_id=host_id, slug=slug, titolo=titolo, citta=citta,
         prezzo_notte_cents=prezzo, capacita=int(data["capacita"]),
-        descrizione=descr.strip(), paese=paese.strip(),
+        descrizione=descr.strip(), paese=paese.strip(), indirizzo=indirizzo.strip(),
         camere=int(data.get("camere", 1)), bagni=int(data.get("bagni", 1)),
         servizi=servizi, valuta=valuta, stato=stato,
         lat_micro=lat, lon_micro=lon, politica_cancellazione=pol,
@@ -305,6 +309,7 @@ class CatalogoVetrina:
                         descrizione TEXT NOT NULL DEFAULT '',
                         citta TEXT NOT NULL,
                         paese TEXT NOT NULL DEFAULT '',
+                        indirizzo TEXT NOT NULL DEFAULT '',
                         prezzo_notte_cents INTEGER NOT NULL,
                         capacita INTEGER NOT NULL,
                         camere INTEGER NOT NULL DEFAULT 1,
@@ -325,6 +330,7 @@ class CatalogoVetrina:
                                ("tassa_pp_notte_cents", "INTEGER NOT NULL DEFAULT 0"),
                                ("tassa_max_notti", "INTEGER NOT NULL DEFAULT 0"),
                                ("tassa_perc_bps", "INTEGER NOT NULL DEFAULT 0"),
+                               ("indirizzo", "TEXT NOT NULL DEFAULT ''"),
                                ("modalita_prenotazione", "TEXT NOT NULL DEFAULT 'immediata'")):
                     try:
                         con.execute("ALTER TABLE alloggi ADD COLUMN %s %s" % (_c, _d))
@@ -362,30 +368,31 @@ class CatalogoVetrina:
             if row is None:
                 cur = con.execute(
                     "INSERT INTO alloggi (host_id, slug, titolo, descrizione, citta, "
-                    "paese, prezzo_notte_cents, capacita, camere, bagni, servizi_mask, "
+                    "paese, indirizzo, prezzo_notte_cents, capacita, camere, bagni, servizi_mask, "
                     "valuta, stato, lat_micro, lon_micro, politica_cancellazione, "
                     "tassa_pp_notte_cents, tassa_max_notti, tassa_perc_bps, "
                     "modalita_prenotazione, creato_ts, aggiornato_ts) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (scheda.host_id, scheda.slug, scheda.titolo, scheda.descrizione,
-                     scheda.citta, scheda.paese, scheda.prezzo_notte_cents, scheda.capacita,
-                     scheda.camere, scheda.bagni, mask, scheda.valuta, scheda.stato,
-                     scheda.lat_micro, scheda.lon_micro, scheda.politica_cancellazione,
-                     scheda.tassa_pp_notte_cents, scheda.tassa_max_notti, scheda.tassa_perc_bps,
+                     scheda.citta, scheda.paese, scheda.indirizzo, scheda.prezzo_notte_cents,
+                     scheda.capacita, scheda.camere, scheda.bagni, mask, scheda.valuta,
+                     scheda.stato, scheda.lat_micro, scheda.lon_micro,
+                     scheda.politica_cancellazione, scheda.tassa_pp_notte_cents,
+                     scheda.tassa_max_notti, scheda.tassa_perc_bps,
                      scheda.modalita_prenotazione, ora, ora))
                 alloggio_id = cur.lastrowid
             else:
                 alloggio_id = row["id"]
                 con.execute(
                     "UPDATE alloggi SET host_id=?, titolo=?, descrizione=?, citta=?, "
-                    "paese=?, prezzo_notte_cents=?, capacita=?, camere=?, bagni=?, "
+                    "paese=?, indirizzo=?, prezzo_notte_cents=?, capacita=?, camere=?, bagni=?, "
                     "servizi_mask=?, valuta=?, stato=?, lat_micro=?, lon_micro=?, "
                     "politica_cancellazione=?, tassa_pp_notte_cents=?, tassa_max_notti=?, "
                     "tassa_perc_bps=?, modalita_prenotazione=?, aggiornato_ts=? WHERE id=?",
                     (scheda.host_id, scheda.titolo, scheda.descrizione, scheda.citta,
-                     scheda.paese, scheda.prezzo_notte_cents, scheda.capacita, scheda.camere,
-                     scheda.bagni, mask, scheda.valuta, scheda.stato, scheda.lat_micro,
-                     scheda.lon_micro, scheda.politica_cancellazione,
+                     scheda.paese, scheda.indirizzo, scheda.prezzo_notte_cents, scheda.capacita,
+                     scheda.camere, scheda.bagni, mask, scheda.valuta, scheda.stato,
+                     scheda.lat_micro, scheda.lon_micro, scheda.politica_cancellazione,
                      scheda.tassa_pp_notte_cents, scheda.tassa_max_notti, scheda.tassa_perc_bps,
                      scheda.modalita_prenotazione, ora, alloggio_id))
             con.execute("DELETE FROM alloggio_immagini WHERE alloggio_id=?", (alloggio_id,))
@@ -629,7 +636,14 @@ class CatalogoVetrina:
                 "ORDER BY ordine, id", (a["id"],)).fetchall()
         finally:
             con.close()
-        return self._dettaglio_json(a, imgs)
+        d = self._dettaglio_json(a, imgs)
+        # indirizzo: PRIVATO, solo nella vista del proprietario (mai nel dettaglio pubblico
+        # né nelle card di ricerca) -> per pre-riempire il form di modifica e ri-geocodificare
+        if isinstance(d, dict):
+            d["indirizzo"] = (a["indirizzo"] if "indirizzo" in a.keys() else "") or ""
+            d["lat_micro"] = a["lat_micro"]
+            d["lon_micro"] = a["lon_micro"]
+        return d
 
     # --- contratti JSON (tutti gli importi int cents; tassi/geo interi) ---
     def _card_json(self, r: sqlite3.Row, criteri: CriteriRicerca) -> Dict[str, Any]:

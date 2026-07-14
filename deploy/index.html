@@ -104,13 +104,19 @@
       <label data-t="checkout">Check-out<input type="date" id="checkout" value="2026-09-03"></label>
       <label data-t="ospiti">Ospiti<input type="number" id="ospiti" value="2" min="1" max="20"></label>
       <label data-t="max_prezzo">Max €<input type="number" id="prezzomax" data-tph="ph_prezzomax" placeholder="es. 150" min="0"></label>
-      <label id="lblRaggio" data-t="raggio">Raggio<select id="raggio"><option value="2">2 km</option><option value="5" selected>5 km</option><option value="10">10 km</option><option value="25">25 km</option><option value="50">50 km</option></select></label>
+      <label id="lblRaggio" data-t="raggio">Raggio<select id="raggio"><option value="0.1">100 m</option><option value="0.25">250 m</option><option value="0.5">500 m</option><option value="1" selected>1 km</option><option value="2">2 km</option><option value="5">5 km</option><option value="10">10 km</option><option value="25">25 km</option><option value="50">50 km</option></select></label>
       <button type="submit" id="btnCerca">Cerca</button>
       <button type="button" id="btnVicino" data-ttitle="vicino_title" title="Trova alloggi vicino a dove ti trovi ora">📍 <span data-t="vicino_a_me">Vicino a me</span></button>
     </div>
     <div class="chips" id="chips"></div>
     <label style="display:flex;align-items:center;gap:.4rem;margin-top:.7rem;font-size:.85rem;color:#155724;font-weight:600;cursor:pointer;text-transform:none;flex-direction:row"><input type="checkbox" id="soloGratuita" style="min-width:0;width:auto"> <span data-t="filtro_gratuita">Solo cancellazione gratuita</span></label>
   </form>
+
+  <div id="bannerBeta" style="background:linear-gradient(135deg,#fff8ec,#fffdf8);border:1px solid #f0dfb8;border-radius:1rem;padding:1rem 1.2rem;margin:0 0 1.4rem;text-align:center">
+    <div style="font-weight:700;color:#8a5200;font-size:1.02rem">🚧 <span id="beta1">Siamo in fase di test e costruzione — apriamo a breve.</span></div>
+    <div style="color:#5e6f8d;font-size:.92rem;margin-top:.25rem"><span id="beta2">Stiamo preparando un servizio più avanzato e più conveniente per te. Nel frattempo è già aperto agli host:</span>
+      <a href="/diventa-host.html" style="color:#155724;font-weight:700;white-space:nowrap"><span id="beta3">pubblica il tuo alloggio ora →</span></a></div>
+  </div>
 
   <div id="vista" style="display:none;gap:.5rem;margin:.2rem 0 .8rem">
     <button type="button" id="btnLista" class="vistaBtn attiva">≣ <span id="lblLista">Lista</span></button>
@@ -281,17 +287,18 @@ async function cerca(){
 // ── MAPPA nella ricerca (Leaflet + OpenStreetMap, gratis, caricato solo se serve) ──
 let LMAP=null, LLAYER=null, LAST_PARAMS=null;
 const MAP_T={
-  it:{lista:'Lista',mappa:'Mappa',vedi:'Vedi',vuota:'Nessun alloggio con posizione sulla mappa (in arrivo).',ko:'Mappa non disponibile ora.'},
-  en:{lista:'List',mappa:'Map',vedi:'View',vuota:'No listings with a map location yet.',ko:'Map unavailable right now.'},
-  es:{lista:'Lista',mappa:'Mapa',vedi:'Ver',vuota:'Aún no hay alojamientos con ubicación en el mapa.',ko:'Mapa no disponible ahora.'},
-  fr:{lista:'Liste',mappa:'Carte',vedi:'Voir',vuota:'Aucun logement localisé sur la carte pour l’instant.',ko:'Carte indisponible.'},
-  de:{lista:'Liste',mappa:'Karte',vedi:'Ansehen',vuota:'Noch keine Unterkünfte mit Kartenposition.',ko:'Karte nicht verfügbar.'},
-  pt:{lista:'Lista',mappa:'Mapa',vedi:'Ver',vuota:'Ainda sem alojamentos com localização no mapa.',ko:'Mapa indisponível.'}
+  it:{lista:'Lista',mappa:'Mappa',vedi:'Vedi',b1:'Siamo in fase di test e costruzione — apriamo a breve.',b2:'Stiamo preparando un servizio più avanzato e più conveniente per te. Nel frattempo è già aperto agli host:',b3:'pubblica il tuo alloggio ora →',vuota:'Nessun alloggio con posizione sulla mappa (in arrivo).',ko:'Mappa non disponibile ora.'},
+  en:{lista:'List',mappa:'Map',vedi:'View',b1:'We are in test & build phase — opening soon.',b2:'We are preparing a more advanced and cheaper service for you. Meanwhile it is already open to hosts:',b3:'publish your place now →',vuota:'No listings with a map location yet.',ko:'Map unavailable right now.'},
+  es:{lista:'Lista',mappa:'Mapa',vedi:'Ver',b1:'Estamos en fase de prueba y construcción — abrimos pronto.',b2:'Preparamos un servicio más avanzado y económico para ti. Mientras tanto ya está abierto a anfitriones:',b3:'publica tu alojamiento ahora →',vuota:'Aún no hay alojamientos con ubicación en el mapa.',ko:'Mapa no disponible ahora.'},
+  fr:{lista:'Liste',mappa:'Carte',vedi:'Voir',b1:'Nous sommes en phase de test et construction — ouverture bientôt.',b2:'Nous préparons un service plus avancé et plus économique. En attendant, c’est déjà ouvert aux hôtes :',b3:'publiez votre logement maintenant →',vuota:'Aucun logement localisé sur la carte pour l’instant.',ko:'Carte indisponible.'},
+  de:{lista:'Liste',mappa:'Karte',vedi:'Ansehen',b1:'Wir sind in der Test- und Aufbauphase — bald geöffnet.',b2:'Wir bereiten einen fortschrittlicheren und günstigeren Service vor. Für Gastgeber ist schon offen:',b3:'jetzt Unterkunft einstellen →',vuota:'Noch keine Unterkünfte mit Kartenposition.',ko:'Karte nicht verfügbar.'},
+  pt:{lista:'Lista',mappa:'Mapa',vedi:'Ver',b1:'Estamos em fase de teste e construção — abrimos em breve.',b2:'Estamos a preparar um serviço mais avançado e económico. Entretanto já está aberto a anfitriões:',b3:'publique o seu alojamento agora →',vuota:'Ainda sem alojamentos com localização no mapa.',ko:'Mapa indisponível.'}
 };
 function mt(k){ return (MAP_T[LANG]||MAP_T.en)[k] || MAP_T.en[k] || k; }
 function localizzaMappa(){
   const a=document.getElementById('lblLista'), b=document.getElementById('lblMappa');
   if(a) a.textContent=mt('lista'); if(b) b.textContent=mt('mappa');
+  ['b1','b2','b3'].forEach(k=>{const e=document.getElementById(k); if(e) e.textContent=mt(k);});
 }
 function caricaLeaflet(){
   return new Promise((res,rej)=>{
