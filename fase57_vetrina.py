@@ -523,6 +523,23 @@ class CatalogoVetrina:
             con.close()
         return r["host_id"] if r is not None else None
 
+    def elimina_alloggio(self, slug: Any) -> bool:
+        """Elimina UN annuncio (alloggio + immagini) — per l'host che ha sbagliato a crearlo.
+        Idempotente: slug inesistente -> False. La verifica proprietà la fa il chiamante."""
+        if not (isinstance(slug, str) and slug):
+            return False
+        con = self._apri()
+        try:
+            with con:
+                r = con.execute("SELECT id FROM alloggi WHERE slug=?", (slug,)).fetchone()
+                if r is None:
+                    return False
+                con.execute("DELETE FROM alloggio_immagini WHERE alloggio_id=?", (r["id"],))
+                con.execute("DELETE FROM alloggi WHERE id=?", (r["id"],))
+            return True
+        finally:
+            con.close()
+
     def cancella_alloggi_host(self, host_id: Any) -> int:
         """CANCELLAZIONE TOTALE annunci+immagini di un host (diritto all'oblio / pulizia)."""
         if not (isinstance(host_id, str) and host_id):

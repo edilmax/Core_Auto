@@ -805,6 +805,8 @@ class RouterHTTP:
             return self._host_calendario_tutti(query, headers)
         if metodo == "GET" and path == "/api/host/metriche_avanzate":
             return self._host_metriche_avanzate(headers)
+        if metodo == "POST" and path == "/api/host/alloggio_elimina":
+            return self._host_alloggio_elimina(body, headers)
         if metodo == "GET" and path == "/api/host/stripe_link":
             return self._host_stripe_link(headers)
         if metodo == "POST" and path == "/api/telegram/webhook":
@@ -3388,6 +3390,35 @@ class RouterHTTP:
                              daemon=True).start()
         except Exception:
             logger.warning("email recupero hold fallita (ISOLATA)", exc_info=True)
+
+    def _host_alloggio_elimina(self, body, headers):
+        """L'host ELIMINA un suo annuncio sbagliato (con doppia conferma nel pannello).
+        SICURO: solo il proprietario; niente eliminazione se ci sono prenotazioni FUTURE
+        confermate (prima vanno annullate: mai lasciare un cliente senza stanza)."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        slug = dati.get("slug")
+        if not (isinstance(slug, str) and slug):
+            return 422, {"errore": "slug_mancante"}
+        if not self._verifica_proprieta(headers, slug):
+            return 403, {"errore": "non_tuo"}
+        try:
+            import datetime as _dte
+            oggi = _dte.date.today().isoformat()
+            future = [p for p in self._sys.inventario.elenco_prenotazioni(alloggio_id=slug,
+                                                                          limit=200)
+                      if not p.get("rilasciato") and str(p.get("check_out", "")) >= oggi]
+            if future:
+                return 409, {"errore": "prenotazioni_attive", "quante": len(future)}
+            ok = self._sys.catalogo.elimina_alloggio(slug)
+        except Exception:
+            logger.error("elimina alloggio: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        return (200, {"stato": "eliminato", "slug": slug}) if ok else \
+               (404, {"errore": "non_trovato"})
 
     def _host_metriche_avanzate(self, headers):
         """KPI avanzati dell'host (fase115, puro): calcolati sulle SUE prenotazioni reali
