@@ -577,6 +577,32 @@ def pagina_azione_html(esito: Dict[str, Any]) -> str:
     ) % (h1, bg, col, ic, h1, p1, p2, pannello)
 
 
+def _punteggio_consigliato(c: Dict[str, Any]) -> int:
+    """Punteggio di qualità di un annuncio per l'ordinamento 'consigliati' (i migliori in cima,
+    come i colossi). PURO/deterministico, usa SOLO segnali già disponibili nella card (nessun
+    dato esterno): foto, recensioni (numero+voto), cancellazione gratuita, ricchezza servizi.
+    Più alto = meglio. A pari punteggio l'ordinamento stabile lascia i recenti prima."""
+    s = 0
+    if not isinstance(c, dict):
+        return 0
+    if c.get("thumbnail"):
+        s += 40                                   # ha una foto: segnale fortissimo di completezza
+    rec = c.get("recensioni")
+    if isinstance(rec, dict):
+        n = rec.get("conteggio")
+        if isinstance(n, int) and n > 0:
+            s += min(30, n * 3)                   # più recensioni = più fiducia (cap 30)
+        media = rec.get("media_centesimi")
+        if isinstance(media, int) and media > 0:
+            s += min(25, media // 20)             # voto 0..500 -> 0..25
+    if c.get("cancellazione_gratuita"):
+        s += 10                                   # leva di conversione
+    serv = c.get("servizi")
+    if isinstance(serv, (list, tuple)):
+        s += min(10, len(serv) * 2)               # più servizi dichiarati = annuncio curato
+    return s
+
+
 def _ext_da_magic(raw: bytes) -> Optional[str]:
     """Tipo immagine dai MAGIC BYTES (mai fidarsi del content-type/estensione). None se
     non e' un'immagine supportata."""
@@ -1036,15 +1062,21 @@ class RouterHTTP:
             else:
                 geo = None
         limit_req = _int("limit") or 24
+        # ORDINAMENTO: default "consigliati" (i migliori in cima, come i colossi) — se l'ospite
+        # non chiede un ordine esplicito. Per consigliati/geo prendo TUTTO e riordino qui.
+        ordine_guest = query.get("ordine") or "consigliati"
+        _ordine_db = ordine_guest if ordine_guest in ("recente", "prezzo_asc", "prezzo_desc") \
+            else "recente"
+        _tutto = (geo is not None) or (ordine_guest == "consigliati")
         criteri = CriteriRicerca(
             citta=query.get("citta") or None,
             prezzo_min_cents=_int("prezzo_min_cents"),
             prezzo_max_cents=_int("prezzo_max_cents"),
             capacita_min=_int("capacita_min"), servizi=servizi,
-            ordine=query.get("ordine", "recente"),
-            # con geo prendo TUTTO il box (poi riordino per distanza qui sotto)
-            limit=(PAGINA_MAX if geo is not None else limit_req),
-            offset=(0 if geo is not None else (_int("offset") or 0)),
+            ordine=_ordine_db,
+            # con geo/consigliati prendo TUTTO (poi riordino qui sotto), altrimenti la pagina
+            limit=(PAGINA_MAX if _tutto else limit_req),
+            offset=(0 if _tutto else (_int("offset") or 0)),
             bbox=bbox_t,
             check_in=query.get("check_in") or None,
             check_out=query.get("check_out") or None)
@@ -1072,6 +1104,12 @@ class RouterHTTP:
             res["totale"] = len(vicini)
             cards = vicini[:limit_req]
             res["ordine"] = "vicinanza"
+        elif ordine_guest == "consigliati":
+            # i migliori in cima (foto, recensioni, cancellazione gratuita, completezza);
+            # ordinamento STABILE: a pari punteggio resta l'ordine base (recenti prima)
+            cards.sort(key=_punteggio_consigliato, reverse=True)
+            cards = cards[:limit_req]
+            res["ordine"] = "consigliati"
         res["risultati"] = cards
         res["lingua"] = lingua
         return 200, res

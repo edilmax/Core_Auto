@@ -145,7 +145,7 @@ class TestGeoVicino(unittest.TestCase):
     def test_senza_geo_ricerca_normale(self):
         s, c = self.r.gestisci("GET", "/api/catalogo", {"citta": "Roma"})
         self.assertEqual(c["totale"], 3)
-        self.assertNotIn("ordine", c)
+        self.assertEqual(c.get("ordine"), "consigliati")   # default: i migliori in cima
         for x in c["risultati"]:
             self.assertNotIn("distanza_m", x)
 
