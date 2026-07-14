@@ -268,8 +268,12 @@ def _valida_immagini(imgs: Any) -> List[Immagine]:
         else:
             continue
         url = _stringa(url, LIMITE_CAMPO * 4)
-        if url is None or not (url.startswith("http://") or url.startswith("https://")):
+        # ok: assoluti http(s) E i NOSTRI upload relativi (/uploads/<nome>, path-safe a monte)
+        if url is None or not (url.startswith("http://") or url.startswith("https://")
+                               or url.startswith("/uploads/")):
             continue
+        if len(out) >= 30:                 # tetto professionale (come i colossi): max 30 foto
+            break
         if not _intero(ordine):
             ordine = i
         alt = alt.strip()[:LIMITE_CAMPO] if isinstance(alt, str) else ""
