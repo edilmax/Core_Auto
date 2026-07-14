@@ -85,6 +85,11 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 **ESITO (stesso giorno):** 1✅ Preferiti ❤ live (cuoricino su card + bottone '❤ N' filtro, localStorage, zero attrito); 2⛔ Alloggiati Web SKIP onesto (il check-in raccoglie nome+documento, la Questura vuole data nascita/sesso/comune → schedine vuote = teatro; riattivare quando il form check-in verrà esteso); 3✅ Recupero prenotazione fallita live (sweeper hold scaduto → `_email_recupero_hold`: UNA email transazionale col link, 'Nessun addebito', mai promemoria). Suite 2139, 0 errori.
 4. ⛔ SKIP motivati: 123 web-push (richiede crypto EC non-stdlib = violerebbe zero-dipendenze), 107/129 traduzioni (serve servizio esterno), 105 VC (nessun ecosistema), 102 (ridondante con scheduler), 141 (doppione guida). Predisposizione futura: restano librerie pronte nel repo, documentate qui.
 
+## 🛡️ PIANO BRAND-SAFETY + REDESIGN "Designer 2.0" (2026-07-14)
+**Problema:** dominio bookinvip.com vs marchi "Booking.com"/"BookVIP" → rischio contestazione per CONFUSIONE. **Logica difensiva (riduzione rischio, non consulenza legale):** "booking" è termine GENERICO (USPTO v. Booking.com, 2020: protezione stretta) → ciò che conta è NON somigliare visivamente. Il nostro blu #1e3c72 era pericolosamente vicino al blu Booking (#003580).
+**Mosse:** 1) Brand visibile = **"Bookin VIP"** (staccato, ≠ dominio) con VIP dominante; 2) **palette nuova verde profondo + oro** (lusso/fiducia/VIP; nessun colosso travel la usa: Booking blu, Airbnb corallo, Agoda viola-rosso, Expedia blu/giallo, TripAdvisor verde acceso ≠ nostro verde scuro elegante); 3) logo/icona wordmark UNICI (niente "B" in scatola blu); 4) micro-guide semplici in testa ai pannelli (admin+host) — "con noi ti semplifichiamo la vita". **Consiglio al fondatore (quando vuole):** registrare il marchio FIGURATIVO "Bookin VIP" a EUIPO (~850€) = protezione vera.
+**ESITO:** vedi commit — palette+logo+titoli+guide applicati su index/host/admin/manifest; suite verde.
+
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 Regola: ogni volta che si completa qualcosa, aggiornare questa lista (togliere il fatto,
 aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre insieme.

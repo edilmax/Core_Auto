@@ -3,24 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#1e3c72">
+<meta name="theme-color" content="#0f4c3a">
 <link rel="icon" href="/icon.svg">
-<title>BookinVIP · Admin</title>
+<title>Bookin VIP · Admin</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#f4f6fa;color:#1a1e2b;padding:1.5rem;line-height:1.5}
   .container{max-width:980px;margin:0 auto}
   header{display:flex;justify-content:space-between;align-items:end;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:2px solid #dce1ed;flex-wrap:wrap;gap:1rem}
-  .logo{font-weight:700;font-size:1.6rem;background:linear-gradient(135deg,#1e3c72,#2a5298);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  .logo{font-weight:700;font-size:1.6rem;background:linear-gradient(135deg,#0f4c3a,#156b52);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
   input,select{padding:.5rem .7rem;border-radius:.7rem;border:1px solid #dce1ed;font-size:1rem}
-  button{background:#1e3c72;color:#fff;border:none;padding:.55rem 1.3rem;border-radius:2rem;font-weight:600;cursor:pointer}
-  button:hover{background:#2a5298}
+  button{background:#0f4c3a;color:#fff;border:none;padding:.55rem 1.3rem;border-radius:2rem;font-weight:600;cursor:pointer}
+  button:hover{background:#156b52}
   button.danger{background:#b02a37}.button.danger:hover{background:#842029}
   table{width:100%;border-collapse:collapse;background:#fff;border-radius:1rem;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,.05)}
   th,td{padding:.7rem .9rem;text-align:left;font-size:.9rem;border-bottom:1px solid #eef2f7}
-  th{background:#f0f4fe;color:#4a5b7a;text-transform:uppercase;font-size:.72rem;letter-spacing:.03em}
+  th{background:#eef7f2;color:#4a5b7a;text-transform:uppercase;font-size:.72rem;letter-spacing:.03em}
   .tag{display:inline-block;padding:.1rem .6rem;border-radius:1rem;font-size:.72rem;font-weight:600}
-  .tag.ok{background:#d4edda;color:#155724}.tag.attiva{background:#eef2f7;color:#2a5298}
+  .tag.ok{background:#d4edda;color:#155724}.tag.attiva{background:#eef2f7;color:#156b52}
   .msg{padding:.7rem 1rem;border-radius:.7rem;margin:.8rem 0;font-size:.9rem}
   .msg.ok{background:#d4edda;color:#155724}.msg.err{background:#f8d7da;color:#842029}
   .key{display:flex;gap:.6rem;align-items:center;margin-bottom:1.2rem;flex-wrap:wrap}
@@ -29,7 +29,7 @@
 <body>
 <div class="container">
   <header>
-    <div class="logo">BookinVIP · Admin</div>
+    <div class="logo">Bookin VIP · Admin</div>
     <div class="key">
       <select id="lang" style="width:auto">
         <option value="it">🇮🇹 IT</option><option value="en">🇬🇧 EN</option><option value="es">🇪🇸 ES</option><option value="fr">🇫🇷 FR</option>
@@ -41,6 +41,14 @@
     </div>
   </header>
 
+  <div style="background:linear-gradient(135deg,#eef7f2,#f9fdfb);border:1px solid #d7e8e0;border-radius:1rem;padding:1rem 1.2rem;margin-bottom:1.2rem">
+    <div style="font-weight:700;color:#0f4c3a">👋 Come funziona (semplice)</div>
+    <div style="font-size:.9rem;color:#4a5b7a;line-height:1.8;margin-top:.3rem">
+      <div><b>1️⃣</b> Incolla la tua chiave admin qui sopra: tutto si carica da solo.</div>
+      <div><b>2️⃣</b> "Tutti gli annunci" = controlli e sospendi · "Controversie" = decidi tu chi rimborsare.</div>
+      <div><b>3️⃣</b> Il resto va da solo (prenotazioni, pagamenti, marketing): qui intervieni solo quando serve.</div>
+    </div>
+  </div>
   <div id="msg"></div>
   <table>
     <thead><tr><th data-i18n="th_all">Alloggio</th><th data-i18n="th_ci">Check-in</th><th data-i18n="th_co">Check-out</th><th data-i18n="th_orig">Origine</th><th data-i18n="th_stato">Stato</th><th></th></tr></thead>
@@ -48,7 +56,7 @@
   </table>
 
   <div style="background:#fff;border-radius:1rem;padding:1.5rem;box-shadow:0 6px 18px rgba(0,0,0,.05);margin-top:1.5rem">
-    <h2 style="color:#1e3c72;font-size:1.2rem;margin-bottom:.3rem" data-i18n="al_h">📋 Tutti gli annunci</h2>
+    <h2 style="color:#0f4c3a;font-size:1.2rem;margin-bottom:.3rem" data-i18n="al_h">📋 Tutti gli annunci</h2>
     <p style="font-size:.85rem;color:#5e6f8d;margin-bottom:.8rem" data-i18n="al_p">Ogni annuncio col suo numero (ID) e l'host. Puoi sospenderlo/ripubblicarlo, oppure cancellare tutto l'host (riempie il campo qui sotto).</p>
     <div style="overflow-x:auto"><table>
       <thead><tr><th data-i18n="al_id">ID</th><th data-i18n="al_tit">Titolo</th><th data-i18n="al_cit">Città</th><th data-i18n="al_host">Host</th><th data-i18n="al_pr">Prezzo</th><th data-i18n="al_st">Stato</th><th></th></tr></thead>
@@ -57,7 +65,7 @@
   </div>
 
   <div style="background:#fff;border-radius:1rem;padding:1.5rem;box-shadow:0 6px 18px rgba(0,0,0,.05);margin-top:1.5rem">
-    <h2 style="color:#1e3c72;font-size:1.2rem;margin-bottom:.8rem" data-i18n="mk_h">📣 Marketing — pubblica campagna</h2>
+    <h2 style="color:#0f4c3a;font-size:1.2rem;margin-bottom:.8rem" data-i18n="mk_h">📣 Marketing — pubblica campagna</h2>
     <p style="font-size:.85rem;color:#5e6f8d;margin-bottom:.8rem" data-i18n="mk_p">Genera post multilingua + immagini promo e li pubblica sui canali configurati nel server (Telegram/Facebook). Senza canali nel .env, i post sono generati ma non pubblicati.</p>
     <div style="margin-bottom:.9rem;font-size:.9rem"><span data-i18n="mk_lingue">Lingue:</span>
       <label style="margin-left:.5rem"><input type="checkbox" class="lng" value="it" checked> IT</label>
@@ -126,7 +134,7 @@ async function caricaAlloggi(){
         ? `<button class="danger alStato" data-s="${esc(a.slug)}" data-st="sospeso">${T('al_sosp')}</button>`
         : `<button class="alStato" data-s="${esc(a.slug)}" data-st="pubblicato" style="background:#155724">${T('al_pub')}</button>`;
       const del=`<button class="alDel" data-h="${esc(a.host_id)}" style="background:#b00020;margin-left:.3rem">${T('al_delhost')}</button>`;
-      return `<tr><td style="font-weight:700;color:#1e3c72">#${a.id}</td><td>${esc(a.titolo)}</td><td>${esc(a.citta)}</td><td style="font-size:.76rem;color:#5e6f8d">${esc(a.host_id)}</td><td>${money(a.prezzo_notte_cents,a.valuta)}</td><td>${esc(a.stato)}</td><td style="white-space:nowrap">${az}${del}</td></tr>`;
+      return `<tr><td style="font-weight:700;color:#0f4c3a">#${a.id}</td><td>${esc(a.titolo)}</td><td>${esc(a.citta)}</td><td style="font-size:.76rem;color:#5e6f8d">${esc(a.host_id)}</td><td>${money(a.prezzo_notte_cents,a.valuta)}</td><td>${esc(a.stato)}</td><td style="white-space:nowrap">${az}${del}</td></tr>`;
     }).join('');
     tb.querySelectorAll('.alStato').forEach(b=>b.onclick=()=>cambiaStatoAdmin(b.dataset.s,b.dataset.st));
     // SICUREZZA: il pulsante nella riga NON cancella; SELEZIONA solo l'host nel riquadro

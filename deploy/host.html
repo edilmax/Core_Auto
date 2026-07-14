@@ -3,24 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#1e3c72">
+<meta name="theme-color" content="#0f4c3a">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon.svg">
-<title>BookinVIP · Host</title>
+<title>Bookin VIP · Host</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#f4f6fa;color:#1a1e2b;padding:1.5rem;line-height:1.5}
   .container{max-width:760px;margin:0 auto}
   header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:2px solid #dce1ed;flex-wrap:wrap;gap:1rem}
-  .logo{font-weight:700;font-size:1.6rem;background:linear-gradient(135deg,#1e3c72,#2a5298);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  .logo{font-weight:700;font-size:1.6rem;background:linear-gradient(135deg,#0f4c3a,#156b52);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
   select,input{padding:.5rem .7rem;border-radius:.7rem;border:1px solid #dce1ed;font-size:1rem;width:100%}
   .card{background:#fff;border-radius:1.25rem;box-shadow:0 6px 18px rgba(0,0,0,.05);padding:1.5rem;margin-bottom:1.5rem}
-  .card h2{font-size:1.2rem;margin-bottom:1rem;color:#1e3c72}
+  .card h2{font-size:1.2rem;margin-bottom:1rem;color:#0f4c3a}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem 1rem}
   .grid label{display:flex;flex-direction:column;font-size:.72rem;font-weight:600;text-transform:uppercase;color:#4a5b7a;gap:.25rem}
   .full{grid-column:1/-1}
-  button{background:#1e3c72;color:#fff;border:none;padding:.65rem 1.5rem;border-radius:2rem;font-weight:600;font-size:1rem;cursor:pointer;margin-top:1rem}
-  button:hover{background:#2a5298}
+  button{background:#0f4c3a;color:#fff;border:none;padding:.65rem 1.5rem;border-radius:2rem;font-weight:600;font-size:1rem;cursor:pointer;margin-top:1rem}
+  button:hover{background:#156b52}
   .msg{padding:.7rem 1rem;border-radius:.7rem;margin-top:.8rem;font-size:.9rem}
   .msg.ok{background:#d4edda;color:#155724}.msg.err{background:#f8d7da;color:#842029}
   .key{background:#fff;border-radius:1rem;padding:1rem 1.5rem;margin-bottom:1.5rem;display:flex;gap:1rem;align-items:end}
@@ -30,7 +30,7 @@
 <body>
 <div class="container">
   <header>
-    <div class="logo" id="lTitolo">BookinVIP · Host</div>
+    <div class="logo" id="lTitolo">Bookin VIP · Host</div>
     <select id="lang" style="width:auto">
       <option value="it">🇮🇹 IT</option><option value="en">🇬🇧 EN</option>
       <option value="es">🇪🇸 ES</option><option value="fr">🇫🇷 FR</option>
@@ -68,7 +68,7 @@
     <div id="msgAuth"></div>
   </div>
 
-  <div class="card" id="cardGuida" style="display:none;background:linear-gradient(135deg,#eef4ff,#f7faff);border:1px solid #dce6fb">
+  <div class="card" id="cardGuida" style="display:none;background:linear-gradient(135deg,#eef7f2,#f7faff);border:1px solid #d7e8e0">
     <h2>👋 <span data-i18n="g_h">Benvenuto! In 3 passi sei operativo</span></h2>
     <div style="font-size:.98rem;line-height:2;margin-top:.2rem">
       <div><b>1️⃣</b> <span data-i18n="g_1">Pubblica il tuo alloggio (titolo, prezzo, foto).</span></div>
@@ -156,10 +156,10 @@
     </div>
     <button id="btnExport" data-i18n="b_export" style="background:#155724">📥 Esporta CSV prenotazioni</button>
     <div id="dash" style="display:none;margin-top:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.8rem">
-      <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#1e3c72" id="d_revenue">—</div><div style="font-size:.75rem;color:#5e6f8d" data-i18n="k_revenue">REVENUE</div></div>
-      <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#1e3c72" id="d_occ">—</div><div style="font-size:.75rem;color:#5e6f8d" data-i18n="k_occ">OCCUPAZIONE</div></div>
-      <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#1e3c72" id="d_pren">—</div><div style="font-size:.75rem;color:#5e6f8d" data-i18n="k_pren">PRENOTAZIONI</div></div>
-      <div style="background:#f0f4fe;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#e0a800" id="d_rating">—</div><div style="font-size:.75rem;color:#5e6f8d" data-i18n="k_rating">RATING</div></div>
+      <div style="background:#eef7f2;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#0f4c3a" id="d_revenue">—</div><div style="font-size:.75rem;color:#5e6f8d" data-i18n="k_revenue">REVENUE</div></div>
+      <div style="background:#eef7f2;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#0f4c3a" id="d_occ">—</div><div style="font-size:.75rem;color:#5e6f8d" data-i18n="k_occ">OCCUPAZIONE</div></div>
+      <div style="background:#eef7f2;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#0f4c3a" id="d_pren">—</div><div style="font-size:.75rem;color:#5e6f8d" data-i18n="k_pren">PRENOTAZIONI</div></div>
+      <div style="background:#eef7f2;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#e0a800" id="d_rating">—</div><div style="font-size:.75rem;color:#5e6f8d" data-i18n="k_rating">RATING</div></div>
     </div>
     <div id="msgMetriche"></div>
   </div>
@@ -174,7 +174,7 @@
 
   <div class="card">
     <h2>🗓️ <span data-i18n="cal_h">Calendario disponibilità</span></h2>
-    <div id="cal_alloggio" style="font-weight:700;color:#1e3c72;margin:.2rem 0 .5rem"></div>
+    <div id="cal_alloggio" style="font-weight:700;color:#0f4c3a;margin:.2rem 0 .5rem"></div>
     <p class="hint" style="font-size:.85rem;margin-bottom:.5rem" data-i18n="cal_hint">Stai guardando il calendario dell'alloggio scelto in alto in "Il tuo alloggio". Se ne hai più di uno, cambialo da lì.</p>
     <input type="hidden" id="c_slug" value="">
     <div class="grid">
@@ -182,7 +182,7 @@
       <label><span data-i18n="l_a">A</span><input type="date" id="c_a" value="2026-09-15"></label>
       <label>&nbsp;<button id="btnCal" data-i18n="b_vedi" style="margin-top:0">Vedi</button></label>
       <label>&nbsp;<button id="btnCalPrezzi" data-i18n="b_prezzi" style="margin-top:0;background:#155724">💶 Prezzi</button></label>
-      <label>&nbsp;<button id="btnCalTutti" data-i18n="b_tutti" style="margin-top:0;background:#2a5298">🏘️ Tutti gli alloggi</button></label>
+      <label>&nbsp;<button id="btnCalTutti" data-i18n="b_tutti" style="margin-top:0;background:#156b52">🏘️ Tutti gli alloggi</button></label>
     </div>
     <div id="cal" style="display:flex;flex-wrap:wrap;gap:.3rem;margin-top:1rem"></div>
     <div style="margin-top:.6rem;font-size:.78rem;color:#5e6f8d">
@@ -331,7 +331,7 @@
   </div>
 
   <details class="card" id="cardAvanzate" style="display:none">
-    <summary style="cursor:pointer;font-weight:700;font-size:1.15rem;color:#1e3c72;list-style:none">🔧 <span data-i18n="avz_h">Strumenti avanzati</span> <span class="hint" style="font-weight:400" data-i18n="avz_p">— aprili solo se ti servono</span></summary>
+    <summary style="cursor:pointer;font-weight:700;font-size:1.15rem;color:#0f4c3a;list-style:none">🔧 <span data-i18n="avz_h">Strumenti avanzati</span> <span class="hint" style="font-weight:400" data-i18n="avz_p">— aprili solo se ti servono</span></summary>
     <div id="avanzate_box" style="margin-top:1rem"></div>
   </details>
 </div>
@@ -364,7 +364,7 @@ function authHeaders(){ const tk = hostToken(); return tk ? {'X-Host-Token':tk} 
 function applica(){
   document.documentElement.lang = LANG;
   document.querySelectorAll('[data-i18n]').forEach(el=>{ const k=el.getAttribute('data-i18n'); const v=T(k); if(v!=null) el.textContent=v; });
-  document.getElementById('lTitolo').textContent = 'BookinVIP · '+T('pannello');
+  document.getElementById('lTitolo').textContent = 'Bookin VIP · '+T('pannello');
   const sel=document.getElementById('lang'); if(sel) sel.value=LANG;
 }
 
