@@ -40,6 +40,7 @@ Money-path completo (prenota → hold/pagamento → escrow → payout), pannelli
 | MCP server + trasparenza + digital twin + sensory + guardian + sentinel | 60, 69, 72, 74, 75, 80 | |
 | Viral loop + referral + dichiarazione + no-show + sleep-guarantee + turnover | 76, 109, 79, 62, 78, 70 | |
 | Contratto locazione PDF | 145 | |
+| **Calendario prezzi host** (base + dinamico suggerito) | 119 (+106) | `GET /api/host/calendario_prezzi`; card calendario pulsante "💶 Prezzi" (griglia giorno-per-giorno, ↑/↓ vs base) |
 
 ## 2) 🟡 COSTRUITO ma SPENTO — come si ACCENDE (i "buchi" che Fable ha trovato)
 Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore in grassetto.**
@@ -56,7 +57,6 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 | 129 | Auto-traduzione RECENSIONI | agganciare a fase63 | recensioni multilingua |
 | 115 | Dashboard metriche host avanzate | rotta + card | KPI host |
 | 117 | Wishlist / preferiti guest | rotta + UI (serve login guest, oggi assente) | conversione |
-| 119 | Calendario prezzi visuale host | rotta + UI | UX host |
 | 123 | Web Push guest (VAPID, gratis) | generare chiavi VAPID + service worker | retention |
 | 127 | Check-in digitale (pre-registrazione + sblocco) | wiring + UI | operazioni |
 | 137 | Fedeltà guest (punti→sconti) | wiring + UI (serve identità guest) | fidelizzazione |

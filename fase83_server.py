@@ -761,6 +761,8 @@ class RouterHTTP:
             return self._host_telegram_link(headers)
         if metodo == "GET" and path == "/api/host/ical_link":
             return self._ical_link(query, headers)
+        if metodo == "GET" and path == "/api/host/calendario_prezzi":
+            return self._host_calendario_prezzi(query, headers)
         if metodo == "GET" and path == "/api/host/stripe_link":
             return self._host_stripe_link(headers)
         if metodo == "POST" and path == "/api/telegram/webhook":
@@ -3029,6 +3031,28 @@ class RouterHTTP:
             seg = seg.encode("utf-8")
         atteso = _h.new(seg, hid.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
         return hid if _h.compare_digest(sig, atteso) else None
+
+    def _host_calendario_prezzi(self, query, headers):
+        """Calendario PREZZI giorno-per-giorno dell'alloggio (fase119): per ogni giorno stato +
+        prezzo base + prezzo DINAMICO suggerito (fase106). L'host vede dove alzare/abbassare."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        slug = query.get("alloggio")
+        if not (isinstance(slug, str) and slug):
+            return 422, {"errore": "alloggio_mancante"}
+        if not self._verifica_proprieta(headers, slug):
+            return 403, {"errore": "non_tuo"}
+        da, a = query.get("da"), query.get("a")
+        if not (isinstance(da, str) and da and isinstance(a, str) and a):
+            return 422, {"errore": "date_mancanti"}
+        try:
+            from fase119_calendario_prezzi import costruisci_calendario
+            celle = costruisci_calendario(slug, da, a,
+                                          stato_giorno=self._sys.inventario.stato_giorno)
+        except Exception:
+            logger.error("calendario prezzi: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        return 200, {"celle": celle}
 
     def _ical_link(self, query, headers):
         """URL .ics del calendario dell'alloggio: l'host lo incolla su Booking/Airbnb/Vrbo e
