@@ -28,7 +28,7 @@ Money-path completo (prenota → hold/pagamento → escrow → payout), pannelli
 | Registro host + contratto firmato + erasure | 88, 163, 156 | |
 | Avvisi prenotazione multi-canale + approva-da-messaggio | 152 | email+Telegram+WeChat+LINE |
 | Smart-pass / self check-in + recensioni verificate | 64, 63 | |
-| Import da Booking/Airbnb (GDPR) + iCal | 77, 82 | |
+| Import da Booking/Airbnb (GDPR) + iCal (import+**export**) | 77, 82, 135 | export .ics attivato: l'host incolla l'URL su Booking/Airbnb → anti-overbooking |
 | Marketing + canali + scheduler + AI testo (Groq) | 90, 91, 94, 165, 164 | Telegram+**Facebook** LIVE; testi scritti da Groq |
 | SEO inbound (224 pagine) + domanda/waitlist | 97, 158, 161 | |
 | Localizzazione 8 lingue | 61 | |
@@ -59,7 +59,6 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 | 119 | Calendario prezzi visuale host | rotta + UI | UX host |
 | 123 | Web Push guest (VAPID, gratis) | generare chiavi VAPID + service worker | retention |
 | 127 | Check-in digitale (pre-registrazione + sblocco) | wiring + UI | operazioni |
-| 135 | iCal BIDIREZIONALE (export nostro→OTA) | rotta export .ics | anti-overbooking cross-OTA |
 | 137 | Fedeltà guest (punti→sconti) | wiring + UI (serve identità guest) | fidelizzazione |
 | 139 | Chatbot AI assistenza guest | agganciare a Pool AI (164/165) + UI | supporto |
 | 141 | Onboarding wizard host guidato | UI a step | attivazione host |

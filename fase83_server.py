@@ -759,6 +759,8 @@ class RouterHTTP:
             return self._host_link_diretto(query, headers)
         if metodo == "GET" and path == "/api/host/telegram_link":
             return self._host_telegram_link(headers)
+        if metodo == "GET" and path == "/api/host/ical_link":
+            return self._ical_link(query, headers)
         if metodo == "GET" and path == "/api/host/stripe_link":
             return self._host_stripe_link(headers)
         if metodo == "POST" and path == "/api/telegram/webhook":
@@ -3028,6 +3030,48 @@ class RouterHTTP:
         atteso = _h.new(seg, hid.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
         return hid if _h.compare_digest(sig, atteso) else None
 
+    def _ical_link(self, query, headers):
+        """URL .ics del calendario dell'alloggio: l'host lo incolla su Booking/Airbnb/Vrbo e
+        le date prenotate QUI si bloccano LÌ (anti-overbooking). Firmato (contiene lo slug),
+        senza scadenza. Solo il proprietario può generarlo."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        slug = query.get("alloggio")
+        if not (isinstance(slug, str) and slug):
+            return 422, {"errore": "alloggio_mancante"}
+        if not self._verifica_proprieta(headers, slug):
+            return 403, {"errore": "non_tuo"}
+        firma = getattr(self._sys, "firma", None)
+        if firma is None:
+            return 503, {"errore": "non_disponibile"}
+        from urllib.parse import quote as _q
+        tok = firma.codifica({"k": "ical", "slug": slug})
+        base = self._base_url or "https://bookinvip.com"
+        return 200, {"url": base + "/ical/" + _q(tok) + ".ics"}
+
+    def _ical_export(self, token):
+        """Testo .ics (feed) delle date OCCUPATE dell'alloggio, dal token firmato. None se il
+        token non è valido. Serve alle piattaforme esterne che leggono il feed periodicamente."""
+        firma = getattr(self._sys, "firma", None)
+        d = firma.decodifica(token) if (firma and token) else None
+        if not (isinstance(d, dict) and d.get("k") == "ical" and d.get("slug")):
+            return None
+        slug = d["slug"]
+        try:
+            pren = self._sys.inventario.elenco_prenotazioni(alloggio_id=slug, limit=500)
+        except Exception:
+            logger.warning("ical export: elenco prenotazioni fallito (ISOLATO)", exc_info=True)
+            return None
+        occ = [{"slug": slug, "check_in": p.get("check_in"), "check_out": p.get("check_out"),
+                "uid": p.get("idem_key")}
+               for p in (pren or []) if not p.get("rilasciato")]
+        try:
+            from fase135_ical_bidirezionale import genera_ical
+            return genera_ical(occ)
+        except Exception:
+            logger.error("ical export: generazione fallita (ISOLATA)", exc_info=True)
+            return None
+
     def _host_telegram_link(self, headers):
         """Link per COLLEGARE il Telegram dell'host: aprendolo e premendo Start, il bot salva
         il suo chat_id -> riceve lì gli avvisi di prenotazione (coi tasti Approva/Rifiuta)."""
@@ -3385,6 +3429,13 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     self._testo(404, "text/html", pagina_voucher_non_valido_html(lng))
                 else:
                     self._testo(200, "text/html", html)
+            elif u.path.startswith("/ical/") and u.path.endswith(".ics"):
+                # feed .ics del calendario (letto da Booking/Airbnb): anti-overbooking
+                ics = router._ical_export(unquote(u.path[len("/ical/"):-4]))
+                if ics is None:
+                    self._testo(404, "text/plain", "Not found")
+                else:
+                    self._testo(200, "text/calendar; charset=utf-8", ics)
             elif u.path == "/host/azione":
                 # APPROVA/RIFIUTA una richiesta da un messaggio (link firmato, un tocco).
                 query = {k: v[0] for k, v in parse_qs(u.query).items()}
