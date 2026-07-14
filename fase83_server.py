@@ -773,6 +773,8 @@ class RouterHTTP:
             return self._split_preview(body)
         if metodo == "POST" and path == "/api/contratto":
             return self._contratto(body)
+        if metodo == "GET" and path == "/api/host/conversazioni":
+            return self._host_conversazioni(headers)
         if metodo == "POST" and path == "/api/voucher/messaggio":
             return self._voucher_msg_invia(body)
         if metodo == "GET" and path == "/api/voucher/messaggi":
@@ -1006,6 +1008,16 @@ class RouterHTTP:
         except Exception:
             hid = "host"
         return rif, hid
+
+    def _host_conversazioni(self, headers):
+        """Le conversazioni dell'host, caricate DA SOLE nel pannello (zero codici)."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        hid = self._host_id_da_token(headers)
+        msg = getattr(self._sys, "messaggistica", None)
+        if msg is None or not hid:
+            return 200, {"conversazioni": []}
+        return 200, {"conversazioni": msg.conversazioni_host(hid)}
 
     def _voucher_msg_invia(self, body):
         """Il CLIENTE scrive all'host dal voucher (per chiarire, es. una controversia)."""

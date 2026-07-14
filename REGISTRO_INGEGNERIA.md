@@ -41,6 +41,10 @@ Money-path completo (prenota → hold/pagamento → escrow → payout), pannelli
 | Viral loop + referral + dichiarazione + no-show + sleep-guarantee + turnover | 76, 109, 79, 62, 78, 70 | |
 | Contratto locazione PDF | 145 | |
 | **Metriche host avanzate** | 115 | `GET /api/host/metriche_avanzate` (KPI fase115 sulle prenotazioni reali dell'host) |
+| **🏁 MEGA-SIM "un anno di vita"** | test_simulazione_anno | 1000 HOST + 1000 CLIENTI su sistema vero (Stripe finto): registrazione+contratto, 1000 annunci (4 valute/4 politiche/su-richiesta), TUTTI i rami money-path (paga/scade/cancella/contesta+chat+arbitro/conferma/approva), sweeper; INVARIANTI: 0 overbooking (SQL), conti esatti su ogni quote, escrow rimborso+host==importo, pannelli vivi; gara 100 thread/1 stanza → ≤1 vincitore. VERDE in 17min (2026-07-14). Suite quotidiana: 60/60 (~45s); mega: `SIM_HOST=1000 SIM_CLI=1000` |
+| **💬 Card "Conversazioni con gli ospiti"** (pannello host) | 113 `conversazioni_host` + 83 `/api/host/conversazioni` | si carica DA SOLA al login (zero codici): lista chat → tocca → bolle (con foto-prova) → rispondi. Chiude il buco "l'host non vedeva la chat" |
+| **📊 Statistiche avanzate nel pannello** | 115 + host.html `dashAvz` | sotto "Carica metriche": notti vendute, ADR, RevPAR, % cancellazioni, lead time (censimento: era API senza UI) |
+| **Censimento incrociato API↔UI** | (verifica 2026-07-14) | 79 rotte controllate: tutte esposte o documentate (split=parcheggiato; `/api/host/invito*`=doppione interno del referral, la UI usa `/api/host/referral`; webhook/health=interni) |
 | **Test sotto carico** | test_carico_concorrente | 40 ricerche simultanee + GARA 30 clienti/1 stanza → 1 solo vincitore (anti-overbooking sotto stress) |
 | **❤ Preferiti (wishlist senza login)** | index.html (localStorage) | cuoricino sulle card + bottone '❤ N' che filtra; zero backend, zero attrito (i colossi li chiudono dietro account) |
 | **💌 Recupero prenotazione fallita** | 83 `_email_recupero_hold` (sweeper) | hold scaduto senza pagamento → UNA email onesta 'date di nuovo libere, riprova' (transazionale, no spam) |

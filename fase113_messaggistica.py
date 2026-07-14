@@ -118,6 +118,31 @@ class Messaggistica:
         finally:
             con.close()
 
+    def conversazioni_host(self, host_id: str, *, limit: int = 50) -> List[Dict[str, Any]]:
+        """Le conversazioni dell'HOST (per il pannello: si caricano DA SOLE, niente codici da
+        digitare): una riga per prenotazione con ultimo messaggio e conteggio."""
+        if not (isinstance(host_id, str) and host_id):
+            return []
+        lim = limit if isinstance(limit, int) and 0 < limit <= 200 else 50
+        con = self._apri()
+        try:
+            rows = con.execute(
+                "SELECT prenotazione_id, COUNT(*) AS n, MAX(id) AS ultimo_id "
+                "FROM messaggi WHERE host_id=? GROUP BY prenotazione_id "
+                "ORDER BY ultimo_id DESC LIMIT ?", (host_id, lim)).fetchall()
+            out = []
+            for pren, n, uid in rows:
+                u = con.execute("SELECT mittente, testo, ts FROM messaggi WHERE id=?",
+                                (uid,)).fetchone()
+                out.append({"prenotazione_id": pren, "messaggi": int(n),
+                            "ultimo_mittente": u[0], "ultimo_testo": u[1], "ultimo_ts": u[2]})
+            return out
+        except Exception:
+            logger.warning("conversazioni_host fallita (ISOLATA)", exc_info=True)
+            return []
+        finally:
+            con.close()
+
     def thread(self, prenotazione_id: str, richiedente: str) -> List[Dict[str, Any]]:
         if not (prenotazione_id and richiedente):
             return []
