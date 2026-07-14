@@ -33,6 +33,7 @@ Money-path completo (prenota → hold/pagamento → escrow → payout), pannelli
 | SEO inbound (224 pagine) + domanda/waitlist | 97, 158, 161 | |
 | Localizzazione 8 lingue | 61 | |
 | Split-payment CALCOLATORE (checkout) | 133, 65 | mostra "€X a testa"; pagamento reale-diviso NON attivo (parcheggiato) |
+| **Sconti soggiorni lunghi** (settimana/mese, li offre l'host) | 57, 59 | ≥7 notti → sconto settimana; ≥28 → mese (prevale); si impila col non-rimborsabile; identità conti intatta |
 | MCP server + trasparenza + digital twin + sensory + guardian + sentinel | 60, 69, 72, 74, 75, 80 | |
 | Viral loop + referral + dichiarazione + no-show + sleep-guarantee + turnover | 76, 109, 79, 62, 78, 70 | |
 | Contratto locazione PDF | 145 | |

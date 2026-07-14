@@ -252,12 +252,26 @@ class ProtocolloConcierge:
             # ha scelto 'non_rimborsabile', accetta -12% sul netto in cambio della CERTEZZA (nessun
             # rimborso) -> l'ospite paga meno; noi prendiamo comm sul netto scontato -> mai in perdita.
             netto_listino = netto
+            # SCONTO SOGGIORNO LUNGO (l'HOST lo offre, come Airbnb/Booking): >=7 notti = sconto
+            # settimana, >=28 = sconto mese (prevale). Applicato sul netto -> l'ospite paga meno,
+            # l'host riempie più notti; la commissione è sul netto scontato (mai in perdita).
+            sconto_lungo = 0
+            try:
+                if self._cat is not None:
+                    _ss, _sm = self._cat.sconto_lungo_di(alloggio)
+                    _nn = len(elenco_notti)
+                    _bps = _sm if (_nn >= 28 and _sm > 0) else (_ss if (_nn >= 7 and _ss > 0) else 0)
+                    if _bps > 0:
+                        sconto_lungo = netto_listino * _bps // 10000
+                        netto = netto_listino - sconto_lungo
+            except Exception:
+                sconto_lungo = 0
             sconto_nr = 0
             try:
                 if self._cat is not None and \
                         self._cat.politica_cancellazione_di(alloggio) == "non_rimborsabile":
-                    sconto_nr = netto_listino * 1200 // 10000        # 12%
-                    netto = netto_listino - sconto_nr
+                    sconto_nr = netto * 1200 // 10000        # 12% (sul netto già scontato lungo)
+                    netto = netto - sconto_nr
             except Exception:
                 sconto_nr = 0
             try:
@@ -310,6 +324,7 @@ class ProtocolloConcierge:
             "prezzo_guest_cents": guest, "netto_host_cents": netto_host,
             "sconto_credito_cents": sconto,
             "sconto_non_rimborsabile_cents": sconto_nr, "prezzo_listino_cents": netto_listino,
+            "sconto_soggiorno_lungo_cents": sconto_lungo,
             "tassa_soggiorno_cents": tassa, "totale_cents": totale,
             "costo_pagamento_cents": costo_pagamento,
             "fonte": fonte, "exp": scade_a, "valuta": valuta,
@@ -333,6 +348,7 @@ class ProtocolloConcierge:
             "costo_pagamento_cents": costo_pagamento,  # costo carta a carico host (copre Stripe; ns 0 margine)
             "sconto_credito_cents": sconto,     # credito fondatore applicato (da nostra commissione)
             "sconto_non_rimborsabile_cents": sconto_nr,   # -12% se non-rimborsabile (finanziato host)
+            "sconto_soggiorno_lungo_cents": sconto_lungo, # sconto settimana/mese (offerto dall'host)
             "prezzo_listino_cents": netto_listino,        # prezzo pieno (per mostrare il risparmio)
             "tassa_soggiorno_cents": tassa,     # tassa citta' (pass-through, voce separata visibile)
             "totale_cents": totale,             # quello che l'ospite paga DAVVERO = soggiorno + tassa

@@ -125,6 +125,8 @@ class SchedaAlloggio:
     tassa_pp_notte_cents: int = 0      # tassa di soggiorno per persona/notte (l'host la dichiara)
     tassa_max_notti: int = 0           # notti massime tassabili (0 = nessun cap)
     tassa_perc_bps: int = 0            # % sul prezzo (alcune nazioni; alternativa al per-persona)
+    sconto_settimana_bps: int = 0      # sconto soggiorno >=7 notti (bps; l'host lo offre)
+    sconto_mese_bps: int = 0           # sconto soggiorno >=28 notti (bps; prevale su settimana)
     modalita_prenotazione: str = "immediata"   # immediata | su_richiesta (l'host sceglie)
 
 
@@ -237,6 +239,8 @@ def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
     t_pp = _tax("tassa_pp_notte_cents", MAX_CENTS)
     t_max = _tax("tassa_max_notti", 366)
     t_perc = _tax("tassa_perc_bps", 10000)
+    sc_sett = _tax("sconto_settimana_bps", 9000)   # max 90% (guardia anti-errore)
+    sc_mese = _tax("sconto_mese_bps", 9000)
     modal = data.get("modalita_prenotazione", "immediata")
     if not isinstance(modal, str) or modal not in MODALITA_PRENOTAZIONE:
         modal = "immediata"
@@ -249,6 +253,7 @@ def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
         servizi=servizi, valuta=valuta, stato=stato,
         lat_micro=lat, lon_micro=lon, politica_cancellazione=pol,
         tassa_pp_notte_cents=t_pp, tassa_max_notti=t_max, tassa_perc_bps=t_perc,
+        sconto_settimana_bps=sc_sett, sconto_mese_bps=sc_mese,
         modalita_prenotazione=modal)
 
 
@@ -323,6 +328,8 @@ class CatalogoVetrina:
                         tassa_pp_notte_cents INTEGER NOT NULL DEFAULT 0,
                         tassa_max_notti INTEGER NOT NULL DEFAULT 0,
                         tassa_perc_bps INTEGER NOT NULL DEFAULT 0,
+                        sconto_settimana_bps INTEGER NOT NULL DEFAULT 0,
+                        sconto_mese_bps INTEGER NOT NULL DEFAULT 0,
                         modalita_prenotazione TEXT NOT NULL DEFAULT 'immediata',
                         creato_ts TEXT NOT NULL,
                         aggiornato_ts TEXT NOT NULL)""")
@@ -331,6 +338,8 @@ class CatalogoVetrina:
                                ("tassa_max_notti", "INTEGER NOT NULL DEFAULT 0"),
                                ("tassa_perc_bps", "INTEGER NOT NULL DEFAULT 0"),
                                ("indirizzo", "TEXT NOT NULL DEFAULT ''"),
+                               ("sconto_settimana_bps", "INTEGER NOT NULL DEFAULT 0"),
+                               ("sconto_mese_bps", "INTEGER NOT NULL DEFAULT 0"),
                                ("modalita_prenotazione", "TEXT NOT NULL DEFAULT 'immediata'")):
                     try:
                         con.execute("ALTER TABLE alloggi ADD COLUMN %s %s" % (_c, _d))
@@ -371,14 +380,16 @@ class CatalogoVetrina:
                     "paese, indirizzo, prezzo_notte_cents, capacita, camere, bagni, servizi_mask, "
                     "valuta, stato, lat_micro, lon_micro, politica_cancellazione, "
                     "tassa_pp_notte_cents, tassa_max_notti, tassa_perc_bps, "
+                    "sconto_settimana_bps, sconto_mese_bps, "
                     "modalita_prenotazione, creato_ts, aggiornato_ts) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (scheda.host_id, scheda.slug, scheda.titolo, scheda.descrizione,
                      scheda.citta, scheda.paese, scheda.indirizzo, scheda.prezzo_notte_cents,
                      scheda.capacita, scheda.camere, scheda.bagni, mask, scheda.valuta,
                      scheda.stato, scheda.lat_micro, scheda.lon_micro,
                      scheda.politica_cancellazione, scheda.tassa_pp_notte_cents,
                      scheda.tassa_max_notti, scheda.tassa_perc_bps,
+                     scheda.sconto_settimana_bps, scheda.sconto_mese_bps,
                      scheda.modalita_prenotazione, ora, ora))
                 alloggio_id = cur.lastrowid
             else:
@@ -388,12 +399,14 @@ class CatalogoVetrina:
                     "paese=?, indirizzo=?, prezzo_notte_cents=?, capacita=?, camere=?, bagni=?, "
                     "servizi_mask=?, valuta=?, stato=?, lat_micro=?, lon_micro=?, "
                     "politica_cancellazione=?, tassa_pp_notte_cents=?, tassa_max_notti=?, "
-                    "tassa_perc_bps=?, modalita_prenotazione=?, aggiornato_ts=? WHERE id=?",
+                    "tassa_perc_bps=?, sconto_settimana_bps=?, sconto_mese_bps=?, "
+                    "modalita_prenotazione=?, aggiornato_ts=? WHERE id=?",
                     (scheda.host_id, scheda.titolo, scheda.descrizione, scheda.citta,
                      scheda.paese, scheda.indirizzo, scheda.prezzo_notte_cents, scheda.capacita,
                      scheda.camere, scheda.bagni, mask, scheda.valuta, scheda.stato,
                      scheda.lat_micro, scheda.lon_micro, scheda.politica_cancellazione,
                      scheda.tassa_pp_notte_cents, scheda.tassa_max_notti, scheda.tassa_perc_bps,
+                     scheda.sconto_settimana_bps, scheda.sconto_mese_bps,
                      scheda.modalita_prenotazione, ora, alloggio_id))
             con.execute("DELETE FROM alloggio_immagini WHERE alloggio_id=?", (alloggio_id,))
             if imgs:
@@ -478,6 +491,25 @@ class CatalogoVetrina:
             return "flessibile"
         pol = r["politica_cancellazione"] if "politica_cancellazione" in r.keys() else None
         return pol if pol in POLITICHE_CANCELLAZIONE else "flessibile"
+
+    def sconto_lungo_di(self, slug: Any) -> Tuple[int, int]:
+        """(sconto_settimana_bps, sconto_mese_bps) dell'alloggio, per il preventivo soggiorni
+        lunghi. (0,0) se assenti/slug ignoto. BLINDATO: colonne mancanti -> 0."""
+        if not (isinstance(slug, str) and slug):
+            return (0, 0)
+        con = self._apri()
+        try:
+            r = con.execute("SELECT sconto_settimana_bps, sconto_mese_bps FROM alloggi "
+                            "WHERE slug=?", (slug,)).fetchone()
+        except sqlite3.OperationalError:
+            return (0, 0)
+        finally:
+            con.close()
+        if r is None:
+            return (0, 0)
+        def _b(v):
+            return v if isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 10000 else 0
+        return (_b(r["sconto_settimana_bps"]), _b(r["sconto_mese_bps"]))
 
     def host_di_alloggio(self, slug: Any) -> Optional[str]:
         """host_id proprietario dell'alloggio (per notifiche prenotazione/payout).
@@ -643,6 +675,8 @@ class CatalogoVetrina:
             d["indirizzo"] = (a["indirizzo"] if "indirizzo" in a.keys() else "") or ""
             d["lat_micro"] = a["lat_micro"]
             d["lon_micro"] = a["lon_micro"]
+            d["sconto_settimana_bps"] = a["sconto_settimana_bps"] if "sconto_settimana_bps" in a.keys() else 0
+            d["sconto_mese_bps"] = a["sconto_mese_bps"] if "sconto_mese_bps" in a.keys() else 0
         return d
 
     # --- contratti JSON (tutti gli importi int cents; tassi/geo interi) ---
