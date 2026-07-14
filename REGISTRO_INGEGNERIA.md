@@ -46,6 +46,7 @@ Money-path completo (prenota → hold/pagamento → escrow → payout), pannelli
 | **💌 Recupero prenotazione fallita** | 83 `_email_recupero_hold` (sweeper) | hold scaduto senza pagamento → UNA email onesta 'date di nuovo libere, riprova' (transazionale, no spam) |
 | **Calendario prezzi host** (base + dinamico suggerito) | 119 (+106) | `GET /api/host/calendario_prezzi`; card calendario pulsante "💶 Prezzi" (griglia giorno-per-giorno, ↑/↓ vs base) |
 | **Calendario MULTI-alloggio** (vista d'insieme) | 83 `_host_calendario_tutti` | `GET /api/host/calendario_tutti`; pulsante "🏘️ Tutti gli alloggi" → griglia righe=alloggi × colonne=giorni colorati (verde/rosso/arancione/grigio): con 10 alloggi vedi subito QUALE è occupato in che data |
+| **💬 Chat controversia + PROVE FOTO** | 113+83 (`/api/voucher/messaggio|messaggi|prova`, `/api/admin/messaggi`) | il CLIENTE chatta con l'host DAL VOUCHER (zero password, voucher firmato) e carica FOTO-PROVA che entrano nella STESSA conversazione; l'ADMIN-arbitro la legge dal riquadro Controversie ("💬 conversazione + prove"). Un solo posto per tutto |
 | **Check-in digitale** (pre-registrazione ospiti → sblocco) | 127 (+64) | COMPLETO: endpoint + FORM sulla pagina voucher (l'ospite registra gli ospiti online prima dell'arrivo); completato → ✓ verde sul voucher |
 
 ## 2) 🟡 COSTRUITO ma SPENTO — come si ACCENDE (i "buchi" che Fable ha trovato)

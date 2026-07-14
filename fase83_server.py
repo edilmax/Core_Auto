@@ -463,6 +463,44 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
         "document.getElementById('btnOk').onclick=call('/api/garanzia/conferma',document.getElementById('btnOk'),'Grazie! Pagamento sbloccato per l host.');"
         "document.getElementById('btnProblema').onclick=call('/api/garanzia/contesta',document.getElementById('btnProblema'),'Segnalazione ricevuta: pagamento sospeso, ti ricontattiamo.');"
         "})();</script>")
+    # CHAT COL TUO HOST + PROVE FOTO (per chiarire; in controversia le vede anche l'arbitro)
+    blocco_pass = blocco_pass + (
+        "<div style='margin-top:1rem;padding-top:1rem;border-top:1px solid #eef2f7'>"
+        "<div style='font-size:.82rem;color:#5e6f8d;margin-bottom:.5rem'>&#128172; Chatta con "
+        "l'host (per domande o per chiarire un problema; puoi allegare FOTO come prova)</div>"
+        "<div id='chBox' style='max-height:180px;overflow-y:auto;font-size:.85rem;"
+        "background:#f7faf8;border-radius:.6rem;padding:.5rem .7rem;margin-bottom:.45rem'></div>"
+        "<textarea id='chTxt' rows='2' placeholder='Scrivi un messaggio...' style='width:100%;"
+        "padding:.55rem;border:1px solid #dce1ed;border-radius:.6rem'></textarea>"
+        "<div style='display:flex;gap:2%;margin-top:.4rem'>"
+        "<button id='chSend' style='flex:1;padding:.6rem;border:0;border-radius:.7rem;"
+        "background:#0f4c3a;color:#fff;font-weight:700;cursor:pointer'>Invia</button>"
+        "<label style='flex:1;display:block;text-align:center;padding:.6rem;border-radius:.7rem;"
+        "background:#eef7f2;color:#0f4c3a;font-weight:700;cursor:pointer'>&#128206; Foto prova"
+        "<input id='chFile' type='file' accept='image/*' style='display:none'></label></div>"
+        "<div id='chMsg' style='margin-top:.4rem;font-size:.82rem'></div></div>"
+        "<script>(function(){var tk=decodeURIComponent((location.pathname.split('/voucher/')[1]||''));"
+        "function esc(x){return String(x).replace(/[<>&]/g,function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c];});}"
+        "function rendi(ms){var b=document.getElementById('chBox');"
+        "b.innerHTML=(ms||[]).map(function(m){var mio=(m.mittente==='ospite');"
+        "var t=esc(m.testo||'');t=t.replace(/(\\/uploads\\/[a-z0-9]+\\.[a-z]+)/g,"
+        "\"<a href='$1' target='_blank'>&#128247; apri foto</a>\");"
+        "return \"<div style='margin:.2rem 0;text-align:\"+(mio?'right':'left')+\"'><span style='display:inline-block;"
+        "padding:.3rem .6rem;border-radius:.7rem;background:\"+(mio?'#d7e8e0':'#fff')+\"'>\"+t+\"</span></div>\";}).join('')"
+        "||\"<span style='color:#8a9bb5'>Nessun messaggio ancora.</span>\";b.scrollTop=b.scrollHeight;}"
+        "function carica(){fetch('/api/voucher/messaggi?voucher_token='+encodeURIComponent(tk))"
+        ".then(function(r){return r.json();}).then(function(d){rendi(d.messaggi);});}"
+        "document.getElementById('chSend').onclick=async function(){var t=document.getElementById('chTxt').value.trim();"
+        "if(!t)return;var r=await fetch('/api/voucher/messaggio',{method:'POST',headers:{'Content-Type':'application/json'},"
+        "body:JSON.stringify({voucher_token:tk,testo:t})});if(r.status===201){document.getElementById('chTxt').value='';carica();}};"
+        "document.getElementById('chFile').onchange=function(){var f=this.files[0];if(!f)return;"
+        "var rd=new FileReader();rd.onload=async function(){"
+        "var r=await fetch('/api/voucher/prova',{method:'POST',headers:{'Content-Type':'application/json'},"
+        "body:JSON.stringify({voucher_token:tk,image_base64:rd.result})});"
+        "var m=document.getElementById('chMsg');if(r.status===201){m.style.color='#155724';"
+        "m.textContent='\\u2713 Prova caricata: e nella conversazione.';carica();}"
+        "else{m.style.color='#b00020';m.textContent='Foto non valida (max 5MB, jpg/png).';}};"
+        "rd.readAsDataURL(f);};carica();})();</script>")
     # CHECK-IN DIGITALE (fase127): pre-registrazione ospiti prima dell'arrivo -> sblocco ok
     blocco_pass = blocco_pass + (
         "<div id='ckBox' style='margin-top:1rem;padding-top:1rem;border-top:1px solid #eef2f7'>"
@@ -735,6 +773,14 @@ class RouterHTTP:
             return self._split_preview(body)
         if metodo == "POST" and path == "/api/contratto":
             return self._contratto(body)
+        if metodo == "POST" and path == "/api/voucher/messaggio":
+            return self._voucher_msg_invia(body)
+        if metodo == "GET" and path == "/api/voucher/messaggi":
+            return self._voucher_msg_thread(query)
+        if metodo == "POST" and path == "/api/voucher/prova":
+            return self._voucher_prova(body)
+        if metodo == "GET" and path == "/api/admin/messaggi":
+            return self._admin_messaggi(query, headers)
         if metodo == "POST" and path == "/api/checkin/pre_registra":
             return self._checkin_pre_registra(body)
         if metodo == "GET" and path == "/api/checkin/stato":
@@ -920,6 +966,100 @@ class RouterHTTP:
             logger.error("upload foto: salvataggio fallito (ISOLATO)", exc_info=True)
             return 503, {"errore": "storage_non_disponibile"}
         return 201, {"url": "/uploads/" + nome}
+
+    def _salva_foto_raw(self, raw64):
+        """Salva un'immagine base64 in UPLOAD_DIR (magic-bytes, 5MB). -> (status, dict)."""
+        import base64 as _b64, os as _os, secrets as _sec
+        if isinstance(raw64, str) and raw64.startswith("data:") and "," in raw64:
+            raw64 = raw64.split(",", 1)[1]
+        try:
+            raw = _b64.b64decode(raw64 or "", validate=True)
+        except Exception:
+            return 422, {"errore": "immagine_non_valida"}
+        if not raw or len(raw) > 5 * 1024 * 1024:
+            return 422, {"errore": "dimensione_non_valida"}
+        ext = _ext_da_magic(raw)
+        if ext is None:
+            return 422, {"errore": "formato_non_supportato"}
+        updir = _os.environ.get("UPLOAD_DIR", "data/uploads")
+        try:
+            _os.makedirs(updir, exist_ok=True)
+            nome = _sec.token_hex(16) + "." + ext
+            with open(_os.path.join(updir, nome), "wb") as f:
+                f.write(raw)
+        except Exception:
+            logger.error("salvataggio foto fallito (ISOLATO)", exc_info=True)
+            return 503, {"errore": "storage_non_disponibile"}
+        return 201, {"url": "/uploads/" + nome}
+
+    # --- CHAT DAL VOUCHER (cliente<->host, zero password: autentica il voucher firmato) ---
+    def _voucher_chat_ctx(self, token):
+        """(rif, host_id) dal voucher firmato, o None. guest_id canonico = 'ospite'."""
+        v = self._voucher_valido(token)
+        if v is None:
+            return None
+        rif, allog = v.get("riferimento", ""), v.get("alloggio_id", "")
+        if not (rif and allog):
+            return None
+        try:
+            hid = self._sys.catalogo.host_di_alloggio(allog) or "host"
+        except Exception:
+            hid = "host"
+        return rif, hid
+
+    def _voucher_msg_invia(self, body):
+        """Il CLIENTE scrive all'host dal voucher (per chiarire, es. una controversia)."""
+        msg = getattr(self._sys, "messaggistica", None)
+        if msg is None:
+            return 503, {"errore": "messaggistica_non_attiva"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        ctx = self._voucher_chat_ctx(dati.get("voucher_token"))
+        if ctx is None:
+            return 400, {"errore": "voucher_non_valido"}
+        rif, hid = ctx
+        ok = msg.invia(rif, hid, "ospite", "ospite", dati.get("testo"))
+        return (201, {"stato": "inviato"}) if ok else (422, {"errore": "non_inviato"})
+
+    def _voucher_msg_thread(self, query):
+        msg = getattr(self._sys, "messaggistica", None)
+        if msg is None:
+            return 503, {"errore": "messaggistica_non_attiva"}
+        ctx = self._voucher_chat_ctx(query.get("voucher_token"))
+        if ctx is None:
+            return 400, {"errore": "voucher_non_valido"}
+        rif, _hid = ctx
+        return 200, {"messaggi": msg.thread(rif, "ospite")}
+
+    def _voucher_prova(self, body):
+        """Il CLIENTE carica una FOTO come PROVA (controversia): la foto entra nella CHAT
+        della prenotazione -> cliente, host e admin la vedono nello stesso posto."""
+        msg = getattr(self._sys, "messaggistica", None)
+        if msg is None:
+            return 503, {"errore": "messaggistica_non_attiva"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        ctx = self._voucher_chat_ctx(dati.get("voucher_token"))
+        if ctx is None:
+            return 400, {"errore": "voucher_non_valido"}
+        st, out = self._salva_foto_raw(dati.get("image_base64"))
+        if st != 201:
+            return st, out
+        rif, hid = ctx
+        msg.invia(rif, hid, "ospite", "ospite", "\U0001F4CE PROVA FOTO: " + out["url"])
+        return 201, {"stato": "caricata", "url": out["url"]}
+
+    def _admin_messaggi(self, query, headers):
+        """L'ARBITRO (admin) legge la conversazione + prove di una prenotazione contestata."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        msg = getattr(self._sys, "messaggistica", None)
+        rif = query.get("riferimento")
+        if msg is None or not (isinstance(rif, str) and rif):
+            return 422, {"errore": "campi_non_validi"}
+        return 200, {"messaggi": msg.thread(rif, "ospite")}
 
     def _auth_admin(self, headers: Dict[str, str]) -> bool:
         if self._admin_key is None:

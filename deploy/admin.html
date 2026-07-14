@@ -223,6 +223,21 @@ async function cancellaHost(){
 document.getElementById('btnCancellaHost').onclick = cancellaHost;
 
 const eur = (c)=>'€'+((c||0)/100).toFixed(2);
+async function vediChat(rif,i){
+  const box=document.getElementById('chat_'+i);
+  if(box.style.display!=='none'){ box.style.display='none'; return; }
+  box.style.display='block'; box.textContent='…';
+  try{
+    const r=await fetch(API+'/api/admin/messaggi?riferimento='+encodeURIComponent(rif),{headers:{'X-Admin-Key':key()}});
+    const d=await r.json(); const ms=d.messaggi||[];
+    const esc=x=>String(x).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+    box.innerHTML = ms.length ? ms.map(m=>{
+      let t=esc(m.testo||'').replace(/(\/uploads\/[a-z0-9]+\.[a-z]+)/g,"<a href='$1' target='_blank'>📷 apri foto prova</a>");
+      const chi=(m.mittente==='ospite')?'👤 Cliente':'🏠 Host';
+      return `<div style="margin:.2rem 0"><b>${chi}:</b> ${t}</div>`;
+    }).join('') : '<span style="color:#8a9bb5">Nessun messaggio: cliente e host non hanno ancora scritto.</span>';
+  }catch(e){ box.textContent='Errore: '+e.message; }
+}
 async function caricaControversie(){
   const box = document.getElementById('ctr_lista');
   try{
@@ -235,7 +250,9 @@ async function caricaControversie(){
       return `<div style="border:1px solid #eef2f7;border-radius:.7rem;padding:.8rem;margin-bottom:.7rem">
         <div><b>${c.titolo||c.alloggio_id||''}</b> · ${T('ctr_rif')} <code>${c.prenotazione_id}</code></div>
         <div style="color:#8a5200;font-size:.85rem;margin:.3rem 0">${T('ctr_motivo')} ${(c.motivo||'—')}</div>
-        <div style="font-size:.85rem">${T('ctr_garanzia')} <b>${eur(imp)}</b></div>
+        <div style="font-size:.85rem">${T('ctr_garanzia')} <b>${eur(imp)}</b>
+          <button onclick="vediChat('${c.prenotazione_id}',${i})" style="background:#156b52;padding:.2rem .7rem;font-size:.78rem;margin-left:.5rem">💬 conversazione + prove</button></div>
+        <div id="chat_${i}" style="display:none;background:#f7faf8;border-radius:.6rem;padding:.5rem .7rem;margin-top:.4rem;max-height:170px;overflow-y:auto;font-size:.82rem"></div>
         <div style="display:flex;gap:.5rem;align-items:center;margin-top:.5rem;flex-wrap:wrap">
           <label style="font-size:.82rem">${T('ctr_pct')} <input type="number" id="pct_${i}" min="0" max="100" value="100" style="width:70px" oninput="ctrCalc(${i},${imp})"></label>
           <span id="split_${i}" style="font-size:.82rem;color:#155724"></span>
