@@ -40,9 +40,11 @@ Money-path completo (prenota → hold/pagamento → escrow → payout), pannelli
 | MCP server + trasparenza + digital twin + sensory + guardian + sentinel | 60, 69, 72, 74, 75, 80 | |
 | Viral loop + referral + dichiarazione + no-show + sleep-guarantee + turnover | 76, 109, 79, 62, 78, 70 | |
 | Contratto locazione PDF | 145 | |
+| **Metriche host avanzate** | 115 | `GET /api/host/metriche_avanzate` (KPI fase115 sulle prenotazioni reali dell'host) |
+| **Test sotto carico** | test_carico_concorrente | 40 ricerche simultanee + GARA 30 clienti/1 stanza → 1 solo vincitore (anti-overbooking sotto stress) |
 | **Calendario prezzi host** (base + dinamico suggerito) | 119 (+106) | `GET /api/host/calendario_prezzi`; card calendario pulsante "💶 Prezzi" (griglia giorno-per-giorno, ↑/↓ vs base) |
 | **Calendario MULTI-alloggio** (vista d'insieme) | 83 `_host_calendario_tutti` | `GET /api/host/calendario_tutti`; pulsante "🏘️ Tutti gli alloggi" → griglia righe=alloggi × colonne=giorni colorati (verde/rosso/arancione/grigio): con 10 alloggi vedi subito QUALE è occupato in che data |
-| **Check-in digitale** (pre-registrazione ospiti → sblocco) | 127 (+64) | backend LIVE: `POST /api/checkin/pre_registra` + `GET /api/checkin/stato` (via voucher firmato); completato → smart-pass sbloccabile. ⏳ manca solo il mini-form ospite sulla pagina voucher (UI) |
+| **Check-in digitale** (pre-registrazione ospiti → sblocco) | 127 (+64) | COMPLETO: endpoint + FORM sulla pagina voucher (l'ospite registra gli ospiti online prima dell'arrivo); completato → ✓ verde sul voucher |
 
 ## 2) 🟡 COSTRUITO ma SPENTO — come si ACCENDE (i "buchi" che Fable ha trovato)
 Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore in grassetto.**
@@ -56,13 +58,12 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 | 104 | Gateway Asia (Alipay + WeChat Pay) | credenziali PSP asiatico | mercato asiatico |
 | 105 | Identity Gate (Verifiable Credentials W3C, gratis) | wiring + UI | alternativa/estensione KYC |
 | 107 | Auto-traduzione ANNUNCI (gratis, come fase61) | agganciare a pubblicazione/dettaglio | annunci multilingua |
-| 129 | Auto-traduzione RECENSIONI | agganciare a fase63 | recensioni multilingua |
-| 115 | Dashboard metriche host avanzate | rotta + card | KPI host |
+| 129 | Auto-traduzione RECENSIONI | serve endpoint di traduzione esterno (LibreTranslate/env) — senza, non produce valore | recensioni multilingua |
 | 117 | Wishlist / preferiti guest | rotta + UI (serve login guest, oggi assente) | conversione |
 | 123 | Web Push guest (VAPID, gratis) | generare chiavi VAPID + service worker | retention |
 | 137 | Fedeltà guest (punti→sconti) | wiring + UI (serve identità guest) | fidelizzazione |
 | 139 | Chatbot AI assistenza guest | agganciare a Pool AI (164/165) + UI | supporto |
-| 141 | Onboarding wizard host guidato | UI a step | attivazione host |
+| 141 | Onboarding wizard host guidato | NON prioritario: il pannello ha già la guida 3-passi live (sarebbe un doppione) | attivazione host |
 | 151 | Export "Alloggiati Web" (Questura IT) | rotta host + credenziali portale | obbligo legge IT |
 | 154 | DB giurisdizioni marketing | usato da outreach (95/89) quando si fa outreach | compliance |
 | 92 | Canale X/Twitter | `X_*` token nel .env (a pagamento) | marketing |
@@ -89,7 +90,6 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
 - **Contratto host**: revisione legale prima di volumi seri (Stripe è LIVE, soldi veri).
 
 **Lavori tecnici (fattibili da me, senza prerequisiti):**
-- Check-in digitale: mini-form ospite sulla pagina voucher (backend già LIVE, fase127).
 - Rifiniture/fix reali a caccia di buchi (come il filtro Ospiti).
 - Recupero preventivi abbandonati (utile appena c'è traffico; usa email esistente).
 - Accendere funzioni gratis senza dipendenze: auto-traduzione annunci/recensioni (107/129),

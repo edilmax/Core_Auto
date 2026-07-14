@@ -463,6 +463,40 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
         "document.getElementById('btnOk').onclick=call('/api/garanzia/conferma',document.getElementById('btnOk'),'Grazie! Pagamento sbloccato per l host.');"
         "document.getElementById('btnProblema').onclick=call('/api/garanzia/contesta',document.getElementById('btnProblema'),'Segnalazione ricevuta: pagamento sospeso, ti ricontattiamo.');"
         "})();</script>")
+    # CHECK-IN DIGITALE (fase127): pre-registrazione ospiti prima dell'arrivo -> sblocco ok
+    blocco_pass = blocco_pass + (
+        "<div id='ckBox' style='margin-top:1rem;padding-top:1rem;border-top:1px solid #eef2f7'>"
+        "<div style='font-size:.82rem;color:#5e6f8d;margin-bottom:.5rem'>Check-in online "
+        "(prima dell'arrivo): registra gli ospiti</div>"
+        "<div id='ckList' style='font-size:.85rem;margin-bottom:.4rem'></div>"
+        "<input id='ckNome' placeholder='Nome e cognome' style='width:100%;padding:.55rem;"
+        "border:1px solid #dce1ed;border-radius:.6rem;margin-bottom:.35rem'>"
+        "<input id='ckDoc' placeholder='Numero documento' style='width:100%;padding:.55rem;"
+        "border:1px solid #dce1ed;border-radius:.6rem;margin-bottom:.45rem'>"
+        "<button id='ckAdd' style='width:49%;padding:.6rem;border:0;border-radius:.7rem;"
+        "background:#eef2f7;color:#1e3c72;font-weight:700;cursor:pointer'>+ Aggiungi</button> "
+        "<button id='ckSend' style='width:49%;padding:.6rem;border:0;border-radius:.7rem;"
+        "background:#1e3c72;color:#fff;font-weight:700;cursor:pointer'>Invia check-in</button>"
+        "<div id='ckMsg' style='margin-top:.5rem;font-size:.85rem'></div></div>"
+        "<script>(function(){var tk=decodeURIComponent((location.pathname.split('/voucher/')[1]||''));"
+        "var os=[];function rend(){document.getElementById('ckList').textContent="
+        "os.length?os.map(function(o){return o.nome;}).join(', '):'';}"
+        "fetch('/api/checkin/stato?voucher_token='+encodeURIComponent(tk)).then(function(r){return r.json();})"
+        ".then(function(d){if(d&&d.completato){document.getElementById('ckBox').innerHTML="
+        "\"<div style='color:#155724;font-weight:700'>&#10003; Check-in online completato</div>\";}});"
+        "document.getElementById('ckAdd').onclick=function(){var n=document.getElementById('ckNome').value.trim(),"
+        "c=document.getElementById('ckDoc').value.trim();if(!n||!c)return;os.push({nome:n,documento:c});"
+        "document.getElementById('ckNome').value='';document.getElementById('ckDoc').value='';rend();};"
+        "document.getElementById('ckSend').onclick=async function(){"
+        "var n=document.getElementById('ckNome').value.trim(),c=document.getElementById('ckDoc').value.trim();"
+        "if(n&&c){os.push({nome:n,documento:c});rend();}"
+        "if(!os.length){document.getElementById('ckMsg').textContent='Aggiungi almeno un ospite';return;}"
+        "var r=await fetch('/api/checkin/pre_registra',{method:'POST',headers:{'Content-Type':'application/json'},"
+        "body:JSON.stringify({voucher_token:tk,ospiti:os})});var d=await r.json();"
+        "var m=document.getElementById('ckMsg');if(d&&d.ok){m.style.color='#155724';"
+        "m.textContent='\\u2713 Check-in completato: al tuo arrivo basta il PIN.';}"
+        "else{m.style.color='#b00020';m.textContent='Dati non validi: controlla nomi/documenti e capacita.';}};"
+        "})();</script>")
     return (
         "<!DOCTYPE html><html lang=\"%s\"><head><meta charset=\"UTF-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
@@ -769,6 +803,8 @@ class RouterHTTP:
             return self._host_calendario_prezzi(query, headers)
         if metodo == "GET" and path == "/api/host/calendario_tutti":
             return self._host_calendario_tutti(query, headers)
+        if metodo == "GET" and path == "/api/host/metriche_avanzate":
+            return self._host_metriche_avanzate(headers)
         if metodo == "GET" and path == "/api/host/stripe_link":
             return self._host_stripe_link(headers)
         if metodo == "POST" and path == "/api/telegram/webhook":
@@ -3314,6 +3350,27 @@ class RouterHTTP:
         except Exception:
             logger.warning("marcatura in_trattativa fallita (ignorata)", exc_info=True)
         return cal
+
+    def _host_metriche_avanzate(self, headers):
+        """KPI avanzati dell'host (fase115, puro): calcolati sulle SUE prenotazioni reali
+        (tutti i suoi alloggi). Host dal token."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        hid = self._host_id_da_token(headers)
+        if not hid:
+            return 422, {"errore": "host_id_mancante"}
+        try:
+            pren = []
+            for al in self._sys.catalogo.alloggi_host(hid, limit=200):
+                slug = al.get("slug") if isinstance(al, dict) else None
+                if slug:
+                    pren.extend(self._sys.inventario.elenco_prenotazioni(alloggio_id=slug,
+                                                                         limit=500))
+            from fase115_dashboard_metriche import calcola_metriche
+            return 200, {"metriche": calcola_metriche(pren), "prenotazioni": len(pren)}
+        except Exception:
+            logger.error("metriche avanzate: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
 
     def _host_calendario(self, query, headers):
         if not self._auth_host(headers):
