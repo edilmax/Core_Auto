@@ -701,6 +701,10 @@ class RouterHTTP:
             return self._split_preview(body)
         if metodo == "POST" and path == "/api/contratto":
             return self._contratto(body)
+        if metodo == "POST" and path == "/api/checkin/pre_registra":
+            return self._checkin_pre_registra(body)
+        if metodo == "GET" and path == "/api/checkin/stato":
+            return self._checkin_stato(query)
         if metodo == "POST" and path == "/api/garanzia/conferma":
             return self._garanzia_conferma(body)
         if metodo == "POST" and path == "/api/garanzia/contesta":
@@ -1792,6 +1796,46 @@ class RouterHTTP:
         if not ref:
             return None, (422, {"errore": "riferimento_mancante"})
         return (ref, dati), None
+
+    def _voucher_valido(self, token):
+        """Decodifica un voucher firmato -> dict (tipo=voucher) o None."""
+        firma = getattr(self._sys, "firma", None)
+        v = firma.decodifica(token) if (firma and token) else None
+        return v if (isinstance(v, dict) and v.get("tipo") == "voucher") else None
+
+    def _checkin_pre_registra(self, body):
+        """CHECK-IN DIGITALE (fase127): l'ospite pre-registra i dati degli ospiti dal suo
+        voucher, PRIMA dell'arrivo. Verifica capacità e formato; completato -> sblocco abilitato."""
+        ck = getattr(self._sys, "checkin", None)
+        if ck is None:
+            return 503, {"errore": "checkin_non_attivo"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        v = self._voucher_valido(dati.get("voucher_token"))
+        if v is None:
+            return 400, {"errore": "voucher_non_valido"}
+        allog, rif = v.get("alloggio_id", ""), v.get("riferimento", "")
+        if not (allog and rif):
+            return 422, {"errore": "voucher_incompleto"}
+        cap = 1
+        try:
+            d = self._sys.catalogo.dettaglio(allog)
+            cap = int(d.get("capacita", 1)) if isinstance(d, dict) else 1
+        except Exception:
+            cap = 1
+        out = ck.pre_registra(rif, allog, dati.get("ospiti"), cap)
+        return (200 if out.get("ok") else 422), out
+
+    def _checkin_stato(self, query):
+        """Stato del check-in (completato?) dal voucher: per mostrare all'ospite se è a posto."""
+        ck = getattr(self._sys, "checkin", None)
+        if ck is None:
+            return 503, {"errore": "checkin_non_attivo"}
+        v = self._voucher_valido(query.get("voucher_token"))
+        if v is None:
+            return 400, {"errore": "voucher_non_valido"}
+        return 200, {"completato": ck.completato(v.get("riferimento", ""))}
 
     def _garanzia_conferma(self, body):
         """L'ospite e' entrato e conferma 'tutto come dichiarato' -> i soldi vanno all'host."""

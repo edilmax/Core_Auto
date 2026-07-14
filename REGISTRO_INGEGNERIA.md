@@ -42,6 +42,7 @@ Money-path completo (prenota → hold/pagamento → escrow → payout), pannelli
 | Contratto locazione PDF | 145 | |
 | **Calendario prezzi host** (base + dinamico suggerito) | 119 (+106) | `GET /api/host/calendario_prezzi`; card calendario pulsante "💶 Prezzi" (griglia giorno-per-giorno, ↑/↓ vs base) |
 | **Calendario MULTI-alloggio** (vista d'insieme) | 83 `_host_calendario_tutti` | `GET /api/host/calendario_tutti`; pulsante "🏘️ Tutti gli alloggi" → griglia righe=alloggi × colonne=giorni colorati (verde/rosso/arancione/grigio): con 10 alloggi vedi subito QUALE è occupato in che data |
+| **Check-in digitale** (pre-registrazione ospiti → sblocco) | 127 (+64) | backend LIVE: `POST /api/checkin/pre_registra` + `GET /api/checkin/stato` (via voucher firmato); completato → smart-pass sbloccabile. ⏳ manca solo il mini-form ospite sulla pagina voucher (UI) |
 
 ## 2) 🟡 COSTRUITO ma SPENTO — come si ACCENDE (i "buchi" che Fable ha trovato)
 Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore in grassetto.**
@@ -59,7 +60,6 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 | 115 | Dashboard metriche host avanzate | rotta + card | KPI host |
 | 117 | Wishlist / preferiti guest | rotta + UI (serve login guest, oggi assente) | conversione |
 | 123 | Web Push guest (VAPID, gratis) | generare chiavi VAPID + service worker | retention |
-| 127 | Check-in digitale (pre-registrazione + sblocco) | wiring + UI | operazioni |
 | 137 | Fedeltà guest (punti→sconti) | wiring + UI (serve identità guest) | fidelizzazione |
 | 139 | Chatbot AI assistenza guest | agganciare a Pool AI (164/165) + UI | supporto |
 | 141 | Onboarding wizard host guidato | UI a step | attivazione host |
@@ -89,6 +89,7 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
 - **Contratto host**: revisione legale prima di volumi seri (Stripe è LIVE, soldi veri).
 
 **Lavori tecnici (fattibili da me, senza prerequisiti):**
+- Check-in digitale: mini-form ospite sulla pagina voucher (backend già LIVE, fase127).
 - Rifiniture/fix reali a caccia di buchi (come il filtro Ospiti).
 - Recupero preventivi abbandonati (utile appena c'è traffico; usa email esistente).
 - Accendere funzioni gratis senza dipendenze: auto-traduzione annunci/recensioni (107/129),

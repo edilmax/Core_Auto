@@ -82,6 +82,7 @@ class ConfigCasaVIP:
     db_payout: str = ":memory:"        # dashboard payout host (incassi attesi per valuta/stato)
     db_accettazioni: str = ":memory:"  # registro firmato accettazioni contratto host (prova legale)
     db_geocache: str = ":memory:"      # cache geocoding città->coordinate (mappa nella ricerca)
+    db_checkin: str = ":memory:"       # check-in digitale (pre-registrazione ospiti + sblocco)
     con_geocoding: bool = False        # ON in prod: geocodifica alla pubblicazione (default OFF: test)
     file_referral: str = ""            # path JSON referral host-porta-host (vuoto = in RAM)
     con_sentinel: bool = False
@@ -127,6 +128,7 @@ class SistemaCasaVIP:
     stripe: Any = None      # ProviderStripe (fase85) o None: per rigenerare link (su-richiesta)
     connect: Any = None     # ProviderConnect (fase101) o None: bonifici automatici agli host
     geocoder: Any = None    # Geocoder (fase166): città->coordinate per la mappa
+    checkin: Any = None     # CheckinDigitale (fase127): pre-registrazione ospiti + sblocco
 
     @property
     def attivo(self) -> bool:
@@ -243,6 +245,13 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         from fase64_smartpass import EmettitorePass
         emettitore_pass = EmettitorePass(firma)
         componenti.append("smartpass(64)")
+    # 3c-bis) CHECK-IN DIGITALE (pre-registrazione ospiti -> sblocco smart-pass) — fase127
+    checkin = None
+    if emettitore_pass is not None:
+        from fase127_checkin_digitale import crea_checkin_digitale
+        checkin = crea_checkin_digitale(cfg.db_checkin, emettitore_pass)
+        checkin.inizializza_schema()
+        componenti.append("checkin_digitale(127)")
 
     # 3e) registro host self-service (l'host si iscrive e si carica DA SOLO)
     registro_host = None
@@ -420,4 +429,4 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           domanda=domanda, garanzia=garanzia,
                           pagamenti_pendenti=pagamenti_pendenti, tassa_comunale=tassa_comunale,
                           payout=payout, accettazioni=accettazioni, stripe=provider,
-                          connect=_connect, geocoder=geocoder)
+                          connect=_connect, geocoder=geocoder, checkin=checkin)
