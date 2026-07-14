@@ -264,6 +264,8 @@ async function cerca(){
     check_in:document.getElementById('checkin').value, check_out:document.getElementById('checkout').value, lang:LANG};
   const pmax = parseInt(document.getElementById('prezzomax').value);
   if(pmax>0) params.prezzo_max_cents = pmax*100;
+  const osp = parseInt(document.getElementById('ospiti').value);   // il n. ospiti FILTRA la ricerca
+  if(osp>0) params.capacita_min = osp;
   if(attivi.size) params.servizi = [...attivi].join(',');
   const sg=document.getElementById('soloGratuita'); if(sg && sg.checked) params.solo_gratuita='1';
   const fx=document.getElementById('flexDate'); if(fx && fx.checked) params.flex_giorni='3';
