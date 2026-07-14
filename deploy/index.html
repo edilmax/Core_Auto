@@ -39,7 +39,14 @@
   .card .ph{width:100%;height:170px;border-radius:.9rem;margin-bottom:.6rem;background:linear-gradient(135deg,#eef2f7,#dce1ed);display:flex;align-items:center;justify-content:center;color:#a9b4c9;font-size:2rem}
   .card h3{font-size:1.2rem;margin-bottom:.25rem}
   .gallery{display:flex;gap:.4rem;overflow-x:auto;margin:.5rem 0;padding-bottom:.3rem}
-  .gallery img{height:140px;border-radius:.8rem;object-fit:cover;flex:0 0 auto}
+  .gallery img{height:140px;border-radius:.8rem;object-fit:cover;flex:0 0 auto;cursor:zoom-in}
+  #lb{display:none;position:fixed;inset:0;background:rgba(10,14,12,.93);z-index:2000;align-items:center;justify-content:center}
+  #lb.open{display:flex}
+  #lb img{max-width:92vw;max-height:86vh;border-radius:.6rem;box-shadow:0 10px 50px rgba(0,0,0,.5)}
+  .lbBtn{position:fixed;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.14);color:#fff;border:0;font-size:2rem;line-height:1;padding:.5rem .9rem;border-radius:2rem;cursor:pointer;user-select:none}
+  .lbBtn:hover{background:rgba(255,255,255,.3)}
+  #lbX{position:fixed;top:1rem;right:1.2rem;font-size:2rem;color:#fff;cursor:pointer;background:none;border:0}
+  #lbN{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);color:#fff;font-size:.9rem;opacity:.85}
   .card .prezzo{font-size:1.5rem;font-weight:700;color:#0f4c3a}
   .card .badge{display:inline-block;background:#eef2f7;padding:.15rem .7rem;border-radius:1rem;font-size:.72rem;font-weight:600;color:#156b52;margin:.15rem .2rem 0 0}
   .card .badge.green{background:#d4edda;color:#155724}.card .badge.red{background:#f8d7da;color:#842029}
@@ -124,6 +131,14 @@
     <button type="button" id="btnMappa" class="vistaBtn">🗺️ <span id="lblMappa">Mappa</span></button>
     <button type="button" id="btnFav" class="vistaBtn" style="display:none">❤</button>
   </div>
+  <div id="lb" onclick="if(event.target===this)lbChiudi()">
+    <button id="lbX" onclick="lbChiudi()">✕</button>
+    <button class="lbBtn" style="left:1rem" onclick="lbNav(-1)">‹</button>
+    <img id="lbImg" src="" alt="">
+    <button class="lbBtn" style="right:1rem" onclick="lbNav(1)">›</button>
+    <div id="lbN"></div>
+  </div>
+
   <div id="mappaWrap" style="display:none;position:relative">
     <div id="mappa" style="height:60vh;min-height:340px;border-radius:1rem;overflow:hidden;border:1px solid #dce1ed"></div>
     <div id="mappaMsg" style="text-align:center;color:#5e6f8d;padding:.6rem;font-size:.9rem"></div>
@@ -243,6 +258,16 @@ function stelle(rie){
   const m=(rie.media_centesimi/100).toFixed(1);
   return `<span style="color:#e0a800">★ ${m}</span> <span style="color:#5e6f8d;font-size:.8rem">(${rie.conteggio})</span>`;
 }
+// 🔍 LIGHTBOX foto: clic = ingrandisci, ‹ › per sfogliare, ✕/ESC per chiudere
+let LB_IMGS=[], LB_I=0;
+function lbApri(i){ LB_I=i; lbShow(); document.getElementById('lb').classList.add('open'); }
+function lbChiudi(){ document.getElementById('lb').classList.remove('open'); }
+function lbNav(d){ if(!LB_IMGS.length) return; LB_I=(LB_I+d+LB_IMGS.length)%LB_IMGS.length; lbShow(); }
+function lbShow(){ document.getElementById('lbImg').src=LB_IMGS[LB_I]||'';
+  document.getElementById('lbN').textContent=(LB_I+1)+' / '+LB_IMGS.length; }
+document.addEventListener('keydown',e=>{ const lb=document.getElementById('lb');
+  if(!lb||!lb.classList.contains('open')) return;
+  if(e.key==='Escape') lbChiudi(); else if(e.key==='ArrowLeft') lbNav(-1); else if(e.key==='ArrowRight') lbNav(1); });
 // ❤ PREFERITI senza login (errore dei colossi: li chiudono dietro account) — localStorage
 function favSet(){ try{ return new Set(JSON.parse(localStorage.getItem('bookinvip_fav')||'[]')); }catch(e){ return new Set(); } }
 function favToggle(slug,el){ const f=favSet(); f.has(slug)?f.delete(slug):f.add(slug);
@@ -416,8 +441,9 @@ async function apri(slug){
     const a = await api('/api/catalogo/'+encodeURIComponent(slug)+'?lang='+LANG);
     if(a.errore){ alert(t('errore')); return; }
     const imgs = (a.immagini||[]).map(i=>i.url).filter(Boolean);
+    LB_IMGS = imgs;
     document.getElementById('mGallery').innerHTML = imgs.length
-      ? imgs.map(u=>`<img src="${u}" alt="" loading="lazy" onerror="this.style.display='none'">`).join('')
+      ? imgs.map((u,i)=>`<img src="${u}" alt="" loading="lazy" onclick="lbApri(${i})" onerror="this.style.display='none'">`).join('')
       : '';
     document.getElementById('mTitolo').textContent = a.titolo;
     document.getElementById('mPrezzo').textContent = money(a.prezzo_notte_cents,a.valuta)+' / '+t('notte');
