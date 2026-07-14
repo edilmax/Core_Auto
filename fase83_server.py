@@ -1144,10 +1144,16 @@ class RouterHTTP:
             cards.append(card)
         # Politica di cancellazione + badge "cancellazione gratuita" (leva di conversione, come i
         # colossi). 'gratuita' = flessibile/moderata (annullabile con rimborso pieno per tempo).
+        _memo_centro = {}
         for card in cards:
             pol = card.get("politica_cancellazione") or self._politica_alloggio(card.get("slug"))
             card["politica_cancellazione"] = pol
             card["cancellazione_gratuita"] = pol in ("flessibile", "moderata")
+            # distanza dal CENTRO città (automatica, cache-first): la mostrano card+dettaglio
+            dc = self._distanza_centro(card.get("citta"), card.get("lat_micro"),
+                                       card.get("lon_micro"), _memo_centro)
+            if dc is not None:
+                card["centro_distanza_m"] = dc
         if str(query.get("solo_gratuita", "")).lower() in ("1", "true", "yes", "on"):
             cards = [c for c in cards if c.get("cancellazione_gratuita")]
             if geo is None:
@@ -2192,6 +2198,9 @@ class RouterHTTP:
         rie = self._riepilogo_recensioni(slug)
         if rie:
             d["recensioni"] = rie
+        dc = self._distanza_centro(d.get("citta"), d.get("lat_micro"), d.get("lon_micro"))
+        if dc is not None:
+            d["centro_distanza_m"] = dc
         return 200, d
 
     def _contratto(self, body):
@@ -2764,6 +2773,30 @@ class RouterHTTP:
                 if isinstance(u, str)]
         id_num = self._sys.catalogo.pubblica(scheda, imgs)
         return 201, {"stato": "pubblicato", "slug": scheda.slug, "id": id_num}
+
+    def _distanza_centro(self, citta, lat_u, lon_u, memo=None):
+        """Metri (int) dall'annuncio al CENTRO della sua città — in automatico (geocoder
+        cache-first + haversine fase121). None se coordinate/centro mancanti. Isolato."""
+        try:
+            gc = getattr(self._sys, "geocoder", None)
+            if gc is None or not (isinstance(citta, str) and citta.strip()):
+                return None
+            if not (isinstance(lat_u, int) and isinstance(lon_u, int)):
+                return None
+            chiave = citta.strip().lower()
+            if memo is not None and chiave in memo:
+                centro = memo[chiave]
+            else:
+                centro = gc.geocodifica(citta)
+                if memo is not None:
+                    memo[chiave] = centro
+            if not centro:
+                return None
+            from fase121_geo_ricerca import distanza_m
+            d = distanza_m(lat_u, lon_u, centro[0], centro[1])
+            return d if isinstance(d, int) and d >= 0 else None
+        except Exception:
+            return None
 
     def _geocodifica_se_serve(self, dati):
         """Se l'annuncio non ha coordinate, le ricava dalla CITTÀ (best-effort, isolato) così

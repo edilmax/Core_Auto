@@ -210,3 +210,29 @@ class TestAutoGeocodeEMappa(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestDistanzaCentro(unittest.TestCase):
+    def test_distanza_centro_automatica(self):
+        import json as _j
+        d = tempfile.mkdtemp()
+        sys_ = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=b"S" * 32,
+                                          db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db"))
+        r = crea_router(sys_)
+        sys_.geocoder = _FakeGeocoder((41890000, 12490000))     # "centro Roma" finto
+        from fase57_vetrina import SchedaAlloggio
+        sys_.catalogo.pubblica(SchedaAlloggio(
+            host_id="h1", slug="dist", titolo="Dist", citta="Roma",
+            prezzo_notte_cents=9000, capacita=2,
+            lat_micro=41900000, lon_micro=12490000))            # ~1.11 km a nord del centro
+        s, det = r.gestisci("GET", "/api/catalogo/dist", {}, None, {})
+        self.assertEqual(s, 200, det)
+        self.assertAlmostEqual(det["centro_distanza_m"], 1113, delta=30)
+        s, res = r.gestisci("GET", "/api/catalogo", {"citta": "Roma"}, None, {})
+        card = res["risultati"][0]
+        self.assertAlmostEqual(card["centro_distanza_m"], 1113, delta=30)
+        # senza geocoder: campo assente, niente crash
+        sys_.geocoder = None
+        s, det2 = r.gestisci("GET", "/api/catalogo/dist", {}, None, {})
+        self.assertNotIn("centro_distanza_m", det2)
+        shutil.rmtree(d, ignore_errors=True)

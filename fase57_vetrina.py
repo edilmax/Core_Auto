@@ -730,6 +730,8 @@ class CatalogoVetrina:
             "descrizione": a["descrizione"],
             "citta": a["citta"],
             "paese": a["paese"],
+            "lat_micro": a["lat_micro"],   # zona (già pubblica in card/mappa); MAI l'indirizzo
+            "lon_micro": a["lon_micro"],
             "prezzo_notte_cents": int(a["prezzo_notte_cents"]),
             "valuta": a["valuta"],
             "capacita": int(a["capacita"]),
