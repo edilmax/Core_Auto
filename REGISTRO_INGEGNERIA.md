@@ -42,6 +42,8 @@ Money-path completo (prenota → hold/pagamento → escrow → payout), pannelli
 | Contratto locazione PDF | 145 | |
 | **Metriche host avanzate** | 115 | `GET /api/host/metriche_avanzate` (KPI fase115 sulle prenotazioni reali dell'host) |
 | **Test sotto carico** | test_carico_concorrente | 40 ricerche simultanee + GARA 30 clienti/1 stanza → 1 solo vincitore (anti-overbooking sotto stress) |
+| **❤ Preferiti (wishlist senza login)** | index.html (localStorage) | cuoricino sulle card + bottone '❤ N' che filtra; zero backend, zero attrito (i colossi li chiudono dietro account) |
+| **💌 Recupero prenotazione fallita** | 83 `_email_recupero_hold` (sweeper) | hold scaduto senza pagamento → UNA email onesta 'date di nuovo libere, riprova' (transazionale, no spam) |
 | **Calendario prezzi host** (base + dinamico suggerito) | 119 (+106) | `GET /api/host/calendario_prezzi`; card calendario pulsante "💶 Prezzi" (griglia giorno-per-giorno, ↑/↓ vs base) |
 | **Calendario MULTI-alloggio** (vista d'insieme) | 83 `_host_calendario_tutti` | `GET /api/host/calendario_tutti`; pulsante "🏘️ Tutti gli alloggi" → griglia righe=alloggi × colonne=giorni colorati (verde/rosso/arancione/grigio): con 10 alloggi vedi subito QUALE è occupato in che data |
 | **Check-in digitale** (pre-registrazione ospiti → sblocco) | 127 (+64) | COMPLETO: endpoint + FORM sulla pagina voucher (l'ospite registra gli ospiti online prima dell'arrivo); completato → ✓ verde sul voucher |
@@ -64,7 +66,7 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 | 137 | Fedeltà guest (punti→sconti) | wiring + UI (serve identità guest) | fidelizzazione |
 | 139 | Chatbot AI assistenza guest | agganciare a Pool AI (164/165) + UI | supporto |
 | 141 | Onboarding wizard host guidato | NON prioritario: il pannello ha già la guida 3-passi live (sarebbe un doppione) | attivazione host |
-| 151 | Export "Alloggiati Web" (Questura IT) | rotta host + credenziali portale | obbligo legge IT |
+| 151 | Export "Alloggiati Web" (Questura IT) | PREREQUISITO: estendere il form check-in (data nascita/sesso/comune, dati che la Questura esige) poi collegare `genera_file` | obbligo legge IT |
 | 154 | DB giurisdizioni marketing | usato da outreach (95/89) quando si fa outreach | compliance |
 | 92 | Canale X/Twitter | `X_*` token nel .env (a pagamento) | marketing |
 | 93 | Canale TikTok | `TIKTOK_ACCESS_TOKEN` (OAuth) **+ video** | marketing video |
@@ -74,6 +76,14 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 | — | **Video AI multilingua** (YouTube/Reels/TikTok) | pool 164/165 pronto; serve generazione video (ffmpeg o AI a pagamento) | marketing video |
 | — | **Instagram/WhatsApp** | bloccati lato Meta (App Review / numero WhatsApp Manager) | canali |
 | — | **OXR** (cambio valuta stima ospite) | `OXR_APP_ID` gratis nel .env | UX prezzo |
+
+## 📋 PIANO "MACCHINA COMPLETA" (2026-07-14, ordine del fondatore: tutto attivo, gratis, autonomo)
+**Logica di selezione:** attivo SOLO ciò che è gratis+autonomo+valore vero (no teatro). Dai colossi prendo ciò che manca e sfrutto i loro errori (spam remarketing → email onesta; preferiti dietro login → preferiti senza login).
+1. ❤ **Preferiti (wishlist)** client-side su index.html — i colossi la chiudono dietro login; noi zero-attrito (localStorage), gratis, zero backend. [fase117 resta libreria per la futura versione con account]
+2. 🏛️ **fase151 Alloggiati Web** (obbligo di legge IT): export file Questura per l'host — SINERGIA col check-in digitale appena completato (nomi+documenti già raccolti). Endpoint host + pulsante.
+3. 💌 **Recupero prenotazione fallita** (errore dei colossi = spam; noi 1 email onesta): quando un hold di pagamento SCADE senza incasso, il cliente riceve UNA email "le date sono di nuovo libere, riprova" (transazionale, non marketing).
+**ESITO (stesso giorno):** 1✅ Preferiti ❤ live (cuoricino su card + bottone '❤ N' filtro, localStorage, zero attrito); 2⛔ Alloggiati Web SKIP onesto (il check-in raccoglie nome+documento, la Questura vuole data nascita/sesso/comune → schedine vuote = teatro; riattivare quando il form check-in verrà esteso); 3✅ Recupero prenotazione fallita live (sweeper hold scaduto → `_email_recupero_hold`: UNA email transazionale col link, 'Nessun addebito', mai promemoria). Suite 2139, 0 errori.
+4. ⛔ SKIP motivati: 123 web-push (richiede crypto EC non-stdlib = violerebbe zero-dipendenze), 107/129 traduzioni (serve servizio esterno), 105 VC (nessun ecosistema), 102 (ridondante con scheduler), 141 (doppione guida). Predisposizione futura: restano librerie pronte nel repo, documentate qui.
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 Regola: ogni volta che si completa qualcosa, aggiornare questa lista (togliere il fatto,

@@ -3351,6 +3351,44 @@ class RouterHTTP:
             logger.warning("marcatura in_trattativa fallita (ignorata)", exc_info=True)
         return cal
 
+    def _email_recupero_hold(self, rec):
+        """RECUPERO prenotazione fallita (hold scaduto senza pagamento): UNA email onesta al
+        cliente — 'le date sono di nuovo libere, riprova' — con il link all'alloggio. NIENTE
+        spam (evento transazionale, una sola volta: lo stato passa a 'scaduto' quindi il
+        sweeper non ripassa). Best-effort ISOLATO: mai blocca lo sweep."""
+        try:
+            ep = getattr(self._sys, "email_provider", None)
+            email = (rec or {}).get("email", "")
+            slug = (rec or {}).get("alloggio_id", "")
+            if ep is None or not (isinstance(email, str) and "@" in email) or not slug:
+                return
+            base = self._base_url or "https://bookinvip.com"
+            url = base + "/alloggio/" + slug
+            titolo = slug
+            try:
+                d = self._sys.catalogo.dettaglio(slug)
+                titolo = (d.get("titolo") if isinstance(d, dict) else None) or slug
+            except Exception:
+                pass
+            import html as _h
+            corpo = ("<div style=\"font-family:sans-serif;max-width:480px\">"
+                     "<h2 style=\"color:#1e3c72\">Il pagamento non è andato a buon fine</h2>"
+                     "<p>La tua prenotazione per <strong>%s</strong> (%s → %s) non è stata "
+                     "completata, quindi le date sono di nuovo <strong>libere</strong>.</p>"
+                     "<p>Se le vuoi ancora, riprova subito (prima che le prenda qualcun altro):</p>"
+                     "<p><a href=\"%s\" style=\"background:#1e3c72;color:#fff;padding:.7rem 1.4rem;"
+                     "border-radius:8px;text-decoration:none;font-weight:bold\">Riprova ora</a></p>"
+                     "<p style=\"color:#5e6f8d;font-size:.85rem\">Nessun addebito è stato "
+                     "effettuato. Questa è un'email di servizio, non riceverai promemoria.</p></div>"
+                     ) % (_h.escape(titolo), _h.escape(rec.get("check_in", "")),
+                          _h.escape(rec.get("check_out", "")), _h.escape(url))
+            import threading
+            threading.Thread(target=ep.invia,
+                             args=(email, "BookinVIP - Le tue date sono di nuovo libere", corpo),
+                             daemon=True).start()
+        except Exception:
+            logger.warning("email recupero hold fallita (ISOLATA)", exc_info=True)
+
     def _host_metriche_avanzate(self, headers):
         """KPI avanzati dell'host (fase115, puro): calcolati sulle SUE prenotazioni reali
         (tutti i suoi alloggi). Host dal token."""
@@ -3711,6 +3749,10 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                             if _pd is not None:
                                 _pd.rimuovi(rec["riferimento"])
                             pp.scadi(rec["riferimento"])
+                            # RECUPERO ONESTO (errore dei colossi = spam; noi UNA email
+                            # transazionale): pagamento non completato -> avvisa il cliente
+                            # che le date sono di nuovo libere, con il link per riprovare.
+                            router._email_recupero_hold(rec)
                         except Exception:
                             logger.warning("sweep hold singolo fallito (ignorato)", exc_info=True)
                     try:

@@ -122,6 +122,7 @@
   <div id="vista" style="display:none;gap:.5rem;margin:.2rem 0 .8rem">
     <button type="button" id="btnLista" class="vistaBtn attiva">≣ <span id="lblLista">Lista</span></button>
     <button type="button" id="btnMappa" class="vistaBtn">🗺️ <span id="lblMappa">Mappa</span></button>
+    <button type="button" id="btnFav" class="vistaBtn" style="display:none">❤</button>
   </div>
   <div id="mappaWrap" style="display:none;position:relative">
     <div id="mappa" style="height:60vh;min-height:340px;border-radius:1rem;overflow:hidden;border:1px solid #dce1ed"></div>
@@ -242,12 +243,20 @@ function stelle(rie){
   const m=(rie.media_centesimi/100).toFixed(1);
   return `<span style="color:#e0a800">★ ${m}</span> <span style="color:#5e6f8d;font-size:.8rem">(${rie.conteggio})</span>`;
 }
+// ❤ PREFERITI senza login (errore dei colossi: li chiudono dietro account) — localStorage
+function favSet(){ try{ return new Set(JSON.parse(localStorage.getItem('bookinvip_fav')||'[]')); }catch(e){ return new Set(); } }
+function favToggle(slug,el){ const f=favSet(); f.has(slug)?f.delete(slug):f.add(slug);
+  localStorage.setItem('bookinvip_fav', JSON.stringify([...f]));
+  el.textContent=f.has(slug)?'❤':'🤍'; aggiornaFavBtn(); }
+function aggiornaFavBtn(){ const b=document.getElementById('btnFav'); if(!b) return;
+  const n=favSet().size; b.style.display=n?'inline-block':'none'; b.textContent='❤ '+n; }
 function cardHtml(a){
   const serv = (a.servizi_label||a.servizi||[]).slice(0,4).map(s=>`<span class="badge">${s}</span>`).join('');
+  const fav = favSet().has(a.slug);
   let disp=''; if(a.disponibile===true) disp=`<span class="badge green">✓</span>`;
   else if(a.disponibile===false) disp=`<span class="badge red">${t('non_disp')}</span>`;
   const foto = a.thumbnail ? `<img class="thumb" src="${a.thumbnail}" alt="${a.titolo}" loading="lazy" onerror="this.outerHTML='<div class=ph>🏠</div>'">` : '<div class="ph">🏠</div>';
-  return `<div class="card">${foto}<h3>${a.titolo}</h3>
+  return `<div class="card" style="position:relative"><span onclick="favToggle('${a.slug}',this)" style="position:absolute;top:1.5rem;right:1.5rem;font-size:1.25rem;cursor:pointer;z-index:2;text-shadow:0 1px 3px rgba(0,0,0,.25)">${fav?'❤':'🤍'}</span>${foto}<h3>${a.titolo}</h3>
     <div class="prezzo">${money(a.prezzo_notte_cents,a.valuta)} <span style="font-size:.85rem;font-weight:400;color:#5e6f8d">/ ${t('notte')}</span></div>
     <div style="margin:.2rem 0">${stelle(a.recensioni)}</div>
     <div style="margin:.3rem 0">${serv} ${disp}</div>
@@ -275,9 +284,10 @@ async function cerca(){
   try{
     const data = await api('/api/catalogo?'+new URLSearchParams(params).toString());
     if(data.risultati && data.risultati.length){
+      ULTIMI_RIS = data.risultati;
       ris.innerHTML = data.risultati.map(cardHtml).join('');
       ris.querySelectorAll('button[data-slug]').forEach(b=>b.onclick=()=>apri(b.dataset.slug));
-      document.getElementById('vista').style.display='flex';
+      document.getElementById('vista').style.display='flex'; aggiornaFavBtn();
       if(document.getElementById('mappaWrap').style.display!=='none') caricaMappaPin();
     } else if(GEO){
       document.getElementById('vista').style.display='none'; tornaLista();
@@ -516,6 +526,13 @@ document.getElementById('citta').oninput = ()=>{ GEO = null; };
 document.getElementById('form').onsubmit = e=>{ e.preventDefault(); cerca(); };
 document.getElementById('btnMappa').onclick = mostraMappa;
 document.getElementById('btnLista').onclick = tornaLista;
+let ULTIMI_RIS = [];
+document.getElementById('btnFav').onclick = ()=>{           // mostra SOLO i preferiti
+  tornaLista(); const f=favSet(); const ris=document.getElementById('risultati');
+  const sel=(ULTIMI_RIS||[]).filter(a=>f.has(a.slug));
+  ris.innerHTML = sel.length ? sel.map(cardHtml).join('') : '<div class="vuoto">❤ —</div>';
+  ris.querySelectorAll('button[data-slug]').forEach(b=>b.onclick=()=>apri(b.dataset.slug));
+};
 document.getElementById('close').onclick = ()=>document.getElementById('modal').classList.remove('open');
 document.getElementById('modal').onclick = e=>{ if(e.target.id==='modal') e.target.classList.remove('open'); };
 document.getElementById('btnPrenota').onclick = prenota;
