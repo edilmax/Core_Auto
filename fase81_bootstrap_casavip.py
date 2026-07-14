@@ -81,6 +81,8 @@ class ConfigCasaVIP:
     db_tassa_comunale: str = ":memory:"  # ledger riscossioni tassa di soggiorno (rendicontazione)
     db_payout: str = ":memory:"        # dashboard payout host (incassi attesi per valuta/stato)
     db_accettazioni: str = ":memory:"  # registro firmato accettazioni contratto host (prova legale)
+    db_geocache: str = ":memory:"      # cache geocoding città->coordinate (mappa nella ricerca)
+    con_geocoding: bool = False        # ON in prod: geocodifica alla pubblicazione (default OFF: test)
     file_referral: str = ""            # path JSON referral host-porta-host (vuoto = in RAM)
     con_sentinel: bool = False
     cartella_sentinel: Optional[str] = None
@@ -124,6 +126,7 @@ class SistemaCasaVIP:
     accettazioni: Any = None
     stripe: Any = None      # ProviderStripe (fase85) o None: per rigenerare link (su-richiesta)
     connect: Any = None     # ProviderConnect (fase101) o None: bonifici automatici agli host
+    geocoder: Any = None    # Geocoder (fase166): città->coordinate per la mappa
 
     @property
     def attivo(self) -> bool:
@@ -290,6 +293,14 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     payout.inizializza_schema()
     componenti.append("payout_dashboard(131)")
 
+    # 3f-quinquies) GEOCODER (città->coordinate, gratis via Nominatim + cache): per la mappa.
+    # GATED da con_geocoding (default OFF: i test non toccano la rete). ON in prod.
+    geocoder = None
+    if cfg.con_geocoding:
+        from fase166_geocoder import crea_geocoder
+        geocoder = crea_geocoder(cfg.db_geocache)
+        componenti.append("geocoder(166)")
+
     # 3f-quater) registro FIRMATO delle accettazioni del contratto host (prova legale opponibile)
     from fase163_accettazioni import crea_registro_accettazioni
     accettazioni = crea_registro_accettazioni(cfg.db_accettazioni, bytes(cfg.segreto_hmac))
@@ -409,4 +420,4 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           domanda=domanda, garanzia=garanzia,
                           pagamenti_pendenti=pagamenti_pendenti, tassa_comunale=tassa_comunale,
                           payout=payout, accettazioni=accettazioni, stripe=provider,
-                          connect=_connect)
+                          connect=_connect, geocoder=geocoder)

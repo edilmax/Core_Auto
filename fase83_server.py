@@ -661,6 +661,8 @@ class RouterHTTP:
             return self._domanda_per_citta(query)
         if metodo == "GET" and path == "/api/catalogo":
             return self._catalogo(query)
+        if metodo == "GET" and path == "/api/mappa":
+            return self._mappa(query)
         if metodo == "GET" and path.startswith("/api/catalogo/"):
             return self._dettaglio(path[len("/api/catalogo/"):], _lingua(query))
         if metodo == "POST" and path == "/api/concierge/quote":
@@ -1073,6 +1075,43 @@ class RouterHTTP:
         res["risultati"] = cards
         res["lingua"] = lingua
         return 200, res
+
+    def _mappa(self, query):
+        """Alloggi come GeoJSON per la MAPPA nella ricerca (come i colossi). Stessi filtri del
+        catalogo (città, prezzo, servizi, 'vicino a me'); solo quelli CON coordinate. Il popup
+        ha titolo, prezzo (valuta reale), recensioni e link. Pin senza coordinate -> esclusi
+        (annunci non ancora geocodificati)."""
+        q = dict(query)
+        try:
+            lim = int(q.get("limit") or 300)
+        except (ValueError, TypeError):
+            lim = 300
+        q["limit"] = str(max(1, min(lim, 500)))       # la mappa mostra molti pin
+        st, res = self._catalogo(q)
+        if st != 200:
+            return st, res
+        feats = []
+        for c in res.get("risultati", []):
+            la, lo = c.get("lat_micro"), c.get("lon_micro")
+            if not (isinstance(la, int) and not isinstance(la, bool)
+                    and isinstance(lo, int) and not isinstance(lo, bool)):
+                continue
+            prezzo = c.get("prezzo_notte_cents")
+            if not isinstance(prezzo, int):
+                prezzo = c.get("prezzo_cents")
+            feats.append({
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [lo / 1_000_000, la / 1_000_000]},
+                "properties": {
+                    "slug": c.get("slug", ""), "titolo": c.get("titolo", ""),
+                    "citta": c.get("citta", ""),
+                    "prezzo_cents": prezzo, "valuta": c.get("valuta", "EUR"),
+                    "foto": c.get("thumbnail") or c.get("foto") or "",
+                    "recensioni": c.get("recensioni"),
+                    "cancellazione_gratuita": c.get("cancellazione_gratuita")}})
+        return 200, {"type": "FeatureCollection", "features": feats,
+                     "totale": res.get("totale", len(feats)), "con_coordinate": len(feats),
+                     "lingua": res.get("lingua")}
 
     @staticmethod
     def _centro_geo(query):
@@ -2564,6 +2603,7 @@ class RouterHTTP:
         # slug nuovo/auto -> proprietario None -> consentito; slug proprio -> aggiorna.
         if not self._verifica_proprieta(headers, dati.get("slug")):
             return 403, {"errore": "non_tuo"}
+        dati = self._geocodifica_se_serve(dati)   # coordinate dalla città (per la mappa)
         from fase57_vetrina import Immagine, SchedaAlloggio, valida_scheda
         ok, codice, scheda = valida_scheda(dati)
         if not ok:
@@ -2572,6 +2612,30 @@ class RouterHTTP:
                 if isinstance(u, str)]
         id_num = self._sys.catalogo.pubblica(scheda, imgs)
         return 201, {"stato": "pubblicato", "slug": scheda.slug, "id": id_num}
+
+    def _geocodifica_se_serve(self, dati):
+        """Se l'annuncio non ha coordinate, le ricava dalla CITTÀ (best-effort, isolato) così
+        compare sulla mappa. L'host non digita MAI coordinate. Cache-first (fase166): la prima
+        volta per una città chiama Nominatim, poi è istantaneo."""
+        try:
+            gc = getattr(self._sys, "geocoder", None)
+            if gc is None or not isinstance(dati, dict):
+                return dati
+            def _ok(x):
+                return isinstance(x, int) and not isinstance(x, bool)
+            if _ok(dati.get("lat_micro")) and _ok(dati.get("lon_micro")):
+                return dati                       # coordinate già presenti -> non tocco
+            citta = dati.get("citta")
+            if not (isinstance(citta, str) and citta.strip()):
+                return dati
+            coord = gc.geocodifica(citta, indirizzo=str(dati.get("indirizzo", "") or ""),
+                                   paese=str(dati.get("paese", "") or ""))
+            if coord:
+                dati = dict(dati)
+                dati["lat_micro"], dati["lon_micro"] = int(coord[0]), int(coord[1])
+        except Exception:
+            logger.warning("auto-geocodifica fallita (ignorata)", exc_info=True)
+        return dati
 
     def _host_importa(self, body, headers):
         """Porta gli annunci dai colossi (Booking/Airbnb) DA NOI: ingerisce l'export

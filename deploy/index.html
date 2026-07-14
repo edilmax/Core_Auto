@@ -26,6 +26,10 @@
   .filtri button{background:#1e3c72;color:#fff;border:none;padding:.55rem 1.75rem;border-radius:2rem;font-weight:600;font-size:1rem;cursor:pointer}
   .filtri button:hover{background:#2a5298}
   .chips{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.9rem}
+  #vista{display:none}
+  .vistaBtn{background:#fff;color:#1e3c72;border:1px solid #cdd7ea;padding:.45rem 1.1rem;border-radius:2rem;font-weight:600;cursor:pointer;font-size:.92rem}
+  .vistaBtn.attiva{background:#1e3c72;color:#fff;border-color:#1e3c72}
+  .leaflet-popup-content{font-size:.9rem;line-height:1.4}.leaflet-popup-content b{color:#1e3c72}
   .chip{font-size:.8rem;padding:.3rem .8rem;border-radius:1rem;border:1px solid #dce1ed;background:#fff;cursor:pointer;user-select:none}
   .chip.on{background:#1e3c72;color:#fff;border-color:#1e3c72}
   .risultati{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.5rem}
@@ -107,6 +111,15 @@
     <div class="chips" id="chips"></div>
     <label style="display:flex;align-items:center;gap:.4rem;margin-top:.7rem;font-size:.85rem;color:#155724;font-weight:600;cursor:pointer;text-transform:none;flex-direction:row"><input type="checkbox" id="soloGratuita" style="min-width:0;width:auto"> <span data-t="filtro_gratuita">Solo cancellazione gratuita</span></label>
   </form>
+
+  <div id="vista" style="display:none;gap:.5rem;margin:.2rem 0 .8rem">
+    <button type="button" id="btnLista" class="vistaBtn attiva">≣ <span id="lblLista">Lista</span></button>
+    <button type="button" id="btnMappa" class="vistaBtn">🗺️ <span id="lblMappa">Mappa</span></button>
+  </div>
+  <div id="mappaWrap" style="display:none;position:relative">
+    <div id="mappa" style="height:60vh;min-height:340px;border-radius:1rem;overflow:hidden;border:1px solid #dce1ed"></div>
+    <div id="mappaMsg" style="text-align:center;color:#5e6f8d;padding:.6rem;font-size:.9rem"></div>
+  </div>
 
   <div id="risultati" class="risultati"><div class="loading">…</div></div>
 
@@ -205,6 +218,7 @@ function applicaTraduzioni(){
   document.querySelectorAll('[data-tph]').forEach(el=> el.setAttribute('placeholder', t(el.getAttribute('data-tph'))));
   document.querySelectorAll('[data-ttitle]').forEach(el=> el.setAttribute('title', t(el.getAttribute('data-ttitle'))));
   const bc=document.getElementById('btnCerca'); if(bc) bc.textContent='🔍 '+t('cerca');
+  if(typeof localizzaMappa==='function') localizzaMappa();
   const bp=document.getElementById('btnPrenota'); if(bp) bp.textContent='📅 '+t('prenota');
   renderChips();
 }
@@ -246,18 +260,92 @@ async function cerca(){
   const sg=document.getElementById('soloGratuita'); if(sg && sg.checked) params.solo_gratuita='1';
   if(GEO){ params.citta=''; params.lat_micro=GEO.lat_micro; params.lon_micro=GEO.lon_micro;
            params.raggio_km=document.getElementById('raggio').value; }
+  LAST_PARAMS = Object.assign({}, params);
   try{
     const data = await api('/api/catalogo?'+new URLSearchParams(params).toString());
     if(data.risultati && data.risultati.length){
       ris.innerHTML = data.risultati.map(cardHtml).join('');
       ris.querySelectorAll('button[data-slug]').forEach(b=>b.onclick=()=>apri(b.dataset.slug));
+      document.getElementById('vista').style.display='flex';
+      if(document.getElementById('mappaWrap').style.display!=='none') caricaMappaPin();
     } else if(GEO){
+      document.getElementById('vista').style.display='none'; tornaLista();
       ris.innerHTML = `<div class="vuoto" style="text-align:center;padding:1.5rem">
         <div style="font-size:2rem">📍</div>
         <h3 style="color:#1e3c72;margin:.5rem 0">${t('nessun_raggio_pre')} ${document.getElementById('raggio').value} km</h3>
         <p style="color:#5e6f8d;max-width:44ch;margin:.3rem auto">${t('allarga_raggio')}</p></div>`;
-    } else { ris.innerHTML = emptyStateHtml(params.citta); bindWaitlist(params.citta); }
+    } else { document.getElementById('vista').style.display='none'; tornaLista();
+      ris.innerHTML = emptyStateHtml(params.citta); bindWaitlist(params.citta); }
   }catch(e){ ris.innerHTML = `<div class="msg err">${t('errore')}: ${e.message}</div>`; }
+}
+// ── MAPPA nella ricerca (Leaflet + OpenStreetMap, gratis, caricato solo se serve) ──
+let LMAP=null, LLAYER=null, LAST_PARAMS=null;
+const MAP_T={
+  it:{lista:'Lista',mappa:'Mappa',vedi:'Vedi',vuota:'Nessun alloggio con posizione sulla mappa (in arrivo).',ko:'Mappa non disponibile ora.'},
+  en:{lista:'List',mappa:'Map',vedi:'View',vuota:'No listings with a map location yet.',ko:'Map unavailable right now.'},
+  es:{lista:'Lista',mappa:'Mapa',vedi:'Ver',vuota:'Aún no hay alojamientos con ubicación en el mapa.',ko:'Mapa no disponible ahora.'},
+  fr:{lista:'Liste',mappa:'Carte',vedi:'Voir',vuota:'Aucun logement localisé sur la carte pour l’instant.',ko:'Carte indisponible.'},
+  de:{lista:'Liste',mappa:'Karte',vedi:'Ansehen',vuota:'Noch keine Unterkünfte mit Kartenposition.',ko:'Karte nicht verfügbar.'},
+  pt:{lista:'Lista',mappa:'Mapa',vedi:'Ver',vuota:'Ainda sem alojamentos com localização no mapa.',ko:'Mapa indisponível.'}
+};
+function mt(k){ return (MAP_T[LANG]||MAP_T.en)[k] || MAP_T.en[k] || k; }
+function localizzaMappa(){
+  const a=document.getElementById('lblLista'), b=document.getElementById('lblMappa');
+  if(a) a.textContent=mt('lista'); if(b) b.textContent=mt('mappa');
+}
+function caricaLeaflet(){
+  return new Promise((res,rej)=>{
+    if(window.L) return res();
+    const css=document.createElement('link'); css.rel='stylesheet';
+    css.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(css);
+    const js=document.createElement('script');
+    js.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    js.onload=()=>res(); js.onerror=()=>rej(new Error('leaflet')); document.head.appendChild(js);
+  });
+}
+function tornaLista(){
+  document.getElementById('mappaWrap').style.display='none';
+  document.getElementById('risultati').style.display='';
+  document.getElementById('btnMappa') && document.getElementById('btnMappa').classList.remove('attiva');
+  document.getElementById('btnLista') && document.getElementById('btnLista').classList.add('attiva');
+}
+async function mostraMappa(){
+  document.getElementById('btnMappa').classList.add('attiva');
+  document.getElementById('btnLista').classList.remove('attiva');
+  document.getElementById('mappaWrap').style.display='block';
+  document.getElementById('risultati').style.display='none';
+  const msg=document.getElementById('mappaMsg'); msg.textContent='…';
+  try{ await caricaLeaflet(); }catch(e){ msg.textContent=mt('ko'); tornaLista(); return; }
+  if(!LMAP){
+    LMAP=L.map('mappa').setView([41.9,12.5],4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(LMAP);
+  }
+  setTimeout(()=>LMAP.invalidateSize(),60);
+  await caricaMappaPin();
+}
+async function caricaMappaPin(){
+  if(!window.L || !LMAP) return;
+  const msg=document.getElementById('mappaMsg'); msg.textContent='…';
+  if(LLAYER){ LMAP.removeLayer(LLAYER); }
+  LLAYER=L.layerGroup().addTo(LMAP);
+  try{
+    const fc=await api('/api/mappa?'+new URLSearchParams(LAST_PARAMS||{}).toString());
+    if(!fc.features || !fc.features.length){ msg.textContent=mt('vuota'); return; }
+    msg.textContent='';
+    const bounds=[];
+    fc.features.forEach(f=>{
+      const c=f.geometry.coordinates, p=f.properties;
+      const lat=c[1], lon=c[0];
+      const prezzo = (p.prezzo_cents!=null && typeof money==='function') ? money(p.prezzo_cents,p.valuta||'EUR') : '';
+      const tit=(p.titolo||'').replace(/[<>]/g,'');
+      const m=L.marker([lat,lon]).addTo(LLAYER);
+      m.bindPopup('<b>'+tit+'</b><br>'+prezzo+'<br><a href="#" onclick="apri(\''+p.slug+'\');return false;">'+mt('vedi')+' →</a>');
+      bounds.push([lat,lon]);
+    });
+    if(bounds.length) LMAP.fitBounds(bounds,{padding:[30,30],maxZoom:14});
+  }catch(e){ msg.textContent=t('errore'); }
 }
 function emptyStateHtml(citta){
   const c = citta ? String(citta).replace(/[<>]/g,'') : '';
@@ -409,6 +497,8 @@ document.getElementById('soloGratuita').onchange = ()=>cerca();
 // digitare una citta esce dalla modalita 'vicino a me'
 document.getElementById('citta').oninput = ()=>{ GEO = null; };
 document.getElementById('form').onsubmit = e=>{ e.preventDefault(); cerca(); };
+document.getElementById('btnMappa').onclick = mostraMappa;
+document.getElementById('btnLista').onclick = tornaLista;
 document.getElementById('close').onclick = ()=>document.getElementById('modal').classList.remove('open');
 document.getElementById('modal').onclick = e=>{ if(e.target.id==='modal') e.target.classList.remove('open'); };
 document.getElementById('btnPrenota').onclick = prenota;

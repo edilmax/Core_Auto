@@ -51,6 +51,9 @@ def main() -> None:  # pragma: no cover
         db_tassa_comunale=os.environ.get("DB_TASSA_COMUNALE", "data/tassa_comunale.db"),
         db_payout=os.environ.get("DB_PAYOUT", "data/payout.db"),
         db_accettazioni=os.environ.get("DB_ACCETTAZIONI", "data/accettazioni.db"),
+        db_geocache=os.environ.get("DB_GEOCACHE", "data/geocache.db"),
+        # geocoding città->coordinate (mappa): ON in prod (Nominatim gratis+cache), OFF nei test
+        con_geocoding=os.environ.get("GEOCODING", "true").lower() in ("1", "true", "yes", "si"),
         file_referral=os.environ.get("FILE_REFERRAL", "data/referral.json"),
         valuta=os.environ.get("VALUTA", "EUR"),
         commissione_bps=int(os.environ.get("COMMISSIONE_BPS", "1000")),  # 10% a regime (marketplace)
