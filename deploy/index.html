@@ -441,11 +441,13 @@ async function apri(slug){
         righe += `<div style="margin-top:.5rem;padding:.5rem .7rem;background:#eafaf0;border-radius:.6rem;font-size:.85rem;color:#155724">${t('ota_pre')}<b>${money(co.ota_totale_cents,V)}</b> · <b>${t('risparmi')} ${money(co.risparmio_guest_cents,V)}</b> (-${(co.risparmio_bps/100).toFixed(0)}%)</div>`; }
       if(q.sconto_non_rimborsabile_cents>0) righe += `<div style="margin-top:.4rem;font-size:.85rem;color:#8a6d0b">🔒 ${t('non_rimb')} · ${t('risparmi')} ${money(q.sconto_non_rimborsabile_cents,V)}</div>`;
       const _tot = q.totale_cents||q.prezzo_guest_cents;
-      righe += `<div style="margin-top:.5rem;font-size:.85rem">👥 ${t('dividi_amici')} <select id="splitN" style="padding:.2rem .3rem">${[2,3,4,5,6].map(n=>`<option value="${n}">${n}</option>`).join('')}</select> <span id="splitOut" style="color:#155724;font-weight:600"></span></div>`;
+      righe += `<div style="margin-top:.5rem;font-size:.85rem">👥 ${t('dividi_amici')} <select id="splitN" style="padding:.2rem .3rem">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${n===1?' selected':''}>${n}</option>`).join('')}</select> <span id="splitOut" style="color:#155724;font-weight:600"></span></div>`;
       righe += `<div id="cd" style="margin-top:.6rem;padding:.5rem .7rem;background:#fff4e5;border:1px solid #ffd9a8;border-radius:.6rem;font-size:.85rem;color:#8a5200;font-weight:600;text-align:center"></div>`;
       mq.innerHTML = righe;
       const sb = document.getElementById('splitN');
-      if(sb){ const calc = async ()=>{ try{ const r = await api('/api/split/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({totale_cents:_tot,n:parseInt(sb.value)})}); if(r.quote){ const mn=r.per_persona_min_cents,mx=r.per_persona_max_cents; document.getElementById('splitOut').textContent = (mn===mx?('= '+money(mn,V)):('= '+money(mn,V)+'–'+money(mx,V)))+' '+t('a_testa'); } }catch(e){} }; sb.onchange=calc; calc(); }
+      if(sb){ const calc = async ()=>{ const n=parseInt(sb.value); const out=document.getElementById('splitOut');
+        if(!(n>1)){ out.textContent = ''; return; }   // 1 = paghi tu tutto (default): il totale sopra è già il tuo
+        try{ const r = await api('/api/split/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({totale_cents:_tot,n:n})}); if(r.quote){ const mn=r.per_persona_min_cents,mx=r.per_persona_max_cents; out.textContent = (mn===mx?('= '+money(mn,V)):('= '+money(mn,V)+'–'+money(mx,V)))+' '+t('a_testa'); } }catch(e){} }; sb.onchange=calc; calc(); }
       document.getElementById('btnPrenota').style.display='';
       // CONTO ALLA ROVESCIA ONESTO: il preventivo (prezzo+stanza) è bloccato per te fino a scade_a.
       if(window.__cdTimer) clearInterval(window.__cdTimer);
