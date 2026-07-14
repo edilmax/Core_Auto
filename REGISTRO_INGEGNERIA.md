@@ -35,6 +35,7 @@ Money-path completo (prenota → hold/pagamento → escrow → payout), pannelli
 | Split-payment CALCOLATORE (checkout) | 133, 65 | mostra "€X a testa"; pagamento reale-diviso NON attivo (parcheggiato) |
 | **Sconti soggiorni lunghi** (settimana/mese, li offre l'host) | 57, 59 | ≥7 notti → sconto settimana; ≥28 → mese (prevale); si impila col non-rimborsabile; identità conti intatta |
 | **Ordinamento "consigliati"** (i migliori in cima, come i colossi) | 83 `_punteggio_consigliato` | default se l'ospite non chiede un ordine; segnali: foto/recensioni/cancellazione gratuita/servizi; puro/deterministico; ordine esplicito recente/prezzo NON riordinato |
+| **Date flessibili** (± giorni, come i colossi) | 58 `prima_finestra` + 83 | checkbox "± 3 giorni": trova la prima finestra libera di N notti in [ci-flex, co+flex]; card mostra 📅 finestra trovata |
 | MCP server + trasparenza + digital twin + sensory + guardian + sentinel | 60, 69, 72, 74, 75, 80 | |
 | Viral loop + referral + dichiarazione + no-show + sleep-guarantee + turnover | 76, 109, 79, 62, 78, 70 | |
 | Contratto locazione PDF | 145 | |

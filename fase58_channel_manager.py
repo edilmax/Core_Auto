@@ -293,6 +293,31 @@ class ChannelManager:
         finally:
             con.close()
 
+    def prima_finestra(self, alloggio_id: Any, da: Any, a: Any,
+                       n_notti: Any) -> Optional[Tuple[str, str]]:
+        """DATE FLESSIBILI: prima finestra di `n_notti` notti consecutive DISPONIBILE dentro
+        [da, a). Ritorna (check_in, check_out) ISO oppure None. BLINDATO: input invalido/
+        intervallo troppo largo -> None. Una query O(giorni) per finestra, cache-friendly."""
+        d0, d1 = _data_iso(da), _data_iso(a)
+        try:
+            n = int(n_notti)
+        except (TypeError, ValueError):
+            return None
+        if d0 is None or d1 is None or n <= 0 or n > MAX_NOTTI:
+            return None
+        span = (d1 - d0).days
+        if span <= 0 or span > 120:                 # tetto anti-abuso sull'ampiezza
+            return None
+        ultimo = d1 - datetime.timedelta(days=n)    # co = inizio+n deve stare dentro [da, a)
+        d = d0
+        while d <= ultimo:
+            ci = d.isoformat()
+            co = (d + datetime.timedelta(days=n)).isoformat()
+            if self.disponibile(alloggio_id, ci, co) is True:
+                return (ci, co)
+            d += datetime.timedelta(days=1)
+        return None
+
     def stato_giorno(self, alloggio_id: str, giorno: str) -> Optional[Dict[str, Any]]:
         con = self._apri()
         try:

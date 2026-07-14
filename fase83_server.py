@@ -1067,7 +1067,12 @@ class RouterHTTP:
         ordine_guest = query.get("ordine") or "consigliati"
         _ordine_db = ordine_guest if ordine_guest in ("recente", "prezzo_asc", "prezzo_desc") \
             else "recente"
-        _tutto = (geo is not None) or (ordine_guest == "consigliati")
+        # DATE FLESSIBILI (± giorni): se attivo, NON filtro per le date esatte in SQL; cerco
+        # per ogni annuncio una finestra libera dello stesso n. di notti dentro [ci-flex, co+flex].
+        flex = _int("flex_giorni") or 0
+        _ciq, _coq = query.get("check_in") or None, query.get("check_out") or None
+        usa_flex = flex > 0 and bool(_ciq) and bool(_coq) and geo is None
+        _tutto = (geo is not None) or (ordine_guest == "consigliati") or usa_flex
         criteri = CriteriRicerca(
             citta=query.get("citta") or None,
             prezzo_min_cents=_int("prezzo_min_cents"),
@@ -1078,8 +1083,8 @@ class RouterHTTP:
             limit=(PAGINA_MAX if _tutto else limit_req),
             offset=(0 if _tutto else (_int("offset") or 0)),
             bbox=bbox_t,
-            check_in=query.get("check_in") or None,
-            check_out=query.get("check_out") or None)
+            check_in=(None if usa_flex else _ciq),
+            check_out=(None if usa_flex else _coq))
         res = self._sys.catalogo.cerca(criteri)
         res = dict(res)
         cards = []
@@ -1099,6 +1104,27 @@ class RouterHTTP:
             cards = [c for c in cards if c.get("cancellazione_gratuita")]
             if geo is None:
                 res["totale"] = len(cards)
+        if usa_flex:
+            # per ogni annuncio trovo la prima finestra libera di N notti dentro [ci-flex, co+flex]
+            import datetime as _dtf
+            try:
+                _n = (_dtf.date.fromisoformat(_coq) - _dtf.date.fromisoformat(_ciq)).days
+                _da = (_dtf.date.fromisoformat(_ciq) - _dtf.timedelta(days=flex)).isoformat()
+                _a = (_dtf.date.fromisoformat(_coq) + _dtf.timedelta(days=flex)).isoformat()
+            except Exception:
+                _n = 0
+            out = []
+            for c in cards:
+                fin = self._sys.inventario.prima_finestra(c.get("slug"), _da, _a, _n) if _n > 0 else None
+                if fin:
+                    c["finestra_ci"], c["finestra_co"], c["disponibile"] = fin[0], fin[1], True
+                    out.append(c)
+            out.sort(key=_punteggio_consigliato, reverse=True)
+            res["totale"] = len(out)
+            res["risultati"] = out[:limit_req]
+            res["ordine"] = "flessibile"
+            res["lingua"] = lingua
+            return 200, res
         if geo is not None:
             vicini = self._entro_raggio(cards, geo)   # filtrati+ordinati, NON tagliati
             res["totale"] = len(vicini)
