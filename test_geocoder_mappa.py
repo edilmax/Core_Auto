@@ -68,10 +68,12 @@ class _FakeGeocoder:
         self.coord = coord
         self.chiamate = 0
         self.ultimo = None      # (citta, indirizzo, paese) dell'ultima chiamata
+        self.tutte = []          # storico chiamate (la guardia indirizzo ne fa più di una)
 
     def geocodifica(self, citta, indirizzo="", paese=""):
         self.chiamate += 1
         self.ultimo = (citta, indirizzo, paese)
+        self.tutte.append((citta, indirizzo, paese))
         return self.coord
 
 
@@ -160,7 +162,7 @@ class TestAutoGeocodeEMappa(unittest.TestCase):
         self.sys.geocoder = fake
         self._pubblica("con-via", "Con via", "Roma",
                        extra={"indirizzo": "Via del Corso 12"})
-        self.assertEqual(fake.ultimo[1], "Via del Corso 12", "geocode deve usare l'indirizzo")
+        self.assertIn("Via del Corso 12", [c[1] for c in fake.tutte], "geocode deve usare l'indirizzo")
         d = self.sys.catalogo.dettaglio_owner("con-via")
         self.assertEqual(d["lat_micro"], 41894560)
         self.assertEqual(d["indirizzo"], "Via del Corso 12")   # privato, vista owner
@@ -235,4 +237,29 @@ class TestDistanzaCentro(unittest.TestCase):
         sys_.geocoder = None
         s, det2 = r.gestisci("GET", "/api/catalogo/dist", {}, None, {})
         self.assertNotIn("centro_distanza_m", det2)
+        shutil.rmtree(d, ignore_errors=True)
+
+
+class TestGuardiaIndirizzo(unittest.TestCase):
+    def test_indirizzo_sbagliato_ripiega_sul_centro(self):
+        d = tempfile.mkdtemp()
+        sys_ = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=b"S" * 32,
+                                          db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db"))
+        r = crea_router(sys_)
+
+        class GC:
+            def geocodifica(self, citta, indirizzo="", paese=""):
+                if indirizzo:                              # indirizzo "sbagliato": 38km via
+                    return (42230000, 12490000)
+                return (41890000, 12490000)                # centro Roma
+        sys_.geocoder = GC()
+        dati = r._geocodifica_se_serve({"citta": "Roma", "indirizzo": "Via Cavour 300"})
+        self.assertEqual(dati["lat_micro"], 41890000, "doveva ripiegare sul centro città")
+        # indirizzo BUONO (1km): resta preciso
+        class GC2(GC):
+            def geocodifica(self, citta, indirizzo="", paese=""):
+                return (41899000, 12490000) if indirizzo else (41890000, 12490000)
+        sys_.geocoder = GC2()
+        dati2 = r._geocodifica_se_serve({"citta": "Roma", "indirizzo": "Via Vera 1"})
+        self.assertEqual(dati2["lat_micro"], 41899000)
         shutil.rmtree(d, ignore_errors=True)

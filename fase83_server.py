@@ -2820,6 +2820,19 @@ class RouterHTTP:
                 return dati
             coord = gc.geocodifica(citta, indirizzo=indir,
                                    paese=str(dati.get("paese", "") or ""))
+            # GUARDIA ANTI-ERRORE: se il geocode dell'INDIRIZZO cade a >30km dal centro
+            # della sua città, l'indirizzo è stato interpretato male (omonimie) -> meglio
+            # il centro città (onesto) che un pin nel posto sbagliato.
+            if coord and indir and isinstance(citta, str) and citta.strip():
+                centro = gc.geocodifica(citta)
+                if centro:
+                    try:
+                        from fase121_geo_ricerca import distanza_m
+                        d_m = distanza_m(coord[0], coord[1], centro[0], centro[1])
+                        if isinstance(d_m, int) and d_m > 30000:
+                            coord = centro
+                    except Exception:
+                        pass
             if coord:
                 dati = dict(dati)
                 dati["lat_micro"], dati["lon_micro"] = int(coord[0]), int(coord[1])
