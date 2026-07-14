@@ -287,7 +287,7 @@ function cardHtml(a){
     <div style="margin:.3rem 0">${serv} ${disp}</div>
     ${a.cancellazione_gratuita ? `<div style="margin:.15rem 0"><span class="badge green">✔ ${t('badge_cancellazione')}</span></div>` : (a.politica_cancellazione==='non_rimborsabile' ? `<div style="margin:.15rem 0"><span class="badge" style="background:#fff3cd;color:#8a6d0b">🔒 ${t('non_rimb')}</span></div>` : '')}
     ${a.finestra_ci?`<div style="margin:.15rem 0"><span class="badge green">📅 ${a.finestra_ci} → ${a.finestra_co}</span></div>`:''}
-    <div class="meta">📍 ${a.citta}${a.paese?', '+a.paese:''}${a.distanza_m!=null?' · <b>'+fmtDist(a.distanza_m)+'</b>':(a.centro_distanza_m!=null?' · '+fmtDist(a.centro_distanza_m)+' '+mt('centro'):'')}</div>
+    <div class="meta">📍 ${a.citta}${a.paese?', '+a.paese:''}${a.distanza_m!=null?' · <b>'+fmtDist(a.distanza_m)+'</b>':(a.centro_distanza_m!=null?' · 📍 '+fmtCentro(a.centro_distanza_m):'')}</div>
     <button data-slug="${a.slug}">${t('dettaglio')}</button></div>`;
 }
 
@@ -327,13 +327,14 @@ async function cerca(){
 // ── MAPPA nella ricerca (Leaflet + OpenStreetMap, gratis, caricato solo se serve) ──
 let LMAP=null, LLAYER=null, LAST_PARAMS=null;
 const MAP_T={
-  it:{lista:'Lista',centro:'dal centro',mappa:'Mappa',vedi:'Vedi',flex:'Date flessibili (± 3 giorni)',sc_lungo:'Sconto soggiorno lungo',b1:'Siamo in fase di test e costruzione — apriamo a breve.',b2:'Stiamo preparando un servizio più avanzato e più conveniente per te. Nel frattempo è già aperto agli host:',b3:'pubblica il tuo alloggio ora →',vuota:'Nessun alloggio con posizione sulla mappa (in arrivo).',ko:'Mappa non disponibile ora.'},
-  en:{lista:'List',centro:'from center',mappa:'Map',vedi:'View',flex:'Flexible dates (± 3 days)',sc_lungo:'Long-stay discount',b1:'We are in test & build phase — opening soon.',b2:'We are preparing a more advanced and cheaper service for you. Meanwhile it is already open to hosts:',b3:'publish your place now →',vuota:'No listings with a map location yet.',ko:'Map unavailable right now.'},
-  es:{lista:'Lista',centro:'del centro',mappa:'Mapa',vedi:'Ver',flex:'Fechas flexibles (± 3 días)',sc_lungo:'Descuento estancia larga',b1:'Estamos en fase de prueba y construcción — abrimos pronto.',b2:'Preparamos un servicio más avanzado y económico para ti. Mientras tanto ya está abierto a anfitriones:',b3:'publica tu alojamiento ahora →',vuota:'Aún no hay alojamientos con ubicación en el mapa.',ko:'Mapa no disponible ahora.'},
-  fr:{lista:'Liste',centro:'du centre',mappa:'Carte',vedi:'Voir',flex:'Dates flexibles (± 3 jours)',sc_lungo:'Réduction long séjour',b1:'Nous sommes en phase de test et construction — ouverture bientôt.',b2:'Nous préparons un service plus avancé et plus économique. En attendant, c’est déjà ouvert aux hôtes :',b3:'publiez votre logement maintenant →',vuota:'Aucun logement localisé sur la carte pour l’instant.',ko:'Carte indisponible.'},
-  de:{lista:'Liste',centro:'vom Zentrum',mappa:'Karte',vedi:'Ansehen',flex:'Flexible Daten (± 3 Tage)',sc_lungo:'Langzeit-Rabatt',b1:'Wir sind in der Test- und Aufbauphase — bald geöffnet.',b2:'Wir bereiten einen fortschrittlicheren und günstigeren Service vor. Für Gastgeber ist schon offen:',b3:'jetzt Unterkunft einstellen →',vuota:'Noch keine Unterkünfte mit Kartenposition.',ko:'Karte nicht verfügbar.'},
-  pt:{lista:'Lista',centro:'do centro',mappa:'Mapa',vedi:'Ver',flex:'Datas flexíveis (± 3 dias)',sc_lungo:'Desconto estadia longa',b1:'Estamos em fase de teste e construção — abrimos em breve.',b2:'Estamos a preparar um serviço mais avançado e económico. Entretanto já está aberto a anfitriões:',b3:'publique o seu alojamento agora →',vuota:'Ainda sem alojamentos com localização no mapa.',ko:'Mapa indisponível.'}
+  it:{lista:'Lista',centro0:'in pieno centro',centro:'dal centro',mappa:'Mappa',vedi:'Vedi',flex:'Date flessibili (± 3 giorni)',sc_lungo:'Sconto soggiorno lungo',b1:'Siamo in fase di test e costruzione — apriamo a breve.',b2:'Stiamo preparando un servizio più avanzato e più conveniente per te. Nel frattempo è già aperto agli host:',b3:'pubblica il tuo alloggio ora →',vuota:'Nessun alloggio con posizione sulla mappa (in arrivo).',ko:'Mappa non disponibile ora.'},
+  en:{lista:'List',centro0:'right in the center',centro:'from center',mappa:'Map',vedi:'View',flex:'Flexible dates (± 3 days)',sc_lungo:'Long-stay discount',b1:'We are in test & build phase — opening soon.',b2:'We are preparing a more advanced and cheaper service for you. Meanwhile it is already open to hosts:',b3:'publish your place now →',vuota:'No listings with a map location yet.',ko:'Map unavailable right now.'},
+  es:{lista:'Lista',centro0:'en pleno centro',centro:'del centro',mappa:'Mapa',vedi:'Ver',flex:'Fechas flexibles (± 3 días)',sc_lungo:'Descuento estancia larga',b1:'Estamos en fase de prueba y construcción — abrimos pronto.',b2:'Preparamos un servicio más avanzado y económico para ti. Mientras tanto ya está abierto a anfitriones:',b3:'publica tu alojamiento ahora →',vuota:'Aún no hay alojamientos con ubicación en el mapa.',ko:'Mapa no disponible ahora.'},
+  fr:{lista:'Liste',centro0:'en plein centre',centro:'du centre',mappa:'Carte',vedi:'Voir',flex:'Dates flexibles (± 3 jours)',sc_lungo:'Réduction long séjour',b1:'Nous sommes en phase de test et construction — ouverture bientôt.',b2:'Nous préparons un service plus avancé et plus économique. En attendant, c’est déjà ouvert aux hôtes :',b3:'publiez votre logement maintenant →',vuota:'Aucun logement localisé sur la carte pour l’instant.',ko:'Carte indisponible.'},
+  de:{lista:'Liste',centro0:'mitten im Zentrum',centro:'vom Zentrum',mappa:'Karte',vedi:'Ansehen',flex:'Flexible Daten (± 3 Tage)',sc_lungo:'Langzeit-Rabatt',b1:'Wir sind in der Test- und Aufbauphase — bald geöffnet.',b2:'Wir bereiten einen fortschrittlicheren und günstigeren Service vor. Für Gastgeber ist schon offen:',b3:'jetzt Unterkunft einstellen →',vuota:'Noch keine Unterkünfte mit Kartenposition.',ko:'Karte nicht verfügbar.'},
+  pt:{lista:'Lista',centro0:'em pleno centro',centro:'do centro',mappa:'Mapa',vedi:'Ver',flex:'Datas flexíveis (± 3 dias)',sc_lungo:'Desconto estadia longa',b1:'Estamos em fase de teste e construção — abrimos em breve.',b2:'Estamos a preparar um serviço mais avançado e económico. Entretanto já está aberto a anfitriões:',b3:'publique o seu alojamento agora →',vuota:'Ainda sem alojamentos com localização no mapa.',ko:'Mapa indisponível.'}
 };
+function fmtCentro(m){ return m<150 ? mt('centro0') : (fmtDist(m)+' '+mt('centro')); }
 function mt(k){ return (MAP_T[LANG]||MAP_T.en)[k] || MAP_T.en[k] || k; }
 function localizzaMappa(){
   const a=document.getElementById('lblLista'), b=document.getElementById('lblMappa');
@@ -447,7 +448,7 @@ async function apri(slug){
       : '';
     document.getElementById('mTitolo').textContent = a.titolo;
     document.getElementById('mPrezzo').innerHTML = money(a.prezzo_notte_cents,a.valuta)+' / '+t('notte')
-      + (a.centro_distanza_m!=null ? ' <span style="font-size:.85rem;font-weight:400;color:#5e6f8d">· 📍 '+fmtDist(a.centro_distanza_m)+' '+mt('centro')+'</span>' : '');
+      + (a.centro_distanza_m!=null ? ' <span style="font-size:.85rem;font-weight:400;color:#5e6f8d">· 📍 '+fmtCentro(a.centro_distanza_m)+'</span>' : '');
     document.getElementById('mBadge').innerHTML = (a.servizi_label||a.servizi||[]).map(s=>`<span class="badge">${s}</span>`).join('');
     document.getElementById('mRating').innerHTML = stelle(a.recensioni);
     document.getElementById('mDescr').textContent = a.descrizione||'';
