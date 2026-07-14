@@ -41,6 +41,7 @@ Money-path completo (prenota → hold/pagamento → escrow → payout), pannelli
 | Viral loop + referral + dichiarazione + no-show + sleep-guarantee + turnover | 76, 109, 79, 62, 78, 70 | |
 | Contratto locazione PDF | 145 | |
 | **Calendario prezzi host** (base + dinamico suggerito) | 119 (+106) | `GET /api/host/calendario_prezzi`; card calendario pulsante "💶 Prezzi" (griglia giorno-per-giorno, ↑/↓ vs base) |
+| **Calendario MULTI-alloggio** (vista d'insieme) | 83 `_host_calendario_tutti` | `GET /api/host/calendario_tutti`; pulsante "🏘️ Tutti gli alloggi" → griglia righe=alloggi × colonne=giorni colorati (verde/rosso/arancione/grigio): con 10 alloggi vedi subito QUALE è occupato in che data |
 
 ## 2) 🟡 COSTRUITO ma SPENTO — come si ACCENDE (i "buchi" che Fable ha trovato)
 Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore in grassetto.**

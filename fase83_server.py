@@ -763,6 +763,8 @@ class RouterHTTP:
             return self._ical_link(query, headers)
         if metodo == "GET" and path == "/api/host/calendario_prezzi":
             return self._host_calendario_prezzi(query, headers)
+        if metodo == "GET" and path == "/api/host/calendario_tutti":
+            return self._host_calendario_tutti(query, headers)
         if metodo == "GET" and path == "/api/host/stripe_link":
             return self._host_stripe_link(headers)
         if metodo == "POST" and path == "/api/telegram/webhook":
@@ -3243,22 +3245,11 @@ class RouterHTTP:
         ok = self._sys.catalogo.imposta_stato(slug, stato)
         return (200 if ok else 422), {"stato": stato if ok else "rifiutato"}
 
-    def _host_calendario(self, query, headers):
-        if not self._auth_host(headers):
-            return 401, {"errore": "unauthorized"}
-        alloggio = query.get("alloggio")
-        da, a = query.get("da"), query.get("a")
-        if not (isinstance(alloggio, str) and alloggio and isinstance(da, str)
-                and isinstance(a, str)):
-            return 422, {"errore": "campi_non_validi"}
-        try:
-            cal = self._sys.inventario.calendario(alloggio, da, a)
-        except Exception:
-            logger.error("host calendario: eccezione ISOLATA", exc_info=True)
-            return 503, {"errore": "service_unavailable"}
-        # IN TRATTATIVA (arancione): giorni tenuti da un hold VIVO (in attesa di pagamento
-        # o di approvazione) — non ancora una prenotazione confermata. Isolato: se fallisce,
-        # il calendario resta valido coi soli stati base.
+    def _cal_arricchito(self, alloggio, da, a):
+        """Celle calendario di UN alloggio (libero/pieno/chiuso/non_caricato) + marcatura
+        'in_trattativa' (arancione) dei giorni con hold VIVO. Riusato dal calendario singolo
+        E da quello di TUTTI gli alloggi. Isolato: l'in_trattativa non blocca mai."""
+        cal = self._sys.inventario.calendario(alloggio, da, a)
         try:
             pp = getattr(self._sys, "pagamenti_pendenti", None)
             if pp is not None and cal:
@@ -3278,7 +3269,49 @@ class RouterHTTP:
                         g["stato"] = "in_trattativa"
         except Exception:
             logger.warning("marcatura in_trattativa fallita (ignorata)", exc_info=True)
+        return cal
+
+    def _host_calendario(self, query, headers):
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        alloggio = query.get("alloggio")
+        da, a = query.get("da"), query.get("a")
+        if not (isinstance(alloggio, str) and alloggio and isinstance(da, str)
+                and isinstance(a, str)):
+            return 422, {"errore": "campi_non_validi"}
+        try:
+            cal = self._cal_arricchito(alloggio, da, a)
+        except Exception:
+            logger.error("host calendario: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
         return 200, {"giorni": cal}
+
+    def _host_calendario_tutti(self, query, headers):
+        """VISTA D'INSIEME multi-alloggio: per OGNI alloggio dell'host, il suo calendario
+        (colori) nel range. Con 10 alloggi l'host vede a colpo d'occhio QUALE è occupato in
+        che data — griglia stile channel-manager. Solo i propri (host dal token)."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        hid = self._host_id_da_token(headers) or query.get("host_id")
+        if not (isinstance(hid, str) and hid):
+            return 422, {"errore": "host_id_mancante"}
+        da, a = query.get("da"), query.get("a")
+        if not (isinstance(da, str) and da and isinstance(a, str) and a):
+            return 422, {"errore": "date_mancanti"}
+        try:
+            listings = self._sys.catalogo.alloggi_host(hid, limit=200)
+            out = []
+            for al in listings:
+                slug = al.get("slug") if isinstance(al, dict) else None
+                if not slug:
+                    continue
+                out.append({"slug": slug,
+                            "titolo": (al.get("titolo") if isinstance(al, dict) else None) or slug,
+                            "giorni": self._cal_arricchito(slug, da, a)})
+        except Exception:
+            logger.error("calendario tutti: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        return 200, {"alloggi": out}
 
     def _host_ical(self, body, headers):
         """Importa il calendario iCal (Airbnb/Booking/Vrbo): blocca le date occupate
