@@ -19,7 +19,7 @@ import unittest
 
 from fase57_vetrina import SLUG_MAX, valida_scheda
 
-SLUG_OK = re.compile(r"^[a-z0-9-]+$")
+SLUG_OK = re.compile(r"^[A-Za-z0-9-]+$")   # il case si PRESERVA: lo slug e' identita'
 
 
 def _valida(slug):
@@ -52,8 +52,13 @@ class TestSlugSicurezza(unittest.TestCase):
         self.assertNotIn("/", sch.slug)
 
     def test_slug_legittimi_invariati(self):
-        """NON deve rompere gli annunci esistenti ne' gli import per id esterno (fase77)."""
-        for s in ("casa-a-roma", "12345678", "bella-casa-2"):
+        """NON deve rompere gli annunci esistenti ne' gli import per id esterno (fase77).
+
+        Il MAIUSCOLO va PRESERVATO: lo slug e' un'identita'. Regressione vera presa dalla suite:
+        col `.lower()` le sim pubblicavano 'casa-R' ma lo trovavano salvato 'casa-r' -> le
+        prenotazioni non maturavano -> saltava il premio referral (2 failure).
+        """
+        for s in ("casa-a-roma", "12345678", "bella-casa-2", "casa-R", "casa-refB"):
             ok, _, sch = _valida(s)
             self.assertTrue(ok)
             self.assertEqual(sch.slug, s, "slug legittimo alterato: %r -> %r" % (s, sch.slug))

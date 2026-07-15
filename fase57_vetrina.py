@@ -181,13 +181,21 @@ def _norm_slug(v: Any) -> Optional[str]:
 
     NORMALIZZA invece di rifiutare, ed e' DETERMINISTICA (stesso input -> stesso slug): gli
     import (fase77 usa gli id esterni property_id/listing_id) restano stabili e il dedup per
-    slug continua a funzionare. Stessa regola di `_slug_unico` (fase83) -> slug auto invariati.
+    slug continua a funzionare.
+
+    ⚠️ NON abbassa il case (niente `.lower()`): lo slug e' un'IDENTITA'. Cambiare 'casa-R' in
+    'casa-r' significa salvare un annuncio a un indirizzo diverso da quello che il chiamante
+    conosce -> lui poi lo cerca con l'originale e non lo trova piu'. (Regressione vera, presa
+    dalla suite: le simulazioni pubblicano 'casa-R'/'casa-refB' e poi prenotano con lo stesso
+    nome; col `.lower()` le prenotazioni non maturavano e saltava il premio referral.) Qui il
+    fine e' TOGLIERE i caratteri pericolosi, non uniformare lo stile: il minuscolo lo applica
+    `fase83._slug_unico`, che GENERA slug nuovi (li' non c'e' identita' preesistente da rompere).
     """
     s = _stringa(v, LIMITE_CAMPO)
     if s is None:
         return None
     s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
-    s = re.sub(r"[^a-zA-Z0-9]+", "-", s).strip("-").lower()[:SLUG_MAX]
+    s = re.sub(r"[^a-zA-Z0-9]+", "-", s).strip("-")[:SLUG_MAX]
     return s or None
 
 
