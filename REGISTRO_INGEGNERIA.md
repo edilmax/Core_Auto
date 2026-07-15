@@ -52,6 +52,7 @@ Money-path completo (prenota → hold/pagamento → escrow → payout), pannelli
 | **Calendario MULTI-alloggio** (vista d'insieme) | 83 `_host_calendario_tutti` | `GET /api/host/calendario_tutti`; pulsante "🏘️ Tutti gli alloggi" → griglia righe=alloggi × colonne=giorni colorati (verde/rosso/arancione/grigio): con 10 alloggi vedi subito QUALE è occupato in che data |
 | **💬 Chat controversia + PROVE FOTO** | 113+83 (`/api/voucher/messaggio|messaggi|prova`, `/api/admin/messaggi`) | il CLIENTE chatta con l'host DAL VOUCHER (zero password, voucher firmato) e carica FOTO-PROVA che entrano nella STESSA conversazione; l'ADMIN-arbitro la legge dal riquadro Controversie ("💬 conversazione + prove"). Un solo posto per tutto |
 | **Check-in digitale** (pre-registrazione ospiti → sblocco) | 127 (+64) | COMPLETO: endpoint + FORM sulla pagina voucher (l'ospite registra gli ospiti online prima dell'arrivo); completato → ✓ verde sul voucher |
+| **Healthcheck VERO container backup** | docker-compose.casavip.yml | fix 2026-07-15: il container `casavip_backup` ereditava l'HEALTHCHECK dell'immagine app (porta 8080 dove NON gira nessun server) → 'unhealthy' perenne (2082 fail di fila, falso allarme che mascherava i guasti veri; i backup in sé giravano ok). Ora il check misura la cosa giusta: ultimo `/data/backup/*.gz` più fresco di 7h (giro ogni 6h) |
 
 ## 2) 🟡 COSTRUITO ma SPENTO — come si ACCENDE (i "buchi" che Fable ha trovato)
 Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore in grassetto.**

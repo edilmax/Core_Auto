@@ -79,6 +79,16 @@ services:
       - casavip_data:/data
     networks:
       - interna
+    # L'immagine casavip-app ha un HEALTHCHECK che interroga la porta 8080, ma qui
+    # non gira nessun server -> il container risultava 'unhealthy' per sempre (falso
+    # allarme che maschera i guasti veri). Controllo giusto: l'ultimo backup e' fresco?
+    # (giro ogni 6h -> rosso se il piu' recente ha piu' di 7h).
+    healthcheck:
+      test: ["CMD", "python", "-c", "import glob,os,sys,time; f=glob.glob('/data/backup/*.gz'); sys.exit(0 if f and time.time()-max(map(os.path.getmtime,f))<25200 else 1)"]
+      interval: 10m
+      timeout: 10s
+      retries: 3
+      start_period: 3m
 
   # Autoheal: riavvia i container marcati 'unhealthy' (restart:unless-stopped NON lo fa).
   # Sidecar opzionale (~6MB). Scommenta per attivarlo.
