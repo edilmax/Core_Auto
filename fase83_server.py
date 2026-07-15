@@ -3979,7 +3979,8 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self._cors()
             self.end_headers()
-            self.wfile.write(dati)
+            if not getattr(self, '_solo_head', False):   # HEAD = header senza corpo
+                self.wfile.write(dati)
 
         def _serve_upload(self, path):
             updir = os.environ.get("UPLOAD_DIR", "data/uploads")
@@ -3996,7 +3997,8 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             self.send_header("Cache-Control", "public, max-age=31536000")
             self._cors()
             self.end_headers()
-            self.wfile.write(dati)
+            if not getattr(self, '_solo_head', False):   # HEAD = header senza corpo
+                self.wfile.write(dati)
 
         def _statico(self, path):
             fpath = percorso_statico_sicuro(path, cartella_statica)
@@ -4016,7 +4018,8 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             self.send_header("Service-Worker-Allowed", "/")
             self._cors()
             self.end_headers()
-            self.wfile.write(dati)
+            if not getattr(self, '_solo_head', False):   # HEAD = header senza corpo
+                self.wfile.write(dati)
 
         def _testo(self, status, ctype, testo):
             dati = testo.encode("utf-8")
@@ -4024,7 +4027,19 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             self.send_header("Content-Type", ctype + "; charset=utf-8")
             self._cors()
             self.end_headers()
-            self.wfile.write(dati)
+            if not getattr(self, '_solo_head', False):   # HEAD = header senza corpo
+                self.wfile.write(dati)
+
+        def do_HEAD(self):
+            """HEAD = GET ma senza corpo. Senza questo metodo BaseHTTPRequestHandler risponde
+            **501 Unsupported method** a OGNI richiesta HEAD: i monitor di uptime (UptimeRobot
+            e simili) usano HEAD di default -> direbbero "sito giu'" mentre il sito e' vivo
+            (falso allarme). Riusa do_GET e scarta il corpo: stessi header, stesso status."""
+            self._solo_head = True
+            try:
+                self.do_GET()
+            finally:
+                self._solo_head = False
 
         def do_OPTIONS(self):
             self.send_response(204)
