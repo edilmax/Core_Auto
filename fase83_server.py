@@ -3049,7 +3049,8 @@ class RouterHTTP:
             try:
                 rep = _imp(item, sorgente=sorgente, catalogo=self._sys.catalogo,
                            inventario=self._sys.inventario, host_id=hid,
-                           genera_slug=self._slug_unico, rehost=self._scarica_immagine)
+                           genera_slug=self._slug_unico, rehost=self._scarica_immagine,
+                           arricchisci=self._geocodifica_se_serve)
             except Exception:
                 logger.error("import portability: eccezione ISOLATA su un annuncio",
                              exc_info=True)

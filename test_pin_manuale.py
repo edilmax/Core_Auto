@@ -142,6 +142,81 @@ class TestPinManuale(unittest.TestCase):
         for c in cat.get("risultati", []):
             self.assertNotIn("pin_manuale", c)
 
+    # ── import dai colossi (fase77): posizione precisa portata con sé ──
+    def test_coord_micro_conversioni(self):
+        from fase77_portability import _coord_micro
+        self.assertEqual(_coord_micro("41.9", "12.5"), (41900000, 12500000))
+        self.assertIsNone(_coord_micro(None, 12))
+        self.assertIsNone(_coord_micro("abc", "12"))
+        self.assertIsNone(_coord_micro(91, 0))
+        self.assertIsNone(_coord_micro(0, 0), "(0,0) = placeholder, mai un pin vero")
+        self.assertIsNone(_coord_micro(True, 1.0))
+
+    def test_import_booking_con_coordinate_esatte(self):
+        self.sys.geocoder = _GC()
+        s, r = self.g("POST", "/api/host/importa", {
+            "sorgente": "booking",
+            "dati": {"property_name": "Import GPS", "city": "Roma",
+                     "currency": "EUR", "base_rate": "90.00", "max_occupancy": 2,
+                     "latitude": 41.90021, "longitude": 12.492231}},
+            {"X-Host-Token": self.tok})
+        self.assertEqual(s, 200, r)
+        self.assertEqual(r["importati"], 1, r)
+        d = self.sys.catalogo.dettaglio_owner(r["risultati"][0]["slug"])
+        self.assertEqual((d["lat_micro"], d["lon_micro"]), (41900210, 12492231),
+                         "le coordinate della piattaforma devono arrivare ESATTE")
+        self.assertTrue(d["pin_manuale"], "coord dell'export = pin fissato (non degradare)")
+
+    def test_import_airbnb_indirizzo_geocodificato(self):
+        self.sys.geocoder = _GC()
+        s, r = self.g("POST", "/api/host/importa", {
+            "sorgente": "airbnb",
+            "dati": {"listing_title": "Import Via", "city": "Roma",
+                     "currency": "EUR", "nightly_price": "80.00", "accommodates": 3,
+                     "address": "Via del Corso 12"}},
+            {"X-Host-Token": self.tok})
+        self.assertEqual(s, 200, r)
+        d = self.sys.catalogo.dettaglio_owner(r["risultati"][0]["slug"])
+        self.assertEqual((d["lat_micro"], d["lon_micro"]), GEO_INDIRIZZO,
+                         "indirizzo dell'export -> geocodifica PRECISA, non centro-città")
+        self.assertEqual(d["indirizzo"], "Via del Corso 12")
+        self.assertFalse(d["pin_manuale"])
+
+    def test_import_coordinate_spazzatura_ripiega(self):
+        self.sys.geocoder = _GC()
+        # (0,0) "null island" -> scartate -> centro città
+        s, r = self.g("POST", "/api/host/importa", {
+            "sorgente": "booking",
+            "dati": {"property_name": "Import rotta", "city": "Roma",
+                     "currency": "EUR", "base_rate": "90.00", "max_occupancy": 2,
+                     "latitude": 0, "longitude": 0}},
+            {"X-Host-Token": self.tok})
+        d = self.sys.catalogo.dettaglio_owner(r["risultati"][0]["slug"])
+        self.assertEqual((d["lat_micro"], d["lon_micro"]), CENTRO_ROMA)
+        self.assertFalse(d["pin_manuale"])
+        # coordinate a >100km dal centro della città dichiarata -> guardia pin
+        s, r = self.g("POST", "/api/host/importa", {
+            "sorgente": "booking",
+            "dati": {"property_name": "Import lontana", "city": "Roma",
+                     "currency": "EUR", "base_rate": "90.00", "max_occupancy": 2,
+                     "latitude": 43.0, "longitude": 12.49}},
+            {"X-Host-Token": self.tok})
+        d = self.sys.catalogo.dettaglio_owner(r["risultati"][0]["slug"])
+        self.assertEqual((d["lat_micro"], d["lon_micro"]), CENTRO_ROMA)
+        self.assertFalse(d["pin_manuale"])
+
+    def test_import_senza_geocoder_non_si_rompe(self):
+        self.assertIsNone(self.sys.geocoder)
+        s, r = self.g("POST", "/api/host/importa", {
+            "sorgente": "booking",
+            "dati": {"property_name": "Import off", "city": "Roma",
+                     "currency": "EUR", "base_rate": "90.00", "max_occupancy": 2,
+                     "latitude": 41.90021, "longitude": 12.492231}},
+            {"X-Host-Token": self.tok})
+        self.assertEqual(s, 200, r)
+        d = self.sys.catalogo.dettaglio_owner(r["risultati"][0]["slug"])
+        self.assertEqual((d["lat_micro"], d["lon_micro"]), (41900210, 12492231))
+
     # ── endpoint /api/host/geocode (centra la mini-mappa prima di salvare) ──
     def test_geocode_endpoint(self):
         self.sys.geocoder = _GC()

@@ -81,6 +81,20 @@ def _primo(raw: Dict[str, Any], *chiavi: str) -> Any:
     return None
 
 
+def _coord_micro(lat: Any, lon: Any) -> Optional[Tuple[int, int]]:
+    """Gradi dell'export (float/str/int) -> microgradi interi; None se non validi.
+    (0,0) = 'null island', placeholder tipico degli export vuoti -> scartato."""
+    try:
+        la, lo = float(str(lat)), float(str(lon))
+    except (TypeError, ValueError):
+        return None
+    if not (-90.0 <= la <= 90.0 and -180.0 <= lo <= 180.0):
+        return None
+    if la == 0.0 and lo == 0.0:
+        return None
+    return int(round(la * 1e6)), int(round(lo * 1e6))
+
+
 def da_booking(raw: Any) -> Dict[str, Any]:
     """Mappa un export stile Booking al formato canonico (best-effort)."""
     if not isinstance(raw, dict):
@@ -90,6 +104,9 @@ def da_booking(raw: Any) -> Dict[str, Any]:
         "slug": _primo(raw, "slug", "property_id", "hotel_id"),
         "titolo": _primo(raw, "property_name", "name", "title"),
         "citta": _primo(raw, "city", "address_city", "town"),
+        "indirizzo": _primo(raw, "address", "address_line", "street_address", "street"),
+        "lat": _primo(raw, "latitude", "lat"),
+        "lon": _primo(raw, "longitude", "lon", "lng"),
         "valuta": _primo(raw, "currency", "currency_code", "curr", "valuta"),
         "prezzo_notte": _primo(raw, "base_rate", "rate", "base_price", "price"),
         "capacita": _primo(raw, "max_occupancy", "capacity", "max_guests"),
@@ -109,6 +126,9 @@ def da_airbnb(raw: Any) -> Dict[str, Any]:
         "slug": _primo(raw, "slug", "listing_id", "id"),
         "titolo": _primo(raw, "listing_title", "name", "title"),
         "citta": _primo(raw, "city", "location_city"),
+        "indirizzo": _primo(raw, "address", "street", "street_address"),
+        "lat": _primo(raw, "latitude", "lat"),
+        "lon": _primo(raw, "longitude", "lng", "lon"),
         "valuta": _primo(raw, "currency", "listing_currency", "curr", "valuta"),
         "prezzo_notte": _primo(raw, "nightly_price", "price", "base_price"),
         "capacita": _primo(raw, "accommodates", "guests", "capacity"),
@@ -198,12 +218,23 @@ def _normalizza(canonico: Dict[str, Any]) -> Tuple[List[str], Optional[Dict[str,
         "prezzo_notte_cents": prezzo, "capacita": int(capacita), "valuta": valuta,
         "descrizione": descr.strip()[:LIMITE_TESTO], "servizi": servizi,
     }
+    # POSIZIONE PRECISA dall'export: indirizzo (privato, per la geocodifica) e/o
+    # coordinate della piattaforma. Le coordinate valgono come pin fissato (fonte
+    # precisa: vince sulla geocodifica; la guardia >100km scarta quelle assurde).
+    indir = canonico.get("indirizzo")
+    if isinstance(indir, str) and indir.strip():
+        scheda["indirizzo"] = indir.strip()[:LIMITE_CAMPO]
+    coord = _coord_micro(canonico.get("lat"), canonico.get("lon"))
+    if coord:
+        scheda["lat_micro"], scheda["lon_micro"] = coord
+        scheda["pin_manuale"] = True
     return errori, scheda, immagini, notti
 
 
 def importa(raw: Any, *, sorgente: str = "canonico", catalogo: Any = None,
             inventario: Any = None, host_id: Optional[str] = None,
-            genera_slug: Any = None, rehost: Any = None) -> ReportImport:
+            genera_slug: Any = None, rehost: Any = None,
+            arricchisci: Any = None) -> ReportImport:
     """Importa una proprieta' da un export (data-portability). Dry-run se catalogo/
     inventario non forniti; altrimenti applica (isolato).
     `host_id`: se fornito, FORZA il proprietario (dal token del pannello) invece di fidarsi
@@ -227,6 +258,16 @@ def importa(raw: Any, *, sorgente: str = "canonico", catalogo: Any = None,
     errori, scheda, immagini, notti = _normalizza(canonico)
     if errori or scheda is None:
         return ReportImport(False, errori=errori, immagini=immagini, notti=notti)
+    # `arricchisci(scheda)->scheda`: gancio iniettato (es. geocodifica del server:
+    # indirizzo->coordinate precise, guardie pin). ISOLATO: se solleva, si importa
+    # comunque con i dati normalizzati.
+    if callable(arricchisci):
+        try:
+            arr = arricchisci(dict(scheda))
+            if isinstance(arr, dict):
+                scheda = arr
+        except Exception:
+            logger.warning("import: arricchisci ISOLATO ha sollevato", exc_info=True)
 
     rep = ReportImport(True, slug=scheda["slug"], scheda=scheda, immagini=immagini,
                        notti=notti)
@@ -253,7 +294,11 @@ def importa(raw: Any, *, sorgente: str = "canonico", catalogo: Any = None,
                                  capacita=scheda["capacita"],
                                  descrizione=scheda["descrizione"],
                                  servizi=scheda["servizi"],
-                                 valuta=scheda.get("valuta", "EUR"))
+                                 valuta=scheda.get("valuta", "EUR"),
+                                 indirizzo=scheda.get("indirizzo", "") or "",
+                                 lat_micro=scheda.get("lat_micro"),
+                                 lon_micro=scheda.get("lon_micro"),
+                                 pin_manuale=bool(scheda.get("pin_manuale", False)))
             imgs = [Immagine(u, i) for i, u in enumerate(immagini)]
             catalogo.pubblica(sch, imgs)
             rep.catalogo_applicato = True
