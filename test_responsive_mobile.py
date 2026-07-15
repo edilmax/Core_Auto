@@ -108,6 +108,23 @@ class TestDesignTokens(unittest.TestCase):
             self.assertRegex(m.group(1), r"^#[0-9a-fA-F]{6}$",
                              "%s: theme-color deve essere hex, non var()" % pag)
 
+    def test_stati_tokenizzati_non_divergono(self):
+        """I colori-stato (calendario+badge) devono venire dai token, non essere riscritti.
+
+        host.html definiva la mappa colori del calendario in DUE punti con gli hex a mano:
+        cambiarne uno e scordare l'altro = i due calendari mostrano stati di colore diverso.
+        Ora entrambe puntano ai token -> non possono piu' divergere.
+        """
+        for pag in self.PAGINE:
+            html = _leggi(pag)
+            for tok in ("--stato-libero:", "--stato-pieno:", "--stato-chiuso:"):
+                self.assertIn(tok, html, "%s: manca il token %s" % (pag, tok))
+        host = _leggi("host.html")
+        for hexv in ("#d4edda", "#f8d7da", "#e2e3e5"):
+            dopo_root = host[host.index("}", host.index(":root{")):]
+            self.assertNotIn(hexv, dopo_root,
+                             "host.html: colore-stato %s riscritto a mano invece del token" % hexv)
+
     def test_niente_var_in_attributi_svg(self):
         """fill/stroke con var() non risolvono se l'SVG non eredita il :root: vietati."""
         for pag in self.PAGINE:

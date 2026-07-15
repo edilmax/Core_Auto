@@ -24,6 +24,11 @@
   --verde-bg:#eafaf0;
   --giallo-bg:#fff3cd;
   --arancio:#ffe0a3;
+  /* STATI (badge + calendario): un solo posto -> i 2 calendari non divergono */
+  --stato-libero:#d4edda;
+  --stato-pieno:#f8d7da;
+  --stato-chiuso:#e2e3e5;
+  --stato-testo-ko:#842029;
 }
 
   *{box-sizing:border-box;margin:0;padding:0}
@@ -43,7 +48,7 @@
   button{background:var(--brand);color:#fff;border:none;padding:.65rem 1.5rem;border-radius:2rem;font-weight:600;font-size:1rem;cursor:pointer;margin-top:1rem}
   button:hover{background:#156b52}
   .msg{padding:.7rem 1rem;border-radius:.7rem;margin-top:.8rem;font-size:.9rem}
-  .msg.ok{background:#d4edda;color:var(--brand-chiaro)}.msg.err{background:#f8d7da;color:#842029}
+  .msg.ok{background:var(--stato-libero);color:var(--brand-chiaro)}.msg.err{background:var(--stato-pieno);color:var(--stato-testo-ko)}
   .key{background:#fff;border-radius:1rem;padding:1rem 1.5rem;margin-bottom:1.5rem;display:flex;gap:1rem;align-items:end}
   .hint{font-weight:400;color:var(--testo-tenue);font-size:.72rem}
 </style>
@@ -177,7 +182,7 @@
     <h2>🏠 <span data-i18n="al_h">Il tuo alloggio</span></h2>
     <p class="hint" style="font-size:.9rem" data-i18n="al_hint">Scegli l'alloggio su cui vuoi lavorare: calendario, disponibilità, prezzi e messaggi qui sotto valgono per quello. Se ne hai uno solo, è già scelto.</p>
     <select id="al_corrente" style="margin-top:.6rem"></select>
-    <div id="al_vuoto" style="display:none;margin-top:.6rem;color:#842029;font-size:.9rem" data-i18n="al_nessuno">Non hai ancora un alloggio: compila "Pubblica alloggio" qui sotto e premi Pubblica.</div>
+    <div id="al_vuoto" style="display:none;margin-top:.6rem;color:var(--stato-testo-ko);font-size:.9rem" data-i18n="al_nessuno">Non hai ancora un alloggio: compila "Pubblica alloggio" qui sotto e premi Pubblica.</div>
   </div>
 
   <div class="card">
@@ -219,10 +224,10 @@
     </div>
     <div id="cal" style="display:flex;flex-wrap:wrap;gap:.3rem;margin-top:1rem"></div>
     <div style="margin-top:.6rem;font-size:.78rem;color:var(--testo-tenue)">
-      <span style="display:inline-block;width:12px;height:12px;background:#d4edda;border-radius:3px"></span> <span data-i18n="cal_libero">libero</span>
-      <span style="display:inline-block;width:12px;height:12px;background:#f8d7da;border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_pieno">occupato</span>
+      <span style="display:inline-block;width:12px;height:12px;background:var(--stato-libero);border-radius:3px"></span> <span data-i18n="cal_libero">libero</span>
+      <span style="display:inline-block;width:12px;height:12px;background:var(--stato-pieno);border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_pieno">occupato</span>
       <span style="display:inline-block;width:12px;height:12px;background:var(--arancio);border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_tratt">in trattativa (attesa pagamento/approvazione)</span>
-      <span style="display:inline-block;width:12px;height:12px;background:#e2e3e5;border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_chiuso">chiuso</span>
+      <span style="display:inline-block;width:12px;height:12px;background:var(--stato-chiuso);border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_chiuso">chiuso</span>
       <span style="display:inline-block;width:12px;height:12px;background:#fff;border:1px solid var(--bordo);border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_nc">non caricato</span>
     </div>
     <div id="msgCal"></div>
@@ -497,7 +502,7 @@ async function caricaPrenotazioni(){
     if(!lst.length){ box.innerHTML='<div style="color:var(--testo-tenue)">'+T('pren_vuoto')+'</div>'; return; }
     box.innerHTML='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'+
       '<thead><tr style="text-align:left;font-size:.72rem;color:#4a5b7a"><th>'+T('th_all2')+'</th><th>'+T('l_da')+'</th><th>'+T('l_a')+'</th><th>'+T('th_stato')+'</th></tr></thead><tbody>'+
-      lst.map(p=>`<tr style="border-top:1px solid var(--sfondo-tenue)"><td>${(p.alloggio||'').replace(/[<>]/g,'')}</td><td>${p.check_in||''}</td><td>${p.check_out||''}</td><td>${p.stato==='rimborsata'?('<span style="color:#842029">'+T('pren_rimb')+'</span>'):('<span style="color:var(--brand-chiaro)">'+T('pren_conf')+'</span>')}</td></tr>`).join('')+
+      lst.map(p=>`<tr style="border-top:1px solid var(--sfondo-tenue)"><td>${(p.alloggio||'').replace(/[<>]/g,'')}</td><td>${p.check_in||''}</td><td>${p.check_out||''}</td><td>${p.stato==='rimborsata'?('<span style="color:var(--stato-testo-ko)">'+T('pren_rimb')+'</span>'):('<span style="color:var(--brand-chiaro)">'+T('pren_conf')+'</span>')}</td></tr>`).join('')+
       '</tbody></table></div>';
   }catch(e){}
 }
@@ -877,7 +882,7 @@ document.getElementById('cv_send').onclick = async ()=>{
 };
 document.getElementById('btnCalTutti').onclick = async ()=>{
   const box=document.getElementById('calTutti'); box.textContent='⏳';
-  const col={libero:'#d4edda',pieno:'#f8d7da',in_trattativa:'var(--arancio)',chiuso:'#e2e3e5',non_caricato:'#fff'};
+  const col={libero:'var(--stato-libero)',pieno:'var(--stato-pieno)',in_trattativa:'var(--arancio)',chiuso:'var(--stato-chiuso)',non_caricato:'#fff'};
   try{
     const da=document.getElementById('c_da').value, a=document.getElementById('c_a').value;
     const r=await fetch(API+'/api/host/calendario_tutti?da='+da+'&a='+a,{headers:authHeaders()});
@@ -912,7 +917,7 @@ document.getElementById('btnCalPrezzi').onclick = async ()=>{
       (d.celle||[]).map(c=>{
         if(c.prezzo_cents==null) return '<span style="min-width:88px;padding:.25rem;border:1px solid var(--sfondo-tenue);border-radius:.4rem;color:#a9b4c9;text-align:center">'+c.giorno.slice(5)+'<br>—</span>';
         const su=(c.prezzo_dinamico_cents>c.prezzo_cents), giu=(c.prezzo_dinamico_cents<c.prezzo_cents);
-        const col=c.stato==='prenotato'?'#f8d7da':(su?'#d4edda':'#fff');
+        const col=c.stato==='prenotato'?'var(--stato-pieno)':(su?'var(--stato-libero)':'#fff');
         return '<span style="min-width:88px;padding:.25rem;border:1px solid var(--sfondo-tenue);border-radius:.4rem;text-align:center;background:'+col+'">'+c.giorno.slice(5)+'<br><b>'+money(c.prezzo_dinamico_cents,V)+'</b>'+((su||giu)?'<br><span style="font-size:.72rem;color:var(--testo-tenue)">'+(su?'↑':'↓')+' base '+money(c.prezzo_cents,V)+'</span>':'')+'</span>';
       }).join('')+'</div>';
   }catch(e){ box.className='msg err'; box.textContent=T('errore')+' '+e.message; }
@@ -965,7 +970,7 @@ document.getElementById('btnImporta').onclick = async ()=>{
   if(r.status===200){
     const d=r.data;
     const falliti=(d.risultati||[]).filter(x=>!x.ok)
-      .map(x=>`<div style="font-size:.8rem;color:#842029">• ${(x.titolo||x.slug||'?')}: ${(x.errori||[]).join(', ')}</div>`).join('');
+      .map(x=>`<div style="font-size:.8rem;color:var(--stato-testo-ko)">• ${(x.titolo||x.slug||'?')}: ${(x.errori||[]).join(', ')}</div>`).join('');
     m.className='msg '+(d.importati>0?'ok':'err');
     m.innerHTML=(d.importati>0?('✅ '+d.importati+'/'+d.totale+' '+T('imp_ok')):('❌ '+T('imp_vuoto')))+falliti;
     document.getElementById('imp_files').value='';
@@ -1062,8 +1067,8 @@ document.getElementById('btnCal').onclick = async ()=>{
     const res = await fetch(API+'/api/host/calendario?'+p.toString(), {headers:authHeaders()});
     if(res.status===401){ m.className='msg err'; m.textContent=T('err_key'); return; }
     const d = await res.json();
-    const col = {libero:'#d4edda', pieno:'#f8d7da', in_trattativa:'var(--arancio)',
-                 chiuso:'#e2e3e5', non_caricato:'#fff'};
+    const col = {libero:'var(--stato-libero)', pieno:'var(--stato-pieno)', in_trattativa:'var(--arancio)',
+                 chiuso:'var(--stato-chiuso)', non_caricato:'#fff'};
     document.getElementById('cal').innerHTML = (d.giorni||[]).map(g=>{
       const gg = g.giorno.slice(8);
       const bg = col[g.stato]||'#fff';

@@ -26,6 +26,11 @@
   --verde-bg:#eafaf0;
   --giallo-bg:#fff3cd;
   --arancio:#ffe0a3;
+  /* STATI (badge + calendario): un solo posto -> i 2 calendari non divergono */
+  --stato-libero:#d4edda;
+  --stato-pieno:#f8d7da;
+  --stato-chiuso:#e2e3e5;
+  --stato-testo-ko:#842029;
 }
 
   *{box-sizing:border-box;margin:0;padding:0}
@@ -67,7 +72,7 @@
   #lbN{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);color:#fff;font-size:.9rem;opacity:.85}
   .card .prezzo{font-size:1.5rem;font-weight:700;color:var(--brand)}
   .card .badge{display:inline-block;background:var(--sfondo-tenue);padding:.15rem .7rem;border-radius:1rem;font-size:.72rem;font-weight:600;color:#156b52;margin:.15rem .2rem 0 0}
-  .card .badge.green{background:#d4edda;color:var(--brand-chiaro)}.card .badge.red{background:#f8d7da;color:#842029}
+  .card .badge.green{background:var(--stato-libero);color:var(--brand-chiaro)}.card .badge.red{background:var(--stato-pieno);color:var(--stato-testo-ko)}
   .card .meta{margin-top:.5rem;font-size:.88rem;color:#4a5b7a;flex:1}
   .card button{margin-top:.75rem;background:#156b52;color:#fff;border:none;padding:.5rem;border-radius:2rem;cursor:pointer;font-weight:600}
   .card button:hover{background:var(--brand)}
@@ -81,7 +86,7 @@
   .prenota-btn{margin-top:1rem;width:100%;background:var(--brand);color:#fff;border:none;padding:.8rem;border-radius:2rem;font-size:1.05rem;font-weight:600;cursor:pointer}
   .loading,.vuoto{text-align:center;padding:3rem;color:var(--testo-tenue);font-style:italic}
   .msg{padding:.7rem 1rem;border-radius:.7rem;margin-top:.5rem;font-size:.9rem}
-  .msg.ok{background:#d4edda;color:var(--brand-chiaro)}.msg.err{background:#f8d7da;color:#842029}
+  .msg.ok{background:var(--stato-libero);color:var(--brand-chiaro)}.msg.err{background:var(--stato-pieno);color:var(--stato-testo-ko)}
   @media(max-width:640px){.filtri .riga{flex-direction:column;align-items:stretch}}
   /* telefoni piccoli (320px): meno padding = piu' larghezza utile; niente scroll orizzontale */
   @media(max-width:400px){body{padding:.75rem}.risultati{gap:1rem}.filtri{padding:1rem}}

@@ -23,6 +23,11 @@
   --verde-bg:#eafaf0;
   --giallo-bg:#fff3cd;
   --arancio:#ffe0a3;
+  /* STATI (badge + calendario): un solo posto -> i 2 calendari non divergono */
+  --stato-libero:#d4edda;
+  --stato-pieno:#f8d7da;
+  --stato-chiuso:#e2e3e5;
+  --stato-testo-ko:#842029;
 }
 
   *{box-sizing:border-box;margin:0;padding:0}
@@ -33,14 +38,14 @@
   input,select{padding:.5rem .7rem;border-radius:.7rem;border:1px solid var(--bordo);font-size:1rem}
   button{background:var(--brand);color:#fff;border:none;padding:.55rem 1.3rem;border-radius:2rem;font-weight:600;cursor:pointer}
   button:hover{background:#156b52}
-  button.danger{background:#b02a37}.button.danger:hover{background:#842029}
+  button.danger{background:#b02a37}.button.danger:hover{background:var(--stato-testo-ko)}
   table{width:100%;border-collapse:collapse;background:#fff;border-radius:1rem;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,.05)}
   th,td{padding:.7rem .9rem;text-align:left;font-size:.9rem;border-bottom:1px solid var(--sfondo-tenue)}
   th{background:#eef7f2;color:#4a5b7a;text-transform:uppercase;font-size:.72rem;letter-spacing:.03em}
   .tag{display:inline-block;padding:.1rem .6rem;border-radius:1rem;font-size:.72rem;font-weight:600}
-  .tag.ok{background:#d4edda;color:var(--brand-chiaro)}.tag.attiva{background:var(--sfondo-tenue);color:#156b52}
+  .tag.ok{background:var(--stato-libero);color:var(--brand-chiaro)}.tag.attiva{background:var(--sfondo-tenue);color:#156b52}
   .msg{padding:.7rem 1rem;border-radius:.7rem;margin:.8rem 0;font-size:.9rem}
-  .msg.ok{background:#d4edda;color:var(--brand-chiaro)}.msg.err{background:#f8d7da;color:#842029}
+  .msg.ok{background:var(--stato-libero);color:var(--brand-chiaro)}.msg.err{background:var(--stato-pieno);color:var(--stato-testo-ko)}
   .key{display:flex;gap:.6rem;align-items:center;margin-bottom:1.2rem;flex-wrap:wrap}
 </style>
 </head>
