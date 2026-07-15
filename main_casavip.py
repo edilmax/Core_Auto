@@ -85,6 +85,23 @@ def main() -> None:  # pragma: no cover
         d = os.path.dirname(p)
         if d:
             os.makedirs(d, exist_ok=True)
+    # ── FAIL-CLOSED sulle chiavi d'accesso (mina disinnescata, collaudo 2026-07-15) ──
+    # `RouterHTTP._auth_host` ha un ramo comodo per lo sviluppo: `if self._host_key is None:
+    # return True` (passa chiunque). In piu' gli endpoint host ripiegano su `query['host_id']`
+    # quando non c'e' un token. Combinati, se HOST_KEY sparisce dall'ambiente (server nuovo,
+    # typo, reset del .env) l'API host diventa APERTA A TUTTI: `/api/host/payout?host_id=<tizio>`
+    # restituirebbe payout, prenotazioni e dati personali di QUALSIASI host. E' un default
+    # fail-OPEN: il guasto silenzioso e' peggio del sito giu'. Qui, al confine del deploy,
+    # si fallisce CHIUSO: meglio non partire che partire spalancati.
+    # (I test non passano da qui: usano crea_router() direttamente, quindi restano invariati.)
+    _mancanti = [n for n in ("HOST_KEY", "ADMIN_KEY") if not os.environ.get(n)]
+    if _mancanti:
+        logging.critical(
+            "RIFIUTO DI PARTIRE: manca %s. Senza, l'API host/admin sarebbe aperta a chiunque "
+            "(es. /api/host/payout?host_id=<altrui>). Impostale in .env.casavip e riavvia.",
+            " e ".join(_mancanti))
+        raise SystemExit(2)
+
     sistema = crea_sistema(config)
     logging.info("Composizione: %s", sistema.report)
     servi(sistema,
