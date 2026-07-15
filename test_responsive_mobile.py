@@ -78,6 +78,32 @@ class TestResponsive320(unittest.TestCase):
                       "index.html: manca il guard overflow-x sul body")
 
 
+class TestErrorBoundary(unittest.TestCase):
+    """FASE 3 collegamenti — `api()` non deve MAI sollevare: l'errore va MOSTRATO, non ingoiato.
+
+    BUG: `api()` faceva `return r.json()` senza guardare lo stato HTTP. Con un 500/502 che
+    risponde HTML (non JSON), `r.json()` SOLLEVA e l'eccezione finiva in uno dei 25 `catch(e){}`
+    vuoti -> schermo muto ("non succede niente"), il guasto invisibile. Ora ogni esito e' un
+    oggetto con `.errore`, che i chiamanti gia' sanno leggere.
+    """
+    def setUp(self):
+        self.html = _leggi("index.html")
+
+    def test_api_non_solleva_mai(self):
+        m = re.search(r"async function api\(path, opts\)\{(.+?)\n\}", self.html, re.S)
+        self.assertIsNotNone(m, "api(): forma cambiata, ricontrollare l'error boundary")
+        corpo = m.group(1)
+        self.assertIn("catch", corpo, "api() deve intercettare gli errori di rete")
+        self.assertIn("errore", corpo, "api() deve restituire un .errore leggibile")
+        self.assertNotRegex(corpo.replace(" ", ""), r"^\s*constr=awaitfetch.*returnr\.json\(\);$",
+                            "api(): tornata la versione che solleva")
+
+    def test_errore_server_non_sembra_catalogo_vuoto(self):
+        """Un guasto NON deve mostrare 'Stiamo aprendo a X!': sarebbe una bugia al cliente."""
+        self.assertIn("!data.risultati && data.errore", self.html,
+                      "cerca(): un errore server verrebbe scambiato per 'nessun alloggio'")
+
+
 class TestDesignTokens(unittest.TestCase):
     """FASE 2 carrozzeria — la palette sta in UN posto solo (design tokens).
 

@@ -246,7 +246,22 @@ function valutaOspite(){
   return M[reg]||'';
 }
 function fmtDist(m){ if(m==null) return ''; return m<1000 ? Math.round(m)+' m' : (m/1000).toFixed(1)+' km'; }
-async function api(path, opts){ const r = await fetch(API+path, opts); return r.json(); }
+// ERROR BOUNDARY (FASE 3): `api()` NON solleva MAI. Prima faceva `return r.json()` e basta:
+// se il server rispondeva 500/502 con HTML (non JSON), r.json() SOLLEVAVA e l'eccezione finiva
+// in uno dei tanti `catch(e){}` vuoti -> schermo muto, l'utente non capiva perche' "non succede
+// niente". Ora ogni esito diventa un OGGETTO che il chiamante sa gia' leggere (`.errore`).
+// Compatibile all'indietro: con una risposta JSON (2xx o 4xx) ritorna il corpo IDENTICO a prima
+// (i 4xx con {errore:...} servono: li usiamo per i messaggi onesti). `_http` = stato reale.
+async function api(path, opts){
+  let r;
+  try{ r = await fetch(API+path, opts); }
+  catch(e){ return {ok:false, errore:'rete_non_raggiungibile', _http:0}; }
+  let d = null;
+  try{ d = await r.json(); }catch(e){ d = null; }
+  if(d && typeof d === 'object'){ d._http = r.status; return d; }
+  return {ok:false, _http:r.status,
+          errore: r.ok ? 'risposta_non_valida' : ('errore_server_'+r.status)};
+}
 
 // Lingua iniziale: 1) scelta salvata  2) lingua del browser  3) inglese (default globale).
 function linguaIniziale(){
@@ -341,6 +356,13 @@ async function cerca(){
   LAST_PARAMS = Object.assign({}, params);
   try{
     const data = await api('/api/catalogo?'+new URLSearchParams(params).toString());
+    // ora che api() non solleva piu', un errore server NON deve essere scambiato per
+    // "nessun alloggio": sarebbe una bugia ("Stiamo aprendo a X!") al posto di un guasto.
+    if(!data.risultati && data.errore){
+      ris.innerHTML = `<div class="msg err">${t('errore')}: ${esc(data.errore)}</div>`;
+      document.getElementById('vista').style.display='none';
+      return;
+    }
     if(data.risultati && data.risultati.length){
       ULTIMI_RIS = data.risultati;
       ris.innerHTML = data.risultati.map(cardHtml).join('');
