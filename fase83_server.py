@@ -719,6 +719,11 @@ def _ip_host_pubblico(host: str) -> bool:
     return True
 
 
+# Tetto anti-abuso: quante email di preventivo puo' ricevere UN indirizzo in un'ora.
+# 3 e' generoso per un utente vero (che ne chiede una, forse due) e stretto per un abusante.
+MAX_PREVENTIVI_EMAIL_ORA = 3
+
+
 class RouterHTTP:
     """Router PURO (testabile): cabla il SistemaCasaVIP (fase81) sulle rotte HTTP."""
 
@@ -2490,6 +2495,23 @@ class RouterHTTP:
         chiave = (email.strip().lower(), slug, ci, co)
         if ora - mem.get(chiave, 0) < 600:
             return 429, {"errore": "gia_inviato_riprova_piu_tardi"}
+        # TETTO PER INDIRIZZO (anti-abuso, collaudo 2026-07-15). Il throttle qui sopra e' per
+        # (email, alloggio, DATE): si aggira BANALMENTE cambiando data -> PROVATO che si potevano
+        # spedire N email a un estraneo. Questo endpoint manda posta a un indirizzo scelto dal
+        # chiamante: senza tetto siamo un mezzo per bombardare terzi DAL NOSTRO dominio. Il danno
+        # vero non e' lo spam: e' info@bookinvip.com in BLACKLIST -> voucher e avvisi host non
+        # consegnati piu' (cioe' il prodotto muore in silenzio).
+        em = email.strip().lower()
+        storia = getattr(self, "_prev_email_storia", None)
+        if storia is None:
+            storia = {}
+            self._prev_email_storia = storia
+        recenti = [t for t in storia.get(em, []) if ora - t < 3600]
+        storia[em] = recenti
+        for k in [k for k, v in list(storia.items()) if not v]:
+            storia.pop(k, None)                      # niente crescita infinita in memoria
+        if len(recenti) >= MAX_PREVENTIVI_EMAIL_ORA:
+            return 429, {"errore": "troppe_richieste_per_questa_email"}
         # ricalcolo dal server: se le date non reggono piu', niente email (onesto)
         try:
             r = self._sys.concierge.quota({
@@ -2531,6 +2553,7 @@ class RouterHTTP:
         if not prov.invia(email.strip(), oggetto, html):
             return 502, {"errore": "invio_fallito"}
         mem[chiave] = ora
+        storia.setdefault(em, []).append(ora)   # conta verso il tetto orario per indirizzo
         return 200, {"stato": "inviata"}
 
     def _marketing_campagna(self, body, headers):
