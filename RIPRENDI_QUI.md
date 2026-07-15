@@ -28,17 +28,24 @@ certificato Let's Encrypt esisteva già in `/etc/letsencrypt` ma il file SSL lo 
    (webroot = `/var/www/bookinvip/certbot/www`) + `renew_hook = docker exec casavip_nginx nginx -s reload`.
    Collaudato con `certbot renew --dry-run` → **success**. `certbot.timer` è enabled+active.
 
-## ▶️ COME AGGIORNARE IL SITO D'ORA IN POI (procedura SICURA)
+## ▶️ COME AGGIORNARE IL SITO D'ORA IN POI (procedura SICURA — pattern "rm-first")
 Dalla cartella del VPS `/var/www/bookinvip`:
 ```bash
-git pull                                   # NON usare 'git reset --hard': cancellerebbe la config HTTPS!
-docker rm -f casavip_nginx                 # evita il bug KeyError:ContainerConfig di compose v1.29.2
+git pull
+docker-compose -f docker-compose.casavip.yml build app
+docker-compose -f docker-compose.casavip.yml stop app backup
+docker-compose -f docker-compose.casavip.yml rm -f app backup
 docker-compose -f docker-compose.casavip.yml up -d
 ```
-> ⚠️ La modifica che accende l'HTTPS è **solo nel working tree del VPS**, non ancora su GitHub.
-> Un `git reset --hard origin/master` la CANCELLA (→ addio 443). Per renderla permanente: fare commit +
-> push su GitHub (`edilmax/Core_Auto`) del `docker-compose.casavip.yml` modificato, poi allineare il VPS.
-> (Meglio ancora, a lungo termine: installare `docker compose` v2 e usare `docker-compose.casavip.ssl.yml`.)
+> **Perché così:** il `build app` è OBBLIGATORIO se cambia il codice o `deploy/` (il frontend è COPIato
+> dentro l'immagine: senza build, il sito resta quello vecchio). Lo `stop`+`rm -f` PRIMA dell'`up`
+> evita il bug `KeyError: ContainerConfig` di `docker-compose` v1.29.2 (crasha quando RI-crea container
+> con volumi). Solo documentazione cambiata → basta `git pull`.
+> ✅ **Verificato 2026-07-15**: la config HTTPS (443 + `nginx.casavip.ssl.conf` + `/etc/letsencrypt` +
+> `certbot/www`) è **committata su GitHub** e il VPS non ha modifiche locali (`git diff` vuoto) →
+> l'infrastruttura è riproducibile. *(La vecchia nota "l'HTTPS vive solo nel working tree del VPS,
+> `git reset --hard` lo cancella" era vera a luglio ma ora è SUPERATA.)*
+> A lungo termine resta consigliato installare `docker compose` v2 (elimina i bug di v1.29.2).
 
 ## 📌 CONTROLLI RAPIDI (dal proprio PC)
 ```bash
