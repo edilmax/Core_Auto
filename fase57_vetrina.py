@@ -128,6 +128,8 @@ class SchedaAlloggio:
     sconto_settimana_bps: int = 0      # sconto soggiorno >=7 notti (bps; l'host lo offre)
     sconto_mese_bps: int = 0           # sconto soggiorno >=28 notti (bps; prevale su settimana)
     modalita_prenotazione: str = "immediata"   # immediata | su_richiesta (l'host sceglie)
+    pin_manuale: bool = False          # True = posizione FISSATA dall'host sulla mappa
+                                       # (trascinando il pin): vince sulla geocodifica
 
 
 # Politiche di cancellazione che l'host puo' scegliere (coerenti con fase111).
@@ -254,7 +256,8 @@ def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
         lat_micro=lat, lon_micro=lon, politica_cancellazione=pol,
         tassa_pp_notte_cents=t_pp, tassa_max_notti=t_max, tassa_perc_bps=t_perc,
         sconto_settimana_bps=sc_sett, sconto_mese_bps=sc_mese,
-        modalita_prenotazione=modal)
+        modalita_prenotazione=modal,
+        pin_manuale=bool(data.get("pin_manuale", False)))
 
 
 def _valida_immagini(imgs: Any) -> List[Immagine]:
@@ -335,6 +338,7 @@ class CatalogoVetrina:
                         sconto_settimana_bps INTEGER NOT NULL DEFAULT 0,
                         sconto_mese_bps INTEGER NOT NULL DEFAULT 0,
                         modalita_prenotazione TEXT NOT NULL DEFAULT 'immediata',
+                        pin_manuale INTEGER NOT NULL DEFAULT 0,
                         creato_ts TEXT NOT NULL,
                         aggiornato_ts TEXT NOT NULL)""")
                 for _c, _d in (("politica_cancellazione", "TEXT NOT NULL DEFAULT 'flessibile'"),
@@ -344,7 +348,8 @@ class CatalogoVetrina:
                                ("indirizzo", "TEXT NOT NULL DEFAULT ''"),
                                ("sconto_settimana_bps", "INTEGER NOT NULL DEFAULT 0"),
                                ("sconto_mese_bps", "INTEGER NOT NULL DEFAULT 0"),
-                               ("modalita_prenotazione", "TEXT NOT NULL DEFAULT 'immediata'")):
+                               ("modalita_prenotazione", "TEXT NOT NULL DEFAULT 'immediata'"),
+                               ("pin_manuale", "INTEGER NOT NULL DEFAULT 0")):
                     try:
                         con.execute("ALTER TABLE alloggi ADD COLUMN %s %s" % (_c, _d))
                     except sqlite3.OperationalError:
@@ -385,8 +390,8 @@ class CatalogoVetrina:
                     "valuta, stato, lat_micro, lon_micro, politica_cancellazione, "
                     "tassa_pp_notte_cents, tassa_max_notti, tassa_perc_bps, "
                     "sconto_settimana_bps, sconto_mese_bps, "
-                    "modalita_prenotazione, creato_ts, aggiornato_ts) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "modalita_prenotazione, pin_manuale, creato_ts, aggiornato_ts) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (scheda.host_id, scheda.slug, scheda.titolo, scheda.descrizione,
                      scheda.citta, scheda.paese, scheda.indirizzo, scheda.prezzo_notte_cents,
                      scheda.capacita, scheda.camere, scheda.bagni, mask, scheda.valuta,
@@ -394,7 +399,8 @@ class CatalogoVetrina:
                      scheda.politica_cancellazione, scheda.tassa_pp_notte_cents,
                      scheda.tassa_max_notti, scheda.tassa_perc_bps,
                      scheda.sconto_settimana_bps, scheda.sconto_mese_bps,
-                     scheda.modalita_prenotazione, ora, ora))
+                     scheda.modalita_prenotazione, 1 if scheda.pin_manuale else 0,
+                     ora, ora))
                 alloggio_id = cur.lastrowid
             else:
                 alloggio_id = row["id"]
@@ -404,14 +410,15 @@ class CatalogoVetrina:
                     "servizi_mask=?, valuta=?, stato=?, lat_micro=?, lon_micro=?, "
                     "politica_cancellazione=?, tassa_pp_notte_cents=?, tassa_max_notti=?, "
                     "tassa_perc_bps=?, sconto_settimana_bps=?, sconto_mese_bps=?, "
-                    "modalita_prenotazione=?, aggiornato_ts=? WHERE id=?",
+                    "modalita_prenotazione=?, pin_manuale=?, aggiornato_ts=? WHERE id=?",
                     (scheda.host_id, scheda.titolo, scheda.descrizione, scheda.citta,
                      scheda.paese, scheda.indirizzo, scheda.prezzo_notte_cents, scheda.capacita,
                      scheda.camere, scheda.bagni, mask, scheda.valuta, scheda.stato,
                      scheda.lat_micro, scheda.lon_micro, scheda.politica_cancellazione,
                      scheda.tassa_pp_notte_cents, scheda.tassa_max_notti, scheda.tassa_perc_bps,
                      scheda.sconto_settimana_bps, scheda.sconto_mese_bps,
-                     scheda.modalita_prenotazione, ora, alloggio_id))
+                     scheda.modalita_prenotazione, 1 if scheda.pin_manuale else 0,
+                     ora, alloggio_id))
             con.execute("DELETE FROM alloggio_immagini WHERE alloggio_id=?", (alloggio_id,))
             if imgs:
                 con.executemany(
@@ -698,6 +705,9 @@ class CatalogoVetrina:
             d["lon_micro"] = a["lon_micro"]
             d["sconto_settimana_bps"] = a["sconto_settimana_bps"] if "sconto_settimana_bps" in a.keys() else 0
             d["sconto_mese_bps"] = a["sconto_mese_bps"] if "sconto_mese_bps" in a.keys() else 0
+            # pin fissato a mano dall'host: il form deve saperlo per NON farlo
+            # sovrascrivere dalla geocodifica dell'indirizzo al prossimo salvataggio
+            d["pin_manuale"] = bool(a["pin_manuale"]) if "pin_manuale" in a.keys() else False
         return d
 
     # --- contratti JSON (tutti gli importi int cents; tassi/geo interi) ---

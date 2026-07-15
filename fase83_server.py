@@ -881,6 +881,8 @@ class RouterHTTP:
             return self._host_prenotazioni(query, headers)
         if metodo == "GET" and path == "/api/host/alloggio":
             return self._host_alloggio_dettaglio(query, headers)
+        if metodo == "GET" and path == "/api/host/geocode":
+            return self._host_geocode(query, headers)
         if metodo == "GET" and path == "/api/host/accettazioni":
             return self._host_accettazioni(query, headers)
         if metodo == "POST" and path == "/api/host/stato":
@@ -2963,6 +2965,30 @@ class RouterHTTP:
             citta = dati.get("citta")
             indir = str(dati.get("indirizzo", "") or "").strip()
             ha_coord = _ok(dati.get("lat_micro")) and _ok(dati.get("lon_micro"))
+            # PIN MANUALE: l'host ha trascinato il segnaposto sulla mappa -> la sua
+            # scelta VINCE su città e indirizzo (è la dichiarazione più esplicita).
+            # Guardia anti-disastro: un pin a >100km dal centro della SUA città è
+            # quasi certamente un errore (continente sbagliato, tocco involontario)
+            # -> pin e coordinate scartati, si torna alla geocodifica normale.
+            if dati.get("pin_manuale"):
+                if not ha_coord:
+                    dati = dict(dati)
+                    dati["pin_manuale"] = False      # flag senza coordinate: non vale
+                else:
+                    centro = gc.geocodifica(citta) if (
+                        isinstance(citta, str) and citta.strip()) else None
+                    if not centro:
+                        return dati                  # niente centro con cui confrontare
+                    from fase121_geo_ricerca import distanza_m
+                    d_m = distanza_m(dati["lat_micro"], dati["lon_micro"],
+                                     centro[0], centro[1])
+                    if not (isinstance(d_m, int) and d_m > 100_000):
+                        return dati                  # pin sensato: parola all'host
+                    dati = dict(dati)                # pin assurdo: via flag e coordinate
+                    dati["pin_manuale"] = False
+                    dati.pop("lat_micro", None)
+                    dati.pop("lon_micro", None)
+                    ha_coord = False
             # con INDIRIZZO -> geocodifica sempre da lì (fonte PRECISA, anche in modifica);
             # senza indirizzo -> solo se mancano le coordinate (non degradare una posizione
             # già precisa a centro-città). Cache-hit se l'indirizzo non è cambiato: istantaneo.
@@ -3510,6 +3536,29 @@ class RouterHTTP:
         if d is None:
             return 404, {"errore": "non_trovato"}
         return 200, d
+
+    def _host_geocode(self, query, headers):
+        """Coordinate per centrare la mini-mappa del form host sui campi digitati
+        (città/indirizzo), PRIMA di salvare. Host-auth (il geocoder non si espone
+        ad anonimi); cache-first fase166 -> Nominatim al massimo 1 volta per chiave."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        gc = getattr(self._sys, "geocoder", None)
+        if gc is None:
+            return 503, {"errore": "geocoder_spento"}
+        citta = str(query.get("citta", "") or "").strip()[:200]
+        indir = str(query.get("indirizzo", "") or "").strip()[:200]
+        paese = str(query.get("paese", "") or "").strip()[:200]
+        if not (citta or indir):
+            return 422, {"errore": "citta_o_indirizzo_richiesti"}
+        try:
+            coord = gc.geocodifica(citta, indirizzo=indir, paese=paese)
+        except Exception:
+            logger.warning("host geocode: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        if not coord:
+            return 404, {"errore": "non_trovata"}
+        return 200, {"lat_micro": int(coord[0]), "lon_micro": int(coord[1])}
 
     def _host_stato(self, body, headers):
         if not self._auth_host(headers):

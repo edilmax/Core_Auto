@@ -53,6 +53,7 @@ Money-path completo (prenota → hold/pagamento → escrow → payout), pannelli
 | **💬 Chat controversia + PROVE FOTO** | 113+83 (`/api/voucher/messaggio|messaggi|prova`, `/api/admin/messaggi`) | il CLIENTE chatta con l'host DAL VOUCHER (zero password, voucher firmato) e carica FOTO-PROVA che entrano nella STESSA conversazione; l'ADMIN-arbitro la legge dal riquadro Controversie ("💬 conversazione + prove"). Un solo posto per tutto |
 | **Check-in digitale** (pre-registrazione ospiti → sblocco) | 127 (+64) | COMPLETO: endpoint + FORM sulla pagina voucher (l'ospite registra gli ospiti online prima dell'arrivo); completato → ✓ verde sul voucher |
 | **Healthcheck VERO container backup** | docker-compose.casavip.yml | fix 2026-07-15: il container `casavip_backup` ereditava l'HEALTHCHECK dell'immagine app (porta 8080 dove NON gira nessun server) → 'unhealthy' perenne (2082 fail di fila, falso allarme che mascherava i guasti veri; i backup in sé giravano ok). Ora il check misura la cosa giusta: ultimo `/data/backup/*.gz` più fresco di 7h (giro ogni 6h) |
+| **📍 Pin trascinabile (posizione al portone)** | 57 (`pin_manuale`) + 83 (`_geocodifica_se_serve`, `GET /api/host/geocode`) + host.html | 2026-07-15: l'host apre la mini-mappa nel form (Leaflet lazy) e trascina il segnaposto sul portone → `pin_manuale=true` e il pin VINCE sulla geocodifica dell'indirizzo (anche in modifica: il flag è persistito e ri-mandato dal form). Guardie: pin >100km dal centro della sua città = errore → scartato, geocodifica normale; flag senza coordinate ignorato; riscrivi l'indirizzo → l'ultima dichiarazione vince (flag giù, si può ri-trascinare). `/api/host/geocode` (host-auth) centra la mappa su città/indirizzo digitati PRIMA di salvare (cache-first 166). Privacy: `pin_manuale` mai nelle viste pubbliche. Migrazione colonna auto. test_pin_manuale (9) |
 | **Email con RETRY anti-singhiozzo** | 86 | fix 2026-07-15: in prod UN invio perso per timeout transitorio SMTP Hostinger (SMTPServerDisconnected; diagnosi: SMTP sano, 1 solo fallimento nella storia = singhiozzo). Prima l'email era persa per sempre (grave se era il link di pagamento di un su-richiesta approvato). Ora: eccezione di rete → UN retry con connessione fresca dopo pausa 1.5s (iniettabile nei test); False "pulito" del provider → NIENTE retry; `invia` non solleva MAI, nemmeno con sleep rotto. +4 test in test_fase86_email (10 giri verdi) |
 
 ## 2) 🟡 COSTRUITO ma SPENTO — come si ACCENDE (i "buchi" che Fable ha trovato)
@@ -119,7 +120,7 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
   vero container backup; retry email anti-singhiozzo (fase86)]
 - Recupero preventivi abbandonati (utile appena c'è traffico; usa email esistente).
 - Import (fase77): far arrivare anche l'indirizzo/coordinate precise.
-- Mappa: pin trascinabile per l'host (precisione al civico anche senza digitare l'indirizzo).
+  [pin trascinabile FATTO 2026-07-15: vedi riga "📍 Pin trascinabile" in sezione 1]
 - Split-payment REALE (link per amico, all-or-nothing) — PARCHEGGIATO dal fondatore.
 - Video AI multilingua (pool 164/165 pronto; manca la generazione video).
 
