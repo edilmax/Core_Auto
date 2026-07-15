@@ -128,19 +128,53 @@ class PagamentiPendenti:
             con.close()
 
     def conferma(self, riferimento: Any) -> Optional[Dict[str, Any]]:
-        """Pagamento riuscito -> 'pagato'. Ritorna il record (per il ledger tassa). None se assente."""
+        """Pagamento riuscito -> 'pagato', ma SOLO da 'in_attesa' o 'scaduto' (CAS in
+        BEGIN IMMEDIATE: chiude la GARA con lo sweeper che nello stesso istante può
+        star liberando le date). Ritorna il record con lo stato PRECEDENTE: il
+        chiamante decide il ramo DOPO l'acquisizione atomica ('in_attesa' = stanza
+        ancora bloccata; 'scaduto' = serve re-block; 'pagato' = webhook duplicato;
+        altri stati = NON confermata, rimborsare). None se il riferimento non esiste.
+        Prima era read-then-write in due tempi: un webhook con lettura 'in_attesa'
+        appena stantia sovrascriveva 'pagato' su date già liberate dallo sweeper ->
+        cliente pagato senza stanza garantita (doppia prenotazione possibile)."""
         if not (isinstance(riferimento, str) and riferimento):
             return None
         con = self._apri()
         try:
-            with con:
+            r = None
+            for _ in range(8):
                 r = con.execute("SELECT * FROM pendenti WHERE riferimento=?",
                                 (riferimento,)).fetchone()
                 if r is None:
                     return None
-                con.execute("UPDATE pendenti SET stato='pagato' WHERE riferimento=?",
-                            (riferimento,))
+                if r["stato"] not in ("in_attesa", "scaduto"):
+                    return self._riga(r)      # pagato/cancellata/...: nessuna scrittura
+                with con:
+                    cur = con.execute(
+                        "UPDATE pendenti SET stato='pagato' WHERE riferimento=? AND stato=?",
+                        (riferimento, r["stato"]))
+                if cur.rowcount:
+                    return self._riga(r)      # CAS vinto: r = lo stato PRECEDENTE, esatto
+                # CAS perso: lo stato è cambiato tra lettura e scrittura (es. lo sweeper
+                # ha appena marcato 'scaduto') -> rileggi e rigioca. Il loop converge:
+                # gli stati confermabili sono 2 e le transizioni finiscono su stati fermi.
             return self._riga(r)
+        finally:
+            con.close()
+
+    def aggiorna_idem(self, riferimento: Any, idem_key: Any) -> bool:
+        """Aggiorna la idem_key del record (dopo un RE-BLOCK con chiave fresca: i flussi
+        futuri — cancellazione/rimborso — devono accoppiarsi al blocco ATTIVO, non a
+        quello originale già rilasciato, o il rilascio sarebbe un replay a vuoto)."""
+        if not (isinstance(riferimento, str) and riferimento
+                and isinstance(idem_key, str) and idem_key):
+            return False
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("UPDATE pendenti SET idem_key=? WHERE riferimento=?",
+                                  (idem_key, riferimento))
+            return bool(cur.rowcount)
         finally:
             con.close()
 

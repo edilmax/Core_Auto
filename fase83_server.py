@@ -2647,7 +2647,11 @@ class RouterHTTP:
             return
         try:
             pp = getattr(self._sys, "pagamenti_pendenti", None)
-            rec = pp.info(rif) if pp is not None else None
+            # ACQUISIZIONE ATOMICA (anti-gara con lo sweeper): `conferma` è un CAS che
+            # scrive 'pagato' SOLO da 'in_attesa'/'scaduto' e ritorna lo stato PRECEDENTE.
+            # Decidere il ramo su una info() letta prima apriva la finestra: sweeper
+            # libera le date tra lettura e scrittura -> pagato senza stanza garantita.
+            rec = pp.conferma(rif) if pp is not None else None
             if rec is None:
                 logger.warning("pagamento per riferimento sconosciuto '%s' (ignorato)", rif)
                 return
@@ -2656,17 +2660,21 @@ class RouterHTTP:
                 return                                    # webhook duplicato: idempotente
             # WHITELIST: si conferma SOLO 'in_attesa' (hold vivo) o 'scaduto' (re-block sotto).
             # Ogni altro stato (cancellata dal cliente/host, rimborsata, richiesta NON ancora
-            # approvata) NON è confermabile: senza questa guardia un pagamento tardivo su una
-            # prenotazione cancellata diventava 'pagato' -> soldi senza stanza + payout indebito.
+            # approvata) NON è confermabile (il CAS non ha scritto niente): senza questa
+            # guardia un pagamento tardivo su una prenotazione cancellata diventava
+            # 'pagato' -> soldi senza stanza + payout indebito.
             if stato not in ("in_attesa", "scaduto"):
                 logger.error("RIMBORSARE: pagamento ricevuto per '%s' in stato '%s' (non "
                              "confermabile: prenotazione cancellata/non approvata). Rimborsare "
                              "manualmente dal dashboard Stripe.", rif, stato)
                 return
             if stato == "scaduto":
-                # PAGAMENTO TARDIVO: la stanza era stata liberata. Ri-tento il blocco.
+                # PAGAMENTO TARDIVO: la stanza era stata liberata. Ri-tento il blocco con
+                # una CHIAVE FRESCA ("reblock:<rif>"): riusare la chiave del blocco
+                # originale (già rilasciato dallo sweeper) era un REPLAY idempotente ->
+                # 'ok' finto SENZA ribloccare davvero = doppia prenotazione possibile.
                 inv = getattr(self._sys, "inventario", None)
-                idem = rec.get("idem_key") or ("hold_" + rif)
+                idem = "reblock:" + rif
                 esito = None
                 try:
                     esito = inv.blocca(rec["alloggio_id"], rec["check_in"], rec["check_out"],
@@ -2682,7 +2690,14 @@ class RouterHTTP:
                     except Exception:
                         pass
                     return
-                # ri-bloccata con successo: ricreo payout maturato + garanzia dai dati salvati
+                # ri-bloccata con successo: i flussi futuri (cancellazione/rimborso) devono
+                # accoppiarsi al blocco ATTIVO -> registro la chiave fresca sul record.
+                try:
+                    pp.aggiorna_idem(rif, idem)
+                except Exception:
+                    logger.warning("aggiorna_idem post-reblock fallito (ignorato)",
+                                   exc_info=True)
+                # ricreo payout maturato + garanzia dai dati salvati
                 import json as _j3
                 try:
                     dj = _j3.loads(rec.get("corpo_json") or "{}")
@@ -2694,8 +2709,8 @@ class RouterHTTP:
                                          dj.get("valuta", "EUR"))
                 self._apri_garanzia(rif, int(dj.get("netto_host_cents", 0)),
                                     rec.get("alloggio_id", ""), rec.get("check_in", ""))
-            # comune a 'in_attesa' e 'scaduto-ribloccato': segna pagato + tassa + payout maturato
-            pp.conferma(rif)
+            # comune a 'in_attesa' e 'scaduto-ribloccato': 'pagato' è GIÀ scritto dal CAS
+            # in cima (acquisizione atomica); qui restano tassa + payout maturato.
             if rec.get("tassa_cents", 0) > 0:
                 led = getattr(self._sys, "tassa_comunale", None)
                 if led is not None:
@@ -3874,6 +3889,48 @@ def percorso_statico_sicuro(path: str, cartella: str) -> Optional[str]:
 # ─────────────────────────────────────────────────────────────────────────────
 # Server HTTP stdlib (thin wrapper, NON testato - I/O)
 # ─────────────────────────────────────────────────────────────────────────────
+def sweep_hold_una_passata(sistema: Any, router: Any) -> None:
+    """UNA passata dello sweeper hold (estratta dal thread per essere testabile).
+    ORDINE ANTI-GARA (fail-safe): prima l'ACQUISIZIONE del record col CAS
+    `pp.scadi` (in_attesa->scaduto); date/garanzia/payout/email SOLO se il CAS
+    riesce. Se un pagamento (o una cancellazione) ha vinto la gara un istante
+    prima, il CAS fallisce e NON si tocca niente: mai liberare le date di una
+    prenotazione appena pagata, mai email 'riprova' a chi ha appena pagato.
+    (Se il processo cade tra CAS e rilascio, le date restano bloccate: il lato
+    sicuro — zero overbooking; il pagamento tardivo le ri-blocca idempotente.)"""
+    pp = getattr(sistema, "pagamenti_pendenti", None)
+    inv = getattr(sistema, "inventario", None)
+    gz = getattr(sistema, "garanzia", None)
+    if pp is None or inv is None:
+        return
+    try:
+        for rec in pp.scaduti():
+            try:
+                if not pp.scadi(rec["riferimento"]):
+                    continue          # pagata/cancellata nel frattempo: non è più roba nostra
+                inv.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"],
+                             idem_key=(rec.get("idem_key") or ("hold_" + rec["riferimento"])))
+                if gz is not None:
+                    gz.annulla(rec["riferimento"])
+                # non pagato entro la scadenza -> via il payout 'in_attesa' (niente guadagno
+                # fantasma). NON cancello il record: resta 'scaduto' per gestire un eventuale
+                # pagamento tardivo (re-blocco/rimborso).
+                _pd = getattr(sistema, "payout", None)
+                if _pd is not None:
+                    _pd.rimuovi(rec["riferimento"])
+                # RECUPERO ONESTO (errore dei colossi = spam; noi UNA email transazionale):
+                # pagamento non completato -> le date sono di nuovo libere, link per riprovare.
+                router._email_recupero_hold(rec)
+            except Exception:
+                logger.warning("sweep hold singolo fallito (ignorato)", exc_info=True)
+        try:
+            pp.pulisci_vecchi()          # housekeeping: via i record scaduti vecchi (>1h)
+        except Exception:
+            pass
+    except Exception:
+        logger.warning("sweep hold fallito (ignorato)", exc_info=True)
+
+
 def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
           cartella_statica: str = "deploy", host_key: Optional[str] = None,
           base_url: str = "", admin_key: Optional[str] = None
@@ -4110,32 +4167,7 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
 
         def _tick_hold():
             while True:
-                try:
-                    for rec in pp.scaduti():
-                        try:
-                            inv.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"],
-                                         idem_key=(rec.get("idem_key") or ("hold_" + rec["riferimento"])))
-                            if gz is not None:
-                                gz.annulla(rec["riferimento"])
-                            # non pagato entro i 2 min -> via il payout 'in_attesa' (niente guadagno
-                            # fantasma) + libera le date. NON cancello il record: lo marco 'scaduto'
-                            # per gestire un eventuale pagamento tardivo (re-blocco/rimborso).
-                            _pd = getattr(sistema, "payout", None)
-                            if _pd is not None:
-                                _pd.rimuovi(rec["riferimento"])
-                            pp.scadi(rec["riferimento"])
-                            # RECUPERO ONESTO (errore dei colossi = spam; noi UNA email
-                            # transazionale): pagamento non completato -> avvisa il cliente
-                            # che le date sono di nuovo libere, con il link per riprovare.
-                            router._email_recupero_hold(rec)
-                        except Exception:
-                            logger.warning("sweep hold singolo fallito (ignorato)", exc_info=True)
-                    try:
-                        pp.pulisci_vecchi()      # housekeeping: via i record scaduti vecchi (>1h)
-                    except Exception:
-                        pass
-                except Exception:
-                    logger.warning("sweep hold fallito (ignorato)", exc_info=True)
+                sweep_hold_una_passata(sistema, router)
                 __import__("time").sleep(120)
         _th2.Thread(target=_tick_hold, daemon=True).start()
 
