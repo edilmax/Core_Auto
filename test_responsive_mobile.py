@@ -98,6 +98,19 @@ class TestErrorBoundary(unittest.TestCase):
         self.assertNotRegex(corpo.replace(" ", ""), r"^\s*constr=awaitfetch.*returnr\.json\(\);$",
                             "api(): tornata la versione che solleva")
 
+    def test_host_letture_e_azioni_non_sollevano(self):
+        """host.html: 13 letture facevano `await (await fetch(..)).json()` -> sollevano su
+        risposta non-JSON (500/502 HTML) e l'errore muore in un catch vuoto: la card resta
+        vuota e l'host non sa perche'. Ora passano da getJson(); post() idem per le azioni."""
+        host = _leggi("host.html")
+        self.assertIn("async function getJson(", host, "host.html: manca l'helper getJson")
+        self.assertNotIn("await (await fetch(API+", host,
+                         "host.html: fetch diretto che puo' sollevare -> usa getJson()")
+        m = re.search(r"async function post\(path, body\)\{(.+?)\n\}", host, re.S)
+        self.assertIsNotNone(m)
+        self.assertIn("catch", m.group(1), "post(): deve intercettare la rete giu'")
+        self.assertIn("errore", m.group(1), "post(): deve restituire un .errore leggibile")
+
     def test_errore_server_non_sembra_catalogo_vuoto(self):
         """Un guasto NON deve mostrare 'Stiamo aprendo a X!': sarebbe una bugia al cliente."""
         self.assertIn("!data.risultati && data.errore", self.html,

@@ -415,11 +415,35 @@ function applica(){
   const sel=document.getElementById('lang'); if(sel) sel.value=LANG;
 }
 
+// ERROR BOUNDARY (FASE 3): `post()` NON solleva MAI. Prima `await res.json()` sollevava se il
+// server rispondeva 500/502 con HTML (non JSON) -> l'eccezione moriva in un catch vuoto e l'host
+// non capiva perche' "non succede niente" pubblicando un annuncio o approvando una prenotazione.
+// Compatibile all'indietro: i chiamanti leggono .status e .data esattamente come prima.
+// ERROR BOUNDARY (FASE 3): letture host. Prima erano 13 letture fetch+json() dirette:
+// con un 500/502 che risponde HTML, .json() SOLLEVA e l'errore muore in un catch vuoto ->
+// la card resta vuota e l'host non sa perche'. getJson NON solleva mai: torna {errore:...}.
+async function getJson(path, opts){
+  let r;
+  try{ r = await fetch(API+path, opts); }
+  catch(e){ return {errore:'rete_non_raggiungibile'}; }
+  let d = null;
+  try{ d = await r.json(); }catch(e){ d = null; }
+  if(d && typeof d === 'object') return d;
+  return {errore: r.ok ? 'risposta_non_valida' : ('errore_server_'+r.status)};
+}
 async function post(path, body){
-  const res = await fetch(API+path, {method:'POST',
-    headers:Object.assign({'Content-Type':'application/json'}, authHeaders()),
-    body:JSON.stringify(body)});
-  return {status:res.status, data:await res.json()};
+  let res;
+  try{
+    res = await fetch(API+path, {method:'POST',
+      headers:Object.assign({'Content-Type':'application/json'}, authHeaders()),
+      body:JSON.stringify(body)});
+  }catch(e){ return {status:0, data:{errore:'rete_non_raggiungibile'}}; }
+  let data = null;
+  try{ data = await res.json(); }catch(e){ data = null; }
+  if(!data || typeof data !== 'object'){
+    data = {errore: res.ok ? 'risposta_non_valida' : ('errore_server_'+res.status)};
+  }
+  return {status:res.status, data:data};
 }
 
 // ── VALUTE: l'host prezza nella SUA moneta; l'ospite paga in quella (like-for-like) ──
@@ -468,7 +492,7 @@ async function caricaAlloggiSelettore(){
   const sel=document.getElementById('al_corrente'); const vuoto=document.getElementById('al_vuoto');
   if(!sel) return;
   try{
-    const d = await (await fetch(API+'/api/host/alloggi', {headers:authHeaders()})).json();
+    const d = await getJson('/api/host/alloggi', {headers:authHeaders()});
     const lst = d.alloggi||[]; MIEI = lst;
     if(!lst.length){ sel.style.display='none'; vuoto.style.display='block'; setCurrentSlug(''); return; }
     sel.style.display='block'; vuoto.style.display='none';
@@ -497,7 +521,7 @@ function organizzaPannello(){
 async function caricaPrenotazioni(){
   const box=document.getElementById('pren_lista'); if(!box) return;
   try{
-    const d=await (await fetch(API+'/api/host/prenotazioni',{headers:authHeaders()})).json();
+    const d=await getJson('/api/host/prenotazioni',{headers:authHeaders()});
     const lst=d.prenotazioni||[];
     if(!lst.length){ box.innerHTML='<div style="color:var(--testo-tenue)">'+T('pren_vuoto')+'</div>'; return; }
     box.innerHTML='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'+
@@ -546,7 +570,7 @@ async function verificaSessione(){
 }
 async function caricaPayout(){
   try{
-    const d = await (await fetch(API+'/api/host/payout', {headers:authHeaders()})).json();
+    const d = await getJson('/api/host/payout', {headers:authHeaders()});
     const box = document.getElementById('payout_lista');
     const p = d.payout||{}; const valute = Object.keys(p);
     if(!valute.length){ box.textContent=T('no_pay'); return; }
@@ -559,7 +583,7 @@ async function caricaPayout(){
 }
 async function caricaRichieste(){
   try{
-    const d = await (await fetch(API+'/api/host/richieste', {headers:authHeaders()})).json();
+    const d = await getJson('/api/host/richieste', {headers:authHeaders()});
     const box = document.getElementById('richieste_lista');
     const lst = d.richieste||[];
     if(!lst.length){ box.textContent=T('no_req'); return; }
@@ -578,7 +602,7 @@ async function caricaRichieste(){
 }
 async function caricaLinkDiretto(){
   try{
-    const d = await (await fetch(API+'/api/host/link_diretto', {headers:authHeaders()})).json();
+    const d = await getJson('/api/host/link_diretto', {headers:authHeaders()});
     const abs = u => (u && u.charAt(0)==='/') ? location.origin + u : u;
     const lst = (d.alloggi&&d.alloggi.length) ? d.alloggi
               : [{titolo:T('tutti_miei'), link:d.link_generale}];
@@ -595,7 +619,7 @@ async function caricaLinkDiretto(){
 }
 async function caricaReferral(){
   try{
-    const d = await (await fetch(API+'/api/host/referral', {headers:authHeaders()})).json();
+    const d = await getJson('/api/host/referral', {headers:authHeaders()});
     if(d.link){
       document.getElementById('ref_link').value = (d.link.charAt(0)==='/') ? location.origin + d.link : d.link;
       document.getElementById('ref_credito').textContent = T('credito_disp')+' €'+((d.credito_cents||0)/100).toFixed(2);
@@ -623,7 +647,7 @@ document.getElementById('btnRegister').onclick = async ()=>{
   if(!document.getElementById('au_clausole').checked){ m.className='msg err'; m.textContent=T('dev_clausole'); return; }
   // prendo versione+impronta VIVE del contratto -> le salviamo come prova d'accettazione
   let doc={};
-  try{ doc = await (await fetch(API+'/api/legale/contratto-host?lang='+LANG)).json(); }catch(e){}
+  try{ doc = await getJson('/api/legale/contratto-host?lang='+LANG); }catch(e){}
   authPost('/api/host/registrazione', {email:document.getElementById('au_email').value, password:document.getElementById('au_pw').value, ragione_sociale:document.getElementById('au_rs').value, telefono:document.getElementById('au_tel').value, line_token:document.getElementById('au_line').value, wechat_webhook:document.getElementById('au_wechat').value, accetta_termini:true, accetta_clausole:true, doc_sha256:(doc.doc_sha256||''), versione:(doc.versione||''), lang:LANG, codice_referral:(new URLSearchParams(location.search).get('ref')||'')}, m, 'registrato');
 };
 document.getElementById('btnLogin').onclick = ()=>{
@@ -773,7 +797,7 @@ document.getElementById('btnAnnullaMod').onclick=()=>{ esciModifica(); svuotaFor
 async function caricaModifica(slug){
   const m=document.getElementById('msgPub');
   try{
-    const d=await (await fetch(API+'/api/host/alloggio?slug='+encodeURIComponent(slug),{headers:authHeaders()})).json();
+    const d=await getJson('/api/host/alloggio?slug='+encodeURIComponent(slug),{headers:authHeaders()});
     if(!d || !d.slug){ m.className='msg err'; m.textContent='❌ '+((d&&d.errore)||''); return; }
     const val=d.valuta||'EUR';
     document.getElementById('p_titolo').value=d.titolo||'';
@@ -815,7 +839,7 @@ document.getElementById('btnTrasp').onclick = async ()=>{
   const p = Math.round((parseFloat(document.getElementById('tr_prezzo').value)||0)*100);
   const ota = document.getElementById('tr_ota').value;
   try{
-    const d = await (await fetch(API+'/api/trasparenza?prezzo_cents='+p+'&ota='+ota)).json();
+    const d = await getJson('/api/trasparenza?prezzo_cents='+p+'&ota='+ota);
     const noi = d.scenario_nostro.host_netto_cents, loro = d.scenario_ota.host_netto_cents;
     const extra = d.guadagno_extra_host_cents;
     m.className='msg ok';
@@ -854,7 +878,7 @@ let CV_RIF=null;
 async function caricaConversazioni(){
   const box=document.getElementById('cv_lista'); if(!box) return;
   try{
-    const d=await (await fetch(API+'/api/host/conversazioni',{headers:authHeaders()})).json();
+    const d=await getJson('/api/host/conversazioni',{headers:authHeaders()});
     const lst=d.conversazioni||[];
     if(!lst.length){ box.innerHTML='<div style="color:var(--testo-tenue)">'+T('cv_vuoto')+'</div>'; return; }
     box.innerHTML=lst.map(c=>`<div onclick="apriConv('${c.prenotazione_id}')" style="cursor:pointer;border:1px solid var(--sfondo-tenue);border-radius:.6rem;padding:.5rem .7rem;margin:.3rem 0">
@@ -866,7 +890,7 @@ async function apriConv(rif){
   CV_RIF=rif; document.getElementById('cv_thread').style.display='block';
   const b=document.getElementById('cv_msgs'); b.textContent='⏳';
   try{
-    const d=await (await fetch(API+'/api/messaggi?prenotazione_id='+encodeURIComponent(rif),{headers:authHeaders()})).json();
+    const d=await getJson('/api/messaggi?prenotazione_id='+encodeURIComponent(rif),{headers:authHeaders()});
     const esc=x=>String(x).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
     b.innerHTML=(d.messaggi||[]).map(m=>{
       let t=esc(m.testo||'').replace(/(\/uploads\/[a-z0-9]+\.[a-z]+)/g,"<a href='$1' target='_blank'>📷 apri foto</a>");
@@ -992,7 +1016,7 @@ document.getElementById('btnMetriche').onclick = async ()=>{
     m.className='msg ok'; m.textContent=T('aggiornato');
     // 📊 statistiche AVANZATE (fase115): notti vendute, prezzo medio, cancellazioni, lead time
     try{
-      const av=await (await fetch(API+'/api/host/metriche_avanzate',{headers:authHeaders()})).json();
+      const av=await getJson('/api/host/metriche_avanzate',{headers:authHeaders()});
       const k=av.metriche||{}; const eur=c=>'€ '+((c||0)/100).toFixed(2);
       document.getElementById('dashAvz').style.display='block';
       document.getElementById('dashAvz').innerHTML =
@@ -1082,7 +1106,7 @@ document.getElementById('btnCal').onclick = async ()=>{
 async function caricaThread(){
   const pren=document.getElementById('msg_pren').value.trim(); if(!pren) return;
   try{
-    const d=await (await fetch(API+'/api/messaggi?prenotazione_id='+encodeURIComponent(pren),{headers:authHeaders()})).json();
+    const d=await getJson('/api/messaggi?prenotazione_id='+encodeURIComponent(pren),{headers:authHeaders()});
     const box=document.getElementById('msgThread');
     if(!d.messaggi||!d.messaggi.length){ box.innerHTML='<div style="color:var(--testo-tenue);font-size:.85rem">'+T('no_msg')+'</div>'; return; }
     box.innerHTML=d.messaggi.map(m=>`<div style="padding:.4rem .7rem;margin:.3rem 0;border-radius:.7rem;background:${m.mittente==='host'?'#eef6ff':'var(--sfondo)'}"><b style="font-size:.72rem;color:#4a5b7a">${m.mittente==='host'?T('tu'):T('ospite')}</b><br>${(m.testo||'').replace(/</g,'&lt;')}</div>`).join('');
