@@ -405,6 +405,12 @@ function pickLang(){
 let LANG = pickLang();
 function T(k){ return (TR[LANG]&&TR[LANG][k])!=null ? TR[LANG][k] : (TR.en[k]!=null?TR.en[k]:k); }
 function key(){ return document.getElementById('hostkey').value; }
+// Escape GLOBALE: prima esisteva solo una `esc` LOCALE dentro la chat (copertura < > &),
+// quindi il resto del pannello rendeva i testi grezzi. Qui i dati sono i TUOI (auto-XSS =
+// severita' bassa), ma senza escape un titolo con `<b>` si vedrebbe in grassetto qui e come
+// testo su index: incoerente e fragile. Copertura piena: & < > " '.
+const _ESC_H = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+function escH(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => _ESC_H[c]); }
 function hostToken(){ return localStorage.getItem('bookinvip_host_token') || ''; }
 function authHeaders(){ const tk = hostToken(); return tk ? {'X-Host-Token':tk} : {'X-Host-Key':key()}; }
 
@@ -497,7 +503,7 @@ async function caricaAlloggiSelettore(){
     if(!lst.length){ sel.style.display='none'; vuoto.style.display='block'; setCurrentSlug(''); return; }
     sel.style.display='block'; vuoto.style.display='none';
     const prec = CURRENT_SLUG;
-    sel.innerHTML = lst.map(a=>`<option value="${a.slug}">${(a.titolo||a.slug)} — ${fmt(a.prezzo_notte_cents,a.valuta)}/notte · #${a.id} (${a.stato})</option>`).join('');
+    sel.innerHTML = lst.map(a=>`<option value="${escH(a.slug)}">${escH(a.titolo||a.slug)} — ${fmt(a.prezzo_notte_cents,a.valuta)}/notte · #${a.id} (${escH(a.stato)})</option>`).join('');
     // mantieni la scelta precedente se esiste ancora, altrimenti il primo
     if(prec && lst.some(a=>a.slug===prec)) sel.value=prec;
     setCurrentSlug(sel.value);
@@ -526,7 +532,7 @@ async function caricaPrenotazioni(){
     if(!lst.length){ box.innerHTML='<div style="color:var(--testo-tenue)">'+T('pren_vuoto')+'</div>'; return; }
     box.innerHTML='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'+
       '<thead><tr style="text-align:left;font-size:.72rem;color:#4a5b7a"><th>'+T('th_all2')+'</th><th>'+T('l_da')+'</th><th>'+T('l_a')+'</th><th>'+T('th_stato')+'</th></tr></thead><tbody>'+
-      lst.map(p=>`<tr style="border-top:1px solid var(--sfondo-tenue)"><td>${(p.alloggio||'').replace(/[<>]/g,'')}</td><td>${p.check_in||''}</td><td>${p.check_out||''}</td><td>${p.stato==='rimborsata'?('<span style="color:var(--stato-testo-ko)">'+T('pren_rimb')+'</span>'):('<span style="color:var(--brand-chiaro)">'+T('pren_conf')+'</span>')}</td></tr>`).join('')+
+      lst.map(p=>`<tr style="border-top:1px solid var(--sfondo-tenue)"><td>${escH(p.alloggio||'')}</td><td>${p.check_in||''}</td><td>${p.check_out||''}</td><td>${p.stato==='rimborsata'?('<span style="color:var(--stato-testo-ko)">'+T('pren_rimb')+'</span>'):('<span style="color:var(--brand-chiaro)">'+T('pren_conf')+'</span>')}</td></tr>`).join('')+
       '</tbody></table></div>';
   }catch(e){}
 }
