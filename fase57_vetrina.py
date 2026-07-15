@@ -46,7 +46,9 @@ from __future__ import annotations
 
 import datetime
 import logging
+import re
 import sqlite3
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -54,6 +56,7 @@ logger = logging.getLogger("core_auto.vetrina")
 
 LIMITE_TESTO = 4000
 LIMITE_CAMPO = 256
+SLUG_MAX = 60                     # slug pubblico: identificatore in URL, corto e SOLO [a-z0-9-]
 MAX_CENTS = 1_000_000_00          # 1.000.000 unita' valuta: tetto anti-abuso
 PAGINA_MAX = 100                  # tetto risultati per pagina (anti-DoS)
 PAGINA_DEFAULT = 24
@@ -166,6 +169,28 @@ def _stringa(v: Any, limite: int) -> Optional[str]:
     return v
 
 
+def _norm_slug(v: Any) -> Optional[str]:
+    """Slug PUBBLICO ripulito: SOLO [a-z0-9-]. None se dopo la pulizia non resta nulla.
+
+    SICUREZZA (bug trovato in collaudo 2026-07-15): lo slug e' un identificatore che finisce
+    negli URL E dentro l'HTML/JS del frontend — `onclick="apri('<slug>')"` nel popup mappa e
+    `data-slug="<slug>"` nelle card. Prima era validato solo come stringa non vuota: un host
+    poteva pubblicare via API uno slug tipo `x');alert(1);//` o `a" onmouseover=alert(1) x="`
+    (XSS STORED contro gli ospiti) oppure `../../etc/passwd` (traversal). Qui si taglia alla
+    radice: nessun apice/segno/punto puo' entrare nel catalogo.
+
+    NORMALIZZA invece di rifiutare, ed e' DETERMINISTICA (stesso input -> stesso slug): gli
+    import (fase77 usa gli id esterni property_id/listing_id) restano stabili e il dedup per
+    slug continua a funzionare. Stessa regola di `_slug_unico` (fase83) -> slug auto invariati.
+    """
+    s = _stringa(v, LIMITE_CAMPO)
+    if s is None:
+        return None
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+    s = re.sub(r"[^a-zA-Z0-9]+", "-", s).strip("-").lower()[:SLUG_MAX]
+    return s or None
+
+
 def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
     """Validatore BLINDATO (non solleva MAI). Denaro SOLO int cents; geo solo int."""
     if not isinstance(data, dict):
@@ -174,7 +199,7 @@ def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
     host_id = _stringa(data.get("host_id"), LIMITE_CAMPO)
     if host_id is None:
         return False, "host_id_non_valido", None
-    slug = _stringa(data.get("slug"), LIMITE_CAMPO)
+    slug = _norm_slug(data.get("slug"))          # SOLO [a-z0-9-]: anti-XSS/traversal (vedi _norm_slug)
     if slug is None:
         return False, "slug_non_valido", None
     titolo = _stringa(data.get("titolo"), LIMITE_CAMPO)
