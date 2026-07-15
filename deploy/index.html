@@ -196,6 +196,13 @@ const SUPP = ['it','en','es','fr','de','pt','ja','zh'];
 let I18N = {ui:{},servizi:{}}, LANG = 'it', QUOTE = null, attivi = new Set(), GEO = null;
 
 function t(k){ return (I18N.ui && I18N.ui[k]) || k; }
+// SICUREZZA: i campi dell'host (titolo/citta/paese/foto) arrivano dal DB COSI' COME LI HA
+// SCRITTI LUI e qui finiscono dentro innerHTML e dentro attributi ("alt", "src"). Senza escape
+// un host poteva iniettare JS nel browser degli OSPITI (XSS stored). Escapiamo all'USCITA
+// (il titolo vero resta integro nel DB e nel modale, che usa textContent = gia' sicuro).
+// Copre sia il testo (& < >) sia gli attributi con doppi/singoli apici (" ').
+const _ESC = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>_ESC[c]); }
 function srv(c){ return (I18N.servizi && I18N.servizi[c]) || c; }
 function eur(c){ return '€ ' + ((c||0)/100).toFixed(2); }   // solo importi in EUR (es. crediti piattaforma)
 // VALUTA-CONSAPEVOLE: l'annuncio è prezzato nella valuta dell'host -> l'ospite la vede REALE
@@ -283,15 +290,15 @@ function cardHtml(a){
   const fav = favSet().has(a.slug);
   let disp=''; if(a.disponibile===true) disp=`<span class="badge green">✓</span>`;
   else if(a.disponibile===false) disp=`<span class="badge red">${t('non_disp')}</span>`;
-  const foto = a.thumbnail ? `<img class="thumb" src="${a.thumbnail}" alt="${a.titolo}" loading="lazy" onerror="this.outerHTML='<div class=ph>🏠</div>'">` : '<div class="ph">🏠</div>';
-  return `<div class="card" style="position:relative"><span onclick="favToggle('${a.slug}',this)" style="position:absolute;top:1.5rem;right:1.5rem;font-size:1.25rem;cursor:pointer;z-index:2;text-shadow:0 1px 3px rgba(0,0,0,.25)">${fav?'❤':'🤍'}</span>${foto}<h3>${a.titolo}</h3>
+  const foto = a.thumbnail ? `<img class="thumb" src="${esc(a.thumbnail)}" alt="${esc(a.titolo)}" loading="lazy" onerror="this.outerHTML='<div class=ph>🏠</div>'">` : '<div class="ph">🏠</div>';
+  return `<div class="card" style="position:relative"><span onclick="favToggle('${esc(a.slug)}',this)" style="position:absolute;top:1.5rem;right:1.5rem;font-size:1.25rem;cursor:pointer;z-index:2;text-shadow:0 1px 3px rgba(0,0,0,.25)">${fav?'❤':'🤍'}</span>${foto}<h3>${esc(a.titolo)}</h3>
     <div class="prezzo">${money(a.prezzo_notte_cents,a.valuta)} <span style="font-size:.85rem;font-weight:400;color:#5e6f8d">/ ${t('notte')}</span></div>
     <div style="margin:.2rem 0">${stelle(a.recensioni)}</div>
     <div style="margin:.3rem 0">${serv} ${disp}</div>
     ${a.cancellazione_gratuita ? `<div style="margin:.15rem 0"><span class="badge green">✔ ${t('badge_cancellazione')}</span></div>` : (a.politica_cancellazione==='non_rimborsabile' ? `<div style="margin:.15rem 0"><span class="badge" style="background:#fff3cd;color:#8a6d0b">🔒 ${t('non_rimb')}</span></div>` : '')}
     ${a.finestra_ci?`<div style="margin:.15rem 0"><span class="badge green">📅 ${a.finestra_ci} → ${a.finestra_co}</span></div>`:''}
-    <div class="meta">📍 ${a.citta}${a.paese?', '+a.paese:''}${a.distanza_m!=null?' · <b>'+fmtDist(a.distanza_m)+'</b>':(a.centro_distanza_m!=null?' · 📍 '+fmtCentro(a.centro_distanza_m):'')}</div>
-    <button data-slug="${a.slug}">${t('dettaglio')}</button></div>`;
+    <div class="meta">📍 ${esc(a.citta)}${a.paese?', '+esc(a.paese):''}${a.distanza_m!=null?' · <b>'+fmtDist(a.distanza_m)+'</b>':(a.centro_distanza_m!=null?' · 📍 '+fmtCentro(a.centro_distanza_m):'')}</div>
+    <button data-slug="${esc(a.slug)}">${t('dettaglio')}</button></div>`;
 }
 
 async function cerca(){
@@ -391,9 +398,9 @@ async function caricaMappaPin(){
       const c=f.geometry.coordinates, p=f.properties;
       const lat=c[1], lon=c[0];
       const prezzo = (p.prezzo_cents!=null && typeof money==='function') ? money(p.prezzo_cents,p.valuta||'EUR') : '';
-      const tit=(p.titolo||'').replace(/[<>]/g,'');
+      const tit=esc(p.titolo);
       const m=L.marker([lat,lon]).addTo(LLAYER);
-      m.bindPopup('<b>'+tit+'</b><br>'+prezzo+'<br><a href="#" onclick="apri(\''+p.slug+'\');return false;">'+mt('vedi')+' →</a>');
+      m.bindPopup('<b>'+tit+'</b><br>'+prezzo+'<br><a href="#" onclick="apri(\''+esc(p.slug)+'\');return false;">'+mt('vedi')+' →</a>');
       bounds.push([lat,lon]);
     });
     if(bounds.length) LMAP.fitBounds(bounds,{padding:[30,30],maxZoom:14});

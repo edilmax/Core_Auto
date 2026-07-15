@@ -13,6 +13,7 @@ e il dedup per slug continua a funzionare.
 """
 from __future__ import annotations
 
+import os
 import re
 import unittest
 
@@ -85,6 +86,36 @@ class TestSlugSicurezza(unittest.TestCase):
     def test_slug_assurdo_respinto(self):
         """Oltre LIMITE_CAMPO (256) resta respinto come prima del fix: anti-abuso, non e' un id."""
         self.assertFalse(_valida("a" * 300)[0])
+
+
+class TestXssFrontend(unittest.TestCase):
+    """GUARDIA: i campi scritti dall'host non devono finire GREZZI dentro innerHTML.
+
+    BUG trovato in collaudo 2026-07-15 (provato): `valida_scheda` accetta il `titolo` cosi' com'e'
+    (giusto: il titolo vero va conservato) — ma `cardHtml` lo interpolava senza escape dentro
+    innerHTML e dentro attributi (`alt="${a.titolo}"`, `src="${a.thumbnail}"`). Payload accettati:
+    `<img src=x onerror=alert(1)>`, `Casa " onload=alert(1) x="` -> XSS STORED contro gli OSPITI.
+    FIX: escape all'USCITA (`esc()`), che e' il punto giusto (il modale usa gia' textContent).
+    """
+    def setUp(self):
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "deploy", "index.html"), encoding="utf-8") as f:
+            self.html = f.read()
+
+    def test_funzione_esc_esiste(self):
+        self.assertIn("function esc(", self.html, "index.html: manca la funzione di escape")
+        for ch in ("&amp;", "&lt;", "&gt;", "&quot;", "&#39;"):
+            self.assertIn(ch, self.html, "esc() deve coprire anche %s" % ch)
+
+    def test_campi_host_sempre_escapati(self):
+        """Nessun `${a.CAMPO}` nudo: i campi dell'host passano SEMPRE da esc()."""
+        nudi = re.findall(r"\$\{a\.(titolo|citta|paese|thumbnail|slug)\}", self.html)
+        self.assertEqual(nudi, [], "campi host interpolati SENZA esc(): %s" % nudi)
+
+    def test_popup_mappa_escapato(self):
+        """Il popup mappa mette lo slug dentro onclick="apri('...')": deve passare da esc()."""
+        self.assertNotIn("+p.slug+", self.html,
+                         "popup mappa: slug non escapato dentro onclick (injection JS)")
 
 
 if __name__ == "__main__":
