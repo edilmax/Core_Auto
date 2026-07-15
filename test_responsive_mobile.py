@@ -125,6 +125,22 @@ class TestDesignTokens(unittest.TestCase):
             self.assertNotIn(hexv, dopo_root,
                              "host.html: colore-stato %s riscritto a mano invece del token" % hexv)
 
+    def test_ogni_tabella_ha_wrapper_che_scrolla(self):
+        """Una tabella a piu' colonne DEVE stare in un contenitore con overflow-x, o sfonda.
+
+        Trovato in FASE 2: la tabella prenotazioni di admin.html (6 colonne) non aveva wrapper
+        -> su un telefono sfondava la pagina in orizzontale (l'altra tabella ce l'aveva gia').
+        Guardia: tante `<table>` quanti i wrapper `overflow-x` che le precedono.
+        """
+        for pag in ("host.html", "admin.html"):
+            html = _leggi(pag)
+            tabelle = html.count("<table")
+            wrapper = len(re.findall(r"overflow-x:\s*auto", html))
+            self.assertGreaterEqual(
+                wrapper, tabelle,
+                "%s: %d <table> ma solo %d wrapper overflow-x -> qualcuna sfonda sul telefono"
+                % (pag, tabelle, wrapper))
+
     def test_niente_var_in_attributi_svg(self):
         """fill/stroke con var() non risolvono se l'SVG non eredita il :root: vietati."""
         for pag in self.PAGINE:

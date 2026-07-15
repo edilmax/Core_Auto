@@ -73,10 +73,14 @@
     </div>
   </div>
   <div id="msg"></div>
+  <!-- wrapper OBBLIGATORIO: 6 colonne su un telefono sfondano la pagina se la tabella
+       non ha un contenitore che scrolla in orizzontale (l'altra tabella qui sotto ce l'ha) -->
+  <div style="overflow-x:auto">
   <table>
     <thead><tr><th data-i18n="th_all">Alloggio</th><th data-i18n="th_ci">Check-in</th><th data-i18n="th_co">Check-out</th><th data-i18n="th_orig">Origine</th><th data-i18n="th_stato">Stato</th><th></th></tr></thead>
     <tbody id="tbody"><tr><td colspan="6" style="text-align:center;color:var(--testo-tenue);padding:2rem" data-i18n="empty_key">Inserisci la chiave admin: si carica da solo.</td></tr></tbody>
   </table>
+  </div>
 
   <div style="background:#fff;border-radius:1rem;padding:1.5rem;box-shadow:0 6px 18px rgba(0,0,0,.05);margin-top:1.5rem">
     <h2 style="color:var(--brand);font-size:1.2rem;margin-bottom:.3rem" data-i18n="al_h">📋 Tutti gli annunci</h2>
