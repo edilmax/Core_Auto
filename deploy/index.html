@@ -32,7 +32,7 @@
   .leaflet-popup-content{font-size:.9rem;line-height:1.4}.leaflet-popup-content b{color:#0f4c3a}
   .chip{font-size:.8rem;padding:.3rem .8rem;border-radius:1rem;border:1px solid #dce1ed;background:#fff;cursor:pointer;user-select:none}
   .chip.on{background:#0f4c3a;color:#fff;border-color:#0f4c3a}
-  .risultati{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.5rem}
+  .risultati{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));gap:1.5rem}
   .card{background:#fff;border-radius:1.25rem;box-shadow:0 8px 24px rgba(0,0,0,.05);transition:transform .15s;padding:1.25rem;display:flex;flex-direction:column}
   .card:hover{transform:translateY(-4px)}
   .card img.thumb{width:100%;height:170px;object-fit:cover;border-radius:.9rem;margin-bottom:.6rem;background:#eef2f7}
@@ -65,6 +65,9 @@
   .msg{padding:.7rem 1rem;border-radius:.7rem;margin-top:.5rem;font-size:.9rem}
   .msg.ok{background:#d4edda;color:#155724}.msg.err{background:#f8d7da;color:#842029}
   @media(max-width:640px){.filtri .riga{flex-direction:column;align-items:stretch}}
+  /* telefoni piccoli (320px): meno padding = piu' larghezza utile; niente scroll orizzontale */
+  @media(max-width:400px){body{padding:.75rem}.risultati{gap:1rem}.filtri{padding:1rem}}
+  html,body{overflow-x:hidden;max-width:100%}
 </style>
 </head>
 <body>

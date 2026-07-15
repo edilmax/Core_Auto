@@ -17,8 +17,11 @@
   .card{background:#fff;border-radius:1.25rem;box-shadow:0 6px 18px rgba(0,0,0,.05);padding:1.5rem;margin-bottom:1.5rem}
   .card h2{font-size:1.2rem;margin-bottom:1rem;color:#0f4c3a}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem 1rem}
-  .grid label{display:flex;flex-direction:column;font-size:.72rem;font-weight:600;text-transform:uppercase;color:#4a5b7a;gap:.25rem}
+  .grid label{display:flex;flex-direction:column;font-size:.72rem;font-weight:600;text-transform:uppercase;color:#4a5b7a;gap:.25rem;min-width:0}
   .full{grid-column:1/-1}
+  /* RESPONSIVE (mancava del tutto): sul telefono il form a 2 colonne non ci sta -> 1 colonna */
+  @media(max-width:640px){.grid{grid-template-columns:1fr}body{padding:1rem}.card{padding:1.1rem}}
+  @media(max-width:400px){body{padding:.75rem}.card{padding:.9rem}}
   button{background:#0f4c3a;color:#fff;border:none;padding:.65rem 1.5rem;border-radius:2rem;font-weight:600;font-size:1rem;cursor:pointer;margin-top:1rem}
   button:hover{background:#156b52}
   .msg{padding:.7rem 1rem;border-radius:.7rem;margin-top:.8rem;font-size:.9rem}
