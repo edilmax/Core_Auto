@@ -37,6 +37,16 @@ docker-compose -f docker-compose.casavip.yml stop app backup
 docker-compose -f docker-compose.casavip.yml rm -f app backup
 docker-compose -f docker-compose.casavip.yml up -d
 ```
+> ⚠️ **Se cambia la CONFIG NGINX** (`deploy/nginx.casavip*.conf`) NON basta `git pull` +
+> `nginx -s reload`: **fallisce in silenzio**. Docker monta quel file come **singolo file, per
+> inode**; `git pull` non lo modifica, lo **sostituisce** (nuovo inode) → il container resta
+> agganciato al file VECCHIO. Serve **ricreare il container**:
+> ```bash
+> docker rm -f casavip_nginx && docker-compose -f docker-compose.casavip.yml up -d
+> ```
+> (Scoperto il 2026-07-15 aggiungendo la CSP: `nginx -t` diceva OK, il reload pure, ma dentro il
+> container la direttiva non c'era. Verificare sempre col container, non col file sul VPS.)
+>
 > **Perché così:** il `build app` è OBBLIGATORIO se cambia il codice o `deploy/` (il frontend è COPIato
 > dentro l'immagine: senza build, il sito resta quello vecchio). Lo `stop`+`rm -f` PRIMA dell'`up`
 > evita il bug `KeyError: ContainerConfig` di `docker-compose` v1.29.2 (crasha quando RI-crea container
