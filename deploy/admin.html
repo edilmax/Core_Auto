@@ -145,7 +145,9 @@ function key(){ return document.getElementById('adminkey').value; }
 function msg(t,ok){ const m=document.getElementById('msg'); m.className='msg '+(ok?'ok':'err'); m.textContent=t; }
 function stat(t){ document.getElementById('autostat').textContent = t; }
 
-function esc(s){ return String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
+// +apice singolo: senza, un valore dentro un attributo con apici singoli o dentro onclick='...'
+// resta iniettabile. Stessa copertura di index.html (& < > " ').
+function esc(s){ return String(s==null?'':s).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c])); }
 const A_VEXP={JPY:0,KRW:0,VND:0,CLP:0,ISK:0};
 const A_VSYM={EUR:'€',USD:'$',GBP:'£',CHF:'CHF',THB:'฿',JPY:'¥',AUD:'A$',CAD:'C$',AED:'AED',SGD:'S$',CNY:'CN¥',HKD:'HK$',MXN:'MX$',BRL:'R$',ZAR:'R',IDR:'Rp',KRW:'₩',INR:'₹',NZD:'NZ$',SEK:'kr',NOK:'kr',DKK:'kr',PLN:'zł',TRY:'₺'};
 function money(c,v){ v=v||'EUR'; const e=(A_VEXP[v]!=null?A_VEXP[v]:2); return (A_VSYM[v]||v)+' '+((c||0)/Math.pow(10,e)).toFixed(e); }
@@ -275,8 +277,9 @@ async function caricaControversie(){
     box.innerHTML = lst.map((c,i)=>{
       const imp = c.importo_host_cents||0;
       return `<div style="border:1px solid var(--sfondo-tenue);border-radius:.7rem;padding:.8rem;margin-bottom:.7rem">
-        <div><b>${c.titolo||c.alloggio_id||''}</b> · ${T('ctr_rif')} <code>${c.prenotazione_id}</code></div>
-        <div style="color:#8a5200;font-size:.85rem;margin:.3rem 0">${T('ctr_motivo')} ${(c.motivo||'—')}</div>
+        <div><b>${esc(c.titolo||c.alloggio_id||'')}</b> · ${T('ctr_rif')} <code>${esc(c.prenotazione_id)}</code></div>
+        <!-- motivo lo scrive l'OSPITE: senza esc() esegue nel browser dell'ADMIN (XSS stored) -->
+        <div style="color:#8a5200;font-size:.85rem;margin:.3rem 0">${T('ctr_motivo')} ${esc(c.motivo||'—')}</div>
         <div style="font-size:.85rem">${T('ctr_garanzia')} <b>${eur(imp)}</b>
           <button onclick="vediChat('${c.prenotazione_id}',${i})" style="background:#156b52;padding:.2rem .7rem;font-size:.78rem;margin-left:.5rem">💬 conversazione + prove</button></div>
         <div id="chat_${i}" style="display:none;background:#f7faf8;border-radius:.6rem;padding:.5rem .7rem;margin-top:.4rem;max-height:170px;overflow-y:auto;font-size:.82rem"></div>

@@ -117,6 +117,23 @@ class TestXssFrontend(unittest.TestCase):
         nudi = re.findall(r"\$\{a\.(titolo|citta|paese|thumbnail|slug)\}", self.html)
         self.assertEqual(nudi, [], "campi host interpolati SENZA esc(): %s" % nudi)
 
+    def test_admin_testi_liberi_escapati(self):
+        """admin.html: i testi scritti da UTENTI non devono finire grezzi nel pannello ADMIN.
+
+        Il piu' pericoloso e' `motivo` della controversia: lo scrive l'OSPITE (non serve nemmeno
+        essere host) e veniva reso senza escape -> eseguiva nel browser dell'admin, cioe' sul
+        profilo con TUTTI i poteri. Idem `titolo` (host). La chat (`m.testo`) era gia' escapata.
+        """
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "deploy", "admin.html"), encoding="utf-8") as f:
+            adm = f.read()
+        self.assertIn("function esc(", adm, "admin.html: manca la funzione di escape")
+        self.assertIn("&#39;", adm, "admin.html: esc() deve coprire anche l'apice singolo")
+        for campo in ("c.motivo", "c.titolo", "m.testo"):
+            nudi = re.findall(r"\$\{" + re.escape(campo) + r"[^}]*\}", adm)
+            for n in nudi:
+                self.assertIn("esc(", n, "admin.html: %s reso SENZA esc() -> %s" % (campo, n))
+
     def test_popup_mappa_escapato(self):
         """Il popup mappa mette lo slug dentro onclick="apri('...')": deve passare da esc()."""
         self.assertNotIn("+p.slug+", self.html,
