@@ -21,10 +21,18 @@ VINCITRICE DEL BENCHMARK (4 modi di mandare le email):
 SOPRAVVIVENZA TOTALE: `invia` non solleva MAI (eccezione -> False); destinatario non
 valido -> False; `send` iniettabile (test deterministici senza SMTP reale); nessuna
 config -> provider non creato. STARTTLS, login solo se le credenziali ci sono.
+
+RETRY ANTI-SINGHIOZZO (collaudo 2026-07-15): in prod un invio e' fallito per un timeout
+transitorio dell'SMTP Hostinger (SMTPServerDisconnected) e l'email era PERSA per sempre
+— grave se era il link di pagamento di un su-richiesta approvato. Ora un errore di RETE
+(eccezione) viene ritentato UNA volta con connessione fresca dopo una breve pausa; un
+False "pulito" del provider NON viene ritentato (ha gia' risposto no). Attesa massima
+comunque limitata (2 tentativi x timeout 10s + pausa), mai bloccante per sempre.
 """
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Callable, Optional
 
 logger = logging.getLogger("core_auto.email")
@@ -32,26 +40,42 @@ logger = logging.getLogger("core_auto.email")
 
 class ProviderEmail:
     """Invia email via SMTP. `send(destinatario, oggetto, html) -> bool` e' iniettabile
-    (default: smtplib reale) per testare senza un server SMTP."""
+    (default: smtplib reale) per testare senza un server SMTP. `sleep` iniettabile per
+    testare il retry senza attese reali."""
 
     def __init__(self, host: str, port: int, user: str, password: str, mittente: str, *,
-                 send: Optional[Callable[[str, str, str], bool]] = None) -> None:
+                 send: Optional[Callable[[str, str, str], bool]] = None,
+                 tentativi: int = 2, pausa_s: float = 1.5,
+                 sleep: Optional[Callable[[float], None]] = None) -> None:
         self._host = host
         self._port = port if isinstance(port, int) and not isinstance(port, bool) else 587
         self._user = user
         self._password = password
         self._mittente = mittente or user
         self._send = send or self._send_smtp
+        ok_int = isinstance(tentativi, int) and not isinstance(tentativi, bool)
+        self._tentativi = max(1, tentativi) if ok_int else 2
+        self._pausa_s = pausa_s
+        self._sleep = sleep or time.sleep
 
     def invia(self, destinatario: Any, oggetto: str, corpo_html: str) -> bool:
-        """Invia una email. Best-effort: ritorna True/False, non solleva MAI."""
+        """Invia una email. Best-effort: ritorna True/False, non solleva MAI.
+        Errore di rete (eccezione) -> UN retry con connessione fresca; False pulito
+        del provider -> nessun retry (il server ha gia' risposto)."""
         if not (isinstance(destinatario, str) and "@" in destinatario):
             return False
-        try:
-            return bool(self._send(destinatario, str(oggetto), str(corpo_html)))
-        except Exception:
-            logger.warning("Email: invio fallito (ISOLATO -> False)", exc_info=True)
-            return False
+        for tentativo in range(1, self._tentativi + 1):
+            try:
+                return bool(self._send(destinatario, str(oggetto), str(corpo_html)))
+            except Exception:
+                logger.warning("Email: invio fallito (tentativo %d/%d, ISOLATO)",
+                               tentativo, self._tentativi, exc_info=True)
+                if tentativo < self._tentativi:
+                    try:
+                        self._sleep(self._pausa_s)
+                    except Exception:
+                        pass  # perfino uno sleep rotto non deve far sollevare `invia`
+        return False
 
     def _send_smtp(self, destinatario: str, oggetto: str,
                    html: str) -> bool:  # pragma: no cover

@@ -53,6 +53,7 @@ Money-path completo (prenota → hold/pagamento → escrow → payout), pannelli
 | **💬 Chat controversia + PROVE FOTO** | 113+83 (`/api/voucher/messaggio|messaggi|prova`, `/api/admin/messaggi`) | il CLIENTE chatta con l'host DAL VOUCHER (zero password, voucher firmato) e carica FOTO-PROVA che entrano nella STESSA conversazione; l'ADMIN-arbitro la legge dal riquadro Controversie ("💬 conversazione + prove"). Un solo posto per tutto |
 | **Check-in digitale** (pre-registrazione ospiti → sblocco) | 127 (+64) | COMPLETO: endpoint + FORM sulla pagina voucher (l'ospite registra gli ospiti online prima dell'arrivo); completato → ✓ verde sul voucher |
 | **Healthcheck VERO container backup** | docker-compose.casavip.yml | fix 2026-07-15: il container `casavip_backup` ereditava l'HEALTHCHECK dell'immagine app (porta 8080 dove NON gira nessun server) → 'unhealthy' perenne (2082 fail di fila, falso allarme che mascherava i guasti veri; i backup in sé giravano ok). Ora il check misura la cosa giusta: ultimo `/data/backup/*.gz` più fresco di 7h (giro ogni 6h) |
+| **Email con RETRY anti-singhiozzo** | 86 | fix 2026-07-15: in prod UN invio perso per timeout transitorio SMTP Hostinger (SMTPServerDisconnected; diagnosi: SMTP sano, 1 solo fallimento nella storia = singhiozzo). Prima l'email era persa per sempre (grave se era il link di pagamento di un su-richiesta approvato). Ora: eccezione di rete → UN retry con connessione fresca dopo pausa 1.5s (iniettabile nei test); False "pulito" del provider → NIENTE retry; `invia` non solleva MAI, nemmeno con sleep rotto. +4 test in test_fase86_email (10 giri verdi) |
 
 ## 2) 🟡 COSTRUITO ma SPENTO — come si ACCENDE (i "buchi" che Fable ha trovato)
 Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore in grassetto.**
@@ -114,10 +115,9 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
 - **Contratto host**: revisione legale prima di volumi seri (Stripe è LIVE, soldi veri).
 
 **Lavori tecnici (fattibili da me, senza prerequisiti):**
-- Rifiniture/fix reali a caccia di buchi (come il filtro Ospiti).
+- Rifiniture/fix reali a caccia di buchi (come il filtro Ospiti). [2026-07-15 fatti: healthcheck
+  vero container backup; retry email anti-singhiozzo (fase86)]
 - Recupero preventivi abbandonati (utile appena c'è traffico; usa email esistente).
-- Accendere funzioni gratis senza dipendenze: auto-traduzione annunci/recensioni (107/129),
-  calendario prezzi host (119), web push (123, genera chiavi VAPID).
 - Import (fase77): far arrivare anche l'indirizzo/coordinate precise.
 - Mappa: pin trascinabile per l'host (precisione al civico anche senza digitare l'indirizzo).
 - Split-payment REALE (link per amico, all-or-nothing) — PARCHEGGIATO dal fondatore.
