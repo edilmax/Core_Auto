@@ -8,26 +8,44 @@
 <link rel="icon" href="/icon.svg">
 <title>Bookin VIP · Host</title>
 <style>
+:root{
+  /* DESIGN TOKENS (FASE 2 carrozzeria): la palette sta QUI, un posto solo.
+     Stessi identici colori di prima -> nessun cambio visivo, solo coerenza. */
+  --brand:#0f4c3a;
+  --brand-chiaro:#155724;
+  --oro:#8a6d0b;
+  --testo:#1a1e2b;
+  --testo-tenue:#5e6f8d;
+  --bordo:#dce1ed;
+  --sfondo:#f4f6fa;
+  --sfondo-tenue:#eef2f7;
+  --rosso:#b00020;
+  --rosso-bg:#fdecec;
+  --verde-bg:#eafaf0;
+  --giallo-bg:#fff3cd;
+  --arancio:#ffe0a3;
+}
+
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#f4f6fa;color:#1a1e2b;padding:1.5rem;line-height:1.5}
+  body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--sfondo);color:var(--testo);padding:1.5rem;line-height:1.5}
   .container{max-width:760px;margin:0 auto}
-  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:2px solid #dce1ed;flex-wrap:wrap;gap:1rem}
-  .logo{font-weight:700;font-size:1.6rem;background:linear-gradient(135deg,#0f4c3a,#156b52);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-  select,input{padding:.5rem .7rem;border-radius:.7rem;border:1px solid #dce1ed;font-size:1rem;width:100%}
+  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:2px solid var(--bordo);flex-wrap:wrap;gap:1rem}
+  .logo{font-weight:700;font-size:1.6rem;background:linear-gradient(135deg,var(--brand),#156b52);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  select,input{padding:.5rem .7rem;border-radius:.7rem;border:1px solid var(--bordo);font-size:1rem;width:100%}
   .card{background:#fff;border-radius:1.25rem;box-shadow:0 6px 18px rgba(0,0,0,.05);padding:1.5rem;margin-bottom:1.5rem}
-  .card h2{font-size:1.2rem;margin-bottom:1rem;color:#0f4c3a}
+  .card h2{font-size:1.2rem;margin-bottom:1rem;color:var(--brand)}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem 1rem}
   .grid label{display:flex;flex-direction:column;font-size:.72rem;font-weight:600;text-transform:uppercase;color:#4a5b7a;gap:.25rem;min-width:0}
   .full{grid-column:1/-1}
   /* RESPONSIVE (mancava del tutto): sul telefono il form a 2 colonne non ci sta -> 1 colonna */
   @media(max-width:640px){.grid{grid-template-columns:1fr}body{padding:1rem}.card{padding:1.1rem}}
   @media(max-width:400px){body{padding:.75rem}.card{padding:.9rem}}
-  button{background:#0f4c3a;color:#fff;border:none;padding:.65rem 1.5rem;border-radius:2rem;font-weight:600;font-size:1rem;cursor:pointer;margin-top:1rem}
+  button{background:var(--brand);color:#fff;border:none;padding:.65rem 1.5rem;border-radius:2rem;font-weight:600;font-size:1rem;cursor:pointer;margin-top:1rem}
   button:hover{background:#156b52}
   .msg{padding:.7rem 1rem;border-radius:.7rem;margin-top:.8rem;font-size:.9rem}
-  .msg.ok{background:#d4edda;color:#155724}.msg.err{background:#f8d7da;color:#842029}
+  .msg.ok{background:#d4edda;color:var(--brand-chiaro)}.msg.err{background:#f8d7da;color:#842029}
   .key{background:#fff;border-radius:1rem;padding:1rem 1.5rem;margin-bottom:1.5rem;display:flex;gap:1rem;align-items:end}
-  .hint{font-weight:400;color:#5e6f8d;font-size:.72rem}
+  .hint{font-weight:400;color:var(--testo-tenue);font-size:.72rem}
 </style>
 </head>
 <body>
@@ -61,7 +79,7 @@
         <span data-i18n="clausole_appr">Approvo specificamente, ai sensi degli artt. 1341-1342 c.c., le clausole del Contratto Host su trattenute/compensazione (art. 6), penale anti-disintermediazione (7), penali e rivalsa (8), manleva (9), limitazione di responsabilità (10), sospensione/risoluzione (11), modifiche (13) e foro competente (14).</span></label>
       <div style="display:flex;gap:.6rem;flex-wrap:wrap">
         <button id="btnLogin" data-i18n="b_login">Accedi</button>
-        <button id="btnRegister" data-i18n="b_register" style="background:#155724">Registrati</button>
+        <button id="btnRegister" data-i18n="b_register" style="background:var(--brand-chiaro)">Registrati</button>
       </div>
     </div>
     <div id="authOut" style="display:none">
@@ -94,7 +112,7 @@
       <input id="ref_link" readonly style="font-size:.82rem">
       <button id="btnCopiaRef" data-i18n="b_copia" style="margin-top:0">Copia</button>
     </div>
-    <div id="ref_credito" style="margin-top:.8rem;font-weight:600;color:#155724"></div>
+    <div id="ref_credito" style="margin-top:.8rem;font-weight:600;color:var(--brand-chiaro)"></div>
   </div>
 
   <div class="card" id="cardDiretto" style="display:none">
@@ -114,7 +132,7 @@
     <p class="hint" style="font-size:.9rem" data-i18n="hc_p">Se annulli una prenotazione già pagata, il cliente viene rimborsato al 100% e a te viene addebitata una penale del 15% (come Booking/Airbnb): accettare una prenotazione significa onorarla.</p>
     <div style="display:flex;gap:.5rem;margin-top:.6rem;flex-wrap:wrap">
       <input id="hc_ref" placeholder="Riferimento prenotazione (es. a5d6...)" style="flex:1;min-width:180px">
-      <button id="btnHostCanc" style="margin-top:0;background:#b00020" data-i18n="hc_btn">Annulla (paghi penale)</button>
+      <button id="btnHostCanc" style="margin-top:0;background:var(--rosso)" data-i18n="hc_btn">Annulla (paghi penale)</button>
     </div>
     <div id="hc_msg" style="margin-top:.6rem;font-size:.9rem"></div>
   </div>
@@ -125,7 +143,7 @@
     <div id="cv_lista" style="font-size:.9rem"></div>
     <div id="cv_thread" style="display:none;margin-top:.6rem">
       <div id="cv_msgs" style="max-height:200px;overflow-y:auto;background:#f7faf8;border-radius:.6rem;padding:.5rem .7rem;font-size:.85rem"></div>
-      <textarea id="cv_txt" rows="2" style="width:100%;margin-top:.4rem;padding:.55rem;border:1px solid #dce1ed;border-radius:.6rem;font-family:inherit" placeholder="Rispondi..."></textarea>
+      <textarea id="cv_txt" rows="2" style="width:100%;margin-top:.4rem;padding:.55rem;border:1px solid var(--bordo);border-radius:.6rem;font-family:inherit" placeholder="Rispondi..."></textarea>
       <button id="cv_send" style="margin-top:.3rem" data-i18n="cv_send">Rispondi</button>
     </div>
   </div>
@@ -168,13 +186,13 @@
     <div class="grid">
       <label class="full">&nbsp;<button id="btnMetriche" data-i18n="b_metriche" style="margin-top:0">Carica metriche</button></label>
     </div>
-    <button id="btnExport" data-i18n="b_export" style="background:#155724">📥 Esporta CSV prenotazioni</button>
+    <button id="btnExport" data-i18n="b_export" style="background:var(--brand-chiaro)">📥 Esporta CSV prenotazioni</button>
     <div id="dash" style="display:none;margin-top:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.8rem">
-      <div style="background:#eef7f2;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#0f4c3a" id="d_revenue">—</div>
-    <div id="dashAvz" style="display:none"></div><div style="font-size:.75rem;color:#5e6f8d" data-i18n="k_revenue">REVENUE</div></div>
-      <div style="background:#eef7f2;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#0f4c3a" id="d_occ">—</div><div style="font-size:.75rem;color:#5e6f8d" data-i18n="k_occ">OCCUPAZIONE</div></div>
-      <div style="background:#eef7f2;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#0f4c3a" id="d_pren">—</div><div style="font-size:.75rem;color:#5e6f8d" data-i18n="k_pren">PRENOTAZIONI</div></div>
-      <div style="background:#eef7f2;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#e0a800" id="d_rating">—</div><div style="font-size:.75rem;color:#5e6f8d" data-i18n="k_rating">RATING</div></div>
+      <div style="background:#eef7f2;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:var(--brand)" id="d_revenue">—</div>
+    <div id="dashAvz" style="display:none"></div><div style="font-size:.75rem;color:var(--testo-tenue)" data-i18n="k_revenue">REVENUE</div></div>
+      <div style="background:#eef7f2;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:var(--brand)" id="d_occ">—</div><div style="font-size:.75rem;color:var(--testo-tenue)" data-i18n="k_occ">OCCUPAZIONE</div></div>
+      <div style="background:#eef7f2;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:var(--brand)" id="d_pren">—</div><div style="font-size:.75rem;color:var(--testo-tenue)" data-i18n="k_pren">PRENOTAZIONI</div></div>
+      <div style="background:#eef7f2;border-radius:1rem;padding:1rem;text-align:center"><div style="font-size:1.6rem;font-weight:700;color:#e0a800" id="d_rating">—</div><div style="font-size:.75rem;color:var(--testo-tenue)" data-i18n="k_rating">RATING</div></div>
     </div>
     <div id="msgMetriche"></div>
   </div>
@@ -189,23 +207,23 @@
 
   <div class="card">
     <h2>🗓️ <span data-i18n="cal_h">Calendario disponibilità</span></h2>
-    <div id="cal_alloggio" style="font-weight:700;color:#0f4c3a;margin:.2rem 0 .5rem"></div>
+    <div id="cal_alloggio" style="font-weight:700;color:var(--brand);margin:.2rem 0 .5rem"></div>
     <p class="hint" style="font-size:.85rem;margin-bottom:.5rem" data-i18n="cal_hint">Stai guardando il calendario dell'alloggio scelto in alto in "Il tuo alloggio". Se ne hai più di uno, cambialo da lì.</p>
     <input type="hidden" id="c_slug" value="">
     <div class="grid">
       <label><span data-i18n="l_da">Da</span><input type="date" id="c_da" value="2026-09-01"></label>
       <label><span data-i18n="l_a">A</span><input type="date" id="c_a" value="2026-09-15"></label>
       <label>&nbsp;<button id="btnCal" data-i18n="b_vedi" style="margin-top:0">Vedi</button></label>
-      <label>&nbsp;<button id="btnCalPrezzi" data-i18n="b_prezzi" style="margin-top:0;background:#155724">💶 Prezzi</button></label>
+      <label>&nbsp;<button id="btnCalPrezzi" data-i18n="b_prezzi" style="margin-top:0;background:var(--brand-chiaro)">💶 Prezzi</button></label>
       <label>&nbsp;<button id="btnCalTutti" data-i18n="b_tutti" style="margin-top:0;background:#156b52">🏘️ Tutti gli alloggi</button></label>
     </div>
     <div id="cal" style="display:flex;flex-wrap:wrap;gap:.3rem;margin-top:1rem"></div>
-    <div style="margin-top:.6rem;font-size:.78rem;color:#5e6f8d">
+    <div style="margin-top:.6rem;font-size:.78rem;color:var(--testo-tenue)">
       <span style="display:inline-block;width:12px;height:12px;background:#d4edda;border-radius:3px"></span> <span data-i18n="cal_libero">libero</span>
       <span style="display:inline-block;width:12px;height:12px;background:#f8d7da;border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_pieno">occupato</span>
-      <span style="display:inline-block;width:12px;height:12px;background:#ffe0a3;border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_tratt">in trattativa (attesa pagamento/approvazione)</span>
+      <span style="display:inline-block;width:12px;height:12px;background:var(--arancio);border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_tratt">in trattativa (attesa pagamento/approvazione)</span>
       <span style="display:inline-block;width:12px;height:12px;background:#e2e3e5;border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_chiuso">chiuso</span>
-      <span style="display:inline-block;width:12px;height:12px;background:#fff;border:1px solid #dce1ed;border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_nc">non caricato</span>
+      <span style="display:inline-block;width:12px;height:12px;background:#fff;border:1px solid var(--bordo);border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_nc">non caricato</span>
     </div>
     <div id="msgCal"></div>
     <div id="calPrezzi" style="margin-top:.6rem;font-size:.82rem"></div>
@@ -235,15 +253,15 @@
     </div>
     <div class="grid">
       <label class="full"><span data-i18n="l_titolo">Titolo</span><input id="p_titolo" placeholder="Casa a Roma"></label>
-      <label class="full"><span data-i18n="l_descr">Descrizione</span> <span class="hint" data-i18n="h_descr">— racconta la tua struttura: com'è, dove si trova, cosa la rende speciale. Più è curata, più prenotano</span><textarea id="p_descr" rows="4" style="width:100%;padding:.55rem;border:1px solid #dce1ed;border-radius:.6rem;font-family:inherit" placeholder="Luminoso appartamento nel cuore di Roma, a 5 minuti dal Colosseo..."></textarea></label>
+      <label class="full"><span data-i18n="l_descr">Descrizione</span> <span class="hint" data-i18n="h_descr">— racconta la tua struttura: com'è, dove si trova, cosa la rende speciale. Più è curata, più prenotano</span><textarea id="p_descr" rows="4" style="width:100%;padding:.55rem;border:1px solid var(--bordo);border-radius:.6rem;font-family:inherit" placeholder="Luminoso appartamento nel cuore di Roma, a 5 minuti dal Colosseo..."></textarea></label>
       <label><span data-i18n="l_citta">Città</span><input id="p_citta" placeholder="Roma"></label>
       <label class="full"><span data-i18n="l_indirizzo">Indirizzo (via e numero)</span> <span class="hint" data-i18n="h_indirizzo">— per la posizione PRECISA sulla mappa. Resta privato: l'ospite vede la zona, l'indirizzo esatto solo dopo la prenotazione</span><input id="p_indirizzo" placeholder="Via Roma 1"></label>
       <input type="hidden" id="p_lat"><input type="hidden" id="p_lon">
       <div class="full">
-        <button type="button" id="btnPin" style="background:#fff;color:#0f4c3a;border:1.5px solid #0f4c3a;padding:.45rem 1rem;font-size:.9rem">📍 <span data-i18n="b_pin">Posiziona sulla mappa</span></button>
+        <button type="button" id="btnPin" style="background:#fff;color:var(--brand);border:1.5px solid var(--brand);padding:.45rem 1rem;font-size:.9rem">📍 <span data-i18n="b_pin">Posiziona sulla mappa</span></button>
         <span class="hint" data-i18n="h_pin">— apri la mappa e trascina il segnaposto sul portone: posizione precisa anche senza indirizzo. La tua scelta vince sull’indirizzo</span>
         <div id="pinWrap" style="display:none;margin-top:.5rem">
-          <div id="pinMappa" style="height:280px;border-radius:.7rem;border:1px solid #dce1ed"></div>
+          <div id="pinMappa" style="height:280px;border-radius:.7rem;border:1px solid var(--bordo)"></div>
           <div id="pinMsg" class="hint" style="margin-top:.3rem"></div>
         </div>
       </div>
@@ -271,7 +289,7 @@
       <label class="full"><span data-i18n="l_foto">Foto</span> <span class="hint" data-i18n="h_foto">— carica dal dispositivo (automatico) o incolla un URL</span>
         <input type="file" id="p_files" accept="image/jpeg,image/png,image/webp,image/gif" multiple style="padding:.4rem;background:#fff">
         <div id="p_thumbs" style="display:flex;flex-wrap:wrap;gap:.4rem;margin:.4rem 0"></div>
-        <textarea id="p_img" rows="2" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid #dce1ed;font-size:.85rem" placeholder="https://...jpg"></textarea></label>
+        <textarea id="p_img" rows="2" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid var(--bordo);font-size:.85rem" placeholder="https://...jpg"></textarea></label>
     </div>
     <button id="btnPubblica" data-i18n="b_pubblica">Pubblica</button>
     <div id="msgPub"></div>
@@ -293,7 +311,7 @@
     <div class="grid">
       <label><span data-i18n="l_giorno">Giorno</span><input type="date" id="d_giorno" value="2026-09-01"></label>
       <label><span data-i18n="l_unita">Unità</span><input type="number" id="d_unita" value="1"></label>
-      <label id="lPrezzo2" class="full"><span data-i18n="l_prezzo_notte">Prezzo/notte</span> <span class="valcur" style="color:#5e6f8d"></span><input type="number" id="d_prezzo" step="0.01" min="0" value="95"></label>
+      <label id="lPrezzo2" class="full"><span data-i18n="l_prezzo_notte">Prezzo/notte</span> <span class="valcur" style="color:var(--testo-tenue)"></span><input type="number" id="d_prezzo" step="0.01" min="0" value="95"></label>
     </div>
     <button id="btnDisp" data-i18n="b_salva">Salva</button>
     <div id="msgDisp"></div>
@@ -306,7 +324,7 @@
       <label><span data-i18n="l_unita">Unità</span><input type="number" id="r_unita" value="1"></label>
       <label><span data-i18n="l_da">Da</span><input type="date" id="r_da" value="2026-09-01"></label>
       <label><span data-i18n="l_a">A</span><input type="date" id="r_a" value="2026-10-01"></label>
-      <label class="full"><span data-i18n="l_prezzo_notte">Prezzo/notte</span> <span class="valcur" style="color:#5e6f8d"></span><input type="number" id="r_prezzo" step="0.01" min="0" value="90"></label>
+      <label class="full"><span data-i18n="l_prezzo_notte">Prezzo/notte</span> <span class="valcur" style="color:var(--testo-tenue)"></span><input type="number" id="r_prezzo" step="0.01" min="0" value="90"></label>
     </div>
     <button id="btnRange" data-i18n="b_apri">Apri periodo</button>
     <div id="msgRange"></div>
@@ -317,13 +335,13 @@
     <p class="hint" style="font-size:.9rem;margin-bottom:.6rem" data-i18n="ical_p">Incolla il contenuto del file .ics o l'export del calendario: le date già occupate verranno bloccate (anti-overbooking).</p>
     <input type="hidden" id="i_slug" value="">
     <div class="grid">
-      <label class="full"><span data-i18n="l_ical">Calendario iCal</span><textarea id="i_ical" rows="5" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid #dce1ed;font-family:monospace;font-size:.85rem" placeholder="BEGIN:VCALENDAR..."></textarea></label>
+      <label class="full"><span data-i18n="l_ical">Calendario iCal</span><textarea id="i_ical" rows="5" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid var(--bordo);font-family:monospace;font-size:.85rem" placeholder="BEGIN:VCALENDAR..."></textarea></label>
     </div>
     <button id="btnIcal" data-i18n="b_ical">Importa e sincronizza</button>
     <div id="msgIcal"></div>
-    <hr style="border:none;border-top:1px solid #eef2f7;margin:.9rem 0">
+    <hr style="border:none;border-top:1px solid var(--sfondo-tenue);margin:.9rem 0">
     <p class="hint" style="font-size:.85rem" data-i18n="icex_p">Esporta il TUO calendario: incolla questo link su Booking/Airbnb/Vrbo e le date prenotate qui si bloccano lì (niente doppie prenotazioni).</p>
-    <button id="btnIcalExport" style="background:#155724" data-i18n="icex_btn">Esporta calendario (.ics)</button>
+    <button id="btnIcalExport" style="background:var(--brand-chiaro)" data-i18n="icex_btn">Esporta calendario (.ics)</button>
     <div id="icexOut" style="margin-top:.5rem;font-size:.85rem;word-break:break-all"></div>
   </div>
 
@@ -333,10 +351,10 @@
     <div class="grid">
       <label><span data-i18n="l_rif">Riferimento prenotazione</span><input id="msg_pren" placeholder="es. REF123"></label>
       <label><span data-i18n="l_email_osp">Email ospite</span><input id="msg_guest" placeholder="ospite@email.it"></label>
-      <label class="full"><span data-i18n="l_msg">Messaggio</span><textarea id="msg_testo" rows="2" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid #dce1ed"></textarea></label>
+      <label class="full"><span data-i18n="l_msg">Messaggio</span><textarea id="msg_testo" rows="2" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid var(--bordo)"></textarea></label>
     </div>
     <button id="btnMsgInvia" data-i18n="b_invia">Invia</button>
-    <button id="btnMsgCarica" data-i18n="b_conv" style="background:#5e6f8d">Carica conversazione</button>
+    <button id="btnMsgCarica" data-i18n="b_conv" style="background:var(--testo-tenue)">Carica conversazione</button>
     <div id="msgMsg"></div>
     <div id="msgThread" style="margin-top:.6rem"></div>
   </div>
@@ -355,7 +373,7 @@
   </div>
 
   <details class="card" id="cardAvanzate" style="display:none">
-    <summary style="cursor:pointer;font-weight:700;font-size:1.15rem;color:#0f4c3a;list-style:none">🔧 <span data-i18n="avz_h">Strumenti avanzati</span> <span class="hint" style="font-weight:400" data-i18n="avz_p">— aprili solo se ti servono</span></summary>
+    <summary style="cursor:pointer;font-weight:700;font-size:1.15rem;color:var(--brand);list-style:none">🔧 <span data-i18n="avz_h">Strumenti avanzati</span> <span class="hint" style="font-weight:400" data-i18n="avz_p">— aprili solo se ti servono</span></summary>
     <div id="avanzate_box" style="margin-top:1rem"></div>
   </details>
 </div>
@@ -476,10 +494,10 @@ async function caricaPrenotazioni(){
   try{
     const d=await (await fetch(API+'/api/host/prenotazioni',{headers:authHeaders()})).json();
     const lst=d.prenotazioni||[];
-    if(!lst.length){ box.innerHTML='<div style="color:#5e6f8d">'+T('pren_vuoto')+'</div>'; return; }
+    if(!lst.length){ box.innerHTML='<div style="color:var(--testo-tenue)">'+T('pren_vuoto')+'</div>'; return; }
     box.innerHTML='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'+
       '<thead><tr style="text-align:left;font-size:.72rem;color:#4a5b7a"><th>'+T('th_all2')+'</th><th>'+T('l_da')+'</th><th>'+T('l_a')+'</th><th>'+T('th_stato')+'</th></tr></thead><tbody>'+
-      lst.map(p=>`<tr style="border-top:1px solid #eef2f7"><td>${(p.alloggio||'').replace(/[<>]/g,'')}</td><td>${p.check_in||''}</td><td>${p.check_out||''}</td><td>${p.stato==='rimborsata'?('<span style="color:#842029">'+T('pren_rimb')+'</span>'):('<span style="color:#155724">'+T('pren_conf')+'</span>')}</td></tr>`).join('')+
+      lst.map(p=>`<tr style="border-top:1px solid var(--sfondo-tenue)"><td>${(p.alloggio||'').replace(/[<>]/g,'')}</td><td>${p.check_in||''}</td><td>${p.check_out||''}</td><td>${p.stato==='rimborsata'?('<span style="color:#842029">'+T('pren_rimb')+'</span>'):('<span style="color:var(--brand-chiaro)">'+T('pren_conf')+'</span>')}</td></tr>`).join('')+
       '</tbody></table></div>';
   }catch(e){}
 }
@@ -530,7 +548,7 @@ async function caricaPayout(){
     const LBL={maturato:T('st_mat'),in_transito:T('st_tra'),pagato:T('st_pag'),trattenuto:T('st_trat')};
     box.innerHTML = valute.map(v=>{
       const righe = Object.keys(p[v]).map(s=>`<div style="display:flex;justify-content:space-between"><span>${LBL[s]||s}</span><b>${(p[v][s]/100).toFixed(2)} ${v}</b></div>`).join('');
-      return `<div style="border-top:1px solid #eef2f7;padding:.6rem 0">${righe}</div>`;
+      return `<div style="border-top:1px solid var(--sfondo-tenue);padding:.6rem 0">${righe}</div>`;
     }).join('');
   }catch(e){}
 }
@@ -540,10 +558,10 @@ async function caricaRichieste(){
     const box = document.getElementById('richieste_lista');
     const lst = d.richieste||[];
     if(!lst.length){ box.textContent=T('no_req'); return; }
-    box.innerHTML = lst.map(r=>`<div style="border-top:1px solid #eef2f7;padding:.6rem 0">
+    box.innerHTML = lst.map(r=>`<div style="border-top:1px solid var(--sfondo-tenue);padding:.6rem 0">
       <b>${r.alloggio_id}</b> · ${r.check_in} → ${r.check_out}
       <div style="margin-top:.4rem;display:flex;gap:.5rem">
-        <button class="rApp" data-r="${r.riferimento}" style="margin-top:0;background:#155724">${T('b_approva')}</button>
+        <button class="rApp" data-r="${r.riferimento}" style="margin-top:0;background:var(--brand-chiaro)">${T('b_approva')}</button>
         <button class="rRif" data-r="${r.riferimento}" style="margin-top:0;background:#b02a37">${T('b_rifiuta')}</button>
       </div></div>`).join('');
     const dec = async (rif, ok)=>{ await fetch(API+'/api/host/richieste/'+(ok?'approva':'rifiuta'),
@@ -560,7 +578,7 @@ async function caricaLinkDiretto(){
     const lst = (d.alloggi&&d.alloggi.length) ? d.alloggi
               : [{titolo:T('tutti_miei'), link:d.link_generale}];
     document.getElementById('dir_links').innerHTML = lst.map((a,i)=>
-      `<div style="margin-bottom:.7rem"><div style="font-size:.78rem;color:#5e6f8d;margin-bottom:.2rem">${a.titolo}</div>
+      `<div style="margin-bottom:.7rem"><div style="font-size:.78rem;color:var(--testo-tenue);margin-bottom:.2rem">${a.titolo}</div>
        <div style="display:flex;gap:.5rem"><input id="dl_${i}" readonly value="${abs(a.link)}" style="flex:1;font-size:.78rem">
        <button data-i="${i}" class="btnDlCopy" style="margin-top:0">${T('b_copia')}</button></div></div>`).join('');
     document.querySelectorAll('.btnDlCopy').forEach(b=>b.onclick=()=>{
@@ -652,7 +670,7 @@ function thumbEl(url){   // miniatura con ✕ per rimuovere
   const img=document.createElement('img'); img.src=url;
   img.style.cssText='width:64px;height:64px;object-fit:cover;border-radius:.5rem'; ph.appendChild(img);
   const x=document.createElement('button'); x.type='button'; x.textContent='✕'; x.title=T('b_rimuovi');
-  x.style.cssText='position:absolute;top:-8px;right:-8px;width:22px;height:22px;padding:0;margin:0;border-radius:50%;background:#b00020;color:#fff;font-size:.8rem;line-height:22px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.3)';
+  x.style.cssText='position:absolute;top:-8px;right:-8px;width:22px;height:22px;padding:0;margin:0;border-radius:50%;background:var(--rosso);color:#fff;font-size:.8rem;line-height:22px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.3)';
   x.onclick=()=>rimuoviFoto(url, ph); ph.appendChild(x);
   return ph;
 }
@@ -669,7 +687,7 @@ function rimuoviFoto(url, ph){
       if(file.size > 5*1024*1024) continue;
       const b64 = await new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(file); });
       const ph=document.createElement('div');
-      ph.style.cssText='width:64px;height:64px;display:flex;align-items:center;justify-content:center;background:#eef2f7;border-radius:.5rem;font-size:1.1rem';
+      ph.style.cssText='width:64px;height:64px;display:flex;align-items:center;justify-content:center;background:var(--sfondo-tenue);border-radius:.5rem;font-size:1.1rem';
       ph.textContent='⏳';
       th.appendChild(ph);
       try{ const r=await post('/api/host/upload_foto',{image_base64:b64});
@@ -833,10 +851,10 @@ async function caricaConversazioni(){
   try{
     const d=await (await fetch(API+'/api/host/conversazioni',{headers:authHeaders()})).json();
     const lst=d.conversazioni||[];
-    if(!lst.length){ box.innerHTML='<div style="color:#5e6f8d">'+T('cv_vuoto')+'</div>'; return; }
-    box.innerHTML=lst.map(c=>`<div onclick="apriConv('${c.prenotazione_id}')" style="cursor:pointer;border:1px solid #eef2f7;border-radius:.6rem;padding:.5rem .7rem;margin:.3rem 0">
+    if(!lst.length){ box.innerHTML='<div style="color:var(--testo-tenue)">'+T('cv_vuoto')+'</div>'; return; }
+    box.innerHTML=lst.map(c=>`<div onclick="apriConv('${c.prenotazione_id}')" style="cursor:pointer;border:1px solid var(--sfondo-tenue);border-radius:.6rem;padding:.5rem .7rem;margin:.3rem 0">
       <b>${c.ultimo_mittente==='ospite'?'👤':'🏠'} ${(c.ultimo_testo||'').replace(/[<>]/g,'').slice(0,70)}</b>
-      <span style="color:#5e6f8d;font-size:.78rem"> · ${c.messaggi} msg · rif ${String(c.prenotazione_id).slice(0,8)}…</span></div>`).join('');
+      <span style="color:var(--testo-tenue);font-size:.78rem"> · ${c.messaggi} msg · rif ${String(c.prenotazione_id).slice(0,8)}…</span></div>`).join('');
   }catch(e){}
 }
 async function apriConv(rif){
@@ -859,7 +877,7 @@ document.getElementById('cv_send').onclick = async ()=>{
 };
 document.getElementById('btnCalTutti').onclick = async ()=>{
   const box=document.getElementById('calTutti'); box.textContent='⏳';
-  const col={libero:'#d4edda',pieno:'#f8d7da',in_trattativa:'#ffe0a3',chiuso:'#e2e3e5',non_caricato:'#fff'};
+  const col={libero:'#d4edda',pieno:'#f8d7da',in_trattativa:'var(--arancio)',chiuso:'#e2e3e5',non_caricato:'#fff'};
   try{
     const da=document.getElementById('c_da').value, a=document.getElementById('c_a').value;
     const r=await fetch(API+'/api/host/calendario_tutti?da='+da+'&a='+a,{headers:authHeaders()});
@@ -869,11 +887,11 @@ document.getElementById('btnCalTutti').onclick = async ()=>{
     if(!al.length){ box.className=''; box.textContent=T('al_nessuno'); return; }
     const gg=(al[0].giorni||[]).map(g=>g.giorno);
     let h='<table style="border-collapse:collapse;font-size:.72rem"><thead><tr><th style="position:sticky;left:0;background:#fff;text-align:left;padding:.2rem .4rem">'+T('miei_h')+'</th>';
-    gg.forEach(g=>{ h+='<th style="padding:.1rem;color:#5e6f8d;font-weight:400">'+g.slice(8)+'</th>'; });
+    gg.forEach(g=>{ h+='<th style="padding:.1rem;color:var(--testo-tenue);font-weight:400">'+g.slice(8)+'</th>'; });
     h+='</tr></thead><tbody>';
     al.forEach(x=>{ const byd={}; (x.giorni||[]).forEach(g=>byd[g.giorno]=g.stato);
       h+='<tr><td style="position:sticky;left:0;background:#fff;padding:.2rem .4rem;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis" title="'+(x.titolo||'').replace(/"/g,'')+'">'+(x.titolo||x.slug)+'</td>';
-      gg.forEach(g=>{ const st=byd[g]||'non_caricato'; h+='<td title="'+g+': '+st+'" style="width:16px;height:16px;background:'+(col[st]||'#fff')+';border:1px solid #eef2f7"></td>'; });
+      gg.forEach(g=>{ const st=byd[g]||'non_caricato'; h+='<td title="'+g+': '+st+'" style="width:16px;height:16px;background:'+(col[st]||'#fff')+';border:1px solid var(--sfondo-tenue)"></td>'; });
       h+='</tr>'; });
     h+='</tbody></table>';
     box.className=''; box.innerHTML=h;
@@ -892,10 +910,10 @@ document.getElementById('btnCalPrezzi').onclick = async ()=>{
     const V=CURRENT_VALUTA||'EUR';
     box.className=''; box.innerHTML='<div style="display:flex;flex-wrap:wrap;gap:.35rem">'+
       (d.celle||[]).map(c=>{
-        if(c.prezzo_cents==null) return '<span style="min-width:88px;padding:.25rem;border:1px solid #eef2f7;border-radius:.4rem;color:#a9b4c9;text-align:center">'+c.giorno.slice(5)+'<br>—</span>';
+        if(c.prezzo_cents==null) return '<span style="min-width:88px;padding:.25rem;border:1px solid var(--sfondo-tenue);border-radius:.4rem;color:#a9b4c9;text-align:center">'+c.giorno.slice(5)+'<br>—</span>';
         const su=(c.prezzo_dinamico_cents>c.prezzo_cents), giu=(c.prezzo_dinamico_cents<c.prezzo_cents);
         const col=c.stato==='prenotato'?'#f8d7da':(su?'#d4edda':'#fff');
-        return '<span style="min-width:88px;padding:.25rem;border:1px solid #eef2f7;border-radius:.4rem;text-align:center;background:'+col+'">'+c.giorno.slice(5)+'<br><b>'+money(c.prezzo_dinamico_cents,V)+'</b>'+((su||giu)?'<br><span style="font-size:.72rem;color:#5e6f8d">'+(su?'↑':'↓')+' base '+money(c.prezzo_cents,V)+'</span>':'')+'</span>';
+        return '<span style="min-width:88px;padding:.25rem;border:1px solid var(--sfondo-tenue);border-radius:.4rem;text-align:center;background:'+col+'">'+c.giorno.slice(5)+'<br><b>'+money(c.prezzo_dinamico_cents,V)+'</b>'+((su||giu)?'<br><span style="font-size:.72rem;color:var(--testo-tenue)">'+(su?'↑':'↓')+' base '+money(c.prezzo_cents,V)+'</span>':'')+'</span>';
       }).join('')+'</div>';
   }catch(e){ box.className='msg err'; box.textContent=T('errore')+' '+e.message; }
 };
@@ -989,15 +1007,15 @@ async function caricaMiei(){
     const res=await fetch(API+'/api/host/alloggi',{headers:authHeaders()});   // host dal token
     if(res.status===401){ m.className='msg err'; m.textContent=T('err_key'); return; }
     const d=await res.json();
-    if(!d.alloggi||!d.alloggi.length){ document.getElementById('miei').innerHTML='<div style="color:#5e6f8d">'+T('no_all')+'</div>'; return; }
+    if(!d.alloggi||!d.alloggi.length){ document.getElementById('miei').innerHTML='<div style="color:var(--testo-tenue)">'+T('no_all')+'</div>'; return; }
     document.getElementById('miei').innerHTML='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr style="text-align:left;font-size:.72rem;color:#4a5b7a"><th>'+T('th_id')+'</th><th>'+T('th_titolo')+'</th><th>'+T('th_citta')+'</th><th>'+T('th_prezzo')+'</th><th>'+T('th_stato')+'</th><th></th></tr></thead><tbody>'+
       d.alloggi.map(a=>{
         const azione = a.stato==='pubblicato'
           ? `<button class="mStato" data-s="${a.slug}" data-st="sospeso" style="background:#b02a37;padding:.3rem .9rem">${T('b_sospendi')}</button>`
-          : `<button class="mStato" data-s="${a.slug}" data-st="pubblicato" style="background:#155724;padding:.3rem .9rem">${T('b_pubblica2')}</button>`;
-        const edit = `<button class="mEdit" data-s="${a.slug}" style="background:#5e6f8d;padding:.3rem .9rem;margin-left:.3rem">${T('b_modifica')}</button>`;
-        const del = `<button class="mDel" data-s="${a.slug}" data-t="${(a.titolo||'').replace(/"/g,'')}" style="background:#fff;color:#b00020;border:1px solid #f3d6d6;padding:.3rem .7rem;margin-left:.3rem">🗑</button>`;
-        return `<tr style="border-top:1px solid #eef2f7"><td style="color:#5e6f8d;font-weight:600">#${a.id}</td><td>${a.titolo}</td><td>${a.citta}</td><td>${fmt(a.prezzo_notte_cents,a.valuta)}</td><td>${a.stato}</td><td style="white-space:nowrap">${azione}${edit}${del}</td></tr>`;
+          : `<button class="mStato" data-s="${a.slug}" data-st="pubblicato" style="background:var(--brand-chiaro);padding:.3rem .9rem">${T('b_pubblica2')}</button>`;
+        const edit = `<button class="mEdit" data-s="${a.slug}" style="background:var(--testo-tenue);padding:.3rem .9rem;margin-left:.3rem">${T('b_modifica')}</button>`;
+        const del = `<button class="mDel" data-s="${a.slug}" data-t="${(a.titolo||'').replace(/"/g,'')}" style="background:#fff;color:var(--rosso);border:1px solid #f3d6d6;padding:.3rem .7rem;margin-left:.3rem">🗑</button>`;
+        return `<tr style="border-top:1px solid var(--sfondo-tenue)"><td style="color:var(--testo-tenue);font-weight:600">#${a.id}</td><td>${a.titolo}</td><td>${a.citta}</td><td>${fmt(a.prezzo_notte_cents,a.valuta)}</td><td>${a.stato}</td><td style="white-space:nowrap">${azione}${edit}${del}</td></tr>`;
       }).join('')+'</tbody></table></div>';
     document.querySelectorAll('#miei .mStato').forEach(b=>b.onclick=()=>cambiaStato(b.dataset.s,b.dataset.st));
     document.querySelectorAll('#miei .mEdit').forEach(b=>b.onclick=()=>caricaModifica(b.dataset.s));
@@ -1044,12 +1062,12 @@ document.getElementById('btnCal').onclick = async ()=>{
     const res = await fetch(API+'/api/host/calendario?'+p.toString(), {headers:authHeaders()});
     if(res.status===401){ m.className='msg err'; m.textContent=T('err_key'); return; }
     const d = await res.json();
-    const col = {libero:'#d4edda', pieno:'#f8d7da', in_trattativa:'#ffe0a3',
+    const col = {libero:'#d4edda', pieno:'#f8d7da', in_trattativa:'var(--arancio)',
                  chiuso:'#e2e3e5', non_caricato:'#fff'};
     document.getElementById('cal').innerHTML = (d.giorni||[]).map(g=>{
       const gg = g.giorno.slice(8);
       const bg = col[g.stato]||'#fff';
-      const bord = g.stato==='non_caricato'?'border:1px solid #dce1ed;':'';
+      const bord = g.stato==='non_caricato'?'border:1px solid var(--bordo);':'';
       const pr = g.prezzo_netto_cents?(' '+fmt(g.prezzo_netto_cents,CURRENT_VALUTA)):'';
       return `<div title="${g.giorno} ${g.stato}${pr}" style="width:42px;height:42px;background:${bg};${bord}border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:600">${gg}</div>`;
     }).join('');
@@ -1061,8 +1079,8 @@ async function caricaThread(){
   try{
     const d=await (await fetch(API+'/api/messaggi?prenotazione_id='+encodeURIComponent(pren),{headers:authHeaders()})).json();
     const box=document.getElementById('msgThread');
-    if(!d.messaggi||!d.messaggi.length){ box.innerHTML='<div style="color:#5e6f8d;font-size:.85rem">'+T('no_msg')+'</div>'; return; }
-    box.innerHTML=d.messaggi.map(m=>`<div style="padding:.4rem .7rem;margin:.3rem 0;border-radius:.7rem;background:${m.mittente==='host'?'#eef6ff':'#f4f6fa'}"><b style="font-size:.72rem;color:#4a5b7a">${m.mittente==='host'?T('tu'):T('ospite')}</b><br>${(m.testo||'').replace(/</g,'&lt;')}</div>`).join('');
+    if(!d.messaggi||!d.messaggi.length){ box.innerHTML='<div style="color:var(--testo-tenue);font-size:.85rem">'+T('no_msg')+'</div>'; return; }
+    box.innerHTML=d.messaggi.map(m=>`<div style="padding:.4rem .7rem;margin:.3rem 0;border-radius:.7rem;background:${m.mittente==='host'?'#eef6ff':'var(--sfondo)'}"><b style="font-size:.72rem;color:#4a5b7a">${m.mittente==='host'?T('tu'):T('ospite')}</b><br>${(m.testo||'').replace(/</g,'&lt;')}</div>`).join('');
   }catch(e){}
 }
 document.getElementById('btnMsgInvia').onclick = async ()=>{
@@ -1082,7 +1100,7 @@ document.getElementById('btnDp').onclick = async ()=>{
     if(r.status===401){ ris.textContent=T('accedi_host'); return; }
     const d=await r.json();
     if(d.prezzo_cents){
-      ris.innerHTML='💶 '+T('dp_sugg')+' <b>€'+(d.prezzo_cents/100).toFixed(2)+'</b> /'+T('vs_anotte').replace('per ','').replace('／','')+' <span style="color:#5e6f8d;font-size:.8rem">('+T('dp_mult')+' '+((d.moltiplicatore_bps||10000)/100).toFixed(0)+'%)</span>'; }
+      ris.innerHTML='💶 '+T('dp_sugg')+' <b>€'+(d.prezzo_cents/100).toFixed(2)+'</b> /'+T('vs_anotte').replace('per ','').replace('／','')+' <span style="color:var(--testo-tenue);font-size:.8rem">('+T('dp_mult')+' '+((d.moltiplicatore_bps||10000)/100).toFixed(0)+'%)</span>'; }
     else { ris.textContent='❌ '+(d.errore||''); }
   }catch(e){ ris.textContent=T('errore')+' '+e.message; }
 };

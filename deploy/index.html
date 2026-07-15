@@ -10,33 +10,51 @@
 <link rel="apple-touch-icon" href="/icon.svg">
 <title>Bookin VIP</title>
 <style>
+:root{
+  /* DESIGN TOKENS (FASE 2 carrozzeria): la palette sta QUI, un posto solo.
+     Stessi identici colori di prima -> nessun cambio visivo, solo coerenza. */
+  --brand:#0f4c3a;
+  --brand-chiaro:#155724;
+  --oro:#8a6d0b;
+  --testo:#1a1e2b;
+  --testo-tenue:#5e6f8d;
+  --bordo:#dce1ed;
+  --sfondo:#f4f6fa;
+  --sfondo-tenue:#eef2f7;
+  --rosso:#b00020;
+  --rosso-bg:#fdecec;
+  --verde-bg:#eafaf0;
+  --giallo-bg:#fff3cd;
+  --arancio:#ffe0a3;
+}
+
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#f4f6fa;color:#1a1e2b;line-height:1.5;padding:1.5rem}
+  body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--sfondo);color:var(--testo);line-height:1.5;padding:1.5rem}
   .container{max-width:1200px;margin:0 auto}
-  header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:2rem;padding-bottom:1rem;border-bottom:2px solid #dce1ed}
-  .logo{font-weight:700;font-size:1.8rem;letter-spacing:-.5px;background:linear-gradient(135deg,#0f4c3a,#156b52);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-  .logo small{font-weight:400;font-size:.85rem;-webkit-text-fill-color:#5e6f8d;color:#5e6f8d}
+  header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:2rem;padding-bottom:1rem;border-bottom:2px solid var(--bordo)}
+  .logo{font-weight:700;font-size:1.8rem;letter-spacing:-.5px;background:linear-gradient(135deg,var(--brand),#156b52);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  .logo small{font-weight:400;font-size:.85rem;-webkit-text-fill-color:var(--testo-tenue);color:var(--testo-tenue)}
   .headright{display:flex;gap:.6rem;align-items:center}
-  select#lang{padding:.4rem .7rem;border-radius:.7rem;border:1px solid #dce1ed;font-size:1rem}
-  #btnInstall{display:none;background:#0f4c3a;color:#fff;border:none;padding:.4rem 1rem;border-radius:2rem;font-weight:600;cursor:pointer}
+  select#lang{padding:.4rem .7rem;border-radius:.7rem;border:1px solid var(--bordo);font-size:1rem}
+  #btnInstall{display:none;background:var(--brand);color:#fff;border:none;padding:.4rem 1rem;border-radius:2rem;font-weight:600;cursor:pointer}
   .filtri{background:#fff;padding:1.25rem 1.5rem;border-radius:1.5rem;box-shadow:0 4px 12px rgba(0,0,0,.04);margin-bottom:2rem}
   .filtri .riga{display:flex;flex-wrap:wrap;gap:.75rem 1.25rem;align-items:end}
   .filtri label{display:flex;flex-direction:column;font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:#4a5b7a;gap:.25rem}
-  .filtri input{padding:.5rem .75rem;border-radius:.7rem;border:1px solid #dce1ed;font-size:1rem;min-width:120px}
-  .filtri button{background:#0f4c3a;color:#fff;border:none;padding:.55rem 1.75rem;border-radius:2rem;font-weight:600;font-size:1rem;cursor:pointer}
+  .filtri input{padding:.5rem .75rem;border-radius:.7rem;border:1px solid var(--bordo);font-size:1rem;min-width:120px}
+  .filtri button{background:var(--brand);color:#fff;border:none;padding:.55rem 1.75rem;border-radius:2rem;font-weight:600;font-size:1rem;cursor:pointer}
   .filtri button:hover{background:#156b52}
   .chips{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.9rem}
   #vista{display:none}
-  .vistaBtn{background:#fff;color:#0f4c3a;border:1px solid #c4d9d0;padding:.45rem 1.1rem;border-radius:2rem;font-weight:600;cursor:pointer;font-size:.92rem}
-  .vistaBtn.attiva{background:#0f4c3a;color:#fff;border-color:#0f4c3a}
-  .leaflet-popup-content{font-size:.9rem;line-height:1.4}.leaflet-popup-content b{color:#0f4c3a}
-  .chip{font-size:.8rem;padding:.3rem .8rem;border-radius:1rem;border:1px solid #dce1ed;background:#fff;cursor:pointer;user-select:none}
-  .chip.on{background:#0f4c3a;color:#fff;border-color:#0f4c3a}
+  .vistaBtn{background:#fff;color:var(--brand);border:1px solid #c4d9d0;padding:.45rem 1.1rem;border-radius:2rem;font-weight:600;cursor:pointer;font-size:.92rem}
+  .vistaBtn.attiva{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .leaflet-popup-content{font-size:.9rem;line-height:1.4}.leaflet-popup-content b{color:var(--brand)}
+  .chip{font-size:.8rem;padding:.3rem .8rem;border-radius:1rem;border:1px solid var(--bordo);background:#fff;cursor:pointer;user-select:none}
+  .chip.on{background:var(--brand);color:#fff;border-color:var(--brand)}
   .risultati{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));gap:1.5rem}
   .card{background:#fff;border-radius:1.25rem;box-shadow:0 8px 24px rgba(0,0,0,.05);transition:transform .15s;padding:1.25rem;display:flex;flex-direction:column}
   .card:hover{transform:translateY(-4px)}
-  .card img.thumb{width:100%;height:170px;object-fit:cover;border-radius:.9rem;margin-bottom:.6rem;background:#eef2f7}
-  .card .ph{width:100%;height:170px;border-radius:.9rem;margin-bottom:.6rem;background:linear-gradient(135deg,#eef2f7,#dce1ed);display:flex;align-items:center;justify-content:center;color:#a9b4c9;font-size:2rem}
+  .card img.thumb{width:100%;height:170px;object-fit:cover;border-radius:.9rem;margin-bottom:.6rem;background:var(--sfondo-tenue)}
+  .card .ph{width:100%;height:170px;border-radius:.9rem;margin-bottom:.6rem;background:linear-gradient(135deg,var(--sfondo-tenue),var(--bordo));display:flex;align-items:center;justify-content:center;color:#a9b4c9;font-size:2rem}
   .card h3{font-size:1.2rem;margin-bottom:.25rem}
   .gallery{display:flex;gap:.4rem;overflow-x:auto;margin:.5rem 0;padding-bottom:.3rem}
   .gallery img{height:140px;border-radius:.8rem;object-fit:cover;flex:0 0 auto;cursor:zoom-in}
@@ -47,23 +65,23 @@
   .lbBtn:hover{background:rgba(255,255,255,.3)}
   #lbX{position:fixed;top:1rem;right:1.2rem;font-size:2rem;color:#fff;cursor:pointer;background:none;border:0}
   #lbN{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);color:#fff;font-size:.9rem;opacity:.85}
-  .card .prezzo{font-size:1.5rem;font-weight:700;color:#0f4c3a}
-  .card .badge{display:inline-block;background:#eef2f7;padding:.15rem .7rem;border-radius:1rem;font-size:.72rem;font-weight:600;color:#156b52;margin:.15rem .2rem 0 0}
-  .card .badge.green{background:#d4edda;color:#155724}.card .badge.red{background:#f8d7da;color:#842029}
+  .card .prezzo{font-size:1.5rem;font-weight:700;color:var(--brand)}
+  .card .badge{display:inline-block;background:var(--sfondo-tenue);padding:.15rem .7rem;border-radius:1rem;font-size:.72rem;font-weight:600;color:#156b52;margin:.15rem .2rem 0 0}
+  .card .badge.green{background:#d4edda;color:var(--brand-chiaro)}.card .badge.red{background:#f8d7da;color:#842029}
   .card .meta{margin-top:.5rem;font-size:.88rem;color:#4a5b7a;flex:1}
   .card button{margin-top:.75rem;background:#156b52;color:#fff;border:none;padding:.5rem;border-radius:2rem;cursor:pointer;font-weight:600}
-  .card button:hover{background:#0f4c3a}
+  .card button:hover{background:var(--brand)}
   .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);align-items:center;justify-content:center;z-index:1000;padding:1rem}
   .modal.open{display:flex}
   .modal-content{background:#fff;max-width:560px;width:100%;border-radius:1.5rem;padding:2rem;max-height:90vh;overflow-y:auto;position:relative}
   .close{position:absolute;top:1rem;right:1.3rem;font-size:1.8rem;cursor:pointer;color:#8a9bb5}
-  .prezzo-grande{font-size:1.8rem;font-weight:700;color:#0f4c3a;margin:.5rem 0}
+  .prezzo-grande{font-size:1.8rem;font-weight:700;color:var(--brand);margin:.5rem 0}
   .riga-prezzo{display:flex;justify-content:space-between;font-size:.92rem;padding:.15rem 0}
-  .riga-prezzo.tot{font-weight:700;border-top:1px solid #dce1ed;margin-top:.4rem;padding-top:.5rem}
-  .prenota-btn{margin-top:1rem;width:100%;background:#0f4c3a;color:#fff;border:none;padding:.8rem;border-radius:2rem;font-size:1.05rem;font-weight:600;cursor:pointer}
-  .loading,.vuoto{text-align:center;padding:3rem;color:#5e6f8d;font-style:italic}
+  .riga-prezzo.tot{font-weight:700;border-top:1px solid var(--bordo);margin-top:.4rem;padding-top:.5rem}
+  .prenota-btn{margin-top:1rem;width:100%;background:var(--brand);color:#fff;border:none;padding:.8rem;border-radius:2rem;font-size:1.05rem;font-weight:600;cursor:pointer}
+  .loading,.vuoto{text-align:center;padding:3rem;color:var(--testo-tenue);font-style:italic}
   .msg{padding:.7rem 1rem;border-radius:.7rem;margin-top:.5rem;font-size:.9rem}
-  .msg.ok{background:#d4edda;color:#155724}.msg.err{background:#f8d7da;color:#842029}
+  .msg.ok{background:#d4edda;color:var(--brand-chiaro)}.msg.err{background:#f8d7da;color:#842029}
   @media(max-width:640px){.filtri .riga{flex-direction:column;align-items:stretch}}
   /* telefoni piccoli (320px): meno padding = piu' larghezza utile; niente scroll orizzontale */
   @media(max-width:400px){body{padding:.75rem}.risultati{gap:1rem}.filtri{padding:1rem}}
@@ -89,7 +107,7 @@
     </div>
   </header>
 
-  <section style="position:relative;overflow:hidden;background:linear-gradient(135deg,#0f4c3a,#156b52);color:#fff;border-radius:1.3rem;padding:2.2rem 1.4rem 2rem;margin:1rem 0 1.5rem;text-align:center">
+  <section style="position:relative;overflow:hidden;background:linear-gradient(135deg,var(--brand),#156b52);color:#fff;border-radius:1.3rem;padding:2.2rem 1.4rem 2rem;margin:1rem 0 1.5rem;text-align:center">
     <svg viewBox="0 0 600 120" width="100%" height="80" preserveAspectRatio="none" aria-hidden="true" style="position:absolute;left:0;bottom:0;opacity:.16">
       <g fill="#fff"><rect x="20" y="60" width="50" height="60"/><rect x="80" y="40" width="40" height="80"/><rect x="130" y="70" width="55" height="50"/><rect x="200" y="30" width="45" height="90"/><rect x="260" y="55" width="50" height="65"/><rect x="330" y="45" width="40" height="75"/><rect x="385" y="68" width="55" height="52"/><rect x="455" y="35" width="45" height="85"/><rect x="515" y="60" width="55" height="60"/></g>
       <circle cx="520" cy="34" r="20" fill="#f9c846" opacity=".9"/>
@@ -102,7 +120,7 @@
         <span style="background:rgba(255,255,255,.18);padding:.4rem .8rem;border-radius:2rem">✓ <span data-t="badge_commissioni">0% commissioni all'ospite</span></span>
         <span style="background:rgba(255,255,255,.18);padding:.4rem .8rem;border-radius:2rem">✓ <span data-t="badge_cancellazione">Cancellazione gratuita</span></span>
         <span style="background:rgba(255,255,255,.18);padding:.4rem .8rem;border-radius:2rem">✓ <span data-t="badge_pagamenti">Pagamenti sicuri</span></span>
-        <span style="background:rgba(249,200,70,.95);color:#0f4c3a;font-weight:700;padding:.4rem .8rem;border-radius:2rem">★ <span data-t="badge_antirimpianto">Anti-Rimpianto: i soldi tornano come credito</span></span>
+        <span style="background:rgba(249,200,70,.95);color:var(--brand);font-weight:700;padding:.4rem .8rem;border-radius:2rem">★ <span data-t="badge_antirimpianto">Anti-Rimpianto: i soldi tornano come credito</span></span>
       </div>
     </div>
   </section>
@@ -119,14 +137,14 @@
       <button type="button" id="btnVicino" data-ttitle="vicino_title" title="Trova alloggi vicino a dove ti trovi ora">📍 <span data-t="vicino_a_me">Vicino a me</span></button>
     </div>
     <div class="chips" id="chips"></div>
-    <label style="display:flex;align-items:center;gap:.4rem;margin-top:.7rem;font-size:.85rem;color:#155724;font-weight:600;cursor:pointer;text-transform:none;flex-direction:row"><input type="checkbox" id="soloGratuita" style="min-width:0;width:auto"> <span data-t="filtro_gratuita">Solo cancellazione gratuita</span></label>
-    <label style="display:flex;align-items:center;gap:.4rem;margin-top:.4rem;font-size:.85rem;color:#0f4c3a;font-weight:600;cursor:pointer;text-transform:none;flex-direction:row"><input type="checkbox" id="flexDate" style="min-width:0;width:auto"> <span id="lblFlex">Date flessibili (± 3 giorni)</span></label>
+    <label style="display:flex;align-items:center;gap:.4rem;margin-top:.7rem;font-size:.85rem;color:var(--brand-chiaro);font-weight:600;cursor:pointer;text-transform:none;flex-direction:row"><input type="checkbox" id="soloGratuita" style="min-width:0;width:auto"> <span data-t="filtro_gratuita">Solo cancellazione gratuita</span></label>
+    <label style="display:flex;align-items:center;gap:.4rem;margin-top:.4rem;font-size:.85rem;color:var(--brand);font-weight:600;cursor:pointer;text-transform:none;flex-direction:row"><input type="checkbox" id="flexDate" style="min-width:0;width:auto"> <span id="lblFlex">Date flessibili (± 3 giorni)</span></label>
   </form>
 
   <div id="bannerBeta" style="background:linear-gradient(135deg,#fff8ec,#fffdf8);border:1px solid #f0dfb8;border-radius:1rem;padding:1rem 1.2rem;margin:0 0 1.4rem;text-align:center">
     <div style="font-weight:700;color:#8a5200;font-size:1.02rem">🚧 <span id="beta1">Siamo in fase di test e costruzione — apriamo a breve.</span></div>
-    <div style="color:#5e6f8d;font-size:.92rem;margin-top:.25rem"><span id="beta2">Stiamo preparando un servizio più avanzato e più conveniente per te. Nel frattempo è già aperto agli host:</span>
-      <a href="/diventa-host.html" style="color:#155724;font-weight:700;white-space:nowrap"><span id="beta3">pubblica il tuo alloggio ora →</span></a></div>
+    <div style="color:var(--testo-tenue);font-size:.92rem;margin-top:.25rem"><span id="beta2">Stiamo preparando un servizio più avanzato e più conveniente per te. Nel frattempo è già aperto agli host:</span>
+      <a href="/diventa-host.html" style="color:var(--brand-chiaro);font-weight:700;white-space:nowrap"><span id="beta3">pubblica il tuo alloggio ora →</span></a></div>
   </div>
 
   <div id="vista" style="display:none;gap:.5rem;margin:.2rem 0 .8rem">
@@ -143,26 +161,26 @@
   </div>
 
   <div id="mappaWrap" style="display:none;position:relative">
-    <div id="mappa" style="height:60vh;min-height:340px;border-radius:1rem;overflow:hidden;border:1px solid #dce1ed"></div>
-    <div id="mappaMsg" style="text-align:center;color:#5e6f8d;padding:.6rem;font-size:.9rem"></div>
+    <div id="mappa" style="height:60vh;min-height:340px;border-radius:1rem;overflow:hidden;border:1px solid var(--bordo)"></div>
+    <div id="mappaMsg" style="text-align:center;color:var(--testo-tenue);padding:.6rem;font-size:.9rem"></div>
   </div>
 
   <div id="risultati" class="risultati"><div class="loading">…</div></div>
 
-  <footer style="margin-top:2.5rem;padding-top:1.25rem;border-top:1px solid #dce1ed;text-align:center;color:#5e6f8d;font-size:.9rem">
+  <footer style="margin-top:2.5rem;padding-top:1.25rem;border-top:1px solid var(--bordo);text-align:center;color:var(--testo-tenue);font-size:.9rem">
     <div style="margin-bottom:.9rem">
-      <div style="font-weight:600;color:#0f4c3a;margin-bottom:.35rem" data-t="host_mete">🏠 Diventa host nelle mete più richieste</div>
+      <div style="font-weight:600;color:var(--brand);margin-bottom:.35rem" data-t="host_mete">🏠 Diventa host nelle mete più richieste</div>
       <div style="display:flex;gap:.5rem .8rem;justify-content:center;flex-wrap:wrap;font-size:.82rem;max-width:60rem;margin:0 auto">
         <a href="/affitta/roma">Roma</a><a href="/affitta/milano">Milano</a><a href="/affitta/firenze">Firenze</a><a href="/affitta/venezia">Venezia</a><a href="/affitta/napoli">Napoli</a><a href="/affitta/new-york">New York</a><a href="/affitta/los-angeles">Los Angeles</a><a href="/affitta/miami">Miami</a><a href="/affitta/austin">Austin</a><a href="/affitta/chicago">Chicago</a><a href="/affitta/london">London</a><a href="/affitta/lisbon">Lisbon</a><a href="/affitta/barcelona">Barcelona</a><a href="/affitta/madrid">Madrid</a><a href="/affitta/paris">Paris</a><a href="/affitta/berlin">Berlin</a><a href="/affitta/amsterdam">Amsterdam</a><a href="/affitta/tokyo">Tokyo</a><a href="/affitta/osaka">Osaka</a><a href="/affitta/singapore">Singapore</a><a href="/affitta/bangkok">Bangkok</a><a href="/affitta/bali">Bali</a><a href="/affitta/sydney">Sydney</a><a href="/affitta/melbourne">Melbourne</a><a href="/affitta/dubai">Dubai</a><a href="/affitta/mexico-city">Mexico City</a><a href="/affitta/buenos-aires">Buenos Aires</a><a href="/affitta/cape-town">Cape Town</a>
       </div>
     </div>
     <div style="display:flex;gap:1.2rem;justify-content:center;flex-wrap:wrap;margin-bottom:.6rem">
-      <a href="https://www.facebook.com/1248474171672376" target="_blank" rel="noopener" style="color:#0f4c3a;text-decoration:none;font-weight:600">f Facebook</a>
-      <a href="https://t.me/bookinvip_ufficiale" target="_blank" rel="noopener" style="color:#0f4c3a;text-decoration:none;font-weight:600">✈ Telegram</a>
-      <a href="https://instagram.com/bookinvip" target="_blank" rel="noopener" style="color:#0f4c3a;text-decoration:none">📷 Instagram</a>
-      <a href="https://youtube.com/@bookinvip" target="_blank" rel="noopener" style="color:#0f4c3a;text-decoration:none">▶ YouTube</a>
-      <a href="https://tiktok.com/@bookinvip" target="_blank" rel="noopener" style="color:#0f4c3a;text-decoration:none">🎵 TikTok</a>
-      <a href="https://x.com/bookinvip" target="_blank" rel="noopener" style="color:#0f4c3a;text-decoration:none">𝕏 (Twitter)</a>
+      <a href="https://www.facebook.com/1248474171672376" target="_blank" rel="noopener" style="color:var(--brand);text-decoration:none;font-weight:600">f Facebook</a>
+      <a href="https://t.me/bookinvip_ufficiale" target="_blank" rel="noopener" style="color:var(--brand);text-decoration:none;font-weight:600">✈ Telegram</a>
+      <a href="https://instagram.com/bookinvip" target="_blank" rel="noopener" style="color:var(--brand);text-decoration:none">📷 Instagram</a>
+      <a href="https://youtube.com/@bookinvip" target="_blank" rel="noopener" style="color:var(--brand);text-decoration:none">▶ YouTube</a>
+      <a href="https://tiktok.com/@bookinvip" target="_blank" rel="noopener" style="color:var(--brand);text-decoration:none">🎵 TikTok</a>
+      <a href="https://x.com/bookinvip" target="_blank" rel="noopener" style="color:var(--brand);text-decoration:none">𝕏 (Twitter)</a>
     </div>
     <div>© Bookin VIP · bookinvip.com · <span data-t="footer_slogan">zero commissioni nascoste</span></div>
   </footer>
@@ -175,14 +193,14 @@
     <h2 id="mTitolo"></h2>
     <div class="prezzo-grande" id="mPrezzo"></div>
     <div id="mBadge"></div>
-    <div id="mRating" style="margin:.3rem 0;font-weight:600;color:#8a6d0b"></div>
+    <div id="mRating" style="margin:.3rem 0;font-weight:600;color:var(--oro)"></div>
     <p id="mDescr" style="color:#4a5b7a;margin:.5rem 0"></p>
-    <p id="mPolitica" style="color:#155724;font-weight:600;font-size:.9rem;margin:.3rem 0"></p>
+    <p id="mPolitica" style="color:var(--brand-chiaro);font-weight:600;font-size:.9rem;margin:.3rem 0"></p>
     <div id="mRecensioni"></div>
     <div id="mQuote"></div>
-    <div id="mRegole" style="font-size:.8rem;color:#5e6f8d;background:#f7f9fc;border:1px solid #eef2f7;border-radius:.6rem;padding:.6rem .8rem;margin:.5rem 0;line-height:1.55">
+    <div id="mRegole" style="font-size:.8rem;color:var(--testo-tenue);background:#f7f9fc;border:1px solid var(--sfondo-tenue);border-radius:.6rem;padding:.6rem .8rem;margin:.5rem 0;line-height:1.55">
       <div>🛡️ <span data-t="regola_garanzia">L'host viene pagato solo DOPO il tuo soggiorno. Hai 24 ore dal check-in per segnalare un problema: passate le 24h senza segnalazioni, il soggiorno è considerato regolare e l'host viene pagato.</span></div>
-      <div style="margin-top:.35rem"><span data-t="regola_accetto">Prenotando accetti i Termini, la politica di cancellazione mostrata sopra e le regole del soggiorno.</span> <a href="/termini.html" target="_blank" style="color:#0f4c3a;font-weight:600" data-t="regola_termini_link">Termini</a></div>
+      <div style="margin-top:.35rem"><span data-t="regola_accetto">Prenotando accetti i Termini, la politica di cancellazione mostrata sopra e le regole del soggiorno.</span> <a href="/termini.html" target="_blank" style="color:var(--brand);font-weight:600" data-t="regola_termini_link">Termini</a></div>
     </div>
     <button class="prenota-btn" id="btnPrenota">Prenota</button>
     <div id="mMsg"></div>
@@ -266,7 +284,7 @@ async function caricaI18N(lang){
 function stelle(rie){
   if(!rie || !rie.conteggio) return '';
   const m=(rie.media_centesimi/100).toFixed(1);
-  return `<span style="color:#e0a800">★ ${m}</span> <span style="color:#5e6f8d;font-size:.8rem">(${rie.conteggio})</span>`;
+  return `<span style="color:#e0a800">★ ${m}</span> <span style="color:var(--testo-tenue);font-size:.8rem">(${rie.conteggio})</span>`;
 }
 // 🔍 LIGHTBOX foto: clic = ingrandisci, ‹ › per sfogliare, ✕/ESC per chiudere
 let LB_IMGS=[], LB_I=0;
@@ -292,10 +310,10 @@ function cardHtml(a){
   else if(a.disponibile===false) disp=`<span class="badge red">${t('non_disp')}</span>`;
   const foto = a.thumbnail ? `<img class="thumb" src="${esc(a.thumbnail)}" alt="${esc(a.titolo)}" loading="lazy" onerror="this.outerHTML='<div class=ph>🏠</div>'">` : '<div class="ph">🏠</div>';
   return `<div class="card" style="position:relative"><span onclick="favToggle('${esc(a.slug)}',this)" style="position:absolute;top:1.5rem;right:1.5rem;font-size:1.25rem;cursor:pointer;z-index:2;text-shadow:0 1px 3px rgba(0,0,0,.25)">${fav?'❤':'🤍'}</span>${foto}<h3>${esc(a.titolo)}</h3>
-    <div class="prezzo">${money(a.prezzo_notte_cents,a.valuta)} <span style="font-size:.85rem;font-weight:400;color:#5e6f8d">/ ${t('notte')}</span></div>
+    <div class="prezzo">${money(a.prezzo_notte_cents,a.valuta)} <span style="font-size:.85rem;font-weight:400;color:var(--testo-tenue)">/ ${t('notte')}</span></div>
     <div style="margin:.2rem 0">${stelle(a.recensioni)}</div>
     <div style="margin:.3rem 0">${serv} ${disp}</div>
-    ${a.cancellazione_gratuita ? `<div style="margin:.15rem 0"><span class="badge green">✔ ${t('badge_cancellazione')}</span></div>` : (a.politica_cancellazione==='non_rimborsabile' ? `<div style="margin:.15rem 0"><span class="badge" style="background:#fff3cd;color:#8a6d0b">🔒 ${t('non_rimb')}</span></div>` : '')}
+    ${a.cancellazione_gratuita ? `<div style="margin:.15rem 0"><span class="badge green">✔ ${t('badge_cancellazione')}</span></div>` : (a.politica_cancellazione==='non_rimborsabile' ? `<div style="margin:.15rem 0"><span class="badge" style="background:var(--giallo-bg);color:var(--oro)">🔒 ${t('non_rimb')}</span></div>` : '')}
     ${a.finestra_ci?`<div style="margin:.15rem 0"><span class="badge green">📅 ${a.finestra_ci} → ${a.finestra_co}</span></div>`:''}
     <div class="meta">📍 ${esc(a.citta)}${a.paese?', '+esc(a.paese):''}${a.distanza_m!=null?' · <b>'+fmtDist(a.distanza_m)+'</b>':(a.centro_distanza_m!=null?' · 📍 '+fmtCentro(a.centro_distanza_m):'')}</div>
     <button data-slug="${esc(a.slug)}">${t('dettaglio')}</button></div>`;
@@ -328,8 +346,8 @@ async function cerca(){
       document.getElementById('vista').style.display='none'; tornaLista();
       ris.innerHTML = `<div class="vuoto" style="text-align:center;padding:1.5rem">
         <div style="font-size:2rem">📍</div>
-        <h3 style="color:#0f4c3a;margin:.5rem 0">${t('nessun_raggio_pre')} ${document.getElementById('raggio').value} km</h3>
-        <p style="color:#5e6f8d;max-width:44ch;margin:.3rem auto">${t('allarga_raggio')}</p></div>`;
+        <h3 style="color:var(--brand);margin:.5rem 0">${t('nessun_raggio_pre')} ${document.getElementById('raggio').value} km</h3>
+        <p style="color:var(--testo-tenue);max-width:44ch;margin:.3rem auto">${t('allarga_raggio')}</p></div>`;
     } else { document.getElementById('vista').style.display='none'; tornaLista();
       ris.innerHTML = emptyStateHtml(params.citta); bindWaitlist(params.citta); }
   }catch(e){ ris.innerHTML = `<div class="msg err">${t('errore')}: ${e.message}</div>`; }
@@ -408,19 +426,19 @@ async function caricaMappaPin(){
 }
 function emptyStateHtml(citta){
   const c = citta ? String(citta).replace(/[<>]/g,'') : '';
-  const cityLine = c ? `<div style="color:#0f4c3a;font-weight:600;margin:.2rem 0">📍 ${c}</div>` : '';
+  const cityLine = c ? `<div style="color:var(--brand);font-weight:600;margin:.2rem 0">📍 ${c}</div>` : '';
   return `<div class="vuoto" style="text-align:center;padding:1.5rem">
     <div style="font-size:2rem">🌱</div>
-    <h3 style="color:#0f4c3a;margin:.5rem 0">${t('empty_titolo')}</h3>
+    <h3 style="color:var(--brand);margin:.5rem 0">${t('empty_titolo')}</h3>
     ${cityLine}
     <div id="wl_proof" style="margin:.3rem 0;font-weight:700;color:#c0392b"></div>
-    <p style="color:#5e6f8d;max-width:44ch;margin:.3rem auto 1rem">${t('empty_lascia')}</p>
+    <p style="color:var(--testo-tenue);max-width:44ch;margin:.3rem auto 1rem">${t('empty_lascia')}</p>
     <div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;max-width:420px;margin:0 auto">
-      <input id="wl_email" type="email" placeholder="${t('ph_email')}" style="flex:1;min-width:200px;padding:.7rem;border-radius:.7rem;border:1px solid #dce1ed">
-      <button id="wl_btn" style="background:#0f4c3a;color:#fff;border:0;border-radius:.7rem;padding:.7rem 1.2rem;font-weight:700;cursor:pointer">${t('avvisami')}</button>
+      <input id="wl_email" type="email" placeholder="${t('ph_email')}" style="flex:1;min-width:200px;padding:.7rem;border-radius:.7rem;border:1px solid var(--bordo)">
+      <button id="wl_btn" style="background:var(--brand);color:#fff;border:0;border-radius:.7rem;padding:.7rem 1.2rem;font-weight:700;cursor:pointer">${t('avvisami')}</button>
     </div>
     <div id="wl_msg" style="margin-top:.7rem;font-size:.9rem"></div>
-    <p style="margin-top:1.4rem;font-size:.9rem;color:#5e6f8d">${t('sei_host')} <a href="/diventa-host.html" style="color:#155724;font-weight:700">${t('pubblica_primo')} →</a></p>
+    <p style="margin-top:1.4rem;font-size:.9rem;color:var(--testo-tenue)">${t('sei_host')} <a href="/diventa-host.html" style="color:var(--brand-chiaro);font-weight:700">${t('pubblica_primo')} →</a></p>
   </div>`;
 }
 function bindWaitlist(citta){
@@ -428,13 +446,13 @@ function bindWaitlist(citta){
   b.onclick=async ()=>{
     const em=(document.getElementById('wl_email').value||'').trim();
     const m=document.getElementById('wl_msg');
-    if(!em || em.indexOf('@')<1){ m.style.color='#b00020'; m.textContent=t('inserisci_email'); return; }
+    if(!em || em.indexOf('@')<1){ m.style.color='var(--rosso)'; m.textContent=t('inserisci_email'); return; }
     const cittaLive=(document.getElementById('citta').value||'').trim()||citta||'';
     let d=null;
     try{ d=await api('/api/domanda',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({email:em,citta:cittaLive,lang:LANG,check_in:document.getElementById('checkin').value,check_out:document.getElementById('checkout').value})}); }catch(e){}
-    if(d && d.ok){ m.style.color='#155724'; m.innerHTML='✅ '+d.messaggio+' <b>(€'+((d.credito_cents||0)/100).toFixed(0)+')</b>'; b.style.display='none'; }
-    else { m.style.color='#b00020'; m.textContent = (d && d.errore) ? (t('errore_server')+' '+d.errore) : t('servizio_non_ragg'); }
+    if(d && d.ok){ m.style.color='var(--brand-chiaro)'; m.innerHTML='✅ '+d.messaggio+' <b>(€'+((d.credito_cents||0)/100).toFixed(0)+')</b>'; b.style.display='none'; }
+    else { m.style.color='var(--rosso)'; m.textContent = (d && d.errore) ? (t('errore_server')+' '+d.errore) : t('servizio_non_ragg'); }
   };
   // prova sociale live: quante persone cercano già in questa città (cold-start / FOMO)
   (async ()=>{
@@ -458,7 +476,7 @@ async function apri(slug){
       : '';
     document.getElementById('mTitolo').textContent = a.titolo;
     document.getElementById('mPrezzo').innerHTML = money(a.prezzo_notte_cents,a.valuta)+' / '+t('notte')
-      + (a.centro_distanza_m!=null ? ' <span style="font-size:.85rem;font-weight:400;color:#5e6f8d">· 📍 '+fmtCentro(a.centro_distanza_m)+'</span>' : '');
+      + (a.centro_distanza_m!=null ? ' <span style="font-size:.85rem;font-weight:400;color:var(--testo-tenue)">· 📍 '+fmtCentro(a.centro_distanza_m)+'</span>' : '');
     document.getElementById('mBadge').innerHTML = (a.servizi_label||a.servizi||[]).map(s=>`<span class="badge">${s}</span>`).join('');
     document.getElementById('mRating').innerHTML = stelle(a.recensioni);
     document.getElementById('mDescr').textContent = a.descrizione||'';
@@ -473,7 +491,7 @@ async function apri(slug){
         rec.innerHTML = '<div style="margin:.5rem 0;font-size:.9rem">'+
           rr.recensioni.slice(0,4).map(x=>{
             const txt=(x.testo&&x.testo.text)?x.testo.text:'';
-            return `<div style="border-top:1px solid #eef2f7;padding:.4rem 0">★ ${x.voto} <span style="color:#155724;font-size:.72rem">✓ ${t('verificata')}</span><br><span style="color:#4a5b7a">${txt.replace(/[<>]/g,'')}</span></div>`;
+            return `<div style="border-top:1px solid var(--sfondo-tenue);padding:.4rem 0">★ ${x.voto} <span style="color:var(--brand-chiaro);font-size:.72rem">✓ ${t('verificata')}</span><br><span style="color:#4a5b7a">${txt.replace(/[<>]/g,'')}</span></div>`;
           }).join('')+'</div>';
       }
     }catch(e){}
@@ -490,15 +508,15 @@ async function apri(slug){
       let righe = `<div class="riga-prezzo"><span>${t('totale')} (${q.notti||''} x ${t('notte')})</span><span>${money(q.prezzo_guest_cents,V)}</span></div>`;
       if(q.tassa_soggiorno_cents>0) righe += `<div class="riga-prezzo"><span>${t('tassa')}</span><span>${money(q.tassa_soggiorno_cents,V)}</span></div>`;
       righe += `<div class="riga-prezzo tot"><span>${t('totale')}</span><span>${money(q.totale_cents||q.prezzo_guest_cents,V)} ${V||''}</span></div>`;
-      if(q.totale_indicativo_cents>0 && q.valuta_indicativa) righe += `<div style="font-size:.78rem;color:#5e6f8d;margin-top:.2rem">≈ ${money(q.totale_indicativo_cents,q.valuta_indicativa)} (${t('indicativo')})</div>`;
+      if(q.totale_indicativo_cents>0 && q.valuta_indicativa) righe += `<div style="font-size:.78rem;color:var(--testo-tenue);margin-top:.2rem">≈ ${money(q.totale_indicativo_cents,q.valuta_indicativa)} (${t('indicativo')})</div>`;
       if(q.confronto_ota && q.confronto_ota.risparmio_guest_cents>0){ const co=q.confronto_ota;
-        righe += `<div style="margin-top:.5rem;padding:.5rem .7rem;background:#eafaf0;border-radius:.6rem;font-size:.85rem;color:#155724">${t('ota_pre')}<b>${money(co.ota_totale_cents,V)}</b> · <b>${t('risparmi')} ${money(co.risparmio_guest_cents,V)}</b> (-${(co.risparmio_bps/100).toFixed(0)}%)</div>`; }
-      if(q.sconto_non_rimborsabile_cents>0) righe += `<div style="margin-top:.4rem;font-size:.85rem;color:#8a6d0b">🔒 ${t('non_rimb')} · ${t('risparmi')} ${money(q.sconto_non_rimborsabile_cents,V)}</div>`;
-      if(q.sconto_soggiorno_lungo_cents>0) righe += `<div style="margin-top:.4rem;font-size:.85rem;color:#155724">📅 ${mt('sc_lungo')} · ${t('risparmi')} ${money(q.sconto_soggiorno_lungo_cents,V)}</div>`;
+        righe += `<div style="margin-top:.5rem;padding:.5rem .7rem;background:var(--verde-bg);border-radius:.6rem;font-size:.85rem;color:var(--brand-chiaro)">${t('ota_pre')}<b>${money(co.ota_totale_cents,V)}</b> · <b>${t('risparmi')} ${money(co.risparmio_guest_cents,V)}</b> (-${(co.risparmio_bps/100).toFixed(0)}%)</div>`; }
+      if(q.sconto_non_rimborsabile_cents>0) righe += `<div style="margin-top:.4rem;font-size:.85rem;color:var(--oro)">🔒 ${t('non_rimb')} · ${t('risparmi')} ${money(q.sconto_non_rimborsabile_cents,V)}</div>`;
+      if(q.sconto_soggiorno_lungo_cents>0) righe += `<div style="margin-top:.4rem;font-size:.85rem;color:var(--brand-chiaro)">📅 ${mt('sc_lungo')} · ${t('risparmi')} ${money(q.sconto_soggiorno_lungo_cents,V)}</div>`;
       const _tot = q.totale_cents||q.prezzo_guest_cents;
-      righe += `<div style="margin-top:.5rem;font-size:.85rem">👥 ${t('dividi_amici')} <select id="splitN" style="padding:.2rem .3rem">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${n===1?' selected':''}>${n}</option>`).join('')}</select> <span id="splitOut" style="color:#155724;font-weight:600"></span></div>`;
+      righe += `<div style="margin-top:.5rem;font-size:.85rem">👥 ${t('dividi_amici')} <select id="splitN" style="padding:.2rem .3rem">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${n===1?' selected':''}>${n}</option>`).join('')}</select> <span id="splitOut" style="color:var(--brand-chiaro);font-weight:600"></span></div>`;
       righe += `<div id="cd" style="margin-top:.6rem;padding:.5rem .7rem;background:#fff4e5;border:1px solid #ffd9a8;border-radius:.6rem;font-size:.85rem;color:#8a5200;font-weight:600;text-align:center"></div>`;
-      righe += `<div style="margin-top:.5rem;text-align:center"><button id="btnPrevMail" style="background:#fff;color:#0f4c3a;border:1.5px solid #0f4c3a;padding:.45rem 1rem;font-size:.88rem;border-radius:.6rem;cursor:pointer">📧 ${t('invia_preventivo')}</button><div id="prevMailMsg" style="font-size:.82rem;margin-top:.3rem"></div></div>`;
+      righe += `<div style="margin-top:.5rem;text-align:center"><button id="btnPrevMail" style="background:#fff;color:var(--brand);border:1.5px solid var(--brand);padding:.45rem 1rem;font-size:.88rem;border-radius:.6rem;cursor:pointer">📧 ${t('invia_preventivo')}</button><div id="prevMailMsg" style="font-size:.82rem;margin-top:.3rem"></div></div>`;
       mq.innerHTML = righe;
       // RECUPERO PREVENTIVO onesto: l'ospite CHIEDE la sua quote via email (un solo
       // invio, nessun promemoria); il server la ricalcola e manda il link per completare
@@ -511,9 +529,9 @@ async function apri(slug){
             body:JSON.stringify({alloggio_id:slug, check_in:document.getElementById('checkin').value,
               check_out:document.getElementById('checkout').value, party:parseInt(document.getElementById('ospiti').value)||1,
               email:em, lang:LANG, fonte:FONTE})});
-          if(r && r.stato==='inviata'){ pm.style.color='#155724'; pm.textContent='✅ '+t('prev_inviato'); bpm.disabled=true; }
-          else{ pm.style.color='#b00020'; pm.textContent='❌ '+t('prev_errore'); }
-        }catch(e){ pm.style.color='#b00020'; pm.textContent='❌ '+t('prev_errore'); }
+          if(r && r.stato==='inviata'){ pm.style.color='var(--brand-chiaro)'; pm.textContent='✅ '+t('prev_inviato'); bpm.disabled=true; }
+          else{ pm.style.color='var(--rosso)'; pm.textContent='❌ '+t('prev_errore'); }
+        }catch(e){ pm.style.color='var(--rosso)'; pm.textContent='❌ '+t('prev_errore'); }
       };
       const sb = document.getElementById('splitN');
       if(sb){ const calc = async ()=>{ const n=parseInt(sb.value); const out=document.getElementById('splitOut');
@@ -524,7 +542,7 @@ async function apri(slug){
       if(window.__cdTimer) clearInterval(window.__cdTimer);
       const _scade = (q.scade_a||0)*1000; const _cd = document.getElementById('cd');
       const _tick = ()=>{ const ms=_scade-Date.now();
-        if(ms<=0){ _cd.textContent='⌛ '+t('offerta_scaduta'); _cd.style.background='#fdecec'; _cd.style.color='#b00020'; document.getElementById('btnPrenota').style.display='none'; clearInterval(window.__cdTimer); return; }
+        if(ms<=0){ _cd.textContent='⌛ '+t('offerta_scaduta'); _cd.style.background='var(--rosso-bg)'; _cd.style.color='var(--rosso)'; document.getElementById('btnPrenota').style.display='none'; clearInterval(window.__cdTimer); return; }
         const s=Math.floor(ms/1000), mm=String(Math.floor(s/60)).padStart(2,'0'), ss=String(s%60).padStart(2,'0');
         _cd.textContent='⏳ '+t('prezzo_bloccato')+' '+mm+':'+ss+(s<120?(' · '+t('affrettati')):''); };
       _tick(); window.__cdTimer=setInterval(_tick,1000);
@@ -546,8 +564,8 @@ async function prenota(){
     if(r.stato==='in_attesa_host'){ msg.innerHTML=`<div class="msg ok">⏳ ${t('richiesta_inviata')} (${r.riferimento||''})</div>`; document.getElementById('btnPrenota').style.display='none'; return; }
     // 3) confermata (senza pagamento online) -> mostra voucher
     if(r.stato==='confermata' || r.voucher_token){
-      const voucher = r.voucher_token ? ` · <a href="/voucher/${encodeURIComponent(r.voucher_token)}?lang=${LANG}" target="_blank" style="color:#155724;font-weight:700">📄 ${t('voucher_label')}</a>` : '';
-      const contr = r.voucher_token ? ` · <a href="#" id="dlContr" style="color:#0f4c3a;font-weight:700">📑 ${t('contratto_pdf')}</a>` : '';
+      const voucher = r.voucher_token ? ` · <a href="/voucher/${encodeURIComponent(r.voucher_token)}?lang=${LANG}" target="_blank" style="color:var(--brand-chiaro);font-weight:700">📄 ${t('voucher_label')}</a>` : '';
+      const contr = r.voucher_token ? ` · <a href="#" id="dlContr" style="color:var(--brand);font-weight:700">📑 ${t('contratto_pdf')}</a>` : '';
       msg.innerHTML=`<div class="msg ok">✅ ${t('conferma')} (${r.riferimento||''})${voucher}${contr}</div>`; document.getElementById('btnPrenota').style.display='none';
       const dl = document.getElementById('dlContr'); const _vt = r.voucher_token;
       if(dl) dl.onclick = async (e)=>{ e.preventDefault(); try{ const cr = await api('/api/contratto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({voucher_token:_vt, lingua:LANG})}); if(cr.pdf_base64){ const a=document.createElement('a'); a.href='data:application/pdf;base64,'+cr.pdf_base64; a.download=cr.filename||'contratto.pdf'; a.click(); } }catch(err){} };

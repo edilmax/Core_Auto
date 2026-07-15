@@ -78,5 +78,43 @@ class TestResponsive320(unittest.TestCase):
                       "index.html: manca il guard overflow-x sul body")
 
 
+class TestDesignTokens(unittest.TestCase):
+    """FASE 2 carrozzeria — la palette sta in UN posto solo (design tokens).
+
+    Prima: 31 colori hardcoded sparsi per pagina (x3 pagine) e nessun `:root` -> cambiare il
+    brand voleva dire caccia al tesoro, e le tinte divergevano tra le pagine. Ora `:root` con
+    token semantici; il refactor e' a PIXEL INVARIATI (stessi hex).
+    """
+    PAGINE = ("index.html", "host.html", "admin.html")
+
+    def test_root_e_token_presenti(self):
+        for pag in self.PAGINE:
+            html = _leggi(pag)
+            self.assertIn(":root{", html, "%s: manca il blocco :root dei design token" % pag)
+            for tok in ("--brand:", "--testo:", "--bordo:", "--rosso:"):
+                self.assertIn(tok, html, "%s: manca il token %s" % (pag, tok))
+
+    def test_palette_usata_via_var(self):
+        """I colori del brand devono passare da var(), non essere ri-scritti a mano."""
+        for pag in self.PAGINE:
+            html = _leggi(pag)
+            self.assertIn("var(--brand)", html, "%s: il brand non usa il token" % pag)
+
+    def test_theme_color_resta_hex(self):
+        """<meta theme-color> NON supporta var(): deve restare un hex vero o il colore sparisce."""
+        for pag in self.PAGINE:
+            m = re.search(r'<meta name="theme-color" content="([^"]+)"', _leggi(pag))
+            self.assertIsNotNone(m, "%s: manca theme-color" % pag)
+            self.assertRegex(m.group(1), r"^#[0-9a-fA-F]{6}$",
+                             "%s: theme-color deve essere hex, non var()" % pag)
+
+    def test_niente_var_in_attributi_svg(self):
+        """fill/stroke con var() non risolvono se l'SVG non eredita il :root: vietati."""
+        for pag in self.PAGINE:
+            html = _leggi(pag)
+            for attr in ('fill="var(--', 'stroke="var(--'):
+                self.assertNotIn(attr, html, "%s: %s non risolve" % (pag, attr))
+
+
 if __name__ == "__main__":
     unittest.main()

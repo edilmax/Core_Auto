@@ -7,22 +7,40 @@
 <link rel="icon" href="/icon.svg">
 <title>Bookin VIP · Admin</title>
 <style>
+:root{
+  /* DESIGN TOKENS (FASE 2 carrozzeria): la palette sta QUI, un posto solo.
+     Stessi identici colori di prima -> nessun cambio visivo, solo coerenza. */
+  --brand:#0f4c3a;
+  --brand-chiaro:#155724;
+  --oro:#8a6d0b;
+  --testo:#1a1e2b;
+  --testo-tenue:#5e6f8d;
+  --bordo:#dce1ed;
+  --sfondo:#f4f6fa;
+  --sfondo-tenue:#eef2f7;
+  --rosso:#b00020;
+  --rosso-bg:#fdecec;
+  --verde-bg:#eafaf0;
+  --giallo-bg:#fff3cd;
+  --arancio:#ffe0a3;
+}
+
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#f4f6fa;color:#1a1e2b;padding:1.5rem;line-height:1.5}
+  body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--sfondo);color:var(--testo);padding:1.5rem;line-height:1.5}
   .container{max-width:980px;margin:0 auto}
-  header{display:flex;justify-content:space-between;align-items:end;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:2px solid #dce1ed;flex-wrap:wrap;gap:1rem}
-  .logo{font-weight:700;font-size:1.6rem;background:linear-gradient(135deg,#0f4c3a,#156b52);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-  input,select{padding:.5rem .7rem;border-radius:.7rem;border:1px solid #dce1ed;font-size:1rem}
-  button{background:#0f4c3a;color:#fff;border:none;padding:.55rem 1.3rem;border-radius:2rem;font-weight:600;cursor:pointer}
+  header{display:flex;justify-content:space-between;align-items:end;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:2px solid var(--bordo);flex-wrap:wrap;gap:1rem}
+  .logo{font-weight:700;font-size:1.6rem;background:linear-gradient(135deg,var(--brand),#156b52);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  input,select{padding:.5rem .7rem;border-radius:.7rem;border:1px solid var(--bordo);font-size:1rem}
+  button{background:var(--brand);color:#fff;border:none;padding:.55rem 1.3rem;border-radius:2rem;font-weight:600;cursor:pointer}
   button:hover{background:#156b52}
   button.danger{background:#b02a37}.button.danger:hover{background:#842029}
   table{width:100%;border-collapse:collapse;background:#fff;border-radius:1rem;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,.05)}
-  th,td{padding:.7rem .9rem;text-align:left;font-size:.9rem;border-bottom:1px solid #eef2f7}
+  th,td{padding:.7rem .9rem;text-align:left;font-size:.9rem;border-bottom:1px solid var(--sfondo-tenue)}
   th{background:#eef7f2;color:#4a5b7a;text-transform:uppercase;font-size:.72rem;letter-spacing:.03em}
   .tag{display:inline-block;padding:.1rem .6rem;border-radius:1rem;font-size:.72rem;font-weight:600}
-  .tag.ok{background:#d4edda;color:#155724}.tag.attiva{background:#eef2f7;color:#156b52}
+  .tag.ok{background:#d4edda;color:var(--brand-chiaro)}.tag.attiva{background:var(--sfondo-tenue);color:#156b52}
   .msg{padding:.7rem 1rem;border-radius:.7rem;margin:.8rem 0;font-size:.9rem}
-  .msg.ok{background:#d4edda;color:#155724}.msg.err{background:#f8d7da;color:#842029}
+  .msg.ok{background:#d4edda;color:var(--brand-chiaro)}.msg.err{background:#f8d7da;color:#842029}
   .key{display:flex;gap:.6rem;align-items:center;margin-bottom:1.2rem;flex-wrap:wrap}
 </style>
 </head>
@@ -37,12 +55,12 @@
       </select>
       <input type="password" id="adminkey" placeholder="X-Admin-Key" style="width:220px">
       <button id="btnCarica" data-i18n="b_agg">🔄 Aggiorna</button>
-      <span id="autostat" style="font-size:.78rem;color:#5e6f8d"></span>
+      <span id="autostat" style="font-size:.78rem;color:var(--testo-tenue)"></span>
     </div>
   </header>
 
   <div style="background:linear-gradient(135deg,#eef7f2,#f9fdfb);border:1px solid #d7e8e0;border-radius:1rem;padding:1rem 1.2rem;margin-bottom:1.2rem">
-    <div style="font-weight:700;color:#0f4c3a">👋 Come funziona (semplice)</div>
+    <div style="font-weight:700;color:var(--brand)">👋 Come funziona (semplice)</div>
     <div style="font-size:.9rem;color:#4a5b7a;line-height:1.8;margin-top:.3rem">
       <div><b>1️⃣</b> Incolla la tua chiave admin qui sopra: tutto si carica da solo.</div>
       <div><b>2️⃣</b> "Tutti gli annunci" = controlli e sospendi · "Controversie" = decidi tu chi rimborsare.</div>
@@ -52,21 +70,21 @@
   <div id="msg"></div>
   <table>
     <thead><tr><th data-i18n="th_all">Alloggio</th><th data-i18n="th_ci">Check-in</th><th data-i18n="th_co">Check-out</th><th data-i18n="th_orig">Origine</th><th data-i18n="th_stato">Stato</th><th></th></tr></thead>
-    <tbody id="tbody"><tr><td colspan="6" style="text-align:center;color:#5e6f8d;padding:2rem" data-i18n="empty_key">Inserisci la chiave admin: si carica da solo.</td></tr></tbody>
+    <tbody id="tbody"><tr><td colspan="6" style="text-align:center;color:var(--testo-tenue);padding:2rem" data-i18n="empty_key">Inserisci la chiave admin: si carica da solo.</td></tr></tbody>
   </table>
 
   <div style="background:#fff;border-radius:1rem;padding:1.5rem;box-shadow:0 6px 18px rgba(0,0,0,.05);margin-top:1.5rem">
-    <h2 style="color:#0f4c3a;font-size:1.2rem;margin-bottom:.3rem" data-i18n="al_h">📋 Tutti gli annunci</h2>
-    <p style="font-size:.85rem;color:#5e6f8d;margin-bottom:.8rem" data-i18n="al_p">Ogni annuncio col suo numero (ID) e l'host. Puoi sospenderlo/ripubblicarlo, oppure cancellare tutto l'host (riempie il campo qui sotto).</p>
+    <h2 style="color:var(--brand);font-size:1.2rem;margin-bottom:.3rem" data-i18n="al_h">📋 Tutti gli annunci</h2>
+    <p style="font-size:.85rem;color:var(--testo-tenue);margin-bottom:.8rem" data-i18n="al_p">Ogni annuncio col suo numero (ID) e l'host. Puoi sospenderlo/ripubblicarlo, oppure cancellare tutto l'host (riempie il campo qui sotto).</p>
     <div style="overflow-x:auto"><table>
       <thead><tr><th data-i18n="al_id">ID</th><th data-i18n="al_tit">Titolo</th><th data-i18n="al_cit">Città</th><th data-i18n="al_host">Host</th><th data-i18n="al_pr">Prezzo</th><th data-i18n="al_st">Stato</th><th></th></tr></thead>
-      <tbody id="al_tbody"><tr><td colspan="7" style="text-align:center;color:#5e6f8d;padding:1.5rem" data-i18n="empty_key">Inserisci la chiave admin: si carica da solo.</td></tr></tbody>
+      <tbody id="al_tbody"><tr><td colspan="7" style="text-align:center;color:var(--testo-tenue);padding:1.5rem" data-i18n="empty_key">Inserisci la chiave admin: si carica da solo.</td></tr></tbody>
     </table></div>
   </div>
 
   <div style="background:#fff;border-radius:1rem;padding:1.5rem;box-shadow:0 6px 18px rgba(0,0,0,.05);margin-top:1.5rem">
-    <h2 style="color:#0f4c3a;font-size:1.2rem;margin-bottom:.8rem" data-i18n="mk_h">📣 Marketing — pubblica campagna</h2>
-    <p style="font-size:.85rem;color:#5e6f8d;margin-bottom:.8rem" data-i18n="mk_p">Genera post multilingua + immagini promo e li pubblica sui canali configurati nel server (Telegram/Facebook). Senza canali nel .env, i post sono generati ma non pubblicati.</p>
+    <h2 style="color:var(--brand);font-size:1.2rem;margin-bottom:.8rem" data-i18n="mk_h">📣 Marketing — pubblica campagna</h2>
+    <p style="font-size:.85rem;color:var(--testo-tenue);margin-bottom:.8rem" data-i18n="mk_p">Genera post multilingua + immagini promo e li pubblica sui canali configurati nel server (Telegram/Facebook). Senza canali nel .env, i post sono generati ma non pubblicati.</p>
     <div style="margin-bottom:.9rem;font-size:.9rem"><span data-i18n="mk_lingue">Lingue:</span>
       <label style="margin-left:.5rem"><input type="checkbox" class="lng" value="it" checked> IT</label>
       <label style="margin-left:.5rem"><input type="checkbox" class="lng" value="en" checked> EN</label>
@@ -74,23 +92,23 @@
       <label style="margin-left:.5rem"><input type="checkbox" class="lng" value="fr"> FR</label>
       <label style="margin-left:.5rem"><input type="checkbox" class="lng" value="de"> DE</label>
     </div>
-    <button id="btnCampagna" data-i18n="b_camp" style="background:#155724">📣 Pubblica campagna</button>
+    <button id="btnCampagna" data-i18n="b_camp" style="background:var(--brand-chiaro)">📣 Pubblica campagna</button>
     <div id="msgCampagna"></div>
   </div>
 
   <div style="background:#fff;border-radius:1rem;padding:1.5rem;box-shadow:0 6px 18px rgba(0,0,0,.05);margin-top:1.5rem;border:1px solid #ffe0b3">
     <h2 style="color:#8a5200;font-size:1.2rem;margin-bottom:.8rem" data-i18n="ctr_h">⚖️ Controversie da risolvere</h2>
-    <p style="font-size:.85rem;color:#5e6f8d;margin-bottom:.8rem" data-i18n="ctr_p">Prenotazioni in cui il cliente ha segnalato un problema (soldi bloccati in garanzia). Dopo aver sentito cliente e host, scegli quanto rimborsare al cliente (%); il resto va all'host. La garanzia si sblocca; poi esegui il rimborso su Stripe (manuale, controllato).</p>
+    <p style="font-size:.85rem;color:var(--testo-tenue);margin-bottom:.8rem" data-i18n="ctr_p">Prenotazioni in cui il cliente ha segnalato un problema (soldi bloccati in garanzia). Dopo aver sentito cliente e host, scegli quanto rimborsare al cliente (%); il resto va all'host. La garanzia si sblocca; poi esegui il rimborso su Stripe (manuale, controllato).</p>
     <button id="btnControversie" data-i18n="ctr_carica" style="background:#8a5200">🔄 Carica controversie</button>
     <div id="ctr_lista" style="margin-top:1rem;font-size:.9rem"></div>
   </div>
 
   <div style="background:#fff;border-radius:1rem;padding:1.5rem;box-shadow:0 6px 18px rgba(0,0,0,.05);margin-top:1.5rem;border:1px solid #f3d6d6">
-    <h2 style="color:#b00020;font-size:1.2rem;margin-bottom:.8rem" data-i18n="del_h">🗑️ Cancella attività host (diritto all'oblio)</h2>
-    <p style="font-size:.85rem;color:#5e6f8d;margin-bottom:.8rem" data-i18n="del_p">Rimuove un host e TUTTI i suoi dati da ogni archivio (annunci, inventario, messaggi, referral, account) e verifica che non resti nulla da nessuna parte. Irreversibile.</p>
+    <h2 style="color:var(--rosso);font-size:1.2rem;margin-bottom:.8rem" data-i18n="del_h">🗑️ Cancella attività host (diritto all'oblio)</h2>
+    <p style="font-size:.85rem;color:var(--testo-tenue);margin-bottom:.8rem" data-i18n="del_p">Rimuove un host e TUTTI i suoi dati da ogni archivio (annunci, inventario, messaggi, referral, account) e verifica che non resti nulla da nessuna parte. Irreversibile.</p>
     <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
       <input id="del_host" data-i18n-ph="del_ph" placeholder="host_id (es. h_xxxxxxxx)" style="width:240px">
-      <button id="btnCancellaHost" data-i18n="b_del" style="background:#b00020">🗑️ Cancella e verifica</button>
+      <button id="btnCancellaHost" data-i18n="b_del" style="background:var(--rosso)">🗑️ Cancella e verifica</button>
     </div>
     <div id="msgCancella" style="margin-top:.8rem;font-size:.88rem"></div>
   </div>
@@ -128,13 +146,13 @@ async function caricaAlloggi(){
     const res=await fetch(API+'/api/admin/alloggi',{headers:{'X-Admin-Key':key()}});
     if(res.status!==200) return;
     const d=await res.json(); const tb=document.getElementById('al_tbody'); const lst=d.alloggi||[];
-    if(!lst.length){ tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:#5e6f8d;padding:1.5rem">'+T('al_vuoto')+'</td></tr>'; return; }
+    if(!lst.length){ tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--testo-tenue);padding:1.5rem">'+T('al_vuoto')+'</td></tr>'; return; }
     tb.innerHTML=lst.map(a=>{
       const az=a.stato==='pubblicato'
         ? `<button class="danger alStato" data-s="${esc(a.slug)}" data-st="sospeso">${T('al_sosp')}</button>`
-        : `<button class="alStato" data-s="${esc(a.slug)}" data-st="pubblicato" style="background:#155724">${T('al_pub')}</button>`;
-      const del=`<button class="alDel" data-h="${esc(a.host_id)}" style="background:#b00020;margin-left:.3rem">${T('al_delhost')}</button>`;
-      return `<tr><td style="font-weight:700;color:#0f4c3a">#${a.id}</td><td>${esc(a.titolo)}</td><td>${esc(a.citta)}</td><td style="font-size:.76rem;color:#5e6f8d">${esc(a.host_id)}</td><td>${money(a.prezzo_notte_cents,a.valuta)}</td><td>${esc(a.stato)}</td><td style="white-space:nowrap">${az}${del}</td></tr>`;
+        : `<button class="alStato" data-s="${esc(a.slug)}" data-st="pubblicato" style="background:var(--brand-chiaro)">${T('al_pub')}</button>`;
+      const del=`<button class="alDel" data-h="${esc(a.host_id)}" style="background:var(--rosso);margin-left:.3rem">${T('al_delhost')}</button>`;
+      return `<tr><td style="font-weight:700;color:var(--brand)">#${a.id}</td><td>${esc(a.titolo)}</td><td>${esc(a.citta)}</td><td style="font-size:.76rem;color:var(--testo-tenue)">${esc(a.host_id)}</td><td>${money(a.prezzo_notte_cents,a.valuta)}</td><td>${esc(a.stato)}</td><td style="white-space:nowrap">${az}${del}</td></tr>`;
     }).join('');
     tb.querySelectorAll('.alStato').forEach(b=>b.onclick=()=>cambiaStatoAdmin(b.dataset.s,b.dataset.st));
     // SICUREZZA: il pulsante nella riga NON cancella; SELEZIONA solo l'host nel riquadro
@@ -159,7 +177,7 @@ async function carica(){
     if(res.status===401){ msg(T('err_key'),false); stat(''); return; }
     const d = await res.json();
     const tb = document.getElementById('tbody');
-    if(!d.prenotazioni || !d.prenotazioni.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:#5e6f8d;padding:2rem">'+T('no_pren')+'</td></tr>'; return; }
+    if(!d.prenotazioni || !d.prenotazioni.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--testo-tenue);padding:2rem">'+T('no_pren')+'</td></tr>'; return; }
     tb.innerHTML = d.prenotazioni.map(p=>{
       const stato = p.rimborsato ? '<span class="tag ok">'+T('t_rimb')+'</span>' : '<span class="tag attiva">'+T('t_att')+'</span>';
       const btn = p.rimborsato ? '' : `<button class="danger" data-a="${p.alloggio_id}" data-ci="${p.check_in}" data-co="${p.check_out}" data-k="${p.idem_key}">${T('b_rimb')}</button>`;
@@ -204,9 +222,9 @@ document.getElementById('btnCarica').onclick = carica;
 async function cancellaHost(){
   const hid = document.getElementById('del_host').value.trim();
   const m = document.getElementById('msgCancella');
-  if(!hid){ m.style.color='#b00020'; m.textContent=T('ins_hid'); return; }
+  if(!hid){ m.style.color='var(--rosso)'; m.textContent=T('ins_hid'); return; }
   if(!confirm(T('conf_del')+' '+hid+'. '+T('proc'))) return;
-  m.style.color='#5e6f8d'; m.textContent=T('canc_corso');
+  m.style.color='var(--testo-tenue)'; m.textContent=T('canc_corso');
   try{
     const res = await fetch(API+'/api/admin/cancella_attivita', {method:'POST',
       headers:{'Content-Type':'application/json','X-Admin-Key':key()},
@@ -214,11 +232,11 @@ async function cancellaHost(){
     const d = await res.json();
     const canc = Object.entries(d.cancellati||{}).map(([k,v])=>k+':'+v).join(', ');
     const res2 = Object.entries(d.residui||{}).map(([k,v])=>k+':'+v).join(', ');
-    if(d.ok){ m.style.color='#155724';
+    if(d.ok){ m.style.color='var(--brand-chiaro)';
       m.innerHTML=T('canc_ok')+' '+canc+'<br>'+T('verif_res')+' '+res2; }
-    else { m.style.color='#b00020';
+    else { m.style.color='var(--rosso)';
       m.innerHTML=T('res_rim')+' '+res2+'<br>'+T('rimossi')+' '+canc; }
-  }catch(e){ m.style.color='#b00020'; m.textContent=T('err_rete'); }
+  }catch(e){ m.style.color='var(--rosso)'; m.textContent=T('err_rete'); }
 }
 document.getElementById('btnCancellaHost').onclick = cancellaHost;
 
@@ -244,10 +262,10 @@ async function caricaControversie(){
     const res = await fetch(API+'/api/admin/controversie', {headers:{'X-Admin-Key':key()}});
     const d = await res.json();
     const lst = d.controversie||[];
-    if(!lst.length){ box.innerHTML='<div style="color:#5e6f8d">'+T('ctr_nessuna')+'</div>'; return; }
+    if(!lst.length){ box.innerHTML='<div style="color:var(--testo-tenue)">'+T('ctr_nessuna')+'</div>'; return; }
     box.innerHTML = lst.map((c,i)=>{
       const imp = c.importo_host_cents||0;
-      return `<div style="border:1px solid #eef2f7;border-radius:.7rem;padding:.8rem;margin-bottom:.7rem">
+      return `<div style="border:1px solid var(--sfondo-tenue);border-radius:.7rem;padding:.8rem;margin-bottom:.7rem">
         <div><b>${c.titolo||c.alloggio_id||''}</b> · ${T('ctr_rif')} <code>${c.prenotazione_id}</code></div>
         <div style="color:#8a5200;font-size:.85rem;margin:.3rem 0">${T('ctr_motivo')} ${(c.motivo||'—')}</div>
         <div style="font-size:.85rem">${T('ctr_garanzia')} <b>${eur(imp)}</b>
@@ -255,14 +273,14 @@ async function caricaControversie(){
         <div id="chat_${i}" style="display:none;background:#f7faf8;border-radius:.6rem;padding:.5rem .7rem;margin-top:.4rem;max-height:170px;overflow-y:auto;font-size:.82rem"></div>
         <div style="display:flex;gap:.5rem;align-items:center;margin-top:.5rem;flex-wrap:wrap">
           <label style="font-size:.82rem">${T('ctr_pct')} <input type="number" id="pct_${i}" min="0" max="100" value="100" style="width:70px" oninput="ctrCalc(${i},${imp})"></label>
-          <span id="split_${i}" style="font-size:.82rem;color:#155724"></span>
-          <button onclick="risolviCtr('${c.prenotazione_id}',${i})" style="margin-left:auto;background:#155724">${T('ctr_risolvi')}</button>
+          <span id="split_${i}" style="font-size:.82rem;color:var(--brand-chiaro)"></span>
+          <button onclick="risolviCtr('${c.prenotazione_id}',${i})" style="margin-left:auto;background:var(--brand-chiaro)">${T('ctr_risolvi')}</button>
         </div>
         <div id="ctrmsg_${i}" style="font-size:.85rem;margin-top:.4rem"></div>
       </div>`;
     }).join('');
     lst.forEach((c,i)=>ctrCalc(i, c.importo_host_cents||0));
-  }catch(e){ box.innerHTML='<div style="color:#b00020">'+T('err_rete')+'</div>'; }
+  }catch(e){ box.innerHTML='<div style="color:var(--rosso)">'+T('err_rete')+'</div>'; }
 }
 function ctrCalc(i, imp){
   const pct = Math.max(0, Math.min(100, parseInt(document.getElementById('pct_'+i).value)||0));
@@ -278,11 +296,11 @@ async function risolviCtr(rif, i){
       headers:{'Content-Type':'application/json','X-Admin-Key':key()},
       body:JSON.stringify({riferimento:rif, percentuale_ospite:pct})});
     const d = await res.json();
-    if(res.status===200){ m.style.color='#155724';
+    if(res.status===200){ m.style.color='var(--brand-chiaro)';
       m.textContent='✅ '+T('ctr_fatto')+' '+T('ctr_cliente')+' '+eur(d.rimborso_cliente_cents)+' · '+T('ctr_host')+' '+eur(d.va_all_host_cents);
       setTimeout(caricaControversie, 1200);
-    } else { m.style.color='#b00020'; m.textContent='❌ '+(d.errore||res.status); }
-  }catch(e){ m.style.color='#b00020'; m.textContent=T('err_rete'); }
+    } else { m.style.color='var(--rosso)'; m.textContent='❌ '+(d.errore||res.status); }
+  }catch(e){ m.style.color='var(--rosso)'; m.textContent=T('err_rete'); }
 }
 document.getElementById('btnControversie').onclick = caricaControversie;
 
