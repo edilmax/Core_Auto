@@ -150,6 +150,41 @@ def corpo_voucher_html(titolo_alloggio: str, codice: str, check_in: str,
          e(check_in), e(check_out), link)
 
 
+def corpo_preventivo_html(titolo_alloggio: str, check_in: str, check_out: str,
+                          righe: Any, url_prenota: str, lingua: str = "it") -> str:
+    """Email 'il tuo preventivo' (recupero ONESTO: parte solo se l'ospite la chiede
+    col clic). `righe` = [(etichetta, importo_formattato), ...]. XSS-safe. Niente
+    urgenza artificiale: solo il riepilogo e il link per completare quando vuole."""
+    import html
+    e = html.escape
+    it = str(lingua or "it").lower().startswith("it")
+    titolo_email = "Il tuo preventivo" if it else "Your quote"
+    sotto = ("Ecco il riepilogo che hai richiesto per" if it
+             else "Here is the summary you requested for")
+    btn = "Completa la prenotazione" if it else "Complete your booking"
+    nota = ("Nessun impegno e nessun addebito: le date restano libere finché "
+            "qualcuno non prenota. Questa è l'unica email: niente promemoria."
+            if it else
+            "No commitment, no charge: the dates stay open until someone books. "
+            "This is the only email: no reminders.")
+    corpo_righe = "".join(
+        "<tr><td style=\"padding:.2rem 0;color:#4a5b7a\">%s</td>"
+        "<td style=\"padding:.2rem 0 .2rem 1.2rem;text-align:right\">"
+        "<strong>%s</strong></td></tr>" % (e(str(k)), e(str(v)))
+        for k, v in (righe or ()) if v)
+    link = ('<p><a href="%s" style="background:#0f4c3a;color:#fff;padding:.7rem 1.4rem;'
+            'border-radius:8px;text-decoration:none;font-weight:bold">%s</a></p>'
+            % (e(url_prenota), e(btn))) if url_prenota else ""
+    return (
+        "<div style=\"font-family:sans-serif;max-width:480px\">"
+        "<h2 style=\"color:#0f4c3a\">%s</h2>"
+        "<p>%s <strong>%s</strong><br>%s → %s</p>"
+        "<table style=\"width:100%%;border-collapse:collapse\">%s</table>%s"
+        "<p style=\"color:#5e6f8d;font-size:.85rem\">%s</p></div>"
+    ) % (e(titolo_email), e(sotto), e(titolo_alloggio), e(check_in), e(check_out),
+         corpo_righe, link, e(nota))
+
+
 def corpo_promemoria_checkin_html(titolo_alloggio: str, voucher_url: str) -> str:
     """Email post-check-in: 'com'è andata?'. Se tutto ok, il cliente non deve fare nulla
     (l'host viene pagato). Se c'è un problema, lo segnala ENTRO 24h dal voucher. XSS-safe."""

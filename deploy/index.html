@@ -488,7 +488,23 @@ async function apri(slug){
       const _tot = q.totale_cents||q.prezzo_guest_cents;
       righe += `<div style="margin-top:.5rem;font-size:.85rem">👥 ${t('dividi_amici')} <select id="splitN" style="padding:.2rem .3rem">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${n===1?' selected':''}>${n}</option>`).join('')}</select> <span id="splitOut" style="color:#155724;font-weight:600"></span></div>`;
       righe += `<div id="cd" style="margin-top:.6rem;padding:.5rem .7rem;background:#fff4e5;border:1px solid #ffd9a8;border-radius:.6rem;font-size:.85rem;color:#8a5200;font-weight:600;text-align:center"></div>`;
+      righe += `<div style="margin-top:.5rem;text-align:center"><button id="btnPrevMail" style="background:#fff;color:#0f4c3a;border:1.5px solid #0f4c3a;padding:.45rem 1rem;font-size:.88rem;border-radius:.6rem;cursor:pointer">📧 ${t('invia_preventivo')}</button><div id="prevMailMsg" style="font-size:.82rem;margin-top:.3rem"></div></div>`;
       mq.innerHTML = righe;
+      // RECUPERO PREVENTIVO onesto: l'ospite CHIEDE la sua quote via email (un solo
+      // invio, nessun promemoria); il server la ricalcola e manda il link per completare
+      const bpm=document.getElementById('btnPrevMail');
+      if(bpm) bpm.onclick=async()=>{
+        const em=prompt(t('email')+':'); if(!em) return;
+        const pm=document.getElementById('prevMailMsg'); pm.textContent='…';
+        try{
+          const r=await api('/api/preventivo/email',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({alloggio_id:slug, check_in:document.getElementById('checkin').value,
+              check_out:document.getElementById('checkout').value, party:parseInt(document.getElementById('ospiti').value)||1,
+              email:em, lang:LANG, fonte:FONTE})});
+          if(r && r.stato==='inviata'){ pm.style.color='#155724'; pm.textContent='✅ '+t('prev_inviato'); bpm.disabled=true; }
+          else{ pm.style.color='#b00020'; pm.textContent='❌ '+t('prev_errore'); }
+        }catch(e){ pm.style.color='#b00020'; pm.textContent='❌ '+t('prev_errore'); }
+      };
       const sb = document.getElementById('splitN');
       if(sb){ const calc = async ()=>{ const n=parseInt(sb.value); const out=document.getElementById('splitOut');
         if(!(n>1)){ out.textContent = ''; return; }   // 1 = paghi tu tutto (default): il totale sopra è già il tuo
@@ -565,7 +581,12 @@ document.getElementById('close').onclick = ()=>document.getElementById('modal').
 document.getElementById('modal').onclick = e=>{ if(e.target.id==='modal') e.target.classList.remove('open'); };
 document.getElementById('btnPrenota').onclick = prenota;
 // link diretto host: ?apri=<slug> apre l'alloggio; ?fonte=diretto applica il 5% al preventivo
-(function(){ const a=new URLSearchParams(location.search).get('apri'); if(a) apri(a); })();
+(function(){ const p=new URLSearchParams(location.search);
+  // ci/co: il link nell'email del preventivo riporta alle STESSE date
+  const ci=p.get('ci'), co=p.get('co');
+  if(ci && /^\d{4}-\d{2}-\d{2}$/.test(ci)) document.getElementById('checkin').value=ci;
+  if(co && /^\d{4}-\d{2}-\d{2}$/.test(co)) document.getElementById('checkout').value=co;
+  const a=p.get('apri'); if(a) apri(a); })();
 document.getElementById('lang').onchange = async e=>{ await caricaI18N(e.target.value); cerca(); };
 
 // PWA: installazione + service worker

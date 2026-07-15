@@ -47,9 +47,10 @@ curl -sS -X POST https://bookinvip.com/api/domanda -H 'Content-Type: application
 ```
 
 ## 🧹 COSE MINORI (non urgenti)
-- Container `casavip_backup` risulta **unhealthy**: è solo estetico (usa l'immagine app ma non avvia il
-  server, quindi l'healthcheck fallisce sempre). Il backup gira lo stesso. Si può ignorare o disabilitare
-  l'healthcheck del solo container backup.
+- ~~Container `casavip_backup` risulta **unhealthy**~~ → ✅ **RISOLTO 2026-07-15** (commit `52a6888`):
+  il container ereditava l'healthcheck dell'immagine app (porta 8080, dove non gira nessun server).
+  Ora ha un healthcheck VERO: ultimo backup in `/data/backup/*.gz` più fresco di 7 ore.
+  In prod risulta **healthy**; se torna rosso, i backup sono DAVVERO fermi (non ignorare).
 - Server **fantasma Aruba `89.46.65.6`** (Flask/Werkzeug morto): non c'entra col sito. Se lo si paga, si
   può dismettere; se non lo si controlla, ignorarlo.
 

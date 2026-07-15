@@ -81,6 +81,9 @@ ETICHETTE_UI: Dict[str, Dict[str, str]] = {
     "verificata": {"it": "verificata", "en": "verified", "es": "verificada", "fr": "vérifiée", "de": "verifiziert", "pt": "verificada", "ja": "確認済み", "zh": "已验证"},
     "dividi_amici": {"it": "Dividi tra amici:", "en": "Split with friends:", "es": "Divide con amigos:", "fr": "Partager entre amis :", "de": "Mit Freunden teilen:", "pt": "Dividir com amigos:", "ja": "友達と割り勘：", "zh": "与好友分摊："},
     "a_testa": {"it": "a testa", "en": "each", "es": "por persona", "fr": "par personne", "de": "pro Person", "pt": "por pessoa", "ja": "1人あたり", "zh": "每人"},
+    "invia_preventivo": {"it": "Inviami il preventivo via email", "en": "Email me this quote", "es": "Envíame el presupuesto por correo", "fr": "Recevoir ce devis par e-mail", "de": "Angebot per E-Mail senden", "pt": "Enviar orçamento por e-mail", "ja": "見積もりをメールで受け取る", "zh": "把报价发送到我的邮箱"},
+    "prev_inviato": {"it": "Preventivo inviato! Controlla la posta", "en": "Quote sent! Check your inbox", "es": "¡Presupuesto enviado! Revisa tu correo", "fr": "Devis envoyé ! Vérifiez vos e-mails", "de": "Angebot gesendet! Prüfe dein Postfach", "pt": "Orçamento enviado! Verifique seu e-mail", "ja": "送信しました！メールをご確認ください", "zh": "已发送！请查收邮件"},
+    "prev_errore": {"it": "Invio non riuscito, riprova", "en": "Sending failed, try again", "es": "Error de envío, reintenta", "fr": "Échec de l'envoi, réessayez", "de": "Senden fehlgeschlagen, bitte erneut versuchen", "pt": "Falha no envio, tente novamente", "ja": "送信に失敗しました。もう一度お試しください", "zh": "发送失败，请重试"},
     "indicativo": {"it": "indicativo · la tua banca applica il suo cambio", "en": "approx. · your bank applies its own rate", "es": "aprox. · tu banco aplica su cambio", "fr": "indicatif · votre banque applique son taux", "de": "ca. · deine Bank nutzt ihren Kurs", "pt": "aprox. · seu banco aplica o câmbio dele", "ja": "目安 · 実際のレートは銀行によります", "zh": "约 · 以银行汇率为准"},
     "ota_pre": {"it": "Su un OTA pagheresti ~", "en": "On an OTA you'd pay ~", "es": "En una OTA pagarías ~", "fr": "Sur une OTA vous paieriez ~", "de": "Bei einem OTA zahltest du ~", "pt": "Numa OTA você pagaria ~", "ja": "OTAなら約", "zh": "在OTA上你要付约"},
     "risparmi": {"it": "risparmi", "en": "you save", "es": "ahorras", "fr": "vous économisez", "de": "du sparst", "pt": "você economiza", "ja": "お得", "zh": "省下"},
@@ -769,6 +772,8 @@ class RouterHTTP:
             return self._book(body)
         if metodo == "POST" and path == "/api/concierge/cancella":
             return self._cancella_prenotazione(body)
+        if metodo == "POST" and path == "/api/preventivo/email":
+            return self._preventivo_email(body)
         if metodo == "POST" and path == "/api/split/preview":
             return self._split_preview(body)
         if metodo == "POST" and path == "/api/contratto":
@@ -2436,6 +2441,97 @@ class RouterHTTP:
             except Exception:
                 logger.warning("confronto OTA quote fallito (ignorato)", exc_info=True)
         return status, corpo
+
+    def _fmt_importo(self, cents, valuta):
+        """Centesimi -> stringa leggibile nella valuta (esponente fase99: JPY 0, BHD 3).
+        Solo interi, mai float."""
+        if not isinstance(cents, int) or isinstance(cents, bool):
+            return ""
+        v = str(valuta or "EUR")
+        try:
+            from fase99_multicurrency import esponente
+            e = esponente(v)
+        except Exception:
+            e = 2
+        if e <= 0:
+            return "%d %s" % (cents, v)
+        return "%d.%0*d %s" % (cents // 10 ** e, e, cents % 10 ** e, v)
+
+    def _preventivo_email(self, body):
+        """RECUPERO PREVENTIVO onesto (senza tracking): l'ospite CHIEDE la sua quote
+        via email (consenso esplicito col clic) -> UNA email transazionale col
+        riepilogo e il link per completare. L'indirizzo si usa per l'invio e basta:
+        nessun archivio marketing, nessun promemoria. Anti-abuso: stesso preventivo
+        alla stessa email al massimo 1 volta ogni 10 minuti. Il preventivo viene
+        RICALCOLATO dal server (mai fidarsi dei numeri del client)."""
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        email = dati.get("email")
+        if not (isinstance(email, str) and "@" in email and len(email) <= 254):
+            return 422, {"errore": "email_non_valida"}
+        prov = getattr(self._sys, "email_provider", None)
+        if prov is None:
+            return 503, {"errore": "email_non_disponibile"}
+        slug = dati.get("alloggio_id") or dati.get("slug")
+        ci = str(dati.get("check_in", "") or "")
+        co = str(dati.get("check_out", "") or "")
+        if not (isinstance(slug, str) and slug and ci and co):
+            return 422, {"errore": "campi_mancanti"}
+        # throttle in-process: 1 invio per (email, alloggio, date) ogni 10 minuti
+        import time as _t
+        mem = getattr(self, "_prev_email_ts", None)
+        if mem is None:
+            mem = {}
+            self._prev_email_ts = mem
+        ora = _t.time()
+        for k in [k for k, ts in mem.items() if ora - ts > 3600]:
+            mem.pop(k, None)
+        chiave = (email.strip().lower(), slug, ci, co)
+        if ora - mem.get(chiave, 0) < 600:
+            return 429, {"errore": "gia_inviato_riprova_piu_tardi"}
+        # ricalcolo dal server: se le date non reggono piu', niente email (onesto)
+        try:
+            r = self._sys.concierge.quota({
+                "alloggio_id": slug, "check_in": ci, "check_out": co,
+                "party": dati.get("party", dati.get("ospiti", 1)),
+                "fonte": str(dati.get("fonte", "") or ""),
+            })
+            status, corpo = int(getattr(r, "status", 200)), getattr(r, "corpo", {}) or {}
+        except Exception:
+            logger.warning("preventivo email: quota ISOLATA fallita", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        if status != 200 or not corpo.get("quote_token"):
+            return 422, {"errore": "non_disponibile"}
+        titolo = slug
+        try:
+            det = self._sys.catalogo.dettaglio(slug)
+            if isinstance(det, dict) and det.get("titolo"):
+                titolo = str(det["titolo"])
+        except Exception:
+            pass
+        lang = "it" if str(dati.get("lang", "") or "").lower().startswith("it") else "en"
+        v = corpo.get("valuta", "EUR")
+        notti = corpo.get("notti")
+        et_sogg = ("Soggiorno" if lang == "it" else "Stay") + (
+            " (%s %s)" % (notti, "notti" if lang == "it" else "nights") if notti else "")
+        righe = [(et_sogg, self._fmt_importo(corpo.get("prezzo_guest_cents"), v))]
+        if isinstance(corpo.get("tassa_soggiorno_cents"), int) and corpo["tassa_soggiorno_cents"] > 0:
+            righe.append(("Tassa di soggiorno" if lang == "it" else "Tourist tax",
+                          self._fmt_importo(corpo["tassa_soggiorno_cents"], v)))
+        tot = corpo.get("totale_cents") or corpo.get("prezzo_guest_cents")
+        righe.append(("Totale" if lang == "it" else "Total", self._fmt_importo(tot, v)))
+        from urllib.parse import urlencode as _ue
+        url = ((self._base_url or "https://bookinvip.com") + "/?" +
+               _ue({"apri": slug, "ci": ci, "co": co}))
+        from fase86_email import corpo_preventivo_html
+        html = corpo_preventivo_html(titolo, ci, co, righe, url, lingua=lang)
+        oggetto = ("BookinVIP - Il tuo preventivo per %s" if lang == "it"
+                   else "BookinVIP - Your quote for %s") % titolo
+        if not prov.invia(email.strip(), oggetto, html):
+            return 502, {"errore": "invio_fallito"}
+        mem[chiave] = ora
+        return 200, {"stato": "inviata"}
 
     def _marketing_campagna(self, body, headers):
         """Genera + pubblica una campagna sui canali configurati (gated da env).
