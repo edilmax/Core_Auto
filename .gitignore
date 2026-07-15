@@ -57,3 +57,19 @@ quarantine_forensic/
 *.bak
 *.bak.*
 *.bak-*
+
+# chiavi private / certificati — MAI su GitHub (il repo e' pubblico).
+# Aggiunti nel collaudo 2026-07-15: '.env*' era coperto, ma una chiave SSH o un certificato
+# finito per sbaglio nella cartella sarebbe stato committato in SILENZIO da un `git add -A`.
+# Verificato prima: nessun file gia' tracciato corrisponde a questi pattern.
+id_rsa
+id_ed25519
+id_ecdsa
+id_dsa
+*.pem
+*.key
+*.p12
+*.pfx
+*.ppk
+*.jks
+*.keystore
