@@ -111,12 +111,18 @@
     return 'en';
   }
   let LANG = pickLang();
+  // SICUREZZA: la "citta" arriva dalla waitlist, cioe' la digita un VISITATORE QUALSIASI nel
+  // form (nessun account). Senza escape, `<img src=x onerror=...>` come citta' esegue nel
+  // browser di chi apre questa pagina PUBBLICA — cioe' proprio gli host che vogliamo attrarre.
+  // cap() capitalizza soltanto: NON e' una difesa. Escape all'uscita, come in index/admin.
+  const _E = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+  const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => _E[c])
   const cap = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : s;
   function renderDomanda(lista){
     const d = TR[LANG]||TR.en;
     document.getElementById('mappaDomanda').innerHTML = lista.map(c => {
       const hot = c.oltre_soglia;
-      return `<a href="/host.html" style="background:${hot?'#fff3cd':'#eef2f7'};border:1px solid ${hot?'#f0c674':'#dce1ed'};border-radius:1rem;padding:.6rem 1rem;color:#0f4c3a;font-weight:700">${hot?'🔥 ':'📍 '}${cap(c.citta)} <span style="color:#c0392b">· ${c.richieste} ${d.dom_attesa}${hot?' · '+d.dom_ora:''}</span></a>`;
+      return `<a href="/host.html" style="background:${hot?'#fff3cd':'#eef2f7'};border:1px solid ${hot?'#f0c674':'#dce1ed'};border-radius:1rem;padding:.6rem 1rem;color:#0f4c3a;font-weight:700">${hot?'🔥 ':'📍 '}${esc(cap(c.citta))} <span style="color:#c0392b">· ${esc(c.richieste)} ${d.dom_attesa}${hot?' · '+d.dom_ora:''}</span></a>`;
     }).join('');
   }
   function apply(){

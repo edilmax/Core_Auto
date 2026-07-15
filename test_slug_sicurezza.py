@@ -134,6 +134,22 @@ class TestXssFrontend(unittest.TestCase):
             for n in nudi:
                 self.assertIn("esc(", n, "admin.html: %s reso SENZA esc() -> %s" % (campo, n))
 
+    def test_diventa_host_citta_waitlist_escapata(self):
+        """diventa-host.html: la "citta" della waitlist la digita un VISITATORE QUALSIASI.
+
+        Catena PROVATA: POST /api/domanda con citta=`<img src=x onerror=alert(1)>` -> accettato
+        (201); GET /api/domanda/citta la ritorna grezza; la pagina la rendeva con `cap(c.citta)`
+        in innerHTML -> eseguiva. `cap()` capitalizza soltanto: NON e' una difesa. Vittima: chi
+        apre la pagina PUBBLICA che recluta gli host. Barriera d'ingresso: zero (nessun account).
+        """
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "deploy", "diventa-host.html"), encoding="utf-8") as f:
+            h = f.read()
+        self.assertIn("const esc", h, "diventa-host.html: manca la funzione di escape")
+        nudi = re.findall(r"\$\{cap\(c\.citta\)\}", h)
+        self.assertEqual(nudi, [], "diventa-host.html: citta' della waitlist resa SENZA esc()")
+        self.assertIn("esc(cap(c.citta))", h, "la citta' deve passare da esc()")
+
     def test_popup_mappa_escapato(self):
         """Il popup mappa mette lo slug dentro onclick="apri('...')": deve passare da esc()."""
         self.assertNotIn("+p.slug+", self.html,
