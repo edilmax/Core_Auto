@@ -1,7 +1,9 @@
 # 🧪 STATO COLLAUDO — sessione 2026-07-16 (Fable 5)
 
-> **Tutto committato su `master`, suite 2289 verde, working tree pulito, NON pushato** (il push al VPS
-> LIVE attende un "pusha" esplicito del fondatore — è l'unica azione irreversibile verso la produzione).
+> ✅ **DEPLOYATO IN PRODUZIONE il 2026-07-16 sera su "pusha" del fondatore** (commit `0f3fb56`,
+> 28 fix del giorno inclusi): procedura rm-first, container `app`+`backup` **healthy**, verificato
+> vivo (homepage 200 cert ok, `/api/domanda` ok:true, `/api/health` 200, host.html nuovo con
+> colonna PIN). Suite 2303 verde al momento del deploy. GitHub allineato (`origin/master`).
 
 **AGGIORNAMENTO (2ª parte sessione, metodo libro sui rami su-richiesta e contestazione): +5 bug VERI
 (16-20), tutti con prova dal vivo + fix + test + commit:**
