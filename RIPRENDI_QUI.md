@@ -1,7 +1,24 @@
 # 🧪 STATO COLLAUDO — sessione 2026-07-16 (Fable 5)
 
-> **Tutto committato su `master`, suite ~2275 verde, working tree pulito, NON pushato** (il push al VPS
+> **Tutto committato su `master`, suite 2289 verde, working tree pulito, NON pushato** (il push al VPS
 > LIVE attende un "pusha" esplicito del fondatore — è l'unica azione irreversibile verso la produzione).
+
+**AGGIORNAMENTO (2ª parte sessione, metodo libro sui rami su-richiesta e contestazione): +5 bug VERI
+(16-20), tutti con prova dal vivo + fix + test + commit:**
+16. `8617e14` decisione approva/rifiuta richiesta NON atomica → approva+rifiuta simultanei = prenotazione
+    confermata su date liberate (OVERBOOKING + cliente invitato a pagare stanza inesistente); fix CAS
+    `rimuovi_se_stato` (fase162) nei due rami di `_decidi_richiesta`.
+17. email esito richiesta: rifiuto = SILENZIO al cliente; scadenza 24h = email-bugia "pagamento non
+    riuscito"; fix `_email_esito_richiesta` (onesta, "nessun addebito") + smistamento nello sweep.
+18. split parziale controversia: ledger payout restava PIENO → `da_pagare` gonfiato = il bonifico
+    manuale pagava all'host anche la quota rimborsata all'ospite; fix `fase131.imposta_importo`.
+19. cancellazione con PENALE: quota-penale dell'host decisa dall'escrow ma payout 'trattenuto' pieno e
+    NESSUN bonifico mai → l'host non riceveva ciò che gli spetta; fix: escrow chiuso PRIMA, ledger
+    riallineato alla quota + transfer (prima di `marca_da_rimborsare`).
+20. gara contesta↔auto-rilascio 24h: SELECT in autocommit + UPDATE senza guardia → 'contestato'
+    sovrascritto e HOST PAGATO con disputa aperta (3/300 nella sonda); fix CAS per riga in
+    `fase160.auto_rilascia`.
+Prossimo: estendere fuzzer "1000 menti" con azioni su-richiesta/contestazione (stadio finale intrecci).
 
 **15 bug VERI chiusi** (prova end-to-end + test permanente + commit), tra cui a **perdita reale di denaro**:
 rimborso admin che pagava ANCHE l'host, addebito Stripe sempre in EUR su annunci non-EUR, Credito
