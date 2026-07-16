@@ -3550,10 +3550,33 @@ class RouterHTTP:
             return 401, {"errore": "unauthorized"}
         alloggio = query.get("alloggio") or None
         da, a = query.get("da") or None, query.get("a") or None
+        # ISOLAMENTO (bug provato: data-leak/IDOR): con uno slug SPECIFICO va verificata la
+        # proprieta' (senza, un host leggeva le metriche di un annuncio ALTRUI); SENZA slug si
+        # aggregavano TUTTI gli annunci di TUTTA la piattaforma (`metriche(None)` = nessun WHERE)
+        # -> ogni host vedeva l'incasso dell'intera piattaforma. Ora: solo i PROPRI annunci.
+        if alloggio is not None and not self._verifica_proprieta(headers, alloggio):
+            return 403, {"errore": "non_tuo"}
         try:
-            inv = self._sys.inventario.metriche(alloggio_id=alloggio, da=da, a=a)
-            pren = self._sys.inventario.elenco_prenotazioni(alloggio_id=alloggio,
-                                                            limit=500)
+            if alloggio is not None:
+                inv = self._sys.inventario.metriche(alloggio_id=alloggio, da=da, a=a)
+                pren = self._sys.inventario.elenco_prenotazioni(alloggio_id=alloggio, limit=500)
+            else:
+                hid = self._host_id_da_token(headers)
+                slugs = [al.get("slug") for al in
+                         (self._sys.catalogo.alloggi_host(hid, limit=200) if hid else [])
+                         if isinstance(al, dict) and al.get("slug")]
+                inv = {"revenue_cents": 0, "notti_totali": 0, "notti_occupate": 0,
+                       "giorni": 0, "occupazione_bps": 0}
+                pren = []
+                for s in slugs:                         # aggrego SOLO gli annunci dell'host
+                    mi = self._sys.inventario.metriche(alloggio_id=s, da=da, a=a)
+                    inv["revenue_cents"] += mi.get("revenue_cents", 0)
+                    inv["notti_totali"] += mi.get("notti_totali", 0)
+                    inv["notti_occupate"] += mi.get("notti_occupate", 0)
+                    inv["giorni"] += mi.get("giorni", 0)
+                    pren.extend(self._sys.inventario.elenco_prenotazioni(alloggio_id=s, limit=500))
+                inv["occupazione_bps"] = (inv["notti_occupate"] * 10000 // inv["notti_totali"]) \
+                    if inv["notti_totali"] else 0
         except Exception:
             logger.error("host metriche: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
@@ -3594,9 +3617,21 @@ class RouterHTTP:
         if not self._auth_host(headers):
             return 401, {"errore": "unauthorized"}
         alloggio = query.get("alloggio") or None
+        # ISOLAMENTO (stesso IDOR di _host_metriche): slug altrui -> 403; senza slug si
+        # esportavano le prenotazioni di TUTTA la piattaforma. Ora: solo le proprie.
+        if alloggio is not None and not self._verifica_proprieta(headers, alloggio):
+            return 403, {"errore": "non_tuo"}
         try:
-            righe = self._sys.inventario.elenco_prenotazioni(alloggio_id=alloggio,
-                                                             limit=500)
+            if alloggio is not None:
+                righe = self._sys.inventario.elenco_prenotazioni(alloggio_id=alloggio, limit=500)
+            else:
+                hid = self._host_id_da_token(headers)
+                righe = []
+                for al in (self._sys.catalogo.alloggi_host(hid, limit=200) if hid else []):
+                    s = al.get("slug") if isinstance(al, dict) else None
+                    if s:
+                        righe.extend(self._sys.inventario.elenco_prenotazioni(alloggio_id=s,
+                                                                              limit=500))
         except Exception:
             logger.error("host export: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
@@ -4096,6 +4131,10 @@ class RouterHTTP:
         if not (isinstance(alloggio, str) and alloggio and isinstance(da, str)
                 and isinstance(a, str)):
             return 422, {"errore": "campi_non_validi"}
+        # ISOLAMENTO (stesso IDOR): il calendario di un annuncio e' visibile solo al proprietario
+        # (senza, un host spiava disponibilita'/occupazione di un rivale con lo slug).
+        if not self._verifica_proprieta(headers, alloggio):
+            return 403, {"errore": "non_tuo"}
         try:
             cal = self._cal_arricchito(alloggio, da, a)
         except Exception:
