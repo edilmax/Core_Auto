@@ -4010,17 +4010,68 @@ class RouterHTTP:
         if not hid:
             return 422, {"errore": "host_id_mancante"}
         try:
+            from fase115_dashboard_metriche import calcola_metriche
             pren = []
             for al in self._sys.catalogo.alloggi_host(hid, limit=200):
                 slug = al.get("slug") if isinstance(al, dict) else None
-                if slug:
-                    pren.extend(self._sys.inventario.elenco_prenotazioni(alloggio_id=slug,
-                                                                         limit=500))
-            from fase115_dashboard_metriche import calcola_metriche
-            return 200, {"metriche": calcola_metriche(pren), "prenotazioni": len(pren)}
+                if not slug:
+                    continue
+                voti = self._voti_per_riferimento(slug)      # rif -> voto (recensioni verificate)
+                for p in self._sys.inventario.elenco_prenotazioni(alloggio_id=slug, limit=500):
+                    self._arricchisci_metrica(p, voti)        # aggiunge prezzo/valuta/voto (mancanti)
+                    pren.append(p)
+            # NON sommare valute diverse (¥ + € = numero senza senso): metriche PER valuta.
+            valute = sorted({(p.get("valuta") or "EUR") for p in pren}) or ["EUR"]
+            if len(valute) <= 1:
+                return 200, {"metriche": calcola_metriche(pren), "valuta": valute[0],
+                             "prenotazioni": len(pren)}
+            per = {v: calcola_metriche([p for p in pren if (p.get("valuta") or "EUR") == v])
+                   for v in valute}
+            dom = max(per, key=lambda v: per[v].get("notti_vendute", 0))   # dominante nel riquadro
+            m = dict(per[dom]); m["valuta"] = dom
+            return 200, {"metriche": m, "metriche_per_valuta": per, "prenotazioni": len(pren)}
         except Exception:
             logger.error("metriche avanzate: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
+
+    def _voti_per_riferimento(self, slug):
+        """Mappa riferimento -> voto delle recensioni verificate di un alloggio (per il rating)."""
+        out: Dict[str, int] = {}
+        r = getattr(self._sys, "recensioni", None)
+        if r is None:
+            return out
+        try:
+            for rr in (r.elenco(slug, 500) or []):
+                rif = rr.get("prenotazione_id")
+                if isinstance(rif, str) and rif:
+                    out[rif] = rr.get("voto")
+        except Exception:
+            pass
+        return out
+
+    def _arricchisci_metrica(self, p, voti):
+        """`elenco_prenotazioni` (dai movimenti) NON porta prezzo/valuta/voto -> senza questi le
+        metriche fase115 (revenue/ADR/RevPAR/rating) erano SEMPRE 0 (bug provato: dashboard host
+        mostrava incasso €0 con prenotazioni reali). Qui si arricchisce dal pendente PAGATO e dalle
+        recensioni. Prezzo solo se 'pagato' (un hold non pagato non e' revenue). Isolato."""
+        try:
+            rif = str(p.get("idem_key", ""))[:24]
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            rec = pp.info(rif) if (pp is not None and rif) else None
+            if rec is not None and rec.get("stato") == "pagato":
+                import json as _j
+                try:
+                    cj = _j.loads(rec.get("corpo_json") or "{}")
+                except Exception:
+                    cj = {}
+                p["prezzo_guest_cents"] = cj.get("prezzo_guest_cents", 0)
+                p["valuta"] = cj.get("valuta") or "EUR"
+            else:
+                p["prezzo_guest_cents"] = 0        # non pagata -> niente revenue
+            if rif in voti:
+                p["voto"] = voti[rif]
+        except Exception:
+            logger.warning("arricchimento metrica fallito (ISOLATO)", exc_info=True)
 
     def _host_calendario(self, query, headers):
         if not self._auth_host(headers):
