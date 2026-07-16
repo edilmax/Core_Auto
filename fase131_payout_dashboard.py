@@ -207,6 +207,27 @@ class PayoutDashboard:
         finally:
             con.close()
 
+    def imposta_importo(self, prenotazione_id: str, minori: int) -> bool:
+        """Riallinea l'importo del payout alla quota DECISA per l'host (split di una
+        controversia, penale trattenuta su cancellazione): il ledger deve dire quanto
+        l'host riceve DAVVERO. Senza, il record restava all'importo PIENO: dashboard
+        gonfiata e — per i bonifici manuali fatti da `da_pagare` — pagamento all'host
+        anche della quota gia' rimborsata all'ospite (perdita reale)."""
+        m = _pos(minori)
+        if m <= 0 or not (isinstance(prenotazione_id, str) and prenotazione_id):
+            return False
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("UPDATE payout SET minori=?, ts=? WHERE prenotazione_id=?",
+                                  (m, self._now(), prenotazione_id))
+            return bool(cur.rowcount)
+        except Exception:
+            logger.warning("imposta_importo fallita (ISOLATA)", exc_info=True)
+            return False
+        finally:
+            con.close()
+
     def da_pagare(self, host_id: str, valuta: str) -> int:
         rie = self.riepilogo(host_id).get(str(valuta).upper(), {})
         return rie.get("maturato", 0) + rie.get("in_transito", 0)

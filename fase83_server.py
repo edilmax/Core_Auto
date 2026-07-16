@@ -1276,8 +1276,16 @@ class RouterHTTP:
             if pd is not None:
                 pd.rimuovi(rif)
         else:
+            # SPLIT PARZIALE: il ledger payout va RIALLINEATO alla quota host PRIMA del
+            # bonifico. Senza, il record restava all'importo PIENO: dashboard host gonfiata
+            # e, per chi paga a mano da `da_pagare`, all'host arrivava ANCHE la quota
+            # appena rimborsata all'ospite (perdita reale, stessa classe del bug #90).
+            quota_host = out.get("host_riceve_cents", importo - rimborso)
+            pd = getattr(self._sys, "payout", None)
+            if pd is not None:
+                pd.imposta_importo(rif, quota_host)
             # la parte che spetta all'host parte da sola verso il suo conto (Connect)
-            self._trasferisci_all_host(rif, out.get("host_riceve_cents", importo - rimborso))
+            self._trasferisci_all_host(rif, quota_host)
         return 200, {"stato": "risolta", "riferimento": rif,
                      "rimborso_cliente_cents": out.get("ospite_rimborso_cents", rimborso),
                      "va_all_host_cents": out.get("host_riceve_cents", importo - rimborso),
@@ -2281,7 +2289,42 @@ class RouterHTTP:
                          "rimborso_cents": 0, "credito_viaggio_cents": 0,
                          "credito_viaggio_token": "", "money_unit": "cents_integer",
                          "nota": "prenotazione gia' cancellata: nessun nuovo credito."}
-        self._payout_trattieni(rif)            # cancellata -> niente payout all'host
+        # ESCROW PRIMA del resto: serve sapere quanto TIENE l'host (quota-penale della
+        # politica) per decidere il payout. host_tiene vale SOLO se la chiusura CAS riesce.
+        host_tiene = 0
+        try:
+            gz = getattr(self._sys, "garanzia", None)
+            if gz is not None:
+                st = gz.stato(rif)
+                imp = st.get("importo_host_cents", 0) if isinstance(st, dict) else 0
+                tratt = r.get("trattenuto_cents", 0)
+                host_tiene = (imp * tratt // pagato) if (imp and pagato and tratt) else 0
+                if host_tiene > 0:
+                    esito_gz = gz.chiudi_proporzionale(rif, host_tiene)
+                    if not (isinstance(esito_gz, dict) and esito_gz.get("ok")):
+                        host_tiene = 0     # escrow gia' deciso altrove: non pagare due volte
+                else:
+                    gz.annulla(rif)        # rimborso pieno -> host 0
+        except Exception:
+            host_tiene = 0
+            logger.warning("chiusura garanzia su cancellazione fallita (ignorato)", exc_info=True)
+        if host_tiene > 0:
+            # la quota-penale e' DELL'HOST. BUG PROVATO al collaudo: il payout finiva
+            # 'trattenuto' PIENO (= "non incassi niente") mentre l'escrow diceva
+            # host_riceve>0, e NESSUN bonifico partiva mai (l'auto-rilascio guarda solo
+            # 'in_garanzia') -> la quota dell'host restava alla piattaforma, invisibile.
+            # Ora: ledger riallineato alla quota VERA + bonifico automatico (gated
+            # Connect; senza account resta 'maturato' = da_pagare giusto per il manuale).
+            # PRIMA di marca_da_rimborsare: il transfer esige il pendente 'pagato'.
+            try:
+                pd = getattr(self._sys, "payout", None)
+                if pd is not None:
+                    pd.imposta_importo(rif, host_tiene)
+            except Exception:
+                logger.warning("riallineo payout su penale fallito (ignorato)", exc_info=True)
+            self._trasferisci_all_host(rif, host_tiene)
+        else:
+            self._payout_trattieni(rif)        # nessuna quota host -> niente payout
         if pagato_davvero:
             self._storna_tassa(rif)            # tassa restituita all'ospite -> fuori dal ledger citta'
         try:
@@ -2301,19 +2344,6 @@ class RouterHTTP:
             tassa = 0                          # mai versata -> niente da rimborsare
         rimborso_totale = r.get("rimborso_cents", 0) + tassa
         cv_cents, cv_token = self._credito_anti_rimpianto(r.get("trattenuto_cents", 0))
-        try:                                      # escrow: l'host TIENE la sua penale, il resto torna all'ospite
-            gz = getattr(self._sys, "garanzia", None)
-            if gz is not None:
-                st = gz.stato(rif)
-                imp = st.get("importo_host_cents", 0) if isinstance(st, dict) else 0
-                tratt = r.get("trattenuto_cents", 0)
-                host_tiene = (imp * tratt // pagato) if (imp and pagato and tratt) else 0
-                if host_tiene > 0:
-                    gz.chiudi_proporzionale(rif, host_tiene)
-                else:
-                    gz.annulla(rif)               # rimborso pieno -> host 0
-        except Exception:
-            logger.warning("chiusura garanzia su cancellazione fallita (ignorato)", exc_info=True)
         return 200, {"stato": "cancellata", "riferimento": rif,
                      "giorni_all_arrivo": giorni, "date_liberate": True,
                      "rimborso_cents": rimborso_totale,                 # soggiorno + tassa
