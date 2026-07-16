@@ -173,6 +173,16 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
   vero container backup; retry email anti-singhiozzo (fase86)]
   [2026-07-16 fatto: cancellazione idempotente — replay non conia piu' Credito Viaggio, vedi riga 💳]
 - [FATTO 2026-07-15: recupero preventivi abbandonati — vedi riga 📧 in sezione 1]
+- **[FATTO 2026-07-16 — COLLAUDO "METODO LIBRO" COMPLETO]**: 29 bug VERI chiusi in un giorno
+  (righe 🧠→🔢 in sezione 1: overbooking su-richiesta, host-pagato-con-disputa, penali mai
+  versate, escrow morto su pagamento tardivo, recensioni-fantasma post-purga, credito senza
+  valuta, referral perso nella gara webhook, ecc.), ognuno con prova-dal-vivo + fix + test +
+  commit. Tutti gli attori tracciati (ospite/host/admin/macchina/email/telegram), stadio finale
+  10×1000 menti = 0 violazioni, MCP bombardato = 0 difetti, suite 2308 verde. **A oggi non
+  restano lavori tecnici aperti**: quel che manca e' SOLO nei "Prerequisiti del FONDATORE"
+  sopra e nella tabella COSTRUITO-ma-SPENTO (attivazioni = decisioni di prodotto/chiavi).
+  Prossima modalita' di collaudo concordata: "gradini G1-G2-G3 + comando di bombardamento"
+  fornito dal fondatore round per round.
 - [FATTI 2026-07-15: pin trascinabile + import con posizione precisa — vedi righe 📍 in sezione 1]
 - Split-payment REALE (link per amico, all-or-nothing) — PARCHEGGIATO dal fondatore.
 - Video AI multilingua (pool 164/165 pronto; manca la generazione video).
