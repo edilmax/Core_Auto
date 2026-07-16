@@ -1819,7 +1819,12 @@ class RouterHTTP:
                 hold_sec = HOLD_APPROVAZIONE_SEC
             else:
                 corpo.pop("payment_url", None)   # niente Stripe: conferma diretta (no link morto)
-            pp.rimuovi(ref)                       # tolgo la richiesta SOLO ora (dopo il fail-safe)
+            # ACQUISIZIONE ATOMICA (CAS, dopo il fail-safe del link): la richiesta si toglie
+            # SOLO se e' ancora 'in_attesa_host'. Se un rifiuto/doppio-approva/sweeper ha
+            # vinto la gara un istante prima, qui si perde e NON si finalizza: mai una
+            # conferma (escrow+email "paga") su date gia' liberate da un'altra decisione.
+            if not pp.rimuovi_se_stato(ref, "in_attesa_host"):
+                return 404, {"errore": "richiesta_non_trovata"}
             corpo["stato"] = "confermata"
             corpo = self._finalizza_prenotazione(
                 corpo, {"email": rec.get("email", ""), "quote_token": rec.get("quote_token", "")},
@@ -1828,12 +1833,17 @@ class RouterHTTP:
                 return 409, {"errore": "credito_gia_usato",
                              "messaggio": "Credito gia' usato su un'altra prenotazione."}
             return 200, {"stato": "approvata", "riferimento": ref, "prenotazione": corpo}
-        try:                                       # rifiuto: libero la stanza, zero addebito
+        # rifiuto: PRIMA l'acquisizione atomica (CAS), POI il rilascio. Se il CAS perde
+        # (approva/sweeper hanno gia' deciso) NON si rilascia niente: liberare le date di
+        # una richiesta appena approvata era l'overbooking. Se il processo cade tra CAS e
+        # rilascio, le date restano bloccate: lato sicuro (stesso ordine dello sweeper).
+        if not pp.rimuovi_se_stato(ref, "in_attesa_host"):
+            return 404, {"errore": "richiesta_non_trovata"}
+        try:                                       # libero la stanza, zero addebito
             self._sys.inventario.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"],
                                           idem_key=rec.get("idem_key") or ("hold_" + str(ref)))
         except Exception:
             logger.warning("rilascio su rifiuto richiesta fallito (ignorato)", exc_info=True)
-        pp.rimuovi(ref)
         return 200, {"stato": "rifiutata", "riferimento": ref}
 
     def _registra_hold(self, corpo, allog, ref, ci, co, qt, email="", hold_sec=None):

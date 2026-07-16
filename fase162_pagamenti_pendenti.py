@@ -200,6 +200,25 @@ class PagamentiPendenti:
         finally:
             con.close()
 
+    def rimuovi_se_stato(self, riferimento: Any, stato: Any) -> bool:
+        """Rimozione CONDIZIONATA (CAS): elimina il record SOLO se e' ancora nello stato
+        atteso. E' l'acquisizione atomica della decisione approva/rifiuta: due decisioni
+        concorrenti (doppio click, approva vs rifiuta, approva vs sweeper che scade) ne
+        vincono UNA sola; il perdente vede False e non tocca date/escrow/pagamenti.
+        Prima era rimuovi() incondizionato: approva+rifiuta simultanei confermavano una
+        prenotazione su date gia' liberate (overbooking + cliente invitato a pagare)."""
+        if not (isinstance(riferimento, str) and riferimento
+                and isinstance(stato, str) and stato):
+            return False
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("DELETE FROM pendenti WHERE riferimento=? AND stato=?",
+                                  (riferimento, stato))
+            return bool(cur.rowcount)
+        finally:
+            con.close()
+
     def scadi(self, riferimento: Any) -> bool:
         """Hold scaduto (non pagato entro i 2 min): NON cancella il record, lo marca 'scaduto'
         conservando i dati. Serve a gestire un eventuale pagamento TARDIVO (link Stripe ancora
