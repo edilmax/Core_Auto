@@ -763,7 +763,7 @@ class RouterHTTP:
         if metodo == "GET" and path == "/api/legale/contratto-host":
             return self._contratto_host(query)
         if metodo == "GET" and path == "/api/trasparenza":
-            return self._trasparenza(query)
+            return self._trasparenza(query, headers)
         if metodo == "POST" and path == "/api/domanda":
             return self._domanda_registra(body)
         if metodo == "GET" and path == "/api/domanda/conta":
@@ -2431,15 +2431,42 @@ class RouterHTTP:
         except Exception:
             logger.warning("notifica domanda host fallita (ignorata)", exc_info=True)
 
-    def _trasparenza(self, query):
-        """Confronto noi-vs-OTA (fase69): 'con Booking incassi X, con noi Y'."""
+    def _trasparenza(self, query, headers=None):
+        """Confronto noi-vs-OTA (fase69): 'con Booking incassi X, con noi Y'. La NOSTRA
+        commissione mostrata riflette quella REALE (config + rampa di lancio per l'host loggato),
+        NON un 10% fisso: altrimenti la trasparenza — l'arma che converte l'host — contraddice il
+        prezzo vero (mostrava 10% mentre in lancio l'host paga 0%, o mentre con COMMISSIONE_BPS=15%
+        ne paga 15% e la trasparenza lo sotto-stimava)."""
         from fase69_trasparenza import confronta_piattaforma
         try:
             prezzo = int(query.get("prezzo_cents", "0"))
         except (ValueError, TypeError):
             prezzo = 0
         ota = query.get("ota", "booking")
-        return 200, confronta_piattaforma(prezzo, ota).as_dict()
+        bps = self._commissione_bps_display(headers)
+        return 200, confronta_piattaforma(prezzo, ota, commissione_nostra_bps=bps).as_dict()
+
+    def _commissione_bps_display(self, headers):
+        """bps della NOSTRA commissione MARKETPLACE da mostrare in trasparenza — coerente con la
+        commissione REALE addebitata da `_comm_alloggio` (fase81): con promo di lancio attiva vale
+        la RAMPA per anzianità dell'host loggato (0→8→10%), altrimenti la config. Generico (nessun
+        host loggato) in promo → la tariffa a regime della rampa. Fail-safe: default config."""
+        cfg = getattr(self._sys, "config", None)
+        base = getattr(cfg, "commissione_bps", 1000)
+        base = base if isinstance(base, int) and not isinstance(base, bool) \
+            and 0 <= base <= 10000 else 1000
+        try:
+            if getattr(cfg, "promo_lancio_attiva", False):
+                from fase98_policy_commissione import (commissione_bps_lancio,
+                                                       LANCIO_BPS_REGIME)
+                reg = getattr(self._sys, "registro_host", None)
+                hid = self._host_id_da_token(headers) if headers else None
+                if hid and reg is not None:
+                    return commissione_bps_lancio(reg.giorni_da_registrazione(hid))
+                return LANCIO_BPS_REGIME       # generico: tariffa a regime della rampa (10%)
+        except Exception:
+            pass
+        return base
 
     def _dettaglio(self, slug, lingua):
         d = self._sys.catalogo.dettaglio(slug)
