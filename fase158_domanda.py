@@ -137,6 +137,11 @@ class GestoreDomanda:
         return self._firma.codifica({
             "tipo": "credito_fondatore", "email": email.strip().lower(),
             "citta": (str(citta).strip().lower() if isinstance(citta, str) else ""),
+            # VALUTA del credito: i "cents" senza valuta valevano 500 di QUALSIASI unita'
+            # minore (¥500 ≈ €3 su un annuncio JPY; e un credito nato in valuta debole si
+            # spendeva come €5 su un annuncio EUR). Il credito sconta SOLO annunci nella
+            # sua stessa valuta (fase59._sconto_credito).
+            "valuta": "EUR",
             "credito_cents": c, "exp": self._now() + max(1, int(giorni)) * 86400,
             "nonce": secrets.token_hex(8)})   # firma univoca -> single-use affidabile (fase167)
 

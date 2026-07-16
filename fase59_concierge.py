@@ -297,7 +297,8 @@ class ProtocolloConcierge:
             netto_host = netto - comm
             # CREDITO FONDATORE: sconto all'ospite finanziato dalla NOSTRA commissione, con
             # guardia floor (la nostra presa resta sopra i costi) -> ZERO perdita. Host invariato.
-            sconto, credito_id = self._sconto_credito(richiesta.get("credito_token"), netto, comm)
+            sconto, credito_id = self._sconto_credito(richiesta.get("credito_token"),
+                                                      netto, comm, valuta)
             guest = netto - sconto
             if guest <= 0 or guest > MAX_CENTS:
                 return RispostaConcierge(422, {"errore": "prezzo_fuori_banda"})
@@ -410,7 +411,8 @@ class ProtocolloConcierge:
             pass
         return self._valuta
 
-    def _sconto_credito(self, token: Any, netto: int, comm: int) -> Tuple[int, str]:
+    def _sconto_credito(self, token: Any, netto: int, comm: int,
+                        valuta: str = "EUR") -> Tuple[int, str]:
         """Sconto Credito Fondatore: verifica il token firmato e applica al MASSIMO quanto la
         nostra commissione puo' assorbire restando sopra i costi (Stripe ~2.9%+0.25 + buffer).
         Non falsificabile, non scaduto. Se non c'e' margine -> 0 (mai in perdita).
@@ -434,6 +436,14 @@ class ProtocolloConcierge:
                         return 0, ""
                 except Exception:
                     logger.warning("credito single-use: check ISOLATO fallito", exc_info=True)
+            # LIKE-FOR-LIKE anche sul credito: i "cents" del credito sono unita' minori
+            # della SUA valuta (legacy senza campo = EUR). Su un annuncio in ALTRA valuta
+            # lo sconto e' 0: senza questa guardia €5 diventavano ¥500 (≈€3) e un credito
+            # nato da una penale in valuta debole si spendeva come €50 su un annuncio EUR
+            # (leak di valore cross-valuta, farmabile). Onesto e conservativo: mai FX.
+            cv_val = str(v.get("valuta") or "EUR").upper()
+            if cv_val != str(valuta or "EUR").upper():
+                return 0, ""
             cr = v.get("credito_cents", 0)
             cr = cr if (_intero(cr) and cr > 0) else 0
             costo = netto * 290 // 10000 + 25 + 200      # Stripe stimato + buffer prudenziale

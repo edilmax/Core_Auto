@@ -2393,7 +2393,8 @@ class RouterHTTP:
         if not pagato_davvero:
             tassa = 0                          # mai versata -> niente da rimborsare
         rimborso_totale = r.get("rimborso_cents", 0) + tassa
-        cv_cents, cv_token = self._credito_anti_rimpianto(r.get("trattenuto_cents", 0))
+        cv_cents, cv_token = self._credito_anti_rimpianto(r.get("trattenuto_cents", 0),
+                                                          v.get("valuta", "EUR"))
         return 200, {"stato": "cancellata", "riferimento": rif,
                      "giorni_all_arrivo": giorni, "date_liberate": True,
                      "rimborso_cents": rimborso_totale,                 # soggiorno + tassa
@@ -2449,9 +2450,12 @@ class RouterHTTP:
         except Exception:
             logger.warning("rilascio su credito_gia_usato fallito (ignorato)", exc_info=True)
 
-    def _credito_anti_rimpianto(self, trattenuto_cents):
-        """Trasforma il 50% della penale in un Credito Viaggio firmato (tetto 5000 cents).
-        Riusa il riscatto floor-guarded del concierge (tipo 'credito_fondatore')."""
+    def _credito_anti_rimpianto(self, trattenuto_cents, valuta="EUR"):
+        """Trasforma il 50% della penale in un Credito Viaggio firmato (tetto 5000 unita'
+        minori DELLA VALUTA della prenotazione). Riusa il riscatto floor-guarded del
+        concierge (tipo 'credito_fondatore'). Il credito porta la SUA valuta: senza,
+        una penale in valuta debole coniava un credito spendibile come €50 su annunci
+        EUR (leak cross-valuta farmabile con self-booking)."""
         import time
         firma = getattr(self._sys, "firma", None)
         t = trattenuto_cents if isinstance(trattenuto_cents, int) and trattenuto_cents > 0 else 0
@@ -2460,8 +2464,10 @@ class RouterHTTP:
             return 0, ""
         try:
             import secrets as _sec
+            val = str(valuta or "EUR").upper()
             tok = firma.codifica({"tipo": "credito_fondatore", "email": "", "citta": "",
-                                  "credito_cents": cv, "exp": int(time.time()) + 365 * 86400,
+                                  "credito_cents": cv, "valuta": val,
+                                  "exp": int(time.time()) + 365 * 86400,
                                   "nonce": _sec.token_hex(8)})   # firma univoca -> single-use (fase167)
             return cv, tok
         except Exception:
