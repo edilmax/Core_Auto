@@ -141,6 +141,29 @@ class TestSingleUseE2E(unittest.TestCase):
         q = self._quote("2026-09-25", "2026-09-28", self._credito(nonce="n3"))
         self.assertGreater(q["sconto_credito_cents"], 0)
 
+    def test_race_n_preventivi_secondo_book_rifiutato(self):
+        """RESIDUO CHIUSO: due preventivi con lo STESSO credito generati PRIMA di prenotare
+        (entrambi scontati) -> il 1o book applica lo sconto e consuma; il 2o book viene RIFIUTATO
+        (409, pre-pagamento) e la stanza LIBERATA (ri-prenotabile). Cosi' un credito vale UNA
+        prenotazione anche sotto race, senza mai toccare una prenotazione legittima."""
+        cr = self._credito(nonce="race")
+        qa = self._quote("2026-09-05", "2026-09-08", cr)
+        qb = self._quote("2026-09-15", "2026-09-18", cr)   # generato PRIMA di prenotare qa
+        self.assertGreater(qa["sconto_credito_cents"], 0)
+        self.assertGreater(qb["sconto_credito_cents"], 0)   # ancora scontato (credito non consumato)
+        sa, _ = self._book(qa)
+        self.assertEqual(sa, 201)                            # 1o book: ok, consuma il credito
+        sb, bb = self._book(qb)
+        self.assertEqual(sb, 409, "il 2o book con credito gia' speso deve essere RIFIUTATO")
+        self.assertEqual(bb.get("errore"), "credito_gia_usato")
+        # la stanza di qb e' stata LIBERATA -> prenotabile di nuovo (senza credito)
+        s2, q2 = self.g("POST", "/api/concierge/quote",
+                        {"alloggio_id": "casa", "check_in": "2026-09-15",
+                         "check_out": "2026-09-18", "party": 2})
+        s3, _ = self.g("POST", "/api/concierge/book",
+                       {"quote_token": q2["quote_token"], "email": "cli2@x.it"})
+        self.assertEqual(s3, 201, "la stanza del book rifiutato deve restare prenotabile")
+
     def test_fail_open_store_rotto_non_blocca_prenotazione(self):
         # se lo store solleva, la prenotazione NON deve essere bloccata (fail-open)
         class _Rotto:

@@ -1510,6 +1510,10 @@ class RouterHTTP:
                 corpo.pop("payment_url", None)
                 return status, corpo
             corpo = self._finalizza_prenotazione(corpo, dati)
+            if corpo.get("_rifiuta_credito"):
+                return 409, {"stato": "rifiutata", "errore": "credito_gia_usato",
+                             "messaggio": "Credito gia' usato su un'altra prenotazione: "
+                                          "rifai il preventivo."}
         return status, corpo
 
     def _modalita_alloggio(self, slug):
@@ -1531,7 +1535,15 @@ class RouterHTTP:
         # futuri (buco provato: era riusabile all'infinito). Consumo QUI (finalizzazione), non
         # al preventivo, cosi' il browsing non brucia il credito e il su-richiesta lo consuma
         # solo se APPROVATO. FAIL-OPEN: un errore dello store non blocca mai la prenotazione.
-        self._consuma_credito(corpo, ref)
+        if self._consuma_credito(corpo, ref) == "diverso":
+            # Il credito era GIA' speso su un'ALTRA prenotazione: unico caso e' la race di
+            # preventivi concorrenti generati PRIMA del primo book (il caso sequenziale non
+            # arriva qui, il preventivo aveva gia' azzerato lo sconto). Siamo PRE-PAGAMENTO
+            # (nessun soldo mosso): RIFIUTA questa prenotazione e libera la stanza. Chiude il
+            # residuo "N preventivi -> N sconti" senza mai toccare una prenotazione legittima.
+            self._rilascia_per_credito(dati, allog, ci, co, ref)
+            return {"stato": "rifiutata", "motivo": "credito_gia_usato",
+                    "riferimento": ref, "_rifiuta_credito": True}
         pass_token = None
         if self._sys.emettitore_pass is not None:
             try:
@@ -1758,6 +1770,9 @@ class RouterHTTP:
             corpo = self._finalizza_prenotazione(
                 corpo, {"email": rec.get("email", ""), "quote_token": rec.get("quote_token", "")},
                 hold_sec=hold_sec)
+            if corpo.get("_rifiuta_credito"):
+                return 409, {"errore": "credito_gia_usato",
+                             "messaggio": "Credito gia' usato su un'altra prenotazione."}
             return 200, {"stato": "approvata", "riferimento": ref, "prenotazione": corpo}
         try:                                       # rifiuto: libero la stanza, zero addebito
             self._sys.inventario.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"],
@@ -2236,25 +2251,36 @@ class RouterHTTP:
 
     def _consuma_credito(self, corpo, ref):
         """Segna come USATO il Credito Fondatore/Viaggio applicato a questa prenotazione (fase167).
-        Idempotente sullo STESSO riferimento (un replay dello stesso book non allarma). Se il
-        credito risulta gia' speso su un'ALTRA prenotazione (riuso in una finestra di preventivi
-        concorrenti) lo si LOGGA: non si annulla la prenotazione gia' firmata (costa solo margine,
-        mai una perdita), ma resta tracciato. FAIL-OPEN: mai bloccare una prenotazione legittima."""
+        Ritorna l'esito dello store: 'nuovo' (prima volta), 'stesso' (replay idempotente dello
+        STESSO book), 'diverso' (credito gia' speso su un'ALTRA prenotazione) — o None se non c'e'
+        nulla da consumare / store assente / errore. FAIL-OPEN: un errore -> None -> la
+        prenotazione PROCEDE (mai bloccare una prenotazione legittima per un guasto del registro)."""
         store = getattr(self._sys, "credito_usati", None)
         if store is None:
-            return
+            return None
         cid = corpo.get("credito_id") if isinstance(corpo, dict) else None
         sconto = corpo.get("sconto_credito_cents", 0) if isinstance(corpo, dict) else 0
         if not (isinstance(cid, str) and cid) or not (isinstance(sconto, int)
                                                       and not isinstance(sconto, bool) and sconto > 0):
-            return
+            return None
         try:
-            esito = store.consuma(cid, ref)
-            if esito == "diverso":
-                logger.warning("credito %s gia' speso su altra prenotazione, ora su %s "
-                               "(riuso in finestra preventivi; sconto %d)", cid, ref, sconto)
+            return store.consuma(cid, ref)
         except Exception:
             logger.warning("consumo credito single-use fallito (ISOLATO)", exc_info=True)
+            return None
+
+    def _rilascia_per_credito(self, dati, allog, ci, co, ref):
+        """Libera la stanza quando una finalizzazione viene RIFIUTATA per credito gia' usato.
+        Usa la stessa idem_key del blocco (firma del quote_token) -> rilascio idempotente."""
+        idem = ""
+        qt = dati.get("quote_token", "") if isinstance(dati, dict) else ""
+        if isinstance(qt, str) and qt:
+            idem = qt.rsplit(".", 1)[-1]
+        try:
+            self._sys.inventario.rilascia(allog, ci, co,
+                                          idem_key=(idem or ("hold_" + str(ref))))
+        except Exception:
+            logger.warning("rilascio su credito_gia_usato fallito (ignorato)", exc_info=True)
 
     def _credito_anti_rimpianto(self, trattenuto_cents):
         """Trasforma il 50% della penale in un Credito Viaggio firmato (tetto 5000 cents).
