@@ -2165,6 +2165,17 @@ class RouterHTTP:
         allog, rif = v.get("alloggio_id", ""), v.get("riferimento", "")
         if not (allog and rif):
             return 422, {"errore": "voucher_incompleto"}
+        # PRENOTAZIONE CANCELLATA -> niente check-in (il voucher non scade mai): senza
+        # questa guardia si registravano ospiti FANTASMA (inquinano l'export alloggiati)
+        # e, a serratura smart attiva, il flag 'completato' abiliterebbe lo SBLOCCO PORTA
+        # di una prenotazione cancellata. 'scaduto' resta ammesso (pagamento in volo).
+        try:
+            _pp = getattr(self._sys, "pagamenti_pendenti", None)
+            _rec = _pp.info(rif) if _pp is not None else None
+            if _rec is not None and _rec.get("stato") in ("rimborsato", "cancellata_host"):
+                return 409, {"errore": "prenotazione_cancellata"}
+        except Exception:
+            logger.warning("guardia cancellata su check-in fallita (ignorata)", exc_info=True)
         cap = 1
         try:
             d = self._sys.catalogo.dettaglio(allog)
@@ -3931,6 +3942,8 @@ class RouterHTTP:
         if not (isinstance(hid, str) and hid):
             return 422, {"errore": "host_id_mancante"}
         try:
+            from fase59_concierge import codice_prenotazione
+            firma = getattr(self._sys, "firma", None)
             listings = self._sys.catalogo.alloggi_host(hid, limit=200)
             out = []
             for a in listings:
@@ -3939,8 +3952,16 @@ class RouterHTTP:
                     continue
                 titolo = (a.get("titolo") if isinstance(a, dict) else None) or slug
                 for p in self._sys.inventario.elenco_prenotazioni(alloggio_id=slug, limit=200):
+                    # CODICE + PIN check-in nel PANNELLO (prima solo nell'email di avviso:
+                    # host che la perdeva = nessun modo di verificare l'ospite alla porta).
+                    # riferimento = idem_key[:24] (fase59); dopo un re-block tardivo la
+                    # chiave attiva e' 'reblock:<rif>' -> si estrae il rif originale.
+                    idem = str(p.get("idem_key") or "")
+                    ref = idem[len("reblock:"):] if idem.startswith("reblock:") else idem[:24]
                     out.append({"alloggio": titolo, "slug": slug,
                                 "check_in": p.get("check_in"), "check_out": p.get("check_out"),
+                                "codice": codice_prenotazione(ref) if ref else "",
+                                "pin": (firma.pin_checkin(ref) if (firma and ref) else ""),
                                 "stato": "rimborsata" if p.get("rilasciato") else "confermata"})
         except Exception:
             logger.error("host prenotazioni: eccezione ISOLATA", exc_info=True)
