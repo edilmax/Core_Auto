@@ -1193,6 +1193,7 @@ class RouterHTTP:
         rif = idem[:24]
         self._payout_trattieni(rif)                    # l'host non incassa una prenotazione rimborsata
         self._storna_tassa(rif)                        # tassa restituita all'ospite -> fuori dal ledger citta'
+        self._revoca_checkin(rif)                      # smart-pass revocato (no sblocco su rimborsata)
         gz = getattr(self._sys, "garanzia", None)
         if gz is not None:
             try:
@@ -2097,6 +2098,7 @@ class RouterHTTP:
         if pd is not None:
             pd.rimuovi(ref)                          # l'host non incassa (il cliente è rimborsato)
         self._storna_tassa(ref)                      # tassa restituita all'ospite -> fuori dal ledger citta'
+        self._revoca_checkin(ref)                    # smart-pass revocato (no sblocco su cancellata host)
         gz = getattr(self._sys, "garanzia", None)
         if gz is not None:
             try:
@@ -2135,6 +2137,18 @@ class RouterHTTP:
                 led.storna(rif)
         except Exception:
             logger.warning("storno tassa fallito (ignorato)", exc_info=True)
+
+    def _revoca_checkin(self, rif):
+        """Prenotazione cancellata/rimborsata -> REVOCA il check-in (fase127): lo smart-pass
+        non e' piu' emettibile e i dati ospiti pre-registrati spariscono. BUG PROVATO in
+        concorrenza (40/40 seed): un ospite che fa check-in e poi cancella manteneva
+        `completato=True` -> sblocco porta indebito + ospiti-fantasma nell'export. Isolato."""
+        try:
+            ck = getattr(self._sys, "checkin", None)
+            if ck is not None and hasattr(ck, "revoca") and isinstance(rif, str) and rif:
+                ck.revoca(rif)
+        except Exception:
+            logger.warning("revoca check-in fallita (ignorata)", exc_info=True)
 
     def _host_payout(self, query, headers):
         """Dashboard payout dell'host: incassi attesi/in-transito/pagati PER VALUTA (fase131)."""
@@ -2377,6 +2391,7 @@ class RouterHTTP:
             self._payout_trattieni(rif)        # nessuna quota host -> niente payout
         if pagato_davvero:
             self._storna_tassa(rif)            # tassa restituita all'ospite -> fuori dal ledger citta'
+        self._revoca_checkin(rif)              # smart-pass revocato (no sblocco su cancellata)
         try:
             if _pp is not None and _rec is not None and _rec.get("stato") != "rimborsato":
                 # invalida il pendente (stato 'rimborsato'): se era pagata = rimborso manuale

@@ -78,7 +78,13 @@ class CheckinDigitale:
                 con.execute("""CREATE TABLE IF NOT EXISTS checkin (
                     prenotazione_id TEXT PRIMARY KEY, alloggio_id TEXT NOT NULL,
                     ospiti_json TEXT NOT NULL, ts INTEGER NOT NULL,
-                    completato INTEGER NOT NULL DEFAULT 1)""")
+                    completato INTEGER NOT NULL DEFAULT 1,
+                    revocato INTEGER NOT NULL DEFAULT 0)""")
+                # migrazione: aggiungi 'revocato' su schemi vecchi (tombstone della cancellazione)
+                try:
+                    con.execute("ALTER TABLE checkin ADD COLUMN revocato INTEGER NOT NULL DEFAULT 0")
+                except sqlite3.OperationalError:
+                    pass
         finally:
             con.close()
 
@@ -91,9 +97,18 @@ class CheckinDigitale:
             return {"ok": False, "errore": "ospiti_non_validi"}
         con = self._apri()
         try:
+            # ATOMICO (BEGIN IMMEDIATE) + TOMBSTONE: se la prenotazione e' stata REVOCATA
+            # (cancellata/rimborsata) il check-in NON si puo' (ri)creare -> chiude la TOCTOU
+            # in cui una pre_registra in volo re-inseriva DOPO la revoca (BUG provato in
+            # concorrenza: 40/40). La cancellazione e' terminale: il tombstone e' permanente.
             with con:
+                con.execute("BEGIN IMMEDIATE")
+                r = con.execute("SELECT revocato FROM checkin WHERE prenotazione_id=?",
+                                (str(prenotazione_id),)).fetchone()
+                if r is not None and int(r[0] if not hasattr(r, "keys") else r["revocato"]):
+                    return {"ok": False, "errore": "prenotazione_cancellata"}
                 con.execute("INSERT OR REPLACE INTO checkin (prenotazione_id, alloggio_id, "
-                            "ospiti_json, ts) VALUES (?,?,?,?)",
+                            "ospiti_json, ts, completato, revocato) VALUES (?,?,?,?,1,0)",
                             (str(prenotazione_id), str(alloggio_id),
                              json.dumps(val), self._now()))
             return {"ok": True, "ospiti": len(val)}
@@ -110,6 +125,35 @@ class CheckinDigitale:
                             (str(prenotazione_id),)).fetchone()
             return bool(r and r[0])
         except Exception:
+            return False
+        finally:
+            con.close()
+
+    def revoca(self, prenotazione_id: Any) -> bool:
+        """REVOCA il check-in (prenotazione cancellata/rimborsata): elimina la riga -> lo
+        smart-pass non e' piu' emettibile (`completato` torna False) E i dati degli ospiti
+        pre-registrati spariscono (niente ospiti-fantasma nell'export Alloggiati, privacy).
+        Idempotente e isolata. Va chiamata da OGNI percorso di cancellazione: senza, un
+        ospite che fa check-in e poi cancella (o viene rimborsato) mantiene il pass valido
+        -> sblocco porta indebito quando c'e' una serratura vera (BUG provato in concorrenza)."""
+        if not (isinstance(prenotazione_id, str) and prenotazione_id):
+            return False
+        con = self._apri()
+        try:
+            # TOMBSTONE PERMANENTE (non semplice DELETE): completato=0 + revocato=1. Cosi'
+            # una pre_registra concorrente che tenta di (ri)creare la riga DOPO la revoca
+            # viene respinta dal check `revocato` (in BEGIN IMMEDIATE) invece di resuscitare
+            # il check-in. INSERT-or-UPDATE: vale anche se la revoca precede ogni check-in.
+            with con:
+                con.execute("BEGIN IMMEDIATE")
+                con.execute(
+                    "INSERT INTO checkin (prenotazione_id, alloggio_id, ospiti_json, ts, "
+                    "completato, revocato) VALUES (?, '', '[]', ?, 0, 1) "
+                    "ON CONFLICT(prenotazione_id) DO UPDATE SET completato=0, revocato=1",
+                    (str(prenotazione_id), self._now()))
+            return True
+        except Exception:
+            logger.warning("revoca check-in fallita (ISOLATA)", exc_info=True)
             return False
         finally:
             con.close()
