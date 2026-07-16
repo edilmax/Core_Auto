@@ -38,8 +38,17 @@ finto, +4 invarianti sui bonifici) — **10 seed × 1000 menti = ZERO violazioni
     "Confermata" anche le rimborsate + le rimborsate bloccavano per sempre alloggio_elimina.
 28. referral: soglia `==` esatta → gara webhook (3ª+4ª pagate insieme) = premio €40 perso PER
     SEMPRE → `>=` (il dedup dello store garantisce già l'una-volta-sola).
-RAMI RESTANTI del libro: iCal import↔export (fix #93 e fase135 già testati — ripassata breve);
-multi-valuta end-to-end (fix #88 già testato — ripassata breve). Poi ri-lancio stadio finale.
+**4ª parte (sera, dopo il deploy — "testare ancora più a fondo"):**
+29. multi-valuta: CREDITO senza valuta → €5 scontavano ¥500 e un Credito Viaggio nato da penale in
+    valuta debole si spendeva come €50 su annunci EUR (leak farmabile) → il credito porta la SUA
+    valuta (fase158 EUR, anti-rimpianto = valuta della prenotazione, legacy = EUR) e sconta SOLO
+    annunci nella stessa valuta. NON ancora deployato (serve nuovo "pusha").
+RAMI VERIFICATI SENZA DIFETTI: iCal a fondo (ostile/tetti/import-su-prenotato/roundtrip
+cross-canale/2000 eventi in 1s — tutto vivo); attore Telegram (9 test dedicati verdi).
+STADIO FINALE ripassato sul codice nuovo: 10 seed × 1000 menti = ZERO violazioni. Suite 2307.
+IL LIBRO È COMPLETO: tutti i rami degli attori tracciati (ospite, host, admin, macchina, email,
+telegram) + intrecci. Prossimo giro utile: "1000 cose" su moduli secondari (wishlist, fedeltà,
+split-quote, deposito cauzionale) o secondo deploy col fix #29.
 
 **15 bug VERI chiusi** (prova end-to-end + test permanente + commit), tra cui a **perdita reale di denaro**:
 rimborso admin che pagava ANCHE l'host, addebito Stripe sempre in EUR su annunci non-EUR, Credito
