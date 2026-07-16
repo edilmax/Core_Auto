@@ -1,9 +1,19 @@
-# 🧪 STATO COLLAUDO — sessione 2026-07-16 (Fable 5)
+# 🧪 STATO COLLAUDO — sessione 2026-07-16/17 (Fable 5)
 
 > ✅ **DEPLOYATO IN PRODUZIONE il 2026-07-16 sera su "pusha" del fondatore** (commit `0f3fb56`,
 > 28 fix del giorno inclusi): procedura rm-first, container `app`+`backup` **healthy**, verificato
 > vivo (homepage 200 cert ok, `/api/domanda` ok:true, `/api/health` 200, host.html nuovo con
-> colonna PIN). Suite 2303 verde al momento del deploy. GitHub allineato (`origin/master`).
+> colonna PIN). Suite 2303 verde al momento del deploy.
+>
+> ⚡ **NOTTE 2026-07-17 — CAMPAGNA "10.000 MENTI" (bombardamento CONCORRENTE, pilota automatico).**
+> 8 bersagli bombardati con thread simultanei sullo stesso record (non più agenti sequenziali):
+> money-spine (400 voucher × 10.000 thread), chat/prove-controversia, su-richiesta (2700 thread),
+> referral/credito (double-spend), check-in, recensioni, MCP, split-payment. **1 BUG VERO trovato
+> e corretto: #30** — la cancellazione non revocava il check-in → smart-pass valido su prenotazione
+> cancellata (fix tombstone `revocato=1`, commit `224d31d`). Tutto il resto: 0 violazioni.
+> **Suite 2323 verde. Tutto committato+GitHub fino a `dab7d73`.** ⚠️ Il VPS LIVE è fermo a `0f3fb56`:
+> indietro di fix #29 (credito multi-valuta) + #30 (check-in) + 8 guardie di concorrenza — **attende
+> un nuovo "pusha"** (nessuna urgenza: #29 non sfruttabile in prod solo-EUR, #30 richiede serratura smart non ancora esistente).
 
 **AGGIORNAMENTO (2ª parte sessione, metodo libro sui rami su-richiesta e contestazione): +5 bug VERI
 (16-20), tutti con prova dal vivo + fix + test + commit:**
