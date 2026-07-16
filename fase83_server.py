@@ -1510,10 +1510,39 @@ class RouterHTTP:
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
+        # ANTI-FAKE (bug provato): il diritto di recensione e' emesso al BOOK, PRIMA del pagamento
+        # -> senza questo controllo si recensiva GRATIS creando un hold mai pagato (recensioni
+        # verificate finte a costo zero, per gonfiare la propria vetrina o bombardare un rivale,
+        # e manipolare il ranking 'consigliati'). Una recensione "verificata" richiede una
+        # prenotazione PAGATA.
+        if not self._recensione_ammessa(dati.get("token")):
+            return 402, {"ok": False, "motivo": "prenotazione_non_pagata", "verificata": False}
         e = self._sys.recensioni.invia(dati.get("token"), dati.get("voto"),
                                        dati.get("testo", ""), dati.get("lingua", "en"))
         status = 201 if e.ok else (409 if e.motivo == "gia_recensita" else 400)
         return status, {"ok": e.ok, "motivo": e.motivo, "verificata": e.verificata}
+
+    def _recensione_ammessa(self, token):
+        """True se la prenotazione del diritto e' stata PAGATA (o non c'era pagamento atteso).
+        Il diritto e' firmato al book (pre-pagamento): qui si blocca la recensione se l'hold non
+        e' mai stato pagato. Se esiste un pendente per il riferimento, dev'essere 'pagato';
+        nessun pendente = conferma immediata senza pagamento -> consentita."""
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        firma = getattr(self._sys, "firma", None)
+        if pp is None or firma is None:
+            return True                     # nessun pagamento atteso (deploy senza pagamenti)
+        try:
+            d = firma.decodifica(token)
+            rif = d.get("prenotazione_id") if isinstance(d, dict) else None
+            if not (isinstance(rif, str) and rif):
+                return True                 # diritto illeggibile qui: lo respinge invia() a valle
+            rec = pp.info(rif)
+            if rec is None:
+                return True                 # nessun hold -> conferma immediata, nessun pagamento atteso
+            return rec.get("stato") == "pagato"
+        except Exception:
+            logger.warning("verifica pagamento recensione fallita (ISOLATA)", exc_info=True)
+            return True                     # errore di lookup: non bloccare (il token resta valido)
 
     def _book(self, body):
         """Prenotazione (fase59) + emissione del DIRITTO di recensione (fase63)."""
