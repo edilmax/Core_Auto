@@ -47,8 +47,12 @@ RAMI VERIFICATI SENZA DIFETTI: iCal a fondo (ostile/tetti/import-su-prenotato/ro
 cross-canale/2000 eventi in 1s — tutto vivo); attore Telegram (9 test dedicati verdi).
 STADIO FINALE ripassato sul codice nuovo: 10 seed × 1000 menti = ZERO violazioni. Suite 2307.
 IL LIBRO È COMPLETO: tutti i rami degli attori tracciati (ospite, host, admin, macchina, email,
-telegram) + intrecci. Prossimo giro utile: "1000 cose" su moduli secondari (wishlist, fedeltà,
-split-quote, deposito cauzionale) o secondo deploy col fix #29.
+telegram) + intrecci. 5ª/6ª parte: martello "1000 cose" sui preventivi (988 caotici, 7 invarianti
+al centesimo, 0 violazioni → guardia test_quote_coerenza) + MCP fase60 bombardato (0 difetti:
+prezzo==concierge, no leak, token manomesso rifiutato, prenota idempotente, dispatcher mai-crash).
+Wishlist/fedeltà/deposito/coda/chatbot139 = SPENTI (non cablati: si collaudano quando si accendono).
+PROSSIMO: (a) secondo deploy (fix #29 + guardie) al prossimo "pusha"; (b) nuova strategia del
+fondatore "gradini G1-G2-G3 + comando di bombardamento" fornito da lui round per round.
 
 **15 bug VERI chiusi** (prova end-to-end + test permanente + commit), tra cui a **perdita reale di denaro**:
 rimborso admin che pagava ANCHE l'host, addebito Stripe sempre in EUR su annunci non-EUR, Credito
