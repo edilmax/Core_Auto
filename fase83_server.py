@@ -1192,6 +1192,7 @@ class RouterHTTP:
         # payout/escrow/pendente sono chiavati sul riferimento. Idempotenti e isolati.
         rif = idem[:24]
         self._payout_trattieni(rif)                    # l'host non incassa una prenotazione rimborsata
+        self._storna_tassa(rif)                        # tassa restituita all'ospite -> fuori dal ledger citta'
         gz = getattr(self._sys, "garanzia", None)
         if gz is not None:
             try:
@@ -2041,6 +2042,7 @@ class RouterHTTP:
         pd = getattr(self._sys, "payout", None)
         if pd is not None:
             pd.rimuovi(ref)                          # l'host non incassa (il cliente è rimborsato)
+        self._storna_tassa(ref)                      # tassa restituita all'ospite -> fuori dal ledger citta'
         gz = getattr(self._sys, "garanzia", None)
         if gz is not None:
             try:
@@ -2068,6 +2070,17 @@ class RouterHTTP:
                 pd.aggiorna_stato(rif, "trattenuto")
         except Exception:
             logger.warning("payout trattieni fallito (ignorato)", exc_info=True)
+
+    def _storna_tassa(self, rif):
+        """Prenotazione rimborsata -> storna la tassa di soggiorno dal ledger citta' (pass-through
+        restituito all'ospite, non piu' dovuto). Senza, `totale_riscosso` (rendicontazione)
+        sovra-conta i rimborsati. Idempotente e isolato."""
+        try:
+            led = getattr(self._sys, "tassa_comunale", None)
+            if led is not None and hasattr(led, "storna") and isinstance(rif, str) and rif:
+                led.storna(rif)
+        except Exception:
+            logger.warning("storno tassa fallito (ignorato)", exc_info=True)
 
     def _host_payout(self, query, headers):
         """Dashboard payout dell'host: incassi attesi/in-transito/pagati PER VALUTA (fase131)."""
@@ -2250,6 +2263,8 @@ class RouterHTTP:
                          "credito_viaggio_token": "", "money_unit": "cents_integer",
                          "nota": "prenotazione gia' cancellata: nessun nuovo credito."}
         self._payout_trattieni(rif)            # cancellata -> niente payout all'host
+        if pagato_davvero:
+            self._storna_tassa(rif)            # tassa restituita all'ospite -> fuori dal ledger citta'
         try:
             if _pp is not None and _rec is not None and _rec.get("stato") != "rimborsato":
                 # invalida il pendente (stato 'rimborsato'): se era pagata = rimborso manuale

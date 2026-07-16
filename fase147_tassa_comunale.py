@@ -135,6 +135,23 @@ class TassaComunale:
         finally:
             con.close()
 
+    def storna(self, prenotazione_id: Any) -> bool:
+        """Storna la riscossione di una prenotazione RIMBORSATA: la tassa (pass-through) e' stata
+        restituita all'ospite -> NON e' piu' dovuta alla citta'. Senza questo, `totale_riscosso`
+        (rendicontazione) sovra-conterebbe le prenotazioni cancellate. Idempotente."""
+        if not (isinstance(prenotazione_id, str) and prenotazione_id):
+            return False
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("DELETE FROM tassa_riscossione WHERE prenotazione_id=?",
+                                  (prenotazione_id,))
+            return bool(cur.rowcount)
+        except Exception:
+            return False
+        finally:
+            con.close()
+
     def totale_riscosso(self, comune: str) -> int:
         con = self._apri()
         try:
