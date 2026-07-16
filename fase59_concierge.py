@@ -235,6 +235,12 @@ class ProtocolloConcierge:
         party = richiesta.get("party", 1)
         if not _intero(party) or not (1 <= party <= PARTY_MAX):
             return RispostaConcierge(400, {"errore": "party_non_valido"})
+        # L'annuncio dev'essere PUBBLICATO: un annuncio sospeso/bozza NON e' vendibile (l'admin lo
+        # sospende per frode/reclami/sicurezza). Senza questo controllo restava quotabile e
+        # prenotabile con lo slug diretto (bug provato: la sospensione nascondeva dalla ricerca
+        # ma non bloccava le vendite). `dettaglio` filtra stato='pubblicato' -> None = non vendibile.
+        if not self._alloggio_vendibile(alloggio):
+            return RispostaConcierge(404, {"errore": "alloggio_non_disponibile"})
         fonte = _stringa(richiesta.get("fonte")) or "marketplace"   # diretto | marketplace
         valuta = self._valuta_alloggio(alloggio)   # LIKE-FOR-LIKE: si addebita nella valuta dell'host
 
@@ -379,6 +385,18 @@ class ProtocolloConcierge:
         except Exception:
             return 0
 
+    def _alloggio_vendibile(self, slug: Any) -> bool:
+        """True se l'annuncio e' PUBBLICATO (vendibile). Sospeso/bozza/inesistente -> False.
+        `dettaglio` filtra stato='pubblicato'. Senza catalogo (concierge stand-alone) -> True
+        (nessuno stato da controllare); catalogo in errore -> True (fail-open, l'inventario resta
+        la guardia: non bloccare TUTTE le prenotazioni per un errore transitorio del catalogo)."""
+        if self._cat is None:
+            return True
+        try:
+            return self._cat.dettaglio(slug) is not None
+        except Exception:
+            return True
+
     def _valuta_alloggio(self, slug: Any) -> str:
         """LIKE-FOR-LIKE: valuta dell'annuncio (l'host prezza in X -> ospite paga X -> host
         incassa X -> commissione X). Nessuna conversione forzata = ZERO rischio cambio per noi."""
@@ -444,6 +462,10 @@ class ProtocolloConcierge:
         if not (isinstance(alloggio, str) and isinstance(ci, str) and isinstance(co, str)
                 and _intero(guest)):
             return RispostaConcierge(400, {"errore": "quote_corrotta"})
+        # difesa in profondita': se l'annuncio e' stato SOSPESO tra il preventivo e il book
+        # (finestra TTL ~15min), non si prenota comunque un annuncio non vendibile.
+        if not self._alloggio_vendibile(alloggio):
+            return RispostaConcierge(404, {"errore": "alloggio_non_disponibile"})
 
         # idem-key = firma del token: doppio book dello stesso token -> una prenotazione
         idem = token.split(".")[-1]
