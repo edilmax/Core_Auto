@@ -178,5 +178,52 @@ class TestCancellazioneMoney(unittest.TestCase):
         self.assertIsNone(pp.info("REF_OLD"))
 
 
+    # ── (3) REPLAY della cancellazione NON conia crediti extra (bug al collaudo) ──
+    def test_replay_cancellazione_non_conia_crediti(self):
+        """BUG PROVATO: la cancellazione self-service NON era idempotente sul Credito Viaggio.
+        La guardia `pagato_davvero` azzerava il rimborso sul replay SOLO finche' il record
+        pendente esisteva; appena l'housekeeping lo purgava (`_rec is None`) falliva-aperta e
+        OGNI replay coniava un nuovo credito (fino a 5000 cents) all'infinito -> perdita
+        illimitata. Fix: se `rilascia` torna idempotente (replay), si esce senza riconiare."""
+        import datetime
+        # alloggio con politica RIGIDA + arrivo a 2 giorni: fuori dal ripensamento 48h
+        # (che vuole arrivo >=3gg) e sotto la soglia 7gg della rigida -> penale piena ->
+        # trattenuto>0 -> il Credito Viaggio viene coniato (condizione per esporre il bug).
+        s, _ = self.g("POST", "/api/host/pubblica",
+                      {"slug": "casa-rig", "titolo": "Casa Rig", "citta": "Roma",
+                       "prezzo_notte_cents": 10000, "capacita": 2,
+                       "politica_cancellazione": "rigida"}, {"X-Host-Token": self.tok})
+        self.assertEqual(s, 201)
+        ci = (datetime.date.today() + datetime.timedelta(days=2)).isoformat()
+        co = (datetime.date.today() + datetime.timedelta(days=4)).isoformat()
+        s, _ = self.g("POST", "/api/host/disponibilita_range",
+                      {"alloggio_id": "casa-rig", "da": ci, "a": co,
+                       "unita_totali": 1, "prezzo_netto_cents": 10000},
+                      {"X-Host-Token": self.tok})
+        self.assertEqual(s, 200)
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": "casa-rig", "check_in": ci, "check_out": co, "party": 2})
+        self.assertEqual(s, 200, q)
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "cli@rig.it"})
+        self.assertEqual(s, 201, b)
+        rif, vt = b["riferimento"], b["voucher_token"]
+        self._webhook(rif)                                   # pagata
+        s, c1 = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual(s, 200, c1)
+        self.assertGreater(c1["credito_viaggio_cents"], 0, "1a cancellazione: credito atteso")
+        # l'housekeeping purga il pendente (record marca_da_rimborsare -> via a +27h): da qui
+        # `_rec is None` e la vecchia guardia non protegge piu'.
+        self.sys.pagamenti_pendenti.pulisci_vecchi(ora_ts=int(time.time()) + 27 * 3600)
+        self.assertIsNone(self.sys.pagamenti_pendenti.info(rif))
+        # REPLAY x2: nessun nuovo credito (prima del fix: 5000 cents ad ogni replay)
+        for _ in range(2):
+            s, cN = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+            self.assertEqual(s, 200, cN)
+            self.assertEqual(cN["credito_viaggio_cents"], 0,
+                             "REGRESSIONE: replay cancellazione conia credito extra")
+            self.assertEqual(cN.get("stato"), "gia_cancellata")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

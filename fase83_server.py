@@ -2162,6 +2162,19 @@ class RouterHTTP:
             return 503, {"errore": "service_unavailable"}
         if not getattr(e, "ok", False):
             return 409, {"stato": "rifiutato", "motivo": getattr(e, "motivo", "")}
+        if getattr(e, "idempotente", False):
+            # REPLAY: la cancellazione era GIA' stata processata (il rilascio delle date e'
+            # idempotente sulla idem_key del voucher). Qui si ESCE: NON riconiare il Credito
+            # Viaggio, NON ri-toccare payout/escrow. BUG PROVATO al collaudo: la guardia
+            # `pagato_davvero` azzera il rimborso sul replay SOLO finche' il record pendente
+            # esiste; appena l'housekeeping lo purga (`_rec is None`) fallisce-aperta e ogni
+            # replay coniava un nuovo credito (fino a 5000 cents) all'infinito. Il segnale
+            # `idempotente` viene dal record "rilascio:" nel DB INVENTARIO (fase58), che la
+            # purga dei pendenti (fase162) non tocca -> affidabile per sempre.
+            return 200, {"stato": "gia_cancellata", "riferimento": rif, "date_liberate": True,
+                         "rimborso_cents": 0, "credito_viaggio_cents": 0,
+                         "credito_viaggio_token": "", "money_unit": "cents_integer",
+                         "nota": "prenotazione gia' cancellata: nessun nuovo credito."}
         self._payout_trattieni(rif)            # cancellata -> niente payout all'host
         try:
             if _pp is not None and _rec is not None and _rec.get("stato") != "rimborsato":
