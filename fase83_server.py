@@ -1869,6 +1869,12 @@ class RouterHTTP:
                                    "prezzo_guest_cents": corpo.get("prezzo_guest_cents", 0),
                                    "totale_cents": corpo.get("totale_cents", 0),
                                    "commissione_cents": corpo.get("commissione_cents", 0),
+                                   # breakdown COMPLETO -> il record riconcilia da solo:
+                                   # totale == netto_host + (comm - sconto) + tassa + costo_pagamento.
+                                   # Senza questi 3 il record non tornava (i conti non quadravano).
+                                   "costo_pagamento_cents": corpo.get("costo_pagamento_cents", 0),
+                                   "sconto_credito_cents": corpo.get("sconto_credito_cents", 0),
+                                   "tassa_soggiorno_cents": corpo.get("tassa_soggiorno_cents", 0),
                                    "valuta": corpo.get("valuta", "EUR"),
                                    "host_id": host_id,
                                    "voucher_token": corpo.get("voucher_token", ""),

@@ -499,6 +499,10 @@ class ProtocolloConcierge:
             "commissione_cents": dati.get("commissione_cents", 0),     # per scalare il credito referral
             "tassa_soggiorno_cents": dati.get("tassa_soggiorno_cents", 0),
             "totale_cents": dati.get("totale_cents", guest),   # soggiorno + tassa
+            # costo carta (Stripe) a carico host: SENZA questo nel record, il breakdown non torna
+            # (totale != netto_host + comm + tassa) e la contabilita' non riconcilia. Il denaro era
+            # gia' corretto nel flusso (dedotto dal netto host), ma il RECORD dev'essere completo.
+            "costo_pagamento_cents": dati.get("costo_pagamento_cents", 0),
             "valuta": dati.get("valuta", self._valuta),
             "sconto_credito_cents": dati.get("sconto_credito_cents", 0),   # per il consumo fase167
             "credito_id": dati.get("credito_id", ""),          # credito da consumare alla finalizzazione
