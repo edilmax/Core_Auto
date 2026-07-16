@@ -2655,7 +2655,12 @@ class RouterHTTP:
         if dati is None:
             return 400, {"errore": "json_non_valido"}
         email = dati.get("email")
-        if not (isinstance(email, str) and "@" in email and len(email) <= 254):
+        # Validazione stretta a MONTE: il destinatario e' scelto dal chiamante -> niente
+        # caratteri di controllo (\r\n = tentativo di header-injection SMTP: aggiungere Bcc a
+        # terzi). Python blocca l'injection a valle (HeaderParseError), ma l'input sporco va
+        # respinto qui con un 422 chiaro invece di far fallire l'invio in silenzio.
+        if not (isinstance(email, str) and "@" in email and 3 <= len(email) <= 254
+                and not any(ord(c) < 32 or c in " <>" for c in email)):
             return 422, {"errore": "email_non_valida"}
         prov = getattr(self._sys, "email_provider", None)
         if prov is None:

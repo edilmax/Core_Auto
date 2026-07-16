@@ -51,6 +51,16 @@ class TestAbusoEmailPreventivo(unittest.TestCase):
             "email": email, "alloggio_id": "casa-x",
             "check_in": "2026-09-%02d" % giorno, "check_out": "2026-09-%02d" % (giorno + 1)}))[0]
 
+    def test_email_con_control_char_respinta(self):
+        """Header-injection SMTP: un destinatario con \\r\\n (per aggiungere Bcc a terzi) e' input
+        sporco -> respinto a monte con 422 (Python bloccherebbe comunque l'invio, ma non deve
+        fallire in silenzio). Anche spazi/angolari respinti; le email valide passano."""
+        self.assertEqual(self._chiedi("vittima@x.com\r\nBcc: attaccante@evil.com", 1), 422)
+        self.assertEqual(self._chiedi("a b@x.com", 2), 422)
+        self.assertEqual(self._chiedi("<a@b.com>", 3), 422)
+        self.assertEqual(self._chiedi("mario.rossi@gmail.com", 4), 200)   # email valida: passa
+        self.assertEqual(len([e for e in self.p.inviate if "\n" in str(e) or "\r" in str(e)]), 0)
+
     def test_cambiare_data_non_aggira_piu_il_tetto(self):
         """Il bug: date diverse = secchielli diversi -> email illimitate a una vittima."""
         esiti = [self._chiedi("vittima@estraneo.example", g) for g in range(1, 8)]
