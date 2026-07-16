@@ -1185,9 +1185,32 @@ class RouterHTTP:
             return 503, {"errore": "service_unavailable"}
         if not getattr(e, "ok", False):
             return 409, {"stato": "rifiutato", "motivo": getattr(e, "motivo", "")}
+        # COERENZA con la cancellazione ospite/host: rimborsare = mettere in sicurezza anche i
+        # SOLDI, non solo liberare le date. Senza questi 3 passi (bug PROVATO): l'host restava
+        # 'maturato' e l'escrow si auto-rilasciava a 24h -> PAGAVAMO L'HOST mentre rimborsavamo
+        # l'ospite = PERDITA PIENA. riferimento = idem_key[:24] (come lo genera fase59.prenota);
+        # payout/escrow/pendente sono chiavati sul riferimento. Idempotenti e isolati.
+        rif = idem[:24]
+        self._payout_trattieni(rif)                    # l'host non incassa una prenotazione rimborsata
+        gz = getattr(self._sys, "garanzia", None)
+        if gz is not None:
+            try:
+                gz.annulla(rif)                        # niente auto-rilascio dell'escrow all'host
+            except Exception:
+                logger.warning("admin rimborso: chiusura garanzia fallita (ignorata)", exc_info=True)
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        if pp is not None:
+            try:
+                rec = pp.info(rif)
+                if rec is not None and rec.get("stato") != "rimborsato":
+                    pp.marca_da_rimborsare(rif)        # blocca il transfer + nessuna conferma tardiva
+            except Exception:
+                logger.warning("admin rimborso: invalidazione pendente fallita (ignorata)",
+                               exc_info=True)
         return 200, {"stato": "rimborsato", "date_liberate": True,
                      "idempotente": bool(getattr(e, "idempotente", False)),
-                     "nota": "date liberate; rimborso PSP da eseguire quando Stripe e' live"}
+                     "nota": "date liberate; payout trattenuto ed escrow chiuso; "
+                             "rimborso PSP da eseguire quando Stripe e' live"}
 
     def _admin_controversie(self, query, headers):
         """Elenco delle CONTROVERSIE aperte (garanzie contestate): l'operatore le vede, sente
