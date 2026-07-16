@@ -4223,7 +4223,16 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
 
         def _tick_hold():
             while True:
-                sweep_hold_una_passata(sistema, router)
+                # try/except NEL CICLO come gli altri due tick (garanzia/promemoria): qui
+                # mancava. Oggi non e' un bug attivo — `sweep_hold_una_passata` si protegge da
+                # sola — ma e' una fragilita': se un domani una modifica solleva fuori dai suoi
+                # try interni, questo thread (daemon, nessuno lo riavvia) MUORE IN SILENZIO ->
+                # gli hold non scadono piu' -> le stanze restano bloccate PER SEMPRE mentre il
+                # sito sembra funzionare. E' il guasto silenzioso peggiore del money-path.
+                try:
+                    sweep_hold_una_passata(sistema, router)
+                except Exception:
+                    logger.error("sweep hold: giro fallito (thread TENUTO VIVO)", exc_info=True)
                 __import__("time").sleep(120)
         _th2.Thread(target=_tick_hold, daemon=True).start()
 
