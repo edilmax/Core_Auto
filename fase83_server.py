@@ -1804,6 +1804,7 @@ class RouterHTTP:
                     nuovo = stripe.crea_link({
                         "totale_cents": corpo.get("totale_cents"),
                         "prezzo_guest_cents": corpo.get("prezzo_guest_cents"),
+                        "valuta": corpo.get("valuta"),   # like-for-like anche sul su-richiesta approvato
                         "riferimento": ref, "email": rec.get("email", ""),
                         "scade_secondi": HOLD_APPROVAZIONE_SEC})
                 except Exception:

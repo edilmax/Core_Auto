@@ -65,6 +65,12 @@ class ProviderStripe:
             if not _intero_pos(cents):
                 return None
             ref = str(dati.get("riferimento", ""))
+            # VALUTA della PRENOTAZIONE (like-for-like): l'host prezza in X -> l'ospite paga X.
+            # Senza questo si addebitava sempre nella valuta FISSA del provider (EUR) anche su
+            # annunci JPY/USD/GBP -> valuta sbagliata e importo errato (bug provato). Fallback
+            # alla valuta del provider se la prenotazione non la specifica.
+            valuta = dati.get("valuta")
+            valuta = valuta.lower() if isinstance(valuta, str) and valuta.strip() else self._valuta
             import time as _t
             # scadenza sessione: default 30 min (instant-book, minimo Stripe). Il chiamante può
             # chiedere di più via 'scade_secondi' (es. su-richiesta approvata: il cliente non è
@@ -80,7 +86,7 @@ class ProviderStripe:
                 ("success_url", self._ok or "https://bookinvip.com/ok"),
                 ("cancel_url", self._ko or "https://bookinvip.com/ko"),
                 ("line_items[0][quantity]", "1"),
-                ("line_items[0][price_data][currency]", self._valuta),
+                ("line_items[0][price_data][currency]", valuta),
                 ("line_items[0][price_data][unit_amount]", str(cents)),
                 ("line_items[0][price_data][product_data][name]",
                  "BookinVIP " + (ref or "prenotazione")),

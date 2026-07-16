@@ -466,6 +466,7 @@ class ProtocolloConcierge:
         payment_url = self._link_isolato({
             "alloggio_id": alloggio, "check_in": ci, "check_out": co, "email": email,
             "prezzo_guest_cents": guest, "totale_cents": totale_charge,
+            "valuta": dati.get("valuta", self._valuta),   # like-for-like: si addebita nella valuta dell'annuncio
             "riferimento": riferimento})
         corpo: Dict[str, Any] = {
             "stato": "confermata",
