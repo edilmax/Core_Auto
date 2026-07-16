@@ -3074,8 +3074,12 @@ class RouterHTTP:
                 return
             soglia = getattr(cfg, "referral_soglia_prenotazioni", 3)
             premio = getattr(cfg, "referral_premio_cents", 4000)
-            # scatta ESATTAMENTE alla soglia (una volta): il conteggio è già aggiornato a 'maturato'
-            if pd.conta_pagati(host_id) == max(1, int(soglia)):
+            # scatta DALLA soglia in poi (>=): il "una volta sola" lo garantisce lo store
+            # (qualifica_referee: BEGIN IMMEDIATE + dedup 'gia_qualificato'), non il
+            # confronto. Con '==' esatto, due webhook CONCORRENTI (3a e 4a prenotazione
+            # pagate insieme) contavano entrambi 4 -> il premio al referente non scattava
+            # MAI piu' (finestra persa per sempre). '>= ' recupera al pagamento successivo.
+            if pd.conta_pagati(host_id) >= max(1, int(soglia)):
                 out = viral.qualifica_referee(host_id, premio_cents=int(premio))
                 if out.get("ok"):
                     logger.info("Referral qualificato: host %s ha raggiunto %d prenotazioni -> "
