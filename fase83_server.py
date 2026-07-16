@@ -3604,27 +3604,59 @@ class RouterHTTP:
         return 200, {"url": base + "/ical/" + _q(tok) + ".ics"}
 
     def _ical_export(self, token):
-        """Testo .ics (feed) delle date OCCUPATE dell'alloggio, dal token firmato. None se il
-        token non è valido. Serve alle piattaforme esterne che leggono il feed periodicamente."""
+        """Testo .ics (feed) delle date NON PRENOTABILI dell'alloggio, dal token firmato. None se
+        il token non è valido. Serve alle piattaforme esterne che leggono il feed periodicamente."""
         firma = getattr(self._sys, "firma", None)
         d = firma.decodifica(token) if (firma and token) else None
         if not (isinstance(d, dict) and d.get("k") == "ical" and d.get("slug")):
             return None
         slug = d["slug"]
         try:
-            pren = self._sys.inventario.elenco_prenotazioni(alloggio_id=slug, limit=500)
+            occ = self._export_occupati(slug)
         except Exception:
-            logger.warning("ical export: elenco prenotazioni fallito (ISOLATO)", exc_info=True)
+            logger.warning("ical export: raccolta occupati fallita (ISOLATO)", exc_info=True)
             return None
-        occ = [{"slug": slug, "check_in": p.get("check_in"), "check_out": p.get("check_out"),
-                "uid": p.get("idem_key")}
-               for p in (pren or []) if not p.get("rilasciato")]
         try:
             from fase135_ical_bidirezionale import genera_ical
             return genera_ical(occ)
         except Exception:
             logger.error("ical export: generazione fallita (ISOLATA)", exc_info=True)
             return None
+
+    def _export_occupati(self, slug):
+        """Tutte le date NON prenotabili [oggi, +365] da esportare verso gli OTA esterni. FONTE
+        UNICA = la disponibilità REALE (fase58.calendario), NON solo le nostre prenotazioni:
+        così un blocco IMPORTATO via iCal (Airbnb/Booking, `unita_totali=0`) e i giorni CHIUSI
+        dall'host si propagano nel feed. Senza questo, una data presa su Airbnb non arrivava a
+        Booking → overbooking cross-canale (il buco che il claim 'anti-overbooking' prometteva di
+        chiudere). Giorni contigui coalizzati in intervalli [inizio, fine) con DTEND ESCLUSIVO."""
+        import datetime as _dt
+        oggi = _dt.date.today()
+        # finestra 365 gg (cap MAX_NOTTI di fase58.calendario); gli OTA guardano ~1 anno avanti
+        cal = self._sys.inventario.calendario(
+            str(slug), oggi.isoformat(), (oggi + _dt.timedelta(days=365)).isoformat())
+        bloccati = sorted(g["giorno"] for g in (cal or [])
+                          if isinstance(g, dict) and g.get("stato") in ("pieno", "chiuso"))
+        occ, inizio, prec = [], None, None
+        for giorno in bloccati:
+            try:
+                gd = _dt.date.fromisoformat(giorno)
+            except (ValueError, TypeError):
+                continue
+            if inizio is None:
+                inizio = prec = gd
+            elif gd == prec + _dt.timedelta(days=1):
+                prec = gd                                  # estende il run contiguo
+            else:
+                occ.append({"slug": slug, "check_in": inizio.isoformat(),
+                            "check_out": (prec + _dt.timedelta(days=1)).isoformat(),
+                            "uid": "block-" + inizio.isoformat()})
+                inizio = prec = gd
+        if inizio is not None:
+            occ.append({"slug": slug, "check_in": inizio.isoformat(),
+                        "check_out": (prec + _dt.timedelta(days=1)).isoformat(),
+                        "uid": "block-" + inizio.isoformat()})
+        return occ
 
     def _host_telegram_link(self, headers):
         """Link per COLLEGARE il Telegram dell'host: aprendolo e premendo Start, il bot salva
