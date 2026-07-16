@@ -140,6 +140,21 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
 - **KYC "Host verificato"**: scegliere provider (Stripe Identity/Veriff) + chiave → poi cablo fase143.
 - **Contratto host**: revisione legale prima di volumi seri (Stripe è LIVE, soldi veri).
 
+**⚠️ FINDING PROVATO — DA DECIDERE DAL FONDATORE (riuso credito):**
+- **Credito Fondatore/Viaggio riusabile all'infinito** (token `credito_fondatore`). PROVATO
+  end-to-end (2026-07-16, deterministico, nessun race): UN solo credito da 5000 cents produce
+  uno sconto di 5000 su OGNI preventivo (3 prenotazioni diverse → 15000 cents regalati, senza
+  limite). `_sconto_credito` (fase59) verifica firma+tipo+exp+margine ma NON ha tracciamento
+  single-use; chiunque ottiene un credito iscrivendosi alla waitlist (fase158) e il token è un
+  **bearer condivisibile**. **Non è una perdita diretta**: la guardia di margine (`min(cr, comm-costo)`)
+  garantisce "mai in perdita" (ogni riscatto ≤ nostra commissione, mai sotto il costo Stripe) →
+  è **EROSIONE DI RICAVO**. **Remediation** = registro DUREVOLE dei crediti consumati (per firma
+  del token) + consumo al BOOK + ri-check al QUOTE (per non promettere uno sconto già speso).
+  **Perché NON l'ho corretto a caldo**: è una scelta di design (single-use vs riuso-cap-margine)
+  che tocca il money-path LIVE con soldi veri; va decisa/rivista dal fondatore. Fix stimato:
+  piccola tabella `crediti_usati` in fase81 iniettata nel concierge, fail-open (un errore del
+  registro non blocca mai una prenotazione legittima, come il resto del codice "isolato").
+
 **Lavori tecnici (fattibili da me, senza prerequisiti):**
 - Rifiniture/fix reali a caccia di buchi (come il filtro Ospiti). [2026-07-15 fatti: healthcheck
   vero container backup; retry email anti-singhiozzo (fase86)]
