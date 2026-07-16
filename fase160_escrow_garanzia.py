@@ -172,18 +172,27 @@ class EscrowGaranzia:
         ora = ora_ts if isinstance(ora_ts, int) and not isinstance(ora_ts, bool) else self._now()
         con = self._apri()
         try:
+            righe = con.execute(
+                "SELECT prenotazione_id, importo_host_cents FROM garanzia "
+                "WHERE stato='in_garanzia' AND sblocco_auto_ts<=?", (ora,)).fetchall()
+            # CAS per riga: si rilascia SOLO chi e' ANCORA 'in_garanzia'. La SELECT sopra
+            # gira in autocommit (fuori transazione): senza la guardia di stato nell'UPDATE,
+            # una contestazione committata tra la lettura e la scrittura veniva SOVRASCRITTA
+            # ('contestato' -> 'rilasciato') e il rif finiva nella lista bonifici = host
+            # PAGATO con la disputa aperta (violazione provata al collaudo: 3/300).
+            vinte = []
             with con:
-                righe = con.execute(
-                    "SELECT prenotazione_id, importo_host_cents FROM garanzia "
-                    "WHERE stato='in_garanzia' AND sblocco_auto_ts<=?", (ora,)).fetchall()
                 for r in righe:
-                    con.execute("UPDATE garanzia SET stato='rilasciato', host_riceve_cents=?, "
-                                "aggiornato_ts=? WHERE prenotazione_id=?",
-                                (r["importo_host_cents"], ora, r["prenotazione_id"]))
+                    cur = con.execute(
+                        "UPDATE garanzia SET stato='rilasciato', host_riceve_cents=?, "
+                        "aggiornato_ts=? WHERE prenotazione_id=? AND stato='in_garanzia'",
+                        (r["importo_host_cents"], ora, r["prenotazione_id"]))
+                    if cur.rowcount:
+                        vinte.append(r)
             if dettagli:
                 return [{"prenotazione_id": r["prenotazione_id"],
-                         "host_riceve_cents": int(r["importo_host_cents"])} for r in righe]
-            return len(righe)
+                         "host_riceve_cents": int(r["importo_host_cents"])} for r in vinte]
+            return len(vinte)
         finally:
             con.close()
 
