@@ -722,6 +722,11 @@ def _ip_host_pubblico(host: str) -> bool:
 # Tetto anti-abuso: quante email di preventivo puo' ricevere UN indirizzo in un'ora.
 # 3 e' generoso per un utente vero (che ne chiede una, forse due) e stretto per un abusante.
 MAX_PREVENTIVI_EMAIL_ORA = 3
+# Tetto prove-foto per prenotazione: il limite di 5MB era PER FILE, non sul NUMERO -> con una
+# sola prenotazione valida si riempiva il disco (= sito giu'). 10 e' abbondante per una
+# controversia vera. Il prefisso identifica le prove nel thread (serve anche a contarle).
+MAX_PROVE_FOTO = 10
+_PREFISSO_PROVA = "📎 PROVA FOTO:"
 
 
 class RouterHTTP:
@@ -1068,11 +1073,24 @@ class RouterHTTP:
         ctx = self._voucher_chat_ctx(dati.get("voucher_token"))
         if ctx is None:
             return 400, {"errore": "voucher_non_valido"}
+        rif, hid = ctx
+        # TETTO PER PRENOTAZIONE (collaudo 2026-07-15). C'era il limite di 5MB per FILE ma
+        # NESSUNO sul numero: con UNA prenotazione valida si potevano caricare foto all'infinito
+        # -> disco pieno (44GB liberi = ~9000 file) -> SQLite non scrive piu' -> SITO GIU'.
+        # Basta anche un client con un ciclo sbagliato: non serve un malintenzionato.
+        # Il controllo sta PRIMA di _salva_foto_raw: se si e' oltre, non si scrive affatto.
+        try:
+            esistenti = msg.thread(rif, "ospite") or []
+            n_prove = sum(1 for m in esistenti
+                          if str((m or {}).get("testo", "")).startswith(_PREFISSO_PROVA))
+        except Exception:
+            n_prove = 0                      # isolato: un errore di lettura non blocca l'ospite
+        if n_prove >= MAX_PROVE_FOTO:
+            return 429, {"errore": "troppe_prove_caricate"}
         st, out = self._salva_foto_raw(dati.get("image_base64"))
         if st != 201:
             return st, out
-        rif, hid = ctx
-        msg.invia(rif, hid, "ospite", "ospite", "\U0001F4CE PROVA FOTO: " + out["url"])
+        msg.invia(rif, hid, "ospite", "ospite", _PREFISSO_PROVA + " " + out["url"])
         return 201, {"stato": "caricata", "url": out["url"]}
 
     def _admin_messaggi(self, query, headers):
