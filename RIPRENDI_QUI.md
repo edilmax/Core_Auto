@@ -1,3 +1,32 @@
+# 🧪 STATO COLLAUDO — sessione 2026-07-16 (Fable 5)
+
+> **Tutto committato su `master`, suite ~2275 verde, working tree pulito, NON pushato** (il push al VPS
+> LIVE attende un "pusha" esplicito del fondatore — è l'unica azione irreversibile verso la produzione).
+
+**15 bug VERI chiusi** (prova end-to-end + test permanente + commit), tra cui a **perdita reale di denaro**:
+rimborso admin che pagava ANCHE l'host, addebito Stripe sempre in EUR su annunci non-EUR, Credito
+Fondatore riusabile all'infinito, cancellazione che coniava crediti, ledger tassa che sovra-contava i
+rimborsati; + **IDOR/data-leak host** (metriche/export-CSV/calendario di annunci altrui o intera
+piattaforma), recensioni finte senza pagare, annuncio sospeso ancora prenotabile, metriche host a €0,
+trasparenza commissione fissa, export iCal cross-canale monco, record prenotazione incompleto. Dettaglio
+completo (cosa era rotto, come, il fix, il test) in **`REGISTRO_INGEGNERIA.md`** (sezione 1).
+
+**Due strumenti nuovi e permanenti nella suite:**
+- 🧠 **`test_menti_invarianti.py`** — fuzzer "1000 menti" (idea del fondatore): agenti-mente con logiche
+  diverse eseguono sequenze casuali sulla macchina reale; verifica invarianti globali (no overbooking,
+  no doppio-payout, host mai pagato su rimborsati, escrow/tassa/conservazione, single-use credito).
+- 🛡️ **`test_robustezza_fuzzing.py`** + **`test_concorrenza_denaro.py`** — nessun endpoint cade su input
+  ostile; money-path race-safe sotto carico.
+
+**Metodo "libro" (in corso)**: si tracciano i VIAGGI reali degli attori pagina-per-pagina, leggendo ogni
+elemento visibile + tutti i componenti del motore dietro, e si SIMULA per verificare che ogni cosa VIVA e
+passi le tappe giuste. GIÀ verificati vivi: ospite (ricerca→dettaglio→prenota→voucher), host
+(registra→pubblica→incassa→approva), admin (arbitro/split/sospendi/cancella), spina del denaro
+(Stripe→webhook→escrow→Connect), cancellazione→rimborso→storno. **Ripresa**: altri rami (su-richiesta,
+contestazione→arbitro, pagamento tardivo). Vedi memory `core-auto-2026-07-16-collaudo`.
+
+---
+
 # ✅ RISOLTO — il sito è ONLINE con HTTPS (aggiornato 2026-07-10)
 
 > `https://bookinvip.com` e `https://www.bookinvip.com` funzionano con il **lucchetto verde** 🔒.
