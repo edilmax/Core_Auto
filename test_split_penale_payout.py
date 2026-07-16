@@ -188,6 +188,75 @@ class TestSplitPenalePayout(unittest.TestCase):
         self.assertEqual(self.fc.transfers, [])
         self.assertEqual(self.sis.garanzia.stato(ref)["stato"], "annullato")
 
+    def test_disputa_aperta_payout_fuori_dal_giro(self):
+        # BUG #21: con la disputa APERTA il payout restava 'maturato' -> `da_pagare`
+        # lo includeva = il bonifico manuale pagava l'host mentre l'arbitro decideva.
+        self._pubblica("casa-g")
+        b = self._book_paga("casa-g")
+        ref = b["riferimento"]
+        self.assertGreater(self.sis.payout.da_pagare(self.hid, "EUR"), 0)
+        s, _ = self.g("POST", "/api/garanzia/contesta",
+                      {"voucher_token": b["voucher_token"], "motivo": "muffa"})
+        self.assertEqual(s, 200)
+        self.assertEqual(self.sis.payout.stato_di(ref), "trattenuto")
+        self.assertEqual(self.sis.payout.da_pagare(self.hid, "EUR"), 0)
+        # l'arbitro decide 60/40 -> la quota host torna PAGABILE (e parte il transfer)
+        netto = self._netto(ref)
+        s, c = self.g("POST", "/api/admin/controversia/risolvi",
+                      {"riferimento": ref, "percentuale_ospite": 40}, AK)
+        self.assertEqual(s, 200, c)
+        quota = netto - netto * 40 // 100
+        self.assertEqual(self.fc.transfers[-1][1], quota)
+        self.assertEqual(self.sis.payout.da_pagare(self.hid, "EUR"), quota)
+
+    def test_pagamento_tardivo_la_garanzia_risorge(self):
+        # BUG #22: pagamento tardivo (hold scaduto, sweeper: garanzia annullata) su stanza
+        # ancora libera -> re-block ok, payout ricreato... ma la garanzia restava
+        # 'annullato' (INSERT DO NOTHING non resuscita) = escrow MORTO: conferma/contesta
+        # ospite in 409, auto-rilascio mai, host mai pagato in automatico.
+        import sqlite3
+        from fase83_server import sweep_hold_una_passata
+        self._pubblica("casa-h")
+        oggi = datetime.date.today()
+        ci = (oggi + datetime.timedelta(days=30)).isoformat()
+        co = (oggi + datetime.timedelta(days=32)).isoformat()
+        _, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": "casa-h", "check_in": ci, "check_out": co, "party": 2})
+        _, bk = self.g("POST", "/api/concierge/book",
+                       {"quote_token": q["quote_token"], "email": "cli@sp.it"})
+        ref = bk["riferimento"]
+        con = sqlite3.connect(f"{self.dir}/p.db")
+        with con:
+            con.execute("UPDATE pendenti SET scadenza_ts=? WHERE riferimento=?",
+                        (int(time.time()) - 5, ref))
+        con.close()
+        sweep_hold_una_passata(self.sis, self.r)
+        self.assertEqual(self.sis.garanzia.stato(ref)["stato"], "annullato")
+        # pagamento TARDIVO (link vivo, stanza ancora libera)
+        payload = json.dumps({"type": "checkout.session.completed",
+                              "data": {"object": {"metadata": {"riferimento": ref}}}})
+        sig = firma_di_test(payload, "whsec_x", int(time.time()))
+        self.r.gestisci("POST", "/api/payments/webhook", {}, payload,
+                        {"Stripe-Signature": sig})
+        self.assertEqual(self.sis.pagamenti_pendenti.info(ref)["stato"], "pagato")
+        st = self.sis.garanzia.stato(ref)
+        self.assertEqual(st["stato"], "in_garanzia", "la garanzia DEVE risorgere")
+        # e le tutele rivivono: l'ospite puo' confermare -> transfer all'host
+        s, c = self.g("POST", "/api/garanzia/conferma", {"voucher_token": bk["voucher_token"]})
+        self.assertEqual(s, 200, c)
+        self.assertEqual(self.fc.transfers[-1][3], ref)
+
+    def test_revive_non_tocca_stati_decisi(self):
+        # apri() NON deve resuscitare garanzie gia' DECISE (rilasciato/risolto/contestato)
+        gz = self.sis.garanzia
+        gz.apri("rifZ", 9000)
+        gz.contesta("rifZ", "x")
+        gz.apri("rifZ", 9000)                        # replay: NON deve riaprire
+        self.assertEqual(gz.stato("rifZ")["stato"], "contestato")
+        gz.risolvi("rifZ", rimborso_ospite_cents=1000)
+        gz.apri("rifZ", 9000)
+        self.assertEqual(gz.stato("rifZ")["stato"], "risolto")
+
     def test_cancellazione_non_pagata_zero_soldi(self):
         # book senza webhook: nessun incasso -> nessuna quota, nessun transfer
         self._pubblica("casa-f", politica="rigida")

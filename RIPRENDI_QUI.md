@@ -18,7 +18,13 @@
 20. gara contesta↔auto-rilascio 24h: SELECT in autocommit + UPDATE senza guardia → 'contestato'
     sovrascritto e HOST PAGATO con disputa aperta (3/300 nella sonda); fix CAS per riga in
     `fase160.auto_rilascia`.
-Prossimo: estendere fuzzer "1000 menti" con azioni su-richiesta/contestazione (stadio finale intrecci).
+21. disputa aperta ma payout 'maturato' → `da_pagare` includeva il conteso (bonifico manuale avrebbe
+    pagato l'host con l'arbitro al lavoro); fix: contesta → payout 'trattenuto', risolvi parziale →
+    record ricostruito con la quota (`fase131.info`+`registra_maturato`).
+22. pagamento tardivo: garanzia restava 'annullato' (escrow morto: conferma/contesta 409, auto-rilascio
+    mai, host mai auto-pagato); fix: revive CAS solo-da-annullato in `fase160.apri`.
+STADIO FINALE avviato: fuzzer "1000 menti" esteso (approva/rifiuta/risolvi/expire+sweeper, Connect
+finto, +4 invarianti sui bonifici) — 10 seed × 1000 menti.
 
 **15 bug VERI chiusi** (prova end-to-end + test permanente + commit), tra cui a **perdita reale di denaro**:
 rimborso admin che pagava ANCHE l'host, addebito Stripe sempre in EUR su annunci non-EUR, Credito

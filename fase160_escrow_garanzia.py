@@ -97,6 +97,18 @@ class EscrowGaranzia:
                     "VALUES (?,?,?, 'in_garanzia', ?,?,?) "
                     "ON CONFLICT(prenotazione_id) DO NOTHING",
                     (prenotazione_id, str(alloggio_id or ""), imp, sblocco, now, now))
+                # REVIVE (CAS, SOLO da 'annullato'): un pagamento TARDIVO ri-apre una
+                # garanzia che lo sweeper aveva annullato con l'hold scaduto. BUG PROVATO:
+                # l'INSERT DO NOTHING non poteva resuscitarla -> booking 'pagato' con
+                # escrow MORTO (conferma/contesta dell'ospite in 409, auto-rilascio mai,
+                # host mai pagato in automatico). Stati decisi (rilasciato/risolto/
+                # contestato) NON si toccano: la storia di una garanzia chiusa e' chiusa.
+                con.execute(
+                    "UPDATE garanzia SET importo_host_cents=?, host_riceve_cents=0, "
+                    "ospite_rimborso_cents=0, stato='in_garanzia', motivo='', "
+                    "sblocco_auto_ts=?, aggiornato_ts=? "
+                    "WHERE prenotazione_id=? AND stato='annullato'",
+                    (imp, sblocco, now, prenotazione_id))
             return True
         finally:
             con.close()

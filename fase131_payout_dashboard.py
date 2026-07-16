@@ -207,6 +207,24 @@ class PayoutDashboard:
         finally:
             con.close()
 
+    def info(self, prenotazione_id: Any) -> Optional[Dict[str, Any]]:
+        """Il record payout di UNA prenotazione (host_id/minori/valuta/stato), None se assente.
+        Serve ai flussi che devono RICOSTRUIRE il payout (es. quota host post-controversia)."""
+        if not (isinstance(prenotazione_id, str) and prenotazione_id):
+            return None
+        con = self._apri()
+        try:
+            r = con.execute("SELECT prenotazione_id, host_id, minori, valuta, stato "
+                            "FROM payout WHERE prenotazione_id=?", (prenotazione_id,)).fetchone()
+            if r is None:
+                return None
+            return {"prenotazione_id": r[0], "host_id": r[1], "minori": int(r[2]),
+                    "valuta": r[3], "stato": r[4]}
+        except Exception:
+            return None
+        finally:
+            con.close()
+
     def imposta_importo(self, prenotazione_id: str, minori: int) -> bool:
         """Riallinea l'importo del payout alla quota DECISA per l'host (split di una
         controversia, penale trattenuta su cancellazione): il ledger deve dire quanto

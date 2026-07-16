@@ -23,18 +23,32 @@ import unittest
 
 import fase85_pagamenti_stripe as _stripe
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
-from fase83_server import crea_router
+from fase83_server import crea_router, sweep_hold_una_passata
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
 
 WH = "whsec_menti"
 AZIONI = ["quote", "book", "pay", "pay2", "cancel", "adminref", "hostcancel",
-          "conferma", "contesta", "review", "requote", "suspend", "republish"]
+          "conferma", "contesta", "review", "requote", "suspend", "republish",
+          # stadio finale (intrecci): su-richiesta, arbitro, scadenza hold + sweeper
+          "approva", "rifiuta", "risolvi", "expire"]
 
 
 def _fake_fetch(url, body, headers):
     import secrets
     return {"url": "https://x/" + secrets.token_hex(5), "id": "cs_" + secrets.token_hex(5)}
+
+
+class _ConnectFinto:
+    """Traccia i bonifici Connect: gli invarianti verificano che partano SOLO per
+    garanzie decise, UNA volta sola, e con l'importo DECISO (mai di piu')."""
+
+    def __init__(self):
+        self.transfers = []
+
+    def trasferisci(self, acct, amount, currency, rif):
+        self.transfers.append((str(acct), int(amount), str(currency), str(rif)))
+        return "tr_%d" % len(self.transfers)
 
 
 class TestMentiInvarianti(unittest.TestCase):
@@ -76,6 +90,9 @@ class TestMentiInvarianti(unittest.TestCase):
                       "accetta_clausole": True, "doc_sha256": doc_sha256(),
                       "versione": CONTRATTO_HOST_VERSIONE})
             tok = c["token"]
+            fc = _ConnectFinto()
+            sysx.connect = fc
+            sysx.registro_host.imposta_stripe_account(c["host_id"], "acct_menti")
             pol = ["flessibile", "moderata", "rigida", "non_rimborsabile"]
             val = ["EUR", "USD", "JPY"]
             slugs = []
@@ -85,6 +102,7 @@ class TestMentiInvarianti(unittest.TestCase):
                   {"slug": slug, "titolo": f"C{i}", "citta": "Roma",
                    "prezzo_notte_cents": rnd.choice([10000, 50000, 120000]), "capacita": 6,
                    "politica_cancellazione": pol[i % 4], "valuta": val[i % 3],
+                   "modalita_prenotazione": ("su_richiesta" if i % 2 else "immediata"),
                    "tassa_pp_notte_cents": rnd.choice([0, 200])}, {"X-Host-Token": tok})
                 g("POST", "/api/host/disponibilita_range",
                   {"alloggio_id": slug, "da": "2026-09-01", "a": "2026-12-31",
@@ -161,6 +179,31 @@ class TestMentiInvarianti(unittest.TestCase):
                         elif az == "review" and stt["diritto"]:
                             g("POST", "/api/recensioni",
                               {"token": stt["diritto"], "voto": rnd.randint(1, 5), "testo": "ok"})
+                        elif az == "approva" and stt["rif"]:
+                            s, ap = g("POST", "/api/host/richieste/approva",
+                                      {"riferimento": stt["rif"]}, {"X-Host-Token": tok})
+                            if s == 200:
+                                pren = ap.get("prenotazione") or {}
+                                stt["voucher"] = pren.get("voucher_token") or stt["voucher"]
+                                stt["diritto"] = (pren.get("diritto_recensione")
+                                                  or stt["diritto"])
+                        elif az == "rifiuta" and stt["rif"]:
+                            g("POST", "/api/host/richieste/rifiuta",
+                              {"riferimento": stt["rif"]}, {"X-Host-Token": tok})
+                        elif az == "risolvi" and stt["rif"]:
+                            g("POST", "/api/admin/controversia/risolvi",
+                              {"riferimento": stt["rif"],
+                               "percentuale_ospite": rnd.choice([0, 25, 50, 100])},
+                              {"X-Admin-Key": "ak"})
+                        elif az == "expire" and stt["rif"]:
+                            cone = sqlite3.connect(f"{d}/p.db")
+                            with cone:
+                                cone.execute(
+                                    "UPDATE pendenti SET scadenza_ts=? WHERE riferimento=? "
+                                    "AND stato IN ('in_attesa','in_attesa_host')",
+                                    (int(time.time()) - 5, stt["rif"]))
+                            cone.close()
+                            sweep_hold_una_passata(sysx, r)
                         elif az == "suspend" and stt["slug"]:
                             g("POST", "/api/admin/alloggio_stato",
                               {"slug": stt["slug"], "stato": "sospeso"}, {"X-Admin-Key": "ak"})
@@ -175,12 +218,22 @@ class TestMentiInvarianti(unittest.TestCase):
                           {"slug": slug, "stato": "pubblicato"}, {"X-Admin-Key": "ak"})
 
             self.assertEqual(eccezioni, [], f"seed={seed}: il router ha SOLLEVATO: {eccezioni[:5]}")
-            self._invarianti(d, seed)
+            self._invarianti(d, seed, fc.transfers)
         finally:
             shutil.rmtree(d, ignore_errors=True)
 
-    def _invarianti(self, d, seed):
+    def _invarianti(self, d, seed, transfers=()):
         viol = []
+        # mappa garanzie (serve a piu' invarianti sotto)
+        gar = {}
+        cong0 = sqlite3.connect(f"{d}/g.db"); cong0.row_factory = sqlite3.Row
+        try:
+            for gr in cong0.execute("SELECT prenotazione_id, stato, importo_host_cents, "
+                                    "host_riceve_cents, ospite_rimborso_cents FROM garanzia"):
+                gar[gr["prenotazione_id"]] = dict(gr)
+        except sqlite3.Error:
+            pass
+        cong0.close()
         con = sqlite3.connect(f"{d}/i.db"); con.row_factory = sqlite3.Row
         for row in con.execute("SELECT alloggio_id, giorno, unita_totali, unita_occupate FROM inventario"):
             if row["unita_occupate"] > row["unita_totali"]:
@@ -215,8 +268,16 @@ class TestMentiInvarianti(unittest.TestCase):
                     viol.append(("CONSERVAZIONE", pn["riferimento"], tot, nh, comm, sc, tassa, cp))
             if pn["stato"] in ("rimborsato", "cancellata_host"):
                 pr = pay_by_ref.get(pn["riferimento"])
-                if pr and pr["stato"] == "maturato":
-                    viol.append(("HOST_PAGATO_SU_RIMBORSATO", pn["riferimento"]))
+                if pr and pr["stato"] in ("maturato", "in_transito", "pagato"):
+                    # payable su una rimborsata SOLO se e' la quota-penale DECISA
+                    # dall'escrow (cancellazione con penale: quella quota e' dell'host)
+                    gq = gar.get(pn["riferimento"]) or {}
+                    quota_ok = (gq.get("stato") == "risolto" and pr["minori"] > 0
+                                and pr["minori"] == gq.get("host_riceve_cents"))
+                    if not quota_ok:
+                        viol.append(("HOST_PAGATO_SU_RIMBORSATO", pn["riferimento"],
+                                     pr["stato"], pr["minori"],
+                                     gq.get("stato"), gq.get("host_riceve_cents")))
         # SINGLE-USE credito: somma sconti su prenotazioni PAGATE, per credito, <= 5000
         sconto_per_cid = {}
         for pn in conp.execute("SELECT stato, corpo_json FROM pendenti"):
@@ -231,17 +292,31 @@ class TestMentiInvarianti(unittest.TestCase):
             if tot_sc > 5000:
                 viol.append(("CREDITO_RIUSATO", cid[:12], tot_sc))
         conp.close(); paydb.close()
-        cong = sqlite3.connect(f"{d}/g.db"); cong.row_factory = sqlite3.Row
-        try:
-            for gr in cong.execute("SELECT prenotazione_id, importo_host_cents, host_riceve_cents, "
-                                   "ospite_rimborso_cents FROM garanzia"):
-                hr = gr["host_riceve_cents"] or 0
-                orr = gr["ospite_rimborso_cents"] or 0
-                if hr < 0 or orr < 0 or hr + orr > (gr["importo_host_cents"] or 0):
-                    viol.append(("ESCROW_NON_CONSERVA", dict(gr)))
-        except sqlite3.Error:
-            pass
-        cong.close()
+        for gq in gar.values():
+            hr = gq["host_riceve_cents"] or 0
+            orr = gq["ospite_rimborso_cents"] or 0
+            if hr < 0 or orr < 0 or hr + orr > (gq["importo_host_cents"] or 0):
+                viol.append(("ESCROW_NON_CONSERVA", gq))
+        # BONIFICI (Connect finto): mai con disputa aperta, mai doppi, mai piu' del deciso
+        tr_by_rif = {}
+        for (_a, amount, _c, rif) in transfers:
+            tr_by_rif.setdefault(rif, []).append(amount)
+        for rif, gq in gar.items():
+            if gq["stato"] == "contestato":
+                pr = pay_by_ref.get(rif)
+                if pr and pr["stato"] in ("maturato", "in_transito", "pagato"):
+                    viol.append(("PAGABILE_CON_DISPUTA", rif, pr["stato"]))
+                if rif in tr_by_rif:
+                    viol.append(("BONIFICO_CON_DISPUTA", rif))
+        for rif, amounts in tr_by_rif.items():
+            gq = gar.get(rif)
+            if len(amounts) != 1:
+                viol.append(("DOPPIO_BONIFICO", rif, amounts))
+            if gq is None or gq["stato"] not in ("rilasciato", "risolto"):
+                viol.append(("BONIFICO_SENZA_DECISIONE", rif, (gq or {}).get("stato")))
+            elif amounts[0] <= 0 or amounts[0] != gq["host_riceve_cents"]:
+                viol.append(("BONIFICO_IMPORTO_SBAGLIATO", rif,
+                             amounts[0], gq["host_riceve_cents"]))
         self.assertEqual(viol, [], f"seed={seed}: invarianti ROTTI: {viol[:8]}")
 
     def test_menti_seed_1(self):

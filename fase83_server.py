@@ -1283,7 +1283,14 @@ class RouterHTTP:
             quota_host = out.get("host_riceve_cents", importo - rimborso)
             pd = getattr(self._sys, "payout", None)
             if pd is not None:
-                pd.imposta_importo(rif, quota_host)
+                # il payout era stato BLOCCATO ('trattenuto') all'apertura della disputa:
+                # la quota decisa dall'arbitro torna PAGABILE ('maturato') ricostruendo il
+                # record (trattenuto->maturato non e' una transizione ammessa: cosi' un
+                # pagamento tardivo non riattiva mai un payout in disputa per sbaglio).
+                riga = pd.info(rif)
+                if riga is not None:
+                    pd.rimuovi(rif)
+                    pd.registra_maturato(rif, riga["host_id"], quota_host, riga["valuta"])
             # la parte che spetta all'host parte da sola verso il suo conto (Connect)
             self._trasferisci_all_host(rif, quota_host)
         return 200, {"stato": "risolta", "riferimento": rif,
@@ -2200,6 +2207,18 @@ class RouterHTTP:
         if g is None:
             return 503, {"errore": "garanzia_non_attiva"}
         out = g.contesta(res[0], str(res[1].get("motivo", "")))
+        if out.get("ok"):
+            # DISPUTA APERTA -> il payout esce dal giro pagamenti ('trattenuto'). BUG
+            # PROVATO: restava 'maturato' -> `da_pagare` lo includeva e il bonifico
+            # MANUALE avrebbe pagato l'host con la controversia in corso. L'esito
+            # (quota/rimozione) lo decide l'arbitro in _admin_controversia_risolvi.
+            try:
+                pd = getattr(self._sys, "payout", None)
+                if pd is not None:
+                    pd.aggiorna_stato(res[0], "trattenuto")
+            except Exception:
+                logger.warning("blocco payout su contestazione fallito (ignorato)",
+                               exc_info=True)
         return (200 if out.get("ok") else 409), out
 
     def _garanzia_stato(self, query, headers):
