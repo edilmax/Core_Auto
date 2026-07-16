@@ -23,8 +23,21 @@
     record ricostruito con la quota (`fase131.info`+`registra_maturato`).
 22. pagamento tardivo: garanzia restava 'annullato' (escrow morto: conferma/contesta 409, auto-rilascio
     mai, host mai auto-pagato); fix: revive CAS solo-da-annullato in `fase160.apri`.
-STADIO FINALE avviato: fuzzer "1000 menti" esteso (approva/rifiuta/risolvi/expire+sweeper, Connect
-finto, +4 invarianti sui bonifici) — 10 seed × 1000 menti.
+STADIO FINALE FATTO: fuzzer "1000 menti" esteso (approva/rifiuta/risolvi/expire+sweeper, Connect
+finto, +4 invarianti sui bonifici) — **10 seed × 1000 menti = ZERO violazioni**.
+
+**3ª parte (stessa sessione), altri rami del libro — +7 difetti chiusi, suite 2303 verde:**
+23. check-in accettato su prenotazione CANCELLATA (ospiti fantasma + sblocco porta futuro) → 409.
+24. PIN/codice check-in invisibili nel pannello host (solo nell'email) → /api/host/prenotazioni
+    porta codice+pin (rif estratto anche da idem 'reblock:'), colonna in host.html.
+25. recensione "verificata" su CANCELLATA dopo la purga 26h (guardia falliva-aperta, classe #95)
+    → segnale durevole dal flag `rimborsato` dei movimenti inventario.
+26.-27. chiave SBAGLIATA `rilasciato` (fase58 espone `rimborsato`): pannello host mostrava
+    "Confermata" anche le rimborsate + le rimborsate bloccavano per sempre alloggio_elimina.
+28. referral: soglia `==` esatta → gara webhook (3ª+4ª pagate insieme) = premio €40 perso PER
+    SEMPRE → `>=` (il dedup dello store garantisce già l'una-volta-sola).
+RAMI RESTANTI del libro: iCal import↔export (fix #93 e fase135 già testati — ripassata breve);
+multi-valuta end-to-end (fix #88 già testato — ripassata breve). Poi ri-lancio stadio finale.
 
 **15 bug VERI chiusi** (prova end-to-end + test permanente + commit), tra cui a **perdita reale di denaro**:
 rimborso admin che pagava ANCHE l'host, addebito Stripe sempre in EUR su annunci non-EUR, Credito
