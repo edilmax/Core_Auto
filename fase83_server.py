@@ -1553,9 +1553,29 @@ class RouterHTTP:
             if not (isinstance(rif, str) and rif):
                 return True                 # diritto illeggibile qui: lo respinge invia() a valle
             rec = pp.info(rif)
-            if rec is None:
-                return True                 # nessun hold -> conferma immediata, nessun pagamento atteso
-            return rec.get("stato") == "pagato"
+            if rec is not None:
+                return rec.get("stato") == "pagato"
+            # RECORD ASSENTE: o non c'era pagamento atteso (conferma immediata) o
+            # l'housekeeping l'ha PURGATO (26h). BUG PROVATO: dopo la purga la guardia
+            # falliva-aperta e una prenotazione CANCELLATA tornava recensibile
+            # "verificata" (stessa classe del bug credito #95). Segnale DUREVOLE che
+            # sopravvive alla purga: il flag `rilasciato` dei movimenti INVENTARIO —
+            # blocco rilasciato = cancellata/rimborsata/scaduta -> niente recensione.
+            inv = getattr(self._sys, "inventario", None)
+            allog = d.get("alloggio_id") if isinstance(d, dict) else None
+            if inv is None or not (isinstance(allog, str) and allog):
+                return True
+            trovato, attivo = False, False
+            for p in inv.elenco_prenotazioni(alloggio_id=allog, limit=500):
+                idem = str(p.get("idem_key") or "")
+                pref = idem[len("reblock:"):] if idem.startswith("reblock:") else idem[:24]
+                if pref == rif:
+                    trovato = True
+                    if not p.get("rimborsato"):
+                        attivo = True       # basta UN blocco ancora vivo (es. re-block)
+            if trovato:
+                return attivo
+            return True                     # nessuna traccia: conferma senza pagamento
         except Exception:
             logger.warning("verifica pagamento recensione fallita (ISOLATA)", exc_info=True)
             return True                     # errore di lookup: non bloccare (il token resta valido)
@@ -3962,7 +3982,11 @@ class RouterHTTP:
                                 "check_in": p.get("check_in"), "check_out": p.get("check_out"),
                                 "codice": codice_prenotazione(ref) if ref else "",
                                 "pin": (firma.pin_checkin(ref) if (firma and ref) else ""),
-                                "stato": "rimborsata" if p.get("rilasciato") else "confermata"})
+                                # la chiave giusta e' 'rimborsato' (fase58): con 'rilasciato'
+                                # (sempre None) OGNI prenotazione risultava "confermata",
+                                # anche le rimborsate -> host che prepara la casa per ospiti
+                                # che non arriveranno.
+                                "stato": "rimborsata" if p.get("rimborsato") else "confermata"})
         except Exception:
             logger.error("host prenotazioni: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
@@ -4185,7 +4209,9 @@ class RouterHTTP:
             oggi = _dte.date.today().isoformat()
             future = [p for p in self._sys.inventario.elenco_prenotazioni(alloggio_id=slug,
                                                                           limit=200)
-                      if not p.get("rilasciato") and str(p.get("check_out", "")) >= oggi]
+                      # chiave giusta: 'rimborsato' ('rilasciato' era sempre None -> anche
+                      # le prenotazioni GIA' rimborsate bloccavano l'eliminazione)
+                      if not p.get("rimborsato") and str(p.get("check_out", "")) >= oggi]
             if future:
                 return 409, {"errore": "prenotazioni_attive", "quante": len(future)}
             ok = self._sys.catalogo.elimina_alloggio(slug)
