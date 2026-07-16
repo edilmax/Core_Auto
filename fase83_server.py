@@ -1844,6 +1844,8 @@ class RouterHTTP:
                                           idem_key=rec.get("idem_key") or ("hold_" + str(ref)))
         except Exception:
             logger.warning("rilascio su rifiuto richiesta fallito (ignorato)", exc_info=True)
+        # il cliente ha diritto di saperlo SUBITO (prima: nessun avviso, aspettava a vuoto)
+        self._email_esito_richiesta(rec, "rifiutata")
         return 200, {"stato": "rifiutata", "riferimento": ref}
 
     def _registra_hold(self, corpo, allog, ref, ci, co, qt, email="", hold_sec=None):
@@ -4006,11 +4008,61 @@ class RouterHTTP:
             logger.warning("marcatura in_trattativa fallita (ignorata)", exc_info=True)
         return cal
 
+    def _email_esito_richiesta(self, rec, esito):
+        """Il cliente ha DIRITTO di sapere come e' finita la sua richiesta su-richiesta:
+        'rifiutata' dall'host o 'scaduta' senza risposta (24h). Prima: sul rifiuto NESSUN
+        avviso (il cliente aspettava a vuoto), sulla scadenza partiva l'email 'il pagamento
+        non e' andato a buon fine' — falsa e allarmante: il cliente non doveva pagare
+        niente. UNA email onesta, transazionale, best-effort ISOLATA (mai blocca)."""
+        try:
+            ep = getattr(self._sys, "email_provider", None)
+            email = (rec or {}).get("email", "")
+            slug = (rec or {}).get("alloggio_id", "")
+            if ep is None or not (isinstance(email, str) and "@" in email) or not slug:
+                return
+            base = self._base_url or "https://bookinvip.com"
+            titolo = slug
+            try:
+                d = self._sys.catalogo.dettaglio(slug)
+                titolo = (d.get("titolo") if isinstance(d, dict) else None) or slug
+            except Exception:
+                pass
+            import html as _h
+            if esito == "rifiutata":
+                ogg = "BookinVIP - L'host non ha potuto accettare la tua richiesta"
+                riga = "l'host non ha potuto accettare la tua richiesta"
+            else:
+                ogg = "BookinVIP - L'host non ha risposto alla tua richiesta"
+                riga = "l'host non ha risposto entro 24 ore alla tua richiesta"
+            corpo = ("<div style=\"font-family:sans-serif;max-width:480px\">"
+                     "<h2 style=\"color:#1e3c72\">La tua richiesta non è stata confermata</h2>"
+                     "<p>Purtroppo %s per <strong>%s</strong> (%s → %s).</p>"
+                     "<p><strong>Nessun addebito è stato effettuato</strong>: per le "
+                     "richieste si paga solo dopo la conferma dell'host.</p>"
+                     "<p>Le date sono di nuovo libere per te altrove:</p>"
+                     "<p><a href=\"%s\" style=\"background:#1e3c72;color:#fff;"
+                     "padding:.7rem 1.4rem;border-radius:8px;text-decoration:none;"
+                     "font-weight:bold\">Trova un altro alloggio</a></p>"
+                     "<p style=\"color:#5e6f8d;font-size:.85rem\">Questa è un'email di "
+                     "servizio, non riceverai promemoria.</p></div>"
+                     ) % (_h.escape(riga), _h.escape(titolo),
+                          _h.escape(rec.get("check_in", "")),
+                          _h.escape(rec.get("check_out", "")), _h.escape(base + "/"))
+            import threading
+            threading.Thread(target=ep.invia, args=(email, ogg, corpo),
+                             daemon=True).start()
+        except Exception:
+            logger.warning("email esito richiesta fallita (ISOLATA)", exc_info=True)
+
     def _email_recupero_hold(self, rec):
         """RECUPERO prenotazione fallita (hold scaduto senza pagamento): UNA email onesta al
         cliente — 'le date sono di nuovo libere, riprova' — con il link all'alloggio. NIENTE
         spam (evento transazionale, una sola volta: lo stato passa a 'scaduto' quindi il
-        sweeper non ripassa). Best-effort ISOLATO: mai blocca lo sweep."""
+        sweeper non ripassa). Best-effort ISOLATO: mai blocca lo sweep.
+        Una RICHIESTA mai approvata ('in_attesa_host') NON e' un pagamento fallito: il
+        cliente non doveva pagare niente -> email di esito richiesta, non di recupero."""
+        if (rec or {}).get("stato") == "in_attesa_host":
+            return self._email_esito_richiesta(rec, "scaduta")
         try:
             ep = getattr(self._sys, "email_provider", None)
             email = (rec or {}).get("email", "")
