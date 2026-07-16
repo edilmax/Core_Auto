@@ -92,6 +92,10 @@ class TestMentiInvarianti(unittest.TestCase):
                   {"X-Host-Token": tok})
                 slugs.append(slug)
             base = datetime.date(2026, 9, 1)
+            # POOL di crediti CONDIVISI: piu' menti riusano lo STESSO credito (single-use di sistema)
+            pool = [sysx.firma.codifica({"tipo": "credito_fondatore", "email": "x@x.it",
+                    "citta": "roma", "credito_cents": 5000, "exp": int(time.time()) + 30 * 86400,
+                    "nonce": "pool-%d" % k}) for k in range(10)]
 
             eccezioni = []
             for a in range(n_agenti):
@@ -106,11 +110,13 @@ class TestMentiInvarianti(unittest.TestCase):
                                     "check_in": (base + datetime.timedelta(days=off)).isoformat(),
                                     "check_out": (base + datetime.timedelta(days=off + notti)).isoformat(),
                                     "party": rnd.randint(1, 4)}
-                            if rnd.random() < 0.3:
-                                body["credito_token"] = sysx.firma.codifica(
-                                    {"tipo": "credito_fondatore", "email": "x@x.it", "citta": "roma",
-                                     "credito_cents": 5000, "exp": int(time.time()) + 30 * 86400,
-                                     "nonce": str(rnd.random())})
+                            if rnd.random() < 0.45:
+                                body["credito_token"] = (rnd.choice(pool) if rnd.random() < 0.6
+                                    else sysx.firma.codifica(
+                                        {"tipo": "credito_fondatore", "email": "x@x.it",
+                                         "citta": "roma", "credito_cents": 5000,
+                                         "exp": int(time.time()) + 30 * 86400,
+                                         "nonce": str(rnd.random())}))
                             s, q = g("POST", "/api/concierge/quote", body)
                             if s == 200:
                                 stt["quote"] = q.get("quote_token"); stt["slug"] = slug
@@ -211,6 +217,19 @@ class TestMentiInvarianti(unittest.TestCase):
                 pr = pay_by_ref.get(pn["riferimento"])
                 if pr and pr["stato"] == "maturato":
                     viol.append(("HOST_PAGATO_SU_RIMBORSATO", pn["riferimento"]))
+        # SINGLE-USE credito: somma sconti su prenotazioni PAGATE, per credito, <= 5000
+        sconto_per_cid = {}
+        for pn in conp.execute("SELECT stato, corpo_json FROM pendenti"):
+            try:
+                dj = json.loads(pn["corpo_json"] or "{}")
+            except Exception:
+                dj = {}
+            cid, sc = dj.get("credito_id"), dj.get("sconto_credito_cents", 0)
+            if pn["stato"] == "pagato" and cid and sc:
+                sconto_per_cid[cid] = sconto_per_cid.get(cid, 0) + sc
+        for cid, tot_sc in sconto_per_cid.items():
+            if tot_sc > 5000:
+                viol.append(("CREDITO_RIUSATO", cid[:12], tot_sc))
         conp.close(); paydb.close()
         cong = sqlite3.connect(f"{d}/g.db"); cong.row_factory = sqlite3.Row
         try:

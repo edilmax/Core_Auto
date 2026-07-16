@@ -1874,6 +1874,7 @@ class RouterHTTP:
                                    # Senza questi 3 il record non tornava (i conti non quadravano).
                                    "costo_pagamento_cents": corpo.get("costo_pagamento_cents", 0),
                                    "sconto_credito_cents": corpo.get("sconto_credito_cents", 0),
+                                   "credito_id": corpo.get("credito_id", ""),   # quale credito ha scontato (audit)
                                    "tassa_soggiorno_cents": corpo.get("tassa_soggiorno_cents", 0),
                                    "valuta": corpo.get("valuta", "EUR"),
                                    "host_id": host_id,
