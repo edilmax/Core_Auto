@@ -83,6 +83,7 @@ class ConfigCasaVIP:
     db_accettazioni: str = ":memory:"  # registro firmato accettazioni contratto host (prova legale)
     db_geocache: str = ":memory:"      # cache geocoding città->coordinate (mappa nella ricerca)
     db_checkin: str = ":memory:"       # check-in digitale (pre-registrazione ospiti + sblocco)
+    db_credito_usati: str = ":memory:"  # registro SINGLE-USE crediti (fase167): un credito si spende UNA volta
     con_geocoding: bool = False        # ON in prod: geocodifica alla pubblicazione (default OFF: test)
     file_referral: str = ""            # path JSON referral host-porta-host (vuoto = in RAM)
     con_sentinel: bool = False
@@ -129,6 +130,7 @@ class SistemaCasaVIP:
     connect: Any = None     # ProviderConnect (fase101) o None: bonifici automatici agli host
     geocoder: Any = None    # Geocoder (fase166): città->coordinate per la mappa
     checkin: Any = None     # CheckinDigitale (fase127): pre-registrazione ospiti + sblocco
+    credito_usati: Any = None  # RegistroCreditiUsati (fase167): single-use del Credito Fondatore/Viaggio
 
     @property
     def attivo(self) -> bool:
@@ -231,12 +233,19 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         except Exception:
             _tasso = None
 
+    # SINGLE-USE del Credito Fondatore/Viaggio (fase167): un credito si spende UNA volta sola.
+    # Iniettato nel concierge (check al preventivo) e consumato dal server alla finalizzazione.
+    from fase167_credito_single_use import crea_registro_crediti_usati
+    credito_usati = crea_registro_crediti_usati(cfg.db_credito_usati)
+    credito_usati.inizializza_schema()
+    componenti.append("credito_single_use(167)")
+
     concierge = crea_protocollo(inventario, bytes(cfg.segreto_hmac), catalogo=catalogo,
                                 valuta=cfg.valuta, link_pagamento=link_pagamento,
                                 commissione=lambda netto: max(0, netto * _bps // 10000),
                                 commissione_alloggio=_comm_alloggio,
                                 tassa_alloggio=_tassa_alloggio, tasso_cambio=_tasso,
-                                psp_bps=cfg.psp_bps)
+                                psp_bps=cfg.psp_bps, credito_store=credito_usati)
     componenti.append("concierge(59)")
 
     # 3c) smart-pass per il self check-in (incluso nel voucher)
@@ -429,4 +438,5 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           domanda=domanda, garanzia=garanzia,
                           pagamenti_pendenti=pagamenti_pendenti, tassa_comunale=tassa_comunale,
                           payout=payout, accettazioni=accettazioni, stripe=provider,
-                          connect=_connect, geocoder=geocoder, checkin=checkin)
+                          connect=_connect, geocoder=geocoder, checkin=checkin,
+                          credito_usati=credito_usati)

@@ -148,10 +148,14 @@ class ProtocolloConcierge:
                  link_pagamento: Optional[Callable[[Dict[str, Any]], Optional[str]]] = None,
                  ttl_quote_sec: int = 900, valuta: str = "EUR",
                  psp_bps: int = 0,
+                 credito_store: Any = None,
                  orologio: Optional[Callable[[], int]] = None) -> None:
         self._inv = inventario
         self._firma = firma
         self._cat = catalogo
+        # SINGLE-USE del Credito Fondatore/Viaggio (fase167). None = nessun tracciamento
+        # (comportamento storico). Con lo store: un credito gia' speso non sconta piu'.
+        self._credito_store = credito_store
         self._commissione = commissione or (lambda netto: 0)
         self._commissione_all = commissione_alloggio   # host-aware: (netto, slug)->comm
         self._tassa_all = tassa_alloggio               # (slug, notti, ospiti, imponibile)->cents
@@ -287,7 +291,7 @@ class ProtocolloConcierge:
             netto_host = netto - comm
             # CREDITO FONDATORE: sconto all'ospite finanziato dalla NOSTRA commissione, con
             # guardia floor (la nostra presa resta sopra i costi) -> ZERO perdita. Host invariato.
-            sconto = self._sconto_credito(richiesta.get("credito_token"), netto, comm)
+            sconto, credito_id = self._sconto_credito(richiesta.get("credito_token"), netto, comm)
             guest = netto - sconto
             if guest <= 0 or guest > MAX_CENTS:
                 return RispostaConcierge(422, {"errore": "prezzo_fuori_banda"})
@@ -323,6 +327,7 @@ class ProtocolloConcierge:
             "prezzo_netto_cents": netto, "commissione_cents": comm,
             "prezzo_guest_cents": guest, "netto_host_cents": netto_host,
             "sconto_credito_cents": sconto,
+            "credito_id": credito_id,        # firma del credito applicato: consumato al book (fase167)
             "sconto_non_rimborsabile_cents": sconto_nr, "prezzo_listino_cents": netto_listino,
             "sconto_soggiorno_lungo_cents": sconto_lungo,
             "tassa_soggiorno_cents": tassa, "totale_cents": totale,
@@ -387,26 +392,37 @@ class ProtocolloConcierge:
             pass
         return self._valuta
 
-    def _sconto_credito(self, token: Any, netto: int, comm: int) -> int:
+    def _sconto_credito(self, token: Any, netto: int, comm: int) -> Tuple[int, str]:
         """Sconto Credito Fondatore: verifica il token firmato e applica al MASSIMO quanto la
         nostra commissione puo' assorbire restando sopra i costi (Stripe ~2.9%+0.25 + buffer).
-        Non falsificabile, non scaduto. Se non c'e' margine -> 0 (mai in perdita)."""
+        Non falsificabile, non scaduto. Se non c'e' margine -> 0 (mai in perdita).
+        SINGLE-USE (fase167): un credito GIA' SPESO non sconta piu' (`usato`). Ritorna
+        (sconto, credito_id) dove credito_id = firma del token (per consumarlo al book)."""
         if not (isinstance(token, str) and token):
-            return 0
+            return 0, ""
         try:
             v = self._firma.decodifica(token)
             if not isinstance(v, dict) or v.get("tipo") != "credito_fondatore":
-                return 0
+                return 0, ""
             exp = v.get("exp")
             if not (isinstance(exp, int) and not isinstance(exp, bool) and exp >= self._now()):
-                return 0
+                return 0, ""
+            credito_id = token.rsplit(".", 1)[-1]        # firma HMAC = id univoco del credito
+            # SINGLE-USE: se lo store dice "gia' usato", niente sconto (fail-open: un errore
+            # dello store NON toglie lo sconto a un credito legittimo).
+            if self._credito_store is not None:
+                try:
+                    if self._credito_store.usato(credito_id):
+                        return 0, ""
+                except Exception:
+                    logger.warning("credito single-use: check ISOLATO fallito", exc_info=True)
             cr = v.get("credito_cents", 0)
             cr = cr if (_intero(cr) and cr > 0) else 0
             costo = netto * 290 // 10000 + 25 + 200      # Stripe stimato + buffer prudenziale
             margine_disponibile = max(0, comm - costo)   # quanto possiamo regalare senza perdere
-            return max(0, min(cr, margine_disponibile))
+            return max(0, min(cr, margine_disponibile)), credito_id
         except Exception:
-            return 0
+            return 0, ""
 
     # ── ATTO 3: prenotazione (verifica firma -> blocco atomico idempotente) ────
     def prenota(self, payload: Any) -> RispostaConcierge:
@@ -461,6 +477,8 @@ class ProtocolloConcierge:
             "tassa_soggiorno_cents": dati.get("tassa_soggiorno_cents", 0),
             "totale_cents": dati.get("totale_cents", guest),   # soggiorno + tassa
             "valuta": dati.get("valuta", self._valuta),
+            "sconto_credito_cents": dati.get("sconto_credito_cents", 0),   # per il consumo fase167
+            "credito_id": dati.get("credito_id", ""),          # credito da consumare alla finalizzazione
             "idempotente": bool(getattr(esito, "idempotente", False)),
             "money_unit": "cents_integer",
         }

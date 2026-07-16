@@ -13,6 +13,7 @@ credito firmato. Durevole SQLite (conn-per-op, dedup email+citta).
 """
 from __future__ import annotations
 
+import secrets
 import sqlite3
 import time
 from typing import Any, Callable, Dict, List, Optional
@@ -136,7 +137,8 @@ class GestoreDomanda:
         return self._firma.codifica({
             "tipo": "credito_fondatore", "email": email.strip().lower(),
             "citta": (str(citta).strip().lower() if isinstance(citta, str) else ""),
-            "credito_cents": c, "exp": self._now() + max(1, int(giorni)) * 86400})
+            "credito_cents": c, "exp": self._now() + max(1, int(giorni)) * 86400,
+            "nonce": secrets.token_hex(8)})   # firma univoca -> single-use affidabile (fase167)
 
 
 def crea_gestore_domanda(percorso: str, *, firma: Any = None, orologio: Any = None

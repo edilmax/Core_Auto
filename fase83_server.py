@@ -1526,6 +1526,12 @@ class RouterHTTP:
         ref = corpo.get("riferimento", "")
         allog = corpo.get("alloggio_id", "")
         ci, co = corpo.get("check_in", ""), corpo.get("check_out", "")
+        # SINGLE-USE del Credito Fondatore/Viaggio (fase167): la prenotazione e' CONFERMATA ->
+        # consuma il credito applicato, cosi' lo stesso token non sconta piu' i preventivi
+        # futuri (buco provato: era riusabile all'infinito). Consumo QUI (finalizzazione), non
+        # al preventivo, cosi' il browsing non brucia il credito e il su-richiesta lo consuma
+        # solo se APPROVATO. FAIL-OPEN: un errore dello store non blocca mai la prenotazione.
+        self._consuma_credito(corpo, ref)
         pass_token = None
         if self._sys.emettitore_pass is not None:
             try:
@@ -2228,6 +2234,28 @@ class RouterHTTP:
         except Exception:
             return "flessibile"
 
+    def _consuma_credito(self, corpo, ref):
+        """Segna come USATO il Credito Fondatore/Viaggio applicato a questa prenotazione (fase167).
+        Idempotente sullo STESSO riferimento (un replay dello stesso book non allarma). Se il
+        credito risulta gia' speso su un'ALTRA prenotazione (riuso in una finestra di preventivi
+        concorrenti) lo si LOGGA: non si annulla la prenotazione gia' firmata (costa solo margine,
+        mai una perdita), ma resta tracciato. FAIL-OPEN: mai bloccare una prenotazione legittima."""
+        store = getattr(self._sys, "credito_usati", None)
+        if store is None:
+            return
+        cid = corpo.get("credito_id") if isinstance(corpo, dict) else None
+        sconto = corpo.get("sconto_credito_cents", 0) if isinstance(corpo, dict) else 0
+        if not (isinstance(cid, str) and cid) or not (isinstance(sconto, int)
+                                                      and not isinstance(sconto, bool) and sconto > 0):
+            return
+        try:
+            esito = store.consuma(cid, ref)
+            if esito == "diverso":
+                logger.warning("credito %s gia' speso su altra prenotazione, ora su %s "
+                               "(riuso in finestra preventivi; sconto %d)", cid, ref, sconto)
+        except Exception:
+            logger.warning("consumo credito single-use fallito (ISOLATO)", exc_info=True)
+
     def _credito_anti_rimpianto(self, trattenuto_cents):
         """Trasforma il 50% della penale in un Credito Viaggio firmato (tetto 5000 cents).
         Riusa il riscatto floor-guarded del concierge (tipo 'credito_fondatore')."""
@@ -2238,8 +2266,10 @@ class RouterHTTP:
         if firma is None or cv <= 0:
             return 0, ""
         try:
+            import secrets as _sec
             tok = firma.codifica({"tipo": "credito_fondatore", "email": "", "citta": "",
-                                  "credito_cents": cv, "exp": int(time.time()) + 365 * 86400})
+                                  "credito_cents": cv, "exp": int(time.time()) + 365 * 86400,
+                                  "nonce": _sec.token_hex(8)})   # firma univoca -> single-use (fase167)
             return cv, tok
         except Exception:
             return 0, ""
