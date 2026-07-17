@@ -2969,6 +2969,25 @@ class RouterHTTP:
             self._conferma_pagamento(rif)
         return 200, {"ricevuto": True, "tipo": tipo}
 
+    def _riasserisci_incasso(self, rec, rif):
+        """Passi derivati IDEMPOTENTI del pagamento: tassa nel ledger + payout 'maturato'.
+        Sicuri da rieseguire (registra_riscossione e aggiorna_stato('maturato') sono no-op
+        se gia' fatti, e rispettano un eventuale tombstone/cancellazione avvenuta nel
+        frattempo -> non risuscitano un rimborsato). Chiamati sia sulla PRIMA conferma sia
+        sul webhook di RETRY, per SANARE un crash del primo handler a meta' (BUG #32:
+        crash dopo il CAS 'pagato' ma prima di questi passi -> tassa persa dal ledger citta'
+        + payout bloccato 'in_attesa' per sempre, con Stripe che ritenta a vuoto)."""
+        try:
+            if isinstance(rec, dict) and rec.get("tassa_cents", 0) > 0:
+                led = getattr(self._sys, "tassa_comunale", None)
+                if led is not None:
+                    led.registra_riscossione(rif, rec.get("comune", ""), rec["tassa_cents"])
+            pd = getattr(self._sys, "payout", None)
+            if pd is not None:
+                pd.aggiorna_stato(rif, "maturato")        # in_attesa -> maturato (guadagno vero)
+        except Exception:
+            logger.warning("riasserisci incasso fallito (ignorato)", exc_info=True)
+
     def _conferma_pagamento(self, rif):
         """Pagamento riuscito. Gestisce la GARA (chi paga prima se la prende):
         - hold ancora attivo ('in_attesa') -> conferma normale (stanza già bloccata).
@@ -2990,7 +3009,15 @@ class RouterHTTP:
                 return
             stato = rec.get("stato", "")
             if stato == "pagato":
-                return                                    # webhook duplicato: idempotente
+                # WEBHOOK DUPLICATO/RETRY. NON basta uscire: se il PRIMO handler e' morto
+                # DOPO il CAS 'pagato' ma PRIMA dei passi derivati (BUG #32 provato), la tassa
+                # non sarebbe mai registrata e il payout resterebbe bloccato 'in_attesa'. Stripe
+                # ritenta per giorni: sfrutto il retry per SANARE lo stato ri-asserendo i passi
+                # IDEMPOTENTI (tassa + payout maturato). NON ri-eseguo credito/referral (non
+                # idempotenti: doppio-apply = perdita); un crash prima di quelli perde solo il
+                # bonus di quella prenotazione (degrado minimo vs incoerenza permanente).
+                self._riasserisci_incasso(rec, rif)
+                return
             # WHITELIST: si conferma SOLO 'in_attesa' (hold vivo) o 'scaduto' (re-block sotto).
             # Ogni altro stato (cancellata dal cliente/host, rimborsata, richiesta NON ancora
             # approvata) NON è confermabile (il CAS non ha scritto niente): senza questa
@@ -3043,14 +3070,10 @@ class RouterHTTP:
                 self._apri_garanzia(rif, int(dj.get("netto_host_cents", 0)),
                                     rec.get("alloggio_id", ""), rec.get("check_in", ""))
             # comune a 'in_attesa' e 'scaduto-ribloccato': 'pagato' è GIÀ scritto dal CAS
-            # in cima (acquisizione atomica); qui restano tassa + payout maturato.
-            if rec.get("tassa_cents", 0) > 0:
-                led = getattr(self._sys, "tassa_comunale", None)
-                if led is not None:
-                    led.registra_riscossione(rif, rec.get("comune", ""), rec["tassa_cents"])
+            # in cima (acquisizione atomica); qui restano tassa + payout maturato (idempotenti,
+            # ri-asseriti anche sul retry per sanare un crash del primo handler - BUG #32).
+            self._riasserisci_incasso(rec, rif)
             pd = getattr(self._sys, "payout", None)
-            if pd is not None:
-                pd.aggiorna_stato(rif, "maturato")        # in_attesa -> maturato (guadagno vero)
             # REFERRAL: se l'host di questa prenotazione è stato INVITATO e raggiunge la soglia
             # di prenotazioni pagate -> premia il referente (una volta sola, mai in perdita).
             hid_pag = rec.get("host_id") if isinstance(rec, dict) else None
