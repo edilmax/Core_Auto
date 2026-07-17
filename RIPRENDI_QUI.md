@@ -23,10 +23,11 @@
 > `60b1d1e`). Investigato anche il fuso orario: prod = UTC deterministico → limitazione nota
 > media-bassa (fix giusto = fuso per-alloggio, feature, NON nelle 48h).
 >
-> ✅ **DEPLOY LIVE #2 fatto** (VPS `0f3fb56`→`ffba36a`): fix #29 + #30 + guardie in produzione,
-> container healthy, log puliti, verificato vivo. ⚠️ **VPS a `ffba36a`, GitHub a `60b1d1e`**: mancano
-> in produzione i fix **#31 (tassa)** e **#32 (crash-recovery)** — money-path — **attendono un
-> TERZO "pusha"**. **Suite 2332 verde.** Tutto committato+GitHub, memoria aggiornata.
+> ✅ **DEPLOY LIVE #3 FATTO** (2026-07-17 su "pusha", VPS `ffba36a`→`e9aaeaf`): fix **#31 (tassa)** +
+> **#32 (crash-recovery)** ora in PRODUZIONE. Procedura rm-first, 3 container **healthy**, log avvio
+> puliti (money_path_pronto:True, avvisi:[], ledger_tassa(147)+checkin(127) caricati), verificato vivo
+> (homepage 200 cert ok, /api/health 200, /api/domanda ok:true). **VPS = GitHub = `e9aaeaf`: TUTTO
+> ALLINEATO, niente in sospeso per il deploy.** Suite 2332 verde. (3 deploy live totali della sessione.)
 >
 > 🔑 **CHIAVE STRIPE (dove sta)**: la chiave LIVE (`sk_live_`) + webhook secret sono in `.env.casavip`
 > **SOLO sul VPS** (`/var/www/bookinvip/.env.casavip`), attivi nel container. NON in git (gitignore
