@@ -701,6 +701,24 @@ class CatalogoVetrina:
         finally:
             con.close()
 
+    def citta_pubblicate(self, *, limit: int = 100000) -> List[str]:
+        """Città DISTINTE con almeno una scheda 'pubblicato' (inventario REALE). È il segnale
+        anti-doorway per la SEO globale: una landing città si genera/indicizza solo dove c'è
+        valore vero, mai per moltiplicazione cieca città×lingua (= scaled content abuse). Ordine
+        alfabetico deterministico. BLINDATO → []."""
+        lim = limit if isinstance(limit, int) and 0 < limit <= 1000000 else 100000
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT DISTINCT citta FROM alloggi WHERE stato='pubblicato' "
+                "AND citta IS NOT NULL AND citta != '' ORDER BY citta LIMIT ?", (lim,)).fetchall()
+            return [str(r[0]) for r in righe if r and r[0]]
+        except Exception:
+            logger.warning("citta_pubblicate fallita (ISOLATA)", exc_info=True)
+            return []
+        finally:
+            con.close()
+
     def dettaglio(self, slug: str) -> Optional[Dict[str, Any]]:
         """Scheda completa + immagini ordinate. None se assente o non 'pubblicato'."""
         con = self._apri()

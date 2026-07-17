@@ -169,6 +169,23 @@ class TestMaglia(unittest.TestCase):
         self.assertEqual(vicini_di("Ignota", ["Roma", "Milano"]), [])
 
 
+class TestRegistroCitta(unittest.TestCase):
+    def test_seed_sempre_piu_inventario_dedup_ordinato(self):
+        from fase97_inbound_seo import registro_citta, CITTA_SEED, slug_citta
+        r = registro_citta(["Porto", "Roma"])          # Roma è già seed, Porto è nuovo
+        self.assertIn("Porto", r)
+        for c in CITTA_SEED:
+            self.assertIn(c, r)                         # seed sempre presente
+        self.assertEqual(sum(1 for x in r if slug_citta(x) == "roma"), 1)   # dedup per slug
+        self.assertEqual(r, sorted(r, key=slug_citta))  # ordine canonico
+
+    def test_gate_anti_doorway(self):
+        from fase97_inbound_seo import registro_citta, citta_da_slug
+        r = registro_citta(["Porto"])
+        self.assertEqual(citta_da_slug("porto", r), "Porto")    # inventario reale → pagina
+        self.assertIsNone(citta_da_slug("citta-fantasma", r))   # fuori dal registro → 404
+
+
 class TestBreadcrumb(unittest.TestCase):
     def test_valido_e_due_livelli(self):
         from fase97_inbound_seo import breadcrumb_jsonld

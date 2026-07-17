@@ -122,6 +122,24 @@ def vicini_di(citta: str, tutte: Sequence[str] = CITTA_SEED, *, k: int = 6) -> L
     return []
 
 
+def registro_citta(citta_inventario: Sequence[str] = (), *,
+                   seed: Sequence[str] = CITTA_SEED) -> List[str]:
+    """REGISTRO DETERMINISTICO delle città che hanno diritto a una landing. Unione di:
+      - SEED curati (mercati-obiettivo per l'acquisizione host: sempre presenti, sono lander
+        host-acquisition con calcolatore risparmio + FAQ = valore proprio, non doorway);
+      - città con INVENTARIO reale (data-driven dal catalogo): così la superficie SEO cresce
+        verso le 195 nazioni SOLO dove c'è valore vero, senza generare pagine vuote (= niente
+        doorway / scaled-content abuse penalizzato da Google).
+    Dedup per slug (prima occorrenza vince), ordine canonico per slug → stabile e testabile.
+    Una città FUORI dal registro NON ha pagina (la rotta risponde 404): è il gate anti-doorway."""
+    visti: Dict[str, str] = {}
+    for c in list(seed) + list(citta_inventario or ()):
+        s = slug_citta(c)
+        if s and s not in visti:
+            visti[s] = c
+    return [visti[s] for s in sorted(visti)]
+
+
 def _euro(cents: int) -> str:
     cents = int(cents)
     return "%d.%02d" % (cents // 100, cents % 100)

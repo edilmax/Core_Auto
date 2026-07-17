@@ -247,6 +247,23 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
   (fase97). Onestà (policy): NESSUN algoritmo garantisce il "primo posto" — questo massimizza il
   potenziale TECNICO dentro le regole (white-hat) e mette al riparo da penalizzazioni; il ranking
   dipende anche da contenuti/autorevolezza/concorrenza. Suite mirate 155 verdi + sandbox 13.]
+  [2026-07-17 fatto: SEO GLOBALE (195 nazioni) — REGISTRO CITTÀ DATA-DRIVEN + gate anti-doorway.
+  PRIMA: le landing e la sitemap erano guidate dal tuple fisso CITTA_SEED (28) → scalare voleva
+  dire moltiplicare a mano città×lingua = rischio doorway/scaled-content (penalizzato). ORA:
+  fase97.registro_citta(inventario, seed=CITTA_SEED) = unione DETERMINISTICA (dedup per slug,
+  ordine canonico) di seed curati (lander host-acquisition, sempre presenti) + città con
+  INVENTARIO reale dal catalogo (fase57.citta_pubblicate: DISTINCT citta WHERE stato=pubblicato,
+  blindato). La rotta /affitta e /sitemap-host ora usano il registro (helper fase83._citta_inventario
+  blindato→[]): una città ENTRA nella superficie SEO solo se è seed o ha inventario reale; fuori
+  dal registro = 404 (gate). Così la superficie cresce verso le 195 nazioni SOLO dove c'è valore
+  vero, mai pagine vuote. Provato live: host a Porto (non-seed) pubblica → /affitta/porto 200 con
+  6 link-maglia nel registro + in sitemap-host (29 città × 8 = 232 URL); slug arbitrario → 404.
+  Guardie: TestCittaPubblicate (57), TestRegistroCitta (97), test_registro_inventario (83),
+  test_registro_gate_e_scala_globale (sandbox). Suite mirate 160 verdi. RESTA (visione globale):
+  hreflang lingua+PAESE (es-MX/pt-BR/en-GB) per i mercati chiave; sitemap-INDEX + sharding oltre
+  50k URL; IndexNow (Bing/Yandex) submission multi-motore; gate anche su DOMANDA (waitlist fase158)
+  oltre che inventario. NOTA onesta: Google non è l'unico motore (Yandex/Baidu/Naver per mercato)
+  e gli AI answer engine (llms.txt/MCP già pronti) sono il layer di scoperta globale.]
 - [FATTO 2026-07-15: recupero preventivi abbandonati — vedi riga 📧 in sezione 1]
 - **[FATTO 2026-07-16 — COLLAUDO "METODO LIBRO" COMPLETO]**: 29 bug VERI chiusi in un giorno
   (righe 🧠→🔢 in sezione 1: overbooking su-richiesta, host-pagato-con-disputa, penali mai

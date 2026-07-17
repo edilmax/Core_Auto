@@ -325,5 +325,22 @@ class TestSlugLastmod(unittest.TestCase):
         self.assertEqual(len(cat.slug_lastmod_pubblicati(limit=-5)), 1)  # fallback a default
 
 
+class TestCittaPubblicate(unittest.TestCase):
+    """Città con inventario reale = segnale anti-doorway per la SEO globale."""
+
+    def test_solo_pubblicate_e_distinte(self):
+        cat = crea_catalogo()
+        cat.pubblica(_scheda("a", citta="Roma"))
+        cat.pubblica(_scheda("b", citta="Roma"))                 # stessa città → una sola
+        cat.pubblica(_scheda("c", citta="Porto"))
+        cat.pubblica(_scheda("d", citta="Oslo", stato="bozza"))  # bozza esclusa
+        cp = cat.citta_pubblicate()
+        self.assertIn("Roma", cp)
+        self.assertIn("Porto", cp)
+        self.assertNotIn("Oslo", cp)
+        self.assertEqual(cp.count("Roma"), 1)                    # distinte
+        self.assertEqual(cp, sorted(cp))                         # ordine deterministico
+
+
 if __name__ == "__main__":
     unittest.main()

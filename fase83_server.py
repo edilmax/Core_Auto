@@ -291,6 +291,15 @@ def robots_txt(base_url: str = "") -> str:
             "Sitemap: %s/sitemap-host.xml\n" % (base_url, base_url))
 
 
+def _citta_inventario(sistema: Any) -> List[str]:
+    """Città con inventario reale dal catalogo (per il registro anti-doorway). BLINDATO → []."""
+    try:
+        m = getattr(sistema.catalogo, "citta_pubblicate", None)
+        return list(m()) if callable(m) else []
+    except Exception:
+        return []
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # SUPERFICIE AI-AGENT (scoperta standard): oltre a /api/mcp (MCP JSON-RPC, fase60) e
 # /llms.txt (fase97), esponiamo il manifest di scoperta /.well-known/ai-plugin.json e
@@ -4666,18 +4675,21 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 # Inbound SEO/AEO (fase97): landing host per città (server-rendered,
                 # crawlabile). Solo città note → niente thin-content da slug arbitrari.
                 try:
-                    from fase97_inbound_seo import (citta_da_slug,
-                                                    genera_landing_host, vicini_di)
+                    from fase97_inbound_seo import (citta_da_slug, genera_landing_host,
+                                                    registro_citta, vicini_di)
                     query = {k: v[0] for k, v in parse_qs(u.query).items()}
-                    citta = citta_da_slug(unquote(u.path[len("/affitta/"):]))
+                    # REGISTRO = seed curati ∪ città con inventario reale (gate anti-doorway):
+                    # una città fuori dal registro → 404, mai pagina vuota da slug arbitrario.
+                    registro = registro_citta(_citta_inventario(sistema))
+                    citta = citta_da_slug(unquote(u.path[len("/affitta/"):]), registro)
                     if citta is None:
                         self._scrivi(404, {"errore": "citta_non_trovata"})
                     else:
                         bps = int(os.environ.get("COMMISSIONE_BPS", "1000"))
-                        # link interni = maglia small-world crawl-ottimale (non tutte le città)
+                        # link interni = maglia small-world sul registro (non tutte le città)
                         self._testo(200, "text/html", genera_landing_host(
                             citta, lingua=query.get("lang", "it"), base_url=base_url,
-                            commissione_bps=bps, citta_correlate=vicini_di(citta)))
+                            commissione_bps=bps, citta_correlate=vicini_di(citta, registro)))
                 except Exception:
                     self._scrivi(500, {"errore": "interno"})
             elif u.path == "/llms.txt":
@@ -4692,8 +4704,10 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             elif u.path.startswith("/uploads/"):
                 self._serve_upload(u.path)                        # foto alloggi caricate
             elif u.path == "/sitemap-host.xml":
-                from fase97_inbound_seo import sitemap_inbound
-                self._testo(200, "application/xml", sitemap_inbound(base_url))
+                from fase97_inbound_seo import sitemap_inbound, registro_citta
+                # la sitemap elenca SOLO le città del registro (seed ∪ inventario reale)
+                self._testo(200, "application/xml", sitemap_inbound(
+                    base_url, citta=registro_citta(_citta_inventario(sistema))))
             elif u.path == "/stop":
                 # Disiscrizione PUBBLICA (link nelle email outreach). Nessuna auth: il
                 # destinatario deve poter dire stop. Opt-out scritto in modo DUREVOLE.

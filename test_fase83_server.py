@@ -878,6 +878,17 @@ class TestSEO(unittest.TestCase):
         r = robots_txt("https://x.it")
         self.assertIn("Sitemap: https://x.it/sitemap.xml", r)
 
+    def test_registro_inventario_guida_sitemap_host(self):
+        from fase83_server import _citta_inventario
+        from fase97_inbound_seo import registro_citta, sitemap_inbound
+        inv = _citta_inventario(self.sys)               # self.sys ha "casa" a Roma
+        self.assertIn("Roma", inv)
+        reg = registro_citta(inv)
+        xml = sitemap_inbound("https://x.it", citta=reg)
+        self.assertIn("/affitta/roma", xml)             # città con inventario nella sitemap
+        # helper blindato: un sistema senza catalogo valido → [] (mai eccezione)
+        self.assertEqual(_citta_inventario(object()), [])
+
 
 class TestRobustezza(unittest.TestCase):
     def test_mai_solleva(self):
