@@ -402,6 +402,16 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
 17 money, 15 idempotency, 16 outbox, 23 datastore, 73 firma-agile, 133/65 split (calcolo),
 164 pool-ai (usato da 165), 154 giurisdizioni (usato da 95). Non hanno un interruttore proprio.
 
+**`ispettore_statico.py`** (strumento di collaudo, 2026-07-18): ispettore automatico dell'INTERO
+progetto (372 py + 12 html, ~76k righe) — AST + regole tarate sulle 36 classi di bug reali già
+trovate (soldi-in-float, SQL costruito male, XSS-interpolazioni senza escape, except muti, UPDATE
+senza WHERE, rete senza timeout/User-Agent, :memory: su store di denaro, nomi indefiniti) + grafo
+dipendenze (`--grafo`). Uso: `python ispettore_statico.py` → verbale compatto dei soli sospetti
+(il metodo "risparmio token": la macchina legge tutto, l'ingegnere verifica solo i sospetti).
+Primo giro completo 2026-07-18: 468 sospetti → triage totale → **0 bug nuovi** (l'unico reale
+della giornata, User-Agent mancante in fase169, era già stato trovato e corretto al collaudo
+IndexNow; Telegram/Meta senza UA = ok, provati funzionanti in prod).
+
 ## 4) ⚪ LEGACY — vecchio stack "Mango / Tavola VIP" (NON nel prodotto CasaVIP)
 fase13, 24–56 (Tavola VIP MVP: fase34–42 prenotazioni ristorante; Mango funnel fase43–55;
 cervello IA fase25–33). Superati dallo stack CasaVIP (fase57+). NON deployati, NON toccare
