@@ -74,6 +74,7 @@ class ConfigCasaVIP:
     db_recensioni: str = ":memory:"
     db_registro_host: str = ":memory:"
     db_viral: str = ":memory:"
+    db_coda: str = ":memory:"          # coda intelligente (fase67): DEPOSITI -> in prod va su FILE
     db_messaggi: str = ":memory:"
     db_domanda: str = ":memory:"       # lista d'attesa + credito fondatore (anti-vuoto)
     db_garanzia: str = ":memory:"      # escrow di garanzia (soldi all'host solo se conforme)
@@ -347,7 +348,10 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     from fase62_predictive_noshow import crea_gestore_noshow
     from fase79_dichiarazione import crea_dichiarazione
     split = crea_gestore_split(":memory:")
-    coda = crea_gestore_coda(":memory:")
+    # la coda custodisce DEPOSITI (denaro): il percorso e' configurabile perche'
+    # all'accensione DEVE stare su file (":memory:" = depositi persi al riavvio
+    # + connessione condivisa fragile fra thread, stessa classe artefatto fase76)
+    coda = crea_gestore_coda(cfg.db_coda)
     turnover = crea_gestore_turnover(":memory:")
     digital_twin = crea_digital_twin(":memory:")
     guardian = crea_guardian()
