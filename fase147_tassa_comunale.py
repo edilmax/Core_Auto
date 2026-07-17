@@ -79,7 +79,14 @@ class TassaComunale:
                     comune TEXT PRIMARY KEY, regola_json TEXT NOT NULL)""")
                 con.execute("""CREATE TABLE IF NOT EXISTS tassa_riscossione (
                     prenotazione_id TEXT PRIMARY KEY, comune TEXT NOT NULL,
-                    importo INTEGER NOT NULL, ts INTEGER NOT NULL)""")
+                    importo INTEGER NOT NULL, ts INTEGER NOT NULL,
+                    stornato INTEGER NOT NULL DEFAULT 0)""")
+                # migrazione: 'stornato' su schemi vecchi (tombstone del rimborso)
+                try:
+                    con.execute("ALTER TABLE tassa_riscossione ADD COLUMN "
+                                "stornato INTEGER NOT NULL DEFAULT 0")
+                except sqlite3.OperationalError:
+                    pass
         finally:
             con.close()
 
@@ -120,13 +127,24 @@ class TassaComunale:
 
     def registra_riscossione(self, prenotazione_id: str, comune: str,
                              importo_cents: int) -> bool:
+        """Registra la tassa incassata (pass-through alla citta'). ATOMICO (BEGIN IMMEDIATE)
+        + TOMBSTONE-AWARE: se la prenotazione e' gia' STORNATA (rimborso concorrente/precedente)
+        NON registra nulla -> chiude la race webhook-pagamento ∥ cancellazione in cui lo storna
+        (DELETE) precedeva la registra (INSERT) e la tassa risorgeva su una prenotazione
+        rimborsata (BUG provato in concorrenza: 107 violazioni). Idempotente."""
         if not prenotazione_id or _i(importo_cents, -1) < 0:
             return False
         con = self._apri()
         try:
             with con:
-                con.execute("INSERT OR IGNORE INTO tassa_riscossione (prenotazione_id, "
-                            "comune, importo, ts) VALUES (?,?,?,?)",
+                con.execute("BEGIN IMMEDIATE")
+                r = con.execute("SELECT stornato FROM tassa_riscossione WHERE prenotazione_id=?",
+                                (str(prenotazione_id),)).fetchone()
+                if r is not None:
+                    # gia' presente: stornato -> non riattivare; non-stornato -> idempotente
+                    return True
+                con.execute("INSERT INTO tassa_riscossione (prenotazione_id, comune, importo, "
+                            "ts, stornato) VALUES (?,?,?,?,0)",
                             (str(prenotazione_id), self._norm(comune),
                              int(importo_cents), self._now()))
             return True
@@ -137,16 +155,23 @@ class TassaComunale:
 
     def storna(self, prenotazione_id: Any) -> bool:
         """Storna la riscossione di una prenotazione RIMBORSATA: la tassa (pass-through) e' stata
-        restituita all'ospite -> NON e' piu' dovuta alla citta'. Senza questo, `totale_riscosso`
-        (rendicontazione) sovra-conterebbe le prenotazioni cancellate. Idempotente."""
+        restituita all'ospite -> NON e' piu' dovuta alla citta'. TOMBSTONE PERMANENTE (importo=0
+        + stornato=1, non semplice DELETE): una `registra_riscossione` concorrente/tardiva che
+        tenta di (ri)aggiungere la tassa DOPO lo storno viene respinta dal check `stornato` ->
+        chiude la race. Va chiamata SEMPRE alla cancellazione (anche se il pagamento non risulta
+        ancora incassato): cosi' il tombstone previene una riscossione tardiva. Idempotente."""
         if not (isinstance(prenotazione_id, str) and prenotazione_id):
             return False
         con = self._apri()
         try:
             with con:
-                cur = con.execute("DELETE FROM tassa_riscossione WHERE prenotazione_id=?",
-                                  (prenotazione_id,))
-            return bool(cur.rowcount)
+                con.execute("BEGIN IMMEDIATE")
+                cur = con.execute(
+                    "INSERT INTO tassa_riscossione (prenotazione_id, comune, importo, ts, stornato) "
+                    "VALUES (?, '', 0, ?, 1) "
+                    "ON CONFLICT(prenotazione_id) DO UPDATE SET importo=0, stornato=1",
+                    (str(prenotazione_id), self._now()))
+            return True
         except Exception:
             return False
         finally:
@@ -155,8 +180,8 @@ class TassaComunale:
     def totale_riscosso(self, comune: str) -> int:
         con = self._apri()
         try:
-            r = con.execute("SELECT SUM(importo) FROM tassa_riscossione WHERE comune=?",
-                            (self._norm(comune),)).fetchone()
+            r = con.execute("SELECT SUM(importo) FROM tassa_riscossione WHERE comune=? "
+                            "AND stornato=0", (self._norm(comune),)).fetchone()
             return int(r[0]) if r and r[0] else 0
         finally:
             con.close()

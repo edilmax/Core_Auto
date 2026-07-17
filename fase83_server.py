@@ -2389,8 +2389,11 @@ class RouterHTTP:
             self._trasferisci_all_host(rif, host_tiene)
         else:
             self._payout_trattieni(rif)        # nessuna quota host -> niente payout
-        if pagato_davvero:
-            self._storna_tassa(rif)            # tassa restituita all'ospite -> fuori dal ledger citta'
+        # STORNA SEMPRE (non solo se pagato_davvero): il tombstone del ledger tassa deve
+        # essere posato anche quando il pagamento non risulta ancora incassato, perche' un
+        # webhook CONCORRENTE potrebbe registrare la tassa un istante DOPO -> senza il
+        # tombstone la tassa risorgeva su una prenotazione rimborsata (BUG di concorrenza).
+        self._storna_tassa(rif)                # tassa fuori dal ledger citta' + tombstone anti-race
         self._revoca_checkin(rif)              # smart-pass revocato (no sblocco su cancellata)
         try:
             if _pp is not None and _rec is not None and _rec.get("stato") != "rimborsato":
