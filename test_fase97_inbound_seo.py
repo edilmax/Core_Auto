@@ -186,6 +186,42 @@ class TestRegistroCitta(unittest.TestCase):
         self.assertIsNone(citta_da_slug("citta-fantasma", r))   # fuori dal registro → 404
 
 
+class TestHreflangRegione(unittest.TestCase):
+    def test_parse_locale_bcp47(self):
+        from fase97_inbound_seo import _lang_regione
+        self.assertEqual(_lang_regione("es-MX"), ("es", "MX"))
+        self.assertEqual(_lang_regione("es"), ("es", None))
+        self.assertEqual(_lang_regione("es-ZZ"), ("es", None))   # regione fuori mappa → ignorata
+        self.assertEqual(_lang_regione("xx"), ("en", None))       # lingua ignota → fallback
+        self.assertEqual(_lang_regione(None), ("it", None))
+
+    def test_locali_ordine_e_validi(self):
+        from fase97_inbound_seo import locali_hreflang
+        loc = locali_hreflang()
+        self.assertEqual(len(loc), len(set(loc)))                 # nessun duplicato
+        for c in loc:
+            self.assertRegex(c, r"^[a-z]{2}(-[A-Z]{2})?$")        # BCP-47
+        self.assertIn("es-MX", loc)
+        self.assertIn("pt-BR", loc)
+        self.assertNotIn("it-IT", loc)                           # it = solo lingua
+
+    def test_pagina_regione_self_canonical_e_locale(self):
+        h = genera_landing_host("Roma", lingua="es-MX", base_url="https://bookinvip.com")
+        self.assertIn('<html lang="es-MX">', h)
+        self.assertIn('rel="canonical" href="https://bookinvip.com/affitta/roma?lang=es-MX"', h)
+        self.assertIn('og:locale" content="es_MX"', h)
+        self.assertIn("Alquila", h)                              # testo in spagnolo (lingua base)
+
+    def test_hreflang_reciproco_regione(self):
+        import re
+        def hl(x):
+            return dict(re.findall(r'hreflang="([^"]*)" href="([^"]*)"', x))
+        a = genera_landing_host("Roma", lingua="es", base_url="https://x")
+        b = genera_landing_host("Roma", lingua="es-MX", base_url="https://x")
+        self.assertEqual(hl(a), hl(b))                           # stesso set = reciproco
+        self.assertIn("x-default", hl(a))
+
+
 class TestBreadcrumb(unittest.TestCase):
     def test_valido_e_due_livelli(self):
         from fase97_inbound_seo import breadcrumb_jsonld

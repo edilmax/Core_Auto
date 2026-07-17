@@ -264,6 +264,19 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
   50k URL; IndexNow (Bing/Yandex) submission multi-motore; gate anche su DOMANDA (waitlist fase158)
   oltre che inventario. NOTA onesta: Google non è l'unico motore (Yandex/Baidu/Naver per mercato)
   e gli AI answer engine (llms.txt/MCP già pronti) sono il layer di scoperta globale.]
+  [2026-07-17 fatto: HREFLANG LINGUA+PAESE (targeting geografico globale). PRIMA: hreflang
+  solo-lingua (it/en/es/...). ORA: fase97.REGIONI_HREFLANG (curata: en→US/GB, es→ES/MX, pt→PT/BR,
+  fr→FR/CA, de→DE/AT, zh→CN/TW; it/ja solo-lingua = mercato unico) → 20 locali BCP-47. Ogni
+  variante-regione è un URL DISTINTO (?lang=es-MX), SELF-canonical, con set hreflang IDENTICO su
+  tutte le varianti (reciproco) + x-default. Parser _lang_regione: 'es-MX'→(es,MX), regione fuori
+  mappa IGNORATA (anti-spam: niente locali arbitrari indicizzabili, es-ZZ→es), lingua ignota→en.
+  Il TESTO usa la lingua base, mentre html lang/canonical/og:locale/og:url usano il locale pieno
+  (+ og:locale:alternate per le altre lingue). Legittimo e non penalizzato (è l'uso previsto di
+  hreflang, cfr en-US/en-GB). Provato live: /affitta/roma?lang=es-MX → html lang es-MX, canonical
+  self, og:locale es_MX, testo spagnolo, 20+x-default reciproci. Guardie: TestHreflangRegione(97),
+  test_hreflang_lingua_paese(sandbox). Il set hreflang vive nel <head>; le annotazioni hreflang
+  nella SITEMAP (xhtml:link) arrivano col pezzo sitemap-index. RESTA: sitemap-index+sharding
+  (>50k URL) e IndexNow (Bing/Yandex). Suite mirate 124 verdi.]
 - [FATTO 2026-07-15: recupero preventivi abbandonati — vedi riga 📧 in sezione 1]
 - **[FATTO 2026-07-16 — COLLAUDO "METODO LIBRO" COMPLETO]**: 29 bug VERI chiusi in un giorno
   (righe 🧠→🔢 in sezione 1: overbooking su-richiesta, host-pagato-con-disputa, penali mai

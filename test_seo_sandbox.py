@@ -219,6 +219,30 @@ class TestSEOSandbox(unittest.TestCase):
             self.assertEqual(len(set(insiemi)), 1,
                              "hreflang non reciproco/uniforme per %s" % c)
 
+    def test_hreflang_lingua_paese(self):
+        from fase97_inbound_seo import locali_hreflang, _lang_regione
+        attesi = set(locali_hreflang())
+        # ogni variante-regione: URL distinto, self-canonical, set hreflang completo+reciproco
+        for code in ("es-MX", "pt-BR", "en-GB", "zh-TW"):
+            base_lang, reg = _lang_regione(code)
+            h = genera_landing_host("Roma", lingua=code, base_url=BASE)
+            self.assertIn('<html lang="%s">' % code, h, code)
+            self.assertEqual(_canonical(h), BASE + "/affitta/roma?lang=" + code, code)
+            hl = _hreflang(h)
+            self.assertEqual(set(hl) - {"x-default"}, attesi, "set hreflang incompleto: %s" % code)
+            self.assertIn("x-default", hl, code)
+            # ogni code punta a un URL distinto e coerente
+            self.assertTrue(hl[code].endswith("?lang=" + code), code)
+            # BCP-47 validi, nessun duplicato
+            self.assertEqual(len(hl), len(set(hl)), code)
+            for c in hl:
+                if c != "x-default":
+                    self.assertRegex(c, r"^[a-z]{2}(-[A-Z]{2})?$", c)
+        # regione arbitraria NON diventa un locale indicizzabile
+        h = genera_landing_host("Roma", lingua="es-ZZ", base_url=BASE)
+        self.assertIn('<html lang="es">', h)
+        self.assertNotIn('hreflang="es-ZZ"', h)
+
     def test_titoli_e_desc_unici_per_lingua(self):
         for lng in LINGUE:
             titoli, descr = set(), set()

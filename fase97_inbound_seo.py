@@ -34,6 +34,20 @@ LINGUE = ("it", "en", "es", "fr", "de", "pt", "ja", "zh")
 # generazione senza che il contenuto cambi è una bugia e i crawler smettono di fidarsene.
 SEO_LASTMOD = "2026-07-17"
 
+# hreflang lingua+PAESE: per i mercati dove UNA lingua serve regioni distinte (targeting
+# geografico legittimo, non penalizzato — è l'uso previsto di hreflang, es. en-US/en-GB). Ogni
+# variante-regione è un URL DISTINTO, self-canonical e reciproco. it/ja restano solo-lingua
+# (mercato unico dominante). Curata (anti-spam: una regione fuori mappa viene ignorata).
+REGIONI_HREFLANG: Dict[str, Tuple[str, ...]] = {
+    "en": ("US", "GB"), "es": ("ES", "MX"), "pt": ("PT", "BR"),
+    "fr": ("FR", "CA"), "de": ("DE", "AT"), "zh": ("CN", "TW"),
+}
+# territorio di default per og:locale quando manca la regione (formato language_TERRITORY).
+TERRITORIO_DEFAULT: Dict[str, str] = {
+    "it": "IT", "en": "US", "es": "ES", "fr": "FR",
+    "de": "DE", "pt": "PT", "ja": "JP", "zh": "CN",
+}
+
 # Città-seme: mercati ampi (incl. dove l'outbound è legale, ma l'inbound è globale).
 CITTA_SEED = (
     "Roma", "Milano", "Firenze", "Venezia", "Napoli", "New York", "Los Angeles",
@@ -346,13 +360,16 @@ def faq_jsonld(lingua: str = "it", *, commissione_bps: int = 1000,
                     "mainEntity": items})
 
 
-def breadcrumb_jsonld(citta: str, base_url: str = "", *, lingua: str = "it") -> str:
+def breadcrumb_jsonld(citta: str, base_url: str = "", *, lingua: str = "it",
+                      canonical: Optional[str] = None) -> str:
     """BreadcrumbList Schema.org (Home > città): rich result + gerarchia chiara per i crawler.
-    Il nome città è dato grezzo → `_jsonld` neutralizza <>& (XSS-safe come faq_jsonld)."""
+    Il nome città è dato grezzo → `_jsonld` neutralizza <>& (XSS-safe come faq_jsonld). Se
+    `canonical` è dato, l'item punta a quello (coerente col locale della pagina)."""
     lng = lingua if lingua in _T else "en"
     base = (base_url or "").rstrip("/")
     slug = slug_citta(citta)
-    canonical = base + "/affitta/" + slug + ("?lang=" + lng if lng != "it" else "")
+    if not canonical:
+        canonical = base + "/affitta/" + slug + ("?lang=" + lng if lng != "it" else "")
     home = (base + "/") if base else "/"
     return _jsonld({"@context": "https://schema.org", "@type": "BreadcrumbList",
                     "itemListElement": [
@@ -361,12 +378,50 @@ def breadcrumb_jsonld(citta: str, base_url: str = "", *, lingua: str = "it") -> 
                          "item": canonical}]})
 
 
+def _lang_regione(codice: Any) -> Tuple[str, Optional[str]]:
+    """'es-MX' -> ('es','MX'); 'es' -> ('es',None). Lingua ignota -> ('en',None). Regione fuori
+    dalla mappa curata -> ignorata (anti-spam: niente locali arbitrari indicizzabili)."""
+    if not isinstance(codice, str):
+        return ("it", None)
+    parti = codice.replace("_", "-").split("-", 1)
+    lang = parti[0].lower()
+    reg = parti[1].upper() if len(parti) > 1 and parti[1] else None
+    if lang not in _T:
+        return ("en", None)
+    if reg and reg not in REGIONI_HREFLANG.get(lang, ()):
+        reg = None
+    return (lang, reg)
+
+
+def _bcp47(lang: str, regione: Optional[str]) -> str:
+    return "%s-%s" % (lang, regione) if regione else lang
+
+
+def locali_hreflang() -> List[str]:
+    """Tutti i codici hreflang (lingue + varianti-regione curate), ordine deterministico."""
+    out: List[str] = []
+    for L in _T:
+        out.append(L)
+        for rr in REGIONI_HREFLANG.get(L, ()):
+            out.append("%s-%s" % (L, rr))
+    return out
+
+
+def _url_locale(base: str, slug: str, codice: str) -> str:
+    """URL della landing per un locale. Default (it) = URL pulito; resto = ?lang=<codice>."""
+    return base + "/affitta/" + slug + ("" if codice == "it" else "?lang=" + codice)
+
+
 def genera_landing_host(citta: str, *, lingua: str = "it", base_url: str = "",
                         commissione_bps: int = 1500, ota_bps: int = 2500,
                         prezzo_demo_cents: int = 10000,
                         citta_correlate: Sequence[str] = ()) -> str:
-    """Pagina landing host per una città (SEO + FAQ JSON-LD + calcolo + CTA). XSS-safe."""
-    lng = lingua if lingua in _T else "en"
+    """Pagina landing host per una città (SEO + FAQ JSON-LD + calcolo + CTA). XSS-safe.
+    `lingua` accetta un codice BCP-47 (es. 'es-MX'): il testo usa la lingua base, mentre
+    canonical/hreflang/og:locale usano il locale completo (targeting lingua+paese)."""
+    lang, regione = _lang_regione(lingua)
+    lng = lang                                        # lingua base per testi/JSON-LD
+    codice = _bcp47(lang, regione)                    # BCP-47 completo (es. 'es-MX')
     t = _T[lng]
     noi, ota = _pct(commissione_bps), _pct(ota_bps)
     r = risparmio_notte(prezzo_demo_cents, commissione_bps, ota_bps)
@@ -374,7 +429,7 @@ def genera_landing_host(citta: str, *, lingua: str = "it", base_url: str = "",
     citta_e = e(citta)
     slug = slug_citta(citta)
     base = (base_url or "").rstrip("/")
-    canonical = base + "/affitta/" + slug + ("?lang=" + lng if lng != "it" else "")
+    canonical = _url_locale(base, slug, codice)       # self-canonical del locale corrente
 
     def fmt(s):
         return s.format(citta=citta_e, ota=ota, noi=noi, prezzo=_euro(r["prezzo"]),
@@ -392,25 +447,33 @@ def genera_landing_host(citta: str, *, lingua: str = "it", base_url: str = "",
 
     cta_url = base + "/diventa-host.html?ref=seo-" + slug
     page = (
-        "<!doctype html><html lang=\"%s\"><head><meta charset=\"utf-8\">" % lng
+        "<!doctype html><html lang=\"%s\"><head><meta charset=\"utf-8\">" % codice
         + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
         + "<title>" + fmt(t["title"]) + "</title>"
         + "<meta name=\"description\" content=\"" + fmt(t["desc"]) + "\">"
         + "<link rel=\"canonical\" href=\"" + e(canonical) + "\">"
-        # hreflang: la stessa pagina in tutte le lingue -> Google la posiziona in ogni Paese
+        # hreflang lingua+PAESE: ogni locale è un URL distinto, il set è identico su tutte le
+        # varianti (reciproco) + x-default -> Google mostra la variante giusta per regione.
         + "".join(
             "<link rel=\"alternate\" hreflang=\"%s\" href=\"%s\">"
-            % (L, e(base + "/affitta/" + slug + ("" if L == "it" else "?lang=" + L)))
-            for L in _T)
+            % (code, e(_url_locale(base, slug, code)))
+            for code in locali_hreflang())
         + "<link rel=\"alternate\" hreflang=\"x-default\" href=\""
         + e(base + "/affitta/" + slug) + "\">"
         + "<meta property=\"og:title\" content=\"" + fmt(t["title"]) + "\">"
         + "<meta property=\"og:type\" content=\"website\">"
+        + "<meta property=\"og:url\" content=\"" + e(canonical) + "\">"
+        + "<meta property=\"og:locale\" content=\""
+        + (lang + "_" + (regione or TERRITORIO_DEFAULT.get(lang, "US"))) + "\">"
+        + "".join(
+            "<meta property=\"og:locale:alternate\" content=\"%s_%s\">"
+            % (L2, TERRITORIO_DEFAULT.get(L2, "US"))
+            for L2 in _T if L2 != lang)
         + "<script type=\"application/ld+json\">"
         + faq_jsonld(lng, commissione_bps=commissione_bps, ota_bps=ota_bps)
         + "</script>"
         + "<script type=\"application/ld+json\">"
-        + breadcrumb_jsonld(citta, base_url=base, lingua=lng)
+        + breadcrumb_jsonld(citta, base_url=base, lingua=lng, canonical=canonical)
         + "</script>"
         + "<style>body{font-family:system-ui,Segoe UI,sans-serif;max-width:46rem;"
           "margin:2rem auto;padding:0 1rem;line-height:1.6;color:#1a1e2b}"
