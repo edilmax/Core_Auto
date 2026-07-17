@@ -13,8 +13,13 @@
 > (gated). + `jsonld_alloggio` esteso (geo/image/bagni, no-float). + rotta `GET /api/host/seo_report`
 > (auth+proprietà). **VERIFICATO LIVE**: home 200, /api/domanda ok:true, /api/health 200, seo_report
 > senza auth→401. Container healthy, boot pulito. **Desktop=GitHub=VPS=`c24e10b`**, suite **2428 verde**.
-> DA ACCENDERE (in "COSTRUITO ma SPENTO"): provider Overpass-POI per-annuncio (arricchisce il geo del
-> cervello), UI pannello host per il rapporto, FAQ da `citazioni_pronte`, IndexNow submit (chiave env).
+> **2026-07-17 (deploy #7): PROVIDER POI-OSM `fase175` ACCESO** — arricchisce il geo del cervello coi
+> luoghi notevoli vicini all'annuncio (Overpass around:1500m, fetch iniettabile + cache SQLite, blindato).
+> Cablato via `con_poi` (fase81) + env `POI_OSM=true`/`DB_POICACHE=/data/poicache.db` (sul VPS PRIMA del
+> deploy). In prod risulta `poi_osm(175)` nella composizione, boot pulito, verificato live. VPS=GitHub=
+> Desktop=`c64cdb8`, suite **2438 verde**. Rimosso uno stub orfano fase175_arricchitore_osm.py.
+> DA ACCENDERE (in "COSTRUITO ma SPENTO"): reverse-geocode QUARTIERE (→ quartiere_fn), FAQ da
+> `citazioni_pronte` nella pagina, UI pannello host per il rapporto, IndexNow submit (chiave env).
 
 > 🌍 **2026-07-17 — ARCO SEO GLOBALE (195 nazioni, multi-motore) COSTRUITO + DEPLOYATO (deploy #5).**
 > Otto pezzi in sequenza, ognuno con sandbox/guardia permanente, suite intera verde, commit+push+VPS:
