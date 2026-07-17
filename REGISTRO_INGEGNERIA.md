@@ -216,6 +216,18 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
   interno alla home, utile al crawl); Sez.4 sitemap → <lastmod> ASSENTE in sitemap_xml e
   sitemap_inbound (fattore #1 del budget di scansione: senza, i crawler ri-scaricano tutto alla
   cieca) + verifica URL assoluti da base_url.]
+  [2026-07-17 fatto: SEO Sezione 4 "sitemap & budget scansione" → <lastmod> aggiunto a ENTRAMBE
+  le sitemap. sitemap.xml (fase83.sitemap_xml): <lastmod> REALE per scheda = data di aggiornato_ts,
+  via nuovo metodo dedicato CatalogoVetrina.slug_lastmod_pubblicati (additivo, NON tocca `cerca` →
+  nessun campo nuovo nelle card pubbliche; solo schede 'pubblicato', blindato→[]). sitemap-host.xml
+  (fase97.sitemap_inbound): <lastmod> = costante SEO_LASTMOD (data del template; si bumpa a mano
+  quando cambiano template/tariffe — MAI now(), un lastmod che cambia a ogni generazione senza che
+  il contenuto cambi fa perdere fiducia ai crawler). Data emessa 'YYYY-MM-DD' (conforme W3C, niente
+  fuso). Guardie: TestSlugLastmod (fase57), test_sitemap_lastmod (fase97), test_sitemap +<lastmod>
+  (fase83); XML validato ben formato. Suite fase57/97/83 + guardia registro verdi (138).
+  RESTA Sez.4: hreflang xhtml:link dentro sitemap-host (le varianti lingua sono URL separati con
+  ?lang, oggi riconciliate solo dai <link hreflang> in <head>); sitemap-index oltre 50k URL. RESTA
+  Sez.2: <header>/<footer>. RESTA Sez.5: Cache-Control/Last-Modified/ETag sulle rotte SSR dinamiche.]
 - [FATTO 2026-07-15: recupero preventivi abbandonati — vedi riga 📧 in sezione 1]
 - **[FATTO 2026-07-16 — COLLAUDO "METODO LIBRO" COMPLETO]**: 29 bug VERI chiusi in un giorno
   (righe 🧠→🔢 in sezione 1: overbooking su-richiesta, host-pagato-con-disputa, penali mai

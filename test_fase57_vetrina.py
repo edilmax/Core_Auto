@@ -304,5 +304,26 @@ class TestStress(unittest.TestCase):
             self.assertEqual(errori, [], f"letture concorrenti fallite: {errori}")
 
 
+class TestSlugLastmod(unittest.TestCase):
+    """Metodo dedicato per il <lastmod> della sitemap: solo schede PUBBLICATE, data ISO."""
+
+    def test_solo_pubblicati_con_data(self):
+        import re
+        cat = crea_catalogo()
+        cat.pubblica(_scheda("visibile", citta="Roma"))
+        cat.pubblica(_scheda("nascosta", stato="bozza"))
+        coppie = cat.slug_lastmod_pubblicati()
+        slugs = {s for s, _ in coppie}
+        self.assertIn("visibile", slugs)
+        self.assertNotIn("nascosta", slugs)             # la bozza NON entra in sitemap
+        for _s, d in coppie:
+            self.assertRegex(d, r"^\d{4}-\d{2}-\d{2}$")  # 'YYYY-MM-DD'
+
+    def test_blindato_limit_invalido(self):
+        cat = crea_catalogo()
+        cat.pubblica(_scheda("x"))
+        self.assertEqual(len(cat.slug_lastmod_pubblicati(limit=-5)), 1)  # fallback a default
+
+
 if __name__ == "__main__":
     unittest.main()

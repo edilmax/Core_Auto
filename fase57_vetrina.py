@@ -682,6 +682,25 @@ class CatalogoVetrina:
         return {"totale": int(totale), "limit": limit, "offset": offset,
                 "risultati": risultati}
 
+    def slug_lastmod_pubblicati(self, *, limit: int = 10000) -> List[Tuple[str, str]]:
+        """(slug, data-di-aggiornamento 'YYYY-MM-DD') delle sole schede PUBBLICATE, per il
+        <lastmod> della sitemap: così i crawler ricrawlano solo ciò che è cambiato davvero
+        (budget di scansione). La data è il prefisso di `aggiornato_ts` (ISO) → sempre caratteri
+        sicuri per l'XML. Lettura dedicata, NON tocca `cerca` (nessun campo nuovo nelle card
+        pubbliche). BLINDATO: errore → []."""
+        lim = limit if isinstance(limit, int) and 0 < limit <= 100000 else 10000
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT slug, aggiornato_ts FROM alloggi WHERE stato='pubblicato' "
+                "ORDER BY id DESC LIMIT ?", (lim,)).fetchall()
+            return [(str(s), str(ts)[:10]) for s, ts in righe if s]
+        except Exception:
+            logger.warning("slug_lastmod_pubblicati fallita (ISOLATA)", exc_info=True)
+            return []
+        finally:
+            con.close()
+
     def dettaglio(self, slug: str) -> Optional[Dict[str, Any]]:
         """Scheda completa + immagini ordinate. None se assente o non 'pubblicato'."""
         con = self._apri()

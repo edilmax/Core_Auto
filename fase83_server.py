@@ -251,23 +251,35 @@ def pagina_alloggio_html(sistema: Any, slug: str, base_url: str = "") -> Optiona
 
 
 def sitemap_xml(sistema: Any, base_url: str = "") -> str:
-    """sitemap.xml con tutte le schede pubblicate (per Google)."""
-    from fase57_vetrina import CriteriRicerca, PAGINA_MAX
-    slugs: List[str] = []
-    offset = 0
+    """sitemap.xml con tutte le schede pubblicate (per Google). Ogni <url> porta il <lastmod>
+    REALE della scheda (data di `aggiornato_ts`): i crawler ricrawlano solo ciò che è cambiato
+    → budget di scansione. Il lastmod cambia SOLO quando la scheda cambia, mai a ogni richiesta."""
+    coppie: List[Tuple[str, str]] = []      # (slug, 'YYYY-MM-DD' | "")
     try:
-        while offset < 10000:
-            res = sistema.catalogo.cerca(CriteriRicerca(limit=PAGINA_MAX, offset=offset))
-            righe = res.get("risultati", [])
-            if not righe:
-                break
-            slugs.extend(str(r.get("slug", "")) for r in righe if r.get("slug"))
-            if len(righe) < PAGINA_MAX:
-                break
-            offset += PAGINA_MAX
+        metodo = getattr(sistema.catalogo, "slug_lastmod_pubblicati", None)
+        if callable(metodo):
+            coppie = [(str(s), str(lm or "")[:10]) for s, lm in (metodo(limit=10000) or []) if s]
+        else:                                # fallback difensivo (catalogo senza il metodo)
+            from fase57_vetrina import CriteriRicerca, PAGINA_MAX
+            offset = 0
+            while offset < 10000:
+                res = sistema.catalogo.cerca(CriteriRicerca(limit=PAGINA_MAX, offset=offset))
+                righe = res.get("risultati", [])
+                if not righe:
+                    break
+                coppie.extend((str(r.get("slug", "")), "") for r in righe if r.get("slug"))
+                if len(righe) < PAGINA_MAX:
+                    break
+                offset += PAGINA_MAX
     except Exception:
         pass
-    urls = "".join("<url><loc>%s/alloggio/%s</loc></url>" % (base_url, s) for s in slugs)
+
+    def _riga(slug: str, lm: str) -> str:
+        # lm = solo data 'YYYY-MM-DD' da isoformat → caratteri sicuri per l'XML
+        tag = ("<lastmod>%s</lastmod>" % lm) if lm else ""
+        return "<url><loc>%s/alloggio/%s</loc>%s</url>" % (base_url, slug, tag)
+
+    urls = "".join(_riga(s, lm) for s, lm in coppie)
     return ('<?xml version="1.0" encoding="UTF-8"?>'
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
             '<url><loc>%s/</loc></url>%s</urlset>' % (base_url, urls))

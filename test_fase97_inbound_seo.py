@@ -135,6 +135,17 @@ class TestSitemap(unittest.TestCase):
         self.assertIn("/affitta/tokyo?lang=en", xml)
         self.assertEqual(xml.count("<url>"), 4)         # 2 città × 2 lingue
 
+    def test_sitemap_lastmod(self):
+        # ogni <url> porta il <lastmod> (data template) per il budget di scansione
+        from fase97_inbound_seo import SEO_LASTMOD
+        xml = sitemap_inbound("https://bookinvip.com", citta=["Roma"], lingue=["it", "en"])
+        self.assertEqual(xml.count("<lastmod>"), 2)     # una per url
+        self.assertIn("<lastmod>%s</lastmod>" % SEO_LASTMOD, xml)
+        # disattivabile passando lastmod="" (retro-compatibilità)
+        senza = sitemap_inbound("https://bookinvip.com", citta=["Roma"], lingue=["it"],
+                                lastmod="")
+        self.assertNotIn("<lastmod>", senza)
+
     def test_seed_non_vuoto(self):
         self.assertGreater(len(CITTA_SEED), 10)
 

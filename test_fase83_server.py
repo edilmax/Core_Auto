@@ -867,9 +867,12 @@ class TestSEO(unittest.TestCase):
         self.assertIn("&lt;script&gt;", h)
 
     def test_sitemap(self):
+        import re
         xml = sitemap_xml(self.sys, "https://x.it")
         self.assertIn("https://x.it/alloggio/casa", xml)
         self.assertIn("urlset", xml)
+        # <lastmod> reale per scheda (data di aggiornamento) → budget di scansione
+        self.assertRegex(xml, r"<lastmod>\d{4}-\d{2}-\d{2}</lastmod>")
 
     def test_robots(self):
         r = robots_txt("https://x.it")

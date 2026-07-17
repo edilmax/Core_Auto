@@ -27,6 +27,13 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 LINGUE = ("it", "en", "es", "fr", "de", "pt", "ja", "zh")
 
+# Data (YYYY-MM-DD) in cui il CONTENUTO/template delle landing è cambiato l'ultima volta.
+# Va nel <lastmod> della sitemap inbound. Le landing sono generate da codice (città × lingua):
+# cambiano solo quando cambia questo template o le tariffe → il lastmod è una COSTANTE che si
+# bumpa a mano quando cambia il contenuto. NON usare now(): un lastmod che cambia a ogni
+# generazione senza che il contenuto cambi è una bugia e i crawler smettono di fidarsene.
+SEO_LASTMOD = "2026-07-17"
+
 # Città-seme: mercati ampi (incl. dove l'outbound è legale, ma l'inbound è globale).
 CITTA_SEED = (
     "Roma", "Milano", "Firenze", "Venezia", "Napoli", "New York", "Los Angeles",
@@ -362,9 +369,12 @@ def llms_txt(base_url: str = "", *, commissione_bps: int = 1500,
 
 
 def sitemap_inbound(base_url: str = "", *, citta: Sequence[str] = CITTA_SEED,
-                    lingue: Sequence[str] = LINGUE) -> str:
-    """sitemap.xml delle landing host (una per città × lingua) per l'indicizzazione."""
+                    lingue: Sequence[str] = LINGUE, lastmod: str = SEO_LASTMOD) -> str:
+    """sitemap.xml delle landing host (una per città × lingua) per l'indicizzazione. Ogni <url>
+    porta il <lastmod> (data in cui il template è cambiato): i crawler usano questo segnale per
+    il budget di scansione (ricrawl solo se cambiato)."""
     base = (base_url or "").rstrip("/")
+    lm = ("<lastmod>%s</lastmod>" % html.escape(lastmod)) if lastmod else ""
     urls = []
     for c in citta:
         s = slug_citta(c)
@@ -372,7 +382,7 @@ def sitemap_inbound(base_url: str = "", *, citta: Sequence[str] = CITTA_SEED,
             continue
         for lng in lingue:
             loc = base + "/affitta/" + s + ("?lang=" + lng if lng != "it" else "")
-            urls.append("<url><loc>%s</loc></url>" % html.escape(loc))
+            urls.append("<url><loc>%s</loc>%s</url>" % (html.escape(loc), lm))
     return ('<?xml version="1.0" encoding="UTF-8"?>'
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
             + "".join(urls) + "</urlset>")
