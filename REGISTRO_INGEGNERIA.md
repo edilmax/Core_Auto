@@ -138,7 +138,7 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 | 117 | Wishlist / preferiti guest | rotta + UI (serve login guest, oggi assente) | conversione |
 | 123 | Web Push guest (VAPID, gratis) | generare chiavi VAPID + service worker | retention |
 | 169 | **IndexNow submit** (ping Bing/Yandex/Seznam/Naver) — key-file già servita se env presente | generare `INDEXNOW_KEY` (hex casuale) + `INDEXNOW_HOST` nel .env; poi chiamare `crea_indexnow().submit([url landing cambiati])` alla pubblicazione annuncio (hook gated, blindato) | scoperta istantanea multi-motore (non-Google) |
-| 171 | **Cervello SEO/AEO Fact-Ledger** (`valuta_annuncio`: punteggio+query+gap) — libreria pura già testata (24 guardie) | costruire l'ORCHESTRATORE-su-publish (prossimo pezzo, effort high): a ogni pubblicazione reale chiama `valuta_annuncio(scheda, ctx OSM/tassa/geocoder, coorte, markup)` e usa `citazioni_pronte` per FAQ/llms.txt + gap per suggerimenti all'host | motore SEO autonomo (arma proprietaria) |
+| 171→173 | ~~Cervello SEO/AEO~~ **ACCESO 2026-07-17 sera** via fase173 (publish-hook + `/api/host/seo_report`). Restano SPENTI i provider POI/quartiere OSM (il cervello è fair senza) e l'uso di `citazioni_pronte` per FAQ/llms.txt | cablare un provider Overpass-POI per-annuncio (gated, cache) + UI pannello host per il rapporto + FAQ dalla `citazioni_pronte` | arricchimento geo del motore |
 | 137 | Fedeltà guest (punti→sconti) | wiring + UI (serve identità guest) | fidelizzazione |
 | 139 | Chatbot AI assistenza guest | agganciare a Pool AI (164/165) + UI | supporto |
 | 141 | Onboarding wizard host guidato | NON prioritario: il pannello ha già la guida 3-passi live (sarebbe un doppione) | attivazione host |
@@ -341,8 +341,24 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
   permanente test_fase171_cervello (24 test: determinismo/permutazioni, scheda piena=100 ESATTO,
   partizione esatta, monotonia white-hat, anti-stuffing, query oneste, anti-spoof, no-float,
   cold-start, bombardamento seedato 600 schede×invarianti). Provato live povero=37 vs ricco=83
-  con gap ordinati per ROI e query 30-59 ordinate sensatamente. PROSSIMO: orchestratore-su-publish
-  (effort high, chiede potenza prima) che cabla il cervello + FAQ/llms da citazioni_pronte.]
+  con gap ordinati per ROI e query 30-59 ordinate sensatamente.]
+  [2026-07-17 sera fatto: MOTORE SEO AUTONOMO fase173 (effort high) — ACCENDE il cervello 171.
+  "Appena uno pubblica, in automatico fa quello che va fatto": hook in fase83._host_pubblica →
+  MotoreSEO.su_pubblicazione(dettaglio) a OGNI publish reale (ISOLATO: try/except, non tocca MAI
+  l'esito della pubblicazione dell'host — provato con motore Esplosivo→201 comunque). Pipeline:
+  ingerisce fase57.dettaglio → contesto pubblico da provider CALLABLE iniettabili+opzionali (tassa
+  147 cablata via crea_motore_da_sistema; POI/quartiere/geocode/coorte futuri, ognuno blindato =
+  errore→contesto degradato mai eccezione) → SPECCHIO markup_pagina che replica ESATTAMENTE quali
+  slot il JSON-LD reale di fase83.jsonld_alloggio emette (anti-deriva contratto, lezione bug #33:
+  guardia test_ogni_slot_dichiarato_emesso_esiste_nel_jsonld_reale) → cervello 171 → ping IndexNow
+  169 (gated: solo se attivo, URL = /alloggio/<slug> + /affitta/<citta>). + ESTESO fase83.jsonld_
+  alloggio: aggiunti geo(GeoCoordinates da microgradi via divmod SENZA float), image[] (foto reali),
+  numberOfBathroomsTotal → più fatti citabili strutturati. + rotta GET /api/host/seo_report (auth
+  host + verifica proprietà) → rapporto_host: punteggio, sotto-punteggi, query vincibili, cosa-
+  migliorare (SOLO gap host, i lavori 'sistema' nostri esclusi). Guardia test_fase173_motore_seo
+  (11: specchio↔JSON-LD reale, geo-no-float, provider-rotti-blindati, tassa-zero-non-entra, IndexNow
+  URL giusti, rotta auth+proprietà, publish non si rompe, factory). SPENTO: provider Overpass-POI
+  (il cervello è fair senza), UI pannello, FAQ da citazioni_pronte — in "COSTRUITO ma SPENTO".]
 - [FATTO 2026-07-15: recupero preventivi abbandonati — vedi riga 📧 in sezione 1]
 - **[FATTO 2026-07-16 — COLLAUDO "METODO LIBRO" COMPLETO]**: 29 bug VERI chiusi in un giorno
   (righe 🧠→🔢 in sezione 1: overbooking su-richiesta, host-pagato-con-disputa, penali mai
@@ -499,4 +515,5 @@ sempre "morto": molti sono librerie usate da altri moduli.
 | 166 | `fase166_geocoder.py` | boot | Geocoder (indirizzo/città -> coordinate) per la mappa nella ricerca. |
 | 167 | `fase167_credito_single_use.py` | boot | Registro SINGLE-USE crediti (un Credito Fondatore/Viaggio si spende UNA volta). |
 | 169 | `fase169_indexnow.py` | +router (key-file) | IndexNow: notifica istantanea multi-motore (Bing/Yandex/Seznam/Naver). GATED da env INDEXNOW_KEY (submit SPENTO default). |
-| 171 | `fase171_cervello_seo.py` | — (libreria PURA) | CERVELLO SEO/AEO "Fact-Ledger" (vincitrice benchmark 4 varianti): punteggio 0-100 + query long-tail vincibili + gap azionabili dallo stesso ledger di fatti citabili. Si accende con l'orchestratore-su-publish (da costruire). |
+| 171 | `fase171_cervello_seo.py` | via 173 | CERVELLO SEO/AEO "Fact-Ledger" (vincitrice benchmark 4 varianti): punteggio 0-100 + query long-tail vincibili + gap azionabili dallo stesso ledger di fatti citabili. ACCESO via fase173. |
+| 173 | `fase173_motore_seo.py` | +router (publish-hook + /api/host/seo_report) | MOTORE SEO AUTONOMO: a ogni publish reale valuta col cervello 171, contesto da provider iniettabili (tassa 147 cablata; POI/quartiere futuri), specchio del JSON-LD reale, ping IndexNow 169 (gated). Blindato: mai rompe il publish. |

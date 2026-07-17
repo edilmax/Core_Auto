@@ -188,6 +188,7 @@ def jsonld_alloggio(dettaglio: Dict[str, Any], base_url: str = "",
                     "addressLocality": dettaglio.get("citta", ""),
                     "addressCountry": dettaglio.get("paese", "")},
         "numberOfRooms": dettaglio.get("camere", 1),
+        "numberOfBathroomsTotal": dettaglio.get("bagni", 1),
         "occupancy": {"@type": "QuantitativeValue",
                       "maxValue": dettaglio.get("capacita", 1)},
         "amenityFeature": [{"@type": "LocationFeatureSpecification",
@@ -196,6 +197,21 @@ def jsonld_alloggio(dettaglio: Dict[str, Any], base_url: str = "",
                    "price": _euro(dettaglio.get("prezzo_notte_cents", 0)),
                    "priceCurrency": dettaglio.get("valuta", "EUR")},
     }
+    # geo: coordinate di ZONA (gia' pubbliche nella mappa; MAI l'indirizzo). Da microgradi
+    # interi a stringa decimale senza float (segno + divmod).
+    lat, lon = dettaglio.get("lat_micro"), dettaglio.get("lon_micro")
+    if isinstance(lat, int) and isinstance(lon, int):
+        def _gradi(micro: int) -> str:
+            segno = "-" if micro < 0 else ""
+            g, resto = divmod(abs(micro), 1_000_000)
+            return "%s%d.%06d" % (segno, g, resto)
+        ld["geo"] = {"@type": "GeoCoordinates",
+                     "latitude": _gradi(lat), "longitude": _gradi(lon)}
+    # image[]: le foto reali dell'annuncio (rich result + prova visiva dei fatti)
+    foto = [i.get("url") for i in (dettaglio.get("immagini") or ())
+            if isinstance(i, dict) and isinstance(i.get("url"), str)]
+    if foto:
+        ld["image"] = foto
     if isinstance(recensioni, dict) and recensioni.get("conteggio", 0) > 0:
         media = recensioni.get("media_centesimi", 0)
         ld["aggregateRating"] = {
@@ -865,6 +881,8 @@ class RouterHTTP:
             return self._split_paga(body)
         if metodo == "GET" and path == "/api/split/stato":
             return self._split_stato(query)
+        if metodo == "GET" and path == "/api/host/seo_report":
+            return self._host_seo_report(query, headers)
         if metodo == "POST" and path == "/api/messaggi":
             return self._msg_invia(body, headers)
         if metodo == "GET" and path == "/api/messaggi":
@@ -3436,7 +3454,41 @@ class RouterHTTP:
         imgs = [Immagine(u, i) for i, u in enumerate(dati.get("immagini", []))
                 if isinstance(u, str)]
         id_num = self._sys.catalogo.pubblica(scheda, imgs)
+        # MOTORE SEO AUTONOMO (fase173): appena l'host pubblica, il motore valuta la pagina
+        # e (se IndexNow e' acceso) avvisa i motori. ISOLATO: mai rompe la pubblicazione.
+        try:
+            det = self._sys.catalogo.dettaglio(scheda.slug)
+            if det is not None:
+                self._motore_seo().su_pubblicazione(det, self._base_url)
+        except Exception:
+            logger.warning("motore SEO su publish fallito (ISOLATO)", exc_info=True)
         return 201, {"stato": "pubblicato", "slug": scheda.slug, "id": id_num}
+
+    def _motore_seo(self):
+        """Motore SEO (fase173) costruito pigramente dai componenti del sistema."""
+        if getattr(self, "_motore_seo_cache", None) is None:
+            from fase173_motore_seo import crea_motore_da_sistema
+            self._motore_seo_cache = crea_motore_da_sistema(self._sys)
+        return self._motore_seo_cache
+
+    def _host_seo_report(self, query, headers):
+        """Rapporto SEO/AEO dell'annuncio per il PANNELLO host: punteggio, query
+        vincibili, cosa migliorare (gap azionabili). Solo il proprietario."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        slug = query.get("alloggio_id", "")
+        if not (isinstance(slug, str) and slug):
+            return 422, {"errore": "campi_non_validi"}
+        if not self._verifica_proprieta(headers, slug):
+            return 403, {"errore": "non_tuo"}
+        try:
+            det = self._sys.catalogo.dettaglio_owner(slug)
+        except Exception:
+            det = None
+        if det is None:
+            return 404, {"errore": "alloggio_non_trovato"}
+        from fase173_motore_seo import rapporto_host
+        return 200, rapporto_host(self._motore_seo().valuta(det))
 
     def _distanza_centro(self, citta, lat_u, lon_u, memo=None):
         """Metri (int) dall'annuncio al CENTRO della sua città — in automatico (geocoder
