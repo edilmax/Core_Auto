@@ -477,6 +477,10 @@ def crea_gestore_coda(percorso: str = ":memory:", *,
         return GestoreCoda(lambda: _ConnCondivisa(con), politica=politica,
                            orologio=orologio)
     # timeout 30s come fase65: sotto burst simultaneo i writer si accodano
-    # invece di fallire 'database is locked' a 5s (custodisce DEPOSITI)
+    # invece di fallire 'database is locked' a 5s (custodisce DEPOSITI).
+    # Genitore creato se manca (stessa lezione: mai boot-crash da path).
+    import os
+    genitore = os.path.dirname(os.path.abspath(percorso))
+    os.makedirs(genitore, exist_ok=True)
     return GestoreCoda(lambda: sqlite3.connect(percorso, timeout=30),
                        politica=politica, orologio=orologio)

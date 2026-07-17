@@ -39,6 +39,17 @@
 > commit `7a00f58`, **Desktop=GitHub=VPS allineati**, container healthy, fix verificato nella pagina
 > SERVITA (money( assente, fmt/escH presenti). Dettaglio: REGISTRO_INGEGNERIA.md righe 📅/🖱️.
 >
+> ✅ **ROUND #35+CODA+SPLIT (2026-07-17 pomeriggio, 3 commit + 2 deploy)**: (1) bombardamento vista
+> multi-alloggio → **BUG #35** (notte VENDUTA nascosta da 'chiuso') fixato, priorità venduta-vince-su-
+> chiusa, 10 seed × 2.700 richieste = 0 violazioni (`1768fea`, LIVE). (2) Coda fase67 bombardata (10
+> seed = 0 violazioni) + `db_coda` configurabile (`b38d6d1`). (3) Split di gruppo → **BUG #36** (rotte
+> VIVE su `:memory:` condiviso = 538/960 pagamenti simultanei in 503 + conti PERSI al riavvio) fixato:
+> `db_split`/`DB_SPLIT` su file + timeout 30s fase65/67 → 503=0. ⚠️ **INCIDENTE**: primo deploy split in
+> crash-loop (~3 min down: env DB_SPLIT/DB_CODA mancanti sul VPS → `unable to open database file`);
+> riparato (env su `/data/*.db` nel volume) e blindato (factory creano il genitore mancante; regola:
+> nuova env di store denaro va sul VPS PRIMA del deploy). Verificato live: health 200, /api/domanda
+> ok:true. Dettaglio: REGISTRO righe 🏘️/🎫/💸.
+>
 > 🔑 **CHIAVE STRIPE (dove sta)**: la chiave LIVE (`sk_live_`) + webhook secret sono in `.env.casavip`
 > **SOLO sul VPS** (`/var/www/bookinvip/.env.casavip`), attivi nel container. NON in git (gitignore
 > esclude i `.env` = giusto, repo pubblico); in locale solo i `.example` con segnaposto vuoti. Se il

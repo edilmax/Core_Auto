@@ -15,6 +15,7 @@ INVARIANTI: nessun 503; somma quote == totale (conservazione al centesimo);
 raccolto == somma quote pagate; completato <=> raccolto == totale; replay idempotente.
 """
 import json
+import os
 import random
 import shutil
 import tempfile
@@ -88,6 +89,21 @@ class TestBombardamentoSplitRouter(unittest.TestCase):
     def test_tempesta_2_seed(self):
         for seed in range(2):
             self._tempesta(seed)
+
+    def test_percorso_senza_cartella_non_crasha(self):
+        """Incidente deploy 2026-07-17: path con cartella mancante -> 'unable to open
+        database file' -> APP in crash-loop all'avvio. Ora il genitore si crea da solo
+        (fase65 e fase67)."""
+        from fase65_split_payment import crea_gestore_split
+        from fase67_coda_intelligente import crea_gestore_coda
+        d = tempfile.mkdtemp()
+        try:
+            s = crea_gestore_split(os.path.join(d, "nuova", "cart", "s.db"))
+            self.assertIsNotNone(s.crea_conto("p", "a", 100, ["x", "y"]))
+            gc = crea_gestore_coda(os.path.join(d, "altra", "coda.db"))
+            self.assertTrue(gc.iscrivi("casa", "2026-09-01", "2026-09-02", "o1").ok)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
 
     def test_db_split_durevole_al_riavvio(self):
         """I conti di gruppo devono SOPRAVVIVERE al riavvio (prima: :memory: = persi)."""

@@ -311,6 +311,11 @@ def crea_gestore_split(percorso: str = ":memory:", *,
         return GestoreSplit(lambda: _ConnCondivisa(con), orologio=orologio)
     # timeout 30s: sotto burst simultaneo (tutti i membri pagano nello stesso
     # istante) il default 5s produceva 'database is locked' -> 503; i writer
-    # ora si ACCODANO (bug #36, bombardamento split)
+    # ora si ACCODANO (bug #36, bombardamento split). Il genitore del percorso
+    # viene CREATO se manca: un path senza cartella crashava l'APP all'avvio
+    # (incidente deploy 2026-07-17: 'unable to open database file').
+    import os
+    genitore = os.path.dirname(os.path.abspath(percorso))
+    os.makedirs(genitore, exist_ok=True)
     return GestoreSplit(lambda: sqlite3.connect(percorso, timeout=30),
                         orologio=orologio)
