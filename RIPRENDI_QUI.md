@@ -1,5 +1,10 @@
 # 🧪 STATO COLLAUDO — sessione 2026-07-16/17/18 (Fable 5)
 
+> 🏔️ **2026-07-18 — MEGA-SIM RECORD 1000 HOST × 10.000 CLIENTI: VERDE.** "Un anno di vita" a
+> scala 10× il precedente (SIM_HOST=1000 SIM_CLI=10000, 30min): 2185 confermate, 1287 contestate,
+> 901 cancellate, 901 scadute, 1220 su-richiesta, 100 controversie arbitrate — tutti gli invarianti
+> tenuti (0 overbooking SQL, conti al cent su ogni quote, escrow esatto, gara 100→1 vincitore).
+>
 > 💥 **2026-07-18 — BOMBARDAMENTO PIENO "10.000 MENTI" RIESEGUITO: ZERO VIOLAZIONI.**
 > 10 seed × 1000 agenti (fuzzer permanente test_menti_invarianti a scala massima) in 246.6s
 > sul codice corrente (`8f4322c`): nessun overbooking, nessun doppio-payout, conti/escrow/tassa
