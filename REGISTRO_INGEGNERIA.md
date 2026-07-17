@@ -277,6 +277,16 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
   test_hreflang_lingua_paese(sandbox). Il set hreflang vive nel <head>; le annotazioni hreflang
   nella SITEMAP (xhtml:link) arrivano col pezzo sitemap-index. RESTA: sitemap-index+sharding
   (>50k URL) e IndexNow (Bing/Yandex). Suite mirate 124 verdi.]
+  [2026-07-17 fatto: SITEMAP-INDEX + SHARDING (scala oltre il tetto 50k URL / 50MB verso 195
+  nazioni). fase97.sitemap_index(voci=[(path,lastmod)]) genera <sitemapindex> che referenzia le
+  sitemap figlie; fase97.shard_citta(citta, per_shard=45000/lingue) spezza le città in gruppi
+  sotto il tetto (deterministico, coprono tutto senza overlap, edge vuoto→[[]]). Rotte fase83:
+  /sitemap-index.xml (referenzia /sitemap.xml + N /sitemap-host-<i>.xml), /sitemap-host-<i>.xml
+  (shard i, 404 se fuori range), /sitemap-host.xml resta (full, compat). robots.txt ora dichiara
+  l'INDICE come entry-point + le due dirette. Al volume attuale (28×8=224) = 1 shard; provato
+  live con tetto forzato: 6 shard [5,5,5,5,5,3] coprono il registro, indice+shard XML ben formati.
+  Guardie: TestSitemapIndex(97), test_sitemap_index_copre_tutte_le_shard + robots (sandbox).
+  RESTA: IndexNow (Bing/Yandex) — ultimo pezzo del piano globale. Suite mirate 127 verdi.]
 - [FATTO 2026-07-15: recupero preventivi abbandonati — vedi riga 📧 in sezione 1]
 - **[FATTO 2026-07-16 — COLLAUDO "METODO LIBRO" COMPLETO]**: 29 bug VERI chiusi in un giorno
   (righe 🧠→🔢 in sezione 1: overbooking su-richiesta, host-pagato-con-disputa, penali mai

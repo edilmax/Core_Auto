@@ -286,9 +286,10 @@ def sitemap_xml(sistema: Any, base_url: str = "") -> str:
 
 
 def robots_txt(base_url: str = "") -> str:
-    # Due sitemap: alloggi (vetrina) + landing host inbound SEO (fase97).
-    return ("User-agent: *\nAllow: /\nSitemap: %s/sitemap.xml\n"
-            "Sitemap: %s/sitemap-host.xml\n" % (base_url, base_url))
+    # Entry-point = sitemap-INDEX (scala oltre 50k URL) + le due sitemap dirette per compat.
+    return ("User-agent: *\nAllow: /\nSitemap: %s/sitemap-index.xml\n"
+            "Sitemap: %s/sitemap.xml\nSitemap: %s/sitemap-host.xml\n"
+            % (base_url, base_url, base_url))
 
 
 def _citta_inventario(sistema: Any) -> List[str]:
@@ -4703,6 +4704,29 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 self._scrivi(200, openapi_agent_spec(base_url))   # spec per agenti non-MCP
             elif u.path.startswith("/uploads/"):
                 self._serve_upload(u.path)                        # foto alloggi caricate
+            elif u.path == "/sitemap-index.xml":
+                # INDICE: referenzia la sitemap alloggi + le sitemap-host a SHARD (scala >50k URL)
+                from fase97_inbound_seo import (registro_citta, shard_citta,
+                                                sitemap_index, SEO_LASTMOD)
+                reg = registro_citta(_citta_inventario(sistema))
+                n_shard = len(shard_citta(reg))
+                voci = [("/sitemap.xml", "")]
+                voci += [("/sitemap-host-%d.xml" % i, SEO_LASTMOD) for i in range(n_shard)]
+                self._testo(200, "application/xml", sitemap_index(base_url, voci=voci))
+            elif (u.path.startswith("/sitemap-host-") and u.path.endswith(".xml")):
+                # una SHARD della sitemap landing
+                from fase97_inbound_seo import (registro_citta, shard_citta, sitemap_inbound)
+                reg = registro_citta(_citta_inventario(sistema))
+                shards = shard_citta(reg)
+                try:
+                    i = int(u.path[len("/sitemap-host-"):-len(".xml")])
+                except ValueError:
+                    i = -1
+                if 0 <= i < len(shards):
+                    self._testo(200, "application/xml",
+                                sitemap_inbound(base_url, citta=shards[i]))
+                else:
+                    self._scrivi(404, {"errore": "shard_inesistente"})
             elif u.path == "/sitemap-host.xml":
                 from fase97_inbound_seo import sitemap_inbound, registro_citta
                 # la sitemap elenca SOLO le città del registro (seed ∪ inventario reale)

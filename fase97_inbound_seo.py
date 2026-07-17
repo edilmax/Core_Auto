@@ -545,3 +545,35 @@ def sitemap_inbound(base_url: str = "", *, citta: Sequence[str] = CITTA_SEED,
     return ('<?xml version="1.0" encoding="UTF-8"?>'
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
             + "".join(urls) + "</urlset>")
+
+
+# Sitemaps.org: max 50.000 URL / 50MB per file. Con margine.
+SITEMAP_MAX_URL = 45000
+
+
+def shard_citta(citta: Sequence[str], *, lingue: Sequence[str] = LINGUE,
+                per_shard: int = SITEMAP_MAX_URL) -> List[List[str]]:
+    """Spezza le città in GRUPPI tali che ogni sitemap figlia resti sotto il tetto di 50k URL
+    (una città = len(lingue) URL). Ritorna una lista di liste-di-città (≥1 gruppo, anche vuoto).
+    Deterministico. Serve a scalare oltre 50k URL verso le 195 nazioni (sitemap-index)."""
+    valide = [c for c in citta if slug_citta(c)]
+    n_lingue = max(1, len(lingue))
+    per_gruppo = max(1, int(per_shard) // n_lingue)
+    gruppi = [valide[i:i + per_gruppo] for i in range(0, len(valide), per_gruppo)]
+    return gruppi or [[]]
+
+
+def sitemap_index(base_url: str = "", *,
+                  voci: Sequence[Tuple[str, str]] = ()) -> str:
+    """<sitemapindex> che referenzia le sitemap FIGLIE. `voci` = lista di (path, lastmod); path
+    relativo alla base (es. '/sitemap-host-0.xml'). È l'entry-point per Google/Bing quando gli
+    URL superano il tetto di un singolo file."""
+    base = (base_url or "").rstrip("/")
+    corpo = "".join(
+        "<sitemap><loc>%s</loc>%s</sitemap>"
+        % (html.escape(base + p),
+           ("<lastmod>%s</lastmod>" % html.escape(lm)) if lm else "")
+        for p, lm in voci)
+    return ('<?xml version="1.0" encoding="UTF-8"?>'
+            '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            + corpo + "</sitemapindex>")

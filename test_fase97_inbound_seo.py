@@ -222,6 +222,29 @@ class TestHreflangRegione(unittest.TestCase):
         self.assertIn("x-default", hl(a))
 
 
+class TestSitemapIndex(unittest.TestCase):
+    def test_shard_partiziona_e_scala(self):
+        from fase97_inbound_seo import shard_citta, registro_citta, slug_citta
+        reg = registro_citta([])                          # solo seed
+        # forza più shard per provare la logica di scala (>50k)
+        sh = shard_citta(reg, per_shard=40)               # 40/8 lingue = 5 città a shard
+        piatto = [c for g in sh for c in g]
+        self.assertEqual(sorted(map(slug_citta, piatto)), sorted(map(slug_citta, reg)))  # copre tutto
+        self.assertEqual(len(piatto), len(set(map(slug_citta, piatto))))                 # no overlap
+        self.assertTrue(all(len(g) <= 5 for g in sh))                                    # sotto tetto
+        self.assertEqual(shard_citta([]), [[]])           # edge: vuoto → un gruppo vuoto
+
+    def test_index_referenzia_e_valido(self):
+        import xml.dom.minidom as minidom
+        from fase97_inbound_seo import sitemap_index
+        idx = sitemap_index("https://bookinvip.com",
+                            voci=[("/sitemap.xml", ""), ("/sitemap-host-0.xml", "2026-07-17")])
+        self.assertIn("<sitemapindex", idx)
+        self.assertIn("<loc>https://bookinvip.com/sitemap-host-0.xml</loc>", idx)
+        self.assertIn("<lastmod>2026-07-17</lastmod>", idx)
+        minidom.parseString(idx)                          # ben formato
+
+
 class TestBreadcrumb(unittest.TestCase):
     def test_valido_e_due_livelli(self):
         from fase97_inbound_seo import breadcrumb_jsonld

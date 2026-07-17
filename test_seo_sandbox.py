@@ -276,8 +276,31 @@ class TestSEOSandbox(unittest.TestCase):
         r = robots_txt(BASE)
         self.assertIn("User-agent: *", r)
         self.assertIn("Allow: /", r)
+        self.assertIn("Sitemap: %s/sitemap-index.xml" % BASE, r)   # entry-point = indice
         self.assertIn("Sitemap: %s/sitemap.xml" % BASE, r)
         self.assertIn("Sitemap: %s/sitemap-host.xml" % BASE, r)
+
+    def test_sitemap_index_copre_tutte_le_shard(self):
+        import xml.dom.minidom as minidom
+        from fase97_inbound_seo import (registro_citta, shard_citta, sitemap_index,
+                                        sitemap_inbound, SEO_LASTMOD)
+        reg = registro_citta([])
+        shards = shard_citta(reg)
+        voci = [("/sitemap.xml", "")] + [("/sitemap-host-%d.xml" % i, SEO_LASTMOD)
+                                         for i in range(len(shards))]
+        idx = sitemap_index(BASE, voci=voci)
+        # l'indice referenzia la sitemap alloggi + una loc per shard
+        self.assertEqual(idx.count("<sitemap>"), 1 + len(shards))
+        for i in range(len(shards)):
+            self.assertIn("<loc>%s/sitemap-host-%d.xml</loc>" % (BASE, i), idx)
+        minidom.parseString(idx)                              # indice ben formato
+        # ogni shard è una sitemap valida e insieme coprono OGNI città del registro
+        coperte = set()
+        for g in shards:
+            xml = sitemap_inbound(BASE, citta=g)
+            minidom.parseString(xml)
+            coperte.update(re.findall(r"/affitta/([a-z0-9-]+)", xml))
+        self.assertEqual(coperte, {slug_citta(c) for c in reg}, "le shard non coprono il registro")
 
     def test_sitemap_xml_schede_ben_formata_con_lastmod(self):
         from fase57_vetrina import crea_catalogo, SchedaAlloggio
