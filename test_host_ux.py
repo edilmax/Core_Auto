@@ -347,5 +347,37 @@ class TestHostUX(unittest.TestCase):
         self.assertEqual(d["immagini"], [])                  # nessun URL esterno/interno salvato
 
 
+class TestSeoCardUI(unittest.TestCase):
+    """La card 'rapporto SEO' del pannello host: esiste, chiama la rotta giusta,
+    e' negli avanzati, appare solo da loggati, tradotta it+en, output escapato."""
+
+    @classmethod
+    def setUpClass(cls):
+        import io, os
+        qui = os.path.dirname(os.path.abspath(__file__))
+        cls.html = io.open(os.path.join(qui, "deploy", "host.html"),
+                           encoding="utf-8").read()
+
+    def test_card_e_rotta(self):
+        self.assertIn('id="cardSeo"', self.html)
+        self.assertIn('id="btnSeo"', self.html)
+        self.assertIn("/api/host/seo_report?alloggio_id=", self.html)
+        self.assertIn("encodeURIComponent(CURRENT_SLUG)", self.html)
+
+    def test_negli_avanzati_e_gated_login(self):
+        self.assertIn("'cardCancella','cardSeo'", self.html)        # spostata in avanzate_box
+        self.assertIn("'cardAvanzate','cardSeo'", self.html)        # visibile solo da loggati
+
+    def test_i18n_it_en(self):
+        for chiave in ("seo_h", "seo_btn", "seo_migliora", "seo_query", "seo_scegli"):
+            self.assertGreaterEqual(self.html.count(chiave + ':"'), 2,
+                                    "chiave %s non in it+en" % chiave)
+
+    def test_output_escapato(self):
+        # i testi del rapporto (azione/query) passano da escH prima di innerHTML
+        self.assertIn("escH(g.azione", self.html)
+        self.assertIn("escH(x.testo", self.html)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -37,8 +37,10 @@
 > Perplexity). fase173.genera_faq, white-hat (solo fatti presenti), innestato in pagina_alloggio_html
 > (isolato). Live 7 FAQ (prezzo 120.00, POI 13m, tassa 3.50) visibili+strutturate. VPS=GitHub=Desktop=
 > `4811b23`, suite **2442 verde**, container healthy.
-> DA ACCENDERE (in "COSTRUITO ma SPENTO"): reverse-geocode QUARTIERE (→ quartiere_fn del motore),
-> UI pannello host per il rapporto SEO (rotta /api/host/seo_report già viva).
+> DA ACCENDERE (in "COSTRUITO ma SPENTO"): reverse-geocode QUARTIERE (→ quartiere_fn del motore).
+> ✅ **2026-07-18 (deploy #10): UI RAPPORTO SEO nel pannello host ACCESA** (card 📈 negli Strumenti
+> avanzati: punteggio /100, cosa migliorare, ricerche vincibili — riga 📈 nel REGISTRO) + 2 test
+> flaky legacy fase15 resi deterministici (suite 2446, 0 errori, stabile 15/15).
 > ✅ **2026-07-18 (deploy #9): INDEXNOW ACCESO** — chiave in `.env.casavip` (VPS, prima del ricreate),
 > key-file 200, primo submit reale 236 URL → scoperto+fixato 403 per User-Agent mancante (classe
 > Groq/fase165) → ri-submit **200 OK**. Ping automatico a ogni publish ora attivo. Dettaglio: riga 📡 REGISTRO.

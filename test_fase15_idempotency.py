@@ -110,19 +110,30 @@ class TestManager(_BaseIdem):
 
     def test_ttl_scaduto_riacquisisce_non_replay(self):
         IdempotencyManager._reset_instance()
-        os.environ["IDEMPOTENCY_TTL_HOURS"] = "0"
         mgr = IdempotencyManager(self.db)
         r = mgr.acquire("ttl", self.fp)
         mgr.store("ttl", r.token, 200, "{}")
+        # scadenza DETERMINISTICA (retrodatata, come test_sweep): con TTL=0 il record
+        # scadeva "nello stesso istante" della store e l'esito dipendeva dal microsecondo
+        # (now > expires_at falso se i due passi cadono nello stesso timestamp) -> flaky.
+        conn = mgr._conn()
+        conn.execute("UPDATE idempotency_keys SET expires_at="
+                     "'2000-01-01T00:00:00+00:00' WHERE idempotency_key='ttl'")
+        conn.close()
         self.assertEqual(mgr.acquire("ttl", self.fp).esito,
                          EsitoAcquisizione.ACQUISITO)
 
     def test_purge_expired(self):
         IdempotencyManager._reset_instance()
-        os.environ["IDEMPOTENCY_TTL_HOURS"] = "0"
         mgr = IdempotencyManager(self.db)
         r = mgr.acquire("ttl", self.fp)
         mgr.store("ttl", r.token, 200, "{}")
+        # scadenza retrodatata (stesso motivo di test_ttl_scaduto: TTL=0 era sul filo
+        # del microsecondo -> flaky)
+        conn = mgr._conn()
+        conn.execute("UPDATE idempotency_keys SET expires_at="
+                     "'2000-01-01T00:00:00+00:00' WHERE idempotency_key='ttl'")
+        conn.close()
         self.assertGreaterEqual(mgr.purge_expired(), 1)
 
     def test_singleton_ignora_db_path_diverso(self):
