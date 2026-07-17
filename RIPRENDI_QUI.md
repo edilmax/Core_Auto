@@ -1,5 +1,21 @@
 # 🧪 STATO COLLAUDO — sessione 2026-07-16/17 (Fable 5)
 
+> 🧠 **2026-07-17 sera — MOTORE SEO AUTONOMO (l'arma proprietaria) COSTRUITO + DEPLOYATO (deploy #6).**
+> "Appena uno pubblica, in automatico fa quello che va fatto." Due pezzi, metodo del fondatore
+> (potenza dichiarata prima). **CERVELLO `fase171_cervello_seo.py`** (vincitrice benchmark 4 varianti
+> + verifica avversariale): la pagina = registro di FATTI CITABILI; `valuta_annuncio()` → punteggio
+> 0-100 + query long-tail VINCIBILI (mai teste, k≥2) + gap azionabili white-hat, tutti dallo stesso
+> ledger. Pesi ai fatti PUBBLICI non falsificabili (distanza-POI, tassa, quartiere); ancora-BITMASK
+> anti-stuffing; anti-spoof geo; matematica INTERA (invariante Σgap==100−punteggio); fairness di
+> posizione; puro/deterministico; 4 bug uccisi dal sandbox. **ORCHESTRATORE `fase173_motore_seo.py`**:
+> hook in `_host_pubblica` (ISOLATO, non rompe mai il publish) → contesto pubblico da provider
+> iniettabili (tassa147 cablata) → specchio del JSON-LD reale (anti-deriva) → cervello → ping IndexNow
+> (gated). + `jsonld_alloggio` esteso (geo/image/bagni, no-float). + rotta `GET /api/host/seo_report`
+> (auth+proprietà). **VERIFICATO LIVE**: home 200, /api/domanda ok:true, /api/health 200, seo_report
+> senza auth→401. Container healthy, boot pulito. **Desktop=GitHub=VPS=`c24e10b`**, suite **2428 verde**.
+> DA ACCENDERE (in "COSTRUITO ma SPENTO"): provider Overpass-POI per-annuncio (arricchisce il geo del
+> cervello), UI pannello host per il rapporto, FAQ da `citazioni_pronte`, IndexNow submit (chiave env).
+
 > 🌍 **2026-07-17 — ARCO SEO GLOBALE (195 nazioni, multi-motore) COSTRUITO + DEPLOYATO (deploy #5).**
 > Otto pezzi in sequenza, ognuno con sandbox/guardia permanente, suite intera verde, commit+push+VPS:
 > (1) **semantica HTML5** landmark `<main>/<section>` (fase97); (2) **`<lastmod>`** in ENTRAMBE le
