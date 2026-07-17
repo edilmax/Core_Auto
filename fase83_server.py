@@ -4698,6 +4698,12 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 bps = int(os.environ.get("COMMISSIONE_BPS", "1000"))
                 self._testo(200, "text/plain",
                             llms_txt(base_url, commissione_bps=bps))
+            elif (os.environ.get("INDEXNOW_KEY", "").strip()
+                  and u.path == "/" + os.environ["INDEXNOW_KEY"].strip() + ".txt"):
+                # IndexNow: file di verifica della proprietà (solo se la chiave è configurata)
+                from fase169_indexnow import key_file_body
+                self._testo(200, "text/plain",
+                            key_file_body(os.environ["INDEXNOW_KEY"].strip()))
             elif u.path == "/.well-known/ai-plugin.json":
                 self._scrivi(200, ai_plugin_manifest(base_url))   # scoperta agenti IA
             elif u.path == "/openapi.json":

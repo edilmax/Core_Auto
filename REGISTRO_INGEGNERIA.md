@@ -137,6 +137,7 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 | 129 | Auto-traduzione RECENSIONI | serve endpoint di traduzione esterno (LibreTranslate/env) — senza, non produce valore | recensioni multilingua |
 | 117 | Wishlist / preferiti guest | rotta + UI (serve login guest, oggi assente) | conversione |
 | 123 | Web Push guest (VAPID, gratis) | generare chiavi VAPID + service worker | retention |
+| 169 | **IndexNow submit** (ping Bing/Yandex/Seznam/Naver) — key-file già servita se env presente | generare `INDEXNOW_KEY` (hex casuale) + `INDEXNOW_HOST` nel .env; poi chiamare `crea_indexnow().submit([url landing cambiati])` alla pubblicazione annuncio (hook gated, blindato) | scoperta istantanea multi-motore (non-Google) |
 | 137 | Fedeltà guest (punti→sconti) | wiring + UI (serve identità guest) | fidelizzazione |
 | 139 | Chatbot AI assistenza guest | agganciare a Pool AI (164/165) + UI | supporto |
 | 141 | Onboarding wizard host guidato | NON prioritario: il pannello ha già la guida 3-passi live (sarebbe un doppione) | attivazione host |
@@ -287,6 +288,17 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
   live con tetto forzato: 6 shard [5,5,5,5,5,3] coprono il registro, indice+shard XML ben formati.
   Guardie: TestSitemapIndex(97), test_sitemap_index_copre_tutte_le_shard + robots (sandbox).
   RESTA: IndexNow (Bing/Yandex) — ultimo pezzo del piano globale. Suite mirate 127 verdi.]
+  [2026-07-17 fatto: INDEXNOW (fase169) — CHIUDE l'arco SEO globale ("Google non è il mondo").
+  Modulo nuovo fase169_indexnow.py: PURO/testabile (payload_indexnow cap 10.000 URL stesso host,
+  urls_valide dedup+filtro-host, key_file_body) + adapter IndexNow GATED da env INDEXNOW_KEY/HOST
+  (default OFF, BLINDATO: un errore di rete NON rompe il flusso; fetch iniettabile per i test).
+  Un ping a api.indexnow.org avvisa Bing/Yandex/Seznam/Naver → scoperta ISTANTANEA sui motori
+  NON-Google (Google lo copre con sitemap-index+lastmod). Rotta fase83 /{INDEXNOW_KEY}.txt =
+  verifica proprietà (gated, nessuna rete). test_fase169_indexnow (9): puri + gated + blindato +
+  factory-env. Registrato in tabella (sez.5) + "COSTRUITO ma SPENTO" (submit da accendere:
+  generare la chiave + hook alla pubblicazione). ARCO GLOBALE COMPLETO: semantica HTML5 → sitemap
+  lastmod → maglia small-world + sandbox → registro data-driven/gate anti-doorway → hreflang
+  lingua+paese → sitemap-index/sharding → IndexNow. Suite mirate 9 verdi (modulo).]
 - [FATTO 2026-07-15: recupero preventivi abbandonati — vedi riga 📧 in sezione 1]
 - **[FATTO 2026-07-16 — COLLAUDO "METODO LIBRO" COMPLETO]**: 29 bug VERI chiusi in un giorno
   (righe 🧠→🔢 in sezione 1: overbooking su-richiesta, host-pagato-con-disputa, penali mai
@@ -442,3 +454,4 @@ sempre "morto": molti sono librerie usate da altri moduli.
 | 165 | `fase165_adattatori_esterni.py` | boot | Adattatori esterni gated (provider AI a rotazione + upload YouTube). |
 | 166 | `fase166_geocoder.py` | boot | Geocoder (indirizzo/città -> coordinate) per la mappa nella ricerca. |
 | 167 | `fase167_credito_single_use.py` | boot | Registro SINGLE-USE crediti (un Credito Fondatore/Viaggio si spende UNA volta). |
+| 169 | `fase169_indexnow.py` | +router (key-file) | IndexNow: notifica istantanea multi-motore (Bing/Yandex/Seznam/Naver). GATED da env INDEXNOW_KEY (submit SPENTO default). |
