@@ -1,4 +1,12 @@
-# 🧪 STATO COLLAUDO — sessione 2026-07-16/17 (Fable 5)
+# 🧪 STATO COLLAUDO — sessione 2026-07-16/17/18 (Fable 5)
+
+> 💥 **2026-07-18 — BOMBARDAMENTO PIENO "10.000 MENTI" RIESEGUITO: ZERO VIOLAZIONI.**
+> 10 seed × 1000 agenti (fuzzer permanente test_menti_invarianti a scala massima) in 246.6s
+> sul codice corrente (`8f4322c`): nessun overbooking, nessun doppio-payout, conti/escrow/tassa
+> esatti, single-use crediti tenuto. + guardie concorrenza (17 test: gare sui soldi, calendario,
+> fuzzing input ostili) verdi in 23.9s. I `401 Stripe` nei log del fuzzer = chiave FINTA respinta
+> e ISOLATA per design (prova che il guasto del fornitore non rompe mai il flusso). Stesso giorno:
+> ispezione statica TOTALE del progetto (76k righe, `ispettore_statico.py`) → 0 bug nuovi.
 
 > 🧠 **2026-07-17 sera — MOTORE SEO AUTONOMO (l'arma proprietaria) COSTRUITO + DEPLOYATO (deploy #6).**
 > "Appena uno pubblica, in automatico fa quello che va fatto." Due pezzi, metodo del fondatore
