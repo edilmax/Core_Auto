@@ -488,8 +488,8 @@ def genera_landing_host(citta: str, *, lingua: str = "it", base_url: str = "",
         # avere UN SOLO <main>. La FAQ e' una <section> etichettata dal suo <h2> (regione
         # nominata + specchio del FAQPage JSON-LD).
         + "<main>"
-        + "<h1>" + fmt(t["h1"]) + "</h1>"
-        + "<p>" + fmt(t["intro"]) + "</p>"
+        + "<header><h1>" + fmt(t["h1"]) + "</h1>"
+        + "<p>" + fmt(t["intro"]) + "</p></header>"
         + "<div class=\"box\">" + fmt(t["calc"]) + "</div>"
         + "<p><a class=\"cta\" href=\"" + e(cta_url) + "\">" + e(t["cta"]) + "</a></p>"
         + "<section aria-labelledby=\"faq\"><h2 id=\"faq\">" + e(t["faqh"]) + "</h2>"
@@ -497,6 +497,8 @@ def genera_landing_host(citta: str, *, lingua: str = "it", base_url: str = "",
         + "</main>"
         + ("<nav aria-labelledby=\"rel\"><h2 id=\"rel\">" + e(t["rel"]) + "</h2>"
            + rel_links + "</nav>" if rel_links else "")
+        # footer: landmark + link interno alla home (aiuta il crawl e la distribuzione equity)
+        + "<footer><a href=\"" + e(base + "/") + "\">BookinVIP</a></footer>"
         + "</body></html>")
     return page
 

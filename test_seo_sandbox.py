@@ -165,6 +165,8 @@ class TestSEOSandbox(unittest.TestCase):
                 ctx = "%s/%s" % (c, lng)
                 self.assertEqual(h.count("<h1>"), 1, "h1 non unico: %s" % ctx)
                 self.assertEqual(h.count("<main>"), 1, "main non unico: %s" % ctx)
+                self.assertIn("<header>", h, "header mancante: %s" % ctx)
+                self.assertIn("<footer>", h, "footer mancante: %s" % ctx)
                 self.assertIn('<html lang="%s">' % lng, h, ctx)
                 self.assertIn('name="viewport"', h, "viewport mancante: %s" % ctx)
                 self.assertIn('charset="utf-8"', h, ctx)

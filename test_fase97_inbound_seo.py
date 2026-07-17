@@ -93,6 +93,13 @@ class TestStrutturaSemantica(unittest.TestCase):
         # il <nav> 'altre città' sta FUORI (dopo) il </main>: è navigazione, non contenuto
         self.assertIn("<nav", h)
         self.assertLess(h.index("</main>"), h.index("<nav"))
+        # <header> dentro il <main>, <footer> dopo con link interno alla home
+        self.assertIn("<header>", h)
+        self.assertLess(h.index("<main>"), h.index("<header>"))
+        self.assertLess(h.index("<header>"), h.index("</main>"))
+        self.assertIn("<footer>", h)
+        self.assertLess(h.index("</main>"), h.index("<footer>"))
+        self.assertIn('<a href="https://bookinvip.com/">BookinVIP</a>', h)
 
     def test_landmark_reggono_senza_citta_correlate(self):
         # senza correlate niente <nav>, ma <main> e <section> FAQ restano

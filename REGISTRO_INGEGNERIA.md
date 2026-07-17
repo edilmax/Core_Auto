@@ -309,6 +309,11 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
   personalizzate (/voucher, /host/azione, /stop, keyfile IndexNow) — Cache public le romperebbe.
   Verificato END-TO-END su server reale (servi()): 200+ETag→304 corpo 0B; ETag sbagliato→200 pieno;
   404 senza ETag. Guardia test_etag_conditional_get(83). Suite mirate 83 verdi.]
+  [2026-07-17 fatto: header/footer semantici (chiude la Sezione 2). genera_landing_host ora avvolge
+  h1+intro in <header> (dentro il <main>) e chiude la pagina con <footer> che porta un link interno
+  alla home (aiuta crawl + distribuzione link-equity). Landmark ora completi: header/main/section/
+  nav/footer. Guardie estese: TestStrutturaSemantica(97) + test_ogni_landing_invarianti(sandbox).
+  ARCO SEO GLOBALE + tecnico CHIUSO. Suite mirate 45 verdi.]
 - [FATTO 2026-07-15: recupero preventivi abbandonati — vedi riga 📧 in sezione 1]
 - **[FATTO 2026-07-16 — COLLAUDO "METODO LIBRO" COMPLETO]**: 29 bug VERI chiusi in un giorno
   (righe 🧠→🔢 in sezione 1: overbooking su-richiesta, host-pagato-con-disputa, penali mai
