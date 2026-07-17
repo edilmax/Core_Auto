@@ -316,12 +316,21 @@ def genera_landing_host(citta: str, *, lingua: str = "it", base_url: str = "",
           "padding:.8rem 1.6rem;border-radius:2rem;text-decoration:none;font-weight:600}"
           "details{margin:.5rem 0}summary{cursor:pointer;font-weight:600}"
           "nav a{color:#2a5298;margin-right:.4rem;font-size:.9rem}</style></head><body>"
+        # <main> = contenuto primario isolato dal boilerplate (assistive tech "salta al
+        # contenuto" + estrattori/crawler, inclusi gli AEO, distinguono corpo da navigazione).
+        # Il <nav> "altre citta'" resta FUORI dal <main>: e' navigazione, e la pagina deve
+        # avere UN SOLO <main>. La FAQ e' una <section> etichettata dal suo <h2> (regione
+        # nominata + specchio del FAQPage JSON-LD).
+        + "<main>"
         + "<h1>" + fmt(t["h1"]) + "</h1>"
         + "<p>" + fmt(t["intro"]) + "</p>"
         + "<div class=\"box\">" + fmt(t["calc"]) + "</div>"
         + "<p><a class=\"cta\" href=\"" + e(cta_url) + "\">" + e(t["cta"]) + "</a></p>"
-        + "<h2>" + e(t["faqh"]) + "</h2>" + faq_html
-        + ("<nav><h2>" + e(t["rel"]) + "</h2>" + rel_links + "</nav>" if rel_links else "")
+        + "<section aria-labelledby=\"faq\"><h2 id=\"faq\">" + e(t["faqh"]) + "</h2>"
+        + faq_html + "</section>"
+        + "</main>"
+        + ("<nav aria-labelledby=\"rel\"><h2 id=\"rel\">" + e(t["rel"]) + "</h2>"
+           + rel_links + "</nav>" if rel_links else "")
         + "</body></html>")
     return page
 

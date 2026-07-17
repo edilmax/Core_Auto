@@ -203,6 +203,19 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
   [2026-07-17 fatto: revisione+bombardamento Split di gruppo → BUG #36 (rotte vive su :memory:
   = 503 a raffica sotto pagamenti simultanei + conti persi al riavvio) fixato con db_split/
   DB_SPLIT + timeout 30s fase65/67 — vedi riga 💸 in sezione 1]
+  [2026-07-17 fatto: revisione SEO INCREMENTALE (no-storm) fase97 — Sezione 2 "struttura HTML5
+  semantica". La landing /affitta/<slug> (genera_landing_host) era PIATTA dentro <body>: nessun
+  landmark tranne <nav>. Aggiunti <main> (contenuto primario isolato dal boilerplate → assistive
+  tech "salta al contenuto" + crawler/estrattori AEO distinguono corpo da navigazione) e
+  <section aria-labelledby="faq"> per la FAQ (regione etichettata, specchio del FAQPage JSON-LD);
+  il <nav> "altre città" spostato FUORI dal <main> (un solo <main> per pagina). Nessun testo/CSS/
+  contenuto cambiato: sola aggiunta di 3 contenitori, generazione ancora PURA/deterministica.
+  Guardia permanente TestStrutturaSemantica in test_fase97_inbound_seo (main unico + <h1> dentro,
+  nav fuori dal </main>, FAQ in <section>; regge anche senza città correlate). Suite fase97 16/16.
+  RESTA (concordato col fondatore): Sez.2 → <header>/<footer> (il footer aggiunge anche un link
+  interno alla home, utile al crawl); Sez.4 sitemap → <lastmod> ASSENTE in sitemap_xml e
+  sitemap_inbound (fattore #1 del budget di scansione: senza, i crawler ri-scaricano tutto alla
+  cieca) + verifica URL assoluti da base_url.]
 - [FATTO 2026-07-15: recupero preventivi abbandonati — vedi riga 📧 in sezione 1]
 - **[FATTO 2026-07-16 — COLLAUDO "METODO LIBRO" COMPLETO]**: 29 bug VERI chiusi in un giorno
   (righe 🧠→🔢 in sezione 1: overbooking su-richiesta, host-pagato-con-disputa, penali mai

@@ -70,6 +70,38 @@ class TestLanding(unittest.TestCase):
             self.assertIn("<title>", h)
 
 
+class TestStrutturaSemantica(unittest.TestCase):
+    """Guardia landmark HTML5 (SSR + crawler/AEO): il contenuto primario deve essere isolato
+    dal boilerplate. UN solo <main>, la navigazione FUORI dal <main>, la FAQ in una <section>
+    etichettata. Regressione = pagina di nuovo 'piatta' dentro <body>."""
+
+    def test_main_unico_nav_fuori_faq_in_section(self):
+        h = genera_landing_host("Roma", lingua="it", base_url="https://bookinvip.com",
+                                citta_correlate=["Milano", "Firenze"])
+        self.assertEqual(h.count("<main>"), 1, "deve esserci UN solo <main>")
+        self.assertEqual(h.count("</main>"), 1)
+        # un solo <h1>, dentro il <main>
+        self.assertEqual(h.count("<h1>"), 1)
+        self.assertLess(h.index("<main>"), h.index("<h1>"))
+        self.assertLess(h.index("<h1>"), h.index("</main>"))
+        # FAQ = <section> etichettata dal suo <h2>, dentro il <main>
+        self.assertIn('<section aria-labelledby="faq">', h)
+        self.assertIn('<h2 id="faq">', h)
+        self.assertLess(h.index("<main>"), h.index('<section aria-labelledby="faq">'))
+        self.assertLess(h.index('<section aria-labelledby="faq">'), h.index("<details>"))
+        self.assertLess(h.index("</section>"), h.index("</main>"))
+        # il <nav> 'altre città' sta FUORI (dopo) il </main>: è navigazione, non contenuto
+        self.assertIn("<nav", h)
+        self.assertLess(h.index("</main>"), h.index("<nav"))
+
+    def test_landmark_reggono_senza_citta_correlate(self):
+        # senza correlate niente <nav>, ma <main> e <section> FAQ restano
+        h = genera_landing_host("Roma", lingua="it")
+        self.assertEqual(h.count("<main>"), 1)
+        self.assertNotIn("<nav", h)
+        self.assertIn('<section aria-labelledby="faq">', h)
+
+
 class TestFaqJsonld(unittest.TestCase):
     def test_jsonld_valido_e_faqpage(self):
         raw = (faq_jsonld("it", commissione_bps=1500, ota_bps=2500)
