@@ -57,10 +57,12 @@ def costruisci_calendario(slug: str, da: str, a: str, *,
                               "stato": "chiuso" if chiuso else "non_aperto",
                               "prezzo_cents": None, "prezzo_dinamico_cents": None})
                 continue
-            if chiuso:
+            # stessa priorita' di fase58.calendario: VENDUTA vince su CHIUSA
+            if isinstance(unita, int) and isinstance(venduto, int) \
+                    and unita > 0 and venduto >= unita:
+                stato = "prenotato"
+            elif chiuso:
                 stato = "chiuso"
-            elif isinstance(unita, int) and isinstance(venduto, int) and unita > 0:
-                stato = "prenotato" if venduto >= unita else "libero"
             else:
                 stato = "libero"
             din = dyn.calcola_prezzo(base, occupazione_bps=occupazione_bps, data=g, pol=pol)

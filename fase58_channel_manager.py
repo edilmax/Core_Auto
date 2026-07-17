@@ -422,10 +422,17 @@ class ChannelManager:
                 if row is None:
                     out.append({"giorno": g, "stato": "non_caricato"})
                     continue
-                if row["chiuso"]:
+                # VENDUTA vince su CHIUSA: se il giorno e' sold-out, la vista non
+                # deve mai nascondere la prenotazione viva dietro un 'chiuso'
+                # posato dall'host dopo la vendita (bug #35, bombardamento
+                # concorrente vista multi-alloggio).
+                if row["unita_totali"] > 0 and \
+                        row["unita_occupate"] >= row["unita_totali"]:
+                    stato = "pieno"
+                elif row["chiuso"]:
                     stato = "chiuso"
                 elif row["unita_occupate"] >= row["unita_totali"]:
-                    stato = "pieno"
+                    stato = "pieno"                    # unita_totali == 0
                 else:
                     stato = "libero"
                 out.append({

@@ -24,6 +24,8 @@ def stato_reale(slug, g):
                        "unita_occupate": 0, "chiuso": 1, "min_notti": 1},
         "2026-08-11": {"prezzo_netto_cents": 0, "unita_totali": 0,
                        "unita_occupate": 0, "chiuso": 1, "min_notti": 1},
+        "2026-08-12": {"prezzo_netto_cents": 10000, "unita_totali": 1,
+                       "unita_occupate": 1, "chiuso": 1, "min_notti": 1},
     }
     return righe.get(g)
 
@@ -33,13 +35,15 @@ class TestContrattoProviderReale(unittest.TestCase):
     'libero' e un giorno CHIUSO appariva 'libero' con prezzo suggerito."""
 
     def test_pieno_e_chiuso_col_provider_reale(self):
-        c = costruisci_calendario("casa", "2026-08-08", "2026-08-11",
+        c = costruisci_calendario("casa", "2026-08-08", "2026-08-12",
                                   stato_giorno=stato_reale)
         stati = {x["giorno"]: x["stato"] for x in c}
         self.assertEqual(stati["2026-08-08"], "prenotato")
         self.assertEqual(stati["2026-08-09"], "libero")
         self.assertEqual(stati["2026-08-10"], "chiuso")
         self.assertEqual(stati["2026-08-11"], "chiuso")   # chiuso senza prezzo
+        # bug #35: VENDUTA vince su CHIUSA (mai nascondere una prenotazione viva)
+        self.assertEqual(stati["2026-08-12"], "prenotato")
 
     def test_chiuso_senza_prezzo_niente_prezzi(self):
         c = costruisci_calendario("casa", "2026-08-11", "2026-08-11",
