@@ -299,6 +299,16 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
   generare la chiave + hook alla pubblicazione). ARCO GLOBALE COMPLETO: semantica HTML5 → sitemap
   lastmod → maglia small-world + sandbox → registro data-driven/gate anti-doorway → hreflang
   lingua+paese → sitemap-index/sharding → IndexNow. Suite mirate 9 verdi (modulo).]
+  [2026-07-17 fatto: CONDITIONAL GET (ETag → 304) sulle rotte SSR = budget di scansione. Prima
+  l'helper fase83._testo NON poneva header di cache sulle superfici dinamiche: ogni ricrawl
+  riscaricava il corpo pieno. Ora fase83._testo_seo (nuovo) aggiunge ETag forte sul CONTENUTO
+  (etag_di = sha1 troncato) + Cache-Control public,max-age=3600; se il crawler rimanda l'ETag
+  invariato (If-None-Match) → 304 SENZA corpo. Puri testabili: etag_di + etag_combacia (lista,
+  wildcard '*', vuoto). Cablato su TUTTE le superfici crawlabili: /affitta, /alloggio, /sitemap.xml,
+  /sitemap-index.xml, /sitemap-host(.xml e -<i>.xml), /robots.txt, /llms.txt. LASCIATE invariate le
+  personalizzate (/voucher, /host/azione, /stop, keyfile IndexNow) — Cache public le romperebbe.
+  Verificato END-TO-END su server reale (servi()): 200+ETag→304 corpo 0B; ETag sbagliato→200 pieno;
+  404 senza ETag. Guardia test_etag_conditional_get(83). Suite mirate 83 verdi.]
 - [FATTO 2026-07-15: recupero preventivi abbandonati — vedi riga 📧 in sezione 1]
 - **[FATTO 2026-07-16 — COLLAUDO "METODO LIBRO" COMPLETO]**: 29 bug VERI chiusi in un giorno
   (righe 🧠→🔢 in sezione 1: overbooking su-richiesta, host-pagato-con-disputa, penali mai

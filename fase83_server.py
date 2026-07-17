@@ -292,6 +292,23 @@ def robots_txt(base_url: str = "") -> str:
             % (base_url, base_url, base_url))
 
 
+def etag_di(dati: bytes) -> str:
+    """ETag forte sul CONTENUTO (sha1 troncato): stesso contenuto → stesso ETag. Il crawler che
+    rimanda l'If-None-Match riceve 304 e NON riscarica (risparmio di budget di scansione)."""
+    import hashlib
+    return '"%s"' % hashlib.sha1(dati).hexdigest()[:16]
+
+
+def etag_combacia(etag: str, if_none_match: str) -> bool:
+    """True se l'ETag è fra quelli in If-None-Match (lista separata da virgole) o se è '*'."""
+    if not if_none_match:
+        return False
+    inm = if_none_match.strip()
+    if inm == "*":
+        return True
+    return etag in [t.strip() for t in inm.split(",")]
+
+
 def _citta_inventario(sistema: Any) -> List[str]:
     """Città con inventario reale dal catalogo (per il registro anti-doorway). BLINDATO → []."""
     try:
@@ -4617,6 +4634,29 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             if not getattr(self, '_solo_head', False):   # HEAD = header senza corpo
                 self.wfile.write(dati)
 
+        def _testo_seo(self, status, ctype, testo, *, max_age=3600):
+            """Come _testo ma con ETag + Cache-Control (CRAWL BUDGET): se il crawler rimanda l'ETag
+            invariato (If-None-Match) → 304 senza corpo, non riscarica. Solo superfici PUBBLICHE
+            (landing/sitemap/robots/llms)."""
+            dati = testo.encode("utf-8")
+            etag = etag_di(dati)
+            inm = self.headers.get("If-None-Match", "") if getattr(self, "headers", None) else ""
+            if status == 200 and etag_combacia(etag, inm):
+                self.send_response(304)
+                self.send_header("ETag", etag)
+                self.send_header("Cache-Control", "public, max-age=%d" % max_age)
+                self._cors()
+                self.end_headers()
+                return
+            self.send_response(status)
+            self.send_header("Content-Type", ctype + "; charset=utf-8")
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", "public, max-age=%d" % max_age)
+            self._cors()
+            self.end_headers()
+            if not getattr(self, '_solo_head', False):
+                self.wfile.write(dati)
+
         def do_HEAD(self):
             """HEAD = GET ma senza corpo. Senza questo metodo BaseHTTPRequestHandler risponde
             **501 Unsupported method** a OGNI richiesta HEAD: i monitor di uptime (UptimeRobot
@@ -4640,16 +4680,16 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 s, c = router.gestisci("GET", u.path, query, None, dict(self.headers))
                 self._scrivi(s, c)
             elif u.path == "/sitemap.xml":
-                self._testo(200, "application/xml", sitemap_xml(sistema, base_url))
+                self._testo_seo(200, "application/xml", sitemap_xml(sistema, base_url))
             elif u.path == "/robots.txt":
-                self._testo(200, "text/plain", robots_txt(base_url))
+                self._testo_seo(200, "text/plain", robots_txt(base_url))
             elif u.path.startswith("/alloggio/"):
                 slug = unquote(u.path[len("/alloggio/"):])
                 html = pagina_alloggio_html(sistema, slug, base_url)
                 if html is None:
                     self._scrivi(404, {"errore": "not_found"})
                 else:
-                    self._testo(200, "text/html", html)
+                    self._testo_seo(200, "text/html", html)
             elif u.path.startswith("/voucher/"):
                 query = {k: v[0] for k, v in parse_qs(u.query).items()}
                 lng = query.get("lang", "it")
@@ -4688,7 +4728,7 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     else:
                         bps = int(os.environ.get("COMMISSIONE_BPS", "1000"))
                         # link interni = maglia small-world sul registro (non tutte le città)
-                        self._testo(200, "text/html", genera_landing_host(
+                        self._testo_seo(200, "text/html", genera_landing_host(
                             citta, lingua=query.get("lang", "it"), base_url=base_url,
                             commissione_bps=bps, citta_correlate=vicini_di(citta, registro)))
                 except Exception:
@@ -4696,8 +4736,8 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             elif u.path == "/llms.txt":
                 from fase97_inbound_seo import llms_txt
                 bps = int(os.environ.get("COMMISSIONE_BPS", "1000"))
-                self._testo(200, "text/plain",
-                            llms_txt(base_url, commissione_bps=bps))
+                self._testo_seo(200, "text/plain",
+                                llms_txt(base_url, commissione_bps=bps))
             elif (os.environ.get("INDEXNOW_KEY", "").strip()
                   and u.path == "/" + os.environ["INDEXNOW_KEY"].strip() + ".txt"):
                 # IndexNow: file di verifica della proprietà (solo se la chiave è configurata)
@@ -4718,7 +4758,7 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 n_shard = len(shard_citta(reg))
                 voci = [("/sitemap.xml", "")]
                 voci += [("/sitemap-host-%d.xml" % i, SEO_LASTMOD) for i in range(n_shard)]
-                self._testo(200, "application/xml", sitemap_index(base_url, voci=voci))
+                self._testo_seo(200, "application/xml", sitemap_index(base_url, voci=voci))
             elif (u.path.startswith("/sitemap-host-") and u.path.endswith(".xml")):
                 # una SHARD della sitemap landing
                 from fase97_inbound_seo import (registro_citta, shard_citta, sitemap_inbound)
@@ -4729,14 +4769,14 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 except ValueError:
                     i = -1
                 if 0 <= i < len(shards):
-                    self._testo(200, "application/xml",
-                                sitemap_inbound(base_url, citta=shards[i]))
+                    self._testo_seo(200, "application/xml",
+                                    sitemap_inbound(base_url, citta=shards[i]))
                 else:
                     self._scrivi(404, {"errore": "shard_inesistente"})
             elif u.path == "/sitemap-host.xml":
                 from fase97_inbound_seo import sitemap_inbound, registro_citta
                 # la sitemap elenca SOLO le città del registro (seed ∪ inventario reale)
-                self._testo(200, "application/xml", sitemap_inbound(
+                self._testo_seo(200, "application/xml", sitemap_inbound(
                     base_url, citta=registro_citta(_citta_inventario(sistema))))
             elif u.path == "/stop":
                 # Disiscrizione PUBBLICA (link nelle email outreach). Nessuna auth: il

@@ -889,6 +889,18 @@ class TestSEO(unittest.TestCase):
         # helper blindato: un sistema senza catalogo valido → [] (mai eccezione)
         self.assertEqual(_citta_inventario(object()), [])
 
+    def test_etag_conditional_get(self):
+        from fase83_server import etag_di, etag_combacia
+        a = etag_di(b"ciao")
+        self.assertEqual(a, etag_di(b"ciao"))                 # deterministico sul contenuto
+        self.assertNotEqual(a, etag_di(b"ciaoo"))             # cambia col contenuto
+        self.assertTrue(a.startswith('"') and a.endswith('"'))
+        self.assertTrue(etag_combacia(a, a))                  # match esatto
+        self.assertTrue(etag_combacia(a, '"x", %s , "y"' % a))  # dentro una lista
+        self.assertTrue(etag_combacia(a, "*"))                # wildcard
+        self.assertFalse(etag_combacia(a, ""))                # nessun If-None-Match
+        self.assertFalse(etag_combacia(a, '"altro"'))         # non combacia
+
 
 class TestRobustezza(unittest.TestCase):
     def test_mai_solleva(self):
