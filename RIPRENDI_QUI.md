@@ -18,8 +18,14 @@
 > Cablato via `con_poi` (fase81) + env `POI_OSM=true`/`DB_POICACHE=/data/poicache.db` (sul VPS PRIMA del
 > deploy). In prod risulta `poi_osm(175)` nella composizione, boot pulito, verificato live. VPS=GitHub=
 > Desktop=`c64cdb8`, suite **2438 verde**. Rimosso uno stub orfano fase175_arricchitore_osm.py.
-> DA ACCENDERE (in "COSTRUITO ma SPENTO"): reverse-geocode QUARTIERE (→ quartiere_fn), FAQ da
-> `citazioni_pronte` nella pagina, UI pannello host per il rapporto, IndexNow submit (chiave env).
+> **2026-07-17 (deploy #8): FAQ AEO da FATTI REALI ACCESE** — ogni pagina alloggio genera FAQ dai
+> fatti del ledger (prezzo, distanza-POI in metri, tassa, capacità...) → FAQPage JSON-LD (rich result +
+> estraibile dagli AI) + `<details>` visibili e coerenti. È il ponte AEO (farsi citare da ChatGPT/
+> Perplexity). fase173.genera_faq, white-hat (solo fatti presenti), innestato in pagina_alloggio_html
+> (isolato). Live 7 FAQ (prezzo 120.00, POI 13m, tassa 3.50) visibili+strutturate. VPS=GitHub=Desktop=
+> `4811b23`, suite **2442 verde**, container healthy.
+> DA ACCENDERE (in "COSTRUITO ma SPENTO"): reverse-geocode QUARTIERE (→ quartiere_fn del motore),
+> UI pannello host per il rapporto SEO (rotta /api/host/seo_report già viva), IndexNow submit (chiave env).
 
 > 🌍 **2026-07-17 — ARCO SEO GLOBALE (195 nazioni, multi-motore) COSTRUITO + DEPLOYATO (deploy #5).**
 > Otto pezzi in sequenza, ognuno con sandbox/guardia permanente, suite intera verde, commit+push+VPS:
