@@ -62,6 +62,66 @@ def citta_da_slug(slug: str, citta: Sequence[str] = CITTA_SEED) -> Optional[str]
     return None
 
 
+def maglia_link_interni(citta: Sequence[str] = CITTA_SEED, *,
+                        k: int = 6) -> Dict[str, List[str]]:
+    """ALGORITMO 'maglia small-world' per i link interni tra le landing città — crawl-ottimale e
+    white-hat (policy Google: link interni RILEVANTI e in numero ragionevole, non l'elenco intero
+    ripetuto = pattern 'link farm'). Proprietà garantite:
+      (1) FORTEMENTE CONNESSO: ogni pagina è raggiungibile da ogni altra → nessun orfano, il
+          crawler arriva ovunque (l'anello i→(i+1) è un ciclo hamiltoniano che copre tutti).
+      (2) DIAMETRO PICCOLO: k-1 'corde' a passo ~n/k accorciano le distanze (topologia
+          small-world) → link-equity distribuita e crawl efficiente (pochi hop tra due pagine).
+      (3) GRADO COSTANTE e LIMITATO: ogni pagina ha esattamente k link (non 27) → niente
+          boilerplate ripetuto, segnale di rilevanza più forte.
+    Puro e DETERMINISTICO (ordine canonico per slug) → interamente testabile in sandbox."""
+    nomi: List[str] = []
+    visti = set()
+    for c in citta:
+        s = slug_citta(c)
+        if s and s not in visti:
+            visti.add(s)
+            nomi.append(c)
+    nomi.sort(key=slug_citta)                        # ordine canonico deterministico
+    n = len(nomi)
+    if n <= 1:
+        return {c: [] for c in nomi}
+    k_eff = max(1, min(int(k) if isinstance(k, int) else 6, n - 1))
+    strides = [1]                                    # anello: connessione forte garantita
+    for j in range(1, k_eff):
+        strides.append(round(j * n / k_eff) % n)     # corde small-world
+    out: Dict[str, List[str]] = {}
+    for i, c in enumerate(nomi):
+        vicini: List[str] = []
+        usati = {i}
+        for st in strides:
+            idx = (i + st) % n
+            if idx not in usati:
+                usati.add(idx)
+                vicini.append(nomi[idx])
+        step = 1                                     # riempi se collisioni (n piccolo)
+        while len(vicini) < k_eff and step < n:
+            idx = (i + step) % n
+            if idx not in usati:
+                usati.add(idx)
+                vicini.append(nomi[idx])
+            step += 1
+        out[c] = vicini
+    return out
+
+
+def vicini_di(citta: str, tutte: Sequence[str] = CITTA_SEED, *, k: int = 6) -> List[str]:
+    """I k vicini di UNA città nella maglia (per la rotta /affitta/<slug>). [] se città ignota.
+    Confronto per slug: robusto se `citta` non è identica a un elemento di `tutte`."""
+    m = maglia_link_interni(tutte, k=k)
+    if citta in m:
+        return m[citta]
+    s = slug_citta(citta)
+    for c, vic in m.items():
+        if slug_citta(c) == s:
+            return vic
+    return []
+
+
 def _euro(cents: int) -> str:
     cents = int(cents)
     return "%d.%02d" % (cents // 100, cents % 100)
@@ -268,6 +328,21 @@ def faq_jsonld(lingua: str = "it", *, commissione_bps: int = 1000,
                     "mainEntity": items})
 
 
+def breadcrumb_jsonld(citta: str, base_url: str = "", *, lingua: str = "it") -> str:
+    """BreadcrumbList Schema.org (Home > città): rich result + gerarchia chiara per i crawler.
+    Il nome città è dato grezzo → `_jsonld` neutralizza <>& (XSS-safe come faq_jsonld)."""
+    lng = lingua if lingua in _T else "en"
+    base = (base_url or "").rstrip("/")
+    slug = slug_citta(citta)
+    canonical = base + "/affitta/" + slug + ("?lang=" + lng if lng != "it" else "")
+    home = (base + "/") if base else "/"
+    return _jsonld({"@context": "https://schema.org", "@type": "BreadcrumbList",
+                    "itemListElement": [
+                        {"@type": "ListItem", "position": 1, "name": "Home", "item": home},
+                        {"@type": "ListItem", "position": 2, "name": citta,
+                         "item": canonical}]})
+
+
 def genera_landing_host(citta: str, *, lingua: str = "it", base_url: str = "",
                         commissione_bps: int = 1500, ota_bps: int = 2500,
                         prezzo_demo_cents: int = 10000,
@@ -315,6 +390,9 @@ def genera_landing_host(citta: str, *, lingua: str = "it", base_url: str = "",
         + "<meta property=\"og:type\" content=\"website\">"
         + "<script type=\"application/ld+json\">"
         + faq_jsonld(lng, commissione_bps=commissione_bps, ota_bps=ota_bps)
+        + "</script>"
+        + "<script type=\"application/ld+json\">"
+        + breadcrumb_jsonld(citta, base_url=base, lingua=lng)
         + "</script>"
         + "<style>body{font-family:system-ui,Segoe UI,sans-serif;max-width:46rem;"
           "margin:2rem auto;padding:0 1rem;line-height:1.6;color:#1a1e2b}"

@@ -150,5 +150,40 @@ class TestSitemap(unittest.TestCase):
         self.assertGreater(len(CITTA_SEED), 10)
 
 
+class TestMaglia(unittest.TestCase):
+    def test_deterministica_e_grado(self):
+        from fase97_inbound_seo import maglia_link_interni, CITTA_SEED
+        m1 = maglia_link_interni(CITTA_SEED, k=6)
+        m2 = maglia_link_interni(list(reversed(CITTA_SEED)), k=6)
+        self.assertEqual(m1, m2, "ordine input non deve cambiare la maglia (canonica)")
+        for c, vic in m1.items():
+            self.assertEqual(len(vic), 6)
+            self.assertNotIn(c, vic)
+
+    def test_casi_limite(self):
+        from fase97_inbound_seo import maglia_link_interni, vicini_di
+        self.assertEqual(maglia_link_interni([], k=6), {})
+        self.assertEqual(maglia_link_interni(["Roma"], k=6), {"Roma": []})
+        due = maglia_link_interni(["Roma", "Milano"], k=6)   # k>n-1 → cap
+        self.assertEqual(len(due["Roma"]), 1)
+        self.assertEqual(vicini_di("Ignota", ["Roma", "Milano"]), [])
+
+
+class TestBreadcrumb(unittest.TestCase):
+    def test_valido_e_due_livelli(self):
+        from fase97_inbound_seo import breadcrumb_jsonld
+        raw = (breadcrumb_jsonld("Roma", "https://bookinvip.com", lingua="it")
+               .replace("\\u003c", "<").replace("\\u003e", ">").replace("\\u0026", "&"))
+        d = json.loads(raw)
+        self.assertEqual(d["@type"], "BreadcrumbList")
+        self.assertEqual(len(d["itemListElement"]), 2)
+        self.assertEqual(d["itemListElement"][1]["name"], "Roma")
+
+    def test_xss_safe(self):
+        from fase97_inbound_seo import breadcrumb_jsonld
+        raw = breadcrumb_jsonld('X"><script>alert(1)</script>', "https://x")
+        self.assertNotIn("<script>alert(1)", raw)
+
+
 if __name__ == "__main__":
     unittest.main()

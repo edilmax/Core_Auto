@@ -4666,17 +4666,18 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 # Inbound SEO/AEO (fase97): landing host per città (server-rendered,
                 # crawlabile). Solo città note → niente thin-content da slug arbitrari.
                 try:
-                    from fase97_inbound_seo import (CITTA_SEED, citta_da_slug,
-                                                    genera_landing_host)
+                    from fase97_inbound_seo import (citta_da_slug,
+                                                    genera_landing_host, vicini_di)
                     query = {k: v[0] for k, v in parse_qs(u.query).items()}
                     citta = citta_da_slug(unquote(u.path[len("/affitta/"):]))
                     if citta is None:
                         self._scrivi(404, {"errore": "citta_non_trovata"})
                     else:
                         bps = int(os.environ.get("COMMISSIONE_BPS", "1000"))
+                        # link interni = maglia small-world crawl-ottimale (non tutte le città)
                         self._testo(200, "text/html", genera_landing_host(
                             citta, lingua=query.get("lang", "it"), base_url=base_url,
-                            commissione_bps=bps, citta_correlate=CITTA_SEED))
+                            commissione_bps=bps, citta_correlate=vicini_di(citta)))
                 except Exception:
                     self._scrivi(500, {"errore": "interno"})
             elif u.path == "/llms.txt":

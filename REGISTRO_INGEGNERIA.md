@@ -228,6 +228,25 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
   RESTA Sez.4: hreflang xhtml:link dentro sitemap-host (le varianti lingua sono URL separati con
   ?lang, oggi riconciliate solo dai <link hreflang> in <head>); sitemap-index oltre 50k URL. RESTA
   Sez.2: <header>/<footer>. RESTA Sez.5: Cache-Control/Last-Modified/ETag sulle rotte SSR dinamiche.]
+  [2026-07-17 fatto: ALGORITMO NUOVO "maglia small-world" per i link interni + SANDBOX SEO.
+  PRIMA: la rotta /affitta passava citta_correlate=CITTA_SEED → OGNI landing linkava TUTTE le 27
+  altre città (blocco identico ripetuto = boilerplate + segnale debole, vicino al pattern "link
+  farm"). ORA: fase97.maglia_link_interni(citta,k=6) costruisce un grafo di link interni PURO e
+  deterministico (ordine canonico per slug) con 3 garanzie white-hat: (1) fortemente connesso
+  (anello hamiltoniano i→i+1 → nessun orfano, crawler arriva ovunque), (2) diametro PICCOLO
+  (corde a passo ~n/k, small-world: 28 nodi → diametro 4, non 27), (3) grado costante k=6 (link
+  rilevanti e LIMITATI, non l'elenco intero). fase97.vicini_di(citta) cablata nella rotta.
+  + fase97.breadcrumb_jsonld: 2° JSON-LD BreadcrumbList (Home>città) in ogni landing (rich-result,
+  XSS-safe via _jsonld). SANDBOX: nuovo test_seo_sandbox.py — simula un CRAWL su tutta la
+  superficie (28×8 landing) e verifica invarianti Google-policy che nessun test copriva:
+  grafo (no self-loop/grado-k/fortemente-connesso/no-orfano/diametro≤8/no-dangling), pagina
+  (h1 unico, main unico, viewport, canonical assoluto+self-referente, hreflang completo+RECIPROCO+
+  x-default, JSON-LD FAQPage+BreadcrumbList validi, link interni rilevanti e limitati, no XSS),
+  unicità title/description per lingua, DETERMINISMO/no-cloaking, copertura sitemap⊇pagine, robots
+  dichiara le sitemap, sitemap XML ben formate con <lastmod>. Test locali: TestMaglia+TestBreadcrumb
+  (fase97). Onestà (policy): NESSUN algoritmo garantisce il "primo posto" — questo massimizza il
+  potenziale TECNICO dentro le regole (white-hat) e mette al riparo da penalizzazioni; il ranking
+  dipende anche da contenuti/autorevolezza/concorrenza. Suite mirate 155 verdi + sandbox 13.]
 - [FATTO 2026-07-15: recupero preventivi abbandonati — vedi riga 📧 in sezione 1]
 - **[FATTO 2026-07-16 — COLLAUDO "METODO LIBRO" COMPLETO]**: 29 bug VERI chiusi in un giorno
   (righe 🧠→🔢 in sezione 1: overbooking su-richiesta, host-pagato-con-disputa, penali mai
