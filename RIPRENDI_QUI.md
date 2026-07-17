@@ -1,5 +1,27 @@
 # 🧪 STATO COLLAUDO — sessione 2026-07-16/17 (Fable 5)
 
+> 🌍 **2026-07-17 — ARCO SEO GLOBALE (195 nazioni, multi-motore) COSTRUITO + DEPLOYATO (deploy #5).**
+> Otto pezzi in sequenza, ognuno con sandbox/guardia permanente, suite intera verde, commit+push+VPS:
+> (1) **semantica HTML5** landmark `<main>/<section>` (fase97); (2) **`<lastmod>`** in ENTRAMBE le
+> sitemap (per-scheda reale via `fase57.slug_lastmod_pubblicati` + costante template); (3) **algoritmo
+> maglia small-world** per i link interni (`fase97.maglia_link_interni`: fortemente connesso, diametro
+> 4 su 28 nodi, grado k=6 → niente link-farm) + **BreadcrumbList** + **`test_seo_sandbox.py`** (crawl
+> simulato multi-invariante); (4) **registro città data-driven + gate anti-doorway** (`registro_citta`
+> = seed ∪ inventario reale; città fuori dal registro → 404: la superficie cresce SOLO dove c'è valore,
+> mai scaled-content); (5) **hreflang lingua+PAESE** (`REGIONI_HREFLANG`, 20 locali BCP-47, URL distinti
+> self-canonical reciproci + x-default + og:locale); (6) **sitemap-index + sharding** (`sitemap_index`,
+> `shard_citta` sotto il tetto 50k, rotte `/sitemap-index.xml` + `/sitemap-host-<i>.xml`, robots→indice);
+> (7) **IndexNow** (`fase169_indexnow.py`, gated `INDEXNOW_KEY`, ping Bing/Yandex/Seznam/Naver, rotta
+> `/{key}.txt`); (8) **conditional GET** ETag→304 + Cache-Control su tutte le rotte crawlabili
+> (`fase83._testo_seo`) + **header/footer** semantici. **VERIFICATO LIVE**: home 200 cert ok,
+> /api/domanda ok:true, /sitemap-index.xml 200, /affitta/roma con ETag+Cache e **304** su If-None-Match,
+> robots→sitemap-index, /affitta/roma?lang=es-MX → `html lang="es-MX"`. Container **healthy**, boot pulito
+> (`money_path_pronto:True, avvisi:[]`). **Desktop = GitHub = VPS = `409fa49`.** Suite **2393 verde** (3
+> skip PG). Onestà: nessun algoritmo garantisce il "primo posto" — questo massimizza il potenziale
+> TECNICO dentro le policy Google (white-hat) ed è a prova di penalizzazione. Dettaglio: righe SEO nel
+> REGISTRO. **DA ACCENDERE**: IndexNow submit (generare `INDEXNOW_KEY`+`INDEXNOW_HOST` + hook alla
+> pubblicazione) — key-file già servita se l'env c'è.
+
 > ✅ **DEPLOYATO IN PRODUZIONE il 2026-07-16 sera su "pusha" del fondatore** (commit `0f3fb56`,
 > 28 fix del giorno inclusi): procedura rm-first, container `app`+`backup` **healthy**, verificato
 > vivo (homepage 200 cert ok, `/api/domanda` ok:true, `/api/health` 200, host.html nuovo con
