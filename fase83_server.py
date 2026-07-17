@@ -3862,8 +3862,25 @@ class RouterHTTP:
             return 422, {"errore": "date_mancanti"}
         try:
             from fase119_calendario_prezzi import costruisci_calendario
-            celle = costruisci_calendario(slug, da, a,
-                                          stato_giorno=self._sys.inventario.stato_giorno)
+            inv = self._sys.inventario
+            stato_fn, occ_bps = inv.stato_giorno, 5000
+            # PREFETCH (vincitrice benchmark): una query per l'intero range invece di
+            # una CONNESSIONE per giorno (362ms->1.7ms; 2.4s->21ms sotto scrittura
+            # concorrente multi-dispositivo). Dai dati gia' letti si calcola anche
+            # l'occupazione REALE del range: prima era fissa a 5000 bps e il fattore
+            # occupazione del prezzo dinamico (fase106) non scattava MAI.
+            rng = getattr(inv, "stato_range", None)
+            if callable(rng):
+                byday = rng(slug, da, a)
+                stato_fn = lambda _s, g: byday.get(g)
+                tot_u = sum(r.get("unita_totali", 0) for r in byday.values()
+                            if isinstance(r, dict) and not r.get("chiuso"))
+                tot_o = sum(r.get("unita_occupate", 0) for r in byday.values()
+                            if isinstance(r, dict) and not r.get("chiuso"))
+                if isinstance(tot_u, int) and tot_u > 0 and isinstance(tot_o, int):
+                    occ_bps = min(10000, max(0, tot_o * 10000 // tot_u))
+            celle = costruisci_calendario(slug, da, a, stato_giorno=stato_fn,
+                                          occupazione_bps=occ_bps)
         except Exception:
             logger.error("calendario prezzi: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}

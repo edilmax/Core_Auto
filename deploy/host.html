@@ -924,8 +924,9 @@ document.getElementById('btnCalTutti').onclick = async ()=>{
     let h='<table style="border-collapse:collapse;font-size:.72rem"><thead><tr><th style="position:sticky;left:0;background:#fff;text-align:left;padding:.2rem .4rem">'+T('miei_h')+'</th>';
     gg.forEach(g=>{ h+='<th style="padding:.1rem;color:var(--testo-tenue);font-weight:400">'+g.slice(8)+'</th>'; });
     h+='</tr></thead><tbody>';
+    const escH=s=>String(s).replace(/[<>&]/g,ch=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[ch]));
     al.forEach(x=>{ const byd={}; (x.giorni||[]).forEach(g=>byd[g.giorno]=g.stato);
-      h+='<tr><td style="position:sticky;left:0;background:#fff;padding:.2rem .4rem;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis" title="'+(x.titolo||'').replace(/"/g,'')+'">'+(x.titolo||x.slug)+'</td>';
+      h+='<tr><td style="position:sticky;left:0;background:#fff;padding:.2rem .4rem;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis" title="'+escH((x.titolo||'').replace(/"/g,''))+'">'+escH(x.titolo||x.slug)+'</td>';
       gg.forEach(g=>{ const st=byd[g]||'non_caricato'; h+='<td title="'+g+': '+st+'" style="width:16px;height:16px;background:'+(col[st]||'#fff')+';border:1px solid var(--sfondo-tenue)"></td>'; });
       h+='</tr>'; });
     h+='</tbody></table>';
@@ -947,8 +948,8 @@ document.getElementById('btnCalPrezzi').onclick = async ()=>{
       (d.celle||[]).map(c=>{
         if(c.prezzo_cents==null) return '<span style="min-width:88px;padding:.25rem;border:1px solid var(--sfondo-tenue);border-radius:.4rem;color:#a9b4c9;text-align:center">'+c.giorno.slice(5)+'<br>—</span>';
         const su=(c.prezzo_dinamico_cents>c.prezzo_cents), giu=(c.prezzo_dinamico_cents<c.prezzo_cents);
-        const col=c.stato==='prenotato'?'var(--stato-pieno)':(su?'var(--stato-libero)':'#fff');
-        return '<span style="min-width:88px;padding:.25rem;border:1px solid var(--sfondo-tenue);border-radius:.4rem;text-align:center;background:'+col+'">'+c.giorno.slice(5)+'<br><b>'+money(c.prezzo_dinamico_cents,V)+'</b>'+((su||giu)?'<br><span style="font-size:.72rem;color:var(--testo-tenue)">'+(su?'↑':'↓')+' base '+money(c.prezzo_cents,V)+'</span>':'')+'</span>';
+        const col=c.stato==='prenotato'?'var(--stato-pieno)':(c.stato==='chiuso'?'var(--stato-chiuso)':(su?'var(--stato-libero)':'#fff'));
+        return '<span style="min-width:88px;padding:.25rem;border:1px solid var(--sfondo-tenue);border-radius:.4rem;text-align:center;background:'+col+'">'+c.giorno.slice(5)+'<br><b>'+fmt(c.prezzo_dinamico_cents,V)+'</b>'+((su||giu)?'<br><span style="font-size:.72rem;color:var(--testo-tenue)">'+(su?'↑':'↓')+' base '+fmt(c.prezzo_cents,V)+'</span>':'')+'</span>';
       }).join('')+'</div>';
   }catch(e){ box.className='msg err'; box.textContent=T('errore')+' '+e.message; }
 };
@@ -1091,6 +1092,7 @@ document.getElementById('btnExport').onclick = async ()=>{
 };
 document.getElementById('btnCal').onclick = async ()=>{
   const m = document.getElementById('msgCal');
+  m.className='msg'; m.textContent='⏳';
   const p = new URLSearchParams({alloggio:document.getElementById('c_slug').value,
     da:document.getElementById('c_da').value, a:document.getElementById('c_a').value});
   try{

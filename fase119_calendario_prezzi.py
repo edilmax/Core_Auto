@@ -46,12 +46,20 @@ def costruisci_calendario(slug: str, da: str, a: str, *,
             st = stato_giorno(slug, g) or {}
             base = st.get("prezzo_netto_cents")
             unita = st.get("unita_totali", st.get("unita", 1))
-            venduto = st.get("venduto", st.get("occupati", 0))
+            # il provider REALE (fase58.stato_giorno) espone `unita_occupate`,
+            # non `venduto`/`occupati`: senza questo alias un giorno PIENO
+            # appariva "libero" nel calendario prezzi (contratto verificato live)
+            venduto = st.get("venduto", st.get("occupati",
+                                               st.get("unita_occupate", 0)))
+            chiuso = bool(st.get("chiuso"))
             if not isinstance(base, int) or base <= 0:
-                celle.append({"giorno": g, "stato": "non_aperto", "prezzo_cents": None,
-                              "prezzo_dinamico_cents": None})
+                celle.append({"giorno": g,
+                              "stato": "chiuso" if chiuso else "non_aperto",
+                              "prezzo_cents": None, "prezzo_dinamico_cents": None})
                 continue
-            if isinstance(unita, int) and isinstance(venduto, int) and unita > 0:
+            if chiuso:
+                stato = "chiuso"
+            elif isinstance(unita, int) and isinstance(venduto, int) and unita > 0:
                 stato = "prenotato" if venduto >= unita else "libero"
             else:
                 stato = "libero"

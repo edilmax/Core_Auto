@@ -12,6 +12,48 @@ def stato_finto(slug, g):
     return {}                                              # non aperto
 
 
+def stato_reale(slug, g):
+    """Chiavi ESATTE di fase58.stato_giorno (riga DB): unita_occupate/chiuso,
+    MAI venduto/occupati. Il vecchio finto mascherava il bug #33."""
+    righe = {
+        "2026-08-08": {"prezzo_netto_cents": 10000, "unita_totali": 1,
+                       "unita_occupate": 1, "chiuso": 0, "min_notti": 1},
+        "2026-08-09": {"prezzo_netto_cents": 10000, "unita_totali": 2,
+                       "unita_occupate": 0, "chiuso": 0, "min_notti": 1},
+        "2026-08-10": {"prezzo_netto_cents": 10000, "unita_totali": 1,
+                       "unita_occupate": 0, "chiuso": 1, "min_notti": 1},
+        "2026-08-11": {"prezzo_netto_cents": 0, "unita_totali": 0,
+                       "unita_occupate": 0, "chiuso": 1, "min_notti": 1},
+    }
+    return righe.get(g)
+
+
+class TestContrattoProviderReale(unittest.TestCase):
+    """Bug #33 (provato live): col provider reale un giorno PIENO appariva
+    'libero' e un giorno CHIUSO appariva 'libero' con prezzo suggerito."""
+
+    def test_pieno_e_chiuso_col_provider_reale(self):
+        c = costruisci_calendario("casa", "2026-08-08", "2026-08-11",
+                                  stato_giorno=stato_reale)
+        stati = {x["giorno"]: x["stato"] for x in c}
+        self.assertEqual(stati["2026-08-08"], "prenotato")
+        self.assertEqual(stati["2026-08-09"], "libero")
+        self.assertEqual(stati["2026-08-10"], "chiuso")
+        self.assertEqual(stati["2026-08-11"], "chiuso")   # chiuso senza prezzo
+
+    def test_chiuso_senza_prezzo_niente_prezzi(self):
+        c = costruisci_calendario("casa", "2026-08-11", "2026-08-11",
+                                  stato_giorno=stato_reale)
+        self.assertIsNone(c[0]["prezzo_cents"])
+        self.assertIsNone(c[0]["prezzo_dinamico_cents"])
+
+    def test_chiuso_con_prezzo_mantiene_il_prezzo(self):
+        c = costruisci_calendario("casa", "2026-08-10", "2026-08-10",
+                                  stato_giorno=stato_reale)
+        self.assertEqual(c[0]["stato"], "chiuso")
+        self.assertEqual(c[0]["prezzo_cents"], 10000)
+
+
 class TestCalendario(unittest.TestCase):
     def test_celle_per_giorno(self):
         c = costruisci_calendario("casa", "2026-08-08", "2026-08-10",
