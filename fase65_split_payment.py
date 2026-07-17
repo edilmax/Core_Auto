@@ -309,4 +309,8 @@ def crea_gestore_split(percorso: str = ":memory:", *,
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return GestoreSplit(lambda: _ConnCondivisa(con), orologio=orologio)
-    return GestoreSplit(lambda: sqlite3.connect(percorso), orologio=orologio)
+    # timeout 30s: sotto burst simultaneo (tutti i membri pagano nello stesso
+    # istante) il default 5s produceva 'database is locked' -> 503; i writer
+    # ora si ACCODANO (bug #36, bombardamento split)
+    return GestoreSplit(lambda: sqlite3.connect(percorso, timeout=30),
+                        orologio=orologio)

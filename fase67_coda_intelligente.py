@@ -476,5 +476,7 @@ def crea_gestore_coda(percorso: str = ":memory:", *,
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return GestoreCoda(lambda: _ConnCondivisa(con), politica=politica,
                            orologio=orologio)
-    return GestoreCoda(lambda: sqlite3.connect(percorso), politica=politica,
-                       orologio=orologio)
+    # timeout 30s come fase65: sotto burst simultaneo i writer si accodano
+    # invece di fallire 'database is locked' a 5s (custodisce DEPOSITI)
+    return GestoreCoda(lambda: sqlite3.connect(percorso, timeout=30),
+                       politica=politica, orologio=orologio)

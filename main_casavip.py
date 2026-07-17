@@ -45,6 +45,7 @@ def main() -> None:  # pragma: no cover
         db_registro_host=os.environ.get("DB_REGISTRO_HOST", "data/registro_host.db"),
         db_viral=os.environ.get("DB_VIRAL", "data/viral.db"),
         db_coda=os.environ.get("DB_CODA", "data/coda.db"),
+        db_split=os.environ.get("DB_SPLIT", "data/split.db"),
         db_messaggi=os.environ.get("DB_MESSAGGI", "data/messaggi.db"),
         db_domanda=os.environ.get("DB_DOMANDA", "data/domanda.db"),
         db_garanzia=os.environ.get("DB_GARANZIA", "data/garanzia.db"),

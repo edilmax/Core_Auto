@@ -75,6 +75,7 @@ class ConfigCasaVIP:
     db_registro_host: str = ":memory:"
     db_viral: str = ":memory:"
     db_coda: str = ":memory:"          # coda intelligente (fase67): DEPOSITI -> in prod va su FILE
+    db_split: str = ":memory:"         # split di gruppo (fase65): rotte VIVE -> in prod va su FILE
     db_messaggi: str = ":memory:"
     db_domanda: str = ":memory:"       # lista d'attesa + credito fondatore (anti-vuoto)
     db_garanzia: str = ":memory:"      # escrow di garanzia (soldi all'host solo se conforme)
@@ -347,7 +348,11 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     from fase75_guardian_engine import crea_guardian
     from fase62_predictive_noshow import crea_gestore_noshow
     from fase79_dichiarazione import crea_dichiarazione
-    split = crea_gestore_split(":memory:")
+    # lo split ha rotte VIVE (/api/split/*) e il server prod e' MULTI-THREAD
+    # (ThreadingHTTPServer): con ":memory:" la connessione condivisa collide
+    # sotto pagamenti simultanei (bug #36: 538/960 in 503) e i conti spariscono
+    # al riavvio -> in prod DEVE stare su file (env DB_SPLIT)
+    split = crea_gestore_split(cfg.db_split)
     # la coda custodisce DEPOSITI (denaro): il percorso e' configurabile perche'
     # all'accensione DEVE stare su file (":memory:" = depositi persi al riavvio
     # + connessione condivisa fragile fra thread, stessa classe artefatto fase76)
