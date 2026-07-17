@@ -29,6 +29,16 @@
 > (homepage 200 cert ok, /api/health 200, /api/domanda ok:true). **VPS = GitHub = `e9aaeaf`: TUTTO
 > ALLINEATO, niente in sospeso per il deploy.** Suite 2332 verde. (3 deploy live totali della sessione.)
 >
+> ✅ **DEPLOY LIVE #4 (2026-07-17 mattina)**: revisione modulo Calendario Prezzi / Vista Multi-Alloggio →
+> **BUG #33** (fase119: giorno PIENO mostrato "libero" + CHIUSO ignorato — deriva di contratto: il provider
+> reale espone `unita_occupate`, il finto dei test usava `venduto`) e **BUG #34** (host.html: bottone
+> "💶 Prezzi" MORTO da sempre in prod — `money()` inesistente nella pagina, ReferenceError; + escape titolo
+> nella vista multi-alloggio) corretti + `fase58.stato_range` vincitrice benchmark 3 varianti (vista
+> 362ms→1.7ms; **2.4s→21ms sotto scrittura tariffe concorrente multi-dispositivo**) + occupazione REALE
+> del range nel prezzo dinamico (prima fissa 5000 bps = fattore fase106 inerte). Suite verde 2 giri,
+> commit `7a00f58`, **Desktop=GitHub=VPS allineati**, container healthy, fix verificato nella pagina
+> SERVITA (money( assente, fmt/escH presenti). Dettaglio: REGISTRO_INGEGNERIA.md righe 📅/🖱️.
+>
 > 🔑 **CHIAVE STRIPE (dove sta)**: la chiave LIVE (`sk_live_`) + webhook secret sono in `.env.casavip`
 > **SOLO sul VPS** (`/var/www/bookinvip/.env.casavip`), attivi nel container. NON in git (gitignore
 > esclude i `.env` = giusto, repo pubblico); in locale solo i `.example` con segnaposto vuoti. Se il
