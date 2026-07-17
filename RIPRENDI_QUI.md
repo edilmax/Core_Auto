@@ -16,10 +16,26 @@
 > Pattern: i bug di concorrenza sul money-path sono TOCTOU cross-tabella → soluzione = tombstone
 > permanente + BEGIN IMMEDIATE. Tutto il resto: 0 violazioni.
 >
+> **+ #32 (ragionamento "che test mancano" col fondatore)**: CRASH a metà webhook pagamento — se il
+> handler muore dopo il CAS 'pagato' ma prima dei passi derivati, il retry di Stripe usciva subito →
+> **tassa persa dal ledger + payout bloccato 'in_attesa' per sempre**. Fix: `_riasserisci_incasso`
+> (tassa+payout idempotenti) chiamato anche sul ramo retry 'pagato'; il retry SANA lo stato (commit
+> `60b1d1e`). Investigato anche il fuso orario: prod = UTC deterministico → limitazione nota
+> media-bassa (fix giusto = fuso per-alloggio, feature, NON nelle 48h).
+>
 > ✅ **DEPLOY LIVE #2 fatto** (VPS `0f3fb56`→`ffba36a`): fix #29 + #30 + guardie in produzione,
-> container healthy, log puliti, verificato vivo. ⚠️ **VPS ora a `ffba36a`, GitHub a `f0c0324`**:
-> manca solo il fix tassa #31 in produzione — **attende un TERZO "pusha"** (money-path: da deployare).
-> Tutto committato+GitHub, memoria aggiornata. "Salva tutto" = fatto su Desktop, GitHub, memoria.
+> container healthy, log puliti, verificato vivo. ⚠️ **VPS a `ffba36a`, GitHub a `60b1d1e`**: mancano
+> in produzione i fix **#31 (tassa)** e **#32 (crash-recovery)** — money-path — **attendono un
+> TERZO "pusha"**. **Suite 2332 verde.** Tutto committato+GitHub, memoria aggiornata.
+>
+> 🔑 **CHIAVE STRIPE (dove sta)**: la chiave LIVE (`sk_live_`) + webhook secret sono in `.env.casavip`
+> **SOLO sul VPS** (`/var/www/bookinvip/.env.casavip`), attivi nel container. NON in git (gitignore
+> esclude i `.env` = giusto, repo pubblico); in locale solo i `.example` con segnaposto vuoti. Se il
+> VPS muore, la chiave si ri-ottiene da **dashboard.stripe.com → Developers → API keys** (non è
+> perdita: il codice insostituibile è su GitHub).
+>
+> 🎯 **GAP RIMANENTI (servono al fondatore)**: (1) Stripe VERO test-mode (tutto gira con Stripe finto);
+> (2) frontend browser E2E (Playwright); (3) carico sostenuto (soffitto SQLite / Postgres).
 
 **AGGIORNAMENTO (2ª parte sessione, metodo libro sui rami su-richiesta e contestazione): +5 bug VERI
 (16-20), tutti con prova dal vivo + fix + test + commit:**
