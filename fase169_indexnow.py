@@ -115,7 +115,10 @@ class IndexNow:
             fetch = self._fetch or _post_reale
             stato = fetch(self._endpoint,
                           json.dumps(corpo).encode("utf-8"),
-                          {"Content-Type": "application/json; charset=utf-8"})
+                          {"Content-Type": "application/json; charset=utf-8",
+                           # senza User-Agent api.indexnow.org risponde 403 (stessa
+                           # classe del 403 Cloudflare di Groq in fase165)
+                           "User-Agent": "Mozilla/5.0 (compatible; BookinVIP-IndexNow/1.0)"})
             return {"inviato": True, "url": len(buoni), "stato": stato}
         except Exception:
             logger.warning("IndexNow submit fallita (ISOLATA)", exc_info=True)

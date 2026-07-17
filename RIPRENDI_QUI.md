@@ -25,7 +25,10 @@
 > (isolato). Live 7 FAQ (prezzo 120.00, POI 13m, tassa 3.50) visibili+strutturate. VPS=GitHub=Desktop=
 > `4811b23`, suite **2442 verde**, container healthy.
 > DA ACCENDERE (in "COSTRUITO ma SPENTO"): reverse-geocode QUARTIERE (→ quartiere_fn del motore),
-> UI pannello host per il rapporto SEO (rotta /api/host/seo_report già viva), IndexNow submit (chiave env).
+> UI pannello host per il rapporto SEO (rotta /api/host/seo_report già viva).
+> ✅ **2026-07-18 (deploy #9): INDEXNOW ACCESO** — chiave in `.env.casavip` (VPS, prima del ricreate),
+> key-file 200, primo submit reale 236 URL → scoperto+fixato 403 per User-Agent mancante (classe
+> Groq/fase165) → ri-submit **200 OK**. Ping automatico a ogni publish ora attivo. Dettaglio: riga 📡 REGISTRO.
 
 > 🌍 **2026-07-17 — ARCO SEO GLOBALE (195 nazioni, multi-motore) COSTRUITO + DEPLOYATO (deploy #5).**
 > Otto pezzi in sequenza, ognuno con sandbox/guardia permanente, suite intera verde, commit+push+VPS:
@@ -46,8 +49,7 @@
 > (`money_path_pronto:True, avvisi:[]`). **Desktop = GitHub = VPS = `409fa49`.** Suite **2393 verde** (3
 > skip PG). Onestà: nessun algoritmo garantisce il "primo posto" — questo massimizza il potenziale
 > TECNICO dentro le policy Google (white-hat) ed è a prova di penalizzazione. Dettaglio: righe SEO nel
-> REGISTRO. **DA ACCENDERE**: IndexNow submit (generare `INDEXNOW_KEY`+`INDEXNOW_HOST` + hook alla
-> pubblicazione) — key-file già servita se l'env c'è.
+> REGISTRO. ~~DA ACCENDERE: IndexNow submit~~ → ✅ ACCESO 2026-07-18 (deploy #9, vedi sopra).
 
 > ✅ **DEPLOYATO IN PRODUZIONE il 2026-07-16 sera su "pusha" del fondatore** (commit `0f3fb56`,
 > 28 fix del giorno inclusi): procedura rm-first, container `app`+`backup` **healthy**, verificato

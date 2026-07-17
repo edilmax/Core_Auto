@@ -49,6 +49,7 @@ class TestAdapterGated(unittest.TestCase):
             catturato["url"] = url
             catturato["body"] = json.loads(body.decode("utf-8"))
             catturato["ct"] = headers.get("Content-Type", "")
+            catturato["ua"] = headers.get("User-Agent", "")
             return 200
 
         i = IndexNow("KEY", H, fetch=fake)
@@ -61,6 +62,8 @@ class TestAdapterGated(unittest.TestCase):
         self.assertEqual(catturato["body"]["urlList"], ["https://bookinvip.com/affitta/roma"])
         self.assertEqual(catturato["body"]["keyLocation"], "https://bookinvip.com/KEY.txt")
         self.assertIn("application/json", catturato["ct"])
+        # senza User-Agent api.indexnow.org risponde 403 (provato in prod 2026-07-17)
+        self.assertTrue(catturato["ua"])
 
     def test_nessun_url_valido(self):
         i = IndexNow("KEY", H, fetch=lambda *a: 200)
