@@ -138,6 +138,7 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 | 117 | Wishlist / preferiti guest | rotta + UI (serve login guest, oggi assente) | conversione |
 | 123 | Web Push guest (VAPID, gratis) | generare chiavi VAPID + service worker | retention |
 | 169 | **IndexNow submit** (ping Bing/Yandex/Seznam/Naver) — key-file già servita se env presente | generare `INDEXNOW_KEY` (hex casuale) + `INDEXNOW_HOST` nel .env; poi chiamare `crea_indexnow().submit([url landing cambiati])` alla pubblicazione annuncio (hook gated, blindato) | scoperta istantanea multi-motore (non-Google) |
+| 171 | **Cervello SEO/AEO Fact-Ledger** (`valuta_annuncio`: punteggio+query+gap) — libreria pura già testata (24 guardie) | costruire l'ORCHESTRATORE-su-publish (prossimo pezzo, effort high): a ogni pubblicazione reale chiama `valuta_annuncio(scheda, ctx OSM/tassa/geocoder, coorte, markup)` e usa `citazioni_pronte` per FAQ/llms.txt + gap per suggerimenti all'host | motore SEO autonomo (arma proprietaria) |
 | 137 | Fedeltà guest (punti→sconti) | wiring + UI (serve identità guest) | fidelizzazione |
 | 139 | Chatbot AI assistenza guest | agganciare a Pool AI (164/165) + UI | supporto |
 | 141 | Onboarding wizard host guidato | NON prioritario: il pannello ha già la guida 3-passi live (sarebbe un doppione) | attivazione host |
@@ -314,6 +315,34 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
   alla home (aiuta crawl + distribuzione link-equity). Landmark ora completi: header/main/section/
   nav/footer. Guardie estese: TestStrutturaSemantica(97) + test_ogni_landing_invarianti(sandbox).
   ARCO SEO GLOBALE + tecnico CHIUSO. Suite mirate 45 verdi.]
+  [2026-07-17 sera fatto: CERVELLO SEO/AEO fase171 "Fact-Ledger" — passo 5 del motore autonomo.
+  METODO: fan-out di design a 4 varianti indipendenti (vincibilità-query / completezza-gap /
+  difficoltà-competitiva / estraibilità-AEO) + verifica avversariale → VINCITRICE "Fact-Ledger AEO"
+  (la pagina = ledger di fatti atomici citabili; citabilità = peso×specificità×verificabilità×
+  distintività×presenza×emissione-markup; i pesi alti ai fatti PUBBLICI non falsificabili:
+  distanza-POI dalle coordinate, tassa fase147, quartiere geocoder) con 3 INNESTI dalle rivali:
+  ancora-BITMASK (servizio conta solo col codice strutturato fase57, testo senza codice=0) +
+  anti-spoof geo (pin >2km dal geocode → coordinate declassate, POI azzerati MA restano nel
+  massimo = lo spoof COSTA) da "Contesa-Inversa"; matematica INTERA per-mille + invariante ESATTO
+  Σgap.punti_persi_milli == 100000−punteggio_milli (largest-remainder deterministico) da "CPGQ";
+  onestà cold-start (vincibilità = priorità RELATIVA mai promessa, mai query-testa: k≥2 vincoli
+  fattuali, prior conservativi con coorte <8) da "Query-Lattice". FAIRNESS DI POSIZIONE: MAXREF
+  calcolato per LA posizione (zona senza POI/quartiere/tassa può comunque fare 100; narrativa non
+  esige menzioni locali dove non esistono entità locali). API: valuta_annuncio(scheda, ctx, coorte,
+  markup_emesso) → {punteggio, sotto_punteggi, fatti, query(it/en, bucket, citazione_pronta), gap
+  (tipo host/host_condizionale/sistema/tempo, delta_query da ri-generazione ESATTA)}. PURO/
+  deterministico (niente float/now/random; distanza equirettangolare con tabella coseni per-mille
+  INTERA). 3 BUG trovati dal sandbox e fixati in sviluppo: distanza asimmetrica (floor su delta
+  negativi + coseno solo da lat1 → abs prima della divisione + coseno punto medio), fairness
+  narrativa (menzione locale esigita dove non c'era nulla da menzionare), vincibilità compressa
+  (prodotto secco di 4 fattori ≤1 → bande irraggiungibili; fix = ammorbidimento geometrico isqrt
+  del prodotto, ordina-conservante + rarità misurata sui QUALIFICATORI non sull'imballaggio
+  camere/capacità) + quartiere-senza-coordinate rifiutato (il quartiere DERIVA dal pin). Guardia
+  permanente test_fase171_cervello (24 test: determinismo/permutazioni, scheda piena=100 ESATTO,
+  partizione esatta, monotonia white-hat, anti-stuffing, query oneste, anti-spoof, no-float,
+  cold-start, bombardamento seedato 600 schede×invarianti). Provato live povero=37 vs ricco=83
+  con gap ordinati per ROI e query 30-59 ordinate sensatamente. PROSSIMO: orchestratore-su-publish
+  (effort high, chiede potenza prima) che cabla il cervello + FAQ/llms da citazioni_pronte.]
 - [FATTO 2026-07-15: recupero preventivi abbandonati — vedi riga 📧 in sezione 1]
 - **[FATTO 2026-07-16 — COLLAUDO "METODO LIBRO" COMPLETO]**: 29 bug VERI chiusi in un giorno
   (righe 🧠→🔢 in sezione 1: overbooking su-richiesta, host-pagato-con-disputa, penali mai
@@ -470,3 +499,4 @@ sempre "morto": molti sono librerie usate da altri moduli.
 | 166 | `fase166_geocoder.py` | boot | Geocoder (indirizzo/città -> coordinate) per la mappa nella ricerca. |
 | 167 | `fase167_credito_single_use.py` | boot | Registro SINGLE-USE crediti (un Credito Fondatore/Viaggio si spende UNA volta). |
 | 169 | `fase169_indexnow.py` | +router (key-file) | IndexNow: notifica istantanea multi-motore (Bing/Yandex/Seznam/Naver). GATED da env INDEXNOW_KEY (submit SPENTO default). |
+| 171 | `fase171_cervello_seo.py` | — (libreria PURA) | CERVELLO SEO/AEO "Fact-Ledger" (vincitrice benchmark 4 varianti): punteggio 0-100 + query long-tail vincibili + gap azionabili dallo stesso ledger di fatti citabili. Si accende con l'orchestratore-su-publish (da costruire). |
