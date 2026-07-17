@@ -87,6 +87,8 @@ class ConfigCasaVIP:
     db_checkin: str = ":memory:"       # check-in digitale (pre-registrazione ospiti + sblocco)
     db_credito_usati: str = ":memory:"  # registro SINGLE-USE crediti (fase167): un credito si spende UNA volta
     con_geocoding: bool = False        # ON in prod: geocodifica alla pubblicazione (default OFF: test)
+    con_poi: bool = False              # provider POI OSM (fase175) per il motore SEO (default OFF: test/rete)
+    db_poicache: str = ":memory:"      # cache POI vicini per-annuncio (Overpass around+cache)
     file_referral: str = ""            # path JSON referral host-porta-host (vuoto = in RAM)
     con_sentinel: bool = False
     cartella_sentinel: Optional[str] = None
@@ -131,6 +133,7 @@ class SistemaCasaVIP:
     stripe: Any = None      # ProviderStripe (fase85) o None: per rigenerare link (su-richiesta)
     connect: Any = None     # ProviderConnect (fase101) o None: bonifici automatici agli host
     geocoder: Any = None    # Geocoder (fase166): città->coordinate per la mappa
+    poi_provider: Any = None  # ProviderPOI (fase175): luoghi notevoli vicini, per il motore SEO
     checkin: Any = None     # CheckinDigitale (fase127): pre-registrazione ospiti + sblocco
     credito_usati: Any = None  # RegistroCreditiUsati (fase167): single-use del Credito Fondatore/Viaggio
 
@@ -321,6 +324,14 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         geocoder = crea_geocoder(cfg.db_geocache)
         componenti.append("geocoder(166)")
 
+    # 3f-quinquies-bis) PROVIDER POI (fase175): luoghi notevoli vicini all'annuncio da OSM,
+    # per arricchire il MOTORE SEO (fase173/171). GATED da con_poi (default OFF: rete). ON in prod.
+    poi_provider = None
+    if cfg.con_poi:
+        from fase175_poi_osm import crea_provider_poi
+        poi_provider = crea_provider_poi(cfg.db_poicache)
+        componenti.append("poi_osm(175)")
+
     # 3f-quater) registro FIRMATO delle accettazioni del contratto host (prova legale opponibile)
     from fase163_accettazioni import crea_registro_accettazioni
     accettazioni = crea_registro_accettazioni(cfg.db_accettazioni, bytes(cfg.segreto_hmac))
@@ -448,4 +459,4 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           pagamenti_pendenti=pagamenti_pendenti, tassa_comunale=tassa_comunale,
                           payout=payout, accettazioni=accettazioni, stripe=provider,
                           connect=_connect, geocoder=geocoder, checkin=checkin,
-                          credito_usati=credito_usati)
+                          poi_provider=poi_provider, credito_usati=credito_usati)

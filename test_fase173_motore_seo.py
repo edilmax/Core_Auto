@@ -176,6 +176,19 @@ class TestRottaEPublish(unittest.TestCase):
         r = m.valuta(self.sis.catalogo.dettaglio("casa-seo"))
         self.assertTrue(0 <= r["punteggio"] <= 100)
 
+    def test_factory_cabla_provider_poi_se_presente(self):
+        # se il sistema espone poi_provider, il motore lo usa nel contesto
+        class FintoPOI:
+            def vicini(self, dettaglio):
+                return [{"nome": "Colosseo", "cat": "attraction",
+                         "lat_micro": 41_900_050, "lon_micro": 12_500_050}]
+        self.sis.poi_provider = FintoPOI()
+        m = crea_motore_da_sistema(self.sis)
+        det = dict(self.sis.catalogo.dettaglio("casa-seo") or {})
+        det["lat_micro"], det["lon_micro"] = 41_900_000, 12_500_000
+        ctx = m.contesto(det)
+        self.assertTrue(any(p["nome"] == "Colosseo" for p in ctx.get("poi", [])))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

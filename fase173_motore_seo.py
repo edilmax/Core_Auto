@@ -176,9 +176,13 @@ def crea_motore_da_sistema(sistema: Any) -> MotoreSEO:
     rispettivi provider; il cervello e' fair anche senza (MAXREF per-posizione)."""
     tassa = getattr(sistema, "tassa_comunale", None)
     tassa_fn = (lambda comune: tassa.regola(comune)) if tassa is not None else None
+    # provider POI (fase175): arricchisce il geo del cervello coi luoghi notevoli vicini.
+    # Presente solo se il sistema lo cabla (con_poi); altrimenti None = cervello fair senza.
+    poi = getattr(sistema, "poi_provider", None)
+    poi_fn = (lambda dettaglio: poi.vicini(dettaglio)) if poi is not None else None
     try:
         from fase169_indexnow import crea_indexnow
         inow = crea_indexnow()
     except Exception:
         inow = None
-    return MotoreSEO(tassa_regola_fn=tassa_fn, indexnow=inow)
+    return MotoreSEO(tassa_regola_fn=tassa_fn, poi_fn=poi_fn, indexnow=inow)
