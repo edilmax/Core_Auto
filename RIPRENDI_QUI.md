@@ -5,15 +5,21 @@
 > vivo (homepage 200 cert ok, `/api/domanda` ok:true, `/api/health` 200, host.html nuovo con
 > colonna PIN). Suite 2303 verde al momento del deploy.
 >
-> ⚡ **NOTTE 2026-07-17 — CAMPAGNA "10.000 MENTI" (bombardamento CONCORRENTE, pilota automatico).**
-> 8 bersagli bombardati con thread simultanei sullo stesso record (non più agenti sequenziali):
+> ⚡ **2026-07-17 — CAMPAGNA "10.000 MENTI" (bombardamento CONCORRENTE, pilota automatico).**
+> 11 bersagli bombardati con thread simultanei sullo stesso record (non più agenti sequenziali):
 > money-spine (400 voucher × 10.000 thread), chat/prove-controversia, su-richiesta (2700 thread),
-> referral/credito (double-spend), check-in, recensioni, MCP, split-payment. **1 BUG VERO trovato
-> e corretto: #30** — la cancellazione non revocava il check-in → smart-pass valido su prenotazione
-> cancellata (fix tombstone `revocato=1`, commit `224d31d`). Tutto il resto: 0 violazioni.
-> **Suite 2323 verde. Tutto committato+GitHub fino a `dab7d73`.** ⚠️ Il VPS LIVE è fermo a `0f3fb56`:
-> indietro di fix #29 (credito multi-valuta) + #30 (check-in) + 8 guardie di concorrenza — **attende
-> un nuovo "pusha"** (nessuna urgenza: #29 non sfruttabile in prod solo-EUR, #30 richiede serratura smart non ancora esistente).
+> referral/credito (double-spend), check-in, recensioni, MCP, split-payment, **calendario-prezzi,
+> registrazione-host, ledger-tassa**. **2 BUG VERI trovati e corretti**: **#30** cancellazione non
+> revocava il check-in → smart-pass valido su prenotazione cancellata (fix tombstone `revocato=1`);
+> **#31** ledger tassa sovra-contava i rimborsati sotto race pay∥cancel → rischio di versare al
+> Comune tassa già restituita (fix tombstone `stornato=1` + storna incondizionato, commit `f0c0324`).
+> Pattern: i bug di concorrenza sul money-path sono TOCTOU cross-tabella → soluzione = tombstone
+> permanente + BEGIN IMMEDIATE. Tutto il resto: 0 violazioni.
+>
+> ✅ **DEPLOY LIVE #2 fatto** (VPS `0f3fb56`→`ffba36a`): fix #29 + #30 + guardie in produzione,
+> container healthy, log puliti, verificato vivo. ⚠️ **VPS ora a `ffba36a`, GitHub a `f0c0324`**:
+> manca solo il fix tassa #31 in produzione — **attende un TERZO "pusha"** (money-path: da deployare).
+> Tutto committato+GitHub, memoria aggiornata. "Salva tutto" = fatto su Desktop, GitHub, memoria.
 
 **AGGIORNAMENTO (2ª parte sessione, metodo libro sui rami su-richiesta e contestazione): +5 bug VERI
 (16-20), tutti con prova dal vivo + fix + test + commit:**
