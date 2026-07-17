@@ -156,6 +156,117 @@ class MotoreSEO:
                     "indexnow": {"inviato": False, "motivo": "errore"}}
 
 
+def _euro_str(cents: Any) -> str:
+    """Cents interi -> '120.00' (mai float sui soldi)."""
+    c = cents if isinstance(cents, int) and not isinstance(cents, bool) else 0
+    return "%d.%02d" % (c // 100, c % 100)
+
+
+# etichette dei servizi in italiano (per le FAQ della pagina, che e' lang=it)
+_SERVIZIO_IT = {
+    "wifi": "wifi", "parcheggio": "parcheggio", "piscina": "piscina",
+    "aria_condizionata": "aria condizionata", "cucina": "cucina",
+    "lavatrice": "lavatrice", "animali_ammessi": "animali ammessi",
+    "colazione": "colazione", "vista_mare": "vista mare",
+    "parcheggio_disabili": "parcheggio per disabili", "check_in_24h": "check-in 24h",
+    "riscaldamento": "riscaldamento",
+}
+_POLITICA_IT = {
+    "flessibile": "La cancellazione è flessibile: puoi cancellare senza penali entro i "
+                  "termini indicati.",
+    "moderata": "La politica di cancellazione è moderata: rimborso parziale secondo i termini.",
+    "rigida": "La politica di cancellazione è rigida: sono previste penali.",
+    "non_rimborsabile": "La tariffa non è rimborsabile.",
+}
+
+
+def genera_faq(rapporto: Dict[str, Any], dettaglio: Dict[str, Any]) -> List[Dict[str, str]]:
+    """FAQ (domanda→risposta) dai FATTI REALI del ledger del cervello: la pagina diventa LA
+    RISPOSTA con un valore DURO e verificabile (prezzo, distanza-POI in metri, tassa, capacità).
+    È il cuore dell'AEO: gli answer-engine citano la fonte fattuale più specifica. White-hat:
+    solo fatti PRESENTI, mai inventati. Deterministico. Cap a 8. Ogni risposta esce dallo stesso
+    ledger di punteggio/query → coerenza garantita (nessun claim non sostenuto)."""
+    fatti = {f["slot"]: f for f in (rapporto.get("fatti") or [])
+             if isinstance(f, dict) and f.get("slot")}
+
+    def pres(slot: str) -> bool:
+        f = fatti.get(slot)
+        return bool(f and f.get("presenza", 0) >= 1000)
+
+    faq: List[Dict[str, str]] = []
+    citta = dettaglio.get("citta") if isinstance(dettaglio.get("citta"), str) else ""
+
+    if pres("prezzo_notte"):
+        val = dettaglio.get("valuta") if isinstance(dettaglio.get("valuta"), str) else "EUR"
+        faq.append({"q": "Quanto costa una notte%s?" % (" a " + citta if citta else ""),
+                    "a": "Il prezzo è di %s %s a notte."
+                         % (_euro_str(dettaglio.get("prezzo_notte_cents")), val)})
+
+    if pres("capacita"):
+        cap = dettaglio.get("capacita")
+        extra = []
+        if pres("camere"):
+            extra.append("%d camer%s" % (dettaglio["camere"],
+                                         "a" if dettaglio["camere"] == 1 else "e"))
+        if pres("bagni"):
+            extra.append("%d bagn%s" % (dettaglio["bagni"],
+                                        "o" if dettaglio["bagni"] == 1 else "i"))
+        coda = (", con " + " e ".join(extra)) if extra else ""
+        faq.append({"q": "Quante persone può ospitare?",
+                    "a": "Può ospitare fino a %d persone%s." % (cap, coda)})
+
+    # POI (dal ledger: valore={nome,cat,dist_m}), i primi 3 per rilevanza
+    poi = [fatti[s]["valore"] for s in sorted(fatti)
+           if s.startswith("poi:") and pres(s)
+           and isinstance(fatti[s].get("valore"), dict)]
+    for p in poi[:3]:
+        m = p.get("dist_m")
+        if not (isinstance(m, int) and m >= 0):
+            continue
+        minuti = max(1, m // 80)
+        faq.append({"q": "Quanto dista da %s?" % p.get("nome", ""),
+                    "a": "Si trova a circa %d metri (~%d minuti a piedi) da %s."
+                         % (m, minuti, p.get("nome", ""))})
+
+    if pres("amenita:animali_ammessi"):
+        faq.append({"q": "Sono ammessi animali?",
+                    "a": "Sì, gli animali domestici sono ammessi."})
+
+    if pres("tassa_soggiorno") and isinstance(fatti["tassa_soggiorno"].get("valore"), dict):
+        r = fatti["tassa_soggiorno"]["valore"]
+        ppn = r.get("ppn_cents")
+        if isinstance(ppn, int) and not isinstance(ppn, bool) and ppn > 0:
+            cap_n = r.get("max_notti")
+            coda = (" (per un massimo di %d notti)" % cap_n
+                    if isinstance(cap_n, int) and cap_n > 0 else "")
+            faq.append({"q": "Quanto è la tassa di soggiorno%s?"
+                             % (" a " + citta if citta else ""),
+                        "a": "La tassa di soggiorno è di %s a persona a notte%s."
+                             % (_euro_str(ppn), coda)})
+
+    if pres("politica"):
+        pol = dettaglio.get("politica_cancellazione")
+        if pol in _POLITICA_IT:
+            faq.append({"q": "Posso cancellare la prenotazione?", "a": _POLITICA_IT[pol]})
+
+    servizi = [s for s in (dettaglio.get("servizi") or ()) if s in _SERVIZIO_IT]
+    if servizi:
+        faq.append({"q": "Quali servizi sono inclusi?",
+                    "a": "Sono inclusi: %s." % ", ".join(_SERVIZIO_IT[s] for s in servizi)})
+
+    return faq[:8]
+
+
+def faq_jsonld(faq: Sequence[Dict[str, str]]) -> Optional[Dict[str, Any]]:
+    """FAQPage Schema.org dalle Q&A (rich result Google + estraibile dagli AI). None se vuoto."""
+    if not faq:
+        return None
+    return {"@context": "https://schema.org", "@type": "FAQPage",
+            "mainEntity": [{"@type": "Question", "name": x["q"],
+                            "acceptedAnswer": {"@type": "Answer", "text": x["a"]}}
+                           for x in faq]}
+
+
 def rapporto_host(rapporto: Dict[str, Any], *, max_query: int = 15) -> Dict[str, Any]:
     """Vista per il PANNELLO host: niente ledger grezzo, solo cio' che l'host puo' usare."""
     query = [{"testo": q["testo"], "lingua": q["lingua"],

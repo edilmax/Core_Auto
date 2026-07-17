@@ -138,7 +138,7 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 | 117 | Wishlist / preferiti guest | rotta + UI (serve login guest, oggi assente) | conversione |
 | 123 | Web Push guest (VAPID, gratis) | generare chiavi VAPID + service worker | retention |
 | 169 | **IndexNow submit** (ping Bing/Yandex/Seznam/Naver) — key-file già servita se env presente | generare `INDEXNOW_KEY` (hex casuale) + `INDEXNOW_HOST` nel .env; poi chiamare `crea_indexnow().submit([url landing cambiati])` alla pubblicazione annuncio (hook gated, blindato) | scoperta istantanea multi-motore (non-Google) |
-| 171→173→175 | ~~Cervello SEO/AEO~~ **ACCESO** via fase173; **provider POI-OSM ACCESO** via fase175 (con_poi, ON in prod). Restano SPENTI: provider QUARTIERE (reverse-geocode) e l'uso di `citazioni_pronte` per FAQ/llms.txt + UI pannello host | reverse-geocode quartiere (fase166 estesa) → `quartiere_fn`; FAQ dalla `citazioni_pronte` nella pagina; schermata pannello host per il rapporto | AEO + UX del motore |
+| 171→173→175 | ~~Cervello + POI~~ **ACCESI**; **FAQ AEO da fatti reali ACCESE** nella pagina alloggio (fase173.genera_faq → FAQPage JSON-LD + `<details>` coerenti). Restano SPENTI: provider QUARTIERE (reverse-geocode) e UI pannello host | reverse-geocode quartiere (fase166 estesa) → `quartiere_fn`; schermata pannello host per il rapporto SEO (rotta già viva) | quartiere + UX |
 | 137 | Fedeltà guest (punti→sconti) | wiring + UI (serve identità guest) | fidelizzazione |
 | 139 | Chatbot AI assistenza guest | agganciare a Pool AI (164/165) + UI | supporto |
 | 141 | Onboarding wizard host guidato | NON prioritario: il pannello ha già la guida 3-passi live (sarebbe un doppione) | attivazione host |
@@ -370,6 +370,19 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
   default-OFF, db_poicache) + main_casavip (POI_OSM=true, DB_POICACHE ON in prod). Guardia
   test_fase175_poi_osm (9) + integrazione (POI alzano il punteggio e sbloccano 'vicino a Colosseo').
   ENV NUOVA sul VPS: POI_OSM + DB_POICACHE=/data/poicache.db PRIMA del deploy (regola incidente #36).]
+  [2026-07-17 sera fatto: FAQ AEO da FATTI REALI (effort high) — la pagina alloggio diventa LA
+  RISPOSTA (ponte AEO, terreno di sorpasso di un brand nuovo). fase173.genera_faq(rapporto, dettaglio)
+  deriva Q&A dallo STESSO ledger del cervello (coerenza garantita): prezzo esatto, distanza-POI in
+  metri, capacità/camere/bagni, tassa di soggiorno (importo+cap), animali, politica, servizi. PURO,
+  white-hat (solo fatti PRESENTI, mai inventati), cap 8, cents interi. fase173.faq_jsonld → FAQPage
+  Schema.org (rich result Google + estraibile dagli AI). Innestato in fase83.pagina_alloggio_html:
+  emette il FAQPage JSON-LD (2° blocco ld, anti-XSS come il 1°) + `<details>` VISIBILI e COERENTI
+  (Google penalizza la FAQ strutturata non-visibile). ISOLATO (try/except: mai rompe la pagina; POI
+  da cache calda post-publish). + esteso jsonld_alloggio già prima. BUG mio corretto: genera_faq
+  leggeva f['slug'] ma il ledger del cervello usa la chiave 'slot' → FAQ vuote tranne servizi;
+  fix 'slot' (guardia test_jsonld_faqpage_coerente_col_visibile lo blocca). Guardia +4 test in
+  test_fase173 (FAQ dai fatti, white-hat solo-presenti, JSON-LD↔visibile coerente, vuoto→None).
+  Provato live: 7 FAQ (prezzo 120.00, Colosseo 13m, tassa 3.50...) tutte visibili+strutturate.]
 - [FATTO 2026-07-15: recupero preventivi abbandonati — vedi riga 📧 in sezione 1]
 - **[FATTO 2026-07-16 — COLLAUDO "METODO LIBRO" COMPLETO]**: 29 bug VERI chiusi in un giorno
   (righe 🧠→🔢 in sezione 1: overbooking su-richiesta, host-pagato-con-disputa, penali mai

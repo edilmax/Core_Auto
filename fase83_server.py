@@ -245,24 +245,45 @@ def pagina_alloggio_html(sistema: Any, slug: str, base_url: str = "") -> Optiona
     ld = json.dumps(jsonld_alloggio(d, base_url, rie), ensure_ascii=False)
     # neutralizza la chiusura del tag <script> dentro il JSON-LD (anti-XSS): unicode-escape
     ld = ld.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+
+    # FAQ da FATTI REALI (motore SEO fase173): la pagina diventa LA RISPOSTA (ponte AEO).
+    # FAQPage JSON-LD (rich result) + <details> VISIBILI e COERENTI col markup (Google penalizza
+    # la FAQ strutturata non visibile). ISOLATO: mai rompe la pagina; POI da cache calda post-publish.
+    faq_ld_script, faq_html = "", ""
+    try:
+        from fase173_motore_seo import crea_motore_da_sistema, genera_faq, faq_jsonld
+        rapporto = crea_motore_da_sistema(sistema).valuta(d)
+        faq = genera_faq(rapporto, d)
+        fld = faq_jsonld(faq)
+        if fld:
+            fl = (json.dumps(fld, ensure_ascii=False)
+                  .replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026"))
+            faq_ld_script = "<script type=\"application/ld+json\">%s</script>" % fl
+            faq_html = ("<section aria-labelledby=\"faq\"><h2 id=\"faq\">Domande frequenti</h2>"
+                        + "".join("<details><summary>%s</summary><p>%s</p></details>"
+                                  % (e(x["q"]), e(x["a"])) for x in faq)
+                        + "</section>")
+    except Exception:
+        faq_ld_script, faq_html = "", ""
+
     return (
         "<!DOCTYPE html><html lang=\"it\"><head><meta charset=\"UTF-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
         "<title>%s - BookinVIP</title>"
         "<meta name=\"description\" content=\"%s\">"
         "<link rel=\"canonical\" href=\"%s/alloggio/%s\">"
-        "<script type=\"application/ld+json\">%s</script></head><body>"
+        "<script type=\"application/ld+json\">%s</script>%s</head><body>"
         "<h1>%s</h1><p><strong>%s</strong>%s</p><p>%s</p>"
-        "<p>Prezzo: %s %s / notte</p><ul>%s</ul>"
+        "<p>Prezzo: %s %s / notte</p><ul>%s</ul>%s"
         "<p><a href=\"/?slug=%s\">Prenota su BookinVIP</a></p></body></html>"
     ) % (
         e(d.get("titolo", "")), e(d.get("descrizione", ""))[:160],
-        e(base_url), e(slug), ld,
+        e(base_url), e(slug), ld, faq_ld_script,
         e(d.get("titolo", "")), e(d.get("citta", "")),
         ", " + e(d.get("paese", "")) if d.get("paese") else "",
         e(d.get("descrizione", "")),
         e(_euro(d.get("prezzo_notte_cents", 0))), e(d.get("valuta", "EUR")),
-        servizi, e(slug),
+        servizi, faq_html, e(slug),
     )
 
 
