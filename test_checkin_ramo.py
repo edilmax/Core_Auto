@@ -113,7 +113,9 @@ class TestCheckinRamo(unittest.TestCase):
         self._paga(b["riferimento"])
         s, pr = self.g("GET", "/api/host/prenotazioni", h={"X-Host-Token": self.tok})
         self.assertEqual(s, 200)
-        riga = [p for p in pr["prenotazioni"] if p.get("stato") == "confermata"][0]
+        # prenotazione VIVA = non archiviata (dal 2026-07-18 lo stato di una viva e'
+        # attiva/futura/confermata secondo la data; il criterio durevole e' 'archiviata').
+        riga = [p for p in pr["prenotazioni"] if not p.get("archiviata")][0]
         self.assertEqual(riga["pin"], self.sis.firma.pin_checkin(b["riferimento"]))
         self.assertEqual(riga["codice"], codice_prenotazione(b["riferimento"]))
 
@@ -130,7 +132,7 @@ class TestCheckinRamo(unittest.TestCase):
         self.assertEqual(self.sis.pagamenti_pendenti.info(ref)["stato"], "pagato")
         s, pr = self.g("GET", "/api/host/prenotazioni", h={"X-Host-Token": self.tok})
         pin_atteso = self.sis.firma.pin_checkin(ref)
-        pins = [p["pin"] for p in pr["prenotazioni"] if p.get("stato") == "confermata"]
+        pins = [p["pin"] for p in pr["prenotazioni"] if not p.get("archiviata")]
         self.assertIn(pin_atteso, pins,
                       "il PIN nel pannello deve derivare dal rif ORIGINALE, non da 'reblock:'")
 

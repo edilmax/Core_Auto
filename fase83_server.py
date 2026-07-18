@@ -4194,8 +4194,11 @@ class RouterHTTP:
         if not (isinstance(hid, str) and hid):
             return 422, {"errore": "host_id_mancante"}
         try:
+            import datetime as _dt
             from fase59_concierge import codice_prenotazione
             firma = getattr(self._sys, "firma", None)
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            oggi = _dt.date.today().isoformat()
             listings = self._sys.catalogo.alloggi_host(hid, limit=200)
             out = []
             for a in listings:
@@ -4210,15 +4213,37 @@ class RouterHTTP:
                     # chiave attiva e' 'reblock:<rif>' -> si estrae il rif originale.
                     idem = str(p.get("idem_key") or "")
                     ref = idem[len("reblock:"):] if idem.startswith("reblock:") else idem[:24]
+                    # ARCHIVIAZIONE LOGICA (nessun DELETE fisico dei dati: restano per l'audit).
+                    # 'rimborsato' (fase58) = il blocco e' stato RILASCIATO -> vale sia per le
+                    # rimborsate sia per le cancellate-host: e' il segnale DUREVOLE che separa
+                    # la vista "attive" dall'"archivio". La distinzione fine rimborsata/cancellata
+                    # si fa SOLO per gli archiviati (pochi -> nessun N+1 sulla vista principale);
+                    # se il pendente e' gia' stato purgato (pulisci_vecchi 26h) resta 'rimborsata'.
+                    ci, co = p.get("check_in"), p.get("check_out")
+                    archiviata = bool(p.get("rimborsato"))
+                    if archiviata:
+                        stato = "rimborsata"
+                        if pp is not None and ref:
+                            try:
+                                rec = pp.info(ref)
+                                if rec and rec.get("stato") == "cancellata_host":
+                                    stato = "cancellata"
+                            except Exception:
+                                pass
+                    else:
+                        # etichetta temporale (informativa) della vista attiva; un soggiorno
+                        # passato ma non rilasciato resta 'confermata' (soldi maturati all'host).
+                        stato = "confermata"
+                        if isinstance(ci, str) and isinstance(co, str) and ci and co:
+                            if ci > oggi:
+                                stato = "futura"
+                            elif ci <= oggi < co:
+                                stato = "attiva"
                     out.append({"alloggio": titolo, "slug": slug,
-                                "check_in": p.get("check_in"), "check_out": p.get("check_out"),
+                                "check_in": ci, "check_out": co,
                                 "codice": codice_prenotazione(ref) if ref else "",
                                 "pin": (firma.pin_checkin(ref) if (firma and ref) else ""),
-                                # la chiave giusta e' 'rimborsato' (fase58): con 'rilasciato'
-                                # (sempre None) OGNI prenotazione risultava "confermata",
-                                # anche le rimborsate -> host che prepara la casa per ospiti
-                                # che non arriveranno.
-                                "stato": "rimborsata" if p.get("rimborsato") else "confermata"})
+                                "stato": stato, "archiviata": archiviata})
         except Exception:
             logger.error("host prenotazioni: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
