@@ -100,6 +100,20 @@
 >   deploy). test_financial_controller (11). **Scatti ②③ SPENTI, attendono VAI**: ② Debt Status
 >   (blocco host a debito + auto-offset sui payout futuri) · ③ addebito carta off-session
 >   (serve decisione SetupIntent + onboarding carta host). Dettaglio: riga 🏛️ REGISTRO sez.1.
+> · 🏰 **BUNKER & FIELD (separazione privilegi) — 2026-07-18/19, LIVE `fe3d444`**: architettura
+>   super-admin professionale. **FIELD** (`/admin`, chiave admin) = operativo, ora PAGINATO
+>   (20/pagina + filtri id/host/stato server-side, audit ricerche, cieco al Bunker). **BUNKER**
+>   (fase180, `/api/bunker/*`) = super-admin con 2° fattore: **TOTP RFC 6238** (telefono) o
+>   **password super-admin** (`BUNKER_PASSWORD`) o break-glass; sessione firmata **15 min legata
+>   all'IP**; audit CRITICO di ogni tentativo su app.log. **Password IMPOSTATE sul VPS**
+>   (`.env.casavip`, mai in git): `ADMIN_KEY` (Field) + `BUNKER_PASSWORD` (Bunker). Provato dal
+>   vivo: pw sbagliata→403, admin+pw giusta→200+sessione, Field 20/pagina. **Incrementi Bunker
+>   RESTANO (attendono VAI)**: ③ spostare le 4 distruttive (alloggio_stato/rimborso/controversia-
+>   risolvi/cancella-attivita) DIETRO la sessione Bunker; ④ sala controllo piena (log/hash/integrità).
+>   Prima ancora ✅ rate-limit login LIVE (5/min per IP, 429+audit). Onestà: password = doppio muro,
+>   non 2FA piena finché non si attiva il telefono (QR pronto su richiesta). Dettaglio: righe
+>   🏰/🗄️/🚪 REGISTRO sez.1. ⚠️ 2 test flaky NOTI da irrobustire (test_raffica_upload sotto carico;
+>   test_ical_export era mina-data GIÀ FIXATA).
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare
