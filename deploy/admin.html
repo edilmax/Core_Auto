@@ -153,6 +153,26 @@ function esc(s){ return String(s==null?'':s).replace(/[<>&"']/g,c=>({'<':'&lt;',
 const A_VEXP={JPY:0,KRW:0,VND:0,CLP:0,ISK:0};
 const A_VSYM={EUR:'€',USD:'$',GBP:'£',CHF:'CHF',THB:'฿',JPY:'¥',AUD:'A$',CAD:'C$',AED:'AED',SGD:'S$',CNY:'CN¥',HKD:'HK$',MXN:'MX$',BRL:'R$',ZAR:'R',IDR:'Rp',KRW:'₩',INR:'₹',NZD:'NZ$',SEK:'kr',NOK:'kr',DKK:'kr',PLN:'zł',TRY:'₺'};
 function money(c,v){ v=v||'EUR'; const e=(A_VEXP[v]!=null?A_VEXP[v]:2); return (A_VSYM[v]||v)+' '+((c||0)/Math.pow(10,e)).toFixed(e); }
+// 🛡️ SCUDO ANTI-DOPPIO-CLIC (identico su index/host): tasto spento + ⏳ alla stessa
+// larghezza mentre la chiamata e' in volo; si riaccende SEMPRE (finally). Niente piu'
+// doppia campagna social o doppio rimborso da doppio clic.
+async function conScudo(btn, fn){
+  if(!btn || btn.disabled) return;
+  const label = btn.innerHTML, w = btn.offsetWidth;
+  btn.disabled = true; if(w) btn.style.minWidth = w+'px';
+  btn.innerHTML = '⏳';
+  try{ await fn(); }
+  finally{
+    btn.innerHTML = label; btn.style.minWidth = '';
+    if(!btn.dataset.restaSpento) btn.disabled = false;
+  }
+}
+function scudoTasti(ids){
+  ids.forEach(id=>{ const b=document.getElementById(id);
+    if(!b || typeof b.onclick!=='function') return;
+    const orig=b.onclick; b.onclick=()=>conScudo(b, ()=>orig.call(b));
+  });
+}
 async function caricaAlloggi(){
   if(!key()) return;
   try{
@@ -167,7 +187,7 @@ async function caricaAlloggi(){
       const del=`<button class="alDel btn-riga" data-h="${esc(a.host_id)}" style="background:var(--rosso);margin-left:.3rem">${T('al_delhost')}</button>`;
       return `<tr><td style="font-weight:700;color:var(--brand)">#${a.id}</td><td>${esc(a.titolo)}</td><td>${esc(a.citta)}</td><td style="font-size:.76rem;color:var(--testo-tenue)">${esc(a.host_id)}</td><td>${money(a.prezzo_notte_cents,a.valuta)}</td><td>${esc(a.stato)}</td><td style="white-space:nowrap">${az}${del}</td></tr>`;
     }).join('');
-    tb.querySelectorAll('.alStato').forEach(b=>b.onclick=()=>cambiaStatoAdmin(b.dataset.s,b.dataset.st));
+    tb.querySelectorAll('.alStato').forEach(b=>b.onclick=()=>conScudo(b,()=>cambiaStatoAdmin(b.dataset.s,b.dataset.st)));
     // SICUREZZA: il pulsante nella riga NON cancella; SELEZIONA solo l'host nel riquadro
     // rosso qui sotto. La cancellazione avviene solo premendo il tasto rosso dedicato (con
     // conferma) -> due passi deliberati, niente cancellazioni accidentali con un clic.
@@ -175,12 +195,16 @@ async function caricaAlloggi(){
   }catch(e){console.warn('bookinvip-admin',e)}
 }
 async function cambiaStatoAdmin(slug,stato){
+  // ESITO SEMPRE VISIBILE: prima, se la chiamata falliva (rete o server), non appariva
+  // NULLA: l'admin premeva Sospendi/Pubblica e non sapeva se avesse funzionato.
   try{
     const res=await fetch(API+'/api/admin/alloggio_stato',{method:'POST',
       headers:{'Content-Type':'application/json','X-Admin-Key':key()},
       body:JSON.stringify({slug,stato})});
-    if(res.status===200) caricaAlloggi();
-  }catch(e){console.warn('bookinvip-admin',e)}
+    let d=null; try{ d=await res.json(); }catch(_){ d=null; }
+    if(res.status===200){ msg('✅ '+slug+' → '+stato+' · '+T('agg'), true); caricaAlloggi(); }
+    else msg('❌ '+slug+': '+((d&&(d.errore||d.dettaglio))||res.status), false);
+  }catch(e){ msg('❌ '+T('err_rete'), false); }
 }
 async function carica(){
   if(!key()){ stat(''); return; }
@@ -196,7 +220,7 @@ async function carica(){
       const btn = p.rimborsato ? '' : `<button class="danger btn-riga" data-a="${p.alloggio_id}" data-ci="${p.check_in}" data-co="${p.check_out}" data-k="${p.idem_key}">${T('b_rimb')}</button>`;
       return `<tr><td>${p.alloggio_id}</td><td>${p.check_in}</td><td>${p.check_out}</td><td>${p.origine||''}</td><td>${stato}</td><td>${btn}</td></tr>`;
     }).join('');
-    tb.querySelectorAll('button.danger').forEach(b=>b.onclick=()=>rimborsa(b.dataset));
+    tb.querySelectorAll('button.danger').forEach(b=>b.onclick=()=>conScudo(b,()=>rimborsa(b.dataset)));
     msg(d.prenotazioni.length+' '+T('n_pren'), true);
     stat(T('agg')+' '+new Date().toLocaleTimeString());
   }catch(e){ msg(T('errore')+' '+e.message,false); }
@@ -283,12 +307,12 @@ async function caricaControversie(){
         <!-- motivo lo scrive l'OSPITE: senza esc() esegue nel browser dell'ADMIN (XSS stored) -->
         <div style="color:#8a5200;font-size:.85rem;margin:.3rem 0">${T('ctr_motivo')} ${esc(c.motivo||'—')}</div>
         <div style="font-size:.85rem">${T('ctr_garanzia')} <b>${eur(imp)}</b>
-          <button onclick="vediChat('${c.prenotazione_id}',${i})" class="btn-riga" style="background:#156b52;margin-left:.5rem">💬 conversazione + prove</button></div>
+          <button onclick="conScudo(this,()=>vediChat('${c.prenotazione_id}',${i}))" class="btn-riga" style="background:#156b52;margin-left:.5rem">💬 conversazione + prove</button></div>
         <div id="chat_${i}" style="display:none;background:#f7faf8;border-radius:.6rem;padding:.5rem .7rem;margin-top:.4rem;max-height:170px;overflow-y:auto;font-size:.82rem"></div>
         <div style="display:flex;gap:.5rem;align-items:center;margin-top:.5rem;flex-wrap:wrap">
           <label style="font-size:.82rem">${T('ctr_pct')} <input type="number" id="pct_${i}" min="0" max="100" value="100" style="width:70px" oninput="ctrCalc(${i},${imp})"></label>
           <span id="split_${i}" style="font-size:.82rem;color:var(--brand-chiaro)"></span>
-          <button onclick="risolviCtr('${c.prenotazione_id}',${i})" class="btn-riga" style="margin-left:auto;background:var(--brand-chiaro)">${T('ctr_risolvi')}</button>
+          <button onclick="conScudo(this,()=>risolviCtr('${c.prenotazione_id}',${i}))" class="btn-riga" style="margin-left:auto;background:var(--brand-chiaro)">${T('ctr_risolvi')}</button>
         </div>
         <div id="ctrmsg_${i}" style="font-size:.85rem;margin-top:.4rem"></div>
       </div>`;
@@ -327,6 +351,8 @@ function salvaECarica(){
 inp.addEventListener('input', salvaECarica);
 inp.addEventListener('change', carica);
 document.getElementById('lang').onchange=e=>{LANG=e.target.value;try{localStorage.setItem('lang',LANG);}catch(_){console.warn('bookinvip-admin',_)}applica();};
+// 🛡️ SCUDO sui tasti-azione fissi (quelli nelle righe sono avvolti inline qui sopra)
+scudoTasti(['btnCarica','btnCampagna','btnControversie','btnCancellaHost']);
 applica();
 window.addEventListener('DOMContentLoaded', ()=>{
   try{ const k = localStorage.getItem(LS); if(k){ inp.value = k; } }catch(e){console.warn('bookinvip-admin',e)}

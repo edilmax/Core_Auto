@@ -7,13 +7,19 @@
 > ④ guardie concorrenza · ⑤ frontend a neuroni Host+Admin (.btn-riga, 21 catch muti curati, 2
 > neuroni morti) · ⑥ frontend Ospite (8 catch + fix backup fase38) · 🚦 SEMAFORO universale stati
 > (3 colori identici host+ospite, fix verde-ambiguo prezzi) · 🧱 ISOLAMENTO multi-host provato a
-> simulazione (0 interferenze host↔host, 10 giri + concorrente). **Tutto committato, pushato,
-> deployato e ALLINEATO** (Desktop=GitHub=VPS). Suite 2456+ verde.
-> **PROSSIMO PASSO concordato**: **Livello 7 — Viaggio E2E dal vivo su produzione** (automa Python
-> stdlib da PowerShell, host+annuncio+prenotazione REALI, poi "pulizia tombale" per id esatti, 0
-> residui verificati via SSH). PIANO gia' approvato dal fondatore, script NON ancora scritto (attende
-> il suo "VAI"). Poi restano i sistemi ⑧ benchmark carico SQLite, ⑨ mutation testing, ⑩ audit
-> accessibilita' — per arrivare a 10. REGOLE FERME: dopo OGNI operazione finita salvare ovunque
+> simulazione (0 interferenze host↔host, 10 giri + concorrente) · 🖱️ SCUDO anti-doppio-clic su
+> tutti i tasti-azione delle 3 pagine + esiti ✅/❌ sempre visibili su Approva/Rifiuta (host) e
+> Sospendi/Pubblica (admin) — compartimento 1 del NUOVO collaudo qualità frontend (2026-07-18,
+> metodo del fondatore: UN COMPARTIMENTO ALLA VOLTA, ogni passo col suo VAI). **Tutto committato,
+> pushato, deployato e ALLINEATO** (Desktop=GitHub=VPS). Suite 2472 verde.
+> **PROSSIMI PASSI (ciascuno attende il VAI del fondatore)**: compartimenti frontend rimanenti
+> in ordine proposto — ② gestione errori (errore≠vuoto sulle card host, timeout rete, authPost),
+> ③ app.js comune (unificare le 3 copie di rete/valute/escape/lingua), ④ prompt nativi
+> (bloccati nei browser in-app). Elenco completo in REGISTRO sez.2-bis. E resta pronto il
+> **Livello 7 — Viaggio E2E dal vivo su produzione** (automa Python stdlib da PowerShell,
+> host+annuncio+prenotazione REALI, poi "pulizia tombale" per id esatti, 0 residui verificati
+> via SSH): piano gia' approvato, script NON ancora scritto (attende il suo "VAI"). Poi i sistemi
+> ⑧ benchmark carico SQLite, ⑨ mutation testing, ⑩ audit accessibilita' — per arrivare a 10. REGOLE FERME: dopo OGNI operazione finita salvare ovunque
 > (commit+push+VPS+REGISTRO); mai email vera del fondatore nei test; deploy rm-first; suite intera
 > prima di ogni deploy. Dettaglio di ogni voce: righe in REGISTRO_INGEGNERIA.md sez.1 (piu' recenti in alto).
 

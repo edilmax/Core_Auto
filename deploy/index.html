@@ -267,6 +267,26 @@ async function api(path, opts){
   return {ok:false, _http:r.status,
           errore: r.ok ? 'risposta_non_valida' : ('errore_server_'+r.status)};
 }
+// 🛡️ SCUDO ANTI-DOPPIO-CLIC (identico su host/admin): tasto spento + ⏳ alla stessa
+// larghezza mentre la chiamata e' in volo; si riaccende SEMPRE (finally). Se fn vuole
+// che il tasto RESTI spento dopo il successo, imposta btn.dataset.restaSpento='1'.
+async function conScudo(btn, fn){
+  if(!btn || btn.disabled) return;
+  const label = btn.innerHTML, w = btn.offsetWidth;
+  btn.disabled = true; if(w) btn.style.minWidth = w+'px';
+  btn.innerHTML = '⏳';
+  try{ await fn(); }
+  finally{
+    btn.innerHTML = label; btn.style.minWidth = '';
+    if(!btn.dataset.restaSpento) btn.disabled = false;
+  }
+}
+function scudoTasti(ids){
+  ids.forEach(id=>{ const b=document.getElementById(id);
+    if(!b || typeof b.onclick!=='function') return;
+    const orig=b.onclick; b.onclick=()=>conScudo(b, ()=>orig.call(b));
+  });
+}
 
 // Lingua iniziale: 1) scelta salvata  2) lingua del browser  3) inglese (default globale).
 function linguaIniziale(){
@@ -475,7 +495,7 @@ function emptyStateHtml(citta){
 }
 function bindWaitlist(citta){
   const b=document.getElementById('wl_btn'); if(!b) return;
-  b.onclick=async ()=>{
+  b.onclick=()=>conScudo(b, async ()=>{
     const em=(document.getElementById('wl_email').value||'').trim();
     const m=document.getElementById('wl_msg');
     if(!em || em.indexOf('@')<1){ m.style.color='var(--rosso)'; m.textContent=t('inserisci_email'); return; }
@@ -485,7 +505,7 @@ function bindWaitlist(citta){
       body:JSON.stringify({email:em,citta:cittaLive,lang:LANG,check_in:document.getElementById('checkin').value,check_out:document.getElementById('checkout').value})}); }catch(e){console.warn('bookinvip-ospite',e)}
     if(d && d.ok){ m.style.color='var(--brand-chiaro)'; m.innerHTML='✅ '+d.messaggio+' <b>(€'+((d.credito_cents||0)/100).toFixed(0)+')</b>'; b.style.display='none'; }
     else { m.style.color='var(--rosso)'; m.textContent = (d && d.errore) ? (t('errore_server')+' '+d.errore) : t('servizio_non_ragg'); }
-  };
+  });
   // prova sociale live: quante persone cercano già in questa città (cold-start / FOMO)
   (async ()=>{
     const cittaP=(document.getElementById('citta').value||'').trim()||citta||'';
@@ -553,7 +573,7 @@ async function apri(slug){
       // RECUPERO PREVENTIVO onesto: l'ospite CHIEDE la sua quote via email (un solo
       // invio, nessun promemoria); il server la ricalcola e manda il link per completare
       const bpm=document.getElementById('btnPrevMail');
-      if(bpm) bpm.onclick=async()=>{
+      if(bpm) bpm.onclick=()=>conScudo(bpm, async()=>{
         const em=prompt(t('email')+':'); if(!em) return;
         const pm=document.getElementById('prevMailMsg'); pm.textContent='…';
         try{
@@ -561,10 +581,10 @@ async function apri(slug){
             body:JSON.stringify({alloggio_id:slug, check_in:document.getElementById('checkin').value,
               check_out:document.getElementById('checkout').value, party:parseInt(document.getElementById('ospiti').value)||1,
               email:em, lang:LANG, fonte:FONTE})});
-          if(r && r.stato==='inviata'){ pm.style.color='var(--brand-chiaro)'; pm.textContent='✅ '+t('prev_inviato'); bpm.disabled=true; }
+          if(r && r.stato==='inviata'){ pm.style.color='var(--brand-chiaro)'; pm.textContent='✅ '+t('prev_inviato'); bpm.dataset.restaSpento='1'; }
           else{ pm.style.color='var(--rosso)'; pm.textContent='❌ '+t('prev_errore'); }
         }catch(e){ pm.style.color='var(--rosso)'; pm.textContent='❌ '+t('prev_errore'); }
-      };
+      });
       const sb = document.getElementById('splitN');
       if(sb){ const calc = async ()=>{ const n=parseInt(sb.value); const out=document.getElementById('splitOut');
         if(!(n>1)){ out.textContent = ''; return; }   // 1 = paghi tu tutto (default): il totale sopra è già il tuo
@@ -627,7 +647,7 @@ document.getElementById('soloGratuita').onchange = ()=>cerca();
 document.getElementById('flexDate').onchange = ()=>cerca();
 // digitare una citta esce dalla modalita 'vicino a me'
 document.getElementById('citta').oninput = ()=>{ GEO = null; };
-document.getElementById('form').onsubmit = e=>{ e.preventDefault(); cerca(); };
+document.getElementById('form').onsubmit = e=>{ e.preventDefault(); conScudo(document.getElementById('btnCerca'), cerca); };
 document.getElementById('btnMappa').onclick = mostraMappa;
 document.getElementById('btnLista').onclick = tornaLista;
 let ULTIMI_RIS = [];
@@ -656,6 +676,9 @@ document.getElementById('btnInstall').onclick = async ()=>{ if(!deferred) return
 // niente piu' service worker: disinstalla eventuali SW vecchi e svuota le cache -> sito sempre fresco
 if('serviceWorker' in navigator){ navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>r.unregister())).catch(()=>{}); if(window.caches) caches.keys().then(ks=>ks.forEach(k=>caches.delete(k))).catch(()=>{}); }
 
+// 🛡️ SCUDO sui tasti-azione fissi (quelli creati al volo — Avvisami, Invia preventivo —
+// sono avvolti inline). btnVicino si disabilita gia' da solo durante la geolocalizzazione.
+scudoTasti(['btnPrenota','btnMappa']);
 // avvio: rileva la lingua, allinea il menù e carica tutto
 LANG = linguaIniziale();
 document.getElementById('lang').value = LANG;
