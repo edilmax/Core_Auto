@@ -291,9 +291,19 @@ def crea_motore_da_sistema(sistema: Any) -> MotoreSEO:
     # Presente solo se il sistema lo cabla (con_poi); altrimenti None = cervello fair senza.
     poi = getattr(sistema, "poi_provider", None)
     poi_fn = (lambda dettaglio: poi.vicini(dettaglio)) if poi is not None else None
+    # quartiere (fase166 reverse-geocode): presente solo se il geocoder e' cablato
+    # (con_geocoding, ON in prod) E sa fare il reverse; cache-first, mai solleva.
+    geo = getattr(sistema, "geocoder", None)
+    q_fn = None
+    if geo is not None and callable(getattr(geo, "quartiere", None)):
+        def q_fn(dettaglio, _g=geo):
+            lat = dettaglio.get("lat_micro") if isinstance(dettaglio, dict) else None
+            lon = dettaglio.get("lon_micro") if isinstance(dettaglio, dict) else None
+            return _g.quartiere(lat, lon)
     try:
         from fase169_indexnow import crea_indexnow
         inow = crea_indexnow()
     except Exception:
         inow = None
-    return MotoreSEO(tassa_regola_fn=tassa_fn, poi_fn=poi_fn, indexnow=inow)
+    return MotoreSEO(tassa_regola_fn=tassa_fn, poi_fn=poi_fn, quartiere_fn=q_fn,
+                     indexnow=inow)

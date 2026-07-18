@@ -31,6 +31,10 @@ from typing import Any, Callable, Optional, Tuple
 logger = logging.getLogger("core_auto.geocoder")
 
 NOMINATIM = "https://nominatim.openstreetmap.org/search"
+NOMINATIM_REVERSE = "https://nominatim.openstreetmap.org/reverse"
+# campi address di Nominatim che valgono come "quartiere", dal piu' specifico
+_CAMPI_QUARTIERE = ("suburb", "neighbourhood", "quarter", "city_district", "borough", "village")
+_QUARTIERE_MAX = 80
 # Nominatim ESIGE un User-Agent identificativo con contatto (policy d'uso).
 _UA = "BookinVIP/1.0 (+https://bookinvip.com; info@bookinvip.com)"
 _LAT_MAX, _LON_MAX = 90_000_000, 180_000_000     # microgradi
@@ -78,6 +82,10 @@ class Geocoder:
                     chiave TEXT PRIMARY KEY,
                     lat_micro INTEGER, lon_micro INTEGER,
                     trovato INTEGER NOT NULL DEFAULT 0, ts INTEGER NOT NULL)""")
+                # reverse-geocode: cella ~100m -> nome quartiere (vuoto = "non trovato" cache-ato)
+                con.execute("""CREATE TABLE IF NOT EXISTS quartiere_cache (
+                    chiave TEXT PRIMARY KEY,
+                    quartiere TEXT NOT NULL DEFAULT '', ts INTEGER NOT NULL)""")
         finally:
             con.close()
 
@@ -150,6 +158,76 @@ class Geocoder:
             return (lat_u, lon_u)
         except Exception:
             logger.warning("geocoder: interrogazione fallita (ISOLATA -> None)", exc_info=True)
+            return None
+
+    # ── QUARTIERE (reverse-geocode): coordinate -> nome del quartiere, cache-first ──
+
+    def quartiere(self, lat_micro: Any, lon_micro: Any) -> Optional[str]:
+        """Nome del quartiere dalle coordinate (microgradi interi), o None.
+        Cache per cella ~100m (vale per tutti gli annunci dello stesso isolato,
+        negativi inclusi: una zona senza quartiere non ri-martella Nominatim).
+        Non solleva mai."""
+        if not (isinstance(lat_micro, int) and isinstance(lon_micro, int)):
+            return None
+        if (lat_micro, lon_micro) == (0, 0):                 # "null island" = niente pin
+            return None
+        if abs(lat_micro) > _LAT_MAX or abs(lon_micro) > _LON_MAX:
+            return None
+        chiave = "%d|%d" % (lat_micro // 1000, lon_micro // 1000)
+        cache = self._quartiere_da_cache(chiave)
+        if cache is not None:
+            return cache or None                             # '' cache-ato = non trovato
+        nome = self._interroga_quartiere(lat_micro, lon_micro)
+        self._salva_quartiere(chiave, nome)
+        return nome
+
+    def _quartiere_da_cache(self, chiave: str) -> Optional[str]:
+        con = self._apri()
+        try:
+            r = con.execute("SELECT quartiere FROM quartiere_cache WHERE chiave=?",
+                            (chiave,)).fetchone()
+            return None if r is None else str(r[0])
+        except Exception:
+            return None
+        finally:
+            con.close()
+
+    def _salva_quartiere(self, chiave: str, nome: Optional[str]) -> None:
+        con = self._apri()
+        try:
+            with con:
+                con.execute("INSERT OR REPLACE INTO quartiere_cache (chiave, quartiere, ts) "
+                            "VALUES (?,?,?)", (chiave, nome or "", self._now()))
+        except Exception:
+            logger.warning("geocoder: salvataggio cache quartiere fallito (ISOLATO)",
+                           exc_info=True)
+        finally:
+            con.close()
+
+    @staticmethod
+    def _gradi_str(micro: int) -> str:
+        """Microgradi interi -> stringa decimale SENZA float (es. -1234567 -> '-1.234567')."""
+        segno = "-" if micro < 0 else ""
+        intero, resto = divmod(abs(micro), 1_000_000)
+        return "%s%d.%06d" % (segno, intero, resto)
+
+    def _interroga_quartiere(self, lat_micro: int, lon_micro: int) -> Optional[str]:
+        try:
+            url = NOMINATIM_REVERSE + "?" + urllib.parse.urlencode(
+                {"lat": self._gradi_str(lat_micro), "lon": self._gradi_str(lon_micro),
+                 "format": "jsonv2", "zoom": "14", "addressdetails": "1"})
+            dati = self._fetch(url)
+            addr = dati.get("address") if isinstance(dati, dict) else None
+            if not isinstance(addr, dict):
+                return None
+            for campo in _CAMPI_QUARTIERE:
+                v = addr.get(campo)
+                if isinstance(v, str) and v.strip():
+                    return " ".join(v.split())[:_QUARTIERE_MAX]
+            return None
+        except Exception:
+            logger.warning("geocoder: reverse quartiere fallito (ISOLATO -> None)",
+                           exc_info=True)
             return None
 
     @staticmethod

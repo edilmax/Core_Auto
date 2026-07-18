@@ -264,6 +264,32 @@ class TestRottaEPublish(unittest.TestCase):
         ctx = m.contesto(det)
         self.assertTrue(any(p["nome"] == "Colosseo" for p in ctx.get("poi", [])))
 
+    def test_factory_cabla_quartiere_se_il_geocoder_lo_sa_fare(self):
+        # se il sistema espone un geocoder con .quartiere (fase166 esteso), il motore
+        # lo usa nel contesto; senza coordinate nel dettaglio -> niente quartiere
+        class FintoGeo:
+            def quartiere(self, lat_micro, lon_micro):
+                return "Monti" if isinstance(lat_micro, int) else None
+        self.sis.geocoder = FintoGeo()
+        m = crea_motore_da_sistema(self.sis)
+        det = dict(self.sis.catalogo.dettaglio("casa-seo") or {})
+        det["lat_micro"], det["lon_micro"] = 41_900_000, 12_500_000
+        self.assertEqual(m.contesto(det).get("quartiere"), "Monti")
+        det2 = dict(det)
+        det2.pop("lat_micro"), det2.pop("lon_micro")
+        self.assertNotIn("quartiere", m.contesto(det2))
+
+    def test_factory_geocoder_vecchio_senza_reverse_ignorato(self):
+        # un geocoder che sa solo geocodificare (niente .quartiere) non rompe la factory
+        class SoloAvanti:
+            def geocodifica(self, citta, indirizzo="", paese=""):
+                return (1, 2)
+        self.sis.geocoder = SoloAvanti()
+        m = crea_motore_da_sistema(self.sis)
+        det = dict(self.sis.catalogo.dettaglio("casa-seo") or {})
+        det["lat_micro"], det["lon_micro"] = 41_900_000, 12_500_000
+        self.assertNotIn("quartiere", m.contesto(det))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

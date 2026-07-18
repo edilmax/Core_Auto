@@ -263,3 +263,47 @@ class TestGuardiaIndirizzo(unittest.TestCase):
         dati2 = r._geocodifica_se_serve({"citta": "Roma", "indirizzo": "Via Vera 1"})
         self.assertEqual(dati2["lat_micro"], 41899000)
         shutil.rmtree(d, ignore_errors=True)
+
+
+class TestQuartiereReverse(unittest.TestCase):
+    """fase166.quartiere (reverse-geocode): cache per cella ~100m (negativi inclusi),
+    stringhe coordinate senza float, blindato su rete giu' e input invalidi."""
+
+    def _geo(self, risposta):
+        chiamate = []
+
+        def fetch(url):
+            chiamate.append(url)
+            if isinstance(risposta, Exception):
+                raise risposta
+            return risposta
+        return crea_geocoder(":memory:", fetch=fetch), chiamate
+
+    def test_trova_e_cache_per_cella(self):
+        g, ch = self._geo({"address": {"suburb": "Monti"}})
+        self.assertEqual(g.quartiere(41_893_100, 12_483_200), "Monti")
+        # stessa cella ~100m: seconda richiesta servita dalla cache, zero rete
+        self.assertEqual(g.quartiere(41_893_900, 12_483_900), "Monti")
+        self.assertEqual(len(ch), 1)
+        self.assertIn("reverse", ch[0])
+        self.assertIn("lat=41.893100", ch[0])
+
+    def test_negativo_cacheato(self):
+        g, ch = self._geo({"address": {"country": "Italia"}})   # nessun campo quartiere
+        self.assertIsNone(g.quartiere(41_893_100, 12_483_200))
+        self.assertIsNone(g.quartiere(41_893_100, 12_483_200))
+        self.assertEqual(len(ch), 1)                            # il "non trovato" non ri-martella
+
+    def test_blindato_e_input_invalidi(self):
+        g, ch = self._geo(RuntimeError("rete giu'"))
+        self.assertIsNone(g.quartiere(41_893_100, 12_483_200))  # errore rete -> None, mai solleva
+        self.assertIsNone(g.quartiere(None, 12_000_000))        # tipo sbagliato
+        self.assertIsNone(g.quartiere(0, 0))                    # null island
+        self.assertIsNone(g.quartiere(95_000_000, 0))           # fuori range lat
+        self.assertEqual(len(ch), 1)                            # gli invalidi non toccano la rete
+
+    def test_coordinate_negative_senza_float(self):
+        g, ch = self._geo({"address": {"neighbourhood": "Palermo Soho"}})
+        self.assertEqual(g.quartiere(-34_588_000, -58_430_000), "Palermo Soho")
+        self.assertIn("lat=-34.588000", ch[0])
+        self.assertIn("lon=-58.430000", ch[0])

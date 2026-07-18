@@ -37,7 +37,9 @@
 > Perplexity). fase173.genera_faq, white-hat (solo fatti presenti), innestato in pagina_alloggio_html
 > (isolato). Live 7 FAQ (prezzo 120.00, POI 13m, tassa 3.50) visibili+strutturate. VPS=GitHub=Desktop=
 > `4811b23`, suite **2442 verde**, container healthy.
-> DA ACCENDERE (in "COSTRUITO ma SPENTO"): reverse-geocode QUARTIERE (→ quartiere_fn del motore).
+> ✅ **2026-07-18 (deploy #11): QUARTIERE AUTOMATICO ACCESO** (fase166 reverse-geocode + quartiere_fn
+> nel motore SEO: pin → nome quartiere → 70 punti geo + query "in zona X"; cache ~100m, no env nuove).
+> L'arco SEO 171→173→175→166 è ora COMPLETO: niente più "da accendere" nel motore SEO.
 > ✅ **2026-07-18 (deploy #10): UI RAPPORTO SEO nel pannello host ACCESA** (card 📈 negli Strumenti
 > avanzati: punteggio /100, cosa migliorare, ricerche vincibili — riga 📈 nel REGISTRO) + 2 test
 > flaky legacy fase15 resi deterministici (suite 2446, 0 errori, stabile 15/15).
