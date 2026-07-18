@@ -19,16 +19,18 @@
 > `deploy/app.js` con namespace `BV.*` = escape+valute+lingua+rete+frasi+scudo in UN posto,
 > pagine con alias, copie locali VIETATE da guardia; escape sigillato al 100% (galleria
 > modale, badge servizi, tabella alloggi, onclick admin) e mezze-misure vietate per sempre.
+> · 🧹 ⑤ PULIZIE CENSITE + ④ NIENTE PROMPT lato ospite (2026-07-18, mandato "macchina
+> perfetta"): service worker allineato (disinstalla ovunque), date default VIVE
+> (BV.dataISO, mai piu' fisse), capacità ||1, CSS hover admin, pagine minori con timeout,
+> e PRENOTA/PREVENTIVO con campo email in pagina (prompt() bloccato nei browser in-app
+> = prenotazioni perse da Instagram/FB; i confirm() di host/admin restano di proposito).
+> · 🚀 **LIVELLO 7 FATTO — VIAGGIO E2E DAL VIVO: VERDE 10/10** (2026-07-18): host reale →
+> pubblica → l'ospite trova/quota (conti al cent) → prenota (link Stripe LIVE nato, non
+> pagato) → hold in_trattativa sul calendario → PULIZIA TOMBALE residui tutti 0
+> (script riusabile: collaudo_livello7_e2e.py).
 > **Tutto committato, pushato, deployato e ALLINEATO** (Desktop=GitHub=VPS). Suite verde
 > (vedi ultima riga REGISTRO).
-> **PROSSIMI PASSI (ciascuno attende il VAI del fondatore)**: compartimenti frontend
-> rimanenti — ④ prompt nativi (bloccati nei browser in-app, es. Instagram), ⑤ minori
-> censiti (date default fisse 2026-09-01, capacità NaN, service worker index-vs-host,
-> refuso CSS admin hover, BV nelle pagine minori contratto-host/diventa-host). Elenco
-> completo in REGISTRO sez.2-bis. E resta pronto il
-> **Livello 7 — Viaggio E2E dal vivo su produzione** (automa Python stdlib da PowerShell,
-> host+annuncio+prenotazione REALI, poi "pulizia tombale" per id esatti, 0 residui verificati
-> via SSH): piano gia' approvato, script NON ancora scritto (attende il suo "VAI"). Poi i sistemi
+> **PROSSIMI PASSI** (mandato fondatore "fai quello che va fatto"): restano i sistemi
 > ⑧ benchmark carico SQLite, ⑨ mutation testing, ⑩ audit accessibilita' — per arrivare a 10. REGOLE FERME: dopo OGNI operazione finita salvare ovunque
 > (commit+push+VPS+REGISTRO); mai email vera del fondatore nei test; deploy rm-first; suite intera
 > prima di ogni deploy. Dettaglio di ogni voce: righe in REGISTRO_INGEGNERIA.md sez.1 (piu' recenti in alto).
