@@ -102,7 +102,8 @@ class TestScudoHost(unittest.TestCase):
         dec = corpo[1][:600]
         self.assertIn("post('/api/host/richieste/'+(ok?'approva':'rifiuta')", dec)
         self.assertIn("'✅ '+T(ok?'req_ok_app':'req_ok_rif')", dec)
-        self.assertIn("'❌ '+(r.data.errore||r.status)", dec)
+        # dal compartimento Gestione Errori: il codice passa da fraseErrore (frase gentile)
+        self.assertIn("'❌ '+(r.data.errore?fraseErrore(r.data.errore):r.status)", dec)
 
     def test_esiti_tradotti_in_8_lingue(self):
         self.assertEqual(self.HTML.count('req_ok_app:'), 8)
@@ -133,10 +134,11 @@ class TestScudoAdmin(unittest.TestCase):
         corpo = self.HTML.split('async function cambiaStatoAdmin', 1)
         self.assertEqual(len(corpo), 2)
         fn = corpo[1][:900]
-        # esito in OGNI ramo: successo, errore del server, errore di rete
+        # esito in OGNI ramo: successo, errore del server, errore di rete (con frase
+        # gentile che distingue anche il timeout: fraseErrore(codRete(e)))
         self.assertIn("msg('✅ '+slug+' → '+stato", fn)
         self.assertIn("msg('❌ '+slug+':", fn)
-        self.assertIn("msg('❌ '+T('err_rete')", fn)
+        self.assertIn("msg('❌ '+fraseErrore(codRete(e))", fn)
         # il vecchio difetto (successo silenzioso senza else) non deve tornare
         self.assertNotIn('if(res.status===200) caricaAlloggi();', fn)
 

@@ -10,12 +10,17 @@
 > simulazione (0 interferenze host↔host, 10 giri + concorrente) · 🖱️ SCUDO anti-doppio-clic su
 > tutti i tasti-azione delle 3 pagine + esiti ✅/❌ sempre visibili su Approva/Rifiuta (host) e
 > Sospendi/Pubblica (admin) — compartimento 1 del NUOVO collaudo qualità frontend (2026-07-18,
-> metodo del fondatore: UN COMPARTIMENTO ALLA VOLTA, ogni passo col suo VAI). **Tutto committato,
-> pushato, deployato e ALLINEATO** (Desktop=GitHub=VPS). Suite 2472 verde.
+> metodo del fondatore: UN COMPARTIMENTO ALLA VOLTA, ogni passo col suo VAI) · 🕸️ GESTIONE
+> ERRORI "zero difetti" (compartimento 2, 2026-07-18): timeout 15s su OGNI chiamata delle 3
+> pagine, falsi-vuoti sbarrati (guasto ≠ "non hai nulla"), frasi gentili 8 lingue, paracadute
+> login/registrazione — PROVATA con harness CAOS (test_caos_rete: Node esegue il VERO JS delle
+> pagine in un DOM finto e lo bombarda: latenze infinite, 500/502/503-HTML, JSON corrotti,
+> array/null/stringhe ostili). **Tutto committato, pushato, deployato e ALLINEATO**
+> (Desktop=GitHub=VPS). Suite verde (vedi ultima riga REGISTRO).
 > **PROSSIMI PASSI (ciascuno attende il VAI del fondatore)**: compartimenti frontend rimanenti
-> in ordine proposto — ② gestione errori (errore≠vuoto sulle card host, timeout rete, authPost),
-> ③ app.js comune (unificare le 3 copie di rete/valute/escape/lingua), ④ prompt nativi
-> (bloccati nei browser in-app). Elenco completo in REGISTRO sez.2-bis. E resta pronto il
+> in ordine proposto — ③ app.js comune (unificare le 3 copie di rete/valute/escape/lingua),
+> ④ prompt nativi (bloccati nei browser in-app), ⑤ minori censiti (date default fisse,
+> capacità NaN, escape galleria/badge). Elenco completo in REGISTRO sez.2-bis. E resta pronto il
 > **Livello 7 — Viaggio E2E dal vivo su produzione** (automa Python stdlib da PowerShell,
 > host+annuncio+prenotazione REALI, poi "pulizia tombale" per id esatti, 0 residui verificati
 > via SSH): piano gia' approvato, script NON ancora scritto (attende il suo "VAI"). Poi i sistemi
