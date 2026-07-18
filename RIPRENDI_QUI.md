@@ -37,6 +37,11 @@
 > Perplexity). fase173.genera_faq, white-hat (solo fatti presenti), innestato in pagina_alloggio_html
 > (isolato). Live 7 FAQ (prezzo 120.00, POI 13m, tassa 3.50) visibili+strutturate. VPS=GitHub=Desktop=
 > `4811b23`, suite **2442 verde**, container healthy.
+> 🚦 **2026-07-18 (deploy #14): SEMAFORO UNIVERSALE** — direttiva fondatore: 3 colori identici
+> ovunque (verde=libero, arancione=in trattativa, rosso=occupato/chiuso). Fixato il verde-ambiguo
+> del calendario prezzi (usava il verde-libero per "prezzo ↑"), mappa SEMAFORO unica sui 2 dialetti
+> del motore (58/119), classi condivise host+index, legenda a 3. Griglia "tutta verde" verificata
+> NON-bug sul DB live (0 prenotazioni/hold pre-lancio: è la verità). PROSSIMO: Livello 7 E2E live.
 > 🎨 **2026-07-18 (deploy #13): FRONTEND ZERO-DIFETTI giro 2 (Web App Ospite)** — mappa a neuroni
 > pulita (58 id, 12 rotte vive, 32 link tutti esistenti, z-index sano), 8 catch muti curati; +
 > trovato per strada un difetto VERO nel backup legacy fase38 (stesso tick = sovrascrittura muta)

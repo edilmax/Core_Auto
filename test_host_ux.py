@@ -414,6 +414,24 @@ class TestFrontendZeroDifetti(unittest.TestCase):
         self.assertNotIn('id="ma_host"', h)
         self.assertNotIn('id="p_host"', h)
 
+    def test_semaforo_universale(self):
+        """Direttiva fondatore: UN solo vocabolario visivo per gli stati, 3 colori identici
+        ovunque (verde=libero, arancione=in trattativa, rosso=occupato/prenotato/chiuso)."""
+        h = self.pagine["host.html"]
+        # le 3 classi esistono in host E index (stesso vocabolario, stessi token)
+        for cls in (".st-libero{", ".st-trattativa{", ".st-occupato{"):
+            self.assertIn(cls, h)
+            self.assertIn(cls, self.pagine["index.html"])
+        # la mappa unica SEMAFORO copre ENTRAMBI i dialetti del motore (58 e 119)
+        for chiave in ("libero:", "pieno:", "prenotato:", "venduto:", "chiuso:",
+                       "in_trattativa:", "non_caricato:"):
+            self.assertIn(chiave, h[h.index("const SEMAFORO"):h.index("const SEMAFORO") + 220])
+        # niente piu' grigio-chiuso ne' verde-prezzo: dopo il CSS, il colore stato
+        # arriva SOLO dalle classi (nessun var(--stato-*) rimesso a mano nel JS/DOM)
+        dopo_stile = h[h.index("</style>"):]
+        self.assertNotIn("var(--stato-chiuso)", dopo_stile)
+        self.assertNotIn("su?'var(--stato-libero)'", dopo_stile)   # il verde-ambiguo dei prezzi
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

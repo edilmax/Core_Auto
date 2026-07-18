@@ -42,8 +42,18 @@ class TestHelperDefinitiPerPagina(unittest.TestCase):
         self.assertNotIn("money(", _testo("host.html"))
 
     def test_host_calendario_prezzi_gestisce_chiuso(self):
-        """La vista prezzi colora anche lo stato 'chiuso' (emesso da fase119)."""
-        self.assertIn("c.stato==='chiuso'", _testo("host.html"))
+        """La vista prezzi colora anche lo stato 'chiuso' (emesso da fase119).
+
+        2026-07-18 (semaforo universale): il controllo per-stringa `c.stato==='chiuso'`
+        e' stato sostituito dalla mappa UNICA `SEMAFORO`, che DEVE coprire il dialetto
+        di fase119 (prenotato/venduto/chiuso) e la vista prezzi DEVE usarla."""
+        t = _testo("host.html")
+        i = t.index("const SEMAFORO")
+        mappa = t[i:i + 220]
+        for stato in ("chiuso:", "prenotato:", "venduto:"):
+            self.assertIn(stato, mappa, "SEMAFORO non copre lo stato %s" % stato)
+        # la vista prezzi consulta la mappa (non piu' if per-stringa)
+        self.assertIn("SEMAFORO[c.stato]", t)
 
 
 if __name__ == "__main__":

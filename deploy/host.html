@@ -50,6 +50,12 @@
   /* bottoni DENTRO le righe (tabelle/liste): scala compatta, niente margine sopra.
      Un solo posto: prima ogni riga rattoppava padding/margin a mano e divergeva. */
   .btn-riga{padding:.3rem .8rem;font-size:.82rem;margin-top:0;border-radius:.6rem}
+  /* SEMAFORO UNIVERSALE (direttiva fondatore): 3 colori-stato IDENTICI in tutta la piattaforma.
+     verde=libero · arancione=in trattativa (hold vivo) · rosso=occupato/prenotato/chiuso.
+     I fondi colorati sono RISERVATI agli stati: i prezzi restano bianchi (solo frecce). */
+  .st-libero{background:var(--stato-libero)}
+  .st-trattativa{background:var(--arancio)}
+  .st-occupato{background:var(--stato-pieno)}
   .msg{padding:.7rem 1rem;border-radius:.7rem;margin-top:.8rem;font-size:.9rem}
   .msg.ok{background:var(--stato-libero);color:var(--brand-chiaro)}.msg.err{background:var(--stato-pieno);color:var(--stato-testo-ko)}
   .key{background:#fff;border-radius:1rem;padding:1rem 1.5rem;margin-bottom:1.5rem;display:flex;gap:1rem;align-items:end}
@@ -227,9 +233,8 @@
     <div id="cal" style="display:flex;flex-wrap:wrap;gap:.3rem;margin-top:1rem"></div>
     <div style="margin-top:.6rem;font-size:.78rem;color:var(--testo-tenue)">
       <span style="display:inline-block;width:12px;height:12px;background:var(--stato-libero);border-radius:3px"></span> <span data-i18n="cal_libero">libero</span>
-      <span style="display:inline-block;width:12px;height:12px;background:var(--stato-pieno);border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_pieno">occupato</span>
+      <span style="display:inline-block;width:12px;height:12px;background:var(--stato-pieno);border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_pieno">occupato</span> · <span data-i18n="cal_chiuso">chiuso</span>
       <span style="display:inline-block;width:12px;height:12px;background:var(--arancio);border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_tratt">in trattativa (attesa pagamento/approvazione)</span>
-      <span style="display:inline-block;width:12px;height:12px;background:var(--stato-chiuso);border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_chiuso">chiuso</span>
       <span style="display:inline-block;width:12px;height:12px;background:#fff;border:1px solid var(--bordo);border-radius:3px;margin-left:.6rem"></span> <span data-i18n="cal_nc">non caricato</span>
     </div>
     <div id="msgCal"></div>
@@ -948,7 +953,6 @@ document.getElementById('cv_send').onclick = async ()=>{
 };
 document.getElementById('btnCalTutti').onclick = async ()=>{
   const box=document.getElementById('calTutti'); box.textContent='⏳';
-  const col={libero:'var(--stato-libero)',pieno:'var(--stato-pieno)',in_trattativa:'var(--arancio)',chiuso:'var(--stato-chiuso)',non_caricato:'#fff'};
   try{
     const da=document.getElementById('c_da').value, a=document.getElementById('c_a').value;
     const r=await fetch(API+'/api/host/calendario_tutti?da='+da+'&a='+a,{headers:authHeaders()});
@@ -963,7 +967,7 @@ document.getElementById('btnCalTutti').onclick = async ()=>{
     const escH=s=>String(s).replace(/[<>&]/g,ch=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[ch]));
     al.forEach(x=>{ const byd={}; (x.giorni||[]).forEach(g=>byd[g.giorno]=g.stato);
       h+='<tr><td style="position:sticky;left:0;background:#fff;padding:.2rem .4rem;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis" title="'+escH((x.titolo||'').replace(/"/g,''))+'">'+escH(x.titolo||x.slug)+'</td>';
-      gg.forEach(g=>{ const st=byd[g]||'non_caricato'; h+='<td title="'+g+': '+st+'" style="width:16px;height:16px;background:'+(col[st]||'#fff')+';border:1px solid var(--sfondo-tenue)"></td>'; });
+      gg.forEach(g=>{ const st=byd[g]||'non_caricato'; h+='<td class="'+(SEMAFORO[st]||'')+'" title="'+g+': '+st+'" style="width:16px;height:16px;border:1px solid var(--sfondo-tenue)"></td>'; });
       h+='</tr>'; });
     h+='</tbody></table>';
     box.className=''; box.innerHTML=h;
@@ -984,8 +988,8 @@ document.getElementById('btnCalPrezzi').onclick = async ()=>{
       (d.celle||[]).map(c=>{
         if(c.prezzo_cents==null) return '<span style="min-width:88px;padding:.25rem;border:1px solid var(--sfondo-tenue);border-radius:.4rem;color:#a9b4c9;text-align:center">'+c.giorno.slice(5)+'<br>—</span>';
         const su=(c.prezzo_dinamico_cents>c.prezzo_cents), giu=(c.prezzo_dinamico_cents<c.prezzo_cents);
-        const col=c.stato==='prenotato'?'var(--stato-pieno)':(c.stato==='chiuso'?'var(--stato-chiuso)':(su?'var(--stato-libero)':'#fff'));
-        return '<span style="min-width:88px;padding:.25rem;border:1px solid var(--sfondo-tenue);border-radius:.4rem;text-align:center;background:'+col+'">'+c.giorno.slice(5)+'<br><b>'+fmt(c.prezzo_dinamico_cents,V)+'</b>'+((su||giu)?'<br><span style="font-size:.72rem;color:var(--testo-tenue)">'+(su?'↑':'↓')+' base '+fmt(c.prezzo_cents,V)+'</span>':'')+'</span>';
+        const cls=(SEMAFORO[c.stato]==='st-libero')?'':(SEMAFORO[c.stato]||'');
+        return '<span class="'+cls+'" style="min-width:88px;padding:.25rem;border:1px solid var(--sfondo-tenue);border-radius:.4rem;text-align:center">'+c.giorno.slice(5)+'<br><b>'+fmt(c.prezzo_dinamico_cents,V)+'</b>'+((su||giu)?'<br><span style="font-size:.72rem;color:var(--testo-tenue)">'+(su?'↑':'↓')+' base '+fmt(c.prezzo_cents,V)+'</span>':'')+'</span>';
       }).join('')+'</div>';
   }catch(e){ box.className='msg err'; box.textContent=T('errore')+' '+e.message; }
 };
@@ -1126,6 +1130,8 @@ document.getElementById('btnExport').onclick = async ()=>{
     m.className='msg ok'; m.textContent=d.righe+' '+T('pren_esportate');
   }catch(e){ m.className='msg err'; m.textContent=T('errore')+' '+e.message; }
 };
+// SEMAFORO UNIVERSALE: un solo vocabolario stato->classe per TUTTI i calendari
+const SEMAFORO={libero:'st-libero',pieno:'st-occupato',prenotato:'st-occupato',venduto:'st-occupato',chiuso:'st-occupato',in_trattativa:'st-trattativa',non_caricato:''};
 document.getElementById('btnCal').onclick = async ()=>{
   const m = document.getElementById('msgCal');
   m.className='msg'; m.textContent='⏳';
@@ -1135,14 +1141,12 @@ document.getElementById('btnCal').onclick = async ()=>{
     const res = await fetch(API+'/api/host/calendario?'+p.toString(), {headers:authHeaders()});
     if(res.status===401){ m.className='msg err'; m.textContent=T('err_key'); return; }
     const d = await res.json();
-    const col = {libero:'var(--stato-libero)', pieno:'var(--stato-pieno)', in_trattativa:'var(--arancio)',
-                 chiuso:'var(--stato-chiuso)', non_caricato:'#fff'};
     document.getElementById('cal').innerHTML = (d.giorni||[]).map(g=>{
       const gg = g.giorno.slice(8);
-      const bg = col[g.stato]||'#fff';
+      const cls = SEMAFORO[g.stato]||'';
       const bord = g.stato==='non_caricato'?'border:1px solid var(--bordo);':'';
       const pr = g.prezzo_netto_cents?(' '+fmt(g.prezzo_netto_cents,CURRENT_VALUTA)):'';
-      return `<div title="${g.giorno} ${g.stato}${pr}" style="width:42px;height:42px;background:${bg};${bord}border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:600">${gg}</div>`;
+      return `<div class="${cls}" title="${g.giorno} ${g.stato}${pr}" style="width:42px;height:42px;${bord}border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:600">${gg}</div>`;
     }).join('');
     m.className='msg ok'; m.textContent=(d.giorni||[]).length+' '+T('giorni');
   }catch(e){ m.className='msg err'; m.textContent=T('errore')+' '+e.message; }

@@ -87,6 +87,11 @@
   .loading,.vuoto{text-align:center;padding:3rem;color:var(--testo-tenue);font-style:italic}
   .msg{padding:.7rem 1rem;border-radius:.7rem;margin-top:.5rem;font-size:.9rem}
   .msg.ok{background:var(--stato-libero);color:var(--brand-chiaro)}.msg.err{background:var(--stato-pieno);color:var(--stato-testo-ko)}
+  /* SEMAFORO UNIVERSALE (stesse 3 classi del pannello host): verde=libero,
+     arancione=in trattativa, rosso=occupato. Vocabolario visivo unico della piattaforma. */
+  .st-libero{background:var(--stato-libero)}
+  .st-trattativa{background:var(--arancio)}
+  .st-occupato{background:var(--stato-pieno)}
   @media(max-width:640px){.filtri .riga{flex-direction:column;align-items:stretch}}
   /* telefoni piccoli (320px): meno padding = piu' larghezza utile; niente scroll orizzontale */
   @media(max-width:400px){body{padding:.75rem}.risultati{gap:1rem}.filtri{padding:1rem}}
