@@ -114,6 +114,14 @@
 >   non 2FA piena finché non si attiva il telefono (QR pronto su richiesta). Dettaglio: righe
 >   🏰/🗄️/🚪 REGISTRO sez.1. ⚠️ 2 test flaky NOTI da irrobustire (test_raffica_upload sotto carico;
 >   test_ical_export era mina-data GIÀ FIXATA).
+>   · ✅ **Incremento ③ ENFORCEMENT FATTO+LIVE `988e963` (2026-07-19)**: le 4 distruttive
+>   (alloggio_stato/rimborso/controversia-risolvi/cancella_attivita) ora richiedono la SESSIONE
+>   BUNKER (X-Bunker-Session) oltre alla chiave admin → senza: 403 `bunker_richiesto` (CRITICO+IP);
+>   gate ATTIVO solo se Bunker configurato (anti-lockout). admin.html: box "Sblocca super-admin"
+>   (password→sessione 15min) + bunkerHdr sulle 4 azioni. Provato LIVE: 403 senza / 422 con (slug
+>   finto, 0 dati toccati). test_bunker_enforcement. **RESTA solo Incremento ④** (sala controllo
+>   piena: log/hash-chain/integrità sotto /bunker) — il Bunker già mostra `GET /api/bunker/stato`
+>   (diagnosi read-only). Password prod impostate in `.env.casavip`: `ADMIN_KEY` + `BUNKER_PASSWORD`.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare
