@@ -40,6 +40,7 @@
     <a class="back" href="/host.html" style="align-self:center">Pannello host &rarr;</a>
   </div>
 </div>
+<script src="/app.js?v=1"></script>
 <script>
 const API = location.origin.startsWith('http') ? '' : 'http://127.0.0.1:8080';
 const L = {it:{back:'Torna',print:'🖨️ Stampa / Salva PDF'},en:{back:'Back',print:'🖨️ Print / Save PDF'}};
@@ -54,7 +55,7 @@ async function carica(l){
   document.getElementById('t_back').textContent=L[l].back;
   document.getElementById('t_print').textContent=L[l].print;
   try{
-    const r = await fetch(API+'/api/legale/contratto-host?lang='+l);
+    const r = await BV.fetchTempo(API+'/api/legale/contratto-host?lang='+l);   // timeout 15s (fonte unica)
     const d = await r.json();
     document.getElementById('testo').textContent = d.testo || '(testo non disponibile)';
     const dl = l==='en'

@@ -162,15 +162,21 @@ class TestScudoOspite(unittest.TestCase):
         self.assertTrue({'btnPrenota', 'btnMappa'}.issubset(ids), ids)
         # Cerca: lo scudo passa dal submit del form (Enter incluso)
         self.assertIn("conScudo(document.getElementById('btnCerca'), cerca)", self.HTML)
-        # tasti creati al volo: Avvisami (waitlist) e Invia preventivo
+        # tasti creati al volo: Avvisami (waitlist) + i due OK inline (prenota, preventivo)
         self.assertIn('b.onclick=()=>conScudo(b, async ()=>{', self.HTML)
-        self.assertIn('bpm.onclick=()=>conScudo(bpm, async()=>{', self.HTML)
+        self.assertEqual(self.HTML.count('conScudo(go, async ()=>{'), 2,
+                         'attesi 2 tasti OK inline con scudo (bkGo prenota + pvGo preventivo)')
 
-    def test_invia_preventivo_resta_spento_dopo_successo(self):
-        # prima faceva bpm.disabled=true (che lo scudo avrebbe riacceso):
-        # ora usa la convenzione restaSpento, che lo scudo rispetta
-        self.assertIn("bpm.dataset.restaSpento='1'", self.HTML)
-        self.assertNotIn('bpm.disabled=true', self.HTML)
+    def test_niente_prompt_lato_ospite(self):
+        # compartimento "prompt nativi": nei browser dentro le app (Instagram/Facebook)
+        # prompt() e' BLOCCATO -> li' prenotare era impossibile. Ora email inline.
+        # NB: si cerca l'USO (assegnazione/chiamata con argomento), non la parola nei
+        # commenti (lezione: i replace/grep ciechi prendono anche il testo dei commenti)
+        for uso in ("= prompt(", "=prompt(", "prompt(t(", "prompt('"):
+            self.assertNotIn(uso, self.HTML,
+                             'index: prompt() vietato (browser in-app lo bloccano)')
+        # dopo il successo il tasto preventivo resta spento (senza scudo sopra: diretto)
+        self.assertIn('bpm.disabled=true', self.HTML)
 
 
 if __name__ == '__main__':

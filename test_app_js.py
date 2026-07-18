@@ -94,5 +94,40 @@ class TestSigilliEscape(unittest.TestCase):
             self.assertNotIn("replace(/</g,'&lt;')", html, p)
 
 
+class TestPuliziaMinori(unittest.TestCase):
+    """Compartimenti ⑤ (pulizie censite) e ④ lato ospite (niente prompt)."""
+
+    def test_niente_service_worker_registrato(self):
+        # index e host DISINSTALLANO ("sito sempre fresco"): il register non deve tornare
+        for p in ('index.html', 'host.html'):
+            html = _leggi(p)
+            self.assertNotIn('serviceWorker.register', html, p)
+            self.assertIn('getRegistrations', html, p)
+
+    def test_date_default_vive_mai_fisse(self):
+        self.assertIn('BV.dataISO = function', _leggi('app.js'))
+        self.assertIn('BV.dataISO(7)', _leggi('index.html'))
+        for pezzo in ('BV.dataISO(0)', 'BV.dataISO(14)', 'BV.dataISO(30)'):
+            self.assertIn(pezzo, _leggi('host.html'), pezzo)
+        # niente piu' date scritte fisse negli input (invecchiano e diventano passate)
+        for p in ('index.html', 'host.html'):
+            self.assertNotIn('value="2026-', _leggi(p), p)
+
+    def test_capacita_mai_non_numero(self):
+        self.assertIn("parseInt(document.getElementById('p_cap').value)||1", _leggi('host.html'))
+
+    def test_css_hover_admin_corretto(self):
+        html = _leggi('admin.html')
+        self.assertIn('button.danger:hover', html)
+        self.assertNotIn('.button.danger:hover', html)
+
+    def test_pagine_minori_con_timeout(self):
+        for p in ('contratto-host.html', 'diventa-host.html'):
+            html = _leggi(p)
+            self.assertIn('<script src="/app.js', html, p)
+            self.assertIn('BV.fetchTempo(', html, p)
+            self.assertNotIn('await fetch(', html, p)
+
+
 if __name__ == '__main__':
     unittest.main()

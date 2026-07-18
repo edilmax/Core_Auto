@@ -92,6 +92,7 @@
     <div class="copy">© Bookin VIP · bookinvip.com · info@bookinvip.com · <span data-i18n="copy">zero commissioni nascoste</span></div>
   </footer>
 
+<script src="/app.js?v=1"></script>
 <script>
   const TR = {
     it:{badge:"🚀 Classe fondatrice",title:"Vuoi guadagnare di più dal tuo alloggio?",sub:"Bookin VIP cerca i migliori host per il lancio.",cta:"Inizia ora, zero costi",cta_small:"nessuna carta richiesta",c1_t:"5% sui tuoi clienti · 10% sui nostri",c1_p:"Solo 5% sulle prenotazioni dei TUOI clienti diretti, 10% solo quando ti portiamo noi un cliente. 0% all'ospite. Sotto il 18–25% delle OTA.",c2_t:"Prezzi dinamici",c2_p:"Il sistema alza/abbassa il prezzo da solo (domanda, stagione, weekend): guadagni di più senza pensarci.",c3_t:"Pagamenti diretti",c3_p:"I soldi arrivano sul tuo conto, in modo sicuro. Zero attese, zero intermediari nascosti.",c4_t:"Pannello completo",c4_p:"Pubblica, gestisci calendario e disponibilità, messaggi con l'ospite, dashboard e iCal Airbnb/Booking.",dom_t:"🔥 La gente sta già cercando casa",dom_p:"Ecco le città con più richieste in attesa proprio ora. Pubblica dove c'è già domanda: i clienti stanno aspettando te.",dom_cta:"Pubblica dove c'è domanda",strip_t:"Pronto in 2 minuti. Gratis.",strip_p:"Crea il tuo account host, pubblica il primo alloggio e inizia a ricevere prenotazioni dirette — senza regalare commissioni alle OTA.",chi_t:"Chi siamo",chi_p:"Bookin VIP è la piattaforma di prenotazione alloggi che mette gli host al primo posto: automatica, a basse commissioni, costruita per farti guadagnare di più dai tuoi clienti diretti (repeat, passaparola, social) invece di regalarli alle grandi piattaforme.",nav_home:"Home",nav_chi:"Chi siamo",nav_termini:"Termini",nav_privacy:"Privacy",copy:"zero commissioni nascoste",dom_attesa:"in attesa",dom_ora:"pubblica ora!"},
@@ -148,7 +149,7 @@
   (async function(){
     try{
       const base = location.origin.startsWith('http') ? '' : 'http://127.0.0.1:8080';
-      const r = await fetch(base + '/api/domanda/citta?limit=12');
+      const r = await BV.fetchTempo(base + '/api/domanda/citta?limit=12');   // timeout 15s (fonte unica)
       const d = await r.json();
       const lista = (d && d.citta) || [];
       if(!lista.length) return;

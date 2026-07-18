@@ -138,8 +138,8 @@
   <form class="filtri" id="form">
     <div class="riga">
       <label data-t="citta">Città<input type="text" id="citta" value="Roma"></label>
-      <label data-t="checkin">Check-in<input type="date" id="checkin" value="2026-09-01"></label>
-      <label data-t="checkout">Check-out<input type="date" id="checkout" value="2026-09-03"></label>
+      <label data-t="checkin">Check-in<input type="date" id="checkin"></label>
+      <label data-t="checkout">Check-out<input type="date" id="checkout"></label>
       <label data-t="ospiti">Ospiti<input type="number" id="ospiti" value="2" min="1" max="20"></label>
       <label data-t="max_prezzo">Max €<input type="number" id="prezzomax" data-tph="ph_prezzomax" placeholder="es. 150" min="0"></label>
       <label id="lblRaggio" data-t="raggio">Raggio<select id="raggio"><option value="0.1">100 m</option><option value="0.25">250 m</option><option value="0.5">500 m</option><option value="1" selected>1 km</option><option value="2">2 km</option><option value="5">5 km</option><option value="10">10 km</option><option value="25">25 km</option><option value="50">50 km</option></select></label>
@@ -549,18 +549,27 @@ async function apri(slug){
       // RECUPERO PREVENTIVO onesto: l'ospite CHIEDE la sua quote via email (un solo
       // invio, nessun promemoria); il server la ricalcola e manda il link per completare
       const bpm=document.getElementById('btnPrevMail');
-      if(bpm) bpm.onclick=()=>conScudo(bpm, async()=>{
-        const em=prompt(t('email')+':'); if(!em) return;
-        const pm=document.getElementById('prevMailMsg'); pm.textContent='…';
-        try{
+      // niente prompt() (bloccato nei browser in-app): campo email inline + OK con scudo
+      if(bpm) bpm.onclick=()=>{
+        const pm=document.getElementById('prevMailMsg');
+        pm.innerHTML=`<div style="display:flex;gap:.4rem;margin-top:.3rem">
+            <input id="pvEmail" type="email" placeholder="${esc(t('ph_email'))}" style="flex:1;min-width:0;padding:.45rem;border:1px solid var(--bordo);border-radius:.5rem">
+            <button id="pvGo" style="background:var(--brand);color:#fff;border:0;border-radius:.5rem;padding:.45rem .9rem;font-weight:700;cursor:pointer">OK</button>
+          </div><div id="pvMsg" style="margin-top:.3rem"></div>`;
+        const go=document.getElementById('pvGo');
+        go.onclick=()=>conScudo(go, async ()=>{
+          const em=(document.getElementById('pvEmail').value||'').trim();
+          const pv=document.getElementById('pvMsg');
+          if(!em || em.indexOf('@')<1){ pv.style.color='var(--rosso)'; pv.textContent=t('inserisci_email'); return; }
           const r=await api('/api/preventivo/email',{method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify({alloggio_id:slug, check_in:document.getElementById('checkin').value,
               check_out:document.getElementById('checkout').value, party:parseInt(document.getElementById('ospiti').value)||1,
               email:em, lang:LANG, fonte:FONTE})});
-          if(r && r.stato==='inviata'){ pm.style.color='var(--brand-chiaro)'; pm.textContent='✅ '+t('prev_inviato'); bpm.dataset.restaSpento='1'; }
-          else{ pm.style.color='var(--rosso)'; pm.textContent='❌ '+((r&&r.errore)?fraseErrore(r.errore):t('prev_errore')); }
-        }catch(e){ pm.style.color='var(--rosso)'; pm.textContent='❌ '+t('prev_errore'); }
-      });
+          if(r && r.stato==='inviata'){ pm.style.color='var(--brand-chiaro)'; pm.textContent='✅ '+t('prev_inviato'); bpm.disabled=true; }
+          else{ pv.style.color='var(--rosso)'; pv.textContent='❌ '+((r&&r.errore)?fraseErrore(r.errore):t('prev_errore')); }
+        });
+        document.getElementById('pvEmail').focus();
+      };
       const sb = document.getElementById('splitN');
       if(sb){ const calc = async ()=>{ const n=parseInt(sb.value); const out=document.getElementById('splitOut');
         if(!(n>1)){ out.textContent = ''; return; }   // 1 = paghi tu tutto (default): il totale sopra è già il tuo
@@ -587,8 +596,22 @@ async function apri(slug){
 
 async function prenota(){
   if(!QUOTE) return;
-  const email = prompt(t('email')+':'); if(!email) return;
   const msg = document.getElementById('mMsg');
+  // NIENTE prompt(): nei browser dentro le app (Instagram/Facebook) e' BLOCCATO ->
+  // li' prenotare era impossibile. Campo email NELLA pagina + tasto OK (con scudo).
+  msg.innerHTML = `<div style="display:flex;gap:.5rem;margin-top:.6rem">
+      <input id="bkEmail" type="email" placeholder="${esc(t('ph_email'))}" style="flex:1;min-width:0;padding:.6rem;border:1px solid var(--bordo);border-radius:.6rem">
+      <button id="bkGo" style="background:var(--brand);color:#fff;border:0;border-radius:.6rem;padding:.6rem 1.1rem;font-weight:700;cursor:pointer">OK</button>
+    </div><div id="bkMsg" style="font-size:.85rem;margin-top:.3rem"></div>`;
+  const go = document.getElementById('bkGo');
+  go.onclick = ()=>conScudo(go, async ()=>{ await _prenotaConEmail(); });
+  document.getElementById('bkEmail').focus();
+}
+async function _prenotaConEmail(){
+  const msg = document.getElementById('mMsg');
+  const email = (document.getElementById('bkEmail').value||'').trim();
+  const bm = document.getElementById('bkMsg');
+  if(!email || email.indexOf('@')<1){ bm.style.color='var(--rosso)'; bm.textContent=t('inserisci_email'); return; }
   try{
     const r = await api('/api/concierge/book', {method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({quote_token:QUOTE, email:email})});
@@ -642,6 +665,10 @@ document.getElementById('btnFav').onclick = ()=>{           // mostra SOLO i pre
 document.getElementById('close').onclick = ()=>document.getElementById('modal').classList.remove('open');
 document.getElementById('modal').onclick = e=>{ if(e.target.id==='modal') e.target.classList.remove('open'); };
 document.getElementById('btnPrenota').onclick = prenota;
+// date di default VIVE (check-in fra 7 giorni, 2 notti): mai piu' date fisse nell'HTML
+// che invecchiano. Il prefill dal link email (?ci&co) qui sotto le sovrascrive, come prima.
+document.getElementById('checkin').value = BV.dataISO(7);
+document.getElementById('checkout').value = BV.dataISO(9);
 // link diretto host: ?apri=<slug> apre l'alloggio; ?fonte=diretto applica il 5% al preventivo
 (function(){ const p=new URLSearchParams(location.search);
   // ci/co: il link nell'email del preventivo riporta alle STESSE date

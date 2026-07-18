@@ -40,6 +40,15 @@
   BV.toCents = function(maj, v){ const e=BV.valExp(v); return Math.round((parseFloat(maj)||0)*Math.pow(10,e)); };
   BV.fromCents = function(cents, v){ const e=BV.valExp(v); return (cents||0)/Math.pow(10,e); };
 
+  /* ── DATE: 'YYYY-MM-DD' in ora LOCALE, oggi+N giorni. I default dei form si
+     calcolano da QUI: mai date scritte fisse nell'HTML (invecchiano e diventano
+     passate, e ogni ricerca partirebbe sbagliata). ── */
+  BV.dataISO = function(giorni){
+    const d = new Date(); d.setDate(d.getDate() + (giorni||0));
+    const p = function(n){ return String(n).padStart(2,'0'); };
+    return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+  };
+
   /* ── LINGUA iniziale: 1) scelta salvata 2) lingua del browser 3) inglese ───── */
   BV.linguaIniziale = function(supportate){
     try{ const s=localStorage.getItem('lang'); if(s && supportate.indexOf(s)>=0) return s; }catch(e){}

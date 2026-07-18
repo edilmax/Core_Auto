@@ -225,8 +225,8 @@
     <p class="hint" style="font-size:.85rem;margin-bottom:.5rem" data-i18n="cal_hint">Stai guardando il calendario dell'alloggio scelto in alto in "Il tuo alloggio". Se ne hai più di uno, cambialo da lì.</p>
     <input type="hidden" id="c_slug" value="">
     <div class="grid">
-      <label><span data-i18n="l_da">Da</span><input type="date" id="c_da" value="2026-09-01"></label>
-      <label><span data-i18n="l_a">A</span><input type="date" id="c_a" value="2026-09-15"></label>
+      <label><span data-i18n="l_da">Da</span><input type="date" id="c_da"></label>
+      <label><span data-i18n="l_a">A</span><input type="date" id="c_a"></label>
       <label>&nbsp;<button id="btnCal" data-i18n="b_vedi" style="margin-top:0">Vedi</button></label>
       <label>&nbsp;<button id="btnCalPrezzi" data-i18n="b_prezzi" style="margin-top:0;background:var(--brand-chiaro)">💶 Prezzi</button></label>
       <label>&nbsp;<button id="btnCalTutti" data-i18n="b_tutti" style="margin-top:0;background:#156b52">🏘️ Tutti gli alloggi</button></label>
@@ -321,7 +321,7 @@
     <h2 id="hDisp" data-i18n="disp_h">Disponibilità</h2>
     <input type="hidden" id="d_slug" value="">
     <div class="grid">
-      <label><span data-i18n="l_giorno">Giorno</span><input type="date" id="d_giorno" value="2026-09-01"></label>
+      <label><span data-i18n="l_giorno">Giorno</span><input type="date" id="d_giorno"></label>
       <label><span data-i18n="l_unita">Unità</span><input type="number" id="d_unita" value="1"></label>
       <label id="lPrezzo2" class="full"><span data-i18n="l_prezzo_notte">Prezzo/notte</span> <span class="valcur" style="color:var(--testo-tenue)"></span><input type="number" id="d_prezzo" step="0.01" min="0" value="95"></label>
     </div>
@@ -334,8 +334,8 @@
     <input type="hidden" id="r_slug" value="">
     <div class="grid">
       <label><span data-i18n="l_unita">Unità</span><input type="number" id="r_unita" value="1"></label>
-      <label><span data-i18n="l_da">Da</span><input type="date" id="r_da" value="2026-09-01"></label>
-      <label><span data-i18n="l_a">A</span><input type="date" id="r_a" value="2026-10-01"></label>
+      <label><span data-i18n="l_da">Da</span><input type="date" id="r_da"></label>
+      <label><span data-i18n="l_a">A</span><input type="date" id="r_a"></label>
       <label class="full"><span data-i18n="l_prezzo_notte">Prezzo/notte</span> <span class="valcur" style="color:var(--testo-tenue)"></span><input type="number" id="r_prezzo" step="0.01" min="0" value="90"></label>
     </div>
     <button id="btnRange" data-i18n="b_apri">Apri periodo</button>
@@ -734,7 +734,7 @@ document.getElementById('btnPubblica').onclick = async ()=>{
     sconto_settimana_bps:(parseInt(document.getElementById('p_sc_sett').value)||0)*100,
     sconto_mese_bps:(parseInt(document.getElementById('p_sc_mese').value)||0)*100,
     modalita_prenotazione:document.getElementById('p_modal').value,
-    capacita:parseInt(document.getElementById('p_cap').value), servizi:serv, immagini:imgs});
+    capacita:parseInt(document.getElementById('p_cap').value)||1, servizi:serv, immagini:imgs});
   if(r.status===201){
     m.className='msg ok'; m.textContent='✅ '+T(editing?'aggiornato_ok':'pubblicato_ok');
     window.__foto=[]; document.getElementById('p_thumbs').innerHTML=''; document.getElementById('p_img').value='';
@@ -1197,10 +1197,16 @@ scudoTasti(['btnLogin','btnRegister','btnPubblica','btnPin','btnDisp','btnTrasp'
   'btnHostCanc','btnRange','btnIcal','cv_send','btnCalTutti','btnCalPrezzi',
   'btnIcalExport','btnStripeLink','btnTgLink','btnImporta','btnMetriche','btnMiei',
   'btnExport','btnCal','btnMsgInvia','btnMsgCarica','btnDp','btnSeo']);
+// date di default VIVE nei form (oggi / +14 / +30): mai piu' default fissi che invecchiano
+document.getElementById('c_da').value=BV.dataISO(0); document.getElementById('c_a').value=BV.dataISO(14);
+document.getElementById('d_giorno').value=BV.dataISO(0);
+document.getElementById('r_da').value=BV.dataISO(0); document.getElementById('r_a').value=BV.dataISO(30);
 applica();
 organizzaPannello();   // riordina: essenziale in alto, avanzato nel cassetto
 aggiornaAuthUI();
-if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(()=>{}); }
+// niente service worker (ALLINEATO a index "sito sempre fresco"): prima questa riga lo
+// RE-installava mentre index lo disinstallava -> ping-pong e rischio pagine vecchie in cache
+if('serviceWorker' in navigator){ navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>r.unregister())).catch(()=>{}); if(window.caches) caches.keys().then(ks=>ks.forEach(k=>caches.delete(k))).catch(()=>{}); }
 </script>
 </body>
 </html>
