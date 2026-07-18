@@ -4256,17 +4256,21 @@ class RouterHTTP:
         ok = self._sys.catalogo.imposta_stato(slug, stato)
         return (200 if ok else 422), {"stato": stato if ok else "rifiutato"}
 
-    def _cal_arricchito(self, alloggio, da, a):
+    def _cal_arricchito(self, alloggio, da, a, hold_prefetch=None):
         """Celle calendario di UN alloggio (libero/pieno/chiuso/non_caricato) + marcatura
         'in_trattativa' (arancione) dei giorni con hold VIVO. Riusato dal calendario singolo
-        E da quello di TUTTI gli alloggi. Isolato: l'in_trattativa non blocca mai."""
+        E da quello di TUTTI gli alloggi. Isolato: l'in_trattativa non blocca mai.
+        hold_prefetch: se passato (mappa slug->[hold] dalla vista multi-alloggio), evita la
+        query per-slug -> N+1 azzerato. Se None, ricade sulla query singola (path invariato)."""
         cal = self._sys.inventario.calendario(alloggio, da, a)
         try:
             pp = getattr(self._sys, "pagamenti_pendenti", None)
             if pp is not None and cal:
                 import datetime as _dtc
                 gg_hold = set()
-                for h in pp.attivi_per_alloggio(alloggio):
+                hold = hold_prefetch.get(alloggio, []) if hold_prefetch is not None \
+                    else pp.attivi_per_alloggio(alloggio)
+                for h in hold:
                     try:
                         d0 = _dtc.date.fromisoformat(h.get("check_in", ""))
                         d1 = _dtc.date.fromisoformat(h.get("check_out", ""))
@@ -4506,6 +4510,13 @@ class RouterHTTP:
             return 422, {"errore": "date_mancanti"}
         try:
             listings = self._sys.catalogo.alloggi_host(hid, limit=200)
+            slugs = [al.get("slug") for al in listings
+                     if isinstance(al, dict) and al.get("slug")]
+            # BATCH: gli hold vivi di TUTTI gli alloggi in UNA query (prima: 1 per slug ->
+            # N+1). La mappa passata a _cal_arricchito azzera le query per-slug degli hold.
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            hold_map = pp.attivi_multi(slugs) \
+                if (pp is not None and callable(getattr(pp, "attivi_multi", None))) else None
             out = []
             for al in listings:
                 slug = al.get("slug") if isinstance(al, dict) else None
@@ -4513,7 +4524,7 @@ class RouterHTTP:
                     continue
                 out.append({"slug": slug,
                             "titolo": (al.get("titolo") if isinstance(al, dict) else None) or slug,
-                            "giorni": self._cal_arricchito(slug, da, a)})
+                            "giorni": self._cal_arricchito(slug, da, a, hold_prefetch=hold_map)})
         except Exception:
             logger.error("calendario tutti: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}

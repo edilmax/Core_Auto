@@ -35,9 +35,15 @@
 > ha SCOVATO un buco vero: clamp rimborso escrow senza test → ora coperto); ⑩ audit
 > accessibilità WCAG (aria-label sui bottoni-icona, aria-live sulle regioni di stato, close
 > da tastiera). **I 10 SISTEMI INGEGNERISTICI SONO COMPLETI.**
-> **PROSSIMI PASSI**: nessuno obbligato — la macchina è collaudata a fondo. Idee aperte se il
-> fondatore vuole: sblocchi Meta/TikTok/OXR (prerequisiti suoi, sez.2-bis), o un nuovo giro
-> loop-caccia-bug. Regole ferme invariate (salvare ovunque, mai email vera, deploy rm-first). REGOLE FERME: dopo OGNI operazione finita salvare ovunque
+> · ⚡ **AUDIT RESILIENZA avviato (2026-07-18)** — protocollo UN COMPARTIMENTO ALLA VOLTA col VAI:
+>   ✅ **Comp.1 Performance FATTO**: vista calendario multi-alloggio era N+1 (1 conn+query
+>   sui pendenti per alloggio) → `fase162.attivi_multi` batch → **20 connessioni → 1** (O(N)→O(1)),
+>   zero regressione visiva (giorni in_trattativa identici). Test: test_perf_calendario_tutti.
+> **PROSSIMI COMPARTIMENTI dell'audit (attendono VAI, uno alla volta)**: ② Security/IDOR (ri-verifica
+>   ownership lato server su ogni endpoint sensibile, mai fidarsi dell'input client); ③ Clean Code
+>   (funzioni con troppe responsabilità/indentazione → modulari e testabili). Passo-2 opzionale del
+>   comp.1: batchare anche il calendario (fase58). Regole ferme invariate (salvare ovunque, mai
+>   email vera, deploy rm-first, suite intera prima del deploy). REGOLE FERME: dopo OGNI operazione finita salvare ovunque
 > (commit+push+VPS+REGISTRO); mai email vera del fondatore nei test; deploy rm-first; suite intera
 > prima di ogni deploy. Dettaglio di ogni voce: righe in REGISTRO_INGEGNERIA.md sez.1 (piu' recenti in alto).
 

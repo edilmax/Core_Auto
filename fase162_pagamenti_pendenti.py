@@ -293,6 +293,31 @@ class PagamentiPendenti:
         finally:
             con.close()
 
+    def attivi_multi(self, slugs: Any, *,
+                     ora_ts: Optional[int] = None) -> Dict[str, List[Dict[str, Any]]]:
+        """Hold vivi per PIU' alloggi in UNA sola query -> {slug: [record, ...]}.
+        Evita l'N+1 della vista calendario multi-alloggio (prima: 1 connessione+query
+        PER slug). Stessa semantica di attivi_per_alloggio, batch: stati vivi
+        ('in_attesa'/'in_attesa_host') e scadenza non passata. Slug non-str ignorati."""
+        lista = [s for s in (slugs or []) if isinstance(s, str) and s]
+        if not lista:
+            return {}
+        ora = ora_ts if isinstance(ora_ts, int) and not isinstance(ora_ts, bool) else self._now()
+        ph = ",".join("?" * len(lista))
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT * FROM pendenti WHERE alloggio_id IN (%s) AND stato IN "
+                "('in_attesa','in_attesa_host') AND scadenza_ts>?" % ph,
+                (*lista, ora)).fetchall()
+        finally:
+            con.close()
+        out: Dict[str, List[Dict[str, Any]]] = {}
+        for r in righe:
+            d = self._riga(r)
+            out.setdefault(d.get("alloggio_id"), []).append(d)
+        return out
+
     def pulisci_vecchi(self, *, eta_sec: int = 93600, ora_ts: Optional[int] = None) -> int:
         """Elimina i record 'scaduto'/'rimborsato' più vecchi di eta_sec (default 26h: una
         sessione Stripe può vivere fino a 24h — su-richiesta approvata — e finché il link è
