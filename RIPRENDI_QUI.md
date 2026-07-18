@@ -1,5 +1,23 @@
 # 🧪 STATO COLLAUDO — sessione 2026-07-16/17/18 (Fable 5)
 
+> 🧭 **PUNTO DI RIPARTENZA per la CHAT SUCCESSIVA (cambio account, 2026-07-18)** — Riprendi da QUI.
+> **Contesto**: stiamo eseguendo i "10 sistemi ingegneristici" richiesti dal fondatore + il
+> "protocollo frontend zero-difetti a compartimenti stagni". FATTI finora: ① ispettore statico 76k
+> righe (0 bug) · ② bombardamento 10.000 menti (0 violazioni) · ③ mega-sim 1000×10.000 (verde) ·
+> ④ guardie concorrenza · ⑤ frontend a neuroni Host+Admin (.btn-riga, 21 catch muti curati, 2
+> neuroni morti) · ⑥ frontend Ospite (8 catch + fix backup fase38) · 🚦 SEMAFORO universale stati
+> (3 colori identici host+ospite, fix verde-ambiguo prezzi) · 🧱 ISOLAMENTO multi-host provato a
+> simulazione (0 interferenze host↔host, 10 giri + concorrente). **Tutto committato, pushato,
+> deployato e ALLINEATO** (Desktop=GitHub=VPS). Suite 2456+ verde.
+> **PROSSIMO PASSO concordato**: **Livello 7 — Viaggio E2E dal vivo su produzione** (automa Python
+> stdlib da PowerShell, host+annuncio+prenotazione REALI, poi "pulizia tombale" per id esatti, 0
+> residui verificati via SSH). PIANO gia' approvato dal fondatore, script NON ancora scritto (attende
+> il suo "VAI"). Poi restano i sistemi ⑧ benchmark carico SQLite, ⑨ mutation testing, ⑩ audit
+> accessibilita' — per arrivare a 10. REGOLE FERME: dopo OGNI operazione finita salvare ovunque
+> (commit+push+VPS+REGISTRO); mai email vera del fondatore nei test; deploy rm-first; suite intera
+> prima di ogni deploy. Dettaglio di ogni voce: righe in REGISTRO_INGEGNERIA.md sez.1 (piu' recenti in alto).
+
+
 > 🏔️ **2026-07-18 — MEGA-SIM RECORD 1000 HOST × 10.000 CLIENTI: VERDE.** "Un anno di vita" a
 > scala 10× il precedente (SIM_HOST=1000 SIM_CLI=10000, 30min): 2185 confermate, 1287 contestate,
 > 901 cancellate, 901 scadute, 1220 su-richiesta, 100 controversie arbitrate — tutti gli invarianti
