@@ -79,6 +79,17 @@
 >   per carattere) → ora solo list/tuple. Prove fisiche: mai 5xx, quote mai ≤0, catalogo senza
 >   veleni, range invertito non prenotabile, flusso sano vivo DOPO la tempesta. Test permanente:
 >   test_input_invalidi_ogni_casella. **🏁 COLLAUDO FINALE 3/3 COMPLETO (0 errori residui).**
+> · 🏭 **REFACTORING INDUSTRIALE "Le mie prenotazioni" (2026-07-18, direttiva "niente tamponi")**:
+>   paginazione SERVER-SIDE vera (fase58 `elenco_prenotazioni_pagina`+`conta_prenotazioni`+indice
+>   `ix_movimenti_blocchi`; endpoint `vista`/`page`/`limit`, taglio e COUNT dal DB) — **PERF misurata
+>   su 300 prenotazioni: 161 query→5, 50.8KB→1.8KB (28×), 167.8ms→6.4ms (26×)** · UX UNIFICATA:
+>   card Richieste eliminata, richieste=STATO del flusso (righe gialle in cima, Approva/Rifiuta+
+>   scudo+countdown) ed ESCLUSE in SQL dalla lista (prima comparivano DOPPIE: doppione
+>   pre-esistente scovato dal test) · etichetta onesta "Scaduta" in archivio · i18n MODULARE
+>   (`BV.t` fonte unica + `TR._fallback` nei dati; card tradotta in TUTTE le 8 lingue).
+>   Test permanenti: test_prenotazioni_paginazione (pagine esatte, mai una riga in più) +
+>   test_host_prenotazioni_archivio + CAOS aggiornato. Checkpoint intermedio: `e84c633`.
+>   Dettaglio: riga 🗂️ REGISTRO sez.1.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare

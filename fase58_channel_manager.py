@@ -157,6 +157,11 @@ class ChannelManager:
                         check_out TEXT,
                         origine TEXT DEFAULT '',
                         ts TEXT NOT NULL)""")
+                # per la lista paginata della dashboard host (filtro per alloggi
+                # dell'host + ordine per data): senza, ogni pagina = scan completo
+                # dei movimenti. idem_key e' gia' PK -> il check "rilasciato" resta O(1).
+                con.execute("CREATE INDEX IF NOT EXISTS ix_movimenti_blocchi ON "
+                            "movimenti(alloggio_id, tipo, esito, check_in)")
         finally:
             con.close()
 
@@ -369,6 +374,89 @@ class ChannelManager:
                  "check_in": r["check_in"], "check_out": r["check_out"],
                  "origine": r["origine"], "ts": r["ts"],
                  "rimborsato": bool(r["rilasciato"])} for r in righe]
+
+    @staticmethod
+    def _dove_lista(alloggi: List[str], vista: str, escludi_idem: List[str]) -> str:
+        """WHERE condiviso di lista+conteggio paginati: blocchi occupati degli alloggi
+        dati, spaccati per vista. 'attive' = nessun rilascio registrato (prenotazione
+        viva); 'archivio' = rilasciata (rimborso/cancellazione). Il rilascio si legge
+        dal movimento gemello 'rilascio:<idem>' -> lookup su PK, O(1) per riga.
+        `escludi_idem`: blocchi da NON considerare (le richieste 'su richiesta' ancora
+        da approvare tengono la stanza ma NON sono prenotazioni: sono uno STATO del
+        flusso, mostrato a parte -> senza esclusione comparirebbero DOPPIE). Filtro in
+        SQL: pagine e conteggi restano ESATTI."""
+        segnaposti = ",".join("?" for _ in alloggi)
+        esiste = ("EXISTS (SELECT 1 FROM movimenti r WHERE r.idem_key = "
+                  "'rilascio:' || m.idem_key)")
+        sql = ("FROM movimenti m WHERE m.tipo='blocco' AND m.esito='occupato' "
+               "AND m.alloggio_id IN (%s) AND %s%s"
+               % (segnaposti, "NOT " if vista == "attive" else "", esiste))
+        if escludi_idem:
+            sql += " AND m.idem_key NOT IN (%s)" % ",".join("?" for _ in escludi_idem)
+        return sql
+
+    @staticmethod
+    def _alloggi_puliti(alloggi: Any) -> List[str]:
+        if not isinstance(alloggi, (list, tuple)):
+            return []
+        return [a for a in alloggi if isinstance(a, str) and a][:200]
+
+    @staticmethod
+    def _idem_puliti(escludi_idem: Any) -> List[str]:
+        if not isinstance(escludi_idem, (list, tuple)):
+            return []
+        return [x for x in escludi_idem if isinstance(x, str) and x][:200]
+
+    def conta_prenotazioni(self, *, alloggi: Any, vista: str = "attive",
+                           escludi_idem: Any = None) -> int:
+        """Quante prenotazioni ha la vista (per il pager e i contatori dei tab).
+        COUNT eseguito DAL database: al client non viaggia mai la lista intera."""
+        alloggi = self._alloggi_puliti(alloggi)
+        if not alloggi:
+            return 0
+        if vista not in ("attive", "archivio"):
+            vista = "attive"
+        escl = self._idem_puliti(escludi_idem)
+        con = self._apri()
+        try:
+            r = con.execute("SELECT COUNT(*) " + self._dove_lista(alloggi, vista, escl),
+                            alloggi + escl).fetchone()
+            return int(r[0]) if r else 0
+        finally:
+            con.close()
+
+    def elenco_prenotazioni_pagina(self, *, alloggi: Any, vista: str = "attive",
+                                   limit: int = 10, offset: int = 0,
+                                   escludi_idem: Any = None
+                                   ) -> List[Dict[str, Any]]:
+        """PAGINA di prenotazioni per la dashboard host: filtro (alloggi dell'host +
+        vista attive/archivio), ordine e TAGLIO fatti dal DATABASE (LIMIT ? OFFSET ?).
+        Restituisce ESATTAMENTE al massimo `limit` righe: il carico trasmesso e'
+        proporzionale alla pagina, mai alla storia. Ordine stabile e deterministico
+        (check_in DESC, rowid DESC come spareggio) -> pagine senza doppioni ne' buchi
+        a dati fermi. limit e' CLAMPATO 1..50 (un valore ostile non scarica il mondo)."""
+        alloggi = self._alloggi_puliti(alloggi)
+        if not alloggi:
+            return []
+        if vista not in ("attive", "archivio"):
+            vista = "attive"
+        lim = limit if (isinstance(limit, int) and not isinstance(limit, bool)) else 10
+        lim = max(1, min(50, lim))
+        off = offset if (isinstance(offset, int) and not isinstance(offset, bool)) else 0
+        off = max(0, min(10**9, off))
+        escl = self._idem_puliti(escludi_idem)
+        sql = ("SELECT m.idem_key, m.alloggio_id, m.check_in, m.check_out, "
+               "m.origine, m.ts " + self._dove_lista(alloggi, vista, escl) +
+               " ORDER BY m.check_in DESC, m.rowid DESC LIMIT ? OFFSET ?")
+        con = self._apri()
+        try:
+            righe = con.execute(sql, alloggi + escl + [lim, off]).fetchall()
+        finally:
+            con.close()
+        return [{"idem_key": r["idem_key"], "alloggio_id": r["alloggio_id"],
+                 "check_in": r["check_in"], "check_out": r["check_out"],
+                 "origine": r["origine"], "ts": r["ts"],
+                 "rimborsato": vista == "archivio"} for r in righe]
 
     def metriche(self, *, alloggio_id: Optional[str] = None,
                  da: Optional[str] = None, a: Optional[str] = None) -> Dict[str, int]:

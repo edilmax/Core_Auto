@@ -4186,69 +4186,114 @@ class RouterHTTP:
         return 200, {"ok": True}
 
     def _host_prenotazioni(self, query, headers):
-        """Le prenotazioni CONFERMATE dell'host (su tutti i suoi alloggi), per la lista
-        semplice 'Le mie prenotazioni'. Le richieste ancora DA approvare sono in /richieste."""
+        """'Le mie prenotazioni' con PAGINAZIONE SERVER-SIDE: filtro, conteggio e
+        TAGLIO li fa il DATABASE (fase58 LIMIT/OFFSET) — al client viaggia SOLO la
+        pagina richiesta, mai l'intera storia. Parametri: `vista` attive|archivio
+        (default attive: le annullate non sporcano la vista), `page` 1-based,
+        `limit` 1..50 (default 10). Parametri ostili -> default garbati, mai 5xx.
+        Le richieste da approvare restano su /api/host/richieste (sono uno STATO del
+        flusso: la UI le fonde in un'unica lista, il money-path approva/rifiuta non
+        si tocca). ARCHIVIAZIONE LOGICA: nessun DELETE, i movimenti restano per
+        l'audit (vista+archivio == tutto)."""
         if not self._auth_host(headers):
             return 401, {"errore": "unauthorized"}
         hid = self._host_id_da_token(headers) or query.get("host_id")
         if not (isinstance(hid, str) and hid):
             return 422, {"errore": "host_id_mancante"}
+
+        def _n(v, default, mini, maxi):
+            try:
+                n = int(str(v))
+            except Exception:
+                return default
+            return max(mini, min(maxi, n))
+
+        vista = query.get("vista")
+        if vista not in ("attive", "archivio"):
+            vista = "attive"
+        page = _n(query.get("page"), 1, 1, 10 ** 6)
+        limit = _n(query.get("limit"), 10, 1, 50)
         try:
             import datetime as _dt
             from fase59_concierge import codice_prenotazione
             firma = getattr(self._sys, "firma", None)
             pp = getattr(self._sys, "pagamenti_pendenti", None)
+            inv = self._sys.inventario
             oggi = _dt.date.today().isoformat()
             listings = self._sys.catalogo.alloggi_host(hid, limit=200)
-            out = []
+            titoli, slugs = {}, []
             for a in listings:
                 slug = a.get("slug") if isinstance(a, dict) else None
                 if not slug:
                     continue
-                titolo = (a.get("titolo") if isinstance(a, dict) else None) or slug
-                for p in self._sys.inventario.elenco_prenotazioni(alloggio_id=slug, limit=200):
-                    # CODICE + PIN check-in nel PANNELLO (prima solo nell'email di avviso:
-                    # host che la perdeva = nessun modo di verificare l'ospite alla porta).
-                    # riferimento = idem_key[:24] (fase59); dopo un re-block tardivo la
-                    # chiave attiva e' 'reblock:<rif>' -> si estrae il rif originale.
-                    idem = str(p.get("idem_key") or "")
-                    ref = idem[len("reblock:"):] if idem.startswith("reblock:") else idem[:24]
-                    # ARCHIVIAZIONE LOGICA (nessun DELETE fisico dei dati: restano per l'audit).
-                    # 'rimborsato' (fase58) = il blocco e' stato RILASCIATO -> vale sia per le
-                    # rimborsate sia per le cancellate-host: e' il segnale DUREVOLE che separa
-                    # la vista "attive" dall'"archivio". La distinzione fine rimborsata/cancellata
-                    # si fa SOLO per gli archiviati (pochi -> nessun N+1 sulla vista principale);
-                    # se il pendente e' gia' stato purgato (pulisci_vecchi 26h) resta 'rimborsata'.
-                    ci, co = p.get("check_in"), p.get("check_out")
-                    archiviata = bool(p.get("rimborsato"))
-                    if archiviata:
-                        stato = "rimborsata"
-                        if pp is not None and ref:
-                            try:
-                                rec = pp.info(ref)
-                                if rec and rec.get("stato") == "cancellata_host":
-                                    stato = "cancellata"
-                            except Exception:
-                                pass
-                    else:
-                        # etichetta temporale (informativa) della vista attiva; un soggiorno
-                        # passato ma non rilasciato resta 'confermata' (soldi maturati all'host).
-                        stato = "confermata"
-                        if isinstance(ci, str) and isinstance(co, str) and ci and co:
-                            if ci > oggi:
-                                stato = "futura"
-                            elif ci <= oggi < co:
-                                stato = "attiva"
-                    out.append({"alloggio": titolo, "slug": slug,
-                                "check_in": ci, "check_out": co,
-                                "codice": codice_prenotazione(ref) if ref else "",
-                                "pin": (firma.pin_checkin(ref) if (firma and ref) else ""),
-                                "stato": stato, "archiviata": archiviata})
+                slugs.append(slug)
+                titoli[slug] = (a.get("titolo") if isinstance(a, dict) else None) or slug
+            # le richieste 'su richiesta' ancora da approvare TENGONO la stanza (blocco
+            # vivo) ma NON sono prenotazioni: sono uno STATO del flusso, mostrato come
+            # riga-azione (fonte /api/host/richieste). Qui si ESCLUDONO in SQL, cosi'
+            # non compaiono doppie e pagine/conteggi restano esatti.
+            escludi = []
+            if pp is not None:
+                try:
+                    escludi = [str(r.get("idem_key") or "")
+                               for r in pp.da_approvare(hid) if r.get("idem_key")]
+                except Exception:
+                    escludi = []
+            tot_attive = inv.conta_prenotazioni(alloggi=slugs, vista="attive",
+                                                escludi_idem=escludi)
+            tot_arch = inv.conta_prenotazioni(alloggi=slugs, vista="archivio")
+            totale = tot_attive if vista == "attive" else tot_arch
+            pagina = inv.elenco_prenotazioni_pagina(
+                alloggi=slugs, vista=vista, limit=limit, offset=(page - 1) * limit,
+                escludi_idem=(escludi if vista == "attive" else None))
+            out = []
+            for p in pagina:
+                # CODICE + PIN check-in nel PANNELLO; riferimento = idem_key[:24]
+                # (fase59); dopo un re-block tardivo la chiave attiva e'
+                # 'reblock:<rif>' -> si estrae il rif originale.
+                idem = str(p.get("idem_key") or "")
+                ref = idem[len("reblock:"):] if idem.startswith("reblock:") else idem[:24]
+                ci, co = p.get("check_in"), p.get("check_out")
+                archiviata = bool(p.get("rimborsato"))
+                if archiviata:
+                    # distinzione fine SOLO sulle righe della pagina (<= limit lookup:
+                    # mai N+1 sull'intera storia); pendente purgato (26h) -> resta
+                    # 'rimborsata'. 'scaduto' = hold/richiesta MAI pagata scaduta da
+                    # sola: etichettarla "rimborsata" era una bugia (niente da
+                    # rimborsare) -> etichetta onesta 'scaduta'.
+                    stato = "rimborsata"
+                    if pp is not None and ref:
+                        try:
+                            rec = pp.info(ref)
+                            if rec and rec.get("stato") == "cancellata_host":
+                                stato = "cancellata"
+                            elif rec and rec.get("stato") == "scaduto":
+                                stato = "scaduta"
+                        except Exception:
+                            pass
+                else:
+                    # etichetta temporale della vista attiva; un soggiorno passato ma
+                    # non rilasciato resta 'confermata' (soldi maturati all'host).
+                    stato = "confermata"
+                    if isinstance(ci, str) and isinstance(co, str) and ci and co:
+                        if ci > oggi:
+                            stato = "futura"
+                        elif ci <= oggi < co:
+                            stato = "attiva"
+                out.append({"alloggio": titoli.get(p.get("alloggio_id"),
+                                                   p.get("alloggio_id") or ""),
+                            "slug": p.get("alloggio_id"),
+                            "check_in": ci, "check_out": co,
+                            "codice": codice_prenotazione(ref) if ref else "",
+                            "pin": (firma.pin_checkin(ref) if (firma and ref) else ""),
+                            "stato": stato, "archiviata": archiviata})
         except Exception:
             logger.error("host prenotazioni: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
-        out.sort(key=lambda x: (x.get("check_in") or ""), reverse=True)
-        return 200, {"prenotazioni": out}
+        return 200, {"prenotazioni": out, "vista": vista, "page": page,
+                     "limit": limit, "totale": totale,
+                     "pagine": max(1, -(-totale // limit)),
+                     "totale_attive": tot_attive, "totale_archivio": tot_arch}
 
     def _host_alloggi(self, query, headers):
         if not self._auth_host(headers):

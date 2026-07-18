@@ -197,7 +197,9 @@ async function __main(){
         box.indexOf(BV.ERR_FRASI.it.server)>=0 && box.indexOf(T('no_pay'))===-1, box.slice(0,200));
   FETCH = function(u,o){ return pende(o); };
   await caricaRichieste();
-  box = document.getElementById('richieste_lista').innerHTML;
+  // dal 2026-07-18 le richieste vivono NELLA lista unificata (pren_lista): il guasto
+  // deve comparire li', mai mascherato da "nessuna richiesta"
+  box = document.getElementById('pren_lista').innerHTML;
   check('host: richieste (24h!) in timeout = frase, NON "nessuna richiesta"',
         box.indexOf(BV.ERR_FRASI.it.lenta)>=0 && box.indexOf(T('no_req'))===-1, box.slice(0,200));
   FETCH = function(){ return corrotto(200); };

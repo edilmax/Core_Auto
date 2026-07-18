@@ -1,16 +1,15 @@
-"""Collaudo ARCHIVIAZIONE LOGICA di 'Le mie prenotazioni' (pulizia UX, punto del fondatore).
+"""Collaudo ARCHIVIAZIONE LOGICA di 'Le mie prenotazioni' (contratto PAGINATO server-side).
 
-L'endpoint GET /api/host/prenotazioni ora separa la VISTA senza toccare i dati:
-  - vista attiva  = prenotazioni vive (archiviata=False), etichette attiva/futura/confermata;
-  - archivio      = rimborsate + cancellate (archiviata=True), distinte per motivo.
-Invarianti difesi:
-  1. una prenotazione rimborsata dall'admin -> archiviata=True, stato 'rimborsata';
-  2. una cancellata dall'host -> archiviata=True, stato 'cancellata';
-  3. una prenotazione viva futura -> archiviata=False, stato 'futura';
-  4. la vista predefinita (archiviata=False) NON contiene rimborsate ne' cancellate;
-  5. NESSUN DELETE fisico: i movimenti restano nel DB (elenco_prenotazioni li vede ancora,
-     e la somma vista+archivio = tutte le prenotazioni) -> l'audit e' integro;
-  6. ogni riga porta il flag 'archiviata' (booleano) su cui il frontend fa lo split.
+Dal 2026-07-18 l'endpoint GET /api/host/prenotazioni accetta `vista` (attive|archivio),
+`page` e `limit`: il DATABASE taglia la pagina, al client viaggia solo il sottoinsieme.
+Invarianti difesi qui (la paginazione fine e' in test_prenotazioni_paginazione):
+  1. una prenotazione rimborsata dall'admin -> vista archivio, stato 'rimborsata';
+  2. una cancellata dall'host -> vista archivio, stato 'cancellata' (distinta);
+  3. una prenotazione viva futura -> vista attive, stato 'futura';
+  4. la vista predefinita (attive) NON contiene mai rimborsate/cancellate;
+  5. NESSUN DELETE fisico: attive+archivio == tutte, e i movimenti grezzi restano
+     nel magazzino (audit integro);
+  6. i contatori (totale_attive/totale_archivio) dicono la verita'.
 """
 import hashlib
 import hmac
@@ -74,65 +73,62 @@ class TestArchivioPrenotazioni(unittest.TestCase):
         self.assertEqual(s, 200)
         return rif
 
-    def _prenotazioni(self):
-        s, d = self.g("GET", "/api/host/prenotazioni", None, HK, {"host_id": "demo"})
+    def _vista(self, vista, page=1, limit=50):
+        s, d = self.g("GET", "/api/host/prenotazioni", None, HK,
+                      {"host_id": "demo", "vista": vista, "page": str(page),
+                       "limit": str(limit)})
         self.assertEqual(s, 200)
-        return d["prenotazioni"]
+        return d
 
     def test_archiviazione_logica_completa(self):
-        vive = [self._prenota_paga() for _ in range(2)]
+        [self._prenota_paga() for _ in range(2)]
         rimb = self._prenota_paga()
         canc = self._prenota_paga()
 
-        # admin RIMBORSA una (serve la sua idem_key per rilasciare lo STESSO blocco)
         idem = self.sis.pagamenti_pendenti.info(rimb)["idem_key"]
         s, _ = self.g("POST", "/api/admin/rimborso", {"alloggio_id": "hotel",
                       "check_in": CI, "check_out": CO, "idem_key": idem}, AK)
         self.assertEqual(s, 200)
-        # host CANCELLA un'altra
         s, _ = self.g("POST", "/api/host/cancella", {"riferimento": canc, "host_id": "demo"}, HK)
         self.assertEqual(s, 200)
 
-        pren = self._prenotazioni()
-        # ogni riga ha il flag 'archiviata'
-        self.assertTrue(all("archiviata" in p for p in pren), "manca il flag archiviata")
+        att = self._vista("attive")
+        arch = self._vista("archivio")
+        attive, archivio = att["prenotazioni"], arch["prenotazioni"]
 
-        attive = [p for p in pren if not p["archiviata"]]
-        archivio = [p for p in pren if p["archiviata"]]
-
-        # (4) la vista predefinita NON contiene rimborsate ne' cancellate
-        stati_attivi = {p["stato"] for p in attive}
-        self.assertEqual(stati_attivi & {"rimborsata", "cancellata"}, set(),
-                         f"vista attiva sporca di annullate: {stati_attivi}")
-        # (3) le vive future sono etichettate 'futura'
-        self.assertTrue(attive, "nessuna prenotazione attiva")
-        self.assertEqual({p["stato"] for p in attive}, {"futura"},
-                         "le prenotazioni vive nel futuro devono essere 'futura'")
-
-        # (1)+(2) l'archivio contiene ESATTAMENTE la rimborsata e la cancellata, distinte
+        # (4) la vista predefinita non contiene annullate
+        self.assertEqual({p["stato"] for p in attive} & {"rimborsata", "cancellata"}, set())
+        self.assertTrue(all(not p["archiviata"] for p in attive))
+        # (3) vive future -> 'futura'
+        self.assertEqual({p["stato"] for p in attive}, {"futura"})
+        # (1)+(2) archivio: esattamente 1 rimborsata + 1 cancellata, distinte
         per_stato = {}
         for p in archivio:
-            per_stato.setdefault(p["stato"], 0)
-            per_stato[p["stato"]] += 1
-        self.assertEqual(per_stato, {"rimborsata": 1, "cancellata": 1},
-                         f"archivio atteso 1 rimborsata + 1 cancellata, trovato {per_stato}")
-
-        # (5) NESSUN DELETE fisico: vista + archivio = tutte le 4 prenotazioni, e i movimenti
-        # grezzi esistono ancora nel magazzino (audit integro)
+            per_stato[p["stato"]] = per_stato.get(p["stato"], 0) + 1
+        self.assertEqual(per_stato, {"rimborsata": 1, "cancellata": 1})
+        self.assertTrue(all(p["archiviata"] for p in archivio))
+        # (6) contatori veritieri, uguali su entrambe le viste
+        for d in (att, arch):
+            self.assertEqual(d["totale_attive"], 2)
+            self.assertEqual(d["totale_archivio"], 2)
+        self.assertEqual(att["totale"], 2)
+        self.assertEqual(arch["totale"], 2)
+        # (5) NESSUN DELETE: attive+archivio == tutte, movimenti grezzi intatti
         self.assertEqual(len(attive) + len(archivio), 4)
         grezze = self.sis.inventario.elenco_prenotazioni(alloggio_id="hotel", limit=500)
         self.assertEqual(len(grezze), 4, "un movimento e' SPARITO: ci sarebbe stato un DELETE")
-        self.assertEqual(sum(1 for x in grezze if x["rimborsato"]), 2,
-                         "le 2 archiviate devono risultare rilasciate, le 2 vive no")
+        self.assertEqual(sum(1 for x in grezze if x["rimborsato"]), 2)
 
-    def test_default_vuoto_e_flag_sempre_presente(self):
-        # nessuna prenotazione -> lista vuota, nessun crash
-        self.assertEqual(self._prenotazioni(), [])
-        # una sola viva -> attiva, archiviata False
+    def test_default_vuoto_e_contratto(self):
+        d = self._vista("attive")
+        self.assertEqual(d["prenotazioni"], [])
+        self.assertEqual(d["totale"], 0)
+        self.assertEqual(d["pagine"], 1)
         self._prenota_paga()
-        pren = self._prenotazioni()
-        self.assertEqual(len(pren), 1)
-        self.assertFalse(pren[0]["archiviata"])
+        d = self._vista("attive")
+        self.assertEqual(len(d["prenotazioni"]), 1)
+        self.assertFalse(d["prenotazioni"][0]["archiviata"])
+        self.assertEqual(d["vista"], "attive")
 
 
 if __name__ == "__main__":

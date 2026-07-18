@@ -123,11 +123,17 @@ class TestRecensionePurga(unittest.TestCase):
 
     def test_pannello_host_marca_rimborsata(self):
         self._book_paga_cancella()
-        s, pr = self.g("GET", "/api/host/prenotazioni", h={"X-Host-Token": self.tok})
+        # dal 2026-07-18 le annullate vivono nella vista ARCHIVIO (paginazione server):
+        # la vista di default resta pulita, la rimborsata deve stare nell'archivio.
+        s, pr = self.g("GET", "/api/host/prenotazioni", h={"X-Host-Token": self.tok},
+                       q={"vista": "archivio"})
         self.assertEqual(s, 200)
         stati = [p["stato"] for p in pr["prenotazioni"]]
         self.assertIn("rimborsata", stati,
                       "chiave 'rimborsato': la cancellata deve apparire RIMBORSATA")
+        s, pr = self.g("GET", "/api/host/prenotazioni", h={"X-Host-Token": self.tok})
+        self.assertNotIn("rimborsata", [p["stato"] for p in pr["prenotazioni"]],
+                         "la vista di default NON deve contenere le annullate")
 
     def test_elimina_annuncio_con_sole_rimborsate_future(self):
         self._book_paga_cancella()

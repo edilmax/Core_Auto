@@ -16,6 +16,25 @@
   const _ESC = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
   BV.esc = function(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return _ESC[c]; }); };
 
+  /* ── i18n MODULARE (fonte unica della RISOLUZIONE, i dizionari restano nelle pagine) ──
+     Catena di fallback DICHIARATA NEI DATI, non cablata nel codice: il dizionario puo'
+     portare `tr._fallback = {"pt-br":"pt", "*":"en"}` e aggiungere una lingua (anche
+     parziale) = SOLO dati, zero modifiche al core. Risoluzione: lingua richiesta ->
+     catena dichiarata -> '*' -> chiave nuda (mai stringhe vuote in pagina).
+     Anti-ciclo: ogni lingua visitata una volta sola. */
+  BV.t = function(tr, lang, chiave){
+    if(!tr) return chiave;
+    var fb = tr._fallback || {};
+    var l = lang, visti = {};
+    while(l && !visti[l]){
+      visti[l] = 1;
+      var d = tr[l];
+      if(d && d[chiave] != null) return d[chiave];
+      l = fb[l] || fb['*'] || null;
+    }
+    return chiave;
+  };
+
   /* ── VALUTE (tabella unica: simbolo, esponente, nome) ──────────────────────────
      L'host prezza nella SUA moneta; l'ospite paga in quella (like-for-like).
      Esponente 0 per JPY/KRW/VND/CLP/ISK (niente decimali). */
