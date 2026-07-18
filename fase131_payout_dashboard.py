@@ -225,6 +225,36 @@ class PayoutDashboard:
         finally:
             con.close()
 
+    def elenca(self, host_id: str, *, stato: Optional[str] = None,
+               valuta: Optional[str] = None, limit: int = 200) -> List[Dict[str, Any]]:
+        """Righe payout di un host (per l'OFFSET penali del Financial Controller
+        fase177: servono le righe 'maturato' nella valuta della penale, FIFO).
+        Read-only, ordine per ts crescente (le piu' vecchie si compensano prima)."""
+        if not (isinstance(host_id, str) and host_id):
+            return []
+        lim = limit if isinstance(limit, int) and 0 < limit <= 500 else 200
+        sql = "SELECT prenotazione_id, host_id, minori, valuta, stato, ts FROM payout " \
+              "WHERE host_id=?"
+        par: List[Any] = [host_id]
+        if isinstance(stato, str) and stato:
+            sql += " AND stato=?"
+            par.append(stato)
+        if isinstance(valuta, str) and valuta:
+            sql += " AND valuta=?"
+            par.append(valuta.upper())
+        sql += " ORDER BY ts, prenotazione_id LIMIT ?"
+        par.append(lim)
+        con = self._apri()
+        try:
+            return [{"prenotazione_id": r[0], "host_id": r[1], "minori": int(r[2]),
+                     "valuta": r[3], "stato": r[4], "ts": int(r[5])}
+                    for r in con.execute(sql, par)]
+        except Exception:
+            logger.warning("elenca payout fallita (ISOLATA)", exc_info=True)
+            return []
+        finally:
+            con.close()
+
     def imposta_importo(self, prenotazione_id: str, minori: int) -> bool:
         """Riallinea l'importo del payout alla quota DECISA per l'host (split di una
         controversia, penale trattenuta su cancellazione): il ledger deve dire quanto

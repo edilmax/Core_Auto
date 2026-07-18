@@ -90,6 +90,16 @@
 >   Test permanenti: test_prenotazioni_paginazione (pagine esatte, mai una riga in più) +
 >   test_host_prenotazioni_archivio + CAOS aggiornato. Checkpoint intermedio: `e84c633`.
 >   Dettaglio: riga 🗂️ REGISTRO sez.1.
+> · 🏛️ **FINANCIAL CONTROLLER Scatto ① FATTO (2026-07-18, blueprint approvato)**: fase177 =
+>   LIBRO GIORNALE append-only (trigger anti-UPDATE/DELETE nel DB + catena hash che denuncia
+>   manomissioni alla riga esatta + idempotenza evento_id + zero PII) · NOTE ND/NC numerate e
+>   vincolate, storno mai modifica · OFFSET penale 15% dai payout maturati (stessa valuta, FIFO,
+>   mai autocompensazione; residuo → debito aperto) · atomicità: 200 di cancellazione SOLO con
+>   ND nel giornale; crash → riasserzione sweeper dal giornale (replay-fix beccato dal test) ·
+>   gara admin∥host: zero ND spurie · env prod DB_FINANZA=/data/finanza.db (messa PRIMA del
+>   deploy). test_financial_controller (11). **Scatti ②③ SPENTI, attendono VAI**: ② Debt Status
+>   (blocco host a debito + auto-offset sui payout futuri) · ③ addebito carta off-session
+>   (serve decisione SetupIntent + onboarding carta host). Dettaglio: riga 🏛️ REGISTRO sez.1.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare

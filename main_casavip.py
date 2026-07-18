@@ -55,6 +55,7 @@ def main() -> None:  # pragma: no cover
         db_accettazioni=os.environ.get("DB_ACCETTAZIONI", "data/accettazioni.db"),
         db_geocache=os.environ.get("DB_GEOCACHE", "data/geocache.db"),
         db_checkin=os.environ.get("DB_CHECKIN", "data/checkin.db"),
+        db_finanza=os.environ.get("DB_FINANZA", "data/finanza.db"),
         # geocoding città->coordinate (mappa): ON in prod (Nominatim gratis+cache), OFF nei test
         con_geocoding=os.environ.get("GEOCODING", "true").lower() in ("1", "true", "yes", "si"),
         # provider POI OSM (fase175) per il motore SEO: ON in prod (Overpass gratis+cache), OFF nei test

@@ -82,6 +82,7 @@ class ConfigCasaVIP:
     db_pendenti: str = ":memory:"      # pagamenti in attesa (hold prima del pagamento)
     db_tassa_comunale: str = ":memory:"  # ledger riscossioni tassa di soggiorno (rendicontazione)
     db_payout: str = ":memory:"        # dashboard payout host (incassi attesi per valuta/stato)
+    db_finanza: str = ":memory:"       # financial controller (fase177): giornale+note+debiti
     db_accettazioni: str = ":memory:"  # registro firmato accettazioni contratto host (prova legale)
     db_geocache: str = ":memory:"      # cache geocoding città->coordinate (mappa nella ricerca)
     db_checkin: str = ":memory:"       # check-in digitale (pre-registrazione ospiti + sblocco)
@@ -136,6 +137,7 @@ class SistemaCasaVIP:
     poi_provider: Any = None  # ProviderPOI (fase175): luoghi notevoli vicini, per il motore SEO
     checkin: Any = None     # CheckinDigitale (fase127): pre-registrazione ospiti + sblocco
     credito_usati: Any = None  # RegistroCreditiUsati (fase167): single-use del Credito Fondatore/Viaggio
+    finanza: Any = None     # FinancialController (fase177): giornale immutabile + note + offset penali
 
     @property
     def attivo(self) -> bool:
@@ -316,6 +318,21 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     payout.inizializza_schema()
     componenti.append("payout_dashboard(131)")
 
+    # 3f-sexies) FINANCIAL CONTROLLER (fase177): giornale immutabile + note + offset
+    # penali. ISOLATO: se non parte, il sistema vive (la penale resta annotata nel
+    # pendente e la riasserzione dello sweeper la registra appena il modulo torna).
+    finanza = None
+    try:
+        from fase177_financial_controller import crea_financial_controller
+        finanza = crea_financial_controller(cfg.db_finanza)
+        finanza.inizializza_schema()
+        componenti.append("financial_controller(177)")
+    except Exception:
+        # nato a meta' = NON nato: mai un controller senza schema cablato al
+        # money-path (503 a raffica sulle cancellazioni)
+        finanza = None
+        logger.warning("financial controller NON attivo (ISOLATO)", exc_info=True)
+
     # 3f-quinquies) GEOCODER (città->coordinate, gratis via Nominatim + cache): per la mappa.
     # GATED da con_geocoding (default OFF: i test non toccano la rete). ON in prod.
     geocoder = None
@@ -459,4 +476,5 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           pagamenti_pendenti=pagamenti_pendenti, tassa_comunale=tassa_comunale,
                           payout=payout, accettazioni=accettazioni, stripe=provider,
                           connect=_connect, geocoder=geocoder, checkin=checkin,
-                          poi_provider=poi_provider, credito_usati=credito_usati)
+                          poi_provider=poi_provider, credito_usati=credito_usati,
+                          finanza=finanza)

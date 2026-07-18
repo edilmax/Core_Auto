@@ -284,6 +284,19 @@ class PagamentiPendenti:
         finally:
             con.close()
 
+    def cancellate_host(self, *, limit: int = 50) -> List[Dict[str, Any]]:
+        """Le cancellazioni-host piu' recenti (per la RIASSERZIONE penali del Financial
+        Controller fase177: un crash tra il CAS e il giornale lascia la penale annotata
+        qui ma senza Nota di Debito -> lo sweeper la sana, pattern #32)."""
+        lim = limit if isinstance(limit, int) and 0 < limit <= 500 else 50
+        con = self._apri()
+        try:
+            righe = con.execute("SELECT * FROM pendenti WHERE stato='cancellata_host' "
+                                "ORDER BY creato_ts DESC LIMIT ?", (lim,)).fetchall()
+            return [self._riga(r) for r in righe]
+        finally:
+            con.close()
+
     def attivi_per_alloggio(self, alloggio_id: Any, *,
                             ora_ts: Optional[int] = None) -> List[Dict[str, Any]]:
         """Hold/richieste ANCORA VIVI per un alloggio ('in_attesa' = in attesa di pagamento,

@@ -2216,6 +2216,23 @@ class RouterHTTP:
             vinta = False
         if not vinta:
             return 409, {"errore": "gia_cancellata"}
+        # FINANCIAL CONTROLLER (fase177, scatto ①): la NOTA DI DEBITO 15% nasce nel
+        # GIORNALE prima di ogni effetto sui soldi e della conferma al client — senza
+        # registro contabile scrivibile, la cancellazione NON riceve il 200 (503
+        # onesto: il CAS e' gia' vinto e la RIASSERZIONE dello sweeper completa
+        # giornale+offset appena possibile, pattern #32). L'offset compensa subito
+        # la penale dai payout maturati dell'host (contratto art. 6).
+        esito_fin = None
+        fc = getattr(self._sys, "finanza", None)
+        if fc is not None and penale > 0:
+            esito_fin = fc.processa_penale(
+                riferimento=ref, host_id=(host_id or rec.get("host_id") or ""),
+                penale_cents=penale, valuta=valuta,
+                payout=getattr(self._sys, "payout", None))
+            if esito_fin is None:
+                logger.error("host cancella %s: GIORNALE non scrivibile, 503 (la "
+                             "riasserzione dello sweeper completera')", ref)
+                return 503, {"errore": "registro_contabile_non_disponibile"}
         try:
             self._sys.inventario.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"],
                                           idem_key=(rec.get("idem_key") or ("hcanc_" + ref)))
@@ -2234,11 +2251,16 @@ class RouterHTTP:
                 pass
         logger.info("HOST ha cancellato %s: cliente rimborso %d, penale host %d %s",
                     ref, guest if pagata else 0, penale, valuta)
-        return 200, {"stato": "cancellata_host", "riferimento": ref,
-                     "rimborso_cliente_cents": (guest if pagata else 0),
-                     "penale_host_cents": penale, "valuta": valuta,
-                     "nota": ("cliente rimborsato al 100%; penale a carico host; date liberate"
-                              if pagata else "cliente non aveva pagato: nessuna penale; date liberate")}
+        corpo_ok = {"stato": "cancellata_host", "riferimento": ref,
+                    "rimborso_cliente_cents": (guest if pagata else 0),
+                    "penale_host_cents": penale, "valuta": valuta,
+                    "nota": ("cliente rimborsato al 100%; penale a carico host; date liberate"
+                             if pagata else "cliente non aveva pagato: nessuna penale; date liberate")}
+        if esito_fin is not None:
+            corpo_ok["nota_debito"] = esito_fin.get("nota_id")
+            corpo_ok["penale_compensata_cents"] = esito_fin.get("offset_cents", 0)
+            corpo_ok["penale_residua_cents"] = esito_fin.get("residuo_cents", 0)
+        return 200, corpo_ok
 
     def _payout_trattieni(self, rif):
         """Prenotazione cancellata -> il payout atteso passa a 'trattenuto' (l'host non vede piu'
@@ -4737,6 +4759,32 @@ def sweep_hold_una_passata(sistema: Any, router: Any) -> None:
             pp.pulisci_vecchi()          # housekeeping: via i record scaduti vecchi (>1h)
         except Exception:
             pass
+        # RIASSERZIONE PENALI (fase177, pattern #32): crash tra il CAS della
+        # cancellazione-host e il giornale = penale annotata nel pendente ma senza
+        # Nota di Debito -> qui si sana (idempotente: chi ce l'ha gia' viene saltato
+        # con un lookup O(1); processa_penale replayato non tocca due volte i payout).
+        try:
+            fc = getattr(sistema, "finanza", None)
+            if fc is not None and hasattr(pp, "cancellate_host"):
+                import json as _j
+                for rec in pp.cancellate_host(limit=50):
+                    rif = rec.get("riferimento")
+                    if not rif or fc.esiste_evento("penale:" + rif):
+                        continue
+                    try:
+                        dj = _j.loads(rec.get("corpo_json") or "{}")
+                    except Exception:
+                        dj = {}
+                    pen = dj.get("penale_host_cents")
+                    if not (isinstance(pen, int) and pen > 0):
+                        continue
+                    fc.processa_penale(
+                        riferimento=rif, host_id=str(rec.get("host_id") or ""),
+                        penale_cents=pen, valuta=str(dj.get("valuta") or "EUR"),
+                        payout=getattr(sistema, "payout", None))
+                    logger.warning("riasserzione penale %s: ND emessa dallo sweeper", rif)
+        except Exception:
+            logger.warning("riasserzione penali fallita (ignorata)", exc_info=True)
     except Exception:
         logger.warning("sweep hold fallito (ignorato)", exc_info=True)
 
