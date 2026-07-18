@@ -30,8 +30,14 @@
 > (script riusabile: collaudo_livello7_e2e.py).
 > **Tutto committato, pushato, deployato e ALLINEATO** (Desktop=GitHub=VPS). Suite verde
 > (vedi ultima riga REGISTRO).
-> **PROSSIMI PASSI** (mandato fondatore "fai quello che va fatto"): restano i sistemi
-> ⑧ benchmark carico SQLite, ⑨ mutation testing, ⑩ audit accessibilita' — per arrivare a 10. REGOLE FERME: dopo OGNI operazione finita salvare ovunque
+> · ⑧⑨⑩ **ULTIMI 3 SISTEMI FATTI** (2026-07-18): ⑧ benchmark carico SQLite (30 thread×30s,
+> 0 lock/0 overbooking, p95 in soglia); ⑨ mutation testing money-path (4/4 mutanti uccisi;
+> ha SCOVATO un buco vero: clamp rimborso escrow senza test → ora coperto); ⑩ audit
+> accessibilità WCAG (aria-label sui bottoni-icona, aria-live sulle regioni di stato, close
+> da tastiera). **I 10 SISTEMI INGEGNERISTICI SONO COMPLETI.**
+> **PROSSIMI PASSI**: nessuno obbligato — la macchina è collaudata a fondo. Idee aperte se il
+> fondatore vuole: sblocchi Meta/TikTok/OXR (prerequisiti suoi, sez.2-bis), o un nuovo giro
+> loop-caccia-bug. Regole ferme invariate (salvare ovunque, mai email vera, deploy rm-first). REGOLE FERME: dopo OGNI operazione finita salvare ovunque
 > (commit+push+VPS+REGISTRO); mai email vera del fondatore nei test; deploy rm-first; suite intera
 > prima di ogni deploy. Dettaglio di ogni voce: righe in REGISTRO_INGEGNERIA.md sez.1 (piu' recenti in alto).
 

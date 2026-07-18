@@ -160,13 +160,13 @@
   <div id="vista" style="display:none;gap:.5rem;margin:.2rem 0 .8rem">
     <button type="button" id="btnLista" class="vistaBtn attiva">≣ <span id="lblLista">Lista</span></button>
     <button type="button" id="btnMappa" class="vistaBtn">🗺️ <span id="lblMappa">Mappa</span></button>
-    <button type="button" id="btnFav" class="vistaBtn" style="display:none">❤</button>
+    <button type="button" id="btnFav" class="vistaBtn" style="display:none" aria-label="Mostra i preferiti">❤</button>
   </div>
-  <div id="lb" onclick="if(event.target===this)lbChiudi()">
-    <button id="lbX" onclick="lbChiudi()">✕</button>
-    <button class="lbBtn" style="left:1rem" onclick="lbNav(-1)">‹</button>
+  <div id="lb" onclick="if(event.target===this)lbChiudi()" role="dialog" aria-label="Foto">
+    <button id="lbX" onclick="lbChiudi()" aria-label="Chiudi">✕</button>
+    <button class="lbBtn" style="left:1rem" onclick="lbNav(-1)" aria-label="Foto precedente">‹</button>
     <img id="lbImg" src="" alt="">
-    <button class="lbBtn" style="right:1rem" onclick="lbNav(1)">›</button>
+    <button class="lbBtn" style="right:1rem" onclick="lbNav(1)" aria-label="Foto successiva">›</button>
     <div id="lbN"></div>
   </div>
 
@@ -175,7 +175,7 @@
     <div id="mappaMsg" style="text-align:center;color:var(--testo-tenue);padding:.6rem;font-size:.9rem"></div>
   </div>
 
-  <div id="risultati" class="risultati"><div class="loading">…</div></div>
+  <div id="risultati" class="risultati" role="region" aria-live="polite" aria-label="Risultati"><div class="loading">…</div></div>
 
   <footer style="margin-top:2.5rem;padding-top:1.25rem;border-top:1px solid var(--bordo);text-align:center;color:var(--testo-tenue);font-size:.9rem">
     <div style="margin-bottom:.9rem">
@@ -198,7 +198,7 @@
 
 <div class="modal" id="modal">
   <div class="modal-content">
-    <span class="close" id="close">&times;</span>
+    <span class="close" id="close" role="button" tabindex="0" aria-label="Chiudi">&times;</span>
     <div class="gallery" id="mGallery"></div>
     <h2 id="mTitolo"></h2>
     <div class="prezzo-grande" id="mPrezzo"></div>
@@ -213,7 +213,7 @@
       <div style="margin-top:.35rem"><span data-t="regola_accetto">Prenotando accetti i Termini, la politica di cancellazione mostrata sopra e le regole del soggiorno.</span> <a href="/termini.html" target="_blank" style="color:var(--brand);font-weight:600" data-t="regola_termini_link">Termini</a></div>
     </div>
     <button class="prenota-btn" id="btnPrenota">Prenota</button>
-    <div id="mMsg"></div>
+    <div id="mMsg" role="status" aria-live="polite"></div>
   </div>
 </div>
 
@@ -663,6 +663,8 @@ document.getElementById('btnFav').onclick = ()=>{           // mostra SOLO i pre
   ris.querySelectorAll('button[data-slug]').forEach(b=>b.onclick=()=>apri(b.dataset.slug));
 };
 document.getElementById('close').onclick = ()=>document.getElementById('modal').classList.remove('open');
+// close accessibile da tastiera (span role=button): Invio/Spazio chiudono come il clic
+document.getElementById('close').onkeydown = e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); document.getElementById('modal').classList.remove('open'); } };
 document.getElementById('modal').onclick = e=>{ if(e.target.id==='modal') e.target.classList.remove('open'); };
 document.getElementById('btnPrenota').onclick = prenota;
 // date di default VIVE (check-in fra 7 giorni, 2 notti): mai piu' date fisse nell'HTML

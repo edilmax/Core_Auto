@@ -100,7 +100,7 @@
       <p><span data-i18n="loggato_pre">✅ Collegato come</span> <strong id="au_who"></strong>. <span data-i18n="loggato_post">Carichi e gestisci solo i tuoi alloggi.</span></p>
       <button id="btnLogout" data-i18n="b_logout" style="background:#b02a37">Esci</button>
     </div>
-    <div id="msgAuth"></div>
+    <div id="msgAuth" role="status" aria-live="polite"></div>
   </div>
 
   <div class="card" id="cardGuida" style="display:none;background:linear-gradient(135deg,#eef7f2,#f7faff);border:1px solid #d7e8e0">
@@ -185,7 +185,7 @@
 
   <div class="key" id="cardKey">
     <label style="flex:1;display:flex;flex-direction:column;font-size:.72rem;font-weight:600;color:#4a5b7a;gap:.25rem"><span data-i18n="hostkey_l">X-Host-Key (solo operatore, avanzato)</span>
-      <input type="password" id="hostkey" placeholder="chiave host"></label>
+      <input type="password" id="hostkey" placeholder="chiave host" aria-label="Chiave host (operatore)"></label>
   </div>
 
   <div class="card" id="cardAllog" style="display:none">
@@ -304,7 +304,7 @@
         <textarea id="p_img" rows="2" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid var(--bordo);font-size:.85rem" placeholder="https://...jpg"></textarea></label>
     </div>
     <button id="btnPubblica" data-i18n="b_pubblica">Pubblica</button>
-    <div id="msgPub"></div>
+    <div id="msgPub" role="status" aria-live="polite"></div>
   </div>
 
   <div class="card">
@@ -1095,7 +1095,7 @@ async function caricaMiei(){
           ? `<button class="mStato btn-riga" data-s="${escH(a.slug)}" data-st="sospeso" style="background:#b02a37">${T('b_sospendi')}</button>`
           : `<button class="mStato btn-riga" data-s="${escH(a.slug)}" data-st="pubblicato" style="background:var(--brand-chiaro)">${T('b_pubblica2')}</button>`;
         const edit = `<button class="mEdit btn-riga" data-s="${escH(a.slug)}" style="background:var(--testo-tenue);margin-left:.3rem">${T('b_modifica')}</button>`;
-        const del = `<button class="mDel btn-riga" data-s="${escH(a.slug)}" data-t="${escH(a.titolo||'')}" style="background:#fff;color:var(--rosso);border:1px solid #f3d6d6;margin-left:.3rem">🗑</button>`;
+        const del = `<button class="mDel btn-riga" data-s="${escH(a.slug)}" data-t="${escH(a.titolo||'')}" aria-label="${escH(T('b_elimina_aria')||'Elimina annuncio')}" style="background:#fff;color:var(--rosso);border:1px solid #f3d6d6;margin-left:.3rem">🗑</button>`;
         return `<tr style="border-top:1px solid var(--sfondo-tenue)"><td style="color:var(--testo-tenue);font-weight:600">#${a.id}</td><td>${escH(a.titolo)}</td><td>${escH(a.citta)}</td><td>${fmt(a.prezzo_notte_cents,a.valuta)}</td><td>${escH(a.stato)}</td><td style="white-space:nowrap">${azione}${edit}${del}</td></tr>`;
       }).join('')+'</tbody></table></div>';
     document.querySelectorAll('#miei .mStato').forEach(b=>b.onclick=()=>conScudo(b,()=>cambiaStato(b.dataset.s,b.dataset.st)));

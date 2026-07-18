@@ -46,6 +46,19 @@ class TestModulo(unittest.TestCase):
         self.assertEqual(st["host_riceve_cents"], 6000)
         self.assertEqual(st["host_riceve_cents"] + st["ospite_rimborso_cents"], 10000)  # conservazione
 
+    def test_risolvi_clampa_rimborso_oltre_importo(self):
+        # GUARDIA (dal mutation testing ⑨): un rimborso richiesto SUPERIORE all'escrow
+        # (chiamata diretta a risolvi, bypassando il clamp 0-100% della UI admin) NON
+        # deve mai far andare l'host in NEGATIVO. Il min() interno lo blocca a 'imp'.
+        self.g.apri("P9", 10000, ora_checkin_ts=1000)
+        self.g.contesta("P9", "problema grave")
+        r = self.g.risolvi("P9", rimborso_ospite_cents=999999)   # >> importo
+        self.assertTrue(r["ok"])
+        st = self.g.stato("P9")
+        self.assertEqual(st["ospite_rimborso_cents"], 10000)     # clampato all'escrow
+        self.assertEqual(st["host_riceve_cents"], 0)             # MAI negativo
+        self.assertEqual(st["host_riceve_cents"] + st["ospite_rimborso_cents"], 10000)
+
     def test_auto_rilascio_dopo_finestra(self):
         self.g.apri("P5", 7000, ora_checkin_ts=1000, finestra_ore=24)
         self.clock["t"] = 1000 + 25 * 3600

@@ -60,7 +60,7 @@
         <option value="it">🇮🇹 IT</option><option value="en">🇬🇧 EN</option><option value="es">🇪🇸 ES</option><option value="fr">🇫🇷 FR</option>
         <option value="de">🇩🇪 DE</option><option value="pt">🇵🇹 PT</option><option value="ja">🇯🇵 JA</option><option value="zh">🇨🇳 ZH</option>
       </select>
-      <input type="password" id="adminkey" placeholder="X-Admin-Key" style="width:220px">
+      <input type="password" id="adminkey" placeholder="X-Admin-Key" style="width:220px" aria-label="Chiave amministratore">
       <button id="btnCarica" data-i18n="b_agg">🔄 Aggiorna</button>
       <span id="autostat" style="font-size:.78rem;color:var(--testo-tenue)"></span>
     </div>
@@ -74,7 +74,7 @@
       <div><b>3️⃣</b> Il resto va da solo (prenotazioni, pagamenti, marketing): qui intervieni solo quando serve.</div>
     </div>
   </div>
-  <div id="msg"></div>
+  <div id="msg" role="status" aria-live="polite"></div>
   <!-- wrapper OBBLIGATORIO: 6 colonne su un telefono sfondano la pagina se la tabella
        non ha un contenitore che scrolla in orizzontale (l'altra tabella qui sotto ce l'ha) -->
   <div style="overflow-x:auto">
