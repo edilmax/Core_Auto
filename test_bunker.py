@@ -102,6 +102,16 @@ class TestSessione(unittest.TestCase):
         spento = bk.crea_bunker(self.firma, totp_secret="", break_glass="")
         self.assertFalse(spento.configurato)
 
+    def test_logout_server_side_revoca(self):
+        tok = self.b.crea_sessione("203.0.113.5")
+        self.assertTrue(self.b.valida_sessione(tok, "203.0.113.5")["ok"])
+        self.assertTrue(self.b.revoca(tok))            # LOGOUT server-side
+        r = self.b.valida_sessione(tok, "203.0.113.5")
+        self.assertFalse(r["ok"])                      # il token e' morto SUBITO
+        self.assertEqual(r["motivo"], "sessione_revocata")
+        # revocare robaccia non esplode
+        self.assertFalse(self.b.revoca("robaccia"))
+
 
 class TestBunkerEndpoint(unittest.TestCase):
     def setUp(self):
@@ -158,6 +168,22 @@ class TestBunkerEndpoint(unittest.TestCase):
         s, out = self._login("ROMPI9")
         self.assertEqual(s, 200)
         self.assertEqual(out["modo"], "break_glass")
+
+    def test_logout_endpoint_uccide_la_sessione(self):
+        s, out = self._login(self._codice_ora())
+        sess = out["sessione"]
+        # la sessione funziona
+        s, _ = self.r.gestisci("GET", "/api/bunker/stato", {}, None,
+                               {"X-Bunker-Session": sess, "X-Forwarded-For": "203.0.113.1"})
+        self.assertEqual(s, 200)
+        # LOGOUT server-side
+        s, _ = self.r.gestisci("POST", "/api/bunker/logout", {}, None,
+                               {"X-Bunker-Session": sess, "X-Forwarded-For": "203.0.113.1"})
+        self.assertEqual(s, 200)
+        # ora la STESSA sessione e' morta (revocata sul server, non solo nel browser)
+        s, _ = self.r.gestisci("GET", "/api/bunker/stato", {}, None,
+                               {"X-Bunker-Session": sess, "X-Forwarded-For": "203.0.113.1"})
+        self.assertEqual(s, 403)
 
     def test_bunker_spento_503(self):
         d = tempfile.mkdtemp()

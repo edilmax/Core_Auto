@@ -85,6 +85,7 @@ class Bunker:
         self._password = (password or "").strip()   # 2° fattore "qualcosa che SAI" (super-admin pw)
         self._break = (break_glass or "").strip()   # codice d'emergenza (loggato CRITICO)
         self._now = orologio or time.time
+        self._revocati = {}                  # nonce -> exp: LOGOUT server-side (denylist)
 
     @property
     def configurato(self) -> bool:
@@ -129,7 +130,25 @@ class Bunker:
             return {"ok": False, "motivo": "sessione_scaduta"}
         if str(dati.get("ip", "")) != str(ip or ""):
             return {"ok": False, "motivo": "ip_non_coincidente"}
+        if dati.get("nonce") in self._revocati:      # LOGOUT server-side: sessione revocata
+            return {"ok": False, "motivo": "sessione_revocata"}
         return {"ok": True, "iat": dati.get("iat"), "exp": dati.get("exp")}
+
+    def revoca(self, token: Any) -> bool:
+        """LOGOUT SERVER-SIDE: mette il nonce della sessione nella denylist -> quel token
+        NON e' piu' valido, subito, su ogni worker (non solo cancellato dal browser). La
+        denylist si auto-pulisce (i nonce scaduti si buttano: la sessione dura 15 min)."""
+        if self._firma is None:
+            return False
+        dati = self._firma.decodifica(token) if token else None
+        if not isinstance(dati, dict) or dati.get("k") != "bunker" or not dati.get("nonce"):
+            return False
+        ora = int(self._now())
+        # housekeeping: via i revocati gia' scaduti
+        for n in [n for n, e in self._revocati.items() if e <= ora]:
+            self._revocati.pop(n, None)
+        self._revocati[dati["nonce"]] = int(dati.get("exp", ora + DURATA_SESSIONE_SEC))
+        return True
 
 
 def crea_bunker(firma: Any, *, totp_secret: str = "", password: str = "",

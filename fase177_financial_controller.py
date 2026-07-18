@@ -245,6 +245,48 @@ class FinancialController:
         finally:
             con.close()
 
+    def conta_movimenti(self) -> int:
+        con = self._apri()
+        try:
+            r = con.execute("SELECT COUNT(*) FROM libro_giornale").fetchone()
+            return int(r[0]) if r else 0
+        finally:
+            con.close()
+
+    def stream_giornale(self):
+        """GENERATORE LAZY: legge il giornale RIGA PER RIGA dal cursore SQLite e la
+        restituisce (yield) una alla volta -> ZERO caricamento in RAM, anche con milioni
+        di movimenti (il cursore SQLite e' pigro per natura). Per l'estratto fiscale in
+        streaming (Incremento 4.1). La connessione si chiude a fine iterazione."""
+        con = self._apri()
+        try:
+            cur = con.execute(
+                "SELECT seq, evento_id, ts, tipo, riferimento, soggetto, conto_dare, "
+                "conto_avere, importo_cents, valuta, causale, emittente, prev_hash, hash "
+                "FROM libro_giornale ORDER BY seq")
+            for r in cur:
+                yield dict(r)
+        finally:
+            con.close()
+
+    def esporta_tutti(self, *, limit: int = 200000, offset: int = 0
+                      ) -> List[Dict[str, Any]]:
+        """TUTTO il giornale in ordine cronologico (seq) per l'estratto contabile
+        certificato (Centro Fiscale). Read-only. `limit` alto ma bounded (un estratto
+        enorme si pagina); di default copre l'intera storia realistica."""
+        lim = limit if (isinstance(limit, int) and not isinstance(limit, bool)
+                        and 0 < limit <= 500000) else 200000
+        off = offset if (isinstance(offset, int) and not isinstance(offset, bool)
+                         and offset >= 0) else 0
+        con = self._apri()
+        try:
+            return [dict(r) for r in con.execute(
+                "SELECT seq, evento_id, ts, tipo, riferimento, soggetto, conto_dare, "
+                "conto_avere, importo_cents, valuta, causale, emittente, hash "
+                "FROM libro_giornale ORDER BY seq LIMIT ? OFFSET ?", (lim, off))]
+        finally:
+            con.close()
+
     # ── note di credito/debito ──────────────────────────────────────────────
     def _prossimo_nota_id(self, con: sqlite3.Connection, tipo: str, anno: int) -> str:
         pref = ("ND" if tipo == "debito" else "NC") + "-%d-" % anno

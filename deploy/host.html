@@ -1279,6 +1279,7 @@ document.getElementById('r_da').value=BV.dataISO(0); document.getElementById('r_
 applica();
 organizzaPannello();   // riordina: essenziale in alto, avanzato nel cassetto
 aggiornaAuthUI();
+if(window.BV&&BV.occhielli) BV.occhielli();   // 👁 mostra/nascondi su ogni input password
 // niente service worker (ALLINEATO a index "sito sempre fresco"): prima questa riga lo
 // RE-installava mentre index lo disinstallava -> ping-pong e rischio pagine vecchie in cache
 if('serviceWorker' in navigator){ navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>r.unregister())).catch(()=>{}); if(window.caches) caches.keys().then(ks=>ks.forEach(k=>caches.delete(k))).catch(()=>{}); }

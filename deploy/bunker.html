@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f1420">
+<link rel="icon" href="/icon.svg">
+<title>Bookin VIP · Bunker</title>
+<style>
+:root{--bg:#0f1420;--card:#171d2b;--oro:#c8a24a;--verde:#3ec77b;--rosso:#ff6b6b;--giallo:#ffcf5c;--txt:#e6ebf3;--tenue:#9aa7bd;--bordo:#26304310}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5}
+.wrap{max-width:1000px;margin:0 auto;padding:1.2rem}
+header{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:1rem}
+.logo{font-weight:800;font-size:1.2rem}.logo .oro{color:var(--oro)}
+.card{background:var(--card);border-radius:1rem;padding:1.1rem 1.3rem;margin-bottom:1rem;border:1px solid #222c40}
+h2{font-size:1.05rem;margin:.1rem 0 .7rem}
+input{background:#0c111b;border:1px solid #2a3550;color:var(--txt);border-radius:.5rem;padding:.5rem .6rem}
+button{background:var(--oro);color:#0f1420;font-weight:700;border:0;border-radius:.5rem;padding:.55rem .9rem;cursor:pointer}
+button.ghost{background:#222c40;color:var(--txt)}
+.pill{display:inline-block;padding:.15rem .6rem;border-radius:1rem;font-size:.8rem;font-weight:700}
+.ok{background:rgba(62,199,123,.15);color:var(--verde)}.ko{background:rgba(255,107,107,.15);color:var(--rosso)}.warn{background:rgba(255,207,92,.15);color:var(--giallo)}.na{background:#222c40;color:var(--tenue)}
+.riga{display:flex;justify-content:space-between;gap:1rem;padding:.35rem 0;border-top:1px solid #222c40;font-size:.92rem}
+.riga:first-child{border-top:0}
+.hint{color:var(--tenue);font-size:.85rem}
+#loglist{background:#0c111b;border-radius:.6rem;padding:.6rem;max-height:340px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.76rem;white-space:pre-wrap;word-break:break-word}
+.logline{padding:.05rem 0}.logcrit{color:var(--rosso);font-weight:700}.logwarn{color:var(--giallo)}
+.nascosto{display:none}
+</style>
+</head>
+<body>
+<script src="/app.js?v=1"></script>
+<div class="wrap">
+  <header>
+    <div class="logo">🏰 Bookin VIP · <span class="oro">Bunker</span></div>
+    <span class="hint" style="margin-left:auto">Sala di controllo · sola lettura</span>
+  </header>
+
+  <div class="card" id="loginCard">
+    <h2>🔒 Ingresso super-admin</h2>
+    <p class="hint">Serve la chiave admin + la password super-admin. Sessione 15 minuti, legata a questo dispositivo.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-top:.4rem">
+      <input type="password" id="ak" placeholder="Chiave admin" style="width:220px" aria-label="Chiave admin">
+      <input type="password" id="pw" placeholder="Password super-admin" style="width:240px" aria-label="Password super-admin">
+      <button id="btnEntra">🔓 Entra</button>
+      <span id="loginStat" class="hint"></span>
+    </div>
+  </div>
+
+  <div id="sala" class="nascosto">
+    <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.6rem">
+      <button class="ghost" id="btnAgg">🔄 Aggiorna</button>
+      <span id="sess" class="hint"></span>
+      <button class="ghost" id="btnEsci" style="margin-left:auto">Esci</button>
+    </div>
+
+    <div class="card">
+      <h2>🔗 Integrità giornale contabile</h2>
+      <p class="hint">La catena di hash prova che nessun movimento di denaro è stato manomesso.</p>
+      <div id="catena" style="margin-top:.5rem"></div>
+    </div>
+
+    <div class="card">
+      <h2>🩺 Stato del sistema</h2>
+      <div id="diag" style="margin-top:.3rem"></div>
+    </div>
+
+    <div class="card">
+      <h2>💼 Centro Fiscale</h2>
+      <p class="hint">Estratto contabile CERTIFICATO: tutti i movimenti di denaro + la prova (catena di hash) che nessuno li ha toccati. Il file da dare al commercialista, alla banca o al Fisco.</p>
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.4rem">
+        <button id="btnEstratto">📥 Scarica estratto certificato (CSV)</button>
+        <span id="estrStat" class="hint"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📋 Log persistenti (ultimi eventi)</h2>
+      <p class="hint">Chi ha fatto cosa + allarmi. In rosso i CRITICI (accessi negati, manomissioni).</p>
+      <div id="loglist" style="margin-top:.5rem"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const esc = BV.esc;
+let SESS='', EXP=0;
+const $=id=>document.getElementById(id);
+function attivo(){ return !!SESS && Date.now()<EXP; }
+function hdr(){ return {'X-Admin-Key':$('ak').value,'X-Bunker-Session':SESS}; }
+async function jget(u){ const r=await fetch(u,{headers:hdr()}); let d=null; try{d=await r.json();}catch(_){console.warn("bunker",_);}; return {status:r.status,d}; }
+
+async function entra(){
+  const st=$('loginStat');
+  if(!$('ak').value||!$('pw').value){ st.textContent='⚠️ Inserisci chiave admin e password super-admin.'; return; }
+  st.textContent='…';
+  try{
+    const r=await fetch('/api/bunker/login',{method:'POST',
+      headers:{'Content-Type':'application/json','X-Admin-Key':$('ak').value},
+      body:JSON.stringify({codice:$('pw').value})});
+    let d=null; try{d=await r.json();}catch(_){console.warn("bunker",_);}
+    if(r.status===200 && d && d.sessione){ SESS=d.sessione; EXP=Date.now()+((d.scade_tra_sec||900)*1000);
+      $('pw').value=''; $('loginCard').classList.add('nascosto'); $('sala').classList.remove('nascosto');
+      st.textContent=''; aggiorna(); avviaTimer();
+    } else if(r.status===429){ st.textContent='⛔ Troppi tentativi, riprova tra poco.'; }
+    else if(r.status===503){ st.textContent='ℹ️ Bunker non configurato sul server.'; }
+    else { st.textContent='❌ Chiave o password super-admin errata.'; }
+  }catch(e){ st.textContent='❌ Errore di rete.'; }
+}
+function esci(){ SESS=''; EXP=0; $('sala').classList.add('nascosto'); $('loginCard').classList.remove('nascosto'); }
+function avviaTimer(){ setInterval(()=>{ if(SESS && !attivo()){ esci(); $('loginStat').textContent='⏱️ Sessione scaduta (15 min). Rientra.'; } },10000); }
+
+function pill(stato,testo){ return '<span class="pill '+stato+'">'+esc(testo)+'</span>'; }
+
+async function aggiorna(){
+  if(!attivo()){ esci(); return; }
+  $('sess').textContent='🔓 sessione attiva ('+Math.max(0,Math.round((EXP-Date.now())/60000))+' min)';
+  // integrità + diagnosi
+  const ig=await jget('/api/bunker/integrita');
+  if(ig.status===403){ esci(); return; }
+  const cat=(ig.d&&ig.d.catena)||{};
+  let ch='';
+  if(cat.ok===true) ch=pill('ok','✅ CATENA INTEGRA')+' <span class="hint">'+(cat.righe||0)+' movimenti verificati</span>';
+  else if(cat.ok===false) ch=pill('ko','🔴 MANOMISSIONE')+' <span class="hint">riga rotta: '+esc(String(cat.seq_rotta))+'</span>';
+  else ch=pill('na','— non disponibile');
+  $('catena').innerHTML=ch;
+  // diagnosi
+  const dg=(ig.d&&ig.d.diagnosi)||{};
+  const m=dg.misure||{};
+  const rows=[];
+  const okpill=b=>b?pill('ok','ok'):pill('ko','problema');
+  rows.push(['Integrità generale', dg.ok===true?pill('ok','tutto sano'):dg.ok===false?pill('ko','allarmi: '+((dg.allarmi||[]).length)):pill('na','—')]);
+  if(m.eta_backup_sec!=null) rows.push(['Ultimo backup', pill(m.eta_backup_sec<8*3600?'ok':'warn', Math.round(m.eta_backup_sec/60)+' min fa')]);
+  if(m.disco_pct!=null) rows.push(['Disco usato', pill(m.disco_pct<85?'ok':m.disco_pct<95?'warn':'ko', m.disco_pct+'%')]);
+  if(m.db_presenti) rows.push(['Database salvati', pill('ok', m.db_presenti.length+'')]);
+  (dg.allarmi||[]).forEach(a=>rows.push(['⚠️ '+esc(a.msg||''), pill(a.grav==='critico'?'ko':'warn', a.grav||'')]));
+  $('diag').innerHTML=rows.map(r=>'<div class="riga"><span>'+r[0]+'</span><span>'+r[1]+'</span></div>').join('');
+  // log
+  const lg=await jget('/api/bunker/log?n=120');
+  const righe=(lg.d&&lg.d.righe)||[];
+  $('loglist').innerHTML=righe.map(l=>{
+    let cls='logline'; if(/CRITICAL/.test(l)) cls+=' logcrit'; else if(/WARNING/.test(l)) cls+=' logwarn';
+    return '<div class="'+cls+'">'+esc(l)+'</div>';
+  }).join('') || '<span class="hint">nessuna riga</span>';
+  $('loglist').scrollTop=$('loglist').scrollHeight;
+}
+async function logout(){
+  // LOGOUT SERVER-SIDE: revoca la sessione sul server (non solo lato browser)
+  try{ if(SESS) await fetch('/api/bunker/logout',{method:'POST',headers:hdr()}); }catch(_){console.warn("bunker",_);}
+  esci(); $('loginStat').textContent='👋 Uscito.';
+}
+async function scaricaEstratto(){
+  const st=$('estrStat'); if(!attivo()){ esci(); return; } st.textContent='… scarico in streaming';
+  try{
+    // l'endpoint STREAMMA il CSV grezzo (zero RAM lato server): leggo il testo e lo salvo
+    const r=await fetch('/api/bunker/export_contabile',{headers:hdr()});
+    if(r.status===403){ esci(); return; }
+    if(!r.ok){ st.textContent='ℹ️ non disponibile ('+r.status+')'; return; }
+    const csv=await r.text();
+    const integra=csv.indexOf('INTEGRITÀ VERIFICATA')>=0;
+    const corrotto=csv.indexOf('NON CHIUSO / CORROTTO')>=0;
+    const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='estratto_contabile_bookinvip.csv'; a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+    const n=(csv.match(/\n\d+,/g)||[]).length;   // righe dati (iniziano con un numero)
+    st.textContent = corrotto ? '🔴 ATTENZIONE: file CORROTTO — non usarlo, avvisa il tecnico'
+      : ('✅ '+n+' movimenti · '+(integra?'INTEGRITÀ VERIFICATA ✅':'?'));
+  }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
+}
+$('btnEntra').onclick=entra;
+$('btnAgg').onclick=aggiorna;
+$('btnEstratto').onclick=scaricaEstratto;
+$('btnEsci').onclick=logout;
+$('pw').addEventListener('keydown',e=>{ if(e.key==='Enter') entra(); });
+BV.occhielli();   // 👁 mostra/nascondi su ogni input password
+</script>
+</body>
+</html>

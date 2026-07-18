@@ -16,6 +16,31 @@
   const _ESC = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
   BV.esc = function(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return _ESC[c]; }); };
 
+  /* ── OCCHIELLO password (mostra/nascondi) — FONTE UNICA, coerente su OGNI pagina.
+     Trova ogni <input type="password"> e ci mette accanto un 👁 che alterna
+     password<->text. Idempotente (data-occhio), sicuro (nessun valore stampato).
+     Chiamala una volta a fine pagina: vale per tutti gli input, anche futuri. ── */
+  BV.occhielli = function(root){
+    root = root || document;
+    var lista = root.querySelectorAll('input[type="password"]');
+    for(var i=0;i<lista.length;i++){ (function(inp){
+      if(inp.getAttribute('data-occhio')) return;
+      inp.setAttribute('data-occhio','1');
+      var b = document.createElement('button');
+      b.type='button'; b.textContent='👁';
+      b.setAttribute('aria-label','Mostra o nascondi la password');
+      b.title='Mostra/nascondi';
+      b.style.cssText='margin-left:.3rem;background:transparent;border:0;cursor:pointer;font-size:1.05rem;opacity:.55;vertical-align:middle;padding:.1rem .2rem';
+      b.onclick=function(){
+        var mostra = inp.type==='password';
+        inp.type = mostra ? 'text':'password';
+        b.style.opacity = mostra ? '1':'.55';
+        b.textContent = mostra ? '🙈':'👁';
+      };
+      if(inp.parentNode) inp.parentNode.insertBefore(b, inp.nextSibling);
+    })(lista[i]); }
+  };
+
   /* ── i18n MODULARE (fonte unica della RISOLUZIONE, i dizionari restano nelle pagine) ──
      Catena di fallback DICHIARATA NEI DATI, non cablata nel codice: il dizionario puo'
      portare `tr._fallback = {"pt-br":"pt", "*":"en"}` e aggiungere una lingua (anche

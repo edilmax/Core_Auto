@@ -1044,6 +1044,14 @@ class RouterHTTP:
             return self._bunker_login(body, headers)
         if metodo == "GET" and path == "/api/bunker/stato":
             return self._bunker_stato(query, headers)
+        if metodo == "GET" and path == "/api/bunker/integrita":
+            return self._bunker_integrita(query, headers)
+        if metodo == "GET" and path == "/api/bunker/log":
+            return self._bunker_log(query, headers)
+        if metodo == "POST" and path == "/api/bunker/logout":
+            return self._bunker_logout(body, headers)
+        if metodo == "GET" and path == "/api/bunker/export_contabile":
+            return self._bunker_export_contabile(query, headers)
         return 404, {"errore": "rotta_non_trovata"}
 
     # --- helper ---
@@ -1400,6 +1408,107 @@ class RouterHTTP:
             return True
         return self._bunker_auth(headers, azione=azione)
 
+    def puo_esportare(self, headers) -> bool:
+        """True se il chiamante ha una sessione Bunker valida (usata dall'handler per lo
+        streaming diretto sul socket dell'estratto fiscale)."""
+        return self._bunker_auth(headers, azione="export_contabile")
+
+    def genera_estratto_csv(self, *, ip: str = ""):
+        """GENERATORE dell'estratto contabile certificato in STREAMING (Incremento 4.1):
+        legge il giornale riga per riga (fase177.stream_giornale, zero RAM), calcola la
+        CATENA DI HASH ON-THE-FLY mentre i dati scorrono, e chiude col footer obbligatorio
+        '# FINE ESTRATTO - INTEGRITÀ VERIFICATA: <hash>'. Se la catena e' rotta o accade un
+        errore durante lo streaming, chiude con '# NON CHIUSO / CORROTTO ...' -> un file
+        interrotto NON puo' mai essere preso per buono. Yielda stringhe: l'handler le scrive
+        sul socket, i test le concatenano. Nessun file temporaneo (mai scritto su disco)."""
+        import csv as _csv
+        import datetime as _dt
+        import hashlib as _hl
+        import io as _io
+        fc = getattr(self._sys, "finanza", None)
+        gen = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%SZ")
+        yield "# BookinVIP - Estratto contabile certificato (streaming)\r\n"
+        yield "# generato_utc,%s\r\n\r\n" % gen
+        yield ("seq,data_utc,tipo,riferimento,soggetto,conto_dare,conto_avere,"
+               "importo_cents,importo,valuta,causale,emittente,hash\r\n")
+        prev = "GENESI"
+        n = 0
+        rotta = None
+        errore = False
+        try:
+            sorgente = fc.stream_giornale() if fc is not None else iter(())
+            for r in sorgente:
+                canon = "|".join([r["evento_id"], str(r["ts"]), r["tipo"], r["riferimento"],
+                                  r["soggetto"], r["conto_dare"], r["conto_avere"],
+                                  str(r["importo_cents"]), r["valuta"], r["causale"],
+                                  r["emittente"], r["prev_hash"]])
+                h = _hl.sha256(canon.encode("utf-8")).hexdigest()
+                if r["prev_hash"] != prev or r["hash"] != h:
+                    rotta = r["seq"]
+                    break
+                prev = r["hash"]
+                n += 1
+                try:
+                    data = _dt.datetime.utcfromtimestamp(int(r["ts"])).strftime(
+                        "%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    data = str(r["ts"])
+                imp = int(r["importo_cents"] or 0)
+                buf = _io.StringIO()
+                _csv.writer(buf).writerow([
+                    r["seq"], data, r["tipo"], r["riferimento"], r["soggetto"],
+                    r["conto_dare"], r["conto_avere"], imp, "%.2f" % (imp / 100.0),
+                    r["valuta"], r["causale"], r["emittente"], r["hash"]])
+                yield buf.getvalue()
+        except Exception:
+            logger.error("estratto streaming: errore durante lo scorrimento", exc_info=True)
+            errore = True
+        if errore:
+            yield "\r\n# NON CHIUSO / CORROTTO - errore durante lo streaming (righe scritte: %d)\r\n" % n
+        elif rotta is not None:
+            yield "\r\n# NON CHIUSO / CORROTTO - manomissione alla riga %s (righe integre: %d)\r\n" % (rotta, n)
+        else:
+            yield "\r\n# righe,%d\r\n" % n
+            yield "# FINE ESTRATTO - INTEGRITÀ VERIFICATA: %s\r\n" % (prev if n else "VUOTO")
+        # AUDIT obbligatorio dell'esportazione (formato richiesto)
+        stato = ("INTEGRITÀ_VERIFICATA" if (not errore and rotta is None)
+                 else "NON_CHIUSO_CORROTTO")
+        logger.warning("EXPORT_FISCALE_STREAM_COMPLETED | DATA: %s | RIGHE: %d | STATUS: %s | IP: %s",
+                       gen, n, stato, ip or "?")
+
+    def _bunker_export_contabile(self, query, headers):
+        """ESTRATTO CONTABILE CERTIFICATO — via router (test + fallback non-streaming):
+        concatena il GENERATORE di streaming (stessa identica uscita che l'handler manda
+        sul socket). In PRODUZIONE l'handler intercetta questa rotta e STREAMMA riga per
+        riga (zero RAM); qui si materializza per i chiamanti che vogliono il dict."""
+        if not self._bunker_auth(headers, azione="export_contabile"):
+            return 403, {"errore": "bunker_richiesto"}
+        if getattr(self._sys, "finanza", None) is None:
+            return 503, {"errore": "giornale_non_attivo"}
+        try:
+            csv_txt = "".join(self.genera_estratto_csv(ip=self._client_ip(headers)))
+        except Exception:
+            logger.error("bunker export contabile: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        integra = "# FINE ESTRATTO - INTEGRITÀ VERIFICATA:" in csv_txt
+        return 200, {"csv": csv_txt, "catena_integra": integra,
+                     "corrotto": ("# NON CHIUSO / CORROTTO" in csv_txt)}
+
+    def _bunker_logout(self, body, headers):
+        """LOGOUT SERVER-SIDE del Bunker: revoca la sessione (nonce in denylist) -> quel
+        token e' morto SUBITO, non solo cancellato dal browser. Sempre 200 (idempotente:
+        anche un token gia' morto va bene). Auditato."""
+        bunker = getattr(self._sys, "bunker", None)
+        tok = headers.get("X-Bunker-Session", "") or headers.get("x-bunker-session", "")
+        if bunker is not None and tok:
+            try:
+                if bunker.revoca(tok):
+                    logger.warning("BUNKER: logout (sessione revocata) ip=%s",
+                                   self._client_ip(headers))
+            except Exception:
+                logger.warning("bunker logout: revoca fallita (ISOLATA)", exc_info=True)
+        return 200, {"ok": True}
+
     def _bunker_stato(self, query, headers):
         """Sala di controllo (read-only): conferma di essere nel Bunker + auto-diagnosi
         del sistema (integrita' catena hash, backup, disco). Richiede sessione Bunker."""
@@ -1416,6 +1525,62 @@ class RouterHTTP:
             logger.error("bunker stato: diagnosi fallita (ISOLATA)", exc_info=True)
             rep["diagnosi"] = {"ok": None, "errore": "diagnosi_non_disponibile"}
         return 200, rep
+
+    @staticmethod
+    def _data_dir():
+        import os as _os
+        return _os.environ.get("DATA_DIR") or _os.path.dirname(
+            _os.environ.get("DB_FINANZA", "data/finanza.db")) or "data"
+
+    def _bunker_integrita(self, query, headers):
+        """SALA CONTROLLO — INTEGRITA' (Incremento 4, read-only, sessione Bunker richiesta):
+        verifica la CATENA HASH del giornale contabile (fase177) = prova che nessun movimento
+        e' stato manomesso, + la diagnosi di sistema (backup/disco/db). La verita' contabile
+        e la salute della macchina in un colpo d'occhio, solo dal Bunker."""
+        if not self._bunker_auth(headers, azione="integrita"):
+            return 403, {"errore": "bunker_richiesto"}
+        rep = {}
+        fc = getattr(self._sys, "finanza", None)
+        try:
+            rep["catena"] = fc.verifica_catena() if fc is not None else {"ok": None,
+                                                                          "motivo": "spento"}
+        except Exception:
+            logger.error("bunker integrita catena: eccezione ISOLATA", exc_info=True)
+            rep["catena"] = {"ok": None, "motivo": "errore"}
+        try:
+            import os as _os
+            from fase178_watchdog import diagnosi
+            dd = self._data_dir()
+            rep["diagnosi"] = diagnosi(dir_dati=dd, dir_backup=_os.path.join(dd, "backup"),
+                                       uptime_ok=None)
+        except Exception:
+            logger.error("bunker integrita diagnosi: eccezione ISOLATA", exc_info=True)
+            rep["diagnosi"] = {"ok": None}
+        return 200, rep
+
+    def _bunker_log(self, query, headers):
+        """SALA CONTROLLO — LOG PERSISTENTI (Incremento 4, read-only, sessione Bunker):
+        ultime N righe del log persistente (DATA_DIR/app.log, sopravvive ai deploy). E' il
+        registro di chi-ha-fatto-cosa e degli allarmi (CRITICAL/BUNKER/RATE-LIMIT/AUDIT).
+        N clampato 1..300: mai scaricare tutto."""
+        if not self._bunker_auth(headers, azione="log"):
+            return 403, {"errore": "bunker_richiesto"}
+        import os as _os
+        try:
+            n = int(str(query.get("n") or 100))
+        except Exception:
+            n = 100
+        n = max(1, min(300, n))
+        path = _os.path.join(self._data_dir(), "app.log")
+        righe = []
+        try:
+            if _os.path.isfile(path):
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    righe = f.readlines()[-n:]
+        except Exception:
+            logger.warning("bunker log: lettura fallita (ISOLATA)", exc_info=True)
+        righe = [r.rstrip("\n")[:500] for r in righe]
+        return 200, {"righe": righe, "n": len(righe), "file": "app.log"}
 
     def _admin_diagnosi(self, query, headers):
         """AUTO-DIAGNOSI on-demand (fase178): stessa lente del Watchdog, ma a richiesta
@@ -5207,6 +5372,34 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
 
         def do_GET(self):
             u = urlparse(self.path)
+            if u.path == "/api/bunker/export_contabile":
+                # STREAMING diretto sul socket (Incremento 4.1): zero RAM, il CSV scorre
+                # riga per riga dal DB al client. Auth Bunker prima di aprire il flusso.
+                hdrs = dict(self.headers)
+                if not router.puo_esportare(hdrs):
+                    self._scrivi(403, {"errore": "bunker_richiesto"})
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition",
+                                 'attachment; filename="estratto_contabile_bookinvip.csv"')
+                self.send_header("Cache-Control", "no-store")
+                self._cors()
+                self.end_headers()
+                if getattr(self, "_solo_head", False):
+                    return
+                try:
+                    ip = router._client_ip(hdrs)
+                    for pezzo in router.genera_estratto_csv(ip=ip):
+                        self.wfile.write(pezzo.encode("utf-8"))
+                except Exception:
+                    # flusso interrotto (rete/DB): marca il file come NON valido, cosi'
+                    # un download troncato non venga mai preso per buono.
+                    try:
+                        self.wfile.write(b"\r\n# NON CHIUSO / CORROTTO - streaming interrotto\r\n")
+                    except Exception:
+                        pass
+                return
             if u.path.startswith("/api/"):
                 query = {k: v[0] for k, v in parse_qs(u.query).items()}
                 s, c = router.gestisci("GET", u.path, query, None, dict(self.headers))
