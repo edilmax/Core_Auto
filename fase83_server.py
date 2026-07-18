@@ -839,6 +839,24 @@ class RouterHTTP:
         self._admin_key = admin_key
         self._base_url = base_url or ""
         self._loc = Localizzatore()
+        # RATE LIMIT autenticazione (fase179): policy del fondatore "5 tentativi/min per IP"
+        # + backoff crescente. In-process (come il throttle preventivi). Isolato: se il
+        # modulo mancasse, l'auth resta invariata (nessun limite, mai un crash).
+        try:
+            from fase179_rate_limit import crea_rate_limiter
+            self._rate = crea_rate_limiter(soglia=5, finestra_sec=60,
+                                           base_blocco_sec=60, max_blocco_sec=3600)
+        except Exception:
+            self._rate = None
+
+    def _rate_chiave_login(self, headers):
+        """Chiave di throttle del login = PER IP (policy fondatore: 5/min per IP). NON
+        blocco per-email di proposito: bloccare un account dopo N fallimenti da qualsiasi
+        IP sarebbe un 'account-lockout DoS' (un attaccante zittisce un host onesto con 5
+        password sbagliate). La minaccia distribuita si vede nell'audit log, non col blocco.
+        IP vuoto (chiamata non attribuibile, es. test diretti) -> nessuna chiave."""
+        ip = self._client_ip(headers)
+        return ("login-ip:" + ip) if ip else ""
 
     def gestisci(self, metodo: str, path: str, query: Optional[Dict[str, str]] = None,
                  body: Optional[str] = None,
@@ -955,7 +973,7 @@ class RouterHTTP:
         if metodo == "POST" and path == "/api/host/registrazione":
             return self._host_registrazione(body, headers)
         if metodo == "POST" and path == "/api/host/login":
-            return self._host_login(body)
+            return self._host_login(body, headers)
         if metodo == "GET" and path == "/api/host/referral":
             return self._host_referral(query, headers)
         if metodo == "GET" and path == "/api/host/link_diretto":
@@ -1053,9 +1071,8 @@ class RouterHTTP:
         # 2) chiave condivisa dell'operatore (o dev aperto se non configurata)
         if self._host_key is None:
             return True
-        import hmac
         fornita = headers.get("X-Host-Key", "") or headers.get("x-host-key", "")
-        return hmac.compare_digest(str(fornita), str(self._host_key))
+        return self._auth_con_rate("host", str(fornita), str(self._host_key), headers)
 
     def _upload_foto(self, body, headers):
         """Upload foto alloggio (base64) -> salva su UPLOAD_DIR -> ritorna l'URL /uploads/<nome>,
@@ -1212,7 +1229,36 @@ class RouterHTTP:
             return True            # nessuna chiave configurata = aperto (dev)
         import hmac
         fornita = headers.get("X-Admin-Key", "") or headers.get("x-admin-key", "")
-        return hmac.compare_digest(str(fornita), str(self._admin_key))
+        return self._auth_con_rate("admin", str(fornita), str(self._admin_key), headers)
+
+    def _auth_con_rate(self, tipo, fornita, atteso, headers) -> bool:
+        """Confronto costante della chiave + BUTTAFUORI per IP sui TENTATIVI FALLITI
+        (brute-force della chiave via header). Controlla il lockout PRIMA: un IP che ha
+        gia' sbagliato N volte e' negato in blocco finche' non scade (anche se il 6°
+        tentativo fosse la chiave giusta: chi ha la chiave non la indovina a raffica).
+        La chiave giusta AZZERA il contatore -> il legittimo non e' mai penalizzato per
+        quanti request faccia. IP diverso = non toccato. IP vuoto (test diretti) = nessun
+        throttle (in prod nginx passa sempre X-Forwarded-For)."""
+        import hmac
+        rl = self._rate
+        ip = self._client_ip(headers)
+        if rl is None or not ip:
+            return hmac.compare_digest(fornita, atteso)
+        chiave = "authkey-%s:%s" % (tipo, ip)
+        consentito, attesa = rl.consenti(chiave)
+        if not consentito:
+            logger.warning("RATE-LIMIT %s-key BLOCCATO 429: ip=%s attesa=%ds",
+                           tipo, ip, attesa)
+            return False           # IP in lockout: negato in blocco
+        ok = hmac.compare_digest(fornita, atteso)
+        if ok:
+            rl.riuscito(chiave)    # chiave giusta: azzera lo storico dei fallimenti
+            return True
+        bloccato, dur = rl.fallito(chiave)
+        if bloccato:
+            logger.warning("RATE-LIMIT %s-key: SOGLIA superata, lockout %ds ip=%s",
+                           tipo, dur, ip)
+        return False
 
     # --- admin: dashboard rimborsi ---
     def _admin_prenotazioni(self, query, headers):
@@ -3478,14 +3524,34 @@ class RouterHTTP:
                                    exc_info=True)
         return (201 if e.ok else 422), out
 
-    def _host_login(self, body):
+    def _host_login(self, body, headers=None):
         reg = getattr(self._sys, "registro_host", None)
         if reg is None:
             return 503, {"errore": "registrazione_non_attiva"}
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
-        e = reg.login(dati.get("email"), dati.get("password"))
+        email = dati.get("email")
+        ip = self._client_ip(headers)
+        k = self._rate_chiave_login(headers)
+        # BUTTAFUORI: se questo IP e' gia' in lockout, rifiuta PRIMA di verificare la
+        # password (429). AUDIT: ogni blocco su app.log (persistente) con l'email presa di
+        # mira, per sapere se qualcuno sta forzando e quale account.
+        if self._rate is not None and k:
+            consentito, attesa = self._rate.consenti(k)
+            if not consentito:
+                logger.warning("RATE-LIMIT login BLOCCATO 429: ip=%s email=%r attesa=%ds",
+                               ip, str(email)[:120], attesa)
+                return 429, {"errore": "troppi_tentativi", "riprova_tra_sec": attesa}
+        e = reg.login(email, dati.get("password"))
+        if self._rate is not None and k:
+            if e.ok:
+                self._rate.riuscito(k)              # login riuscito: azzera (mai penalizzare il vero)
+            else:
+                bloccato, attesa = self._rate.fallito(k)
+                if bloccato:
+                    logger.warning("RATE-LIMIT login: SOGLIA superata, lockout %ds ip=%s "
+                                   "email=%r", attesa, ip, str(email)[:120])
         return (200 if e.ok else 401), e.as_dict()
 
     def _host_referral(self, query, headers):
