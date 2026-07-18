@@ -38,7 +38,21 @@ from typing import Any, Callable, Dict, List, Optional
 logger = logging.getLogger("core_auto.financial_controller")
 
 TIPI_GIORNALE = ("nota_debito", "nota_credito", "penale_offset", "penale_incassata",
-                 "storno", "debt_on", "debt_off")
+                 "storno", "debt_on", "debt_off",
+                 # movimenti di denaro "ordinari" (log immutabile di TUTTO, non solo penali):
+                 "incasso", "payout_host", "payout_manuale", "rimborso",
+                 "tassa_incassata", "tassa_stornata")
+
+# mappatura tipo -> (conto_dare, conto_avere) per i movimenti ordinari: partita doppia
+# leggibile a colpo d'occhio nell'audit (cassa piattaforma vs debiti verso host/ospite/comune).
+_CONTI_MOVIMENTO = {
+    "incasso":         ("cassa_piattaforma", "debiti_vs_host"),      # entra denaro ospite
+    "payout_host":     ("debiti_vs_host", "cassa_piattaforma"),      # esce verso l'host (auto)
+    "payout_manuale":  ("debiti_vs_host", "cassa_piattaforma"),      # transfer fallito -> manuale
+    "rimborso":        ("debiti_vs_ospite", "cassa_piattaforma"),    # esce verso l'ospite
+    "tassa_incassata": ("cassa_piattaforma", "debiti_vs_comune"),    # quota tassa trattenuta
+    "tassa_stornata":  ("debiti_vs_comune", "cassa_piattaforma"),    # tassa restituita
+}
 
 
 def _cent(v: Any) -> int:
@@ -172,6 +186,25 @@ class FinancialController:
             return None
         finally:
             con.close()
+
+    def movimento(self, *, tipo: str, riferimento: str, soggetto: str,
+                  importo_cents: int, valuta: str, causale: str,
+                  evento_id: Optional[str] = None, emittente: str = "sistema"
+                  ) -> Optional[Dict[str, Any]]:
+        """Registra un MOVIMENTO DI DENARO ordinario nel giornale immutabile (incasso,
+        bonifico host, rimborso, tassa). E' la scatola nera che NON si perde a un deploy:
+        risponde a 'ma il bonifico e' partito?' con una riga hash-incatenata e datata.
+        Idempotente su evento_id (default 'tipo:riferimento' -> un retract/retry non
+        raddoppia). Best-effort per il chiamante: mai deve rompere il money-path, quindi
+        chi lo chiama lo avvolge in try (qui ritorna None su input non valido)."""
+        conti = _CONTI_MOVIMENTO.get(tipo)
+        if conti is None:
+            return None
+        ev = evento_id or ("%s:%s" % (tipo, riferimento))
+        return self.registra(evento_id=ev, tipo=tipo, riferimento=riferimento,
+                             soggetto=soggetto, conto_dare=conti[0], conto_avere=conti[1],
+                             importo_cents=importo_cents, valuta=valuta,
+                             causale=causale, emittente=emittente)
 
     def verifica_catena(self) -> Dict[str, Any]:
         """Ricalcola TUTTA la catena: ogni manomissione (anche con i trigger droppati

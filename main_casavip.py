@@ -34,9 +34,32 @@ def _segreto() -> bytes:
     return b
 
 
+def _configura_logging() -> None:  # pragma: no cover
+    """Log su STDOUT (per `docker logs`) + su FILE nel volume dati, che SOPRAVVIVE al
+    deploy rm-first (i log del container invece si perdono a ogni ricreazione: era il
+    fantasma 'la scatola nera bruciata dal deploy'). File rotante 5x5MB in DATA_DIR."""
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(logging.StreamHandler())            # stdout -> docker logs
+    root.handlers[-1].setFormatter(fmt)
+    try:
+        from logging.handlers import RotatingFileHandler
+        data_dir = os.environ.get("DATA_DIR") or os.path.dirname(
+            os.environ.get("DB_FINANZA", "data/finanza.db")) or "data"
+        os.makedirs(data_dir, exist_ok=True)
+        fh = RotatingFileHandler(os.path.join(data_dir, "app.log"),
+                                 maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8")
+        fh.setFormatter(fmt)
+        root.addHandler(fh)
+        logging.getLogger("core_auto").info("log persistente attivo: %s/app.log", data_dir)
+    except Exception:
+        logging.getLogger("core_auto").warning("log su file non attivato (ISOLATO)",
+                                               exc_info=True)
+
+
 def main() -> None:  # pragma: no cover
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    _configura_logging()
     config = ConfigCasaVIP(
         abilitato=True,
         segreto_hmac=_segreto(),

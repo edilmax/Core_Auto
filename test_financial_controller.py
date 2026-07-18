@@ -238,8 +238,10 @@ class TestOffsetEFlusso(unittest.TestCase):
         self.assertEqual(s, 200)
         s2, _ = self.g("POST", "/api/host/cancella", {"riferimento": rif, "host_id": "demo"}, HK)
         self.assertEqual(s2, 409)
-        self.assertEqual(self.sis.finanza.movimenti(rif), [],
-                         "decisione admin: NESSUNA nota di debito spuria per l'host")
+        # il giornale ora traccia i movimenti ordinari (incasso/rimborso): l'intento del
+        # test e' che NON ci sia una nota_debito (penale) spuria per l'host.
+        self.assertNotIn("nota_debito", [m["tipo"] for m in self.sis.finanza.movimenti(rif)],
+                         "decisione admin: NESSUNA penale spuria per l'host")
 
     def test_riasserzione_dopo_crash(self):
         rif = self._prenota_paga()
@@ -247,7 +249,9 @@ class TestOffsetEFlusso(unittest.TestCase):
         # ma il giornale non e' mai stato scritto
         pp = self.sis.pagamenti_pendenti
         self.assertTrue(pp.marca_cancellata_host(rif, 3000))
-        self.assertEqual(self.sis.finanza.movimenti(rif), [])
+        # prima dello sweep: nessuna PENALE ancora (i movimenti incasso/tassa del pagamento
+        # ci sono gia' ed e' corretto; e' la nota_debito che ancora manca).
+        self.assertNotIn("nota_debito", [m["tipo"] for m in self.sis.finanza.movimenti(rif)])
         sweep_hold_una_passata(self.sis, self.r)
         mv = self.sis.finanza.movimenti(rif)
         self.assertIn("nota_debito", [m["tipo"] for m in mv])

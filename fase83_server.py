@@ -1328,6 +1328,17 @@ class RouterHTTP:
                 rec = pp.info(rif)
                 if rec is not None and rec.get("stato") != "rimborsato":
                     pp.marca_da_rimborsare(rif)        # blocca il transfer + nessuna conferma tardiva
+                    # SCATOLA NERA del rimborso admin (importo = totale ospite dal record)
+                    import json as _jr
+                    try:
+                        dj = _jr.loads(rec.get("corpo_json") or "{}")
+                    except Exception:
+                        dj = {}
+                    tot = int(dj.get("totale_cents", 0) or dj.get("prezzo_guest_cents", 0) or 0)
+                    if tot > 0:
+                        self._giornale(tipo="rimborso", riferimento=rif, soggetto="ospite:" + rif,
+                                       importo_cents=tot, valuta=dj.get("valuta") or "EUR",
+                                       causale="rimborso disposto da admin")
             except Exception:
                 logger.warning("admin rimborso: invalidazione pendente fallita (ignorata)",
                                exc_info=True)
@@ -2118,6 +2129,26 @@ class RouterHTTP:
         except Exception:
             logger.warning("registra payout fallito (ignorato)", exc_info=True)
 
+    def _giornale(self, *, tipo, riferimento, soggetto, importo_cents, valuta,
+                  causale, evento_id=None):
+        """Scrive UN movimento nel giornale immutabile (fase177), COMPLETAMENTE ISOLATO:
+        il registro contabile e' la scatola nera dell'audit, NON deve MAI poter rompere il
+        movimento di denaro reale (che e' gia' avvenuto). Gated: se il modulo e' spento,
+        no-op silenzioso."""
+        try:
+            fc = getattr(self._sys, "finanza", None)
+            if fc is None:
+                return
+            if not (isinstance(importo_cents, int) and not isinstance(importo_cents, bool)
+                    and importo_cents > 0):
+                return
+            fc.movimento(tipo=tipo, riferimento=str(riferimento),
+                         soggetto=str(soggetto), importo_cents=int(importo_cents),
+                         valuta=str(valuta or "EUR"), causale=str(causale),
+                         evento_id=evento_id)
+        except Exception:
+            logger.warning("giornale movimento '%s' fallito (ISOLATO)", tipo, exc_info=True)
+
     def _trasferisci_all_host(self, rif, importo_cents):
         """SOLDI ALL'HOST IN AUTOMATICO (strategia fondatore): allo sblocco dell'escrow
         (ok cliente / 24h di silenzio / esito controversia), se l'host ha Stripe collegato
@@ -2155,10 +2186,20 @@ class RouterHTTP:
                     pd.aggiorna_stato(rif, "in_transito")     # soldi partiti verso l'host
                 logger.info("Connect: transfer %s -> host %s (%d %s) per %s",
                             tid, host_id, importo_cents, valuta, rif)
+                # SCATOLA NERA: il bonifico e' partito -> riga immutabile e datata (risponde
+                # per sempre a "ma il bonifico e' stato inviato?", anche dopo N deploy).
+                self._giornale(tipo="payout_host", riferimento=rif,
+                               soggetto="host:" + str(host_id), importo_cents=int(importo_cents),
+                               valuta=valuta, causale="bonifico Connect %s all'host" % tid)
             else:
                 logger.error("BONIFICO MANUALE RICHIESTO: transfer Connect fallito per '%s' "
                              "(%d %s a %s). Il payout resta tracciato.",
                              rif, importo_cents, valuta, acct)
+                # ANCHE il fallimento va nel giornale: e' ESATTAMENTE lo scenario "non ho
+                # ricevuto il bonifico" -> resta la prova che si e' tentato e serve il manuale.
+                self._giornale(tipo="payout_manuale", riferimento=rif,
+                               soggetto="host:" + str(host_id), importo_cents=int(importo_cents),
+                               valuta=valuta, causale="transfer Connect FALLITO: bonifico manuale richiesto")
         except Exception:
             logger.warning("trasferimento automatico host fallito (ISOLATO)", exc_info=True)
 
@@ -2269,6 +2310,11 @@ class RouterHTTP:
                 gz.annulla(ref)
             except Exception:
                 pass
+        if pagata and guest > 0:
+            # SCATOLA NERA del RIMBORSO all'ospite (cancellazione host = rimborso 100%)
+            self._giornale(tipo="rimborso", riferimento=ref, soggetto="ospite:" + ref,
+                           importo_cents=int(guest), valuta=valuta,
+                           causale="rimborso 100% per cancellazione host")
         logger.info("HOST ha cancellato %s: cliente rimborso %d, penale host %d %s",
                     ref, guest if pagata else 0, penale, valuta)
         corpo_ok = {"stato": "cancellata_host", "riferimento": ref,
@@ -3150,6 +3196,25 @@ class RouterHTTP:
             pd = getattr(self._sys, "payout", None)
             if pd is not None:
                 pd.aggiorna_stato(rif, "maturato")        # in_attesa -> maturato (guadagno vero)
+            # SCATOLA NERA dell'INCASSO (idempotente su evento_id: il retry del webhook non
+            # raddoppia). Importo = totale pagato dall'ospite; + riga tassa se dovuta.
+            import json as _jg
+            try:
+                dj = _jg.loads(rec.get("corpo_json") or "{}") if isinstance(rec, dict) else {}
+            except Exception:
+                dj = {}
+            val = dj.get("valuta") or "EUR"
+            totale = int(dj.get("totale_cents", 0) or dj.get("prezzo_guest_cents", 0) or 0)
+            hid = dj.get("host_id") or (rec.get("host_id") if isinstance(rec, dict) else "") or ""
+            if totale > 0:
+                self._giornale(tipo="incasso", riferimento=rif, soggetto="host:" + str(hid),
+                               importo_cents=totale, valuta=val,
+                               causale="pagamento ospite ricevuto")
+            if isinstance(rec, dict) and int(rec.get("tassa_cents", 0) or 0) > 0:
+                self._giornale(tipo="tassa_incassata", riferimento=rif,
+                               soggetto="comune:" + str(rec.get("comune", "")),
+                               importo_cents=int(rec["tassa_cents"]), valuta=val,
+                               causale="tassa di soggiorno trattenuta")
         except Exception:
             logger.warning("riasserisci incasso fallito (ignorato)", exc_info=True)
 
