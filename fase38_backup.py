@@ -66,6 +66,15 @@ def esegui_backup(db_path: str, dir_backup: str, *,
         raise ValueError("max_bytes deve essere > 0")
     os.makedirs(dir_backup, exist_ok=True)
     ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    # anti-collisione: due backup nello stesso tick dell'orologio (Windows ~1-15ms di
+    # granularita') avrebbero lo STESSO nome -> il secondo sovrascriveva il primo in
+    # silenzio. Suffisso progressivo finche' il nome e' libero (ordine cronologico salvo).
+    base = ts
+    n = 1
+    while (os.path.exists(os.path.join(dir_backup, f"{prefisso}-{ts}.db.gz"))
+           or os.path.exists(os.path.join(dir_backup, f"{prefisso}-{ts}.db"))):
+        n += 1
+        ts = f"{base}-{n}"
     tmp = os.path.join(dir_backup, f".tmp-{ts}.db")
     _snapshot_consistente(db_path, tmp)
     try:

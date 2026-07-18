@@ -388,7 +388,7 @@ class TestFrontendZeroDifetti(unittest.TestCase):
         import io, os, re
         qui = os.path.dirname(os.path.abspath(__file__))
         cls.pagine = {}
-        for nome in ("host.html", "admin.html"):
+        for nome in ("host.html", "admin.html", "index.html"):
             cls.pagine[nome] = io.open(os.path.join(qui, "deploy", nome),
                                        encoding="utf-8").read()
         cls.re = re

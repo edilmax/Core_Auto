@@ -248,7 +248,7 @@ function valutaOspite(){
 function fmtDist(m){ if(m==null) return ''; return m<1000 ? Math.round(m)+' m' : (m/1000).toFixed(1)+' km'; }
 // ERROR BOUNDARY (FASE 3): `api()` NON solleva MAI. Prima faceva `return r.json()` e basta:
 // se il server rispondeva 500/502 con HTML (non JSON), r.json() SOLLEVAVA e l'eccezione finiva
-// in uno dei tanti `catch(e){}` vuoti -> schermo muto, l'utente non capiva perche' "non succede
+// in uno dei tanti `catch(e){console.warn('bookinvip-ospite',e)}` vuoti -> schermo muto, l'utente non capiva perche' "non succede
 // niente". Ora ogni esito diventa un OGGETTO che il chiamante sa gia' leggere (`.errore`).
 // Compatibile all'indietro: con una risposta JSON (2xx o 4xx) ritorna il corpo IDENTICO a prima
 // (i 4xx con {errore:...} servono: li usiamo per i messaggi onesti). `_http` = stato reale.
@@ -265,7 +265,7 @@ async function api(path, opts){
 
 // Lingua iniziale: 1) scelta salvata  2) lingua del browser  3) inglese (default globale).
 function linguaIniziale(){
-  try{ const s=localStorage.getItem('lang'); if(s && SUPP.includes(s)) return s; }catch(e){}
+  try{ const s=localStorage.getItem('lang'); if(s && SUPP.includes(s)) return s; }catch(e){console.warn('bookinvip-ospite',e)}
   const cand = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language||'en'];
   for(const l of cand){ const b=String(l||'').slice(0,2).toLowerCase(); if(SUPP.includes(b)) return b; }
   return 'en';
@@ -296,7 +296,7 @@ function applicaTraduzioni(){
 
 async function caricaI18N(lang){
   LANG = lang; document.documentElement.lang = lang;
-  try{ localStorage.setItem('lang', lang); }catch(e){}
+  try{ localStorage.setItem('lang', lang); }catch(e){console.warn('bookinvip-ospite',e)}
   try{ I18N = await api('/api/i18n?lang='+lang); }catch(e){ I18N={ui:{},servizi:{}}; }
   applicaTraduzioni();
 }
@@ -477,7 +477,7 @@ function bindWaitlist(citta){
     const cittaLive=(document.getElementById('citta').value||'').trim()||citta||'';
     let d=null;
     try{ d=await api('/api/domanda',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({email:em,citta:cittaLive,lang:LANG,check_in:document.getElementById('checkin').value,check_out:document.getElementById('checkout').value})}); }catch(e){}
+      body:JSON.stringify({email:em,citta:cittaLive,lang:LANG,check_in:document.getElementById('checkin').value,check_out:document.getElementById('checkout').value})}); }catch(e){console.warn('bookinvip-ospite',e)}
     if(d && d.ok){ m.style.color='var(--brand-chiaro)'; m.innerHTML='✅ '+d.messaggio+' <b>(€'+((d.credito_cents||0)/100).toFixed(0)+')</b>'; b.style.display='none'; }
     else { m.style.color='var(--rosso)'; m.textContent = (d && d.errore) ? (t('errore_server')+' '+d.errore) : t('servizio_non_ragg'); }
   };
@@ -488,7 +488,7 @@ function bindWaitlist(citta){
     try{ const r=await api('/api/domanda/conta?citta='+encodeURIComponent(cittaP));
       const n=(r&&r.richieste)||0; const el=document.getElementById('wl_proof');
       if(el && n>0) el.textContent='🔥 '+n+' '+t('gia_cercano')+' '+cittaP;
-    }catch(e){}
+    }catch(e){console.warn('bookinvip-ospite',e)}
   })();
 }
 
@@ -521,7 +521,7 @@ async function apri(slug){
             return `<div style="border-top:1px solid var(--sfondo-tenue);padding:.4rem 0">★ ${x.voto} <span style="color:var(--brand-chiaro);font-size:.72rem">✓ ${t('verificata')}</span><br><span style="color:#4a5b7a">${txt.replace(/[<>]/g,'')}</span></div>`;
           }).join('')+'</div>';
       }
-    }catch(e){}
+    }catch(e){console.warn('bookinvip-ospite',e)}
     const FONTE = new URLSearchParams(location.search).get('fonte')||'marketplace';
     const q = await api('/api/concierge/quote', {method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({alloggio_id:slug, check_in:document.getElementById('checkin').value,
@@ -563,7 +563,7 @@ async function apri(slug){
       const sb = document.getElementById('splitN');
       if(sb){ const calc = async ()=>{ const n=parseInt(sb.value); const out=document.getElementById('splitOut');
         if(!(n>1)){ out.textContent = ''; return; }   // 1 = paghi tu tutto (default): il totale sopra è già il tuo
-        try{ const r = await api('/api/split/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({totale_cents:_tot,n:n})}); if(r.quote){ const mn=r.per_persona_min_cents,mx=r.per_persona_max_cents; out.textContent = (mn===mx?('= '+money(mn,V)):('= '+money(mn,V)+'–'+money(mx,V)))+' '+t('a_testa'); } }catch(e){} }; sb.onchange=calc; calc(); }
+        try{ const r = await api('/api/split/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({totale_cents:_tot,n:n})}); if(r.quote){ const mn=r.per_persona_min_cents,mx=r.per_persona_max_cents; out.textContent = (mn===mx?('= '+money(mn,V)):('= '+money(mn,V)+'–'+money(mx,V)))+' '+t('a_testa'); } }catch(e){console.warn('bookinvip-ospite',e)} }; sb.onchange=calc; calc(); }
       document.getElementById('btnPrenota').style.display='';
       // CONTO ALLA ROVESCIA ONESTO: il preventivo (prezzo+stanza) è bloccato per te fino a scade_a.
       if(window.__cdTimer) clearInterval(window.__cdTimer);
@@ -595,7 +595,7 @@ async function prenota(){
       const contr = r.voucher_token ? ` · <a href="#" id="dlContr" style="color:var(--brand);font-weight:700">📑 ${t('contratto_pdf')}</a>` : '';
       msg.innerHTML=`<div class="msg ok">✅ ${t('conferma')} (${r.riferimento||''})${voucher}${contr}</div>`; document.getElementById('btnPrenota').style.display='none';
       const dl = document.getElementById('dlContr'); const _vt = r.voucher_token;
-      if(dl) dl.onclick = async (e)=>{ e.preventDefault(); try{ const cr = await api('/api/contratto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({voucher_token:_vt, lingua:LANG})}); if(cr.pdf_base64){ const a=document.createElement('a'); a.href='data:application/pdf;base64,'+cr.pdf_base64; a.download=cr.filename||'contratto.pdf'; a.click(); } }catch(err){} };
+      if(dl) dl.onclick = async (e)=>{ e.preventDefault(); try{ const cr = await api('/api/contratto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({voucher_token:_vt, lingua:LANG})}); if(cr.pdf_base64){ const a=document.createElement('a'); a.href='data:application/pdf;base64,'+cr.pdf_base64; a.download=cr.filename||'contratto.pdf'; a.click(); } }catch(err){console.warn('bookinvip-ospite',err)} };
     }
     else { msg.innerHTML=`<div class="msg err">❌ ${r.motivo||r.errore||t('errore')}</div>`; }
   }catch(e){ msg.innerHTML=`<div class="msg err">${t('errore')}: ${e.message}</div>`; }
