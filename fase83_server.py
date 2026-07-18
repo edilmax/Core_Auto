@@ -1020,6 +1020,8 @@ class RouterHTTP:
             return self._admin_controversia_risolvi(body, headers)
         if metodo == "POST" and path == "/api/admin/cancella_attivita":
             return self._admin_cancella_attivita(body, headers)
+        if metodo == "GET" and path == "/api/admin/diagnosi":
+            return self._admin_diagnosi(query, headers)
         return 404, {"errore": "rotta_non_trovata"}
 
     # --- helper ---
@@ -1247,6 +1249,24 @@ class RouterHTTP:
             return 422, {"errore": "campi_non_validi"}
         ok = self._sys.catalogo.imposta_stato(slug, stato)
         return (200 if ok else 422), {"stato": stato if ok else "rifiutato"}
+
+    def _admin_diagnosi(self, query, headers):
+        """AUTO-DIAGNOSI on-demand (fase178): stessa lente del Watchdog, ma a richiesta
+        dell'admin. READ-ONLY (non tocca alcun dato): catena hash del giornale, freschezza
+        backup, disco, db presenti. La misura dell'uptime NON si fa da qui (un processo non
+        puo' dire di essere morto): la fa il watchdog esterno."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        try:
+            import os as _os
+            from fase178_watchdog import diagnosi
+            dati = _os.environ.get("DATA_DIR", "data")
+            bkp = _os.environ.get("BACKUP_DIR", _os.path.join(dati, "backup"))
+            rep = diagnosi(dir_dati=dati, dir_backup=bkp, uptime_ok=None)
+        except Exception:
+            logger.error("admin diagnosi: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        return 200, rep
 
     def _admin_cancella_attivita(self, body, headers):
         """TASTO 'cancella tutto': rimuove un host da OGNI archivio (fase156) e VERIFICA che

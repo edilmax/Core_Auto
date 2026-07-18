@@ -403,6 +403,67 @@ docker-compose -f docker-compose.casavip.yml up -d
 > provare i passi B su un VPS di staging vero, cronometro alla mano (bus-factor: che funzioni
 > anche per un tecnico che non conosce il progetto).
 
+## 🧯 ZERO-KNOWLEDGE — per un tecnico che NON ha mai visto questo progetto
+> Leggi questo se devi rimettere in piedi BookinVIP e non sai nulla del codice.
+> **Cos'è**: un sito (Python stdlib dietro nginx, in Docker) su UN server Hostinger
+> `76.13.44.167`, dominio `bookinvip.com`. I dati sono **file SQLite** in un volume Docker.
+> Il codice è su GitHub (`edilmax/Core_Auto`, mai perso). I dati stanno **solo** nel volume
+> + nelle **copie offsite cifrate** sul PC del proprietario.
+
+### (a) DOVE stanno i dati — percorsi esatti (scoperta automatica di OGNI .db)
+- Nel server, volume Docker montato come `/data` dentro i container. Sul disco del VPS:
+  `/var/lib/docker/volumes/bookinvip_casavip_data/_data/`
+  (trovalo sempre con: `docker volume inspect --format '{{.Mountpoint}}' bookinvip_casavip_data`)
+- Lì dentro: **tutti i `*.db`** (17: catalogo, inventario, registro_host, accettazioni, payout,
+  **finanza** = giornale contabile, garanzia, pendenti, tassa_comunale, viral, messaggi, domanda,
+  checkin, coda, split, geocache, poicache) + la cartella `backup/` (snapshot .db.gz + .sha256).
+  Il backup li scopre da solo (`*.db`): non c'è una lista da aggiornare.
+
+### (b) DECIFRARE una copia offsite (sul PC)
+```bash
+# le copie sono ~/bookinvip-offsite/bookinvip-<data>.tar.gz.enc (AES-256).
+# serve SOLO la passphrase scelta a suo tempo (NON è nel repo né sul server: chiedila al proprietario).
+BV_PASS='LA-PASSPHRASE' bash deploy/restore_offsite.sh ~/bookinvip-offsite/bookinvip-<data>.tar.gz.enc ~/RESTORE
+# -> verifica ogni checksum + PRAGMA integrity_check + CATENA HASH del giornale.
+#    Se dice "GIORNALE MANOMESSO"/"RESTORE con N problemi" -> usa un pacchetto più vecchio.
+#    Se dice "RESTORE OK" -> in ~/RESTORE ci sono tutti i .db pronti.
+# (decrypt "a mano" senza lo script, se serve:)
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -in <pacchetto>.enc -out backup.tar.gz -pass env:BV_PASS
+```
+
+### (c) RIPRISTINO CRONOMETRATO (server nuovo Ubuntu, obiettivo < 1 ora)
+```bash
+# [~10 min] 1. strumenti
+apt update && apt install -y docker.io docker-compose git python3
+# [~2 min]  2. codice (da GitHub, mai perso)
+git clone https://github.com/edilmax/Core_Auto.git /var/www/bookinvip && cd /var/www/bookinvip
+# [~3 min]  3. segreti: ricrea /var/www/bookinvip/.env.casavip (chiavi Stripe da dashboard.stripe.com;
+#            TELEGRAM_BOT_TOKEN/CHAT_ID; e le env DB_* -> vedi main_casavip.py). Vedi anche la sez. 🔑 ACCESSO.
+# [~1 min]  4. volume + dati restaurati (dal punto b, dal PC):
+docker volume create bookinvip_casavip_data
+VOL=$(docker volume inspect --format '{{.Mountpoint}}' bookinvip_casavip_data)
+scp ~/RESTORE/*.db root@<NUOVO-VPS>:$VOL/            # copia i 17 .db nel volume
+# [~15 min] 5. HTTPS: punta il DNS di bookinvip.com al nuovo IP, poi certbot (vedi sez. RISOLTO HTTPS)
+# [~5 min]  6. avvia
+docker-compose -f docker-compose.casavip.yml build app
+docker-compose -f docker-compose.casavip.yml up -d
+# 7. VERIFICA: curl -sS -o /dev/null -w "%{http_code}\n" https://bookinvip.com/api/health   # -> 200
+#    e la catena del giornale: python3 fase178_watchdog.py --dati $VOL --backup $VOL/backup --uptime skip
+```
+> Collo di bottiglia reale = DNS+certificato (passo 5). ⚠️ **DA fare col fondatore**: provarlo davvero
+> su uno staging, cronometro alla mano (bus-factor: che funzioni per un estraneo, non solo sulla carta).
+
+## 🩺 WATCHDOG (sistema nervoso) — installazione e uso
+> Sorveglia salute e AVVISA su Telegram. Read-only, non tocca dati. **Due teste** (l'allarme non muore col server):
+```bash
+# SUL VPS (auto-diagnosi: catena hash + backup fresco + disco + uptime) — cron ogni 10 min:
+( crontab -l 2>/dev/null; echo "*/10 * * * * cd /var/www/bookinvip && sh deploy/watchdog.sh >/dev/null 2>&1" ) | crontab -
+# DAL PC (l'unico che vede "il server è morto") — quando il PC è acceso, o via Task Scheduler:
+REMOTO=1 bash deploy/watchdog.sh    # legge Telegram da deploy/.watchdog.env (gitignored)
+```
+> Log persistente in `/data/watchdog.log`. Diagnosi on-demand: `GET /api/admin/diagnosi` (admin-key).
+> Consigliato in più (gratis, 2 min): un uptime-monitor esterno (es. UptimeRobot) su `/api/health`.
+
 ## ▶️ COME AGGIORNARE IL SITO D'ORA IN POI (procedura SICURA — pattern "rm-first")
 Dalla cartella del VPS `/var/www/bookinvip`:
 ```bash

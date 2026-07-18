@@ -76,3 +76,4 @@ id_dsa
 # copie offsite cifrate (mai nel repo)
 bookinvip-offsite/
 .offsite.env
+.watchdog.env
