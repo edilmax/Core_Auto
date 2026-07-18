@@ -238,20 +238,28 @@ class PagamentiPendenti:
 
     def marca_da_rimborsare(self, riferimento: Any) -> bool:
         """Pagamento tardivo su stanza già presa: marca 'rimborsato' (il cliente va rimborsato).
-        Non riappare negli scaduti; verrà ripulito da pulisci_vecchi."""
+        Non riappare negli scaduti; verrà ripulito da pulisci_vecchi.
+        CONDIZIONATA (anti-gara admin∥host, BUG provato): NON retrocede mai un record già
+        'cancellata_host' — quello stato porta la PENALE dell'host nel corpo_json e riscriverlo
+        creava il mostro "stato rimborsato + penale registrata" (multa incoerente). Il transfer
+        è comunque bloccato in entrambi gli stati. Idempotente: replay su 'rimborsato' = no-op."""
         if not (isinstance(riferimento, str) and riferimento):
             return False
         con = self._apri()
         try:
             with con:
-                cur = con.execute("UPDATE pendenti SET stato='rimborsato' WHERE riferimento=?",
-                                  (riferimento,))
+                cur = con.execute(
+                    "UPDATE pendenti SET stato='rimborsato' WHERE riferimento=? "
+                    "AND stato NOT IN ('cancellata_host','rimborsato')", (riferimento,))
             return bool(cur.rowcount)
         finally:
             con.close()
 
     def marca_cancellata_host(self, riferimento: Any, penale_cents: int = 0) -> bool:
-        """L'host ha annullato: marca 'cancellata_host' e registra la penale nel corpo_json."""
+        """L'host ha annullato: marca 'cancellata_host' e registra la penale nel corpo_json.
+        CAS (acquisizione atomica della decisione, pattern #16/#31): scrive SOLO se il record
+        non è già chiuso ('cancellata_host'/'rimborsato'). Chi perde la gara (doppio click,
+        admin rimborso nello stesso istante) vede False e NON deve applicare penale/effetti."""
         if not (isinstance(riferimento, str) and riferimento):
             return False
         con = self._apri()
@@ -269,7 +277,8 @@ class PagamentiPendenti:
                 cj["penale_host_cents"] = int(penale_cents) if isinstance(penale_cents, int) else 0
                 import json as _j2
                 cur = con.execute(
-                    "UPDATE pendenti SET stato='cancellata_host', corpo_json=? WHERE riferimento=?",
+                    "UPDATE pendenti SET stato='cancellata_host', corpo_json=? "
+                    "WHERE riferimento=? AND stato NOT IN ('cancellata_host','rimborsato')",
                     (_j2.dumps(cj), riferimento))
             return bool(cur.rowcount)
         finally:

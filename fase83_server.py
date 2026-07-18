@@ -2201,6 +2201,21 @@ class RouterHTTP:
         # aveva ancora pagato, nessun danno al cliente -> nessuna penale).
         from fase98_policy_commissione import commissione_cents
         penale = commissione_cents(guest, PENALE_HOST_BPS) if pagata else 0
+        # ACQUISIZIONE ATOMICA della decisione (CAS-FIRST, come lo sweeper): la marcatura
+        # 'cancellata_host' vince PRIMA di ogni effetto. Se un'altra decisione ha chiuso il
+        # record un istante prima (admin rimborso, doppio click, webhook tardivo), qui si
+        # esce con 409 SENZA toccare date/soldi e SENZA penale: mai una multa all'host su
+        # una prenotazione chiusa dall'admin (BUG provato in gara admin∥host: stato
+        # 'rimborsato' con penale 15% registrata). Crash dopo il CAS = date ancora bloccate
+        # (lato sicuro, zero overbooking; i passi sotto sono idempotenti e ripetibili).
+        try:
+            vinta = pp.marca_cancellata_host(ref, penale)
+        except Exception:
+            logger.warning("host cancella: marcatura fallita (trattata come persa)",
+                           exc_info=True)
+            vinta = False
+        if not vinta:
+            return 409, {"errore": "gia_cancellata"}
         try:
             self._sys.inventario.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"],
                                           idem_key=(rec.get("idem_key") or ("hcanc_" + ref)))
@@ -2217,10 +2232,6 @@ class RouterHTTP:
                 gz.annulla(ref)
             except Exception:
                 pass
-        try:
-            pp.marca_cancellata_host(ref, penale)
-        except Exception:
-            logger.warning("host cancella: marcatura fallita (ignorata)", exc_info=True)
         logger.info("HOST ha cancellato %s: cliente rimborso %d, penale host %d %s",
                     ref, guest if pagata else 0, penale, valuta)
         return 200, {"stato": "cancellata_host", "riferimento": ref,
@@ -3506,7 +3517,14 @@ class RouterHTTP:
         ok, codice, scheda = valida_scheda(dati)
         if not ok:
             return 422, {"errore": "scheda_non_valida", "dettaglio": codice}
-        imgs = [Immagine(u, i) for i, u in enumerate(dati.get("immagini", []))
+        # SOLO una vera lista: `get("immagini", [])` difende dalla chiave MANCANTE ma non
+        # da un valore avvelenato (None/numero/bool -> enumerate esplodeva in 500; una
+        # STRINGA veniva iterata carattere per carattere = immagini-spazzatura). BUG
+        # provato dal collaudo punto 3 (input non validi su ogni casella).
+        raw_imgs = dati.get("immagini")
+        if not isinstance(raw_imgs, (list, tuple)):
+            raw_imgs = []
+        imgs = [Immagine(u, i) for i, u in enumerate(raw_imgs)
                 if isinstance(u, str)]
         id_num = self._sys.catalogo.pubblica(scheda, imgs)
         # MOTORE SEO AUTONOMO (fase173): appena l'host pubblica, il motore valuta la pagina

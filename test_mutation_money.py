@@ -56,6 +56,25 @@ def _hash(p):
         return hashlib.sha256(f.read()).hexdigest()
 
 
+def _butta_pyc(percorso):
+    """Elimina il bytecode compilato (__pycache__) del modulo mutato. SENZA questo, un
+    mutante a TAGLIA IDENTICA ('-'->'+') scritto e ripristinato nello stesso secondo
+    supera la regola di validita' della cache (size, mtime-in-secondi) e:
+      - il ripristino lascia in cache la matematica MUTATA col sorgente giusto su disco
+        -> 17 falsi-rossi nei processi successivi (BUG PROVATO 2026-07-18: fase59
+        'netto+comm' vivo in __pycache__, suite e run standalone avvelenati);
+      - oppure, all'andata, il killer importa l'ORIGINALE dalla cache invece del mutante
+        -> falso-sopravvissuto (mutation testing che si crede coperto e non lo e').
+    Buttare la cache a OGNI scrittura e' l'unico ripristino vero."""
+    import importlib.util
+    try:
+        pyc = importlib.util.cache_from_source(percorso)
+        if os.path.exists(pyc):
+            os.remove(pyc)
+    except Exception:
+        pass
+
+
 def _lancia(moduli):
     """True se ALMENO un test fallisce/errore (mutante ucciso)."""
     r = subprocess.run([sys.executable, "-m", "unittest"] + moduli,
@@ -81,10 +100,12 @@ class TestMutationMoney(unittest.TestCase):
             try:
                 with open(percorso, "wb") as f:
                     f.write(originale.replace(btrova, bmuta, 1))
+                _butta_pyc(percorso)          # il killer DEVE compilare il mutante
                 ucciso = _lancia(killer)
             finally:
                 with open(percorso, "wb") as f:
                     f.write(originale)
+                _butta_pyc(percorso)          # nessun bytecode mutato per i posteri
             self.assertEqual(_hash(percorso), h0,
                              "%s: file NON ripristinato!" % nomefile)
             print(("UCCISO  " if ucciso else "SOPRAV. ") + etichetta

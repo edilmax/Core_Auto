@@ -8,10 +8,12 @@ dello sblocco. Store DUREVOLE SQLite. Orologio iniettabile. BLINDATO: errore →
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import re
 import sqlite3
+import threading
 import time
 from typing import Any, Callable, Dict, List, Optional
 
@@ -58,10 +60,16 @@ def valida_ospiti(ospiti: Any, capacita: int) -> Optional[List[Dict[str, str]]]:
 
 class CheckinDigitale:
     def __init__(self, conn_factory: Callable[[], sqlite3.Connection], emettitore_pass: Any,
-                 *, orologio: Optional[Callable[[], int]] = None) -> None:
+                 *, orologio: Optional[Callable[[], int]] = None,
+                 lucchetto: Any = None) -> None:
         self._cf = conn_factory
         self._pass = emettitore_pass            # fase64: .emetti(prenotazione, alloggio, ...)
         self._now = orologio or (lambda: int(time.time()))
+        # Con la connessione CONDIVISA (:memory:) due thread sulla stessa con facevano
+        # BEGIN-dentro-BEGIN ("cannot start a transaction within a transaction") e la
+        # revoca falliva IN SILENZIO (isolata) -> smart-pass vivo su prenotazione
+        # cancellata. Il lucchetto serializza; con file (una con per chiamata) e' un no-op.
+        self._lock = lucchetto if lucchetto is not None else contextlib.nullcontext()
 
     def _apri(self) -> sqlite3.Connection:
         con = self._cf()
@@ -72,21 +80,22 @@ class CheckinDigitale:
         return con
 
     def inizializza_schema(self) -> None:
-        con = self._apri()
-        try:
-            with con:
-                con.execute("""CREATE TABLE IF NOT EXISTS checkin (
-                    prenotazione_id TEXT PRIMARY KEY, alloggio_id TEXT NOT NULL,
-                    ospiti_json TEXT NOT NULL, ts INTEGER NOT NULL,
-                    completato INTEGER NOT NULL DEFAULT 1,
-                    revocato INTEGER NOT NULL DEFAULT 0)""")
-                # migrazione: aggiungi 'revocato' su schemi vecchi (tombstone della cancellazione)
-                try:
-                    con.execute("ALTER TABLE checkin ADD COLUMN revocato INTEGER NOT NULL DEFAULT 0")
-                except sqlite3.OperationalError:
-                    pass
-        finally:
-            con.close()
+        with self._lock:
+            con = self._apri()
+            try:
+                with con:
+                    con.execute("""CREATE TABLE IF NOT EXISTS checkin (
+                        prenotazione_id TEXT PRIMARY KEY, alloggio_id TEXT NOT NULL,
+                        ospiti_json TEXT NOT NULL, ts INTEGER NOT NULL,
+                        completato INTEGER NOT NULL DEFAULT 1,
+                        revocato INTEGER NOT NULL DEFAULT 0)""")
+                    # migrazione: aggiungi 'revocato' su schemi vecchi (tombstone della cancellazione)
+                    try:
+                        con.execute("ALTER TABLE checkin ADD COLUMN revocato INTEGER NOT NULL DEFAULT 0")
+                    except sqlite3.OperationalError:
+                        pass
+            finally:
+                con.close()
 
     def pre_registra(self, prenotazione_id: str, alloggio_id: str, ospiti: Any,
                      capacita: int) -> Dict[str, Any]:
@@ -95,39 +104,41 @@ class CheckinDigitale:
         val = valida_ospiti(ospiti, capacita)
         if val is None:
             return {"ok": False, "errore": "ospiti_non_validi"}
-        con = self._apri()
-        try:
-            # ATOMICO (BEGIN IMMEDIATE) + TOMBSTONE: se la prenotazione e' stata REVOCATA
-            # (cancellata/rimborsata) il check-in NON si puo' (ri)creare -> chiude la TOCTOU
-            # in cui una pre_registra in volo re-inseriva DOPO la revoca (BUG provato in
-            # concorrenza: 40/40). La cancellazione e' terminale: il tombstone e' permanente.
-            with con:
-                con.execute("BEGIN IMMEDIATE")
-                r = con.execute("SELECT revocato FROM checkin WHERE prenotazione_id=?",
-                                (str(prenotazione_id),)).fetchone()
-                if r is not None and int(r[0] if not hasattr(r, "keys") else r["revocato"]):
-                    return {"ok": False, "errore": "prenotazione_cancellata"}
-                con.execute("INSERT OR REPLACE INTO checkin (prenotazione_id, alloggio_id, "
-                            "ospiti_json, ts, completato, revocato) VALUES (?,?,?,?,1,0)",
-                            (str(prenotazione_id), str(alloggio_id),
-                             json.dumps(val), self._now()))
-            return {"ok": True, "ospiti": len(val)}
-        except Exception:
-            logger.warning("pre_registra fallita (ISOLATA)", exc_info=True)
-            return {"ok": False, "errore": "interno"}
-        finally:
-            con.close()
+        with self._lock:
+            con = self._apri()
+            try:
+                # ATOMICO (BEGIN IMMEDIATE) + TOMBSTONE: se la prenotazione e' stata REVOCATA
+                # (cancellata/rimborsata) il check-in NON si puo' (ri)creare -> chiude la TOCTOU
+                # in cui una pre_registra in volo re-inseriva DOPO la revoca (BUG provato in
+                # concorrenza: 40/40). La cancellazione e' terminale: il tombstone e' permanente.
+                with con:
+                    con.execute("BEGIN IMMEDIATE")
+                    r = con.execute("SELECT revocato FROM checkin WHERE prenotazione_id=?",
+                                    (str(prenotazione_id),)).fetchone()
+                    if r is not None and int(r[0] if not hasattr(r, "keys") else r["revocato"]):
+                        return {"ok": False, "errore": "prenotazione_cancellata"}
+                    con.execute("INSERT OR REPLACE INTO checkin (prenotazione_id, alloggio_id, "
+                                "ospiti_json, ts, completato, revocato) VALUES (?,?,?,?,1,0)",
+                                (str(prenotazione_id), str(alloggio_id),
+                                 json.dumps(val), self._now()))
+                return {"ok": True, "ospiti": len(val)}
+            except Exception:
+                logger.warning("pre_registra fallita (ISOLATA)", exc_info=True)
+                return {"ok": False, "errore": "interno"}
+            finally:
+                con.close()
 
     def completato(self, prenotazione_id: str) -> bool:
-        con = self._apri()
-        try:
-            r = con.execute("SELECT completato FROM checkin WHERE prenotazione_id=?",
-                            (str(prenotazione_id),)).fetchone()
-            return bool(r and r[0])
-        except Exception:
-            return False
-        finally:
-            con.close()
+        with self._lock:
+            con = self._apri()
+            try:
+                r = con.execute("SELECT completato FROM checkin WHERE prenotazione_id=?",
+                                (str(prenotazione_id),)).fetchone()
+                return bool(r and r[0])
+            except Exception:
+                return False
+            finally:
+                con.close()
 
     def revoca(self, prenotazione_id: Any) -> bool:
         """REVOCA il check-in (prenotazione cancellata/rimborsata): elimina la riga -> lo
@@ -138,25 +149,26 @@ class CheckinDigitale:
         -> sblocco porta indebito quando c'e' una serratura vera (BUG provato in concorrenza)."""
         if not (isinstance(prenotazione_id, str) and prenotazione_id):
             return False
-        con = self._apri()
-        try:
-            # TOMBSTONE PERMANENTE (non semplice DELETE): completato=0 + revocato=1. Cosi'
-            # una pre_registra concorrente che tenta di (ri)creare la riga DOPO la revoca
-            # viene respinta dal check `revocato` (in BEGIN IMMEDIATE) invece di resuscitare
-            # il check-in. INSERT-or-UPDATE: vale anche se la revoca precede ogni check-in.
-            with con:
-                con.execute("BEGIN IMMEDIATE")
-                con.execute(
-                    "INSERT INTO checkin (prenotazione_id, alloggio_id, ospiti_json, ts, "
-                    "completato, revocato) VALUES (?, '', '[]', ?, 0, 1) "
-                    "ON CONFLICT(prenotazione_id) DO UPDATE SET completato=0, revocato=1",
-                    (str(prenotazione_id), self._now()))
-            return True
-        except Exception:
-            logger.warning("revoca check-in fallita (ISOLATA)", exc_info=True)
-            return False
-        finally:
-            con.close()
+        with self._lock:
+            con = self._apri()
+            try:
+                # TOMBSTONE PERMANENTE (non semplice DELETE): completato=0 + revocato=1. Cosi'
+                # una pre_registra concorrente che tenta di (ri)creare la riga DOPO la revoca
+                # viene respinta dal check `revocato` (in BEGIN IMMEDIATE) invece di resuscitare
+                # il check-in. INSERT-or-UPDATE: vale anche se la revoca precede ogni check-in.
+                with con:
+                    con.execute("BEGIN IMMEDIATE")
+                    con.execute(
+                        "INSERT INTO checkin (prenotazione_id, alloggio_id, ospiti_json, ts, "
+                        "completato, revocato) VALUES (?, '', '[]', ?, 0, 1) "
+                        "ON CONFLICT(prenotazione_id) DO UPDATE SET completato=0, revocato=1",
+                        (str(prenotazione_id), self._now()))
+                return True
+            except Exception:
+                logger.warning("revoca check-in fallita (ISOLATA)", exc_info=True)
+                return False
+            finally:
+                con.close()
 
     def sblocca(self, prenotazione_id: str, alloggio_id: str,
                 **kw: Any) -> Optional[str]:
@@ -174,7 +186,8 @@ def crea_checkin_digitale(percorso: str, emettitore_pass: Any, *,
                           orologio: Any = None) -> CheckinDigitale:
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
+        # connessione UNICA condivisa tra thread -> serve il lucchetto (vedi __init__)
         return CheckinDigitale(lambda: _ConnCondivisa(con), emettitore_pass,
-                               orologio=orologio)
+                               orologio=orologio, lucchetto=threading.Lock())
     return CheckinDigitale(lambda: sqlite3.connect(percorso), emettitore_pass,
                            orologio=orologio)

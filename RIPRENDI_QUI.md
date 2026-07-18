@@ -59,10 +59,26 @@
 >   severità (aggancio fonte-unica in pagina + 5 entità in app.js). **Suite 2520 verde (3 skip)**.
 >   Nessun rischio XSS reale in prod. Dettaglio: righe 🧨/🧿 nel REGISTRO sez.1.
 > **COLLAUDO FINALE (3 punti, VAI-gated)**: ✅ punto 1 integrità scadenze di massa — FATTO ·
->   ⏳ punto 2 permessi in contemporanea (admin∥host stesso istante su prenotazioni e soldi) —
->   VAI RICEVUTO, in corso (test_admin_host_stesso_istante.py: A admin-rimborsa∥host-cancella ×30,
->   B sospendi∥10-prenotano, C doppio-click; sospetto da provare: penale 15% registrata anche
->   quando decide l'admin) · ⏳ punto 3 input non validi — attende VAI.
+>   ✅ **punto 2 permessi in contemporanea — FATTO (2026-07-18)**: 3 scenari (admin-rimborsa∥
+>   host-cancella ×30; sospendi∥10-prenotano; doppio-click) ×10 giri = 0 falliti, MA prima
+>   **2 BUG VERI trovati e fixati**: ⚖️ "multa fantasma" (gara admin∥host o anche solo retry
+>   webhook post-cancellazione-host → stato 'rimborsato' CON penale 15% registrata; fix
+>   CAS-FIRST su marca_cancellata_host + marca_da_rimborsare condizionata, mai retrocedere
+>   una cancellata_host) e 🔐 revoca check-in MUTA sotto gara (connessione condivisa
+>   `:memory:` senza lucchetto → BEGIN-dentro-BEGIN → smart-pass vivo su cancellata; fix
+>   lucchetto in fase127; prod non esposta: usa file) + 🧪 **terzo reperto dalla suite**: il
+>   mutation-test (⑨) avvelenava la __pycache__ (mutante a taglia identica ripristinato nello
+>   stesso secondo = bytecode mutato "valido" → 17 falsi-rossi sul percorso prezzi con sorgente
+>   giusto e git pulito; fix `_butta_pyc` a ogni scrittura). Dettaglio: righe ⚖️/🔐/🧪 REGISTRO sez.1.
+>   Test permanente: test_admin_host_stesso_istante (invarianti fisici: stanze ricontate,
+>   tassa 0, da_pagare 0, giro-bonifici futuro paga nessuno, penale ⇔ cancellata_host) ·
+>   ✅ **punto 3 input non validi — FATTO (2026-07-18)**: ~1.500 colpi con chiavi valide su
+>   9 rotte di scrittura (ogni campo × ogni veleno: None/negativi/enormi/emoji/4000-char/
+>   mancante/body-vuoto + date impossibili) → **1 BUG VERO fixato**: ☠️ `immagini`=None/numero/
+>   bool su /api/host/pubblica = 500 (enumerate su non-iterabile; stringa = immagini-spazzatura
+>   per carattere) → ora solo list/tuple. Prove fisiche: mai 5xx, quote mai ≤0, catalogo senza
+>   veleni, range invertito non prenotabile, flusso sano vivo DOPO la tempesta. Test permanente:
+>   test_input_invalidi_ogni_casella. **🏁 COLLAUDO FINALE 3/3 COMPLETO (0 errori residui).**
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare
