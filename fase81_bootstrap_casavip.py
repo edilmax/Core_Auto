@@ -88,6 +88,9 @@ class ConfigCasaVIP:
     db_checkin: str = ":memory:"       # check-in digitale (pre-registrazione ospiti + sblocco)
     db_credito_usati: str = ":memory:"  # registro SINGLE-USE crediti (fase167): un credito si spende UNA volta
     con_geocoding: bool = False        # ON in prod: geocodifica alla pubblicazione (default OFF: test)
+    bunker_totp_secret: str = ""       # 2FA super-admin (fase180): segreto TOTP base32 (env, mai in git)
+    bunker_password: str = ""          # password super-admin (2° fattore "qualcosa che sai")
+    bunker_recovery: str = ""          # break-glass super-admin: codice d'emergenza se si perde l'authenticator
     con_poi: bool = False              # provider POI OSM (fase175) per il motore SEO (default OFF: test/rete)
     db_poicache: str = ":memory:"      # cache POI vicini per-annuncio (Overpass around+cache)
     file_referral: str = ""            # path JSON referral host-porta-host (vuoto = in RAM)
@@ -138,6 +141,7 @@ class SistemaCasaVIP:
     checkin: Any = None     # CheckinDigitale (fase127): pre-registrazione ospiti + sblocco
     credito_usati: Any = None  # RegistroCreditiUsati (fase167): single-use del Credito Fondatore/Viaggio
     finanza: Any = None     # FinancialController (fase177): giornale immutabile + note + offset penali
+    bunker: Any = None      # Bunker (fase180): super-admin 2FA TOTP + sessione blindata 15 min
 
     @property
     def attivo(self) -> bool:
@@ -333,6 +337,22 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         finanza = None
         logger.warning("financial controller NON attivo (ISOLATO)", exc_info=True)
 
+    # 3f-septies) BUNKER super-admin (fase180): 2FA TOTP + sessione blindata. GATED da
+    # bunker_totp_secret/recovery (env in prod). Se spento, gli endpoint /bunker
+    # rispondono "non configurato" (mai un crash), e le distruttive restano come oggi
+    # finche' l'Enforcement (incremento 3) non le sposta dietro il bunker.
+    bunker = None
+    try:
+        from fase180_bunker import crea_bunker
+        bunker = crea_bunker(firma, totp_secret=cfg.bunker_totp_secret,
+                             password=cfg.bunker_password,
+                             break_glass=cfg.bunker_recovery)
+        if bunker.configurato:
+            componenti.append("bunker(180)")
+    except Exception:
+        bunker = None
+        logger.warning("bunker NON attivo (ISOLATO)", exc_info=True)
+
     # 3f-quinquies) GEOCODER (città->coordinate, gratis via Nominatim + cache): per la mappa.
     # GATED da con_geocoding (default OFF: i test non toccano la rete). ON in prod.
     geocoder = None
@@ -477,4 +497,4 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           payout=payout, accettazioni=accettazioni, stripe=provider,
                           connect=_connect, geocoder=geocoder, checkin=checkin,
                           poi_provider=poi_provider, credito_usati=credito_usati,
-                          finanza=finanza)
+                          finanza=finanza, bunker=bunker)

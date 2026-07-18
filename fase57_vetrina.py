@@ -399,6 +399,11 @@ class CatalogoVetrina:
                             "ON alloggi(stato, citta)")
                 con.execute("CREATE INDEX IF NOT EXISTS idx_alloggi_stato_prezzo "
                             "ON alloggi(stato, prezzo_notte_cents)")
+                # Field admin paginato (fase83): filtro per host_id / (stato,aggiornato).
+                con.execute("CREATE INDEX IF NOT EXISTS idx_alloggi_host "
+                            "ON alloggi(host_id)")
+                con.execute("CREATE INDEX IF NOT EXISTS idx_alloggi_stato_agg "
+                            "ON alloggi(stato, aggiornato_ts)")
                 con.execute("CREATE INDEX IF NOT EXISTS idx_img_alloggio "
                             "ON alloggio_immagini(alloggio_id, ordine)")
         finally:
@@ -751,6 +756,50 @@ class CatalogoVetrina:
                  "titolo": r["titolo"], "citta": r["citta"],
                  "prezzo_notte_cents": int(r["prezzo_notte_cents"]),
                  "valuta": r["valuta"] or "EUR", "stato": r["stato"]} for r in righe]
+
+    def tutti_alloggi_pagina(self, *, id_num: Any = None, host_id: Any = None,
+                             stato: Any = None, citta: Any = None,
+                             limit: int = 20, offset: int = 0) -> Dict[str, Any]:
+        """Vista admin PAGINATA + FILTRATA (Field operativo). Il DATABASE fa filtro,
+        conteggio e taglio (WHERE parametrizzato + COUNT + LIMIT/OFFSET): al client
+        arrivano SOLO `limit` record (default 20, cap 100), mai la piattaforma intera.
+        Nessun SELECT *: solo le colonne mostrate. Filtri opzionali: id numerico,
+        host_id, stato (pubblicato|sospeso|bozza), citta. Ritorna {alloggi, totale}."""
+        dove: List[str] = []
+        par: List[Any] = []
+        if isinstance(id_num, int) and not isinstance(id_num, bool) and id_num > 0:
+            dove.append("id=?")
+            par.append(id_num)
+        if isinstance(host_id, str) and host_id.strip():
+            dove.append("host_id=?")
+            par.append(host_id.strip()[:120])
+        if isinstance(stato, str) and stato in STATI_VALIDI:
+            dove.append("stato=?")
+            par.append(stato)
+        if isinstance(citta, str) and citta.strip():
+            dove.append("citta=?")
+            par.append(citta.strip().lower()[:120])
+        clausola = (" WHERE " + " AND ".join(dove)) if dove else ""
+        lim = limit if (isinstance(limit, int) and not isinstance(limit, bool)
+                        and 0 < limit <= 100) else 20
+        off = offset if (isinstance(offset, int) and not isinstance(offset, bool)
+                         and offset >= 0) else 0
+        off = min(off, 10 ** 9)
+        con = self._apri()
+        try:
+            tot = con.execute("SELECT COUNT(*) FROM alloggi" + clausola, par).fetchone()[0]
+            righe = con.execute(
+                "SELECT id, host_id, slug, titolo, citta, prezzo_notte_cents, valuta, stato "
+                "FROM alloggi" + clausola + " ORDER BY aggiornato_ts DESC, id DESC "
+                "LIMIT ? OFFSET ?", par + [lim, off]).fetchall()
+        finally:
+            con.close()
+        return {"alloggi": [{"id": int(r["id"]), "host_id": r["host_id"], "slug": r["slug"],
+                             "titolo": r["titolo"], "citta": r["citta"],
+                             "prezzo_notte_cents": int(r["prezzo_notte_cents"]),
+                             "valuta": r["valuta"] or "EUR", "stato": r["stato"]}
+                            for r in righe],
+                "totale": int(tot)}
 
     def dettaglio_owner(self, slug: str) -> Optional[Dict[str, Any]]:
         """Come dettaglio() ma per il PROPRIETARIO nel pannello: ritorna l'alloggio in

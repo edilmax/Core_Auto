@@ -75,9 +75,12 @@ class TestIcalExport(unittest.TestCase):
         CHIUSI dall'host — altrimenti una data presa su Airbnb non arriva a Booking (overbooking).
         Prima il feed leggeva solo elenco_prenotazioni (movimenti) e ometteva import/chiusure."""
         import datetime
-        oggi = datetime.date.today()
-        # date future (dentro la finestra export [oggi, +365])
-        imp0 = oggi + datetime.timedelta(days=50)
+        # blocco importato in una finestra FUTURA con GAP dalla nostra prenotazione
+        # (setUp: 2026-09-10..12). FIX 2026-07-19: prima era `oggi + 50 giorni` -> con
+        # certe date di "oggi" il blocco finiva ADIACENTE al 09-10 e l'export li FONDEVA
+        # in un unico range (DTSTART:20260910 spariva) = test date-dipendente. Ora fisso
+        # e non adiacente (09-20..23), robusto a qualsiasi "oggi" prima di settembre 2026.
+        imp0 = datetime.date(2026, 9, 20)
         imp1 = imp0 + datetime.timedelta(days=3)          # import: [imp0, imp1) esclusivo
         comp = lambda s: s.isoformat().replace("-", "")
         # IMPORT da "Airbnb" via endpoint reale

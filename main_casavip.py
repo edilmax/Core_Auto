@@ -79,6 +79,9 @@ def main() -> None:  # pragma: no cover
         db_geocache=os.environ.get("DB_GEOCACHE", "data/geocache.db"),
         db_checkin=os.environ.get("DB_CHECKIN", "data/checkin.db"),
         db_finanza=os.environ.get("DB_FINANZA", "data/finanza.db"),
+        bunker_totp_secret=os.environ.get("BUNKER_TOTP_SECRET", ""),
+        bunker_password=os.environ.get("BUNKER_PASSWORD", ""),
+        bunker_recovery=os.environ.get("BUNKER_RECOVERY", ""),
         # geocoding città->coordinate (mappa): ON in prod (Nominatim gratis+cache), OFF nei test
         con_geocoding=os.environ.get("GEOCODING", "true").lower() in ("1", "true", "yes", "si"),
         # provider POI OSM (fase175) per il motore SEO: ON in prod (Overpass gratis+cache), OFF nei test

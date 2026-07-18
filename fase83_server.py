@@ -1040,6 +1040,10 @@ class RouterHTTP:
             return self._admin_cancella_attivita(body, headers)
         if metodo == "GET" and path == "/api/admin/diagnosi":
             return self._admin_diagnosi(query, headers)
+        if metodo == "POST" and path == "/api/bunker/login":
+            return self._bunker_login(body, headers)
+        if metodo == "GET" and path == "/api/bunker/stato":
+            return self._bunker_stato(query, headers)
         return 404, {"errore": "rotta_non_trovata"}
 
     # --- helper ---
@@ -1273,15 +1277,42 @@ class RouterHTTP:
         return 200, {"prenotazioni": el}
 
     def _admin_alloggi(self, query, headers):
-        """Vista admin: TUTTI gli annunci (ogni host, ogni stato) con id numerico + host_id."""
+        """FIELD operativo PAGINATO + FILTRATO: annunci di ogni host/stato, 20 per pagina,
+        filtri [id][host_id][stato] fatti DAL DATABASE (WHERE + COUNT + LIMIT/OFFSET). Al
+        client arrivano solo 20 record, mai la piattaforma intera. AUDIT: ogni ricerca su
+        app.log persistente (chi ha filtrato per cosa)."""
         if not self._auth_admin(headers):
             return 401, {"errore": "unauthorized"}
+
+        def _int(v):
+            try:
+                return int(str(v))
+            except Exception:
+                return None
+        page = _int(query.get("page")) or 1
+        page = max(1, min(page, 10 ** 6))
+        limit = _int(query.get("limit")) or 20
+        limit = max(1, min(20, limit))          # Field: MAI più di 20 per pagina
+        id_num = _int(query.get("id"))
+        host_id = query.get("host_id") or None
+        stato = query.get("stato") or None
+        citta = query.get("citta") or None
         try:
-            el = self._sys.catalogo.tutti_alloggi(limit=1000)
+            rep = self._sys.catalogo.tutti_alloggi_pagina(
+                id_num=id_num, host_id=host_id, stato=stato, citta=citta,
+                limit=limit, offset=(page - 1) * limit)
         except Exception:
             logger.error("admin alloggi: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
-        return 200, {"alloggi": el}
+        totale = int(rep.get("totale", 0))
+        # AUDIT immutabile della ricerca (Field): chi, da dove, con quali filtri.
+        criteri = ",".join("%s=%s" % (k, v) for k, v in
+                           (("id", id_num), ("host", host_id), ("stato", stato),
+                            ("citta", citta)) if v)
+        logger.info("AUDIT admin alloggi: ip=%s filtri=[%s] page=%d -> %d risultati",
+                    self._client_ip(headers), criteri or "nessuno", page, totale)
+        return 200, {"alloggi": rep.get("alloggi", []), "page": page, "limit": limit,
+                     "totale": totale, "pagine": max(1, -(-totale // limit))}
 
     def _admin_alloggio_stato(self, body, headers):
         """Admin: cambia lo stato di QUALSIASI annuncio (sospendi/ripubblica) per slug."""
@@ -1295,6 +1326,79 @@ class RouterHTTP:
             return 422, {"errore": "campi_non_validi"}
         ok = self._sys.catalogo.imposta_stato(slug, stato)
         return (200 if ok else 422), {"stato": stato if ok else "rifiutato"}
+
+    # ── BUNKER (super-admin, fase180): 2FA + sessione blindata ──────────────
+    def _bunker_login(self, body, headers):
+        """Ingresso nel Bunker: serve la chiave admin (Field) + il codice TOTP (2° fattore).
+        Ritorna una SESSIONE firmata 15 min legata all'IP. AUDIT: ogni tentativo (riuscito
+        o fallito) su app.log persistente; accesso non autorizzato/manomissione = CRITICO."""
+        ip = self._client_ip(headers)
+        bunker = getattr(self._sys, "bunker", None)
+        if bunker is None or not bunker.configurato:
+            return 503, {"errore": "bunker_non_configurato"}
+        # rate-limit dedicato al bunker (per IP): il 2FA non si forza a raffica
+        k = "bunker-login:" + ip if (self._rate is not None and ip) else ""
+        if k:
+            ok, attesa = self._rate.consenti(k)
+            if not ok:
+                logger.critical("BUNKER login BLOCCATO (rate-limit) ip=%s attesa=%ds", ip, attesa)
+                return 429, {"errore": "troppi_tentativi", "riprova_tra_sec": attesa}
+        # 1° fattore: chiave admin. Se sbagliata -> NON autorizzato (loggato critico).
+        if not self._auth_admin(headers):
+            logger.critical("BUNKER: chiave admin ERRATA (tentativo intrusione) ip=%s", ip)
+            if k:
+                self._rate.fallito(k)
+            return 401, {"errore": "unauthorized"}
+        dati = self._json(body) or {}
+        esito = bunker.verifica_secondo_fattore(dati.get("codice"))
+        if not esito:
+            logger.critical("BUNKER: 2FA FALLITO (codice errato) ip=%s", ip)
+            if k:
+                self._rate.fallito(k)
+            return 403, {"errore": "2fa_non_valido"}
+        if esito == "break_glass":
+            logger.critical("BUNKER: ingresso con BREAK-GLASS (recupero d'emergenza) ip=%s", ip)
+        sess = bunker.crea_sessione(ip)
+        if not sess:
+            return 503, {"errore": "sessione_non_creata"}
+        if k:
+            self._rate.riuscito(k)
+        logger.warning("BUNKER: ingresso OK (%s) ip=%s", esito, ip)
+        return 200, {"ok": True, "sessione": sess, "scade_tra_sec": 15 * 60, "modo": esito}
+
+    def _bunker_auth(self, headers, *, azione=""):
+        """True se il chiamante ha una sessione Bunker valida (X-Bunker-Session + IP).
+        Ogni negazione su un'azione protetta e' loggata CRITICA (tentativo di operare senza
+        bunker = possibile intrusione)."""
+        bunker = getattr(self._sys, "bunker", None)
+        ip = self._client_ip(headers)
+        if bunker is None or not bunker.configurato:
+            return False
+        tok = headers.get("X-Bunker-Session", "") or headers.get("x-bunker-session", "")
+        r = bunker.valida_sessione(tok, ip)
+        if not r.get("ok"):
+            logger.critical("BUNKER: accesso NEGATO azione=%s motivo=%s ip=%s",
+                            azione or "?", r.get("motivo"), ip)
+            return False
+        logger.warning("BUNKER: azione '%s' autorizzata ip=%s", azione or "?", ip)
+        return True
+
+    def _bunker_stato(self, query, headers):
+        """Sala di controllo (read-only): conferma di essere nel Bunker + auto-diagnosi
+        del sistema (integrita' catena hash, backup, disco). Richiede sessione Bunker."""
+        if not self._bunker_auth(headers, azione="stato_sistema"):
+            return 403, {"errore": "bunker_richiesto"}
+        rep = {"bunker": True}
+        try:
+            import os as _os
+            from fase178_watchdog import diagnosi
+            dati = _os.environ.get("DATA_DIR", "data")
+            bkp = _os.environ.get("BACKUP_DIR", _os.path.join(dati, "backup"))
+            rep["diagnosi"] = diagnosi(dir_dati=dati, dir_backup=bkp, uptime_ok=None)
+        except Exception:
+            logger.error("bunker stato: diagnosi fallita (ISOLATA)", exc_info=True)
+            rep["diagnosi"] = {"ok": None, "errore": "diagnosi_non_disponibile"}
+        return 200, rep
 
     def _admin_diagnosi(self, query, headers):
         """AUTO-DIAGNOSI on-demand (fase178): stessa lente del Watchdog, ma a richiesta

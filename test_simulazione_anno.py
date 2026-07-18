@@ -194,7 +194,10 @@ class TestSimulazioneAnno(unittest.TestCase):
             s, _ = self.g("GET", path, h={"X-Host-Token": tok[3]})
             self.assertEqual(s, 200, path)
         s, aa = self.g("GET", "/api/admin/alloggi", h={"X-Admin-Key": "ak"})
-        self.assertEqual(s, 200); self.assertEqual(len(aa.get("alloggi", [])), N_HOST)
+        # Field paginato (max 20/pagina): il CONTEGGIO totale e' nel campo 'totale',
+        # la pagina ne porta al massimo 20.
+        self.assertEqual(s, 200); self.assertEqual(aa.get("totale"), N_HOST)
+        self.assertLessEqual(len(aa.get("alloggi", [])), 20)
 
         dt = time.time() - t0
         print("\n== 1 ANNO: %d host, %d clienti | conf=%d contest=%d canc=%d scad=%d surichiesta=%d "
