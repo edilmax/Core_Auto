@@ -108,9 +108,19 @@ class TestXssFrontend(unittest.TestCase):
             self.html = f.read()
 
     def test_funzione_esc_esiste(self):
-        self.assertIn("function esc(", self.html, "index.html: manca la funzione di escape")
+        """Dal 2026-07-18 (app.js FONTE UNICA, commit 125d6f7) l'escaper non vive piu'
+        DENTRO la pagina: la pagina DEVE agganciarsi alla fonte unica (`const esc = BV.esc`)
+        e l'implementazione vera, con TUTTE e 5 le entita', vive in deploy/app.js.
+        (La vecchia pretesa `function esc(` in pagina contraddiceva la guardia
+        anti-duplicazione di test_app_js: una copia locale oggi e' VIETATA.)"""
+        self.assertIn("const esc = BV.esc", self.html,
+                      "index.html: manca l'aggancio alla fonte unica dell'escape")
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "deploy", "app.js"), encoding="utf-8") as f:
+            js = f.read()
+        self.assertIn("BV.esc =", js, "app.js: manca l'escaper centrale BV.esc")
         for ch in ("&amp;", "&lt;", "&gt;", "&quot;", "&#39;"):
-            self.assertIn(ch, self.html, "esc() deve coprire anche %s" % ch)
+            self.assertIn(ch, js, "BV.esc deve coprire anche %s" % ch)
 
     def test_campi_host_sempre_escapati(self):
         """Nessun `${a.CAMPO}` nudo: i campi dell'host passano SEMPRE da esc()."""
@@ -127,8 +137,12 @@ class TestXssFrontend(unittest.TestCase):
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                "deploy", "admin.html"), encoding="utf-8") as f:
             adm = f.read()
-        self.assertIn("function esc(", adm, "admin.html: manca la funzione di escape")
-        self.assertIn("&#39;", adm, "admin.html: esc() deve coprire anche l'apice singolo")
+        self.assertIn("const esc = BV.esc", adm,
+                      "admin.html: manca l'aggancio alla fonte unica dell'escape")
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "deploy", "app.js"), encoding="utf-8") as f:
+            js = f.read()
+        self.assertIn("&#39;", js, "BV.esc deve coprire anche l'apice singolo")
         for campo in ("c.motivo", "c.titolo", "m.testo"):
             nudi = re.findall(r"\$\{" + re.escape(campo) + r"[^}]*\}", adm)
             for n in nudi:

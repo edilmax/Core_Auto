@@ -47,6 +47,22 @@
 >   date-flessibili inline con `except: _n=0` che disattivava la feature in silenzio → estratta
 >   `finestra_flessibile` pura e testabile (test_finestra_flessibile, 8 casi bordo). Comportamento
 >   invariato, fallimento silenzioso eliminato. **AUDIT DI RESILIENZA COMPLETO (3/3).**
+> · 🧨 **COLLAUDO FINALE punto 1 FATTO (2026-07-18, Fable 5)**: 100 prenotazioni che scadono nello
+>   STESSO istante (1 alloggio × 100 unità) → 3 prove (sweep singolo; 8 spazzini concorrenti;
+>   50 pagamenti-sul-filo ∥ 4 spazzini) ×10 giri = 0 falliti; stanze SEMPRE liberate exactly-once
+>   (contate ri-prenotandole fisicamente), libere==100−pagate, mai 'in_attesa' per sempre.
+>   NESSUN bug nel motore (test permanente: test_scadenza_massa_100). PERÒ la prima suite INTERA
+>   ha svelato 🧿: 2 guardie XSS di test_slug_sicurezza erano ROSSE dal commit `125d6f7`
+>   ("app.js fonte unica" 18/07 13:59, `function esc(` sostituita da `const esc = BV.esc`):
+>   contraddicevano la guardia anti-duplicazione di test_app_js → i claim "suite intera verde"
+>   dei 7 commit successivi erano SBAGLIATI per quei 2 test. Guardie modernizzate senza perdere
+>   severità (aggancio fonte-unica in pagina + 5 entità in app.js). **Suite 2520 verde (3 skip)**.
+>   Nessun rischio XSS reale in prod. Dettaglio: righe 🧨/🧿 nel REGISTRO sez.1.
+> **COLLAUDO FINALE (3 punti, VAI-gated)**: ✅ punto 1 integrità scadenze di massa — FATTO ·
+>   ⏳ punto 2 permessi in contemporanea (admin∥host stesso istante su prenotazioni e soldi) —
+>   VAI RICEVUTO, in corso (test_admin_host_stesso_istante.py: A admin-rimborsa∥host-cancella ×30,
+>   B sospendi∥10-prenotano, C doppio-click; sospetto da provare: penale 15% registrata anche
+>   quando decide l'admin) · ⏳ punto 3 input non validi — attende VAI.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare
