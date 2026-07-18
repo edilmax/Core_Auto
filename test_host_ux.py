@@ -379,5 +379,41 @@ class TestSeoCardUI(unittest.TestCase):
         self.assertIn("escH(x.testo", self.html)
 
 
+class TestFrontendZeroDifetti(unittest.TestCase):
+    """Guardie del protocollo frontend (2026-07-18): niente catch muti, bottoni-riga
+    in scala compatta, niente neuroni morti. Valgono per host.html E admin.html."""
+
+    @classmethod
+    def setUpClass(cls):
+        import io, os, re
+        qui = os.path.dirname(os.path.abspath(__file__))
+        cls.pagine = {}
+        for nome in ("host.html", "admin.html"):
+            cls.pagine[nome] = io.open(os.path.join(qui, "deploy", nome),
+                                       encoding="utf-8").read()
+        cls.re = re
+
+    def test_nessun_catch_muto(self):
+        # un catch VUOTO inghiotte l'errore senza traccia (il "silent fail" vietato):
+        # ogni catch deve avere un corpo (console.warn / messaggio / commento non basta: codice)
+        for nome, html in self.pagine.items():
+            muti = self.re.findall(r"catch\s*\(\s*\w*\s*\)\s*\{\s*\}", html)
+            self.assertEqual(muti, [], "%s ha %d catch muti" % (nome, len(muti)))
+
+    def test_bottoni_riga_compatti(self):
+        # la classe unica .btn-riga esiste e i bottoni generati nelle righe la usano
+        # (prima: pillole a grandezza piena dentro le tabelle = "bottoni enormi")
+        self.assertIn(".btn-riga{", self.pagine["host.html"])
+        self.assertIn(".btn-riga{", self.pagine["admin.html"])
+        self.assertGreaterEqual(self.pagine["host.html"].count("btn-riga"), 8)
+        self.assertGreaterEqual(self.pagine["admin.html"].count("btn-riga"), 7)
+
+    def test_neuroni_morti_rimossi(self):
+        # campi hidden definiti e mai letti da nessuno (residui della vecchia dashboard)
+        h = self.pagine["host.html"]
+        self.assertNotIn('id="ma_host"', h)
+        self.assertNotIn('id="p_host"', h)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -37,6 +37,11 @@
 > Perplexity). fase173.genera_faq, white-hat (solo fatti presenti), innestato in pagina_alloggio_html
 > (isolato). Live 7 FAQ (prezzo 120.00, POI 13m, tassa 3.50) visibili+strutturate. VPS=GitHub=Desktop=
 > `4811b23`, suite **2442 verde**, container healthy.
+> 🎨 **2026-07-18 (deploy #12): FRONTEND ZERO-DIFETTI giro 1 (Host+Admin)** — protocollo del
+> fondatore "a neuroni": mappa sinaptica pulita (0 fili rotti, 0 rotte morte, i18n pari), poi
+> `.btn-riga` (fine dei bottoni enormi nelle tabelle), 21 catch muti → console.warn, 2 campi
+> fantasma rimossi, calendario verificato sano. Guardie permanenti in test_host_ux. PROSSIMO
+> del protocollo: Web App Ospite (index.html) con metodo d'ispezione DIVERSO, poi altri giri.
 > ✅ **2026-07-18 (deploy #11): QUARTIERE AUTOMATICO ACCESO** (fase166 reverse-geocode + quartiere_fn
 > nel motore SEO: pin → nome quartiere → 70 punti geo + query "in zona X"; cache ~100m, no env nuove).
 > L'arco SEO 171→173→175→166 è ora COMPLETO: niente più "da accendere" nel motore SEO.

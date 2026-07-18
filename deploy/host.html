@@ -47,6 +47,9 @@
   @media(max-width:400px){body{padding:.75rem}.card{padding:.9rem}}
   button{background:var(--brand);color:#fff;border:none;padding:.65rem 1.5rem;border-radius:2rem;font-weight:600;font-size:1rem;cursor:pointer;margin-top:1rem}
   button:hover{background:#156b52}
+  /* bottoni DENTRO le righe (tabelle/liste): scala compatta, niente margine sopra.
+     Un solo posto: prima ogni riga rattoppava padding/margin a mano e divergeva. */
+  .btn-riga{padding:.3rem .8rem;font-size:.82rem;margin-top:0;border-radius:.6rem}
   .msg{padding:.7rem 1rem;border-radius:.7rem;margin-top:.8rem;font-size:.9rem}
   .msg.ok{background:var(--stato-libero);color:var(--brand-chiaro)}.msg.err{background:var(--stato-pieno);color:var(--stato-testo-ko)}
   .key{background:#fff;border-radius:1rem;padding:1rem 1.5rem;margin-bottom:1.5rem;display:flex;gap:1rem;align-items:end}
@@ -204,7 +207,6 @@
 
   <div class="card">
     <h2>🏠 <span data-i18n="miei_h">I miei alloggi</span></h2>
-    <input type="hidden" id="ma_host" value="">
     <button id="btnMiei" data-i18n="b_carica" style="margin-top:0">Aggiorna elenco</button>
     <div id="miei" style="margin-top:1rem"></div>
     <div id="msgMiei"></div>
@@ -250,7 +252,6 @@
   <div class="card">
     <h2 id="hPubblica" data-i18n="pub_h">Pubblica alloggio</h2>
     <p class="hint" style="font-size:.9rem;margin-bottom:.6rem" data-i18n="pub_hint">Compila e premi Pubblica: l'indirizzo dell'annuncio viene creato in automatico, non devi scrivere nessun codice. Per modificarne uno esistente, sceglilo in alto in "Il tuo alloggio".</p>
-    <input type="hidden" id="p_host" value="">
     <input type="hidden" id="p_slug" value="">
     <div id="p_modifica" style="display:none;margin-bottom:.8rem;padding:.5rem .8rem;background:#fff4e5;border:1px solid #ffd9a8;border-radius:.6rem;font-size:.88rem;color:#8a5200">
       ✏️ <span data-i18n="p_edit_msg">Stai modificando un annuncio esistente. Premi Pubblica per salvare.</span>
@@ -404,7 +405,7 @@ const TR = {
 };
 const SUPP = Object.keys(TR);
 function pickLang(){
-  try{ const s=localStorage.getItem('lang'); if(s && SUPP.includes(s)) return s; }catch(e){}
+  try{ const s=localStorage.getItem('lang'); if(s && SUPP.includes(s)) return s; }catch(e){console.warn('bookinvip-host',e)}
   const cand=(navigator.languages&&navigator.languages.length)?navigator.languages:[navigator.language||'en'];
   for(const l of cand){ const b=String(l||'').slice(0,2).toLowerCase(); if(SUPP.includes(b)) return b; }
   return 'en';
@@ -514,7 +515,7 @@ async function caricaAlloggiSelettore(){
     // mantieni la scelta precedente se esiste ancora, altrimenti il primo
     if(prec && lst.some(a=>a.slug===prec)) sel.value=prec;
     setCurrentSlug(sel.value);
-  }catch(e){}
+  }catch(e){console.warn('bookinvip-host',e)}
 }
 document.getElementById('al_corrente').onchange = e=>setCurrentSlug(e.target.value);
 
@@ -569,7 +570,7 @@ async function caricaPrenotazioni(){
       '<thead><tr style="text-align:left;font-size:.72rem;color:#4a5b7a"><th>'+T('th_all2')+'</th><th>'+T('l_da')+'</th><th>'+T('l_a')+'</th><th>'+T('th_pin')+'</th><th>'+T('th_stato')+'</th></tr></thead><tbody>'+
       lst.map(p=>`<tr style="border-top:1px solid var(--sfondo-tenue)"><td>${escH(p.alloggio||'')}</td><td>${p.check_in||''}</td><td>${p.check_out||''}</td><td style="white-space:nowrap">${escH(p.codice||'')}${p.pin?(' · <b>'+escH(p.pin)+'</b>'):''}</td><td>${p.stato==='rimborsata'?('<span style="color:var(--stato-testo-ko)">'+T('pren_rimb')+'</span>'):('<span style="color:var(--brand-chiaro)">'+T('pren_conf')+'</span>')}</td></tr>`).join('')+
       '</tbody></table></div>';
-  }catch(e){}
+  }catch(e){console.warn('bookinvip-host',e)}
 }
 
 function aggiornaAuthUI(){
@@ -607,7 +608,7 @@ async function verificaSessione(){
     // token valido -> carica il resto del pannello
     caricaReferral(); caricaLinkDiretto(); caricaRichieste(); caricaPayout();
     caricaAlloggiSelettore(); caricaMiei(); caricaPrenotazioni(); caricaConversazioni();
-  }catch(e){}
+  }catch(e){console.warn('bookinvip-host',e)}
 }
 async function caricaPayout(){
   try{
@@ -620,7 +621,7 @@ async function caricaPayout(){
       const righe = Object.keys(p[v]).map(s=>`<div style="display:flex;justify-content:space-between"><span>${LBL[s]||s}</span><b>${(p[v][s]/100).toFixed(2)} ${v}</b></div>`).join('');
       return `<div style="border-top:1px solid var(--sfondo-tenue);padding:.6rem 0">${righe}</div>`;
     }).join('');
-  }catch(e){}
+  }catch(e){console.warn('bookinvip-host',e)}
 }
 async function caricaRichieste(){
   try{
@@ -631,15 +632,15 @@ async function caricaRichieste(){
     box.innerHTML = lst.map(r=>`<div style="border-top:1px solid var(--sfondo-tenue);padding:.6rem 0">
       <b>${r.alloggio_id}</b> · ${r.check_in} → ${r.check_out}
       <div style="margin-top:.4rem;display:flex;gap:.5rem">
-        <button class="rApp" data-r="${r.riferimento}" style="margin-top:0;background:var(--brand-chiaro)">${T('b_approva')}</button>
-        <button class="rRif" data-r="${r.riferimento}" style="margin-top:0;background:#b02a37">${T('b_rifiuta')}</button>
+        <button class="rApp btn-riga" data-r="${r.riferimento}" style="background:var(--brand-chiaro)">${T('b_approva')}</button>
+        <button class="rRif btn-riga" data-r="${r.riferimento}" style="background:#b02a37">${T('b_rifiuta')}</button>
       </div></div>`).join('');
     const dec = async (rif, ok)=>{ await fetch(API+'/api/host/richieste/'+(ok?'approva':'rifiuta'),
         {method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),
          body:JSON.stringify({riferimento:rif})}); caricaRichieste(); };
     box.querySelectorAll('.rApp').forEach(b=>b.onclick=()=>dec(b.dataset.r,true));
     box.querySelectorAll('.rRif').forEach(b=>b.onclick=()=>dec(b.dataset.r,false));
-  }catch(e){}
+  }catch(e){console.warn('bookinvip-host',e)}
 }
 async function caricaLinkDiretto(){
   try{
@@ -650,13 +651,13 @@ async function caricaLinkDiretto(){
     document.getElementById('dir_links').innerHTML = lst.map((a,i)=>
       `<div style="margin-bottom:.7rem"><div style="font-size:.78rem;color:var(--testo-tenue);margin-bottom:.2rem">${a.titolo}</div>
        <div style="display:flex;gap:.5rem"><input id="dl_${i}" readonly value="${abs(a.link)}" style="flex:1;font-size:.78rem">
-       <button data-i="${i}" class="btnDlCopy" style="margin-top:0">${T('b_copia')}</button></div></div>`).join('');
+       <button data-i="${i}" class="btnDlCopy btn-riga">${T('b_copia')}</button></div></div>`).join('');
     document.querySelectorAll('.btnDlCopy').forEach(b=>b.onclick=()=>{
       const i=document.getElementById('dl_'+b.dataset.i); i.select();
       navigator.clipboard&&navigator.clipboard.writeText(i.value);
       b.textContent=T('b_copiato'); setTimeout(()=>b.textContent=T('b_copia'),1500);
     });
-  }catch(e){}
+  }catch(e){console.warn('bookinvip-host',e)}
 }
 async function caricaReferral(){
   try{
@@ -665,7 +666,7 @@ async function caricaReferral(){
       document.getElementById('ref_link').value = (d.link.charAt(0)==='/') ? location.origin + d.link : d.link;
       document.getElementById('ref_credito').textContent = T('credito_disp')+' €'+((d.credito_cents||0)/100).toFixed(2);
     }
-  }catch(e){}
+  }catch(e){console.warn('bookinvip-host',e)}
 }
 document.getElementById('btnCopiaRef').onclick = ()=>{
   const i=document.getElementById('ref_link'); i.select();
@@ -688,7 +689,7 @@ document.getElementById('btnRegister').onclick = async ()=>{
   if(!document.getElementById('au_clausole').checked){ m.className='msg err'; m.textContent=T('dev_clausole'); return; }
   // prendo versione+impronta VIVE del contratto -> le salviamo come prova d'accettazione
   let doc={};
-  try{ doc = await getJson('/api/legale/contratto-host?lang='+LANG); }catch(e){}
+  try{ doc = await getJson('/api/legale/contratto-host?lang='+LANG); }catch(e){console.warn('bookinvip-host',e)}
   authPost('/api/host/registrazione', {email:document.getElementById('au_email').value, password:document.getElementById('au_pw').value, ragione_sociale:document.getElementById('au_rs').value, telefono:document.getElementById('au_tel').value, line_token:document.getElementById('au_line').value, wechat_webhook:document.getElementById('au_wechat').value, accetta_termini:true, accetta_clausole:true, doc_sha256:(doc.doc_sha256||''), versione:(doc.versione||''), lang:LANG, codice_referral:(new URLSearchParams(location.search).get('ref')||'')}, m, 'registrato');
 };
 document.getElementById('btnLogin').onclick = ()=>{
@@ -805,7 +806,7 @@ async function apriPin(){
         const r=await fetch(API+'/api/host/geocode?'+new URLSearchParams({citta:citta,indirizzo:ind}),{headers:authHeaders()});
         const d=await r.json();
         if(r.ok&&d.lat_micro!=null){ lat=d.lat_micro; lon=d.lon_micro; zoom=ind?17:12; }
-      }catch(e){}
+      }catch(e){console.warn('bookinvip-host',e)}
     }
   }
   const ok=isFinite(lat)&&isFinite(lon);
@@ -925,7 +926,7 @@ async function caricaConversazioni(){
     box.innerHTML=lst.map(c=>`<div onclick="apriConv('${c.prenotazione_id}')" style="cursor:pointer;border:1px solid var(--sfondo-tenue);border-radius:.6rem;padding:.5rem .7rem;margin:.3rem 0">
       <b>${c.ultimo_mittente==='ospite'?'👤':'🏠'} ${(c.ultimo_testo||'').replace(/[<>]/g,'').slice(0,70)}</b>
       <span style="color:var(--testo-tenue);font-size:.78rem"> · ${c.messaggi} msg · rif ${String(c.prenotazione_id).slice(0,8)}…</span></div>`).join('');
-  }catch(e){}
+  }catch(e){console.warn('bookinvip-host',e)}
 }
 async function apriConv(rif){
   CV_RIF=rif; document.getElementById('cv_thread').style.display='block';
@@ -1069,7 +1070,7 @@ document.getElementById('btnMetriche').onclick = async ()=>{
           [T('sta_canc'), ((k.tasso_cancellazione_bps||0)/100).toFixed(0)+'%'],
           [T('sta_lead'), (k.lead_time_medio_giorni||0)+' gg'] ]
         .map(x=>'<span style="background:#eef7f2;border-radius:.6rem;padding:.3rem .7rem"><b>'+x[1]+'</b> '+x[0]+'</span>').join('')+'</div>';
-    }catch(e){}
+    }catch(e){console.warn('bookinvip-host',e)}
   }catch(e){ m.className='msg err'; m.textContent=T('errore')+' '+e.message; }
 };
 async function caricaMiei(){
@@ -1082,10 +1083,10 @@ async function caricaMiei(){
     document.getElementById('miei').innerHTML='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr style="text-align:left;font-size:.72rem;color:#4a5b7a"><th>'+T('th_id')+'</th><th>'+T('th_titolo')+'</th><th>'+T('th_citta')+'</th><th>'+T('th_prezzo')+'</th><th>'+T('th_stato')+'</th><th></th></tr></thead><tbody>'+
       d.alloggi.map(a=>{
         const azione = a.stato==='pubblicato'
-          ? `<button class="mStato" data-s="${a.slug}" data-st="sospeso" style="background:#b02a37;padding:.3rem .9rem">${T('b_sospendi')}</button>`
-          : `<button class="mStato" data-s="${a.slug}" data-st="pubblicato" style="background:var(--brand-chiaro);padding:.3rem .9rem">${T('b_pubblica2')}</button>`;
-        const edit = `<button class="mEdit" data-s="${a.slug}" style="background:var(--testo-tenue);padding:.3rem .9rem;margin-left:.3rem">${T('b_modifica')}</button>`;
-        const del = `<button class="mDel" data-s="${a.slug}" data-t="${(a.titolo||'').replace(/"/g,'')}" style="background:#fff;color:var(--rosso);border:1px solid #f3d6d6;padding:.3rem .7rem;margin-left:.3rem">🗑</button>`;
+          ? `<button class="mStato btn-riga" data-s="${a.slug}" data-st="sospeso" style="background:#b02a37">${T('b_sospendi')}</button>`
+          : `<button class="mStato btn-riga" data-s="${a.slug}" data-st="pubblicato" style="background:var(--brand-chiaro)">${T('b_pubblica2')}</button>`;
+        const edit = `<button class="mEdit btn-riga" data-s="${a.slug}" style="background:var(--testo-tenue);margin-left:.3rem">${T('b_modifica')}</button>`;
+        const del = `<button class="mDel btn-riga" data-s="${a.slug}" data-t="${(a.titolo||'').replace(/"/g,'')}" style="background:#fff;color:var(--rosso);border:1px solid #f3d6d6;margin-left:.3rem">🗑</button>`;
         return `<tr style="border-top:1px solid var(--sfondo-tenue)"><td style="color:var(--testo-tenue);font-weight:600">#${a.id}</td><td>${a.titolo}</td><td>${a.citta}</td><td>${fmt(a.prezzo_notte_cents,a.valuta)}</td><td>${a.stato}</td><td style="white-space:nowrap">${azione}${edit}${del}</td></tr>`;
       }).join('')+'</tbody></table></div>';
     document.querySelectorAll('#miei .mStato').forEach(b=>b.onclick=()=>cambiaStato(b.dataset.s,b.dataset.st));
@@ -1153,7 +1154,7 @@ async function caricaThread(){
     const box=document.getElementById('msgThread');
     if(!d.messaggi||!d.messaggi.length){ box.innerHTML='<div style="color:var(--testo-tenue);font-size:.85rem">'+T('no_msg')+'</div>'; return; }
     box.innerHTML=d.messaggi.map(m=>`<div style="padding:.4rem .7rem;margin:.3rem 0;border-radius:.7rem;background:${m.mittente==='host'?'#eef6ff':'var(--sfondo)'}"><b style="font-size:.72rem;color:#4a5b7a">${m.mittente==='host'?T('tu'):T('ospite')}</b><br>${(m.testo||'').replace(/</g,'&lt;')}</div>`).join('');
-  }catch(e){}
+  }catch(e){console.warn('bookinvip-host',e)}
 }
 document.getElementById('btnMsgInvia').onclick = async ()=>{
   const m=document.getElementById('msgMsg');
@@ -1177,7 +1178,7 @@ document.getElementById('btnDp').onclick = async ()=>{
   }catch(e){ ris.textContent=T('errore')+' '+e.message; }
 };
 
-document.getElementById('lang').onchange = e=>{ LANG=e.target.value; try{localStorage.setItem('lang',LANG);}catch(_){} applica(); aggiornaAuthUI(); };
+document.getElementById('lang').onchange = e=>{ LANG=e.target.value; try{localStorage.setItem('lang',LANG);}catch(_){console.warn('bookinvip-host',_)} applica(); aggiornaAuthUI(); };
 applica();
 organizzaPannello();   // riordina: essenziale in alto, avanzato nel cassetto
 aggiornaAuthUI();
