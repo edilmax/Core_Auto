@@ -39,10 +39,13 @@
 >   ✅ **Comp.1 Performance FATTO**: vista calendario multi-alloggio era N+1 (1 conn+query
 >   sui pendenti per alloggio) → `fase162.attivi_multi` batch → **20 connessioni → 1** (O(N)→O(1)),
 >   zero regressione visiva (giorni in_trattativa identici). Test: test_perf_calendario_tutti.
-> **PROSSIMI COMPARTIMENTI dell'audit (attendono VAI, uno alla volta)**: ② Security/IDOR (ri-verifica
->   ownership lato server su ogni endpoint sensibile, mai fidarsi dell'input client); ③ Clean Code
->   (funzioni con troppe responsabilità/indentazione → modulari e testabili). Passo-2 opzionale del
->   comp.1: batchare anche il calendario (fase58). Regole ferme invariate (salvare ovunque, mai
+>   ✅ **Comp.2 Security/IDOR FATTO**: approva/rifiuta richiesta era fail-OPEN sull'ownership
+>   (con host_id memorizzato vuoto, chiunque decideva richieste altrui) → fix fail-CLOSED che
+>   ri-deriva il proprietario dall'alloggio. Test: test_idor_richieste (rosso sul vecchio, verde
+>   sul fix). Esito audit: altri 13 endpoint sensibili già gatati, unico buco era questo.
+> **PROSSIMO COMPARTIMENTO (attende VAI)**: ③ Clean Code / Technical Debt (funzioni con troppe
+>   responsabilità o troppa indentazione → modulari e testabili in isolamento). Passo-2 opzionale
+>   del comp.1: batchare anche il calendario (fase58). Regole ferme invariate (salvare ovunque, mai
 >   email vera, deploy rm-first, suite intera prima del deploy). REGOLE FERME: dopo OGNI operazione finita salvare ovunque
 > (commit+push+VPS+REGISTRO); mai email vera del fondatore nei test; deploy rm-first; suite intera
 > prima di ogni deploy. Dettaglio di ogni voce: righe in REGISTRO_INGEGNERIA.md sez.1 (piu' recenti in alto).

@@ -1900,7 +1900,21 @@ class RouterHTTP:
         rec = pp.info(ref) if isinstance(ref, str) else None
         if rec is None or rec.get("stato") != "in_attesa_host":
             return 404, {"errore": "richiesta_non_trovata"}
-        if rec.get("host_id") and host_id_atteso and rec["host_id"] != host_id_atteso:
+        # OWNERSHIP FAIL-CLOSED (audit resilienza comp.2 - IDOR): NON fidarsi dell'host_id
+        # MEMORIZZATO sulla richiesta -> può essere '' se al book la lookup dell'alloggio
+        # fallì (annuncio sospeso/cancellato o eccezione). Prima: con host_id vuoto il check
+        # era SALTATO -> qualsiasi host approvava/rifiutava una richiesta ALTRUI (bypass di
+        # autorizzazione su azione che muove stato+soldi). Ora: ri-derivo il proprietario VERO
+        # dall'alloggio; per un host self-service (host_id_atteso valorizzato) deve coincidere,
+        # e se l'ownership NON è confermabile -> DENY. L'operatore (host_id_atteso None) resta
+        # ammesso (back-office). Il link firmato porta l'hid reale -> continua a passare.
+        owner = None
+        try:
+            owner = self._sys.catalogo.host_di_alloggio(rec.get("alloggio_id", "")) or None
+        except Exception:
+            owner = None
+        owner = owner or (rec.get("host_id") or None)
+        if host_id_atteso and owner != host_id_atteso:
             return 403, {"errore": "non_tua"}
         import json as _j
         if approva:
