@@ -15,7 +15,8 @@
 #   4) impacchetta il giro in UN archivio CIFRATO (AES-256) con data e ora, e
 #      tiene uno storico locale (retention configurabile).
 #
-# REQUISITI sul PC: bash (Git-Bash su Windows va bene), ssh, rsync, openssl.
+# REQUISITI sul PC: bash (Git-Bash su Windows va bene), ssh, openssl, tar.
+# rsync e' OPZIONALE: se manca (tipico su Windows) si scarica via tar-su-ssh.
 # USO:
 #   BV_PASS='una-passphrase-forte' bash deploy/pull_offsite.sh
 #   (oppure crea deploy/.offsite.env con le variabili — vedi sotto — e lancialo)
@@ -48,8 +49,8 @@ if [ -z "$BV_PASS" ]; then
   rosso "  Esempio:  BV_PASS='frase-lunga-e-segreta' bash deploy/pull_offsite.sh"
   exit 2
 fi
-command -v rsync   >/dev/null || { rosso "manca rsync";   exit 2; }
 command -v openssl >/dev/null || { rosso "manca openssl"; exit 2; }
+command -v tar     >/dev/null || { rosso "manca tar";     exit 2; }
 
 mkdir -p "$DEST" "$STAGE"
 trap 'rm -rf "$STAGE"' EXIT
@@ -59,10 +60,18 @@ verde "[1/4] backup fresco sul VPS…"
 $SSH "$VPS_HOST" "cd /var/www/bookinvip && DATA_DIR='$VPS_DATA' BACKUP_DIR='$VPS_BACKUP' sh deploy/backup_casavip.sh" >/dev/null
 verde "      fatto."
 
-# ── 2) PULL incrementale della cartella backup/ ───────────────────────────────
-verde "[2/4] scarico i backup dal VPS (incrementale)…"
-rsync -az --delete -e "$SSH" "$VPS_HOST:$VPS_BACKUP/" "$STAGE/backup/"
+# ── 2) PULL della cartella backup/ (rsync se c'e', altrimenti tar-su-ssh) ──────
+mkdir -p "$STAGE/backup"
+if command -v rsync >/dev/null 2>&1; then
+  verde "[2/4] scarico i backup dal VPS (rsync incrementale)…"
+  rsync -az --delete -e "$SSH" "$VPS_HOST:$VPS_BACKUP/" "$STAGE/backup/"
+else
+  verde "[2/4] scarico i backup dal VPS (tar-su-ssh: niente rsync, va bene lo stesso)…"
+  # impacchetta lato VPS e srotola in locale: un solo stream SSH cifrato
+  $SSH "$VPS_HOST" "tar -czf - -C '$VPS_BACKUP' ." | tar -xzf - -C "$STAGE/backup"
+fi
 N="$(find "$STAGE/backup" -name '*.db.gz' | wc -l | tr -d ' ')"
+[ "$N" -gt 0 ] || { rosso "nessun archivio scaricato: controlla SSH/percorso VPS."; exit 1; }
 verde "      $N archivi in staging."
 
 # ── 3) RI-VERIFICA dei checksum in locale (origine->copia integra) ────────────

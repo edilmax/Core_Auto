@@ -352,6 +352,57 @@ certificato Let's Encrypt esisteva già in `/etc/letsencrypt` ma il file SSL lo 
    (webroot = `/var/www/bookinvip/certbot/www`) + `renew_hook = docker exec casavip_nginx nginx -s reload`.
    Collaudato con `certbot renew --dry-run` → **success**. `certbot.timer` è enabled+active.
 
+## 💾 BACKUP OFFSITE + RESTORE DA ZERO (contro il data-loss catastrofico) — 2026-07-18
+> **Perché**: i backup di bordo (container `casavip_backup`, ogni 6h, 14 per DB) vivono sul
+> disco del VPS. Se il disco muore / ransomware / cancello il volume: dati E backup spariscono
+> insieme. Difesa: una copia **CIFRATA fuori macchina**, tirata dal PC (mai il VPS che spinge).
+> **Scoperto quel giorno**: il backup aveva una LISTA FISSA e NON salvava `finanza.db` (il
+> giornale contabile) + checkin/coda/split/geocache/poicache → ora fa **glob `*.db`** (salva
+> tutto, sempre). Guardia: `test_backup_completo.py`.
+
+### 1) FARE una copia offsite (dal PC, quando vuoi — ideale: ogni sera)
+```bash
+cd ~/Desktop/Core_Auto
+BV_PASS='UNA-PASSPHRASE-LUNGA-E-SEGRETA' bash deploy/pull_offsite.sh
+# -> crea ~/bookinvip-offsite/bookinvip-<data>.tar.gz.enc  (AES-256, verificato coi checksum)
+```
+> La **passphrase** è l'unica cosa che NON deve stare nel repo né sul VPS: scrivila dove tieni
+> le password. Senza, la copia non si può decifrare (è il punto: nemmeno un ladro può).
+> Requisiti PC: `ssh`, `openssl`, `tar` (rsync NON serve: c'è il ripiego tar-su-ssh).
+
+### 2) RESTORE DA ZERO (server nuovo, disco morto — procedura idiota-proof)
+**A. Ricostruisci i dati dalla copia offsite (sul PC):**
+```bash
+cd ~/Desktop/Core_Auto
+BV_PASS='LA-STESSA-PASSPHRASE' bash deploy/restore_offsite.sh ~/bookinvip-offsite/bookinvip-<data>.tar.gz.enc ~/RESTORE
+# verifica OGNI db (PRAGMA integrity_check) + la CATENA HASH del giornale.
+# Se dice "GIORNALE MANOMESSO" o "RESTORE con N problemi": NON usare, prova un pacchetto più vecchio.
+# Se dice "RESTORE OK": in ~/RESTORE hai tutti i .db pronti.
+```
+**B. Rimetti in piedi il server (su un VPS Ubuntu pulito):**
+```bash
+# 1. installa docker + docker-compose (v1.29.2) e git
+apt update && apt install -y docker.io docker-compose git
+# 2. prendi il codice (è su GitHub, mai perso)
+git clone https://github.com/edilmax/Core_Auto.git /var/www/bookinvip && cd /var/www/bookinvip
+# 3. ricrea il file dei segreti .env.casavip (chiavi Stripe da dashboard.stripe.com, vedi sotto)
+#    e le env DB_* (DB_FINANZA=/data/finanza.db, DB_CHECKIN=..., ecc. — vedi main_casavip.py)
+# 4. crea il volume dati e COPIA DENTRO i .db restaurati
+docker volume create bookinvip_casavip_data
+VOL=$(docker volume inspect --format '{{.Mountpoint}}' bookinvip_casavip_data)
+scp ~/RESTORE/*.db root@<nuovo-vps>:$VOL/      # dal PC; oppure cp se già sul server
+# 5. avvia (HTTPS: serve /etc/letsencrypt — rigenera con certbot se il dominio punta qui)
+docker-compose -f docker-compose.casavip.yml build app
+docker-compose -f docker-compose.casavip.yml up -d
+# 6. verifica: curl -sS -o /dev/null -w "%{http_code}\n" https://bookinvip.com/api/health  -> 200
+```
+> **Obiettivo < 1 ora**: i passi 1-2 sono ~10 min, il 4 (copia dati) è secondi (i DB sono piccoli).
+> Il collo di bottiglia vero è il DNS/certificato HTTPS. **Esercitazione fatta 2026-07-18**: pull
+> reale (172 archivi, 51 checksum ok) + restore su ambiente isolato (17 DB integri) + prova col
+> dente (giornale manomesso → beccato a `seq=2`, restore rifiutato). ⚠️ **DA fare col fondatore**:
+> provare i passi B su un VPS di staging vero, cronometro alla mano (bus-factor: che funzioni
+> anche per un tecnico che non conosce il progetto).
+
 ## ▶️ COME AGGIORNARE IL SITO D'ORA IN POI (procedura SICURA — pattern "rm-first")
 Dalla cartella del VPS `/var/www/bookinvip`:
 ```bash

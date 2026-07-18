@@ -73,3 +73,6 @@ id_dsa
 *.ppk
 *.jks
 *.keystore
+# copie offsite cifrate (mai nel repo)
+bookinvip-offsite/
+.offsite.env
