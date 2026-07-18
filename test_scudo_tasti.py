@@ -28,42 +28,47 @@ PAGINE = ('index.html', 'host.html', 'admin.html')
 
 
 class TestScudoPresenteOvunque(unittest.TestCase):
-    """Lo scudo esiste, identico nel comportamento, in TUTTE e 3 le pagine."""
+    """Lo scudo vive nella FONTE UNICA app.js (compartimento 3); ogni pagina lo
+    importa con alias — impossibile che le 3 copie divergano: non esistono piu'."""
 
-    def test_conscudo_definito_in_tutte_le_pagine(self):
+    def _corpo_scudo(self):
+        corpo = _leggi('app.js').split('BV.conScudo = async function', 1)
+        self.assertEqual(len(corpo), 2, 'BV.conScudo sparito da app.js')
+        return corpo[1][:900]
+
+    def test_conscudo_fonte_unica_con_alias_nelle_pagine(self):
+        app = _leggi('app.js')
+        self.assertIn('BV.conScudo = async function(btn, fn)', app)
+        self.assertIn('BV.scudoTasti = function(ids)', app)
         for p in PAGINE:
             html = _leggi(p)
-            self.assertIn('async function conScudo(btn, fn)', html, p)
-            self.assertIn('function scudoTasti(ids)', html, p)
+            self.assertIn('<script src="/app.js', html, p)
+            self.assertIn('const conScudo = BV.conScudo;', html, p)
+            self.assertIn('const scudoTasti = BV.scudoTasti;', html, p)
 
     def test_scudo_spegne_il_tasto_e_mostra_attesa(self):
-        for p in PAGINE:
-            html = _leggi(p)
-            corpo = html.split('async function conScudo', 1)[1][:900]
-            self.assertIn('btn.disabled = true', corpo, p)
-            self.assertIn("btn.innerHTML = '⏳'", corpo, p)
+        corpo = self._corpo_scudo()
+        self.assertIn('btn.disabled = true', corpo)
+        self.assertIn("btn.innerHTML = '⏳'", corpo)
 
     def test_scudo_si_riaccende_sempre_anche_su_errore(self):
         # finally = il tasto NON puo' restare morto se la chiamata fallisce
-        for p in PAGINE:
-            corpo = _leggi(p).split('async function conScudo', 1)[1][:900]
-            self.assertIn('finally', corpo, p)
-            self.assertIn('btn.disabled = false', corpo, p)
+        corpo = self._corpo_scudo()
+        self.assertIn('finally', corpo)
+        self.assertIn('btn.disabled = false', corpo)
 
     def test_scudo_non_fa_saltare_il_layout(self):
         # blocca la larghezza prima dello spinner e la libera dopo (UI che non si accavalla)
-        for p in PAGINE:
-            corpo = _leggi(p).split('async function conScudo', 1)[1][:900]
-            self.assertIn("btn.style.minWidth = w+'px'", corpo, p)
-            self.assertIn("btn.style.minWidth = ''", corpo, p)
+        corpo = self._corpo_scudo()
+        self.assertIn("btn.style.minWidth = w+'px'", corpo)
+        self.assertIn("btn.style.minWidth = ''", corpo)
 
     def test_scudo_anti_rientro_e_resta_spento(self):
-        for p in PAGINE:
-            corpo = _leggi(p).split('async function conScudo', 1)[1][:900]
-            # un tasto gia' spento non riparte (il doppio clic muore qui)
-            self.assertIn('if(!btn || btn.disabled) return;', corpo, p)
-            # chi vuole restare spento dopo il successo viene rispettato
-            self.assertIn('restaSpento', corpo, p)
+        corpo = self._corpo_scudo()
+        # un tasto gia' spento non riparte (il doppio clic muore qui)
+        self.assertIn('if(!btn || btn.disabled) return;', corpo)
+        # chi vuole restare spento dopo il successo viene rispettato
+        self.assertIn('restaSpento', corpo)
 
 
 class TestScudoHost(unittest.TestCase):

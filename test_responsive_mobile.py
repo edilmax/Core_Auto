@@ -90,26 +90,33 @@ class TestErrorBoundary(unittest.TestCase):
         self.html = _leggi("index.html")
 
     def test_api_non_solleva_mai(self):
-        m = re.search(r"async function api\(path, opts\)\{(.+?)\n\}", self.html, re.S)
-        self.assertIsNotNone(m, "api(): forma cambiata, ricontrollare l'error boundary")
+        # 2026-07-18 (compartimento app.js): la barriera vive nella FONTE UNICA BV.getJson;
+        # api() in pagina e' un ALIAS che ci passa sempre -> impossibile aggirarla.
+        self.assertIn("const api = (path, opts) => BV.getJson(API+path, opts);", self.html,
+                      "index: api() deve restare l'alias di BV.getJson")
+        app = _leggi("app.js")
+        m = re.search(r"BV\.getJson = async function\(url, opts\)\{(.+?)\n  \};", app, re.S)
+        self.assertIsNotNone(m, "BV.getJson: forma cambiata, ricontrollare l'error boundary")
         corpo = m.group(1)
-        self.assertIn("catch", corpo, "api() deve intercettare gli errori di rete")
-        self.assertIn("errore", corpo, "api() deve restituire un .errore leggibile")
-        self.assertNotRegex(corpo.replace(" ", ""), r"^\s*constr=awaitfetch.*returnr\.json\(\);$",
-                            "api(): tornata la versione che solleva")
+        self.assertIn("catch", corpo, "BV.getJson deve intercettare gli errori di rete")
+        self.assertIn("errore", corpo, "BV.getJson deve restituire un .errore leggibile")
 
     def test_host_letture_e_azioni_non_sollevano(self):
         """host.html: 13 letture facevano `await (await fetch(..)).json()` -> sollevano su
         risposta non-JSON (500/502 HTML) e l'errore muore in un catch vuoto: la card resta
-        vuota e l'host non sa perche'. Ora passano da getJson(); post() idem per le azioni."""
+        vuota e l'host non sa perche'. Ora getJson/post sono ALIAS della fonte unica."""
         host = _leggi("host.html")
-        self.assertIn("async function getJson(", host, "host.html: manca l'helper getJson")
+        self.assertIn("const getJson = (path, opts) => BV.getJson(API+path, opts);", host,
+                      "host.html: getJson deve restare l'alias di BV.getJson")
+        self.assertIn("const post = (path, body) => BV.post(API+path, body, authHeaders());", host,
+                      "host.html: post deve restare l'alias di BV.post")
         self.assertNotIn("await (await fetch(API+", host,
                          "host.html: fetch diretto che puo' sollevare -> usa getJson()")
-        m = re.search(r"async function post\(path, body\)\{(.+?)\n\}", host, re.S)
-        self.assertIsNotNone(m)
-        self.assertIn("catch", m.group(1), "post(): deve intercettare la rete giu'")
-        self.assertIn("errore", m.group(1), "post(): deve restituire un .errore leggibile")
+        app = _leggi("app.js")
+        m = re.search(r"BV\.post = async function\(url, body, headers\)\{(.+?)\n  \};", app, re.S)
+        self.assertIsNotNone(m, "BV.post: forma cambiata, ricontrollare l'error boundary")
+        self.assertIn("catch", m.group(1), "BV.post: deve intercettare la rete giu'")
+        self.assertIn("errore", m.group(1), "BV.post: deve restituire un .errore leggibile")
 
     def test_errore_server_non_sembra_catalogo_vuoto(self):
         """Un guasto NON deve mostrare 'Stiamo aprendo a X!': sarebbe una bugia al cliente."""

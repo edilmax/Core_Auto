@@ -15,12 +15,17 @@
 > pagine, falsi-vuoti sbarrati (guasto ≠ "non hai nulla"), frasi gentili 8 lingue, paracadute
 > login/registrazione — PROVATA con harness CAOS (test_caos_rete: Node esegue il VERO JS delle
 > pagine in un DOM finto e lo bombarda: latenze infinite, 500/502/503-HTML, JSON corrotti,
-> array/null/stringhe ostili). **Tutto committato, pushato, deployato e ALLINEATO**
-> (Desktop=GitHub=VPS). Suite verde (vedi ultima riga REGISTRO).
-> **PROSSIMI PASSI (ciascuno attende il VAI del fondatore)**: compartimenti frontend rimanenti
-> in ordine proposto — ③ app.js comune (unificare le 3 copie di rete/valute/escape/lingua),
-> ④ prompt nativi (bloccati nei browser in-app), ⑤ minori censiti (date default fisse,
-> capacità NaN, escape galleria/badge). Elenco completo in REGISTRO sez.2-bis. E resta pronto il
+> array/null/stringhe ostili) · 📦 APP.JS FONTE UNICA (compartimento 3, 2026-07-18):
+> `deploy/app.js` con namespace `BV.*` = escape+valute+lingua+rete+frasi+scudo in UN posto,
+> pagine con alias, copie locali VIETATE da guardia; escape sigillato al 100% (galleria
+> modale, badge servizi, tabella alloggi, onclick admin) e mezze-misure vietate per sempre.
+> **Tutto committato, pushato, deployato e ALLINEATO** (Desktop=GitHub=VPS). Suite verde
+> (vedi ultima riga REGISTRO).
+> **PROSSIMI PASSI (ciascuno attende il VAI del fondatore)**: compartimenti frontend
+> rimanenti — ④ prompt nativi (bloccati nei browser in-app, es. Instagram), ⑤ minori
+> censiti (date default fisse 2026-09-01, capacità NaN, service worker index-vs-host,
+> refuso CSS admin hover, BV nelle pagine minori contratto-host/diventa-host). Elenco
+> completo in REGISTRO sez.2-bis. E resta pronto il
 > **Livello 7 — Viaggio E2E dal vivo su produzione** (automa Python stdlib da PowerShell,
 > host+annuncio+prenotazione REALI, poi "pulizia tombale" per id esatti, 0 residui verificati
 > via SSH): piano gia' approvato, script NON ancora scritto (attende il suo "VAI"). Poi i sistemi

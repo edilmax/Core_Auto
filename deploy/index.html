@@ -217,6 +217,7 @@
   </div>
 </div>
 
+<script src="/app.js?v=1"></script>
 <script>
 const API = location.origin.startsWith('http') ? '' : 'http://127.0.0.1:8080';
 const SERVIZI = ['wifi','piscina','parcheggio','aria_condizionata','animali_ammessi','colazione'];
@@ -229,17 +230,12 @@ function t(k){ return (I18N.ui && I18N.ui[k]) || k; }
 // un host poteva iniettare JS nel browser degli OSPITI (XSS stored). Escapiamo all'USCITA
 // (il titolo vero resta integro nel DB e nel modale, che usa textContent = gia' sicuro).
 // Copre sia il testo (& < >) sia gli attributi con doppi/singoli apici (" ').
-const _ESC = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
-function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>_ESC[c]); }
+const esc = BV.esc;   // FONTE UNICA in app.js: escape pieno & < > " ' all'USCITA
 function srv(c){ return (I18N.servizi && I18N.servizi[c]) || c; }
 function eur(c){ return '€ ' + ((c||0)/100).toFixed(2); }   // solo importi in EUR (es. crediti piattaforma)
-// VALUTA-CONSAPEVOLE: l'annuncio è prezzato nella valuta dell'host -> l'ospite la vede REALE
-// (come i colossi, ma senza ricarichi occulti). Esponente 0 per JPY/KRW/… ; simbolo per valuta.
-const VEXP={JPY:0,KRW:0,VND:0,CLP:0,ISK:0};
-const VSYM={EUR:'€',USD:'$',GBP:'£',CHF:'CHF',THB:'฿',JPY:'¥',AUD:'A$',CAD:'C$',AED:'AED',SGD:'S$',CNY:'CN¥',HKD:'HK$',MXN:'MX$',BRL:'R$',ZAR:'R',IDR:'Rp',KRW:'₩',INR:'₹',NZD:'NZ$',SEK:'kr',NOK:'kr',DKK:'kr',PLN:'zł',TRY:'₺'};
-function vexp(v){ return VEXP[v]!=null?VEXP[v]:2; }
-function vsym(v){ return VSYM[v]||v||''; }
-function money(c,v){ v=v||'EUR'; const e=vexp(v); return vsym(v)+' '+((c||0)/Math.pow(10,e)).toFixed(e); }
+// VALUTA-CONSAPEVOLE: l'annuncio è prezzato nella valuta dell'host -> l'ospite la vede REALE.
+// Tabella simboli/esponenti: FONTE UNICA in app.js (BV.VALUTE).
+const money = BV.money;
 // valuta stimata del VISITATORE (dalla regione del browser) -> mostra "≈ nella tua moneta"
 // (indicativo, tasso reale; l'addebito resta nella valuta dell'annuncio). Attivo se il server
 // ha la chiave cambi (OXR); altrimenti l'ospite vede comunque la valuta reale dell'annuncio.
@@ -257,78 +253,18 @@ function fmtDist(m){ if(m==null) return ''; return m<1000 ? Math.round(m)+' m' :
 // niente". Ora ogni esito diventa un OGGETTO che il chiamante sa gia' leggere (`.errore`).
 // Compatibile all'indietro: con una risposta JSON (2xx o 4xx) ritorna il corpo IDENTICO a prima
 // (i 4xx con {errore:...} servono: li usiamo per i messaggi onesti). `_http` = stato reale.
-// TIMEOUT (GESTIONE ERRORI): senza tempo massimo una rete che "pende" lascia il "…"
-// per sempre. 15s poi la richiesta viene abortita -> codice 'rete_lenta' (frase onesta).
-// __TEMPO_MAX_MS e' l'override per i test di caos (latenze estreme simulate).
-const TEMPO_MAX_MS = (window.__TEMPO_MAX_MS || 15000);
-async function fetchTempo(path, opts){
-  const ctl = new AbortController();
-  const t = setTimeout(()=>ctl.abort(), TEMPO_MAX_MS);
-  try{ return await fetch(API+path, Object.assign({}, opts, {signal:ctl.signal})); }
-  finally{ clearTimeout(t); }
-}
-function codRete(e){ return (e && e.name==='AbortError') ? 'rete_lenta' : 'rete_non_raggiungibile'; }
-async function api(path, opts){
-  let r;
-  try{ r = await fetchTempo(path, opts); }
-  catch(e){ return {ok:false, errore:codRete(e), _http:0}; }
-  let d = null;
-  try{ d = await r.json(); }catch(e){ d = null; }
-  // !Array.isArray: un ARRAY e' typeof 'object' -> senza la guardia un array JSON valido
-  // passava per corpo buono e i chiamanti lo scambiavano per "nessun dato" (falso vuoto)
-  if(d && typeof d === 'object' && !Array.isArray(d)){ d._http = r.status; return d; }
-  return {ok:false, _http:r.status,
-          errore: r.ok ? 'risposta_non_valida' : ('errore_server_'+r.status)};
-}
-// FRASI GENTILI per i guasti di rete/server: l'utente non deve mai leggere codici tecnici.
-// Locali alla pagina (come MAP_T) ma in TUTTE e 8 le lingue. I codici LOGICI del backend
-// (es. non_disponibile) NON passano da qui: hanno gia' i loro messaggi onesti.
-const ERR_T={
- it:{rete:'Non riesco a contattare il server. Controlla la connessione e riprova.',lenta:'La connessione è lenta: ci sta mettendo troppo. Riprova.',server:'Il servizio ha un problema momentaneo. Riprova tra poco.',risposta:'Risposta inattesa dal server. Riprova.'},
- en:{rete:'Cannot reach the server. Check your connection and try again.',lenta:'The connection is slow: it took too long. Please try again.',server:'The service has a temporary problem. Try again shortly.',risposta:'Unexpected reply from the server. Please try again.'},
- es:{rete:'No puedo contactar con el servidor. Comprueba tu conexión e inténtalo de nuevo.',lenta:'La conexión es lenta: tardó demasiado. Inténtalo de nuevo.',server:'El servicio tiene un problema temporal. Inténtalo en un momento.',risposta:'Respuesta inesperada del servidor. Inténtalo de nuevo.'},
- fr:{rete:'Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.',lenta:'La connexion est lente : cela a pris trop de temps. Réessayez.',server:'Le service a un problème momentané. Réessayez dans un instant.',risposta:'Réponse inattendue du serveur. Réessayez.'},
- de:{rete:'Server nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.',lenta:'Die Verbindung ist langsam: es hat zu lange gedauert. Bitte erneut versuchen.',server:'Der Dienst hat ein vorübergehendes Problem. Versuche es gleich noch einmal.',risposta:'Unerwartete Antwort vom Server. Bitte erneut versuchen.'},
- pt:{rete:'Não consigo contactar o servidor. Verifique a ligação e tente novamente.',lenta:'A ligação está lenta: demorou demasiado. Tente novamente.',server:'O serviço tem um problema momentâneo. Tente novamente daqui a pouco.',risposta:'Resposta inesperada do servidor. Tente novamente.'},
- ja:{rete:'サーバーに接続できません。通信環境を確認して、もう一度お試しください。',lenta:'接続が遅く、時間がかかりすぎました。もう一度お試しください。',server:'サービスに一時的な問題があります。しばらくしてからお試しください。',risposta:'サーバーから予期しない応答がありました。もう一度お試しください。'},
- zh:{rete:'无法连接服务器。请检查网络后重试。',lenta:'网络较慢，请求超时。请重试。',server:'服务暂时出现问题，请稍后重试。',risposta:'服务器返回了意外的响应。请重试。'}
-};
-function fraseErrore(cod){
-  const D=ERR_T[LANG]||ERR_T.en;
-  if(cod==='rete_non_raggiungibile') return D.rete;
-  if(cod==='rete_lenta') return D.lenta;
-  if(cod==='risposta_non_valida') return D.risposta;
-  if(/^errore_server_\d+$/.test(String(cod))) return D.server+' ('+String(cod).slice(14)+')';
-  return String(cod==null?'':cod);   // codice logico del backend: resta visibile (onesto)
-}
-// 🛡️ SCUDO ANTI-DOPPIO-CLIC (identico su host/admin): tasto spento + ⏳ alla stessa
-// larghezza mentre la chiamata e' in volo; si riaccende SEMPRE (finally). Se fn vuole
-// che il tasto RESTI spento dopo il successo, imposta btn.dataset.restaSpento='1'.
-async function conScudo(btn, fn){
-  if(!btn || btn.disabled) return;
-  const label = btn.innerHTML, w = btn.offsetWidth;
-  btn.disabled = true; if(w) btn.style.minWidth = w+'px';
-  btn.innerHTML = '⏳';
-  try{ await fn(); }
-  finally{
-    btn.innerHTML = label; btn.style.minWidth = '';
-    if(!btn.dataset.restaSpento) btn.disabled = false;
-  }
-}
-function scudoTasti(ids){
-  ids.forEach(id=>{ const b=document.getElementById(id);
-    if(!b || typeof b.onclick!=='function') return;
-    const orig=b.onclick; b.onclick=()=>conScudo(b, ()=>orig.call(b));
-  });
-}
+// RETE: FONTE UNICA in app.js (timeout 15s -> 'rete_lenta', mai solleva, guardia
+// anti-array contro i falsi vuoti). api() = alias col prefisso API della pagina.
+const api = (path, opts) => BV.getJson(API+path, opts);
+// FRASI GENTILI per i guasti di rete/server: FONTE UNICA in app.js (BV.ERR_FRASI,
+// 8 lingue). I codici LOGICI del backend passano invariati (gia' onesti).
+const fraseErrore = (cod) => BV.fraseErrore(cod, LANG);
+// 🛡️ SCUDO ANTI-DOPPIO-CLIC: FONTE UNICA in app.js (BV.conScudo/BV.scudoTasti).
+const conScudo = BV.conScudo;
+const scudoTasti = BV.scudoTasti;
 
-// Lingua iniziale: 1) scelta salvata  2) lingua del browser  3) inglese (default globale).
-function linguaIniziale(){
-  try{ const s=localStorage.getItem('lang'); if(s && SUPP.includes(s)) return s; }catch(e){console.warn('bookinvip-ospite',e)}
-  const cand = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language||'en'];
-  for(const l of cand){ const b=String(l||'').slice(0,2).toLowerCase(); if(SUPP.includes(b)) return b; }
-  return 'en';
-}
+// Lingua iniziale (scelta salvata -> browser -> inglese): FONTE UNICA in app.js.
+const linguaIniziale = () => BV.linguaIniziale(SUPP);
 
 function renderChips(){
   document.getElementById('chips').innerHTML = SERVIZI.map(c=>
@@ -386,7 +322,8 @@ function favToggle(slug,el){ const f=favSet(); f.has(slug)?f.delete(slug):f.add(
 function aggiornaFavBtn(){ const b=document.getElementById('btnFav'); if(!b) return;
   const n=favSet().size; b.style.display=n?'inline-block':'none'; b.textContent='❤ '+n; }
 function cardHtml(a){
-  const serv = (a.servizi_label||a.servizi||[]).slice(0,4).map(s=>`<span class="badge">${s}</span>`).join('');
+  // esc(s): i servizi sono testo LIBERO dell'host (csv) -> senza escape, HTML iniettabile
+  const serv = (a.servizi_label||a.servizi||[]).slice(0,4).map(s=>`<span class="badge">${esc(s)}</span>`).join('');
   const fav = favSet().has(a.slug);
   let disp=''; if(a.disponibile===true) disp=`<span class="badge green">✓</span>`;
   else if(a.disponibile===false) disp=`<span class="badge red">${t('non_disp')}</span>`;
@@ -516,7 +453,7 @@ async function caricaMappaPin(){
   }catch(e){ msg.textContent=t('errore'); }
 }
 function emptyStateHtml(citta){
-  const c = citta ? String(citta).replace(/[<>]/g,'') : '';
+  const c = citta ? esc(String(citta)) : '';   // escape pieno, non mezza-misura
   const cityLine = c ? `<div style="color:var(--brand);font-weight:600;margin:.2rem 0">📍 ${c}</div>` : '';
   return `<div class="vuoto" style="text-align:center;padding:1.5rem">
     <div style="font-size:2rem">🌱</div>
@@ -563,12 +500,12 @@ async function apri(slug){
     const imgs = (a.immagini||[]).map(i=>i.url).filter(Boolean);
     LB_IMGS = imgs;
     document.getElementById('mGallery').innerHTML = imgs.length
-      ? imgs.map((u,i)=>`<img src="${u}" alt="" loading="lazy" onclick="lbApri(${i})" onerror="this.style.display='none'">`).join('')
+      ? imgs.map((u,i)=>`<img src="${esc(u)}" alt="" loading="lazy" onclick="lbApri(${i})" onerror="this.style.display='none'">`).join('')
       : '';
     document.getElementById('mTitolo').textContent = a.titolo;
     document.getElementById('mPrezzo').innerHTML = money(a.prezzo_notte_cents,a.valuta)+' / '+t('notte')
       + (a.centro_distanza_m!=null ? ' <span style="font-size:.85rem;font-weight:400;color:var(--testo-tenue)">· 📍 '+fmtCentro(a.centro_distanza_m)+'</span>' : '');
-    document.getElementById('mBadge').innerHTML = (a.servizi_label||a.servizi||[]).map(s=>`<span class="badge">${s}</span>`).join('');
+    document.getElementById('mBadge').innerHTML = (a.servizi_label||a.servizi||[]).map(s=>`<span class="badge">${esc(s)}</span>`).join('');
     document.getElementById('mRating').innerHTML = stelle(a.recensioni);
     document.getElementById('mDescr').textContent = a.descrizione||'';
     const POL={flessibile:t('pol_flessibile'),moderata:t('pol_moderata'),rigida:t('pol_rigida'),non_rimborsabile:t('pol_non_rimborsabile')};
@@ -582,7 +519,7 @@ async function apri(slug){
         rec.innerHTML = '<div style="margin:.5rem 0;font-size:.9rem">'+
           rr.recensioni.slice(0,4).map(x=>{
             const txt=(x.testo&&x.testo.text)?x.testo.text:'';
-            return `<div style="border-top:1px solid var(--sfondo-tenue);padding:.4rem 0">★ ${x.voto} <span style="color:var(--brand-chiaro);font-size:.72rem">✓ ${t('verificata')}</span><br><span style="color:#4a5b7a">${txt.replace(/[<>]/g,'')}</span></div>`;
+            return `<div style="border-top:1px solid var(--sfondo-tenue);padding:.4rem 0">★ ${esc(x.voto)} <span style="color:var(--brand-chiaro);font-size:.72rem">✓ ${t('verificata')}</span><br><span style="color:#4a5b7a">${esc(txt)}</span></div>`;
           }).join('')+'</div>';
       }
     }catch(e){console.warn('bookinvip-ospite',e)}

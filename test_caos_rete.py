@@ -125,14 +125,14 @@ async function __main(){
   FETCH = function(u,o){ return u.indexOf('/api/catalogo')===0 ? corrotto(500) : jsonRes(200,{}); };
   await cerca();
   let ris = document.getElementById('risultati').innerHTML;
-  check('index: cerca su 500 mostra la frase gentile', ris.indexOf(ERR_T.it.server)>=0, ris.slice(0,200));
+  check('index: cerca su 500 mostra la frase gentile', ris.indexOf(BV.ERR_FRASI.it.server)>=0, ris.slice(0,200));
   check('index: cerca su 500 NIENTE falso vuoto (waitlist)', ris.indexOf('wl_btn')===-1, '');
   check('index: cerca su 500 niente codice grezzo', ris.indexOf('errore_server_500')===-1, '');
 
   FETCH = function(u,o){ return u.indexOf('/api/catalogo')===0 ? pende(o) : jsonRes(200,{}); };
   await cerca();
   ris = document.getElementById('risultati').innerHTML;
-  check('index: cerca che PENDE -> frase "connessione lenta"', ris.indexOf(ERR_T.it.lenta)>=0, ris.slice(0,200));
+  check('index: cerca che PENDE -> frase "connessione lenta"', ris.indexOf(BV.ERR_FRASI.it.lenta)>=0, ris.slice(0,200));
 
   FETCH = function(u,o){ return u.indexOf('/api/catalogo')===0
     ? jsonRes(200,{risultati:[null,{slug:'ok1',titolo:'CasaProva',prezzo_notte_cents:1000,valuta:'EUR'}]})
@@ -156,7 +156,7 @@ async function __main(){
   };
   await apri('x');
   const mq = document.getElementById('mQuote').innerHTML;
-  check('index: preventivo in timeout NON dice "non disponibile" (bugia)', mq.indexOf(ERR_T.it.lenta)>=0, mq.slice(0,200));
+  check('index: preventivo in timeout NON dice "non disponibile" (bugia)', mq.indexOf(BV.ERR_FRASI.it.lenta)>=0, mq.slice(0,200));
   check('index: apri() senza esplosioni (niente alert imprevisti)', ALERTS.length===alertsPrima, ALERTS.slice(alertsPrima).join('|'));
 
   for(const l of ['it','en','es','fr','de','pt','ja','zh']){
@@ -189,35 +189,35 @@ async function __main(){
   await caricaPrenotazioni();
   let box = document.getElementById('pren_lista').innerHTML;
   check('host: prenotazioni su 500 = frase, NON "nessuna prenotazione"',
-        box.indexOf(T('e_server'))>=0 && box.indexOf(T('pren_vuoto'))===-1, box.slice(0,200));
+        box.indexOf(BV.ERR_FRASI.it.server)>=0 && box.indexOf(T('pren_vuoto'))===-1, box.slice(0,200));
   FETCH = function(){ return corrotto(502); };
   await caricaPayout();
   box = document.getElementById('payout_lista').innerHTML;
   check('host: incassi su 502 = frase, NON "nessun incasso"',
-        box.indexOf(T('e_server'))>=0 && box.indexOf(T('no_pay'))===-1, box.slice(0,200));
+        box.indexOf(BV.ERR_FRASI.it.server)>=0 && box.indexOf(T('no_pay'))===-1, box.slice(0,200));
   FETCH = function(u,o){ return pende(o); };
   await caricaRichieste();
   box = document.getElementById('richieste_lista').innerHTML;
   check('host: richieste (24h!) in timeout = frase, NON "nessuna richiesta"',
-        box.indexOf(T('e_lenta'))>=0 && box.indexOf(T('no_req'))===-1, box.slice(0,200));
+        box.indexOf(BV.ERR_FRASI.it.lenta)>=0 && box.indexOf(T('no_req'))===-1, box.slice(0,200));
   FETCH = function(){ return corrotto(200); };
   await caricaConversazioni();
   box = document.getElementById('cv_lista').innerHTML;
-  check('host: conversazioni corrotte = frase', box.indexOf(T('e_risposta'))>=0 && box.indexOf(T('cv_vuoto'))===-1, box.slice(0,200));
+  check('host: conversazioni corrotte = frase', box.indexOf(BV.ERR_FRASI.it.risposta)>=0 && box.indexOf(T('cv_vuoto'))===-1, box.slice(0,200));
 
   CURRENT_SLUG='casa-mia'; MIEI=[{slug:'casa-mia',titolo:'Casa mia',valuta:'EUR'}];
   FETCH = function(){ return corrotto(500); };
   await caricaAlloggiSelettore();
   check('host: selettore su 500 NON azzera la scelta', CURRENT_SLUG==='casa-mia', CURRENT_SLUG);
   check('host: selettore su 500 avvisa (niente "non hai alloggi")',
-        document.getElementById('al_vuoto').textContent.indexOf(T('e_server'))>=0,
+        document.getElementById('al_vuoto').textContent.indexOf(BV.ERR_FRASI.it.server)>=0,
         document.getElementById('al_vuoto').textContent);
 
   localStorage.setItem('bookinvip_host_token','tok-vivo');
   FETCH = function(){ return rifiuta(); };
   await verificaSessione();
   check('host: rete giu NON slogga (token intatto)', localStorage.getItem('bookinvip_host_token')==='tok-vivo', '');
-  check('host: rete giu avvisa in msgAuth', document.getElementById('msgAuth').textContent.indexOf(T('e_rete'))>=0,
+  check('host: rete giu avvisa in msgAuth', document.getElementById('msgAuth').textContent.indexOf(BV.ERR_FRASI.it.rete)>=0,
         document.getElementById('msgAuth').textContent);
   FETCH = function(){ return jsonRes(401,{errore:'token_scaduto'}); };
   await verificaSessione();
@@ -227,13 +227,13 @@ async function __main(){
   mAuth.textContent='';
   FETCH = function(){ return rifiuta(); };
   await authPost('/api/host/login',{email:'a@b.c'},mAuth,'accesso_ok');
-  check('host: login con rete giu = frase (prima: silenzio)', mAuth.textContent.indexOf(T('e_rete'))>=0, mAuth.textContent);
+  check('host: login con rete giu = frase (prima: silenzio)', mAuth.textContent.indexOf(BV.ERR_FRASI.it.rete)>=0, mAuth.textContent);
   FETCH = function(){ return corrotto(500); };
   await authPost('/api/host/login',{},mAuth,'accesso_ok');
-  check('host: login su 500-HTML = frase server', mAuth.textContent.indexOf(T('e_server'))>=0, mAuth.textContent);
+  check('host: login su 500-HTML = frase server', mAuth.textContent.indexOf(BV.ERR_FRASI.it.server)>=0, mAuth.textContent);
   FETCH = function(){ return jsonRes(200,'stringa-nuda'); };
   await authPost('/api/host/login',{},mAuth,'accesso_ok');
-  check('host: FUZZ login 200-stringa = risposta non valida', mAuth.textContent.indexOf(T('e_risposta'))>=0, mAuth.textContent);
+  check('host: FUZZ login 200-stringa = risposta non valida', mAuth.textContent.indexOf(BV.ERR_FRASI.it.risposta)>=0, mAuth.textContent);
 
   FETCH = function(u,o){ return u.indexOf('/api/host/metriche_avanzate')===0 ? jsonRes(200,{metriche:{}}) : jsonRes(200,{}); };
   const bm = document.getElementById('btnMetriche');
@@ -247,7 +247,7 @@ async function __main(){
   FETCH = function(){ return jsonRes(200,{righe:3}); };   // csv MANCANTE
   await document.getElementById('btnExport').onclick();
   check('host: export senza csv BLOCCATO (niente file "undefined")',
-        BLOBS.length===0 && document.getElementById('msgMetriche').textContent.indexOf(T('e_risposta'))>=0,
+        BLOBS.length===0 && document.getElementById('msgMetriche').textContent.indexOf(BV.ERR_FRASI.it.risposta)>=0,
         document.getElementById('msgMetriche').textContent);
 }
 """
@@ -260,7 +260,7 @@ async function __main(){
   FETCH = function(){ return corrotto(500); };
   await caricaAlloggi();
   let mm = document.getElementById('msg').textContent;
-  check('admin: annunci su 500 NON piu muto', mm.indexOf(T('err_srv'))>=0, mm);
+  check('admin: annunci su 500 NON piu muto', mm.indexOf(BV.ERR_FRASI.it.server)>=0, mm);
   FETCH = function(){ return jsonRes(401,{}); };
   await caricaAlloggi();
   mm = document.getElementById('msg').textContent;
@@ -271,12 +271,12 @@ async function __main(){
   await carica();
   check('admin: prenotazioni su 500 = frase, NIENTE "nessuna prenotazione"',
         document.getElementById('tbody').innerHTML==='SENTINELLA'
-        && document.getElementById('msg').textContent.indexOf(T('err_srv'))>=0,
+        && document.getElementById('msg').textContent.indexOf(BV.ERR_FRASI.it.server)>=0,
         document.getElementById('msg').textContent);
   FETCH = function(){ return jsonRes(200,[]); };
   await carica();
   check('admin: FUZZ corpo array = risposta non valida',
-        document.getElementById('msg').textContent.indexOf(T('err_risp'))>=0,
+        document.getElementById('msg').textContent.indexOf(BV.ERR_FRASI.it.risposta)>=0,
         document.getElementById('msg').textContent);
 
   let t0=Date.now();
@@ -284,7 +284,7 @@ async function __main(){
   await caricaControversie();
   const cl = document.getElementById('ctr_lista').innerHTML;
   check('admin: controversie in timeout = frase lenta, NON "nessuna controversia"',
-        cl.indexOf(T('err_lenta'))>=0 && cl.indexOf(T('ctr_nessuna'))===-1, cl.slice(0,200));
+        cl.indexOf(BV.ERR_FRASI.it.lenta)>=0 && cl.indexOf(T('ctr_nessuna'))===-1, cl.slice(0,200));
   check('admin: timeout presto', (Date.now()-t0)<3000, (Date.now()-t0)+'ms');
 }
 """
@@ -300,37 +300,45 @@ class TestGuardieStatiche(unittest.TestCase):
         with io.open(os.path.join(BASE, nome), encoding='utf-8') as f:
             return f.read()
 
-    def test_timeout_presente_ovunque(self):
+    def _app(self):
+        with io.open(os.path.join(BASE, 'app.js'), encoding='utf-8') as f:
+            return f.read()
+
+    def test_app_js_caricato_da_ogni_pagina(self):
+        # FONTE UNICA (compartimento 3): ogni pagina carica app.js PRIMA dello script inline
         for p in self.PAGINE:
             html = self._leggi(p)
-            self.assertIn('__TEMPO_MAX_MS', html, p)
-            self.assertIn('AbortController', html, p)
-            self.assertIn("'rete_lenta'", html, p)
+            self.assertIn('<script src="/app.js', html, p)
+            self.assertLess(html.index('<script src="/app.js'), html.index('<script>\n'), p)
 
-    def test_guardia_array_presente_ovunque(self):
+    def test_timeout_nella_fonte_unica(self):
+        app = self._app()
+        self.assertIn('__TEMPO_MAX_MS', app)
+        self.assertIn('AbortController', app)
+        self.assertIn("'rete_lenta'", app)
+
+    def test_guardia_array_nella_fonte_unica(self):
         # un array JSON valido e' typeof 'object': senza questa guardia torna il falso vuoto
-        for p in self.PAGINE:
-            self.assertIn('Array.isArray', self._leggi(p), p)
+        self.assertIn('Array.isArray', self._app())
 
     def test_nessuna_fetch_nuda_fuori_dal_wrapper(self):
-        # OGNI chiamata deve passare da fetchTempo (=timeout+esito). L'unica `await fetch(`
-        # ammessa per pagina e' quella DENTRO fetchTempo. E' la guardia che ha scovato
-        # la fuga del calendario singolo (btnCal) durante il collaudo.
+        # OGNI chiamata deve passare da BV.fetchTempo (=timeout+esito). L'unica
+        # `await fetch(` ammessa in tutto il frontend e' quella DENTRO il wrapper in
+        # app.js. E' la guardia che ha scovato la fuga del calendario singolo (btnCal).
         for p in self.PAGINE:
             n = self._leggi(p).count('await fetch(')
-            self.assertEqual(n, 1, '%s: %d chiamate fetch nude (attesa solo quella nel wrapper)' % (p, n))
+            self.assertEqual(n, 0, '%s: %d chiamate fetch nude (devono passare da BV.*)' % (p, n))
+        self.assertEqual(self._app().count('await fetch('), 1, 'app.js: attesa SOLO quella nel wrapper')
 
-    def test_frasi_gentili_in_8_lingue(self):
-        host = self._leggi('host.html')
-        for k in ('e_rete:', 'e_lenta:', 'e_server:', 'e_risposta:'):
-            self.assertEqual(host.count(k), 8, 'host ' + k)
-        admin = self._leggi('admin.html')
-        for k in ('err_lenta:', 'err_srv:', 'err_risp:'):
-            self.assertEqual(admin.count(k), 8, 'admin ' + k)
-        index = self._leggi('index.html')
-        blocco = index.split('const ERR_T={', 1)[1].split('};', 1)[0]
+    def test_frasi_gentili_fonte_unica_8_lingue_senza_copie(self):
+        app = self._app()
+        blocco = app.split('BV.ERR_FRASI = {', 1)[1].split('};', 1)[0]
         for lingua in ('it:', 'en:', 'es:', 'fr:', 'de:', 'pt:', 'ja:', 'zh:'):
-            self.assertIn(lingua, blocco, 'index ERR_T ' + lingua)
+            self.assertIn(lingua, blocco, 'app.js ERR_FRASI ' + lingua)
+        # ANTI-DUPLICAZIONE: le copie per-pagina delle frasi NON devono tornare
+        self.assertEqual(self._leggi('host.html').count('e_rete:'), 0, 'host: copia frasi vietata')
+        self.assertEqual(self._leggi('admin.html').count('err_lenta:'), 0, 'admin: copia frasi vietata')
+        self.assertNotIn('const ERR_T', self._leggi('index.html'), 'index: copia frasi vietata')
 
     def test_falsi_vuoti_sbarrati_sulle_card_host(self):
         host = self._leggi('host.html')
@@ -354,7 +362,10 @@ class TestCaosRete(unittest.TestCase):
     maxDiff = None
 
     def _esegui(self, pagina, scenari, minimo_check):
-        js = PRELUDIO + '\n' + _estrai_js(pagina) + '\n' + scenari + CODA
+        # come nel browser: PRIMA app.js (fonte unica BV.*), POI lo script della pagina
+        with io.open(os.path.join(BASE, 'app.js'), encoding='utf-8') as f:
+            app_js = f.read()
+        js = PRELUDIO + '\n' + app_js + '\n' + _estrai_js(pagina) + '\n' + scenari + CODA
         fd, path = tempfile.mkstemp(suffix='.js')
         os.close(fd)
         try:
