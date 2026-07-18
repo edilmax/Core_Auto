@@ -1318,6 +1318,8 @@ class RouterHTTP:
         """Admin: cambia lo stato di QUALSIASI annuncio (sospendi/ripubblica) per slug."""
         if not self._auth_admin(headers):
             return 401, {"errore": "unauthorized"}
+        if not self._bunker_ok_o_field(headers, azione="alloggio_stato"):
+            return 403, {"errore": "bunker_richiesto"}
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
@@ -1383,6 +1385,21 @@ class RouterHTTP:
         logger.warning("BUNKER: azione '%s' autorizzata ip=%s", azione or "?", ip)
         return True
 
+    def _bunker_ok_o_field(self, headers, *, azione):
+        """ENFORCEMENT least-privilege sulle operazioni DISTRUTTIVE (Incremento 3).
+        Ritorna True se l'operazione puo' procedere:
+          - Bunker NON configurato (super-admin non ancora impostato) -> True: l'enforcement
+            e' INATTIVO, resta la sola chiave admin (mai chiudersi fuori prima di aver messo
+            in piedi il Bunker; i test che non configurano il Bunker restano invariati);
+          - Bunker configurato -> serve una SESSIONE BUNKER valida (2° muro). Senza -> False
+            (il chiamante risponde 403 'bunker_richiesto', loggato CRITICO da `_bunker_auth`).
+        Cosi' 'nessuno esegue operazioni distruttive senza il bunker' vale appena il
+        super-admin e' attivo, senza mai paralizzare la piattaforma prima."""
+        bunker = getattr(self._sys, "bunker", None)
+        if bunker is None or not bunker.configurato:
+            return True
+        return self._bunker_auth(headers, azione=azione)
+
     def _bunker_stato(self, query, headers):
         """Sala di controllo (read-only): conferma di essere nel Bunker + auto-diagnosi
         del sistema (integrita' catena hash, backup, disco). Richiede sessione Bunker."""
@@ -1423,6 +1440,8 @@ class RouterHTTP:
         non resti nulla. 200 se ok (0 residui), 409 se qualcosa e' rimasto (con il dettaglio)."""
         if not self._auth_admin(headers):
             return 401, {"errore": "unauthorized"}
+        if not self._bunker_ok_o_field(headers, azione="cancella_attivita"):
+            return 403, {"errore": "bunker_richiesto"}
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
@@ -1442,6 +1461,8 @@ class RouterHTTP:
         Il rimborso Stripe vero si esegue quando il PSP e' attivo (gated)."""
         if not self._auth_admin(headers):
             return 401, {"errore": "unauthorized"}
+        if not self._bunker_ok_o_field(headers, azione="rimborso"):
+            return 403, {"errore": "bunker_richiesto"}
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
@@ -1526,6 +1547,8 @@ class RouterHTTP:
         (rimborso Stripe controllato) — qui si registra la DECISIONE e si sblocca la garanzia."""
         if not self._auth_admin(headers):
             return 401, {"errore": "unauthorized"}
+        if not self._bunker_ok_o_field(headers, azione="controversia_risolvi"):
+            return 403, {"errore": "bunker_richiesto"}
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
