@@ -43,10 +43,14 @@
 >   (con host_id memorizzato vuoto, chiunque decideva richieste altrui) → fix fail-CLOSED che
 >   ri-deriva il proprietario dall'alloggio. Test: test_idor_richieste (rosso sul vecchio, verde
 >   sul fix). Esito audit: altri 13 endpoint sensibili già gatati, unico buco era questo.
-> **PROSSIMO COMPARTIMENTO (attende VAI)**: ③ Clean Code / Technical Debt (funzioni con troppe
->   responsabilità o troppa indentazione → modulari e testabili in isolamento). Passo-2 opzionale
->   del comp.1: batchare anche il calendario (fase58). Regole ferme invariate (salvare ovunque, mai
->   email vera, deploy rm-first, suite intera prima del deploy). REGOLE FERME: dopo OGNI operazione finita salvare ovunque
+>   ✅ **Comp.3 Clean Code FATTO**: `_catalogo` (108 righe, 4 responsabilità) aveva la matematica
+>   date-flessibili inline con `except: _n=0` che disattivava la feature in silenzio → estratta
+>   `finestra_flessibile` pura e testabile (test_finestra_flessibile, 8 casi bordo). Comportamento
+>   invariato, fallimento silenzioso eliminato. **AUDIT DI RESILIENZA COMPLETO (3/3).**
+> **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
+>   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
+>   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare
+>   ovunque, mai email vera, deploy rm-first, suite intera prima del deploy). REGOLE FERME: dopo OGNI operazione finita salvare ovunque
 > (commit+push+VPS+REGISTRO); mai email vera del fondatore nei test; deploy rm-first; suite intera
 > prima di ogni deploy. Dettaglio di ogni voce: righe in REGISTRO_INGEGNERIA.md sez.1 (piu' recenti in alto).
 

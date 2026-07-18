@@ -754,6 +754,30 @@ def _punteggio_consigliato(c: Dict[str, Any]) -> int:
     return s
 
 
+def finestra_flessibile(check_in: Any, check_out: Any, flex_giorni: Any):
+    """Range di ricerca a DATE FLESSIBILI: da [check_in - flex] a [check_out + flex] e il
+    numero di notti richieste. PURA/deterministica (nessun I/O) -> testabile in isolamento.
+    Ritorna (da_iso, a_iso, n_notti) oppure None se l'input non è valido (date non ISO,
+    check_out<=check_in, flex non intero o <=0).
+
+    Estratta da _catalogo (audit resilienza comp.3): prima era inline dentro un
+    'try/except: _n=0' che, su un errore di parsing, DISATTIVAVA la ricerca flessibile IN
+    SILENZIO -> l'ospite non trovava nulla e nessuno sapeva perché. Ora il caso invalido è
+    esplicito (None) e la funzione è coperta da test unitari sui bordi (±1 giorno)."""
+    import datetime as _d
+    try:
+        ci = _d.date.fromisoformat(str(check_in))
+        co = _d.date.fromisoformat(str(check_out))
+    except (ValueError, TypeError):
+        return None
+    n = (co - ci).days
+    if n <= 0 or not isinstance(flex_giorni, int) or isinstance(flex_giorni, bool) \
+            or flex_giorni <= 0:
+        return None
+    return ((ci - _d.timedelta(days=flex_giorni)).isoformat(),
+            (co + _d.timedelta(days=flex_giorni)).isoformat(), n)
+
+
 def _ext_da_magic(raw: bytes) -> Optional[str]:
     """Tipo immagine dai MAGIC BYTES (mai fidarsi del content-type/estensione). None se
     non e' un'immagine supportata."""
@@ -1459,14 +1483,10 @@ class RouterHTTP:
             if geo is None:
                 res["totale"] = len(cards)
         if usa_flex:
-            # per ogni annuncio trovo la prima finestra libera di N notti dentro [ci-flex, co+flex]
-            import datetime as _dtf
-            try:
-                _n = (_dtf.date.fromisoformat(_coq) - _dtf.date.fromisoformat(_ciq)).days
-                _da = (_dtf.date.fromisoformat(_ciq) - _dtf.timedelta(days=flex)).isoformat()
-                _a = (_dtf.date.fromisoformat(_coq) + _dtf.timedelta(days=flex)).isoformat()
-            except Exception:
-                _n = 0
+            # per ogni annuncio trovo la prima finestra libera di N notti dentro [ci-flex, co+flex].
+            # Il calcolo del range è ora una funzione PURA (testabile): None = input invalido.
+            _fin_range = finestra_flessibile(_ciq, _coq, flex)
+            _da, _a, _n = _fin_range if _fin_range else (None, None, 0)
             out = []
             for c in cards:
                 fin = self._sys.inventario.prima_finestra(c.get("slug"), _da, _a, _n) if _n > 0 else None
