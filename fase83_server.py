@@ -1155,6 +1155,8 @@ class RouterHTTP:
             return self._bunker_dac7_report(query, headers)
         if metodo == "POST" and path == "/api/host/dati_fiscali":
             return self._host_dati_fiscali(body, headers)
+        if metodo == "GET" and path == "/api/host/dac7_stato":
+            return self._host_dac7_stato(query, headers)   # avviso hold payout nel pannello
         return 404, {"errore": "rotta_non_trovata"}
 
     # --- helper ---
@@ -1540,8 +1542,54 @@ class RouterHTTP:
             return 400, {"errore": "json_non_valido"}
         ok = reg.imposta_dati_fiscali(hid, dati)
         info = reg.info_host(hid) or {}
-        return (200 if ok else 422), {"salvato": bool(ok),
-                                      "mancanti": self._dac7_mancanti(info)}
+        manca = self._dac7_mancanti(info)
+        # SBLOCCO AUTOMATICO (Incremento 6): dati ora completi -> i payout rimasti in hold
+        # ('maturato' + host bloccato) vengono RITENTATI subito. Idempotente e sicuro:
+        # _trasferisci_all_host rifa' da solo TUTTE le guardie (pagato online? Stripe
+        # collegato? non gia' partito?) e ignora in silenzio cio' che non e' trasferibile.
+        riprovati = 0
+        if ok and not manca:
+            pd = getattr(self._sys, "payout", None)
+            if pd is not None:
+                try:
+                    for r in pd.elenca(hid, stato="maturato"):
+                        self._trasferisci_all_host(r["prenotazione_id"], int(r["minori"]))
+                        riprovati += 1
+                    if riprovati:
+                        logger.warning("PAYOUT_HOLD_RELEASED | HOST_ID: %s | RITENTATI: %d "
+                                       "| MOTIVO: DATI_FISCALI_COMPLETATI", hid, riprovati)
+                except Exception:
+                    logger.warning("sblocco payout post-dati-fiscali fallito (ISOLATO: "
+                                   "restano 'maturato', nulla perso)", exc_info=True)
+        return (200 if ok else 422), {"salvato": bool(ok), "mancanti": manca,
+                                      "payout_riprovati": riprovati}
+
+    def _host_dac7_stato(self, query, headers):
+        """AVVISO nel pannello host (Incremento 6): l'host DEVE sapere perche' i bonifici
+        non arrivano. Ritorna: dati mancanti, se i suoi payout sono in HOLD DAC7 e quanto
+        c'e' fermo (somma dei 'maturato'). Host-auth, read-only, solo per se' stesso."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        hid = self._host_id_da_token(headers)
+        if not (isinstance(hid, str) and hid):
+            return 422, {"errore": "host_id_mancante"}
+        reg = getattr(self._sys, "registro_host", None)
+        info = (reg.info_host(hid) or {}) if reg is not None else {}
+        manca = self._dac7_mancanti(info) if info else []
+        bloccato, _m = self._dac7_payout_bloccato(hid)
+        fermi = 0
+        if bloccato:
+            pd = getattr(self._sys, "payout", None)
+            if pd is not None:
+                try:
+                    fermi = sum(int(r["minori"]) for r in pd.elenca(hid, stato="maturato"))
+                except Exception:
+                    fermi = 0
+        return 200, {"mancanti": manca, "payout_bloccati": bool(bloccato),
+                     "payout_fermi_cents": fermi,
+                     "dati": {c: info.get(c, "") for c in
+                              ("codice_fiscale", "partita_iva", "indirizzo_fiscale",
+                               "paese", "iban", "tipo_soggetto")}}
 
     def _bunker_dac7_conformita(self, query, headers):
         """SALA CONTROLLO — STATO CONFORMITÀ HOST (DAC7): elenca gli host e segnala chi NON
@@ -1573,10 +1621,21 @@ class RouterHTTP:
                     tot_reportabili += 1
                 if urgente:
                     tot_urgenti += 1
+                # Incr.6: per gli URGENTI mostra anche i payout in HOLD (soldi fermi finche'
+                # non completano i dati). Solo per loro: query mirata, il resto non pesa.
+                fermi = 0
+                if urgente:
+                    pd = getattr(self._sys, "payout", None)
+                    if pd is not None:
+                        try:
+                            fermi = sum(int(r["minori"])
+                                        for r in pd.elenca(h["host_id"], stato="maturato"))
+                        except Exception:
+                            fermi = 0
                 out.append({"host_id": h["host_id"], "ragione_sociale": h["ragione_sociale"],
                             "email": h["email"], "completo": completo, "mancanti": manca,
                             "prenotazioni": n, "ricavi_cents": lordo, "reportabile": rep,
-                            "urgente": urgente})
+                            "urgente": urgente, "payout_fermi_cents": fermi})
             out.sort(key=lambda x: (not x["urgente"], x["completo"], -x["ricavi_cents"]))
         except Exception:
             logger.error("dac7 conformita: eccezione ISOLATA", exc_info=True)
@@ -2762,12 +2821,51 @@ class RouterHTTP:
         except Exception:
             logger.warning("giornale movimento '%s' fallito (ISOLATO)", tipo, exc_info=True)
 
+    def _dac7_payout_bloccato(self, host_id):
+        """ENFORCEMENT DAC7 (art. proc. dovuta diligenza, Dir. UE 2021/514): (bloccato,
+        mancanti) — True SOLO se l'host e' REPORTABILE per legge (>=30 pren O >=2000 EUR
+        nell'anno corrente O precedente) E i dati fiscali sono incompleti. La direttiva
+        prevede proprio la trattenuta dei pagamenti come leva quando il venditore non
+        fornisce i dati. FAIL-OPEN: qualunque errore interno -> NON bloccare (il payout e'
+        denaro DOVUTO all'host; il blocco e' una leva di conformita', non un invariante di
+        sicurezza — un bug del controllo non deve mai congelare bonifici legittimi).
+        Kill-switch: env DAC7_BLOCCO_PAYOUT=0."""
+        try:
+            import os as _os
+            if _os.environ.get("DAC7_BLOCCO_PAYOUT", "1") == "0":
+                return False, []
+            reg = getattr(self._sys, "registro_host", None)
+            fc = getattr(self._sys, "finanza", None)
+            if reg is None or fc is None or not (isinstance(host_id, str) and host_id):
+                return False, []
+            info = reg.info_host(host_id)
+            if not info:
+                return False, []
+            manca = self._dac7_mancanti(info)
+            if not manca:
+                return False, []                      # dati completi -> mai bloccato
+            import datetime as _dt
+            from fase100_dac7 import valuta_dac7
+            anno_ora = _dt.datetime.utcnow().year
+            for anno in (anno_ora, anno_ora - 1):
+                a = fc.aggrega_dac7(anno).get(host_id)
+                if a and valuta_dac7(int(a["n"]), int(a["lordo"]), True).deve_segnalare:
+                    return True, manca                # sopra soglia + incompleto = bloccato
+            return False, []                          # sotto soglia: nessun obbligo, si paga
+        except Exception:
+            logger.warning("controllo DAC7 payout fallito (FAIL-OPEN: non blocco)",
+                           exc_info=True)
+            return False, []
+
     def _trasferisci_all_host(self, rif, importo_cents):
         """SOLDI ALL'HOST IN AUTOMATICO (strategia fondatore): allo sblocco dell'escrow
         (ok cliente / 24h di silenzio / esito controversia), se l'host ha Stripe collegato
         e la prenotazione era PAGATA online, il netto parte da solo verso il suo conto.
         GATED (senza Connect/account: resta manuale, tracciato), IDEMPOTENTE (Idempotency-Key
-        per riferimento + guardia stato payout), ISOLATO (mai blocca il rilascio)."""
+        per riferimento + guardia stato payout), ISOLATO (mai blocca il rilascio).
+        ENFORCEMENT DAC7: host reportabile senza dati fiscali -> il transfer NON parte, il
+        payout resta 'maturato' (tracciato, mai perso) e si sblocca da solo quando l'host
+        completa i dati (retry in _host_dati_fiscali)."""
         try:
             connect = getattr(self._sys, "connect", None)
             pp = getattr(self._sys, "pagamenti_pendenti", None)
@@ -2788,6 +2886,19 @@ class RouterHTTP:
                 return                                # host non collegato -> bonifico manuale
             if pd is not None and pd.stato_di(rif) in ("in_transito", "pagato"):
                 return                                # gia' partito (guardia anti-doppio)
+            bloccato, manca = self._dac7_payout_bloccato(host_id)
+            if bloccato:
+                # HOLD DERIVATO, non scritto: payout resta 'maturato' (visibile in da_pagare,
+                # IMPOSSIBILE perderlo) + host-bloccato => in hold. Niente stato 'trattenuto'
+                # (e' delle controversie: riusarlo farebbe sbloccare al DAC7 soldi fermati da
+                # un arbitro) e NIENTE riga nel giornale (nessun denaro si e' mosso).
+                # Log formato kimi, finisce nei log del Bunker (app.log persistente).
+                import datetime as _dt
+                logger.warning("PAYOUT_HOLD_TRIGGERED | HOST_ID: %s | RIF: %s | IMPORTO: %d | "
+                               "MOTIVO: MANCANZA_DATI_FISCALI (%s) | DATA: %s",
+                               host_id, rif, int(importo_cents), ",".join(manca),
+                               _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%SZ"))
+                return
             import json as _jt
             try:
                 valuta = _jt.loads(rec.get("corpo_json") or "{}").get("valuta") or "EUR"

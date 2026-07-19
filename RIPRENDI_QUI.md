@@ -156,6 +156,22 @@
 >   login salvano la credenziale dove le dashboard già la cercano. KILL-SWITCH `PAGE_GATE=0`.
 >   test_gatekeeper (11, VERO server HTTP). **Suite 2612 verde (3 skip).** NB dopo il deploy:
 >   tutti rifanno login UNA volta (il cookie nasce solo dal login).
+> · 💰 **GOVERNANCE PAGAMENTI (Incremento 6, spec kimi) — blocco payout DAC7**: cancello
+>   HARD-CODED in `_trasferisci_all_host` (unica via del transfer automatico): host REPORTABILE
+>   (≥30 pren O ≥€2000, anno corrente o precedente) E dati fiscali incompleti → il bonifico NON
+>   parte, **HOLD DERIVATO** (payout resta 'maturato' = visibile/mai perso; NO stato 'trattenuto'
+>   che è delle controversie, NO righe giornale: nulla si è mosso) · **SBLOCCO AUTOMATICO**: al
+>   `POST /api/host/dati_fiscali` completo i maturato vengono ritentati subito (payout_riprovati)
+>   · host VEDE l'avviso: card "🇪🇺 Dati fiscali" NUOVA in host.html (prima l'endpoint non aveva
+>   UI!) con banner rosso via `GET /api/host/dac7_stato` (quanto è fermo) · Bunker: 💰 €fermi
+>   sugli urgenti in conformità · audit `PAYOUT_HOLD_TRIGGERED/RELEASED` formato kimi · FAIL-OPEN
+>   (bug del controllo → si paga: denaro dovuto) · kill-switch `DAC7_BLOCCO_PAYOUT=0` ·
+>   test_dac7_blocco_payout (8/8).
+> · 🧭 **FIX NAVIGAZIONE POST-LOGIN BUNKER (kimi)**: "Sblocca" in admin.html ora salva la
+>   sessione in sessionStorage CONDIVISO e fa redirect a /bunker.html (cookie gatekeeper appena
+>   emesso → porta aperta, sala già loggata); tornando al Field le 4 distruttive restano armate
+>   nei 15 min (sessione condivisa). Le distruttive NON si spostano nel bunker (Incremento ③
+>   deliberato: spostarle avrebbe rotto i rimborsi). Guardie pagine 80/80 verdi.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare
