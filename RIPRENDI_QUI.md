@@ -260,6 +260,18 @@
 >   ovunque, rete tutta con timeout, globali=costanti, money già a ricalcolo incrociato.
 >   PROVE: suite **2690 verde** + bombardamento pieno 10×1000 RIESEGUITO = ZERO violazioni
 >   (159s). Riga 🔟 REGISTRO sez.1.
+> · 🔗 **RICONCILIAZIONE INTER-LIBRO (2026-07-19, mandato "cambia metodo, neuroni profondi")**:
+>   metodo ORTOGONALE — un oracolo indipendente ricalcola da zero e confronta i 4 libri
+>   TRA LORO (giornale/payout/escrow/tassa/pendenti/inventario), cosa che nessun test faceva.
+>   Guida prenotazioni reali (quote→book→webhook + replay/rimborsi/gare paga∥cancella) in
+>   5 VALUTE (EUR/USD/JPY/GBP/CHF). Invarianti: identità record, incasso==totale, idempotenza,
+>   payout==netto, tassa per comune, quadratura PER VALUTA, rimborsata→payout non pieno,
+>   inventario↔denaro (mai "soldi senza stanza"/overbooking), catena hash. Esito: 10 seed ×
+>   200 pren × 5 valute = ZERO divergenze + guardia permanente (test_riconciliazione_interlibro).
+>   +auto-riparazione crash #32 provata con fault-injection. 1 reperto = nel MIO harness
+>   (endpoint cancella sbagliato mascherava il rimborso), corretto. ONESTÀ: nessun bug
+>   contabile nel prodotto; il valore è la PROVA che i libri riconciliano + la guardia.
+>   Riga 🔗 REGISTRO sez.1.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare
