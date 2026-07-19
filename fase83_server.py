@@ -1125,6 +1125,14 @@ class RouterHTTP:
             return self._admin_audit(query, headers)    # scheda contabile + semaforo (fase181)
         if metodo == "POST" and path == "/api/admin/storno_penale":
             return self._admin_storno_penale(body, headers)   # 5ª distruttiva (Bunker-gated)
+        if metodo == "GET" and path == "/api/admin/verifiche":
+            return self._admin_verifiche(query, headers)      # KYC dashboard (Incr.10)
+        if metodo == "GET" and path == "/api/admin/verifiche/dettaglio":
+            return self._admin_verifiche_dettaglio(query, headers)
+        if metodo == "GET" and path == "/api/admin/verifiche/fascicolo":
+            return self._admin_verifiche_fascicolo(query, headers)   # Bunker-gated
+        if metodo == "POST" and path == "/api/admin/verifica_stato":
+            return self._admin_verifica_stato(body, headers)         # Bunker-gated
         if metodo == "GET" and path == "/api/admin/alloggi":
             return self._admin_alloggi(query, headers)
         if metodo == "POST" and path == "/api/admin/alloggio_stato":
@@ -1163,6 +1171,10 @@ class RouterHTTP:
             return self._host_dati_fiscali(body, headers)
         if metodo == "GET" and path == "/api/host/dac7_stato":
             return self._host_dac7_stato(query, headers)   # avviso hold payout nel pannello
+        if metodo == "GET" and path == "/api/host/kyc_stato":
+            return self._host_kyc_stato(query, headers)    # verifica identita' (Incr.11)
+        if metodo == "POST" and path == "/api/host/kyc_avvia":
+            return self._host_kyc_avvia(body, headers)     # avvia Stripe Identity (gated)
         return 404, {"errore": "rotta_non_trovata"}
 
     # --- helper ---
@@ -1505,6 +1517,279 @@ class RouterHTTP:
         logger.info("AUDIT console: ip=%s id=%r tipo=%s semaforo=%s",
                     self._client_ip(headers), termine[:60], scheda.get("tipo"), sem)
         return 200, scheda
+
+    # ── STRIPE IDENTITY (Incremento 11): verifica documentale AUTOMATICA ─────
+    @staticmethod
+    def _identity_key():
+        import os as _os
+        return _os.environ.get("STRIPE_IDENTITY_KEY", "").strip()
+
+    def _kyc_sync(self, host_id):
+        """Se la verifica e' 'in_corso', chiede a Stripe lo stato REALE (2s, read-only,
+        MAI il report: quello contiene PII e resta da Stripe) e transita il registro.
+        Ritorna lo stato aggiornato."""
+        kyc = getattr(self._sys, "kyc", None)
+        if kyc is None:
+            return "non_disponibile"
+        stato = kyc.stato(host_id)
+        chiave = self._identity_key()
+        if stato == "in_corso" and chiave:
+            from fase143_kyc_host import stripe_identity_stato
+            remoto = stripe_identity_stato(chiave, kyc.sessione(host_id))
+            if remoto == "verified":
+                kyc.conferma(host_id, "verificato")
+                logger.warning("KYC IDENTITY VERIFICATO | HOST_ID: %s (Stripe)", host_id)
+            elif remoto == "canceled":
+                kyc.conferma(host_id, "respinto")     # ritentabile (respinto -> in_corso)
+            stato = kyc.stato(host_id)
+        return stato
+
+    def _host_kyc_stato(self, query, headers):
+        """L'host vede il SUO stato di verifica identita' (+ sync live se in corso)."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        hid = self._host_id_da_token(headers)
+        if not (isinstance(hid, str) and hid):
+            return 422, {"errore": "host_id_mancante"}
+        return 200, {"configurato": bool(self._identity_key()
+                                         and getattr(self._sys, "kyc", None) is not None),
+                     "stato": self._kyc_sync(hid)}
+
+    def _host_kyc_avvia(self, body, headers):
+        """L'host avvia la verifica documentale: sessione HOSTED Stripe Identity (il
+        documento va dal suo telefono a Stripe, MAI da noi). GATED da STRIPE_IDENTITY_KEY:
+        senza chiave -> 503 onesto (la macchina e' pronta, si accende con la chiave)."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        hid = self._host_id_da_token(headers)
+        kyc = getattr(self._sys, "kyc", None)
+        chiave = self._identity_key()
+        if kyc is None or not chiave:
+            return 503, {"errore": "identity_non_configurato"}
+        if not (isinstance(hid, str) and hid):
+            return 422, {"errore": "host_id_mancante"}
+        if kyc.stato(hid) == "verificato":
+            return 200, {"ok": True, "stato": "verificato", "url": ""}
+        from fase143_kyc_host import stripe_identity_crea
+        ritorno = (self._base_url or "https://bookinvip.com") + "/host.html?identity=fatto"
+        esito = stripe_identity_crea(chiave, hid, ritorno)
+        if not esito:
+            return 503, {"errore": "sessione_non_creata"}
+        if not kyc.registra_avvio(hid, esito["id"]):
+            return 409, {"errore": "gia_in_corso", "stato": kyc.stato(hid)}
+        logger.info("KYC IDENTITY AVVIATO | HOST_ID: %s | SESSIONE: %s", hid, esito["id"])
+        return 200, {"ok": True, "stato": "in_corso", "url": esito["url"]}
+
+    # ── KYC DASHBOARD "Verifiche & Legale" (Incremento 10) ──────────────────
+    def _stato_documenti_host(self, h):
+        """Stato composito dei 'documenti' che DAVVERO custodiamo (mai carte d'identita':
+        quelle restano al provider — DSA art.30 ammette l'identificazione elettronica):
+        contratto firmato (fase163), dati fiscali DAC7, Stripe Connect, verifica manuale."""
+        acc = getattr(self._sys, "accettazioni", None)
+        contratto = False
+        if acc is not None:
+            try:
+                contratto = bool(acc.elenco(h["host_id"]))
+            except Exception:
+                contratto = False
+        fiscale = not self._dac7_mancanti(h)
+        stripe_ok = bool(h.get("stripe_account_id"))
+        ver = h.get("verifica_stato") or ""
+        # Incr.11: stato Stripe Identity (DOPPIA SICUREZZA: colonna informativa —
+        # la verifica MANUALE del super-admin resta SOVRANA per l'in_regola)
+        kyc = getattr(self._sys, "kyc", None)
+        identity = kyc.stato(h["host_id"]) if kyc is not None else "non_disponibile"
+        completo = contratto and fiscale and stripe_ok and ver == "verificato"
+        return {"contratto": contratto, "fiscale": fiscale, "stripe": stripe_ok,
+                "verifica": ver, "identity": identity, "in_regola": completo}
+
+    def _admin_verifiche(self, query, headers):
+        """LISTA 'Verifiche & Legale' (admin): ogni host con lo stato documenti composito
+        + contatori. Filtri: q (id/email/nome via cerca_host) e stato
+        (in_regola|incompleti|revocati|verificati). AUDIT di ogni consultazione."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        reg = getattr(self._sys, "registro_host", None)
+        if reg is None:
+            return 503, {"errore": "registro_non_attivo"}
+        q = str(query.get("q") or "").strip()
+        filtro = str(query.get("stato") or "").strip()
+        try:
+            if q:
+                # cerca_host trova gli id; il pieno (campi verifica) si ricarica per id
+                base = []
+                for r in reg.cerca_host(q, limit=50).get("host", []):
+                    x = reg.info_host(r["host_id"])
+                    if x:
+                        x = dict(x)
+                        x["host_id"] = r["host_id"]
+                        base.append(x)
+            else:
+                base = reg.elenco_host()
+            out, cont = [], {"in_regola": 0, "incompleti": 0, "revocati": 0,
+                            "verificati": 0}
+            for h in base:
+                sd = self._stato_documenti_host(h)
+                if sd["verifica"] == "revocato":
+                    cont["revocati"] += 1
+                elif sd["in_regola"]:
+                    cont["in_regola"] += 1
+                else:
+                    cont["incompleti"] += 1
+                if sd["verifica"] == "verificato":
+                    cont["verificati"] += 1
+                voce = {"host_id": h["host_id"], "email": h.get("email", ""),
+                        "ragione_sociale": h.get("ragione_sociale", ""),
+                        "tipo_soggetto": h.get("tipo_soggetto", ""), "documenti": sd}
+                if filtro == "in_regola" and not sd["in_regola"]:
+                    continue
+                if filtro == "incompleti" and (sd["in_regola"]
+                                               or sd["verifica"] == "revocato"):
+                    continue
+                if filtro == "revocati" and sd["verifica"] != "revocato":
+                    continue
+                if filtro == "verificati" and sd["verifica"] != "verificato":
+                    continue
+                out.append(voce)
+        except Exception:
+            logger.error("verifiche host: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        logger.info("ADMIN_ACTION | OGGETTO: verifiche_host | AZIONE: Lista (q=%r "
+                    "stato=%r) | IP: %s", q[:40], filtro, self._client_ip(headers))
+        return 200, {"host": out[:200], "totale": len(out), "contatori": cont}
+
+    @staticmethod
+    def _maschera(v, visibili=4):
+        v = str(v or "")
+        return ("*" * max(0, len(v) - visibili) + v[-visibili:]) if v else ""
+
+    def _admin_verifiche_dettaglio(self, query, headers):
+        """DETTAGLIO host (admin): prove del contratto firmato (fase163: quando, IP, hash
+        documento, versione, integrita'), completezza fiscale (IBAN/CF MASCHERATI: i dati
+        pieni stanno nel FASCICOLO Bunker-gated), Stripe, storia verifica. AUDIT."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        hid = str(query.get("host_id") or "").strip()
+        reg = getattr(self._sys, "registro_host", None)
+        info = (reg.info_host(hid) or None) if (reg is not None and hid) else None
+        if info is None:
+            return 404, {"errore": "host_non_trovato"}
+        acc = getattr(self._sys, "accettazioni", None)
+        prove = []
+        if acc is not None:
+            try:
+                prove = [{k: r.get(k) for k in ("documento", "versione", "ts", "ip",
+                                                 "doc_sha256", "integra")}
+                         for r in acc.elenco(hid)]
+            except Exception:
+                prove = []
+        h = dict(info)
+        h["host_id"] = hid
+        logger.info("ADMIN_ACTION | OGGETTO: %s | AZIONE: Visualizzazione | IP: %s",
+                    hid, self._client_ip(headers))
+        return 200, {"host_id": hid, "email": info.get("email", ""),
+                     "ragione_sociale": info.get("ragione_sociale", ""),
+                     "tipo_soggetto": info.get("tipo_soggetto", ""),
+                     "documenti": self._stato_documenti_host(h),
+                     "contratto_prove": prove,
+                     "fiscale": {"mancanti": self._dac7_mancanti(info),
+                                 "paese": info.get("paese", ""),
+                                 "iban_maschera": self._maschera(info.get("iban")),
+                                 "cf_maschera": self._maschera(info.get("codice_fiscale"))},
+                     "verifica": {"stato": info.get("verifica_stato", ""),
+                                  "note": info.get("verifica_note", ""),
+                                  "ts": info.get("verifica_ts", ""),
+                                  "da": info.get("verifica_da", "")},
+                     # Incr.11: stato Stripe Identity SINCRONIZZATO live (2s) all'apertura
+                     "identity": self._kyc_sync(hid)}
+
+    def _admin_verifiche_fascicolo(self, query, headers):
+        """FASCICOLO LEGALE completo (BUNKER-gated: dati fiscali PIENI + prove contratto +
+        storia verifica) — il "download batch" ONESTO: i documenti che DAVVERO custodiamo.
+        AUDIT: Download."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        if not self._bunker_ok_o_field(headers, azione="fascicolo_host"):
+            return 403, {"errore": "bunker_richiesto"}
+        hid = str(query.get("host_id") or "").strip()
+        reg = getattr(self._sys, "registro_host", None)
+        info = (reg.info_host(hid) or None) if (reg is not None and hid) else None
+        if info is None:
+            return 404, {"errore": "host_non_trovato"}
+        acc = getattr(self._sys, "accettazioni", None)
+        prove = []
+        if acc is not None:
+            try:
+                prove = acc.elenco(hid)
+            except Exception:
+                prove = []
+        fc = getattr(self._sys, "finanza", None)
+        debiti = fc.debiti_host(hid) if fc is not None else []
+        logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: Download fascicolo | IP: %s",
+                       hid, self._client_ip(headers))
+        return 200, {"fascicolo": {"host_id": hid, "identita": {
+                         k: info.get(k, "") for k in ("email", "ragione_sociale",
+                                                       "telefono", "tipo_soggetto")},
+                     "fiscale": {k: info.get(k, "") for k in
+                                 ("codice_fiscale", "partita_iva", "indirizzo_fiscale",
+                                  "paese", "iban", "data_nascita")},
+                     "contratto_prove": prove,
+                     "verifica": {k: info.get("verifica_" + k, "") for k in
+                                  ("stato", "note", "ts", "da")},
+                     "stripe_account": info.get("stripe_account_id", ""),
+                     "identity": {"stato": (getattr(self._sys, "kyc", None).stato(hid)
+                                            if getattr(self._sys, "kyc", None) else
+                                            "non_disponibile"),
+                                  "session_ref": (getattr(self._sys, "kyc", None)
+                                                  .sessione(hid)
+                                                  if getattr(self._sys, "kyc", None)
+                                                  else "")},
+                     "debiti": debiti,
+                     "nota_legale": ("Documenti d'identita' MAI conservati da BookinVIP: "
+                                     "identificazione elettronica via provider (DSA art.30)"
+                                     )}}
+
+    def _admin_verifica_stato(self, body, headers):
+        """APPROVA/REVOCA la verifica (BUNKER-gated: la revoca FERMA i bonifici).
+        motivo obbligatorio per la revoca; alla ri-verifica i payout in hold RIPARTONO."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        if not self._bunker_ok_o_field(headers, azione="verifica_host"):
+            return 403, {"errore": "bunker_richiesto"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        hid = str(dati.get("host_id") or "").strip()
+        stato = str(dati.get("stato") or "").strip()
+        motivo = str(dati.get("motivo") or "").strip()
+        if stato not in ("verificato", "revocato", ""):
+            return 422, {"errore": "stato_non_valido"}
+        if stato == "revocato" and not motivo:
+            return 422, {"errore": "motivo_obbligatorio"}   # una revoca ha sempre un perche'
+        reg = getattr(self._sys, "registro_host", None)
+        if reg is None or not hid:
+            return 422, {"errore": "host_id_mancante"}
+        ip = self._client_ip(headers)
+        if not reg.imposta_verifica(hid, stato, note=motivo, da="super-admin@" + ip):
+            return 404, {"errore": "host_non_trovato"}
+        logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: Verifica->%s | MOTIVO: %s | "
+                       "IP: %s", hid, stato or "non_verificato", motivo or "-", ip)
+        riprovati = 0
+        if stato == "verificato":                # sblocco: i payout in hold ripartono
+            pd = getattr(self._sys, "payout", None)
+            if pd is not None:
+                try:
+                    for r in pd.elenca(hid, stato="maturato"):
+                        self._trasferisci_all_host(r["prenotazione_id"], int(r["minori"]))
+                        riprovati += 1
+                    if riprovati:
+                        logger.warning("PAYOUT_HOLD_RELEASED | HOST_ID: %s | RITENTATI: %d"
+                                       " | MOTIVO: VERIFICA_RIPRISTINATA", hid, riprovati)
+                except Exception:
+                    logger.warning("retry payout post-verifica fallito (ISOLATO)",
+                                   exc_info=True)
+        return 200, {"ok": True, "host_id": hid, "stato": stato,
+                     "payout_riprovati": riprovati}
 
     def _admin_storno_penale(self, body, headers):
         """STORNO PENALE (tool super-admin, 5ª operazione distruttiva): corregge una ND
@@ -2997,6 +3282,21 @@ class RouterHTTP:
                            exc_info=True)
             return False, []
 
+    def _verifica_payout_bloccato(self, host_id):
+        """KYC DASHBOARD (Incr.10): True se il super-admin ha REVOCATO la verifica
+        dell'host -> i bonifici vanno in HOLD (derivato: payout resta 'maturato') finche'
+        lo stato non torna 'verificato'. SOLO 'revocato' blocca: il semplice non-verificato
+        NON blocca (bloccherebbe ogni host esistente = paralisi). FAIL-OPEN su errori."""
+        try:
+            reg = getattr(self._sys, "registro_host", None)
+            if reg is None or not (isinstance(host_id, str) and host_id):
+                return False
+            info = reg.info_host(host_id)
+            return bool(info and info.get("verifica_stato") == "revocato")
+        except Exception:
+            logger.warning("controllo verifica payout fallito (FAIL-OPEN)", exc_info=True)
+            return False
+
     def _trasferisci_all_host(self, rif, importo_cents):
         """SOLDI ALL'HOST IN AUTOMATICO (strategia fondatore): allo sblocco dell'escrow
         (ok cliente / 24h di silenzio / esito controversia), se l'host ha Stripe collegato
@@ -3056,6 +3356,13 @@ class RouterHTTP:
                                    " -> ledger %d cents (offset/riscossione)", rif,
                                    int(importo_cents), int(_rp["minori"]))
                 importo_cents = int(_rp["minori"])
+            if self._verifica_payout_bloccato(host_id):
+                import datetime as _dtv
+                logger.warning("PAYOUT_HOLD_TRIGGERED | HOST_ID: %s | RIF: %s | IMPORTO: %d"
+                               " | MOTIVO: VERIFICA_REVOCATA | DATA: %s", host_id, rif,
+                               int(importo_cents),
+                               _dtv.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%SZ"))
+                return                     # resta 'maturato': si sblocca alla ri-verifica
             bloccato, manca = self._dac7_payout_bloccato(host_id)
             if bloccato:
                 # HOLD DERIVATO, non scritto: payout resta 'maturato' (visibile in da_pagare,
@@ -4092,6 +4399,23 @@ class RouterHTTP:
                 logger.warning("salvataggio cs_ fallito (ISOLATO)", exc_info=True)
             logger.info("Stripe: pagamento CONFERMATO per riferimento '%s'", rif)
             self._conferma_pagamento(rif)
+        elif str(tipo).startswith("identity.verification_session."):
+            # STRIPE IDENTITY (Incr.11): il webhook porta l'ESITO (mai il documento).
+            # ISOLATO: qualunque errore qui non tocca il resto del webhook.
+            try:
+                obj = (dati or {}).get("object", {}) or {}
+                hid = (obj.get("metadata", {}) or {}).get("host_id", "")
+                stato_s = str(obj.get("status") or "")
+                kyc = getattr(self._sys, "kyc", None)
+                if kyc is not None and hid:
+                    if stato_s == "verified":
+                        kyc.conferma(hid, "verificato")
+                        logger.warning("KYC IDENTITY VERIFICATO | HOST_ID: %s (webhook)",
+                                       hid)
+                    elif stato_s == "canceled":
+                        kyc.conferma(hid, "respinto")
+            except Exception:
+                logger.warning("webhook identity: errore ISOLATO", exc_info=True)
         return 200, {"ricevuto": True, "tipo": tipo}
 
     def _riasserisci_incasso(self, rec, rif):

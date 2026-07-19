@@ -212,6 +212,22 @@
 >   cancello (admin+Bunker, motivo OBBLIGATORIO). UI: ↩️ nella card Audit sulle ND.
 >   test_storno_penale (6). Con questo il Financial Controller ha TUTTO tranne Scatto ③
 >   (carta off-session: attende decisione SetupIntent del fondatore).
+> · 🛡️ **KYC DASHBOARD "Verifiche & Legale" (Incremento 10)**: PRIMA cosa nel pannello admin —
+>   contatori ✅⚠️⛔ + ricerca dedicata + stato composito dei documenti che DAVVERO custodiamo
+>   (📜 contratto fase163 con prove ts/IP/hash · 💶 fiscale DAC7 · 💳 Stripe · 🛡️ verifica manuale).
+>   DECISIONE LEGALE (fonti DSA art.30): MAI carte d'identità da noi — identificazione
+>   elettronica via provider soddisfa la legge; privati non-trader fuori perimetro. Azioni:
+>   Dettaglio (IBAN/CF MASCHERATI), Approva/Revoca/Ripristina (Bunker, motivo obbligatorio),
+>   Fascicolo legale JSON (Bunker, dati pieni). REVOCA = HOLD bonifici (stesso hold derivato
+>   DAC7); RIPRISTINO = ripartono da soli. Audit ADMIN_ACTION formato kimi.
+>   test_verifiche_host (5).
+> · 🪪 **STRIPE IDENTITY (Incremento 11, "DOPPIA SICUREZZA")**: verifica documentale AUTOMATICA
+>   ~190 Paesi, flusso HOSTED (documento telefono→Stripe, MAI da noi; da noi solo esiti fase143
+>   montata nel boot). GATED da `STRIPE_IDENTITY_KEY` (segnaposto GIÀ sul VPS, vuoto: si accende
+>   mettendo la chiave, zero deploy) + `DB_KYC=/data/kyc.db` già sul VPS. Host: bottone "Verifica
+>   identità con Stripe"; admin: colonna 🪪; esiti via webhook firmato + sync 2s. **SOVRANITÀ**:
+>   la revoca manuale ferma i bonifici anche se Stripe dice OK. test_stripe_identity (7).
+>   Etichette fiscali host rese MONDIALI (CF/TIN, IVA/VAT).
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare

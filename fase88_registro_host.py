@@ -110,7 +110,10 @@ class RegistroHost:
                 for col in ("telefono", "line_token", "wechat_webhook", "telegram_chat_id",
                             "stripe_account_id", "codice_fiscale", "partita_iva",
                             "indirizzo_fiscale", "paese", "iban", "tipo_soggetto",
-                            "data_nascita"):
+                            "data_nascita",
+                            # VERIFICA HOST (KYC dashboard, Incr.10): '' = non verificato,
+                            # 'verificato' | 'revocato' (manuale super-admin; provider futuro)
+                            "verifica_stato", "verifica_note", "verifica_ts", "verifica_da"):
                     try:
                         con.execute("ALTER TABLE host ADD COLUMN %s TEXT NOT NULL DEFAULT ''" % col)
                     except sqlite3.OperationalError:
@@ -217,7 +220,8 @@ class RegistroHost:
             r = con.execute("SELECT email, telefono, line_token, wechat_webhook, "
                             "telegram_chat_id, stripe_account_id, ragione_sociale, "
                             "codice_fiscale, partita_iva, indirizzo_fiscale, paese, iban, "
-                            "tipo_soggetto, data_nascita "
+                            "tipo_soggetto, data_nascita, "
+                            "verifica_stato, verifica_note, verifica_ts, verifica_da "
                             "FROM host WHERE host_id=?",
                             (host_id,)).fetchone()
         finally:
@@ -234,7 +238,9 @@ class RegistroHost:
                 "codice_fiscale": g("codice_fiscale"), "partita_iva": g("partita_iva"),
                 "indirizzo_fiscale": g("indirizzo_fiscale"), "paese": g("paese"),
                 "iban": g("iban"), "tipo_soggetto": g("tipo_soggetto"),
-                "data_nascita": g("data_nascita")}
+                "data_nascita": g("data_nascita"),
+                "verifica_stato": g("verifica_stato"), "verifica_note": g("verifica_note"),
+                "verifica_ts": g("verifica_ts"), "verifica_da": g("verifica_da")}
 
     # ── DATI FISCALI (DAC7): raccolta + audit di conformita' ────────────────
     CAMPI_FISCALI = ("codice_fiscale", "partita_iva", "indirizzo_fiscale", "paese",
@@ -274,7 +280,8 @@ class RegistroHost:
         try:
             righe = con.execute(
                 "SELECT host_id, email, ragione_sociale, stato, codice_fiscale, "
-                "partita_iva, indirizzo_fiscale, paese, iban, tipo_soggetto "
+                "partita_iva, indirizzo_fiscale, paese, iban, tipo_soggetto, "
+                "stripe_account_id, verifica_stato "
                 "FROM host ORDER BY creato_ts LIMIT ?", (lim,)).fetchall()
         finally:
             con.close()
@@ -285,8 +292,35 @@ class RegistroHost:
                         "ragione_sociale": r["ragione_sociale"] or "", "stato": r["stato"],
                         "codice_fiscale": g("codice_fiscale"), "partita_iva": g("partita_iva"),
                         "indirizzo_fiscale": g("indirizzo_fiscale"), "paese": g("paese"),
-                        "iban": g("iban"), "tipo_soggetto": g("tipo_soggetto")})
+                        "iban": g("iban"), "tipo_soggetto": g("tipo_soggetto"),
+                        "stripe_account_id": g("stripe_account_id"),
+                        "verifica_stato": g("verifica_stato")})
         return out
+
+    def imposta_verifica(self, host_id: Any, stato: Any, *, note: str = "",
+                         da: str = "") -> bool:
+        """VERIFICA HOST (Incr.10): il super-admin marca lo stato di verifica manuale.
+        stato: '' (non verificato) | 'verificato' | 'revocato'. Audit nei campi stessi
+        (note, chi, quando); la storia completa vive nei log persistenti."""
+        if not (isinstance(host_id, str) and host_id):
+            return False
+        if stato not in ("", "verificato", "revocato"):
+            return False
+        import time as _t
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute(
+                    "UPDATE host SET verifica_stato=?, verifica_note=?, verifica_ts=?, "
+                    "verifica_da=? WHERE host_id=?",
+                    (stato, str(note or "")[:300], str(int(_t.time())),
+                     str(da or "")[:120], host_id))
+            return bool(cur.rowcount)
+        except Exception:
+            logger.warning("imposta_verifica fallita (ISOLATA)", exc_info=True)
+            return False
+        finally:
+            con.close()
 
     def cerca_host(self, termine: Any, *, limit: int = 10, offset: int = 0
                    ) -> Dict[str, Any]:

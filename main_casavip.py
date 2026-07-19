@@ -79,6 +79,7 @@ def main() -> None:  # pragma: no cover
         db_geocache=os.environ.get("DB_GEOCACHE", "data/geocache.db"),
         db_checkin=os.environ.get("DB_CHECKIN", "data/checkin.db"),
         db_finanza=os.environ.get("DB_FINANZA", "data/finanza.db"),
+        db_kyc=os.environ.get("DB_KYC", "data/kyc.db"),
         bunker_totp_secret=os.environ.get("BUNKER_TOTP_SECRET", ""),
         bunker_password=os.environ.get("BUNKER_PASSWORD", ""),
         bunker_recovery=os.environ.get("BUNKER_RECOVERY", ""),

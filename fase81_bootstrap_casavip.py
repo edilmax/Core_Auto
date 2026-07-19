@@ -83,6 +83,7 @@ class ConfigCasaVIP:
     db_tassa_comunale: str = ":memory:"  # ledger riscossioni tassa di soggiorno (rendicontazione)
     db_payout: str = ":memory:"        # dashboard payout host (incassi attesi per valuta/stato)
     db_finanza: str = ":memory:"       # financial controller (fase177): giornale+note+debiti
+    db_kyc: str = ":memory:"           # esiti verifica identita' host (fase143, MAI documenti)
     db_accettazioni: str = ":memory:"  # registro firmato accettazioni contratto host (prova legale)
     db_geocache: str = ":memory:"      # cache geocoding città->coordinate (mappa nella ricerca)
     db_checkin: str = ":memory:"       # check-in digitale (pre-registrazione ospiti + sblocco)
@@ -141,6 +142,7 @@ class SistemaCasaVIP:
     checkin: Any = None     # CheckinDigitale (fase127): pre-registrazione ospiti + sblocco
     credito_usati: Any = None  # RegistroCreditiUsati (fase167): single-use del Credito Fondatore/Viaggio
     finanza: Any = None     # FinancialController (fase177): giornale immutabile + note + offset penali
+    kyc: Any = None         # KYCHost (fase143): esiti verifica identita' (provider, no-PII)
     bunker: Any = None      # Bunker (fase180): super-admin 2FA TOTP + sessione blindata 15 min
 
     @property
@@ -337,6 +339,18 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         finanza = None
         logger.warning("financial controller NON attivo (ISOLATO)", exc_info=True)
 
+    # 3f-octies) KYC HOST (fase143): registro degli ESITI di verifica identita' (mai
+    # documenti: identificazione elettronica via provider, DSA art.30). ISOLATO.
+    kyc = None
+    try:
+        from fase143_kyc_host import crea_kyc_host
+        kyc = crea_kyc_host(cfg.db_kyc)
+        kyc.inizializza_schema()
+        componenti.append("kyc_host(143)")
+    except Exception:
+        kyc = None
+        logger.warning("kyc host NON attivo (ISOLATO)", exc_info=True)
+
     # 3f-septies) BUNKER super-admin (fase180): 2FA TOTP + sessione blindata. GATED da
     # bunker_totp_secret/recovery (env in prod). Se spento, gli endpoint /bunker
     # rispondono "non configurato" (mai un crash), e le distruttive restano come oggi
@@ -497,4 +511,4 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           payout=payout, accettazioni=accettazioni, stripe=provider,
                           connect=_connect, geocoder=geocoder, checkin=checkin,
                           poi_provider=poi_provider, credito_usati=credito_usati,
-                          finanza=finanza, bunker=bunker)
+                          finanza=finanza, bunker=bunker, kyc=kyc)

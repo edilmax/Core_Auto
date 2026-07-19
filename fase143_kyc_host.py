@@ -98,6 +98,23 @@ class KYCHost:
             return False
         return self._transita(host_id, esito, None)
 
+    def registra_avvio(self, host_id: str, session_ref: str) -> bool:
+        """Sessione creata FUORI (fase83 con Stripe Identity): salva ref + 'in_corso'.
+        Evita la race della closure condivisa di `avvia` quando piu' host partono insieme."""
+        if not (host_id and session_ref):
+            return False
+        return self._transita(str(host_id), "in_corso", str(session_ref))
+
+    def sessione(self, host_id: str) -> str:
+        """session_ref corrente ('' se mai avviata) — per il sync di stato col provider."""
+        con = self._apri()
+        try:
+            r = con.execute("SELECT session_ref FROM kyc WHERE host_id=?",
+                            (str(host_id),)).fetchone()
+            return (r[0] or "") if r else ""
+        finally:
+            con.close()
+
     def _transita(self, host_id: str, nuovo: str, ref: Optional[str]) -> bool:
         if nuovo not in STATI:
             return False
@@ -125,6 +142,62 @@ class KYCHost:
             return False
         finally:
             con.close()
+
+
+def stripe_identity_crea(chiave: str, host_id: str, return_url: str, *,
+                         fetch: Any = None, timeout: float = 6.0
+                         ) -> Optional[Dict[str, str]]:
+    """Crea una VerificationSession Stripe Identity (flusso HOSTED: il documento viaggia
+    dal telefono dell'host DIRETTAMENTE a Stripe — mai dai nostri server).
+    Ritorna {'id': 'vs_...', 'url': <pagina hosted>} o None. `fetch` iniettabile per i
+    test. PRIVACY: nei log SOLO l'id sessione, mai dati del documento."""
+    if not (chiave and isinstance(host_id, str) and host_id):
+        return None
+    dati = {"type": "document", "metadata[host_id]": host_id,
+            "return_url": return_url or ""}
+    try:
+        if fetch is None:
+            from urllib.parse import urlencode
+            from urllib.request import Request, urlopen
+            import json as _j
+            req = Request("https://api.stripe.com/v1/identity/verification_sessions",
+                          data=urlencode(dati).encode("utf-8"),
+                          headers={"Authorization": "Bearer " + chiave})
+            with urlopen(req, timeout=timeout) as r:
+                out = _j.loads(r.read().decode("utf-8"))
+        else:
+            out = fetch("identity/verification_sessions", dati, chiave)
+        sid, url = out.get("id", ""), out.get("url", "")
+        if sid and url:
+            logger.info("Stripe Identity: sessione creata %s per host %s", sid, host_id)
+            return {"id": sid, "url": url}
+    except Exception:
+        logger.warning("Stripe Identity: creazione sessione fallita (ISOLATA)",
+                       exc_info=True)
+    return None
+
+
+def stripe_identity_stato(chiave: str, session_id: str, *, fetch: Any = None,
+                          timeout: float = 2.0) -> Optional[str]:
+    """Stato della sessione (read-only, timeout CORTO: mai bloccare pannelli):
+    'verified' | 'processing' | 'requires_input' | 'canceled' | None (irraggiungibile).
+    NON scarica MAI il report di verifica (contiene PII: resta da Stripe)."""
+    if not (chiave and isinstance(session_id, str) and session_id.startswith("vs_")):
+        return None
+    try:
+        if fetch is None:
+            from urllib.request import Request, urlopen
+            import json as _j
+            req = Request("https://api.stripe.com/v1/identity/verification_sessions/"
+                          + session_id,
+                          headers={"Authorization": "Bearer " + chiave})
+            with urlopen(req, timeout=timeout) as r:
+                out = _j.loads(r.read().decode("utf-8"))
+        else:
+            out = fetch("identity/verification_sessions/" + session_id, None, chiave)
+        return str(out.get("status") or "") or None
+    except Exception:
+        return None
 
 
 def crea_kyc_host(percorso: str, *, avvia_sessione: Any = None,
