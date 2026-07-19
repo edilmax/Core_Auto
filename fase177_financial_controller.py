@@ -41,7 +41,12 @@ TIPI_GIORNALE = ("nota_debito", "nota_credito", "penale_offset", "penale_incassa
                  "storno", "debt_on", "debt_off",
                  # movimenti di denaro "ordinari" (log immutabile di TUTTO, non solo penali):
                  "incasso", "payout_host", "payout_manuale", "rimborso",
-                 "tassa_incassata", "tassa_stornata")
+                 "tassa_incassata", "tassa_stornata",
+                 # commissione NETTA trattenuta all'host (comm + costo carta - credito): registrata
+                 # al PAGAMENTO cosi' il report DAC7 e' corretto anche se il bonifico e' in hold
+                 # (prima il netto DAC7 veniva letto solo dai bonifici COMPLETATI -> host reportabile
+                 #  con payout trattenuto -> netto=0 -> commissioni=lordo pieno = misreport al Fisco).
+                 "commissione")
 
 # mappatura tipo -> (conto_dare, conto_avere) per i movimenti ordinari: partita doppia
 # leggibile a colpo d'occhio nell'audit (cassa piattaforma vs debiti verso host/ospite/comune).
@@ -52,6 +57,7 @@ _CONTI_MOVIMENTO = {
     "rimborso":        ("debiti_vs_ospite", "cassa_piattaforma"),    # esce verso l'ospite
     "tassa_incassata": ("cassa_piattaforma", "debiti_vs_comune"),    # quota tassa trattenuta
     "tassa_stornata":  ("debiti_vs_comune", "cassa_piattaforma"),    # tassa restituita
+    "commissione":     ("debiti_vs_host", "ricavi_commissioni"),     # cio' che tratteniamo all'host
 }
 
 
@@ -263,7 +269,8 @@ class FinancialController:
             imp = int(r["importo_cents"] or 0)
             sog = r["soggetto"] or ""
             d = per_rif.setdefault(rif, {"host": "", "ts": None, "incasso": 0,
-                                         "tassa": 0, "netto": 0, "rimborso": 0})
+                                         "tassa": 0, "netto": 0, "rimborso": 0,
+                                         "commissione": 0, "ha_comm": False})
             if tipo == "incasso":
                 d["incasso"] += imp
                 d["ts"] = r["ts"]
@@ -273,6 +280,11 @@ class FinancialController:
                 d["tassa"] += imp
             elif tipo in ("payout_host", "payout_manuale"):
                 d["netto"] += imp
+                if sog.startswith("host:") and not d["host"]:
+                    d["host"] = sog[5:]
+            elif tipo == "commissione":
+                d["commissione"] += imp
+                d["ha_comm"] = True
                 if sog.startswith("host:") and not d["host"]:
                     d["host"] = sog[5:]
             elif tipo == "rimborso":
@@ -289,8 +301,15 @@ class FinancialController:
                 continue
             q = (dt.month - 1) // 3 + 1
             lordo = max(0, int(d["incasso"]) - int(d["tassa"]))     # corrispettivo alloggio
-            netto = int(d["netto"])
-            commiss = max(0, lordo - netto)
+            # NETTO all'host: se la commissione e' stata registrata al pagamento (fix 2026-07-19)
+            # la usiamo -> il report e' CORRETTO anche col bonifico in HOLD (netto = lordo-comm).
+            # Storico pre-fix (senza riga 'commissione'): retrocompat dal bonifico completato.
+            if d.get("ha_comm"):
+                commiss = min(int(d["commissione"]), lordo)
+                netto = lordo - commiss
+            else:
+                netto = int(d["netto"])
+                commiss = max(0, lordo - netto)
             h = agg.setdefault(d["host"], {
                 "n": 0, "lordo": 0, "netto": 0, "commissioni": 0, "tasse": 0,
                 "rimborsi": 0, "trim": {1: 0, 2: 0, 3: 0, 4: 0},

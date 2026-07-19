@@ -272,6 +272,17 @@
 >   (endpoint cancella sbagliato mascherava il rimborso), corretto. ONESTÀ: nessun bug
 >   contabile nel prodotto; il valore è la PROVA che i libri riconciliano + la guardia.
 >   Riga 🔗 REGISTRO sez.1.
+> · 🧮 **BUG FISCALE DAC7 FIXATO (2026-07-19, VAI del fondatore) — trovato col TEST DIFFERENZIALE**:
+>   metodo nuovo = reimplemento la commissione da zero e la confronto col prodotto (fase59
+>   prenotazione vs fase177 aggrega_dac7 = commissione dichiarata al Fisco). BUG: aggrega_dac7
+>   leggeva il netto host solo dai bonifici COMPLETATI → host reportabile col payout in HOLD
+>   (dati fiscali mancanti/verifica revocata) → netto=0 → commissioni=LORDO pieno. Dichiaravamo
+>   al Fisco €5.130 invece di €780 (+558%) + reddito host sottostimato. Non lo vedeva nessun
+>   metodo perché la conservazione è strutturale (riconciliazione sempre verde) e i test DAC7
+>   usavano payout completati. FIX: la commissione netta (comm+costo−credito) si registra a
+>   giornale al PAGAMENTO (idempotente); aggrega_dac7 fa netto=lordo−commissione (retrocompat
+>   storico). Provato: ora €780 esatto, catena integra, 67 test finanziari verdi, 0 regressioni.
+>   Riga 🧮 REGISTRO sez.1.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare

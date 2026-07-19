@@ -4584,6 +4584,20 @@ class RouterHTTP:
                 self._giornale(tipo="incasso", riferimento=rif, soggetto="host:" + str(hid),
                                importo_cents=totale, valuta=val,
                                causale="pagamento ospite ricevuto")
+                # COMMISSIONE NETTA trattenuta all'host, registrata ORA (al pagamento), non al
+                # bonifico: comm + costo carta - credito fondatore = cio' che davvero tratteniamo.
+                # Cosi' il report DAC7 (netto = lordo - commissione) e' corretto anche se il
+                # bonifico e' in HOLD (host reportabile senza dati fiscali / verifica revocata).
+                # Idempotente su evento_id: il retry del webhook non la raddoppia.
+                _comm = int(dj.get("commissione_cents", 0) or 0)
+                _costo = int(dj.get("costo_pagamento_cents", 0) or 0)
+                _sconto = int(dj.get("sconto_credito_cents", 0) or 0)
+                _comm_netta = _comm + _costo - _sconto
+                if _comm_netta > 0:
+                    self._giornale(tipo="commissione", riferimento=rif,
+                                   soggetto="host:" + str(hid), importo_cents=_comm_netta,
+                                   valuta=val, evento_id="commissione:" + str(rif),
+                                   causale="commissione piattaforma (comm+costo carta-credito)")
             if isinstance(rec, dict) and int(rec.get("tassa_cents", 0) or 0) > 0:
                 self._giornale(tipo="tassa_incassata", riferimento=rif,
                                soggetto="comune:" + str(rec.get("comune", "")),
