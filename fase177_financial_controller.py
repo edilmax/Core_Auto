@@ -571,6 +571,36 @@ class FinancialController:
         return {"nota_id": nota["nota_id"], "penale_cents": imp,
                 "offset_cents": offset_tot, "residuo_cents": residuo}
 
+    def nota(self, nota_id: Any) -> Optional[Dict[str, Any]]:
+        """AUDIT CONSOLE: una nota per id (ND-/NC-anno-progressivo). Read-only."""
+        if not (isinstance(nota_id, str) and nota_id):
+            return None
+        con = self._apri()
+        try:
+            r = con.execute("SELECT * FROM note WHERE nota_id=?",
+                            (nota_id.strip().upper(),)).fetchone()
+            return dict(r) if r is not None else None
+        except Exception:
+            logger.warning("nota lookup fallito (ISOLATO)", exc_info=True)
+            return None
+        finally:
+            con.close()
+
+    def note_per_riferimento(self, riferimento: Any) -> List[Dict[str, Any]]:
+        """AUDIT CONSOLE: tutte le note (ND/NC) di una prenotazione. Read-only (ix_note_rif)."""
+        if not (isinstance(riferimento, str) and riferimento):
+            return []
+        con = self._apri()
+        try:
+            cur = con.execute("SELECT * FROM note WHERE riferimento=? ORDER BY ts",
+                              (riferimento,))
+            return [dict(r) for r in cur]
+        except Exception:
+            logger.warning("note_per_riferimento fallito (ISOLATO)", exc_info=True)
+            return []
+        finally:
+            con.close()
+
     def debiti_aperti(self, *, limit: int = 500) -> List[Dict[str, Any]]:
         """TUTTI i debiti 'aperto' (sala controllo Bunker): quanto ci devono gli host."""
         lim = limit if isinstance(limit, int) and 0 < limit <= 2000 else 500

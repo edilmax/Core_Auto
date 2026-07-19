@@ -1121,6 +1121,8 @@ class RouterHTTP:
             return self._admin_prenotazioni(query, headers)
         if metodo == "GET" and path == "/api/admin/search":
             return self._admin_search(query, headers)   # ricerca operativa unificata (Incr.7)
+        if metodo == "GET" and path == "/api/admin/audit":
+            return self._admin_audit(query, headers)    # scheda contabile + semaforo (fase181)
         if metodo == "GET" and path == "/api/admin/alloggi":
             return self._admin_alloggi(query, headers)
         if metodo == "POST" and path == "/api/admin/alloggio_stato":
@@ -1479,6 +1481,28 @@ class RouterHTTP:
                     pagina, out["totale"], out["totali"]["annunci"],
                     out["totali"]["host"], out["totali"]["prenotazioni"])
         return 200, out
+
+    def _admin_audit(self, query, headers):
+        """FINANCIAL AUDIT CONSOLE (fase181): scheda contabile unica da QUALSIASI id
+        (riferimento/BVIP-code/ND-NC/host_id) + semaforo integrita' 4 stati + shadow-check
+        Stripe (2s). READ-ONLY provato. Admin-auth; whitelist campi (mai dati fiscali)."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        termine = str(query.get("id") or "").strip()
+        if not termine:
+            return 422, {"errore": "id_mancante"}
+        try:
+            from fase181_audit_console import componi, stripe_session_fetch
+            sk = getattr(getattr(self._sys, "config", None), "stripe_secret_key", "") or ""
+            check = ((lambda cs: stripe_session_fetch(sk, cs)) if sk else None)
+            scheda = componi(self._sys, termine, stripe_check=check)
+        except Exception:
+            logger.error("audit console: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        sem = (scheda.get("semaforo") or {}).get("complessivo", "-")
+        logger.info("AUDIT console: ip=%s id=%r tipo=%s semaforo=%s",
+                    self._client_ip(headers), termine[:60], scheda.get("tipo"), sem)
+        return 200, scheda
 
     def _admin_alloggio_stato(self, body, headers):
         """Admin: cambia lo stato di QUALSIASI annuncio (sospendi/ripubblica) per slug."""
@@ -4024,6 +4048,15 @@ class RouterHTTP:
                     "riferimento", "")
             except Exception:
                 rif = ""
+            # AUDIT CONSOLE: salva l'id sessione (cs_...) -> shadow-check Stripe possibile
+            # per sempre su questa prenotazione. ISOLATO: mai bloccare la conferma.
+            try:
+                cs_id = (dati or {}).get("object", {}).get("id", "")
+                pp_ = getattr(self._sys, "pagamenti_pendenti", None)
+                if pp_ is not None and rif and hasattr(pp_, "salva_stripe_session"):
+                    pp_.salva_stripe_session(rif, cs_id)
+            except Exception:
+                logger.warning("salvataggio cs_ fallito (ISOLATO)", exc_info=True)
             logger.info("Stripe: pagamento CONFERMATO per riferimento '%s'", rif)
             self._conferma_pagamento(rif)
         return 200, {"ricevuto": True, "tipo": tipo}

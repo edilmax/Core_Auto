@@ -127,6 +127,40 @@ class PagamentiPendenti:
         finally:
             con.close()
 
+    def salva_stripe_session(self, riferimento: Any, cs_id: Any) -> bool:
+        """AUDIT CONSOLE (prerequisito): salva l'id sessione Stripe (cs_...) arrivato col
+        webhook, dentro corpo_json (merge, MAI sovrascrive il resto). Da qui in poi lo
+        shadow-check Stripe della scheda contabile puo' verificare il pagamento alla fonte.
+        Idempotente e ISOLATO (un fallimento qui non tocca la conferma del pagamento)."""
+        if not (isinstance(riferimento, str) and riferimento
+                and isinstance(cs_id, str) and cs_id.startswith("cs_")):
+            return False
+        import json as _j
+        con = self._apri()
+        try:
+            with con:
+                r = con.execute("SELECT corpo_json FROM pendenti WHERE riferimento=?",
+                                (riferimento,)).fetchone()
+                if r is None:
+                    return False
+                try:
+                    dj = _j.loads(r["corpo_json"] or "{}")
+                    if not isinstance(dj, dict):
+                        dj = {}
+                except Exception:
+                    dj = {}
+                if dj.get("stripe_cs") == cs_id:
+                    return True                       # gia' salvato (retry webhook)
+                dj["stripe_cs"] = cs_id
+                con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                            (_j.dumps(dj, ensure_ascii=False), riferimento))
+                return True
+        except Exception:
+            logger.warning("salva_stripe_session fallita (ISOLATA)", exc_info=True)
+            return False
+        finally:
+            con.close()
+
     def cerca_prenotazioni(self, termine: Any, *, limit: int = 10, offset: int = 0
                            ) -> Dict[str, Any]:
         """RICERCA OPERATIVA (Field, Incremento 7): prenotazioni per RIFERIMENTO (prefisso,

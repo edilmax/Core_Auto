@@ -198,6 +198,13 @@
 >   di ogni ricerca. `GET /api/admin/search` + cerca_* nei 3 store (57/88/162).
 >   test_admin_search (8). NOTA onesta al fondatore: i filtri annunci c'erano già (Incr.2);
 >   il pezzo NUOVO è host-per-nome + prenotazioni + barra unica.
+> · 🔬 **FINANCIAL AUDIT CONSOLE (fase181, "VAI Audit Console")**: lo Spotlight contabile —
+>   nella barra admin il bottone 🔬 (o su ogni prenotazione trovata): incolli QUALSIASI id
+>   (riferimento/BVIP-XXXX-XXXX/ND-NC/host) → scheda unica dei libri (162+131+160+177) con
+>   SEMAFORO 4 stati (🟢 coerente · 🔴 mismatch col perché · 🟡 Stripe non verificabile ora,
+>   timeout 2s · ⚪ n/a onesto, non degrada) + SHADOW-CHECK Stripe (il webhook ORA salva il
+>   cs_ → prerequisito FATTO; contraddizione = rosso). READ-ONLY provato (zero righe nuove),
+>   whitelist (mai corpo_json/CF/IBAN). `GET /api/admin/audit`. test_audit_console (7).
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare
