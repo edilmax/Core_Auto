@@ -1910,6 +1910,16 @@ class RouterHTTP:
         except Exception:
             logger.error("bunker integrita diagnosi: eccezione ISOLATA", exc_info=True)
             rep["diagnosi"] = {"ok": None}
+        # Debt Status (Scatto ②): quanto ci devono gli host (penali non ancora riscosse).
+        # Si saldano DA SOLE alla fonte sui prossimi payout; qui la vista di controllo.
+        try:
+            aperti = fc.debiti_aperti() if fc is not None else []
+            rep["debiti"] = {"aperti": len(aperti),
+                             "totale_cents": sum(int(d.get("residuo_cents") or 0)
+                                                 for d in aperti),
+                             "host": sorted({str(d.get("host_id") or "") for d in aperti})}
+        except Exception:
+            rep["debiti"] = {"aperti": None}
         return 200, rep
 
     def _bunker_log(self, query, headers):
@@ -2906,6 +2916,36 @@ class RouterHTTP:
                 return                                # host non collegato -> bonifico manuale
             if pd is not None and pd.stato_di(rif) in ("in_transito", "pagato"):
                 return                                # gia' partito (guardia anti-doppio)
+            # SCATTO ② (Debt Status): PRIMA di pagare, i debiti 'aperto' dell'host si
+            # saldano ALLA FONTE (riscossione sui maturato, fase177). Puo' ridurre o
+            # consumare anche QUESTO payout. Isolata: se fallisce, si paga.
+            fc_ = getattr(self._sys, "finanza", None)
+            if fc_ is not None and pd is not None and hasattr(fc_, "riscuoti_debiti"):
+                try:
+                    ris = fc_.riscuoti_debiti(host_id=host_id, payout=pd)
+                    if ris.get("riscossi_cents"):
+                        logger.warning("DEBT_COLLECTED | HOST_ID: %s | RISCOSSI: %d cents "
+                                       "| SALDATI: %d | ANCORA APERTI: %d", host_id,
+                                       ris["riscossi_cents"], ris["debiti_saldati"],
+                                       ris["debiti_aperti"])
+                except Exception:
+                    logger.warning("riscossione debiti fallita (ISOLATA: si paga)",
+                                   exc_info=True)
+            # UNA SOLA VERITA' PER L'IMPORTO (fix overpay): comanda il ledger payout.
+            # Se l'offset penali (Scatto ①) o la riscossione (②) hanno ridotto/consumato
+            # questo payout, il bonifico parte per il RESIDUO del ledger — non per
+            # l'importo del chiamante (garanzia), che non sa delle compensazioni.
+            if pd is not None:
+                _rp = pd.info(rif)
+                if _rp is None or int(_rp.get("minori") or 0) <= 0:
+                    logger.warning("PAYOUT GIA' COMPENSATO/ASSENTE | RIF: %s | HOST_ID: %s"
+                                   " | nessun bonifico da inviare", rif, host_id)
+                    return
+                if int(_rp["minori"]) != int(importo_cents):
+                    logger.warning("IMPORTO RIALLINEATO AL LEDGER | RIF: %s | richiesto %d"
+                                   " -> ledger %d cents (offset/riscossione)", rif,
+                                   int(importo_cents), int(_rp["minori"]))
+                importo_cents = int(_rp["minori"])
             bloccato, manca = self._dac7_payout_bloccato(host_id)
             if bloccato:
                 # HOLD DERIVATO, non scritto: payout resta 'maturato' (visibile in da_pagare,
@@ -3115,7 +3155,18 @@ class RouterHTTP:
         host_id = self._host_id_da_token(headers) or query.get("host_id")
         if not (isinstance(host_id, str) and host_id):
             return 422, {"errore": "host_id_mancante"}
-        return 200, {"payout": pd.riepilogo(host_id)}
+        # Debt Status (Scatto ②): l'host VEDE il suo debito aperto (penali non ancora
+        # compensate) e sa che i prossimi bonifici lo saldano alla fonte. Trasparenza.
+        debiti = {}
+        fc = getattr(self._sys, "finanza", None)
+        if fc is not None:
+            try:
+                for d in fc.debiti_host(host_id, stato="aperto"):
+                    v = str(d.get("valuta") or "EUR")
+                    debiti[v] = debiti.get(v, 0) + int(d.get("residuo_cents") or 0)
+            except Exception:
+                debiti = {}
+        return 200, {"payout": pd.riepilogo(host_id), "debiti_aperti_cents": debiti}
 
     def _garanzia_da_voucher(self, body):
         dati = self._json(body)

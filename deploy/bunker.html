@@ -147,6 +147,11 @@ async function aggiorna(){
   if(cat.ok===true) ch=pill('ok','✅ CATENA INTEGRA')+' <span class="hint">'+(cat.righe||0)+' movimenti verificati</span>';
   else if(cat.ok===false) ch=pill('ko','🔴 MANOMISSIONE')+' <span class="hint">riga rotta: '+esc(String(cat.seq_rotta))+'</span>';
   else ch=pill('na','— non disponibile');
+  // Debt Status: penali host non ancora riscosse (si saldano da sole sui prossimi bonifici)
+  const de=(ig.d&&ig.d.debiti)||{};
+  if(de.aperti!=null) ch += ' ' + (de.aperti>0
+    ? pill('warn','💳 '+de.aperti+' debiti host · '+((de.totale_cents||0)/100).toFixed(2)+'€ (riscossione automatica sui prossimi bonifici)')
+    : pill('ok','nessun debito host'));
   $('catena').innerHTML=ch;
   // diagnosi
   const dg=(ig.d&&ig.d.diagnosi)||{};

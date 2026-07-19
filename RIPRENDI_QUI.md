@@ -178,6 +178,18 @@
 >   saltata; report: colonna `notti_anno` + immobili "titolo (città) - N notti/M pren", annunci
 >   cancellati con notti restano dichiarati. test_dac7_notti (7). **DAC7 COMPLETO su tutti i
 >   requisiti UE.**
+> · 💳 **SCATTO ② DEBT STATUS + FIX OVERPAY (dal "continua" del fondatore)**: (1) i debiti
+>   'aperto' ora si RISCUOTONO DA SOLI alla fonte sui payout futuri (fase177.riscuoti_debiti,
+>   stesso schema evento_id di ①, FIFO, stessa valuta, giornale-prima) PRIMA di ogni bonifico;
+>   nota/debito → 'saldato', log DEBT_COLLECTED; (2) **FIX OVERPAY pre-esistente scovato**: la
+>   conferma ospite passava l'importo dalla garanzia → dopo un offset ① il bonifico partiva
+>   PIENO (host pagato 2 volte della quota compensata) → ora UNA SOLA VERITÀ: l'importo lo
+>   detta il ledger payout (row assente→0 bonifico; ridotta→residuo). Ordine choke-point:
+>   anti-doppio → riscossione → riallineo → gate DAC7 → transfer. Trasparenza: host vede
+>   debiti_aperti_cents in /api/host/payout, Bunker n°+totale in /integrita (pill 💳).
+>   DECISIONE: niente sospensione host a debito (le prenotazioni future SONO il veicolo di
+>   rimborso). test_debt_status (7) + 42 money-path riverificati. RESTANO: Scatto ③ carta
+>   off-session (gated SetupIntent), storno penale Bunker-gated, Audit Console.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare

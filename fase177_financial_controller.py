@@ -571,6 +571,106 @@ class FinancialController:
         return {"nota_id": nota["nota_id"], "penale_cents": imp,
                 "offset_cents": offset_tot, "residuo_cents": residuo}
 
+    def debiti_aperti(self, *, limit: int = 500) -> List[Dict[str, Any]]:
+        """TUTTI i debiti 'aperto' (sala controllo Bunker): quanto ci devono gli host."""
+        lim = limit if isinstance(limit, int) and 0 < limit <= 2000 else 500
+        con = self._apri()
+        try:
+            cur = con.execute("SELECT * FROM debiti WHERE stato='aperto'"
+                              " ORDER BY aggiornato_ts LIMIT ?", (lim,))
+            return [dict(r) for r in cur]
+        except Exception:
+            logger.warning("debiti_aperti fallita (ISOLATA)", exc_info=True)
+            return []
+        finally:
+            con.close()
+
+    # ── MOTORE PENALI, Scatto ②: RISCOSSIONE debiti aperti sui payout FUTURI ─
+    def riscuoti_debiti(self, *, host_id: str, payout: Any,
+                        emittente: str = "sistema") -> Dict[str, Any]:
+        """Debt Status (gradino b): quando l'host ha debiti 'aperto' (penali non coperte
+        al momento della cancellazione), i payout 'maturato' SUCCESSIVI li saldano ALLA
+        FONTE, prima di ogni bonifico. FIFO sui debiti (il piu' vecchio prima) e FIFO sui
+        payout, STESSA valuta, mai il payout della prenotazione del debito stesso.
+        STESSO schema evento_id di processa_penale ('offset:<nota_id>:<pid>') -> replay e
+        idempotenza gratis: un payout gia' consumato per una nota non si riconsuma MAI
+        (il giornale rifiuta il doppione e qui si salta). Metodo AUTONOMO di proposito:
+        non tocca processa_penale (money-path collaudato). Giornale prima del ledger,
+        storno immediato se il ledger non si aggiorna (identico a Scatto ①).
+        Ritorna {'riscossi_cents': n, 'debiti_saldati': k, 'debiti_aperti': j}."""
+        esito = {"riscossi_cents": 0, "debiti_saldati": 0, "debiti_aperti": 0}
+        if not (isinstance(host_id, str) and host_id) or payout is None:
+            return esito
+        try:
+            aperti = self.debiti_host(host_id, stato="aperto")
+        except Exception:
+            logger.warning("riscuoti: lettura debiti fallita (ISOLATA)", exc_info=True)
+            return esito
+        for deb in aperti:
+            nota_id = str(deb.get("debito_id") or "")
+            rif_deb = str(deb.get("riferimento") or "")
+            valuta = str(deb.get("valuta") or "EUR")
+            residuo = _cent(deb.get("residuo_cents"))
+            if not nota_id or residuo <= 0:
+                continue
+            try:
+                righe = payout.elenca(host_id, stato="maturato", valuta=valuta) or []
+            except Exception:
+                logger.warning("riscuoti: lettura payout fallita (ISOLATA)", exc_info=True)
+                righe = []
+            for r in righe:
+                if residuo <= 0:
+                    break
+                pid = r.get("prenotazione_id")
+                disp = _cent(r.get("minori"))
+                if not pid or pid == rif_deb or disp <= 0:
+                    continue
+                quota = min(disp, residuo)
+                mv = self.registra(evento_id="offset:%s:%s" % (nota_id, pid),
+                                   tipo="penale_offset", riferimento=rif_deb,
+                                   soggetto="host:" + host_id,
+                                   conto_dare="debiti_vs_host_payout",
+                                   conto_avere="crediti_vs_host",
+                                   importo_cents=quota, valuta=valuta,
+                                   causale="riscossione debito su payout %s" % pid,
+                                   emittente=emittente)
+                if mv is None or mv.get("idempotente"):
+                    continue          # giornale giu' O payout gia' consumato per la nota
+                try:
+                    ok = (payout.imposta_importo(pid, disp - quota) if disp - quota > 0
+                          else payout.rimuovi(pid))
+                except Exception:
+                    ok = False
+                if not ok:
+                    self.registra(evento_id="storno-offset:%s:%s" % (nota_id, pid),
+                                  tipo="storno", riferimento=rif_deb,
+                                  soggetto="host:" + host_id,
+                                  conto_dare="crediti_vs_host",
+                                  conto_avere="debiti_vs_host_payout",
+                                  importo_cents=quota, valuta=valuta,
+                                  causale="storno riscossione: ledger payout non aggiornabile",
+                                  emittente="sistema")
+                    continue
+                residuo -= quota
+                esito["riscossi_cents"] += quota
+            if residuo != _cent(deb.get("residuo_cents")):
+                stato = "saldato" if residuo == 0 else "aperto"
+                self._debito_scrivi(nota_id, host_id, rif_deb, residuo, valuta, stato)
+                if residuo == 0:
+                    esito["debiti_saldati"] += 1
+                    con = self._apri()
+                    try:
+                        with con:
+                            con.execute("UPDATE note SET stato='saldata' WHERE nota_id=?",
+                                        (nota_id,))
+                    finally:
+                        con.close()
+                    logger.warning("DEBITO SALDATO | HOST_ID: %s | NOTA: %s | "
+                                   "riscosso alla fonte sui payout", host_id, nota_id)
+            if residuo > 0:
+                esito["debiti_aperti"] += 1
+        return esito
+
 
 def crea_financial_controller(percorso: str, *, orologio: Any = None
                               ) -> FinancialController:
