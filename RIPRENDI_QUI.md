@@ -190,6 +190,14 @@
 >   DECISIONE: niente sospensione host a debito (le prenotazioni future SONO il veicolo di
 >   rimborso). test_debt_status (7) + 42 money-path riverificati. RESTANO: Scatto ③ carta
 >   off-session (gated SetupIntent), storno penale Bunker-gated, Audit Console.
+> · 🔎 **RICERCA OPERATIVA unificata (Incremento 7, kimi)**: barra UNICA in cima all'admin —
+>   annunci (slug/titolo/città/ID, anche sospesi), host (id/email/nome), prenotazioni
+>   (riferimento a prefisso / email ospite) — live+Enter+AJAX, paginata, integrata coi filtri
+>   dell'Incr.2 (click→riempie e ricarica). SICUREZZA a whitelist: mai CF/P.IVA/IBAN/hash/log
+>   nella risposta (test dedicato); wildcard neutralizzate; ID numerico corto ammesso; audit
+>   di ogni ricerca. `GET /api/admin/search` + cerca_* nei 3 store (57/88/162).
+>   test_admin_search (8). NOTA onesta al fondatore: i filtri annunci c'erano già (Incr.2);
+>   il pezzo NUOVO è host-per-nome + prenotazioni + barra unica.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare

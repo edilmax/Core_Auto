@@ -1119,6 +1119,8 @@ class RouterHTTP:
             return self._host_cancella(body, headers)
         if metodo == "GET" and path == "/api/admin/prenotazioni":
             return self._admin_prenotazioni(query, headers)
+        if metodo == "GET" and path == "/api/admin/search":
+            return self._admin_search(query, headers)   # ricerca operativa unificata (Incr.7)
         if metodo == "GET" and path == "/api/admin/alloggi":
             return self._admin_alloggi(query, headers)
         if metodo == "POST" and path == "/api/admin/alloggio_stato":
@@ -1426,6 +1428,57 @@ class RouterHTTP:
                     self._client_ip(headers), criteri or "nessuno", page, totale)
         return 200, {"alloggi": rep.get("alloggi", []), "page": page, "limit": limit,
                      "totale": totale, "pagine": max(1, -(-totale // limit))}
+
+    def _admin_search(self, query, headers):
+        """RICERCA OPERATIVA unificata (Field, Incremento 7): UNA barra per annunci
+        (slug/titolo/citta/ID), host (id/email/nome) e prenotazioni (riferimento/email
+        ospite). PAGINATA per dominio (stessa pagina sui tre, prev/next lato UI).
+        FILTRO DI SICUREZZA a WHITELIST: escono SOLO campi operativi — MAI dati fiscali
+        (CF/P.IVA/IBAN), MAI log/hash/roba del Bunker. Wildcard neutralizzate negli store.
+        AUDIT di ogni ricerca su app.log (chi, da dove, cosa)."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        q = str(query.get("q") or "").strip()
+        # minimo 2 caratteri (anti-scan), MA un ID numerico corto (es. "7") e' legittimo
+        if len(q) < 2 and not q.isdigit():
+            return 422, {"errore": "termine_troppo_corto", "minimo": 2}
+        if len(q) > 120:
+            q = q[:120]
+
+        def _int(v, d):
+            try:
+                return max(1, min(int(str(v)), 10 ** 6))
+            except Exception:
+                return d
+        pagina = _int(query.get("page"), 1)
+        limit = min(20, _int(query.get("limit"), 10))
+        off = (pagina - 1) * limit
+        out = {"q": q, "page": pagina, "limit": limit,
+               "annunci": [], "host": [], "prenotazioni": [],
+               "totali": {"annunci": 0, "host": 0, "prenotazioni": 0}}
+        cat = getattr(self._sys, "catalogo", None)
+        reg = getattr(self._sys, "registro_host", None)
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        try:
+            if cat is not None and hasattr(cat, "cerca_annunci_admin"):
+                r = cat.cerca_annunci_admin(q, limit=limit, offset=off)
+                out["annunci"], out["totali"]["annunci"] = r["alloggi"], r["totale"]
+            if reg is not None and hasattr(reg, "cerca_host"):
+                r = reg.cerca_host(q, limit=limit, offset=off)
+                out["host"], out["totali"]["host"] = r["host"], r["totale"]
+            if pp is not None and hasattr(pp, "cerca_prenotazioni"):
+                r = pp.cerca_prenotazioni(q, limit=limit, offset=off)
+                out["prenotazioni"] = r["prenotazioni"]
+                out["totali"]["prenotazioni"] = r["totale"]
+        except Exception:
+            logger.error("admin search: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        out["totale"] = sum(out["totali"].values())
+        logger.info("AUDIT admin search: ip=%s q=%r page=%d -> %d risultati "
+                    "(annunci=%d host=%d pren=%d)", self._client_ip(headers), q[:60],
+                    pagina, out["totale"], out["totali"]["annunci"],
+                    out["totali"]["host"], out["totali"]["prenotazioni"])
+        return 200, out
 
     def _admin_alloggio_stato(self, body, headers):
         """Admin: cambia lo stato di QUALSIASI annuncio (sospendi/ripubblica) per slug."""

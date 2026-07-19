@@ -288,6 +288,39 @@ class RegistroHost:
                         "iban": g("iban"), "tipo_soggetto": g("tipo_soggetto")})
         return out
 
+    def cerca_host(self, termine: Any, *, limit: int = 10, offset: int = 0
+                   ) -> Dict[str, Any]:
+        """RICERCA OPERATIVA (Field, Incremento 7): host per id / email / ragione sociale
+        (LIKE case-insensitive, wildcard dell'utente NEUTRALIZZATE). Read-only, SOLO campi
+        operativi: MAI dati fiscali (CF/P.IVA/IBAN restano al Bunker/DAC7).
+        Ritorna {'host': [...], 'totale': n}."""
+        if not (isinstance(termine, str) and len(termine.strip()) >= 2):
+            return {"host": [], "totale": 0}
+        lim = limit if isinstance(limit, int) and 0 < limit <= 50 else 10
+        off = offset if isinstance(offset, int) and 0 <= offset <= 10 ** 6 else 0
+        # escape di % e _ : il termine e' TESTO, mai pattern
+        t = termine.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        like = "%" + t + "%"
+        where = ("WHERE host_id LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' "
+                 "OR ragione_sociale LIKE ? ESCAPE '\\'")
+        con = self._apri()
+        try:
+            tot = con.execute("SELECT COUNT(*) FROM host " + where,
+                              (like, like, like)).fetchone()[0]
+            righe = con.execute(
+                "SELECT host_id, email, ragione_sociale, stato FROM host " + where +
+                " ORDER BY creato_ts LIMIT ? OFFSET ?",
+                (like, like, like, lim, off)).fetchall()
+        except Exception:
+            logger.warning("cerca_host fallita (ISOLATA)", exc_info=True)
+            return {"host": [], "totale": 0}
+        finally:
+            con.close()
+        return {"host": [{"host_id": r["host_id"], "email": r["email"] or "",
+                          "ragione_sociale": r["ragione_sociale"] or "",
+                          "stato": r["stato"]} for r in righe],
+                "totale": int(tot)}
+
     def imposta_stripe_account(self, host_id: Any, account_id: Any) -> bool:
         """Collega il conto Stripe Connect dell'host (per i bonifici automatici)."""
         if not (isinstance(host_id, str) and host_id):

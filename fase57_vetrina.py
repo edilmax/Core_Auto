@@ -630,6 +630,43 @@ class CatalogoVetrina:
                  "citta": r["citta"], "prezzo_notte_cents": int(r["prezzo_notte_cents"]),
                  "valuta": r["valuta"] or "EUR", "stato": r["stato"]} for r in righe]
 
+    def cerca_annunci_admin(self, termine: Any, *, limit: int = 10, offset: int = 0
+                            ) -> Dict[str, Any]:
+        """RICERCA OPERATIVA (Field, Incremento 7): annunci di OGNI stato per slug / titolo
+        / citta (LIKE, wildcard neutralizzate) o ID esatto se il termine e' un numero.
+        Read-only, solo campi operativi. {'alloggi': [...], 'totale': n}.
+        Minimo 2 caratteri, MA un ID numerico corto (es. '7') e' ammesso."""
+        if not (isinstance(termine, str)
+                and (len(termine.strip()) >= 2 or termine.strip().isdigit())):
+            return {"alloggi": [], "totale": 0}
+        lim = limit if isinstance(limit, int) and 0 < limit <= 50 else 10
+        off = offset if isinstance(offset, int) and 0 <= offset <= 10 ** 6 else 0
+        t = termine.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        like = "%" + t + "%"
+        try:
+            id_num = int(termine.strip())
+        except (ValueError, TypeError):
+            id_num = -1
+        where = ("WHERE slug LIKE ? ESCAPE '\\' OR titolo LIKE ? ESCAPE '\\' "
+                 "OR citta LIKE ? ESCAPE '\\' OR id = ?")
+        par = (like, like, like, id_num)
+        con = self._apri()
+        try:
+            tot = con.execute("SELECT COUNT(*) FROM alloggi " + where, par).fetchone()[0]
+            righe = con.execute(
+                "SELECT id, slug, titolo, citta, stato, host_id FROM alloggi " + where +
+                " ORDER BY aggiornato_ts DESC LIMIT ? OFFSET ?",
+                par + (lim, off)).fetchall()
+        except Exception:
+            logger.warning("cerca_annunci_admin fallita (ISOLATA)", exc_info=True)
+            return {"alloggi": [], "totale": 0}
+        finally:
+            con.close()
+        return {"alloggi": [{"id": int(r["id"]), "slug": r["slug"], "titolo": r["titolo"],
+                             "citta": r["citta"], "stato": r["stato"],
+                             "host_id": r["host_id"] or ""} for r in righe],
+                "totale": int(tot)}
+
     # --- READ: ricerca paginata (solo 'pubblicato') ---
     def cerca(self, criteri: CriteriRicerca) -> Dict[str, Any]:
         """Ritorna {'totale', 'limit', 'offset', 'risultati':[scheda_card...]}.

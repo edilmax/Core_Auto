@@ -127,6 +127,39 @@ class PagamentiPendenti:
         finally:
             con.close()
 
+    def cerca_prenotazioni(self, termine: Any, *, limit: int = 10, offset: int = 0
+                           ) -> Dict[str, Any]:
+        """RICERCA OPERATIVA (Field, Incremento 7): prenotazioni per RIFERIMENTO (prefisso,
+        usa l'indice PK) o EMAIL ospite (LIKE). Wildcard dell'utente neutralizzate.
+        Read-only, SOLO campi operativi (mai corpo_json/idem_key). {'prenotazioni', 'totale'}."""
+        if not (isinstance(termine, str) and len(termine.strip()) >= 2):
+            return {"prenotazioni": [], "totale": 0}
+        lim = limit if isinstance(limit, int) and 0 < limit <= 50 else 10
+        off = offset if isinstance(offset, int) and 0 <= offset <= 10 ** 6 else 0
+        t = termine.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        where = ("WHERE riferimento LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\'")
+        par = (t + "%", "%" + t + "%")               # rif = prefisso (indice), email = contiene
+        con = self._apri()
+        try:
+            tot = con.execute("SELECT COUNT(*) FROM pendenti " + where, par).fetchone()[0]
+            righe = con.execute(
+                "SELECT riferimento, alloggio_id, check_in, check_out, stato, host_id, email"
+                " FROM pendenti " + where + " ORDER BY creato_ts DESC LIMIT ? OFFSET ?",
+                par + (lim, off)).fetchall()
+        except Exception:
+            logger.warning("cerca_prenotazioni fallita (ISOLATA)", exc_info=True)
+            return {"prenotazioni": [], "totale": 0}
+        finally:
+            con.close()
+        return {"prenotazioni": [{"riferimento": r["riferimento"],
+                                  "alloggio_id": r["alloggio_id"],
+                                  "check_in": r["check_in"], "check_out": r["check_out"],
+                                  "stato": r["stato"],
+                                  "host_id": (r["host_id"] if "host_id" in r.keys() else "") or "",
+                                  "email": (r["email"] if "email" in r.keys() else "") or ""}
+                                 for r in righe],
+                "totale": int(tot)}
+
     def notti_per_alloggio(self, host_id: Any, anno: int) -> Dict[str, Dict[str, int]]:
         """DAC7 ('giorni-affitto per immobile'): notti LOCATE per alloggio nell'anno.
         Conta SOLO le prenotazioni PAGATE (le rimborsate/cancellate non sono locazione)
