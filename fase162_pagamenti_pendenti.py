@@ -127,6 +127,45 @@ class PagamentiPendenti:
         finally:
             con.close()
 
+    def notti_per_alloggio(self, host_id: Any, anno: int) -> Dict[str, Dict[str, int]]:
+        """DAC7 ('giorni-affitto per immobile'): notti LOCATE per alloggio nell'anno.
+        Conta SOLO le prenotazioni PAGATE (le rimborsate/cancellate non sono locazione)
+        e attribuisce le notti all'anno del SOGGIORNO: un soggiorno a cavallo d'anno si
+        divide (notti di dicembre all'anno vecchio, di gennaio al nuovo). Read-only,
+        a prova di data malformata (una riga rotta non rompe mai il report).
+        Ritorna {alloggio_id: {'notti': n, 'pren': m}}."""
+        import datetime as _dt
+        if not (isinstance(host_id, str) and host_id
+                and isinstance(anno, int) and not isinstance(anno, bool)):
+            return {}
+        try:
+            ini, fine = _dt.date(anno, 1, 1), _dt.date(anno + 1, 1, 1)
+        except (ValueError, OverflowError):
+            return {}
+        con = self._apri()
+        try:
+            righe = con.execute("SELECT alloggio_id, check_in, check_out FROM pendenti "
+                                "WHERE host_id=? AND stato='pagato'", (host_id,)).fetchall()
+        except Exception:
+            logger.warning("notti_per_alloggio fallita (ISOLATA)", exc_info=True)
+            return {}
+        finally:
+            con.close()
+        out: Dict[str, Dict[str, int]] = {}
+        for r in righe:
+            try:
+                ci = _dt.date.fromisoformat(str(r["check_in"]))
+                co = _dt.date.fromisoformat(str(r["check_out"]))
+            except (ValueError, TypeError):
+                continue                     # data rotta: si salta la riga, non il report
+            n = (min(co, fine) - max(ci, ini)).days   # overlap [check_in, check_out) ∩ anno
+            if n <= 0:
+                continue
+            d = out.setdefault(str(r["alloggio_id"]), {"notti": 0, "pren": 0})
+            d["notti"] += n
+            d["pren"] += 1
+        return out
+
     def conferma(self, riferimento: Any) -> Optional[Dict[str, Any]]:
         """Pagamento riuscito -> 'pagato', ma SOLO da 'in_attesa' o 'scaduto' (CAS in
         BEGIN IMMEDIATE: chiude la GARA con lo sweeper che nello stesso istante può

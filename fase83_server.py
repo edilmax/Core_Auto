@@ -1676,26 +1676,46 @@ class RouterHTTP:
         yield ("host_id,ragione_sociale,tipo_soggetto,codice_fiscale,partita_iva,paese,"
                "indirizzo_fiscale,iban,dati_completi,n_prenotazioni,"
                "corrispettivo_lordo_eur,commissioni_eur,tasse_soggiorno_eur,rimborsi_eur,"
-               "Q1_eur,Q2_eur,Q3_eur,Q4_eur,immobili\r\n")
+               "Q1_eur,Q2_eur,Q3_eur,Q4_eur,notti_anno,immobili\r\n")
         acc = _hl.sha256()
         n_host = 0
         errore = False
         try:
             agg = fc.aggrega_dac7(anno) if fc is not None else {}
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
             for h in (reg.elenco_host() if reg is not None else []):
                 a = agg.get(h["host_id"])
                 if not a:
                     continue
                 if not valuta_dac7(int(a["n"]), int(a["lordo"]), True).deve_segnalare:
                     continue                          # solo i REPORTABILI per legge
-                immobili = ""
+                # GIORNI-AFFITTO PER IMMOBILE (requisito DAC7): notti locate nell'anno,
+                # dalla verita' del money-path (prenotazioni PAGATE, soggiorno nell'anno).
+                notti = {}
+                if pp is not None:
+                    try:
+                        notti = pp.notti_per_alloggio(h["host_id"], int(anno)) or {}
+                    except Exception:
+                        notti = {}
+                notti_tot = sum(v.get("notti", 0) for v in notti.values())
+                voci, visti = [], set()
                 if cat is not None:
                     try:
-                        immobili = " | ".join(
-                            "%s (%s)" % (x.get("titolo", ""), x.get("citta", ""))
-                            for x in (cat.alloggi_host(h["host_id"], limit=50) or []))
+                        for x in (cat.alloggi_host(h["host_id"], limit=50) or []):
+                            slug = str(x.get("slug", ""))
+                            visti.add(slug)
+                            nx = notti.get(slug)
+                            base = "%s (%s)" % (x.get("titolo", ""), x.get("citta", ""))
+                            voci.append(base + (" - %d notti/%d pren" %
+                                                (nx["notti"], nx["pren"]) if nx else ""))
                     except Exception:
-                        immobili = ""
+                        voci = []
+                # onesta': notti locate su annunci POI CANCELLATI vanno comunque dichiarate
+                for slug, nx in sorted(notti.items()):
+                    if slug not in visti:
+                        voci.append("%s (annuncio rimosso) - %d notti/%d pren"
+                                    % (slug, nx["notti"], nx["pren"]))
+                immobili = " | ".join(voci)
                 eur = lambda c: "%.2f" % (int(c) / 100.0)
                 riga = [h["host_id"], h["ragione_sociale"], h.get("tipo_soggetto", ""),
                         h.get("codice_fiscale", ""), h.get("partita_iva", ""),
@@ -1703,7 +1723,7 @@ class RouterHTTP:
                         "SI" if not self._dac7_mancanti(h) else "NO",
                         a["n"], eur(a["lordo"]), eur(a["commissioni"]), eur(a["tasse"]),
                         eur(a["rimborsi"]), eur(a["trim"][1]), eur(a["trim"][2]),
-                        eur(a["trim"][3]), eur(a["trim"][4]), immobili]
+                        eur(a["trim"][3]), eur(a["trim"][4]), notti_tot, immobili]
                 buf = _io.StringIO()
                 _csv.writer(buf).writerow(riga)
                 testo = buf.getvalue()

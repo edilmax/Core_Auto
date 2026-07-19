@@ -172,6 +172,12 @@
 >   emesso → porta aperta, sala già loggata); tornando al Field le 4 distruttive restano armate
 >   nei 15 min (sessione condivisa). Le distruttive NON si spostano nel bunker (Incremento ③
 >   deliberato: spostarle avrebbe rotto i rimborsi). Guardie pagine 80/80 verdi.
+> · 🌙 **GIORNI-AFFITTO PER IMMOBILE nel report DAC7 (chiusura requisiti UE)**: fase162
+>   `notti_per_alloggio(host, anno)` — SOLO prenotazioni PAGATE, notti attribuite all'anno del
+>   SOGGIORNO (cavallo d'anno DIVISO: dicembre al vecchio, gennaio al nuovo), data malformata
+>   saltata; report: colonna `notti_anno` + immobili "titolo (città) - N notti/M pren", annunci
+>   cancellati con notti restano dichiarati. test_dac7_notti (7). **DAC7 COMPLETO su tutti i
+>   requisiti UE.**
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare
