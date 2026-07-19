@@ -122,6 +122,18 @@
 >   finto, 0 dati toccati). test_bunker_enforcement. **RESTA solo Incremento ④** (sala controllo
 >   piena: log/hash-chain/integrità sotto /bunker) — il Bunker già mostra `GET /api/bunker/stato`
 >   (diagnosi read-only). Password prod impostate in `.env.casavip`: `ADMIN_KEY` + `BUNKER_PASSWORD`.
+> · ✅ **UX HARDENING + CENTRO FISCALE streaming — LIVE `49001d4` (2026-07-19)**: (a) occhiello
+>   👁 mostra/nascondi su OGNI input password (app.js `BV.occhielli`, host/admin/bunker) + LOGOUT
+>   ovunque (admin aggiunto) + logout SERVER-SIDE del Bunker (`Bunker.revoca` + POST /api/bunker/logout,
+>   denylist nonce → token morto subito). (b) **Estratto contabile CERTIFICATO in STREAMING** (Incr.4.1,
+>   d'accordo con kimi k3): `stream_giornale` generatore lazy (zero RAM) + `genera_estratto_csv` streamma
+>   il CSV col hash on-the-fly + footer obbligatorio `# FINE ESTRATTO - INTEGRITÀ VERIFICATA: <hash>`
+>   (o `# NON CHIUSO / CORROTTO` se rotto/interrotto) + audit `EXPORT_FISCALE_STREAM_COMPLETED`; handler
+>   `do_GET` streamma sul socket; scaricabile da bunker.html (💼 Centro Fiscale). Provato LIVE (403 gated,
+>   footer, audit). Nota onesta: zero-RAM è a livello app; nginx può bufferizzare file giganti (refinement:
+>   `proxy_buffering off`). **PROSSIMI Centro Fiscale (servono dati fiscali — P.IVA/IBAN già in .env.casavip)**:
+>   DAC7 (obbligo UE), tassa per Comune, commissioni+IVA, fatture numerate, riconciliazione Stripe.
+>   Dettaglio: righe 💼/🧰/🎛️/🔐/🗄️/🏰/🚪 REGISTRO sez.1 + [[bookinvip-bunker-field]].
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare
