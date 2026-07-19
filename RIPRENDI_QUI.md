@@ -313,6 +313,10 @@
 >   fondatore (DA COSTRUIRE, decisa)**: NON 5 cartelle duplicate ma UN codebase in 5 istanze
 >   (5 DB + 5 sottodomini + hub centrale coi link) — motori separati (host/admin/super-admin propri)
 >   con codice unico. Partenza: centro + Affitti brevi, un motore alla volta. Vedi [[bookinvip-motori-multi]].
+>   RIFINITURA design (deploy 7282ee8, iterata col fondatore): motori SOTTO il verde a tab
+>   SOTTOLINEATE (active verde+sottolineatura oro), titolo "Il tuo viaggio, senza sorprese" su UNA
+>   riga con "senza sorprese" in oro (hero_titolo/hero_titolo2), hero riquadrato compatto,
+>   sfumature leggere. Regola: iterare i visual con anteprima Artifact prima del deploy.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare
