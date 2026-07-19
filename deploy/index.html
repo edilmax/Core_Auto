@@ -42,6 +42,46 @@
   .headright{display:flex;gap:.6rem;align-items:center}
   select#lang{padding:.4rem .7rem;border-radius:.7rem;border:1px solid var(--bordo);font-size:1rem}
   #btnInstall{display:none;background:var(--brand);color:#fff;border:none;padding:.4rem 1rem;border-radius:2rem;font-weight:600;cursor:pointer}
+  /* ===== HERO MOTORI (2026-07-19): verde + sfumature leggere + barra dei motori ===== */
+  .hero{position:relative;overflow:hidden;border-radius:1.5rem;color:#fff;margin:.3rem 0 1rem;padding:1rem 1.5rem 1.4rem;
+    background:radial-gradient(90% 60% at 50% -12%,rgba(230,193,92,.15) 0,rgba(230,193,92,0) 55%),
+      radial-gradient(70% 55% at 16% 8%,rgba(47,107,86,.5) 0,rgba(47,107,86,0) 60%),
+      radial-gradient(82% 70% at 92% 32%,rgba(12,63,48,.55) 0,rgba(12,63,48,0) 62%),
+      linear-gradient(158deg,#266b54 -25%,var(--brand) 42%,#082a20 128%);
+    box-shadow:0 22px 52px -30px rgba(8,42,32,.7)}
+  .hero::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,0) 22%)}
+  .htop{display:flex;justify-content:space-between;align-items:center;gap:.6rem;position:relative;z-index:3;flex-wrap:wrap}
+  .hbrand{display:flex;align-items:center;gap:.5rem}
+  .hbrand .cr{width:30px;height:12px;display:block}
+  .hword{font-family:Georgia,'Times New Roman',serif;font-weight:700;font-size:1.4rem;letter-spacing:.3px;line-height:1;color:#fff}
+  .hword .v{color:#f3d888;font-weight:800;letter-spacing:.04em;margin-left:.1em}
+  .hctrl{display:flex;gap:.45rem;align-items:center}
+  .hctrl #btnInstall{display:none;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.24);color:#fff;padding:.34rem .8rem;border-radius:2rem;font-weight:600;font-size:.8rem;cursor:pointer}
+  .claim{text-align:center;margin:1.2rem auto .1rem;max-width:34ch;position:relative;z-index:2}
+  .claim h1{font-family:Georgia,serif;font-style:italic;font-weight:400;font-size:clamp(1.35rem,4.2vw,2rem);line-height:1.18;margin:0;color:#fff}
+  .claim p{opacity:.86;font-size:.94rem;margin:.35rem 0 0}
+  .mcaption{text-align:center;color:rgba(255,255,255,.66);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;font-weight:700;margin:1.05rem 0 .55rem;position:relative;z-index:2}
+  .motori{display:flex;gap:.4rem;justify-content:center;flex-wrap:wrap;position:relative;z-index:2}
+  .mtab{display:inline-flex;align-items:center;gap:.45rem;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.16);color:rgba(255,255,255,.92);border-radius:2rem;padding:.45rem .95rem;font-size:.9rem;font-weight:600;cursor:pointer;transition:all .15s}
+  .mtab:hover{background:rgba(255,255,255,.17)}
+  .mtab.on{background:#fff;color:var(--brand);border-color:#fff;box-shadow:0 8px 20px -8px rgba(0,0,0,.45)}
+  .mtab .em{font-size:1.05rem}
+  .mtab .ml{display:flex;flex-direction:column;align-items:flex-start;line-height:1.05}
+  .mtab .ml small{font-weight:500;font-size:.64rem;opacity:.72}
+  .motoreMsg{text-align:center;margin:.7rem auto 0;position:relative;z-index:2;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);color:#fff;font-size:.85rem;padding:.4rem .85rem;border-radius:2rem;width:max-content;max-width:92%}
+  .hbadges{display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;margin:1rem 0 0;position:relative;z-index:2;font-size:.82rem}
+  .hbadges span{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.14);padding:.34rem .7rem;border-radius:2rem;color:#fff}
+  .hbadges .star{background:rgba(249,200,70,.95);border-color:transparent;color:var(--brand);font-weight:700}
+  .hbadges .star span{color:var(--brand)}
+  .langpick{position:relative}
+  .langbtn{display:inline-flex;align-items:center;gap:.35rem;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.24);color:#fff;border-radius:2rem;padding:.26rem .6rem;font-size:.8rem;font-weight:700;cursor:pointer}
+  .langbtn svg{width:18px;height:13px;border-radius:2px;display:block;overflow:hidden}
+  .langmenu{position:absolute;right:0;top:calc(100% + .35rem);background:#fff;color:var(--testo);border-radius:.8rem;box-shadow:0 14px 34px rgba(0,0,0,.22);padding:.3rem;min-width:158px;z-index:60;display:none}
+  .langmenu.open{display:block}
+  .langopt{display:flex;align-items:center;gap:.55rem;padding:.42rem .55rem;border-radius:.5rem;cursor:pointer;font-size:.9rem;color:var(--testo)}
+  .langopt:hover{background:var(--sfondo)}
+  .langopt svg{width:22px;height:15px;border-radius:2px;flex:none;overflow:hidden}
+  .lang-hidden{position:absolute!important;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px}
   .filtri{background:#fff;padding:1.25rem 1.5rem;border-radius:1.5rem;box-shadow:0 4px 12px rgba(0,0,0,.04);margin-bottom:2rem}
   .filtri .riga{display:flex;flex-wrap:wrap;gap:.75rem 1.25rem;align-items:end}
   .filtri label{display:flex;flex-direction:column;font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:#4a5b7a;gap:.25rem}
@@ -100,38 +140,43 @@
 </head>
 <body>
 <div class="container">
-  <header>
-    <div class="logo"><img src="/logo.svg" alt="Bookin VIP" style="height:38px;display:block"></div>
-    <div class="headright">
-      <button id="btnInstall">⬇ App</button>
-      <select id="lang" aria-label="Language">
-        <option value="it">🇮🇹 Italiano</option>
-        <option value="en">🇬🇧 English</option>
-        <option value="es">🇪🇸 Español</option>
-        <option value="fr">🇫🇷 Français</option>
-        <option value="de">🇩🇪 Deutsch</option>
-        <option value="pt">🇵🇹 Português</option>
-        <option value="ja">🇯🇵 日本語</option>
-        <option value="zh">🇨🇳 中文</option>
-      </select>
-    </div>
-  </header>
-
-  <section style="position:relative;overflow:hidden;background:linear-gradient(135deg,var(--brand),#156b52);color:#fff;border-radius:1.3rem;padding:2.2rem 1.4rem 2rem;margin:1rem 0 1.5rem;text-align:center">
-    <svg viewBox="0 0 600 120" width="100%" height="80" preserveAspectRatio="none" aria-hidden="true" style="position:absolute;left:0;bottom:0;opacity:.16">
-      <g fill="#fff"><rect x="20" y="60" width="50" height="60"/><rect x="80" y="40" width="40" height="80"/><rect x="130" y="70" width="55" height="50"/><rect x="200" y="30" width="45" height="90"/><rect x="260" y="55" width="50" height="65"/><rect x="330" y="45" width="40" height="75"/><rect x="385" y="68" width="55" height="52"/><rect x="455" y="35" width="45" height="85"/><rect x="515" y="60" width="55" height="60"/></g>
-      <circle cx="520" cy="34" r="20" fill="#f9c846" opacity=".9"/>
-    </svg>
-    <div style="position:relative">
-      <img src="/logo.svg" alt="Bookin VIP" style="height:46px;filter:brightness(0) invert(1);margin-bottom:.6rem">
-      <h1 data-t="hero_titolo" style="font-size:1.9rem;font-weight:800;margin:.2rem auto .5rem;max-width:20ch;line-height:1.15">Il tuo viaggio, senza sorprese</h1>
-      <p data-t="hero_sub" style="opacity:.95;max-width:46ch;margin:0 auto 1.1rem;font-size:1.02rem">Alloggi certificati · paghi il prezzo pulito · cancellazione gratuita</p>
-      <div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;font-size:.84rem">
-        <span style="background:rgba(255,255,255,.18);padding:.4rem .8rem;border-radius:2rem">✓ <span data-t="badge_commissioni">0% commissioni all'ospite</span></span>
-        <span style="background:rgba(255,255,255,.18);padding:.4rem .8rem;border-radius:2rem">✓ <span data-t="badge_cancellazione">Cancellazione gratuita</span></span>
-        <span style="background:rgba(255,255,255,.18);padding:.4rem .8rem;border-radius:2rem">✓ <span data-t="badge_pagamenti">Pagamenti sicuri</span></span>
-        <span style="background:rgba(249,200,70,.95);color:var(--brand);font-weight:700;padding:.4rem .8rem;border-radius:2rem">★ <span data-t="badge_antirimpianto">Anti-Rimpianto: i soldi tornano come credito</span></span>
+  <section class="hero">
+    <div class="htop">
+      <div class="hbrand">
+        <svg class="cr" viewBox="0 0 46 18" aria-hidden="true"><defs><linearGradient id="crg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e6c15c"/><stop offset="1" stop-color="#b8860b"/></linearGradient></defs><path d="M3 15 L10 3 L17 11 L23 2 L29 11 L36 3 L43 15 Z" fill="url(#crg)"/><rect x="3" y="15.2" width="40" height="2.6" rx="1.3" fill="url(#crg)"/></svg>
+        <span class="hword">Bookin<span class="v">VIP</span></span>
       </div>
+      <div class="hctrl">
+        <button id="btnInstall">⬇ App</button>
+        <div class="langpick" id="langpick"></div>
+        <select id="lang" class="lang-hidden" aria-label="Language">
+          <option value="it">🇮🇹 Italiano</option>
+          <option value="en">🇬🇧 English</option>
+          <option value="es">🇪🇸 Español</option>
+          <option value="fr">🇫🇷 Français</option>
+          <option value="de">🇩🇪 Deutsch</option>
+          <option value="pt">🇵🇹 Português</option>
+          <option value="ja">🇯🇵 日本語</option>
+          <option value="zh">🇨🇳 中文</option>
+        </select>
+      </div>
+    </div>
+    <div class="claim">
+      <h1 data-t="hero_titolo">Il tuo viaggio, senza sorprese</h1>
+      <p data-t="hero_sub">Alloggi certificati · paghi il prezzo pulito · cancellazione gratuita</p>
+    </div>
+    <div class="mcaption" data-t="hero_claim">Una sola macchina, tanti modi di trovare casa</div>
+    <div class="motori" id="motori">
+      <button type="button" class="mtab on" data-m="soggiorni"><span class="em">🏠</span><span class="ml"><b data-t="m_soggiorni">Soggiorni</b><small data-t="m_soggiorni_s">a notte</small></span></button>
+      <button type="button" class="mtab" data-m="affitti"><span class="em">📅</span><span class="ml"><b data-t="m_affitti">Affitti brevi</b><small data-t="m_affitti_s">1–3 mesi</small></span></button>
+      <button type="button" class="mtab" data-m="ville"><span class="em">👑</span><span class="ml"><b data-t="m_ville">Ville VIP</b><small data-t="m_ville_s">di pregio</small></span></button>
+      <button type="button" class="mtab" data-m="business"><span class="em">💼</span><span class="ml"><b data-t="m_business">Business</b><small data-t="m_business_s">trasferte</small></span></button>
+    </div>
+    <div class="motoreMsg" id="motoreMsg" style="display:none"></div>
+    <div class="hbadges">
+      <span>✓ <span data-t="badge_commissioni">0% commissioni all'ospite</span></span>
+      <span>✓ <span data-t="badge_pagamenti">Pagamenti sicuri</span></span>
+      <span class="star">★ <span data-t="badge_antirimpianto">Anti-Rimpianto: i soldi tornano come credito</span></span>
     </div>
   </section>
 
@@ -693,6 +738,49 @@ scudoTasti(['btnPrenota','btnMappa']);
 // avvio: rileva la lingua, allinea il menù e carica tutto
 LANG = linguaIniziale();
 document.getElementById('lang').value = LANG;
+// ── SELETTORE LINGUA con bandierine SVG (coerenti su telefono E desktop, non emoji) ──
+(function(){
+  var sel=document.getElementById('lang'), host=document.getElementById('langpick');
+  if(!sel||!host) return;
+  var F={
+    it:'<svg viewBox="0 0 3 2"><rect width="3" height="2" fill="#fff"/><rect width="1" height="2" fill="#009246"/><rect width="1" height="2" x="2" fill="#ce2b37"/></svg>',
+    en:'<svg viewBox="0 0 60 30"><rect width="60" height="30" fill="#012169"/><path d="M0 0l60 30M60 0L0 30" stroke="#fff" stroke-width="6"/><path d="M0 0l60 30M60 0L0 30" stroke="#c8102e" stroke-width="4"/><path d="M30 0v30M0 15h60" stroke="#fff" stroke-width="10"/><path d="M30 0v30M0 15h60" stroke="#c8102e" stroke-width="6"/></svg>',
+    es:'<svg viewBox="0 0 3 2"><rect width="3" height="2" fill="#c60b1e"/><rect width="3" height="1" y="0.5" fill="#ffc400"/></svg>',
+    fr:'<svg viewBox="0 0 3 2"><rect width="3" height="2" fill="#fff"/><rect width="1" height="2" fill="#0055a4"/><rect width="1" height="2" x="2" fill="#ef4135"/></svg>',
+    de:'<svg viewBox="0 0 5 3"><rect width="5" height="3" fill="#ffce00"/><rect width="5" height="2" fill="#dd0000"/><rect width="5" height="1" fill="#000"/></svg>',
+    pt:'<svg viewBox="0 0 5 3"><rect width="5" height="3" fill="#da291c"/><rect width="2" height="3" fill="#046a38"/><circle cx="2" cy="1.5" r="0.55" fill="#ffe000"/></svg>',
+    ja:'<svg viewBox="0 0 3 2"><rect width="3" height="2" fill="#fff"/><circle cx="1.5" cy="1" r="0.6" fill="#bc002d"/></svg>',
+    zh:'<svg viewBox="0 0 30 20"><rect width="30" height="20" fill="#de2910"/><text x="6.5" y="9.5" font-size="8" fill="#ffde00" text-anchor="middle" font-family="Arial">★</text><text x="12" y="4" font-size="3" fill="#ffde00">★</text><text x="14" y="7" font-size="3" fill="#ffde00">★</text><text x="14" y="11" font-size="3" fill="#ffde00">★</text><text x="12" y="14" font-size="3" fill="#ffde00">★</text></svg>'
+  };
+  var NAMES={it:'Italiano',en:'English',es:'Español',fr:'Français',de:'Deutsch',pt:'Português',ja:'日本語',zh:'中文'};
+  var CODE={it:'IT',en:'EN',es:'ES',fr:'FR',de:'DE',pt:'PT',ja:'JA',zh:'ZH'};
+  var btn=document.createElement('button'); btn.type='button'; btn.className='langbtn'; btn.setAttribute('aria-label','Lingua');
+  var menu=document.createElement('div'); menu.className='langmenu'; menu.setAttribute('role','listbox');
+  function cur(){ return F[sel.value]?sel.value:'it'; }
+  function paint(){ btn.innerHTML=(F[cur()]||'')+'<span>'+CODE[cur()]+'</span><span aria-hidden="true" style="opacity:.7">▾</span>'; }
+  Object.keys(NAMES).forEach(function(l){
+    var o=document.createElement('div'); o.className='langopt'; o.setAttribute('role','option');
+    o.innerHTML=(F[l]||'')+'<span>'+NAMES[l]+'</span>';
+    o.onclick=function(){ sel.value=l; sel.dispatchEvent(new Event('change')); paint(); menu.classList.remove('open'); };
+    menu.appendChild(o);
+  });
+  btn.onclick=function(e){ e.stopPropagation(); menu.classList.toggle('open'); };
+  document.addEventListener('click',function(){ menu.classList.remove('open'); });
+  host.appendChild(btn); host.appendChild(menu); paint();
+  sel.addEventListener('change', paint);
+})();
+// ── BARRA DEI MOTORI: Soggiorni attivo; gli altri "presto" (arriveranno come motori separati) ──
+(function(){
+  var box=document.getElementById('motori'); if(!box) return;
+  box.querySelectorAll('.mtab').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      if(tab.dataset.m==='soggiorni') return;
+      var m=document.getElementById('motoreMsg');
+      if(m){ m.textContent='🔜 '+(typeof t==='function'?t('motore_presto'):'Presto disponibile');
+             m.style.display='block'; clearTimeout(m._h); m._h=setTimeout(function(){ m.style.display='none'; },2800); }
+    });
+  });
+})();
 (async()=>{ await caricaI18N(LANG); cerca(); })();
 </script>
 </body>

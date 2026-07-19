@@ -305,6 +305,14 @@
 >   + fase83 (webhook salva-carta, endpoint host, sweep gated) + host.html bottone. DOPPIO GATE:
 >   chiave Stripe (salvataggio) + SCATTO3_ATTIVO=1 (addebito). test_scatto3_carta (11). **RESTA
 >   fondatore**: mettere SCATTO3_ATTIVO=1 sul VPS + test con carta vera. Riga 💳/♟️ REGISTRO sez.1.
+> · 🎨 **HERO "MOTORI" + BANDIERINE SVG (2026-07-19, homepage)**: nuovo hero verde con sfumature
+>   leggere + barra dei MOTORI (Soggiorni attivo · Affitti brevi/Ville VIP/Business = "presto") +
+>   selettore lingua con bandierine SVG (le emoji si vedevano come lettere su Windows). select#lang
+>   nascosto+sincronizzato (logica i18n invariata). Dizionario motori × 8 lingue in fase83. Regola
+>   ANTI-OTA rispettata (verde+oro, mai blu Booking). Riga 🎨 REGISTRO. **IDEA MULTI-MOTORE del
+>   fondatore (DA COSTRUIRE, decisa)**: NON 5 cartelle duplicate ma UN codebase in 5 istanze
+>   (5 DB + 5 sottodomini + hub centrale coi link) — motori separati (host/admin/super-admin propri)
+>   con codice unico. Partenza: centro + Affitti brevi, un motore alla volta. Vedi [[bookinvip-motori-multi]].
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare
