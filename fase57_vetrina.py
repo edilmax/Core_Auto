@@ -116,6 +116,7 @@ class SchedaAlloggio:
     capacita: int
     descrizione: str = ""
     paese: str = ""
+    cin: str = ""                 # Codice Identificativo Nazionale (obbligo annunci IT), PUBBLICO
     indirizzo: str = ""           # via+civico (PRIVATO: solo per geocodifica precisa, mai pubblico)
     camere: int = 1
     bagni: int = 1
@@ -242,6 +243,15 @@ def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
     paese = data.get("paese", "")
     if not isinstance(paese, str) or len(paese) > LIMITE_CAMPO:
         return False, "paese_non_valido", None
+    # CIN (Codice Identificativo Nazionale, obbligo IT dal 20/05/2026 — Reg. UE 2024/1028):
+    # qui SOLO il formato (opzionale, alfanumerico maiuscolo); l'OBBLIGO per gli annunci
+    # italiani è policy del marketplace (fase83), il motore resta neutro per giurisdizione.
+    cin = data.get("cin", "")
+    if not isinstance(cin, str):
+        return False, "cin_non_valido", None
+    cin = cin.strip().upper()
+    if cin and not (6 <= len(cin) <= 30 and cin.isalnum()):
+        return False, "cin_non_valido", None
     indirizzo = data.get("indirizzo", "")
     if not isinstance(indirizzo, str) or len(indirizzo) > LIMITE_CAMPO:
         return False, "indirizzo_non_valido", None
@@ -283,7 +293,7 @@ def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
     return True, "", SchedaAlloggio(
         host_id=host_id, slug=slug, titolo=titolo, citta=citta,
         prezzo_notte_cents=prezzo, capacita=int(data["capacita"]),
-        descrizione=descr.strip(), paese=paese.strip(), indirizzo=indirizzo.strip(),
+        descrizione=descr.strip(), paese=paese.strip(), cin=cin, indirizzo=indirizzo.strip(),
         camere=int(data.get("camere", 1)), bagni=int(data.get("bagni", 1)),
         servizi=servizi, valuta=valuta, stato=stato,
         lat_micro=lat, lon_micro=lon, politica_cancellazione=pol,
@@ -382,7 +392,8 @@ class CatalogoVetrina:
                                ("sconto_settimana_bps", "INTEGER NOT NULL DEFAULT 0"),
                                ("sconto_mese_bps", "INTEGER NOT NULL DEFAULT 0"),
                                ("modalita_prenotazione", "TEXT NOT NULL DEFAULT 'immediata'"),
-                               ("pin_manuale", "INTEGER NOT NULL DEFAULT 0")):
+                               ("pin_manuale", "INTEGER NOT NULL DEFAULT 0"),
+                               ("cin", "TEXT NOT NULL DEFAULT ''")):
                     try:
                         con.execute("ALTER TABLE alloggi ADD COLUMN %s %s" % (_c, _d))
                     except sqlite3.OperationalError:
@@ -440,14 +451,14 @@ class CatalogoVetrina:
             if row is None:
                 cur = con.execute(
                     "INSERT INTO alloggi (host_id, slug, titolo, descrizione, citta, "
-                    "paese, indirizzo, prezzo_notte_cents, capacita, camere, bagni, servizi_mask, "
+                    "paese, cin, indirizzo, prezzo_notte_cents, capacita, camere, bagni, servizi_mask, "
                     "valuta, stato, lat_micro, lon_micro, politica_cancellazione, "
                     "tassa_pp_notte_cents, tassa_max_notti, tassa_perc_bps, "
                     "sconto_settimana_bps, sconto_mese_bps, "
                     "modalita_prenotazione, pin_manuale, creato_ts, aggiornato_ts) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (scheda.host_id, scheda.slug, scheda.titolo, scheda.descrizione,
-                     scheda.citta, scheda.paese, scheda.indirizzo, scheda.prezzo_notte_cents,
+                     scheda.citta, scheda.paese, scheda.cin, scheda.indirizzo, scheda.prezzo_notte_cents,
                      scheda.capacita, scheda.camere, scheda.bagni, mask, scheda.valuta,
                      scheda.stato, scheda.lat_micro, scheda.lon_micro,
                      scheda.politica_cancellazione, scheda.tassa_pp_notte_cents,
@@ -460,13 +471,13 @@ class CatalogoVetrina:
                 alloggio_id = row["id"]
                 con.execute(
                     "UPDATE alloggi SET host_id=?, titolo=?, descrizione=?, citta=?, "
-                    "paese=?, indirizzo=?, prezzo_notte_cents=?, capacita=?, camere=?, bagni=?, "
+                    "paese=?, cin=?, indirizzo=?, prezzo_notte_cents=?, capacita=?, camere=?, bagni=?, "
                     "servizi_mask=?, valuta=?, stato=?, lat_micro=?, lon_micro=?, "
                     "politica_cancellazione=?, tassa_pp_notte_cents=?, tassa_max_notti=?, "
                     "tassa_perc_bps=?, sconto_settimana_bps=?, sconto_mese_bps=?, "
                     "modalita_prenotazione=?, pin_manuale=?, aggiornato_ts=? WHERE id=?",
                     (scheda.host_id, scheda.titolo, scheda.descrizione, scheda.citta,
-                     scheda.paese, scheda.indirizzo, scheda.prezzo_notte_cents, scheda.capacita,
+                     scheda.paese, scheda.cin, scheda.indirizzo, scheda.prezzo_notte_cents, scheda.capacita,
                      scheda.camere, scheda.bagni, mask, scheda.valuta, scheda.stato,
                      scheda.lat_micro, scheda.lon_micro, scheda.politica_cancellazione,
                      scheda.tassa_pp_notte_cents, scheda.tassa_max_notti, scheda.tassa_perc_bps,
@@ -912,6 +923,7 @@ class CatalogoVetrina:
             "descrizione": a["descrizione"],
             "citta": a["citta"],
             "paese": a["paese"],
+            "cin": (a["cin"] if "cin" in a.keys() else "") or "",   # obbligo di esposizione IT
             "lat_micro": a["lat_micro"],   # zona (già pubblica in card/mappa); MAI l'indirizzo
             "lon_micro": a["lon_micro"],
             "prezzo_notte_cents": int(a["prezzo_notte_cents"]),

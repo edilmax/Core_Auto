@@ -128,6 +128,102 @@ class RegistroHost:
         return self._firma.codifica({"tipo": "host_token", "host_id": host_id,
                                      "email": email, "exp": self._now() + self._ttl})
 
+    # ── PASSWORD DIMENTICATA (C2 mega-audit 2026-07-20: prima era il LOCK-OUT ETERNO:
+    #    nessun reset, email UNIQUE -> l'host che dimenticava la password perdeva
+    #    annunci e payout per sempre, e nemmeno l'admin poteva aiutarlo) ──────────────
+    def token_reset_password(self, email: Any) -> Optional[str]:
+        """MAGIC-LINK firmato, 30 minuti, SINGLE-USE: dentro c'è l'impronta dell'hash
+        ATTUALE -> appena la password cambia il link diventa carta straccia (e tutti i
+        link precedenti con lui). None se l'email non esiste/non è attiva: il chiamante
+        risponde comunque 200 (anti-enumerazione utenti)."""
+        if not _email_valida(email):
+            return None
+        email_n = email.strip().lower()
+        con = self._apri()
+        try:
+            r = con.execute("SELECT host_id, pw_hash, stato FROM host WHERE email=?",
+                            (email_n,)).fetchone()
+        finally:
+            con.close()
+        if r is None or r["stato"] != "attivo":
+            return None
+        return self._firma.codifica({"tipo": "host_pw_reset", "host_id": r["host_id"],
+                                     "fp": r["pw_hash"][:16],
+                                     "exp": self._now() + 1800})
+
+    def reset_password(self, token: Any, nuova: Any) -> EsitoHost:
+        """Applica il magic-link: firma valida + non scaduto + impronta che combacia
+        con l'hash corrente (single-use) -> nuova password (stesse regole del registro).
+        Ritorna un token di accesso fresco: l'host rientra subito."""
+        dati = self._firma.decodifica(token)
+        if not isinstance(dati, dict) or dati.get("tipo") != "host_pw_reset":
+            return EsitoHost(False, errore="link_non_valido")
+        exp = dati.get("exp")
+        if not isinstance(exp, int) or isinstance(exp, bool) or exp < self._now():
+            return EsitoHost(False, errore="link_scaduto")
+        if not (isinstance(nuova, str) and len(nuova) >= 8):
+            return EsitoHost(False, errore="password_troppo_corta")
+        host_id = dati.get("host_id")
+        con = self._apri()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            r = con.execute("SELECT email, pw_hash, stato FROM host WHERE host_id=?",
+                            (host_id,)).fetchone()
+            if r is None or r["stato"] != "attivo" \
+                    or r["pw_hash"][:16] != dati.get("fp"):
+                con.execute("COMMIT")
+                return EsitoHost(False, errore="link_non_valido")   # usato/revocato
+            salt = secrets.token_bytes(16)
+            con.execute("UPDATE host SET salt=?, pw_hash=? WHERE host_id=?",
+                        (salt.hex(), _hash_password(nuova, salt), host_id))
+            con.execute("COMMIT")
+            return EsitoHost(True, host_id=host_id,
+                             token=self._token(host_id, r["email"]))
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            logger.warning("reset password fallito (ISOLATO)", exc_info=True)
+            return EsitoHost(False, errore="errore_interno")
+        finally:
+            con.close()
+
+    def cambia_password(self, host_id: Any, vecchia: Any, nuova: Any) -> EsitoHost:
+        """Rotazione volontaria (host loggato): vecchia verificata, nuova con le stesse
+        regole. Invalida anche ogni magic-link in circolazione (cambia l'impronta)."""
+        if not (isinstance(host_id, str) and host_id and isinstance(vecchia, str)):
+            return EsitoHost(False, errore="credenziali_non_valide")
+        if not (isinstance(nuova, str) and len(nuova) >= 8):
+            return EsitoHost(False, errore="password_troppo_corta")
+        con = self._apri()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            r = con.execute("SELECT email, salt, pw_hash, stato FROM host WHERE host_id=?",
+                            (host_id,)).fetchone()
+            if r is None or r["stato"] != "attivo":
+                con.execute("COMMIT")
+                return EsitoHost(False, errore="credenziali_non_valide")
+            if not hmac.compare_digest(r["pw_hash"],
+                                       _hash_password(vecchia, bytes.fromhex(r["salt"]))):
+                con.execute("COMMIT")
+                return EsitoHost(False, errore="credenziali_non_valide")
+            salt = secrets.token_bytes(16)
+            con.execute("UPDATE host SET salt=?, pw_hash=? WHERE host_id=?",
+                        (salt.hex(), _hash_password(nuova, salt), host_id))
+            con.execute("COMMIT")
+            return EsitoHost(True, host_id=host_id,
+                             token=self._token(host_id, r["email"]))
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            logger.warning("cambia password fallita (ISOLATA)", exc_info=True)
+            return EsitoHost(False, errore="errore_interno")
+        finally:
+            con.close()
+
     def registra(self, email: Any, password: Any, *, accetta_termini: bool = False,
                  ragione_sociale: str = "", telefono: str = "", line_token: str = "",
                  wechat_webhook: str = "",

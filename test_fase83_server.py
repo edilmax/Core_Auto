@@ -788,8 +788,17 @@ class TestRecensioni(unittest.TestCase):
 
     def test_flusso_completo(self):
         _, corpo = self._prenota()
-        diritto = corpo["diritto_recensione"]
-        # invia recensione con il diritto firmato
+        # NBF (2026-07-20, stile Booking/Agoda): il diritto emesso al book porta
+        # nbf=check-out -> recensire PRIMA del soggiorno e' troppo_presto
+        s0, c0 = self.r.gestisci("POST", "/api/recensioni", body=json.dumps(
+            {"token": corpo["diritto_recensione"], "voto": 5}))
+        self.assertEqual(s0, 400)
+        self.assertEqual(c0.get("motivo"), "troppo_presto")
+        # DOPO il check-out (diritto maturo, stessa firma di sistema): ammessa
+        import time as _t
+        from fase63_recensioni import EmettitoreDiritto
+        diritto = EmettitoreDiritto(self.sys.firma).emetti(
+            corpo["riferimento"], "casa", non_prima_ts=int(_t.time()) - 60)
         s, c = self.r.gestisci("POST", "/api/recensioni", body=json.dumps(
             {"token": diritto, "voto": 5, "testo": "Ottimo", "lingua": "it"}))
         self.assertEqual(s, 201)
@@ -811,8 +820,13 @@ class TestRecensioni(unittest.TestCase):
 
     def test_jsonld_aggregate_rating(self):
         _, corpo = self._prenota()
+        # diritto MATURO (nbf passato): la recensione entra solo post-soggiorno
+        import time as _t
+        from fase63_recensioni import EmettitoreDiritto
+        maturo = EmettitoreDiritto(self.sys.firma).emetti(
+            corpo["riferimento"], "casa", non_prima_ts=int(_t.time()) - 60)
         self.r.gestisci("POST", "/api/recensioni", body=json.dumps(
-            {"token": corpo["diritto_recensione"], "voto": 4}))
+            {"token": maturo, "voto": 4}))
         from fase83_server import pagina_alloggio_html
         h = pagina_alloggio_html(self.sys, "casa")
         self.assertIn("aggregateRating", h)

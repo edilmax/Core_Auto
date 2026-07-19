@@ -244,6 +244,7 @@
       <a href="https://x.com/bookinvip" target="_blank" rel="noopener" style="color:var(--brand);text-decoration:none">𝕏 (Twitter)</a>
     </div>
     <div>© Bookin VIP · bookinvip.com · <span data-t="footer_slogan">zero commissioni nascoste</span></div>
+    <div style="margin-top:.35rem;font-size:.78rem;opacity:.85">Gestore: Edil Max di Foti Massimo · P.IVA 11795700969 · <a href="mailto:info@bookinvip.com" style="color:inherit">info@bookinvip.com</a> · <a href="/termini.html" style="color:inherit">Termini</a> · <a href="/privacy.html" style="color:inherit">Privacy</a></div>
   </footer>
 </div>
 
@@ -257,6 +258,7 @@
     <div id="mRating" style="margin:.3rem 0;font-weight:600;color:var(--oro)"></div>
     <p id="mDescr" style="color:#4a5b7a;margin:.5rem 0"></p>
     <p id="mPolitica" style="color:var(--brand-chiaro);font-weight:600;font-size:.9rem;margin:.3rem 0"></p>
+    <p id="mCin" style="color:var(--testo-tenue);font-size:.78rem;margin:.15rem 0"></p>
     <div id="mRecensioni"></div>
     <div id="mQuote"></div>
     <div id="mRegole" style="font-size:.8rem;color:var(--testo-tenue);background:#f7f9fc;border:1px solid var(--sfondo-tenue);border-radius:.6rem;padding:.6rem .8rem;margin:.5rem 0;line-height:1.55">
@@ -578,6 +580,8 @@ async function apri(slug){
     document.getElementById('mDescr').textContent = a.descrizione||'';
     const POL={flessibile:t('pol_flessibile'),moderata:t('pol_moderata'),rigida:t('pol_rigida'),non_rimborsabile:t('pol_non_rimborsabile')};
     document.getElementById('mPolitica').textContent = POL[a.politica_cancellazione]||POL.flessibile;
+    // CIN: esposizione OBBLIGATORIA negli annunci italiani (Reg. UE 2024/1028 + DL 145/2023)
+    document.getElementById('mCin').textContent = a.cin ? ('CIN: ' + a.cin) : '';
     document.getElementById('mMsg').innerHTML='';
     // recensioni verificate (solo chi ha pagato)
     const rec = document.getElementById('mRecensioni'); rec.innerHTML='';

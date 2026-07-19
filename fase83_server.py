@@ -1182,6 +1182,12 @@ class RouterHTTP:
             return self._host_disponibilita_range(body, headers)
         if metodo == "POST" and path == "/api/host/registrazione":
             return self._host_registrazione(body, headers)
+        if metodo == "POST" and path == "/api/host/password_dimenticata":
+            return self._host_password_dimenticata(body)
+        if metodo == "POST" and path == "/api/host/password_reset":
+            return self._host_password_reset(body)
+        if metodo == "POST" and path == "/api/host/cambia_password":
+            return self._host_cambia_password(body, headers)
         if metodo == "POST" and path == "/api/host/login":
             return self._host_login(body, headers)
         if metodo == "GET" and path == "/api/host/referral":
@@ -5073,6 +5079,68 @@ class RouterHTTP:
             logger.error("host accettazioni: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
 
+    def _host_password_dimenticata(self, body):
+        """PASSWORD DIMENTICATA (C2 2026-07-20 — prima: lock-out ETERNO, nessun reset).
+        Risponde SEMPRE 200 (anti-enumerazione: mai rivelare se un'email esiste). Se
+        esiste: magic-link firmato 30 min single-use via email, nel FRAGMENT dell'url
+        (#reset=... non finisce nei log del server). Throttle 60s per email."""
+        reg = getattr(self._sys, "registro_host", None)
+        dati = self._json(body)
+        if reg is None or dati is None:
+            return 200, {"ok": True}
+        email = dati.get("email")
+        try:
+            import time as _t
+            if not hasattr(self, "_pw_reset_ts"):
+                self._pw_reset_ts = {}
+            k = str(email or "").strip().lower()
+            if k and _t.time() - self._pw_reset_ts.get(k, 0) < 60:
+                return 200, {"ok": True}            # troppo presto: niente seconda email
+            tok = reg.token_reset_password(email)
+            if tok and getattr(self._sys, "email_provider", None) is not None:
+                self._pw_reset_ts[k] = _t.time()
+                from fase86_email import corpo_reset_password_html
+                link = ((self._base_url or "https://bookinvip.com")
+                        + "/host.html#reset=" + tok)
+                import threading
+                threading.Thread(target=self._sys.email_provider.invia,
+                                 args=(k, "BookinVIP - Reimposta la password",
+                                       corpo_reset_password_html(link)),
+                                 daemon=True).start()
+        except Exception:
+            logger.warning("password dimenticata: invio fallito (ISOLATO)", exc_info=True)
+        return 200, {"ok": True}
+
+    def _host_password_reset(self, body):
+        """Applica il magic-link: nuova password + accesso immediato (token+cookie)."""
+        reg = getattr(self._sys, "registro_host", None)
+        if reg is None:
+            return 503, {"errore": "registrazione_non_attiva"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        e = reg.reset_password(dati.get("token"), dati.get("password"))
+        corpo = e.as_dict()
+        if e.ok:
+            ttl = self._GATE_TTL["host"]
+            corpo = dict(corpo)
+            corpo["_cookie"] = [("bv_host", self._gate_firma("host", ttl), ttl)]
+        return (200 if e.ok else 400), corpo
+
+    def _host_cambia_password(self, body, headers):
+        """Rotazione volontaria della password (host loggato col suo token)."""
+        reg = getattr(self._sys, "registro_host", None)
+        if reg is None:
+            return 503, {"errore": "registrazione_non_attiva"}
+        hid = self._host_id_da_token(headers)
+        if not hid:
+            return 401, {"errore": "unauthorized"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        e = reg.cambia_password(hid, dati.get("vecchia"), dati.get("nuova"))
+        return (200 if e.ok else 400), e.as_dict()
+
     def _host_registrazione(self, body, headers=None):
         """L'host crea il proprio account DA SOLO (self-service): niente onboarding manuale.
         Registra ANCHE la PROVA d'accettazione del contratto (versione+hash+IP+dispositivo+
@@ -5104,6 +5172,22 @@ class RouterHTTP:
                          line_token=str(dati.get("line_token", "")),
                          wechat_webhook=str(dati.get("wechat_webhook", "")))
         out = e.as_dict()
+        # EMAIL DI BENVENUTO (C2 2026-07-20): conferma che l'account esiste e fa emergere
+        # SUBITO un refuso nell'email (se non arriva, l'indirizzo e' sbagliato: meglio
+        # accorgersene ORA che al primo reset password). Best-effort in background.
+        if e.ok and getattr(self._sys, "email_provider", None) is not None:
+            try:
+                from fase86_email import corpo_benvenuto_host_html
+                import threading
+                threading.Thread(
+                    target=self._sys.email_provider.invia,
+                    args=(str(dati.get("email", "")).strip().lower(),
+                          "Benvenuto su BookinVIP - il tuo account host è pronto",
+                          corpo_benvenuto_host_html(
+                              (self._base_url or "https://bookinvip.com") + "/host.html")),
+                    daemon=True).start()
+            except Exception:
+                logger.warning("email benvenuto host fallita (ignorata)", exc_info=True)
         # PROVA D'ACCETTAZIONE firmata (best-effort MA loggata: l'account e' gia' creato con
         # versione+ts nel registro host; qui aggiungiamo la prova forte hash+IP+dispositivo).
         if e.ok:
@@ -5306,6 +5390,13 @@ class RouterHTTP:
         ok, codice, scheda = valida_scheda(dati)
         if not ok:
             return 422, {"errore": "scheda_non_valida", "dettaglio": codice}
+        # CIN OBBLIGATORIO per gli annunci ITALIANI (Reg. UE 2024/1028 + DL 145/2023,
+        # vincolante per le piattaforme dal 20/05/2026: raccogliere ED esporre il codice,
+        # multe 500-5.000EUR per annuncio senza). Policy del marketplace, il motore fase57
+        # resta neutro. Vale solo per stato 'pubblicato': la bozza si puo' salvare.
+        if (scheda.stato == "pubblicato" and not scheda.cin
+                and scheda.paese.strip().upper() in ("IT", "ITA", "ITALIA", "ITALY")):
+            return 422, {"errore": "cin_obbligatorio_italia"}
         # SOLO una vera lista: `get("immagini", [])` difende dalla chiave MANCANTE ma non
         # da un valore avvelenato (None/numero/bool -> enumerate esplodeva in 500; una
         # STRINGA veniva iterata carattere per carattere = immagini-spazzatura). BUG

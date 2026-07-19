@@ -194,6 +194,45 @@ def corpo_preventivo_html(titolo_alloggio: str, check_in: str, check_out: str,
          corpo_righe, link, e(nota))
 
 
+def corpo_reset_password_html(link: str) -> str:
+    """Email 'password dimenticata' (C2 2026-07-20): magic-link 30 minuti, single-use.
+    Onesta: dice chiaro che se non l'hai chiesta tu, puoi ignorarla. XSS-safe."""
+    import html
+    e = html.escape
+    return (
+        "<div style=\"font-family:sans-serif;max-width:480px\">"
+        "<h2 style=\"color:#0f4c3a\">BookinVIP - Reimposta la password</h2>"
+        "<p>Hai chiesto di reimpostare la password del tuo account host.</p>"
+        "<p><a href=\"%s\" style=\"background:#0f4c3a;color:#fff;padding:.7rem 1.4rem;"
+        "border-radius:8px;text-decoration:none;font-weight:700\">Scegli la nuova password"
+        "</a></p>"
+        "<p style=\"color:#5e6f8d;font-size:.85rem\">Il link vale <strong>30 minuti</strong> "
+        "e funziona <strong>una sola volta</strong>. Se non hai chiesto tu il cambio, "
+        "ignora questa email: la tua password resta quella di sempre.</p></div>"
+    ) % e(link)
+
+
+def corpo_benvenuto_host_html(pannello_url: str) -> str:
+    """Email di benvenuto all'host appena registrato: conferma che l'account esiste
+    (e fa emergere SUBITO un refuso nell'email: se non ti arriva, l'indirizzo è
+    sbagliato e puoi ri-registrarti prima di caricare annunci). XSS-safe."""
+    import html
+    e = html.escape
+    return (
+        "<div style=\"font-family:sans-serif;max-width:480px\">"
+        "<h2 style=\"color:#0f4c3a\">Benvenuto su BookinVIP! 👑</h2>"
+        "<p>Il tuo account host è pronto. In 3 passi sei online:</p>"
+        "<ol><li>Pubblica il tuo alloggio (titolo, prezzo, foto).</li>"
+        "<li>Apri le date libere sul calendario.</li>"
+        "<li>Ricevi le prenotazioni e approva con un tocco.</li></ol>"
+        "<p><a href=\"%s\" style=\"background:#0f4c3a;color:#fff;padding:.7rem 1.4rem;"
+        "border-radius:8px;text-decoration:none;font-weight:700\">Apri il pannello host"
+        "</a></p>"
+        "<p style=\"color:#5e6f8d;font-size:.85rem\">0%% di commissioni all'ospite, 5%% sul "
+        "tuo link diretto, 10%% dal marketplace. Nessun costo fisso.</p></div>"
+    ) % e(pannello_url)
+
+
 def corpo_promemoria_checkin_html(titolo_alloggio: str, voucher_url: str) -> str:
     """Email post-check-in: 'com'è andata?'. Se tutto ok, il cliente non deve fare nulla
     (l'host viene pagato). Se c'è un problema, lo segnala ENTRO 24h dal voucher. XSS-safe."""
