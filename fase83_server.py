@@ -1052,6 +1052,12 @@ class RouterHTTP:
             return self._bunker_logout(body, headers)
         if metodo == "GET" and path == "/api/bunker/export_contabile":
             return self._bunker_export_contabile(query, headers)
+        if metodo == "GET" and path == "/api/bunker/dac7_conformita":
+            return self._bunker_dac7_conformita(query, headers)
+        if metodo == "GET" and path == "/api/bunker/dac7_report":
+            return self._bunker_dac7_report(query, headers)
+        if metodo == "POST" and path == "/api/host/dati_fiscali":
+            return self._host_dati_fiscali(body, headers)
         return 404, {"errore": "rotta_non_trovata"}
 
     # --- helper ---
@@ -1408,10 +1414,179 @@ class RouterHTTP:
             return True
         return self._bunker_auth(headers, azione=azione)
 
+    # ── DAC7 (reporting fiscale UE, Incremento 5) ───────────────────────────
+    @staticmethod
+    def _dac7_mancanti(h):
+        """Campi fiscali DAC7 mancanti per un host (dict da elenco_host/info_host)."""
+        manca = []
+        if not (h.get("codice_fiscale") or h.get("partita_iva")):
+            manca.append("codice_fiscale/partita_iva")
+        for c in ("indirizzo_fiscale", "paese", "iban"):
+            if not h.get(c):
+                manca.append(c)
+        return manca
+
+    def _host_dati_fiscali(self, body, headers):
+        """L'HOST fornisce i propri dati fiscali (DAC7). Host-auth: solo per sé stesso."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        reg = getattr(self._sys, "registro_host", None)
+        if reg is None:
+            return 503, {"errore": "registro_non_attivo"}
+        hid = self._host_id_da_token(headers)
+        dati = self._json(body)
+        if not (isinstance(hid, str) and hid):
+            return 422, {"errore": "host_id_mancante"}
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        ok = reg.imposta_dati_fiscali(hid, dati)
+        info = reg.info_host(hid) or {}
+        return (200 if ok else 422), {"salvato": bool(ok),
+                                      "mancanti": self._dac7_mancanti(info)}
+
+    def _bunker_dac7_conformita(self, query, headers):
+        """SALA CONTROLLO — STATO CONFORMITÀ HOST (DAC7): elenca gli host e segnala chi NON
+        ha i dati fiscali completi, con il loro volume (prenotazioni/ricavi anno) e se sono
+        REPORTABILI per legge (soglia UE 30 pren O €2000). Read-only, sessione Bunker."""
+        if not self._bunker_auth(headers, azione="dac7_conformita"):
+            return 403, {"errore": "bunker_richiesto"}
+        reg = getattr(self._sys, "registro_host", None)
+        fc = getattr(self._sys, "finanza", None)
+        if reg is None:
+            return 503, {"errore": "registro_non_attivo"}
+        try:
+            import datetime as _dt
+            from fase100_dac7 import valuta_dac7
+            anno = self._anno_valido(query.get("anno"))
+            agg = fc.aggrega_dac7(anno) if fc is not None else {}
+            out, tot_incompleti, tot_reportabili, tot_urgenti = [], 0, 0, 0
+            for h in reg.elenco_host():
+                a = agg.get(h["host_id"], {})
+                n = int(a.get("n", 0))
+                lordo = int(a.get("lordo", 0))
+                manca = self._dac7_mancanti(h)
+                rep = valuta_dac7(n, lordo, True).deve_segnalare   # solo soglia
+                completo = not manca
+                urgente = bool(rep and not completo)  # da segnalare per legge MA dati incompleti
+                if not completo:
+                    tot_incompleti += 1
+                if rep:
+                    tot_reportabili += 1
+                if urgente:
+                    tot_urgenti += 1
+                out.append({"host_id": h["host_id"], "ragione_sociale": h["ragione_sociale"],
+                            "email": h["email"], "completo": completo, "mancanti": manca,
+                            "prenotazioni": n, "ricavi_cents": lordo, "reportabile": rep,
+                            "urgente": urgente})
+            out.sort(key=lambda x: (not x["urgente"], x["completo"], -x["ricavi_cents"]))
+        except Exception:
+            logger.error("dac7 conformita: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        return 200, {"anno": anno, "host": out, "totale": len(out),
+                     "incompleti": tot_incompleti, "reportabili": tot_reportabili,
+                     "urgenti": tot_urgenti}
+
+    @staticmethod
+    def _anno_valido(v):
+        import datetime as _dt
+        try:
+            a = int(str(v))
+            if 2020 <= a <= 2100:
+                return a
+        except Exception:
+            pass
+        return _dt.datetime.utcnow().year - 1        # default: anno fiscale precedente
+
+    def genera_dac7_csv(self, *, anno, ip=""):
+        """GENERATORE del report DAC7 in STREAMING (zero RAM, stesso stile dell'estratto):
+        una riga per host REPORTABILE con identita' + dati fiscali + remunerazione annuale
+        e per trimestre + immobili. Chiude col footer '# FINE REPORT DAC7 - INTEGRITÀ:
+        <hash>' (hash di TUTTE le righe emesse) o '# NON CHIUSO / CORROTTO' su errore.
+        Audit: DAC7_REPORT_GENERATED. Nessun file su disco (mai scritto)."""
+        import csv as _csv
+        import datetime as _dt
+        import hashlib as _hl
+        import io as _io
+        from fase100_dac7 import valuta_dac7
+        reg = getattr(self._sys, "registro_host", None)
+        fc = getattr(self._sys, "finanza", None)
+        cat = getattr(self._sys, "catalogo", None)
+        gen = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%SZ")
+        yield "# BookinVIP - Report DAC7 (Direttiva UE 2021/514) - anno %s\r\n" % anno
+        yield "# generato_utc,%s\r\n" % gen
+        yield "# nota,importi in EUR; reportabili = >=30 prenotazioni O >=2000 EUR\r\n\r\n"
+        yield ("host_id,ragione_sociale,tipo_soggetto,codice_fiscale,partita_iva,paese,"
+               "indirizzo_fiscale,iban,dati_completi,n_prenotazioni,"
+               "corrispettivo_lordo_eur,commissioni_eur,tasse_soggiorno_eur,rimborsi_eur,"
+               "Q1_eur,Q2_eur,Q3_eur,Q4_eur,immobili\r\n")
+        acc = _hl.sha256()
+        n_host = 0
+        errore = False
+        try:
+            agg = fc.aggrega_dac7(anno) if fc is not None else {}
+            for h in (reg.elenco_host() if reg is not None else []):
+                a = agg.get(h["host_id"])
+                if not a:
+                    continue
+                if not valuta_dac7(int(a["n"]), int(a["lordo"]), True).deve_segnalare:
+                    continue                          # solo i REPORTABILI per legge
+                immobili = ""
+                if cat is not None:
+                    try:
+                        immobili = " | ".join(
+                            "%s (%s)" % (x.get("titolo", ""), x.get("citta", ""))
+                            for x in (cat.alloggi_host(h["host_id"], limit=50) or []))
+                    except Exception:
+                        immobili = ""
+                eur = lambda c: "%.2f" % (int(c) / 100.0)
+                riga = [h["host_id"], h["ragione_sociale"], h.get("tipo_soggetto", ""),
+                        h.get("codice_fiscale", ""), h.get("partita_iva", ""),
+                        h.get("paese", ""), h.get("indirizzo_fiscale", ""), h.get("iban", ""),
+                        "SI" if not self._dac7_mancanti(h) else "NO",
+                        a["n"], eur(a["lordo"]), eur(a["commissioni"]), eur(a["tasse"]),
+                        eur(a["rimborsi"]), eur(a["trim"][1]), eur(a["trim"][2]),
+                        eur(a["trim"][3]), eur(a["trim"][4]), immobili]
+                buf = _io.StringIO()
+                _csv.writer(buf).writerow(riga)
+                testo = buf.getvalue()
+                acc.update(testo.encode("utf-8"))
+                n_host += 1
+                yield testo
+        except Exception:
+            logger.error("dac7 report: errore durante lo streaming", exc_info=True)
+            errore = True
+        if errore:
+            yield "\r\n# NON CHIUSO / CORROTTO - errore durante lo streaming\r\n"
+        else:
+            yield "\r\n# host_reportabili,%d\r\n" % n_host
+            yield "# FINE REPORT DAC7 - INTEGRITÀ: %s\r\n" % acc.hexdigest()
+        stato = "NON_CHIUSO_CORROTTO" if errore else "SUCCESS"
+        logger.warning("DAC7_REPORT_GENERATED | DATA: %s | ANNO: %s | HOST: %d | STATUS: %s | IP: %s",
+                       gen, anno, n_host, stato, ip or "?")
+
+    def _bunker_dac7_report(self, query, headers):
+        """Report DAC7 via router (test + fallback): concatena il generatore di streaming.
+        In produzione l'handler intercetta la rotta e STREAMMA (zero RAM)."""
+        if not self._bunker_auth(headers, azione="dac7_report"):
+            return 403, {"errore": "bunker_richiesto"}
+        anno = self._anno_valido(query.get("anno"))
+        try:
+            csv_txt = "".join(self.genera_dac7_csv(anno=anno,
+                                                   ip=self._client_ip(headers)))
+        except Exception:
+            logger.error("dac7 report: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        return 200, {"csv": csv_txt, "anno": anno,
+                     "integro": ("# FINE REPORT DAC7 - INTEGRITÀ:" in csv_txt)}
+
     def puo_esportare(self, headers) -> bool:
         """True se il chiamante ha una sessione Bunker valida (usata dall'handler per lo
         streaming diretto sul socket dell'estratto fiscale)."""
         return self._bunker_auth(headers, azione="export_contabile")
+
+    def puo_dac7(self, headers) -> bool:
+        """Sessione Bunker valida per lo streaming del report DAC7 (dati PII+finanziari)."""
+        return self._bunker_auth(headers, azione="dac7_report")
 
     def genera_estratto_csv(self, *, ip: str = ""):
         """GENERATORE dell'estratto contabile certificato in STREAMING (Incremento 4.1):
@@ -5395,6 +5570,32 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 except Exception:
                     # flusso interrotto (rete/DB): marca il file come NON valido, cosi'
                     # un download troncato non venga mai preso per buono.
+                    try:
+                        self.wfile.write(b"\r\n# NON CHIUSO / CORROTTO - streaming interrotto\r\n")
+                    except Exception:
+                        pass
+                return
+            if u.path == "/api/bunker/dac7_report":
+                # STREAMING del report DAC7 (PII+finanziario) direttamente sul socket.
+                hdrs = dict(self.headers)
+                if not router.puo_dac7(hdrs):
+                    self._scrivi(403, {"errore": "bunker_richiesto"})
+                    return
+                anno = router._anno_valido({k: v[0] for k, v in
+                                            parse_qs(urlparse(self.path).query).items()}.get("anno"))
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition",
+                                 'attachment; filename="dac7_report_%s.csv"' % anno)
+                self.send_header("Cache-Control", "no-store")
+                self._cors()
+                self.end_headers()
+                if getattr(self, "_solo_head", False):
+                    return
+                try:
+                    for pezzo in router.genera_dac7_csv(anno=anno, ip=router._client_ip(hdrs)):
+                        self.wfile.write(pezzo.encode("utf-8"))
+                except Exception:
                     try:
                         self.wfile.write(b"\r\n# NON CHIUSO / CORROTTO - streaming interrotto\r\n")
                     except Exception:

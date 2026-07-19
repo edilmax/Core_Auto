@@ -31,7 +31,7 @@ import logging
 import secrets
 import sqlite3
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from fase59_concierge import FirmaQuote
 
@@ -105,9 +105,12 @@ class RegistroHost:
                         termini_ts INTEGER NOT NULL,
                         stato TEXT NOT NULL DEFAULT 'attivo',
                         creato_ts INTEGER NOT NULL)""")
-                # migrazione idempotente per DB esistenti (canali contatto host)
+                # migrazione idempotente per DB esistenti (canali contatto host + DATI FISCALI
+                # DAC7: codice fiscale/P.IVA, indirizzo, paese, IBAN, tipo soggetto, nascita)
                 for col in ("telefono", "line_token", "wechat_webhook", "telegram_chat_id",
-                            "stripe_account_id"):
+                            "stripe_account_id", "codice_fiscale", "partita_iva",
+                            "indirizzo_fiscale", "paese", "iban", "tipo_soggetto",
+                            "data_nascita"):
                     try:
                         con.execute("ALTER TABLE host ADD COLUMN %s TEXT NOT NULL DEFAULT ''" % col)
                     except sqlite3.OperationalError:
@@ -212,19 +215,78 @@ class RegistroHost:
         con = self._apri()
         try:
             r = con.execute("SELECT email, telefono, line_token, wechat_webhook, "
-                            "telegram_chat_id, stripe_account_id, ragione_sociale "
+                            "telegram_chat_id, stripe_account_id, ragione_sociale, "
+                            "codice_fiscale, partita_iva, indirizzo_fiscale, paese, iban, "
+                            "tipo_soggetto, data_nascita "
                             "FROM host WHERE host_id=?",
                             (host_id,)).fetchone()
         finally:
             con.close()
         if r is None:
             return None
+        g = lambda k: (r[k] if k in r.keys() and r[k] is not None else "")
         return {"email": r["email"] or "", "telefono": (r["telefono"] or ""),
                 "line_token": (r["line_token"] or ""),
                 "wechat_webhook": (r["wechat_webhook"] or ""),
                 "telegram_chat_id": (r["telegram_chat_id"] or ""),
                 "stripe_account_id": (r["stripe_account_id"] or ""),
-                "ragione_sociale": (r["ragione_sociale"] or "")}
+                "ragione_sociale": (r["ragione_sociale"] or ""),
+                "codice_fiscale": g("codice_fiscale"), "partita_iva": g("partita_iva"),
+                "indirizzo_fiscale": g("indirizzo_fiscale"), "paese": g("paese"),
+                "iban": g("iban"), "tipo_soggetto": g("tipo_soggetto"),
+                "data_nascita": g("data_nascita")}
+
+    # ── DATI FISCALI (DAC7): raccolta + audit di conformita' ────────────────
+    CAMPI_FISCALI = ("codice_fiscale", "partita_iva", "indirizzo_fiscale", "paese",
+                     "iban", "tipo_soggetto", "data_nascita")
+
+    def imposta_dati_fiscali(self, host_id: Any, dati: Dict[str, Any]) -> bool:
+        """Salva/aggiorna i dati fiscali dell'host (per DAC7). Scrive SOLO i campi forniti
+        e non vuoti; validazione minima (lunghezze). Blindato."""
+        if not (isinstance(host_id, str) and host_id and isinstance(dati, dict)):
+            return False
+        set_cols, par = [], []
+        for c in self.CAMPI_FISCALI:
+            v = dati.get(c)
+            if isinstance(v, str) and v.strip():
+                set_cols.append("%s=?" % c)
+                par.append(v.strip()[:200])
+        if not set_cols:
+            return False
+        par.append(host_id)
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("UPDATE host SET %s WHERE host_id=?" % ", ".join(set_cols),
+                                  par)
+            return bool(cur.rowcount)
+        except Exception:
+            logger.warning("imposta_dati_fiscali fallita (ISOLATA)", exc_info=True)
+            return False
+        finally:
+            con.close()
+
+    def elenco_host(self, *, limit: int = 5000) -> List[Dict[str, str]]:
+        """Tutti gli host con i campi identita'+fiscali, per l'audit di conformita' DAC7.
+        Read-only. NON include password/salt."""
+        lim = limit if isinstance(limit, int) and 0 < limit <= 100000 else 5000
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT host_id, email, ragione_sociale, stato, codice_fiscale, "
+                "partita_iva, indirizzo_fiscale, paese, iban, tipo_soggetto "
+                "FROM host ORDER BY creato_ts LIMIT ?", (lim,)).fetchall()
+        finally:
+            con.close()
+        out = []
+        for r in righe:
+            g = lambda k: (r[k] if k in r.keys() and r[k] is not None else "")
+            out.append({"host_id": r["host_id"], "email": r["email"] or "",
+                        "ragione_sociale": r["ragione_sociale"] or "", "stato": r["stato"],
+                        "codice_fiscale": g("codice_fiscale"), "partita_iva": g("partita_iva"),
+                        "indirizzo_fiscale": g("indirizzo_fiscale"), "paese": g("paese"),
+                        "iban": g("iban"), "tipo_soggetto": g("tipo_soggetto")})
+        return out
 
     def imposta_stripe_account(self, host_id: Any, account_id: Any) -> bool:
         """Collega il conto Stripe Connect dell'host (per i bonifici automatici)."""

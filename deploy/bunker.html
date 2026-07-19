@@ -75,6 +75,28 @@ button.ghost{background:#222c40;color:var(--txt)}
     </div>
 
     <div class="card">
+      <h2>🇪🇺 Conformità Host (DAC7)</h2>
+      <p class="hint">La legge europea (DAC7) obbliga a comunicare al Fisco gli host che superano <b>30 prenotazioni</b> o <b>2.000&nbsp;€</b> l'anno. Qui vedi chi va segnalato e a chi <b>mancano i dati fiscali</b> (in rosso: da segnalare MA incompleto — vanno chiesti i dati subito).</p>
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.5rem 0">
+        <label class="hint" for="dacAnno">Anno:</label>
+        <input type="number" id="dacAnno" style="width:110px" aria-label="Anno DAC7">
+        <button class="ghost" id="btnConf">🔄 Controlla</button>
+        <span id="confStat" class="hint"></span>
+      </div>
+      <div id="confRiepilogo" style="margin:.3rem 0"></div>
+      <div id="confLista"></div>
+    </div>
+
+    <div class="card">
+      <h2>📤 Report DAC7 certificato</h2>
+      <p class="hint">Genera il file CSV da consegnare all'Agenzia delle Entrate: una riga per ogni host da segnalare, con dati fiscali, incassi, trimestri e immobili. Include la <b>prova di integrità</b> (hash). Solo host oltre soglia. Ogni generazione è tracciata nei log.</p>
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.4rem">
+        <button id="btnDac7">📥 Genera report DAC7 (CSV)</button>
+        <span id="dac7Stat" class="hint"></span>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>📋 Log persistenti (ultimi eventi)</h2>
       <p class="hint">Chi ha fatto cosa + allarmi. In rosso i CRITICI (accessi negati, manomissioni).</p>
       <div id="loglist" style="margin-top:.5rem"></div>
@@ -168,10 +190,59 @@ async function scaricaEstratto(){
       : ('✅ '+n+' movimenti · '+(integra?'INTEGRITÀ VERIFICATA ✅':'?'));
   }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
 }
+async function conformita(){
+  const st=$('confStat'); if(!attivo()){ esci(); return; }
+  const anno=parseInt($('dacAnno').value,10)||(new Date().getFullYear()-1);
+  st.textContent='… controllo';
+  const r=await jget('/api/bunker/dac7_conformita?anno='+anno);
+  if(r.status===403){ esci(); return; }
+  if(!r.d){ st.textContent='ℹ️ non disponibile'; return; }
+  const host=r.d.host||[];
+  st.textContent='';
+  $('confRiepilogo').innerHTML =
+    pill('ok', (r.d.reportabili||0)+' da segnalare')+' '+
+    (r.d.urgenti>0 ? pill('ko','⚠️ '+r.d.urgenti+' incompleti da sistemare') : pill('na','0 incompleti'))+
+    ' <span class="hint">anno '+anno+' · '+host.length+' host totali</span>';
+  // mostra prima gli urgenti, poi i reportabili completi, poi il resto
+  host.sort((a,b)=>(b.urgente-a.urgente)||(b.reportabile-a.reportabile));
+  $('confLista').innerHTML = host.map(h=>{
+    let stato = h.urgente ? pill('ko','DA SEGNALARE · DATI MANCANTI')
+      : h.reportabile ? pill('ok','da segnalare · ok')
+      : h.completo ? pill('na','sotto soglia')
+      : pill('warn','sotto soglia · dati incompleti');
+    const manc = (h.mancanti&&h.mancanti.length) ? ' <span class="hint">manca: '+esc(h.mancanti.join(', '))+'</span>' : '';
+    return '<div class="riga"><span>'+esc(h.email||h.host_id)+
+      ' <span class="hint">('+(h.prenotazioni||0)+' pren · '+((h.ricavi_cents||0)/100).toFixed(0)+'€)</span>'+manc+
+      '</span><span>'+stato+'</span></div>';
+  }).join('') || '<span class="hint">nessun host</span>';
+}
+async function scaricaDac7(){
+  const st=$('dac7Stat'); if(!attivo()){ esci(); return; }
+  const anno=parseInt($('dacAnno').value,10)||(new Date().getFullYear()-1);
+  st.textContent='… genero in streaming';
+  try{
+    const r=await fetch('/api/bunker/dac7_report?anno='+anno,{headers:hdr()});
+    if(r.status===403){ esci(); return; }
+    if(!r.ok){ st.textContent='ℹ️ non disponibile ('+r.status+')'; return; }
+    const csv=await r.text();
+    const integra=csv.indexOf('INTEGRITÀ:')>=0 && csv.indexOf('NON CHIUSO')<0;
+    const corrotto=csv.indexOf('NON CHIUSO / CORROTTO')>=0;
+    const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='report_dac7_'+anno+'.csv'; a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+    const m=csv.match(/# host_reportabili,(\d+)/);
+    st.textContent = corrotto ? '🔴 file CORROTTO — non consegnarlo, avvisa il tecnico'
+      : ('✅ '+(m?m[1]:'?')+' host segnalati · '+(integra?'INTEGRITÀ OK ✅':'?'));
+  }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
+}
 $('btnEntra').onclick=entra;
 $('btnAgg').onclick=aggiorna;
 $('btnEstratto').onclick=scaricaEstratto;
+$('btnConf').onclick=conformita;
+$('btnDac7').onclick=scaricaDac7;
 $('btnEsci').onclick=logout;
+if(!$('dacAnno').value) $('dacAnno').value=(new Date().getFullYear()-1);
 $('pw').addEventListener('keydown',e=>{ if(e.key==='Enter') entra(); });
 BV.occhielli();   // 👁 mostra/nascondi su ogni input password
 </script>

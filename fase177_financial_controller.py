@@ -245,6 +245,66 @@ class FinancialController:
         finally:
             con.close()
 
+    def aggrega_dac7(self, anno: int) -> Dict[str, Dict[str, Any]]:
+        """Aggrega il giornale per host per l'ANNO fiscale (DAC7). Raggruppa i movimenti
+        per riferimento = ricostruisce l'economia di OGNI prenotazione (lordo alloggio,
+        tassa, netto all'host, rimborsi), la attribuisce all'anno/trimestre dell'INCASSO,
+        e somma per host. Fonte: il giornale immutabile (verita' contabile). Ritorna
+        {host_id: {n, lordo, netto, commissioni, tasse, rimborsi, trim{1..4}, trim_n{1..4}}}."""
+        import datetime as _dt
+        try:
+            anno = int(anno)
+        except Exception:
+            return {}
+        per_rif: Dict[str, Dict[str, Any]] = {}
+        for r in self.stream_giornale():
+            rif = r["riferimento"]
+            tipo = r["tipo"]
+            imp = int(r["importo_cents"] or 0)
+            sog = r["soggetto"] or ""
+            d = per_rif.setdefault(rif, {"host": "", "ts": None, "incasso": 0,
+                                         "tassa": 0, "netto": 0, "rimborso": 0})
+            if tipo == "incasso":
+                d["incasso"] += imp
+                d["ts"] = r["ts"]
+                if sog.startswith("host:"):
+                    d["host"] = sog[5:]
+            elif tipo == "tassa_incassata":
+                d["tassa"] += imp
+            elif tipo in ("payout_host", "payout_manuale"):
+                d["netto"] += imp
+                if sog.startswith("host:") and not d["host"]:
+                    d["host"] = sog[5:]
+            elif tipo == "rimborso":
+                d["rimborso"] += imp
+        agg: Dict[str, Dict[str, Any]] = {}
+        for rif, d in per_rif.items():
+            if not d["host"] or d["ts"] is None:
+                continue
+            try:
+                dt = _dt.datetime.utcfromtimestamp(int(d["ts"]))
+            except Exception:
+                continue
+            if dt.year != anno:
+                continue
+            q = (dt.month - 1) // 3 + 1
+            lordo = max(0, int(d["incasso"]) - int(d["tassa"]))     # corrispettivo alloggio
+            netto = int(d["netto"])
+            commiss = max(0, lordo - netto)
+            h = agg.setdefault(d["host"], {
+                "n": 0, "lordo": 0, "netto": 0, "commissioni": 0, "tasse": 0,
+                "rimborsi": 0, "trim": {1: 0, 2: 0, 3: 0, 4: 0},
+                "trim_n": {1: 0, 2: 0, 3: 0, 4: 0}})
+            h["n"] += 1
+            h["lordo"] += lordo
+            h["netto"] += netto
+            h["commissioni"] += commiss
+            h["tasse"] += int(d["tassa"])
+            h["rimborsi"] += int(d["rimborso"])
+            h["trim"][q] += lordo
+            h["trim_n"][q] += 1
+        return agg
+
     def conta_movimenti(self) -> int:
         con = self._apri()
         try:
