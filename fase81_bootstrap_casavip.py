@@ -144,6 +144,7 @@ class SistemaCasaVIP:
     finanza: Any = None     # FinancialController (fase177): giornale immutabile + note + offset penali
     kyc: Any = None         # KYCHost (fase143): esiti verifica identita' (provider, no-PII)
     bunker: Any = None      # Bunker (fase180): super-admin 2FA TOTP + sessione blindata 15 min
+    carta: Any = None       # ProviderCarta (fase183, Scatto ③): carta host off-session (gated)
 
     @property
     def attivo(self) -> bool:
@@ -198,6 +199,16 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     _connect = crea_provider_connect(cfg.stripe_secret_key)
     if _connect is not None:
         componenti.append("connect(101)")
+    # SCATTO ③ (fase183): provider carta off-session, gated stessa chiave Stripe. Il PROVIDER
+    # esiste (per il salvataggio carta), ma l'ADDEBITO automatico e' gated a parte da
+    # SCATTO3_ATTIVO nel server -> dormiente finche' il fondatore non attiva e testa.
+    try:
+        from fase183_carta_offsession import crea_provider_carta
+        _carta = crea_provider_carta(cfg.stripe_secret_key)
+    except Exception:
+        _carta = None
+    if _carta is not None:
+        componenti.append("carta_offsession(183)")
     _bps = cfg.commissione_bps if isinstance(cfg.commissione_bps, int) and \
         0 <= cfg.commissione_bps <= 10000 else 1000   # fallback 10% (regime), mai 0 per errore
     _ctx_host: Dict[str, Any] = {}    # holder late-bound: registro_host nasce piu' sotto
@@ -509,6 +520,6 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           domanda=domanda, garanzia=garanzia,
                           pagamenti_pendenti=pagamenti_pendenti, tassa_comunale=tassa_comunale,
                           payout=payout, accettazioni=accettazioni, stripe=provider,
-                          connect=_connect, geocoder=geocoder, checkin=checkin,
+                          connect=_connect, carta=_carta, geocoder=geocoder, checkin=checkin,
                           poi_provider=poi_provider, credito_usati=credito_usati,
                           finanza=finanza, bunker=bunker, kyc=kyc)

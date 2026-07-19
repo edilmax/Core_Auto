@@ -1,14 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Bookin VIP">
-  <!-- Icona distintiva: scudo verde profondo + corona oro (VIP, fiducia, protezione).
-       Nessuna somiglianza con le icone degli OTA. -->
+  <!-- QUADRATO APP = stesso verde brand della web-app (#0f4c3a), a TUTTO-BORDO (maskable-safe:
+       niente angoli bianchi/neri quando il telefono installa l'app). Corona oro (VIP) al centro,
+       dentro la zona sicura. Nessuna somiglianza con le icone degli OTA. -->
   <defs>
     <linearGradient id="or2" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#e6c15c"/><stop offset="1" stop-color="#b8860b"/>
     </linearGradient>
   </defs>
-  <path d="M32 2 L58 12 V34 C58 48 46 58 32 62 C18 58 6 48 6 34 V12 Z" fill="#0f4c3a"/>
-  <path d="M15 34 L21 24 L28 31 L32 21 L36 31 L43 24 L49 34 Z" fill="url(#or2)"/>
-  <rect x="15" y="35.5" width="34" height="4" rx="2" fill="url(#or2)"/>
-  <text x="32" y="54" text-anchor="middle" font-family="Georgia, serif" font-size="13"
-        font-weight="800" fill="#e6c15c" letter-spacing="1">VIP</text>
+  <!-- sfondo PIENO = il "quadrato" verde, identico alla web-app -->
+  <rect x="0" y="0" width="64" height="64" fill="#0f4c3a"/>
+  <!-- corona oro centrata (dentro la zona sicura maskable) -->
+  <path d="M15 33 L21 23 L28 30 L32 20 L36 30 L43 23 L49 33 Z" fill="url(#or2)"/>
+  <rect x="15" y="34.5" width="34" height="4" rx="2" fill="url(#or2)"/>
+  <text x="32" y="50" text-anchor="middle" font-family="Georgia, serif" font-size="12"
+        font-weight="800" fill="#ffffff" letter-spacing="1.5">VIP</text>
 </svg>

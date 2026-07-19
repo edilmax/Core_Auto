@@ -291,6 +291,20 @@
 >   (1.440 rami, 3 valute) = ZERO fantasmi. Guardia permanente: test_fantasmi_terminali (~13s).
 >   Lezione (2ª del giorno): VALIDA L'ORACOLO — 350 falsi fantasmi dal mio orologio corto.
 >   Riga 👻 REGISTRO sez.1.
+> · ♟️ **MODEL-CHECKING ESAUSTIVO (2026-07-19, metodo "prova non campione")**: enumerate TUTTE
+>   le 14.641 permutazioni di 11 eventi a profondità 4 su mondo minimo (1 alloggio×1 unità, 2
+>   prenotazioni rivali A/B) = 0 violazioni su O1..O9 (mai overbooking/soldi-senza-stanza/stato
+>   illegale/resurrezione-assorbenti/doppio-incasso/catena rotta). Copertura CONFERMA l'oracolo:
+>   BOTH_BOOKED=1620 (gara esercitata), BOTH_PAID=0 (impossibile). Guardia permanente:
+>   test_sequenze_avverse (12 sequenze curate) + test_fantasmi_terminali.
+> · 🔒 **CASSAFORTE CHIUSA (2026-07-19)**: TOTP Bunker ATTIVO+verificato dal vivo (segreto sul VPS,
+>   additivo: password resta valida) + backup offsite cifrato con passphrase del fondatore.
+> · 💳 **SCATTO ③ CARTA OFF-SESSION COSTRUITO ma DORMIENTE (2026-07-19, opzione 1 fondatore+kimi)**:
+>   fase183 (carta hosted mode=setup + addebito PaymentIntent off_session, fetch-iniettabile) +
+>   fase177.riscuoti_da_carta (addebito-prima-poi-giornale, idem, backoff) + fase88 colonne carta
+>   + fase83 (webhook salva-carta, endpoint host, sweep gated) + host.html bottone. DOPPIO GATE:
+>   chiave Stripe (salvataggio) + SCATTO3_ATTIVO=1 (addebito). test_scatto3_carta (11). **RESTA
+>   fondatore**: mettere SCATTO3_ATTIVO=1 sul VPS + test con carta vera. Riga 💳/♟️ REGISTRO sez.1.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare

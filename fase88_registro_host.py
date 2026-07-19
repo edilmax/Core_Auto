@@ -113,7 +113,10 @@ class RegistroHost:
                             "data_nascita",
                             # VERIFICA HOST (KYC dashboard, Incr.10): '' = non verificato,
                             # 'verificato' | 'revocato' (manuale super-admin; provider futuro)
-                            "verifica_stato", "verifica_note", "verifica_ts", "verifica_da"):
+                            "verifica_stato", "verifica_note", "verifica_ts", "verifica_da",
+                            # SCATTO ③ (fase183): carta host off-session per i debiti scoperti.
+                            # SOLO identificativi opachi Stripe (nessuna PII carta da noi).
+                            "stripe_customer_id", "stripe_payment_method"):
                     try:
                         con.execute("ALTER TABLE host ADD COLUMN %s TEXT NOT NULL DEFAULT ''" % col)
                     except sqlite3.OperationalError:
@@ -221,7 +224,8 @@ class RegistroHost:
                             "telegram_chat_id, stripe_account_id, ragione_sociale, "
                             "codice_fiscale, partita_iva, indirizzo_fiscale, paese, iban, "
                             "tipo_soggetto, data_nascita, "
-                            "verifica_stato, verifica_note, verifica_ts, verifica_da "
+                            "verifica_stato, verifica_note, verifica_ts, verifica_da, "
+                            "stripe_customer_id, stripe_payment_method "
                             "FROM host WHERE host_id=?",
                             (host_id,)).fetchone()
         finally:
@@ -240,7 +244,9 @@ class RegistroHost:
                 "iban": g("iban"), "tipo_soggetto": g("tipo_soggetto"),
                 "data_nascita": g("data_nascita"),
                 "verifica_stato": g("verifica_stato"), "verifica_note": g("verifica_note"),
-                "verifica_ts": g("verifica_ts"), "verifica_da": g("verifica_da")}
+                "verifica_ts": g("verifica_ts"), "verifica_da": g("verifica_da"),
+                "stripe_customer_id": g("stripe_customer_id"),
+                "stripe_payment_method": g("stripe_payment_method")}
 
     # ── DATI FISCALI (DAC7): raccolta + audit di conformita' ────────────────
     CAMPI_FISCALI = ("codice_fiscale", "partita_iva", "indirizzo_fiscale", "paese",
@@ -367,6 +373,24 @@ class RegistroHost:
             return bool(cur.rowcount)
         except Exception:
             logger.warning("imposta_stripe_account fallita (ISOLATA)", exc_info=True)
+            return False
+        finally:
+            con.close()
+
+    def imposta_carta(self, host_id: Any, customer_id: Any, payment_method: Any) -> bool:
+        """SCATTO ③ (fase183): salva gli id opachi Stripe della carta host (customer + pm).
+        Nessuna PII carta (numero/scadenza) transita o si archivia da noi."""
+        if not (isinstance(host_id, str) and host_id):
+            return False
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("UPDATE host SET stripe_customer_id=?, "
+                                  "stripe_payment_method=? WHERE host_id=?",
+                                  (str(customer_id or ""), str(payment_method or ""), host_id))
+            return bool(cur.rowcount)
+        except Exception:
+            logger.warning("imposta_carta fallita (ISOLATA)", exc_info=True)
             return False
         finally:
             con.close()

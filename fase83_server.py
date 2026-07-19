@@ -1088,6 +1088,10 @@ class RouterHTTP:
             return self._host_alloggio_elimina(body, headers)
         if metodo == "GET" and path == "/api/host/stripe_link":
             return self._host_stripe_link(headers)
+        if metodo == "POST" and path == "/api/host/carta_link":
+            return self._host_carta_link(headers)      # Scatto ③: salva carta (hosted)
+        if metodo == "GET" and path == "/api/host/carta_stato":
+            return self._host_carta_stato(headers)
         if metodo == "POST" and path == "/api/telegram/webhook":
             return self._telegram_webhook(body, headers)
         if metodo == "GET" and path == "/api/host/richieste":
@@ -4518,10 +4522,16 @@ class RouterHTTP:
         if not ok:
             return 400, {"errore": "firma_non_valida"}
         if tipo == "checkout.session.completed":
+            obj0 = (dati or {}).get("object", {}) or {}
+            meta0 = obj0.get("metadata", {}) or {}
+            # SCATTO ③ (fase183): sessione di SALVATAGGIO CARTA (mode=setup), NON un pagamento.
+            # Riconosciuta dallo scopo nel metadata -> salva customer+payment_method dell'host.
+            if obj0.get("mode") == "setup" or meta0.get("scopo") == "mandato_penale_offsession":
+                self._carta_salva_da_sessione(obj0)
+                return 200, {"ricevuto": True, "tipo": tipo, "scopo": "carta"}
             rif = ""
             try:
-                rif = (dati or {}).get("object", {}).get("metadata", {}).get(
-                    "riferimento", "")
+                rif = meta0.get("riferimento", "")
             except Exception:
                 rif = ""
             # AUDIT CONSOLE: salva l'id sessione (cs_...) -> shadow-check Stripe possibile
@@ -4553,6 +4563,112 @@ class RouterHTTP:
             except Exception:
                 logger.warning("webhook identity: errore ISOLATO", exc_info=True)
         return 200, {"ricevuto": True, "tipo": tipo}
+
+    # ── SCATTO ③: carta host off-session (fase183) ──────────────────────────
+    MANDATO_CARTA = ("Autorizzo BookinVIP ad addebitare su questa carta gli importi che "
+                     "risultassi dovere per penali di cancellazione non coperte dai miei "
+                     "incassi futuri. Solo debiti certi, con avviso; posso rimuovere la "
+                     "carta quando non ho debiti aperti.")
+
+    def _carta_salva_da_sessione(self, obj):
+        """Webhook mode=setup completato -> salva gli id opachi (customer + payment_method)
+        dell'host. ISOLATO: mai rompere il webhook."""
+        try:
+            meta = obj.get("metadata", {}) or {}
+            hid = meta.get("host_id", "")
+            carta = getattr(self._sys, "carta", None)
+            reg = getattr(self._sys, "registro_host", None)
+            if carta is None or reg is None or not hid:
+                return
+            det = None
+            sid = obj.get("id", "")
+            if sid and hasattr(carta, "dettagli_da_sessione"):
+                det = carta.dettagli_da_sessione(sid)
+            if not det:                       # fallback: gia' nell'evento
+                cust, pm = obj.get("customer") or "", obj.get("payment_method") or ""
+                det = {"customer": cust, "payment_method": pm} if (cust and pm) else None
+            if det and det.get("customer") and det.get("payment_method"):
+                reg.imposta_carta(hid, det["customer"], det["payment_method"])
+                logger.warning("CARTA HOST SALVATA | HOST_ID: %s (mandato off-session)", hid)
+        except Exception:
+            logger.warning("salvataggio carta host fallito (ISOLATO)", exc_info=True)
+
+    def _host_carta_link(self, headers):
+        """L'host apre la pagina HOSTED per salvare una carta (badge Host Verificato+ e
+        rete di sicurezza penali). La carta va da lui a Stripe, MAI da noi."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        carta = getattr(self._sys, "carta", None)
+        reg = getattr(self._sys, "registro_host", None)
+        if carta is None:
+            return 503, {"errore": "carta_non_attiva"}      # Scatto ③ dormiente (no chiave)
+        hid = self._host_id_da_token(headers)
+        if not hid:
+            return 422, {"errore": "host_id_mancante"}
+        email = ""
+        try:
+            email = (reg.info_host(hid) or {}).get("email", "") if reg else ""
+        except Exception:
+            email = ""
+        url = carta.crea_link_carta(host_id=hid, email=email)
+        if not url:
+            return 502, {"errore": "link_non_creato"}
+        return 200, {"url": url, "mandato": self.MANDATO_CARTA}
+
+    def _host_carta_stato(self, headers):
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        hid = self._host_id_da_token(headers)
+        reg = getattr(self._sys, "registro_host", None)
+        info = {}
+        try:
+            info = (reg.info_host(hid) or {}) if (reg and hid) else {}
+        except Exception:
+            info = {}
+        return 200, {"carta_collegata": bool(info.get("stripe_payment_method")),
+                     "attivo": getattr(self._sys, "carta", None) is not None}
+
+    def riscuoti_debiti_carta(self):
+        """SWEEP Scatto ③ (gated SCATTO3_ATTIVO): per gli host con debiti 'aperto' scoperti
+        E una carta salvata, addebita off-session il residuo. DORMIENTE finche' il fondatore
+        non mette SCATTO3_ATTIVO=1 in prod (money-move reale). Isolato/fail-safe."""
+        import os as _os
+        if _os.environ.get("SCATTO3_ATTIVO", "0") != "1":
+            return {"saltato": "non_attivo"}
+        fc = getattr(self._sys, "finanza", None)
+        carta = getattr(self._sys, "carta", None)
+        reg = getattr(self._sys, "registro_host", None)
+        if fc is None or carta is None or reg is None:
+            return {"saltato": "non_configurato"}
+        esito = {"host": 0, "incassati_cents": 0, "saldati": 0}
+        try:
+            host_con_debiti = {}
+            for deb in fc.debiti_aperti():
+                hid = str(deb.get("host_id") or "")
+                if hid:
+                    host_con_debiti[hid] = True
+            for hid in host_con_debiti:
+                info = reg.info_host(hid) or {}
+                cust = info.get("stripe_customer_id", "")
+                pm = info.get("stripe_payment_method", "")
+                if not (cust and pm):
+                    continue                  # niente carta -> resta al just-in-time (email)
+                r = fc.riscuoti_da_carta(host_id=hid, provider_carta=carta,
+                                         customer=cust, payment_method=pm)
+                esito["host"] += 1
+                esito["incassati_cents"] += int(r.get("incassati_cents", 0))
+                esito["saldati"] += int(r.get("debiti_saldati", 0))
+        except Exception:
+            logger.warning("sweep carta off-session fallito (ISOLATO)", exc_info=True)
+        return esito
+
+    def _riscuoti_carta_se_ora(self):
+        """Gancio per il tick orario: sweep carta al massimo 1 volta ogni 12h."""
+        import time as _t
+        if _t.time() - getattr(self, "_carta_sweep_ts", 0) < 12 * 3600:
+            return None
+        self._carta_sweep_ts = _t.time()
+        return self.riscuoti_debiti_carta()
 
     def _riasserisci_incasso(self, rec, rif):
         """Passi derivati IDEMPOTENTI del pagamento: tassa nel ledger + payout 'maturato'.
@@ -6783,6 +6899,10 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     router._pulizia_uploads_se_ora()
                 except Exception:
                     logger.warning("pulizia uploads fallita (ignorata)", exc_info=True)
+                try:
+                    router._riscuoti_carta_se_ora()     # Scatto ③ (gated SCATTO3_ATTIVO)
+                except Exception:
+                    logger.warning("sweep carta off-session fallito (ignorato)", exc_info=True)
                 __import__("time").sleep(3600)
         _th.Thread(target=_tick_garanzia, daemon=True).start()
 

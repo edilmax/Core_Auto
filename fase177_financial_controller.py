@@ -780,6 +780,107 @@ class FinancialController:
                 esito["debiti_aperti"] += 1
         return esito
 
+    # ── MOTORE PENALI, Scatto ③: RISCOSSIONE dei debiti scoperti sulla CARTA ─
+    def riscuoti_da_carta(self, *, host_id: str, provider_carta: Any, customer: str,
+                          payment_method: str, emittente: str = "sistema",
+                          ora_ts: Any = None, max_tentativi: int = 4) -> Dict[str, Any]:
+        """SCATTO ③: i debiti 'aperto' rimasti DOPO l'offset sui payout (host che cancella e
+        poi sparisce = nessun incasso futuro) si addebitano OFF-SESSION sulla carta salvata.
+        Ordine SICURO (denaro reale via Stripe): ADDEBITO prima, GIORNALE dopo — con la
+        STESSA Idempotency-Key `carta:<debito>:<residuo>` su addebito E su riga giornale, cosi'
+        un retry (o crash a meta') NON addebita ne' registra due volte. Backoff su
+        tentativi/prossimo_ts: una carta rifiutata non si martella. FAIL-SAFE: qualunque
+        errore -> il debito resta 'aperto' (mai segnare saldato senza incasso vero).
+        Ritorna {'incassati_cents', 'debiti_saldati', 'richiede_azione', 'falliti'}."""
+        esito = {"incassati_cents": 0, "debiti_saldati": 0, "richiede_azione": 0, "falliti": 0}
+        if not (isinstance(host_id, str) and host_id) or provider_carta is None:
+            return esito
+        if not (isinstance(customer, str) and customer
+                and isinstance(payment_method, str) and payment_method):
+            return esito
+        ora = int(ora_ts) if isinstance(ora_ts, int) and not isinstance(ora_ts, bool) \
+            else int(self._now())
+        try:
+            aperti = self.debiti_host(host_id, stato="aperto")
+        except Exception:
+            logger.warning("carta: lettura debiti fallita (ISOLATA)", exc_info=True)
+            return esito
+        for deb in aperti:
+            nota_id = str(deb.get("debito_id") or "")
+            rif_deb = str(deb.get("riferimento") or "")
+            valuta = str(deb.get("valuta") or "EUR")
+            residuo = _cent(deb.get("residuo_cents"))
+            tentativi = int(deb.get("tentativi") or 0)
+            prossimo = deb.get("prossimo_ts")
+            if not nota_id or residuo <= 0:
+                continue
+            if tentativi >= max_tentativi:
+                continue                       # basta: serve intervento manuale/umano
+            if isinstance(prossimo, int) and not isinstance(prossimo, bool) and prossimo > ora:
+                continue                       # ancora in backoff: non ritentare adesso
+            idem = "carta:%s:%d" % (nota_id, residuo)
+            try:
+                r = provider_carta.addebita(customer=customer, payment_method=payment_method,
+                                            importo_cents=residuo, valuta=valuta,
+                                            riferimento=rif_deb, idem=idem)
+            except Exception:
+                logger.warning("carta: addebito sollevato (ISOLATO)", exc_info=True)
+                r = {"stato": "fallito", "motivo": "eccezione"}
+            stato = r.get("stato")
+            if stato == "riuscito":
+                # denaro incassato -> giornale (idempotente sullo stesso idem) + debito saldato
+                mv = self.registra(evento_id=idem, tipo="penale_incassata",
+                                   riferimento=rif_deb, soggetto="host:" + host_id,
+                                   conto_dare="cassa_piattaforma", conto_avere="crediti_vs_host",
+                                   importo_cents=residuo, valuta=valuta,
+                                   causale="penale riscossa su carta off-session %s"
+                                           % r.get("pi", ""), emittente=emittente)
+                # anche se il giornale rifiuta il doppione (replay), il debito va saldato
+                self._debito_scrivi(nota_id, host_id, rif_deb, 0, valuta, "saldato")
+                self._segna_nota_saldata(nota_id)
+                esito["incassati_cents"] += residuo
+                esito["debiti_saldati"] += 1
+                logger.warning("DEBITO SALDATO SU CARTA | HOST_ID: %s | NOTA: %s | %d %s | PI: %s",
+                               host_id, nota_id, residuo, valuta, r.get("pi", ""))
+            elif stato == "richiede_azione":
+                self._debito_backoff(nota_id, host_id, rif_deb, residuo, valuta,
+                                     tentativi + 1, ora)
+                esito["richiede_azione"] += 1
+                logger.warning("CARTA RICHIEDE AZIONE (SCA) | HOST_ID: %s | NOTA: %s | "
+                               "avvisare l'host di autenticare", host_id, nota_id)
+            else:
+                self._debito_backoff(nota_id, host_id, rif_deb, residuo, valuta,
+                                     tentativi + 1, ora)
+                esito["falliti"] += 1
+                logger.warning("CARTA ADDEBITO FALLITO | HOST_ID: %s | NOTA: %s | MOTIVO: %s",
+                               host_id, nota_id, r.get("motivo"))
+        return esito
+
+    def _segna_nota_saldata(self, nota_id: str) -> None:
+        con = self._apri()
+        try:
+            with con:
+                con.execute("UPDATE note SET stato='saldata' WHERE nota_id=?", (nota_id,))
+        except Exception:
+            logger.warning("carta: nota->saldata fallita (ISOLATO)", exc_info=True)
+        finally:
+            con.close()
+
+    def _debito_backoff(self, debito_id: str, host_id: str, riferimento: str,
+                        residuo: int, valuta: str, tentativi: int, ora: int) -> None:
+        """Aggiorna tentativi + prossimo_ts (backoff esponenziale: 1,2,4,8 giorni) senza
+        toccare il residuo. Il debito resta 'aperto'."""
+        prossimo = ora + (2 ** max(0, tentativi - 1)) * 86400
+        con = self._apri()
+        try:
+            with con:
+                con.execute("UPDATE debiti SET tentativi=?, prossimo_ts=?, aggiornato_ts=?"
+                            " WHERE debito_id=?", (int(tentativi), int(prossimo), ora, debito_id))
+        except Exception:
+            logger.warning("carta: backoff debito fallito (ISOLATO)", exc_info=True)
+        finally:
+            con.close()
+
 
     # ── MOTORE PENALI: STORNO (correzione = nota contraria, MAI modifica) ────
     def storna_penale(self, *, nota_id: Any, motivo: str = "", payout: Any = None,
