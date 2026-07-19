@@ -242,4 +242,4 @@ def crea_dichiarazione(percorso: str = ":memory:") -> DichiarazioneEngine:
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return DichiarazioneEngine(lambda: _ConnCondivisa(con))
-    return DichiarazioneEngine(lambda: sqlite3.connect(percorso))
+    return DichiarazioneEngine(lambda: sqlite3.connect(percorso, timeout=30))

@@ -149,6 +149,8 @@ class TassaComunale:
                              int(importo_cents), self._now()))
             return True
         except Exception:
+            logger.warning("registra_riscossione: errore DB (ISOLATO, il retry webhook "
+                           "riasserisce)", exc_info=True)
             return False
         finally:
             con.close()
@@ -173,6 +175,8 @@ class TassaComunale:
                     (str(prenotazione_id), self._now()))
             return True
         except Exception:
+            # storno fallito = tassa sovra-contata al Comune (a nostro carico): mai muto
+            logger.warning("storna tassa: errore DB (ISOLATO)", exc_info=True)
             return False
         finally:
             con.close()
@@ -191,4 +195,4 @@ def crea_tassa_comunale(percorso: str, *, orologio: Any = None) -> TassaComunale
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return TassaComunale(lambda: _ConnCondivisa(con), orologio=orologio)
-    return TassaComunale(lambda: sqlite3.connect(percorso), orologio=orologio)
+    return TassaComunale(lambda: sqlite3.connect(percorso, timeout=30), orologio=orologio)

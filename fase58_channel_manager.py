@@ -754,4 +754,4 @@ def crea_channel_manager(percorso: str = ":memory:", *,
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return ChannelManager(lambda: _ConnCondivisa(con), notificatore=notificatore)
-    return ChannelManager(lambda: sqlite3.connect(percorso), notificatore=notificatore)
+    return ChannelManager(lambda: sqlite3.connect(percorso, timeout=30), notificatore=notificatore)

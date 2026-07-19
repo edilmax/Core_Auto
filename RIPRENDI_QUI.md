@@ -249,6 +249,17 @@
 >   doppie (strette solo a giro manuale BENCH_*/BENCH_STRICT=1; invarianti duri sempre). Guardie
 >   rosse-sul-vecchio → verdi; 10 giri × 2 moduli sotto carico vero (15 bruciatori/16 core) =
 >   0 falliti. Suite **2678 verde**. Dettaglio: riga 🚥 REGISTRO sez.1.
+> · 🔟 **AUDIT "10 MODULI" A MASSIMA SEVERITÀ (2026-07-19, mandato "ricontrolla anche i verdi")**:
+>   ispettore locale su 77 moduli vivi + ogni sospetto letto a mano. FIX VERI: ① timeout=30
+>   su 29 store SQLite (il default 5s sotto contesa = False silenziosi, la classe del bug
+>   prova-foto) + guardia permanente; ② CSV fiscali anti formula-injection (=+-@ → testo,
+>   hash certificazione intatto); ③ email anti header-injection (a-capo nel Subject/dest.
+>   respinti al choke-point); ④ voce nei silenzi money (payout/tassa/FC/check-in loggano);
+>   ⑤ SCOPA uploads orfani (>7gg non citati da annunci/chat; fail-closed, paracadute 50%,
+>   kill-switch PULIZIA_UPLOADS=0, 1×/24h nel tick). VERDI RI-GUADAGNATI con prove: WAL
+>   ovunque, rete tutta con timeout, globali=costanti, money già a ricalcolo incrociato.
+>   PROVE: suite **2690 verde** + bombardamento pieno 10×1000 RIESEGUITO = ZERO violazioni
+>   (159s). Riga 🔟 REGISTRO sez.1.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare

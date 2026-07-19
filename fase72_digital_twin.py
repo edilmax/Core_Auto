@@ -268,4 +268,4 @@ def crea_digital_twin(percorso: str = ":memory:", *,
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return DigitalTwin(lambda: _ConnCondivisa(con), orologio=orologio)
-    return DigitalTwin(lambda: sqlite3.connect(percorso), orologio=orologio)
+    return DigitalTwin(lambda: sqlite3.connect(percorso, timeout=30), orologio=orologio)

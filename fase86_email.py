@@ -64,9 +64,18 @@ class ProviderEmail:
         del provider -> nessun retry (il server ha gia' risposto)."""
         if not (isinstance(destinatario, str) and "@" in destinatario):
             return False
+        # ANTI HEADER-INJECTION (choke-point unico, vale per OGNI provider): un a-capo
+        # dentro destinatario/oggetto finirebbe negli header SMTP (es. "\r\nBcc: ...") ->
+        # posta di massa dal nostro dominio -> blacklist. Il soggetto puo' contenere testo
+        # scritto dall'host (titolo annuncio): qualunque whitespace collassa in spazio.
+        destinatario = destinatario.strip()
+        if "\r" in destinatario or "\n" in destinatario:
+            logger.warning("Email: destinatario con a-capo RIFIUTATO (header injection)")
+            return False
+        oggetto = " ".join(str(oggetto).split())
         for tentativo in range(1, self._tentativi + 1):
             try:
-                return bool(self._send(destinatario, str(oggetto), str(corpo_html)))
+                return bool(self._send(destinatario, oggetto, str(corpo_html)))
             except Exception:
                 logger.warning("Email: invio fallito (tentativo %d/%d, ISOLATO)",
                                tentativo, self._tentativi, exc_info=True)

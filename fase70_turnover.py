@@ -324,6 +324,6 @@ def crea_gestore_turnover(percorso: str = ":memory:", *, ora_checkout: int = 11,
         return GestoreTurnover(lambda: _ConnCondivisa(con), ora_checkout=ora_checkout,
                                ora_checkin=ora_checkin, notificatore=notificatore,
                                orologio=orologio)
-    return GestoreTurnover(lambda: sqlite3.connect(percorso), ora_checkout=ora_checkout,
+    return GestoreTurnover(lambda: sqlite3.connect(percorso, timeout=30), ora_checkout=ora_checkout,
                            ora_checkin=ora_checkin, notificatore=notificatore,
                            orologio=orologio)

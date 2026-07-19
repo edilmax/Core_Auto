@@ -136,6 +136,7 @@ class CheckinDigitale:
                                 (str(prenotazione_id),)).fetchone()
                 return bool(r and r[0])
             except Exception:
+                logger.warning("completato: errore DB (ISOLATO)", exc_info=True)
                 return False
             finally:
                 con.close()
@@ -189,5 +190,5 @@ def crea_checkin_digitale(percorso: str, emettitore_pass: Any, *,
         # connessione UNICA condivisa tra thread -> serve il lucchetto (vedi __init__)
         return CheckinDigitale(lambda: _ConnCondivisa(con), emettitore_pass,
                                orologio=orologio, lucchetto=threading.Lock())
-    return CheckinDigitale(lambda: sqlite3.connect(percorso), emettitore_pass,
+    return CheckinDigitale(lambda: sqlite3.connect(percorso, timeout=30), emettitore_pass,
                            orologio=orologio)

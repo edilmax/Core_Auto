@@ -511,7 +511,7 @@ def crea_pagamenti_pendenti(percorso: str, *, orologio: Any = None) -> Pagamenti
         return PagamentiPendenti(lambda: _ConnCondivisa(con), orologio=orologio)
 
     def cf() -> sqlite3.Connection:
-        c = sqlite3.connect(percorso)
+        c = sqlite3.connect(percorso, timeout=30)
         c.row_factory = sqlite3.Row
         return c
     return PagamentiPendenti(cf, orologio=orologio)

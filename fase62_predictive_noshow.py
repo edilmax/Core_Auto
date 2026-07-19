@@ -256,7 +256,7 @@ def crea_storico_presenze(percorso: str = ":memory:") -> StoricoPresenze:
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return StoricoPresenze(lambda: _ConnCondivisa(con))
-    return StoricoPresenze(lambda: sqlite3.connect(percorso))
+    return StoricoPresenze(lambda: sqlite3.connect(percorso, timeout=30))
 
 
 def crea_gestore_noshow(percorso: str = ":memory:",

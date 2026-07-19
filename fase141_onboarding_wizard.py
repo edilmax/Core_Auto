@@ -155,4 +155,4 @@ def crea_onboarding_wizard(percorso: str, *, orologio: Any = None) -> Onboarding
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return OnboardingWizard(lambda: _ConnCondivisa(con), orologio=orologio)
-    return OnboardingWizard(lambda: sqlite3.connect(percorso), orologio=orologio)
+    return OnboardingWizard(lambda: sqlite3.connect(percorso, timeout=30), orologio=orologio)

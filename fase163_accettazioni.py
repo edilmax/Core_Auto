@@ -291,7 +291,7 @@ class RegistroAccettazioni:
     def _apri(self) -> sqlite3.Connection:
         if self._mem is not None:
             return self._mem
-        con = sqlite3.connect(self._db)
+        con = sqlite3.connect(self._db, timeout=30)
         try:
             con.execute("PRAGMA journal_mode=WAL")
             con.execute("PRAGMA synchronous=NORMAL")

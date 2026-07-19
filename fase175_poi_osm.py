@@ -201,7 +201,7 @@ def crea_provider_poi(percorso: str, *, fetch: Any = None,
         p = ProviderPOI(lambda: _ConnCondivisa(con), fetch=fetch, endpoint=endpoint,
                         orologio=orologio, raggio_m=raggio_m)
     else:
-        p = ProviderPOI(lambda: sqlite3.connect(percorso), fetch=fetch, endpoint=endpoint,
+        p = ProviderPOI(lambda: sqlite3.connect(percorso, timeout=30), fetch=fetch, endpoint=endpoint,
                         orologio=orologio, raggio_m=raggio_m)
     p.inizializza_schema()
     return p

@@ -273,4 +273,4 @@ def crea_catena(percorso: str = ":memory:") -> CatenaIntegrita:
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return CatenaIntegrita(lambda: _ConnCondivisa(con))
-    return CatenaIntegrita(lambda: sqlite3.connect(percorso))
+    return CatenaIntegrita(lambda: sqlite3.connect(percorso, timeout=30))

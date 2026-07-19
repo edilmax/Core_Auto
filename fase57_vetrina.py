@@ -409,6 +409,22 @@ class CatalogoVetrina:
         finally:
             con.close()
 
+    def nomi_uploads(self) -> set:
+        """Basename dei file /uploads/ citati dalle immagini di TUTTI gli annunci (ogni
+        stato, anche sospesi). Per la pulizia orfani: SOLLEVA su errore DB — il chiamante
+        e' fail-closed (senza censimento completo NON si cancella nulla)."""
+        import re as _re
+        con = self._apri()
+        try:
+            rows = con.execute("SELECT url FROM alloggio_immagini "
+                               "WHERE url LIKE '%/uploads/%'").fetchall()
+            out: set = set()
+            for (u,) in rows:
+                out.update(_re.findall(r"/uploads/([A-Za-z0-9_.\-]+)", str(u)))
+            return out
+        finally:
+            con.close()
+
     # --- WRITE: pubblicazione idempotente (upsert per slug + replace immagini) ---
     def pubblica(self, scheda: SchedaAlloggio, immagini: Any = ()) -> int:
         """Upsert per `slug` (idempotente) + sostituzione atomica delle immagini.
@@ -964,7 +980,7 @@ def crea_catalogo(percorso: str = ":memory:", *,
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return CatalogoVetrina(lambda: _ConnCondivisa(con), disponibilita=disponibilita)
-    return CatalogoVetrina(lambda: sqlite3.connect(percorso), disponibilita=disponibilita)
+    return CatalogoVetrina(lambda: sqlite3.connect(percorso, timeout=30), disponibilita=disponibilita)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

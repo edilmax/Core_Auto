@@ -149,5 +149,5 @@ def crea_web_push(percorso: str, *, vapid_public: str = "",
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return WebPush(lambda: _ConnCondivisa(con), vapid_public=vapid_public,
                        firma_vapid=firma_vapid, fetch=fetch, orologio=orologio)
-    return WebPush(lambda: sqlite3.connect(percorso), vapid_public=vapid_public,
+    return WebPush(lambda: sqlite3.connect(percorso, timeout=30), vapid_public=vapid_public,
                    firma_vapid=firma_vapid, fetch=fetch, orologio=orologio)

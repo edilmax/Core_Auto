@@ -141,6 +141,7 @@ class PayoutDashboard:
                             (nuovo, self._now(), str(prenotazione_id)))
             return True
         except Exception:
+            logger.warning("aggiorna_stato: errore DB (ISOLATO)", exc_info=True)
             return False
         finally:
             con.close()
@@ -157,6 +158,7 @@ class PayoutDashboard:
                 out.setdefault(valuta, {})[stato] = int(tot or 0)
             return out
         except Exception:
+            logger.warning("riepilogo: errore DB (ISOLATO)", exc_info=True)
             return {}
         finally:
             con.close()
@@ -170,6 +172,7 @@ class PayoutDashboard:
                             "('maturato','in_transito','pagato')", (str(host_id),)).fetchone()
             return int(r[0]) if r else 0
         except Exception:
+            logger.warning("conta_pagati: errore DB (ISOLATO)", exc_info=True)
             return 0
         finally:
             con.close()
@@ -185,6 +188,10 @@ class PayoutDashboard:
                             (prenotazione_id,)).fetchone()
             return r[0] if r else ""
         except Exception:
+            # "" per errore e' fail-safe SOLO grazie all'Idempotency-Key del transfer
+            # Stripe (un eventuale doppio viene deduplicato la'): la voce nel log serve
+            # a non scoprirlo mai in silenzio.
+            logger.warning("stato_di: errore DB (ISOLATO)", exc_info=True)
             return ""
         finally:
             con.close()
@@ -221,6 +228,7 @@ class PayoutDashboard:
             return {"prenotazione_id": r[0], "host_id": r[1], "minori": int(r[2]),
                     "valuta": r[3], "stato": r[4]}
         except Exception:
+            logger.warning("info payout: errore DB (ISOLATO)", exc_info=True)
             return None
         finally:
             con.close()
@@ -289,4 +297,4 @@ def crea_payout_dashboard(percorso: str, *, orologio: Any = None) -> PayoutDashb
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return PayoutDashboard(lambda: _ConnCondivisa(con), orologio=orologio)
-    return PayoutDashboard(lambda: sqlite3.connect(percorso), orologio=orologio)
+    return PayoutDashboard(lambda: sqlite3.connect(percorso, timeout=30), orologio=orologio)

@@ -244,6 +244,6 @@ def crea_geocoder(percorso: str, *, fetch: Any = None,
         con = sqlite3.connect(":memory:", check_same_thread=False)
         g = Geocoder(lambda: _conn_condivisa(con), fetch=fetch, orologio=orologio)
     else:
-        g = Geocoder(lambda: sqlite3.connect(percorso), fetch=fetch, orologio=orologio)
+        g = Geocoder(lambda: sqlite3.connect(percorso, timeout=30), fetch=fetch, orologio=orologio)
     g.inizializza_schema()
     return g

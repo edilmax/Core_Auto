@@ -206,5 +206,5 @@ def crea_kyc_host(percorso: str, *, avvia_sessione: Any = None,
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return KYCHost(lambda: _ConnCondivisa(con), avvia_sessione=avvia_sessione,
                        orologio=orologio)
-    return KYCHost(lambda: sqlite3.connect(percorso), avvia_sessione=avvia_sessione,
+    return KYCHost(lambda: sqlite3.connect(percorso, timeout=30), avvia_sessione=avvia_sessione,
                    orologio=orologio)

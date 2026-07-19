@@ -503,5 +503,5 @@ def crea_registro_host(percorso: str, segreto: bytes, *,
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return RegistroHost(lambda: _ConnCondivisa(con), firma, orologio=orologio,
                             ttl_token=ttl_token)
-    return RegistroHost(lambda: sqlite3.connect(percorso), firma, orologio=orologio,
+    return RegistroHost(lambda: sqlite3.connect(percorso, timeout=30), firma, orologio=orologio,
                         ttl_token=ttl_token)

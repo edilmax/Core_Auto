@@ -125,4 +125,4 @@ def crea_wishlist(percorso: str, *, orologio: Any = None) -> Wishlist:
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return Wishlist(lambda: _ConnCondivisa(con), orologio=orologio)
-    return Wishlist(lambda: sqlite3.connect(percorso), orologio=orologio)
+    return Wishlist(lambda: sqlite3.connect(percorso, timeout=30), orologio=orologio)

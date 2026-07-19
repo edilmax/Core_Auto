@@ -151,4 +151,4 @@ def crea_gestore_domanda(percorso: str, *, firma: Any = None, orologio: Any = No
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return GestoreDomanda(lambda: _ConnCondivisa(con), firma=firma, orologio=orologio)
-    return GestoreDomanda(lambda: sqlite3.connect(percorso), firma=firma, orologio=orologio)
+    return GestoreDomanda(lambda: sqlite3.connect(percorso, timeout=30), firma=firma, orologio=orologio)

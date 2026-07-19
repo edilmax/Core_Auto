@@ -310,4 +310,4 @@ def crea_viral_loop(percorso: str, segreto: bytes, **kw: Any) -> ViralLoopEngine
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return ViralLoopEngine(lambda: _ConnCondivisa(con), firma, **kw)
-    return ViralLoopEngine(lambda: sqlite3.connect(percorso), firma, **kw)
+    return ViralLoopEngine(lambda: sqlite3.connect(percorso, timeout=30), firma, **kw)

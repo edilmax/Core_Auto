@@ -139,4 +139,4 @@ def crea_split_quote(percorso: str, *, orologio: Any = None) -> SplitQuoteUguali
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return SplitQuoteUguali(lambda: _ConnCondivisa(con), orologio=orologio)
-    return SplitQuoteUguali(lambda: sqlite3.connect(percorso), orologio=orologio)
+    return SplitQuoteUguali(lambda: sqlite3.connect(percorso, timeout=30), orologio=orologio)

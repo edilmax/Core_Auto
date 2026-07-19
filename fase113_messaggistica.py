@@ -118,6 +118,21 @@ class Messaggistica:
         finally:
             con.close()
 
+    def nomi_uploads(self) -> set:
+        """Basename dei file /uploads/ citati nelle chat (prove foto). Per la pulizia
+        orfani: SOLLEVA su errore DB — il chiamante e' fail-closed."""
+        import re as _re
+        con = self._apri()
+        try:
+            rows = con.execute("SELECT testo FROM messaggi "
+                               "WHERE testo LIKE '%/uploads/%'").fetchall()
+            out: set = set()
+            for (t,) in rows:
+                out.update(_re.findall(r"/uploads/([A-Za-z0-9_.\-]+)", str(t)))
+            return out
+        finally:
+            con.close()
+
     def conversazioni_host(self, host_id: str, *, limit: int = 50) -> List[Dict[str, Any]]:
         """Le conversazioni dell'HOST (per il pannello: si caricano DA SOLE, niente codici da
         digitare): una riga per prenotazione con ultimo messaggio e conteggio."""
@@ -175,6 +190,7 @@ class Messaggistica:
                                   (str(prenotazione_id), str(lettore)))
             return cur.rowcount
         except Exception:
+            logger.warning("segna_letti: errore DB (ISOLATO)", exc_info=True)
             return 0
         finally:
             con.close()
@@ -184,4 +200,4 @@ def crea_messaggistica(percorso: str, *, orologio: Any = None) -> Messaggistica:
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return Messaggistica(lambda: _ConnCondivisa(con), orologio=orologio)
-    return Messaggistica(lambda: sqlite3.connect(percorso), orologio=orologio)
+    return Messaggistica(lambda: sqlite3.connect(percorso, timeout=30), orologio=orologio)

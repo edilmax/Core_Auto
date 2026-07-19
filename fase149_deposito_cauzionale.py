@@ -179,5 +179,5 @@ def crea_deposito_cauzionale(percorso: str, *, capture: Any = None, release: Any
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return DepositoCauzionale(lambda: _ConnCondivisa(con), capture=capture,
                                   release=release, orologio=orologio)
-    return DepositoCauzionale(lambda: sqlite3.connect(percorso), capture=capture,
+    return DepositoCauzionale(lambda: sqlite3.connect(percorso, timeout=30), capture=capture,
                               release=release, orologio=orologio)

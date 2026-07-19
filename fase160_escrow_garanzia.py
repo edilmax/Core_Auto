@@ -260,7 +260,7 @@ def crea_escrow_garanzia(percorso: str, *, orologio: Any = None) -> EscrowGaranz
         return EscrowGaranzia(lambda: _ConnCondivisa(con), orologio=orologio)
 
     def cf() -> sqlite3.Connection:
-        c = sqlite3.connect(percorso)
+        c = sqlite3.connect(percorso, timeout=30)
         c.row_factory = sqlite3.Row
         return c
     return EscrowGaranzia(cf, orologio=orologio)

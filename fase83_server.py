@@ -1214,6 +1214,72 @@ class RouterHTTP:
         fornita = headers.get("X-Host-Key", "") or headers.get("x-host-key", "")
         return self._auth_con_rate("host", str(fornita), str(self._host_key), headers)
 
+    def pulizia_uploads_orfani(self, *, eta_min_s=7 * 86400, adesso=None):
+        """PULIZIA AUTOMATICA dei file orfani in UPLOAD_DIR (audit "10 moduli" 2026-07-19):
+        un upload mai agganciato a un annuncio ne' citato in chat resta su disco PER
+        SEMPRE (residuo). Cancella SOLO file (a) piu' vecchi di eta_min_s (default 7gg:
+        un host a meta' pubblicazione non viene mai toccato) e (b) non citati da NESSUNA
+        fonte. FAIL-CLOSED: censimento in errore -> zero cancellazioni; PARACADUTE: se
+        gli "orfani" superano meta' dei file (e >5) il censimento e' sospetto -> annulla
+        con log CRITICO. Kill-switch: PULIZIA_UPLOADS=0."""
+        import os as _os
+        import time as _t
+        if _os.environ.get("PULIZIA_UPLOADS", "1") == "0":
+            return {"saltata": "kill_switch"}
+        updir = _os.environ.get("UPLOAD_DIR", "data/uploads")
+        if not _os.path.isdir(updir):
+            return {"saltata": "no_dir"}
+        try:
+            riferiti = set()
+            cat = getattr(self._sys, "catalogo", None)
+            msg = getattr(self._sys, "messaggistica", None)
+            if cat is not None:
+                riferiti |= cat.nomi_uploads()
+            if msg is not None:
+                riferiti |= msg.nomi_uploads()
+        except Exception:
+            logger.warning("pulizia uploads: censimento riferimenti in errore -> "
+                           "NESSUNA cancellazione (fail-closed)", exc_info=True)
+            return {"saltata": "censimento_in_errore"}
+        adesso = adesso if adesso is not None else _t.time()
+        tutti = [n for n in _os.listdir(updir)
+                 if _os.path.isfile(_os.path.join(updir, n))]
+        candidati = []
+        for n in tutti:
+            if n in riferiti:
+                continue
+            try:
+                if adesso - _os.path.getmtime(_os.path.join(updir, n)) < eta_min_s:
+                    continue
+            except OSError:
+                continue
+            candidati.append(n)
+        if tutti and len(candidati) > max(5, len(tutti) // 2):
+            logger.error("CRITICO pulizia uploads: %d/%d 'orfani' = censimento sospetto, "
+                         "ANNULLATA (nessun file toccato)", len(candidati), len(tutti))
+            return {"saltata": "paracadute", "candidati": len(candidati),
+                    "totale": len(tutti)}
+        rimossi = 0
+        for n in candidati:
+            try:
+                _os.remove(_os.path.join(updir, n))
+                rimossi += 1
+            except OSError:
+                pass
+        if rimossi:
+            logger.warning("PULIZIA_UPLOADS | rimossi %d file orfani (>%d gg, mai citati "
+                           "da annunci/chat) su %d totali", rimossi,
+                           eta_min_s // 86400, len(tutti))
+        return {"rimossi": rimossi, "totale": len(tutti), "riferiti": len(riferiti)}
+
+    def _pulizia_uploads_se_ora(self):
+        """Gancio per il tick orario: esegue la pulizia al massimo una volta ogni 24h."""
+        import time as _t
+        if _t.time() - getattr(self, "_pulizia_uploads_ts", 0) < 86400:
+            return None
+        self._pulizia_uploads_ts = _t.time()
+        return self.pulizia_uploads_orfani()
+
     def _upload_foto(self, body, headers):
         """Upload foto alloggio (base64) -> salva su UPLOAD_DIR -> ritorna l'URL /uploads/<nome>,
         che il catalogo/vetrina mostra come qualsiasi immagine. Host-auth. BLINDATO: valida il
@@ -2072,6 +2138,19 @@ class RouterHTTP:
             pass
         return _dt.datetime.utcnow().year - 1        # default: anno fiscale precedente
 
+    @staticmethod
+    def _cella_csv_sicura(v):
+        """ANTI FORMULA-INJECTION (OWASP CSV injection): i report fiscali si aprono in
+        Excel/LibreOffice, e una cella che inizia con = + - @ (o tab/CR) viene ESEGUITA
+        come formula — e ragione sociale / indirizzo / titoli immobili li scrive l'HOST.
+        Prefisso apostrofo = testo. I numeri veri (anche negativi) passano intatti."""
+        if not isinstance(v, str) or not v:
+            return v
+        import re as _re
+        if v[0] in "=+-@\t\r" and not _re.match(r"^-?\d+([.,]\d+)?$", v):
+            return "'" + v
+        return v
+
     def genera_dac7_csv(self, *, anno, ip=""):
         """GENERATORE del report DAC7 in STREAMING (zero RAM, stesso stile dell'estratto):
         una riga per host REPORTABILE con identita' + dati fiscali + remunerazione annuale
@@ -2142,7 +2221,7 @@ class RouterHTTP:
                         eur(a["rimborsi"]), eur(a["trim"][1]), eur(a["trim"][2]),
                         eur(a["trim"][3]), eur(a["trim"][4]), notti_tot, immobili]
                 buf = _io.StringIO()
-                _csv.writer(buf).writerow(riga)
+                _csv.writer(buf).writerow([self._cella_csv_sicura(x) for x in riga])
                 testo = buf.getvalue()
                 acc.update(testo.encode("utf-8"))
                 n_host += 1
@@ -2255,10 +2334,10 @@ class RouterHTTP:
                     data = str(r["ts"])
                 imp = int(r["importo_cents"] or 0)
                 buf = _io.StringIO()
-                _csv.writer(buf).writerow([
+                _csv.writer(buf).writerow([self._cella_csv_sicura(x) for x in (
                     r["seq"], data, r["tipo"], r["riferimento"], r["soggetto"],
                     r["conto_dare"], r["conto_avere"], imp, "%.2f" % (imp / 100.0),
-                    r["valuta"], r["causale"], r["emittente"], r["hash"]])
+                    r["valuta"], r["causale"], r["emittente"], r["hash"])])
                 yield buf.getvalue()
         except Exception:
             logger.error("estratto streaming: errore durante lo scorrimento", exc_info=True)
@@ -6686,6 +6765,10 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                                            exc_info=True)
                 except Exception:
                     logger.warning("auto_rilascia garanzia fallito (ignorato)", exc_info=True)
+                try:
+                    router._pulizia_uploads_se_ora()
+                except Exception:
+                    logger.warning("pulizia uploads fallita (ignorata)", exc_info=True)
                 __import__("time").sleep(3600)
         _th.Thread(target=_tick_garanzia, daemon=True).start()
 

@@ -124,7 +124,7 @@ def crea_registro_crediti_usati(percorso: str, *, orologio: Any = None
         return RegistroCreditiUsati(lambda: _ConnCondivisa(con), orologio=orologio)
 
     def cf() -> sqlite3.Connection:
-        c = sqlite3.connect(percorso)
+        c = sqlite3.connect(percorso, timeout=30)
         c.row_factory = sqlite3.Row
         return c
     return RegistroCreditiUsati(cf, orologio=orologio)

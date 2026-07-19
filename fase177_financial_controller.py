@@ -540,6 +540,8 @@ class FinancialController:
                 ok = (payout.imposta_importo(pid, disp - quota) if disp - quota > 0
                       else payout.rimuovi(pid))
             except Exception:
+                logger.warning("offset penale: ledger payout in errore (ISOLATO, "
+                               "segue storno)", exc_info=True)
                 ok = False
             if not ok:
                 # ledger non allineato: STORNO immediato della riga di offset
@@ -726,6 +728,8 @@ class FinancialController:
                     ok = (payout.imposta_importo(pid, disp - quota) if disp - quota > 0
                           else payout.rimuovi(pid))
                 except Exception:
+                    logger.warning("riscossione debito: ledger payout in errore (ISOLATO, "
+                                   "segue storno)", exc_info=True)
                     ok = False
                 if not ok:
                     self.registra(evento_id="storno-offset:%s:%s" % (nota_id, pid),
@@ -833,7 +837,7 @@ def crea_financial_controller(percorso: str, *, orologio: Any = None
         genitore = os.path.dirname(os.path.abspath(percorso))
         if genitore:
             os.makedirs(genitore, exist_ok=True)   # lezione bug #36: il genitore si crea
-        return FinancialController(lambda: sqlite3.connect(percorso), orologio=orologio)
+        return FinancialController(lambda: sqlite3.connect(percorso, timeout=30), orologio=orologio)
     con = sqlite3.connect(":memory:", check_same_thread=False)
     import threading
     _lock = threading.Lock()

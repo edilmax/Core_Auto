@@ -227,4 +227,4 @@ def crea_registro_recensioni(percorso: str, segreto: bytes, *,
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return RegistroRecensioni(lambda: _ConnCondivisa(con), firma, orologio=orologio)
-    return RegistroRecensioni(lambda: sqlite3.connect(percorso), firma, orologio=orologio)
+    return RegistroRecensioni(lambda: sqlite3.connect(percorso, timeout=30), firma, orologio=orologio)

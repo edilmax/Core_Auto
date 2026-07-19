@@ -165,5 +165,5 @@ def crea_fedelta_guest(percorso: str, *, cents_per_punto: int = CENTS_PER_PUNTO,
         con = sqlite3.connect(":memory:", check_same_thread=False)
         return FedeltaGuest(lambda: _ConnCondivisa(con), cents_per_punto=cents_per_punto,
                             orologio=orologio)
-    return FedeltaGuest(lambda: sqlite3.connect(percorso),
+    return FedeltaGuest(lambda: sqlite3.connect(percorso, timeout=30),
                         cents_per_punto=cents_per_punto, orologio=orologio)
