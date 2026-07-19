@@ -228,6 +228,19 @@
 >   identità con Stripe"; admin: colonna 🪪; esiti via webhook firmato + sync 2s. **SOVRANITÀ**:
 >   la revoca manuale ferma i bonifici anche se Stripe dice OK. test_stripe_identity (7).
 >   Etichette fiscali host rese MONDIALI (CF/TIN, IVA/VAT).
+> · 🪪 **STRIPE IDENTITY ACCESO IN PRODUZIONE** (fondatore ha attivato sul dashboard →
+>   "ATTIVATO" → sequenza automatica): chiave=sk_live scritta, container ricreati, **E2E LIVE
+>   col flusso VERO** (host usa-e-getta → URL hosted live verify.stripe.com → sessione
+>   cancellata zero-costi → cancellazione tombale Bunker residui 0). Bottone 🪪 VIVO per gli host.
+> · 🔄 **RICONCILIAZIONE STRIPE (Incremento 12, ultimo fantasma pre-mortem)**: fase182 —
+>   sessioni PAGATE Stripe (match metadata[riferimento]) vs 'incasso' giornale al centesimo
+>   + totali charge/refund/transfer vs giornale; fantasmi segnalati (solo_stripe = webhook
+>   perso!, solo_giornale, importo_diverso); non-pagate filtrate; paginazione con tetto;
+>   READ-ONLY provato; Bunker-gated (`GET /api/bunker/riconciliazione`) + pannello 🔄 in
+>   bunker.html. fase177: somme_periodo/incassi_periodo. test_riconciliazione (8).
+>   **PRE-MORTEM COMPLETO: tutti i fantasmi del 2026-07-18 chiusi** (backup offsite ✓
+>   log persistenti ✓ allarmi ✓ rate-limit ✓ re-sync Stripe ✓). Restano SOLO decisioni
+>   fondatore: Scatto③ SetupIntent, passphrase offsite, TOTP telefono, 2° server, token social.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare

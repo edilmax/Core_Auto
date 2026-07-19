@@ -1163,6 +1163,8 @@ class RouterHTTP:
             return self._gate_logout(body, headers)      # gatekeeper: cancella i cookie
         if metodo == "GET" and path == "/api/bunker/export_contabile":
             return self._bunker_export_contabile(query, headers)
+        if metodo == "GET" and path == "/api/bunker/riconciliazione":
+            return self._bunker_riconciliazione(query, headers)   # fase182 (pre-mortem)
         if metodo == "GET" and path == "/api/bunker/dac7_conformita":
             return self._bunker_dac7_conformita(query, headers)
         if metodo == "GET" and path == "/api/bunker/dac7_report":
@@ -2151,6 +2153,36 @@ class RouterHTTP:
             return 503, {"errore": "service_unavailable"}
         return 200, {"csv": csv_txt, "anno": anno,
                      "integro": ("# FINE REPORT DAC7 - INTEGRITÀ:" in csv_txt)}
+
+    def _bunker_riconciliazione(self, query, headers):
+        """RICONCILIAZIONE STRIPE (fase182, ultimo fantasma del pre-mortem): confronta il
+        periodo intero — sessioni PAGATE di Stripe vs 'incasso' del giornale (per
+        riferimento, al centesimo) + totali charge/refund/transfer vs giornale.
+        READ-ONLY totale. Bunker-gated. GATED dalla chiave Stripe."""
+        if not self._bunker_auth(headers, azione="riconciliazione"):
+            return 403, {"errore": "bunker_richiesto"}
+        sk = getattr(getattr(self._sys, "config", None), "stripe_secret_key", "") or ""
+        fc = getattr(self._sys, "finanza", None)
+        if not sk or fc is None:
+            return 503, {"errore": "stripe_o_finanza_non_configurati"}
+
+        def _int(v, d):
+            try:
+                return max(1, min(int(str(v)), 365))
+            except Exception:
+                return d
+        giorni = _int(query.get("giorni"), 30)
+        try:
+            from fase182_riconciliazione import riconcilia
+            rep = riconcilia(fc, sk, giorni=giorni)
+        except Exception:
+            logger.error("riconciliazione: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        logger.warning("RICONCILIAZIONE_ESEGUITA | GIORNI: %d | OK: %s | FANTASMI: "
+                       "stripe=%d giornale=%d diversi=%d | IP: %s", giorni, rep["ok"],
+                       len(rep["solo_stripe"]), len(rep["solo_giornale"]),
+                       len(rep["importo_diverso"]), self._client_ip(headers))
+        return 200, rep
 
     def puo_esportare(self, headers) -> bool:
         """True se il chiamante ha una sessione Bunker valida (usata dall'handler per lo

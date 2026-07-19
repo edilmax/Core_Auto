@@ -601,6 +601,62 @@ class FinancialController:
         finally:
             con.close()
 
+    def somme_periodo(self, da_ts: int, *, a_ts: Optional[int] = None
+                      ) -> Dict[str, Dict[str, int]]:
+        """RICONCILIAZIONE (fase182): somme del giornale per tipo e valuta nel periodo.
+        Read-only. {tipo: {valuta: cents}}."""
+        try:
+            da = int(da_ts)
+            fino = int(a_ts) if a_ts is not None else None
+        except (TypeError, ValueError):
+            return {}
+        con = self._apri()
+        try:
+            sql = ("SELECT tipo, valuta, SUM(importo_cents) FROM libro_giornale "
+                   "WHERE ts >= ?")
+            par: List[Any] = [da]
+            if fino is not None:
+                sql += " AND ts <= ?"
+                par.append(fino)
+            sql += " GROUP BY tipo, valuta"
+            out: Dict[str, Dict[str, int]] = {}
+            for tipo, val, tot in con.execute(sql, par):
+                out.setdefault(str(tipo), {})[str(val)] = int(tot or 0)
+            return out
+        except Exception:
+            logger.warning("somme_periodo fallita (ISOLATA)", exc_info=True)
+            return {}
+        finally:
+            con.close()
+
+    def incassi_periodo(self, da_ts: int, *, a_ts: Optional[int] = None
+                        ) -> Dict[str, Dict[str, Any]]:
+        """RICONCILIAZIONE: gli 'incasso' del periodo per riferimento (match con le
+        sessioni Stripe pagate). Read-only. {riferimento: {'cents': n, 'valuta': v}}."""
+        try:
+            da = int(da_ts)
+            fino = int(a_ts) if a_ts is not None else None
+        except (TypeError, ValueError):
+            return {}
+        con = self._apri()
+        try:
+            sql = ("SELECT riferimento, valuta, SUM(importo_cents) FROM libro_giornale "
+                   "WHERE tipo='incasso' AND ts >= ?")
+            par: List[Any] = [da]
+            if fino is not None:
+                sql += " AND ts <= ?"
+                par.append(fino)
+            sql += " GROUP BY riferimento, valuta"
+            out: Dict[str, Dict[str, Any]] = {}
+            for rif, val, tot in con.execute(sql, par):
+                out[str(rif)] = {"cents": int(tot or 0), "valuta": str(val)}
+            return out
+        except Exception:
+            logger.warning("incassi_periodo fallita (ISOLATA)", exc_info=True)
+            return {}
+        finally:
+            con.close()
+
     def debiti_aperti(self, *, limit: int = 500) -> List[Dict[str, Any]]:
         """TUTTI i debiti 'aperto' (sala controllo Bunker): quanto ci devono gli host."""
         lim = limit if isinstance(limit, int) and 0 < limit <= 2000 else 500

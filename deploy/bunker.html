@@ -98,6 +98,19 @@ button.ghost{background:#222c40;color:var(--txt)}
     </div>
 
     <div class="card">
+      <h2>🔄 Riconciliazione Stripe</h2>
+      <p class="hint">Confronta il periodo intero con la banca: ogni sessione PAGATA che Stripe conosce contro ogni incasso del giornale (al centesimo), più i totali di incassi/rimborsi/bonifici. Se un webhook si è perso o un centesimo balla, appare qui.</p>
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.5rem 0">
+        <label class="hint" for="ricGiorni">Ultimi</label>
+        <input type="number" id="ricGiorni" value="30" min="1" max="365" style="width:80px" aria-label="Giorni riconciliazione">
+        <span class="hint">giorni</span>
+        <button class="ghost" id="btnRic">🔄 Riconcilia</button>
+        <span id="ricStat" class="hint"></span>
+      </div>
+      <div id="ricOut" style="margin-top:.3rem"></div>
+    </div>
+
+    <div class="card">
       <h2>📋 Log persistenti (ultimi eventi)</h2>
       <p class="hint">Chi ha fatto cosa + allarmi. In rosso i CRITICI (accessi negati, manomissioni).</p>
       <div id="loglist" style="margin-top:.5rem"></div>
@@ -247,6 +260,36 @@ async function scaricaDac7(){
       : ('✅ '+(m?m[1]:'?')+' host segnalati · '+(integra?'INTEGRITÀ OK ✅':'?'));
   }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
 }
+async function riconcilia(){
+  const st=$('ricStat'), out=$('ricOut');
+  if(!attivo()){ esci(); return; }
+  st.textContent='… interrogo Stripe e il giornale'; out.innerHTML='';
+  try{
+    const g=Math.max(1,Math.min(365,parseInt($('ricGiorni').value,10)||30));
+    const r=await fetch('/api/bunker/riconciliazione?giorni='+g,{headers:hdr()});
+    if(r.status===403){ esci(); return; }
+    let d=null; try{ d=await r.json(); }catch(_){ console.warn('bunker',_); }
+    if(!r.ok || !d){ st.textContent='ℹ️ non disponibile ('+r.status+')'; return; }
+    st.textContent='';
+    const righe=[];
+    righe.push('<div style="margin:.3rem 0">'+(d.ok
+      ? pill('ok','✅ TUTTO COMBACIA')
+      : pill('ko','🔴 DISCREPANZE TROVATE'))+
+      ' <span class="hint">'+d.sessioni_pagate+' sessioni pagate · '+d.incassi_giornale+' incassi a giornale · ultimi '+d.giorni+' gg</span></div>');
+    const co=d.confronti||{};
+    Object.keys(co).forEach(k=>{ const c=co[k];
+      Object.keys(c.delta||{}).forEach(v=>{ const dl=c.delta[v];
+        righe.push('<div class="riga"><span>'+esc(k)+' '+esc(v)+'</span><span>Stripe '
+          +((c.stripe[v]||0)/100).toFixed(2)+' · giornale '+((c.giornale[v]||0)/100).toFixed(2)
+          +' · '+(dl===0?pill('ok','Δ 0'):pill('ko','Δ '+(dl/100).toFixed(2)))+'</span></div>'); });
+    });
+    (d.solo_stripe||[]).forEach(x=>righe.push('<div class="riga"><span>👻 Stripe ha, giornale NO</span><span>'+esc(x.riferimento||x.id||'')+' · '+((x.cents||0)/100).toFixed(2)+' '+esc(x.valuta||'')+'</span></div>'));
+    (d.solo_giornale||[]).forEach(x=>righe.push('<div class="riga"><span>👻 giornale ha, Stripe NO</span><span>'+esc(x.riferimento||'')+' · '+((x.cents||0)/100).toFixed(2)+' '+esc(x.valuta||'')+'</span></div>'));
+    (d.importo_diverso||[]).forEach(x=>righe.push('<div class="riga"><span>⚖️ importo DIVERSO</span><span>'+esc(x.riferimento||'')+' · Stripe '+((x.stripe_cents||0)/100).toFixed(2)+' vs giornale '+((x.giornale_cents||0)/100).toFixed(2)+'</span></div>'));
+    out.innerHTML=righe.join('');
+  }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
+}
+$('btnRic').onclick=riconcilia;
 $('btnEntra').onclick=entra;
 $('btnAgg').onclick=aggiorna;
 $('btnEstratto').onclick=scaricaEstratto;
