@@ -19,11 +19,30 @@ logger = logging.getLogger("core_auto.messaggistica")
 MAX_TESTO = 4000
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 _TEL = re.compile(r"(?:(?:\+|00)\d[\d\s().-]{6,}\d)|(?:\b\d[\d\s().-]{7,}\d\b)")
+# Url di una PROVA FOTO come la genera il server: token_hex(16) + estensione da magic-bytes.
+# Volutamente STRETTA (32 esadecimali esatti): un testo qualunque non ci passa.
+_URL_PROVA = re.compile(r"/uploads/[0-9a-f]{32}\.(?:png|jpg|webp|gif)")
 
 
 def maschera_pii(testo: str) -> str:
-    t = _EMAIL.sub("[email rimossa]", testo)
-    return _TEL.sub("[contatto rimosso]", t)
+    # PROTEZIONE URL PROVE (fix 2026-07-19): il filtro anti-telefono scambiava per numero
+    # un run "00"+cifre DENTRO il nome esadecimale della foto (es. ...fa005754588289...)
+    # e lo storpiava in "[contatto rimosso]" -> link rotto in chat (l'arbitro non apre la
+    # prova) e file non piu' "citato" -> la pulizia orfani l'avrebbe CANCELLATO dopo 7gg.
+    # Gli url /uploads/ (di sistema, charset ristretto) si accantonano PRIMA delle maschere
+    # e si ripristinano DOPO; \x00 non puo' fondersi con cifre adiacenti in un falso match.
+    salvati = []
+
+    def _accantona(m):
+        salvati.append(m.group(0))
+        return "\x00U%d\x00" % (len(salvati) - 1)
+
+    t = _URL_PROVA.sub(_accantona, testo)
+    t = _EMAIL.sub("[email rimossa]", t)
+    t = _TEL.sub("[contatto rimosso]", t)
+    for i, u in enumerate(salvati):
+        t = t.replace("\x00U%d\x00" % i, u)
+    return t
 
 
 class _ConnCondivisa:

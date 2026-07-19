@@ -116,7 +116,7 @@ class TestBombardamentoChatProve(unittest.TestCase):
                 s, o = self.g("POST", "/api/voucher/messaggio",
                               {"voucher_token": self.vt, "testo": "prova %d" % i})
             with lock:
-                esiti.append((i, s))
+                esiti.append((i, s, o))
 
         ths = [threading.Thread(target=invia, args=(i,)) for i in range(N)]
         for t in ths:
@@ -130,7 +130,7 @@ class TestBombardamentoChatProve(unittest.TestCase):
                          "thread ancora vivi dopo 90s: macchina satura o deadlock "
                          "(le verifiche sarebbero su dati parziali)")
 
-        accettati = sum(1 for (_i, s) in esiti if s == 201)
+        accettati = sum(1 for (_i, s, _o) in esiti if s == 201)
         thread = self.sis.messaggistica.thread(self.rif, "ospite")
         # NESSUNA PERDITA: ogni 201 e' una bolla
         self.assertEqual(len(thread), accettati,
@@ -141,14 +141,57 @@ class TestBombardamentoChatProve(unittest.TestCase):
             "SELECT id FROM messaggi WHERE prenotazione_id=? ORDER BY id", (self.rif,)).fetchall()]
         con.close()
         self.assertEqual(ids, sorted(set(ids)), "id non monotoni/unici: sequenza rotta")
-        # NESSUN FILE ORFANO: ogni file su disco e' citato in chat
-        url_in_chat = set()
+        # NO-PERDITA + NO-ORFANO sulle foto caricate da questo test, verificate PER URL
+        # RITORNATA dal 201 (non per glob della cartella). Storia vera (2026-07-19): i rossi
+        # "orfano"/"persa" comparivano quando token_hex generava un nome con "00"+8 cifre
+        # (es. faa2e65a8a8376fa005754588289e254.png) e maschera_pii lo storpiava in chat
+        # scambiandolo per un TELEFONO -> bug REALE di prodotto, fixato in fase113 e coperto
+        # dalla regressione deterministica test_prova_nome_sfortunato_catena_intatta.
+        # Qui il confronto per-url resta: e' l'invariante esatto (ogni 201 -> citazione
+        # INTATTA in chat + file su disco), robusto anche a file estranei nella cartella.
+        caricate = set()
+        for (_i, s, o) in esiti:
+            if s == 201 and isinstance(o, dict) and o.get("url"):
+                caricate.add(o["url"].rsplit("/", 1)[1])
+        cited = set()
         for m in thread:
-            url_in_chat.update(re.findall(r"/uploads/(\S+)", str(m.get("testo", ""))))
+            cited.update(re.findall(r"/uploads/(\S+)", str(m.get("testo", ""))))
+        self.assertEqual(caricate - cited, set(),
+                         "prova caricata (201) ma persa dalla chat: %r" % (caricate - cited))
+        for bn in caricate:
+            self.assertTrue(os.path.exists(os.path.join(self.dir, "uploads", bn)),
+                            "foto caricata sparita dal disco: %s" % bn)
         files = {os.path.basename(x) for x in glob.glob(f"{self.dir}/uploads/*")}
-        self.assertEqual(files - url_in_chat, set(),
-                         "file orfani su disco (prova persa dalla chat): %r" % (files - url_in_chat))
-        self.assertEqual(url_in_chat - files, set(), "bolla cita una foto inesistente")
+        self.assertEqual((cited & caricate) - files, set(), "bolla cita una foto inesistente")
+
+    def test_prova_nome_sfortunato_catena_intatta(self):
+        """REGRESSIONE DETERMINISTICA (2026-07-19): si FORZA il nome file 'sfortunato'
+        (contiene "00"+8 cifre, ~0,2% dei nomi reali) che sul codice vecchio maschera_pii
+        storpiava in "[contatto rimosso]" dentro la bolla -> link rotto per l'arbitro e
+        prova destinata alla pulizia orfani (>7gg). Attesa: catena INTERA intatta:
+        201 -> bolla cita il nome ESATTO -> file su disco -> pulizia non lo tocca mai."""
+        import secrets as _sec
+        NOME = "faa2e65a8a8376fa005754588289e254"        # dal fallimento reale in suite
+        vero = _sec.token_hex
+        _sec.token_hex = lambda n=16: NOME[:2 * n]
+        try:
+            s, o = self.g("POST", "/api/voucher/prova",
+                          {"voucher_token": self.vt, "image_base64": _PNG})
+        finally:
+            _sec.token_hex = vero
+        self.assertEqual(s, 201, o)
+        self.assertEqual(o.get("url"), "/uploads/" + NOME + ".png")
+        testi = [str(m.get("testo", ""))
+                 for m in self.sis.messaggistica.thread(self.rif, "ospite")]
+        self.assertTrue(any("/uploads/" + NOME + ".png" in t for t in testi),
+                        "bolla NON cita il nome esatto (maschera l'ha storpiato?): %r" % testi)
+        self.assertTrue(all("[contatto rimosso]" not in t for t in testi), testi)
+        percorso = os.path.join(self.dir, "uploads", NOME + ".png")
+        self.assertTrue(os.path.exists(percorso))
+        # la pulizia orfani, anche OLTRE la grazia di 7gg, non deve toccare una prova citata
+        esito = self.r.pulizia_uploads_orfani(adesso=time.time() + 30 * 86400)
+        self.assertTrue(os.path.exists(percorso),
+                        "pulizia ha cancellato una prova CITATA in chat: %r" % (esito,))
 
     def test_prova_non_registrata_niente_orfano_niente_bugia(self):
         """GUARDIA (fix 2026-07-19, radice del test 'ballerino'): se la bolla in chat NON

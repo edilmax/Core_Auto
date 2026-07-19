@@ -44,6 +44,37 @@ class TestMessaggistica(unittest.TestCase):
         self.assertEqual(maschera_pii("ok"), "ok")
         self.assertIn("[email rimossa]", maschera_pii("a@b.com"))
 
+    def test_maschera_non_storpia_url_prova(self):
+        """REGRESSIONE (2026-07-19, radice VERA dei rossi 'orfano/persa' della suite):
+        il filtro anti-telefono scambiava per numero il run '00'+8 cifre dentro il nome
+        esadecimale della foto e lo storpiava -> link rotto in chat + prova destinata
+        alla pulizia orfani. I due nomi qui sotto sono ESATTAMENTE quelli dei due
+        fallimenti reali in suite: sul codice vecchio questo test e' ROSSO."""
+        for nome in ("faa2e65a8a8376fa005754588289e254.png",
+                     "52fea0069627654ae479cbc4fc24cbec.png"):
+            t = "\U0001f4ce PROVA FOTO: /uploads/" + nome
+            self.assertEqual(maschera_pii(t), t, nome)
+        # e con TUTTE le estensioni ammesse dai magic-bytes
+        for ext in ("png", "jpg", "webp", "gif"):
+            u = "/uploads/" + "a0" * 4 + "0057545882890057" + "b1" * 4 + "." + ext
+            self.assertEqual(maschera_pii(u), u, ext)
+
+    def test_maschera_pii_resta_severa_attorno_alle_url(self):
+        """La protezione url NON deve aprire buchi: telefono/email nello STESSO messaggio
+        della url restano mascherati; una url 'finta' (non 32 esadecimali) NON e' protetta."""
+        t = maschera_pii("guarda /uploads/faa2e65a8a8376fa005754588289e254.png "
+                         "e chiamami al 0039 333 1234567 o su x@y.it")
+        self.assertIn("/uploads/faa2e65a8a8376fa005754588289e254.png", t)
+        self.assertIn("[contatto rimosso]", t)
+        self.assertIn("[email rimossa]", t)
+        self.assertNotIn("333", t)
+        # furbo che traveste il numero da url: NON combacia col formato stretto -> mascherato
+        self.assertNotIn("00393331234567", maschera_pii("/uploads/00393331234567.png"))
+        # letterale \x00U0\x00 digitato dall'utente: nessuna url accantonata -> resta com'e',
+        # e con una url presente NON deve produrre doppie sostituzioni sbagliate
+        strano = maschera_pii("\x00U0\x00 /uploads/" + "ab" * 16 + ".png")
+        self.assertEqual(strano.count("/uploads/"), 2)  # il letterale diventa la stessa url: innocuo
+
     def test_segna_letti(self):
         m = msg()
         m.invia("p1", "H", "G", "G", "uno")
