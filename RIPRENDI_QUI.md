@@ -283,6 +283,14 @@
 >   giornale al PAGAMENTO (idempotente); aggrega_dac7 fa netto=lordo−commissione (retrocompat
 >   storico). Provato: ora €780 esatto, catena integra, 67 test finanziari verdi, 0 regressioni.
 >   Riga 🧮 REGISTRO sez.1.
+> · 👻 **CACCIA FANTASMI TERMINALE (2026-07-19, metodo deep-seek "ogni ramo fino alla fine")**:
+>   ogni prenotazione guidata fino allo stato di riposo (6 rami: conferma/auto-rilascio/arbitro
+>   100%/arbitro parziale/cancellazione/hold scaduto) con tutti gli orologi fatti scattare, poi
+>   oracolo terminale: niente escrow in limbo, niente payout fantasma, niente doppio incasso,
+>   commissione a giornale coerente, quadratura per valuta, catena integra. 8 seed × 180 pren
+>   (1.440 rami, 3 valute) = ZERO fantasmi. Guardia permanente: test_fantasmi_terminali (~13s).
+>   Lezione (2ª del giorno): VALIDA L'ORACOLO — 350 falsi fantasmi dal mio orologio corto.
+>   Riga 👻 REGISTRO sez.1.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare
