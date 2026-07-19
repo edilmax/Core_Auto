@@ -702,6 +702,75 @@ class FinancialController:
         return esito
 
 
+    # ── MOTORE PENALI: STORNO (correzione = nota contraria, MAI modifica) ────
+    def storna_penale(self, *, nota_id: Any, motivo: str = "", payout: Any = None,
+                      emittente: str = "super-admin") -> Optional[Dict[str, Any]]:
+        """STORNO di una penale sbagliata (tool Bunker-gated). Il giornale e' immutabile:
+        non si cancella MAI nulla — si emette la NOTA DI CREDITO contraria (storno_di=ND)
+        per l'intero importo. Passi (tutti idempotenti o protetti da chiave):
+          1) NC contraria (evento_id 'storno-nota:<ND>': doppio click = UNO storno);
+          2) ND -> stato 'stornata'; il suo debito -> residuo 0, stato 'stornato'
+             (riscuoti_debiti non lo riprendera' MAI piu': filtra stato='aperto');
+          3) RESTITUZIONE dell'eventuale gia' RISCOSSO (verita' dal giornale: offset
+             della nota meno storni) -> riga payout 'maturato' `stornoND-<ND>` visibile
+             in da_pagare per il bonifico MANUALE del fondatore (una correzione la firma
+             un umano, mai un transfer automatico; PK fissa = zero doppi accrediti).
+        Ritorna {'nota_id','nc_id','riscosso_cents','restituito_in_da_pagare',
+        'gia_stornata'} o None (nota inesistente/non-ND o giornale non scrivibile)."""
+        n = self.nota(nota_id)
+        if n is None or n.get("tipo") != "debito":
+            return None                       # si stornano SOLO le note di debito (ND)
+        nid = str(n["nota_id"])
+        if str(n.get("stato")) == "stornata":
+            return {"nota_id": nid, "nc_id": None, "riscosso_cents": 0,
+                    "restituito_in_da_pagare": 0, "gia_stornata": True}
+        rif = str(n["riferimento"])
+        val = str(n["valuta"])
+        imp = _cent(n["importo_cents"])
+        host_id = str(n.get("soggetto") or "").partition(":")[2]
+        # quanto era GIA' stato riscosso: verita' dal giornale (offset - storni della nota)
+        riscosso = 0
+        for m in self.movimenti(rif):
+            ev = str(m.get("evento_id") or "")
+            if m.get("tipo") == "penale_offset" and ev.startswith("offset:%s:" % nid):
+                riscosso += int(m.get("importo_cents") or 0)
+            elif m.get("tipo") == "storno" and ev.startswith("storno-offset:%s:" % nid):
+                riscosso -= int(m.get("importo_cents") or 0)
+        riscosso = max(0, riscosso)
+        nc = self.emetti_nota(tipo="credito", riferimento=rif,
+                              soggetto="host:" + host_id, importo_cents=imp,
+                              valuta=val,
+                              causale=("storno penale %s: %s"
+                                       % (nid, (motivo or "senza motivo")[:200])),
+                              emittente=emittente,
+                              evento_id="storno-nota:%s" % nid, storno_di=nid)
+        if nc is None:
+            return None                       # giornale non scrivibile -> 503 onesto
+        con = self._apri()
+        try:
+            with con:
+                con.execute("UPDATE note SET stato='stornata' WHERE nota_id=?", (nid,))
+        finally:
+            con.close()
+        self._debito_scrivi(nid, host_id, rif, 0, val, "stornato")
+        restituito = 0
+        if riscosso > 0 and payout is not None:
+            try:
+                if payout.registra_maturato("stornoND-" + nid, host_id, riscosso, val):
+                    restituito = riscosso     # PK fissa: un replay NON riaccredita
+            except Exception:
+                logger.warning("storno: restituzione in da_pagare fallita (ISOLATA: "
+                               "il riscosso resta documentato nel giornale)",
+                               exc_info=True)
+        logger.warning("PENALE_STORNATA | NOTA: %s | NC: %s | HOST: %s | IMPORTO: %d | "
+                       "RISCOSSO_DA_RESTITUIRE: %d | MOTIVO: %s | EMITTENTE: %s",
+                       nid, nc.get("nota_id"), host_id, imp, riscosso,
+                       (motivo or "-")[:120], emittente)
+        return {"nota_id": nid, "nc_id": nc.get("nota_id"),
+                "riscosso_cents": riscosso, "restituito_in_da_pagare": restituito,
+                "gia_stornata": False}
+
+
 def crea_financial_controller(percorso: str, *, orologio: Any = None
                               ) -> FinancialController:
     if percorso != ":memory:":

@@ -1123,6 +1123,8 @@ class RouterHTTP:
             return self._admin_search(query, headers)   # ricerca operativa unificata (Incr.7)
         if metodo == "GET" and path == "/api/admin/audit":
             return self._admin_audit(query, headers)    # scheda contabile + semaforo (fase181)
+        if metodo == "POST" and path == "/api/admin/storno_penale":
+            return self._admin_storno_penale(body, headers)   # 5ª distruttiva (Bunker-gated)
         if metodo == "GET" and path == "/api/admin/alloggi":
             return self._admin_alloggi(query, headers)
         if metodo == "POST" and path == "/api/admin/alloggio_stato":
@@ -1503,6 +1505,37 @@ class RouterHTTP:
         logger.info("AUDIT console: ip=%s id=%r tipo=%s semaforo=%s",
                     self._client_ip(headers), termine[:60], scheda.get("tipo"), sem)
         return 200, scheda
+
+    def _admin_storno_penale(self, body, headers):
+        """STORNO PENALE (tool super-admin, 5ª operazione distruttiva): corregge una ND
+        sbagliata con la NOTA DI CREDITO contraria (fase177.storna_penale: giornale mai
+        modificato, debito azzerato, riscosso restituito in da_pagare per bonifico
+        MANUALE). DOPPIO CANCELLO: chiave admin + sessione Bunker (come le altre 4)."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        if not self._bunker_ok_o_field(headers, azione="storno_penale"):
+            return 403, {"errore": "bunker_richiesto"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        nota_id = str(dati.get("nota_id") or "").strip()
+        motivo = str(dati.get("motivo") or "").strip()
+        if not nota_id:
+            return 422, {"errore": "nota_id_mancante"}
+        if not motivo:
+            return 422, {"errore": "motivo_obbligatorio"}   # una correzione ha SEMPRE un perche'
+        fc = getattr(self._sys, "finanza", None)
+        if fc is None or not hasattr(fc, "storna_penale"):
+            return 503, {"errore": "finanza_non_attiva"}
+        esito = fc.storna_penale(nota_id=nota_id, motivo=motivo,
+                                 payout=getattr(self._sys, "payout", None),
+                                 emittente="super-admin@" + self._client_ip(headers))
+        if esito is None:
+            n = fc.nota(nota_id)
+            if n is None or n.get("tipo") != "debito":
+                return 404, {"errore": "nota_non_trovata_o_non_ND"}
+            return 503, {"errore": "giornale_non_scrivibile"}
+        return 200, esito
 
     def _admin_alloggio_stato(self, body, headers):
         """Admin: cambia lo stato di QUALSIASI annuncio (sospendi/ripubblica) per slug."""

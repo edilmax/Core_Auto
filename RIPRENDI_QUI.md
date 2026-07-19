@@ -205,6 +205,13 @@
 >   timeout 2s · ⚪ n/a onesto, non degrada) + SHADOW-CHECK Stripe (il webhook ORA salva il
 >   cs_ → prerequisito FATTO; contraddizione = rosso). READ-ONLY provato (zero righe nuove),
 >   whitelist (mai corpo_json/CF/IBAN). `GET /api/admin/audit`. test_audit_console (7).
+> · ↩️ **STORNO PENALE (5ª distruttiva, "VAI storno penale")**: `fase177.storna_penale` — NC
+>   contraria (storno_di, evento_id fisso → idempotente), ND→'stornata', debito→'stornato'
+>   (mai più riscosso, provato), riscosso RESTITUITO in da_pagare `stornoND-<ND>` (bonifico
+>   MANUALE: le correzioni le firma un umano). `POST /api/admin/storno_penale` col doppio
+>   cancello (admin+Bunker, motivo OBBLIGATORIO). UI: ↩️ nella card Audit sulle ND.
+>   test_storno_penale (6). Con questo il Financial Controller ha TUTTO tranne Scatto ③
+>   (carta off-session: attende decisione SetupIntent del fondatore).
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare
