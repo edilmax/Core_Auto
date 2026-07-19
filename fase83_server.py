@@ -2351,8 +2351,13 @@ class RouterHTTP:
         try:
             import os as _os
             from fase178_watchdog import diagnosi
-            dati = _os.environ.get("DATA_DIR", "data")
-            bkp = _os.environ.get("BACKUP_DIR", _os.path.join(dati, "backup"))
+            # BUG SCOVATO AL COLLAUDO LIVE (Incr.10/11): nel container DATA_DIR esiste
+            # ma e' VUOTA -> environ.get(..., "data") ritorna "" (il default scatta solo
+            # se la chiave MANCA) -> diagnosi su cartelle inesistenti ("0 db, nessun
+            # backup" con /data pieno). Fix: stesso fallback robusto di _data_dir().
+            dati = self._data_dir()
+            bkp = (_os.environ.get("BACKUP_DIR", "").strip()
+                   or _os.path.join(dati, "backup"))
             rep = diagnosi(dir_dati=dati, dir_backup=bkp, uptime_ok=None)
         except Exception:
             logger.error("admin diagnosi: eccezione ISOLATA", exc_info=True)

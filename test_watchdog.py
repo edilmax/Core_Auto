@@ -143,6 +143,28 @@ class TestEndpointDiagnosi(unittest.TestCase):
         self.assertEqual(self.sis.finanza.verifica_catena()["ok"], True)
         self.assertEqual(len(self.sis.finanza.movimenti("qualsiasi")), len(mv_prima))
 
+    def test_data_dir_vuota_usa_fallback(self):
+        """BUG scovato al collaudo live Incr.10/11: nel container DATA_DIR esiste ma
+        VUOTA -> environ.get(..., default) ritorna '' (il default scatta solo se la
+        chiave MANCA) -> diagnosi su cartelle inesistenti ('0 db' con /data pieno).
+        Col fix l'endpoint usa il fallback di _data_dir() (dirname di DB_FINANZA)."""
+        import os
+        prima_dd = os.environ.get("DATA_DIR")
+        prima_fin = os.environ.get("DB_FINANZA")
+        os.environ["DATA_DIR"] = ""                      # esattamente il caso prod
+        os.environ["DB_FINANZA"] = f"{self.dir}/finanza.db"
+        try:
+            s, rep = self.g({"X-Admin-Key": "ak"})
+            self.assertEqual(s, 200)
+            # la cartella del DB finanza contiene i .db del setUp: DEVE vederli
+            self.assertGreaterEqual(len(rep["misure"]["db_presenti"]), 1)
+        finally:
+            for k, v in (("DATA_DIR", prima_dd), ("DB_FINANZA", prima_fin)):
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
 
 if __name__ == "__main__":
     unittest.main()
