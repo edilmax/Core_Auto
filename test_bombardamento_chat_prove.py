@@ -122,7 +122,13 @@ class TestBombardamentoChatProve(unittest.TestCase):
         for t in ths:
             t.start()
         for t in ths:
-            t.join(30)
+            t.join(90)
+        # ANTI-BALLERINO (2026-07-19): join col timeout NON solleva -> su macchina satura
+        # le verifiche partivano con richieste ancora in volo (conteggi parziali = rosso
+        # misterioso). Ora un eventuale ritardo e' un fallimento ONESTO e spiegato.
+        self.assertEqual([i for i, t in enumerate(ths) if t.is_alive()], [],
+                         "thread ancora vivi dopo 90s: macchina satura o deadlock "
+                         "(le verifiche sarebbero su dati parziali)")
 
         accettati = sum(1 for (_i, s) in esiti if s == 201)
         thread = self.sis.messaggistica.thread(self.rif, "ospite")
@@ -143,6 +149,47 @@ class TestBombardamentoChatProve(unittest.TestCase):
         self.assertEqual(files - url_in_chat, set(),
                          "file orfani su disco (prova persa dalla chat): %r" % (files - url_in_chat))
         self.assertEqual(url_in_chat - files, set(), "bolla cita una foto inesistente")
+
+    def test_prova_non_registrata_niente_orfano_niente_bugia(self):
+        """GUARDIA (fix 2026-07-19, radice del test 'ballerino'): se la bolla in chat NON
+        viene scritta (DB occupato oltre il busy-timeout -> fase113.invia ritorna False,
+        mai solleva), l'endpoint NON deve dire 'caricata' (l'arbitro non vedrebbe MAI la
+        prova: in controversia = ospite senza prove) e NON deve lasciare la foto orfana
+        su disco. Sul codice vecchio: 201 bugiardo + file orfano -> questa guardia e' ROSSA."""
+        vero = self.sis.messaggistica.invia
+        self.sis.messaggistica.invia = lambda *a, **k: False
+        try:
+            s, o = self.g("POST", "/api/voucher/prova",
+                          {"voucher_token": self.vt, "image_base64": _PNG})
+        finally:
+            self.sis.messaggistica.invia = vero
+        self.assertEqual(s, 503, o)
+        self.assertEqual(o.get("errore"), "prova_non_registrata")
+        self.assertEqual(glob.glob(f"{self.dir}/uploads/*"), [],
+                         "file orfano su disco: foto scritta ma bolla mai nata")
+        self.assertEqual([m for m in self.sis.messaggistica.thread(self.rif, "ospite")
+                          if "PROVA FOTO:" in str(m.get("testo", ""))], [])
+        # il flusso sano DOPO il guasto e' vivo: stessa foto, stavolta registrata
+        s2, o2 = self.g("POST", "/api/voucher/prova",
+                        {"voucher_token": self.vt, "image_base64": _PNG})
+        self.assertEqual(s2, 201, o2)
+        self.assertEqual(len(glob.glob(f"{self.dir}/uploads/*")), 1)
+
+    def test_prova_eccezione_isolata_niente_orfano(self):
+        """Variante: un invia che SOLLEVA (implementazione diversa o guasto imprevisto)
+        -> stesso esito onesto: niente 5xx anonimo, niente file orfano."""
+        def _boom(*a, **k):
+            raise RuntimeError("db esploso")
+        vero = self.sis.messaggistica.invia
+        self.sis.messaggistica.invia = _boom
+        try:
+            s, o = self.g("POST", "/api/voucher/prova",
+                          {"voucher_token": self.vt, "image_base64": _PNG})
+        finally:
+            self.sis.messaggistica.invia = vero
+        self.assertEqual(s, 503, o)
+        self.assertEqual(glob.glob(f"{self.dir}/uploads/*"), [],
+                         "file orfano su disco dopo eccezione")
 
     def test_estraneo_non_legge_il_thread(self):
         self.g("POST", "/api/voucher/messaggio", {"voucher_token": self.vt, "testo": "privato"})
@@ -165,7 +212,9 @@ class TestBombardamentoChatProve(unittest.TestCase):
         for t in ths:
             t.start()
         for t in ths:
-            t.join(30)
+            t.join(90)
+        self.assertEqual([t for t in ths if t.is_alive()], [],
+                         "thread ancora vivi dopo 90s: conteggio prove sarebbe parziale")
         prove = sum(1 for m in self.sis.messaggistica.thread(self.rif, "ospite")
                     if "PROVA FOTO:" in str(m.get("testo", "")))
         # il tetto e' MAX_PROVE_FOTO=10 ma la lettura-poi-scrittura non e' atomica -> in raffica

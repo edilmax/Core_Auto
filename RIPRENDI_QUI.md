@@ -112,8 +112,8 @@
 >   risolvi/cancella-attivita) DIETRO la sessione Bunker; ④ sala controllo piena (log/hash/integrità).
 >   Prima ancora ✅ rate-limit login LIVE (5/min per IP, 429+audit). Onestà: password = doppio muro,
 >   non 2FA piena finché non si attiva il telefono (QR pronto su richiesta). Dettaglio: righe
->   🏰/🗄️/🚪 REGISTRO sez.1. ⚠️ 2 test flaky NOTI da irrobustire (test_raffica_upload sotto carico;
->   test_ical_export era mina-data GIÀ FIXATA).
+>   🏰/🗄️/🚪 REGISTRO sez.1. ✅ i 2 test flaky sono RISOLTI 2026-07-19 — dietro c'era un bug vero, riga 🚥 REGISTRO sez.1
+>   (test_ical_export era mina-data già fixata prima).
 >   · ✅ **Incremento ③ ENFORCEMENT FATTO+LIVE `988e963` (2026-07-19)**: le 4 distruttive
 >   (alloggio_stato/rimborso/controversia-risolvi/cancella_attivita) ora richiedono la SESSIONE
 >   BUNKER (X-Bunker-Session) oltre alla chiave admin → senza: 403 `bunker_richiesto` (CRITICO+IP);
@@ -241,6 +241,14 @@
 >   **PRE-MORTEM COMPLETO: tutti i fantasmi del 2026-07-18 chiusi** (backup offsite ✓
 >   log persistenti ✓ allarmi ✓ rate-limit ✓ re-sync Stripe ✓). Restano SOLO decisioni
 >   fondatore: Scatto③ SetupIntent, passphrase offsite, TOTP telefono, 2° server, token social.
+> · 🚥 **SEMAFORO CHE NON MENTE (2026-07-19, mandato aperto "inizia da dove vuoi")**: dietro il
+>   test "ballerino" c'era un BUG VERO — /api/voucher/prova diceva "✓ caricata" anche quando la
+>   bolla in chat NON veniva scritta (DB occupato): prova INVISIBILE all'arbitro in controversia
+>   + foto orfana su disco. Fix: esito verificato, file ripulito, 503 onesto, messaggi veri in
+>   pagina voucher (429/5xx). Test irrobustiti: join onesto 90s (raffica), benchmark a soglie
+>   doppie (strette solo a giro manuale BENCH_*/BENCH_STRICT=1; invarianti duri sempre). Guardie
+>   rosse-sul-vecchio → verdi; 10 giri × 2 moduli sotto carico vero (15 bruciatori/16 core) =
+>   0 falliti. Suite **2678 verde**. Dettaglio: riga 🚥 REGISTRO sez.1.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare

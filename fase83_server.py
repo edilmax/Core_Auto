@@ -578,7 +578,10 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
         "body:JSON.stringify({voucher_token:tk,image_base64:rd.result})});"
         "var m=document.getElementById('chMsg');if(r.status===201){m.style.color='#155724';"
         "m.textContent='\\u2713 Prova caricata: e nella conversazione.';carica();}"
-        "else{m.style.color='#b00020';m.textContent='Foto non valida (max 5MB, jpg/png).';}};"
+        "else{var em='Foto non valida (max 5MB, jpg/png).';"
+        "if(r.status===429)em='Hai raggiunto il limite di prove caricabili.';"
+        "else if(r.status>=500)em='Non riuscito in questo momento: riprova tra qualche istante.';"
+        "m.style.color='#b00020';m.textContent=em;}};"
         "rd.readAsDataURL(f);};carica();})();</script>")
     # CHECK-IN DIGITALE (fase127): pre-registrazione ospiti prima dell'arrivo -> sblocco ok
     blocco_pass = blocco_pass + (
@@ -1348,7 +1351,24 @@ class RouterHTTP:
         st, out = self._salva_foto_raw(dati.get("image_base64"))
         if st != 201:
             return st, out
-        msg.invia(rif, hid, "ospite", "ospite", _PREFISSO_PROVA + " " + out["url"])
+        # ESITO DELLA BOLLA VERIFICATO (fix 2026-07-19): prima msg.invia era IGNORATO ->
+        # con DB occupato (fase113 ritorna False, mai solleva) il cliente leggeva
+        # "caricata" ma la prova NON esisteva in chat (l'arbitro non l'avrebbe mai vista)
+        # e la foto restava ORFANA su disco. Niente bolla -> file rimosso + 503 onesto.
+        try:
+            ok = bool(msg.invia(rif, hid, "ospite", "ospite",
+                                _PREFISSO_PROVA + " " + out["url"]))
+        except Exception:
+            logger.error("prova foto: bolla non scritta (ISOLATO)", exc_info=True)
+            ok = False
+        if not ok:
+            import os as _os
+            try:
+                _os.remove(_os.path.join(_os.environ.get("UPLOAD_DIR", "data/uploads"),
+                                         out["url"].rsplit("/", 1)[1]))
+            except Exception:
+                logger.warning("prova foto: pulizia file non riuscita", exc_info=True)
+            return 503, {"errore": "prova_non_registrata"}
         return 201, {"stato": "caricata", "url": out["url"]}
 
     def _admin_messaggi(self, query, headers):
