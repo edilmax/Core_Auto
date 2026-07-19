@@ -116,8 +116,17 @@ class TestRecensionePurga(unittest.TestCase):
                          "data": {"object": {"metadata": {"riferimento": b["riferimento"]}}}})
         self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
                         {"Stripe-Signature": firma_di_test(pl, "whsec_x", int(time.time()))})
+        # NBF (2026-07-20): prima del check-out il diritto del book dice troppo_presto;
+        # per il "pagata resta ammessa" si usa un diritto maturo (stessa firma di sistema)
         s, o = self.g("POST", "/api/recensioni",
                       {"token": b["diritto_recensione"], "voto": 4, "testo": "bello"})
+        self.assertEqual(s, 400, o)
+        self.assertEqual(o.get("motivo"), "troppo_presto")
+        import time as _t
+        from fase63_recensioni import EmettitoreDiritto
+        maturo = EmettitoreDiritto(self.sis.firma).emetti(
+            b["riferimento"], "casa", non_prima_ts=int(_t.time()) - 60)
+        s, o = self.g("POST", "/api/recensioni", {"token": maturo, "voto": 4, "testo": "bello"})
         self.assertEqual(s, 201, o)
         self.assertTrue(o["verificata"])
 

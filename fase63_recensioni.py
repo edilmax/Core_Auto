@@ -44,6 +44,10 @@ logger = logging.getLogger("core_auto.recensioni")
 VOTO_MIN, VOTO_MAX = 1, 5
 LIMITE_TESTO = 2000
 LINGUE_NOTE = ("en", "it", "es", "fr", "de", "pt", "ja", "zh")
+# Sotto-voti stile Booking/Agoda (2026-07-20, richiesta fondatore): la gente guarda
+# proprio queste voci. Fisse e in ordine di vetrina; ogni voce e' OPZIONALE (NULL se
+# l'ospite non la compila), intero 1..5 come il voto generale.
+CATEGORIE = ("pulizia", "comfort", "posizione", "servizi", "host", "qualita_prezzo")
 
 
 def _intero(v: Any) -> bool:
@@ -69,13 +73,21 @@ class EmettitoreDiritto:
         self._ttl = max(0, int(ttl_giorni)) * 86400
         self._now = orologio or (lambda: int(time.time()))
 
-    def emetti(self, prenotazione_id: str, alloggio_id: str) -> str:
+    def emetti(self, prenotazione_id: str, alloggio_id: str, *,
+               non_prima_ts: Optional[int] = None) -> str:
+        """non_prima_ts (nbf): la recensione NON e' valida prima di questo istante
+        (= il check-out): come Booking/Agoda si recensisce DOPO il soggiorno, mai prima.
+        Nel token FIRMATO -> non aggirabile. Assente = diritti vecchi ancora validi."""
         payload: Dict[str, Any] = {
             "prenotazione_id": str(prenotazione_id),
             "alloggio_id": str(alloggio_id),
         }
         if self._ttl > 0:
             payload["exp"] = self._now() + self._ttl
+        if _intero(non_prima_ts) and non_prima_ts > 0:
+            payload["nbf"] = int(non_prima_ts)
+            if self._ttl > 0:                    # i 90 giorni contano dal CHECK-OUT
+                payload["exp"] = int(non_prima_ts) + self._ttl
         return self._firma.codifica(payload)
 
 
@@ -114,18 +126,29 @@ class RegistroRecensioni:
                         ts TEXT NOT NULL)""")
                 con.execute("CREATE INDEX IF NOT EXISTS idx_rec_alloggio "
                             "ON recensioni(alloggio_id)")
+                # MIGRAZIONE IDEMPOTENTE sotto-voti (DB esistenti in prod): colonne NULL,
+                # nessuna riscrittura dei dati storici.
+                esistenti = {r[1] for r in con.execute("PRAGMA table_info(recensioni)")}
+                for cat in CATEGORIE:
+                    if "cat_" + cat not in esistenti:
+                        con.execute("ALTER TABLE recensioni ADD COLUMN cat_%s INTEGER" % cat)
         finally:
             con.close()
 
     def invia(self, token: Any, voto: Any, testo: Any = "",
-              lingua: Any = "en") -> EsitoRecensione:
-        """Invia una recensione presentando il diritto firmato. BLINDATO, fail-closed."""
+              lingua: Any = "en", categorie: Any = None) -> EsitoRecensione:
+        """Invia una recensione presentando il diritto firmato. BLINDATO, fail-closed.
+        categorie: dict opzionale {nome_categoria: voto 1..5} stile Booking/Agoda —
+        sottoinsieme di CATEGORIE; chiave sconosciuta o voto fuori scala = rifiuto."""
         dati = self._firma.decodifica(token)
         if dati is None:
             return EsitoRecensione(False, "diritto_non_valido")   # firma rotta/assente
         exp = dati.get("exp")
         if exp is not None and (not _intero(exp) or exp < self._now()):
             return EsitoRecensione(False, "diritto_scaduto")
+        nbf = dati.get("nbf")
+        if nbf is not None and (not _intero(nbf) or self._now() < nbf):
+            return EsitoRecensione(False, "troppo_presto")        # si recensisce DOPO il soggiorno
         prenotazione_id = dati.get("prenotazione_id")
         alloggio_id = dati.get("alloggio_id")
         if not (isinstance(prenotazione_id, str) and prenotazione_id
@@ -135,6 +158,13 @@ class RegistroRecensioni:
             return EsitoRecensione(False, "voto_non_valido")
         if not isinstance(testo, str) or len(testo) > LIMITE_TESTO:
             return EsitoRecensione(False, "testo_non_valido")
+        if categorie is None:
+            categorie = {}
+        if not isinstance(categorie, dict):
+            return EsitoRecensione(False, "categorie_non_valide")
+        for k, v in categorie.items():
+            if k not in CATEGORIE or not _intero(v) or not (VOTO_MIN <= v <= VOTO_MAX):
+                return EsitoRecensione(False, "categorie_non_valide")
         lingua = lingua if (isinstance(lingua, str) and lingua in LINGUE_NOTE) else "en"
         ts = datetime.datetime.now().isoformat(timespec="seconds")
         con = self._apri()
@@ -145,10 +175,13 @@ class RegistroRecensioni:
             if esiste is not None:                      # una sola recensione per soggiorno
                 con.execute("COMMIT")
                 return EsitoRecensione(False, "gia_recensita")
+            col_cat = "".join(", cat_" + c for c in CATEGORIE)
             con.execute(
                 "INSERT INTO recensioni (prenotazione_id, alloggio_id, voto, testo, "
-                "lingua, verificata, ts) VALUES (?,?,?,?,?,1,?)",
-                (prenotazione_id, alloggio_id, voto, testo.strip(), lingua, ts))
+                "lingua, verificata, ts" + col_cat + ") VALUES (?,?,?,?,?,1,?"
+                + ",?" * len(CATEGORIE) + ")",
+                (prenotazione_id, alloggio_id, voto, testo.strip(), lingua, ts)
+                + tuple(categorie.get(c) for c in CATEGORIE))
             con.execute("COMMIT")
             return EsitoRecensione(True, "", verificata=True)
         except Exception:
@@ -178,23 +211,58 @@ class RegistroRecensioni:
             con.close()
         n = row["n"]
         media_cento = (row["somma"] * 100) // n if n else 0   # es. 425 = 4.25 stelle
+        # medie per CATEGORIA (stile Booking): solo su chi ha compilato quella voce
+        cats: Dict[str, Any] = {}
+        con = self._apri()
+        try:
+            for c in CATEGORIE:
+                r = con.execute(
+                    "SELECT COUNT(cat_%s) AS n, COALESCE(SUM(cat_%s),0) AS somma "
+                    "FROM recensioni WHERE alloggio_id=? AND verificata=1" % (c, c),
+                    (str(alloggio_id),)).fetchone()
+                if r["n"]:
+                    cats[c] = {"conteggio": int(r["n"]),
+                               "media_centesimi": int((r["somma"] * 100) // r["n"])}
+        finally:
+            con.close()
         return {"conteggio": int(n), "media_centesimi": int(media_cento),
-                "distribuzione": distrib}
+                "distribuzione": distrib, "categorie": cats}
 
     def elenco(self, alloggio_id: str, limit: int = 20) -> List[Dict[str, Any]]:
         limit = max(1, min(100, limit if _intero(limit) else 20))
         con = self._apri()
         try:
             righe = con.execute(
-                "SELECT prenotazione_id, voto, testo, lingua, ts FROM recensioni "
+                "SELECT * FROM recensioni "
                 "WHERE alloggio_id=? AND verificata=1 ORDER BY ts DESC, rowid DESC "
                 "LIMIT ?", (str(alloggio_id), limit)).fetchall()
         finally:
             con.close()
-        return [{"prenotazione_id": r["prenotazione_id"], "voto": int(r["voto"]),
-                 # testo TAGGATO con la lingua d'origine: l'agente del cliente traduce
-                 "testo": {"text": r["testo"], "lang": r["lingua"]}, "ts": r["ts"]}
-                for r in righe]
+        out = []
+        for r in righe:
+            voce = {"prenotazione_id": r["prenotazione_id"], "voto": int(r["voto"]),
+                    # testo TAGGATO con la lingua d'origine: l'agente del cliente traduce
+                    "testo": {"text": r["testo"], "lang": r["lingua"]}, "ts": r["ts"]}
+            cats = {c: int(r["cat_" + c]) for c in CATEGORIE if r["cat_" + c] is not None}
+            if cats:
+                voce["categorie"] = cats
+            out.append(voce)
+        return out
+
+    def gia_recensita(self, prenotazione_id: str) -> bool:
+        """True se questa prenotazione ha gia' la sua recensione (per la pagina voucher:
+        mostra 'grazie' invece del form). BLINDATO: errore DB -> False (il form riappare,
+        l'idempotenza vera resta sulla PK)."""
+        try:
+            con = self._apri()
+            try:
+                return con.execute("SELECT 1 FROM recensioni WHERE prenotazione_id=?",
+                                   (str(prenotazione_id),)).fetchone() is not None
+            finally:
+                con.close()
+        except Exception:
+            logger.warning("gia_recensita fallita (ISOLATA)", exc_info=True)
+            return False
 
 
 # ─────────────────────────────────────────────────────────────────────────────

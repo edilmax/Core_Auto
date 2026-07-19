@@ -90,8 +90,19 @@ class TestRecensioniAntiFake(unittest.TestCase):
     def test_recensione_pagata_ammessa(self):
         b = self._book("2026-09-15", "2026-09-18")
         self._paga(b["riferimento"])                         # ora e' pagata
+        # NBF (2026-07-20, stile Booking/Agoda): pagata MA soggiorno non ancora fatto ->
+        # il diritto emesso al book (nbf=check-out) rifiuta con troppo_presto
         s, res = self.g("POST", "/api/recensioni",
                         {"token": b["diritto_recensione"], "voto": 4, "testo": "soggiorno vero"})
+        self.assertEqual(s, 400, res)
+        self.assertEqual(res.get("motivo"), "troppo_presto")
+        # DOPO il check-out (stessa firma di sistema, nbf passato): ammessa
+        import time as _t
+        from fase63_recensioni import EmettitoreDiritto
+        maturo = EmettitoreDiritto(self.sys.firma).emetti(
+            b["riferimento"], "casa", non_prima_ts=int(_t.time()) - 60)
+        s, res = self.g("POST", "/api/recensioni",
+                        {"token": maturo, "voto": 4, "testo": "soggiorno vero"})
         self.assertEqual(s, 201, res)
         self.assertTrue(res.get("ok") and res.get("verificata"))
         rie = self.sys.recensioni.riepilogo("casa")

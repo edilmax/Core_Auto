@@ -351,9 +351,23 @@ async function caricaI18N(lang){
 }
 
 function stelle(rie){
-  if(!rie || !rie.conteggio) return '';
+  // zero recensioni: badge "Nuovo" (stile Booking "Novità") — MAI numeri finti
+  if(!rie || !rie.conteggio) return `<span style="background:var(--stato-libero);color:var(--brand-chiaro);font-size:.72rem;padding:.15rem .55rem;border-radius:1rem;font-weight:700">${t('rec_nuovo')}</span>`;
   const m=(rie.media_centesimi/100).toFixed(1);
   return `<span style="color:#e0a800">★ ${m}</span> <span style="color:var(--testo-tenue);font-size:.8rem">(${rie.conteggio})</span>`;
+}
+// barrette per categoria stile Booking/Agoda (pulizia, comfort, ...): la gente guarda queste
+function barreCategorie(rie){
+  const cats=(rie&&rie.categorie)||{};
+  const ORD=['pulizia','comfort','posizione','servizi','host','qualita_prezzo'];
+  const righe=ORD.filter(k=>cats[k]&&cats[k].conteggio).map(k=>{
+    const m=cats[k].media_centesimi, pct=Math.max(0,Math.min(100,m/5));
+    return `<div style="display:flex;align-items:center;gap:.5rem;margin:.22rem 0;font-size:.85rem">`+
+      `<span style="flex:0 0 34%;color:#4a5b7a">${t('rec_'+k)}</span>`+
+      `<span style="flex:1;height:7px;background:var(--sfondo-tenue);border-radius:4px;overflow:hidden"><span style="display:block;height:100%;width:${pct}%;background:linear-gradient(90deg,var(--brand),#2a7157)"></span></span>`+
+      `<b style="flex:0 0 2.2rem;text-align:right;color:var(--brand)">${(m/100).toFixed(1)}</b></div>`;
+  }).join('');
+  return righe?`<div style="margin:.5rem 0 .3rem">${righe}</div>`:'';
 }
 // 🔍 LIGHTBOX foto: clic = ingrandisci, ‹ › per sfogliare, ✕/ESC per chiudere
 let LB_IMGS=[], LB_I=0;
@@ -570,7 +584,7 @@ async function apri(slug){
     try{
       const rr = await api('/api/recensioni/'+encodeURIComponent(slug));
       if(rr.recensioni && rr.recensioni.length){
-        rec.innerHTML = '<div style="margin:.5rem 0;font-size:.9rem">'+
+        rec.innerHTML = barreCategorie(rr.riepilogo) + '<div style="margin:.5rem 0;font-size:.9rem">'+
           rr.recensioni.slice(0,4).map(x=>{
             const txt=(x.testo&&x.testo.text)?x.testo.text:'';
             return `<div style="border-top:1px solid var(--sfondo-tenue);padding:.4rem 0">★ ${esc(x.voto)} <span style="color:var(--brand-chiaro);font-size:.72rem">✓ ${t('verificata')}</span><br><span style="color:#4a5b7a">${esc(txt)}</span></div>`;

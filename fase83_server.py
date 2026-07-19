@@ -151,6 +151,19 @@ ETICHETTE_UI: Dict[str, Dict[str, str]] = {
     "wl_msg_tpl": {"it": "Ti avvisiamo appena ci sono alloggi a %s. Hai un Credito Fondatore per la tua prima prenotazione.", "en": "We'll notify you as soon as stays are available in %s. You have a Founder Credit for your first booking.", "es": "Te avisaremos en cuanto haya alojamientos en %s. Tienes un Crédito Fundador para tu primera reserva.", "fr": "Nous vous préviendrons dès que des logements seront disponibles à %s. Vous avez un Crédit Fondateur pour votre première réservation.", "de": "Wir benachrichtigen dich, sobald in %s Unterkünfte verfügbar sind. Du hast ein Gründerguthaben für deine erste Buchung.", "pt": "Avisamos assim que houver acomodações em %s. Você tem um Crédito Fundador para a sua primeira reserva.", "ja": "%sに宿泊施設が用意でき次第お知らせします。初回予約に使える創設者クレジットをご利用いただけます。", "zh": "一旦%s有房源，我们会立即通知您。您可享创始人礼遇积分用于首次预订。"},
     "contratto_pdf": {"it": "Contratto PDF", "en": "PDF contract", "es": "Contrato PDF", "fr": "Contrat PDF", "de": "PDF-Vertrag", "pt": "Contrato PDF", "ja": "契約書（PDF）", "zh": "合同PDF"},
     "voucher_label": {"it": "Voucher", "en": "Voucher", "es": "Voucher", "fr": "Bon", "de": "Voucher", "pt": "Voucher", "ja": "バウチャー", "zh": "预订凭证"},
+    # --- recensioni stile Booking/Agoda (voto generale + sotto-voti) ---
+    "rec_titolo": {"it": "Com'è andata? Lascia una recensione", "en": "How was your stay? Leave a review", "es": "¿Qué tal tu estancia? Deja una reseña", "fr": "Comment était votre séjour ? Laissez un avis", "de": "Wie war Ihr Aufenthalt? Bewertung abgeben", "pt": "Como foi a estadia? Deixe uma avaliação", "ja": "ご滞在はいかがでしたか？レビューを書く", "zh": "住得怎么样？留下点评"},
+    "rec_generale": {"it": "Voto generale", "en": "Overall rating", "es": "Valoración general", "fr": "Note globale", "de": "Gesamtbewertung", "pt": "Avaliação geral", "ja": "総合評価", "zh": "总体评分"},
+    "rec_pulizia": {"it": "Pulizia", "en": "Cleanliness", "es": "Limpieza", "fr": "Propreté", "de": "Sauberkeit", "pt": "Limpeza", "ja": "清潔さ", "zh": "清洁度"},
+    "rec_comfort": {"it": "Comfort", "en": "Comfort", "es": "Confort", "fr": "Confort", "de": "Komfort", "pt": "Conforto", "ja": "快適さ", "zh": "舒适度"},
+    "rec_posizione": {"it": "Posizione", "en": "Location", "es": "Ubicación", "fr": "Emplacement", "de": "Lage", "pt": "Localização", "ja": "ロケーション", "zh": "位置"},
+    "rec_servizi": {"it": "Servizi", "en": "Facilities", "es": "Servicios", "fr": "Équipements", "de": "Ausstattung", "pt": "Comodidades", "ja": "設備", "zh": "设施"},
+    "rec_host": {"it": "Host", "en": "Host", "es": "Anfitrión", "fr": "Hôte", "de": "Gastgeber", "pt": "Anfitrião", "ja": "ホスト", "zh": "房东"},
+    "rec_qualita_prezzo": {"it": "Qualità/prezzo", "en": "Value for money", "es": "Calidad/precio", "fr": "Rapport qualité-prix", "de": "Preis-Leistung", "pt": "Custo-benefício", "ja": "コスパ", "zh": "性价比"},
+    "rec_testo_ph": {"it": "Racconta com'è andata (facoltativo)", "en": "Tell us how it went (optional)", "es": "Cuéntanos qué tal (opcional)", "fr": "Racontez votre séjour (facultatif)", "de": "Erzählen Sie davon (optional)", "pt": "Conte como foi (opcional)", "ja": "感想をどうぞ（任意）", "zh": "说说体验（选填）"},
+    "rec_invia": {"it": "Invia recensione", "en": "Submit review", "es": "Enviar reseña", "fr": "Envoyer votre avis", "de": "Bewertung senden", "pt": "Enviar avaliação", "ja": "レビューを送信", "zh": "提交点评"},
+    "rec_grazie": {"it": "Grazie! La tua recensione verificata è pubblicata.", "en": "Thank you! Your verified review is published.", "es": "¡Gracias! Tu reseña verificada está publicada.", "fr": "Merci ! Votre avis vérifié est publié.", "de": "Danke! Ihre verifizierte Bewertung ist online.", "pt": "Obrigado! A sua avaliação verificada foi publicada.", "ja": "ありがとうございます！認証済みレビューを公開しました。", "zh": "谢谢！您的验证点评已发布。"},
+    "rec_nuovo": {"it": "Nuovo", "en": "New", "es": "Nuevo", "fr": "Nouveau", "de": "Neu", "pt": "Novo", "ja": "新着", "zh": "新上线"},
 }
 
 
@@ -629,6 +642,92 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
         "m.textContent='\\u2713 Check-in completato: al tuo arrivo basta il PIN.';}"
         "else{m.style.color='#b00020';m.textContent='Dati non validi: controlla nomi/documenti e capacita.';}};"
         "})();</script>")
+    # RECENSIONE POST-SOGGIORNO stile Booking/Agoda (fase63, 2026-07-20): voto generale +
+    # sotto-voti (pulizia, comfort, ...). Il form appare SOLO dopo il check-out e solo se la
+    # prenotazione non e' cancellata; il diritto firmato (nbf=check-out) e' emesso QUI dal
+    # server e incorporato nella pagina: l'ospite non copia nulla. Gia' recensita -> grazie.
+    try:
+        _rif_v = str(dati.get("riferimento", ""))
+        _allog_v = str(dati.get("alloggio_id", ""))
+        _co_v = str(dati.get("check_out", ""))
+        _reg = getattr(sistema, "recensioni", None)
+        _emet = getattr(sistema, "emettitore_recensioni", None)
+        if _reg is not None and _emet is not None and _rif_v and _allog_v and _co_v:
+            import datetime as _dtv
+            import json as _jsv
+            _co_data = _dtv.date.fromisoformat(_co_v)
+            _cancellata = False
+            try:
+                _pp = getattr(sistema, "pagamenti_pendenti", None)
+                _st = _pp.info(_rif_v) if _pp is not None else None
+                _cancellata = bool(_st is not None and _st.get("stato")
+                                   in ("rimborsato", "cancellata_host"))
+            except Exception:
+                _cancellata = False
+            if _dtv.date.today() >= _co_data and not _cancellata:
+                if _reg.gia_recensita(_rif_v):
+                    blocco_pass = blocco_pass + (
+                        "<div style='margin-top:1rem;padding-top:1rem;border-top:1px solid "
+                        "#eef2f7;color:#155724;font-weight:700'>&#11088; %s</div>"
+                        % e(_ui("rec_grazie", lng)))
+                else:
+                    _nbf = int(_dtv.datetime.combine(_co_data, _dtv.time.min).timestamp())
+                    _diritto = _emet.emetti(_rif_v, _allog_v, non_prima_ts=_nbf)
+                    _cats = _jsv.dumps(
+                        [[c, _ui("rec_" + c, lng)] for c in
+                         ("pulizia", "comfort", "posizione", "servizi", "host",
+                          "qualita_prezzo")], ensure_ascii=True)
+                    # testi per il JS via JSON (dentro <script> le entita' HTML NON si
+                    # decodificano: un apostrofo escapato romperebbe la stringa)
+                    _txt = _jsv.dumps({"gen": _ui("rec_generale", lng),
+                                       "grazie": _ui("rec_grazie", lng),
+                                       "err": _ui("errore", lng),
+                                       "tok": _diritto, "lng": lng}, ensure_ascii=True)
+                    blocco_pass = blocco_pass + (
+                        "<div id='recBox' style='margin-top:1rem;padding-top:1rem;"
+                        "border-top:1px solid #eef2f7'>"
+                        "<div style='font-weight:700;margin-bottom:.5rem'>&#11088; " + e(_ui("rec_titolo", lng)) + "</div>"
+                        "<div id='recRows'></div>"
+                        "<textarea id='recTxt' rows='3' maxlength='2000' placeholder='" + e(_ui("rec_testo_ph", lng)) + "' "
+                        "style='width:100%;padding:.55rem;border:1px solid #dce1ed;border-radius:.6rem;margin-top:.5rem'></textarea>"
+                        "<button id='recSend' style='width:100%;margin-top:.5rem;padding:.8rem;border:0;border-radius:.8rem;"
+                        "background:#0f4c3a;color:#fff;font-weight:700;cursor:pointer'>" + e(_ui("rec_invia", lng)) + "</button>"
+                        "<div id='recMsg' style='margin-top:.5rem;font-size:.85rem'></div></div>"
+                        "<script>(function(){"
+                        "var TXT=" + _txt + ";"
+                        "var CATS=" + _cats + ";var voti={gen:0},rows=document.getElementById('recRows');"
+                        "function riga(k,lbl){var d=document.createElement('div');"
+                        "d.style.cssText='display:flex;justify-content:space-between;align-items:center;margin:.15rem 0';"
+                        "var s=document.createElement('span');s.textContent=lbl;"
+                        "if(k==='gen')s.style.fontWeight='700';d.appendChild(s);"
+                        "var box=document.createElement('span');"
+                        "for(var i=1;i<=5;i++){(function(v){var b=document.createElement('button');"
+                        "b.type='button';b.textContent='\\u2606';"
+                        "b.style.cssText='border:0;background:none;font-size:1.25rem;cursor:pointer;"
+                        "padding:.05rem .1rem;color:#c9c9c9';"
+                        "b.onclick=function(){voti[k]=v;var bs=box.children;"
+                        "for(var j=0;j<5;j++){bs[j].textContent=(j<v)?'\\u2605':'\\u2606';"
+                        "bs[j].style.color=(j<v)?'#e0a800':'#c9c9c9';}};"
+                        "box.appendChild(b);})(i);}d.appendChild(box);rows.appendChild(d);}"
+                        "riga('gen',TXT.gen);for(var i=0;i<CATS.length;i++)riga(CATS[i][0],CATS[i][1]);"
+                        "function grazie(){var b=document.getElementById('recBox');b.innerHTML='';"
+                        "var w=document.createElement('div');w.style.cssText='color:#155724;font-weight:700';"
+                        "w.textContent='\\u2B50 '+TXT.grazie;b.appendChild(w);}"
+                        "document.getElementById('recSend').onclick=async function(){"
+                        "var m=document.getElementById('recMsg');"
+                        "if(!voti.gen){m.style.color='#b00020';m.textContent=TXT.gen+': \\u2605 1-5';return;}"
+                        "this.disabled=true;var cats={};"
+                        "for(var i=0;i<CATS.length;i++){var k=CATS[i][0];if(voti[k])cats[k]=voti[k];}"
+                        "try{var r=await fetch('/api/recensioni',{method:'POST',"
+                        "headers:{'Content-Type':'application/json'},body:JSON.stringify("
+                        "{token:TXT.tok,voto:voti.gen,testo:document.getElementById('recTxt').value.trim(),"
+                        "lingua:TXT.lng,categorie:cats})});"
+                        "if(r.status===201||r.status===409){grazie();}"
+                        "else{m.style.color='#b00020';m.textContent=TXT.err;this.disabled=false;}"
+                        "}catch(_){m.style.color='#b00020';m.textContent=TXT.err;this.disabled=false;}};"
+                        "})();</script>")
+    except Exception:
+        logger.warning("blocco recensione voucher fallito (ISOLATO)", exc_info=True)
     return (
         "<!DOCTYPE html><html lang=\"%s\"><head><meta charset=\"UTF-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
@@ -2916,7 +3015,8 @@ class RouterHTTP:
         if not self._recensione_ammessa(dati.get("token")):
             return 402, {"ok": False, "motivo": "prenotazione_non_pagata", "verificata": False}
         e = self._sys.recensioni.invia(dati.get("token"), dati.get("voto"),
-                                       dati.get("testo", ""), dati.get("lingua", "en"))
+                                       dati.get("testo", ""), dati.get("lingua", "en"),
+                                       categorie=dati.get("categorie"))
         status = 201 if e.ok else (409 if e.motivo == "gia_recensita" else 400)
         return status, {"ok": e.ok, "motivo": e.motivo, "verificata": e.verificata}
 
@@ -3039,7 +3139,16 @@ class RouterHTTP:
                 logger.warning("emissione voucher fallita (ignorata)", exc_info=True)
         if self._sys.emettitore_recensioni is not None:
             try:
-                corpo["diritto_recensione"] = self._sys.emettitore_recensioni.emetti(ref, allog)
+                # nbf = mezzanotte del CHECK-OUT: si recensisce DOPO il soggiorno (stile
+                # Booking/Agoda), mai prima. Dentro il token firmato -> non aggirabile.
+                try:
+                    import datetime as _dtr
+                    nbf = int(_dtr.datetime.combine(_dtr.date.fromisoformat(str(co)),
+                                                    _dtr.time.min).timestamp())
+                except Exception:
+                    nbf = None
+                corpo["diritto_recensione"] = self._sys.emettitore_recensioni.emetti(
+                    ref, allog, non_prima_ts=nbf)
             except Exception:
                 logger.warning("emissione diritto recensione fallita (ignorata)", exc_info=True)
         email = dati.get("email")
