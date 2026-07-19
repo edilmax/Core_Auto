@@ -782,7 +782,8 @@ document.getElementById('btnRegister').onclick = async ()=>{
 document.getElementById('btnLogin').onclick = ()=>{
   authPost('/api/host/login', {email:document.getElementById('au_email').value, password:document.getElementById('au_pw').value}, document.getElementById('msgAuth'), 'accesso_ok');
 };
-document.getElementById('btnLogout').onclick = ()=>{
+document.getElementById('btnLogout').onclick = async ()=>{
+  try{ await fetchTempo('/api/gate/logout', {method:'POST'}); }catch(_){ console.warn('bookinvip-host',_); }   // cancella il cookie di pagina
   localStorage.removeItem('bookinvip_host_token'); localStorage.removeItem('bookinvip_host_email'); aggiornaAuthUI();
 };
 

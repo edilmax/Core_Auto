@@ -122,6 +122,7 @@ async function entra(){
       body:JSON.stringify({codice:$('pw').value})});
     let d=null; try{d=await r.json();}catch(_){console.warn("bunker",_);}
     if(r.status===200 && d && d.sessione){ SESS=d.sessione; EXP=Date.now()+((d.scade_tra_sec||900)*1000);
+      try{sessionStorage.setItem('bv_bunker_sess',SESS);sessionStorage.setItem('bv_bunker_exp',String(EXP));}catch(_){console.warn('bunker',_);}
       $('pw').value=''; $('loginCard').classList.add('nascosto'); $('sala').classList.remove('nascosto');
       st.textContent=''; aggiorna(); avviaTimer();
     } else if(r.status===429){ st.textContent='⛔ Troppi tentativi, riprova tra poco.'; }
@@ -129,7 +130,7 @@ async function entra(){
     else { st.textContent='❌ Chiave o password super-admin errata.'; }
   }catch(e){ st.textContent='❌ Errore di rete.'; }
 }
-function esci(){ SESS=''; EXP=0; $('sala').classList.add('nascosto'); $('loginCard').classList.remove('nascosto'); }
+function esci(){ SESS=''; EXP=0; try{sessionStorage.removeItem('bv_bunker_sess');sessionStorage.removeItem('bv_bunker_exp');}catch(_){console.warn('bunker',_);} $('sala').classList.add('nascosto'); $('loginCard').classList.remove('nascosto'); }
 function avviaTimer(){ setInterval(()=>{ if(SESS && !attivo()){ esci(); $('loginStat').textContent='⏱️ Sessione scaduta (15 min). Rientra.'; } },10000); }
 
 function pill(stato,testo){ return '<span class="pill '+stato+'">'+esc(testo)+'</span>'; }
@@ -169,6 +170,7 @@ async function aggiorna(){
 async function logout(){
   // LOGOUT SERVER-SIDE: revoca la sessione sul server (non solo lato browser)
   try{ if(SESS) await fetch('/api/bunker/logout',{method:'POST',headers:hdr()}); }catch(_){console.warn("bunker",_);}
+  try{ await fetch('/api/gate/logout',{method:'POST'}); }catch(_){console.warn("bunker",_);}   // cancella il cookie di pagina
   esci(); $('loginStat').textContent='👋 Uscito.';
 }
 async function scaricaEstratto(){
@@ -245,6 +247,14 @@ $('btnEsci').onclick=logout;
 if(!$('dacAnno').value) $('dacAnno').value=(new Date().getFullYear()-1);
 $('pw').addEventListener('keydown',e=>{ if(e.key==='Enter') entra(); });
 BV.occhielli();   // 👁 mostra/nascondi su ogni input password
+// GATEKEEPER: se il login è appena avvenuto (sessione in questa scheda + cookie valido dal
+// server che ci ha fatto arrivare qui), entra diretto senza richiedere di nuovo le chiavi.
+try{
+  var _s=sessionStorage.getItem('bv_bunker_sess'), _e=+sessionStorage.getItem('bv_bunker_exp')||0;
+  if(_s && Date.now()<_e){ SESS=_s; EXP=_e;
+    $('loginCard').classList.add('nascosto'); $('sala').classList.remove('nascosto');
+    aggiorna(); avviaTimer(); }
+}catch(_){ console.warn('bunker',_); }
 </script>
 </body>
 </html>

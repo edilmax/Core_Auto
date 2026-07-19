@@ -728,6 +728,99 @@ def pagina_azione_html(esito: Dict[str, Any]) -> str:
     ) % (h1, bg, col, ic, h1, p1, p2, pannello)
 
 
+def pagina_login_gate(livello: str, base_url: str = "") -> str:
+    """PAGINA DI LOGIN pubblica del gatekeeper (server-rendered). Contiene SOLO il form del
+    ruolo: nessun bottone/struttura della dashboard finisce nel sorgente per chi non è loggato.
+    Al successo salva la credenziale dove la dashboard la cerca (localStorage/sessionStorage) e
+    reindirizza: così le dashboard esistenti restano invariate. Marcata no-store dall'handler."""
+    if livello not in ("admin", "host", "bunker"):
+        livello = "host"
+    # (titolo, sottotitolo, HTML dei campi, JS di invio) per ruolo
+    if livello == "admin":
+        titolo, sub = "Area amministrazione", "Accesso riservato"
+        campi = ('<input id="k" type="password" placeholder="Chiave admin" '
+                 'autocomplete="current-password" aria-label="Chiave admin">')
+        js = ("var k=document.getElementById('k').value;"
+              "if(!k){msg('Inserisci la chiave.');return;}btn(true);try{"
+              "var r=await fetch('/api/admin/login',{method:'POST',headers:{'X-Admin-Key':k}});"
+              "if(r.status===200){try{localStorage.setItem('bookinvip_admin_key',k);}catch(e){}"
+              "location.replace('/admin.html');}"
+              "else if(r.status===429){msg('Troppi tentativi, riprova tra poco.');btn(false);}"
+              "else{msg('Chiave errata.');btn(false);}"
+              "}catch(e){msg('Errore di rete.');btn(false);}")
+    elif livello == "bunker":
+        titolo, sub = "Bunker · super-admin", "Doppia chiave richiesta"
+        campi = ('<input id="k" type="password" placeholder="Chiave admin" '
+                 'autocomplete="current-password" aria-label="Chiave admin">'
+                 '<input id="c" type="password" placeholder="Codice super-admin" '
+                 'autocomplete="one-time-code" aria-label="Codice super-admin">')
+        js = ("var k=document.getElementById('k').value,c=document.getElementById('c').value;"
+              "if(!k||!c){msg('Inserisci chiave admin e codice super-admin.');return;}btn(true);try{"
+              "var r=await fetch('/api/bunker/login',{method:'POST',headers:"
+              "{'Content-Type':'application/json','X-Admin-Key':k},body:JSON.stringify({codice:c})});"
+              "var d=null;try{d=await r.json();}catch(_){}"
+              "if(r.status===200&&d&&d.sessione){try{sessionStorage.setItem('bv_bunker_sess',d.sessione);}catch(e){}"
+              "location.replace('/bunker.html');}"
+              "else if(r.status===429){msg('Troppi tentativi, riprova tra poco.');btn(false);}"
+              "else if(r.status===503){msg('Bunker non configurato.');btn(false);}"
+              "else{msg('Chiave o codice errato.');btn(false);}"
+              "}catch(e){msg('Errore di rete.');btn(false);}")
+    else:
+        titolo, sub = "Area host", "Accedi al tuo pannello"
+        campi = ('<input id="em" type="email" placeholder="Email" autocomplete="username" '
+                 'aria-label="Email"><input id="pw" type="password" placeholder="Password" '
+                 'autocomplete="current-password" aria-label="Password">')
+        js = ("var em=document.getElementById('em').value,pw=document.getElementById('pw').value;"
+              "if(!em||!pw){msg('Inserisci email e password.');return;}btn(true);try{"
+              "var r=await fetch('/api/host/login',{method:'POST',headers:"
+              "{'Content-Type':'application/json'},body:JSON.stringify({email:em,password:pw})});"
+              "var d=null;try{d=await r.json();}catch(_){}"
+              "if(r.status===200&&d&&d.token){try{localStorage.setItem('bookinvip_host_token',d.token);"
+              "localStorage.setItem('bookinvip_host_email',em);}catch(e){}location.replace('/host.html');}"
+              "else if(r.status===429){msg('Troppi tentativi, riprova tra poco.');btn(false);}"
+              "else{msg('Email o password errata.');btn(false);}"
+              "}catch(e){msg('Errore di rete.');btn(false);}")
+    esc_t = titolo.replace("&", "&amp;").replace("<", "&lt;")
+    esc_s = sub.replace("&", "&amp;").replace("<", "&lt;")
+    return (
+        '<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        '<meta name="robots" content="noindex, nofollow">'
+        '<title>' + esc_t + ' · BookinVIP</title><style>'
+        'body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#0f1420;'
+        'color:#e6ebf3;margin:0;min-height:100vh;display:flex;align-items:center;'
+        'justify-content:center;padding:1.2rem}'
+        '.c{background:#171d2b;border:1px solid #26304a;border-radius:1.2rem;'
+        'box-shadow:0 12px 40px rgba(0,0,0,.35);padding:2.2rem 1.9rem;max-width:380px;width:100%}'
+        '.logo{font-weight:800;font-size:1.25rem;margin-bottom:.2rem}.logo b{color:#c8a24a}'
+        '.sub{color:#9aa7bd;font-size:.9rem;margin-bottom:1.3rem}'
+        'input{display:block;width:100%;box-sizing:border-box;background:#0c111b;'
+        'border:1px solid #2a3550;color:#e6ebf3;border-radius:.6rem;padding:.7rem .8rem;'
+        'margin-bottom:.7rem;font-size:1rem}'
+        'button{width:100%;background:#c8a24a;color:#0f1420;font-weight:700;border:0;'
+        'border-radius:.6rem;padding:.8rem;font-size:1rem;cursor:pointer}'
+        'button:disabled{opacity:.6;cursor:default}'
+        '.m{color:#ff8f8f;font-size:.88rem;min-height:1.1rem;margin-top:.7rem;text-align:center}'
+        '.eye{float:right;margin-top:-2.55rem;margin-right:.5rem;position:relative;'
+        'cursor:pointer;font-size:1.05rem;opacity:.7}'
+        '</style></head><body><div class="c">'
+        '<div class="logo">🏰 Bookin<b>VIP</b></div><div class="sub">' + esc_s + '</div>'
+        '<form id="f" autocomplete="on">' + campi +
+        '<button id="go" type="submit">Entra</button></form>'
+        '<div class="m" id="m"></div>'
+        '<script>'
+        'function msg(t){document.getElementById("m").textContent=t||"";}'
+        'function btn(b){document.getElementById("go").disabled=b;'
+        'document.getElementById("go").textContent=b?"…":"Entra";}'
+        'document.querySelectorAll(\'input[type=password]\').forEach(function(p){'
+        'var e=document.createElement("span");e.className="eye";e.textContent="👁";'
+        'e.onclick=function(){p.type=p.type==="password"?"text":"password";};'
+        'p.insertAdjacentElement("afterend",e);});'
+        'document.getElementById("f").addEventListener("submit",async function(ev){'
+        'ev.preventDefault();' + js + '});'
+        '</script></body></html>')
+
+
 def _punteggio_consigliato(c: Dict[str, Any]) -> int:
     """Punteggio di qualità di un annuncio per l'ordinamento 'consigliati' (i migliori in cima,
     come i colossi). PURO/deterministico, usa SOLO segnali già disponibili nella card (nessun
@@ -1050,6 +1143,10 @@ class RouterHTTP:
             return self._bunker_log(query, headers)
         if metodo == "POST" and path == "/api/bunker/logout":
             return self._bunker_logout(body, headers)
+        if metodo == "POST" and path == "/api/admin/login":
+            return self._admin_login(body, headers)      # gatekeeper: cookie sessione admin
+        if metodo == "POST" and path == "/api/gate/logout":
+            return self._gate_logout(body, headers)      # gatekeeper: cancella i cookie
         if metodo == "GET" and path == "/api/bunker/export_contabile":
             return self._bunker_export_contabile(query, headers)
         if metodo == "GET" and path == "/api/bunker/dac7_conformita":
@@ -1380,7 +1477,9 @@ class RouterHTTP:
         if k:
             self._rate.riuscito(k)
         logger.warning("BUNKER: ingresso OK (%s) ip=%s", esito, ip)
-        return 200, {"ok": True, "sessione": sess, "scade_tra_sec": 15 * 60, "modo": esito}
+        ttl = self._GATE_TTL["bunker"]              # gatekeeper: cookie di pagina bunker (15 min)
+        return 200, {"ok": True, "sessione": sess, "scade_tra_sec": 15 * 60, "modo": esito,
+                     "_cookie": [("bv_bunker", self._gate_firma("bunker", ttl), ttl)]}
 
     def _bunker_auth(self, headers, *, azione=""):
         """True se il chiamante ha una sessione Bunker valida (X-Bunker-Session + IP).
@@ -1682,7 +1781,8 @@ class RouterHTTP:
                                    self._client_ip(headers))
             except Exception:
                 logger.warning("bunker logout: revoca fallita (ISOLATA)", exc_info=True)
-        return 200, {"ok": True}
+        # gatekeeper: cancella anche il cookie di pagina (oltre a revocare la sessione API)
+        return 200, {"ok": True, "_cookie": [("bv_bunker", "", 0)]}
 
     def _bunker_stato(self, query, headers):
         """Sala di controllo (read-only): conferma di essere nel Bunker + auto-diagnosi
@@ -4019,7 +4119,12 @@ class RouterHTTP:
                 if bloccato:
                     logger.warning("RATE-LIMIT login: SOGLIA superata, lockout %ds ip=%s "
                                    "email=%r", attesa, ip, str(email)[:120])
-        return (200 if e.ok else 401), e.as_dict()
+        corpo = e.as_dict()
+        if e.ok:                                    # gatekeeper: emette il cookie di pagina host
+            ttl = self._GATE_TTL["host"]
+            corpo = dict(corpo)
+            corpo["_cookie"] = [("bv_host", self._gate_firma("host", ttl), ttl)]
+        return (200 if e.ok else 401), corpo
 
     def _host_referral(self, query, headers):
         """Link di invito dell'host + credito disponibile (viral loop fase76)."""
@@ -4650,6 +4755,84 @@ class RouterHTTP:
             seg = seg.encode("utf-8")
         atteso = _h.new(seg, hid.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
         return hid if _h.compare_digest(sig, atteso) else None
+
+    # ── GATEKEEPER: sessione-PAGINA firmata (cookie) per servire le pagine riservate ──
+    # Il denaro/i dati erano gia' protetti sull'API (ogni azione verifica il token). Questo
+    # e' l'hardening in piu': la STRUTTURA delle pagine admin/bunker/host NON viene servita a
+    # chi non ha una sessione valida (zero information leakage). Il cookie firma SOLO "questo
+    # browser ha passato il login <livello>": stateless (come FirmaQuote), niente stato in RAM.
+    # L'auth dell'API resta invariata (header token) -> immune a CSRF (un cookie SameSite=Lax
+    # da solo non basta: le chiamate che muovono dati vogliono comunque l'header, non-settabile
+    # cross-site). Il cookie e' HttpOnly (mai leggibile da JS/XSS) + Secure (solo HTTPS).
+    def _gate_segreto(self):
+        seg = getattr(getattr(self._sys, "config", None), "segreto_hmac", b"") or b""
+        return seg.encode("utf-8") if isinstance(seg, str) else seg
+
+    def _gate_firma(self, livello, ttl_sec=43200):
+        """Cookie firmato 'livello|scadenza|nonce|hmac' (HMAC-SHA256, segreto del progetto)."""
+        import base64
+        import hashlib
+        import hmac as _h
+        import os as _os
+        import time as _t
+        exp = int(_t.time()) + int(ttl_sec)
+        nonce = base64.urlsafe_b64encode(_os.urandom(9)).decode("ascii").rstrip("=")
+        corpo = "%s|%d|%s" % (livello, exp, nonce)
+        sig = _h.new(self._gate_segreto(), corpo.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+        return corpo + "|" + sig
+
+    def _gate_valida(self, valore, livello_atteso):
+        """True se il cookie e' firmato bene, del livello giusto e NON scaduto. Costante-tempo."""
+        import hashlib
+        import hmac as _h
+        import time as _t
+        if not (isinstance(valore, str) and valore.count("|") == 3):
+            return False
+        livello, exp, nonce, sig = valore.split("|")
+        if livello != livello_atteso:
+            return False
+        corpo = "%s|%s|%s" % (livello, exp, nonce)
+        atteso = _h.new(self._gate_segreto(), corpo.encode("utf-8"),
+                        hashlib.sha256).hexdigest()[:32]
+        if not _h.compare_digest(sig, atteso):
+            return False
+        try:
+            return int(exp) > int(_t.time())
+        except (ValueError, TypeError):
+            return False
+
+    @staticmethod
+    def _leggi_cookie(headers, nome):
+        """Estrae UN cookie dal header 'Cookie' (parsing tollerante, senza dipendenze)."""
+        raw = ""
+        if isinstance(headers, dict):
+            raw = headers.get("Cookie", "") or headers.get("cookie", "")
+        for parte in str(raw).split(";"):
+            k, _, v = parte.strip().partition("=")
+            if k == nome:
+                return v.strip()
+        return ""
+
+    # durata sessione-pagina per livello (secondi). Bunker corto = 15 min (come la sua sessione).
+    _GATE_TTL = {"admin": 12 * 3600, "host": 12 * 3600, "bunker": 15 * 60}
+
+    def _admin_login(self, body, headers):
+        """Login di PAGINA per l'admin: verifica la chiave admin (rate-limited come le altre
+        rotte admin) e, se giusta, emette il cookie di sessione 'bv_admin'. Non introduce una
+        credenziale nuova: la chiave e' la stessa di sempre (inviata come X-Admin-Key)."""
+        if self._admin_key is None:
+            return 503, {"errore": "admin_non_configurato"}
+        if not self._auth_admin(headers):        # confronto costante-tempo + rate-limit dentro
+            return 401, {"errore": "unauthorized"}
+        ttl = self._GATE_TTL["admin"]
+        return 200, {"ok": True, "_cookie": [("bv_admin", self._gate_firma("admin", ttl), ttl)]}
+
+    def _gate_logout(self, body, headers):
+        """Logout di PAGINA: cancella TUTTI i cookie di sessione (Max-Age=0). Cosi' dopo il
+        logout la ri-navigazione a una pagina riservata torna al login (con le pagine gia'
+        marcate no-store, il browser non ne conserva copia)."""
+        vuoti = [("bv_admin", "", 0), ("bv_host", "", 0), ("bv_bunker", "", 0)]
+        return 200, {"ok": True, "_cookie": vuoti}
 
     def _host_calendario_prezzi(self, query, headers):
         """Calendario PREZZI giorno-per-giorno dell'alloggio (fase119): per ogni giorno stato +
@@ -5449,10 +5632,31 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Host-Key")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
+        def _cookie_secure(self):
+            """Secure solo se la richiesta e' HTTPS (nginx setta X-Forwarded-Proto=https in
+            prod -> sempre Secure; in locale su http resta off, cosi' il test manuale funziona)."""
+            proto = (self.headers.get("X-Forwarded-Proto", "")
+                     or self.headers.get("x-forwarded-proto", "")).lower()
+            return "; Secure" if proto in ("", "https") else ""
+
+        def _emetti_cookie(self, cookies):
+            """Set-Cookie HttpOnly + SameSite=Lax (+ Secure in HTTPS). Max-Age=0 = cancella."""
+            sec = self._cookie_secure()
+            for nome, valore, max_age in cookies:
+                self.send_header("Set-Cookie",
+                                 "%s=%s; HttpOnly%s; SameSite=Lax; Path=/; Max-Age=%d"
+                                 % (nome, valore, sec, int(max_age)))
+
         def _scrivi(self, status, corpo):
+            cookies = None
+            if isinstance(corpo, dict) and "_cookie" in corpo:
+                corpo = dict(corpo)
+                cookies = corpo.pop("_cookie")          # direttiva interna: non finisce nel JSON
             dati = json.dumps(corpo, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
+            if cookies:
+                self._emetti_cookie(cookies)
             self._cors()
             self.end_headers()
             if not getattr(self, '_solo_head', False):   # HEAD = header senza corpo
@@ -5476,7 +5680,14 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             if not getattr(self, '_solo_head', False):   # HEAD = header senza corpo
                 self.wfile.write(dati)
 
-        def _statico(self, path):
+        def _no_store(self):
+            """Header anti-cache: il browser NON conserva la pagina (dopo il logout non
+            riappare dalla cache/back). Requisito del gatekeeper."""
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, private")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+
+        def _statico(self, path, no_store=False):
             fpath = percorso_statico_sicuro(path, cartella_statica)
             if fpath is None or not os.path.isfile(fpath):
                 self._scrivi(404, {"errore": "file_non_trovato"})
@@ -5492,15 +5703,42 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             self.send_response(200)
             self.send_header("Content-Type", ctype)
             self.send_header("Service-Worker-Allowed", "/")
+            if no_store:
+                self._no_store()
             self._cors()
             self.end_headers()
             if not getattr(self, '_solo_head', False):   # HEAD = header senza corpo
                 self.wfile.write(dati)
 
-        def _testo(self, status, ctype, testo):
+        # basename -> livello richiesto per le pagine RISERVATE (gatekeeper server-side)
+        _PAGINE_GATED = {"admin.html": "admin", "bunker.html": "bunker", "host.html": "host"}
+
+        def _servi_gated(self, path):
+            """GATEKEEPER: serve una pagina riservata SOLO con cookie di sessione valido.
+            Senza sessione: 302 al login del ruolo, NESSUN byte della dashboard spedito.
+            Con sessione: serve la dashboard marcata no-store (post-logout non riappare)."""
+            if os.environ.get("PAGE_GATE", "1") == "0":     # kill-switch d'emergenza
+                self._statico(path, no_store=True)
+                return
+            base = os.path.basename(path).lower()
+            livello = self._PAGINE_GATED.get(base)
+            cookie = router._leggi_cookie(dict(self.headers), "bv_" + livello) if livello else ""
+            if not (livello and router._gate_valida(cookie, livello)):
+                # non autenticato -> la pagina, per lui, "non esiste": lo mandiamo al login
+                self.send_response(302)
+                self.send_header("Location", "/entra-" + (livello or "host"))
+                self._no_store()
+                self._cors()
+                self.end_headers()
+                return
+            self._statico(path, no_store=True)              # autenticato: dashboard, mai cacheata
+
+        def _testo(self, status, ctype, testo, no_store=False):
             dati = testo.encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", ctype + "; charset=utf-8")
+            if no_store:
+                self._no_store()
             self._cors()
             self.end_headers()
             if not getattr(self, '_solo_head', False):   # HEAD = header senza corpo
@@ -5725,6 +5963,13 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                             "<body style='font-family:system-ui;max-width:32rem;margin:4rem "
                             "auto;text-align:center'><h1>BookinVIP</h1><p style='font-size:"
                             "1.1rem'>%s</p></body>" % msg)
+            elif u.path in ("/entra-admin", "/entra-host", "/entra-bunker"):
+                # PAGINA DI LOGIN pubblica: SOLO il form del ruolo, zero struttura dashboard.
+                self._testo(200, "text/html",
+                            pagina_login_gate(u.path[len("/entra-"):], base_url),
+                            no_store=True)
+            elif os.path.basename(u.path).lower() in ("admin.html", "bunker.html", "host.html"):
+                self._servi_gated(u.path)            # GATEKEEPER server-side (cookie o 302 login)
             else:
                 self._statico(u.path)
 

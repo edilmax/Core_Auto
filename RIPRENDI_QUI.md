@@ -132,8 +132,30 @@
 >   `do_GET` streamma sul socket; scaricabile da bunker.html (💼 Centro Fiscale). Provato LIVE (403 gated,
 >   footer, audit). Nota onesta: zero-RAM è a livello app; nginx può bufferizzare file giganti (refinement:
 >   `proxy_buffering off`). **PROSSIMI Centro Fiscale (servono dati fiscali — P.IVA/IBAN già in .env.casavip)**:
->   DAC7 (obbligo UE), tassa per Comune, commissioni+IVA, fatture numerate, riconciliazione Stripe.
+>   ~~DAC7~~ ✅ FATTO (riga sotto), tassa per Comune, commissioni+IVA, fatture numerate, riconciliazione Stripe.
 >   Dettaglio: righe 💼/🧰/🎛️/🔐/🗄️/🏰/🚪 REGISTRO sez.1 + [[bookinvip-bunker-field]].
+> · 🇪🇺 **DAC7 COMPLIANCE (Incremento 5) — FATTO `871c4eb` (2026-07-19)**: obbligo UE 2021/514
+>   (segnalare al Fisco gli host ≥30 pren O ≥€2000/anno). ① host fornisce i dati fiscali
+>   (`POST /api/host/dati_fiscali`, colonne+migrazione fase88); ② `fase177.aggrega_dac7(anno)`
+>   dal giornale immutabile (lordo=incasso−tassa, commissioni=lordo−netto, per TRIMESTRE);
+>   ③ conformità Bunker (`/api/bunker/dac7_conformita`: "urgente"=reportabile MA incompleto);
+>   ④ report certificato STREAMING (`/api/bunker/dac7_report`: solo reportabili, dati fiscali+
+>   Q1-4+immobili, footer `# FINE REPORT DAC7 - INTEGRITÀ: <hash>`, audit DAC7_REPORT_GENERATED,
+>   gated 403, zero file su disco); riusa fase100.valuta_dac7 per la soglia. bunker.html: 2 pannelli
+>   (Conformità + Genera report, anno selezionabile). test_dac7 (4). Suite 2601 verde al momento
+>   del commit. PROSSIMI opzionali: blocco payout non-conformi, giorni-affitto per immobile.
+> · 🚪 **GATEKEEPER SERVER-SIDE (fortezza a porta chiusa) — FATTO (2026-07-19)**: la STRUTTURA
+>   di admin/bunker/host.html non viene più servita ai non autenticati (prima: 200 a chiunque =
+>   ricognizione gratis; ora: **302 → `/entra-admin|host|bunker`**, form-only server-rendered,
+>   noindex, no-store). VERITÀ: denaro/dati erano GIÀ protetti (API a token, invariata → niente
+>   CSRF dal cookie); questo chiude l'information leakage. Cookie `bv_<ruolo>` firmato HMAC
+>   stateless (livello|scadenza|nonce|firma), HttpOnly+Secure(X-Forwarded-Proto)+SameSite=Lax,
+>   TTL 12h (bunker 15min); emesso dai login (nuovo `POST /api/admin/login` riusa la chiave
+>   admin), cancellato dai logout (`/api/gate/logout`); dashboard servite con
+>   `Cache-Control: no-store` (post-logout niente cache/back). Ponte zero-churn: le pagine
+>   login salvano la credenziale dove le dashboard già la cercano. KILL-SWITCH `PAGE_GATE=0`.
+>   test_gatekeeper (11, VERO server HTTP). **Suite 2612 verde (3 skip).** NB dopo il deploy:
+>   tutti rifanno login UNA volta (il cookie nasce solo dal login).
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare

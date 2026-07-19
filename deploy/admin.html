@@ -331,6 +331,8 @@ document.getElementById('btnLogout').onclick = async function(){
   // logout: revoca la sessione Bunker sul server (se attiva) e azzera tutto in locale.
   // fetchTempo = wrapper unico (timeout+esito); mai fetch nuda.
   try{ if(bunkerAttivo()) await fetchTempo(API+'/api/bunker/logout',{method:'POST',headers:bunkerHdr({'X-Admin-Key':key()})}); }catch(_){ console.warn('bookinvip-admin',_); }
+  try{ await fetchTempo(API+'/api/gate/logout',{method:'POST'}); }catch(_){ console.warn('bookinvip-admin',_); }   // cancella il cookie di pagina
+  try{ localStorage.removeItem('bookinvip_admin_key'); }catch(_){ console.warn('bookinvip-admin',_); }
   BUNKER_SESS=''; BUNKER_EXP=0; document.getElementById('adminkey').value=''; location.reload();
 };
 if(window.BV&&BV.occhielli) BV.occhielli();   // 👁 su ogni input password
