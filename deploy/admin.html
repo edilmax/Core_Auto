@@ -284,7 +284,7 @@ async function caricaAlloggi(pagina){
       const del=`<button class="alDel btn-riga" data-h="${esc(a.host_id)}" style="background:var(--rosso);margin-left:.3rem">${T('al_delhost')}</button>`;
       return `<tr><td style="font-weight:700;color:var(--brand)">#${a.id}</td><td>${esc(a.titolo)}</td><td>${esc(a.citta)}</td><td style="font-size:.76rem;color:var(--testo-tenue)">${esc(a.host_id)}</td><td>${money(a.prezzo_notte_cents,a.valuta)}</td><td>${esc(a.stato)}</td><td style="white-space:nowrap">${az}${del}</td></tr>`;
     }).join('');
-    tb.querySelectorAll('.alStato').forEach(b=>b.onclick=()=>conScudo(b,()=>cambiaStatoAdmin(b.dataset.s,b.dataset.st)));
+    tb.querySelectorAll('.alStato').forEach(b=>b.onclick=()=>{ if(!confirm("Impostare l'annuncio \""+b.dataset.s+"\" su \""+b.dataset.st+"\"?")) return; conScudo(b,()=>cambiaStatoAdmin(b.dataset.s,b.dataset.st)); });
     // SICUREZZA: il pulsante nella riga NON cancella; SELEZIONA solo l'host nel riquadro
     // rosso qui sotto. La cancellazione avviene solo premendo il tasto rosso dedicato (con
     // conferma) -> due passi deliberati, niente cancellazioni accidentali con un clic.

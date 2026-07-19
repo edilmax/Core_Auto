@@ -57,6 +57,7 @@ async function carica(l){
   try{
     const r = await BV.fetchTempo(API+'/api/legale/contratto-host?lang='+l);   // timeout 15s (fonte unica)
     const d = await r.json();
+    if(!r.ok || d.errore || !d.versione) throw new Error(d.errore || ('http '+r.status));  // niente "Versione undefined" sul 503
     document.getElementById('testo').textContent = d.testo || '(testo non disponibile)';
     const dl = l==='en'
       ? 'Version <b>'+d.versione+'</b> · binding text: Italian · document fingerprint (SHA-256): <b>'+d.doc_sha256+'</b>'

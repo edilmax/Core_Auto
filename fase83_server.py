@@ -774,7 +774,8 @@ def pagina_login_gate(livello: str, base_url: str = "") -> str:
               "var r=await fetch('/api/bunker/login',{method:'POST',headers:"
               "{'Content-Type':'application/json','X-Admin-Key':k},body:JSON.stringify({codice:c})});"
               "var d=null;try{d=await r.json();}catch(_){}"
-              "if(r.status===200&&d&&d.sessione){try{sessionStorage.setItem('bv_bunker_sess',d.sessione);}catch(e){}"
+              "if(r.status===200&&d&&d.sessione){try{sessionStorage.setItem('bv_bunker_sess',d.sessione);"
+              "sessionStorage.setItem('bv_bunker_exp',String(Date.now()+1000*(d.scade_tra_sec||900)));}catch(e){}"
               "location.replace('/bunker.html');}"
               "else if(r.status===429){msg('Troppi tentativi, riprova tra poco.');btn(false);}"
               "else if(r.status===503){msg('Bunker non configurato.');btn(false);}"
@@ -1008,6 +1009,8 @@ class RouterHTTP:
             return self._book(body)
         if metodo == "POST" and path == "/api/concierge/cancella":
             return self._cancella_prenotazione(body)
+        if metodo == "GET" and path == "/api/concierge/manifest":
+            return self._concierge_manifest()
         if metodo == "POST" and path == "/api/preventivo/email":
             return self._preventivo_email(body)
         if metodo == "POST" and path == "/api/split/preview":
@@ -4303,6 +4306,35 @@ class RouterHTTP:
             return 400, {"errore": "json_non_valido"}
         r = fn(dati)
         return int(getattr(r, "status", 200)), getattr(r, "corpo", {}) or {}
+
+    def _concierge_manifest(self):
+        """MANIFEST machine-readable per AGENTI AI — PROMESSO da /llms.txt (fase97) e prima
+        inesistente: gli agenti ricevevano 404 (trovato dall'ispezione collegamenti
+        2026-07-20). Descrive il flusso concierge in 3 passi. Il prezzo vive DENTRO
+        quote_token FIRMATO: l'agente non puo' alterarlo. Sola lettura, nessuna chiave."""
+        base = (self._base_url or "").rstrip("/")
+        return 200, {
+            "nome": "BookinVIP Concierge",
+            "versione": 1,
+            "mcp": base + "/api/mcp",
+            "moneta": "centesimi interi (cents), mai float",
+            "catalogo": {"metodo": "GET", "path": "/api/catalogo",
+                         "nota": "ricerca alloggi (citta', date, ospiti)"},
+            "flusso": [
+                {"passo": 1, "metodo": "POST", "path": "/api/concierge/quote",
+                 "body": {"alloggio_id": "string", "check_in": "YYYY-MM-DD",
+                          "check_out": "YYYY-MM-DD", "party": "int"},
+                 "ritorna": ["quote_token (prezzo FIRMATO dal sistema)",
+                             "prezzo_guest_cents", "valuta"]},
+                {"passo": 2, "metodo": "POST", "path": "/api/concierge/book",
+                 "body": {"quote_token": "string", "email": "string"},
+                 "ritorna": ["riferimento", "voucher_token",
+                             "payment_url (Stripe; assente se l'host deve approvare)"]},
+                {"passo": 3, "metodo": "POST", "path": "/api/concierge/cancella",
+                 "body": {"voucher_token": "string"},
+                 "ritorna": ["rimborso calcolato dalla politica di cancellazione, in cents"]},
+            ],
+        }
 
     def _concierge_quote(self, body):
         """Preventivo firmato (fase59) + CONFRONTO OTA lato ospite (fase125): a parita' di

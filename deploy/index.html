@@ -368,7 +368,7 @@ document.addEventListener('keydown',e=>{ const lb=document.getElementById('lb');
 // ❤ PREFERITI senza login (errore dei colossi: li chiudono dietro account) — localStorage
 function favSet(){ try{ return new Set(JSON.parse(localStorage.getItem('bookinvip_fav')||'[]')); }catch(e){ return new Set(); } }
 function favToggle(slug,el){ const f=favSet(); f.has(slug)?f.delete(slug):f.add(slug);
-  localStorage.setItem('bookinvip_fav', JSON.stringify([...f]));
+  try{ localStorage.setItem('bookinvip_fav', JSON.stringify([...f])); }catch(e){ console.warn('fav', e); }  // storage bloccato (private mode): il click non deve rompersi
   el.textContent=f.has(slug)?'❤':'🤍'; aggiornaFavBtn(); }
 function aggiornaFavBtn(){ const b=document.getElementById('btnFav'); if(!b) return;
   const n=favSet().size; b.style.display=n?'inline-block':'none'; b.textContent='❤ '+n; }
@@ -437,14 +437,17 @@ const MAP_T={
   es:{lista:'Lista',centro0:'en pleno centro',centro:'del centro',mappa:'Mapa',vedi:'Ver',flex:'Fechas flexibles (± 3 días)',sc_lungo:'Descuento estancia larga',b1:'Estamos en fase de prueba y construcción — abrimos pronto.',b2:'Preparamos un servicio más avanzado y económico para ti. Mientras tanto ya está abierto a anfitriones:',b3:'publica tu alojamiento ahora →',vuota:'Aún no hay alojamientos con ubicación en el mapa.',ko:'Mapa no disponible ahora.'},
   fr:{lista:'Liste',centro0:'en plein centre',centro:'du centre',mappa:'Carte',vedi:'Voir',flex:'Dates flexibles (± 3 jours)',sc_lungo:'Réduction long séjour',b1:'Nous sommes en phase de test et construction — ouverture bientôt.',b2:'Nous préparons un service plus avancé et plus économique. En attendant, c’est déjà ouvert aux hôtes :',b3:'publiez votre logement maintenant →',vuota:'Aucun logement localisé sur la carte pour l’instant.',ko:'Carte indisponible.'},
   de:{lista:'Liste',centro0:'mitten im Zentrum',centro:'vom Zentrum',mappa:'Karte',vedi:'Ansehen',flex:'Flexible Daten (± 3 Tage)',sc_lungo:'Langzeit-Rabatt',b1:'Wir sind in der Test- und Aufbauphase — bald geöffnet.',b2:'Wir bereiten einen fortschrittlicheren und günstigeren Service vor. Für Gastgeber ist schon offen:',b3:'jetzt Unterkunft einstellen →',vuota:'Noch keine Unterkünfte mit Kartenposition.',ko:'Karte nicht verfügbar.'},
-  pt:{lista:'Lista',centro0:'em pleno centro',centro:'do centro',mappa:'Mapa',vedi:'Ver',flex:'Datas flexíveis (± 3 dias)',sc_lungo:'Desconto estadia longa',b1:'Estamos em fase de teste e construção — abrimos em breve.',b2:'Estamos a preparar um serviço mais avançado e económico. Entretanto já está aberto a anfitriões:',b3:'publique o seu alojamento agora →',vuota:'Ainda sem alojamentos com localização no mapa.',ko:'Mapa indisponível.'}
+  pt:{lista:'Lista',centro0:'em pleno centro',centro:'do centro',mappa:'Mapa',vedi:'Ver',flex:'Datas flexíveis (± 3 dias)',sc_lungo:'Desconto estadia longa',b1:'Estamos em fase de teste e construção — abrimos em breve.',b2:'Estamos a preparar um serviço mais avançado e económico. Entretanto já está aberto a anfitriões:',b3:'publique o seu alojamento agora →',vuota:'Ainda sem alojamentos com localização no mapa.',ko:'Mapa indisponível.'},
+  ja:{lista:'リスト',centro0:'中心部のど真ん中',centro:'中心から',mappa:'地図',vedi:'見る',flex:'柔軟な日付（±3日）',sc_lungo:'長期滞在割引',b1:'現在テスト・構築中です — まもなくオープン。',b2:'より高度でお得なサービスを準備中です。ホストの皆様は既にご利用いただけます：',b3:'今すぐ宿を掲載 →',vuota:'地図に位置情報付きの宿はまだありません。',ko:'地図は現在ご利用いただけません。'},
+  zh:{lista:'列表',centro0:'市中心核心地段',centro:'距市中心',mappa:'地图',vedi:'查看',flex:'灵活日期（±3天）',sc_lungo:'长住折扣',b1:'我们正在测试和建设中 — 即将开放。',b2:'我们正在为您打造更先进、更实惠的服务。房东现已可以入驻：',b3:'立即发布您的房源 →',vuota:'暂无带地图位置的房源。',ko:'地图暂时不可用。'}
 };
 function fmtCentro(m){ return m<150 ? mt('centro0') : (fmtDist(m)+' '+mt('centro')); }
 function mt(k){ return (MAP_T[LANG]||MAP_T.en)[k] || MAP_T.en[k] || k; }
 function localizzaMappa(){
   const a=document.getElementById('lblLista'), b=document.getElementById('lblMappa');
   if(a) a.textContent=mt('lista'); if(b) b.textContent=mt('mappa');
-  ['b1','b2','b3'].forEach(k=>{const e=document.getElementById(k); if(e) e.textContent=mt(k);});
+  // gli id nel DOM sono beta1/2/3, le chiavi del dizionario b1/2/3
+  ['b1','b2','b3'].forEach(k=>{const e=document.getElementById('beta'+k.slice(1)); if(e) e.textContent=mt(k);});
   {const lf=document.getElementById('lblFlex'); if(lf) lf.textContent=mt('flex');}
 }
 function caricaLeaflet(){

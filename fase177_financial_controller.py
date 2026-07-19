@@ -218,6 +218,7 @@ class FinancialController:
         con = self._apri()
         try:
             prev = "GENESI"
+            righe = 0
             for r in con.execute("SELECT * FROM libro_giornale ORDER BY seq"):
                 atteso = hashlib.sha256(self._canonico(
                     r["evento_id"], int(r["ts"]), r["tipo"], r["riferimento"],
@@ -227,7 +228,8 @@ class FinancialController:
                 if r["prev_hash"] != prev or r["hash"] != atteso:
                     return {"ok": False, "seq_rotta": int(r["seq"])}
                 prev = r["hash"]
-            return {"ok": True, "seq_rotta": None, "testa": prev}
+                righe += 1
+            return {"ok": True, "seq_rotta": None, "testa": prev, "righe": righe}
         finally:
             con.close()
 

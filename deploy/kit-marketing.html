@@ -102,9 +102,10 @@ Grazie,
 </div>
 <script>
 function cp(btn){
-  const txt = btn.parentNode.textContent.replace('📋 Copia','').trim();
-  navigator.clipboard.writeText(txt).then(()=>{ btn.textContent='✅ Copiato'; btn.classList.add('ok');
-    setTimeout(()=>{ btn.textContent='📋 Copia'; btn.classList.remove('ok'); },1500); });
+  if(btn.disabled) return;                               // secondo click durante "Copiato": niente testo sporco ne' timer doppi
+  const txt=[...btn.parentNode.childNodes].filter(n=>n!==btn).map(n=>n.textContent).join('').trim();
+  navigator.clipboard.writeText(txt).then(()=>{ btn.disabled=true; btn.textContent='✅ Copiato'; btn.classList.add('ok');
+    setTimeout(()=>{ btn.textContent='📋 Copia'; btn.classList.remove('ok'); btn.disabled=false; },1500); });
 }
 </script>
 </body>
