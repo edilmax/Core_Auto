@@ -1,9 +1,10 @@
 # 🚀 DEPLOY — come si mette online BookinVIP
 
 > Documento ufficiale, aggiornato **2026-07-20**. Descrive la procedura **reale** usata in
-> produzione. La versione precedente di questo file descriveva il **vecchio stack**
-> (Flask + gunicorn + Postgres su un server Aruba che non usiamo più): quella documentazione
-> è stata archiviata in `_archivio/`. **Seguire solo questo file.**
+> produzione, e **solo quella**: qui dentro non c'è alcun comando che non si debba eseguire.
+> La versione precedente di questo file descriveva un impianto e un server **dismessi**, con
+> una sequenza di aggiornamento che su questa macchina **fallisce**: è stata archiviata in
+> `_archivio/` e non va più consultata. **Seguire solo questo file.**
 
 ## 1. Dove gira il prodotto
 
@@ -122,8 +123,47 @@ poi `build` + `up -d`. Obiettivo: **meno di un'ora**, DNS e certificato esclusi.
 
 ---
 
+## 8. ⛔ PULIZIA DEL SERVER — la regola che ci è costata cara
+
+**Mai eseguire `git clean` (né cancellazioni a mano) sul VPS senza aver prima controllato i
+bind-mount del compose.** Alcune cartelle **non tracciate da git sono mount vivi**: cancellarle
+non fa cadere il sito subito, lo fa morire **settimane dopo**.
+
+**È già successo (2026-07-20):** una pulizia dei file orfani ha rimosso `certbot/`, che è
+montata per la sfida di rinnovo del certificato. Il sito continuava a rispondere — il
+certificato era ancora valido — ma il rinnovo era **rotto in silenzio**: HTTPS morto alla
+scadenza, ~60 giorni dopo, senza alcun preavviso.
+
+**Peggio:** ricreare la cartella **non basta**. Docker tiene il mount agganciato alla
+directory **cancellata** (per inode), quindi il container continua a non vedere i file nuovi.
+Serve **ricreare il container**.
+
+Procedura corretta:
+
+```bash
+# 1. quali cartelle sono mount vivi? (da NON toccare mai)
+cd /var/www/bookinvip
+grep -E '^\s+- \./' docker-compose.casavip.yml | sed 's/^\s*- //' | cut -d: -f1 | sort -u
+
+# 2. solo dopo, e con una copia di sicurezza:
+cp -r <file-da-rimuovere> /root/backup-orfani-$(date +%Y%m%d)/
+git clean -fd -e certbot          # -e ESCLUDE i mount vivi
+
+# 3. se per errore un mount è stato toccato: ricreare il container che lo usa
+docker rm -f casavip_nginx && docker-compose -f docker-compose.casavip.yml up -d
+
+# 4. e VERIFICARE che il rinnovo funzioni davvero
+certbot renew --dry-run           # atteso: "all simulated renewals succeeded"
+echo prova > certbot/www/_t && docker exec casavip_nginx cat /var/www/certbot/_t && rm certbot/www/_t
+```
+
+> La verifica del punto 4 è la sola che conta: se il container **vede** il file appena scritto,
+> il mount è agganciato bene e Let's Encrypt riuscirà a rinnovare.
+
+---
+
 ### Nota storica
 
-La procedura del **vecchio stack** (Flask + gunicorn + Postgres, `docker compose up -d`,
-`.env` con `HMAC_SECRET`/`POSTGRES_PASSWORD`, healthcheck su `/api/v1/health`) è conservata
-in `_archivio/DEPLOY_CASAVIP.md` e nei report storici: **non si applica al prodotto attuale**.
+La procedura dell'impianto **precedente** (server e tecnologie ora dismessi) è conservata nei
+documenti in `_archivio/`: **non si applica al prodotto attuale** e i suoi comandi **non vanno
+eseguiti** su questa macchina.

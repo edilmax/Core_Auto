@@ -149,12 +149,19 @@ class TestEnvEDeploy(unittest.TestCase):
                   "money_path_pronto",                     # la verifica d'avvio
                   ".env.casavip"):                         # il file dei segreti vero
             self.assertIn(s, md, "DEPLOY.md non documenta: %s" % s)
-        # e deve AVVERTIRE che i comandi in stile Compose v2 non funzionano su questa
-        # macchina (NB: `docker compose up -d` compare nella "Nota storica", dove e' citato
-        # proprio come procedura SUPERATA: si controlla l'avvertenza, non la stringa).
-        self.assertIn("Docker Compose v1.29.2", md)
+        self.assertIn("Docker Compose v1.29.2", md)      # avverte: qui NON c'e' la v2
         self.assertIn("non funzionano", md)
-        self.assertIn("Nota storica", md)
+        # ZERO riferimenti al vecchio impianto: nel file non deve restare NEMMENO un comando
+        # sbagliato copiabile per errore (2026-07-20: il vecchio DEPLOY.md documentava una
+        # sequenza che su questa macchina fallisce con KeyError: ContainerConfig).
+        for vietato in ("Flask", "gunicorn", "Postgres", "POSTGRES", "Aruba",
+                        "docker compose up", "docker compose build", "/api/v1/health",
+                        "down -v"):
+            self.assertNotIn(vietato, md, "DEPLOY.md contiene ancora: %s" % vietato)
+        # e deve contenere l'AVVERTENZA sui bind-mount (l'incidente certbot del 2026-07-20)
+        for atteso in ("git clean", "bind-mount", "certbot renew --dry-run",
+                       "docker rm -f casavip_nginx"):
+            self.assertIn(atteso, md, "DEPLOY.md non avverte su: %s" % atteso)
 
 
 if __name__ == "__main__":
