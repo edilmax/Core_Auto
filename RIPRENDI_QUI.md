@@ -328,6 +328,16 @@
 >   il lavoro interrotto aveva la pagina ma NON rotta né bottone: aggiunti. Email best-effort
 >   in thread: mai bloccare i soldi. test_email_ciclo (9 × 10 giri) + 134 regressione.
 >   Riga C3 REGISTRO sez.1.
+> · ⭐ **PAGINA DI SOLA VALUTAZIONE /recensione/ (2026-07-20, dopo prova dal vivo col fondatore)**:
+>   il fondatore ha provato la demo e ha (giustamente) obiettato che il voto era dentro il
+>   VOUCHER pieno (cancella/prezzo/check-in) — "deve essere solo la votazione, come Booking".
+>   Aggiunta `pagina_recensione_html` + rotta `GET /recensione/<token>`: pagina pulita col SOLO
+>   form voto (generale + categorie), stesso token/motore/endpoint del voucher. L'email invito
+>   post-soggiorno ora punta a /recensione/ (non al voucher). **VINCOLO RISPETTATO: voucher e
+>   motore fase63 NON toccati, tutto additivo.** test_pagina_recensione (7 × 10 giri) + voucher/C3
+>   ancora verdi. Demo locale su porta 8899 (script scratchpad/demo_votazioni.py; launcher
+>   Desktop/APRI-DEMO-VOTAZIONI.html → pagina pulita). NB date "23→19" nella demo = scorciatoia
+>   (check_out forzato a ieri per sbloccare il form), NON un bug del prodotto.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare

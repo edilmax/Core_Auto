@@ -839,6 +839,120 @@ def pagina_ricevuta_html(sistema: Any, token: Any) -> Optional[str]:
          e(str(v.get("check_in", ""))), e(str(v.get("check_out", ""))), righe)
 
 
+def pagina_recensione_html(sistema: Any, token: Any, lingua: str = "it") -> Optional[str]:
+    """PAGINA DI SOLA VALUTAZIONE (2026-07-20). Il cliente ci arriva dall'email
+    post-soggiorno e vede SOLTANTO la valutazione — voto generale + categorie — senza
+    voucher/cancella/prezzo/check-in/chat. Usa lo STESSO motore (fase63) e lo STESSO
+    endpoint /api/recensioni del voucher: cambia solo la VETRINA, non il meccanismo. Il
+    diritto firmato (nbf=check-out) e' emesso qui dal server (il cliente non copia nulla).
+    Il voucher NON viene toccato. None se il token non e' un voucher valido (la rotta
+    mostra la pagina gentile)."""
+    import html
+    firma = getattr(sistema, "firma", None)
+    if firma is None:
+        return None
+    dati = firma.decodifica(token)
+    if not isinstance(dati, dict) or dati.get("tipo") != "voucher":
+        return None
+    lng = lingua if lingua in LINGUE_SUPPORTATE else "it"
+    e = html.escape
+    rif = str(dati.get("riferimento", ""))
+    allog = str(dati.get("alloggio_id", ""))
+    co = str(dati.get("check_out", ""))
+    reg = getattr(sistema, "recensioni", None)
+    emet = getattr(sistema, "emettitore_recensioni", None)
+    if reg is None or emet is None or not (rif and allog and co):
+        return None
+    import datetime as _dtv
+    import json as _jsv
+    try:
+        co_data = _dtv.date.fromisoformat(co)
+    except Exception:
+        return None
+    # titolo + stato dalla STESSA fonte della ricevuta (una sola query)
+    titolo, cancellata = allog, False
+    try:
+        pp = getattr(sistema, "pagamenti_pendenti", None)
+        st = pp.info(rif) if pp is not None else None
+        if st:
+            titolo = _jsv.loads(st.get("corpo_json") or "{}").get("titolo") or allog
+            cancellata = st.get("stato") in ("rimborsato", "cancellata_host")
+    except Exception:
+        pass
+    # corpo centrale: "dopo il soggiorno" / gia' fatta / il form (STESSO del voucher)
+    if _dtv.date.today() < co_data or cancellata:
+        msg = ("You'll be able to review once your stay is over." if lng == "en"
+               else "Potrai lasciare la recensione al termine del soggiorno.")
+        corpo = "<p style='color:#5e6f8d'>%s</p>" % e(msg)
+    elif reg.gia_recensita(rif):
+        corpo = ("<div style='color:#155724;font-weight:800;font-size:1.1rem'>"
+                 "&#11088; %s</div>" % e(_ui("rec_grazie", lng)))
+    else:
+        nbf = int(_dtv.datetime.combine(co_data, _dtv.time.min).timestamp())
+        diritto = emet.emetti(rif, allog, non_prima_ts=nbf)   # STESSA emissione del voucher
+        cats = _jsv.dumps([[c, _ui("rec_" + c, lng)] for c in
+                           ("pulizia", "comfort", "posizione", "servizi", "host",
+                            "qualita_prezzo")], ensure_ascii=True)
+        txt = _jsv.dumps({"gen": _ui("rec_generale", lng), "grazie": _ui("rec_grazie", lng),
+                          "err": _ui("errore", lng), "tok": diritto, "lng": lng},
+                         ensure_ascii=True)
+        corpo = (
+            "<div id='recBox'><div id='recRows'></div>"
+            "<textarea id='recTxt' rows='3' maxlength='2000' placeholder='" + e(_ui("rec_testo_ph", lng)) + "' "
+            "style='width:100%;padding:.6rem;border:1px solid #dce1ed;border-radius:.6rem;margin-top:.8rem'></textarea>"
+            "<button id='recSend' style='width:100%;margin-top:.6rem;padding:.9rem;border:0;border-radius:.8rem;"
+            "background:#0f4c3a;color:#fff;font-weight:800;font-size:1rem;cursor:pointer'>" + e(_ui("rec_invia", lng)) + "</button>"
+            "<div id='recMsg' style='margin-top:.6rem;font-size:.9rem'></div></div>"
+            "<script>(function(){var TXT=" + txt + ";var CATS=" + cats + ";"
+            "var voti={gen:0},rows=document.getElementById('recRows');"
+            "function riga(k,lbl){var d=document.createElement('div');"
+            "d.style.cssText='display:flex;justify-content:space-between;align-items:center;margin:.35rem 0';"
+            "var s=document.createElement('span');s.textContent=lbl;"
+            "if(k==='gen'){s.style.fontWeight='800';s.style.fontSize='1.05rem';}d.appendChild(s);"
+            "var box=document.createElement('span');"
+            "for(var i=1;i<=5;i++){(function(v){var b=document.createElement('button');"
+            "b.type='button';b.textContent='\\u2606';"
+            "b.style.cssText='border:0;background:none;font-size:1.5rem;cursor:pointer;padding:.05rem .12rem;color:#c9c9c9';"
+            "b.onclick=function(){voti[k]=v;var bs=box.children;"
+            "for(var j=0;j<5;j++){bs[j].textContent=(j<v)?'\\u2605':'\\u2606';"
+            "bs[j].style.color=(j<v)?'#e0a800':'#c9c9c9';}};"
+            "box.appendChild(b);})(i);}d.appendChild(box);rows.appendChild(d);}"
+            "riga('gen',TXT.gen);for(var i=0;i<CATS.length;i++)riga(CATS[i][0],CATS[i][1]);"
+            "function grazie(){var b=document.getElementById('recBox');b.innerHTML='';"
+            "var w=document.createElement('div');w.style.cssText='color:#155724;font-weight:800;font-size:1.1rem';"
+            "w.textContent='\\u2B50 '+TXT.grazie;b.appendChild(w);}"
+            "document.getElementById('recSend').onclick=async function(){"
+            "var m=document.getElementById('recMsg');"
+            "if(!voti.gen){m.style.color='#b00020';m.textContent=TXT.gen+': \\u2605 1-5';return;}"
+            "this.disabled=true;var cats={};"
+            "for(var i=0;i<CATS.length;i++){var k=CATS[i][0];if(voti[k])cats[k]=voti[k];}"
+            "try{var r=await fetch('/api/recensioni',{method:'POST',"
+            "headers:{'Content-Type':'application/json'},body:JSON.stringify("
+            "{token:TXT.tok,voto:voti.gen,testo:document.getElementById('recTxt').value.trim(),"
+            "lingua:TXT.lng,categorie:cats})});"
+            "if(r.status===201||r.status===409){grazie();}"
+            "else{m.style.color='#b00020';m.textContent=TXT.err;this.disabled=false;}"
+            "}catch(_){m.style.color='#b00020';m.textContent=TXT.err;this.disabled=false;}};"
+            "})();</script>")
+    dom = "How was your stay at" if lng == "en" else "Com'è andato il tuo soggiorno a"
+    nota = ("Only real guests can review: your opinion is verified." if lng == "en"
+            else "Solo chi ha soggiornato davvero può recensire: la tua opinione è verificata.")
+    return (
+        "<!DOCTYPE html><html lang=\"%s\"><head><meta charset=\"UTF-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "<meta name=\"robots\" content=\"noindex\">"
+        "<title>%s</title><style>body{font-family:system-ui,sans-serif;"
+        "background:#f4f6fa;color:#1a1e2b;padding:2rem;max-width:440px;margin:0 auto}"
+        ".v{background:#fff;border-radius:1.5rem;padding:2rem;box-shadow:0 8px 24px "
+        "rgba(0,0,0,.06)}.bm{font-weight:800;color:#0f4c3a;font-size:1.2rem}"
+        "h1{color:#0f4c3a;font-size:1.25rem;line-height:1.3;margin:.6rem 0 1.2rem}"
+        "</style></head><body><div class=\"v\"><div class=\"bm\">BookinVIP</div>"
+        "<h1>&#11088; %s %s?</h1>%s"
+        "<p style=\"color:#8a9bb5;font-size:.8rem;margin-top:1.4rem\">%s</p>"
+        "</div></body></html>"
+    ) % (e(lng), e(_ui("rec_titolo", lng)), e(dom), e(titolo), corpo, e(nota))
+
+
 def pagina_voucher_non_valido_html(lingua: str = "it") -> str:
     """Pagina GENTILE quando un link voucher non è valido/scaduto/manomesso (invece di un
     errore tecnico): rassicura e indirizza il cliente. Bilingue it/en."""
@@ -7178,6 +7292,16 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     self._testo(404, "text/html", pagina_voucher_non_valido_html("it"))
                 else:
                     self._testo(200, "text/html", html)
+            elif u.path.startswith("/recensione/"):
+                # SOLA VALUTAZIONE (2026-07-20): pagina pulita col SOLO voto; stesso token
+                # firmato del voucher, stesso motore/endpoint. Il voucher resta intatto.
+                query = {k: v[0] for k, v in parse_qs(u.query).items()}
+                lng = query.get("lang", "it")
+                html = pagina_recensione_html(sistema, unquote(u.path[len("/recensione/"):]), lng)
+                if html is None:
+                    self._testo(404, "text/html", pagina_voucher_non_valido_html(lng))
+                else:
+                    self._testo(200, "text/html", html)
             elif u.path.startswith("/ical/") and u.path.endswith(".ics"):
                 # feed .ics del calendario (letto da Booking/Airbnb): anti-overbooking
                 ics = router._ical_export(unquote(u.path[len("/ical/"):-4]))
@@ -7397,7 +7521,10 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                         except Exception:
                             dj = {}
                         vt = dj.get("voucher_token", "")
-                        vurl = (base + "/voucher/" + vt) if vt else ""
+                        # RICOLLEGATO ALLA PAGINA DI SOLA VALUTAZIONE (2026-07-20): l'invito
+                        # post-soggiorno porta a /recensione/ (solo il voto), NON al voucher
+                        # pieno. Stesso token firmato, stesso motore: cambia solo la vetrina.
+                        vurl = (base + "/recensione/" + vt) if vt else ""
                         titolo = dj.get("titolo") or rec.get("alloggio_id", "")
                         try:
                             from fase86_email import corpo_invito_recensione_html
