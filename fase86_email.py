@@ -194,6 +194,118 @@ def corpo_preventivo_html(titolo_alloggio: str, check_in: str, check_out: str,
          corpo_righe, link, e(nota))
 
 
+def _soldi(cents: int, valuta: str) -> str:
+    """Formato onesto per le email: '123.45 EUR' da centesimi interi (mai float a monte)."""
+    try:
+        c = int(cents)
+    except Exception:
+        c = 0
+    return "%d.%02d %s" % (c // 100, c % 100, valuta or "EUR")
+
+
+def corpo_pagamento_confermato_html(titolo: str, voucher_url: str,
+                                    importo_cents: int, valuta: str) -> str:
+    """Email dopo il PAGAMENTO riuscito (C3 2026-07-20: prima non partiva nulla e
+    grazie.html prometteva un'email che non arrivava). XSS-safe."""
+    import html
+    e = html.escape
+    riga_importo = ("<p>Importo pagato: <strong>%s</strong></p>" % e(_soldi(importo_cents, valuta))
+                    if importo_cents else "")
+    link = ('<p><a href="%s" style="background:#0f4c3a;color:#fff;padding:.7rem 1.4rem;'
+            'border-radius:8px;text-decoration:none;font-weight:700">Apri il tuo voucher'
+            '</a></p>' % e(voucher_url)) if voucher_url else ""
+    return (
+        "<div style=\"font-family:sans-serif;max-width:480px\">"
+        "<h2 style=\"color:#0f4c3a\">✅ Pagamento ricevuto</h2>"
+        "<p>Il pagamento per <strong>%s</strong> è andato a buon fine: la prenotazione "
+        "è confermata.</p>%s%s"
+        "<p style=\"color:#5e6f8d;font-size:.85rem\">Nel voucher trovi PIN di check-in, "
+        "chat con l'host e la ricevuta. Conserva questa email.</p></div>"
+    ) % (e(titolo), riga_importo, link)
+
+
+def corpo_cancellazione_html(titolo: str, rimborso_cents: int, valuta: str,
+                             credito_cents: int = 0) -> str:
+    """Email di conferma CANCELLAZIONE con l'importo del rimborso nero su bianco
+    (C3: prima il cliente cancellava e restava col dubbio 'i miei soldi tornano?')."""
+    import html
+    e = html.escape
+    riga = ("<p style=\"background:#e7f6ec;border-radius:10px;padding:.7rem 1rem;"
+            "color:#155724\">Rimborso: <strong>%s</strong> sul metodo di pagamento "
+            "originale (tempi bancari: di norma 5-10 giorni lavorativi).</p>"
+            % e(_soldi(rimborso_cents, valuta))) if rimborso_cents > 0 else \
+        ("<p style=\"background:#fff4e5;border-radius:10px;padding:.7rem 1rem;"
+         "color:#8a5200\">Per la politica di cancellazione scelta non è previsto "
+         "rimborso.</p>")
+    credito = ("<p>🎁 In più hai un <strong>Credito Viaggio di %s</strong> per la "
+               "prossima prenotazione.</p>" % e(_soldi(credito_cents, valuta))
+               ) if credito_cents > 0 else ""
+    return (
+        "<div style=\"font-family:sans-serif;max-width:480px\">"
+        "<h2 style=\"color:#0f4c3a\">Prenotazione cancellata</h2>"
+        "<p>La tua prenotazione per <strong>%s</strong> è stata cancellata e le date "
+        "sono state liberate.</p>%s%s"
+        "<p style=\"color:#5e6f8d;font-size:.85rem\">Speriamo di rivederti presto su "
+        "BookinVIP.</p></div>"
+    ) % (e(titolo), riga, credito)
+
+
+def corpo_invito_recensione_html(titolo: str, voucher_url: str) -> str:
+    """Email post-CHECK-OUT: invito a recensire (stile Booking/Agoda). Il form coi
+    sotto-voti (pulizia, comfort, ...) è già sul voucher: un tocco e si apre."""
+    import html
+    e = html.escape
+    link = ('<p><a href="%s" style="background:#0f4c3a;color:#fff;padding:.7rem 1.4rem;'
+            'border-radius:8px;text-decoration:none;font-weight:700">⭐ Lascia la tua '
+            'recensione</a></p>' % e(voucher_url)) if voucher_url else ""
+    return (
+        "<div style=\"font-family:sans-serif;max-width:480px\">"
+        "<h2 style=\"color:#0f4c3a\">Com'è andata a %s?</h2>"
+        "<p>Il tuo soggiorno è concluso: raccontalo a chi verrà dopo di te. Bastano "
+        "due tocchi — voto generale e, se vuoi, pulizia, comfort, posizione…</p>%s"
+        "<p style=\"color:#5e6f8d;font-size:.85rem\">Solo chi ha soggiornato davvero può "
+        "recensire: la tua opinione vale, ed è verificata.</p></div>"
+    ) % (e(titolo), link)
+
+
+def corpo_esito_controversia_html(rimborso_cents: int, valuta: str) -> str:
+    """Email all'ospite con l'ESITO della controversia (C3: prima l'esito era invisibile)."""
+    import html
+    e = html.escape
+    if rimborso_cents > 0:
+        corpo = ("<p style=\"background:#e7f6ec;border-radius:10px;padding:.7rem 1rem;"
+                 "color:#155724\">Ti verrà rimborsato: <strong>%s</strong> (tempi "
+                 "bancari: di norma 5-10 giorni lavorativi).</p>"
+                 % e(_soldi(rimborso_cents, valuta)))
+    else:
+        corpo = ("<p style=\"background:#fff4e5;border-radius:10px;padding:.7rem 1rem;"
+                 "color:#8a5200\">Dopo la verifica delle prove non è stato riconosciuto "
+                 "un rimborso.</p>")
+    return (
+        "<div style=\"font-family:sans-serif;max-width:480px\">"
+        "<h2 style=\"color:#0f4c3a\">Esito della tua segnalazione</h2>"
+        "<p>Abbiamo esaminato la tua segnalazione con le prove della conversazione.</p>"
+        "%s<p style=\"color:#5e6f8d;font-size:.85rem\">Grazie per averci aiutato a "
+        "tenere alta la qualità.</p></div>"
+    ) % corpo
+
+
+def corpo_payout_host_html(importo_cents: int, valuta: str, codice: str) -> str:
+    """Email all'HOST quando la sua quota parte verso il suo conto (C3: prima l'host
+    non sapeva di essere stato pagato)."""
+    import html
+    e = html.escape
+    return (
+        "<div style=\"font-family:sans-serif;max-width:480px\">"
+        "<h2 style=\"color:#0f4c3a\">💶 Pagamento in arrivo</h2>"
+        "<p>La tua quota per la prenotazione <strong>%s</strong> è partita verso il tuo "
+        "conto: <strong>%s</strong>.</p>"
+        "<p style=\"color:#5e6f8d;font-size:.85rem\">I tempi di accredito dipendono "
+        "dalla tua banca (di norma 1-3 giorni lavorativi). Dettagli nel pannello host, "
+        "riquadro \"I tuoi incassi\".</p></div>"
+    ) % (e(codice), e(_soldi(importo_cents, valuta)))
+
+
 def corpo_reset_password_html(link: str) -> str:
     """Email 'password dimenticata' (C2 2026-07-20): magic-link 30 minuti, single-use.
     Onesta: dice chiaro che se non l'hai chiesta tu, puoi ignorarla. XSS-safe."""

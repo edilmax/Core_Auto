@@ -182,9 +182,15 @@ class TestE2EHostAvvisato(unittest.TestCase):
         dest = [e[0] for e in cap.inviate]
         self.assertIn("ospite@x.it", dest)                          # ospite avvisato (voucher)
         self.assertIn("host@b.it", dest)                            # HOST avvisato (nuovo!)
-        # l'avviso host contiene i dati prenotazione
-        host_mail = [e for e in cap.inviate if e[0] == "host@b.it"][0]
-        self.assertIn("Casa Mia", host_mail[2])
+        # l'avviso host contiene i dati prenotazione. NB: da C2 (2026-07-20) alla
+        # REGISTRAZIONE parte anche l'email di BENVENUTO -> l'avviso prenotazione
+        # non e' piu' necessariamente la PRIMA email all'host: si cerca tra tutte.
+        host_mails = [e for e in cap.inviate if e[0] == "host@b.it"]
+        self.assertTrue(any("Casa Mia" in e[2] for e in host_mails),
+                        "avviso prenotazione all'host mancante; oggetti: %r"
+                        % [e[1] for e in host_mails])
+        self.assertTrue(any("Benvenuto" in e[2] for e in host_mails),
+                        "email di benvenuto (C2) mancante alla registrazione")
 
 
 if __name__ == "__main__":

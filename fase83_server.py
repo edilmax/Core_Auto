@@ -728,6 +728,20 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
                         "})();</script>")
     except Exception:
         logger.warning("blocco recensione voucher fallito (ISOLATO)", exc_info=True)
+    # RICEVUTA DI PAGAMENTO (C3 2026-07-20): link visibile SOLO se risulta pagata
+    # (la pagina /ricevuta/ rifiuta comunque le non pagate: doppia guardia).
+    try:
+        _ppr = getattr(sistema, "pagamenti_pendenti", None)
+        _rr = _ppr.info(str(dati.get("riferimento", ""))) if _ppr is not None else None
+        if _rr is not None and _rr.get("stato") == "pagato":
+            from urllib.parse import quote as _q
+            blocco_pass = blocco_pass + (
+                "<a href='/ricevuta/%s' style='display:block;margin-top:1rem;"
+                "text-align:center;padding:.7rem;border-radius:.8rem;background:#eef7f2;"
+                "color:#0f4c3a;font-weight:700;text-decoration:none'>&#129534; "
+                "Ricevuta di pagamento</a>" % _q(str(token), safe=""))
+    except Exception:
+        logger.warning("link ricevuta voucher fallito (ISOLATO)", exc_info=True)
     return (
         "<!DOCTYPE html><html lang=\"%s\"><head><meta charset=\"UTF-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
@@ -753,6 +767,76 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
         e(_ui("totale", lng)), e(prezzo), e(str(dati.get("valuta", "EUR"))),
         blocco_pass,
     )
+
+
+def pagina_ricevuta_html(sistema: Any, token: Any) -> Optional[str]:
+    """RICEVUTA DI PAGAMENTO stampabile (C3 2026-07-20: prima chi pagava con soldi veri
+    non riceveva alcun documento). Autenticata dal voucher firmato, SOLO prenotazioni
+    PAGATE. Nota onesta in calce: non è una fattura fiscale (quella arriverà col regime
+    IVA del gestore). None se token invalido o non pagata."""
+    import html as _h
+    firma = getattr(sistema, "firma", None)
+    if firma is None:
+        return None
+    v = firma.decodifica(token)
+    if not isinstance(v, dict) or v.get("tipo") != "voucher":
+        return None
+    rif = str(v.get("riferimento", ""))
+    pp = getattr(sistema, "pagamenti_pendenti", None)
+    rec = pp.info(rif) if pp is not None else None
+    if rec is None or rec.get("stato") != "pagato":
+        return None
+    import json as _j
+    try:
+        dj = _j.loads(rec.get("corpo_json") or "{}")
+    except Exception:
+        dj = {}
+    e = _h.escape
+    from fase59_concierge import codice_prenotazione
+    valuta = dj.get("valuta") or v.get("valuta", "EUR")
+
+    def soldi(c):
+        try:
+            c = int(c)
+        except Exception:
+            c = 0
+        return "%d.%02d %s" % (c // 100, c % 100, valuta)
+
+    totale = int(dj.get("prezzo_guest_cents", 0) or v.get("prezzo_guest_cents", 0) or 0)
+    tassa = int(v.get("tassa_soggiorno_cents", 0) or 0)
+    soggiorno = max(0, totale - tassa)
+    righe = ("<div class='r'><span>Soggiorno</span><strong>%s</strong></div>" % e(soldi(soggiorno))
+             + (("<div class='r'><span>Tassa di soggiorno</span><strong>%s</strong></div>"
+                 % e(soldi(tassa))) if tassa else "")
+             + "<div class='r' style='font-size:1.1rem'><span><strong>Totale pagato</strong>"
+               "</span><strong>%s</strong></div>" % e(soldi(totale)))
+    return (
+        "<!DOCTYPE html><html lang=\"it\"><head><meta charset=\"UTF-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "<title>Ricevuta BookinVIP</title><style>body{font-family:system-ui,sans-serif;"
+        "background:#f4f6fa;color:#1a1e2b;padding:2rem;max-width:480px;margin:0 auto}"
+        ".v{background:#fff;border-radius:1.5rem;padding:2rem;box-shadow:0 8px 24px "
+        "rgba(0,0,0,.06)}h1{color:#0f4c3a;font-size:1.3rem}.r{display:flex;"
+        "justify-content:space-between;padding:.3rem 0;border-bottom:1px solid #eef2f7}"
+        "@media print{body{background:#fff}.noprint{display:none}}</style></head><body>"
+        "<div class=\"v\">"
+        "<div style=\"font-weight:700;color:#0f4c3a;font-size:1.2rem\">BookinVIP</div>"
+        "<h1>🧾 Ricevuta di pagamento</h1>"
+        "<div class=\"r\"><span>Prenotazione</span><strong>%s</strong></div>"
+        "<div class=\"r\"><span>Alloggio</span><strong>%s</strong></div>"
+        "<div class=\"r\"><span>Dal</span><strong>%s</strong></div>"
+        "<div class=\"r\"><span>Al</span><strong>%s</strong></div>"
+        "%s"
+        "<p style=\"color:#5e6f8d;font-size:.82rem;margin-top:1rem\">Pagamento elaborato da "
+        "Stripe. Gestore della piattaforma: Edil Max di Foti Massimo — P.IVA 11795700969 — "
+        "Via Paletro 11, 20821 Meda (MB) — info@bookinvip.com.<br>Questa ricevuta attesta il "
+        "pagamento e non costituisce fattura fiscale.</p>"
+        "<button class=\"noprint\" onclick=\"window.print()\" style=\"width:100%%;padding:.7rem;"
+        "border:0;border-radius:.8rem;background:#0f4c3a;color:#fff;font-weight:700;"
+        "cursor:pointer\">🖨️ Stampa / salva PDF</button>"
+        "</div></body></html>"
+    ) % (e(codice_prenotazione(rif)), e(dj.get("titolo") or rec.get("alloggio_id", "")),
+         e(str(v.get("check_in", ""))), e(str(v.get("check_out", ""))), righe)
 
 
 def pagina_voucher_non_valido_html(lingua: str = "it") -> str:
@@ -2784,6 +2868,7 @@ class RouterHTTP:
                     pd.registra_maturato(rif, riga["host_id"], quota_host, riga["valuta"])
             # la parte che spetta all'host parte da sola verso il suo conto (Connect)
             self._trasferisci_all_host(rif, quota_host)
+        self._email_esito_controversia(rif, out.get("ospite_rimborso_cents", rimborso))
         return 200, {"stato": "risolta", "riferimento": rif,
                      "rimborso_cliente_cents": out.get("ospite_rimborso_cents", rimborso),
                      "va_all_host_cents": out.get("host_riceve_cents", importo - rimborso),
@@ -3567,6 +3652,82 @@ class RouterHTTP:
             logger.warning("controllo verifica payout fallito (FAIL-OPEN)", exc_info=True)
             return False
 
+    # ── EMAIL DI CICLO (C3 2026-07-20): prima il cliente pagava/cancellava/contestava
+    #    nel SILENZIO. Tutte best-effort in background: mai bloccare i soldi. ──────────
+    def _email_bg(self, dest, oggetto, html):
+        try:
+            prov = getattr(self._sys, "email_provider", None)
+            if prov is None or not (isinstance(dest, str) and "@" in dest):
+                return
+            import threading
+            threading.Thread(target=prov.invia, args=(dest, oggetto, html),
+                             daemon=True).start()
+        except Exception:
+            logger.warning("email background fallita (ignorata)", exc_info=True)
+
+    def _email_pagamento_confermato(self, rec):
+        """Dopo il webhook 'pagato': conferma con importo e link voucher (grazie.html
+        prometteva un'email che prima non partiva mai)."""
+        try:
+            import json as _j
+            try:
+                dj = _j.loads(rec.get("corpo_json") or "{}")
+            except Exception:
+                dj = {}
+            vt = dj.get("voucher_token", "")
+            vurl = ((self._base_url or "https://bookinvip.com") + "/voucher/" + vt) if vt else ""
+            from fase86_email import corpo_pagamento_confermato_html
+            self._email_bg(rec.get("email", ""),
+                           "BookinVIP - Pagamento ricevuto: prenotazione confermata",
+                           corpo_pagamento_confermato_html(
+                               dj.get("titolo") or rec.get("alloggio_id", ""), vurl,
+                               int(dj.get("prezzo_guest_cents", 0) or 0),
+                               dj.get("valuta", "EUR")))
+        except Exception:
+            logger.warning("email conferma pagamento fallita (ignorata)", exc_info=True)
+
+    def _email_cancellazione(self, rif, rimborso_cents, valuta, credito_cents):
+        """Conferma di cancellazione con l'importo del rimborso nero su bianco."""
+        try:
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            rec = pp.info(rif) if pp is not None else None
+            if not rec:
+                return
+            import json as _j
+            try:
+                dj = _j.loads(rec.get("corpo_json") or "{}")
+            except Exception:
+                dj = {}
+            from fase86_email import corpo_cancellazione_html
+            self._email_bg(rec.get("email", ""),
+                           "BookinVIP - Cancellazione confermata",
+                           corpo_cancellazione_html(
+                               dj.get("titolo") or rec.get("alloggio_id", ""),
+                               int(rimborso_cents or 0), valuta or "EUR",
+                               int(credito_cents or 0)))
+        except Exception:
+            logger.warning("email cancellazione fallita (ignorata)", exc_info=True)
+
+    def _email_esito_controversia(self, rif, rimborso_cents):
+        """L'esito dell'arbitrato arriva all'ospite (prima era invisibile)."""
+        try:
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            rec = pp.info(rif) if pp is not None else None
+            if not rec:
+                return
+            import json as _j
+            try:
+                dj = _j.loads(rec.get("corpo_json") or "{}")
+            except Exception:
+                dj = {}
+            from fase86_email import corpo_esito_controversia_html
+            self._email_bg(rec.get("email", ""),
+                           "BookinVIP - Esito della tua segnalazione",
+                           corpo_esito_controversia_html(int(rimborso_cents or 0),
+                                                         dj.get("valuta", "EUR")))
+        except Exception:
+            logger.warning("email esito controversia fallita (ignorata)", exc_info=True)
+
     def _trasferisci_all_host(self, rif, importo_cents):
         """SOLDI ALL'HOST IN AUTOMATICO (strategia fondatore): allo sblocco dell'escrow
         (ok cliente / 24h di silenzio / esito controversia), se l'host ha Stripe collegato
@@ -3662,6 +3823,15 @@ class RouterHTTP:
                 self._giornale(tipo="payout_host", riferimento=rif,
                                soggetto="host:" + str(host_id), importo_cents=int(importo_cents),
                                valuta=valuta, causale="bonifico Connect %s all'host" % tid)
+                try:                            # C3: l'host sa di essere stato pagato
+                    from fase59_concierge import codice_prenotazione as _cp
+                    from fase86_email import corpo_payout_host_html
+                    self._email_bg((info or {}).get("email", ""),
+                                   "BookinVIP - Pagamento in arrivo sul tuo conto",
+                                   corpo_payout_host_html(int(importo_cents), valuta,
+                                                          _cp(rif)))
+                except Exception:
+                    logger.warning("email payout host fallita (ignorata)", exc_info=True)
             else:
                 logger.error("BONIFICO MANUALE RICHIESTO: transfer Connect fallito per '%s' "
                              "(%d %s a %s). Il payout resta tracciato.",
@@ -4106,6 +4276,8 @@ class RouterHTTP:
         rimborso_totale = r.get("rimborso_cents", 0) + tassa
         cv_cents, cv_token = self._credito_anti_rimpianto(r.get("trattenuto_cents", 0),
                                                           v.get("valuta", "EUR"))
+        if pagato_davvero:                     # C3: conferma cancellazione + rimborso in email
+            self._email_cancellazione(rif, rimborso_totale, v.get("valuta", "EUR"), cv_cents)
         return 200, {"stato": "cancellata", "riferimento": rif,
                      "giorni_all_arrivo": giorni, "date_liberate": True,
                      "rimborso_cents": rimborso_totale,                 # soggiorno + tassa
@@ -4966,6 +5138,7 @@ class RouterHTTP:
             # in cima (acquisizione atomica); qui restano tassa + payout maturato (idempotenti,
             # ri-asseriti anche sul retry per sanare un crash del primo handler - BUG #32).
             self._riasserisci_incasso(rec, rif)
+            self._email_pagamento_confermato(rec)      # C3: conferma col link voucher
             pd = getattr(self._sys, "payout", None)
             # REFERRAL: se l'host di questa prenotazione è stato INVITATO e raggiunge la soglia
             # di prenotazioni pagate -> premia il referente (una volta sola, mai in perdita).
@@ -6998,6 +7171,13 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     self._testo(404, "text/html", pagina_voucher_non_valido_html(lng))
                 else:
                     self._testo(200, "text/html", html)
+            elif u.path.startswith("/ricevuta/"):
+                # RICEVUTA stampabile (C3): stesso token firmato del voucher, solo PAGATE
+                html = pagina_ricevuta_html(sistema, unquote(u.path[len("/ricevuta/"):]))
+                if html is None:
+                    self._testo(404, "text/html", pagina_voucher_non_valido_html("it"))
+                else:
+                    self._testo(200, "text/html", html)
             elif u.path.startswith("/ical/") and u.path.endswith(".ics"):
                 # feed .ics del calendario (letto da Booking/Airbnb): anti-overbooking
                 ics = router._ical_export(unquote(u.path[len("/ical/"):-4]))
@@ -7203,5 +7383,34 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     logger.warning("sweep promemoria fallito (ignorato)", exc_info=True)
                 __import__("time").sleep(3600)     # ogni ora
         _th3.Thread(target=_tick_promemoria, daemon=True).start()
+
+        def _tick_invito_recensione():
+            """C3: post-CHECK-OUT parte l'invito a recensire (stile Booking). Senza invito
+            il motore recensioni resta a secco. Finestra 14gg, una sola volta per rif."""
+            base = getattr(getattr(sistema, "config", None), "base_url", "") or "https://bookinvip.com"
+            while True:
+                try:
+                    oggi = _dt3.date.today().isoformat()
+                    for rec in pp.da_invitare_recensione(oggi=oggi):
+                        try:
+                            dj = _j3.loads(rec.get("corpo_json") or "{}")
+                        except Exception:
+                            dj = {}
+                        vt = dj.get("voucher_token", "")
+                        vurl = (base + "/voucher/" + vt) if vt else ""
+                        titolo = dj.get("titolo") or rec.get("alloggio_id", "")
+                        try:
+                            from fase86_email import corpo_invito_recensione_html
+                            email_prov.invia(rec.get("email", ""),
+                                             "BookinVIP - Com'è andata? Lascia la tua recensione",
+                                             corpo_invito_recensione_html(titolo, vurl))
+                        except Exception:
+                            logger.warning("invio invito recensione fallito (ignorato)",
+                                           exc_info=True)
+                        pp.segna_invito_recensione(rec["riferimento"])
+                except Exception:
+                    logger.warning("sweep invito recensione fallito (ignorato)", exc_info=True)
+                __import__("time").sleep(3600)     # ogni ora
+        _th3.Thread(target=_tick_invito_recensione, daemon=True).start()
 
     srv.serve_forever()

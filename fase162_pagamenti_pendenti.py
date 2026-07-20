@@ -68,10 +68,12 @@ class PagamentiPendenti:
                         con.execute("ALTER TABLE pendenti ADD COLUMN %s TEXT NOT NULL DEFAULT ''" % _c)
                     except sqlite3.OperationalError:
                         pass
-                try:      # colonna INTEGER separata (promemoria check-in inviato)
-                    con.execute("ALTER TABLE pendenti ADD COLUMN promemoria_ts INTEGER NOT NULL DEFAULT 0")
-                except sqlite3.OperationalError:
-                    pass
+                # colonne INTEGER separate (promemoria check-in / invito recensione inviati)
+                for _c in ("promemoria_ts", "invito_recensione_ts"):
+                    try:
+                        con.execute("ALTER TABLE pendenti ADD COLUMN %s INTEGER NOT NULL DEFAULT 0" % _c)
+                    except sqlite3.OperationalError:
+                        pass
         finally:
             con.close()
 
@@ -477,6 +479,44 @@ class PagamentiPendenti:
                 "AND promemoria_ts=0 AND email!='' ORDER BY check_in LIMIT ?",
                 (oggi, lim)).fetchall()
             return [self._riga(r) for r in righe]
+        finally:
+            con.close()
+
+    def da_invitare_recensione(self, *, oggi: str, limit: int = 200) -> List[Dict[str, Any]]:
+        """Prenotazioni PAGATE con soggiorno CONCLUSO (check_out < oggi) mai invitate a
+        recensire e con email presente. Per l'email post-checkout stile Booking (C3
+        2026-07-20): senza invito, il motore recensioni resta a secco."""
+        if not (isinstance(oggi, str) and oggi):
+            return []
+        lim = limit if isinstance(limit, int) and not isinstance(limit, bool) \
+            and 0 < limit <= 500 else 200
+        # finestra 14 giorni: al primo avvio NON si spammano i soggiorni antichi
+        try:
+            import datetime as _dt
+            da = (_dt.date.fromisoformat(oggi) - _dt.timedelta(days=14)).isoformat()
+        except Exception:
+            return []
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT * FROM pendenti WHERE stato='pagato' AND check_out<? "
+                "AND check_out>=? AND invito_recensione_ts=0 AND email!='' "
+                "ORDER BY check_out LIMIT ?",
+                (oggi, da, lim)).fetchall()
+            return [self._riga(r) for r in righe]
+        finally:
+            con.close()
+
+    def segna_invito_recensione(self, riferimento: Any, ts: Optional[int] = None) -> bool:
+        if not (isinstance(riferimento, str) and riferimento):
+            return False
+        t = ts if isinstance(ts, int) and not isinstance(ts, bool) else self._now()
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("UPDATE pendenti SET invito_recensione_ts=? "
+                                  "WHERE riferimento=?", (t, riferimento))
+            return bool(cur.rowcount)
         finally:
             con.close()
 

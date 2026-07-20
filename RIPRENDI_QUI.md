@@ -317,6 +317,17 @@
 >   SOTTOLINEATE (active verde+sottolineatura oro), titolo "Il tuo viaggio, senza sorprese" su UNA
 >   riga con "senza sorprese" in oro (hero_titolo/hero_titolo2), hero riquadrato compatto,
 >   sfumature leggere. Regola: iterare i visual con anteprima Artifact prima del deploy.
+> · ✉️ **C3 EMAIL DI CICLO + RICEVUTA (2026-07-20, chiuso il lavoro interrotto della notte
+>   "macchina completa")**: prima il cliente pagava/cancellava/contestava nel SILENZIO. Ora:
+>   conferma pagamento con importo+link voucher (UNA sola anche se Stripe ri-manda il webhook,
+>   provato), cancellazione col rimborso nero su bianco, esito controversia all'ospite, avviso
+>   all'host quando la sua quota parte (Connect), invito a recensire post check-out (sweep
+>   orario, finestra 14gg anti-spam, una volta per soggiorno; il form coi sotto-voti è già sul
+>   voucher). + 🧾 RICEVUTA stampabile `/ricevuta/<token>` (token voucher firmato, SOLO pagate,
+>   P.IVA reale, nota onesta "non è fattura fiscale") con bottone nel voucher solo se pagata —
+>   il lavoro interrotto aveva la pagina ma NON rotta né bottone: aggiunti. Email best-effort
+>   in thread: mai bloccare i soldi. test_email_ciclo (9 × 10 giri) + 134 regressione.
+>   Riga C3 REGISTRO sez.1.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare
