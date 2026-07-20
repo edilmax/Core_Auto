@@ -27,7 +27,7 @@ def _router():
 
 class TestReferralFlow(unittest.TestCase):
     def _registra(self, r, email, codice=""):
-        body = {"email": email, "password": "passw0rd!", "accetta_termini": True}
+        body = {"email": email, "password": "passw0rd!", "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True}
         if codice:
             body["codice_referral"] = codice
         s, c = r.gestisci("POST", "/api/host/registrazione", {}, json.dumps(body), {})

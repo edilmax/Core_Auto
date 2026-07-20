@@ -274,6 +274,49 @@ CONTRATTO_HOST: Dict[str, str] = {
 LINGUE_CONTRATTO = tuple(CONTRATTO_HOST.keys())
 DOCUMENTO_HOST = "contratto_host"
 
+# ── CONSENSO PRIVACY/GDPR come DOCUMENTO DISTINTO (2026-07-20) ────────────────
+# Il GDPR vuole un consenso SPECIFICO e separato: prima stava nella stessa spunta del
+# contratto. Si registra come RIGA A PARTE (documento diverso) e NON come colonna nuova:
+# cosi' la stringa firmata resta identica e le prove gia' archiviate restano INTEGRE.
+DOCUMENTO_PRIVACY = "privacy_gdpr"
+PRIVACY_VERSIONE = "2026-07-20"
+_PRIVACY_FALLBACK = ("Informativa privacy BookinVIP: titolare, finalita', base giuridica, "
+                     "conservazione, diritti dell'interessato e contatti sono pubblicati "
+                     "alla pagina /privacy.html della Piattaforma.")
+_privacy_cache: Dict[str, str] = {}
+
+
+def testo_privacy() -> str:
+    """Testo su cui si calcola l'impronta del consenso privacy: la pagina REALE
+    (deploy/privacy.html, quella che l'utente vede). Se illeggibile -> testo di riserva,
+    cosi' il consenso si registra comunque (mai bloccare una registrazione per un file)."""
+    if "t" not in _privacy_cache:
+        testo = _PRIVACY_FALLBACK
+        try:
+            import os
+            p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "deploy", "privacy.html")
+            with open(p, encoding="utf-8") as f:
+                testo = f.read()
+        except Exception:
+            logger.warning("privacy.html non leggibile: uso il testo di riserva")
+        _privacy_cache["t"] = testo
+    return _privacy_cache["t"]
+
+
+def privacy_sha256() -> str:
+    """Impronta VINCOLANTE dell'informativa privacy accettata (versione + testo)."""
+    return hashlib.sha256(
+        (PRIVACY_VERSIONE + "\n" + testo_privacy()).encode("utf-8")).hexdigest()
+
+
+def versione_di(documento: str) -> str:
+    return PRIVACY_VERSIONE if documento == DOCUMENTO_PRIVACY else CONTRATTO_HOST_VERSIONE
+
+
+def hash_di(documento: str) -> str:
+    return privacy_sha256() if documento == DOCUMENTO_PRIVACY else doc_sha256()
+
 
 def testo_contratto(lang: str = "it") -> str:
     return CONTRATTO_HOST.get((lang or "it").lower(), CONTRATTO_HOST["it"])
@@ -423,12 +466,34 @@ class RegistroAccettazioni:
             self._chiudi(con)
 
     def ha_accettato_corrente(self, host_id: Any,
-                              documento: str = DOCUMENTO_HOST) -> bool:
-        """True se l'host ha una accettazione INTEGRA della versione corrente del documento."""
+                              documento: str = DOCUMENTO_HOST,
+                              versione: Optional[str] = None) -> bool:
+        """True se l'host ha una accettazione INTEGRA della versione corrente del documento.
+        `versione` esplicita per i documenti diversi dal contratto (es. privacy)."""
+        attesa = versione or versione_di(documento)
         for r in self.elenco(host_id, documento):
-            if r["versione"] == CONTRATTO_HOST_VERSIONE and r["integra"]:
+            if r["versione"] == attesa and r["integra"]:
                 return True
         return False
+
+    def stato_consensi(self, host_id: Any) -> Dict[str, Any]:
+        """Fotografia dei consensi per la schermata di RI-ACCETTAZIONE: cosa manca e perche'.
+        `deve_riaccettare` = manca il contratto corrente, le clausole vessatorie o la privacy."""
+        contratto = self.ha_accettato_corrente(host_id, DOCUMENTO_HOST)
+        privacy = self.ha_accettato_corrente(host_id, DOCUMENTO_PRIVACY)
+        vess = False
+        ultima = ""
+        for r in self.elenco(host_id, DOCUMENTO_HOST):
+            if r["integra"]:
+                ultima = r["versione"]
+                if r["versione"] == CONTRATTO_HOST_VERSIONE and r["vessatorie"]:
+                    vess = True
+        return {"contratto_corrente": contratto, "clausole_vessatorie": vess,
+                "privacy_corrente": privacy,
+                "versione_corrente": CONTRATTO_HOST_VERSIONE,
+                "versione_accettata": ultima,
+                "privacy_versione": PRIVACY_VERSIONE,
+                "deve_riaccettare": not (contratto and vess and privacy)}
 
     def conta(self) -> int:
         con = self._apri()

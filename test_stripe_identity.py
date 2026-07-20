@@ -71,7 +71,7 @@ class TestStripeIdentity(unittest.TestCase):
                              base_url="https://bookinvip.com")
         s, c = self.g("POST", "/api/host/registrazione",
                       {"email": "h@idn.it", "password": "password1",
-                       "accetta_termini": True, "accetta_clausole": True,
+                       "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
                        "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
         self.assertEqual(s, 201, c)
         self.hid, self.tok = c["host_id"], c["token"]

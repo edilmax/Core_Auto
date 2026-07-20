@@ -70,7 +70,7 @@ class TestBombardamentoChatProve(unittest.TestCase):
                              base_url="https://bookinvip.com")
         s, c = self.g("POST", "/api/host/registrazione",
                       {"email": "h@cp.it", "password": "password1", "accetta_termini": True,
-                       "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                       "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                        "versione": CONTRATTO_HOST_VERSIONE})
         self.assertEqual(s, 201, c)
         self.tok = c["token"]

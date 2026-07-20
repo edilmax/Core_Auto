@@ -161,7 +161,7 @@ class TestFAQ(unittest.TestCase):
         r = crea_router(sis, host_key="hk", base_url="https://bookinvip.com")
         _, c = r.gestisci("POST", "/api/host/registrazione", {},
                           json.dumps({"email": "h@f.it", "password": "password1",
-                                      "accetta_termini": True, "accetta_clausole": True,
+                                      "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
                                       "doc_sha256": doc_sha256(),
                                       "versione": CONTRATTO_HOST_VERSIONE}), {})
         r.gestisci("POST", "/api/host/pubblica", {},
@@ -198,7 +198,7 @@ class TestRottaEPublish(unittest.TestCase):
                              base_url="https://bookinvip.com")
         s, c = self.g("POST", "/api/host/registrazione",
                       {"email": "h@seo.it", "password": "password1",
-                       "accetta_termini": True, "accetta_clausole": True,
+                       "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
                        "doc_sha256": doc_sha256(),
                        "versione": CONTRATTO_HOST_VERSIONE})
         assert s == 201, c

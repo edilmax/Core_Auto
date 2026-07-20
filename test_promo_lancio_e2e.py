@@ -73,7 +73,7 @@ class BasePromo(unittest.TestCase):
     def _host_con_alloggio(self, r, email="h@promo.local", slug="casa"):
         s, c = self._g(r, "POST", "/api/host/registrazione",
                        {"email": email, "password": "password1", "accetta_termini": True,
-                        "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                        "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                         "versione": CONTRATTO_HOST_VERSIONE})
         self.assertEqual(s, 201, c)
         tk = {"X-Host-Token": c["token"]}

@@ -86,7 +86,7 @@ class TestRiconciliazioneInterlibro(unittest.TestCase):
             val, citta = VAL_CITTA[k]
             _, c = g("POST", "/api/host/registrazione",
                      {"email": "h%d@rc.it" % k, "password": "password1",
-                      "accetta_termini": True, "accetta_clausole": True,
+                      "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
                       "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
             tok = c["token"]
             sl = "rc-%d" % k
@@ -214,7 +214,7 @@ class TestRiconciliazioneInterlibro(unittest.TestCase):
         oggi = datetime.date.today()
         _, c = g("POST", "/api/host/registrazione",
                  {"email": "cr@rc.it", "password": "password1", "accetta_termini": True,
-                  "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                  "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                   "versione": CONTRATTO_HOST_VERSIONE})
         tok = c["token"]
         g("POST", "/api/host/pubblica",

@@ -82,7 +82,7 @@ class TestSimulazioneAnno(unittest.TestCase):
         for i in range(N_HOST):
             s, c = self.g("POST", "/api/host/registrazione",
                           {"email": "host%04d@sim.test" % i, "password": "password%04d" % i,
-                           "accetta_termini": True, "accetta_clausole": True,
+                           "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
                            "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
             self.assertEqual(s, 201)
             tok.append(c["token"])
@@ -208,7 +208,7 @@ class TestSimulazioneAnno(unittest.TestCase):
         # concorrenza estrema: 100 thread sulla STESSA stanza/date -> 1 solo vincitore
         s, c = self.g("POST", "/api/host/registrazione",
                       {"email": "gara@sim.test", "password": "passwordgara",
-                       "accetta_termini": True, "accetta_clausole": True,
+                       "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
                        "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
         t = c["token"]
         self.g("POST", "/api/host/pubblica", {"slug": "gara", "titolo": "Gara", "citta": "Roma",

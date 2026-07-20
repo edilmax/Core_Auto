@@ -67,7 +67,7 @@ class TestVerificheHost(unittest.TestCase):
         # host COMPLETO: contratto firmato (registrazione con clausole) + fiscale + stripe
         s, c = self.g("POST", "/api/host/registrazione",
                       {"email": "ok@ver.it", "password": "password1",
-                       "accetta_termini": True, "accetta_clausole": True,
+                       "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
                        "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
         self.assertEqual(s, 201, c)
         self.hid, self.tok = c["host_id"], c["token"]
@@ -146,10 +146,13 @@ class TestVerificheHost(unittest.TestCase):
         s, d = self.g("GET", "/api/admin/verifiche/dettaglio", None, AK,
                       {"host_id": self.hid})
         self.assertEqual(s, 200, d)
-        self.assertEqual(len(d["contratto_prove"]), 1)
-        p = d["contratto_prove"][0]
+        # da 2026-07-20 le prove sono 2: contratto + privacy (consenso GDPR separato)
+        self.assertEqual(len(d["contratto_prove"]), 2)
+        p = [x for x in d["contratto_prove"] if x["documento"] == "contratto_host"][0]
         self.assertTrue(p["integra"])
         self.assertEqual(p["versione"], CONTRATTO_HOST_VERSIONE)
+        self.assertTrue(any(x["documento"] == "privacy_gdpr" and x["integra"]
+                            for x in d["contratto_prove"]))
         blob = json.dumps(d)
         self.assertNotIn("IT60X0542811101000000123456", blob)   # IBAN MAI in chiaro
         self.assertNotIn("RSSMRA80A01H501U", blob)              # CF MAI in chiaro
@@ -201,7 +204,7 @@ class TestVerificheHost(unittest.TestCase):
         self.assertEqual(s, 200, d)
         f = d["fascicolo"]
         self.assertEqual(f["fiscale"]["iban"], "IT60X0542811101000000123456")  # PIENO
-        self.assertEqual(len(f["contratto_prove"]), 1)
+        self.assertEqual(len(f["contratto_prove"]), 2)   # contratto + privacy GDPR
         self.assertIn("identita", f)
         self.assertIn("MAI conservati", f["nota_legale"])
 

@@ -43,7 +43,7 @@ class TestHostUX(unittest.TestCase):
     def _registra(self, email):
         s, c = self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(
             {"email": email, "password": "passwordlunga", "ragione_sociale": "B&B",
-             "accetta_termini": True, "accetta_clausole": True,
+             "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
              "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE}))
         self.assertEqual(s, 201, c)
         return c["token"]
@@ -161,7 +161,7 @@ class TestHostUX(unittest.TestCase):
         # niente pannello "fantasma" con un token morto.
         s, c = self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(
             {"email": "temp@x.it", "password": "passwordlunga", "accetta_termini": True,
-             "accetta_clausole": True, "doc_sha256": doc_sha256(),
+             "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
              "versione": CONTRATTO_HOST_VERSIONE}))
         self.assertEqual(s, 201, c)
         h = {"X-Host-Token": c["token"]}

@@ -96,7 +96,7 @@ class TestScontoLungo(unittest.TestCase):
         from fase163_accettazioni import doc_sha256, CONTRATTO_HOST_VERSIONE
         s, c = self.r.gestisci("POST", "/api/host/registrazione", {}, json.dumps(
             {"email": "h@sl.it", "password": "password1", "accetta_termini": True,
-             "accetta_clausole": True, "doc_sha256": doc_sha256(),
+             "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
              "versione": CONTRATTO_HOST_VERSIONE}), {})
         self.assertEqual(s, 201, c)
         tok = c["token"]

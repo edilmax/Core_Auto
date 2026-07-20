@@ -37,7 +37,7 @@ class TestHostMetricheIsolamento(unittest.TestCase):
     def _host(self, email, slug):
         s, c = self.g("POST", "/api/host/registrazione",
                       {"email": email, "password": "password1", "accetta_termini": True,
-                       "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                       "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                        "versione": CONTRATTO_HOST_VERSIONE})
         tok = c["token"]
         self.g("POST", "/api/host/pubblica",

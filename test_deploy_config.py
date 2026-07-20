@@ -139,10 +139,22 @@ class TestEnvEDeploy(unittest.TestCase):
             self.assertIn(v, env_ex)
 
     def test_deploy_md(self):
+        """RISCRITTO 2026-07-20: DEPLOY.md documentava il VECCHIO stack (Flask+gunicorn+
+        Postgres, server Aruba, `docker compose` v2) — seguirlo avrebbe rotto il deploy.
+        Ora descrive la procedura VERA del prodotto: rm-first su Compose v1."""
         md = _read("DEPLOY.md")
-        for s in ("docker compose up -d", "cp .env.example .env",
-                  "/api/v1/health", "down -v"):
-            self.assertIn(s, md)
+        for s in ("docker-compose -f docker-compose.casavip.yml build app",
+                  "rm -f app backup",                      # la sequenza rm-first
+                  "76.13.44.167",                          # il server vero
+                  "money_path_pronto",                     # la verifica d'avvio
+                  ".env.casavip"):                         # il file dei segreti vero
+            self.assertIn(s, md, "DEPLOY.md non documenta: %s" % s)
+        # e deve AVVERTIRE che i comandi in stile Compose v2 non funzionano su questa
+        # macchina (NB: `docker compose up -d` compare nella "Nota storica", dove e' citato
+        # proprio come procedura SUPERATA: si controlla l'avvertenza, non la stringa).
+        self.assertIn("Docker Compose v1.29.2", md)
+        self.assertIn("non funzionano", md)
+        self.assertIn("Nota storica", md)
 
 
 if __name__ == "__main__":

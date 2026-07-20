@@ -50,7 +50,7 @@ class TestCommissioneCoerente(unittest.TestCase):
                 return r.gestisci(m, p, {}, json.dumps(b) if b is not None else None, h or {})
             s, c = g("POST", "/api/host/registrazione",
                      {"email": "h@cc.it", "password": "password1", "accetta_termini": True,
-                      "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                      "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                       "versione": CONTRATTO_HOST_VERSIONE})
             tok, hid = c["token"], c["host_id"]
             g("POST", "/api/host/pubblica",

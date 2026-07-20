@@ -15,7 +15,7 @@ def _read(path):
 
 class TestArchitettura(unittest.TestCase):
     def setUp(self):
-        self.doc = _read("ARCHITETTURA.md")
+        self.doc = _read("_archivio/ARCHITETTURA.md")   # archiviato 2026-07-20 (stack legacy)
 
     def test_quattro_sezioni(self):
         for sezione in ("Anatomia del repository", "Flusso dei dati",

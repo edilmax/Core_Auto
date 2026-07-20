@@ -7,10 +7,16 @@
 ## 1. La verità nuda sui numeri (2026)
 - **Airbnb**: 15,5% dall'host (16% Brasile), 0% all'ospite → prezzo pulito. In UE con IVA ~18-19%.
 - **Booking**: ~15% dall'host (range 10-25%), prezzo pulito (commissione dentro la tariffa).
-- **Noi oggi**: 15% dall'host (`commissione_bps=1500`), 0% ospite, prezzo pulito.
+- **Noi oggi** (aggiornato 2026-07-20, verificato nel codice): **10%** dall'host a regime
+  (`COMMISSIONE_BPS=1000`), **5%** sulle prenotazioni dal link diretto dell'host, **0% ospite**,
+  prezzo pulito. In lancio la rampa porta il marketplace a **0% nei primi 90 giorni** e **8%**
+  fino a un anno (`PROMO_LANCIO` ATTIVA in produzione). In **ogni** periodo, e in aggiunta alla
+  commissione, l'host paga la **tariffa tecnica fissa del 3%** (costo gateway Stripe, nostro
+  margine zero) — vedi ART. 6-BIS del Contratto Host.
 
 ➡️ **Conclusione scomoda:** "0% commissioni all'ospite" NON è più un vantaggio (lo fanno tutti).
-A parità di 15% **non c'è motivo di sceglierci**. Serve un vantaggio VERO.
+A parità di ~15% **non ci sarebbe motivo di sceglierci**: il vantaggio VERO è il take-rate più
+basso (10% + 3% tecnico contro il 15-16% dei colossi) reso possibile dall'automazione.
 
 ## 2. Il motore: perché conveniamo a ENTRAMBI (e non perdiamo mai)
 **La leva = costo strutturale bassissimo grazie all'automazione totale** (tutto automatico, solo i

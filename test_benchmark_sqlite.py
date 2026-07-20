@@ -93,7 +93,7 @@ class TestBenchmarkSqlite(unittest.TestCase):
         # setup: 1 host, N alloggi, N_GIORNI aperti (1 unita' per notte)
         _, c = g("scrittura", "POST", "/api/host/registrazione",
                  {"email": "bench@ct.it", "password": "password1", "accetta_termini": True,
-                  "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                  "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                   "versione": CONTRATTO_HOST_VERSIONE})
         H = {"X-Host-Token": c["token"]}
         oggi = datetime.date.today()

@@ -68,7 +68,7 @@ class TestDac7CommissioneGiornale(unittest.TestCase):
         oggi = datetime.date.today()
         _, c = g("POST", "/api/host/registrazione",
                  {"email": "big@x.it", "password": "password1", "accetta_termini": True,
-                  "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                  "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                   "versione": CONTRATTO_HOST_VERSIONE})
         tok, hid = c["token"], c["host_id"]
         con = sqlite3.connect(reg)                    # invecchia -> 10% commissione
@@ -143,7 +143,7 @@ class TestDac7CommissioneGiornale(unittest.TestCase):
         oggi = datetime.date.today()
         _, c = g("POST", "/api/host/registrazione",
                  {"email": "h@x.it", "password": "password1", "accetta_termini": True,
-                  "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                  "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                   "versione": CONTRATTO_HOST_VERSIONE})
         tok = c["token"]
         con = sqlite3.connect(reg)

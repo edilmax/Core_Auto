@@ -1438,6 +1438,10 @@ class RouterHTTP:
             return self._host_geocode(query, headers)
         if metodo == "GET" and path == "/api/host/accettazioni":
             return self._host_accettazioni(query, headers)
+        if metodo == "GET" and path == "/api/host/contratto_stato":
+            return self._host_contratto_stato(headers)
+        if metodo == "POST" and path == "/api/host/riaccetta":
+            return self._host_riaccetta(body, headers)
         if metodo == "POST" and path == "/api/host/stato":
             return self._host_stato(body, headers)
         if metodo == "POST" and path == "/api/host/cancella":
@@ -5350,6 +5354,77 @@ class RouterHTTP:
             logger.error("contratto host: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
 
+    def _registra_consensi(self, acc, host_id, lang, headers):
+        """Scrive le DUE prove firmate: (1) contratto host CON approvazione specifica delle
+        clausole vessatorie ex artt. 1341-1342 c.c., (2) informativa privacy/GDPR come
+        documento SEPARATO (consenso specifico). Ogni riga porta versione + impronta del
+        testo + IP + dispositivo + data/ora, sigillata con HMAC-SHA256."""
+        from fase163_accettazioni import (DOCUMENTO_PRIVACY, PRIVACY_VERSIONE,
+                                          privacy_sha256)
+        ip = self._client_ip(headers)
+        ua = self._user_agent(headers)
+        r1 = acc.registra(host_id, lang=lang, ip=ip, user_agent=ua, vessatorie=True)
+        r2 = acc.registra(host_id, documento=DOCUMENTO_PRIVACY, versione=PRIVACY_VERSIONE,
+                          doc_sha256_=privacy_sha256(), lang=lang, ip=ip, user_agent=ua)
+        if not (r1.get("ok") and r2.get("ok")):
+            logger.error("PROVA consensi INCOMPLETA per host %s (contratto=%s privacy=%s)",
+                         host_id, r1.get("ok"), r2.get("ok"))
+        return {"registrata": bool(r1.get("ok")), "versione": r1.get("versione"),
+                "vessatorie": bool(r1.get("vessatorie")),
+                "privacy_registrata": bool(r2.get("ok")),
+                "privacy_versione": r2.get("versione")}
+
+    def _host_contratto_stato(self, headers):
+        """Serve alla schermata di RI-ACCETTAZIONE: dice se l'host e' in regola con la
+        versione CORRENTE del contratto, con le clausole vessatorie e con la privacy."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        acc = getattr(self._sys, "accettazioni", None)
+        host_id = self._host_id_da_token(headers)
+        if acc is None or not (isinstance(host_id, str) and host_id):
+            return 200, {"deve_riaccettare": False}
+        try:
+            from fase163_accettazioni import doc_sha256 as _dh, privacy_sha256 as _ph
+            st = acc.stato_consensi(host_id)
+            st["doc_sha256"] = _dh()
+            st["privacy_sha256"] = _ph()
+            return 200, st
+        except Exception:
+            logger.error("stato consensi: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+
+    def _host_riaccetta(self, body, headers):
+        """RI-ACCETTAZIONE del contratto aggiornato (art. 13): richiede di nuovo TUTTE E TRE
+        le spunte e scrive prove NUOVE e firmate (le vecchie restano: registro append-only,
+        si prova cosa era in vigore quando). Rifiuta a monte se ne manca una."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        acc = getattr(self._sys, "accettazioni", None)
+        host_id = self._host_id_da_token(headers)
+        if acc is None or not (isinstance(host_id, str) and host_id):
+            return 422, {"errore": "host_id_mancante"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        mancanti = [k for k, v in (("accetta_termini", dati.get("accetta_termini")),
+                                   ("accetta_clausole", dati.get("accetta_clausole")),
+                                   ("accetta_privacy", dati.get("accetta_privacy")))
+                    if not bool(v)]
+        if mancanti:
+            return 422, {"errore": "consensi_mancanti", "mancanti": mancanti}
+        try:
+            from fase163_accettazioni import CONTRATTO_HOST_VERSIONE as _v, doc_sha256 as _dh
+            hc = dati.get("doc_sha256")
+            if isinstance(hc, str) and hc and hc != _dh():
+                return 409, {"errore": "contratto_aggiornato", "doc_sha256": _dh(),
+                             "versione": _v}
+            out = self._registra_consensi(acc, host_id, str(dati.get("lang", "it")), headers)
+            logger.info("RI-ACCETTAZIONE | HOST_ID: %s | VERSIONE: %s", host_id, _v)
+            return 200, {"ok": bool(out.get("registrata")), "accettazione": out}
+        except Exception:
+            logger.error("ri-accettazione: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+
     def _host_accettazioni(self, query, headers):
         """Le prove d'accettazione dell'host (ognuna con flag `integra` = non manomessa)."""
         if not self._auth_host(headers):
@@ -5452,6 +5527,17 @@ class RouterHTTP:
                 and hash_client != hash_vivo:
             return 409, {"errore": "contratto_aggiornato",
                          "doc_sha256": hash_vivo, "versione": ver_viva}
+        # LE 3 SPUNTE SONO OBBLIGATORIE **A MONTE** (2026-07-20): prima solo i Termini
+        # bloccavano lato server e le clausole vessatorie erano controllate SOLO dal
+        # browser -> una chiamata via API creava un account con `vessatorie=0`, cioe' con
+        # trattenute/penali/foro NON opponibili. Ora l'account non nasce affatto: niente
+        # account senza le tre prove (contratto, art. 1341-1342 c.c., privacy GDPR).
+        mancanti = [k for k, v in (("accetta_termini", dati.get("accetta_termini")),
+                                   ("accetta_clausole", dati.get("accetta_clausole")),
+                                   ("accetta_privacy", dati.get("accetta_privacy")))
+                    if not bool(v)]
+        if mancanti:
+            return 422, {"errore": "consensi_mancanti", "mancanti": mancanti}
         e = reg.registra(dati.get("email"), dati.get("password"),
                          accetta_termini=bool(dati.get("accetta_termini")),
                          ragione_sociale=str(dati.get("ragione_sociale", "")),
@@ -5481,14 +5567,8 @@ class RouterHTTP:
             acc = getattr(self._sys, "accettazioni", None)
             if acc is not None:
                 try:
-                    r = acc.registra(
-                        e.host_id, lang=str(dati.get("lang", "it")),
-                        ip=self._client_ip(headers),
-                        user_agent=self._user_agent(headers),
-                        vessatorie=bool(dati.get("accetta_clausole")))
-                    out["accettazione"] = {"registrata": bool(r.get("ok")),
-                                           "versione": r.get("versione"),
-                                           "vessatorie": r.get("vessatorie")}
+                    out["accettazione"] = self._registra_consensi(
+                        acc, e.host_id, str(dati.get("lang", "it")), headers)
                 except Exception:
                     logger.error("PROVA accettazione contratto FALLITA per host %s",
                                  getattr(e, "host_id", "?"), exc_info=True)

@@ -14,7 +14,7 @@ def _read(path):
 
 class TestRoadmapMango(unittest.TestCase):
     def setUp(self):
-        self.doc = _read("ROADMAP_MANGO.md")
+        self.doc = _read("_archivio/ROADMAP_MANGO.md")   # archiviato 2026-07-20 (stack legacy)
 
     def test_sette_mattoni(self):
         for n in range(43, 50):                      # fase43..fase49

@@ -32,7 +32,7 @@ class TestAdminPannello(unittest.TestCase):
     def _host_pubblica(self, email, titolo, **extra):
         s, c = self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(
             {"email": email, "password": "passwordlunga", "accetta_termini": True,
-             "accetta_clausole": True, "doc_sha256": doc_sha256(),
+             "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
              "versione": CONTRATTO_HOST_VERSIONE}))
         self.assertEqual(s, 201, c)
         tok, hid = c["token"], c["host_id"]

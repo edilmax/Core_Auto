@@ -338,6 +338,37 @@
 >   ancora verdi. Demo locale su porta 8899 (script scratchpad/demo_votazioni.py; launcher
 >   Desktop/APRI-DEMO-VOTAZIONI.html → pagina pulita). NB date "23→19" nella demo = scorciatoia
 >   (check_out forzato a ieri per sbloccare il form), NON un bug del prodotto.
+> · 📚 **RIASSETTO DOCUMENTALE + BONIFICA VPS (2026-07-20)**: radice blindata a **5 file
+>   ufficiali** (README · REGISTRO · RIPRENDI_QUI · DEPLOY · CLAUDE), gli altri 9 in `_archivio/`
+>   (23 doc storici + LEGGIMI che avvisa "cifre superate"). **README riscritto da zero** (quello
+>   vecchio parlava di Flask/Aruba/1875 test) e **DEPLOY.md riscritto**: documentava il vecchio
+>   stack e la procedura `docker compose up -d` che **su questa macchina FALLISCE** — chi lo
+>   seguiva rompeva il deploy. **CLAUDE.md: REGOLA ZERO** (solo i 5 file ufficiali, `_archivio`
+>   mai da seguire, ⛔ vietato creare nuovi `.md`, numeri da verificare nel codice). Audit
+>   millimetrico dei 5 documenti vs motore: **0 discrepanze**. Sul VPS rimossi i **19 file
+>   orfani** (backup in `/root/orfani-backup-20260720`). ⚠️ **INCIDENTE risolto**: `git clean`
+>   ha cancellato anche `certbot/` (bind-mount del rinnovo HTTPS) → `certbot renew` falliva =
+>   bomba a orologeria a ~60 giorni. Ricreata + `docker rm -f casavip_nginx` (trappola inode) →
+>   **"all simulated renewals succeeded"**. LEZIONE: su VPS mai `git clean` senza escludere i
+>   bind-mount vivi del compose.
+> · 🔎 **AUDIT COERENZA A TAPPETO (2026-07-20, pre-rilascio)**: ispettore che legge le tariffe VERE
+>   dal codice e scansiona **1.346 file** cercando cifre non allineate. **Pagine utente: ZERO
+>   anomalie.** Trovati e corretti 3 refusi nei documenti vivi: STRATEGIA_VINCENTE diceva ancora
+>   "Noi oggi 15%", STRATEGIA_CRESCITA diceva "nei primi 3 mesi paghiamo NOI Stripe" (contraddiceva
+>   Strada A: il 3% è SEMPRE dell'host) e promo "OFF" (in prod è ON), REGISTRO/fase98 presentavano
+>   il modello legacy "2%/8%" come vigente → marcato LEGACY. `_archivio/` (10 doc storici con cifre
+>   vecchie) NON va in produzione → aggiunto banner LEGGIMI-ARCHIVIO. Guardia STRUTTURALE permanente
+>   `TestNessunaCifraOrfana`: ri-scansiona deploy/*.html a ogni suite → cifra orfana = suite rossa.
+> · ⚖️ **CONSENSI BLINDATI (2026-07-20, audit legale)**: prima UNA casella copriva Contratto+Privacy
+>   (GDPR vuole consensi distinti) e le clausole vessatorie erano controllate SOLO dal browser —
+>   **provato**: via API `accetta_clausole:false` → account creato con vessatorie=0 = trattenute/
+>   penali/foro NON opponibili. Ora: **3 caselle** (Contratto · artt.1341-1342 · Privacy GDPR),
+>   **tasto grigio e non cliccabile** finché non sono spuntate tutte, e il **server rifiuta a monte**
+>   (422 `consensi_mancanti`, nessun account). La privacy è registrata come **documento separato**
+>   (riga nuova, non colonna nuova → le 114 prove già archiviate restano `integra`). Aggiunta la
+>   **RI-ACCETTAZIONE** (art.13): `GET /api/host/contratto_stato` + `POST /api/host/riaccetta` +
+>   card gialla che compare da sola al login quando il contratto cambia (append-only: le prove
+>   vecchie restano). Guardia `test_consensi_blindati` (13); aggiornati 84 payload in 74 test.
 > · 🚨 **BUG GRAVE: LA PROMO 0% NON ERA MAI STATA APPLICATA — FIXATA (2026-07-20)**. Trovato
 >   mentre il fondatore chiedeva di verificare il link diretto: il motore addebitava **10% dal
 >   primo giorno** invece dello 0% dei primi 90gg. Causa (1 riga, fase81): il proprietario si

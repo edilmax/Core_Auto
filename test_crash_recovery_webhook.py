@@ -55,7 +55,7 @@ class TestCrashRecoveryWebhook(unittest.TestCase):
         self.r = crea_router(self.sis, host_key="hk", base_url="https://b.com")
         s, c = self.g("POST", "/api/host/registrazione",
                       {"email": "h@cx.it", "password": "password1", "accetta_termini": True,
-                       "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                       "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                        "versione": CONTRATTO_HOST_VERSIONE})
         self.assertEqual(s, 201, c)
         self.hid, self.tok = c["host_id"], c["token"]

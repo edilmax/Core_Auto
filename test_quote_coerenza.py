@@ -62,7 +62,7 @@ class TestQuoteCoerenza(unittest.TestCase):
 
             s, c = g("POST", "/api/host/registrazione",
                      {"email": "h@qc.it", "password": "password1", "accetta_termini": True,
-                      "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                      "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                       "versione": CONTRATTO_HOST_VERSIONE})
             self.assertEqual(s, 201, c)
             H = {"X-Host-Token": c["token"]}

@@ -87,7 +87,7 @@ class TestBombardamentoConcorrente(unittest.TestCase):
 
             _, c = g("POST", "/api/host/registrazione",
                      {"email": "h@b.it", "password": "password1", "accetta_termini": True,
-                      "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                      "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                       "versione": CONTRATTO_HOST_VERSIONE})
             hid, tok = c["host_id"], c["token"]
             sis.registro_host.imposta_stripe_account(hid, "acct_bomb")

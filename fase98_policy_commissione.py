@@ -1,5 +1,10 @@
 """
-CORE_AUTO - Fase 98: Policy commissione (RAMPA DI LANCIO per anzianità + split asimmetrico 2%/8%).
+CORE_AUTO - Fase 98: Policy commissione (RAMPA DI LANCIO per anzianità).
+
+⚠️ NOTA DI COERENZA (2026-07-20): in questo file esiste anche un modello LEGACY "split
+asimmetrico 2%/8%" (HOST_BPS/GUEST_BPS) mai cablato nel prodotto: il modello VIVO è
+"0% ospite, tutto dedotto dall'host" (fase59). Le costanti 2%/8% restano solo per
+compatibilità storica: NON descrivono il tariffario applicato.
 
 STRATEGIA VINCENTE: batti i colossi (~15-20% tutto incluso) con ~10% a regime, e conquista
 copertura SUBITO con una rampa temporale (land-grab), NON con un privilegio ordinale.

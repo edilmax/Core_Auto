@@ -83,7 +83,7 @@ class TestBombardamentoCalendarioTutti(unittest.TestCase):
             def registra(email):
                 _, c = g("POST", "/api/host/registrazione",
                          {"email": email, "password": "password1", "accetta_termini": True,
-                          "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                          "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                           "versione": CONTRATTO_HOST_VERSIONE})
                 return {"X-Host-Token": c["token"]}
 
@@ -239,7 +239,7 @@ class TestBombardamentoCalendarioTutti(unittest.TestCase):
 
             _, c = g("POST", "/api/host/registrazione",
                      {"email": "s@ct.it", "password": "password1", "accetta_termini": True,
-                      "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                      "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                       "versione": CONTRATTO_HOST_VERSIONE})
             H = {"X-Host-Token": c["token"]}
             oggi = datetime.date.today()

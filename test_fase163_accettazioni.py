@@ -135,7 +135,7 @@ class TestIntegrazioneHTTP(unittest.TestCase):
     def test_registrazione_salva_prova_firmata(self):
         s, d = self._reg(
             {"email": "a@b.com", "password": "password1", "accetta_termini": True,
-             "accetta_clausole": True, "lang": "it"},
+             "accetta_clausole": True, "accetta_privacy": True, "lang": "it"},
             {"X-Forwarded-For": "203.0.113.9, 10.0.0.1", "User-Agent": "Firefox"})
         self.assertEqual(s, 201)
         self.assertTrue(d["accettazione"]["registrata"])
@@ -145,18 +145,30 @@ class TestIntegrazioneHTTP(unittest.TestCase):
         s2, d2 = self.r.gestisci("GET", "/api/host/accettazioni", {}, None,
                                  {"X-Host-Token": tok})
         self.assertEqual(s2, 200)
-        self.assertEqual(len(d2["accettazioni"]), 1)
-        acc = d2["accettazioni"][0]
+        # da 2026-07-20 le prove sono DUE: contratto (con clausole vessatorie) e privacy
+        # come documento SEPARATO (consenso GDPR specifico).
+        self.assertEqual(len(d2["accettazioni"]), 2)
+        per_doc = {a["documento"]: a for a in d2["accettazioni"]}
+        acc = per_doc["contratto_host"]
         self.assertTrue(acc["integra"])
         self.assertTrue(acc["vessatorie"])
         self.assertEqual(acc["ip"], "203.0.113.9")
         self.assertEqual(acc["user_agent"], "Firefox")
+        priv = per_doc["privacy_gdpr"]
+        self.assertTrue(priv["integra"])
+        self.assertEqual(priv["ip"], "203.0.113.9")
 
-    def test_registrazione_senza_clausole_registra_vessatorie_false(self):
+    def test_registrazione_senza_clausole_RIFIUTATA(self):
+        """CAMBIO 2026-07-20 (tutela legale): prima l'account NASCEVA con vessatorie=0
+        (trattenute/penali/foro non opponibili) perche' solo il browser controllava.
+        Ora il server rifiuta A MONTE: niente account senza tutte e tre le prove."""
         s, d = self._reg({"email": "c@d.com", "password": "password1",
-                          "accetta_termini": True, "accetta_clausole": False})
-        self.assertEqual(s, 201)
-        self.assertFalse(d["accettazione"]["vessatorie"])
+                          "accetta_termini": True, "accetta_clausole": False,
+                          "accetta_privacy": True})
+        self.assertEqual(s, 422)
+        self.assertEqual(d.get("errore"), "consensi_mancanti")
+        self.assertIn("accetta_clausole", d.get("mancanti", []))
+        self.assertNotIn("accettazione", d)
 
     def test_senza_accetta_termini_niente_account_ne_prova(self):
         s, d = self._reg({"email": "e@f.com", "password": "password1",
@@ -166,7 +178,7 @@ class TestIntegrazioneHTTP(unittest.TestCase):
 
     def test_anti_manomissione_hash_sbagliato_409(self):
         s, d = self._reg({"email": "g@h.com", "password": "password1",
-                          "accetta_termini": True, "accetta_clausole": True,
+                          "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
                           "doc_sha256": "deadbeef"})
         self.assertEqual(s, 409)
         self.assertEqual(d["errore"], "contratto_aggiornato")
@@ -174,7 +186,7 @@ class TestIntegrazioneHTTP(unittest.TestCase):
 
     def test_hash_corretto_passa(self):
         s, _ = self._reg({"email": "i@j.com", "password": "password1",
-                          "accetta_termini": True, "accetta_clausole": True,
+                          "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
                           "doc_sha256": doc_sha256()})
         self.assertEqual(s, 201)
 

@@ -22,7 +22,7 @@ class TestCalendarioPrezzi(unittest.TestCase):
         self.r = crea_router(self.sys, host_key="hk")
         s, c = self.g("POST", "/api/host/registrazione",
                       {"email": "h@cp.it", "password": "password1", "accetta_termini": True,
-                       "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                       "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                        "versione": CONTRATTO_HOST_VERSIONE})
         self.assertEqual(s, 201, c)
         self.tok = c["token"]
@@ -98,7 +98,7 @@ class TestCalendarioPrezzi(unittest.TestCase):
         self.assertEqual(s, 422)                                        # date mancanti
         altro = self.g("POST", "/api/host/registrazione",
                        {"email": "h2@cp.it", "password": "password1", "accetta_termini": True,
-                        "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                        "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                         "versione": CONTRATTO_HOST_VERSIONE})[1]["token"]
         s, _ = self.g("GET", "/api/host/calendario_prezzi", h={"X-Host-Token": altro},
                       q={"alloggio": "casa", "da": "2026-09-01", "a": "2026-09-04"})

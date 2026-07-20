@@ -140,6 +140,81 @@ class TestContratto(unittest.TestCase):
         self.assertIn("ART. 6-BIS", d["testo"])
 
 
+class TestNessunaCifraOrfana(unittest.TestCase):
+    """AUDIT A TAPPETO (2026-07-20): nessuna percentuale 'orfana' o superata nelle pagine che
+    il CLIENTE vede. Ogni riga di `deploy/*.html` che parla di commissione o tariffa tecnica
+    deve usare SOLO cifre allineate al motore; le righe che confrontano i concorrenti possono
+    citare qualunque cifra (sono loro, non noi)."""
+
+    KW_COSTO = re.compile(r"commission|commissione|comisi|Provision|tariffa tecnica|costo carta|"
+                          r"technical fee|frais techniques|technische Geb|taxa t|tarifa t", re.I)
+    KW_ALTRUI = re.compile(r"booking|airbnb|vrbo|expedia|agoda|tripadvisor|hostelworld|OTA|"
+                           r"coloss|concorren|mercato|portale|competitor", re.I)
+    # percentuali nostre legittime NON commissionali (penali, sconti, politiche di cancellazione)
+    KW_ALTRO = re.compile(r"penale|penalit|cancellazion|rimbors|sconto|non rimborsabile|"
+                          r"soggiorno lungo|IVA|VAT|tassa|refund|discount|width|height", re.I)
+    PERC = re.compile(r"(\d{1,3})(?:[.,]\d+)?\s?%")
+
+    def test_pagine_utente_solo_cifre_del_motore(self):
+        bps = _psp_bps_default()
+        ammesse = {0, BPS_DIRETTO // 100, LANCIO_BPS_FASE1 // 100,
+                   LANCIO_BPS_REGIME // 100, bps // 100, 100}
+        anomalie = []
+        for nome in sorted(os.listdir(os.path.join(BASE, "deploy"))):
+            if not nome.endswith(".html"):
+                continue
+            for n, riga in enumerate(_leggi("deploy/" + nome).splitlines(), 1):
+                if not (self.PERC.search(riga) and self.KW_COSTO.search(riga)):
+                    continue
+                if self.KW_ALTRUI.search(riga) or self.KW_ALTRO.search(riga):
+                    continue
+                fuori = {int(x) for x in self.PERC.findall(riga)} - ammesse
+                if fuori:
+                    anomalie.append("deploy/%s:%d cifre=%s | %s"
+                                    % (nome, n, sorted(fuori), riga.strip()[:110]))
+        self.assertEqual(anomalie, [], "cifre non allineate al motore nelle pagine utente:\n"
+                                       + "\n".join(anomalie))
+
+    def test_radice_solo_cinque_documenti_ufficiali(self):
+        """RIASSETTO 2026-07-20: in radice restano SOLO i 5 file ufficiali. Le strategie e i
+        report storici stanno in `_archivio/` (cifre superate, non vanno seguite)."""
+        ufficiali = {"README.md", "REGISTRO_INGEGNERIA.md", "RIPRENDI_QUI.md",
+                     "DEPLOY.md", "CLAUDE.md"}
+        presenti = {f for f in os.listdir(BASE) if f.endswith(".md")}
+        self.assertEqual(presenti, ufficiali,
+                         "in radice devono esserci SOLO i 5 documenti ufficiali; "
+                         "trovati in più: %s | mancanti: %s"
+                         % (sorted(presenti - ufficiali), sorted(ufficiali - presenti)))
+        self.assertTrue(os.path.isfile(os.path.join(BASE, "_archivio",
+                                                    "LEGGIMI-ARCHIVIO.md")),
+                        "l'archivio deve avvisare che le sue cifre sono superate")
+
+    def test_readme_unica_sorgente_testuale_del_tariffario(self):
+        """Il README è l'UNICA fonte testuale di verità sulle tariffe: deve dichiarare tutti
+        gli scaglioni del motore, il 3% SEMPRE dovuto e l'identità matematica."""
+        r = _leggi("README.md")
+        bps = _psp_bps_default()
+        for atteso in ("%d%%" % (bps // 100), "%d%%" % (LANCIO_BPS_FASE1 // 100),
+                       "%d%%" % (LANCIO_BPS_REGIME // 100), "%d%%" % (BPS_DIRETTO // 100),
+                       str(LANCIO_GIORNI_GRATIS)):
+            self.assertIn(atteso, r, "README: manca la cifra %s del motore" % atteso)
+        self.assertIn("SEMPRE dovuta", r)            # la tariffa tecnica non si spegne mai
+        self.assertIn("anche quando la commissione è 0%", r)
+        self.assertIn("prezzo_ospite = netto_host + commissione + tariffa_tecnica", r)
+        # niente affermazioni del vecchio README (stack Flask, server Aruba): NB "niente Flask"
+        # e' una frase CORRETTA, quindi si cerca l'affermazione sbagliata, non la parola.
+        self.assertNotIn("API REST Flask", r)
+        self.assertNotIn("Aruba", r)
+        self.assertIn("stdlib puro", r)
+
+    def test_readme_dichiara_i_tre_consensi(self):
+        """Il README deve descrivere la tutela legale come è implementata davvero."""
+        r = _leggi("README.md")
+        for atteso in ("1341-1342", "GDPR", "consensi_mancanti", "HMAC-SHA256",
+                       "grigio e non cliccabile", "422"):
+            self.assertIn(atteso, r, "README: manca '%s' nella sezione consensi" % atteso)
+
+
 class TestTerminiPubblici(unittest.TestCase):
     def test_termini_dichiarano_la_tariffa(self):
         t = _leggi("deploy/termini.html")

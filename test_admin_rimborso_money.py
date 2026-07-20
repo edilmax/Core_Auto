@@ -52,7 +52,7 @@ class TestAdminRimborsoMoney(unittest.TestCase):
                              base_url="https://bookinvip.com")
         s, c = self.g("POST", "/api/host/registrazione",
                       {"email": "h@ar.it", "password": "password1", "accetta_termini": True,
-                       "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                       "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                        "versione": CONTRATTO_HOST_VERSIONE})
         self.tok, self.hid = c["token"], c["host_id"]
         self.g("POST", "/api/host/pubblica",

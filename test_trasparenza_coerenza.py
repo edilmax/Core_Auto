@@ -58,7 +58,7 @@ class TestTrasparenzaCoerente(unittest.TestCase):
         try:
             st, c = r.gestisci("POST", "/api/host/registrazione", {}, json.dumps({
                 "email": "h@x.it", "password": "password1", "accetta_termini": True,
-                "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                 "versione": CONTRATTO_HOST_VERSIONE}), {})
             self.assertEqual(st, 201, c)
             tok = c["token"]

@@ -46,7 +46,7 @@ class TestIsolamentoMultiHost(unittest.TestCase):
     def _crea_host(self, n, tag=""):
         email = "host%s-%d@test.it" % (tag, n)
         body = {"email": email, "password": "password%d!" % n, "accetta_termini": True,
-                "accetta_clausole": True, "ragione_sociale": "Casa %d" % n,
+                "accetta_clausole": True, "accetta_privacy": True, "ragione_sociale": "Casa %d" % n,
                 "doc_sha256": doc_sha256(), "lang": "it"}
         s, out = self.g("POST", "/api/host/registrazione", body)
         self.assertEqual(s, 201, "registrazione host %d fallita: %r" % (n, out))

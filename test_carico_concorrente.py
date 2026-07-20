@@ -83,7 +83,7 @@ class TestCaricoConcorrente(unittest.TestCase):
     def test_metriche_avanzate_endpoint(self):
         s, c = self.g("POST", "/api/host/registrazione",
                       {"email": "h@load.it", "password": "password1", "accetta_termini": True,
-                       "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                       "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                        "versione": CONTRATTO_HOST_VERSIONE})
         self.assertEqual(s, 201, c)
         # NB: l'host del catalogo è h1 (pubblicato in setUp); registro un annuncio suo

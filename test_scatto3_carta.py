@@ -170,7 +170,7 @@ class TestScatto3Router(unittest.TestCase):
         sis.carta = _CartaFinta("sk", fetch=finto)
         _, c = r.gestisci("POST", "/api/host/registrazione", {}, json.dumps(
             {"email": "h@c.it", "password": "password1", "accetta_termini": True,
-             "accetta_clausole": True, "doc_sha256": doc_sha256(),
+             "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
              "versione": CONTRATTO_HOST_VERSIONE}), {})
         return sis, r, c["token"], c["host_id"]
 

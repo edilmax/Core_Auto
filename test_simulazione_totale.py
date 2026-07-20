@@ -76,7 +76,7 @@ class TestSimulazioneTotale(unittest.TestCase):
         s, c = self.g("POST", "/api/host/registrazione",
                       {"email": email, "password": "password1", "ragione_sociale": f"Host {i}",
                        "telefono": f"+3933300000{i:02d}", "accetta_termini": True,
-                       "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                       "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                        "versione": CONTRATTO_HOST_VERSIONE, "lang": "it"})
         self.assertEqual(s, 201, c)
         return c["host_id"], c["token"], email
@@ -404,7 +404,7 @@ class TestSimulazioneTotale(unittest.TestCase):
         # B si iscrive col codice di A
         s, b = self.g("POST", "/api/host/registrazione",
                       {"email": "refB@sim.it", "password": "password1",
-                       "accetta_termini": True, "accetta_clausole": True,
+                       "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
                        "doc_sha256": doc_sha256(), "codice_referral": code})
         self.assertEqual(s, 201)
         bid, btok = b["host_id"], b["token"]

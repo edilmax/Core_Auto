@@ -528,7 +528,7 @@ class TestSelfServiceHost(unittest.TestCase):
     def test_registra_login_pubblica_solo_miei(self):
         s, c = self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(
             {"email": "mario@bnb.it", "password": "passwordlunga",
-             "accetta_termini": True, "ragione_sociale": "B&B Mario"}))
+             "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True, "ragione_sociale": "B&B Mario"}))
         self.assertEqual(s, 201)
         token, hid = c["token"], c["host_id"]
         h = {"X-Host-Token": token}
@@ -555,7 +555,7 @@ class TestSelfServiceHost(unittest.TestCase):
 
     def test_login(self):
         self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(
-            {"email": "l@b.it", "password": "passwordlunga", "accetta_termini": True}))
+            {"email": "l@b.it", "password": "passwordlunga", "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True}))
         s, c = self.r.gestisci("POST", "/api/host/login", body=json.dumps(
             {"email": "l@b.it", "password": "passwordlunga"}))
         self.assertEqual(s, 200)
@@ -567,7 +567,7 @@ class TestSelfServiceHost(unittest.TestCase):
     def test_viral_referral(self):
         # host A si registra e prende il suo link
         a = self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(
-            {"email": "a@b.it", "password": "passwordlunga", "accetta_termini": True}))[1]
+            {"email": "a@b.it", "password": "passwordlunga", "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True}))[1]
         ha = {"X-Host-Token": a["token"]}
         s, ref = self.r.gestisci("GET", "/api/host/referral", headers=ha)
         self.assertEqual(s, 200)
@@ -576,7 +576,7 @@ class TestSelfServiceHost(unittest.TestCase):
         codice = ref["codice"]
         # host B si registra COL codice di A -> entrambi accreditati
         b = self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(
-            {"email": "b@b.it", "password": "passwordlunga", "accetta_termini": True,
+            {"email": "b@b.it", "password": "passwordlunga", "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
              "codice_referral": codice}))[1]
         self.assertTrue(b["referral"]["ok"])
         self.assertGreater(b["referral"]["credito_cents"], 0)   # B: credito di benvenuto al signup
@@ -586,10 +586,14 @@ class TestSelfServiceHost(unittest.TestCase):
         self.assertEqual(ref2["credito_cents"], 0)
 
     def test_registrazione_termini(self):
+        """Da 2026-07-20 il rifiuto avviene A MONTE sui 3 consensi obbligatori (contratto,
+        clausole vessatorie ex artt. 1341-1342 c.c., privacy GDPR): l'errore ora e'
+        `consensi_mancanti` e dice QUALI mancano."""
         s, c = self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(
             {"email": "x@b.it", "password": "passwordlunga", "accetta_termini": False}))
         self.assertEqual(s, 422)
-        self.assertEqual(c["errore"], "termini_non_accettati")
+        self.assertEqual(c["errore"], "consensi_mancanti")
+        self.assertIn("accetta_termini", c["mancanti"])
 
 
 class TestOnboarding(unittest.TestCase):

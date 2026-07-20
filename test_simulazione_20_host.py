@@ -100,7 +100,7 @@ class TestSimulazione20Host(unittest.TestCase):
     def _registra(self, i, *, codice=None):
         corpo = {"email": f"h{i}@sim20.it", "password": "password1",
                  "ragione_sociale": f"Host {i}", "telefono": f"+3933320{i:04d}",
-                 "accetta_termini": True, "accetta_clausole": True,
+                 "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
                  "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE, "lang": "it"}
         if codice:
             corpo["codice_referral"] = codice

@@ -105,7 +105,7 @@ class TestGuardieCollegamenti(unittest.TestCase):
         from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
         st, c = self.r.gestisci("POST", "/api/host/registrazione", {}, json.dumps({
             "email": "g@cp.it", "password": "password1", "accetta_termini": True,
-            "accetta_clausole": True, "doc_sha256": doc_sha256(),
+            "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
             "versione": CONTRATTO_HOST_VERSIONE}), {})
         self.assertEqual(st, 201, c)
         tk = {"X-Host-Token": c["token"]}

@@ -9,17 +9,22 @@
 ## 1. Rampa commissione (per anzianità host) — `fase98.commissione_bps_lancio`
 | Anzianità | Commissione marketplace | Chi paga Stripe |
 |---|---|---|
-| **0–3 mesi** | **0%** (host tiene tutto) | **NOI** (investimento acquisizione) |
-| **3–12 mesi** | **8%** | **host** (trasparente = onestà) |
-| **oltre 12 mesi** | **10%** (< 15,5% colossi) | **host** |
-Diretto host→cliente: **5% fisso** (copre Stripe, no-loss). Flag `promo_lancio_attiva` (OFF finché non si lancia).
+| **0–3 mesi** | **0%** | **host** (tariffa tecnica 3%) |
+| **3–12 mesi** | **8%** | **host** (3%, trasparente = onestà) |
+| **oltre 12 mesi** | **10%** (< 15,5% colossi) | **host** (3%) |
+Diretto host→cliente: **5% fisso**, sempre + 3% tecnico. Flag `PROMO_LANCIO`: **ATTIVA in
+produzione** (verificato 2026-07-20).
 
-## 2. ⚠️ CORREZIONE ONESTA: lo Stripe del lancio è un COSTO nostro
-Nei primi 3 mesi (0% commissione) **paghiamo NOI Stripe** → NON è "costo zero", è un
-**investimento di acquisizione preciso e quantificabile**. Dopo, lo Stripe passa all'host
-(dichiarato in chiaro = onestà). Quindi:
-- **A regime**: mai in perdita (host paga Stripe, noi prendiamo 8–10% pieno).
-- **Nel lancio**: piccola perdita VOLUTA = (GMV lancio) × costo-Stripe. Va tenuta sotto controllo.
+## 2. ⚠️ CHI PAGA STRIPE — DECISIONE DEL FONDATORE 2026-07-20 ("Strada A")
+**Lo paga SEMPRE l'host, anche durante la promo 0%.** La tariffa tecnica del **3%** è dedotta
+dal netto host in **ogni** periodo (`costo_pagamento` in fase59, `PAGAMENTO_BPS=300`): noi non
+prendiamo margine su quella riga, ma **non ci rimettiamo mai**, nemmeno in lancio.
+> Nota storica: questo documento prevedeva che nei primi 3 mesi lo Stripe lo pagassimo NOI
+> (investimento di acquisizione). **Non è mai stato implementato così** e nel luglio 2026 il
+> fondatore ha scelto di allineare i TESTI al codice (host paga sempre il 3%) invece del
+> contrario, dichiarandolo in chiaro su pannello host, Termini §5 e Contratto ART. 6-BIS.
+- **A regime**: mai in perdita (host paga il 3%, noi prendiamo 8–10% pieno).
+- **In lancio**: ricavo nostro 0, ma **nessuna perdita** (il costo carta non è a nostro carico).
 
 ## 3. Costo Stripe (PSP) — stima prudente
 - Carte UE ~1,5% + €0,25; UK ~2,5%; **internazionali ~3,25% + €0,25**; Connect payout +~0,25%.

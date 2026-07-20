@@ -71,7 +71,7 @@ class TestBombardamentoSuRichiesta(unittest.TestCase):
 
             _, c = g("POST", "/api/host/registrazione",
                      {"email": "h@sr.it", "password": "password1", "accetta_termini": True,
-                      "accetta_clausole": True, "doc_sha256": doc_sha256(),
+                      "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                       "versione": CONTRATTO_HOST_VERSIONE})
             tok = c["token"]
             H = {"X-Host-Token": tok}

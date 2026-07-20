@@ -25,7 +25,7 @@ class TestErasure(unittest.TestCase):
         self.r = crea_router(self.sis, host_key="hk", admin_key="ak",
                              base_url="https://bookinvip.com")
         s, c = self.g("POST", "/api/host/registrazione",
-                      {"email": "h@x.it", "password": "passw0rd!", "accetta_termini": True})
+                      {"email": "h@x.it", "password": "passw0rd!", "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True})
         self.hid = c["host_id"]
         self.g("POST", "/api/host/pubblica", {
             "host_id": self.hid, "slug": "casa", "titolo": "Casa", "citta": "Roma",

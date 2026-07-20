@@ -72,7 +72,7 @@ class TestFantasmiTerminali(unittest.TestCase):
             val, citta = VAL_CITTA[k]
             _, c = g("POST", "/api/host/registrazione",
                      {"email": "h%d@gt.it" % k, "password": "password1",
-                      "accetta_termini": True, "accetta_clausole": True,
+                      "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
                       "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
             tok = c["token"]
             sl = "gt-%d" % k
