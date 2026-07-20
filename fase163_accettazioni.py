@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 # Bump questa versione a OGNI modifica sostanziale del testo -> gli host dovranno ri-accettare.
-CONTRATTO_HOST_VERSIONE = "2026-07-11"
+CONTRATTO_HOST_VERSIONE = "2026-07-20"
 
 # ── TESTO DEL CONTRATTO (it = lingua che fa fede) ─────────────────────────────
 _IT = """CONTRATTO HOST BOOKINVIP — Versione {VER}
@@ -84,6 +84,20 @@ dell'Host. Il Payout matura a soggiorno regolarmente avvenuto. BookinVIP ha diri
 TRATTENERE, COMPENSARE o RECUPERARE dai Payout presenti o futuri dell'Host ogni importo a
 qualunque titolo dovuto dall'Host (penali, rimborsi all'Ospite, storni/chargeback, costi,
 sanzioni), anche senza preventivo consenso ulteriore.
+
+ART. 6-BIS — TARIFFA TECNICA DI ELABORAZIONE DEI PAGAMENTI (SEMPRE DOVUTA).
+Oltre alla Commissione, resta a carico esclusivo dell'Host una TARIFFA TECNICA FISSA pari al
+3% (tre per cento) dell'importo della transazione, a copertura dei costi del gateway di
+pagamento (Stripe), trattenuta automaticamente al momento del pagamento. Tale tariffa e'
+SEMPRE dovuta, per l'intero ciclo di vita dell'Host sulla Piattaforma, e si applica anche nei
+periodi in cui la Commissione di piattaforma e' pari allo 0%. Riepilogo del tariffario vigente:
+ (a) prenotazioni provenienti dal marketplace BookinVIP: Commissione 0% nei primi 90 (novanta)
+     giorni dalla registrazione dell'Host; 8% dal 91esimo giorno e fino a 1 (un) anno; 10% a
+     regime oltre 1 (un) anno — in ogni caso OLTRE alla tariffa tecnica del 3%;
+ (b) prenotazioni provenienti dal link diretto dell'Host: Commissione 5%, OLTRE alla tariffa
+     tecnica del 3%.
+BookinVIP non consegue alcun margine sulla tariffa tecnica, destinata a coprire i costi del
+servizio di pagamento. L'Ospite non sostiene alcuna commissione (modello 0% Ospite).
 
 ART. 7 — DIVIETO DI DISINTERMEDIAZIONE (ANTI-CIRCONVENZIONE).
 E' vietato all'Host dirottare fuori dalla Piattaforma prenotazioni originate su di essa, o
@@ -192,6 +206,18 @@ BookinVIP applies a zero-cost model for the Guest: the Commission is withheld fr
 Payout. Payout accrues once the stay has duly taken place. BookinVIP may WITHHOLD, SET OFF or
 RECOVER from present or future Payouts any amount owed by the Host on any basis (penalties,
 Guest refunds, chargebacks, costs, sanctions).
+
+ART. 6-BIS — PAYMENT PROCESSING TECHNICAL FEE (ALWAYS DUE). In addition to the Commission, a
+FIXED TECHNICAL FEE of 3% (three per cent) of the transaction amount remains solely payable by
+the Host, covering the costs of the payment gateway (Stripe), withheld automatically at the
+time of payment. This fee is ALWAYS due, for the Host's entire lifecycle on the Platform, and
+applies also during periods in which the platform Commission is 0%. Current fee schedule:
+ (a) bookings from the BookinVIP marketplace: Commission 0% for the first 90 (ninety) days from
+     the Host's registration; 8% from day 91 up to 1 (one) year; 10% thereafter — in each case
+     IN ADDITION TO the 3% technical fee;
+ (b) bookings from the Host's direct link: Commission 5%, IN ADDITION TO the 3% technical fee.
+BookinVIP makes no margin on the technical fee, which covers payment-service costs. The Guest
+bears no commission (0% Guest model).
 
 ART. 7 — ANTI-CIRCUMVENTION. The Host may not divert off-Platform any booking originated on it,
 solicit the Guest to book elsewhere, or exchange contacts/payments to avoid the Commission.

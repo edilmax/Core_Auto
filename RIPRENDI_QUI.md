@@ -338,6 +338,30 @@
 >   ancora verdi. Demo locale su porta 8899 (script scratchpad/demo_votazioni.py; launcher
 >   Desktop/APRI-DEMO-VOTAZIONI.html → pagina pulita). NB date "23→19" nella demo = scorciatoia
 >   (check_out forzato a ieri per sbloccare il form), NON un bug del prodotto.
+> · 🚨 **BUG GRAVE: LA PROMO 0% NON ERA MAI STATA APPLICATA — FIXATA (2026-07-20)**. Trovato
+>   mentre il fondatore chiedeva di verificare il link diretto: il motore addebitava **10% dal
+>   primo giorno** invece dello 0% dei primi 90gg. Causa (1 riga, fase81): il proprietario si
+>   leggeva da `dettaglio(slug)["host_id"]` ma il dettaglio pubblico NON espone l'host → hid
+>   sempre None → rampa saltata → fail-safe 10%. Fix: `catalogo.host_di_alloggio(slug)`. Peggio:
+>   `/api/trasparenza` (strada diversa) MOSTRAVA 0% → **promettevamo 0% e addebitavamo 10%**.
+>   Nessuna guardia lo prendeva: una testava la formula da sola, l'altra la pagina — mancava il
+>   percorso vero (quote→commissione). +2° fix: la rampa terminava su 10% FISSO ignorando
+>   `COMMISSIONE_BPS` (impostazione ignorata = ricavo perso) → ora finisce sul regime configurato.
+>   Guardia permanente `test_promo_lancio_e2e` (9, ROSSA sul vecchio) + collaudo multi-metodo
+>   (560 combinazioni differenziali, 480 richieste concorrenti, catena soldi a 0%, fuzz) = 0 violazioni.
+> · 💶 **TRASPARENZA COSTI HOST "Strada A" (2026-07-20)**: audit read-only del modulo pagamenti →
+>   il codice era GIUSTO (costo carta 3% dedotto dal netto host, `PAGAMENTO_BPS` default 300, non
+>   impostato sul VPS) ma i TESTI non lo dicevano: con la promo lancio ATTIVA (0% primi 90gg / 8% /
+>   10%) l'host a 0% credeva di "tenere tutto" e invece il 3% gli veniva dedotto. Scelta fondatore:
+>   allineare i TESTI, **mai le formule**. Fatto: card "🎉 Promozione Lancio 0%" in cima al pannello
+>   host coi 4 scaglioni espliciti (0/8/10% + diretto 5%, sempre **+3% tariffa tecnica**), corretti
+>   `h_prezzo_osp`/`dir_p` in TUTTE le 8 lingue, **ART. 6-BIS** nel contratto IT+EN ("SEMPRE dovuta"),
+>   **versione contratto 2026-07-11 → 2026-07-20** (gli host ri-accettano: indolore ora, 0 host reali),
+>   §5 dei termini pubblici riscritto. Guardia ANTI-DERIVA `test_trasparenza_costi` (11): le % dei
+>   testi sono ancorate alle costanti del codice → cambiare una tariffa senza aggiornare i testi
+>   fa diventare la suite ROSSA. ⚠️ REPERTO aperto (business): il "diretto" resta 5% anche durante
+>   la promo → nei primi 90gg il diretto (8% totale) costa PIÙ del marketplace (3% totale); i testi
+>   lo dichiarano onestamente, invertirlo sarebbe una modifica di logica. Riga TRASPARENZA REGISTRO sez.1.
 > **PROSSIMI PASSI**: nessuno obbligato. Idee aperte (attendono VAI): passo-2 del comp.1 (batchare
 >   anche il calendario, fase58); estrazione dei rami geo/consigliati di `_catalogo`; sblocchi
 >   Meta/TikTok/OXR (prerequisiti del fondatore, sez.2-bis). Regole ferme invariate (salvare
