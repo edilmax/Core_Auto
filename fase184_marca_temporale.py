@@ -580,18 +580,29 @@ class ArchivioMarche:
                                 "qualificata INTEGER NOT NULL DEFAULT 0")
                 except sqlite3.OperationalError:
                     pass
-                con.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_marca_giorno "
-                            "ON marche(giorno, ambito) WHERE stato='ok'")
+                # Una marca riuscita per giorno E PER RANGO: cosi' una qualificata
+                # puo' AGGIUNGERSI a un ripiego preso prima (l'archivio e' append-only:
+                # non si cancella la prova vecchia, si affianca quella migliore).
+                con.execute("DROP INDEX IF EXISTS idx_marca_giorno")
+                con.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_marca_giorno_rango "
+                            "ON marche(giorno, ambito, qualificata) WHERE stato='ok'")
                 con.execute("CREATE INDEX IF NOT EXISTS idx_marca_ts "
                             "ON marche(richiesto_ts)")
         finally:
             self._chiudi(con)
 
-    def gia_marcato(self, giorno: str, ambito: str = "registri") -> bool:
+    def gia_marcato(self, giorno: str, ambito: str = "registri",
+                    solo_qualificata: bool = False) -> bool:
+        """C'e' gia' una marca riuscita per quel giorno?
+        Con `solo_qualificata` la domanda diventa: c'e' gia' una marca QUALIFICATA?
+        Serve al giro giornaliero per non accontentarsi di un ripiego preso quando i
+        prestatori europei erano momentaneamente irraggiungibili."""
         con = self._apri()
         try:
-            r = con.execute("SELECT 1 FROM marche WHERE giorno=? AND ambito=? "
-                            "AND stato='ok'", (str(giorno), str(ambito))).fetchone()
+            sql = ("SELECT 1 FROM marche WHERE giorno=? AND ambito=? AND stato='ok'")
+            if solo_qualificata:
+                sql += " AND qualificata=1"
+            r = con.execute(sql, (str(giorno), str(ambito))).fetchone()
             return r is not None
         finally:
             self._chiudi(con)
@@ -720,8 +731,16 @@ def marca_i_registri(archivio: ArchivioMarche, *, accettazioni=None, finanza=Non
         import datetime as _dt
         g = giorno or _dt.datetime.utcfromtimestamp(
             ora_ts if ora_ts is not None else time.time()).strftime("%Y-%m-%d")
-        if archivio.gia_marcato(g):
-            return {"ok": True, "saltato": "gia_marcato_oggi", "giorno": g}
+        # Il giorno e' concluso quando c'e' la prova del rango che vogliamo: se
+        # preferiamo le qualificate, un ripiego preso stamattina NON basta a fermare
+        # i tentativi — si riprova finche' un prestatore europeo risponde.
+        punta_a_qualificata = not str(
+            os.environ.get("MARCA_ACCETTA_RIPIEGO", "")).strip().lower() in (
+                "1", "true", "yes", "si", "on")
+        if archivio.gia_marcato(g, solo_qualificata=punta_a_qualificata):
+            return {"ok": True, "saltato": "gia_marcato_oggi", "giorno": g,
+                    "qualificata": punta_a_qualificata}
+        aveva_ripiego = punta_a_qualificata and archivio.gia_marcato(g)
         acc_sig, acc_righe = "assente", 0
         if accettazioni is not None:
             s = accettazioni.sigillo()
@@ -738,6 +757,11 @@ def marca_i_registri(archivio: ArchivioMarche, *, accettazioni=None, finanza=Non
         if (esito.get("ok") and solo_qualificate() and not esito.get("qualificata")):
             # richiesta esplicita: nessuna marca e' meglio di una di rango inferiore
             esito = {"ok": False, "motivo": "solo_qualificate_ma_nessuna_disponibile"}
+        if aveva_ripiego and esito.get("ok") and not esito.get("qualificata"):
+            # si stava solo cercando di MIGLIORARE una prova gia' presa: se torna di
+            # nuovo un ripiego non si archivia un doppione, si riprovera' dopo.
+            return {"ok": True, "saltato": "ripiego_gia_presente", "giorno": g,
+                    "qualificata": False}
         scritto = archivio.scrivi(giorno=g, ambito="registri", impronta=sig["impronta"],
                                   canonico=sig["canonico"], esito=esito, ora_ts=ora_ts)
         if esito.get("ok"):

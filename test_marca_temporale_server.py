@@ -149,7 +149,37 @@ class TestRotteBunker(BaseServer):
             self.assertIn(st, (400, 404))
             self.assertIsNone(token)
 
-    def test_congela_adesso_e_idempotente(self):
+    def test_congela_adesso_e_idempotente_con_marca_qualificata(self):
+        """Una seconda richiesta non deve disturbare di nuovo l'Autorita' — a patto che
+        la marca gia' presa sia QUALIFICATA. (Se fosse solo un ripiego si riproverebbe
+        apposta, per non restare tutto il giorno con una prova di rango inferiore:
+        regola cambiata il 2026-07-21 dopo averlo visto accadere in produzione.)"""
+        import fase184_marca_temporale as m2
+        from test_marca_qualificata import _token_qualificato
+
+        def qualificata(imp, **kw):
+            risposta = _token_qualificato(imp, nonce=7)
+            e = m2.interpreta_risposta(risposta, imp, 7)
+            e["qualificata"] = m2.e_qualificata(e.get("token") or b"")
+            e["tsa"] = "http://tsa.finta.eu"
+            return e
+
+        vero = m2.chiedi_marca
+        m2.chiedi_marca = qualificata
+        try:
+            st1, c1 = self.g("POST", "/api/bunker/marca_ora", {}, self._hdr())
+            st2, c2 = self.g("POST", "/api/bunker/marca_ora", {}, self._hdr())
+        finally:
+            m2.chiedi_marca = vero
+        self.assertEqual(st1, 200, c1)
+        self.assertTrue(c1.get("ok"), c1)
+        self.assertTrue(c1.get("qualificata"), "la marca finta deve risultare qualificata")
+        self.assertEqual(st2, 200)
+        self.assertEqual(c2.get("saltato"), "gia_marcato_oggi")
+
+    def test_col_solo_ripiego_congela_adesso_RIPROVA(self):
+        """Con in archivio una marca ordinaria, premere «Congela adesso» deve tentare
+        di nuovo: e' l'occasione per rimpiazzarla con una qualificata."""
         import fase184_marca_temporale as m2
         vero = m2.chiedi_marca
         m2.chiedi_marca = lambda imp, **kw: m2.interpreta_risposta(
@@ -159,11 +189,10 @@ class TestRotteBunker(BaseServer):
             st2, c2 = self.g("POST", "/api/bunker/marca_ora", {}, self._hdr())
         finally:
             m2.chiedi_marca = vero
-        self.assertEqual(st1, 200, c1)
-        self.assertTrue(c1.get("ok"), c1)
-        self.assertEqual(st2, 200)
-        self.assertEqual(c2.get("saltato"), "gia_marcato_oggi",
-                         "una seconda richiesta non deve disturbare di nuovo la TSA")
+        self.assertTrue(c1.get("ok"))
+        self.assertFalse(c1.get("qualificata"))
+        self.assertEqual(c2.get("saltato"), "ripiego_gia_presente",
+                         "si e' riprovato, ma senza archiviare un doppione")
 
 
 class TestDossier(BaseServer):

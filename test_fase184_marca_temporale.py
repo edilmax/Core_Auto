@@ -542,12 +542,65 @@ class TestGiroCompleto(unittest.TestCase):
                                     giornale_righe=9)["impronta"]
         self.assertEqual(r["impronta"], atteso)
 
-    def test_idempotente_sul_giorno(self):
+    def test_idempotente_sul_giorno_QUANDO_LA_MARCA_E_QUALIFICATA(self):
+        """REGOLA CAMBIATA il 2026-07-21 (difetto visto in PRODUZIONE). Prima bastava
+        una marca qualunque a chiudere il giorno: se i prestatori europei erano
+        irraggiungibili al primo giro, si ripiegava e non si riprovava piu' per tutto
+        il giorno, restando con una prova di rango inferiore. Ora il giorno si chiude
+        solo con una marca QUALIFICATA — e allora si', una sola richiesta."""
+        from test_marca_qualificata import _token_qualificato
+
+        def rete_qualificata(url, richiesta, timeout):
+            self.chiamate.append(url)
+            t = mt._leggi_tlv(richiesta, 0)
+            c = mt._figli(richiesta, t[1], t[2])
+            imp = mt._figli(richiesta, c[1][1], c[1][2])[1]
+            return _token_qualificato(richiesta[imp[1]:imp[2]],
+                                      nonce=mt._intero_da(richiesta, c[2][1], c[2][2]))
+
         for _ in range(4):
             mt.marca_i_registri(self.a, accettazioni=_Registro(), finanza=_Finanza(),
                                 giorno="2026-07-21", url="http://tsa.finta",
+                                trasporto=rete_qualificata)
+        self.assertEqual(len(self.chiamate), 1,
+                         "con una marca QUALIFICATA basta una sola richiesta al giorno")
+
+    def test_col_ripiego_si_RIPROVA_per_ottenere_la_qualificata(self):
+        """L'altra faccia: se in archivio c'e' solo un ripiego, i giri successivi devono
+        riprovare — altrimenti una prova inferiore resterebbe li' tutto il giorno."""
+        for _ in range(3):
+            mt.marca_i_registri(self.a, accettazioni=_Registro(), finanza=_Finanza(),
+                                giorno="2026-07-21", url="http://tsa.finta",
                                 trasporto=self._rete_buona)
-        self.assertEqual(len(self.chiamate), 1, "una sola richiesta alla TSA per giorno")
+        self.assertGreater(len(self.chiamate), 1,
+                           "col solo ripiego in archivio si deve riprovare")
+        riuscite = [r for r in self.a.elenco() if r["stato"] == "ok"]
+        self.assertEqual(len(riuscite), 1,
+                         "ma senza archiviare doppioni dello stesso rango")
+
+    def test_una_qualificata_puo_AFFIANCARSI_a_un_ripiego(self):
+        """Archivio append-only: la prova migliore si aggiunge, non sostituisce."""
+        from test_marca_qualificata import _token_qualificato
+        mt.marca_i_registri(self.a, accettazioni=_Registro(), finanza=_Finanza(),
+                            giorno="2026-07-21", url="http://tsa.finta",
+                            trasporto=self._rete_buona)
+
+        def rete_qualificata(url, richiesta, timeout):
+            t = mt._leggi_tlv(richiesta, 0)
+            c = mt._figli(richiesta, t[1], t[2])
+            imp = mt._figli(richiesta, c[1][1], c[1][2])[1]
+            return _token_qualificato(richiesta[imp[1]:imp[2]],
+                                      nonce=mt._intero_da(richiesta, c[2][1], c[2][2]))
+
+        r = mt.marca_i_registri(self.a, accettazioni=_Registro(), finanza=_Finanza(),
+                                giorno="2026-07-21", url="http://tsa.finta",
+                                trasporto=rete_qualificata)
+        self.assertTrue(r["ok"])
+        self.assertTrue(r["qualificata"])
+        ranghi = sorted(x["qualificata"] for x in self.a.elenco()
+                        if x["stato"] == "ok")
+        self.assertEqual(ranghi, [0, 1], "devono convivere il ripiego e la qualificata")
+        self.assertTrue(self.a.gia_marcato("2026-07-21", solo_qualificata=True))
 
     def test_rete_giu_non_rompe_niente(self):
         """Requisito assoluto: la marca e' un DI PIU'. Se la TSA e' irraggiungibile la
