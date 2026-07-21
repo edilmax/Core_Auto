@@ -263,6 +263,31 @@ class PayoutDashboard:
         finally:
             con.close()
 
+    def tutti(self, *, stato: Optional[str] = None, limit: int = 2000
+              ) -> List[Dict[str, Any]]:
+        """TUTTE le righe payout (non di un singolo host). Read-only. Serve al Guardiano
+        degli stati impossibili: cercare i bonifici 'maturato' fermi da troppo tempo e le
+        righe il cui host non esiste piu' (payout orfano dopo una cancellazione forzata).
+        Ordine per ts crescente (le piu' vecchie prima)."""
+        lim = limit if isinstance(limit, int) and 0 < limit <= 5000 else 2000
+        sql = "SELECT prenotazione_id, host_id, minori, valuta, stato, ts FROM payout"
+        par: List[Any] = []
+        if isinstance(stato, str) and stato:
+            sql += " WHERE stato=?"
+            par.append(stato)
+        sql += " ORDER BY ts, prenotazione_id LIMIT ?"
+        par.append(lim)
+        con = self._apri()
+        try:
+            return [{"prenotazione_id": r[0], "host_id": r[1], "minori": int(r[2]),
+                     "valuta": r[3], "stato": r[4], "ts": int(r[5])}
+                    for r in con.execute(sql, par)]
+        except Exception:
+            logger.warning("tutti payout fallita (ISOLATA)", exc_info=True)
+            return []
+        finally:
+            con.close()
+
     def imposta_importo(self, prenotazione_id: str, minori: int) -> bool:
         """Riallinea l'importo del payout alla quota DECISA per l'host (split di una
         controversia, penale trattenuta su cancellazione): il ledger deve dire quanto

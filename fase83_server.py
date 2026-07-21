@@ -1617,6 +1617,8 @@ class RouterHTTP:
             return self._bunker_export_contabile(query, headers)
         if metodo == "GET" and path == "/api/bunker/riconciliazione":
             return self._bunker_riconciliazione(query, headers)   # fase182 (pre-mortem)
+        if metodo == "GET" and path == "/api/bunker/guardiano":
+            return self._bunker_guardiano(headers)                # fase186 (a richiesta)
         if metodo == "GET" and path == "/api/bunker/dac7_conformita":
             return self._bunker_dac7_conformita(query, headers)
         if metodo == "GET" and path == "/api/bunker/dac7_report":
@@ -2708,6 +2710,19 @@ class RouterHTTP:
         return 200, {"csv": csv_txt, "anno": anno,
                      "integro": ("# FINE REPORT DAC7 - INTEGRITÀ:" in csv_txt)}
 
+    def _bunker_guardiano(self, headers):
+        """IL GUARDIANO DEGLI STATI IMPOSSIBILI (fase186) a richiesta: lo stesso controllo
+        che gira da solo ogni giorno, eseguito subito e restituito. READ-ONLY, bunker-gated.
+        Cerca conti che non tornano con Stripe, escrow bloccati, bonifici fermi o orfani."""
+        if not self._bunker_auth(headers, azione="guardiano"):
+            return 403, {"errore": "bunker_richiesto"}
+        try:
+            from fase186_guardiano import scansiona
+            return 200, scansiona(self._sys)
+        except Exception:
+            logger.error("guardiano a richiesta: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+
     def _bunker_riconciliazione(self, query, headers):
         """RICONCILIAZIONE STRIPE (fase182, ultimo fantasma del pre-mortem): confronta il
         periodo intero — sessioni PAGATE di Stripe vs 'incasso' del giornale (per
@@ -3475,12 +3490,17 @@ class RouterHTTP:
         host_id = dati.get("host_id")
         if not (isinstance(host_id, str) and host_id):
             return 422, {"errore": "host_id_mancante"}
+        # 'forza=True' serve solo per un obbligo legale inderogabile e va chiesto
+        # esplicitamente: senza, un host con soldi o persone in ballo NON si cancella.
+        forza = dati.get("forza") is True
         try:
             from fase156_erasure import cancella_attivita_host
-            rep = cancella_attivita_host(self._sys, host_id)
+            rep = cancella_attivita_host(self._sys, host_id, forza=forza)
         except Exception:
             logger.error("admin cancella attivita: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
+        if rep.get("errore") == "obblighi_pendenti":
+            return 409, rep                         # bloccata: prima si sistema
         return (200 if rep.get("ok") else 409), rep
 
     def _admin_rimborso(self, body, headers):
@@ -6464,6 +6484,50 @@ class RouterHTTP:
         richiedente = self._host_id_da_token(headers) or "host"
         return 200, {"messaggi": msg.thread(pren, richiedente)}
 
+    def _alloggio_ha_prenotazioni(self, slug) -> bool:
+        """Vero se sull'alloggio e' MAI stata fatta una prenotazione (anche rimborsata):
+        le sue prove — voucher, contratto, registro incassi — sono nella valuta di allora,
+        quindi quella valuta e' ormai storia e non si cambia. Fail-SAFE: se non si riesce a
+        controllare, si risponde True (meglio rifiutare un cambio valuta che permetterlo
+        alla cieca sopra delle prove gia' scritte)."""
+        try:
+            inv = getattr(self._sys, "inventario", None)
+            if inv is None or not hasattr(inv, "elenco_prenotazioni"):
+                return True
+            return len(inv.elenco_prenotazioni(alloggio_id=slug, limit=1) or []) > 0
+        except Exception:
+            logger.warning("controllo prenotazioni alloggio fallito (ISOLATO)", exc_info=True)
+            return True
+
+    def _blinda_valuta(self, dati):
+        """Protegge la valuta di un annuncio ESISTENTE. Ritorna (errore|None, dati).
+
+        · campo valuta OMESSO su un annuncio che esiste -> si tiene la SUA valuta (mai il
+          reset silenzioso a EUR);
+        · cambio di valuta chiesto quando esistono gia' prenotazioni -> 409 rifiutato.
+        Su un annuncio nuovo non fa nulla (la valuta nuova e' libera)."""
+        slug = dati.get("slug")
+        if not (isinstance(slug, str) and slug):
+            return None, dati
+        try:
+            esistente = self._sys.catalogo.dettaglio(slug)
+        except Exception:
+            esistente = None
+        if not (isinstance(esistente, dict) and esistente.get("valuta")):
+            return None, dati                      # annuncio nuovo: valuta libera
+        attuale = str(esistente["valuta"]).strip().upper()
+        chiesta = dati.get("valuta")
+        if not (isinstance(chiesta, str) and chiesta.strip()):
+            dati = dict(dati)
+            dati["valuta"] = attuale               # OMESSA -> tieni la sua, non EUR
+            return None, dati
+        if chiesta.strip().upper() != attuale and self._alloggio_ha_prenotazioni(slug):
+            return (409, {"errore": "valuta_bloccata", "attuale": attuale,
+                          "messaggio": "La valuta non si puo' cambiare: esistono gia' "
+                                       "prenotazioni in %s, e i loro voucher e contratti "
+                                       "sono in quella moneta." % attuale}), dati
+        return None, dati
+
     def _host_pubblica(self, body, headers):
         if not self._auth_host(headers):
             return 401, {"errore": "unauthorized"}
@@ -6486,6 +6550,16 @@ class RouterHTTP:
         if not self._verifica_proprieta(headers, dati.get("slug")):
             return 403, {"errore": "non_tuo"}
         dati = self._geocodifica_se_serve(dati)   # coordinate dalla città (per la mappa)
+        # VALUTA: su un annuncio GIA' ESISTENTE non si azzera e non si cambia alla leggera.
+        # Due difetti dell'audit del 2026-07-22:
+        #   1) se il form non manda la valuta, `da_dict` la metteva a EUR "per difetto" ->
+        #      un annuncio in yen tornava in euro in silenzio a ogni modifica;
+        #   2) cambiare la valuta quando esistono gia' delle prenotazioni renderebbe
+        #      l'annuncio (JPY) diverso dal voucher/contratto/registro di quelle
+        #      prenotazioni (EUR): lo stesso soggiorno raccontato in due monete.
+        errore_valuta, dati = self._blinda_valuta(dati)
+        if errore_valuta is not None:
+            return errore_valuta
         from fase57_vetrina import Immagine, SchedaAlloggio, valida_scheda
         ok, codice, scheda = valida_scheda(dati)
         if not ok:
@@ -7578,6 +7652,15 @@ class RouterHTTP:
                       if not p.get("rimborsato") and str(p.get("check_out", "")) >= oggi]
             if future:
                 return 409, {"errore": "prenotazioni_attive", "quante": len(future)}
+            # ANCHE un soggiorno GIA' PASSATO puo' avere l'escrow ancora aperto (in attesa
+            # del rilascio automatico, o contestato): cancellare l'alloggio lascerebbe i
+            # soldi dell'ospite in una riga orfana. Il controllo sulle prenotazioni future
+            # non lo vedeva -> era un buco dell'audit del 2026-07-22.
+            gar = getattr(self._sys, "garanzia", None)
+            if gar is not None and hasattr(gar, "aperte_per_alloggio"):
+                aperte = int(gar.aperte_per_alloggio(slug) or 0)
+                if aperte:
+                    return 409, {"errore": "escrow_aperto", "quanti": aperte}
             ok = self._sys.catalogo.elimina_alloggio(slug)
         except Exception:
             logger.error("elimina alloggio: eccezione ISOLATA", exc_info=True)
@@ -8319,6 +8402,38 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
     inv = getattr(sistema, "inventario", None)
     if pp is not None and inv is not None:
         import threading as _th2
+
+        # IL GUARDIANO (fase186): ogni giorno cerca gli STATI IMPOSSIBILI (conti che non
+        # tornano con Stripe, escrow bloccati, bonifici fermi o orfani) e, se ne trova,
+        # GRIDA con un'email all'amministratore. E' il paracadute che l'audit del
+        # 2026-07-22 ha trovato mancante: fase182 esisteva ma era un bottone manuale.
+        import threading as _thg
+
+        def _tick_guardiano():
+            import time as _tg
+            while True:
+                try:
+                    from fase186_guardiano import scansiona, riassunto_html
+                    rep = scansiona(sistema)
+                    if not rep.get("pulito"):
+                        logger.critical("GUARDIANO: %d stato/i anomalo/i -> %s",
+                                        rep.get("conta"), rep.get("anomalie"))
+                        cfg = getattr(sistema, "config", None)
+                        dest = (getattr(cfg, "email_alert", "")
+                                or getattr(cfg, "email_mittente", "")
+                                or "info@bookinvip.com")
+                        prov = getattr(sistema, "email_provider", None)
+                        if prov is not None and dest:
+                            _thg.Thread(target=prov.invia,
+                                        args=(dest, "BookinVIP - ALLARME Guardiano: stato "
+                                              "anomalo rilevato", riassunto_html(rep)),
+                                        daemon=True).start()
+                    else:
+                        logger.info("GUARDIANO: nessuno stato anomalo (tutto quadra)")
+                except Exception:
+                    logger.error("guardiano: giro fallito (thread TENUTO VIVO)", exc_info=True)
+                _tg.sleep(86400)                       # una volta al giorno
+        _thg.Thread(target=_tick_guardiano, daemon=True).start()
 
         def _tick_hold():
             while True:

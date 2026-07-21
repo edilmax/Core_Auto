@@ -381,6 +381,27 @@
 >   Procedura completa e a parole semplici in `REGISTRO_INGEGNERIA.md`, sezione
 >   «DA FARE / PROSSIMI PASSI».
 >
+> · 🛡️ **MESSA IN SICUREZZA ESEGUITA (2026-07-22) — 3 riparazioni + IL GUARDIANO**.
+>   Dopo che 3 audit convergevano su UNA lacuna (nessuno controlla in automatico gli
+>   «stati impossibili» e nessuno grida), il piano è stato eseguito tutto:
+>   **(a)** un host non si può più cancellare se ha prenotazioni attive, payout dovuto,
+>   escrow aperto o sospesi (`fase156.obblighi_pendenti`, 409; `forza=True` per l'obbligo
+>   legale ma registra cosa c'era). Anche l'eliminazione di un ALLOGGIO rifiuta se l'escrow
+>   è ancora aperto. Guardia `test_cancellazione_host_sicura`.
+>   **(b)** la valuta di un annuncio non si azzera più a EUR se il campo è omesso, e non si
+>   cambia se esistono prenotazioni (`_blinda_valuta`, 409 `valuta_bloccata`). Guardia
+>   `test_valuta_annuncio_bloccata`.
+>   **(c)** il rimborso legacy `fase35` è CHIUSO (era l'unico senza chiave di idempotenza);
+>   una guardia sorveglia che il motore legacy resti scollegato dal vivo.
+>   **IL GUARDIANO (`fase186_guardiano.py`)**: giro automatico giornaliero che cerca conti
+>   che non tornano con Stripe (riusa fase182, che era un bottone manuale), **escrow
+>   bloccati** (>48h), **bonifici fermi** (>7gg), **payout orfani** (host inesistente); se
+>   trova qualcosa **manda un'email di allarme** all'amministratore. Endpoint manuale
+>   `GET /api/bunker/guardiano`. Soglie larghe: mai gridare al lupo. Guardia `test_guardiano`
+>   (ogni stato provato rosso). Tutte le riparazioni provate rosse sul codice vecchio.
+>   ⚙️ **DA IMPOSTARE (opzionale)**: `ALERT_EMAIL` sul VPS per far arrivare gli allarmi a
+>   un indirizzo diverso da `info@bookinvip.com` (es. la mail personale del fondatore).
+>
 > · 🕐 **AUDIT FUSI ORARI + INPUT + TEST CIECHI (2026-07-22)**: le date **viste** dal
 >   cliente erano salve (testo, mai convertite; il browser non usa `toISOString`), ma
 >   **ogni calcolo sul tempo usava il fuso del server** — e in produzione non c'è nessuna

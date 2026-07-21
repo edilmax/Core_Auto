@@ -111,6 +111,7 @@ def main() -> None:  # pragma: no cover
         smtp_user=os.environ.get("SMTP_USER", ""),
         smtp_password=os.environ.get("SMTP_PASSWORD", ""),
         email_mittente=os.environ.get("EMAIL_MITTENTE", ""),
+        email_alert=os.environ.get("ALERT_EMAIL", ""),   # Guardiano fase186; vuoto->mittente
         whatsapp_token=os.environ.get("WHATSAPP_TOKEN", ""),
         whatsapp_phone_id=os.environ.get("WHATSAPP_PHONE_ID", ""),
         oxr_app_id=os.environ.get("OXR_APP_ID", ""),

@@ -164,13 +164,19 @@ class StripeProvider(PagamentoProvider):
             return EventoPagamento("non_valido")
 
     def rimborsa(self, riferimento: str, importo_cents: int) -> EsitoRimborso:
-        stripe = self._stripe()
-        try:
-            ref = stripe.Refund.create(payment_intent=riferimento, amount=importo_cents)
-        except Exception:
-            logger.error("Stripe: rimborso fallito (rif=%s)", riferimento, exc_info=True)
-            return EsitoRimborso(False)
-        return EsitoRimborso(True, getattr(ref, "id", ""))
+        """CHIUSO il 2026-07-22 (audit doppio-addebito). Percorso di rimborso LEGACY
+        ('Tavola VIP'): non allineato al motore di calcolo centrale (fase111/fase177) e
+        soprattutto **privo di chiave di idempotenza** — due chiamate concorrenti
+        avrebbero potuto emettere DUE rimborsi veri su Stripe. Non e' cablato nel prodotto
+        vivo (main/fase81/fase83 non lo importano) e usa la SDK esterna, che qui non e'
+        nemmeno installata. Qui si CHIUDE: non emette piu' alcun rimborso, e non tocca
+        Stripe. I rimborsi passano SOLO dal percorso centrale (idempotente, allineato al
+        motore). Lasciato come metodo per non rompere le firme legacy, ma inerte."""
+        logger.critical(
+            "RIMBORSO LEGACY (fase35) chiamato ma CHIUSO: rif=%s importo=%s. "
+            "Il rimborso passa solo dal motore centrale (fase111/fase177).",
+            riferimento, importo_cents)
+        return EsitoRimborso(False)
 
 
 @dataclass(frozen=True)

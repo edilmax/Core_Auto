@@ -235,6 +235,51 @@ class EscrowGaranzia:
                  "motivo": r["motivo"], "ts": int(r["aggiornato_ts"]),
                  "money_unit": "cents_integer"} for r in righe]
 
+    def aperte_per_alloggio(self, alloggio_id: Any) -> int:
+        """Quanti escrow di QUESTO alloggio sono ancora aperti (soldi non ancora
+        rilasciati ne' rimborsati): stato 'in_garanzia' o 'contestato'.
+
+        Serve a impedire che si CANCELLI un alloggio mentre custodisce ancora i soldi di
+        un ospite: sarebbe una riga di garanzia orfana, che punta a un alloggio che non
+        esiste piu'. Read-only. 0 anche su input non valido o errore (fail-safe: chi
+        chiama decide se bloccare, mai un falso 'tutto libero' che nasconde un errore DB
+        -> qui in caso di errore si RILANCIA, cosi' il chiamante non elimina alla cieca)."""
+        if not (isinstance(alloggio_id, str) and alloggio_id):
+            return 0
+        con = self._apri()
+        try:
+            r = con.execute(
+                "SELECT COUNT(*) FROM garanzia WHERE alloggio_id=? "
+                "AND stato IN ('in_garanzia','contestato')", (alloggio_id,)).fetchone()
+            return int(r[0]) if r else 0
+        finally:
+            con.close()
+
+    def aperte_scadute(self, *, ora_ts: Any = None, grazia_ore: int = 48,
+                       limit: int = 500) -> List[Dict[str, Any]]:
+        """Escrow ancora 'in_garanzia' il cui rilascio automatico e' passato da PIU' di
+        `grazia_ore`. E' uno STATO IMPOSSIBILE: il giro orario avrebbe gia' dovuto
+        rilasciarli e pagare l'host. Se sono ancora qui, quel giro ha fallito (o la riga
+        e' orfana). Read-only: serve al Guardiano per accorgersene e gridare. La grazia
+        larga (48h) evita falsi allarmi su ritardi normali."""
+        now = self._now() if not (isinstance(ora_ts, int) and not isinstance(ora_ts, bool)) \
+            else ora_ts
+        soglia = now - max(0, int(grazia_ore)) * 3600
+        lim = limit if isinstance(limit, int) and 0 < limit <= 2000 else 500
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT prenotazione_id, alloggio_id, importo_host_cents, sblocco_auto_ts, "
+                "aperto_ts FROM garanzia WHERE stato='in_garanzia' AND sblocco_auto_ts < ? "
+                "ORDER BY sblocco_auto_ts ASC LIMIT ?", (soglia, lim)).fetchall()
+        finally:
+            con.close()
+        return [{"prenotazione_id": r["prenotazione_id"], "alloggio_id": r["alloggio_id"],
+                 "importo_host_cents": int(r["importo_host_cents"]),
+                 "sblocco_auto_ts": int(r["sblocco_auto_ts"]),
+                 "ore_di_ritardo": max(0, int((now - r["sblocco_auto_ts"]) / 3600))}
+                for r in righe]
+
     def stato(self, prenotazione_id: Any) -> Optional[Dict[str, Any]]:
         if not isinstance(prenotazione_id, str):
             return None

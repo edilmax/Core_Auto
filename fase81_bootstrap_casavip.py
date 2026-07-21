@@ -63,6 +63,8 @@ class ConfigCasaVIP:
     smtp_user: str = ""
     smtp_password: str = ""
     email_mittente: str = ""
+    email_alert: str = ""               # dove il Guardiano (fase186) grida se trova uno stato
+                                        # impossibile; vuoto -> ripiega su email_mittente
     whatsapp_token: str = ""            # gated: avvisi prenotazione all'host via WhatsApp
     whatsapp_phone_id: str = ""         # gated: id numero mittente WhatsApp Cloud API
     oxr_app_id: str = ""                # gated: Open Exchange Rates (display indicativo valuta ospite)
