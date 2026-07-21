@@ -67,6 +67,27 @@ def controlla(ambito, chiave, ok, dettaglio=""):
 # (`fase99_multicurrency.esponente`), che e' la stessa fonte usata dal server per
 # formattare gli importi. Se un giorno il motore cambia, questo collaudo cambia con lui;
 # se il motore non c'e', si fallisce dicendolo invece di indovinare.
+def _trova_il_motore():
+    """Mette sul percorso il posto dove vive il motore, ovunque si stia girando.
+
+    Questo strumento si lancia anche COPIATO DENTRO IL CONTAINER di produzione per
+    guardare i dati veri, e li' `collaudi/` non c'e' (l'immagine porta solo i moduli e
+    le pagine). Python mette sul percorso la cartella dello SCRIPT, non quella di
+    lavoro: copiato in /tmp, non trovava piu' `fase99` e il collaudo moriva invece di
+    controllare. Si cercano quindi i posti plausibili, e se il motore non si trova
+    **si fallisce dicendolo**: indovinare l'esponente di una valuta sarebbe peggio che
+    non controllare affatto.
+    """
+    import sys
+    for posto in (os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                  os.getcwd(), "/app"):
+        if posto and posto not in sys.path and os.path.isdir(posto):
+            sys.path.append(posto)
+
+
+_trova_il_motore()
+
+
 def _esponente(valuta):
     """Cifre decimali della valuta, chieste al MOTORE (mai a una copia locale)."""
     from fase99_multicurrency import esponente
