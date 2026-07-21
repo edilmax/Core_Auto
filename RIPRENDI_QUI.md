@@ -372,6 +372,17 @@
 >   cartelle ora si ricava da TUTTI i campi `db_*`, non da una lista scritta a mano.
 >   **Lezione: i test erano verdi perché usano `:memory:` di proposito — solo il confronto
 >   con la configurazione di PRODUZIONE poteva scoprirlo.**
+> · 🔴 **PROSSIMO LAVORO — LE EMAIL PARLANO UNA LINGUA SOLA**: `fase86_email.py` ha
+>   **10 corpi di email e 9 non sanno in che lingua parlare** (voucher, pagamento
+>   confermato, rimborso, invito a recensire, esito controversia, bonifico host, reset
+>   password, benvenuto host, promemoria check-in). **È peggio delle pagine**: su una
+>   pagina la lingua si cambia, su un'email no. **L'ostacolo non è tradurre: la lingua
+>   non viene MAI SALVATA** — il browser prenota con `{quote_token, email}` e basta
+>   (`index.html:689`), `registro_host` non ha la colonna, esiste solo in
+>   `accettazioni.lang`. Eppure il **link** del voucher porta già `?lang=`: **la pagina
+>   del voucher è tradotta, l'email che la annuncia no.** Ordine: browser manda la
+>   lingua → la prenotazione la salva → `fase86_email` in 8 lingue.
+>
 > · 👁️ **LE VERIFICHE DEL PRODOTTO (2026-07-21 notte)** — la lezione piu' cara della
 >   giornata: **i due difetti peggiori li ha trovati il FONDATORE guardando il sito**,
 >   non i 3011 test. Radice comune: tutti i collaudi provavano il **codice** con **dati

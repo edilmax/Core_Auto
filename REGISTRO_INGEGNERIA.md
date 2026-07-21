@@ -226,6 +226,34 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 **Fatto e verificato in produzione:** login reale · **10 alloggi creati** (Roma/Milano/Venezia/Barcellona/Parigi/Londra/Tokyo/Dubai/Bali/NY — valute EUR/GBP/JPY/AED/USD, sconti settimana/mese, indirizzi→geocode preciso, foto, 60gg di date) · foto caricata e CANCELLATA · annuncio "SBAGLIATO" creato ed **ELIMINATO col nuovo 🗑** · **2 richieste su-richiesta** da clienti demo (visibili in "Richieste da approvare" + avviso Telegram al fondatore) · link invito OK · **STRESS 100 host + 100 annunci in 8.2s (~1467 op/min), health OK sotto carico** · pulizia completa (0 residui, i 10 del fondatore intatti). **Nota collaudo:** raffiche di admin-delete → nginx risponde 503 (protezione anti-burst, NON un bug: retry risolve). Novità di questo giro: 🗑 elimina annuncio con DOPPIA conferma (bloccato se prenotazioni future, 409) + card in ORDINE D'USO (guida→alloggio→pubblica→i miei→periodo→calendario→richieste→prenotazioni→telegram→stripe→incassi).
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
+
+### 🔴 PRIORITÀ — LE EMAIL PARLANO UNA LINGUA SOLA (trovato 2026-07-21, da chiudere)
+
+`fase86_email.py` ha **10 corpi di email: 9 non hanno il parametro `lingua`** e portano
+l'italiano scritto dentro. Fra questi il **voucher** (il documento che l'ospite mostra al
+check-in), **pagamento confermato**, **cancellazione e rimborso**, **invito a recensire**,
+**esito della controversia**, **bonifico all'host**, **reimposta password**, **benvenuto
+host**, **promemoria check-in**. Solo `corpo_preventivo_html` ha la lingua, e binaria.
+
+**È peggio delle pagine**: su una pagina la lingua si cambia, su un'email no.
+
+**L'ostacolo non è tradurre: la lingua non viene MAI SALVATA.** Verificato in produzione:
+- il browser prenota con `{quote_token, email}` — **niente lingua** (`index.html:689`);
+- `registro_host.host`: **nessuna colonna di lingua** (27 colonne);
+- `garanzia`, `messaggi`, `pendenti`: nessuna lingua;
+- la lingua dell'host esiste **solo** in `accettazioni.lang` (dalla firma del contratto);
+- `recensioni` invece ce l'ha già.
+
+Dettaglio che spiega tutto: il **link** del voucher porta già `?lang=`
+(`index.html:696`) e il PDF del contratto manda `lingua: LANG` → **la pagina del voucher
+è tradotta, l'email che la annuncia no.**
+
+**Ordine**: (1) il browser manda `lingua` quando prenota → (2) la prenotazione la salva →
+(3) `fase86_email` prende `lingua` con tutte e 8 le lingue, i chiamanti la passano, e il
+link dentro l'email porta `?lang=`. Guardia da scrivere: **nessun corpo di email può
+esistere senza sapere in che lingua parla** (auto-applicante come quella degli archivi:
+si aggiunge una funzione `corpo_*` finta e la suite deve cadere).
+
 Regola: ogni volta che si completa qualcosa, aggiornare questa lista (togliere il fatto,
 aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre insieme.
 
