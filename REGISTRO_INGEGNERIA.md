@@ -227,6 +227,44 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### 🔴 DA FARE SUBITO — CAMBIARE LA CHIAVE DELL'AMMINISTRATORE (`ADMIN_KEY`)
+
+**Cos'è, in parole semplici.** È la parola d'ordine che apre il tuo pannello di
+amministratore: da lì si vedono le prenotazioni, i dati degli host e **si fanno i
+rimborsi**. La digiti su `bookinvip.com/entra-admin` e il browser se la ricorda.
+
+**Qual è il problema.** Quella attuale è lunga **11 caratteri** e comincia con una parola
+riconoscibile — il tipo di parola che un programma automatico prova per prima. Su un
+sistema dove Stripe muove **soldi veri**, è la serratura più debole della casa.
+
+**Quanto è grave davvero, senza allarmismi.** C'è già una protezione: chi sbaglia la
+chiave più volte dallo stesso collegamento viene bloccato per un po' (e il blocco si
+allunga). Quindi non è una porta spalancata. Ma quella protezione funziona per singolo
+collegamento: chi ci provasse da tanti collegamenti diversi la aggirerebbe. **Non è un
+incendio: è un estintore scaduto.** Va sostituito con calma, non di corsa.
+
+**Cosa serve da te: cinque minuti e un posto dove scriverla.**
+Il punto delicato non è cambiarla — è che **la nuova chiave la devi conservare tu**. Se la
+cambiamo e non la salvi da nessuna parte, resti fuori dal tuo pannello finché non ne
+generiamo un'altra. Quindi prima apri dove tieni le password (o un foglio di carta nel
+cassetto), poi si cambia.
+
+**Come si fa (lo faccio io, tu guardi e la trascrivi):**
+1. genero una chiave casuale di 40 caratteri e **te la mostro una volta**;
+2. tu la scrivi dove tieni le tue password;
+3. la scrivo in `/var/www/bookinvip/.env.casavip` sul server, al posto di quella vecchia;
+4. riavvio l'applicazione (l'app si ferma pochi secondi, il sito resta in piedi);
+5. tu entri su `bookinvip.com/entra-admin` con la nuova chiave e la fai ricordare al
+   browser.
+
+**Da sapere prima:** il browser ha memorizzato quella vecchia. Dopo il cambio ti chiederà
+di nuovo la chiave — è normale, non è un guasto.
+
+**Perché non l'ho fatto da solo.** Cambiare una chiave d'accesso mentre tu non ci sei
+significa poterti chiudere fuori dal tuo stesso pannello. Le chiavi e i soldi li decidi tu.
+
+
+
 ### 🔴 PRIORITÀ — LE EMAIL PARLANO UNA LINGUA SOLA (trovato 2026-07-21, da chiudere)
 
 `fase86_email.py` ha **10 corpi di email: 9 non hanno il parametro `lingua`** e portano
@@ -299,7 +337,7 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
 - ✅ `deploy/index.html` è invece corretto: lo *«0% commissioni all'ospite»* è vero (l'ospite paga davvero 0%).
 - [x] **Riscritte** entrambe con la verità del motore — che è anche una proposta **migliore**: *0% per 90 giorni → 8% → 10%*, 5% diretto, **+3% tecnico sempre dovuto, anche a 0%**. Nel kit c'è ora un riquadro rosso *«dillo sempre, anche quando non te lo chiedono»*. `diventa-host` aggiornata in **tutte e 8 le lingue**, slogan del piede compreso (*«nessuna commissione nascosta: 3% tariffa tecnica sempre dovuta»*).
 - [x] **Guardia `TestPagineCheReclutanoHost` (4)** in `test_trasparenza_costi.py`: ogni pagina che parla di percentuali agli host **deve** dichiarare il 3%; una promessa di *«niente costi nascosti»* sulle pagine di reclutamento deve avere il 3% **nella stessa frase**; vietato il «10% secco»; le percentuali sono **ancorate alle costanti di fase98**. Provata **ROSSA sul testo vecchio**.
-- 🔍 **Perché erano sfuggite all'audit automatico**: cercava la sigla `OTA` **senza confini di parola** e la trovava dentro *«pren-OTA-zione»* → **ogni riga contenente "prenotazione" veniva scartata** come "parla dei concorrenti" e non veniva mai controllata. Corretto (`OTA`): sono emerse **6 righe prima invisibili**, esaminate una per una. L'audit ha ora una **baseline** delle 41 righe già giudicate legittime (cifre dei concorrenti, penali, costo reale di Stripe, testi storici): da oggi esce **rosso su qualsiasi cifra nuova**, invece di essere un elenco da rileggere ogni volta.
+- 🔍 **Perché erano sfuggite all'audit automatico**: cercava la sigla `OTA` **senza confini di parola** e la trovava dentro *«pren-OTA-zione»* → **ogni riga contenente "prenotazione" veniva scartata** come "parla dei concorrenti" e non veniva mai controllata. Corretto (`OTA`): sono emerse **6 righe prima invisibili**, esaminate una per una. L'audit ha ora una **baseline** delle 41 righe già giudicate legittime (cifre dei concorrenti, penali, costo reale di Stripe, testi storici): da oggi esce **rosso su qualsiasi cifra nuova**, invece di essere un elenco da rileggere ogni volta.
 - 💡 **La lezione**: il difetto non era nel motore ma **nel controllo** — una parola dentro un'altra parola aveva spento il collaudo proprio sul termine più frequente del progetto.
 
 **🚨 DUE DATABASE VIVEVANO IN MEMORIA IN PRODUZIONE (2026-07-21) — TROVATI E CHIUSI:**

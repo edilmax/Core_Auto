@@ -372,6 +372,15 @@
 >   cartelle ora si ricava da TUTTI i campi `db_*`, non da una lista scritta a mano.
 >   **Lezione: i test erano verdi perché usano `:memory:` di proposito — solo il confronto
 >   con la configurazione di PRODUZIONE poteva scoprirlo.**
+> · 🔴 **DA FARE CON IL FONDATORE — CAMBIARE `ADMIN_KEY`**: la chiave che apre il
+>   pannello amministratore (dove si fanno **i rimborsi**) è lunga **11 caratteri** e
+>   comincia con una parola riconoscibile, su un sistema con Stripe LIVE. Esiste già il
+>   blocco per tentativi ripetuti dallo stesso collegamento, quindi **non è urgente ma va
+>   fatto**: è un estintore scaduto, non un incendio. Serve il fondatore presente perché
+>   **la nuova chiave deve salvarla lui** (altrimenti resta fuori dal proprio pannello).
+>   Procedura completa e a parole semplici in `REGISTRO_INGEGNERIA.md`, sezione
+>   «DA FARE / PROSSIMI PASSI».
+>
 > · 🕐 **AUDIT FUSI ORARI + INPUT + TEST CIECHI (2026-07-22)**: le date **viste** dal
 >   cliente erano salve (testo, mai convertite; il browser non usa `toISOString`), ma
 >   **ogni calcolo sul tempo usava il fuso del server** — e in produzione non c'è nessuna
