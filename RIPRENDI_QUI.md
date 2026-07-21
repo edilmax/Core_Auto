@@ -372,6 +372,63 @@
 >   cartelle ora si ricava da TUTTI i campi `db_*`, non da una lista scritta a mano.
 >   **Lezione: i test erano verdi perché usano `:memory:` di proposito — solo il confronto
 >   con la configurazione di PRODUZIONE poteva scoprirlo.**
+> · 🛡️ **IL SISTEMA CHE SORVEGLIA SE STESSO (2026-07-21, `d819765`)**: non piu' solo
+>   test, ma un'architettura di verifica. **`collaudi/piramide.py`**: 6 livelli
+>   (fondamenta → unita' → cablaggio → sistema → realta' → meta), ognuno regge quello
+>   sopra, e se un modo di rompersi resta **senza guardiani** esce ROSSO.
+>   **`collaudi/capitolato.py`** (idea del fondatore): si dichiarano le PROPRIETA' e la
+>   macchina controlla **ogni elemento contro ognuna** — cosi' «quello che adesso non mi
+>   viene in mente» non dipende piu' dalla memoria di nessuno.
+>   **`collaudi/logiche.py`**: i ragionamenti a catena seguiti **anello per anello**
+>   (308 anelli) — chi lo legge capisce come funziona la macchina senza ricordarselo.
+>   **`collaudi/mutazione_prodotto.py`**: si rompe il motore di proposito e si pretende
+>   che i test se ne accorgano (**10 mutanti su 10 uccisi**).
+>   **`collaudi/mappa_scoperta.py`**: cosa non e' guardato da NESSUNO (138 rotte, 134
+>   moduli → **zero zone cieche**). **`collaudi/caccia_finti_verdi.py`**: test saltati,
+>   senza asserzioni, guardie che non possono fallire.
+>   ⚖️ **REGOLA DEI 10 COLLAUDI in `CLAUDE.md`**, con i 9 modi di rompersi incontrati sul
+>   campo e la regola madre: **NESSUN VERDE VALE FINCHE' NON E' STATO VISTO ROSSO**.
+>
+> · 🚨 **DIFETTI VERI TROVATI DAGLI STRUMENTI NUOVI (tutti chiusi)**: **13 test di
+>   SICUREZZA non giravano** (classe legata a `pyyaml` assente: corazza nginx, HTTPS,
+>   segreti, generazione chiavi) → riscritti senza dipendenze, da 4 a 21 · **3 guardie
+>   nginx NON POTEVANO FALLIRE** («la stringa c'e'» invece di «la protezione c'e' su OGNI
+>   porta») · un mio test **si saltava da solo** · la baseline dell'audit **si
+>   auto-approvava** · l'audit **si leggeva addosso** il proprio rapporto · la
+>   **MUTAZIONE** ha scoperto che lo scaglione **8% non era difeso da nessuno** (10% al
+>   posto di 8% = +2% su ogni prenotazione, e la suite restava verde) · 2 rotte mai
+>   nominate da un test · l'ora del dossier legale non dichiarava il fuso.
+>
+> · 💶 **BUG SUI SOLDI TROVATO DAL FONDATORE GUARDANDO IL SITO**: `Zen House Shibuya`
+>   mostrava **¥1.800.000 a notte** (≈€11.000). Lo **yen non ha decimali**: il prezzo era
+>   stato salvato ×100. **Il motore era SANO** (provato: un host giapponese che pubblica
+>   ¥18.000 salva `18000`) — era solo il dato dimostrativo, **corretto in produzione**.
+>   ⚠️ **LEZIONE APERTA**: nessun collaudo guarda se **il numero ha senso**. Serve una
+>   classe nuova: **plausibilita' semantica del dato** (un ×100 sfonda qualsiasi banda
+>   ragionevole). Vale anche per capacita', distanze, date, percentuali.
+>
+> · 🌍 **LINGUE — LAVORO APERTO, priorita' del fondatore**: 8 pagine pubbliche erano
+>   **solo in italiano**, fra cui **privacy** (obbligo GDPR) e **termini** (contrattuali).
+>   Il capitolato non le vedeva perche' **saltava le pagine senza dizionario**: il caso
+>   peggiore trattato come "non applicabile" → chiuso, **ASSENZA NON E' CONFORMITA'**.
+>   **FATTO**: `fase185_testi_legali.py` con **PRIVACY in tutte e 8 le lingue** complete
+>   (it/en/es/fr/de/pt/ja/zh), versione + impronta SHA-256, **lingue realmente fornite**
+>   (non solo dichiarate) e clausola **«fa fede l'italiano»**; percentuali da `fase98` e
+>   penale da `fase83`, mai scritte a mano. Guardia `test_testi_legali` (15).
+>   **DA FARE, in quest'ordine**: (1) **TERMINI nelle 6 lingue mancanti** (ci sono solo
+>   it/en) · (2) **rotta API + gusci** per termini/privacy (il sito mostra ancora le
+>   vecchie pagine: il modulo esiste ma **non e' collegato**) · (3) `grazie.html` +
+>   `annullato.html` (~170 parole, le vede **ogni ospite che paga**) · (4) `commissioni`
+>   + `contratto-host` · (5) `host.html`: ha 8 lingue ma **158 voci vuote** in
+>   es/fr/de/pt/ja/zh · (6) `admin` + `bunker` — il fondatore si e' corretto:
+>   «mettiamo tutte le lingue per coerenza», **nessuna pagina e' esente**.
+>
+> · 💱 **VALUTE**: regola confermata — l'host prezza nella **sua** valuta e l'ospite
+>   **paga quella**; si converte solo la **VISUALIZZAZIONE** (se si convertisse
+>   l'addebito, il cambio fra prenotazione e incasso farebbe perdere qualcuno).
+>   Il **convertitore ESISTE GIA'** (`fase99`) ed e' **SPENTO**: manca `OXR_APP_ID` sul
+>   VPS. **Non e' un lavoro, e' un interruttore** — serve una chiave del fondatore.
+>
 > · ⚖️ **MARCA QUALIFICATA EUROPEA ATTIVA (2026-07-21, eIDAS art. 42)**: non più una
 >   marca "qualunque" — le chiediamo a **prestatori della lista di fiducia europea**
 >   (**ACCV** Spagna e **QuoVadis EU** come prime scelte, **Izenpe** e **Stato belga**
