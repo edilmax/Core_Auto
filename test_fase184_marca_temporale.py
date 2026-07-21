@@ -668,18 +668,42 @@ class TestConfigurazione(unittest.TestCase):
             if vecchio is not None:
                 os.environ["TSA_URL"] = vecchio
 
-    def test_solo_TSA_i_cui_token_si_verificano_da_soli(self):
-        """GUARDIA DI SCELTA. Il 2026-07-21 sette Autorita' sono state interrogate dal
-        vivo e i loro token verificati con `openssl ts -verify` contro il solo archivio
-        CA di sistema. Apple, FreeTSA e Izenpe hanno dato token VALIDI ma non
-        verificabili senza procurarsi la loro radice: inutili davanti a un perito, e
-        quindi vietate come predefinite. Se qualcuno le rimette, questo test lo ferma."""
-        bocciate = ["apple.com", "freetsa.org", "izenpe.com", "baltstamp"]
-        for url in mt.TSA_PREDEFINITE:
-            for b in bocciate:
-                self.assertNotIn(b, url,
-                                 "%s era stata scartata: token non verificabile con le "
-                                 "CA standard" % b)
+    def test_le_prime_due_sono_QUALIFICATE_e_verificabili_da_chiunque(self):
+        """LA REGOLA CHE CONTA. Le prime due Autorita' interrogate devono essere
+        QUALIFICATE (eIDAS art. 42) **e** i loro token devono verificarsi con il solo
+        archivio CA di sistema. Provato dal vivo il 2026-07-21 su 16 endpoint europei:
+        ACCV (ES) e QuoVadis EU soddisfano entrambe le condizioni.
+        Izenpe (ES) e BOSA (BE) sono qualificate ma richiedono la loro radice: vanno
+        bene come RISERVA, mai come prima scelta, altrimenti il perito che riceve il
+        `.tsr` non riuscirebbe a verificarlo senza procurarsi altro materiale."""
+        prime_due = mt.TSA_QUALIFICATE[:2]
+        for url in prime_due:
+            self.assertTrue("accv.es" in url or "quovadisglobal.com" in url,
+                            "%s non e' fra le qualificate verificabili da chiunque" % url)
+        for url in prime_due:
+            for solo_riserva in ("izenpe.com", "belgium.be"):
+                self.assertNotIn(solo_riserva, url,
+                                 "%s e' qualificata ma serve la sua radice: puo' stare "
+                                 "solo DOPO le prime due" % solo_riserva)
+
+    def test_mai_le_Autorita_bocciate(self):
+        """Apple e FreeTSA: token non verificabili con le CA standard E non qualificate.
+        BalTstamp: non ha risposto. Se qualcuno le rimette, questo test lo ferma."""
+        for url in mt.TSA_QUALIFICATE + mt.TSA_RIPIEGO:
+            for bocciata in ("apple.com", "freetsa.org", "baltstamp"):
+                self.assertNotIn(bocciata, url, "%s era stata scartata" % bocciata)
+
+    def test_il_ripiego_non_e_mai_prima_dei_qualificati(self):
+        """L'ordine E' la politica: prima l'Europa qualificata, il ripiego solo dopo."""
+        lista = mt._tsa_configurate()
+        primo_ripiego = min((lista.index(u) for u in mt.TSA_RIPIEGO if u in lista),
+                            default=len(lista))
+        ultimo_qual = max((lista.index(u) for u in mt.TSA_QUALIFICATE if u in lista),
+                          default=-1)
+        self.assertGreater(primo_ripiego, ultimo_qual,
+                           "un'Autorita' NON qualificata viene interrogata prima di una "
+                           "qualificata: si otterrebbe una marca di rango inferiore "
+                           "pur avendone a disposizione una qualificata")
 
     def test_emittenti_tutti_diversi(self):
         """Tre TSA della stessa societa' non sono un failover: sono un solo punto debole."""

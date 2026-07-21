@@ -372,6 +372,18 @@
 >   cartelle ora si ricava da TUTTI i campi `db_*`, non da una lista scritta a mano.
 >   **Lezione: i test erano verdi perché usano `:memory:` di proposito — solo il confronto
 >   con la configurazione di PRODUZIONE poteva scoprirlo.**
+> · ⚖️ **MARCA QUALIFICATA EUROPEA ATTIVA (2026-07-21, eIDAS art. 42)**: non più una
+>   marca "qualunque" — le chiediamo a **prestatori della lista di fiducia europea**
+>   (**ACCV** Spagna e **QuoVadis EU** come prime scelte, **Izenpe** e **Stato belga**
+>   di riserva). L'**art. 41 eIDAS** dà alla marca qualificata la **presunzione legale**
+>   di esattezza di data e ora: **l'onere della prova si rovescia** sulla controparte.
+>   La qualifica **si legge dentro il token** (dichiarazione ETSI `0.4.0.19422.1.1`), non
+>   si assume: se un prestatore la perdesse, la marca dopo risulterebbe subito non
+>   qualificata. **Provata dal vivo**: marca ACCV reale, `openssl ts -verify` → OK.
+>   Se nessun qualificato risponde si ripiega **etichettando onestamente** la marca come
+>   non qualificata (`MARCA_SOLO_QUALIFICATA=1` vieta anche quello). Guardie:
+>   `test_marca_qualificata` (14) + `test_qualifica_catena` (11, **anello per anello**
+>   fino al dossier) + livello **N7** nel collaudo a neuroni.
 > · ⏱️ **MARCA TEMPORALE RFC 3161 (2026-07-21, l'ultimo tassello)**: le nostre firme le
 >   facciamo noi, con il nostro orologio → restava l'obiezione *"l'ora ve la siete scritta
 >   voi"*. Ora ogni giorno i registri (accettazioni + giornale) si riducono a **un'impronta**

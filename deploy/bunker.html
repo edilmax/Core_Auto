@@ -152,7 +152,7 @@ button.ghost{background:#222c40;color:var(--txt)}
 
     <div class="card">
       <h2>⏱️ Marche temporali (ora certificata da un terzo)</h2>
-      <p class="hint">Le nostre firme le facciamo noi, quindi <strong>l'ora la dichiariamo noi</strong>. Ogni giorno i registri vengono ridotti a un'impronta e datati da un'<strong>Autorità di marcatura esterna</strong> (DigiCert, Sectigo, Entrust): da quel momento l'ora non è più una nostra affermazione. Il file <code>.tsr</code> si consegna a un perito, che lo verifica <strong>senza di noi</strong> con <code>openssl ts -verify</code>.</p>
+      <p class="hint">Le nostre firme le facciamo noi, quindi <strong>l'ora la dichiariamo noi</strong>. Ogni giorno i registri vengono ridotti a un'impronta e datati da un'<strong>Autorità di marcatura QUALIFICATA europea</strong> (ACCV Spagna · QuoVadis EU · Izenpe · Stato belga). Per le marche <strong>qualificate</strong> l'<strong>art. 41 eIDAS</strong> stabilisce la <strong>presunzione legale</strong> di esattezza di data e ora: in causa non tocca a noi provare che l'ora è giusta — tocca a chi contesta provare il contrario. Il file <code>.tsr</code> si consegna a un perito, che lo verifica <strong>senza di noi</strong> con <code>openssl ts -verify</code>.</p>
       <div style="display:flex;gap:.5rem;align-items:center;margin:.5rem 0;flex-wrap:wrap">
         <button class="ghost" id="btnMarche">⏱️ Mostra marche</button>
         <button class="ghost" id="btnMarcaOra">🔒 Congela adesso</button>
@@ -459,21 +459,29 @@ async function marche(){
     if(!r.ok||!d){ st.textContent='ℹ️ non attiva ('+r.status+')'; return; }
     const righe=d.marche||[];
     st.textContent=righe.length? (d.riuscite+' su '+d.totale+' riuscite'
+      +' · ⚖️ '+d.qualificate+' qualificate'+(d.tutte_qualificate?' (tutte)':'')
       +(d.tutte_riverificate?' · ✅ tutte riverificate':' · 🔴 una non si riverifica')) : '';
     if(!righe.length){ out.innerHTML='<p class="hint">Nessuna marca ancora: la prima parte'
       +' entro un\'ora dall\'avvio, oppure premi <strong>Congela adesso</strong>.</p>'; return; }
     out.innerHTML='<table><thead><tr><th>Giorno</th><th>Ora certificata (UTC)</th>'
-      +'<th>Autorità</th><th>N. serie</th><th>Riverifica</th><th>Prova</th></tr></thead><tbody>'
+      +'<th>Autorità</th><th>Rango</th><th>N. serie</th><th>Riverifica</th>'
+      +'<th>Prova</th></tr></thead><tbody>'
       +righe.map(m=>'<tr><td>'+esc(m.giorno)+'</td>'
         +'<td>'+(m.ora_certificata_utc?esc(m.ora_certificata_utc):'<span class="hint">—</span>')+'</td>'
         +'<td>'+(m.autorita?esc(m.autorita.replace(/^https?:\/\//,'')):'<span class="hint">'+esc(m.errore||'')+'</span>')+'</td>'
+        +'<td>'+(m.stato!=='ok'?'<span class="hint">—</span>'
+                :(m.qualificata?'<strong style="color:#155724">⚖️ QUALIFICATA</strong>'
+                              :'<span class="hint">RFC 3161 (ripiego)</span>'))
+                +(m.stato==='ok'&&!m.qualifica_coerente?' 🔴':'')+'</td>'
         +'<td>'+esc(String(m.seriale||'').slice(0,18))+'</td>'
         +'<td>'+(m.stato!=='ok'?'<span class="hint">—</span>'
                 :(m.token_riverificato&&m.ora_coerente?'✅':'🔴 <strong>ANOMALIA</strong>'))+'</td>'
         +'<td>'+(m.stato==='ok'?'<button class="ghost" data-tsr="'+m.id+'">⬇️ .tsr</button>'
                 :'<span class="hint">—</span>')+'</td></tr>').join('')
       +'</tbody></table>'
-      +'<p class="hint" style="margin-top:.5rem">Per verificare senza di noi: '
+      +'<p class="hint" style="margin-top:.5rem"><strong>⚖️ Cosa cambia con la qualifica:</strong> '
+      +esc(d.cosa_significa_qualificata||'')+'</p>'
+      +'<p class="hint">Per verificare senza di noi: '
       +'<code>'+esc(d.come_verificare||'')+'</code></p>';
     out.querySelectorAll('button[data-tsr]').forEach(b=>{ b.onclick=()=>scaricaTsr(b.dataset.tsr); });
   }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
@@ -503,7 +511,8 @@ async function marcaOra(){
     let d=null; try{ d=await r.json(); }catch(_){ console.warn('bunker',_); }
     if(!d){ st.textContent='ℹ️ non disponibile ('+r.status+')'; return; }
     st.textContent = d.saltato? '✅ oggi è già congelato'
-                   : (d.ok? '✅ congelato da '+String(d.tsa||'').replace(/^https?:\/\//,'')
+                   : (d.ok? (d.qualificata?'⚖️ congelato con marca QUALIFICATA da ':'✅ congelato da ')
+                            +String(d.tsa||'').replace(/^https?:\/\//,'')
                           : '🔴 non riuscito: '+esc(d.motivo||''));
     marche();
   }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }

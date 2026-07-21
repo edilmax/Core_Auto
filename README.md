@@ -43,7 +43,7 @@ competitivo è il **take-rate più basso del mercato**, reso possibile dall'auto
 Core_Auto/
 ├── main_casavip.py             avvio del prodotto: legge le variabili d'ambiente e compone il sistema
 ├── fase*.py                    134 moduli del motore (uno per funzione — indice in REGISTRO_INGEGNERIA.md)
-├── test_*.py                   300 file di test (la suite INTERA deve essere verde prima di ogni deploy)
+├── test_*.py                   302 file di test (la suite INTERA deve essere verde prima di ogni deploy)
 ├── deploy/                     ciò che vede il browser: 13 pagine + app.js + configurazioni nginx
 │   ├── index.html              vetrina, ricerca, mappa, checkout (ospite)
 │   ├── host.html               pannello host: pubblica, calendario, incassi, consensi
@@ -142,14 +142,22 @@ IP ha accettato»* in *«la persona con documento verificato da un terzo indipen
 accettato»*. Viene scritta alla firma se la verifica c'è già, oppure **quando la verifica si
 completa dopo**. Il riferimento entra **dentro** la firma HMAC: alterarlo la invalida.
 
-**⏱️ L'ora certificata da un terzo.** Le firme qui sopra sono **nostre**, fatte con **il nostro
-orologio**: da sole non tolgono l'obiezione *«i registri e l'ora ve li siete scritti voi»*. Per
-questo ogni giorno lo stato dei registri viene ridotto a un'impronta e **datato da un'Autorità di
-Marcatura esterna** (DigiCert, Sectigo o Entrust, con ricambio automatico) secondo lo standard
-**RFC 3161**. All'Autorità va **solo l'impronta**, mai i dati. Il file `.tsr` che ne torna si
-scarica dal Bunker e si verifica **senza di noi**, con `openssl ts -verify`. Si accende con
-`MARCA_TEMPORALE` (attiva) e l'Autorità si cambia con `TSA_URL` — passare a un ente **qualificato**
-europeo è cambiare un indirizzo, non una riga di codice.
+**⚖️ L'ora certificata da un'Autorità QUALIFICATA europea.** Le firme qui sopra sono **nostre**,
+fatte con **il nostro orologio**: da sole non tolgono l'obiezione *«i registri e l'ora ve li siete
+scritti voi»*. Per questo ogni giorno lo stato dei registri viene ridotto a un'impronta e **datato
+da un prestatore iscritto nella lista di fiducia europea** (**ACCV** Spagna e **QuoVadis EU**;
+**Izenpe** e **Stato belga** di riserva), secondo lo standard **RFC 3161**.
+
+Per le marche **qualificate** l'**art. 41 del Regolamento (UE) 910/2014 (eIDAS)** stabilisce la
+**presunzione legale** di esattezza della data e dell'ora e di integrità dei dati: in giudizio
+**non tocca a noi provare che l'ora è giusta — tocca a chi contesta provare il contrario**.
+
+La qualifica **non si assume, si legge**: dentro ogni token c'è la dichiarazione ETSI
+`0.4.0.19422.1.1` che il prestatore appone sotto vigilanza dell'organismo nazionale, e ogni marca
+viene archiviata con il proprio esito. All'Autorità va **solo l'impronta**, mai i dati. Il file
+`.tsr` si scarica dal Bunker e si verifica **senza di noi**, con `openssl ts -verify`. Se nessun
+prestatore qualificato risponde si ripiega su una TSA ordinaria **etichettando la marca come non
+qualificata**; con `MARCA_SOLO_QUALIFICATA=1` il ripiego è vietato.
 
 **Ri-accettazione**: quando cambia la versione del contratto, al login compare da sola la
 schermata dedicata (`GET /api/host/contratto_stato` · `POST /api/host/riaccetta`). Le prove
@@ -172,7 +180,7 @@ I valori veri vivono **solo** in `/var/www/bookinvip/.env.casavip` sul VPS (mai 
 | `COMMISSIONE_BPS` | commissione a regime (default `1000` = 10%) |
 | `PAGAMENTO_BPS` | **tariffa tecnica** (default `300` = 3%) |
 | `PROMO_LANCIO` | accende la rampa 0→8→10% (default `true`) |
-| `MARCA_TEMPORALE` · `TSA_URL` | ora certificata da un terzo (default acceso; l'Autorità è sostituibile) |
+| `MARCA_TEMPORALE` · `TSA_URL` · `MARCA_SOLO_QUALIFICATA` | ora certificata da un'Autorità **qualificata** europea (default acceso; prestatore sostituibile) |
 | `STRIPE_SECRET_KEY` · `STRIPE_WEBHOOK_SECRET` | pagamenti (in produzione sono chiavi **LIVE**) |
 | `HOST_KEY` · `ADMIN_KEY` · `BUNKER_PASSWORD` | accessi ai pannelli |
 | `DB_*` | percorsi dei database nel volume `/data` |

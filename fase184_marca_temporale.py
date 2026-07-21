@@ -14,15 +14,26 @@ Le si manda **solo un'impronta SHA-256** (32 byte). Non i dati, non i nomi, non 
 un'impronta e' a senso unico. Nessun trasferimento di dati personali (GDPR: nessun dato,
 nessun trasferimento), e la TSA non puo' risalire a niente.
 
-"QUALIFICATA" — LA VERITA' SENZA GIRI DI PAROLE
------------------------------------------------
-eIDAS art. 42 chiama *qualificata* la marca emessa da un prestatore iscritto nella **lista
-di fiducia europea** (QTSP), quasi sempre a contratto. Il MECCANISMO e' identico a quello
-implementato qui (stesso RFC, stesso token, stessa verifica): cambia CHI firma. Per questo
-la TSA e' una **variabile di configurazione** (`TSA_URL`): il giorno in cui si firma con un
-QTSP, si cambia un indirizzo e tutto il resto — richieste, archivio, verifica, esportazione
-per il giudice — resta identico. Nel frattempo si usano TSA pubbliche RFC 3161: gia' oggi
-sono prova di data certa opponibile, perche' l'ora non la dichiariamo noi.
+QUALIFICATA EUROPEA (eIDAS art. 42) — ATTIVA
+--------------------------------------------
+Le marche sono chieste a **prestatori QUALIFICATI europei** (ACCV/Spagna, QuoVadis EU,
+Izenpe/Spagna, BOSA/Belgio). eIDAS art. 41 da' alla marca qualificata la **presunzione
+legale** di esattezza della data e dell'ora e di integrita' dei dati: in giudizio non
+tocca a noi dimostrare che l'ora e' giusta — tocca a chi contesta dimostrare il
+contrario. E' un rovesciamento dell'onere della prova, ed e' il motivo per cui vale la
+pena usarle.
+
+La qualifica NON si crede sulla parola: `e_qualificata()` cerca dentro il token la
+dichiarazione ETSI EN 319 422 `esi4-qtstStatement-1` (OID 0.4.0.19422.1.1) che il
+prestatore appone sotto la propria responsabilita' e sotto vigilanza dell'organismo
+nazionale. Ogni marca viene ARCHIVIATA con il suo esito: se un prestatore perdesse la
+qualifica, la marca successiva risulterebbe subito non qualificata, senza che nessuno
+debba accorgersene a mano.
+
+Se nessun qualificato risponde si ripiega su TSA pubbliche non qualificate (DigiCert,
+Sectigo, Entrust) **etichettando onestamente la marca come non qualificata**: meglio una
+prova dichiarata per quello che e' che nessuna prova. Con `MARCA_SOLO_QUALIFICATA=1` il
+ripiego e' vietato del tutto.
 
 ZERO DIPENDENZE
 ---------------
@@ -32,9 +43,10 @@ Nessuna libreria esterna, coerente con la regola del progetto.
 
 COME SI ACCENDE
 ---------------
-  MARCA_TEMPORALE=1          (default: acceso)
-  TSA_URL=...                una o piu' URL separate da virgola (failover in ordine)
-  DB_MARCHE=/data/marche.db  archivio append-only dei token
+  MARCA_TEMPORALE=1           (default: acceso)
+  MARCA_SOLO_QUALIFICATA=1    vieta il ripiego non qualificato (default: 0, ripiega)
+  TSA_URL=...                 una o piu' URL separate da virgola: scavalca la lista
+  DB_MARCHE=/data/marche.db   archivio append-only dei token
 
 MAI BLOCCANTE: se la rete o la TSA non rispondono, l'errore viene ARCHIVIATO e si riprova
 al giro dopo. Nessuna funzione di questo modulo puo' rompere il money-path.
@@ -50,22 +62,44 @@ from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("core_auto.marca_temporale")
 
-# ── TSA pubbliche RFC 3161, provate in ordine (failover) ─────────────────────────
-# SCELTE SUL CAMPO, non a orecchio. Il 2026-07-21 sono state interrogate DAVVERO sette
-# Autorita' e per ognuna si e' verificato il token con `openssl ts -verify` contro il
-# solo archivio CA di sistema. Il criterio NON e' "risponde" ma "un terzo lo verifica
-# senza procurarsi altro": e' l'unica cosa che conta davanti a un giudice.
-#   verificate OK : DigiCert · Sectigo · Entrust
-#   SCARTATE      : Apple, FreeTSA, Izenpe (token valido, ma la loro radice non sta
-#                   negli archivi CA standard -> il perito dovrebbe procurarsela a parte)
-#   SCARTATA      : BaltStamp (non ha risposto: timeout)
-# Tre emittenti indipendenti = se una e' giu' o cambia politica, la prova si fa lo stesso.
-# Sostituibili con un QTSP europeo (lista di fiducia) senza toccare una riga di codice.
-TSA_PREDEFINITE = (
+# ═════════════════════════════════════════════════════════════════════════════════
+#  CHI FIRMA L'ORA — prima i QUALIFICATI europei (eIDAS art. 42)
+# ═════════════════════════════════════════════════════════════════════════════════
+# "Qualificata" non e' una parola di marketing: e' VERIFICABILE. Il certificato con cui
+# la TSA firma deve contenere la dichiarazione ETSI EN 319 422 `esi4-qtstStatement-1`
+# (OID 0.4.0.19422.1.1) = "emetto marche temporali QUALIFICATE". Qui non si crede a
+# nessuno sulla parola: si guarda dentro il token (`e_qualificata`).
+#
+# SCELTI SUL CAMPO il 2026-07-21: interrogati dal vivo 16 endpoint di prestatori europei,
+# controllata la dichiarazione ETSI dentro ogni token e provata la verifica con
+# `openssl ts -verify` contro il SOLO archivio CA di sistema. Esito:
+#   QUALIFICATI e verificabili da chiunque : ACCV (ES) · QuoVadis EU
+#   QUALIFICATI ma serve la loro radice    : Izenpe (ES) · BOSA (BE)
+#   NON qualificati                        : Certum, CESNET, DFN, Lex Persona
+#   non hanno risposto                     : APED (GR), BalTstamp, Disig, SK ID, InfoCert
+# Verificato anche che il container di produzione li raggiunga tutti (ACCV usa la porta
+# 8318, non standard: sarebbe stato il classico guasto scoperto mesi dopo).
+OID_QTST_ETSI = (0, 4, 0, 19422, 1, 1)      # esi4-qtstStatement-1: marca QUALIFICATA
+OID_QC_COMPLIANCE = (0, 4, 0, 1862, 1, 1)   # QcCompliance: certificato qualificato
+
+TSA_QUALIFICATE = (
+    "http://tss.accv.es:8318/tsa",        # ACCV (Generalitat Valenciana, ES)
+    "http://ts.quovadisglobal.com/eu",    # QuoVadis EU
+    "http://tsa.izenpe.com",              # Izenpe (Paesi Baschi, ES)
+    "http://tsa.belgium.be/connect",      # BOSA (Stato belga)
+)
+
+# RIPIEGO NON QUALIFICATO: si usa SOLO se nessun prestatore qualificato risponde, per non
+# restare del tutto senza prova. La marca viene ARCHIVIATA COME NON QUALIFICATA e il
+# Bunker lo mostra: meglio una prova onestamente etichettata che nessuna prova — ma il
+# ripiego non deve mai potersi spacciare per una marca qualificata.
+TSA_RIPIEGO = (
     "http://timestamp.digicert.com",
     "http://timestamp.sectigo.com",
     "http://timestamp.entrust.net/TSS/RFC3161sha2TS",
 )
+
+TSA_PREDEFINITE = TSA_QUALIFICATE + TSA_RIPIEGO
 
 OID_SHA256 = (2, 16, 840, 1, 101, 3, 4, 2, 1)
 
@@ -387,10 +421,36 @@ def interpreta_risposta(risposta: bytes, impronta_attesa: bytes,
 #  Rete
 # ═════════════════════════════════════════════════════════════════════════════════
 
+def e_qualificata(token: bytes) -> bool:
+    """Il token e' una marca QUALIFICATA ai sensi di eIDAS art. 42?
+
+    Non lo si deduce dal nome del prestatore ne' dalla sua pubblicita': si cerca dentro
+    il certificato di firma la dichiarazione ETSI EN 319 422 `esi4-qtstStatement-1`
+    (OID 0.4.0.19422.1.1). E' il prestatore stesso a metterla, sotto la propria
+    responsabilita' e sotto vigilanza dell'organismo nazionale: se c'e', dichiara di
+    emettere marche qualificate; se non c'e', la marca NON e' qualificata e va detto."""
+    try:
+        return _der_oid(OID_QTST_ETSI) in bytes(token or b"")
+    except Exception:
+        return False
+
+
+def solo_qualificate() -> bool:
+    """MARCA_SOLO_QUALIFICATA=1 -> mai ripiegare su un prestatore non qualificato
+    (si preferisce nessuna marca a una marca di rango inferiore). Default: si ripiega,
+    ma la marca resta ARCHIVIATA come non qualificata."""
+    return str(os.environ.get("MARCA_SOLO_QUALIFICATA", "0")).strip().lower() \
+        in ("1", "true", "yes", "si", "on")
+
+
 def _tsa_configurate(url: Optional[str] = None) -> Tuple[str, ...]:
+    """L'ordine e' la politica: prima i QUALIFICATI europei, poi — solo se nessuno
+    risponde e non e' vietato — il ripiego non qualificato."""
     grezzo = url if url is not None else os.environ.get("TSA_URL", "")
     scelte = tuple(u.strip() for u in str(grezzo).split(",") if u.strip())
-    return scelte or TSA_PREDEFINITE
+    if scelte:
+        return scelte
+    return TSA_QUALIFICATE if solo_qualificate() else TSA_PREDEFINITE
 
 
 def chiedi_marca(impronta_sha256: bytes, *, url: Optional[str] = None,
@@ -421,6 +481,13 @@ def chiedi_marca(impronta_sha256: bytes, *, url: Optional[str] = None,
             if esito.get("ok"):
                 esito["tsa"] = indirizzo
                 esito["nonce_inviato"] = nonce
+                # QUALIFICATA? lo dice il certificato dentro il token, non la lista qui
+                # sopra: se un prestatore perdesse la qualifica, la marca risulterebbe
+                # subito non qualificata senza che nessuno debba accorgersene a mano.
+                esito["qualificata"] = e_qualificata(esito.get("token") or b"")
+                if not esito["qualificata"] and indirizzo in TSA_QUALIFICATE:
+                    logger.warning("marca temporale: %s NON ha piu' la dichiarazione ETSI "
+                                   "di prestatore qualificato", indirizzo)
                 return esito
             tentativi.append({"tsa": indirizzo, "motivo": esito.get("motivo")})
         except Exception as e:
@@ -505,6 +572,14 @@ class ArchivioMarche:
                         richiesto_ts INTEGER NOT NULL,
                         token_b64 TEXT NOT NULL DEFAULT '',
                         errore TEXT NOT NULL DEFAULT '')""")
+                # QUALIFICATA (eIDAS art. 42): aggiunta il 2026-07-21, migrazione
+                # idempotente. Le marche gia' archiviate restano valide e risultano
+                # non qualificate, che e' la verita' (erano RFC 3161 e basta).
+                try:
+                    con.execute("ALTER TABLE marche ADD COLUMN "
+                                "qualificata INTEGER NOT NULL DEFAULT 0")
+                except sqlite3.OperationalError:
+                    pass
                 con.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_marca_giorno "
                             "ON marche(giorno, ambito) WHERE stato='ok'")
                 con.execute("CREATE INDEX IF NOT EXISTS idx_marca_ts "
@@ -531,14 +606,15 @@ class ArchivioMarche:
                 int(esito.get("gen_time") or 0),
                 int(ora_ts if ora_ts is not None else time.time()),
                 base64.b64encode(token).decode("ascii") if token else "",
-                "" if ok else str(esito.get("motivo") or "errore"))
+                "" if ok else str(esito.get("motivo") or "errore"),
+                1 if (ok and esito.get("qualificata")) else 0)
         con = self._apri()
         try:
             with con:
                 cur = con.execute(
                     "INSERT INTO marche (giorno, ambito, impronta, canonico, stato, tsa,"
-                    " policy, seriale, gen_time, richiesto_ts, token_b64, errore)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", riga)
+                    " policy, seriale, gen_time, richiesto_ts, token_b64, errore,"
+                    " qualificata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", riga)
             return {"ok": ok, "id": int(cur.lastrowid)}
         except sqlite3.IntegrityError:
             return {"ok": ok, "id": None, "duplicato": True}
@@ -549,8 +625,8 @@ class ArchivioMarche:
         con = self._apri()
         try:
             sql = ("SELECT id, giorno, ambito, impronta, canonico, stato, tsa, policy,"
-                   " seriale, gen_time, richiesto_ts, errore, length(token_b64) AS peso"
-                   " FROM marche")
+                   " seriale, gen_time, richiesto_ts, errore, qualificata,"
+                   " length(token_b64) AS peso FROM marche")
             if solo_ok:
                 sql += " WHERE stato='ok'"
             sql += " ORDER BY id DESC LIMIT ?"
@@ -579,8 +655,8 @@ class ArchivioMarche:
         database lasciando il token vecchio (o viceversa)."""
         con = self._apri()
         try:
-            r = con.execute("SELECT impronta, token_b64, gen_time FROM marche WHERE id=?",
-                            (int(marca_id),)).fetchone()
+            r = con.execute("SELECT impronta, token_b64, gen_time, qualificata "
+                            "FROM marche WHERE id=?", (int(marca_id),)).fetchone()
         finally:
             self._chiudi(con)
         if r is None:
@@ -601,6 +677,11 @@ class ArchivioMarche:
                 info["ok"] = True
                 info["coerente_con_archivio"] = (int(info["gen_time"])
                                                  == int(r["gen_time"]))
+                # la qualifica si rilegge DAL TOKEN: se qualcuno alzasse il flag nel
+                # database senza avere un token qualificato, qui emergerebbe.
+                info["qualificata"] = e_qualificata(token)
+                info["qualifica_coerente"] = (int(bool(info["qualificata"]))
+                                              == int(r["qualificata"] or 0))
                 return info
         return {"ok": False, "motivo": "token_non_certifica_questa_impronta"}
 
@@ -654,18 +735,24 @@ def marca_i_registri(archivio: ArchivioMarche, *, accettazioni=None, finanza=Non
                               accettazioni_righe=acc_righe,
                               giornale_testa=gio_testa, giornale_righe=gio_righe)
         esito = chiedi_marca(bytes.fromhex(sig["impronta"]), url=url, trasporto=trasporto)
+        if (esito.get("ok") and solo_qualificate() and not esito.get("qualificata")):
+            # richiesta esplicita: nessuna marca e' meglio di una di rango inferiore
+            esito = {"ok": False, "motivo": "solo_qualificate_ma_nessuna_disponibile"}
         scritto = archivio.scrivi(giorno=g, ambito="registri", impronta=sig["impronta"],
                                   canonico=sig["canonico"], esito=esito, ora_ts=ora_ts)
         if esito.get("ok"):
-            logger.warning("MARCA TEMPORALE ottenuta | giorno=%s | tsa=%s | seriale=%s "
-                           "| ora certificata=%s", g, esito.get("tsa"),
+            logger.warning("MARCA TEMPORALE%s ottenuta | giorno=%s | tsa=%s | seriale=%s "
+                           "| ora certificata=%s",
+                           " QUALIFICATA (eIDAS)" if esito.get("qualificata") else
+                           " (NON qualificata: ripiego)", g, esito.get("tsa"),
                            esito.get("seriale"), esito.get("gen_time"))
         else:
             logger.warning("marca temporale non ottenuta (si riprova): %s",
                            esito.get("motivo"))
         return {"ok": bool(esito.get("ok")), "giorno": g, "impronta": sig["impronta"],
                 "id": scritto.get("id"), "motivo": esito.get("motivo"),
-                "tsa": esito.get("tsa"), "gen_time": esito.get("gen_time")}
+                "tsa": esito.get("tsa"), "gen_time": esito.get("gen_time"),
+                "qualificata": bool(esito.get("qualificata"))}
     except Exception:
         logger.error("marca temporale: giro fallito (ISOLATO)", exc_info=True)
         return {"ok": False, "motivo": "eccezione_isolata"}

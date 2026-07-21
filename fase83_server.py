@@ -2807,6 +2807,7 @@ class RouterHTTP:
                         "ora_certificata_utc": _utc(m.get("gen_time")),
                         "autorita": m["tsa"], "policy_tsa": m["policy"],
                         "numero_serie": m["seriale"],
+                        "qualificata_eidas": "SI" if v.get("qualificata") else "NO",
                         "impronta_marcata": m["impronta"],
                         "sigillo_leggibile": m["canonico"],
                         "token_riverificato": "SI" if v.get("ok") else "NO",
@@ -2835,11 +2836,21 @@ class RouterHTTP:
                              "rimborsate: Stripe non restituisce la sua commissione.")},
                 "marche_temporali": {
                     "totale": len(marche), "elenco": marche,
+                    "qualificate_eidas": sum(1 for m in marche
+                                             if m.get("qualificata_eidas") == "SI"),
                     "cosa_provano": ("Ogni riga e' un token RFC 3161 firmato da "
                                      "un'Autorita' di marcatura INDIPENDENTE: attesta che "
                                      "alla data indicata i registri contenevano gia' "
                                      "esattamente l'impronta riportata. L'ora non e' "
                                      "dichiarata da BookinVIP."),
+                    "valore_della_qualifica": ("Le righe con qualificata_eidas=SI sono "
+                                               "marche QUALIFICATE ai sensi del "
+                                               "Regolamento (UE) 910/2014 (eIDAS) art. 42, "
+                                               "emesse da prestatori iscritti nella lista "
+                                               "di fiducia europea. L'art. 41 attribuisce "
+                                               "loro la PRESUNZIONE di esattezza di data e "
+                                               "ora e di integrita' dei dati: l'onere di "
+                                               "provare il contrario grava su chi contesta."),
                     "come_verificare": ("openssl ts -verify -data <file con il sigillo "
                                         "leggibile> -in marca.tsr -token_in -CAfile "
                                         "<archivio CA di sistema>")},
@@ -2883,6 +2894,11 @@ class RouterHTTP:
             yield emetti("# L'ora NON e' dichiarata da BookinVIP: ogni riga e' un token "
                          "firmato da un'Autorita' indipendente che attesta che a quella "
                          "data i registri contenevano gia' quell'impronta.\r\n")
+            yield emetti("# Le righe con qualificata_eidas=SI sono marche QUALIFICATE "
+                         "(Reg. UE 910/2014 art. 42) emesse da prestatori della lista di "
+                         "fiducia europea: l'art. 41 attribuisce loro la PRESUNZIONE di "
+                         "esattezza di data e ora e di integrita' dei dati, e l'onere "
+                         "della prova contraria grava su chi contesta.\r\n")
             yield emetti("# verifica indipendente,openssl ts -verify -data <file col "
                          "sigillo leggibile> -in marca.tsr -token_in -CAfile <CA di "
                          "sistema>\r\n")
@@ -2897,7 +2913,9 @@ class RouterHTTP:
             else:
                 yield emetti("# nessuna marca temporale presente\r\n")
             yield emetti("\r\n# host,%d\r\n# prove_manomesse,%d\r\n# marche_temporali,%d\r\n"
-                         % (len(host), manomesse, len(marche)))
+                         "# marche_qualificate_eidas,%d\r\n"
+                         % (len(host), manomesse, len(marche),
+                            sum(1 for m in marche if m.get("qualificata_eidas") == "SI")))
             yield "# FINE DOSSIER - INTEGRITÀ: %s\r\n" % impronta.hexdigest()
         logger.warning("EXPORT_LEGALE_COMPLETED | DATA: %s | HOST: %d | MANOMESSE: %d | "
                        "FORMATO: %s | IP: %s", gen, len(host), manomesse, formato, ip or "?")
@@ -3180,13 +3198,24 @@ class RouterHTTP:
                                             if gt else ""),
                     "impronta": r["impronta"], "sigillo_leggibile": r["canonico"],
                     "errore": r["errore"],
+                    # QUALIFICATA (eIDAS art. 42): riletta DAL TOKEN, non dal database
+                    "qualificata": bool(v.get("qualificata")),
+                    "qualifica_coerente": bool(v.get("qualifica_coerente", True)),
                     "token_riverificato": bool(v.get("ok")),
                     "ora_coerente": bool(v.get("coerente_con_archivio")),
                     "scarica": "/api/bunker/marca.tsr?id=%d" % r["id"]})
             ok = [x for x in righe if x["stato"] == "ok"]
+            qual = [x for x in ok if x["qualificata"]]
             return 200, {"marche": righe, "totale": len(righe), "riuscite": len(ok),
+                         "qualificate": len(qual),
+                         "tutte_qualificate": bool(ok) and len(qual) == len(ok),
                          "tutte_riverificate": all(x["token_riverificato"] for x in ok),
                          "ultima_ora_certificata": ok[0]["ora_certificata_utc"] if ok else "",
+                         "cosa_significa_qualificata":
+                             "eIDAS art. 41: la marca QUALIFICATA gode della presunzione "
+                             "legale di esattezza di data e ora e di integrita' dei dati. "
+                             "In giudizio non tocca a noi provare che l'ora e' giusta: "
+                             "tocca a chi contesta provare il contrario.",
                          "come_verificare": "openssl ts -verify -data <file col sigillo "
                                             "leggibile> -in marca.tsr -token_in -CAfile "
                                             "<archivio CA di sistema>"}
