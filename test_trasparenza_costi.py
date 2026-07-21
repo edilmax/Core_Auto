@@ -20,6 +20,7 @@ import os
 import re
 import unittest
 
+import fase185_testi_legali as TL
 from fase98_policy_commissione import (BPS_DIRETTO, LANCIO_BPS_FASE1, LANCIO_BPS_REGIME,
                                        LANCIO_GIORNI_GRATIS)
 from fase163_accettazioni import (CONTRATTO_HOST, CONTRATTO_HOST_VERSIONE, doc_sha256,
@@ -48,9 +49,15 @@ class TestAncoraggioAlCodice(unittest.TestCase):
         bps = _psp_bps_default()
         self.assertEqual(bps % 100, 0, "tariffa non intera: i testi '3%%' andrebbero rivisti")
         atteso = "%d%%" % (bps // 100)                    # 300 bps -> "3%"
-        for rel in ("deploy/host.html", "deploy/termini.html"):
-            self.assertIn(atteso, _leggi(rel),
-                          "%s non dichiara la tariffa tecnica %s del codice" % (rel, atteso))
+        self.assertIn(atteso, _leggi("deploy/host.html"),
+                      "deploy/host.html non dichiara la tariffa tecnica %s del codice"
+                      % atteso)
+        # i TERMINI non stanno piu' nell'HTML: sono un documento servito dal motore in 8
+        # lingue. Si verifica dove il testo vive davvero, e in OGNI lingua.
+        for lang in TL.LINGUE:
+            self.assertIn(atteso, TL.testo_termini(lang),
+                          "i termini in '%s' non dichiarano la tariffa tecnica %s"
+                          % (lang, atteso))
         for lang in ("it", "en"):
             self.assertIn(atteso, CONTRATTO_HOST[lang],
                           "il contratto (%s) non dichiara la tariffa %s" % (lang, atteso))
@@ -217,21 +224,32 @@ class TestNessunaCifraOrfana(unittest.TestCase):
 
 class TestTerminiPubblici(unittest.TestCase):
     def test_termini_dichiarano_la_tariffa(self):
-        t = _leggi("deploy/termini.html")
-        self.assertIn("tariffa tecnica fissa del 3%", t)
-        self.assertIn("sempre dovuta", t)
-        self.assertIn("0% per i primi 90 giorni", t)
-        self.assertIn("Stripe", t)
+        """Il testo italiano che fa fede deve dire le quattro cose che contano.
+
+        Si legge dal MOTORE, non dal file: `deploy/termini.html` e' un guscio che chiede
+        il documento a /api/legale/documento nella lingua dell'utente. Che il guscio sia
+        davvero collegato lo pretende `test_testi_legali`.
+        """
+        t = TL.testo_termini("it")
+        self.assertRegex(t, r"tariffa\s+tecnica",
+                         "i termini non nominano la tariffa tecnica")
+        self.assertRegex(t, r"SEMPRE DOVUTA|sempre dovuta",
+                         "non dicono che e' SEMPRE dovuta")
+        self.assertRegex(t, r"0%\s+per i primi 90 giorni",
+                         "non dichiarano i 90 giorni a commissione zero")
+        self.assertIn("Stripe", t, "non nominano il gestore di pagamento")
+
+    def test_i_termini_dicono_il_3_in_tutte_le_lingue(self):
+        """Una sola lingua che tace la tariffa basta a rendere disonesta la promessa."""
+        mute = [lg for lg in TL.LINGUE
+                if not re.search(r"3\s?%", TL.testo_termini(lg))]
+        self.assertEqual(mute, [], "lingue che non dichiarano il 3%%: %s" % mute)
 
     def test_pagina_commissioni_resta_coerente(self):
         """La pagina Commissioni era gia' onesta: non deve perdere il 3%."""
         c = _leggi("deploy/commissioni.html")
         self.assertIn("3%", c)
         self.assertIn("costo carta", c)
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TestPagineCheReclutanoHost(unittest.TestCase):
@@ -249,15 +267,20 @@ class TestPagineCheReclutanoHost(unittest.TestCase):
     """
 
     #  file -> deve dichiarare il 3% (True) oppure e' rivolto SOLO all'ospite (False)
+    # `termini.html` non e' piu' in questa lista: e' diventato un guscio e il suo testo
+    # vive nel motore. La stessa pretesa (chi parla di percentuali dichiara il 3%) e'
+    # applicata al documento vero, in TUTTE le lingue, da
+    # TestTerminiPubblici.test_i_termini_dicono_il_3_in_tutte_le_lingue.
     PAGINE_HOST = ("kit-marketing.html", "diventa-host.html", "commissioni.html",
-                   "termini.html", "host.html")
+                   "host.html")
 
     def _leggi(self, nome):
         import io
         import os
         p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "deploy", nome)
-        if not os.path.exists(p):
-            self.skipTest("pagina assente: %s" % nome)
+        # ASSENZA NON E' CONFORMITA': una pagina che sparisce non assolve la regola,
+        # la rende impossibile da verificare — ed e' un fatto, non un'esenzione.
+        self.assertTrue(os.path.exists(p), "pagina per host sparita: %s" % nome)
         return io.open(p, encoding="utf-8", errors="replace").read()
 
     def test_ogni_pagina_per_host_dichiara_la_tariffa_tecnica(self):
@@ -354,3 +377,7 @@ class TestEmailAgliHost(unittest.TestCase):
         for bps in (LANCIO_BPS_FASE1, LANCIO_BPS_REGIME, BPS_DIRETTO):
             self.assertRegex(corpo, r"(?<![0-9])%d\s?%%" % (bps // 100),
                              "manca %d%% dichiarato dal motore" % (bps // 100))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

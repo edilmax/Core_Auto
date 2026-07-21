@@ -26,20 +26,41 @@
   <div class="card">
     <div class="logo">Bookin VIP</div>
     <div class="tick">✓</div>
-    <h1 id="h">Grazie! Pagamento ricevuto</h1>
-    <p id="p1">La tua prenotazione è <strong>confermata</strong>.</p>
-    <p id="p2">Riceverai a breve un'email con il voucher e i dettagli del soggiorno.</p>
-    <a class="btn" href="/" id="btn">Torna alla home</a>
+    <h1 id="h"></h1>
+    <p id="p1"></p>
+    <p id="p2"></p>
+    <a class="btn" href="/" id="btn"></a>
   </div>
 <script>
-  if((navigator.language||'it').slice(0,2).toLowerCase()==='en'){
-    document.documentElement.lang='en';
-    document.title='Thank you — Booking confirmed · Bookin VIP';
-    h.textContent='Thank you! Payment received';
-    p1.innerHTML='Your booking is <strong>confirmed</strong>.';
-    p2.textContent='You will receive an email shortly with your voucher and stay details.';
-    btn.textContent='Back to home';
-  }
+/* Tutte e 8 le lingue, e si rispetta la scelta gia' fatta dall'utente sul sito
+   (localStorage 'lang'), non solo la lingua del browser: chi ha navigato in giapponese
+   e ha appena pagato deve leggere giapponese proprio qui. */
+const T = {
+  it:{h:'Grazie! Pagamento ricevuto',p1:'La tua prenotazione è <b>confermata</b>.',p2:'Riceverai a breve un\'email con il voucher e i dettagli del soggiorno.',btn:'Torna alla home',tit:'Grazie — Prenotazione confermata'},
+  en:{h:'Thank you! Payment received',p1:'Your booking is <b>confirmed</b>.',p2:'You will receive an email shortly with your voucher and stay details.',btn:'Back to home',tit:'Thank you — Booking confirmed'},
+  es:{h:'¡Gracias! Pago recibido',p1:'Tu reserva está <b>confirmada</b>.',p2:'En breve recibirás un correo con el bono y los detalles de la estancia.',btn:'Volver al inicio',tit:'Gracias — Reserva confirmada'},
+  fr:{h:'Merci ! Paiement reçu',p1:'Votre réservation est <b>confirmée</b>.',p2:'Vous recevrez sous peu un e-mail avec votre bon et les détails du séjour.',btn:'Retour à l\'accueil',tit:'Merci — Réservation confirmée'},
+  de:{h:'Danke! Zahlung erhalten',p1:'Ihre Buchung ist <b>bestätigt</b>.',p2:'Sie erhalten in Kürze eine E-Mail mit Ihrem Gutschein und den Details zum Aufenthalt.',btn:'Zurück zur Startseite',tit:'Danke — Buchung bestätigt'},
+  pt:{h:'Obrigado! Pagamento recebido',p1:'A tua reserva está <b>confirmada</b>.',p2:'Vais receber em breve um e-mail com o voucher e os detalhes da estadia.',btn:'Voltar ao início',tit:'Obrigado — Reserva confirmada'},
+  ja:{h:'お支払いを受け付けました',p1:'ご予約は<b>確定</b>しました。',p2:'まもなくバウチャーと滞在の詳細をメールでお送りします。',btn:'ホームに戻る',tit:'ありがとうございます — ご予約確定'},
+  zh:{h:'感谢您！已收到付款',p1:'您的预订已<b>确认</b>。',p2:'我们将很快通过电子邮件发送凭证和入住详情。',btn:'返回首页',tit:'感谢您 — 预订已确认'}
+};
+function lingua(){
+  const u = new URLSearchParams(location.search).get('lang');
+  if (u && T[u]) return u;
+  try { const s = localStorage.getItem('lang'); if (s && T[s]) return s; } catch(e){}
+  const n = (navigator.language||'en').slice(0,2).toLowerCase();
+  return T[n] ? n : 'en';
+}
+(function(){
+  const lg = lingua(), t = T[lg];
+  document.documentElement.lang = lg;
+  document.title = t.tit + ' \u00b7 Bookin VIP';
+  document.getElementById('h').textContent = t.h;
+  document.getElementById('p1').innerHTML = t.p1;
+  document.getElementById('p2').textContent = t.p2;
+  document.getElementById('btn').textContent = t.btn;
+})();
 </script>
 </body>
 </html>

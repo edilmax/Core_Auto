@@ -218,6 +218,377 @@ publication constitutes acceptance.
 These Terms are provided in several languages for convenience. In case of discrepancy, the
 ITALIAN version prevails.
 """,
+"es": """TERMINOS Y CONDICIONES DEL SERVICIO — BOOKINVIP
+Version {VER} · Ultima actualizacion: {VER}
+Titular: {SOC}, NIF/IVA {PIVA}, {IND} — {EMAIL}
+
+1. OBJETO Y FUNCION DE BOOKINVIP
+BookinVIP es una plataforma tecnologica de intermediacion que pone en contacto a
+Anfitriones (propietarios o gestores de alojamientos) y Huespedes para la reserva de
+estancias. BookinVIP NO posee, no gestiona y no controla los alojamientos. El contrato de
+alojamiento se celebra DIRECTAMENTE entre Anfitrion y Huesped; BookinVIP aporta las
+herramientas (escaparate, reserva, pago, bono, registro digital de entrada).
+
+2. ACEPTACION
+Al usar la Plataforma aceptas estos Terminos y la Politica de Privacidad. Si no los
+aceptas, no utilices el servicio.
+
+3. OBLIGACIONES DEL ANFITRION
+El Anfitrion garantiza que: tiene titulo para ofrecer el alojamiento y cumple la
+normativa local (licencias, registro de huespedes, impuesto turistico, seguridad); la
+informacion y las fotos del anuncio son veraces y estan actualizadas; la disponibilidad
+mostrada es real; las declaraciones vinculantes (p. ej. "sin alergenos", "admite
+mascotas") son ciertas. Si resultan falsas, el Huesped tiene derecho al reembolso y el
+Anfitrion a una penalizacion segun el mecanismo de la Plataforma.
+
+4. RESERVA Y PAGO (HUESPED)
+El precio mostrado lo calcula y lo firma el sistema: no puede modificarse desde el
+navegador. El Huesped paga el precio limpio: no soporta ninguna comision de plataforma.
+El pago se realiza mediante un proveedor autorizado (Stripe); BookinVIP no conserva los
+datos de la tarjeta.
+
+5. COSTES A CARGO DEL ANFITRION
+Comision de plataforma: {PROMO}% durante los primeros {GG} dias desde el registro,
+despues {FASE1}% hasta un ano y {REGIME}% en regimen ordinario, sobre las reservas
+procedentes del marketplace; {DIRETTO}% sobre las reservas procedentes del enlace directo
+del Anfitrion.
+TARIFA TECNICA: ademas de la comision, queda a cargo exclusivo del Anfitrion una tarifa
+tecnica fija igual al {TECNICA}% del importe de la transaccion, SIEMPRE DEBIDA en
+cualquier periodo — tambien cuando la comision es del {PROMO}% — para cubrir los costes
+del proveedor de pago. La Plataforma no obtiene ningun margen sobre este concepto.
+
+6. COBROS Y TRANSFERENCIAS
+La parte del Anfitrion permanece en garantia hasta la confirmacion del Huesped o hasta la
+liberacion automatica prevista por la Plataforma; despues se transfiere a la cuenta
+vinculada. Las transferencias pueden retenerse cuando la ley lo exige (obligaciones de
+identificacion fiscal), hasta su regularizacion.
+
+7. CANCELACIONES Y PENALIZACIONES
+Las condiciones de cancelacion se indican en cada anuncio. Si el Anfitrion cancela una
+reserva ya pagada, o el alojamiento resulta no disponible, se devenga una penalizacion
+igual al {PENALE}% del importe, compensada con los cobros futuros del Anfitrion o
+registrada como deuda.
+
+8. VALORACIONES
+Las valoraciones solo se admiten tras una estancia real y concluida, una sola vez por
+reserva. Los contenidos ofensivos, falsos o comerciales pueden ser retirados.
+
+9. LIMITACION DE RESPONSABILIDAD
+BookinVIP responde del correcto funcionamiento de la Plataforma. No responde de la
+calidad del alojamiento, del comportamiento de Anfitriones y Huespedes, ni de hechos no
+imputables a la Plataforma, dentro de los limites permitidos por la ley aplicable.
+
+10. LEY APLICABLE
+Se aplica la ley italiana. Quedan a salvo los derechos irrenunciables reconocidos al
+consumidor por la ley de su pais de residencia.
+
+11. MODIFICACIONES
+Las modificaciones se publican en esta pagina con una nueva version. El uso continuado de
+la Plataforma tras la publicacion equivale a su aceptacion.
+
+12. IDIOMA
+Estos Terminos se facilitan en varios idiomas por comodidad. En caso de divergencia
+prevalece la version ITALIANA.
+""",
+"fr": """CONDITIONS GENERALES DE SERVICE — BOOKINVIP
+Version {VER} · Derniere mise a jour : {VER}
+Exploitant : {SOC}, N° TVA {PIVA}, {IND} — {EMAIL}
+
+1. OBJET ET ROLE DE BOOKINVIP
+BookinVIP est une plateforme technologique d'intermediation qui met en relation des Hotes
+(proprietaires ou gestionnaires de logements) et des Voyageurs pour la reservation de
+sejours. BookinVIP NE possede pas, ne gere pas et ne controle pas les logements. Le
+contrat de sejour est conclu DIRECTEMENT entre l'Hote et le Voyageur ; BookinVIP fournit
+les outils (vitrine, reservation, paiement, bon, enregistrement numerique).
+
+2. ACCEPTATION
+En utilisant la Plateforme, vous acceptez les presentes Conditions et la Politique de
+confidentialite. Si vous ne les acceptez pas, n'utilisez pas le service.
+
+3. OBLIGATIONS DE L'HOTE
+L'Hote garantit que : il a qualite pour proposer le logement et respecte la
+reglementation locale (licences, declaration des voyageurs, taxe de sejour, securite) ;
+les informations et les photos de l'annonce sont exactes et a jour ; la disponibilite
+affichee est reelle ; les declarations contraignantes (p. ex. "sans allergenes", "animaux
+acceptes") sont veridiques. Si elles se revelent fausses, le Voyageur a droit au
+remboursement et l'Hote est redevable d'une penalite selon le mecanisme de la Plateforme.
+
+4. RESERVATION ET PAIEMENT (VOYAGEUR)
+Le prix affiche est calcule et signe par le systeme : il n'est pas modifiable depuis le
+navigateur. Le Voyageur paie le prix net : aucune commission de plateforme n'est a sa
+charge. Le paiement est effectue via un prestataire agree (Stripe) ; BookinVIP ne
+conserve pas les donnees de la carte.
+
+5. COUTS A LA CHARGE DE L'HOTE
+Commission de plateforme : {PROMO}% pendant les {GG} premiers jours suivant
+l'inscription, puis {FASE1}% jusqu'a un an, puis {REGIME}% en regime courant, sur les
+reservations issues de la place de marche ; {DIRETTO}% sur les reservations issues du
+lien direct de l'Hote.
+FRAIS TECHNIQUES : outre la commission, restent a la charge exclusive de l'Hote des frais
+techniques fixes egaux a {TECNICA}% du montant de la transaction, TOUJOURS DUS quelle que
+soit la periode — y compris lorsque la commission est de {PROMO}% — afin de couvrir les
+couts du prestataire de paiement. La Plateforme ne realise aucune marge sur ce poste.
+
+6. ENCAISSEMENTS ET VIREMENTS
+La part de l'Hote reste sous sequestre jusqu'a la confirmation du Voyageur ou jusqu'a la
+liberation automatique prevue par la Plateforme ; elle est ensuite virée sur le compte
+associe. Les virements peuvent etre retenus lorsque la loi l'impose (obligations
+d'identification fiscale), jusqu'a regularisation.
+
+7. ANNULATIONS ET PENALITES
+Les conditions d'annulation sont indiquees sur chaque annonce. Si l'Hote annule une
+reservation deja payee, ou si le logement se revele indisponible, une penalite egale a
+{PENALE}% du montant est due, compensee sur les encaissements futurs de l'Hote ou
+enregistree comme dette.
+
+8. AVIS
+Les avis ne sont admis qu'apres un sejour reel et acheve, une seule fois par reservation.
+Les contenus injurieux, faux ou commerciaux peuvent etre supprimes.
+
+9. LIMITATION DE RESPONSABILITE
+BookinVIP repond du bon fonctionnement de la Plateforme. Elle ne repond pas de la qualite
+du logement, du comportement des Hotes et des Voyageurs, ni des evenements qui ne lui
+sont pas imputables, dans les limites permises par la loi applicable.
+
+10. DROIT APPLICABLE
+Le droit italien s'applique. Demeurent reserves les droits imperatifs reconnus au
+consommateur par la loi de son pays de residence.
+
+11. MODIFICATIONS
+Les modifications sont publiees sur cette page avec un nouveau numero de version.
+L'utilisation continue de la Plateforme apres publication vaut acceptation.
+
+12. LANGUE
+Les presentes Conditions sont fournies en plusieurs langues par commodite. En cas de
+divergence, la version ITALIENNE fait foi.
+""",
+"de": """ALLGEMEINE GESCHAEFTSBEDINGUNGEN — BOOKINVIP
+Version {VER} · Letzte Aktualisierung: {VER}
+Betreiber: {SOC}, USt-IdNr. {PIVA}, {IND} — {EMAIL}
+
+1. GEGENSTAND UND ROLLE VON BOOKINVIP
+BookinVIP ist eine technologische Vermittlungsplattform, die Gastgeber (Eigentuemer oder
+Verwalter von Unterkuenften) und Gaeste fuer die Buchung von Aufenthalten zusammenbringt.
+BookinVIP besitzt, verwaltet und kontrolliert die Unterkuenfte NICHT. Der Beherbergungs-
+vertrag kommt UNMITTELBAR zwischen Gastgeber und Gast zustande; BookinVIP stellt die
+Werkzeuge bereit (Schaufenster, Buchung, Zahlung, Gutschein, digitaler Check-in).
+
+2. ANNAHME
+Mit der Nutzung der Plattform akzeptieren Sie diese Bedingungen und die
+Datenschutzerklaerung. Wenn Sie sie nicht akzeptieren, nutzen Sie den Dienst nicht.
+
+3. PFLICHTEN DES GASTGEBERS
+Der Gastgeber sichert zu, dass: er berechtigt ist, die Unterkunft anzubieten, und die
+oertlichen Vorschriften einhaelt (Genehmigungen, Gaestemeldung, Kurtaxe, Sicherheit); die
+Angaben und Fotos des Inserats wahrheitsgemaess und aktuell sind; die angezeigte
+Verfuegbarkeit tatsaechlich besteht; verbindliche Angaben (z. B. "allergenfrei",
+"haustierfreundlich") zutreffen. Erweisen sie sich als unrichtig, hat der Gast Anspruch
+auf Erstattung und der Gastgeber schuldet eine Vertragsstrafe nach dem Mechanismus der
+Plattform.
+
+4. BUCHUNG UND ZAHLUNG (GAST)
+Der angezeigte Preis wird vom System berechnet und signiert: er ist ueber den Browser
+nicht veraenderbar. Der Gast zahlt den reinen Preis: ihn trifft keine Plattformprovision.
+Die Zahlung erfolgt ueber einen zugelassenen Zahlungsdienstleister (Stripe); BookinVIP
+speichert keine Kartendaten.
+
+5. KOSTEN ZULASTEN DES GASTGEBERS
+Plattformprovision: {PROMO}% in den ersten {GG} Tagen ab der Registrierung, danach
+{FASE1}% bis zu einem Jahr, danach {REGIME}% im Regelbetrieb, auf Buchungen aus dem
+Marktplatz; {DIRETTO}% auf Buchungen ueber den Direktlink des Gastgebers.
+TECHNISCHES ENTGELT: neben der Provision traegt ausschliesslich der Gastgeber ein festes
+technisches Entgelt in Hoehe von {TECNICA}% des Transaktionsbetrags, das in JEDEM
+Zeitraum STETS GESCHULDET ist — auch wenn die Provision {PROMO}% betraegt — zur Deckung
+der Kosten des Zahlungsdienstleisters. Die Plattform erzielt hierauf keine Marge.
+
+6. EINNAHMEN UND UEBERWEISUNGEN
+Der Anteil des Gastgebers verbleibt bis zur Bestaetigung durch den Gast oder bis zur von
+der Plattform vorgesehenen automatischen Freigabe in Verwahrung; danach wird er auf das
+verknuepfte Konto ueberwiesen. Ueberweisungen koennen einbehalten werden, soweit das
+Gesetz dies vorschreibt (steuerliche Identifizierungspflichten), bis zur Regularisierung.
+
+7. STORNIERUNGEN UND VERTRAGSSTRAFEN
+Die Stornobedingungen sind bei jedem Inserat angegeben. Storniert der Gastgeber eine
+bereits bezahlte Buchung oder ist die Unterkunft nicht verfuegbar, faellt eine
+Vertragsstrafe in Hoehe von {PENALE}% des Betrags an, die mit kuenftigen Einnahmen des
+Gastgebers verrechnet oder als Verbindlichkeit erfasst wird.
+
+8. BEWERTUNGEN
+Bewertungen sind nur nach einem tatsaechlichen und abgeschlossenen Aufenthalt zulaessig,
+einmal je Buchung. Beleidigende, unwahre oder werbliche Inhalte koennen entfernt werden.
+
+9. HAFTUNGSBESCHRAENKUNG
+BookinVIP haftet fuer das ordnungsgemaesse Funktionieren der Plattform. Sie haftet nicht
+fuer die Qualitaet der Unterkunft, fuer das Verhalten von Gastgebern und Gaesten oder
+fuer nicht von ihr zu vertretende Ereignisse, soweit das anwendbare Recht dies zulaesst.
+
+10. ANWENDBARES RECHT
+Es gilt italienisches Recht. Unberuehrt bleiben die zwingenden Rechte, die dem
+Verbraucher nach dem Recht seines Wohnsitzstaates zustehen.
+
+11. AENDERUNGEN
+Aenderungen werden auf dieser Seite mit einer neuen Version veroeffentlicht. Die weitere
+Nutzung der Plattform nach der Veroeffentlichung gilt als Zustimmung.
+
+12. SPRACHE
+Diese Bedingungen werden aus Gruenden der Bequemlichkeit in mehreren Sprachen
+bereitgestellt. Bei Abweichungen ist die ITALIENISCHE Fassung massgeblich.
+""",
+"pt": """TERMOS E CONDICOES DE SERVICO — BOOKINVIP
+Versao {VER} · Ultima atualizacao: {VER}
+Operador: {SOC}, NIF/IVA {PIVA}, {IND} — {EMAIL}
+
+1. OBJETO E FUNCAO DA BOOKINVIP
+A BookinVIP e uma plataforma tecnologica de intermediacao que coloca em contacto
+Anfitrioes (proprietarios ou gestores de alojamentos) e Hospedes para a reserva de
+estadias. A BookinVIP NAO possui, nao gere e nao controla os alojamentos. O contrato de
+alojamento e celebrado DIRETAMENTE entre Anfitriao e Hospede; a BookinVIP fornece as
+ferramentas (montra, reserva, pagamento, voucher, check-in digital).
+
+2. ACEITACAO
+Ao utilizar a Plataforma aceitas estes Termos e a Politica de Privacidade. Se nao os
+aceitares, nao utilizes o servico.
+
+3. OBRIGACOES DO ANFITRIAO
+O Anfitriao garante que: tem titulo para oferecer o alojamento e cumpre a legislacao
+local (licencas, registo de hospedes, taxa turistica, seguranca); as informacoes e as
+fotografias do anuncio sao verdadeiras e atualizadas; a disponibilidade apresentada e
+real; as declaracoes vinculativas (p. ex. "sem alergenios", "aceita animais") sao
+verdadeiras. Se se revelarem falsas, o Hospede tem direito ao reembolso e o Anfitriao
+fica sujeito a uma penalizacao nos termos do mecanismo da Plataforma.
+
+4. RESERVA E PAGAMENTO (HOSPEDE)
+O preco apresentado e calculado e assinado pelo sistema: nao pode ser alterado a partir
+do navegador. O Hospede paga o preco limpo: nao suporta qualquer comissao de plataforma.
+O pagamento e efetuado atraves de prestador autorizado (Stripe); a BookinVIP nao conserva
+os dados do cartao.
+
+5. CUSTOS A CARGO DO ANFITRIAO
+Comissao de plataforma: {PROMO}% nos primeiros {GG} dias apos o registo, depois {FASE1}%
+ate um ano e {REGIME}% em regime normal, sobre as reservas provenientes do marketplace;
+{DIRETTO}% sobre as reservas provenientes da ligacao direta do Anfitriao.
+TAXA TECNICA: alem da comissao, fica a cargo exclusivo do Anfitriao uma taxa tecnica fixa
+igual a {TECNICA}% do montante da transacao, SEMPRE DEVIDA em qualquer periodo — tambem
+quando a comissao e de {PROMO}% — para cobrir os custos do prestador de pagamento. A
+Plataforma nao obtem qualquer margem sobre esta rubrica.
+
+6. RECEBIMENTOS E TRANSFERENCIAS
+A parte do Anfitriao permanece em garantia ate a confirmacao do Hospede ou ate a
+libertacao automatica prevista pela Plataforma; e depois transferida para a conta
+associada. As transferencias podem ser retidas quando a lei o exija (obrigacoes de
+identificacao fiscal), ate a regularizacao.
+
+7. CANCELAMENTOS E PENALIZACOES
+As condicoes de cancelamento sao indicadas em cada anuncio. Se o Anfitriao cancelar uma
+reserva ja paga, ou se o alojamento nao estiver disponivel, e devida uma penalizacao
+igual a {PENALE}% do montante, compensada com os recebimentos futuros do Anfitriao ou
+registada como divida.
+
+8. AVALIACOES
+As avaliacoes so sao admitidas apos uma estadia real e concluida, uma unica vez por
+reserva. Conteudos ofensivos, falsos ou comerciais podem ser removidos.
+
+9. LIMITACAO DE RESPONSABILIDADE
+A BookinVIP responde pelo correto funcionamento da Plataforma. Nao responde pela
+qualidade do alojamento, pelo comportamento de Anfitrioes e Hospedes, nem por
+acontecimentos que nao lhe sejam imputaveis, nos limites permitidos pela lei aplicavel.
+
+10. LEI APLICAVEL
+Aplica-se a lei italiana. Ficam ressalvados os direitos irrenunciaveis reconhecidos ao
+consumidor pela lei do seu pais de residencia.
+
+11. ALTERACOES
+As alteracoes sao publicadas nesta pagina com uma nova versao. A utilizacao continuada da
+Plataforma apos a publicacao vale como aceitacao.
+
+12. LINGUA
+Estes Termos sao disponibilizados em varias linguas por comodidade. Em caso de
+divergencia prevalece a versao ITALIANA.
+""",
+"ja": """利用規約 — BOOKINVIP
+バージョン {VER} ・ 最終更新: {VER}
+運営者: {SOC}、付加価値税登録番号 {PIVA}、{IND} — {EMAIL}
+
+1. 目的および BOOKINVIP の役割
+BookinVIP は、宿泊施設の所有者または運営者（以下「ホスト」）と宿泊を予約する利用者（以下「ゲスト」）を結びつける技術的仲介プラットフォームです。
+BookinVIP は宿泊施設を所有・運営・管理しません。宿泊契約はホストとゲストの間で直接締結され、BookinVIP はその手段（掲載、予約、決済、バウチャー、デジタルチェックイン）を提供します。
+
+2. 同意
+本プラットフォームを利用することにより、本規約およびプライバシーポリシーに同意したものとみなされます。同意しない場合は本サービスを利用しないでください。
+
+3. ホストの義務
+ホストは次の事項を保証します。宿泊施設を提供する正当な権限を有し、現地の法令（許認可、宿泊者名簿、宿泊税、安全基準）を遵守していること。掲載情報および写真が真実かつ最新であること。表示された空室状況が実際のものであること。拘束力のある表示（例：「アレルゲン不使用」「ペット可」）が真実であること。これらが虚偽であった場合、ゲストは返金を受ける権利を有し、ホストは本プラットフォームの定める違約金を負います。
+
+4. 予約および支払（ゲスト）
+表示価格はシステムが算出し署名したものであり、ブラウザから変更することはできません。ゲストは追加のプラットフォーム手数料を一切負担せず、提示価格のみを支払います。決済は認可された決済代行会社（Stripe）を通じて行われ、BookinVIP はカード情報を保存しません。
+
+5. ホストが負担する費用
+プラットフォーム手数料：登録から {GG} 日間は {PROMO}%、その後1年までは {FASE1}%、以降は {REGIME}%（マーケットプレイス経由の予約）。ホストの直接リンク経由の予約は {DIRETTO}%。
+技術手数料：上記手数料に加え、取引金額の {TECNICA}% に相当する固定の技術手数料をホストが専ら負担します。これは手数料が {PROMO}% の期間を含むすべての期間において常に発生し、決済代行会社の実費を賄うものです。本項目についてプラットフォームは利益を得ません。
+
+6. 入金および送金
+ホストの取り分は、ゲストの確認または本プラットフォームが定める自動解除まで保管され、その後連携口座へ送金されます。法令が要求する場合（税務上の本人確認義務等）、送金は規定の履行まで保留されることがあります。
+
+7. キャンセルおよび違約金
+キャンセル条件は各掲載に表示されます。ホストが支払済みの予約を取り消した場合、または宿泊施設が利用できない場合、金額の {PENALE}% に相当する違約金が発生し、ホストの将来の入金から相殺されるか、債務として記録されます。
+
+8. レビュー
+レビューは、実際に完了した宿泊の後に、予約ごとに1回のみ投稿できます。侮辱的、虚偽または宣伝目的の内容は削除されることがあります。
+
+9. 責任の制限
+BookinVIP は本プラットフォームの適正な動作について責任を負います。適用法が許容する範囲内で、宿泊施設の品質、ホストおよびゲストの行為、並びに本プラットフォームの責に帰しない事象については責任を負いません。
+
+10. 準拠法
+イタリア法を準拠法とします。消費者が居住国の法令により認められる強行規定上の権利は影響を受けません。
+
+11. 変更
+変更は新しいバージョンとして本ページに公表されます。公表後も本プラットフォームの利用を継続した場合、変更に同意したものとみなされます。
+
+12. 言語
+本規約は便宜のため複数の言語で提供されます。解釈に相違がある場合はイタリア語版が優先します。
+""",
+"zh": """服务条款 — BOOKINVIP
+版本 {VER} · 最后更新：{VER}
+运营者：{SOC}，增值税号 {PIVA}，{IND} — {EMAIL}
+
+1. 目的与 BOOKINVIP 的角色
+BookinVIP 是一个技术中介平台，为房东（住宿的所有者或管理者）与房客建立联系以便预订住宿。
+BookinVIP 不拥有、不经营也不控制任何住宿。住宿合同直接在房东与房客之间订立；BookinVIP 仅提供工具（展示、预订、支付、凭证、数字入住登记）。
+
+2. 接受
+使用本平台即表示您接受本条款及隐私政策。若您不接受，请勿使用本服务。
+
+3. 房东的义务
+房东保证：其有权提供该住宿并遵守当地法规（许可、旅客登记、住宿税、安全规定）；房源信息与照片真实且保持更新；所展示的可预订情况真实；具有约束力的声明（如“无致敏原”、“可携宠物”）属实。如经查不实，房客有权获得退款，房东应按平台机制承担违约金。
+
+4. 预订与支付（房客）
+所示价格由系统计算并签名，无法通过浏览器修改。房客支付的是“干净价格”：无需承担任何平台佣金。支付通过持牌支付机构（Stripe）完成；BookinVIP 不保存银行卡信息。
+
+5. 房东承担的费用
+平台佣金：自注册起前 {GG} 天为 {PROMO}%，其后至一年为 {FASE1}%，之后为 {REGIME}%（适用于来自平台市场的预订）；来自房东专属链接的预订为 {DIRETTO}%。
+技术服务费：除佣金外，房东需单独承担相当于交易金额 {TECNICA}% 的固定技术服务费，在任何时期均应支付——包括佣金为 {PROMO}% 的期间——用以支付支付机构的成本。平台在该项上不获取任何利润。
+
+6. 收款与转账
+房东应得款项将托管至房客确认或平台规定的自动释放为止，随后转入已绑定账户。当法律要求时（税务身份识别义务），转账可能被暂缓，直至完成合规手续。
+
+7. 取消与违约金
+取消条件在每个房源页面列明。若房东取消已付款的预订，或住宿实际不可用，应支付相当于订单金额 {PENALE}% 的违约金，该款项将从房东未来收入中抵扣或记录为欠款。
+
+8. 评价
+仅允许在真实且已完成的住宿之后发表评价，每笔预订限一次。侮辱性、虚假或商业推广内容可能被删除。
+
+9. 责任限制
+BookinVIP 对平台的正常运行承担责任。在适用法律允许的范围内，平台不对住宿质量、房东与房客的行为，以及不可归责于平台的事件承担责任。
+
+10. 适用法律
+适用意大利法律。消费者根据其居住国法律享有的强制性权利不受影响。
+
+11. 修改
+修改将以新版本形式发布于本页面。发布后继续使用本平台即视为接受修改。
+
+12. 语言
+本条款为方便起见提供多种语言版本。若各版本之间存在差异，以意大利语版本为准。
+""",
 }
 
 

@@ -446,6 +446,11 @@ def openapi_agent_spec(base_url: str = "") -> Dict[str, Any]:
                 "summary": "Dizionario UI per lingua",
                 "parameters": [_q("lang", "string", "it,en,es,fr,de,pt,ja,zh")],
                 "responses": {"200": {"description": "ui + servizi + stati"}}}},
+            "/api/legale/documento": {"get": {"operationId": "documentoLegale",
+                "summary": "Termini o Privacy nella lingua richiesta (versione + impronta)",
+                "parameters": [_q("doc", "string", "termini|privacy"),
+                               _q("lang", "string", "it,en,es,fr,de,pt,ja,zh")],
+                "responses": {"200": {"description": "testo + versione + doc_sha256"}}}},
             "/api/domanda/citta": {"get": {"operationId": "mappaDomanda",
                 "summary": "Citta con piu' persone in attesa (domanda aggregata)",
                 "responses": {"200": {"description": "elenco citta/richieste"}}}},
@@ -1284,6 +1289,8 @@ class RouterHTTP:
             return 200, {"lingue": list(LINGUE_SUPPORTATE)}
         if metodo == "GET" and path == "/api/i18n":
             return 200, _dizionario_i18n(_lingua(query))
+        if metodo == "GET" and path == "/api/legale/documento":
+            return self._documento_legale(query)
         if metodo == "GET" and path == "/api/legale/contratto-host":
             return self._contratto_host(query)
         if metodo == "GET" and path == "/api/trasparenza":
@@ -5877,6 +5884,29 @@ class RouterHTTP:
     def _user_agent(headers):
         h = headers or {}
         return (h.get("User-Agent") or h.get("user-agent") or "")[:400]
+
+    def _documento_legale(self, query):
+        """Serve TERMINI e PRIVACY nella lingua chiesta, con versione e impronta.
+
+        Il modulo `fase185` esisteva gia' completo, ma NON era collegato a nulla: le
+        pagine pubbliche restavano quelle statiche in italiano. Il fondatore se n'e'
+        accorto da solo — «clicco termini e lo leggo solo italiano» — ed e' il modo di
+        rompersi n.2 della regola dei collaudi: **il pezzo e' perfetto e non e'
+        collegato**. Questa rotta e' l'anello mancante.
+
+        Restituisce anche `lingue` (quelle REALMENTE fornite, non quelle dichiarate) e
+        `lingua_che_fa_fede`, perche' in caso di divergenza il testo italiano prevale e
+        l'utente ha diritto di saperlo.
+        """
+        try:
+            from fase185_testi_legali import documento
+            nome = str((query or {}).get("doc") or "termini").strip().lower()
+            if nome not in ("termini", "privacy"):
+                return 400, {"errore": "documento_sconosciuto"}
+            return 200, documento(nome, _lingua(query))
+        except Exception:
+            logger.error("documento legale: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
 
     def _contratto_host(self, query):
         """Serve il testo VIVO del contratto host + versione + hash vincolante (per l'accettazione)."""

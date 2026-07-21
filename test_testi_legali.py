@@ -26,6 +26,8 @@ import os
 import re
 import unittest
 
+import fase185_testi_legali as L
+
 QUI = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -161,23 +163,59 @@ class TestModuloTestiLegali(unittest.TestCase):
 
 
 class TestPagineLegaliPubbliche(unittest.TestCase):
-    """`privacy.html` e `termini.html`: prima di oggi NESSUN test le nominava."""
+    """`privacy.html` e `termini.html`: da oggi sono GUSCI, non testi.
+
+    Prima erano HTML statico in italiano — il fondatore se n'e' accorto da solo
+    («clicco termini e lo leggo solo italiano»). Ora prendono il documento da
+    /api/legale/documento nella lingua dell'utente, quindi cio' che va sorvegliato
+    cambia natura: non piu' "la pagina contiene la frase giusta", ma **la pagina e'
+    collegata al motore ed espone tutte le lingue**.
+
+    NOTA SU UN FINTO VERDE GIA' PAGATO. La verifica del 3% viveva qui e si SALTAVA DA
+    SOLA quando la pagina non nominava le commissioni: appena il testo e' uscito
+    dall'HTML, il controllo e' evaporato senza che nulla diventasse rosso. Ora quella
+    verifica sta dove sta il testo — sul documento vero, in TUTTE le lingue.
+    """
 
     def _pagina(self, nome):
         p = os.path.join(QUI, "deploy", nome)
-        if not os.path.exists(p):
-            self.skipTest("pagina assente: %s" % nome)
+        self.assertTrue(os.path.exists(p), "pagina legale sparita: %s" % nome)
         return _leggi(p)
 
-    def test_privacy_html_esiste_ed_e_piena(self):
-        testo = self._pagina("privacy.html")
-        self.assertGreater(len(testo), 1500)
-        self.assertIn("<title>", testo)
+    def test_le_pagine_legali_chiamano_il_motore(self):
+        """La chiamata dev'essere VIVA, non raccontata.
 
-    def test_termini_html_esiste_ed_e_pieno(self):
-        testo = self._pagina("termini.html")
-        self.assertGreater(len(testo), 1500)
-        self.assertIn("<title>", testo)
+        La prima stesura cercava la stringa "/api/legale/documento" in tutta la pagina.
+        Provata col guasto vero — chiamata spenta, commento lasciato intatto — restava
+        VERDE: si accontentava del commento che DESCRIVE la chiamata. Sarebbe stata
+        cieca proprio al difetto per cui e' nata (il pezzo scollegato). Ora i commenti
+        si tolgono prima di guardare, e si pretende la chiamata dentro un fetch().
+        """
+        for nome, doc in (("termini.html", "termini"), ("privacy.html", "privacy")):
+            vivo = re.sub(r"/\*.*?\*/", " ", self._pagina(nome), flags=re.S)
+            vivo = re.sub(r"(?m)^\s*//.*$", " ", vivo)
+            self.assertRegex(
+                vivo, r"fetch\(\s*['\"`]/api/legale/documento",
+                "%s non CHIAMA il motore (un commento non basta): tornerebbe statica"
+                % nome)
+            self.assertRegex(vivo, r"const DOC\s*=\s*'%s'" % doc,
+                             "%s chiede il documento sbagliato" % nome)
+
+    def test_le_pagine_legali_offrono_tutte_le_lingue(self):
+        for nome in ("termini.html", "privacy.html"):
+            testo = self._pagina(nome)
+            for lang in L.LINGUE:
+                self.assertRegex(testo, r"\b%s\s*:\s*\{\s*torna:" % lang,
+                                 "%s non ha la cornice in '%s'" % (nome, lang))
+
+    def test_le_pagine_legali_non_contengono_piu_testo_legale_fisso(self):
+        """Se il testo tornasse dentro l'HTML, tornerebbe anche in una lingua sola."""
+        for nome in ("termini.html", "privacy.html"):
+            testo = self._pagina(nome)
+            for frase in ("BookinVIP e' una piattaforma", "Commissione di piattaforma",
+                          "BOZZA NON VINCOLANTE", "Ultimo aggiornamento:"):
+                self.assertNotIn(frase, testo,
+                                 "%s e' tornata statica: contiene '%s'" % (nome, frase))
 
     def test_nessun_segreto_nelle_pagine_legali(self):
         for nome in ("privacy.html", "termini.html"):
@@ -185,14 +223,52 @@ class TestPagineLegaliPubbliche(unittest.TestCase):
             for spia in ("sk_live", "sk_test", "whsec_", "ADMIN_KEY"):
                 self.assertNotIn(spia, testo, "%s contiene '%s'" % (nome, spia))
 
-    def test_i_termini_dichiarano_la_tariffa_tecnica(self):
-        """Stessa regola di tutte le pagine per host: chi nomina percentuali deve
-        nominare anche il 3% sempre dovuto."""
-        testo = self._pagina("termini.html")
-        if not re.search(r"commission", testo, re.I):
-            self.skipTest("la pagina non parla di commissioni")
-        self.assertRegex(testo, r"3\s?%",
-                         "i termini parlano di commissioni senza il 3% tecnico")
+    def test_il_documento_esce_dal_marcatore_senza_marcatura_viva(self):
+        """La pagina inserisce il testo con innerHTML: deve passare da esc()."""
+        for nome in ("termini.html", "privacy.html"):
+            testo = self._pagina(nome)
+            self.assertIn("function esc(", testo)
+            self.assertIn("comeHtml(", testo)
+            self.assertNotIn("innerHTML = d.testo", testo,
+                             "%s inserisce il testo senza ripulirlo" % nome)
+
+
+class TestTariffaTecnicaInOgniLingua(unittest.TestCase):
+    """La regola vale sul TESTO, non sulla pagina: chi nomina la commissione deve
+    nominare anche la tariffa tecnica sempre dovuta. In tutte e otto le lingue, o in
+    una si prometterebbe qualcosa di diverso."""
+
+    def test_ogni_lingua_dichiara_la_tariffa_tecnica(self):
+        tecnica = L._percentuali()["tecnica"]
+        mute = []
+        for lang in L.LINGUE:
+            testo = L.testo_termini(lang)
+            if not re.search(r"%d\s?%%" % tecnica, testo):
+                mute.append(lang)
+        self.assertEqual(mute, [],
+                         "queste lingue non dichiarano la tariffa tecnica del %d%%: %s"
+                         % (tecnica, mute))
+
+    def test_ogni_lingua_porta_le_stesse_percentuali(self):
+        """Nessuna lingua puo' promettere una percentuale diversa da un'altra."""
+        insiemi = {}
+        for lang in L.LINGUE:
+            insiemi[lang] = sorted(set(re.findall(r"(\d+)\s?%", L.testo_termini(lang))))
+        riferimento = insiemi[L.LINGUA_CHE_FA_FEDE]
+        diverse = [lg for lg, v in insiemi.items() if v != riferimento]
+        self.assertEqual(diverse, [],
+                         "percentuali diverse fra le lingue (%s fa fede con %s): %s"
+                         % (L.LINGUA_CHE_FA_FEDE, riferimento,
+                            {lg: insiemi[lg] for lg in diverse}))
+
+    def test_nessun_segnaposto_dimenticato_in_nessuna_lingua(self):
+        for nome in ("termini", "privacy"):
+            for lang in L.LINGUE:
+                testo = L.documento(nome, lang)["testo"]
+                resti = re.findall(r"\{[A-Z0-9_]+\}", testo)
+                self.assertEqual(resti, [],
+                                 "%s/%s ha segnaposto non riempiti: %s"
+                                 % (nome, lang, resti))
 
 
 if __name__ == "__main__":

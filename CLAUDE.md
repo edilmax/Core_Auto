@@ -69,7 +69,7 @@ E la conseguenza operativa, che è la regola più importante di tutte:
 finti verdi. La ripetizione misura la **stabilità**; non misura la **copertura**. Sono due
 assi diversi: prima si guadagna la copertura, poi si ripete per la stabilità.
 
-## I 9 MODI DI ROMPERSI (incontrati sul campo, non teorici)
+## GLI 11 MODI DI ROMPERSI (incontrati sul campo, non teorici)
 
 Ogni cosa costruita va passata su questa lista chiedendo, per ognuna:
 **«se si rompesse così, chi se ne accorgerebbe?»** Se la risposta è «nessuno», manca una
@@ -86,6 +86,18 @@ guardia — anche se tutto è verde.
 | 7 | **Il tempo che passa** — scadenze, rampe, rinnovi | certificato, scaglioni per anzianità |
 | 8 | **Ambiente diverso** — locale ≠ produzione | `:memory:` nei test, file in prod |
 | 9 | **Rifattorizzazione** — il cuore cambia, le guardie restano sul vecchio | `stato_scaglione` senza le guardie di `commissione_bps_lancio` |
+| 10 | **Dato assurdo** — il formato è giusto, il **numero** non ha senso | `¥1.800.000 a notte` (prezzo ×100 su valuta senza decimali) |
+| 11 | **Lingua congelata** — la pagina ha 8 lingue ma il testo non è sostituibile | privacy e termini leggibili **solo in italiano** |
+
+> I modi **10 e 11 non li ha trovati nessun test: li ha trovati il fondatore guardando
+> il sito.** È la lezione più cara della giornata, e vale come regola a sé:
+>
+> ### 👁️ I test provano che il codice fa quello che dice. Nessuno chiedeva *cosa vede una persona*.
+>
+> Da qui i due strumenti che colmano il buco: `collaudi/plausibilita.py` («questo numero
+> ha senso nel mondo vero?», girato anche sui **dati veri di produzione**) e
+> `collaudi/occhio_del_fondatore.py` («chi apre questa pagina, cosa legge?»).
+> Entrambi guardano il **prodotto**, non il codice.
 
 ## I 10 COLLAUDI, IN QUEST'ORDINE
 

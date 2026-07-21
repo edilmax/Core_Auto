@@ -37,8 +37,8 @@ def costruisci_params(prezzo_guest_cents: int, application_fee_cents: int,
         return None
     return {
         "mode": "payment",
-        "success_url": success_url or "https://bookinvip.com/grazie",
-        "cancel_url": cancel_url or "https://bookinvip.com/annullato",
+        "success_url": success_url or "https://bookinvip.com/grazie.html",
+        "cancel_url": cancel_url or "https://bookinvip.com/annullato.html",
         "line_items[0][price_data][currency]": (valuta or "eur").lower(),
         "line_items[0][price_data][product_data][name]": "BookinVIP %s" % (riferimento or ""),
         "line_items[0][price_data][unit_amount]": str(prezzo_guest_cents),

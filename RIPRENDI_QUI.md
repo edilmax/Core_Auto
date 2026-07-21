@@ -372,6 +372,51 @@
 >   cartelle ora si ricava da TUTTI i campi `db_*`, non da una lista scritta a mano.
 >   **Lezione: i test erano verdi perché usano `:memory:` di proposito — solo il confronto
 >   con la configurazione di PRODUZIONE poteva scoprirlo.**
+> · 👁️ **LE VERIFICHE DEL PRODOTTO (2026-07-21 notte)** — la lezione piu' cara della
+>   giornata: **i due difetti peggiori li ha trovati il FONDATORE guardando il sito**,
+>   non i 3011 test. Radice comune: tutti i collaudi provavano il **codice** con **dati
+>   inventati da loro**, e nessuno chiedeva *«cosa vede una persona?»*. Due strumenti
+>   nuovi guardano il **prodotto finito**:
+>   **`collaudi/plausibilita.py`** — «questo numero ha senso nel mondo vero?»: bande
+>   credibili, esponenti delle valute (JPY/KRW a **0 decimali**, KWD/BHD a 3), coerenza
+>   col resto del listino. Girato sui **dati VERI di produzione** (128 righe, 227
+>   controlli, 0 violazioni) e **provato rosso** sul caso reale: riconosce il ¥1.800.000
+>   tre volte e ne **nomina la causa** («moltiplicato per cento»).
+>   **`collaudi/occhio_del_fondatore.py`** — «chi apre questa pagina, cosa **legge**?»:
+>   conta le parole visibili che restano in italiano in tutte e 8 le lingue (tutto cio'
+>   che sta fuori dai marcatori `data-t`/`data-i18n` non viene mai sostituito).
+>   Debito misurato: **1808 parole** → **1034** dopo il lavoro di stanotte.
+>   La piramide passa da **9 a 11 modi di rompersi** (`dato assurdo`, `lingua congelata`)
+>   e la copertura degli archivi non si giudica piu' cercando un nome nei test: **si
+>   prova** (si aggiunge un archivio finto e si pretende che la suite cada).
+>
+> · 🌍 **LINGUE — FATTO STANOTTE**: **TERMINI in tutte e 8 le lingue** (mancavano
+>   es/fr/de/pt/ja/zh) + **ROTTA `GET /api/legale/documento`** + **gusci** `termini.html`
+>   e `privacy.html`: prima il modulo `fase185` era completo ma **scollegato**, e il sito
+>   mostrava le vecchie pagine statiche solo in italiano. **749 parole congelate → 2.**
+>   Provato che **tutte e 8 le lingue portano le STESSE percentuali** (0/3/5/8/10/15),
+>   lette dal motore e mai scritte a mano. Fatte anche **`grazie.html` e
+>   `annullato.html`** (le legge OGNI ospite che paga): erano it+en decisi dal browser,
+>   ora 8 lingue e **rispettano la lingua gia' scelta sul sito**; lingua ignota → inglese.
+>   ⚠️ **DA SAPERE**: la vecchia `termini.html` conteneva un avviso **«BOZZA NON
+>   VINCOLANTE»** mentre la piattaforma incassa davvero. Il guscio nuovo mostra il testo
+>   ufficiale di `fase185` (lo stesso su cui si firma l'accettazione), quindi **quell'avviso
+>   non c'e' piu'**: e' la scelta coerente, ma **va fatto validare da un avvocato**.
+>   **RESTA DA FARE, in quest'ordine**: `kit-marketing` (386) · `bunker` (306) ·
+>   `guida-operativa` (280) · `admin` (27) · `index` (24 parole, fra cui **«pubblica il
+>   tuo alloggio ora»**, un richiamo per host) · `commissioni` (2) · `host` (3).
+>
+> · 🚨 **FINTI VERDI TROVATI E CHIUSI STANOTTE** (tutti provati rossi dopo la correzione):
+>   `test_testi_legali` **si saltava da solo** («la pagina non parla di commissioni»):
+>   appena il testo e' uscito dall'HTML per andare nel motore, il controllo del **3%** e'
+>   evaporato in silenzio → spostato sul documento vero, in **tutte e 8 le lingue** ·
+>   la guardia del cablaggio si accontentava di **un commento** che descriveva la
+>   chiamata (con `fetch` spento e commento intatto restava verde) · `occhio_del_fondatore`
+>   assolveva le pagine sotto le 15 parole come «troppo poco testo», e cosi' **`grazie.html`
+>   (14 parole, 0% tradotta, la legge ogni ospite che paga)** passava: **ASSENZA NON E'
+>   CONFORMITA'**, di nuovo · la piramide dava **12 archivi scoperti** che erano invece
+>   coperti (rosso falso: cercava il nome, non la sorveglianza).
+>
 > · 🛡️ **IL SISTEMA CHE SORVEGLIA SE STESSO (2026-07-21, `d819765`)**: non piu' solo
 >   test, ma un'architettura di verifica. **`collaudi/piramide.py`**: 6 livelli
 >   (fondamenta → unita' → cablaggio → sistema → realta' → meta), ognuno regge quello

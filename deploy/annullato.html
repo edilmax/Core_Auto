@@ -26,20 +26,41 @@
   <div class="card">
     <div class="logo">Bookin VIP</div>
     <div class="ico">✕</div>
-    <h1 id="h">Pagamento annullato</h1>
-    <p id="p1"><strong>Nessun addebito</strong> è stato effettuato.</p>
-    <p id="p2">La stanza resta disponibile: puoi completare la prenotazione quando vuoi.</p>
-    <a class="btn" href="/" id="btn">Torna alla home</a>
+    <h1 id="h"></h1>
+    <p id="p1"></p>
+    <p id="p2"></p>
+    <a class="btn" href="/" id="btn"></a>
   </div>
 <script>
-  if((navigator.language||'it').slice(0,2).toLowerCase()==='en'){
-    document.documentElement.lang='en';
-    document.title='Payment cancelled · Bookin VIP';
-    h.textContent='Payment cancelled';
-    p1.innerHTML='<strong>No charge</strong> was made.';
-    p2.textContent='The room is still available: you can complete your booking anytime.';
-    btn.textContent='Back to home';
-  }
+/* Tutte e 8 le lingue, e si rispetta la scelta gia' fatta dall'utente sul sito
+   (localStorage 'lang'), non solo la lingua del browser: chi ha navigato in giapponese
+   e ha appena pagato deve leggere giapponese proprio qui. */
+const T = {
+  it:{h:'Pagamento annullato',p1:'<b>Nessun addebito</b> è stato effettuato.',p2:'La stanza resta disponibile: puoi completare la prenotazione quando vuoi.',btn:'Torna alla home',tit:'Pagamento annullato'},
+  en:{h:'Payment cancelled',p1:'<b>No charge</b> was made.',p2:'The room is still available: you can complete your booking anytime.',btn:'Back to home',tit:'Payment cancelled'},
+  es:{h:'Pago cancelado',p1:'<b>No se ha realizado ningún cargo</b>.',p2:'La habitación sigue disponible: puedes completar la reserva cuando quieras.',btn:'Volver al inicio',tit:'Pago cancelado'},
+  fr:{h:'Paiement annulé',p1:'<b>Aucun débit</b> n\'a été effectué.',p2:'La chambre reste disponible : vous pouvez finaliser votre réservation quand vous le souhaitez.',btn:'Retour à l\'accueil',tit:'Paiement annulé'},
+  de:{h:'Zahlung abgebrochen',p1:'Es wurde <b>nichts abgebucht</b>.',p2:'Das Zimmer bleibt verfügbar: Sie können die Buchung jederzeit abschließen.',btn:'Zurück zur Startseite',tit:'Zahlung abgebrochen'},
+  pt:{h:'Pagamento cancelado',p1:'<b>Não foi efetuada qualquer cobrança</b>.',p2:'O quarto continua disponível: podes concluir a reserva quando quiseres.',btn:'Voltar ao início',tit:'Pagamento cancelado'},
+  ja:{h:'お支払いはキャンセルされました',p1:'<b>請求は発生していません</b>。',p2:'お部屋はまだご利用いただけます。いつでもご予約を完了できます。',btn:'ホームに戻る',tit:'お支払いキャンセル'},
+  zh:{h:'支付已取消',p1:'<b>未产生任何扣款</b>。',p2:'房间仍然可预订：您可以随时完成预订。',btn:'返回首页',tit:'支付已取消'}
+};
+function lingua(){
+  const u = new URLSearchParams(location.search).get('lang');
+  if (u && T[u]) return u;
+  try { const s = localStorage.getItem('lang'); if (s && T[s]) return s; } catch(e){}
+  const n = (navigator.language||'en').slice(0,2).toLowerCase();
+  return T[n] ? n : 'en';
+}
+(function(){
+  const lg = lingua(), t = T[lg];
+  document.documentElement.lang = lg;
+  document.title = t.tit + ' \u00b7 Bookin VIP';
+  document.getElementById('h').textContent = t.h;
+  document.getElementById('p1').innerHTML = t.p1;
+  document.getElementById('p2').textContent = t.p2;
+  document.getElementById('btn').textContent = t.btn;
+})();
 </script>
 </body>
 </html>

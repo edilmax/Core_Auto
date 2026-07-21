@@ -60,7 +60,9 @@ SOLO_MATRICE = "--solo-matrice" in sys.argv
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  I 9 MODI DI ROMPERSI — incontrati sul campo, ognuno con chi lo guarda
+#  GLI 11 MODI DI ROMPERSI — incontrati sul campo, ognuno con chi lo guarda
+#  (i primi 9 dai difetti del 2026-07-21; il 10 e l'11 dai due difetti che
+#   il FONDATORE ha trovato guardando il sito, non i test)
 # ═══════════════════════════════════════════════════════════════════════════════
 MODI = [
     ("dati effimeri",
@@ -95,6 +97,13 @@ MODI = [
     ("rifattorizzazione",
      "il cuore cambia, le guardie restano attaccate al vecchio",
      ["collaudi/mutazione_prodotto.py", "test_fase98_policy_commissione.py"]),
+    ("dato assurdo",
+     "il formato e' giusto ma il NUMERO non ha senso nel mondo vero",
+     ["collaudi/plausibilita.py", "test_plausibilita.py"]),
+    ("lingua congelata",
+     "la pagina esiste in 8 lingue ma il testo non puo' essere sostituito",
+     ["collaudi/occhio_del_fondatore.py", "test_occhio_fondatore.py",
+      "collaudi/capitolato.py"]),
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -121,7 +130,9 @@ LIVELLI = [
      [("script", "collaudo_neuroni_marca.py --giri=1 --con-rete"),
       ("script", "super_collaudo_marca.py --con-rete"),
       ("script", "audit_coerenza_tariffe.py"),
-      ("script", "audit_millimetrico.py")]),
+      ("script", "audit_millimetrico.py"),
+      ("script", "plausibilita.py"),
+      ("script", "occhio_del_fondatore.py")]),
     ("L5", "META", "chi controlla i controllori: nessun finto verde, nessun buco, "
      "e il giudizio finale della mutazione",
      [("script", "caccia_finti_verdi.py"),
@@ -183,7 +194,18 @@ def matrice(inv):
 
 
 def copertura_elementi(inv):
-    """Ogni elemento costruito deve essere nominato da almeno un test o collaudo."""
+    """Ogni elemento costruito deve essere sorvegliato da almeno un test o collaudo.
+
+    ATTENZIONE AL LIMITE DI QUESTO METODO, che e' costato un rosso falso.
+    Cercare il NOME dentro i test riconosce solo la sorveglianza scritta a mano, una
+    voce per volta. Non riconosce la sorveglianza migliore: quella che **scorre
+    l'inventario** e copre da sola anche cio' che non esiste ancora.
+
+    Per gli ARCHIVI, che sono sorvegliati proprio cosi', la ricerca testuale dichiarava
+    12 buchi inesistenti. La copertura degli archivi si giudica quindi **eseguendo una
+    prova** (`prova_copertura_archivi.py`): si aggiunge un archivio finto e si pretende
+    che la suite diventi rossa. Non e' falsificabile in nessuna delle due direzioni.
+    """
     corpi = []
     for f in inv["test"]:
         corpi.append(_leggi(os.path.join(REPO, f)))
@@ -194,8 +216,7 @@ def copertura_elementi(inv):
     for etichetta, elementi, trasforma in (
             ("moduli", inv["moduli"], lambda x: x[:-3]),
             ("rotte", inv["rotte"], lambda x: x),
-            ("pagine", inv["pagine"], lambda x: x),
-            ("archivi", inv["archivi"], lambda x: x.upper())):
+            ("pagine", inv["pagine"], lambda x: x)):
         scoperti = [e for e in elementi if trasforma(e) not in tutto]
         print("\n  %-9s %3d costruiti | %3d sorvegliati | %d SCOPERTI"
               % (etichetta, len(elementi), len(elementi) - len(scoperti), len(scoperti)))
@@ -203,6 +224,16 @@ def copertura_elementi(inv):
             for s in scoperti[:12]:
                 print("        SCOPERTO: %s" % s)
             buchi.append("%s scoperti: %s" % (etichetta, scoperti[:12]))
+
+    # gli archivi: si PROVA la sorveglianza, non si cerca il nome
+    import prova_copertura_archivi as pca
+    viva, caduti, _u = pca.prova()
+    print("\n  %-9s %3d costruiti | sorveglianza PROVATA sul campo: %s"
+          % ("archivi", len(inv["archivi"]),
+             "SI' (archivio finto -> %d test rossi)" % caduti if viva
+             else "NO — un archivio mai dichiarato NON fa cadere nulla"))
+    if not viva:
+        buchi.append("archivi: la guardia resta verde con un archivio mai dichiarato")
     return buchi
 
 

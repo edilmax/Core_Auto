@@ -61,7 +61,15 @@ class TestCentsToStr(unittest.TestCase):
 class TestValidaSplit(unittest.TestCase):
 
     def test_split_corretto(self):
-        valida_split(100000, 10000, 90000)  # non solleva
+        """Uno split che quadra passa, e passa NEL MODO DOCUMENTATO.
+
+        Prima la riga era `valida_split(100000, 10000, 90000)  # non solleva`: verificava
+        davvero qualcosa (se sollevasse, il test cadrebbe), ma senza dirlo. Se un domani
+        la funzione smettesse di sollevare e tornasse l'errore come valore, questo test
+        resterebbe verde mentre il controllo sui soldi sarebbe sparito.
+        """
+        self.assertIsNone(valida_split(100000, 10000, 90000),
+                          "valida_split non deve restituire nulla: segnala per eccezione")
 
     def test_split_non_quadra(self):
         with self.assertRaises(ValueError):

@@ -17,6 +17,8 @@ RIPETIZIONI = 10
 
 COLLAUDI_TUTTI = [
     ("caccia ai finti verdi", ["caccia_finti_verdi.py"]),
+    ("plausibilita' del dato (i numeri hanno senso?)", ["plausibilita.py"]),
+    ("occhio del fondatore (cosa legge una persona?)", ["occhio_del_fondatore.py"]),
     ("mutazione del motore (i test vedono i guasti veri?)", ["mutazione_prodotto.py"]),
     ("neuroni marca temporale (con rete vera)",
      ["collaudo_neuroni_marca.py", "--giri=1", "--con-rete"]),

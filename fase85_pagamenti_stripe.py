@@ -83,8 +83,8 @@ class ProviderStripe:
             params: List[Tuple[str, str]] = [
                 ("mode", "payment"),
                 ("expires_at", str(scade_at)),   # urgenza + auto-scadenza allineata all'hold stanza
-                ("success_url", self._ok or "https://bookinvip.com/ok"),
-                ("cancel_url", self._ko or "https://bookinvip.com/ko"),
+                ("success_url", self._ok or "https://bookinvip.com/grazie.html"),
+                ("cancel_url", self._ko or "https://bookinvip.com/annullato.html"),
                 ("line_items[0][quantity]", "1"),
                 ("line_items[0][price_data][currency]", valuta),
                 ("line_items[0][price_data][unit_amount]", str(cents)),

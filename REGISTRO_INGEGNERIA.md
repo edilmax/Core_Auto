@@ -662,6 +662,58 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
 - Split-payment REALE (link per amico, all-or-nothing) — PARCHEGGIATO dal fondatore.
 - Video AI multilingua (pool 164/165 pronto; manca la generazione video).
 
+## 2-ter) 👁️ VERIFICHE DEL **PRODOTTO** (non del codice) — nate dai difetti trovati dal fondatore
+
+Il 2026-07-21 due difetti veri sono stati trovati **guardando il sito**, non dai 3011 test.
+Hanno la stessa radice: tutti i collaudi provavano il **codice** con **dati inventati da
+loro**, e nessuno chiedeva *«una persona che apre questa pagina, cosa vede?»*.
+Da qui due strumenti che guardano il **prodotto finito**, piu' le loro guardie permanenti.
+
+| Strumento | Domanda che pone | Difetto che avrebbe intercettato | Guardia |
+|---|---|---|---|
+| `collaudi/plausibilita.py` | «questo numero ha senso nel mondo vero?» | `¥1.800.000 a notte` (≈11.000 €): prezzo ×100 su valuta **senza decimali** | `test_plausibilita.py` (15) |
+| `collaudi/occhio_del_fondatore.py` | «chi apre questa pagina, cosa **legge**?» | privacy e termini leggibili **solo in italiano** in tutte e 8 le lingue | `test_occhio_fondatore.py` (9) |
+| `collaudi/prova_copertura_archivi.py` | «gli archivi sono davvero sorvegliati?» | rosso **falso** della piramide su 12 archivi in realta' coperti | integrato in `piramide.py` |
+
+**`plausibilita.py`** — bande credibili per classe di valore, esponenti delle valute
+(JPY/KRW/HUF a 0 decimali, KWD/BHD/OMR a 3), coerenza col resto del listino (mediana ×50),
+importi, date, testi vuoti. Si lancia con `--dati=<cartella>` **anche sui dati veri di
+produzione**. Provato rosso sul caso reale: lo riconosce tre volte e ne **nomina la causa**.
+
+**`occhio_del_fondatore.py`** — conta, pagina per pagina, le parole visibili che restano
+in italiano qualunque lingua scelga l'utente (tutto cio' che sta fuori dai marcatori
+`data-t` / `data-i18n` non viene mai sostituito). Debito misurato: **1808 parole** →
+**1061** dopo il cablaggio di termini e privacy. Il tetto in `test_occhio_fondatore.py`
+**si abbassa solo a mano**, dopo aver tradotto davvero.
+
+**Piramide**: i modi di rompersi sorvegliati passano da 9 a **11** (`dato assurdo`,
+`lingua congelata`). La copertura degli archivi non si giudica piu' cercando un nome nei
+test — si **prova**: si aggiunge un archivio finto e si pretende che la suite cada.
+
+**DIFETTO SUI SOLDI TROVATO GUARDANDO GLI INDIRIZZI (2026-07-21, corretto)**
+Tutti e quattro gli indirizzi di ripiego dopo il pagamento portavano a pagine
+**inesistenti**: `fase85` mandava a `/ok` e `/ko`, `fase101` a `/grazie` e `/annullato`
+(senza `.html`). Le pagine vere sono `grazie.html` e `annullato.html`. In produzione non
+si vedeva perche' `STRIPE_SUCCESS_URL` e `STRIPE_CANCEL_URL` sono impostate: il giro
+reggeva **per configurazione, non per costruzione**. Un solo deploy senza quelle due
+variabili e ogni cliente che paga finiva su un 404 **subito dopo l'addebito** — con
+Stripe LIVE, soldi veri gia' prelevati e nessuna conferma a schermo: il caso da manuale
+della contestazione sulla carta. Corretti tutti e quattro; guardia
+`test_indirizzi_di_ritorno.py` (4): **ogni indirizzo del nostro dominio scritto in chiaro
+nel codice del pagamento deve corrispondere a un file che esiste in `deploy/`**. Provata
+rossa rimettendo `/ok`.
+
+**Finti verdi trovati e chiusi in questo giro** (tutti provati rossi dopo la correzione):
+- `test_testi_legali` **si saltava da solo** («la pagina non parla di commissioni»): appena
+  il testo e' uscito dall'HTML per andare nel motore, il controllo del 3% e' evaporato in
+  silenzio. Spostato sul documento vero, **in tutte e 8 le lingue**.
+- la guardia del cablaggio si accontentava di **un commento** che descriveva la chiamata:
+  con `fetch` spento e commento intatto restava verde. Ora i commenti si tolgono prima di
+  guardare e si pretende la chiamata dentro un `fetch()`.
+- `occhio_del_fondatore` scartava le pagine sotto le 15 parole come «troppo poco testo»:
+  `grazie.html` (14 parole, 0% tradotta, la legge **ogni ospite che paga**) veniva
+  assolta. **ASSENZA NON E' CONFORMITA'**, di nuovo.
+
 ## 3) 🔵 LIBRERIE / INTERNI (non "si accendono": li usano altri moduli)
 17 money, 15 idempotency, 16 outbox, 23 datastore, 73 firma-agile, 133/65 split (calcolo),
 164 pool-ai (usato da 165), 154 giurisdizioni (usato da 95). Non hanno un interruttore proprio.
@@ -819,4 +871,4 @@ sempre "morto": molti sono librerie usate da altri moduli.
 | 181 | `fase181_audit_console.py` | +router (`GET /api/admin/audit`) | FINANCIAL AUDIT CONSOLE: "Spotlight" contabile read-only — qualsiasi ID (riferimento/BVIP-code/ND-NC/host) → scheda unica dei libri + semaforo integrità 4 stati + shadow-check Stripe 2s. ACCESO (vedi riga 🔬 sez.1). |
 | 182 | `fase182_riconciliazione.py` | +router (`GET /api/bunker/riconciliazione`) | RICONCILIAZIONE STRIPE di massa (ultimo fantasma pre-mortem): sessioni PAGATE Stripe vs 'incasso' giornale per riferimento al centesimo + totali charge/refund/transfer; segnala i fantasmi. READ-ONLY, Bunker-gated. ACCESO (riga 🔄 sez.1). |
 | 184 | `fase184_marca_temporale.py` | boot (`MARCA_TEMPORALE`, `DB_MARCHE`) + router (`GET /api/bunker/marche_temporali`, `GET /api/bunker/marca.tsr`, `POST /api/bunker/marca_ora`) + tick giornaliero | **MARCA TEMPORALE RFC 3161**: l'ora dei registri certificata da un'Autorità ESTERNA (DigiCert/Sectigo/Entrust, failover). ASN.1/DER scritto a mano, zero dipendenze. Manda solo un'impronta SHA-256: la TSA non vede nulla. **Prestatori QUALIFICATI europei** (ACCV/QuoVadis/Izenpe/BOSA) con qualifica letta dal token (OID ETSI 0.4.0.19422.1.1) e ripiego onestamente etichettato. Token archiviato append-only e verificabile da terzi con `openssl ts -verify`. ACCESO (riga ⏱️ sez.1). |
-| 185 | `fase185_testi_legali.py` | (in cablaggio) | **TESTI LEGALI MULTILINGUA**: termini e privacy in tutte le lingue dichiarate, con versione, impronta SHA-256, lingue REALMENTE fornite (non solo dichiarate) e clausola «fa fede l'italiano». Le percentuali arrivano da fase98 e la penale da fase83: mai scritte a mano. 🟡 **IN COSTRUZIONE** (2026-07-21): termini it/en, privacy it/en/es/fr; mancano le altre lingue, la rotta API e i gusci delle pagine. Guardia: test_testi_legali. |
+| 185 | `fase185_testi_legali.py` | router (`GET /api/legale/documento?doc=termini\|privacy&lang=..`) + gusci `deploy/termini.html` e `deploy/privacy.html` | **TESTI LEGALI MULTILINGUA**: termini e privacy in **tutte e 8 le lingue** (it/en/es/fr/de/pt/ja/zh), con versione, impronta SHA-256, lingue REALMENTE fornite (non solo dichiarate) e clausola «fa fede l'italiano». Le percentuali arrivano da fase98 e la penale da fase83: mai scritte a mano — provato che tutte e 8 le lingue portano le STESSE percentuali. ✅ **ACCESO e CABLATO** (2026-07-21): il modulo era completo ma **scollegato**, e il sito continuava a mostrare le vecchie pagine statiche in italiano (lo ha visto il fondatore: «clicco termini e lo leggo solo italiano»). Guardie: `test_testi_legali` (19). |

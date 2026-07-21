@@ -67,12 +67,34 @@ class TestGuidaOperativa(unittest.TestCase):
                          "(ammesse: %s)" % (inventate, sorted(ammesse)))
 
     def test_se_parla_di_commissione_deve_dire_il_3(self):
-        """Stessa regola delle altre pagine per host: chi promette una percentuale di
-        commissione deve dichiarare anche la tariffa tecnica sempre dovuta."""
-        if not re.search(r"commission", self.testo, re.I):
-            self.skipTest("la guida non parla di commissioni: regola non applicabile")
-        self.assertRegex(self.testo, r"3\s?%",
-                         "parla di commissioni senza dichiarare la tariffa tecnica")
+        """Chi promette una percentuale di commissione deve dichiarare anche la tariffa
+        tecnica sempre dovuta.
+
+        PRIMA QUESTO TEST SI SALTAVA DA SOLO quando la pagina non nominava le
+        commissioni. Nel merito aveva ragione — la guida parla di rimborsi e di penale,
+        non di commissioni — ma un test che si assolve da solo **sparisce dal rapporto**:
+        resta scritto "skipped" e nessuno lo legge piu'. Il giorno in cui qualcuno
+        aggiunge una promessa di commissione alla guida, il salto smette di essere
+        legittimo e nulla lo segnala.
+
+        Ora si asserisce in tutti e due i rami: o la tariffa tecnica c'e', oppure si
+        **dimostra** che di commissioni non si parla, con tutte le parole che varrebbero
+        come promessa.
+        """
+        parla = re.search(r"commission|provvigion|trattenut[ao]\s+d[ai]\s+noi",
+                          self.testo, re.I)
+        if parla:
+            self.assertRegex(
+                self.testo, r"3\s?%",
+                "parla di commissioni (%r) senza dichiarare la tariffa tecnica"
+                % parla.group(0))
+            return
+        # ramo di esenzione: va DIMOSTRATO, non dato per buono
+        for parola in ("commission", "provvigion", "percentuale che tratteniamo"):
+            self.assertNotRegex(
+                self.testo, parola,
+                "l'esenzione non vale piu': la guida ha cominciato a parlare di "
+                "commissioni (%r) e ora deve dichiarare il 3%%" % parola)
 
     def test_nessun_segreto_nella_pagina(self):
         for spia in ("sk_live", "sk_test", "whsec_", "BUNKER_PASSWORD", "ADMIN_KEY"):
