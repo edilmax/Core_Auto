@@ -210,9 +210,6 @@ class TestAutoGeocodeEMappa(unittest.TestCase):
         self.assertEqual(slugs, {"milano-1"})
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
 
 class TestDistanzaCentro(unittest.TestCase):
     def test_distanza_centro_automatica(self):
@@ -307,3 +304,6 @@ class TestQuartiereReverse(unittest.TestCase):
         self.assertEqual(g.quartiere(-34_588_000, -58_430_000), "Palermo Soho")
         self.assertIn("lat=-34.588000", ch[0])
         self.assertIn("lon=-58.430000", ch[0])
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

@@ -121,8 +121,12 @@ class TestPubblicazione(unittest.TestCase):
         self.cat = crea_catalogo()
 
     def test_schema_idempotente(self):
-        self.cat.inizializza_schema()  # secondo giro, nessun errore
-        self.cat.inizializza_schema()
+        # "non solleva" va DETTO: se un domani `inizializza_schema` tornasse un errore
+        # come valore invece di sollevare, un test muto resterebbe verde.
+        self.assertIsNone(self.cat.inizializza_schema())
+        self.assertIsNone(self.cat.inizializza_schema())
+        # e dopo due giri il catalogo funziona ancora davvero
+        self.assertIsInstance(self.cat.citta_pubblicate(), list)
 
     def test_pubblica_e_dettaglio(self):
         self.cat.pubblica(_scheda(servizi=("wifi", "piscina"), descrizione="vista"),

@@ -195,12 +195,30 @@ def corpo_preventivo_html(titolo_alloggio: str, check_in: str, check_out: str,
 
 
 def _soldi(cents: int, valuta: str) -> str:
-    """Formato onesto per le email: '123.45 EUR' da centesimi interi (mai float a monte)."""
+    """Importo scritto secondo i decimali VERI della valuta.
+
+    Prima questa funzione divideva per cento a mano, sempre, anche sulle valute che
+    non hanno decimali. Un ospite giapponese che pagava
+    ¥54.000 riceveva l'email di conferma con scritto **540.00 JPY** — cento volte meno
+    di quanto gli era stato addebitato davvero. Il sito e Stripe erano corretti: era il
+    RACCONTO a essere sbagliato, ed e' il caso peggiore perche' non rompe niente.
+
+    Ora si chiede al motore (`fase99.Denaro.formatta`), che e' la stessa fonte usata dal
+    server: una sola verita' sugli esponenti, impossibile che divergano.
+    """
     try:
         c = int(cents)
     except Exception:
         c = 0
-    return "%d.%02d %s" % (c // 100, c % 100, valuta or "EUR")
+    v = str(valuta or "EUR").strip().upper() or "EUR"
+    try:
+        from fase99_multicurrency import Denaro
+        return Denaro(c, v).formatta()
+    except Exception:
+        # valuta irregolare: meglio un numero grezzo con la sigla che un numero
+        # plausibile ma falso di cento volte
+        logger.warning("importo non formattabile (%r %r): scritto grezzo", cents, valuta)
+        return "%d %s" % (c, v)
 
 
 def corpo_pagamento_confermato_html(titolo: str, voucher_url: str,

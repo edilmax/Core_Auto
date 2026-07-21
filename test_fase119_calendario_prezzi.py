@@ -89,7 +89,13 @@ class TestCalendario(unittest.TestCase):
                   "prezzo_dinamico_cents": 13000}]
         h = calendario_html(celle)
         self.assertIn("<table", h)
-        self.assertIn("€130.00", h)
+        # prima si pretendeva "€130.00": il simbolo dell'euro era SCRITTO DENTRO
+        # il calendario, quindi un annuncio in yen mostrava "€" davanti a degli
+        # yen. Ora l'importo porta la sua valuta e rispetta i suoi decimali.
+        self.assertIn("130.00 EUR", h)
+        from fase119_calendario_prezzi import calendario_html as _ch
+        self.assertIn("13000 JPY", _ch(celle, "JPY"))
+        self.assertNotIn("€", _ch(celle, "JPY"))
 
     def test_html_non_aperto(self):
         h = calendario_html([{"giorno": "2026-08-08", "stato": "non_aperto",

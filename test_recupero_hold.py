@@ -57,12 +57,20 @@ class TestRecuperoHold(unittest.TestCase):
         self.assertIn("Nessun addebito", html)                   # onestà
 
     def test_senza_email_o_provider_silenzio(self):
+        # "silenzio" significa che NON parte nessuna email, non che il codice non
+        # esplode: prima si chiamava e basta, e il test non poteva fallire.
+        partite_prima = len(getattr(self.sys.email_provider, "inviate", []) or [])
         self.r._email_recupero_hold({"riferimento": "r2", "alloggio_id": "casa",
                                      "email": "", "check_in": "x", "check_out": "y"})
         self.r._email_recupero_hold(None)
+        partite_dopo = len(getattr(self.sys.email_provider, "inviate", []) or [])
+        self.assertEqual(partite_dopo, partite_prima,
+                         "senza indirizzo e' partita un'email lo stesso")
         self.sys.email_provider = None
         self.r._email_recupero_hold({"riferimento": "r3", "alloggio_id": "casa",
-                                     "email": "a@b.it"})         # nessun crash
+                                     "email": "a@b.it"})
+        self.assertIsNone(self.sys.email_provider,
+                          "senza provider il giro deve restare in silenzio, non ricrearlo")
         time.sleep(0.1)
 
 

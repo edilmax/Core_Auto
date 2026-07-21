@@ -686,7 +686,7 @@ async function _prenotaConEmail(){
   if(!email || email.indexOf('@')<1){ bm.style.color='var(--rosso)'; bm.textContent=t('inserisci_email'); return; }
   try{
     const r = await api('/api/concierge/book', {method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({quote_token:QUOTE, email:email})});
+      body:JSON.stringify({quote_token:QUOTE, email:email, lang:LANG})});
     // 1) se c'è un link di pagamento -> vai al checkout Stripe (stato 'in_attesa_pagamento')
     if(r.payment_url){ window.location.href = r.payment_url; return; }
     // 2) alloggio 'su richiesta' -> l'host deve approvare (24h): NON è un errore

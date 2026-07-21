@@ -36,6 +36,21 @@ def classifica_intento(testo: Any) -> str:
     return "fallback"
 
 
+def _importo_chat(cents, valuta):
+    """Importo con la valuta, secondo i suoi decimali veri.
+
+    Questo modulo non ha chiamanti (costruito e mai collegato), ma il gesto sbagliato
+    va tolto comunque: il giorno che venisse acceso, nessuno ricontrollerebbe come
+    scrive i numeri.
+    """
+    c = cents if isinstance(cents, int) and not isinstance(cents, bool) else 0
+    v = str(valuta or "EUR").strip().upper() or "EUR"
+    try:
+        from fase99_multicurrency import Denaro
+        return Denaro(max(0, c), v).formatta()
+    except Exception:
+        return "%d %s" % (max(0, c), v)
+
 class ChatbotGuest:
     def __init__(self, catalogo: Any = None, concierge: Any = None, *,
                  llm: Optional[Callable[[str], str]] = None, lingua: str = "it") -> None:
@@ -111,8 +126,11 @@ class ChatbotGuest:
             cents = int(corpo.get("prezzo_guest_cents", 0))
             val = corpo.get("valuta", "EUR")
             # PREZZO DAL CORE (firmato), mai inventato dall'IA
-            txt = ("Totale %d.%02d %s (preventivo firmato)." if it else
-                   "Total %d.%02d %s (signed quote).") % (cents // 100, cents % 100, val)
+            # ENTRAMBI i rami con un solo segnaposto: l'importo arriva gia' scritto
+            # nella valuta giusta. (Avevo sostituito solo l'inglese: quello italiano
+            # restava con tre segnaposto e sollevava TypeError.)
+            txt = ("Totale %s (preventivo firmato)." if it else
+                   "Total %s (signed quote).") % _importo_chat(cents, val)
             return {"intento": "prezzo", "risposta": txt, "fonte": "concierge",
                     "quote_token": corpo.get("quote_token"),
                     "prezzo_guest_cents": cents}

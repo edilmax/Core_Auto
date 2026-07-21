@@ -56,7 +56,10 @@ class TestCircuitBreakerFinanziario(unittest.TestCase):
         pol = PoliticaRanaInversa()
         cfg = ConfigMotore("mango", pol, Giurisdizione(), PSPStandard(150, 25))
         st = pol.evolvi(pol.stato_iniziale(), MetricheHost(1, 0, 0))
-        ripartisci(cfg, 1_000, st, MetricheHost(1, 0, 0))     # default: nessun breaker
+        # senza limite il calcolo deve RIUSCIRE e conservare il denaro: prima si
+        # chiamava e basta, quindi il test non poteva fallire.
+        r = ripartisci(cfg, 1_000, st, MetricheHost(1, 0, 0))
+        self.assertIsNotNone(r, "senza limite la ripartizione non deve essere bloccata")
 
 
 # ───────────────────────────── FUZZING ──────────────────────────────────────

@@ -372,6 +372,38 @@
 >   cartelle ora si ricava da TUTTI i campi `db_*`, non da una lista scritta a mano.
 >   **Lezione: i test erano verdi perché usano `:memory:` di proposito — solo il confronto
 >   con la configurazione di PRODUZIONE poteva scoprirlo.**
+> · 🕐 **AUDIT FUSI ORARI + INPUT + TEST CIECHI (2026-07-22)**: le date **viste** dal
+>   cliente erano salve (testo, mai convertite; il browser non usa `toISOString`), ma
+>   **ogni calcolo sul tempo usava il fuso del server** — e in produzione non c'è nessuna
+>   `TZ`. La finestra per contestare dava **12 ore invece di 24 a Honolulu** e 18 a New
+>   York, su soldi già pagati → ancorata al fuso più a ovest, ora nessuno scende sotto le
+>   24. Le **«48 ore» di ripensamento erano giorni di calendario** (duravano fra 48 e 72
+>   ore secondo l'ora in cui prenotavi) → ora sono **172.800 secondi veri** nel gettone
+>   firmato. ⚠️ La prima versione della correzione **peggiorava il male** (Tokyo a 19 ore):
+>   l'ha vista la guardia, non io. L'alloggio **non ha ancora un fuso orario** nel modello
+>   dati: quando ci sarà, l'approssimazione va sostituita dall'ora locale vera.
+>   Input: email dell'ospite non normalizzata · email validata **prima** del trim (uno
+>   spazio incollato = «credenziali non valide» a chi ha la password giusta) · alloggio
+>   chiamato col suo **slug** anche nel contratto PDF · `Łukasz` → `?ukasz`. Tutti chiusi.
+>   Test ciechi: **8**, fra cui `test_dac7_notti` che **si spegneva venti giorni all'anno**
+>   su un obbligo fiscale. Guardia nuova sul PATTERN: `test_suite_senza_zone_cieche`.
+>   🔴 **DA FARE TU**: `ADMIN_KEY` è di 11 caratteri con una parola riconoscibile davanti —
+>   protegge i rimborsi su Stripe LIVE. Cambiala con 32+ caratteri casuali.
+>
+> · 💱 **AUDIT VALUTA (2026-07-21) — 8 DIFETTI CHIUSI**: l'**addebito era giusto** (browser
+>   e motore concordano su ogni valuta, Stripe riceve l'intero con la valuta dell'annuncio)
+>   ma **il racconto dell'addebito era falso**: otto punti dividevano per cento a mano,
+>   sempre. Un ospite giapponese che paga **¥54.000** leggeva **540.00 JPY** nell'email di
+>   conferma, nel **voucher**, nella **ricevuta**, nel **contratto PDF che si firma** e
+>   perfino nel **JSON-LD che finisce nei risultati Google**. Causa: `fase99.Denaro.formatta()`
+>   era già corretto e **nessuno lo chiamava** — la solita duplicazione. Corretti tutti;
+>   `fase57` ora accetta solo sigle ISO di 3 lettere (prima passava `"EURO"`, `"BITCOIN"`).
+>   Guardie: `test_importi_scritti` (10, sorveglia il **gesto** — ha trovato 5 punti dopo
+>   che ne avevo corretti 3), `test_valute_coerenti` (10, browser=motore),
+>   `test_valuta_end_to_end` (13, uno yen vero seguito anello per anello).
+>   ⚠️ Trovato anche un difetto **nel mio collaudo**: `plausibilita.py` teneva una terza
+>   tabella e dava **HUF/TWD/COP senza decimali** (ne hanno due) → ora legge dal motore.
+>
 > · 🔴 **PROSSIMO LAVORO — LE EMAIL PARLANO UNA LINGUA SOLA**: `fase86_email.py` ha
 >   **10 corpi di email e 9 non sanno in che lingua parlare** (voucher, pagamento
 >   confermato, rimborso, invito a recensire, esito controversia, bonifico host, reset

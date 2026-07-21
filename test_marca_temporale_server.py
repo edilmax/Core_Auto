@@ -273,9 +273,6 @@ class TestSpenta(unittest.TestCase):
                 os.environ["MARCA_TEMPORALE"] = vecchio
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
 
 class TestIlGiroGiornalieroEIndipendente(unittest.TestCase):
     """GUARDIA STRUTTURALE — il giro della marca non deve dipendere da altro.
@@ -331,3 +328,6 @@ class TestIlGiroGiornalieroEIndipendente(unittest.TestCase):
         s = self._sorgente()
         i = s.index("_tick_marca_temporale, daemon=True")
         self.assertGreater(i, 0, "il ciclo deve girare come demone")
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

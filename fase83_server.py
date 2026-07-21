@@ -183,6 +183,93 @@ def _dizionario_i18n(lingua: str) -> Dict[str, Any]:
     }
 
 
+# Fasce orarie estreme del pianeta: da UTC-12 a UTC+14 (Kiribati).
+ORE_FUSO_MIN, ORE_FUSO_MAX = -12, 14
+ORA_CHECKIN_LOCALE = 15          # convenzione: check-in alle 15:00 ORA LOCALE
+
+
+def _istante_checkin_prudente(check_in: str) -> Optional[int]:
+    """L'istante da cui contare le 24 ore di contestazione, SENZA sapere il fuso.
+
+    L'alloggio non ha un fuso orario nel modello dati. Prima si faceva
+    `fromisoformat(ci + "T15:00:00").timestamp()`, cioe' si assumeva che ogni alloggio
+    del mondo facesse il check-in alle 15:00 **del fuso del server** (UTC in produzione).
+    Per chi sta a ovest di Greenwich quell'istante cade PRIMA dell'arrivo reale, e la
+    finestra di 24 ore in cui l'ospite puo' contestare si chiude quando ha passato in
+    casa appena 14 ore: dieci ore di tutela in meno, su soldi gia' pagati.
+
+    Qui si prende l'istante piu' TARDI in cui possa essere check-in da qualche parte
+    (le 15:00 a UTC-12). Il motivo e' che `fase160` calcola la scadenza come
+    `questo istante + 24h`: quindi cio' che conta e' **quando la finestra si CHIUDE**,
+    non quando si apre. Aprirla presto non allunga niente — anzi la chiude prima, ed e'
+    l'errore che avevo fatto alla prima stesura (Tokyo scendeva a 19 ore). Ancorandola
+    all'ultimo arrivo possibile al mondo, la scadenza cade sempre almeno 24 ore dopo
+    l'arrivo VERO di chiunque. L'host viene pagato al massimo un giorno dopo: fra
+    accorciare la tutela di chi ha appena pagato e ritardare un incasso, si sceglie il
+    secondo.
+
+    Quando l'alloggio avra' un fuso (derivabile da citta'/paese), questa approssimazione
+    va sostituita dall'ora locale vera.
+    """
+    import datetime as _d
+    try:
+        giorno = _d.date.fromisoformat(str(check_in))
+    except Exception:
+        return None
+    piu_a_ovest = _d.timezone(_d.timedelta(hours=ORE_FUSO_MIN))
+    return int(_d.datetime(giorno.year, giorno.month, giorno.day,
+                           ORA_CHECKIN_LOCALE, 0, 0, tzinfo=piu_a_ovest).timestamp())
+
+
+def _istante_fine_tutela(check_in: str, ore_finestra: int = 24) -> Optional[int]:
+    """L'istante entro cui la tutela deve valere per CHIUNQUE: le 24 ore contate
+    dall'ultimo check-in possibile al mondo (le 15:00 a UTC-12)."""
+    import datetime as _d
+    try:
+        giorno = _d.date.fromisoformat(str(check_in))
+    except Exception:
+        return None
+    piu_a_ovest = _d.timezone(_d.timedelta(hours=ORE_FUSO_MIN))
+    inizio = _d.datetime(giorno.year, giorno.month, giorno.day,
+                         ORA_CHECKIN_LOCALE, 0, 0, tzinfo=piu_a_ovest)
+    return int((inizio + _d.timedelta(hours=int(ore_finestra))).timestamp())
+
+
+SECONDI_RIPENSAMENTO = 48 * 3600          # 172.800: quarantotto ore VERE
+
+
+def _entro_ripensamento(voucher: Dict[str, Any]) -> bool:
+    """Vero se dalla prenotazione sono passati meno di 172.800 secondi.
+
+    Prima si contavano i GIORNI DI CALENDARIO (`date.today() - prenotato_data <= 2`) col
+    giorno del SERVER. Chi prenotava alle 23:50 aveva diritto al rimborso pieno anche 26
+    ore dopo; chi prenotava alle 00:10 ce l'aveva ancora dopo 49. La finestra reale
+    andava da 48 a 72 ore secondo l'ora della prenotazione, e cambiava a seconda del fuso
+    dell'utente — su un diritto legale (California SB 644, art. 49 del codice del
+    consumatore brasiliano).
+
+    L'istante sta nel gettone FIRMATO, quindi non e' manomettibile dal browser.
+
+    I voucher emessi PRIMA di questa modifica non hanno l'istante e non si possono
+    riscrivere (sono firmati): per quelli si ricade sul vecchio conteggio a giorni, che
+    e' piu' largo. Un diritto gia' comunicato non lo si restringe a cose fatte.
+    """
+    import datetime as _d
+    import time as _t
+    ts = voucher.get("prenotato_ts")
+    if isinstance(ts, int) and not isinstance(ts, bool) and ts > 0:
+        trascorsi = int(_t.time()) - ts
+        return 0 <= trascorsi <= SECONDI_RIPENSAMENTO
+    pren = voucher.get("prenotato_data")           # gettoni vecchi: conteggio storico
+    if isinstance(pren, str) and pren:
+        try:
+            giorni = (_d.date.today() - _d.date.fromisoformat(pren)).days
+            return 0 <= giorni <= 2
+        except Exception:
+            return False
+    return False
+
+
 def _lingua(query: Dict[str, str]) -> str:
     lng = (query or {}).get("lang", "")
     return lng if lng in LINGUE_SUPPORTATE else "en"
@@ -192,10 +279,22 @@ def _lingua(query: Dict[str, str]) -> str:
 # SEO / discoverability (gratis): pagina crawlabile per alloggio + JSON-LD + sitemap.
 # Funzioni PURE e testabili. base_url = dominio (vuoto = relativo finche' non c'e').
 # ─────────────────────────────────────────────────────────────────────────────
-def _euro(cents: Any) -> str:
+def _importo(cents: Any, valuta: Any = "EUR") -> str:
+    """Importo secondo i decimali VERI della valuta (JPY 0, KWD 3), chiesti al motore.
+
+    Si chiamava `_euro` e divideva per cento sempre. Su un annuncio in yen produceva
+    "540.00" per ¥54.000: sbagliato di cento volte sulla pagina pubblica E dentro il
+    JSON-LD, cioe' nel prezzo che Google mostra nei risultati di ricerca.
+    Nessun float: il motore lavora su interi.
+    """
     if not isinstance(cents, int) or isinstance(cents, bool) or cents < 0:
-        return "0.00"
-    return "%d.%02d" % (cents // 100, cents % 100)        # no float, deterministico
+        cents = 0
+    v = str(valuta or "EUR").strip().upper() or "EUR"
+    try:
+        from fase99_multicurrency import Denaro
+        return Denaro(cents, v).formatta().rsplit(" ", 1)[0]
+    except Exception:
+        return "%d" % cents
 
 
 def jsonld_alloggio(dettaglio: Dict[str, Any], base_url: str = "",
@@ -219,7 +318,8 @@ def jsonld_alloggio(dettaglio: Dict[str, Any], base_url: str = "",
         "amenityFeature": [{"@type": "LocationFeatureSpecification",
                             "name": s, "value": True} for s in servizi],
         "offers": {"@type": "Offer",
-                   "price": _euro(dettaglio.get("prezzo_notte_cents", 0)),
+                   "price": _importo(dettaglio.get("prezzo_notte_cents", 0),
+                                     dettaglio.get("valuta", "EUR")),
                    "priceCurrency": dettaglio.get("valuta", "EUR")},
     }
     # geo: coordinate di ZONA (gia' pubbliche nella mappa; MAI l'indirizzo). Da microgradi
@@ -307,7 +407,8 @@ def pagina_alloggio_html(sistema: Any, slug: str, base_url: str = "") -> Optiona
         e(d.get("titolo", "")), e(d.get("citta", "")),
         ", " + e(d.get("paese", "")) if d.get("paese") else "",
         e(d.get("descrizione", "")),
-        e(_euro(d.get("prezzo_notte_cents", 0))), e(d.get("valuta", "EUR")),
+        e(_importo(d.get("prezzo_notte_cents", 0), d.get("valuta", "EUR"))),
+        e(d.get("valuta", "EUR")),
         servizi, faq_html, e(slug),
     )
 
@@ -476,8 +577,11 @@ def genera_csv_prenotazioni(righe: Any) -> str:
     import io
     buf = io.StringIO()
     w = csv.writer(buf)
+    # "revenue_eur" dava l'euro per scontato: un host giapponese esportava i suoi
+    # incassi con l'intestazione sbagliata e il numero diviso per cento. Ora la valuta
+    # e' una colonna, e l'importo rispetta i suoi decimali.
     w.writerow(["alloggio", "check_in", "check_out", "notti", "origine", "stato",
-                "revenue_eur", "riferimento"])
+                "revenue", "valuta", "riferimento"])
     for r in (righe or []):
         if not isinstance(r, dict):
             continue
@@ -487,7 +591,8 @@ def genera_csv_prenotazioni(righe: Any) -> str:
             r.get("alloggio_id", ""), r.get("check_in", ""), r.get("check_out", ""),
             _notti_count(r.get("check_in"), r.get("check_out")),
             r.get("origine", ""), "rimborsata" if r.get("rimborsato") else "attiva",
-            "%d.%02d" % (rev // 100, rev % 100), str(r.get("idem_key", ""))[:16],
+            _importo(rev, r.get("valuta", "EUR")), str(r.get("valuta", "EUR")),
+            str(r.get("idem_key", ""))[:16],
         ])
     return buf.getvalue()
 
@@ -519,8 +624,7 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
         return None
     lng = lingua if lingua in LINGUE_SUPPORTATE else "it"
     e = html.escape
-    prezzo = "%d.%02d" % (dati.get("prezzo_guest_cents", 0) // 100,
-                          dati.get("prezzo_guest_cents", 0) % 100)
+    prezzo = _importo(dati.get("prezzo_guest_cents", 0), dati.get("valuta", "EUR"))
     # CODICE prenotazione leggibile (BVIP-XXXX-XXXX) + PIN check-in, uguali per cliente e host
     from fase59_concierge import codice_prenotazione
     _ref = str(dati.get("riferimento", ""))
@@ -805,7 +909,7 @@ def pagina_ricevuta_html(sistema: Any, token: Any) -> Optional[str]:
             c = int(c)
         except Exception:
             c = 0
-        return "%d.%02d %s" % (c // 100, c % 100, valuta)
+        return _importo(c, valuta) + " " + str(valuta or "EUR")
 
     totale = int(dj.get("prezzo_guest_cents", 0) or v.get("prezzo_guest_cents", 0) or 0)
     tassa = int(v.get("tassa_soggiorno_cents", 0) or 0)
@@ -3870,16 +3974,29 @@ class RouterHTTP:
         if getattr(self._sys, "firma", None) is not None:
             try:
                 import datetime as _dt
+                import time as _t_pren
                 qt = dati.get("quote_token", "")
+                # LINGUA DELL'OSPITE: sta qui perche' il gettone e' l'unico contenitore
+                # che accompagna la prenotazione ovunque ed e' FIRMATO (non manomettibile).
+                # Senza, ogni email e ogni pagina successiva ripiegherebbero sull'italiano:
+                # e' il difetto per cui la pagina del voucher risultava tradotta per chi
+                # arrivava dal sito e italiana per chi arrivava dall'email.
+                _lang_osp = _lingua({"lang": dati.get("lang")})
                 corpo["voucher_token"] = self._sys.firma.codifica({
                     "tipo": "voucher", "riferimento": ref, "alloggio_id": allog,
+                    "lang": _lang_osp,
                     "check_in": ci, "check_out": co,
                     "prezzo_guest_cents": corpo.get("prezzo_guest_cents", 0),
                     "valuta": corpo.get("valuta", "EUR"),
                     "smart_pass": pass_token or "",
                     "tassa_soggiorno_cents": corpo.get("tassa_soggiorno_cents", 0),
                     "politica": self._politica_alloggio(allog),
-                    "prenotato_data": _dt.date.today().isoformat(),   # per il ripensamento 48h
+                    "prenotato_data": _dt.date.today().isoformat(),   # (storico)
+                    # l'ISTANTE, in secondi epoch: le 48h di ripensamento sono un diritto
+                    # legale e vanno contate in secondi veri, non in giorni di calendario
+                    # (che durano da 48 a 72 ore secondo l'ora in cui si prenota) ne' col
+                    # "giorno" del server, che cambia alle 09:00 per un giapponese.
+                    "prenotato_ts": int(_t_pren.time()),
                     "idem_key": (qt.split(".")[-1] if isinstance(qt, str) and qt else "")})
             except Exception:
                 logger.warning("emissione voucher fallita (ignorata)", exc_info=True)
@@ -3897,7 +4014,13 @@ class RouterHTTP:
                     ref, allog, non_prima_ts=nbf)
             except Exception:
                 logger.warning("emissione diritto recensione fallita (ignorata)", exc_info=True)
+        # NORMALIZZATA come quella dell'host (fase88 fa lo stesso): senza, la stessa
+        # persona che scrive "Mario.Rossi@" e poi "mario.rossi@" diventa due persone, e i
+        # controlli che confrontano in minuscolo non riconoscono la riga salvata.
         email = dati.get("email")
+        if isinstance(email, str):
+            email = email.strip().lower()
+            dati["email"] = email
         if getattr(self._sys, "email_provider", None) is not None \
                 and isinstance(email, str) and "@" in email:
             try:
@@ -3905,14 +4028,24 @@ class RouterHTTP:
                 from fase59_concierge import codice_prenotazione
                 # SEMPRE assoluto: un link relativo (/voucher/...) NON è cliccabile da un'email.
                 # Fallback al dominio se BASE_URL non è configurato (come altri link, es. host.html).
+                # `?lang=`: senza, la pagina del voucher ripiega su "it" e l'ospite
+                # straniero apre in italiano il documento che dovra' mostrare al check-in.
                 vurl = ((self._base_url or "https://bookinvip.com") + "/voucher/"
-                        + corpo["voucher_token"]) if corpo.get("voucher_token") else ""
+                        + corpo["voucher_token"] + "?lang=" + _lang_osp) \
+                    if corpo.get("voucher_token") else ""
                 _codice = codice_prenotazione(ref)
                 _pin = self._sys.firma.pin_checkin(ref) if getattr(self._sys, "firma", None) else ""
                 # se c'è un pagamento da completare, l'email DEVE contenere il link (per il
                 # su-richiesta è l'unico canale: il cliente non è sul sito) + oggetto onesto.
                 _purl = corpo.get("payment_url", "") or ""
-                html = corpo_voucher_html(allog, _codice, ci, co, vurl, pin=_pin,
+                # il NOME dell'alloggio, non il suo slug: l'ospite non deve leggere
+                # "attico-citta-studi" al posto di «Attico Citta' Studi»
+                try:
+                    _d = self._sys.catalogo.dettaglio(allog)
+                    _nome = (_d.get("titolo") or allog) if isinstance(_d, dict) else allog
+                except Exception:
+                    _nome = allog
+                html = corpo_voucher_html(_nome, _codice, ci, co, vurl, pin=_pin,
                                           payment_url=_purl)
                 _ogg = ("BookinVIP - Approvata! Completa il pagamento" if _purl
                         else "BookinVIP - Prenotazione confermata")
@@ -4194,9 +4327,8 @@ class RouterHTTP:
             g = getattr(self._sys, "garanzia", None)
             if g is None or not ref:
                 return
-            import datetime
             try:
-                ts = int(datetime.datetime.fromisoformat(ci + "T15:00:00").timestamp())
+                ts = _istante_checkin_prudente(ci)
             except Exception:
                 ts = None
             g.apri(ref, netto_host_cents, alloggio_id=allog, ora_checkin_ts=ts)
@@ -4839,14 +4971,7 @@ class RouterHTTP:
         # RIPENSAMENTO 48h: se annulli entro 2 giorni dall'acquisto e l'arrivo è >=72h -> 100%
         # (copre e SUPERA California SB 644 [24h] + diritto di pentimento Brasile art.49). Vince
         # su qualunque politica; NON si applica a soggiorni imminenti/passati (arrivo < 3 giorni).
-        ripensamento = False
-        try:
-            _pren = v.get("prenotato_data")
-            if isinstance(_pren, str) and _pren:
-                _gg_pren = (datetime.date.today() - datetime.date.fromisoformat(_pren)).days
-                ripensamento = (0 <= _gg_pren <= 2) and (giorni >= 3)
-        except Exception:
-            ripensamento = False
+        ripensamento = _entro_ripensamento(v) and (giorni >= 3)
         try:
             from fase111_cancellazione import calcola_rimborso
             r = calcola_rimborso(pagato, giorni, politica=politica,
@@ -5208,15 +5333,37 @@ class RouterHTTP:
         if not isinstance(v, dict) or v.get("tipo") != "voucher":
             return 400, {"errore": "voucher_non_valido"}
         allog = v.get("alloggio_id", "")
-        host, citta = "", ""
+        host, citta, titolo = "", "", ""
         try:
             d = self._sys.catalogo.dettaglio(allog)
-            citta = d.get("citta", "") if isinstance(d, dict) else ""
+            if isinstance(d, dict):
+                citta = d.get("citta", "")
+                # IL NOME DEL BENE LOCATO. Prima qui finiva lo SLUG e il contratto diceva
+                # "Immobile: attico-citta-studi": una stringa presa dall'indirizzo web al
+                # posto del nome dell'immobile, su un documento che le parti firmano.
+                # Il titolo era gia' in questo stesso `d`, e veniva buttato via.
+                titolo = d.get("titolo", "") or ""
             host = self._sys.catalogo.host_di_alloggio(allog) or ""
         except Exception:
             pass
-        lingua = dati.get("lingua") if dati.get("lingua") in ("it", "en") else "it"
-        info = {"host": host, "alloggio": allog, "citta": citta,
+        # Il contratto esiste in it/en. Per ogni altra lingua si ripiegava su ITALIANO:
+        # un ospite giapponese riceveva il contratto in italiano. Ora ripiega su INGLESE.
+        # (Il PDF e' costruito coi font base, Latin-1: il giapponese diventerebbe "????",
+        # quindi finche' non si incorpora un font CJK l'inglese e' la risposta onesta.)
+        lingua = dati.get("lingua") if dati.get("lingua") in ("it", "en") else "en"
+        # Se il nome non e' scrivibile in questo PDF (font base = Latin-1: il giapponese
+        # diventerebbe "????"), si usa lo SLUG, che e' ASCII per costruzione. Su un
+        # documento che le parti firmano, un identificativo tecnico ma leggibile e'
+        # meglio di quattro punti interrogativi.
+        _nome_bene = titolo or allog
+        try:
+            from fase145_contratto_pdf import rappresentabile
+            if titolo and not rappresentabile(titolo):
+                _nome_bene = allog
+        except Exception:
+            pass
+        info = {"host": host, "alloggio": _nome_bene, "alloggio_slug": allog,
+                "citta": citta,
                 "check_in": v.get("check_in", ""), "check_out": v.get("check_out", ""),
                 "prezzo_cents": v.get("prezzo_guest_cents", 0), "valuta": v.get("valuta", "EUR"),
                 "riferimento": v.get("riferimento", "")}

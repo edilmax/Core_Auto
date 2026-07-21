@@ -80,13 +80,27 @@ _COLORE = {"libero": "#d4edda", "prenotato": "#f8d7da", "chiuso": "#e2e3e5",
            "non_aperto": "#ffffff", "errore": "#fff3cd"}
 
 
-def calendario_html(celle: List[Dict[str, Any]]) -> str:
+def _importo(cents: Any, valuta: Any) -> str:
+    """Importo secondo i decimali VERI della valuta, chiesti al motore."""
+    c = cents if isinstance(cents, int) and not isinstance(cents, bool) else 0
+    v = str(valuta or "EUR").strip().upper() or "EUR"
+    try:
+        from fase99_multicurrency import Denaro
+        return Denaro(c, v).formatta()
+    except Exception:
+        return "%d %s" % (c, v)
+
+
+def calendario_html(celle: List[Dict[str, Any]], valuta: str = "EUR") -> str:
     """Griglia HTML inline (XSS-safe) dal risultato di costruisci_calendario."""
     out = ['<table style="border-collapse:collapse;font-family:system-ui">']
     for c in celle:
         col = _COLORE.get(c.get("stato"), "#fff")
         pd = c.get("prezzo_dinamico_cents")
-        prezzo = ("€%d.%02d" % (pd // 100, pd % 100)) if isinstance(pd, int) else "-"
+        # prima: "€%d.%02d" — simbolo dell'euro FISSO e divisione per cento sempre:
+        # un annuncio in yen avrebbe mostrato all'host "€540.00" invece di
+        # "54000 JPY": valuta sbagliata e scala sbagliata nello stesso numero.
+        prezzo = _importo(pd, valuta) if isinstance(pd, int) else "-"
         out.append('<td style="border:1px solid #ccc;padding:.4rem;background:%s">'
                    '<div>%s</div><b>%s</b></td>'
                    % (col, html.escape(str(c.get("giorno", ""))[5:]), html.escape(prezzo)))

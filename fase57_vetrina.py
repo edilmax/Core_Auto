@@ -31,7 +31,9 @@ SCHEMA VINCITORE (benchmark 4 varianti x 10 stress, filtri AND su catalogo grand
 
 DENARO: prezzi SOLO in centesimi INTERI (`*_cents: int`). Float, bool e stringhe
 numeriche RIFIUTATI in ingresso (come fase56). Geo in MICROGRADI interi (lat*1e6),
-mai float nello storage. La valuta e' solo un'etichetta.
+mai float nello storage. La valuta NON e' un'etichetta: da essa dipende
+l'esponente (JPY 0 decimali, BHD 3), quindi quanto vale davvero l'intero
+salvato e quanto Stripe addebita. Convalidata come sigla ISO di 3 lettere.
 
 SOPRAVVIVENZA TOTALE:
   - validatore BLINDATO che NON solleva mai (come fase56): input corrotto -> rifiutato;
@@ -256,7 +258,16 @@ def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
     if not isinstance(indirizzo, str) or len(indirizzo) > LIMITE_CAMPO:
         return False, "indirizzo_non_valido", None
     valuta = data.get("valuta", "EUR")
-    if not isinstance(valuta, str) or not (1 <= len(valuta) <= 8):
+    if not isinstance(valuta, str):
+        return False, "valuta_non_valida", None
+    valuta = valuta.strip().upper()
+    # TRE LETTERE, SOLO LETTERE. Da questa sigla il motore ricava l'esponente (quante
+    # cifre decimali ha la valuta): una sigla che non conosce fa rispondere 2 "per
+    # difetto", cioe' INDOVINARE. Su un prezzo, indovinare l'esponente vuol dire
+    # sbagliare l'addebito di cento volte — la stessa famiglia del difetto dello yen.
+    # Si normalizza in maiuscolo anche perche' gli incassi dell'host sono raggruppati
+    # per valuta: "eur" ed "EUR" spezzerebbero il riepilogo in due.
+    if len(valuta) != 3 or not valuta.isalpha():
         return False, "valuta_non_valida", None
 
     servizi_in = data.get("servizi", ())

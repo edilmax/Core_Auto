@@ -43,7 +43,18 @@ TERMINI_VERSIONE_CORRENTE = "1.0"
 
 
 def _email_valida(v: Any) -> bool:
-    return (isinstance(v, str) and 3 <= len(v) <= 254 and v.count("@") == 1
+    """Valida DOPO aver tolto gli spazi ai bordi.
+
+    Prima si validava la stringa grezza e uno spazio incollato per sbaglio (tastiera del
+    telefono, copia-incolla da una rubrica) faceva fallire il controllo. In fase di
+    accesso il messaggio che ne usciva era **"credenziali non valide"**: l'utente ha la
+    password giusta e si sente dire che e' sbagliata. Gli spazi INTERNI restano vietati:
+    quelli non sono una svista, sono un indirizzo non valido.
+    """
+    if not isinstance(v, str):
+        return False
+    v = v.strip()
+    return (3 <= len(v) <= 254 and v.count("@") == 1
             and "." in v.split("@")[-1] and " " not in v)
 
 

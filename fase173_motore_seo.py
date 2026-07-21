@@ -156,10 +156,19 @@ class MotoreSEO:
                     "indexnow": {"inviato": False, "motivo": "errore"}}
 
 
-def _euro_str(cents: Any) -> str:
-    """Cents interi -> '120.00' (mai float sui soldi)."""
+def _euro_str(cents: Any, valuta: Any = "EUR") -> str:
+    """Importo secondo i decimali VERI della valuta (mai float sui soldi).
+
+    Prima divideva per cento sempre: su un annuncio in yen il contenuto SEO — quello che
+    finisce indicizzato — annunciava ¥54.000 come "540.00 JPY".
+    """
     c = cents if isinstance(cents, int) and not isinstance(cents, bool) else 0
-    return "%d.%02d" % (c // 100, c % 100)
+    v = str(valuta or "EUR").strip().upper() or "EUR"
+    try:
+        from fase99_multicurrency import Denaro
+        return Denaro(max(0, c), v).formatta().rsplit(" ", 1)[0]
+    except Exception:
+        return "%d" % max(0, c)
 
 
 # etichette dei servizi in italiano (per le FAQ della pagina, che e' lang=it)
@@ -200,7 +209,7 @@ def genera_faq(rapporto: Dict[str, Any], dettaglio: Dict[str, Any]) -> List[Dict
         val = dettaglio.get("valuta") if isinstance(dettaglio.get("valuta"), str) else "EUR"
         faq.append({"q": "Quanto costa una notte%s?" % (" a " + citta if citta else ""),
                     "a": "Il prezzo è di %s %s a notte."
-                         % (_euro_str(dettaglio.get("prezzo_notte_cents")), val)})
+                         % (_euro_str(dettaglio.get("prezzo_notte_cents"), val), val)})
 
     if pres("capacita"):
         cap = dettaglio.get("capacita")

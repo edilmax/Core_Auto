@@ -54,12 +54,31 @@ def controlla(ambito, chiave, ok, dettaglio=""):
 # ═══════════════════════════════════════════════════════════════════════════════
 # Le valute SENZA decimali sono la trappola: se si moltiplica per 100 "come l'euro",
 # il prezzo diventa cento volte tanto e sembra ancora un numero normale.
-ESPONENTE = {
-    "JPY": 0, "KRW": 0, "VND": 0, "CLP": 0, "ISK": 0, "HUF": 0, "TWD": 0,
-    "COP": 0, "PYG": 0, "RWF": 0, "UGX": 0, "XAF": 0, "XOF": 0, "XPF": 0,
-    "BHD": 3, "JOD": 3, "KWD": 3, "OMR": 3, "TND": 3,
-}
-ESPONENTE_PREDEFINITO = 2
+#
+# QUESTA TABELLA NON ESISTE PIU', E NON DEVE TORNARE.
+# La prima stesura ne teneva una propria, e si e' scoperto che diceva il falso su tre
+# valute: HUF, TWD e COP dichiarate SENZA decimali quando ne hanno due. Sarebbe stato
+# il difetto peggiore possibile in uno strumento nato per trovare gli errori di scala:
+# uno strumento che li INVENTA (un prezzo ungherese corretto denunciato come sbagliato)
+# e insieme li NASCONDE (una banda calcolata cento volte piu' larga del dovuto).
+#
+# La causa non era la distrazione: era la DUPLICAZIONE. Due tabelle della stessa cosa
+# divergono sempre, e la copia sbagliata non fa rumore. Quindi qui si legge dal motore
+# (`fase99_multicurrency.esponente`), che e' la stessa fonte usata dal server per
+# formattare gli importi. Se un giorno il motore cambia, questo collaudo cambia con lui;
+# se il motore non c'e', si fallisce dicendolo invece di indovinare.
+def _esponente(valuta):
+    """Cifre decimali della valuta, chieste al MOTORE (mai a una copia locale)."""
+    from fase99_multicurrency import esponente
+    return esponente(str(valuta or "EUR"))
+
+
+def valuta_nota(valuta):
+    """Vero se e' una valuta ISO plausibile (3 lettere). Una sigla inventata non e'
+    un dettaglio estetico: il suo esponente verrebbe indovinato, e su un prezzo
+    indovinare significa sbagliare l'addebito."""
+    v = str(valuta or "").strip()
+    return len(v) == 3 and v.isalpha()
 
 # Quanto vale, MOLTO alla larga, un'unita' di quella valuta in euro. Non servono tassi
 # precisi: servono ordini di grandezza, perche' cio' che si cerca e' un errore ×100.
@@ -75,10 +94,6 @@ IN_EURO = {
 # deve lasciar passare l'ostello e la villa di lusso, e fermare solo l'assurdo.
 NOTTE_MIN_EUR = 5.0
 NOTTE_MAX_EUR = 5000.0
-
-
-def _esponente(valuta):
-    return ESPONENTE.get(str(valuta or "EUR").upper(), ESPONENTE_PREDEFINITO)
 
 
 def in_euro(minori, valuta):
@@ -130,8 +145,13 @@ def prezzi_alloggi(cartella):
                       "(%.0f-%.0f). Tipico errore x100 su una valuta con %d decimali."
                       % (minori, valuta, euro, NOTTE_MIN_EUR, NOTTE_MAX_EUR,
                          _esponente(valuta)))
-            controlla("prezzi", slug, valuta in IN_EURO or valuta in ESPONENTE,
-                      "valuta '%s' sconosciuta: impossibile giudicare il prezzo" % valuta)
+            controlla("prezzi", slug, valuta_nota(valuta),
+                      "valuta '%s' non e' una sigla ISO di 3 lettere: il suo esponente "
+                      "verrebbe INDOVINATO (2), e su un prezzo indovinare significa "
+                      "sbagliare l'addebito" % valuta)
+            controlla("prezzi", slug, valuta in IN_EURO,
+                      "valuta '%s' senza un tasso di riferimento: il prezzo viene "
+                      "giudicato come se fosse in euro, quindi la banda non vale" % valuta)
 
             # Le valute SENZA decimali: un importo che finisce con due zeri ED e'
             # enorme e' il sintomo classico del x100.

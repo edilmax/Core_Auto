@@ -690,6 +690,137 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
 - Split-payment REALE (link per amico, all-or-nothing) — PARCHEGGIATO dal fondatore.
 - Video AI multilingua (pool 164/165 pronto; manca la generazione video).
 
+## 2-quinquies) 🕐 AUDIT FUSI ORARI, INPUT E TEST CIECHI (2026-07-22)
+
+### A. FUSI — cosa era salvo e cosa no
+
+**SALVO**: le date di check-in/check-out sono testo `'YYYY-MM-DD'` e non passano mai da un
+timestamp sul percorso di visualizzazione; il browser le costruisce con
+`getFullYear/getMonth/getDate` e **non** con `toISOString()`. Un ospite giapponese **non**
+vede il check-in spostato al giorno prima: verificato.
+
+**NON SALVO**: ogni conversione data→istante usava il fuso del SERVER (UTC in produzione:
+nel `Dockerfile.casavip` e nel compose **non c'è nessuna `TZ`**) oppure UTC scritto a mano.
+L'alloggio **non ha un fuso orario nel modello dati** (c'è `citta`, c'è `paese`, nessuno li
+usa per derivarlo).
+
+| Difetto | Impatto reale | Stato |
+|---|---|---|
+| finestra di contestazione escrow: `fromisoformat(ci+"T15:00:00").timestamp()` | ore di tutela REALI dall'arrivo: Honolulu **12**, New York **18**, Tokyo 31 — su soldi già pagati | **CORRETTO**: ancorata alle 15:00 del fuso più a ovest (UTC-12), così la scadenza cade sempre ≥24h dopo l'arrivo di chiunque |
+| «48 ore» di ripensamento contate in **giorni di calendario** | durata reale fra **48 e 72 ore** secondo l'ora della prenotazione, e confine mobile col fuso — su un diritto legale (California SB 644, art. 49 cod. cons. brasiliano) | **CORRETTO**: `SECONDI_RIPENSAMENTO = 172800` confrontati con `prenotato_ts` scritto nel gettone FIRMATO; i voucher già emessi ricadono sul conteggio storico (un diritto comunicato non si restringe a cose fatte) |
+| pass serratura `fase64` a 15:00 UTC per tutti | un ospite di Tokyo resterebbe fuori dalla porta 9 ore | non corretto: **`MOSTRA_PASS_SERRATURA = False`**, non è mostrato a nessuno |
+| diritto di recensione, promemoria, fascia penale, stato "futura/attiva" | scattano sul «giorno» del server: ±9h per l'Asia, ±10h per le Americhe | aperto, minore |
+
+⚠️ **Errore mio, corretto dal test**: la prima stesura ancorava la finestra al fuso più a
+EST. Ma la scadenza è `istante + 24h`, quindi conta **quando si chiude**: aprire prima la
+chiudeva prima, e Tokyo scendeva a **19 ore**. Il rimedio peggiorava il male; la guardia
+`test_fusi_orari` l'ha visto e ha imposto la correzione.
+
+**Perché nessuno se n'era accorto**: il presidio esistente (`capitolato.p6_date_con_fuso`)
+è una ricerca di testo su come si **stampano** le ore. Non può vedere un `.timestamp()` su
+un orario naive né un confronto fra `date.today()` e una data. Tutti questi difetti gli
+passavano davanti — è il modo di rompersi n.4, «controllo che non controlla».
+
+### B. INPUT E IDENTITÀ — quattro difetti, tutti chiusi
+
+| Difetto | Impatto reale |
+|---|---|
+| l'email dell'**ospite** non veniva normalizzata (quella dell'host sì) | `Mario.Rossi@` e `mario.rossi@` = due persone; i controlli anti-abuso che confrontano in minuscolo non vedevano la riga |
+| l'email veniva **validata prima del trim** | uno spazio incollato dal telefono → all'accesso risponde **«credenziali non valide»** a chi ha la password giusta |
+| l'alloggio chiamato col suo **slug** | l'email del voucher e **il contratto PDF** dicevano `attico-studi` invece di «Attico Città Studî»: sul contratto è l'identificazione del bene locato |
+| lettere fuori da Latin-1 → `?` | `Łukasz` diventava `?ukasz`. Ora traslitterate (Ł→L, Ş→S, Đ→D); per il CJK, che con quei font non è rappresentabile, si ripiega sullo **slug ASCII** invece di stampare `????` |
+
+In più: **la lingua dell'ospite viene finalmente conservata** (nel gettone firmato del
+voucher) e ogni link del voucher spedito per email porta `?lang=`; il **contratto** non
+ripiega più sull'italiano ma sull'inglese.
+
+### C. TEST CIECHI — otto, tutti chiusi, con una guardia sul PATTERN
+
+`test_suite_senza_zone_cieche.py` sorveglia la suite stessa cercando il **gesto**:
+- **classi definite dopo `unittest.main()`** → non girano se lanci il file da solo. Trovate
+  in `test_geocoder_mappa` (3 classi) e `test_marca_temporale_server` (la prova che il giro
+  della marca è indipendente), oltre a `test_trasparenza_costi` già chiuso;
+- **test che si assolvono da soli**: `test_dac7_notti` si **spegneva per venti giorni
+  all'anno** (finestra a cavallo d'anno) su un obbligo fiscale — e il salto copriva un
+  problema che non esisteva, perché le asserzioni interrogavano già l'anno della
+  prenotazione; `test_guida_operativa` si assolveva se la pagina spariva;
+- **test senza asserzioni**: 4 resi espliciti (fra cui il «silenzio» del recupero hold, che
+  ora verifica che NON parta nessuna email invece che «non esplode»).
+
+⚠️ Il rilevatore dei test muti alla prima stesura dava **17 falsi rossi** (contava come muti
+i test che verificano dentro funzioni di appoggio). Ristretto: è muto solo ciò che non
+chiama **nulla**. Un falso rosso insegna a ignorare lo strumento, e allora il rosso vero non
+lo guarda più nessuno.
+
+### D. AMBIENTE vs STRUTTURA
+
+`COMMISSIONE_BPS`, `VALUTA` e `PROMO_LANCIO` **non sono impostate in produzione**: vivono
+sui ripieghi scritti nel codice (`1000`, `EUR`, `true`). Oggi coincidono con l'intenzione,
+ma per **coincidenza**, non per costruzione — nessuna guardia lo verifica al deploy.
+🔴 **`ADMIN_KEY` è di 11 caratteri e comincia con una parola riconoscibile**: protegge
+rimborsi e dati finanziari su un sistema con Stripe LIVE. C'è un buttafuori per IP con
+blocco progressivo (mitiga la forzatura da un solo indirizzo), ma **va cambiata con una
+chiave casuale da 32+ caratteri**. È un segreto del fondatore: non l'ho toccata.
+
+## 2-quater) 💱 AUDIT VALUTA (2026-07-21, ordine del fondatore) — 8 difetti chiusi
+
+**La domanda posta**: «dal primo prezzo visto sulla pagina fino all'addebito finale e
+all'email di ricevuta, la valuta mostrata sia sempre coerente e priva di errori di scala
+(es. ×100 non dovuti)».
+
+**Cosa era GIÀ CORRETTO** (verificato, non dato per buono): la strada dei soldi. Il
+browser (`deploy/app.js` → `BV.VALUTE`/`toCents`) e il motore (`fase99.esponente`)
+concordano su **ogni** valuta; `fase85`/`fase101`/`fase104` mandano a Stripe l'intero
+così com'è con la valuta dell'annuncio — quindi **l'addebito era giusto**.
+
+**Cosa era SBAGLIATO: il RACCONTO dell'addebito.** Otto punti scrivevano il denaro
+dividendo per cento **a mano**, sempre, qualunque valuta:
+
+| Dove | Chi lo legge | Cosa vedeva un ospite giapponese che paga ¥54.000 |
+|---|---|---|
+| `fase86_email._soldi` | email conferma pagamento, rimborso, controversia, bonifico host | **540.00 JPY** |
+| `fase145_contratto_pdf._euro` | **il contratto PDF che le parti firmano** | **540.00 JPY** |
+| `fase83:522` | **il VOUCHER** (il documento mostrato al check-in) | 540.00 |
+| `fase83:808` | **la RICEVUTA** (prova di pagamento) | 540.00 JPY |
+| `fase83:222` | **JSON-LD → i risultati di ricerca Google** | 540.00 |
+| `fase83:310` | pagina pubblica `/alloggio/<slug>` | 540.00 JPY |
+| `fase83:488` | esportazione CSV dell'host (colonna `revenue_eur`) | euro dato per scontato |
+| `fase173:203` | contenuto SEO indicizzato | 540.00 JPY |
+| `fase119:89` | calendario prezzi host — **anche il simbolo € fisso** | €540.00 (latente) |
+| `fase139:115` | chatbot ospite (non collegato) | latente |
+
+**Perché era il caso peggiore**: nulla si rompe, nulla finisce nei log, nessun test cade.
+L'addebito è giusto e il numero raccontato è falso: si scopre quando un cliente protesta,
+oppure mai.
+
+**La causa è sempre la DUPLICAZIONE**: `fase99.Denaro.formatta()` esisteva già ed era già
+corretto per tutte le valute (JPY 0 decimali, KWD 3). **Nessuno lo chiamava.** Stessa
+radice del difetto trovato in `collaudi/plausibilita.py`, che teneva una **terza** tabella
+degli esponenti e dichiarava **HUF, TWD e COP senza decimali** quando ne hanno due — uno
+strumento nato per trovare gli errori di scala che li avrebbe insieme *inventati* (prezzo
+ungherese corretto denunciato) e *nascosti* (banda cento volte più larga).
+
+**Difetto in più, sulla convalida**: `fase57_vetrina` accettava come valuta **qualunque
+stringa di 1-8 caratteri** (`"EURO"`, `"eur"`, `"BITCOIN"`). Da quella sigla il motore
+ricava l'esponente e, non conoscendola, **indovina 2** — cioè sbaglia l'addebito di cento
+volte sulle valute a 0 decimali; e `"eur"`/`"EUR"` come etichette diverse spezzavano in due
+il riepilogo incassi dell'host. Ora: **tre lettere, solo lettere, normalizzate maiuscole**.
+
+**GUARDIE NUOVE** (tutte provate rosse sul codice guasto):
+- `test_importi_scritti.py` (10) — ogni funzione che scrive importi dà lo **stesso**
+  risultato del motore su ogni valuta; **nessun modulo può tornare a dividere per cento a
+  mano** (controllo sul *gesto*, non sui singoli casi: è così che sono emersi 5 dei punti
+  qui sopra, dopo che ne avevo corretti 3);
+- `test_valute_coerenti.py` (10) — **browser e motore devono concordare su ogni valuta**:
+  il numero mandato a Stripe lo calcola il browser, quindi un disaccordo lì è un addebito
+  sbagliato. Più: il server rifiuta le sigle inventate, e il collaudo non può ritenersi
+  una tabella propria;
+- `test_valuta_end_to_end.py` (13) — **uno yen vero seguito anello per anello**: annuncio →
+  preventivo → parametri Stripe → importo scritto, e lo stesso giro in euro per provare che
+  il sistema **distingue** le valute invece di appiattirle. Include le altre porte del
+  denaro (bonifico all'host, gateway Asia), aggiunte dopo che una **mutazione sopravvissuta**
+  ha mostrato che il giro principale non le attraversa.
+
 ## 2-ter) 👁️ VERIFICHE DEL **PRODOTTO** (non del codice) — nate dai difetti trovati dal fondatore
 
 Il 2026-07-21 due difetti veri sono stati trovati **guardando il sito**, non dai 3011 test.

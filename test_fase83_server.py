@@ -12,7 +12,7 @@ import unittest
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import (
     RouterHTTP, crea_router, percorso_statico_sicuro,
-    jsonld_alloggio, pagina_alloggio_html, sitemap_xml, robots_txt, _euro,
+    jsonld_alloggio, pagina_alloggio_html, sitemap_xml, robots_txt, _importo,
 )
 
 SEG = b"0123456789abcdef0123456789abcdef"
@@ -768,7 +768,7 @@ class TestRecensioni(unittest.TestCase):
         self.assertIn("smart_pass", corpo)
         # lo smart-pass e' un vero pass d'ingresso verificabile (fase64)
         from fase64_smartpass import VerificatorePass
-        from fase83_server import _euro  # noqa
+        from fase83_server import _importo  # noqa
         ver = VerificatorePass(self.sys.firma, orologio=lambda: __import__(
             "fase64_smartpass")._epoch_da_data_ora("2026-09-01", 16))
         self.assertTrue(ver.verifica(corpo["smart_pass"], "casa").consentito)
@@ -851,10 +851,17 @@ class TestSEO(unittest.TestCase):
         _popola(self.sys)
 
     def test_euro_no_float(self):
-        self.assertEqual(_euro(9500), "95.00")
-        self.assertEqual(_euro(9999), "99.99")
-        self.assertEqual(_euro(5), "0.05")
-        self.assertEqual(_euro(-1), "0.00")
+        """Si chiamava `_euro` e non sapeva in che valuta stesse scrivendo: su un
+        annuncio in yen produceva "540.00" per Y54.000, anche dentro il JSON-LD che
+        finisce nei risultati di Google. Ora vuole la valuta, e la rispetta."""
+        self.assertEqual(_importo(9500, "EUR"), "95.00")
+        self.assertEqual(_importo(9999, "EUR"), "99.99")
+        self.assertEqual(_importo(5, "EUR"), "0.05")
+        self.assertEqual(_importo(54000, "JPY"), "54000")   # niente decimali
+        self.assertEqual(_importo(25500, "KWD"), "25.500")  # tre decimali
+        # importo negativo: si azzera invece di stampare un meno su una pagina pubblica
+        self.assertEqual(_importo(-1, "EUR"), "0.00")
+        self.assertEqual(_importo(-1, "JPY"), "0")
 
     def test_jsonld(self):
         d = self.sys.catalogo.dettaglio("casa")

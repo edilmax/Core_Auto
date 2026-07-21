@@ -31,7 +31,10 @@ class TestGuidaOperativa(unittest.TestCase):
 
     def setUp(self):
         if not os.path.exists(PAGINA):
-            self.skipTest("guida-operativa.html non presente")
+            # ASSENZA NON E' CONFORMITA': una pagina che sparisce non assolve la
+            # regola, rende impossibile verificarla — ed e' un fatto, non un'esenzione.
+            self.fail("guida-operativa.html non c'e' piu': la guida per gli operatori "
+                      "e' sparita dal deploy")
         self.testo = _leggi(PAGINA)
 
     def test_la_pagina_e_viva(self):

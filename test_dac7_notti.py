@@ -116,9 +116,12 @@ class TestReportConNotti(unittest.TestCase):
         self.ci = (dt.date.today() + dt.timedelta(days=20)).isoformat()
         self.co = (dt.date.today() + dt.timedelta(days=22)).isoformat()
         self.anno = int(self.ci[:4])
-        if self.anno != time.gmtime().tm_year:
-            self.skipTest("finestra a cavallo d'anno (fine dicembre): la matematica "
-                          "è coperta dai test unitari qui sopra")
+        # NIENTE SALTO A FINE DICEMBRE. Prima, se `oggi+20` finiva nell'anno dopo, il
+        # test si spegneva da solo — cioe' per una ventina di giorni all'anno la
+        # verifica sul conteggio DAC7 (un obbligo fiscale) semplicemente non girava, e
+        # nel rapporto compariva come «skipped». Non serviva: le asserzioni qui sotto
+        # interrogano gia' `genera_dac7_csv(anno=self.anno)`, cioe' l'anno DELLA
+        # PRENOTAZIONE, non quello corrente. Il salto copriva un problema che non c'era.
         g = lambda m, p, b: self.r.gestisci(m, p, {}, json.dumps(b), hk)
         g("POST", "/api/host/pubblica", {"host_id": self.hid, "slug": "casa", "titolo": "Villa",
           "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,

@@ -259,9 +259,15 @@ class TestGapCoerenza(unittest.TestCase):
 
 class TestNoFloatEColdStart(unittest.TestCase):
     def test_nessun_float_nell_output(self):
-        _no_float(valuta_annuncio(_scheda_piena(), _ctx_pieno(),
-                                  {"n_citta": 20, "hanno": {"wifi": 18}},
-                                  MARKUP_TUTTO))
+        # `_no_float` SOLLEVA se trova un numero a virgola mobile: il controllo c'era
+        # ma non si vedeva, e un test che sembra muto prima o poi viene "semplificato".
+        uscita = valuta_annuncio(_scheda_piena(), _ctx_pieno(),
+                                 {"n_citta": 20, "hanno": {"wifi": 18}}, MARKUP_TUTTO)
+        _no_float(uscita)
+        self.assertIsInstance(uscita, dict)
+        with self.assertRaises(AssertionError,
+                               msg="il criterio non riconosce piu' un float"):
+            _no_float({"prezzo": 1.5})
 
     def test_coorte_cieca_usa_prior(self):
         a = valuta_annuncio(_scheda_piena(), _ctx_pieno(), None, ())
