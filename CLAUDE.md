@@ -42,6 +42,91 @@ automatica fa fallire la suite se i due divergono):
 
 ---
 
+---
+
+# 🔟 REGOLA DEI 10 COLLAUDI — come si dimostra che una cosa funziona
+
+**Perché esiste.** Il 2026-07-21, in una sola giornata, **sette difetti veri** sono passati
+sotto una suite completamente verde: due database che vivevano in RAM (recensioni perse a
+ogni riavvio, un credito rispendibile), tre pagine ed email che reclutavano host senza
+dichiarare il 3%, il giro della marca temporale legato per sbaglio all'email, e lo
+scaglione dell'8% che nessun test avrebbe difeso se fosse diventato 10%.
+
+Nessuno di questi era un caso. Erano tutti la stessa cosa:
+
+> **Un test verde non dice «funziona». Dice «non ho visto niente».**
+> Finché non sai *cosa quel test è capace di vedere*, il verde non vale nulla.
+
+E la conseguenza operativa, che è la regola più importante di tutte:
+
+> ### ⚠️ NESSUN VERDE VALE FINCHÉ NON È STATO VISTO ROSSO.
+> Una guardia che non è mai fallita davanti al guasto che dovrebbe vedere **non è una
+> guardia**: è un ornamento. Il 2026-07-21 tre verifiche di sicurezza su nginx sono
+> risultate incapaci di fallire — tre volte di fila, per lo stesso errore di fondo
+> («la stringa c'è da qualche parte» invece di «la protezione c'è su ogni porta»).
+
+**Ripetere non basta.** Eseguire venti volte un test che non può fallire produce venti
+finti verdi. La ripetizione misura la **stabilità**; non misura la **copertura**. Sono due
+assi diversi: prima si guadagna la copertura, poi si ripete per la stabilità.
+
+## I 9 MODI DI ROMPERSI (incontrati sul campo, non teorici)
+
+Ogni cosa costruita va passata su questa lista chiedendo, per ognuna:
+**«se si rompesse così, chi se ne accorgerebbe?»** Se la risposta è «nessuno», manca una
+guardia — anche se tutto è verde.
+
+| # | Modo di rompersi | Caso reale |
+|---|---|---|
+| 1 | **Dati effimeri** — funziona, ma scrive dove i dati muoiono | recensioni e crediti in RAM |
+| 2 | **Cablaggio mancante** — il pezzo è perfetto e non è collegato | promo 0% mai applicata |
+| 3 | **Testi che mentono** — il codice fa X, la pagina promette Y | «10%» senza il 3% |
+| 4 | **Controllo che non controlla** — la guardia non può fallire | `server_tokens` su due blocchi |
+| 5 | **Dipendenza nascosta** — funziona solo se c'è altro | la marca legata a SMTP |
+| 6 | **Il terzo che cambia** — un servizio esterno smette o cambia | una TSA che perde la qualifica |
+| 7 | **Il tempo che passa** — scadenze, rampe, rinnovi | certificato, scaglioni per anzianità |
+| 8 | **Ambiente diverso** — locale ≠ produzione | `:memory:` nei test, file in prod |
+| 9 | **Rifattorizzazione** — il cuore cambia, le guardie restano sul vecchio | `stato_scaglione` senza le guardie di `commissione_bps_lancio` |
+
+## I 10 COLLAUDI, IN QUEST'ORDINE
+
+Ognuno ha uno **scopo diverso**: non sono dieci ripetizioni, sono dieci **punti di vista**.
+Nessuno di essi da solo basta; è la loro **diversità** che copre i 9 modi di rompersi.
+
+| # | Collaudo | Cosa cerca | Copre |
+|---|---|---|---|
+| 1 | **Guardia rossa sul vecchio** | il bug corretto non può tornare | 9 |
+| 2 | **Cablaggio, anello per anello** | il pezzo è collegato fino a ciò che l'utente vede | 2 |
+| 3 | **Avvio reale + persistenza** | `main_casavip.py` eseguito davvero; nessun `:memory:`; i dati sopravvivono al deploy | 1, 8 |
+| 4 | **Neuroni** | il compartimento attraversato a livelli annidati, fino ai casi terminali | tutti |
+| 5 | **Oracolo indipendente** | un secondo calcolo, scritto separatamente, ricalcola da zero e confronta | 9 |
+| 6 | **Fuzzing, concorrenza, estremi** | input assurdi, gare, troncamenti, valori limite | 4 |
+| 7 | **Giudice esterno** | uno strumento **non nostro** conferma (OpenSSL, `curl` sul sito vero) | 6 |
+| 8 | **Audit dei testi** | ogni cifra e promessa pubblica confrontata col motore | 3 |
+| 9 | **Caccia ai finti verdi** | test saltati, senza asserzioni, guardie costanti, baseline compiacenti | 4 |
+| 10 | **🧬 MUTAZIONE — per ultimo** | si rompe il motore di proposito: **i test se ne accorgono?** | 4, 9 |
+
+**La mutazione va per ultima** perché è l'unica che giudica **i test**, non il codice: ha
+senso solo quando gli altri nove sono già verdi. Un mutante che sopravvive è la prova
+matematica che lì non c'è protezione, per quanto verde sia tutto il resto.
+
+## COME SI ESEGUE
+
+```bash
+python collaudi/protocollo.py               # i 10 in ordine, mutazione per ultima
+python collaudi/protocollo.py --giri=10     # 10 ripetizioni: stabilità
+python collaudi/mutazione_prodotto.py       # solo il giudizio finale
+python collaudi/caccia_finti_verdi.py       # solo la caccia ai finti verdi
+```
+
+**Ripetizioni**: minimo **5** per ogni cosa; **10** per ciò che tocca **soldi**, **prove
+legali** o **sicurezza**. Un solo rosso su N giri = si analizza, si corregge e si
+**riparte da zero**: l'instabilità è essa stessa un difetto.
+
+**Non si dichiara «fatto»** finché il protocollo non è verde **e** ogni guardia nuova è
+stata **vista rossa** almeno una volta sul codice guasto.
+
+---
+
 # DIRETTIVA OPERATIVA FINALE E SUPREMA
 
 **1. RIVALUTAZIONE GLOBALE E PILOTA AUTOMATICO**

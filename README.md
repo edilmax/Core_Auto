@@ -43,7 +43,7 @@ competitivo è il **take-rate più basso del mercato**, reso possibile dall'auto
 Core_Auto/
 ├── main_casavip.py             avvio del prodotto: legge le variabili d'ambiente e compone il sistema
 ├── fase*.py                    134 moduli del motore (uno per funzione — indice in REGISTRO_INGEGNERIA.md)
-├── test_*.py                   302 file di test (la suite INTERA deve essere verde prima di ogni deploy)
+├── test_*.py                   304 file di test (la suite INTERA deve essere verde prima di ogni deploy)
 ├── deploy/                     ciò che vede il browser: 13 pagine + app.js + configurazioni nginx
 │   ├── index.html              vetrina, ricerca, mappa, checkout (ospite)
 │   ├── host.html               pannello host: pubblica, calendario, incassi, consensi
@@ -52,6 +52,7 @@ Core_Auto/
 │   ├── commissioni.html · termini.html · privacy.html · contratto-host.html   pagine legali/tariffe
 │   └── app.js                  fonte unica: escape, valute, lingua, rete, scudo anti-doppio-clic
 ├── data/                       database SQLite (in produzione è un volume Docker; mai nel repo)
+├── collaudi/                   strumenti d'officina: collaudi profondi e audit (NON entrano nell'immagine)
 ├── legale/ · contatti/         materiali di supporto
 ├── _archivio/                  SOLO memoria storica: cifre e piani SUPERATI, da non seguire
 ├── Dockerfile.casavip          immagine del prodotto
@@ -192,6 +193,31 @@ I valori veri vivono **solo** in `/var/www/bookinvip/.env.casavip` sul VPS (mai 
 # la suite INTERA deve essere verde prima di ogni deploy (Windows, Python 3.9)
 python -m unittest discover -s . -p "test_*.py"
 ```
+
+### Oltre la suite: i collaudi profondi (`collaudi/`)
+
+La suite prova il codice **con se stesso**. In `collaudi/` stanno gli strumenti che lo provano
+**da fuori**, e che hanno trovato difetti che la suite non poteva vedere:
+
+| Strumento | Cosa fa |
+|---|---|
+| `collaudo_neuroni_marca.py` | attraversa la marca temporale su 7 livelli, dal protocollo binario alla qualifica europea |
+| `super_collaudo_marca.py` | usa **OpenSSL come giudice esterno** e confronta le due implementazioni nei due sensi |
+| `collaudo_neuroni_legale.py` | consensi, identità, scaglioni, prove, dossier, permessi, concorrenza |
+| `collaudo_finale_totale.py` · `collaudo_rampa_totale.py` | i soldi, con oracoli indipendenti che ricalcolano tutto da zero |
+| `audit_coerenza_tariffe.py` | ogni percentuale scritta in **ogni file** confrontata col motore (con baseline: rosso su ogni cifra nuova) |
+| `audit_millimetrico.py` | i 5 documenti ufficiali contro il motore, riga per riga |
+| `verifica_produzione.py` | il **sito vero** interrogato dall'esterno, in sola lettura |
+| `campagna_totale.py` | ripete ogni collaudo **5 volte** e pretende che sia **stabile**, non solo verde |
+| `sonda_qtsp.py` | interroga i prestatori europei e verifica quali dichiarano davvero marche qualificate |
+
+```bash
+python collaudi/campagna_totale.py        # tutto, 5 ripetizioni ciascuno
+python collaudi/verifica_produzione.py --giri=5
+```
+
+Non si chiamano `test_*.py` di proposito: la suite non deve raccoglierli (interrogano la rete
+vera e durano minuti). Il `Dockerfile.casavip` non li copia: restano strumenti d'officina.
 
 **Una modifica alla volta.** Ogni bug corretto lascia un **test-guardia** che è **rosso sul
 codice vecchio e verde sul nuovo**. A lavoro finito si salva **in tutti e tre i posti**:

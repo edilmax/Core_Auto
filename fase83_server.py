@@ -2718,7 +2718,9 @@ class RouterHTTP:
         import hashlib as _hl
         import io as _io
         import json as _js
-        gen = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        # l'ora DEVE dichiarare il fuso: in un fascicolo legale un orario nudo
+        # e' contestabile ("che fuso era?"). E' UTC: si scrive.
+        gen = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
         impronta = _hl.sha256()
 
         def emetti(testo):

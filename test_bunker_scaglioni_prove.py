@@ -227,21 +227,25 @@ class TestScaglioni(BaseSala):
         self.assertIn("versione del contratto", d["nota_riaccettazione"])
 
     def test_host_senza_data_non_regala_lo_zero(self):
-        hid, _tk = self.host()
-        con = sqlite3.connect(self.db_reg)
-        try:
-            con.execute("UPDATE host SET creato_ts=NULL WHERE host_id=?", (hid,))
-            con.commit()
-        except Exception:
-            self.skipTest("colonna NOT NULL: caso non riproducibile")
-        finally:
-            con.close()
-        s, d = self.g("GET", "/api/bunker/scaglioni_host", None, self.bunker())
-        self.assertEqual(d["host"][0]["scaglione"], "regime")
-        self.assertEqual(d["host"][0]["bps"], LANCIO_BPS_REGIME)
+        """FINTO VERDE CHIUSO (2026-07-21). Questo test provava a mettere `creato_ts`
+        a NULL nel database e, siccome la colonna e' NOT NULL, si SALTAVA da solo: non
+        ha mai verificato niente. L'invariante vero pero' esiste ed e' importante —
+        *una data mancante o assurda non deve mai regalare la commissione 0%* — e si
+        prova direttamente sulla funzione che decide, senza violare il database."""
+        from fase98_policy_commissione import LANCIO_BPS_REGIME, stato_scaglione
+        for anzianita in (None, "", "abc", -5, -99999, [], {}, float("nan")):
+            s = stato_scaglione(anzianita)
+            self.assertEqual(
+                s["scaglione"], "regime",
+                "con anzianita' %r la macchina non applica il regime: rischia di "
+                "regalare lo 0%%" % (anzianita,))
+            self.assertEqual(s["bps"], LANCIO_BPS_REGIME,
+                             "con anzianita' %r la commissione non e' quella di "
+                             "regime" % (anzianita,))
+            self.assertGreater(s["bps"], 0,
+                               "commissione ZERO con anzianita' %r: soldi regalati"
+                               % (anzianita,))
 
-
-class TestProveLegali(BaseSala):
     def test_prove_complete_e_integre(self):
         hid, _tk = self.host()
         s, d = self.g("GET", "/api/bunker/prove_legali", None, self.bunker())

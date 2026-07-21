@@ -110,5 +110,74 @@ class TestIntegrazioneFase88Counter(unittest.TestCase):
         self.assertFalse(e_fondatore(reg.numero_host("h_inesistente")))
 
 
+class TestStatoScaglioneBordi(unittest.TestCase):
+    """`stato_scaglione` e' la FONTE UNICA di verita' sugli scaglioni (la chiamano il
+    preventivo di fase81 e il pannello di fase83). Prima del 2026-07-21 era coperta solo
+    di striscio: un test di MUTAZIONE ha dimostrato che portando lo scaglione centrale
+    dall'8% al 10% — un sovrapprezzo del 2% su ogni prenotazione di quella fascia —
+    l'intera suite restava verde. Qui si presidiano tutti i bordi."""
+
+    def test_i_tre_scaglioni_ai_bordi_esatti(self):
+        from fase98_policy_commissione import (LANCIO_BPS_FASE1, LANCIO_BPS_REGIME,
+                                               LANCIO_GIORNI_FASE1, LANCIO_GIORNI_GRATIS,
+                                               stato_scaglione)
+        attesi = [
+            (0, "promo", 0),
+            (LANCIO_GIORNI_GRATIS - 1, "promo", 0),
+            (LANCIO_GIORNI_GRATIS, "fase1", LANCIO_BPS_FASE1),
+            (LANCIO_GIORNI_GRATIS + 1, "fase1", LANCIO_BPS_FASE1),
+            (LANCIO_GIORNI_FASE1 - 1, "fase1", LANCIO_BPS_FASE1),
+            (LANCIO_GIORNI_FASE1, "regime", LANCIO_BPS_REGIME),
+            (LANCIO_GIORNI_FASE1 + 500, "regime", LANCIO_BPS_REGIME),
+        ]
+        for giorni, scaglione, bps in attesi:
+            s = stato_scaglione(giorni)
+            self.assertEqual(s["scaglione"], scaglione,
+                             "al giorno %d lo scaglione dovrebbe essere %s"
+                             % (giorni, scaglione))
+            self.assertEqual(s["bps"], bps,
+                             "al giorno %d la commissione dovrebbe essere %d bps (%d%%), "
+                             "trovata %d" % (giorni, bps, bps // 100, s["bps"]))
+
+    def test_lo_scaglione_centrale_NON_E_quello_di_regime(self):
+        """Il cuore del buco: se i due coincidessero, l'host della fascia centrale
+        pagherebbe come uno a regime senza che nulla lo segnali."""
+        from fase98_policy_commissione import (LANCIO_BPS_FASE1, LANCIO_BPS_REGIME,
+                                               LANCIO_GIORNI_FASE1, LANCIO_GIORNI_GRATIS,
+                                               stato_scaglione)
+        self.assertLess(LANCIO_BPS_FASE1, LANCIO_BPS_REGIME,
+                        "lo scaglione centrale deve costare MENO del regime")
+        centrale = stato_scaglione((LANCIO_GIORNI_GRATIS + LANCIO_GIORNI_FASE1) // 2)
+        regime = stato_scaglione(LANCIO_GIORNI_FASE1 + 10)
+        self.assertLess(centrale["bps"], regime["bps"],
+                        "la fascia intermedia paga quanto il regime: sovrapprezzo "
+                        "invisibile su ogni prenotazione fra i 3 mesi e l'anno")
+
+    def test_la_commissione_non_scende_mai_col_passare_del_tempo(self):
+        """Monotonia: un host non deve mai pagare MENO invecchiando (e mai piu' del
+        regime), altrimenti la rampa avrebbe un buco da qualche parte."""
+        from fase98_policy_commissione import LANCIO_BPS_REGIME, stato_scaglione
+        precedente = -1
+        for giorni in range(0, 800, 7):
+            bps = stato_scaglione(giorni)["bps"]
+            self.assertGreaterEqual(bps, precedente,
+                                    "al giorno %d la commissione SCENDE" % giorni)
+            self.assertLessEqual(bps, LANCIO_BPS_REGIME,
+                                 "al giorno %d si supera il regime" % giorni)
+            precedente = bps
+
+    def test_i_giorni_al_prossimo_scatto_sono_veri(self):
+        """Il pannello mostra "mancano N giorni": se fosse sbagliato, si prometterebbe
+        all'host una data che non arriva."""
+        from fase98_policy_commissione import LANCIO_GIORNI_GRATIS, stato_scaglione
+        for giorni in (0, 10, LANCIO_GIORNI_GRATIS - 1):
+            s = stato_scaglione(giorni)
+            self.assertEqual(s["giorni_al_prossimo"], LANCIO_GIORNI_GRATIS - giorni,
+                             "conteggio sbagliato al giorno %d" % giorni)
+            fra = stato_scaglione(giorni + s["giorni_al_prossimo"])
+            self.assertEqual(fra["bps"], s["prossimo_bps"],
+                             "lo scatto promesso non corrisponde a quello che accade")
+
+
 if __name__ == "__main__":
     unittest.main()

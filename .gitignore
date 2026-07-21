@@ -77,3 +77,10 @@ id_dsa
 bookinvip-offsite/
 .offsite.env
 .watchdog.env
+
+# Uscite dei collaudi (si rigenerano a ogni esecuzione): il codice si
+# versiona, i suoi rapporti no.
+collaudi/rapporto_*.txt
+collaudi/*.tsr
+collaudi/*.tsq
+collaudi/__pycache__/

@@ -59,9 +59,15 @@ async function carica(l){
     const d = await r.json();
     if(!r.ok || d.errore || !d.versione) throw new Error(d.errore || ('http '+r.status));  // niente "Versione undefined" sul 503
     document.getElementById('testo').textContent = d.testo || '(testo non disponibile)';
+    // I valori vengono dalla NOSTRA API (una data e un'impronta esadecimale), quindi
+    // oggi il rischio e' nullo: si passano ugualmente dall'escape perche' il giorno in
+    // cui uno di questi campi diventasse influenzabile da fuori, qui non si aprirebbe
+    // niente. Difesa in profondita', costo una riga.
+    const _e = (x) => String(x==null?'':x).replace(/[&<>"']/g,
+      c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const dl = l==='en'
-      ? 'Version <b>'+d.versione+'</b> · binding text: Italian · document fingerprint (SHA-256): <b>'+d.doc_sha256+'</b>'
-      : 'Versione <b>'+d.versione+'</b> · testo che fa fede: italiano · impronta del documento (SHA-256): <b>'+d.doc_sha256+'</b>';
+      ? 'Version <b>'+_e(d.versione)+'</b> · binding text: Italian · document fingerprint (SHA-256): <b>'+_e(d.doc_sha256)+'</b>'
+      : 'Versione <b>'+_e(d.versione)+'</b> · testo che fa fede: italiano · impronta del documento (SHA-256): <b>'+_e(d.doc_sha256)+'</b>';
     document.getElementById('meta').innerHTML = dl;
   }catch(e){ document.getElementById('testo').textContent='Errore di caricamento.'; }
 }
