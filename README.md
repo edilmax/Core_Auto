@@ -1,7 +1,7 @@
 # 🏛️ BookinVIP — come è fatta la macchina (documento ufficiale)
 
 > **Questo file è la porta d'ingresso al progetto.** Descrive la macchina **com'è OGGI**
-> (aggiornato **2026-07-20**). Se un'informazione qui contraddice un documento più vecchio,
+> (aggiornato **2026-07-21**). Se un'informazione qui contraddice un documento più vecchio,
 > **vale questa**. I documenti storici stanno in `_archivio/` e **non vanno seguiti**.
 >
 > **I 5 documenti ufficiali — gli UNICI da leggere e aggiornare:**
@@ -42,8 +42,8 @@ competitivo è il **take-rate più basso del mercato**, reso possibile dall'auto
 ```
 Core_Auto/
 ├── main_casavip.py             avvio del prodotto: legge le variabili d'ambiente e compone il sistema
-├── fase*.py                    133 moduli del motore (uno per funzione — indice in REGISTRO_INGEGNERIA.md)
-├── test_*.py                   296 file di test (la suite INTERA deve essere verde prima di ogni deploy)
+├── fase*.py                    134 moduli del motore (uno per funzione — indice in REGISTRO_INGEGNERIA.md)
+├── test_*.py                   300 file di test (la suite INTERA deve essere verde prima di ogni deploy)
 ├── deploy/                     ciò che vede il browser: 13 pagine + app.js + configurazioni nginx
 │   ├── index.html              vetrina, ricerca, mappa, checkout (ospite)
 │   ├── host.html               pannello host: pubblica, calendario, incassi, consensi
@@ -142,6 +142,15 @@ IP ha accettato»* in *«la persona con documento verificato da un terzo indipen
 accettato»*. Viene scritta alla firma se la verifica c'è già, oppure **quando la verifica si
 completa dopo**. Il riferimento entra **dentro** la firma HMAC: alterarlo la invalida.
 
+**⏱️ L'ora certificata da un terzo.** Le firme qui sopra sono **nostre**, fatte con **il nostro
+orologio**: da sole non tolgono l'obiezione *«i registri e l'ora ve li siete scritti voi»*. Per
+questo ogni giorno lo stato dei registri viene ridotto a un'impronta e **datato da un'Autorità di
+Marcatura esterna** (DigiCert, Sectigo o Entrust, con ricambio automatico) secondo lo standard
+**RFC 3161**. All'Autorità va **solo l'impronta**, mai i dati. Il file `.tsr` che ne torna si
+scarica dal Bunker e si verifica **senza di noi**, con `openssl ts -verify`. Si accende con
+`MARCA_TEMPORALE` (attiva) e l'Autorità si cambia con `TSA_URL` — passare a un ente **qualificato**
+europeo è cambiare un indirizzo, non una riga di codice.
+
 **Ri-accettazione**: quando cambia la versione del contratto, al login compare da sola la
 schermata dedicata (`GET /api/host/contratto_stato` · `POST /api/host/riaccetta`). Le prove
 vecchie **restano** in archivio: servono a dimostrare cosa valeva in quel momento.
@@ -163,6 +172,7 @@ I valori veri vivono **solo** in `/var/www/bookinvip/.env.casavip` sul VPS (mai 
 | `COMMISSIONE_BPS` | commissione a regime (default `1000` = 10%) |
 | `PAGAMENTO_BPS` | **tariffa tecnica** (default `300` = 3%) |
 | `PROMO_LANCIO` | accende la rampa 0→8→10% (default `true`) |
+| `MARCA_TEMPORALE` · `TSA_URL` | ora certificata da un terzo (default acceso; l'Autorità è sostituibile) |
 | `STRIPE_SECRET_KEY` · `STRIPE_WEBHOOK_SECRET` | pagamenti (in produzione sono chiavi **LIVE**) |
 | `HOST_KEY` · `ADMIN_KEY` · `BUNKER_PASSWORD` | accessi ai pannelli |
 | `DB_*` | percorsi dei database nel volume `/data` |

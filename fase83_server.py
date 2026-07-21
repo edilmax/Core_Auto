@@ -1488,6 +1488,10 @@ class RouterHTTP:
             return self._bunker_prove_legali(query, headers)
         if metodo == "GET" and path == "/api/bunker/costi_tecnici":
             return self._bunker_costi_tecnici(query, headers)
+        if metodo == "GET" and path == "/api/bunker/marche_temporali":
+            return self._bunker_marche(query, headers)
+        if metodo == "POST" and path == "/api/bunker/marca_ora":
+            return self._bunker_marca_ora(body, headers)
         if metodo == "GET" and path == "/api/bunker/integrita":
             return self._bunker_integrita(query, headers)
         if metodo == "GET" and path == "/api/bunker/log":
@@ -2789,6 +2793,26 @@ class RouterHTTP:
 
         host = reg.anzianita_host(limit=5000) if reg is not None else []
         costi = pp.aggrega_costi_tecnici() if pp is not None else {}
+        # MARCHE TEMPORALI (fase184): l'ora dei registri certificata da un TERZO. Nel
+        # fascicolo servono perche' rispondono alla sola obiezione che resterebbe —
+        # "l'ora di questi registri ve la siete scritta voi".
+        marche = []
+        try:
+            arch = getattr(self._sys, "marche", None)
+            if arch is not None:
+                for m in arch.elenco(limit=400, solo_ok=True):
+                    v = arch.verifica(m["id"])
+                    marche.append({
+                        "giorno": m["giorno"],
+                        "ora_certificata_utc": _utc(m.get("gen_time")),
+                        "autorita": m["tsa"], "policy_tsa": m["policy"],
+                        "numero_serie": m["seriale"],
+                        "impronta_marcata": m["impronta"],
+                        "sigillo_leggibile": m["canonico"],
+                        "token_riverificato": "SI" if v.get("ok") else "NO",
+                        "ora_coerente": "SI" if v.get("coerente_con_archivio") else "NO"})
+        except Exception:
+            logger.error("dossier: marche temporali non leggibili (ISOLATO)", exc_info=True)
         manomesse = 0
         if str(formato).lower() == "json":
             righe = []
@@ -2809,6 +2833,16 @@ class RouterHTTP:
                     "per_valuta": costi.get("per_valuta", {}),
                     "nota": ("Le perdite sono la tariffa tecnica di prenotazioni poi "
                              "rimborsate: Stripe non restituisce la sua commissione.")},
+                "marche_temporali": {
+                    "totale": len(marche), "elenco": marche,
+                    "cosa_provano": ("Ogni riga e' un token RFC 3161 firmato da "
+                                     "un'Autorita' di marcatura INDIPENDENTE: attesta che "
+                                     "alla data indicata i registri contenevano gia' "
+                                     "esattamente l'impronta riportata. L'ora non e' "
+                                     "dichiarata da BookinVIP."),
+                    "come_verificare": ("openssl ts -verify -data <file con il sigillo "
+                                        "leggibile> -in marca.tsr -token_in -CAfile "
+                                        "<archivio CA di sistema>")},
             }, ensure_ascii=False, indent=2, default=str)
             yield emetti(corpo)
             yield "\n# FINE DOSSIER - INTEGRITÀ: %s\n" % impronta.hexdigest()
@@ -2844,7 +2878,26 @@ class RouterHTTP:
                          "costo resta definitivamente a carico della piattaforma e non e' "
                          "ribaltabile sull'host (payout annullato). Portare in deduzione come "
                          "costo di servizio sostenuto.\r\n")
-            yield emetti("\r\n# host,%d\r\n# prove_manomesse,%d\r\n" % (len(host), manomesse))
+            yield emetti("\r\n# MARCHE TEMPORALI - ora certificata da un'Autorita' terza "
+                         "(RFC 3161)\r\n")
+            yield emetti("# L'ora NON e' dichiarata da BookinVIP: ogni riga e' un token "
+                         "firmato da un'Autorita' indipendente che attesta che a quella "
+                         "data i registri contenevano gia' quell'impronta.\r\n")
+            yield emetti("# verifica indipendente,openssl ts -verify -data <file col "
+                         "sigillo leggibile> -in marca.tsr -token_in -CAfile <CA di "
+                         "sistema>\r\n")
+            if marche:
+                col_m = list(marche[0].keys())
+                yield emetti(",".join(col_m) + "\r\n")
+                for m in marche:
+                    buf = _io.StringIO()
+                    _csv.writer(buf).writerow(
+                        [self._cella_csv_sicura(m[c]) for c in col_m])
+                    yield emetti(buf.getvalue())
+            else:
+                yield emetti("# nessuna marca temporale presente\r\n")
+            yield emetti("\r\n# host,%d\r\n# prove_manomesse,%d\r\n# marche_temporali,%d\r\n"
+                         % (len(host), manomesse, len(marche)))
             yield "# FINE DOSSIER - INTEGRITÀ: %s\r\n" % impronta.hexdigest()
         logger.warning("EXPORT_LEGALE_COMPLETED | DATA: %s | HOST: %d | MANOMESSE: %d | "
                        "FORMATO: %s | IP: %s", gen, len(host), manomesse, formato, ip or "?")
@@ -3096,6 +3149,92 @@ class RouterHTTP:
             return 200, rep
         except Exception:
             logger.error("bunker costi tecnici: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+
+    def _bunker_marche(self, query, headers):
+        """MARCHE TEMPORALI (fase184) — solo Bunker, read-only. Elenco delle marche
+        ottenute da Autorita' esterne: giorno, ora certificata, chi l'ha firmata,
+        numero di serie, e l'esito della RIVERIFICA del token archiviato (che smaschera
+        una riga a cui qualcuno avesse cambiato l'impronta lasciando il token vecchio).
+
+        Con `?scarica=<id>` restituisce il token grezzo `.tsr`: e' l'oggetto che si
+        consegna a un perito o a un giudice, verificabile con `openssl ts -verify`
+        SENZA di noi e SENZA il nostro software. E' il punto di tutta la faccenda."""
+        if not self._bunker_auth(headers, azione="marche_temporali"):
+            return 403, {"errore": "bunker_richiesto"}
+        arch = getattr(self._sys, "marche", None)
+        if arch is None:
+            return 503, {"errore": "marca_temporale_non_attiva",
+                         "come_si_accende": "MARCA_TEMPORALE=1 + riavvio"}
+        try:
+            import datetime as _dt
+            righe = []
+            for r in arch.elenco(limit=int(query.get("limit") or 60)):
+                v = arch.verifica(r["id"]) if r["stato"] == "ok" else {"ok": False}
+                gt = int(r.get("gen_time") or 0)
+                righe.append({
+                    "id": r["id"], "giorno": r["giorno"], "stato": r["stato"],
+                    "autorita": r["tsa"], "policy": r["policy"], "seriale": r["seriale"],
+                    "ora_certificata_utc": (_dt.datetime.utcfromtimestamp(gt)
+                                            .strftime("%Y-%m-%d %H:%M:%S UTC")
+                                            if gt else ""),
+                    "impronta": r["impronta"], "sigillo_leggibile": r["canonico"],
+                    "errore": r["errore"],
+                    "token_riverificato": bool(v.get("ok")),
+                    "ora_coerente": bool(v.get("coerente_con_archivio")),
+                    "scarica": "/api/bunker/marca.tsr?id=%d" % r["id"]})
+            ok = [x for x in righe if x["stato"] == "ok"]
+            return 200, {"marche": righe, "totale": len(righe), "riuscite": len(ok),
+                         "tutte_riverificate": all(x["token_riverificato"] for x in ok),
+                         "ultima_ora_certificata": ok[0]["ora_certificata_utc"] if ok else "",
+                         "come_verificare": "openssl ts -verify -data <file col sigillo "
+                                            "leggibile> -in marca.tsr -token_in -CAfile "
+                                            "<archivio CA di sistema>"}
+        except Exception:
+            logger.error("bunker marche temporali: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+
+    def scarica_marca(self, marca_id, headers):
+        """Il token grezzo `.tsr` di UNA marca, per il download dal Bunker.
+        Ritorna (stato, byte_o_None). E' l'unico pezzo che esce in binario: si consegna
+        tale e quale a un perito, che lo verifica con `openssl ts -verify` senza di noi."""
+        if not self._bunker_auth(headers, azione="scarica_marca"):
+            return 403, None
+        arch = getattr(self._sys, "marche", None)
+        if arch is None:
+            return 503, None
+        try:
+            token = arch.token(int(marca_id))
+        except Exception:
+            return 400, None
+        if not token:
+            return 404, None
+        logger.warning("ADMIN_ACTION | AZIONE: Scarico token marca temporale | ID: %s | "
+                       "IP: %s", marca_id, self._client_ip(headers))
+        return 200, token
+
+    def _bunker_marca_ora(self, body, headers):
+        """Forza SUBITO una marca temporale (fase184), senza aspettare il giro notturno.
+        Serve quando si vuole congelare lo stato dei registri prima di un evento
+        importante (una contestazione, un deposito, un'ispezione). Idempotente sul
+        giorno: se oggi c'e' gia', risponde che c'e' gia' e non disturba la TSA."""
+        if not self._bunker_auth(headers, azione="marca_ora"):
+            return 403, {"errore": "bunker_richiesto"}
+        arch = getattr(self._sys, "marche", None)
+        if arch is None:
+            return 503, {"errore": "marca_temporale_non_attiva"}
+        try:
+            from fase184_marca_temporale import marca_i_registri
+            esito = marca_i_registri(arch,
+                                     accettazioni=getattr(self._sys, "accettazioni", None),
+                                     finanza=getattr(self._sys, "finanza", None))
+            logger.warning("ADMIN_ACTION | AZIONE: Marca temporale su richiesta | "
+                           "ESITO: %s | AUTORITA: %s | IP: %s",
+                           "ok" if esito.get("ok") else esito.get("motivo"),
+                           esito.get("tsa") or "-", self._client_ip(headers))
+            return (200 if esito.get("ok") or esito.get("saltato") else 502), esito
+        except Exception:
+            logger.error("bunker marca ora: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
 
     def _bunker_integrita(self, query, headers):
@@ -7673,6 +7812,26 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
 
         def do_GET(self):
             u = urlparse(self.path)
+            if u.path == "/api/bunker/marca.tsr":
+                # TOKEN GREZZO della marca temporale: l'unico contenuto binario che esce.
+                # E' il file che si consegna a un perito o si allega a un atto.
+                qs = {k: v[0] for k, v in parse_qs(u.query).items()}
+                stato, token = router.scarica_marca(qs.get("id", ""), dict(self.headers))
+                if stato != 200 or not token:
+                    self._scrivi(stato, {"errore": "non_disponibile"})
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "application/timestamp-reply")
+                self.send_header("Content-Length", str(len(token)))
+                self.send_header("Content-Disposition",
+                                 'attachment; filename="marca_%s.tsr"'
+                                 % str(qs.get("id", "")).replace('"', ""))
+                self.send_header("Cache-Control", "no-store")
+                self._cors()
+                self.end_headers()
+                if not getattr(self, "_solo_head", False):
+                    self.wfile.write(token)
+                return
             if u.path == "/api/bunker/export_legale":
                 # DOSSIER LEGALE-FISCALE in STREAMING (zero RAM), come l'estratto contabile.
                 hdrs = dict(self.headers)
@@ -8032,5 +8191,34 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     logger.warning("sweep invito recensione fallito (ignorato)", exc_info=True)
                 __import__("time").sleep(3600)     # ogni ora
         _th3.Thread(target=_tick_invito_recensione, daemon=True).start()
+
+    # ── MARCA TEMPORALE (fase184) — indipendente da tutto il resto ──────────────
+    # DIFETTO CHIUSO 2026-07-21, trovato avviando main_casavip.py per davvero: questo
+    # giro stava dentro il blocco `if pp is not None and email_prov is not None`, cioe'
+    # partiva SOLO con SMTP configurato. In produzione SMTP c'e', quindi avrebbe
+    # funzionato — ma il giorno in cui l'email si guasta le prove legali smetterebbero
+    # di essere datate da un terzo IN SILENZIO. Datare i registri non ha niente a che
+    # vedere con l'invio delle email: qui dipende solo da se stesso.
+    _marche = getattr(sistema, "marche", None)
+    if _marche is not None:
+        import threading as _th4
+
+        def _tick_marca_temporale():
+            """Una volta al giorno riduce i registri (accettazioni + giornale) a una
+            impronta e la fa datare da un'Autorita' ESTERNA (RFC 3161). Toglie l'ultima
+            obiezione possibile — *"l'ora dei vostri registri ve la siete scritta voi"*.
+            Idempotente sul giorno; se la rete o la TSA non rispondono, archivia il
+            tentativo e riprova al giro dopo, senza fermare nulla."""
+            from fase184_marca_temporale import marca_i_registri
+            while True:
+                try:
+                    marca_i_registri(_marche,
+                                     accettazioni=getattr(sistema, "accettazioni", None),
+                                     finanza=getattr(sistema, "finanza", None))
+                except Exception:
+                    logger.warning("marca temporale: giro saltato (ignorato)",
+                                   exc_info=True)
+                __import__("time").sleep(3600)   # ogni ora, ma marca una volta al giorno
+        _th4.Thread(target=_tick_marca_temporale, daemon=True).start()
 
     srv.serve_forever()

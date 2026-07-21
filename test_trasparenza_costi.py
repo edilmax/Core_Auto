@@ -232,3 +232,125 @@ class TestTerminiPubblici(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPagineCheReclutanoHost(unittest.TestCase):
+    """GUARDIA — chi promette una percentuale all'host DEVE dire anche il 3%.
+
+    TROVATO IL 2026-07-21, dopo la "Strada A". Tre pagine PUBBLICHE parlavano di
+    commissione senza nominare mai la tariffa tecnica sempre dovuta:
+      · `kit-marketing.html`  diceva "10% la nostra commissione" e "gratis";
+      · `diventa-host.html`   prometteva "zero commissioni nascoste" in 8 lingue;
+    cioe' esattamente la bugia involontaria che la Strada A doveva eliminare — un host
+    reclutato con quei testi avrebbe scoperto il 3% solo dopo aver firmato.
+    Erano sfuggite perche' l'audit automatico saltava ogni riga contenente
+    "prenotazione": cercava la sigla "OTA" senza confini di parola e la trovava dentro
+    "prenOTAzione". Qui la copertura non dipende piu' da nessuna euristica.
+    """
+
+    #  file -> deve dichiarare il 3% (True) oppure e' rivolto SOLO all'ospite (False)
+    PAGINE_HOST = ("kit-marketing.html", "diventa-host.html", "commissioni.html",
+                   "termini.html", "host.html")
+
+    def _leggi(self, nome):
+        import io
+        import os
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "deploy", nome)
+        if not os.path.exists(p):
+            self.skipTest("pagina assente: %s" % nome)
+        return io.open(p, encoding="utf-8", errors="replace").read()
+
+    def test_ogni_pagina_per_host_dichiara_la_tariffa_tecnica(self):
+        for nome in self.PAGINE_HOST:
+            testo = self._leggi(nome)
+            self.assertRegex(
+                testo, r"3\s?%",
+                "%s parla agli host di percentuali ma NON nomina la tariffa tecnica "
+                "del 3%%: e' la stessa mancanza di trasparenza chiusa il 2026-07-20."
+                % nome)
+
+    def test_nessuna_promessa_di_zero_costi_nascosti_senza_il_3(self):
+        """"Zero commissioni nascoste" e' una promessa: vale solo se il 3% e' scritto."""
+        import re
+        # Sulle pagine di RECLUTAMENTO la promessa e il 3% devono stare VICINI: chi le
+        # legge scorre pochi secondi. Sulle pagine tariffarie/legali (commissioni,
+        # termini) basta che il 3% sia dichiarato: la pagina intera parla di quello,
+        # ed e' gia' preteso dal test qui sopra.
+        for nome in ("kit-marketing.html", "diventa-host.html"):
+            testo = self._leggi(nome)
+            # solo le promesse sui COSTI: "zero intermediari nascosti" parla d'altro
+            promessa = (r"[^\"><]{0,70}"
+                        r"(?:commission\w*|costi|spese|tariff\w*|fee|charges|"
+                        r"comisi\w*|frais|Geb\w*|taxas)"
+                        r"[^\"><]{0,25}(?:nascost\w*|hidden|ocult\w*|cach\w*|"
+                        r"versteckt\w*|隠れ|隐藏)[^\"><]{0,70}")
+            for frase in re.findall(promessa, testo, re.I):
+                self.assertIn("3%", frase,
+                              "%s promette '%s' senza nominare il 3%% nella stessa frase"
+                              % (nome, frase.strip()))
+
+    def test_il_kit_marketing_dice_la_verita_sulla_rampa(self):
+        """Il kit non deve piu' vendere un "10% secco": la verita' (0%->8%->10%) e'
+        anche l'argomento piu' forte che abbiamo."""
+        testo = self._leggi("kit-marketing.html")
+        self.assertIn("90 giorni", testo, "il kit non nomina la promo 0% dei 90 giorni")
+        self.assertIn("3%", testo)
+        # "iscriversi e pubblicare e' gratis" e' VERO (si paga solo sulla prenotazione):
+        # cio' che non deve piu' esserci e' un "10%" secco venduto come LA commissione,
+        # perche' nasconde sia la rampa sia il 3%.
+        self.assertNotIn("10% la nostra commissione", testo)
+        self.assertNotIn("Commissione al 10% per il tuo alloggio", testo)
+
+    def test_le_percentuali_delle_pagine_sono_quelle_del_motore(self):
+        """Ancoraggio al codice: se domani cambiano le costanti, questi testi devono
+        cambiare con loro (o la suite diventa rossa)."""
+        from fase98_policy_commissione import (BPS_DIRETTO, LANCIO_BPS_FASE1,
+                                               LANCIO_BPS_REGIME, LANCIO_GIORNI_GRATIS)
+        testo = self._leggi("kit-marketing.html") + self._leggi("diventa-host.html")
+        self.assertIn("%d giorni" % LANCIO_GIORNI_GRATIS, testo)
+        for bps in (LANCIO_BPS_FASE1, LANCIO_BPS_REGIME, BPS_DIRETTO):
+            self.assertRegex(testo, r"\b%d\s?%%" % (bps // 100),
+                             "manca la percentuale %d%% dichiarata dal motore"
+                             % (bps // 100))
+
+
+class TestEmailAgliHost(unittest.TestCase):
+    """GUARDIA — anche le EMAIL agli host devono dire il 3%.
+
+    TROVATO IL 2026-07-21: l'email di BENVENUTO (la prima cosa che un host legge)
+    diceva "10% dal marketplace" — mentre nei primi 90 giorni paga 0% — e "nessun
+    costo fisso", senza nominare mai la tariffa tecnica del 3%, sempre dovuta.
+    Le pagine erano state sistemate, le email no.
+    """
+
+    def _benvenuto(self):
+        from fase86_email import corpo_benvenuto_host_html
+        return corpo_benvenuto_host_html("https://bookinvip.com/host.html")
+
+    def test_dichiara_la_tariffa_tecnica(self):
+        self.assertRegex(self._benvenuto(), r"3\s?%",
+                         "la prima email all'host non nomina il 3% sempre dovuto")
+
+    def test_dichiara_la_promozione_di_lancio(self):
+        from fase98_policy_commissione import LANCIO_GIORNI_GRATIS
+        corpo = self._benvenuto()
+        self.assertIn("%d giorni" % LANCIO_GIORNI_GRATIS, corpo)
+        self.assertIn("0%", corpo)
+
+    def test_non_promette_zero_costi_senza_qualificarlo(self):
+        """"Nessun costo fisso" e' vero solo se subito accanto si dice qual e' il costo
+        variabile sempre dovuto."""
+        import re
+        corpo = re.sub(r"<[^>]+>", " ", self._benvenuto())
+        for m in re.finditer(r"[Nn]essun[^.]{0,80}costo[^.]{0,80}\.", corpo):
+            frase = m.group(0)
+            self.assertRegex(frase, r"3\s?%",
+                             "promessa '%s' senza il 3%% nella stessa frase" % frase.strip())
+
+    def test_le_percentuali_vengono_dal_motore(self):
+        from fase98_policy_commissione import (BPS_DIRETTO, LANCIO_BPS_FASE1,
+                                               LANCIO_BPS_REGIME)
+        corpo = self._benvenuto()
+        for bps in (LANCIO_BPS_FASE1, LANCIO_BPS_REGIME, BPS_DIRETTO):
+            self.assertRegex(corpo, r"(?<![0-9])%d\s?%%" % (bps // 100),
+                             "manca %d%% dichiarato dal motore" % (bps // 100))

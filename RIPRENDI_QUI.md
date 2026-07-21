@@ -338,6 +338,52 @@
 >   ancora verdi. Demo locale su porta 8899 (script scratchpad/demo_votazioni.py; launcher
 >   Desktop/APRI-DEMO-VOTAZIONI.html → pagina pulita). NB date "23→19" nella demo = scorciatoia
 >   (check_out forzato a ieri per sbloccare il form), NON un bug del prodotto.
+> · 🚨 **IL GIRO DELLA MARCA PARTIVA SOLO CON SMTP (2026-07-21) — CHIUSO**: scoperto
+>   **avviando `main_casavip.py` per davvero** (nessun test lo esegue). Il ciclo era finito
+>   dentro il blocco delle email → senza SMTP le prove non venivano più datate, in silenzio.
+>   Ricollocato al primo livello, dipende solo dal proprio archivio. **Riprovato dal vivo:
+>   marca vera da DigiCert senza email configurata.** Guardia strutturale (5).
+>   **Lezione: avviare il programma vero è un collaudo a sé — `main_casavip.py` è l'unico
+>   file che la suite non esegue mai.**
+> · 🚨 **ANCHE LE EMAIL TACEVANO IL 3% (2026-07-21) — CHIUSO**: l'email di **benvenuto**
+>   (la prima cosa che un host legge) diceva «10% dal marketplace» — mentre nei primi 90
+>   giorni paga **0%** — e «nessun costo fisso», senza il 3%. L'email di **reclutamento**
+>   (fase89, 6 lingue, dormiente ma lanciabile) prometteva una percentuale **calcolata dai
+>   concorrenti**, cioè un numero che il motore NON applica. Entrambe riscritte con le
+>   cifre di `fase98`. Guardie nuove provate rosse sul vecchio; il test che pretendeva
+>   «15%» è stato invertito. **Filo comune: era stato sistemato ciò che si GUARDA, non ciò
+>   che si MANDA.**
+> · 🚨 **TRE PAGINE RECLUTAVANO HOST SENZA DIRE IL 3% (2026-07-21) — CHIUSO**: la Strada A
+>   aveva sistemato pannello/commissioni/termini/contratto ma **non le pagine con cui si
+>   trovano gli host**. `kit-marketing.html` vendeva «**10%** la nostra commissione» e
+>   «gratis»; `diventa-host.html` prometteva «zero commissioni nascoste» **in 8 lingue** —
+>   mai un accenno al 3%. Riscritte con la verità (che vende meglio: **0% per 90 giorni**),
+>   3% dichiarato ovunque, guardia `TestPagineCheReclutanoHost` **provata rossa sul vecchio**.
+>   **Erano sfuggite perché l'audit cercava «OTA» senza confini di parola e la trovava dentro
+>   «pren-OTA-zione»: ogni riga con "prenotazione" veniva saltata.** Corretto + baseline di 41
+>   righe già giudicate legittime → da ora rosso su qualsiasi cifra nuova.
+> · 🚨 **DUE DATABASE VIVEVANO IN MEMORIA IN PRODUZIONE (2026-07-21) — CHIUSI**: costruendo
+>   la guardia sui percorsi per la marca temporale è saltato fuori che `DB_RECENSIONI` e
+>   `DB_CREDITO_USATI` **non venivano passati** da `main_casavip.py` → restavano `:memory:`
+>   anche in produzione (verificato sul server: nessun file, eppure il motore risultava
+>   acceso). Conseguenze reali: **ogni recensione spariva al riavvio** e **un credito già
+>   speso tornava rispendibile dopo un deploy** (denaro vero). Chiusi con 2 righe in `main`
+>   + 7 dichiarazioni nel compose + guardia `test_db_persistenti` (7). La creazione delle
+>   cartelle ora si ricava da TUTTI i campi `db_*`, non da una lista scritta a mano.
+>   **Lezione: i test erano verdi perché usano `:memory:` di proposito — solo il confronto
+>   con la configurazione di PRODUZIONE poteva scoprirlo.**
+> · ⏱️ **MARCA TEMPORALE RFC 3161 (2026-07-21, l'ultimo tassello)**: le nostre firme le
+>   facciamo noi, con il nostro orologio → restava l'obiezione *"l'ora ve la siete scritta
+>   voi"*. Ora ogni giorno i registri (accettazioni + giornale) si riducono a **un'impronta**
+>   che viene **datata da un'Autorità esterna** (DigiCert/Sectigo/Entrust, con ricambio).
+>   ASN.1/DER **scritto a mano** → zero dipendenze. Alla TSA va **solo l'impronta**: nessun
+>   dato esce. Il `.tsr` si scarica dal Bunker e si verifica **senza di noi** con
+>   `openssl ts -verify` (**provato dal vivo**: token DigiCert → *Verification: OK*; documento
+>   con un carattere cambiato → *message imprint mismatch*). Sette TSA provate, tre promosse:
+>   Apple/FreeTSA/Izenpe **scartate** perché la loro radice non sta nelle CA standard.
+>   Guardie: `test_fase184_marca_temporale` (65) + `test_marca_temporale_server` (18).
+>   Kill-switch `MARCA_TEMPORALE=0`. **Per una marca formalmente QUALIFICATA (eIDAS art. 42)
+>   basta mettere in `TSA_URL` l'indirizzo di un ente della lista europea: zero codice.**
 > · 🪪 **IDENTITÀ LEGATA ALLA FIRMA (2026-07-21, super-tutela)**: prima la prova non diceva CHI
 >   aveva firmato (difesa facile: "non ero io"). Ora, se l'host è verificato con Stripe Identity,
 >   il registro scrive una **terza riga firmata** `identita_stripe` che lega la **sessione di

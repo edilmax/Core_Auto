@@ -76,6 +76,13 @@ def main() -> None:  # pragma: no cover
         db_tassa_comunale=os.environ.get("DB_TASSA_COMUNALE", "data/tassa_comunale.db"),
         db_payout=os.environ.get("DB_PAYOUT", "data/payout.db"),
         db_accettazioni=os.environ.get("DB_ACCETTAZIONI", "data/accettazioni.db"),
+        # DIFETTO CHIUSO 2026-07-21: questi due NON venivano passati -> restavano
+        # a ":memory:" anche in PRODUZIONE. Le recensioni sparivano a ogni riavvio e
+        # il registro dei crediti gia' spesi pure (= un credito rispendibile dopo un
+        # deploy, cioe' denaro vero). Guardia: test_db_persistenti.py.
+        db_recensioni=os.environ.get("DB_RECENSIONI", "data/recensioni.db"),
+        db_credito_usati=os.environ.get("DB_CREDITO_USATI", "data/credito_usati.db"),
+        db_marche=os.environ.get("DB_MARCHE", "data/marche.db"),
         db_geocache=os.environ.get("DB_GEOCACHE", "data/geocache.db"),
         db_checkin=os.environ.get("DB_CHECKIN", "data/checkin.db"),
         db_finanza=os.environ.get("DB_FINANZA", "data/finanza.db"),
@@ -111,10 +118,14 @@ def main() -> None:  # pragma: no cover
         con_sentinel=os.environ.get("SENTINEL", "").lower() in ("1", "true", "yes"),
         cartella_sentinel=os.environ.get("SENTINEL_DIR") or ".",
     )
-    for p in (config.db_catalogo, config.db_inventario, config.db_registro_host,
-              config.db_viral, config.db_messaggi, config.db_domanda, config.db_garanzia,
-              config.db_pendenti, config.db_tassa_comunale, config.db_payout,
-              config.file_referral):
+    # La cartella va creata per OGNI file, non per una lista scelta a mano: un percorso
+    # dimenticato qui fa fallire l'apertura del database al primo avvio su una macchina
+    # nuova. Si ricava dalla configurazione, cosi' non si puo' piu' dimenticare nessuno.
+    _percorsi = [getattr(config, c) for c in sorted(vars(ConfigCasaVIP()))
+                 if c.startswith("db_")] + [config.file_referral]
+    for p in _percorsi:
+        if not p or p == ":memory:":
+            continue
         d = os.path.dirname(p)
         if d:
             os.makedirs(d, exist_ok=True)

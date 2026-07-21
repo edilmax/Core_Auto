@@ -173,43 +173,38 @@ def crea_fonte_api(endpoint: Optional[str], api_key: Optional[str], *,
 def _pct(bps: int) -> str:
     return "%d" % (bps // 100) if bps % 100 == 0 else "%d.%d" % (bps // 100, (bps % 100) // 10)
 
+def _intero_bps(v: Any) -> int:
+    try:
+        return max(0, int(v))
+    except Exception:
+        return 0
+
+
+def _tecnica_bps() -> int:
+    """La tariffa tecnica VERA: dall'ambiente in produzione, altrimenti il default 300
+    (3%) dichiarato in main_casavip.py. Mai una cifra scritta a mano qui."""
+    import os
+    return _intero_bps(os.environ.get("PAGAMENTO_BPS", "300")) or 300
+
+
+# TRASPARENZA (2026-07-21). Queste email vanno a HOST VERI. Prima promettevano una
+# percentuale DERIVATA dai concorrenti (min(colossi) - 5%), cioe' un numero che il nostro
+# motore NON applica, e tacevano la tariffa tecnica sempre dovuta: la stessa mancanza
+# chiusa sulle pagine e sull'email di benvenuto. Ora {pct} e' la cifra DEI COLOSSI (solo
+# confronto), le NOSTRE cifre arrivano da fase98 e il {tecnica}% e' dichiarato apertamente.
 _TEMPLATE = {
-    "en": ("Lower commission for your property — join Prima Emilia",
-           "Hello {nome},\n\nWe are a new company in the hospitality booking sector. We offer "
-           "the lowest commission on the market: {pct}% — automatically 5% below the major "
-           "platforms.\n\nWould you like to join and collaborate with us in our founding "
-           "class, Prima Emilia?\n\nJust reply to this email.\n\n— BookinVIP\n"
-           "To stop receiving these messages: {optout}\n"),
-    "es": ("Comisión más baja para tu alojamiento — únete a Prima Emilia",
-           "Hola {nome},\n\nSomos una nueva empresa del sector de reservas. Ofrecemos la "
-           "comisión más baja del mercado: {pct}% — automáticamente un 5% menos que las "
-           "grandes plataformas.\n\n¿Quieres unirte y colaborar con nosotros en nuestra "
-           "clase fundadora, Prima Emilia?\n\nResponde a este correo.\n\n— BookinVIP\n"
-           "Para dejar de recibir estos mensajes: {optout}\n"),
-    "pt": ("Comissão mais baixa para o seu alojamento — junte-se à Prima Emilia",
-           "Olá {nome},\n\nSomos uma nova empresa no setor de reservas. Oferecemos a comissão "
-           "mais baixa do mercado: {pct}% — automaticamente 5% abaixo das grandes "
-           "plataformas.\n\nQuer participar e colaborar connosco na nossa classe fundadora, "
-           "Prima Emilia?\n\nResponda a este email.\n\n— BookinVIP\n"
-           "Para não receber mais estas mensagens: {optout}\n"),
-    "fr": ("Commission plus basse pour votre hébergement — rejoignez Prima Emilia",
-           "Bonjour {nome},\n\nNous sommes une nouvelle société du secteur des réservations. "
-           "Nous offrons la commission la plus basse du marché : {pct}% — automatiquement 5% "
-           "de moins que les grandes plateformes.\n\nSouhaitez-vous nous rejoindre dans notre "
-           "classe fondatrice, Prima Emilia ?\n\nRépondez à cet email.\n\n— BookinVIP\n"
-           "Pour ne plus recevoir ces messages : {optout}\n"),
-    "de": ("Niedrigere Provision für Ihre Unterkunft — Prima Emilia",
-           "Hallo {nome},\n\nWir sind ein neues Unternehmen im Buchungssektor. Wir bieten die "
-           "niedrigste Provision am Markt: {pct}% — automatisch 5% unter den großen "
-           "Plattformen.\n\nMöchten Sie unserer Gründerklasse Prima Emilia beitreten?\n\n"
-           "Antworten Sie einfach auf diese E-Mail.\n\n— BookinVIP\n"
-           "Zum Abbestellen: {optout}\n"),
-    "it": ("Commissione più bassa per la tua struttura — entra in Prima Emilia",
-           "Ciao {nome},\n\nSiamo una nuova società del settore prenotazioni. Offriamo la "
-           "commissione più bassa sul mercato: {pct}% — automaticamente il 5% in meno dei "
-           "colossi.\n\nVuoi partecipare e collaborare con noi nella nostra classe "
-           "fondatrice, Prima Emilia?\n\nRispondi a questa email.\n\n— BookinVIP\n"
-           "Per non ricevere più questi messaggi: {optout}\n"),
+    "en": ('Lower commission for your property — join Prima Emilia',
+           'Hello {nome},\n\nWe are a new company in the hospitality booking sector. Our commission is {promo}% for your first {giorni} days, then {fase1}%, then {regime}% — against the {pct}% and more of the major platforms. Only {diretto}% on bookings from your own clients, and the guest always pays 0%.\n\nOne thing is always due, including during the {promo}% period: a {tecnica}% technical fee covering the card cost. We earn nothing on it, and we prefer telling you now rather than after you sign.\n\nWould you like to join and collaborate with us in our founding class, Prima Emilia?\n\nJust reply to this email.\n\n— BookinVIP\n\nTo stop receiving these messages: {optout}\n'),
+    "es": ('Comisión más baja para tu alojamiento — únete a Prima Emilia',
+           'Hola {nome},\n\nSomos una nueva empresa del sector de reservas. Nuestra comisión es del {promo}% durante tus primeros {giorni} días, luego {fase1}%, luego {regime}% — frente al {pct}% o más de las grandes plataformas. Solo {diretto}% en las reservas de tus propios clientes, y el huésped siempre paga 0%.\n\nUna cosa se debe siempre, también durante el {promo}%: una tarifa técnica del {tecnica}% que cubre el coste de la tarjeta. No ganamos nada con ella y preferimos decírtelo ahora, no después de firmar.\n\n¿Quieres unirte y colaborar con nosotros en nuestra clase fundadora, Prima Emilia?\n\nResponde a este correo.\n\n— BookinVIP\n\nPara dejar de recibir estos mensajes: {optout}\n'),
+    "pt": ('Comissão mais baixa para o seu alojamento — junte-se à Prima Emilia',
+           'Olá {nome},\n\nSomos uma nova empresa no setor de reservas. A nossa comissão é de {promo}% nos seus primeiros {giorni} dias, depois {fase1}%, depois {regime}% — face aos {pct}% ou mais das grandes plataformas. Apenas {diretto}% nas reservas dos seus próprios clientes, e o hóspede paga sempre 0%.\n\nUma coisa é sempre devida, mesmo durante os {promo}%: uma taxa técnica de {tecnica}% que cobre o custo do cartão. Não ganhamos nada com ela e preferimos dizê-lo já, não depois de assinar.\n\nQuer participar e colaborar connosco na nossa classe fundadora, Prima Emilia?\n\nResponda a este email.\n\n— BookinVIP\n\nPara não receber mais estas mensagens: {optout}\n'),
+    "fr": ('Commission plus basse pour votre hébergement — rejoignez Prima Emilia',
+           "Bonjour {nome},\n\nNous sommes une nouvelle société du secteur des réservations. Notre commission est de {promo}% pendant vos {giorni} premiers jours, puis {fase1}%, puis {regime}% — face aux {pct}% et plus des grandes plateformes. Seulement {diretto}% sur les réservations de vos propres clients, et le voyageur paie toujours 0%.\n\nUne chose reste toujours due, même pendant le {promo}% : des frais techniques de {tecnica}% qui couvrent le coût de la carte. Nous n'y gagnons rien et nous préférons vous le dire maintenant, pas après signature.\n\nSouhaitez-vous nous rejoindre dans notre classe fondatrice, Prima Emilia ?\n\nRépondez à cet email.\n\n— BookinVIP\n\nPour ne plus recevoir ces messages : {optout}\n"),
+    "de": ('Niedrigere Provision für Ihre Unterkunft — Prima Emilia',
+           'Hallo {nome},\n\nWir sind ein neues Unternehmen im Buchungssektor. Unsere Provision beträgt {promo}% in Ihren ersten {giorni} Tagen, dann {fase1}%, dann {regime}% — gegenüber {pct}% und mehr bei den großen Plattformen. Nur {diretto}% bei Buchungen Ihrer eigenen Kunden, und der Gast zahlt immer 0%.\n\nEines ist immer fällig, auch während der {promo}%: eine technische Gebühr von {tecnica}%, die die Kartenkosten deckt. Daran verdienen wir nichts, und wir sagen es Ihnen lieber jetzt als nach der Unterschrift.\n\nMöchten Sie unserer Gründerklasse Prima Emilia beitreten?\n\nAntworten Sie einfach auf diese E-Mail.\n\n— BookinVIP\n\nZum Abbestellen: {optout}\n'),
+    "it": ('Commissione più bassa per la tua struttura — entra in Prima Emilia',
+           "Ciao {nome},\n\nSiamo una nuova società del settore prenotazioni. La nostra commissione è {promo}% per i tuoi primi {giorni} giorni, poi {fase1}%, poi {regime}% — contro il {pct}% e oltre dei colossi. Solo {diretto}% sulle prenotazioni dei tuoi clienti, e l'ospite paga sempre 0%.\n\nUna cosa è sempre dovuta, anche durante lo {promo}%: una tariffa tecnica del {tecnica}% che copre il costo della carta. Su quella non guadagniamo nulla, e preferiamo dirtelo adesso invece che dopo la firma.\n\nVuoi partecipare e collaborare con noi nella nostra classe fondatrice, Prima Emilia?\n\nRispondi a questa email.\n\n— BookinVIP\n\nPer non ricevere più questi messaggi: {optout}\n"),
 }
 
 
@@ -225,7 +220,14 @@ def componi_email_prima_emilia(contatto: Contatto, nostra_bps: int, *,
     lng = lingua or LINGUA_PER_PAESE.get(str(contatto.paese).upper(), "en")
     oggetto, corpo = _TEMPLATE.get(lng, _TEMPLATE["en"])
     nome = contatto.nome or {"en": "Hello", "es": "Hola", "it": "Gentile struttura"}.get(lng, "Hello")
-    testo = corpo.format(nome=nome, pct=_pct(nostra_bps), optout=link_opt_out.strip())
+    from fase98_policy_commissione import (BPS_DIRETTO, LANCIO_BPS_FASE1,
+                                           LANCIO_BPS_REGIME, LANCIO_GIORNI_GRATIS)
+    testo = corpo.format(
+        nome=nome, optout=link_opt_out.strip(),
+        pct=_pct(_intero_bps(nostra_bps) + 500),      # la cifra DEI COLOSSI
+        promo="0", giorni=LANCIO_GIORNI_GRATIS,
+        fase1=_pct(LANCIO_BPS_FASE1), regime=_pct(LANCIO_BPS_REGIME),
+        diretto=_pct(BPS_DIRETTO), tecnica=_pct(_tecnica_bps()))
     return lng, oggetto, testo
 
 

@@ -85,6 +85,7 @@ class ConfigCasaVIP:
     db_finanza: str = ":memory:"       # financial controller (fase177): giornale+note+debiti
     db_kyc: str = ":memory:"           # esiti verifica identita' host (fase143, MAI documenti)
     db_accettazioni: str = ":memory:"  # registro firmato accettazioni contratto host (prova legale)
+    db_marche: str = ":memory:"        # marche temporali RFC 3161 (fase184): ora certificata da un terzo
     db_geocache: str = ":memory:"      # cache geocoding città->coordinate (mappa nella ricerca)
     db_checkin: str = ":memory:"       # check-in digitale (pre-registrazione ospiti + sblocco)
     db_credito_usati: str = ":memory:"  # registro SINGLE-USE crediti (fase167): un credito si spende UNA volta
@@ -135,6 +136,7 @@ class SistemaCasaVIP:
     tassa_comunale: Any = None
     payout: Any = None
     accettazioni: Any = None
+    marche: Any = None      # ArchivioMarche (fase184): token RFC 3161 dell'ora certificata
     stripe: Any = None      # ProviderStripe (fase85) o None: per rigenerare link (su-richiesta)
     connect: Any = None     # ProviderConnect (fase101) o None: bonifici automatici agli host
     geocoder: Any = None    # Geocoder (fase166): città->coordinate per la mappa
@@ -410,6 +412,20 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     accettazioni = crea_registro_accettazioni(cfg.db_accettazioni, bytes(cfg.segreto_hmac))
     componenti.append("accettazioni(163)")
 
+    # 3f-quinquies) MARCA TEMPORALE (fase184): l'ora dei registri certificata da un TERZO.
+    # Le firme HMAC sono NOSTRE, quindi l'ora la dichiariamo noi; una marca RFC 3161 la
+    # fa attestare da un'Autorita' esterna. Isolata e mai bloccante: se non parte, il
+    # resto della macchina prosegue identico.
+    marche = None
+    from fase184_marca_temporale import attivo as marca_attiva
+    if marca_attiva():
+        from fase184_marca_temporale import crea_archivio_marche
+        marche = crea_archivio_marche(cfg.db_marche)
+        if marche is not None:
+            componenti.append("marca_temporale(184)")
+        else:
+            avvisi.append("marca temporale: archivio non apribile (proseguo senza)")
+
     # 3f-ter) referral host-porta-host (codice firmato + bonus crediti non-cashabili)
     from fase109_referral_host import crea_referral_host
     referral = crea_referral_host(bytes(cfg.segreto_hmac), cfg.file_referral)
@@ -530,7 +546,7 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           notificatore_prenotazione=notificatore_prenotazione,
                           domanda=domanda, garanzia=garanzia,
                           pagamenti_pendenti=pagamenti_pendenti, tassa_comunale=tassa_comunale,
-                          payout=payout, accettazioni=accettazioni, stripe=provider,
+                          payout=payout, accettazioni=accettazioni, marche=marche, stripe=provider,
                           connect=_connect, carta=_carta, geocoder=geocoder, checkin=checkin,
                           poi_provider=poi_provider, credito_usati=credito_usati,
                           finanza=finanza, bunker=bunker, kyc=kyc)

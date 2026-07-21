@@ -28,6 +28,14 @@ services:
       UPLOAD_DIR: /data/uploads                  # foto alloggi caricate dagli host (durevole)
       DB_PAYOUT: /data/payout.db                 # dashboard payout host (durevole)
       DB_ACCETTAZIONI: /data/accettazioni.db     # prove FIRMATE d'accettazione contratto host (durevole = valore legale)
+      DB_MARCHE: /data/marche.db                 # marche temporali RFC 3161 (durevole = valore legale: senza questa riga i token finirebbero in /app/data, cancellata a OGNI deploy)
+      DB_RECENSIONI: /data/recensioni.db       # voti degli ospiti (durevole) - ERA MANCANTE -> le recensioni sparivano a ogni deploy
+      DB_CREDITO_USATI: /data/credito_usati.db # crediti gia' spesi (durevole) - ERA MANCANTE -> un credito era rispendibile dopo un riavvio
+      DB_FINANZA: /data/finanza.db             # libro giornale immutabile (durevole = valore legale e fiscale)
+      DB_KYC: /data/kyc.db                     # esiti verifica identita' (durevole, mai documenti)
+      DB_CHECKIN: /data/checkin.db             # check-in digitale (durevole)
+      DB_SPLIT: /data/split.db                 # pagamenti di gruppo (durevole)
+      DB_CODA: /data/coda.db                   # coda intelligente con depositi (durevole)
       FILE_REFERRAL: /data/referral.json         # referral host (durevole)
       CAMPAGNA_STATO_FILE: /data/campagna_stato.json   # scheduler no-burst (durevole)
       OUTREACH_OPTOUT_FILE: /data/outreach_optout.json # opt-out (durevole = obbligo legale)

@@ -591,6 +591,32 @@ class RegistroAccettazioni:
         finally:
             self._chiudi(con)
 
+    def sigillo(self) -> Dict[str, Any]:
+        """Riduce TUTTO il registro a UNA impronta (per la MARCA TEMPORALE, fase184).
+
+        Concatena in ordine di id `id:firma` di ogni riga e ne fa lo SHA-256: cambiare,
+        togliere o aggiungere anche una sola prova cambia il sigillo. Marcando questo
+        sigillo presso un'Autorita' terza si prova che a quell'ora esistevano GIA'
+        esattamente quelle prove — cosa che la sola firma HMAC, fatta da noi, non puo'
+        dimostrare (il nostro orologio lo regoliamo noi).
+
+        Usa le FIRME, non i dati grezzi: nessun dato personale entra nel calcolo, e il
+        sigillo resta ricalcolabile da chiunque abbia il database."""
+        con = self._apri()
+        try:
+            h = hashlib.sha256()
+            righe = 0
+            # colonne per POSIZIONE: qui le connessioni non usano row_factory
+            for r in con.execute("SELECT id, firma FROM accettazioni ORDER BY id"):
+                h.update(("%d:%s\n" % (int(r[0]), r[1])).encode("utf-8"))
+                righe += 1
+            return {"sigillo": h.hexdigest(), "righe": righe}
+        except Exception:
+            logger.error("sigillo accettazioni: eccezione ISOLATA", exc_info=True)
+            return {"sigillo": "errore", "righe": 0}
+        finally:
+            self._chiudi(con)
+
 
 def crea_registro_accettazioni(db_path: str, segreto: bytes,
                                now: Optional[Any] = None) -> RegistroAccettazioni:

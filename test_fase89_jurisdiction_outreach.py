@@ -78,9 +78,37 @@ class TestEmailLocalizzata(unittest.TestCase):
         c = Contatto("Hotel Sol", "info@sol.mx", "MX", contatto_pubblico_business=True)
         lng, ogg, corpo = componi_email_prima_emilia(c, 1500, link_opt_out="https://x/stop")
         self.assertEqual(lng, "es")                      # MX -> spagnolo
-        self.assertIn("15%", corpo)
         self.assertIn("Prima Emilia", corpo)
         self.assertIn("https://x/stop", corpo)           # opt-out presente
+
+    def test_dice_le_NOSTRE_cifre_non_una_derivata_dai_concorrenti(self):
+        """CAMBIO VOLUTO (2026-07-21). Prima l'email prometteva `nostra_bps`, cioe'
+        min(colossi) - 5%: un numero che il MOTORE NON APPLICA. Un host reclutato cosi'
+        si sarebbe visto addebitare altro. Ora le cifre vengono da fase98 (unica fonte)
+        e la percentuale dei colossi resta solo come confronto.
+        Il vecchio test pretendeva '15%' (la cifra derivata) e su questo codice e' ROSSO."""
+        from fase98_policy_commissione import (BPS_DIRETTO, LANCIO_BPS_FASE1,
+                                               LANCIO_BPS_REGIME, LANCIO_GIORNI_GRATIS)
+        c = Contatto("Hotel Sol", "info@sol.mx", "MX", contatto_pubblico_business=True)
+        _l, _o, corpo = componi_email_prima_emilia(c, 1500, link_opt_out="https://x/stop")
+        for bps in (LANCIO_BPS_FASE1, LANCIO_BPS_REGIME, BPS_DIRETTO):
+            self.assertIn("%d%%" % (bps // 100), corpo,
+                          "manca la cifra %d%% del motore" % (bps // 100))
+        self.assertIn("%d " % LANCIO_GIORNI_GRATIS, corpo, "manca la durata della promo")
+        self.assertIn("20%", corpo, "la cifra dei colossi (1500+500) deve restare, "
+                                    "ma come CONFRONTO")
+
+    def test_dichiara_la_tariffa_tecnica_in_ogni_lingua(self):
+        """Nessun host puo' essere reclutato senza sapere del 3% sempre dovuto."""
+        for paese, lingua in [("MX", "es"), ("US", "en"), ("IT", "it"), ("FR", "fr"),
+                              ("DE", "de"), ("BR", "pt")]:
+            c = Contatto("Prova", "a@b." + paese.lower(), paese,
+                         contatto_pubblico_business=True)
+            r = componi_email_prima_emilia(c, 1500, link_opt_out="https://x/stop",
+                                           lingua=lingua)
+            self.assertIsNotNone(r, lingua)
+            self.assertIn("3%", r[2], "la mail in %s non nomina la tariffa tecnica" % lingua)
+            self.assertIn("0%", r[2], "la mail in %s non nomina la promo" % lingua)
 
     def test_opt_out_obbligatorio(self):
         c = Contatto("H", "a@b.us", "US", contatto_pubblico_business=True)

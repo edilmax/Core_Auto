@@ -340,8 +340,15 @@ def corpo_benvenuto_host_html(pannello_url: str) -> str:
         "<p><a href=\"%s\" style=\"background:#0f4c3a;color:#fff;padding:.7rem 1.4rem;"
         "border-radius:8px;text-decoration:none;font-weight:700\">Apri il pannello host"
         "</a></p>"
-        "<p style=\"color:#5e6f8d;font-size:.85rem\">0%% di commissioni all'ospite, 5%% sul "
-        "tuo link diretto, 10%% dal marketplace. Nessun costo fisso.</p></div>"
+        # TRASPARENZA (2026-07-21): questa e' la PRIMA cosa che un host legge. Diceva
+        # "10%% dal marketplace" (mentre nei primi 90 giorni paga 0%%) e "nessun costo
+        # fisso" senza nominare la tariffa tecnica del 3%%, sempre dovuta. Ora dice la
+        # verita' intera: e' anche un'offerta migliore.
+        "<p style=\"color:#5e6f8d;font-size:.85rem\">Commissione <b>0%% per i primi "
+        "90 giorni</b>, poi 8%% fino a un anno, poi 10%% dal marketplace. Sempre solo "
+        "5%% sul tuo link diretto. L'ospite paga 0%%. Nessun canone e nessun costo "
+        "fisso: l'unica cosa sempre dovuta e' una tariffa tecnica del 3%% "
+        "sull'importo, che copre il costo della carta.</p></div>"
     ) % e(pannello_url)
 
 
