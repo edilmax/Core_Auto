@@ -575,6 +575,36 @@ class RegistroHost:
         finally:
             con.close()
 
+    def anzianita_host(self, *, limit: int = 2000, ora_ts: Any = None
+                       ) -> List[Dict[str, Any]]:
+        """Anagrafica minima + ANZIANITA' di ogni host, in UNA query (per la vista scaglioni
+        del super-admin). Ritorna host_id, email, ragione sociale, stato, `creato_ts` e i
+        `giorni` trascorsi. NON calcola tariffe: quelle le decide fase98 (fonte unica).
+        Read-only, nessun dato sensibile (niente IBAN/CF/password)."""
+        import time as _t
+        now = int(ora_ts) if isinstance(ora_ts, int) and not isinstance(ora_ts, bool) \
+            else int(_t.time())
+        lim = limit if isinstance(limit, int) and not isinstance(limit, bool) \
+            and 0 < limit <= 20000 else 2000
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT host_id, email, ragione_sociale, stato, creato_ts "
+                "FROM host ORDER BY creato_ts LIMIT ?", (lim,)).fetchall()
+        except Exception:
+            logger.warning("anzianita_host fallita (ISOLATA)", exc_info=True)
+            return []
+        finally:
+            con.close()
+        out: List[Dict[str, Any]] = []
+        for r in righe:
+            ts = r["creato_ts"] if isinstance(r["creato_ts"], int) else None
+            out.append({"host_id": r["host_id"], "email": r["email"] or "",
+                        "ragione_sociale": r["ragione_sociale"] or "",
+                        "stato": r["stato"], "creato_ts": ts,
+                        "giorni": (max(0, (now - ts) // 86400) if ts is not None else None)})
+        return out
+
     def giorni_da_registrazione(self, host_id: Any, *, ora_ts: Any = None) -> int:
         """Giorni interi dalla registrazione dell'host (per la RAMPA di lancio della commissione).
         Host ignoto/errore -> numero molto grande (nessuno sconto lancio per sbaglio)."""

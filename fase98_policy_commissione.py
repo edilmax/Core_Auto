@@ -99,6 +99,53 @@ def commissione_bps_lancio(giorni_da_registrazione: Any, *,
     return br
 
 
+def stato_scaglione(giorni_da_registrazione: Any, *, promo_attiva: bool = True,
+                    bps_regime_config: Any = LANCIO_BPS_REGIME,
+                    bps_diretto: int = BPS_DIRETTO,
+                    giorni_gratis: int = LANCIO_GIORNI_GRATIS,
+                    giorni_fase1: int = LANCIO_GIORNI_FASE1) -> Dict[str, Any]:
+    """FONTE UNICA della fotografia commissionale di un host (2026-07-21).
+
+    Nasce per un motivo preciso: la stessa rampa era calcolata in DUE punti (il motore che
+    ADDEBITA in fase81 e la vetrina che MOSTRA in fase83) con parametri diversi -> potevano
+    divergere in silenzio (il motore al 15% configurato, la pagina ferma al 10%). Da qui in
+    poi entrambi passano di qua, quindi la divergenza e' impossibile per costruzione.
+
+    Ritorna: scaglione attivo (bps + etichetta), giorni mancanti al prossimo scatto, quale
+    sara' la tariffa dopo, e la tariffa del canale DIRETTO (che la rampa non tocca mai).
+    Fail-safe: anzianita' ignota/non valida -> regime (mai regalare lo 0% per errore).
+    NB: `bps_fase1` viene clampato al regime -> la rampa non supera mai la tariffa a regime.
+    """
+    regime = max(0, min(10000, _intero(bps_regime_config, LANCIO_BPS_REGIME)))
+    fase1 = min(LANCIO_BPS_FASE1, regime)
+    gg = max(0, _intero(giorni_gratis, LANCIO_GIORNI_GRATIS))
+    gf = max(gg, _intero(giorni_fase1, LANCIO_GIORNI_FASE1))
+    valido = isinstance(giorni_da_registrazione, int) \
+        and not isinstance(giorni_da_registrazione, bool) and giorni_da_registrazione >= 0
+    g = giorni_da_registrazione if valido else None
+    if not promo_attiva:
+        return {"bps": regime, "scaglione": "regime", "promo_attiva": False,
+                "giorni_anzianita": g, "giorni_al_prossimo": None, "prossimo_bps": None,
+                "bps_diretto": max(0, min(10000, _intero(bps_diretto, BPS_DIRETTO))),
+                "anzianita_nota": valido}
+    if not valido:                      # anzianita' sconosciuta -> regime, nessuna promessa
+        return {"bps": regime, "scaglione": "regime", "promo_attiva": True,
+                "giorni_anzianita": None, "giorni_al_prossimo": None, "prossimo_bps": None,
+                "bps_diretto": max(0, min(10000, _intero(bps_diretto, BPS_DIRETTO))),
+                "anzianita_nota": False}
+    if g < gg:
+        scaglione, bps, al_prossimo, prossimo = "promo", 0, gg - g, fase1
+    elif g < gf:
+        scaglione, bps, al_prossimo, prossimo = "fase1", fase1, gf - g, regime
+    else:
+        scaglione, bps, al_prossimo, prossimo = "regime", regime, None, None
+    return {"bps": bps, "scaglione": scaglione, "promo_attiva": True,
+            "giorni_anzianita": g, "giorni_al_prossimo": al_prossimo,
+            "prossimo_bps": prossimo,
+            "bps_diretto": max(0, min(10000, _intero(bps_diretto, BPS_DIRETTO))),
+            "anzianita_nota": True}
+
+
 def e_fondatore(numero_host: Any, *, soglia: int = SOGLIA_FONDATORI) -> bool:
     n = _intero(numero_host, 0)
     return 1 <= n <= max(0, _intero(soglia, SOGLIA_FONDATORI))

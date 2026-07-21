@@ -533,6 +533,65 @@ class PagamentiPendenti:
         finally:
             con.close()
 
+    def aggrega_costi_tecnici(self, *, limit: int = 20000) -> Dict[str, Any]:
+        """PROSPETTO DELLA TARIFFA TECNICA (3% Stripe) — per il super-admin e il commercialista.
+
+        Perche' esiste (buco trovato nell'audit del 2026-07-20): la tariffa tecnica finisce
+        dentro la riga 'commissione' del giornale e NON viene mai stornata quando si rimborsa.
+        Ma Stripe la sua fetta **non la restituisce**: su ogni prenotazione rimborsata quel
+        costo resta a carico della piattaforma ed e' una PERDITA TECNICA reale, che prima non
+        compariva da nessuna parte.
+
+        Legge (sola lettura) i record dei pagamenti e separa:
+          - `incassate`  : prenotazioni pagate e non rimborsate -> tariffa effettivamente coperta
+          - `perdite`    : pagate e poi rimborsate/cancellate -> costo Stripe NON recuperato
+        Il netto (`coperto_cents`) e' quanto la tariffa tecnica ha davvero coperto.
+        Raggruppa anche per valuta: non si sommano mai valute diverse.
+        """
+        import json as _j
+        lim = limit if isinstance(limit, int) and not isinstance(limit, bool) \
+            and 0 < limit <= 100000 else 20000
+        vuoto = {"conteggio": 0, "cents": 0}
+        out: Dict[str, Any] = {"incassate": dict(vuoto), "perdite": dict(vuoto),
+                               "coperto_cents": 0, "per_valuta": {}, "letti": 0}
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT stato, corpo_json FROM pendenti "
+                "WHERE stato IN ('pagato','rimborsato','cancellata_host') "
+                "ORDER BY rowid DESC LIMIT ?", (lim,)).fetchall()
+        except Exception:
+            logger.warning("aggrega_costi_tecnici fallita (ISOLATA)", exc_info=True)
+            return out
+        finally:
+            con.close()
+        for r in righe:
+            out["letti"] += 1
+            try:
+                dj = _j.loads(r["corpo_json"] or "{}")
+            except Exception:
+                continue
+            costo = dj.get("costo_pagamento_cents", 0)
+            if not (isinstance(costo, int) and not isinstance(costo, bool) and costo > 0):
+                continue
+            valuta = str(dj.get("valuta") or "EUR")[:8].upper()
+            persa = r["stato"] in ("rimborsato", "cancellata_host")
+            chiave = "perdite" if persa else "incassate"
+            out[chiave]["conteggio"] += 1
+            out[chiave]["cents"] += costo
+            v = out["per_valuta"].setdefault(valuta, {"incassate_cents": 0, "perdite_cents": 0,
+                                                      "conteggio": 0})
+            v["conteggio"] += 1
+            v["perdite_cents" if persa else "incassate_cents"] += costo
+        out["coperto_cents"] = out["incassate"]["cents"] - out["perdite"]["cents"]
+        # ETICHETTE FISCALI ESPLICITE (2026-07-21): il commercialista deve leggere la voce e
+        # sapere subito cosa farne, senza interpretare. La quota Stripe su una prenotazione
+        # rimborsata NON e' recuperabile: e' un costo di servizio sostenuto e non ribaltato.
+        out["incassate"]["voce_fiscale"] = "Ricavo tecnico coperto (tariffa ribaltata all'host)"
+        out["perdite"]["voce_fiscale"] = ("COSTO TECNICO IRRECUPERABILE — perdita deducibile "
+                                          "(commissione Stripe non restituita su rimborsi/storni)")
+        return out
+
     def info(self, riferimento: Any) -> Optional[Dict[str, Any]]:
         if not (isinstance(riferimento, str) and riferimento):
             return None

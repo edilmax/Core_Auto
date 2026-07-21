@@ -280,6 +280,20 @@ DOCUMENTO_HOST = "contratto_host"
 # cosi' la stringa firmata resta identica e le prove gia' archiviate restano INTEGRE.
 DOCUMENTO_PRIVACY = "privacy_gdpr"
 PRIVACY_VERSIONE = "2026-07-20"
+
+# ── LEGAME IDENTITA' VERIFICATA ↔ FIRMA DEL CONTRATTO (2026-07-21) ────────────
+# Senza questo, la prova dice "qualcuno da questo IP ha accettato quel testo": NON dice
+# CHI. Con Stripe Identity il documento e' verificato da un TERZO indipendente (i documenti
+# restano da Stripe, noi mai) e qui si registra il legame: sessione di verifica + impronta
+# che unisce quella sessione al contratto ESATTO firmato. La difesa "non ero io" cade.
+DOCUMENTO_IDENTITA = "identita_stripe"
+
+
+def impronta_identita(session_ref: Any, doc_hash: Optional[str] = None) -> str:
+    """Impronta che LEGA la sessione di verifica identita' al testo esatto del contratto.
+    Ricalcolabile da chiunque abbia i due dati -> il legame e' verificabile, non asserito."""
+    base = "%s|%s" % (str(session_ref or ""), doc_hash or doc_sha256())
+    return hashlib.sha256(base.encode("utf-8")).hexdigest()
 _PRIVACY_FALLBACK = ("Informativa privacy BookinVIP: titolare, finalita', base giuridica, "
                      "conservazione, diritti dell'interessato e contatti sono pubblicati "
                      "alla pagina /privacy.html della Piattaforma.")
@@ -389,44 +403,61 @@ class RegistroAccettazioni:
                         vessatorie INTEGER NOT NULL DEFAULT 0,
                         accettato_ts INTEGER NOT NULL,
                         firma TEXT NOT NULL)""")
+                # RIFERIMENTO ESTERNO (2026-07-21): la sessione di verifica identita' (vs_...).
+                # Migrazione idempotente; entra nella firma SOLO quando valorizzato, cosi' le
+                # prove gia' archiviate restano INTEGRE (stringa firmata invariata).
+                try:
+                    con.execute("ALTER TABLE accettazioni ADD COLUMN "
+                                "riferimento TEXT NOT NULL DEFAULT ''")
+                except sqlite3.OperationalError:
+                    pass
                 con.execute("CREATE INDEX IF NOT EXISTS idx_acc_host "
                             "ON accettazioni(host_id)")
         finally:
             self._chiudi(con)
 
     def _firma(self, host_id: str, documento: str, versione: str, doc_sha256_: str,
-               lang: str, ip: str, user_agent: str, vessatorie: int, ts: int) -> str:
+               lang: str, ip: str, user_agent: str, vessatorie: int, ts: int,
+               riferimento: str = "") -> str:
         canonico = "|".join([
             host_id, documento, versione, doc_sha256_, lang, ip,
             user_agent, str(int(vessatorie)), str(int(ts))])
+        # RETROCOMPATIBILITA' VOLUTA: il riferimento entra nella stringa firmata SOLO se
+        # presente. Le prove scritte prima (riferimento vuoto) restano verificabili con la
+        # firma originale -> nessun falso allarme di manomissione sullo storico.
+        if riferimento:
+            canonico += "|" + str(riferimento)
         return hmac.new(self._seg, canonico.encode("utf-8"), hashlib.sha256).hexdigest()
 
     def registra(self, host_id: Any, *, documento: str = DOCUMENTO_HOST,
                  versione: str = CONTRATTO_HOST_VERSIONE,
                  doc_sha256_: Optional[str] = None, lang: str = "it",
                  ip: str = "", user_agent: str = "", vessatorie: bool = False,
-                 ts: Optional[int] = None) -> Dict[str, Any]:
-        """Scrive UNA prova d'accettazione firmata. Ritorna {ok, id, firma, ...}."""
+                 ts: Optional[int] = None, riferimento: str = "") -> Dict[str, Any]:
+        """Scrive UNA prova d'accettazione firmata. Ritorna {ok, id, firma, ...}.
+        `riferimento`: identificativo esterno (es. sessione Stripe Identity `vs_...`)."""
         if not (isinstance(host_id, str) and host_id):
             return {"ok": False, "errore": "host_id_mancante"}
         doc_hash = doc_sha256_ or doc_sha256()
         lang = (str(lang or "it").lower())[:8]
         ip = str(ip or "")[:64]
         ua = str(user_agent or "")[:400]
+        rif = str(riferimento or "")[:128]
         vex = 1 if vessatorie else 0
         t = int(ts if ts is not None else self._now())
-        firma = self._firma(host_id, documento, versione, doc_hash, lang, ip, ua, vex, t)
+        firma = self._firma(host_id, documento, versione, doc_hash, lang, ip, ua, vex, t, rif)
         con = self._apri()
         try:
             with con:
                 cur = con.execute(
                     "INSERT INTO accettazioni (host_id, documento, versione, doc_sha256, "
-                    "lang, ip, user_agent, vessatorie, accettato_ts, firma) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (host_id, documento, versione, doc_hash, lang, ip, ua, vex, t, firma))
+                    "lang, ip, user_agent, vessatorie, accettato_ts, firma, riferimento) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (host_id, documento, versione, doc_hash, lang, ip, ua, vex, t, firma, rif))
             return {"ok": True, "id": cur.lastrowid, "host_id": host_id,
                     "documento": documento, "versione": versione, "doc_sha256": doc_hash,
-                    "lang": lang, "vessatorie": bool(vex), "accettato_ts": t, "firma": firma}
+                    "lang": lang, "vessatorie": bool(vex), "accettato_ts": t, "firma": firma,
+                    "riferimento": rif}
         except Exception:
             logger.error("registra accettazione fallita (ISOLATA)", exc_info=True)
             return {"ok": False, "errore": "errore_interno"}
@@ -434,12 +465,15 @@ class RegistroAccettazioni:
             self._chiudi(con)
 
     def _riga_dict(self, r: sqlite3.Row) -> Dict[str, Any]:
-        (id_, host_id, documento, versione, doc_hash, lang, ip, ua, vex, ts, firma) = r
-        atteso = self._firma(host_id, documento, versione, doc_hash, lang, ip, ua, vex, ts)
+        (id_, host_id, documento, versione, doc_hash, lang, ip, ua, vex, ts, firma,
+         rif) = tuple(r) + (("",) if len(tuple(r)) == 11 else ())
+        atteso = self._firma(host_id, documento, versione, doc_hash, lang, ip, ua, vex, ts,
+                             rif or "")
         valida = hmac.compare_digest(atteso, firma)
         return {"id": id_, "host_id": host_id, "documento": documento, "versione": versione,
                 "doc_sha256": doc_hash, "lang": lang, "ip": ip, "user_agent": ua,
                 "vessatorie": bool(vex), "accettato_ts": ts, "firma": firma,
+                "riferimento": rif or "",
                 "integra": valida}     # integra=False -> riga MANOMESSA
 
     def elenco(self, host_id: Any, documento: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -450,13 +484,13 @@ class RegistroAccettazioni:
             if documento:
                 cur = con.execute(
                     "SELECT id,host_id,documento,versione,doc_sha256,lang,ip,user_agent,"
-                    "vessatorie,accettato_ts,firma FROM accettazioni "
+                    "vessatorie,accettato_ts,firma,riferimento FROM accettazioni "
                     "WHERE host_id=? AND documento=? ORDER BY id",
                     (host_id, documento))
             else:
                 cur = con.execute(
                     "SELECT id,host_id,documento,versione,doc_sha256,lang,ip,user_agent,"
-                    "vessatorie,accettato_ts,firma FROM accettazioni "
+                    "vessatorie,accettato_ts,firma,riferimento FROM accettazioni "
                     "WHERE host_id=? ORDER BY id", (host_id,))
             return [self._riga_dict(r) for r in cur.fetchall()]
         except Exception:
@@ -464,6 +498,59 @@ class RegistroAccettazioni:
             return []
         finally:
             self._chiudi(con)
+
+    def lega_identita(self, host_id: Any, session_ref: Any, stato_kyc: Any = "", *,
+                      ip: str = "", user_agent: str = "", lang: str = "it",
+                      doc_hash: Optional[str] = None,
+                      ts: Optional[int] = None) -> Dict[str, Any]:
+        """LEGA l'identita' verificata (Stripe Identity) alla firma del contratto.
+
+        Scrive una riga `identita_stripe` FIRMATA che contiene: il riferimento della sessione
+        di verifica (`vs_...`), lo stato della verifica in quel momento, la versione del
+        contratto e un'impronta che unisce sessione + testo del contratto. Da quel momento la
+        prova non dice piu' solo "qualcuno da questo IP ha accettato": dice CHI, con documento
+        verificato da un terzo indipendente.
+
+        Idempotente: se esiste gia' un legame INTEGRO con la stessa sessione per la versione
+        corrente, non ne scrive un altro (nessun doppione al ri-login o al retry del webhook).
+        """
+        if not (isinstance(host_id, str) and host_id):
+            return {"ok": False, "errore": "host_id_mancante"}
+        ref = str(session_ref or "").strip()
+        if not ref:
+            return {"ok": False, "errore": "sessione_identita_mancante"}
+        dh = doc_hash or doc_sha256()
+        for r in self.elenco(host_id, DOCUMENTO_IDENTITA):
+            if (r.get("riferimento") == ref and r.get("versione") == CONTRATTO_HOST_VERSIONE
+                    and r.get("integra")):
+                return {"ok": True, "gia_presente": True, "riferimento": ref,
+                        "documento": DOCUMENTO_IDENTITA, "versione": CONTRATTO_HOST_VERSIONE}
+        out = self.registra(host_id, documento=DOCUMENTO_IDENTITA,
+                            versione=CONTRATTO_HOST_VERSIONE,
+                            doc_sha256_=impronta_identita(ref, dh),
+                            lang=lang, ip=ip, user_agent=user_agent,
+                            riferimento=ref, ts=ts)
+        if out.get("ok"):
+            out["stato_kyc"] = str(stato_kyc or "")
+            out["impronta_legame"] = out.get("doc_sha256")
+            logger.info("LEGAME IDENTITA-CONTRATTO scritto | HOST: %s | SESSIONE: %s | "
+                        "VERSIONE: %s", host_id, ref, CONTRATTO_HOST_VERSIONE)
+        return out
+
+    def identita_legata(self, host_id: Any) -> Dict[str, Any]:
+        """Il legame identita↔contratto per la versione CORRENTE (per Bunker e dossier).
+        `verificabile` = l'impronta si ricalcola dai due dati -> il legame non e' asserito."""
+        for r in self.elenco(host_id, DOCUMENTO_IDENTITA):
+            if r.get("versione") == CONTRATTO_HOST_VERSIONE:
+                ref = r.get("riferimento") or ""
+                atteso = impronta_identita(ref)
+                return {"legata": True, "session_ref": ref,
+                        "impronta_legame": r.get("doc_sha256"),
+                        "verificabile": (r.get("doc_sha256") == atteso),
+                        "integra": bool(r.get("integra")),
+                        "accettato_ts": r.get("accettato_ts"), "ip": r.get("ip", "")}
+        return {"legata": False, "session_ref": "", "impronta_legame": "",
+                "verificabile": False, "integra": None, "accettato_ts": None, "ip": ""}
 
     def ha_accettato_corrente(self, host_id: Any,
                               documento: str = DOCUMENTO_HOST,

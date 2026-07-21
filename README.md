@@ -43,7 +43,7 @@ competitivo è il **take-rate più basso del mercato**, reso possibile dall'auto
 Core_Auto/
 ├── main_casavip.py             avvio del prodotto: legge le variabili d'ambiente e compone il sistema
 ├── fase*.py                    133 moduli del motore (uno per funzione — indice in REGISTRO_INGEGNERIA.md)
-├── test_*.py                   294 file di test (la suite INTERA deve essere verde prima di ogni deploy)
+├── test_*.py                   296 file di test (la suite INTERA deve essere verde prima di ogni deploy)
 ├── deploy/                     ciò che vede il browser: 13 pagine + app.js + configurazioni nginx
 │   ├── index.html              vetrina, ricerca, mappa, checkout (ospite)
 │   ├── host.html               pannello host: pubblica, calendario, incassi, consensi
@@ -133,6 +133,14 @@ contratto (con il flag delle clausole vessatorie) e **privacy come documento sep
 con **versione · impronta SHA-256 del testo · IP · dispositivo · data e ora**, sigillata con
 **HMAC-SHA256**. Se qualcuno modifica una riga nel database la firma non torna più: la
 manomissione è dimostrabile (`integra: false`).
+
+**🪪 Terza riga: l'identità legata alla firma.** Se l'host ha fatto la verifica documentale con
+**Stripe Identity** (documento e selfie custoditi da Stripe, **mai** da noi), viene scritta una
+riga `identita_stripe` che lega la **sessione di verifica** (`vs_…`) al **testo esatto** del
+contratto, con un'impronta ricalcolabile da chiunque. È ciò che trasforma *«qualcuno da questo
+IP ha accettato»* in *«la persona con documento verificato da un terzo indipendente ha
+accettato»*. Viene scritta alla firma se la verifica c'è già, oppure **quando la verifica si
+completa dopo**. Il riferimento entra **dentro** la firma HMAC: alterarlo la invalida.
 
 **Ri-accettazione**: quando cambia la versione del contratto, al login compare da sola la
 schermata dedicata (`GET /api/host/contratto_stato` · `POST /api/host/riaccetta`). Le prove

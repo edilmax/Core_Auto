@@ -68,13 +68,31 @@ class TestTrasparenzaCoerente(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
 
     def test_promo_generico_senza_host_regime(self):
-        # promo attiva, nessun host loggato -> tariffa a regime della rampa (10%), non config
+        """CAMBIO 2026-07-21 (fonte unica `fase98.stato_scaglione`): il visitatore generico
+        (nessun host loggato) vede la tariffa A REGIME **configurata**, non un 10% fisso.
+        Prima la rampa ignorava COMMISSIONE_BPS mentre il motore la rispettava: la pagina
+        MOSTRAVA 10% e il preventivo ne ADDEBITAVA 15%. Ora i due numeri coincidono."""
         d, s, r = _sistema(1500, True)
         try:
             _, comm = _comm_mostrata(r)
-            self.assertEqual(comm, 1000, "generico in promo = regime rampa 10% (config ignorata dalla rampa)")
+            self.assertEqual(comm, 1500,
+                             "il generico in promo deve vedere il regime CONFIGURATO (15%), "
+                             "cioe' quello che il motore addebiterebbe a un host anziano")
         finally:
             shutil.rmtree(d, ignore_errors=True)
+
+    def test_nessuna_divergenza_mostrato_vs_addebitato(self):
+        """GUARDIA ANTI-DIVERGENZA: la vetrina e il motore devono usare la STESSA funzione.
+        Rossa se qualcuno reintroduce un calcolo parallelo con parametri diversi."""
+        import inspect
+        import fase81_bootstrap_casavip as f81
+        import fase83_server as f83
+        for modulo, nome in ((f81, "fase81 (motore che addebita)"),
+                             (f83, "fase83 (vetrina che mostra)")):
+            src = inspect.getsource(modulo)
+            self.assertIn("stato_scaglione", src, "%s non usa la fonte unica" % nome)
+            self.assertNotIn("commissione_bps_lancio(", src,
+                             "%s chiama ancora la rampa grezza: rischio divergenza" % nome)
 
 
 if __name__ == "__main__":

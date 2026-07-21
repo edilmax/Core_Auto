@@ -1480,6 +1480,14 @@ class RouterHTTP:
             return self._bunker_login(body, headers)
         if metodo == "GET" and path == "/api/bunker/stato":
             return self._bunker_stato(query, headers)
+        if metodo == "GET" and path == "/api/bunker/export_legale":
+            return self._bunker_export_legale(query, headers)
+        if metodo == "GET" and path == "/api/bunker/scaglioni_host":
+            return self._bunker_scaglioni(query, headers)
+        if metodo == "GET" and path == "/api/bunker/prove_legali":
+            return self._bunker_prove_legali(query, headers)
+        if metodo == "GET" and path == "/api/bunker/costi_tecnici":
+            return self._bunker_costi_tecnici(query, headers)
         if metodo == "GET" and path == "/api/bunker/integrita":
             return self._bunker_integrita(query, headers)
         if metodo == "GET" and path == "/api/bunker/log":
@@ -1953,6 +1961,10 @@ class RouterHTTP:
             if remoto == "verified":
                 kyc.conferma(host_id, "verificato")
                 logger.warning("KYC IDENTITY VERIFICATO | HOST_ID: %s (Stripe)", host_id)
+                # L'host si e' verificato DOPO aver firmato: chiudo ora il legame
+                # identita↔contratto, cosi' la prova diventa completa comunque.
+                self._lega_identita_se_possibile(
+                    getattr(self._sys, "accettazioni", None), host_id)
             elif remoto == "canceled":
                 kyc.conferma(host_id, "respinto")     # ritentabile (respinto -> in_corso)
             stato = kyc.stato(host_id)
@@ -2092,8 +2104,10 @@ class RouterHTTP:
         prove = []
         if acc is not None:
             try:
-                prove = [{k: r.get(k) for k in ("documento", "versione", "ts", "ip",
-                                                 "doc_sha256", "integra")}
+                # 2026-07-21: il Field (sola chiave admin) vede SOLO lo stato della prova.
+                # IP, impronta del testo e firma HMAC sono dati legali/personali: si leggono
+                # dal BUNKER (`/api/bunker/prove_legali` o il fascicolo), col secondo fattore.
+                prove = [{k: r.get(k) for k in ("documento", "versione", "integra")}
                          for r in acc.elenco(hid)]
             except Exception:
                 prove = []
@@ -2681,6 +2695,175 @@ class RouterHTTP:
         logger.warning("EXPORT_FISCALE_STREAM_COMPLETED | DATA: %s | RIGHE: %d | STATUS: %s | IP: %s",
                        gen, n, stato, ip or "?")
 
+    def genera_dossier_legale(self, *, formato: str = "csv", ip: str = ""):
+        """DOSSIER LEGALE-FISCALE CERTIFICATO (2026-07-21) — generatore in STREAMING.
+
+        Un solo file che mette insieme cio' che prima era sparso o invisibile:
+        anagrafica host · scaglione commissione APPLICATO (dalla fonte unica fase98, mai
+        ricalcolato) · prova del contratto (versione, impronta SHA-256 del testo, **IP**,
+        dispositivo, **ora UTC**, **firma HMAC-SHA256**, approvazione clausole vessatorie) ·
+        prova privacy/GDPR · e in coda il prospetto della TARIFFA TECNICA Stripe, con le
+        PERDITE sui rimborsi separate (voce per il commercialista).
+
+        Valore probatorio: nulla e' troncato e il file si chiude con l'impronta SHA-256 di
+        TUTTO il contenuto ('FINE DOSSIER'). Se manca quella riga il file NON e' valido.
+        Se una prova risulta manomessa il dossier lo dichiara riga per riga (`integra=NO`).
+        """
+        import csv as _csv
+        import datetime as _dt
+        import hashlib as _hl
+        import io as _io
+        import json as _js
+        gen = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        impronta = _hl.sha256()
+
+        def emetti(testo):
+            impronta.update(testo.encode("utf-8"))
+            return testo
+
+        reg = getattr(self._sys, "registro_host", None)
+        acc = getattr(self._sys, "accettazioni", None)
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        cfg = getattr(self._sys, "config", None)
+        base = getattr(cfg, "commissione_bps", 1000)
+        base = base if isinstance(base, int) and not isinstance(base, bool) else 1000
+        promo = bool(getattr(cfg, "promo_lancio_attiva", False))
+        from fase98_policy_commissione import stato_scaglione
+
+        def _utc(ts):
+            try:
+                return _dt.datetime.utcfromtimestamp(int(ts)).strftime("%Y-%m-%d %H:%M:%S UTC")
+            except Exception:
+                return ""
+
+        def riga_host(h):
+            """Fotografia completa di UN host: tariffa + prove. Mai dati inventati."""
+            st = stato_scaglione(h.get("giorni"), promo_attiva=promo, bps_regime_config=base)
+            prove = acc.elenco(h["host_id"]) if acc is not None else []
+            contratto = next((p for p in prove if p.get("documento") == "contratto_host"), {})
+            privacy = next((p for p in prove if p.get("documento") == "privacy_gdpr"), {})
+            try:
+                ident = acc.identita_legata(h["host_id"]) if acc is not None else {}
+            except Exception:
+                ident = {}
+            kyc = getattr(self._sys, "kyc", None)
+            stato_kyc = ""
+            try:
+                stato_kyc = (kyc.riferimento(h["host_id"]) or {}).get("stato", "") if kyc else ""
+            except Exception:
+                stato_kyc = ""
+            return {
+                "host_id": h["host_id"], "email": h["email"],
+                "ragione_sociale": h["ragione_sociale"], "stato_account": h["stato"],
+                "registrato_utc": _utc(h.get("creato_ts")),
+                "giorni_anzianita": h.get("giorni"),
+                "scaglione": st["scaglione"],
+                "commissione_marketplace_pct": "%.2f" % (st["bps"] / 100.0),
+                "commissione_diretto_pct": "%.2f" % (st["bps_diretto"] / 100.0),
+                "giorni_al_prossimo_scatto": st["giorni_al_prossimo"],
+                "prossima_commissione_pct": ("" if st["prossimo_bps"] is None
+                                             else "%.2f" % (st["prossimo_bps"] / 100.0)),
+                "contratto_versione": contratto.get("versione", ""),
+                "contratto_sha256": contratto.get("doc_sha256", ""),
+                "contratto_accettato_utc": _utc(contratto.get("accettato_ts")),
+                "contratto_ip": contratto.get("ip", ""),
+                "contratto_dispositivo": contratto.get("user_agent", ""),
+                "clausole_vessatorie": ("SI" if contratto.get("vessatorie") else "NO"),
+                "contratto_firma_hmac_sha256": contratto.get("firma", ""),
+                "contratto_integra": ("SI" if contratto.get("integra") else "NO"),
+                "privacy_versione": privacy.get("versione", ""),
+                "privacy_sha256": privacy.get("doc_sha256", ""),
+                "privacy_accettata_utc": _utc(privacy.get("accettato_ts")),
+                "privacy_ip": privacy.get("ip", ""),
+                "privacy_firma_hmac_sha256": privacy.get("firma", ""),
+                "privacy_integra": ("SI" if privacy.get("integra") else "NO"),
+                # IDENTITA' VERIFICATA legata a QUESTO contratto: e' cio' che trasforma
+                # "qualcuno da un IP" in "la persona con documento verificato da un terzo".
+                "identita_verificata": ("SI" if ident.get("legata") else "NO"),
+                "identita_sessione_stripe": ident.get("session_ref", ""),
+                "identita_impronta_legame": ident.get("impronta_legame", ""),
+                "identita_legame_verificabile": ("SI" if ident.get("verificabile") else "NO"),
+                "identita_legata_utc": _utc(ident.get("accettato_ts")),
+                "identita_stato_kyc": stato_kyc,
+            }
+
+        host = reg.anzianita_host(limit=5000) if reg is not None else []
+        costi = pp.aggrega_costi_tecnici() if pp is not None else {}
+        manomesse = 0
+        if str(formato).lower() == "json":
+            righe = []
+            for h in host:
+                v = riga_host(h)
+                if v["contratto_integra"] == "NO" or v["privacy_integra"] == "NO":
+                    manomesse += 1
+                righe.append(v)
+            corpo = _js.dumps({
+                "documento": "Dossier legale-fiscale BookinVIP",
+                "generato_utc": gen, "host": righe, "totale_host": len(righe),
+                "prove_manomesse": manomesse,
+                "tariffa_tecnica": {
+                    "bps": self._psp_bps(),
+                    "incassata_cents": (costi.get("incassate") or {}).get("cents", 0),
+                    "persa_su_rimborsi_cents": (costi.get("perdite") or {}).get("cents", 0),
+                    "coperto_netto_cents": costi.get("coperto_cents", 0),
+                    "per_valuta": costi.get("per_valuta", {}),
+                    "nota": ("Le perdite sono la tariffa tecnica di prenotazioni poi "
+                             "rimborsate: Stripe non restituisce la sua commissione.")},
+            }, ensure_ascii=False, indent=2, default=str)
+            yield emetti(corpo)
+            yield "\n# FINE DOSSIER - INTEGRITÀ: %s\n" % impronta.hexdigest()
+        else:
+            yield emetti("# BookinVIP - Dossier legale-fiscale certificato\r\n")
+            yield emetti("# generato_utc,%s\r\n" % gen)
+            yield emetti("# commissione_regime_bps,%d,promo_attiva,%s,tariffa_tecnica_bps,%d\r\n\r\n"
+                         % (base, "SI" if promo else "NO", self._psp_bps()))
+            colonne = list(riga_host({"host_id": "", "email": "", "ragione_sociale": "",
+                                      "stato": "", "creato_ts": None, "giorni": None}).keys())
+            yield emetti(",".join(colonne) + "\r\n")
+            for h in host:
+                v = riga_host(h)
+                if v["contratto_integra"] == "NO" or v["privacy_integra"] == "NO":
+                    manomesse += 1
+                buf = _io.StringIO()
+                _csv.writer(buf).writerow(
+                    [self._cella_csv_sicura(v[c]) for c in colonne])
+                yield emetti(buf.getvalue())
+            inc = (costi.get("incassate") or {}).get("cents", 0)
+            per = (costi.get("perdite") or {}).get("cents", 0)
+            yield emetti("\r\n# PROSPETTO TARIFFA TECNICA (Stripe) - classificazione fiscale\r\n")
+            yield emetti("voce,classificazione_fiscale,prenotazioni,importo_cents,importo\r\n")
+            yield emetti("tariffa_tecnica_incassata,RICAVO TECNICO COPERTO (ribaltato all'host),"
+                         "%d,%d,%.2f\r\n"
+                         % ((costi.get("incassate") or {}).get("conteggio", 0), inc, inc / 100.0))
+            yield emetti("perdita_tecnica_su_rimborsi,COSTO TECNICO IRRECUPERABILE - perdita "
+                         "deducibile,%d,%d,%.2f\r\n"
+                         % ((costi.get("perdite") or {}).get("conteggio", 0), per, per / 100.0))
+            yield emetti("coperto_netto,saldo,,%d,%.2f\r\n"
+                         % (inc - per, (inc - per) / 100.0))
+            yield emetti("# nota,Stripe NON restituisce la sua commissione sui rimborsi: quel "
+                         "costo resta definitivamente a carico della piattaforma e non e' "
+                         "ribaltabile sull'host (payout annullato). Portare in deduzione come "
+                         "costo di servizio sostenuto.\r\n")
+            yield emetti("\r\n# host,%d\r\n# prove_manomesse,%d\r\n" % (len(host), manomesse))
+            yield "# FINE DOSSIER - INTEGRITÀ: %s\r\n" % impronta.hexdigest()
+        logger.warning("EXPORT_LEGALE_COMPLETED | DATA: %s | HOST: %d | MANOMESSE: %d | "
+                       "FORMATO: %s | IP: %s", gen, len(host), manomesse, formato, ip or "?")
+
+    def _bunker_export_legale(self, query, headers):
+        """DOSSIER LEGALE-FISCALE — via router (test e fallback non-streaming). In produzione
+        l'handler HTTP intercetta la rotta e streamma; qui si materializza per i chiamanti."""
+        if not self._bunker_auth(headers, azione="export_legale"):
+            return 403, {"errore": "bunker_richiesto"}
+        formato = "json" if str(query.get("formato") or "").lower() == "json" else "csv"
+        try:
+            testo = "".join(self.genera_dossier_legale(
+                formato=formato, ip=self._client_ip(headers)))
+        except Exception:
+            logger.error("dossier legale: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        return 200, {"formato": formato, "contenuto": testo,
+                     "certificato": "# FINE DOSSIER - INTEGRITÀ:" in testo}
+
     def _bunker_export_contabile(self, query, headers):
         """ESTRATTO CONTABILE CERTIFICATO — via router (test + fallback non-streaming):
         concatena il GENERATORE di streaming (stessa identica uscita che l'handler manda
@@ -2737,6 +2920,183 @@ class RouterHTTP:
         import os as _os
         return _os.environ.get("DATA_DIR") or _os.path.dirname(
             _os.environ.get("DB_FINANZA", "data/finanza.db")) or "data"
+
+    # ══════════ SALA CONTROLLO: SCAGLIONI · PROVE LEGALI · COSTI TECNICI ══════════
+    # Nate dall'audit del 2026-07-20: il super-admin era CIECO su tre fronti — a che
+    # tariffa sta ogni host (e quando scatta la prossima), le prove di consenso complete
+    # (IP/ora/firma), e quanto ci costa davvero la tariffa tecnica Stripe sui rimborsi.
+    def _bunker_scaglioni(self, query, headers):
+        """SCAGLIONI & PROMO: per ogni host data di registrazione, anzianita', scaglione
+        ATTIVO (0/8/10% marketplace + 5% diretto), giorni al prossimo scatto e DATA esatta
+        del cambio. Il numero NON viene ricalcolato qui: arriva da `fase98.stato_scaglione`,
+        la stessa funzione che il motore usa per ADDEBITARE -> impossibile divergere.
+        Filtri: `q` (host_id/email/ragione sociale) e `scaglione` (promo|fase1|regime)."""
+        if not self._bunker_auth(headers, azione="scaglioni_host"):
+            return 403, {"errore": "bunker_richiesto"}
+        reg = getattr(self._sys, "registro_host", None)
+        if reg is None:
+            return 503, {"errore": "registro_non_attivo"}
+        try:
+            import datetime as _dt
+            from fase98_policy_commissione import stato_scaglione
+            cfg = getattr(self._sys, "config", None)
+            base = getattr(cfg, "commissione_bps", 1000)
+            base = base if isinstance(base, int) and not isinstance(base, bool) \
+                and 0 <= base <= 10000 else 1000
+            promo = bool(getattr(cfg, "promo_lancio_attiva", False))
+            q = str(query.get("q") or "").strip().lower()
+            filtro = str(query.get("scaglione") or "").strip().lower()
+            acc = getattr(self._sys, "accettazioni", None)
+            righe, conta = [], {"promo": 0, "fase1": 0, "regime": 0, "ignoti": 0}
+            da_riaccettare = 0
+            for h in reg.anzianita_host(limit=5000):
+                st = stato_scaglione(h.get("giorni"), promo_attiva=promo,
+                                     bps_regime_config=base)
+                conta[st["scaglione"]] = conta.get(st["scaglione"], 0) + 1
+                if not st["anzianita_nota"]:
+                    conta["ignoti"] += 1
+                data_reg, data_prossimo = "", ""
+                if isinstance(h.get("creato_ts"), int):
+                    d0 = _dt.datetime.utcfromtimestamp(h["creato_ts"]).date()
+                    data_reg = d0.isoformat()
+                    if st["giorni_al_prossimo"] is not None:
+                        data_prossimo = (_dt.date.today() + _dt.timedelta(
+                            days=int(st["giorni_al_prossimo"]))).isoformat()
+                # CONSENSI (2026-07-21): chi non e' ancora in regola con la versione CORRENTE
+                # del contratto. La ri-accettazione si ATTIVA cambiando la versione del testo
+                # (fase163) — qui si VEDE chi e' rimasto indietro, prima invisibile a tutti.
+                cons = {}
+                if acc is not None:
+                    try:
+                        cons = acc.stato_consensi(h["host_id"]) or {}
+                    except Exception:
+                        cons = {}
+                riacc = bool(cons.get("deve_riaccettare"))
+                if riacc:
+                    da_riaccettare += 1
+                voce = {"host_id": h["host_id"], "email": h["email"],
+                        "ragione_sociale": h["ragione_sociale"], "stato": h["stato"],
+                        "registrato_il": data_reg, "giorni": h.get("giorni"),
+                        "scaglione": st["scaglione"], "bps": st["bps"],
+                        "percentuale": st["bps"] / 100.0,
+                        "bps_diretto": st["bps_diretto"],
+                        "giorni_al_prossimo": st["giorni_al_prossimo"],
+                        "prossimo_bps": st["prossimo_bps"],
+                        "prossimo_scatto_il": data_prossimo,
+                        "deve_riaccettare": riacc,
+                        "versione_accettata": cons.get("versione_accettata", ""),
+                        "versione_contratto_corrente": cons.get("versione_corrente", "")}
+                if q and q not in (voce["host_id"] + " " + voce["email"] + " "
+                                   + voce["ragione_sociale"]).lower():
+                    continue
+                if filtro and filtro != st["scaglione"]:
+                    continue
+                righe.append(voce)
+            logger.info("AUDIT | BUNKER scaglioni consultati | RIGHE: %d | IP: %s",
+                        len(righe), self._client_ip(headers))
+            from fase163_accettazioni import CONTRATTO_HOST_VERSIONE as _vc
+            return 200, {"host": righe, "totale": len(righe), "conteggi": conta,
+                         "promo_attiva": promo, "commissione_regime_bps": base,
+                         "tariffa_tecnica_bps": self._psp_bps(),
+                         "versione_contratto_corrente": _vc,
+                         "da_riaccettare": da_riaccettare,
+                         "nota_riaccettazione": (
+                             "La ri-accettazione forzata si attiva alzando la versione del "
+                             "contratto (fase163): da quel momento ogni host trova la richiesta "
+                             "al login. Qui si vede chi e' ancora indietro.")}
+        except Exception:
+            logger.error("bunker scaglioni: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+
+    def _psp_bps(self):
+        """La tariffa tecnica configurata (bps). Letta dal concierge = quella VERA applicata."""
+        try:
+            c = getattr(self._sys, "concierge", None)
+            v = getattr(c, "_psp_bps", None)
+            if isinstance(v, int) and not isinstance(v, bool):
+                return v
+        except Exception:
+            pass
+        return 0
+
+    def _bunker_prove_legali(self, query, headers):
+        """PROVE LEGALI COMPLETE (accettazioni.db) — solo Bunker. Ogni prova con documento,
+        versione, impronta SHA-256 del testo, **IP**, dispositivo, **data/ora UTC** e **firma
+        HMAC-SHA256**, piu' il flag `integra` (falso = riga manomessa). Con `host_id` da' le
+        prove di quell'host; senza, l'elenco completo + il conteggio delle righe NON integre
+        (nessuno prima controllava l'integrita' delle prove: si vedeva solo aprendo un host)."""
+        if not self._bunker_auth(headers, azione="prove_legali"):
+            return 403, {"errore": "bunker_richiesto"}
+        acc = getattr(self._sys, "accettazioni", None)
+        reg = getattr(self._sys, "registro_host", None)
+        if acc is None:
+            return 503, {"errore": "registro_accettazioni_non_attivo"}
+        try:
+            import datetime as _dt
+            hid = str(query.get("host_id") or "").strip()
+            elenco = []
+            if hid:
+                sorgente = [(hid, acc.elenco(hid))]
+            else:
+                lim = 500
+                sorgente = [(h["host_id"], acc.elenco(h["host_id"]))
+                            for h in (reg.anzianita_host(limit=lim) if reg else [])]
+            manomesse = 0
+            for host_id, prove in sorgente:
+                for p in prove:
+                    if not p.get("integra"):
+                        manomesse += 1
+                    ts = p.get("accettato_ts")
+                    elenco.append({
+                        "host_id": host_id, "documento": p.get("documento"),
+                        "versione": p.get("versione"), "doc_sha256": p.get("doc_sha256"),
+                        "ip": p.get("ip"), "dispositivo": p.get("user_agent"),
+                        "accettato_ts": ts,
+                        "accettato_utc": (_dt.datetime.utcfromtimestamp(int(ts))
+                                          .strftime("%Y-%m-%d %H:%M:%S UTC")
+                                          if isinstance(ts, int) else ""),
+                        "clausole_vessatorie": bool(p.get("vessatorie")),
+                        # riferimento esterno: per `identita_stripe` e' la sessione di
+                        # verifica documentale (vs_...) legata a QUESTO contratto
+                        "riferimento": p.get("riferimento", ""),
+                        "firma_hmac_sha256": p.get("firma"), "integra": bool(p.get("integra"))})
+            logger.warning("ADMIN_ACTION | AZIONE: Consultazione prove legali | RIGHE: %d | "
+                           "MANOMESSE: %d | IP: %s", len(elenco), manomesse,
+                           self._client_ip(headers))
+            return 200, {"prove": elenco, "totale": len(elenco), "manomesse": manomesse,
+                         "integrita_ok": manomesse == 0}
+        except Exception:
+            logger.error("bunker prove legali: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+
+    def _bunker_costi_tecnici(self, query, headers):
+        """PROSPETTO TARIFFA TECNICA (3% Stripe) — solo Bunker. Separa quanto la tariffa ha
+        davvero coperto da quanto e' andato PERSO sui rimborsi: Stripe non restituisce la sua
+        fetta, quindi ogni prenotazione rimborsata lascia un costo a carico della piattaforma
+        che prima non compariva da nessuna parte (buco trovato nell'audit del 2026-07-20)."""
+        if not self._bunker_auth(headers, azione="costi_tecnici"):
+            return 403, {"errore": "bunker_richiesto"}
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        if pp is None:
+            return 503, {"errore": "pagamenti_non_attivi"}
+        try:
+            rep = pp.aggrega_costi_tecnici()
+            rep["tariffa_tecnica_bps"] = self._psp_bps()
+            rep["nota"] = ("COSTO TECNICO IRRECUPERABILE (perdita deducibile): e' la tariffa "
+                           "tecnica di prenotazioni poi rimborsate o cancellate. Stripe NON "
+                           "restituisce la sua commissione sui rimborsi, quindi quel costo "
+                           "resta definitivamente a carico della piattaforma e non e' "
+                           "ribaltabile sull'host (il suo payout viene annullato). Voce da "
+                           "portare in deduzione come costo di servizio sostenuto.")
+            rep["classificazione_fiscale"] = {
+                "incassate": rep["incassate"].get("voce_fiscale", ""),
+                "perdite": rep["perdite"].get("voce_fiscale", "")}
+            logger.info("AUDIT | BUNKER costi tecnici consultati | IP: %s",
+                        self._client_ip(headers))
+            return 200, rep
+        except Exception:
+            logger.error("bunker costi tecnici: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
 
     def _bunker_integrita(self, query, headers):
         """SALA CONTROLLO — INTEGRITA' (Incremento 4, read-only, sessione Bunker richiesta):
@@ -4631,13 +4991,16 @@ class RouterHTTP:
             and 0 <= base <= 10000 else 1000
         try:
             if getattr(cfg, "promo_lancio_attiva", False):
-                from fase98_policy_commissione import (commissione_bps_lancio,
-                                                       LANCIO_BPS_REGIME)
+                # FONTE UNICA (fase98.stato_scaglione), la STESSA del motore che addebita:
+                # prima questa riga usava i default della rampa mentre il motore seguiva
+                # COMMISSIONE_BPS -> con una config diversa da 10% la pagina MOSTRAVA un
+                # numero e il preventivo ne ADDEBITAVA un altro. Ora non e' piu' possibile.
+                from fase98_policy_commissione import stato_scaglione
                 reg = getattr(self._sys, "registro_host", None)
                 hid = self._host_id_da_token(headers) if headers else None
-                if hid and reg is not None:
-                    return commissione_bps_lancio(reg.giorni_da_registrazione(hid))
-                return LANCIO_BPS_REGIME       # generico: tariffa a regime della rampa (10%)
+                giorni = reg.giorni_da_registrazione(hid) if (hid and reg is not None) else None
+                return stato_scaglione(giorni, promo_attiva=True,
+                                       bps_regime_config=base)["bps"]
         except Exception:
             pass
         return base
@@ -5369,10 +5732,33 @@ class RouterHTTP:
         if not (r1.get("ok") and r2.get("ok")):
             logger.error("PROVA consensi INCOMPLETA per host %s (contratto=%s privacy=%s)",
                          host_id, r1.get("ok"), r2.get("ok"))
-        return {"registrata": bool(r1.get("ok")), "versione": r1.get("versione"),
-                "vessatorie": bool(r1.get("vessatorie")),
-                "privacy_registrata": bool(r2.get("ok")),
-                "privacy_versione": r2.get("versione")}
+        out = {"registrata": bool(r1.get("ok")), "versione": r1.get("versione"),
+               "vessatorie": bool(r1.get("vessatorie")),
+               "privacy_registrata": bool(r2.get("ok")),
+               "privacy_versione": r2.get("versione")}
+        # LEGAME IDENTITA' (se l'host si e' gia' verificato): trasforma "qualcuno da questo
+        # IP" in "la persona con documento verificato da Stripe". Isolato: mai bloccante.
+        out["identita_legata"] = self._lega_identita_se_possibile(acc, host_id, ip, ua, lang)
+        return out
+
+    def _lega_identita_se_possibile(self, acc, host_id, ip="", ua="", lang="it"):
+        """Scrive il legame identita↔contratto SE esiste una sessione di verifica.
+        Chiamato alla firma e di nuovo quando la verifica si completa DOPO (webhook), cosi'
+        anche chi firma prima di verificarsi finisce per avere la prova completa."""
+        try:
+            kyc = getattr(self._sys, "kyc", None)
+            if kyc is None or acc is None:
+                return False
+            info = kyc.riferimento(host_id) or {}
+            ref = info.get("session_ref") or ""
+            if not ref:
+                return False
+            r = acc.lega_identita(host_id, ref, info.get("stato", ""),
+                                  ip=ip, user_agent=ua, lang=lang)
+            return bool(r.get("ok"))
+        except Exception:
+            logger.warning("legame identita-contratto fallito (ISOLATO)", exc_info=True)
+            return False
 
     def _host_contratto_stato(self, headers):
         """Serve alla schermata di RI-ACCETTAZIONE: dice se l'host e' in regola con la
@@ -7287,6 +7673,33 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
 
         def do_GET(self):
             u = urlparse(self.path)
+            if u.path == "/api/bunker/export_legale":
+                # DOSSIER LEGALE-FISCALE in STREAMING (zero RAM), come l'estratto contabile.
+                hdrs = dict(self.headers)
+                if not router.puo_esportare(hdrs):
+                    self._scrivi(403, {"errore": "bunker_richiesto"})
+                    return
+                qs = {k: v[0] for k, v in parse_qs(u.query).items()}
+                fmt = "json" if str(qs.get("formato", "")).lower() == "json" else "csv"
+                self.send_response(200)
+                self.send_header("Content-Type",
+                                 "application/json; charset=utf-8" if fmt == "json"
+                                 else "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition",
+                                 'attachment; filename="dossier_legale_bookinvip.%s"' % fmt)
+                self.send_header("Cache-Control", "no-store")
+                self._cors()
+                self.end_headers()
+                if getattr(self, "_solo_head", False):
+                    return
+                try:
+                    for pezzo in router.genera_dossier_legale(
+                            formato=fmt, ip=router._client_ip(hdrs)):
+                        self.wfile.write(pezzo.encode("utf-8"))
+                except Exception:
+                    # flusso interrotto: il file NON avra' la riga di chiusura -> non valido
+                    logger.error("dossier legale: streaming interrotto", exc_info=True)
+                return
             if u.path == "/api/bunker/export_contabile":
                 # STREAMING diretto sul socket (Incremento 4.1): zero RAM, il CSV scorre
                 # riga per riga dal DB al client. Auth Bunker prima di aprire il flusso.

@@ -218,7 +218,7 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         # (rampa di lancio per anzianita' host quando promo_lancio_attiva: 0% -> 8% -> 10%).
         try:
             from fase98_policy_commissione import (commissione_bps_fonte, commissione_cents,
-                                                   commissione_bps_lancio)
+                                                   stato_scaglione)
             numero = 0
             bps_mkt = _bps                       # default 10% regime (fail-safe se anzianita' ignota)
             reg = _ctx_host.get("reg")
@@ -233,13 +233,13 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                 if hid:
                     numero = reg.numero_host(hid)
                     if getattr(cfg, "promo_lancio_attiva", False):   # rampa lancio per anzianità
-                        # la RAMPA finisce sulla commissione CONFIGURATA, non su un 10%
-                        # fisso: altrimenti alzare COMMISSIONE_BPS non avrebbe effetto sugli
-                        # host oltre l'anno (impostazione ignorata in silenzio = ricavo perso).
-                        # `bps_fase1` clampato al regime -> la rampa non supera mai il regime.
-                        bps_mkt = commissione_bps_lancio(
+                        # FONTE UNICA (fase98.stato_scaglione): la stessa funzione che usa
+                        # la vetrina e il pannello super-admin -> il numero ADDEBITATO e il
+                        # numero MOSTRATO non possono divergere. La rampa finisce sulla
+                        # commissione CONFIGURATA (non su un 10% fisso) e non la supera mai.
+                        bps_mkt = stato_scaglione(
                             reg.giorni_da_registrazione(hid),
-                            bps_fase1=min(800, _bps), bps_regime=_bps)
+                            promo_attiva=True, bps_regime_config=_bps)["bps"]
             bps = commissione_bps_fonte(fonte, numero, bps_marketplace=bps_mkt)
             return commissione_cents(netto, bps)
         except Exception:

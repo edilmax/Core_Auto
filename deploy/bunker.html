@@ -111,6 +111,46 @@ button.ghost{background:#222c40;color:var(--txt)}
     </div>
 
     <div class="card">
+      <h2>📊 Scaglioni &amp; Promo (commissione per host)</h2>
+      <p class="hint">A che tariffa sta OGNI host in questo momento, quanti giorni mancano al prossimo scatto e la data esatta del cambio. Il numero arriva dalla stessa funzione che <strong>addebita</strong>: non è un calcolo del browser, quindi non può divergere.</p>
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.5rem 0">
+        <input id="scQ" placeholder="Cerca host: id, email, ragione sociale" style="flex:1;min-width:200px" aria-label="Cerca host">
+        <select id="scFiltro" aria-label="Filtra per scaglione">
+          <option value="">Tutti gli scaglioni</option>
+          <option value="promo">🟢 Promo 0%</option>
+          <option value="fase1">🔵 Fase 8%</option>
+          <option value="regime">🔵 Regime 10%</option>
+        </select>
+        <button class="ghost" id="btnSc">📊 Mostra</button>
+        <span id="scStat" class="hint"></span>
+      </div>
+      <div id="scOut" style="margin-top:.3rem;overflow-x:auto"></div>
+    </div>
+
+    <div class="card">
+      <h2>📜 Prove legali dei consensi (HMAC-SHA256)</h2>
+      <p class="hint">Le prove complete: versione del contratto, impronta del testo, <strong>IP</strong>, dispositivo, <strong>data e ora UTC</strong> e <strong>firma HMAC-SHA256</strong>. Se una riga fosse manomessa nel database la firma non torna e qui compare in rosso. Dati personali: visibili solo da qui, mai nel pannello operativo.</p>
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.5rem 0">
+        <input id="plHost" placeholder="host_id (vuoto = tutti)" style="flex:1;min-width:200px" aria-label="Host per prove legali">
+        <button class="ghost" id="btnProve">📜 Mostra prove</button>
+        <button id="btnDossier">📥 Scarica dossier legale (CSV)</button>
+        <button class="ghost" id="btnDossierJ">📥 JSON</button>
+        <span id="plStat" class="hint"></span>
+      </div>
+      <div id="plOut" style="margin-top:.3rem;overflow-x:auto"></div>
+    </div>
+
+    <div class="card">
+      <h2>🧾 Tariffa tecnica Stripe (3%) e perdite</h2>
+      <p class="hint">Quanto la tariffa tecnica ha davvero coperto e quanto è andato <strong>perso sui rimborsi</strong>: Stripe non restituisce la sua commissione, quindi su ogni prenotazione rimborsata quel costo resta a carico della piattaforma. È la voce da girare al commercialista.</p>
+      <div style="display:flex;gap:.5rem;align-items:center;margin:.5rem 0">
+        <button class="ghost" id="btnCosti">🧾 Calcola prospetto</button>
+        <span id="ctStat" class="hint"></span>
+      </div>
+      <div id="ctOut" style="margin-top:.3rem"></div>
+    </div>
+
+    <div class="card">
       <h2>📋 Log persistenti (ultimi eventi)</h2>
       <p class="hint">Chi ha fatto cosa + allarmi. In rosso i CRITICI (accessi negati, manomissioni).</p>
       <div id="loglist" style="margin-top:.5rem"></div>
@@ -289,6 +329,119 @@ async function riconcilia(){
     out.innerHTML=righe.join('');
   }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
 }
+// ── 📊 SCAGLIONI & PROMO ──────────────────────────────────────────────────────
+const SC_ETICHETTA={promo:'🟢 Promo 0%',fase1:'🔵 Fase 8%',regime:'🔵 Regime'};
+async function scaglioni(){
+  const st=$('scStat'), out=$('scOut');
+  if(!attivo()){ esci(); return; }
+  st.textContent='… calcolo'; out.innerHTML='';
+  try{
+    const qs='?q='+encodeURIComponent($('scQ').value.trim())
+           +'&scaglione='+encodeURIComponent($('scFiltro').value);
+    const r=await fetch('/api/bunker/scaglioni_host'+qs,{headers:hdr()});
+    if(r.status===403){ esci(); return; }
+    let d=null; try{ d=await r.json(); }catch(_){ console.warn('bunker',_); }
+    if(!r.ok||!d){ st.textContent='ℹ️ non disponibile ('+r.status+')'; return; }
+    const c=d.conteggi||{};
+    st.innerHTML=pill('ok','🟢 '+(c.promo||0)+' in promo')+' '+pill('','🔵 '+(c.fase1||0)+' a 8%')
+      +' '+pill('','🔵 '+(c.regime||0)+' a regime')
+      +(c.ignoti?' '+pill('ko','⚠️ '+c.ignoti+' senza data'):'')
+      +(d.da_riaccettare?' '+pill('ko','📜 '+d.da_riaccettare+' devono ri-accettare'):'');
+    if(!d.host||!d.host.length){ out.innerHTML='<p class="hint">Nessun host con questi filtri.</p>'; return; }
+    const th='<tr><th>Host</th><th>Registrato</th><th>Giorni</th><th>Scaglione</th>'
+      +'<th>Marketplace</th><th>Diretto</th><th>Prossimo scatto</th><th>Contratto</th></tr>';
+    const tr=d.host.map(h=>'<tr><td>'+esc(h.email||h.host_id)
+      +'<br><span class="hint">'+esc(h.host_id)+'</span></td>'
+      +'<td>'+esc(h.registrato_il||'—')+'</td><td>'+(h.giorni==null?'—':h.giorni)+'</td>'
+      +'<td>'+(SC_ETICHETTA[h.scaglione]||esc(h.scaglione))+'</td>'
+      +'<td><strong>'+h.percentuale.toFixed(2)+'%</strong></td>'
+      +'<td>'+(h.bps_diretto/100).toFixed(2)+'%</td>'
+      +'<td>'+(h.giorni_al_prossimo==null?'—'
+           : esc(h.prossimo_scatto_il||'')+' <span class="hint">(fra '+h.giorni_al_prossimo
+             +' gg → '+(h.prossimo_bps/100).toFixed(2)+'%)</span>')+'</td>'
+      +'<td>'+(h.deve_riaccettare
+           ? '🔴 da ri-accettare<br><span class="hint">ha v'+esc(h.versione_accettata||'—')+'</span>'
+           : '✅ in regola')+'</td></tr>').join('');
+    out.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:.9rem">'
+      +th+tr+'</table><p class="hint" style="margin-top:.4rem">Tariffa tecnica Stripe: '
+      +((d.tariffa_tecnica_bps||0)/100).toFixed(2)+'% — sempre dovuta, anche a commissione 0%.</p>';
+  }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
+}
+// ── 📜 PROVE LEGALI (IP · ora UTC · firma HMAC-SHA256) ────────────────────────
+async function proveLegali(){
+  const st=$('plStat'), out=$('plOut');
+  if(!attivo()){ esci(); return; }
+  st.textContent='… leggo il registro'; out.innerHTML='';
+  try{
+    const h=$('plHost').value.trim();
+    const r=await fetch('/api/bunker/prove_legali'+(h?'?host_id='+encodeURIComponent(h):''),
+                        {headers:hdr()});
+    if(r.status===403){ esci(); return; }
+    let d=null; try{ d=await r.json(); }catch(_){ console.warn('bunker',_); }
+    if(!r.ok||!d){ st.textContent='ℹ️ non disponibile ('+r.status+')'; return; }
+    st.innerHTML=d.integrita_ok ? pill('ok','✅ '+d.totale+' prove, tutte integre')
+                                : pill('ko','🔴 '+d.manomesse+' prove MANOMESSE su '+d.totale);
+    if(!d.prove||!d.prove.length){ out.innerHTML='<p class="hint">Nessuna prova registrata.</p>'; return; }
+    const DOCN={contratto_host:'📜 Contratto',privacy_gdpr:'🔒 Privacy GDPR',
+                identita_stripe:'🪪 Identità verificata'};
+    const th='<tr><th>Host</th><th>Documento</th><th>Versione</th><th>Accettato (UTC)</th>'
+      +'<th>IP</th><th>Clausole</th><th>Riferimento</th><th>Firma HMAC-SHA256</th><th>Integra</th></tr>';
+    const tr=d.prove.map(p=>'<tr'+(p.integra?'':' style="background:#fdecea"')+'>'
+      +'<td>'+esc(p.host_id||'')+'</td><td>'+(DOCN[p.documento]||esc(p.documento||''))+'</td>'
+      +'<td>'+esc(p.versione||'')+'</td><td>'+esc(p.accettato_utc||'')+'</td>'
+      +'<td>'+esc(p.ip||'—')+'</td><td>'+(p.clausole_vessatorie?'✅':'—')+'</td>'
+      +'<td style="font-family:monospace;font-size:.75rem">'+esc(p.riferimento||'—')+'</td>'
+      +'<td style="font-family:monospace;font-size:.75rem">'+esc((p.firma_hmac_sha256||'').slice(0,24))+'…</td>'
+      +'<td>'+(p.integra?'✅':'🔴 NO')+'</td></tr>').join('');
+    out.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:.85rem">'+th+tr+'</table>';
+  }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
+}
+async function scaricaDossier(formato){
+  const st=$('plStat');
+  if(!attivo()){ esci(); return; }
+  st.textContent='… preparo il dossier';
+  try{
+    const r=await fetch('/api/bunker/export_legale?formato='+formato,{headers:hdr()});
+    if(r.status===403){ esci(); return; }
+    if(!r.ok){ st.textContent='ℹ️ non disponibile ('+r.status+')'; return; }
+    const testo=await r.text();
+    if(testo.indexOf('# FINE DOSSIER')<0){ st.textContent='🔴 file NON valido (troncato)'; return; }
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([testo],
+      {type:formato==='json'?'application/json':'text/csv'}));
+    a.download='dossier_legale_bookinvip.'+formato; a.click(); URL.revokeObjectURL(a.href);
+    st.textContent='✅ scaricato e certificato';
+  }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
+}
+// ── 🧾 TARIFFA TECNICA STRIPE E PERDITE SUI RIMBORSI ─────────────────────────
+async function costiTecnici(){
+  const st=$('ctStat'), out=$('ctOut');
+  if(!attivo()){ esci(); return; }
+  st.textContent='… calcolo'; out.innerHTML='';
+  try{
+    const r=await fetch('/api/bunker/costi_tecnici',{headers:hdr()});
+    if(r.status===403){ esci(); return; }
+    let d=null; try{ d=await r.json(); }catch(_){ console.warn('bunker',_); }
+    if(!r.ok||!d){ st.textContent='ℹ️ non disponibile ('+r.status+')'; return; }
+    st.textContent='';
+    const inc=(d.incassate||{}), per=(d.perdite||{});
+    const eur=c=>((c||0)/100).toFixed(2);
+    out.innerHTML='<div class="riga"><span>✅ Ricavo tecnico coperto ('+(inc.conteggio||0)+' prenotazioni)'
+      +'<br><span class="hint">ribaltato all\'host</span></span>'
+      +'<span><strong>'+eur(inc.cents)+'</strong></span></div>'
+      +'<div class="riga"><span>🔴 <strong>COSTO TECNICO IRRECUPERABILE</strong> ('+(per.conteggio||0)+')'
+      +'<br><span class="hint">perdita deducibile — Stripe non restituisce la commissione sui rimborsi</span></span>'
+      +'<span><strong>-'+eur(per.cents)+'</strong></span></div>'
+      +'<div class="riga"><span>= Saldo</span><span><strong>'+eur(d.coperto_cents)+'</strong></span></div>'
+      +'<p class="hint" style="margin-top:.5rem">'+esc(d.nota||'')+'</p>';
+  }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
+}
+$('btnSc').onclick=scaglioni;
+$('scQ').addEventListener('keydown',e=>{ if(e.key==='Enter') scaglioni(); });
+$('btnProve').onclick=proveLegali;
+$('btnDossier').onclick=()=>scaricaDossier('csv');
+$('btnDossierJ').onclick=()=>scaricaDossier('json');
+$('btnCosti').onclick=costiTecnici;
 $('btnRic').onclick=riconcilia;
 $('btnEntra').onclick=entra;
 $('btnAgg').onclick=aggiorna;

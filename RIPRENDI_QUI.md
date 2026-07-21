@@ -338,6 +338,26 @@
 >   ancora verdi. Demo locale su porta 8899 (script scratchpad/demo_votazioni.py; launcher
 >   Desktop/APRI-DEMO-VOTAZIONI.html → pagina pulita). NB date "23→19" nella demo = scorciatoia
 >   (check_out forzato a ieri per sbloccare il form), NON un bug del prodotto.
+> · 🪪 **IDENTITÀ LEGATA ALLA FIRMA (2026-07-21, super-tutela)**: prima la prova non diceva CHI
+>   aveva firmato (difesa facile: "non ero io"). Ora, se l'host è verificato con Stripe Identity,
+>   il registro scrive una **terza riga firmata** `identita_stripe` che lega la **sessione di
+>   verifica** (`vs_...`) al **testo esatto** del contratto, con impronta **ricalcolabile da
+>   chiunque**. Il riferimento è DENTRO la firma HMAC (alterarlo la invalida) ma entra solo
+>   quando c'è → **le prove già archiviate restano integre**. Scritta alla firma o **quando la
+>   verifica arriva dopo**. Visibile nel Bunker e nel dossier (6 colonne). Guardia
+>   `test_identita_contratto` (14). PROSSIMO possibile: **marca temporale qualificata** via
+>   provider REST (chiude l'obiezione "i registri li avete scritti voi") — valutato, non fatto.
+> · 🏰 **SALA CONTROLLO SUPER-ADMIN (2026-07-21)**: dall'audit "il super-admin è cieco" →
+>   4 rotte nuove tutte Bunker-gated: `scaglioni_host` (a che tariffa sta ogni host, giorni al
+>   prossimo scatto e DATA del cambio), `prove_legali` (IP · ora UTC · versione · impronta ·
+>   firma HMAC-SHA256 · flag integra, con conteggio manomesse), `costi_tecnici` (3% coperto vs
+>   PERSO sui rimborsi: Stripe non restituisce la sua fetta) e `export_legale` (**dossier
+>   certificato** CSV/JSON con anagrafica+scaglione+prove+prospetto tecnico, chiuso da impronta
+>   SHA-256). **FONTE UNICA `fase98.stato_scaglione`**: motore e vetrina ora usano la stessa
+>   funzione → divergenza impossibile (prima fase81 seguiva COMMISSIONE_BPS e fase83 no).
+>   **Field messo in sicurezza**: `/api/admin/verifiche/dettaglio` non espone più IP/impronta
+>   senza secondo fattore. 3 sezioni nuove in bunker.html. Guardia `test_bunker_scaglioni_prove`
+>   (18). NB: dossier in CSV/JSON, **non PDF** (servirebbe una libreria esterna = viola zero-dipendenze).
 > · 📚 **RIASSETTO DOCUMENTALE + BONIFICA VPS (2026-07-20)**: radice blindata a **5 file
 >   ufficiali** (README · REGISTRO · RIPRENDI_QUI · DEPLOY · CLAUDE), gli altri 9 in `_archivio/`
 >   (23 doc storici + LEGGIMI che avvisa "cifre superate"). **README riscritto da zero** (quello

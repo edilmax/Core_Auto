@@ -76,6 +76,24 @@ class KYCHost:
     def verificato(self, host_id: str) -> bool:
         return self.stato(host_id) == "verificato"
 
+    def riferimento(self, host_id: str) -> Dict[str, Any]:
+        """Stato + riferimento della sessione di verifica (`vs_...`) + quando.
+        Serve a LEGARE l'identita' verificata alla firma del contratto (fase163): senza
+        questo aggancio si prova che 'qualcuno da un IP ha accettato', non CHI. Read-only.
+        Host mai verificato -> stato 'non_avviata' e riferimento vuoto (mai inventare)."""
+        con = self._apri()
+        try:
+            r = con.execute("SELECT stato, session_ref, ts FROM kyc WHERE host_id=?",
+                            (str(host_id),)).fetchone()
+        except Exception:
+            logger.warning("riferimento KYC fallito (ISOLATO)", exc_info=True)
+            return {"stato": "non_disponibile", "session_ref": "", "ts": None}
+        finally:
+            con.close()
+        if r is None:
+            return {"stato": "non_avviata", "session_ref": "", "ts": None}
+        return {"stato": r[0], "session_ref": r[1] or "", "ts": r[2]}
+
     def avvia(self, host_id: str) -> Dict[str, Any]:
         """GATED: senza provider → nessuna sessione. Ritorna il riferimento per il redirect."""
         if not host_id or self._avvia is None:
