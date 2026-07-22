@@ -1,3 +1,26 @@
+## 🟡 IN CORSO — "PAGA IN STRUTTURA" (2026-07-23) — **FASE 1 FATTA (dark launch)**
+
+Feature grande a 3 fasi (piano nel memory `bookinvip-paga-in-struttura`). Modello soldi: online =
+prezzo pulito (0% ospite); in struttura = ospite paga +1,50/notte, host incassa uguale, noi non ci
+perdiamo mai (`fase188`, calcolo puro).
+
+- ✅ **FASE 1 (vetrina) CABLATA**: colonna `paga_in_struttura` (default ON) in `fase57` con migrazione
+  ALTER · toggle nel pannello host (`host.html`, 8 lingue) · preventivo arricchito in
+  `fase83._concierge_quote` (isolato) · checkout `index.html` mostra ENTRAMBI i prezzi + **box
+  trasparenza 8 lingue** (online = protetto da noi / saldo in loco NON rimborsabile da noi).
+- 🌑 **DARK LAUNCH**: la vetrina ospite è SPENTA di default (`PAGA_STRUTTURA_ATTIVO=0`); si accende
+  solo quando la FASE 2 rende l'opzione davvero selezionabile → si può deployare senza confondere
+  l'ospite (codice allineato Desktop=GitHub=VPS, feature dark). Toggle host e calcolo restano attivi.
+- 🧪 Guardie: `test_paga_struttura` (6) + `test_paga_struttura_cablaggio` (4, incl. dark-launch vista
+  rossa). Rese rosse sul codice guasto (2 bug veri beccati: slug da `body` invece che da `corpo`; `os`
+  fuori scope). Render manuale del box nelle 8 lingue verificato a mano (occhio del fondatore).
+- ⏭️ **PROSSIMO — FASE 2**: carta OBBLIGATORIA + addebito Stripe dell'anticipo (`fase85`) + carta
+  salvata SetupIntent (`fase183`) + saldo su voucher/email 8 lingue (`fase86`) + **accendere il flag**.
+  Poi **FASE 3** (anticipo non rimborsabile, no-show) e **ANTI-TRUFFA re-iscrizione** (impronta
+  cifrata cod.fiscale/IBAN/Stripe → la rampa non riparte da 0). Alla fine: ricontrollo INTERO + suite.
+
+---
+
 # 🧪 STATO COLLAUDO — sessione 2026-07-16/17/18 (Fable 5)
 
 > 🧭 **PUNTO DI RIPARTENZA per la CHAT SUCCESSIVA (cambio account, 2026-07-18)** — Riprendi da QUI.

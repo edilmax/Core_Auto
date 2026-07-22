@@ -5617,6 +5617,41 @@ class RouterHTTP:
                             "risparmio_bps": c["risparmio_bps"]}
             except Exception:
                 logger.warning("confronto OTA quote fallito (ignorato)", exc_info=True)
+            # PAGA IN STRUTTURA (fase188): se l'annuncio lo accetta, aggiunge l'alternativa
+            # (anticipo ONLINE + saldo di persona all'host + fee 1.50/notte a carico ospite).
+            # Solo display: l'addebito vero (Fase 2) resta ancorato alla valuta dell'alloggio.
+            # Isolato e fail-safe: se salta, la quote resta intatta.
+            try:
+                # lo slug si legge dal preventivo (corpo), NON da `body`: qui `body` e' ancora
+                # la STRINGA JSON grezza (niente .get) -> l'avrebbe fatto saltare in silenzio.
+                slug = str(corpo.get("alloggio_id") or "")
+                cat = getattr(self._sys, "catalogo", None)
+                det = cat.dettaglio(slug) if (cat is not None and slug) else None
+                # DARK LAUNCH: la vetrina ospite resta SPENTA finche' la FASE 2 (carta +
+                # addebito anticipo) non e' pronta -> PAGA_STRUTTURA_ATTIVO=1 la accende. Cosi'
+                # il codice sta gia' su Desktop=GitHub=VPS, ma l'ospite non vede un'opzione che
+                # non puo' ancora SCEGLIERE. Toggle host e calcolo restano attivi (innocui).
+                import os as _os
+                attivo = _os.environ.get("PAGA_STRUTTURA_ATTIVO", "0") == "1"
+                accetta = attivo and (bool(det.get("paga_in_struttura", True))
+                                      if isinstance(det, dict) else False)
+                tot = corpo.get("totale_cents")
+                comm = corpo.get("commissione_cents")
+                nn = corpo.get("notti")
+                if (accetta and isinstance(tot, int) and not isinstance(tot, bool) and tot > 0):
+                    import fase188_paga_struttura as _ps
+                    r = _ps.calcola(tot, nn, comm if isinstance(comm, int) and not isinstance(comm, bool) else 0)
+                    corpo["paga_in_struttura"] = {
+                        "accettato": True,
+                        "ospite_paga_totale_cents": r["ospite_paga_totale_cents"],
+                        "anticipo_online_cents": r["anticipo_online_cents"],
+                        "saldo_in_loco_cents": r["saldo_in_loco_cents"],
+                        "fee_cents": r["fee_cents"],
+                    }
+                else:
+                    corpo["paga_in_struttura"] = {"accettato": False}
+            except Exception:
+                logger.warning("paga-in-struttura quote fallito (ignorato)", exc_info=True)
         return status, corpo
 
     def _fmt_importo(self, cents, valuta):

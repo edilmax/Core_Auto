@@ -139,6 +139,9 @@ class SchedaAlloggio:
     modalita_prenotazione: str = "immediata"   # immediata | su_richiesta (l'host sceglie)
     pin_manuale: bool = False          # True = posizione FISSATA dall'host sulla mappa
                                        # (trascinando il pin): vince sulla geocodifica
+    paga_in_struttura: bool = True     # True = l'host ACCETTA "paga in struttura" (default ON):
+                                       # l'ospite puo' scegliere di pagare il saldo di persona
+                                       # all'host (anticipo online + saldo in loco, fase188)
 
 
 # Politiche di cancellazione che l'host puo' scegliere (coerenti con fase111).
@@ -311,6 +314,11 @@ def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
         fuso = _norm_fuso(data.get("fuso"), citta, paese)
     except Exception:
         fuso = ""
+    # "Paga in struttura": l'host lo ACCETTA per default (ON). Robusto ai vari modi in cui il
+    # frontend puo' mandarlo (bool JSON, o stringhe): solo un "no" esplicito lo spegne.
+    _pis = data.get("paga_in_struttura", True)
+    paga_in_struttura = (_pis if isinstance(_pis, bool)
+                         else str(_pis).strip().lower() not in ("false", "0", "no", "off", ""))
     return True, "", SchedaAlloggio(
         host_id=host_id, slug=slug, titolo=titolo, citta=citta,
         prezzo_notte_cents=prezzo, capacita=int(data["capacita"]),
@@ -322,7 +330,8 @@ def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
         tassa_pp_notte_cents=t_pp, tassa_max_notti=t_max, tassa_perc_bps=t_perc,
         sconto_settimana_bps=sc_sett, sconto_mese_bps=sc_mese,
         modalita_prenotazione=modal,
-        pin_manuale=bool(data.get("pin_manuale", False)))
+        pin_manuale=bool(data.get("pin_manuale", False)),
+        paga_in_struttura=paga_in_struttura)
 
 
 def _valida_immagini(imgs: Any) -> List[Immagine]:
@@ -405,6 +414,7 @@ class CatalogoVetrina:
                         sconto_mese_bps INTEGER NOT NULL DEFAULT 0,
                         modalita_prenotazione TEXT NOT NULL DEFAULT 'immediata',
                         pin_manuale INTEGER NOT NULL DEFAULT 0,
+                        paga_in_struttura INTEGER NOT NULL DEFAULT 1,
                         creato_ts TEXT NOT NULL,
                         aggiornato_ts TEXT NOT NULL)""")
                 for _c, _d in (("politica_cancellazione", "TEXT NOT NULL DEFAULT 'flessibile'"),
@@ -417,7 +427,8 @@ class CatalogoVetrina:
                                ("modalita_prenotazione", "TEXT NOT NULL DEFAULT 'immediata'"),
                                ("pin_manuale", "INTEGER NOT NULL DEFAULT 0"),
                                ("cin", "TEXT NOT NULL DEFAULT ''"),
-                               ("fuso", "TEXT NOT NULL DEFAULT ''")):
+                               ("fuso", "TEXT NOT NULL DEFAULT ''"),
+                               ("paga_in_struttura", "INTEGER NOT NULL DEFAULT 1")):
                     try:
                         con.execute("ALTER TABLE alloggi ADD COLUMN %s %s" % (_c, _d))
                     except sqlite3.OperationalError:
@@ -494,8 +505,8 @@ class CatalogoVetrina:
                     "servizi_mask, valuta, stato, lat_micro, lon_micro, politica_cancellazione, "
                     "tassa_pp_notte_cents, tassa_max_notti, tassa_perc_bps, "
                     "sconto_settimana_bps, sconto_mese_bps, "
-                    "modalita_prenotazione, pin_manuale, creato_ts, aggiornato_ts) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "modalita_prenotazione, pin_manuale, paga_in_struttura, creato_ts, aggiornato_ts) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (scheda.host_id, scheda.slug, scheda.titolo, scheda.descrizione,
                      scheda.citta, scheda.paese, scheda.fuso, scheda.cin, scheda.indirizzo,
                      scheda.prezzo_notte_cents,
@@ -505,6 +516,7 @@ class CatalogoVetrina:
                      scheda.tassa_max_notti, scheda.tassa_perc_bps,
                      scheda.sconto_settimana_bps, scheda.sconto_mese_bps,
                      scheda.modalita_prenotazione, 1 if scheda.pin_manuale else 0,
+                     1 if scheda.paga_in_struttura else 0,
                      ora, ora))
                 alloggio_id = cur.lastrowid
             else:
@@ -516,7 +528,7 @@ class CatalogoVetrina:
                     "servizi_mask=?, valuta=?, stato=?, lat_micro=?, lon_micro=?, "
                     "politica_cancellazione=?, tassa_pp_notte_cents=?, tassa_max_notti=?, "
                     "tassa_perc_bps=?, sconto_settimana_bps=?, sconto_mese_bps=?, "
-                    "modalita_prenotazione=?, pin_manuale=?, aggiornato_ts=? WHERE id=?",
+                    "modalita_prenotazione=?, pin_manuale=?, paga_in_struttura=?, aggiornato_ts=? WHERE id=?",
                     (scheda.host_id, scheda.titolo, scheda.descrizione, scheda.citta,
                      scheda.paese, scheda.fuso, scheda.cin, scheda.indirizzo,
                      scheda.prezzo_notte_cents, scheda.capacita,
@@ -525,6 +537,7 @@ class CatalogoVetrina:
                      scheda.tassa_pp_notte_cents, scheda.tassa_max_notti, scheda.tassa_perc_bps,
                      scheda.sconto_settimana_bps, scheda.sconto_mese_bps,
                      scheda.modalita_prenotazione, 1 if scheda.pin_manuale else 0,
+                     1 if scheda.paga_in_struttura else 0,
                      ora, alloggio_id))
             con.execute("DELETE FROM alloggio_immagini WHERE alloggio_id=?", (alloggio_id,))
             if imgs:
@@ -983,6 +996,8 @@ class CatalogoVetrina:
             "tassa_perc_bps": int(a["tassa_perc_bps"]) if "tassa_perc_bps" in a.keys() else 0,
             "modalita_prenotazione": (a["modalita_prenotazione"]
                                       if "modalita_prenotazione" in a.keys() else "immediata"),
+            "paga_in_struttura": (bool(a["paga_in_struttura"])
+                                  if "paga_in_struttura" in a.keys() else True),
             "lat_micro": a["lat_micro"],
             "lon_micro": a["lon_micro"],
             "immagini": [{"url": i["url"], "ordine": int(i["ordine"]), "alt": i["alt"]}
