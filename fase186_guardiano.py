@@ -43,6 +43,9 @@ logger = logging.getLogger("core_auto.guardiano")
 GRAZIA_ESCROW_ORE = 48          # un escrow gia' scaduto da 2 giorni non dovrebbe esistere
 GIORNI_PAYOUT_FERMO = 7         # un bonifico 'maturato' fermo da una settimana e' bloccato
 GIORNI_RICONCILIAZIONE = 30     # finestra del confronto con Stripe
+ORE_CAMBIO_FERMO = 26           # cambio valuta (OXR): nessun tasso riuscito da >1 giorno NONOSTANTE
+#                                 la sonda giornaliera = il terzo (OXR) e' giu'. Soglia >24h per
+#                                 non gridare su un singolo blip che si riprende al giro dopo.
 
 
 def _ora(ora: Any) -> int:
@@ -118,10 +121,32 @@ def _payout_anomali(sistema: Any, ora_ts: int, giorni_fermo: int
     return {"bonifico_fermo": fermi, "payout_orfano": orfani}
 
 
+def _cambio_valuta_fermo(sistema: Any, ora_ts: int,
+                         soglia_ore: int) -> Optional[Dict[str, Any]]:
+    """Il convertitore valuta (OXR, fase99) è configurato ma non prende i tassi da troppo tempo?
+    È SOLO display (nessun addebito ne dipende: l'ospite paga sempre nella valuta dell'alloggio),
+    ma se resta muto il fondatore deve saperlo — è "il terzo che cambia". `stato()` è READ-ONLY
+    (nessuna rete qui): la sonda VERA la fa il giro giornaliero prima di chiamare scansiona.
+    Nessuna chiave OXR → None (niente allarme: la funzione è semplicemente spenta)."""
+    tassi = getattr(sistema, "tassi", None)
+    if tassi is None:
+        return None
+    st = tassi.stato(ora_ts)
+    if not st.get("configurato"):
+        return None
+    eta = st.get("eta_ore")
+    fermo = bool(st.get("mai_riuscito")) or (eta is not None and eta > soglia_ore)
+    if not fermo:
+        return None
+    return {"eta_ore": eta, "mai_riuscito": bool(st.get("mai_riuscito")),
+            "ultimo_ok_ts": st.get("ultimo_ok_ts"), "soglia_ore": soglia_ore}
+
+
 def scansiona(sistema: Any, *, ora: Any = None,
               giorni_riconciliazione: int = GIORNI_RICONCILIAZIONE,
               grazia_escrow_ore: int = GRAZIA_ESCROW_ORE,
-              giorni_payout_fermo: int = GIORNI_PAYOUT_FERMO) -> Dict[str, Any]:
+              giorni_payout_fermo: int = GIORNI_PAYOUT_FERMO,
+              ore_cambio_fermo: int = ORE_CAMBIO_FERMO) -> Dict[str, Any]:
     """Cerca tutti gli stati impossibili e li raccoglie. READ-ONLY. Ritorna:
     {pulito: bool, conta: N, anomalie: {categoria: [...]/{...}}, ts, ...}."""
     ora_ts = _ora(ora)
@@ -152,6 +177,10 @@ def scansiona(sistema: Any, *, ora: Any = None,
     if pa.get("payout_orfano"):
         anomalie["payout_orfano"] = pa["payout_orfano"]
 
+    cv = _prova(_cambio_valuta_fermo, sistema, ora_ts, ore_cambio_fermo)
+    if cv:
+        anomalie["cambio_valuta_fermo"] = cv
+
     def _conta(v: Any) -> int:
         if isinstance(v, list):
             return len(v)
@@ -171,6 +200,7 @@ _TITOLI = {
     "escrow_bloccato": "Escrow bloccati (soldi ospite non rilasciati)",
     "bonifico_fermo": "Bonifici dovuti all'host, fermi da troppo tempo",
     "payout_orfano": "Bonifici dovuti a un host che non esiste piu'",
+    "cambio_valuta_fermo": "Cambio valuta (OXR) fermo: la stima «≈ nella tua moneta» non si aggiorna",
 }
 
 

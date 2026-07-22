@@ -149,6 +149,7 @@ class SistemaCasaVIP:
     kyc: Any = None         # KYCHost (fase143): esiti verifica identita' (provider, no-PII)
     bunker: Any = None      # Bunker (fase180): super-admin 2FA TOTP + sessione blindata 15 min
     carta: Any = None       # ProviderCarta (fase183, Scatto ③): carta host off-session (gated)
+    tassi: Any = None       # ProviderTassi (fase99): cambio valuta indicativo; None se OXR spento
 
     @property
     def attivo(self) -> bool:
@@ -263,6 +264,7 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
             return 0
 
     _tasso = None
+    _tassi = None
     if cfg.oxr_app_id:
         try:
             from fase99_multicurrency import crea_provider_tassi
@@ -272,6 +274,7 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
             componenti.append("cambio_indicativo(99)")
         except Exception:
             _tasso = None
+            _tassi = None
 
     # SINGLE-USE del Credito Fondatore/Viaggio (fase167): un credito si spende UNA volta sola.
     # Iniettato nel concierge (check al preventivo) e consumato dal server alla finalizzazione.
@@ -552,4 +555,4 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           payout=payout, accettazioni=accettazioni, marche=marche, stripe=provider,
                           connect=_connect, carta=_carta, geocoder=geocoder, checkin=checkin,
                           poi_provider=poi_provider, credito_usati=credito_usati,
-                          finanza=finanza, bunker=bunker, kyc=kyc)
+                          finanza=finanza, bunker=bunker, kyc=kyc, tassi=_tassi)

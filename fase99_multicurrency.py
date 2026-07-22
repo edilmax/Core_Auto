@@ -202,6 +202,21 @@ class ProviderTassi:
             pass
         return False
 
+    def stato(self, ora: Optional[float] = None) -> Dict[str, Any]:
+        """SALUTE del cambio valuta (READ-ONLY, nessuna rete): per l'allarme del Guardiano.
+        `_ts` è impostato SOLO su un fetch riuscito → è l'ora dell'ultimo successo. Ritorna:
+        configurato (c'è la chiave?), ultimo_ok_ts, eta_ore (da quanto NON riesce), mai_riuscito.
+        Un `eta_ore` alto NONOSTANTE la sonda giornaliera = OXR davvero giù (non solo traffico
+        scarso). Isolato: mai solleva."""
+        t = float(ora) if ora is not None else self._orologio()
+        with self._lock:
+            ok_ts = self._ts
+        eta = (t - ok_ts) if ok_ts > 0 else None
+        return {"configurato": bool(self._app),
+                "ultimo_ok_ts": int(ok_ts),
+                "eta_ore": (round(eta / 3600.0, 1) if eta is not None else None),
+                "mai_riuscito": ok_ts <= 0}
+
     def scalda(self) -> None:
         """Avvia UN solo scarico in un thread daemon: non blocca il chiamante. Chiamato allo
         startup (scalda la cache) e da `tasso()` quando la cache è scaduta."""

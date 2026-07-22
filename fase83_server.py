@@ -8567,6 +8567,14 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             while True:
                 try:
                     from fase186_guardiano import scansiona, riassunto_html
+                    # sonda OXR 1 volta/giorno (lo scan è read-only): così un tasso vecchio da
+                    # traffico scarso non viene scambiato per "OXR giù". Isolato: mai rompe il giro.
+                    try:
+                        _t = getattr(sistema, "tassi", None)
+                        if _t is not None:
+                            _t.aggiorna()
+                    except Exception:
+                        pass
                     rep = scansiona(sistema)
                     if not rep.get("pulito"):
                         logger.critical("GUARDIANO: %d stato/i anomalo/i -> %s",

@@ -143,6 +143,80 @@ class TestTTLeFailSafe(unittest.TestCase):
             self.assertIsNone(p.tasso("EUR", "USD"))  # nessun crash, nessun tasso
 
 
+class _FakeSistema:
+    """Sistema minimo per il Guardiano: solo `.tassi`. Gli altri controlli di scansiona()
+    accedono ad attributi assenti -> sollevano -> vengono ISOLATI (_prova) -> None. Cosi' il
+    test vede SOLO l'anomalia del cambio valuta."""
+    def __init__(self, tassi=None):
+        self.tassi = tassi
+
+
+def _fetch_rotto(url):
+    raise RuntimeError("OXR irraggiungibile")
+
+
+class TestAllarmeOXR(unittest.TestCase):
+    """L'allarme "il terzo che cambia": se OXR resta muto da >1 giorno, il Guardiano grida."""
+
+    def _provider(self, clock, ttl=3600):
+        return ProviderTassi("k", fetch=_fetch(), orologio=lambda: clock[0], ttl_sec=ttl)
+
+    def test_stato_mai_fresco_stale(self):
+        clock = [1000.0]
+        p = self._provider(clock)
+        s = p.stato(clock[0])                        # non ha mai preso i tassi
+        self.assertTrue(s["mai_riuscito"])
+        self.assertIsNone(s["eta_ore"])
+        self.assertTrue(s["configurato"])
+        p.aggiorna()                                 # ok @ t=1000
+        s = p.stato(1000 + 7200)                     # 2h dopo
+        self.assertFalse(s["mai_riuscito"])
+        self.assertEqual(s["eta_ore"], 2.0)
+
+    def test_guardiano_grida_se_oxr_muto_da_oltre_un_giorno(self):
+        from fase186_guardiano import scansiona
+        clock = [1000.0]
+        p = self._provider(clock)
+        p.aggiorna()                                 # ultimo tasso riuscito @ t=1000
+        sis = _FakeSistema(tassi=p)
+        # 1h dopo: sotto soglia (26h) -> PULITO, nessun allarme
+        rep = scansiona(sis, ora=lambda: 1000 + 3600)
+        self.assertTrue(rep["pulito"], rep.get("anomalie"))
+        self.assertNotIn("cambio_valuta_fermo", rep["anomalie"])
+        # 27h dopo: oltre soglia -> GRIDA
+        rep = scansiona(sis, ora=lambda: 1000 + 27 * 3600)
+        self.assertFalse(rep["pulito"])
+        self.assertIn("cambio_valuta_fermo", rep["anomalie"])
+        self.assertGreater(rep["anomalie"]["cambio_valuta_fermo"]["eta_ore"], 26)
+
+    def test_guardiano_grida_se_oxr_giu_dal_boot(self):
+        from fase186_guardiano import scansiona
+        p = ProviderTassi("k", fetch=_fetch_rotto)
+        p.aggiorna()                                 # fallisce -> non ha MAI preso i tassi
+        rep = scansiona(_FakeSistema(tassi=p), ora=lambda: 10 ** 9)
+        self.assertIn("cambio_valuta_fermo", rep["anomalie"])
+        self.assertTrue(rep["anomalie"]["cambio_valuta_fermo"]["mai_riuscito"])
+
+    def test_oxr_spento_nessun_allarme(self):
+        from fase186_guardiano import scansiona
+        # nessun provider (chiave non impostata a livello di sistema)
+        rep = scansiona(_FakeSistema(tassi=None), ora=lambda: 10 ** 9)
+        self.assertTrue(rep["pulito"])
+        self.assertNotIn("cambio_valuta_fermo", rep["anomalie"])
+        # provider presente ma SENZA chiave (configurato=False) -> non e' un guasto, e' spento
+        p = ProviderTassi("", fetch=_fetch())
+        rep = scansiona(_FakeSistema(tassi=p), ora=lambda: 10 ** 9)
+        self.assertNotIn("cambio_valuta_fermo", rep["anomalie"])
+
+    def test_riassunto_html_include_l_anomalia(self):
+        from fase186_guardiano import scansiona, riassunto_html
+        p = ProviderTassi("k", fetch=_fetch_rotto)
+        p.aggiorna()
+        rep = scansiona(_FakeSistema(tassi=p), ora=lambda: 10 ** 9)
+        html = riassunto_html(rep)
+        self.assertIn("OXR", html)                   # l'email nomina il cambio valuta
+
+
 class TestFabbrica(unittest.TestCase):
 
     def test_crea_provider_passa_i_parametri(self):

@@ -23,7 +23,7 @@ Money-path completo (prenota → hold/pagamento → escrow → payout), pannelli
 | Pagamenti Stripe + webhook + hold pendenti | 85, 87, 162 | **Stripe LIVE (soldi veri)** |
 | Escrow garanzia + **Connect (bonifici auto)** | 160, 101 | **Connect VERIFICATO ATTIVO** su Stripe live (2026-07-14). Modello: charge alla piattaforma + transfer separato all'host al rilascio 24h (solo la commissione è ricavo). Manca solo che l'host prema "Collega Stripe" |
 | Payout dashboard | 131 | |
-| Multi-valuta like-for-like | 99 | OXR spento (stima "≈ tua moneta" off) |
+| Multi-valuta like-for-like | 99 | **OXR ACCESO 2026-07-22** (stima "≈ nella tua moneta" LIVE): cache non-bloccante + allarme Guardiano se OXR tace >1gg. Provato in prod: annuncio GBP → stima ≈EUR, addebito resta GBP |
 | Cancellazioni + tassa soggiorno | 111, 66, 147 | |
 | Registro host + contratto firmato + erasure | 88, 163, 156 | |
 | Avvisi prenotazione multi-canale + approva-da-messaggio | 152 | email+Telegram+WeChat+LINE |
@@ -208,7 +208,7 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 | — | **Split-payment REALE** (link per amico, all-or-nothing) | PARCHEGGIATO dal fondatore ("ci complichiamo la vita") | vedi memory handoff |
 | — | **Video AI multilingua** (YouTube/Reels/TikTok) | pool 164/165 pronto; serve generazione video (ffmpeg o AI a pagamento) | marketing video |
 | — | **Instagram/WhatsApp** | bloccati lato Meta (App Review / numero WhatsApp Manager) | canali |
-| — | **OXR** — convertitore valuta "≈ nella tua moneta" (stima ospite) | 🔧 2026-07-22: **CACHE NON-BLOCCANTE COSTRUITA** (fase99 `ProviderTassi`: stale-while-revalidate, TTL 6h → ~4 chiamate/giorno dentro il free 1000/mese, ri-scarico in **thread di SFONDO** → `tasso()` non blocca MAI la richiesta, fail-safe se OXR è giù; scaldata al boot da fase81 `_tassi.scalda()`; `test_convertitore_valuta` 11, cache viste rosse sul vecchio). **Solo DISPLAY**: l'addebito Stripe resta in `valuta` dell'alloggio, `totale_indicativo_cents`/`valuta_indicativa` non toccano mai la carica (verificato fase59+fase85). **ACCENSIONE: 1 sola env `OXR_APP_ID` sul VPS + restart** (chiave gratis su openexchangerates.org) — il codice è già pronto e gated (senza chiave resta spento, zero effetti) | UX prezzo |
+| 99 | **OXR** — convertitore valuta "≈ nella tua moneta" | 🟢 **ACCESO 2026-07-22** (chiave impostata sul VPS + verificato LIVE: annuncio GBP→stima ≈EUR, addebito resta GBP). **CACHE NON-BLOCCANTE** (fase99 `ProviderTassi`: stale-while-revalidate, TTL 6h → ~4 chiamate/giorno dentro il free 1000/mese, ri-scarico in **thread di SFONDO** → `tasso()` non blocca MAI, fail-safe se OXR è giù; scaldata al boot da `_tassi.scalda()`). **Solo DISPLAY**: l'addebito Stripe resta in `valuta` dell'alloggio (`totale_indicativo`/`valuta_indicativa` non toccano la carica, verificato fase59+85). **ALLARME "il terzo che cambia"**: `sistema.tassi.stato()` + il giro giornaliero fase83 sonda OXR 1/giorno + `fase186._cambio_valuta_fermo` → se OXR tace >26h il Guardiano manda l'email d'allarme (soglia >24h per non gridare su un blip). `test_convertitore_valuta` (16), cache+allarme viste rosse sul vecchio | UX prezzo |
 
 ## 📋 PIANO "MACCHINA COMPLETA" (2026-07-14, ordine del fondatore: tutto attivo, gratis, autonomo)
 **Logica di selezione:** attivo SOLO ciò che è gratis+autonomo+valore vero (no teatro). Dai colossi prendo ciò che manca e sfrutto i loro errori (spam remarketing → email onesta; preferiti dietro login → preferiti senza login).
