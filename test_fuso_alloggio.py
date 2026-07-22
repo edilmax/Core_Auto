@@ -65,7 +65,8 @@ class TestModelloDati(unittest.TestCase):
 
     def setUp(self):
         d = tempfile.mkdtemp()
-        self.cat = crea_catalogo(os.path.join(d, "c.db"))
+        self.percorso = os.path.join(d, "c.db")
+        self.cat = crea_catalogo(self.percorso)
         self.cat.inizializza_schema()
 
     def _pubblica(self, slug, citta, paese="", fuso=None):
@@ -91,6 +92,23 @@ class TestModelloDati(unittest.TestCase):
 
     def test_citta_ignota_paese_ambiguo_resta_vuoto(self):
         self.assertEqual(self._pubblica("x", "Cittadina Ignota", "US")["fuso"], "")
+
+    def test_backfill_riempie_i_vecchi_annunci_al_riavvio(self):
+        """Un annuncio creato prima della colonna `fuso` (fuso vuoto) deve ricevere il suo
+        fuso al successivo avvio, dedotto dalla citta'. Self-healing, senza interventi."""
+        import sqlite3
+        self._pubblica("roma-vecchia", "Roma", "IT")
+        # lo riporto allo stato "vecchio" (fuso vuoto), come una riga pre-migrazione
+        con = sqlite3.connect(self.percorso)
+        con.execute("UPDATE alloggi SET fuso='' WHERE slug='roma-vecchia'")
+        con.commit()
+        con.close()
+        self.assertEqual(self.cat.dettaglio("roma-vecchia")["fuso"], "")
+        # riavvio -> inizializza_schema esegue il backfill
+        cat2 = crea_catalogo(self.percorso)
+        cat2.inizializza_schema()
+        self.assertEqual(cat2.dettaglio("roma-vecchia")["fuso"], "Europe/Rome",
+                         "il backfill non ha riempito il fuso di un annuncio vecchio")
 
 
 class TestAncoraggioAiCalcoli(unittest.TestCase):

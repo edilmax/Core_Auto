@@ -422,6 +422,21 @@ class CatalogoVetrina:
                         con.execute("ALTER TABLE alloggi ADD COLUMN %s %s" % (_c, _d))
                     except sqlite3.OperationalError:
                         pass
+                # RIEMPIMENTO AUTO DEL FUSO (self-healing): gli annunci creati prima della
+                # colonna `fuso` l'hanno vuota. Ad ogni avvio si prova a dedurlo da
+                # citta'/paese per quelli ancora vuoti -> l'ora locale diventa ESATTA senza
+                # toccare nulla a mano. Idempotente (tocca solo fuso=''), best-effort: se
+                # fase187 non c'e' o non deduce, la riga resta vuota e usa il ripiego prudente.
+                try:
+                    from fase187_fuso_orario import fuso_da_luogo
+                    vuoti = con.execute(
+                        "SELECT id, citta, paese FROM alloggi WHERE fuso=''").fetchall()
+                    for r in vuoti:
+                        f = fuso_da_luogo(r["citta"], r["paese"] if "paese" in r.keys() else "")
+                        if f:
+                            con.execute("UPDATE alloggi SET fuso=? WHERE id=?", (f, r["id"]))
+                except Exception:
+                    pass
                 con.execute("""
                     CREATE TABLE IF NOT EXISTS alloggio_immagini (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
