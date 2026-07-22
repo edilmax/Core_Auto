@@ -18,6 +18,8 @@ h2{font-size:1.05rem;margin:.1rem 0 .7rem}
 input{background:#0c111b;border:1px solid #2a3550;color:var(--txt);border-radius:.5rem;padding:.5rem .6rem}
 button{background:var(--oro);color:#0f1420;font-weight:700;border:0;border-radius:.5rem;padding:.55rem .9rem;cursor:pointer}
 button.ghost{background:#222c40;color:var(--txt)}
+#lang{background:#0c111b;border:1px solid #2a3550;color:var(--txt);border-radius:.5rem;padding:.35rem .5rem;font-size:.85rem}
+#lang option{color:var(--txt);background:#0c111b}
 .pill{display:inline-block;padding:.15rem .6rem;border-radius:1rem;font-size:.8rem;font-weight:700}
 .ok{background:rgba(62,199,123,.15);color:var(--verde)}.ko{background:rgba(255,107,107,.15);color:var(--rosso)}.warn{background:rgba(255,207,92,.15);color:var(--giallo)}.na{background:#222c40;color:var(--tenue)}
 .riga{display:flex;justify-content:space-between;gap:1rem;padding:.35rem 0;border-top:1px solid #222c40;font-size:.92rem}
@@ -33,55 +35,58 @@ button.ghost{background:#222c40;color:var(--txt)}
 <div class="wrap">
   <header>
     <div class="logo">🏰 Bookin VIP · <span class="oro">Bunker</span></div>
-    <span class="hint" style="margin-left:auto">Sala di controllo · sola lettura</span>
+    <select id="lang" aria-label="Language" style="margin-left:auto">
+      <option value="it">🇮🇹 Italiano</option><option value="en">🇬🇧 English</option><option value="es">🇪🇸 Español</option><option value="fr">🇫🇷 Français</option><option value="de">🇩🇪 Deutsch</option><option value="pt">🇵🇹 Português</option><option value="ja">🇯🇵 日本語</option><option value="zh">🇨🇳 中文</option>
+    </select>
+    <span class="hint" style="margin-left:.6rem" data-i18n="hdr_readonly">Sala di controllo · sola lettura</span>
   </header>
 
   <div class="card" id="loginCard">
-    <h2>🔒 Ingresso super-admin</h2>
-    <p class="hint">Serve la chiave admin + la password super-admin. Sessione 15 minuti, legata a questo dispositivo.</p>
+    <h2 data-i18n="login_h">🔒 Ingresso super-admin</h2>
+    <p class="hint" data-i18n="login_p">Serve la chiave admin + la password super-admin. Sessione 15 minuti, legata a questo dispositivo.</p>
     <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-top:.4rem">
-      <input type="password" id="ak" placeholder="Chiave admin" style="width:220px" aria-label="Chiave admin">
-      <input type="password" id="pw" placeholder="Password super-admin" style="width:240px" aria-label="Password super-admin">
-      <button id="btnEntra">🔓 Entra</button>
+      <input type="password" id="ak" placeholder="Chiave admin" data-i18n-ph="ph_ak" style="width:220px" aria-label="Chiave admin">
+      <input type="password" id="pw" placeholder="Password super-admin" data-i18n-ph="ph_pw" style="width:240px" aria-label="Password super-admin">
+      <button id="btnEntra" data-i18n="btn_entra">🔓 Entra</button>
       <span id="loginStat" class="hint"></span>
     </div>
   </div>
 
   <div id="sala" class="nascosto">
     <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.6rem">
-      <button class="ghost" id="btnAgg">🔄 Aggiorna</button>
+      <button class="ghost" id="btnAgg" data-i18n="btn_agg">🔄 Aggiorna</button>
       <span id="sess" class="hint"></span>
-      <a href="/admin.html" class="hint" style="margin-left:auto;text-decoration:none">← Torna al pannello admin</a>
-      <button class="ghost" id="btnEsci">Esci</button>
+      <a href="/admin.html" class="hint" style="margin-left:auto;text-decoration:none" data-i18n="torna_admin">← Torna al pannello admin</a>
+      <button class="ghost" id="btnEsci" data-i18n="btn_esci">Esci</button>
     </div>
 
     <div class="card">
-      <h2>🔗 Integrità giornale contabile</h2>
-      <p class="hint">La catena di hash prova che nessun movimento di denaro è stato manomesso.</p>
+      <h2 data-i18n="integ_h">🔗 Integrità giornale contabile</h2>
+      <p class="hint" data-i18n="integ_p">La catena di hash prova che nessun movimento di denaro è stato manomesso.</p>
       <div id="catena" style="margin-top:.5rem"></div>
     </div>
 
     <div class="card">
-      <h2>🩺 Stato del sistema</h2>
+      <h2 data-i18n="diag_h">🩺 Stato del sistema</h2>
       <div id="diag" style="margin-top:.3rem"></div>
     </div>
 
     <div class="card">
-      <h2>💼 Centro Fiscale</h2>
-      <p class="hint">Estratto contabile CERTIFICATO: tutti i movimenti di denaro + la prova (catena di hash) che nessuno li ha toccati. Il file da dare al commercialista, alla banca o al Fisco.</p>
+      <h2 data-i18n="fisc_h">💼 Centro Fiscale</h2>
+      <p class="hint" data-i18n="fisc_p">Estratto contabile CERTIFICATO: tutti i movimenti di denaro + la prova (catena di hash) che nessuno li ha toccati. Il file da dare al commercialista, alla banca o al Fisco.</p>
       <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.4rem">
-        <button id="btnEstratto">📥 Scarica estratto certificato (CSV)</button>
+        <button id="btnEstratto" data-i18n="btn_estratto">📥 Scarica estratto certificato (CSV)</button>
         <span id="estrStat" class="hint"></span>
       </div>
     </div>
 
     <div class="card">
-      <h2>🇪🇺 Conformità Host (DAC7)</h2>
-      <p class="hint">La legge europea (DAC7) obbliga a comunicare al Fisco gli host che superano <b>30 prenotazioni</b> o <b>2.000&nbsp;€</b> l'anno. Qui vedi chi va segnalato e a chi <b>mancano i dati fiscali</b> (in rosso: da segnalare MA incompleto). Per questi host i <b>bonifici sono in HOLD automatico</b> (💰 = quanto c'è fermo): si sbloccano da soli appena completano i dati dal pannello. Per pagare comunque a mano: dashboard payout, come sempre.</p>
+      <h2 data-i18n="conf_h">🇪🇺 Conformità Host (DAC7)</h2>
+      <p class="hint" data-i18n-html="conf_p">La legge europea (DAC7) obbliga a comunicare al Fisco gli host che superano <b>30 prenotazioni</b> o <b>2.000&nbsp;€</b> l'anno. Qui vedi chi va segnalato e a chi <b>mancano i dati fiscali</b> (in rosso: da segnalare MA incompleto). Per questi host i <b>bonifici sono in HOLD automatico</b> (💰 = quanto c'è fermo): si sbloccano da soli appena completano i dati dal pannello. Per pagare comunque a mano: dashboard payout, come sempre.</p>
       <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.5rem 0">
-        <label class="hint" for="dacAnno">Anno:</label>
+        <label class="hint" for="dacAnno" data-i18n="lbl_anno">Anno:</label>
         <input type="number" id="dacAnno" style="width:110px" aria-label="Anno DAC7">
-        <button class="ghost" id="btnConf">🔄 Controlla</button>
+        <button class="ghost" id="btnConf" data-i18n="btn_conf">🔄 Controlla</button>
         <span id="confStat" class="hint"></span>
       </div>
       <div id="confRiepilogo" style="margin:.3rem 0"></div>
@@ -89,87 +94,104 @@ button.ghost{background:#222c40;color:var(--txt)}
     </div>
 
     <div class="card">
-      <h2>📤 Report DAC7 certificato</h2>
-      <p class="hint">Genera il file CSV da consegnare all'Agenzia delle Entrate: una riga per ogni host da segnalare, con dati fiscali, incassi, trimestri e immobili. Include la <b>prova di integrità</b> (hash). Solo host oltre soglia. Ogni generazione è tracciata nei log.</p>
+      <h2 data-i18n="dac7_h">📤 Report DAC7 certificato</h2>
+      <p class="hint" data-i18n-html="dac7_p">Genera il file CSV da consegnare all'Agenzia delle Entrate: una riga per ogni host da segnalare, con dati fiscali, incassi, trimestri e immobili. Include la <b>prova di integrità</b> (hash). Solo host oltre soglia. Ogni generazione è tracciata nei log.</p>
       <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.4rem">
-        <button id="btnDac7">📥 Genera report DAC7 (CSV)</button>
+        <button id="btnDac7" data-i18n="btn_dac7">📥 Genera report DAC7 (CSV)</button>
         <span id="dac7Stat" class="hint"></span>
       </div>
     </div>
 
     <div class="card">
-      <h2>🔄 Riconciliazione Stripe</h2>
-      <p class="hint">Confronta il periodo intero con la banca: ogni sessione PAGATA che Stripe conosce contro ogni incasso del giornale (al centesimo), più i totali di incassi/rimborsi/bonifici. Se un webhook si è perso o un centesimo balla, appare qui.</p>
+      <h2 data-i18n="ric_h">🔄 Riconciliazione Stripe</h2>
+      <p class="hint" data-i18n="ric_p">Confronta il periodo intero con la banca: ogni sessione PAGATA che Stripe conosce contro ogni incasso del giornale (al centesimo), più i totali di incassi/rimborsi/bonifici. Se un webhook si è perso o un centesimo balla, appare qui.</p>
       <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.5rem 0">
-        <label class="hint" for="ricGiorni">Ultimi</label>
+        <label class="hint" for="ricGiorni" data-i18n="lbl_ultimi">Ultimi</label>
         <input type="number" id="ricGiorni" value="30" min="1" max="365" style="width:80px" aria-label="Giorni riconciliazione">
-        <span class="hint">giorni</span>
-        <button class="ghost" id="btnRic">🔄 Riconcilia</button>
+        <span class="hint" data-i18n="lbl_giorni">giorni</span>
+        <button class="ghost" id="btnRic" data-i18n="btn_ric">🔄 Riconcilia</button>
         <span id="ricStat" class="hint"></span>
       </div>
       <div id="ricOut" style="margin-top:.3rem"></div>
     </div>
 
     <div class="card">
-      <h2>📊 Scaglioni &amp; Promo (commissione per host)</h2>
-      <p class="hint">A che tariffa sta OGNI host in questo momento, quanti giorni mancano al prossimo scatto e la data esatta del cambio. Il numero arriva dalla stessa funzione che <strong>addebita</strong>: non è un calcolo del browser, quindi non può divergere.</p>
+      <h2 data-i18n="sc_h">📊 Scaglioni &amp; Promo (commissione per host)</h2>
+      <p class="hint" data-i18n-html="sc_p">A che tariffa sta OGNI host in questo momento, quanti giorni mancano al prossimo scatto e la data esatta del cambio. Il numero arriva dalla stessa funzione che <strong>addebita</strong>: non è un calcolo del browser, quindi non può divergere.</p>
       <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.5rem 0">
-        <input id="scQ" placeholder="Cerca host: id, email, ragione sociale" style="flex:1;min-width:200px" aria-label="Cerca host">
+        <input id="scQ" placeholder="Cerca host: id, email, ragione sociale" data-i18n-ph="ph_scQ" style="flex:1;min-width:200px" aria-label="Cerca host">
         <select id="scFiltro" aria-label="Filtra per scaglione">
-          <option value="">Tutti gli scaglioni</option>
-          <option value="promo">🟢 Promo 0%</option>
-          <option value="fase1">🔵 Fase 8%</option>
-          <option value="regime">🔵 Regime 10%</option>
+          <option value="" data-i18n="opt_tutti">Tutti gli scaglioni</option>
+          <option value="promo" data-i18n="opt_promo">🟢 Promo 0%</option>
+          <option value="fase1" data-i18n="opt_fase1">🔵 Fase 8%</option>
+          <option value="regime" data-i18n="opt_regime">🔵 Regime 10%</option>
         </select>
-        <button class="ghost" id="btnSc">📊 Mostra</button>
+        <button class="ghost" id="btnSc" data-i18n="btn_sc">📊 Mostra</button>
         <span id="scStat" class="hint"></span>
       </div>
       <div id="scOut" style="margin-top:.3rem;overflow-x:auto"></div>
     </div>
 
     <div class="card">
-      <h2>📜 Prove legali dei consensi (HMAC-SHA256)</h2>
-      <p class="hint">Le prove complete: versione del contratto, impronta del testo, <strong>IP</strong>, dispositivo, <strong>data e ora UTC</strong> e <strong>firma HMAC-SHA256</strong>. Se una riga fosse manomessa nel database la firma non torna e qui compare in rosso. Dati personali: visibili solo da qui, mai nel pannello operativo.</p>
+      <h2 data-i18n="pl_h">📜 Prove legali dei consensi (HMAC-SHA256)</h2>
+      <p class="hint" data-i18n-html="pl_p">Le prove complete: versione del contratto, impronta del testo, <strong>IP</strong>, dispositivo, <strong>data e ora UTC</strong> e <strong>firma HMAC-SHA256</strong>. Se una riga fosse manomessa nel database la firma non torna e qui compare in rosso. Dati personali: visibili solo da qui, mai nel pannello operativo.</p>
       <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.5rem 0">
-        <input id="plHost" placeholder="host_id (vuoto = tutti)" style="flex:1;min-width:200px" aria-label="Host per prove legali">
-        <button class="ghost" id="btnProve">📜 Mostra prove</button>
-        <button id="btnDossier">📥 Scarica dossier legale (CSV)</button>
-        <button class="ghost" id="btnDossierJ">📥 JSON</button>
+        <input id="plHost" placeholder="host_id (vuoto = tutti)" data-i18n-ph="ph_plHost" style="flex:1;min-width:200px" aria-label="Host per prove legali">
+        <button class="ghost" id="btnProve" data-i18n="btn_prove">📜 Mostra prove</button>
+        <button id="btnDossier" data-i18n="btn_dossier">📥 Scarica dossier legale (CSV)</button>
+        <button class="ghost" id="btnDossierJ" data-i18n="btn_dossierJ">📥 JSON</button>
         <span id="plStat" class="hint"></span>
       </div>
       <div id="plOut" style="margin-top:.3rem;overflow-x:auto"></div>
     </div>
 
     <div class="card">
-      <h2>🧾 Tariffa tecnica Stripe (3%) e perdite</h2>
-      <p class="hint">Quanto la tariffa tecnica ha davvero coperto e quanto è andato <strong>perso sui rimborsi</strong>: Stripe non restituisce la sua commissione, quindi su ogni prenotazione rimborsata quel costo resta a carico della piattaforma. È la voce da girare al commercialista.</p>
+      <h2 data-i18n="ct_h">🧾 Tariffa tecnica Stripe (3%) e perdite</h2>
+      <p class="hint" data-i18n-html="ct_p">Quanto la tariffa tecnica ha davvero coperto e quanto è andato <strong>perso sui rimborsi</strong>: Stripe non restituisce la sua commissione, quindi su ogni prenotazione rimborsata quel costo resta a carico della piattaforma. È la voce da girare al commercialista.</p>
       <div style="display:flex;gap:.5rem;align-items:center;margin:.5rem 0">
-        <button class="ghost" id="btnCosti">🧾 Calcola prospetto</button>
+        <button class="ghost" id="btnCosti" data-i18n="btn_costi">🧾 Calcola prospetto</button>
         <span id="ctStat" class="hint"></span>
       </div>
       <div id="ctOut" style="margin-top:.3rem"></div>
     </div>
 
     <div class="card">
-      <h2>⏱️ Marche temporali (ora certificata da un terzo)</h2>
-      <p class="hint">Le nostre firme le facciamo noi, quindi <strong>l'ora la dichiariamo noi</strong>. Ogni giorno i registri vengono ridotti a un'impronta e datati da un'<strong>Autorità di marcatura QUALIFICATA europea</strong> (ACCV Spagna · QuoVadis EU · Izenpe · Stato belga). Per le marche <strong>qualificate</strong> l'<strong>art. 41 eIDAS</strong> stabilisce la <strong>presunzione legale</strong> di esattezza di data e ora: in causa non tocca a noi provare che l'ora è giusta — tocca a chi contesta provare il contrario. Il file <code>.tsr</code> si consegna a un perito, che lo verifica <strong>senza di noi</strong> con <code>openssl ts -verify</code>.</p>
+      <h2 data-i18n="mt_h">⏱️ Marche temporali (ora certificata da un terzo)</h2>
+      <p class="hint" data-i18n-html="mt_p">Le nostre firme le facciamo noi, quindi <strong>l'ora la dichiariamo noi</strong>. Ogni giorno i registri vengono ridotti a un'impronta e datati da un'<strong>Autorità di marcatura QUALIFICATA europea</strong> (ACCV Spagna · QuoVadis EU · Izenpe · Stato belga). Per le marche <strong>qualificate</strong> l'<strong>art. 41 eIDAS</strong> stabilisce la <strong>presunzione legale</strong> di esattezza di data e ora: in causa non tocca a noi provare che l'ora è giusta — tocca a chi contesta provare il contrario. Il file <code>.tsr</code> si consegna a un perito, che lo verifica <strong>senza di noi</strong> con <code>openssl ts -verify</code>.</p>
       <div style="display:flex;gap:.5rem;align-items:center;margin:.5rem 0;flex-wrap:wrap">
-        <button class="ghost" id="btnMarche">⏱️ Mostra marche</button>
-        <button class="ghost" id="btnMarcaOra">🔒 Congela adesso</button>
+        <button class="ghost" id="btnMarche" data-i18n="btn_marche">⏱️ Mostra marche</button>
+        <button class="ghost" id="btnMarcaOra" data-i18n="btn_marcaOra">🔒 Congela adesso</button>
         <span id="mtStat" class="hint"></span>
       </div>
       <div id="mtOut" style="margin-top:.3rem;overflow-x:auto"></div>
     </div>
 
     <div class="card">
-      <h2>📋 Log persistenti (ultimi eventi)</h2>
-      <p class="hint">Chi ha fatto cosa + allarmi. In rosso i CRITICI (accessi negati, manomissioni).</p>
+      <h2 data-i18n="log_h">📋 Log persistenti (ultimi eventi)</h2>
+      <p class="hint" data-i18n="log_p">Chi ha fatto cosa + allarmi. In rosso i CRITICI (accessi negati, manomissioni).</p>
       <div id="loglist" style="margin-top:.5rem"></div>
     </div>
   </div>
 </div>
 
 <script>
+// ── i18n (modello di commissioni.html) ───────────────────────────────────────
+const TR={
+ it:{hdr_readonly:"Sala di controllo · sola lettura",login_h:"🔒 Ingresso super-admin",login_p:"Serve la chiave admin + la password super-admin. Sessione 15 minuti, legata a questo dispositivo.",ph_ak:"Chiave admin",ph_pw:"Password super-admin",btn_entra:"🔓 Entra",btn_agg:"🔄 Aggiorna",torna_admin:"← Torna al pannello admin",btn_esci:"Esci",integ_h:"🔗 Integrità giornale contabile",integ_p:"La catena di hash prova che nessun movimento di denaro è stato manomesso.",diag_h:"🩺 Stato del sistema",fisc_h:"💼 Centro Fiscale",fisc_p:"Estratto contabile CERTIFICATO: tutti i movimenti di denaro + la prova (catena di hash) che nessuno li ha toccati. Il file da dare al commercialista, alla banca o al Fisco.",btn_estratto:"📥 Scarica estratto certificato (CSV)",conf_h:"🇪🇺 Conformità Host (DAC7)",conf_p:"La legge europea (DAC7) obbliga a comunicare al Fisco gli host che superano <b>30 prenotazioni</b> o <b>2.000&nbsp;€</b> l'anno. Qui vedi chi va segnalato e a chi <b>mancano i dati fiscali</b> (in rosso: da segnalare MA incompleto). Per questi host i <b>bonifici sono in HOLD automatico</b> (💰 = quanto c'è fermo): si sbloccano da soli appena completano i dati dal pannello. Per pagare comunque a mano: dashboard payout, come sempre.",lbl_anno:"Anno:",btn_conf:"🔄 Controlla",dac7_h:"📤 Report DAC7 certificato",dac7_p:"Genera il file CSV da consegnare all'Agenzia delle Entrate: una riga per ogni host da segnalare, con dati fiscali, incassi, trimestri e immobili. Include la <b>prova di integrità</b> (hash). Solo host oltre soglia. Ogni generazione è tracciata nei log.",btn_dac7:"📥 Genera report DAC7 (CSV)",ric_h:"🔄 Riconciliazione Stripe",ric_p:"Confronta il periodo intero con la banca: ogni sessione PAGATA che Stripe conosce contro ogni incasso del giornale (al centesimo), più i totali di incassi/rimborsi/bonifici. Se un webhook si è perso o un centesimo balla, appare qui.",lbl_ultimi:"Ultimi",lbl_giorni:"giorni",btn_ric:"🔄 Riconcilia",sc_h:"📊 Scaglioni & Promo (commissione per host)",sc_p:"A che tariffa sta OGNI host in questo momento, quanti giorni mancano al prossimo scatto e la data esatta del cambio. Il numero arriva dalla stessa funzione che <strong>addebita</strong>: non è un calcolo del browser, quindi non può divergere.",ph_scQ:"Cerca host: id, email, ragione sociale",opt_tutti:"Tutti gli scaglioni",opt_promo:"🟢 Promo 0%",opt_fase1:"🔵 Fase 8%",opt_regime:"🔵 Regime 10%",btn_sc:"📊 Mostra",pl_h:"📜 Prove legali dei consensi (HMAC-SHA256)",pl_p:"Le prove complete: versione del contratto, impronta del testo, <strong>IP</strong>, dispositivo, <strong>data e ora UTC</strong> e <strong>firma HMAC-SHA256</strong>. Se una riga fosse manomessa nel database la firma non torna e qui compare in rosso. Dati personali: visibili solo da qui, mai nel pannello operativo.",ph_plHost:"host_id (vuoto = tutti)",btn_prove:"📜 Mostra prove",btn_dossier:"📥 Scarica dossier legale (CSV)",btn_dossierJ:"📥 JSON",ct_h:"🧾 Tariffa tecnica Stripe (3%) e perdite",ct_p:"Quanto la tariffa tecnica ha davvero coperto e quanto è andato <strong>perso sui rimborsi</strong>: Stripe non restituisce la sua commissione, quindi su ogni prenotazione rimborsata quel costo resta a carico della piattaforma. È la voce da girare al commercialista.",btn_costi:"🧾 Calcola prospetto",mt_h:"⏱️ Marche temporali (ora certificata da un terzo)",mt_p:"Le nostre firme le facciamo noi, quindi <strong>l'ora la dichiariamo noi</strong>. Ogni giorno i registri vengono ridotti a un'impronta e datati da un'<strong>Autorità di marcatura QUALIFICATA europea</strong> (ACCV Spagna · QuoVadis EU · Izenpe · Stato belga). Per le marche <strong>qualificate</strong> l'<strong>art. 41 eIDAS</strong> stabilisce la <strong>presunzione legale</strong> di esattezza di data e ora: in causa non tocca a noi provare che l'ora è giusta — tocca a chi contesta provare il contrario. Il file <code>.tsr</code> si consegna a un perito, che lo verifica <strong>senza di noi</strong> con <code>openssl ts -verify</code>.",btn_marche:"⏱️ Mostra marche",btn_marcaOra:"🔒 Congela adesso",log_h:"📋 Log persistenti (ultimi eventi)",log_p:"Chi ha fatto cosa + allarmi. In rosso i CRITICI (accessi negati, manomissioni).",err_rete:"❌ errore di rete",err_rete_full:"❌ Errore di rete.",js_inserisci:"⚠️ Inserisci chiave admin e password super-admin.",js_troppi:"⛔ Troppi tentativi, riprova tra poco.",js_nonconfig:"ℹ️ Bunker non configurato sul server.",js_errata:"❌ Chiave o password super-admin errata.",js_scaduta:"⏱️ Sessione scaduta (15 min). Rientra.",js_sess_attiva:"sessione attiva",js_min:"min",js_catena_integra:"✅ CATENA INTEGRA",js_mov_verificati:"movimenti verificati",js_manomissione:"🔴 MANOMISSIONE",js_riga_rotta:"riga rotta:",js_non_disp:"— non disponibile",js_debiti_host:"debiti host",js_risc_auto:"(riscossione automatica sui prossimi bonifici)",js_no_debiti:"nessun debito host",js_integ_gen:"Integrità generale",js_tutto_sano:"tutto sano",js_allarmi:"allarmi:",js_ok:"ok",js_problema:"problema",js_ultimo_backup:"Ultimo backup",js_min_fa:"min fa",js_disco:"Disco usato",js_db_salvati:"Database salvati",js_nessuna_riga:"nessuna riga",js_uscito:"👋 Uscito.",js_scarico_stream:"… scarico in streaming",js_non_disp2:"ℹ️ non disponibile",js_file_corrotto:"🔴 ATTENZIONE: file CORROTTO — non usarlo, avvisa il tecnico",js_movimenti:"movimenti",js_integ_verif:"INTEGRITÀ VERIFICATA ✅",js_controllo:"… controllo",js_da_segnalare:"da segnalare",js_incompleti_sist:"incompleti da sistemare",js_zero_incompleti:"0 incompleti",js_anno:"anno",js_host_totali:"host totali",js_st_urgente:"DA SEGNALARE · DATI MANCANTI",js_st_report:"da segnalare · ok",js_st_sotto:"sotto soglia",js_st_sotto_inc:"sotto soglia · dati incompleti",js_manca:"manca:",js_fermi:"fermi",js_pren:"pren",js_nessun_host:"nessun host",js_genero_stream:"… genero in streaming",js_file_corrotto2:"🔴 file CORROTTO — non consegnarlo, avvisa il tecnico",js_host_segnalati:"host segnalati",js_integ_ok:"INTEGRITÀ OK ✅",js_interrogo:"… interrogo Stripe e il giornale",js_combacia:"✅ TUTTO COMBACIA",js_discrepanze:"🔴 DISCREPANZE TROVATE",js_sess_pagate:"sessioni pagate",js_inc_giornale:"incassi a giornale",js_ultimi:"ultimi",js_gg:"gg",js_giornale:"giornale",js_solo_stripe:"👻 Stripe ha, giornale NO",js_solo_giornale:"👻 giornale ha, Stripe NO",js_imp_diverso:"⚖️ importo DIVERSO",js_calcolo:"… calcolo",js_in_promo:"in promo",js_a_8:"a 8%",js_a_regime:"a regime",js_senza_data:"senza data",js_devono_riacc:"devono ri-accettare",js_nessun_host_filtri:"Nessun host con questi filtri.",th_host:"Host",th_registrato:"Registrato",th_giorni:"Giorni",th_scaglione:"Scaglione",th_marketplace:"Marketplace",th_diretto:"Diretto",th_prossimo:"Prossimo scatto",th_contratto:"Contratto",js_fra:"fra",js_da_riacc:"🔴 da ri-accettare",js_ha_v:"ha v",js_in_regola:"✅ in regola",js_tariffa_tecnica:"Tariffa tecnica Stripe:",js_sempre_dovuta:"— sempre dovuta, anche a commissione 0%.",sc_et_promo:"🟢 Promo 0%",sc_et_fase1:"🔵 Fase 8%",sc_et_regime:"🔵 Regime",js_leggo_reg:"… leggo il registro",js_prove_integre:"prove, tutte integre",js_prove_manom:"prove MANOMESSE su",js_nessuna_prova:"Nessuna prova registrata.",docn_contratto:"📜 Contratto",docn_privacy:"🔒 Privacy GDPR",docn_identita:"🪪 Identità verificata",th_documento:"Documento",th_versione:"Versione",th_accettato:"Accettato (UTC)",th_ip:"IP",th_clausole:"Clausole",th_riferimento:"Riferimento",th_firma:"Firma HMAC-SHA256",th_integra:"Integra",js_no:"🔴 NO",js_preparo_dossier:"… preparo il dossier",js_file_nonvalido:"🔴 file NON valido (troncato)",js_scaricato_cert:"✅ scaricato e certificato",js_ricavo_coperto:"✅ Ricavo tecnico coperto",js_prenotazioni:"prenotazioni",js_ribaltato:"ribaltato all'host",js_costo_irrec:"🔴 <strong>COSTO TECNICO IRRECUPERABILE</strong>",js_perdita_ded:"perdita deducibile — Stripe non restituisce la commissione sui rimborsi",js_saldo:"= Saldo",js_leggo:"… leggo",js_non_attiva:"ℹ️ non attiva",js_su:"su",js_riuscite:"riuscite",js_qualificate:"qualificate",js_tutte:"(tutte)",js_tutte_river:"tutte riverificate",js_una_non_river:"una non si riverifica",js_nessuna_marca:"Nessuna marca ancora: la prima parte entro un'ora dall'avvio, oppure premi <strong>Congela adesso</strong>.",th_giorno:"Giorno",th_ora_cert:"Ora certificata (UTC)",th_autorita:"Autorità",th_rango:"Rango",th_nserie:"N. serie",th_riverifica:"Riverifica",th_prova:"Prova",js_qualificata_s:"<strong style='color:#155724'>⚖️ QUALIFICATA</strong>",js_ripiego:"<span class='hint'>RFC 3161 (ripiego)</span>",js_anomalia:"🔴 <strong>ANOMALIA</strong>",js_cosa_cambia:"<strong>⚖️ Cosa cambia con la qualifica:</strong>",js_per_verificare:"Per verificare senza di noi:",js_scarico_prova:"… scarico la prova",js_prova_scaricata:"✅ prova scaricata",js_chiedo_ora:"… chiedo l'ora a un'Autorità esterna",js_gia_congelato:"✅ oggi è già congelato",js_congelato_qual:"⚖️ congelato con marca QUALIFICATA da",js_congelato_da:"✅ congelato da",js_non_riuscito:"🔴 non riuscito:"},
+ en:{hdr_readonly:"Control room · read-only",login_h:"🔒 Super-admin access",login_p:"Requires the admin key + the super-admin password. Session 15 minutes, tied to this device.",ph_ak:"Admin key",ph_pw:"Super-admin password",btn_entra:"🔓 Enter",btn_agg:"🔄 Refresh",torna_admin:"← Back to admin panel",btn_esci:"Log out",integ_h:"🔗 Ledger integrity",integ_p:"The hash chain proves that no money movement has been tampered with.",diag_h:"🩺 System status",fisc_h:"💼 Tax Center",fisc_p:"CERTIFIED accounting statement: every money movement + the proof (hash chain) that no one has touched them. The file to hand to your accountant, the bank or the tax authority.",btn_estratto:"📥 Download certified statement (CSV)",conf_h:"🇪🇺 Host compliance (DAC7)",conf_p:"European law (DAC7) requires reporting to the tax authority hosts that exceed <b>30 bookings</b> or <b>€2,000</b> a year. Here you see who must be reported and who is <b>missing tax data</b> (in red: to report BUT incomplete). For these hosts <b>payouts are automatically on HOLD</b> (💰 = how much is held): they unlock by themselves as soon as they complete their data from the panel. To pay manually anyway: payout dashboard, as always.",lbl_anno:"Year:",btn_conf:"🔄 Check",dac7_h:"📤 Certified DAC7 report",dac7_p:"Generates the CSV file to submit to the tax authority: one row per host to report, with tax data, revenue, quarters and properties. Includes the <b>integrity proof</b> (hash). Only hosts above threshold. Every generation is tracked in the logs.",btn_dac7:"📥 Generate DAC7 report (CSV)",ric_h:"🔄 Stripe reconciliation",ric_p:"Compares the whole period against the bank: every PAID session Stripe knows about against every ledger receipt (to the cent), plus the totals of receipts/refunds/payouts. If a webhook was lost or a cent is off, it shows up here.",lbl_ultimi:"Last",lbl_giorni:"days",btn_ric:"🔄 Reconcile",sc_h:"📊 Tiers & Promo (commission per host)",sc_p:"What rate EACH host is on right now, how many days until the next step and the exact change date. The number comes from the same function that <strong>charges</strong>: it is not a browser calculation, so it cannot diverge.",ph_scQ:"Search host: id, email, company name",opt_tutti:"All tiers",opt_promo:"🟢 Promo 0%",opt_fase1:"🔵 Phase 8%",opt_regime:"🔵 Standard 10%",btn_sc:"📊 Show",pl_h:"📜 Legal proof of consents (HMAC-SHA256)",pl_p:"The complete proof: contract version, text fingerprint, <strong>IP</strong>, device, <strong>UTC date and time</strong> and <strong>HMAC-SHA256 signature</strong>. If a row were tampered with in the database the signature no longer matches and it appears here in red. Personal data: visible only from here, never in the operational panel.",ph_plHost:"host_id (empty = all)",btn_prove:"📜 Show proof",btn_dossier:"📥 Download legal dossier (CSV)",btn_dossierJ:"📥 JSON",ct_h:"🧾 Stripe technical fee (3%) and losses",ct_p:"How much the technical fee actually covered and how much was <strong>lost on refunds</strong>: Stripe does not return its fee, so on every refunded booking that cost stays with the platform. This is the item to pass to your accountant.",btn_costi:"🧾 Compute statement",mt_h:"⏱️ Timestamps (time certified by a third party)",mt_p:"We create our own signatures, so <strong>we declare the time ourselves</strong>. Every day the ledgers are reduced to a fingerprint and dated by a <strong>QUALIFIED European timestamping Authority</strong> (ACCV Spain · QuoVadis EU · Izenpe · Belgian State). For <strong>qualified</strong> timestamps, <strong>art. 41 eIDAS</strong> establishes the <strong>legal presumption</strong> of accuracy of date and time: in court it is not up to us to prove the time is right — it is up to the challenger to prove otherwise. The <code>.tsr</code> file is handed to an expert, who verifies it <strong>without us</strong> with <code>openssl ts -verify</code>.",btn_marche:"⏱️ Show timestamps",btn_marcaOra:"🔒 Freeze now",log_h:"📋 Persistent logs (latest events)",log_p:"Who did what + alerts. In red the CRITICAL ones (denied access, tampering).",err_rete:"❌ network error",err_rete_full:"❌ Network error.",js_inserisci:"⚠️ Enter the admin key and super-admin password.",js_troppi:"⛔ Too many attempts, try again shortly.",js_nonconfig:"ℹ️ Bunker not configured on the server.",js_errata:"❌ Wrong admin key or super-admin password.",js_scaduta:"⏱️ Session expired (15 min). Log in again.",js_sess_attiva:"active session",js_min:"min",js_catena_integra:"✅ CHAIN INTACT",js_mov_verificati:"movements verified",js_manomissione:"🔴 TAMPERING",js_riga_rotta:"broken row:",js_non_disp:"— not available",js_debiti_host:"host debts",js_risc_auto:"(automatic collection on next payouts)",js_no_debiti:"no host debt",js_integ_gen:"General integrity",js_tutto_sano:"all healthy",js_allarmi:"alerts:",js_ok:"ok",js_problema:"problem",js_ultimo_backup:"Last backup",js_min_fa:"min ago",js_disco:"Disk used",js_db_salvati:"Databases saved",js_nessuna_riga:"no rows",js_uscito:"👋 Logged out.",js_scarico_stream:"… downloading (streaming)",js_non_disp2:"ℹ️ not available",js_file_corrotto:"🔴 WARNING: file CORRUPT — do not use it, alert the technician",js_movimenti:"movements",js_integ_verif:"INTEGRITY VERIFIED ✅",js_controllo:"… checking",js_da_segnalare:"to report",js_incompleti_sist:"incomplete to fix",js_zero_incompleti:"0 incomplete",js_anno:"year",js_host_totali:"total hosts",js_st_urgente:"TO REPORT · MISSING DATA",js_st_report:"to report · ok",js_st_sotto:"below threshold",js_st_sotto_inc:"below threshold · incomplete data",js_manca:"missing:",js_fermi:"held",js_pren:"bookings",js_nessun_host:"no host",js_genero_stream:"… generating (streaming)",js_file_corrotto2:"🔴 file CORRUPT — do not submit it, alert the technician",js_host_segnalati:"hosts reported",js_integ_ok:"INTEGRITY OK ✅",js_interrogo:"… querying Stripe and the ledger",js_combacia:"✅ EVERYTHING MATCHES",js_discrepanze:"🔴 DISCREPANCIES FOUND",js_sess_pagate:"paid sessions",js_inc_giornale:"ledger receipts",js_ultimi:"last",js_gg:"days",js_giornale:"ledger",js_solo_stripe:"👻 Stripe has, ledger does NOT",js_solo_giornale:"👻 ledger has, Stripe does NOT",js_imp_diverso:"⚖️ DIFFERENT amount",js_calcolo:"… computing",js_in_promo:"in promo",js_a_8:"at 8%",js_a_regime:"at standard",js_senza_data:"without date",js_devono_riacc:"must re-accept",js_nessun_host_filtri:"No host with these filters.",th_host:"Host",th_registrato:"Registered",th_giorni:"Days",th_scaglione:"Tier",th_marketplace:"Marketplace",th_diretto:"Direct",th_prossimo:"Next step",th_contratto:"Contract",js_fra:"in",js_da_riacc:"🔴 must re-accept",js_ha_v:"has v",js_in_regola:"✅ compliant",js_tariffa_tecnica:"Stripe technical fee:",js_sempre_dovuta:"— always due, even at 0% commission.",sc_et_promo:"🟢 Promo 0%",sc_et_fase1:"🔵 Phase 8%",sc_et_regime:"🔵 Standard",js_leggo_reg:"… reading the register",js_prove_integre:"proofs, all intact",js_prove_manom:"proofs TAMPERED of",js_nessuna_prova:"No proof recorded.",docn_contratto:"📜 Contract",docn_privacy:"🔒 GDPR Privacy",docn_identita:"🪪 Verified identity",th_documento:"Document",th_versione:"Version",th_accettato:"Accepted (UTC)",th_ip:"IP",th_clausole:"Clauses",th_riferimento:"Reference",th_firma:"HMAC-SHA256 signature",th_integra:"Intact",js_no:"🔴 NO",js_preparo_dossier:"… preparing the dossier",js_file_nonvalido:"🔴 INVALID file (truncated)",js_scaricato_cert:"✅ downloaded and certified",js_ricavo_coperto:"✅ Technical revenue covered",js_prenotazioni:"bookings",js_ribaltato:"passed on to the host",js_costo_irrec:"🔴 <strong>UNRECOVERABLE TECHNICAL COST</strong>",js_perdita_ded:"deductible loss — Stripe does not return the fee on refunds",js_saldo:"= Balance",js_leggo:"… reading",js_non_attiva:"ℹ️ not active",js_su:"of",js_riuscite:"succeeded",js_qualificate:"qualified",js_tutte:"(all)",js_tutte_river:"all re-verified",js_una_non_river:"one does not re-verify",js_nessuna_marca:"No timestamp yet: the first one starts within an hour of launch, or press <strong>Freeze now</strong>.",th_giorno:"Day",th_ora_cert:"Certified time (UTC)",th_autorita:"Authority",th_rango:"Rank",th_nserie:"Serial no.",th_riverifica:"Re-verify",th_prova:"Proof",js_qualificata_s:"<strong style='color:#155724'>⚖️ QUALIFIED</strong>",js_ripiego:"<span class='hint'>RFC 3161 (fallback)</span>",js_anomalia:"🔴 <strong>ANOMALY</strong>",js_cosa_cambia:"<strong>⚖️ What the qualification changes:</strong>",js_per_verificare:"To verify without us:",js_scarico_prova:"… downloading the proof",js_prova_scaricata:"✅ proof downloaded",js_chiedo_ora:"… asking the time from an external Authority",js_gia_congelato:"✅ today is already frozen",js_congelato_qual:"⚖️ frozen with a QUALIFIED timestamp by",js_congelato_da:"✅ frozen by",js_non_riuscito:"🔴 failed:"},
+ es:{hdr_readonly:"Sala de control · solo lectura",login_h:"🔒 Acceso super-admin",login_p:"Requiere la clave admin + la contraseña super-admin. Sesión 15 minutos, vinculada a este dispositivo.",ph_ak:"Clave admin",ph_pw:"Contraseña super-admin",btn_entra:"🔓 Entrar",btn_agg:"🔄 Actualizar",torna_admin:"← Volver al panel admin",btn_esci:"Salir",integ_h:"🔗 Integridad del libro contable",integ_p:"La cadena de hash prueba que ningún movimiento de dinero ha sido manipulado.",diag_h:"🩺 Estado del sistema",fisc_h:"💼 Centro Fiscal",fisc_p:"Extracto contable CERTIFICADO: todos los movimientos de dinero + la prueba (cadena de hash) de que nadie los ha tocado. El archivo para dar al contable, al banco o a Hacienda.",btn_estratto:"📥 Descargar extracto certificado (CSV)",conf_h:"🇪🇺 Conformidad Host (DAC7)",conf_p:"La ley europea (DAC7) obliga a comunicar a Hacienda los hosts que superan <b>30 reservas</b> o <b>2.000&nbsp;€</b> al año. Aquí ves quién debe declararse y a quién le <b>faltan los datos fiscales</b> (en rojo: a declarar PERO incompleto). Para estos hosts las <b>transferencias están en HOLD automático</b> (💰 = cuánto hay retenido): se desbloquean solas en cuanto completan los datos desde el panel. Para pagar igualmente a mano: dashboard de payout, como siempre.",lbl_anno:"Año:",btn_conf:"🔄 Comprobar",dac7_h:"📤 Informe DAC7 certificado",dac7_p:"Genera el archivo CSV a entregar a Hacienda: una fila por cada host a declarar, con datos fiscales, ingresos, trimestres e inmuebles. Incluye la <b>prueba de integridad</b> (hash). Solo hosts por encima del umbral. Cada generación queda registrada en los logs.",btn_dac7:"📥 Generar informe DAC7 (CSV)",ric_h:"🔄 Conciliación Stripe",ric_p:"Compara todo el periodo con el banco: cada sesión PAGADA que Stripe conoce contra cada ingreso del libro (al céntimo), más los totales de ingresos/reembolsos/transferencias. Si un webhook se perdió o baila un céntimo, aparece aquí.",lbl_ultimi:"Últimos",lbl_giorni:"días",btn_ric:"🔄 Conciliar",sc_h:"📊 Tramos y Promo (comisión por host)",sc_p:"A qué tarifa está CADA host en este momento, cuántos días faltan para el próximo cambio y la fecha exacta del cambio. El número viene de la misma función que <strong>cobra</strong>: no es un cálculo del navegador, por lo que no puede divergir.",ph_scQ:"Buscar host: id, email, razón social",opt_tutti:"Todos los tramos",opt_promo:"🟢 Promo 0%",opt_fase1:"🔵 Fase 8%",opt_regime:"🔵 Régimen 10%",btn_sc:"📊 Mostrar",pl_h:"📜 Pruebas legales de los consentimientos (HMAC-SHA256)",pl_p:"Las pruebas completas: versión del contrato, huella del texto, <strong>IP</strong>, dispositivo, <strong>fecha y hora UTC</strong> y <strong>firma HMAC-SHA256</strong>. Si una fila fuera manipulada en la base de datos la firma no cuadra y aquí aparece en rojo. Datos personales: visibles solo desde aquí, nunca en el panel operativo.",ph_plHost:"host_id (vacío = todos)",btn_prove:"📜 Mostrar pruebas",btn_dossier:"📥 Descargar expediente legal (CSV)",btn_dossierJ:"📥 JSON",ct_h:"🧾 Tarifa técnica Stripe (3%) y pérdidas",ct_p:"Cuánto ha cubierto realmente la tarifa técnica y cuánto se ha <strong>perdido en reembolsos</strong>: Stripe no devuelve su comisión, así que en cada reserva reembolsada ese coste queda a cargo de la plataforma. Es la partida para pasar al contable.",btn_costi:"🧾 Calcular prospecto",mt_h:"⏱️ Sellos de tiempo (hora certificada por un tercero)",mt_p:"Nuestras firmas las hacemos nosotros, así que <strong>la hora la declaramos nosotros</strong>. Cada día los registros se reducen a una huella y son fechados por una <strong>Autoridad de sellado CUALIFICADA europea</strong> (ACCV España · QuoVadis EU · Izenpe · Estado belga). Para los sellos <strong>cualificados</strong> el <strong>art. 41 eIDAS</strong> establece la <strong>presunción legal</strong> de exactitud de la fecha y la hora: en juicio no nos toca a nosotros probar que la hora es correcta — le toca a quien la impugna probar lo contrario. El archivo <code>.tsr</code> se entrega a un perito, que lo verifica <strong>sin nosotros</strong> con <code>openssl ts -verify</code>.",btn_marche:"⏱️ Mostrar sellos",btn_marcaOra:"🔒 Congelar ahora",log_h:"📋 Logs persistentes (últimos eventos)",log_p:"Quién hizo qué + alertas. En rojo los CRÍTICOS (accesos denegados, manipulaciones).",err_rete:"❌ error de red",err_rete_full:"❌ Error de red.",js_inserisci:"⚠️ Introduce la clave admin y la contraseña super-admin.",js_troppi:"⛔ Demasiados intentos, reintenta en un momento.",js_nonconfig:"ℹ️ Bunker no configurado en el servidor.",js_errata:"❌ Clave admin o contraseña super-admin incorrecta.",js_scaduta:"⏱️ Sesión caducada (15 min). Vuelve a entrar.",js_sess_attiva:"sesión activa",js_min:"min",js_catena_integra:"✅ CADENA ÍNTEGRA",js_mov_verificati:"movimientos verificados",js_manomissione:"🔴 MANIPULACIÓN",js_riga_rotta:"fila rota:",js_non_disp:"— no disponible",js_debiti_host:"deudas host",js_risc_auto:"(cobro automático en las próximas transferencias)",js_no_debiti:"sin deuda host",js_integ_gen:"Integridad general",js_tutto_sano:"todo sano",js_allarmi:"alertas:",js_ok:"ok",js_problema:"problema",js_ultimo_backup:"Última copia",js_min_fa:"min atrás",js_disco:"Disco usado",js_db_salvati:"Bases de datos guardadas",js_nessuna_riga:"sin filas",js_uscito:"👋 Sesión cerrada.",js_scarico_stream:"… descargando (streaming)",js_non_disp2:"ℹ️ no disponible",js_file_corrotto:"🔴 ATENCIÓN: archivo CORRUPTO — no lo uses, avisa al técnico",js_movimenti:"movimientos",js_integ_verif:"INTEGRIDAD VERIFICADA ✅",js_controllo:"… comprobando",js_da_segnalare:"a declarar",js_incompleti_sist:"incompletos por corregir",js_zero_incompleti:"0 incompletos",js_anno:"año",js_host_totali:"hosts totales",js_st_urgente:"A DECLARAR · DATOS FALTANTES",js_st_report:"a declarar · ok",js_st_sotto:"bajo umbral",js_st_sotto_inc:"bajo umbral · datos incompletos",js_manca:"falta:",js_fermi:"retenidos",js_pren:"reservas",js_nessun_host:"sin host",js_genero_stream:"… generando (streaming)",js_file_corrotto2:"🔴 archivo CORRUPTO — no lo entregues, avisa al técnico",js_host_segnalati:"hosts declarados",js_integ_ok:"INTEGRIDAD OK ✅",js_interrogo:"… consultando Stripe y el libro",js_combacia:"✅ TODO CUADRA",js_discrepanze:"🔴 DISCREPANCIAS ENCONTRADAS",js_sess_pagate:"sesiones pagadas",js_inc_giornale:"ingresos en el libro",js_ultimi:"últimos",js_gg:"días",js_giornale:"libro",js_solo_stripe:"👻 Stripe tiene, el libro NO",js_solo_giornale:"👻 el libro tiene, Stripe NO",js_imp_diverso:"⚖️ importe DISTINTO",js_calcolo:"… calculando",js_in_promo:"en promo",js_a_8:"al 8%",js_a_regime:"en régimen",js_senza_data:"sin fecha",js_devono_riacc:"deben re-aceptar",js_nessun_host_filtri:"Ningún host con estos filtros.",th_host:"Host",th_registrato:"Registrado",th_giorni:"Días",th_scaglione:"Tramo",th_marketplace:"Marketplace",th_diretto:"Directo",th_prossimo:"Próximo cambio",th_contratto:"Contrato",js_fra:"en",js_da_riacc:"🔴 debe re-aceptar",js_ha_v:"tiene v",js_in_regola:"✅ en regla",js_tariffa_tecnica:"Tarifa técnica Stripe:",js_sempre_dovuta:"— siempre debida, incluso con comisión 0%.",sc_et_promo:"🟢 Promo 0%",sc_et_fase1:"🔵 Fase 8%",sc_et_regime:"🔵 Régimen",js_leggo_reg:"… leyendo el registro",js_prove_integre:"pruebas, todas íntegras",js_prove_manom:"pruebas MANIPULADAS de",js_nessuna_prova:"Ninguna prueba registrada.",docn_contratto:"📜 Contrato",docn_privacy:"🔒 Privacidad GDPR",docn_identita:"🪪 Identidad verificada",th_documento:"Documento",th_versione:"Versión",th_accettato:"Aceptado (UTC)",th_ip:"IP",th_clausole:"Cláusulas",th_riferimento:"Referencia",th_firma:"Firma HMAC-SHA256",th_integra:"Íntegra",js_no:"🔴 NO",js_preparo_dossier:"… preparando el expediente",js_file_nonvalido:"🔴 archivo NO válido (truncado)",js_scaricato_cert:"✅ descargado y certificado",js_ricavo_coperto:"✅ Ingreso técnico cubierto",js_prenotazioni:"reservas",js_ribaltato:"repercutido al host",js_costo_irrec:"🔴 <strong>COSTE TÉCNICO IRRECUPERABLE</strong>",js_perdita_ded:"pérdida deducible — Stripe no devuelve la comisión en los reembolsos",js_saldo:"= Saldo",js_leggo:"… leyendo",js_non_attiva:"ℹ️ no activa",js_su:"de",js_riuscite:"logradas",js_qualificate:"cualificadas",js_tutte:"(todas)",js_tutte_river:"todas reverificadas",js_una_non_river:"una no se reverifica",js_nessuna_marca:"Ningún sello aún: el primero se crea dentro de una hora tras el arranque, o pulsa <strong>Congelar ahora</strong>.",th_giorno:"Día",th_ora_cert:"Hora certificada (UTC)",th_autorita:"Autoridad",th_rango:"Rango",th_nserie:"N.º de serie",th_riverifica:"Reverificación",th_prova:"Prueba",js_qualificata_s:"<strong style='color:#155724'>⚖️ CUALIFICADA</strong>",js_ripiego:"<span class='hint'>RFC 3161 (reserva)</span>",js_anomalia:"🔴 <strong>ANOMALÍA</strong>",js_cosa_cambia:"<strong>⚖️ Qué cambia con la cualificación:</strong>",js_per_verificare:"Para verificar sin nosotros:",js_scarico_prova:"… descargando la prueba",js_prova_scaricata:"✅ prueba descargada",js_chiedo_ora:"… pidiendo la hora a una Autoridad externa",js_gia_congelato:"✅ hoy ya está congelado",js_congelato_qual:"⚖️ congelado con sello CUALIFICADO por",js_congelato_da:"✅ congelado por",js_non_riuscito:"🔴 no logrado:"},
+ fr:{hdr_readonly:"Salle de contrôle · lecture seule",login_h:"🔒 Accès super-admin",login_p:"Nécessite la clé admin + le mot de passe super-admin. Session 15 minutes, liée à cet appareil.",ph_ak:"Clé admin",ph_pw:"Mot de passe super-admin",btn_entra:"🔓 Entrer",btn_agg:"🔄 Actualiser",torna_admin:"← Retour au panneau admin",btn_esci:"Se déconnecter",integ_h:"🔗 Intégrité du journal comptable",integ_p:"La chaîne de hachage prouve qu'aucun mouvement d'argent n'a été altéré.",diag_h:"🩺 État du système",fisc_h:"💼 Centre Fiscal",fisc_p:"Relevé comptable CERTIFIÉ : tous les mouvements d'argent + la preuve (chaîne de hachage) que personne n'y a touché. Le fichier à donner au comptable, à la banque ou au fisc.",btn_estratto:"📥 Télécharger le relevé certifié (CSV)",conf_h:"🇪🇺 Conformité Hôte (DAC7)",conf_p:"La loi européenne (DAC7) oblige à déclarer au fisc les hôtes qui dépassent <b>30 réservations</b> ou <b>2 000&nbsp;€</b> par an. Ici vous voyez qui doit être déclaré et à qui il <b>manque les données fiscales</b> (en rouge : à déclarer MAIS incomplet). Pour ces hôtes les <b>virements sont en HOLD automatique</b> (💰 = combien est bloqué) : ils se débloquent tout seuls dès qu'ils complètent leurs données depuis le panneau. Pour payer quand même à la main : tableau de bord payout, comme toujours.",lbl_anno:"Année :",btn_conf:"🔄 Vérifier",dac7_h:"📤 Rapport DAC7 certifié",dac7_p:"Génère le fichier CSV à remettre au fisc : une ligne par hôte à déclarer, avec données fiscales, recettes, trimestres et biens. Inclut la <b>preuve d'intégrité</b> (hash). Uniquement les hôtes au-dessus du seuil. Chaque génération est tracée dans les logs.",btn_dac7:"📥 Générer le rapport DAC7 (CSV)",ric_h:"🔄 Rapprochement Stripe",ric_p:"Compare toute la période avec la banque : chaque session PAYÉE que Stripe connaît contre chaque encaissement du journal (au centime), plus les totaux d'encaissements/remboursements/virements. Si un webhook s'est perdu ou qu'un centime cloche, cela apparaît ici.",lbl_ultimi:"Derniers",lbl_giorni:"jours",btn_ric:"🔄 Rapprocher",sc_h:"📊 Paliers & Promo (commission par hôte)",sc_p:"À quel taux se trouve CHAQUE hôte en ce moment, combien de jours avant le prochain palier et la date exacte du changement. Le chiffre vient de la même fonction qui <strong>facture</strong> : ce n'est pas un calcul du navigateur, il ne peut donc pas diverger.",ph_scQ:"Chercher un hôte : id, e-mail, raison sociale",opt_tutti:"Tous les paliers",opt_promo:"🟢 Promo 0%",opt_fase1:"🔵 Phase 8%",opt_regime:"🔵 Régime 10%",btn_sc:"📊 Afficher",pl_h:"📜 Preuves légales des consentements (HMAC-SHA256)",pl_p:"Les preuves complètes : version du contrat, empreinte du texte, <strong>IP</strong>, appareil, <strong>date et heure UTC</strong> et <strong>signature HMAC-SHA256</strong>. Si une ligne était altérée dans la base de données la signature ne correspond plus et elle apparaît ici en rouge. Données personnelles : visibles uniquement d'ici, jamais dans le panneau opérationnel.",ph_plHost:"host_id (vide = tous)",btn_prove:"📜 Afficher les preuves",btn_dossier:"📥 Télécharger le dossier légal (CSV)",btn_dossierJ:"📥 JSON",ct_h:"🧾 Frais technique Stripe (3%) et pertes",ct_p:"Combien les frais techniques ont réellement couvert et combien a été <strong>perdu sur les remboursements</strong> : Stripe ne restitue pas sa commission, donc sur chaque réservation remboursée ce coût reste à la charge de la plateforme. C'est le poste à transmettre au comptable.",btn_costi:"🧾 Calculer le relevé",mt_h:"⏱️ Horodatages (heure certifiée par un tiers)",mt_p:"Nos signatures, c'est nous qui les faisons, donc <strong>c'est nous qui déclarons l'heure</strong>. Chaque jour les registres sont réduits à une empreinte et datés par une <strong>Autorité d'horodatage QUALIFIÉE européenne</strong> (ACCV Espagne · QuoVadis EU · Izenpe · État belge). Pour les horodatages <strong>qualifiés</strong> l'<strong>art. 41 eIDAS</strong> établit la <strong>présomption légale</strong> d'exactitude de la date et de l'heure : au tribunal ce n'est pas à nous de prouver que l'heure est juste — c'est à celui qui conteste de prouver le contraire. Le fichier <code>.tsr</code> se remet à un expert, qui le vérifie <strong>sans nous</strong> avec <code>openssl ts -verify</code>.",btn_marche:"⏱️ Afficher les horodatages",btn_marcaOra:"🔒 Figer maintenant",log_h:"📋 Logs persistants (derniers événements)",log_p:"Qui a fait quoi + alertes. En rouge les CRITIQUES (accès refusés, altérations).",err_rete:"❌ erreur réseau",err_rete_full:"❌ Erreur réseau.",js_inserisci:"⚠️ Saisissez la clé admin et le mot de passe super-admin.",js_troppi:"⛔ Trop de tentatives, réessayez dans un instant.",js_nonconfig:"ℹ️ Bunker non configuré sur le serveur.",js_errata:"❌ Clé admin ou mot de passe super-admin incorrect.",js_scaduta:"⏱️ Session expirée (15 min). Reconnectez-vous.",js_sess_attiva:"session active",js_min:"min",js_catena_integra:"✅ CHAÎNE INTÈGRE",js_mov_verificati:"mouvements vérifiés",js_manomissione:"🔴 ALTÉRATION",js_riga_rotta:"ligne rompue :",js_non_disp:"— non disponible",js_debiti_host:"dettes hôte",js_risc_auto:"(recouvrement automatique sur les prochains virements)",js_no_debiti:"aucune dette hôte",js_integ_gen:"Intégrité générale",js_tutto_sano:"tout est sain",js_allarmi:"alertes :",js_ok:"ok",js_problema:"problème",js_ultimo_backup:"Dernière sauvegarde",js_min_fa:"min",js_disco:"Disque utilisé",js_db_salvati:"Bases de données sauvegardées",js_nessuna_riga:"aucune ligne",js_uscito:"👋 Déconnecté.",js_scarico_stream:"… téléchargement (streaming)",js_non_disp2:"ℹ️ non disponible",js_file_corrotto:"🔴 ATTENTION : fichier CORROMPU — ne l'utilisez pas, prévenez le technicien",js_movimenti:"mouvements",js_integ_verif:"INTÉGRITÉ VÉRIFIÉE ✅",js_controllo:"… vérification",js_da_segnalare:"à déclarer",js_incompleti_sist:"incomplets à corriger",js_zero_incompleti:"0 incomplet",js_anno:"année",js_host_totali:"hôtes au total",js_st_urgente:"À DÉCLARER · DONNÉES MANQUANTES",js_st_report:"à déclarer · ok",js_st_sotto:"sous le seuil",js_st_sotto_inc:"sous le seuil · données incomplètes",js_manca:"manque :",js_fermi:"bloqués",js_pren:"rés.",js_nessun_host:"aucun hôte",js_genero_stream:"… génération (streaming)",js_file_corrotto2:"🔴 fichier CORROMPU — ne le remettez pas, prévenez le technicien",js_host_segnalati:"hôtes déclarés",js_integ_ok:"INTÉGRITÉ OK ✅",js_interrogo:"… interrogation de Stripe et du journal",js_combacia:"✅ TOUT CONCORDE",js_discrepanze:"🔴 ÉCARTS TROUVÉS",js_sess_pagate:"sessions payées",js_inc_giornale:"encaissements au journal",js_ultimi:"derniers",js_gg:"j",js_giornale:"journal",js_solo_stripe:"👻 Stripe a, le journal NON",js_solo_giornale:"👻 le journal a, Stripe NON",js_imp_diverso:"⚖️ montant DIFFÉRENT",js_calcolo:"… calcul",js_in_promo:"en promo",js_a_8:"à 8%",js_a_regime:"en régime",js_senza_data:"sans date",js_devono_riacc:"doivent re-accepter",js_nessun_host_filtri:"Aucun hôte avec ces filtres.",th_host:"Hôte",th_registrato:"Inscrit",th_giorni:"Jours",th_scaglione:"Palier",th_marketplace:"Marketplace",th_diretto:"Direct",th_prossimo:"Prochain palier",th_contratto:"Contrat",js_fra:"dans",js_da_riacc:"🔴 doit re-accepter",js_ha_v:"a v",js_in_regola:"✅ en règle",js_tariffa_tecnica:"Frais technique Stripe :",js_sempre_dovuta:"— toujours dû, même à 0% de commission.",sc_et_promo:"🟢 Promo 0%",sc_et_fase1:"🔵 Phase 8%",sc_et_regime:"🔵 Régime",js_leggo_reg:"… lecture du registre",js_prove_integre:"preuves, toutes intègres",js_prove_manom:"preuves ALTÉRÉES sur",js_nessuna_prova:"Aucune preuve enregistrée.",docn_contratto:"📜 Contrat",docn_privacy:"🔒 Confidentialité RGPD",docn_identita:"🪪 Identité vérifiée",th_documento:"Document",th_versione:"Version",th_accettato:"Accepté (UTC)",th_ip:"IP",th_clausole:"Clauses",th_riferimento:"Référence",th_firma:"Signature HMAC-SHA256",th_integra:"Intègre",js_no:"🔴 NON",js_preparo_dossier:"… préparation du dossier",js_file_nonvalido:"🔴 fichier NON valide (tronqué)",js_scaricato_cert:"✅ téléchargé et certifié",js_ricavo_coperto:"✅ Recette technique couverte",js_prenotazioni:"réservations",js_ribaltato:"répercuté sur l'hôte",js_costo_irrec:"🔴 <strong>COÛT TECHNIQUE IRRÉCUPÉRABLE</strong>",js_perdita_ded:"perte déductible — Stripe ne restitue pas la commission sur les remboursements",js_saldo:"= Solde",js_leggo:"… lecture",js_non_attiva:"ℹ️ non active",js_su:"sur",js_riuscite:"réussies",js_qualificate:"qualifiées",js_tutte:"(toutes)",js_tutte_river:"toutes revérifiées",js_una_non_river:"une ne se revérifie pas",js_nessuna_marca:"Aucun horodatage pour l'instant : le premier arrive dans l'heure suivant le démarrage, ou appuyez sur <strong>Figer maintenant</strong>.",th_giorno:"Jour",th_ora_cert:"Heure certifiée (UTC)",th_autorita:"Autorité",th_rango:"Rang",th_nserie:"N° de série",th_riverifica:"Revérification",th_prova:"Preuve",js_qualificata_s:"<strong style='color:#155724'>⚖️ QUALIFIÉ</strong>",js_ripiego:"<span class='hint'>RFC 3161 (repli)</span>",js_anomalia:"🔴 <strong>ANOMALIE</strong>",js_cosa_cambia:"<strong>⚖️ Ce que change la qualification :</strong>",js_per_verificare:"Pour vérifier sans nous :",js_scarico_prova:"… téléchargement de la preuve",js_prova_scaricata:"✅ preuve téléchargée",js_chiedo_ora:"… demande de l'heure à une Autorité externe",js_gia_congelato:"✅ aujourd'hui est déjà figé",js_congelato_qual:"⚖️ figé avec un horodatage QUALIFIÉ par",js_congelato_da:"✅ figé par",js_non_riuscito:"🔴 échec :"},
+ de:{hdr_readonly:"Kontrollraum · schreibgeschützt",login_h:"🔒 Super-Admin-Zugang",login_p:"Erfordert den Admin-Schlüssel + das Super-Admin-Passwort. Sitzung 15 Minuten, an dieses Gerät gebunden.",ph_ak:"Admin-Schlüssel",ph_pw:"Super-Admin-Passwort",btn_entra:"🔓 Eintreten",btn_agg:"🔄 Aktualisieren",torna_admin:"← Zurück zum Admin-Panel",btn_esci:"Abmelden",integ_h:"🔗 Integrität des Buchungsjournals",integ_p:"Die Hash-Kette beweist, dass keine Geldbewegung manipuliert wurde.",diag_h:"🩺 Systemstatus",fisc_h:"💼 Steuerzentrum",fisc_p:"ZERTIFIZIERTER Kontoauszug: alle Geldbewegungen + der Nachweis (Hash-Kette), dass niemand sie angerührt hat. Die Datei für den Steuerberater, die Bank oder das Finanzamt.",btn_estratto:"📥 Zertifizierten Auszug herunterladen (CSV)",conf_h:"🇪🇺 Host-Konformität (DAC7)",conf_p:"Das europäische Recht (DAC7) verpflichtet, dem Finanzamt Hosts zu melden, die <b>30 Buchungen</b> oder <b>2.000&nbsp;€</b> im Jahr überschreiten. Hier sehen Sie, wer gemeldet werden muss und wem die <b>Steuerdaten fehlen</b> (in Rot: zu melden, ABER unvollständig). Für diese Hosts sind die <b>Auszahlungen automatisch auf HOLD</b> (💰 = wie viel zurückgehalten wird): Sie werden von selbst freigegeben, sobald sie ihre Daten im Panel vervollständigen. Um trotzdem manuell zu zahlen: Auszahlungs-Dashboard, wie immer.",lbl_anno:"Jahr:",btn_conf:"🔄 Prüfen",dac7_h:"📤 Zertifizierter DAC7-Bericht",dac7_p:"Erzeugt die CSV-Datei zur Übermittlung an das Finanzamt: eine Zeile pro zu meldendem Host, mit Steuerdaten, Einnahmen, Quartalen und Immobilien. Enthält den <b>Integritätsnachweis</b> (Hash). Nur Hosts über der Schwelle. Jede Erstellung wird in den Logs protokolliert.",btn_dac7:"📥 DAC7-Bericht erzeugen (CSV)",ric_h:"🔄 Stripe-Abgleich",ric_p:"Vergleicht den gesamten Zeitraum mit der Bank: jede BEZAHLTE Sitzung, die Stripe kennt, gegen jede Einnahme im Journal (auf den Cent), plus die Summen aus Einnahmen/Erstattungen/Auszahlungen. Wenn ein Webhook verloren ging oder ein Cent nicht stimmt, erscheint es hier.",lbl_ultimi:"Letzte",lbl_giorni:"Tage",btn_ric:"🔄 Abgleichen",sc_h:"📊 Stufen & Promo (Provision pro Host)",sc_p:"Auf welchem Satz JEDER Host gerade steht, wie viele Tage bis zur nächsten Stufe und das genaue Änderungsdatum. Die Zahl kommt aus derselben Funktion, die <strong>berechnet</strong>: es ist keine Browser-Berechnung, sie kann also nicht abweichen.",ph_scQ:"Host suchen: ID, E-Mail, Firmenname",opt_tutti:"Alle Stufen",opt_promo:"🟢 Promo 0%",opt_fase1:"🔵 Phase 8%",opt_regime:"🔵 Regelbetrieb 10%",btn_sc:"📊 Anzeigen",pl_h:"📜 Rechtsnachweise der Einwilligungen (HMAC-SHA256)",pl_p:"Die vollständigen Nachweise: Vertragsversion, Text-Fingerabdruck, <strong>IP</strong>, Gerät, <strong>Datum und Uhrzeit in UTC</strong> und <strong>HMAC-SHA256-Signatur</strong>. Würde eine Zeile in der Datenbank manipuliert, stimmt die Signatur nicht mehr und sie erscheint hier in Rot. Personenbezogene Daten: nur von hier sichtbar, nie im operativen Panel.",ph_plHost:"host_id (leer = alle)",btn_prove:"📜 Nachweise anzeigen",btn_dossier:"📥 Rechtsdossier herunterladen (CSV)",btn_dossierJ:"📥 JSON",ct_h:"🧾 Technische Stripe-Gebühr (3%) und Verluste",ct_p:"Wie viel die technische Gebühr tatsächlich gedeckt hat und wie viel bei <strong>Erstattungen verloren</strong> ging: Stripe erstattet seine Gebühr nicht, daher bleiben diese Kosten bei jeder erstatteten Buchung bei der Plattform. Das ist der Posten für den Steuerberater.",btn_costi:"🧾 Aufstellung berechnen",mt_h:"⏱️ Zeitstempel (Zeit von einem Dritten zertifiziert)",mt_p:"Unsere Signaturen erstellen wir selbst, also <strong>erklären wir die Zeit selbst</strong>. Jeden Tag werden die Register auf einen Fingerabdruck reduziert und von einer <strong>QUALIFIZIERTEN europäischen Zeitstempel-Autorität</strong> datiert (ACCV Spanien · QuoVadis EU · Izenpe · Belgischer Staat). Für <strong>qualifizierte</strong> Zeitstempel begründet <strong>Art. 41 eIDAS</strong> die <strong>gesetzliche Vermutung</strong> der Richtigkeit von Datum und Uhrzeit: vor Gericht müssen nicht wir beweisen, dass die Zeit stimmt — wer sie anficht, muss das Gegenteil beweisen. Die <code>.tsr</code>-Datei wird einem Sachverständigen übergeben, der sie <strong>ohne uns</strong> mit <code>openssl ts -verify</code> prüft.",btn_marche:"⏱️ Zeitstempel anzeigen",btn_marcaOra:"🔒 Jetzt einfrieren",log_h:"📋 Persistente Logs (letzte Ereignisse)",log_p:"Wer hat was getan + Warnungen. In Rot die KRITISCHEN (verweigerte Zugriffe, Manipulationen).",err_rete:"❌ Netzwerkfehler",err_rete_full:"❌ Netzwerkfehler.",js_inserisci:"⚠️ Admin-Schlüssel und Super-Admin-Passwort eingeben.",js_troppi:"⛔ Zu viele Versuche, bitte gleich erneut versuchen.",js_nonconfig:"ℹ️ Bunker auf dem Server nicht konfiguriert.",js_errata:"❌ Admin-Schlüssel oder Super-Admin-Passwort falsch.",js_scaduta:"⏱️ Sitzung abgelaufen (15 Min). Erneut anmelden.",js_sess_attiva:"aktive Sitzung",js_min:"Min",js_catena_integra:"✅ KETTE INTAKT",js_mov_verificati:"Bewegungen geprüft",js_manomissione:"🔴 MANIPULATION",js_riga_rotta:"fehlerhafte Zeile:",js_non_disp:"— nicht verfügbar",js_debiti_host:"Host-Schulden",js_risc_auto:"(automatischer Einzug bei den nächsten Auszahlungen)",js_no_debiti:"keine Host-Schuld",js_integ_gen:"Allgemeine Integrität",js_tutto_sano:"alles gesund",js_allarmi:"Warnungen:",js_ok:"ok",js_problema:"Problem",js_ultimo_backup:"Letztes Backup",js_min_fa:"Min.",js_disco:"Speicher belegt",js_db_salvati:"Gespeicherte Datenbanken",js_nessuna_riga:"keine Zeilen",js_uscito:"👋 Abgemeldet.",js_scarico_stream:"… lade herunter (Streaming)",js_non_disp2:"ℹ️ nicht verfügbar",js_file_corrotto:"🔴 ACHTUNG: Datei BESCHÄDIGT — nicht verwenden, Techniker benachrichtigen",js_movimenti:"Bewegungen",js_integ_verif:"INTEGRITÄT GEPRÜFT ✅",js_controllo:"… prüfe",js_da_segnalare:"zu melden",js_incompleti_sist:"unvollständig, zu beheben",js_zero_incompleti:"0 unvollständig",js_anno:"Jahr",js_host_totali:"Hosts gesamt",js_st_urgente:"ZU MELDEN · DATEN FEHLEN",js_st_report:"zu melden · ok",js_st_sotto:"unter Schwelle",js_st_sotto_inc:"unter Schwelle · Daten unvollständig",js_manca:"fehlt:",js_fermi:"zurückgehalten",js_pren:"Buchungen",js_nessun_host:"kein Host",js_genero_stream:"… erzeuge (Streaming)",js_file_corrotto2:"🔴 Datei BESCHÄDIGT — nicht einreichen, Techniker benachrichtigen",js_host_segnalati:"gemeldete Hosts",js_integ_ok:"INTEGRITÄT OK ✅",js_interrogo:"… frage Stripe und das Journal ab",js_combacia:"✅ ALLES STIMMT ÜBEREIN",js_discrepanze:"🔴 ABWEICHUNGEN GEFUNDEN",js_sess_pagate:"bezahlte Sitzungen",js_inc_giornale:"Einnahmen im Journal",js_ultimi:"letzte",js_gg:"Tage",js_giornale:"Journal",js_solo_stripe:"👻 Stripe hat, Journal NICHT",js_solo_giornale:"👻 Journal hat, Stripe NICHT",js_imp_diverso:"⚖️ Betrag ABWEICHEND",js_calcolo:"… berechne",js_in_promo:"in Promo",js_a_8:"auf 8%",js_a_regime:"im Regelbetrieb",js_senza_data:"ohne Datum",js_devono_riacc:"müssen erneut zustimmen",js_nessun_host_filtri:"Kein Host mit diesen Filtern.",th_host:"Host",th_registrato:"Registriert",th_giorni:"Tage",th_scaglione:"Stufe",th_marketplace:"Marktplatz",th_diretto:"Direkt",th_prossimo:"Nächste Stufe",th_contratto:"Vertrag",js_fra:"in",js_da_riacc:"🔴 muss erneut zustimmen",js_ha_v:"hat v",js_in_regola:"✅ konform",js_tariffa_tecnica:"Technische Stripe-Gebühr:",js_sempre_dovuta:"— immer fällig, auch bei 0% Provision.",sc_et_promo:"🟢 Promo 0%",sc_et_fase1:"🔵 Phase 8%",sc_et_regime:"🔵 Regelbetrieb",js_leggo_reg:"… lese das Register",js_prove_integre:"Nachweise, alle intakt",js_prove_manom:"Nachweise MANIPULIERT von",js_nessuna_prova:"Kein Nachweis erfasst.",docn_contratto:"📜 Vertrag",docn_privacy:"🔒 DSGVO-Datenschutz",docn_identita:"🪪 Verifizierte Identität",th_documento:"Dokument",th_versione:"Version",th_accettato:"Akzeptiert (UTC)",th_ip:"IP",th_clausole:"Klauseln",th_riferimento:"Referenz",th_firma:"HMAC-SHA256-Signatur",th_integra:"Intakt",js_no:"🔴 NEIN",js_preparo_dossier:"… bereite das Dossier vor",js_file_nonvalido:"🔴 UNGÜLTIGE Datei (abgeschnitten)",js_scaricato_cert:"✅ heruntergeladen und zertifiziert",js_ricavo_coperto:"✅ Technischer Ertrag gedeckt",js_prenotazioni:"Buchungen",js_ribaltato:"an den Host weitergegeben",js_costo_irrec:"🔴 <strong>UNWIEDERBRINGLICHE TECHNISCHE KOSTEN</strong>",js_perdita_ded:"abzugsfähiger Verlust — Stripe erstattet die Gebühr bei Erstattungen nicht",js_saldo:"= Saldo",js_leggo:"… lese",js_non_attiva:"ℹ️ nicht aktiv",js_su:"von",js_riuscite:"erfolgreich",js_qualificate:"qualifiziert",js_tutte:"(alle)",js_tutte_river:"alle erneut verifiziert",js_una_non_river:"eine verifiziert nicht erneut",js_nessuna_marca:"Noch kein Zeitstempel: der erste erfolgt innerhalb einer Stunde nach dem Start, oder drücken Sie <strong>Jetzt einfrieren</strong>.",th_giorno:"Tag",th_ora_cert:"Zertifizierte Zeit (UTC)",th_autorita:"Autorität",th_rango:"Rang",th_nserie:"Seriennr.",th_riverifica:"Erneute Prüfung",th_prova:"Nachweis",js_qualificata_s:"<strong style='color:#155724'>⚖️ QUALIFIZIERT</strong>",js_ripiego:"<span class='hint'>RFC 3161 (Ausweichlösung)</span>",js_anomalia:"🔴 <strong>ANOMALIE</strong>",js_cosa_cambia:"<strong>⚖️ Was die Qualifizierung ändert:</strong>",js_per_verificare:"Zum Prüfen ohne uns:",js_scarico_prova:"… lade den Nachweis herunter",js_prova_scaricata:"✅ Nachweis heruntergeladen",js_chiedo_ora:"… frage die Zeit bei einer externen Autorität an",js_gia_congelato:"✅ heute ist bereits eingefroren",js_congelato_qual:"⚖️ eingefroren mit QUALIFIZIERTEM Zeitstempel von",js_congelato_da:"✅ eingefroren von",js_non_riuscito:"🔴 fehlgeschlagen:"},
+ pt:{hdr_readonly:"Sala de controlo · apenas leitura",login_h:"🔒 Acesso super-admin",login_p:"Requer a chave admin + a palavra-passe super-admin. Sessão 15 minutos, associada a este dispositivo.",ph_ak:"Chave admin",ph_pw:"Palavra-passe super-admin",btn_entra:"🔓 Entrar",btn_agg:"🔄 Atualizar",torna_admin:"← Voltar ao painel admin",btn_esci:"Sair",integ_h:"🔗 Integridade do livro contabilístico",integ_p:"A cadeia de hash prova que nenhum movimento de dinheiro foi adulterado.",diag_h:"🩺 Estado do sistema",fisc_h:"💼 Centro Fiscal",fisc_p:"Extrato contabilístico CERTIFICADO: todos os movimentos de dinheiro + a prova (cadeia de hash) de que ninguém lhes tocou. O ficheiro para dar ao contabilista, ao banco ou ao Fisco.",btn_estratto:"📥 Descarregar extrato certificado (CSV)",conf_h:"🇪🇺 Conformidade Host (DAC7)",conf_p:"A lei europeia (DAC7) obriga a comunicar ao Fisco os hosts que ultrapassam <b>30 reservas</b> ou <b>2.000&nbsp;€</b> por ano. Aqui vê quem deve ser comunicado e a quem <b>faltam os dados fiscais</b> (a vermelho: a comunicar MAS incompleto). Para estes hosts as <b>transferências estão em HOLD automático</b> (💰 = quanto está retido): desbloqueiam-se sozinhas assim que completam os dados no painel. Para pagar mesmo assim à mão: dashboard de payout, como sempre.",lbl_anno:"Ano:",btn_conf:"🔄 Verificar",dac7_h:"📤 Relatório DAC7 certificado",dac7_p:"Gera o ficheiro CSV a entregar ao Fisco: uma linha por cada host a comunicar, com dados fiscais, receitas, trimestres e imóveis. Inclui a <b>prova de integridade</b> (hash). Apenas hosts acima do limiar. Cada geração é registada nos logs.",btn_dac7:"📥 Gerar relatório DAC7 (CSV)",ric_h:"🔄 Reconciliação Stripe",ric_p:"Compara todo o período com o banco: cada sessão PAGA que o Stripe conhece contra cada recebimento do livro (ao cêntimo), mais os totais de recebimentos/reembolsos/transferências. Se um webhook se perdeu ou um cêntimo baila, aparece aqui.",lbl_ultimi:"Últimos",lbl_giorni:"dias",btn_ric:"🔄 Reconciliar",sc_h:"📊 Escalões & Promo (comissão por host)",sc_p:"A que taxa está CADA host neste momento, quantos dias faltam para o próximo escalão e a data exata da mudança. O número vem da mesma função que <strong>cobra</strong>: não é um cálculo do navegador, portanto não pode divergir.",ph_scQ:"Procurar host: id, email, denominação social",opt_tutti:"Todos os escalões",opt_promo:"🟢 Promo 0%",opt_fase1:"🔵 Fase 8%",opt_regime:"🔵 Regime 10%",btn_sc:"📊 Mostrar",pl_h:"📜 Provas legais dos consentimentos (HMAC-SHA256)",pl_p:"As provas completas: versão do contrato, impressão do texto, <strong>IP</strong>, dispositivo, <strong>data e hora UTC</strong> e <strong>assinatura HMAC-SHA256</strong>. Se uma linha fosse adulterada na base de dados a assinatura deixa de bater certo e aparece aqui a vermelho. Dados pessoais: visíveis só a partir daqui, nunca no painel operacional.",ph_plHost:"host_id (vazio = todos)",btn_prove:"📜 Mostrar provas",btn_dossier:"📥 Descarregar dossiê legal (CSV)",btn_dossierJ:"📥 JSON",ct_h:"🧾 Taxa técnica Stripe (3%) e perdas",ct_p:"Quanto a taxa técnica cobriu de facto e quanto foi <strong>perdido nos reembolsos</strong>: o Stripe não devolve a sua comissão, por isso em cada reserva reembolsada esse custo fica a cargo da plataforma. É a rubrica a passar ao contabilista.",btn_costi:"🧾 Calcular mapa",mt_h:"⏱️ Selos temporais (hora certificada por um terceiro)",mt_p:"As nossas assinaturas fazemo-las nós, por isso <strong>a hora declaramo-la nós</strong>. Todos os dias os registos são reduzidos a uma impressão e datados por uma <strong>Autoridade de selagem QUALIFICADA europeia</strong> (ACCV Espanha · QuoVadis EU · Izenpe · Estado belga). Para os selos <strong>qualificados</strong> o <strong>art. 41 eIDAS</strong> estabelece a <strong>presunção legal</strong> de exatidão da data e da hora: em tribunal não nos cabe provar que a hora está certa — cabe a quem contesta provar o contrário. O ficheiro <code>.tsr</code> entrega-se a um perito, que o verifica <strong>sem nós</strong> com <code>openssl ts -verify</code>.",btn_marche:"⏱️ Mostrar selos",btn_marcaOra:"🔒 Congelar agora",log_h:"📋 Logs persistentes (últimos eventos)",log_p:"Quem fez o quê + alertas. A vermelho os CRÍTICOS (acessos negados, adulterações).",err_rete:"❌ erro de rede",err_rete_full:"❌ Erro de rede.",js_inserisci:"⚠️ Introduza a chave admin e a palavra-passe super-admin.",js_troppi:"⛔ Demasiadas tentativas, tente novamente daqui a pouco.",js_nonconfig:"ℹ️ Bunker não configurado no servidor.",js_errata:"❌ Chave admin ou palavra-passe super-admin errada.",js_scaduta:"⏱️ Sessão expirada (15 min). Entre novamente.",js_sess_attiva:"sessão ativa",js_min:"min",js_catena_integra:"✅ CADEIA ÍNTEGRA",js_mov_verificati:"movimentos verificados",js_manomissione:"🔴 ADULTERAÇÃO",js_riga_rotta:"linha quebrada:",js_non_disp:"— não disponível",js_debiti_host:"dívidas host",js_risc_auto:"(cobrança automática nas próximas transferências)",js_no_debiti:"sem dívida host",js_integ_gen:"Integridade geral",js_tutto_sano:"tudo saudável",js_allarmi:"alertas:",js_ok:"ok",js_problema:"problema",js_ultimo_backup:"Última cópia",js_min_fa:"min atrás",js_disco:"Disco usado",js_db_salvati:"Bases de dados guardadas",js_nessuna_riga:"sem linhas",js_uscito:"👋 Sessão terminada.",js_scarico_stream:"… a descarregar (streaming)",js_non_disp2:"ℹ️ não disponível",js_file_corrotto:"🔴 ATENÇÃO: ficheiro CORROMPIDO — não o use, avise o técnico",js_movimenti:"movimentos",js_integ_verif:"INTEGRIDADE VERIFICADA ✅",js_controllo:"… a verificar",js_da_segnalare:"a comunicar",js_incompleti_sist:"incompletos por corrigir",js_zero_incompleti:"0 incompletos",js_anno:"ano",js_host_totali:"hosts no total",js_st_urgente:"A COMUNICAR · DADOS EM FALTA",js_st_report:"a comunicar · ok",js_st_sotto:"abaixo do limiar",js_st_sotto_inc:"abaixo do limiar · dados incompletos",js_manca:"falta:",js_fermi:"retidos",js_pren:"reservas",js_nessun_host:"sem host",js_genero_stream:"… a gerar (streaming)",js_file_corrotto2:"🔴 ficheiro CORROMPIDO — não o entregue, avise o técnico",js_host_segnalati:"hosts comunicados",js_integ_ok:"INTEGRIDADE OK ✅",js_interrogo:"… a consultar o Stripe e o livro",js_combacia:"✅ TUDO CONFERE",js_discrepanze:"🔴 DISCREPÂNCIAS ENCONTRADAS",js_sess_pagate:"sessões pagas",js_inc_giornale:"recebimentos no livro",js_ultimi:"últimos",js_gg:"dias",js_giornale:"livro",js_solo_stripe:"👻 Stripe tem, o livro NÃO",js_solo_giornale:"👻 o livro tem, Stripe NÃO",js_imp_diverso:"⚖️ montante DIFERENTE",js_calcolo:"… a calcular",js_in_promo:"em promo",js_a_8:"a 8%",js_a_regime:"em regime",js_senza_data:"sem data",js_devono_riacc:"têm de re-aceitar",js_nessun_host_filtri:"Nenhum host com estes filtros.",th_host:"Host",th_registrato:"Registado",th_giorni:"Dias",th_scaglione:"Escalão",th_marketplace:"Marketplace",th_diretto:"Direto",th_prossimo:"Próximo escalão",th_contratto:"Contrato",js_fra:"em",js_da_riacc:"🔴 deve re-aceitar",js_ha_v:"tem v",js_in_regola:"✅ em conformidade",js_tariffa_tecnica:"Taxa técnica Stripe:",js_sempre_dovuta:"— sempre devida, mesmo com comissão 0%.",sc_et_promo:"🟢 Promo 0%",sc_et_fase1:"🔵 Fase 8%",sc_et_regime:"🔵 Regime",js_leggo_reg:"… a ler o registo",js_prove_integre:"provas, todas íntegras",js_prove_manom:"provas ADULTERADAS de",js_nessuna_prova:"Nenhuma prova registada.",docn_contratto:"📜 Contrato",docn_privacy:"🔒 Privacidade RGPD",docn_identita:"🪪 Identidade verificada",th_documento:"Documento",th_versione:"Versão",th_accettato:"Aceite (UTC)",th_ip:"IP",th_clausole:"Cláusulas",th_riferimento:"Referência",th_firma:"Assinatura HMAC-SHA256",th_integra:"Íntegra",js_no:"🔴 NÃO",js_preparo_dossier:"… a preparar o dossiê",js_file_nonvalido:"🔴 ficheiro NÃO válido (truncado)",js_scaricato_cert:"✅ descarregado e certificado",js_ricavo_coperto:"✅ Receita técnica coberta",js_prenotazioni:"reservas",js_ribaltato:"repassado ao host",js_costo_irrec:"🔴 <strong>CUSTO TÉCNICO IRRECUPERÁVEL</strong>",js_perdita_ded:"perda dedutível — o Stripe não devolve a comissão nos reembolsos",js_saldo:"= Saldo",js_leggo:"… a ler",js_non_attiva:"ℹ️ não ativa",js_su:"de",js_riuscite:"bem-sucedidos",js_qualificate:"qualificados",js_tutte:"(todos)",js_tutte_river:"todos reverificados",js_una_non_river:"um não se reverifica",js_nessuna_marca:"Ainda nenhum selo: o primeiro surge dentro de uma hora após o arranque, ou prima <strong>Congelar agora</strong>.",th_giorno:"Dia",th_ora_cert:"Hora certificada (UTC)",th_autorita:"Autoridade",th_rango:"Grau",th_nserie:"N.º de série",th_riverifica:"Reverificação",th_prova:"Prova",js_qualificata_s:"<strong style='color:#155724'>⚖️ QUALIFICADO</strong>",js_ripiego:"<span class='hint'>RFC 3161 (recurso)</span>",js_anomalia:"🔴 <strong>ANOMALIA</strong>",js_cosa_cambia:"<strong>⚖️ O que muda com a qualificação:</strong>",js_per_verificare:"Para verificar sem nós:",js_scarico_prova:"… a descarregar a prova",js_prova_scaricata:"✅ prova descarregada",js_chiedo_ora:"… a pedir a hora a uma Autoridade externa",js_gia_congelato:"✅ hoje já está congelado",js_congelato_qual:"⚖️ congelado com selo QUALIFICADO por",js_congelato_da:"✅ congelado por",js_non_riuscito:"🔴 falhou:"},
+ ja:{hdr_readonly:"コントロールルーム · 読み取り専用",login_h:"🔒 スーパー管理者ログイン",login_p:"管理者キー + スーパー管理者パスワードが必要です。セッションは15分、この端末に紐づきます。",ph_ak:"管理者キー",ph_pw:"スーパー管理者パスワード",btn_entra:"🔓 入る",btn_agg:"🔄 更新",torna_admin:"← 管理パネルに戻る",btn_esci:"ログアウト",integ_h:"🔗 会計台帳の整合性",integ_p:"ハッシュチェーンが、いかなる金銭の動きも改ざんされていないことを証明します。",diag_h:"🩺 システム状態",fisc_h:"💼 税務センター",fisc_p:"認証済みの会計明細：すべての金銭の動き + 誰も手を加えていないという証拠（ハッシュチェーン）。税理士・銀行・税務当局に渡すためのファイルです。",btn_estratto:"📥 認証済み明細をダウンロード（CSV）",conf_h:"🇪🇺 ホストのコンプライアンス（DAC7）",conf_p:"欧州法（DAC7）は、年間 <b>30予約</b> または <b>2,000&nbsp;€</b> を超えるホストを税務当局に報告するよう義務づけています。ここでは、報告が必要な相手と <b>税務データが不足</b> している相手（赤：報告対象だが未完成）が分かります。これらのホストは <b>送金が自動的にHOLD</b>（💰＝保留額）となり、パネルでデータを補完すると自動的に解除されます。それでも手動で支払う場合：いつも通りペイアウトのダッシュボードから。",lbl_anno:"年：",btn_conf:"🔄 確認",dac7_h:"📤 認証済みDAC7レポート",dac7_p:"税務当局に提出するCSVファイルを生成します：報告対象のホストごとに1行、税務データ・収入・四半期・物件を含みます。<b>整合性の証拠</b>（ハッシュ）を含みます。しきい値を超えるホストのみ。生成はすべてログに記録されます。",btn_dac7:"📥 DAC7レポートを生成（CSV）",ric_h:"🔄 Stripe照合",ric_p:"期間全体を銀行と照合します：Stripeが把握する各支払い済みセッションと台帳の各入金を（1セント単位で）突き合わせ、さらに入金・返金・送金の合計も比較します。webhookが失われたり1セントでもずれていれば、ここに表示されます。",lbl_ultimi:"直近",lbl_giorni:"日",btn_ric:"🔄 照合",sc_h:"📊 段階＆プロモ（ホスト別手数料）",sc_p:"各ホストが今どの料率にあり、次の段階まで何日か、変更の正確な日付を表示します。この数値は <strong>課金</strong> するのと同じ関数から来ます：ブラウザの計算ではないため、食い違うことはありません。",ph_scQ:"ホストを検索：id、メール、会社名",opt_tutti:"すべての段階",opt_promo:"🟢 プロモ 0%",opt_fase1:"🔵 フェーズ 8%",opt_regime:"🔵 通常 10%",btn_sc:"📊 表示",pl_h:"📜 同意の法的証拠（HMAC-SHA256）",pl_p:"完全な証拠：契約バージョン、本文のフィンガープリント、<strong>IP</strong>、端末、<strong>UTCの日時</strong>、<strong>HMAC-SHA256署名</strong>。データベースで1行でも改ざんされると署名が一致せず、ここに赤で表示されます。個人データ：ここからのみ閲覧可能で、運用パネルには表示されません。",ph_plHost:"host_id（空＝すべて）",btn_prove:"📜 証拠を表示",btn_dossier:"📥 法的ドシエをダウンロード（CSV）",btn_dossierJ:"📥 JSON",ct_h:"🧾 Stripe技術手数料（3%）と損失",ct_p:"技術手数料が実際にどれだけ賄ったか、そして <strong>返金で失われた</strong> 額：Stripeは手数料を返さないため、返金された予約ごとにその費用はプラットフォーム負担のまま残ります。税理士に回すべき項目です。",btn_costi:"🧾 明細を計算",mt_h:"⏱️ タイムスタンプ（第三者が証明した時刻）",mt_p:"署名は自分たちで行うため、<strong>時刻も自分たちで宣言</strong> します。毎日、記録はフィンガープリントに縮約され、<strong>欧州の適格タイムスタンプ機関</strong>（ACCVスペイン · QuoVadis EU · Izenpe · ベルギー国）によって日時が付与されます。<strong>適格</strong> なタイムスタンプについては <strong>eIDAS第41条</strong> が日時の正確性の <strong>法的推定</strong> を定めます：裁判で時刻が正しいことを証明するのは私たちではなく、異議を唱える側が反対を証明しなければなりません。<code>.tsr</code> ファイルは鑑定人に渡され、<strong>私たち抜きで</strong> <code>openssl ts -verify</code> により検証されます。",btn_marche:"⏱️ タイムスタンプを表示",btn_marcaOra:"🔒 今すぐ凍結",log_h:"📋 永続ログ（最新のイベント）",log_p:"誰が何をしたか + アラート。赤は重大なもの（アクセス拒否、改ざん）。",err_rete:"❌ ネットワークエラー",err_rete_full:"❌ ネットワークエラー。",js_inserisci:"⚠️ 管理者キーとスーパー管理者パスワードを入力してください。",js_troppi:"⛔ 試行回数が多すぎます。しばらくして再試行してください。",js_nonconfig:"ℹ️ サーバーでBunkerが未設定です。",js_errata:"❌ 管理者キーまたはスーパー管理者パスワードが誤っています。",js_scaduta:"⏱️ セッションが期限切れ（15分）。再度ログインしてください。",js_sess_attiva:"アクティブなセッション",js_min:"分",js_catena_integra:"✅ チェーン正常",js_mov_verificati:"件の動きを検証済み",js_manomissione:"🔴 改ざん",js_riga_rotta:"破損した行：",js_non_disp:"— 利用不可",js_debiti_host:"件のホスト債務",js_risc_auto:"（次回の送金で自動回収）",js_no_debiti:"ホスト債務なし",js_integ_gen:"全体の整合性",js_tutto_sano:"すべて健全",js_allarmi:"アラート：",js_ok:"ok",js_problema:"問題",js_ultimo_backup:"最新のバックアップ",js_min_fa:"分前",js_disco:"ディスク使用量",js_db_salvati:"保存済みデータベース",js_nessuna_riga:"行なし",js_uscito:"👋 ログアウトしました。",js_scarico_stream:"… ストリーミングでダウンロード中",js_non_disp2:"ℹ️ 利用不可",js_file_corrotto:"🔴 注意：ファイル破損 — 使用せず、技術者に連絡してください",js_movimenti:"件の動き",js_integ_verif:"整合性を確認 ✅",js_controllo:"… 確認中",js_da_segnalare:"件 報告対象",js_incompleti_sist:"件 未完成（要修正）",js_zero_incompleti:"未完成 0件",js_anno:"対象年",js_host_totali:"ホスト合計",js_st_urgente:"報告対象 · データ不足",js_st_report:"報告対象 · ok",js_st_sotto:"しきい値未満",js_st_sotto_inc:"しきい値未満 · データ不完全",js_manca:"不足：",js_fermi:"保留中",js_pren:"予約",js_nessun_host:"ホストなし",js_genero_stream:"… ストリーミングで生成中",js_file_corrotto2:"🔴 ファイル破損 — 提出せず、技術者に連絡してください",js_host_segnalati:"件のホストを報告",js_integ_ok:"整合性OK ✅",js_interrogo:"… Stripeと台帳を照会中",js_combacia:"✅ すべて一致",js_discrepanze:"🔴 不一致を検出",js_sess_pagate:"件の支払い済みセッション",js_inc_giornale:"件の台帳入金",js_ultimi:"直近",js_gg:"日",js_giornale:"台帳",js_solo_stripe:"👻 Stripeにあり、台帳になし",js_solo_giornale:"👻 台帳にあり、Stripeになし",js_imp_diverso:"⚖️ 金額が相違",js_calcolo:"… 計算中",js_in_promo:"件がプロモ",js_a_8:"件が8%",js_a_regime:"件が通常",js_senza_data:"件 日付なし",js_devono_riacc:"件が再同意必要",js_nessun_host_filtri:"このフィルターに該当するホストはありません。",th_host:"ホスト",th_registrato:"登録日",th_giorni:"日数",th_scaglione:"段階",th_marketplace:"マーケットプレイス",th_diretto:"直接",th_prossimo:"次の段階",th_contratto:"契約",js_fra:"あと",js_da_riacc:"🔴 再同意が必要",js_ha_v:"現在 v",js_in_regola:"✅ 適合",js_tariffa_tecnica:"Stripe技術手数料：",js_sempre_dovuta:"— 手数料0%でも常に発生します。",sc_et_promo:"🟢 プロモ 0%",sc_et_fase1:"🔵 フェーズ 8%",sc_et_regime:"🔵 通常",js_leggo_reg:"… 登録簿を読み込み中",js_prove_integre:"件の証拠、すべて正常",js_prove_manom:"件改ざん・全",js_nessuna_prova:"記録された証拠はありません。",docn_contratto:"📜 契約",docn_privacy:"🔒 プライバシー GDPR",docn_identita:"🪪 本人確認済み",th_documento:"書類",th_versione:"バージョン",th_accettato:"同意日時（UTC）",th_ip:"IP",th_clausole:"条項",th_riferimento:"参照",th_firma:"HMAC-SHA256署名",th_integra:"正常",js_no:"🔴 NO",js_preparo_dossier:"… ドシエを準備中",js_file_nonvalido:"🔴 無効なファイル（切り詰め）",js_scaricato_cert:"✅ ダウンロードして認証済み",js_ricavo_coperto:"✅ 賄われた技術収入",js_prenotazioni:"予約",js_ribaltato:"ホストに転嫁",js_costo_irrec:"🔴 <strong>回収不能な技術コスト</strong>",js_perdita_ded:"控除可能な損失 — Stripeは返金時に手数料を返しません",js_saldo:"= 残高",js_leggo:"… 読み込み中",js_non_attiva:"ℹ️ 無効",js_su:"／",js_riuscite:"成功",js_qualificate:"件 適格",js_tutte:"（すべて）",js_tutte_river:"すべて再検証済み",js_una_non_river:"1件が再検証できません",js_nessuna_marca:"まだタイムスタンプがありません：最初のものは起動から1時間以内に作成されます。または <strong>今すぐ凍結</strong> を押してください。",th_giorno:"日",th_ora_cert:"証明された時刻（UTC）",th_autorita:"機関",th_rango:"ランク",th_nserie:"シリアル番号",th_riverifica:"再検証",th_prova:"証拠",js_qualificata_s:"<strong style='color:#155724'>⚖️ 適格</strong>",js_ripiego:"<span class='hint'>RFC 3161（代替）</span>",js_anomalia:"🔴 <strong>異常</strong>",js_cosa_cambia:"<strong>⚖️ 適格性で変わること：</strong>",js_per_verificare:"私たち抜きで検証するには：",js_scarico_prova:"… 証拠をダウンロード中",js_prova_scaricata:"✅ 証拠をダウンロードしました",js_chiedo_ora:"… 外部機関に時刻を要求中",js_gia_congelato:"✅ 本日はすでに凍結済み",js_congelato_qual:"⚖️ 適格タイムスタンプで凍結：",js_congelato_da:"✅ 凍結：",js_non_riuscito:"🔴 失敗："},
+ zh:{hdr_readonly:"控制室 · 只读",login_h:"🔒 超级管理员登录",login_p:"需要管理员密钥 + 超级管理员密码。会话15分钟，绑定此设备。",ph_ak:"管理员密钥",ph_pw:"超级管理员密码",btn_entra:"🔓 进入",btn_agg:"🔄 刷新",torna_admin:"← 返回管理面板",btn_esci:"退出",integ_h:"🔗 账簿完整性",integ_p:"哈希链证明没有任何资金流动被篡改。",diag_h:"🩺 系统状态",fisc_h:"💼 税务中心",fisc_p:"已认证的会计对账单：所有资金流动 + 无人改动的证明（哈希链）。可交给会计师、银行或税务机关的文件。",btn_estratto:"📥 下载认证对账单（CSV）",conf_h:"🇪🇺 房东合规（DAC7）",conf_p:"欧盟法律（DAC7）要求向税务机关申报每年超过 <b>30笔预订</b> 或 <b>2,000&nbsp;€</b> 的房东。这里可见谁需申报、谁 <b>缺少税务数据</b>（红色：需申报但不完整）。对这些房东 <b>打款自动处于HOLD</b>（💰＝被冻结的金额）：一旦他们在面板补全数据便自动解锁。若仍要手动付款：一如既往，打款仪表板。",lbl_anno:"年份：",btn_conf:"🔄 检查",dac7_h:"📤 认证DAC7报告",dac7_p:"生成提交给税务机关的CSV文件：每个需申报的房东一行，含税务数据、收入、季度与房产。包含 <b>完整性证明</b>（哈希）。仅限超过阈值的房东。每次生成都会记录在日志中。",btn_dac7:"📥 生成DAC7报告（CSV）",ric_h:"🔄 Stripe对账",ric_p:"将整个期间与银行核对：Stripe已知的每笔已付款会话与账簿的每笔收款（精确到分）逐一比对，并比较收款/退款/打款的总额。若某个webhook丢失或有一分钱对不上，都会显示在这里。",lbl_ultimi:"最近",lbl_giorni:"天",btn_ric:"🔄 对账",sc_h:"📊 档位＆促销（每位房东的佣金）",sc_p:"每位房东当前处于哪个费率、距离下一档还有几天以及确切的变更日期。该数字来自与 <strong>计费</strong> 相同的函数：不是浏览器计算，因此不会出现分歧。",ph_scQ:"搜索房东：id、邮箱、公司名称",opt_tutti:"全部档位",opt_promo:"🟢 促销 0%",opt_fase1:"🔵 阶段 8%",opt_regime:"🔵 常规 10%",btn_sc:"📊 显示",pl_h:"📜 同意的法律证据（HMAC-SHA256）",pl_p:"完整证据：合同版本、文本指纹、<strong>IP</strong>、设备、<strong>UTC日期与时间</strong> 以及 <strong>HMAC-SHA256签名</strong>。若数据库中某一行被篡改，签名将不再吻合并在此显示为红色。个人数据：仅可从此处查看，绝不出现在运营面板。",ph_plHost:"host_id（留空＝全部）",btn_prove:"📜 显示证据",btn_dossier:"📥 下载法律档案（CSV）",btn_dossierJ:"📥 JSON",ct_h:"🧾 Stripe技术费（3%）与损失",ct_p:"技术费实际覆盖了多少，以及在 <strong>退款中损失</strong> 了多少：Stripe不退还其佣金，因此每笔被退款的预订，该成本仍由平台承担。这是要交给会计师的项目。",btn_costi:"🧾 计算明细",mt_h:"⏱️ 时间戳（由第三方认证的时间）",mt_p:"签名由我们自己完成，所以 <strong>时间也由我们声明</strong>。每天记录被缩减为一枚指纹，并由 <strong>欧洲合格时间戳机构</strong>（ACCV西班牙 · QuoVadis EU · Izenpe · 比利时国家）加盖日期。对 <strong>合格</strong> 时间戳，<strong>eIDAS第41条</strong> 确立了日期与时间准确性的 <strong>法律推定</strong>：在法庭上无需我们证明时间正确——由提出异议者证明相反。<code>.tsr</code> 文件交给鉴定人，由其 <strong>在无需我们参与的情况下</strong> 用 <code>openssl ts -verify</code> 验证。",btn_marche:"⏱️ 显示时间戳",btn_marcaOra:"🔒 立即冻结",log_h:"📋 持久日志（最新事件）",log_p:"谁做了什么 + 警报。红色为严重项（拒绝访问、篡改）。",err_rete:"❌ 网络错误",err_rete_full:"❌ 网络错误。",js_inserisci:"⚠️ 请输入管理员密钥和超级管理员密码。",js_troppi:"⛔ 尝试次数过多，请稍后重试。",js_nonconfig:"ℹ️ 服务器上未配置Bunker。",js_errata:"❌ 管理员密钥或超级管理员密码错误。",js_scaduta:"⏱️ 会话已过期（15分钟）。请重新登录。",js_sess_attiva:"活动会话",js_min:"分钟",js_catena_integra:"✅ 链完整",js_mov_verificati:"笔流动已验证",js_manomissione:"🔴 篡改",js_riga_rotta:"损坏的行：",js_non_disp:"— 不可用",js_debiti_host:"笔房东欠款",js_risc_auto:"（在下次打款时自动扣收）",js_no_debiti:"无房东欠款",js_integ_gen:"总体完整性",js_tutto_sano:"一切正常",js_allarmi:"警报：",js_ok:"ok",js_problema:"问题",js_ultimo_backup:"最近备份",js_min_fa:"分钟前",js_disco:"磁盘已用",js_db_salvati:"已保存的数据库",js_nessuna_riga:"无行",js_uscito:"👋 已退出。",js_scarico_stream:"… 正在流式下载",js_non_disp2:"ℹ️ 不可用",js_file_corrotto:"🔴 注意：文件已损坏 — 请勿使用，通知技术员",js_movimenti:"笔流动",js_integ_verif:"完整性已验证 ✅",js_controllo:"… 检查中",js_da_segnalare:"个需申报",js_incompleti_sist:"个不完整待修正",js_zero_incompleti:"0 个不完整",js_anno:"年份",js_host_totali:"个房东合计",js_st_urgente:"需申报 · 数据缺失",js_st_report:"需申报 · ok",js_st_sotto:"低于阈值",js_st_sotto_inc:"低于阈值 · 数据不完整",js_manca:"缺少：",js_fermi:"冻结",js_pren:"预订",js_nessun_host:"无房东",js_genero_stream:"… 正在流式生成",js_file_corrotto2:"🔴 文件已损坏 — 请勿提交，通知技术员",js_host_segnalati:"个房东已申报",js_integ_ok:"完整性OK ✅",js_interrogo:"… 正在查询Stripe与账簿",js_combacia:"✅ 全部吻合",js_discrepanze:"🔴 发现差异",js_sess_pagate:"笔已付款会话",js_inc_giornale:"笔账簿收款",js_ultimi:"最近",js_gg:"天",js_giornale:"账簿",js_solo_stripe:"👻 Stripe有，账簿没有",js_solo_giornale:"👻 账簿有，Stripe没有",js_imp_diverso:"⚖️ 金额不同",js_calcolo:"… 计算中",js_in_promo:"个在促销",js_a_8:"个为8%",js_a_regime:"个为常规",js_senza_data:"个无日期",js_devono_riacc:"个需重新接受",js_nessun_host_filtri:"没有符合这些筛选条件的房东。",th_host:"房东",th_registrato:"注册于",th_giorni:"天数",th_scaglione:"档位",th_marketplace:"市场",th_diretto:"直接",th_prossimo:"下一档",th_contratto:"合同",js_fra:"还有",js_da_riacc:"🔴 需重新接受",js_ha_v:"现为 v",js_in_regola:"✅ 合规",js_tariffa_tecnica:"Stripe技术费：",js_sempre_dovuta:"— 即使佣金为0%也始终应付。",sc_et_promo:"🟢 促销 0%",sc_et_fase1:"🔵 阶段 8%",sc_et_regime:"🔵 常规",js_leggo_reg:"… 正在读取登记簿",js_prove_integre:"条证据，全部完整",js_prove_manom:"条被篡改／共",js_nessuna_prova:"没有已记录的证据。",docn_contratto:"📜 合同",docn_privacy:"🔒 GDPR隐私",docn_identita:"🪪 已验证身份",th_documento:"文件",th_versione:"版本",th_accettato:"接受于（UTC）",th_ip:"IP",th_clausole:"条款",th_riferimento:"参考",th_firma:"HMAC-SHA256签名",th_integra:"完整",js_no:"🔴 否",js_preparo_dossier:"… 正在准备档案",js_file_nonvalido:"🔴 无效文件（被截断）",js_scaricato_cert:"✅ 已下载并认证",js_ricavo_coperto:"✅ 已覆盖的技术收入",js_prenotazioni:"预订",js_ribaltato:"转嫁给房东",js_costo_irrec:"🔴 <strong>不可收回的技术成本</strong>",js_perdita_ded:"可抵扣损失 — Stripe在退款时不退还佣金",js_saldo:"= 余额",js_leggo:"… 读取中",js_non_attiva:"ℹ️ 未激活",js_su:"／",js_riuscite:"成功",js_qualificate:"个合格",js_tutte:"（全部）",js_tutte_river:"全部已复验",js_una_non_river:"有一枚无法复验",js_nessuna_marca:"尚无时间戳：第一枚将在启动后一小时内生成，或按 <strong>立即冻结</strong>。",th_giorno:"日期",th_ora_cert:"认证时间（UTC）",th_autorita:"机构",th_rango:"等级",th_nserie:"序列号",th_riverifica:"复验",th_prova:"证据",js_qualificata_s:"<strong style='color:#155724'>⚖️ 合格</strong>",js_ripiego:"<span class='hint'>RFC 3161（备用）</span>",js_anomalia:"🔴 <strong>异常</strong>",js_cosa_cambia:"<strong>⚖️ 合格资格带来的改变：</strong>",js_per_verificare:"在无需我们参与的情况下验证：",js_scarico_prova:"… 正在下载证据",js_prova_scaricata:"✅ 证据已下载",js_chiedo_ora:"… 正在向外部机构请求时间",js_gia_congelato:"✅ 今天已冻结",js_congelato_qual:"⚖️ 已用合格时间戳冻结，来自",js_congelato_da:"✅ 冻结，来自",js_non_riuscito:"🔴 失败："}
+};
+const SUPP=Object.keys(TR);
+function pick(){try{const s=localStorage.getItem('lang');if(s&&SUPP.includes(s))return s;}catch(e){}for(const l of (navigator.languages||[navigator.language||'it'])){const b=String(l||'').slice(0,2).toLowerCase();if(SUPP.includes(b))return b;}return 'it';}
+let LANG=pick();
+let T=TR[LANG]||TR.it;
+document.documentElement.lang=LANG;
+// ── fine blocco i18n (apply()/onchange in fondo) ─────────────────────────────
 const esc = BV.esc;
 let SESS='', EXP=0;
 const $=id=>document.getElementById(id);
@@ -179,7 +201,7 @@ async function jget(u){ const r=await fetch(u,{headers:hdr()}); let d=null; try{
 
 async function entra(){
   const st=$('loginStat');
-  if(!$('ak').value||!$('pw').value){ st.textContent='⚠️ Inserisci chiave admin e password super-admin.'; return; }
+  if(!$('ak').value||!$('pw').value){ st.textContent=T.js_inserisci; return; }
   st.textContent='…';
   try{
     const r=await fetch('/api/bunker/login',{method:'POST',
@@ -190,42 +212,42 @@ async function entra(){
       try{sessionStorage.setItem('bv_bunker_sess',SESS);sessionStorage.setItem('bv_bunker_exp',String(EXP));}catch(_){console.warn('bunker',_);}
       $('pw').value=''; $('loginCard').classList.add('nascosto'); $('sala').classList.remove('nascosto');
       st.textContent=''; aggiorna(); avviaTimer();
-    } else if(r.status===429){ st.textContent='⛔ Troppi tentativi, riprova tra poco.'; }
-    else if(r.status===503){ st.textContent='ℹ️ Bunker non configurato sul server.'; }
-    else { st.textContent='❌ Chiave o password super-admin errata.'; }
-  }catch(e){ st.textContent='❌ Errore di rete.'; }
+    } else if(r.status===429){ st.textContent=T.js_troppi; }
+    else if(r.status===503){ st.textContent=T.js_nonconfig; }
+    else { st.textContent=T.js_errata; }
+  }catch(e){ st.textContent=T.err_rete_full; }
 }
 function esci(){ SESS=''; EXP=0; try{sessionStorage.removeItem('bv_bunker_sess');sessionStorage.removeItem('bv_bunker_exp');}catch(_){console.warn('bunker',_);} $('sala').classList.add('nascosto'); $('loginCard').classList.remove('nascosto'); }
-function avviaTimer(){ setInterval(()=>{ if(SESS && !attivo()){ esci(); $('loginStat').textContent='⏱️ Sessione scaduta (15 min). Rientra.'; } },10000); }
+function avviaTimer(){ setInterval(()=>{ if(SESS && !attivo()){ esci(); $('loginStat').textContent=T.js_scaduta; } },10000); }
 
 function pill(stato,testo){ return '<span class="pill '+stato+'">'+esc(testo)+'</span>'; }
 
 async function aggiorna(){
   if(!attivo()){ esci(); return; }
-  $('sess').textContent='🔓 sessione attiva ('+Math.max(0,Math.round((EXP-Date.now())/60000))+' min)';
+  $('sess').textContent='🔓 '+T.js_sess_attiva+' ('+Math.max(0,Math.round((EXP-Date.now())/60000))+' '+T.js_min+')';
   // integrità + diagnosi
   const ig=await jget('/api/bunker/integrita');
   if(ig.status===403){ esci(); return; }
   const cat=(ig.d&&ig.d.catena)||{};
   let ch='';
-  if(cat.ok===true) ch=pill('ok','✅ CATENA INTEGRA')+' <span class="hint">'+(cat.righe||0)+' movimenti verificati</span>';
-  else if(cat.ok===false) ch=pill('ko','🔴 MANOMISSIONE')+' <span class="hint">riga rotta: '+esc(String(cat.seq_rotta))+'</span>';
-  else ch=pill('na','— non disponibile');
+  if(cat.ok===true) ch=pill('ok',T.js_catena_integra)+' <span class="hint">'+(cat.righe||0)+' '+T.js_mov_verificati+'</span>';
+  else if(cat.ok===false) ch=pill('ko',T.js_manomissione)+' <span class="hint">'+T.js_riga_rotta+' '+esc(String(cat.seq_rotta))+'</span>';
+  else ch=pill('na',T.js_non_disp);
   // Debt Status: penali host non ancora riscosse (si saldano da sole sui prossimi bonifici)
   const de=(ig.d&&ig.d.debiti)||{};
   if(de.aperti!=null) ch += ' ' + (de.aperti>0
-    ? pill('warn','💳 '+de.aperti+' debiti host · '+((de.totale_cents||0)/100).toFixed(2)+'€ (riscossione automatica sui prossimi bonifici)')
-    : pill('ok','nessun debito host'));
+    ? pill('warn','💳 '+de.aperti+' '+T.js_debiti_host+' · '+((de.totale_cents||0)/100).toFixed(2)+'€ '+T.js_risc_auto)
+    : pill('ok',T.js_no_debiti));
   $('catena').innerHTML=ch;
   // diagnosi
   const dg=(ig.d&&ig.d.diagnosi)||{};
   const m=dg.misure||{};
   const rows=[];
-  const okpill=b=>b?pill('ok','ok'):pill('ko','problema');
-  rows.push(['Integrità generale', dg.ok===true?pill('ok','tutto sano'):dg.ok===false?pill('ko','allarmi: '+((dg.allarmi||[]).length)):pill('na','—')]);
-  if(m.eta_backup_sec!=null) rows.push(['Ultimo backup', pill(m.eta_backup_sec<8*3600?'ok':'warn', Math.round(m.eta_backup_sec/60)+' min fa')]);
-  if(m.disco_pct!=null) rows.push(['Disco usato', pill(m.disco_pct<85?'ok':m.disco_pct<95?'warn':'ko', m.disco_pct+'%')]);
-  if(m.db_presenti) rows.push(['Database salvati', pill('ok', m.db_presenti.length+'')]);
+  const okpill=b=>b?pill('ok',T.js_ok):pill('ko',T.js_problema);
+  rows.push([T.js_integ_gen, dg.ok===true?pill('ok',T.js_tutto_sano):dg.ok===false?pill('ko',T.js_allarmi+' '+((dg.allarmi||[]).length)):pill('na','—')]);
+  if(m.eta_backup_sec!=null) rows.push([T.js_ultimo_backup, pill(m.eta_backup_sec<8*3600?'ok':'warn', Math.round(m.eta_backup_sec/60)+' '+T.js_min_fa)]);
+  if(m.disco_pct!=null) rows.push([T.js_disco, pill(m.disco_pct<85?'ok':m.disco_pct<95?'warn':'ko', m.disco_pct+'%')]);
+  if(m.db_presenti) rows.push([T.js_db_salvati, pill('ok', m.db_presenti.length+'')]);
   (dg.allarmi||[]).forEach(a=>rows.push(['⚠️ '+esc(a.msg||''), pill(a.grav==='critico'?'ko':'warn', a.grav||'')]));
   $('diag').innerHTML=rows.map(r=>'<div class="riga"><span>'+r[0]+'</span><span>'+r[1]+'</span></div>').join('');
   // log
@@ -234,22 +256,22 @@ async function aggiorna(){
   $('loglist').innerHTML=righe.map(l=>{
     let cls='logline'; if(/CRITICAL/.test(l)) cls+=' logcrit'; else if(/WARNING/.test(l)) cls+=' logwarn';
     return '<div class="'+cls+'">'+esc(l)+'</div>';
-  }).join('') || '<span class="hint">nessuna riga</span>';
+  }).join('') || '<span class="hint">'+T.js_nessuna_riga+'</span>';
   $('loglist').scrollTop=$('loglist').scrollHeight;
 }
 async function logout(){
   // LOGOUT SERVER-SIDE: revoca la sessione sul server (non solo lato browser)
   try{ if(SESS) await fetch('/api/bunker/logout',{method:'POST',headers:hdr()}); }catch(_){console.warn("bunker",_);}
   try{ await fetch('/api/gate/logout',{method:'POST'}); }catch(_){console.warn("bunker",_);}   // cancella il cookie di pagina
-  esci(); $('loginStat').textContent='👋 Uscito.';
+  esci(); $('loginStat').textContent=T.js_uscito;
 }
 async function scaricaEstratto(){
-  const st=$('estrStat'); if(!attivo()){ esci(); return; } st.textContent='… scarico in streaming';
+  const st=$('estrStat'); if(!attivo()){ esci(); return; } st.textContent=T.js_scarico_stream;
   try{
     // l'endpoint STREAMMA il CSV grezzo (zero RAM lato server): leggo il testo e lo salvo
     const r=await fetch('/api/bunker/export_contabile',{headers:hdr()});
     if(r.status===403){ esci(); return; }
-    if(!r.ok){ st.textContent='ℹ️ non disponibile ('+r.status+')'; return; }
+    if(!r.ok){ st.textContent=T.js_non_disp2+' ('+r.status+')'; return; }
     const csv=await r.text();
     const integra=csv.indexOf('INTEGRITÀ VERIFICATA')>=0;
     const corrotto=csv.indexOf('NON CHIUSO / CORROTTO')>=0;
@@ -258,47 +280,47 @@ async function scaricaEstratto(){
     a.download='estratto_contabile_bookinvip.csv'; a.click();
     setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
     const n=(csv.match(/\n\d+,/g)||[]).length;   // righe dati (iniziano con un numero)
-    st.textContent = corrotto ? '🔴 ATTENZIONE: file CORROTTO — non usarlo, avvisa il tecnico'
-      : ('✅ '+n+' movimenti · '+(integra?'INTEGRITÀ VERIFICATA ✅':'?'));
-  }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
+    st.textContent = corrotto ? T.js_file_corrotto
+      : ('✅ '+n+' '+T.js_movimenti+' · '+(integra?T.js_integ_verif:'?'));
+  }catch(e){ st.textContent=T.err_rete; console.warn('bunker',e); }
 }
 async function conformita(){
   const st=$('confStat'); if(!attivo()){ esci(); return; }
   const anno=parseInt($('dacAnno').value,10)||(new Date().getFullYear()-1);
-  st.textContent='… controllo';
+  st.textContent=T.js_controllo;
   const r=await jget('/api/bunker/dac7_conformita?anno='+anno);
   if(r.status===403){ esci(); return; }
-  if(!r.d){ st.textContent='ℹ️ non disponibile'; return; }
+  if(!r.d){ st.textContent=T.js_non_disp2; return; }
   const host=r.d.host||[];
   st.textContent='';
   $('confRiepilogo').innerHTML =
-    pill('ok', (r.d.reportabili||0)+' da segnalare')+' '+
-    (r.d.urgenti>0 ? pill('ko','⚠️ '+r.d.urgenti+' incompleti da sistemare') : pill('na','0 incompleti'))+
-    ' <span class="hint">anno '+anno+' · '+host.length+' host totali</span>';
+    pill('ok', (r.d.reportabili||0)+' '+T.js_da_segnalare)+' '+
+    (r.d.urgenti>0 ? pill('ko','⚠️ '+r.d.urgenti+' '+T.js_incompleti_sist) : pill('na',T.js_zero_incompleti))+
+    ' <span class="hint">'+T.js_anno+' '+anno+' · '+host.length+' '+T.js_host_totali+'</span>';
   // mostra prima gli urgenti, poi i reportabili completi, poi il resto
   host.sort((a,b)=>(b.urgente-a.urgente)||(b.reportabile-a.reportabile));
   $('confLista').innerHTML = host.map(h=>{
-    let stato = h.urgente ? pill('ko','DA SEGNALARE · DATI MANCANTI')
-      : h.reportabile ? pill('ok','da segnalare · ok')
-      : h.completo ? pill('na','sotto soglia')
-      : pill('warn','sotto soglia · dati incompleti');
-    const manc = (h.mancanti&&h.mancanti.length) ? ' <span class="hint">manca: '+esc(h.mancanti.join(', '))+'</span>' : '';
+    let stato = h.urgente ? pill('ko',T.js_st_urgente)
+      : h.reportabile ? pill('ok',T.js_st_report)
+      : h.completo ? pill('na',T.js_st_sotto)
+      : pill('warn',T.js_st_sotto_inc);
+    const manc = (h.mancanti&&h.mancanti.length) ? ' <span class="hint">'+T.js_manca+' '+esc(h.mancanti.join(', '))+'</span>' : '';
     // Incr.6: payout in HOLD (bonifici fermi finché l'host non completa i dati fiscali)
     const fermi = (h.urgente && h.payout_fermi_cents>0)
-      ? ' '+pill('warn','💰 '+((h.payout_fermi_cents||0)/100).toFixed(2)+'€ fermi') : '';
+      ? ' '+pill('warn','💰 '+((h.payout_fermi_cents||0)/100).toFixed(2)+'€ '+T.js_fermi) : '';
     return '<div class="riga"><span>'+esc(h.email||h.host_id)+
-      ' <span class="hint">('+(h.prenotazioni||0)+' pren · '+((h.ricavi_cents||0)/100).toFixed(0)+'€)</span>'+manc+
+      ' <span class="hint">('+(h.prenotazioni||0)+' '+T.js_pren+' · '+((h.ricavi_cents||0)/100).toFixed(0)+'€)</span>'+manc+
       '</span><span>'+stato+fermi+'</span></div>';
-  }).join('') || '<span class="hint">nessun host</span>';
+  }).join('') || '<span class="hint">'+T.js_nessun_host+'</span>';
 }
 async function scaricaDac7(){
   const st=$('dac7Stat'); if(!attivo()){ esci(); return; }
   const anno=parseInt($('dacAnno').value,10)||(new Date().getFullYear()-1);
-  st.textContent='… genero in streaming';
+  st.textContent=T.js_genero_stream;
   try{
     const r=await fetch('/api/bunker/dac7_report?anno='+anno,{headers:hdr()});
     if(r.status===403){ esci(); return; }
-    if(!r.ok){ st.textContent='ℹ️ non disponibile ('+r.status+')'; return; }
+    if(!r.ok){ st.textContent=T.js_non_disp2+' ('+r.status+')'; return; }
     const csv=await r.text();
     const integra=csv.indexOf('INTEGRITÀ:')>=0 && csv.indexOf('NON CHIUSO')<0;
     const corrotto=csv.indexOf('NON CHIUSO / CORROTTO')>=0;
@@ -307,60 +329,60 @@ async function scaricaDac7(){
     a.download='report_dac7_'+anno+'.csv'; a.click();
     setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
     const m=csv.match(/# host_reportabili,(\d+)/);
-    st.textContent = corrotto ? '🔴 file CORROTTO — non consegnarlo, avvisa il tecnico'
-      : ('✅ '+(m?m[1]:'?')+' host segnalati · '+(integra?'INTEGRITÀ OK ✅':'?'));
-  }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
+    st.textContent = corrotto ? T.js_file_corrotto2
+      : ('✅ '+(m?m[1]:'?')+' '+T.js_host_segnalati+' · '+(integra?T.js_integ_ok:'?'));
+  }catch(e){ st.textContent=T.err_rete; console.warn('bunker',e); }
 }
 async function riconcilia(){
   const st=$('ricStat'), out=$('ricOut');
   if(!attivo()){ esci(); return; }
-  st.textContent='… interrogo Stripe e il giornale'; out.innerHTML='';
+  st.textContent=T.js_interrogo; out.innerHTML='';
   try{
     const g=Math.max(1,Math.min(365,parseInt($('ricGiorni').value,10)||30));
     const r=await fetch('/api/bunker/riconciliazione?giorni='+g,{headers:hdr()});
     if(r.status===403){ esci(); return; }
     let d=null; try{ d=await r.json(); }catch(_){ console.warn('bunker',_); }
-    if(!r.ok || !d){ st.textContent='ℹ️ non disponibile ('+r.status+')'; return; }
+    if(!r.ok || !d){ st.textContent=T.js_non_disp2+' ('+r.status+')'; return; }
     st.textContent='';
     const righe=[];
     righe.push('<div style="margin:.3rem 0">'+(d.ok
-      ? pill('ok','✅ TUTTO COMBACIA')
-      : pill('ko','🔴 DISCREPANZE TROVATE'))+
-      ' <span class="hint">'+d.sessioni_pagate+' sessioni pagate · '+d.incassi_giornale+' incassi a giornale · ultimi '+d.giorni+' gg</span></div>');
+      ? pill('ok',T.js_combacia)
+      : pill('ko',T.js_discrepanze))+
+      ' <span class="hint">'+d.sessioni_pagate+' '+T.js_sess_pagate+' · '+d.incassi_giornale+' '+T.js_inc_giornale+' · '+T.js_ultimi+' '+d.giorni+' '+T.js_gg+'</span></div>');
     const co=d.confronti||{};
     Object.keys(co).forEach(k=>{ const c=co[k];
       Object.keys(c.delta||{}).forEach(v=>{ const dl=c.delta[v];
         righe.push('<div class="riga"><span>'+esc(k)+' '+esc(v)+'</span><span>Stripe '
-          +((c.stripe[v]||0)/100).toFixed(2)+' · giornale '+((c.giornale[v]||0)/100).toFixed(2)
+          +((c.stripe[v]||0)/100).toFixed(2)+' · '+T.js_giornale+' '+((c.giornale[v]||0)/100).toFixed(2)
           +' · '+(dl===0?pill('ok','Δ 0'):pill('ko','Δ '+(dl/100).toFixed(2)))+'</span></div>'); });
     });
-    (d.solo_stripe||[]).forEach(x=>righe.push('<div class="riga"><span>👻 Stripe ha, giornale NO</span><span>'+esc(x.riferimento||x.id||'')+' · '+((x.cents||0)/100).toFixed(2)+' '+esc(x.valuta||'')+'</span></div>'));
-    (d.solo_giornale||[]).forEach(x=>righe.push('<div class="riga"><span>👻 giornale ha, Stripe NO</span><span>'+esc(x.riferimento||'')+' · '+((x.cents||0)/100).toFixed(2)+' '+esc(x.valuta||'')+'</span></div>'));
-    (d.importo_diverso||[]).forEach(x=>righe.push('<div class="riga"><span>⚖️ importo DIVERSO</span><span>'+esc(x.riferimento||'')+' · Stripe '+((x.stripe_cents||0)/100).toFixed(2)+' vs giornale '+((x.giornale_cents||0)/100).toFixed(2)+'</span></div>'));
+    (d.solo_stripe||[]).forEach(x=>righe.push('<div class="riga"><span>'+T.js_solo_stripe+'</span><span>'+esc(x.riferimento||x.id||'')+' · '+((x.cents||0)/100).toFixed(2)+' '+esc(x.valuta||'')+'</span></div>'));
+    (d.solo_giornale||[]).forEach(x=>righe.push('<div class="riga"><span>'+T.js_solo_giornale+'</span><span>'+esc(x.riferimento||'')+' · '+((x.cents||0)/100).toFixed(2)+' '+esc(x.valuta||'')+'</span></div>'));
+    (d.importo_diverso||[]).forEach(x=>righe.push('<div class="riga"><span>'+T.js_imp_diverso+'</span><span>'+esc(x.riferimento||'')+' · Stripe '+((x.stripe_cents||0)/100).toFixed(2)+' vs '+T.js_giornale+' '+((x.giornale_cents||0)/100).toFixed(2)+'</span></div>'));
     out.innerHTML=righe.join('');
-  }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
+  }catch(e){ st.textContent=T.err_rete; console.warn('bunker',e); }
 }
 // ── 📊 SCAGLIONI & PROMO ──────────────────────────────────────────────────────
-const SC_ETICHETTA={promo:'🟢 Promo 0%',fase1:'🔵 Fase 8%',regime:'🔵 Regime'};
 async function scaglioni(){
   const st=$('scStat'), out=$('scOut');
   if(!attivo()){ esci(); return; }
-  st.textContent='… calcolo'; out.innerHTML='';
+  const SC_ETICHETTA={promo:T.sc_et_promo,fase1:T.sc_et_fase1,regime:T.sc_et_regime};
+  st.textContent=T.js_calcolo; out.innerHTML='';
   try{
     const qs='?q='+encodeURIComponent($('scQ').value.trim())
            +'&scaglione='+encodeURIComponent($('scFiltro').value);
     const r=await fetch('/api/bunker/scaglioni_host'+qs,{headers:hdr()});
     if(r.status===403){ esci(); return; }
     let d=null; try{ d=await r.json(); }catch(_){ console.warn('bunker',_); }
-    if(!r.ok||!d){ st.textContent='ℹ️ non disponibile ('+r.status+')'; return; }
+    if(!r.ok||!d){ st.textContent=T.js_non_disp2+' ('+r.status+')'; return; }
     const c=d.conteggi||{};
-    st.innerHTML=pill('ok','🟢 '+(c.promo||0)+' in promo')+' '+pill('','🔵 '+(c.fase1||0)+' a 8%')
-      +' '+pill('','🔵 '+(c.regime||0)+' a regime')
-      +(c.ignoti?' '+pill('ko','⚠️ '+c.ignoti+' senza data'):'')
-      +(d.da_riaccettare?' '+pill('ko','📜 '+d.da_riaccettare+' devono ri-accettare'):'');
-    if(!d.host||!d.host.length){ out.innerHTML='<p class="hint">Nessun host con questi filtri.</p>'; return; }
-    const th='<tr><th>Host</th><th>Registrato</th><th>Giorni</th><th>Scaglione</th>'
-      +'<th>Marketplace</th><th>Diretto</th><th>Prossimo scatto</th><th>Contratto</th></tr>';
+    st.innerHTML=pill('ok','🟢 '+(c.promo||0)+' '+T.js_in_promo)+' '+pill('','🔵 '+(c.fase1||0)+' '+T.js_a_8)
+      +' '+pill('','🔵 '+(c.regime||0)+' '+T.js_a_regime)
+      +(c.ignoti?' '+pill('ko','⚠️ '+c.ignoti+' '+T.js_senza_data):'')
+      +(d.da_riaccettare?' '+pill('ko','📜 '+d.da_riaccettare+' '+T.js_devono_riacc):'');
+    if(!d.host||!d.host.length){ out.innerHTML='<p class="hint">'+T.js_nessun_host_filtri+'</p>'; return; }
+    const th='<tr><th>'+T.th_host+'</th><th>'+T.th_registrato+'</th><th>'+T.th_giorni+'</th><th>'+T.th_scaglione+'</th>'
+      +'<th>'+T.th_marketplace+'</th><th>'+T.th_diretto+'</th><th>'+T.th_prossimo+'</th><th>'+T.th_contratto+'</th></tr>';
     const tr=d.host.map(h=>'<tr><td>'+esc(h.email||h.host_id)
       +'<br><span class="hint">'+esc(h.host_id)+'</span></td>'
       +'<td>'+esc(h.registrato_il||'—')+'</td><td>'+(h.giorni==null?'—':h.giorni)+'</td>'
@@ -368,154 +390,153 @@ async function scaglioni(){
       +'<td><strong>'+h.percentuale.toFixed(2)+'%</strong></td>'
       +'<td>'+(h.bps_diretto/100).toFixed(2)+'%</td>'
       +'<td>'+(h.giorni_al_prossimo==null?'—'
-           : esc(h.prossimo_scatto_il||'')+' <span class="hint">(fra '+h.giorni_al_prossimo
-             +' gg → '+(h.prossimo_bps/100).toFixed(2)+'%)</span>')+'</td>'
+           : esc(h.prossimo_scatto_il||'')+' <span class="hint">('+T.js_fra+' '+h.giorni_al_prossimo
+             +' '+T.js_gg+' → '+(h.prossimo_bps/100).toFixed(2)+'%)</span>')+'</td>'
       +'<td>'+(h.deve_riaccettare
-           ? '🔴 da ri-accettare<br><span class="hint">ha v'+esc(h.versione_accettata||'—')+'</span>'
-           : '✅ in regola')+'</td></tr>').join('');
+           ? T.js_da_riacc+'<br><span class="hint">'+T.js_ha_v+esc(h.versione_accettata||'—')+'</span>'
+           : T.js_in_regola)+'</td></tr>').join('');
     out.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:.9rem">'
-      +th+tr+'</table><p class="hint" style="margin-top:.4rem">Tariffa tecnica Stripe: '
-      +((d.tariffa_tecnica_bps||0)/100).toFixed(2)+'% — sempre dovuta, anche a commissione 0%.</p>';
-  }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
+      +th+tr+'</table><p class="hint" style="margin-top:.4rem">'+T.js_tariffa_tecnica+' '
+      +((d.tariffa_tecnica_bps||0)/100).toFixed(2)+'% '+T.js_sempre_dovuta+'</p>';
+  }catch(e){ st.textContent=T.err_rete; console.warn('bunker',e); }
 }
 // ── 📜 PROVE LEGALI (IP · ora UTC · firma HMAC-SHA256) ────────────────────────
 async function proveLegali(){
   const st=$('plStat'), out=$('plOut');
   if(!attivo()){ esci(); return; }
-  st.textContent='… leggo il registro'; out.innerHTML='';
+  st.textContent=T.js_leggo_reg; out.innerHTML='';
   try{
     const h=$('plHost').value.trim();
     const r=await fetch('/api/bunker/prove_legali'+(h?'?host_id='+encodeURIComponent(h):''),
                         {headers:hdr()});
     if(r.status===403){ esci(); return; }
     let d=null; try{ d=await r.json(); }catch(_){ console.warn('bunker',_); }
-    if(!r.ok||!d){ st.textContent='ℹ️ non disponibile ('+r.status+')'; return; }
-    st.innerHTML=d.integrita_ok ? pill('ok','✅ '+d.totale+' prove, tutte integre')
-                                : pill('ko','🔴 '+d.manomesse+' prove MANOMESSE su '+d.totale);
-    if(!d.prove||!d.prove.length){ out.innerHTML='<p class="hint">Nessuna prova registrata.</p>'; return; }
-    const DOCN={contratto_host:'📜 Contratto',privacy_gdpr:'🔒 Privacy GDPR',
-                identita_stripe:'🪪 Identità verificata'};
-    const th='<tr><th>Host</th><th>Documento</th><th>Versione</th><th>Accettato (UTC)</th>'
-      +'<th>IP</th><th>Clausole</th><th>Riferimento</th><th>Firma HMAC-SHA256</th><th>Integra</th></tr>';
+    if(!r.ok||!d){ st.textContent=T.js_non_disp2+' ('+r.status+')'; return; }
+    st.innerHTML=d.integrita_ok ? pill('ok','✅ '+d.totale+' '+T.js_prove_integre)
+                                : pill('ko','🔴 '+d.manomesse+' '+T.js_prove_manom+' '+d.totale);
+    if(!d.prove||!d.prove.length){ out.innerHTML='<p class="hint">'+T.js_nessuna_prova+'</p>'; return; }
+    const DOCN={contratto_host:T.docn_contratto,privacy_gdpr:T.docn_privacy,
+                identita_stripe:T.docn_identita};
+    const th='<tr><th>'+T.th_host+'</th><th>'+T.th_documento+'</th><th>'+T.th_versione+'</th><th>'+T.th_accettato+'</th>'
+      +'<th>'+T.th_ip+'</th><th>'+T.th_clausole+'</th><th>'+T.th_riferimento+'</th><th>'+T.th_firma+'</th><th>'+T.th_integra+'</th></tr>';
     const tr=d.prove.map(p=>'<tr'+(p.integra?'':' style="background:#fdecea"')+'>'
       +'<td>'+esc(p.host_id||'')+'</td><td>'+(DOCN[p.documento]||esc(p.documento||''))+'</td>'
       +'<td>'+esc(p.versione||'')+'</td><td>'+esc(p.accettato_utc||'')+'</td>'
       +'<td>'+esc(p.ip||'—')+'</td><td>'+(p.clausole_vessatorie?'✅':'—')+'</td>'
       +'<td style="font-family:monospace;font-size:.75rem">'+esc(p.riferimento||'—')+'</td>'
       +'<td style="font-family:monospace;font-size:.75rem">'+esc((p.firma_hmac_sha256||'').slice(0,24))+'…</td>'
-      +'<td>'+(p.integra?'✅':'🔴 NO')+'</td></tr>').join('');
+      +'<td>'+(p.integra?'✅':T.js_no)+'</td></tr>').join('');
     out.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:.85rem">'+th+tr+'</table>';
-  }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
+  }catch(e){ st.textContent=T.err_rete; console.warn('bunker',e); }
 }
 async function scaricaDossier(formato){
   const st=$('plStat');
   if(!attivo()){ esci(); return; }
-  st.textContent='… preparo il dossier';
+  st.textContent=T.js_preparo_dossier;
   try{
     const r=await fetch('/api/bunker/export_legale?formato='+formato,{headers:hdr()});
     if(r.status===403){ esci(); return; }
-    if(!r.ok){ st.textContent='ℹ️ non disponibile ('+r.status+')'; return; }
+    if(!r.ok){ st.textContent=T.js_non_disp2+' ('+r.status+')'; return; }
     const testo=await r.text();
-    if(testo.indexOf('# FINE DOSSIER')<0){ st.textContent='🔴 file NON valido (troncato)'; return; }
+    if(testo.indexOf('# FINE DOSSIER')<0){ st.textContent=T.js_file_nonvalido; return; }
     const a=document.createElement('a');
     a.href=URL.createObjectURL(new Blob([testo],
       {type:formato==='json'?'application/json':'text/csv'}));
     a.download='dossier_legale_bookinvip.'+formato; a.click(); URL.revokeObjectURL(a.href);
-    st.textContent='✅ scaricato e certificato';
-  }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
+    st.textContent=T.js_scaricato_cert;
+  }catch(e){ st.textContent=T.err_rete; console.warn('bunker',e); }
 }
 // ── 🧾 TARIFFA TECNICA STRIPE E PERDITE SUI RIMBORSI ─────────────────────────
 async function costiTecnici(){
   const st=$('ctStat'), out=$('ctOut');
   if(!attivo()){ esci(); return; }
-  st.textContent='… calcolo'; out.innerHTML='';
+  st.textContent=T.js_calcolo; out.innerHTML='';
   try{
     const r=await fetch('/api/bunker/costi_tecnici',{headers:hdr()});
     if(r.status===403){ esci(); return; }
     let d=null; try{ d=await r.json(); }catch(_){ console.warn('bunker',_); }
-    if(!r.ok||!d){ st.textContent='ℹ️ non disponibile ('+r.status+')'; return; }
+    if(!r.ok||!d){ st.textContent=T.js_non_disp2+' ('+r.status+')'; return; }
     st.textContent='';
     const inc=(d.incassate||{}), per=(d.perdite||{});
     const eur=c=>((c||0)/100).toFixed(2);
-    out.innerHTML='<div class="riga"><span>✅ Ricavo tecnico coperto ('+(inc.conteggio||0)+' prenotazioni)'
-      +'<br><span class="hint">ribaltato all\'host</span></span>'
+    out.innerHTML='<div class="riga"><span>'+T.js_ricavo_coperto+' ('+(inc.conteggio||0)+' '+T.js_prenotazioni+')'
+      +'<br><span class="hint">'+T.js_ribaltato+'</span></span>'
       +'<span><strong>'+eur(inc.cents)+'</strong></span></div>'
-      +'<div class="riga"><span>🔴 <strong>COSTO TECNICO IRRECUPERABILE</strong> ('+(per.conteggio||0)+')'
-      +'<br><span class="hint">perdita deducibile — Stripe non restituisce la commissione sui rimborsi</span></span>'
+      +'<div class="riga"><span>'+T.js_costo_irrec+' ('+(per.conteggio||0)+')'
+      +'<br><span class="hint">'+T.js_perdita_ded+'</span></span>'
       +'<span><strong>-'+eur(per.cents)+'</strong></span></div>'
-      +'<div class="riga"><span>= Saldo</span><span><strong>'+eur(d.coperto_cents)+'</strong></span></div>'
+      +'<div class="riga"><span>'+T.js_saldo+'</span><span><strong>'+eur(d.coperto_cents)+'</strong></span></div>'
       +'<p class="hint" style="margin-top:.5rem">'+esc(d.nota||'')+'</p>';
-  }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
+  }catch(e){ st.textContent=T.err_rete; console.warn('bunker',e); }
 }
 // ── ⏱️ MARCHE TEMPORALI: l'ora certificata da un'Autorità esterna ────────────
 async function marche(){
   const st=$('mtStat'), out=$('mtOut');
   if(!attivo()){ esci(); return; }
-  st.textContent='… leggo'; out.innerHTML='';
+  st.textContent=T.js_leggo; out.innerHTML='';
   try{
     const r=await fetch('/api/bunker/marche_temporali',{headers:hdr()});
     if(r.status===403){ esci(); return; }
     let d=null; try{ d=await r.json(); }catch(_){ console.warn('bunker',_); }
-    if(!r.ok||!d){ st.textContent='ℹ️ non attiva ('+r.status+')'; return; }
+    if(!r.ok||!d){ st.textContent=T.js_non_attiva+' ('+r.status+')'; return; }
     const righe=d.marche||[];
-    st.textContent=righe.length? (d.riuscite+' su '+d.totale+' riuscite'
-      +' · ⚖️ '+d.qualificate+' qualificate'+(d.tutte_qualificate?' (tutte)':'')
-      +(d.tutte_riverificate?' · ✅ tutte riverificate':' · 🔴 una non si riverifica')) : '';
-    if(!righe.length){ out.innerHTML='<p class="hint">Nessuna marca ancora: la prima parte'
-      +' entro un\'ora dall\'avvio, oppure premi <strong>Congela adesso</strong>.</p>'; return; }
-    out.innerHTML='<table><thead><tr><th>Giorno</th><th>Ora certificata (UTC)</th>'
-      +'<th>Autorità</th><th>Rango</th><th>N. serie</th><th>Riverifica</th>'
-      +'<th>Prova</th></tr></thead><tbody>'
+    st.textContent=righe.length? (d.riuscite+' '+T.js_su+' '+d.totale+' '+T.js_riuscite
+      +' · ⚖️ '+d.qualificate+' '+T.js_qualificate+(d.tutte_qualificate?' '+T.js_tutte:'')
+      +(d.tutte_riverificate?' · ✅ '+T.js_tutte_river:' · 🔴 '+T.js_una_non_river)) : '';
+    if(!righe.length){ out.innerHTML='<p class="hint">'+T.js_nessuna_marca+'</p>'; return; }
+    out.innerHTML='<table><thead><tr><th>'+T.th_giorno+'</th><th>'+T.th_ora_cert+'</th>'
+      +'<th>'+T.th_autorita+'</th><th>'+T.th_rango+'</th><th>'+T.th_nserie+'</th><th>'+T.th_riverifica+'</th>'
+      +'<th>'+T.th_prova+'</th></tr></thead><tbody>'
       +righe.map(m=>'<tr><td>'+esc(m.giorno)+'</td>'
         +'<td>'+(m.ora_certificata_utc?esc(m.ora_certificata_utc):'<span class="hint">—</span>')+'</td>'
         +'<td>'+(m.autorita?esc(m.autorita.replace(/^https?:\/\//,'')):'<span class="hint">'+esc(m.errore||'')+'</span>')+'</td>'
         +'<td>'+(m.stato!=='ok'?'<span class="hint">—</span>'
-                :(m.qualificata?'<strong style="color:#155724">⚖️ QUALIFICATA</strong>'
-                              :'<span class="hint">RFC 3161 (ripiego)</span>'))
+                :(m.qualificata?T.js_qualificata_s
+                              :T.js_ripiego))
                 +(m.stato==='ok'&&!m.qualifica_coerente?' 🔴':'')+'</td>'
         +'<td>'+esc(String(m.seriale||'').slice(0,18))+'</td>'
         +'<td>'+(m.stato!=='ok'?'<span class="hint">—</span>'
-                :(m.token_riverificato&&m.ora_coerente?'✅':'🔴 <strong>ANOMALIA</strong>'))+'</td>'
+                :(m.token_riverificato&&m.ora_coerente?'✅':T.js_anomalia))+'</td>'
         +'<td>'+(m.stato==='ok'?'<button class="ghost" data-tsr="'+m.id+'">⬇️ .tsr</button>'
                 :'<span class="hint">—</span>')+'</td></tr>').join('')
       +'</tbody></table>'
-      +'<p class="hint" style="margin-top:.5rem"><strong>⚖️ Cosa cambia con la qualifica:</strong> '
+      +'<p class="hint" style="margin-top:.5rem">'+T.js_cosa_cambia+' '
       +esc(d.cosa_significa_qualificata||'')+'</p>'
-      +'<p class="hint">Per verificare senza di noi: '
+      +'<p class="hint">'+T.js_per_verificare+' '
       +'<code>'+esc(d.come_verificare||'')+'</code></p>';
     out.querySelectorAll('button[data-tsr]').forEach(b=>{ b.onclick=()=>scaricaTsr(b.dataset.tsr); });
-  }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
+  }catch(e){ st.textContent=T.err_rete; console.warn('bunker',e); }
 }
 async function scaricaTsr(id){
   const st=$('mtStat');
   if(!attivo()){ esci(); return; }
-  st.textContent='… scarico la prova';
+  st.textContent=T.js_scarico_prova;
   try{
     const r=await fetch('/api/bunker/marca.tsr?id='+encodeURIComponent(id),{headers:hdr()});
     if(r.status===403){ esci(); return; }
-    if(!r.ok){ st.textContent='ℹ️ non disponibile ('+r.status+')'; return; }
+    if(!r.ok){ st.textContent=T.js_non_disp2+' ('+r.status+')'; return; }
     const b=await r.blob();
     const a=document.createElement('a');
     a.href=URL.createObjectURL(b); a.download='marca_'+id+'.tsr'; a.click();
     URL.revokeObjectURL(a.href);
-    st.textContent='✅ prova scaricata';
-  }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
+    st.textContent=T.js_prova_scaricata;
+  }catch(e){ st.textContent=T.err_rete; console.warn('bunker',e); }
 }
 async function marcaOra(){
   const st=$('mtStat');
   if(!attivo()){ esci(); return; }
-  st.textContent='… chiedo l\'ora a un\'Autorità esterna';
+  st.textContent=T.js_chiedo_ora;
   try{
     const r=await fetch('/api/bunker/marca_ora',{method:'POST',headers:hdr(),body:'{}'});
     if(r.status===403){ esci(); return; }
     let d=null; try{ d=await r.json(); }catch(_){ console.warn('bunker',_); }
-    if(!d){ st.textContent='ℹ️ non disponibile ('+r.status+')'; return; }
-    st.textContent = d.saltato? '✅ oggi è già congelato'
-                   : (d.ok? (d.qualificata?'⚖️ congelato con marca QUALIFICATA da ':'✅ congelato da ')
+    if(!d){ st.textContent=T.js_non_disp2+' ('+r.status+')'; return; }
+    st.textContent = d.saltato? T.js_gia_congelato
+                   : (d.ok? (d.qualificata?T.js_congelato_qual+' ':T.js_congelato_da+' ')
                             +String(d.tsa||'').replace(/^https?:\/\//,'')
-                          : '🔴 non riuscito: '+esc(d.motivo||''));
+                          : T.js_non_riuscito+' '+esc(d.motivo||''));
     marche();
-  }catch(e){ st.textContent='❌ errore di rete'; console.warn('bunker',e); }
+  }catch(e){ st.textContent=T.err_rete; console.warn('bunker',e); }
 }
 $('btnMarche').onclick=marche;
 $('btnMarcaOra').onclick=marcaOra;
@@ -543,6 +564,20 @@ try{
     $('loginCard').classList.add('nascosto'); $('sala').classList.remove('nascosto');
     aggiorna(); avviaTimer(); }
 }catch(_){ console.warn('bunker',_); }
+// ── i18n: apply()/onchange (in fondo, così tutte le funzioni sopra esistono già) ──
+let _applied=false;
+function apply(){
+  T=TR[LANG]||TR.it; document.documentElement.lang=LANG;
+  document.querySelectorAll('[data-i18n]').forEach(el=>{const k=el.getAttribute('data-i18n');if(T[k]!=null)el.textContent=T[k];});
+  document.querySelectorAll('[data-i18n-html]').forEach(el=>{const k=el.getAttribute('data-i18n-html');if(T[k]!=null)el.innerHTML=T[k];});
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{const k=el.getAttribute('data-i18n-ph');if(T[k]!=null)el.setAttribute('placeholder',T[k]);});
+  const s=$('lang'); if(s)s.value=LANG;
+  // se la sessione è attiva, ri-renderizza il blocco dinamico sempre visibile (integrità/diagnosi/log)
+  if(_applied && typeof attivo==='function' && attivo()){ try{aggiorna();}catch(_){console.warn('bunker',_);} }
+  _applied=true;
+}
+apply();
+$('lang').onchange=e=>{LANG=e.target.value;try{localStorage.setItem('lang',LANG);}catch(_){console.warn('bunker',_);}apply();};
 </script>
 </body>
 </html>

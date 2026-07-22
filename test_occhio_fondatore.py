@@ -5,9 +5,10 @@ COSA SORVEGLIA.
 restano in italiano qualunque lingua scelga l'utente (tutto cio' che sta fuori dagli
 elementi marcati `data-t` / `data-i18n` non viene mai sostituito).
 
-Oggi sono **1034**. Erano **1808**: termini e privacy sono diventati gusci serviti
-dal motore in 8 lingue, e le due pagine di esito pagamento (`grazie`, `annullato`) hanno
-smesso di conoscere solo italiano e inglese. E' un debito vero, aperto, che si paga pagina per pagina.
+Oggi sono **63**. Erano **1808**, poi **1034**: ora anche le 3 pagine interne che erano
+solo in italiano (`bunker`, `guida-operativa`, `kit-marketing`) sono tradotte in 8 lingue
+(2026-07-22, `data-i18n`/`data-i18n-html` + dizionario). Restano solo piccoli residui su
+`admin` (27), `index` (24) e briciole. E' un debito vero, aperto, che si paga pagina per pagina.
 
 PERCHE' UN TETTO E NON UN «TUTTO A ZERO».
 Pretendere zero subito renderebbe la suite rossa per un lavoro non ancora fatto, e una
@@ -39,20 +40,20 @@ import occhio_del_fondatore as occhio                          # noqa: E402
 TETTO = {
     "admin.html": 27,
     "annullato.html": 1,
-    "bunker.html": 306,
+    "bunker.html": 0,
     "commissioni.html": 2,
     "contratto-host.html": 1,
     "diventa-host.html": 1,
     "grazie.html": 1,
-    "guida-operativa.html": 280,
+    "guida-operativa.html": 1,
     "host.html": 3,
     "index.html": 24,
-    "kit-marketing.html": 386,
+    "kit-marketing.html": 0,
     "privacy.html": 1,
     "termini.html": 1,
 }
 
-TOTALE_OGGI = 1034
+TOTALE_OGGI = 63
 
 
 class TestNessunPassoIndietro(unittest.TestCase):

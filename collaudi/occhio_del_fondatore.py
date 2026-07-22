@@ -49,9 +49,11 @@ QUI = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(QUI)
 PAGINE = os.path.join(REPO, "deploy")
 
-# I DUE meccanismi di traduzione vivi nel sito. Chi ne aggiunge un terzo deve
-# aggiungerlo qui, altrimenti questo strumento dara' per congelate pagine tradotte.
-MARCATORI = ("data-t", "data-i18n")
+# I meccanismi di traduzione vivi nel sito. Chi ne aggiunge un altro deve aggiungerlo qui,
+# altrimenti questo strumento dara' per congelate pagine tradotte. `data-i18n-html` (bunker)
+# marca elementi con markup inline tradotti via innerHTML a runtime: e' tradotto quanto
+# `data-i18n`, va contato uguale (il testo VISIBILE cambia lingua alla stessa maniera).
+MARCATORI = ("data-t", "data-i18n", "data-i18n-html")
 
 # Sotto questa soglia di copertura la pagina si considera bocciata: un utente straniero
 # leggerebbe piu' italiano che lingua propria.
