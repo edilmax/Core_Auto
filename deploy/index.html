@@ -443,7 +443,7 @@ async function cerca(){
         <p style="color:var(--testo-tenue);max-width:44ch;margin:.3rem auto">${t('allarga_raggio')}</p></div>`;
     } else { document.getElementById('vista').style.display='none'; tornaLista();
       ris.innerHTML = emptyStateHtml(params.citta); bindWaitlist(params.citta); }
-  }catch(e){ ris.innerHTML = `<div class="msg err">${t('errore')}: ${e.message}</div>`; }
+  }catch(e){ ris.innerHTML = `<div class="msg err">${t('errore')}: ${esc(e.message||'')}</div>`; }
 }
 // ── MAPPA nella ricerca (Leaflet + OpenStreetMap, gratis, caricato solo se serve) ──
 let LMAP=null, LLAYER=null, LAST_PARAMS=null;
@@ -690,17 +690,17 @@ async function _prenotaConEmail(){
     // 1) se c'è un link di pagamento -> vai al checkout Stripe (stato 'in_attesa_pagamento')
     if(r.payment_url){ window.location.href = r.payment_url; return; }
     // 2) alloggio 'su richiesta' -> l'host deve approvare (24h): NON è un errore
-    if(r.stato==='in_attesa_host'){ msg.innerHTML=`<div class="msg ok">⏳ ${t('richiesta_inviata')} (${r.riferimento||''})</div>`; document.getElementById('btnPrenota').style.display='none'; return; }
+    if(r.stato==='in_attesa_host'){ msg.innerHTML=`<div class="msg ok">⏳ ${t('richiesta_inviata')} (${esc(r.riferimento||'')})</div>`; document.getElementById('btnPrenota').style.display='none'; return; }
     // 3) confermata (senza pagamento online) -> mostra voucher
     if(r.stato==='confermata' || r.voucher_token){
       const voucher = r.voucher_token ? ` · <a href="/voucher/${encodeURIComponent(r.voucher_token)}?lang=${LANG}" target="_blank" style="color:var(--brand-chiaro);font-weight:700">📄 ${t('voucher_label')}</a>` : '';
       const contr = r.voucher_token ? ` · <a href="#" id="dlContr" style="color:var(--brand);font-weight:700">📑 ${t('contratto_pdf')}</a>` : '';
-      msg.innerHTML=`<div class="msg ok">✅ ${t('conferma')} (${r.riferimento||''})${voucher}${contr}</div>`; document.getElementById('btnPrenota').style.display='none';
+      msg.innerHTML=`<div class="msg ok">✅ ${t('conferma')} (${esc(r.riferimento||'')})${voucher}${contr}</div>`; document.getElementById('btnPrenota').style.display='none';
       const dl = document.getElementById('dlContr'); const _vt = r.voucher_token;
       if(dl) dl.onclick = async (e)=>{ e.preventDefault(); try{ const cr = await api('/api/contratto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({voucher_token:_vt, lingua:LANG})}); if(cr.pdf_base64){ const a=document.createElement('a'); a.href='data:application/pdf;base64,'+cr.pdf_base64; a.download=cr.filename||'contratto.pdf'; a.click(); } }catch(err){console.warn('bookinvip-ospite',err)} };
     }
     else { msg.innerHTML=`<div class="msg err">❌ ${esc(r.motivo||fraseErrore(r.errore)||t('errore'))}</div>`; }
-  }catch(e){ msg.innerHTML=`<div class="msg err">${t('errore')}: ${e.message}</div>`; }
+  }catch(e){ msg.innerHTML=`<div class="msg err">${t('errore')}: ${esc(e.message||'')}</div>`; }
 }
 
 // "Vicino a me": chiede la posizione al browser, la converte in microgradi interi e cerca.
