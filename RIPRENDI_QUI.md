@@ -14,10 +14,20 @@ perdiamo mai (`fase188`, calcolo puro).
 - 🧪 Guardie: `test_paga_struttura` (6) + `test_paga_struttura_cablaggio` (4, incl. dark-launch vista
   rossa). Rese rosse sul codice guasto (2 bug veri beccati: slug da `body` invece che da `corpo`; `os`
   fuori scope). Render manuale del box nelle 8 lingue verificato a mano (occhio del fondatore).
-- ⏭️ **PROSSIMO — FASE 2**: carta OBBLIGATORIA + addebito Stripe dell'anticipo (`fase85`) + carta
-  salvata SetupIntent (`fase183`) + saldo su voucher/email 8 lingue (`fase86`) + **accendere il flag**.
-  Poi **FASE 3** (anticipo non rimborsabile, no-show) e **ANTI-TRUFFA re-iscrizione** (impronta
-  cifrata cod.fiscale/IBAN/Stripe → la rampa non riparte da 0). Alla fine: ricontrollo INTERO + suite.
+- 🟡 **FASE 2 IN CORSO** — ① **fondazione Stripe FATTA** (commit `f978d46`, su Desktop+GitHub, DORMIENTE,
+  **non ancora deployata sul VPS**: è solo un metodo dormiente, zero effetto in prod → si deploierà col
+  primo pezzo funzionale): `fase85.crea_link_anticipo` addebita SOLO l'anticipo + salva la carta, marca
+  `modo=in_struttura`+`saldo_cents` per il webhook; guardia `TestAnticipoPagaStruttura` (6, incl.
+  «addebita l'anticipo NON il totale»). **DA CABLARE** (design deciso, low-risk — vedi memory
+  `bookinvip-paga-in-struttura` per i 7 passi): book branch (ricalcolo server-side dal token FIRMATO) ·
+  `_finalizza` salta escrow/payout per in_struttura · webhook `checkout.session.completed` conferma
+  senza escrow · saldo su voucher+email 8 lingue · UI checkout selezionabile · accendere il flag.
+  Costruire DARK, testare con Stripe FINTO; **flip in prod = soldi veri → solo con ok fondatore.**
+- ⏭️ Dopo la FASE 2: **FASE 3** (anticipo non rimborsabile, penale no-show sulla carta salvata) e
+  **ANTI-TRUFFA re-iscrizione** (impronta cifrata cod.fiscale/IBAN/Stripe → la rampa non riparte da 0).
+  Alla fine: **ricontrollo INTERO della macchina** + suite completa.
+- **Stato deploy 3 posti**: Desktop=GitHub=`f978d46` · **VPS=`1024e5b`** (FASE 1, dark, LIVE e verificata:
+  quote reale in prod → `accettato:false`). Il VPS è indietro solo del metodo dormiente FASE 2.
 
 ---
 
