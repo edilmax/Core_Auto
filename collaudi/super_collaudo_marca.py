@@ -22,6 +22,11 @@ import re
 import shutil
 import subprocess
 import sys
+
+try:  # Windows: console cp1252 non regge box-drawing/emoji -> uscita UTF-8 tollerante
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
 import tempfile
 import time
 

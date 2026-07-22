@@ -27,6 +27,11 @@ import os
 import subprocess
 import sys
 
+try:  # Windows: console cp1252 non regge box-drawing/emoji -> uscita UTF-8 tollerante
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Il finto archivio: non dichiarato nel compose, non letto da main. Se la sorveglianza

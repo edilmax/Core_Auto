@@ -14,6 +14,11 @@ import hashlib
 import os
 import subprocess
 import sys
+
+try:  # Windows: console cp1252 non regge box-drawing/emoji -> uscita UTF-8 tollerante
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
 import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

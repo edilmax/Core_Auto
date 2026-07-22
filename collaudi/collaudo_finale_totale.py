@@ -25,6 +25,11 @@ import re
 import shutil
 import sqlite3
 import sys
+
+try:  # Windows: console cp1252 non regge box-drawing/emoji -> uscita UTF-8 tollerante
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
 import tempfile
 import time
 
@@ -259,12 +264,17 @@ def b1():
     fonti = {
         "README.md": open(os.path.join(REPO, "README.md"), encoding="utf-8").read(),
         "deploy/host.html": open(os.path.join(REPO, "deploy", "host.html"), encoding="utf-8").read(),
-        "deploy/termini.html": open(os.path.join(REPO, "deploy", "termini.html"), encoding="utf-8").read(),
         "deploy/commissioni.html": open(os.path.join(REPO, "deploy", "commissioni.html"), encoding="utf-8").read(),
     }
     from fase163_accettazioni import CONTRATTO_HOST
     fonti["contratto (IT)"] = CONTRATTO_HOST["it"]
     fonti["contratto (EN)"] = CONTRATTO_HOST["en"]
+    # I termini pubblici sono un GUSCIO servito dal motore (fase185, dopo il refactor i18n):
+    # il file statico termini.html non contiene piu' testo fisso. La tariffa tecnica si legge
+    # nel testo VERO generato dal motore, non nel guscio -> si controlla testo_termini().
+    from fase185_testi_legali import testo_termini
+    fonti["termini (motore IT)"] = testo_termini("it")
+    fonti["termini (motore EN)"] = testo_termini("en")
     attesi = {"tariffa tecnica": "%d%%" % (PSP // 100),
               "commissione regime": "%d%%" % (LANCIO_BPS_REGIME // 100),
               "fase intermedia": "%d%%" % (LANCIO_BPS_FASE1 // 100),
@@ -277,8 +287,8 @@ def b1():
         for etichetta, cifra in attesi.items():
             if cifra not in testo:
                 viol("B1-cifra-assente", det="%s: manca %s (%s)" % (nome, cifra, etichetta))
-    # il 3% deve esserci ANCHE nei termini pubblici e nel tariffario
-    for nome in ("deploy/termini.html", "deploy/commissioni.html"):
+    # il 3% deve esserci ANCHE nei termini pubblici (testo del motore, non il guscio) e nel tariffario
+    for nome in ("termini (motore IT)", "termini (motore EN)", "deploy/commissioni.html"):
         if "3%" not in fonti[nome]:
             viol("B1-tecnica-assente", det=nome)
     print("   verificate %d cifre su %d fonti ufficiali"

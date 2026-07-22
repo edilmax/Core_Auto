@@ -23,6 +23,14 @@ import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
+
+# Windows: la console cp1252 non regge i box-drawing (──) del report e il collaudo moriva
+# al primo 'giro' senza verificare NULLA della marca (legalmente critica). Uno strumento di
+# collaudo non deve MAI cadere per un carattere: uscita UTF-8 tollerante.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
 os.chdir(REPO)
 
 import fase184_marca_temporale as mt          # noqa: E402
