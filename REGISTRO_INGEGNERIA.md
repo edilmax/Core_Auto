@@ -1035,7 +1035,7 @@ sempre "morto": molti sono librerie usate da altri moduli.
 | 81 | `fase81_bootstrap_casavip.py` | — | Bootstrap Casa VIP (composition root del lodging stack). |
 | 82 | `fase82_ical_sync.py` | +router | iCal Sync (la portabilita' REALE, non quella gonfiata). |
 | 83 | `fase83_server.py` | — | Server HTTP (la COLLA che fa uscire la Ferrari dal garage). |
-| 85 | `fase85_pagamenti_stripe.py` | boot | Provider Pagamento Stripe (l'ultimo pezzo del money-path). |
+| 85 | `fase85_pagamenti_stripe.py` | boot | Provider Pagamento Stripe (l'ultimo pezzo del money-path). `crea_link` = Checkout online del TOTALE (flusso live, intatto). **`crea_link_anticipo`** (2026-07-23, PAGA IN STRUTTURA FASE 2, per ora DORMIENTE): Checkout `mode=payment` che addebita SOLO l'anticipo (fase188) e **salva la carta** (`setup_future_usage=off_session` + `customer_creation=always`) per la penale no-show; `metadata[modo]=in_struttura`+`saldo_cents` per far riconoscere la prenotazione al webhook; il saldo NON si incassa (host in loco) → niente escrow. Guardia `test_fase85` TestAnticipoPagaStruttura (6: addebita l'anticipo NON il totale, salva carta+marca in_struttura, anticipo invalido→None, isolato, saldo 0). |
 | 86 | `fase86_email.py` | boot+router | Provider Email (voucher all'ospite via SMTP). |
 | 87 | `fase87_stripe_webhook.py` | +router | Webhook Stripe (l'altra meta' del money-path: conferma pagamento). |
 | 88 | `fase88_registro_host.py` | boot | Registro Host self-service (l'host si iscrive e si carica DA SOLO). |

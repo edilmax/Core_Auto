@@ -67,6 +67,56 @@ class TestProvider(unittest.TestCase):
         self.assertIn("currency%5D=usd", spy.body)
 
 
+ANT = {"anticipo_cents": 3312, "saldo_cents": 26838, "totale_cents": 30000,
+       "riferimento": "PS777", "email": "g@x.it", "valuta": "EUR"}
+
+
+class TestAnticipoPagaStruttura(unittest.TestCase):
+    """PAGA IN STRUTTURA: la Checkout Session addebita SOLO l'anticipo e salva la carta."""
+
+    def test_ritorna_url(self):
+        spy = FetchSpy()
+        p = ProviderStripe("sk_test_x", "https://ok", "https://ko", fetch=spy)
+        self.assertEqual(p.crea_link_anticipo(ANT), "https://checkout.stripe.com/c/sess_123")
+
+    def test_addebita_ANTICIPO_non_il_totale(self):
+        # il difetto da temere: addebitare il totale (300) invece dell'anticipo (33,12).
+        spy = FetchSpy()
+        ProviderStripe("sk", "o", "k", fetch=spy).crea_link_anticipo(ANT)
+        self.assertIn("unit_amount%5D=3312", spy.body)          # anticipo, in cents
+        self.assertNotIn("unit_amount%5D=30000", spy.body)      # MAI il totale
+        self.assertNotIn("26838", spy.body.split("metadata")[0]) # il saldo non e' un line item
+
+    def test_salva_la_carta_e_marca_in_struttura(self):
+        spy = FetchSpy()
+        ProviderStripe("sk", "o", "k", fetch=spy).crea_link_anticipo(ANT)
+        self.assertIn("setup_future_usage%5D=off_session", spy.body)  # carta salvata
+        self.assertIn("customer_creation=always", spy.body)
+        self.assertIn("mode=payment", spy.body)
+        self.assertIn("in_struttura", spy.body)                 # metadata[modo]
+        self.assertIn("saldo_cents%5D=26838", spy.body)         # saldo nei metadata (per il webhook)
+        self.assertIn("PS777", spy.body)                        # riferimento
+
+    def test_anticipo_invalido_none(self):
+        spy = FetchSpy()
+        p = ProviderStripe("sk", "o", "k", fetch=spy)
+        for bad in ({"anticipo_cents": 0}, {"anticipo_cents": -5},
+                    {"anticipo_cents": 33.1}, {"anticipo_cents": True}, {}, None):
+            self.assertIsNone(p.crea_link_anticipo(bad))
+
+    def test_fetch_solleva_isolato(self):
+        p = ProviderStripe("sk", "o", "k", fetch=FetchSpy(solleva=True))
+        self.assertIsNone(p.crea_link_anticipo(ANT))            # None, non crash
+
+    def test_saldo_zero_ok(self):
+        # prezzo minuscolo: anticipo == totale, saldo 0 -> paga tutto online, valido
+        spy = FetchSpy()
+        u = ProviderStripe("sk", "o", "k", fetch=spy).crea_link_anticipo(
+            {"anticipo_cents": 500, "saldo_cents": 0, "riferimento": "R", "valuta": "EUR"})
+        self.assertEqual(u, "https://checkout.stripe.com/c/sess_123")
+        self.assertIn("saldo_cents%5D=0", spy.body)
+
+
 class TestFactoryGated(unittest.TestCase):
     def test_senza_chiave_none(self):
         self.assertIsNone(crea_provider_stripe(None))

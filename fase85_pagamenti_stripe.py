@@ -108,6 +108,71 @@ class ProviderStripe:
                            exc_info=True)
             return None
 
+    def crea_link_anticipo(self, dati: Dict[str, Any]) -> Optional[str]:
+        """PAGA IN STRUTTURA: Checkout Session che addebita SUBITO solo l'ANTICIPO
+        (commissione + fee + copertura carta = tutto NOSTRO, fase188) E salva la carta per la
+        penale no-show/tardiva (FASE 3). La carta va dall'ospite a Stripe, MAI da noi (hosted).
+        Il SALDO **non** si incassa qui: lo paga l'ospite all'host DI PERSONA -> nessun escrow,
+        nessun payout, nessun auto-rilascio. Il webhook riconosce la prenotazione dai metadata
+        (`modo=in_struttura`, `anticipo_cents`, `saldo_cents`). Ritorna l'URL hosted o None.
+
+        Deliberatamente SEPARATO da `crea_link` (flusso online LIVE): lo lasciamo intatto."""
+        try:
+            if not isinstance(dati, dict):
+                return None
+            anticipo = dati.get("anticipo_cents")
+            if not _intero_pos(anticipo):
+                return None
+            saldo = dati.get("saldo_cents")
+            saldo = saldo if (isinstance(saldo, int) and not isinstance(saldo, bool)
+                              and saldo >= 0) else 0
+            ref = str(dati.get("riferimento", ""))
+            valuta = dati.get("valuta")
+            valuta = valuta.lower() if isinstance(valuta, str) and valuta.strip() else self._valuta
+            import time as _t
+            scade_sec = dati.get("scade_secondi")
+            if not (isinstance(scade_sec, int) and not isinstance(scade_sec, bool)):
+                scade_sec = 1800
+            scade_sec = max(1800, min(86100, scade_sec))
+            scade_at = int(_t.time()) + scade_sec
+            params: List[Tuple[str, str]] = [
+                ("mode", "payment"),
+                # SALVA LA CARTA insieme all'incasso dell'anticipo (una sola pagina hosted):
+                # servira' off-session per la penale no-show (FASE 3). customer_creation=always
+                # crea il customer a cui Stripe lega la carta.
+                ("customer_creation", "always"),
+                ("payment_intent_data[setup_future_usage]", "off_session"),
+                ("payment_intent_data[metadata][riferimento]", ref),
+                ("payment_intent_data[metadata][scopo]", "anticipo_paga_struttura"),
+                ("expires_at", str(scade_at)),
+                ("success_url", self._ok or "https://bookinvip.com/grazie.html"),
+                ("cancel_url", self._ko or "https://bookinvip.com/annullato.html"),
+                ("line_items[0][quantity]", "1"),
+                ("line_items[0][price_data][currency]", valuta),
+                ("line_items[0][price_data][unit_amount]", str(int(anticipo))),
+                ("line_items[0][price_data][product_data][name]",
+                 "BookinVIP anticipo " + (ref or "prenotazione")),
+                ("client_reference_id", ref),
+                ("metadata[riferimento]", ref),
+                ("metadata[modo]", "in_struttura"),
+                ("metadata[anticipo_cents]", str(int(anticipo))),
+                ("metadata[saldo_cents]", str(int(saldo))),
+            ]
+            email = dati.get("email")
+            if isinstance(email, str) and "@" in email:
+                params.append(("customer_email", email))
+            from urllib.parse import urlencode
+            body = urlencode(params).encode("utf-8")
+            headers = {"Authorization": "Bearer " + self._key,
+                       "Content-Type": "application/x-www-form-urlencoded"}
+            resp = self._fetch(STRIPE_URL, body, headers)
+            url = resp.get("url") if isinstance(resp, dict) else None
+            return url if isinstance(url, str) and url else None
+        except Exception:
+            logger.warning("Stripe: creazione link ANTICIPO fallita (ISOLATA -> None)",
+                           exc_info=True)
+            return None
+
     @staticmethod
     def _fetch_reale(url: str, body: bytes,
                      headers: Dict[str, str]) -> Dict[str, Any]:  # pragma: no cover
