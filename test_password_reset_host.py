@@ -47,7 +47,8 @@ class TestPasswordResetHost(unittest.TestCase):
         s, c = self.g("POST", "/api/host/registrazione",
                       {"email": "h@pw.it", "password": "vecchia123",
                        "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
-                       "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
+                       "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE,
+                       "lang": "it"})
         self.assertEqual(s, 201, c)
         self.tok = c["token"]
         self._attendi_email(1)                       # benvenuto (thread in background)

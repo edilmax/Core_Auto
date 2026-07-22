@@ -98,7 +98,7 @@ class TestFactory(unittest.TestCase):
 class TestCorpo(unittest.TestCase):
     def test_html_con_link(self):
         h = corpo_voucher_html("Casa Roma", "ABC123", "2026-09-01", "2026-09-02",
-                               "https://bookinvip.com/voucher/tok")
+                               "https://bookinvip.com/voucher/tok", lingua="it")
         self.assertIn("Prenotazione confermata", h)
         self.assertIn("ABC123", h)
         self.assertIn("https://bookinvip.com/voucher/tok", h)

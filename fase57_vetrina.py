@@ -118,6 +118,9 @@ class SchedaAlloggio:
     capacita: int
     descrizione: str = ""
     paese: str = ""
+    fuso: str = ""                # fuso IANA dell'alloggio ('Europe/Rome', 'Asia/Tokyo'):
+                                  # ancora a QUI check-in, pass serratura, recensioni,
+                                  # cancellazione — mai al fuso del server o dell'ospite
     cin: str = ""                 # Codice Identificativo Nazionale (obbligo annunci IT), PUBBLICO
     indirizzo: str = ""           # via+civico (PRIVATO: solo per geocodifica precisa, mai pubblico)
     camere: int = 1
@@ -301,10 +304,18 @@ def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
     if not isinstance(modal, str) or modal not in MODALITA_PRENOTAZIONE:
         modal = "immediata"
 
+    # FUSO dell'alloggio: quello dato dall'host se valido, altrimenti dedotto da
+    # citta'/paese (best-effort), altrimenti '' (i calcoli useranno il ripiego prudente).
+    try:
+        from fase187_fuso_orario import normalizza as _norm_fuso
+        fuso = _norm_fuso(data.get("fuso"), citta, paese)
+    except Exception:
+        fuso = ""
     return True, "", SchedaAlloggio(
         host_id=host_id, slug=slug, titolo=titolo, citta=citta,
         prezzo_notte_cents=prezzo, capacita=int(data["capacita"]),
-        descrizione=descr.strip(), paese=paese.strip(), cin=cin, indirizzo=indirizzo.strip(),
+        descrizione=descr.strip(), paese=paese.strip(), fuso=fuso, cin=cin,
+        indirizzo=indirizzo.strip(),
         camere=int(data.get("camere", 1)), bagni=int(data.get("bagni", 1)),
         servizi=servizi, valuta=valuta, stato=stato,
         lat_micro=lat, lon_micro=lon, politica_cancellazione=pol,
@@ -375,6 +386,7 @@ class CatalogoVetrina:
                         descrizione TEXT NOT NULL DEFAULT '',
                         citta TEXT NOT NULL,
                         paese TEXT NOT NULL DEFAULT '',
+                        fuso TEXT NOT NULL DEFAULT '',
                         indirizzo TEXT NOT NULL DEFAULT '',
                         prezzo_notte_cents INTEGER NOT NULL,
                         capacita INTEGER NOT NULL,
@@ -404,7 +416,8 @@ class CatalogoVetrina:
                                ("sconto_mese_bps", "INTEGER NOT NULL DEFAULT 0"),
                                ("modalita_prenotazione", "TEXT NOT NULL DEFAULT 'immediata'"),
                                ("pin_manuale", "INTEGER NOT NULL DEFAULT 0"),
-                               ("cin", "TEXT NOT NULL DEFAULT ''")):
+                               ("cin", "TEXT NOT NULL DEFAULT ''"),
+                               ("fuso", "TEXT NOT NULL DEFAULT ''")):
                     try:
                         con.execute("ALTER TABLE alloggi ADD COLUMN %s %s" % (_c, _d))
                     except sqlite3.OperationalError:
@@ -462,14 +475,15 @@ class CatalogoVetrina:
             if row is None:
                 cur = con.execute(
                     "INSERT INTO alloggi (host_id, slug, titolo, descrizione, citta, "
-                    "paese, cin, indirizzo, prezzo_notte_cents, capacita, camere, bagni, servizi_mask, "
-                    "valuta, stato, lat_micro, lon_micro, politica_cancellazione, "
+                    "paese, fuso, cin, indirizzo, prezzo_notte_cents, capacita, camere, bagni, "
+                    "servizi_mask, valuta, stato, lat_micro, lon_micro, politica_cancellazione, "
                     "tassa_pp_notte_cents, tassa_max_notti, tassa_perc_bps, "
                     "sconto_settimana_bps, sconto_mese_bps, "
                     "modalita_prenotazione, pin_manuale, creato_ts, aggiornato_ts) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (scheda.host_id, scheda.slug, scheda.titolo, scheda.descrizione,
-                     scheda.citta, scheda.paese, scheda.cin, scheda.indirizzo, scheda.prezzo_notte_cents,
+                     scheda.citta, scheda.paese, scheda.fuso, scheda.cin, scheda.indirizzo,
+                     scheda.prezzo_notte_cents,
                      scheda.capacita, scheda.camere, scheda.bagni, mask, scheda.valuta,
                      scheda.stato, scheda.lat_micro, scheda.lon_micro,
                      scheda.politica_cancellazione, scheda.tassa_pp_notte_cents,
@@ -482,13 +496,15 @@ class CatalogoVetrina:
                 alloggio_id = row["id"]
                 con.execute(
                     "UPDATE alloggi SET host_id=?, titolo=?, descrizione=?, citta=?, "
-                    "paese=?, cin=?, indirizzo=?, prezzo_notte_cents=?, capacita=?, camere=?, bagni=?, "
+                    "paese=?, fuso=?, cin=?, indirizzo=?, prezzo_notte_cents=?, capacita=?, "
+                    "camere=?, bagni=?, "
                     "servizi_mask=?, valuta=?, stato=?, lat_micro=?, lon_micro=?, "
                     "politica_cancellazione=?, tassa_pp_notte_cents=?, tassa_max_notti=?, "
                     "tassa_perc_bps=?, sconto_settimana_bps=?, sconto_mese_bps=?, "
                     "modalita_prenotazione=?, pin_manuale=?, aggiornato_ts=? WHERE id=?",
                     (scheda.host_id, scheda.titolo, scheda.descrizione, scheda.citta,
-                     scheda.paese, scheda.cin, scheda.indirizzo, scheda.prezzo_notte_cents, scheda.capacita,
+                     scheda.paese, scheda.fuso, scheda.cin, scheda.indirizzo,
+                     scheda.prezzo_notte_cents, scheda.capacita,
                      scheda.camere, scheda.bagni, mask, scheda.valuta, scheda.stato,
                      scheda.lat_micro, scheda.lon_micro, scheda.politica_cancellazione,
                      scheda.tassa_pp_notte_cents, scheda.tassa_max_notti, scheda.tassa_perc_bps,
@@ -934,6 +950,7 @@ class CatalogoVetrina:
             "descrizione": a["descrizione"],
             "citta": a["citta"],
             "paese": a["paese"],
+            "fuso": (a["fuso"] if "fuso" in a.keys() else "") or "",   # fuso IANA dell'alloggio
             "cin": (a["cin"] if "cin" in a.keys() else "") or "",   # obbligo di esposizione IT
             "lat_micro": a["lat_micro"],   # zona (già pubblica in card/mappa); MAI l'indirizzo
             "lon_micro": a["lon_micro"],

@@ -235,6 +235,45 @@ def _istante_fine_tutela(check_in: str, ore_finestra: int = 24) -> Optional[int]
     return int((inizio + _d.timedelta(hours=int(ore_finestra))).timestamp())
 
 
+def _istante_checkin(check_in: str, fuso: str = "") -> Optional[int]:
+    """L'istante (epoch UTC) del check-in alle 15:00 ORA LOCALE DELL'ALLOGGIO.
+
+    Se l'alloggio ha un fuso vero (`Asia/Tokyo`, `Pacific/Honolulu`, ...) l'istante e'
+    ESATTO. Se non ce l'ha, si ricade sull'approssimazione prudente (l'ultimo check-in
+    possibile al mondo), che non stringe mai la tutela di nessuno. Cosi' l'aggiunta del
+    fuso all'alloggio migliora la precisione senza rischiare regressioni dove manca."""
+    if fuso:
+        try:
+            from fase187_fuso_orario import istante_locale
+            preciso = istante_locale(check_in, ORA_CHECKIN_LOCALE, fuso)
+            if preciso is not None:
+                return preciso
+        except Exception:
+            pass
+    return _istante_checkin_prudente(check_in)
+
+
+def _mezzanotte_checkout(check_out: str, fuso: str = "") -> Optional[int]:
+    """Mezzanotte del giorno di CHECK-OUT nel fuso dell'alloggio: da qui si puo'
+    recensire (dopo il soggiorno, ora locale). Senza fuso, la mezzanotte piu' TARDI al
+    mondo (UTC-12), cosi' nessuno recensisce prima del proprio giorno di check-out."""
+    if fuso:
+        try:
+            from fase187_fuso_orario import mezzanotte_locale
+            preciso = mezzanotte_locale(check_out, fuso)
+            if preciso is not None:
+                return preciso
+        except Exception:
+            pass
+    import datetime as _d
+    try:
+        g = _d.date.fromisoformat(str(check_out))
+    except Exception:
+        return None
+    piu_a_ovest = _d.timezone(_d.timedelta(hours=ORE_FUSO_MIN))
+    return int(_d.datetime(g.year, g.month, g.day, 0, 0, 0, tzinfo=piu_a_ovest).timestamp())
+
+
 SECONDI_RIPENSAMENTO = 48 * 3600          # 172.800: quarantotto ore VERE
 
 
@@ -3987,7 +4026,8 @@ class RouterHTTP:
         pass_token = None
         if self._sys.emettitore_pass is not None:
             try:
-                pass_token = self._sys.emettitore_pass.emetti(ref, allog, ci, co)
+                pass_token = self._sys.emettitore_pass.emetti(
+                    ref, allog, ci, co, fuso=self._fuso_alloggio(allog))
                 corpo["smart_pass"] = pass_token
             except Exception:
                 logger.warning("emissione smart-pass fallita (ignorata)", exc_info=True)
@@ -4022,12 +4062,12 @@ class RouterHTTP:
                 logger.warning("emissione voucher fallita (ignorata)", exc_info=True)
         if self._sys.emettitore_recensioni is not None:
             try:
-                # nbf = mezzanotte del CHECK-OUT: si recensisce DOPO il soggiorno (stile
-                # Booking/Agoda), mai prima. Dentro il token firmato -> non aggirabile.
+                # nbf = mezzanotte del CHECK-OUT nel FUSO DELL'ALLOGGIO: si recensisce DOPO
+                # il soggiorno (stile Booking/Agoda), mai prima, e "dopo" e' l'ora del
+                # posto — non del server, che per un giapponese cambia giorno alle 09:00.
+                # Dentro il token firmato -> non aggirabile.
                 try:
-                    import datetime as _dtr
-                    nbf = int(_dtr.datetime.combine(_dtr.date.fromisoformat(str(co)),
-                                                    _dtr.time.min).timestamp())
+                    nbf = _mezzanotte_checkout(co, self._fuso_alloggio(allog))
                 except Exception:
                     nbf = None
                 corpo["diritto_recensione"] = self._sys.emettitore_recensioni.emetti(
@@ -4065,10 +4105,10 @@ class RouterHTTP:
                     _nome = (_d.get("titolo") or allog) if isinstance(_d, dict) else allog
                 except Exception:
                     _nome = allog
+                from fase86_email import oggetto as _oggetto_email
                 html = corpo_voucher_html(_nome, _codice, ci, co, vurl, pin=_pin,
-                                          payment_url=_purl)
-                _ogg = ("BookinVIP - Approvata! Completa il pagamento" if _purl
-                        else "BookinVIP - Prenotazione confermata")
+                                          payment_url=_purl, lingua=_lang_osp)
+                _ogg = _oggetto_email("v_ogg_pay" if _purl else "v_ogg_conf", _lang_osp)
                 # IN BACKGROUND: l'SMTP (rete) non deve MAI rallentare la conferma prenotazione.
                 # Il provider e' gia' fail-safe (non solleva); il thread e' daemon (isolato).
                 import threading
@@ -4348,7 +4388,10 @@ class RouterHTTP:
             if g is None or not ref:
                 return
             try:
-                ts = _istante_checkin_prudente(ci)
+                # ANCORATO al fuso VERO dell'alloggio: le 24h di contestazione partono
+                # dalle 15:00 ora locale del posto, non del server. Senza fuso, ripiego
+                # prudente (mai una finestra piu' stretta del giusto).
+                ts = _istante_checkin(ci, self._fuso_alloggio(allog))
             except Exception:
                 ts = None
             g.apri(ref, netto_host_cents, alloggio_id=allog, ora_checkin_ts=ts)
@@ -4483,13 +4526,15 @@ class RouterHTTP:
                 dj = {}
             vt = dj.get("voucher_token", "")
             vurl = ((self._base_url or "https://bookinvip.com") + "/voucher/" + vt) if vt else ""
-            from fase86_email import corpo_pagamento_confermato_html
+            from fase86_email import corpo_pagamento_confermato_html, oggetto
+            lang = self._lang_da_voucher(vt)
+            vurl = (vurl + "?lang=" + lang) if vurl else vurl
             self._email_bg(rec.get("email", ""),
-                           "BookinVIP - Pagamento ricevuto: prenotazione confermata",
+                           oggetto("pc_ogg", lang),
                            corpo_pagamento_confermato_html(
                                dj.get("titolo") or rec.get("alloggio_id", ""), vurl,
                                int(dj.get("prezzo_guest_cents", 0) or 0),
-                               dj.get("valuta", "EUR")))
+                               dj.get("valuta", "EUR"), lingua=lang))
         except Exception:
             logger.warning("email conferma pagamento fallita (ignorata)", exc_info=True)
 
@@ -4505,13 +4550,14 @@ class RouterHTTP:
                 dj = _j.loads(rec.get("corpo_json") or "{}")
             except Exception:
                 dj = {}
-            from fase86_email import corpo_cancellazione_html
+            from fase86_email import corpo_cancellazione_html, oggetto
+            lang = self._lang_da_voucher(dj.get("voucher_token"))
             self._email_bg(rec.get("email", ""),
-                           "BookinVIP - Cancellazione confermata",
+                           oggetto("c_ogg", lang),
                            corpo_cancellazione_html(
                                dj.get("titolo") or rec.get("alloggio_id", ""),
                                int(rimborso_cents or 0), valuta or "EUR",
-                               int(credito_cents or 0)))
+                               int(credito_cents or 0), lingua=lang))
         except Exception:
             logger.warning("email cancellazione fallita (ignorata)", exc_info=True)
 
@@ -4527,11 +4573,13 @@ class RouterHTTP:
                 dj = _j.loads(rec.get("corpo_json") or "{}")
             except Exception:
                 dj = {}
-            from fase86_email import corpo_esito_controversia_html
+            from fase86_email import corpo_esito_controversia_html, oggetto
+            lang = self._lang_da_voucher(dj.get("voucher_token"))
             self._email_bg(rec.get("email", ""),
-                           "BookinVIP - Esito della tua segnalazione",
+                           oggetto("d_ogg", lang),
                            corpo_esito_controversia_html(int(rimborso_cents or 0),
-                                                         dj.get("valuta", "EUR")))
+                                                         dj.get("valuta", "EUR"),
+                                                         lingua=lang))
         except Exception:
             logger.warning("email esito controversia fallita (ignorata)", exc_info=True)
 
@@ -4632,11 +4680,12 @@ class RouterHTTP:
                                valuta=valuta, causale="bonifico Connect %s all'host" % tid)
                 try:                            # C3: l'host sa di essere stato pagato
                     from fase59_concierge import codice_prenotazione as _cp
-                    from fase86_email import corpo_payout_host_html
+                    from fase86_email import corpo_payout_host_html, oggetto
+                    lang = self._lang_host(host_id)
                     self._email_bg((info or {}).get("email", ""),
-                                   "BookinVIP - Pagamento in arrivo sul tuo conto",
+                                   oggetto("p_ogg", lang),
                                    corpo_payout_host_html(int(importo_cents), valuta,
-                                                          _cp(rif)))
+                                                          _cp(rif), lingua=lang))
                 except Exception:
                     logger.warning("email payout host fallita (ignorata)", exc_info=True)
             else:
@@ -4966,8 +5015,21 @@ class RouterHTTP:
         pagato = v.get("prezzo_guest_cents", 0)
         if not all(isinstance(x, str) and x for x in (allog, ci, co)):
             return 422, {"errore": "voucher_incompleto"}
+        # giorni all'arrivo -> fascia di penale. "Oggi" e' il giorno NEL FUSO DELL'ALLOGGIO,
+        # non del server: per un ospite alle Hawaii che cancella all'alba, il server (UTC)
+        # e' gia' al giorno dopo e gli conterebbe un giorno in meno, cioe' una penale piu'
+        # severa. Ancorato al posto, il conto e' quello vero per l'ospite.
         try:
-            giorni = (datetime.date.fromisoformat(ci) - datetime.date.today()).days
+            import datetime as _dtc
+            fuso = self._fuso_alloggio(allog)
+            oggi_locale = _dtc.date.today()
+            if fuso:
+                try:
+                    from zoneinfo import ZoneInfo
+                    oggi_locale = _dtc.datetime.now(ZoneInfo(fuso)).date()
+                except Exception:
+                    pass
+            giorni = (_dtc.date.fromisoformat(ci) - oggi_locale).days
         except Exception:
             giorni = 0
         giorni = giorni if giorni > 0 else 0
@@ -5099,6 +5161,45 @@ class RouterHTTP:
             return self._sys.catalogo.politica_cancellazione_di(slug)
         except Exception:
             return "flessibile"
+
+    def _lang_da_voucher(self, vt):
+        """La lingua dell'ospite, letta dal gettone FIRMATO del voucher. 'en' se assente
+        (mai 'it' per difetto). E' la fonte affidabile: la lingua ci viene messa alla
+        prenotazione e viaggia col voucher ovunque, quindi ogni email asincrona (conferma,
+        rimborso, esito, promemoria) esce nella lingua giusta."""
+        try:
+            firma = getattr(self._sys, "firma", None)
+            v = firma.decodifica(vt) if (firma and isinstance(vt, str) and vt) else None
+            if isinstance(v, dict) and v.get("lang"):
+                return v["lang"]
+        except Exception:
+            pass
+        return "en"
+
+    def _lang_host(self, host_id):
+        """La lingua dell'host, dalla sua ultima accettazione contratto (dove la lingua e'
+        registrata). 'en' se ignota — mai 'it' per difetto."""
+        try:
+            acc = getattr(self._sys, "accettazioni", None)
+            righe = acc.elenco(host_id) if acc is not None else []
+            for r in reversed(righe or []):
+                if isinstance(r, dict) and r.get("lang"):
+                    return r["lang"]
+        except Exception:
+            pass
+        return "en"
+
+    def _fuso_alloggio(self, slug):
+        """Il fuso IANA dell'alloggio ('Asia/Tokyo', ...) o '' se non impostato. Serve ad
+        ancorare check-in, pass serratura, recensioni e cancellazione all'ora LOCALE del
+        posto, mai al fuso del server o dell'ospite. '' -> i calcoli usano il ripiego
+        prudente (mai una tutela piu' stretta del giusto)."""
+        try:
+            d = self._sys.catalogo.dettaglio(slug)
+            f = d.get("fuso") if isinstance(d, dict) else ""
+            return f if isinstance(f, str) else ""
+        except Exception:
+            return ""
 
     def _consuma_credito(self, corpo, ref):
         """Segna come USATO il Credito Fondatore/Viaggio applicato a questa prenotazione (fase167).
@@ -6214,13 +6315,14 @@ class RouterHTTP:
             tok = reg.token_reset_password(email)
             if tok and getattr(self._sys, "email_provider", None) is not None:
                 self._pw_reset_ts[k] = _t.time()
-                from fase86_email import corpo_reset_password_html
+                from fase86_email import corpo_reset_password_html, oggetto
+                lang = dati.get("lang", "en")     # l'host e' sulla pagina: lingua corrente
                 link = ((self._base_url or "https://bookinvip.com")
                         + "/host.html#reset=" + tok)
                 import threading
                 threading.Thread(target=self._sys.email_provider.invia,
-                                 args=(k, "BookinVIP - Reimposta la password",
-                                       corpo_reset_password_html(link)),
+                                 args=(k, oggetto("rp_ogg", lang),
+                                       corpo_reset_password_html(link, lingua=lang)),
                                  daemon=True).start()
         except Exception:
             logger.warning("password dimenticata: invio fallito (ISOLATO)", exc_info=True)
@@ -6303,14 +6405,16 @@ class RouterHTTP:
         # accorgersene ORA che al primo reset password). Best-effort in background.
         if e.ok and getattr(self._sys, "email_provider", None) is not None:
             try:
-                from fase86_email import corpo_benvenuto_host_html
+                from fase86_email import corpo_benvenuto_host_html, oggetto
+                lang = dati.get("lang", "en")     # lingua scelta in fase di registrazione
                 import threading
                 threading.Thread(
                     target=self._sys.email_provider.invia,
                     args=(str(dati.get("email", "")).strip().lower(),
-                          "Benvenuto su BookinVIP - il tuo account host è pronto",
+                          oggetto("b_ogg", lang),
                           corpo_benvenuto_host_html(
-                              (self._base_url or "https://bookinvip.com") + "/host.html")),
+                              (self._base_url or "https://bookinvip.com") + "/host.html",
+                              lingua=lang)),
                     daemon=True).start()
             except Exception:
                 logger.warning("email benvenuto host fallita (ignorata)", exc_info=True)
@@ -8467,14 +8571,14 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                         except Exception:
                             dj = {}
                         vt = dj.get("voucher_token", "")
-                        vurl = (base + "/voucher/" + vt) if vt else ""
+                        lang = router._lang_da_voucher(vt)
+                        vurl = (base + "/voucher/" + vt + "?lang=" + lang) if vt else ""
                         titolo = dj.get("titolo") or rec.get("alloggio_id", "")
                         try:
-                            from fase86_email import corpo_promemoria_checkin_html
-                            html = corpo_promemoria_checkin_html(titolo, vurl)
+                            from fase86_email import corpo_promemoria_checkin_html, oggetto
+                            html = corpo_promemoria_checkin_html(titolo, vurl, lingua=lang)
                             email_prov.invia(rec.get("email", ""),
-                                             "BookinVIP - Com'è andata? (24h per segnalare problemi)",
-                                             html)
+                                             oggetto("pr_ogg", lang), html)
                         except Exception:
                             logger.warning("invio promemoria fallito (ignorato)", exc_info=True)
                         pp.segna_promemoria(rec["riferimento"])
@@ -8496,16 +8600,18 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                         except Exception:
                             dj = {}
                         vt = dj.get("voucher_token", "")
+                        lang = router._lang_da_voucher(vt)
                         # RICOLLEGATO ALLA PAGINA DI SOLA VALUTAZIONE (2026-07-20): l'invito
                         # post-soggiorno porta a /recensione/ (solo il voto), NON al voucher
                         # pieno. Stesso token firmato, stesso motore: cambia solo la vetrina.
-                        vurl = (base + "/recensione/" + vt) if vt else ""
+                        vurl = (base + "/recensione/" + vt + "?lang=" + lang) if vt else ""
                         titolo = dj.get("titolo") or rec.get("alloggio_id", "")
                         try:
-                            from fase86_email import corpo_invito_recensione_html
+                            from fase86_email import corpo_invito_recensione_html, oggetto
                             email_prov.invia(rec.get("email", ""),
-                                             "BookinVIP - Com'è andata? Lascia la tua recensione",
-                                             corpo_invito_recensione_html(titolo, vurl))
+                                             oggetto("r_ogg", lang),
+                                             corpo_invito_recensione_html(titolo, vurl,
+                                                                          lingua=lang))
                         except Exception:
                             logger.warning("invio invito recensione fallito (ignorato)",
                                            exc_info=True)

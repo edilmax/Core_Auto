@@ -176,14 +176,14 @@ class TestSuRichiestaStripe(unittest.TestCase):
 
     def test_email_contiene_bottone_pagamento(self):
         html = corpo_voucher_html("Casa SR", "BVIP-XXXX-YYYY", "2026-09-10", "2026-09-12",
-                                  "https://bookinvip.com/voucher/tok", pin="1234",
+                                  "https://bookinvip.com/voucher/tok", pin="1234", lingua="it",
                                   payment_url="https://checkout.stripe.test/cs_9")
         self.assertIn("https://checkout.stripe.test/cs_9", html)
         self.assertIn("Completa il pagamento", html)
         self.assertIn("approvata e riservata", html)
         # senza payment_url: email classica, nessun bottone
         html2 = corpo_voucher_html("Casa SR", "BVIP-XXXX-YYYY", "2026-09-10", "2026-09-12",
-                                   "https://bookinvip.com/voucher/tok", pin="1234")
+                                   "https://bookinvip.com/voucher/tok", pin="1234", lingua="it")
         self.assertNotIn("Completa il pagamento", html2)
         self.assertIn("Prenotazione confermata", html2)
 

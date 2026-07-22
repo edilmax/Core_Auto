@@ -17,9 +17,12 @@ from fase64_smartpass import (
 
 SEGRETO = b"0123456789abcdef0123456789abcdef"
 
-# finestra: check-in 2026-07-01 15:00 UTC .. check-out 2026-07-03 11:00 UTC
-DA = _epoch_da_data_ora("2026-07-01", 15)
-A = _epoch_da_data_ora("2026-07-03", 11)
+# La finestra del pass ora e' all'ORA LOCALE dell'alloggio (non UTC per tutti, che era
+# il bug). Si ancora a un fuso vero per avere orari esatti e verificabili.
+FUSO = "Europe/Rome"
+# check-in 2026-07-01 15:00 e check-out 2026-07-03 11:00 ORA DI ROMA
+DA = _epoch_da_data_ora("2026-07-01", 15, FUSO)
+A = _epoch_da_data_ora("2026-07-03", 11, FUSO)
 DENTRO = (DA + A) // 2
 
 
@@ -33,13 +36,13 @@ class TestFinestra(unittest.TestCase):
     def test_apre_nella_finestra(self):
         clock = [DENTRO]
         em, ver = _coppia(clock)
-        token = em.emetti("p1", "casa", "2026-07-01", "2026-07-03")
+        token = em.emetti("p1", "casa", "2026-07-01", "2026-07-03", fuso=FUSO)
         self.assertTrue(ver.verifica(token, "casa").consentito)
 
     def test_troppo_presto(self):
         clock = [DA - 3600]
         em, ver = _coppia(clock)
-        token = em.emetti("p1", "casa", "2026-07-01", "2026-07-03")
+        token = em.emetti("p1", "casa", "2026-07-01", "2026-07-03", fuso=FUSO)
         e = ver.verifica(token, "casa")
         self.assertFalse(e.consentito)
         self.assertEqual(e.motivo, "troppo_presto")
@@ -47,14 +50,14 @@ class TestFinestra(unittest.TestCase):
     def test_scaduto(self):
         clock = [A + 3600]
         em, ver = _coppia(clock)
-        token = em.emetti("p1", "casa", "2026-07-01", "2026-07-03")
+        token = em.emetti("p1", "casa", "2026-07-01", "2026-07-03", fuso=FUSO)
         e = ver.verifica(token, "casa")
         self.assertFalse(e.consentito)
         self.assertEqual(e.motivo, "scaduto")
 
     def test_estremi_inclusi(self):
         em = crea_emettitore_pass(SEGRETO)
-        token = em.emetti("p1", "casa", "2026-07-01", "2026-07-03")
+        token = em.emetti("p1", "casa", "2026-07-01", "2026-07-03", fuso=FUSO)
         for t in (DA, A):
             ver = crea_verificatore_pass(SEGRETO, orologio=lambda tt=t: tt)
             self.assertTrue(ver.verifica(token, "casa").consentito)
@@ -64,7 +67,7 @@ class TestSicurezza(unittest.TestCase):
     def test_porta_sbagliata(self):
         ver = crea_verificatore_pass(SEGRETO, orologio=lambda: DENTRO)
         token = crea_emettitore_pass(SEGRETO).emetti("p1", "casa", "2026-07-01",
-                                                     "2026-07-03")
+                                                     "2026-07-03", fuso=FUSO)
         e = ver.verifica(token, "villa-vicina")
         self.assertFalse(e.consentito)
         self.assertEqual(e.motivo, "alloggio_errato")
@@ -72,7 +75,7 @@ class TestSicurezza(unittest.TestCase):
     def test_firma_manomessa(self):
         ver = crea_verificatore_pass(SEGRETO, orologio=lambda: DENTRO)
         token = crea_emettitore_pass(SEGRETO).emetti("p1", "casa", "2026-07-01",
-                                                     "2026-07-03")
+                                                     "2026-07-03", fuso=FUSO)
         b64, sig = token.split(".")
         payload = json.loads(base64.urlsafe_b64decode(b64))
         payload["valido_a"] = payload["valido_a"] + 10 * 86400   # prova a prolungare
@@ -84,7 +87,7 @@ class TestSicurezza(unittest.TestCase):
 
     def test_chiave_diversa(self):
         token = crea_emettitore_pass(SEGRETO).emetti("p1", "casa", "2026-07-01",
-                                                     "2026-07-03")
+                                                     "2026-07-03", fuso=FUSO)
         ver = crea_verificatore_pass(b"X" * 32, orologio=lambda: DENTRO)
         self.assertFalse(ver.verifica(token, "casa").consentito)
 
@@ -99,7 +102,7 @@ class TestRevoca(unittest.TestCase):
         ver = crea_verificatore_pass(SEGRETO, orologio=lambda: DENTRO,
                                      revocato=lambda pid: pid == "p1")
         token = crea_emettitore_pass(SEGRETO).emetti("p1", "casa", "2026-07-01",
-                                                     "2026-07-03")
+                                                     "2026-07-03", fuso=FUSO)
         e = ver.verifica(token, "casa")
         self.assertFalse(e.consentito)
         self.assertEqual(e.motivo, "revocato")
@@ -116,7 +119,7 @@ class TestRevoca(unittest.TestCase):
             raise RuntimeError("db revoche giu'")
         ver = crea_verificatore_pass(SEGRETO, orologio=lambda: DENTRO, revocato=boom)
         token = crea_emettitore_pass(SEGRETO).emetti("p1", "casa", "2026-07-01",
-                                                     "2026-07-03")
+                                                     "2026-07-03", fuso=FUSO)
         e = ver.verifica(token, "casa")
         self.assertFalse(e.consentito)                       # fail-closed: NEGA
         self.assertEqual(e.motivo, "verifica_revoca_fallita")
@@ -130,8 +133,8 @@ class TestEmissione(unittest.TestCase):
 
     def test_orari_configurabili(self):
         em = EmettitorePass(FirmaQuote(SEGRETO), ora_checkin=14, ora_checkout=10)
-        token = em.emetti("p1", "casa", "2026-07-01", "2026-07-03")
-        da = _epoch_da_data_ora("2026-07-01", 14)
+        token = em.emetti("p1", "casa", "2026-07-01", "2026-07-03", fuso=FUSO)
+        da = _epoch_da_data_ora("2026-07-01", 14, FUSO)     # stesso fuso del token
         ver_prima = crea_verificatore_pass(SEGRETO, orologio=lambda: da - 60)
         ver_dopo = crea_verificatore_pass(SEGRETO, orologio=lambda: da + 60)
         self.assertFalse(ver_prima.verifica(token, "casa").consentito)
@@ -141,7 +144,7 @@ class TestEmissione(unittest.TestCase):
 class TestWallet(unittest.TestCase):
     def test_payload(self):
         token = crea_emettitore_pass(SEGRETO).emetti("p1", "casa", "2026-07-01",
-                                                     "2026-07-03")
+                                                     "2026-07-03", fuso=FUSO)
         p = costruisci_pass_wallet(token, alloggio_id="casa", titolo="Casa al mare",
                                    check_in="2026-07-01", check_out="2026-07-03")
         self.assertEqual(p["payload"], token)

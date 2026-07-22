@@ -49,7 +49,7 @@ class TestPromemoria(unittest.TestCase):
         self.assertNotIn("R5", [r["riferimento"] for r in self.pp.da_promemoriare(oggi="2026-06-01")])
 
     def test_email_template_valido(self):
-        html = corpo_promemoria_checkin_html("Casa Bella", "https://bookinvip.com/voucher/vt.sig")
+        html = corpo_promemoria_checkin_html("Casa Bella", "https://bookinvip.com/voucher/vt.sig", lingua="it")
         self.assertIn("Casa Bella", html)
         self.assertIn("24 ore", html)
         self.assertIn("Segnala un problema", html)

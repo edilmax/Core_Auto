@@ -346,25 +346,32 @@ class TestEmailAgliHost(unittest.TestCase):
     Le pagine erano state sistemate, le email no.
     """
 
-    def _benvenuto(self):
+    def _benvenuto(self, lang="it"):
         from fase86_email import corpo_benvenuto_host_html
-        return corpo_benvenuto_host_html("https://bookinvip.com/host.html")
+        return corpo_benvenuto_host_html("https://bookinvip.com/host.html", lingua=lang)
 
-    def test_dichiara_la_tariffa_tecnica(self):
-        self.assertRegex(self._benvenuto(), r"3\s?%",
-                         "la prima email all'host non nomina il 3% sempre dovuto")
+    def test_dichiara_la_tariffa_tecnica_IN_OGNI_LINGUA(self):
+        """La trasparenza sul 3% e' la prima cosa che un host legge: non puo' mancare in
+        nessuna delle 8 lingue (o in una si prometterebbe qualcosa di diverso)."""
+        from fase86_email import LINGUE
+        mute = [lg for lg in LINGUE if not __import__("re").search(r"3\s?%",
+                                                                   self._benvenuto(lg))]
+        self.assertEqual(mute, [], "il 3%% manca nelle lingue: %s" % mute)
 
-    def test_dichiara_la_promozione_di_lancio(self):
+    def test_dichiara_la_promozione_di_lancio_in_ogni_lingua(self):
         from fase98_policy_commissione import LANCIO_GIORNI_GRATIS
-        corpo = self._benvenuto()
-        self.assertIn("%d giorni" % LANCIO_GIORNI_GRATIS, corpo)
-        self.assertIn("0%", corpo)
+        from fase86_email import LINGUE
+        for lg in LINGUE:
+            corpo = self._benvenuto(lg)
+            self.assertIn(str(LANCIO_GIORNI_GRATIS), corpo,
+                          "i %d giorni mancano in '%s'" % (LANCIO_GIORNI_GRATIS, lg))
+            self.assertRegex(corpo, r"0\s?%", "lo 0%% manca in '%s'" % lg)
 
     def test_non_promette_zero_costi_senza_qualificarlo(self):
-        """"Nessun costo fisso" e' vero solo se subito accanto si dice qual e' il costo
-        variabile sempre dovuto."""
+        """"Nessun costo fisso" (frase ITALIANA) e' vero solo se subito accanto si dice
+        qual e' il costo variabile sempre dovuto."""
         import re
-        corpo = re.sub(r"<[^>]+>", " ", self._benvenuto())
+        corpo = re.sub(r"<[^>]+>", " ", self._benvenuto("it"))
         for m in re.finditer(r"[Nn]essun[^.]{0,80}costo[^.]{0,80}\.", corpo):
             frase = m.group(0)
             self.assertRegex(frase, r"3\s?%",

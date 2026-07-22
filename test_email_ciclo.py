@@ -122,7 +122,7 @@ class TestEmailCiclo(unittest.TestCase):
                       {"alloggio_id": "casa", "check_in": ci, "check_out": co, "party": 2})
         self.assertEqual(s, 200, q)
         s, b = self.g("POST", "/api/concierge/book",
-                      {"quote_token": q["quote_token"], "email": "cli@ec.it"})
+                      {"quote_token": q["quote_token"], "email": "cli@ec.it", "lang": "it"})
         self.assertEqual(s, 201, b)
         return b["riferimento"], b["voucher_token"]
 
@@ -257,14 +257,14 @@ class TestEmailCiclo(unittest.TestCase):
         # cancellazione: rimborso positivo vs zero (frasi diverse, sempre oneste)
         con_r = corpo_cancellazione_html("Casa", 7000, "EUR")
         self.assertIn("70.00 EUR", con_r)
-        senza_r = corpo_cancellazione_html("Casa", 0, "EUR")
+        senza_r = corpo_cancellazione_html("Casa", 0, "EUR", lingua="it")
         self.assertIn("non è previsto", senza_r)
         # credito anti-rimpianto mostrato solo se c'è
-        self.assertIn("Credito Viaggio", corpo_cancellazione_html("Casa", 0, "EUR", 900))
+        self.assertIn("Credito Viaggio", corpo_cancellazione_html("Casa", 0, "EUR", 900, lingua="it"))
         self.assertNotIn("Credito Viaggio", corpo_cancellazione_html("Casa", 0, "EUR", 0))
         # esito controversia: rimborso vs nessun rimborso
-        self.assertIn("50.00 EUR", corpo_esito_controversia_html(5000, "EUR"))
-        self.assertIn("non è stato riconosciuto", corpo_esito_controversia_html(0, "EUR"))
+        self.assertIn("50.00 EUR", corpo_esito_controversia_html(5000, "EUR", lingua="it"))
+        self.assertIn("non è stato riconosciuto", corpo_esito_controversia_html(0, "EUR", lingua="it"))
         # importi rotti non fanno mai crashare (0 onesto)
         self.assertIn("0.00 EUR", corpo_pagamento_confermato_html("Casa", "", "boh", "EUR"))
 

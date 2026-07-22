@@ -381,6 +381,20 @@
 >   Procedura completa e a parole semplici in `REGISTRO_INGEGNERIA.md`, sezione
 >   «DA FARE / PROSSIMI PASSI».
 >
+> · 🌍 **EMAIL IN 8 LINGUE + FUSO NEL MODELLO DATI (2026-07-22)** — i due fronti chiesti,
+>   piu' il TEST IMPOSSIBILE. **Email**: `fase86_email` ora manda TUTTE le email (voucher,
+>   conferma, rimborso, esito, bonifico host, benvenuto, reset, promemoria, recensione) in
+>   8 lingue; ripiego INGLESE mai italiano; importi corretti per valuta; link col `?lang=`.
+>   La lingua dell'ospite viene dal gettone firmato, quella dell'host da `accettazioni.lang`.
+>   **Fuso**: colonna `fuso` (IANA) nella tabella alloggi (dedotta da citta'/paese via
+>   `fase187`, zero dipendenze con `zoneinfo`); check-in, pass serratura, recensioni e
+>   cancellazione ancorati all'ora LOCALE del posto. **Test impossibile** (giapponese a
+>   Tokyo prenota Honolulu in yen): ¥54.000 su Stripe, email giapponese, pass alle 15:00
+>   di Honolulu, ripensamento 172.800s — 5 test verdi. Guardie: `test_email_localizzate`
+>   (7), `test_fuso_alloggio` (12), `test_impossibile_tokyo_honolulu` (5), tutte rosse sul
+>   codice vecchio. ⚙️ Gli annunci di produzione senza fuso usano il ripiego prudente:
+>   opzionale un backfill del `fuso` da citta' (non urgente, il ripiego e' sicuro).
+>
 > · 🛡️ **MESSA IN SICUREZZA ESEGUITA (2026-07-22) — 3 riparazioni + IL GUARDIANO**.
 >   Dopo che 3 audit convergevano su UNA lacuna (nessuno controlla in automatico gli
 >   «stati impossibili» e nessuno grida), il piano è stato eseguito tutto:

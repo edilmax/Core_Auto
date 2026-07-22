@@ -295,6 +295,10 @@ class EscrowGaranzia:
                 "importo_host_cents": int(r["importo_host_cents"]),
                 "host_riceve_cents": int(r["host_riceve_cents"]),
                 "ospite_rimborso_cents": int(r["ospite_rimborso_cents"]),
+                "aperto_ts": int(r["aperto_ts"]),
+                # quando la finestra di contestazione si chiude (ancorata all'ora locale
+                # dell'alloggio dal 2026-07-22): utile all'ospite e al Guardiano
+                "sblocco_auto_ts": int(r["sblocco_auto_ts"]),
                 "motivo": r["motivo"], "money_unit": "cents_integer"}
 
 

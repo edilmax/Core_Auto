@@ -162,7 +162,7 @@ class TestE2EHostAvvisato(unittest.TestCase):
 
         # host REGISTRATO (cosi' info_host(host_id) trova email+telefono)
         s, c = g("POST", "/api/host/registrazione",
-                 {"email": "host@b.it", "password": "passw0rd!", "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
+                 {"email": "host@b.it", "password": "passw0rd!", "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True, "lang": "it",
                   "telefono": "+39 333 9999999"})
         self.assertEqual(s, 201)
         hid = c["host_id"]

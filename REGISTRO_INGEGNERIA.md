@@ -728,6 +728,36 @@ aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre i
 - Split-payment REALE (link per amico, all-or-nothing) — PARCHEGGIATO dal fondatore.
 - Video AI multilingua (pool 164/165 pronto; manca la generazione video).
 
+## 2-sexies) 🌍 EMAIL IN 8 LINGUE + FUSO NEL MODELLO DATI (2026-07-22)
+
+### Email transazionali localizzate (`fase86_email.py`)
+Prima 9 email su 10 erano in italiano fisso: un ospite giapponese che pagava riceveva la
+conferma, il **voucher**, il **rimborso**, l'**esito controversia** in italiano. Ora la
+lingua viaggia nel gettone firmato del voucher (`lang`) e nel record, e **tutte le email**
+(ospite e host) escono in 8 lingue (it/en/es/fr/de/pt/ja/zh) da una tabella `_TR` (56
+chiavi × 8). Il ripiego e' l'**INGLESE**, mai l'italiano implicito. Gli importi passano da
+`_soldi` (fase99): ¥54.000, non 540.00. I link del voucher portano `?lang=`. Le lingue
+degli host vengono da `accettazioni.lang`; quella dell'ospite dal voucher.
+🐞 Trovato in costruzione: `_wrap` faceva un **doppio escape** dell'h2 (&amp;lt; invece di
+&lt;) — XSS-safe ma testo sbagliato; corretto. Guardia `test_email_localizzate` (7): ogni
+email in ogni lingua, nessuna perdita di italiano, ripiego inglese, XSS-safe, valuta
+corretta. Provata rossa.
+
+### Il fuso nel modello dati — vedi anche fase187
+La colonna `fuso` (IANA) e' ora nella tabella `alloggi` (migrazione ALTER TABLE, dedotta
+da citta'/paese o data dall'host). I calcoli sul tempo — check-in/escrow, pass serratura
+(fase64), sblocco recensioni, finestra di cancellazione — sono ancorati all'ORA LOCALE del
+posto. Gli annunci esistenti senza fuso usano il ripiego prudente (mai una tutela piu'
+stretta). Guardia `test_fuso_alloggio` (12).
+
+### 🧪 IL TEST IMPOSSIBILE (`test_impossibile_tokyo_honolulu`, 5)
+Un giapponese (browser UTC+9) prenota una casa a Honolulu (UTC-10) prezzata in yen, in UN
+flusso vero: (1) Stripe addebita ¥54.000 SENZA decimali; (2) email e voucher in
+GIAPPONESE, link `?lang=ja`; (3) pass serratura alle **15:00 di Honolulu** (19h di scarto
+da Tokyo — il fuso e' quello dell'ALLOGGIO); (4) finestra contestazione ancorata a
+Honolulu; (5) ripensamento 172.800 secondi VERI. Se e' verde, i quattro difetti da
+catastrofe non tornano insieme in silenzio.
+
 ## 2-quinquies) 🕐 AUDIT FUSI ORARI, INPUT E TEST CIECHI (2026-07-22)
 
 ### A. FUSI — cosa era salvo e cosa no
@@ -1070,3 +1100,4 @@ sempre "morto": molti sono librerie usate da altri moduli.
 | 184 | `fase184_marca_temporale.py` | boot (`MARCA_TEMPORALE`, `DB_MARCHE`) + router (`GET /api/bunker/marche_temporali`, `GET /api/bunker/marca.tsr`, `POST /api/bunker/marca_ora`) + tick giornaliero | **MARCA TEMPORALE RFC 3161**: l'ora dei registri certificata da un'Autorità ESTERNA (DigiCert/Sectigo/Entrust, failover). ASN.1/DER scritto a mano, zero dipendenze. Manda solo un'impronta SHA-256: la TSA non vede nulla. **Prestatori QUALIFICATI europei** (ACCV/QuoVadis/Izenpe/BOSA) con qualifica letta dal token (OID ETSI 0.4.0.19422.1.1) e ripiego onestamente etichettato. Token archiviato append-only e verificabile da terzi con `openssl ts -verify`. ACCESO (riga ⏱️ sez.1). |
 | 185 | `fase185_testi_legali.py` | router (`GET /api/legale/documento?doc=termini\|privacy&lang=..`) + gusci `deploy/termini.html` e `deploy/privacy.html` | **TESTI LEGALI MULTILINGUA**: termini e privacy in **tutte e 8 le lingue** (it/en/es/fr/de/pt/ja/zh), con versione, impronta SHA-256, lingue REALMENTE fornite (non solo dichiarate) e clausola «fa fede l'italiano». Le percentuali arrivano da fase98 e la penale da fase83: mai scritte a mano — provato che tutte e 8 le lingue portano le STESSE percentuali. ✅ **ACCESO e CABLATO** (2026-07-21): il modulo era completo ma **scollegato**, e il sito continuava a mostrare le vecchie pagine statiche in italiano (lo ha visto il fondatore: «clicco termini e lo leggo solo italiano»). Guardie: `test_testi_legali` (19). |
 | 186 | `fase186_guardiano.py` | boot (tick giornaliero) + router (`GET /api/bunker/guardiano`) + config `email_alert` (env `ALERT_EMAIL`) | **IL GUARDIANO DEGLI STATI IMPOSSIBILI**: giro automatico giornaliero che cerca gli stati che NON dovrebbero poter esistere — conti che non tornano con Stripe (riusa fase182), **escrow bloccati** (garanzie scadute da >48h), **bonifici fermi** (payout maturato da >7gg), **payout orfani** (host che non esiste piu'). READ-ONLY; se trova qualcosa **GRIDA con un'email** all'amministratore (`email_alert`→`email_mittente`→info@). Nato dall'audit del 2026-07-22, dove 3 indagini convergevano su questa lacuna: fase182 esisteva ma era un bottone MANUALE. Soglie larghe (mai gridare al lupo). ACCESO. Guardie: `test_guardiano` (7, ogni stato provato rosso). |
+| 187 | `fase187_fuso_orario.py` | usato da fase57 (colonna `fuso`), fase83 (check-in/escrow, recensione, cancellazione) e fase64 (pass serratura) | **IL FUSO ORARIO DELL'ALLOGGIO**: nomi IANA ('Europe/Rome','Asia/Tokyo','Pacific/Honolulu') via `zoneinfo` (stdlib, DB IANA di sistema — **zero dipendenze**). L'alloggio ha ora una colonna `fuso` nel DB (dedotta da citta'/paese o data dall'host); tutti i calcoli sul tempo — check-in, finestra di contestazione escrow, sblocco recensioni, pass serratura, finestra di cancellazione — sono ancorati all'ORA LOCALE del posto, non del server. Senza fuso, ripiego prudente (mai una tutela piu' stretta). Chiude il difetto dell'audit 2026-07-22 (Honolulu riceveva 12h di tutela invece di 24). Guardia `test_fuso_alloggio` (12, provata rossa). |
