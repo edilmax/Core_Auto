@@ -114,6 +114,10 @@ class Lettore(HTMLParser):
 
 
 DOMINIO = re.compile(r"^[a-z0-9-]+\.[a-z]{2,}$", re.I)
+# un'email e' testo visibile ma NON prosa da tradurre: info@bookinvip.com e' uguale in ogni
+# lingua (come i domini/marchi gia' esclusi). Senza questo, un contatto email conta come
+# "parola italiana" e boccia una pagina per niente.
+EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", re.I)
 
 
 def _e_prosa(parola):
@@ -127,7 +131,7 @@ def _e_prosa(parola):
     «Buenos Aires» no.
     """
     nudo = re.sub(r"[^A-Za-zÀ-ÿ]", "", parola)
-    if len(nudo) < 3 or NON_PROSA.match(parola) or DOMINIO.match(parola):
+    if len(nudo) < 3 or NON_PROSA.match(parola) or DOMINIO.match(parola) or EMAIL.match(parola):
         return False
     return nudo[:1].islower()
 

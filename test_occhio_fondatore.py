@@ -5,10 +5,12 @@ COSA SORVEGLIA.
 restano in italiano qualunque lingua scelga l'utente (tutto cio' che sta fuori dagli
 elementi marcati `data-t` / `data-i18n` non viene mai sostituito).
 
-Oggi sono **63**. Erano **1808**, poi **1034**: ora anche le 3 pagine interne che erano
-solo in italiano (`bunker`, `guida-operativa`, `kit-marketing`) sono tradotte in 8 lingue
-(2026-07-22, `data-i18n`/`data-i18n-html` + dizionario). Restano solo piccoli residui su
-`admin` (27), `index` (24) e briciole. E' un debito vero, aperto, che si paga pagina per pagina.
+Oggi sono **10**. Erano **1808**, poi **1034**, poi **63**: 2026-07-22 tradotte in 8 lingue
+prima le 3 pagine interne (`bunker`/`guida-operativa`/`kit-marketing`), poi `admin` (100%) e
+la home `index` (100%, i 4 messaggi beta+flex portati allo standard `data-t`+server i18n). I
+**10** che restano sono briciole su pagine gia' OK (`host` 3, `commissioni`/`guida` 1) e i
+**gusci** serviti dal motore in 8 lingue (`termini`/`privacy`/`grazie`/`annullato`/`contratto-host`,
+1 ciascuno: non traducibili lato client, il testo arriva dal server). Debito quasi chiuso.
 
 PERCHE' UN TETTO E NON UN «TUTTO A ZERO».
 Pretendere zero subito renderebbe la suite rossa per un lavoro non ancora fatto, e una
@@ -38,22 +40,22 @@ import occhio_del_fondatore as occhio                          # noqa: E402
 # pagina -> parole italiane che oggi restano ferme. SI ABBASSA SOLO A MANO, dopo aver
 # tradotto. Se un numero e' piu' alto del reale, il test lo dice: va allineato in basso.
 TETTO = {
-    "admin.html": 27,
+    "admin.html": 0,
     "annullato.html": 1,
     "bunker.html": 0,
-    "commissioni.html": 2,
+    "commissioni.html": 1,
     "contratto-host.html": 1,
-    "diventa-host.html": 1,
+    "diventa-host.html": 0,
     "grazie.html": 1,
     "guida-operativa.html": 1,
     "host.html": 3,
-    "index.html": 24,
+    "index.html": 0,
     "kit-marketing.html": 0,
     "privacy.html": 1,
     "termini.html": 1,
 }
 
-TOTALE_OGGI = 63
+TOTALE_OGGI = 10
 
 
 class TestNessunPassoIndietro(unittest.TestCase):
