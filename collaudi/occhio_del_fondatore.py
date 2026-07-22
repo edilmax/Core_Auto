@@ -37,6 +37,14 @@ import re
 import sys
 from html.parser import HTMLParser
 
+# Windows: la console cp1252 non regge le emoji del report e l'audit moriva a meta'
+# (UnicodeEncodeError su 👏). Uno strumento di collaudo non deve MAI cadere per un carattere:
+# si forza l'uscita in UTF-8 tollerante, cosi' il verdetto arriva sempre in fondo.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 QUI = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(QUI)
 PAGINE = os.path.join(REPO, "deploy")

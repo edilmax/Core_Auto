@@ -235,6 +235,40 @@ def _istante_fine_tutela(check_in: str, ore_finestra: int = 24) -> Optional[int]
     return int((inizio + _d.timedelta(hours=int(ore_finestra))).timestamp())
 
 
+def _line_token_valido(s: str) -> bool:
+    """Un LINE Notify token e' una stringa-token: lettere/cifre/-/_ , niente spazi, niente
+    '@' (un'email non e' un token), non un URL. Vuoto = valido (campo OPZIONALE)."""
+    t = str(s or "").strip()
+    if not t:
+        return True
+    if " " in t or "@" in t or t.lower().startswith(("http://", "https://")):
+        return False
+    import re as _re
+    return bool(_re.fullmatch(r"[A-Za-z0-9_\-]{8,200}", t))
+
+
+def _wechat_webhook_valido(s: str) -> bool:
+    """Un webhook WeChat Work e' un URL HTTPS (es. https://qyapi.weixin.qq.com/...).
+    Vuoto = valido (campo OPZIONALE). Si rifiuta un'email o testo a caso."""
+    u = str(s or "").strip()
+    if not u:
+        return True
+    if " " in u or "@" in u.split("://")[-1].split("/")[0]:
+        return False
+    return u.lower().startswith("https://") and "." in u.split("://")[-1].split("/")[0]
+
+
+def _valida_canali_opzionali(dati: Dict[str, Any]):
+    """Ritorna (400, {...}) se un canale opzionale e' compilato MALE, altrimenti None.
+    Serve a dare all'host un errore CHIARO sul campo giusto, senza far nascere un account
+    con un webhook rotto (che poi fallirebbe in silenzio al primo avviso)."""
+    if not _line_token_valido(dati.get("line_token", "")):
+        return (422, {"errore": "line_token_non_valido", "campo": "line_token"})
+    if not _wechat_webhook_valido(dati.get("wechat_webhook", "")):
+        return (422, {"errore": "wechat_webhook_non_valido", "campo": "wechat_webhook"})
+    return None
+
+
 def _istante_checkin(check_in: str, fuso: str = "") -> Optional[int]:
     """L'istante (epoch UTC) del check-in alle 15:00 ORA LOCALE DELL'ALLOGGIO.
 
@@ -1393,13 +1427,22 @@ class RouterHTTP:
         self._admin_key = admin_key
         self._base_url = base_url or ""
         self._loc = Localizzatore()
-        # RATE LIMIT autenticazione (fase179): policy del fondatore "5 tentativi/min per IP"
-        # + backoff crescente. In-process (come il throttle preventivi). Isolato: se il
-        # modulo mancasse, l'auth resta invariata (nessun limite, mai un crash).
+        # RATE LIMIT autenticazione (fase179), RICALIBRATO il 2026-07-22 dopo che un host
+        # VERO e' finito in lockout provando la password (log di produzione). Difende dal
+        # brute-force ma NON deve punire chi sbaglia in buona fede (caps-lock, password
+        # salvata vecchia, refuso):
+        #   - soglia 8/min (era 5): margine per un umano che sbaglia; per un attaccante 8
+        #     tentativi al minuto contro una password >=8 caratteri sono comunque inutili;
+        #   - primo blocco 30s (era 60): fastidio breve, non una porta sbattuta;
+        #   - blocco MASSIMO 10 min (era 60): un host onesto non resta MAI chiuso fuori
+        #     un'ora. Anche a regime, ~8 tentativi ogni 10 min = ~48/ora: brute-force
+        #     online impraticabile, ma l'utente vero recupera in fretta.
+        # Resta PER IP (mai per-email: bloccare un account con password sbagliate da un IP
+        # qualsiasi sarebbe un DoS sull'host onesto).
         try:
             from fase179_rate_limit import crea_rate_limiter
-            self._rate = crea_rate_limiter(soglia=5, finestra_sec=60,
-                                           base_blocco_sec=60, max_blocco_sec=3600)
+            self._rate = crea_rate_limiter(soglia=8, finestra_sec=60,
+                                           base_blocco_sec=30, max_blocco_sec=600)
         except Exception:
             self._rate = None
 
@@ -6393,6 +6436,12 @@ class RouterHTTP:
                     if not bool(v)]
         if mancanti:
             return 422, {"errore": "consensi_mancanti", "mancanti": mancanti}
+        # CANALI OPZIONALI (Line/WeChat) compilati male -> errore CHIARO sul campo, e la
+        # registrazione NON passa dal rate limiter del login: sbagliare un campo opzionale
+        # non deve MAI consumare i tentativi d'accesso ne' far scattare 'troppi_tentativi'.
+        errore_canali = _valida_canali_opzionali(dati)
+        if errore_canali is not None:
+            return errore_canali
         e = reg.registra(dati.get("email"), dati.get("password"),
                          accetta_termini=bool(dati.get("accetta_termini")),
                          ragione_sociale=str(dati.get("ragione_sociale", "")),

@@ -1,12 +1,15 @@
 """Collaudo RATE LIMIT autenticazione (fase179 + agganci fase83) — anti brute-force.
 
-Policy fondatore: 5 tentativi/min per IP sul login (+ backoff crescente e chiave per-email).
-Kimi-NTU: Testare (6 richieste rapide -> il 6° e' 429), Isolare (in-process, nessun I/O),
+Policy (RICALIBRATA 2026-07-22): 8 tentativi/min per IP sul login, primo blocco 30s, blocco
+MASSIMO 10 min. Prima era 5/min con blocco fino a 1h: un caso VERO nei log di prod aveva chiuso
+fuori un host onesto che provava la password. Piu' spazio per lo sbaglio in buona fede, stessa
+difesa dal brute-force (+ backoff crescente, PER-IP mai per-email = niente account-lockout DoS).
+Kimi-NTU: Testare (9 richieste rapide -> il 9° e' 429), Isolare (in-process, nessun I/O),
 Verificare (IP diversi = bucket diversi -> l'app vede DAVVERO chi chiama), Scalare (soglie).
 Invarianti:
-  1. RateLimiter: 5 fallimenti/finestra -> lockout; successo azzera; backoff raddoppia;
-     memoria limitata (sfratto LRU) -> un attaccante che ruota chiavi non gonfia la RAM;
-  2. login: 6 tentativi rapidi dallo STESSO IP -> il 6° e' 429 (loggato); un ALTRO IP NON
+  1. RateLimiter (meccanismo, soglia d'esempio 5): N fallimenti/finestra -> lockout; successo
+     azzera; backoff raddoppia; memoria limitata (sfratto LRU) -> chi ruota chiavi non gonfia RAM;
+  2. login: 9 tentativi rapidi dallo STESSO IP -> il 9° e' 429 (loggato); un ALTRO IP NON
      e' bloccato (traffico legittimo non influenzato); un login RIUSCITO azzera il contatore;
   3. la chiave admin sbagliata a raffica da un IP -> lockout di QUELL'IP; la chiave giusta
      da un altro IP funziona sempre.
@@ -87,13 +90,14 @@ class TestLoginThrottle(unittest.TestCase):
                                json.dumps({"email": email, "password": pw}),
                                {"X-Forwarded-For": ip})
 
-    def test_sei_richieste_rapide_il_sesto_e_429(self):
+    def test_otto_rapide_ok_poi_il_nono_e_429(self):
+        # policy ricalibrata: 8 tentativi/min ammessi, il 9° blocca (soglia=8)
         ip = "203.0.113.7"
-        for i in range(5):
+        for i in range(8):
             s, _ = self._login("vero@collaudo.invalid", "sbagliata", ip)
-            self.assertEqual(s, 401, "tentativo %d deve essere 401" % (i + 1))
+            self.assertEqual(s, 401, "tentativo %d deve essere 401 (sotto soglia 8)" % (i + 1))
         s, body = self._login("vero@collaudo.invalid", "sbagliata", ip)
-        self.assertEqual(s, 429, "il 6° tentativo deve essere BLOCCATO (429)")
+        self.assertEqual(s, 429, "il 9° tentativo deve essere BLOCCATO (429)")
         self.assertEqual(body["errore"], "troppi_tentativi")
         self.assertGreater(body["riprova_tra_sec"], 0)
 
@@ -122,7 +126,7 @@ class TestLoginThrottle(unittest.TestCase):
     def test_admin_key_brute_force_per_ip(self):
         ip = "203.0.113.66"
         h = lambda k: {"X-Admin-Key": k, "X-Forwarded-For": ip}
-        for _ in range(6):
+        for _ in range(8):     # soglia ricalibrata a 8: servono 8 fallimenti per il lockout
             self.r.gestisci("GET", "/api/admin/alloggi", {}, None, h("chiave-sbagliata"))
         # QUELL'IP ora e' in lockout: anche la chiave GIUSTA da lì e' negata
         s, _ = self.r.gestisci("GET", "/api/admin/alloggi", {}, None, h("ak"))
