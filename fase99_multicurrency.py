@@ -19,6 +19,8 @@ PURO/deterministico: il tasso è iniettato (test senza rete). `ProviderTassi` ga
 """
 from __future__ import annotations
 
+import threading
+import time
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Callable, Dict, Optional
@@ -150,23 +152,87 @@ def converti(importo: Denaro, valuta_dest: str, tasso_mid: Any, *,
 
 class ProviderTassi:
     """Tassi mid-market da fonte REALE (Open Exchange Rates free tier). GATED da app_id:
-    senza chiave → tasso None. `fetch(url)->dict` iniettabile (test senza rete). Isolato."""
+    senza chiave → tasso None. `fetch(url)->dict` iniettabile (test senza rete). Isolato.
+
+    CACHE NON-BLOCCANTE (stale-while-revalidate). I tassi OXR si aggiornano ~ogni ora e il
+    piano gratuito consente ~1000 chiamate/mese: perciò NON si contatta OXR a ogni preventivo.
+    L'ultimo pacchetto di tassi resta in memoria per `ttl_sec` (default 6h → ~4 chiamate al
+    giorno); quando scade, si RI-scarica in un thread di SFONDO mentre si continuano a servire
+    i tassi vecchi. `tasso()` non blocca MAI la richiesta dell'utente:
+      · cache fresca            → calcolo immediato dai tassi in memoria;
+      · cache scaduta           → rinfresco in sfondo + intanto servo i tassi vecchi (stale);
+      · cache ancora vuota      → None (la stima «≈» non compare per QUEL preventivo, ricompare
+                                  appena lo scarico di sfondo finisce, ~1s dopo);
+      · OXR irraggiungibile     → continuo a servire i tassi vecchi (fail-safe), mai un errore.
+    Un solo scarico alla volta (lock). Orologio iniettabile → test deterministici sul TTL."""
     URL = "https://openexchangerates.org/api/latest.json?app_id=%s"
+    TTL_SEC = 6 * 3600
+    TIMEOUT_SEC = 6
 
     def __init__(self, app_id: str, *,
-                 fetch: Optional[Callable[[str], Dict[str, Any]]] = None) -> None:
+                 fetch: Optional[Callable[[str], Dict[str, Any]]] = None,
+                 orologio: Optional[Callable[[], float]] = None,
+                 ttl_sec: Optional[int] = None) -> None:
         self._app = app_id or ""
         self._fetch = fetch or self._fetch_reale
+        self._orologio = orologio or time.time
+        self._ttl = int(ttl_sec) if ttl_sec is not None else self.TTL_SEC
+        self._rates: Optional[Dict[str, Any]] = None
+        self._ts = 0.0
+        self._lock = threading.Lock()
+        self._in_corso = False
 
-    def tasso(self, origine: str, dest: str) -> Optional[Decimal]:
-        """Cross-rate dest per 1 origine. OXR free tier ha base USD → si calcola via USD."""
+    def _fresco(self) -> bool:
+        return self._rates is not None and (self._orologio() - self._ts) < self._ttl
+
+    def aggiorna(self) -> bool:
+        """Scarico SINCRONO dei tassi → aggiorna la cache. Usato dal thread di sfondo E dai
+        test. Isolato: qualunque errore → cache INVARIATA (stale preservato), ritorna False."""
         if not self._app:
-            return None
+            return False
         try:
             data = self._fetch(self.URL % self._app)
             rates = data.get("rates") if isinstance(data, dict) else None
-            if not isinstance(rates, dict):
-                return None
+            if isinstance(rates, dict) and rates:
+                with self._lock:
+                    self._rates = rates
+                    self._ts = self._orologio()
+                return True
+        except Exception:
+            pass
+        return False
+
+    def scalda(self) -> None:
+        """Avvia UN solo scarico in un thread daemon: non blocca il chiamante. Chiamato allo
+        startup (scalda la cache) e da `tasso()` quando la cache è scaduta."""
+        if not self._app:
+            return
+        with self._lock:
+            if self._in_corso:
+                return
+            self._in_corso = True
+
+        def _lavoro() -> None:
+            try:
+                self.aggiorna()
+            finally:
+                with self._lock:
+                    self._in_corso = False
+
+        threading.Thread(target=_lavoro, daemon=True, name="oxr-tassi").start()
+
+    def tasso(self, origine: str, dest: str) -> Optional[Decimal]:
+        """Cross-rate dest per 1 origine (via USD, base del piano free). Serve dalla CACHE; se
+        scaduta, rinfresca in SFONDO e intanto serve i tassi vecchi. NON blocca mai."""
+        if not self._app:
+            return None
+        if not self._fresco():
+            self.scalda()
+        with self._lock:
+            rates = self._rates
+        if not isinstance(rates, dict):
+            return None
+        try:
             o = str(origine).upper()
             d = str(dest).upper()
             ro = Decimal(str(rates[o])) if o != "USD" else Decimal(1)
@@ -180,9 +246,10 @@ class ProviderTassi:
     def _fetch_reale(self, url: str) -> Dict[str, Any]:  # pragma: no cover
         import json
         import urllib.request
-        with urllib.request.urlopen(url, timeout=15) as r:
+        with urllib.request.urlopen(url, timeout=self.TIMEOUT_SEC) as r:
             return json.loads(r.read())
 
 
-def crea_provider_tassi(app_id: Optional[str], *, fetch: Any = None) -> ProviderTassi:
-    return ProviderTassi(app_id or "", fetch=fetch)
+def crea_provider_tassi(app_id: Optional[str], *, fetch: Any = None,
+                        orologio: Any = None, ttl_sec: Any = None) -> ProviderTassi:
+    return ProviderTassi(app_id or "", fetch=fetch, orologio=orologio, ttl_sec=ttl_sec)

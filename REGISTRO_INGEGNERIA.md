@@ -208,7 +208,7 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 | — | **Split-payment REALE** (link per amico, all-or-nothing) | PARCHEGGIATO dal fondatore ("ci complichiamo la vita") | vedi memory handoff |
 | — | **Video AI multilingua** (YouTube/Reels/TikTok) | pool 164/165 pronto; serve generazione video (ffmpeg o AI a pagamento) | marketing video |
 | — | **Instagram/WhatsApp** | bloccati lato Meta (App Review / numero WhatsApp Manager) | canali |
-| — | **OXR** (cambio valuta stima ospite) | `OXR_APP_ID` gratis nel .env | UX prezzo |
+| — | **OXR** — convertitore valuta "≈ nella tua moneta" (stima ospite) | 🔧 2026-07-22: **CACHE NON-BLOCCANTE COSTRUITA** (fase99 `ProviderTassi`: stale-while-revalidate, TTL 6h → ~4 chiamate/giorno dentro il free 1000/mese, ri-scarico in **thread di SFONDO** → `tasso()` non blocca MAI la richiesta, fail-safe se OXR è giù; scaldata al boot da fase81 `_tassi.scalda()`; `test_convertitore_valuta` 11, cache viste rosse sul vecchio). **Solo DISPLAY**: l'addebito Stripe resta in `valuta` dell'alloggio, `totale_indicativo_cents`/`valuta_indicativa` non toccano mai la carica (verificato fase59+fase85). **ACCENSIONE: 1 sola env `OXR_APP_ID` sul VPS + restart** (chiave gratis su openexchangerates.org) — il codice è già pronto e gated (senza chiave resta spento, zero effetti) | UX prezzo |
 
 ## 📋 PIANO "MACCHINA COMPLETA" (2026-07-14, ordine del fondatore: tutto attivo, gratis, autonomo)
 **Logica di selezione:** attivo SOLO ciò che è gratis+autonomo+valore vero (no teatro). Dai colossi prendo ciò che manca e sfrutto i loro errori (spam remarketing → email onesta; preferiti dietro login → preferiti senza login).

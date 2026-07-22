@@ -267,6 +267,7 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         try:
             from fase99_multicurrency import crea_provider_tassi
             _tassi = crea_provider_tassi(cfg.oxr_app_id)
+            _tassi.scalda()                              # scalda la cache tassi in SFONDO (non blocca il boot)
             _tasso = lambda da, a: _tassi.tasso(da, a)   # noqa: E731
             componenti.append("cambio_indicativo(99)")
         except Exception:
