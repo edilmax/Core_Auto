@@ -84,3 +84,9 @@ collaudi/rapporto_*.txt
 collaudi/*.tsr
 collaudi/*.tsq
 collaudi/__pycache__/
+collaudi/screenshot_visivi/
+
+# --- Collaudo VISIVO (Playwright): node_modules enorme, MAI nel repo; package.json SI'
+#     (documenta la dipendenza), package-lock resta ignorato da *.json ---
+node_modules/
+!package.json

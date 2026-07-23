@@ -1,0 +1,24 @@
+{
+  "name": "core_auto",
+  "version": "1.0.0",
+  "description": "> **Questo file è la porta d'ingresso al progetto.** Descrive la macchina **com'è OGGI** > (aggiornato **2026-07-21**). Se un'informazione qui contraddice un documento più vecchio, > **vale questa**. I documenti storici stanno in `_archivio/` e **non vanno seguiti**. > > **I 5 documenti ufficiali — gli UNICI da leggere e aggiornare:** > > | File | A cosa serve | > |---|---| > | `README.md` | **questo**: cos'è la macchina, struttura, motore, tariffe, consensi | > | `REGISTRO_INGEGNERIA.md` | registro di **ogni modulo**: cosa fa, se è acceso o spento, come si accende | > | `RIPRENDI_QUI.md` | **stato vivo**: a che punto siamo, cosa è stato fatto per ultimo | > | `DEPLOY.md` | come si mette online (procedura operativa) | > | `CLAUDE.md` | regole ferree per chi (umano o IA) mette le mani sul progetto | > > ⛔ **Non si creano altri file `.md`.** Ogni aggiornamento modifica uno di questi cinque.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edilmax/Core_Auto.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/edilmax/Core_Auto/issues"
+  },
+  "homepage": "https://github.com/edilmax/Core_Auto#readme",
+  "dependencies": {
+    "playwright": "^1.61.1"
+  }
+}

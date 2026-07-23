@@ -272,8 +272,9 @@ class TestFusoOrario(_Base):
         self.pubblica(slug, giorni_da_oggi=0, fuso=fuso)
         ci, co = self.dd(giorni, notti=1)
         ore = self._ore_reali(fuso, ci)
-        if ore is None:
-            self.skipTest("zoneinfo non disponibile (ambiente)")   # skip SOLO ambientale
+        # zoneinfo e' stdlib (3.9+): deve esserci. Niente skip (sarebbe una zona cieca): se
+        # manca e' un difetto d'ambiente vero, e vogliamo vederlo, non nasconderlo.
+        self.assertIsNotNone(ore, "zoneinfo/ora locale non calcolabile: ambiente rotto")
         atteso_penale = ore < 24
         q, b = self.prenota(slug, ci, co)
         if b.get("modo_pagamento") != "in_struttura":
