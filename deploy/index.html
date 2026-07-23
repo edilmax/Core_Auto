@@ -17,7 +17,7 @@
   --brand-chiaro:#155724;
   --oro:#8a6d0b;
   --testo:#1a1e2b;
-  --testo-tenue:#5e6f8d;
+  --testo-tenue:#46536b;
   --bordo:#dce1ed;
   --sfondo:#f4f6fa;
   --sfondo-tenue:#eef2f7;
@@ -70,7 +70,7 @@
   .mtab .em{font-size:1.1rem}
   .mtab .ml{display:flex;flex-direction:column;align-items:flex-start;line-height:1.05}
   .mtab .ml small{font-weight:500;font-size:.66rem;color:var(--testo-tenue);opacity:.9}
-  .mtab.on .ml small{color:var(--brand);opacity:.72}
+  .mtab.on .ml small{color:var(--brand);opacity:.95}
   .motoreMsg{text-align:center;margin:.6rem auto 0;background:var(--giallo-bg);border:1px solid #f0dfb8;color:#8a5200;font-size:.85rem;padding:.4rem .85rem;border-radius:.6rem;width:max-content;max-width:92%}
   .hbadges{display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;margin:1rem 0 0;position:relative;z-index:2;font-size:.82rem}
   .hbadges span{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.14);padding:.34rem .7rem;border-radius:2rem;color:#fff}
@@ -193,7 +193,7 @@
       <label data-t="checkout">Check-out<input type="date" id="checkout"></label>
       <label data-t="ospiti">Ospiti<input type="number" id="ospiti" value="2" min="1" max="20"></label>
       <label data-t="max_prezzo">Max €<input type="number" id="prezzomax" data-tph="ph_prezzomax" placeholder="es. 150" min="0"></label>
-      <label id="lblRaggio" data-t="raggio">Raggio<select id="raggio"><option value="0.1">100 m</option><option value="0.25">250 m</option><option value="0.5">500 m</option><option value="1" selected>1 km</option><option value="2">2 km</option><option value="5">5 km</option><option value="10">10 km</option><option value="25">25 km</option><option value="50">50 km</option></select></label>
+      <label id="lblRaggio" data-t="raggio">Raggio<select id="raggio" aria-label="Raggio ricerca"><option value="0.1">100 m</option><option value="0.25">250 m</option><option value="0.5">500 m</option><option value="1" selected>1 km</option><option value="2">2 km</option><option value="5">5 km</option><option value="10">10 km</option><option value="25">25 km</option><option value="50">50 km</option></select></label>
       <button type="submit" id="btnCerca">Cerca</button>
       <button type="button" id="btnVicino" data-ttitle="vicino_title" title="Trova alloggi vicino a dove ti trovi ora">📍 <span data-t="vicino_a_me">Vicino a me</span></button>
     </div>
@@ -634,7 +634,7 @@ async function apri(slug){
       if(q.sconto_non_rimborsabile_cents>0) righe += `<div style="margin-top:.4rem;font-size:.85rem;color:var(--oro)">🔒 ${t('non_rimb')} · ${t('risparmi')} ${money(q.sconto_non_rimborsabile_cents,V)}</div>`;
       if(q.sconto_soggiorno_lungo_cents>0) righe += `<div style="margin-top:.4rem;font-size:.85rem;color:var(--brand-chiaro)">📅 ${mt('sc_lungo')} · ${t('risparmi')} ${money(q.sconto_soggiorno_lungo_cents,V)}</div>`;
       const _tot = q.totale_cents||q.prezzo_guest_cents;
-      righe += `<div style="margin-top:.5rem;font-size:.85rem">👥 ${t('dividi_amici')} <select id="splitN" style="padding:.2rem .3rem">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${n===1?' selected':''}>${n}</option>`).join('')}</select> <span id="splitOut" style="color:var(--brand-chiaro);font-weight:600"></span></div>`;
+      righe += `<div style="margin-top:.5rem;font-size:.85rem">👥 ${t('dividi_amici')} <select id="splitN" aria-label="${esc(t('dividi_amici'))}" style="padding:.2rem .3rem">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${n===1?' selected':''}>${n}</option>`).join('')}</select> <span id="splitOut" style="color:var(--brand-chiaro);font-weight:600"></span></div>`;
       righe += `<div id="cd" style="margin-top:.6rem;padding:.5rem .7rem;background:#fff4e5;border:1px solid #ffd9a8;border-radius:.6rem;font-size:.85rem;color:#8a5200;font-weight:600;text-align:center"></div>`;
       righe += `<div style="margin-top:.5rem;text-align:center"><button id="btnPrevMail" style="background:#fff;color:var(--brand);border:1.5px solid var(--brand);padding:.45rem 1rem;font-size:.88rem;border-radius:.6rem;cursor:pointer">📧 ${t('invia_preventivo')}</button><div id="prevMailMsg" style="font-size:.82rem;margin-top:.3rem"></div></div>`;
       mq.innerHTML = righe;
