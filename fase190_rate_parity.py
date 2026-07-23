@@ -181,5 +181,5 @@ def crea_gestore_rate_parity(percorso: str, *, orologio: Any = None) -> GestoreR
     """Factory. DORMIENTE finche' non lo si cabla (endpoint segnalazione + lettura del segnale
     di visibilita' nel ranking di ricerca)."""
     def _cf() -> sqlite3.Connection:
-        return sqlite3.connect(percorso)
+        return sqlite3.connect(percorso, timeout=30)   # bug #36: aspetta il turno sotto contesa
     return GestoreRateParity(_cf, orologio=orologio)

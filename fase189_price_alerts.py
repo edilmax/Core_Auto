@@ -220,5 +220,5 @@ def crea_gestore_price_alerts(percorso: str, *, orologio: Any = None) -> Gestore
     """Factory. `percorso` = file sqlite (o ':memory:'). DORMIENTE finche' non lo si cabla
     nel sistema (fase81) e non si aggiunge il giro di matchmaking."""
     def _cf() -> sqlite3.Connection:
-        return sqlite3.connect(percorso)
+        return sqlite3.connect(percorso, timeout=30)   # bug #36: aspetta il turno sotto contesa
     return GestorePriceAlert(_cf, orologio=orologio)
