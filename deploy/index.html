@@ -614,17 +614,20 @@ async function apri(slug){
       // PAGA IN STRUTTURA (fase188): solo se l'host lo accetta. Si mostrano ENTRAMBI i prezzi
       // (online pulito / in struttura +fee) e il BOX TRASPARENZA con lo scudo legale: online
       // = protetto da noi; il saldo pagato di persona NON passa da noi -> non rimborsabile.
+      // LINK 1-CLICK (STRATEGIA 1, avviso-prezzo): ?paga=struttura pre-seleziona "in struttura".
+      const preStr = new URLSearchParams(location.search).get('paga')==='struttura';
       window.__modoPag='';   // default SEMPRE online (si azzera a ogni preventivo)
       if(q.paga_in_struttura && q.paga_in_struttura.accettato){ const ps=q.paga_in_struttura;
+        if(preStr) window.__modoPag='in_struttura';   // pre-seleziona SOLO se l'annuncio lo accetta
         const dett = mt('ps_loco_dett').replace('{anticipo}',money(ps.anticipo_online_cents,V)).replace('{saldo}',money(ps.saldo_in_loco_cents,V)).replace('{fee}',money(ps.fee_cents,V));
         const onlinePrezzo = money(q.totale_cents||q.prezzo_guest_cents,V);
         righe += `<div style="margin-top:.6rem;padding:.6rem .7rem;background:var(--sfondo-tenue,#f6f7f9);border:1px solid var(--bordo);border-radius:.6rem;font-size:.85rem">
           <div style="font-weight:700;margin-bottom:.45rem">💳 ${esc(mt('ps_titolo'))}</div>
           <label style="display:flex;gap:.5rem;align-items:flex-start;padding:.4rem 0;cursor:pointer">
-            <input type="radio" name="modopag" value="" checked onchange="window.__modoPag=''" style="width:auto;margin-top:.25rem">
+            <input type="radio" name="modopag" value="" ${preStr?'':'checked'} onchange="window.__modoPag=''" style="width:auto;margin-top:.25rem">
             <span><b>✅ ${esc(mt('ps_online'))}</b> — <b>${onlinePrezzo}</b></span></label>
           <label style="display:flex;gap:.5rem;align-items:flex-start;padding:.4rem 0;cursor:pointer">
-            <input type="radio" name="modopag" value="in_struttura" onchange="window.__modoPag='in_struttura'" style="width:auto;margin-top:.25rem">
+            <input type="radio" name="modopag" value="in_struttura" ${preStr?'checked':''} onchange="window.__modoPag='in_struttura'" style="width:auto;margin-top:.25rem">
             <span><b>🏠 ${esc(mt('ps_loco'))}</b> — <b>${money(ps.ospite_paga_totale_cents,V)}</b><br><span style="font-size:.78rem;color:var(--testo-tenue)">${esc(dett)}</span></span></label>
           <div style="font-size:.8rem;margin-top:.35rem;padding:.45rem .55rem;background:var(--verde-bg);border-radius:.5rem;color:var(--brand-chiaro)">🛡️ ${esc(mt('ps_scudo'))}</div>
         </div>`; }
