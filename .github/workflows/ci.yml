@@ -11,6 +11,10 @@ on:
     - cron: '0 3 * * 1'      # ogni lunedi' 03:00 UTC -> scansione ZAP del sito live
   workflow_dispatch: {}       # avvio manuale (utile per lanciare la ZAP a richiesta)
 
+# Token di CI a PRIVILEGI MINIMI: i job leggono il codice, non scrivono nulla.
+permissions:
+  contents: read
+
 jobs:
   # Feedback VELOCE: i test critici sui soldi + Paga in Struttura (pochi minuti).
   money-smoke:
@@ -96,8 +100,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Python 3.11: su 3.9 non c'e' la wheel di Atheris e la build da sorgente fallisce
+      # (usa Py_IsNone, funzione della CPython >=3.10). I motori-soldi sono Python puro:
+      # stesso identico comportamento. clang resta come rete di sicurezza per la build.
       - uses: actions/setup-python@v5
-        with: { python-version: '3.9' }
+        with: { python-version: '3.11' }
       - name: Dipendenze di build (fallback se manca la wheel)
         run: sudo apt-get update && sudo apt-get install -y clang
       - name: Installa Atheris

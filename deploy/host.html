@@ -89,8 +89,8 @@
         <label class="full"><span data-i18n="f_pw">Password (min 8)</span><input id="au_pw" type="password"></label>
         <label class="full"><span data-i18n="f_rs">Ragione sociale / nome struttura (per registrarti)</span><input id="au_rs" placeholder="B&B Il Sole"></label>
         <label class="full"><span data-i18n="f_tel">Telefono/WhatsApp (per gli avvisi prenotazione)</span> <span class="hint" data-i18n="h_tel">— opzionale, con prefisso es. +39</span><input id="au_tel" type="tel" placeholder="+39 333 1234567"></label>
-        <label class="full"><span data-i18n="f_line">LINE Notify token</span> <span class="hint" data-i18n="h_asia">— opzionale (Asia: Giappone/Thailandia/Taiwan)</span><input id="au_line" placeholder="token LINE Notify"><div class="fieldErr" id="err_line" role="alert"></div></label>
-        <label class="full"><span data-i18n="f_wechat">WeChat Work webhook</span> <span class="hint" data-i18n="h_cina">— opzionale (Cina)</span><input id="au_wechat" placeholder="https://qyapi.weixin.qq.com/..."><div class="fieldErr" id="err_wechat" role="alert"></div></label>
+        <label class="full"><span data-i18n="f_line">LINE Notify token</span> <span class="hint" data-i18n="h_asia">— opzionale (Asia: Giappone/Thailandia/Taiwan)</span><input id="au_line" placeholder="token LINE Notify"><span class="fieldErr" id="err_line" role="alert"></span></label>
+        <label class="full"><span data-i18n="f_wechat">WeChat Work webhook</span> <span class="hint" data-i18n="h_cina">— opzionale (Cina)</span><input id="au_wechat" placeholder="https://qyapi.weixin.qq.com/..."><span class="fieldErr" id="err_wechat" role="alert"></span></label>
       </div>
       <label style="display:flex;gap:.5rem;font-size:.85rem;margin-top:.7rem;text-transform:none">
         <input type="checkbox" id="au_terms" style="width:auto;margin-top:.2rem">
@@ -390,10 +390,10 @@
         <span><b data-i18n="l_paga_str">Accetta “Paga in struttura”</b> <span class="hint" data-i18n="h_paga_str">— l'ospite può pagare di persona all'arrivo: un piccolo anticipo online e il saldo direttamente a te. Tu incassi uguale; l'ospite paga una piccola fee di servizio per la comodità. Consigliato attivo.</span></span></label>
       <label><span data-i18n="l_cap">Capacità</span><input type="number" id="p_cap" value="4"></label>
       <label><span data-i18n="l_serv">Servizi (csv)</span><input id="p_serv" value="wifi,piscina"></label>
-      <label class="full"><span data-i18n="l_foto">Foto</span> <span class="hint" data-i18n="h_foto">— carica dal dispositivo (automatico) o incolla un URL</span>
+      <div class="full"><span data-i18n="l_foto">Foto</span> <span class="hint" data-i18n="h_foto">— carica dal dispositivo (automatico) o incolla un URL</span>
         <input type="file" id="p_files" accept="image/jpeg,image/png,image/webp,image/gif" multiple style="padding:.4rem;background:#fff">
         <div id="p_thumbs" style="display:flex;flex-wrap:wrap;gap:.4rem;margin:.4rem 0"></div>
-        <textarea id="p_img" rows="2" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid var(--bordo);font-size:.85rem" placeholder="https://...jpg"></textarea></label>
+        <textarea id="p_img" rows="2" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid var(--bordo);font-size:.85rem" placeholder="https://...jpg"></textarea></div>
     </div>
     <button id="btnPubblica" data-i18n="b_pubblica">Pubblica</button>
     <div id="msgPub" role="status" aria-live="polite"></div>

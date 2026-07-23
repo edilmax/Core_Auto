@@ -141,27 +141,38 @@ class TestFlask(unittest.TestCase):
 
 
 class TestCIWorkflow(unittest.TestCase):
-    def test_workflow_esiste_e_lancia_la_suite(self):
+    def _doc(self):
         import yaml
         with open(os.path.join(".github", "workflows", "ci.yml"), encoding="utf-8") as f:
-            doc = yaml.safe_load(f)
+            return yaml.safe_load(f)
+
+    def test_workflow_esiste_e_lancia_la_suite(self):
+        doc = self._doc()
         # 'on' viene interpretato da YAML come True -> accetto entrambe le chiavi
         trigger = doc.get("on", doc.get(True))
         self.assertIn("push", trigger)
         self.assertIn("pull_request", trigger)
-        steps = doc["jobs"]["test"]["steps"]
-        testo = json.dumps(steps)
+        testo = json.dumps(doc["jobs"])
         self.assertIn("actions/checkout", testo)
         self.assertIn("actions/setup-python", testo)
+        # la suite INTERA gira per davvero (in un job qualunque, non piu' per forza 'test')
         self.assertIn("unittest discover", testo)
 
     def test_workflow_hardening(self):
-        import yaml
-        with open(os.path.join(".github", "workflows", "ci.yml"), encoding="utf-8") as f:
-            doc = yaml.safe_load(f)
-        self.assertEqual(doc["permissions"]["contents"], "read")        # least-privilege
-        self.assertFalse(doc["jobs"]["test"]["strategy"]["fail-fast"])   # entrambe le versioni
-        self.assertIn("cache", json.dumps(doc["jobs"]["test"]["steps"])) # cache pip
+        doc = self._doc()
+        # 1) token di CI a privilegi minimi (least-privilege): i job non scrivono nel repo
+        self.assertEqual(doc["permissions"]["contents"], "read")
+        # 2) la scansione ZAP del sito LIVE NON deve girare ad ogni push (solo schedule/manuale):
+        #    e' una tutela della produzione (niente crawl ad ogni commit). Guardia del gating.
+        zap_if = doc["jobs"]["zap"].get("if", "")
+        self.assertIn("schedule", zap_if)
+        self.assertIn("workflow_dispatch", zap_if)
+
+    # NOTA (2026-07-23): le vecchie asserzioni su un singolo job 'test' con matrice
+    # multi-versione (fail-fast:false) e cache pip riflettevano un CI SUPERATO. Ora il CI e'
+    # multi-job (money-smoke/full-suite/mutazione/qualita/w3c/atheris/zap) su Python 3.9 (= la
+    # produzione). Le guardie sopra difendono l'INTENTO che conta: privilegi minimi, la suite
+    # intera gira davvero, e ZAP non tocca la produzione ad ogni push.
 
 
 if __name__ == "__main__":
