@@ -22,6 +22,10 @@ COSA GUARDA, tutto READ-ONLY, senza toccare nulla:
      mai partiti.
   4. PAYOUT ORFANO: una riga di payout il cui host non esiste piu' -> residuo di una
      cancellazione forzata; soldi dovuti a nessuno.
+  5. SOLDI SU PRENOTAZIONE RIMBORSATA: un payout 'maturato'/'in_transito' o un escrow che
+     sta per auto-rilasciarsi, ma la prenotazione risulta 'rimborsato'/'cancellata_host' ->
+     staremmo per pagare l'host di soldi gia' resi all'ospite (la PERDITA PIENA di fase83,
+     quando uno dei passi di sicurezza del rimborso e' fallito in isolamento).
 
 `scansiona()` e' PURA (nessun invio, nessuna scrittura): ritorna il referto. E' il server
 (giro giornaliero) a mandare l'email di allarme se il referto non e' pulito. Cosi' il
@@ -46,6 +50,13 @@ GIORNI_RICONCILIAZIONE = 30     # finestra del confronto con Stripe
 ORE_CAMBIO_FERMO = 26           # cambio valuta (OXR): nessun tasso riuscito da >1 giorno NONOSTANTE
 #                                 la sonda giornaliera = il terzo (OXR) e' giu'. Soglia >24h per
 #                                 non gridare su un singolo blip che si riprende al giro dopo.
+
+# Una prenotazione in questi stati e' CHIUSA a sfavore dell'host: l'ospite e' stato rimborsato
+# o l'host ha annullato -> nessun soldo deve piu' incamminarsi verso l'host (stati di fase162).
+_STATI_RIMBORSO = ("rimborsato", "cancellata_host")
+# Payout con soldi ANCORA fermabili, in coda o in viaggio verso l'host. 'trattenuto'/'pagato'
+# esclusi di proposito: il primo e' gia' corretto, il secondo e' perdita gia' realizzata.
+_STATI_PAYOUT_VERSO_HOST = ("maturato", "in_transito")
 
 
 def _ora(ora: Any) -> int:
@@ -121,6 +132,60 @@ def _payout_anomali(sistema: Any, ora_ts: int, giorni_fermo: int
     return {"bonifico_fermo": fermi, "payout_orfano": orfani}
 
 
+def _soldi_su_rimborsata(sistema: Any, ora_ts: int) -> Dict[str, List[Dict[str, Any]]]:
+    """Soldi ancora incamminati verso l'host per una prenotazione che l'ospite si e' vista
+    RIMBORSARE, o che l'host ha CANCELLATO. E' la PERDITA PIENA documentata in fase83: il
+    rimborso mette in sicurezza i soldi in piu' passi (trattieni il payout, annulla l'escrow);
+    se UNO fallisce in isolamento, il bonifico 'maturato' o l'auto-rilascio dell'escrow
+    pagherebbe l'host di soldi gia' resi all'ospite. READ-ONLY: qui si GRIDA, non si ripara.
+    Chiave condivisa: payout/escrow/pendente sono TUTTI sul 'riferimento' (fase83:3641)."""
+    pp = getattr(sistema, "pagamenti_pendenti", None)
+    if pp is None or not hasattr(pp, "info"):
+        return {"payout_su_rimborsata": [], "escrow_su_rimborsata": []}
+
+    def _stato_rimborso(rif: Any) -> Optional[str]:
+        # None se la prenotazione NON e' chiusa a sfavore host (o non si sa): niente allarme.
+        if not (isinstance(rif, str) and rif):
+            return None
+        try:
+            p = pp.info(rif)
+        except Exception:
+            return None
+        st = (p or {}).get("stato")
+        return st if st in _STATI_RIMBORSO else None
+
+    payout_ko: List[Dict[str, Any]] = []
+    pay = getattr(sistema, "payout", None)
+    if pay is not None and hasattr(pay, "tutti"):
+        for stato in _STATI_PAYOUT_VERSO_HOST:
+            try:
+                righe = pay.tutti(stato=stato, limit=5000)
+            except Exception:
+                logger.warning("guardiano: payout-su-rimborsata fallito (ISOLATO)", exc_info=True)
+                righe = []
+            for r in righe:
+                sr = _stato_rimborso(r.get("prenotazione_id"))
+                if sr:
+                    payout_ko.append({**r, "stato_pendente": sr})
+
+    escrow_ko: List[Dict[str, Any]] = []
+    gar = getattr(sistema, "garanzia", None)
+    if gar is not None and hasattr(gar, "aperte_scadute"):
+        try:
+            # grazia_ore=0 -> escrow 'in_garanzia' il cui auto-rilascio E' GIA' scattato/scattando:
+            # e' esattamente cio' che auto_rilascia versa all'host. Su prenotazione rimborsata = loss.
+            aperte = gar.aperte_scadute(ora_ts=ora_ts, grazia_ore=0, limit=2000)
+        except Exception:
+            logger.warning("guardiano: escrow-su-rimborsata fallito (ISOLATO)", exc_info=True)
+            aperte = []
+        for g in aperte:
+            sr = _stato_rimborso(g.get("prenotazione_id"))
+            if sr:
+                escrow_ko.append({**g, "stato_pendente": sr})
+
+    return {"payout_su_rimborsata": payout_ko, "escrow_su_rimborsata": escrow_ko}
+
+
 def _cambio_valuta_fermo(sistema: Any, ora_ts: int,
                          soglia_ore: int) -> Optional[Dict[str, Any]]:
     """Il convertitore valuta (OXR, fase99) è configurato ma non prende i tassi da troppo tempo?
@@ -177,6 +242,12 @@ def scansiona(sistema: Any, *, ora: Any = None,
     if pa.get("payout_orfano"):
         anomalie["payout_orfano"] = pa["payout_orfano"]
 
+    sr = _prova(_soldi_su_rimborsata, sistema, ora_ts) or {}
+    if sr.get("payout_su_rimborsata"):
+        anomalie["payout_su_rimborsata"] = sr["payout_su_rimborsata"]
+    if sr.get("escrow_su_rimborsata"):
+        anomalie["escrow_su_rimborsata"] = sr["escrow_su_rimborsata"]
+
     cv = _prova(_cambio_valuta_fermo, sistema, ora_ts, ore_cambio_fermo)
     if cv:
         anomalie["cambio_valuta_fermo"] = cv
@@ -200,6 +271,8 @@ _TITOLI = {
     "escrow_bloccato": "Escrow bloccati (soldi ospite non rilasciati)",
     "bonifico_fermo": "Bonifici dovuti all'host, fermi da troppo tempo",
     "payout_orfano": "Bonifici dovuti a un host che non esiste piu'",
+    "payout_su_rimborsata": "Bonifico verso l'host per una prenotazione RIMBORSATA/annullata (perdita)",
+    "escrow_su_rimborsata": "Escrow che sta per pagare l'host di una prenotazione RIMBORSATA (perdita)",
     "cambio_valuta_fermo": "Cambio valuta (OXR) fermo: la stima «≈ nella tua moneta» non si aggiorna",
 }
 
