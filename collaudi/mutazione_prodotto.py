@@ -135,6 +135,12 @@ MUTANTI = [
      "if ore >= 99999:",
      "test_paga_struttura_e2e",
      "la penale (prima notte) scatta anche con >24h di preavviso: addebito indebito sulla carta del cliente"),
+
+    ("fase83_server.py",
+     "penale = prezzo // notti",
+     "penale = prezzo",
+     "test_paga_struttura_avanzato",
+     "la penale addebita il TOTALE del soggiorno invece della sola prima notte: addebito enormemente gonfiato"),
 ]
 
 
