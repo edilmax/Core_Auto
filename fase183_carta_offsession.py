@@ -99,6 +99,29 @@ class ProviderCarta:
             logger.warning("carta: dettagli_da_sessione falliti (ISOLATO)", exc_info=True)
             return None
 
+    def dettagli_pagamento_da_sessione(self, session_id: str) -> Optional[Dict[str, str]]:
+        """PAGA IN STRUTTURA (penale no-show): da una Checkout Session mode=payment con
+        setup_future_usage='off_session' -> (customer, payment_method) per addebiti futuri
+        off-session. La carta l'ha salvata Stripe sul PaymentIntent. 2 GET, ISOLATO -> None."""
+        try:
+            s = self._fetch("GET", "%s/checkout/sessions/%s" % (_BASE, session_id),
+                            None, self._headers())
+            if not isinstance(s, dict):
+                return None
+            customer = s.get("customer") or ""
+            pi = s.get("payment_intent") or ""
+            pm = ""
+            if pi:
+                pio = self._fetch("GET", "%s/payment_intents/%s" % (_BASE, pi), None,
+                                  self._headers())
+                pm = (pio.get("payment_method") if isinstance(pio, dict) else "") or ""
+            if customer and pm:
+                return {"customer": str(customer), "payment_method": str(pm)}
+            return None
+        except Exception:
+            logger.warning("carta: dettagli_pagamento_da_sessione falliti (ISOLATO)", exc_info=True)
+            return None
+
     # ── 2) ADDEBITO OFF-SESSION (host non presente): PaymentIntent confirm ──
     def addebita(self, *, customer: str, payment_method: str, importo_cents: Any,
                  valuta: str, riferimento: str,

@@ -5300,7 +5300,15 @@ class RouterHTTP:
                                                           v.get("valuta", "EUR"))
         if pagato_davvero:                     # C3: conferma cancellazione + rimborso in email
             self._email_cancellazione(rif, rimborso_totale, v.get("valuta", "EUR"), cv_cents)
+        # PAGA IN STRUTTURA (FASE 3): PENALE tardiva. Regola fondatore: normale -> si trattiene
+        # solo l'anticipo (gia' fatto: rimborso 0); a <24h dal check-in -> penale = PRIMA NOTTE
+        # sulla carta salvata. Best-effort ISOLATO e GATED (dark): mai un addebito reale senza
+        # flag/carta. Solo su prenotazioni pagate (l'anticipo c'e' e la carta e' stata salvata).
+        penale_out = None
+        if v.get("modo_pagamento") == "in_struttura" and pagato_davvero:
+            penale_out = self._forse_penale_struttura(rif, v, giorni)
         return 200, {"stato": "cancellata", "riferimento": rif,
+                     "penale_struttura": penale_out,
                      "giorni_all_arrivo": giorni, "date_liberate": True,
                      "rimborso_cents": rimborso_totale,                 # soggiorno + tassa
                      "rimborso_soggiorno_cents": r["rimborso_cents"],
@@ -5315,6 +5323,66 @@ class RouterHTTP:
                               ("date liberate; rimborso PSP da eseguire quando Stripe e' live."
                                + (" Hai un Credito Viaggio per la prossima prenotazione."
                                   if cv_cents else "")))}
+
+    def _forse_penale_struttura(self, rif, v, giorni):
+        """PAGA IN STRUTTURA (FASE 3) — PENALE cancellazione TARDIVA / no-show. Regola del
+        fondatore: se la cancellazione avviene a MENO di 24h dal check-in, si addebita la PRIMA
+        NOTTE (prezzo_guest / notti) sulla carta salvata; altrimenti niente (si e' gia' trattenuto
+        l'anticipo). GATED da PAGA_STRUTTURA_ATTIVO (dark: senza flag NON addebita), ISOLATO (mai
+        rompe la cancellazione), IDEMPOTENTE (idem-key sul riferimento). Ritorna un dict d'esito
+        o None se non applicabile. Le 24h contano sull'ISTANTE vero del check-in (15:00 nel fuso
+        dell'alloggio), non sul 'giorno' del server."""
+        try:
+            import os as _os
+            if _os.environ.get("PAGA_STRUTTURA_ATTIVO", "0") != "1":
+                return None                        # DARK: nessun addebito senza la feature accesa
+            allog = v.get("alloggio_id", "")
+            try:
+                ts_ci = _istante_checkin(v.get("check_in", ""), self._fuso_alloggio(allog))
+            except Exception:
+                ts_ci = None
+            import time as _t
+            ore = ((ts_ci - int(_t.time())) / 3600.0) if ts_ci else (max(0, giorni) * 24)
+            if ore >= 24:
+                return {"applicata": False, "motivo": "non_tardiva"}   # >=24h: solo anticipo
+            # penale = PRIMA NOTTE dal voucher FIRMATO (prezzo_guest / notti), interi
+            prezzo = v.get("prezzo_guest_cents", 0)
+            if not (isinstance(prezzo, int) and not isinstance(prezzo, bool) and prezzo > 0):
+                return {"applicata": False, "motivo": "prezzo_assente"}
+            notti = max(1, _notti_count(v.get("check_in", ""), v.get("check_out", "")))
+            penale = prezzo // notti
+            if penale <= 0:
+                return {"applicata": False, "motivo": "importo_zero"}
+            carta = getattr(self._sys, "carta", None)
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            if carta is None or pp is None:
+                return {"applicata": False, "motivo": "carta_non_attiva"}
+            # customer + payment_method dalla sessione dell'anticipo (cs_ salvato dal webhook)
+            import json as _j
+            cs = ""
+            try:
+                rec = pp.info(rif)
+                dj = _j.loads(rec.get("corpo_json") or "{}") if isinstance(rec, dict) else {}
+                cs = dj.get("stripe_cs", "") if isinstance(dj, dict) else ""
+            except Exception:
+                cs = ""
+            det = carta.dettagli_pagamento_da_sessione(cs) if cs else None
+            if not det:
+                return {"applicata": False, "motivo": "carta_non_recuperata", "importo_cents": penale}
+            res = carta.addebita(customer=det["customer"], payment_method=det["payment_method"],
+                                 importo_cents=penale, valuta=v.get("valuta", "EUR"),
+                                 riferimento=rif, idem="penale_struttura:" + str(rif))
+            stato = res.get("stato") if isinstance(res, dict) else "fallito"
+            if stato == "riuscito":
+                logger.warning("PENALE STRUTTURA addebitata | rif %s | %d cents (prima notte)",
+                               rif, penale)
+            else:
+                logger.error("PENALE STRUTTURA non riuscita | rif %s | stato=%s", rif, stato)
+            return {"applicata": stato == "riuscito", "importo_cents": penale, "stato": stato,
+                    "motivo": (res.get("motivo", "") if isinstance(res, dict) else "")}
+        except Exception:
+            logger.warning("penale struttura fallita (ISOLATA)", exc_info=True)
+            return {"applicata": False, "motivo": "eccezione"}
 
     def _politica_alloggio(self, slug):
         try:

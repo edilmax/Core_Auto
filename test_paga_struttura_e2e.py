@@ -107,9 +107,10 @@ class TestPagaStrutturaE2E(unittest.TestCase):
     def _in_attesa_payout(self):
         return self.sys.payout.riepilogo(self.hid).get("EUR", {}).get("in_attesa", 0)
 
-    def _webhook(self, rif):
+    def _webhook(self, rif, cs="cs_testsession"):
+        # include l'id sessione (cs_) cosi' il webhook lo salva -> serve alla penale FASE 3
         pl = json.dumps({"type": "checkout.session.completed",
-                         "data": {"object": {"metadata": {"riferimento": rif}}}})
+                         "data": {"object": {"id": cs, "metadata": {"riferimento": rif}}}})
         return self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
                                {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
 
@@ -278,6 +279,175 @@ class TestPagaStrutturaE2E(unittest.TestCase):
                 self.assertNotEqual(s2, 201, "0/neg notti NON deve confermare (%s->%s)" % (ci, co))
             else:
                 self.assertNotEqual(s, 200)
+
+
+import fase183_carta_offsession as _carta_mod
+
+_CARTA_CALLS = []
+_CARTA_DECLINE = [False]
+
+
+def _fake_carta_fetch(metodo, url, body, headers):
+    _CARTA_CALLS.append((metodo, url))
+    if metodo == "GET" and "/checkout/sessions/" in url:
+        return {"customer": "cus_test", "payment_intent": "pi_test"}
+    if metodo == "GET" and "/payment_intents/" in url:
+        return {"payment_method": "pm_test"}
+    if metodo == "POST" and url.endswith("/payment_intents"):
+        if _CARTA_DECLINE[0]:
+            return {"error": {"code": "card_declined"}}
+        return {"status": "succeeded", "id": "pi_charge"}
+    return {}
+
+
+class TestPenaleStrutturaFase3(unittest.TestCase):
+    """PENALE cancellazione tardiva / no-show (regola fondatore: <24h -> prima notte sulla
+    carta salvata). High-signal: confini (>=24h vs <24h), invariante (importo = prima notte),
+    modalita' d'errore (carta assente/rifiutata, flag off) -> mai un addebito indebito o un crash."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._o1 = _stripe.ProviderStripe._fetch_reale
+        cls._o2 = _carta_mod.ProviderCarta._fetch_reale
+        _stripe.ProviderStripe._fetch_reale = staticmethod(_fake_fetch)
+        _carta_mod.ProviderCarta._fetch_reale = staticmethod(_fake_carta_fetch)
+
+    @classmethod
+    def tearDownClass(cls):
+        _stripe.ProviderStripe._fetch_reale = cls._o1
+        _carta_mod.ProviderCarta._fetch_reale = cls._o2
+
+    def setUp(self):
+        self._flag = os.environ.get("PAGA_STRUTTURA_ATTIVO")
+        os.environ["PAGA_STRUTTURA_ATTIVO"] = "1"
+        del _BODIES[:]
+        _FAIL_ANTICIPO[0] = False
+        _CARTA_DECLINE[0] = False
+        del _CARTA_CALLS[:]
+        self.dir = tempfile.mkdtemp()
+        d = self.dir
+        self.sys = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"S" * 32, con_registrazione_host=True,
+            db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db", db_registro_host=f"{d}/r.db",
+            db_accettazioni=f"{d}/acc.db", db_pendenti=f"{d}/p.db", db_payout=f"{d}/pay.db",
+            db_garanzia=f"{d}/g.db", db_tassa_comunale=f"{d}/t.db",
+            commissione_bps=1000, psp_bps=0, stripe_secret_key="sk",
+            stripe_webhook_secret=WH, stripe_success_url="https://x/ok",
+            stripe_cancel_url="https://x/no"))
+        self.r = crea_router(self.sys, host_key="hk", admin_key="ak",
+                             base_url="https://bookinvip.com")
+        s, c = self.r.gestisci("POST", "/api/host/registrazione", {}, json.dumps(
+            {"email": "h@ps.it", "password": "password1", "accetta_termini": True,
+             "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
+             "versione": CONTRATTO_HOST_VERSIONE}), {})
+        self.tok = c["token"]
+        import datetime
+        oggi = datetime.date.today()
+        self.g("POST", "/api/host/pubblica",
+               {"slug": "casa", "titolo": "Casa", "citta": "Roma", "prezzo_notte_cents": 30000,
+                "capacita": 4, "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
+        self.g("POST", "/api/host/disponibilita_range",
+               {"alloggio_id": "casa", "da": oggi.isoformat(),
+                "a": (oggi + datetime.timedelta(days=40)).isoformat(),
+                "unita_totali": 5, "prezzo_netto_cents": 30000}, {"X-Host-Token": self.tok})
+
+    def tearDown(self):
+        if self._flag is None:
+            os.environ.pop("PAGA_STRUTTURA_ATTIVO", None)
+        else:
+            os.environ["PAGA_STRUTTURA_ATTIVO"] = self._flag
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def g(self, m, p, b=None, h=None):
+        return self.r.gestisci(m, p, {}, json.dumps(b) if b is not None else None, h or {})
+
+    def _prenota_paga(self, ci, co):
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": "casa", "check_in": ci, "check_out": co, "party": 2})
+        self.assertEqual(s, 200, q)
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "cli@ps.it",
+                       "modo_pagamento": "in_struttura"})
+        self.assertEqual(s, 201, b)
+        return q, b
+
+    def _wh(self, rif):
+        pl = json.dumps({"type": "checkout.session.completed",
+                         "data": {"object": {"id": "cs_pen", "metadata": {"riferimento": rif}}}})
+        self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
+                        {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
+
+    def _cancella(self, vt):
+        return self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+
+    def _dates(self, giorni_da_oggi, notti=1):
+        import datetime
+        oggi = datetime.date.today()
+        ci = oggi + datetime.timedelta(days=giorni_da_oggi)
+        return ci.isoformat(), (ci + datetime.timedelta(days=notti)).isoformat()
+
+    # ── CONFINE: <24h addebita la prima notte; >=24h no ──
+    def test_tardiva_sotto_24h_addebita_prima_notte(self):
+        ci, co = self._dates(0, notti=1)          # check-in OGGI -> < 24h
+        q, b = self._prenota_paga(ci, co)
+        self.assertEqual(b.get("modo_pagamento"), "in_struttura", b)
+        self._wh(b["riferimento"])
+        s, c = self._cancella(b["voucher_token"])
+        self.assertEqual(s, 200, c)
+        pen = c.get("penale_struttura") or {}
+        self.assertTrue(pen.get("applicata"), "penale non applicata a <24h: %s" % pen)
+        # INVARIANTE: importo == PRIMA NOTTE (prezzo_guest / notti)
+        atteso = q["prezzo_guest_cents"] // 1
+        self.assertEqual(pen.get("importo_cents"), atteso, "penale != prima notte")
+        # e un addebito e' partito davvero sulla carta
+        self.assertTrue(any(m == "POST" and u.endswith("/payment_intents") for m, u in _CARTA_CALLS))
+
+    def test_anticipata_oltre_24h_nessuna_penale(self):
+        ci, co = self._dates(10, notti=2)         # check-in lontano -> >= 24h
+        q, b = self._prenota_paga(ci, co)
+        self._wh(b["riferimento"])
+        s, c = self._cancella(b["voucher_token"])
+        self.assertEqual(s, 200, c)
+        pen = c.get("penale_struttura") or {}
+        self.assertFalse(pen.get("applicata"), "penale applicata a >=24h: NON deve")
+        self.assertFalse(any(m == "POST" and u.endswith("/payment_intents") for m, u in _CARTA_CALLS),
+                         "addebito partito a >=24h")
+
+    # ── MODALITA' D'ERRORE ──
+    def test_flag_off_nessun_addebito(self):
+        os.environ["PAGA_STRUTTURA_ATTIVO"] = "1"          # serve per creare la prenotazione
+        ci, co = self._dates(0, notti=1)
+        q, b = self._prenota_paga(ci, co)
+        self._wh(b["riferimento"])
+        os.environ["PAGA_STRUTTURA_ATTIVO"] = "0"          # feature SPENTA al momento della penale
+        s, c = self._cancella(b["voucher_token"])
+        self.assertEqual(s, 200, c)
+        self.assertIsNone(c.get("penale_struttura"), "dark: nessuna penale a flag spento")
+        self.assertFalse(any(m == "POST" and u.endswith("/payment_intents") for m, u in _CARTA_CALLS))
+
+    def test_carta_rifiutata_non_rompe_la_cancellazione(self):
+        _CARTA_DECLINE[0] = True
+        ci, co = self._dates(0, notti=1)
+        q, b = self._prenota_paga(ci, co)
+        self._wh(b["riferimento"])
+        s, c = self._cancella(b["voucher_token"])
+        self.assertEqual(s, 200, "carta rifiutata NON deve rompere la cancellazione: %s" % c)
+        pen = c.get("penale_struttura") or {}
+        self.assertFalse(pen.get("applicata"), "carta rifiutata: penale non riuscita")
+        self.assertEqual(c.get("date_liberate"), True, "le date vanno liberate comunque")
+
+    def test_senza_cs_salvato_nessun_addebito(self):
+        # se il webhook non ha salvato il cs_ (nessuna carta recuperabile) -> niente addebito, no crash
+        ci, co = self._dates(0, notti=1)
+        q, b = self._prenota_paga(ci, co)
+        # NB: NON invio il webhook -> nessun cs_ salvato
+        s, c = self._cancella(b["voucher_token"])
+        self.assertEqual(s, 200, c)
+        pen = c.get("penale_struttura")
+        # o non applicabile (non pagato) o carta_non_recuperata: mai un addebito
+        if pen:
+            self.assertFalse(pen.get("applicata"))
+        self.assertFalse(any(m == "POST" and u.endswith("/payment_intents") for m, u in _CARTA_CALLS))
 
 
 if __name__ == "__main__":
