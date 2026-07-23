@@ -86,6 +86,16 @@ collaudi/*.tsq
 collaudi/__pycache__/
 collaudi/screenshot_visivi/
 
+# Artefatti dei collaudi locali (coverage, Hypothesis, cache dei linter): si
+# rigenerano ad ogni esecuzione -> MAI nel repo (altrimenti finiscono in un `git add -A`).
+.coverage
+.coverage.*
+htmlcov/
+.hypothesis/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
 # --- Collaudo VISIVO (Playwright): node_modules enorme, MAI nel repo; package.json SI'
 #     (documenta la dipendenza), package-lock resta ignorato da *.json ---
 node_modules/

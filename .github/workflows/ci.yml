@@ -1,11 +1,15 @@
 name: BookinVIP CI
 
-# Gira ad ogni push/PR su master: se un test diventa rosso, lo vedi subito su GitHub.
+# Gira ad ogni push/PR su master. In piu': la scansione OWASP ZAP del sito live gira
+# SOLO su schedule settimanale o avvio manuale (non ad ogni commit).
 on:
   push:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  schedule:
+    - cron: '0 3 * * 1'      # ogni lunedi' 03:00 UTC -> scansione ZAP del sito live
+  workflow_dispatch: {}       # avvio manuale (utile per lanciare la ZAP a richiesta)
 
 jobs:
   # Feedback VELOCE: i test critici sui soldi + Paga in Struttura (pochi minuti).
@@ -15,6 +19,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.9' }
+      - name: Dipendenze di test
+        run: pip install hypothesis
       - name: Test money-path + Paga in Struttura
         run: |
           python -m unittest \
@@ -22,9 +28,11 @@ jobs:
             test_paga_struttura_cablaggio test_paga_struttura_avanzato \
             test_fase85_pagamenti_stripe test_fase98_policy_commissione \
             test_conservazione_denaro test_cancellazione_money \
-            test_fase189_price_alerts test_fase190_rate_parity \n            test_property_soldi
+            test_fase189_price_alerts test_fase190_rate_parity \
+            test_property_soldi
 
-  # Suite INTERA (piu' lunga): il quadro completo.
+  # Suite INTERA (piu' lunga): il quadro completo. Installa le dipendenze di test che
+  # alcuni test importano (flask/yaml/hypothesis) cosi' girano DAVVERO (non si saltano).
   full-suite:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -32,6 +40,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.9' }
+      - name: Dipendenze di test
+        run: pip install -r requirements.txt hypothesis pyyaml
       - name: Suite completa
         run: python -m unittest discover -s . -p "test_*.py"
 
@@ -59,3 +69,50 @@ jobs:
         run: mypy fase188_paga_struttura.py fase98_policy_commissione.py fase111_cancellazione.py --ignore-missing-imports || true
       - name: pip-audit (dipendenze)
         run: pip-audit || true
+
+  # ===== STRUMENTI ESTERNI: girano SOLO su Linux (Java/clang assenti su Windows) =====
+
+  # W3C: validatore HTML5 ufficiale (Nu di W3C, via Java) su tutte le pagine servite.
+  # Report-only (|| true): mostra i rilievi nel log senza bloccare -> le pagine hanno
+  # inline intenzionali; visti i primi risultati si decide se irrigidire in hard-fail.
+  w3c:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.9' }
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Installa html5validator (usa il Nu di W3C)
+        run: pip install html5validator
+      - name: Valida HTML5 + CSS delle pagine in deploy/
+        run: html5validator --root deploy --also-check-css --show-warnings || true
+
+  # ATHERIS: fuzzing coverage-guided sui motori-soldi. Un invariante rotto = job ROSSO
+  # (bug vero). Gli invarianti sono gia' provati a mano su 222.400 giri -> niente falsi-rossi.
+  atheris:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.9' }
+      - name: Dipendenze di build (fallback se manca la wheel)
+        run: sudo apt-get update && sudo apt-get install -y clang
+      - name: Installa Atheris
+        run: pip install atheris
+      - name: Fuzz motori-soldi (max 2 min; crash o invariante rotto = STOP)
+        run: python collaudi/fuzz_soldi.py -max_total_time=120 -atheris_runs=500000
+
+  # OWASP ZAP: scansione DAST BASELINE (passiva, NON attacca) del sito live. Gira solo su
+  # schedule settimanale o avvio manuale -> niente crawl della produzione ad ogni commit.
+  # Report-only (|| true): i rilievi restano nel log del job.
+  zap:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: OWASP ZAP Baseline (passivo) su https://bookinvip.com
+        run: |
+          docker run --rm -v "$(pwd):/zap/wrk/:rw" -t ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t https://bookinvip.com -I -a || true
