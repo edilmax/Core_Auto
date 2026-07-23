@@ -1,33 +1,31 @@
-## 🟡 IN CORSO — "PAGA IN STRUTTURA" (2026-07-23) — **FASE 1 FATTA (dark launch)**
+## 🟢 STATO 2026-07-23 — "PAGA IN STRUTTURA" FASE 1+2 COMPLETE (dark) · STRATEGIA 1 e 2 predisposte (dormienti)
 
-Feature grande a 3 fasi (piano nel memory `bookinvip-paga-in-struttura`). Modello soldi: online =
-prezzo pulito (0% ospite); in struttura = ospite paga +1,50/notte, host incassa uguale, noi non ci
-perdiamo mai (`fase188`, calcolo puro).
+**PAGA IN STRUTTURA** (memory `bookinvip-paga-in-struttura`): online = prezzo pulito (0% ospite); in
+struttura = ospite +1,50/notte, host incassa uguale, noi non ci perdiamo mai (`fase188`, punto fisso).
+- ✅ **FASE 1 + FASE 2 COMPLETE** e DARK (`PAGA_STRUTTURA_ATTIVO=0`): toggle host, quote arricchito,
+  checkout con RADIO selezionabile (online / in struttura) 8 lingue, addebito **anticipo** + carta
+  salvata (`fase85.crea_link_anticipo`), book/finalize/webhook che **saltano escrow+payout** (il saldo
+  lo incassa l'host in loco), saldo su voucher+email 8 lingue. **Flip in prod = SOLO col via del
+  fondatore** (`PAGA_STRUTTURA_ATTIVO=1`).
+- 🧪 **Batteria Anti-Finti-Verdi** (regola del fondatore, ora in memory `protocollo-anti-finti-verdi`):
+  `test_paga_struttura_p0` (invarianti P0 + fuzzing 6000, «non si perde MAI in nessuna valuta»),
+  `_e2e` (negative: link fallito→online, webhook duplicato→tassa non registrata, modo corrotto/XSS,
+  0 notti), `_cablaggio`, + **4 mutanti paga** in `collaudi/mutazione_prodotto.py` (14/14 uccisi).
+  **3 bug/limiti veri trovati e chiusi** in collaudo: 2-passate gateway→punto fisso; webhook duplicato
+  in-struttura che avrebbe contato il totale; slug/os. Il «minimo 5€» è SUPERATO dalla fee 1,50/notte.
+- ⏭️ Resta **FASE 3** (anticipo non rimborsabile, no-show sulla carta salvata) + **anti-truffa re-iscrizione**.
 
-- ✅ **FASE 1 (vetrina) CABLATA**: colonna `paga_in_struttura` (default ON) in `fase57` con migrazione
-  ALTER · toggle nel pannello host (`host.html`, 8 lingue) · preventivo arricchito in
-  `fase83._concierge_quote` (isolato) · checkout `index.html` mostra ENTRAMBI i prezzi + **box
-  trasparenza 8 lingue** (online = protetto da noi / saldo in loco NON rimborsabile da noi).
-- 🌑 **DARK LAUNCH**: la vetrina ospite è SPENTA di default (`PAGA_STRUTTURA_ATTIVO=0`); si accende
-  solo quando la FASE 2 rende l'opzione davvero selezionabile → si può deployare senza confondere
-  l'ospite (codice allineato Desktop=GitHub=VPS, feature dark). Toggle host e calcolo restano attivi.
-- 🧪 Guardie: `test_paga_struttura` (6) + `test_paga_struttura_cablaggio` (4, incl. dark-launch vista
-  rossa). Rese rosse sul codice guasto (2 bug veri beccati: slug da `body` invece che da `corpo`; `os`
-  fuori scope). Render manuale del box nelle 8 lingue verificato a mano (occhio del fondatore).
-- 🟡 **FASE 2 IN CORSO** — ① **fondazione Stripe FATTA** (commit `f978d46`, su Desktop+GitHub, DORMIENTE,
-  **non ancora deployata sul VPS**: è solo un metodo dormiente, zero effetto in prod → si deploierà col
-  primo pezzo funzionale): `fase85.crea_link_anticipo` addebita SOLO l'anticipo + salva la carta, marca
-  `modo=in_struttura`+`saldo_cents` per il webhook; guardia `TestAnticipoPagaStruttura` (6, incl.
-  «addebita l'anticipo NON il totale»). **DA CABLARE** (design deciso, low-risk — vedi memory
-  `bookinvip-paga-in-struttura` per i 7 passi): book branch (ricalcolo server-side dal token FIRMATO) ·
-  `_finalizza` salta escrow/payout per in_struttura · webhook `checkout.session.completed` conferma
-  senza escrow · saldo su voucher+email 8 lingue · UI checkout selezionabile · accendere il flag.
-  Costruire DARK, testare con Stripe FINTO; **flip in prod = soldi veri → solo con ok fondatore.**
-- ⏭️ Dopo la FASE 2: **FASE 3** (anticipo non rimborsabile, penale no-show sulla carta salvata) e
-  **ANTI-TRUFFA re-iscrizione** (impronta cifrata cod.fiscale/IBAN/Stripe → la rampa non riparte da 0).
-  Alla fine: **ricontrollo INTERO della macchina** + suite completa.
-- **Stato deploy 3 posti**: Desktop=GitHub=`f978d46` · **VPS=`1024e5b`** (FASE 1, dark, LIVE e verificata:
-  quote reale in prod → `accettato:false`). Il VPS è indietro solo del metodo dormiente FASE 2.
+**STRATEGIA 1 — SMART PRICE ALERT** (`fase189_price_alerts`, DORMIENTE): tabella `price_alerts` +
+matchmaking puro (destinazione+valuta+budget+date-flex) + anti-spam 1/giorno; consegna riusa il
+dispatcher multi-canale `fase152`. `test_fase189` (12). Da cablare: endpoint registra + trigger su
+ribasso prezzo + link 1-click. **STRATEGIA 2 — RATE PARITY** (`fase190_rate_parity`, DORMIENTE):
+tabella `parity_reports` + `e_violazione` (nostro>OTA oltre 2%) + `punteggio_visibilita` (Badge VIP +15 /
+penalità −40). `test_fase190` (14). Da cablare: modale "Segnala prezzo più basso" + segnale nel ranking
+`fase173` + **clausola parità nel Contratto Host (bump versione + legale, NON in autonomia)**.
+
+- **Stato deploy 3 posti**: Desktop=GitHub avanti (FASE 2 + strategie); **VPS ancora `1024e5b`** (FASE 1
+  dark, LIVE e verificata: quote reale → `accettato:false`). Il deploy della FASE 2 (dark) va fatto dopo
+  suite verde. Tutto ciò che non è ancora sul VPS è **dormiente/dark** → nessun effetto sull'ospite vero.
 
 ---
 
