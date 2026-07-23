@@ -5965,24 +5965,25 @@ class RouterHTTP:
                 titolo = str(det["titolo"])
         except Exception:
             pass
-        lang = "it" if str(dati.get("lang", "") or "").lower().startswith("it") else "en"
+        # 8 LINGUE PIENE (ripiego EN), non piu' it/en binario: il template ha gia' tutte e 8
+        # le lingue, prima le ETICHETTE righe + l'oggetto le annullavano a it/en.
+        lang = _lingua({"lang": dati.get("lang")})
+        from fase86_email import corpo_preventivo_html, T as _T, oggetto as _oggetto_email
         v = corpo.get("valuta", "EUR")
         notti = corpo.get("notti")
-        et_sogg = ("Soggiorno" if lang == "it" else "Stay") + (
-            " (%s %s)" % (notti, "notti" if lang == "it" else "nights") if notti else "")
+        et_sogg = _T("prev_sogg", lang) + (
+            " (%s %s)" % (notti, _T("prev_notti", lang)) if notti else "")
         righe = [(et_sogg, self._fmt_importo(corpo.get("prezzo_guest_cents"), v))]
         if isinstance(corpo.get("tassa_soggiorno_cents"), int) and corpo["tassa_soggiorno_cents"] > 0:
-            righe.append(("Tassa di soggiorno" if lang == "it" else "Tourist tax",
+            righe.append((_T("prev_tassa", lang),
                           self._fmt_importo(corpo["tassa_soggiorno_cents"], v)))
         tot = corpo.get("totale_cents") or corpo.get("prezzo_guest_cents")
-        righe.append(("Totale" if lang == "it" else "Total", self._fmt_importo(tot, v)))
+        righe.append((_T("prev_totale", lang), self._fmt_importo(tot, v)))
         from urllib.parse import urlencode as _ue
         url = ((self._base_url or "https://bookinvip.com") + "/?" +
                _ue({"apri": slug, "ci": ci, "co": co}))
-        from fase86_email import corpo_preventivo_html
         html = corpo_preventivo_html(titolo, ci, co, righe, url, lingua=lang)
-        oggetto = ("BookinVIP - Il tuo preventivo per %s" if lang == "it"
-                   else "BookinVIP - Your quote for %s") % titolo
+        oggetto = _oggetto_email("prev_ogg", lang, titolo)
         if not prov.invia(email.strip(), oggetto, html):
             return 502, {"errore": "invio_fallito"}
         mem[chiave] = ora

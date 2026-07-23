@@ -135,6 +135,23 @@ def _lingua(l: Any) -> str:
 
 # chiave semantica -> testo per lingua. Ogni chiave ha tutte e 8 le lingue.
 _TR = {
+    # --- email 'preventivo' (recupero hold): etichette righe + oggetto, 8 lingue ---
+    "prev_sogg": {"it": "Soggiorno", "en": "Stay", "es": "Estancia", "fr": "Séjour",
+                  "de": "Aufenthalt", "pt": "Estadia", "ja": "滞在", "zh": "住宿"},
+    "prev_notti": {"it": "notti", "en": "nights", "es": "noches", "fr": "nuits",
+                   "de": "Nächte", "pt": "noites", "ja": "泊", "zh": "晚"},
+    "prev_tassa": {"it": "Tassa di soggiorno", "en": "Tourist tax", "es": "Tasa turística",
+                   "fr": "Taxe de séjour", "de": "Kurtaxe", "pt": "Taxa de turismo",
+                   "ja": "宿泊税", "zh": "旅游税"},
+    "prev_totale": {"it": "Totale", "en": "Total", "es": "Total", "fr": "Total",
+                    "de": "Gesamt", "pt": "Total", "ja": "合計", "zh": "总计"},
+    "prev_ogg": {"it": "BookinVIP - Il tuo preventivo per %s",
+                 "en": "BookinVIP - Your quote for %s",
+                 "es": "BookinVIP - Tu presupuesto para %s",
+                 "fr": "BookinVIP - Votre devis pour %s",
+                 "de": "BookinVIP - Ihr Angebot für %s",
+                 "pt": "BookinVIP - O teu orçamento para %s",
+                 "ja": "BookinVIP - %s のお見積り", "zh": "BookinVIP - %s 的报价"},
     # --- voucher / conferma prenotazione ---
     "v_apri": {"it": "Apri il tuo voucher", "en": "Open your voucher",
                "es": "Abre tu bono", "fr": "Ouvrir votre bon",

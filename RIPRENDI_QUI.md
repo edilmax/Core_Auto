@@ -479,16 +479,7 @@ penalità −40). `test_fase190` (14). Da cablare: modale "Segnala prezzo più b
 >   ⚠️ Trovato anche un difetto **nel mio collaudo**: `plausibilita.py` teneva una terza
 >   tabella e dava **HUF/TWD/COP senza decimali** (ne hanno due) → ora legge dal motore.
 >
-> · 🔴 **PROSSIMO LAVORO — LE EMAIL PARLANO UNA LINGUA SOLA**: `fase86_email.py` ha
->   **10 corpi di email e 9 non sanno in che lingua parlare** (voucher, pagamento
->   confermato, rimborso, invito a recensire, esito controversia, bonifico host, reset
->   password, benvenuto host, promemoria check-in). **È peggio delle pagine**: su una
->   pagina la lingua si cambia, su un'email no. **L'ostacolo non è tradurre: la lingua
->   non viene MAI SALVATA** — il browser prenota con `{quote_token, email}` e basta
->   (`index.html:689`), `registro_host` non ha la colonna, esiste solo in
->   `accettazioni.lang`. Eppure il **link** del voucher porta già `?lang=`: **la pagina
->   del voucher è tradotta, l'email che la annuncia no.** Ordine: browser manda la
->   lingua → la prenotazione la salva → `fase86_email` in 8 lingue.
+> · ✅ **EMAIL MULTILINGUA — FATTO** (verificato 2026-07-24): tutti i 10 corpi di `fase86_email` sono in 8 lingue; la lingua dell'ospite si cattura al book e si salva nel `voucher_token` firmato, poi la usano tutte le email. Ultimo residuo (email recupero-preventivo, prima it/en) chiuso 2026-07-24. Guardie `test_email_localizzate` + `test_email_preventivo_lingua`.
 >
 > · 👁️ **LE VERIFICHE DEL PRODOTTO (2026-07-21 notte)** — la lezione piu' cara della
 >   giornata: **i due difetti peggiori li ha trovati il FONDATORE guardando il sito**,

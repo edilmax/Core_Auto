@@ -266,35 +266,9 @@ significa poterti chiudere fuori dal tuo stesso pannello. Le chiavi e i soldi li
 
 
 
-### 🔴 PRIORITÀ — LE EMAIL PARLANO UNA LINGUA SOLA (trovato 2026-07-21, da chiudere)
+### ✅ EMAIL MULTILINGUA — FATTO (verificato nel codice 2026-07-24)
 
-`fase86_email.py` ha **10 corpi di email: 9 non hanno il parametro `lingua`** e portano
-l'italiano scritto dentro. Fra questi il **voucher** (il documento che l'ospite mostra al
-check-in), **pagamento confermato**, **cancellazione e rimborso**, **invito a recensire**,
-**esito della controversia**, **bonifico all'host**, **reimposta password**, **benvenuto
-host**, **promemoria check-in**. Solo `corpo_preventivo_html` ha la lingua, e binaria.
-
-**È peggio delle pagine**: su una pagina la lingua si cambia, su un'email no.
-
-**L'ostacolo non è tradurre: la lingua non viene MAI SALVATA.** Verificato in produzione:
-- il browser prenota con `{quote_token, email}` — **niente lingua** (`index.html:689`);
-- `registro_host.host`: **nessuna colonna di lingua** (27 colonne);
-- `garanzia`, `messaggi`, `pendenti`: nessuna lingua;
-- la lingua dell'host esiste **solo** in `accettazioni.lang` (dalla firma del contratto);
-- `recensioni` invece ce l'ha già.
-
-Dettaglio che spiega tutto: il **link** del voucher porta già `?lang=`
-(`index.html:696`) e il PDF del contratto manda `lingua: LANG` → **la pagina del voucher
-è tradotta, l'email che la annuncia no.**
-
-**Ordine**: (1) il browser manda `lingua` quando prenota → (2) la prenotazione la salva →
-(3) `fase86_email` prende `lingua` con tutte e 8 le lingue, i chiamanti la passano, e il
-link dentro l'email porta `?lang=`. Guardia da scrivere: **nessun corpo di email può
-esistere senza sapere in che lingua parla** (auto-applicante come quella degli archivi:
-si aggiunge una funzione `corpo_*` finta e la suite deve cadere).
-
-Regola: ogni volta che si completa qualcosa, aggiornare questa lista (togliere il fatto,
-aggiungere ciò che resta). Così "cosa è fatto" e "cosa manca" stanno sempre insieme.
+Tutti e 10 i corpi di `fase86_email.py` accettano `lingua` (ripiego INGLESE, mai italiano). La lingua dell'ospite **viene catturata** alla prenotazione (`deploy/index.html` manda `lang` nel book), **salvata** nel `voucher_token` FIRMATO (`fase83._finalizza_prenotazione`), e **passata** a ogni email (voucher/pagamento/cancellazione/controversia/recensione/promemoria via `_lang_da_voucher`; bonifico host via `accettazioni.lang`; reset/benvenuto da `dati.lang`). Ultimo residuo chiuso 2026-07-24: l'email di **recupero-preventivo** (`_preventivo_email`) era it/en binaria → ora 8 lingue piene (chiavi `prev_*` in `_TR` + `T()`/`oggetto()`). Guardie: `test_email_localizzate` + `test_email_preventivo_lingua` (4, ES/JA/DE + ripiego EN). _(La vecchia sezione «LE EMAIL PARLANO UNA LINGUA SOLA» era STANTIA — contraddiceva la sezione FATTO più avanti e rigenerava un falso «da fare» — rimossa per igiene doc, regola CLAUDE.md «togliere ciò che è completato».)_
 
 **Prerequisiti del FONDATORE (sbloccano funzioni già pronte):**
 - Stripe Connect: **niente da fare** (già attivo); serve solo che gli host premano "Collega Stripe".
