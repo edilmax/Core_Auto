@@ -76,10 +76,15 @@ class TestPoliticaCancellazione(unittest.TestCase):
         self.assertEqual(c["trattenuto_cents"], 0)
 
     def test_credito_viaggio_anti_rimpianto_sulla_penale(self):
-        # Fuori dal ripensamento (arrivo imminente +1gg): scatta la PENALE -> parte torna in credito.
-        self._pubblica("moderata")                                # moderata: a +1gg -> 50%
+        # Fuori dal ripensamento, scatta la PENALE moderata -> parte torna in credito.
+        # ARRIVO +2gg, NON +1: a +1 giorno l'arrivo (check-in 15:00 nel fuso) e' SUL CONFINE
+        # delle 24h -> le ore-all-arrivo oscillano fra 0 e 1 giorno a seconda dell'ORA in cui
+        # gira il test (moderata: giorni 0 -> 0% rimborso = 100% penale; giorni>=1 -> 50%).
+        # Era un test A TEMPO (flaky, visto ROSSO in CI). A +2gg giorni-all-arrivo e' SEMPRE
+        # 1-2 (moderata = 50%) e le ore sono SEMPRE < 72h (nessun ripensamento). Deterministico.
+        self._pubblica("moderata")                                # moderata: giorni 1-4 -> 50%
         _, q = self.g("POST", "/api/concierge/quote", {
-            "alloggio_id": "casa", "check_in": self._d(1), "check_out": self._d(3),
+            "alloggio_id": "casa", "check_in": self._d(2), "check_out": self._d(4),
             "party": 1})
         _, b = self.g("POST", "/api/concierge/book",
                       {"quote_token": q["quote_token"], "email": "o@x.it"})
