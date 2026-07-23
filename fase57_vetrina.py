@@ -998,8 +998,6 @@ class CatalogoVetrina:
                                       if "modalita_prenotazione" in a.keys() else "immediata"),
             "paga_in_struttura": (bool(a["paga_in_struttura"])
                                   if "paga_in_struttura" in a.keys() else True),
-            "lat_micro": a["lat_micro"],
-            "lon_micro": a["lon_micro"],
             "immagini": [{"url": i["url"], "ordine": int(i["ordine"]), "alt": i["alt"]}
                          for i in imgs],
             # come si prenota: la UI passa lo slug come tavolo_id al gateway (fase56)

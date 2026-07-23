@@ -11,9 +11,14 @@ Durevole SQLite (conn-per-op, row_factory=Row), idempotente, denaro in cents int
 """
 from __future__ import annotations
 
+import logging
 import sqlite3
 import time
 from typing import Any, Callable, Dict, List, Optional
+
+# BUG trovato da ruff (F821) 2026-07-23: i gestori `except` usavano `logger` senza definirlo ->
+# in produzione un fail-safe che scatta andava in NameError invece di loggare-e-proseguire.
+logger = logging.getLogger("core_auto.pagamenti_pendenti")
 
 HOLD_SECONDI_DEFAULT = 120           # 2 minuti per pagare, poi la stanza si libera (urgenza tipo Agoda: chi paga prima se la prende)
 
