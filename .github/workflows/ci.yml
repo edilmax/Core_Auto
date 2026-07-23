@@ -44,3 +44,18 @@ jobs:
         with: { python-version: '3.9' }
       - name: Mutazione (i test si accorgono dei guasti?)
         run: python collaudi/mutazione_prodotto.py
+
+  # Qualita' statica + dipendenze (Ubuntu): ruff, mypy sui soldi, pip-audit.
+  qualita:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.9' }
+      - run: pip install ruff mypy pip-audit
+      - name: Ruff (bug potenziali)
+        run: ruff check fase*.py main_casavip.py --select F,E7 || true
+      - name: Mypy sui motori-soldi
+        run: mypy fase188_paga_struttura.py fase98_policy_commissione.py fase111_cancellazione.py --ignore-missing-imports || true
+      - name: pip-audit (dipendenze)
+        run: pip-audit || true
