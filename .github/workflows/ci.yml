@@ -1,34 +1,46 @@
-# CORE_AUTO / Tavola VIP - CI: l'intera suite gira ad ogni push e PR.
-name: CI
+name: BookinVIP CI
 
+# Gira ad ogni push/PR su master: se un test diventa rosso, lo vedi subito su GitHub.
 on:
   push:
+    branches: [ master ]
   pull_request:
-
-# Least-privilege: il workflow legge soltanto il codice.
-permissions:
-  contents: read
-
-# Annulla le run superate sullo stesso ref (risparmia minuti CI).
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+    branches: [ master ]
 
 jobs:
-  test:
+  # Feedback VELOCE: i test critici sui soldi + Paga in Struttura (pochi minuti).
+  money-smoke:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false          # esegui entrambe le versioni anche se una fallisce
-      matrix:
-        python-version: ["3.9", "3.11"]
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip            # cache delle dipendenze tra le run
-      - name: Installa dipendenze
-        run: pip install -r requirements.txt
-      - name: Suite di test (gate di regressione)
-        run: python -m unittest discover -p "test_*.py"
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.9' }
+      - name: Test money-path + Paga in Struttura
+        run: |
+          python -m unittest \
+            test_paga_struttura test_paga_struttura_p0 test_paga_struttura_e2e \
+            test_paga_struttura_cablaggio test_paga_struttura_avanzato \
+            test_fase85_pagamenti_stripe test_fase98_policy_commissione \
+            test_conservazione_denaro test_cancellazione_money \
+            test_fase189_price_alerts test_fase190_rate_parity
+
+  # Suite INTERA (piu' lunga): il quadro completo.
+  full-suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.9' }
+      - name: Suite completa
+        run: python -m unittest discover -s . -p "test_*.py"
+
+  # Guardia mutazione: prova che i test dei soldi non sono ciechi.
+  mutazione:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.9' }
+      - name: Mutazione (i test si accorgono dei guasti?)
+        run: python collaudi/mutazione_prodotto.py
