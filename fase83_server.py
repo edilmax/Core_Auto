@@ -146,6 +146,8 @@ ETICHETTE_UI: Dict[str, Dict[str, str]] = {
     "prezzo_dinamico": {"it": "Prezzo dinamico suggerito", "en": "Suggested dynamic price", "es": "Precio dinámico", "fr": "Prix dynamique", "de": "Dynamischer Preis", "pt": "Preço dinâmico sugerido", "ja": "推奨ダイナミック価格", "zh": "建议动态价格"},
     # --- voucher ---
     "voucher_ok": {"it": "Prenotazione confermata", "en": "Booking confirmed", "es": "Reserva confirmada", "fr": "Réservation confirmée", "de": "Buchung bestätigt", "pt": "Reserva confirmada", "ja": "予約確定", "zh": "预订已确认"},
+    "ps_anticipo_pagato": {"it": "Pagato online (anticipo)", "en": "Paid online (deposit)", "es": "Pagado online (anticipo)", "fr": "Payé en ligne (acompte)", "de": "Online bezahlt (Anzahlung)", "pt": "Pago online (adiantamento)", "ja": "オンライン決済済み（前金）", "zh": "已在线支付（订金）"},
+    "ps_saldo_nota": {"it": "Saldo da pagare in struttura all'arrivo:", "en": "Balance to pay at the property on arrival:", "es": "Saldo a pagar en el alojamiento a la llegada:", "fr": "Solde à payer sur place à l'arrivée :", "de": "Restbetrag bei Ankunft vor Ort zu zahlen:", "pt": "Saldo a pagar no alojamento à chegada:", "ja": "到着時に現地でお支払いいただく残額：", "zh": "抵达时在住处支付的余款："},
     "rif": {"it": "Riferimento", "en": "Reference", "es": "Referencia", "fr": "Référence", "de": "Referenz", "pt": "Referência", "ja": "予約番号", "zh": "参考号"},
     "dal": {"it": "Dal", "en": "From", "es": "Desde", "fr": "Du", "de": "Von", "pt": "De", "ja": "から", "zh": "从"},
     "al": {"it": "Al", "en": "To", "es": "Hasta", "fr": "Au", "de": "Bis", "pt": "Até", "ja": "まで", "zh": "至"},
@@ -928,6 +930,25 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
                 "Ricevuta di pagamento</a>" % _q(str(token), safe=""))
     except Exception:
         logger.warning("link ricevuta voucher fallito (ISOLATO)", exc_info=True)
+    # PAGA IN STRUTTURA: se questa prenotazione e' "in struttura" (firmato nel token), mostra
+    # il SALDO da pagare all'host DI PERSONA all'arrivo + quanto e' gia' stato pagato online.
+    # E' cio' che l'host legge sul voucher per sapere quanto incassare. Assente sull'online.
+    blocco_saldo = ""
+    _modo_v = str(dati.get("modo_pagamento", ""))
+    _saldo_v = dati.get("saldo_in_loco_cents", 0)
+    if _modo_v == "in_struttura" and isinstance(_saldo_v, int) and not isinstance(_saldo_v, bool) \
+            and _saldo_v > 0:
+        _val_v = str(dati.get("valuta", "EUR"))
+        _ant_v = dati.get("anticipo_online_cents", 0)
+        _ant_v = _ant_v if isinstance(_ant_v, int) and not isinstance(_ant_v, bool) else 0
+        blocco_saldo = (
+            "<div class=\"r\"><span>%s</span><strong>%s %s</strong></div>"
+            "<div style='margin-top:.5rem;padding:.7rem .8rem;background:#fff4e5;"
+            "border:1px solid #ffd9a8;border-radius:.8rem;color:#8a5200'>"
+            "<div style='font-size:.8rem'>%s</div>"
+            "<strong style='font-size:1.15rem'>%s %s</strong></div>"
+        ) % (e(_ui("ps_anticipo_pagato", lng)), e(_importo(_ant_v, _val_v)), e(_val_v),
+             e(_ui("ps_saldo_nota", lng)), e(_importo(_saldo_v, _val_v)), e(_val_v))
     return (
         "<!DOCTYPE html><html lang=\"%s\"><head><meta charset=\"UTF-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
@@ -943,6 +964,7 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
         "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
         "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
         "<div class=\"r\"><span>%s</span><strong>%s %s</strong></div>"
+        "%s"
         "%s</div></body></html>"
     ) % (
         e(lng), e(_ui("voucher_ok", lng)),
@@ -951,6 +973,7 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
         e(_ui("dal", lng)), e(str(dati.get("check_in", ""))),
         e(_ui("al", lng)), e(str(dati.get("check_out", ""))),
         e(_ui("totale", lng)), e(prezzo), e(str(dati.get("valuta", "EUR"))),
+        blocco_saldo,
         blocco_pass,
     )
 
@@ -4647,12 +4670,18 @@ class RouterHTTP:
             from fase86_email import corpo_pagamento_confermato_html, oggetto
             lang = self._lang_da_voucher(vt)
             vurl = (vurl + "?lang=" + lang) if vurl else vurl
+            # PAGA IN STRUTTURA: online abbiamo incassato solo l'ANTICIPO -> mostra quello come
+            # "pagato" + il SALDO da dare all'host in loco. Online: importo=prezzo, saldo=0.
+            _in_str = dj.get("modo_pagamento") == "in_struttura"
+            _importo_email = int(dj.get("anticipo_online_cents", 0) or 0) if _in_str \
+                else int(dj.get("prezzo_guest_cents", 0) or 0)
+            _saldo_email = int(dj.get("saldo_in_loco_cents", 0) or 0) if _in_str else 0
             self._email_bg(rec.get("email", ""),
                            oggetto("pc_ogg", lang),
                            corpo_pagamento_confermato_html(
                                dj.get("titolo") or rec.get("alloggio_id", ""), vurl,
-                               int(dj.get("prezzo_guest_cents", 0) or 0),
-                               dj.get("valuta", "EUR"), lingua=lang))
+                               _importo_email, dj.get("valuta", "EUR"), lingua=lang,
+                               saldo_cents=_saldo_email))
         except Exception:
             logger.warning("email conferma pagamento fallita (ignorata)", exc_info=True)
 
@@ -6160,7 +6189,13 @@ class RouterHTTP:
                 # IDEMPOTENTI (tassa + payout maturato). NON ri-eseguo credito/referral (non
                 # idempotenti: doppio-apply = perdita); un crash prima di quelli perde solo il
                 # bonus di quella prenotazione (degrado minimo vs incoerenza permanente).
-                self._riasserisci_incasso(rec, rif)
+                # PAGA IN STRUTTURA: NON ri-asserire! Per l'in-struttura non c'e' NIENTE di
+                # derivato (niente tassa nostra, niente payout, niente incasso del totale: online
+                # abbiamo preso solo l'anticipo, il saldo+tassa li incassa l'host in loco). Un
+                # retry deve essere un NO-OP: senza questa guardia registreremmo il TOTALE come
+                # nostro incasso + la tassa che non abbiamo mai incassato (bug provato dal test).
+                if not self._rec_in_struttura(rec):
+                    self._riasserisci_incasso(rec, rif)
                 return
             # WHITELIST: si conferma SOLO 'in_attesa' (hold vivo) o 'scaduto' (re-block sotto).
             # Ogni altro stato (cancellata dal cliente/host, rimborsata, richiesta NON ancora

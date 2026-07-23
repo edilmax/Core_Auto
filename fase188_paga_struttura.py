@@ -85,9 +85,16 @@ def calcola(prezzo_cents: Any, notti: Any, commissione_cents: Any, *,
         return max(gateway_minimo_cents, per_stripe, per_psp)
 
     # anticipo online = commissione + fee + copertura carta (tutto nostro). Il gateway dipende
-    # dall'anticipo -> una passata di assestamento.
+    # dall'anticipo: e' un PUNTO FISSO (anticipo = comm + fee + _gw(anticipo)). Iterando converge
+    # in pochi passi (l'incremento cala di ~3,25% a passo); iterare invece di fare 2 sole passate
+    # rende il gateway ESATTO a QUALSIASI grandezza -> niente sotto-copertura di Stripe nemmeno
+    # su prenotazioni enormi (bug provato dal test P0 a 1M: 2 passate lasciavano un buco di ~2€).
     anticipo = comm + fee + _gw(comm + fee)
-    anticipo = comm + fee + _gw(anticipo)
+    for _ in range(8):
+        nuovo = comm + fee + _gw(anticipo)
+        if nuovo == anticipo:
+            break
+        anticipo = nuovo
     anticipo = min(anticipo, ospite_totale)                     # mai piu' del totale (prezzi minuscoli)
     gateway = _gw(anticipo)
     # su un totale minuscolo comm+fee+gateway potrebbero superare l'anticipo: si comprime prima

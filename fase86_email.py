@@ -197,6 +197,10 @@ _TR = {
     "pc_importo": {"it": "Importo pagato", "en": "Amount paid", "es": "Importe pagado",
                    "fr": "Montant payé", "de": "Gezahlter Betrag", "pt": "Valor pago",
                    "ja": "お支払い金額", "zh": "已付金额"},
+    "pc_saldo": {"it": "Saldo da pagare in struttura all'arrivo:", "en": "Balance to pay at the property on arrival:",
+                 "es": "Saldo a pagar en el alojamiento a la llegada:", "fr": "Solde à payer sur place à l'arrivée :",
+                 "de": "Restbetrag bei Ankunft vor Ort zu zahlen:", "pt": "Saldo a pagar no alojamento à chegada:",
+                 "ja": "到着時に現地でお支払いいただく残額：", "zh": "抵达时在住处支付的余款："},
     "pc_ok": {"it": "Il pagamento per <strong>%s</strong> è andato a buon fine: la prenotazione è confermata.",
               "en": "The payment for <strong>%s</strong> was successful: your booking is confirmed.",
               "es": "El pago de <strong>%s</strong> se ha realizado: tu reserva está confirmada.",
@@ -619,15 +623,24 @@ def corpo_preventivo_html(titolo_alloggio: str, check_in: str, check_out: str,
 
 
 def corpo_pagamento_confermato_html(titolo: str, voucher_url: str, importo_cents: int,
-                                    valuta: str, lingua: Any = "en") -> str:
-    """Email dopo il PAGAMENTO riuscito. LOCALIZZATA. XSS-safe."""
+                                    valuta: str, lingua: Any = "en",
+                                    saldo_cents: int = 0) -> str:
+    """Email dopo il PAGAMENTO riuscito. LOCALIZZATA. XSS-safe.
+    `saldo_cents` > 0 (PAGA IN STRUTTURA): mostra il SALDO da pagare all'host in loco.
+    Default 0 (online) -> email invariata."""
     e = _html.escape
     lg = _lingua(lingua)
     riga_importo = ("<p>%s: <strong>%s</strong></p>"
                     % (e(T("pc_importo", lg)), e(_soldi(importo_cents, valuta)))
                     if importo_cents else "")
+    # PAGA IN STRUTTURA: il saldo da pagare di persona, evidenziato (l'ospite deve saperlo).
+    riga_saldo = ("<p style=\"background:#fff4e5;border-radius:10px;padding:.7rem 1rem;"
+                  "color:#8a5200\">%s <strong>%s</strong></p>"
+                  % (e(T("pc_saldo", lg)), e(_soldi(saldo_cents, valuta)))
+                  if (isinstance(saldo_cents, int) and not isinstance(saldo_cents, bool)
+                      and saldo_cents > 0) else "")
     return _wrap("#0f4c3a", T("pc_titolo", lg),
-                 "<p>%s</p>" % (T("pc_ok", lg) % e(titolo)), riga_importo,
+                 "<p>%s</p>" % (T("pc_ok", lg) % e(titolo)), riga_importo, riga_saldo,
                  _btn(voucher_url, T("v_apri", lg)), _nota(T("pc_nota", lg)))
 
 

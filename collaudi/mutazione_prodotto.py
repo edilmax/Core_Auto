@@ -98,6 +98,31 @@ MUTANTI = [
      "",
      "test_avvio_main test_db_persistenti",
      "le recensioni tornano a vivere in RAM: perse a ogni riavvio (BUG VERO DI OGGI)"),
+
+    # ── PAGA IN STRUTTURA (anticipo/saldo, fase188 + fase83) ─────────────────────
+    ("fase188_paga_struttura.py",
+     "GATEWAY_BPS = 325",
+     "GATEWAY_BPS = 200",
+     "test_paga_struttura_p0 test_paga_struttura",
+     "la copertura carta non copre il 3,25% di Stripe extra-UE: si PERDE denaro su ogni carta straniera"),
+
+    ("fase188_paga_struttura.py",
+     "GATEWAY_FISSO_CENTS = 55",
+     "GATEWAY_FISSO_CENTS = 25",
+     "test_paga_struttura_p0",
+     "sparisce il margine di sicurezza sopra il fisso Stripe (0,25): si perde sui piccoli addebiti"),
+
+    ("fase83_server.py",
+     "if corpo.get(\"modo_pagamento\") != \"in_struttura\":",
+     "if corpo.get(\"modo_pagamento\") == \"in_struttura\":",
+     "test_paga_struttura_e2e",
+     "protezione soldi INVERTITA: l'online perde escrow+payout / l'in-struttura trattiene un saldo che non ha"),
+
+    ("fase83_server.py",
+     "if not self._rec_in_struttura(rec):",
+     "if True:",
+     "test_paga_struttura_e2e",
+     "il webhook DUPLICATO in-struttura registra il TOTALE + la tassa come incasso nostro (soldi mai ricevuti)"),
 ]
 
 
