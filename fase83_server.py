@@ -1493,7 +1493,47 @@ class RouterHTTP:
             logger.error("RouterHTTP: eccezione ISOLATA (-> 500)", exc_info=True)
             return 500, {"errore": "errore_interno"}
 
+    def _salute_db(self) -> Tuple[bool, Dict[str, str]]:
+        """Salute di OGNI archivio configurato: connessione a parte + SELECT 1 (READ-ONLY,
+        veloce, ISOLATA per DB: un archivio rotto non nasconde gli altri). Enumera i campi
+        'db_*' di ConfigCasaVIP -> nessun nome scritto a mano; :memory:/vuoti saltati."""
+        import sqlite3 as _sq
+        cfg = getattr(self._sys, "config", None)
+        campi = getattr(type(cfg), "__dataclass_fields__", {}) if cfg is not None else {}
+        out: Dict[str, str] = {}
+        tutto_ok = True
+        for nome in campi:
+            if not nome.startswith("db_"):
+                continue
+            perc = getattr(cfg, nome, "")
+            if not (isinstance(perc, str) and perc) or perc == ":memory:":
+                continue
+            try:
+                con = _sq.connect(perc, timeout=5)
+                try:
+                    # PRAGMA schema_version LEGGE l'intestazione del file: fallisce su un file
+                    # non-sqlite/corrotto (un banale SELECT 1 non tocca il file e non se ne accorge).
+                    con.execute("PRAGMA schema_version").fetchone()
+                finally:
+                    con.close()
+                out[nome] = "ok"
+            except Exception:
+                out[nome] = "ERRORE"
+                tutto_ok = False
+        return tutto_ok, out
+
     def _instrada(self, metodo, path, query, body, headers):
+        # SONDE DI SALUTE, prima del gate 'sistema_spento': la LIVENESS deve rispondere ANCHE
+        # durante avvio/spegnimento (l'orchestratore distingue "processo vivo ma non pronto" da
+        # "processo morto"); READY e DB danno un esito PROPRIO invece del generico 503. READ-ONLY.
+        if metodo == "GET" and path == "/api/health/live":
+            return 200, {"status": "live", "money_unit": "cents_integer"}
+        if metodo == "GET" and path == "/api/health/ready":
+            pronto = bool(getattr(self._sys, "attivo", False))
+            return (200 if pronto else 503), {"status": "ready" if pronto else "not_ready"}
+        if metodo == "GET" and path == "/api/health/db":
+            ok, dettaglio = self._salute_db()
+            return (200 if ok else 503), {"status": "ok" if ok else "degraded", "db": dettaglio}
         if not self._sys.attivo:
             return 503, {"errore": "sistema_spento"}
         if metodo == "GET" and path == "/api/health":
