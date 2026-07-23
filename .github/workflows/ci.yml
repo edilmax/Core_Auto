@@ -77,8 +77,9 @@ jobs:
   # ===== STRUMENTI ESTERNI: girano SOLO su Linux (Java/clang assenti su Windows) =====
 
   # W3C: validatore HTML5 ufficiale (Nu di W3C, via Java) su tutte le pagine servite.
-  # Report-only (|| true): mostra i rilievi nel log senza bloccare -> le pagine hanno
-  # inline intenzionali; visti i primi risultati si decide se irrigidire in hard-fail.
+  # HTML in STRICT (blocca sugli errori HTML veri: al primo giro erano img src="" e <div>
+  # dentro <label>, ora corretti -> 0 errori HTML). CSS in REPORT-ONLY: il motore CSS del
+  # validatore e' datato e segnala a torto CSS validi e moderni (inset, text-wrap) -> non blocca.
   w3c:
     runs-on: ubuntu-latest
     steps:
@@ -91,7 +92,9 @@ jobs:
           java-version: '17'
       - name: Installa html5validator (usa il Nu di W3C)
         run: pip install html5validator
-      - name: Valida HTML5 + CSS delle pagine in deploy/
+      - name: Valida HTML5 (STRICT - blocca sugli errori HTML veri)
+        run: html5validator --root deploy --show-warnings
+      - name: Valida CSS (REPORT-ONLY - validatore CSS datato, falsi positivi su CSS moderno)
         run: html5validator --root deploy --also-check-css --show-warnings || true
 
   # ATHERIS: fuzzing coverage-guided sui motori-soldi. Un invariante rotto = job ROSSO
@@ -119,7 +122,10 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - name: OWASP ZAP Baseline (passivo) su https://bookinvip.com
+      # STRICT sul GRAVE: -I fa si' che gli AVVISI non blocchino (al primo giro: 0 FAIL,
+      # 59 PASS, 11 avvisi = header di hardening mancanti, non buchi). Esce non-zero SOLO
+      # su un alert FAIL (vulnerabilita' vera). Niente mount: il report va su stdout.
+      - name: OWASP ZAP Baseline sul sito live (STRICT - blocca solo su FAIL grave)
         run: |
-          docker run --rm -v "$(pwd):/zap/wrk/:rw" -t ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t https://bookinvip.com -I -a || true
+          docker run --rm -t ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t https://bookinvip.com -I -a

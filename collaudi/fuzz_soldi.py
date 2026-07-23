@@ -14,7 +14,12 @@ minuscolo il motore comprime fee/commissione entro l'anticipo (corner sub-cent c
 reale non esiste: nessuna prenotazione costa 3 centesimi) e li' quelle uguaglianze non tengono.
 Vengono quindi verificate solo dove il motore lavora davvero -> nessun falso-rosso in CI.
 """
+import os
 import sys
+
+# La radice del repo (dove vivono i fase*.py) DEVE stare nel path: lanciando
+# "python collaudi/fuzz_soldi.py" Python mette collaudi/ nel path, non la radice.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import atheris
 
