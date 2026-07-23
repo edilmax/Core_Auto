@@ -30,6 +30,12 @@ class TestViolazionePura(unittest.TestCase):
         # noi 101, OTA 100, soglia 102 -> non e' violazione (rumore/valute)
         self.assertFalse(RP.e_violazione(10100, 10000))
 
+    def test_confine_esatto_tolleranza_off_by_one(self):
+        # OTA 100.00, tolleranza 2% -> soglia ESATTA 102.00. Confine < vs <=:
+        # a 102.00 NON e' violazione (siamo alla soglia), a 102.01 SI'.
+        self.assertFalse(RP.e_violazione(10200, 10000), "alla soglia esatta non e' violazione")
+        self.assertTrue(RP.e_violazione(10201, 10000), "un cent oltre la soglia E' violazione")
+
     def test_input_assurdi_non_sollevano(self):
         for n, o in ((None, None), ("x", 100), (100, 0), (-5, 100), (100, -1)):
             try:
