@@ -4035,6 +4035,10 @@ class RouterHTTP:
                 corpo["stato"] = "in_attesa_host"
                 corpo.pop("payment_url", None)
                 return status, corpo
+            # PAGA IN STRUTTURA (FASE 2): solo instant-book. Se l'ospite ha scelto "in struttura"
+            # e le condizioni valgono, sostituisce il link col Checkout dell'ANTICIPO. Fail-safe:
+            # se qualcosa non va, resta il flusso ONLINE (nessuna prenotazione persa).
+            self._forse_paga_struttura(corpo, dati)
             corpo = self._finalizza_prenotazione(corpo, dati)
             if corpo.get("_rifiuta_credito"):
                 return 409, {"stato": "rifiutata", "errore": "credito_gia_usato",
@@ -4048,6 +4052,58 @@ class RouterHTTP:
             return m if m in ("immediata", "su_richiesta") else "immediata"
         except Exception:
             return "immediata"
+
+    def _forse_paga_struttura(self, corpo, dati):
+        """FASE 2 - PAGA IN STRUTTURA (solo instant-book, DARK finche' PAGA_STRUTTURA_ATTIVO=1).
+        Se l'ospite ha scelto 'in_struttura' E l'annuncio lo accetta E la feature e' accesa:
+        ricalcola anticipo/saldo dal totale FIRMATO (fase188 — tamper-proof: MAI dai valori del
+        client), crea il Checkout dell'ANTICIPO (fase85.crea_link_anticipo, che salva anche la
+        carta) e SOSTITUISCE payment_url; marca corpo perche' a valle si salti escrow/payout.
+        FAIL-SAFE: qualsiasi intoppo -> resta il flusso ONLINE (corpo intatto). True se attiva."""
+        try:
+            if str((dati or {}).get("modo_pagamento") or "") != "in_struttura":
+                return False
+            import os as _os
+            if _os.environ.get("PAGA_STRUTTURA_ATTIVO", "0") != "1":
+                return False                       # DARK: opzione non attiva in prod
+            allog = corpo.get("alloggio_id", "")
+            # l'annuncio DEVE accettare (ri-verifica server-side, non ci si fida del client)
+            det = None
+            try:
+                det = self._sys.catalogo.dettaglio(allog)
+            except Exception:
+                det = None
+            if not (isinstance(det, dict) and bool(det.get("paga_in_struttura", True))):
+                return False
+            stripe = getattr(self._sys, "stripe", None)
+            if stripe is None or not hasattr(stripe, "crea_link_anticipo"):
+                return False
+            totale = corpo.get("totale_cents")
+            if not (isinstance(totale, int) and not isinstance(totale, bool) and totale > 0):
+                return False
+            comm = corpo.get("commissione_cents", 0)
+            comm = comm if isinstance(comm, int) and not isinstance(comm, bool) else 0
+            import fase188_paga_struttura as _ps
+            notti = _notti_count(corpo.get("check_in", ""), corpo.get("check_out", ""))
+            r = _ps.calcola(totale, notti, comm)
+            link = stripe.crea_link_anticipo({
+                "anticipo_cents": r["anticipo_online_cents"],
+                "saldo_cents": r["saldo_in_loco_cents"],
+                "valuta": corpo.get("valuta", "EUR"),
+                "email": (dati or {}).get("email", ""),
+                "riferimento": corpo.get("riferimento", "")})
+            if not link:
+                logger.warning("paga-struttura: link anticipo non creato -> resto ONLINE")
+                return False
+            corpo["payment_url"] = link
+            corpo["modo_pagamento"] = "in_struttura"
+            corpo["anticipo_online_cents"] = r["anticipo_online_cents"]
+            corpo["saldo_in_loco_cents"] = r["saldo_in_loco_cents"]
+            corpo["fee_cents"] = r["fee_cents"]
+            return True
+        except Exception:
+            logger.warning("paga-struttura: ramo fallito (ISOLATO) -> ONLINE", exc_info=True)
+            return False
 
     def _finalizza_prenotazione(self, corpo, dati, hold_sec=None):
         """Emette voucher/smart-pass/diritto, apre l'escrow, avvisa l'host, gestisce l'hold
@@ -4097,6 +4153,11 @@ class RouterHTTP:
                     "valuta": corpo.get("valuta", "EUR"),
                     "smart_pass": pass_token or "",
                     "tassa_soggiorno_cents": corpo.get("tassa_soggiorno_cents", 0),
+                    # PAGA IN STRUTTURA: firmati nel voucher cosi' la pagina e l'email possono
+                    # mostrare il SALDO da pagare in loco (assenti/0 sulle prenotazioni online).
+                    "modo_pagamento": corpo.get("modo_pagamento", ""),
+                    "saldo_in_loco_cents": corpo.get("saldo_in_loco_cents", 0),
+                    "anticipo_online_cents": corpo.get("anticipo_online_cents", 0),
                     "politica": self._politica_alloggio(allog),
                     "prenotato_data": _dt.date.today().isoformat(),   # (storico)
                     # l'ISTANTE, in secondi epoch: le 48h di ripensamento sono un diritto
@@ -4166,8 +4227,12 @@ class RouterHTTP:
             except Exception:
                 logger.warning("invio email voucher fallito (ignorato)", exc_info=True)
         self._avvisa_host_prenotazione(allog, ref, ci, co, corpo.get("fonte", ""))
-        self._apri_garanzia(ref, corpo.get("netto_host_cents", 0), allog, ci)
-        self._registra_payout(ref, allog, corpo)
+        # PAGA IN STRUTTURA: il saldo lo incassa l'host DI PERSONA (non passa da noi) e
+        # l'anticipo online e' interamente NOSTRO -> nessun escrow di garanzia, nessun payout
+        # da maturare. Si salta il denaro-a-valle; restano hold+voucher+email (col saldo).
+        if corpo.get("modo_pagamento") != "in_struttura":
+            self._apri_garanzia(ref, corpo.get("netto_host_cents", 0), allog, ci)
+            self._registra_payout(ref, allog, corpo)
         self._registra_hold(corpo, allog, ref, ci, co, dati.get("quote_token", ""),
                             dati.get("email", ""), hold_sec=hold_sec)
         return corpo
@@ -4417,6 +4482,12 @@ class RouterHTTP:
                                    "valuta": corpo.get("valuta", "EUR"),
                                    "host_id": host_id,
                                    "voucher_token": corpo.get("voucher_token", ""),
+                                   # PAGA IN STRUTTURA: il webhook/conferma leggono di qui che
+                                   # e' in struttura (niente payout/garanzia) + il saldo da
+                                   # incassare in loco. Assente/"" sulle prenotazioni online.
+                                   "modo_pagamento": corpo.get("modo_pagamento", ""),
+                                   "saldo_in_loco_cents": corpo.get("saldo_in_loco_cents", 0),
+                                   "anticipo_online_cents": corpo.get("anticipo_online_cents", 0),
                                    "titolo": titolo})
             import time as _t83
             scad = (int(_t83.time()) + hold_sec) if isinstance(hold_sec, int) \
@@ -6101,6 +6172,12 @@ class RouterHTTP:
                              "confermabile: prenotazione cancellata/non approvata). Rimborsare "
                              "manualmente dal dashboard Stripe.", rif, stato)
                 return
+            # PAGA IN STRUTTURA: percorso SEPARATO. L'anticipo e' nostro, il saldo (con la
+            # tassa) lo incassa l'host DI PERSONA -> nessuna tassa da registrare, nessun payout
+            # da maturare, nessun escrow. Se tardivo, ri-blocca come l'online (anti-gara).
+            if self._rec_in_struttura(rec):
+                self._conferma_struttura(rec, rif, stato)
+                return
             if stato == "scaduto":
                 # PAGAMENTO TARDIVO: la stanza era stata liberata. Ri-tento il blocco con
                 # una CHIAVE FRESCA ("reblock:<rif>"): riusare la chiave del blocco
@@ -6161,6 +6238,54 @@ class RouterHTTP:
             self._forse_qualifica_referral(hid_pag, pd)
         except Exception:
             logger.warning("conferma pagamento/ledger tassa fallita (ignorata)", exc_info=True)
+
+    def _rec_in_struttura(self, rec):
+        """True se la prenotazione pendente e' 'paga in struttura' (letto dal corpo_json che
+        _registra_hold ha salvato). Isolato: dubbio -> False (percorso online standard)."""
+        try:
+            import json as _j
+            dj = _j.loads(rec.get("corpo_json") or "{}") if isinstance(rec, dict) else {}
+            return dj.get("modo_pagamento") == "in_struttura"
+        except Exception:
+            return False
+
+    def _conferma_struttura(self, rec, rif, stato):
+        """FASE 2 - conferma di un ANTICIPO 'paga in struttura'. L'anticipo (commissione+fee+
+        gateway) e' interamente NOSTRO; il saldo, tassa inclusa, lo incassa l'host DI PERSONA ->
+        NIENTE tassa da registrare, NIENTE payout da maturare, NIENTE escrow. 'pagato' e' gia'
+        scritto dal CAS a monte. Se il pagamento e' TARDIVO (hold scaduto) ri-blocca la stanza
+        con chiave fresca (stessa anti-gara dell'online); se e' gia' presa -> segnala rimborso.
+        La carta e' salvata su Stripe (cs_ gia' registrato dal webhook) -> la penale no-show
+        (FASE 3) recuperera' customer+payment_method da li'."""
+        if stato == "scaduto":
+            inv = getattr(self._sys, "inventario", None)
+            idem = "reblock:" + rif
+            esito = None
+            try:
+                esito = inv.blocca(rec["alloggio_id"], rec["check_in"], rec["check_out"],
+                                   idem_key=idem, origine="anticipo_tardivo") if inv else None
+            except Exception:
+                esito = None
+            if not getattr(esito, "ok", False):
+                logger.error("RIMBORSARE anticipo: pagamento tardivo su stanza gia' presa - "
+                             "rif '%s' (alloggio %s %s->%s). Rimborsare l'anticipo.",
+                             rif, rec.get("alloggio_id"), rec.get("check_in"), rec.get("check_out"))
+                try:
+                    pp = getattr(self._sys, "pagamenti_pendenti", None)
+                    if pp is not None:
+                        pp.marca_da_rimborsare(rif)
+                except Exception:
+                    pass
+                return
+            try:
+                pp = getattr(self._sys, "pagamenti_pendenti", None)
+                if pp is not None:
+                    pp.aggiorna_idem(rif, idem)
+            except Exception:
+                logger.warning("aggiorna_idem post-reblock (struttura) fallito (ignorato)",
+                               exc_info=True)
+        # niente tassa/payout/garanzia: il saldo (tassa inclusa) lo gestisce l'host in loco.
+        self._email_pagamento_confermato(rec)
 
     def _applica_credito_host(self, ref, host_id, commissione_cents):
         """Scala il credito referral dell'host sulla commissione di questa prenotazione:
