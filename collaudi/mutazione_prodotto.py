@@ -180,8 +180,20 @@ if __name__ == "__main__":
             print("\n%2d. %s" % (i, percorso))
             print("    guasto introdotto: %s" % danno)
             if verde:
-                sopravvissuti.append((percorso, danno, test))
-                print("    ESITO: MUTANTE SOPRAVVISSUTO — i test restano VERDI!")
+                # RI-VERIFICA prima di gridare "buco": un survivor puo' essere una FLAKINESS
+                # transitoria del killer (subprocess sotto carico sul runner CI, oppure una rotta
+                # a tempo che al primo giro non ha visto il mutante). Rigiro il killer UNA volta,
+                # ancora sul codice MUTATO: un buco VERO sopravvive in modo DETERMINISTICO
+                # (entrambe le volte), una flakiness muore alla ri-prova. Cosi' non si maschera un
+                # gap reale (sopravvive lo stesso) ne' si fa rosso il job per un intoppo passeggero.
+                verde2, _ = esegui(test)
+                if verde2:
+                    sopravvissuti.append((percorso, danno, test))
+                    print("    ESITO: MUTANTE SOPRAVVISSUTO — i test restano VERDI (2 giri su 2)!")
+                else:
+                    uccisi += 1
+                    print("    ESITO: ucciso alla RI-VERIFICA (primo giro = flaky del killer, "
+                          "non un buco): il mutante viene visto al secondo giro")
             else:
                 uccisi += 1
                 riga = [r for r in uscita.splitlines()
