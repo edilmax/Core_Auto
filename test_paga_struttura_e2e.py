@@ -227,6 +227,42 @@ class TestPagaStrutturaE2E(unittest.TestCase):
             self.assertNotEqual(b.get("modo_pagamento"), "in_struttura",
                                 "modo '%s' NON deve attivare in-struttura" % cattivo)
 
+    # ── FASE 3: cancellazione (anticipo non rimborsabile, mai il prezzo pieno) ──
+    def test_cancellazione_in_struttura_NON_rimborsa_il_prezzo_pieno(self):
+        # INVARIANTE P0: cancellando un'in-struttura, non si rimborsa MAI il prezzo pieno (mai
+        # versato online: da noi e' passato solo l'anticipo). Rimborsarlo = perdita secca nostra.
+        q, b = self._prenota("2026-09-05", "2026-09-08", modo="in_struttura")
+        vt = b.get("voucher_token")
+        self.assertTrue(vt, "manca il voucher_token per cancellare")
+        self._webhook(b["riferimento"])                     # anticipo pagato
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual(s, 200, c)
+        # cancellazione immediata + arrivo lontano -> ripensamento 48h: si rende al MASSIMO
+        # l'anticipo, MAI il prezzo pieno.
+        self.assertLessEqual(c.get("rimborso_cents", 0), b["anticipo_online_cents"],
+                             "rimborso oltre l'anticipo: si rende denaro mai incassato online")
+        self.assertLess(c.get("rimborso_cents", 0), q["totale_cents"],
+                        "REGRESSIONE: rimborsato il prezzo pieno su in-struttura")
+
+    def test_cancellazione_in_struttura_fuori_ripensamento_rimborso_zero(self):
+        # arrivo VICINO (< 3 giorni) -> niente ripensamento 48h -> l'anticipo NON e' rimborsabile
+        # -> rimborso 0 (l'anticipo, fee di servizio, resta nostro). Date dinamiche da oggi.
+        import datetime
+        oggi = datetime.date.today()
+        d_in = (oggi + datetime.timedelta(days=1)).isoformat()
+        d_out = (oggi + datetime.timedelta(days=3)).isoformat()
+        self.g("POST", "/api/host/disponibilita_range",
+               {"alloggio_id": "casa", "da": d_in, "a": (oggi + datetime.timedelta(days=5)).isoformat(),
+                "unita_totali": 2, "prezzo_netto_cents": 30000}, {"X-Host-Token": self.tok})
+        q, b = self._prenota(d_in, d_out, modo="in_struttura")
+        if b.get("modo_pagamento") != "in_struttura":
+            self.skipTest("annuncio/date non idonei all'in-struttura in questo scenario")
+        self._webhook(b["riferimento"])
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
+        self.assertEqual(s, 200, c)
+        self.assertEqual(c.get("rimborso_cents", 0), 0,
+                         "fuori ripensamento l'anticipo NON e' rimborsabile: rimborso deve essere 0")
+
     def test_zero_notti_e_date_impossibili_rifiutate(self):
         # 0 notti / date invertite: il preventivo/prenotazione NON deve confermare nulla,
         # a prescindere dal modo di pagamento.

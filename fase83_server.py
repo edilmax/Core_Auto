@@ -5197,6 +5197,19 @@ class RouterHTTP:
             pagato = 0
         # POLITICA dal VOUCHER FIRMATO (scelta dall'host, anti-furbata) - NON dalla richiesta
         politica = v.get("politica") or self._politica_alloggio(allog)
+        # PAGA IN STRUTTURA (FASE 3): online abbiamo incassato solo l'ANTICIPO (fee di servizio
+        # nostra); il SALDO non e' mai passato da noi (lo incassa l'host in loco) -> non c'e'
+        # nulla di suo da rimborsare. L'anticipo NON e' rimborsabile su cancellazione volontaria,
+        # SALVO il diritto di ripensamento 48h (tutela consumatore). Quindi: la base del rimborso
+        # e' l'ANTICIPO davvero pagato (non il prezzo pieno, MAI versato online: rimborsarlo
+        # sarebbe regalare soldi mai incassati) e la politica diventa 'non_rimborsabile'. Il resto
+        # del flusso (rilascio stanza, invalidazione pendente, idempotenza) resta identico.
+        # Attivo solo su prenotazioni gia' in_struttura -> in prod (flag off) non ne esistono.
+        if v.get("modo_pagamento") == "in_struttura":
+            _ant = v.get("anticipo_online_cents", 0)
+            pagato = (_ant if (pagato_davvero and isinstance(_ant, int)
+                               and not isinstance(_ant, bool) and _ant > 0) else 0)
+            politica = "non_rimborsabile"
         # RIPENSAMENTO 48h: se annulli entro 2 giorni dall'acquisto e l'arrivo è >=72h -> 100%
         # (copre e SUPERA California SB 644 [24h] + diritto di pentimento Brasile art.49). Vince
         # su qualunque politica; NON si applica a soggiorni imminenti/passati (arrivo < 3 giorni).

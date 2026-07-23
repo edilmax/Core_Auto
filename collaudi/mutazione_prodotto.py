@@ -123,6 +123,12 @@ MUTANTI = [
      "if True:",
      "test_paga_struttura_e2e",
      "il webhook DUPLICATO in-struttura registra il TOTALE + la tassa come incasso nostro (soldi mai ricevuti)"),
+
+    ("fase83_server.py",
+     "if v.get(\"modo_pagamento\") == \"in_struttura\":",
+     "if v.get(\"modo_pagamento\") == \"MAI\":",
+     "test_paga_struttura_e2e",
+     "cancellando un'in-struttura si rimborsa il PREZZO PIENO mai incassato online (solo l'anticipo e' passato da noi): perdita secca"),
 ]
 
 
