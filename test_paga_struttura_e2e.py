@@ -255,8 +255,9 @@ class TestPagaStrutturaE2E(unittest.TestCase):
                {"alloggio_id": "casa", "da": d_in, "a": (oggi + datetime.timedelta(days=5)).isoformat(),
                 "unita_totali": 2, "prezzo_netto_cents": 30000}, {"X-Host-Token": self.tok})
         q, b = self._prenota(d_in, d_out, modo="in_struttura")
-        if b.get("modo_pagamento") != "in_struttura":
-            self.skipTest("annuncio/date non idonei all'in-struttura in questo scenario")
+        # niente skip (sarebbe una zona cieca): con flag on + annuncio che accetta + instant-book,
+        # la prenotazione DEVE diventare in_struttura. Se non lo e', e' un difetto, non un caso da saltare.
+        self.assertEqual(b.get("modo_pagamento"), "in_struttura", b)
         self._webhook(b["riferimento"])
         s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
         self.assertEqual(s, 200, c)
