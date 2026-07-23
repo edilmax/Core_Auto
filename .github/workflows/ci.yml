@@ -22,7 +22,7 @@ jobs:
             test_paga_struttura_cablaggio test_paga_struttura_avanzato \
             test_fase85_pagamenti_stripe test_fase98_policy_commissione \
             test_conservazione_denaro test_cancellazione_money \
-            test_fase189_price_alerts test_fase190_rate_parity
+            test_fase189_price_alerts test_fase190_rate_parity \n            test_property_soldi
 
   # Suite INTERA (piu' lunga): il quadro completo.
   full-suite:
