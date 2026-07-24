@@ -1,3 +1,27 @@
+## 🟢 STATO 2026-07-24 (notte) — SEO GLOBALE 195 PAESI: 28 → 230 città + link-mesh reso small-world
+
+Direttiva fondatore ("attiva tutto il gratis, tanta pubblicità che ci invidino i colossi, dal
+piccolo al grande"). Attivazione **zero-chiave / zero-account**, tutta autonoma:
+- **`fase97.CITTA_SEED` espanso 28 → 230 città** curate di OGNI continente (Asia inclusa: Bangkok,
+  Manila, Hanoi, Ho Chi Minh City, Chiang Mai, Bali, Seoul, Tokyo, Hong Kong… + Europa/Americhe/
+  Africa/Oceania/Medio Oriente). Il motore genera da solo **230 × 8 lingue = 1.840 landing SEO**
+  `/affitta/{città}` (title/desc/canonical/hreflang lingua+paese/FAQ JSON-LD/BreadcrumbList/calcolo
+  risparmio/CTA) + sitemap-index shardata. Slug tutti UNICI (0 collisioni), title ≤76/100.
+  `SEO_LASTMOD` bumpato a 2026-07-24. Gate anti-doorway invariato (oltre il seed solo città con
+  inventario reale).
+- **BUG VERO trovato e corretto in `fase97.maglia_link_interni`** (i link interni tra le landing):
+  le corde erano a passo `n/k` → **diametro del grafo LINEARE in n** (O(n/k)): invisibile a 28 città
+  (diametro ≤8), ma a 230 saliva a **29** e il crawl-budget crollava. Riscritto con **corde
+  geometriche base-b** (b = più piccola base con b^k>n): ogni nodo raggiungibile "a cifre" base-b →
+  diametro **~O(k·n^(1/k)) sub-lineare**. Misurato: **230 città → diametro 29→7** (e ~9 fino a 500).
+  Preserva anello hamiltoniano (stride 1 → forte connessione), grado k, determinismo.
+- Test aggiornati con soglia PRINCIPIATA e scala-consapevole (non più il magico `≤8`, tarato su 28):
+  `diametro ≤ (b-1)·k` — un anello puro (diametro n-1) la sfonda sempre = regressione catturata.
+  `test_registro_gate` usa ora città davvero fuori-seed (calcolate a runtime). **Suite completa VERDE**
+  (exit 0). PROSSIMO: attivare IndexNow (Bing/Yandex, chiave auto-generata) + submit sitemap.
+
+---
+
 ## 🟢 STATO 2026-07-24 (notte) — SISTEMA COLD-START: nuovo annuncio → avvisa la lista d'attesa
 
 Problema del fondatore (uomo solo, zero inventario vero): il marketing recluta HOST prima, poi

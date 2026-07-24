@@ -133,15 +133,29 @@ class TestSEOSandbox(unittest.TestCase):
             return max(dist.values()) if len(dist) == n else 10 ** 9
 
         diam = max(ecc(i) for i in range(n))
-        # anello puro avrebbe diametro n-1 (=27); small-world deve essere ≪ (prova la topologia)
-        self.assertLessEqual(diam, 8, "diametro %d troppo grande (small-world fallito)" % diam)
+        # soglia PRINCIPIATA e scala-consapevole: con corde geometriche base-b (b = più piccola
+        # base con b^K > n) ogni nodo è raggiungibile "a cifre" base-b → diametro ≤ (b-1)·K,
+        # SUB-lineare in n. Un anello puro avrebbe diametro n-1 → sfonda sempre = regressione
+        # catturata. (Il vecchio ≤8 era tarato su n=28 e nascondeva un diametro O(n/k) lineare.)
+        b = 2
+        while b ** K <= n and b < n:
+            b += 1
+        bound = (b - 1) * K
+        self.assertLessEqual(diam, bound,
+                             "diametro %d > soglia %d (small-world fallito, n=%d)" % (diam, bound, n))
 
     def test_registro_gate_e_scala_globale(self):
         # il registro = seed (sempre) ∪ inventario reale; una città fuori NON ha pagina (404).
         from fase97_inbound_seo import registro_citta, citta_da_slug
         solo_seed = registro_citta([])
         self.assertEqual(len(solo_seed), len({slug_citta(c) for c in CITTA_SEED}))
-        esteso = registro_citta(["Reykjavik", "Porto"])          # 2 città non-seed
+        # città d'inventario davvero FUORI dal seed (che ora copre ~230 mete): scelte in modo
+        # robusto così il test regge anche se il seed cresce ancora.
+        noti = {slug_citta(c) for c in CITTA_SEED}
+        fuori = [c for c in ("Ushuaia", "Timbuktu", "Nuuk", "Gibraltar", "Anchorage")
+                 if slug_citta(c) not in noti][:2]
+        self.assertEqual(len(fuori), 2, "servono 2 città non-seed per il test")
+        esteso = registro_citta(fuori)                           # 2 città non-seed
         self.assertEqual(len(esteso), len(solo_seed) + 2, "l'inventario non scala il registro")
         self.assertIsNone(citta_da_slug("slug-arbitrario-spam", esteso), "gate doorway rotto")
         # la maglia sul registro ESTESO resta valida (connessa, grado k, no self-loop)

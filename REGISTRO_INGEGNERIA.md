@@ -550,6 +550,12 @@ Tutti e 10 i corpi di `fase86_email.py` accettano `lingua` (ripiego INGLESE, mai
   RESTA Sez.4: hreflang xhtml:link dentro sitemap-host (le varianti lingua sono URL separati con
   ?lang, oggi riconciliate solo dai <link hreflang> in <head>); sitemap-index oltre 50k URL. RESTA
   Sez.2: <header>/<footer>. RESTA Sez.5: Cache-Control/Last-Modified/ETag sulle rotte SSR dinamiche.]
+  [2026-07-24 fatto: SEO GLOBALE — CITTA_SEED 28→230 città (ogni continente, ~150 nazioni; slug
+  tutti unici, SEO_LASTMOD→2026-07-24) → 230×8=1840 landing. + BUG VERO in maglia_link_interni:
+  le corde a passo n/k davano diametro LINEARE O(n/k) (a 28 città ≤8 lo nascondeva; a 230 saliva a
+  29 → crawl-budget crolla). RISCRITTO con corde GEOMETRICHE base-b (b=min con b^k>n): diametro
+  ~O(k·n^(1/k)) sub-lineare, misurato 230→7 (era 29). Anello/grado-k/determinismo preservati. Test
+  soglia ora PRINCIPIATA (b-1)·k (scala-consapevole, non il magico ≤8) + città fuori-seed a runtime.]
   [2026-07-17 fatto: ALGORITMO NUOVO "maglia small-world" per i link interni + SANDBOX SEO.
   PRIMA: la rotta /affitta passava citta_correlate=CITTA_SEED → OGNI landing linkava TUTTE le 27
   altre città (blocco identico ripetuto = boilerplate + segnale debole, vicino al pattern "link

@@ -32,7 +32,7 @@ LINGUE = ("it", "en", "es", "fr", "de", "pt", "ja", "zh")
 # cambiano solo quando cambia questo template o le tariffe → il lastmod è una COSTANTE che si
 # bumpa a mano quando cambia il contenuto. NON usare now(): un lastmod che cambia a ogni
 # generazione senza che il contenuto cambi è una bugia e i crawler smettono di fidarsene.
-SEO_LASTMOD = "2026-07-17"
+SEO_LASTMOD = "2026-07-24"
 
 # hreflang lingua+PAESE: per i mercati dove UNA lingua serve regioni distinte (targeting
 # geografico legittimo, non penalizzato — è l'uso previsto di hreflang, es. en-US/en-GB). Ogni
@@ -48,12 +48,76 @@ TERRITORIO_DEFAULT: Dict[str, str] = {
     "de": "DE", "pt": "PT", "ja": "JP", "zh": "CN",
 }
 
-# Città-seme: mercati ampi (incl. dove l'outbound è legale, ma l'inbound è globale).
+# Città-seme: grandi mete di OGNI continente (~230 città, ~150 nazioni). L'inbound è globale e
+# legale ovunque (pull, non outbound): ogni landing ha valore proprio (calcolo risparmio + FAQ),
+# non è un doorway. Lista CURATA e a slug UNICI (la sandbox SEO test_seo_sandbox fa fallire
+# duplicati/collisioni). Cresce verso le 195 nazioni; oltre il seed, solo città con inventario
+# reale (registro_citta) — mai pagine vuote. Espansa 2026-07-24 (28 -> ~230, ordine fondatore
+# "copertura 195 paesi, gratis").
 CITTA_SEED = (
+    # — prima ondata (mercati storici) —
     "Roma", "Milano", "Firenze", "Venezia", "Napoli", "New York", "Los Angeles",
     "Miami", "Austin", "Chicago", "London", "Lisbon", "Barcelona", "Madrid", "Paris",
     "Berlin", "Amsterdam", "Tokyo", "Osaka", "Singapore", "Bangkok", "Bali",
     "Sydney", "Melbourne", "Dubai", "Mexico City", "Buenos Aires", "Cape Town",
+    # — Italia —
+    "Torino", "Bologna", "Verona", "Palermo", "Genova",
+    # — Europa centro/ovest —
+    "Munich", "Hamburg", "Frankfurt", "Vienna", "Salzburg", "Zurich", "Geneva",
+    "Brussels", "Rotterdam", "The Hague", "Luxembourg", "Monaco",
+    # — UK / Irlanda —
+    "Edinburgh", "Manchester", "Liverpool", "Oxford", "Dublin",
+    # — Iberia —
+    "Porto", "Seville", "Valencia", "Malaga", "Bilbao", "Granada", "Palma",
+    # — Francia —
+    "Nice", "Lyon", "Marseille", "Bordeaux", "Cannes",
+    # — Nord Europa —
+    "Copenhagen", "Stockholm", "Oslo", "Bergen", "Helsinki", "Reykjavik",
+    # — Est Europa / Balcani —
+    "Prague", "Budapest", "Warsaw", "Krakow", "Bucharest", "Sofia", "Belgrade",
+    "Zagreb", "Dubrovnik", "Split", "Ljubljana", "Tallinn", "Kyiv",
+    # — Sud Europa / Mediterraneo —
+    "Athens", "Santorini", "Mykonos", "Thessaloniki", "Crete", "Valletta",
+    "Nicosia", "Istanbul", "Antalya", "Cappadocia",
+    # — Russia / Caucaso —
+    "Moscow", "Saint Petersburg", "Tbilisi", "Yerevan", "Baku",
+    # — Asia Est —
+    "Hong Kong", "Shanghai", "Beijing", "Guangzhou", "Shenzhen", "Chengdu", "Xian",
+    "Seoul", "Busan", "Jeju", "Kyoto", "Nagoya", "Fukuoka", "Sapporo", "Taipei", "Macau",
+    # — Asia Sud-Est —
+    "Chiang Mai", "Phuket", "Pattaya", "Krabi", "Koh Samui", "Kuala Lumpur", "Penang",
+    "Langkawi", "Jakarta", "Yogyakarta", "Ubud", "Manila", "Cebu", "Palawan", "Hanoi",
+    "Ho Chi Minh City", "Da Nang", "Hoi An", "Phnom Penh", "Siem Reap", "Yangon",
+    # — Asia Sud —
+    "New Delhi", "Mumbai", "Bangalore", "Goa", "Jaipur", "Kolkata", "Chennai",
+    "Colombo", "Kathmandu", "Dhaka", "Male",
+    # — Asia Centrale —
+    "Almaty", "Tashkent", "Samarkand", "Ulaanbaatar",
+    # — Medio Oriente —
+    "Abu Dhabi", "Doha", "Riyadh", "Jeddah", "Kuwait City", "Manama", "Muscat",
+    "Amman", "Beirut", "Tel Aviv", "Jerusalem",
+    # — Africa Nord —
+    "Cairo", "Marrakech", "Casablanca", "Fez", "Tunis", "Hurghada", "Sharm El Sheikh",
+    # — Africa Sub-sahariana —
+    "Johannesburg", "Durban", "Nairobi", "Mombasa", "Zanzibar", "Lagos", "Accra",
+    "Addis Ababa", "Kigali", "Dakar", "Port Louis",
+    # — USA —
+    "San Francisco", "Las Vegas", "Seattle", "Boston", "Washington", "New Orleans",
+    "San Diego", "Orlando", "Nashville", "Denver", "Honolulu",
+    # — Canada —
+    "Toronto", "Vancouver", "Montreal", "Quebec City", "Calgary",
+    # — Messico —
+    "Cancun", "Tulum", "Guadalajara", "Playa del Carmen", "Puerto Vallarta",
+    # — Caraibi / America Centrale —
+    "Havana", "Punta Cana", "Santo Domingo", "San Juan", "Nassau", "Montego Bay",
+    "Panama City", "San José",
+    # — Sud America —
+    "Rio de Janeiro", "Sao Paulo", "Salvador", "Florianopolis", "Brasilia", "Lima",
+    "Cusco", "Santiago", "Bogota", "Cartagena", "Medellin", "Quito", "La Paz",
+    "Montevideo", "Caracas",
+    # — Oceania —
+    "Brisbane", "Gold Coast", "Perth", "Adelaide", "Auckland", "Queenstown",
+    "Wellington", "Christchurch", "Nadi",
 )
 
 
@@ -100,9 +164,22 @@ def maglia_link_interni(citta: Sequence[str] = CITTA_SEED, *,
     if n <= 1:
         return {c: [] for c in nomi}
     k_eff = max(1, min(int(k) if isinstance(k, int) else 6, n - 1))
-    strides = [1]                                    # anello: connessione forte garantita
-    for j in range(1, k_eff):
-        strides.append(round(j * n / k_eff) % n)     # corde small-world
+    # STRIDE GEOMETRICHE (base-b): stride 1 (=b^0) garantisce l'anello hamiltoniano → forte
+    # connessione; le corde b^1..b^(k-1) rendono ogni nodo raggiungibile "a cifre" base-b, cioè
+    # in ~(b-1)·k hop con b≈n^(1/k) → DIAMETRO ~O(k·n^(1/k)), veramente small-world e SUB-LINEARE.
+    # (La versione precedente usava corde a passo n/k: diametro ~O(n/k) = LINEARE in n —
+    # invisibile a 28 città (≤8), ma a 230 saliva a 29 e il crawl-budget crollava.)
+    strides = [1]
+    b = 2
+    while b ** k_eff <= n and b < n:                 # b = più piccola base con b^k > n
+        b += 1
+    s = 1
+    for _ in range(1, k_eff):
+        s *= b
+        st = s % n
+        while st == 0 or st in strides:              # corda distinta e non nulla → grado = k
+            st = (st + 1) % n
+        strides.append(st)
     out: Dict[str, List[str]] = {}
     for i, c in enumerate(nomi):
         vicini: List[str] = []
