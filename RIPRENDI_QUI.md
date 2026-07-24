@@ -15,6 +15,21 @@
 - **RBAC 3 livelli** già verificato solido (senza admin 401 · admin+codice-errato 403 · distruttive
   richiedono sessione bunker · 34 test). Per lanciarlo: `python collaudi/avvia_server_visivo.py 8099` +
   `node collaudi/clickthrough_pannelli.js`.
+- **③ COMPORTAMENTALE LIVE — "fa ESATTAMENTE ciò che dichiara"** (nuovo `collaudi/beh_pannelli.py`,
+  **12/12 verdi** end-to-end sul server vero): HOST blocco calendario (chiuso/manutenzione) → data
+  **istantaneamente non prenotabile** nella quote → sblocco → di nuovo prenotabile; import **iCal**
+  feed esterno → blocca le date (`giorni_bloccati:1`); ADMIN **sospensione richiede super-admin**
+  (403 senza, la sicurezza funziona) → annuncio sparisce da `/api/catalogo` → riattiva → riappare;
+  SUPER-ADMIN doppia chiave viva + rampa commissioni leggibile. Claim restanti provati dai test
+  dedicati (48 OK): audit-log immodificabile+operatore+ts (`test_audit_console`), dispute→payout/
+  rimborso bloccati (`test_bunker_enforcement`), rampa 0/8/10 esatta (`test_bunker_scaglioni_prove`,
+  `test_fase98_policy_commissione`).
+- **⚠️ GAP ONESTI (funzioni della direttiva che NON esistono come descritte)**: (a) **KILL-SWITCH
+  globale unico** «blocca tutte le transazioni/API» NON esiste — ci sono interruttori MIRATI
+  (`DAC7_BLOCCO_PAYOUT`, `PULIZIA_UPLOADS`, `PAGE_GATE`, `PAGA_STRUTTURA_ATTIVO`, break-glass bunker);
+  (b) **gestione ruoli/account ADMIN multipli** NON esiste — una sola `ADMIN_KEY` condivisa; (c)
+  **config CAMBIO VALUTA nel bunker** NON esiste — è via env `OXR_APP_ID` (il bunker gestisce rampa
+  commissioni + cap tasse). Da valutare col fondatore se costruirle (candidate a lavori futuri).
 
 ---
 
