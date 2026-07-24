@@ -1,3 +1,34 @@
+## 🟢 STATO 2026-07-24 (sera) — CACCIA-ERRORI ESTREMA + SICUREZZA + A11Y · 3 POSTI a `bd9eb5d` · sito 200
+
+**Sync 3 posti**: Desktop = GitHub = VPS = **`bd9eb5d`**. Produzione sana: app `healthy`,
+`money_path_pronto: True`, sonde `/api/health/live|ready|db` = 200, `PAGA_STRUTTURA_ATTIVO=1`.
+
+**🔎 BATTERIA CACCIA-ERRORI ESTREMA (4 pilastri) — TUTTO VERDE** (direttiva fondatore, RIPETIBILE
+→ memoria [[bookinvip-caccia-errori-estrema]]):
+1. **MUTATION** `collaudi/mutazione_prodotto.py` → **18/18 uccisi, 0 sopravvissuti** (inclusi i 2
+   nuovi: valuta-3dec, off-by-one 24h).
+2. **FUZZING** → Hypothesis nella suite verde + fuzzer stdlib locale **500.000 input** sui motori
+   soldi (fase188/98/111) = **0 violazioni** (conservazione, non-negatività, gateway≥Stripe, rampa,
+   floor). Atheris coverage-guided resta in CI Ubuntu (job `fuzz`; non compila su Windows).
+3. **CONCORRENZA/RACE** `test_race_hold_conferma . _cancellazione_money . _bombardamento_split_router
+   . _bombardamento_coda . _stress_dual_persona` → **21 test OK**, 0 eccezioni/5xx, 0 IDOR, 0
+   bypass-admin (43 min di stress reale).
+4. **VISIVO+A11Y** (Playwright + Axe-Core sul sito LIVE): 7 pagine 200, **0 errori JS / 0 richieste
+   fallite**; Axe WCAG 2.1 A+AA → home/host/guida 0 viol; **2 "serious" contrasto TROVATE E CHIUSE**
+   (`diventa-host` .copy e `commissioni` footer opacity .7→.85; `commissioni` .note #8a96ad→#5b6675) →
+   **ri-audit sul LIVE = 0 serious/0 critical**.
+
+**🔒 SICUREZZA**: aggiunto **Bandit** al CI come gate sul grave (HIGH/HIGH fa fallire la build).
+Unico HIGH trovato e chiuso: `etag_di()` usava sha1 per un ETag HTTP (non crittografico) →
+`usedforsecurity=False` (digest byte-IDENTICO). `app.py` = Flask legacy MORTO (prod=fase83 stdlib),
+escluso dal gate. Commit sicurezza `55a87fb`, a11y `bd9eb5d`.
+
+**Nota strumenti**: Playwright+Axe-Core installati nello **scratchpad** (NON nel repo → produzione
+resta stdlib-pura); l'audit gira sul sito live in sola lettura. Per l'E2E visuale permanente serve
+un connettore/CI dormiente (pronto da cablare, non blocca la produzione).
+
+---
+
 ## 🟢 STATO 2026-07-24 — MICRO-STEPPING (#14) COMPLETO · 3 POSTI ALLINEATI a `1dbbd95` · sito 200
 
 **Sync 3 posti RIPRISTINATO**: Desktop = GitHub = VPS = **`1dbbd95`** (prima il VPS era fermo a
