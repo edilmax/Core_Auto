@@ -73,7 +73,7 @@
 <div class="container">
   <header>
     <div class="logo" id="lTitolo">Bookin VIP · Host</div>
-    <select id="lang" style="width:auto">
+    <select id="lang" style="width:auto" aria-label="Lingua / Language">
       <option value="it">🇮🇹 IT</option><option value="en">🇬🇧 EN</option>
       <option value="es">🇪🇸 ES</option><option value="fr">🇫🇷 FR</option>
       <option value="de">🇩🇪 DE</option><option value="pt">🇵🇹 PT</option>
@@ -390,8 +390,8 @@
         <span><b data-i18n="l_paga_str">Accetta “Paga in struttura”</b> <span class="hint" data-i18n="h_paga_str">— l'ospite può pagare di persona all'arrivo: un piccolo anticipo online e il saldo direttamente a te. Tu incassi uguale; l'ospite paga una piccola fee di servizio per la comodità. Consigliato attivo.</span></span></label>
       <label><span data-i18n="l_cap">Capacità</span><input type="number" id="p_cap" value="4"></label>
       <label><span data-i18n="l_serv">Servizi (csv)</span><input id="p_serv" value="wifi,piscina"></label>
-      <div class="full"><span data-i18n="l_foto">Foto</span> <span class="hint" data-i18n="h_foto">— carica dal dispositivo (automatico) o incolla un URL</span>
-        <input type="file" id="p_files" accept="image/jpeg,image/png,image/webp,image/gif" multiple style="padding:.4rem;background:#fff">
+      <div class="full"><span id="lbl_foto" data-i18n="l_foto">Foto</span> <span class="hint" data-i18n="h_foto">— carica dal dispositivo (automatico) o incolla un URL</span>
+        <input type="file" id="p_files" accept="image/jpeg,image/png,image/webp,image/gif" multiple aria-labelledby="lbl_foto" style="padding:.4rem;background:#fff">
         <div id="p_thumbs" style="display:flex;flex-wrap:wrap;gap:.4rem;margin:.4rem 0"></div>
         <textarea id="p_img" rows="2" style="width:100%;padding:.5rem;border-radius:.7rem;border:1px solid var(--bordo);font-size:.85rem" placeholder="https://...jpg"></textarea></div>
     </div>

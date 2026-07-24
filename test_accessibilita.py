@@ -79,6 +79,20 @@ class TestAccessibilita(unittest.TestCase):
         self.assertIn('aria-label="Chiave host', _leggi('host.html'))
         self.assertIn('aria-label="Chiave amministratore"', _leggi('admin.html'))
 
+    def test_select_e_upload_del_pannello_host_etichettati(self):
+        # WCAG 4.1.2 / 1.3.1: un <select> e un <input type=file> FUORI da un <label> devono
+        # avere un nome accessibile. Trovati SCOPERTI il 2026-07-24 dall'audit Axe-Core sul
+        # pannello host (mai visti prima: gli audit colpivano solo la versione gated/login).
+        html = _leggi('host.html')
+        m_lang = re.search(r'<select[^>]*id="lang"[^>]*>', html)
+        self.assertIsNotNone(m_lang, 'host.html: manca il select #lang')
+        self.assertRegex(m_lang.group(0), r'aria-label(ledby)?=',
+                         'host.html: il selettore lingua #lang non ha nome accessibile')
+        m_file = re.search(r'<input[^>]*id="p_files"[^>]*>', html)
+        self.assertIsNotNone(m_file, 'host.html: manca l\'upload foto #p_files')
+        self.assertRegex(m_file.group(0), r'aria-label(ledby)?=',
+                         'host.html: l\'upload foto #p_files non ha etichetta accessibile')
+
     def test_close_modale_accessibile_da_tastiera(self):
         html = _leggi('index.html')
         m = re.search(r'<span class="close"[^>]*>', html)

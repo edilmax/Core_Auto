@@ -105,6 +105,24 @@ jobs:
       - name: Valida HTML5 + CSS delle pagine in deploy/ (report-only)
         run: html5validator --root deploy --also-check-css --show-warnings || true
 
+  # ACCESSIBILITA: Playwright + Axe-Core (WCAG 2.1 A+AA) sulle pagine pubbliche statiche.
+  # GATE VERO sul grave: una violazione 'critical'/'serious' fa fallire il job. Deterministico
+  # (file://, niente server). Complementa collaudi/test_a11y.js (flusso dinamico, report-only) e
+  # la guardia stdlib test_accessibilita.py. Trovati e chiusi il 2026-07-24: 2 contrasti + 2
+  # critical sul pannello host (#lang senza nome, #p_files senza label).
+  accessibilita:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Dipendenze (playwright + axe-core, gia' in package.json)
+        run: npm install --no-audit --no-fund
+      - name: Browser Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Audit WCAG statico (blocca su critical/serious)
+        run: node collaudi/a11y_static.js
+
   # ATHERIS: fuzzing coverage-guided sui motori-soldi. Un invariante rotto = job ROSSO
   # (bug vero). Gli invarianti sono gia' provati a mano su 222.400 giri -> niente falsi-rossi.
   atheris:
