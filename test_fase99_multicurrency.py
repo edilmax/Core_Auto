@@ -89,6 +89,42 @@ class TestConversioneTrasparente(unittest.TestCase):
         self.assertEqual(r["destinazione_cliente"].minori, r["destinazione_mid"].minori)
         self.assertEqual(r["nostro_markup"].minori, 0)
 
+    def test_converti_verso_valuta_0_decimali(self):
+        """MICRO-STEPPING Flow 2: convertire VERSO lo yen (0 decimali). `converti` usa
+        l'esponente della DESTINAZIONE per scalare: qui dev'essere 1 (non 100). Se qualcuno
+        inchiodasse il fattore a `Decimal(100)` come per l'euro, l'importo mandato a Stripe
+        sarebbe ¥ x100 e nessun test (tutti su destinazioni a 2 decimali) se ne accorgerebbe.
+        VISTO ROSSO col mutante `fattore = Decimal(100)`."""
+        r = converti(Denaro(10000, "USD"), "JPY", "150.0", markup_bps=100)  # $100 -> yen
+        self.assertEqual(r["destinazione_mid"].minori, 15000)               # 100*150, esp 0
+        self.assertEqual(r["destinazione_mid"].formatta(), "15000 JPY")     # niente decimali
+        self.assertEqual(r["destinazione_cliente"].minori, 15150)           # +1%
+        self.assertEqual(r["nostro_markup"].minori, 150)
+        self.assertEqual(r["nostro_markup"].valuta, "JPY")
+
+    def test_converti_verso_valuta_3_decimali(self):
+        """MICRO-STEPPING Flow 2: convertire VERSO il dinaro kuwaitiano/bahreinita (3 decimali).
+        Il fattore dev'essere 1000: col mutante `Decimal(100)` l'importo uscirebbe /10 (mid
+        3000 invece di 30000). VISTO ROSSO col mutante."""
+        r = converti(Denaro(10000, "USD"), "KWD", "0.30", markup_bps=100)   # $100 -> KWD
+        self.assertEqual(r["destinazione_mid"].minori, 30000)               # 30.000 KWD (esp 3)
+        self.assertEqual(r["destinazione_mid"].formatta(), "30.000 KWD")
+        self.assertEqual(r["destinazione_cliente"].minori, 30300)           # 30.300 KWD (+1%)
+        self.assertEqual(r["nostro_markup"].minori, 300)                    # 0.300 KWD
+        b = converti(Denaro(10000, "USD"), "BHD", "0.376", markup_bps=100)  # anche BHD
+        self.assertEqual(b["destinazione_mid"].formatta(), "37.600 BHD")
+
+    def test_converti_3_decimali_half_up_e_mai_in_perdita(self):
+        """MICRO-STEPPING Flow 2: la DIREZIONE dell'arrotondamento dentro `converti` a 3
+        decimali (HALF_UP, non troncamento) + l'invariante-soldi: il cliente non paga MAI
+        meno del mid (markup >= 0), altrimenti ci rimetteremmo noi sul cambio.
+        1.2345 KWD -> 1234.5 millesimi -> HALF_UP -> 1235 (col troncamento sarebbe 1234)."""
+        r = converti(Denaro(100, "USD"), "KWD", "1.2345", markup_bps=100)   # $1.00 -> KWD
+        self.assertEqual(r["destinazione_mid"].minori, 1235)               # HALF_UP, non 1234
+        self.assertGreaterEqual(r["nostro_markup"].minori, 0)              # mai in perdita
+        self.assertEqual(r["destinazione_cliente"].minori,
+                         r["destinazione_mid"].minori + r["nostro_markup"].minori)
+
 
 class TestProviderTassi(unittest.TestCase):
     def test_gated_senza_app_id(self):
