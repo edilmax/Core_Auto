@@ -99,6 +99,7 @@ class ConfigCasaVIP:
     db_poicache: str = ":memory:"      # cache POI vicini per-annuncio (Overpass around+cache)
     file_referral: str = ""            # path JSON referral host-porta-host (vuoto = in RAM)
     file_blocco_globale: str = ""      # path flag kill-switch (vuoto = derivato da db_payout o solo-env)
+    db_admin_accounts: str = ":memory:"  # operatori admin con ruoli (fase192)
     con_sentinel: bool = False
     cartella_sentinel: Optional[str] = None
 
@@ -152,6 +153,7 @@ class SistemaCasaVIP:
     carta: Any = None       # ProviderCarta (fase183, Scatto ③): carta host off-session (gated)
     tassi: Any = None       # ProviderTassi (fase99): cambio valuta indicativo; None se OXR spento
     blocco_globale: Any = None  # BloccoGlobale (fase191): kill-switch d'emergenza dei movimenti soldi
+    admin_accounts: Any = None  # AdminAccounts (fase192): operatori admin con ruoli (multi-admin)
 
     @property
     def attivo(self) -> bool:
@@ -361,6 +363,10 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         _os_bg.path.join(_os_bg.path.dirname(cfg.db_payout) or ".", "blocco_globale.flag")
         if cfg.db_payout not in ("", ":memory:") else "")
     blocco_globale = crea_blocco_globale(_flag_bg)
+
+    # OPERATORI ADMIN con ruoli (fase192): additivo, la ADMIN_KEY resta il super-potere root.
+    from fase192_admin_accounts import crea_admin_accounts
+    admin_accounts = crea_admin_accounts(cfg.db_admin_accounts)
     payout.inizializza_schema()
     componenti.append("payout_dashboard(131)")
 
@@ -566,4 +572,4 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           connect=_connect, carta=_carta, geocoder=geocoder, checkin=checkin,
                           poi_provider=poi_provider, credito_usati=credito_usati,
                           finanza=finanza, bunker=bunker, kyc=kyc, tassi=_tassi,
-                          blocco_globale=blocco_globale)
+                          blocco_globale=blocco_globale, admin_accounts=admin_accounts)

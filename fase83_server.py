@@ -1778,6 +1778,14 @@ class RouterHTTP:
             return self._bunker_blocco_globale_stato(headers)
         if metodo == "POST" and path == "/api/bunker/blocco_globale":
             return self._bunker_blocco_globale_imposta(body, headers)
+        if metodo == "GET" and path == "/api/bunker/cambio_valuta":
+            return self._bunker_cambio_valuta(headers)
+        if metodo == "POST" and path == "/api/bunker/cambio_valuta/aggiorna":
+            return self._bunker_cambio_valuta_aggiorna(headers)
+        if metodo == "GET" and path == "/api/bunker/admin_accounts":
+            return self._bunker_admin_accounts(headers)
+        if metodo == "POST" and path == "/api/bunker/admin_accounts":
+            return self._bunker_admin_accounts_gestisci(body, headers)
         if metodo == "POST" and path == "/api/host/dati_fiscali":
             return self._host_dati_fiscali(body, headers)
         if metodo == "GET" and path == "/api/host/dac7_stato":
@@ -2056,9 +2064,76 @@ class RouterHTTP:
     def _auth_admin(self, headers: Dict[str, str]) -> bool:
         if self._admin_key is None:
             return True            # nessuna chiave configurata = aperto (dev)
-        import hmac
+        # OPERATORE admin (fase192) con token firmato: additivo, non tocca la ROOT key. Va provato
+        # PRIMA del confronto-chiave, cosi' una richiesta legittima d'operatore (senza X-Admin-Key)
+        # NON conta come tentativo-chiave fallito nel buttafuori per IP.
+        if self._ruolo_operatore(headers) is not None:
+            return True
         fornita = headers.get("X-Admin-Key", "") or headers.get("x-admin-key", "")
         return self._auth_con_rate("admin", str(fornita), str(self._admin_key), headers)
+
+    def _firma_op(self, email, ruolo, ttl_sec=28800):
+        """Token operatore admin firmato 'op|email|ruolo|exp|nonce|hmac' (HMAC-SHA256, segreto)."""
+        import base64
+        import hashlib
+        import hmac as _h
+        import os as _os
+        import time as _t
+        exp = int(_t.time()) + int(ttl_sec)
+        nonce = base64.urlsafe_b64encode(_os.urandom(9)).decode("ascii").rstrip("=")
+        corpo = "op|%s|%s|%d|%s" % (email, ruolo, exp, nonce)
+        sig = _h.new(self._gate_segreto(), corpo.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+        return corpo + "|" + sig
+
+    def _verifica_op(self, token):
+        """Verifica firma (costante-tempo) + scadenza del token operatore. -> {email, ruolo} o None."""
+        import hashlib
+        import hmac as _h
+        import time as _t
+        try:
+            parti = str(token).split("|")
+            if len(parti) != 6 or parti[0] != "op":
+                return None
+            _, email, ruolo, exp, nonce, sig = parti
+            corpo = "op|%s|%s|%s|%s" % (email, ruolo, exp, nonce)
+            atteso = _h.new(self._gate_segreto(), corpo.encode("utf-8"),
+                            hashlib.sha256).hexdigest()[:32]
+            if not _h.compare_digest(atteso, str(sig)):
+                return None
+            if int(exp) < int(_t.time()):
+                return None
+            return {"email": email, "ruolo": ruolo}
+        except Exception:
+            return None
+
+    def _ruolo_operatore(self, headers):
+        """Ruolo di CHI agisce: 'admin' con la ROOT key; altrimenti il ruolo CORRENTE dell'operatore
+        del token X-Admin-Op (ri-letto dal DB fase192 -> revoca/cambio-ruolo ISTANTANEI); None se
+        non autenticato. Serve per i permessi per-ruolo."""
+        import hmac as _h
+        fornita = headers.get("X-Admin-Key", "") or headers.get("x-admin-key", "")
+        if self._admin_key is not None and fornita \
+                and _h.compare_digest(str(fornita), str(self._admin_key)):
+            return "admin"                       # ROOT = admin pieno
+        tok = headers.get("X-Admin-Op", "") or headers.get("x-admin-op", "")
+        if not tok:
+            return None
+        d = self._verifica_op(tok)
+        if not d:
+            return None
+        aa = getattr(self._sys, "admin_accounts", None)
+        if aa is not None:
+            return aa.ruolo_attivo(d["email"])   # revocato/cambiato -> None/nuovo ruolo, all'istante
+        return d.get("ruolo")
+
+    def _puo_azione(self, headers, azione):
+        """Il RUOLO di chi agisce puo' compiere questa azione? (fase192: 'supporto' fa letture e
+        assistenza ma NON soldi/moderazione distruttiva; 'admin'/root = tutto). La ROOT resta piena."""
+        try:
+            from fase192_admin_accounts import puo
+            return puo(self._ruolo_operatore(headers), azione)
+        except Exception:
+            return True
 
     def _auth_con_rate(self, tipo, fornita, atteso, headers) -> bool:
         """Confronto costante della chiave + BUTTAFUORI per IP sui TENTATIVI FALLITI
@@ -2500,6 +2575,8 @@ class RouterHTTP:
             return 401, {"errore": "unauthorized"}
         if not self._bunker_ok_o_field(headers, azione="storno_penale"):
             return 403, {"errore": "bunker_richiesto"}
+        if not self._puo_azione(headers, "storno_penale"):   # ruolo 'supporto' non muove soldi
+            return 403, {"errore": "permesso_negato_ruolo"}
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
@@ -3574,6 +3651,88 @@ class RouterHTTP:
         st = bg.stato()
         return (200 if ok else 500), {**st, "impostato": ok}
 
+    def _bunker_admin_accounts(self, headers):
+        """GESTIONE PERMESSI (fase192) — elenco operatori admin. Solo super-admin. Mai salt/hash."""
+        if not self._bunker_auth(headers, azione="admin_accounts"):
+            return 403, {"errore": "bunker_richiesto"}
+        from fase192_admin_accounts import RUOLI
+        aa = getattr(self._sys, "admin_accounts", None)
+        return 200, {"account": (aa.lista() if aa is not None else []), "ruoli": list(RUOLI)}
+
+    def _bunker_admin_accounts_gestisci(self, body, headers):
+        """Crea/revoca/riattiva/cambia-ruolo un operatore admin. Solo super-admin.
+        Body {azione: crea|revoca|riattiva|ruolo, email, password?, ruolo?}. La ADMIN_KEY root
+        resta il super-potere; questi sono operatori aggiuntivi con permessi per ruolo."""
+        if not self._bunker_auth(headers, azione="admin_accounts"):
+            return 403, {"errore": "bunker_richiesto"}
+        aa = getattr(self._sys, "admin_accounts", None)
+        if aa is None:
+            return 503, {"errore": "admin_accounts_assente"}
+        dati = self._json(body) or {}
+        azione = str(dati.get("azione", ""))
+        email = dati.get("email", "")
+        if azione == "crea":
+            r = aa.crea(email, dati.get("password", ""), dati.get("ruolo", ""), creato_da="super-admin")
+            logger.warning("ADMIN ACCOUNT creato/aggiornato %s ruolo=%s ok=%s",
+                           email, dati.get("ruolo"), r.get("ok"))
+            return (200 if r.get("ok") else 422), r
+        if azione == "revoca":
+            ok = aa.revoca(email)
+            logger.warning("ADMIN ACCOUNT revocato %s ok=%s", email, ok)
+            return (200 if ok else 404), {"ok": ok, "email": email}
+        if azione == "riattiva":
+            ok = aa.riattiva(email)
+            return (200 if ok else 404), {"ok": ok, "email": email}
+        if azione == "ruolo":
+            ok = aa.imposta_ruolo(email, dati.get("ruolo", ""))
+            logger.warning("ADMIN ACCOUNT ruolo %s -> %s ok=%s", email, dati.get("ruolo"), ok)
+            return (200 if ok else 422), {"ok": ok, "email": email, "ruolo": dati.get("ruolo")}
+        return 422, {"errore": "azione_non_valida"}
+
+    def _bunker_cambio_valuta(self, headers):
+        """CAMBIO VALUTA (fase99 ProviderTassi) — stato + tassi campione. Solo super-admin.
+        READ-ONLY: la chiave OXR resta un segreto in .env (mai esposta/modificabile via UI)."""
+        if not self._bunker_auth(headers, azione="cambio_valuta"):
+            return 403, {"errore": "bunker_richiesto"}
+        tassi = getattr(self._sys, "tassi", None)
+        if tassi is None:
+            return 200, {"configurato": False, "assente": True,
+                         "nota": "convertitore spento (manca OXR_APP_ID in .env)"}
+        try:
+            st = dict(tassi.stato())
+        except Exception:
+            st = {"configurato": False}
+        campioni = {}
+        for o, d in (("EUR", "USD"), ("EUR", "GBP"), ("USD", "JPY")):
+            try:
+                t = tassi.tasso(o, d)
+                if t is not None:
+                    campioni["%s->%s" % (o, d)] = str(t)
+            except Exception:
+                pass
+        st["campioni"] = campioni
+        st["markup_bps"] = 100          # fee di conversione trasparente (1%), dichiarata
+        return 200, st
+
+    def _bunker_cambio_valuta_aggiorna(self, headers):
+        """Forza SUBITO un rinfresco dei tassi da OXR (senza aspettare il giro giornaliero).
+        Solo super-admin. Isolato: qualunque errore -> aggiornato False, mai solleva."""
+        if not self._bunker_auth(headers, azione="cambio_valuta"):
+            return 403, {"errore": "bunker_richiesto"}
+        tassi = getattr(self._sys, "tassi", None)
+        if tassi is None:
+            return 503, {"errore": "convertitore_spento"}
+        ok = False
+        try:
+            ok = bool(tassi.aggiorna())
+        except Exception:
+            ok = False
+        try:
+            st = dict(tassi.stato())
+        except Exception:
+            st = {}
+        return 200, {"aggiornato": ok, **st}
+
     def _bunker_integrita(self, query, headers):
         """SALA CONTROLLO — INTEGRITA' (Incremento 4, read-only, sessione Bunker richiesta):
         verifica la CATENA HASH del giornale contabile (fase177) = prova che nessun movimento
@@ -3690,6 +3849,8 @@ class RouterHTTP:
             return 401, {"errore": "unauthorized"}
         if not self._bunker_ok_o_field(headers, azione="rimborso"):
             return 403, {"errore": "bunker_richiesto"}
+        if not self._puo_azione(headers, "rimborso"):   # ruolo 'supporto' non muove soldi
+            return 403, {"errore": "permesso_negato_ruolo"}
         if self._transazioni_bloccate():           # kill-switch globale: niente rimborsi in freeze
             return 503, {"errore": "transazioni_sospese"}
         dati = self._json(body)
@@ -7666,10 +7827,33 @@ class RouterHTTP:
         credenziale nuova: la chiave e' la stessa di sempre (inviata come X-Admin-Key)."""
         if self._admin_key is None:
             return 503, {"errore": "admin_non_configurato"}
+        ttl = self._GATE_TTL["admin"]
+        dati = self._json(body) if body else None
+        # (A) OPERATORE (fase192) via email+password -> token operatore col RUOLO. Rate-limit per IP.
+        if isinstance(dati, dict) and dati.get("email") and dati.get("password"):
+            rl = self._rate
+            ip = self._client_ip(headers)
+            chiave = ("authop:%s" % ip) if ip else ""
+            if rl is not None and chiave:
+                consentito, attesa = rl.consenti(chiave)
+                if not consentito:
+                    return 429, {"errore": "troppi_tentativi", "attesa_sec": attesa}
+            aa = getattr(self._sys, "admin_accounts", None)
+            v = aa.verifica(dati.get("email"), dati.get("password")) if aa is not None else {"ok": False}
+            if not v.get("ok"):
+                if rl is not None and chiave:
+                    rl.fallito(chiave)
+                return 401, {"errore": "credenziali_non_valide"}
+            if rl is not None and chiave:
+                rl.riuscito(chiave)
+            tok = self._firma_op(v["email"], v["ruolo"])
+            return 200, {"ok": True, "ruolo": v["ruolo"], "operatore": v["email"], "op_token": tok,
+                         "_cookie": [("bv_admin", self._gate_firma("admin", ttl), ttl)]}
+        # (B) ROOT via X-Admin-Key (come sempre): super-potere pieno.
         if not self._auth_admin(headers):        # confronto costante-tempo + rate-limit dentro
             return 401, {"errore": "unauthorized"}
-        ttl = self._GATE_TTL["admin"]
-        return 200, {"ok": True, "_cookie": [("bv_admin", self._gate_firma("admin", ttl), ttl)]}
+        return 200, {"ok": True, "ruolo": "admin",
+                     "_cookie": [("bv_admin", self._gate_firma("admin", ttl), ttl)]}
 
     def _gate_logout(self, body, headers):
         """Logout di PAGINA: cancella TUTTI i cookie di sessione (Max-Age=0). Cosi' dopo il

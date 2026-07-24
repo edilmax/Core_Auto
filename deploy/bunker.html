@@ -72,6 +72,29 @@ button.ghost{background:#222c40;color:var(--txt)}
     </div>
 
     <div class="card">
+      <h2>💱 Cambio valuta (OXR)</h2>
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <span id="cvStato" class="hint">stato: —</span>
+        <button class="ghost" id="btnCvAgg">🔄 Aggiorna tassi</button>
+        <button class="ghost" id="btnCvVedi">👁️ Stato</button>
+      </div>
+      <div id="cvCampioni" class="hint" style="margin-top:.3rem"></div>
+    </div>
+
+    <div class="card">
+      <h2>👥 Operatori admin (permessi)</h2>
+      <p class="hint">Account aggiuntivi con ruolo per il team. La chiave admin principale resta il super-potere. <b>supporto</b> = letture/assistenza (niente soldi); <b>admin</b> = pieno.</p>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+        <input id="aaEmail" type="email" placeholder="email operatore" aria-label="Email operatore">
+        <input id="aaPw" type="password" placeholder="password (min 8)" aria-label="Password operatore">
+        <select id="aaRuolo" aria-label="Ruolo operatore"><option value="supporto">supporto</option><option value="admin">admin</option></select>
+        <button id="btnAaCrea">➕ Crea / aggiorna</button>
+        <button class="ghost" id="btnAaLista">🔄 Elenco</button>
+      </div>
+      <div id="aaLista" style="margin-top:.4rem"></div>
+    </div>
+
+    <div class="card">
       <h2 data-i18n="integ_h">🔗 Integrità giornale contabile</h2>
       <p class="hint" data-i18n="integ_p">La catena di hash prova che nessun movimento di denaro è stato manomesso.</p>
       <div id="catena" style="margin-top:.5rem"></div>
@@ -222,7 +245,7 @@ async function entra(){
     if(r.status===200 && d && d.sessione){ SESS=d.sessione; EXP=Date.now()+((d.scade_tra_sec||900)*1000);
       try{sessionStorage.setItem('bv_bunker_sess',SESS);sessionStorage.setItem('bv_bunker_exp',String(EXP));}catch(_){console.warn('bunker',_);}
       $('pw').value=''; $('loginCard').classList.add('nascosto'); $('sala').classList.remove('nascosto');
-      st.textContent=''; aggiorna(); blkStato(); avviaTimer();
+      st.textContent=''; aggiorna(); blkStato(); cvStato(); aaLista(); avviaTimer();
     } else if(r.status===429){ st.textContent=T.js_troppi; }
     else if(r.status===503){ st.textContent=T.js_nonconfig; }
     else { st.textContent=T.js_errata; }
@@ -567,6 +590,46 @@ async function blkImposta(att){
 $('btnBlkOn').onclick=()=>blkImposta(true);
 $('btnBlkOff').onclick=()=>blkImposta(false);
 $('btnBlkAgg').onclick=blkStato;
+async function cvStato(){
+  const {status,d}=await jget('/api/bunker/cambio_valuta');
+  const el=$('cvStato'); if(!el) return;
+  if(status!==200||!d){ el.textContent='stato: non disponibile'; return; }
+  if(d.assente || d.configurato===false){ el.textContent='💤 convertitore spento (manca OXR_APP_ID)'; if($('cvCampioni'))$('cvCampioni').textContent=''; return; }
+  const eta = (d.eta_ore==null)?'—':(d.eta_ore+'h fa');
+  el.textContent = d.mai_riuscito ? '⚠️ configurato, nessun tasso ancora' : ('✅ tassi aggiornati '+eta);
+  const c=d.campioni||{}; const cc=$('cvCampioni');
+  if(cc) cc.textContent = Object.keys(c).length ? ('campioni: '+Object.entries(c).map(([k,v])=>k+' '+(Number(v).toFixed(4))).join(' · ')) : '';
+}
+async function cvAggiorna(){
+  const el=$('cvStato'); if(el) el.textContent='aggiorno…';
+  try{ await fetch('/api/bunker/cambio_valuta/aggiorna',{method:'POST',headers:hdr()}); }catch(_){console.warn('bunker',_);}
+  cvStato();
+}
+$('btnCvAgg').onclick=cvAggiorna;
+$('btnCvVedi').onclick=cvStato;
+async function aaLista(){
+  const {status,d}=await jget('/api/bunker/admin_accounts');
+  const box=$('aaLista'); if(!box) return;
+  if(status!==200||!d){ box.textContent='non disponibile'; return; }
+  const acc=d.account||[]; box.textContent='';
+  if(!acc.length){ box.innerHTML='<span class="hint">nessun operatore</span>'; return; }
+  acc.forEach(a=>{
+    const row=document.createElement('div'); row.style.cssText='display:flex;gap:.4rem;align-items:center;padding:.2rem 0';
+    const sp=document.createElement('span'); sp.textContent=a.email+' — '+a.ruolo+' '+(a.attivo?'✅':'⛔ revocato'); row.appendChild(sp);
+    const br=document.createElement('button'); br.className='ghost'; br.textContent='revoca'; br.onclick=()=>aaAzione('revoca',a.email); row.appendChild(br);
+    const ba=document.createElement('button'); ba.className='ghost'; ba.textContent='riattiva'; ba.onclick=()=>aaAzione('riattiva',a.email); row.appendChild(ba);
+    box.appendChild(row);
+  });
+}
+async function aaPost(body){
+  try{ await fetch('/api/bunker/admin_accounts',{method:'POST',headers:{...hdr(),'Content-Type':'application/json'},body:JSON.stringify(body)}); }
+  catch(_){console.warn('bunker',_);}
+  aaLista();
+}
+async function aaCrea(){ await aaPost({azione:'crea',email:$('aaEmail').value,password:$('aaPw').value,ruolo:$('aaRuolo').value}); $('aaPw').value=''; }
+async function aaAzione(azione,email){ await aaPost({azione,email}); }
+$('btnAaCrea').onclick=aaCrea;
+$('btnAaLista').onclick=aaLista;
 $('btnMarche').onclick=marche;
 $('btnMarcaOra').onclick=marcaOra;
 $('btnSc').onclick=scaglioni;

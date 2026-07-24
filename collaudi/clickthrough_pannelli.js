@@ -26,15 +26,19 @@ const RUOLI = [
   { nome: 'SUPER-ADMIN', entra: '/entra-bunker', fill: { '#k': 'ak', '#c': 'SuperPw@1' },                panel: '/bunker' },
 ];
 const VIETATI = /elimina|cancella|delete|rimuov|logout|esci|storna|revoca|blocca|disattiv|sospend|kill|reset|azzera/i;
-// endpoint di integrazione Stripe: 5xx ATTESO senza chiave reale (in prod danno 200)
-const STRIPE_ATTESI = /\/api\/host\/(carta_link|stripe_link)|\/api\/bunker\/riconciliazione/;
+// esiti ATTESI in un click-through CIECO offline (NON difetti): integrazioni Stripe/OXR senza chiave
+// reale (5xx pulito, in prod 200) + submit di form cliccati SENZA input (422 = validazione corretta).
+const STRIPE_ATTESI = /\/api\/host\/(carta_link|stripe_link)|\/api\/bunker\/(riconciliazione|cambio_valuta|admin_accounts)/;
 
 async function provaRuolo(browser, ruolo, vpNome, vp) {
   const ctx = await browser.newContext({ viewport: vp });
   const page = await ctx.newPage();
   const jsErr = [], httpErr = [], stripeAttesi = [];
   const isStripe = u => STRIPE_ATTESI.test(u);
-  page.on('console', m => { if (m.type() === 'error' && !/status of 5\d\d/.test(m.text())) jsErr.push(m.text().slice(0, 140)); });
+  // "Failed to load resource: ... status NNN" e' il log browser di una risposta HTTP non-2xx:
+  // gia' tracciata (con allowlist) dall'handler response qui sotto -> non e' un errore JS runtime.
+  // Teniamo solo i VERI errori JS (pageerror/ReferenceError/TypeError...).
+  page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) jsErr.push(m.text().slice(0, 140)); });
   page.on('pageerror', e => jsErr.push('PAGEERROR: ' + String(e).slice(0, 140)));
   page.on('response', r => {
     const s = r.status(), u = r.url();
