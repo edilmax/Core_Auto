@@ -66,13 +66,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.9' }
-      - run: pip install ruff mypy pip-audit
+      - run: pip install ruff mypy pip-audit bandit
       - name: Ruff (bug potenziali)
         run: ruff check fase*.py main_casavip.py --select F,E7 || true
       - name: Mypy sui motori-soldi
         run: mypy fase188_paga_struttura.py fase98_policy_commissione.py fase111_cancellazione.py --ignore-missing-imports || true
       - name: pip-audit (dipendenze)
         run: pip-audit || true
+      # Bandit (security scanner). GATE VERO sul grave: un finding HIGH fa fallire la build.
+      # Escluso ./collaudi (strumenti di test) e ./_archivio (storia). app.py e' Flask legacy
+      # MORTO (produzione = fase83 stdlib) -> le sue voci non contano. Oggi: 0 HIGH.
+      - name: Bandit (sicurezza — blocca sul grave)
+        run: bandit -r . -x ./collaudi,./_archivio,./app.py --severity-level high --confidence-level high
 
   # ===== STRUMENTI ESTERNI: girano SOLO su Linux (Java/clang assenti su Windows) =====
 

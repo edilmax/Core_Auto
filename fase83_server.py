@@ -538,7 +538,9 @@ def etag_di(dati: bytes) -> str:
     """ETag forte sul CONTENUTO (sha1 troncato): stesso contenuto → stesso ETag. Il crawler che
     rimanda l'If-None-Match riceve 304 e NON riscarica (risparmio di budget di scansione)."""
     import hashlib
-    return '"%s"' % hashlib.sha1(dati).hexdigest()[:16]
+    # usedforsecurity=False: e' un'impronta di CONTENUTO per la cache HTTP (ETag/304), NON un
+    # uso crittografico -> SHA1 va bene qui, e lo dichiariamo esplicito (ambienti FIPS + scanner).
+    return '"%s"' % hashlib.sha1(dati, usedforsecurity=False).hexdigest()[:16]
 
 
 def etag_combacia(etag: str, if_none_match: str) -> bool:
