@@ -1,3 +1,18 @@
+## 🟢 STATO 2026-07-24 (notte) — 3 CANALI MARKETING GRATUITI (crescita autonoma)
+
+Aggiunti 3 canali social **GRATUITI** alla crescita autonoma (oltre a Telegram/FB/IG/X/TikTok già
+presenti), come connettori DORMIENTI stdlib-native accesi dal token in `.env`:
+- **`fase193` Mastodon** (social aperto, API scrittura gratis), **`fase194` Bluesky** (AT Protocol),
+  **`fase195` Reddit** (subreddit permesso). Adapter `CanalePubblicazione`, `fetch` iniettabile
+  (test senza rete), isolati, cablati in `fase91.crea_canali_da_env`. Guardia `test_canali_gratuiti`
+  (12). Chiavi documentate in `.env.casavip.example` (`MASTODON_*`, `BLUESKY_*`, `REDDIT_*`).
+- **Da accendere**: token dal fondatore + schedulazione auto-post. Prossimi gratis possibili:
+  Pinterest (serve hosting immagine), Google Business, feed RSS + Open Graph (zero-chiave, sempre-on).
+- Mutazione: re-verify survivor ora SPAZIATO (pausa 2s) per non far fallire il job su un transitorio
+  di carico del runner CI (locale sempre 18/18).
+
+---
+
 ## 🟢 STATO 2026-07-24 (notte) — COLLAUDO COMPORTAMENTALE PANNELLO HOST (effetto istantaneo)
 
 Nuovo collaudo `collaudi/beh_host.py` (**14/14 verdi** sul server vivo): l'azione dell'host si

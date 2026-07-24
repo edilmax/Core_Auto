@@ -196,7 +196,13 @@ if __name__ == "__main__":
                 # il job per un intoppo passeggero (falso-survivor ~ p^3 invece di p^2). Storia:
                 # il job MUTAZIONE flakava a intermittenza sul CI (locale sempre 18/18), passando
                 # al re-run -> classica flakiness transitoria da carico del runner.
-                riverifiche = [esegui(test)[0] for _ in range(2)]
+                # SPAZIATE: se il picco e' un transitorio di CARICO del runner (subprocess lenti),
+                # 3 giri back-to-back cadono tutti nella stessa finestra; una piccola pausa la lascia
+                # dissolvere. Un buco VERO resta comunque (e' deterministico), un intoppo di carico no.
+                riverifiche = []
+                for _ in range(2):
+                    time.sleep(2)
+                    riverifiche.append(esegui(test)[0])
                 if all(riverifiche):
                     sopravvissuti.append((percorso, danno, test))
                     print("    ESITO: MUTANTE SOPRAVVISSUTO — i test restano VERDI (3 giri su 3)!")
