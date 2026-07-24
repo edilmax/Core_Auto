@@ -5956,6 +5956,44 @@ class RouterHTTP:
         except Exception:
             logger.warning("notifica domanda host fallita (ignorata)", exc_info=True)
 
+    def _avvisa_domanda_ospiti(self, citta, slug):
+        """COLD-START FLYWHEEL: un host pubblica il PRIMO annuncio in 'citta' -> avvisa gli OSPITI
+        in lista d'attesa per quella citta (fase158) col link all'annuncio + il loro Credito
+        Fondatore di benvenuto. Cosi' la domanda RACCOLTA (email lasciate quando non c'era ancora
+        nulla) diventa le PRIME PRENOTAZIONI appena arriva inventario. Solo al PRIMO annuncio della
+        citta (0->1): niente re-spam ai successivi. ISOLATO + gated all'email (no-op se spento)."""
+        try:
+            dom = getattr(self._sys, "domanda", None)
+            ep = getattr(self._sys, "email_provider", None)
+            if dom is None or ep is None or not (isinstance(citta, str) and citta.strip()):
+                return
+            from fase57_vetrina import CriteriRicerca
+            res = self._sys.catalogo.cerca(CriteriRicerca(citta=citta, limit=2)) or {}
+            if len(res.get("risultati") or []) != 1:      # notifica SOLO al primo annuncio (0->1)
+                return
+            emails = dom.email_citta(citta)
+            if not emails:
+                return
+            from html import escape as e            # escape locale (non e' a livello modulo)
+            base = self._base_url or "https://bookinvip.com"
+            nome = str(citta).strip().title()
+            link = "%s/alloggio/%s" % (base, slug)
+            for em in emails[:2000]:
+                try:
+                    cred = dom.emette_credito_fondatore(em, citta)
+                    credlink = ("%s/?credito=%s" % (base, cred)) if cred else base
+                    ogg = "🎉 %s è aperta su BookinVIP — col tuo Credito di benvenuto" % nome
+                    html = ("<p>Ciao! Avevi chiesto di essere avvisato/a per <b>%s</b>: il primo "
+                            "alloggio è ora prenotabile.</p>"
+                            "<p><a href=\"%s\">Guardalo qui</a> — e usa il tuo <b>Credito "
+                            "Fondatore</b> sulla prima prenotazione: <a href=\"%s\">attivalo</a>.</p>"
+                            % (e(nome), e(link), e(credlink)))
+                    ep.invia(em, ogg, html)
+                except Exception:
+                    continue
+        except Exception:
+            logger.warning("avviso domanda ospiti fallito (ISOLATO)", exc_info=True)
+
     def _trasparenza(self, query, headers=None):
         """Confronto noi-vs-OTA (fase69): 'con Booking incassi X, con noi Y'. La NOSTRA
         commissione mostrata riflette quella REALE (config + rampa di lancio per l'host loggato),
@@ -7363,6 +7401,15 @@ class RouterHTTP:
                 self._motore_seo().su_pubblicazione(det, self._base_url)
         except Exception:
             logger.warning("motore SEO su publish fallito (ISOLATO)", exc_info=True)
+        # COLD-START: primo annuncio nella citta -> avvisa la lista d'attesa (fase158). ISOLATO.
+        try:
+            if getattr(scheda, "stato", "") == "pubblicato":
+                # citta GREZZA (come l'ha digitata l'host / come il catalogo la memorizza): la
+                # ricerca del catalogo e' case-sensitive, mentre email_citta normalizza da sola.
+                self._avvisa_domanda_ospiti(dati.get("citta", "") or getattr(scheda, "citta", ""),
+                                            scheda.slug)
+        except Exception:
+            logger.warning("avviso domanda ospiti su publish fallito (ISOLATO)", exc_info=True)
         return 201, {"stato": "pubblicato", "slug": scheda.slug, "id": id_num}
 
     def _motore_seo(self):

@@ -1,3 +1,21 @@
+## 🟢 STATO 2026-07-24 (notte) — SISTEMA COLD-START: nuovo annuncio → avvisa la lista d'attesa
+
+Problema del fondatore (uomo solo, zero inventario vero): il marketing recluta HOST prima, poi
+clienti; la home dice già «in test, aperto agli host, pubblica ora» (giusto). Il **pezzo mancante
+del flywheel**: c'era «domanda alta → avvisa host» ma NON «host pubblica → avvisa ospiti in attesa».
+- **COSTRUITO** (`fase83._avvisa_domanda_ospiti`, innescato in `_host_pubblica`): quando un host
+  pubblica il **PRIMO** annuncio in una città (0→1), gli ospiti in **lista d'attesa** (`fase158`, già
+  con 8 richieste reali in prod) per quella città ricevono un'**email col link all'annuncio + il loro
+  Credito Fondatore**. Trasforma la domanda raccolta in PRIME PRENOTAZIONI. Solo al primo annuncio
+  (niente re-spam), ISOLATO (mai rompe il publish), gated all'email (no-op se SMTP spento).
+- Guardia `test_cold_start_flywheel` (4, vista ROSSA). 2 BUG chiusi in collaudo: catalogo `cerca`
+  è case-sensitive (usata la città grezza) + `e()` (escape) non è a livello modulo (import locale).
+- **NB inventario**: prod ha 2 annunci ("Attico Vista Colosseo", "Suite Colosseo") — probabilmente
+  DEMO. Il feed RSS/OG li mostra: DECIDERE col fondatore se tenerli come esempio o toglierli (per un
+  «sii il primo host» onesto). **Marketing auto = tema HOST** (fase90 ce l'ha: «tieni di più vs OTA»).
+
+---
+
 ## 🟢 STATO 2026-07-24 (notte) — AMPLIFICAZIONE GRATIS ZERO-CHIAVE: Open Graph + RSS (ACCESI)
 
 Accesi **subito** (nessuna chiave, sempre-attivi, alto ROI) in `fase83_server`:
