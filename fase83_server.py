@@ -1774,6 +1774,10 @@ class RouterHTTP:
             return self._bunker_dac7_conformita(query, headers)
         if metodo == "GET" and path == "/api/bunker/dac7_report":
             return self._bunker_dac7_report(query, headers)
+        if metodo == "GET" and path == "/api/bunker/blocco_globale":
+            return self._bunker_blocco_globale_stato(headers)
+        if metodo == "POST" and path == "/api/bunker/blocco_globale":
+            return self._bunker_blocco_globale_imposta(body, headers)
         if metodo == "POST" and path == "/api/host/dati_fiscali":
             return self._host_dati_fiscali(body, headers)
         if metodo == "GET" and path == "/api/host/dac7_stato":
@@ -3545,6 +3549,31 @@ class RouterHTTP:
             logger.error("bunker marca ora: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
 
+    def _bunker_blocco_globale_stato(self, headers):
+        """KILL-SWITCH GLOBALE (fase191) — stato, READ-ONLY. Solo super-admin."""
+        if not self._bunker_auth(headers, azione="blocco_globale"):
+            return 403, {"errore": "bunker_richiesto"}
+        bg = getattr(self._sys, "blocco_globale", None)
+        return 200, (bg.stato() if bg else {"attivo": False, "assente": True})
+
+    def _bunker_blocco_globale_imposta(self, body, headers):
+        """KILL-SWITCH GLOBALE d'emergenza: accende/spegne il FREEZE dei movimenti di denaro
+        (book/rimborso/payout/carta). Solo super-admin. Body {attivo: bool, motivo: str}.
+        L'azione e' registrata (chi/quando/motivo nel flag) e loggata CRITICO."""
+        if not self._bunker_auth(headers, azione="blocco_globale"):
+            return 403, {"errore": "bunker_richiesto"}
+        bg = getattr(self._sys, "blocco_globale", None)
+        if bg is None:
+            return 503, {"errore": "blocco_globale_assente"}
+        dati = self._json(body) or {}
+        attivo = bool(dati.get("attivo"))
+        motivo = str(dati.get("motivo", ""))[:200]
+        ok = bg.imposta(attivo, motivo=motivo, chi="super-admin")
+        logger.critical("KILL-SWITCH GLOBALE %s | motivo=%s",
+                        "ATTIVATO (freeze soldi)" if attivo else "disattivato", motivo or "-")
+        st = bg.stato()
+        return (200 if ok else 500), {**st, "impostato": ok}
+
     def _bunker_integrita(self, query, headers):
         """SALA CONTROLLO — INTEGRITA' (Incremento 4, read-only, sessione Bunker richiesta):
         verifica la CATENA HASH del giornale contabile (fase177) = prova che nessun movimento
@@ -3661,6 +3690,8 @@ class RouterHTTP:
             return 401, {"errore": "unauthorized"}
         if not self._bunker_ok_o_field(headers, azione="rimborso"):
             return 403, {"errore": "bunker_richiesto"}
+        if self._transazioni_bloccate():           # kill-switch globale: niente rimborsi in freeze
+            return 503, {"errore": "transazioni_sospese"}
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
@@ -4083,11 +4114,23 @@ class RouterHTTP:
             logger.warning("verifica pagamento recensione fallita (ISOLATA)", exc_info=True)
             return True                     # errore di lookup: non bloccare (il token resta valido)
 
+    def _transazioni_bloccate(self):
+        """True se il KILL-SWITCH GLOBALE d'emergenza e' attivo (fase191): congela i movimenti
+        di denaro (book/rimborso/payout/carta) lasciando il sito navigabile. Isolato: mai solleva
+        (in dubbio NON blocca; la env resta la rete di sicurezza autorevole)."""
+        try:
+            bg = getattr(self._sys, "blocco_globale", None)
+            return bool(bg and bg.attivo())
+        except Exception:
+            return False
+
     def _book(self, body):
         """Prenotazione (fase59) + emissione del DIRITTO di recensione (fase63)."""
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
+        if self._transazioni_bloccate():           # kill-switch globale: niente nuove prenotazioni
+            return 503, {"errore": "transazioni_sospese"}
         r = self._sys.concierge.prenota(dati)
         status = int(getattr(r, "status", 200))
         corpo = dict(getattr(r, "corpo", {}) or {})
@@ -4782,6 +4825,8 @@ class RouterHTTP:
         payout resta 'maturato' (tracciato, mai perso) e si sblocca da solo quando l'host
         completa i dati (retry in _host_dati_fiscali)."""
         try:
+            if self._transazioni_bloccate():          # kill-switch globale: nessun bonifico
+                return                                # (payout resta 'maturato', mai perso; riparte a freeze off)
             connect = getattr(self._sys, "connect", None)
             pp = getattr(self._sys, "pagamenti_pendenti", None)
             reg = getattr(self._sys, "registro_host", None)
@@ -5385,6 +5430,8 @@ class RouterHTTP:
             import os as _os
             if _os.environ.get("PAGA_STRUTTURA_ATTIVO", "0") != "1":
                 return None                        # DARK: nessun addebito senza la feature accesa
+            if self._transazioni_bloccate():       # kill-switch globale: nessun addebito carta
+                return {"applicata": False, "motivo": "blocco_globale"}
             allog = v.get("alloggio_id", "")
             try:
                 ts_ci = _istante_checkin(v.get("check_in", ""), self._fuso_alloggio(allog))

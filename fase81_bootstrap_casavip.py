@@ -98,6 +98,7 @@ class ConfigCasaVIP:
     con_poi: bool = False              # provider POI OSM (fase175) per il motore SEO (default OFF: test/rete)
     db_poicache: str = ":memory:"      # cache POI vicini per-annuncio (Overpass around+cache)
     file_referral: str = ""            # path JSON referral host-porta-host (vuoto = in RAM)
+    file_blocco_globale: str = ""      # path flag kill-switch (vuoto = derivato da db_payout o solo-env)
     con_sentinel: bool = False
     cartella_sentinel: Optional[str] = None
 
@@ -150,6 +151,7 @@ class SistemaCasaVIP:
     bunker: Any = None      # Bunker (fase180): super-admin 2FA TOTP + sessione blindata 15 min
     carta: Any = None       # ProviderCarta (fase183, Scatto ③): carta host off-session (gated)
     tassi: Any = None       # ProviderTassi (fase99): cambio valuta indicativo; None se OXR spento
+    blocco_globale: Any = None  # BloccoGlobale (fase191): kill-switch d'emergenza dei movimenti soldi
 
     @property
     def attivo(self) -> bool:
@@ -351,6 +353,14 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
 
     from fase131_payout_dashboard import crea_payout_dashboard
     payout = crea_payout_dashboard(cfg.db_payout)
+
+    # KILL-SWITCH GLOBALE (fase191): DORMIENTE. Flag durevole accanto ai dati (o solo-env se in RAM).
+    import os as _os_bg
+    from fase191_blocco_globale import crea_blocco_globale
+    _flag_bg = cfg.file_blocco_globale or (
+        _os_bg.path.join(_os_bg.path.dirname(cfg.db_payout) or ".", "blocco_globale.flag")
+        if cfg.db_payout not in ("", ":memory:") else "")
+    blocco_globale = crea_blocco_globale(_flag_bg)
     payout.inizializza_schema()
     componenti.append("payout_dashboard(131)")
 
@@ -555,4 +565,5 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           payout=payout, accettazioni=accettazioni, marche=marche, stripe=provider,
                           connect=_connect, carta=_carta, geocoder=geocoder, checkin=checkin,
                           poi_provider=poi_provider, credito_usati=credito_usati,
-                          finanza=finanza, bunker=bunker, kyc=kyc, tassi=_tassi)
+                          finanza=finanza, bunker=bunker, kyc=kyc, tassi=_tassi,
+                          blocco_globale=blocco_globale)

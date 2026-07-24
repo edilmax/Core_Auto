@@ -60,6 +60,17 @@ button.ghost{background:#222c40;color:var(--txt)}
       <button class="ghost" id="btnEsci" data-i18n="btn_esci">Esci</button>
     </div>
 
+    <div class="card" style="border:2px solid #b91c1c">
+      <h2>🚨 Kill-switch globale (emergenza)</h2>
+      <p class="hint">Congela ALL'ISTANTE tutti i movimenti di denaro — prenotazioni, rimborsi, bonifici agli host, addebiti carta. Il sito resta navigabile (ricerca e pagine). Usare SOLO in emergenza; si riattiva tutto disattivando l'interruttore.</p>
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <span id="blkStato" class="hint">stato: —</span>
+        <button id="btnBlkOn" style="background:#b91c1c;color:#fff">🔴 ATTIVA FREEZE</button>
+        <button class="ghost" id="btnBlkOff">🟢 Disattiva</button>
+        <button class="ghost" id="btnBlkAgg">🔄 Aggiorna</button>
+      </div>
+    </div>
+
     <div class="card">
       <h2 data-i18n="integ_h">🔗 Integrità giornale contabile</h2>
       <p class="hint" data-i18n="integ_p">La catena di hash prova che nessun movimento di denaro è stato manomesso.</p>
@@ -211,7 +222,7 @@ async function entra(){
     if(r.status===200 && d && d.sessione){ SESS=d.sessione; EXP=Date.now()+((d.scade_tra_sec||900)*1000);
       try{sessionStorage.setItem('bv_bunker_sess',SESS);sessionStorage.setItem('bv_bunker_exp',String(EXP));}catch(_){console.warn('bunker',_);}
       $('pw').value=''; $('loginCard').classList.add('nascosto'); $('sala').classList.remove('nascosto');
-      st.textContent=''; aggiorna(); avviaTimer();
+      st.textContent=''; aggiorna(); blkStato(); avviaTimer();
     } else if(r.status===429){ st.textContent=T.js_troppi; }
     else if(r.status===503){ st.textContent=T.js_nonconfig; }
     else { st.textContent=T.js_errata; }
@@ -538,6 +549,24 @@ async function marcaOra(){
     marche();
   }catch(e){ st.textContent=T.err_rete; console.warn('bunker',e); }
 }
+async function blkStato(){
+  const {status,d}=await jget('/api/bunker/blocco_globale');
+  const el=$('blkStato'); if(!el) return;
+  if(status!==200||!d){ el.textContent='stato: non disponibile'; return; }
+  const att=!!d.attivo, mot=(d.dettaglio&&d.dettaglio.motivo)?(' — '+d.dettaglio.motivo):'';
+  el.textContent = att ? ('⛔ FREEZE ATTIVO'+mot) : '✅ operativo (nessun blocco)';
+  el.style.color = att ? '#b91c1c' : '#166534';
+}
+async function blkImposta(att){
+  if(att && !confirm('Attivare il FREEZE globale? Blocca TUTTI i movimenti di denaro finché non lo disattivi.')) return;
+  const motivo = att ? (prompt('Motivo del blocco (finisce nel registro):')||'') : '';
+  try{ await fetch('/api/bunker/blocco_globale',{method:'POST',headers:{...hdr(),'Content-Type':'application/json'},body:JSON.stringify({attivo:att,motivo})}); }
+  catch(_){console.warn('bunker',_);}
+  blkStato();
+}
+$('btnBlkOn').onclick=()=>blkImposta(true);
+$('btnBlkOff').onclick=()=>blkImposta(false);
+$('btnBlkAgg').onclick=blkStato;
 $('btnMarche').onclick=marche;
 $('btnMarcaOra').onclick=marcaOra;
 $('btnSc').onclick=scaglioni;
