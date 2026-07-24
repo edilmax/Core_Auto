@@ -188,18 +188,22 @@ if __name__ == "__main__":
             if verde:
                 # RI-VERIFICA prima di gridare "buco": un survivor puo' essere una FLAKINESS
                 # transitoria del killer (subprocess sotto carico sul runner CI, oppure una rotta
-                # a tempo che al primo giro non ha visto il mutante). Rigiro il killer UNA volta,
-                # ancora sul codice MUTATO: un buco VERO sopravvive in modo DETERMINISTICO
-                # (entrambe le volte), una flakiness muore alla ri-prova. Cosi' non si maschera un
-                # gap reale (sopravvive lo stesso) ne' si fa rosso il job per un intoppo passeggero.
-                verde2, _ = esegui(test)
-                if verde2:
+                # a tempo che al primo giro non ha visto il mutante). Un buco VERO sopravvive in
+                # modo DETERMINISTICO a OGNI giro; una flakiness muore appena il killer riprende.
+                # Rigiro il killer fino a 2 volte IN PIU' (3 totali sul codice MUTATO): se ANCHE
+                # UNA sola volta lo uccide -> era flaky, ucciso. Solo se regge a TUTTI e 3 e' un
+                # buco reale. Cosi' non si maschera un gap (sopravvive comunque) ne' si fa rosso
+                # il job per un intoppo passeggero (falso-survivor ~ p^3 invece di p^2). Storia:
+                # il job MUTAZIONE flakava a intermittenza sul CI (locale sempre 18/18), passando
+                # al re-run -> classica flakiness transitoria da carico del runner.
+                riverifiche = [esegui(test)[0] for _ in range(2)]
+                if all(riverifiche):
                     sopravvissuti.append((percorso, danno, test))
-                    print("    ESITO: MUTANTE SOPRAVVISSUTO — i test restano VERDI (2 giri su 2)!")
+                    print("    ESITO: MUTANTE SOPRAVVISSUTO — i test restano VERDI (3 giri su 3)!")
                 else:
                     uccisi += 1
                     print("    ESITO: ucciso alla RI-VERIFICA (primo giro = flaky del killer, "
-                          "non un buco): il mutante viene visto al secondo giro")
+                          "non un buco): il mutante viene visto a un giro successivo")
             else:
                 uccisi += 1
                 riga = [r for r in uscita.splitlines()

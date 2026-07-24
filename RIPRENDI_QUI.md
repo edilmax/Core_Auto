@@ -1,3 +1,23 @@
+## 🟢 STATO 2026-07-24 (notte) — BATTERIA RI-ESEGUITA + 3 RUOLI (super-admin) + RE-VERIFY MUTAZIONE
+
+**Batteria caccia-errori estrema RI-ESEGUITA (direttiva: va ripetuta), tutta verde in locale**:
+Mutation 18/18 · Fuzzing 500k=0 violazioni · Concorrenza 21 test OK (0 IDOR/5xx/bypass-admin) ·
+Visivo+A11Y 0 anomalie. Produzione sana (sito+sonde 200, `ATTIVO=1`).
+
+**👥 3 SUPERFICI-RUOLO (host < admin < bunker/super-admin) — copertura completata** (`ce7453f`):
+il super-admin sono **DUE password** (prima entri come admin con X-Admin-Key, poi dall'admin passi
+al bunker con la 2ª chiave/codice TOTP → sessione separata). RBAC verificato solido: senza chiave
+admin 401, admin+TOTP-errato 403, distruttive richiedono la sessione bunker (34 test OK). A11Y: il
+**bunker mancava** dall'audit → aggiunto sia al gate CI Playwright (`a11y_static.js`) sia alla guardia
+stdlib (`test_accessibilita`), esito 0 gravi su tutti e 3 i ruoli.
+
+**🕰️ RE-VERIFY MUTAZIONE a 3 giri**: il job CI `mutazione` flakava a INTERMITTENZA (locale sempre
+18/18, passava al re-run → flakiness transitoria da carico del runner, NON un buco). Il re-verify era
+a 2 giri; portato a **3 giri** (`mutazione_prodotto.py`): un mutante è "sopravvissuto" solo se regge a
+tutti e 3, altrimenti è flaky→ucciso (falso-survivor ~p³). Locale 18/18 confermato.
+
+---
+
 ## 🟢 STATO 2026-07-24 (sera) — CACCIA-ERRORI ESTREMA + SICUREZZA + A11Y · 3 POSTI a `a7d2226` · CI 8/8 VERDE · sito 200
 
 **CI GitHub Actions INTERAMENTE VERDE** su `a7d2226`: qualita (con **gate Bandit**), mutazione,
