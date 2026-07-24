@@ -75,6 +75,7 @@ def main() -> None:  # pragma: no cover
         db_pendenti=os.environ.get("DB_PENDENTI", "data/pendenti.db"),
         db_tassa_comunale=os.environ.get("DB_TASSA_COMUNALE", "data/tassa_comunale.db"),
         db_payout=os.environ.get("DB_PAYOUT", "data/payout.db"),
+        db_admin_accounts=os.environ.get("DB_ADMIN_ACCOUNTS", "data/admin_accounts.db"),
         db_accettazioni=os.environ.get("DB_ACCETTAZIONI", "data/accettazioni.db"),
         # DIFETTO CHIUSO 2026-07-21: questi due NON venivano passati -> restavano
         # a ":memory:" anche in PRODUZIONE. Le recensioni sparivano a ogni riavvio e

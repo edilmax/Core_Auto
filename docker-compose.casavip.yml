@@ -27,6 +27,7 @@ services:
       DB_TASSA_COMUNALE: /data/tassa_comunale.db # ledger tassa di soggiorno (durevole)
       UPLOAD_DIR: /data/uploads                  # foto alloggi caricate dagli host (durevole)
       DB_PAYOUT: /data/payout.db                 # dashboard payout host (durevole)
+      DB_ADMIN_ACCOUNTS: /data/admin_accounts.db # operatori admin con ruoli (fase192, durevole)
       DB_ACCETTAZIONI: /data/accettazioni.db     # prove FIRMATE d'accettazione contratto host (durevole = valore legale)
       DB_MARCHE: /data/marche.db                 # marche temporali RFC 3161 (durevole = valore legale: senza questa riga i token finirebbero in /app/data, cancellata a OGNI deploy)
       DB_RECENSIONI: /data/recensioni.db       # voti degli ospiti (durevole) - ERA MANCANTE -> le recensioni sparivano a ogni deploy
