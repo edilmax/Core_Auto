@@ -79,6 +79,30 @@ class TestRimborso(unittest.TestCase):
     def test_politica_sconosciuta_usa_flessibile(self):
         self.assertEqual(calcola_rimborso(10000, 5, politica="boh")["politica"], "flessibile")
 
+    # --- FLOOR del rimborso parziale (Flow 4 micro-stepping): mai over-refund di 1 cent ---
+    def test_rimborso_parziale_FLOOR_non_arrotonda_su(self):
+        # 9999 * 50% = 4999.5 -> DEVE fare FLOOR (4999), non round (5000). Con round() si
+        # rimborserebbe 1 cent di troppo (noi in perdita). Nessun test lo bloccava: la
+        # conservazione (rimborso+trattenuto=pagato) resta vera anche arrotondando su.
+        r = calcola_rimborso(9999, 3, politica="moderata")          # moderata@3gg -> bps 5000
+        self.assertEqual(r["bps"], 5000)
+        self.assertEqual(r["rimborso_cents"], 4999, "rimborso non FLOORato (over-refund di 1 cent)")
+        self.assertEqual(r["trattenuto_cents"], 5000)
+        self.assertEqual(round(9999 * 5000 / 10000), 5000)          # prova: round() darebbe 5000
+
+    def test_rimborso_non_supera_mai_la_quota_esatta(self):
+        # invariante FLOOR non-circolare: rimborso <= quota proporzionale ESATTA, sempre.
+        # (rimborso*10000 <= soggiorno*bps) <=> il rimborso non eccede mai la frazione esatta.
+        # Rosso se qualcuno passa a round()/ceil (over-refund su importi dispari).
+        for pagato in (9999, 10001, 12345, 7777, 33333, 1, 3, 101):
+            for pol_nome in POLITICHE:
+                for g in (0, 1, 5, 7, 30):
+                    r = calcola_rimborso(pagato, g, politica=pol_nome)   # fee=0 -> soggiorno=pagato
+                    self.assertLessEqual(
+                        r["rimborso_cents"] * 10000, pagato * r["bps"],
+                        "OVER-REFUND: pagato=%d pol=%s g=%d -> rimborso %d supera la quota esatta"
+                        % (pagato, pol_nome, g, r["rimborso_cents"]))
+
 
 if __name__ == "__main__":
     unittest.main()
