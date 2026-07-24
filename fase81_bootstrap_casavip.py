@@ -365,8 +365,13 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     blocco_globale = crea_blocco_globale(_flag_bg)
 
     # OPERATORI ADMIN con ruoli (fase192): additivo, la ADMIN_KEY resta il super-potere root.
+    # Store DUREVOLE: se non configurato, si mette accanto agli altri DB (in /data), cosi' gli
+    # account non spariscono al riavvio; resta :memory: solo nei test (db_payout in RAM).
     from fase192_admin_accounts import crea_admin_accounts
-    admin_accounts = crea_admin_accounts(cfg.db_admin_accounts)
+    _dba = cfg.db_admin_accounts
+    if _dba == ":memory:" and cfg.db_payout not in ("", ":memory:"):
+        _dba = _os_bg.path.join(_os_bg.path.dirname(cfg.db_payout) or ".", "admin_accounts.db")
+    admin_accounts = crea_admin_accounts(_dba)
     payout.inizializza_schema()
     componenti.append("payout_dashboard(131)")
 
