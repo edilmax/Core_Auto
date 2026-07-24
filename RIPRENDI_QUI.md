@@ -1,3 +1,32 @@
+## 🟢 STATO 2026-07-24 — MICRO-STEPPING (#14) COMPLETO · 3 POSTI ALLINEATI a `1dbbd95` · sito 200
+
+**Sync 3 posti RIPRISTINATO**: Desktop = GitHub = VPS = **`1dbbd95`** (prima il VPS era fermo a
+`985b7cc`, GitHub a `61b4eb0`). Deploy rm-first eseguito, container `healthy`, `money_path_pronto:
+True, avvisi: []`, sonde `/api/health/live|ready|db` = 200, `PAGA_STRUTTURA_ATTIVO=1` intatto.
+
+**MICRO-STEPPING dei 5 flussi reali — CHIUSO** (metodo: cercare i *mutanti sopravvissuti*, ogni
+guardia **vista ROSSA** prima del verde):
+- ✅ **Flow 1** (`61b4eb0`) min-stay: `disponibile()` ora rispetta `min_notti` come `blocca()` →
+  niente "preventivo fantasma" ricerca↔book; `min_notti` impostabile via `disponibilita_range`.
+- ✅ **Flow 3** (`be808fe`) check-in/pass SOLO a pagamento `pagato` → chiuso buco "soggiorno gratis"
+  (un non-pagante non abilita più lo sblocco porta).
+- ✅ **Flow 4** floor rimborso (`bcbf13d`) + **confine 24h** (`1dbbd95`): trovato e chiuso un
+  **off-by-one** — a ESATTAMENTE 24h di preavviso il mutante `>=24`→`>24` addebitava la prima notte
+  (indebito). Guardia `TestConfine24hEsatto` (forza `ore`=24.0 via mock), vista rossa.
+- ✅ **Flow 2** valute (`5d7e82f`): `converti()` era testato solo verso EUR (2 dec); aggiunte guardie
+  verso **JPY (0 dec)**, **KWD/BHD (3 dec)** + HALF_UP + invariante "mai in perdita sul cambio".
+  I **cap tasse** (fase66/147: notti/persona/totale) erano già tutti inchiodati.
+- ✅ **Flow 5** (`b8b1006`) isolamento RBAC in scrittura cross-host (test).
+
+**Collaudi**: suite INTERA verde · `mutazione_prodotto` **18/18 uccisi, 0 sopravvissuti** (aggiunti i 2
+nuovi: valuta-3dec e off-by-one 24h) · caccia-finti-verdi pulita. **Nessun cambio di comportamento non
+guardato**: i cambi di produzione (Flow 1, Flow 3) sono additivi/retro-compatibili e testati.
+
+**PROSSIMO** (dal task-list host-tracked): #10 velocità (cache), #12 traduzioni, #13 connettori
+dormienti (servono le chiavi dal fondatore), #14 resto flussi se emergono nuovi angoli.
+
+---
+
 ## 🟢 STATO 2026-07-23 — "PAGA IN STRUTTURA" FASE 1+2 COMPLETE (dark) · STRATEGIA 1 e 2 predisposte (dormienti)
 
 **PAGA IN STRUTTURA** (memory `bookinvip-paga-in-struttura`): online = prezzo pulito (0% ospite); in
