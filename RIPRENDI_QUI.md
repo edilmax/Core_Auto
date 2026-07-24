@@ -18,7 +18,16 @@ piccolo al grande"). Attivazione **zero-chiave / zero-account**, tutta autonoma:
 - Test aggiornati con soglia PRINCIPIATA e scala-consapevole (non più il magico `≤8`, tarato su 28):
   `diametro ≤ (b-1)·k` — un anello puro (diametro n-1) la sfonda sempre = regressione catturata.
   `test_registro_gate` usa ora città davvero fuori-seed (calcolate a runtime). **Suite completa VERDE**
-  (exit 0). PROSSIMO: attivare IndexNow (Bing/Yandex, chiave auto-generata) + submit sitemap.
+  (exit 0). **DEPLOYATO LIVE** (`224b67a`, 3 posti): 1.840 landing `/affitta/{città}` a 200, gate 404
+  ok, dati intatti (lead realmutodavide, catalogo 0). Sitemap-host = 1840 URL, 230 città.
+- **⚡ INDEXNOW ACCESO (zero-account)**: generata `INDEXNOW_KEY` (server serve `/CHIAVE.txt`, 200),
+  `INDEXNOW_HOST=bookinvip.com` in `.env.casavip` (VPS). **Tutte le 1.842 URL inviate** a
+  Bing/Yandex/Seznam/Naver (10 lotti, tutti stato 200; il POST massivo 1842-in-1 dava 403 al primo
+  colpo → risolto a LOTTI da 200). Ping automatico su ogni publish già cablato (fase173→fase169).
+  llms.txt/robots/sitemap-index verificati live. NB DEPLOY: `docker-compose` v1 è incompatibile con
+  l'immagine BuildKit di questo Docker (KeyError ContainerConfig) → **installato Docker Compose v2**
+  sul VPS (`/usr/local/lib/docker/cli-plugins/docker-compose`, v2.29.7): i deploy ora usano
+  `docker compose` (senza trattino). PROSSIMO gratis: Nostr (keypair auto-generata, da COSTRUIRE).
 
 ---
 
