@@ -276,6 +276,14 @@ class TestFusoOrario(_Base):
         # manca e' un difetto d'ambiente vero, e vogliamo vederlo, non nasconderlo.
         self.assertIsNotNone(ore, "zoneinfo/ora locale non calcolabile: ambiente rotto")
         atteso_penale = ore < 24
+        # ROBUSTEZZA anti-flaky (bonifica 2026-07-24): fra il calcolo di `ore` QUI e quello INTERNO
+        # del motore (fatto alla cancellazione, alcuni secondi dopo: pubblica+prenota+webhook+cancel)
+        # passa tempo reale -> a ridosso ESATTO delle 24h i due istanti possono cadere ai lati opposti
+        # del confine per pura deriva d'orologio (non un bug: entrambe le risposte sono "giuste" per
+        # l'istante in cui sono state prese). Questo rendeva il job MUTAZIONE rosso a certe ore UTC.
+        # Il verso ESATTO al confine e' gia' coperto in modo DETERMINISTICO da TestConfine24hEsatto
+        # (clock mockato, uccide entrambi i mutanti >=24): qui, nella fascia ambigua, si salta invece
+        # di asserire a caso. Fuori dalla fascia (il caso normale) l'asserzione resta PIENA.
         q, b = self.prenota(slug, ci, co)
         if b.get("modo_pagamento") != "in_struttura":
             self.fail("prenotazione non in_struttura: setup rotto")
@@ -283,6 +291,9 @@ class TestFusoOrario(_Base):
         s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
         self.assertEqual(s, 200, c)
         applicata = bool((c.get("penale_struttura") or {}).get("applicata"))
+        if abs(ore - 24.0) < 0.05:        # ~3 minuti: copre ampiamente la durata del flusso
+            self.skipTest("ore=%.4f a ridosso del confine 24h: verso ambiguo per deriva "
+                          "d'orologio (coperto deterministicamente da TestConfine24hEsatto)" % ore)
         self.assertEqual(applicata, atteso_penale,
                          "fuso %s ci=%s: penale=%s ma per l'ora vera (%.1fh) doveva essere %s"
                          % (fuso, ci, applicata, ore, atteso_penale))
