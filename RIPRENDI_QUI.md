@@ -1,8 +1,16 @@
 ## 🟢 STATO 2026-07-24 (notte) — 3 FUNZIONI NUOVE DEI PANNELLI (kill-switch · multi-admin · cambio valuta)
 
 Costruite le 3 funzioni che mancavano (scelta fondatore "build all 3"), tutte col metodo visto-ROSSO,
-stdlib-pure, additive/sicure. Coverage pannelli: SUPER-ADMIN **20/20** (0 tasti morti). Click-through
-PC+Mobile **0 difetti** (8 nuovi bottoni super-admin inclusi). Commit `54185f5` (+`5dcb8e0`).
+stdlib-pure, additive/sicure. **DEPLOYATE, CI 8/8 verde, 3 posti a `654f151`, kill-switch DORMIENTE.**
+Coverage pannelli: SUPER-ADMIN **20/20** (0 tasti morti). Click-through PC+Mobile **0 difetti**.
+**4 fallimenti CI chiusi** dopo il primo push (le guardie hanno fatto il loro dovere): (a) il nuovo
+campo `db_admin_accounts` esigeva `DB_ADMIN_ACCOUNTS` nel `docker-compose.casavip.yml`+`main_casavip.py`
+(`test_db_persistenti`); (b) le 3 card nuove del bunker avevano 47 parole IT non tradotte (tetto 0) →
+marcate `data-i18n`/`data-i18n-ph` + 14 chiavi×8 lingue, congelate 0 (`test_occhio_fondatore`); (c)
+regressione `_auth_admin`: la ROOT saltava `_auth_con_rate` (che azzera il rate-limit su chiave giusta)
+→ ripristinata, il salto vale SOLO col token operatore. ⚠️ **LEZIONE**: la full-suite LOCALE (Windows) usciva
+VERDE anche su questi difetti che la CI (Linux) bocciava (`occhio` conteggio HTMLParser, `db_persistenti`)
+→ **la CI è il gate autorevole**, non fidarsi solo del locale.
 - **🔴 KILL-SWITCH GLOBALE (`fase191`)**: interruttore d'emergenza che CONGELA book/rimborso/payout/
   addebito-carta lasciando il sito navigabile. DORMIENTE. Env `BLOCCO_GLOBALE=1` (root) o toggle a CALDO
   dal super-admin (bottone bunker). Guardie a 4 innesti (`_transazioni_bloccate`→503). `test_blocco_globale`
