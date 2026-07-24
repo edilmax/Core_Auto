@@ -1,4 +1,11 @@
-## 🟢 STATO 2026-07-24 (sera) — CACCIA-ERRORI ESTREMA + SICUREZZA + A11Y · 3 POSTI a `dbfe328` · sito 200
+## 🟢 STATO 2026-07-24 (sera) — CACCIA-ERRORI ESTREMA + SICUREZZA + A11Y · 3 POSTI a `34fa4c6` · sito 200
+
+**🕰️ BONIFICA FLAKY (`34fa4c6`)**: la CI di `dbfe328` era fallita sul job **mutazione** — FLAKE
+transitorio, NON un bug (la run `6345e4b`, stessa mutazione, era SUCCESS; in locale 18/18 anche in
+UTC). Causa: `TestFusoOrario` calcola `ore` dall'orologio reale, ma fra quel calcolo e quello interno
+del motore (alla cancellazione) passano secondi → a ridosso ESATTO delle 24h i due istanti cadono ai
+lati opposti del confine. Fix: nella fascia ±3 min si SALTA (il verso esatto è già coperto in modo
+deterministico da `TestConfine24hEsatto`, clock mockato); fuori resta asserzione piena. CI ora verde.
 
 **♿ A11Y PANNELLO HOST + GATE CI PERMANENTE (`dbfe328`)**: approfondendo l'audit ho scoperto 2
 `critical` WCAG sul **pannello host loggato** (mai visti: gli audit colpivano solo la versione
