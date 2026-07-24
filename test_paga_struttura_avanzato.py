@@ -271,32 +271,36 @@ class TestFusoOrario(_Base):
         slug = "casa-tz-" + fuso.split("/")[-1].lower()
         self.pubblica(slug, giorni_da_oggi=0, fuso=fuso)
         ci, co = self.dd(giorni, notti=1)
-        ore = self._ore_reali(fuso, ci)
         # zoneinfo e' stdlib (3.9+): deve esserci. Niente skip (sarebbe una zona cieca): se
         # manca e' un difetto d'ambiente vero, e vogliamo vederlo, non nasconderlo.
-        self.assertIsNotNone(ore, "zoneinfo/ora locale non calcolabile: ambiente rotto")
-        atteso_penale = ore < 24
-        # ROBUSTEZZA anti-flaky (bonifica 2026-07-24): fra il calcolo di `ore` QUI e quello INTERNO
-        # del motore (fatto alla cancellazione, alcuni secondi dopo: pubblica+prenota+webhook+cancel)
-        # passa tempo reale -> a ridosso ESATTO delle 24h i due istanti possono cadere ai lati opposti
-        # del confine per pura deriva d'orologio (non un bug: entrambe le risposte sono "giuste" per
-        # l'istante in cui sono state prese). Questo rendeva il job MUTAZIONE rosso a certe ore UTC.
-        # Il verso ESATTO al confine e' gia' coperto in modo DETERMINISTICO da TestConfine24hEsatto
-        # (clock mockato, uccide entrambi i mutanti >=24): qui, nella fascia ambigua, si salta invece
-        # di asserire a caso. Fuori dalla fascia (il caso normale) l'asserzione resta PIENA.
+        ore_prima = self._ore_reali(fuso, ci)     # limite ALTO: `now` PRIMA del flusso
+        self.assertIsNotNone(ore_prima, "zoneinfo/ora locale non calcolabile: ambiente rotto")
         q, b = self.prenota(slug, ci, co)
         if b.get("modo_pagamento") != "in_struttura":
             self.fail("prenotazione non in_struttura: setup rotto")
         self.webhook(b["riferimento"])
         s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
         self.assertEqual(s, 200, c)
+        ore_dopo = self._ore_reali(fuso, ci)      # limite BASSO: `now` DOPO il flusso (piu' avanti)
         applicata = bool((c.get("penale_struttura") or {}).get("applicata"))
-        if abs(ore - 24.0) < 0.05:        # ~3 minuti: copre ampiamente la durata del flusso
-            self.skipTest("ore=%.4f a ridosso del confine 24h: verso ambiguo per deriva "
-                          "d'orologio (coperto deterministicamente da TestConfine24hEsatto)" % ore)
-        self.assertEqual(applicata, atteso_penale,
-                         "fuso %s ci=%s: penale=%s ma per l'ora vera (%.1fh) doveva essere %s"
-                         % (fuso, ci, applicata, ore, atteso_penale))
+        # ROBUSTEZZA anti-flaky (bonifica 2026-07-24): il motore calcola `ore` all'INTERNO, alla
+        # cancellazione, a un istante FRA questi due -> ore_motore ∈ [ore_dopo, ore_prima] (`ore`
+        # cala mentre `now` avanza). A ridosso ESATTO delle 24h, `ore` calcolato qui e nel motore
+        # (a pochi secondi di distanza) possono cadere ai lati opposti del confine per pura deriva
+        # d'orologio: NON un bug. Invece di saltare (auto-assoluzione vietata da
+        # test_suite_senza_zone_cieche) o asserire un verso fragile, si asserisce in ENTRAMBI i rami
+        # che la decisione sia GIUSTIFICABILE da un istante della finestra. Cosi' la deriva
+        # sub-secondo e' tollerata, ma un vero bug di FUSO (che sposta `ore` di ORE, fuori dalla
+        # finestra) resta ROSSO. Il confine ESATTO e' inoltre coperto in modo deterministico da
+        # TestConfine24hEsatto (clock mockato).
+        if applicata:
+            self.assertLess(ore_dopo, 24.0,
+                "fuso %s ci=%s: penale APPLICATA ma nemmeno l'istante piu' recente (%.3fh) e' "
+                "sotto le 24h -> il motore sbaglia il fuso" % (fuso, ci, ore_dopo))
+        else:
+            self.assertGreaterEqual(ore_prima, 24.0,
+                "fuso %s ci=%s: penale NON applicata ma gia' l'istante piu' vecchio (%.3fh) era "
+                "sotto le 24h -> il motore sbaglia il fuso" % (fuso, ci, ore_prima))
 
     def test_estremo_est_domani(self):
         self._prova_fuso("Pacific/Kiritimati", 1)     # UTC+14
