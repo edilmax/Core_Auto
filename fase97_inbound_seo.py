@@ -25,7 +25,7 @@ import re
 import unicodedata
 from typing import Dict, List, Optional, Sequence, Tuple
 
-LINGUE = ("it", "en", "es", "fr", "de", "pt", "ja", "zh")
+LINGUE = ("it", "en", "es", "fr", "de", "pt", "ja", "zh", "ru", "id", "th", "vi", "ko")
 
 # Data (YYYY-MM-DD) in cui il CONTENUTO/template delle landing è cambiato l'ultima volta.
 # Va nel <lastmod> della sitemap inbound. Le landing sono generate da codice (città × lingua):
@@ -46,6 +46,7 @@ REGIONI_HREFLANG: Dict[str, Tuple[str, ...]] = {
 TERRITORIO_DEFAULT: Dict[str, str] = {
     "it": "IT", "en": "US", "es": "ES", "fr": "FR",
     "de": "DE", "pt": "PT", "ja": "JP", "zh": "CN",
+    "ru": "RU", "id": "ID", "th": "TH", "vi": "VN", "ko": "KR",
 }
 
 # Città-seme: grandi mete di OGNI continente (~230 città, ~150 nazioni). L'inbound è globale e
@@ -365,6 +366,76 @@ _T: Dict[str, Dict[str, str]] = {
         "rel": "在其他城市出租",
         "faqh": "常见问题",
     },
+    "ru": {
+        "title": "Сдавайте жильё в {citta} без высоких комиссий | BookinVIP",
+        "desc": "Хозяева в {citta}: перестаньте отдавать {ota}% Booking/Airbnb. С BookinVIP вы "
+                "платите всего {noi}% и получаете больше с каждого бронирования. Бесплатно.",
+        "h1": "Сдаёте жильё в {citta}? Оставляйте себе больше за каждую ночь.",
+        "intro": "OTA берут до {ota}% — часто с гостей, которые и так ВАШИ (сарафанное радио, "
+                 "Instagram, повторные). BookinVIP берёт {noi}% и даёт сайт прямого бронирования, "
+                 "оплату, ваучер и самостоятельное заселение — бесплатно.",
+        "calc": "За ночь в €{prezzo}: с OTA вы оставляете €{netto_ota}, с нами €{netto_noi} "
+                "→ <b>+€{risparmio} за ночь</b>.",
+        "cta": "Разместить жильё бесплатно",
+        "rel": "Аренда в других городах",
+        "faqh": "Частые вопросы",
+    },
+    "id": {
+        "title": "Sewakan properti Anda di {citta} tanpa komisi tinggi | BookinVIP",
+        "desc": "Tuan rumah di {citta}: berhenti memberi {ota}% ke Booking/Airbnb. Dengan "
+                "BookinVIP Anda hanya bayar {noi}% dan menyimpan lebih banyak setiap pemesanan. Gratis.",
+        "h1": "Menyewakan di {citta}? Simpan lebih banyak setiap malam.",
+        "intro": "OTA mengambil hingga {ota}% — sering dari tamu yang sudah MILIK Anda (dari mulut "
+                 "ke mulut, Instagram, langganan). BookinVIP mengenakan {noi}% dan memberi situs "
+                 "pemesanan langsung, pembayaran, voucher, dan check-in mandiri — gratis.",
+        "calc": "Untuk semalam €{prezzo}: dengan OTA Anda menyimpan €{netto_ota}, dengan kami "
+                "€{netto_noi} → <b>+€{risparmio} per malam</b>.",
+        "cta": "Pasang properti Anda gratis",
+        "rel": "Menyewakan di kota lain",
+        "faqh": "Pertanyaan umum",
+    },
+    "th": {
+        "title": "ปล่อยเช่าที่พักของคุณใน {citta} โดยไม่เสียค่าคอมสูง | BookinVIP",
+        "desc": "เจ้าของที่พักใน {citta}: เลิกจ่าย {ota}% ให้ Booking/Airbnb ด้วย BookinVIP "
+                "คุณจ่ายเพียง {noi}% และเก็บรายได้มากขึ้นทุกการจอง ฟรี ทำเองได้",
+        "h1": "ปล่อยเช่าใน {citta} ใช่ไหม? เก็บรายได้มากขึ้นทุกคืน",
+        "intro": "OTA เก็บสูงถึง {ota}% — บ่อยครั้งจากลูกค้าที่เป็นของคุณอยู่แล้ว (บอกต่อ, Instagram, "
+                 "ลูกค้าประจำ) BookinVIP คิดเพียง {noi}% พร้อมเว็บไซต์จองตรง การชำระเงิน วอเชอร์ "
+                 "และเช็คอินด้วยตนเอง — ฟรี",
+        "calc": "ต่อคืนที่ €{prezzo}: กับ OTA คุณเก็บได้ €{netto_ota} กับเรา €{netto_noi} "
+                "→ <b>+€{risparmio} ต่อคืน</b>",
+        "cta": "ลงประกาศที่พักฟรี",
+        "rel": "ปล่อยเช่าในเมืองอื่น",
+        "faqh": "คำถามที่พบบ่อย",
+    },
+    "vi": {
+        "title": "Cho thuê chỗ ở của bạn tại {citta} không phí cao | BookinVIP",
+        "desc": "Chủ nhà tại {citta}: đừng đưa {ota}% cho Booking/Airbnb nữa. Với BookinVIP bạn "
+                "chỉ trả {noi}% và giữ lại nhiều hơn cho mỗi lượt đặt. Miễn phí, tự phục vụ.",
+        "h1": "Cho thuê tại {citta}? Giữ lại nhiều hơn mỗi đêm.",
+        "intro": "Các OTA lấy tới {ota}% — thường từ khách vốn đã là CỦA BẠN (truyền miệng, "
+                 "Instagram, khách quen). BookinVIP chỉ thu {noi}% và cung cấp trang đặt phòng "
+                 "trực tiếp, thanh toán, voucher và tự nhận phòng — miễn phí.",
+        "calc": "Cho một đêm €{prezzo}: với OTA bạn giữ €{netto_ota}, với chúng tôi €{netto_noi} "
+                "→ <b>+€{risparmio} mỗi đêm</b>.",
+        "cta": "Đăng chỗ ở miễn phí",
+        "rel": "Cho thuê ở các thành phố khác",
+        "faqh": "Câu hỏi thường gặp",
+    },
+    "ko": {
+        "title": "{citta}에서 높은 수수료 없이 숙소 임대하기 | BookinVIP",
+        "desc": "{citta}의 호스트님: Booking/Airbnb에 {ota}%를 주지 마세요. BookinVIP에서는 "
+                "{noi}%만 내고 예약마다 더 많이 가져갑니다. 무료, 셀프 서비스.",
+        "h1": "{citta}에서 숙소를 임대하시나요? 매일 밤 더 많이 남기세요.",
+        "intro": "OTA는 최대 {ota}%를 가져갑니다 — 종종 이미 당신의 고객(입소문, 인스타그램, "
+                 "단골)에게서요. BookinVIP는 {noi}%만 받고 직접 예약 사이트, 결제, 바우처, "
+                 "셀프 체크인을 무료로 제공합니다.",
+        "calc": "1박 €{prezzo} 기준: OTA로는 €{netto_ota}, 저희와는 €{netto_noi}를 남깁니다 "
+                "→ <b>1박당 +€{risparmio}</b>.",
+        "cta": "무료로 숙소 등록하기",
+        "rel": "다른 도시에서 임대하기",
+        "faqh": "자주 묻는 질문",
+    },
 }
 
 _FAQ: Dict[str, List[Tuple[str, str]]] = {
@@ -415,6 +486,36 @@ _FAQ: Dict[str, List[Tuple[str, str]]] = {
            ("我必须离开Booking/Airbnb吗？", "不必。可同时使用：导入iCal日历，日期自动同步，"
             "避免超额预订。"),
            ("我如何收款？", "通过安全支付；你会收到签名凭证，它也是自助入住的钥匙。全部自动。")],
+    "ru": [("Сколько стоит BookinVIP?", "Размещение бесплатно. Вы платите только комиссию {noi}% "
+            "за бронирование — ниже {ota}% крупных OTA."),
+           ("Нужно ли уходить с Booking/Airbnb?", "Нет. Используйте BookinVIP параллельно: "
+            "импортируйте календарь iCal, и даты синхронизируются, без овербукинга."),
+           ("Как я получаю оплату?", "Через безопасный платёж; вы получаете подписанный ваучер, "
+            "который также является ключом самостоятельного заселения. Полностью автоматически.")],
+    "id": [("Berapa biaya BookinVIP?", "Memasang iklan gratis. Anda hanya membayar komisi {noi}% "
+            "per pemesanan — di bawah {ota}% OTA besar."),
+           ("Haruskah saya meninggalkan Booking/Airbnb?", "Tidak. Gunakan berdampingan: impor "
+            "kalender iCal Anda dan tanggal tetap sinkron, tanpa overbooking."),
+           ("Bagaimana saya dibayar?", "Melalui pembayaran aman; Anda mendapat voucher bertanda "
+            "tangan yang juga menjadi kunci check-in mandiri. Sepenuhnya otomatis.")],
+    "th": [("BookinVIP มีค่าใช้จ่ายเท่าไร?", "ลงประกาศฟรี คุณจ่ายเพียงค่าคอมมิชชัน {noi}% "
+            "ต่อการจอง — ต่ำกว่า {ota}% ของ OTA รายใหญ่"),
+           ("ต้องเลิกใช้ Booking/Airbnb ไหม?", "ไม่ ใช้ควบคู่กันได้: นำเข้าปฏิทิน iCal "
+            "แล้ววันที่จะซิงค์กัน ไม่มีการจองซ้ำ"),
+           ("ฉันรับเงินอย่างไร?", "ผ่านการชำระเงินที่ปลอดภัย คุณจะได้รับวอเชอร์ที่มีลายเซ็น "
+            "ซึ่งเป็นกุญแจเช็คอินด้วยตนเองด้วย ทุกอย่างอัตโนมัติ")],
+    "vi": [("BookinVIP có phí bao nhiêu?", "Đăng tin miễn phí. Bạn chỉ trả phí đặt phòng {noi}% "
+            "— thấp hơn {ota}% của các OTA lớn."),
+           ("Tôi có phải rời Booking/Airbnb không?", "Không. Dùng song song: nhập lịch iCal và "
+            "các ngày luôn đồng bộ, không trùng đặt phòng."),
+           ("Tôi được thanh toán thế nào?", "Qua thanh toán an toàn; bạn nhận voucher có chữ ký, "
+            "cũng là chìa khóa tự nhận phòng. Hoàn toàn tự động.")],
+    "ko": [("BookinVIP 이용료는 얼마인가요?", "등록은 무료입니다. 예약당 {noi}% 수수료만 내면 되며, "
+            "대형 OTA의 {ota}%보다 낮습니다."),
+           ("Booking/Airbnb를 떠나야 하나요?", "아니요. 함께 사용하세요: iCal 캘린더를 가져오면 "
+            "날짜가 동기화되어 중복 예약이 없습니다."),
+           ("결제는 어떻게 받나요?", "안전한 결제를 통해; 서명된 바우처를 받으며, 이는 셀프 체크인 "
+            "키이기도 합니다. 완전 자동입니다.")],
 }
 
 

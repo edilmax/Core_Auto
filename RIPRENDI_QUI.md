@@ -1,3 +1,23 @@
+## 🟢 STATO 2026-07-24 (notte) — PUBBLICITÀ MONDIALE: +5 lingue (13 tot, 2990 pagine) + canale NOSTR
+
+Direttiva "continua pubblicità in tutto il mondo / fai tutto quello che puoi da solo":
+- **SEO: 8 → 13 lingue** su `fase97` — aggiunte **Russo, Indonesiano, Thai, Vietnamita, Coreano**
+  (miliardi di persone + i mercati asiatici del fondatore). Ora **230 città × 13 lingue = 2.990 landing**.
+  Tradotti `_T` (title/desc/h1/intro/calc/cta/rel/faqh) + `_FAQ` (3 Q&A) + `TERRITORIO_DEFAULT` per ogni
+  lingua. L'i18n dell'app (ETICHETTE_UI fase83, LINGUE fase86) è SEPARATO e resta a 8 (non toccato).
+  Sandbox SEO verde su tutte le 13 (title 10-100, desc≥50, unicità, hreflang completo). ⚠️ traduzioni
+  marketing curate da me: una rilettura madrelingua è consigliata prima di spingerle forte.
+- **NUOVO CANALE NOSTR** `fase197_canale_nostr.py` (🟢 cablato, DORMIENTE, gated) — social
+  DECENTRALIZZATO **ZERO-account** (l'identità è una coppia di chiavi auto-generata, nessuno può
+  bannarci). Firma **Schnorr/secp256k1 BIP340** + **client WebSocket** minimale, TUTTO in **stdlib
+  pura** (nessuna dipendenza). Costruisce eventi kind=1 firmati e li manda ai relay. GATED da
+  `NOSTR_PRIVATE_KEY`+`NOSTR_RELAYS`. Guardia `test_canale_nostr` (13, vista ROSSA): vettori BIP340
+  (chiavi pubbliche note per privata 1/2/3 → validano le costanti della curva), round-trip firma/
+  verifica, rifiuto manomissione, evento coerente, gated on/off, cablaggio fase91. Registrato (197).
+  Da accendere: `NOSTR_PRIVATE_KEY` (me la genero io) + relay. Prossimo gratis costruibile: Nostr LIVE.
+
+---
+
 ## 🟢 STATO 2026-07-24 (notte) — SEO GLOBALE 195 PAESI: 28 → 230 città + link-mesh reso small-world
 
 Direttiva fondatore ("attiva tutto il gratis, tanta pubblicità che ci invidino i colossi, dal

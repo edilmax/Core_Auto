@@ -142,7 +142,8 @@ def crea_canali_da_env(env: Optional[Dict[str, str]] = None, *,
     # Canali GRATUITI aggiuntivi (dormienti, accesi dal token nel .env): Mastodon, Bluesky, Reddit.
     for mod, fn, nome in (("fase193_canale_mastodon", "crea_canale_mastodon_da_env", "mastodon"),
                           ("fase194_canale_bluesky", "crea_canale_bluesky_da_env", "bluesky"),
-                          ("fase195_canale_reddit", "crea_canale_reddit_da_env", "reddit")):
+                          ("fase195_canale_reddit", "crea_canale_reddit_da_env", "reddit"),
+                          ("fase197_canale_nostr", "crea_canale_nostr_da_env", "nostr")):
         try:
             c = getattr(__import__(mod), fn)(e, fetch=fetch)
             if c is not None:
