@@ -1,11 +1,21 @@
-## 🟢 STATO 2026-07-24 (sera) — CACCIA-ERRORI ESTREMA + SICUREZZA + A11Y · 3 POSTI a `34fa4c6` · sito 200
+## 🟢 STATO 2026-07-24 (sera) — CACCIA-ERRORI ESTREMA + SICUREZZA + A11Y · 3 POSTI a `a7d2226` · CI 8/8 VERDE · sito 200
 
-**🕰️ BONIFICA FLAKY (`34fa4c6`)**: la CI di `dbfe328` era fallita sul job **mutazione** — FLAKE
-transitorio, NON un bug (la run `6345e4b`, stessa mutazione, era SUCCESS; in locale 18/18 anche in
-UTC). Causa: `TestFusoOrario` calcola `ore` dall'orologio reale, ma fra quel calcolo e quello interno
-del motore (alla cancellazione) passano secondi → a ridosso ESATTO delle 24h i due istanti cadono ai
-lati opposti del confine. Fix: nella fascia ±3 min si SALTA (il verso esatto è già coperto in modo
-deterministico da `TestConfine24hEsatto`, clock mockato); fuori resta asserzione piena. CI ora verde.
+**CI GitHub Actions INTERAMENTE VERDE** su `a7d2226`: qualita (con **gate Bandit**), mutazione,
+**accessibilita** (job NUOVO, gira su Ubuntu), money-smoke, full-suite, w3c, atheris = success;
+zap skipped (schedule-only). 3 posti allineati, produzione sana.
+
+**🕰️ BONIFICA FLAKY `TestFusoOrario` — storia (lezione anti-finti-verdi)**: dopo il push la CI è
+andata rossa. `dbfe328` falliva su **mutazione** (confine 24h, orologio reale). PRIMO tentativo
+(`34fa4c6`): far **saltare** il test nella fascia ambigua con `skipTest` → SBAGLIATO: il
+meta-guardiano `test_suite_senza_zone_cieche` l'ha giustamente bocciato (uno skip deciso da CIÒ CHE
+IL TEST VERIFICA = auto-assoluzione) → era LUI il rosso della full-suite, non un time-flake. FIX
+CORRETTO (`a7d2226`), deterministico e SENZA salti: si calcola `ore` PRIMA e DOPO il flusso; il
+motore decide a un istante fra i due → `ore_motore ∈ [ore_dopo, ore_prima]`; si asserisce in
+ENTRAMBI i rami che la decisione sia GIUSTIFICABILE da un istante della finestra (penale⇒ore_dopo<24;
+niente penale⇒ore_prima≥24). Tollera la deriva d'orologio sub-secondo, ma un vero bug di FUSO (sposta
+`ore` di ORE) resta ROSSO. Confine esatto già coperto da `TestConfine24hEsatto`. Verificato:
+full-suite `Ran 3331 OK` + mutazione 18/18 + CI 8/8 verde. **Lezione**: i guardiani della suite
+funzionano — hanno intercettato un mio finto-verde prima che si radicasse.
 
 **♿ A11Y PANNELLO HOST + GATE CI PERMANENTE (`dbfe328`)**: approfondendo l'audit ho scoperto 2
 `critical` WCAG sul **pannello host loggato** (mai visti: gli audit colpivano solo la versione
