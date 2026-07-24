@@ -427,6 +427,27 @@ def jsonld_alloggio(dettaglio: Dict[str, Any], base_url: str = "",
     return ld
 
 
+def _og_image_url(d: Any) -> str:
+    """URL immagine per l'anteprima social (og:image). La 1a foto dell'annuncio se c'e';
+    altrimenti un'immagine GRATIS generata da Pollinations (titolo+citta), formato OG 1200x630.
+    Cosi' ogni link condiviso mostra SEMPRE una foto (mai un'anteprima nuda)."""
+    from urllib.parse import quote as _q
+    try:
+        imgs = d.get("immagini") or d.get("foto") or []
+        if isinstance(imgs, (list, tuple)) and imgs:
+            primo = imgs[0]
+            u = primo.get("url") if isinstance(primo, dict) else getattr(primo, "url", "")
+            if u and str(u).startswith("http"):
+                return str(u)
+    except Exception:
+        pass
+    prompt = ("%s %s alloggio, fotografia realistica, luce naturale"
+              % (d.get("titolo", "") if isinstance(d, dict) else "",
+                 d.get("citta", "") if isinstance(d, dict) else "")).strip()
+    return ("https://image.pollinations.ai/prompt/%s?width=1200&height=630&nologo=true"
+            % _q(prompt[:200]))
+
+
 def pagina_alloggio_html(sistema: Any, slug: str, base_url: str = "") -> Optional[str]:
     """Pagina HTML crawlabile (server-rendered) con JSON-LD. None se assente. Le SPA
     sono indicizzate male: questa rende il contenuto a Google e agli agenti SENZA JS."""
@@ -470,18 +491,40 @@ def pagina_alloggio_html(sistema: Any, slug: str, base_url: str = "") -> Optiona
     except Exception:
         faq_ld_script, faq_html = "", ""
 
+    # OPEN GRAPH + Twitter Card: link condiviso -> anteprima RICCA (foto+titolo+prezzo). Costruito
+    # per concatenazione (gia' escapato) per non toccare gli argomenti % della pagina.
+    _ogimg = _og_image_url(d)
+    _ogtit = e((str(d.get("titolo", "")) + " · " + str(d.get("citta", ""))).strip(" ·"))
+    _ogdesc = e(str(d.get("descrizione", ""))[:200])
+    _ogprice = e(_importo(d.get("prezzo_notte_cents", 0), d.get("valuta", "EUR")))
+    og = (
+        "<meta property=\"og:type\" content=\"website\">"
+        "<meta property=\"og:site_name\" content=\"BookinVIP\">"
+        "<meta property=\"og:title\" content=\"" + _ogtit + "\">"
+        "<meta property=\"og:description\" content=\"" + _ogdesc + "\">"
+        "<meta property=\"og:url\" content=\"" + e(base_url) + "/alloggio/" + e(slug) + "\">"
+        "<meta property=\"og:image\" content=\"" + e(_ogimg) + "\">"
+        "<meta property=\"og:image:width\" content=\"1200\">"
+        "<meta property=\"og:image:height\" content=\"630\">"
+        "<meta property=\"product:price:amount\" content=\"" + _ogprice + "\">"
+        "<meta property=\"product:price:currency\" content=\"" + e(d.get("valuta", "EUR")) + "\">"
+        "<meta name=\"twitter:card\" content=\"summary_large_image\">"
+        "<meta name=\"twitter:title\" content=\"" + _ogtit + "\">"
+        "<meta name=\"twitter:image\" content=\"" + e(_ogimg) + "\">"
+    )
+
     return (
         "<!DOCTYPE html><html lang=\"it\"><head><meta charset=\"UTF-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
         "<title>%s - BookinVIP</title>"
-        "<meta name=\"description\" content=\"%s\">"
+        "<meta name=\"description\" content=\"%s\">%s"
         "<link rel=\"canonical\" href=\"%s/alloggio/%s\">"
         "<script type=\"application/ld+json\">%s</script>%s</head><body>"
         "<h1>%s</h1><p><strong>%s</strong>%s</p><p>%s</p>"
         "<p>Prezzo: %s %s / notte</p><ul>%s</ul>%s"
         "<p><a href=\"/?slug=%s\">Prenota su BookinVIP</a></p></body></html>"
     ) % (
-        e(d.get("titolo", "")), e(d.get("descrizione", ""))[:160],
+        e(d.get("titolo", "")), e(d.get("descrizione", ""))[:160], og,
         e(base_url), e(slug), ld, faq_ld_script,
         e(d.get("titolo", "")), e(d.get("citta", "")),
         ", " + e(d.get("paese", "")) if d.get("paese") else "",
@@ -490,6 +533,43 @@ def pagina_alloggio_html(sistema: Any, slug: str, base_url: str = "") -> Optiona
         e(d.get("valuta", "EUR")),
         servizi, faq_html, e(slug),
     )
+
+
+def feed_rss_xml(sistema: Any, base_url: str = "") -> str:
+    """Feed RSS 2.0 degli annunci recenti (GRATIS, sempre-attivo, zero chiave). Ogni voce porta a
+    /alloggio/slug (con Open Graph). Serve alla SYNDICATION autonoma: aggregatori, lettori RSS,
+    IFTTT/Zapier che ri-postano ovunque. Isolato: errore su un annuncio -> saltato, mai rompe."""
+    from xml.sax.saxutils import escape as _x
+    base = base_url or "https://bookinvip.com"
+    items: List[str] = []
+    try:
+        from fase57_vetrina import CriteriRicerca
+        res = sistema.catalogo.cerca(CriteriRicerca(limit=40))
+        for r in (res.get("risultati", []) if isinstance(res, dict) else []):
+            try:
+                slug = str(r.get("slug", ""))
+                if not slug:
+                    continue
+                titolo = _x(str(r.get("titolo", "") or slug))
+                citta = _x(str(r.get("citta", "")))
+                desc = _x(str(r.get("descrizione", ""))[:300])
+                link = _x("%s/alloggio/%s" % (base, slug))
+                img = _x(_og_image_url(r))
+                prezzo = _x(_importo(r.get("prezzo_notte_cents", 0), r.get("valuta", "EUR")))
+                items.append(
+                    "<item><title>%s — %s</title><link>%s</link><guid isPermaLink=\"true\">%s</guid>"
+                    "<description>%s (da %s a notte)</description>"
+                    "<enclosure url=\"%s\" type=\"image/jpeg\"/></item>"
+                    % (titolo, citta, link, link, desc, prezzo, img))
+            except Exception:
+                continue
+    except Exception:
+        pass
+    canale = ("<title>BookinVIP — nuovi alloggi</title><link>%s</link>"
+              "<description>Alloggi dal marketplace BookinVIP (commissioni oneste)</description>"
+              "<language>it</language>" % _x(base))
+    return ('<?xml version="1.0" encoding="UTF-8"?>'
+            '<rss version="2.0"><channel>%s%s</channel></rss>' % (canale, "".join(items)))
 
 
 def sitemap_xml(sistema: Any, base_url: str = "") -> str:
@@ -8932,6 +9012,8 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 self._scrivi(s, c)
             elif u.path == "/sitemap.xml":
                 self._testo_seo(200, "application/xml", sitemap_xml(sistema, base_url))
+            elif u.path in ("/feed.xml", "/rss", "/rss.xml"):
+                self._testo_seo(200, "application/rss+xml", feed_rss_xml(sistema, base_url))
             elif u.path == "/robots.txt":
                 self._testo_seo(200, "text/plain", robots_txt(base_url))
             elif u.path.startswith("/alloggio/"):

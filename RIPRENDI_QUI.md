@@ -1,3 +1,18 @@
+## 🟢 STATO 2026-07-24 (notte) — AMPLIFICAZIONE GRATIS ZERO-CHIAVE: Open Graph + RSS (ACCESI)
+
+Accesi **subito** (nessuna chiave, sempre-attivi, alto ROI) in `fase83_server`:
+- **OPEN GRAPH + Twitter Card** su ogni `/alloggio/{slug}`: link condiviso (WhatsApp/social/aggregatori)
+  → anteprima RICCA con **foto + titolo + prezzo** (`_og_image_url`: 1a foto dell'annuncio, o ripiego
+  Pollinations GRATIS 1200×630 → mai anteprima nuda). Amplifica OGNI canale a costo zero. Provato live.
+- **FEED RSS** `/feed.xml` (+ `/rss`): syndication autonoma degli annunci recenti (titolo, link, prezzo,
+  immagine) per aggregatori/lettori/IFTTT-Zapier. `<link rel=alternate>` autodiscovery in index.html.
+- Guardia `test_seo_social` (5: tag OG presenti, og:image sempre presente, RSS valido+robusto su
+  catalogo vuoto, 404 annuncio inesistente). Stdlib, isolato, produzione sana.
+- **PROSSIMI zero-chiave**: blog-guide destinazioni (il motore SEO fase171/173 + sitemap 224 pagine
+  c'è già; valutare pagine-guida editoriali). Key-gated dormienti: Pinterest, Google Business, Nostr.
+
+---
+
 ## 🟢 STATO 2026-07-24 (notte) — 3 CANALI MARKETING GRATUITI (crescita autonoma)
 
 Aggiunti 3 canali social **GRATUITI** alla crescita autonoma (oltre a Telegram/FB/IG/X/TikTok già
