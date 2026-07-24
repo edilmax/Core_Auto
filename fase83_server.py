@@ -5105,17 +5105,24 @@ class RouterHTTP:
         allog, rif = v.get("alloggio_id", ""), v.get("riferimento", "")
         if not (allog and rif):
             return 422, {"errore": "voucher_incompleto"}
-        # PRENOTAZIONE CANCELLATA -> niente check-in (il voucher non scade mai): senza
-        # questa guardia si registravano ospiti FANTASMA (inquinano l'export alloggiati)
-        # e, a serratura smart attiva, il flag 'completato' abiliterebbe lo SBLOCCO PORTA
-        # di una prenotazione cancellata. 'scaduto' resta ammesso (pagamento in volo).
+        # REGOLA AUREA (Flow 3): il check-in porta `completato=True`, che ABILITA il pass della
+        # porta (fase127.sblocca). Quindi si concede SOLO a PAGAMENTO CONFERMATO ('pagato'):
+        #  - 'rimborsato'/'cancellata_host' -> cancellata (evita anche ospiti-fantasma nell'export);
+        #  - 'in_attesa'/'scaduto'/'in_attesa_host' (NON pagato) -> NO: prima erano ammessi
+        #    ("pagamento in volo"), ma cosi' un ospite che NON paga poteva abilitare il pass =
+        #    soggiorno gratis con serratura vera. Chi paga davvero e' 'pagato' in pochi secondi
+        #    (webhook), ben prima dell'arrivo -> nessun ostacolo per l'ospite legittimo.
+        #  - NESSUN pendente (conferma diretta, senza pagamento online) -> ammesso.
         try:
             _pp = getattr(self._sys, "pagamenti_pendenti", None)
             _rec = _pp.info(rif) if _pp is not None else None
-            if _rec is not None and _rec.get("stato") in ("rimborsato", "cancellata_host"):
+            _st = _rec.get("stato") if _rec is not None else None
+            if _st in ("rimborsato", "cancellata_host"):
                 return 409, {"errore": "prenotazione_cancellata"}
+            if _rec is not None and _st != "pagato":
+                return 409, {"errore": "pagamento_non_confermato", "stato": _st}
         except Exception:
-            logger.warning("guardia cancellata su check-in fallita (ignorata)", exc_info=True)
+            logger.warning("guardia pagamento su check-in fallita (ignorata)", exc_info=True)
         cap = 1
         try:
             d = self._sys.catalogo.dettaglio(allog)
