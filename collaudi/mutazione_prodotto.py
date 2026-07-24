@@ -137,6 +137,12 @@ MUTANTI = [
      "la penale (prima notte) scatta anche con >24h di preavviso: addebito indebito sulla carta del cliente"),
 
     ("fase83_server.py",
+     "if ore >= 24:",
+     "if ore > 24:",
+     "test_paga_struttura_avanzato.TestConfine24hEsatto",
+     "OFF-BY-ONE al confine: a ESATTAMENTE 24h di preavviso la penale scatta lo stesso (addebito indebito sulla carta salvata di chi ha disdetto in tempo)"),
+
+    ("fase83_server.py",
      "penale = prezzo // notti",
      "penale = prezzo",
      "test_paga_struttura_avanzato",

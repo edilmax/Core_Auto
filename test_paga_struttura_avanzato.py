@@ -422,5 +422,57 @@ class TestManipolazione(_Base):
         self.assertIn(s, (400, 422))
 
 
+class TestConfine24hEsatto(unittest.TestCase):
+    """MICRO-STEPPING Flow 4 — l'OFF-BY-ONE al confine ESATTO delle 24h.
+
+    I test integrati (TestFusoOrario) calcolano `ore` dall'orologio reale e non colpiscono
+    MAI le 24.0 esatte. Cosi' il mutante `if ore >= 24` -> `if ore > 24` SOPRAVVIVEVA: a chi
+    disdice con ESATTAMENTE 24h di preavviso addebiterebbe la prima notte sulla carta salvata
+    (addebito indebito). Regola del fondatore: la penale scatta solo a MENO di 24h; a 24h
+    esatte la carta NON si tocca. Qui si forza `ore` a valori esatti a livello di funzione:
+      · ore = 24.0        -> nessuna penale (motivo 'non_tardiva'), la carta non si tocca;
+      · ore = 24h - 1 sec -> tardiva: entra nel ramo penale (si ferma solo perche' qui la
+                             carta e' assente -> motivo diverso da 'non_tardiva').
+    VISTO ROSSO col mutante `> 24` (il caso 24.0 cade nel ramo penale -> motivo != 'non_tardiva').
+    """
+
+    def _decisione(self, ore_esatte):
+        from unittest import mock
+        import fase83_server as srv
+        NOW = 1_000_000
+        ts_ci = NOW + int(round(ore_esatte * 3600))          # istante check-in a `ore` da ora
+        router = srv.RouterHTTP.__new__(srv.RouterHTTP)       # istanza minima, senza __init__
+        router._sys = object()                               # niente carta/pagamenti_pendenti
+        router._fuso_alloggio = lambda a: "UTC"
+        v = {"alloggio_id": "x", "check_in": "2026-09-10", "check_out": "2026-09-11",
+             "prezzo_guest_cents": 12000, "valuta": "EUR"}
+        with mock.patch.object(srv, "_istante_checkin", lambda ci, fuso="": ts_ci), \
+             mock.patch("time.time", lambda: float(NOW)):
+            return srv.RouterHTTP._forse_penale_struttura(router, "REF-24H", v, 1)
+
+    def setUp(self):
+        self._flag = os.environ.get("PAGA_STRUTTURA_ATTIVO")
+        os.environ["PAGA_STRUTTURA_ATTIVO"] = "1"             # feature accesa (dark altrimenti)
+
+    def tearDown(self):
+        if self._flag is None:
+            os.environ.pop("PAGA_STRUTTURA_ATTIVO", None)
+        else:
+            os.environ["PAGA_STRUTTURA_ATTIVO"] = self._flag
+
+    def test_esattamente_24h_nessuna_penale(self):
+        d = self._decisione(24.0)
+        self.assertEqual(d.get("motivo"), "non_tardiva",
+                         "a ESATTAMENTE 24h la carta NON si tocca: 24h esatte = preavviso valido")
+        self.assertFalse(d.get("applicata"))
+
+    def test_appena_sotto_24h_e_tardiva(self):
+        d = self._decisione(24.0 - 1.0 / 3600.0)             # 1 secondo sotto le 24h
+        self.assertNotEqual(d.get("motivo"), "non_tardiva",
+                            "sotto le 24h la disdetta E' tardiva: deve entrare nel ramo penale")
+        self.assertEqual(d.get("motivo"), "carta_non_attiva",
+                         "superato il confine, si ferma qui solo perche' la carta e' assente")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
