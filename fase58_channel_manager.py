@@ -288,11 +288,16 @@ class ChannelManager:
         aid = str(alloggio_id)
         con = self._apri()
         try:
-            for g in notti_list:
+            for i, g in enumerate(notti_list):
                 row = con.execute(
-                    "SELECT unita_totali, unita_occupate, chiuso FROM inventario "
+                    "SELECT unita_totali, unita_occupate, chiuso, min_notti FROM inventario "
                     "WHERE alloggio_id=? AND giorno=?", (aid, g)).fetchone()
                 if row is None or row["chiuso"] or row["unita_occupate"] >= row["unita_totali"]:
+                    return False
+                # COERENZA col book (blocca, STESSA riga): un soggiorno piu' corto del minimo
+                # NON e' prenotabile -> non e' "disponibile". Senza, ricerca/quote diceva LIBERO
+                # e poi il book rifiutava con 409 min_notti (preventivo fantasma).
+                if i == 0 and len(notti_list) < row["min_notti"]:
                     return False
             return True
         finally:

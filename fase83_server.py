@@ -7373,6 +7373,11 @@ class RouterHTTP:
                 and isinstance(unita, int) and not isinstance(unita, bool)
                 and isinstance(prezzo, int) and not isinstance(prezzo, bool)):
             return 422, {"errore": "campi_non_validi"}
+        # soggiorno MINIMO (facoltativo, default 1): lo rispettano ENTRAMBI la ricerca/quote
+        # (disponibile) e il book (blocca) -> niente preventivi sotto la soglia.
+        mn = dati.get("min_notti", 1)
+        if not (isinstance(mn, int) and not isinstance(mn, bool) and 1 <= mn <= 366):
+            return 422, {"errore": "min_notti_non_valido"}
         if not self._verifica_proprieta(headers, alloggio):
             return 403, {"errore": "non_tuo"}
         try:
@@ -7387,7 +7392,7 @@ class RouterHTTP:
         for i in range(n):
             g = (d0 + datetime.timedelta(days=i)).isoformat()
             if self._sys.inventario.imposta_disponibilita(
-                    alloggio, g, unita_totali=unita, prezzo_netto_cents=prezzo):
+                    alloggio, g, unita_totali=unita, prezzo_netto_cents=prezzo, min_notti=mn):
                 impostati += 1
         return 200, {"giorni_impostati": impostati}
 
