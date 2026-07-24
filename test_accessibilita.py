@@ -14,7 +14,9 @@ import unittest
 
 BASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'deploy')
 PAGINE = ('index.html', 'host.html', 'admin.html')
-TUTTE = PAGINE + ('contratto-host.html', 'diventa-host.html')
+# le 3 superfici-ruolo (host < admin < bunker/super-admin) + pubbliche, per i controlli GENERICI
+# (lingua, zoom, alt su ogni immagine): bunker.html incluso qui cosi' anche il super-admin e' coperto.
+TUTTE = PAGINE + ('bunker.html', 'contratto-host.html', 'diventa-host.html')
 
 # bottoni il cui contenuto e' SOLO un'icona/emoji: DEVONO avere aria-label
 SOLO_ICONA = ('✕', '‹', '›', '🗑', '❤', '🤍', '📍', '✈', '📷', '▶', '🎵')

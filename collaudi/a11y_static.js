@@ -24,8 +24,9 @@ const { pathToFileURL } = require('url');
 const axeSrc = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
 const DEPLOY = path.join(__dirname, '..', 'deploy');
 // Pagine pubbliche che si renderizzano da sole (no sessione/gate app-driven).
-const PAGINE = ['index.html', 'host.html', 'admin.html', 'diventa-host.html', 'commissioni.html',
-  'guida-operativa.html', 'contratto-host.html', 'grazie.html', 'annullato.html'];
+// Le 3 superfici-RUOLO (host < admin < bunker/super-admin) + le pagine pubbliche.
+const PAGINE = ['index.html', 'host.html', 'admin.html', 'bunker.html', 'diventa-host.html',
+  'commissioni.html', 'guida-operativa.html', 'contratto-host.html', 'grazie.html', 'annullato.html'];
 
 (async () => {
   const browser = await chromium.launch();
