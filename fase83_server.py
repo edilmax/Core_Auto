@@ -2064,10 +2064,13 @@ class RouterHTTP:
     def _auth_admin(self, headers: Dict[str, str]) -> bool:
         if self._admin_key is None:
             return True            # nessuna chiave configurata = aperto (dev)
-        # OPERATORE admin (fase192) con token firmato: additivo, non tocca la ROOT key. Va provato
-        # PRIMA del confronto-chiave, cosi' una richiesta legittima d'operatore (senza X-Admin-Key)
-        # NON conta come tentativo-chiave fallito nel buttafuori per IP.
-        if self._ruolo_operatore(headers) is not None:
+        # OPERATORE admin (fase192) con TOKEN firmato (X-Admin-Op): additivo. Va provato PRIMA, cosi'
+        # una richiesta legittima d'operatore (senza X-Admin-Key) NON conta come tentativo-chiave
+        # fallito nel buttafuori per IP. Guardato da `tok` per NON deviare la ROOT: la chiave root
+        # deve ripassare da `_auth_con_rate` (che, sulla chiave giusta, AZZERA il contatore dei
+        # fallimenti -> il legittimo non e' mai penalizzato). Deviarla romperebbe quel reset.
+        tok = headers.get("X-Admin-Op", "") or headers.get("x-admin-op", "")
+        if tok and self._ruolo_operatore(headers) is not None:
             return True
         fornita = headers.get("X-Admin-Key", "") or headers.get("x-admin-key", "")
         return self._auth_con_rate("admin", str(fornita), str(self._admin_key), headers)
