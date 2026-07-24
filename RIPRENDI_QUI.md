@@ -1,4 +1,15 @@
-## 🟢 STATO 2026-07-24 (sera) — CACCIA-ERRORI ESTREMA + SICUREZZA + A11Y · 3 POSTI a `bd9eb5d` · sito 200
+## 🟢 STATO 2026-07-24 (sera) — CACCIA-ERRORI ESTREMA + SICUREZZA + A11Y · 3 POSTI a `dbfe328` · sito 200
+
+**♿ A11Y PANNELLO HOST + GATE CI PERMANENTE (`dbfe328`)**: approfondendo l'audit ho scoperto 2
+`critical` WCAG sul **pannello host loggato** (mai visti: gli audit colpivano solo la versione
+gated/login) — `<select id=lang>` senza nome accessibile e `<input type=file id=p_files>` senza
+label. Corretti (`aria-label` bilingue + `aria-labelledby` alla scritta "Foto" i18n), DEPLOYATI
+live. Guardie: `test_accessibilita` esteso (stdlib, vista ROSSA sul vecchio) + **nuovo job CI
+`accessibilita`** che gira `collaudi/a11y_static.js` (Playwright+Axe-Core, GATE su critical/serious
+delle pagine statiche; `node_modules` fuori dal repo). NB: le violazioni axe su `file://` sono
+accurate; gli errori JS su `file://` sono artefatti (path assoluti /app.js) → lo smoke JS vero gira
+sul live. `collaudi/test_a11y.js` (flusso dinamico checkout/admin) resta report-only, da cablare su
+server-in-CI. CI ora a 8 job (aggiunto `accessibilita`). Prima (`bd9eb5d`):
 
 **Sync 3 posti**: Desktop = GitHub = VPS = **`bd9eb5d`**. Produzione sana: app `healthy`,
 `money_path_pronto: True`, sonde `/api/health/live|ready|db` = 200, `PAGA_STRUTTURA_ATTIVO=1`.
