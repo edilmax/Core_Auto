@@ -1,3 +1,26 @@
+## 🟢 STATO 2026-07-24 (notte) — NUOVO CANALE: BLOG / GUIDA multilingua (zero-account, SEO sempreverde)
+
+Direttiva "altri tipi di canali, blog o cose del genere". Costruito `fase198_blog.py` — canale di
+crescita **ZERO-account** che accendo IO (nessun account, nessuna chiave):
+- Ogni articolo × lingua = pagina SEO server-rendered (title/desc/canonical, **hreflang** lingua+paese,
+  **JSON-LD Article + BreadcrumbList**, link interni a `/diventa-host` e agli altri articoli). Indice
+  `/blog`, articolo `/blog/{slug}`, `/sitemap-blog.xml` (aggiunta a robots.txt). PURO/deterministico/
+  XSS-safe. Contenuto VERO e generale (niente numeri fiscali/legali inventati).
+- Lingue: le **8 vetted** dell'app (le 5 asiatiche di fase97 si aggiungeranno con rilettura madrelingua,
+  per qualità del testo lungo). Aggiungere un articolo = un dict in `ARTICOLI` (il motore scala).
+- Primi **2 articoli** ("prenotazioni-dirette", "check-in-automatico") × 8 lingue + indice = ~18 pagine.
+  Cablato in `fase83`. Guardia `test_fase198_blog` (invarianti SEO, indice, sitemap; vista ROSSA).
+  Registrato (198). Da fare: più articoli + le 5 lingue asiatiche + guide per città.
+- **BINARI-AI POTENZIATI** (`fase97.llms_txt` arricchito): il file che leggono ChatGPT/Claude/Perplexity
+  ora dichiara il **flusso agente in 3 passi** (cerca `GET /api/catalogo` → preventivo firmato
+  `POST /api/concierge/quote` → prenota `POST /api/concierge/book`), la discovery (MCP/manifest/OpenAPI/
+  ai-plugin), copertura globale (230+ città, 13 lingue) e il blog. Guardia `test_guardie_collegamenti`
+  conferma che ogni `/api/` promesso RISPONDE davvero (mai rotte finte). Superficie agente già ricca e
+  cablata (fase60 MCP, /.well-known/ai-plugin.json, /openapi.json, /api/concierge/*). Strategia: essere
+  il BINARIO di prenotazione dell'era-AI, che i colossi (pubblicità+commissioni alte) non possono seguire.
+
+---
+
 ## 🟢 STATO 2026-07-24 (notte) — PUBBLICITÀ MONDIALE: +5 lingue (13 tot, 2990 pagine) + canale NOSTR
 
 Direttiva "continua pubblicità in tutto il mondo / fai tutto quello che puoi da solo":

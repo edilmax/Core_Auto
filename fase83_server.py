@@ -611,7 +611,8 @@ def robots_txt(base_url: str = "") -> str:
     # Entry-point = sitemap-INDEX (scala oltre 50k URL) + le due sitemap dirette per compat.
     return ("User-agent: *\nAllow: /\nSitemap: %s/sitemap-index.xml\n"
             "Sitemap: %s/sitemap.xml\nSitemap: %s/sitemap-host.xml\n"
-            % (base_url, base_url, base_url))
+            "Sitemap: %s/sitemap-blog.xml\n"
+            % (base_url, base_url, base_url, base_url))
 
 
 def etag_di(dati: bytes) -> str:
@@ -9130,6 +9131,24 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                             commissione_bps=bps, citta_correlate=vicini_di(citta, registro)))
                 except Exception:
                     self._scrivi(500, {"errore": "interno"})
+            elif u.path == "/blog" or u.path.startswith("/blog/"):
+                # BLOG / GUIDA multilingua (fase198): hub di contenuti sempreverdi SEO.
+                from fase198_blog import genera_articolo_html, genera_indice_blog
+                query = {k: v[0] for k, v in parse_qs(u.query).items()}
+                lng = query.get("lang", "it")
+                slug = unquote(u.path[len("/blog/"):]).strip("/") if u.path != "/blog" else ""
+                if not slug:
+                    self._testo_seo(200, "text/html",
+                                    genera_indice_blog(lingua=lng, base_url=base_url))
+                else:
+                    art = genera_articolo_html(slug, lingua=lng, base_url=base_url)
+                    if art is None:
+                        self._scrivi(404, {"errore": "articolo_non_trovato"})
+                    else:
+                        self._testo_seo(200, "text/html", art)
+            elif u.path == "/sitemap-blog.xml":
+                from fase198_blog import sitemap_blog
+                self._testo_seo(200, "application/xml", sitemap_blog(base_url))
             elif u.path == "/llms.txt":
                 from fase97_inbound_seo import llms_txt
                 bps = int(os.environ.get("COMMISSIONE_BPS", "1000"))
