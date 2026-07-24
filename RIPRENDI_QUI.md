@@ -1,3 +1,23 @@
+## 🟢 STATO 2026-07-24 (notte) — AUDIT MILLIMETRICO DEI 3 PANNELLI (host/admin/super-admin)
+
+**Direttiva: certezza che OGNI tasto/modulo dei 3 pannelli faccia esattamente ciò che deve.**
+- **Mappa di copertura (ogni bottone → endpoint → gestito? testato?)**: HOST 48/48, ADMIN 19/19,
+  SUPER-ADMIN 16/16 = **tutti gestiti dal server E referenziati dai test · 0 TASTI MORTI** (nessun
+  bottone chiama un endpoint inesistente) · 0 endpoint non testati. Strumento: `scratchpad/coverage_pannelli.py`.
+- **CLICK-THROUGH end-to-end PC + Mobile** (nuovo collaudo permanente `collaudi/clickthrough_pannelli.js`,
+  Playwright): login via gate reale dei 3 ruoli (host email+pw · admin chiave · **super-admin DOPPIA
+  chiave admin+codice**), poi clic su OGNI bottone/tab sicuro. Esito: **login OK su tutti e 3 i ruoli,
+  PC e Mobile · 0 bottoni non reattivi · 0 errori JS · 0 HTTP errati**. ADMIN 100% pulito. Gli unici 5xx
+  sono 3 endpoint di integrazione Stripe (`carta_link`/`stripe_link`/`riconciliazione`) che senza chiave
+  reale degradano PULITI (JSON d'errore, non crash) → in prod (sk_live) danno 200 (allowlist nel collaudo).
+  Visto ROSSO: chiave admin errata resta fuori dal pannello (login fallito segnalato). Il launcher
+  `collaudi/avvia_server_visivo.py` ora accende anche il bunker (`bunker_password="SuperPw@1"`).
+- **RBAC 3 livelli** già verificato solido (senza admin 401 · admin+codice-errato 403 · distruttive
+  richiedono sessione bunker · 34 test). Per lanciarlo: `python collaudi/avvia_server_visivo.py 8099` +
+  `node collaudi/clickthrough_pannelli.js`.
+
+---
+
 ## 🟢 STATO 2026-07-24 (notte) — BATTERIA RI-ESEGUITA + 3 RUOLI (super-admin) + RE-VERIFY MUTAZIONE
 
 **Batteria caccia-errori estrema RI-ESEGUITA (direttiva: va ripetuta), tutta verde in locale**:

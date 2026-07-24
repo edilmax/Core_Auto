@@ -33,6 +33,7 @@ def _prepara(porta):
         db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db", db_registro_host=f"{d}/r.db",
         db_accettazioni=f"{d}/acc.db", db_pendenti=f"{d}/p.db", db_payout=f"{d}/pay.db",
         db_garanzia=f"{d}/g.db", db_tassa_comunale=f"{d}/t.db",
+        bunker_password="SuperPw@1",   # accende il SUPER-ADMIN (bunker) per il collaudo dei 3 ruoli
         commissione_bps=1000, psp_bps=0, stripe_secret_key="sk_test_visivo",
         stripe_webhook_secret="whsec_v", stripe_success_url="http://localhost/ok",
         stripe_cancel_url="http://localhost/no"))
