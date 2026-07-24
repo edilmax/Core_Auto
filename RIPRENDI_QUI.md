@@ -1,3 +1,23 @@
+## 🟢 STATO 2026-07-24 (notte) — 3 FUNZIONI NUOVE DEI PANNELLI (kill-switch · multi-admin · cambio valuta)
+
+Costruite le 3 funzioni che mancavano (scelta fondatore "build all 3"), tutte col metodo visto-ROSSO,
+stdlib-pure, additive/sicure. Coverage pannelli: SUPER-ADMIN **20/20** (0 tasti morti). Click-through
+PC+Mobile **0 difetti** (8 nuovi bottoni super-admin inclusi). Commit `54185f5` (+`5dcb8e0`).
+- **🔴 KILL-SWITCH GLOBALE (`fase191`)**: interruttore d'emergenza che CONGELA book/rimborso/payout/
+  addebito-carta lasciando il sito navigabile. DORMIENTE. Env `BLOCCO_GLOBALE=1` (root) o toggle a CALDO
+  dal super-admin (bottone bunker). Guardie a 4 innesti (`_transazioni_bloccate`→503). `test_blocco_globale`
+  (4, vista ROSSA). Smoke LIVE ok. **Da accendere solo in emergenza.**
+- **👥 MULTI-ADMIN con RUOLI (`fase192`)**: operatori admin aggiuntivi (admin=pieno · supporto=letture/
+  assistenza, NIENTE soldi). La ADMIN_KEY resta root. Password PBKDF2 200k+salt. Il super-admin li
+  crea/revoca/cambia-ruolo (bunker). Login operatore email+password → token firmato `X-Admin-Op` col ruolo;
+  `_ruolo_operatore` ri-legge il DB ad ogni richiesta (revoca/cambio-ruolo ISTANTANEI); `supporto` che prova
+  rimborso/storno → 403. `test_admin_accounts` (7, vista ROSSA). **DA FARE (UI)**: campi email+password su
+  `/entra-admin` + `X-Admin-Op` in `admin.html` per far LOGGARE gli operatori (backend pronto e testato).
+- **💱 CAMBIO VALUTA nel super-admin (`fase83`)**: card bunker con stato OXR + tassi campione + "aggiorna";
+  la chiave OXR resta SEGRETA in `.env` (mai esposta). `test_bunker_cambio_valuta` (4).
+
+---
+
 ## 🟢 STATO 2026-07-24 (notte) — AUDIT MILLIMETRICO DEI 3 PANNELLI (host/admin/super-admin)
 
 **Direttiva: certezza che OGNI tasto/modulo dei 3 pannelli faccia esattamente ciò che deve.**
