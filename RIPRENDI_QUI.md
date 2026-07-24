@@ -1,3 +1,20 @@
+## 🟢 STATO 2026-07-24 (notte) — COLLAUDO COMPORTAMENTALE PANNELLO HOST (effetto istantaneo)
+
+Nuovo collaudo `collaudi/beh_host.py` (**14/14 verdi** sul server vivo): l'azione dell'host si
+riflette ALL'ISTANTE sul pubblico.
+1. **Blocco/sblocco data**: host blocca (`chiuso=True`) → la quote pubblica di quelle date diventa
+   NON prenotabile subito; sblocca → torna prenotabile all'istante.
+2. **Prezzo + min-stay**: host cambia prezzo 18000→25000/notte → il checkout ricalcola AL CENTESIMO
+   (36000→**50000** su 2 notti, nessuna cache vecchia); min-stay 3 → la quote di 2 notti è RIFIUTATA
+   (coerenza ricerca↔book), 3 notti OK.
+3. **Prenotazione**: l'ospite riceve **voucher** (`voucher_token` firmato) + **PIN/pass**
+   (`smart_pass`, token firmato infalsificabile 301 char); il **canale Telegram** dell'host è cablato
+   nel dispatcher `fase152` (dormiente finché non c'è il bot token + il chat_id dell'host).
+Super-test ri-eseguiti verdi: Mutation 18/18, Fuzzing 500k=0, A11y 0, Click-through PC+Mobile 0.
+NB: il driver RESETTA la finestra di date a inizio run (server visivo stateful). Produzione intatta.
+
+---
+
 ## 🟢 STATO 2026-07-24 (notte) — 3 FUNZIONI NUOVE DEI PANNELLI (kill-switch · multi-admin · cambio valuta)
 
 Costruite le 3 funzioni che mancavano (scelta fondatore "build all 3"), tutte col metodo visto-ROSSO,
