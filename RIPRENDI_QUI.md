@@ -1,3 +1,26 @@
+## 🟢 STATO 2026-07-25 — CAMMINO E2E PRECISO: un bot percorre TUTTO il viaggio, effetto verificato passo-passo
+
+Direttiva fondatore "cammina il flusso completo… si fallo e preciso": i bug di LOGICA di percorso non li
+vede un test unitario, li vede solo chi CAMMINA il flusso come utente vero (lezione dei 4 vicoli ciechi).
+Costruito `collaudi/percorso_e2e.py` — un bot percorre l'intero viaggio e a OGNI passo verifica non solo
+che "risponda" ma che avvenga la **cosa giusta** (l'effetto), contando ogni punto di blocco (exit≠0):
+- **VIAGGIO HOST** (5 passi): registra (dal gate pubblico, 3 consensi) → login → pubblica → apri le date →
+  l'annuncio **compare nella ricerca pubblica**.
+- **VIAGGIO OSPITE** (8 passi): preventivo **al centesimo** (2 notti = 40000) → prenota (rif+voucher) →
+  **le date si BLOCCANO** (2ª prenotazione stesse date, 1 unità → rifiutata) → voucher PRE-pagamento
+  **senza PIN** + «Completa il pagamento» → paga (webhook Stripe firmato) → **email conferma** parte →
+  voucher POST-pagamento **con PIN + controversia** → **l'host vede l'incasso** in maturazione.
+- **ECCEZIONE** (2 passi): cancella → rimborso/cancellata → **le date si RIAPRONO** (nuova prenotazione riprende).
+- **15/15 verdi.** Deterministico, in-house (Stripe finto + email finta, `crea_sistema`/`crea_router`).
+- **VISTO ROSSO** (regola aurea): iniettando il bug "PIN trapelato pre-pagamento", il passo 9 diventa
+  ROSSO (exit 1) → la macchina del walker vede davvero il difetto, non è un ornamento. I passi 7-8-15
+  formano un triangolo differenziale sullo stesso motore disponibilità (prenota=blocca, cancella=riapre):
+  se la disponibilità fosse ignorata → 8 rosso; se sempre piena → 15 rosso. Entrambi verdi = stato reale.
+- Complementare a `collaudi/vicoli_ciechi.py` (caccia link/form/API morti sul server visivo): quello
+  cerca le porte chiuse, questo cammina la storia dall'inizio alla fine verificando ogni conseguenza.
+
+---
+
 ## 🟢 STATO 2026-07-25 — COERENZA DOCUMENTI PER STATO: voucher + email + notifica host (mai PIN pre-pagamento)
 
 Direttiva fondatore "ogni email/voucher/bot deve contenere SOLO ciò che spetta allo stato; mai PIN o
