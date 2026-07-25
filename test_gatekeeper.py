@@ -181,6 +181,14 @@ class TestGatekeeper(unittest.TestCase):
         # firma di un altro segreto non passa
         self.assertFalse(r._gate_valida("admin|9999999999|x|deadbeef", "admin"))
 
+    # ── post-pagamento: /grazie e /annullato (Stripe success/cancel) DEVONO servire la pagina ──
+    def test_pagine_post_pagamento_non_404(self):
+        # erano un 404 -> l'ospite DOPO aver pagato vedeva pagina morta (vicolo cieco).
+        for p in ("/grazie", "/annullato"):
+            st, hd, body, _ = self.req("GET", p)
+            self.assertEqual(st, 200, "%s deve servire la pagina (era 404 post-pagamento)" % p)
+            self.assertIn("<", body, "%s non serve HTML" % p)
+
     # ── 8) kill-switch d'emergenza PAGE_GATE=0: serve senza gate ───────────────
     def test_killswitch_disattiva_il_gate(self):
         import os

@@ -18,6 +18,11 @@ import sys
 import urllib.error
 import urllib.request
 
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 BASE = os.environ.get("BASE_VISIVO", "http://127.0.0.1:8099")
 
 
@@ -61,7 +66,7 @@ ENTRY = [
 ]
 
 # pagine protette: DEVONO rimandare a un gate, e il gate host DEVE avere una via d'uscita
-GATE_CON_USCITA = {"/entra-host": ["/diventa-host.html", "password_dimenticata", "password_reset"]}
+GATE_CON_USCITA = {"/entra-host": ["/api/host/registrazione", "password_dimenticata", "password_reset"]}
 
 
 def main():
@@ -103,10 +108,12 @@ def main():
                 continue
             controllati.add(a)
             n_link += 1
-            # /api: provo GET e POST vuoto; è "vivo" se ALMENO uno non è rotta_non_trovata
+            # /api MORTA = la ROTTA non esiste (rotta_non_trovata). Un 404 'not_found' (risorsa
+            # mancante, es. /api/catalogo/<slug-inesistente>) NON è un vicolo cieco: la rotta c'è.
             g_st, g_b = _req("GET", a)
             po_st, po_b = _req("POST", a, "{}")
-            if _morto(g_st, g_b) and _morto(po_st, po_b):
+            assente = lambda st, b: st == -1 or (isinstance(b, str) and "rotta_non_trovata" in b)
+            if assente(g_st, g_b) and assente(po_st, po_b):
                 vicoli.append("API MORTA %s (in %s) -> GET %s / POST %s" % (a, p, g_st, po_st))
 
     # 3) vie d'uscita obbligatorie dei gate
@@ -121,7 +128,7 @@ def main():
     if vicoli:
         print("VICOLI CIECHI TROVATI: %d" % len(vicoli))
         for v in vicoli:
-            print("   ✗ " + v)
+            print("   [X] " + v)
     else:
         print("VICOLI CIECHI: 0 — ogni percorso porta da qualche parte, nessun utente resta bloccato.")
     print("=" * 78)

@@ -9365,6 +9365,10 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 self._testo(200, "text/html",
                             pagina_login_gate(u.path[len("/entra-"):], base_url),
                             no_store=True)
+            elif u.path in ("/grazie", "/annullato"):
+                # PAGINE POST-PAGAMENTO Stripe (STRIPE_SUCCESS_URL/CANCEL_URL): senza estensione,
+                # servono i .html. Erano un 404 -> l'ospite DOPO il pagamento vedeva pagina morta.
+                self._statico(u.path + ".html")
             elif os.path.basename(u.path).lower() in ("admin.html", "bunker.html", "host.html"):
                 self._servi_gated(u.path)            # GATEKEEPER server-side (cookie o 302 login)
             else:
