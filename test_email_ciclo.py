@@ -220,7 +220,13 @@ class TestEmailCiclo(unittest.TestCase):
     def test_ricevuta_solo_pagate(self):
         # NON ancora pagata: niente ricevuta, niente link nel voucher
         self.assertIsNone(pagina_ricevuta_html(self.sis, self.vt))
-        self.assertNotIn("/ricevuta/", pagina_voucher_html(self.sis, self.vt, "it"))
+        # GATE STATO-PAGAMENTO: PRIMA del pagamento il voucher NON espone PIN reale né controversia
+        _pin = self.sis.firma.pin_checkin(self.rif)
+        _v_pre = pagina_voucher_html(self.sis, self.vt, "it")
+        self.assertNotIn("/ricevuta/", _v_pre)
+        self.assertNotIn(_pin, _v_pre)                     # PIN reale bloccato pre-pagamento
+        self.assertNotIn("/api/garanzia/", _v_pre)         # nessun tasto controversia pre-pagamento
+        self.assertIn("Completa il pagamento", _v_pre)
         self._webhook(self.rif)
         pagina = pagina_ricevuta_html(self.sis, self.vt)
         self.assertIsNotNone(pagina, "ricevuta assente su prenotazione PAGATA")
@@ -229,8 +235,11 @@ class TestEmailCiclo(unittest.TestCase):
         self.assertIn("400.00 EUR", pagina)               # totale pagato
         self.assertIn("P.IVA 11795700969", pagina)        # identità gestore reale
         self.assertIn("non costituisce fattura fiscale", pagina)  # onestà
-        # ora il voucher offre la ricevuta
-        self.assertIn("/ricevuta/", pagina_voucher_html(self.sis, self.vt, "it"))
+        # ora il voucher offre la ricevuta E sblocca PIN reale + tasti controversia (post-pagamento)
+        _v_post = pagina_voucher_html(self.sis, self.vt, "it")
+        self.assertIn("/ricevuta/", _v_post)
+        self.assertIn(_pin, _v_post)                       # PIN reale ora presente
+        self.assertIn("/api/garanzia/", _v_post)           # controversia/segnalazione sbloccata
         # token manomesso/estraneo -> nessuna pagina (mai dati altrui)
         self.assertIsNone(pagina_ricevuta_html(self.sis, "token-farlocco"))
         self.assertIsNone(pagina_ricevuta_html(self.sis, self.vt[:-4] + "AAAA"))

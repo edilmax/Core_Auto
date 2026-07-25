@@ -792,6 +792,14 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
     _ref = str(dati.get("riferimento", ""))
     _codice_pren = codice_prenotazione(_ref)
     _pin_checkin = firma.pin_checkin(_ref)
+    # ═══ GATE STATO-PAGAMENTO (correttezza del viaggio cliente, direttiva fondatore) ═══
+    # PIN d'accesso, pass serratura, TASTI CONTROVERSIA/segnalazione, chat e check-in online si
+    # SBLOCCANO SOLO a pagamento avvenuto (stato 'pagato' = CAPTURED). Prima del pagamento il
+    # voucher mostra SOLO riepilogo costi + date + invito a completare il pagamento. Doppia difesa:
+    # (1) qui NON si generano i blocchi sensibili se non pagato; (2) guardia fisica a fine funzione.
+    _pp_stato = getattr(sistema, "pagamenti_pendenti", None)
+    _rec_stato = _pp_stato.info(_ref) if _pp_stato is not None else None
+    _pagato = bool(_rec_stato) and _rec_stato.get("stato") == "pagato"
     # Codice "serratura smart" (self check-in): NASCOSTO di default. È un pass firmato utile
     # SOLO se l'host ha una serratura elettronica compatibile (hardware, che al lancio nessuno
     # ha) -> mostrarlo confonderebbe il cliente. Resta emesso nel token (riattivabile in futuro,
@@ -1032,7 +1040,14 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
             "<strong style='font-size:1.15rem'>%s %s</strong></div>"
         ) % (e(_ui("ps_anticipo_pagato", lng)), e(_importo(_ant_v, _val_v)), e(_val_v),
              e(_ui("ps_saldo_nota", lng)), e(_importo(_saldo_v, _val_v)), e(_val_v))
-    return (
+    if not _pagato:
+        # NON pagato: niente PIN, niente controversia, niente check-in — solo l'invito a pagare.
+        blocco_pass = ("<div style='margin-top:1.2rem;padding:1rem;background:#fff6e6;"
+                       "border:1px solid #ffd9a8;border-radius:.9rem;color:#8a5200;text-align:center'>"
+                       "<strong>Completa il pagamento per attivare il voucher</strong><br>"
+                       "<span style='font-size:.9rem'>Il PIN di check-in e le opzioni di gestione "
+                       "si sbloccano dopo il pagamento.</span></div>")
+    pagina = (
         "<!DOCTYPE html><html lang=\"%s\"><head><meta charset=\"UTF-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
         "<title>Voucher BookinVIP</title><style>body{font-family:system-ui,sans-serif;"
@@ -1052,13 +1067,20 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
     ) % (
         e(lng), e(_ui("voucher_ok", lng)),
         e(_ui("rif", lng)), e(_codice_pren),
-        e(_pin_checkin),
+        (e(_pin_checkin) if _pagato else "&#128274;"),      # PIN reale SOLO a pagamento avvenuto
         e(_ui("dal", lng)), e(str(dati.get("check_in", ""))),
         e(_ui("al", lng)), e(str(dati.get("check_out", ""))),
         e(_ui("totale", lng)), e(prezzo), e(str(dati.get("valuta", "EUR"))),
         blocco_saldo,
         blocco_pass,
     )
+    # ═══ GUARDIA FISICA (direttiva fondatore): un voucher NON pagato non deve MAI contenere il PIN
+    # reale né i tasti di controversia/garanzia. Se — per qualunque motivo — trapelassero, li togliamo
+    # e lo denunciamo nei log. Con il gate a monte questa non scatta mai: è la seconda rete.
+    if not _pagato and (_pin_checkin in pagina or "/api/garanzia/" in pagina):
+        logger.error("VOUCHER non pagato con PIN/controversia esposti (rif=%s): rimozione difensiva", _ref)
+        pagina = pagina.replace(_pin_checkin, "&#128274;").replace("/api/garanzia/", "#")
+    return pagina
 
 
 def pagina_ricevuta_html(sistema: Any, token: Any) -> Optional[str]:
@@ -2231,14 +2253,14 @@ class RouterHTTP:
         rl = self._rate
         ip = self._client_ip(headers)
         if rl is None or not ip:
-            return hmac.compare_digest(fornita, atteso)
+            return hmac.compare_digest(fornita.encode("utf-8"), atteso.encode("utf-8"))
         chiave = "authkey-%s:%s" % (tipo, ip)
         consentito, attesa = rl.consenti(chiave)
         if not consentito:
             logger.warning("RATE-LIMIT %s-key BLOCCATO 429: ip=%s attesa=%ds",
                            tipo, ip, attesa)
             return False           # IP in lockout: negato in blocco
-        ok = hmac.compare_digest(fornita, atteso)
+        ok = hmac.compare_digest(fornita.encode("utf-8"), atteso.encode("utf-8"))
         if ok:
             rl.riuscito(chiave)    # chiave giusta: azzera lo storico dei fallimenti
             return True
@@ -4465,6 +4487,28 @@ class RouterHTTP:
         ref = corpo.get("riferimento", "")
         allog = corpo.get("alloggio_id", "")
         ci, co = corpo.get("check_in", ""), corpo.get("check_out", "")
+        # ═══ GUARDIA INVARIANTI RUNTIME (fase199): BLOCCO pre-commit su violazione MATEMATICA. ═══
+        # I3 (prova-prima-del-commit): una CONFERMA senza preventivo FIRMATO non tocca il DB.
+        # I4 (denaro mai negativo): importi corrotti/negativi bloccati prima della scrittura.
+        # I1/I2 restano garantiti ai loro punti (disponibilita' atomica / webhook) e DIMOSTRATI con Z3.
+        # FAIL-OPEN su errore PROPRIO: una guardia difettosa non deve MAI fermare un flusso valido.
+        try:
+            from fase199_invarianti import i3_prova_prima_del_commit, i4_denaro_non_negativo
+            _neg = i4_denaro_non_negativo({
+                "prezzo_guest": corpo.get("prezzo_guest_cents", 0),
+                "tassa": corpo.get("tassa_soggiorno_cents", 0),
+                "anticipo": corpo.get("anticipo_online_cents", 0),
+                "saldo": corpo.get("saldo_in_loco_cents", 0)})
+            _senza_prova = i3_prova_prima_del_commit([{"stato": "confermata", "rif": ref,
+                                                       "prova_firmata": bool(dati.get("quote_token"))}])
+            if _neg or _senza_prova:
+                logger.error("INVARIANTE VIOLATO al finalizza %s (negativi=%r, senza_prova=%r) "
+                             "-> BLOCCO scrittura DB", ref, _neg, _senza_prova)
+                return {"stato": "rifiutata", "motivo": "invariante_violato", "riferimento": ref}
+        except ImportError:
+            pass
+        except Exception:
+            logger.warning("guardia invarianti fase199 fallita (ISOLATA, fail-open)", exc_info=True)
         # SINGLE-USE del Credito Fondatore/Viaggio (fase167): la prenotazione e' CONFERMATA ->
         # consuma il credito applicato, cosi' lo stesso token non sconta piu' i preventivi
         # futuri (buco provato: era riusabile all'infinito). Consumo QUI (finalizzazione), non
@@ -4567,7 +4611,12 @@ class RouterHTTP:
                 except Exception:
                     _nome = allog
                 from fase86_email import oggetto as _oggetto_email
-                html = corpo_voucher_html(_nome, _codice, ci, co, vurl, pin=_pin,
+                # GATE STATO-PAGAMENTO anche nell'EMAIL: se c'è un pagamento da completare (_purl),
+                # l'email NON contiene il PIN — solo riepilogo + link di pagamento. Il PIN arriva
+                # con l'email di conferma post-pagamento (e resta dietro al voucher, gateato). Coerente
+                # col gate della pagina voucher: mai il PIN prima del pagamento.
+                html = corpo_voucher_html(_nome, _codice, ci, co, vurl,
+                                          pin=("" if _purl else _pin),
                                           payment_url=_purl, lingua=_lang_osp)
                 _ogg = _oggetto_email("v_ogg_pay" if _purl else "v_ogg_conf", _lang_osp)
                 # IN BACKGROUND: l'SMTP (rete) non deve MAI rallentare la conferma prenotazione.
@@ -4579,7 +4628,8 @@ class RouterHTTP:
                     daemon=True).start()
             except Exception:
                 logger.warning("invio email voucher fallito (ignorato)", exc_info=True)
-        self._avvisa_host_prenotazione(allog, ref, ci, co, corpo.get("fonte", ""))
+        self._avvisa_host_prenotazione(allog, ref, ci, co, corpo.get("fonte", ""),
+                                       pagamento_pendente=bool(corpo.get("payment_url")))
         # PAGA IN STRUTTURA: il saldo lo incassa l'host DI PERSONA (non passa da noi) e
         # l'anticipo online e' interamente NOSTRO -> nessun escrow di garanzia, nessun payout
         # da maturare. Si salta il denaro-a-valle; restano hold+voucher+email (col saldo).
@@ -5826,9 +5876,11 @@ class RouterHTTP:
         except Exception:
             return 0, ""
 
-    def _avvisa_host_prenotazione(self, allog, ref, ci, co, origine):
+    def _avvisa_host_prenotazione(self, allog, ref, ci, co, origine, pagamento_pendente=False):
         """Notifica l'host della nuova prenotazione (email + WhatsApp gated). Best-effort:
-        ogni errore e' ISOLATO, non blocca mai la prenotazione gia' confermata."""
+        ogni errore e' ISOLATO, non blocca mai la prenotazione gia' confermata.
+        GATE STATO-PAGAMENTO: il PIN check-in NON entra nella notifica se il pagamento è ancora
+        pendente (coerente col cliente); l'host lo vede nel pannello al check-in (post-pagamento)."""
         try:
             notif = getattr(self._sys, "notificatore_prenotazione", None)
             reg = getattr(self._sys, "registro_host", None)
@@ -5845,8 +5897,10 @@ class RouterHTTP:
             lingua = (lingua_da_telefono(contatti.get("telefono"))
                       if contatti.get("telefono") else "it")
             titolo = (d.get("titolo") if isinstance(d, dict) else None) or allog
-            # stesso codice + PIN che vede il cliente (per il check-in)
-            _pin = self._sys.firma.pin_checkin(ref) if getattr(self._sys, "firma", None) else ""
+            # stesso codice + PIN che vede il cliente (per il check-in), MA non se il pagamento è
+            # ancora pendente (gate: niente PIN prima del pagamento, nemmeno all'host).
+            _pin = (self._sys.firma.pin_checkin(ref) if getattr(self._sys, "firma", None)
+                    and not pagamento_pendente else "")
             ogg, testo = componi_avviso_host(
                 Localizzatore(), alloggio=titolo, ci=ci, co=co, origine=origine,
                 riferimento=codice_prenotazione(ref), pin=_pin,

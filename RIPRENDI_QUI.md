@@ -1,3 +1,72 @@
+## 🟢 STATO 2026-07-25 — COERENZA DOCUMENTI PER STATO: voucher + email + notifica host (mai PIN pre-pagamento)
+
+Direttiva fondatore "ogni email/voucher/bot deve contenere SOLO ciò che spetta allo stato; mai PIN o
+controversia prima del pagamento". **2 LEAK VERI trovati e chiusi**:
+- **VOUCHER** (`pagina_voucher_html`): mostrava PIN check-in + tasti controversia/garanzia + check-in
+  online basandosi SOLO sulla firma del token, **senza controllare il pagamento**. → GATE su
+  `pagamenti_pendenti.info(rif).stato=='pagato'` (stessa condizione già usata per la ricevuta): PRE-
+  pagamento solo riepilogo+date+«Completa il pagamento»; POST-pagamento sblocca PIN/controversia/check-in.
+  + **GUARDIA FISICA** a fine funzione (l'assert richiesto): se non pagato e il PIN/`/api/garanzia/`
+  trapelano → rimozione difensiva + log. Test: `test_fase83_server.test_pagina_voucher` (pre) +
+  `test_email_ciclo` (pre→webhook→post: PIN e controversia compaiono solo dopo).
+- **EMAIL** (`corpo_voucher_html` in `_finalizza_prenotazione`): passava `pin` E `payment_url` insieme →
+  l'email pre-pagamento conteneva il PIN. → FIX: `pin=("" if payment_url else pin)` (niente PIN se
+  pagamento pendente; il PIN arriva con l'email di conferma post-pagamento, che linka al voucher gateato).
+- **NOTIFICA HOST** (`_avvisa_host_prenotazione`→`componi_avviso_host`): includeva il PIN al book (pre-
+  pagamento). → FIX: `pagamento_pendente` gate (niente PIN nella notifica se pagamento pendente; l'host
+  lo vede nel pannello al check-in). Guardia pura `test_gate_email_notifica` (4: email pre=no-PIN+bottone-
+  paga / post=PIN; host senza-pin=no-riga / con-pin=riga). Coerenza totale su TUTTI i canali cliente/host.
+
+---
+
+## 🟢 STATO 2026-07-25 — ARCHITETTURA IMMUNITARIA: invarianti formali + DIMOSTRAZIONE Z3 + guardia runtime
+
+Direttiva "verifica formale / certezza matematica 100%". Costruito `fase199_invarianti.py` (motore
+invarianti) — vedi REGISTRO 199. Sintesi:
+- **DIMOSTRAZIONE Z3/SMT** (`dimostra_formalmente`): prova UNIVERSALE (∀ interi, non un campione) di
+  **I1 Zero-Double-Booking · I2 Atomicità-Finanziaria · I3 Isolamento-PII** → tutti **DIMOSTRATO**
+  (UNSAT del controesempio = teorema). Affiancata da PROVA Hypothesis (800+500 stati). z3-solver è
+  dep di test/prova, prod resta stdlib-pura.
+- **GUARDIA RUNTIME CABLATA** in `_finalizza_prenotazione`: BLOCCA la scrittura DB su violazione I3
+  (conferma senza quote_token firmato) / I4 (denaro negativo); FAIL-OPEN su errore proprio. Flussi
+  book reali 65/65 verdi (non blocca il valido).
+- **AUDITOR** `scansiona_db` (oracolo indipendente, GRIDA nei log; da schedulare nel guardiano).
+- **REPORT ONESTO 4 PILASTRI del fondatore**: (1) Verifica formale → **FATTO** (Z3+Hypothesis+guardia).
+  (2) Shadow deployment / eBPF traffic-mirroring → **l'equivalente in-house = la batteria/CI come gate
+  pre-deploy + l'auditor invarianti**; eBPF/mirroring reale = infra pesante NON autosufficiente, non
+  fatta di proposito. (3) Isolamento kernel/self-healing < 10ms → **quello che c'è: Docker
+  healthcheck+restart:always + container backup + pattern "ISOLATO" ovunque**; Firecracker/eBPF/respawn
+  <10ms = non applicabile a un'app stdlib su 1 VPS (detto chiaro). (4) Immutable ledger / WAL / RPO=0 →
+  **GIÀ presente: WAL su tutti i DB critici, ledger immutabile fase177, catena hash marche fase184,
+  backup offsite**; ricostruzione da eventi = parziale (giornale immutabile), event-sourcing puro non
+  necessario qui. In sintesi: il pilastro che dà valore VERO (1) è fatto e DIMOSTRATO; 2-4 sono
+  coperti dagli equivalenti già in casa; il resto è infra da datacenter, onestamente non adatta qui.
+
+---
+
+## 🟢 STATO 2026-07-25 — AUDIT AL LIMITE ASSOLUTO: batteria estrema + comando unico + 1 bug corretto
+
+Direttiva fondatore "spingi al limite massimo prima di chiudere". Audit totale in-house (zero cloud):
+- **`collaudi/estremo.py` NUOVO** — batteria estrema, 6 categorie, **0 violazioni**: (1) CHAOS/fault-injection
+  (disco read-only a metà transazione + atomicità: niente dati parziali, integrità DB ok), (2) CRASH
+  RECOVERY (kill a metà scrittura → riapertura, `PRAGMA integrity_check` ok, dato non-committato assente),
+  (3) DIMENSIONI ANOMALE (payload da 2MB / JSON annidato 300 → rifiuto controllato, mai OOM/crash),
+  (4) SOAK/leak (6000 cicli → **+0.06 MB**, nessun memory leak; `--ore 48` per durata reale),
+  (5) FUZZING tutti gli endpoint (2500 richieste ostili → sempre status controllato), (6) TIME-TRAVEL
+  (notti su ora-legale/anno-bisestile/capodanno + token che scade se l'orologio salta avanti + token
+  manomesso rifiutato). Usa i componenti VERI (crea_sistema/crea_router/crea_protocollo, orologio iniettabile).
+- **🐛 BUG VERO TROVATO DAL FUZZING + CORRETTO**: `_auth_con_rate` (fase83) faceva `hmac.compare_digest`
+  su **str**; una chiave/token con caratteri **non-ASCII** (emoji/unicode) sollevava `TypeError` → 500
+  (isolato, ma un login sbagliato NON dev'essere un 500). Fix: confronto sui **byte UTF-8**. Guardia
+  `test_auth_non_ascii` (3, vista ROSSA: chiave/token/admin non-ASCII → 401/403 pulito, mai 500).
+- **`collaudi/batteria.py` NUOVO = COMANDO UNICO**: `python collaudi/batteria.py` lancia TUTTO in
+  sequenza (suite 348 · master E2E · mutazione · caccia-finti-verdi · plausibilità · estremo · Bandit
+  High=0 · behavioral dal-vivo · a11y+click-through · verifica-produzione), con riepilogo + exit-code;
+  le fasi server/node/rete sono best-effort (saltate con nota se mancano). Audit di oggi tutto verde:
+  mutazione 18/18, Bandit High=0, SQLi 0 (verificato), WCAG 0, click-through 0, produzione 0 violazioni.
+
+---
+
 ## 🟢 STATO 2026-07-24 (notte) — NUOVO CANALE: BLOG / GUIDA multilingua (zero-account, SEO sempreverde)
 
 Direttiva "altri tipi di canali, blog o cose del genere". Costruito `fase198_blog.py` — canale di

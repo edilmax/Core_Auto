@@ -147,6 +147,19 @@ MUTANTI = [
      "penale = prezzo",
      "test_paga_struttura_avanzato",
      "la penale addebita il TOTALE del soggiorno invece della sola prima notte: addebito enormemente gonfiato"),
+
+    # ── GATE STATO-PAGAMENTO del voucher (PIN/controversia mai prima del pagamento) ──────
+    ("fase83_server.py",
+     "    _pagato = bool(_rec_stato) and _rec_stato.get(\"stato\") == \"pagato\"",
+     "    _pagato = True",
+     "test_fase83_server test_email_ciclo",
+     "il gate salta alla RADICE: ogni voucher trattato come PAGATO -> PIN check-in e controversia esposti su prenotazioni NON pagate (rompe entrambi i livelli, gate + guardia)"),
+
+    ("fase83_server.py",
+     "    if not _pagato:\n        # NON pagato: niente PIN, niente controversia",
+     "    if False:\n        # NON pagato: niente PIN, niente controversia",
+     "test_fase83_server test_email_ciclo",
+     "i tasti controversia/garanzia e il check-in restano sul voucher non pagato: post-vendita esposto prima del pagamento"),
 ]
 
 

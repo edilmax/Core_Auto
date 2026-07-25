@@ -774,15 +774,21 @@ class TestRecensioni(unittest.TestCase):
         self.assertTrue(ver.verifica(corpo["smart_pass"], "casa").consentito)
 
     def test_pagina_voucher(self):
+        # GATE STATO-PAGAMENTO (fondatore): senza pagamento CONFERMATO, il voucher NON espone il PIN
+        # reale né i tasti di controversia — solo riepilogo + invito a pagare. (Il caso PAGATO->PIN
+        # sbloccato è provato in test_email_ciclo con setup di pagamento completo.)
+        from fase59_concierge import codice_prenotazione
         from fase83_server import pagina_voucher_html
         _, corpo = self._prenota()
+        rif = corpo["riferimento"]
+        pin = self.sys.firma.pin_checkin(rif)
         h = pagina_voucher_html(self.sys, corpo["voucher_token"], "it")
         self.assertIn("Prenotazione confermata", h)
-        # ora mostra il codice LEGGIBILE (BVIP-XXXX-XXXX) + PIN, non il riferimento grezzo
-        from fase59_concierge import codice_prenotazione
-        self.assertIn(codice_prenotazione(corpo["riferimento"]), h)
-        self.assertIn("PIN check-in", h)
-        self.assertIn(self.sys.firma.pin_checkin(corpo["riferimento"]), h)
+        self.assertIn(codice_prenotazione(rif), h)         # codice leggibile BVIP-XXXX-XXXX
+        self.assertIn("PIN check-in", h)                   # l'etichetta c'è...
+        self.assertNotIn(pin, h)                           # ...ma il PIN REALE no (bloccato pre-pagamento)
+        self.assertNotIn("/api/garanzia/", h)              # nessun tasto controversia pre-pagamento
+        self.assertIn("Completa il pagamento", h)
         self.assertIn("BookinVIP", h)
 
     def test_voucher_manomesso_404(self):
