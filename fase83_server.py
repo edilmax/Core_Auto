@@ -2323,14 +2323,14 @@ class RouterHTTP:
         rl = self._rate
         ip = self._client_ip(headers)
         if rl is None or not ip:
-            return hmac.compare_digest(fornita.encode("utf-8"), atteso.encode("utf-8"))
+            return hmac.compare_digest(fornita.encode("utf-8", "surrogatepass"), atteso.encode("utf-8", "surrogatepass"))
         chiave = "authkey-%s:%s" % (tipo, ip)
         consentito, attesa = rl.consenti(chiave)
         if not consentito:
             logger.warning("RATE-LIMIT %s-key BLOCCATO 429: ip=%s attesa=%ds",
                            tipo, ip, attesa)
             return False           # IP in lockout: negato in blocco
-        ok = hmac.compare_digest(fornita.encode("utf-8"), atteso.encode("utf-8"))
+        ok = hmac.compare_digest(fornita.encode("utf-8", "surrogatepass"), atteso.encode("utf-8", "surrogatepass"))
         if ok:
             rl.riuscito(chiave)    # chiave giusta: azzera lo storico dei fallimenti
             return True
@@ -8034,7 +8034,7 @@ class RouterHTTP:
         seg = getattr(getattr(self._sys, "config", None), "segreto_hmac", b"") or b""
         if isinstance(seg, str):
             seg = seg.encode("utf-8")
-        atteso = _h.new(seg, hid.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
+        atteso = _h.new(seg, hid.encode("utf-8", "surrogatepass"), hashlib.sha256).hexdigest()[:16]
         return hid if _h.compare_digest(sig, atteso) else None
 
     # ── GATEKEEPER: sessione-PAGINA firmata (cookie) per servire le pagine riservate ──
@@ -8073,7 +8073,7 @@ class RouterHTTP:
         if livello != livello_atteso:
             return False
         corpo = "%s|%s|%s" % (livello, exp, nonce)
-        atteso = _h.new(self._gate_segreto(), corpo.encode("utf-8"),
+        atteso = _h.new(self._gate_segreto(), corpo.encode("utf-8", "surrogatepass"),
                         hashlib.sha256).hexdigest()[:32]
         if not _h.compare_digest(sig, atteso):
             return False

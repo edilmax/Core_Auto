@@ -160,6 +160,32 @@ MUTANTI = [
      "    if False:\n        # NON pagato: niente PIN, niente controversia",
      "test_fase83_server test_email_ciclo",
      "i tasti controversia/garanzia e il check-in restano sul voucher non pagato: post-vendita esposto prima del pagamento"),
+
+    # ── IL CALENDARIO (blocco atomico anti-overbooking, fase58) ──────────────────
+    ("fase58_channel_manager.py",
+     "                if row[\"unita_occupate\"] >= row[\"unita_totali\"]:\n                    motivo = \"pieno\"",
+     "                if row[\"unita_occupate\"] > row[\"unita_totali\"]:\n                    motivo = \"pieno\"",
+     "test_fase58_channel_manager",
+     "OVERBOOKING di 1: l'ultima unita' si vende DUE volte (>= diventa >) -> due ospiti, una stanza"),
+
+    ("fase58_channel_manager.py",
+     "                if row[\"chiuso\"]:\n                    motivo = \"chiuso\"",
+     "                if False:\n                    motivo = \"chiuso\"",
+     "test_fase58_channel_manager",
+     "una notte CHIUSA dall'host diventa prenotabile lo stesso: si vende una data bloccata"),
+
+    ("fase58_channel_manager.py",
+     "                if i == 0 and len(notti_list) < row[\"min_notti\"]:\n                    motivo = \"min_notti\"",
+     "                if i == 0 and len(notti_list) < 0:\n                    motivo = \"min_notti\"",
+     "test_fase58_channel_manager",
+     "il soggiorno minimo (min_notti) non e' piu' imposto: si accettano soggiorni piu' corti del consentito"),
+
+    # ── I PERMESSI (ruoli operatore admin, fase192) ──────────────────────────────
+    ("fase192_admin_accounts.py",
+     "        return str(azione) not in AZIONI_SOLO_ADMIN",
+     "        return True",
+     "test_admin_accounts",
+     "il ruolo 'supporto' (assistenza) puo' muovere i SOLDI: rimborsi/storni da un account che non deve toccarli"),
 ]
 
 

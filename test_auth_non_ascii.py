@@ -47,6 +47,23 @@ class TestAuthNonAscii(unittest.TestCase):
         self.assertNotEqual(st, 500, "chiave admin non-ASCII -> 500")
         self.assertIn(st, (401, 403, 429, 400), "atteso rifiuto pulito, non %r" % st)
 
+    def test_surrogato_isolato_non_crasha_auth(self):
+        # SCOVATO da collaudi/gare_estreme.py (fuzzing): un SURROGATO Unicode isolato (\ud800, non
+        # ASCII e nemmeno UTF-8 valido) faceva UnicodeEncodeError su .encode("utf-8") -> 500.
+        # Copre TUTTE le verifiche firma con input utente: admin-key, host-token, cookie gate.
+        # Fix: .encode("utf-8", "surrogatepass"). Vista ROSSA: pre-fix questi danno 500/eccezione.
+        surrogati = ("\ud800", "ab\ud800cd", "\udfff\ud800", "x𝄞")  # anche coppia rotta
+        for s in surrogati:
+            st, _ = self.r.gestisci("POST", "/api/admin/rimborso", {},
+                                    json.dumps({"riferimento": "x"}), {"X-Admin-Key": s})
+            self.assertIn(st, (401, 403, 429, 400), "admin surrogato %r -> %r (atteso rifiuto)" % (s, st))
+            st2, _ = self._post("/api/host/pubblica", {"X-Host-Token": s})
+            self.assertNotEqual(st2, 500, "host-token surrogato %r -> 500" % s)
+            # cookie gate: un surrogato nel cookie di sessione non deve schiantare il gatekeeper
+            st3, _ = self.r.gestisci("GET", "/host.html", {}, None,
+                                     {"Cookie": "bv_host=host|9999999999|" + s + "|deadbeef"})
+            self.assertNotEqual(st3, 500, "cookie gate surrogato %r -> 500" % s)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

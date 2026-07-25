@@ -9,6 +9,8 @@ Lancia, in sequenza e in modo autosufficiente (ZERO servizi cloud), tutta la dif
   4. Caccia finti-verdi (caccia_finti_verdi)        — test che non possono fallire
   5. Plausibilità dati (plausibilita)               — i numeri hanno senso nel mondo vero
   6. BATTERIA ESTREMA (estremo)                     — chaos/fault-injection, crash, soak, fuzzing, time-travel
+  6b. Gare + Fuzzing combinatorio (gare_estreme)    — race al ms (auditor I1 giudice) + fuzz endpoint, mai 500
+  6c. Multi-vettore (multivettore)                  — idempotenza retry + concorrenza pannelli + tamper + finanza 0-cent
   7. Sicurezza statica (Bandit)                     — gate: 0 vulnerabilità High
   8. [server] Behavioral host + pannelli DAL VIVO   — avvia server locale, prova, chiude
   8b.[server] Vicoli ciechi                         — cammina link/form/API, nessun 404/rotta-morta
@@ -84,6 +86,8 @@ def main():
         ("4. Caccia finti-verdi", [PY, "collaudi/caccia_finti_verdi.py"], 300, None),
         ("5. Plausibilità dati", [PY, "collaudi/plausibilita.py"], 300, None),
         ("6. Batteria ESTREMA", [PY, "collaudi/estremo.py"], 900, None),
+        ("6b. Gare+Fuzzing combinatorio", [PY, "collaudi/gare_estreme.py"], 400, None),
+        ("6c. Multi-vettore (rete+pannelli+tamper+finanza)", [PY, "collaudi/multivettore.py"], 700, None),
     ]
     for nome, cmd, to, _ok in fasi:
         rc, out, dur = _run(cmd, timeout=to)

@@ -1,3 +1,65 @@
+## 🟢 STATO 2026-07-26 — COLLAUDO MULTI-VETTORE: resilienza rete + concorrenza pannelli + tampering + finanza
+
+Direttiva "collaudo combinato multi-vettore e resilienza integrata". Nuovo `collaudi/multivettore.py`
+(cablato in `batteria.py` tappa 6c) — 4 vettori, **18/18 verdi**, componenti veri, auditor fase199 giudice:
+- **V1 RESILIENZA RETE/IDEMPOTENZA**: book ripetuto sullo stesso quote_token (connessione caduta) →
+  1 sola occupazione, 2ª `idempotente=True`; **webhook di pagamento consegnato 2 volte** (Stripe
+  ritenta) → `pagato` una sola volta (CAS), occupazione invariata, auditor 0 violazioni. Nessun
+  duplicato, nessuno stato orfano.
+- **V2 CONCORRENZA MULTI-PANNELLO** (barriera thread): (a) host cambia prezzo durante il checkout →
+  addebito = prezzo **firmato** nel preventivo; (b) admin sospende l'annuncio mentre l'host aggiorna
+  la disponibilità → annuncio **non vendibile** (quote 404), l'update host non resuscita un sospeso;
+  (c) la commissione è **frozen in config** (immutabile a runtime) **e firmata** nel preventivo → il
+  book onora quella firmata + un token con firma manomessa è rifiutato.
+- **V3 TAMPERING/SCALATA PRIVILEGI** (9 casi a livello router): token host come chiave admin, ruolo
+  operatore ribaltato ad admin, chiave quasi-giusta, payload gigante, **surrogati**, byte di controllo,
+  token bunker manomesso → **sempre rifiuto pulito (401/403), MAI 500 né accesso concesso**. (Il gate
+  delle PAGINE 302 vive nell'handler HTTP → lo copre `test_gatekeeper` con server vero.)
+- **V4 INVARIANTI FINANZIARI**: **570 preventivi** su griglia importi×notti×commissione×psp (1 cent →
+  5M, 1→90 notti, 0/5/8/10/15%, psp 2/3/3,25%) → **totale ospite == netto_host + commissione + carta +
+  tassa, a 0 centesimi esatti**, sempre; nessun negativo; guest==netto (0% fee ospite). Prova ROSSA:
+  +1 centesimo iniettato → V4 lo becca (uguaglianza esatta fra interi).
+- **5 BUG DEL TEST corretti in corsa** (non del prodotto, ma vanno sistemati): il server SLUGIFICA
+  (`f_test`→`f-test`) → V4 interrogava lo slug sbagliato (casi=0) → `_host_pubblica` ora ritorna lo
+  slug reale; il wrapper `g()` ri-serializzava il body → firma webhook non combaciava → uso
+  `gestisci()` grezzo; le pagine gate sono nell'handler HTTP non nel router; `sis.config` è FROZEN →
+  il cambio-commissione era tautologico → riscritto sul legame di firma. Nessuna anomalia di prodotto:
+  idempotenza, atomicità, gate e aritmetica REGGONO tutti.
+- **NOTA prod**: `PAGA_STRUTTURA_ATTIVO=1` sul VPS (acceso dal fondatore) — la direttiva chiede di
+  preservarlo così; produzione sana verificata.
+
+---
+
+## 🟢 STATO 2026-07-26 — COLLAUDO ESTREMO COMBINATO: gare al ms + fuzzing + mutazione estesa (1 CRASH VERO chiuso)
+
+Direttiva "suite combinatori, concorrenza e mutazione estesa". Nuovo `collaudi/gare_estreme.py` (cablato
+in `batteria.py` tappa 6b) — pure-Python, componenti veri, deterministico:
+- **GARE AL MILLISECONDO** (barriera di thread, tutti scattano insieme), con l'**auditor invarianti
+  fase199 come giudice indipendente**: A1 8 prenotazioni simultanee su 1 unità → **ESATTAMENTE 1**
+  confermata + 0 double-booking (auditor) + 0 overbooking fisico (query DB); A2 cambio-prezzo host
+  DURANTE il checkout → il prezzo **firmato** nel preventivo è immutabile (mai addebito a prezzo non
+  visto), il preventivo nuovo vede il prezzo nuovo (no cache); A3 cancella-vs-prenota → occupazione
+  mai oltre 1; A4 blocco-data-vs-prenota → no overbooking, no occupante-fantasma (BEGIN IMMEDIATE
+  serializza; prenota-poi-chiudi è legittimo).
+- **FUZZING COMBINATORIO** (734 combinazioni: campi × 25 classi ostili — surrogati, SQLi, XSS, overflow,
+  giganti, NaN, coppie 2-a-2) su ricerca/login/checkout/pannelli/webhook: la direttiva è **mai un 500**
+  → il fuzzer segnala come FALLA ogni 500/eccezione (prima l'euristica "Traceback nel corpo" era troppo
+  debole e mascherava i 500 puliti).
+- **🐛 CRASH VERO TROVATO E CHIUSO**: un **surrogato Unicode isolato** (`\ud800`, non-ASCII e nemmeno
+  UTF-8 valido) in `X-Admin-Key`/`X-Host-Token`/cookie-gate faceva `UnicodeEncodeError` su
+  `.encode("utf-8")` → **500**. Il fix non-ASCII di ieri NON copriva i surrogati. Corretti i **3 siti
+  di verifica firma con input utente** (`_auth_con_rate` ×2, `_tg_verifica_payload`, `_gate_valida`) con
+  `.encode("utf-8", "surrogatepass")`: le chiavi vere ASCII restano identiche (auth invariata), i
+  surrogati diventano byte → rifiuto **401** pulito. Guardia `test_auth_non_ascii.test_surrogato_isolato_
+  non_crasha_auth` **vista ROSSA** (rollback del fix → `UnicodeEncodeError`/500, FAILED) e verde col fix.
+- **MUTAZIONE ESTESA a calendario e permessi** (erano 20 solo-soldi): +4 mutanti in
+  `mutazione_prodotto.py` → **24/24 uccisi**: overbooking (`>=`→`>`, l'ultima unità venduta 2 volte),
+  notte CHIUSA prenotabile (`if row["chiuso"]`→`if False`), min-stay bypassato (`< min_notti`→`< 0`),
+  ruolo 'supporto' che muove i SOLDI (`not in AZIONI_SOLO_ADMIN`→`True`). Ognuno visto rosso dal killer
+  (`test_fase58_channel_manager` / `test_admin_accounts`). **0 sopravvissuti.**
+
+---
+
 ## 🟢 STATO 2026-07-25 (pomeriggio) — BATTERIA COMPLETA: 2 DIFETTI VERI trovati e chiusi + LEZIONE finto-verde
 
 **⚠️ LEZIONE DEL GIORNO (finto-verde MIO, da manuale)**: il "suite verde" delle 13:25 era l'exit code
