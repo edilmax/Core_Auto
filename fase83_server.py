@@ -1362,6 +1362,7 @@ def pagina_login_gate(livello: str, base_url: str = "") -> str:
     if livello not in ("admin", "host", "bunker"):
         livello = "host"
     # (titolo, sottotitolo, HTML dei campi, JS di invio) per ruolo
+    sotto = sotto_js = ""          # footer (Registrati / Password dimenticata) — solo per l'host
     if livello == "admin":
         titolo, sub = "Area amministrazione", "Accesso riservato"
         campi = ('<input id="k" type="password" placeholder="Chiave admin" '
@@ -1407,6 +1408,33 @@ def pagina_login_gate(livello: str, base_url: str = "") -> str:
               "else if(r.status===429){msg('Troppi tentativi, riprova tra poco.');btn(false);}"
               "else{msg('Email o password errata.');btn(false);}"
               "}catch(e){msg('Errore di rete.');btn(false);}")
+        # NUOVO host o password persa: dal login DEVE poter registrarsi o recuperare (era un
+        # vicolo cieco: chi arrivava dal bot vedeva solo 'accedi' e restava bloccato).
+        sotto = ('<div style="margin-top:1.1rem;text-align:center;font-size:.92rem">'
+                 '<a href="/diventa-host.html" style="color:#c8a24a;font-weight:600;'
+                 'text-decoration:none">Non hai un account? Registrati</a>'
+                 '<br><a href="#" id="pwlost" style="color:#9aa7bd;text-decoration:none;'
+                 'display:inline-block;margin-top:.5rem">Password dimenticata?</a></div>')
+        sotto_js = ("var _pl=document.getElementById('pwlost');if(_pl){_pl.onclick="
+                    "async function(ev){ev.preventDefault();var e=document.getElementById('em');"
+                    "var em=(e&&e.value)||prompt('Inserisci la tua email:');if(!em)return;try{"
+                    "await fetch('/api/host/password_dimenticata',{method:'POST',headers:"
+                    "{'Content-Type':'application/json'},body:JSON.stringify({email:em})});}catch(_){}"
+                    "msg('Se l\\'email e registrata, ti abbiamo inviato il link per la nuova password.');"
+                    "};}"
+                    # RESET dal link email (#reset=<token> nel fragment: mai nei log): chiede la
+                    # nuova password e la applica, poi manda al pannello.
+                    "(function(){var _h=location.hash||'';if(_h.indexOf('#reset=')!==0)return;"
+                    "var _t=decodeURIComponent(_h.slice(7));"
+                    "var _p=prompt('Scegli la NUOVA password (minimo 8 caratteri):');"
+                    "if(!_p)return;if(_p.length<8){msg('La password deve avere almeno 8 caratteri.');return;}"
+                    "fetch('/api/host/password_reset',{method:'POST',headers:{'Content-Type':"
+                    "'application/json'},body:JSON.stringify({token:_t,password:_p})}).then(function(r){"
+                    "return r.json().then(function(d){return{s:r.status,d:d};});}).then(function(o){"
+                    "if(o.s===200&&o.d&&o.d.ok){msg('Password cambiata! Ora accedi con la nuova password.');"
+                    "location.hash='';setTimeout(function(){location.replace('/host.html');},1400);}"
+                    "else{msg('Link non valido o scaduto: richiedi un nuovo link.');}}).catch(function(){"
+                    "msg('Errore di rete.');});})();")
     esc_t = titolo.replace("&", "&amp;").replace("<", "&lt;")
     esc_s = sub.replace("&", "&amp;").replace("<", "&lt;")
     return (
@@ -1434,7 +1462,7 @@ def pagina_login_gate(livello: str, base_url: str = "") -> str:
         '<div class="logo">🏰 Bookin<b>VIP</b></div><div class="sub">' + esc_s + '</div>'
         '<form id="f" autocomplete="on">' + campi +
         '<button id="go" type="submit">Entra</button></form>'
-        '<div class="m" id="m"></div>'
+        '<div class="m" id="m"></div>' + sotto +
         '<script>'
         'function msg(t){document.getElementById("m").textContent=t||"";}'
         'function btn(b){document.getElementById("go").disabled=b;'
@@ -1444,7 +1472,7 @@ def pagina_login_gate(livello: str, base_url: str = "") -> str:
         'e.onclick=function(){p.type=p.type==="password"?"text":"password";};'
         'p.insertAdjacentElement("afterend",e);});'
         'document.getElementById("f").addEventListener("submit",async function(ev){'
-        'ev.preventDefault();' + js + '});'
+        'ev.preventDefault();' + js + '});' + sotto_js +
         '</script></body></html>')
 
 
@@ -7094,8 +7122,11 @@ class RouterHTTP:
                 self._pw_reset_ts[k] = _t.time()
                 from fase86_email import corpo_reset_password_html, oggetto
                 lang = dati.get("lang", "en")     # l'host e' sulla pagina: lingua corrente
+                # Il link porta al GATE PUBBLICO (/entra-host), NON a /host.html che è gated
+                # (302 senza sessione -> il reset non partiva mai: chi resetta è sempre sloggato).
+                # Il token resta nel FRAGMENT (#) -> mai nei log del server. Il gate lo gestisce.
                 link = ((self._base_url or "https://bookinvip.com")
-                        + "/host.html#reset=" + tok)
+                        + "/entra-host#reset=" + tok)
                 import threading
                 threading.Thread(target=self._sys.email_provider.invia,
                                  args=(k, oggetto("rp_ogg", lang),
