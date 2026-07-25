@@ -1394,28 +1394,68 @@ def pagina_login_gate(livello: str, base_url: str = "") -> str:
               "else{msg('Chiave o codice errato.');btn(false);}"
               "}catch(e){msg('Errore di rete.');btn(false);}")
     else:
-        titolo, sub = "Area host", "Accedi al tuo pannello"
+        # Il gate host fa LOGIN e REGISTRAZIONE sulla stessa pagina PUBBLICA (la dashboard host.html
+        # resta gated). Prima 'Registrati' rimandava a /diventa-host.html i cui bottoni tornavano a
+        # /host.html (gated) → /entra-host: LOOP infinito, e il form di registrazione (dentro host.html
+        # gated) era IRRAGGIUNGIBILE. Ora la registrazione avviene QUI. doc_sha256/versione del
+        # contratto sono iniettati dal server (la firma d'accettazione resta verificabile).
+        from fase163_accettazioni import CONTRATTO_HOST_VERSIONE as _CV, doc_sha256 as _ds
+        _dsha, _cver = _ds(), str(_CV)
+        titolo, sub = "Area host", "Accedi o registrati"
         campi = ('<input id="em" type="email" placeholder="Email" autocomplete="username" '
-                 'aria-label="Email"><input id="pw" type="password" placeholder="Password" '
-                 'autocomplete="current-password" aria-label="Password">')
+                 'aria-label="Email"><input id="pw" type="password" placeholder="Password (min 8)" '
+                 'autocomplete="current-password" aria-label="Password">'
+                 '<div id="regx" style="display:none">'
+                 '<input id="rs" placeholder="Nome struttura / ragione sociale (facoltativo)" '
+                 'aria-label="Nome struttura">'
+                 '<label style="display:block;text-align:left;font-size:.8rem;color:#9aa7bd;'
+                 'margin:.35rem 0"><input type="checkbox" id="c1"> Accetto il '
+                 '<a href="/termini.html" target="_blank" style="color:#c8a24a">Contratto Host</a></label>'
+                 '<label style="display:block;text-align:left;font-size:.8rem;color:#9aa7bd;'
+                 'margin:.35rem 0"><input type="checkbox" id="c2"> Approvo le clausole ex '
+                 'artt. 1341-1342 c.c. (trattenute, penali, foro)</label>'
+                 '<label style="display:block;text-align:left;font-size:.8rem;color:#9aa7bd;'
+                 'margin:.35rem 0"><input type="checkbox" id="c3"> Accetto la '
+                 '<a href="/privacy.html" target="_blank" style="color:#c8a24a">Privacy</a> (GDPR)</label>'
+                 '</div>')
         js = ("var em=document.getElementById('em').value,pw=document.getElementById('pw').value;"
-              "if(!em||!pw){msg('Inserisci email e password.');return;}btn(true);try{"
-              "var r=await fetch('/api/host/login',{method:'POST',headers:"
+              "if(!em||!pw){msg('Inserisci email e password.');return;}"
+              "if(window._reg){if(!(document.getElementById('c1').checked&&"
+              "document.getElementById('c2').checked&&document.getElementById('c3').checked)){"
+              "msg('Per registrarti spunta le tre caselle (Contratto, clausole, Privacy).');return;}"
+              "if(pw.length<8){msg('La password deve avere almeno 8 caratteri.');return;}btn(true);try{"
+              "var rr=await fetch('/api/host/registrazione',{method:'POST',headers:"
+              "{'Content-Type':'application/json'},body:JSON.stringify({email:em,password:pw,"
+              "ragione_sociale:document.getElementById('rs').value,accetta_termini:true,"
+              "accetta_clausole:true,accetta_privacy:true,doc_sha256:'%s',versione:'%s',"
+              "codice_referral:(new URLSearchParams(location.search).get('ref')||'')})});"
+              "var dd=null;try{dd=await rr.json();}catch(_){}"
+              "if(rr.status===201&&dd&&dd.token){try{localStorage.setItem('bookinvip_host_token',dd.token);"
+              "localStorage.setItem('bookinvip_host_email',em);}catch(e){}location.replace('/host.html');}"
+              "else if(rr.status===409){msg('Esiste gia un account con questa email: accedi.');btn(false);}"
+              "else{msg((dd&&dd.errore)?('Registrazione: '+dd.errore):'Registrazione non riuscita.');"
+              "btn(false);}}catch(e){msg('Errore di rete.');btn(false);}return;}"
+              "btn(true);try{var r=await fetch('/api/host/login',{method:'POST',headers:"
               "{'Content-Type':'application/json'},body:JSON.stringify({email:em,password:pw})});"
               "var d=null;try{d=await r.json();}catch(_){}"
               "if(r.status===200&&d&&d.token){try{localStorage.setItem('bookinvip_host_token',d.token);"
               "localStorage.setItem('bookinvip_host_email',em);}catch(e){}location.replace('/host.html');}"
               "else if(r.status===429){msg('Troppi tentativi, riprova tra poco.');btn(false);}"
               "else{msg('Email o password errata.');btn(false);}"
-              "}catch(e){msg('Errore di rete.');btn(false);}")
-        # NUOVO host o password persa: dal login DEVE poter registrarsi o recuperare (era un
-        # vicolo cieco: chi arrivava dal bot vedeva solo 'accedi' e restava bloccato).
+              "}catch(e){msg('Errore di rete.');btn(false);}") % (_dsha, _cver)
+        # Toggle registrazione + recupero password (niente più link che rimandano ad altre pagine).
         sotto = ('<div style="margin-top:1.1rem;text-align:center;font-size:.92rem">'
-                 '<a href="/diventa-host.html" style="color:#c8a24a;font-weight:600;'
+                 '<a href="#" id="toreg" style="color:#c8a24a;font-weight:600;'
                  'text-decoration:none">Non hai un account? Registrati</a>'
                  '<br><a href="#" id="pwlost" style="color:#9aa7bd;text-decoration:none;'
                  'display:inline-block;margin-top:.5rem">Password dimenticata?</a></div>')
-        sotto_js = ("var _pl=document.getElementById('pwlost');if(_pl){_pl.onclick="
+        sotto_js = ("var _tr=document.getElementById('toreg');window._reg=false;if(_tr){"
+                    "_tr.onclick=function(ev){ev.preventDefault();window._reg=!window._reg;"
+                    "document.getElementById('regx').style.display=window._reg?'block':'none';"
+                    "document.getElementById('go').textContent=window._reg?'Registrati':'Entra';"
+                    "_tr.textContent=window._reg?'Hai gia un account? Accedi':"
+                    "'Non hai un account? Registrati';msg('');};}"
+                    "var _pl=document.getElementById('pwlost');if(_pl){_pl.onclick="
                     "async function(ev){ev.preventDefault();var e=document.getElementById('em');"
                     "var em=(e&&e.value)||prompt('Inserisci la tua email:');if(!em)return;try{"
                     "await fetch('/api/host/password_dimenticata',{method:'POST',headers:"

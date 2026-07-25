@@ -15,9 +15,12 @@ class TestGateHostNonVicoloCieco(unittest.TestCase):
         # login: email + password
         self.assertIn('id="em"', h)
         self.assertIn('id="pw"', h)
-        # REGISTRAZIONE per il nuovo host
-        self.assertIn("/diventa-host.html", h, "manca il link Registrati verso la registrazione")
+        # REGISTRAZIONE SUL gate stesso (niente più loop verso /diventa-host.html→/host.html gated)
         self.assertIn("Registrati", h)
+        self.assertIn("/api/host/registrazione", h, "il gate deve permettere di REGISTRARSI qui")
+        for consenso in ('id="c1"', 'id="c2"', 'id="c3"'):
+            self.assertIn(consenso, h, "manca un consenso obbligatorio nella registrazione: %s" % consenso)
+        self.assertNotIn("/diventa-host.html", h, "il gate NON deve rimandare a diventa-host (era il loop)")
         # RECUPERO password (richiesta del link)
         self.assertIn("Password dimenticata", h)
         self.assertIn("/api/host/password_dimenticata", h, "manca il flusso di recupero password")
@@ -30,7 +33,7 @@ class TestGateHostNonVicoloCieco(unittest.TestCase):
         # solo l'host è pubblico e registrabile; admin/bunker NO
         for liv in ("admin", "bunker"):
             g = pagina_login_gate(liv, "https://bookinvip.com")
-            self.assertNotIn("/diventa-host.html", g, "%s non deve offrire registrazione host" % liv)
+            self.assertNotIn("/api/host/registrazione", g, "%s non deve offrire registrazione host" % liv)
             self.assertNotIn("/api/host/password_dimenticata", g)
 
 
