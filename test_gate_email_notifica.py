@@ -31,6 +31,22 @@ class TestEmailStatoPagamento(unittest.TestCase):
         self.assertNotIn("pay.stripe", h)                  # nessun invito a pagare
 
 
+class TestPreventivoSoloPreventivo(unittest.TestCase):
+    """Il PREVENTIVO (fase più a monte) deve essere SOLO preventivo: prezzo + date + invito a
+    prenotare. MAI PIN, smart-pass, controversia o voucher (quelli nascono dopo il pagamento)."""
+
+    def test_email_preventivo_niente_pin_ne_postvendita(self):
+        from fase86_email import corpo_preventivo_html
+        h = corpo_preventivo_html("Attico Roma", "2026-09-01", "2026-09-03",
+                                  [("2 notti", "€200,00"), ("Tassa soggiorno", "€8,00")],
+                                  "https://bookinvip.com/prenota/x", lingua="it")
+        for vietato in ("PIN", "smart_pass", "garanzia", "controvers", "serratura",
+                        "self check-in", "self-check", "voucher_token", "/api/garanzia/"):
+            self.assertNotIn(vietato, h, "il preventivo NON deve contenere %r" % vietato)
+        self.assertIn("200", h)                            # il prezzo c'è
+        self.assertIn("prenota", h.lower())                # invito a prenotare/pagare
+
+
 class TestNotificaHostStatoPagamento(unittest.TestCase):
     def _avviso(self, pin):
         from fase152_notifiche_prenotazione import componi_avviso_host
