@@ -1,3 +1,43 @@
+## 🟢 STATO 2026-07-25 (pomeriggio) — BATTERIA COMPLETA: 2 DIFETTI VERI trovati e chiusi + LEZIONE finto-verde
+
+**⚠️ LEZIONE DEL GIORNO (finto-verde MIO, da manuale)**: il "suite verde" delle 13:25 era l'exit code
+di **`tail`**, non della suite — il comando era `unittest … 2>&1 | tail -15` e l'exit di una PIPELINE
+è quello dell'ULTIMO comando (sempre 0). In realtà la suite era ROSSA da metà mattina (guardia timeout,
+sotto) e la **CI su GitHub era rossa da 4 giri consecutivi** (9c4abd8→9af4aef, job `full-suite`, tutti
+gli altri job verdi) — non l'avevo guardata, nonostante la lezione «la CI è il gate autorevole» fosse
+già scritta. REGOLE: (1) mai leggere l'esito della suite attraverso una pipe — exit code diretto su
+file; (2) dopo OGNI push, guardare la CI.
+
+**🐛 DIFETTO 2 (VERO, di prodotto) — `fase199_invarianti.py:166`**: l'auditor `scansiona_db` apriva i
+DB con `sqlite3.connect(f)` **senza `timeout=30`** (standard del repo, bug #36): gira CONTRO i DB vivi
+di produzione in concorrenza col sito → sotto contesa avrebbe fatto «database is locked» invece di
+aspettare il turno. Scovato dalla guardia strutturale `test_neuroni_guardie.TestSqliteTimeout` (che ha
+fatto il suo mestiere: rossa dal commit f8102cd delle 11:47, nascosta dal finto-verde della pipe).
+Fix: `timeout=30` + commento. `test_neuroni_guardie` + `test_fase199_invarianti` = 30/30 verdi.
+
+Direttiva "fai altri test". Prima: i 2 walker nuovi CABLATI in `collaudi/batteria.py` (tappa **2b
+Cammino E2E preciso** + tappa **8b Vicoli ciechi** col server visivo) → d'ora in poi il comando unico
+li lancia sempre. Poi batteria COMPLETA eseguita: **13/14 verdi** — Master E2E, Cammino E2E, Mutazione,
+Caccia finti-verdi, Plausibilità, Batteria ESTREMA, Bandit High=0, Behavioral host+pannelli dal vivo,
+Vicoli ciechi 0, WCAG 0, Click-through 0, **Verifica produzione (sito vero) 0 violazioni**.
+Il 14° (suite piena, `failures=1`) era la guardia timeout (DIFETTO 2 sopra); il giro verboso di
+verifica ha fatto emergere ANCHE il flaky qui sotto (`failures=1, errors=1` = due difetti distinti).
+- **🐛 DIFETTO 1 = FLAKY VERO SCOVATO E SRADICATO**: `test_i1_concorda_con_oracolo_indipendente`
+  (`test_fase199_invarianti`, prova Hypothesis di I1) — 1 ERROR su 3445 nella suite piena, ma verde in
+  isolamento e **nessun controesempio salvato** in `.hypothesis` → l'invariante NON è mai stato violato.
+  Colpevole (traceback REALE dalla suite piena): `hypothesis.errors.FailedHealthCheck: Input
+  generation is slow` (`HealthCheck.too_slow`) — sotto carico UNA estrazione ha impiegato **9.75s**
+  (CPU rubata dalla suite) e il controllo-salute ha dichiarato il test malato; il `@settings` del file
+  non disattivava né quello né il `deadline` (200ms/esempio), entrambi misure di WALL-CLOCK, zero
+  attinenza con l'invariante. Diagnosi PROVATA (anti-finti-verdi): il gemello `DeadlineExceeded`
+  RIPRODOTTO deterministicamente con profilo `deadline=0.05ms`; fix `deadline=None +
+  suppress_health_check=[too_slow]` sui 2 property test (pattern GIÀ giusto in
+  `test_property_soldi.py`, dimenticato nel file nuovo) → ri-attacco a 50µs = **23/23 verdi, immune
+  al cronometro**. Regola fondatore: «l'instabilità è essa stessa un difetto» — il cronometro non è
+  un invariante, l'asserzione sì.
+
+---
+
 ## 🟢 STATO 2026-07-25 — CAMMINO E2E PRECISO: un bot percorre TUTTO il viaggio, effetto verificato passo-passo
 
 Direttiva fondatore "cammina il flusso completo… si fallo e preciso": i bug di LOGICA di percorso non li

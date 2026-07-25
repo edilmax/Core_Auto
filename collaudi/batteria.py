@@ -4,12 +4,14 @@ CORE_AUTO — BATTERIA COMPLETA in un solo comando.  Uso:   python collaudi/batt
 Lancia, in sequenza e in modo autosufficiente (ZERO servizi cloud), tutta la difesa della macchina:
   1. Suite completa (unittest, ~348 file)          — copertura logica/funzionale E2E
   2. Master E2E totale (collaudo_finale_totale)     — flusso completo + concorrenza + manomissione
+  2b. Cammino E2E preciso (percorso_e2e)            — bot cammina host+ospite+eccezioni, effetto passo-passo
   3. Mutazione (mutazione_prodotto)                 — i test VEDONO i guasti? (giudica i test)
   4. Caccia finti-verdi (caccia_finti_verdi)        — test che non possono fallire
   5. Plausibilità dati (plausibilita)               — i numeri hanno senso nel mondo vero
   6. BATTERIA ESTREMA (estremo)                     — chaos/fault-injection, crash, soak, fuzzing, time-travel
   7. Sicurezza statica (Bandit)                     — gate: 0 vulnerabilità High
   8. [server] Behavioral host + pannelli DAL VIVO   — avvia server locale, prova, chiude
+  8b.[server] Vicoli ciechi                         — cammina link/form/API, nessun 404/rotta-morta
   9. [server+node] Accessibilità WCAG + click-through
  10. [internet] Verifica produzione (sito VERO)     — salta se offline
 
@@ -77,6 +79,7 @@ def main():
         ("1. Suite completa (unittest)", [PY, "-m", "unittest", "discover", "-s", ".",
                                           "-p", "test_*.py"], 2400, None),
         ("2. Master E2E totale", [PY, "collaudi/collaudo_finale_totale.py"], 600, None),
+        ("2b. Cammino E2E preciso", [PY, "collaudi/percorso_e2e.py"], 300, None),
         ("3. Mutazione", [PY, "collaudi/mutazione_prodotto.py"], 900, None),
         ("4. Caccia finti-verdi", [PY, "collaudi/caccia_finti_verdi.py"], 300, None),
         ("5. Plausibilità dati", [PY, "collaudi/plausibilita.py"], 300, None),
@@ -107,7 +110,8 @@ def main():
         if _porta_su(PORTA):
             env = dict(os.environ, BASE_VISIVO="http://127.0.0.1:%d" % PORTA)
             for nome, cmd in (("8. Behavioral host DAL VIVO", [PY, "collaudi/beh_host.py"]),
-                              ("8. Behavioral pannelli DAL VIVO", [PY, "collaudi/beh_pannelli.py"])):
+                              ("8. Behavioral pannelli DAL VIVO", [PY, "collaudi/beh_pannelli.py"]),
+                              ("8b. Vicoli ciechi (link/form/API morti)", [PY, "collaudi/vicoli_ciechi.py"])):
                 rc, out, dur = _run(cmd, timeout=400, env=env)
                 registra(nome, rc, out, dur)
             # 9: node (a11y + click-through) — solo se node c'è

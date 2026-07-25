@@ -8,7 +8,7 @@
 """
 import unittest
 
-from hypothesis import given, settings
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from fase199_invarianti import (STATI_OCCUPANTI, ViolazioneInvariante, guardia_prenotazione,
@@ -108,7 +108,12 @@ def _prenotazione(draw):
 
 
 class TestProvaFormale(unittest.TestCase):
-    @settings(max_examples=800)
+    # deadline=None: il deadline di Hypothesis (200ms/esempio di default) misura il WALL-CLOCK del
+    # corpo -> sotto carico (suite intera, antivirus) un singolo esempio sfora -> DeadlineExceeded
+    # FLAKY (successo in isolamento, ERROR in batteria: visto 2026-07-25). La correttezza qui e'
+    # l'asserzione, non il cronometro. Stesso pattern gia' usato in test_property_soldi.py.
+    @settings(max_examples=800, deadline=None,
+              suppress_health_check=[HealthCheck.too_slow])
     @given(st.lists(_prenotazione(), max_size=12))
     def test_i1_concorda_con_oracolo_indipendente(self, prens):
         for i, p in enumerate(prens):
@@ -125,7 +130,8 @@ class TestProvaFormale(unittest.TestCase):
         self.assertEqual(ottenuto, atteso,
                          "I1 diverge dall'oracolo su %r" % (prens,))
 
-    @settings(max_examples=500)
+    @settings(max_examples=500, deadline=None,
+              suppress_health_check=[HealthCheck.too_slow])
     @given(st.integers(0, 5000), st.lists(st.integers(0, 5000), max_size=6))
     def test_i2_mai_falso_positivo_su_bilanciato(self, dovuto, pagamenti):
         # se la somma NON supera il dovuto e non è saldato, e non ci sono negativi -> nessuna violazione

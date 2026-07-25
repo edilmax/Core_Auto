@@ -163,7 +163,9 @@ def scansiona_db(percorso_dir: str) -> Dict[str, Any]:
     letti = 0
     for f in glob.glob(os.path.join(percorso_dir, "*.db")):
         try:
-            con = sqlite3.connect(f)
+            # timeout=30 (standard, bug #36): l'auditor gira CONTRO i DB vivi di produzione,
+            # in concorrenza col sito -> sotto contesa ASPETTA il turno, mai 'database is locked'.
+            con = sqlite3.connect(f, timeout=30)
             tab = [t[0] for t in con.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'")]
             for t in tab:
