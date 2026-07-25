@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Sequence
+from typing import Any, Callable, List, Optional, Sequence
 
 from fase25_brain import LLMProvider, ResilientBrain
 from fase29_backpressure import Priorita  # solo-stdlib: nessun ciclo

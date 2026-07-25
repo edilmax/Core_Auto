@@ -138,6 +138,59 @@ class TestProvaFormale(unittest.TestCase):
             self.assertTrue(viol, "I2 non ha visto un overpay")
 
 
+class TestAuditorDB(unittest.TestCase):
+    """L'auditor `scansiona_db` legge i DB reali (schema-tollerante) e conta le violazioni."""
+
+    def test_scan_pulito_e_doppia_conferma(self):
+        import os
+        import shutil
+        import sqlite3
+        import tempfile
+        from fase199_invarianti import scansiona_db
+        d = tempfile.mkdtemp()
+        try:
+            con = sqlite3.connect(os.path.join(d, "pren.db"))
+            con.execute("CREATE TABLE pren(alloggio_id TEXT, check_in TEXT, check_out TEXT, stato TEXT)")
+            con.execute("INSERT INTO pren VALUES ('A','2026-09-01','2026-09-05','pagato')")
+            con.commit()
+            r1 = scansiona_db(d)
+            self.assertEqual(r1["violazioni"], {}, "scan pulito non deve avere violazioni")
+            self.assertGreaterEqual(r1["prenotazioni_lette"], 1)
+            # aggiungo una prenotazione SOVRAPPOSTA e confermata sulla stessa unità
+            con.execute("INSERT INTO pren VALUES ('A','2026-09-03','2026-09-08','confermata')")
+            con.commit()
+            con.close()
+            r2 = scansiona_db(d)
+            self.assertIn("I1_DOPPIA_CONFERMA", r2["violazioni"], "doppia conferma non rilevata dall'auditor")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_scan_dir_inesistente_non_solleva(self):
+        from fase199_invarianti import scansiona_db
+        self.assertEqual(scansiona_db("/dir/che/non/esiste/xyz")["violazioni"], {})
+
+
+class TestRottaBunkerInvarianti(unittest.TestCase):
+    def test_rotta_registrata_e_gated(self):
+        import json
+        import shutil
+        import tempfile
+        from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
+        from fase83_server import crea_router
+        d = tempfile.mkdtemp()
+        try:
+            sis = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=b"k" * 32,
+                                             db_payout=d + "/p.db"))
+            r = crea_router(sis, host_key="hk", admin_key="ak", base_url="http://t")
+            st, out = r.gestisci("GET", "/api/bunker/invarianti", {}, None, {})
+            # la rotta ESISTE (non 404 rotta_non_trovata) ed è protetta dal bunker
+            self.assertNotEqual((st, out.get("errore") if isinstance(out, dict) else None),
+                                (404, "rotta_non_trovata"), "rotta /api/bunker/invarianti non registrata")
+            self.assertIn(st, (403, 401), "endpoint invarianti deve essere bunker-gated")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 class TestDimostrazioneZ3(unittest.TestCase):
     """Prova UNIVERSALE (Z3/SMT): non un campione, ma TUTTI gli infiniti interi. UNSAT = teorema."""
 

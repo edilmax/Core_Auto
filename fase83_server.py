@@ -1871,6 +1871,8 @@ class RouterHTTP:
             return self._bunker_export_contabile(query, headers)
         if metodo == "GET" and path == "/api/bunker/riconciliazione":
             return self._bunker_riconciliazione(query, headers)   # fase182 (pre-mortem)
+        if metodo == "GET" and path == "/api/bunker/invarianti":
+            return self._bunker_invarianti(query, headers)        # fase199 auditor invarianti
         if metodo == "GET" and path == "/api/bunker/guardiano":
             return self._bunker_guardiano(headers)                # fase186 (a richiesta)
         if metodo == "GET" and path == "/api/bunker/dac7_conformita":
@@ -3060,6 +3062,24 @@ class RouterHTTP:
         except Exception:
             logger.error("guardiano a richiesta: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
+
+    def _bunker_invarianti(self, query, headers):
+        """AUDITOR INVARIANTI (fase199): scansiona i DB reali e CONTA le violazioni degli invarianti
+        di sistema (I1 no-doppia-conferma sovrapposta, ...). READ-ONLY, bunker-gated. Oracolo
+        indipendente: NON ripara, DENUNCIA. `ok:true` + 0 violazioni = macchina in stato coerente."""
+        if not self._bunker_auth(headers, azione="invarianti"):
+            return 403, {"errore": "bunker_richiesto"}
+        try:
+            from fase199_invarianti import scansiona_db
+            rap = scansiona_db(self._data_dir())
+        except Exception:
+            logger.error("bunker invarianti: eccezione ISOLATA", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        viol = {k: len(v) for k, v in rap.get("violazioni", {}).items()}
+        logger.warning("INVARIANTI_SCAN | letti=%d | violazioni=%r | IP: %s",
+                       rap.get("prenotazioni_lette", 0), viol, self._client_ip(headers))
+        return 200, {"ok": not viol, "violazioni": viol,
+                     "prenotazioni_lette": rap.get("prenotazioni_lette", 0)}
 
     def _bunker_riconciliazione(self, query, headers):
         """RICONCILIAZIONE STRIPE (fase182, ultimo fantasma del pre-mortem): confronta il

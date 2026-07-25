@@ -169,7 +169,6 @@ def scansiona_db(percorso_dir: str) -> Dict[str, Any]:
             for t in tab:
                 cols = [c[1] for c in con.execute("PRAGMA table_info(%s)" % t)]
                 if "check_in" in cols and "check_out" in cols and "stato" in cols:
-                    sel = [c for c in ("rowid", "stato", "check_in", "check_out") if c in cols or c == "rowid"]
                     uni = "alloggio_id" if "alloggio_id" in cols else (
                         "unita" if "unita" in cols else None)
                     q = "SELECT stato, check_in, check_out%s FROM %s" % (

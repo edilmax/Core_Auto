@@ -23,7 +23,7 @@ import html
 import json
 import re
 import unicodedata
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 LINGUE = ("it", "en", "es", "fr", "de", "pt", "ja", "zh", "ru", "id", "th", "vi", "ko")
 
