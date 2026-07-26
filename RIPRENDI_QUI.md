@@ -1,3 +1,25 @@
+## 🟢 STATO 2026-07-26 — CAOS ENGINEERING mirato: SIGKILL vero + fd + manomissione + deadlock/timeout
+
+Direttiva "chaos engineering / zero-data-loss", fatta MIRATA (no doppioni con `estremo.py` che già
+copre chaos-disco/crash-recovery/soak-RAM/fuzzing). Nuovo `collaudi/caos.py` (+ launcher
+`_srv_caos.py`, cablato in `batteria.py` 6e) — i 4 pezzi genuinamente nuovi, **13/13, 0 falle**:
+- **A — SIGKILL VERO** del processo server (kill -9, non una connessione chiusa) a METÀ di un fiume
+  di prenotazioni concorrenti (27-32 scritte), poi **riavvio sugli STESSI dati**: `integrity_check` OK
+  su ogni DB, auditor 0 double-booking, 0 overbooking, sito di nuovo usabile (catalogo 200). Red-proof:
+  un DB troncato a mano È visto corrotto da `integrity_check`.
+- **B — FILE DESCRIPTOR**: 2500 richieste → descrittori PIATTI (delta ≤20). Su Windows il conteggio
+  non è disponibile (soft-pass); su Linux/VPS conta da `/proc/self/fd` (verifica reale sul VPS).
+- **C — MANOMISSIONE DIRETTA**: il giornale (fase177) è **append-only via trigger** (blocca perfino
+  l'UPDATE, `UPDATE vietato`) **E** la catena-hash becca la manomissione **anche a trigger droppati**
+  (attaccante con accesso al file); token firmati HMAC → manomesso rifiutato al 100%. **Limite ONESTO
+  dichiarato**: i record OPERATIVI (prezzo catalogo, occupazione) NON hanno checksum per-riga
+  (protetti da OS/permessi + backup + integrity_check; tamper-evidence solo su record legali/finanziari).
+- **D — DEADLOCK/TIMEOUT**: con un lock di scrittura tenuto, il 2° scrittore riceve un errore PULITO
+  «database is locked» entro ~il timeout (non congela mai); rilasciato il lock, procede (nessun
+  deadlock permanente). Solo-collaudi (non tocca la produzione): il Dockerfile non copia `collaudi/`.
+
+---
+
 ## 🟢 STATO 2026-07-26 — SEGNALAZIONE IN ANTICIPO: escrow su rimborsata a rilascio FUTURO
 
 Direttiva "rendilo anche segnalato in anticipo". Il guardiano vedeva l'escrow-su-rimborsata SOLO a

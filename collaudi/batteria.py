@@ -12,6 +12,7 @@ Lancia, in sequenza e in modo autosufficiente (ZERO servizi cloud), tutta la dif
   6b. Gare + Fuzzing combinatorio (gare_estreme)    — race al ms (auditor I1 giudice) + fuzz endpoint, mai 500
   6c. Multi-vettore (multivettore)                  — idempotenza retry + concorrenza pannelli + tamper + finanza 0-cent
   6d. Stati impossibili (stati_impossibili)         — inietta orfani/soldi-senza-stanza, il guardiano li vede?
+  6e. Caos (caos)                                   — SIGKILL vero + file descriptor + manomissione + deadlock/timeout
   7. Sicurezza statica (Bandit)                     — gate: 0 vulnerabilità High
   8. [server] Behavioral host + pannelli DAL VIVO   — avvia server locale, prova, chiude
   8b.[server] Vicoli ciechi                         — cammina link/form/API, nessun 404/rotta-morta
@@ -90,6 +91,7 @@ def main():
         ("6b. Gare+Fuzzing combinatorio", [PY, "collaudi/gare_estreme.py"], 400, None),
         ("6c. Multi-vettore (rete+pannelli+tamper+finanza)", [PY, "collaudi/multivettore.py"], 700, None),
         ("6d. Stati impossibili (guardiano + transizioni)", [PY, "collaudi/stati_impossibili.py"], 300, None),
+        ("6e. Caos (SIGKILL+fd+manomissione+deadlock)", [PY, "collaudi/caos.py"], 400, None),
     ]
     for nome, cmd, to, _ok in fasi:
         rc, out, dur = _run(cmd, timeout=to)
