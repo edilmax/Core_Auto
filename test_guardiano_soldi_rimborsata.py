@@ -64,6 +64,12 @@ def _escrow_scaduto(gar, rif, annullato=False):
         assert gar.annulla(rif)["ok"]
 
 
+def _escrow_futuro(gar, rif):
+    # sblocco nel FUTURO (rilascio fra ~30gg) -> aperte_scadute NON lo vede; aperte() SI:
+    # e' la SEGNALAZIONE IN ANTICIPO di un escrow rimasto aperto su una prenotazione rimborsata.
+    assert gar.apri(rif, 5000, alloggio_id="allog-1", ora_checkin_ts=ORA, finestra_ore=720)
+
+
 class TestSoldiSuRimborsata(unittest.TestCase):
 
     # --- POSITIVI: la guardia DEVE gridare (rossi sul codice vecchio) ---
@@ -92,7 +98,23 @@ class TestSoldiSuRimborsata(unittest.TestCase):
         _escrow_scaduto(s.garanzia, "R3")
         rep = G.scansiona(s, ora=CLOCK)
         self.assertIn("escrow_su_rimborsata", rep["anomalie"])
-        self.assertIn("R3", [r["prenotazione_id"] for r in rep["anomalie"]["escrow_su_rimborsata"]])
+        r3 = [r for r in rep["anomalie"]["escrow_su_rimborsata"] if r["prenotazione_id"] == "R3"]
+        self.assertTrue(r3)
+        self.assertTrue(r3[0]["imminente"], "rilascio gia' passato -> imminente=True (urgente)")
+
+    def test_escrow_FUTURO_su_rimborsata_segnalato_in_anticipo(self):
+        # SEGNALAZIONE IN ANTICIPO: escrow ancora aperto su una rimborsata, ma rilascio fra ~30gg.
+        # Il codice VECCHIO (aperte_scadute, solo passato) NON lo vedeva; ora aperte() lo vede,
+        # marcato imminente=False (preavviso, non urgenza). Vista ROSSA sul vecchio comportamento.
+        s = _sistema()
+        _pendente(s.pagamenti_pendenti, "R9", "rimborsato")
+        _escrow_futuro(s.garanzia, "R9")
+        rep = G.scansiona(s, ora=CLOCK)
+        self.assertIn("escrow_su_rimborsata", rep["anomalie"],
+                      "escrow futuro su rimborsata NON segnalato in anticipo")
+        r9 = [r for r in rep["anomalie"]["escrow_su_rimborsata"] if r["prenotazione_id"] == "R9"]
+        self.assertTrue(r9, "R9 (rilascio futuro) non trovato: manca il preavviso")
+        self.assertFalse(r9[0]["imminente"], "rilascio futuro -> preavviso, non imminente")
 
     # --- REMOZIONE / NON-compiacenza: la guardia NON deve gridare ---
     def test_payout_maturato_su_prenotazione_PAGATA_e_ok(self):

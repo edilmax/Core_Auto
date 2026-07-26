@@ -154,18 +154,19 @@ def sezione_A():
           _nonvuoto(_cat(rep, "escrow_su_rimborsata")), "anomalie=%r" % rep.get("anomalie"))
     shutil.rmtree(d, ignore_errors=True)
 
-    # A6) SONDA — escrow su rimborsata ma con rilascio FUTURO: e' il GAP DOCUMENTATO (il guardiano
-    # vede l'escrow-su-rimborsata solo quando il rilascio E' GIA' scattato, non proattivamente).
+    # A6) SEGNALAZIONE IN ANTICIPO: escrow su rimborsata con rilascio FUTURO (fra giorni) ora
+    # e' rilevato PRIMA che scatti (gap chiuso: il guardiano usa aperte() = tutti gli aperti).
     d, sis = _nuovo()
     sis.pagamenti_pendenti.registra("rifA6", alloggio_id="x", check_in="2026-09-01",
                                     check_out="2026-09-03")
     sis.pagamenti_pendenti.marca_cancellata_host("rifA6", penale_cents=0)
-    sis.garanzia.apri("rifA6", 50000, alloggio_id="x", ora_checkin_ts=ora, finestra_ore=72)
+    sis.garanzia.apri("rifA6", 50000, alloggio_id="x", ora_checkin_ts=ora, finestra_ore=720)  # +30gg
     rep = GUARD.scansiona(sis, ora=_orolo(ora))
-    visto = _nonvuoto(_cat(rep, "escrow_su_rimborsata"))
-    print("     [SONDA] escrow su rimborsata con rilascio FUTURO rilevato? %s%s"
-          % ("SI" if visto else "NO",
-             "" if visto else " — GAP DOCUMENTATO (rilevato solo a rilascio scaduto; futuro non proattivo)"))
+    cat = _cat(rep, "escrow_su_rimborsata") or []
+    a6 = [r for r in cat if r.get("prenotazione_id") == "rifA6"]
+    esito("A6 escrow su rimborsata a rilascio FUTURO -> SEGNALATO IN ANTICIPO (preavviso)",
+          bool(a6) and a6[0].get("imminente") is False,
+          "trovato=%s imminente=%s" % (bool(a6), a6[0].get("imminente") if a6 else None))
     shutil.rmtree(d, ignore_errors=True)
 
 

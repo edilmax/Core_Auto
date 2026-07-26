@@ -171,18 +171,27 @@ def _soldi_su_rimborsata(sistema: Any, ora_ts: int) -> Dict[str, List[Dict[str, 
 
     escrow_ko: List[Dict[str, Any]] = []
     gar = getattr(sistema, "garanzia", None)
-    if gar is not None and hasattr(gar, "aperte_scadute"):
+    if gar is not None and (hasattr(gar, "aperte") or hasattr(gar, "aperte_scadute")):
         try:
-            # grazia_ore=0 -> escrow 'in_garanzia' il cui auto-rilascio E' GIA' scattato/scattando:
-            # e' esattamente cio' che auto_rilascia versa all'host. Su prenotazione rimborsata = loss.
-            aperte = gar.aperte_scadute(ora_ts=ora_ts, grazia_ore=0, limit=2000)
+            # SEGNALAZIONE IN ANTICIPO: TUTTI gli escrow 'in_garanzia' (rilascio passato O FUTURO)
+            # su una prenotazione rimborsata sono un'incoerenza -> il flusso di rimborso ha lasciato
+            # la garanzia aperta. La prevenzione (auto_rilascia salta_se) evita comunque di pagare
+            # l'host, ma qui lo si SEGNALA subito (anche giorni prima del rilascio) per trovare la
+            # causa a monte. Ripiego su aperte_scadute (solo rilascio passato) se 'aperte' manca.
+            if hasattr(gar, "aperte"):
+                aperte = gar.aperte(limit=2000)
+            else:
+                aperte = gar.aperte_scadute(ora_ts=ora_ts, grazia_ore=0, limit=2000)
         except Exception:
             logger.warning("guardiano: escrow-su-rimborsata fallito (ISOLATO)", exc_info=True)
             aperte = []
         for g in aperte:
             sr = _stato_rimborso(g.get("prenotazione_id"))
             if sr:
-                escrow_ko.append({**g, "stato_pendente": sr})
+                # 'imminente' True se il rilascio e' gia' scattato (urgente); False se futuro (preavviso)
+                _sb = g.get("sblocco_auto_ts")
+                imminente = isinstance(_sb, int) and _sb <= ora_ts
+                escrow_ko.append({**g, "stato_pendente": sr, "imminente": imminente})
 
     return {"payout_su_rimborsata": payout_ko, "escrow_su_rimborsata": escrow_ko}
 

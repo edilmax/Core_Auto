@@ -1,3 +1,19 @@
+## 🟢 STATO 2026-07-26 — SEGNALAZIONE IN ANTICIPO: escrow su rimborsata a rilascio FUTURO
+
+Direttiva "rendilo anche segnalato in anticipo". Il guardiano vedeva l'escrow-su-rimborsata SOLO a
+rilascio già scattato (`aperte_scadute` grazia_ore=0). Ora anche in ANTICIPO: nuovo
+**`fase160.aperte()`** (TUTTI gli escrow `in_garanzia`, rilascio passato O futuro) usato da
+`fase186._soldi_su_rimborsata`; ogni riga porta il flag **`imminente`** (True = rilascio già scattato,
+urgente; False = futuro, preavviso). **A cosa serve** (non è per i soldi — la prevenzione
+`auto_rilascia(salta_se)` già impedisce il pagamento): è OSSERVABILITÀ — un escrow aperto su una
+rimborsata è il SINTOMO che il flusso di rimborso ha lasciato la garanzia aperta; vederlo il giorno
+stesso (non 30 gg dopo, al rilascio) permette di trovare e riparare la causa a monte. Cintura+bretelle.
+Guardia `test_guardiano_soldi_rimborsata.test_escrow_FUTURO_su_rimborsata_segnalato_in_anticipo` (vista
+ROSSA: rollback a `aperte_scadute` → non rilevato) + `test_escrow_scaduto` ora verifica `imminente=True`.
+Sonda A6 di `stati_impossibili.py` promossa a **asserzione verde** (13/13, zero sonde residue).
+
+---
+
 ## 🟢 STATO 2026-07-26 — STANZA FANTASMA CHIUSA: guardiano di orfani inventario↔prenotazioni
 
 Direttiva "chiudi la stanza fantasma". Il gap: una notte occupata nell'inventario SENZA una

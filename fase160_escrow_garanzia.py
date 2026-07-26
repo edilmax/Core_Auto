@@ -303,6 +303,24 @@ class EscrowGaranzia:
                  "ore_di_ritardo": max(0, int((now - r["sblocco_auto_ts"]) / 3600))}
                 for r in righe]
 
+    def aperte(self, *, limit: int = 500) -> List[Dict[str, Any]]:
+        """TUTTI gli escrow ancora 'in_garanzia' (rilascio passato O FUTURO). Read-only.
+        Serve al Guardiano per segnalare IN ANTICIPO un'incoerenza (es. escrow ancora aperto
+        su una prenotazione gia' rimborsata) PRIMA che scatti il rilascio: `aperte_scadute`
+        vede solo il rilascio gia' passato, questo vede anche quello che scattera' fra giorni."""
+        lim = limit if isinstance(limit, int) and 0 < limit <= 2000 else 500
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT prenotazione_id, alloggio_id, importo_host_cents, sblocco_auto_ts, "
+                "aperto_ts FROM garanzia WHERE stato='in_garanzia' "
+                "ORDER BY sblocco_auto_ts ASC LIMIT ?", (lim,)).fetchall()
+        finally:
+            con.close()
+        return [{"prenotazione_id": r["prenotazione_id"], "alloggio_id": r["alloggio_id"],
+                 "importo_host_cents": int(r["importo_host_cents"]),
+                 "sblocco_auto_ts": int(r["sblocco_auto_ts"])} for r in righe]
+
     def stato(self, prenotazione_id: Any) -> Optional[Dict[str, Any]]:
         if not isinstance(prenotazione_id, str):
             return None
