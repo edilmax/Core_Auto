@@ -1,3 +1,23 @@
+## 🟢 STATO 2026-07-26 — RECLUTAMENTO HOST «PRIMA ROMA»: messaggio in 8 lingue, cablato nel motore
+
+Direttiva "prepara il messaggio di reclutamento host; sincronizzato con la lingua che scelgono nella
+web app; versione inglese + lingue strategiche". Cablata in `fase89` la variante **`_TEMPLATE_ROMA` +
+`componi_email_prima_roma`**:
+- **8 lingue = quelle della web app** (it/en/es/fr/de/pt/ja/zh, come `fase86.LINGUE`): `lingua` = quella
+  scelta dall'host entrando nel sito (viaggia nel gettone) → il messaggio esce nella STESSA. Ripiego su
+  **inglese, mai italiano** (come il resto del sito).
+- Copy **nuova, calda, per Roma** (non più la vecchia «Prima Emilia» fredda/aziendale). Oggetto E corpo
+  formattati con le **cifre REALI di fase98**: 0% i primi 90 giorni · poi 8% · poi 10% · 5% sui diretti ·
+  ospite 0% · **tariffa tecnica 3% SEMPRE dichiarata** (regola d'oro: dirla PRIMA della firma, in ogni lingua).
+- **Opt-out obbligatorio** (GDPR) → None senza. Guardia `test_outreach_roma` (7: 8 lingue, cifre reali,
+  nessun segnaposto residuo, lingua sincronizzata, ripiego EN, 3% in ogni lingua, opt-out+email valida).
+- **NOTA LEGALE**: l'invio AUTOMATICO resta soggetto al *jurisdiction-gate* di fase89 (UE esclusa di
+  default per il cold-email B2B). La variante Roma è per l'outreach **CALDO** (host che hanno già scelto
+  la lingua nella web app / contatti opt-in) e per l'invio **MANUALE** dal fondatore. Prossimo passo
+  reale resta: **reclutare il 1° host vero a Roma** → scatta il flywheel su realmutodavide.
+
+---
+
 ## 🟢 STATO 2026-07-26 — CAOS ENGINEERING mirato: SIGKILL vero + fd + manomissione + deadlock/timeout
 
 Direttiva "chaos engineering / zero-data-loss", fatta MIRATA (no doppioni con `estremo.py` che già

@@ -208,6 +208,30 @@ _TEMPLATE = {
 }
 
 
+# ── PRIMA ROMA: reclutamento host di Roma, 8 lingue SINCRONIZZATE con la web app ──────────
+# Le stesse lingue del sito/email (it/en/es/fr/de/pt/ja/zh, fase86.LINGUE): l'host che entra
+# nella web app sceglie una lingua (viaggia nel gettone) e il messaggio esce nella STESSA.
+# Ripiego su INGLESE, mai italiano. Oggetto E corpo formattati con le cifre REALI di fase98.
+_TEMPLATE_ROMA = {
+    "it": ("A Roma pubblichi gratis: {promo}% di commissione per {giorni} giorni",
+           "Ciao {nome},\n\nsto aprendo a Roma una nuova piattaforma di prenotazioni, BookinVIP, e sto scegliendo a mano i primi host della città.\n\nPerché conviene entrare adesso:\n• {promo}% di commissione per i primi {giorni} giorni — pubblichi gratis e tieni tutto.\n• Poi {fase1}% fino al primo anno, poi {regime}% a regime, contro il {pct}% e oltre di Booking e Airbnb.\n• Il tuo ospite paga sempre 0%: vede un prezzo pulito, e il tuo annuncio è più competitivo del loro.\n• Sulle prenotazioni dei tuoi clienti diretti solo {diretto}%.\n\nUna cosa te la dico prima, non dopo la firma: c'è una tariffa tecnica del {tecnica}% sempre dovuta, anche durante lo {promo}% — copre soltanto il costo della carta di credito, e su quella noi non guadagniamo nulla.\n\nIn cambio hai una piattaforma che lavora per te: calendario anti-doppia-prenotazione, pagamenti sicuri, deposito cauzionale, recensioni, sito in 13 lingue, tutto automatico. Cerco poche persone per la classe fondatrice di Roma: chi entra adesso resta il primo.\n\nRispondi a questa email e ti apro io l'account, passo passo. Bastano dieci minuti e le foto del tuo alloggio.\n\n— BookinVIP\n\nPer non ricevere più questi messaggi: {optout}\n"),
+    "en": ("Publish free in Rome: {promo}% commission for {giorni} days",
+           "Hi {nome},\n\nI'm launching a new booking platform in Rome, BookinVIP, and I'm hand-picking the city's first hosts.\n\nWhy it pays to join now:\n• {promo}% commission for the first {giorni} days — you publish for free and keep everything.\n• Then {fase1}% up to the first year, then {regime}% after that, against the {pct}% and more charged by Booking and Airbnb.\n• Your guest always pays 0%: they see a clean price, so your listing is more competitive than theirs.\n• On bookings from your own direct clients, only {diretto}%.\n\nOne thing I tell you up front, not after you sign: there is a {tecnica}% technical fee always due, even during the {promo}% period — it only covers the credit-card cost, and we earn nothing on it.\n\nIn return you get a platform that works for you: anti-double-booking calendar, secure payments, security deposit, reviews, a site in 13 languages, all automated. I'm looking for a few people for Rome's founding class: whoever joins now stays first.\n\nJust reply to this email and I'll open your account and walk you through it. It takes ten minutes and photos of your place.\n\n— BookinVIP\n\nTo stop receiving these messages: {optout}\n"),
+    "es": ("Publica gratis en Roma: {promo}% de comisión durante {giorni} días",
+           "Hola {nome},\n\nestoy lanzando en Roma una nueva plataforma de reservas, BookinVIP, y estoy eligiendo a mano los primeros anfitriones de la ciudad.\n\nPor qué conviene entrar ahora:\n• {promo}% de comisión durante los primeros {giorni} días — publicas gratis y te quedas con todo.\n• Luego {fase1}% hasta el primer año, después {regime}%, frente al {pct}% o más de Booking y Airbnb.\n• Tu huésped siempre paga 0%: ve un precio limpio, así que tu anuncio es más competitivo que el de ellos.\n• En las reservas de tus propios clientes directos, solo {diretto}%.\n\nUna cosa te la digo antes, no después de firmar: hay una tarifa técnica del {tecnica}% siempre debida, también durante el {promo}% — solo cubre el coste de la tarjeta, y nosotros no ganamos nada con ella.\n\nA cambio tienes una plataforma que trabaja para ti: calendario anti-sobreventa, pagos seguros, depósito, reseñas, sitio en 13 idiomas, todo automático. Busco pocas personas para la clase fundadora de Roma: quien entra ahora se queda primero.\n\nResponde a este correo y te abro yo la cuenta, paso a paso. Bastan diez minutos y las fotos de tu alojamiento.\n\n— BookinVIP\n\nPara dejar de recibir estos mensajes: {optout}\n"),
+    "fr": ("Publiez gratuitement à Rome : {promo}% de commission pendant {giorni} jours",
+           "Bonjour {nome},\n\nje lance à Rome une nouvelle plateforme de réservations, BookinVIP, et je choisis à la main les premiers hôtes de la ville.\n\nPourquoi entrer maintenant :\n• {promo}% de commission pendant les {giorni} premiers jours — vous publiez gratuitement et gardez tout.\n• Ensuite {fase1}% jusqu'à la première année, puis {regime}%, face aux {pct}% et plus de Booking et Airbnb.\n• Votre voyageur paie toujours 0% : il voit un prix net, votre annonce est donc plus compétitive que la leur.\n• Sur les réservations de vos propres clients directs, seulement {diretto}%.\n\nUne chose que je vous dis d'emblée, pas après la signature : des frais techniques de {tecnica}% sont toujours dus, même pendant le {promo}% — ils couvrent seulement le coût de la carte, et nous n'y gagnons rien.\n\nEn échange, une plateforme qui travaille pour vous : calendrier anti-surréservation, paiements sécurisés, caution, avis, site en 13 langues, tout automatique. Je cherche quelques personnes pour la classe fondatrice de Rome : qui entre maintenant reste le premier.\n\nRépondez à cet e-mail et j'ouvre votre compte, étape par étape. Il faut dix minutes et les photos de votre logement.\n\n— BookinVIP\n\nPour ne plus recevoir ces messages : {optout}\n"),
+    "de": ("In Rom kostenlos inserieren: {promo}% Provision für {giorni} Tage",
+           "Hallo {nome},\n\nich starte in Rom eine neue Buchungsplattform, BookinVIP, und wähle die ersten Gastgeber der Stadt persönlich aus.\n\nWarum sich der Einstieg jetzt lohnt:\n• {promo}% Provision in den ersten {giorni} Tagen — Sie inserieren kostenlos und behalten alles.\n• Danach {fase1}% bis zum ersten Jahr, dann {regime}%, gegenüber {pct}% und mehr bei Booking und Airbnb.\n• Ihr Gast zahlt immer 0%: Er sieht einen sauberen Preis, Ihr Inserat ist also wettbewerbsfähiger als deren.\n• Auf Buchungen Ihrer eigenen Direktkunden nur {diretto}%.\n\nEines sage ich Ihnen vorab, nicht nach der Unterschrift: Es fällt immer eine technische Gebühr von {tecnica}% an, auch während der {promo}% — sie deckt nur die Kartenkosten, und wir verdienen nichts daran.\n\nIm Gegenzug eine Plattform, die für Sie arbeitet: Kalender gegen Doppelbuchungen, sichere Zahlungen, Kaution, Bewertungen, Website in 13 Sprachen, alles automatisch. Ich suche wenige Personen für die Gründerklasse Roms: Wer jetzt einsteigt, bleibt der Erste.\n\nAntworten Sie einfach auf diese E-Mail, und ich richte Ihr Konto ein, Schritt für Schritt. Es dauert zehn Minuten und die Fotos Ihrer Unterkunft.\n\n— BookinVIP\n\nZum Abbestellen dieser Nachrichten: {optout}\n"),
+    "pt": ("Publique grátis em Roma: {promo}% de comissão durante {giorni} dias",
+           "Olá {nome},\n\nestou a lançar em Roma uma nova plataforma de reservas, BookinVIP, e estou a escolher à mão os primeiros anfitriões da cidade.\n\nPorque compensa entrar agora:\n• {promo}% de comissão nos primeiros {giorni} dias — publica de graça e fica com tudo.\n• Depois {fase1}% até ao primeiro ano, depois {regime}%, face aos {pct}% ou mais da Booking e Airbnb.\n• O seu hóspede paga sempre 0%: vê um preço limpo, por isso o seu anúncio é mais competitivo do que o deles.\n• Nas reservas dos seus próprios clientes diretos, apenas {diretto}%.\n\nUma coisa digo-lhe já, não depois de assinar: há uma taxa técnica de {tecnica}% sempre devida, mesmo durante os {promo}% — cobre apenas o custo do cartão, e nós não ganhamos nada com ela.\n\nEm troca, uma plataforma que trabalha por si: calendário anti-sobre-reserva, pagamentos seguros, caução, avaliações, site em 13 línguas, tudo automático. Procuro poucas pessoas para a classe fundadora de Roma: quem entra agora fica em primeiro.\n\nResponda a este email e eu abro-lhe a conta, passo a passo. Bastam dez minutos e as fotos do seu alojamento.\n\n— BookinVIP\n\nPara deixar de receber estas mensagens: {optout}\n"),
+    "ja": ("ローマで無料掲載：最初の{giorni}日間は手数料{promo}%",
+           "{nome} 様\n\nローマで新しい予約プラットフォーム BookinVIP を立ち上げており、街で最初のホストを一人ずつお選びしています。\n\n今参加する理由：\n・最初の{giorni}日間は手数料{promo}% — 無料で掲載でき、売上はすべてお客様のものです。\n・その後は1年目まで{fase1}%、以降は{regime}% — Booking や Airbnb の{pct}%以上に対して。\n・ゲストの手数料は常に0%：明朗な価格が表示されるため、あなたの掲載は他社より競争力があります。\n・あなたご自身の直接のお客様の予約は{diretto}%のみ。\n\n署名の後ではなく、先にお伝えします：{promo}%の期間中も、常に{tecnica}%の技術手数料がかかります — これはカード決済の費用のみをカバーし、当社はそこで一切利益を得ません。\n\nその代わり、あなたのために働くプラットフォームを：ダブルブッキング防止カレンダー、安全な決済、保証金、レビュー、13言語のサイト、すべて自動です。ローマの創設メンバーを少人数だけ探しています：今参加する方が最初のホストになります。\n\nこのメールにご返信ください。アカウントの開設を一つずつご案内します。10分とお部屋の写真があれば十分です。\n\n— BookinVIP\n\n配信停止：{optout}\n"),
+    "zh": ("在罗马免费发布：前{giorni}天佣金{promo}%",
+           "{nome} 您好，\n\n我正在罗马推出一个全新的预订平台 BookinVIP，并亲自挑选这座城市的首批房东。\n\n现在加入的理由：\n· 前{giorni}天佣金{promo}% — 免费发布，收入全归您。\n· 之后到第一年为{fase1}%，此后为{regime}% — 相比 Booking 和 Airbnb 的{pct}%甚至更高。\n· 您的房客始终支付0%佣金：他们看到的是干净的价格，因此您的房源比他们更有竞争力。\n· 您自己直接客户的预订仅收{diretto}%。\n\n有一点我先说明，而不是等您签约之后：即使在{promo}%期间，也始终有{tecnica}%的技术费 — 它仅用于覆盖信用卡成本，我们在其中不赚取任何利润。\n\n作为回报，您将获得一个为您工作的平台：防重复预订日历、安全支付、押金、评价、13种语言的网站，全部自动化。我只为罗马的创始成员寻找少数几位：现在加入的人将成为第一批。\n\n请回复此邮件，我会一步步为您开通账户。只需十分钟和您房源的照片。\n\n— BookinVIP\n\n退订这些邮件：{optout}\n"),
+}
+
+
 def componi_email_prima_emilia(contatto: Contatto, nostra_bps: int, *,
                                link_opt_out: str, lingua: Optional[str] = None
                                ) -> Optional[Tuple[str, str, str]]:
@@ -229,6 +253,40 @@ def componi_email_prima_emilia(contatto: Contatto, nostra_bps: int, *,
         fase1=_pct(LANCIO_BPS_FASE1), regime=_pct(LANCIO_BPS_REGIME),
         diretto=_pct(BPS_DIRETTO), tecnica=_pct(_tecnica_bps()))
     return lng, oggetto, testo
+
+
+def componi_email_prima_roma(contatto: Contatto, nostra_bps: int, *,
+                             link_opt_out: str, lingua: Optional[str] = None
+                             ) -> Optional[Tuple[str, str, str]]:
+    """Reclutamento host di ROMA in 8 lingue SINCRONIZZATE con la web app (it/en/es/fr/de/pt/
+    ja/zh; ripiego EN, mai IT). `lingua` = la lingua scelta dall'host quando entra nella web app
+    (viaggia nel gettone, fase86): passala qui e oggetto+corpo escono nella STESSA lingua.
+    Ritorna (lingua, oggetto, corpo) con le cifre REALI di fase98, oppure None se manca l'opt-out
+    (obbligatorio) o l'email non è valida.
+    NB legale: l'invio AUTOMATICO resta soggetto al jurisdiction-gate del motore (UE esclusa di
+    default). Questa variante è per l'outreach CALDO (host che hanno già scelto la lingua nella
+    web app / contatti opt-in) e per l'invio MANUALE."""
+    if not _email_valida(getattr(contatto, "email", None)):
+        return None
+    if not (isinstance(link_opt_out, str) and link_opt_out.strip()):
+        return None                                  # opt-out OBBLIGATORIO
+    lng = lingua or LINGUA_PER_PAESE.get(str(getattr(contatto, "paese", "")).upper(), "en")
+    if lng not in _TEMPLATE_ROMA:
+        lng = "en"                                   # sincronizzato col ripiego della web app
+    oggetto, corpo = _TEMPLATE_ROMA[lng]
+    # ripiego SENZA nome: un VOCATIVO, non la parola di saluto (senno' esce "Hi Hello," / "Ciao ,").
+    nome = contatto.nome or {"it": "host", "en": "there", "es": "anfitrión", "fr": "hôte",
+                             "de": "Gastgeber", "pt": "anfitrião", "ja": "ホスト",
+                             "zh": "房东"}.get(lng, "there")
+    from fase98_policy_commissione import (BPS_DIRETTO, LANCIO_BPS_FASE1,
+                                           LANCIO_BPS_REGIME, LANCIO_GIORNI_GRATIS)
+    val = dict(
+        nome=nome, optout=link_opt_out.strip(),
+        pct=_pct(_intero_bps(nostra_bps) + 500),      # la cifra DEI COLOSSI
+        promo="0", giorni=LANCIO_GIORNI_GRATIS,
+        fase1=_pct(LANCIO_BPS_FASE1), regime=_pct(LANCIO_BPS_REGIME),
+        diretto=_pct(BPS_DIRETTO), tecnica=_pct(_tecnica_bps()))
+    return lng, oggetto.format(**val), corpo.format(**val)
 
 
 # ── Motore: gate + composizione + invio (sender iniettato) ───────────────────
