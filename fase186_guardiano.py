@@ -46,6 +46,7 @@ logger = logging.getLogger("core_auto.guardiano")
 # Soglie: oltre queste, uno stato e' "impossibile" e va segnalato.
 GRAZIA_ESCROW_ORE = 48          # un escrow gia' scaduto da 2 giorni non dovrebbe esistere
 GIORNI_PAYOUT_FERMO = 7         # un bonifico 'maturato' fermo da una settimana e' bloccato
+GRAZIA_HOLD_ORE = 1             # una notte occupata senza prenotazione da >1h e' una STANZA FANTASMA
 GIORNI_RICONCILIAZIONE = 30     # finestra del confronto con Stripe
 ORE_CAMBIO_FERMO = 26           # cambio valuta (OXR): nessun tasso riuscito da >1 giorno NONOSTANTE
 #                                 la sonda giornaliera = il terzo (OXR) e' giu'. Soglia >24h per
@@ -207,6 +208,21 @@ def _cambio_valuta_fermo(sistema: Any, ora_ts: int,
             "ultimo_ok_ts": st.get("ultimo_ok_ts"), "soglia_ore": soglia_ore}
 
 
+def _hold_fantasma(sistema: Any, ora_ts: int, grazia_ore: int) -> List[Dict[str, Any]]:
+    """STANZE FANTASMA: notti occupate nell'inventario SENZA prenotazione (idem_key non presente
+    fra i pendenti), da un crash fra blocco e registrazione. Read-only (il tick fase83 le CHIUDE
+    liberando le notti; qui si CONTANO perche' il guardiano gridi se ne restano)."""
+    inv = getattr(sistema, "inventario", None)
+    pp = getattr(sistema, "pagamenti_pendenti", None)
+    if inv is None or pp is None or not hasattr(inv, "orfani") or not hasattr(pp, "idem_keys"):
+        return []
+    try:
+        return inv.orfani(pp.idem_keys(), ora_ts=ora_ts, grazia_sec=max(1, int(grazia_ore)) * 3600)
+    except Exception:
+        logger.warning("guardiano: scan stanze fantasma fallito (ISOLATO)", exc_info=True)
+        return []
+
+
 def scansiona(sistema: Any, *, ora: Any = None,
               giorni_riconciliazione: int = GIORNI_RICONCILIAZIONE,
               grazia_escrow_ore: int = GRAZIA_ESCROW_ORE,
@@ -251,6 +267,10 @@ def scansiona(sistema: Any, *, ora: Any = None,
     cv = _prova(_cambio_valuta_fermo, sistema, ora_ts, ore_cambio_fermo)
     if cv:
         anomalie["cambio_valuta_fermo"] = cv
+
+    hf = _prova(_hold_fantasma, sistema, ora_ts, GRAZIA_HOLD_ORE)
+    if hf:
+        anomalie["hold_fantasma"] = hf
 
     def _conta(v: Any) -> int:
         if isinstance(v, list):

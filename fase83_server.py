@@ -8873,6 +8873,18 @@ def sweep_hold_una_passata(sistema: Any, router: Any) -> None:
             pp.pulisci_vecchi()          # housekeeping: via i record scaduti vecchi (>1h)
         except Exception:
             pass
+        # STANZA FANTASMA: notti occupate nell'inventario SENZA un pendente (crash fra il blocco
+        # e la registrazione della prenotazione). Lo sweeper sopra non le vede: non c'e' pendente
+        # da scadere. Le CHIUDE liberando le notti (rilascia idempotente). Grazia 1h -> non tocca
+        # mai un checkout in corso (blocco e pendente nascono nello stesso istante).
+        try:
+            if hasattr(inv, "libera_orfani") and hasattr(pp, "idem_keys"):
+                for _o in inv.libera_orfani(pp.idem_keys(), grazia_sec=3600):
+                    logger.warning("STANZA FANTASMA chiusa: idem=%s alloggio=%s %s->%s",
+                                   _o.get("idem_key"), _o.get("alloggio_id"),
+                                   _o.get("check_in"), _o.get("check_out"))
+        except Exception:
+            logger.warning("chiusura stanze fantasma fallita (ignorata)", exc_info=True)
         # RIASSERZIONE PENALI (fase177, pattern #32): crash tra il CAS della
         # cancellazione-host e il giornale = penale annotata nel pendente ma senza
         # Nota di Debito -> qui si sana (idempotente: chi ce l'ha gia' viene saltato

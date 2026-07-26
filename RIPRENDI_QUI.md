@@ -1,3 +1,28 @@
+## 🟢 STATO 2026-07-26 — STANZA FANTASMA CHIUSA: guardiano di orfani inventario↔prenotazioni
+
+Direttiva "chiudi la stanza fantasma". Il gap: una notte occupata nell'inventario SENZA una
+prenotazione (idem_key non presente fra i pendenti) — nasce da un crash fra `blocca` (scrive
+occupazione + movimento) e la registrazione del pendente. Lo sweeper degli hold scaduti NON la vede
+(non c'è un pendente da far scadere) → la notte resta occupata per sempre = invendibile. Chiuso a
+2 livelli (rilevamento + guarigione automatica):
+- **`fase58.orfani(idem_validi)`** (read-only): blocchi 'occupato' non rilasciati il cui idem_key NON
+  ha un pendente e più vecchi della grazia. **`fase58.libera_orfani`**: li CHIUDE liberando le notti
+  (`rilascia` idempotente). **`fase162.idem_keys()`**: l'insieme dei pendenti legittimi.
+- **Tick fase83** (sweeper orario): dopo l'housekeeping, `inv.libera_orfani(pp.idem_keys())` → chiude
+  le stanze fantasma, log `WARNING` per ognuna.
+- **Guardiano fase186**: nuova categoria **`hold_fantasma`** (`_hold_fantasma`, grazia 1h) → il
+  guardiano GRIDA se ne restano.
+- **2 PROTEZIONI provate**: (1) il set `idem_validi` dei pendenti → un hold LEGITTIMO non è mai
+  liberato; (2) la **grazia 1h** → un blocco appena creato (checkout in corso, blocco e pendente
+  nascono nello stesso istante) non è mai toccato. Guardia `test_stanza_fantasma` (4, vista ROSSA:
+  senza il filtro dei pendenti anche il legittimo risulterebbe orfano) + mutante #26 (filtro invertito,
+  26/26 uccisi). La sonda C di `stati_impossibili.py` ora è VERDE: fantasma **rilevato (C1) e chiuso
+  (C2)**. GAP RESIDUO (documentato, benigno): escrow-su-rimborsata a rilascio FUTURO non rilevato
+  proattivamente — reso innocuo dalla prevenzione escrow del giro precedente (auto_rilascia non paga
+  le rimborsate).
+
+---
+
 ## 🟢 STATO 2026-07-26 — PIÙ A FONDO: caccia agli STATI IMPOSSIBILI + 1 RISCHIO PERDITA VERO chiuso
 
 Direttiva "andiamo più a fondo". Nuovo `collaudi/stati_impossibili.py` (cablato in `batteria.py` 6d):

@@ -650,6 +650,52 @@ class ChannelManager:
         finally:
             con.close()
 
+    def orfani(self, idem_validi: Any, *, ora_ts: Any = None,
+               grazia_sec: int = 3600) -> List[Dict[str, Any]]:
+        """STANZA FANTASMA (read-only): blocchi 'occupato' NON rilasciati il cui idem_key NON ha
+        un pendente (non e' in `idem_validi`) e piu' vecchi della finestra di grazia. Nascono da
+        un crash fra il blocco-inventario e la registrazione della prenotazione: la notte resta
+        occupata per sempre, perche' non c'e' NESSUN pendente da far scadere -> lo sweeper degli
+        hold scaduti non la vede. `idem_validi`: gli idem_key che HANNO un pendente (legittimi).
+        La grazia evita di toccare un blocco la cui prenotazione si sta registrando in questo istante."""
+        import time as _t
+        try:
+            validi = set(idem_validi or ())
+        except Exception:
+            validi = set()
+        base = ora_ts if isinstance(ora_ts, int) and not isinstance(ora_ts, bool) else int(_t.time())
+        soglia = datetime.datetime.fromtimestamp(
+            base - max(0, int(grazia_sec))).isoformat(timespec="seconds")
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT m.idem_key, m.alloggio_id, m.check_in, m.check_out, m.ts "
+                "FROM movimenti m WHERE m.tipo='blocco' AND m.esito='occupato' AND m.ts < ? "
+                "AND NOT EXISTS (SELECT 1 FROM movimenti r "
+                "WHERE r.idem_key='rilascio:' || m.idem_key)", (soglia,)).fetchall()
+        finally:
+            con.close()
+        return [{"idem_key": r["idem_key"], "alloggio_id": r["alloggio_id"],
+                 "check_in": r["check_in"], "check_out": r["check_out"], "ts": r["ts"]}
+                for r in righe
+                if r["idem_key"] not in validi and r["check_in"] and r["check_out"]]
+
+    def libera_orfani(self, idem_validi: Any, *, ora_ts: Any = None,
+                      grazia_sec: int = 3600) -> List[Dict[str, Any]]:
+        """CHIUDE le stanze fantasma: rilascia le notti dei blocchi orfani (vedi orfani()).
+        `rilascia` e' idempotente. Ritorna la lista dei blocchi effettivamente liberati."""
+        liberati = []
+        for o in self.orfani(idem_validi, ora_ts=ora_ts, grazia_sec=grazia_sec):
+            try:
+                e = self.rilascia(o["alloggio_id"], o["check_in"], o["check_out"],
+                                  idem_key=o["idem_key"])
+                if getattr(e, "ok", False):
+                    liberati.append(o)
+            except Exception:
+                logger.warning("libera_orfani: rilascio fallito (ISOLATO) idem=%s",
+                               o.get("idem_key"), exc_info=True)
+        return liberati
+
     def registra_evento_esterno(self, alloggio_id: str, check_in: str, check_out: str, *,
                                 idem_key: str, fonte: str) -> EsitoPrenotazione:
         """Ingest di una prenotazione da fonte ESTERNA (altra OTA, iCal/PMS, walk-in):

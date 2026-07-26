@@ -226,45 +226,48 @@ def sezione_B():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# C) SONDA CROSS-DB — occupazione fantasma
+# C) STANZA FANTASMA — inventario occupato SENZA prenotazione: rilevata E chiusa?
 # ══════════════════════════════════════════════════════════════════════════════
 def sezione_C():
-    print("-- C  SONDA CROSS-DB (occupazione fantasma: inventario occupato senza prenotazione) --")
+    print("-- C  STANZA FANTASMA (notte occupata senza prenotazione: il guardiano la vede E la chiude?) --")
     d, sis = _nuovo()
     r = _router(sis)
     g = _g(r)
     tk = _host(g)
     oggi = datetime.date.today()
-    slug = _host_pubblica(g, tk, "sc", 2, 20000, oggi.isoformat(),
+    slug = _host_pubblica(g, tk, "sc", 1, 20000, oggi.isoformat(),
                           (oggi + datetime.timedelta(days=40)).isoformat())
     ci = (oggi + datetime.timedelta(days=5)).isoformat()
-    # inietto un'occupazione DIRETTA nell'inventario, SENZA passare da una prenotazione
-    # (simula un crash fra blocca-inventario e registra-pendente: hold fantasma).
-    con = sqlite3.connect(d + "/i.db", timeout=30)
+    co = (oggi + datetime.timedelta(days=6)).isoformat()
+    # FANTASMA REALISTICO: blocco l'inventario (scrive occupazione + movimento, come nel flusso
+    # vero) ma NON registro il pendente -> simula il crash fra blocca e registra-pendente.
+    sis.inventario.blocca(slug, ci, co, idem_key="fantasma_xyz", origine="test")
+    occ0 = _occ_inv(d, slug, ci)
+    ora = int(time.time())
+    # 1) il guardiano fase186 ora la VEDE (categoria hold_fantasma), con l'ora avanti oltre la grazia
+    rep = GUARD.scansiona(sis, ora=_orolo(ora + 3 * 3600))
+    visto = _nonvuoto(_cat(rep, "hold_fantasma"))
+    esito("C1 stanza fantasma RILEVATA dal guardiano (hold_fantasma)", visto,
+          "categorie=%r" % list((rep.get("anomalie") or {}).keys()))
+    # 2) il tick la CHIUDE: libera_orfani (idem_validi = i pendenti veri, qui nessuno) -> notte libera
+    liberati = sis.inventario.libera_orfani(sis.pagamenti_pendenti.idem_keys(), ora_ts=ora + 3 * 3600)
+    occ1 = _occ_inv(d, slug, ci)
+    esito("C2 stanza fantasma CHIUSA (notte di nuovo libera, rivendibile)",
+          occ0 == 1 and occ1 == 0 and any(o["idem_key"] == "fantasma_xyz" for o in liberati),
+          "occ prima=%s dopo=%s liberati=%r" % (occ0, occ1, [o["idem_key"] for o in liberati]))
+    shutil.rmtree(d, ignore_errors=True)
+
+
+def _occ_inv(dbdir, slug, giorno):
+    con = sqlite3.connect(dbdir + "/i.db", timeout=30)
     try:
-        con.execute("UPDATE inventario SET unita_occupate = unita_occupate + 1 "
-                    "WHERE alloggio_id=? AND giorno=?", (slug, ci))
-        con.commit()
-        fantasma = con.execute("SELECT unita_occupate FROM inventario WHERE alloggio_id=? "
-                               "AND giorno=?", (slug, ci)).fetchone()[0]
-    except sqlite3.Error as e:
-        fantasma = "err:%r" % e
+        row = con.execute("SELECT unita_occupate FROM inventario WHERE alloggio_id=? AND giorno=?",
+                          (slug, giorno)).fetchone()
+        return row[0] if row else None
+    except sqlite3.Error:
+        return None
     finally:
         con.close()
-    # la vede QUALCUNO? Il guardiano fase186 (soldi) e l'auditor fase199 (double-booking).
-    # ESCLUDO la riconciliazione (nel test non gira -> rende pulito=False sempre): senno' il
-    # sondaggio direbbe "SI" per rumore, non perche' l'occupazione fantasma e' davvero vista.
-    rep = GUARD.scansiona(sis, ora=_orolo(int(time.time())))
-    inv199 = INV.scansiona_db(d).get("violazioni", {})
-    visto = bool(_altre_categorie(rep)) or bool(inv199)
-    # NB: questo e' un SONDAGGIO, non un fallimento del prodotto: un'occupazione fantasma senza
-    # riga di prenotazione NON e' oggi sorvegliata da nessun guardiano (i soldi non sono in ballo:
-    # nessun ospite ha pagato, nessun host verra' pagato). La segnalo per onesta', non la conto FALLA.
-    print("     [SONDA] occupazione fantasma (occupate=%s) rilevata da un guardiano? %s"
-          % (fantasma, "SI" if visto else "NO — nessuno la sorveglia (candidato: estendere fase199)"))
-    esito("C inventario resta coerente (nessuna eccezione, sonda eseguita)",
-          isinstance(fantasma, int), "fantasma=%r" % fantasma)
-    shutil.rmtree(d, ignore_errors=True)
 
 
 def main():

@@ -193,6 +193,13 @@ MUTANTI = [
      "                            salta = False",
      "test_escrow_no_pay_rimborsata",
      "l'auto-rilascio paga l'host anche su prenotazione RIMBORSATA: perdita secca (rimborso ospite + bonifico host)"),
+
+    # ── LA STANZA FANTASMA (inventario occupato senza prenotazione, fase58) ──────
+    ("fase58_channel_manager.py",
+     "                if r[\"idem_key\"] not in validi and r[\"check_in\"] and r[\"check_out\"]]",
+     "                if r[\"idem_key\"] in validi and r[\"check_in\"] and r[\"check_out\"]]",
+     "test_stanza_fantasma",
+     "il filtro dei pendenti INVERTITO: si libererebbe la prenotazione LEGITTIMA e si terrebbe la fantasma"),
 ]
 
 

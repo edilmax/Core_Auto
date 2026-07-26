@@ -302,6 +302,19 @@ class PagamentiPendenti:
         finally:
             con.close()
 
+    def idem_keys(self) -> set:
+        """Insieme di tutti gli idem_key che HANNO un pendente (qualsiasi stato). Serve alla
+        caccia delle STANZE FANTASMA (fase58.libera_orfani): un blocco inventario il cui idem_key
+        NON e' qui e' orfano (la prenotazione non e' mai stata registrata / e' stata purgata)."""
+        con = self._apri()
+        try:
+            righe = con.execute("SELECT idem_key FROM pendenti WHERE idem_key<>''").fetchall()
+        except Exception:
+            return set()
+        finally:
+            con.close()
+        return {r["idem_key"] for r in righe}
+
     def rimuovi(self, riferimento: Any) -> bool:
         if not (isinstance(riferimento, str) and riferimento):
             return False
