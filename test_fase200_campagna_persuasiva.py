@@ -158,10 +158,18 @@ class TestGlobale(unittest.TestCase):
         self.assertEqual(r["lingua"], "it")
 
     def test_prompt_istruisce_la_lingua(self):
+        # l'ordine di lingua è NELLA LINGUA STESSA e compare in CIMA e in FONDO (posizioni forti):
+        # senza questo il modello, annegato in un prompt italiano, sbrodava italiano ovunque (bug reale
+        # visto su Parigi/Londra scritte in italiano nel primo giro di preview).
         p_en = C.GeneratoreCampagna._prompt_ai(C.ANGOLI[0], "London", "en")
-        self.assertIn("Scrivi in inglese", p_en)
+        self.assertIn("Write the caption exclusively in English", p_en)
+        self.assertTrue(p_en.strip().startswith(C._ORDINE_LINGUA["en"]), "ordine lingua non in cima")
+        self.assertIn("interamente in inglese", p_en)                    # promemoria in fondo
+        p_fr = C.GeneratoreCampagna._prompt_ai(C.ANGOLI[0], "Paris", "fr")
+        self.assertIn("exclusivement en français", p_fr)
+        self.assertNotIn("Write the caption", p_fr)                      # niente ordine di un'altra lingua
         p_ja = C.GeneratoreCampagna._prompt_ai(C.ANGOLI[0], "Tokyo", "ja")
-        self.assertIn("Scrivi in giapponese", p_ja)
+        self.assertIn("日本語", p_ja)
 
     def test_genera_globale_gira_le_citta_e_da_la_lingua_locale(self):
         d = tempfile.mkdtemp()
@@ -193,6 +201,38 @@ class TestGlobale(unittest.TestCase):
             self.assertEqual(len(coppie), n, "le combinazioni città×leva si ripetono prima di %d" % n)
         finally:
             shutil.rmtree(d, ignore_errors=True)
+
+
+class TestGuardiaLingua(unittest.TestCase):
+    """Regola d'oro: MAI italiano fuori Italia. Il guardiano scarta le didascalie italiane contaminate
+    (portoghese e italiano sono quasi gemelli: il modello a volte parte con «Pubblica…»)."""
+
+    def test_riconosce_italiano_e_discrimina_dalle_sorelle(self):
+        # italiano inequivocabile → contaminato quando la lingua target non è italiano
+        self.assertTrue(C._contaminato_italiano("Pubblica il tuo alloggio a Lisbona", "pt"))
+        self.assertTrue(C._contaminato_italiano("Bastano 10 giorni, scrivimi", "fr"))
+        # lingue-sorelle NON devono scattare (publica/alojamento/dias, senza doppia-b)
+        self.assertFalse(C._contaminato_italiano("Publica o teu alojamento em Lisboa por 90 dias", "pt"))
+        self.assertFalse(C._contaminato_italiano("List your London property, 0% commission", "en"))
+        self.assertFalse(C._contaminato_italiano("Publica tu alojamiento gratis", "es"))
+        # se la lingua target È italiano, non è contaminazione
+        self.assertFalse(C._contaminato_italiano("Pubblica il tuo alloggio a Roma", "it"))
+
+    def test_scarta_didascalia_italiana_e_ripiega_pulito(self):
+        # l'AI sbroda italiano per una città portoghese → deve essere SCARTATA e usato il ripiego (EN pulito)
+        g = C.crea_generatore_campagna(lambda p: "Pubblica il tuo alloggio a Lisbona gratis per 90 giorni", citta="Lisbon")
+        r = g.genera(citta="Lisbon", lingua="pt")
+        self.assertFalse(r["da_ai"], "ha accettato una didascalia italiana fuori Italia")
+        self.assertFalse(C._contaminato_italiano(r["didascalia"], "pt"),
+                         "la didascalia finale contiene ancora italiano: %r" % r["didascalia"])
+        self.assertTrue(r["didascalia"].strip())          # mai vuota
+
+    def test_accetta_didascalia_nella_lingua_giusta(self):
+        # testo pulito nella lingua target → accettato (il guardiano non è un falso-positivo)
+        g = C.crea_generatore_campagna(lambda p: "Publica o teu alojamento em Lisboa, 0% de comissao", citta="Lisbon")
+        r = g.genera(citta="Lisbon", lingua="pt")
+        self.assertTrue(r["da_ai"], "ha scartato una didascalia portoghese valida")
+        self.assertIn("alojamento", r["didascalia"])
 
 
 if __name__ == "__main__":

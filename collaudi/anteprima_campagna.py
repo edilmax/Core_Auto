@@ -45,7 +45,7 @@ def _groq(api_key):
     def genera_testo(prompt):
         if not api_key:
             return None
-        body = json.dumps({"model": GROQ_MODELLO, "temperature": 0.9, "max_tokens": 220,
+        body = json.dumps({"model": GROQ_MODELLO, "temperature": 0.7, "max_tokens": 220,
                            "messages": [{"role": "user", "content": prompt}]}).encode("utf-8")
         req = urllib.request.Request(GROQ_URL, data=body, method="POST",
                                      headers={"Authorization": "Bearer " + api_key,

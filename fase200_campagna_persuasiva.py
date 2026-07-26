@@ -98,6 +98,20 @@ LINGUA_CITTA = {
 NOME_LINGUA = {"it": "italiano", "en": "inglese", "es": "spagnolo", "fr": "francese",
                "de": "tedesco", "pt": "portoghese", "ja": "giapponese", "zh": "cinese"}
 
+# Ordine di lingua scritto NELLA LINGUA STESSA: è il modo più affidabile per far obbedire il modello
+# (un'istruzione italiana annegata in un prompt italiano viene ignorata → esce italiano ovunque). Va
+# messo in cima E in fondo al prompt (il modello pesa molto l'ultima riga).
+_ORDINE_LINGUA = {
+    "it": "Scrivi la didascalia esclusivamente in italiano.",
+    "en": "Write the caption exclusively in English. Do not use any Italian.",
+    "es": "Escribe la descripción exclusivamente en español. No uses italiano.",
+    "fr": "Écris la légende exclusivement en français. N'utilise pas d'italien.",
+    "de": "Schreibe die Bildunterschrift ausschließlich auf Deutsch. Kein Italienisch.",
+    "pt": "Escreve a legenda exclusivamente em português. Não uses italiano.",
+    "ja": "キャプションは必ず日本語だけで書いてください。イタリア語は使わないでください。",
+    "zh": "请只用中文写这段文案，不要使用意大利语。",
+}
+
 # Ripiego in INGLESE (universale) per le citta' non italiane quando l'AI e' spenta (mai italiano fuori Italia).
 RIPIEGO_EN = {
     "reciprocita": "Publish your place in {citta} on BookinVIP: 0% commission for your first 90 days, "
@@ -122,6 +136,22 @@ def _riempi(testo: str, citta: str) -> str:
         return str(testo).replace("{citta}", str(citta or "Roma"))
     except Exception:
         return str(testo)
+
+
+# Parole ITALIANE inequivocabili (discriminano da spagnolo/portoghese/francese, lingue-sorelle):
+#  - pubblic*  = doppia-b, solo italiano (es: publica, pt: publicar, fr: publier — mai due b)
+#  - alloggi*  = solo italiano (es: alojamiento, pt: alojamento, fr: logement)
+#  - giorni / scrivimi / il tuo / commission[ei] (con la vocale finale) = solo italiano
+_SPIA_ITALIANO = re.compile(
+    r"(pubblic\w*|alloggi\w*|\bgiorni\b|\bscrivimi\b|\bil tuo\b|\bcommission[ei]\b)", re.IGNORECASE)
+
+
+def _contaminato_italiano(testo: str, lingua: str) -> bool:
+    """True se la lingua target NON è italiano ma il testo contiene parole ITALIANE inequivocabili.
+    Regola d'oro del progetto: mai italiano fuori Italia. Usato per scartare le didascalie contaminate."""
+    if lingua == "it":
+        return False
+    return bool(_SPIA_ITALIANO.search(testo or ""))
 
 
 # Pulizia di SICUREZZA della didascalia: GARANTISCE niente emoji e niente premesse/spiegazioni,
@@ -207,16 +237,23 @@ class GeneratoreCampagna:
     @staticmethod
     def _prompt_ai(angolo: Dict[str, str], citta: str, lingua: str = "it") -> str:
         lang = NOME_LINGUA.get(lingua, "inglese")
-        return (
-            ("Scrivi in %s.\n" % lang) +
+        ordine = _ORDINE_LINGUA.get(lingua, _ORDINE_LINGUA["en"])
+        # Anti-contaminazione: le istruzioni sono in italiano; senza questo il modello ripeteva parole
+        # italiane ("Pubblica…") anche scrivendo in un'altra lingua (bug reale visto su Lisbona/Parigi).
+        anti_it = ("" if lingua == "it" else
+                   " Le istruzioni qui sopra sono in italiano SOLO per te: la didascalia non deve "
+                   "contenere NESSUNA parola italiana — traduci tutto in %s, comprese le prime parole." % lang)
+        corpo = (
+            # LINGUA in cima, nella lingua stessa (forte)
+            (ordine + "\n\n") +
             "Sei un copywriter pubblicitario esperto (scuola Ogilvy) che scrive per BookinVIP, una nuova "
             "piattaforma di prenotazioni di alloggi che parte a %s. Fatti reali e SPECIFICI da usare: "
             "l'host pubblica gratis con 0%% di commissione per i primi 90 giorni (poi 8%%, poi 10%%); "
             "l'ospite paga sempre 0%% di fee; c'e' una tariffa tecnica del 3%% dichiarata PRIMA della "
             "firma (copre solo la carta, noi non ci guadagniamo). Promessa del brand: «Il tuo viaggio, "
             "senza sorprese».\n\n"
-            "Scrivi UNA sola didascalia da social (nella lingua indicata sopra) per invitare un HOST di "
-            "%s a pubblicare il suo alloggio, applicando questa leva psicologica:\n%s\n\n"
+            "Scrivi UNA sola didascalia da social per invitare un HOST di %s a pubblicare il suo "
+            "alloggio, applicando questa leva psicologica:\n%s\n\n"
             "Regole di copywriting, rispettale TUTTE:\n"
             "- Massimo 280 caratteri.\n"
             "- La prima frase e' un aggancio che promette un beneficio concreto.\n"
@@ -225,9 +262,12 @@ class GeneratoreCampagna:
             "- Linguaggio semplice e onesto: niente frasi furbe, niente superlativi gonfiati, niente promesse false.\n"
             "- NIENTE emoji. NIENTE hashtag. NIENTE virgolette attorno al testo.\n"
             "- NON premettere spiegazioni o introduzioni (vietato iniziare con «Ecco una didascalia» o simili): "
-            "scrivi SOLTANTO il testo del post, nient'altro."
+            "scrivi SOLTANTO il testo del post, nient'altro.\n\n"
             % (citta, citta, _riempi(angolo["istruzione"], citta))
         )
+        # LINGUA ripetuta in fondo (posizione più pesante per il modello) + anti-contaminazione
+        return corpo + ("IMPORTANTE — la lingua della didascalia: %s Il testo finale deve essere "
+                        "interamente in %s.%s" % (ordine, lang, anti_it))
 
     def genera(self, *, angolo_chiave: Optional[str] = None,
                citta: Optional[str] = None, lingua: Optional[str] = None,
@@ -245,19 +285,26 @@ class GeneratoreCampagna:
             i = self._leggi_indice()
             ang = ANGOLI[i % len(ANGOLI)]
 
-        # 1) didascalia via AI, con ripiego mai-vuoto (nella lingua giusta)
+        # 1) didascalia via AI, con ripiego mai-vuoto (nella lingua giusta).
+        #    Rete di sicurezza LINGUA: fuori Italia la didascalia non deve contenere italiano; se il
+        #    modello contamina (portoghese/italiano quasi gemelli), scarto e riprovo una volta, poi ripiego.
         ripiego = ang["ripiego"] if lingua == "it" else RIPIEGO_EN.get(ang["chiave"], ang["ripiego"])
         didascalia = ""
         da_ai = False
         if self._ai is not None:
-            try:
-                testo = self._ai(self._prompt_ai(ang, citta, lingua))
+            for tentativo in range(2):
+                try:
+                    testo = self._ai(self._prompt_ai(ang, citta, lingua))
+                except Exception:
+                    logger.warning("campagna: AI testo fallita (uso ripiego)", exc_info=True)
+                    break
                 pulito = pulisci_didascalia(testo) if isinstance(testo, str) else ""
-                if pulito:
+                if pulito and not _contaminato_italiano(pulito, lingua):
                     didascalia = pulito[:600]
                     da_ai = True
-            except Exception:
-                logger.warning("campagna: AI testo fallita (uso ripiego)", exc_info=True)
+                    break
+                logger.info("campagna: didascalia scartata (vuota/italiano fuori Italia), tentativo %d",
+                            tentativo + 1)
         if not didascalia:
             didascalia = pulisci_didascalia(_riempi(ripiego, citta))
 
