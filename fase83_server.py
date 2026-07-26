@@ -9392,11 +9392,24 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
     if gz is not None and hasattr(gz, "auto_rilascia"):
         import threading as _th
 
+        # PREVENZIONE perdita: non versare l'escrow all'host se la prenotazione e' RIMBORSATA/
+        # cancellata_host (il passo che chiude l'escrow nel rimborso puo' saltare in isolamento).
+        # Fail-safe verso l'host: in dubbio -> non salta (rilascia). Il guardiano fase186 resta
+        # la rete a valle; questa e' la prevenzione al momento esatto del rilascio.
+        _pp_g = getattr(sistema, "pagamenti_pendenti", None)
+
+        def _rimborsata(_rif):
+            try:
+                _i = _pp_g.info(_rif) if _pp_g is not None else None
+                return bool(_i) and _i.get("stato") in ("rimborsato", "cancellata_host")
+            except Exception:
+                return False
+
         def _tick_garanzia():
             while True:
                 try:
                     # 24h di silenzio = tutto ok -> rilascio + bonifico AUTOMATICO all'host
-                    for _r in (gz.auto_rilascia(dettagli=True) or []):
+                    for _r in (gz.auto_rilascia(dettagli=True, salta_se=_rimborsata) or []):
                         try:
                             router._trasferisci_all_host(_r["prenotazione_id"],
                                                          _r["host_riceve_cents"])

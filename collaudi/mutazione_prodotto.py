@@ -186,6 +186,13 @@ MUTANTI = [
      "        return True",
      "test_admin_accounts",
      "il ruolo 'supporto' (assistenza) puo' muovere i SOLDI: rimborsi/storni da un account che non deve toccarli"),
+
+    # ── L'ESCROW non paga l'host su prenotazione RIMBORSATA (fase160) ─────────────
+    ("fase160_escrow_garanzia.py",
+     "                            salta = bool(salta_se(rif))",
+     "                            salta = False",
+     "test_escrow_no_pay_rimborsata",
+     "l'auto-rilascio paga l'host anche su prenotazione RIMBORSATA: perdita secca (rimborso ospite + bonifico host)"),
 ]
 
 

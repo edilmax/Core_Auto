@@ -177,10 +177,19 @@ class EscrowGaranzia:
         return self._muta(prenotazione_id, ("contestato",), "risolto",
                           host=imp - rimb, rimborso=rimb)
 
-    def auto_rilascia(self, *, ora_ts: Any = None, dettagli: bool = False) -> Any:
+    def auto_rilascia(self, *, ora_ts: Any = None, dettagli: bool = False,
+                      salta_se: Any = None) -> Any:
         """Rilascia all'host tutte le garanzie 'in_garanzia' con finestra scaduta e nessuna
         contestazione. Ritorna quante ne ha rilasciate; con dettagli=True la LISTA
-        [{prenotazione_id, host_riceve_cents}] (per i bonifici automatici Connect)."""
+        [{prenotazione_id, host_riceve_cents}] (per i bonifici automatici Connect).
+
+        `salta_se`: callable(prenotazione_id) -> bool. Se ritorna True (es. prenotazione
+        RIMBORSATA/cancellata_host), quell'escrow NON viene versato all'host ma CHIUSO come
+        'annullato' (host_riceve=0). E' la PREVENZIONE al momento del rilascio: se il passo
+        che chiude l'escrow durante il rimborso e' saltato (crash isolato), qui non si paga
+        comunque l'host per una prenotazione gia' rimborsata (mai in perdita). Il predicato
+        deve essere FAIL-SAFE verso l'host: in dubbio/errore -> False (si rilascia normalmente),
+        cosi' un host legittimo non resta mai NON pagato per colpa di una lettura fallita."""
         ora = ora_ts if isinstance(ora_ts, int) and not isinstance(ora_ts, bool) else self._now()
         con = self._apri()
         try:
@@ -195,10 +204,24 @@ class EscrowGaranzia:
             vinte = []
             with con:
                 for r in righe:
+                    rif = r["prenotazione_id"]
+                    salta = False
+                    if salta_se is not None:
+                        try:
+                            salta = bool(salta_se(rif))
+                        except Exception:
+                            salta = False           # fail-safe verso l'host: in dubbio si rilascia
+                    if salta:
+                        # prenotazione rimborsata: chiudi l'escrow senza pagare l'host (CAS)
+                        con.execute(
+                            "UPDATE garanzia SET stato='annullato', host_riceve_cents=0, "
+                            "aggiornato_ts=? WHERE prenotazione_id=? AND stato='in_garanzia'",
+                            (ora, rif))
+                        continue
                     cur = con.execute(
                         "UPDATE garanzia SET stato='rilasciato', host_riceve_cents=?, "
                         "aggiornato_ts=? WHERE prenotazione_id=? AND stato='in_garanzia'",
-                        (r["importo_host_cents"], ora, r["prenotazione_id"]))
+                        (r["importo_host_cents"], ora, rif))
                     if cur.rowcount:
                         vinte.append(r)
             if dettagli:

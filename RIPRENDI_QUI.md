@@ -1,3 +1,31 @@
+## 🟢 STATO 2026-07-26 — PIÙ A FONDO: caccia agli STATI IMPOSSIBILI + 1 RISCHIO PERDITA VERO chiuso
+
+Direttiva "andiamo più a fondo". Nuovo `collaudi/stati_impossibili.py` (cablato in `batteria.py` 6d):
+non testa gli happy-path ma **INIETTA di proposito ogni stato impossibile** e verifica che la rete di
+sicurezza (guardiano fase186) lo VEDA — è il "visto ROSSO" della rete stessa. **11/11 verdi**:
+- **A (iniezione & rilevamento)**: escrow bloccato, bonifico fermo >7gg, payout orfano (host
+  inesistente), payout su rimborsata, escrow su rimborsata a rilascio scaduto → il guardiano li vede
+  TUTTI; su sistema pulito non grida (a parte "riconciliazione non-eseguita", attesa senza Stripe nel test).
+- **B (transizioni illegali sul percorso vivo)**: webhook su prenotazione CANCELLATA → non diventa
+  'pagato' (mai soldi-senza-stanza), doppia cancellazione idempotente, webhook per riferimento
+  inesistente controllato (mai 500), auditor invarianti pulito dopo tutto.
+- **2 SONDE oneste (gap veri, documentati)**: escrow su rimborsata a rilascio FUTURO non rilevato
+  proattivamente; **occupazione fantasma** (inventario occupato senza prenotazione, da crash fra
+  blocca-inventario e registra-pendente) non sorvegliata da nessun guardiano — candidato: estendere
+  fase199. Nessuna delle due muove soldi (availability leak / rilevata comunque a rilascio scaduto).
+- **🐛 RISCHIO PERDITA VERO trovato e CHIUSO (prevenzione, non solo detection)**: `fase160.auto_rilascia`
+  versava all'host ogni escrow 'in_garanzia' a finestra scaduta controllando le CONTESTAZIONI ma **non
+  lo stato di RIMBORSO**. Se il passo che chiude l'escrow durante un rimborso salta in isolamento
+  (crash), al rilascio l'host sarebbe stato pagato per una prenotazione già rimborsata = **perdita
+  secca** (rimborso all'ospite + bonifico all'host). Il guardiano fase186 lo vede ma **a posteriori**;
+  ora c'è la **PREVENZIONE al momento del rilascio**: `auto_rilascia(salta_se=...)` chiude 'annullato'
+  (host 0) gli escrow su prenotazioni rimborsate/cancellata_host; il tick fase83 passa il predicato dai
+  pendenti. **Fail-safe verso l'host**: in dubbio/errore si rilascia (l'host legittimo non resta mai non
+  pagato). Guardia `test_escrow_no_pay_rimborsata` (3, vista ROSSA: senza filtro la rimborsata è pagata)
+  + mutante #25 in `mutazione_prodotto.py` (25/25 uccisi).
+
+---
+
 ## 🟢 STATO 2026-07-26 — COLLAUDO MULTI-VETTORE: resilienza rete + concorrenza pannelli + tampering + finanza
 
 Direttiva "collaudo combinato multi-vettore e resilienza integrata". Nuovo `collaudi/multivettore.py`
