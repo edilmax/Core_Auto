@@ -1,3 +1,26 @@
+## 🌍 STATO 2026-07-27 — CAMPAGNA PERSUASIVA ORA GLOBALE (fase200): città top del mondo, lingua del posto
+
+Direttiva "ricordati che siamo GLOBALI, fai gare i posti più visitati, fai strategia, studia tutto".
+Estesa `fase200` da Roma-centrica a **multi-locale**:
+- **Rotazione doppia**: oltre alle 7 leve di Cialdini, ruota le **13 destinazioni TOP del mondo**
+  (`CITTA_TOP`: Roma, Barcelona, Lisbon, Paris, London, Amsterdam, Berlin, New York, Miami, Dubai,
+  Bangkok, Tokyo, Istanbul) **ciascuna nella lingua del posto** (`LINGUA_CITTA`: es/pt/fr/de/ja/en…).
+  Il prompt AI istruisce «Scrivi in {lingua}»; quando l'AI è spenta il ripiego è **inglese universale**
+  (`RIPIEGO_EN`), **mai italiano fuori Italia**.
+- **`genera_globale()`** nuovo: sceglie città dal giro + lingua locale. `genera(lingua=...)` (default
+  'it', retro-compatibile). L'indice durevole ora gira sul **MCM(7 leve, 13 città)=91** (`_PERIODO`):
+  leva e città avanzano indipendenti → copre **tutte le 91 combinazioni città×leva** prima di ripetere.
+- **Strategia = multi-locale** (studiata, non improvvisata): la DOMANDA/SEO è già globale (2990 landing,
+  IndexNow, blog); il collo di bottiglia di un marketplace è l'OFFERTA, e la densità si costruisce
+  **poche città alla volta**, non spargendosi su tutte le 230. Quindi: reclutamento host concentrato su
+  una rosa di **città top ad alto traffico**, nella **lingua locale** (parlare la lingua del posto = più
+  fiducia, principio di simpatia/unità). Roma resta la prima (dov'è il lead reale realmutodavide).
+- **Test 14 → 21** (7 nuovi globali; le 2 di rotazione **viste ROSSE** sul vecchio wrap-a-7). Anteprima:
+  `python3 collaudi/anteprima_campagna.py --globale 13` mostra il giro mondiale (città+lingua).
+- STATO invariato: **DORMIENTE** (auto-pubblicazione non cablata; prima si mostrano gli esempi al fondatore).
+
+---
+
 ## 🟢 STATO 2026-07-26 — RECLUTAMENTO HOST «PRIMA ROMA»: messaggio in 8 lingue, cablato nel motore
 
 Direttiva "prepara il messaggio di reclutamento host; sincronizzato con la lingua che scelgono nella
@@ -15,6 +38,33 @@ web app; versione inglese + lingue strategiche". Cablata in `fase89` la variante
   default per il cold-email B2B). La variante Roma è per l'outreach **CALDO** (host che hanno già scelto
   la lingua nella web app / contatti opt-in) e per l'invio **MANUALE** dal fondatore. Prossimo passo
   reale resta: **reclutare il 1° host vero a Roma** → scatta il flywheel su realmutodavide.
+
+---
+
+## 🟢 STATO 2026-07-26 — MOTORE CAMPAGNA PERSUASIVA (fase200) + connettori accesi + campagna studiata
+
+Direttiva "crea la campagna, studia prima tutto a 360°, niente emoji, per essere il numero uno".
+- **RICERCA vera** (non a memoria): cold-start marketplace (host-first, densità per città, mai ads
+  prima della densità), Cialdini 7 leve (Unità = moltiplicatore), challenger brand (Davide vs Golia),
+  crescita Airbnb (reclutamento host diretto), copywriting Ogilvy (specifico non generico, un beneficio,
+  un invito, semplice non furbo). Campagna «Classe Fondatrice di Roma» → Artifact pubblicato +
+  memoria [[bookinvip-campagna-lancio]].
+- **`fase200_campagna_persuasiva.py` NUOVO** (test 14/14): per ogni post genera didascalia (Groq
+  iniettabile, **ripiego mai-vuoto**) + immagine (Pollinations **flux**, keyless) applicando una delle
+  7 leve **a rotazione durevole**. **Prompt in stile Ogilvy** (specifico/un-beneficio/un-CTA) +
+  **pulitore di sicurezza `pulisci_didascalia`** che GARANTISCE **niente emoji, niente premesse
+  («Ecco una didascalia:»), niente virgolette/hashtag** anche se il modello sgarra (il fondatore NON
+  vuole emoji). Modello prod consigliato: **llama-3.3-70b-versatile** (l'8b era grezzo). STATO:
+  **DORMIENTE** — auto-pubblicazione non cablata (si mostrano prima gli esempi). `collaudi/anteprima_campagna.py`
+  genera esempi VERI con Groq e li posta su Telegram.
+- **🐛 bug scovato**: urllib verso Groq prende **403 (Cloudflare)** senza User-Agent «da browser»; la
+  PRODUZIONE fase165 ce l'aveva già, era solo lo script preview → aggiunto.
+- **CONNETTORI accesi+verificati oggi** (il fondatore aveva già messo molte chiavi): Stripe✅ SMTP-email✅
+  (Gmail inbox; ProtonMail spam = normale dominio nuovo, SPF/DKIM/DMARC tutti presenti) Facebook✅
+  (pagina "BookinVip", post di prova published=false OK) Groq-AI✅ Immagini-AI✅ (Pollinations keyless)
+  Telegram✅ OXR✅ **Nostr✅** (acceso, chiave sul server) **Mastodon✅** (@bookinvip, post prova OK).
+  Instagram: serve token con permessi IG (il token dato era senza instagram_basic/content_publish + 0
+  pagine); TikTok: manca OAuth; Bluesky/Reddit: da fare; Video HF/YouTube: da accendere.
 
 ---
 
