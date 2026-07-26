@@ -65,10 +65,12 @@ def _riscalda(immagine, tentativi=3):
     """PRE-RISCALDO: flux ci mette ~30-60s a generare; se Telegram/Facebook vanno a prenderla per URL
     prima che sia pronta è un 400. La scarico io PER INTERO (non solo 64 byte): così Pollinations la
     genera e la mette in CACHE, e la fetch successiva (TG/FB) la trova pronta e istantanea."""
+    # NB: Pollinations (Cloudflare) blocca lo UA di default di Python -> serve un UA "browser"
+    req = urllib.request.Request(immagine, headers={"User-Agent": "Mozilla/5.0 (BookinVIP)"})
     for _ in range(tentativi):
         try:
-            with urllib.request.urlopen(immagine, timeout=95) as r:
-                if len(r.read()) > 1000:      # immagine vera, non una pagina d'errore
+            with urllib.request.urlopen(req, timeout=95) as r:
+                if len(r.read()) > 3000:      # immagine vera, non una pagina d'errore/sfida
                     return True
         except Exception:
             pass

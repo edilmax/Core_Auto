@@ -1,3 +1,29 @@
+## 🎬 STATO 2026-07-27 — GIOIELLO VIDEO: spot di reclutamento host renderizzato in autonomia (gratis, zero chiavi)
+
+Direttiva "video di reclutamento, tutto gratis e senza di me". Costruita la **generazione video
+completa** che al progetto mancava (era l'unico buco del motore marketing: "manca la generazione video"):
+- **`collaudi/video_render.py`**: spot verticale 1080×1920 in 5 scene — immagini Pollinations flux
+  (keyless) + **voce neurale edge-tts** nella lingua della città + copione **Groq** passato dal
+  guardiano-lingua di fase200 (mai italiano fuori Italia; ripiego deterministico it/en mai-vuoto) +
+  montaggio **ffmpeg** (Ken Burns, testo sovrimpresso col fix `expansion=none` per i "%", dissolvenze,
+  end-card). Gira sul **VPS host, fuori dal container** (ffmpeg+edge-tts non sono stdlib: la
+  produzione resta pura, il Dockerfile non copia `collaudi/`).
+- **`collaudi/pubblica_video.py`**: upload del video in **multipart puro Python** su Telegram/Facebook
+  (sul VPS `curl -F` non leggeva il file).
+- **PROVATO VERO sul VPS**: ffmpeg + edge-tts 7.2.8 installati; **2 video Roma/it renderizzati**
+  (`/tmp/roma.mp4`, `/tmp/roma2.mp4`, ~3.5MB). Trappola imparata: Pollinations E Groq (Cloudflare)
+  bloccano lo UA di default di urllib → UA "browser" (fix anche nel pre-riscaldo di
+  `anteprima_campagna.py`, soglia 1000→3000 byte).
+- **Guardiano lingua fase200** (commit `74c9b59`): bug REALE dal primo giro Groq globale (Parigi/Londra
+  in italiano, Lisbona mista) → ordine-di-lingua nella lingua stessa in cima E in fondo al prompt +
+  rete `_contaminato_italiano` (scarta, riprova 1 volta, poi ripiego EN pulito). Test fase200 21→**24**
+  (+3 visti ROSSI sul testo italiano con lingua≠it).
+- STATO: strumento **MANUALE** (auto-pubblicazione NON cablata; prima gli esempi al fondatore).
+  Comando sul VPS: `python3 collaudi/video_render.py --citta Roma --lingua it` poi
+  `python3 collaudi/pubblica_video.py /tmp/... --telegram`. DA FARE: schedulazione + upload YouTube.
+
+---
+
 ## 🌍 STATO 2026-07-27 — CAMPAGNA PERSUASIVA ORA GLOBALE (fase200): città top del mondo, lingua del posto
 
 Direttiva "ricordati che siamo GLOBALI, fai gare i posti più visitati, fai strategia, studia tutto".
