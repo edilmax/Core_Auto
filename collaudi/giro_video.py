@@ -79,6 +79,22 @@ TAPPE = [
     ("cairo", "Cairo", "ar", None),
     ("cape-town", "Cape Town", "en", None),
     ("marrakech", "Marrakech", "fr", None),
+    # — LE CITTÀ PIÙ BELLE DEL MONDO (direttiva fondatore 27/07 notte): le gemme oltre le capitali
+    #   del traffico. Slug tutti VERIFICATI vivi (200) su /affitta/.
+    ("venezia", "Venezia", "it", None),
+    ("firenze", "Firenze", "it", None),
+    ("napoli", "Napoli", "it", None),
+    ("prague", "Prague", "en", None),
+    ("athens", "Athens", "en", None),
+    ("santorini", "Santorini", "en", None),
+    ("dubrovnik", "Dubrovnik", "en", None),
+    ("budapest", "Budapest", "en", None),
+    ("edinburgh", "Edinburgh", "en", "en-GB-RyanNeural"),
+    ("san-francisco", "San Francisco", "en", None),
+    ("krakow", "Krakow", "en", None),
+    ("porto", "Porto", "pt", None),
+    ("seville", "Sevilla", "es", None),
+    ("granada", "Granada", "es", None),
 ]
 
 # ── DIDASCALIE per lingua ({c}=città, {link}=landing con UTM). Regola d'oro: il 3% SEMPRE detto. ─
