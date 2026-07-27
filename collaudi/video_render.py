@@ -204,6 +204,29 @@ PRONUNCIA_DOMINIO = {"it": "Bookin VIP punto com", "en": "Bookin VIP dot com",
                      "th": "Bookin VIP ดอทคอม", "ar": "بوكين في آي بي دوت كوم"}
 
 
+# CHIUSURA FISSA (scena 5): la frase finale NON la scrive l'AI — è curata, una per lingua, con
+# l'indirizzo dettato in modo fluido (niente balbettii «Bookin VIP su Bookin VIP»). In inglese
+# «V I P» a lettere (vi-ai-pi); nelle lingue latine «vip» come parola; in russo in cirillico.
+CHIUSURA_VOCE = {
+    "it": "Il tuo viaggio, senza sorprese. Bookin vip punto com.",
+    "en": "Your trip, without surprises. Bookin V I P dot com.",
+    "es": "Tu viaje, sin sorpresas. Bookin vip punto com.",
+    "fr": "Votre voyage, sans surprises. Bookin vip point com.",
+    "de": "Ihre Reise, ohne Überraschungen. Bookin vip Punkt com.",
+    "pt": "A sua viagem, sem surpresas. Bookin vip ponto com.",
+    "nl": "Uw reis, zonder verrassingen. Bookin vip punt com.",
+    "tr": "Sürprizsiz bir yolculuk. Bookin vip nokta com.",
+    "ru": "Ваша поездка без сюрпризов. Букин вип точка ком.",
+    "id": "Perjalanan tanpa kejutan. Bookin vip titik com.",
+    "vi": "Chuyến đi không bất ngờ. Bookin vip chấm com.",
+    "ko": "놀라움 없는 여행. 부킨 브이아이피 닷컴.",
+    "zh": "旅途没有意外。Bookin vip 点 com。",
+    "th": "การเดินทางที่ไม่มีเซอร์ไพรส์ Bookin vip ดอทคอม",
+    "ja": "驚きのない旅を。ブッキン ブイアイピー ドットコム。",
+    "ar": "رحلتك بلا مفاجآت. بوكين في آي بي دوت كوم.",
+}
+
+
 def _pronuncia(testo, lingua):
     """Adatta il testo alla VOCE: dominio dettato bene + 'BookinVIP' scandito 'Bookin VIP'."""
     import re
@@ -283,6 +306,8 @@ def copione(api_key, citta, lingua):
         scene.append({"soggetto": _riempi(sog, citta),
                       "schermo": _riempi(schermo[i], citta),
                       "voce": voci[i]})
+    # la CHIUSURA e' sempre la frase fissa curata (l'indirizzo detto bene, mai balbettii AI)
+    scene[-1]["voce"] = CHIUSURA_VOCE.get(lingua_voce, CHIUSURA_VOCE["en"])
     return scene, da_ai, lingua_voce, lingua_schermo
 
 
