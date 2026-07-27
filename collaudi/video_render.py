@@ -106,7 +106,7 @@ EXTRA_ORDINE = {
 BEAT_SOGGETTI = [
     "aerial golden hour view of {citta} skyline and rooftops, warm natural light, photorealistic, natural proportions",
     "beautiful cozy sunlit apartment interior in {citta}, inviting, warm, photorealistic, natural proportions",
-    "warm human moment, a host handing keys to a happy guest at an apartment door in {citta}, photorealistic, natural proportions",
+    "warm close-up of elegant house keys with a golden keychain on a rustic wooden table, soft morning light through a window, cozy welcoming mood, photorealistic, natural proportions",
     "elegant modern minimal apartment interior in {citta}, natural light, photorealistic, natural proportions",
     "sunset skyline of {citta}, luxury travel mood, photorealistic, natural proportions",
 ]
@@ -190,6 +190,27 @@ def _env(nome, default=""):
 
 def _riempi(t, citta):
     return t.replace("{citta}", citta)
+
+
+# ── PRONUNCIA GUIDATA (solo VOCE, mai a schermo): la TTS leggeva "bookinvip.com" come una
+# parola sola storpiata. Si detta «Bookin VIP punto com» nella lingua giusta. ─────────────────────
+PRONUNCIA_DOMINIO = {"it": "Bookin VIP punto com", "en": "Bookin VIP dot com",
+                     "es": "Bookin VIP punto com", "fr": "Bookin VIP point com",
+                     "de": "Bookin VIP Punkt com", "pt": "Bookin VIP ponto com",
+                     "nl": "Bookin VIP punt com", "tr": "Bookin VIP nokta com",
+                     "ru": "Bookin VIP точка com", "id": "Bookin VIP titik com",
+                     "vi": "Bookin VIP chấm com", "ja": "ブッキン ブイアイピー ドットコム",
+                     "ko": "부킨 브이아이피 닷컴", "zh": "Bookin VIP 点 com",
+                     "th": "Bookin VIP ดอทคอม", "ar": "بوكين في آي بي دوت كوم"}
+
+
+def _pronuncia(testo, lingua):
+    """Adatta il testo alla VOCE: dominio dettato bene + 'BookinVIP' scandito 'Bookin VIP'."""
+    import re
+    dom = PRONUNCIA_DOMINIO.get(lingua, PRONUNCIA_DOMINIO["en"])
+    t = re.sub(r"(?i)bookinvip\s*\.\s*com", "\x00DOM\x00", testo)
+    t = re.sub(r"(?i)bookinvip", "Bookin VIP", t)
+    return t.replace("\x00DOM\x00", dom)
 
 
 def _run(cmd, **kw):
@@ -373,7 +394,7 @@ def monta(citta, lingua, out_path, voce=None):
         if not scarica_immagine(s["soggetto"], img):
             raise RuntimeError("immagine flux non scaricata (scena %d)" % (i + 1))
         mp3 = os.path.join(tmp, "voce%d.mp3" % i)
-        dur = sintetizza_voce(s["voce"], voce_scelta, mp3) + 0.6
+        dur = sintetizza_voce(_pronuncia(s["voce"], lingua_voce), voce_scelta, mp3) + 0.6
         clips.append(clip_scena(img, mp3, dur, s["schermo"], tmp, i, zoom_in=(i % 2 == 0),
                                 font=font, hint=(hint if i == 0 else None)))
     lista = os.path.join(tmp, "lista.txt")
@@ -445,7 +466,7 @@ def monta_nota(citta, lingua, out_path, voce=None):
         if not scarica_immagine(s["soggetto"], img):
             raise RuntimeError("immagine flux non scaricata (nota, scena %d)" % (i + 1))
         mp3 = os.path.join(tmp, "voce%d.mp3" % i)
-        dur = sintetizza_voce(s["voce"], voce_scelta, mp3) + 0.4
+        dur = sintetizza_voce(_pronuncia(s["voce"], lingua_voce), voce_scelta, mp3) + 0.4
         clips.append(clip_nota(img, mp3, dur, s["schermo"], tmp, i, font=font))
     lista = os.path.join(tmp, "lista.txt")
     open(lista, "w").write("".join("file '%s'\n" % c for c in clips))
