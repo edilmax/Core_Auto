@@ -74,6 +74,33 @@ def telegram(path, caption):
         return "ERR %r" % e
 
 
+def telegram_nota(path, testo_seguente=""):
+    """Cerchietto (video note): suona DENTRO la chat con un tocco, mai a tutto schermo.
+    Non supporta didascalia -> l'eventuale testo/link parte come messaggio subito dopo."""
+    tok, chat = _env("TELEGRAM_BOT_TOKEN"), _env("TELEGRAM_CHAT_ID")
+    if not (tok and chat):
+        return "no-token"
+    data = open(path, "rb").read()
+    try:
+        d = _post_multipart("https://api.telegram.org/bot%s/sendVideoNote" % tok,
+                            {"chat_id": chat, "length": "640"},
+                            {"video_note": (os.path.basename(path), data, "video/mp4")})
+        if not d.get("ok"):
+            return "ERR %s" % d.get("description")
+        esito = "OK id %s" % d["result"]["message_id"]
+        if testo_seguente:
+            corpo = json.dumps({"chat_id": chat, "text": testo_seguente}).encode("utf-8")
+            req = urllib.request.Request("https://api.telegram.org/bot%s/sendMessage" % tok,
+                                         data=corpo, method="POST",
+                                         headers={"Content-Type": "application/json",
+                                                  "User-Agent": "Mozilla/5.0 (BookinVIP)"})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                json.loads(r.read().decode("utf-8", "replace"))
+        return esito
+    except Exception as e:
+        return "ERR %r" % e
+
+
 def facebook(path, caption):
     page, tok = _env("META_PAGE_ID"), _env("META_PAGE_TOKEN")
     if not (page and tok):

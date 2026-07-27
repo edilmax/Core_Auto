@@ -390,15 +390,70 @@ def posta_telegram(path, caption):
         return "ERR %s" % (p.stdout or p.stderr)[:200]
 
 
+# ── CERCHIETTO (video note Telegram): quadrato 640x640, testo NEL cerchio, ≤60s ─────────────────
+# È l'unico formato Telegram che suona DENTRO la chat: un tocco sul cerchio = audio sul posto,
+# mai a tutto schermo. Niente hint (il cerchietto è già l'invito) e testo centrato (i bordi
+# del quadrato vengono ritagliati dal cerchio del client).
+def clip_nota(img, mp3, durata, schermo_txt, tmp, idx, font=FONT):
+    txt_file = os.path.join(tmp, "n%d.txt" % idx)
+    open(txt_file, "w", encoding="utf-8").write(schermo_txt.replace("\n", " "))
+    vf = (
+        "crop=iw*0.94:ih*0.94,scale=800:800:force_original_aspect_ratio=increase:flags=lanczos,"
+        "crop=640:640,setsar=1,"
+        "drawtext=fontfile=%s:textfile=%s:expansion=none:fontcolor=white:fontsize=40:"
+        "x=(w-text_w)/2:y=h*0.72:box=1:boxcolor=black@0.45:boxborderw=14,"
+        "fade=t=in:st=0:d=0.3,fade=t=out:st=%.2f:d=0.3"
+        % (font, txt_file, max(0.1, durata - 0.3))
+    )
+    out = os.path.join(tmp, "nota%d.mp4" % idx)
+    _run(["ffmpeg", "-y", "-loop", "1", "-i", img, "-i", mp3,
+          "-vf", vf, "-t", "%.2f" % durata, "-c:v", "libx264", "-preset", "medium",
+          "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2",
+          "-r", str(FPS), out])
+    return out
+
+
+def monta_nota(citta, lingua, out_path, voce=None):
+    api = _env("GROQ_API_KEY")
+    tmp = tempfile.mkdtemp(prefix="nota_")
+    scene, da_ai, lingua_voce, lingua_schermo = copione(api, citta, lingua)
+    print("  nota: copione %s (voce=%s schermo=%s)" % ("Groq" if da_ai else "ripiego",
+                                                       lingua_voce, lingua_schermo))
+    voce_scelta = voce or VOCI.get(lingua_voce, VOCI["en"])
+    font = _font(lingua_schermo)
+    if font is None:
+        lingua_schermo, font = "en", FONT
+        for i, s in enumerate(scene):
+            s["schermo"] = _riempi(SCHERMO["en"][i], citta)
+    clips = []
+    for i, s in enumerate(scene):
+        img = os.path.join(tmp, "img%d.jpg" % i)
+        if not scarica_immagine(s["soggetto"], img):
+            raise RuntimeError("immagine flux non scaricata (nota, scena %d)" % (i + 1))
+        mp3 = os.path.join(tmp, "voce%d.mp3" % i)
+        dur = sintetizza_voce(s["voce"], voce_scelta, mp3) + 0.4
+        clips.append(clip_nota(img, mp3, dur, s["schermo"], tmp, i, font=font))
+    lista = os.path.join(tmp, "lista.txt")
+    open(lista, "w").write("".join("file '%s'\n" % c for c in clips))
+    _run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", lista, "-c", "copy",
+          "-movflags", "+faststart", out_path])
+    print("NOTA pronta: %s (%.1f MB)" % (out_path, os.path.getsize(out_path) / 1e6))
+    return out_path
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--citta", default="Roma")
     ap.add_argument("--lingua", default="it")
     ap.add_argument("--out", default="/tmp/bookinvip_video.mp4")
     ap.add_argument("--voce", default=None, help="voce edge-tts esplicita (es. en-GB-RyanNeural per Londra)")
+    ap.add_argument("--nota", action="store_true", help="cerchietto Telegram 640x640 (video note)")
     ap.add_argument("--telegram", action="store_true")
     a = ap.parse_args()
-    out = monta(a.citta, a.lingua, a.out, voce=a.voce)
+    if a.nota:
+        out = monta_nota(a.citta, a.lingua, a.out, voce=a.voce)
+    else:
+        out = monta(a.citta, a.lingua, a.out, voce=a.voce)
     if a.telegram:
         cap = "BookinVIP — %s. Il tuo viaggio, senza sorprese. bookinvip.com" % a.citta
         print("-> Telegram: %s" % posta_telegram(out, cap))
