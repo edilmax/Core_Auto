@@ -41,8 +41,10 @@ services:
       CAMPAGNA_STATO_FILE: /data/campagna_stato.json   # scheduler no-burst (durevole)
       OUTREACH_OPTOUT_FILE: /data/outreach_optout.json # opt-out (durevole = obbligo legale)
       STATIC_DIR: /app/deploy
+      VIDEO_DIR: /app/video_pubblici     # spot video citta' (gated: cartella vuota = feature spenta)
     volumes:
       - casavip_data:/data            # SQLite persistente
+      - ./video_pubblici:/app/video_pubblici:ro   # l'app vede QUALI video esistono (embed nelle landing)
     networks:
       - interna                       # rete isolata: solo nginx puo' raggiungere app
     expose:
@@ -70,6 +72,7 @@ services:
       - ./deploy/nginx.casavip.ssl.conf:/etc/nginx/conf.d/default.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - ./certbot/www:/var/www/certbot:ro
+      - ./video_pubblici:/var/www/video:ro   # spot video citta' serviti statici (Range nativo)
 
   # Backup automatico (snapshot consistente + retention) ogni 6 ore. Riusa l'immagine app.
   backup:

@@ -590,10 +590,29 @@ def _url_locale(base: str, slug: str, codice: str) -> str:
     return base + "/affitta/" + slug + ("" if codice == "it" else "?lang=" + codice)
 
 
+def video_locale(slug: str) -> Optional[Tuple[str, str, str]]:
+    """(url_rel_video, url_rel_poster, data_iso) dello spot della città se presente in VIDEO_DIR;
+    None altrimenti. GATED: senza env VIDEO_DIR (default) la feature è SPENTA e le landing restano
+    identiche al byte. I file li serve nginx statici da /video/ (Range nativo)."""
+    import datetime
+    import os
+    d = os.environ.get("VIDEO_DIR", "")
+    if not d:
+        return None
+    f = os.path.join(d, slug + ".mp4")
+    if not os.path.isfile(f):
+        return None
+    poster = "/video/" + slug + ".jpg" if os.path.isfile(os.path.join(d, slug + ".jpg")) else ""
+    data = datetime.date.fromtimestamp(os.path.getmtime(f)).isoformat()
+    return ("/video/" + slug + ".mp4", poster, data)
+
+
 def genera_landing_host(citta: str, *, lingua: str = "it", base_url: str = "",
                         commissione_bps: int = 1500, ota_bps: int = 2500,
                         prezzo_demo_cents: int = 10000,
-                        citta_correlate: Sequence[str] = ()) -> str:
+                        citta_correlate: Sequence[str] = (),
+                        video_url: str = "", video_poster: str = "",
+                        video_data: str = "") -> str:
     """Pagina landing host per una città (SEO + FAQ JSON-LD + calcolo + CTA). XSS-safe.
     `lingua` accetta un codice BCP-47 (es. 'es-MX'): il testo usa la lingua base, mentre
     canonical/hreflang/og:locale usano il locale completo (targeting lingua+paese)."""
@@ -611,6 +630,11 @@ def genera_landing_host(citta: str, *, lingua: str = "it", base_url: str = "",
 
     def fmt(s):
         return s.format(citta=citta_e, ota=ota, noi=noi, prezzo=_euro(r["prezzo"]),
+                        netto_ota=_euro(r["netto_ota"]), netto_noi=_euro(r["netto_noi"]),
+                        risparmio=_euro(r["risparmio"]))
+
+    def fmt_raw(s):   # per il JSON-LD: valori GREZZI (l'escaping lo fa json.dumps, non html)
+        return s.format(citta=citta, ota=ota, noi=noi, prezzo=_euro(r["prezzo"]),
                         netto_ota=_euro(r["netto_ota"]), netto_noi=_euro(r["netto_noi"]),
                         risparmio=_euro(r["risparmio"]))
 
@@ -647,6 +671,25 @@ def genera_landing_host(citta: str, *, lingua: str = "it", base_url: str = "",
             "<meta property=\"og:locale:alternate\" content=\"%s_%s\">"
             % (L2, TERRITORIO_DEFAULT.get(L2, "US"))
             for L2 in _T if L2 != lang)
+        # SPOT VIDEO della città (gated: senza video_url la pagina è IDENTICA): og:video = il
+        # link condiviso mostra l'anteprima VIDEO; VideoObject JSON-LD = idoneo ai rich result.
+        + (("<meta property=\"og:image\" content=\"" + e(video_poster) + "\">") if video_poster else "")
+        + ((
+            "<meta property=\"og:video\" content=\"" + e(video_url) + "\">"
+            "<meta property=\"og:video:secure_url\" content=\"" + e(video_url) + "\">"
+            "<meta property=\"og:video:type\" content=\"video/mp4\">"
+            "<meta property=\"og:video:width\" content=\"1080\">"
+            "<meta property=\"og:video:height\" content=\"1440\">"
+            "<script type=\"application/ld+json\">"
+            + json.dumps({
+                "@context": "https://schema.org", "@type": "VideoObject",
+                "name": fmt_raw(t["title"]), "description": fmt_raw(t["desc"]),
+                "contentUrl": video_url,
+                **({"thumbnailUrl": video_poster} if video_poster else {}),
+                **({"uploadDate": video_data} if video_data else {}),
+                "inLanguage": lng,
+            }, ensure_ascii=False).replace("</", "<\\/")   # mai chiudere lo <script> dal JSON
+            + "</script>") if video_url else "")
         + "<script type=\"application/ld+json\">"
         + faq_jsonld(lng, commissione_bps=commissione_bps, ota_bps=ota_bps)
         + "</script>"
@@ -668,6 +711,10 @@ def genera_landing_host(citta: str, *, lingua: str = "it", base_url: str = "",
         + "<main>"
         + "<header><h1>" + fmt(t["h1"]) + "</h1>"
         + "<p>" + fmt(t["intro"]) + "</p></header>"
+        + (("<p><video src=\"" + e(video_url) + "\" controls playsinline preload=\"metadata\""
+            + ((" poster=\"" + e(video_poster) + "\"") if video_poster else "")
+            + " style=\"width:100%;max-width:24rem;border-radius:1rem\"></video></p>")
+           if video_url else "")
         + "<div class=\"box\">" + fmt(t["calc"]) + "</div>"
         + "<p><a class=\"cta\" href=\"" + e(cta_url) + "\">" + e(t["cta"]) + "</a></p>"
         + "<section aria-labelledby=\"faq\"><h2 id=\"faq\">" + e(t["faqh"]) + "</h2>"

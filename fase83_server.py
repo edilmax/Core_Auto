@@ -9282,10 +9282,23 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                         self._scrivi(404, {"errore": "citta_non_trovata"})
                     else:
                         bps = int(os.environ.get("COMMISSIONE_BPS", "1000"))
+                        # SPOT VIDEO della città (gated da VIDEO_DIR): se esiste, la landing lo
+                        # incorpora (player + og:video + VideoObject). ISOLATO: mai rompe la pagina.
+                        v_url = v_poster = v_data = ""
+                        try:
+                            from fase97_inbound_seo import slug_citta, video_locale
+                            vid = video_locale(slug_citta(citta))
+                            if vid:
+                                v_url = base_url + vid[0]
+                                v_poster = (base_url + vid[1]) if vid[1] else ""
+                                v_data = vid[2]
+                        except Exception:
+                            pass
                         # link interni = maglia small-world sul registro (non tutte le città)
                         self._testo_seo(200, "text/html", genera_landing_host(
                             citta, lingua=query.get("lang", "it"), base_url=base_url,
-                            commissione_bps=bps, citta_correlate=vicini_di(citta, registro)))
+                            commissione_bps=bps, citta_correlate=vicini_di(citta, registro),
+                            video_url=v_url, video_poster=v_poster, video_data=v_data))
                 except Exception:
                     self._scrivi(500, {"errore": "interno"})
             elif u.path == "/blog" or u.path.startswith("/blog/"):

@@ -24,6 +24,11 @@ verificato coi FOTOGRAMMI e — novita' — con le ORECCHIE):
 - **VAI del fondatore sul test v4** → `/tmp/rigenera_finale.py` IN CORSA: tutte le 40 città nel
   formato approvato, sostituzione di TUTTI i post vivi (mappa VECCHI completa), TG+FB+Mastodon,
   bilancio città-per-città a fine corsa (log `/tmp/finale.log`, fine `/tmp/finale.done`).
+- **🎥 COSTRUITO in parallelo (mandato «finisci tutto, strategia studiata, senza chiedere»)**:
+  SPOT VIDEO DENTRO IL SITO — vedi voce REGISTRO 2026-07-27 sera (fase97 `video_locale` gated
+  `VIDEO_DIR` + player/og:video/VideoObject nelle landing + nginx `/video/` statico + compose).
+  DEPLOY tenuto in coda: si fa A GIRO VIDEO FINITO (rebuild app + recreate nginx = trappola
+  inode nota), poi popolamento `video_pubblici/` dai 40 mp4 + poster estratti, verifica live.
 
 ---
 

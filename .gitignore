@@ -100,3 +100,4 @@ htmlcov/
 #     (documenta la dipendenza), package-lock resta ignorato da *.json ---
 node_modules/
 !package.json
+video_pubblici/
