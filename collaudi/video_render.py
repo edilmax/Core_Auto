@@ -44,16 +44,36 @@ VOCI = {"it": "it-IT-DiegoNeural", "en": "en-US-GuyNeural", "es": "es-ES-AlvaroN
         "nl": "nl-NL-MaartenNeural", "ar": "ar-AE-HamdanNeural"}
 
 # Font per lingua DELLO SCHERMO: DejaVu copre latino esteso (vi/tr/nl/id inclusi) e cirillico;
-# CJK (ja/zh/ko) e thai vogliono i Noto (installati sul VPS). Se il font manca -> DejaVu (fallback).
-FONT_LINGUA = {"ja": "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
-               "zh": "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
-               "ko": "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
-               "th": "/usr/share/fonts/truetype/noto/NotoSansThai-Bold.ttf"}
+# CJK (ja/zh/ko) e thai vogliono font dedicati (installati sul VPS). ⚠️ LEZIONE VISTA SUI FOTOGRAMMI:
+# NotoSansThai ha SOLO l'alfabeto thai — niente cifre ne' '%' -> "3%" usciva a QUADRATINI. Il font
+# thai giusto e' Loma (TLWG): thai + latino + cifre insieme (verificato su PNG). I Noto CJK invece
+# le cifre le hanno (verificato). Candidati in ordine; se NESSUNO esiste -> MAI quadratini: lo
+# schermo degrada a inglese (gestito in monta), non a DejaVu.
+FONT_LINGUA = {"ja": ["/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"],
+               "zh": ["/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"],
+               "ko": ["/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"],
+               "th": ["/usr/share/fonts/truetype/tlwg/Loma-Bold.ttf",
+                      "/usr/share/fonts/truetype/tlwg/Waree-Bold.ttf"]}
 
 
 def _font(lingua_schermo):
-    f = FONT_LINGUA.get(lingua_schermo, FONT)
-    return f if os.path.exists(f) else FONT
+    """Ritorna il font per la lingua, o None se la lingua esige un font speciale che MANCA
+    (il chiamante degrada lo schermo a inglese: mai quadratini)."""
+    if lingua_schermo in FONT_LINGUA:
+        for f in FONT_LINGUA[lingua_schermo]:
+            if os.path.exists(f):
+                return f
+        return None
+    return FONT
+
+
+# Invito «attiva l'audio» (primi ~3s): i social partono SEMPRE muti (anti-disturbo, per tutti) —
+# la pratica professionale e' scritte che reggono il muto + un invito discreto ad alzare il volume.
+AUDIO_HINT = {"it": "Attiva l'audio", "en": "Sound on", "es": "Activa el sonido",
+              "fr": "Activez le son", "de": "Ton einschalten", "pt": "Ativa o som",
+              "nl": "Geluid aan", "tr": "Sesi aç", "ru": "Включите звук",
+              "id": "Nyalakan suara", "vi": "Bật âm thanh", "ko": "소리 켜기",
+              "zh": "打开声音", "th": "เปิดเสียง", "ja": "音声をオンに"}
 
 
 # Lingue OLTRE le 8 di fase200: nome (per il prompt) + ordine-di-lingua scritto NELLA lingua stessa
@@ -278,7 +298,7 @@ def _drawtext_filter(txt_path, font):
     )
 
 
-def clip_scena(img, mp3, durata, schermo_txt, tmp, idx, zoom_in=True, font=FONT):
+def clip_scena(img, mp3, durata, schermo_txt, tmp, idx, zoom_in=True, font=FONT, hint=None):
     txt_file = os.path.join(tmp, "t%d.txt" % idx)
     open(txt_file, "w", encoding="utf-8").write(schermo_txt)
     d_frames = int(durata * FPS)
@@ -286,12 +306,19 @@ def clip_scena(img, mp3, durata, schermo_txt, tmp, idx, zoom_in=True, font=FONT)
         z = "z='min(zoom+0.0009,1.22)'"
     else:
         z = "z='if(lte(zoom,1.0),1.22,max(zoom-0.0009,1.0))'"
+    testo = _drawtext_filter(txt_file, font)
+    if hint:
+        hint_file = os.path.join(tmp, "hint%d.txt" % idx)
+        open(hint_file, "w", encoding="utf-8").write(hint)
+        testo += (",drawtext=fontfile=%s:textfile=%s:expansion=none:fontcolor=white:fontsize=44:"
+                  "x=(w-text_w)/2:y=190:box=1:boxcolor=black@0.38:boxborderw=18:enable='lt(t,3.2)'"
+                  % (font, hint_file))
     vf = (
         "scale=1350:2400:force_original_aspect_ratio=increase,crop=1350:2400,"
         "zoompan=%s:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=%d:s=%dx%d:fps=%d,setsar=1,"
         "%s,"
         "fade=t=in:st=0:d=0.4,fade=t=out:st=%.2f:d=0.4"
-        % (z, d_frames, W, H, FPS, _drawtext_filter(txt_file, font), max(0.1, durata - 0.4))
+        % (z, d_frames, W, H, FPS, testo, max(0.1, durata - 0.4))
     )
     out = os.path.join(tmp, "scena%d.mp4" % idx)
     _run(["ffmpeg", "-y", "-loop", "1", "-i", img, "-i", mp3,
@@ -310,6 +337,12 @@ def monta(citta, lingua, out_path, voce=None):
                                                   lingua_voce, lingua_schermo))
     voce_scelta = voce or VOCI.get(lingua_voce, VOCI["en"])
     font = _font(lingua_schermo)
+    if font is None:   # font speciale richiesto ma ASSENTE -> mai quadratini: schermo in inglese
+        print("  [font %s assente -> schermo in inglese]" % lingua_schermo)
+        lingua_schermo, font = "en", FONT
+        for i, s in enumerate(scene):
+            s["schermo"] = _riempi(SCHERMO["en"][i], citta)
+    hint = AUDIO_HINT.get(lingua_schermo, AUDIO_HINT["en"])
     clips = []
     for i, s in enumerate(scene):
         print("  scena %d: %s" % (i + 1, s["voce"]))
@@ -318,7 +351,8 @@ def monta(citta, lingua, out_path, voce=None):
             raise RuntimeError("immagine flux non scaricata (scena %d)" % (i + 1))
         mp3 = os.path.join(tmp, "voce%d.mp3" % i)
         dur = sintetizza_voce(s["voce"], voce_scelta, mp3) + 0.6
-        clips.append(clip_scena(img, mp3, dur, s["schermo"], tmp, i, zoom_in=(i % 2 == 0), font=font))
+        clips.append(clip_scena(img, mp3, dur, s["schermo"], tmp, i, zoom_in=(i % 2 == 0),
+                                font=font, hint=(hint if i == 0 else None)))
     lista = os.path.join(tmp, "lista.txt")
     open(lista, "w").write("".join("file '%s'\n" % c for c in clips))
     _run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", lista, "-c", "copy", out_path])
