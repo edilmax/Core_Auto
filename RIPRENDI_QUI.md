@@ -1,3 +1,27 @@
+## 🧠 STATO 2026-07-27/f — DUE CAMPAGNE SEPARATE (direttiva «senza mischiare») · HOST 2.0 PSICOLOGICO
+
+Direttive fondatore in serie: «mai esseri umani, le meraviglie delle città» → «le città più belle
+del mondo» (TAPPE 40→54: +Venezia, Firenze, Napoli, Praga, Atene, Santorini, Dubrovnik, Budapest,
+Edimburgo, San Francisco, Cracovia, Porto, Sevilla, Granada — slug verificati) → **«PRIMA DEFINIRE
+SENZA MISCHIARE: campagna HOST separata da campagna CLIENTI; priorità HOST; algoritmi apposta sulla
+loro psicologia; guarda cosa dicono gli SCIENZIATI»**.
+- **CAMPAGNA CLIENTI**: PARCHEGGIATA (idea «visita le meraviglie» = demand-side, si farà separata).
+- **CAMPAGNA HOST 2.0 (ora)** — RICERCA MIRATA fatta (fonti accademiche in chat): motivatore n.1
+  del proprietario = GUADAGNO concreto (income-calculator = il convertitore più potente); barriera
+  n.1 = FIDUCIA (paura danni); poi CONTROLLO e STATUS; prospect theory (Kahneman-Tversky, Nobel):
+  la PERDITA pesa ~2× il guadagno → il conto va incorniciato come perdita.
+- **ALGORITMO nel renderer** (`copione()` FORMATO LUNGO 7 scene — «allungali che sono cortini»):
+  4 scene d'apertura APPROVATE intoccate + **IL CONTO sempre** (loss-framed: «ogni notte su €100:
+  loro −15 · noi −0», fatti veri della rampa) + **LEVA ROTANTE per città** (md5): FIDUCIA (deposito/
+  PIN/regole tue — funzioni VERE) · CLASSE FONDATRICE (status onesto «sii il primo della tua città»,
+  niente promesse inventate) · CONTROLLO (prezzi/calendario tuoi) + chiusura fissa. Groq scrive le
+  6 battute nella lingua locale (guardiano attivo); ripiego psicologico it/en; altre lingue senza
+  AI degradano al classico 5-scene coerente (mai voci miste). Immagini psicologiche senza umani.
+  Dizionari CONTO_SCHERMO + LEVA_SCHERMO completi sulle 15 lingue di schermo. Test offline verde.
+- ITER: test Roma HOST 2.0 sul canale → verdetto fondatore → giro mondiale 54 col formato lungo.
+
+---
+
 ## 🚀 STATO 2026-07-27/e — FORMATO APPROVATO DAL FONDATORE (test v4) · GIRO FINALE DEI 40 IN CORSA
 
 Giornata di correzioni A STRETTO GIRO col fondatore sul video (4 test successivi sul canale, ognuno

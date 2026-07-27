@@ -124,6 +124,86 @@ SCENA3_VARIANTI = [
 def _scena3(citta):
     import hashlib
     return SCENA3_VARIANTI[int(hashlib.md5(citta.encode("utf-8")).hexdigest(), 16) % 3]
+
+
+# ── BLOCCO PSICOLOGICO HOST (direttiva «priorità host, algoritmi apposta, psicologia» 27/07) ────
+# Scienza (ricerca mirata): motivatore n.1 = GUADAGNO concreto (il "conto" tipo income-calculator);
+# barriera n.1 = FIDUCIA (paura danni); poi CONTROLLO e STATUS. Algoritmo: la scena del CONTO c'è
+# SEMPRE (ancoraggio 100→85 vs 100→100), la seconda RUOTA per città fra le 3 ammazza-barriere.
+# Tutto FATTI VERI del prodotto (deposito, PIN, rampa 0/8/10, Classe Fondatrice) — mai vanterie.
+PSICO_IMG_CONTO = ("stack of euro banknotes and coins on a rustic wooden table next to a small "
+                   "wooden house model, warm morning light, photorealistic, natural proportions, no people")
+PSICO_ROTANTI = [
+    ("fiducia", "elegant apartment door with a modern secure smart lock and a brass door chain, "
+                "warm welcoming light, photorealistic, natural proportions, no people"),
+    ("fondatore", "golden laurel wreath resting on an elegant certificate on a dark desk, "
+                  "prestigious warm mood, photorealistic, natural proportions, no people"),
+    ("controllo", "tidy desk with an open paper calendar and house keys by a window overlooking "
+                  "{citta}, organized, warm light, photorealistic, natural proportions, no people"),
+]
+
+# Testi a schermo del blocco psicologico (corti, 2 righe): CONTO + le 3 leve, per lingua di schermo.
+# Il CONTO è incorniciato come PERDITA (prospect theory, Kahneman-Tversky: la perdita pesa ~2x
+# il guadagno equivalente): «ogni notte −€15» morde più di «ti resta 100».
+CONTO_SCHERMO = {
+    "it": "Ogni notte, su €100:\nloro −15 · noi −0",
+    "en": "Every night, on €100:\nthem −15 · us −0",
+    "es": "Cada noche, de €100:\nellos −15 · nosotros −0",
+    "fr": "Chaque nuit, sur 100 € :\neux −15 · nous −0",
+    "de": "Jede Nacht, von €100:\ndie −15 · wir −0",
+    "pt": "Cada noite, de €100:\neles −15 · nós −0",
+    "nl": "Elke nacht, van €100:\nzij −15 · wij −0",
+    "tr": "Her gece, 100 €'da:\nonlar −15 · biz −0",
+    "ru": "Каждую ночь со 100 €:\nони −15 · мы −0",
+    "id": "Tiap malam, dari €100:\nmereka −15 · kami −0",
+    "vi": "Mỗi đêm, từ €100:\nhọ −15 · chúng tôi −0",
+    "ko": "매일 밤 €100 중:\n그들 −15 · 우리 −0",
+    "zh": "每晚€100中：\n他们 −15 · 我们 −0",
+    "th": "ทุกคืน จาก €100:\nพวกเขา −15 · เรา −0",
+    "ja": "毎晩、€100のうち:\n他社 −15 · 当社 −0",
+}
+LEVA_SCHERMO = {
+    "fiducia": {"it": "La casa resta tua:\ndeposito e regole tue", "en": "Your home stays yours:\ndeposit and your rules",
+                "es": "Tu casa sigue siendo tuya:\ndepósito y tus reglas", "fr": "Votre maison reste à vous :\ncaution et vos règles",
+                "de": "Ihr Zuhause bleibt Ihres:\nKaution und Ihre Regeln", "pt": "A casa continua tua:\ncaução e regras tuas",
+                "nl": "Uw huis blijft van u:\nborg en uw regels", "tr": "Eviniz sizin kalır:\ndepozito ve sizin kurallarınız",
+                "ru": "Дом остаётся вашим:\nзалог и ваши правила", "id": "Rumah tetap milikmu:\ndeposit dan aturanmu",
+                "vi": "Nhà vẫn là của bạn:\nđặt cọc và luật của bạn", "ko": "집은 당신의 것:\n보증금과 당신의 규칙",
+                "zh": "房子还是你的：\n押金与你的规则", "th": "บ้านยังเป็นของคุณ:\nเงินมัดจำและกฎของคุณ",
+                "ja": "家はあなたのもの:\n保証金とあなたのルール"},
+    "fondatore": {"it": "Classe Fondatrice:\nsii il primo della tua città", "en": "Founding Class:\nbe first in your city",
+                  "es": "Clase Fundadora:\nsé el primero de tu ciudad", "fr": "Classe Fondatrice :\nsoyez le premier de votre ville",
+                  "de": "Gründerklasse:\nsei der Erste deiner Stadt", "pt": "Classe Fundadora:\nsê o primeiro da tua cidade",
+                  "nl": "Oprichtersklasse:\nwees de eerste van uw stad", "tr": "Kurucu Sınıf:\nşehrinin ilki ol",
+                  "ru": "Класс основателей:\nстань первым в своём городе", "id": "Kelas Pendiri:\njadilah yang pertama di kotamu",
+                  "vi": "Lớp Sáng lập:\nhãy là người đầu tiên", "ko": "창립 클래스:\n도시의 첫 호스트가 되세요",
+                  "zh": "创始会员：\n做你城市的第一个", "th": "รุ่นผู้ก่อตั้ง:\nเป็นคนแรกของเมืองคุณ",
+                  "ja": "創業クラス:\n街の最初のホストに"},
+    "controllo": {"it": "Prezzi, calendario, regole:\ndecidi tu", "en": "Prices, calendar, rules:\nyou decide",
+                  "es": "Precios, calendario, reglas:\ntú decides", "fr": "Prix, calendrier, règles :\nc'est vous qui décidez",
+                  "de": "Preise, Kalender, Regeln:\nSie entscheiden", "pt": "Preços, calendário, regras:\ntu decides",
+                  "nl": "Prijzen, kalender, regels:\nu beslist", "tr": "Fiyat, takvim, kurallar:\nsiz karar verirsiniz",
+                  "ru": "Цены, календарь, правила:\nрешаете вы", "id": "Harga, kalender, aturan:\nkamu yang putuskan",
+                  "vi": "Giá, lịch, luật:\nbạn quyết định", "ko": "가격, 일정, 규칙:\n당신이 정한다",
+                  "zh": "价格、日历、规则：\n你说了算", "th": "ราคา ปฏิทิน กฎ:\nคุณตัดสินใจ",
+                  "ja": "料金・カレンダー・ルール:\nあなたが決める"},
+}
+# Voce di RIPIEGO del blocco psicologico (se l'AI tace), it/en (le altre degradano con coerenza).
+PSICO_VOCE_RIPIEGO = {
+    "it": {"conto": "Fai due conti: a cento euro a notte, con i grandi portali perdi quindici euro ogni notte. Da noi zero, per novanta giorni.",
+           "fiducia": "La tua casa resta tua: deposito cauzionale, check-in con PIN e le regole le metti tu.",
+           "fondatore": "I primi host di ogni città formano la Classe Fondatrice. Il posto da primo è ancora libero: prenditelo.",
+           "controllo": "Prezzi, calendario e regole li decidi tu. Sempre."},
+    "en": {"conto": "Do the math: at a hundred euros a night, the big portals cost you fifteen euros every single night. With us, zero for ninety days.",
+           "fiducia": "Your home stays yours: security deposit, PIN check-in, and you set the rules.",
+           "fondatore": "The first hosts of every city form the Founding Class. The first spot is still open: take it.",
+           "controllo": "Prices, calendar and rules: you decide. Always."},
+}
+
+
+def _leva_rotante(citta):
+    import hashlib
+    return PSICO_ROTANTI[int(hashlib.md5(("leva:" + citta).encode("utf-8")).hexdigest(), 16) % 3]
 SCHERMO = {
     "it": ["{citta}.", "Mettila a reddito,\nsenza sorprese.", "0% commissioni\nper 90 giorni",
            "3% tecnico,\ndetto prima.", "BookinVIP\nbookinvip.com"],
@@ -260,23 +340,40 @@ def _run(cmd, **kw):
 
 
 # ── COPIONE VOCE via Groq (una AI a giro), lingua locale + guardiano lingua ─────────────────────
-def _groq_copione(api_key, citta, lingua, n):
-    """Chiede a Groq le n battute di voce nella lingua locale, separate da '|'. Ritorna lista o None."""
+def _groq_copione(api_key, citta, lingua, n, leva=None):
+    """Chiede a Groq le n battute di voce nella lingua locale, separate da '|'. Ritorna lista o None.
+    Con `leva` la struttura include il blocco psicologico (conto-perdita + leva rotante)."""
     if not api_key:
         return None
     ordine = EXTRA_ORDINE.get(lingua) or C._ORDINE_LINGUA.get(lingua, C._ORDINE_LINGUA["en"])
     lang = EXTRA_NOME.get(lingua) or C.NOME_LINGUA.get(lingua, "inglese")
+    if leva:
+        descr_leva = {
+            "fiducia": "la PROTEZIONE: la casa resta sua — deposito cauzionale, check-in con PIN, "
+                       "le regole le decide lui",
+            "fondatore": "lo STATUS: i primi host della citta' formano la Classe Fondatrice di "
+                         "BookinVIP; il posto da primo e' ancora libero",
+            "controllo": "il CONTROLLO: prezzi, calendario e regole li decide lui, sempre",
+        }[leva]
+        struttura = ("1) aggancio con la citta'  2) metti a reddito senza pensieri  "
+                     "3) l'offerta 0%/90 giorni  4) la trasparenza del 3%  "
+                     "5) IL CONTO come PERDITA (fatti esatti: su 100 euro a notte, con i grandi "
+                     "portali il proprietario PERDE 15 euro ogni notte; da noi 0 per 90 giorni)  "
+                     "6) " + descr_leva + ".")
+    else:
+        struttura = ("1) aggancio con la citta'  2) metti a reddito senza pensieri  "
+                     "3) l'offerta 0%/90 giorni  4) la trasparenza del 3%  "
+                     "5) invito: BookinVIP, bookinvip.com.")
     prompt = (
         "%s\n\nSei un copywriter pubblicitario (scuola Ogilvy). Scrivi il copione PARLATO di uno spot "
         "video di %d battute BREVISSIME per invitare un HOST di %s a pubblicare la sua casa su BookinVIP. "
         "Fatti veri: 0%% commissione i primi 90 giorni (poi 8%%), l'ospite paga 0%%, una tariffa tecnica "
         "del 3%% detta PRIMA della firma. Promessa: «Il tuo viaggio, senza sorprese».\n"
-        "Struttura le %d battute cosi': 1) aggancio con la citta'  2) metti a reddito senza pensieri  "
-        "3) l'offerta 0%%/90 giorni  4) la trasparenza del 3%%  5) invito: BookinVIP, bookinvip.com.\n"
-        "Regole: ogni battuta max 12 parole, parlata e naturale, NIENTE emoji, NIENTE virgolette. "
+        "Struttura le %d battute cosi': %s\n"
+        "Regole: ogni battuta max 14 parole, parlata e naturale, NIENTE emoji, NIENTE virgolette. "
         "Rispondi SOLO con le %d battute separate dal carattere '|', nient'altro. "
         "IMPORTANTE: scrivi interamente in %s.%s"
-        % (ordine, n, citta, n, n, lang,
+        % (ordine, n, citta, n, struttura, n, lang,
            "" if lingua == "it" else " Nessuna parola italiana.")
     )
     body = json.dumps({"model": GROQ_MODELLO, "temperature": 0.7, "max_tokens": 320,
@@ -304,23 +401,40 @@ def _groq_copione(api_key, citta, lingua, n):
 
 
 def copione(api_key, citta, lingua):
-    """Ritorna (scene, da_ai, lingua_voce, lingua_schermo). Coerenza garantita: se l'AI tace e
-    NON esiste un ripiego locale, si degrada TUTTO a inglese (voce+schermo insieme, mai misti)."""
-    voci = _groq_copione(api_key, citta, lingua, len(BEAT_SOGGETTI))
+    """Ritorna (scene, da_ai, lingua_voce, lingua_schermo). FORMATO LUNGO (7 scene): 4 d'apertura
+    APPROVATE e intoccate + IL CONTO (perdita, sempre) + LEVA psicologica rotante + chiusura fissa.
+    Coerenza garantita: se l'AI tace, ripiego psicologico it/en; per le altre lingue si degrada al
+    formato CLASSICO a 5 scene nella lingua del ripiego (mai voci miste, mai video rotto)."""
+    leva_nome, leva_img = _leva_rotante(citta)
+    voci = _groq_copione(api_key, citta, lingua, 6, leva=leva_nome)
     da_ai = voci is not None
     lingua_voce = lingua
+    lungo = True
     if not da_ai:
         lingua_voce = lingua if lingua in VOCE_RIPIEGO else "en"
-        base = VOCE_RIPIEGO[lingua_voce]
-        voci = [_riempi(x, citta) for x in base]
+        psic = PSICO_VOCE_RIPIEGO.get(lingua_voce)
+        if psic:
+            voci = ([_riempi(x, citta) for x in VOCE_RIPIEGO[lingua_voce][:4]]
+                    + [psic["conto"], psic[leva_nome]])
+        else:
+            lungo = False                                  # formato classico a 5 scene
+            voci = [_riempi(x, citta) for x in VOCE_RIPIEGO[lingua_voce]]
     lingua_schermo = lingua_voce if lingua_voce in SCHERMO else "en"
     schermo = SCHERMO[lingua_schermo]
-    soggetti = list(BEAT_SOGGETTI)
-    soggetti[2] = _scena3(citta)
+    base_sogg = list(BEAT_SOGGETTI)
+    base_sogg[2] = _scena3(citta)
+    if lungo:
+        soggetti = base_sogg[:4] + [PSICO_IMG_CONTO, leva_img] + [base_sogg[4]]
+        schermi = (list(schermo[:4])
+                   + [CONTO_SCHERMO[lingua_schermo], LEVA_SCHERMO[leva_nome][lingua_schermo]]
+                   + [schermo[4]])
+        voci = voci[:6] + [""]                             # la 7ª voce è la chiusura fissa
+    else:
+        soggetti, schermi = base_sogg, list(schermo)
     scene = []
     for i, sog in enumerate(soggetti):
         scene.append({"soggetto": _riempi(sog, citta),
-                      "schermo": _riempi(schermo[i], citta),
+                      "schermo": _riempi(schermi[i], citta),
                       "voce": voci[i]})
     # la CHIUSURA e' sempre la frase fissa curata (l'indirizzo detto bene, mai balbettii AI)
     scene[-1]["voce"] = CHIUSURA_VOCE.get(lingua_voce, CHIUSURA_VOCE["en"])
