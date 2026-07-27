@@ -364,16 +364,19 @@ def _groq_copione(api_key, citta, lingua, n, leva=None):
         struttura = ("1) aggancio con la citta'  2) metti a reddito senza pensieri  "
                      "3) l'offerta 0%/90 giorni  4) la trasparenza del 3%  "
                      "5) invito: BookinVIP, bookinvip.com.")
+    regole = ("Regole: le battute 1-4 max 12 parole; le battute 5 e 6 piu' RICCHE, fino a 22 "
+              "parole l'una (anche due frasi). " if leva
+              else "Regole: ogni battuta max 14 parole. ")
     prompt = (
         "%s\n\nSei un copywriter pubblicitario (scuola Ogilvy). Scrivi il copione PARLATO di uno spot "
-        "video di %d battute BREVISSIME per invitare un HOST di %s a pubblicare la sua casa su BookinVIP. "
+        "video di %d battute per invitare un HOST di %s a pubblicare la sua casa su BookinVIP. "
         "Fatti veri: 0%% commissione i primi 90 giorni (poi 8%%), l'ospite paga 0%%, una tariffa tecnica "
         "del 3%% detta PRIMA della firma. Promessa: «Il tuo viaggio, senza sorprese».\n"
-        "Struttura le %d battute cosi': %s\n"
-        "Regole: ogni battuta max 14 parole, parlata e naturale, NIENTE emoji, NIENTE virgolette. "
+        "Struttura le %d battute cosi': %s\n%s"
+        "Parlato naturale, NIENTE emoji, NIENTE virgolette. "
         "Rispondi SOLO con le %d battute separate dal carattere '|', nient'altro. "
         "IMPORTANTE: scrivi interamente in %s.%s"
-        % (ordine, n, citta, n, struttura, n, lang,
+        % (ordine, n, citta, n, struttura, regole, n, lang,
            "" if lingua == "it" else " Nessuna parola italiana.")
     )
     body = json.dumps({"model": GROQ_MODELLO, "temperature": 0.7, "max_tokens": 320,
@@ -549,7 +552,8 @@ def monta(citta, lingua, out_path, voce=None):
         if not scarica_immagine(s["soggetto"], img):
             raise RuntimeError("immagine flux non scaricata (scena %d)" % (i + 1))
         mp3 = os.path.join(tmp, "voce%d.mp3" % i)
-        dur = sintetizza_voce(_pronuncia(s["voce"], lingua_voce), voce_scelta, mp3) + 0.6
+        # +1.0 di respiro per scena («allungali che sono cortini»): Ken Burns respira, il testo resta
+        dur = sintetizza_voce(_pronuncia(s["voce"], lingua_voce), voce_scelta, mp3) + 1.0
         clips.append(clip_scena(img, mp3, dur, s["schermo"], tmp, i, zoom_in=(i % 2 == 0),
                                 font=font, hint=(hint if i == 0 else None)))
     lista = os.path.join(tmp, "lista.txt")
