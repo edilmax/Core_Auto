@@ -21,6 +21,7 @@ services:
       DB_REGISTRO_HOST: /data/registro_host.db   # account host self-service (durevole)
       DB_VIRAL: /data/viral.db                   # crediti referral (durevole)
       DB_DOMANDA: /data/domanda.db               # waitlist cold-start (durevole) - ERA MANCANTE -> scritture KO
+      DB_PARTNER: /data/partner.db               # candidature programma partner fase201 (durevole)
       DB_MESSAGGI: /data/messaggi.db             # messaggistica (durevole)
       DB_GARANZIA: /data/garanzia.db             # escrow di garanzia (durevole)
       DB_PENDENTI: /data/pendenti.db             # hold pagamento / su-richiesta (durevole)

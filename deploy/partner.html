@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Programma Partner — BookinVIP</title>
+<meta name="description" content="Porta host a BookinVIP e cresci con noi: property manager, creator e agenzie. Candidati al programma partner.">
+<style>
+:root{--brand:#0f4c3a;--brand-chiaro:#1a6b52;--oro:#c9a227;--testo:#1a1e2b;--testo-tenue:#5e6f8d;--bordo:#dfe5ee;--sfondo:#ffffff;--sfondo-tenue:#f4f7fb;--rosso:#b3261e;--verde-bg:#e7f5ec}
+body{margin:0;font-family:system-ui,Segoe UI,sans-serif;color:var(--testo);background:var(--sfondo);line-height:1.6}
+header.hero{background:linear-gradient(135deg,var(--brand),var(--brand-chiaro));color:#fff;padding:3rem 1.2rem 2.4rem;text-align:center;position:relative}
+#lang{position:absolute;top:1rem;right:1rem;padding:.3rem .6rem;border-radius:.6rem;border:1px solid rgba(255,255,255,.5);background:rgba(255,255,255,.12);color:#fff}
+#lang option{color:#1a1e2b}
+h1{margin:.2rem 0 .6rem;font-size:1.9rem}
+.hero p{max-width:38rem;margin:0 auto;opacity:.95}
+main{max-width:46rem;margin:0 auto;padding:1rem 1.2rem 3rem}
+section{margin:2rem 0}
+.card{background:var(--sfondo-tenue);border:1px solid var(--bordo);border-radius:1rem;padding:1.2rem 1.4rem}
+h2{color:var(--brand);margin:.2rem 0 .6rem}
+a.btn,button.btn{display:inline-block;background:var(--brand);color:#fff;border:0;padding:.8rem 1.6rem;border-radius:2rem;text-decoration:none;font-weight:600;font-size:1rem;cursor:pointer}
+label{display:block;margin:.8rem 0 .2rem;font-weight:600}
+input,select,textarea{width:100%;box-sizing:border-box;padding:.6rem .7rem;border:1px solid var(--bordo);border-radius:.6rem;font:inherit}
+textarea{min-height:6rem}
+.consenso{display:flex;gap:.6rem;align-items:flex-start;margin:1rem 0}
+.consenso input{width:auto;margin-top:.3rem}
+#esito{margin-top:1rem;font-weight:600;display:none;padding:.8rem 1rem;border-radius:.6rem}
+#esito.ok{display:block;background:var(--verde-bg);color:var(--brand)}
+#esito.err{display:block;background:#fdecea;color:var(--rosso)}
+.nota{color:var(--testo-tenue);font-size:.92rem}
+footer{border-top:1px solid var(--bordo);padding:1.2rem;text-align:center}
+footer a{color:var(--brand);margin:0 .5rem;text-decoration:none}
+</style>
+</head>
+<body>
+<header class="hero">
+  <select id="lang" aria-label="Language">
+    <option value="it">🇮🇹 IT</option><option value="en">🇬🇧 EN</option><option value="es">🇪🇸 ES</option><option value="fr">🇫🇷 FR</option><option value="de">🇩🇪 DE</option><option value="pt">🇵🇹 PT</option><option value="ja">🇯🇵 JA</option><option value="zh">🇨🇳 ZH</option>
+  </select>
+  <h1 data-i18n="h1">Cresci con noi: Programma Partner</h1>
+  <p data-i18n="hero_p">Porta host su BookinVIP e vinciamo insieme. Property manager, creator, agenzie: qui le porte sono aperte.</p>
+</header>
+<main>
+  <section class="card">
+    <h2 data-i18n="host_h">Sei già un host?</h2>
+    <p data-i18n="host_p">Il tuo link di invito è nel pannello host: chi si iscrive dal tuo link riceve un credito di benvenuto, e tu accumuli credito quando i tuoi invitati incassano le prime prenotazioni.</p>
+    <p><a class="btn" href="/entra-host" data-i18n="host_btn">Vai al pannello host</a></p>
+  </section>
+  <section class="card">
+    <h2 data-i18n="pro_h">Sei un professionista?</h2>
+    <p data-i18n="pro_p">Gestisci più proprietà, hai un pubblico di viaggiatori o rappresenti un'agenzia? Raccontacelo: definiamo insieme condizioni su misura, senza vincoli e senza esclusive.</p>
+    <form id="f" novalidate>
+      <label for="nome" data-i18n="f_nome">Nome e cognome (o azienda)</label>
+      <input id="nome" name="nome" maxlength="80" required>
+      <label for="email" data-i18n="f_email">Email</label>
+      <input id="email" name="email" type="email" maxlength="254" required>
+      <label for="tipo" data-i18n="f_tipo">Chi sei</label>
+      <select id="tipo" name="tipo">
+        <option value="property_manager" data-i18n="tipo_pm">Property manager (gestisco più proprietà)</option>
+        <option value="creator" data-i18n="tipo_creator">Creator / blog di viaggi</option>
+        <option value="agenzia" data-i18n="tipo_agenzia">Agenzia</option>
+        <option value="altro" data-i18n="tipo_altro">Altro</option>
+      </select>
+      <label for="citta" data-i18n="f_citta">Città principale (facoltativa)</label>
+      <input id="citta" name="citta" maxlength="80">
+      <label for="msg" data-i18n="f_msg">Raccontaci di te</label>
+      <textarea id="msg" name="messaggio" maxlength="2000"></textarea>
+      <div class="consenso">
+        <input id="consenso" type="checkbox">
+        <label for="consenso" style="font-weight:400" data-i18n="f_consenso">Ho letto l'informativa privacy e acconsento al trattamento dei miei dati per essere ricontattato.</label>
+      </div>
+      <button class="btn" type="submit" data-i18n="f_invia">Invia la candidatura</button>
+      <div id="esito" role="status"></div>
+      <p class="nota" data-i18n="nota">Ti rispondiamo personalmente. Nessun costo, nessun impegno: le condizioni si concordano prima, per iscritto, come tutto su BookinVIP.</p>
+    </form>
+  </section>
+</main>
+<footer>
+  <a href="/" data-i18n="nav_home">Home</a>
+  <a href="/commissioni.html" data-i18n="nav_comm">Commissioni</a>
+  <a href="/diventa-host.html" data-i18n="nav_host">Diventa host</a>
+  <a href="/privacy.html" data-i18n="nav_privacy">Privacy</a>
+</footer>
+<script>
+const TR={
+ it:{h1:"Cresci con noi: Programma Partner",hero_p:"Porta host su BookinVIP e vinciamo insieme. Property manager, creator, agenzie: qui le porte sono aperte.",host_h:"Sei già un host?",host_p:"Il tuo link di invito è nel pannello host: chi si iscrive dal tuo link riceve un credito di benvenuto, e tu accumuli credito quando i tuoi invitati incassano le prime prenotazioni.",host_btn:"Vai al pannello host",pro_h:"Sei un professionista?",pro_p:"Gestisci più proprietà, hai un pubblico di viaggiatori o rappresenti un'agenzia? Raccontacelo: definiamo insieme condizioni su misura, senza vincoli e senza esclusive.",f_nome:"Nome e cognome (o azienda)",f_email:"Email",f_tipo:"Chi sei",tipo_pm:"Property manager (gestisco più proprietà)",tipo_creator:"Creator / blog di viaggi",tipo_agenzia:"Agenzia",tipo_altro:"Altro",f_citta:"Città principale (facoltativa)",f_msg:"Raccontaci di te",f_consenso:"Ho letto l'informativa privacy e acconsento al trattamento dei miei dati per essere ricontattato.",f_invia:"Invia la candidatura",nota:"Ti rispondiamo personalmente. Nessun costo, nessun impegno: le condizioni si concordano prima, per iscritto, come tutto su BookinVIP.",ok_msg:"Candidatura ricevuta: ti scriviamo presto. Grazie!",err_msg:"Invio non riuscito: riprova tra poco.",err_consenso:"Per inviare serve il consenso privacy.",err_campi:"Controlla nome, email e i campi del modulo.",nav_home:"Home",nav_comm:"Commissioni",nav_host:"Diventa host",nav_privacy:"Privacy"},
+ en:{h1:"Grow with us: Partner Program",hero_p:"Bring hosts to BookinVIP and let's win together. Property managers, creators, agencies: our door is open.",host_h:"Already a host?",host_p:"Your invite link is in the host panel: whoever signs up from your link gets a welcome credit, and you earn credit when your invitees collect their first bookings.",host_btn:"Go to the host panel",pro_h:"Are you a professional?",pro_p:"Do you manage several properties, have a travel audience or represent an agency? Tell us: we agree tailored terms together, no lock-in and no exclusivity.",f_nome:"Full name (or company)",f_email:"Email",f_tipo:"Who you are",tipo_pm:"Property manager (I manage several properties)",tipo_creator:"Creator / travel blog",tipo_agenzia:"Agency",tipo_altro:"Other",f_citta:"Main city (optional)",f_msg:"Tell us about yourself",f_consenso:"I have read the privacy notice and consent to the processing of my data to be contacted back.",f_invia:"Send application",nota:"We reply personally. No cost, no commitment: terms are agreed first, in writing, like everything on BookinVIP.",ok_msg:"Application received: we'll write to you soon. Thank you!",err_msg:"Submission failed: please try again shortly.",err_consenso:"Privacy consent is required to submit.",err_campi:"Please check your name, email and the form fields.",nav_home:"Home",nav_comm:"Commissions",nav_host:"Become a host",nav_privacy:"Privacy"},
+ es:{h1:"Crece con nosotros: Programa Partner",hero_p:"Trae anfitriones a BookinVIP y ganemos juntos. Property managers, creadores, agencias: las puertas están abiertas.",host_h:"¿Ya eres anfitrión?",host_p:"Tu enlace de invitación está en el panel de anfitrión: quien se registre desde tu enlace recibe un crédito de bienvenida, y tú acumulas crédito cuando tus invitados cobran sus primeras reservas.",host_btn:"Ir al panel de anfitrión",pro_h:"¿Eres profesional?",pro_p:"¿Gestionas varias propiedades, tienes audiencia viajera o representas una agencia? Cuéntanoslo: acordamos condiciones a medida, sin ataduras ni exclusividad.",f_nome:"Nombre y apellidos (o empresa)",f_email:"Email",f_tipo:"Quién eres",tipo_pm:"Property manager (gestiono varias propiedades)",tipo_creator:"Creador / blog de viajes",tipo_agenzia:"Agencia",tipo_altro:"Otro",f_citta:"Ciudad principal (opcional)",f_msg:"Cuéntanos sobre ti",f_consenso:"He leído la información de privacidad y consiento el tratamiento de mis datos para ser contactado.",f_invia:"Enviar candidatura",nota:"Respondemos personalmente. Sin coste ni compromiso: las condiciones se acuerdan antes y por escrito, como todo en BookinVIP.",ok_msg:"Candidatura recibida: te escribimos pronto. ¡Gracias!",err_msg:"No se pudo enviar: inténtalo de nuevo en un momento.",err_consenso:"Para enviar se necesita el consentimiento de privacidad.",err_campi:"Revisa el nombre, el email y los campos del formulario.",nav_home:"Inicio",nav_comm:"Comisiones",nav_host:"Ser anfitrión",nav_privacy:"Privacidad"},
+ fr:{h1:"Grandissez avec nous : Programme Partenaire",hero_p:"Amenez des hôtes sur BookinVIP et gagnons ensemble. Property managers, créateurs, agences : la porte est ouverte.",host_h:"Déjà hôte ?",host_p:"Votre lien d'invitation est dans le panneau hôte : celui qui s'inscrit via votre lien reçoit un crédit de bienvenue, et vous cumulez du crédit quand vos invités encaissent leurs premières réservations.",host_btn:"Aller au panneau hôte",pro_h:"Vous êtes un professionnel ?",pro_p:"Vous gérez plusieurs logements, avez une audience voyage ou représentez une agence ? Dites-le-nous : nous convenons ensemble de conditions sur mesure, sans engagement ni exclusivité.",f_nome:"Nom et prénom (ou société)",f_email:"Email",f_tipo:"Qui êtes-vous",tipo_pm:"Property manager (je gère plusieurs logements)",tipo_creator:"Créateur / blog voyage",tipo_agenzia:"Agence",tipo_altro:"Autre",f_citta:"Ville principale (facultatif)",f_msg:"Parlez-nous de vous",f_consenso:"J'ai lu la politique de confidentialité et je consens au traitement de mes données pour être recontacté.",f_invia:"Envoyer la candidature",nota:"Nous répondons personnellement. Sans frais, sans engagement : les conditions se conviennent avant, par écrit, comme tout sur BookinVIP.",ok_msg:"Candidature reçue : nous vous écrivons vite. Merci !",err_msg:"Échec de l'envoi : réessayez dans un instant.",err_consenso:"Le consentement de confidentialité est requis pour envoyer.",err_campi:"Vérifiez le nom, l'email et les champs du formulaire.",nav_home:"Accueil",nav_comm:"Commissions",nav_host:"Devenir hôte",nav_privacy:"Confidentialité"},
+ de:{h1:"Wachse mit uns: Partnerprogramm",hero_p:"Bring Gastgeber zu BookinVIP — gewinnen wir gemeinsam. Property Manager, Creator, Agenturen: die Tür steht offen.",host_h:"Schon Gastgeber?",host_p:"Dein Einladungslink ist im Gastgeber-Panel: Wer sich über deinen Link anmeldet, erhält ein Willkommensguthaben, und du sammelst Guthaben, wenn deine Eingeladenen ihre ersten Buchungen erhalten.",host_btn:"Zum Gastgeber-Panel",pro_h:"Bist du Profi?",pro_p:"Du verwaltest mehrere Unterkünfte, hast ein Reise-Publikum oder vertrittst eine Agentur? Erzähl es uns: Wir vereinbaren gemeinsam maßgeschneiderte Konditionen, ohne Bindung und ohne Exklusivität.",f_nome:"Vor- und Nachname (oder Firma)",f_email:"E-Mail",f_tipo:"Wer bist du",tipo_pm:"Property Manager (ich verwalte mehrere Unterkünfte)",tipo_creator:"Creator / Reiseblog",tipo_agenzia:"Agentur",tipo_altro:"Sonstiges",f_citta:"Hauptstadt/-ort (optional)",f_msg:"Erzähl uns von dir",f_consenso:"Ich habe die Datenschutzhinweise gelesen und willige in die Verarbeitung meiner Daten zur Kontaktaufnahme ein.",f_invia:"Bewerbung senden",nota:"Wir antworten persönlich. Keine Kosten, keine Verpflichtung: Konditionen werden vorher schriftlich vereinbart — wie alles bei BookinVIP.",ok_msg:"Bewerbung erhalten: wir schreiben dir bald. Danke!",err_msg:"Senden fehlgeschlagen: bitte gleich noch einmal versuchen.",err_consenso:"Zum Senden ist die Datenschutz-Einwilligung erforderlich.",err_campi:"Bitte Name, E-Mail und die Formularfelder prüfen.",nav_home:"Start",nav_comm:"Provisionen",nav_host:"Gastgeber werden",nav_privacy:"Datenschutz"},
+ pt:{h1:"Cresça connosco: Programa Partner",hero_p:"Traga anfitriões para a BookinVIP e vençamos juntos. Property managers, criadores, agências: as portas estão abertas.",host_h:"Já é anfitrião?",host_p:"O seu link de convite está no painel do anfitrião: quem se registar pelo seu link recebe um crédito de boas-vindas, e você acumula crédito quando os seus convidados recebem as primeiras reservas.",host_btn:"Ir para o painel do anfitrião",pro_h:"É um profissional?",pro_p:"Gere várias propriedades, tem um público de viagens ou representa uma agência? Conte-nos: definimos juntos condições à medida, sem vínculos e sem exclusividade.",f_nome:"Nome completo (ou empresa)",f_email:"Email",f_tipo:"Quem é você",tipo_pm:"Property manager (giro várias propriedades)",tipo_creator:"Criador / blog de viagens",tipo_agenzia:"Agência",tipo_altro:"Outro",f_citta:"Cidade principal (opcional)",f_msg:"Fale-nos de si",f_consenso:"Li a informação de privacidade e consinto o tratamento dos meus dados para ser contactado.",f_invia:"Enviar candidatura",nota:"Respondemos pessoalmente. Sem custos, sem compromisso: as condições combinam-se antes, por escrito, como tudo na BookinVIP.",ok_msg:"Candidatura recebida: escrevemos-lhe em breve. Obrigado!",err_msg:"Envio falhou: tente novamente daqui a pouco.",err_consenso:"Para enviar é necessário o consentimento de privacidade.",err_campi:"Verifique o nome, o email e os campos do formulário.",nav_home:"Início",nav_comm:"Comissões",nav_host:"Ser anfitrião",nav_privacy:"Privacidade"},
+ ja:{h1:"一緒に成長を：パートナープログラム",hero_p:"BookinVIPにホストを連れてきて、一緒に勝ちましょう。プロパティマネージャー、クリエイター、代理店：扉は開いています。",host_h:"すでにホストですか？",host_p:"招待リンクはホストパネルにあります。あなたのリンクから登録した人はウェルカムクレジットを受け取り、招待した人が最初の予約を受けるとあなたにもクレジットが貯まります。",host_btn:"ホストパネルへ",pro_h:"プロフェッショナルの方へ",pro_p:"複数の物件を管理している、旅行好きのオーディエンスがいる、代理店を代表している——ぜひ教えてください。拘束も独占もなしで、条件を一緒に決めます。",f_nome:"氏名（または会社名）",f_email:"メール",f_tipo:"あなたは",tipo_pm:"プロパティマネージャー（複数物件を管理）",tipo_creator:"クリエイター／旅行ブログ",tipo_agenzia:"代理店",tipo_altro:"その他",f_citta:"主要都市（任意）",f_msg:"自己紹介",f_consenso:"プライバシー情報を読み、連絡を受けるためのデータ処理に同意します。",f_invia:"応募を送信",nota:"私たちが直接お返事します。費用も義務もありません。条件は事前に書面で合意します——BookinVIPのすべてと同じように。",ok_msg:"応募を受け取りました。近日中にご連絡します。ありがとうございます！",err_msg:"送信に失敗しました。しばらくしてからもう一度お試しください。",err_consenso:"送信にはプライバシーへの同意が必要です。",err_campi:"氏名・メール・フォームの項目をご確認ください。",nav_home:"ホーム",nav_comm:"手数料",nav_host:"ホストになる",nav_privacy:"プライバシー"},
+ zh:{h1:"与我们一起成长：合作伙伴计划",hero_p:"把房东带到BookinVIP，一起共赢。物业管理者、创作者、代理机构：大门敞开。",host_h:"已经是房东？",host_p:"您的邀请链接在房东面板中：通过您的链接注册的人将获得欢迎信用金，当受邀者收到首批预订时，您也会累积信用金。",host_btn:"前往房东面板",pro_h:"您是专业人士？",pro_p:"您管理多处房源、拥有旅行受众或代表一家机构？告诉我们：我们一起商定量身定制的条件，无绑定、无独家。",f_nome:"姓名（或公司）",f_email:"邮箱",f_tipo:"您的身份",tipo_pm:"物业管理者（管理多处房源）",tipo_creator:"创作者／旅行博客",tipo_agenzia:"代理机构",tipo_altro:"其他",f_citta:"主要城市（选填）",f_msg:"介绍一下自己",f_consenso:"我已阅读隐私说明，并同意为回复联系而处理我的数据。",f_invia:"提交申请",nota:"我们会亲自回复。无费用、无义务：条件事先书面商定——BookinVIP的一切都是如此。",ok_msg:"申请已收到：我们会尽快联系您。谢谢！",err_msg:"提交失败：请稍后再试。",err_consenso:"提交需要同意隐私条款。",err_campi:"请检查姓名、邮箱和表单字段。",nav_home:"首页",nav_comm:"佣金",nav_host:"成为房东",nav_privacy:"隐私"}
+};
+function applica(l){
+  const d=TR[l]||TR.it;
+  document.documentElement.lang=l;
+  document.querySelectorAll("[data-i18n]").forEach(el=>{const k=el.getAttribute("data-i18n");if(d[k])el.textContent=d[k];});
+}
+const sel=document.getElementById("lang");
+let LNG=(localStorage.getItem("bv_lang")||navigator.language||"it").slice(0,2);
+if(!TR[LNG])LNG="en";
+sel.value=LNG;applica(LNG);
+sel.onchange=()=>{LNG=sel.value;localStorage.setItem("bv_lang",LNG);applica(LNG);};
+document.getElementById("f").onsubmit=async e=>{
+  e.preventDefault();
+  const d=TR[LNG]||TR.it,es=document.getElementById("esito");
+  es.className="";es.style.display="none";
+  if(!document.getElementById("consenso").checked){es.textContent=d.err_consenso;es.className="err";return;}
+  const corpo={nome:document.getElementById("nome").value.trim(),
+               email:document.getElementById("email").value.trim(),
+               tipo:document.getElementById("tipo").value,
+               citta:document.getElementById("citta").value.trim(),
+               messaggio:document.getElementById("msg").value.trim(),
+               consenso:true};
+  try{
+    const r=await fetch("/api/partner",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(corpo)});
+    if(r.status===201){es.textContent=d.ok_msg;es.className="ok";e.target.reset();}
+    else if(r.status===422){es.textContent=d.err_campi;es.className="err";}
+    else{es.textContent=d.err_msg;es.className="err";}
+  }catch(_){es.textContent=d.err_msg;es.className="err";}
+};
+</script>
+</body>
+</html>

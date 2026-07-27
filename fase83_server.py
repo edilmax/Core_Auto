@@ -1723,6 +1723,10 @@ class RouterHTTP:
             return self._trasparenza(query, headers)
         if metodo == "POST" and path == "/api/domanda":
             return self._domanda_registra(body)
+        if metodo == "POST" and path == "/api/partner":
+            return self._partner_registra(body)
+        if metodo == "GET" and path == "/api/admin/partner":
+            return self._admin_partner(query, headers)
         if metodo == "GET" and path == "/api/domanda/conta":
             return self._domanda_conta(query)
         if metodo == "GET" and path == "/api/domanda/citta":
@@ -5997,6 +6001,36 @@ class RouterHTTP:
             notif.avvisa(contatti, ogg, testo)
         except Exception:
             logger.warning("avviso host prenotazione fallito (ignorato)", exc_info=True)
+
+    def _partner_registra(self, body):
+        """Candidatura al programma partner (fase201): pubblica, GDPR-gated (consenso
+        obbligatorio), dedup per email, tetto orario anti-flooding."""
+        par = getattr(self._sys, "partner", None)
+        if par is None:
+            return 503, {"errore": "partner_non_attivo"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        esito = par.registra(dati.get("nome"), dati.get("email"), dati.get("tipo"),
+                             citta=dati.get("citta", ""), messaggio=dati.get("messaggio", ""),
+                             consenso=dati.get("consenso") is True)
+        if esito.get("ok"):
+            return 201, {"ok": True}
+        codice = 429 if esito.get("errore") == "riprova_piu_tardi" else 422
+        return codice, esito
+
+    def _admin_partner(self, query, headers):
+        """Elenco candidature partner (solo admin)."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "non_autorizzato"}
+        par = getattr(self._sys, "partner", None)
+        if par is None:
+            return 503, {"errore": "partner_non_attivo"}
+        try:
+            limite = int(query.get("limite", "200"))
+        except (TypeError, ValueError):
+            limite = 200
+        return 200, {"totale": par.conta(), "candidati": par.candidati(limite)}
 
     def _domanda_registra(self, body):
         """Lista d'attesa anti-vuoto: l'ospite lascia email+citta quando non trova nulla ->

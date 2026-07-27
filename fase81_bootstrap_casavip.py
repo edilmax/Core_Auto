@@ -80,6 +80,7 @@ class ConfigCasaVIP:
     db_split: str = ":memory:"         # split di gruppo (fase65): rotte VIVE -> in prod va su FILE
     db_messaggi: str = ":memory:"
     db_domanda: str = ":memory:"       # lista d'attesa + credito fondatore (anti-vuoto)
+    db_partner: str = ":memory:"       # candidature programma partner (fase201)
     db_garanzia: str = ":memory:"      # escrow di garanzia (soldi all'host solo se conforme)
     db_pendenti: str = ":memory:"      # pagamenti in attesa (hold prima del pagamento)
     db_tassa_comunale: str = ":memory:"  # ledger riscossioni tassa di soggiorno (rendicontazione)
@@ -135,6 +136,7 @@ class SistemaCasaVIP:
     referral: Any = None
     notificatore_prenotazione: Any = None
     domanda: Any = None
+    partner: Any = None
     garanzia: Any = None
     pagamenti_pendenti: Any = None
     tassa_comunale: Any = None
@@ -337,6 +339,11 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     domanda = crea_gestore_domanda(cfg.db_domanda, firma=firma)
     domanda.inizializza_schema()
     componenti.append("domanda/waitlist(158)")
+
+    from fase201_partner import crea_gestore_partner
+    partner = crea_gestore_partner(cfg.db_partner)
+    partner.inizializza_schema()
+    componenti.append("partner(201)")
 
     from fase160_escrow_garanzia import crea_escrow_garanzia
     garanzia = crea_escrow_garanzia(cfg.db_garanzia)
@@ -571,7 +578,7 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           dichiarazione=dichiarazione, noshow=noshow, marketing=marketing,
                           messaggistica=messaggistica, referral=referral,
                           notificatore_prenotazione=notificatore_prenotazione,
-                          domanda=domanda, garanzia=garanzia,
+                          domanda=domanda, partner=partner, garanzia=garanzia,
                           pagamenti_pendenti=pagamenti_pendenti, tassa_comunale=tassa_comunale,
                           payout=payout, accettazioni=accettazioni, marche=marche, stripe=provider,
                           connect=_connect, carta=_carta, geocoder=geocoder, checkin=checkin,
