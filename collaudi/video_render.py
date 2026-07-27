@@ -106,10 +106,23 @@ EXTRA_ORDINE = {
 BEAT_SOGGETTI = [
     "aerial golden hour view of {citta} skyline and rooftops, warm natural light, photorealistic, natural proportions",
     "beautiful cozy sunlit apartment interior in {citta}, inviting, warm, photorealistic, natural proportions",
-    "warm close-up of elegant house keys with a golden keychain on a rustic wooden table, soft morning light through a window, cozy welcoming mood, photorealistic, natural proportions",
+    None,   # scena 3: A GIRO fra le 3 varianti sotto (scelta fondatore: "devono essere a giro tutte e tre")
     "elegant modern minimal apartment interior in {citta}, natural light, photorealistic, natural proportions",
     "sunset skyline of {citta}, luxury travel mood, photorealistic, natural proportions",
 ]
+
+# Le 3 varianti della scena centrale, A ROTAZIONE per città (md5 stabile: ogni città ha sempre
+# la sua, distribuite ~uguali sulle 40). L'ordine è tarato perché ROMA (md5%3=2) peschi le PERSONE.
+SCENA3_VARIANTI = [
+    "warm close-up of elegant house keys with a golden keychain on a rustic wooden table, soft morning light, cozy welcoming mood, photorealistic, natural proportions",
+    "inviting cozy terrace of a home in {citta} at golden hour, plants and warm lights, welcoming atmosphere, photorealistic, natural proportions",
+    "warm human moment, a smiling host handing house keys to a happy guest at an apartment door in {citta}, natural body proportions, photorealistic",
+]
+
+
+def _scena3(citta):
+    import hashlib
+    return SCENA3_VARIANTI[int(hashlib.md5(citta.encode("utf-8")).hexdigest(), 16) % 3]
 SCHERMO = {
     "it": ["{citta}.", "Mettila a reddito,\nsenza sorprese.", "0% commissioni\nper 90 giorni",
            "3% tecnico,\ndetto prima.", "BookinVIP\nbookinvip.com"],
@@ -301,8 +314,10 @@ def copione(api_key, citta, lingua):
         voci = [_riempi(x, citta) for x in base]
     lingua_schermo = lingua_voce if lingua_voce in SCHERMO else "en"
     schermo = SCHERMO[lingua_schermo]
+    soggetti = list(BEAT_SOGGETTI)
+    soggetti[2] = _scena3(citta)
     scene = []
-    for i, sog in enumerate(BEAT_SOGGETTI):
+    for i, sog in enumerate(soggetti):
         scene.append({"soggetto": _riempi(sog, citta),
                       "schermo": _riempi(schermo[i], citta),
                       "voce": voci[i]})
