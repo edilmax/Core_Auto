@@ -24,9 +24,16 @@ completa** che al progetto mancava (era l'unico buco del motore marketing: "manc
 - **2026-07-27/b (direttiva "fai anche le altre 12 città")**: on-screen esteso a 6 lingue latine
   (it/en/es/fr/de/pt; ja/zh restano EN a schermo — DejaVu senza glifi CJK — ma la voce è locale),
   ripieghi voce in 6 lingue, `--voce` esplicita (London → en-GB-RyanNeural). Primo spot Roma già
-  PUBBLICATO sul canale Telegram BookinVip (msg 86); in corso il giro delle altre 12 città top
-  nella lingua del posto (Barcelona/es, Lisboa/pt, Paris/fr, London/en-GB, Amsterdam/en, Berlin/de,
-  New York/en, Miami/en, Dubai/en, Bangkok/en, Tokyo/ja, Istanbul/en).
+  PUBBLICATO sul canale Telegram BookinVip (msg 86). **✅ GIRO MONDIALE COMPLETATO (2026-07-27
+  mattina): 12/12 città pubblicate sul canale Telegram** (msg 87–98: Barcelona/es, Lisboa/pt,
+  Paris/fr, London/en-GB, Amsterdam/en, Berlin/de, New York/en, Miami/en, Dubai/en, Bangkok/en,
+  Tokyo/ja, Istanbul/en), ~3-6 min/video, **copione scritto da Groq nella lingua locale in TUTTE
+  e 12** (zero ripieghi, zero scarti del guardiano-lingua), didascalia Telegram nella lingua del
+  posto. Video sul VPS in `/tmp/bv_*.mp4` (~3.5MB l'uno). GAP ONESTI del canale video: niente
+  musica di sottofondo (solo voce); Tokyo con scritte a schermo EN (font CJK mancante sul VPS —
+  per il giapponese a schermo serve `fonts-noto-cjk`); Amsterdam/Istanbul/Bangkok/Dubai in inglese
+  (lingue nl/tr/th/ar fuori dalle 8 dell'app; edge-tts le avrebbe); pubblicazione SOLO Telegram
+  (Facebook pronto in pubblica_video.py ma da decidere col fondatore; YouTube serve OAuth).
 
 ---
 
