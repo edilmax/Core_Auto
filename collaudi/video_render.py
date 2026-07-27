@@ -97,12 +97,14 @@ EXTRA_ORDINE = {
 # (FONT_LINGUA). L'arabo NON ha lo schermo (drawtext senza shaping RTL) ma ha la voce. Se manca
 # il ripiego voce locale si degrada TUTTO a inglese, coerente (mai italiano fuori Italia). Il
 # copione parlato vero lo scrive Groq nella lingua locale; questo e' la rete.
+# NB: niente "cinematic" nei prompt — invita il modello a mettere BANDE NERE da cinema attorno
+# alla foto (visto sui fotogrammi); "natural proportions" contrasta lo stiramento.
 BEAT_SOGGETTI = [
-    "cinematic aerial golden hour view of {citta} skyline and rooftops, warm light, photorealistic",
-    "beautiful cozy sunlit apartment interior in {citta}, inviting, warm, photorealistic",
-    "warm human moment, a host handing keys to a happy guest at an apartment door in {citta}, photorealistic",
-    "elegant modern minimal apartment interior in {citta}, transparent glass, natural light, photorealistic",
-    "aspirational cinematic sunset skyline of {citta}, luxury travel mood, photorealistic",
+    "aerial golden hour view of {citta} skyline and rooftops, warm natural light, photorealistic, natural proportions",
+    "beautiful cozy sunlit apartment interior in {citta}, inviting, warm, photorealistic, natural proportions",
+    "warm human moment, a host handing keys to a happy guest at an apartment door in {citta}, photorealistic, natural proportions",
+    "elegant modern minimal apartment interior in {citta}, natural light, photorealistic, natural proportions",
+    "sunset skyline of {citta}, luxury travel mood, photorealistic, natural proportions",
 ]
 SCHERMO = {
     "it": ["{citta}.", "Mettila a reddito,\nsenza sorprese.", "0% commissioni\nper 90 giorni",
@@ -261,9 +263,13 @@ def copione(api_key, citta, lingua):
 
 # ── immagine flux + voce edge-tts + clip ffmpeg per scena ───────────────────────────────────────
 def scarica_immagine(soggetto, dest):
+    # ⚠️ GUARDIA ASPECT-RATIO (provata con seed identico sui 3 formati): flux al 9:16 estremo
+    # STIRA il contenuto in verticale (palazzi allungati); al quadrato e al 3:4 le proporzioni
+    # sono NATURALI. Quindi si chiede il 3:4 NATIVO e il 9:16 lo facciamo NOI in ffmpeg col
+    # center-crop (mai stirare: tagliare, non deformare).
     url = (C.POLLINATIONS + urllib.parse.quote(soggetto) +
-           "?width=%d&height=%d&model=flux&enhance=true&nologo=true&seed=%d"
-           % (W, H, abs(hash(soggetto)) % 100000))
+           "?width=768&height=1024&model=flux&enhance=true&nologo=true&seed=%d"
+           % (abs(hash(soggetto)) % 100000))
     # NB: Pollinations (Cloudflare) blocca lo User-Agent di default di Python -> serve un UA "browser"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (BookinVIP)"})
     for _ in range(3):
@@ -313,8 +319,11 @@ def clip_scena(img, mp3, durata, schermo_txt, tmp, idx, zoom_in=True, font=FONT,
         testo += (",drawtext=fontfile=%s:textfile=%s:expansion=none:fontcolor=white:fontsize=44:"
                   "x=(w-text_w)/2:y=190:box=1:boxcolor=black@0.38:boxborderw=18:enable='lt(t,3.2)'"
                   % (font, hint_file))
+    # crop 3% per lato = via le cornici/bande nere che il modello a volte disegna ai bordi;
+    # poi COVER a proporzioni conservate + center-crop 9:16 (mai stirare) + lanczos (upscale nitido).
     vf = (
-        "scale=1350:2400:force_original_aspect_ratio=increase,crop=1350:2400,"
+        "crop=iw*0.94:ih*0.94,"
+        "scale=1350:2400:force_original_aspect_ratio=increase:flags=lanczos,crop=1350:2400,"
         "zoompan=%s:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=%d:s=%dx%d:fps=%d,setsar=1,"
         "%s,"
         "fade=t=in:st=0:d=0.4,fade=t=out:st=%.2f:d=0.4"
