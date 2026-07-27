@@ -396,12 +396,14 @@ def posta_telegram(path, caption):
 # del quadrato vengono ritagliati dal cerchio del client).
 def clip_nota(img, mp3, durata, schermo_txt, tmp, idx, font=FONT):
     txt_file = os.path.join(tmp, "n%d.txt" % idx)
-    open(txt_file, "w", encoding="utf-8").write(schermo_txt.replace("\n", " "))
+    open(txt_file, "w", encoding="utf-8").write(schermo_txt)
+    # 2 righe centrate, corpo 34: dentro la CORDA del cerchio anche a y=66% (il client ritaglia
+    # il quadrato a cerchio: una riga lunga a tutta larghezza verrebbe decapitata ai bordi)
     vf = (
         "crop=iw*0.94:ih*0.94,scale=800:800:force_original_aspect_ratio=increase:flags=lanczos,"
         "crop=640:640,setsar=1,"
-        "drawtext=fontfile=%s:textfile=%s:expansion=none:fontcolor=white:fontsize=40:"
-        "x=(w-text_w)/2:y=h*0.72:box=1:boxcolor=black@0.45:boxborderw=14,"
+        "drawtext=fontfile=%s:textfile=%s:expansion=none:fontcolor=white:fontsize=34:"
+        "line_spacing=8:x=(w-text_w)/2:y=h*0.66:box=1:boxcolor=black@0.45:boxborderw=14,"
         "fade=t=in:st=0:d=0.3,fade=t=out:st=%.2f:d=0.3"
         % (font, txt_file, max(0.1, durata - 0.3))
     )
