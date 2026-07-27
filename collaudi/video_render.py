@@ -41,8 +41,10 @@ VOCI = {"it": "it-IT-DiegoNeural", "en": "en-US-GuyNeural", "es": "es-ES-AlvaroN
         "ja": "ja-JP-KeitaNeural", "zh": "zh-CN-YunxiNeural"}
 
 # ── COPIONE (5 battute): soggetto immagine · testo a schermo · voce (ripiego) — per lingua ──────
-# On-screen e ripiego voce in italiano e inglese; le altre lingue ricadono sull'inglese (mai italiano
-# fuori Italia). Il copione parlato vero lo scrive Groq nella lingua locale; questo e' la rete.
+# On-screen in it/en/es/fr/de/pt (alfabeti latini: DejaVu li rende); ja/zh restano in inglese a
+# schermo (DejaVu NON ha i glifi CJK -> tofu) ma la VOCE e' locale. Ripiego voce in 6 lingue,
+# le altre ricadono sull'inglese (mai italiano fuori Italia). Il copione parlato vero lo scrive
+# Groq nella lingua locale; questo e' la rete.
 BEAT_SOGGETTI = [
     "cinematic aerial golden hour view of {citta} skyline and rooftops, warm light, photorealistic",
     "beautiful cozy sunlit apartment interior in {citta}, inviting, warm, photorealistic",
@@ -55,6 +57,14 @@ SCHERMO = {
            "3% tecnico,\ndetto prima.", "BookinVIP\nbookinvip.com"],
     "en": ["{citta}.", "Earn from it,\nno surprises.", "0% commission\nfor 90 days",
            "3% technical fee,\ntold upfront.", "BookinVIP\nbookinvip.com"],
+    "es": ["{citta}.", "Ponla a trabajar,\nsin sorpresas.", "0% de comisión\ndurante 90 días",
+           "3% técnico,\ndicho antes.", "BookinVIP\nbookinvip.com"],
+    "fr": ["{citta}.", "Mettez-le en location,\nsans surprises.", "0 % de commission\npendant 90 jours",
+           "3 % techniques,\nannoncés d'avance.", "BookinVIP\nbookinvip.com"],
+    "de": ["{citta}.", "Vermieten,\nohne Überraschungen.", "0% Provision\nfür 90 Tage",
+           "3% Technikgebühr,\nvorab gesagt.", "BookinVIP\nbookinvip.com"],
+    "pt": ["{citta}.", "Ponha-a a render,\nsem surpresas.", "0% de comissão\npor 90 dias",
+           "3% técnica,\ndita antes.", "BookinVIP\nbookinvip.com"],
 }
 VOCE_RIPIEGO = {
     "it": ["Hai una casa a {citta}?", "Mettila a reddito, senza pensieri.",
@@ -65,6 +75,26 @@ VOCE_RIPIEGO = {
            "For the first ninety days you list with zero commission.",
            "Only a three percent technical fee, told upfront. Guests pay nothing.",
            "BookinVIP. Your trip, without surprises."],
+    "es": ["¿Tienes una casa en {citta}?", "Ponla a trabajar, sin preocupaciones.",
+           "Los primeros noventa días publicas con cero comisión.",
+           "Solo una tarifa técnica del tres por ciento, dicha antes. El huésped no paga nada.",
+           "BookinVIP. Tu viaje, sin sorpresas."],
+    "fr": ["Vous avez un logement à {citta} ?", "Mettez-le en location, sans souci.",
+           "Pendant les quatre-vingt-dix premiers jours, zéro commission.",
+           "Seulement trois pour cent de frais techniques, annoncés d'avance. Le voyageur ne paie rien.",
+           "BookinVIP. Votre voyage, sans surprises."],
+    "de": ["Haben Sie eine Wohnung in {citta}?", "Vermieten Sie sie, ganz ohne Aufwand.",
+           "In den ersten neunzig Tagen listen Sie mit null Prozent Provision.",
+           "Nur drei Prozent Technikgebühr, vorab gesagt. Gäste zahlen nichts.",
+           "BookinVIP. Ihre Reise, ohne Überraschungen."],
+    "pt": ["Tem uma casa em {citta}?", "Ponha-a a render, sem preocupações.",
+           "Nos primeiros noventa dias publica com zero comissão.",
+           "Apenas uma taxa técnica de três por cento, dita antes. O hóspede não paga nada.",
+           "BookinVIP. A sua viagem, sem surpresas."],
+    "ja": ["{citta}に物件をお持ちですか？", "手間なく貸し出して、収入に。",
+           "最初の90日間は手数料ゼロで掲載できます。",
+           "技術手数料は3%のみ。事前にきちんとお伝えします。ゲストは何も払いません。",
+           "BookinVIP。あなたの旅を、驚きなしで。"],
 }
 
 
@@ -216,12 +246,13 @@ def clip_scena(img, mp3, durata, schermo_txt, tmp, idx, zoom_in=True):
     return out
 
 
-def monta(citta, lingua, out_path):
+def monta(citta, lingua, out_path, voce=None):
     api = _env("GROQ_API_KEY")
     tmp = tempfile.mkdtemp(prefix="vid_")
     print("Copione (%s / %s)..." % (citta, lingua))
     scene, da_ai = copione(api, citta, lingua)
     print("  copione: %s" % ("Groq" if da_ai else "ripiego"))
+    voce_scelta = voce or VOCI.get(lingua, VOCI["en"])
     clips = []
     for i, s in enumerate(scene):
         print("  scena %d: %s" % (i + 1, s["voce"]))
@@ -229,7 +260,7 @@ def monta(citta, lingua, out_path):
         if not scarica_immagine(s["soggetto"], img):
             raise RuntimeError("immagine flux non scaricata (scena %d)" % (i + 1))
         mp3 = os.path.join(tmp, "voce%d.mp3" % i)
-        dur = sintetizza_voce(s["voce"], VOCI.get(lingua, VOCI["en"]), mp3) + 0.6
+        dur = sintetizza_voce(s["voce"], voce_scelta, mp3) + 0.6
         clips.append(clip_scena(img, mp3, dur, s["schermo"], tmp, i, zoom_in=(i % 2 == 0)))
     lista = os.path.join(tmp, "lista.txt")
     open(lista, "w").write("".join("file '%s'\n" % c for c in clips))
@@ -259,9 +290,10 @@ def main():
     ap.add_argument("--citta", default="Roma")
     ap.add_argument("--lingua", default="it")
     ap.add_argument("--out", default="/tmp/bookinvip_video.mp4")
+    ap.add_argument("--voce", default=None, help="voce edge-tts esplicita (es. en-GB-RyanNeural per Londra)")
     ap.add_argument("--telegram", action="store_true")
     a = ap.parse_args()
-    out = monta(a.citta, a.lingua, a.out)
+    out = monta(a.citta, a.lingua, a.out, voce=a.voce)
     if a.telegram:
         cap = "BookinVIP — %s. Il tuo viaggio, senza sorprese. bookinvip.com" % a.citta
         print("-> Telegram: %s" % posta_telegram(out, cap))

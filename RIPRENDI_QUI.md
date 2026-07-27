@@ -21,6 +21,12 @@ completa** che al progetto mancava (era l'unico buco del motore marketing: "manc
 - STATO: strumento **MANUALE** (auto-pubblicazione NON cablata; prima gli esempi al fondatore).
   Comando sul VPS: `python3 collaudi/video_render.py --citta Roma --lingua it` poi
   `python3 collaudi/pubblica_video.py /tmp/... --telegram`. DA FARE: schedulazione + upload YouTube.
+- **2026-07-27/b (direttiva "fai anche le altre 12 città")**: on-screen esteso a 6 lingue latine
+  (it/en/es/fr/de/pt; ja/zh restano EN a schermo — DejaVu senza glifi CJK — ma la voce è locale),
+  ripieghi voce in 6 lingue, `--voce` esplicita (London → en-GB-RyanNeural). Primo spot Roma già
+  PUBBLICATO sul canale Telegram BookinVip (msg 86); in corso il giro delle altre 12 città top
+  nella lingua del posto (Barcelona/es, Lisboa/pt, Paris/fr, London/en-GB, Amsterdam/en, Berlin/de,
+  New York/en, Miami/en, Dubai/en, Bangkok/en, Tokyo/ja, Istanbul/en).
 
 ---
 
