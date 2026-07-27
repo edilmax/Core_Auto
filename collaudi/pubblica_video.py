@@ -10,6 +10,7 @@ import io
 import json
 import os
 import sys
+import time
 import urllib.request
 import uuid
 
@@ -87,11 +88,55 @@ def facebook(path, caption):
         return "ERR %r" % e
 
 
+def mastodon(path, caption):
+    base, tok = _env("MASTODON_INSTANCE"), _env("MASTODON_TOKEN")
+    if not (base and tok):
+        return "no-token"
+    if not base.startswith("http"):
+        base = "https://" + base
+    base = base.rstrip("/")
+    hdr = {"Authorization": "Bearer " + tok, "User-Agent": "Mozilla/5.0 (BookinVIP)"}
+    data = open(path, "rb").read()
+    try:
+        boundary, corpo = _multipart({"description": "BookinVIP"},
+                                     {"file": (os.path.basename(path), data, "video/mp4")})
+        h = dict(hdr)
+        h["Content-Type"] = "multipart/form-data; boundary=" + boundary
+        req = urllib.request.Request(base + "/api/v2/media", data=corpo, method="POST", headers=h)
+        with urllib.request.urlopen(req, timeout=300) as r:
+            m = json.loads(r.read().decode("utf-8", "replace"))
+        mid = m.get("id")
+        if not mid:
+            return "ERR media %s" % m
+        # il video viene TRANSCODIFICATO in asincrono: lo status con media non pronto e' un 422 ->
+        # aspetto che l'anteprima abbia una URL (pronto), max ~3 minuti
+        for _ in range(36):
+            try:
+                rq = urllib.request.Request(base + "/api/v1/media/%s" % mid, headers=hdr)
+                with urllib.request.urlopen(rq, timeout=30) as r:
+                    if json.loads(r.read().decode("utf-8", "replace")).get("url"):
+                        break
+            except Exception:
+                pass
+            time.sleep(5)
+        body = json.dumps({"status": caption, "media_ids": [str(mid)],
+                           "visibility": "public"}).encode("utf-8")
+        h2 = dict(hdr)
+        h2["Content-Type"] = "application/json"
+        rq = urllib.request.Request(base + "/api/v1/statuses", data=body, method="POST", headers=h2)
+        with urllib.request.urlopen(rq, timeout=60) as r:
+            d = json.loads(r.read().decode("utf-8", "replace"))
+        return ("OK %s" % d.get("url")) if d.get("id") else "ERR %s" % d
+    except Exception as e:
+        return "ERR %r" % e
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("path")
     ap.add_argument("--telegram", action="store_true")
     ap.add_argument("--facebook", action="store_true")
+    ap.add_argument("--mastodon", action="store_true")
     ap.add_argument("--caption", default="BookinVIP. Il tuo viaggio, senza sorprese. bookinvip.com")
     a = ap.parse_args()
     if not os.path.exists(a.path):
@@ -102,6 +147,8 @@ def main():
         print("-> Telegram: %s" % telegram(a.path, a.caption))
     if a.facebook:
         print("-> Facebook: %s" % facebook(a.path, a.caption))
+    if a.mastodon:
+        print("-> Mastodon: %s" % mastodon(a.path, a.caption))
 
 
 if __name__ == "__main__":

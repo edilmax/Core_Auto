@@ -38,13 +38,45 @@ GROQ_MODELLO = os.environ.get("GROQ_MODELLO", "llama-3.3-70b-versatile")
 # Voci neurali edge-tts per lingua (naturali, maschili calde). Ripiego: inglese.
 VOCI = {"it": "it-IT-DiegoNeural", "en": "en-US-GuyNeural", "es": "es-ES-AlvaroNeural",
         "fr": "fr-FR-HenriNeural", "de": "de-DE-ConradNeural", "pt": "pt-PT-DuarteNeural",
-        "ja": "ja-JP-KeitaNeural", "zh": "zh-CN-YunxiNeural"}
+        "ja": "ja-JP-KeitaNeural", "zh": "zh-CN-YunxiNeural",
+        "ko": "ko-KR-InJoonNeural", "th": "th-TH-NiwatNeural", "vi": "vi-VN-NamMinhNeural",
+        "id": "id-ID-ArdiNeural", "ru": "ru-RU-DmitryNeural", "tr": "tr-TR-AhmetNeural",
+        "nl": "nl-NL-MaartenNeural", "ar": "ar-AE-HamdanNeural"}
+
+# Font per lingua DELLO SCHERMO: DejaVu copre latino esteso (vi/tr/nl/id inclusi) e cirillico;
+# CJK (ja/zh/ko) e thai vogliono i Noto (installati sul VPS). Se il font manca -> DejaVu (fallback).
+FONT_LINGUA = {"ja": "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+               "zh": "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+               "ko": "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+               "th": "/usr/share/fonts/truetype/noto/NotoSansThai-Bold.ttf"}
+
+
+def _font(lingua_schermo):
+    f = FONT_LINGUA.get(lingua_schermo, FONT)
+    return f if os.path.exists(f) else FONT
+
+
+# Lingue OLTRE le 8 di fase200: nome (per il prompt) + ordine-di-lingua scritto NELLA lingua stessa
+# (stessa tecnica del guardiano: posizione forte, il modello obbedisce alla sua lingua).
+# NB: l'arabo ha la VOCE ma NON lo schermo (ffmpeg drawtext non fa lo shaping RTL -> resta EN a video).
+EXTRA_NOME = {"ko": "coreano", "th": "thailandese", "vi": "vietnamita", "id": "indonesiano",
+              "ru": "russo", "tr": "turco", "nl": "olandese", "ar": "arabo"}
+EXTRA_ORDINE = {
+    "ko": "대본은 반드시 한국어로만 작성하세요.",
+    "th": "เขียนทั้งหมดเป็นภาษาไทยเท่านั้น",
+    "vi": "Viết toàn bộ bằng tiếng Việt.",
+    "id": "Tulis semuanya dalam bahasa Indonesia.",
+    "ru": "Пиши весь текст только по-русски.",
+    "tr": "Tamamını Türkçe yaz.",
+    "nl": "Schrijf alles in het Nederlands.",
+    "ar": "اكتب كل النص باللغة العربية فقط.",
+}
 
 # ── COPIONE (5 battute): soggetto immagine · testo a schermo · voce (ripiego) — per lingua ──────
-# On-screen in it/en/es/fr/de/pt (alfabeti latini: DejaVu li rende); ja/zh restano in inglese a
-# schermo (DejaVu NON ha i glifi CJK -> tofu) ma la VOCE e' locale. Ripiego voce in 6 lingue,
-# le altre ricadono sull'inglese (mai italiano fuori Italia). Il copione parlato vero lo scrive
-# Groq nella lingua locale; questo e' la rete.
+# On-screen in 14 lingue: latine+cirillico con DejaVu, CJK (ja/zh/ko) e thai coi Noto del VPS
+# (FONT_LINGUA). L'arabo NON ha lo schermo (drawtext senza shaping RTL) ma ha la voce. Se manca
+# il ripiego voce locale si degrada TUTTO a inglese, coerente (mai italiano fuori Italia). Il
+# copione parlato vero lo scrive Groq nella lingua locale; questo e' la rete.
 BEAT_SOGGETTI = [
     "cinematic aerial golden hour view of {citta} skyline and rooftops, warm light, photorealistic",
     "beautiful cozy sunlit apartment interior in {citta}, inviting, warm, photorealistic",
@@ -65,6 +97,24 @@ SCHERMO = {
            "3% Technikgebühr,\nvorab gesagt.", "BookinVIP\nbookinvip.com"],
     "pt": ["{citta}.", "Ponha-a a render,\nsem surpresas.", "0% de comissão\npor 90 dias",
            "3% técnica,\ndita antes.", "BookinVIP\nbookinvip.com"],
+    "nl": ["{citta}.", "Verhuur zonder\nverrassingen.", "0% commissie\nvoor 90 dagen",
+           "3% technische kosten,\nvooraf gemeld.", "BookinVIP\nbookinvip.com"],
+    "tr": ["{citta}.", "Evinizi gelire çevirin,\nsürpriz yok.", "90 gün boyunca\n%0 komisyon",
+           "%3 teknik ücret,\nönceden söylenir.", "BookinVIP\nbookinvip.com"],
+    "ru": ["{citta}.", "Сдавайте жильё\nбез сюрпризов.", "0% комиссии\n90 дней",
+           "3% техсбор,\nоб этом заранее.", "BookinVIP\nbookinvip.com"],
+    "id": ["{citta}.", "Sewakan tanpa\nkejutan.", "Komisi 0%\nselama 90 hari",
+           "Biaya teknis 3%,\ndiberitahu di awal.", "BookinVIP\nbookinvip.com"],
+    "vi": ["{citta}.", "Cho thuê,\nkhông bất ngờ.", "0% hoa hồng\ntrong 90 ngày",
+           "3% phí kỹ thuật,\nbáo trước.", "BookinVIP\nbookinvip.com"],
+    "ko": ["{citta}.", "숙소를 수익으로,\n부담 없이.", "첫 90일\n수수료 0%",
+           "기술 수수료 3%,\n사전 안내.", "BookinVIP\nbookinvip.com"],
+    "zh": ["{citta}.", "轻松出租，\n没有意外。", "前90天\n0%佣金",
+           "3%技术费，\n事先说明。", "BookinVIP\nbookinvip.com"],
+    "th": ["{citta}.", "ปล่อยเช่า\nไม่มีเซอร์ไพรส์", "ค่าคอมมิชชั่น 0%\n90 วันแรก",
+           "ค่าเทคนิค 3%\nแจ้งล่วงหน้า", "BookinVIP\nbookinvip.com"],
+    "ja": ["{citta}.", "手間なく貸して、\n収入に。", "最初の90日間\n手数料0%",
+           "技術手数料3%、\n事前にお伝え。", "BookinVIP\nbookinvip.com"],
 }
 VOCE_RIPIEGO = {
     "it": ["Hai una casa a {citta}?", "Mettila a reddito, senza pensieri.",
@@ -130,8 +180,8 @@ def _groq_copione(api_key, citta, lingua, n):
     """Chiede a Groq le n battute di voce nella lingua locale, separate da '|'. Ritorna lista o None."""
     if not api_key:
         return None
-    ordine = C._ORDINE_LINGUA.get(lingua, C._ORDINE_LINGUA["en"])
-    lang = C.NOME_LINGUA.get(lingua, "inglese")
+    ordine = EXTRA_ORDINE.get(lingua) or C._ORDINE_LINGUA.get(lingua, C._ORDINE_LINGUA["en"])
+    lang = EXTRA_NOME.get(lingua) or C.NOME_LINGUA.get(lingua, "inglese")
     prompt = (
         "%s\n\nSei un copywriter pubblicitario (scuola Ogilvy). Scrivi il copione PARLATO di uno spot "
         "video di %d battute BREVISSIME per invitare un HOST di %s a pubblicare la sua casa su BookinVIP. "
@@ -170,18 +220,23 @@ def _groq_copione(api_key, citta, lingua, n):
 
 
 def copione(api_key, citta, lingua):
+    """Ritorna (scene, da_ai, lingua_voce, lingua_schermo). Coerenza garantita: se l'AI tace e
+    NON esiste un ripiego locale, si degrada TUTTO a inglese (voce+schermo insieme, mai misti)."""
     voci = _groq_copione(api_key, citta, lingua, len(BEAT_SOGGETTI))
     da_ai = voci is not None
+    lingua_voce = lingua
     if not da_ai:
-        base = VOCE_RIPIEGO.get(lingua) or VOCE_RIPIEGO["en"]
+        lingua_voce = lingua if lingua in VOCE_RIPIEGO else "en"
+        base = VOCE_RIPIEGO[lingua_voce]
         voci = [_riempi(x, citta) for x in base]
-    schermo = SCHERMO.get(lingua) or SCHERMO["en"]
+    lingua_schermo = lingua_voce if lingua_voce in SCHERMO else "en"
+    schermo = SCHERMO[lingua_schermo]
     scene = []
     for i, sog in enumerate(BEAT_SOGGETTI):
         scene.append({"soggetto": _riempi(sog, citta),
                       "schermo": _riempi(schermo[i], citta),
                       "voce": voci[i]})
-    return scene, da_ai
+    return scene, da_ai, lingua_voce, lingua_schermo
 
 
 # ── immagine flux + voce edge-tts + clip ffmpeg per scena ───────────────────────────────────────
@@ -213,17 +268,17 @@ def sintetizza_voce(testo, voce, dest):
         return 3.0
 
 
-def _drawtext_filter(txt_path):
+def _drawtext_filter(txt_path, font):
     # box scuro semitrasparente nel terzo basso + testo bianco grande centrato (multilinea via textfile)
     # expansion=none: rende letterale il carattere '%' (0% / 3%), altrimenti ffmpeg lo mangia come codice
     return (
         "drawbox=y=ih-660:x=0:w=iw:h=520:color=black@0.42:t=fill,"
         "drawtext=fontfile=%s:textfile=%s:expansion=none:reload=0:fontcolor=white:fontsize=74:"
-        "line_spacing=16:x=(w-text_w)/2:y=h-560:borderw=3:bordercolor=black@0.6" % (FONT, txt_path)
+        "line_spacing=16:x=(w-text_w)/2:y=h-560:borderw=3:bordercolor=black@0.6" % (font, txt_path)
     )
 
 
-def clip_scena(img, mp3, durata, schermo_txt, tmp, idx, zoom_in=True):
+def clip_scena(img, mp3, durata, schermo_txt, tmp, idx, zoom_in=True, font=FONT):
     txt_file = os.path.join(tmp, "t%d.txt" % idx)
     open(txt_file, "w", encoding="utf-8").write(schermo_txt)
     d_frames = int(durata * FPS)
@@ -236,7 +291,7 @@ def clip_scena(img, mp3, durata, schermo_txt, tmp, idx, zoom_in=True):
         "zoompan=%s:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=%d:s=%dx%d:fps=%d,setsar=1,"
         "%s,"
         "fade=t=in:st=0:d=0.4,fade=t=out:st=%.2f:d=0.4"
-        % (z, d_frames, W, H, FPS, _drawtext_filter(txt_file), max(0.1, durata - 0.4))
+        % (z, d_frames, W, H, FPS, _drawtext_filter(txt_file, font), max(0.1, durata - 0.4))
     )
     out = os.path.join(tmp, "scena%d.mp4" % idx)
     _run(["ffmpeg", "-y", "-loop", "1", "-i", img, "-i", mp3,
@@ -250,9 +305,11 @@ def monta(citta, lingua, out_path, voce=None):
     api = _env("GROQ_API_KEY")
     tmp = tempfile.mkdtemp(prefix="vid_")
     print("Copione (%s / %s)..." % (citta, lingua))
-    scene, da_ai = copione(api, citta, lingua)
-    print("  copione: %s" % ("Groq" if da_ai else "ripiego"))
-    voce_scelta = voce or VOCI.get(lingua, VOCI["en"])
+    scene, da_ai, lingua_voce, lingua_schermo = copione(api, citta, lingua)
+    print("  copione: %s (voce=%s schermo=%s)" % ("Groq" if da_ai else "ripiego",
+                                                  lingua_voce, lingua_schermo))
+    voce_scelta = voce or VOCI.get(lingua_voce, VOCI["en"])
+    font = _font(lingua_schermo)
     clips = []
     for i, s in enumerate(scene):
         print("  scena %d: %s" % (i + 1, s["voce"]))
@@ -261,7 +318,7 @@ def monta(citta, lingua, out_path, voce=None):
             raise RuntimeError("immagine flux non scaricata (scena %d)" % (i + 1))
         mp3 = os.path.join(tmp, "voce%d.mp3" % i)
         dur = sintetizza_voce(s["voce"], voce_scelta, mp3) + 0.6
-        clips.append(clip_scena(img, mp3, dur, s["schermo"], tmp, i, zoom_in=(i % 2 == 0)))
+        clips.append(clip_scena(img, mp3, dur, s["schermo"], tmp, i, zoom_in=(i % 2 == 0), font=font))
     lista = os.path.join(tmp, "lista.txt")
     open(lista, "w").write("".join("file '%s'\n" % c for c in clips))
     _run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", lista, "-c", "copy", out_path])

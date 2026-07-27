@@ -1,3 +1,31 @@
+## 🌍 STATO 2026-07-27/c — GIRO VIDEO MONDIALE: 40 tappe, 16 lingue, 3 canali, rotazione perpetua (CARTA BIANCA)
+
+Direttive "manca l'Est asiatico… è una pazzia tutte le 195 nazioni?… carichiamo su tutti i posti
+immaginabili" + "strategia marketing di ultima generazione, CARTA BIANCA". Risposta strategica:
+195-in-un-giorno = spam + ban dei servizi gratuiti; la copertura totale si fa **A ROTAZIONE** (e le
+«195 nazioni» su Google ci sono GIÀ con le 2990 landing SEO). Costruito `collaudi/giro_video.py`:
+- **40 tappe** città-top col MONDO VERO dentro (16 città Est/Sud-Est Asia: Seoul, Osaka, Kyoto,
+  Hong Kong, Taipei, Shanghai, Beijing, Singapore, Kuala Lumpur, Manila, Jakarta, Bali, Hanoi,
+  Ho Chi Minh City, Chiang Mai, Phuket, Bangkok + Sydney, Città del Messico, Buenos Aires, Madrid,
+  Rio, Vienna, Mosca, Mumbai, Cairo, Città del Capo, Marrakech…), ognuna nella **lingua del posto**.
+- Renderer esteso: **16 voci neurali** (+coreano/thai/vietnamita/indonesiano/russo/turco/olandese/
+  arabo), **14 lingue a schermo** (Noto CJK + Noto Thai installati sul VPS; arabo=voce senza schermo,
+  niente shaping RTL in drawtext; degrado coerente a EN se manca il ripiego locale). Rio con voce
+  brasiliana, Londra britannica.
+- **3 canali per video**: Telegram + Facebook + **Mastodon** (upload multipart+attesa transcodifica,
+  nuovo in pubblica_video.py) — didascalia in 16 lingue col 3% sempre dichiarato + **link UTM per
+  canale** alle landing `/affitta/{slug}` (40 slug verificati 200) = attribuzione misurabile.
+- **Rotazione perpetua**: cron giornaliero sul VPS host (`--giornaliero`, indice durevole in
+  /root/bookinvip_giro_video.json, copione AI sempre fresco = mai due video uguali). `--lotto` per
+  i giri massicci; `--pubblica-esistenti` per portare i 9 video del primo giro anche su FB+Mastodon.
+- LANCIATO il lotto da **31 città** (27 nuove + Amsterdam/Bangkok/Istanbul/Dubai RIFATTE in
+  nl/th/tr/ar). Prova a secco 40 tappe verde. CANALI CHE MANCANO (serve il fondatore): YouTube
+  (OAuth), Reddit (app+credenziali; attenti alle regole dei subreddit), Bluesky (account),
+  Instagram/TikTok/X (blocchi noti), Pinterest/Google Business (account). Blog: embed video nelle
+  guide = prossimo lavoro (serve hosting mp4 sul sito).
+
+---
+
 ## 🎬 STATO 2026-07-27 — GIOIELLO VIDEO: spot di reclutamento host renderizzato in autonomia (gratis, zero chiavi)
 
 Direttiva "video di reclutamento, tutto gratis e senza di me". Costruita la **generazione video
