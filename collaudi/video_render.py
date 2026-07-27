@@ -19,6 +19,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.parse
 import urllib.request
 
@@ -271,8 +272,12 @@ def scarica_immagine(soggetto, dest):
            "?width=768&height=1024&model=flux&enhance=true&nologo=true&seed=%d"
            % (abs(hash(soggetto)) % 100000))
     # NB: Pollinations (Cloudflare) blocca lo User-Agent di default di Python -> serve un UA "browser"
+    # PAZIENZA anti rate-limit (lezione del 27/07: ~300 immagini in un giorno -> throttling, 31
+    # citta' fallite di fila): 6 tentativi con 15s di pausa fra i falliti + 3s di garbo prima di
+    # ogni immagine. Meglio lento che respinto.
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (BookinVIP)"})
-    for _ in range(3):
+    time.sleep(3)
+    for tentativo in range(6):
         try:
             with urllib.request.urlopen(req, timeout=95) as r:
                 dati = r.read()
@@ -281,6 +286,8 @@ def scarica_immagine(soggetto, dest):
                 return True
         except Exception:
             pass
+        if tentativo < 5:
+            time.sleep(15)
     return False
 
 
