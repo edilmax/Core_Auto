@@ -97,6 +97,58 @@ TAPPE = [
     ("granada", "Granada", "es", None),
 ]
 
+# ── ONDATA MONDIALE (direttiva «tutte, anche se sono 200»): il resto delle 230 città del seed
+# SEO (fase97 = fonte unica: OGNI città del seed ha la landing viva per costruzione) entra nel
+# giro AUTOMATICAMENTE, con la lingua del posto (fra le 16 con didascalia+voce) e ripiego EN.
+from fase97_inbound_seo import CITTA_SEED, slug_citta as _slug97
+
+LINGUA_ONDATA = {
+    # Italia
+    "Milano": "it", "Torino": "it", "Bologna": "it", "Verona": "it", "Palermo": "it", "Genova": "it",
+    # Europa de/fr/nl
+    "Munich": "de", "Hamburg": "de", "Frankfurt": "de", "Salzburg": "de", "Zurich": "de",
+    "Geneva": "fr", "Brussels": "fr", "Luxembourg": "fr", "Monaco": "fr",
+    "Rotterdam": "nl", "The Hague": "nl",
+    "Nice": "fr", "Lyon": "fr", "Marseille": "fr", "Bordeaux": "fr", "Cannes": "fr",
+    # Iberia / LatAm ispanofona
+    "Valencia": "es", "Malaga": "es", "Bilbao": "es", "Palma": "es",
+    "Cancun": "es", "Tulum": "es", "Guadalajara": "es", "Playa del Carmen": "es",
+    "Puerto Vallarta": "es", "Havana": "es", "Punta Cana": "es", "Santo Domingo": "es",
+    "San Juan": "es", "Panama City": "es", "San José": "es", "Lima": "es", "Cusco": "es",
+    "Santiago": "es", "Bogota": "es", "Cartagena": "es", "Medellin": "es", "Quito": "es",
+    "La Paz": "es", "Montevideo": "es", "Caracas": "es",
+    # Brasile (voce pt-BR sotto)
+    "Sao Paulo": "pt", "Salvador": "pt", "Florianopolis": "pt", "Brasilia": "pt",
+    # Turchia / Russia+russofoni
+    "Antalya": "tr", "Cappadocia": "tr",
+    "Saint Petersburg": "ru", "Almaty": "ru", "Tashkent": "ru", "Samarkand": "ru",
+    # Asia Est
+    "Guangzhou": "zh", "Shenzhen": "zh", "Chengdu": "zh", "Xian": "zh", "Macau": "zh",
+    "Busan": "ko", "Jeju": "ko", "Nagoya": "ja", "Fukuoka": "ja", "Sapporo": "ja",
+    # Sud-Est asiatico
+    "Pattaya": "th", "Krabi": "th", "Koh Samui": "th",
+    "Yogyakarta": "id", "Ubud": "id", "Da Nang": "vi", "Hoi An": "vi",
+    # Medio Oriente / Nord Africa arabofono+francofono
+    "Abu Dhabi": "ar", "Doha": "ar", "Riyadh": "ar", "Jeddah": "ar", "Kuwait City": "ar",
+    "Manama": "ar", "Muscat": "ar", "Amman": "ar", "Beirut": "ar",
+    "Hurghada": "ar", "Sharm El Sheikh": "ar",
+    "Casablanca": "fr", "Fez": "fr", "Tunis": "fr", "Dakar": "fr",
+    # Canada francofono
+    "Montreal": "fr", "Quebec City": "fr",
+}
+VOCE_ONDATA = {
+    "Manchester": "en-GB-RyanNeural", "Liverpool": "en-GB-RyanNeural",
+    "Oxford": "en-GB-RyanNeural", "Dublin": "en-IE-ConnorNeural",
+    "Sao Paulo": "pt-BR-AntonioNeural", "Salvador": "pt-BR-AntonioNeural",
+    "Florianopolis": "pt-BR-AntonioNeural", "Brasilia": "pt-BR-AntonioNeural",
+}
+_gia = {t[0] for t in TAPPE}
+for _c in CITTA_SEED:
+    _s = _slug97(_c)
+    if _s and _s not in _gia:
+        _gia.add(_s)
+        TAPPE.append((_s, _c, LINGUA_ONDATA.get(_c, "en"), VOCE_ONDATA.get(_c)))
+
 # ── DIDASCALIE per lingua ({c}=città, {link}=landing con UTM). Regola d'oro: il 3% SEMPRE detto. ─
 CAPTION = {
     "it": "Hai una casa a {c}? Mettila a reddito senza pensieri: 0% commissioni per i primi 90 "
