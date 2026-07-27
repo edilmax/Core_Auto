@@ -31,7 +31,10 @@ except Exception:
 
 import fase200_campagna_persuasiva as C
 
-W, H, FPS = 1080, 1920, 30
+# FORMATO ORIGINALE (direttiva fondatore 27/07): il video esce nel 3:4 NATIVO delle immagini —
+# niente ritaglio a 9:16, quello che il generatore disegna e' quello che si vede (solo -3% di
+# bordo anti-cornici). Telegram/FB mostrano il 3:4 verticale senza problemi.
+W, H, FPS = 1080, 1440, 30
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODELLO = os.environ.get("GROQ_MODELLO", "llama-3.3-70b-versatile")
@@ -304,10 +307,11 @@ def sintetizza_voce(testo, voce, dest):
 def _drawtext_filter(txt_path, font):
     # box scuro semitrasparente nel terzo basso + testo bianco grande centrato (multilinea via textfile)
     # expansion=none: rende letterale il carattere '%' (0% / 3%), altrimenti ffmpeg lo mangia come codice
+    # (geometria proporzionata al canvas 3:4 1080x1440)
     return (
-        "drawbox=y=ih-660:x=0:w=iw:h=520:color=black@0.42:t=fill,"
-        "drawtext=fontfile=%s:textfile=%s:expansion=none:reload=0:fontcolor=white:fontsize=74:"
-        "line_spacing=16:x=(w-text_w)/2:y=h-560:borderw=3:bordercolor=black@0.6" % (font, txt_path)
+        "drawbox=y=ih-495:x=0:w=iw:h=390:color=black@0.42:t=fill,"
+        "drawtext=fontfile=%s:textfile=%s:expansion=none:reload=0:fontcolor=white:fontsize=72:"
+        "line_spacing=14:x=(w-text_w)/2:y=h-420:borderw=3:bordercolor=black@0.6" % (font, txt_path)
     )
 
 
@@ -324,13 +328,14 @@ def clip_scena(img, mp3, durata, schermo_txt, tmp, idx, zoom_in=True, font=FONT,
         hint_file = os.path.join(tmp, "hint%d.txt" % idx)
         open(hint_file, "w", encoding="utf-8").write(hint)
         testo += (",drawtext=fontfile=%s:textfile=%s:expansion=none:fontcolor=white:fontsize=44:"
-                  "x=(w-text_w)/2:y=190:box=1:boxcolor=black@0.38:boxborderw=18:enable='lt(t,3.2)'"
+                  "x=(w-text_w)/2:y=140:box=1:boxcolor=black@0.38:boxborderw=18:enable='lt(t,3.2)'"
                   % (font, hint_file))
     # crop 3% per lato = via le cornici/bande nere che il modello a volte disegna ai bordi;
-    # poi COVER a proporzioni conservate + center-crop 9:16 (mai stirare) + lanczos (upscale nitido).
+    # poi COVER a proporzioni conservate sul canvas 3:4 = FORMATO ORIGINALE dell'immagine
+    # (nessun ritaglio di contenuto: 3:4 su 3:4, solo il bordo) + lanczos (upscale nitido).
     vf = (
         "crop=iw*0.94:ih*0.94,"
-        "scale=1350:2400:force_original_aspect_ratio=increase:flags=lanczos,crop=1350:2400,"
+        "scale=1350:1800:force_original_aspect_ratio=increase:flags=lanczos,crop=1350:1800,"
         "zoompan=%s:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=%d:s=%dx%d:fps=%d,setsar=1,"
         "%s,"
         "fade=t=in:st=0:d=0.4,fade=t=out:st=%.2f:d=0.4"
