@@ -1,3 +1,25 @@
+## 🔬 STATO 2026-07-27/d — 3 DIFETTI VISTI SUI FOTOGRAMMI e CHIUSI · RIGENERAZIONE UNIFORME dei 40
+
+Le correzioni del fondatore, tutte verificate GUARDANDO i fotogrammi (mai a memoria):
+1. **QUADRATINI thai (Bangkok)**: NotoSansThai ha SOLO l'alfabeto thai — niente cifre né «%» →
+   «3%»/«0%»/«90» a box. Fix: famiglia TLWG (**Loma-Bold** = thai+latino+cifre, testato su PNG)
+   + **guardia anti-tofu**: font speciale assente → schermo in inglese, MAI DejaVu coi box.
+2. **VOLUME che non parte da solo**: regola di piattaforma (TUTTI i social partono muti,
+   anti-disturbo, nessuno può scavalcarla). Mitigazione professionale: scritte che reggono il
+   muto (già) + **invito «attiva l'audio» primi 3s in 15 lingue** (AUDIO_HINT, stesso font dello schermo).
+3. **STIRAMENTO immagini**: PROVATO con seed identico sui 3 formati — flux al 9:16 estremo STIRA
+   il contenuto (palazzi allungati); al quadrato e al **3:4 è NATURALE**. Fix: si genera al 3:4
+   nativo e il 9:16 lo fa ffmpeg (**cover + center-crop: tagliare, mai deformare**) + crop 3%/lato
+   anti-cornici-nere (il modello a volte «incornicia»; tolto anche "cinematic" dal prompt che le
+   invita) + upscale **lanczos**. Commit `181c385` + `fdd676f`.
+- **RIGENERAZIONE UNIFORME IN CORSA**: runner `/tmp/rigenera40.py` sul VPS rifà TUTTI i 40 spot
+  col renderer corretto e li SOSTITUISCE città per città (cancella i post difettosi TG/FB/Mastodon
+  → pubblica il corretto: canale mai vuoto). Log `/tmp/rigenera40.log`, fine = `/tmp/rigenera40.done`.
+- LEZIONE di metodo: i difetti visivi si trovano SOLO guardando i fotogrammi (`ffmpeg -ss N
+  -frames:v 1` + occhio); il collaudo testuale non li vede. È l'«occhio del fondatore» applicato ai video.
+
+---
+
 ## 🌍 STATO 2026-07-27/c — GIRO VIDEO MONDIALE: 40 tappe, 16 lingue, 3 canali, rotazione perpetua (CARTA BIANCA)
 
 Direttive "manca l'Est asiatico… è una pazzia tutte le 195 nazioni?… carichiamo su tutti i posti
