@@ -112,11 +112,12 @@ BEAT_SOGGETTI = [
 ]
 
 # Le 3 varianti della scena centrale, A ROTAZIONE per città (md5 stabile: ogni città ha sempre
-# la sua, distribuite ~uguali sulle 40). L'ordine è tarato perché ROMA (md5%3=2) peschi le PERSONE.
+# la sua, distribuite ~uguali sulle 40). ⚠️ DIRETTIVA FONDATORE 27/07 sera: MAI esseri umani in
+# campagna — al posto delle persone LE MERAVIGLIE della città (il landmark più bello).
 SCENA3_VARIANTI = [
     "warm close-up of elegant house keys with a golden keychain on a rustic wooden table, soft morning light, cozy welcoming mood, photorealistic, natural proportions",
     "inviting cozy terrace of a home in {citta} at golden hour, plants and warm lights, welcoming atmosphere, photorealistic, natural proportions",
-    "warm human moment, a smiling host handing house keys to a happy guest at an apartment door in {citta}, natural body proportions, photorealistic",
+    "the most beautiful iconic landmark of {citta}, breathtaking view at golden hour, no people, photorealistic, natural proportions",
 ]
 
 
