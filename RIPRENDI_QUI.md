@@ -1,3 +1,32 @@
+## 🚀 STATO 2026-07-27/e — FORMATO APPROVATO DAL FONDATORE (test v4) · GIRO FINALE DEI 40 IN CORSA
+
+Giornata di correzioni A STRETTO GIRO col fondatore sul video (4 test successivi sul canale, ognuno
+verificato coi FOTOGRAMMI e — novita' — con le ORECCHIE):
+- **FORMATO ORIGINALE 3:4** (1080×1440, direttiva «metti il formato originale»): niente ritaglio,
+  l'immagine come nasce; geometria scritte riproporzionata. Audio **AAC stereo 44.1kHz + faststart**
+  (il mono-24k senza faststart era il motivo VERO per cui l'anteprima non suonava inline).
+- **SCENA CENTRALE A GIRO su 3 varianti** (scelta fondatore «devono essere a giro tutte e tre»):
+  persone/chiavi-dorate/terrazza, md5 stabile per città (40 = 17/12/11), Roma=persone.
+  ⚠️ LEZIONE: avevo tolto le persone di mia iniziativa → «non devi fare quello che vuoi»; le scelte
+  creative si CHIEDONO (AskUserQuestion), mai decidere da soli sul prodotto del fondatore.
+- **CHIUSURA VOCALE FISSA in 16 lingue** (mai scritta dall'AI): «Il tuo viaggio, senza sorprese.
+  Bookin vip punto com.» — pronuncia GUIDATA per lingua (en «V I P dot com», ru in cirillico, ja
+  katakana) + `_pronuncia()` su tutte le battute. **👂 ORECCHIE NUOVE**: faster-whisper in
+  `/root/whisper-venv` sul VPS trascrive la coda audio e VERIFICA la pronuncia («bookinvip.com»
+  riconosciuto al primo colpo) — l'occhio-del-fondatore esteso all'audio.
+- **CERCHIETTO Telegram** (`--nota`/`telegram_nota`): l'unico formato che suona DENTRO la chat con
+  un tocco; test su Roma sul canale (testo 2 righe corpo 34 dentro la corda del cerchio). In attesa
+  di verdetto per la serie. **Autoplay col suono = IMPOSSIBILE per chiunque** (regola piattaforme);
+  lato utente: Impostazioni Telegram → Riproduzione automatica video.
+- Pollinations THROTTLA (~300 img/giorno): renderer ora PAZIENTE (6 tentativi, 15s fra i falliti,
+  3s di garbo) + passo lento fra le città. ⚠️ altro finto-verde da pipe beccato (render fallito
+  mascherato da `| tail` → pubblicato file vecchio): exit-code SEMPRE diretto.
+- **VAI del fondatore sul test v4** → `/tmp/rigenera_finale.py` IN CORSA: tutte le 40 città nel
+  formato approvato, sostituzione di TUTTI i post vivi (mappa VECCHI completa), TG+FB+Mastodon,
+  bilancio città-per-città a fine corsa (log `/tmp/finale.log`, fine `/tmp/finale.done`).
+
+---
+
 ## 🔬 STATO 2026-07-27/d — 3 DIFETTI VISTI SUI FOTOGRAMMI e CHIUSI · RIGENERAZIONE UNIFORME dei 40
 
 Le correzioni del fondatore, tutte verificate GUARDANDO i fotogrammi (mai a memoria):
