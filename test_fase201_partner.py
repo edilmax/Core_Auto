@@ -2,6 +2,8 @@
 """Guardia PROGRAMMA PARTNER (fase201): GDPR-gate consenso (visto ROSSO: senza consenso non si
 scrive NULLA), validazioni, dedup email, tetto orario, persistenza su FILE, rotte pubbliche/admin."""
 import json
+import os
+import re
 import shutil
 import tempfile
 import unittest
@@ -112,6 +114,43 @@ class TestRottePartner(unittest.TestCase):
     def test_json_rotto_400(self):
         st, _ = self.r.gestisci("POST", "/api/partner", {}, "{non-json", {})
         self.assertEqual(st, 400)
+
+
+class TestPaginaPartner(unittest.TestCase):
+    """Sorveglianza della PAGINA pubblica partner.html (guardia «nessuna pagina senza guardiani»):
+    il form punta alla rotta VERA, il consenso GDPR c'è, le 8 lingue sono complete, e la pagina
+    NON promette percentuali ai partner (le condizioni economiche le firma il fondatore)."""
+
+    @classmethod
+    def setUpClass(cls):
+        base = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(base, "deploy", "partner.html"), encoding="utf-8") as f:
+            cls.pag = f.read()
+
+    def test_form_cablato_alla_rotta_vera(self):
+        self.assertIn('fetch("/api/partner"', self.pag)          # stessa rotta del router
+        self.assertIn('id="consenso"', self.pag)
+        self.assertIn('type="checkbox"', self.pag)
+        self.assertIn("consenso:true", self.pag)                  # inviato solo se spuntato
+
+    def test_otto_lingue_complete_stesse_chiavi(self):
+        for l in ("it:{", "en:{", "es:{", "fr:{", "de:{", "pt:{", "ja:{", "zh:{"):
+            self.assertIn(l, self.pag, "manca la lingua " + l)
+        for chiave in ("ok_msg", "err_msg", "err_consenso", "f_invia", "pro_h", "host_h", "nota"):
+            self.assertEqual(self.pag.count(chiave + ':"'), 8,
+                             "chiave '%s' non presente in tutte le 8 lingue" % chiave)
+
+    def test_onesta_nessuna_percentuale_promessa(self):
+        # nei TESTI (blocco TR) niente percentuali: le condizioni economiche le firma il
+        # fondatore caso per caso (il 100% del CSS width non c'entra e resta fuori dal blocco)
+        m = re.search(r"const TR=\{.*?\n\};", self.pag, re.S)
+        self.assertIsNotNone(m)
+        self.assertNotRegex(m.group(0), r"\d+\s*%")
+
+    def test_consenso_client_bloccante(self):
+        # il submit senza spunta mostra err_consenso e NON chiama la rete
+        js = self.pag[self.pag.index("onsubmit"):]
+        self.assertLess(js.index("err_consenso"), js.index("fetch("))
 
 
 if __name__ == "__main__":
