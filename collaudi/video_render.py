@@ -330,10 +330,12 @@ def clip_scena(img, mp3, durata, schermo_txt, tmp, idx, zoom_in=True, font=FONT,
         % (z, d_frames, W, H, FPS, testo, max(0.1, durata - 0.4))
     )
     out = os.path.join(tmp, "scena%d.mp4" % idx)
+    # audio STANDARD social: AAC stereo 44.1kHz (edge-tts esce mono 24kHz: alcuni player inline
+    # non lo riproducono -> "l'audio non va" nell'anteprima)
     _run(["ffmpeg", "-y", "-loop", "1", "-i", img, "-i", mp3,
           "-filter_complex", "[0:v]" + vf + "[v]", "-map", "[v]", "-map", "1:a",
           "-t", "%.2f" % durata, "-c:v", "libx264", "-preset", "medium", "-pix_fmt", "yuv420p",
-          "-c:a", "aac", "-b:a", "128k", "-r", str(FPS), out])
+          "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2", "-r", str(FPS), out])
     return out
 
 
@@ -364,7 +366,10 @@ def monta(citta, lingua, out_path, voce=None):
                                 font=font, hint=(hint if i == 0 else None)))
     lista = os.path.join(tmp, "lista.txt")
     open(lista, "w").write("".join("file '%s'\n" % c for c in clips))
-    _run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", lista, "-c", "copy", out_path])
+    # +faststart = moov in TESTA al file: l'anteprima social parte (video E audio) in streaming
+    # senza dover scaricare tutto il file (senza, "l'audio non va" finche' non apri il video)
+    _run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", lista, "-c", "copy",
+          "-movflags", "+faststart", out_path])
     print("VIDEO pronto: %s (%.1f MB)" % (out_path, os.path.getsize(out_path) / 1e6))
     return out_path
 
