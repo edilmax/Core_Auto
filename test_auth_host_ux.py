@@ -110,9 +110,11 @@ class TestErroriDistinti(_Base):
     def test_gia_registrata_vs_credenziali_non_valide(self):
         st, c = self._registra(email="dup@x.com", password="password1")
         self.assertEqual(st, 201, c)
-        # ri-registrare la STESSA email -> 'email_gia_registrata' (accedi, non registrarti)
+        # ri-registrare la STESSA email -> 'email_gia_registrata' (accedi, non registrarti).
+        # STATO ESATTO 422 (2026-07-28): prima l'asserzione accettava 400/409/422 — una
+        # guardia che tollera tre esiti diversi non vede la regressione (modo #4).
         st, c = self._registra(email="dup@x.com", password="password1")
-        self.assertEqual(st, 409, c) if st == 409 else self.assertIn(st, (409, 422, 400), c)
+        self.assertEqual(st, 422, c)
         self.assertEqual(c.get("errore"), "email_gia_registrata")
         # login con password SBAGLIATA -> 'credenziali_non_valide' (distinto)
         st, c = self.g("POST", "/api/host/login",

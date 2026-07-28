@@ -108,8 +108,12 @@ class ProviderPOI:
         cache = self._da_cache(chiave)
         if cache is not None:
             return cache
-        poi = self._interroga(lat, lon)
-        self._salva_cache(chiave, poi)
+        # Si cache-a SOLO una risposta VERA di Overpass (anche vuota): un 429/timeout
+        # (frequentissimo su overpass-api.de) NON deve diventare un "qui non c'e' niente"
+        # permanente, che lascerebbe quell'isolato senza POI nel motore SEO per sempre.
+        risposta_vera, poi = self._interroga(lat, lon)
+        if risposta_vera:
+            self._salva_cache(chiave, poi)
         return poi
 
     def _da_cache(self, chiave: str) -> Optional[List[Dict[str, Any]]]:
@@ -146,14 +150,17 @@ class ProviderPOI:
             'node(%s)[%s=%s][name];' % (intorno, k, v) for (k, v) in _MAPPA_CAT)
         return "[out:json][timeout:15];(%s);out center %d;" % (filtri, _MAX_POI * 3)
 
-    def _interroga(self, lat_micro: int, lon_micro: int) -> List[Dict[str, Any]]:
+    def _interroga(self, lat_micro: int,
+                   lon_micro: int) -> Tuple[bool, List[Dict[str, Any]]]:
+        """(risposta_vera, poi). `risposta_vera=False` = Overpass non ha risposto
+        (rete/429/timeout): il chiamante NON deve cache-are il vuoto."""
         try:
             url = self._endpoint + "?" + urllib.parse.urlencode(
                 {"data": self._query(lat_micro, lon_micro)})
             dati = self._fetch(url)
             elementi = dati.get("elements") if isinstance(dati, dict) else None
             if not isinstance(elementi, list):
-                return []
+                return True, []                  # risposta vera ma senza elementi validi
             out: List[Dict[str, Any]] = []
             visti = set()
             for el in elementi:
@@ -179,11 +186,11 @@ class ProviderPOI:
                             "lat_micro": lat_u, "lon_micro": lon_u})
                 if len(out) >= _MAX_POI:
                     break
-            return out
+            return True, out
         except Exception:
-            logger.warning("poi: interrogazione Overpass fallita (ISOLATA -> [])",
-                           exc_info=True)
-            return []
+            logger.warning("poi: interrogazione Overpass fallita (ISOLATA -> [], "
+                           "NON cache-ata)", exc_info=True)
+            return False, []
 
     @staticmethod
     def _fetch_reale(url: str) -> Any:  # pragma: no cover (rete)

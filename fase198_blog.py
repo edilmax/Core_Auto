@@ -250,7 +250,14 @@ def _articolo_da_slug(slug: str) -> Optional[Dict[str, object]]:
 
 
 def _lng(lingua: object) -> str:
-    return lingua if isinstance(lingua, str) and lingua in _UI else "it"
+    """La lingua da servire: quella chiesta se esiste, altrimenti INGLESE.
+
+    Ripiegava sull'ITALIANO: un lettore che arrivava con `?lang=ru` (lingua servita
+    dalle landing di fase97 ma non dal blog) o con un codice qualsiasi si trovava
+    l'articolo in italiano. Su un blog che esiste per portare traffico da tutto il
+    mondo, «non conosco questa lingua» non puo' voler dire «italiano»: la lingua
+    franca e' l'inglese (stessa regola di fase86 e di `fase83._lingua`)."""
+    return lingua if isinstance(lingua, str) and lingua in _UI else "en"
 
 
 def _jsonld(obj: object) -> str:

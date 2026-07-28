@@ -200,7 +200,11 @@ class TestHreflangRegione(unittest.TestCase):
         self.assertEqual(_lang_regione("es"), ("es", None))
         self.assertEqual(_lang_regione("es-ZZ"), ("es", None))   # regione fuori mappa → ignorata
         self.assertEqual(_lang_regione("xx"), ("en", None))       # lingua ignota → fallback
-        self.assertEqual(_lang_regione(None), ("it", None))
+        # codice assente/non-stringa: INGLESE come per ogni lingua ignota. Prima tornava
+        # ("it", None) e la landing usciva in italiano per tutto il mondo (2026-07-28).
+        self.assertEqual(_lang_regione(None), ("en", None))
+        self.assertEqual(_lang_regione(""), ("en", None))
+        self.assertEqual(_lang_regione(42), ("en", None))
 
     def test_locali_ordine_e_validi(self):
         from fase97_inbound_seo import locali_hreflang

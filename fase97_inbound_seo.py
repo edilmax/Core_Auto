@@ -559,8 +559,10 @@ def breadcrumb_jsonld(citta: str, base_url: str = "", *, lingua: str = "it",
 def _lang_regione(codice: Any) -> Tuple[str, Optional[str]]:
     """'es-MX' -> ('es','MX'); 'es' -> ('es',None). Lingua ignota -> ('en',None). Regione fuori
     dalla mappa curata -> ignorata (anti-spam: niente locali arbitrari indicizzabili)."""
-    if not isinstance(codice, str):
-        return ("it", None)
+    if not isinstance(codice, str) or not codice.strip():
+        # Rispondeva ('it', None), contro quanto promesso due righe piu' su: una
+        # landing chiamata con lingua=None usciva in ITALIANO per tutto il mondo.
+        return ("en", None)
     parti = codice.replace("_", "-").split("-", 1)
     lang = parti[0].lower()
     reg = parti[1].upper() if len(parti) > 1 and parti[1] else None

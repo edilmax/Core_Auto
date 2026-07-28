@@ -40,7 +40,15 @@ class TraduttoreRecensioni:
                            ) -> Dict[str, Any]:
         out = dict(recensione) if isinstance(recensione, dict) else {}
         testo = out.get("testo", "")
-        origine = out.get("lingua") or rileva_lingua(testo)
+        dichiarata = out.get("lingua")
+        # FORMA VERA di fase63 (`elenco`): il testo arriva TAGGATO con la sua lingua,
+        # {"text": "...", "lang": "it"}. Pretendendo una stringa, il traduttore lo
+        # trovava "non traducibile" e lo lasciava passare intatto (tradotto=False):
+        # con dati veri non traduceva MAI nulla, nemmeno col backend acceso.
+        if isinstance(testo, dict):
+            dichiarata = dichiarata or testo.get("lang")
+            testo = testo.get("text", "")
+        origine = dichiarata or rileva_lingua(testo)
         out["lingua_origine"] = origine
         out["testo_originale"] = testo                     # mai sovrascritto
         r = self._t.traduci_testo(testo, origine, lingua_lettore)

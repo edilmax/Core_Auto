@@ -374,14 +374,27 @@ class ProtocolloConcierge:
 
     def _converti_indicativo(self, da: str, a: Any, importo: int) -> int:
         """Stima indicativa nella valuta dell'ospite (tasso MID, nessun markup occulto). Solo
-        display: l'addebito resta in `da`. 0 se manca il tasso o la valuta e' la stessa."""
+        display: l'addebito resta in `da`. 0 se manca il tasso o la valuta e' la stessa.
+
+        SCALA (bug corretto 2026-07-28, test_profondo_valute): `importo` e il valore
+        restituito sono UNITA' MINORI di due valute che possono avere esponenti diversi,
+        mentre il tasso mid e' espresso in unita' MAGGIORI (1 EUR = 160 JPY). Moltiplicare
+        e basta produceva un errore di scala di 10/100/1000 volte sulla riga "≈ nella tua
+        moneta": ¥36.800 mostrati come "2,30 EUR", 412,00 EUR mostrati come "¥6.592.000".
+        Il fattore 10^(esponente_destinazione - esponente_origine) rimette la stima nelle
+        unita' minori giuste (che sono quelle che il browser divide per 10^esponente).
+        Decimal e HALF_UP: niente float sul denaro, nemmeno quando e' solo da mostrare."""
         if not (self._tasso and isinstance(a, str) and a and a != da and _intero(importo)):
             return 0
         try:
             tasso = self._tasso(da, a)
             if tasso is None:
                 return 0
-            val = int(round(importo * float(tasso)))
+            from decimal import ROUND_HALF_UP, Decimal
+            from fase99_multicurrency import esponente
+            scala = Decimal(10) ** (esponente(a) - esponente(da))
+            val = int((Decimal(importo) * Decimal(str(tasso)) * scala)
+                      .quantize(Decimal(1), rounding=ROUND_HALF_UP))
             return val if 0 < val <= MAX_CENTS else 0
         except Exception:
             return 0

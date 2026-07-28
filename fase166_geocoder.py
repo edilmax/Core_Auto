@@ -108,9 +108,13 @@ class Geocoder:
         if cache is not None:
             trovato, lat, lon = cache
             return (lat, lon) if trovato else None
-        # 2) rete (isolata)
-        coord = self._interroga(chiave)
-        self._salva_cache(chiave, coord)
+        # 2) rete (isolata). Si cache-a SOLO una risposta VERA di Nominatim (trovato o
+        # non trovato): un errore transitorio (429/timeout/DNS) NON diventa un
+        # "citta inesistente" permanente — altrimenti una citta geocodificata durante
+        # un disservizio non avrebbe MAI piu' un pin sulla mappa, per nessun host.
+        risposta_vera, coord = self._interroga(chiave)
+        if risposta_vera:
+            self._salva_cache(chiave, coord)
         return coord
 
     def _da_cache(self, chiave: str) -> Optional[Tuple[int, Optional[int], Optional[int]]]:
@@ -140,25 +144,28 @@ class Geocoder:
         finally:
             con.close()
 
-    def _interroga(self, chiave: str) -> Optional[Tuple[int, int]]:
+    def _interroga(self, chiave: str) -> Tuple[bool, Optional[Tuple[int, int]]]:
+        """(risposta_vera, coordinate). `risposta_vera=False` = Nominatim non ha risposto
+        (rete/429/timeout): il chiamante NON deve cache-are il negativo, si ritentera'."""
         try:
             q = chiave.replace("|", ", ")
             url = NOMINATIM + "?" + urllib.parse.urlencode(
                 {"q": q, "format": "json", "limit": "1"})
             dati = self._fetch(url)
             if not (isinstance(dati, list) and dati):
-                return None
+                return True, None                    # risposta vera: qui non c'e' niente
             primo = dati[0]
             lat = float(primo.get("lat"))
             lon = float(primo.get("lon"))
             lat_u = int(round(lat * 1_000_000))
             lon_u = int(round(lon * 1_000_000))
             if abs(lat_u) > _LAT_MAX or abs(lon_u) > _LON_MAX:
-                return None
-            return (lat_u, lon_u)
+                return True, None                    # risposta vera ma assurda: negativo
+            return True, (lat_u, lon_u)
         except Exception:
-            logger.warning("geocoder: interrogazione fallita (ISOLATA -> None)", exc_info=True)
-            return None
+            logger.warning("geocoder: interrogazione fallita (ISOLATA -> None, NON cache-ata)",
+                           exc_info=True)
+            return False, None
 
     # ── QUARTIERE (reverse-geocode): coordinate -> nome del quartiere, cache-first ──
 
@@ -177,8 +184,9 @@ class Geocoder:
         cache = self._quartiere_da_cache(chiave)
         if cache is not None:
             return cache or None                             # '' cache-ato = non trovato
-        nome = self._interroga_quartiere(lat_micro, lon_micro)
-        self._salva_quartiere(chiave, nome)
+        risposta_vera, nome = self._interroga_quartiere(lat_micro, lon_micro)
+        if risposta_vera:                    # errore di rete -> niente cache negativa
+            self._salva_quartiere(chiave, nome)
         return nome
 
     def _quartiere_da_cache(self, chiave: str) -> Optional[str]:
@@ -211,7 +219,9 @@ class Geocoder:
         intero, resto = divmod(abs(micro), 1_000_000)
         return "%s%d.%06d" % (segno, intero, resto)
 
-    def _interroga_quartiere(self, lat_micro: int, lon_micro: int) -> Optional[str]:
+    def _interroga_quartiere(self, lat_micro: int,
+                             lon_micro: int) -> Tuple[bool, Optional[str]]:
+        """(risposta_vera, quartiere). Come `_interroga`: un errore di rete non si cache-a."""
         try:
             url = NOMINATIM_REVERSE + "?" + urllib.parse.urlencode(
                 {"lat": self._gradi_str(lat_micro), "lon": self._gradi_str(lon_micro),
@@ -219,16 +229,16 @@ class Geocoder:
             dati = self._fetch(url)
             addr = dati.get("address") if isinstance(dati, dict) else None
             if not isinstance(addr, dict):
-                return None
+                return True, None
             for campo in _CAMPI_QUARTIERE:
                 v = addr.get(campo)
                 if isinstance(v, str) and v.strip():
-                    return " ".join(v.split())[:_QUARTIERE_MAX]
-            return None
+                    return True, " ".join(v.split())[:_QUARTIERE_MAX]
+            return True, None
         except Exception:
-            logger.warning("geocoder: reverse quartiere fallito (ISOLATO -> None)",
-                           exc_info=True)
-            return None
+            logger.warning("geocoder: reverse quartiere fallito (ISOLATO -> None, "
+                           "NON cache-ato)", exc_info=True)
+            return False, None
 
     @staticmethod
     def _fetch_reale(url: str) -> Any:  # pragma: no cover (rete)

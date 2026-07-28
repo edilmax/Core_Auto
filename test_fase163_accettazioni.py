@@ -95,8 +95,18 @@ class TestDocumento(unittest.TestCase):
                          documento_corrente("en")["doc_sha256"])   # stesso doc vincolante
 
     def test_lingue_e_fallback(self):
+        """Il contratto esiste in it/en. Chi chiede una lingua che non abbiamo tradotto
+        riceve l'INGLESE — non l'italiano: un host tedesco o giapponese leggeva in
+        italiano il documento che deve firmare (corretto 2026-07-28). L'italiano resta
+        la lingua che FA FEDE, ed e' dichiarato nella risposta; l'impronta vincolante
+        non cambia con la lingua mostrata."""
         self.assertEqual(documento_corrente("en")["lang"], "en")
-        self.assertEqual(documento_corrente("zz")["lang"], "it")   # ignota -> fa fede l'italiano
+        for ignota in ("zz", "de", "ja", "zh", "fr", "es", "pt", "", None):
+            doc = documento_corrente(ignota)
+            self.assertEqual(doc["lang"], "en", "lingua %r -> %r" % (ignota, doc["lang"]))
+            self.assertIn("INDEMNIFICATION", doc["testo"])
+            self.assertEqual(doc["lingua_che_fa_fede"], "it")
+            self.assertEqual(doc["doc_sha256"], doc_sha256())   # vincolante, invariato
         self.assertIn("MANLEVA", documento_corrente("it")["testo"])
         self.assertIn("INDEMNIFICATION", documento_corrente("en")["testo"])
 

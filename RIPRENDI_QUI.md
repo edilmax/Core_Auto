@@ -1,3 +1,51 @@
+## 🎯 STATO 2026-07-28 — LIVELLO 1 (HAPPY PATH) CHIUSO: 134/134 ROTTE + SCAVO PROFONDO
+
+Direttiva fondatore: **programma di collaudo a 4 LIVELLI**, tutti obbligatori (vedi memoria
+[[bookinvip-programma-4-livelli]]). **LIVELLO 1 = IDONEO**, in due ondate + verifica multipla.
+
+**ONDA 1 — copertura sistematica**: censite **134 rotte** del router; ognuna ha ora una prova col
+caso felice (auth giusta, dati validi) che asserisce **stato esatto + chiavi/tipi + valori veri**
+(mai «non è 500»). Nuovi: `test_happy_host/admin/soldi/agente/altro/moduli/conti/lacune.py`
+(240 test) + **spia automatica di copertura**: registra ogni rotta attraversata e confronta con
+l'elenco — una rotta nuova non provata fa diventare rosso il collaudo E ne fa il nome.
+Difetti chiusi: annuncio **sospeso che tornava online da solo** al primo salvataggio host (causa
+doppia: il pannello ripropone i dati + `dettaglio_owner` non esponeva `stato`); contratto di
+locazione che scriveva **sempre «Numero ospiti: 1»**; filtro città del pannello admin che non
+trovava mai nulla; 7 codici d'errore grezzi in faccia all'utente; forma della risposta del
+preventivo che **cambiava a seconda dei guasti** (chiave che spariva); 2 ornamenti nei collaudi.
+
+**ONDA 2 — scavo profondo** (6 direzioni nuove, `test_profondo_*.py`, +220 test):
+- **🌍 LINGUE (il più grave)**: **voucher** (13 etichette + 16 messaggi in italiano fisso),
+  **ricevuta di pagamento** (interamente italiana per chiunque nel mondo), **contratto host**,
+  **termini/privacy**, **blog**, pagina recensione e pagina link-scaduto ripiegavano tutti
+  sull'ITALIANO. Corretto: 33 chiavi × 8 lingue, `_lingua_pagina()`, la lingua viaggia **firmata
+  nel gettone**, ripiego sempre **inglese**. `lingua_che_fa_fede` resta 'it' e l'impronta legale
+  non cambia (valore probatorio intatto).
+- **💥 IDEMPOTENZA**: il **doppio clic sul book** rieseguiva tutti gli effetti derivati anche col
+  replay riconosciuto; doppio conto su «dividi le spese». Chiusi.
+- **💱 VALUTE**: la stima «≈ nella tua moneta» non cambiava scala fra esponenti diversi (EUR→JPY
+  numero assurdo; solo display, l'addebito era corretto). Chiuso. APERTO: vincolo Stripe sulle
+  valute a 3 decimali (importo divisibile per 10).
+- **🗣️ PAGINE↔API**: `index.html` stampava i codici GREZZI del motore all'ospite ('pieno',
+  'min_notti', 'quote_scaduta'…) e 12 codici non avevano frase in nessuna lingua. Chiusi.
+- **🤖 DORMIENTI**: chatbot che annunciava il totale **senza tassa di soggiorno** (300 invece di
+  310) e rispondeva «no animali» su case che li ammettono (cercava una parola che il catalogo
+  non usa). Chiusi. **9 moduli costruiti e funzionanti ma senza interruttore né rotta**
+  (deposito 149, wishlist 117, fedeltà 137, chatbot 139, push 123, gateway Asia 104, traduzioni
+  107/129, coda 67): decisione di prodotto del fondatore.
+- **🔧 APERTE**: CORS completato (3 header d'auth mancanti), asimmetria lettura/scrittura sulle
+  date allineata, kill-switch verificato, 4 rotte bunker provate col **server vero**.
+
+**VERIFICA MULTIPLA (misurata dal coordinatore, exit code diretto, albero fermo con impronta
+del codice identica prima/dopo)**: suite **4187 test · 0 fallimenti · 3 skip d'ambiente ·
+VERDE ×3 giri consecutivi** · mutazione **41/41 uccisi** · finti-verdi **0 veri** (8 sospetti
+letti: 7 skip d'ambiente legittimi + falso allarme sulle prove Z3, **verificate: girano, 8/8**) ·
+sito vero dall'esterno **190 controlli 0 violazioni** · plausibilità dati reali **36 OK**.
+⚠️ LEZIONE: durante una misura un'altra squadra stava modificando gli stessi file → **3 falsi
+rossi**, causa riprodotta in laboratorio. Da qui in poi: **una campagna alla volta**.
+
+---
+
 ## 🔬 STATO 2026-07-28 — CAMPAGNA DI VERIFICA SUPREMA: 10 DIFETTI VERI CHIUSI · GIRO 54/54 COMPLETO
 
 **Collaudo supremo (12 agenti in parallelo, ~3h)** — dettaglio completo nella voce REGISTRO

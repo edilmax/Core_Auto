@@ -896,8 +896,14 @@ class CatalogoVetrina:
             dove.append("stato=?")
             par.append(stato)
         if isinstance(citta, str) and citta.strip():
-            dove.append("citta=?")
-            par.append(citta.strip().lower()[:120])
+            # DIFETTO PROVATO 2026-07-28 (test_happy_admin.test_admin_alloggi_filtro_citta):
+            # il parametro veniva abbassato a minuscolo (`.lower()`) ma la colonna conserva
+            # la citta' COME L'HA SCRITTA L'HOST ("Roma") e in SQLite `=` su TEXT e'
+            # case-SENSITIVE (collazione BINARY) -> il filtro citta' del Field non trovava
+            # MAI nulla: "Roma" cercava "roma". Si confronta senza distinzione di maiuscole
+            # su ENTRAMBI i lati (COLLATE NOCASE), che era anche l'intenzione originaria.
+            dove.append("citta = ? COLLATE NOCASE")
+            par.append(citta.strip()[:120])
         clausola = (" WHERE " + " AND ".join(dove)) if dove else ""
         lim = limit if (isinstance(limit, int) and not isinstance(limit, bool)
                         and 0 < limit <= 100) else 20
@@ -938,6 +944,10 @@ class CatalogoVetrina:
         # indirizzo: PRIVATO, solo nella vista del proprietario (mai nel dettaglio pubblico
         # né nelle card di ricerca) -> per pre-riempire il form di modifica e ri-geocodificare
         if isinstance(d, dict):
+            # STATO (bozza/pubblicato/sospeso): serve al PROPRIETARIO — è la vista con cui
+            # si pre-riempie il form di modifica, e senza questo campo un ri-salvataggio
+            # ricadeva sul default "pubblicato" (bug 2026-07-28, vedi fase83._blinda_stato).
+            d["stato"] = a["stato"]
             d["indirizzo"] = (a["indirizzo"] if "indirizzo" in a.keys() else "") or ""
             d["lat_micro"] = a["lat_micro"]
             d["lon_micro"] = a["lon_micro"]

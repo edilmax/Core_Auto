@@ -113,6 +113,9 @@ class GestoreSplit:
                         pagato INTEGER NOT NULL DEFAULT 0,
                         pagamento_idem TEXT,
                         PRIMARY KEY (conto_id, partecipante_id))""")
+                # lookup del conto APERTO di una prenotazione (dedup anti doppio clic)
+                con.execute("CREATE INDEX IF NOT EXISTS ix_conti_pren "
+                            "ON conti(prenotazione_id, stato)")
         finally:
             con.close()
 
@@ -159,6 +162,18 @@ class GestoreSplit:
             if con.execute("SELECT 1 FROM conti WHERE conto_id=?", (cid,)).fetchone():
                 con.execute("ROLLBACK")
                 return None
+            # UN SOLO conto APERTO per prenotazione (difetto PROVATO 2026-07-28,
+            # test_profondo_idempotenza): il doppio clic su "dividi il conto" creava un
+            # SECONDO conto per la stessa prenotazione, con le stesse quote. Il gruppo si
+            # spezzava su due conti (chi paga su quello sbagliato risulta non aver pagato)
+            # e la somma raccolta poteva arrivare al DOPPIO del totale dovuto. Replay ->
+            # si restituisce il conto che c'e' gia' (idempotente). Per cambiare la
+            # ripartizione si annulla prima il conto aperto.
+            gia = con.execute("SELECT conto_id FROM conti WHERE prenotazione_id=? AND "
+                              "stato='aperto' LIMIT 1", (prenotazione_id,)).fetchone()
+            if gia is not None:
+                con.execute("ROLLBACK")
+                return str(gia["conto_id"])
             con.execute(
                 "INSERT INTO conti (conto_id, prenotazione_id, alloggio_id, "
                 "totale_cents, stato, scadenza, creato_ts) VALUES (?,?,?,?,?,?,?)",

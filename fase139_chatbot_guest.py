@@ -94,7 +94,12 @@ class ChatbotGuest:
                                  "Check-in from 3pm, check-out by 11am. Self check-in.", "policy")
             if intento == "animali":
                 d = self._dett(slug)
-                pet = "pet" in [str(s).lower() for s in (d.get("servizi") or [])]
+                # VOCABOLARIO VERO del catalogo (fase57.SERVIZI): il codice e'
+                # 'animali_ammessi'. Cercare solo "pet" (parola che il catalogo non ha mai
+                # usato) faceva rispondere "non ammessi" su una casa che LI AMMETTE: il
+                # test unitario non lo vedeva perche' il suo catalogo finto diceva "pet".
+                pet = bool({"animali_ammessi", "pet"}
+                           & {str(s).lower() for s in (d.get("servizi") or [])})
                 return self._out(intento, ("Animali ammessi." if pet else
                                  "Animali non ammessi salvo accordo con l'host.") if it else
                                  ("Pets allowed." if pet else "Pets not allowed."), "catalogo")
@@ -124,16 +129,23 @@ class ChatbotGuest:
         corpo = getattr(r, "corpo", {})
         if getattr(r, "status", 0) == 200 and isinstance(corpo, dict):
             cents = int(corpo.get("prezzo_guest_cents", 0))
+            # "Totale" deve essere il totale VERO: soggiorno + tassa di soggiorno
+            # (`totale_cents` di fase59). Mostrando `prezzo_guest_cents` il chatbot
+            # annunciava un prezzo piu' BASSO di quello che l'ospite paga davvero
+            # (300,00 invece di 310,00 su un annuncio con tassa): un testo che mente
+            # sui soldi. Ripiego sul soggiorno se il campo manca (concierge vecchi).
+            tot = corpo.get("totale_cents")
+            tot = int(tot) if isinstance(tot, int) and not isinstance(tot, bool) else cents
             val = corpo.get("valuta", "EUR")
             # PREZZO DAL CORE (firmato), mai inventato dall'IA
             # ENTRAMBI i rami con un solo segnaposto: l'importo arriva gia' scritto
             # nella valuta giusta. (Avevo sostituito solo l'inglese: quello italiano
             # restava con tre segnaposto e sollevava TypeError.)
             txt = ("Totale %s (preventivo firmato)." if it else
-                   "Total %s (signed quote).") % _importo_chat(cents, val)
+                   "Total %s (signed quote).") % _importo_chat(tot, val)
             return {"intento": "prezzo", "risposta": txt, "fonte": "concierge",
                     "quote_token": corpo.get("quote_token"),
-                    "prezzo_guest_cents": cents}
+                    "prezzo_guest_cents": cents, "totale_cents": tot}
         return self._out("prezzo", "Non disponibile per quelle date." if it else
                          "Not available for those dates.", "concierge")
 

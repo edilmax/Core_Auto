@@ -170,7 +170,78 @@ ETICHETTE_UI: Dict[str, Dict[str, str]] = {
     "rec_invia": {"it": "Invia recensione", "en": "Submit review", "es": "Enviar reseña", "fr": "Envoyer votre avis", "de": "Bewertung senden", "pt": "Enviar avaliação", "ja": "レビューを送信", "zh": "提交点评"},
     "rec_grazie": {"it": "Grazie! La tua recensione verificata è pubblicata.", "en": "Thank you! Your verified review is published.", "es": "¡Gracias! Tu reseña verificada está publicada.", "fr": "Merci ! Votre avis vérifié est publié.", "de": "Danke! Ihre verifizierte Bewertung ist online.", "pt": "Obrigado! A sua avaliação verificada foi publicada.", "ja": "ありがとうございます！認証済みレビューを公開しました。", "zh": "谢谢！您的验证点评已发布。"},
     "rec_nuovo": {"it": "Nuovo", "en": "New", "es": "Nuevo", "fr": "Nouveau", "de": "Neu", "pt": "Novo", "ja": "新着", "zh": "新上线"},
+    # --- pagina VOUCHER (server-rendered): era l'ultimo pezzo di macchina rimasto in
+    #     italiano fisso. E' il documento che l'ospite straniero apre e mostra al
+    #     check-in: bottoni, avvisi e istruzioni devono parlare la SUA lingua.
+    "v_pin_label": {"it": "PIN check-in", "en": "Check-in PIN", "es": "PIN de entrada", "fr": "PIN d'arrivée", "de": "Check-in-PIN", "pt": "PIN de check-in", "ja": "チェックインPIN", "zh": "入住 PIN"},
+    "v_cancella": {"it": "Cancella prenotazione", "en": "Cancel booking", "es": "Anular reserva", "fr": "Annuler la réservation", "de": "Buchung stornieren", "pt": "Cancelar reserva", "ja": "予約をキャンセル", "zh": "取消预订"},
+    "v_dopo_checkin": {"it": "Dopo il check-in:", "en": "After check-in:", "es": "Después de la entrada:", "fr": "Après l'arrivée :", "de": "Nach dem Check-in:", "pt": "Depois do check-in:", "ja": "チェックイン後：", "zh": "入住之后："},
+    "v_tutto_ok": {"it": "Confermo: tutto come descritto", "en": "I confirm: everything as described", "es": "Confirmo: todo como se describe", "fr": "Je confirme : tout est conforme", "de": "Ich bestätige: alles wie beschrieben", "pt": "Confirmo: tudo como descrito", "ja": "確認しました：記載どおりです", "zh": "我确认：与描述一致"},
+    "v_segnala_problema": {"it": "Segnala un problema", "en": "Report a problem", "es": "Informar de un problema", "fr": "Signaler un problème", "de": "Problem melden", "pt": "Comunicar um problema", "ja": "問題を報告", "zh": "报告问题"},
+    "v_chat_intro": {"it": "Chatta con l'host (per domande o per chiarire un problema; puoi allegare FOTO come prova)", "en": "Chat with the host (for questions or to clear up a problem; you can attach PHOTOS as evidence)", "es": "Chatea con el anfitrión (para dudas o para aclarar un problema; puedes adjuntar FOTOS como prueba)", "fr": "Discutez avec l'hôte (pour des questions ou pour clarifier un problème ; vous pouvez joindre des PHOTOS comme preuve)", "de": "Chatten Sie mit dem Gastgeber (für Fragen oder zur Klärung eines Problems; Sie können FOTOS als Nachweis anhängen)", "pt": "Converse com o anfitrião (para dúvidas ou para esclarecer um problema; podes anexar FOTOS como prova)", "ja": "ホストとチャット（ご質問や問題の確認に。証拠として写真を添付できます）", "zh": "与房东聊天（咨询或说明问题；可附上照片作为凭证）"},
+    "v_scrivi_ph": {"it": "Scrivi un messaggio...", "en": "Write a message...", "es": "Escribe un mensaje...", "fr": "Écrivez un message...", "de": "Nachricht schreiben...", "pt": "Escreve uma mensagem...", "ja": "メッセージを入力...", "zh": "写一条消息..."},
+    "v_invia": {"it": "Invia", "en": "Send", "es": "Enviar", "fr": "Envoyer", "de": "Senden", "pt": "Enviar", "ja": "送信", "zh": "发送"},
+    "v_foto_prova": {"it": "Foto prova", "en": "Photo evidence", "es": "Foto de prueba", "fr": "Photo preuve", "de": "Beweisfoto", "pt": "Foto de prova", "ja": "証拠写真", "zh": "凭证照片"},
+    "v_checkin_online": {"it": "Check-in online (prima dell'arrivo): registra gli ospiti", "en": "Online check-in (before arrival): register the guests", "es": "Check-in online (antes de llegar): registra a los huéspedes", "fr": "Enregistrement en ligne (avant l'arrivée) : enregistrez les voyageurs", "de": "Online-Check-in (vor der Anreise): Gäste registrieren", "pt": "Check-in online (antes da chegada): regista os hóspedes", "ja": "オンラインチェックイン（到着前）：宿泊者を登録", "zh": "在线登记（抵达前）：登记入住人"},
+    "v_nome_ph": {"it": "Nome e cognome", "en": "First and last name", "es": "Nombre y apellidos", "fr": "Nom et prénom", "de": "Vor- und Nachname", "pt": "Nome e apelido", "ja": "氏名", "zh": "姓名"},
+    "v_doc_ph": {"it": "Numero documento", "en": "ID document number", "es": "Número de documento", "fr": "Numéro de pièce d'identité", "de": "Ausweisnummer", "pt": "Número do documento", "ja": "身分証番号", "zh": "证件号码"},
+    "v_aggiungi": {"it": "+ Aggiungi", "en": "+ Add", "es": "+ Añadir", "fr": "+ Ajouter", "de": "+ Hinzufügen", "pt": "+ Adicionar", "ja": "＋ 追加", "zh": "＋ 添加"},
+    "v_invia_checkin": {"it": "Invia check-in", "en": "Send check-in", "es": "Enviar check-in", "fr": "Envoyer l'enregistrement", "de": "Check-in senden", "pt": "Enviar check-in", "ja": "チェックインを送信", "zh": "提交登记"},
+    "v_ricevuta": {"it": "Ricevuta di pagamento", "en": "Payment receipt", "es": "Recibo de pago", "fr": "Reçu de paiement", "de": "Zahlungsbeleg", "pt": "Recibo de pagamento", "ja": "支払い領収書", "zh": "付款收据"},
+    "v_completa_prima": {"it": "Completa il pagamento per attivare il voucher", "en": "Complete the payment to activate the voucher", "es": "Completa el pago para activar el bono", "fr": "Finalisez le paiement pour activer le bon", "de": "Zahlung abschließen, um den Gutschein zu aktivieren", "pt": "Conclui o pagamento para ativar o voucher", "ja": "お支払いを完了するとバウチャーが有効になります", "zh": "完成付款以激活凭证"},
+    "v_pin_dopo_pagamento": {"it": "Il PIN di check-in e le opzioni di gestione si sbloccano dopo il pagamento.", "en": "The check-in PIN and the management options unlock after payment.", "es": "El PIN de entrada y las opciones de gestión se desbloquean tras el pago.", "fr": "Le PIN d'arrivée et les options de gestion se débloquent après le paiement.", "de": "Check-in-PIN und Verwaltungsoptionen werden nach der Zahlung freigeschaltet.", "pt": "O PIN de check-in e as opções de gestão desbloqueiam-se após o pagamento.", "ja": "チェックインPINと管理メニューはお支払い後に利用できます。", "zh": "入住 PIN 与管理选项将在付款后解锁。"},
+    # --- messaggi che il voucher mostra DOPO un clic (finivano nel codice, in italiano) ---
+    "v_js_conferma_canc": {"it": "Cancellare la prenotazione?", "en": "Cancel this booking?", "es": "¿Anular la reserva?", "fr": "Annuler la réservation ?", "de": "Buchung wirklich stornieren?", "pt": "Cancelar a reserva?", "ja": "予約をキャンセルしますか？", "zh": "确定要取消预订吗？"},
+    "v_js_cancellata": {"it": "Cancellata. Rimborso", "en": "Cancelled. Refund", "es": "Anulada. Reembolso", "fr": "Annulée. Remboursement", "de": "Storniert. Erstattung", "pt": "Cancelada. Reembolso", "ja": "キャンセルしました。返金", "zh": "已取消。退款"},
+    "v_js_canc_ko": {"it": "Cancellazione non riuscita", "en": "Cancellation failed", "es": "No se pudo anular", "fr": "Échec de l'annulation", "de": "Stornierung fehlgeschlagen", "pt": "Cancelamento falhou", "ja": "キャンセルできませんでした", "zh": "取消失败"},
+    "v_js_op_ko": {"it": "Operazione non riuscita", "en": "Operation failed", "es": "Operación fallida", "fr": "Opération échouée", "de": "Vorgang fehlgeschlagen", "pt": "Operação falhou", "ja": "操作に失敗しました", "zh": "操作失败"},
+    "v_js_ok_sbloccato": {"it": "Grazie! Pagamento sbloccato per l'host.", "en": "Thank you! Payment released to the host.", "es": "¡Gracias! Pago liberado al anfitrión.", "fr": "Merci ! Paiement débloqué pour l'hôte.", "de": "Danke! Zahlung für den Gastgeber freigegeben.", "pt": "Obrigado! Pagamento libertado ao anfitrião.", "ja": "ありがとうございます！ホストへの支払いを解除しました。", "zh": "谢谢！已向房东释放付款。"},
+    "v_js_segnalato": {"it": "Segnalazione ricevuta: pagamento sospeso, ti ricontattiamo.", "en": "Report received: payment on hold, we'll get back to you.", "es": "Incidencia recibida: pago en espera, te contactaremos.", "fr": "Signalement reçu : paiement suspendu, nous vous recontactons.", "de": "Meldung erhalten: Zahlung ausgesetzt, wir melden uns.", "pt": "Comunicação recebida: pagamento suspenso, entraremos em contacto.", "ja": "ご報告を受け付けました：お支払いを保留し、追ってご連絡します。", "zh": "已收到反馈：付款已暂停，我们会与您联系。"},
+    "v_js_nessun_msg": {"it": "Nessun messaggio ancora.", "en": "No messages yet.", "es": "Aún no hay mensajes.", "fr": "Aucun message pour l'instant.", "de": "Noch keine Nachrichten.", "pt": "Ainda sem mensagens.", "ja": "まだメッセージはありません。", "zh": "暂无消息。"},
+    "v_js_apri_foto": {"it": "apri foto", "en": "open photo", "es": "abrir foto", "fr": "ouvrir la photo", "de": "Foto öffnen", "pt": "abrir foto", "ja": "写真を開く", "zh": "查看照片"},
+    "v_js_prova_ok": {"it": "Prova caricata: è nella conversazione.", "en": "Evidence uploaded: it's in the conversation.", "es": "Prueba subida: está en la conversación.", "fr": "Preuve envoyée : elle est dans la conversation.", "de": "Nachweis hochgeladen: er ist im Chat.", "pt": "Prova carregada: está na conversa.", "ja": "証拠をアップロードしました：会話に表示されます。", "zh": "凭证已上传：已加入对话。"},
+    "v_js_foto_ko": {"it": "Foto non valida (max 5MB, jpg/png).", "en": "Invalid photo (max 5MB, jpg/png).", "es": "Foto no válida (máx 5MB, jpg/png).", "fr": "Photo non valide (max 5 Mo, jpg/png).", "de": "Ungültiges Foto (max. 5 MB, jpg/png).", "pt": "Foto inválida (máx 5MB, jpg/png).", "ja": "無効な写真です（最大5MB、jpg/png）。", "zh": "照片无效（最大 5MB，jpg/png）。"},
+    "v_js_foto_limite": {"it": "Hai raggiunto il limite di prove caricabili.", "en": "You've reached the limit of uploadable evidence.", "es": "Has alcanzado el límite de pruebas subibles.", "fr": "Vous avez atteint la limite de preuves téléversables.", "de": "Sie haben das Limit hochladbarer Nachweise erreicht.", "pt": "Atingiste o limite de provas carregáveis.", "ja": "アップロードできる証拠の上限に達しました。", "zh": "已达到可上传凭证的上限。"},
+    "v_js_riprova": {"it": "Non riuscito in questo momento: riprova tra qualche istante.", "en": "Not possible right now: please try again in a moment.", "es": "No ha sido posible ahora: inténtalo en un momento.", "fr": "Impossible pour le moment : réessayez dans un instant.", "de": "Gerade nicht möglich: bitte gleich erneut versuchen.", "pt": "Não foi possível agora: tenta daqui a pouco.", "ja": "現在実行できません。しばらくしてからお試しください。", "zh": "当前无法完成：请稍后再试。"},
+    "v_js_ck_completato": {"it": "Check-in online completato", "en": "Online check-in completed", "es": "Check-in online completado", "fr": "Enregistrement en ligne terminé", "de": "Online-Check-in abgeschlossen", "pt": "Check-in online concluído", "ja": "オンラインチェックイン完了", "zh": "在线登记已完成"},
+    "v_js_ck_almeno_uno": {"it": "Aggiungi almeno un ospite", "en": "Add at least one guest", "es": "Añade al menos un huésped", "fr": "Ajoutez au moins un voyageur", "de": "Mindestens einen Gast hinzufügen", "pt": "Adiciona pelo menos um hóspede", "ja": "少なくとも1名を追加してください", "zh": "请至少添加一位入住人"},
+    "v_js_ck_ok": {"it": "Check-in completato: al tuo arrivo basta il PIN.", "en": "Check-in completed: on arrival the PIN is enough.", "es": "Check-in completado: al llegar basta el PIN.", "fr": "Enregistrement terminé : à l'arrivée, le PIN suffit.", "de": "Check-in abgeschlossen: bei Ankunft genügt die PIN.", "pt": "Check-in concluído: à chegada basta o PIN.", "ja": "チェックイン完了：到着時はPINだけで大丈夫です。", "zh": "登记完成：抵达时只需 PIN。"},
+    "v_js_ck_ko": {"it": "Dati non validi: controlla nomi/documenti e capacita.", "en": "Invalid data: check names/documents and capacity.", "es": "Datos no validos: revisa nombres/documentos y capacidad.", "fr": "Donnees invalides : verifiez noms/documents et capacite.", "de": "Ungueltige Daten: Namen/Ausweise und Kapazitaet pruefen.", "pt": "Dados invalidos: verifica nomes/documentos e capacidade.", "ja": "データが無効です：氏名・書類・定員をご確認ください。", "zh": "数据无效：请检查姓名/证件与可住人数。"},
+    # --- RICEVUTA di pagamento (era interamente in italiano, per chiunque) ---
+    "ric_alloggio": {"it": "Alloggio", "en": "Property", "es": "Alojamiento", "fr": "Logement", "de": "Unterkunft", "pt": "Alojamento", "ja": "宿泊施設", "zh": "住宿"},
+    "ric_soggiorno": {"it": "Soggiorno", "en": "Stay", "es": "Estancia", "fr": "Séjour", "de": "Aufenthalt", "pt": "Estadia", "ja": "滞在", "zh": "住宿费"},
+    "ric_totale_pagato": {"it": "Totale pagato", "en": "Total paid", "es": "Total pagado", "fr": "Total payé", "de": "Gesamt bezahlt", "pt": "Total pago", "ja": "お支払い合計", "zh": "已付总额"},
+    "ric_nota_stripe": {"it": "Pagamento elaborato da Stripe. Gestore della piattaforma:", "en": "Payment processed by Stripe. Platform operator:", "es": "Pago procesado por Stripe. Operador de la plataforma:", "fr": "Paiement traité par Stripe. Exploitant de la plateforme :", "de": "Zahlung abgewickelt von Stripe. Betreiber der Plattform:", "pt": "Pagamento processado pela Stripe. Operador da plataforma:", "ja": "決済はStripeが処理します。プラットフォーム運営者：", "zh": "付款由 Stripe 处理。平台运营方："},
+    "ric_nota_fattura": {"it": "Questa ricevuta attesta il pagamento e non costituisce fattura fiscale.", "en": "This receipt attests the payment and is not a tax invoice.", "es": "Este recibo acredita el pago y no constituye factura fiscal.", "fr": "Ce reçu atteste le paiement et ne constitue pas une facture fiscale.", "de": "Dieser Beleg bestätigt die Zahlung und ist keine Steuerrechnung.", "pt": "Este recibo comprova o pagamento e não constitui fatura fiscal.", "ja": "この領収書はお支払いを証明するもので、税務上の請求書ではありません。", "zh": "此收据用于证明付款，不构成税务发票。"},
+    "ric_stampa": {"it": "Stampa / salva PDF", "en": "Print / save PDF", "es": "Imprimir / guardar PDF", "fr": "Imprimer / enregistrer en PDF", "de": "Drucken / als PDF speichern", "pt": "Imprimir / guardar PDF", "ja": "印刷 / PDFで保存", "zh": "打印 / 保存 PDF"},
+    # --- pagina RECENSIONE (era bilingue it/en: un tedesco leggeva italiano) ---
+    "rec_dopo_soggiorno": {"it": "Potrai lasciare la recensione al termine del soggiorno.", "en": "You'll be able to review once your stay is over.", "es": "Podrás dejar tu reseña cuando termine la estancia.", "fr": "Vous pourrez laisser un avis une fois le séjour terminé.", "de": "Sie können nach Ende Ihres Aufenthalts bewerten.", "pt": "Poderás avaliar quando a estadia terminar.", "ja": "ご滞在の終了後にレビューを書けます。", "zh": "入住结束后即可评价。"},
+    "rec_domanda": {"it": "Com'è andato il tuo soggiorno a", "en": "How was your stay at", "es": "¿Qué tal tu estancia en", "fr": "Comment s'est passé votre séjour à", "de": "Wie war Ihr Aufenthalt in", "pt": "Como foi a tua estadia em", "ja": "こちらのご滞在はいかがでしたか：", "zh": "您在此的入住体验如何："},
+    "rec_solo_veri": {"it": "Solo chi ha soggiornato davvero può recensire: la tua opinione è verificata.", "en": "Only real guests can review: your opinion is verified.", "es": "Solo quien se ha alojado de verdad puede opinar: tu opinión está verificada.", "fr": "Seuls les vrais voyageurs peuvent laisser un avis : votre opinion est vérifiée.", "de": "Nur echte Gäste können bewerten: Ihre Meinung ist verifiziert.", "pt": "Só quem ficou mesmo pode avaliar: a tua opinião é verificada.", "ja": "実際に滞在した方だけがレビューできます。あなたの声は認証済みです。", "zh": "只有真正入住过的客人才能评价：您的意见经过验证。"},
+    # --- pagina LINK VOUCHER NON VALIDO (era bilingue it/en) ---
+    "lnv_titolo": {"it": "Link non valido", "en": "Link not valid", "es": "Enlace no válido", "fr": "Lien non valide", "de": "Link ungültig", "pt": "Link inválido", "ja": "リンクが無効です", "zh": "链接无效"},
+    "lnv_h1": {"it": "Questo link del voucher non è valido", "en": "This voucher link isn't valid", "es": "Este enlace del bono no es válido", "fr": "Ce lien de bon n'est pas valide", "de": "Dieser Gutschein-Link ist ungültig", "pt": "Este link do voucher não é válido", "ja": "このバウチャーのリンクは無効です", "zh": "此凭证链接无效"},
+    "lnv_p1": {"it": "Il link potrebbe essere vecchio, incompleto o scaduto.", "en": "The link may be old, incomplete or expired.", "es": "El enlace puede ser antiguo, incompleto o estar caducado.", "fr": "Le lien peut être ancien, incomplet ou expiré.", "de": "Der Link kann alt, unvollständig oder abgelaufen sein.", "pt": "O link pode estar antigo, incompleto ou expirado.", "ja": "リンクが古い、不完全、または期限切れの可能性があります。", "zh": "该链接可能过旧、不完整或已过期。"},
+    "lnv_p2": {"it": "Apri il link dall'ultima email di conferma che hai ricevuto, oppure scrivici e ti aiutiamo subito.", "en": "Please open the link from your latest confirmation email, or contact us and we'll help right away.", "es": "Abre el enlace desde el último correo de confirmación que recibiste, o escríbenos y te ayudamos enseguida.", "fr": "Ouvrez le lien depuis votre dernier e-mail de confirmation, ou écrivez-nous et nous vous aidons tout de suite.", "de": "Öffnen Sie den Link aus Ihrer letzten Bestätigungs-E-Mail, oder schreiben Sie uns — wir helfen sofort.", "pt": "Abre o link a partir do último e-mail de confirmação, ou escreve-nos e ajudamos já.", "ja": "最新の確認メールからリンクを開いてください。ご不明な場合はご連絡いただければすぐに対応します。", "zh": "请从您最近收到的确认邮件中打开链接，或联系我们，我们会立即协助。"},
+    "lnv_home": {"it": "Torna su BookinVIP", "en": "Back to BookinVIP", "es": "Volver a BookinVIP", "fr": "Retour sur BookinVIP", "de": "Zurück zu BookinVIP", "pt": "Voltar à BookinVIP", "ja": "BookinVIPに戻る", "zh": "返回 BookinVIP"},
 }
+
+
+def _lingua_pagina(lingua: Any, voucher: Any = None) -> str:
+    """La lingua di una pagina server-rendered, con la gerarchia giusta:
+    1) quella chiesta nell'URL, se la parliamo;
+    2) altrimenti quella FIRMATA nel gettone del voucher (catturata al momento del book:
+       e' la lingua vera dell'ospite, e nessuno puo' manometterla);
+    3) altrimenti INGLESE.
+    Non ripiega MAI sull'italiano: era il difetto per cui un ospite giapponese apriva in
+    italiano il documento che deve mostrare al check-in."""
+    if lingua in LINGUE_SUPPORTATE:
+        return lingua
+    if isinstance(voucher, dict):
+        firmata = voucher.get("lang")
+        if firmata in LINGUE_SUPPORTATE:
+            return firmata
+    return "en"
 
 
 def _ui(chiave: str, lingua: str) -> str:
@@ -774,9 +845,13 @@ PENALE_HOST_BPS = 1500
 HOLD_APPROVAZIONE_SEC = 86100
 
 
-def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optional[str]:
+def pagina_voucher_html(sistema: Any, token: Any, lingua: Any = None) -> Optional[str]:
     """Voucher di conferma (server-rendered, stampabile, multilingua). Verifica la firma
-    del token (non falsificabile). None se assente/manomesso/non un voucher."""
+    del token (non falsificabile). None se assente/manomesso/non un voucher.
+
+    LINGUA: quella chiesta nell'URL; se manca o non la parliamo si usa quella FIRMATA
+    nel gettone (catturata al book), e solo come ultima spiaggia l'inglese. Mai
+    l'italiano per difetto: e' il documento che l'ospite mostra al check-in."""
     import html
     firma = getattr(sistema, "firma", None)
     if firma is None:
@@ -784,7 +859,7 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
     dati = firma.decodifica(token)
     if not isinstance(dati, dict) or dati.get("tipo") != "voucher":
         return None
-    lng = lingua if lingua in LINGUE_SUPPORTATE else "it"
+    lng = _lingua_pagina(lingua, dati)
     e = html.escape
     prezzo = _importo(dati.get("prezzo_guest_cents", 0), dati.get("valuta", "EUR"))
     # CODICE prenotazione leggibile (BVIP-XXXX-XXXX) + PIN check-in, uguali per cliente e host
@@ -810,56 +885,68 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
                    "<code style='word-break:break-all;font-size:.8rem'>%s</code></div>"
                    ) % (e(_ui("self_pass", lng)), pass_code) \
         if (MOSTRA_PASS_SERRATURA and pass_code) else ""
+    # DIZIONARIO per il JS della pagina: i messaggi che l'ospite legge DOPO un clic
+    # (conferme, errori, avvisi) vivevano dentro il codice, in italiano fisso. Ora
+    # escono da qui, nella lingua della pagina. ensure_ascii: dentro <script> le entita'
+    # HTML non si decodificano, quindi il JSON esce in \uXXXX ed e' sempre sicuro.
+    _js_txt = json.dumps(
+        {k[len("v_js_"):]: _ui(k, lng) for k in ETICHETTE_UI if k.startswith("v_js_")},
+        ensure_ascii=True, sort_keys=True)
+    blocco_pass = blocco_pass + ("<script>var BVL=%s;</script>" % _js_txt)
     # cancellazione self-service (token preso dall'URL, niente da incollare)
     blocco_pass = blocco_pass + (
         "<button id='btnCanc' style='margin-top:1.2rem;width:100%;padding:.8rem;border:0;"
         "border-radius:.8rem;background:#b00020;color:#fff;font-weight:700;cursor:pointer'>"
-        "Cancella prenotazione</button>"
+        + e(_ui("v_cancella", lng)) + "</button>"
         "<div id='cancMsg' style='margin-top:.6rem;font-size:.85rem'></div>"
         "<script>document.getElementById('btnCanc').onclick=async function(){"
-        "if(!confirm('Cancellare la prenotazione?'))return;"
+        "if(!confirm(BVL.conferma_canc))return;"
         "var tk=decodeURIComponent((location.pathname.split('/voucher/')[1]||''));"
         "var r=await fetch('/api/concierge/cancella',{method:'POST',"
         "headers:{'Content-Type':'application/json'},body:JSON.stringify({voucher_token:tk})});"
         "var d=await r.json();var m=document.getElementById('cancMsg');"
         "if(d.stato==='cancellata'){m.style.color='#155724';"
-        "m.textContent='Cancellata. Rimborso '+(d.rimborso_cents/100).toFixed(2)+' EUR';"
+        "m.textContent=BVL.cancellata+' '+(d.rimborso_cents/100).toFixed(2)+' EUR';"
         "this.style.display='none';}else{m.style.color='#b00020';"
-        "m.textContent='Cancellazione non riuscita';}};</script>")
+        "m.textContent=BVL.canc_ko;}};</script>")
     # Escrow di garanzia: l'ospite conferma "tutto ok" (sblocca il pagamento) o segnala un problema
     blocco_pass = blocco_pass + (
         "<div style='margin-top:1rem;padding-top:1rem;border-top:1px solid #eef2f7'>"
-        "<div style='font-size:.82rem;color:#5e6f8d;margin-bottom:.5rem'>Dopo il check-in:</div>"
+        "<div style='font-size:.82rem;color:#5e6f8d;margin-bottom:.5rem'>"
+        + e(_ui("v_dopo_checkin", lng)) + "</div>"
         "<button id='btnOk' style='width:100%;padding:.8rem;border:0;border-radius:.8rem;"
-        "background:#155724;color:#fff;font-weight:700;cursor:pointer'>&#10003; Confermo: tutto "
-        "come descritto</button>"
+        "background:#155724;color:#fff;font-weight:700;cursor:pointer'>&#10003; "
+        + e(_ui("v_tutto_ok", lng)) + "</button>"
         "<button id='btnProblema' style='width:100%;margin-top:.5rem;padding:.7rem;border:0;"
         "border-radius:.8rem;background:#e0a800;color:#1e3c72;font-weight:700;cursor:pointer'>"
-        "&#9888; Segnala un problema</button>"
+        "&#9888; " + e(_ui("v_segnala_problema", lng)) + "</button>"
         "<div id='gMsg' style='margin-top:.6rem;font-size:.85rem'></div></div>"
         "<script>(function(){var tk=decodeURIComponent((location.pathname.split('/voucher/')[1]||''));"
         "function call(p,btn,ok){return async function(){btn.disabled=true;"
         "var r=await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},"
         "body:JSON.stringify({voucher_token:tk})});var d=await r.json();var m=document.getElementById('gMsg');"
         "if(d&&d.ok){m.style.color='#155724';m.textContent=ok;}else{m.style.color='#b00020';"
-        "m.textContent='Operazione non riuscita';btn.disabled=false;}};}"
-        "document.getElementById('btnOk').onclick=call('/api/garanzia/conferma',document.getElementById('btnOk'),'Grazie! Pagamento sbloccato per l host.');"
-        "document.getElementById('btnProblema').onclick=call('/api/garanzia/contesta',document.getElementById('btnProblema'),'Segnalazione ricevuta: pagamento sospeso, ti ricontattiamo.');"
+        "m.textContent=BVL.op_ko;btn.disabled=false;}};}"
+        "document.getElementById('btnOk').onclick=call('/api/garanzia/conferma',document.getElementById('btnOk'),BVL.ok_sbloccato);"
+        "document.getElementById('btnProblema').onclick=call('/api/garanzia/contesta',document.getElementById('btnProblema'),BVL.segnalato);"
         "})();</script>")
     # CHAT COL TUO HOST + PROVE FOTO (per chiarire; in controversia le vede anche l'arbitro)
     blocco_pass = blocco_pass + (
         "<div style='margin-top:1rem;padding-top:1rem;border-top:1px solid #eef2f7'>"
-        "<div style='font-size:.82rem;color:#5e6f8d;margin-bottom:.5rem'>&#128172; Chatta con "
-        "l'host (per domande o per chiarire un problema; puoi allegare FOTO come prova)</div>"
+        "<div style='font-size:.82rem;color:#5e6f8d;margin-bottom:.5rem'>&#128172; "
+        + e(_ui("v_chat_intro", lng)) + "</div>"
         "<div id='chBox' style='max-height:180px;overflow-y:auto;font-size:.85rem;"
         "background:#f7faf8;border-radius:.6rem;padding:.5rem .7rem;margin-bottom:.45rem'></div>"
-        "<textarea id='chTxt' rows='2' placeholder='Scrivi un messaggio...' style='width:100%;"
+        "<textarea id='chTxt' rows='2' placeholder=\"" + e(_ui("v_scrivi_ph", lng))
+        + "\" style='width:100%;"
         "padding:.55rem;border:1px solid #dce1ed;border-radius:.6rem'></textarea>"
         "<div style='display:flex;gap:2%;margin-top:.4rem'>"
         "<button id='chSend' style='flex:1;padding:.6rem;border:0;border-radius:.7rem;"
-        "background:#0f4c3a;color:#fff;font-weight:700;cursor:pointer'>Invia</button>"
+        "background:#0f4c3a;color:#fff;font-weight:700;cursor:pointer'>"
+        + e(_ui("v_invia", lng)) + "</button>"
         "<label style='flex:1;display:block;text-align:center;padding:.6rem;border-radius:.7rem;"
-        "background:#eef7f2;color:#0f4c3a;font-weight:700;cursor:pointer'>&#128206; Foto prova"
+        "background:#eef7f2;color:#0f4c3a;font-weight:700;cursor:pointer'>&#128206; "
+        + e(_ui("v_foto_prova", lng)) +
         "<input id='chFile' type='file' accept='image/*' style='display:none'></label></div>"
         "<div id='chMsg' style='margin-top:.4rem;font-size:.82rem'></div></div>"
         "<script>(function(){var tk=decodeURIComponent((location.pathname.split('/voucher/')[1]||''));"
@@ -867,10 +954,10 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
         "function rendi(ms){var b=document.getElementById('chBox');"
         "b.innerHTML=(ms||[]).map(function(m){var mio=(m.mittente==='ospite');"
         "var t=esc(m.testo||'');t=t.replace(/(\\/uploads\\/[a-z0-9]+\\.[a-z]+)/g,"
-        "\"<a href='$1' target='_blank'>&#128247; apri foto</a>\");"
+        "\"<a href='$1' target='_blank'>&#128247; \"+BVL.apri_foto+\"</a>\");"
         "return \"<div style='margin:.2rem 0;text-align:\"+(mio?'right':'left')+\"'><span style='display:inline-block;"
         "padding:.3rem .6rem;border-radius:.7rem;background:\"+(mio?'#d7e8e0':'#fff')+\"'>\"+t+\"</span></div>\";}).join('')"
-        "||\"<span style='color:#8a9bb5'>Nessun messaggio ancora.</span>\";b.scrollTop=b.scrollHeight;}"
+        "||\"<span style='color:#8a9bb5'>\"+BVL.nessun_msg+\"</span>\";b.scrollTop=b.scrollHeight;}"
         "function carica(){fetch('/api/voucher/messaggi?voucher_token='+encodeURIComponent(tk))"
         ".then(function(r){return r.json();}).then(function(d){rendi(d.messaggi);});}"
         "document.getElementById('chSend').onclick=async function(){var t=document.getElementById('chTxt').value.trim();"
@@ -881,45 +968,49 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
         "var r=await fetch('/api/voucher/prova',{method:'POST',headers:{'Content-Type':'application/json'},"
         "body:JSON.stringify({voucher_token:tk,image_base64:rd.result})});"
         "var m=document.getElementById('chMsg');if(r.status===201){m.style.color='#155724';"
-        "m.textContent='\\u2713 Prova caricata: e nella conversazione.';carica();}"
-        "else{var em='Foto non valida (max 5MB, jpg/png).';"
-        "if(r.status===429)em='Hai raggiunto il limite di prove caricabili.';"
-        "else if(r.status>=500)em='Non riuscito in questo momento: riprova tra qualche istante.';"
+        "m.textContent='\\u2713 '+BVL.prova_ok;carica();}"
+        "else{var em=BVL.foto_ko;"
+        "if(r.status===429)em=BVL.foto_limite;"
+        "else if(r.status>=500)em=BVL.riprova;"
         "m.style.color='#b00020';m.textContent=em;}};"
         "rd.readAsDataURL(f);};carica();})();</script>")
     # CHECK-IN DIGITALE (fase127): pre-registrazione ospiti prima dell'arrivo -> sblocco ok
     blocco_pass = blocco_pass + (
         "<div id='ckBox' style='margin-top:1rem;padding-top:1rem;border-top:1px solid #eef2f7'>"
-        "<div style='font-size:.82rem;color:#5e6f8d;margin-bottom:.5rem'>Check-in online "
-        "(prima dell'arrivo): registra gli ospiti</div>"
+        "<div style='font-size:.82rem;color:#5e6f8d;margin-bottom:.5rem'>"
+        + e(_ui("v_checkin_online", lng)) + "</div>"
         "<div id='ckList' style='font-size:.85rem;margin-bottom:.4rem'></div>"
-        "<input id='ckNome' placeholder='Nome e cognome' style='width:100%;padding:.55rem;"
+        "<input id='ckNome' placeholder=\"" + e(_ui("v_nome_ph", lng))
+        + "\" style='width:100%;padding:.55rem;"
         "border:1px solid #dce1ed;border-radius:.6rem;margin-bottom:.35rem'>"
-        "<input id='ckDoc' placeholder='Numero documento' style='width:100%;padding:.55rem;"
+        "<input id='ckDoc' placeholder=\"" + e(_ui("v_doc_ph", lng))
+        + "\" style='width:100%;padding:.55rem;"
         "border:1px solid #dce1ed;border-radius:.6rem;margin-bottom:.45rem'>"
         "<button id='ckAdd' style='width:49%;padding:.6rem;border:0;border-radius:.7rem;"
-        "background:#eef2f7;color:#1e3c72;font-weight:700;cursor:pointer'>+ Aggiungi</button> "
+        "background:#eef2f7;color:#1e3c72;font-weight:700;cursor:pointer'>"
+        + e(_ui("v_aggiungi", lng)) + "</button> "
         "<button id='ckSend' style='width:49%;padding:.6rem;border:0;border-radius:.7rem;"
-        "background:#1e3c72;color:#fff;font-weight:700;cursor:pointer'>Invia check-in</button>"
+        "background:#1e3c72;color:#fff;font-weight:700;cursor:pointer'>"
+        + e(_ui("v_invia_checkin", lng)) + "</button>"
         "<div id='ckMsg' style='margin-top:.5rem;font-size:.85rem'></div></div>"
         "<script>(function(){var tk=decodeURIComponent((location.pathname.split('/voucher/')[1]||''));"
         "var os=[];function rend(){document.getElementById('ckList').textContent="
         "os.length?os.map(function(o){return o.nome;}).join(', '):'';}"
         "fetch('/api/checkin/stato?voucher_token='+encodeURIComponent(tk)).then(function(r){return r.json();})"
         ".then(function(d){if(d&&d.completato){document.getElementById('ckBox').innerHTML="
-        "\"<div style='color:#155724;font-weight:700'>&#10003; Check-in online completato</div>\";}});"
+        "\"<div style='color:#155724;font-weight:700'>&#10003; \"+BVL.ck_completato+\"</div>\";}});"
         "document.getElementById('ckAdd').onclick=function(){var n=document.getElementById('ckNome').value.trim(),"
         "c=document.getElementById('ckDoc').value.trim();if(!n||!c)return;os.push({nome:n,documento:c});"
         "document.getElementById('ckNome').value='';document.getElementById('ckDoc').value='';rend();};"
         "document.getElementById('ckSend').onclick=async function(){"
         "var n=document.getElementById('ckNome').value.trim(),c=document.getElementById('ckDoc').value.trim();"
         "if(n&&c){os.push({nome:n,documento:c});rend();}"
-        "if(!os.length){document.getElementById('ckMsg').textContent='Aggiungi almeno un ospite';return;}"
+        "if(!os.length){document.getElementById('ckMsg').textContent=BVL.ck_almeno_uno;return;}"
         "var r=await fetch('/api/checkin/pre_registra',{method:'POST',headers:{'Content-Type':'application/json'},"
         "body:JSON.stringify({voucher_token:tk,ospiti:os})});var d=await r.json();"
         "var m=document.getElementById('ckMsg');if(d&&d.ok){m.style.color='#155724';"
-        "m.textContent='\\u2713 Check-in completato: al tuo arrivo basta il PIN.';}"
-        "else{m.style.color='#b00020';m.textContent='Dati non validi: controlla nomi/documenti e capacita.';}};"
+        "m.textContent='\\u2713 '+BVL.ck_ok;}"
+        "else{m.style.color='#b00020';m.textContent=BVL.ck_ko;}};"
         "})();</script>")
     # RECENSIONE POST-SOGGIORNO stile Booking/Agoda (fase63, 2026-07-20): voto generale +
     # sotto-voti (pulizia, comfort, ...). Il form appare SOLO dopo il check-out e solo se la
@@ -1018,7 +1109,7 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
                 "<a href='/ricevuta/%s' style='display:block;margin-top:1rem;"
                 "text-align:center;padding:.7rem;border-radius:.8rem;background:#eef7f2;"
                 "color:#0f4c3a;font-weight:700;text-decoration:none'>&#129534; "
-                "Ricevuta di pagamento</a>" % _q(str(token), safe=""))
+                + e(_ui("v_ricevuta", lng)) + "</a>") % _q(str(token), safe="")
     except Exception:
         logger.warning("link ricevuta voucher fallito (ISOLATO)", exc_info=True)
     # PAGA IN STRUTTURA: se questa prenotazione e' "in struttura" (firmato nel token), mostra
@@ -1044,9 +1135,9 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
         # NON pagato: niente PIN, niente controversia, niente check-in — solo l'invito a pagare.
         blocco_pass = ("<div style='margin-top:1.2rem;padding:1rem;background:#fff6e6;"
                        "border:1px solid #ffd9a8;border-radius:.9rem;color:#8a5200;text-align:center'>"
-                       "<strong>Completa il pagamento per attivare il voucher</strong><br>"
-                       "<span style='font-size:.9rem'>Il PIN di check-in e le opzioni di gestione "
-                       "si sbloccano dopo il pagamento.</span></div>")
+                       "<strong>" + e(_ui("v_completa_prima", lng)) + "</strong><br>"
+                       "<span style='font-size:.9rem'>"
+                       + e(_ui("v_pin_dopo_pagamento", lng)) + "</span></div>")
     pagina = (
         "<!DOCTYPE html><html lang=\"%s\"><head><meta charset=\"UTF-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
@@ -1058,7 +1149,7 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
         "<div style=\"font-weight:700;color:#1e3c72;font-size:1.3rem\">BookinVIP</div>"
         "<h1>✓ %s</h1>"
         "<div class=\"r\"><span>%s</span><strong style=\"letter-spacing:.05em\">%s</strong></div>"
-        "<div class=\"r\"><span>PIN check-in</span><strong style=\"font-size:1.15rem;color:#1e3c72\">%s</strong></div>"
+        "<div class=\"r\"><span>%s</span><strong style=\"font-size:1.15rem;color:#1e3c72\">%s</strong></div>"
         "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
         "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
         "<div class=\"r\"><span>%s</span><strong>%s %s</strong></div>"
@@ -1067,6 +1158,7 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
     ) % (
         e(lng), e(_ui("voucher_ok", lng)),
         e(_ui("rif", lng)), e(_codice_pren),
+        e(_ui("v_pin_label", lng)),
         (e(_pin_checkin) if _pagato else "&#128274;"),      # PIN reale SOLO a pagamento avvenuto
         e(_ui("dal", lng)), e(str(dati.get("check_in", ""))),
         e(_ui("al", lng)), e(str(dati.get("check_out", ""))),
@@ -1083,11 +1175,15 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: str = "it") -> Optiona
     return pagina
 
 
-def pagina_ricevuta_html(sistema: Any, token: Any) -> Optional[str]:
+def pagina_ricevuta_html(sistema: Any, token: Any, lingua: Any = None) -> Optional[str]:
     """RICEVUTA DI PAGAMENTO stampabile (C3 2026-07-20: prima chi pagava con soldi veri
     non riceveva alcun documento). Autenticata dal voucher firmato, SOLO prenotazioni
     PAGATE. Nota onesta in calce: non è una fattura fiscale (quella arriverà col regime
-    IVA del gestore). None se token invalido o non pagata."""
+    IVA del gestore). None se token invalido o non pagata.
+
+    LINGUA: non ne aveva nessuna — la prova di pagamento usciva in italiano anche per
+    chi aveva prenotato in giapponese. Ora segue la stessa gerarchia del voucher
+    (URL -> lingua firmata nel gettone -> inglese)."""
     import html as _h
     firma = getattr(sistema, "firma", None)
     if firma is None:
@@ -1095,6 +1191,7 @@ def pagina_ricevuta_html(sistema: Any, token: Any) -> Optional[str]:
     v = firma.decodifica(token)
     if not isinstance(v, dict) or v.get("tipo") != "voucher":
         return None
+    lng = _lingua_pagina(lingua, v)
     rif = str(v.get("riferimento", ""))
     pp = getattr(sistema, "pagamenti_pendenti", None)
     rec = pp.info(rif) if pp is not None else None
@@ -1119,15 +1216,17 @@ def pagina_ricevuta_html(sistema: Any, token: Any) -> Optional[str]:
     totale = int(dj.get("prezzo_guest_cents", 0) or v.get("prezzo_guest_cents", 0) or 0)
     tassa = int(v.get("tassa_soggiorno_cents", 0) or 0)
     soggiorno = max(0, totale - tassa)
-    righe = ("<div class='r'><span>Soggiorno</span><strong>%s</strong></div>" % e(soldi(soggiorno))
-             + (("<div class='r'><span>Tassa di soggiorno</span><strong>%s</strong></div>"
-                 % e(soldi(tassa))) if tassa else "")
-             + "<div class='r' style='font-size:1.1rem'><span><strong>Totale pagato</strong>"
-               "</span><strong>%s</strong></div>" % e(soldi(totale)))
+    righe = ("<div class='r'><span>%s</span><strong>%s</strong></div>"
+             % (e(_ui("ric_soggiorno", lng)), e(soldi(soggiorno)))
+             + (("<div class='r'><span>%s</span><strong>%s</strong></div>"
+                 % (e(_ui("tassa", lng)), e(soldi(tassa)))) if tassa else "")
+             + "<div class='r' style='font-size:1.1rem'><span><strong>%s</strong>"
+               "</span><strong>%s</strong></div>"
+               % (e(_ui("ric_totale_pagato", lng)), e(soldi(totale))))
     return (
-        "<!DOCTYPE html><html lang=\"it\"><head><meta charset=\"UTF-8\">"
+        "<!DOCTYPE html><html lang=\"%s\"><head><meta charset=\"UTF-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-        "<title>Ricevuta BookinVIP</title><style>body{font-family:system-ui,sans-serif;"
+        "<title>%s · BookinVIP</title><style>body{font-family:system-ui,sans-serif;"
         "background:#f4f6fa;color:#1a1e2b;padding:2rem;max-width:480px;margin:0 auto}"
         ".v{background:#fff;border-radius:1.5rem;padding:2rem;box-shadow:0 8px 24px "
         "rgba(0,0,0,.06)}h1{color:#0f4c3a;font-size:1.3rem}.r{display:flex;"
@@ -1135,25 +1234,29 @@ def pagina_ricevuta_html(sistema: Any, token: Any) -> Optional[str]:
         "@media print{body{background:#fff}.noprint{display:none}}</style></head><body>"
         "<div class=\"v\">"
         "<div style=\"font-weight:700;color:#0f4c3a;font-size:1.2rem\">BookinVIP</div>"
-        "<h1>🧾 Ricevuta di pagamento</h1>"
-        "<div class=\"r\"><span>Prenotazione</span><strong>%s</strong></div>"
-        "<div class=\"r\"><span>Alloggio</span><strong>%s</strong></div>"
-        "<div class=\"r\"><span>Dal</span><strong>%s</strong></div>"
-        "<div class=\"r\"><span>Al</span><strong>%s</strong></div>"
+        "<h1>🧾 %s</h1>"
+        "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
+        "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
+        "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
+        "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
         "%s"
-        "<p style=\"color:#5e6f8d;font-size:.82rem;margin-top:1rem\">Pagamento elaborato da "
-        "Stripe. Gestore della piattaforma: Edil Max di Foti Massimo — P.IVA 11795700969 — "
-        "Via Paletro 11, 20821 Meda (MB) — info@bookinvip.com.<br>Questa ricevuta attesta il "
-        "pagamento e non costituisce fattura fiscale.</p>"
+        "<p style=\"color:#5e6f8d;font-size:.82rem;margin-top:1rem\">%s "
+        "Edil Max di Foti Massimo — P.IVA 11795700969 — "
+        "Via Paletro 11, 20821 Meda (MB) — info@bookinvip.com.<br>%s</p>"
         "<button class=\"noprint\" onclick=\"window.print()\" style=\"width:100%%;padding:.7rem;"
         "border:0;border-radius:.8rem;background:#0f4c3a;color:#fff;font-weight:700;"
-        "cursor:pointer\">🖨️ Stampa / salva PDF</button>"
+        "cursor:pointer\">🖨️ %s</button>"
         "</div></body></html>"
-    ) % (e(codice_prenotazione(rif)), e(dj.get("titolo") or rec.get("alloggio_id", "")),
-         e(str(v.get("check_in", ""))), e(str(v.get("check_out", ""))), righe)
+    ) % (e(lng), e(_ui("v_ricevuta", lng)), e(_ui("v_ricevuta", lng)),
+         e(_ui("rif", lng)), e(codice_prenotazione(rif)),
+         e(_ui("ric_alloggio", lng)), e(dj.get("titolo") or rec.get("alloggio_id", "")),
+         e(_ui("dal", lng)), e(str(v.get("check_in", ""))),
+         e(_ui("al", lng)), e(str(v.get("check_out", ""))), righe,
+         e(_ui("ric_nota_stripe", lng)), e(_ui("ric_nota_fattura", lng)),
+         e(_ui("ric_stampa", lng)))
 
 
-def pagina_recensione_html(sistema: Any, token: Any, lingua: str = "it") -> Optional[str]:
+def pagina_recensione_html(sistema: Any, token: Any, lingua: Any = None) -> Optional[str]:
     """PAGINA DI SOLA VALUTAZIONE (2026-07-20). Il cliente ci arriva dall'email
     post-soggiorno e vede SOLTANTO la valutazione — voto generale + categorie — senza
     voucher/cancella/prezzo/check-in/chat. Usa lo STESSO motore (fase63) e lo STESSO
@@ -1168,7 +1271,7 @@ def pagina_recensione_html(sistema: Any, token: Any, lingua: str = "it") -> Opti
     dati = firma.decodifica(token)
     if not isinstance(dati, dict) or dati.get("tipo") != "voucher":
         return None
-    lng = lingua if lingua in LINGUE_SUPPORTATE else "it"
+    lng = _lingua_pagina(lingua, dati)
     e = html.escape
     rif = str(dati.get("riferimento", ""))
     allog = str(dati.get("alloggio_id", ""))
@@ -1195,9 +1298,7 @@ def pagina_recensione_html(sistema: Any, token: Any, lingua: str = "it") -> Opti
         pass
     # corpo centrale: "dopo il soggiorno" / gia' fatta / il form (STESSO del voucher)
     if _dtv.date.today() < co_data or cancellata:
-        msg = ("You'll be able to review once your stay is over." if lng == "en"
-               else "Potrai lasciare la recensione al termine del soggiorno.")
-        corpo = "<p style='color:#5e6f8d'>%s</p>" % e(msg)
+        corpo = "<p style='color:#5e6f8d'>%s</p>" % e(_ui("rec_dopo_soggiorno", lng))
     elif reg.gia_recensita(rif):
         corpo = ("<div style='color:#155724;font-weight:800;font-size:1.1rem'>"
                  "&#11088; %s</div>" % e(_ui("rec_grazie", lng)))
@@ -1248,9 +1349,8 @@ def pagina_recensione_html(sistema: Any, token: Any, lingua: str = "it") -> Opti
             "else{m.style.color='#b00020';m.textContent=TXT.err;this.disabled=false;}"
             "}catch(_){m.style.color='#b00020';m.textContent=TXT.err;this.disabled=false;}};"
             "})();</script>")
-    dom = "How was your stay at" if lng == "en" else "Com'è andato il tuo soggiorno a"
-    nota = ("Only real guests can review: your opinion is verified." if lng == "en"
-            else "Solo chi ha soggiornato davvero può recensire: la tua opinione è verificata.")
+    dom = _ui("rec_domanda", lng)
+    nota = _ui("rec_solo_veri", lng)
     return (
         "<!DOCTYPE html><html lang=\"%s\"><head><meta charset=\"UTF-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
@@ -1267,21 +1367,20 @@ def pagina_recensione_html(sistema: Any, token: Any, lingua: str = "it") -> Opti
     ) % (e(lng), e(_ui("rec_titolo", lng)), e(dom), e(titolo), corpo, e(nota))
 
 
-def pagina_voucher_non_valido_html(lingua: str = "it") -> str:
+def pagina_voucher_non_valido_html(lingua: str = "en") -> str:
     """Pagina GENTILE quando un link voucher non è valido/scaduto/manomesso (invece di un
-    errore tecnico): rassicura e indirizza il cliente. Bilingue it/en."""
-    en = str(lingua).lower().startswith("en")
-    lng = "en" if en else "it"
-    tit = "Link not valid" if en else "Link non valido"
-    h1 = "This voucher link isn't valid" if en else "Questo link del voucher non è valido"
-    p1 = ("The link may be old, incomplete or expired." if en else
-          "Il link potrebbe essere vecchio, incompleto o scaduto.")
-    p2 = ("Please open the link from your latest confirmation email, "
-          "or contact us and we'll help right away." if en else
-          "Apri il link dall'ultima email di conferma che hai ricevuto, "
-          "oppure scrivici e ti aiutiamo subito.")
+    errore tecnico): rassicura e indirizza il cliente. In tutte e 8 le lingue.
+
+    Era bilingue it/en con una regola sola — «comincia per en? inglese, altrimenti
+    ITALIANO» — quindi un tedesco, un giapponese o un cinese col link rotto leggevano
+    italiano. Ora ogni lingua ha il suo testo e l'ignota ripiega sull'inglese."""
+    lng = _lingua_pagina(lingua)
+    tit = _ui("lnv_titolo", lng)
+    h1 = _ui("lnv_h1", lng)
+    p1 = _ui("lnv_p1", lng)
+    p2 = _ui("lnv_p2", lng)
     mail = "info@bookinvip.com"
-    home = "Back to BookinVIP" if en else "Torna su BookinVIP"
+    home = _ui("lnv_home", lng)
     return (
         "<!DOCTYPE html><html lang=\"%s\"><head><meta charset=\"UTF-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
@@ -4524,6 +4623,14 @@ class RouterHTTP:
         status = int(getattr(r, "status", 200))
         corpo = dict(getattr(r, "corpo", {}) or {})
         if status == 201:
+            # DOPPIO CLIC (stesso preventivo firmato ripresentato): fase59 ha riconosciuto il
+            # REPLAY della idem-key e NON ha ri-bloccato niente. Da qui in poi gli effetti
+            # derivati NON vanno rifatti: la risposta e' quella della prenotazione che c'e' gia'
+            # (o un rifiuto pulito se non e' piu' prenotabile).
+            if corpo.get("idempotente"):
+                gia = self._replay_prenotazione(corpo)
+                if gia is not None:
+                    return gia
             allog = corpo.get("alloggio_id", "")
             if self._modalita_alloggio(allog) == "su_richiesta":
                 # SU RICHIESTA: la stanza e' tenuta, l'host deve APPROVARE. Niente voucher/
@@ -4542,6 +4649,72 @@ class RouterHTTP:
                              "messaggio": "Credito gia' usato su un'altra prenotazione: "
                                           "rifai il preventivo."}
         return status, corpo
+
+    def _replay_prenotazione(self, corpo):
+        """DOPPIO CLIC sul book. Il blocco inventario e' tornato `idempotente=True` (stessa
+        idem-key = stesso preventivo firmato). Se per quel riferimento esiste GIA' un
+        pendente, rifare la finalizzazione era un DIFETTO PROVATO (2026-07-28,
+        test_profondo_idempotenza):
+          · 'in_attesa'/'in_attesa_host' -> SECONDA email identica all'ospite e un NUOVO
+            voucher_token con `prenotato_ts` fresco: le 48h di ripensamento ripartivano da
+            zero a ogni clic (rimborso pieno oltre la finestra legale);
+          · 'pagato' -> risposta con `payment_url` + email "completa il pagamento" a chi
+            aveva GIA' pagato: invito al DOPPIO ADDEBITO (e il webhook del secondo
+            pagamento non lo avrebbe nemmeno segnalato, il CAS e' gia' 'pagato');
+          · 'scaduto' -> escrow e payout RIAPERTI su una prenotazione mai pagata e con le
+            date gia' liberate dallo sweeper: l'auto-rilascio dell'escrow avrebbe
+            bonificato all'host soldi mai incassati (`salta_se` copre solo le rimborsate);
+          · 'rimborsato'/'cancellata_host' -> escrow riaperto 'in_garanzia' su una
+            prenotazione gia' rimborsata all'ospite.
+        Ritorna (status, corpo) da restituire SUBITO, oppure None = prosegui normalmente
+        (nessun pendente: non c'e' niente da proteggere)."""
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        ref = corpo.get("riferimento", "")
+        if pp is None or not (isinstance(ref, str) and ref):
+            return None
+        try:
+            rec = pp.info(ref)
+        except Exception:
+            logger.warning("replay book: lettura pendente fallita (ISOLATA)", exc_info=True)
+            return None
+        if not isinstance(rec, dict) or not rec:
+            return None
+        stato = rec.get("stato", "")
+        if stato in ("rimborsato", "da_rimborsare", "cancellata_host"):
+            return 409, {"stato": "rifiutata", "errore": "prenotazione_annullata",
+                         "riferimento": ref,
+                         "messaggio": "Questa prenotazione e' stata annullata: "
+                                      "rifai la ricerca."}
+        if stato == "scaduto":
+            return 409, {"stato": "rifiutata", "errore": "preventivo_scaduto",
+                         "riferimento": ref,
+                         "messaggio": "Il tempo per pagare e' scaduto e le date sono di "
+                                      "nuovo libere: rifai il preventivo."}
+        fuori = dict(corpo)
+        try:
+            import json as _jr
+            salvato = _jr.loads(rec.get("corpo_json") or "{}")
+        except Exception:
+            salvato = {}
+        if isinstance(salvato, dict):
+            # gli STESSI valori della prima volta: soprattutto il voucher_token (uno solo per
+            # prenotazione, con l'istante d'acquisto ORIGINALE).
+            for k in ("voucher_token", "netto_host_cents", "prezzo_guest_cents",
+                      "totale_cents", "commissione_cents", "costo_pagamento_cents",
+                      "tassa_soggiorno_cents", "sconto_credito_cents", "valuta",
+                      "modo_pagamento", "saldo_in_loco_cents", "anticipo_online_cents"):
+                if salvato.get(k) not in (None, ""):
+                    fuori[k] = salvato[k]
+        fuori["idempotente"] = True
+        if stato == "pagato":
+            fuori.pop("payment_url", None)     # MAI un secondo link di pagamento
+            fuori["stato"] = "pagata"
+        elif stato == "in_attesa_host":
+            fuori.pop("payment_url", None)
+            fuori["stato"] = "in_attesa_host"
+        else:
+            fuori["stato"] = "in_attesa_pagamento"
+        return 201, fuori
 
     def _modalita_alloggio(self, slug):
         try:
@@ -4658,6 +4831,20 @@ class RouterHTTP:
                 import datetime as _dt
                 import time as _t_pren
                 qt = dati.get("quote_token", "")
+                # NUMERO OSPITI: vive solo nel PREVENTIVO FIRMATO (`party`) e non arrivava
+                # fin qui, cosi' il contratto di locazione (POST /api/contratto) stampava
+                # sempre "Numero ospiti: 1" anche per un soggiorno prenotato per 3 persone:
+                # un dato FALSO su un documento che le parti firmano e che l'host usa per la
+                # comunicazione agli alloggiati. Si porta nel voucher (firmato: non
+                # manomettibile) leggendolo dal preventivo, non dal corpo della richiesta.
+                _party = 0
+                try:
+                    _qd = self._sys.firma.decodifica(qt) if qt else None
+                    _p = (_qd or {}).get("party") if isinstance(_qd, dict) else None
+                    if isinstance(_p, int) and not isinstance(_p, bool) and _p > 0:
+                        _party = _p
+                except Exception:
+                    _party = 0
                 # LINGUA DELL'OSPITE: sta qui perche' il gettone e' l'unico contenitore
                 # che accompagna la prenotazione ovunque ed e' FIRMATO (non manomettibile).
                 # Senza, ogni email e ogni pagina successiva ripiegherebbero sull'italiano:
@@ -4666,7 +4853,7 @@ class RouterHTTP:
                 _lang_osp = _lingua({"lang": dati.get("lang")})
                 corpo["voucher_token"] = self._sys.firma.codifica({
                     "tipo": "voucher", "riferimento": ref, "alloggio_id": allog,
-                    "lang": _lang_osp,
+                    "lang": _lang_osp, "party": _party,
                     "check_in": ci, "check_out": co,
                     "prezzo_guest_cents": corpo.get("prezzo_guest_cents", 0),
                     "valuta": corpo.get("valuta", "EUR"),
@@ -6384,6 +6571,12 @@ class RouterHTTP:
                 "check_in": v.get("check_in", ""), "check_out": v.get("check_out", ""),
                 "prezzo_cents": v.get("prezzo_guest_cents", 0), "valuta": v.get("valuta", "EUR"),
                 "riferimento": v.get("riferimento", "")}
+        # NUMERO OSPITI dal voucher FIRMATO (non dal corpo della richiesta: e' un dato del
+        # contratto, non un'opinione del client). Voucher vecchi senza il campo -> il
+        # modulo mette il suo default.
+        _osp = v.get("party")
+        if isinstance(_osp, int) and not isinstance(_osp, bool) and _osp > 0:
+            info["ospiti"] = _osp
         try:
             from fase145_contratto_pdf import genera_pdf, componi_contratto
             import base64
@@ -6470,6 +6663,11 @@ class RouterHTTP:
             # (anticipo ONLINE + saldo di persona all'host + fee 1.50/notte a carico ospite).
             # Solo display: l'addebito vero (Fase 2) resta ancorato alla valuta dell'alloggio.
             # Isolato e fail-safe: se salta, la quote resta intatta.
+            # CONTRATTO STABILE: il default si scrive PRIMA del try, altrimenti un errore
+            # dentro il blocco (es. catalogo.dettaglio che solleva) faceva SPARIRE del tutto
+            # la chiave invece di lasciarla a {"accettato": False} -> forma della risposta
+            # variabile a seconda dei guasti. La chiave c'e' sempre.
+            corpo["paga_in_struttura"] = {"accettato": False}
             try:
                 # lo slug si legge dal preventivo (corpo), NON da `body`: qui `body` e' ancora
                 # la STRINGA JSON grezza (niente .get) -> l'avrebbe fatto saltare in silenzio.
@@ -7633,6 +7831,37 @@ class RouterHTTP:
                                        "sono in quella moneta." % attuale}), dati
         return None, dati
 
+    def _blinda_stato(self, dati):
+        """Protegge lo STATO (bozza/sospeso/pubblicato) di un annuncio ESISTENTE quando il
+        corpo NON lo dichiara: si tiene il SUO, mai il default "pubblicato".
+
+        Difetto PROVATO (2026-07-28, happy-path host): il pannello pre-riempie il form da
+        /api/host/alloggio e ri-salva su /api/host/pubblica SENZA il campo `stato`;
+        `valida_scheda` ricadeva sul default 'pubblicato', quindi un annuncio che l'host
+        aveva SOSPESO (o lasciato in bozza) tornava ONLINE e PRENOTABILE al primo ritocco
+        di prezzo/foto/titolo — una scelta dell'host distrutta da un salvataggio di
+        routine, con il rischio di ricevere prenotazioni per una casa tolta apposta dalla
+        vetrina. Stessa classe (e stessa forma) del reset silenzioso della valuta.
+        Cambiare stato resta possibile, ma solo DICHIARANDOLO (/api/host/stato, oppure
+        `stato` esplicito nel corpo). Su un annuncio nuovo non fa nulla."""
+        slug = dati.get("slug")
+        if not (isinstance(slug, str) and slug):
+            return dati
+        chiesto = dati.get("stato")
+        if isinstance(chiesto, str) and chiesto.strip():
+            return dati                            # stato dichiarato: comanda il chiamante
+        try:
+            # dettaglio_owner (non `dettaglio`): vede l'annuncio in QUALSIASI stato — un
+            # sospeso/bozza dal dettaglio pubblico non si vedrebbe affatto.
+            esistente = self._sys.catalogo.dettaglio_owner(slug)
+        except Exception:
+            esistente = None
+        attuale = esistente.get("stato") if isinstance(esistente, dict) else None
+        if isinstance(attuale, str) and attuale.strip():
+            dati = dict(dati)
+            dati["stato"] = attuale
+        return dati
+
     def _host_pubblica(self, body, headers):
         if not self._auth_host(headers):
             return 401, {"errore": "unauthorized"}
@@ -7665,6 +7894,10 @@ class RouterHTTP:
         errore_valuta, dati = self._blinda_valuta(dati)
         if errore_valuta is not None:
             return errore_valuta
+        # STATO: campo OMESSO su un annuncio ESISTENTE -> si tiene il SUO (mai il default
+        # "pubblicato"): un salvataggio di routine non ri-mette MAI in vetrina cio' che
+        # l'host aveva sospeso. Vedi _blinda_stato.
+        dati = self._blinda_stato(dati)
         from fase57_vetrina import Immagine, SchedaAlloggio, valida_scheda
         ok, codice, scheda = valida_scheda(dati)
         if not ok:
@@ -8882,6 +9115,28 @@ class RouterHTTP:
         except Exception:
             logger.warning("arricchimento metrica fallito (ISOLATO)", exc_info=True)
 
+    @staticmethod
+    def _errore_range_notti(da, a):
+        """UN SOLO CONTRATTO per i due campi data (`da`, `a`) di TUTTE le rotte che parlano
+        di NOTTI: intervallo semi-aperto [da, a), massimo 366 notti — identico a
+        POST /api/host/disponibilita_range e a `fase58.notti`. Ritorna il nome dell'errore
+        (stesso vocabolario della POST) oppure None se il range e' buono.
+
+        Prima le LETTURE non validavano nulla: un range assurdo (a<=da, data non ISO, oltre
+        366 giorni) usciva **200 con la lista VUOTA**, e il pannello host mostrava "0 giorni"
+        come se il calendario fosse vuoto invece di dire che le date erano sbagliate — mentre
+        la SCRITTURA, con gli STESSI due campi, rispondeva 422 spiegando il motivo."""
+        import datetime as _dtr
+        try:
+            d0 = _dtr.date.fromisoformat(da)
+            d1 = _dtr.date.fromisoformat(a)
+        except (ValueError, TypeError, AttributeError):
+            return "date_non_valide"
+        n = (d1 - d0).days
+        if n <= 0 or n > 366:
+            return "intervallo_non_valido"
+        return None
+
     def _host_calendario(self, query, headers):
         if not self._auth_host(headers):
             return 401, {"errore": "unauthorized"}
@@ -8894,6 +9149,9 @@ class RouterHTTP:
         # (senza, un host spiava disponibilita'/occupazione di un rivale con lo slug).
         if not self._verifica_proprieta(headers, alloggio):
             return 403, {"errore": "non_tuo"}
+        err = self._errore_range_notti(da, a)      # stesso contratto della POST (vedi sopra)
+        if err:
+            return 422, {"errore": err}
         try:
             cal = self._cal_arricchito(alloggio, da, a)
         except Exception:
@@ -8913,6 +9171,9 @@ class RouterHTTP:
         da, a = query.get("da"), query.get("a")
         if not (isinstance(da, str) and da and isinstance(a, str) and a):
             return 422, {"errore": "date_mancanti"}
+        err = self._errore_range_notti(da, a)      # stesso contratto [da, a) delle altre rotte
+        if err:
+            return 422, {"errore": err}
         try:
             listings = self._sys.catalogo.alloggi_host(hid, limit=200)
             slugs = [al.get("slug") for al in listings
@@ -9138,9 +9399,24 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 "Scheduler campagna NON avviato (ISOLATO)", exc_info=True)
 
     class Handler(BaseHTTPRequestHandler):
+        # HEADER DI AUTENTICAZIONE davvero letti dal router: X-Host-Key/X-Host-Token
+        # (`_auth_host`), X-Admin-Key/X-Admin-Op (`_auth_admin`), X-Bunker-Session
+        # (`_bunker_auth`). DEVONO stare TUTTI in Access-Control-Allow-Headers: il preflight
+        # CORS del browser autorizza SOLO gli header dichiarati qui, e un header non
+        # dichiarato non viene spedito -> la richiesta cross-origin arriva SENZA credenziali
+        # e torna 401. Prima erano dichiarati solo "Content-Type, X-Host-Key": ogni client
+        # browser di altra origine (widget partner, pannello su altro dominio, agente AI in
+        # pagina) poteva autenticarsi SOLO con la vecchia chiave d'operatore.
+        # Nessun indebolimento: Allow-Origin e' "*" e Allow-Credentials NON e' impostato,
+        # quindi il browser non allega mai cookie/sessioni ambientali; questi header vanno
+        # scritti a mano da chi conosce gia' il segreto.
+        AUTH_HEADERS = ("X-Host-Key", "X-Host-Token", "X-Admin-Key", "X-Admin-Op",
+                        "X-Bunker-Session")
+
         def _cors(self):
             self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Host-Key")
+            self.send_header("Access-Control-Allow-Headers",
+                             "Content-Type, " + ", ".join(self.AUTH_HEADERS))
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
         def _cookie_secure(self):
@@ -9415,8 +9691,11 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 else:
                     self._testo_seo(200, "text/html", html)
             elif u.path.startswith("/voucher/"):
+                # LINGUA: nessun default cieco. Se `?lang=` manca o non la parliamo, le
+                # pagine leggono la lingua FIRMATA nel gettone (catturata al book) e solo
+                # come ultima spiaggia l'inglese — mai l'italiano per difetto.
                 query = {k: v[0] for k, v in parse_qs(u.query).items()}
-                lng = query.get("lang", "it")
+                lng = query.get("lang")
                 html = pagina_voucher_html(sistema, unquote(u.path[len("/voucher/"):]), lng)
                 if html is None:
                     # link non valido/scaduto -> pagina GENTILE (non un errore tecnico)
@@ -9425,16 +9704,18 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     self._testo(200, "text/html", html)
             elif u.path.startswith("/ricevuta/"):
                 # RICEVUTA stampabile (C3): stesso token firmato del voucher, solo PAGATE
-                html = pagina_ricevuta_html(sistema, unquote(u.path[len("/ricevuta/"):]))
+                query = {k: v[0] for k, v in parse_qs(u.query).items()}
+                lng = query.get("lang")
+                html = pagina_ricevuta_html(sistema, unquote(u.path[len("/ricevuta/"):]), lng)
                 if html is None:
-                    self._testo(404, "text/html", pagina_voucher_non_valido_html("it"))
+                    self._testo(404, "text/html", pagina_voucher_non_valido_html(lng))
                 else:
                     self._testo(200, "text/html", html)
             elif u.path.startswith("/recensione/"):
                 # SOLA VALUTAZIONE (2026-07-20): pagina pulita col SOLO voto; stesso token
                 # firmato del voucher, stesso motore/endpoint. Il voucher resta intatto.
                 query = {k: v[0] for k, v in parse_qs(u.query).items()}
-                lng = query.get("lang", "it")
+                lng = query.get("lang")
                 html = pagina_recensione_html(sistema, unquote(u.path[len("/recensione/"):]), lng)
                 if html is None:
                     self._testo(404, "text/html", pagina_voucher_non_valido_html(lng))
@@ -9446,7 +9727,11 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 if ics is None:
                     self._testo(404, "text/plain", "Not found")
                 else:
-                    self._testo(200, "text/calendar; charset=utf-8", ics)
+                    # `_testo` aggiunge gia' "; charset=utf-8": ripeterlo qui produceva
+                    # un Content-Type con il parametro DUPLICATO ("text/calendar;
+                    # charset=utf-8; charset=utf-8"), malformato per RFC 9110 proprio
+                    # sull'unica risposta che leggono i parser di Booking/Airbnb.
+                    self._testo(200, "text/calendar", ics)
             elif u.path == "/host/azione":
                 # APPROVA/RIFIUTA una richiesta da un messaggio (link firmato, un tocco).
                 query = {k: v[0] for k, v in parse_qs(u.query).items()}

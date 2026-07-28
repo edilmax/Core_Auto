@@ -80,9 +80,15 @@ class TestArticoli(unittest.TestCase):
         b = genera_articolo_html("check-in-automatico", lingua="en", base_url=BASE)
         self.assertEqual(a, b)
 
-    def test_lingua_ignota_ripiega_it(self):
-        h = genera_articolo_html("prenotazioni-dirette", lingua="xx", base_url=BASE)
-        self.assertIn('<html lang="it">', h)
+    def test_lingua_ignota_ripiega_INGLESE(self):
+        """Ripiegava sull'ITALIANO: chi arrivava col russo (servito dalle landing di
+        fase97 ma non dal blog) o con un codice qualsiasi leggeva italiano. Su un blog
+        che esiste per portare traffico dal mondo, il ripiego e' l'inglese."""
+        for ignota in ("xx", "sw", "ru", "", None, 42):
+            h = genera_articolo_html("prenotazioni-dirette", lingua=ignota, base_url=BASE)
+            self.assertIn('<html lang="en">', h, "lingua %r -> non inglese" % ignota)
+            self.assertEqual(h, genera_articolo_html("prenotazioni-dirette",
+                                                     lingua="en", base_url=BASE))
 
     def test_corpo_presente(self):
         # il testo dei paragrafi dev'essere davvero nella pagina (non solo il titolo)

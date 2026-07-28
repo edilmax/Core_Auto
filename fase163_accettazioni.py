@@ -332,8 +332,21 @@ def hash_di(documento: str) -> str:
     return privacy_sha256() if documento == DOCUMENTO_PRIVACY else doc_sha256()
 
 
+def lingua_contratto_servita(lang: Any) -> str:
+    """La lingua in cui il contratto viene REALMENTE mostrato.
+
+    Il contratto esiste in it/en. Per ogni altra lingua si ripiegava sull'ITALIANO:
+    un host tedesco, francese, spagnolo, portoghese, giapponese o cinese apriva il
+    documento che deve firmare e lo leggeva in italiano. Il ripiego giusto e'
+    l'INGLESE (lingua franca); l'italiano resta la lingua che FA FEDE — cosa dichiarata
+    nella risposta e provata dall'impronta vincolante, che e' sempre quella italiana e
+    non cambia con la lingua mostrata."""
+    scelta = str(lang or "").lower().replace("_", "-").split("-", 1)[0][:2]
+    return scelta if scelta in CONTRATTO_HOST else "en"
+
+
 def testo_contratto(lang: str = "it") -> str:
-    return CONTRATTO_HOST.get((lang or "it").lower(), CONTRATTO_HOST["it"])
+    return CONTRATTO_HOST[lingua_contratto_servita(lang)]
 
 
 def doc_sha256() -> str:
@@ -344,9 +357,9 @@ def doc_sha256() -> str:
 
 
 def documento_corrente(lang: str = "it") -> Dict[str, Any]:
-    lang = (lang or "it").lower()
-    if lang not in CONTRATTO_HOST:
-        lang = "it"
+    # `lang` = la lingua REALMENTE servita (mai una dichiarazione bugiarda), con ripiego
+    # sull'inglese e non sull'italiano: vedi `lingua_contratto_servita`.
+    lang = lingua_contratto_servita(lang)
     return {
         "documento": DOCUMENTO_HOST,
         "versione": CONTRATTO_HOST_VERSIONE,

@@ -48,6 +48,13 @@ class BloccoGlobale:
     def imposta(self, attivo: Any, *, motivo: str = "", chi: str = "") -> bool:
         """Accende/spegne il flag a runtime (file). L'ENV non si tocca da qui (autorevole).
         Idempotente. Isolato: qualunque errore -> False, stato invariato."""
+        # MODALITA' "SOLO-ENV" (percorso vuoto: nessun archivio durevole configurato): la
+        # leva a caldo NON esiste, e va detto subito. Senza questa guardia `self._path +
+        # ".tmp"` diventava ".tmp", cioe' un file SPAZZATURA scritto nella cartella di
+        # lavoro del processo a ogni pressione del tasto rosso, seguito da un os.replace
+        # verso un percorso vuoto che falliva comunque: rifiuti sul disco e nessun freeze.
+        if not self._path:
+            return False
         try:
             if attivo:
                 tmp = self._path + ".tmp"

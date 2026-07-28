@@ -1,0 +1,101 @@
+# =============================================================================
+#  RUFF — configurazione unica del progetto (linter statico)
+# =============================================================================
+#  A cosa serve: leggere il codice SENZA eseguirlo e segnalare bug potenziali
+#  (variabili mai definite, import inutili, trappole classiche, costrutti
+#  pericolosi per la sicurezza) prima che diventino un guasto in produzione.
+#
+#  COME LO USA LA CI (.github/workflows/ci.yml) — due livelli, dichiarati:
+#
+#    1) job "qualita"     -> GATE VERO, blocca la build. Usa una selezione
+#       STRETTA passata a riga di comando (--select), scelta perche' oggi vale
+#       ZERO rilievi sul prodotto vivo: sono solo regole da "bug certo" o da
+#       "buco di sicurezza certo" (exec/eval/pickle/yaml.load/shell=True/
+#       hash deboli/nomi non definiti). Se una di queste si accende, e' un
+#       difetto vero, non stile. Cricchetto: si possono solo AGGIUNGERE regole
+#       a quella lista, mai toglierne.
+#
+#    2) job "lint-severo" -> INFORMATIVO, NON blocca. Usa QUESTA configurazione
+#       (E, F, B, S = pycodestyle + pyflakes + flake8-bugbear + flake8-bandit).
+#       E' volutamente non bloccante: su un codice gia' scritto la severita'
+#       nuova produce centinaia di rilievi di stile, e rendere rossa la CI per
+#       lo stile del codice esistente sarebbe un falso allarme quotidiano.
+#       Si legge il log, si sistema un po' alla volta, e quando una famiglia di
+#       rilievi arriva a zero la si promuove nel GATE VERO del punto 1.
+#
+#  Regola aurea del progetto: nessun verde vale finche' non e' stato visto
+#  rosso. Il set del punto 1 e' stato provato su codice guasto apposta (exec,
+#  eval, pickle.loads, yaml.load, md5, shell=True, nome non definito, default
+#  mutabile) e li ha visti TUTTI.
+# =============================================================================
+
+target-version = "py39"          # la produzione gira su Python 3.9 (Docker + CI)
+line-length = 120                # vedi ignore E501: e' solo un riferimento
+
+# Fuori dal linter: storia, artefatti e roba non nostra.
+#  _archivio/ = documenti e codice storici, per regola NON si seguono e non si toccano
+#  deploy/    = pagine HTML/JS servite, non moduli Python
+#  data/      = dati, non codice
+extend-exclude = [
+    "_archivio",
+    "deploy",
+    "data",
+    "__pycache__",
+    ".mypy_cache",
+    ".ruff_cache",
+    "*.backup",
+    "*.pre_quantum",
+    "*.pre_repair",
+]
+
+[lint]
+# E = stile/pycodestyle · F = pyflakes (bug veri) · B = bugbear (trappole)
+# S = flake8-bandit (sicurezza, le stesse famiglie di bandit ma dentro ruff)
+select = ["E", "F", "B", "S"]
+
+# ---------------------------------------------------------------------------
+#  IGNORE — ognuno con la sua motivazione. Non sono scuse: sono scelte di
+#  progetto gia' prese, che il linter non puo' conoscere.
+# ---------------------------------------------------------------------------
+ignore = [
+    # --- stile della scrittura, non difetti -------------------------------
+    "E501",   # riga troppo lunga. Il repo e' scritto con commenti in italiano
+              # a piena riga e con HTML/SQL incorporati nelle stringhe: 4571
+              # rilievi, di cui solo 233 righe superano davvero i 120 caratteri.
+              # Zero valore diagnostico, tantissimo rumore.
+    "E741",   # nome di variabile ambiguo (l, I, O). 11 casi in codice gia'
+              # scritto e funzionante; rinominarli e' un rischio, non un
+              # guadagno.
+    "E731",   # lambda assegnata a variabile. 6 casi, usati come scorciatoie
+              # locali leggibili. Stile.
+
+    # --- scelte di ARCHITETTURA del progetto -------------------------------
+    "S310",   # urllib.request.urlopen "sospetta". La produzione e' STDLIB
+              # PURA per direttiva: urlopen E' il client HTTP del progetto
+              # (niente `requests` nell'immagine). 58 rilievi = la scelta
+              # architetturale, non un buco.
+    "S110",   # try/except/pass  (48 casi)
+    "S112",   # try/except/continue (5 casi)
+              # I connettori esterni (Telegram, Sentry, social, geocoder...)
+              # sono DORMIENTI e devono poter fallire in silenzio senza mai
+              # far cadere una prenotazione. Il silenzio li' e' voluto.
+]
+
+# NOTA su cosa NON e' stato messo negli ignore, apposta, perche' merita di
+# restare visibile nel log del job informativo:
+#   S608 (SQL costruito a stringa, 24)      -> da guardare uno per uno
+#   S105 (stringa che sembra una password, 2)
+#   S311 (random non crittografico, 1)      -> ok se non e' per i token
+#   B023 (funzione che usa la variabile del ciclo, 5) -> trappola vera
+#   B904/B905/B007/B008                     -> trappole classiche
+#   F401/F841/F811 (import e variabili inutili, 43)   -> pulizia progressiva
+
+[lint.per-file-ignores]
+# I test e gli strumenti d'officina hanno regole diverse dal prodotto:
+# li' `assert` E' il mestiere, e i dati finti sono voluti.
+"test_*.py" = ["S101", "S105", "S106", "S107", "S311", "S324", "B011"]
+"collaudi/*" = ["S101", "S105", "S106", "S107", "S311", "S324", "B011", "S603", "S607"]
+"collaudo_*.py" = ["S101", "S105", "S106", "S107", "S311", "S324", "B011"]
+# app.py = vecchio stack Flask MORTO (la produzione e' fase83 stdlib): non si
+# tocca piu', i suoi rilievi non contano.
+"app.py" = ["E", "F", "B", "S"]

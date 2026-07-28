@@ -36,6 +36,12 @@ LINGUE = ("it", "en", "es", "fr", "de", "pt", "ja", "zh")
 
 LINGUA_CHE_FA_FEDE = "it"
 
+# Quale testo si serve quando la lingua chiesta non esiste. NON e' l'italiano: chi
+# arriva con un codice che non conosciamo non e' italiano, e' semplicemente uno che
+# non abbiamo tradotto. Gli si da' l'INGLESE (lingua franca) e gli si dichiara che in
+# caso di divergenza fa fede l'italiano — la clausola resta dentro ogni versione.
+LINGUA_RIPIEGO = "en"
+
 TERMINI_VERSIONE = "2026-07-21"
 PRIVACY_VERSIONE = "2026-07-21"
 
@@ -609,14 +615,21 @@ def lingue_disponibili(documento: str = "termini") -> Tuple[str, ...]:
     return tuple(l for l in LINGUE if l in tabella)
 
 
+def _lingua_servita(lang: Any, tabella: Dict[str, str]) -> str:
+    """La lingua REALMENTE servita: quella chiesta se il testo esiste, altrimenti il
+    ripiego (inglese). Mai un ripiego silenzioso in italiano."""
+    chiesta = str(lang or "").lower().replace("_", "-").split("-", 1)[0][:2]
+    if chiesta in tabella:
+        return chiesta
+    return LINGUA_RIPIEGO if LINGUA_RIPIEGO in tabella else LINGUA_CHE_FA_FEDE
+
+
 def testo_termini(lang: str = "it") -> str:
-    modello = _TERMINI.get(str(lang or "it").lower()[:2]) or _TERMINI["it"]
-    return _componi(modello, TERMINI_VERSIONE)
+    return _componi(_TERMINI[_lingua_servita(lang, _TERMINI)], TERMINI_VERSIONE)
 
 
 def testo_privacy(lang: str = "it") -> str:
-    modello = _PRIVACY.get(str(lang or "it").lower()[:2]) or _PRIVACY["it"]
-    return _componi(modello, PRIVACY_VERSIONE)
+    return _componi(_PRIVACY[_lingua_servita(lang, _PRIVACY)], PRIVACY_VERSIONE)
 
 
 def impronta(testo: str) -> str:
@@ -631,11 +644,15 @@ def documento(nome: str, lang: str = "it") -> Dict[str, Any]:
         testo = testo_privacy(lang) if nome == "privacy" else testo_termini(lang)
         versione = PRIVACY_VERSIONE if nome == "privacy" else TERMINI_VERSIONE
         disponibili = lingue_disponibili(nome)
-        chiesta = str(lang or "it").lower()[:2]
+        tabella = _PRIVACY if nome == "privacy" else _TERMINI
+        chiesta = str(lang or "").lower().replace("_", "-").split("-", 1)[0][:2]
+        # `lang` dichiara la lingua REALMENTE servita, non quella chiesta: dire "de" e
+        # stampare un altro idioma e' il modo di rompersi n.3 (testi che mentono).
+        servita = _lingua_servita(lang, tabella)
         return {
             "documento": nome, "versione": versione, "testo": testo,
             "doc_sha256": impronta(testo),
-            "lang": chiesta if chiesta in disponibili else LINGUA_CHE_FA_FEDE,
+            "lang": servita,
             "lingue": list(disponibili),
             "lingua_che_fa_fede": LINGUA_CHE_FA_FEDE,
             "tradotto": chiesta in disponibili,

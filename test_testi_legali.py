@@ -110,12 +110,20 @@ class TestModuloTestiLegali(unittest.TestCase):
                                  % (documento, lang, impronte.get(d["doc_sha256"])))
                 impronte[d["doc_sha256"]] = lang
 
-    def test_una_lingua_non_fornita_ripiega_sullitaliano_DICENDOLO(self):
+    def test_una_lingua_non_fornita_ripiega_sullINGLESE_DICENDOLO(self):
         """Ripiegare va bene; ripiegare in silenzio no: chi legge deve sapere che sta
-        vedendo l'italiano perche' la sua lingua non c'e' (ancora)."""
+        vedendo un ripiego perche' la sua lingua non c'e' (ancora).
+
+        Il ripiego era l'ITALIANO: chi chiedeva 'xx' (o swahili, o russo) riceveva il
+        testo italiano. Su un prodotto mondiale «non conosco questa lingua» non puo'
+        voler dire «italiano»: si serve l'INGLESE, si dichiara `lang: en` (la lingua
+        REALMENTE servita, altrimenti il campo mentirebbe) e resta scritto che in caso
+        di divergenza fa fede l'italiano."""
         d = self.tl.documento("privacy", "xx")
         self.assertFalse(d["tradotto"], "dichiara tradotta una lingua che non esiste")
-        self.assertEqual(d["lang"], "it")
+        self.assertEqual(d["lang"], "en")
+        self.assertEqual(d["testo"], self.tl.documento("privacy", "en")["testo"])
+        self.assertEqual(d["lingua_che_fa_fede"], "it")
         self.assertIn("it", d["lingue"])
 
     def test_i_dati_del_titolare_sono_UNA_VOLTA_SOLA(self):

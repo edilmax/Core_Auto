@@ -85,7 +85,10 @@ class MacchinaBookinVIP(RuleBasedStateMachine):
     def __init__(self):
         super().__init__()
         type(self).sequenze_esplorate += 1
-        self._orig_fetch = _stripe.ProviderStripe._fetch_reale
+        # si preleva dal __dict__ della classe: l'accesso per attributo srotola lo
+        # @staticmethod in funzione nuda e il ripristino avrebbe rimesso un metodo
+        # d'ISTANZA al suo posto (ripristino FINTO, latente finche' nessuno lo chiama).
+        self._orig_fetch = _stripe.ProviderStripe.__dict__["_fetch_reale"]
         _stripe.ProviderStripe._fetch_reale = staticmethod(_fake_fetch)
         d = self.d = tempfile.mkdtemp(prefix="stateful_api_")
         self.sis = crea_sistema(ConfigCasaVIP(

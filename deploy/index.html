@@ -720,7 +720,10 @@ async function _prenotaConEmail(){
       const dl = document.getElementById('dlContr'); const _vt = r.voucher_token;
       if(dl) dl.onclick = async (e)=>{ e.preventDefault(); try{ const cr = await api('/api/contratto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({voucher_token:_vt, lingua:LANG})}); if(cr.pdf_base64){ const a=document.createElement('a'); a.href='data:application/pdf;base64,'+cr.pdf_base64; a.download=cr.filename||'contratto.pdf'; a.click(); } }catch(err){console.warn('bookinvip-ospite',err)} };
     }
-    else { msg.innerHTML=`<div class="msg err">❌ ${esc(r.motivo||fraseErrore(r.errore)||t('errore'))}</div>`; }
+    // MOTIVO DEL RIFIUTO: passa dal dizionario come l'errore. Prima usciva GREZZO —
+    // l'ospite leggeva 'pieno', 'min_notti', 'giorno_non_caricato' cosi' com'erano,
+    // cioe' i codici interni dell'inventario in faccia a chi sta pagando.
+    else { msg.innerHTML=`<div class="msg err">❌ ${esc(fraseErrore(r.motivo)||fraseErrore(r.errore)||t('errore'))}</div>`; }
   }catch(e){ msg.innerHTML=`<div class="msg err">${t('errore')}: ${esc(e.message||'')}</div>`; }
 }
 

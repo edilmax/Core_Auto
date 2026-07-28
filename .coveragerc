@@ -1,0 +1,35 @@
+# Copertura del codice — LIVELLO 2 (righe E rami).
+# Si misura SOLO il prodotto vivo: main_casavip.py + i moduli fase*.py che entrano
+# nell'immagine Docker. Restano fuori i test, gli strumenti d'officina (collaudi/), il
+# vecchio stack Mango/Tavola VIP (fase13-56, NON e' il prodotto) e l'archivio storico.
+[run]
+branch = True
+source = .
+omit =
+    test_*.py
+    collaudi/*
+    _archivio/*
+    app.py
+    fase1?_*.py
+    fase2?_*.py
+    fase3?_*.py
+    fase4?_*.py
+    fase5[0-6]_*.py
+    setup.py
+    */site-packages/*
+
+[report]
+# Le righe che non sono codice vero da coprire: guardie di import, rami difensivi
+# dichiarati, blocchi __main__.
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    raise NotImplementedError
+    except ImportError:
+    if TYPE_CHECKING:
+show_missing = True
+skip_covered = False
+precision = 1
+
+[html]
+directory = .coverage_html
