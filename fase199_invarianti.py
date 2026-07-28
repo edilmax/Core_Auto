@@ -31,6 +31,8 @@ STATI_OCCUPANTI = frozenset({"confermata", "pagato", "maturato", "in_transito",
                              "checkin", "checkout", "completata"})
 # Stati in cui la prenotazione è "confermata" e quindi ESIGE una prova firmata.
 STATI_CONFERMATI = STATI_OCCUPANTI
+# Stati in cui il soggiorno e' SALDATO: la somma pagata deve corrispondere ESATTAMENTE al dovuto.
+STATI_SALDATI = frozenset({"pagato", "maturato", "in_transito", "completata"})
 
 
 class ViolazioneInvariante(Exception):
@@ -42,9 +44,29 @@ class ViolazioneInvariante(Exception):
         self.dettaglio = dettaglio
 
 
+# ── NUCLEI PURI DELLE REGOLE ────────────────────────────────────────────────────────
+# Scritti con & | (non and/or) perche' la STESSA espressione valga sia sui bool di Python
+# sia sulle espressioni simboliche di Z3. Cosi' `dimostra_formalmente` non ri-scrive a mano
+# le formule (che sarebbe un ornamento: si dimostrerebbe la copia, non il codice) ma dimostra
+# ESATTAMENTE il predicato che gira in produzione. Rompere un nucleo => la prova cade.
+def _sovrappone_expr(ci1: Any, co1: Any, ci2: Any, co2: Any) -> Any:
+    """Nucleo di I1: due intervalli semiaperti [ci,co) condividono almeno una notte?"""
+    return (ci1 < co2) & (ci2 < co1)
+
+
+def _i2_viola_expr(somma: Any, dovuto: Any, saldato: Any) -> Any:
+    """Nucleo di I2: il conto e' fuori norma? (pagato piu' del dovuto, oppure saldato ma non esatto)."""
+    return (somma > dovuto) | (saldato & (somma != dovuto))
+
+
+def _i3_viola_expr(confermata: Any, prova_firmata: Any) -> Any:
+    """Nucleo di I3: prenotazione CONFERMATA senza prova firmata?"""
+    return confermata & (prova_firmata == False)   # noqa: E712 - '== False' vale anche su Z3
+
+
 def _sovrappone(ci1: Any, co1: Any, ci2: Any, co2: Any) -> bool:
     """Due intervalli semiaperti [ci,co) si sovrappongono? (confini che si toccano = OK, non overlap)."""
-    return ci1 < co2 and ci2 < co1
+    return bool(_sovrappone_expr(ci1, co1, ci2, co2))
 
 
 # ── I1: nessuna doppia conferma sovrapposta sulla stessa unità ──────────────────────
@@ -81,10 +103,10 @@ def i2_bilancio_pagamenti(prenotazioni: Sequence[Dict[str, Any]]) -> List[Tuple[
         if not isinstance(dovuto, int) or isinstance(dovuto, bool) or dovuto < 0:
             viol.append((rif, "totale dovuto negativo/non intero"))
             continue
-        if s > dovuto:
-            viol.append((rif, "OVERPAY: pagato %d > dovuto %d" % (s, dovuto)))
-        elif p.get("stato") in ("pagato", "maturato", "in_transito", "completata") and s != dovuto:
-            viol.append((rif, "saldato ma somma %d != dovuto %d" % (s, dovuto)))
+        saldato = p.get("stato") in STATI_SALDATI
+        if _i2_viola_expr(s, dovuto, saldato):          # <- il nucleo dimostrato con Z3
+            viol.append((rif, "OVERPAY: pagato %d > dovuto %d" % (s, dovuto) if s > dovuto
+                         else "saldato ma somma %d != dovuto %d" % (s, dovuto)))
     return viol
 
 
@@ -92,7 +114,8 @@ def i2_bilancio_pagamenti(prenotazioni: Sequence[Dict[str, Any]]) -> List[Tuple[
 def i3_prova_prima_del_commit(prenotazioni: Sequence[Dict[str, Any]]) -> List[Any]:
     """Ritorna i riferimenti delle prenotazioni CONFERMATE senza prova firmata (quote_token/consenso)."""
     return [p.get("rif") for p in prenotazioni
-            if p.get("stato") in STATI_CONFERMATI and not p.get("prova_firmata")]
+            if _i3_viola_expr(p.get("stato") in STATI_CONFERMATI,   # <- il nucleo dimostrato con Z3
+                              bool(p.get("prova_firmata")))]
 
 
 # ── I4: nessun importo negativo ─────────────────────────────────────────────────────
@@ -211,35 +234,324 @@ def dimostra_formalmente() -> Dict[str, str]:
 
     ris: Dict[str, str] = {}
 
-    # I1 — ZERO DOUBLE-BOOKING: il predicato di sovrapposizione usato dalla guardia
-    # (a1<b2 ∧ b1<a2) è ESATTAMENTE "gli intervalli semiaperti condividono una notte"
-    # (max(inizio) < min(fine)). Se coincidono, nessun overlap sfugge e nessuno è inventato.
+    # ATTENZIONE (lezione del 2026-07-28): questi teoremi NON ri-scrivono le formule a mano.
+    # Chiamano i NUCLEI VERI usati dai checker (_sovrappone_expr / _i2_viola_expr /
+    # _i3_viola_expr) e li confrontano con una specifica scritta in modo INDIPENDENTE.
+    # Prima lo facevano con copie inline: rompendo il codice di produzione la "dimostrazione"
+    # restava verde (I2 era addirittura una tautologia, A∧B ⟹ B). Un teorema che non puo'
+    # cadere non e' una prova: e' un ornamento.
+
+    # I1 — ZERO DOUBLE-BOOKING: il predicato di sovrapposizione DI PRODUZIONE è ESATTAMENTE
+    # "gli intervalli semiaperti condividono una notte" (max(inizio) < min(fine)):
+    # nessun overlap sfugge (completezza) e nessuno è inventato (correttezza).
     a1, a2, b1, b2 = z3.Ints("a1 a2 b1 b2")
     mx = z3.If(a1 > b1, a1, b1)
     mn = z3.If(a2 < b2, a2, b2)
-    predicato_guardia = z3.And(a1 < b2, b1 < a2)
-    condivide_notte = mx < mn
+    predicato_guardia = _sovrappone_expr(a1, a2, b1, b2)   # ← il codice VERO, non una copia
+    condivide_notte = mx < mn                              # ← specifica indipendente
     nome, esito = _teorema("I1_zero_double_booking",
-                           z3.And(a1 < a2, b1 < b2),          # intervalli validi
+                           z3.And(a1 < a2, b1 < b2),       # intervalli validi
                            predicato_guardia == condivide_notte)
     ris[nome] = esito
 
-    # I2 — ATOMICITÀ FINANZIARIA: se la guardia ACCETTA (nessun overpay) allora somma ≤ dovuto;
-    # e se è SALDATO, somma == dovuto ESATTAMENTE (i pagamenti parziali ricostruiscono il totale).
+    # I2 — ATOMICITÀ FINANZIARIA: la regola VERA segnala violazione esattamente quando il conto
+    # NON è sano, dove "sano" è definito a parte: mai pagato più del dovuto e, se saldato,
+    # somma == dovuto al centesimo. Se la regola smettesse di vedere un overpay (o ne inventasse
+    # uno), l'equivalenza cadrebbe e Z3 stamperebbe il controesempio.
     S, D = z3.Ints("S D")                                  # S = somma pagamenti, D = dovuto
     saldato = z3.Bool("saldato")
-    accettato = z3.And(S <= D, z3.Implies(saldato, S == D))  # = checker OK (con pagamenti ≥ 0)
+    viola_vera = _i2_viola_expr(S, D, saldato)             # ← il codice VERO
+    sano = z3.And(S <= D, z3.Implies(saldato, S == D))     # ← specifica indipendente
     nome, esito = _teorema("I2_atomicita_finanziaria",
-                           z3.And(S >= 0, D >= 0, accettato),
-                           z3.And(S <= D, z3.Implies(saldato, S == D)))
+                           z3.And(S >= 0, D >= 0),
+                           viola_vera == z3.Not(sano))
     ris[nome] = esito
 
-    # I3 — ISOLAMENTO PII / PROVA-PRIMA-DEL-COMMIT: nessuna prenotazione CONFERMATA può essere
-    # accettata senza prova firmata (l'analogo del "PII protetta prima del commit").
-    confermata, prova, bloccato = z3.Bools("confermata prova bloccato")
-    regola_guardia = bloccato == z3.And(confermata, z3.Not(prova))   # blocca sse confermata senza prova
+    # I3 — ISOLAMENTO PII / PROVA-PRIMA-DEL-COMMIT: la regola VERA blocca esattamente le
+    # prenotazioni confermate senza prova firmata; e ciò che passa, se è confermato, la prova
+    # ce l'ha per forza (nessuna conferma può sfuggire al controllo).
+    confermata, prova = z3.Bools("confermata prova")
+    bloccato = _i3_viola_expr(confermata, prova)           # ← il codice VERO
     nome, esito = _teorema("I3_isolamento_pii",
-                           regola_guardia,
-                           z3.Implies(z3.And(confermata, z3.Not(bloccato)), prova))
+                           z3.BoolVal(True),
+                           z3.And(bloccato == z3.And(confermata, z3.Not(prova)),
+                                  z3.Implies(z3.And(confermata, z3.Not(bloccato)), prova)))
     ris[nome] = esito
+    return ris
+
+
+# ═════════════════════════════════════════════════════════════════════════════════════
+# MACCHINE A STATI DEL DOMINIO — modelli formali + teoremi Z3 sulle TRANSIZIONI.
+#
+# Il modello NON è un disegno a mano: è lo SPECCHIO dei guardi CAS reali, e la concordanza
+# modello<->codice vero è essa stessa una guardia (test_fase199_transizioni pilota il DB
+# REALE su TUTTI gli stati x TUTTI gli eventi e pretende la stessa relazione):
+#   - PRENOTAZIONE: fase162_pagamenti_pendenti — le 4 scritture di stato sono tutte CAS SQL
+#     (`conferma` solo da in_attesa/scaduto; `scadi` solo da in_attesa/in_attesa_host;
+#     `marca_da_rimborsare`/`marca_cancellata_host` mai da un record già chiuso);
+#   - PAYOUT: fase131_payout_dashboard._TRANSIZIONI — tabella esplicita, letta DIRETTAMENTE
+#     dalla produzione dentro `dimostra_transizioni` (non una copia: se la tabella cambia,
+#     i teoremi si ri-verificano su quella nuova);
+#   - ESCROW: fase160_escrow_garanzia — le formule di split sono riscritte QUI una volta sola
+#     in forma "selettore" (`se`), usabile sia con if concreti (concordanza col codice vero)
+#     sia con z3.If (dimostrazione universale ∀ intero, non campionata).
+# ═════════════════════════════════════════════════════════════════════════════════════
+
+# ── PRENOTAZIONE (fase162): eventi = (nome, stati sorgente ammessi, stato target) ────
+# Specchio ESATTO delle whitelist CAS SQL. `registra` crea in_attesa/in_attesa_host;
+# le rimozioni (rimuovi/pulisci_vecchi) escono dalla macchina, non sono transizioni.
+STATI_PRENOTAZIONE = ("in_attesa", "in_attesa_host", "scaduto", "pagato",
+                      "rimborsato", "cancellata_host")
+EVENTI_PRENOTAZIONE = (
+    # webhook Stripe "pagamento riuscito": SOLO da hold vivo o scaduto (pagamento tardivo)
+    ("conferma", ("in_attesa", "scaduto"), "pagato"),
+    # sweeper: l'hold/richiesta non pagata scade
+    ("scadi", ("in_attesa", "in_attesa_host"), "scaduto"),
+    # rimborso: MAI retrocede un record già chiuso (cancellata_host/rimborsato)
+    ("marca_da_rimborsare", ("in_attesa", "in_attesa_host", "scaduto", "pagato"),
+     "rimborsato"),
+    # cancellazione host con penale: idem, mai da un record già chiuso
+    ("marca_cancellata_host", ("in_attesa", "in_attesa_host", "scaduto", "pagato"),
+     "cancellata_host"),
+)
+# Stati terminali NEGATIVI: da qui NESSUN cammino deve mai portare a 'pagato'.
+TERMINALI_NEGATIVI_PRENOTAZIONE = ("rimborsato", "cancellata_host")
+# Rango di pipeline: ogni transizione legale deve SALIRE (aciclicità dimostrata con Z3).
+RANGO_PRENOTAZIONE = {"in_attesa": 0, "in_attesa_host": 0, "scaduto": 1, "pagato": 2,
+                      "rimborsato": 3, "cancellata_host": 3}
+
+# ── PAYOUT (fase131): rango di pipeline. in_transito e trattenuto sono lo STESSO passo
+# (bonifico in corso / bonifico sospeso da hold DAC7-disputa): la coppia hold è l'UNICO
+# movimento laterale ammesso; tutto il resto deve salire. ────────────────────────────
+RANGO_PAYOUT = {"in_attesa": 0, "maturato": 1, "in_transito": 2, "trattenuto": 2,
+                "pagato": 3}
+COPPIA_HOLD_PAYOUT = ("in_transito", "trattenuto")
+
+
+def transizioni_prenotazione() -> Dict[str, set]:
+    """La relazione di transizione {stato: {successori}} DERIVATA dagli eventi (una sola
+    fonte di verità nel modello). Auto-anelli esclusi (un CAS verso lo stesso stato è no-op)."""
+    tab: Dict[str, set] = {s: set() for s in STATI_PRENOTAZIONE}
+    for _nome, sorgenti, target in EVENTI_PRENOTAZIONE:
+        for s in sorgenti:
+            if s != target:
+                tab[s].add(target)
+    return tab
+
+
+def _se_concreto(cond: Any, a: Any, b: Any) -> Any:
+    return a if cond else b
+
+
+def formula_split_risolvi(importo: Any, richiesto: Any, se: Any = _se_concreto) -> Tuple[Any, Any]:
+    """SPECCHIO di fase160.risolvi (interi): rimb = min(_cent(richiesto), importo);
+    host = importo - rimb. Ritorna (host, rimborso). Con se=z3.If diventa simbolica."""
+    rimb = se(richiesto >= 0, richiesto, 0)        # _cent: i negativi diventano 0
+    rimb = se(rimb <= importo, rimb, importo)      # min(., importo): il clamp
+    return importo - rimb, rimb
+
+
+def formula_split_proporzionale(importo: Any, host_chiesto: Any,
+                                se: Any = _se_concreto) -> Tuple[Any, Any]:
+    """SPECCHIO di fase160.chiudi_proporzionale (interi): host = max(0, min(_cent(x), importo));
+    rimborso = importo - host. Ritorna (host, rimborso)."""
+    h = se(host_chiesto >= 0, host_chiesto, 0)     # _cent
+    h = se(h <= importo, h, importo)               # min(., importo)
+    h = se(h >= 0, h, 0)                           # max(0, .) — fedele al codice, riga per riga
+    return h, importo - h
+
+
+def dimostra_transizioni() -> Dict[str, str]:
+    """TEOREMI Z3 sulle TRANSIZIONI DI STATO del dominio (UNSAT del controesempio = teorema):
+
+    PRENOTAZIONE (modello = specchio dei CAS fase162, concordanza collaudata sul DB vero):
+      - PREN_terminale_assorbente     : da rimborsato/cancellata_host NESSUNA transizione esce;
+      - PREN_mai_pagato_da_terminale  : nessun CAMMINO (qualsiasi lunghezza: bound n-1 passi
+                                        con stutter = raggiungibilità completa su n stati)
+                                        porta da un terminale negativo a 'pagato';
+      - PREN_pagato_solo_da_pagabili  : 'pagato' si raggiunge SOLO da in_attesa/scaduto;
+      - PREN_monotona_senza_cicli     : ogni transizione SALE di rango (⇒ grafo aciclico).
+    PAYOUT (tabella _TRANSIZIONI letta DIRETTAMENTE dalla produzione fase131):
+      - PAY_pagato_assorbente         : da 'pagato' (soldi partiti e arrivati) non si esce;
+      - PAY_mai_ritorno_in_coda       : nulla rientra in 'in_attesa'; 'maturato' solo da 'in_attesa';
+      - PAY_monotono_mai_indietro     : il rango di pipeline non scende MAI;
+      - PAY_cicli_solo_coppia_hold    : ogni movimento a rango costante è dentro la coppia
+                                        hold {in_transito,trattenuto} (sospensione/ripresa del
+                                        bonifico) ⇒ ogni ciclo legale è confinato lì.
+    ESCROW (formula-selettore, la STESSA eseguita concreta contro fase160 nel collaudo):
+      - ESC_risolvi_conservazione_clamp / ESC_proporzionale_conservazione_clamp:
+        ∀ importo≥1, ∀ richiesto intero (anche negativo/abnorme): host+rimborso == importo
+        ESATTO e 0 ≤ rimborso ≤ importo, 0 ≤ host ≤ importo (clamp DIMOSTRATO, non campionato).
+    IDEMPOTENZA (webhook/eventi consegnati DUE volte):
+      - IDEM_eventi_prenotazione / IDEM_eventi_payout: ogni evento CAS applicato 2 volte
+        lascia lo stato del secondo giro identico al primo (upd∘upd == upd, ∀ stato);
+      - IDEM_webhook_pagamento: il webhook composto (conferma prenotazione + payout maturato
+        + tassa + riga payout INSERT-OR-IGNORE con importo) applicato 2 volte è = 1 volta,
+        importo compreso (il replay NON riscrive mai `minori`).
+
+    Ritorna {teorema: 'DIMOSTRATO' | 'CONTROESEMPIO ...' | 'INDETERMINATO' |
+    'STATO_NON_MODELLATO: ...'} oppure {'disponibile': 'z3 assente'}."""
+    try:
+        import z3
+    except Exception:
+        return {"disponibile": "z3 assente"}
+    from fase131_payout_dashboard import _TRANSIZIONI as TAB_PAYOUT
+
+    ris: Dict[str, str] = {}
+
+    def _teorema(nome: str, vincoli: Any, tesi: Any) -> None:
+        s = z3.Solver()
+        s.add(vincoli)
+        s.add(z3.Not(tesi))
+        esito = s.check()
+        ris[nome] = ("DIMOSTRATO" if esito == z3.unsat
+                     else ("CONTROESEMPIO %s" % s.model() if esito == z3.sat
+                           else "INDETERMINATO"))
+
+    def _macchina(tabella: Dict[str, Any]) -> Tuple[List[str], Dict[str, int], Any, Any]:
+        """Codifica una tabella {stato: {successori}} come relazione Z3 su interi."""
+        stati = sorted(set(tabella) | {t for v in tabella.values() for t in v})
+        idx = {n: i for i, n in enumerate(stati)}
+        archi = sorted((idx[a], idx[b]) for a, v in tabella.items() for b in v)
+
+        def T(u: Any, v: Any) -> Any:
+            if not archi:
+                return z3.BoolVal(False)
+            return z3.Or([z3.And(u == a, v == b) for a, b in archi])
+
+        def dom(u: Any) -> Any:
+            return z3.And(u >= 0, u < len(stati))
+        return stati, idx, T, dom
+
+    def _rango(u: Any, idx: Dict[str, int], ranghi: Dict[str, int]) -> Any:
+        e: Any = z3.IntVal(-10 ** 6)
+        for nome, i in idx.items():
+            e = z3.If(u == i, z3.IntVal(ranghi[nome]), e)
+        return e
+
+    def _idem_eventi(nome_teorema: str, eventi: Any, idx: Dict[str, int], dom: Any) -> None:
+        """Ogni evento CAS (sorgenti S -> target t): upd(s)=If(s∈S,t,s); upd∘upd == upd ∀s."""
+        difetti = []
+        for nome_ev, sorgenti, target in eventi:
+            srcs = [idx[x] for x in sorgenti]
+            t = idx[target]
+            sv = z3.Int("idem_%s_%s" % (nome_teorema, nome_ev))
+
+            def upd(u: Any) -> Any:
+                return z3.If(z3.Or([u == i for i in srcs]), t, u)
+            slv = z3.Solver()
+            slv.add(dom(sv))
+            slv.add(z3.Not(upd(upd(sv)) == upd(sv)))
+            e = slv.check()
+            if e != z3.unsat:
+                difetti.append("%s: %s" % (
+                    nome_ev, "CONTROESEMPIO %s" % slv.model() if e == z3.sat else "INDETERMINATO"))
+        ris[nome_teorema] = "DIMOSTRATO" if not difetti else "; ".join(difetti)
+
+    # ── PRENOTAZIONE ────────────────────────────────────────────────────────────────
+    tab_pren = transizioni_prenotazione()
+    stati_p, idx_p, T_p, dom_p = _macchina(tab_pren)
+    s1, s2 = z3.Ints("s1 s2")
+    term = [idx_p[t] for t in TERMINALI_NEGATIVI_PRENOTAZIONE]
+    _teorema("PREN_terminale_assorbente",
+             z3.And(dom_p(s1), dom_p(s2), T_p(s1, s2)),
+             z3.And([s1 != t for t in term]))
+    # cammino di n-1 passi CON STUTTER (fermarsi è ammesso): su n stati copre OGNI
+    # raggiungibilità (un cammino semplice non ripete stati -> lunghezza < n). Quindi il
+    # teorema vale per cammini di QUALSIASI lunghezza, non solo per il singolo passo.
+    n = len(stati_p)
+    passi = [z3.Int("q%d" % i) for i in range(n)]
+    vinc = [dom_p(q) for q in passi]
+    vinc.append(z3.Or([passi[0] == t for t in term]))
+    for i in range(n - 1):
+        vinc.append(z3.Or(passi[i + 1] == passi[i], T_p(passi[i], passi[i + 1])))
+    _teorema("PREN_mai_pagato_da_terminale",
+             z3.And(vinc), passi[-1] != idx_p["pagato"])
+    _teorema("PREN_pagato_solo_da_pagabili",
+             z3.And(dom_p(s1), dom_p(s2), T_p(s1, s2), s2 == idx_p["pagato"]),
+             z3.Or(s1 == idx_p["in_attesa"], s1 == idx_p["scaduto"]))
+    _teorema("PREN_monotona_senza_cicli",
+             z3.And(dom_p(s1), dom_p(s2), T_p(s1, s2)),
+             _rango(s2, idx_p, RANGO_PRENOTAZIONE) > _rango(s1, idx_p, RANGO_PRENOTAZIONE))
+
+    # ── PAYOUT (tabella di produzione) ──────────────────────────────────────────────
+    stati_y, idx_y, T_y, dom_y = _macchina(TAB_PAYOUT)
+    nomi_pay = ("PAY_pagato_assorbente", "PAY_mai_ritorno_in_coda",
+                "PAY_monotono_mai_indietro", "PAY_cicli_solo_coppia_hold")
+    mancanti = sorted(set(stati_y) - set(RANGO_PAYOUT))
+    attesi_pay = {"in_attesa", "maturato", "in_transito", "trattenuto", "pagato"}
+    if mancanti or not attesi_pay.issubset(stati_y):
+        # la macchina di produzione è cambiata e il modello non la copre più: si GRIDA
+        # (mai un finto DIMOSTRATO su una macchina diversa da quella modellata)
+        msg = "STATO_NON_MODELLATO: nuovi=%r attesi_mancanti=%r" % (
+            mancanti, sorted(attesi_pay - set(stati_y)))
+        for nm in nomi_pay:
+            ris[nm] = msg
+    else:
+        u1, u2 = z3.Ints("u1 u2")
+        _teorema("PAY_pagato_assorbente",
+                 z3.And(dom_y(u1), dom_y(u2), T_y(u1, u2)),
+                 u1 != idx_y["pagato"])
+        _teorema("PAY_mai_ritorno_in_coda",
+                 z3.And(dom_y(u1), dom_y(u2), T_y(u1, u2)),
+                 z3.And(u2 != idx_y["in_attesa"],
+                        z3.Implies(u2 == idx_y["maturato"], u1 == idx_y["in_attesa"])))
+        _teorema("PAY_monotono_mai_indietro",
+                 z3.And(dom_y(u1), dom_y(u2), T_y(u1, u2)),
+                 _rango(u2, idx_y, RANGO_PAYOUT) >= _rango(u1, idx_y, RANGO_PAYOUT))
+        hold = [idx_y[h] for h in COPPIA_HOLD_PAYOUT]
+        _teorema("PAY_cicli_solo_coppia_hold",
+                 z3.And(dom_y(u1), dom_y(u2), T_y(u1, u2),
+                        _rango(u1, idx_y, RANGO_PAYOUT) == _rango(u2, idx_y, RANGO_PAYOUT)),
+                 z3.And(z3.Or([u1 == h for h in hold]),
+                        z3.Or([u2 == h for h in hold]), u1 != u2))
+
+    # ── ESCROW: conservazione + clamp, ∀ intero (anche negativo/abnorme) ────────────
+    imp, x = z3.Ints("imp x")
+
+    def zse(c: Any, a: Any, b: Any) -> Any:
+        return z3.If(c, a, b)
+    host_r, rimb_r = formula_split_risolvi(imp, x, se=zse)
+    _teorema("ESC_risolvi_conservazione_clamp",
+             imp >= 1,
+             z3.And(host_r + rimb_r == imp, rimb_r >= 0, rimb_r <= imp,
+                    host_r >= 0, host_r <= imp))
+    host_p, rimb_p = formula_split_proporzionale(imp, x, se=zse)
+    _teorema("ESC_proporzionale_conservazione_clamp",
+             imp >= 1,
+             z3.And(host_p + rimb_p == imp, rimb_p >= 0, rimb_p <= imp,
+                    host_p >= 0, host_p <= imp))
+
+    # ── IDEMPOTENZA: stesso evento consegnato DUE volte = UNA volta ─────────────────
+    _idem_eventi("IDEM_eventi_prenotazione", EVENTI_PRENOTAZIONE, idx_p, dom_p)
+    eventi_payout = []
+    for target in sorted({t for v in TAB_PAYOUT.values() for t in v}):
+        sorgenti = tuple(sorted(s for s, v in TAB_PAYOUT.items() if target in v))
+        eventi_payout.append(("verso_" + target, sorgenti, target))
+    _idem_eventi("IDEM_eventi_payout", eventi_payout, idx_y, dom_y)
+
+    # webhook COMPOSTO "pagamento riuscito" (fase83._dopo_pagamento): conferma prenotazione
+    # (CAS fase162) + riga payout INSERT-OR-IGNORE con importo (fase131.registra_maturato)
+    # + payout in_attesa->maturato (tabella di produzione) + tassa nel ledger (set, no-op
+    # al replay). Stato composto: (stato_pren, stato_payout, tassa, riga_presente, minori).
+    if "maturato" in idx_y and not mancanti:
+        sp, sy, minori, nuovo = z3.Ints("sp sy minori nuovo")
+        presente, tassa = z3.Bools("presente tassa")
+        conf_srcs = [idx_p[s] for s in EVENTI_PRENOTAZIONE[0][1]]
+        mat_srcs = [idx_y[s] for s, v in TAB_PAYOUT.items() if "maturato" in v]
+
+        def fw(a_sp: Any, a_sy: Any, a_tassa: Any, a_pres: Any, a_min: Any) -> Tuple[Any, ...]:
+            b_sp = z3.If(z3.Or([a_sp == i for i in conf_srcs]), idx_p["pagato"], a_sp)
+            b_min = z3.If(a_pres, a_min, nuovo)      # INSERT OR IGNORE: replay NON riscrive
+            b_sy = (z3.If(z3.Or([a_sy == i for i in mat_srcs]), idx_y["maturato"], a_sy)
+                    if mat_srcs else a_sy)
+            return b_sp, b_sy, z3.BoolVal(True), z3.BoolVal(True), b_min
+        una = fw(sp, sy, tassa, presente, minori)
+        due = fw(*una)
+        _teorema("IDEM_webhook_pagamento",
+                 z3.And(dom_p(sp), dom_y(sy), minori >= 0, nuovo >= 0),
+                 z3.And(una[0] == due[0], una[1] == due[1], una[2] == due[2],
+                        una[3] == due[3], una[4] == due[4]))
+    else:
+        ris["IDEM_webhook_pagamento"] = "STATO_NON_MODELLATO: 'maturato' assente dalla tabella payout"
     return ris

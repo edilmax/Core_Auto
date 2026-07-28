@@ -14,6 +14,15 @@ Le mutazioni NON sono casuali: sono i guasti che costerebbero davvero — soldi
 addebitati male, consensi non verificati, firme non controllate, marche accettate a
 torto. Ogni mutante e' accompagnato dal danno che provocherebbe nel mondo reale.
 
+Due famiglie, perche' i modi di perdere sono due. I mutanti sui SOLDI (in cima)
+chiedono «paghiamo/incassiamo la cifra giusta?». Quelli sulle GUARDIE DI SICUREZZA
+(in fondo) chiedono «chi ENTRA e' davvero chi dice di essere?»: firme, cookie di
+sessione, token operatore, password, rate-limit, consensi. Sono i guasti piu' insidiosi,
+perche' col codice guasto il sito continua a funzionare benissimo — semplicemente, la
+porta e' aperta. Il 2026-07-27 questa seconda famiglia ha trovato DUE buchi veri sul
+token operatore admin (firma non provata, scadenza non provata): le guardie mancanti
+sono ora in `test_admin_accounts.py`.
+
 Il codice viene SEMPRE ripristinato, anche se qualcosa va storto.
 """
 import io
@@ -200,6 +209,109 @@ MUTANTI = [
      "                if r[\"idem_key\"] in validi and r[\"check_in\"] and r[\"check_out\"]]",
      "test_stanza_fantasma",
      "il filtro dei pendenti INVERTITO: si libererebbe la prenotazione LEGITTIMA e si terrebbe la fantasma"),
+
+    # ══ LE GUARDIE DI SICUREZZA: firme, gate, permessi, anti-abuso ════════════════
+    # I soldi hanno gia' i loro mutanti (sopra). Qui si attacca l'ALTRO lato: chi ENTRA.
+    # Ogni mutazione qui e' un modo realistico in cui una porta resta aperta — e nessuno
+    # se ne accorge, perche' il sito continua a funzionare benissimo. Sono i guasti che
+    # non si vedono finche' non e' troppo tardi.
+
+    # ── LA CHIAVE (confronto firma, rate-limit, input velenoso) ──────────────────
+    ("fase83_server.py",
+     "            return hmac.compare_digest(fornita.encode(\"utf-8\", \"surrogatepass\"), atteso.encode(\"utf-8\", \"surrogatepass\"))",
+     "            return True",
+     "test_fase201_partner test_auth_non_ascii",
+     "il confronto della chiave diventa SEMPRE-VERO: ogni chiave admin/host e' accettata -> pannelli, dati e soldi aperti a chiunque"),
+
+    ("fase83_server.py",
+     "            return hmac.compare_digest(fornita.encode(\"utf-8\", \"surrogatepass\"), atteso.encode(\"utf-8\", \"surrogatepass\"))",
+     "            return hmac.compare_digest(fornita.encode(\"utf-8\"), atteso.encode(\"utf-8\"))",
+     "test_auth_non_ascii",
+     "cade il 'surrogatepass': un surrogato Unicode isolato nella chiave fa esplodere l'auth -> 500 invece del 401 (rotta abbattibile a mano + oracolo per chi sonda)"),
+
+    ("fase83_server.py",
+     "        consentito, attesa = rl.consenti(chiave)\n        if not consentito:",
+     "        consentito, attesa = rl.consenti(chiave)\n        if False:",
+     "test_rate_limit_login",
+     "il buttafuori per IP non blocca piu' nessuno: la chiave admin si prova a raffica all'infinito (brute-force senza freni)"),
+
+    # ── IL GATE DELLE PAGINE (cookie di sessione firmato, fase83 gatekeeper) ─────
+    ("fase83_server.py",
+     "        if not _h.compare_digest(sig, atteso):\n            return False",
+     "        if False:\n            return False",
+     "test_gatekeeper",
+     "il cookie di sessione-pagina non e' piu' verificato: basta scrivere 'admin|9999999999|x|deadbeef' nel browser per farsi servire la dashboard admin"),
+
+    ("fase83_server.py",
+     "        if livello != livello_atteso:\n            return False",
+     "        if False:\n            return False",
+     "test_gatekeeper",
+     "il livello del cookie non conta piu': un cookie HOST valido apre la pagina ADMIN (scalata di privilegio da host ad amministratore)"),
+
+    # ── IL TOKEN OPERATORE ADMIN (fase192 + fase83): e' una credenziale ──────────
+    ("fase83_server.py",
+     "            if not _h.compare_digest(atteso, str(sig)):\n                return None",
+     "            if False:\n                return None",
+     "test_admin_accounts",
+     "token operatore FABBRICATO a mano: chi conosce l'email di un operatore entra come lui senza password (LACUNA VERA scoperta il 2026-07-27: sopravviveva, guardia aggiunta)"),
+
+    ("fase83_server.py",
+     "            if int(exp) < int(_t.time()):\n                return None",
+     "            if False:\n                return None",
+     "test_admin_accounts",
+     "il token operatore non scade MAI: uno rubato una volta vale per sempre (LACUNA VERA scoperta il 2026-07-27: sopravviveva, guardia aggiunta)"),
+
+    ("fase83_server.py",
+     "            return aa.ruolo_attivo(d[\"email\"])",
+     "            return d.get(\"ruolo\")  # mutato",
+     "test_admin_accounts",
+     "il ruolo non e' piu' riletto dal DB: revoca e declassamento perdono effetto -> un operatore licenziato resta dentro finche' il suo token non scade"),
+
+    ("fase192_admin_accounts.py",
+     "        if not hmac.compare_digest(atteso, calcolato):\n            return {\"ok\": False, \"errore\": \"credenziali_non_valide\"}",
+     "        if False:\n            return {\"ok\": False, \"errore\": \"credenziali_non_valide\"}",
+     "test_admin_accounts",
+     "la password dell'operatore admin non e' piu' verificata: qualunque parola apre un account amministrativo"),
+
+    # ── LA PASSWORD DELL'HOST (fase88): il pannello con annunci e incassi ────────
+    ("fase88_registro_host.py",
+     "        if not hmac.compare_digest(atteso, calcolato):\n            return EsitoHost(False, errore=\"credenziali_non_valide\")",
+     "        if False:\n            return EsitoHost(False, errore=\"credenziali_non_valide\")",
+     "test_fase88_registro_host",
+     "qualunque password apre il pannello di QUALUNQUE host: annunci, calendario, dati e incassi di un altro"),
+
+    # ── IL DEEP-LINK TELEGRAM FIRMATO (fase83) ──────────────────────────────────
+    ("fase83_server.py",
+     "        return hid if _h.compare_digest(sig, atteso) else None",
+     "        return hid",
+     "test_telegram_host",
+     "il payload del deep-link non e' piu' firmato: chi indovina un host_id dirotta sul proprio telefono le notifiche di prenotazione di quell'host"),
+
+    # ── IL KILL-SWITCH D'EMERGENZA (fase191) ────────────────────────────────────
+    ("fase83_server.py",
+     "        if self._transazioni_bloccate():           # kill-switch globale: niente nuove prenotazioni",
+     "        if False:           # kill-switch globale: niente nuove prenotazioni",
+     "test_blocco_globale",
+     "il freno d'emergenza non ferma piu' le prenotazioni: durante un incidente si continua a incassare da clienti che non potremo servire"),
+
+    # ── ANTI-ABUSO E GDPR DEL PROGRAMMA PARTNER (fase201) ───────────────────────
+    ("fase201_partner.py",
+     "        if consenso is not True:\n            return {\"errore\": \"consenso_richiesto\"}",
+     "        if False:\n            return {\"errore\": \"consenso_richiesto\"}",
+     "test_fase201_partner",
+     "candidature partner archiviate SENZA consenso privacy: dato personale trattato senza base giuridica (violazione GDPR)"),
+
+    ("fase201_partner.py",
+     "                if recenti >= MAX_CANDIDATURE_ORA:",
+     "                if False:",
+     "test_fase201_partner",
+     "cade il tetto orario: uno script riempie l'archivio partner a volonta' (flooding del DB)"),
+
+    ("fase201_partner.py",
+     "                            (em, n, tipo, _testo(citta, 80),",
+     "                            (str(email), n, tipo, _testo(citta, 80),",
+     "test_fase201_partner",
+     "l'email non e' piu' normalizzata prima di scrivere: la stessa casella entra N volte cambiando le maiuscole (dedup aggirata, archivio sporco)"),
 ]
 
 

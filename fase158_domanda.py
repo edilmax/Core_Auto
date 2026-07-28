@@ -16,6 +16,7 @@ from __future__ import annotations
 import secrets
 import sqlite3
 import time
+import unicodedata
 from typing import Any, Callable, Dict, List, Optional
 
 CREDITO_FONDATORE_CENTS = 500          # 5,00 EUR di benvenuto (configurabile)
@@ -39,8 +40,28 @@ class _ConnCondivisa:
         return getattr(self._con, n)
 
 
+def _velenoso(c: str) -> bool:
+    """Carattere che NON puo' finire in archivio: surrogato isolato (categoria 'Cs': non
+    codificabile in UTF-8 -> l'INSERT esplode e la rotta PUBBLICA risponde 500) o byte di
+    controllo ('Cc': il NUL tronca la stringa in ogni consumatore a valle). Trovato dalla
+    campagna adversarial 2026-07-27: stessa classe di difetto chiusa in fase201_partner.
+    Helper duplicato di proposito: fase158 non deve dipendere da un altro compartimento."""
+    return c not in "\t\n" and unicodedata.category(c) in ("Cc", "Cs")
+
+
+def _pulisci(v: Any, maxlen: int = 254) -> str:
+    return "".join(c for c in v if not _velenoso(c))[:maxlen] if isinstance(v, str) else ""
+
+
+# nome PUBBLICO: il router (fase83) deve poter ripulire la citta' con LO STESSO metro del
+# gestore, altrimenti archivio e risposta divergono (e la risposta grezza non si codifica).
+pulisci_testo = _pulisci
+
+
 def _email_ok(e: Any) -> bool:
-    return isinstance(e, str) and 3 <= len(e) <= 254 and "@" in e and "." in e.split("@")[-1]
+    if not isinstance(e, str) or any(_velenoso(c) for c in e):
+        return False
+    return 3 <= len(e) <= 254 and "@" in e and "." in e.split("@")[-1]
 
 
 class GestoreDomanda:
@@ -76,7 +97,11 @@ class GestoreDomanda:
         if not _email_ok(email) or not (isinstance(citta, str) and citta.strip()):
             return False
         em = email.strip().lower()
-        ci = citta.strip().lower()
+        # la CITTA' arriva grezza dall'utente: ripulita dai caratteri non archiviabili prima
+        # dell'INSERT (surrogati/NUL) -> mai un 500 sulla rotta pubblica di cold-start
+        ci = _pulisci(citta, 120).strip().lower()
+        if not ci:
+            return False
         p = party if isinstance(party, int) and not isinstance(party, bool) and party > 0 else 1
         con = self._apri()
         try:

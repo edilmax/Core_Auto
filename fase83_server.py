@@ -1979,7 +1979,9 @@ class RouterHTTP:
         try:
             d = json.loads(body) if body else None
             return d if isinstance(d, dict) else None
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, RecursionError):
+            # RecursionError: corpo con annidamento profondissimo ('[[[[...') -> il parser
+            # sfonda lo stack. NON e' un errore nostro: e' corpo malformato -> 400, mai 500.
             return None
 
     def _host_id_da_token(self, headers: Dict[str, str]) -> Optional[str]:
@@ -2291,9 +2293,17 @@ class RouterHTTP:
         del token X-Admin-Op (ri-letto dal DB fase192 -> revoca/cambio-ruolo ISTANTANEI); None se
         non autenticato. Serve per i permessi per-ruolo."""
         import hmac as _h
+        if self._admin_key is None:
+            # Nessuna chiave configurata = modalita' APERTA (dev): _auth_admin (riga ~2244)
+            # lascia passare CHIUNQUE come root. I due strati devono dire la STESSA cosa: se
+            # qui tornassimo None, _puo_azione negherebbe rimborso/arbitrato/moderazione a un
+            # chiamante che _auth_admin ha appena riconosciuto come amministratore pieno --
+            # porta spalancata e, insieme, controversie irrisolvibili. Con la chiave
+            # configurata (produzione) questo ramo non si attiva mai e il gate di ruolo resta
+            # intatto: 'supporto' continua a non toccare i soldi.
+            return "admin"
         fornita = headers.get("X-Admin-Key", "") or headers.get("x-admin-key", "")
-        if self._admin_key is not None and fornita \
-                and _h.compare_digest(str(fornita), str(self._admin_key)):
+        if fornita and _h.compare_digest(str(fornita), str(self._admin_key)):
             return "admin"                       # ROOT = admin pieno
         tok = headers.get("X-Admin-Op", "") or headers.get("x-admin-op", "")
         if not tok:
@@ -2785,6 +2795,11 @@ class RouterHTTP:
             return 401, {"errore": "unauthorized"}
         if not self._bunker_ok_o_field(headers, azione="alloggio_stato"):
             return 403, {"errore": "bunker_richiesto"}
+        # SCALATA DI PRIVILEGI (difetto PROVATO 2026-07-28, test_ruoli_admin_adversarial):
+        # 'alloggio_stato' e' in AZIONI_SOLO_ADMIN (fase192) ma il gate di RUOLO non veniva
+        # MAI chiamato -> un operatore 'supporto' sospendeva/ripubblicava QUALSIASI annuncio.
+        if not self._puo_azione(headers, "alloggio_stato"):   # 'supporto' non modera
+            return 403, {"errore": "permesso_negato_ruolo"}
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
@@ -4021,6 +4036,12 @@ class RouterHTTP:
             return 401, {"errore": "unauthorized"}
         if not self._bunker_ok_o_field(headers, azione="cancella_attivita"):
             return 403, {"errore": "bunker_richiesto"}
+        # SCALATA DI PRIVILEGI (difetto PROVATO 2026-07-28, test_ruoli_admin_adversarial):
+        # 'cancella_attivita' e' in AZIONI_SOLO_ADMIN ma nessuno chiamava il gate di RUOLO ->
+        # un operatore 'supporto' cancellava un host da OGNI archivio (200 + report), la piu'
+        # distruttiva delle azioni. Ora il ruolo decide PRIMA di toccare qualsiasi cosa.
+        if not self._puo_azione(headers, "cancella_attivita"):   # 'supporto' non cancella
+            return 403, {"errore": "permesso_negato_ruolo"}
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
@@ -4071,7 +4092,11 @@ class RouterHTTP:
         # 'maturato' e l'escrow si auto-rilasciava a 24h -> PAGAVAMO L'HOST mentre rimborsavamo
         # l'ospite = PERDITA PIENA. riferimento = idem_key[:24] (come lo genera fase59.prenota);
         # payout/escrow/pendente sono chiavati sul riferimento. Idempotenti e isolati.
-        rif = idem[:24]
+        # RE-BLOCK (bug PROVATO 2026-07-27, test_stateful_api): dopo un pagamento TARDIVO la
+        # chiave attiva e' 'reblock:<rif>' (quella che il pannello mostra e che rilascia le
+        # date) -> idem[:24] dava un rif SBAGLIATO e i 3 passi di sicurezza soldi diventavano
+        # no-op silenziosi (host pagato + ospite rimborsato). Stesso strip di _host_prenotazioni.
+        rif = idem[len("reblock:"):] if idem.startswith("reblock:") else idem[:24]
         self._payout_trattieni(rif)                    # l'host non incassa una prenotazione rimborsata
         self._storna_tassa(rif)                        # tassa restituita all'ospite -> fuori dal ledger citta'
         self._revoca_checkin(rif)                      # smart-pass revocato (no sblocco su rimborsata)
@@ -4137,6 +4162,11 @@ class RouterHTTP:
             return 401, {"errore": "unauthorized"}
         if not self._bunker_ok_o_field(headers, azione="controversia_risolvi"):
             return 403, {"errore": "bunker_richiesto"}
+        # SCALATA DI PRIVILEGI (difetto PROVATO 2026-07-28, test_ruoli_admin_adversarial):
+        # qui si decide COME si spartisce la somma in garanzia (soldi veri) e 'supporto' non
+        # muove soldi: l'azione e' in AZIONI_SOLO_ADMIN, ma il gate di RUOLO non c'era.
+        if not self._puo_azione(headers, "controversia_risolvi"):   # 'supporto' non arbitra
+            return 403, {"errore": "permesso_negato_ruolo"}
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
@@ -5368,6 +5398,32 @@ class RouterHTTP:
             return 403, {"errore": "non_tua"}       # solo il proprietario può cancellare la sua
         if rec.get("stato") in ("cancellata_host", "rimborsato"):
             return 409, {"errore": "gia_cancellata"}
+        # ESCROW GIA' LIQUIDATO -> l'host NON puo' piu' auto-cancellare (bug PROVATO
+        # 2026-07-28, test_escrow_gia_liquidato). Cammino: l'ospite paga e preme "tutto ok"
+        # (o passano le 24h dal check-in) -> l'escrow si chiude e il netto e' gia' PARTITO
+        # verso il conto dell'host; se poi l'host cancella, qui si rimborsava il cliente al
+        # 100% mentre quei soldi erano gia' fuori: la differenza (netto - penale 15%) restava
+        # una PERDITA SECCA nostra, farmabile all'infinito da una coppia host+ospite
+        # complice. Uno stop netto PRIMA del CAS (nessun effetto, nessuna penale): un caso
+        # cosi' — cancellare un soggiorno gia' iniziato/confermato — passa dall'assistenza,
+        # che ha l'arbitrato e puo' recuperare dall'host. Fail-open su errore della guardia
+        # (mai bloccare una cancellazione legittima per un bug nostro).
+        try:
+            _gz = getattr(self._sys, "garanzia", None)
+            _st = _gz.stato(ref) if _gz is not None else None
+            if isinstance(_st, dict) and _st.get("stato") in ("rilasciato", "risolto") \
+                    and int(_st.get("host_riceve_cents", 0) or 0) > 0:
+                logger.error("HOST CANCELLA BLOCCATA | RIF: %s | escrow '%s' gia' liquidato "
+                             "all'host per %d: rimborsare il cliente qui sarebbe una perdita "
+                             "a nostro carico. Serve l'assistenza (arbitrato/recupero).",
+                             ref, _st.get("stato"), int(_st.get("host_riceve_cents", 0) or 0))
+                return 409, {"errore": "escrow_gia_liquidato",
+                             "gia_liquidato_cents": int(_st.get("host_riceve_cents", 0) or 0),
+                             "nota": "il soggiorno risulta gia' confermato e il pagamento "
+                                     "sbloccato: contatta l'assistenza per l'annullamento."}
+        except Exception:
+            logger.warning("guardia escrow su cancellazione host fallita (ignorata)",
+                           exc_info=True)
         import json as _j
         try:
             dj = _j.loads(rec.get("corpo_json") or "{}")
@@ -5516,6 +5572,22 @@ class RouterHTTP:
         ref = v.get("riferimento", "")
         if not ref:
             return None, (422, {"errore": "riferimento_mancante"})
+        # GATE STATO-PAGAMENTO (bug PROVATO 2026-07-27, test_stateful_api): conferma/contesta
+        # garanzia si sbloccano SOLO a pagamento avvenuto — la pagina voucher nasconde i tasti
+        # (guardia fisica), ma l'API accettava la chiamata DIRETTA col token: un ospite MAI
+        # pagato poteva contestare (payout host 'trattenuto' a costo zero = griefing) o
+        # confermare "tutto ok" PRIMA del soggiorno (bruciando il proprio diritto di disputa).
+        # Stessa regola e stessa forma della guardia sul check-in (_checkin_pre_registra):
+        # nessun pendente (conferma diretta, senza pagamento online) -> ammesso. Fail-open
+        # su errore PROPRIO della guardia (mai bloccare un flusso valido per un bug nostro).
+        try:
+            _pp = getattr(self._sys, "pagamenti_pendenti", None)
+            _rec = _pp.info(ref) if _pp is not None else None
+            if _rec is not None and _rec.get("stato") != "pagato":
+                return None, (409, {"errore": "pagamento_non_confermato",
+                                    "stato": _rec.get("stato")})
+        except Exception:
+            logger.warning("guardia pagamento su garanzia fallita (ignorata)", exc_info=True)
         return (ref, dati), None
 
     def _voucher_valido(self, token):
@@ -5722,11 +5794,18 @@ class RouterHTTP:
         # ESCROW PRIMA del resto: serve sapere quanto TIENE l'host (quota-penale della
         # politica) per decidere il payout. host_tiene vale SOLO se la chiusura CAS riesce.
         host_tiene = 0
+        gia_uscito = 0        # quota GIA' liquidata dall'escrow (host + rimborso d'arbitrato)
         try:
             gz = getattr(self._sys, "garanzia", None)
             if gz is not None:
                 st = gz.stato(rif)
                 imp = st.get("importo_host_cents", 0) if isinstance(st, dict) else 0
+                # ESCROW GIA' DECISO: 'rilasciato' (l'ospite ha premuto "tutto ok" -> bonifico
+                # Connect gia' partito) o 'risolto' (arbitrato: quota host + quota rimborsata).
+                # Quei soldi NON sono piu' in cassa nostra.
+                if isinstance(st, dict) and st.get("stato") in ("rilasciato", "risolto"):
+                    gia_uscito = (int(st.get("host_riceve_cents", 0) or 0)
+                                  + int(st.get("ospite_rimborso_cents", 0) or 0))
                 tratt = r.get("trattenuto_cents", 0)
                 host_tiene = (imp * tratt // pagato) if (imp and pagato and tratt) else 0
                 if host_tiene > 0:
@@ -5737,7 +5816,30 @@ class RouterHTTP:
                     gz.annulla(rif)        # rimborso pieno -> host 0
         except Exception:
             host_tiene = 0
+            gia_uscito = 0     # in dubbio NON si taglia: mai negare un rimborso legittimo
             logger.warning("chiusura garanzia su cancellazione fallita (ignorato)", exc_info=True)
+        # TETTO DI CASSA (bug PROVATO 2026-07-28, test_escrow_gia_liquidato): la cancellazione
+        # ricalcolava il rimborso dalla SOLA politica, senza guardare se l'escrow era gia' stato
+        # liquidato. Cammino: paga -> preme "tutto ok" (escrow 'rilasciato' + bonifico Connect
+        # all'host) -> cancella con lo stesso voucher -> politica flessibile/ripensamento = 100%
+        # -> promettevamo all'ospite l'INTERO prezzo mentre la quota host era gia' USCITA:
+        # perdita secca a nostro carico (26100 su 30000 nel test), farmabile da host+ospite
+        # complici. Stessa falla via 'risolto' (arbitrato) e per la quota gia' rimborsata
+        # dall'arbitro (doppio rimborso). Ora il rimborso e' TAGLIATO a quanto ci resta
+        # davvero in cassa. Il taglio scatta SOLO su escrow gia' chiuso a favore dell'host
+        # (gia_uscito>0): i rimborsi legittimi (escrow 'in_garanzia') restano identici.
+        tratt_originale = r.get("trattenuto_cents", 0)
+        if gia_uscito > 0 and pagato > 0:
+            tetto = max(0, pagato - gia_uscito)
+            if int(r.get("rimborso_cents", 0)) > tetto:
+                logger.error("RIMBORSO TAGLIATO AL TETTO DI CASSA | RIF: %s | politica avrebbe "
+                             "reso %d | gia' liquidato dall'escrow %d | incassato %d | reso %d",
+                             rif, int(r.get("rimborso_cents", 0)), gia_uscito, pagato, tetto)
+                r = dict(r)
+                r["rimborso_cents"] = tetto
+                r["trattenuto_cents"] = pagato - tetto
+                r["tetto_cassa_cents"] = tetto
+                r["gia_liquidato_cents"] = gia_uscito
         if host_tiene > 0:
             # la quota-penale e' DELL'HOST. BUG PROVATO al collaudo: il payout finiva
             # 'trattenuto' PIENO (= "non incassi niente") mentre l'escrow diceva
@@ -5777,7 +5879,9 @@ class RouterHTTP:
         if not pagato_davvero:
             tassa = 0                          # mai versata -> niente da rimborsare
         rimborso_totale = r.get("rimborso_cents", 0) + tassa
-        cv_cents, cv_token = self._credito_anti_rimpianto(r.get("trattenuto_cents", 0),
+        # il credito nasce dal trattenuto ORIGINALE della politica: il taglio anti-perdita
+        # (tetto di cassa) non deve MAI coniare Credito Viaggio nuovo dal nulla.
+        cv_cents, cv_token = self._credito_anti_rimpianto(tratt_originale,
                                                           v.get("valuta", "EUR"))
         if pagato_davvero:                     # C3: conferma cancellazione + rimborso in email
             self._email_cancellazione(rif, rimborso_totale, v.get("valuta", "EUR"), cv_cents)
@@ -6045,6 +6149,15 @@ class RouterHTTP:
         # città mancante NON deve bloccare la cattura email (è il cuore del cold-start):
         # fallback "(qualsiasi)" -> una email valida si registra SEMPRE. Fallisce solo se l'email
         # è davvero invalida (errore onesto, non più "email_o_citta").
+        # CITTA' RIPULITA UNA VOLTA SOLA, qui (difetto PROVATO 2026-07-28, live su socket,
+        # test_input_velenoso_router): `{"citta":"Rom\ud800a"}` -> surrogato isolato. Il
+        # gestore fase158 lo toglieva DENTRO `registra`, ma il router continuava a usare la
+        # stringa GREZZA per `conta()` (UnicodeEncodeError in sqlite), per il TOKEN del credito
+        # e per il `messaggio` di risposta -> `_scrivi` non riusciva a codificare il JSON e il
+        # server chiudeva la connessione SENZA RISPOSTA (dietro nginx: 502). In piu' il credito
+        # veniva emesso per una citta' DIVERSA da quella archiviata. Una sola normalizzazione.
+        from fase158_domanda import pulisci_testo as _pulisci_citta
+        citta = _pulisci_citta(citta, 120) if isinstance(citta, str) else citta
         citta_eff = citta.strip() if isinstance(citta, str) and citta.strip() else "(qualsiasi)"
         if not dom.registra(email, citta_eff, check_in=str(dati.get("check_in", "")),
                             check_out=str(dati.get("check_out", "")),
@@ -8866,6 +8979,45 @@ def percorso_statico_sicuro(path: str, cartella: str) -> Optional[str]:
     return candidato
 
 
+def corpo_json_bytes(corpo: Any) -> bytes:
+    """Serializza SEMPRE una risposta JSON in byte spedibili. PURA e testabile.
+
+    Difetto PROVATO (2026-07-28, live su socket): un solo carattere non codificabile in UTF-8
+    (surrogato isolato, es. `"\\ud800"` nel corpo di una POST pubblica) faceva alzare
+    UnicodeEncodeError DENTRO `_scrivi`, PRIMA di `send_response` -> il server chiudeva la
+    connessione senza spedire NEMMENO UNA RIGA di risposta (dietro nginx: 502). Nessuna rotta
+    deve poter uccidere la risposta: qui i surrogati diventano il carattere di sostituzione e
+    il client riceve comunque un JSON valido con lo stato giusto."""
+    testo = json.dumps(corpo, ensure_ascii=False)
+    try:
+        return testo.encode("utf-8")
+    except UnicodeEncodeError:
+        # 'backslashreplace' non e' JSON-safe: si passa da surrogatepass -> decodifica
+        # tollerante, cosi' il risultato resta UTF-8 valido e il JSON resta parsabile.
+        return testo.encode("utf-8", "surrogatepass").decode("utf-8", "replace").encode("utf-8")
+
+
+def lunghezza_corpo(valore: Any) -> int:
+    """Content-Length -> intero >= 0, MAI un'eccezione. PURA e testabile.
+    Difetto PROVATO (2026-07-28, live su socket): `Content-Length: abc` alzava ValueError in
+    `do_POST` -> connessione chiusa senza risposta. Valore assurdo/negativo = nessun corpo."""
+    try:
+        n = int(str(valore).strip())
+    except (TypeError, ValueError):
+        return 0
+    return n if n > 0 else 0
+
+
+def corpo_richiesta_testo(grezzo: bytes) -> str:
+    """Byte del corpo -> testo, MAI un'eccezione. PURA e testabile.
+    Difetto PROVATO (2026-07-28, live su socket): un corpo POST con byte non-UTF8 (es. b'\\xff')
+    alzava UnicodeDecodeError in `do_POST` -> connessione chiusa senza risposta. Ora i byte
+    invalidi diventano U+FFFD: il JSON non si parsa -> 400 json_non_valido (errore onesto)."""
+    if not isinstance(grezzo, (bytes, bytearray)):
+        return ""
+    return bytes(grezzo).decode("utf-8", "replace")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Server HTTP stdlib (thin wrapper, NON testato - I/O)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -9011,7 +9163,7 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             if isinstance(corpo, dict) and "_cookie" in corpo:
                 corpo = dict(corpo)
                 cookies = corpo.pop("_cookie")          # direttiva interna: non finisce nel JSON
-            dati = json.dumps(corpo, ensure_ascii=False).encode("utf-8")
+            dati = corpo_json_bytes(corpo)   # non puo' fallire: la risposta parte SEMPRE
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             if cookies:
@@ -9435,8 +9587,8 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
 
         def do_POST(self):
             u = urlparse(self.path)
-            lung = int(self.headers.get("Content-Length", 0) or 0)
-            body = self.rfile.read(lung).decode("utf-8") if lung else ""
+            lung = lunghezza_corpo(self.headers.get("Content-Length", 0))
+            body = corpo_richiesta_testo(self.rfile.read(lung)) if lung else ""
             s, c = router.gestisci("POST", u.path, {}, body, dict(self.headers))
             self._scrivi(s, c)
 

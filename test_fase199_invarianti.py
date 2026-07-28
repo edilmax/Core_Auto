@@ -90,8 +90,13 @@ class TestGuardiaPreCommit(unittest.TestCase):
             guardia_prenotazione(_p(2, "A", 0, 2, prova_firmata=False), [])
 
     def test_passa_operazione_valida(self):
-        guardia_prenotazione(_p(2, "B", 0, 2, totale_dovuto_cents=1000, pagamenti_cents=[1000]),
-                             [_p(1, "A", 0, 5)])          # nessuna eccezione = OK
+        # asserzione ESPLICITA (non solo "nessuna eccezione"): il contratto della guardia
+        # e' «operazione valida -> ritorna None senza sollevare». Vista ROSSA facendo
+        # sollevare la guardia su input valido.
+        self.assertIsNone(
+            guardia_prenotazione(_p(2, "B", 0, 2, totale_dovuto_cents=1000,
+                                    pagamenti_cents=[1000]),
+                                 [_p(1, "A", 0, 5)]))
 
     def test_verifica_stato_pulito(self):
         self.assertEqual(verifica_stato([_p(1, "A", 0, 5)], importi={"x": 10}), {})

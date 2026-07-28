@@ -431,13 +431,21 @@ def copione(api_key, citta, lingua):
         schermi = (list(schermo[:4])
                    + [CONTO_SCHERMO[lingua_schermo], LEVA_SCHERMO[leva_nome][lingua_schermo]]
                    + [schermo[4]])
+        # ripiego inglese PER SCENA (anti-tofu): se il font speciale manca, il chiamante degrada
+        # OGNI scena — anche CONTO e LEVA del formato lungo, non solo le 5 classiche (prima il
+        # degrade indicizzava SCHERMO["en"] a 5 voci su 7 scene -> IndexError, video mai reso)
+        schermi_en = (list(SCHERMO["en"][:4])
+                      + [CONTO_SCHERMO["en"], LEVA_SCHERMO[leva_nome]["en"]]
+                      + [SCHERMO["en"][4]])
         voci = voci[:6] + [""]                             # la 7ª voce è la chiusura fissa
     else:
         soggetti, schermi = base_sogg, list(schermo)
+        schermi_en = list(SCHERMO["en"])
     scene = []
     for i, sog in enumerate(soggetti):
         scene.append({"soggetto": _riempi(sog, citta),
                       "schermo": _riempi(schermi[i], citta),
+                      "schermo_en": _riempi(schermi_en[i], citta),
                       "voce": voci[i]})
     # la CHIUSURA e' sempre la frase fissa curata (l'indirizzo detto bene, mai balbettii AI)
     scene[-1]["voce"] = CHIUSURA_VOCE.get(lingua_voce, CHIUSURA_VOCE["en"])
@@ -542,8 +550,8 @@ def monta(citta, lingua, out_path, voce=None):
     if font is None:   # font speciale richiesto ma ASSENTE -> mai quadratini: schermo in inglese
         print("  [font %s assente -> schermo in inglese]" % lingua_schermo)
         lingua_schermo, font = "en", FONT
-        for i, s in enumerate(scene):
-            s["schermo"] = _riempi(SCHERMO["en"][i], citta)
+        for s in scene:
+            s["schermo"] = s["schermo_en"]   # ripiego per scena: regge anche il formato lungo
     hint = AUDIO_HINT.get(lingua_schermo, AUDIO_HINT["en"])
     clips = []
     for i, s in enumerate(scene):
@@ -617,8 +625,8 @@ def monta_nota(citta, lingua, out_path, voce=None):
     font = _font(lingua_schermo)
     if font is None:
         lingua_schermo, font = "en", FONT
-        for i, s in enumerate(scene):
-            s["schermo"] = _riempi(SCHERMO["en"][i], citta)
+        for s in scene:
+            s["schermo"] = s["schermo_en"]   # ripiego per scena: regge anche il formato lungo
     clips = []
     for i, s in enumerate(scene):
         img = os.path.join(tmp, "img%d.jpg" % i)

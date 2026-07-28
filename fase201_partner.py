@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+import unicodedata
 from typing import Any, Callable, Dict, List, Optional
 
 TIPI_PARTNER = ("property_manager", "creator", "agenzia", "altro")
@@ -40,12 +41,42 @@ class _ConnCondivisa:
         return getattr(self._con, n)
 
 
+def _velenoso(c: str) -> bool:
+    """Carattere che NON puo' finire in archivio: surrogato isolato (categoria 'Cs': non
+    codificabile in UTF-8 -> l'INSERT esplode e la rotta risponde 500) o byte di controllo
+    ('Cc': il NUL tronca la stringa in ogni consumatore a valle - CSV, log, librerie C).
+    Tabulazione e a-capo restano leciti nei testi liberi."""
+    return c not in "\t\n" and unicodedata.category(c) in ("Cc", "Cs")
+
+
+def _email_norm(e: Any) -> Optional[str]:
+    """Email normalizzata per la DEDUP (minuscole, senza spazi ai bordi) oppure None se non
+    e' spedibile. Rifiuta spazi INTERNI, caratteri di controllo e surrogati: non sono email
+    vere, sono grimaldelli per duplicare la stessa casella o per far esplodere l'archivio."""
+    if not isinstance(e, str):
+        return None
+    e = e.strip().lower()
+    if not (3 <= len(e) <= 254):
+        return None
+    if any(c.isspace() or _velenoso(c) for c in e):
+        return None
+    locale, sep, dominio = e.partition("@")
+    if not sep or not locale or "@" in dominio:
+        return None                       # senza destinatario o con due chiocciole: non esiste
+    pezzi = dominio.split(".")
+    if len(pezzi) < 2 or not all(pezzi):
+        return None                       # dominio senza punto, o con punti vuoti ('x.', '.x')
+    return e
+
+
 def _email_ok(e: Any) -> bool:
-    return isinstance(e, str) and 3 <= len(e) <= 254 and "@" in e and "." in e.split("@")[-1]
+    return _email_norm(e) is not None
 
 
 def _testo(v: Any, maxlen: int) -> str:
-    return v.strip()[:maxlen] if isinstance(v, str) else ""
+    if not isinstance(v, str):
+        return ""
+    return "".join(c for c in v if not _velenoso(c)).strip()[:maxlen]
 
 
 class GestorePartner:
@@ -79,7 +110,8 @@ class GestorePartner:
         GDPR: senza consenso ESPLICITO (True) non si scrive NULLA."""
         if consenso is not True:
             return {"errore": "consenso_richiesto"}
-        if not _email_ok(email):
+        em = _email_norm(email)
+        if em is None:
             return {"errore": "email_non_valida"}
         n = _testo(nome, 80)
         if len(n) < 2:
@@ -95,7 +127,7 @@ class GestorePartner:
                 if recenti >= MAX_CANDIDATURE_ORA:
                     return {"errore": "riprova_piu_tardi"}
                 con.execute("INSERT OR REPLACE INTO partner VALUES (?,?,?,?,?,1,?)",
-                            (email.strip().lower(), n, tipo, _testo(citta, 80),
+                            (em, n, tipo, _testo(citta, 80),
                              _testo(messaggio, 2000), adesso))
             return {"ok": True}
         finally:

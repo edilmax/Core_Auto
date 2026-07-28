@@ -681,14 +681,21 @@ def genera_landing_host(citta: str, *, lingua: str = "it", base_url: str = "",
             "<meta property=\"og:video:width\" content=\"1080\">"
             "<meta property=\"og:video:height\" content=\"1440\">"
             "<script type=\"application/ld+json\">"
-            + json.dumps({
+            # `_jsonld` come FAQ/Breadcrumb: neutralizza < > & (non solo '</'). Difetto
+            # PROVATO 2026-07-28 (test_landing_video_jsonld): il nome citta' e' dato UTENTE
+            # (il registro include le citta' con inventario reale, scritte dagli host); con
+            # il solo `.replace("</", ...)` una citta' tipo `Zz<!--<script>` finiva GREZZA
+            # nel blocco e portava il parser HTML in 'script data double escaped' -> il
+            # `</script>` successivo NON chiudeva piu' l'elemento (JSON-LD a valle inghiottito,
+            # markup pilotato dall'utente). Un solo metro di escaping per tutti i blocchi.
+            + _jsonld({
                 "@context": "https://schema.org", "@type": "VideoObject",
                 "name": fmt_raw(t["title"]), "description": fmt_raw(t["desc"]),
                 "contentUrl": video_url,
                 **({"thumbnailUrl": video_poster} if video_poster else {}),
                 **({"uploadDate": video_data} if video_data else {}),
                 "inLanguage": lng,
-            }, ensure_ascii=False).replace("</", "<\\/")   # mai chiudere lo <script> dal JSON
+            })
             + "</script>") if video_url else "")
         + "<script type=\"application/ld+json\">"
         + faq_jsonld(lng, commissione_bps=commissione_bps, ota_bps=ota_bps)

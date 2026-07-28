@@ -1,3 +1,30 @@
+## 🔬 STATO 2026-07-28 — CAMPAGNA DI VERIFICA SUPREMA: 10 DIFETTI VERI CHIUSI · GIRO 54/54 COMPLETO
+
+**Collaudo supremo (12 agenti in parallelo, ~3h)** — dettaglio completo nella voce REGISTRO
+2026-07-27/28. Sintesi: **10 difetti VERI** trovati e chiusi alla radice, ognuno con guardia
+**vista ROSSA** — 3 PERDITE DI DENARO (rimborso su escrow già liquidato: 26.100 su 30.000
+incassati, ripetibile · host che cancella dopo aver incassato: 21.600 a ciclo · rimborso admin
+con `rif` sbagliato → payout non trattenuto), 4 SICUREZZA (scalata 'supporto'→admin su 3 azioni
+riservate · firma+scadenza token operatore senza test · garanzia contestabile senza pagamento ·
+contraddizione fra i due controlli d'accesso), 3 CRASH PUBBLICI (surrogato unicode → 500 su
+/api/partner e /api/domanda · RecursionError da JSON annidato · do_POST senza risposta), + il
+video mai reso senza font CJK. **La verifica formale era un ORNAMENTO**: provato rompendo il
+predicato vero (test restava verde) → rifatta con 3 nuclei condivisi produzione↔dimostrazione,
+ora **16 teoremi Z3** con controesempi in chiaro. **NUMERI FINALI (misurati dal coordinatore,
+exit code diretto): suite 3611 test · 0 fallimenti · 0 errori · 3 saltati (Postgres assente) ·
+mutazione 41/41 uccisi · finti-verdi 0 · caos/soak/fuzz 6 strumenti, 0 violazioni.**
+Strumenti nuovi: test_stateful_api · test_partner_adversarial (18) · test_video_robusto (44) ·
+test_sicurezza_adversarial · test_escrow_gia_liquidato · test_domanda_velenosa (6) ·
+test_fase199_transizioni · collaudi/gare_micro.py (15) · collaudi/drip_facebook.py.
+
+**🌍 GIRO MONDIALE COMPLETATO 54/54** (Telegram msg 137-190, tutte pubblicate): Mastodon 50/54,
+**Facebook 15/54 — blocco anti-spam VERO della piattaforma** (`OAuthException code 368`: «per
+proteggere la community limitiamo la frequenza», si scioglie da solo). Non è un difetto nostro:
+la cura è il **gocciolamento** (`collaudi/drip_facebook.py` + cron ogni 30 min, 1 video a giro,
+stato durevole `/root/drip_facebook.json`). Recupero automatico a ondate già in corso.
+
+---
+
 ## 🧠 STATO 2026-07-27/f — DUE CAMPAGNE SEPARATE (direttiva «senza mischiare») · HOST 2.0 PSICOLOGICO
 
 Direttive fondatore in serie: «mai esseri umani, le meraviglie delle città» → «le città più belle
