@@ -756,7 +756,7 @@ class CatalogoVetrina:
         where = ["a.stato = 'pubblicato'"]
         par: List[Any] = []
         if criteri.citta:
-            where.append("a.citta = ?")
+            where.append("LOWER(a.citta) = LOWER(?)")
             par.append(criteri.citta.strip())
         if _intero(criteri.prezzo_min_cents):
             where.append("a.prezzo_notte_cents >= ?")
