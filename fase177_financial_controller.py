@@ -456,13 +456,10 @@ class FinancialController:
         finally:
             con.close()
 
-    def nota(self, nota_id: str) -> Optional[Dict[str, Any]]:
-        con = self._apri()
-        try:
-            r = con.execute("SELECT * FROM note WHERE nota_id=?", (nota_id,)).fetchone()
-            return dict(r) if r else None
-        finally:
-            con.close()
+    # NB: `nota()` sta piu' in basso, insieme agli altri strumenti di sola lettura
+    # dell'Audit Console. Qui ce n'era una SECONDA definizione, piu' vecchia e senza
+    # validazione dell'id: codice MORTO (Python tiene l'ultima definizione) rimosso il
+    # 2026-07-29 — sembrava attivo a chi leggeva il file, ma non e' mai stato eseguito.
 
     # ── debiti ──────────────────────────────────────────────────────────────
     def _debito_scrivi(self, debito_id: str, host_id: str, riferimento: str,

@@ -513,6 +513,26 @@ class ProtocolloConcierge:
             "prezzo_guest_cents": guest, "totale_cents": totale_charge,
             "valuta": dati.get("valuta", self._valuta),   # like-for-like: si addebita nella valuta dell'annuncio
             "riferimento": riferimento})
+        # 🔴 FAIL-SAFE «STRIPE GIU' = SOGGIORNO GRATIS» (difetto ALTO trovato 2026-07-29 dalla
+        # campagna di livello 2 e PROVATO sul disco). Se il pagamento e' CONFIGURATO
+        # (self._link is not None) ma il link NON e' stato creato, l'unica causa e' un guasto
+        # del gateway: confermare lo stesso significava consegnare voucher + PIN validi, tenere
+        # le date bloccate e NON chiedere mai un centesimo — con la tabella dei pendenti vuota,
+        # quindi nessuno sweeper che liberi la stanza e nessun appiglio per la riconciliazione.
+        # Camera fuori mercato + ospite con voucher valido + incasso zero + zero traccia.
+        # Si RILASCIA il blocco appena preso e si risponde 503: e' esattamente il fail-safe che
+        # il ramo su-richiesta (fase83 approvazione host) ha gia'. Il modo diretto SENZA Stripe
+        # configurato (self._link is None) resta legittimo e invariato.
+        if self._link is not None and not payment_url:
+            try:
+                self._inv.rilascia(alloggio, ci, co, idem_key=idem)   # stanza subito vendibile
+            except Exception:
+                logger.error("prenota: rilascio dopo link fallito ISOLATO", exc_info=True)
+            logger.error("PRENOTAZIONE RIFIUTATA: gateway di pagamento irraggiungibile "
+                         "(riferimento %s, alloggio %s): nessuna conferma senza pagamento",
+                         riferimento, alloggio)
+            return RispostaConcierge(503, {"errore": "pagamento_non_disponibile",
+                                           "riprova": True})
         corpo: Dict[str, Any] = {
             "stato": "confermata",
             "riferimento": riferimento,

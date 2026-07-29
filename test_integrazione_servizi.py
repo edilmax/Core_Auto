@@ -38,8 +38,6 @@ import unittest
 import urllib.error
 from urllib.parse import parse_qsl, urlsplit
 
-import fase85_pagamenti_stripe as _f85
-import fase101_stripe_connect as _f101
 import fase165_adattatori_esterni as _f165
 import fase166_geocoder as _f166
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
@@ -50,7 +48,8 @@ from fase87_stripe_webhook import firma_di_test, verifica_firma_stripe
 from fase90_marketing import Post
 from fase91_canali_social import CanaleMetaGraph, CanaleTelegram
 from fase99_multicurrency import crea_provider_tassi
-from fase101_stripe_connect import crea_provider_connect
+from fase101_stripe_connect import (crea_provider_connect,
+                                    crea_provider_stripe_connect)
 from fase152_notifiche_prenotazione import CanaleTelegram as CanaleTelegramHost
 from fase152_notifiche_prenotazione import CanaleWhatsApp
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
@@ -70,10 +69,16 @@ def _giorno(i):
 
 
 def _campi(corpo):
-    """Corpo x-www-form-urlencoded -> dict (come lo legge Stripe)."""
+    """Corpo x-www-form-urlencoded -> dict (come lo legge Stripe). Difensivo: un corpo di
+    tipo sbagliato non fa esplodere il finto — lo fa BOCCIARE dal vaglio del contratto."""
     if isinstance(corpo, (bytes, bytearray)):
-        corpo = corpo.decode("utf-8")
-    return dict(parse_qsl(corpo or "", keep_blank_values=True))
+        try:
+            corpo = bytes(corpo).decode("utf-8")
+        except Exception:
+            return {}
+    if not isinstance(corpo, str):
+        return {}
+    return dict(parse_qsl(corpo, keep_blank_values=True))
 
 
 class _CatturaLog:
@@ -116,46 +121,202 @@ class _CatturaLog:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  FINTI SEVERI
+#  FINTI SEVERI — le controfigure RIFIUTANO cio' che il servizio VERO rifiuterebbe
+#
+#  Un finto GENTILE ("qualunque cosa mi mandi, ti rispondo 200") non prova NIENTE: il
+#  test resta verde anche se partisse un `unit_amount` in euro invece che in centesimi
+#  (100x meno), un transfer senza `Idempotency-Key` (doppio bonifico al retry), un GET
+#  con un corpo, una valuta "EUR" maiuscola (Stripe: 400) o un destinatario email con
+#  un a-capo dentro.
+#
+#  Qui ogni richiesta passa PRIMA dal vaglio del contratto del servizio vero: se non lo
+#  rispetta viene REGISTRATA come violazione e RIFIUTATA con un 400, come farebbe Stripe.
+#
+#  Perche' REGISTRARE e non limitarsi a sollevare: tutto il codice di produzione qui e'
+#  BLINDATO (`except Exception -> None/False`), quindi un'eccezione sollevata dentro il
+#  finto verrebbe INGOIATA e il test resterebbe verde lo stesso. La prova sta nel
+#  pretendere che la lista delle violazioni sia VUOTA: lo fa `_ContrattiPuliti.tearDown`,
+#  ereditata da OGNI classe di questo file, quindi vale per tutti i test, anche futuri.
 # ══════════════════════════════════════════════════════════════════════════════
 _MANCA = object()          # "non specificato" (distinto da None, che e' una risposta valida)
 
+_REGISTRO_FINTI = []       # ogni finto creato si iscrive qui (azzerato a ogni setUp)
 
-class FintoStripeForm:
-    """Stripe form-encoded (fase85 / fase101): fetch(url, body, headers) -> dict.
-    Registra TUTTO; `guasto` = eccezione da sollevare (rete giu' / 500)."""
 
-    def __init__(self, risposta=_MANCA, guasto=None):
+def azzera_finti():
+    del _REGISTRO_FINTI[:]
+
+
+def violazioni_di_contratto():
+    return [v for f in _REGISTRO_FINTI for v in f.violazioni]
+
+
+class _FintoSevero:
+    """Base comune: registra le richieste e boccia quelle fuori contratto."""
+
+    servizio = "servizio"
+
+    def __init__(self):
         self.richieste = []
-        self._risposta = {"id": "cs_test_1",
-                          "url": "https://checkout.stripe.com/c/pay/cs_test_1"} \
-            if risposta is _MANCA else risposta
-        self._guasto = guasto
+        self.violazioni = []
+        self._idem_visti = {}      # Idempotency-Key -> impronta del corpo (vedi _controlla_stripe)
+        _REGISTRO_FINTI.append(self)
 
-    def __call__(self, url, body, headers):
-        self.richieste.append({"url": url, "headers": dict(headers or {}),
-                               "campi": _campi(body), "corpo": body})
-        if self._guasto is not None:
-            raise self._guasto
-        r = self._risposta
-        return r(self.richieste[-1]) if callable(r) else r
+    def _esigi(self, condizione, motivo):
+        """Se il contratto e' violato: annota (prova che sopravvive al blindaggio del
+        prodotto) e rifiuta con un 400, come il servizio vero."""
+        if not condizione:
+            self.violazioni.append("%s: %s" % (self.servizio, motivo))
+            raise urllib.error.HTTPError("https://" + self.servizio, 400, motivo, {}, None)
 
     @property
     def ultima(self):
         return self.richieste[-1]
 
 
-class FintoStripeCarta:
+# ── contratto STRIPE (vale per checkout, transfers, payment_intents, accounts…) ──
+_CAMPI_MONETA = ("amount", "unit_amount")
+_IDEMPOTENTI = ("/v1/transfers", "/v1/payment_intents", "/v1/refunds", "/v1/charges")
+
+# Ogni chiave che finisce per `_amount` e' un importo in unita' MINORI intere per Stripe:
+# `application_fee_amount` (la NOSTRA commissione sul destination charge di fase101),
+# `amount_to_capture`, `amount_refunded`… Elencare solo `amount`/`unit_amount` lasciava
+# passare un `application_fee_amount=1250.5` (400 da Stripe) o `=-500` (commissione
+# NEGATIVA: pagheremmo l'host piu' di quanto incassato).
+_SUFFISSI_MONETA = ("_amount", "_cents")
+
+# Chiavi che devono contenere un conto CONNESSO, a qualsiasi profondita' di annidamento:
+# fase101 manda `payment_intent_data[transfer_data][destination]`, non `destination`.
+_CAMPI_CONTO = ("destination",)
+
+
+def _nudo(chiave):
+    """'line_items[0][price_data][unit_amount]' -> 'unit_amount'."""
+    return chiave.rstrip("]").rsplit("[", 1)[-1]
+
+
+def _e_moneta(nome_nudo):
+    return nome_nudo in _CAMPI_MONETA or nome_nudo.endswith(_SUFFISSI_MONETA)
+
+
+def _controlla_stripe(finto, url, corpo, headers, metodo="POST"):
+    """Le regole che l'API Stripe VERA applica a una richiesta form-encoded. Violarle
+    significa 400 (nel migliore dei casi) o un movimento di denaro sbagliato."""
+    e = finto._esigi
+    e(isinstance(url, str) and url.startswith("https://api.stripe.com/v1/"),
+      "URL non e' un endpoint Stripe v1: %r" % (url,))
+    auth = str(headers.get("Authorization", ""))
+    e(auth.startswith("Bearer sk_"),
+      "Authorization assente o non e' una secret key: %r" % (auth[:16],))
+    e("\r" not in auth and "\n" not in auth, "a-capo dentro Authorization")
+    if metodo == "GET":
+        e(corpo in (None, b"", ""), "GET con un corpo (Stripe vuole i parametri in query)")
+        return {}
+    e(isinstance(corpo, (bytes, bytearray)),
+      "corpo non e' bytes: urllib.request non lo accetta (%s)" % (type(corpo).__name__,))
+    e(str(headers.get("Content-Type")) == "application/x-www-form-urlencoded",
+      "Content-Type errato: %r" % (headers.get("Content-Type"),))
+    try:
+        testo = bytes(corpo).decode("ascii")
+    except Exception:
+        testo = None
+    e(testo is not None, "corpo non ASCII: manca la percent-codifica (urlencode)")
+    campi = _campi(testo)
+    e(bool(campi), "corpo vuoto")
+    for chiave, val in campi.items():
+        n = _nudo(chiave)
+        if _e_moneta(n):
+            e(val.isdigit(), "%s=%r non e' un intero di CENTESIMI" % (chiave, val))
+            if n in _CAMPI_MONETA:
+                e(int(val) > 0, "%s=%r: importo non positivo" % (chiave, val))
+        if n == "currency":
+            e(len(val) == 3 and val.isalpha() and val.islower(),
+              "valuta non ISO-4217 minuscola: %r" % (val,))
+        if n in ("customer_email", "email"):
+            e("@" in val and "\r" not in val and "\n" not in val,
+              "email malformata o con a-capo: %r" % (val,))
+        if n in ("success_url", "cancel_url", "return_url", "refresh_url"):
+            e(val.startswith("https://"), "%s non e' https: %r" % (chiave, val))
+        if n == "expires_at":
+            e(val.isdigit(), "expires_at non e' un timestamp intero: %r" % (val,))
+        if n == "quantity":
+            e(val.isdigit() and int(val) > 0, "quantity non valida: %r" % (val,))
+    for chiave, val in campi.items():
+        if _nudo(chiave) in _CAMPI_CONTO:
+            e(val.startswith("acct_"),
+              "%s non e' un account connesso: %r" % (chiave, val))
+    # la NOSTRA commissione non puo' mangiarsi il lordo: fee >= lordo = 400 da Stripe e,
+    # se passasse, all'host resterebbe zero (o meno) di una prenotazione gia' incassata.
+    fee = next((v for k, v in campi.items()
+                if _nudo(k) == "application_fee_amount" and v.isdigit()), None)
+    lordo = next((v for k, v in campi.items()
+                  if _nudo(k) == "unit_amount" and v.isdigit()), None)
+    if fee is not None and lordo is not None:
+        qta = next((v for k, v in campi.items()
+                    if _nudo(k) == "quantity" and v.isdigit()), "1")
+        e(int(fee) < int(lordo) * int(qta),
+          "application_fee_amount=%s >= lordo %s: all'host non resta nulla" % (fee, lordo))
+    percorso = urlsplit(url).path
+    if any(percorso == p or percorso.startswith(p + "/") for p in _IDEMPOTENTI):
+        idem = str(headers.get("Idempotency-Key", ""))
+        e(idem.strip() != "",
+          "POST %s SENZA Idempotency-Key: al retry Stripe rifarebbe il movimento (doppio)"
+          % (percorso,))
+        e(len(idem) <= 255 and all(32 <= ord(ch) < 127 for ch in idem),
+          "Idempotency-Key non ASCII stampabile o piu' lunga di 255: %r" % (idem,))
+        # Stripe VERO risponde 400 `idempotency_error` se la stessa chiave torna con un
+        # corpo diverso. Riusare una chiave stantia su un movimento NUOVO non e' un doppio
+        # addebito: e' un bonifico che non parte mai e nessuno se ne accorge.
+        visto = finto._idem_visti
+        impronta = (percorso, tuple(sorted(campi.items())))
+        if idem in visto:
+            e(visto[idem] == impronta,
+              "Idempotency-Key %r riusata con un corpo DIVERSO: Stripe risponderebbe 400 "
+              "e il movimento nuovo non partirebbe" % (idem,))
+        visto[idem] = impronta
+    return campi
+
+
+class FintoStripeForm(_FintoSevero):
+    """Stripe form-encoded (fase85 / fase101): fetch(url, body, headers) -> dict.
+    Registra TUTTO, VAGLIA il contratto; `guasto` = eccezione da sollevare (rete giu')."""
+
+    servizio = "api.stripe.com"
+
+    def __init__(self, risposta=_MANCA, guasto=None):
+        super().__init__()
+        self._risposta = {"id": "cs_test_1",
+                          "url": "https://checkout.stripe.com/c/pay/cs_test_1"} \
+            if risposta is _MANCA else risposta
+        self._guasto = guasto
+
+    def __call__(self, url, body, headers):
+        h = dict(headers or {})
+        self.richieste.append({"url": url, "headers": h, "campi": _campi(body),
+                               "corpo": body})
+        _controlla_stripe(self, url, body, h)
+        if self._guasto is not None:
+            raise self._guasto
+        r = self._risposta
+        return r(self.richieste[-1]) if callable(r) else r
+
+
+class FintoStripeCarta(_FintoSevero):
     """ProviderCarta (fase183): fetch(metodo, url, body, headers) -> dict."""
 
+    servizio = "api.stripe.com/carta"
+
     def __init__(self, risposte=None, guasto=None):
-        self.richieste = []
+        super().__init__()
         self._risposte = risposte or {}
         self._guasto = guasto
 
     def __call__(self, metodo, url, body, headers):
-        self.richieste.append({"metodo": metodo, "url": url, "headers": dict(headers or {}),
+        h = dict(headers or {})
+        self.richieste.append({"metodo": metodo, "url": url, "headers": h,
                                "campi": _campi(body) if body else {}})
+        self._esigi(metodo in ("GET", "POST"), "metodo HTTP inatteso: %r" % (metodo,))
+        _controlla_stripe(self, url, body, h, metodo=metodo)
         if self._guasto is not None:
             raise self._guasto
         for chiave, val in self._risposte.items():
@@ -163,60 +324,432 @@ class FintoStripeCarta:
                 return val
         return {}
 
-    @property
-    def ultima(self):
-        return self.richieste[-1]
 
-
-class FintoHttpAI:
+class FintoHttpAI(_FintoSevero):
     """fase165: fetch(url, *, metodo, intestazioni, corpo, timeout) -> (status, obj)."""
 
+    servizio = "provider-ai"
+
     def __init__(self, esiti):
-        self.richieste = []
+        super().__init__()
         self._esiti = list(esiti)
 
     def __call__(self, url, *, metodo="GET", intestazioni=None, corpo=None, timeout=30.0):
-        self.richieste.append({"url": url, "metodo": metodo,
-                               "intestazioni": dict(intestazioni or {}), "corpo": corpo,
-                               "timeout": timeout})
+        h = dict(intestazioni or {})
+        self.richieste.append({"url": url, "metodo": metodo, "intestazioni": h,
+                               "corpo": corpo, "timeout": timeout})
+        e = self._esigi
+        e(isinstance(url, str) and url.startswith("https://"), "URL non https: %r" % (url,))
+        e(metodo in ("GET", "POST"), "metodo inatteso: %r" % (metodo,))
+        e(isinstance(timeout, (int, float)) and not isinstance(timeout, bool)
+          and 0 < float(timeout) <= 120,
+          "timeout assente o assurdo (%r): senza timeout un worker resta appeso" % (timeout,))
+        if corpo is not None:
+            e(metodo == "POST", "corpo su una richiesta %s" % (metodo,))
+            e(isinstance(corpo, (bytes, bytearray)), "corpo non bytes")
+            ct = str(h.get("Content-Type", ""))
+            e(ct != "", "richiesta con corpo e senza Content-Type")
+            if ct.startswith("application/json"):
+                try:
+                    json.loads(bytes(corpo).decode("utf-8"))
+                    valido = True
+                except Exception:
+                    valido = False
+                e(valido, "Content-Type json ma il corpo non e' JSON valido")
+        # Groq/OpenAI-compatibili: senza Bearer il servizio vero risponde 401 e la
+        # generazione non parte MAI. Un finto che non lo pretende terrebbe verde un
+        # adattatore che ha smesso di mandare la chiave.
+        if "api.groq.com" in url:
+            a = str(h.get("Authorization", ""))
+            e(a.startswith("Bearer ") and a[7:].strip() != "",
+              "richiesta a Groq senza Bearer: il vero risponderebbe 401")
         return self._esiti.pop(0) if self._esiti else (0, None)
 
 
-class FintoJson:
+class FintoJson(_FintoSevero):
     """Canali social (fase91/193): fetch(url, data[, headers]) -> dict."""
 
+    servizio = "social"
+
     def __init__(self, risposte=None, guasto=None):
-        self.richieste = []
+        super().__init__()
         self._risposte = list(risposte or [])
         self._guasto = guasto
 
     def __call__(self, url, data=None, headers=None):
-        self.richieste.append({"url": url, "data": dict(data or {}),
-                               "headers": dict(headers or {})})
+        d = dict(data or {})
+        h = dict(headers or {})
+        self.richieste.append({"url": url, "data": d, "headers": h})
+        e = self._esigi
+        e(isinstance(url, str) and url.startswith("https://"), "URL non https: %r" % (url,))
+        e(" " not in url and "\n" not in url and "\r" not in url,
+          "URL con spazi o a-capo: %r" % (url,))
+        e(bool(d), "corpo VUOTO: una pubblicazione senza campi non e' un post, e' un 400")
+        for k, v in d.items():
+            e(isinstance(k, str) and k != "", "campo senza nome nel corpo")
+            e(v is not None,
+              "campo %r a None: urlencode lo manderebbe come la stringa 'None'" % (k,))
+            e(isinstance(v, (str, int, float, bool, dict, list)),
+              "campo %r di tipo %s: non serializzabile" % (k, type(v).__name__))
+        auth = str(h.get("Authorization", ""))
+        if auth:
+            e(auth.startswith("Bearer ") and auth[7:].strip() != "",
+              "Authorization malformata: %r" % (auth[:12],))
         if self._guasto is not None:
             raise self._guasto
         return self._risposte.pop(0) if self._risposte else {"ok": True, "id": "1"}
 
 
-class FintoStatus:
-    """Canali fase152: fetch(url, headers, body) -> (status, testo)."""
+class FintoStatus(_FintoSevero):
+    """Canali fase152 (avvisi all'host): fetch(url, headers, body) -> (status, testo)."""
+
+    servizio = "avvisi-host"
 
     def __init__(self, status=200, guasto=None):
-        self.richieste = []
+        super().__init__()
         self._status = status
         self._guasto = guasto
 
     def __call__(self, url, headers, body):
-        self.richieste.append({"url": url, "headers": dict(headers or {}), "body": body})
+        h = dict(headers or {})
+        self.richieste.append({"url": url, "headers": h, "body": body})
+        e = self._esigi
+        e(isinstance(url, str) and url.startswith("https://"), "URL non https: %r" % (url,))
+        e(isinstance(body, dict) and bool(body), "corpo assente o non un oggetto JSON")
+        if "graph.facebook.com" in url:
+            e(str(h.get("Authorization", "")).startswith("Bearer "),
+              "Meta/WhatsApp senza Bearer token")
+            e(str(body.get("messaging_product")) == "whatsapp",
+              "manca messaging_product=whatsapp (la Cloud API lo esige)")
+            e(str(body.get("to", "")).isdigit(),
+              "numero WhatsApp non normalizzato a sole cifre: %r" % (body.get("to"),))
+        if "api.telegram.org" in url:
+            e(str(body.get("chat_id", "")).strip() != "", "chat_id vuoto")
+            e(str(body.get("text", "")).strip() != "", "messaggio vuoto")
         if self._guasto is not None:
             raise self._guasto
         return self._status, "{}"
 
 
+# ── contratto NOMINATIM / OVERPASS: la policy d'uso e' vincolante (ci bannano) ──
+_PARAM_NOMINATIM_AMMESSI = {"format", "limit", "q", "lat", "lon", "zoom",
+                            "addressdetails", "accept-language", "countrycodes"}
+
+
+def _controlla_nominatim(prova, url):
+    """URL Nominatim ammesso: host giusto, format=json, limit<=1 sulla ricerca, nessun
+    parametro inventato (uno sconosciuto = 400 dal servizio vero)."""
+    e = prova._esigi
+    e(isinstance(url, str) and url.startswith("https://nominatim.openstreetmap.org/"),
+      "URL fuori da Nominatim: %r" % (url,))
+    parti = urlsplit(url)
+    q = dict(parse_qsl(parti.query))
+    e(q.get("format") in ("json", "jsonv2"),
+      "format non JSON (la risposta arriverebbe in XML): %r" % (q.get("format"),))
+    for chiave in q:
+        e(chiave in _PARAM_NOMINATIM_AMMESSI, "parametro sconosciuto %r" % (chiave,))
+    if parti.path.rstrip("/").endswith("/search"):
+        e(q.get("q", "").strip() != "", "ricerca senza testo")
+        e(int(q.get("limit", "1")) <= 1, "limit>1: scarico inutile (policy Nominatim)")
+    if parti.path.rstrip("/").endswith("/reverse"):
+        for chiave in ("lat", "lon"):
+            try:
+                float(q.get(chiave, ""))
+                ok = True
+            except Exception:
+                ok = False
+            e(ok, "reverse senza %s numerica: %r" % (chiave, q.get(chiave)))
+
+
+class _ContrattiPuliti(unittest.TestCase):
+    """Ereditata da OGNI classe del file: azzera il registro dei finti prima del test e
+    pretende ZERO violazioni dopo. Cosi' la severita' non dipende dal fatto che il singolo
+    test si ricordi di controllarla — vale sempre, anche per i test scritti domani."""
+
+    def setUp(self):
+        azzera_finti()
+
+    def tearDown(self):
+        fuori = violazioni_di_contratto()
+        self.assertEqual(fuori, [], "richieste FUORI CONTRATTO ai servizi terzi: %s" % fuori)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  0) CHI CONTROLLA IL CONTROLLORE — i finti severi sono davvero severi?
+# ══════════════════════════════════════════════════════════════════════════════
+_AUTH_OK = {"Authorization": "Bearer sk_test_x",
+            "Content-Type": "application/x-www-form-urlencoded"}
+
+
+class TestFintiSeveriSonoDavveroSeveri(unittest.TestCase):
+    """Un finto che accetta tutto NON e' una guardia, e' un ornamento: i test che ci
+    girano sopra sono verdi per costruzione. Qui ogni vaglio viene messo alla prova con
+    la richiesta STORTA che deve bocciare e con quella DIRITTA che deve passare. Se un
+    domani qualcuno ammorbidisse un controllo per far passare un test, sono questi a
+    diventare rossi — PRIMA che l'ammorbidimento nasconda un difetto vero."""
+
+    def setUp(self):
+        azzera_finti()
+
+    def tearDown(self):
+        azzera_finti()
+
+    def _rifiuta(self, finto, chiamata, pezzo_del_motivo):
+        """La richiesta storta deve essere (1) rifiutata con un 400 come dal servizio vero
+        e (2) ANNOTATA, perche' il prodotto blindato ingoierebbe l'eccezione."""
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            chiamata()
+        self.assertEqual(e.exception.code, 400)
+        self.assertEqual(len(finto.violazioni), 1, finto.violazioni)
+        self.assertIn(pezzo_del_motivo, finto.violazioni[0])
+        self.assertEqual(violazioni_di_contratto(), finto.violazioni)
+
+    # ── STRIPE ───────────────────────────────────────────────────────────────
+    def test_stripe_accetta_la_richiesta_ben_formata(self):
+        f = FintoStripeForm()
+        f("https://api.stripe.com/v1/checkout/sessions",
+          b"mode=payment&line_items%5B0%5D%5Bprice_data%5D%5Bunit_amount%5D=24350"
+          b"&line_items%5B0%5D%5Bprice_data%5D%5Bcurrency%5D=eur"
+          b"&success_url=https%3A%2F%2Fbookinvip.com%2Fok", _AUTH_OK)
+        self.assertEqual(f.violazioni, [], "il vaglio boccia una richiesta CORRETTA")
+
+    def test_stripe_boccia_importo_non_intero_o_non_positivo(self):
+        for corpo, motivo in ((b"amount=243.50&currency=eur", "CENTESIMI"),
+                              (b"amount=-100&currency=eur", "CENTESIMI"),
+                              (b"amount=0&currency=eur", "non positivo"),
+                              (b"amount=24%2C350&currency=eur", "CENTESIMI"),
+                              (b"line_items%5B0%5D%5Bprice_data%5D%5Bunit_amount%5D=1e3",
+                               "CENTESIMI")):
+            f = FintoStripeForm()
+            self._rifiuta(f, lambda f=f, corpo=corpo: f(
+                "https://api.stripe.com/v1/transfers", corpo,
+                dict(_AUTH_OK, **{"Idempotency-Key": "k"})), motivo)
+            azzera_finti()
+
+    def test_stripe_boccia_valuta_non_iso(self):
+        for valuta in (b"EUR", b"euro", b"e", b"eu"):
+            f = FintoStripeForm()
+            self._rifiuta(f, lambda f=f, valuta=valuta: f(
+                "https://api.stripe.com/v1/checkout/sessions",
+                b"amount=100&currency=" + valuta, _AUTH_OK), "ISO-4217")
+            azzera_finti()
+
+    def test_stripe_boccia_chiave_e_intestazioni_sbagliate(self):
+        casi = ((dict(_AUTH_OK, Authorization=""), "Authorization"),
+                (dict(_AUTH_OK, Authorization="Bearer pk_live_1"), "secret key"),
+                (dict(_AUTH_OK, Authorization="sk_test_x"), "Authorization"),
+                (dict(_AUTH_OK, **{"Content-Type": "application/json"}), "Content-Type"))
+        for headers, motivo in casi:
+            f = FintoStripeForm()
+            self._rifiuta(f, lambda f=f, headers=headers: f(
+                "https://api.stripe.com/v1/checkout/sessions",
+                b"amount=100&currency=eur", headers), motivo)
+            azzera_finti()
+
+    def test_stripe_boccia_transfer_senza_idempotency_key(self):
+        """IL difetto che costa denaro vero: senza la chiave, il retry di rete rifa' il
+        bonifico. Un finto gentile non lo vedrebbe mai."""
+        f = FintoStripeForm()
+        self._rifiuta(f, lambda: f("https://api.stripe.com/v1/transfers",
+                                   b"amount=100&currency=eur&destination=acct_1", _AUTH_OK),
+                      "SENZA Idempotency-Key")
+        azzera_finti()
+        f2 = FintoStripeForm()
+        self._rifiuta(f2, lambda: f2("https://api.stripe.com/v1/payment_intents",
+                                     b"amount=100&currency=eur",
+                                     dict(_AUTH_OK, **{"Idempotency-Key": "   "})),
+                      "SENZA Idempotency-Key")
+
+    def test_stripe_boccia_la_commissione_storta_sul_destination_charge(self):
+        """`application_fee_amount` e' LA nostra commissione (fase101 destination charge).
+        Un finto che vaglia solo `amount`/`unit_amount` la lascia passare in euro (100x
+        meno), negativa (pagheremmo l'host piu' dell'incassato) o piu' grande del lordo."""
+        lordo = (b"&line_items%5B0%5D%5Bprice_data%5D%5Bunit_amount%5D=30000"
+                 b"&line_items%5B0%5D%5Bprice_data%5D%5Bcurrency%5D=eur")
+        casi = ((b"1250.5", "CENTESIMI"), (b"-500", "CENTESIMI"), (b"1e3", "CENTESIMI"),
+                (b"90000", "non resta nulla"), (b"30000", "non resta nulla"))
+        for fee, motivo in casi:
+            f = FintoStripeForm()
+            self._rifiuta(f, lambda f=f, fee=fee: f(
+                "https://api.stripe.com/v1/checkout/sessions",
+                b"mode=payment&payment_intent_data%5Bapplication_fee_amount%5D=" + fee
+                + lordo, _AUTH_OK), motivo)
+            azzera_finti()
+        f = FintoStripeForm()          # controprova: 10% su 30000 e' regolare
+        f("https://api.stripe.com/v1/checkout/sessions",
+          b"mode=payment&payment_intent_data%5Bapplication_fee_amount%5D=3000" + lordo,
+          _AUTH_OK)
+        self.assertEqual(f.violazioni, [], "il vaglio boccia una commissione LEGITTIMA")
+
+    def test_stripe_boccia_il_conto_annidato_non_connesso(self):
+        """fase101 manda `payment_intent_data[transfer_data][destination]`: guardare solo
+        la chiave `destination` di primo livello lascia passare un conto qualsiasi."""
+        f = FintoStripeForm()
+        self._rifiuta(f, lambda: f(
+            "https://api.stripe.com/v1/checkout/sessions",
+            b"line_items%5B0%5D%5Bprice_data%5D%5Bunit_amount%5D=30000"
+            b"&payment_intent_data%5Btransfer_data%5D%5Bdestination%5D=cus_1", _AUTH_OK),
+            "account connesso")
+
+    def test_stripe_boccia_idempotency_mancante_sui_sotto_percorsi(self):
+        """/v1/payment_intents/pi_1/confirm E' un movimento di denaro quanto la creazione:
+        col vecchio `url.endswith('/v1/payment_intents')` non veniva mai controllato."""
+        for coda in ("confirm", "capture"):
+            f = FintoStripeForm()
+            self._rifiuta(f, lambda f=f, coda=coda: f(
+                "https://api.stripe.com/v1/payment_intents/pi_1/" + coda,
+                b"amount_to_capture=100", _AUTH_OK), "SENZA Idempotency-Key")
+            azzera_finti()
+
+    def test_stripe_boccia_la_chiave_idempotente_riusata_su_un_corpo_diverso(self):
+        """Stripe risponde 400 `idempotency_error`. Il danno non e' il doppio addebito: e'
+        il bonifico NUOVO che non parte perche' riusa la chiave di quello vecchio."""
+        f = FintoStripeForm()
+        h = dict(_AUTH_OK, **{"Idempotency-Key": "transfer_BVIP-AAAA"})
+        f("https://api.stripe.com/v1/transfers",
+          b"amount=21600&currency=eur&destination=acct_H1", h)
+        self._rifiuta(f, lambda: f("https://api.stripe.com/v1/transfers",
+                                   b"amount=9900&currency=eur&destination=acct_H2", h),
+                      "riusata con un corpo DIVERSO")
+        azzera_finti()
+        f2 = FintoStripeForm()         # controprova: STESSO corpo = retry legittimo
+        for _ in range(2):
+            f2("https://api.stripe.com/v1/transfers",
+               b"amount=21600&currency=eur&destination=acct_H1", h)
+        self.assertEqual(f2.violazioni, [], "il retry identico non e' un errore")
+
+    def test_stripe_boccia_destinazione_e_email_storte(self):
+        f = FintoStripeForm()
+        self._rifiuta(f, lambda: f("https://api.stripe.com/v1/transfers",
+                                   b"amount=100&currency=eur&destination=cus_1",
+                                   dict(_AUTH_OK, **{"Idempotency-Key": "k"})),
+                      "account connesso")
+        azzera_finti()
+        f2 = FintoStripeForm()
+        self._rifiuta(f2, lambda: f2(
+            "https://api.stripe.com/v1/checkout/sessions",
+            b"amount=100&currency=eur&customer_email=a%40b.it%0ABcc%3A+vittima%40x.it",
+            _AUTH_OK), "a-capo")
+
+    def test_stripe_boccia_corpo_non_bytes_o_url_estraneo(self):
+        f = FintoStripeForm()
+        self._rifiuta(f, lambda: f("https://api.stripe.com/v1/checkout/sessions",
+                                   "amount=100&currency=eur", _AUTH_OK), "non e' bytes")
+        azzera_finti()
+        f2 = FintoStripeForm()
+        self._rifiuta(f2, lambda: f2("https://api.stripe.evil.com/v1/checkout/sessions",
+                                     b"amount=100&currency=eur", _AUTH_OK), "endpoint Stripe")
+
+    def test_stripe_carta_boccia_il_get_con_corpo(self):
+        f = FintoStripeCarta()
+        self._rifiuta(f, lambda: f("GET", "https://api.stripe.com/v1/setup_intents/seti_1",
+                                   b"expand=x", _AUTH_OK), "GET con un corpo")
+        azzera_finti()
+        f2 = FintoStripeCarta()
+        self._rifiuta(f2, lambda: f2("DELETE", "https://api.stripe.com/v1/customers/cus_1",
+                                     None, _AUTH_OK), "metodo HTTP inatteso")
+
+    # ── AI (fase165) ─────────────────────────────────────────────────────────
+    def test_ai_boccia_timeout_assurdo_e_corpo_incoerente(self):
+        f = FintoHttpAI([(200, {})])
+        self._rifiuta(f, lambda: f("https://api.groq.com/x", metodo="POST", timeout=0,
+                                   corpo=b"{}",
+                                   intestazioni={"Content-Type": "application/json"}),
+                      "timeout")
+        azzera_finti()
+        f2 = FintoHttpAI([(200, {})])
+        self._rifiuta(f2, lambda: f2("https://api.groq.com/x", metodo="POST",
+                                     corpo=b"non-json",
+                                     intestazioni={"Content-Type": "application/json"}),
+                      "non e' JSON valido")
+        azzera_finti()
+        f3 = FintoHttpAI([(200, {})])
+        self._rifiuta(f3, lambda: f3("https://api.groq.com/x", metodo="POST", corpo=b"{}",
+                                     intestazioni={}), "senza Content-Type")
+        azzera_finti()
+        f4 = FintoHttpAI([(200, {})])
+        self._rifiuta(f4, lambda: f4("http://api.groq.com/x", metodo="GET"), "non https")
+
+    def test_ai_boccia_la_richiesta_senza_chiave(self):
+        """Groq senza Bearer = 401: la generazione non partirebbe MAI."""
+        f = FintoHttpAI([(200, {})])
+        self._rifiuta(f, lambda: f("https://api.groq.com/openai/v1/chat/completions",
+                                   metodo="POST", corpo=b"{}",
+                                   intestazioni={"Content-Type": "application/json"}),
+                      "senza Bearer")
+
+    # ── SOCIAL (fase91/193) ──────────────────────────────────────────────────
+    def test_social_boccia_none_e_url_in_chiaro(self):
+        f = FintoJson()
+        self._rifiuta(f, lambda: f("https://graph.facebook.com/v19.0/P/feed",
+                                   {"message": "x", "link": None}), "'None'")
+        azzera_finti()
+        f2 = FintoJson()
+        self._rifiuta(f2, lambda: f2("http://graph.facebook.com/v19.0/P/feed",
+                                     {"message": "x"}), "non https")
+        azzera_finti()
+        f3 = FintoJson()
+        self._rifiuta(f3, lambda: f3("https://mastodon.social/api/v1/statuses",
+                                     {"status": "x"}, {"Authorization": "Bearer "}),
+                      "Authorization malformata")
+        azzera_finti()
+        f4 = FintoJson()
+        self._rifiuta(f4, lambda: f4("https://graph.facebook.com/v19.0/P/feed", {}),
+                      "corpo VUOTO")
+
+    # ── AVVISI HOST (fase152) ────────────────────────────────────────────────
+    def test_avvisi_bocciano_whatsapp_incompleto(self):
+        f = FintoStatus()
+        self._rifiuta(f, lambda: f("https://graph.facebook.com/v18.0/P/messages",
+                                   {"Authorization": "Bearer t"},
+                                   {"to": "393331234567", "type": "text"}),
+                      "messaging_product")
+        azzera_finti()
+        f2 = FintoStatus()
+        self._rifiuta(f2, lambda: f2("https://graph.facebook.com/v18.0/P/messages",
+                                     {"Authorization": "Bearer t"},
+                                     {"messaging_product": "whatsapp",
+                                      "to": "+39 333 1234567"}), "non normalizzato")
+        azzera_finti()
+        f3 = FintoStatus()
+        self._rifiuta(f3, lambda: f3("https://api.telegram.org/botX/sendMessage",
+                                     {}, {"chat_id": "", "text": "x"}), "chat_id vuoto")
+
+    # ── NOMINATIM / OVERPASS ─────────────────────────────────────────────────
+    def test_nominatim_boccia_limite_e_parametri_inventati(self):
+        casi = (("https://nominatim.openstreetmap.org/search?q=Roma&format=json&limit=20",
+                 "limit>1"),
+                ("https://nominatim.openstreetmap.org/search?q=Roma&format=xml", "format"),
+                ("https://nominatim.openstreetmap.org/search?q=Roma&format=json&pol=1",
+                 "parametro sconosciuto"),
+                ("https://nominatim.openstreetmap.org/search?q=&format=json",
+                 "senza testo"),
+                ("https://nominatim.openstreetmap.org/reverse?format=json&lat=x&lon=2",
+                 "lat"),
+                ("https://example.com/search?q=Roma&format=json", "fuori da Nominatim"))
+        for url, motivo in casi:
+            f = _FintoNominatim([])
+            self._rifiuta(f, lambda f=f, url=url: f(url), motivo)
+            azzera_finti()
+
+    def test_overpass_boccia_la_query_incompleta(self):
+        casi = (("https://overpass-api.de/api/interpreter?data=node(around%3A100%2C1%2C2)%3B",
+                 "out:json"),
+                ("https://overpass-api.de/api/interpreter?data=%5Bout%3Ajson%5Dnode%3B",
+                 "around"),
+                ("https://overpass-api.de/api/interpreter?data=%5Bout%3Ajson%5D"
+                 "node(around%3A100%2C1%2C2)", "';'"),
+                ("https://overpass-api.de/api/interpreter", "query Overpass assente"))
+        for url, motivo in casi:
+            f = _FintoOverpass({"elements": []})
+            self._rifiuta(f, lambda f=f, url=url: f(url), motivo)
+            azzera_finti()
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  1) STRIPE — Checkout (fase85): forma della richiesta e importi in cents interi
 # ══════════════════════════════════════════════════════════════════════════════
-class TestStripeCheckoutContratto(unittest.TestCase):
+class TestStripeCheckoutContratto(_ContrattiPuliti):
     def _provider(self, finto, valuta="eur"):
         return crea_provider_stripe("sk_test_x", "https://bookinvip.com/grazie.html",
                                     "https://bookinvip.com/annullato.html",
@@ -316,7 +849,7 @@ class TestStripeCheckoutContratto(unittest.TestCase):
 # ══════════════════════════════════════════════════════════════════════════════
 #  2) STRIPE — Connect transfer (fase101): Idempotency-Key = mai doppio bonifico
 # ══════════════════════════════════════════════════════════════════════════════
-class TestStripeConnectContratto(unittest.TestCase):
+class TestStripeConnectContratto(_ContrattiPuliti):
     def test_forma_transfer_con_idempotency_key(self):
         f = FintoStripeForm(risposta={"id": "tr_123"})
         p = crea_provider_connect("sk_test_x", fetch=f)
@@ -365,6 +898,44 @@ class TestStripeConnectContratto(unittest.TestCase):
             p = crea_provider_connect("sk_test_x", fetch=f)
             self.assertIsNone(p.trasferisci("acct_H1", 100, "EUR", "BVIP-X"), repr(risposta))
 
+    # ── destination charge (crea_link): la via in cui la NOSTRA commissione viaggia
+    #    dentro la stessa richiesta del pagamento dell'ospite. Non era coperta: qui
+    #    la forma esatta, e la prova che gli importi storti non partono MAI.
+    def test_forma_destination_charge_con_application_fee(self):
+        f = FintoStripeForm()
+        p = crea_provider_stripe_connect("sk_test_x",
+                                         success_url="https://bookinvip.com/grazie.html",
+                                         cancel_url="https://bookinvip.com/annullato.html",
+                                         fetch=f)
+        self.assertEqual(p.crea_link({"prezzo_guest_cents": 30000,
+                                      "commissione_cents": 3000,
+                                      "host_account": "acct_H1", "valuta": "EUR",
+                                      "riferimento": "BVIP-AAAA"}),
+                         "https://checkout.stripe.com/c/pay/cs_test_1")
+        c = f.ultima["campi"]
+        self.assertEqual(c["line_items[0][price_data][unit_amount]"], "30000")
+        self.assertEqual(c["line_items[0][price_data][currency]"], "eur")
+        self.assertEqual(c["payment_intent_data[application_fee_amount]"], "3000")
+        self.assertEqual(c["payment_intent_data[transfer_data][destination]"], "acct_H1")
+        self.assertEqual(c["client_reference_id"], "BVIP-AAAA")
+        self.assertEqual(f.ultima["url"], "https://api.stripe.com/v1/checkout/sessions")
+
+    def test_commissioni_e_importi_storti_non_partono(self):
+        """Fee negativa, fee >= lordo, importi non interi: nessuna richiesta a Stripe.
+        Se un domani la guardia di `costruisci_params` cadesse, il finto severo boccia
+        comunque la richiesta e `tearDown` fa rosso: doppia rete."""
+        for lordo, fee in ((30000, -1), (30000, 30000), (30000, 40000), (30000, 12.5),
+                           (0, 0), (-30000, 100), (30000, True), (12.5, 100)):
+            f = FintoStripeForm()
+            p = crea_provider_stripe_connect("sk_test_x", fetch=f)
+            self.assertIsNone(p.crea_link({"prezzo_guest_cents": lordo,
+                                           "commissione_cents": fee,
+                                           "host_account": "acct_H1", "valuta": "EUR",
+                                           "riferimento": "BVIP-X"}),
+                              "(%r,%r) ha prodotto un link" % (lordo, fee))
+            self.assertEqual(f.richieste, [],
+                             "(%r,%r) ha chiamato Stripe" % (lordo, fee))
+
     def test_stripe_500_sul_transfer_non_solleva(self):
         f = FintoStripeForm(guasto=urllib.error.HTTPError(
             "https://api.stripe.com", 500, "boom", {}, None))
@@ -376,7 +947,7 @@ class TestStripeConnectContratto(unittest.TestCase):
 # ══════════════════════════════════════════════════════════════════════════════
 #  3) STRIPE — Carta off-session (fase183)
 # ══════════════════════════════════════════════════════════════════════════════
-class TestStripeCartaContratto(unittest.TestCase):
+class TestStripeCartaContratto(_ContrattiPuliti):
     def _p(self, finto):
         return crea_provider_carta("sk_test_x", fetch=finto)
 
@@ -462,7 +1033,7 @@ class TestStripeCartaContratto(unittest.TestCase):
 # ══════════════════════════════════════════════════════════════════════════════
 #  4) EMAIL SMTP (fase86)
 # ══════════════════════════════════════════════════════════════════════════════
-class TestEmailContratto(unittest.TestCase):
+class TestEmailContratto(_ContrattiPuliti):
     def _prov(self, send, tentativi=2):
         self.pause = []
         return ProviderEmail("smtp.test", 587, "u", "p", "no-reply@bookinvip.com",
@@ -568,7 +1139,7 @@ def _post(testo="Nuova casa a Roma"):
                 link="https://bookinvip.com/alloggio/casa-1")
 
 
-class TestCanaliContratto(unittest.TestCase):
+class TestCanaliContratto(_ContrattiPuliti):
     TOK = "7891234:AAH-segretissimo-token-bot"
 
     def test_telegram_forma_chiamata(self):
@@ -705,7 +1276,7 @@ class TestCanaliContratto(unittest.TestCase):
         self.assertEqual(buono.visti, ["host@x.it"])
 
 
-class TestPubblicaVideoContratto(unittest.TestCase):
+class TestPubblicaVideoContratto(_ContrattiPuliti):
     """collaudi/pubblica_video.py: script di pubblicazione video (Telegram/Facebook)."""
 
     @classmethod
@@ -770,7 +1341,7 @@ class TestPubblicaVideoContratto(unittest.TestCase):
 # ══════════════════════════════════════════════════════════════════════════════
 #  6) CAMBIO VALUTA — Open Exchange Rates (fase99)
 # ══════════════════════════════════════════════════════════════════════════════
-class TestCambioValutaOXR(unittest.TestCase):
+class TestCambioValutaOXR(_ContrattiPuliti):
     RATES = {"rates": {"EUR": 0.9, "GBP": 0.8, "JPY": 150.0}}
 
     def _prov(self, fetch, ttl=3600, t0=1000.0):
@@ -855,23 +1426,40 @@ class TestCambioValutaOXR(unittest.TestCase):
 # ══════════════════════════════════════════════════════════════════════════════
 #  7) GEOCODER Nominatim (fase166) + POI Overpass (fase175)
 # ══════════════════════════════════════════════════════════════════════════════
-class TestGeocoderContratto(unittest.TestCase):
+class _FintoNominatim(_FintoSevero):
+    """Nominatim SEVERO: ogni URL passa dalla policy (format=json, limit<=1, nessun
+    parametro inventato) prima di ricevere una risposta."""
+
+    servizio = "nominatim"
+
+    def __init__(self, risposta, registro=None):
+        super().__init__()
+        self._risposta = risposta
+        self._registro = registro if registro is not None else []
+
+    def __call__(self, url):
+        self.richieste.append(url)
+        self._registro.append(url)
+        _controlla_nominatim(self, url)
+        if isinstance(self._risposta, Exception):
+            raise self._risposta
+        return self._risposta(url) if callable(self._risposta) else self._risposta
+
+
+class TestGeocoderContratto(_ContrattiPuliti):
     def setUp(self):
+        super().setUp()
         self.d = tempfile.mkdtemp()
         self.db = os.path.join(self.d, "geo.db")
         self.chiamate = []
 
     def tearDown(self):
         shutil.rmtree(self.d, ignore_errors=True)
+        super().tearDown()
 
     def _geo(self, risposta):
-        def fetch(url):
-            self.chiamate.append(url)
-            if isinstance(risposta, Exception):
-                raise risposta
-            return risposta(url) if callable(risposta) else risposta
-
-        return crea_geocoder(self.db, fetch=fetch)
+        return crea_geocoder(self.db,
+                             fetch=_FintoNominatim(risposta, registro=self.chiamate))
 
     def _righe(self, tabella="geocache"):
         con = sqlite3.connect(self.db)
@@ -984,25 +1572,48 @@ class TestGeocoderContratto(unittest.TestCase):
                          "errore di rete cache-ato come 'nessun quartiere'")
 
 
-class TestPOIContratto(unittest.TestCase):
+class _FintoOverpass(_FintoSevero):
+    """Overpass SEVERO: la query deve essere sintatticamente completa (out:json, around,
+    ';' finale) o il servizio vero risponde 400 'parse error'."""
+
+    servizio = "overpass"
+
+    def __init__(self, risposta, registro=None):
+        super().__init__()
+        self._risposta = risposta
+        self._registro = registro if registro is not None else []
+
+    def __call__(self, url):
+        self.richieste.append(url)
+        self._registro.append(url)
+        e = self._esigi
+        e(isinstance(url, str) and url.startswith("https://"), "URL non https: %r" % (url,))
+        q = dict(parse_qsl(urlsplit(url).query)).get("data", "")
+        e(q != "", "query Overpass assente (parametro data)")
+        e(q.lstrip().startswith("[out:json]"), "manca [out:json]: risposta XML inutilizzabile")
+        e("around:" in q, "query senza raggio 'around': scaricherebbe il pianeta")
+        e(q.rstrip().endswith(";"), "query non terminata da ';': parse error")
+        if isinstance(self._risposta, Exception):
+            raise self._risposta
+        return self._risposta
+
+
+class TestPOIContratto(_ContrattiPuliti):
     LAT, LON = 41_902_784, 12_496_366
 
     def setUp(self):
+        super().setUp()
         self.d = tempfile.mkdtemp()
         self.db = os.path.join(self.d, "poi.db")
         self.chiamate = []
 
     def tearDown(self):
         shutil.rmtree(self.d, ignore_errors=True)
+        super().tearDown()
 
     def _prov(self, risposta):
-        def fetch(url):
-            self.chiamate.append(url)
-            if isinstance(risposta, Exception):
-                raise risposta
-            return risposta
-
-        return crea_provider_poi(self.db, fetch=fetch)
+        return crea_provider_poi(self.db,
+                                 fetch=_FintoOverpass(risposta, registro=self.chiamate))
 
     def _righe(self):
         con = sqlite3.connect(self.db)
@@ -1051,7 +1662,7 @@ class TestPOIContratto(unittest.TestCase):
 # ══════════════════════════════════════════════════════════════════════════════
 #  8) AI (fase164 pool + fase165 adattatori)
 # ══════════════════════════════════════════════════════════════════════════════
-class TestAIContratto(unittest.TestCase):
+class TestAIContratto(_ContrattiPuliti):
     def test_groq_forma_richiesta(self):
         f = FintoHttpAI([(200, {"choices": [{"message": {"content": " ciao "}}]})])
         a = AdattatoreGroq("gsk_segreto", modello="llama-3.1-8b-instant", fetch=f)
@@ -1175,11 +1786,12 @@ class TestAIContratto(unittest.TestCase):
 # ══════════════════════════════════════════════════════════════════════════════
 #  9) INTEGRAZIONE VERA: API -> SERVIZIO TERZO -> DATABASE (riaperto dal disco)
 # ══════════════════════════════════════════════════════════════════════════════
-class _BaseIntegrazione(unittest.TestCase):
+class _BaseIntegrazione(_ContrattiPuliti):
     """Sistema vero su FILE, servizi terzi con finti severi. Dopo ogni chiamata si riapre
     il database con sqlite3 e si guarda la riga: la risposta HTTP non e' una prova."""
 
     def setUp(self):
+        super().setUp()
         self.d = tempfile.mkdtemp(prefix="integr_servizi_")
         p = lambda n: os.path.join(self.d, n)                            # noqa: E731
         self.percorsi = {"pendenti": p("pend.db"), "payout": p("payout.db"),
@@ -1213,17 +1825,19 @@ class _BaseIntegrazione(unittest.TestCase):
         self.sis.email_provider._send = lambda d, o, h: (self.email.append((d, o, h))
                                                          or True)
         self.nominatim = []
-        self.sis.geocoder = crea_geocoder(self.percorsi["geocache"],
-                                          fetch=self._finto_nominatim)
+        self.sis.geocoder = crea_geocoder(
+            self.percorsi["geocache"],
+            fetch=_FintoNominatim(self._risposta_nominatim, registro=self.nominatim))
         self.r = crea_router(self.sis, host_key="hk", admin_key="ak",
                              base_url="https://bookinvip.com")
 
     def tearDown(self):
         shutil.rmtree(self.d, ignore_errors=True)
+        super().tearDown()
 
-    def _finto_nominatim(self, url):
+    @staticmethod
+    def _risposta_nominatim(url):
         """Nominatim finto: /search -> coordinate, /reverse -> quartiere."""
-        self.nominatim.append(url)
         if "/reverse" in url:
             return {"address": {"suburb": "Centro"}}
         return [{"lat": "41.902784", "lon": "12.496366"}]
@@ -1235,6 +1849,28 @@ class _BaseIntegrazione(unittest.TestCase):
     def g(self, m, path, corpo=None, headers=None):
         return self.r.gestisci(m, path, {}, json.dumps(corpo) if corpo is not None else None,
                                headers or {})
+
+    def attendi_email(self, dest, quante=1, secondi=5.0):
+        """Le email partono su un THREAD daemon (l'SMTP non deve rallentare i soldi):
+        leggere `self.email` subito dopo la chiamata sarebbe una GARA. Qui si attende
+        l'effetto, con un tetto: se non arriva, il test fallisce con un messaggio chiaro."""
+        scadenza = time.time() + secondi
+        while time.time() < scadenza:
+            trovate = [(o, h) for d, o, h in list(self.email) if d == dest]
+            if len(trovate) >= quante:
+                return trovate
+            time.sleep(0.01)
+        trovate = [(o, h) for d, o, h in list(self.email) if d == dest]
+        self.fail("attese %d email per %s, arrivate %d (%s)"
+                  % (quante, dest, len(trovate), [o for o, _ in trovate]))
+
+    def nessuna_email_per(self, dest, secondi=0.5):
+        """Prova NEGATIVA: si aspetta comunque, altrimenti si proverebbe solo che il thread
+        non ha ancora finito."""
+        scadenza = time.time() + secondi
+        while time.time() < scadenza:
+            time.sleep(0.01)
+        return [(o, h) for d, o, h in list(self.email) if d == dest]
 
     def sql(self, quale, query, args=()):
         """RIAPRE il database dal disco (nuova connessione) e legge davvero."""
@@ -1323,10 +1959,10 @@ class TestApiDbStripeCheckout(_BaseIntegrazione):
         NESSUN denaro deve muoversi — niente incasso a giornale, niente bonifico all'host,
         niente link di pagamento inventato.
 
-        NB (segnalato al coordinatore): oggi il book DEGRADA in 'confermata senza pagamento
-        online' (il ramo pensato per Stripe NON configurato). Qui si sorveglia cio' che deve
-        valere in ogni caso — soprattutto che l'host non venga pagato per un incasso mai
-        avvenuto — senza congelare nel test il comportamento di degrado."""
+        Il comportamento di degrado (oggi: conferma senza pagamento) e' inchiodato a parte
+        in `TestDifettoChiusoStripeGiuAlBook`, che spiega perche' e' un difetto. QUI si
+        sorveglia solo cio' che deve valere in OGNI caso — oggi e dopo la correzione —
+        soprattutto che l'host non venga pagato per un incasso mai avvenuto."""
         self.registra_host()
         self.pubblica()
         self.sis.stripe._fetch = FintoStripeForm(guasto=urllib.error.HTTPError(
@@ -1337,7 +1973,11 @@ class TestApiDbStripeCheckout(_BaseIntegrazione):
         self.assertEqual(s, 200, q)
         s, b = self.g("POST", "/api/concierge/book",
                       {"quote_token": q["quote_token"], "email": "ospite@x.it"})
-        self.assertLess(s, 500, "un 500 di Stripe non deve diventare un 500 nostro")
+        # un 500 di Stripe non puo' diventare un 500 NOSTRO non gestito. Le uniche risposte
+        # sensate sono: 201 (degrado di oggi), 409 (date perse nel frattempo) o 503
+        # 'pagamento_non_disponibile' (il fail-safe corretto, gia' presente sul su-richiesta).
+        self.assertIn(s, (201, 409, 503),
+                      "risposta ingestibile con Stripe giu': %s %s" % (s, b))
         self.assertFalse(b.get("payment_url"), "link di pagamento inventato senza Stripe")
         # NIENTE denaro: nessun incasso a giornale, nessun bonifico in partenza
         self.assertEqual(self.sql("finanza", "SELECT * FROM libro_giornale"), [],
@@ -1355,6 +1995,68 @@ class TestApiDbStripeCheckout(_BaseIntegrazione):
                          "BONIFICO ALL'HOST su una prenotazione mai pagata")
         self.assertEqual(self.sql("finanza",
                                   "SELECT * FROM libro_giornale WHERE tipo='payout_host'"), [])
+
+
+class TestDifettoChiusoStripeGiuAlBook(_BaseIntegrazione):
+    """⚠️ DIFETTO APERTO — misurato il 2026-07-29, NON corretto (non tocco la produzione).
+
+    COSA SUCCEDE OGGI se Stripe risponde 500 mentre un ospite prenota in instant-book:
+      · `fase59_concierge.book` chiama `_link_isolato(...)`, che ISOLA l'errore e ritorna
+        None; subito dopo scrive comunque `corpo["stato"] = "confermata"`.
+      · L'ospite riceve 201 con un `voucher_token` VALIDO e uno `smart_pass` firmato
+        (= il PIN di check-in), ma NESSUN `payment_url`: non gli viene mai chiesto di pagare.
+      · Le date restano BLOCCATE (una seconda quote sulle stesse notti da' 409).
+      · La tabella `pendenti` resta VUOTA: non esiste un pagamento in attesa, quindi lo
+        sweeper dei pagamenti non liberera' mai quella stanza e la riconciliazione non ha
+        nemmeno un appiglio per accorgersene.
+      → soggiorno confermato, camera bloccata, zero incasso, nessuna traccia da cui ripartire.
+
+    PERCHE' E' UN DIFETTO E NON UNA SCELTA: lo stesso identico caso, sul ramo SU-RICHIESTA
+    (fase83_server, approvazione host), ha gia' il fail-safe giusto — «niente conferma senza
+    un link di pagamento valido» -> 503 `pagamento_non_disponibile`. L'instant-book non ce
+    l'ha. Il codice non riesce a distinguere «Stripe non configurato» (modo diretto, legittimo)
+    da «Stripe configurato ma irraggiungibile» (incidente): tratta il secondo come il primo.
+
+    QUESTO TEST NON APPROVA IL COMPORTAMENTO: lo INCHIODA. Il giorno in cui qualcuno mette
+    il fail-safe anche qui, questo test diventa ROSSO e chi corregge lo trova e lo aggiorna
+    (invece di scoprire per caso che c'era un buco). Le righe che valgono in OGNI caso — che
+    nessun denaro si muova — sono asserite a parte, sotto."""
+
+    def test_difetto_CHIUSO_gateway_giu_non_conferma_e_libera_la_stanza(self):
+        """✅ CHIUSO IL 2026-07-29 dal coordinatore, subito dopo questa segnalazione.
+        Il fail-safe che mancava all'instant-book c'e': gateway CONFIGURATO ma irraggiungibile
+        -> 503 `pagamento_non_disponibile`, blocco RILASCIATO, nessun voucher, nessun PIN.
+        (Guardia dedicata + prova del rosso: test_stripe_giu_al_book.py.)"""
+        self.registra_host()
+        self.pubblica()
+        self.sis.stripe._fetch = FintoStripeForm(guasto=urllib.error.HTTPError(
+            "https://api.stripe.com", 500, "boom", {}, None))
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": "casa-1", "check_in": _giorno(1),
+                       "check_out": _giorno(3), "party": 2})
+        self.assertEqual(s, 200, q)
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "ospite@x.it"})
+        # ── il comportamento CORRETTO, inchiodato riga per riga ──
+        self.assertEqual(s, 503, "senza pagamento non si conferma: %s" % b)
+        self.assertEqual(b.get("errore"), "pagamento_non_disponibile")
+        self.assertNotEqual(b.get("stato"), "confermata")
+        self.assertFalse(b.get("voucher_token"), "voucher su un soggiorno mai pagato")
+        self.assertFalse(b.get("smart_pass"), "PIN di check-in su un soggiorno mai pagato")
+        self.assertEqual(self.sql("pendenti", "SELECT * FROM pendenti"), [],
+                         "nessun pendente: giusto, la prenotazione non e' mai nata")
+        # e soprattutto: la camera TORNA VENDIBILE (prima restava fuori mercato per sempre)
+        s2, _ = self.g("POST", "/api/concierge/quote",
+                       {"alloggio_id": "casa-1", "check_in": _giorno(1),
+                        "check_out": _giorno(3), "party": 2})
+        self.assertEqual(s2, 200, "la stanza e' rimasta bloccata da una prenotazione mai nata")
+        # ── e cio' che deve valere COMUNQUE, prima e dopo la correzione ──
+        self.assertEqual(self.sql("finanza", "SELECT * FROM libro_giornale"), [],
+                         "incasso a giornale senza che nessuno abbia pagato")
+        self.assertEqual(self.sql("payout", "SELECT * FROM payout WHERE stato IN "
+                                            "('in_transito','pagato')"), [])
+        self.assertEqual([r for r in self.connect.richieste
+                          if r["url"].endswith("/transfers")], [])
 
 
 class TestApiDbWebhookFirmato(_BaseIntegrazione):
@@ -1428,6 +2130,32 @@ class TestApiDbWebhookFirmato(_BaseIntegrazione):
         s, _ = self.webhook(self.rif, ts=int(time.time()) - 3600)
         self.assertEqual(s, 400)
         self.assertEqual(self._stato_disco(), "in_attesa")
+
+    def test_firma_dal_futuro_rifiutata(self):
+        """Post-datare la firma allargherebbe a piacere la finestra di replay: la tolleranza
+        vale in ENTRAMBE le direzioni. Al bordo (+/-5 min) invece la firma resta valida,
+        altrimenti un orologio leggermente sfasato ci farebbe perdere i pagamenti veri."""
+        s, _ = self.webhook(self.rif, ts=int(time.time()) + 3600)
+        self.assertEqual(s, 400)
+        self.assertEqual(self._stato_disco(), "in_attesa")
+        s, out = self.webhook(self.rif, ts=int(time.time()) - 120)   # sfasamento tollerato
+        self.assertEqual((s, out.get("ricevuto")), (200, True))
+        self.assertEqual(self._stato_disco(), "pagato")
+
+    def test_evento_di_altro_tipo_non_muove_un_centesimo(self):
+        """Stripe manda decine di tipi di evento: solo checkout.session.completed incassa."""
+        for tipo in ("payment_intent.created", "charge.succeeded", "customer.created",
+                     "checkout.session.expired"):
+            pl = json.dumps({"type": tipo,
+                             "data": {"object": {"id": "cs_x",
+                                                 "metadata": {"riferimento": self.rif}}}})
+            s, _ = self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
+                                   {"Stripe-Signature": firma_di_test(pl, WH,
+                                                                      int(time.time()))})
+            self.assertLess(s, 500, tipo)
+            self.assertEqual(self._stato_disco(), "in_attesa", "%s ha confermato" % tipo)
+        self.assertEqual(self.sql("finanza", "SELECT * FROM libro_giornale"), [])
+        self.assertEqual(self.sql("payout", "SELECT * FROM payout WHERE stato='maturato'"), [])
 
     def test_header_firma_assente_o_spazzatura(self):
         pl = json.dumps({"type": "checkout.session.completed",
@@ -1521,6 +2249,21 @@ class TestApiDbConnectPayout(_BaseIntegrazione):
         self.assertEqual(len(self.sql("payout", "SELECT * FROM payout WHERE prenotazione_id=?",
                                       (self.rif,))), 1)
 
+    def test_transfer_nella_valuta_incassata_e_mai_piu_del_netto(self):
+        """Il bonifico all'host deve partire nella STESSA valuta incassata dall'ospite e non
+        superare MAI il netto host: una valuta diversa qui = perdita secca sul cambio."""
+        self.g("POST", "/api/garanzia/conferma", {"voucher_token": self.b["voucher_token"]})
+        tr = [r for r in self.connect.richieste if r["url"].endswith("/transfers")]
+        self.assertEqual(len(tr), 1)
+        incassato = self.sql("finanza",
+                             "SELECT * FROM libro_giornale WHERE tipo='incasso'")[0]
+        self.assertEqual(str(incassato["valuta"]).upper(), "EUR")   # oracolo indipendente
+        self.assertEqual(tr[0]["campi"]["currency"], str(incassato["valuta"]).lower())
+        netto = int(self.b["netto_host_cents"])
+        self.assertEqual(int(tr[0]["campi"]["amount"]), netto)
+        self.assertLess(netto, int(self.b["totale_cents"]),
+                        "il netto host non puo' essere l'intero incasso: manca la commissione")
+
     def test_host_senza_conto_stripe_nessun_transfer_ma_payout_tracciato(self):
         self.sis.registro_host.imposta_stripe_account(self.host_id, "")
         s, _ = self.g("POST", "/api/garanzia/conferma",
@@ -1550,7 +2293,7 @@ class TestApiDbCartaHost(_BaseIntegrazione):
         # e i due GET a Stripe sono partiti davvero (sessione + setup_intent)
         self.assertEqual([r["metodo"] for r in self.carta.richieste], ["GET", "GET"])
         for riga in self.sql("registro", "SELECT * FROM host WHERE host_id=?", (hid,)):
-            for k, v in riga.items():
+            for _k, v in riga.items():
                 self.assertNotIn("4242", str(v), "numero carta nel nostro database")
 
     def test_link_carta_dal_pannello_host(self):
@@ -1614,6 +2357,112 @@ class TestApiDbGeocoder(_BaseIntegrazione):
         self.assertEqual(s, 200)
         self.assertIn(det.get("lat_micro", 0), (0, None),
                       "coordinate inventate con Nominatim giu'")
+
+
+class TestApiDbEmailSMTP(_BaseIntegrazione):
+    """L'ultimo anello della catena: API -> database -> SMTP. La lingua che l'ospite sceglie
+    al book deve arrivare INTATTA fino all'oggetto della email che il server consegna."""
+
+    def _prenota_in(self, lingua, email):
+        self.registra_host()
+        self.pubblica()
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": "casa-1", "check_in": _giorno(1),
+                       "check_out": _giorno(3), "party": 2})
+        self.assertEqual(s, 200, q)
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": email, "lang": lingua})
+        self.assertEqual(s, 201, b)
+        self.attendi_email(email)              # il voucher: aspetta il thread, poi azzera
+        del self.email[:]                      # guardiamo solo cio' che parte DOPO il pagamento
+        self.assertEqual(self.webhook(b["riferimento"])[0], 200)
+        return self.attendi_email(email)[-1]
+
+    def test_ospite_giapponese_riceve_la_conferma_in_giapponese(self):
+        oggetto_ric, corpo = self._prenota_in("ja", "ospite@jp.example")
+        self.assertEqual(oggetto_ric, T("pc_ogg", "ja"))
+        self.assertIn(T("pc_titolo", "ja"), corpo)
+        self.assertNotIn(T("pc_titolo", "it"), corpo)
+
+    def test_lingua_sconosciuta_ripiega_sull_inglese_mai_sull_italiano(self):
+        """«Non so che lingua parli» non vuol dire «italiano»: la piattaforma e' globale."""
+        oggetto_ric, corpo = self._prenota_in("xx", "ospite@nowhere.example")
+        self.assertEqual(oggetto_ric, T("pc_ogg", "en"))
+        self.assertIn(T("pc_titolo", "en"), corpo)
+        self.assertNotIn(T("pc_titolo", "it"), corpo)
+
+    def test_smtp_morto_non_perde_il_pagamento(self):
+        """Se il server di posta e' giu' al momento del webhook, il PAGAMENTO deve restare
+        registrato: l'email e' best-effort, il denaro no. Prova sul DISCO riaperto.
+
+        COSA VEDE (misurato rompendo il codice, non ipotizzato): il guasto e' iniettato al
+        livello piu' basso — la connessione SMTP — e sotto ci sono QUATTRO difese: il retry
+        del provider, il provider fail-safe, il thread daemon e — l'ultima, quella che conta
+        davvero — l'ORDINE: `_riasserisci_incasso` scrive il denaro PRIMA che l'email venga
+        tentata. Rimuovendo le prime tre il test resta verde (giustamente: i soldi sono gia'
+        a disco); rimuovendo anche l'ordine — email prima del ledger — diventa ROSSO. E'
+        quindi la guardia dell'invariante «prima il denaro, poi la posta»."""
+        self.registra_host()
+        self.pubblica()
+        q, b = self.prenota()
+        rif = b["riferimento"]
+        tentativi = []
+
+        def esplode(dest, ogg, html):
+            tentativi.append(dest)
+            raise ConnectionResetError("SMTP chiuso")
+
+        self.attendi_email("ospite@x.it")      # il voucher del book e' gia' partito
+        del self.email[:]
+        self.sis.email_provider._send = esplode
+        s, out = self.webhook(rif)
+        self.assertEqual((s, out.get("ricevuto")), (200, True),
+                         "SMTP giu' ha fatto fallire il webhook: Stripe ritenterebbe")
+        righe = self.sql("pendenti", "SELECT stato FROM pendenti WHERE riferimento=?", (rif,))
+        self.assertEqual(righe[0]["stato"], "pagato")
+        inc = self.sql("finanza", "SELECT * FROM libro_giornale WHERE tipo='incasso'")
+        self.assertEqual(len(inc), 1)
+        self.assertEqual(inc[0]["importo_cents"], int(b["totale_cents"]))
+        self.assertEqual(self.nessuna_email_per("ospite@x.it"), [],
+                         "email data per consegnata con l'SMTP giu'")
+        self.assertTrue(tentativi, "il guasto SMTP non e' stato nemmeno raggiunto: il test "
+                                   "non sta provando l'isolamento che dice di provare")
+
+    def test_email_al_destinatario_esatto_e_senza_a_capo(self):
+        """Nessuna email deve partire verso un destinatario con un a-capo (header injection)
+        ne' con un oggetto multilinea: il choke-point vale sull'intero giro reale."""
+        self.registra_host()
+        self.pubblica()
+        q, b = self.prenota(email="ospite@x.it")
+        self.webhook(b["riferimento"])
+        self.attendi_email("ospite@x.it", quante=2)
+        for dest, ogg, _h in list(self.email):
+            self.assertNotIn("\n", dest)
+            self.assertNotIn("\r", dest)
+            self.assertNotIn("\n", ogg)
+            self.assertNotIn("\r", ogg)
+            self.assertIn("@", dest)
+
+
+class TestApiDbSegretiFuoriDaiLog(_BaseIntegrazione):
+    """I segreti (chiave Stripe, segreto del webhook) attraversano tutto il giro: non devono
+    comparire in NESSUNA riga di log, nemmeno dentro un traceback."""
+
+    def test_giro_completo_senza_segreti_nei_log(self):
+        with _CatturaLog() as log:                      # root: tutti i logger del progetto
+            self.registra_host()
+            self.pubblica()
+            q, b = self.prenota()
+            self.webhook(b["riferimento"])
+            self.webhook(b["riferimento"], firma_valida=False)   # anche il caso d'errore
+            self.sis.registro_host.imposta_stripe_account(self.host_id, "acct_HOST1")
+            self.g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
+        testo = log.come_testo()
+        self.assertNotIn("sk_test_x", testo, "CHIAVE STRIPE NEI LOG")
+        self.assertNotIn(WH, testo, "SEGRETO DEL WEBHOOK NEI LOG")
+        self.assertNotIn("whsec_", testo)
+        # il test sa distinguere: se i segreti ci fossero, li vedrebbe
+        self.assertIn("sk_test_x", self.stripe.ultima["headers"]["Authorization"])
 
 
 if __name__ == "__main__":

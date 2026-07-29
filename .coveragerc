@@ -1,7 +1,12 @@
 # Copertura del codice — LIVELLO 2 (righe E rami).
-# Si misura SOLO il prodotto vivo: main_casavip.py + i moduli fase*.py che entrano
-# nell'immagine Docker. Restano fuori i test, gli strumenti d'officina (collaudi/), il
-# vecchio stack Mango/Tavola VIP (fase13-56, NON e' il prodotto) e l'archivio storico.
+# Si misura SOLO il prodotto vivo: main_casavip.py + i moduli fase*.py raggiungibili
+# dall'avvio. Restano fuori i test, gli strumenti d'officina (collaudi/) e l'archivio.
+# PRECISAZIONE ONESTA: il vecchio stack Mango/Tavola VIP (fase13-56) resta fuori dalla
+# misura perche' e' CODICE MORTO — nessun modulo misurato lo importa ne' lo nomina —
+# NON perche' resti fuori dall'immagine: `COPY fase*.py` nel Dockerfile.casavip ce lo
+# porta dentro comunque (zavorra, non prodotto). Se un domani tornasse vivo, dovrebbe
+# tornare anche sotto misura: lo sorveglia test_copertura_onesta.py, che confronta la
+# lista omit qui sotto con la chiusura degli import di produzione.
 [run]
 branch = True
 source = .

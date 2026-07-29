@@ -18,7 +18,12 @@ pubblici, PII/dati) si dichiara QUALE test lo blocca e DOVE vive. Per ogni voce 
   (c) quel test contiene almeno UNA asserzione vera (non e' un guscio vuoto, un `pass`,
       un test disattivato con @unittest.skip o @unittest.expectedFailure);
   (d) quel test vive dentro una unittest.TestCase (altrimenti non verrebbe mai eseguito:
-      un metodo `test_...` in una classe qualsiasi e' codice morto che sembra una guardia).
+      un metodo `test_...` in una classe qualsiasi e' codice morto che sembra una guardia);
+  (e) il modulo IMPORTA e quel test e' fra quelli che il runner carica davvero. I punti
+      (a)-(d) leggono il TESTO: non possono vedere un file che ha smesso di importare
+      (una dipendenza rinominata, un `from fase... import X` che non esiste piu'). In quel
+      caso unittest sostituisce l'intero modulo con un `_FailedTest`: la guardia non gira
+      piu', e sull'analisi statica sembra tutto a posto.
 
 VISTO ROSSO (regola aurea - fatto davvero, non dichiarato)
 ----------------------------------------------------------
@@ -28,8 +33,25 @@ in `test_cancella_dopo_conferma_escrow_non_supera_incasso_DISABILITATO`: questo 
 diventato ROSSO su `test_ogni_guardia_dichiarata_esiste_ancora` con il messaggio
 "MONEY-01 ... test SPARITO", poi il nome e' stato ripristinato e il verde e' tornato.
 La stessa prova e' automatizzata e permanente in `TestIlControlloSaFallire`, che costruisce
-tre guardie FINTE (file assente / test assente / guscio senza asserzioni) e pretende che
-ognuno dei tre controlli le BOCCI: se qualcuno indebolisse i controlli, quei test cadono.
+guardie FINTE (file assente / test assente / guscio senza asserzioni / modulo che non
+importa) e pretende che ognuno dei controlli le BOCCI: se qualcuno indebolisse i controlli,
+quei test cadono.
+
+Il 2026-07-29 tre voci sono state verificate FINO IN FONDO rimettendo il bug storico nel
+prodotto e controllando che la guardia dichiarata diventasse rossa (poi il file di
+produzione e' stato ripristinato byte per byte, sha256 confrontato prima e dopo):
+  - SEC-08   `fase83_server._decidi_richiesta` riportata alla forma fail-open
+             (`owner` letto solo dal record, salto del check se vuoto)
+             -> test_idor_richieste: 200 invece di 403, ROSSO;
+  - DATI-11  saltata la chiamata a `_blinda_valuta` in `_host_pubblica`
+             -> test_valuta_annuncio_bloccata: 'EUR' invece di 'JPY', ROSSO;
+  - MONEY-26 `_transazioni_bloccate` che risponde sempre False
+             -> test_blocco_globale: book 400 invece di 503, ROSSO.
+E il controllo (e) e' stato visto rosso sul suo guasto specifico: aggiungendo un
+`from fase_sparita_dopo_refactor import X` a `test_head_http.py`, `TestGuardieCaricabili-
+Davvero` e' diventata ROSSA ("CRASH-08 ... non e' fra i test che il runner carica") mentre
+`TestGuardieVive` (i controlli sul TESTO) e' rimasta VERDE: e' esattamente la differenza
+che (e) esiste per coprire.
 
 REGOLA DI PROCESSO (obbligatoria, come il REGISTRO_INGEGNERIA.md)
 -----------------------------------------------------------------
@@ -46,6 +68,7 @@ funzione che proteggeva non esiste piu' nel prodotto, e allora si scrive perche'
 """
 import ast
 import os
+import sys
 import unittest
 
 RADICE = os.path.dirname(os.path.abspath(__file__))
@@ -737,6 +760,33 @@ def _percorso(voce):
     return os.path.join(RADICE, voce["file"])
 
 
+def id_caricati(nome_modulo):
+    """Gli id dei test che il RUNNER carica davvero da quel modulo. Un modulo che non
+    importa piu' non solleva: unittest lo sostituisce con un `_FailedTest`, quindi il
+    nome della guardia semplicemente NON compare in questo insieme."""
+    if nome_modulo in _CACHE_ID:
+        return _CACHE_ID[nome_modulo]
+    trovati = set()
+
+    def raccogli(suite):
+        for elemento in suite:
+            if isinstance(elemento, unittest.TestSuite):
+                raccogli(elemento)
+            else:
+                trovati.add(elemento.id())
+
+    try:
+        raccogli(unittest.defaultTestLoader.loadTestsFromName(nome_modulo))
+    except Exception as errore:            # modulo introvabile: nessun test caricato
+        trovati = set()
+        _CACHE_ID[nome_modulo + "!errore"] = repr(errore)
+    _CACHE_ID[nome_modulo] = trovati
+    return trovati
+
+
+_CACHE_ID = {}  # type: dict
+
+
 def controlla_voce(voce):
     """Ritorna la lista dei problemi trovati (vuota = voce sana)."""
     guai = []
@@ -881,6 +931,33 @@ class TestGuardieVive(unittest.TestCase):
                          "REGISTRO ANTI-REGRESSIONE VIOLATO:\n  " + "\n  ".join(guai))
 
 
+class TestGuardieCaricabiliDavvero(unittest.TestCase):
+    """(e) LA PROVA CHE MANCA ALL'ANALISI STATICA: il modulo importa e la guardia e'
+    fra i test che il runner carica. Un `from fase199_x import Y` rimasto indietro dopo
+    un rinomino rende INTERO il file un `_FailedTest`: nel testo la guardia c'e' ancora,
+    nella suite non gira piu'."""
+
+    def test_ogni_modulo_di_guardia_importa_ancora(self):
+        rotti = []
+        for nome in sorted({v["file"] for v in REGISTRO}):
+            modulo = nome[:-3]
+            if not id_caricati(modulo):
+                rotti.append("%s: nessun test caricato (%s)"
+                             % (nome, _CACHE_ID.get(modulo + "!errore", "import fallito")))
+        self.assertEqual(rotti, [],
+                         "MODULI DI GUARDIA CHE NON IMPORTANO PIU':\n  " + "\n  ".join(rotti))
+
+    def test_ogni_guardia_dichiarata_e_fra_i_test_caricati(self):
+        assenti = []
+        for voce in REGISTRO:
+            ids = id_caricati(voce["file"][:-3])
+            if not any(i.endswith("." + voce["test"]) for i in ids):
+                assenti.append("%s: %s::%s non e' fra i test che il runner carica"
+                               % (voce["codice"], voce["file"], voce["test"]))
+        self.assertEqual(assenti, [],
+                         "GUARDIE CHE NON GIRANO PIU':\n  " + "\n  ".join(assenti))
+
+
 class TestIlControlloSaFallire(unittest.TestCase):
     """VISTO ROSSO PERMANENTE (regola aurea: un controllo che non puo' fallire e' un
     ornamento). Si costruiscono guardie FINTE guaste e si pretende che i controlli le
@@ -987,6 +1064,47 @@ class TestIlControlloSaFallire(unittest.TestCase):
                          "una classe che non deriva da TestCase non esegue nulla")
         self.assertTrue(_e_test_case(cl_vivo, per_nome),
                         "l'ereditarieta' indiretta da TestCase va riconosciuta")
+
+    def test_il_controllo_vede_il_modulo_che_non_importa_piu(self):
+        """Il guasto che l'AST NON puo' vedere: il file c'e', il testo della guardia c'e',
+        ma il modulo esplode all'import -> la guardia non gira. Il caricamento dal runner
+        deve accorgersene; l'analisi statica, sullo stesso file, dice 'tutto a posto'."""
+        self._scrivi("test_finta_rotta.py",
+                     "import unittest\n"
+                     "from fase_che_non_esiste_mai import Qualcosa\n"
+                     "class T(unittest.TestCase):\n"
+                     "    def test_guardia_viva(self):\n"
+                     + self._ASS)
+        sys.path.insert(0, self.dir)
+        self.addCleanup(lambda: sys.path.remove(self.dir)
+                        if self.dir in sys.path else None)
+        self.addCleanup(sys.modules.pop, "test_finta_rotta", None)
+        _CACHE_ID.pop("test_finta_rotta", None)
+        ids = id_caricati("test_finta_rotta")
+        self.assertFalse(any(i.endswith(".test_guardia_viva") for i in ids),
+                         "un modulo che non importa deve risultare SENZA la sua guardia")
+        # e l'analisi statica, sullo stesso file, non se ne accorge: e' il buco che (e) chiude
+        alb = albero_di(os.path.join(self.dir, "test_finta_rotta.py"))
+        fn, classe = trova_guardia(alb, "test_guardia_viva")
+        self.assertIsNotNone(fn, "l'AST vede la guardia: e' proprio questo il tranello")
+        self.assertIsNotNone(classe)
+        self.assertGreaterEqual(conta_asserzioni(fn), 1)
+
+    def test_il_controllo_non_grida_su_un_modulo_sano(self):
+        """Controprova (non-compiacenza): su un modulo che importa, la guardia si trova."""
+        self._scrivi("test_finta_sana.py",
+                     "import unittest\n"
+                     "class T(unittest.TestCase):\n"
+                     "    def test_guardia_viva(self):\n"
+                     + self._ASS)
+        sys.path.insert(0, self.dir)
+        self.addCleanup(lambda: sys.path.remove(self.dir)
+                        if self.dir in sys.path else None)
+        self.addCleanup(sys.modules.pop, "test_finta_sana", None)
+        _CACHE_ID.pop("test_finta_sana", None)
+        ids = id_caricati("test_finta_sana")
+        self.assertTrue(any(i.endswith(".test_guardia_viva") for i in ids),
+                        "falso allarme: una guardia sana deve risultare caricata")
 
     def test_controlla_voce_boccia_ognuno_dei_tre_guasti(self):
         """Il controllo completo, sulle tre rotture, deve dare tre bocciature diverse."""

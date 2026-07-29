@@ -46,6 +46,17 @@ def _pos(v: Any) -> int:
     return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else -1
 
 
+def _norm_valuta(v: Any) -> str:
+    """Sigla valuta NORMALIZZATA (senza spazi, maiuscola). DIFETTO CHIUSO 2026-07-29:
+    `_valuta()` valida DOPO lo strip (' eur ' passa) ma la riga si scriveva con
+    `valuta.upper()`, cioe' ' EUR ' — una chiave DIVERSA da 'EUR'. Il payout esisteva
+    ma diventava INVISIBILE: `riepilogo`/`da_pagare` lo raggruppavano sotto ' EUR ' e
+    `elenca(valuta='EUR')` non lo trovava -> nessun bonifico all'host e nessuna
+    compensazione penale possibile su quella riga. Ora scrittura e lettura normalizzano
+    allo stesso modo."""
+    return str(v).strip().upper()
+
+
 class PayoutDashboard:
     def __init__(self, conn_factory: Callable[[], sqlite3.Connection], *,
                  orologio: Optional[Callable[[], int]] = None) -> None:
@@ -83,7 +94,7 @@ class PayoutDashboard:
                 con.execute("INSERT OR IGNORE INTO payout (prenotazione_id, host_id, "
                             "minori, valuta, stato, ts) VALUES (?,?,?,?, 'maturato', ?)",
                             (str(prenotazione_id), str(host_id), int(minori),
-                             valuta.upper(), self._now()))
+                             _norm_valuta(valuta), self._now()))
             return True
         except Exception:
             logger.warning("registra_maturato fallita (ISOLATA)", exc_info=True)
@@ -104,7 +115,7 @@ class PayoutDashboard:
                 con.execute("INSERT OR IGNORE INTO payout (prenotazione_id, host_id, "
                             "minori, valuta, stato, ts) VALUES (?,?,?,?, 'in_attesa', ?)",
                             (str(prenotazione_id), str(host_id), int(minori),
-                             valuta.upper(), self._now()))
+                             _norm_valuta(valuta), self._now()))
             return True
         except Exception:
             logger.warning("registra_in_attesa fallita (ISOLATA)", exc_info=True)
@@ -249,7 +260,7 @@ class PayoutDashboard:
             par.append(stato)
         if isinstance(valuta, str) and valuta:
             sql += " AND valuta=?"
-            par.append(valuta.upper())
+            par.append(_norm_valuta(valuta))
         sql += " ORDER BY ts, prenotazione_id LIMIT ?"
         par.append(lim)
         con = self._apri()
@@ -310,7 +321,7 @@ class PayoutDashboard:
             con.close()
 
     def da_pagare(self, host_id: str, valuta: str) -> int:
-        rie = self.riepilogo(host_id).get(str(valuta).upper(), {})
+        rie = self.riepilogo(host_id).get(_norm_valuta(valuta), {})
         return rie.get("maturato", 0) + rie.get("in_transito", 0)
 
 

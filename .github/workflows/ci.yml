@@ -38,6 +38,13 @@ permissions:
 #    lint-severo  -> lint severo su codice gia' scritto: informativo, si legge il log
 #    zap          -> gira solo a schedule/manuale, non ad ogni commit
 #
+#  ATTENZIONE, distinzione che va detta e non intuita: "bloccante" qui vuol dire
+#  "il gate lo aspetta e il suo esito conta". Fra i bloccanti, w3c e' l'unico che
+#  NON BLOCCA SUI RILIEVI (il suo comando finisce con `|| true`, vedi la sua
+#  dichiarazione): resta nel gate perche' se il validatore stesso non gira il job
+#  e' rosso e il gate lo vede, ma un errore HTML da solo non ferma la build.
+#  Gli altri sette bloccano davvero sul contenuto.
+#
 #  >>> DA FARE A MANO DAL FONDATORE (io non ho accesso alle impostazioni di GitHub):
 #      Settings -> Branches -> Branch protection rule su "master" ->
 #      "Require status checks to pass before merging" -> aggiungere UN SOLO check:
@@ -78,8 +85,11 @@ jobs:
         with:
           python-version: '3.9'
           cache: pip
+      # `coverage` serve anche qui, non solo al job "copertura": test_pipeline_ci.py
+      # riproduce dal vivo, in una cartella sterile, il comando di soglia usato dal
+      # cricchetto e pretende di vederlo uscire diverso da zero sotto la soglia.
       - name: Dipendenze di test
-        run: pip install -r requirements.txt hypothesis pyyaml
+        run: pip install -r requirements.txt hypothesis pyyaml coverage
       - name: Suite completa
         run: python -m unittest discover -s . -p "test_*.py"
 
@@ -270,9 +280,24 @@ jobs:
   # ===== STRUMENTI ESTERNI: girano SOLO su Linux (Java/clang assenti su Windows) =====
 
   # W3C: validatore HTML5 ufficiale (Nu di W3C, via Java) su tutte le pagine servite.
-  # HTML in STRICT (blocca sugli errori HTML veri: al primo giro erano img src="" e <div>
-  # dentro <label>, ora corretti -> 0 errori HTML). CSS in REPORT-ONLY: il motore CSS del
-  # validatore e' datato e segnala a torto CSS validi e moderni (inset, text-wrap) -> non blocca.
+  #
+  # >>> DICHIARAZIONE: NON BLOCCA SUI RILIEVI <<<
+  # Il comando finisce con `|| true`: i rilievi restano nel log e non fanno fallire il job.
+  # NON e' una svista, ed e' gia' stato provato in entrambi i modi:
+  #   - 2026-07-23 (secondo giro) il job fu reso HTML-STRICT dopo aver confermato 0 errori
+  #     HTML veri (i due veri - `<img src="">` in index.html e un `<div>` dentro `<label>`
+  #     in host.html - erano stati corretti alla fonte);
+  #   - lo stesso giorno fu RIPORTATO a report-only: il Nu di W3C valida anche il CSS
+  #     *inline* dentro le pagine e il suo motore CSS e' datato, quindi falsa-positiva su
+  #     proprieta' valide e moderne (inset, text-wrap, background-clip, linear-gradient).
+  #     Irrigidirlo significherebbe rosso quotidiano su CSS corretto: gridare al lupo, che
+  #     e' il danno peggiore (si smette di guardare il rosso vero).
+  # Per irrigidirlo davvero servono due cose, non una: filtrare i messaggi del motore CSS
+  # (--ignore-re) e verificare il risultato su un giro vero. Finche' non e' fatto, questa
+  # dichiarazione deve restare qui: test_pipeline_ci.py la confronta col comando e va ROSSO
+  # se il commento dice una cosa e il codice ne fa un'altra.
+  # I guardiani che bloccano davvero sul contenuto sono gli altri sette (soldi, suite,
+  # copertura, mutazione, qualita, accessibilita, fuzzing).
   w3c:
     runs-on: ubuntu-latest
     steps:

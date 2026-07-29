@@ -205,7 +205,15 @@ class TestPrenota(unittest.TestCase):
         rb = proto.prenota({"quote_token": r.corpo["quote_token"], "email": "g@x.it"})
         self.assertEqual(rb.corpo.get("payment_url"), "https://pay/x")
 
-    def test_link_pagamento_che_solleva_non_rompe(self):
+    def test_link_pagamento_che_solleva_NON_conferma(self):
+        """⚠️ CORRETTO IL 2026-07-29. Questo test asseriva `status == 201` col commento
+        «prenotazione valida nonostante PSP giu'»: **codificava come atteso un difetto che
+        regalava il soggiorno** (voucher + PIN validi, date bloccate, nessun payment_url,
+        nessun pendente → stanza fuori mercato e incasso zero). Un test che benedice una
+        perdita di denaro è più pericoloso di nessun test.
+        Comportamento corretto: gateway CONFIGURATO ma in avaria → 503 e stanza rilasciata,
+        esattamente come già faceva il ramo su-richiesta. Dettaglio e prove in
+        test_stripe_giu_al_book.py."""
         inv, cat, _ = _setup(unita=1)
         def boom(_):
             raise RuntimeError("psp giu'")
@@ -214,8 +222,10 @@ class TestPrenota(unittest.TestCase):
         r = proto.quota({"alloggio_id": "casa", "check_in": "2026-09-01",
                          "check_out": "2026-09-03"})
         rb = proto.prenota({"quote_token": r.corpo["quote_token"], "email": "g@x.it"})
-        self.assertEqual(rb.status, 201)      # prenotazione valida nonostante PSP giu'
+        self.assertEqual(rb.status, 503)
+        self.assertEqual(rb.corpo.get("errore"), "pagamento_non_disponibile")
         self.assertNotIn("payment_url", rb.corpo)
+        self.assertNotIn("voucher_token", rb.corpo)
 
 
 class TestToolAggiuntivi(unittest.TestCase):

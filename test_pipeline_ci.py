@@ -1,0 +1,786 @@
+# -*- coding: utf-8 -*-
+"""
+LA PIPELINE CI COME DATO - un cancello mai visto chiudersi non e' un cancello.
+
+Perche' esiste. La CI di questo progetto ha undici job e un job finale, `gate`, che
+riassume tutto: e' quello che il fondatore deve rendere "required" su GitHub. Se il
+cablaggio del gate ha anche un solo errore - un job bloccante dimenticato nei `needs`,
+una condizione che guarda solo `failure` e lascia passare `cancelled`, una soglia di
+copertura scritta ma neutralizzata da un `|| true` - allora il semaforo verde della CI
+non e' un verdetto: e' una decorazione. E nessun test del prodotto se ne accorgerebbe
+mai, perche' il difetto sta NELLA MACCHINA CHE GIUDICA, non nel prodotto.
+
+Qui il file `.github/workflows/ci.yml` viene trattato per quello che e': un DATO, con
+una forma esatta, che si carica con pyyaml e si asserisce campo per campo.
+
+Cosa si dimostra, in ordine:
+
+  1) IGIENE DEL FILE      - 0 byte di controllo, 0 tab, nessun `\\n` letterale (le tre
+                            trappole che questo repo ha gia' pagato con le patch via
+                            heredoc), e il file si carica davvero come YAML.
+  2) TRIGGER              - push E pull_request su master, senza filtri `paths` che
+                            permetterebbero a un commit di scivolare fuori dalla CI;
+                            token a privilegi minimi.
+  3) NEEDS COMPLETO       - ogni job del file e' classificato (bloccante o non
+                            bloccante, dichiarato nella mappa in testa a ci.yml) e i
+                            `needs` del gate coincidono ESATTAMENTE con i bloccanti.
+                            Aggiungere un job nuovo e dimenticarlo fa fallire questo
+                            test: e' il punto in cui il "dimenticato" si vede.
+  4) CONDIZIONE DEL       - la condizione del verdetto rosso non viene solo cercata come
+     VERDETTO               stringa: viene PARSATA e VALUTATA su tutti gli esiti
+                            possibili di tutti i needs. E il valutatore stesso e' provato
+                            rosso su una condizione volutamente debole.
+  5) JOB COPERTURA        - usa .coveragerc, misura i RAMI, e l'ultimo passo confronta
+                            davvero con COVERAGE_MIN senza scappatoie.
+  6) NIENTE SCAPPATOIE    - nessun `continue-on-error` nei bloccanti, nessuna azione
+                            deprecata, nessun `uses:` agganciato a un ramo mobile, e i
+                            sette gate che devono bloccare sul contenuto non sono
+                            annullati da un `|| true`.
+  7) PROVA SUL CAMPO      - il comando di soglia del cricchetto viene ESEGUITO davvero,
+                            in una cartella sterile, e si pretende di vederlo uscire
+                            diverso da zero sotto la soglia e uguale a zero sopra. In
+                            piu' si dimostra che `branch = True` e' portante: lo stesso
+                            identico codice, con la stessa identica soglia, passa se si
+                            misurano solo le righe e FALLISCE se si misurano anche i
+                            rami.
+
+Prova sul campo gia' eseguita a mano sul repo VERO (documentata qui perche' non e'
+ripetibile in pochi secondi dentro la suite):
+
+    COVERAGE_FILE=<fuori dal repo> python -m coverage run -m unittest \\
+        test_suite_senza_zone_cieche
+    python -m coverage report        ->  TOTAL 23436 righe, 6488 rami, 0.0%
+    python -m coverage report --fail-under=82   ->  exit 2      (ROSSO, come deve)
+
+    ... e su un sottoinsieme che tocca davvero un motore:
+    python -m coverage run -m unittest test_fase98_policy_commissione
+    python -m coverage report        ->  TOTAL 0.8%
+    python -m coverage report --fail-under=82   ->  exit 2      (ROSSO)
+    python -m coverage report --fail-under=0    ->  exit 0      (VERDE: sa anche passare)
+
+Le 23.436 righe e i 6.488 rami coincidono con i numeri dichiarati nel commento del job
+`copertura`: la misura del job e' quella vera, non una cifra ricordata a memoria.
+"""
+
+import io
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+import yaml
+
+QUI = os.path.dirname(os.path.abspath(__file__))
+CI_YML = os.path.join(QUI, ".github", "workflows", "ci.yml")
+COVERAGERC = os.path.join(QUI, ".coveragerc")
+
+# Il job che riassume tutto: e' lui il check da rendere "required" su GitHub.
+GATE = "gate"
+
+# Gli esiti che GitHub puo' assegnare a un job da cui il gate dipende.
+ESITI_POSSIBILI = ("success", "failure", "cancelled", "skipped")
+ESITI_NON_VERDI = ("failure", "cancelled", "skipped")
+
+# Marcatore obbligatorio: un job che sta nei `needs` ma il cui comando e' neutralizzato
+# con `|| true` DEVE dichiararlo nel proprio commento con questa frase esatta. Serve a
+# impedire il difetto piu' insidioso di tutti: un commento che promette un controllo che
+# il comando sotto non fa (in questo repo e' successo davvero con il job w3c).
+MARCATORE_SENZA_DENTI = "NON BLOCCA SUI RILIEVI"
+
+# Per ognuno dei job che DEVONO bloccare sul contenuto: il pezzo di comando che e' il
+# loro vero gate. Si pretende che quel comando non sia annullato da un `|| true`.
+COMANDI_CHE_DEVONO_BLOCCARE = {
+    "money-smoke": "python -m unittest",
+    "full-suite": "unittest discover",
+    "copertura": "--fail-under=",
+    "mutazione": "collaudi/mutazione_prodotto.py",
+    "qualita": "bandit -r .",
+    "accessibilita": "collaudi/a11y_static.js",
+    "atheris": "collaudi/fuzz_soldi.py",
+}
+
+# Versione MINIMA accettabile per le azioni di GitHub usate qui. Sotto queste versioni
+# l'azione gira su un runtime Node ritirato (node12/node16) o e' stata proprio spenta
+# (upload-artifact v3, chiuso a gennaio 2025): sono azioni deprecate.
+VERSIONE_MINIMA_AZIONI = {
+    "actions/checkout": 4,
+    "actions/setup-python": 5,
+    "actions/setup-node": 4,
+    "actions/setup-java": 4,
+    "actions/upload-artifact": 4,
+    "actions/download-artifact": 4,
+    "actions/cache": 4,
+}
+
+# Comandi di workflow ritirati da GitHub: se ricompaiono, il passo che li usa non fa
+# piu' quello che crede di fare (e non fallisce: peggio).
+COMANDI_RITIRATI = ("::set-output", "::save-state", "::set-env", "::add-path")
+
+
+def _testo_ci():
+    with io.open(CI_YML, encoding="utf-8") as f:
+        return f.read()
+
+
+def _doc_ci():
+    return yaml.safe_load(_testo_ci())
+
+
+def _trigger(doc):
+    """In YAML `on:` e' la parola riservata per "vero": pyyaml la carica come True."""
+    return doc.get("on", doc.get(True))
+
+
+def _passi(job):
+    return job.get("steps", []) or []
+
+
+def _run_dei_passi(job):
+    return [p["run"] for p in _passi(job) if isinstance(p.get("run"), str)]
+
+
+def _blocco_di_commento_sopra(testo, chiave_job):
+    """Le righe di commento contigue subito sopra la definizione di un job."""
+    righe = testo.splitlines()
+    bersaglio = "  %s:" % chiave_job
+    try:
+        i = righe.index(bersaglio)
+    except ValueError:
+        raise AssertionError("job %r non trovato nel testo di ci.yml" % chiave_job)
+    raccolte = []
+    j = i - 1
+    while j >= 0 and righe[j].strip().startswith("#"):
+        raccolte.append(righe[j].strip().lstrip("#").strip())
+        j -= 1
+    return "\n".join(reversed(raccolte))
+
+
+def _elenco_dichiarato(testo, intestazione, nomi_validi, fermate=()):
+    """Legge dalla mappa in testa a ci.yml l'elenco di job sotto una intestazione.
+
+    Si ferma alla prima riga di commento vuota, a `>>>`, a una riga di separazione, a
+    una delle intestazioni successive o alla fine dei commenti: cosi' i paragrafi di
+    spiegazione che vengono dopo non finiscono nell'elenco (il paragrafo che spiega il
+    gate nomina "gate" e "w3c", e senza questo taglio entrerebbero nella lista).
+    """
+    trovati = []
+    raccogliendo = False
+    for riga in testo.splitlines():
+        spoglia = riga.strip()
+        if not spoglia.startswith("#"):
+            if raccogliendo:
+                break
+            continue
+        contenuto = spoglia.lstrip("#").strip()
+        if not raccogliendo:
+            if contenuto.startswith(intestazione):
+                raccogliendo = True
+            continue
+        if (contenuto == "" or contenuto.startswith(">>>")
+                or set(contenuto) == {"="}
+                or any(contenuto.startswith(f) for f in fermate)):
+            break
+        for pezzo in re.findall(r"[a-z][a-z0-9-]+", contenuto):
+            if pezzo in nomi_validi and pezzo not in trovati:
+                trovati.append(pezzo)
+    return trovati
+
+
+# Un passo che installa dipendenze non e' un controllo: `pip install ...` senza
+# `|| true` non rende "con i denti" un job il cui unico vero comando e' neutralizzato.
+_INSTALLAZIONE = re.compile(r"^(sudo\s+)?(apt-get|pip3?|npm|npx|python -m pip)\b")
+
+
+def _e_installazione(comando):
+    testa = comando.strip()
+    return bool(_INSTALLAZIONE.match(testa)) and "install" in testa
+
+
+def _comandi_di_controllo(job):
+    """I comandi del job che esprimono un giudizio (tolte le installazioni)."""
+    return [c for c in _run_dei_passi(job) if not _e_installazione(c)]
+
+
+# ---------------------------------------------------------------------------
+#  Il valutatore della condizione del verdetto.
+#  Non cerca stringhe: legge la condizione VERA scritta in ci.yml, la scompone e la
+#  valuta come farebbe GitHub. Se la condizione fosse scritta in una forma che non
+#  riconosce, solleva: non la accetta "per fiducia".
+# ---------------------------------------------------------------------------
+_TERMINE = re.compile(r"^contains\(\s*needs\.\*\.result\s*,\s*'([a-z_]+)'\s*\)$")
+
+
+def stati_catturati(espressione):
+    corpo = espressione.strip()
+    if corpo.startswith("${{") and corpo.endswith("}}"):
+        corpo = corpo[3:-2].strip()
+    if "&&" in corpo:
+        raise ValueError("la condizione del verdetto contiene un AND: con `&&` "
+                         "servirebbero PIU' job rossi insieme per far scattare il "
+                         "rosso, e un job rosso da solo passerebbe. Va in OR.")
+    stati = []
+    for parte in corpo.split("||"):
+        trovato = _TERMINE.match(parte.strip())
+        if trovato is None:
+            raise ValueError("termine non riconosciuto nella condizione del verdetto: "
+                             "%r (atteso: contains(needs.*.result, '<esito>'))"
+                             % parte.strip())
+        stati.append(trovato.group(1))
+    return stati
+
+
+def verdetto_rosso(stati, risultati):
+    """Come GitHub valuta `contains(needs.*.result, X)` su un elenco di esiti."""
+    return any(r in stati for r in risultati)
+
+
+def esiti_che_scappano(stati, quanti_needs):
+    """Quali esiti NON verdi passerebbero indisturbati con questi `stati`."""
+    scappati = []
+    for cattivo in ESITI_NON_VERDI:
+        risultati = ["success"] * (quanti_needs - 1) + [cattivo]
+        if not verdetto_rosso(stati, risultati):
+            scappati.append(cattivo)
+    return scappati
+
+
+class TestIgieneDelFile(unittest.TestCase):
+    """Le tre trappole gia' pagate da questo repo: byte invisibili, tab, `\\n` letterali."""
+
+    def test_zero_byte_di_controllo_zero_tab_zero_backslash_n(self):
+        with open(CI_YML, "rb") as f:
+            dati = f.read()
+        controllo = [(i, b) for i, b in enumerate(dati)
+                     if b < 32 and b not in (9, 10, 13)]
+        self.assertEqual(controllo, [],
+                         "byte di controllo invisibili in ci.yml (tipico delle patch "
+                         "via heredoc): posizione e valore qui sopra")
+        self.assertEqual(dati.count(b"\x09"), 0,
+                         "ci.yml contiene TAB: YAML non li ammette come indentazione")
+        self.assertEqual(dati.count(b"\x5c\x6e"), 0,
+                         "ci.yml contiene la sequenza backslash-n letterale: una "
+                         "patch ha scritto \\n invece di andare a capo davvero")
+        self.assertEqual(dati.count(b"\x0d"), 0,
+                         "ci.yml contiene ritorni carrello (CRLF): il runner e' Linux")
+
+    def test_il_controllo_dei_byte_riconoscerebbe_il_difetto(self):
+        """Se il criterio smettesse di vedere, questo controllo sarebbe un ornamento."""
+        sporco = b"name: x\n\x08jobs:\n\tdue\n" + b"\x5c\x6e"
+        controllo = [(i, b) for i, b in enumerate(sporco)
+                     if b < 32 and b not in (9, 10, 13)]
+        self.assertEqual([b for _, b in controllo], [8])
+        self.assertEqual(sporco.count(b"\x09"), 1)
+        self.assertEqual(sporco.count(b"\x5c\x6e"), 1)
+
+    def test_il_file_si_carica_come_yaml_ed_e_una_pipeline(self):
+        doc = _doc_ci()
+        self.assertIsInstance(doc, dict)
+        self.assertEqual(doc["name"], "BookinVIP CI")
+        self.assertIsInstance(doc["jobs"], dict)
+        self.assertGreaterEqual(len(doc["jobs"]), 9)
+        self.assertIn(GATE, doc["jobs"],
+                      "il job si deve chiamare esattamente 'gate': e' il nome che il "
+                      "fondatore seleziona nella branch protection di GitHub, e "
+                      "rinominarlo scollega silenziosamente la protezione del ramo")
+        for nome, job in doc["jobs"].items():
+            self.assertEqual(job.get("runs-on"), "ubuntu-latest",
+                             "il job %r non dichiara il runner" % nome)
+            self.assertTrue(_passi(job), "il job %r non ha passi" % nome)
+
+
+class TestTrigger(unittest.TestCase):
+    """Il gate deve girare sui push E sulle pull request, senza vie di fuga."""
+
+    def setUp(self):
+        self.doc = _doc_ci()
+        self.trigger = _trigger(self.doc)
+
+    def test_push_e_pull_request_su_master(self):
+        self.assertIn("push", self.trigger)
+        self.assertIn("pull_request", self.trigger)
+        self.assertEqual(self.trigger["push"]["branches"], ["master"])
+        self.assertEqual(self.trigger["pull_request"]["branches"], ["master"],
+                         "senza il trigger pull_request il gate non gira sulle PR e "
+                         "renderlo 'required' su GitHub bloccherebbe ogni merge per "
+                         "sempre (il check non arriverebbe mai)")
+
+    def test_nessun_filtro_che_permetta_a_un_commit_di_saltare_la_ci(self):
+        for evento in ("push", "pull_request"):
+            filtri = self.trigger[evento]
+            for scappatoia in ("paths", "paths-ignore", "branches-ignore", "types"):
+                self.assertNotIn(scappatoia, filtri,
+                                 "il trigger %r ha un filtro %r: esisterebbe una "
+                                 "categoria di commit che non passa dal gate"
+                                 % (evento, scappatoia))
+
+    def test_zap_e_manuale_e_settimanale_non_ad_ogni_commit(self):
+        self.assertIn("schedule", self.trigger)
+        self.assertIn("workflow_dispatch", self.trigger)
+        condizione = self.doc["jobs"]["zap"].get("if", "")
+        self.assertIn("schedule", condizione)
+        self.assertIn("workflow_dispatch", condizione)
+
+    def test_token_di_ci_a_privilegi_minimi(self):
+        self.assertEqual(self.doc["permissions"], {"contents": "read"},
+                         "il token della CI deve poter solo LEGGERE il repository")
+
+
+class TestNeedsDelGateCompleto(unittest.TestCase):
+    """Nessun job bloccante puo' restare fuori dai `needs` del gate."""
+
+    def setUp(self):
+        self.testo = _testo_ci()
+        self.doc = _doc_ci()
+        self.jobs = set(self.doc["jobs"])
+        self.needs = list(self.doc["jobs"][GATE]["needs"])
+        self.bloccanti = _elenco_dichiarato(self.testo, "BLOCCANTI (entrano", self.jobs,
+                                            fermate=("NON BLOCCANTI", "ATTENZIONE"))
+        self.non_bloccanti = _elenco_dichiarato(self.testo, "NON BLOCCANTI", self.jobs,
+                                                fermate=("BLOCCANTI (entrano",
+                                                         "ATTENZIONE"))
+
+    def test_la_mappa_in_testa_al_file_e_leggibile_e_non_vuota(self):
+        """Ancora contro l'auto-assoluzione: se il lettore della mappa smettesse di
+        leggere e tornasse una lista vuota, i due confronti dinamici qui sotto
+        potrebbero passare a vuoto. Questa lista scritta a mano lo impedisce."""
+        self.assertEqual(sorted(self.bloccanti),
+                         ["accessibilita", "atheris", "copertura", "full-suite",
+                          "money-smoke", "mutazione", "qualita", "w3c"],
+                         "se hai aggiunto un job BLOCCANTE devi aggiornare questa "
+                         "lista di proposito, dopo esserti accertato che sia anche "
+                         "nei needs del gate: e' il punto in cui la decisione si "
+                         "prende invece di scivolare")
+        self.assertEqual(sorted(self.non_bloccanti), ["lint-severo", "zap"],
+                         "un job non bloccante in piu' significa un controllo il cui "
+                         "rosso non ferma nessuno: deve essere una scelta esplicita")
+
+    def test_ogni_job_del_file_e_classificato(self):
+        classificati = set(self.bloccanti) | set(self.non_bloccanti) | {GATE}
+        self.assertEqual(
+            self.jobs - classificati, set(),
+            "questi job esistono ma non sono ne' dichiarati bloccanti ne' dichiarati "
+            "non bloccanti nella mappa in testa a ci.yml: nessuno sa se il loro rosso "
+            "conta. Classificali (e se sono bloccanti, mettili nei needs del gate).")
+        self.assertEqual(classificati - self.jobs, set(),
+                         "la mappa in testa a ci.yml elenca job che non esistono piu'")
+
+    def test_i_needs_del_gate_sono_esattamente_i_bloccanti(self):
+        self.assertEqual(sorted(self.needs), sorted(self.bloccanti),
+                         "i needs del gate e la mappa dei bloccanti divergono: uno dei "
+                         "due mente. Se un bloccante non e' nei needs, il gate resta "
+                         "VERDE mentre quel job e' rosso.")
+
+    def test_i_needs_del_gate_sono_tutti_i_job_meno_i_non_bloccanti(self):
+        attesi = self.jobs - set(self.non_bloccanti) - {GATE}
+        self.assertEqual(set(self.needs), attesi,
+                         "un job nuovo e' stato aggiunto senza entrare nel gate")
+        self.assertEqual(len(self.needs), len(set(self.needs)),
+                         "un job compare due volte nei needs")
+        self.assertNotIn(GATE, self.needs)
+
+    def test_i_non_bloccanti_hanno_un_motivo_verificabile(self):
+        """Stare fuori dal gate non e' un'opinione: deve avere un appiglio nel file."""
+        zap = self.doc["jobs"]["zap"]
+        self.assertIn("github.event_name", zap.get("if", ""),
+                      "zap sta fuori dal gate perche' gira solo a schedule/manuale: se "
+                      "quel gating sparisse, girerebbe ad ogni commit senza che il suo "
+                      "esito conti per nessuno")
+        lint = self.doc["jobs"]["lint-severo"]
+        self.assertIn("NON blocca", lint.get("name", ""),
+                      "lint-severo deve dichiarare nel proprio nome che non blocca: e' "
+                      "cio' che si legge nell'elenco dei check su GitHub")
+
+    def test_il_gate_gira_sempre_anche_quando_qualcuno_e_rosso(self):
+        gate = self.doc["jobs"][GATE]
+        self.assertEqual(str(gate.get("if")).strip(), "always()",
+                         "senza `if: always()` il gate viene SALTATO appena un job da "
+                         "cui dipende fallisce, e un job saltato non da' nessun rosso")
+        self.assertNotIn("continue-on-error", gate)
+        self.assertIn("required", gate.get("name", ""),
+                      "il nome del gate deve dire a cosa serve: e' il check da rendere "
+                      "required nella branch protection")
+
+
+class TestCondizioneDelVerdetto(unittest.TestCase):
+    """La condizione non viene creduta: viene parsata e valutata su ogni esito.
+
+    Nota sulla semantica di GitHub, che qui e' portante: un passo con un `if` che non
+    contiene una funzione di stato (always(), failure(), ...) si porta dietro un
+    `success()` implicito in AND. Quindi il passo del verdetto rosso gira solo se i
+    passi precedenti del gate sono riusciti - e se uno di quelli fallisse, il job
+    sarebbe rosso comunque. In tutti i casi il gate fallisce in chiusura: non esiste
+    la combinazione "qualcosa e' andato storto ma il gate e' verde".
+    """
+
+    def setUp(self):
+        self.doc = _doc_ci()
+        gate = self.doc["jobs"][GATE]
+        self.passi = _passi(gate)
+        self.quanti = len(gate["needs"])
+        rossi = [p for p in self.passi
+                 if isinstance(p.get("run"), str) and "exit 1" in p["run"]]
+        self.assertEqual(len(rossi), 1,
+                         "nel gate deve esserci UNO e un solo passo che fa fallire il "
+                         "job; trovati %d" % len(rossi))
+        self.rosso = rossi[0]
+        self.i_rosso = self.passi.index(self.rosso)
+
+    def test_la_condizione_e_scritta_in_una_forma_riconoscibile(self):
+        stati = stati_catturati(self.rosso["if"])
+        self.assertEqual(sorted(set(stati)), ["cancelled", "failure", "skipped"])
+        self.assertEqual(len(stati), len(set(stati)), "termine ripetuto")
+
+    def test_il_passo_rosso_fa_fallire_davvero_il_job(self):
+        self.assertIn("exit 1", self.rosso["run"])
+        self.assertNotIn("|| true", self.rosso["run"])
+        self.assertNotIn("continue-on-error", self.rosso)
+        self.assertIn("::error", self.rosso["run"],
+                      "il rosso deve anche dire A SCHERMO perche' e' rosso")
+
+    def test_ogni_esito_non_verde_di_ogni_needs_fa_scattare_il_rosso(self):
+        stati = stati_catturati(self.rosso["if"])
+        for posizione in range(self.quanti):
+            for cattivo in ESITI_NON_VERDI:
+                risultati = ["success"] * self.quanti
+                risultati[posizione] = cattivo
+                with self.subTest(job=posizione, esito=cattivo):
+                    self.assertTrue(
+                        verdetto_rosso(stati, risultati),
+                        "il job in posizione %d con esito %r passerebbe indisturbato"
+                        % (posizione, cattivo))
+
+    def test_tutti_verdi_resta_verde(self):
+        """Una condizione sempre-vera bloccherebbe tutto: sarebbe l'altro difetto."""
+        stati = stati_catturati(self.rosso["if"])
+        self.assertFalse(verdetto_rosso(stati, ["success"] * self.quanti))
+
+    def test_il_valutatore_vede_rosso_su_una_condizione_debole(self):
+        """VISTO ROSSO del controllo stesso: su condizioni volutamente guaste il
+        valutatore DEVE denunciare gli esiti che scapperebbero."""
+        vera = stati_catturati(self.doc["jobs"][GATE]["steps"][self.i_rosso]["if"])
+        self.assertEqual(esiti_che_scappano(vera, self.quanti), [])
+        self.assertEqual(esiti_che_scappano(["failure"], self.quanti),
+                         ["cancelled", "skipped"])
+        self.assertEqual(esiti_che_scappano(["failure", "cancelled"], self.quanti),
+                         ["skipped"])
+        self.assertEqual(sorted(esiti_che_scappano([], self.quanti)),
+                         sorted(list(ESITI_NON_VERDI)))
+
+    def test_il_parser_rifiuta_le_forme_che_non_sa_giudicare(self):
+        for guasta in ("${{ always() }}",
+                       "${{ contains(needs.*.result, 'failure') && "
+                       "contains(needs.*.result, 'cancelled') }}",
+                       "${{ contains(needs.copertura.result, 'failure') }}",
+                       "${{ failure() }}"):
+            with self.subTest(condizione=guasta):
+                self.assertRaises(ValueError, stati_catturati, guasta)
+
+    def test_il_passo_verde_non_puo_girare_dopo_il_rosso(self):
+        """Se il passo del VERDE avesse `if: always()` stamperebbe "CI VERDE" anche
+        subito dopo il rosso: il log direbbe l'opposto dell'esito."""
+        verdi = [p for p in self.passi
+                 if isinstance(p.get("run"), str) and "VERDE" in p["run"]]
+        self.assertEqual(len(verdi), 1)
+        verde = verdi[0]
+        self.assertIsNone(verde.get("if"),
+                          "il passo del verdetto verde non deve avere nessun `if`: "
+                          "senza `if` gira solo se tutti i passi precedenti sono "
+                          "riusciti, che e' esattamente cio' che serve")
+        self.assertGreater(self.passi.index(verde), self.i_rosso,
+                           "il verdetto verde deve stare DOPO il rosso")
+
+    def test_il_gate_stampa_l_esito_di_ogni_singolo_needs(self):
+        """Chi apre la CI deve vedere QUALE job e' rosso, non solo che qualcosa lo e'."""
+        testo = "\n".join(_run_dei_passi(self.doc["jobs"][GATE]))
+        for job in self.doc["jobs"][GATE]["needs"]:
+            riferimento = ("needs['%s'].result" % job) if "-" in job \
+                else ("needs.%s.result" % job)
+            self.assertIn(riferimento, testo,
+                          "il riepilogo del gate non mostra l'esito di %r" % job)
+
+
+class TestJobCopertura(unittest.TestCase):
+    """La soglia esiste, misura i rami, e l'ultimo passo la fa valere."""
+
+    def setUp(self):
+        self.doc = _doc_ci()
+        self.job = self.doc["jobs"]["copertura"]
+        with io.open(COVERAGERC, encoding="utf-8") as f:
+            self.rc = f.read()
+
+    def test_coveragerc_esiste_misura_i_rami_e_solo_il_prodotto_vivo(self):
+        self.assertTrue(os.path.isfile(COVERAGERC))
+        self.assertIn("branch = True", self.rc,
+                      "senza branch=True si misurano solo le righe: un `if` con il "
+                      "ramo else mai provato risulterebbe coperto al 100%")
+        self.assertIn("source = .", self.rc)
+        for fuori in ("test_*.py", "collaudi/*", "_archivio/*", "app.py"):
+            self.assertIn(fuori, self.rc,
+                          "%r deve restare fuori dalla misura: non e' prodotto vivo "
+                          "e gonfierebbe (o sgonfierebbe) la percentuale" % fuori)
+
+    def test_la_soglia_e_dichiarata_e_a_cricchetto(self):
+        grezzo = self.job["env"]["COVERAGE_MIN"]
+        self.assertIsInstance(grezzo, str,
+                              "COVERAGE_MIN va scritto fra apici: senza, YAML lo "
+                              "carica come numero e l'espansione in shell cambia")
+        self.assertTrue(grezzo.isdigit())
+        self.assertGreaterEqual(int(grezzo), 82,
+                                "CRICCHETTO: la soglia di copertura puo' solo salire. "
+                                "82 e' la misura vera gia' raggiunta (82,5% su 23.436 "
+                                "righe e 6.488 rami): abbassarla vorrebbe dire "
+                                "cancellare prove gia' scritte.")
+        self.assertLessEqual(int(grezzo), 100)
+
+    def test_la_misura_gira_sulla_suite_intera(self):
+        comandi = "\n".join(_run_dei_passi(self.job))
+        self.assertIn("coverage run -m unittest discover", comandi,
+                      "la copertura va misurata sulla suite INTERA, non su un "
+                      "sottoinsieme scelto a mano (sarebbe una misura addomesticata)")
+        self.assertIn('-p "test_*.py"', comandi)
+
+    def test_l_ultimo_passo_e_il_cricchetto_e_non_ha_scappatoie(self):
+        passi = _passi(self.job)
+        ultimo = passi[-1]
+        self.assertIn("coverage report --fail-under=${COVERAGE_MIN}", ultimo["run"],
+                      "l'ultimo passo del job deve essere il confronto con la soglia, "
+                      "e deve leggere COVERAGE_MIN (non un numero riscritto a mano)")
+        self.assertNotIn("|| true", ultimo["run"])
+        self.assertNotIn("continue-on-error", ultimo)
+        self.assertIsNone(ultimo.get("if"),
+                          "il passo della soglia non deve avere `if: always()`: con "
+                          "always() girerebbe anche dopo una suite rossa e i suoi "
+                          "numeri sarebbero senza senso")
+
+    def test_i_passi_di_report_non_mascherano_la_suite_rossa(self):
+        """`if: always()` sui report va bene (il numero si vuole comunque), ma nessuno
+        di essi deve inghiottire il fallimento della suite."""
+        passi = _passi(self.job)
+        misure = [p for p in passi
+                  if isinstance(p.get("run"), str) and "coverage run" in p["run"]]
+        self.assertEqual(len(misure), 1)
+        self.assertIsNone(misure[0].get("if"))
+        self.assertNotIn("|| true", misure[0]["run"])
+        self.assertNotIn("continue-on-error", self.job)
+
+    def test_il_report_html_viene_conservato(self):
+        usi = [p.get("uses", "") for p in _passi(self.job)]
+        self.assertTrue(any(u.startswith("actions/upload-artifact@") for u in usi),
+                        "il dettaglio riga-per-riga deve restare scaricabile: senza, "
+                        "un rosso di copertura non e' diagnosticabile")
+
+
+class TestNienteScappatoie(unittest.TestCase):
+    """continue-on-error, azioni deprecate, `|| true` sui gate veri."""
+
+    def setUp(self):
+        self.testo = _testo_ci()
+        self.doc = _doc_ci()
+        self.needs = list(self.doc["jobs"][GATE]["needs"])
+
+    def test_nessun_continue_on_error_nei_job_bloccanti(self):
+        colpevoli = []
+        for nome in self.needs + [GATE]:
+            job = self.doc["jobs"][nome]
+            if job.get("continue-on-error"):
+                colpevoli.append("%s (job intero)" % nome)
+            for i, passo in enumerate(_passi(job)):
+                if passo.get("continue-on-error"):
+                    colpevoli.append("%s passo %d (%s)"
+                                     % (nome, i, passo.get("name", "senza nome")))
+        self.assertEqual(colpevoli, [],
+                         "continue-on-error rende VERDE un job che ha fallito: il gate "
+                         "lo vedrebbe come success. Job coinvolti: %s" % colpevoli)
+
+    def test_i_sette_gate_veri_non_sono_annullati_da_or_true(self):
+        for nome, comando in sorted(COMANDI_CHE_DEVONO_BLOCCARE.items()):
+            with self.subTest(job=nome):
+                self.assertIn(nome, self.needs)
+                passi = [p for p in _passi(self.doc["jobs"][nome])
+                         if isinstance(p.get("run"), str) and comando in p["run"]]
+                self.assertEqual(len(passi), 1,
+                                 "nel job %r il comando che deve bloccare (%r) non e' "
+                                 "unico: trovate %d occorrenze"
+                                 % (nome, comando, len(passi)))
+                self.assertNotIn("|| true", passi[0]["run"],
+                                 "nel job %r il gate vero e' annullato da `|| true`: "
+                                 "esce sempre 0 e non puo' bloccare niente"
+                                 % nome)
+                self.assertIsNone(passi[0].get("continue-on-error"))
+
+    def test_ruff_stretto_blocca_e_la_sua_lista_e_a_cricchetto(self):
+        passi = [p["run"] for p in _passi(self.doc["jobs"]["qualita"])
+                 if isinstance(p.get("run"), str) and "--select" in p["run"]]
+        self.assertEqual(len(passi), 1)
+        self.assertNotIn("|| true", passi[0])
+        for regola in ("E9", "F82", "S102", "S307", "S324", "S506", "S602", "S701"):
+            self.assertIn(regola, passi[0],
+                          "CRICCHETTO del lint: la regola %r e' sparita dalla "
+                          "selezione stretta. A quella lista si aggiunge soltanto."
+                          % regola)
+
+    def test_chi_non_blocca_sui_rilievi_lo_dichiara_e_chi_blocca_no(self):
+        """Il difetto piu' insidioso: un commento che promette un controllo che il
+        comando sotto non fa. Qui commento e comando devono dire la stessa cosa."""
+        for nome in self.needs:
+            job = self.doc["jobs"][nome]
+            comandi = _comandi_di_controllo(job)
+            self.assertTrue(comandi, "il job %r non esegue nessun controllo" % nome)
+            senza_denti = all("|| true" in c for c in comandi)
+            commento = _blocco_di_commento_sopra(self.testo, nome)
+            dichiarato = MARCATORE_SENZA_DENTI in commento
+            with self.subTest(job=nome):
+                self.assertEqual(
+                    senza_denti, dichiarato,
+                    "il job %r: ogni comando neutralizzato con `|| true` = %s, ma la "
+                    "dichiarazione %r nel suo commento = %s. O il commento mente sul "
+                    "codice, o il codice e' cambiato senza aggiornare il commento."
+                    % (nome, senza_denti, MARCATORE_SENZA_DENTI, dichiarato))
+
+    def test_nessuna_azione_deprecata(self):
+        usati = re.findall(r"uses:\s*([\w.-]+/[\w.-]+)@v(\d+)", self.testo)
+        self.assertTrue(usati, "nessun `uses:` trovato: il file non e' quello atteso")
+        vecchie = []
+        for azione, versione in usati:
+            minima = VERSIONE_MINIMA_AZIONI.get(azione)
+            if minima is not None and int(versione) < minima:
+                vecchie.append("%s@v%s (minimo v%d)" % (azione, versione, minima))
+        self.assertEqual(vecchie, [],
+                         "azioni deprecate: girano su un runtime Node ritirato o sono "
+                         "state spente da GitHub. %s" % vecchie)
+        for azione in VERSIONE_MINIMA_AZIONI:
+            if azione in self.testo:
+                self.assertIn(azione + "@v", self.testo,
+                              "%r usata senza versione esplicita" % azione)
+
+    def test_nessun_comando_di_workflow_ritirato(self):
+        for ritirato in COMANDI_RITIRATI:
+            self.assertNotIn(ritirato, self.testo,
+                             "%r e' stato ritirato da GitHub: il passo che lo usa non "
+                             "fa piu' quello che crede, e non fallisce" % ritirato)
+
+    def test_ogni_azione_e_agganciata_a_una_versione_non_a_un_ramo(self):
+        riferimenti = re.findall(r"uses:\s*(\S+)", self.testo)
+        self.assertTrue(riferimenti)
+        mobili = [r for r in riferimenti
+                  if not re.search(r"@(v\d+(\.\d+)*|[0-9a-f]{40})$", r)]
+        self.assertEqual(mobili, [],
+                         "queste azioni sono agganciate a un ramo mobile (@main, "
+                         "@master, @latest): il contenuto puo' cambiare sotto i piedi "
+                         "della CI senza che nessuno tocchi il repo. %s" % mobili)
+
+    def test_i_job_bloccanti_non_hanno_condizioni_che_li_facciano_sparire(self):
+        for nome in self.needs:
+            with self.subTest(job=nome):
+                self.assertIsNone(
+                    self.doc["jobs"][nome].get("if"),
+                    "il job bloccante %r ha una condizione al livello del job: "
+                    "esisterebbe un evento in cui non gira, e il gate lo vedrebbe "
+                    "'skipped'" % nome)
+
+
+class TestSogliaProvataSulCampo(unittest.TestCase):
+    """PUNTO 3: il comando del cricchetto viene ESEGUITO, non letto.
+
+    Si costruisce una cartella sterile con un modulo di quattro istruzioni e un `if`,
+    e un test che ne percorre un solo ramo. Numeri esatti, verificati:
+        righe   = 3 coperte su 4              -> 75,0 %
+        rami    = 1 percorso su 2             -> (3+1)/(4+2) = 66,7 %
+    Con una soglia di 70:
+        misurando SOLO le righe   -> 75,0 >= 70  -> exit 0   (passerebbe)
+        misurando ANCHE i rami    -> 66,7 <  70  -> exit 2   (ROSSO)
+    E' la prova che `branch = True` nel .coveragerc non e' un ornamento: cambia il
+    verdetto a parita' di codice e di soglia.
+    """
+
+    MODULO = ("def classifica(n):\n"
+              "    if n > 0:\n"
+              "        return 'positivo'\n"
+              "    return 'non positivo'\n")
+
+    TEST = ("import unittest\n"
+            "import modulo_vivo\n"
+            "class T(unittest.TestCase):\n"
+            "    def test_solo_il_ramo_positivo(self):\n"
+            "        self.assertEqual(modulo_vivo.classifica(1), 'positivo')\n")
+
+    def setUp(self):
+        self.cartella = tempfile.mkdtemp(prefix="cricchetto_")
+        self.addCleanup(shutil.rmtree, self.cartella, True)
+
+    def _scrivi(self, nome, testo):
+        with io.open(os.path.join(self.cartella, nome), "w", encoding="utf-8") as f:
+            f.write(testo)
+
+    def _prepara(self, rami):
+        self._scrivi("modulo_vivo.py", self.MODULO)
+        self._scrivi("test_uno.py", self.TEST)
+        self._scrivi(".coveragerc",
+                     "[run]\nbranch = %s\nsource = .\nomit =\n    test_*.py\n"
+                     "[report]\nprecision = 1\n" % ("True" if rami else "False"))
+        esito = self._coverage(["run", "-m", "unittest", "test_uno"])
+        self.assertEqual(esito.returncode, 0,
+                         "la misura non e' partita: %s" % esito.stderr[-400:])
+
+    def _coverage(self, argomenti):
+        return subprocess.run([sys.executable, "-m", "coverage"] + argomenti,
+                              cwd=self.cartella, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, universal_newlines=True)
+
+    def _percentuale(self):
+        esito = self._coverage(["report"])
+        self.assertEqual(esito.returncode, 0, esito.stderr[-400:])
+        ultima = [r for r in esito.stdout.splitlines() if r.startswith("TOTAL")]
+        self.assertEqual(len(ultima), 1, esito.stdout)
+        return ultima[0].split()[-1]
+
+    def test_il_comando_del_cricchetto_esce_rosso_sotto_la_soglia(self):
+        self._prepara(rami=True)
+        self.assertEqual(self._percentuale(), "66.7%")
+        sotto = self._coverage(["report", "--fail-under=70"])
+        self.assertEqual(sotto.returncode, 2,
+                         "il comando di soglia NON ha bloccato sotto la soglia: e' "
+                         "questo il momento in cui il cricchetto smette di esistere")
+
+    def test_lo_stesso_comando_esce_verde_sopra_la_soglia(self):
+        """Un controllo che fallisce sempre e' inutile quanto uno che passa sempre."""
+        self._prepara(rami=True)
+        sopra = self._coverage(["report", "--fail-under=66"])
+        self.assertEqual(sopra.returncode, 0, sopra.stdout[-400:])
+        esatta = self._coverage(["report", "--fail-under=66.7"])
+        self.assertEqual(esatta.returncode, 0,
+                         "alla soglia esatta il confronto deve essere >=, non >")
+
+    def test_misurare_i_rami_cambia_il_verdetto(self):
+        """VISTO ROSSO su `branch = True`: si toglie e la stessa soglia passa."""
+        self._prepara(rami=False)
+        self.assertEqual(self._percentuale(), "75.0%")
+        senza_rami = self._coverage(["report", "--fail-under=70"])
+        self.assertEqual(senza_rami.returncode, 0,
+                         "senza i rami il 70 passerebbe (75,0%)")
+        self.setUp()
+        self._prepara(rami=True)
+        self.assertEqual(self._percentuale(), "66.7%")
+        con_rami = self._coverage(["report", "--fail-under=70"])
+        self.assertEqual(con_rami.returncode, 2,
+                         "con i rami lo stesso identico codice deve fallire il 70: se "
+                         "non fallisce, `branch = True` non e' arrivato alla misura")
+
+    def test_e_proprio_il_comando_scritto_nel_job(self):
+        """La prova vale solo se prova il comando VERO, non uno somigliante."""
+        job = _doc_ci()["jobs"]["copertura"]
+        ultimo = _passi(job)[-1]["run"].strip()
+        self.assertEqual(ultimo, "coverage report --fail-under=${COVERAGE_MIN}")
+        soglia = job["env"]["COVERAGE_MIN"]
+        self._prepara(rami=True)
+        vero = self._coverage(["report", "--fail-under=" + soglia])
+        self.assertEqual(vero.returncode, 2,
+                         "con la soglia VERA della CI (%s) e una copertura del 66,7%% "
+                         "il job deve essere rosso" % soglia)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
