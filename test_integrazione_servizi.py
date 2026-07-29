@@ -111,7 +111,7 @@ class _CatturaLog:
             lg.propagate = prop
         return False
 
-    def testo(self):
+    def come_testo(self):
         return "\n".join(self.righe)
 
 
@@ -592,8 +592,8 @@ class TestCanaliContratto(unittest.TestCase):
             "Unauthorized", {}, None))
         with _CatturaLog("core_auto.canali_social") as log:
             self.assertFalse(CanaleTelegram(self.TOK, "-100123", fetch=f).pubblica(_post()))
-        self.assertNotIn(self.TOK, log.testo(), "TOKEN TELEGRAM FINITO NEI LOG")
-        self.assertNotIn("AAH-segretissimo", log.testo())
+        self.assertNotIn(self.TOK, log.come_testo(), "TOKEN TELEGRAM FINITO NEI LOG")
+        self.assertNotIn("AAH-segretissimo", log.come_testo())
 
     def test_telegram_spento_senza_credenziali(self):
         f = FintoJson()
@@ -677,7 +677,7 @@ class TestCanaliContratto(unittest.TestCase):
         with _CatturaLog("fase152_notifiche_prenotazione") as log:
             self.assertFalse(CanaleWhatsApp("tok-wa-segreto", "PHONE1",
                                             fetch=f).invia("393331234567", "o", "t"))
-        self.assertNotIn("tok-wa-segreto", log.testo())
+        self.assertNotIn("tok-wa-segreto", log.come_testo())
 
     def test_dispatcher_un_canale_rotto_non_ferma_gli_altri(self):
         from fase152_notifiche_prenotazione import NotificatorePrenotazione

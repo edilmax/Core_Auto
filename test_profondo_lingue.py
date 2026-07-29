@@ -109,7 +109,7 @@ def visibile(pagina):
     return lettore.pezzi
 
 
-def testo_piatto(pagina):
+def piatto(pagina):
     return " ".join(visibile(pagina))
 
 
@@ -263,16 +263,16 @@ class TestEmailNelleOttoLingue(unittest.TestCase):
     def test_I3_ogni_email_porta_la_parola_spia_ESATTA_della_sua_lingua(self):
         for lg in OTTO:
             corpi = dict(tutte_le_email(lg))
-            self.assertIn(SPIA_EMAIL_VOUCHER[lg], testo_piatto(corpi["voucher"]),
+            self.assertIn(SPIA_EMAIL_VOUCHER[lg], piatto(corpi["voucher"]),
                           "voucher/%s non contiene %r" % (lg, SPIA_EMAIL_VOUCHER[lg]))
-            self.assertIn(SPIA_EMAIL_CANC[lg], testo_piatto(corpi["cancellazione"]),
+            self.assertIn(SPIA_EMAIL_CANC[lg], piatto(corpi["cancellazione"]),
                           "cancellazione/%s non contiene %r" % (lg, SPIA_EMAIL_CANC[lg]))
-            self.assertIn(SPIA_EMAIL_PAGATO[lg], testo_piatto(corpi["pagamento"]),
+            self.assertIn(SPIA_EMAIL_PAGATO[lg], piatto(corpi["pagamento"]),
                           "pagamento/%s non contiene %r" % (lg, SPIA_EMAIL_PAGATO[lg]))
 
     def test_I2_lo_stesso_corpo_email_e_diverso_in_tutte_le_28_coppie(self):
         for nome in dict(tutte_le_email("en")):
-            resi = {lg: testo_piatto(dict(tutte_le_email(lg))[nome]) for lg in OTTO}
+            resi = {lg: piatto(dict(tutte_le_email(lg))[nome]) for lg in OTTO}
             uguali = [(a, b) for i, a in enumerate(OTTO) for b in OTTO[i + 1:]
                       if resi[a] == resi[b]]
             self.assertEqual(uguali, [],
@@ -347,11 +347,11 @@ class TestPagineServerRendered(unittest.TestCase):
         for lg in OTTO:
             pagina = SEO.genera_landing_host("Roma", lingua=lg, base_url="https://b.com")
             self.assertEqual(_attributo_lang(pagina), lg)
-            self.assertIn(SPIA_LANDING[lg], testo_piatto(pagina),
+            self.assertIn(SPIA_LANDING[lg], piatto(pagina),
                           "landing/%s non contiene %r" % (lg, SPIA_LANDING[lg]))
 
     def test_I2_la_landing_ha_28_versioni_diverse(self):
-        resi = {lg: testo_piatto(SEO.genera_landing_host("Roma", lingua=lg))
+        resi = {lg: piatto(SEO.genera_landing_host("Roma", lingua=lg))
                 for lg in OTTO}
         uguali = [(a, b) for i, a in enumerate(OTTO) for b in OTTO[i + 1:]
                   if resi[a] == resi[b]]
@@ -378,18 +378,18 @@ class TestPagineServerRendered(unittest.TestCase):
         e' quello spagnolo, l'attributo lang porta il locale completo (BCP-47)."""
         pagina = SEO.genera_landing_host("Roma", lingua="es-MX", base_url="https://b.com")
         self.assertEqual(_attributo_lang(pagina), "es-MX")
-        self.assertIn(SPIA_LANDING["es"], testo_piatto(pagina))
-        self.assertNotIn(SPIA_LANDING["it"], testo_piatto(pagina))
+        self.assertIn(SPIA_LANDING["es"], piatto(pagina))
+        self.assertNotIn(SPIA_LANDING["it"], piatto(pagina))
         self.assertIn('hreflang="es-MX"', pagina)
 
     def test_una_variante_di_lingua_nota_non_finisce_MAI_in_una_terza_lingua(self):
         """'IT'/'it-CH'/'ja_JP': o quella lingua, o l'inglese. Mai un idioma estraneo."""
         for variante, base in VARIANTI.items():
             for reso, dove in (
-                    (testo_piatto(SEO.genera_landing_host("Roma", lingua=variante)),
+                    (piatto(SEO.genera_landing_host("Roma", lingua=variante)),
                      "landing"),
-                    (testo_piatto(BLOG.genera_indice_blog(lingua=variante)), "blog"),
-                    (testo_piatto(EM.corpo_voucher_html("Z", "B", "a", "b", "u",
+                    (piatto(BLOG.genera_indice_blog(lingua=variante)), "blog"),
+                    (piatto(EM.corpo_voucher_html("Z", "B", "a", "b", "u",
                                                         lingua=variante)), "email"),
                     (LEG.documento("termini", variante)["testo"], "termini")):
                 spie = {"landing": SPIA_LANDING, "blog": SPIA_BLOG,
@@ -410,9 +410,9 @@ class TestPagineServerRendered(unittest.TestCase):
         for lg in OTTO:
             indice = BLOG.genera_indice_blog(lingua=lg, base_url="https://b.com")
             self.assertEqual(_attributo_lang(indice), lg)
-            self.assertIn(SPIA_BLOG[lg], testo_piatto(indice),
+            self.assertIn(SPIA_BLOG[lg], piatto(indice),
                           "blog/%s non contiene %r" % (lg, SPIA_BLOG[lg]))
-            self.assertIn(SPIA_BLOG_TITOLO[lg], testo_piatto(indice),
+            self.assertIn(SPIA_BLOG_TITOLO[lg], piatto(indice),
                           "blog/%s non contiene %r" % (lg, SPIA_BLOG_TITOLO[lg]))
             articolo = BLOG.genera_articolo_html(slug, lingua=lg, base_url="https://b.com")
             self.assertEqual(_attributo_lang(articolo), lg)
@@ -420,7 +420,7 @@ class TestPagineServerRendered(unittest.TestCase):
     def test_I2_ogni_articolo_e_diverso_in_tutte_le_28_coppie(self):
         for voce in BLOG.ARTICOLI:
             slug = str(voce["slug"])
-            resi = {lg: testo_piatto(BLOG.genera_articolo_html(slug, lingua=lg))
+            resi = {lg: piatto(BLOG.genera_articolo_html(slug, lingua=lg))
                     for lg in OTTO}
             uguali = [(a, b) for i, a in enumerate(OTTO) for b in OTTO[i + 1:]
                       if resi[a] == resi[b]]
@@ -494,7 +494,7 @@ class TestPagineServerRendered(unittest.TestCase):
             self.assertEqual(_attributo_lang(pagina), lg,
                              "link-non-valido/%s dichiara la lingua sbagliata" % lg)
             self.assertIn("info@bookinvip.com", pagina)
-            resi[lg] = testo_piatto(pagina)
+            resi[lg] = piatto(pagina)
         uguali = [(a, b) for i, a in enumerate(OTTO) for b in OTTO[i + 1:]
                   if resi[a] == resi[b]]
         self.assertEqual(uguali, [], "pagina link-non-valido identica fra %s" % uguali)
@@ -775,7 +775,7 @@ class TestViaggioDellaLingua(_ConRouter):
             self.assertEqual(destinatario, "conf-%s@x.com" % lg)
             self.assertEqual(oggetto, EM.oggetto("v_ogg_pay", lg),
                              "conferma/%s: oggetto %r" % (lg, oggetto))
-            self.assertIn(SPIA_EMAIL_VOUCHER[lg], testo_piatto(corpo),
+            self.assertIn(SPIA_EMAIL_VOUCHER[lg], piatto(corpo),
                           "conferma/%s: il corpo non e' in quella lingua" % lg)
             if lg != "it":
                 self.assertEqual(italiano_dentro(corpo), [],
@@ -793,7 +793,7 @@ class TestViaggioDellaLingua(_ConRouter):
             self.assertTrue(self.posta.attendi(1), "email di pagamento mai partita (%s)" % lg)
             _d, oggetto, corpo = self.posta.ultima()
             self.assertEqual(oggetto, EM.oggetto("pc_ogg", lg))
-            self.assertIn(SPIA_EMAIL_PAGATO[lg], testo_piatto(corpo),
+            self.assertIn(SPIA_EMAIL_PAGATO[lg], piatto(corpo),
                           "pagamento/%s: corpo nella lingua sbagliata" % lg)
             self.assertEqual(italiano_dentro(corpo), [],
                              "pagamento/%s: italiano nel corpo" % lg)
@@ -806,7 +806,7 @@ class TestViaggioDellaLingua(_ConRouter):
                             "email di cancellazione mai partita (%s)" % lg)
             _d, oggetto, corpo = self.posta.ultima()
             self.assertEqual(oggetto, EM.oggetto("c_ogg", lg))
-            self.assertIn(SPIA_EMAIL_CANC[lg], testo_piatto(corpo),
+            self.assertIn(SPIA_EMAIL_CANC[lg], piatto(corpo),
                           "cancellazione/%s: corpo nella lingua sbagliata" % lg)
             self.assertEqual(italiano_dentro(corpo), [],
                              "cancellazione/%s: italiano nel corpo" % lg)
@@ -817,7 +817,7 @@ class TestViaggioDellaLingua(_ConRouter):
         self.assertTrue(self.posta.attendi(1))
         _d, oggetto, corpo = self.posta.ultima()
         self.assertEqual(oggetto, EM.oggetto("v_ogg_pay", "en"))
-        self.assertIn(SPIA_EMAIL_VOUCHER["en"], testo_piatto(corpo))
+        self.assertIn(SPIA_EMAIL_VOUCHER["en"], piatto(corpo))
         self.assertEqual(italiano_dentro(corpo), [], "email italiana per lingua ignota")
         self.posta.pulisci()
         self.webhook(b["riferimento"])
@@ -856,9 +856,9 @@ class TestPagineDelVoucher(_ConRouter):
             pagina = pagina_voucher_html(self.sis, token, lg)
             self.assertIsNotNone(pagina, "voucher/%s non renderizzato" % lg)
             self.assertEqual(_attributo_lang(pagina), lg)
-            self.assertIn(SPIA_VOUCHER_PAGINA[lg], testo_piatto(pagina),
+            self.assertIn(SPIA_VOUCHER_PAGINA[lg], piatto(pagina),
                           "voucher/%s non contiene %r" % (lg, SPIA_VOUCHER_PAGINA[lg]))
-            resi[lg] = testo_piatto(pagina)
+            resi[lg] = piatto(pagina)
         uguali = [(a, b) for i, a in enumerate(OTTO) for b in OTTO[i + 1:]
                   if resi[a] == resi[b]]
         self.assertEqual(uguali, [], "voucher identico fra lingue diverse: %s" % uguali)
@@ -908,11 +908,11 @@ class TestPagineDelVoucher(_ConRouter):
             pagina = pagina_ricevuta_html(self.sis, token, lg)
             self.assertIsNotNone(pagina, "ricevuta/%s non renderizzata" % lg)
             self.assertEqual(_attributo_lang(pagina), lg)
-            self.assertIn(SPIA_RICEVUTA[lg], testo_piatto(pagina),
+            self.assertIn(SPIA_RICEVUTA[lg], piatto(pagina),
                           "ricevuta/%s non contiene %r" % (lg, SPIA_RICEVUTA[lg]))
             # l'importo pagato resta lo stesso in ogni lingua (la lingua non tocca i soldi)
             self.assertIn("400.00 EUR", pagina, "ricevuta/%s: importo alterato" % lg)
-            resi[lg] = testo_piatto(pagina)
+            resi[lg] = piatto(pagina)
         uguali = [(a, b) for i, a in enumerate(OTTO) for b in OTTO[i + 1:]
                   if resi[a] == resi[b]]
         self.assertEqual(uguali, [], "ricevuta identica fra lingue diverse: %s" % uguali)
@@ -937,7 +937,7 @@ class TestPagineDelVoucher(_ConRouter):
             pagina = pagina_recensione_html(self.sis, token, lg)
             self.assertIsNotNone(pagina, "recensione/%s non renderizzata" % lg)
             self.assertEqual(_attributo_lang(pagina), lg)
-            resi[lg] = testo_piatto(pagina)
+            resi[lg] = piatto(pagina)
         uguali = [(a, b) for i, a in enumerate(OTTO) for b in OTTO[i + 1:]
                   if resi[a] == resi[b]]
         self.assertEqual(uguali, [], "pagina recensione identica fra %s" % uguali)
@@ -1074,7 +1074,7 @@ class TestRotteHTTPVere(unittest.TestCase):
             stato, corpo = self._get("/voucher/%s?lang=%s" % (tk, lg))
             self.assertEqual(stato, 200, corpo[:200])
             self.assertEqual(_attributo_lang(corpo), lg, "rotta /voucher/?lang=%s" % lg)
-            self.assertIn(SPIA_VOUCHER_PAGINA[lg], testo_piatto(corpo))
+            self.assertIn(SPIA_VOUCHER_PAGINA[lg], piatto(corpo))
         # SENZA ?lang=: la lingua FIRMATA nel gettone (giapponese), non l'italiano
         stato, corpo = self._get("/voucher/" + tk)
         self.assertEqual(stato, 200)
@@ -1092,7 +1092,7 @@ class TestRotteHTTPVere(unittest.TestCase):
             stato, corpo = self._get("/ricevuta/%s?lang=%s" % (tk, lg))
             self.assertEqual(stato, 200, corpo[:200])
             self.assertEqual(_attributo_lang(corpo), lg)
-            self.assertIn(SPIA_RICEVUTA[lg], testo_piatto(corpo))
+            self.assertIn(SPIA_RICEVUTA[lg], piatto(corpo))
         self.assertEqual(_attributo_lang(self._get("/ricevuta/" + tk)[1]), "ja")
 
     def test_rotta_link_rotto_risponde_404_nella_lingua_chiesta(self):
@@ -1110,11 +1110,11 @@ class TestRotteHTTPVere(unittest.TestCase):
             stato, corpo = self._get("/affitta/roma?lang=" + lg)
             self.assertEqual(stato, 200, corpo[:200])
             self.assertEqual(_attributo_lang(corpo), lg)
-            self.assertIn(SPIA_LANDING[lg], testo_piatto(corpo))
+            self.assertIn(SPIA_LANDING[lg], piatto(corpo))
             stato, corpo = self._get("/blog?lang=" + lg)
             self.assertEqual(stato, 200, corpo[:200])
             self.assertEqual(_attributo_lang(corpo), lg)
-            self.assertIn(SPIA_BLOG[lg], testo_piatto(corpo))
+            self.assertIn(SPIA_BLOG[lg], piatto(corpo))
 
     def test_rotta_i18n_e_catalogo_via_HTTP_vero(self):
         for lg in OTTO:

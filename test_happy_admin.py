@@ -794,12 +794,17 @@ class HappyAdmin(unittest.TestCase):
 
     # ══════════════════════ BUNKER — marche temporali ══════════════════════
     def test_bunker_marca_ora_e_elenco(self):
+        _prima_utc = datetime.datetime.utcnow().strftime("%Y-%m-%d")   # finestra: PRIMA
         out = self.rotta("POST", "/api/bunker/marca_ora", 200, {}, self.AKB)
         self.assertIs(out["ok"], True, out)
         self.assertEqual(out["tsa"], "https://tsa.finta/tsr")
         self.assertEqual(len(out["impronta"]), 64)
         self.assertIsInstance(out["id"], int)
-        self.assertEqual(out["giorno"], datetime.datetime.utcnow().strftime("%Y-%m-%d"))
+        # ⏰ ANTI-INSTABILITA' NOTTURNA (chiuso 2026-07-29): confrontare il giorno scritto dal
+        # SERVER con un utcnow() calcolato DOPO la chiamata rende il test rosso a cavallo della
+        # mezzanogiorno UTC, senza che nulla sia rotto. Si accetta la FINESTRA fra prima e dopo.
+        self.assertIn(out["giorno"], {_prima_utc, datetime.datetime.utcnow().strftime("%Y-%m-%d")},
+                      "giorno fuori dalla finestra della chiamata: %r" % out.get("giorno"))
 
         el = self.rotta("GET", "/api/bunker/marche_temporali", 200, headers=self.AKB)
         self.assertEqual((el["totale"], el["riuscite"]), (1, 1), el)

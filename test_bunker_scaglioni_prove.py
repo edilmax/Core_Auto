@@ -167,9 +167,15 @@ class TestScaglioni(BaseSala):
             if al_prossimo is None:
                 self.assertEqual(v["prossimo_scatto_il"], "")
             else:
-                atteso = (datetime.date.today()
-                          + datetime.timedelta(days=al_prossimo)).isoformat()
-                self.assertEqual(v["prossimo_scatto_il"], atteso, "data scatto a %d gg" % giorni)
+                # ⏰ ANTI-INSTABILITA' NOTTURNA (chiuso 2026-07-29): il server calcola la data
+                # col SUO date.today(); se il test la ricalcola dopo la mezzanotte locale i due
+                # valori differiscono di un giorno senza che nulla sia rotto. Finestra di 1 giorno.
+                base = datetime.date.today()
+                ammessi = {(base + datetime.timedelta(days=al_prossimo)).isoformat(),
+                           (base + datetime.timedelta(days=al_prossimo - 1)).isoformat()}
+                self.assertIn(v["prossimo_scatto_il"], ammessi,
+                              "data scatto a %d gg fuori finestra: %r"
+                              % (giorni, v.get("prossimo_scatto_il")))
             self.assertEqual(v["bps_diretto"], 500)      # il diretto non lo tocca la rampa
 
     def test_il_bunker_mostra_ESATTAMENTE_cio_che_il_motore_addebita(self):
