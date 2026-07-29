@@ -110,21 +110,18 @@ jobs:
       #  SALIRE, mai scendere. Una volta che il progetto ha raggiunto un
       #  livello, non gli e' piu' permesso tornare indietro.
       #
-      #  ATTENZIONE: 55 NON e' un numero misurato, e' un valore PRUDENTE messo
-      #  a mano perche' la misura vera non e' mai stata presa su tutta la suite
-      #  (l'unico dato locale disponibile era un file .coverage parziale, non
-      #  rappresentativo). Il numero VERO lo stampa questo job al primo giro:
-      #  lo trovi come annotazione "Copertura misurata" e nel riepilogo della run.
+      #  ✅ MISURA VERA PRESA (run del 2026-07-28, commit e7beaea, suite INTERA su
+      #  Linux): **82.5%** su 23.436 righe e 6.488 rami del prodotto vivo.
+      #  Soglia portata da 55 (valore prudente non misurato) a **82**: il misurato
+      #  arrotondato per difetto, con un solo punto di margine per il rumore.
       #
-      #  >>> COMPITO DEL COORDINATORE, dopo il PRIMO giro:
-      #      - se il misurato e' SOPRA 55  -> alzare COVERAGE_MIN al misurato
-      #        arrotondato per difetto (es. misurato 71.4 -> 71). Da li' in poi
-      #        si alza e basta, ogni volta che si guadagna terreno.
-      #      - se il misurato e' SOTTO 55  -> abbassare COVERAGE_MIN UNA VOLTA
-      #        SOLA al misurato arrotondato per difetto, e da quel momento vale
-      #        il cricchetto: solo in salita.
+      #  >>> CRICCHETTO (regola permanente): questo numero si ALZA soltanto.
+      #      Quando una run misura piu' dell'attuale, si alza al nuovo valore
+      #      arrotondato per difetto. Non si abbassa MAI per far passare un commit:
+      #      se la copertura scende, il commit ha tolto prove ed e' quello a dover
+      #      cambiare, non la soglia.
       # ------------------------------------------------------------------
-      COVERAGE_MIN: '55'
+      COVERAGE_MIN: '82'
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -310,7 +307,10 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '20'
-          cache: npm                      # riusa i pacchetti npm gia' scaricati
+          # NIENTE `cache: npm`: la cache npm PRETENDE un lock file (package-lock.json /
+          # npm-shrinkwrap.json / yarn.lock) che questo repo NON versiona -> il job moriva
+          # con "Dependencies lock file is not found" PRIMA ancora di installare nulla.
+          # Difetto della pipeline (2026-07-28), non del prodotto: visto solo dalla CI Linux.
       - name: Dipendenze (playwright + axe-core, gia' in package.json)
         run: npm install --no-audit --no-fund
       - name: Browser Chromium
