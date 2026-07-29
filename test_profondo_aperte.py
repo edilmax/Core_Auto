@@ -232,10 +232,14 @@ class SchemaOrologio:
 
 # Debito NOTO al 2026-07-28, congelato: chiave -> quante uguaglianze in quella funzione.
 # Solo la classe pericolosa (DUE OROLOGI). Questa tabella può solo RIMPICCIOLIRE.
-DEBITO_OROLOGIO = {
-    ("test_happy_admin.py", "test_bunker_marca_ora_e_elenco", "utcnow"): 1,
-    ("test_bunker_scaglioni_prove.py", "test_scaglioni_agli_estremi_con_date", "today"): 1,
-}
+# ✅ DEBITO SALDATO il 2026-07-29 dal coordinatore: i due confronti a due orologi sono stati
+# corretti con una FINESTRA di tolleranza (prima/dopo la chiamata), e la correzione e' stata
+# PROVATA riproducendo la mezzanotte DURANTE la chiamata (l'orologio del test avanza solo
+# dalla seconda lettura): prima cadeva, ora regge.
+# Da qui in poi vale il CRICCHETTO: il debito e' ZERO e puo' solo restare zero. Chiunque
+# introduca un nuovo confronto a due orologi fa diventare ROSSA questa guardia, che gli dice
+# file, riga e rimedio.
+DEBITO_OROLOGIO = {}
 
 # Campioni di controllo del rilevatore: (sorgente, classe attesa o None se non segnalabile)
 _CAMPIONI = [
@@ -356,19 +360,21 @@ class TestAntiFlakyOrologio(unittest.TestCase):
 
     def test_le_righe_esatte_da_correggere_sono_indicate(self):
         """La guardia non dice solo «c'è un problema»: dice DOVE, riga per riga.
-        (Il coordinatore corregge lì, senza che questo file tocchi i test altrui.)"""
+        DEBITO SALDATO (2026-07-29): l'elenco degli aperti dev'essere VUOTO, e se un domani
+        qualcuno riapre il debito questa guardia lo nomina file per file."""
         tutti = SchemaOrologio.in_cartella(RADICE)
-        aperti = [t for t in SchemaOrologio.pericolosi(tutti)
-                  if SchemaOrologio.chiave(t) in DEBITO_OROLOGIO]
+        pericolosi = SchemaOrologio.pericolosi(tutti)
+        aperti = [t for t in pericolosi if SchemaOrologio.chiave(t) in DEBITO_OROLOGIO]
         self.assertEqual(len(aperti), sum(DEBITO_OROLOGIO.values()), aperti)
-        per_file = {t["file"]: t["riga"] for t in aperti}
-        self.assertEqual(sorted(per_file), ["test_bunker_scaglioni_prove.py",
-                                            "test_happy_admin.py"], per_file)
-        # la riga «~802» del mandato: il confronto del giorno della marca temporale
-        self.assertTrue(700 < per_file["test_happy_admin.py"] < 900, per_file)
-        self.assertIn("utcnow", [t["codice"] for t in aperti
-                                 if t["file"] == "test_happy_admin.py"][0])
-        print("\n[aperte/1] DUE OROLOGI — salta a mezzanotte, da correggere:", file=sys.stderr)
+        # ✅ ZERO confronti a due orologi in TUTTA la suite: il debito e' saldato e resta tale.
+        residui = "\n".join("    %(file)s:%(riga)d  %(funzione)s  ->  %(codice)s" % t
+                            for t in sorted(pericolosi, key=lambda x: (x["file"], x["riga"])))
+        self.assertEqual(pericolosi, [],
+                         "il debito orologio era ZERO: qualcuno ha reintrodotto un confronto "
+                         "fra l'orologio del server e quello del test (salta a mezzanotte).\n"
+                         "Rimedio: finestra di tolleranza (prima/dopo la chiamata) oppure eco "
+                         "del valore spedito al server.\n" + residui)
+        print("\n[aperte/1] DUE OROLOGI — debito SALDATO, elenco aperti:", file=sys.stderr)
         for t in sorted(aperti, key=lambda x: (x["file"], x["riga"])):
             print("    %(file)s:%(riga)d  %(funzione)s  ->  %(codice)s" % t, file=sys.stderr)
         print("[aperte/1] ECO — un orologio solo (rischio limitato al CAPODANNO, se quel "

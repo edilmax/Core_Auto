@@ -112,11 +112,13 @@ class TestWebhookGuarigione(unittest.TestCase):
         """Fail-safe: se nel frattempo la prenotazione e' stata rimborsata, il retry NON deve
         far maturare il payout (sarebbe un bonifico su soldi gia' restituiti)."""
         rif, _ = self._pendente_pagato_a_meta()
-        self.sis.pagamenti_pendenti.marca(rif, "rimborsato") \
-            if hasattr(self.sis.pagamenti_pendenti, "marca") else None
-        info = self.sis.pagamenti_pendenti.info(rif)
-        if info.get("stato") != "rimborsato":
-            self.skipTest("questo store non espone il passaggio diretto a 'rimborsato'")
+        # NIENTE skip: si usa la STRADA VERA del prodotto (`fase162.marca_da_rimborsare`, la
+        # stessa del rimborso admin). Un test che si assolve da solo e' una zona cieca — lo
+        # vieta `test_suite_senza_zone_cieche` e ha ragione: sparirebbe dal rapporto come
+        # «saltato» proprio mentre il caso che deve difendere resta scoperto.
+        self.assertTrue(self.sis.pagamenti_pendenti.marca_da_rimborsare(rif),
+                        "il passaggio a 'rimborsato' deve riuscire da 'pagato'")
+        self.assertEqual(self.sis.pagamenti_pendenti.info(rif)["stato"], "rimborsato")
         evento = json.dumps({"id": "evt_r", "type": "checkout.session.completed",
                              "data": {"object": {"id": "cs_1",
                                                  "metadata": {"riferimento": rif}}}})
