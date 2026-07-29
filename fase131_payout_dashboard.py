@@ -81,6 +81,15 @@ class PayoutDashboard:
                     stato TEXT NOT NULL, ts INTEGER NOT NULL)""")
                 con.execute("CREATE INDEX IF NOT EXISTS ix_payout_host "
                             "ON payout(host_id)")
+                # MIGRAZIONE DEI DATI (2026-07-29). Il fix di `_norm_valuta` ha corretto
+                # solo le scritture NUOVE: le righe gia' in archivio, scritte con
+                # `valuta.upper()` senza strip, restano con ' EUR '. `riepilogo` raggruppa
+                # sul valore GREZZO letto dal file, quindi quelle righe finiscono sotto una
+                # chiave che `da_pagare`/`elenca` non cercano mai -> soldi dovuti all'host
+                # INVISIBILI e bonifico mai fatto. Idempotente: su archivi puliti tocca
+                # ZERO righe (il WHERE la rende un no-op ad ogni avvio successivo).
+                con.execute("UPDATE payout SET valuta=UPPER(TRIM(valuta)) "
+                            "WHERE valuta<>UPPER(TRIM(valuta))")
         finally:
             con.close()
 
