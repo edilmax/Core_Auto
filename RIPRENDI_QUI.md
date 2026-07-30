@@ -46,6 +46,63 @@ rossi**, causa riprodotta in laboratorio. Da qui in poi: **una campagna alla vol
 
 ---
 
+## 🔧 STATO 2026-07-30 — 4 INTERVENTI CHIRURGICI (metodo ZERO-BLOAT) · TUTTI ONLINE
+
+Direttiva del fondatore: **stop alle campagne, solo correzioni chirurgiche su richiesta esplicita**
+— «modifica la riga sbagliata, vietato aggiungere funzioni wrapper, classi helper o if ridondanti;
+bilancio righe prossimo allo zero». Metodo applicato a ogni intervento: **1 diff isolato mostrato
+prima del commit · guardia vista ROSSA · ripristino byte-identico (sha256) · suite INTERA verde ·
+CI Linux verde · deploy col protocollo a rischio zero (backup verificato + punto di ritorno)**.
+
+| Intervento | Produzione | Guardia | Commit | Online |
+|---|---|---|---|---|
+| Ricerca pubblica cieca alle maiuscole | **1 riga** (`LOWER(a.citta)=LOWER(?)`) | 5 | `c32c1d3` | ✅ |
+| Valuta storica dei payout (migrazione retroattiva) | **1 istruzione SQL** | 5 | `d535e77` | ✅ |
+| Deposito cauzionale (fase149) cablato | **6 righe** su 3 file | 10 | `6efd8f7` | ✅ |
+| Allarme «marche temporali ferme» | **13 righe** (1 file) | 8 | `7cdeb29` | ✅ |
+
+**DETTAGLI CHE CONTANO**
+- **Ricerca**: l'host salva «Roma», l'ospite cercava «roma» → **zero risultati** e messaggio «stiamo
+  aprendo a roma!» mentre l'annuncio era pubblicato. Perdita di prenotazioni silenziosa. Lo stesso
+  confronto era già insensibile alle maiuscole nel pannello admin: scoperta proprio la ricerca che
+  porta i soldi. Provato LIVE nel container: Roma/roma/ROMA/RoMa → 1 risultato, milano → 0.
+- **Payout**: il fix dell'onda 1 correggeva solo le scritture NUOVE; le righe già in archivio con
+  `' EUR '` restavano sotto una chiave che `da_pagare`/`elenca` non cercano mai → **soldi dovuti
+  all'host invisibili**. La migrazione (in `inizializza_schema`) è idempotente: su archivio pulito
+  tocca ZERO righe.
+- **Deposito**: era «costruito e dimenticato» (nessuna chiamata, nessun campo config, nessuna riga
+  compose). Cablato con archivio **DUREVOLE** (`/data/deposito.db`: custodisce hold su carte; in RAM
+  si perderebbe la traccia di soldi bloccati ai clienti). **PSP dormiente di proposito**: `capture`/
+  `release` NON iniettati → `cattura_danno` è RIFIUTATA senza stati a metà (fase149 riga ~109).
+  Collegarlo muove denaro dei clienti: decisione del fondatore. Verificato LIVE: collegato, fra i
+  componenti, archivio su file.
+- **Marche**: il giro giornaliero fa datare contratti+giornale da una TSA esterna (RFC 3161); se la
+  TSA taceva il giro riprovava **IN SILENZIO** → settimane senza prove datate, scoperto in causa.
+  Ora `_marca_temporale_ferma` (read-only) grida dopo 48h. Verificato LIVE **in entrambe le
+  direzioni**: adesso TACE (ultima marca 2026-07-30), con orologio spostato a +100h **GRIDA**
+  (108.6 ore) e l'email contiene il titolo giusto.
+  ⚠️ **LEZIONE**: la prima stesura gridava su un impianto APPENA NATO (archivio vuoto) e l'ha colta
+  `test_guardiano.test_su_tutto_pulito_il_guardiano_TACE`. **Un falso allarme è un difetto**: insegna
+  a ignorare i rossi. Distinzione: archivio VUOTO = installazione nuova → silenzio; archivio con
+  TENTATIVI tutti falliti → allarme.
+- **VERIFICATO ANCHE**: IP tracking (anti-frode/GDPR) e persistenza marche erano **GIÀ ATTIVI** —
+  IP pubblico reale + user-agent nelle prove firmate, 7 marche giornaliere in archivio. Zero righe
+  scritte: sarebbe stato bloat.
+- **MUTAZIONE, falso rosso della CI**: il mutante «protezione soldi invertita» risultò sopravvissuto
+  su Linux (3 giri su 3) → riprodotto in locale (ucciso da 3 test), ipotesi cache-bytecode smentita
+  con esperimento, riprodotto su **Linux vero** (VPS, py3.12: ucciso) → rieseguito il job: **verde**.
+  Era un intoppo del runner. La difesa anti-intoppo del motore (3 giri + pausa) **non è bastata**:
+  candidato irrobustimento futuro.
+- **PARCHEGGIATO** (non in produzione, fuori dai commit): il resto dell'onda 2 del Livello 2 —
+  7 file di produzione/pipeline in `git stash` + 7 collaudi in `Desktop/_onda2_parcheggio`
+  (contratto di persistenza, dati reali, migrazioni mancanti, immagine Docker in CI, parità
+  d'ambiente py3.9-CI vs py3.11-prod). Da riprendere con calma, uno alla volta.
+- **DA FARE DAL FONDATORE (2 minuti)**: GitHub → Settings → Branches → regola su `master` →
+  «Require status checks» → aggiungere **solo `gate`**. Finché non c'è, il cancello esiste ma la
+  porta resta aperta.
+
+---
+
 ## 🔬 STATO 2026-07-28 — CAMPAGNA DI VERIFICA SUPREMA: 10 DIFETTI VERI CHIUSI · GIRO 54/54 COMPLETO
 
 **Collaudo supremo (12 agenti in parallelo, ~3h)** — dettaglio completo nella voce REGISTRO
