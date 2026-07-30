@@ -99,6 +99,75 @@ class TestAdminRimborsoMoney(unittest.TestCase):
         ril = self.sys.garanzia.auto_rilascia(ora_ts=int(time.time()) + 10**9, dettagli=True)
         self.assertEqual(ril, [], "REGRESSIONE: l'host viene pagato su prenotazione rimborsata")
 
+    def test_se_un_passo_di_sicurezza_FALLISCE_la_risposta_NON_dice_fatto(self):
+        """IL RIMBORSO NON PUO' DICHIARARE COSE CHE NON SONO AVVENUTE.
+
+        `_admin_rimborso` esegue i passi che impediscono la PERDITA PIENA -- trattenere il
+        payout, stornare la tassa, REVOCARE il check-in, chiudere l'escrow, invalidare il
+        pendente -- e ognuno e' isolato in un `except` che scrive solo nel log. Poi la
+        funzione ritornava INCONDIZIONATAMENTE 200 con la nota «payout trattenuto ed escrow
+        chiuso»: una frase che poteva essere FALSA.
+
+        Il pezzo che nessun altro copre e' la SERRATURA: se la revoca del check-in fallisce,
+        lo smart-pass resta valido su una prenotazione rimborsata -> la porta si apre a un
+        ospite che ha gia' riavuto i soldi. Il Guardiano (fase186) sorveglia bonifici ed
+        escrow, non le serrature: qui non arriva.
+
+        VISTO ROSSO sul codice vecchio: rispondeva 200 «rimborsato ... payout trattenuto ed
+        escrow chiuso» senza una parola sui due passi esplosi.
+        """
+        class _Rotto:
+            def __getattr__(self, nome):
+                def _boom(*a, **k):
+                    raise RuntimeError("componente guasto: %s" % nome)
+                return _boom
+
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": "casa", "check_in": "2026-09-20",
+                       "check_out": "2026-09-22", "party": 2})
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "cli@ar.it"})
+        rif = b["riferimento"]
+        pl = json.dumps({"type": "checkout.session.completed",
+                         "data": {"object": {"metadata": {"riferimento": rif}}}})
+        self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
+                        {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
+        s, adm = self.g("GET", "/api/admin/prenotazioni", None, {"X-Admin-Key": "ak"})
+        idem = [p for p in adm["prenotazioni"] if p.get("check_in") == "2026-09-20"][0]["idem_key"]
+
+        # ROMPO due passi: la serratura e il payout. Il rilascio delle date resta sano.
+        self.sys.checkin = _Rotto()
+        self.sys.payout = _Rotto()
+
+        s, res = self.g("POST", "/api/admin/rimborso",
+                        {"alloggio_id": "casa", "check_in": "2026-09-20",
+                         "check_out": "2026-09-22", "idem_key": idem}, {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, "le date sono state liberate davvero: %r" % (res,))
+        falliti = res.get("passi_falliti") or []
+        self.assertIn("checkin_revocato", falliti,
+                      "la revoca della serratura e' esplosa e la risposta tace: %r" % (res,))
+        self.assertIn("payout_trattenuto", falliti,
+                      "il payout non e' stato trattenuto e la risposta tace: %r" % (res,))
+        self.assertNotIn("payout trattenuto", (res.get("nota") or "").lower(),
+                         "la nota dichiara un passo NON avvenuto: %r" % (res,))
+
+    def test_quando_va_tutto_bene_NON_inventa_fallimenti(self):
+        """Prova di rimozione: la lista dei falliti dev'essere vuota sul percorso sano,
+        altrimenti la nuova segnalazione sarebbe un falso allarme (difetto quanto il buco)."""
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": "casa", "check_in": "2026-09-25",
+                       "check_out": "2026-09-27", "party": 2})
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "cli@ar.it"})
+        s, adm = self.g("GET", "/api/admin/prenotazioni", None, {"X-Admin-Key": "ak"})
+        idem = [p for p in adm["prenotazioni"] if p.get("check_in") == "2026-09-25"][0]["idem_key"]
+        s, res = self.g("POST", "/api/admin/rimborso",
+                        {"alloggio_id": "casa", "check_in": "2026-09-25",
+                         "check_out": "2026-09-27", "idem_key": idem}, {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, res)
+        self.assertEqual(res.get("passi_falliti"), [],
+                         "grida su un rimborso perfettamente riuscito: %r" % (res,))
+
     def test_rimborso_admin_idempotente(self):
         s, q = self.g("POST", "/api/concierge/quote",
                       {"alloggio_id": "casa", "check_in": "2026-09-15",

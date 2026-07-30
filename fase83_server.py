@@ -4196,15 +4196,20 @@ class RouterHTTP:
         # date) -> idem[:24] dava un rif SBAGLIATO e i 3 passi di sicurezza soldi diventavano
         # no-op silenziosi (host pagato + ospite rimborsato). Stesso strip di _host_prenotazioni.
         rif = idem[len("reblock:"):] if idem.startswith("reblock:") else idem[:24]
-        self._payout_trattieni(rif)                    # l'host non incassa una prenotazione rimborsata
-        self._storna_tassa(rif)                        # tassa restituita all'ospite -> fuori dal ledger citta'
-        self._revoca_checkin(rif)                      # smart-pass revocato (no sblocco su rimborsata)
+        # Ogni passo e' isolato (uno rotto non deve fermare gli altri) ma NON silenzioso: si
+        # raccoglie chi ha fallito, perche' la risposta non puo' dichiarare cose non avvenute.
+        _falliti = [nome for nome, ok in (
+            ("payout_trattenuto", self._payout_trattieni(rif)),   # l'host non incassa una rimborsata
+            ("tassa_stornata", self._storna_tassa(rif)),          # tassa fuori dal ledger citta'
+            ("checkin_revocato", self._revoca_checkin(rif)),      # smart-pass revocato: la PORTA
+        ) if not ok]
         gz = getattr(self._sys, "garanzia", None)
         if gz is not None:
             try:
                 gz.annulla(rif)                        # niente auto-rilascio dell'escrow all'host
             except Exception:
                 logger.warning("admin rimborso: chiusura garanzia fallita (ignorata)", exc_info=True)
+                _falliti.append("escrow_annullato")
         pp = getattr(self._sys, "pagamenti_pendenti", None)
         if pp is not None:
             try:
@@ -4225,10 +4230,20 @@ class RouterHTTP:
             except Exception:
                 logger.warning("admin rimborso: invalidazione pendente fallita (ignorata)",
                                exc_info=True)
+                _falliti.append("pendente_invalidato")
+        if _falliti:
+            # Le date SONO libere (il rilascio e' riuscito, e' la prima cosa che si fa), ma i
+            # passi che mettono in sicurezza i soldi e la PORTA no: va detto, non taciuto.
+            logger.error("RIMBORSO ADMIN INCOMPLETO rif=%s passi FALLITI=%r -> rischio PERDITA "
+                         "PIENA (host pagato + ospite rimborsato) e/o smart-pass ancora valido",
+                         rif, _falliti)
         return 200, {"stato": "rimborsato", "date_liberate": True,
                      "idempotente": bool(getattr(e, "idempotente", False)),
-                     "nota": "date liberate; payout trattenuto ed escrow chiuso; "
-                             "rimborso PSP da eseguire quando Stripe e' live"}
+                     "passi_falliti": _falliti,
+                     "nota": ("date liberate; payout trattenuto ed escrow chiuso; "
+                              "rimborso PSP da eseguire quando Stripe e' live") if not _falliti
+                             else ("date liberate, ma ATTENZIONE: questi passi NON sono riusciti "
+                                   "e vanno fatti a mano -> " + ", ".join(_falliti))}
 
     def _admin_controversie(self, query, headers):
         """Elenco delle CONTROVERSIE aperte (garanzie contestate): l'operatore le vede, sente
@@ -5695,13 +5710,16 @@ class RouterHTTP:
 
     def _payout_trattieni(self, rif):
         """Prenotazione cancellata -> il payout atteso passa a 'trattenuto' (l'host non vede piu'
-        un incasso che non arrivera'). Isolato."""
+        un incasso che non arrivera'). Isolato. Ritorna True se fatto (o niente da fare),
+        False se e' FALLITO: chi chiama deve poterlo DIRE invece di dichiarare 'fatto'."""
         try:
             pd = getattr(self._sys, "payout", None)
             if pd is not None and isinstance(rif, str) and rif:
                 pd.aggiorna_stato(rif, "trattenuto")
+            return True
         except Exception:
             logger.warning("payout trattieni fallito (ignorato)", exc_info=True)
+            return False
 
     def _storna_tassa(self, rif):
         """Prenotazione rimborsata -> storna la tassa di soggiorno dal ledger citta' (pass-through
@@ -5711,8 +5729,10 @@ class RouterHTTP:
             led = getattr(self._sys, "tassa_comunale", None)
             if led is not None and hasattr(led, "storna") and isinstance(rif, str) and rif:
                 led.storna(rif)
+            return True
         except Exception:
             logger.warning("storno tassa fallito (ignorato)", exc_info=True)
+            return False
 
     def _revoca_checkin(self, rif):
         """Prenotazione cancellata/rimborsata -> REVOCA il check-in (fase127): lo smart-pass
@@ -5723,8 +5743,10 @@ class RouterHTTP:
             ck = getattr(self._sys, "checkin", None)
             if ck is not None and hasattr(ck, "revoca") and isinstance(rif, str) and rif:
                 ck.revoca(rif)
+            return True
         except Exception:
             logger.warning("revoca check-in fallita (ignorata)", exc_info=True)
+            return False
 
     def _host_payout(self, query, headers):
         """Dashboard payout dell'host: incassi attesi/in-transito/pagati PER VALUTA (fase131)."""
