@@ -107,6 +107,27 @@ CI Linux verde · deploy col protocollo a rischio zero (backup verificato + punt
   cambiare il nome: prima si aggiorna la regola su GitHub, poi il file. La nota fra parentesi nel
   nome è ormai superata ma **NON si tocca** per questo motivo.
   Nota minore: `strict` è OFF, cioè un ramo può essere unito anche se non aggiornato con master.
+  📌 **SEMANTICA ESATTA, verificata sul campo** (correzione di un'imprecisione detta a voce): la
+  regola blocca **cancellazione ramo**, **push forzati** e **merge di PR col gate rosso**. NON
+  blocca un **push diretto** del proprietario su master — è il nostro flusso attuale: il push
+  entra subito e i controlli girano DOPO. Per bloccare anche noi servirebbe «Require a pull
+  request before merging» (non attivato, scelta del fondatore). Ciò che ci protegge davvero resta
+  la disciplina: **suite INTERA verde prima del commit + tabella CI guardata dopo ogni push**
+  (solo oggi ha intercettato 3 rossi prima che arrivassero in produzione).
+
+### ▶️ PROSSIMI INTERVENTI CANDIDATI (il fondatore scegli quale, uno alla volta)
+1. **Ospiti al check-in contati sulla CAPIENZA e non sui PAGANTI** — una persona in più entro
+   capienza entra, e la **tassa di soggiorno risulta riscossa per meno teste** di quelle presenti:
+   l'unico rimasto che tocca soldi e adempimenti. Irrigidirlo rifiuterebbe check-in legittimi →
+   serve una decisione di prodotto, non una patch al volo.
+2. **Migrazione mai provata su `fase34` (archivio PRENOTAZIONI)** — ha un `ALTER TABLE ADD COLUMN`
+   e nessun test: un aggiornamento sui dati veri potrebbe esplodere. (Materiale già scritto nel
+   parcheggio: `test_migrazioni_mancanti.py`.)
+3. **La CI non costruisce mai l'immagine Docker** che va in produzione: un commit che rompe il
+   Dockerfile passa tutto verde, gate compreso. (Materiale nel parcheggio: `test_parita_ambiente`
+   + job `immagine` già abbozzato; da lì anche la parità py3.9-CI vs py3.11-prod.)
+4. **Vincolo Stripe sulle valute a 3 decimali** (BHD/KWD/OMR…: importo divisibile per 10).
+5. **`_puo_azione` fail-open** su import fallito di fase192 (difesa in profondità sui permessi).
 
 ---
 
