@@ -6049,7 +6049,13 @@ class RouterHTTP:
         except Exception:
             host_tiene = 0
             gia_uscito = 0     # in dubbio NON si taglia: mai negare un rimborso legittimo
-            logger.warning("chiusura garanzia su cancellazione fallita (ignorato)", exc_info=True)
+            # ERROR, non warning: se la cassaforte non si chiude resta APERTA su una
+            # prenotazione cancellata e puo' auto-rilasciarsi all'host -> rimborsiamo
+            # l'ospite E paghiamo l'host = PERDITA PIENA. Il Guardiano legge gli ERROR del
+            # registro ogni giorno: e' cio' che rende il guasto visibile entro 24h.
+            logger.error("CASSAFORTE NON CHIUSA sulla cancellazione di %s: l'escrow resta "
+                         "aperto e puo' pagare l'host di una prenotazione cancellata "
+                         "(PERDITA PIENA) -> chiuderlo a mano", rif, exc_info=True)
         # TETTO DI CASSA (bug PROVATO 2026-07-28, test_escrow_gia_liquidato): la cancellazione
         # ricalcolava il rimborso dalla SOLA politica, senza guardare se l'escrow era gia' stato
         # liquidato. Cammino: paga -> preme "tutto ok" (escrow 'rilasciato' + bonifico Connect
@@ -6101,8 +6107,12 @@ class RouterHTTP:
                 # in corso; se NON pagata = il link morto non potrà mai più confermarla.
                 _pp.marca_da_rimborsare(rif)
         except Exception:
-            logger.warning("invalidazione pendente su cancellazione fallita (ignorata)",
-                           exc_info=True)
+            # ERROR: senza questa marcatura il LINK DI PAGAMENTO resta VIVO (lo dice il
+            # commento qui sopra) e un pagamento tardivo puo' confermare una prenotazione
+            # GIA' CANCELLATA -> soldi incassati per una stanza che abbiamo liberato.
+            logger.error("PENDENTE NON INVALIDATO sulla cancellazione di %s: il link di "
+                         "pagamento resta VIVO e un pagamento tardivo puo' resuscitare la "
+                         "prenotazione -> invalidarlo a mano", rif, exc_info=True)
         # CREDITO VIAGGIO ANTI-RIMPIANTO: se hai perso qualcosa, una parte torna come credito
         # (non-cashabile, riscattabile su una prossima prenotazione; ci costa solo margine futuro).
         # la tassa di soggiorno (pass-through) si rimborsa SEMPRE per intero: niente soggiorno = niente tassa

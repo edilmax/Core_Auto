@@ -225,5 +225,90 @@ class TestCancellazioneMoney(unittest.TestCase):
             self.assertEqual(cN.get("stato"), "gia_cancellata")
 
 
+class TestCancellazioneGuastiSilenziosi(TestCancellazioneMoney):
+    """I PASSI DI SICUREZZA DELLA CANCELLAZIONE NON POSSONO FALLIRE IN SUSSURRO.
+
+    Cancellare non e' solo "liberare le date": e' mettere in sicurezza i soldi. Due passi
+    fallivano con un semplice `logger.warning`, e il flusso proseguiva:
+
+    · CHIUSURA DELLA CASSAFORTE (fase83:6049). Se `gz.annulla()` esplode, l'escrow resta
+      APERTO su una prenotazione cancellata e puo' auto-rilasciarsi all'host: rimborsiamo
+      l'ospite E paghiamo l'host = PERDITA PIENA.
+    · INVALIDAZIONE DEL PENDENTE (fase83:6103). Il commento accanto dice gia' cosa protegge:
+      «se NON pagata = il link morto non potra' mai piu' confermarla». Se fallisce, il link
+      di pagamento resta VIVO e un pagamento tardivo puo' confermare una prenotazione GIA'
+      CANCELLATA -- soldi incassati per una stanza che abbiamo liberato.
+
+    Perche' ERROR e non warning: dal 2026-07-30 il Guardiano legge gli ERROR del registro
+    ogni giorno e li manda per email (mai i warning, 131 e spesso innocui). E' quella
+    differenza che rende il guasto visibile entro 24h invece che mai.
+
+    NB: la chiusura della cassaforte ha gia' una rete a valle -- il Guardiano cerca gli
+    escrow su prenotazione rimborsata -- ma solo SE l'altro passo (la marcatura) e' andato a
+    buon fine: se falliscono entrambi, la prenotazione non risulta rimborsata e la
+    correlazione non scatta. Per questo servono udibili tutti e due.
+
+    VISTO ROSSO: col vecchio `logger.warning` nessuna delle due guardie passa.
+    """
+
+    class _Rotto:
+        def __getattr__(self, nome):
+            def _boom(*a, **k):
+                raise RuntimeError("archivio guasto: %s" % nome)
+            return _boom
+
+    def _cancella_con(self, componente, rotto):
+        b = self._prenota("2026-10-05", "2026-10-07")
+        self._webhook(b["riferimento"])                     # pagata: e' il caso che costa
+        setattr(self.sys, componente, rotto)
+        return self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
+
+    def test_cassaforte_non_chiusa_e_un_ERRORE_udibile(self):
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            s, _ = self._cancella_con("garanzia", self._Rotto())
+        unito = " ".join(reg.output).lower()
+        self.assertTrue("garanzia" in unito or "cassaforte" in unito,
+                        "il guasto della cassaforte non e' udibile: %r" % (reg.output,))
+
+    def test_pendente_non_invalidato_e_un_ERRORE_udibile(self):
+        """INIEZIONE CHIRURGICA: si rompe SOLO `marca_da_rimborsare`, non tutto l'archivio.
+        Distruggendo l'intero componente falliva prima `info()`, il record restava vuoto e
+        quel passo non partiva nemmeno: la prova non toccava la riga da provare. Un test che
+        non arriva dove crede e' un finto rosso quanto un finto verde."""
+        vero = self.sys.pagamenti_pendenti
+
+        class _SoloQuelPasso:
+            def __getattr__(self, nome):
+                if nome == "marca_da_rimborsare":
+                    def _boom(*a, **k):
+                        raise RuntimeError("archivio guasto: marca_da_rimborsare")
+                    return _boom
+                return getattr(vero, nome)
+
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            s, _ = self._cancella_con("pagamenti_pendenti", _SoloQuelPasso())
+        unito = " ".join(reg.output).lower()
+        self.assertTrue("pendente" in unito or "link" in unito,
+                        "il link di pagamento resta vivo e nessuno lo dice: %r" % (reg.output,))
+
+    def test_una_cancellazione_RIUSCITA_non_scrive_errori(self):
+        """Prova di rimozione: sul percorso sano zero ERROR, o l'email del Guardiano
+        diventerebbe rumore quotidiano (regola 10)."""
+        import logging
+        catturati = []
+
+        class _Spia(logging.Handler):
+            def emit(self, record):
+                if record.levelno >= logging.ERROR:
+                    catturati.append(record.getMessage())
+        reg = logging.getLogger("core_auto")
+        h = _Spia(); reg.addHandler(h); self.addCleanup(lambda: reg.removeHandler(h))
+        b = self._prenota("2026-10-15", "2026-10-17")
+        self._webhook(b["riferimento"])
+        s, _ = self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
+        self.assertEqual(s, 200)
+        self.assertEqual(catturati, [], "grida su una cancellazione riuscita: %r" % (catturati,))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
