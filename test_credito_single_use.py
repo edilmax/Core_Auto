@@ -164,8 +164,26 @@ class TestSingleUseE2E(unittest.TestCase):
                        {"quote_token": q2["quote_token"], "email": "cli2@x.it"})
         self.assertEqual(s3, 201, "la stanza del book rifiutato deve restare prenotabile")
 
-    def test_fail_open_store_rotto_non_blocca_prenotazione(self):
-        # se lo store solleva, la prenotazione NON deve essere bloccata (fail-open)
+    def test_store_rotto_RIFIUTA_la_prenotazione_invece_di_regalare_il_credito(self):
+        """CONTRATTO CORRETTO (2026-07-30). Questo test prima si chiamava
+        `test_fail_open_store_rotto_non_blocca_prenotazione` e pretendeva `201`: cioe'
+        IMPONEVA il difetto invece di sorvegliarlo.
+
+        Il difetto: se l'archivio dei crediti e' guasto, `consuma()` solleva; il fail-open
+        confermava la prenotazione con lo SCONTO GIA' APPLICATO mentre il credito restava
+        NON marcato come speso -> lo stesso credito tornava spendibile, all'infinito. Il
+        guasto non e' teorico: "database is locked" sotto concorrenza e' gia' successo qui.
+
+        Perche' il contratto giusto e' RIFIUTARE: due righe piu' sotto il codice ragiona
+        gia' cosi' per il caso gemello ('diverso') -- siamo PRE-PAGAMENTO, nessun soldo
+        mosso, quindi si rifiuta e si libera la stanza. Rifiutare e' recuperabile (l'ospite
+        rifa' il preventivo); regalare un credito riusabile no.
+
+        All'ospite si dice la VERITA': `service_unavailable` (problema momentaneo), non
+        `credito_gia_usato` che sarebbe falso -- lui non ha usato niente.
+
+        VISTO ROSSO sul codice vecchio: rispondeva 201.
+        """
         class _Rotto:
             def usato(self, cid):
                 raise RuntimeError("store giu'")
@@ -176,8 +194,14 @@ class TestSingleUseE2E(unittest.TestCase):
         # ricablo il concierge allo store rotto (il router usa self.sys.credito_usati al book)
         self.sys.concierge._credito_store = _Rotto()
         q = self._quote("2026-10-15", "2026-10-18", self._credito(nonce="n4"))
+        self.assertGreater(q["sconto_credito_cents"], 0,
+                           "il preventivo deve avere lo sconto: e' quello che rende grave "
+                           "confermare senza bruciare il credito")
         s, b = self._book(q)
-        self.assertEqual(s, 201, "un guasto dello store NON deve bloccare la prenotazione")
+        self.assertEqual(s, 409, "archivio crediti guasto -> prenotazione RIFIUTATA: %r" % (b,))
+        self.assertEqual(b.get("errore"), "service_unavailable",
+                         "il motivo detto all'ospite dev'essere vero: %r" % (b,))
+        self.assertNotIn("voucher_token", b, "nessuna prenotazione confermata: %r" % (b,))
 
 
 if __name__ == "__main__":
