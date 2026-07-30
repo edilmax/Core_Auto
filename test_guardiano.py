@@ -44,6 +44,55 @@ class TestSistemaSanoNessunAllarme(_Base):
         self.assertEqual(rep["conta"], 0)
 
 
+class TestControlloCieco(_Base):
+    """«PULITO» e «NON HO POTUTO GUARDARE» non sono la stessa cosa.
+
+    Il Guardiano avvolge tutti i suoi controlli in `_prova`, che cattura qualunque errore e
+    ritorna None; il chiamante fa `if ric:` e la categoria SPARISCE dall'elenco. Poi
+    `conta = 0` -> `pulito = True` -> nessuna email. Tradotto: se un controllo va in errore,
+    il Guardiano dichiara che va tutto bene mentre e' CIECO su quel fronte -- e i fronti sono
+    otto, fra cui la riconciliazione con Stripe e gli escrow che pagano l'host.
+
+    E' lo stesso difetto di forma trovato altrove il 2026-07-30 (il test che pretendeva il
+    comando che spegne il sito, il log che diceva «blocco temporaneo» su un'app murata, il
+    credito «non consumato» confuso con «niente da consumare»): uno strumento che rassicura
+    invece di controllare.
+
+    VISTO ROSSO sul codice vecchio: con un archivio guasto rispondeva pulito=True, conta=0.
+    """
+
+    class _ArchivioRotto:
+        """Qualunque cosa gli si chieda, esplode. Simula un DB corrotto o irraggiungibile."""
+        def __getattr__(self, nome):
+            def _boom(*a, **k):
+                raise RuntimeError("archivio guasto: %s" % nome)
+            return _boom
+
+    def test_un_controllo_che_esplode_NON_puo_diventare_tutto_pulito(self):
+        self.sys.garanzia = self._ArchivioRotto()          # rompe il controllo escrow
+        rep = G.scansiona(self.sys, ora=lambda: self.now)
+        self.assertFalse(rep["pulito"],
+                         "un controllo esploso e' stato scambiato per «tutto a posto»: %r" % rep)
+        self.assertGreater(rep["conta"], 0, "il conteggio ignora i controlli ciechi: %r" % rep)
+        self.assertIn("controllo_cieco", rep["anomalie"],
+                      "il Guardiano deve DICHIARARE cosa non ha potuto guardare: %r" % rep)
+
+    def test_l_allarme_dice_QUALE_controllo_e_cieco(self):
+        """Non basta gridare: serve sapere su cosa siamo ciechi, o l'email e' inutile."""
+        self.sys.payout = self._ArchivioRotto()            # rompe bonifici fermi/orfani
+        rep = G.scansiona(self.sys, ora=lambda: self.now)
+        ciechi = rep["anomalie"].get("controllo_cieco") or []
+        self.assertTrue(any("payout" in str(c) for c in ciechi),
+                        "l'elenco dei ciechi non nomina il controllo rotto: %r" % (ciechi,))
+
+    def test_e_l_email_di_allarme_lo_scrive(self):
+        self.sys.garanzia = self._ArchivioRotto()
+        rep = G.scansiona(self.sys, ora=lambda: self.now)
+        html = G.riassunto_html(rep)
+        self.assertIn("non ha potuto", html.lower(),
+                      "l'email non spiega che un controllo non ha potuto girare: %s" % html[:400])
+
+
 class TestEscrowBloccato(_Base):
 
     def test_una_garanzia_scaduta_da_giorni_e_un_allarme(self):

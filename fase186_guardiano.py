@@ -96,11 +96,10 @@ def _escrow_bloccati(sistema: Any, ora_ts: int, grazia_ore: int) -> List[Dict[st
     gar = getattr(sistema, "garanzia", None)
     if gar is None or not hasattr(gar, "aperte_scadute"):
         return []
-    try:
-        return gar.aperte_scadute(ora_ts=ora_ts, grazia_ore=grazia_ore)
-    except Exception:
-        logger.warning("guardiano: scan escrow fallito (ISOLATO)", exc_info=True)
-        return []
+    # NIENTE except qui: un archivio guasto tornava [] = «nessun escrow bloccato», cioe'
+    # una BUGIA travestita da controllo pulito. L'isolamento sta in `_prova` (scansiona),
+    # che l'errore lo REGISTRA fra i controlli ciechi invece di farlo sparire.
+    return gar.aperte_scadute(ora_ts=ora_ts, grazia_ore=grazia_ore)
 
 
 def _payout_anomali(sistema: Any, ora_ts: int, giorni_fermo: int
@@ -113,11 +112,7 @@ def _payout_anomali(sistema: Any, ora_ts: int, giorni_fermo: int
     if pay is None or not hasattr(pay, "tutti"):
         return {"bonifico_fermo": fermi, "payout_orfano": orfani}
     soglia = ora_ts - max(0, int(giorni_fermo)) * 86400
-    try:
-        righe = pay.tutti(limit=5000)
-    except Exception:
-        logger.warning("guardiano: scan payout fallito (ISOLATO)", exc_info=True)
-        return {"bonifico_fermo": fermi, "payout_orfano": orfani}
+    righe = pay.tutti(limit=5000)          # errore -> lo registra `_prova` come controllo CIECO
     for r in righe:
         stato = r.get("stato")
         # host che non esiste piu' + soldi ancora dovuti = orfano
@@ -160,11 +155,9 @@ def _soldi_su_rimborsata(sistema: Any, ora_ts: int) -> Dict[str, List[Dict[str, 
     pay = getattr(sistema, "payout", None)
     if pay is not None and hasattr(pay, "tutti"):
         for stato in _STATI_PAYOUT_VERSO_HOST:
-            try:
-                righe = pay.tutti(stato=stato, limit=5000)
-            except Exception:
-                logger.warning("guardiano: payout-su-rimborsata fallito (ISOLATO)", exc_info=True)
-                righe = []
+            # errore -> `_prova` lo registra come CIECO: qui tornare [] direbbe «nessun
+            # bonifico verso l'host su prenotazione rimborsata», cioe' nessuna perdita.
+            righe = pay.tutti(stato=stato, limit=5000)
             for r in righe:
                 sr = _stato_rimborso(r.get("prenotazione_id"))
                 if sr:
@@ -173,19 +166,17 @@ def _soldi_su_rimborsata(sistema: Any, ora_ts: int) -> Dict[str, List[Dict[str, 
     escrow_ko: List[Dict[str, Any]] = []
     gar = getattr(sistema, "garanzia", None)
     if gar is not None and (hasattr(gar, "aperte") or hasattr(gar, "aperte_scadute")):
-        try:
-            # SEGNALAZIONE IN ANTICIPO: TUTTI gli escrow 'in_garanzia' (rilascio passato O FUTURO)
-            # su una prenotazione rimborsata sono un'incoerenza -> il flusso di rimborso ha lasciato
-            # la garanzia aperta. La prevenzione (auto_rilascia salta_se) evita comunque di pagare
-            # l'host, ma qui lo si SEGNALA subito (anche giorni prima del rilascio) per trovare la
-            # causa a monte. Ripiego su aperte_scadute (solo rilascio passato) se 'aperte' manca.
-            if hasattr(gar, "aperte"):
-                aperte = gar.aperte(limit=2000)
-            else:
-                aperte = gar.aperte_scadute(ora_ts=ora_ts, grazia_ore=0, limit=2000)
-        except Exception:
-            logger.warning("guardiano: escrow-su-rimborsata fallito (ISOLATO)", exc_info=True)
-            aperte = []
+        # SEGNALAZIONE IN ANTICIPO: TUTTI gli escrow 'in_garanzia' (rilascio passato O FUTURO)
+        # su una prenotazione rimborsata sono un'incoerenza -> il flusso di rimborso ha lasciato
+        # la garanzia aperta. La prevenzione (auto_rilascia salta_se) evita comunque di pagare
+        # l'host, ma qui lo si SEGNALA subito (anche giorni prima del rilascio) per trovare la
+        # causa a monte. Ripiego su aperte_scadute (solo rilascio passato) se 'aperte' manca.
+        # NIENTE except: un errore qui tornava [] = «nessun escrow sta per pagare l'host di una
+        # rimborsata», la bugia piu' costosa che il Guardiano possa dire. Lo isola `_prova`.
+        if hasattr(gar, "aperte"):
+            aperte = gar.aperte(limit=2000)
+        else:
+            aperte = gar.aperte_scadute(ora_ts=ora_ts, grazia_ore=0, limit=2000)
         for g in aperte:
             sr = _stato_rimborso(g.get("prenotazione_id"))
             if sr:
@@ -254,11 +245,8 @@ def _hold_fantasma(sistema: Any, ora_ts: int, grazia_ore: int) -> List[Dict[str,
     pp = getattr(sistema, "pagamenti_pendenti", None)
     if inv is None or pp is None or not hasattr(inv, "orfani") or not hasattr(pp, "idem_keys"):
         return []
-    try:
-        return inv.orfani(pp.idem_keys(), ora_ts=ora_ts, grazia_sec=max(1, int(grazia_ore)) * 3600)
-    except Exception:
-        logger.warning("guardiano: scan stanze fantasma fallito (ISOLATO)", exc_info=True)
-        return []
+    # errore -> lo registra `_prova` come controllo CIECO, non come «nessuna stanza fantasma»
+    return inv.orfani(pp.idem_keys(), ora_ts=ora_ts, grazia_sec=max(1, int(grazia_ore)) * 3600)
 
 
 def scansiona(sistema: Any, *, ora: Any = None,
@@ -275,11 +263,17 @@ def scansiona(sistema: Any, *, ora: Any = None,
     # ne' far sollevare il Guardiano (che gira in un thread daemon: se esplode, muore in
     # silenzio e non guarda piu' niente). getattr NON basta: un __getattr__ che solleva un
     # errore diverso da AttributeError buca il default -> serve un try/except vero.
+    # ...ma un controllo fallito NON e' un controllo pulito: se sparisse e basta, `conta`
+    # resterebbe 0 e il report direbbe «tutto a posto» mentre siamo CIECHI su quel fronte
+    # (verificato: con un archivio guasto usciva pulito=True, conta=0, anomalie={}).
+    ciechi: list = []
+
     def _prova(f, *a):
         try:
             return f(*a)
         except Exception:
             logger.error("guardiano: un controllo e' fallito (ISOLATO)", exc_info=True)
+            ciechi.append(getattr(f, "__name__", "sconosciuto"))
             return None
 
     ric = _prova(_riconciliazione, sistema, giorni_riconciliazione)
@@ -314,6 +308,9 @@ def scansiona(sistema: Any, *, ora: Any = None,
     if hf:
         anomalie["hold_fantasma"] = hf
 
+    if ciechi:
+        anomalie["controllo_cieco"] = ciechi
+
     def _conta(v: Any) -> int:
         if isinstance(v, list):
             return len(v)
@@ -337,6 +334,7 @@ _TITOLI = {
     "escrow_su_rimborsata": "Escrow che sta per pagare l'host di una prenotazione RIMBORSATA (perdita)",
     "cambio_valuta_fermo": "Cambio valuta (OXR) fermo: la stima «≈ nella tua moneta» non si aggiorna",
     "marca_temporale_ferma": "Marca temporale ferma: contratti e giornale NON sono piu' datati da un terzo",
+    "controllo_cieco": "Un controllo del Guardiano NON ha potuto girare: su quel fronte siamo CIECHI",
 }
 
 
