@@ -48,6 +48,7 @@ GRAZIA_ESCROW_ORE = 48          # un escrow gia' scaduto da 2 giorni non dovrebb
 GIORNI_PAYOUT_FERMO = 7         # un bonifico 'maturato' fermo da una settimana e' bloccato
 GRAZIA_HOLD_ORE = 1             # una notte occupata senza prenotazione da >1h e' una STANZA FANTASMA
 GIORNI_RICONCILIAZIONE = 30     # finestra del confronto con Stripe
+ORE_MARCA_FERMA = 48            # prove legali non piu' datate da un terzo: 2 giri giornalieri saltati
 ORE_CAMBIO_FERMO = 26           # cambio valuta (OXR): nessun tasso riuscito da >1 giorno NONOSTANTE
 #                                 la sonda giornaliera = il terzo (OXR) e' giu'. Soglia >24h per
 #                                 non gridare su un singolo blip che si riprende al giro dopo.
@@ -217,6 +218,34 @@ def _cambio_valuta_fermo(sistema: Any, ora_ts: int,
             "ultimo_ok_ts": st.get("ultimo_ok_ts"), "soglia_ore": soglia_ore}
 
 
+def _marca_temporale_ferma(sistema: Any, ora_ts: int,
+                           soglia_ore: int) -> Optional[Dict[str, Any]]:
+    """Le prove legali smettono di essere datate da un terzo? Il giro giornaliero riduce
+    contratti e giornale a un'impronta e la fa datare da una TSA esterna (RFC 3161). Se la TSA
+    tace, il giro archivia il tentativo e riprova IN SILENZIO: si potrebbero passare settimane
+    senza prove datate e scoprirlo in causa. E' "il terzo che cambia" applicato all'asset legale.
+    READ-ONLY (nessuna rete qui): si guarda solo l'ultima marca RIUSCITA in archivio."""
+    arch = getattr(sistema, "marche", None)
+    if arch is None:
+        return None
+    righe = arch.elenco(limit=1, solo_ok=True)
+    if not righe:
+        # Nessuna marca RIUSCITA: e' un guasto solo se ci sono stati TENTATIVI (archivio non
+        # vuoto). Un archivio VUOTO e' un'installazione appena nata: gridare qui sarebbe un
+        # falso allarme, e un falso allarme insegna a ignorare i rossi.
+        if not arch.elenco(limit=1):
+            return None
+        return {"eta_ore": None, "mai_riuscita": True, "ultimo_giorno": "",
+                "soglia_ore": soglia_ore}
+    ultimo = righe[0]
+    quando = int(ultimo.get("richiesto_ts") or ultimo.get("gen_time") or 0)
+    eta = (ora_ts - quando) / 3600.0 if quando else None
+    if eta is None or eta <= soglia_ore:
+        return None
+    return {"eta_ore": round(eta, 1), "mai_riuscita": False,
+            "ultimo_giorno": ultimo.get("giorno", ""), "soglia_ore": soglia_ore}
+
+
 def _hold_fantasma(sistema: Any, ora_ts: int, grazia_ore: int) -> List[Dict[str, Any]]:
     """STANZE FANTASMA: notti occupate nell'inventario SENZA prenotazione (idem_key non presente
     fra i pendenti), da un crash fra blocco e registrazione. Read-only (il tick fase83 le CHIUDE
@@ -277,6 +306,10 @@ def scansiona(sistema: Any, *, ora: Any = None,
     if cv:
         anomalie["cambio_valuta_fermo"] = cv
 
+    mt = _prova(_marca_temporale_ferma, sistema, ora_ts, ORE_MARCA_FERMA)
+    if mt:
+        anomalie["marca_temporale_ferma"] = mt
+
     hf = _prova(_hold_fantasma, sistema, ora_ts, GRAZIA_HOLD_ORE)
     if hf:
         anomalie["hold_fantasma"] = hf
@@ -303,6 +336,7 @@ _TITOLI = {
     "payout_su_rimborsata": "Bonifico verso l'host per una prenotazione RIMBORSATA/annullata (perdita)",
     "escrow_su_rimborsata": "Escrow che sta per pagare l'host di una prenotazione RIMBORSATA (perdita)",
     "cambio_valuta_fermo": "Cambio valuta (OXR) fermo: la stima «≈ nella tua moneta» non si aggiorna",
+    "marca_temporale_ferma": "Marca temporale ferma: contratti e giornale NON sono piu' datati da un terzo",
 }
 
 
