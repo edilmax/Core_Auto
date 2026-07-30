@@ -46,6 +46,60 @@ rossi**, causa riprodotta in laboratorio. Da qui in poi: **una campagna alla vol
 
 ---
 
+## 🔎 STATO 2026-07-30 (sera) — 6 DIFETTI TROVATI DA UNA RICERCA E CHIUSI, TUTTI DELLA STESSA FAMIGLIA
+
+Nati da **due ricerche mirate** (77 agenti, ~4M token: errori documentati delle IA che manutengono
+codice + scavo nella storia vera del repo + mappa dei punti fragili), poi filtrate da revisori
+ostili: **44 regole sopravvissute su 68**, e **7 sospetti concreti nel nostro codice, tutti
+verificati a mano prima di toccare qualsiasi cosa** (una volta la ricerca esagerava, vedi sotto).
+
+| # | Difetto | Produzione | Commit |
+|---|---|---|---|
+| 1 | Archivio crediti guasto → prenotazione confermata **con lo sconto** e credito MAI bruciato (riusabile all'infinito) | +14 −9 | `d325884`+`249a439` |
+| 2 | Guardiano: un controllo che esplode diventava **«tutto pulito»** | +31 **−33** | `0794ea0` |
+| 3 | Canale d'allarme **muto**: `curl` senza `-f` esce 0 su token revocato | +6 −2 | `94454e2` |
+| 4 | Rimborso admin: rispondeva «fatto» **anche se i passi di sicurezza fallivano** | +28 −6 | `dd7a5b3` |
+| 5 | Guardia invarianti sui soldi: poteva **sparire in silenzio** con una rinomina | +8 −1 | `e25490b` |
+| 6 | 165 guasti isolati finivano **solo in un registro senza lettori** | +55 −0 | `8615a32` |
+
+**Totale: +142 −51.** Zero moduli nuovi, zero funzioni pubbliche nuove, zero dipendenze, zero
+traduzioni nuove. Una correzione ha reso il file **più corto** (la #2 è una cancellazione).
+
+**TUTTI E SEI AVEVANO LA STESSA FORMA**: uno strumento che **rassicura invece di controllare**.
+Il credito confondeva «non c'era niente da bruciare» con «non sono riuscito a bruciarlo». Il
+guardiano confondeva «ho guardato e va bene» con «non ho potuto guardare». Il watchdog confondeva
+«inviato» con «il comando non si è lamentato». Il rimborso confondeva «ho provato» con «è andata».
+La guardia invarianti confondeva «assente» con «niente da segnalare».
+
+**DUE TEST BENEDICEVANO IL DIFETTO** (non lo sorvegliavano — lo imponevano):
+`test_fail_open_store_rotto_non_blocca_prenotazione` pretendeva `201` sul guasto dell'archivio
+crediti, e la guardia di `DEPLOY.md` pretendeva il comando Compose v1 che spegne il sito. Entrambi
+corretti in **commit separati, senza una riga di produzione dentro**.
+
+**LA RICERCA ESAGERAVA SU UN PUNTO, e l'ho verificato invece di crederle**: sosteneva che la doppia
+`commissione_cents` (`fase43` arrotonda, `fase98` tronca — **divergono nel 39,6% su un milione di
+combinazioni**) causasse una differenza sui soldi veri. **Falso oggi**: `fase45`/`fase46`, che usano
+la versione che arrotonda, **non sono chiamati da nessuno** (compaiono solo nei commenti). È una
+**mina, non una ferita** → va disinnescata con una cancellazione, non è una perdita in corso.
+
+**IO STESSO HO SBAGLIATO DUE VOLTE, e mi hanno fermato i test:** (a) la prima prova rossa del
+messaggio i18n era un **verde finto** (percorsi Linux dati a Python su Windows: il file non veniva
+riscritto); (b) la prima stesura del controllo #6 leggeva `data/app.log` **dello sviluppatore**
+(153 ERROR dalle mie stesse prove) e gridava — colta da `test_su_tutto_pulito_il_guardiano_TACE`,
+**la stessa guardia che a luglio colse il mio falso allarme sulle marche**. Modo-di-rompersi n.8.
+
+**LA MISURA CHE SPIEGA TUTTO**: 395 file di test, **solo 81 (20,5%) provano cosa succede quando un
+pezzo si rompe**; nel solo `fase83` ci sono **165 punti** dove un errore viene ingoiato. Tutti e sei
+i difetti stavano lì. Prossimo lavoro: **alzare quel 20%**, ma SOLO dove un fallimento silenzioso
+costa soldi, apre una porta o fa perdere una prova legale — non su tutti e 165 (sarebbe rumore).
+
+**RESIDUI DICHIARATI** (non corretti, per non allargare l'intervento): la cancellazione host
+(`fase83:5685`) e quella ospite (`fase83:6078`) chiamano gli stessi tre aiutanti **ignorandone
+l'esito** — stesso difetto della #4, altri due posti. E i **15 moduli senza chiamanti** (fra cui
+`fase151` = tracciato Questura, `fase103` = reverse charge IVA): decisione del fondatore.
+
+---
+
 ## 🔧 STATO 2026-07-30 — 5 INTERVENTI CHIRURGICI (metodo ZERO-BLOAT)
 
 Direttiva del fondatore: **stop alle campagne, solo correzioni chirurgiche su richiesta esplicita**

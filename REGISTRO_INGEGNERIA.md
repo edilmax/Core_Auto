@@ -228,6 +228,33 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### 🟡 PROSSIMO LAVORO — alzare il 20% (prove di guasto sui punti che contano)
+Misurato il 2026-07-30: **395 file di test, solo 81 (20,5%) provano cosa succede quando un pezzo si
+rompe**; nel solo `fase83_server.py` ci sono **165 punti** dove un errore viene ingoiato di
+proposito. **Tutti e sei i difetti trovati quel giorno stavano lì** — nessuno nei prezzi, nelle
+rotte o nei calcoli, cioè nelle parti coperte dall'altro 80%.
+⚠️ **NON si scrivono prove su tutti e 165**: sarebbe rumore, ed è così che si arriva a 4.600 test
+che non vedono cinque bug veri. Si passano in rassegna e per ognuno si sceglie, **in quest'ordine di
+valore**: (1) **togliere** il punto di fallimento silenzioso (la #2 di quel giorno è una
+cancellazione: 5 `except` spariti, file più corto); (2) **farlo urlare** (rifiuto, campo nella
+risposta, email del guardiano); (3) **sorvegliarlo** con una guardia — solo se resta. Criterio di
+selezione: si interviene dove un fallimento silenzioso **costa soldi, apre una porta, o fa perdere
+una prova legale**. Gli altri restano scoperti **di proposito, e va scritto**.
+
+### 🟡 CANDIDATO — disinnescare la mina della doppia `commissione_cents`
+`fase43_commissione.py:58` (Decimal HALF_UP) e `fase98_policy_commissione.py:154` (floor):
+**divergono nel 39,6% su un milione di combinazioni realistiche** (sempre 1 centesimo). Oggi **NON**
+c'è perdita: la versione che arrotonda vive in `fase45`/`fase46`, che **nessun modulo chiama**
+(compaiono solo nei commenti di `fase49`/`fase50`/`fase69`) — verificato, contro quanto sosteneva la
+ricerca. È una **mina**: il giorno in cui qualcuno cabla `fase45` o copia da lì, il prezzo mostrato e
+quello addebitato divergono. Rimedio: **cancellazione**, non aggiunta.
+
+### 🟡 RESIDUO della correzione #4 — altri due percorsi ignorano l'esito
+`_payout_trattieni`/`_storna_tassa`/`_revoca_checkin` ora tornano True/False, ma la **cancellazione
+host** (`fase83:5685`) e quella **ospite** (`fase83:6078`) li chiamano **ignorando il valore**:
+stesso difetto del rimborso admin, altri due posti. Non corretto lì per non allargare l'intervento
+oltre il chiesto (l'errore misurato nel 27% delle patch sbagliate).
+
 ### 🔴 SERVE IL FONDATORE — l'applicazione Meta (Facebook) è BLOCCATA
 Trovato il 2026-07-30 leggendo i log del VPS. Il drip pubblicava da 2 giorni: **357 tentativi tutti
 falliti** con `400`, coda ferma a **39 video**. Diagnosi in sola lettura (nessuna pubblicazione,
