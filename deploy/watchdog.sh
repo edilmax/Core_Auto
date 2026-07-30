@@ -46,10 +46,14 @@ log(){ mkdir -p "$(dirname "$LOG")" 2>/dev/null; echo "$(date '+%Y-%m-%d %H:%M:%
 
 telegram(){  # $1 = testo
   [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ] || { log "TELEGRAM non configurato: $1"; return 0; }
-  curl -sS -m 15 -o /dev/null \
+  # -f OBBLIGATORIO: senza, curl esce 0 anche su 401/404 (token revocato) e il ramo di
+  # errore qui sotto NON scatta MAI -> restiamo senza allarmi senza saperlo. Provato:
+  # senza -f uscita 0, con -f uscita 22.
+  curl -sSf -m 15 -o /dev/null \
     --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
     --data-urlencode "text=$1" \
-    "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" || log "invio Telegram fallito"
+    "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+    || log "CANALE DI ALLARME MUTO: invio Telegram fallito (token revocato? rete?) — msg: $1"
 }
 
 # ── misura uptime da dove gira (dentro o fuori) ──────────────────────────────

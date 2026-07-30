@@ -166,5 +166,60 @@ class TestEndpointDiagnosi(unittest.TestCase):
                     os.environ[k] = v
 
 
+class TestCanaleDiAllarmeNonPuoEssereMUTO(unittest.TestCase):
+    """IL WATCHDOG DEVE ACCORGERSI SE L'ALLARME NON PARTE.
+
+    Il modulo puro (fase178) e' collaudato sopra, ma NESSUNO leggeva lo script che
+    CONSEGNA l'allarme -- e li' c'era il buco: `curl` senza `-f` esce con codice 0 anche
+    quando il server risponde 401/404. PROVATO SUL CAMPO il 2026-07-30:
+        curl -sS  ...token_inventato...  -> uscita 0   (la shell crede sia andata bene)
+        curl -sSf ...token_inventato...  -> uscita 22  (fallimento visto)
+    Con la forma senza `-f`, il ramo `|| log "invio Telegram fallito"` NON scattava MAI:
+    se il token veniva revocato o ruotato, gli allarmi smettevano di partire e non lo
+    scopriva nessuno. Un guardiano che grida in un telefono staccato non serve a niente --
+    e da oggi il Guardiano (fase186) sa anche dire quando e' cieco, quindi la sua voce
+    deve arrivare.
+
+    Nota di metodo: qui NON si controlla che la stringa "-f" esista "da qualche parte"
+    nel file (errore gia' commesso in questo progetto con `server_tokens`, dove il
+    controllo passava mentre uno dei due blocchi nginx era scoperto). Si isola la
+    funzione `telegram()` e si guarda IL SUO curl.
+    """
+
+    SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "deploy", "watchdog.sh")
+
+    def _corpo_funzione(self, nome):
+        """Estrae il corpo di `nome(){ ... }` dallo script (fino alla graffa in colonna 0)."""
+        with open(self.SCRIPT, encoding="utf-8", errors="replace") as f:
+            righe = f.read().split("\n")
+        dentro, corpo = False, []
+        for r in righe:
+            if not dentro and r.startswith(nome + "(){"):
+                dentro = True
+                continue
+            if dentro:
+                if r.startswith("}"):
+                    break
+                corpo.append(r)
+        self.assertTrue(corpo, "funzione %s() non trovata in %s" % (nome, self.SCRIPT))
+        return "\n".join(corpo)
+
+    def test_il_curl_che_manda_l_allarme_FALLISCE_sugli_errori_HTTP(self):
+        corpo = self._corpo_funzione("telegram")
+        self.assertIn("curl", corpo, "telegram() non usa curl?! %r" % corpo)
+        # -f (o --fail) e' l'unica cosa che rende il codice d'uscita affidabile
+        self.assertTrue(("-f " in corpo) or ("--fail" in corpo) or ("-sSf" in corpo)
+                        or ("-fsS" in corpo),
+                        "il curl che consegna l'allarme non ha -f: con un token revocato "
+                        "esce 0, il ramo di errore non scatta e restiamo senza allarmi "
+                        "SENZA SAPERLO.\n%s" % corpo)
+
+    def test_e_il_fallimento_dell_invio_viene_registrato(self):
+        """Accorgersene non basta: dev'esserci il ramo che lo scrive."""
+        corpo = self._corpo_funzione("telegram")
+        self.assertIn("||", corpo, "manca il ramo di errore sull'invio: %s" % corpo)
+        self.assertIn("log ", corpo, "il fallimento dell'invio non viene registrato: %s" % corpo)
+
+
 if __name__ == "__main__":
     unittest.main()
