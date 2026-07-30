@@ -7351,15 +7351,29 @@ class RouterHTTP:
                 not isinstance(commissione_cents, bool) and commissione_cents > 0 else 0
             if comm <= 0:
                 return 0
-            res = viral.usa_credito(host_id, comm)
+            res = viral.usa_credito(host_id, comm)   # <- QUI il credito e' gia' COMMITTATO
             used = int(res.get("scontato_cents", 0)) if isinstance(res, dict) else 0
             if used > 0:
-                pd.aumenta_payout(ref, used)         # commissione ridotta -> host incassa di più
+                try:
+                    pd.aumenta_payout(ref, used)     # commissione ridotta -> host incassa di più
+                except Exception:
+                    # I due passi NON sono atomici: il credito e' gia' stato bruciato sopra.
+                    # Se fallisce qui, l'host paga la commissione PIENA e ha perso il credito
+                    # che si era guadagnato portando un altro host: a rimetterci e' LUI.
+                    # Invertire l'ordine non salva (fallendo il consumo terrebbe sconto E
+                    # credito: ci rimetteremmo noi). Serve una compensazione che RESTITUISCA
+                    # il credito -> registrata come candidato. Qui si rende RIPARABILE A MANO:
+                    # servono l'host e i centesimi esatti.
+                    logger.error("CREDITO REFERRAL PERSO: host %s, %d cent gia' scalati dal suo "
+                                 "credito ma NON applicati alla commissione di %s -> "
+                                 "restituirglieli a mano", host_id, used, ref, exc_info=True)
+                    return 0
                 logger.info("Credito referral scalato: host %s -%d di commissione su %s",
                             host_id, used, ref)
             return used
         except Exception:
-            logger.warning("applicazione credito host fallita (ignorata)", exc_info=True)
+            logger.error("APPLICAZIONE CREDITO HOST FALLITA per %s su %s: l'host potrebbe non "
+                         "aver ricevuto lo sconto che gli spetta", host_id, ref, exc_info=True)
             return 0
 
     def _forse_qualifica_referral(self, host_id, pd):
@@ -7383,7 +7397,11 @@ class RouterHTTP:
                                 "premio %d al referente %s", host_id, soglia, premio,
                                 out.get("referente_id"))
         except Exception:
-            logger.warning("qualifica referral fallita (ignorata)", exc_info=True)
+            # Ha un recupero (il `>=` fa riprovare a ogni pagamento successivo), ma un guasto
+            # PERSISTENTE lascerebbe il referente senza il premio promesso, in silenzio.
+            logger.error("PREMIO REFERRAL non assegnato per l'invitato %s: chi l'ha portato "
+                         "non ha ricevuto il premio (si riprova al prossimo pagamento)",
+                         host_id, exc_info=True)
 
     def _mcp(self, body):
         if self._sys.mcp is None:

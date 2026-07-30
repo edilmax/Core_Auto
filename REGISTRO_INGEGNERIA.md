@@ -241,6 +241,17 @@ risposta, email del guardiano); (3) **sorvegliarlo** con una guardia — solo se
 selezione: si interviene dove un fallimento silenzioso **costa soldi, apre una porta, o fa perdere
 una prova legale**. Gli altri restano scoperti **di proposito, e va scritto**.
 
+### 🟡 CANDIDATO — restituire il credito referral quando lo sconto non va a buon fine
+`_applica_credito_host` (fase83) fa **due passi NON atomici**: `viral.usa_credito()` **committa** lo
+scalo del credito, poi `payout.aumenta_payout()` applica lo sconto. Se il secondo fallisce, il
+credito è **bruciato** e l'host paga la commissione piena: **a rimetterci è LUI**, sui €40 che si è
+guadagnato portando un altro host. ⚠️ **Invertire l'ordine non salva**: fallendo il consumo, l'host
+terrebbe sconto **e** credito → ci rimetteremmo noi. L'unica soluzione pulita è una **compensazione
+che RESTITUISCA il credito** — codice nuovo in un modulo che muove denaro, quindi rischio nuovo.
+**Fatto ora (2026-07-30)**: reso **udibile e riparabile a mano** — l'errore riporta **host e
+centesimi esatti**, e il guardiano legge il registro ogni giorno. **Da costruire quando ci saranno
+host veri** su cui validare la compensazione.
+
 ### ✅ GIÀ COPERTO — NON «aggiustare» il rilascio date che fallisce in silenzio
 **Verificato il 2026-07-30 con una prova eseguita, non a ragionamento.** In tre punti
 (`fase83:5174` rifiuto richiesta, `:5693` cancellazione host, `_rilascia_per_credito`) il rilascio
