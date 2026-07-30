@@ -97,9 +97,16 @@ CI Linux verde · deploy col protocollo a rischio zero (backup verificato + punt
   7 file di produzione/pipeline in `git stash` + 7 collaudi in `Desktop/_onda2_parcheggio`
   (contratto di persistenza, dati reali, migrazioni mancanti, immagine Docker in CI, parità
   d'ambiente py3.9-CI vs py3.11-prod). Da riprendere con calma, uno alla volta.
-- **DA FARE DAL FONDATORE (2 minuti)**: GitHub → Settings → Branches → regola su `master` →
-  «Require status checks» → aggiungere **solo `gate`**. Finché non c'è, il cancello esiste ma la
-  porta resta aperta.
+- ✅ **CANCELLO CHIUSO (2026-07-30, fatto dal fondatore e VERIFICATO via API)**: su `master` la
+  protezione è attiva con **un solo controllo richiesto — `gate`** — più push forzato e
+  cancellazione del ramo vietati. Da adesso nessun codice con un controllo rosso entra.
+  ⚠️⚠️ **TRAPPOLA DA RICORDARE**: GitHub lega il controllo richiesto al **NOME ESATTO** del job,
+  che oggi è `gate (esito unico - da rendere required su GitHub)`. **Rinominare quel job in
+  ci.yml scollega la protezione IN SILENZIO** (GitHub aspetterebbe un controllo che non arriva
+  mai, oppure — peggio — non trova nulla da richiedere e lascia passare). Se un domani si vuole
+  cambiare il nome: prima si aggiorna la regola su GitHub, poi il file. La nota fra parentesi nel
+  nome è ormai superata ma **NON si tocca** per questo motivo.
+  Nota minore: `strict` è OFF, cioè un ramo può essere unito anche se non aggiornato con master.
 
 ---
 
