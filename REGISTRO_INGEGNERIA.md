@@ -241,6 +241,21 @@ risposta, email del guardiano); (3) **sorvegliarlo** con una guardia — solo se
 selezione: si interviene dove un fallimento silenzioso **costa soldi, apre una porta, o fa perdere
 una prova legale**. Gli altri restano scoperti **di proposito, e va scritto**.
 
+### ✅ GIÀ COPERTO — NON «aggiustare» il rilascio date che fallisce in silenzio
+**Verificato il 2026-07-30 con una prova eseguita, non a ragionamento.** In tre punti
+(`fase83:5174` rifiuto richiesta, `:5693` cancellazione host, `_rilascia_per_credito`) il rilascio
+delle notti fallisce con un semplice warning e le date **restano bloccate**: sembra una perdita di
+vendite invisibile. **Non lo è**: il pendente viene rimosso, quindi le notti diventano **orfane** e
+il Guardiano le trova come **STANZA FANTASMA** (`_hold_fantasma`, tolleranza 1h). E quella copertura
+è a sua volta protetta da `test_stanza_fantasma.py`, quindi non può sparire in silenzio.
+**Prova eseguita**: prenotazione creata → pendente rimosso **senza** rilasciare le notti →
+`scansiona` risponde `pulito=False, conta=2` con `hold_fantasma` che riporta idem_key, alloggio e
+le date esatte.
+⛔ **Quindi: NON si tocca.** Aggiungere log o guardie qui sarebbe rumore su un buco che non esiste.
+È la regola uscita dalla ricerca (FixedBench, arXiv 2605.07769): sui compiti in cui la risposta
+giusta è **non toccare niente**, gli agenti di frontiera modificano lo stesso nel **35-65%** dei
+casi. **La patch vuota è una risposta legittima.**
+
 ### 🟡 CANDIDATO — controllo di stato «prenotazione PAGATA senza cassaforte aperta»
 Il Guardiano cerca escrow **bloccati** e **su rimborsata**, ma NON le prenotazioni **senza**
 escrow. Se `_apri_garanzia` fallisce (fase83:5241) la prenotazione prosegue confermata e l'ospite

@@ -185,6 +185,61 @@ class TestBunkerEndpoint(unittest.TestCase):
                                {"X-Bunker-Session": sess, "X-Forwarded-For": "203.0.113.1"})
         self.assertEqual(s, 403)
 
+    def test_logout_FALLITO_non_puo_dichiarare_ok(self):
+        """IL LOGOUT DEL BUNKER NON PUO' MENTIRE.
+
+        La descrizione di `_bunker_logout` promette: «quel token e' morto SUBITO, non solo
+        cancellato dal browser». Se `bunker.revoca()` esplode, la promessa e' FALSA -- il
+        token resta VIVO -- e la risposta diceva comunque `{"ok": True}` con un semplice
+        `logger.warning`.
+
+        Conta in uno scenario preciso, ed e' quello che conta davvero: si fa logout PROPRIO
+        perche' si sospetta che il token sia stato rubato. E' l'unico momento in cui la
+        revoca serve, ed e' l'unico in cui il suo fallimento fa danno. Ed e' il pannello dei
+        soldi, dietro doppia chiave.
+
+        Stessa famiglia del rimborso admin che rispondeva "fatto" sui passi falliti: uno
+        strumento che dichiara un successo che non c'e' stato.
+
+        VISTO ROSSO: prima rispondeva ok=True senza una parola, e nemmeno un ERROR.
+        """
+        s, out = self._login(self._codice_ora())
+        sess = out["sessione"]
+
+        class _RevocaRotta:
+            def __init__(self, vero): self._v = vero
+            def __getattr__(self, n): return getattr(self._v, n)
+            def revoca(self, tok): raise RuntimeError("denylist non scrivibile")
+        self.sis.bunker = _RevocaRotta(self.sis.bunker)
+
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            s, body = self.r.gestisci("POST", "/api/bunker/logout", {}, None,
+                                      {"X-Bunker-Session": sess, "X-Forwarded-For": "203.0.113.1"})
+        self.assertEqual(s, 200, "il cookie va tolto comunque: %r" % (body,))
+        self.assertIs(body.get("revocata"), False,
+                      "la risposta dichiara un logout che NON e' avvenuto: %r" % (body,))
+        self.assertTrue(any("revoc" in x.lower() for x in reg.output),
+                        "il fallimento della revoca non e' udibile: %r" % (reg.output,))
+
+    def test_logout_RIUSCITO_lo_dichiara_e_non_grida(self):
+        """Prova di rimozione: sul percorso sano `revocata` e' True e nessun ERROR."""
+        import logging
+        catturati = []
+
+        class _Spia(logging.Handler):
+            def emit(self, record):
+                if record.levelno >= logging.ERROR:
+                    catturati.append(record.getMessage())
+        lg = logging.getLogger("core_auto")
+        h = _Spia(); lg.addHandler(h); self.addCleanup(lambda: lg.removeHandler(h))
+        s, out = self._login(self._codice_ora())
+        s, body = self.r.gestisci("POST", "/api/bunker/logout", {}, None,
+                                  {"X-Bunker-Session": out["sessione"],
+                                   "X-Forwarded-For": "203.0.113.1"})
+        self.assertEqual(s, 200)
+        self.assertIs(body.get("revocata"), True, "logout riuscito non dichiarato: %r" % (body,))
+        self.assertEqual(catturati, [], "grida su un logout riuscito: %r" % (catturati,))
+
     def test_bunker_spento_503(self):
         d = tempfile.mkdtemp()
         try:

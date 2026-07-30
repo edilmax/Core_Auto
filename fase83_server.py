@@ -3631,15 +3631,25 @@ class RouterHTTP:
         anche un token gia' morto va bene). Auditato."""
         bunker = getattr(self._sys, "bunker", None)
         tok = headers.get("X-Bunker-Session", "") or headers.get("x-bunker-session", "")
+        revocata = True                    # niente sessione da revocare = niente da promettere
         if bunker is not None and tok:
             try:
-                if bunker.revoca(tok):
+                revocata = bool(bunker.revoca(tok))
+                if revocata:
                     logger.warning("BUNKER: logout (sessione revocata) ip=%s",
                                    self._client_ip(headers))
             except Exception:
-                logger.warning("bunker logout: revoca fallita (ISOLATA)", exc_info=True)
-        # gatekeeper: cancella anche il cookie di pagina (oltre a revocare la sessione API)
-        return 200, {"ok": True, "_cookie": [("bv_bunker", "", 0)]}
+                # La promessa nella descrizione ("quel token e' morto SUBITO") diventerebbe
+                # FALSA: il token resta VIVO. Conta proprio quando si fa logout perche' si
+                # sospetta un furto -- l'unico momento in cui la revoca serve davvero, sul
+                # pannello dei soldi. Non si dichiara un successo che non c'e' stato.
+                revocata = False
+                logger.error("BUNKER: REVOCA FALLITA al logout ip=%s -> il token resta VIVO "
+                             "fino alla scadenza naturale", self._client_ip(headers),
+                             exc_info=True)
+        # gatekeeper: il cookie si toglie COMUNQUE (il browser non lo usa piu'), ma `revocata`
+        # dice la verita' su cosa e' successo davvero lato server.
+        return 200, {"ok": True, "revocata": revocata, "_cookie": [("bv_bunker", "", 0)]}
 
     def _bunker_stato(self, query, headers):
         """Sala di controllo (read-only): conferma di essere nel Bunker + auto-diagnosi
