@@ -60,7 +60,7 @@ CI Linux verde · deploy col protocollo a rischio zero (backup verificato + punt
 | Valuta storica dei payout (migrazione retroattiva) | **1 istruzione SQL** | 5 | `d535e77` | ✅ |
 | Deposito cauzionale (fase149) cablato | **6 righe** su 3 file | 10 | `6efd8f7` | ✅ |
 | Allarme «marche temporali ferme» | **13 righe** (1 file) | 8 | `7cdeb29` | ✅ |
-| Check-in: tetto ospiti = **PAGANTI**, non capienza | **3 righe** (1 file) | 7 | `8ac1c63` | ⏳ da deployare |
+| Check-in: tetto ospiti = **PAGANTI**, non capienza | **3 righe** (1 file) | 7 | `8ac1c63` | ✅ |
 
 **DETTAGLI CHE CONTANO**
 - **Ricerca**: l'host salva «Roma», l'ospite cercava «roma» → **zero risultati** e messaggio «stiamo
@@ -102,6 +102,24 @@ CI Linux verde · deploy col protocollo a rischio zero (backup verificato + punt
   («Dati non validi: controlla nomi/documenti e capacità»), non un codice grezzo.
   **Una sola porta di produzione** porta a quella validazione (`fase83:1864`) e **un solo punto**
   crea i voucher: il fix non è a metà. Suite intera **4617 test OK**.
+- **DEPLOY 2026-07-30 11:2x — FATTO e VERIFICATO DAL VIVO**: backup dati+codice **provati leggibili**
+  (`tar tzf`: 745 e 4847 voci, 54 `.db` dentro) + punto di ritorno `/root/PRE_DEPLOY_20260730-112147.commit`
+  = `8ed4526`; pull → build → rm-first; container sull'immagine nuova (`cc7916cc66d9`), avvio pulito
+  (`avvisi: []`, `money_path_pronto: True`, 0 traceback). **Prova funzionale nel container di
+  produzione, 7/7 corretta**, con archivi TEMPORANEI in `/tmp` → **nessun dato finto in produzione**
+  (25 `.db` prima e dopo, `integrity_check` 25/25 ok, i 2 lead veri intatti, `/api/catalogo` = 0
+  annunci). Le due direzioni provate sul server vero: pagata-per-2 con 5 ospiti → **422 e pass NON
+  abilitato**; pagata-per-2 con 2 ospiti → **200 e pass abilitato**; pagata-per-8 in casa da 6 → 7
+  rifiutati / 6 accettati; voucher storico senza il dato → 200 sulla capienza.
+- 🔴 **INCIDENTE DEL DEPLOY (~1 minuto di sito giù) e CORREZIONE ALLA RADICE**: ho seguito
+  `DEPLOY.md`, che prescriveva **`docker-compose` v1 col trattino**. La v1 è **ROTTA**: muore con
+  `KeyError: 'ContainerConfig'` **dopo** aver rinominato e fermato `casavip_nginx` → sonde a `000`
+  dall'esterno e residuo `<hash>_casavip_nginx`. Ripristinato con `docker compose` (v2) e container
+  ricreato col nome giusto (nessun residuo). **`DEPLOY.md` CORRETTO in 5 punti**: §1 ora impone la
+  **v2** e spiega il guasto della v1 col rimedio, §3 tutte le righe passate a `docker compose`,
+  §7 e §8 idem. **LEZIONE**: sul VPS convivono v1 `1.29.2` e v2 `2.29.7`; la nota giusta era nella
+  memoria di sessione, non nel documento ufficiale → **quando le due fonti divergono, si verifica
+  sul campo e si CORREGGE il documento**, che è la fonte per chiunque venga dopo.
 - ⚠️ **GAP ROVESCIO TROVATO E NON TOCCATO** (decisione del fondatore): il **preventivo NON confronta
   il numero di persone con la capienza** dell'annuncio — controlla solo un tetto globale
   `PARTY_MAX=50` (fase59:236). Si può quindi prenotare per **8 persone una casa da 6** e pagare la

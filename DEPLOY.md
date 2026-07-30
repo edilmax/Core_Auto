@@ -18,8 +18,18 @@
 | **Dati** | volume Docker `bookinvip_casavip_data`, montato su `/data` |
 | **Segreti** | `/var/www/bookinvip/.env.casavip` — **mai** nel repository |
 
-> ⚠️ Sul VPS c'è **Docker Compose v1.29.2**: il comando è `docker-compose` **col trattino**.
-> I comandi in stile v2 (`docker compose`) **non funzionano** su questa macchina.
+> ⛔ **USARE `docker compose` (v2, SENZA trattino).** Sul VPS sono installate **entrambe** le
+> versioni (verificato 2026-07-30: v1 `1.29.2` e v2 `2.29.7`), ma **la v1 col trattino è ROTTA**:
+> muore con `KeyError: 'ContainerConfig'` dopo aver **già rinominato e fermato `casavip_nginx`**,
+> quindi lascia il **sito irraggiungibile** e un container-residuo con nome sporco
+> (`<hash>_casavip_nginx`) che al deploy successivo diventa un duplicato.
+> **Costato ~1 minuto di sito giù il 2026-07-30**, seguendo questa stessa pagina quando ancora
+> prescriveva la v1. Riparazione se ricapita:
+> `docker rm -f <hash>_casavip_nginx && docker compose -f docker-compose.casavip.yml up -d`
+>
+> Nota storica: la v1 era l'unica presente ai primi deploy, da cui la vecchia istruzione. Il
+> `rm-first` qui sotto era il rimedio a un *altro* sintomo della stessa v1; con la v2 non serve più,
+> ma **resta innocuo** e lo si tiene perché non tocca il volume dei dati.
 
 ## 2. Prima di ogni deploy: la suite INTERA deve essere verde
 
@@ -40,24 +50,25 @@ Da eseguire sul VPS, **in questo ordine**:
 
 ```bash
 cd /var/www/bookinvip && \
-git pull && \
-docker-compose -f docker-compose.casavip.yml build app && \
-docker-compose -f docker-compose.casavip.yml stop app backup && \
-docker-compose -f docker-compose.casavip.yml rm -f app backup && \
-docker-compose -f docker-compose.casavip.yml up -d
+git pull --ff-only && \
+docker compose -f docker-compose.casavip.yml build app && \
+docker compose -f docker-compose.casavip.yml stop app backup && \
+docker compose -f docker-compose.casavip.yml rm -f app backup && \
+docker compose -f docker-compose.casavip.yml up -d
 ```
 
-**Perché "rm-first" e non `up -d` diretto:** con Compose v1, un `up -d` su container
-esistenti dopo un `build` fallisce con `KeyError: ContainerConfig`. Fermare e **rimuovere**
-i container prima di ricrearli è l'unica sequenza che funziona. Il volume dei dati **non**
-viene toccato: `rm -f` rimuove i container, non i dati.
+**Perché "rm-first":** con Compose v1 un `up -d` su container esistenti dopo un `build`
+falliva con `KeyError: ContainerConfig`, e fermare+rimuovere prima di ricreare era l'unica
+sequenza che funzionasse. **Con la v2 non è più necessario, ma resta innocuo e lo si tiene**:
+il volume dei dati non viene toccato — `rm -f` rimuove i container, non i dati.
+⛔ Usare **`docker compose`** (v2) in ogni riga: la v1 col trattino butta giù nginx (vedi §1).
 
 > Se la modifica riguarda **solo i documenti** (`.md`), basta `git pull`: niente rebuild.
 >
 > ⚠️ **Modifiche alla configurazione nginx**: `git pull` + `nginx -s reload` **non basta** e
 > fallisce in silenzio (Docker monta quel file per inode, git lo sostituisce creandone uno
 > nuovo e il container resta sul vecchio). Serve:
-> `docker rm -f casavip_nginx && docker-compose -f docker-compose.casavip.yml up -d`
+> `docker rm -f casavip_nginx && docker compose -f docker-compose.casavip.yml up -d`
 >
 > ⚠️ **Mai `git reset --hard` sul VPS**: cancellerebbe eventuali file locali non tracciati.
 
@@ -117,7 +128,7 @@ poi `build` + `up -d`. Obiettivo: **meno di un'ora**, DNS e certificato esclusi.
 |---|---|
 | Stato dei container | `docker ps` |
 | Log applicazione | `docker logs -f casavip_app` |
-| Riavvio pulito dell'app | `docker-compose -f docker-compose.casavip.yml restart app` |
+| Riavvio pulito dell'app | `docker compose -f docker-compose.casavip.yml restart app` |
 | Girare i test dentro l'immagine di produzione | `docker run --rm -v /var/www/bookinvip:/app -w /app casavip-app python -m unittest <modulo>` |
 | Vedere i backup | `ls -t $(docker volume inspect --format '{{.Mountpoint}}' bookinvip_casavip_data)/backup \| head` |
 
@@ -150,7 +161,7 @@ cp -r <file-da-rimuovere> /root/backup-orfani-$(date +%Y%m%d)/
 git clean -fd -e certbot          # -e ESCLUDE i mount vivi
 
 # 3. se per errore un mount è stato toccato: ricreare il container che lo usa
-docker rm -f casavip_nginx && docker-compose -f docker-compose.casavip.yml up -d
+docker rm -f casavip_nginx && docker compose -f docker-compose.casavip.yml up -d
 
 # 4. e VERIFICARE che il rinnovo funzioni davvero
 certbot renew --dry-run           # atteso: "all simulated renewals succeeded"
