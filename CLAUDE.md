@@ -42,6 +42,89 @@ automatica fa fallire la suite se i due divergono):
 
 ---
 
+# ⚙️ REGOLA FERREA DI OPERATIVITÀ E PRECISIONE
+
+Dettata dal fondatore il **2026-07-30**, dopo una giornata in cui **tre strumenti diversi ci hanno
+rassicurato mentre erano guasti**. Ogni riga qui sotto nasce da un fatto accaduto, non da una
+teoria: dove c'è un esempio, è successo davvero.
+
+**1. PRECISIONE CHIRURGICA E MINIMA INVASIVITÀ.** Si ripara **solo** lo stretto necessario —
+idealmente **una riga**. Vietati: codice superfluo, funzioni non chieste, classi helper, `if`/`try`
+ridondanti, file temporanei, commenti spazzatura, dipendenze nuove.
+*Il fix «paganti al check-in» è costato 3 righe; riscrivere il modulo sarebbe stato un errore.*
+
+**2. ZERO TOLLERANZA PER IL VERDE FINTO.** Nessun test, guardia o controllo vale finché non è stato
+**visto fallire** sul guasto vero e poi visto passare, con **ripristino byte-identico (sha256)**.
+Vietate le guardie e le frasi **ornamentali**, che rassicurano senza controllare nulla.
+*Tre casi in un giorno: una guardia che **pretendeva** il comando che spegne il sito; un log che
+scriveva «blocco temporaneo, riprovo» mentre l'app era murata; una mia prova rossa che non
+riscriveva il file e passava «senza vedere niente».*
+
+**3. ALLINEAMENTO TOTALE DELLE FONTI DI VERITÀ.** Ogni modifica reale sulla macchina (pacchetti
+rimossi, pin, configurazione) va **subito** riflessa nei documenti, con la verità **verificata sul
+campo**. È **vietato** scrivere nei 5 documenti un'affermazione non provata sulla macchina — anche
+se «suona giusta» o se l'ha suggerita qualcun altro.
+*`DEPLOY.md` prescriveva un comando rotto: la nota giusta stava solo in una memoria di sessione.
+Costo: un minuto di sito irraggiungibile.*
+
+**4. MANI IN TASCA DURANTE I CICLI.** Mentre una suite o un deploy sono in corso sono
+**intoccabili i file del progetto e la macchina che esegue i test**. Vietato: modificare file,
+lanciare una seconda suite, fare trasferimenti pesanti. **Ammesso**: lavoro in **sola lettura su
+altre macchine**. Il divieto non è formale: modificare i file sotto test produce **rossi finti**.
+*Già successo tre volte in un giorno. Misurato: la stessa suite passa da 23 a 27 minuti se la
+macchina lavora in parallelo.*
+
+**5. PULIZIA RADICALE DELLA POLVERE — MA SOLO DOPO LA PROVA.** Nessun residuo obsoleto deve
+sopravvivere: vecchi backup, script morti, comandi deprecati. Se un comando è pericoloso va
+**sradicato alla radice** (rimosso **e** bloccato, es. pin apt a priorità negativa) e **va
+verificato che il blocco funzioni davvero**, non solo installato.
+⚠️ **Si distrugge solo dopo aver dimostrato che nulla di vivo lo usa**: collegamenti del compose,
+cron, unità systemd, script, e file presenti **solo** lì.
+*Una pulizia «ovvia» cancellò `certbot/`: il sito rispondeva, ma il rinnovo del certificato era
+morto **in silenzio**, e si sarebbe scoperto sessanta giorni dopo.*
+
+**6. SUITE INTERA ANCHE PER UNA VIRGOLA IN UN `.md`.** Nessuna eccezione, nemmeno per la
+documentazione. Eseguire «solo i test che sembrano attinenti» non è consentito.
+*Corretto un documento, eseguite tre guardie invece di tutte: la CI è andata rossa, perché un test
+**leggeva** quel documento.*
+
+**7. IL CODICE D'USCITA SI LEGGE DIRETTO, MAI ATTRAVERSO UN TUBO.** `comando | tail` restituisce
+l'esito di `tail`, non del comando.
+*Un `EXIT=0` su una suite che stampava `FAILED`.*
+
+**8. LA CI SU LINUX È IL GIUDICE; IL VERDE LOCALE È UN INDIZIO.** Un verde sul computer non
+autorizza né tranquillità né deploy. Dopo ogni push si **guarda la tabella**.
+*Ha colto due volte ciò che il verde locale non vedeva, per differenze fra sistemi operativi.*
+
+**9. L'OSSERVABILE DEBOLE È UN DIFETTO.** Quando si registra il fallimento di un servizio esterno
+si scrivono **codice, sottocodice e messaggio**, mai il solo stato HTTP.
+*Per due giorni «400 Bad Request» ha reso indistinguibili un blocco temporaneo e un'applicazione
+bloccata: due situazioni con rimedi opposti.*
+
+**10. UN FALSO ALLARME È UN DIFETTO QUANTO UN ALLARME MANCATO.** Insegna a ignorare i segnali. Ogni
+allarme si prova nelle **due direzioni**: **tace** quando tutto è a posto, **grida** quando serve.
+*Un allarme nuovo gridava su un impianto appena installato; l'ha colto un test esistente.*
+
+**11. IL DIFETTO È SPESSO IN CHI CHIAMA, NON NEL PEZZO CHE MOSTRA IL SINTOMO.** Prima di toccare un
+modulo che «sembra sbagliato», si guarda **chi lo usa**. È anche il modo di tenere il diff minimo.
+*Il modulo del check-in era corretto: sbagliava chi gli passava il numero.*
+
+**12. PRIMA DI DISTRUGGERE O SOSTITUIRE, GUARDARE COSA C'È. E MAI `|| true`.** Ogni comando
+distruttivo passa da una **simulazione** (`apt -s`, elenco del contenuto dell'archivio, `git diff`).
+`|| true` è vietato: nasconde i fallimenti.
+*Un comando suggerito cancellava un percorso «alla cieca» che su molte macchine è il collegamento
+alla versione **buona**.*
+
+**13. DATE E NOMI NON SONO PROVE: SI GUARDA IL CONTENUTO.** Un archivio si verifica **aprendolo**:
+la correzione è dentro? il commit citato è quello giusto? l'impronta **sha256** coincide con
+l'originale? **Un backup non verificato leggibile non è un backup.**
+*La cartella della chiavetta portava la data di oggi e conteneva codice vecchio.*
+
+**14. LE CHIAVI NON SI CHIEDONO E NON SI STAMPANO.** Se il fondatore offre password, codici o
+telefoni, si rifiuta con gentilezza e si trova un'altra strada. Le diagnosi che toccano servizi
+esterni sono **in sola lettura**, non pubblicano nulla e **mascherano i segreti** nell'output.
+*La diagnosi di Facebook ha letto il gettone dal file dei segreti senza mostrarlo mai.*
+
 ---
 
 # 🔟 REGOLA DEI 10 COLLAUDI — come si dimostra che una cosa funziona
