@@ -241,6 +241,18 @@ risposta, email del guardiano); (3) **sorvegliarlo** con una guardia — solo se
 selezione: si interviene dove un fallimento silenzioso **costa soldi, apre una porta, o fa perdere
 una prova legale**. Gli altri restano scoperti **di proposito, e va scritto**.
 
+### 🟡 CANDIDATO — controllo di stato «prenotazione PAGATA senza cassaforte aperta»
+Il Guardiano cerca escrow **bloccati** e **su rimborsata**, ma NON le prenotazioni **senza**
+escrow. Se `_apri_garanzia` fallisce (fase83:5241) la prenotazione prosegue confermata e l'ospite
+NON è protetto. Il 2026-07-30 il fallimento è stato reso **udibile** (log ERROR → il Guardiano lo
+legge entro 24h), ma un controllo **di stato** sarebbe più forte: resta vero finché non lo si
+aggiusta, mentre una riga di registro può uscire dalla finestra.
+⚠️ **Non costruito subito, di proposito**: servirebbe distinguere i casi in cui la cassaforte NON
+deve esserci — «paga in struttura» la salta apposta, netto host a zero, prenotazioni storiche — e
+**oggi la produzione ha ZERO prenotazioni su cui validarlo**. Un allarme sui soldi non validabile
+contro la realtà rischia il falso allarme (regola 10: un falso allarme è un difetto quanto un
+allarme mancato). **Da costruire quando ci saranno prenotazioni vere.**
+
 ### 🟡 CANDIDATO — disinnescare la mina della doppia `commissione_cents`
 `fase43_commissione.py:58` (Decimal HALF_UP) e `fase98_policy_commissione.py:154` (floor):
 **divergono nel 39,6% su un milione di combinazioni realistiche** (sempre 1 centesimo). Oggi **NON**

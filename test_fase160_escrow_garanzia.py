@@ -123,5 +123,68 @@ class TestE2E(unittest.TestCase):
         self.assertEqual(s2, 409)
 
 
+class TestCassaforteNonApertaDeveGRIDARE(unittest.TestCase):
+    """SE LA CASSAFORTE NON SI APRE, NON PUO' RESTARE UN SUSSURRO.
+
+    `_apri_garanzia` protegge i soldi dell'ospite: trattiene l'importo dell'host finche' non
+    passa la finestra di contestazione. Se `garanzia.apri()` fallisce (archivio bloccato,
+    disco pieno) l'errore era ingoiato con un semplice `logger.warning` e la prenotazione
+    proseguiva CONFERMATA: l'ospite crede di essere protetto e non lo e'.
+
+    E nessuno se ne accorgeva. Il Guardiano cerca escrow BLOCCATI o SU RIMBORSATA, non
+    prenotazioni SENZA escrow -- quel controllo non esiste (registrato come candidato: va
+    costruito quando ci saranno prenotazioni vere su cui validarlo, altrimenti rischia falsi
+    allarmi sulle 'paga in struttura', che la cassaforte la saltano di proposito).
+
+    Il livello ERROR non e' cosmetico: dal 2026-07-30 il Guardiano LEGGE il registro ogni
+    giorno e manda un'email sugli ERROR delle ultime 24h (mai sui warning, che sono 131 e
+    includono cose innocue). Alzare il livello e' cio' che trasforma questo guasto da
+    invisibile-per-sempre a visibile-entro-un-giorno.
+
+    VISTO ROSSO: col vecchio `logger.warning` questa guardia fallisce.
+    """
+
+    def test_il_fallimento_dell_apertura_e_registrato_come_ERRORE(self):
+        d = tempfile.mkdtemp(); self.addCleanup(lambda: shutil.rmtree(d, ignore_errors=True))
+        sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=SEG, db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db",
+            db_registro_host=f"{d}/r.db", db_garanzia=f"{d}/g.db", commissione_bps=1500))
+        r = crea_router(sis, host_key="hk", admin_key="ak", base_url="https://bookinvip.com")
+
+        class _CassaforteRotta:
+            def apri(self, *a, **k):
+                raise RuntimeError("archivio garanzia guasto")
+        sis.garanzia = _CassaforteRotta()
+
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            r._apri_garanzia("rif-x", 17000, "casa", "2026-11-10")
+        unito = " ".join(reg.output).lower()
+        self.assertIn("garanzia", unito,
+                      "il messaggio non dice che e' la CASSAFORTE a non essersi aperta: %r"
+                      % (reg.output,))
+
+    def test_quando_si_apre_NON_scrive_errori(self):
+        """Prova di rimozione: sul percorso sano nessun ERROR, o l'email del Guardiano
+        diventerebbe rumore quotidiano (regola 10: un falso allarme e' un difetto)."""
+        import logging
+        d = tempfile.mkdtemp(); self.addCleanup(lambda: shutil.rmtree(d, ignore_errors=True))
+        sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=SEG, db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db",
+            db_registro_host=f"{d}/r.db", db_garanzia=f"{d}/g.db", commissione_bps=1500))
+        r = crea_router(sis, host_key="hk", admin_key="ak", base_url="https://bookinvip.com")
+        reg = logging.getLogger("core_auto")
+        catturati = []
+
+        class _Spia(logging.Handler):
+            def emit(self, record):
+                if record.levelno >= logging.ERROR:
+                    catturati.append(record.getMessage())
+        h = _Spia(); reg.addHandler(h); self.addCleanup(lambda: reg.removeHandler(h))
+        r._apri_garanzia("rif-ok", 17000, "casa", "2026-11-10")
+        self.assertEqual(catturati, [], "grida su un'apertura riuscita: %r" % (catturati,))
+        self.assertEqual((sis.garanzia.stato("rif-ok") or {}).get("stato"), "in_garanzia",
+                         "setup: la cassaforte doveva aprirsi davvero")
+
+
 if __name__ == "__main__":
     unittest.main()

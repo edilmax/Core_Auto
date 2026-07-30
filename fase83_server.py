@@ -5252,7 +5252,13 @@ class RouterHTTP:
                 ts = None
             g.apri(ref, netto_host_cents, alloggio_id=allog, ora_checkin_ts=ts)
         except Exception:
-            logger.warning("apertura garanzia fallita (ignorata)", exc_info=True)
+            # ERROR, non warning: la prenotazione prosegue CONFERMATA ma l'ospite NON e'
+            # protetto, e nessun controllo cerca le prenotazioni SENZA cassaforte. Il
+            # Guardiano legge gli ERROR del registro ogni giorno (fase186): e' l'unica cosa
+            # che rende questo guasto visibile invece che invisibile per sempre.
+            logger.error("CASSAFORTE NON APERTA per %s: la prenotazione prosegue ma l'ospite "
+                         "NON e' protetto e l'host non e' trattenuto -> intervenire a mano",
+                         ref, exc_info=True)
 
     def _registra_payout(self, ref, allog, corpo):
         """Registra l'incasso ATTESO dell'host (stato 'maturato') nella dashboard payout
