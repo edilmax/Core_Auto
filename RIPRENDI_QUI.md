@@ -93,10 +93,50 @@ pezzo si rompe**; nel solo `fase83` ci sono **165 punti** dove un errore viene i
 i difetti stavano lì. Prossimo lavoro: **alzare quel 20%**, ma SOLO dove un fallimento silenzioso
 costa soldi, apre una porta o fa perdere una prova legale — non su tutti e 165 (sarebbe rumore).
 
-**RESIDUI DICHIARATI** (non corretti, per non allargare l'intervento): la cancellazione host
-(`fase83:5685`) e quella ospite (`fase83:6078`) chiamano gli stessi tre aiutanti **ignorandone
-l'esito** — stesso difetto della #4, altri due posti. E i **15 moduli senza chiamanti** (fra cui
-`fase151` = tracciato Questura, `fase103` = reverse charge IVA): decisione del fondatore.
+**RESIDUI DICHIARATI**: i **15 moduli senza chiamanti** (fra cui `fase151` = tracciato Questura,
+`fase103` = reverse charge IVA): decisione del fondatore.
+
+---
+
+## 🎯 LA CACCIA AI GUASTI SILENZIOSI — da 146 punti spaventosi a 4 correzioni vere
+
+Nata dalla misura che ha dato ragione al fondatore: **395 file di test, solo 81 (20,5%) provano
+cosa succede quando un pezzo si rompe**, mentre in `fase83` ci sono **146 punti** che ingoiano un
+errore. Tutti e sei i difetti del giro precedente stavano lì.
+
+**IL SETACCIO (il metodo, riusabile per qualunque prossima caccia):**
+
+| Passaggio | Restano |
+|---|---|
+| Punti che ingoiano un errore | **146** |
+| …che poi **PROSEGUONO come se fosse andata bene** | 56 |
+| …in cui il passo ingoiato è **un'AZIONE DI SICUREZZA** (non un effetto collaterale: saltare un'email o una miniatura è corretto) | **10** |
+| **Buchi VERI corretti** | **4** |
+| **Provati GIÀ COPERTI → patch vuota** | **6** |
+
+⚠️ **Il criterio affilato NON è «tocca i soldi»** (146 punti, sovrastima grossolana) **ma
+«dichiara un successo che non c'è stato»**: è la forma esatta di *tutti* i difetti veri.
+
+| # | Corretto | Conseguenza evitata | Commit |
+|---|---|---|---|
+| 1 | Cassaforte non aperta al book | l'ospite paga credendosi protetto e non lo è | `146c4a9` |
+| 2 | Cassaforte non chiusa in cancellazione | escrow aperto → paga l'host di una cancellata = **perdita piena** | `f458c42` |
+| 3 | Pendente non invalidato | il link di pagamento resta **vivo**: un pagamento tardivo **resuscita** una cancellata | `f458c42` |
+| 4 | Logout bunker che rispondeva `ok` senza revocare | il token resta **vivo** proprio quando si esce perché lo si crede rubato | `11b2af5` |
+
+**I 6 NON TOCCATI, CON LA PROVA** — e marcati nel registro **«non toccare»**:
+tre rilasci-date sono coperti dal controllo **stanze fantasma** del guardiano (**simulato il
+guasto**: `pulito=False, conta=2` con idem_key e date esatte; e quella copertura è protetta da
+`test_stanza_fantasma.py`); due stanno già dentro un ramo che registra un ERROR; uno porta al
+percorso sicuro (`vinta = False`).
+> Sui compiti in cui la risposta giusta è **non toccare niente**, gli agenti di frontiera
+> modificano lo stesso nel **35-65%** dei casi (FixedBench, arXiv 2605.07769). **La patch vuota è
+> una risposta legittima** — ma va scritta, o il prossimo la «aggiusta».
+
+**PERCHÉ ALZARE IL LIVELLO DEL LOG ORA VALE QUALCOSA**: stamattina era cosmetico, nessuno leggeva
+il registro. Da `8615a32` il guardiano lo legge ogni giorno e manda gli ERROR per email. **Le
+correzioni si rafforzano a vicenda**: il guardiano vale solo perché l'allarme non è più muto, e la
+parola cambiata vale solo perché il guardiano legge.
 
 ---
 
