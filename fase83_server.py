@@ -4645,8 +4645,8 @@ class RouterHTTP:
             self._forse_paga_struttura(corpo, dati)
             corpo = self._finalizza_prenotazione(corpo, dati)
             if corpo.get("_rifiuta_credito"):
-                return 409, {"stato": "rifiutata", "errore": "credito_gia_usato",
-                             "messaggio": "Credito gia' usato su un'altra prenotazione: "
+                return 409, {"stato": "rifiutata", "errore": corpo["_rifiuta_credito"],
+                             "messaggio": "Il credito non e' stato applicato: "
                                           "rifai il preventivo."}
         return status, corpo
 
@@ -4808,16 +4808,20 @@ class RouterHTTP:
         # consuma il credito applicato, cosi' lo stesso token non sconta piu' i preventivi
         # futuri (buco provato: era riusabile all'infinito). Consumo QUI (finalizzazione), non
         # al preventivo, cosi' il browsing non brucia il credito e il su-richiesta lo consuma
-        # solo se APPROVATO. FAIL-OPEN: un errore dello store non blocca mai la prenotazione.
-        if self._consuma_credito(corpo, ref) == "diverso":
-            # Il credito era GIA' speso su un'ALTRA prenotazione: unico caso e' la race di
-            # preventivi concorrenti generati PRIMA del primo book (il caso sequenziale non
-            # arriva qui, il preventivo aveva gia' azzerato lo sconto). Siamo PRE-PAGAMENTO
-            # (nessun soldo mosso): RIFIUTA questa prenotazione e libera la stanza. Chiude il
-            # residuo "N preventivi -> N sconti" senza mai toccare una prenotazione legittima.
+        # solo se APPROVATO.
+        _esito_credito = self._consuma_credito(corpo, ref)
+        if _esito_credito in ("diverso", "errore"):
+            # DUE casi, stesso rimedio. 'diverso': il credito era GIA' speso su un'ALTRA
+            # prenotazione (race di preventivi concorrenti generati PRIMA del primo book; il
+            # caso sequenziale non arriva qui, il preventivo aveva gia' azzerato lo sconto).
+            # 'errore': l'archivio e' guasto e NON abbiamo potuto bruciarlo -- era fail-open
+            # (2026-07-30) e confermava con lo sconto applicato e il credito ancora spendibile
+            # all'infinito. In ENTRAMBI siamo PRE-PAGAMENTO (nessun soldo mosso): RIFIUTA e
+            # libera la stanza. Rifiutare e' recuperabile, regalare un credito riusabile no.
             self._rilascia_per_credito(dati, allog, ci, co, ref)
-            return {"stato": "rifiutata", "motivo": "credito_gia_usato",
-                    "riferimento": ref, "_rifiuta_credito": True}
+            _cod = "credito_gia_usato" if _esito_credito == "diverso" else "service_unavailable"
+            return {"stato": "rifiutata", "motivo": _cod,
+                    "riferimento": ref, "_rifiuta_credito": _cod}
         pass_token = None
         if self._sys.emettitore_pass is not None:
             try:
@@ -5133,8 +5137,8 @@ class RouterHTTP:
                 corpo, {"email": rec.get("email", ""), "quote_token": rec.get("quote_token", "")},
                 hold_sec=hold_sec)
             if corpo.get("_rifiuta_credito"):
-                return 409, {"errore": "credito_gia_usato",
-                             "messaggio": "Credito gia' usato su un'altra prenotazione."}
+                return 409, {"errore": corpo["_rifiuta_credito"],
+                             "messaggio": "Il credito non e' stato applicato."}
             return 200, {"stato": "approvata", "riferimento": ref, "prenotazione": corpo}
         # rifiuto: PRIMA l'acquisizione atomica (CAS), POI il rilascio. Se il CAS perde
         # (approva/sweeper hanno gia' deciso) NON si rilascia niente: liberare le date di
@@ -6226,8 +6230,11 @@ class RouterHTTP:
         try:
             return store.consuma(cid, ref)
         except Exception:
-            logger.warning("consumo credito single-use fallito (ISOLATO)", exc_info=True)
-            return None
+            # NON e' "niente da consumare": e' "non ho potuto bruciarlo". Confonderli
+            # significava confermare con lo sconto applicato e il credito ancora spendibile.
+            logger.error("consumo credito single-use FALLITO: prenotazione RIFIUTATA "
+                         "(sconto gia' applicato, credito NON bruciato)", exc_info=True)
+            return "errore"
 
     def _rilascia_per_credito(self, dati, allog, ci, co, ref):
         """Libera la stanza quando una finalizzazione viene RIFIUTATA per credito gia' usato.
