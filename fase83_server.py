@@ -5822,6 +5822,12 @@ class RouterHTTP:
             cap = int(d.get("capacita", 1)) if isinstance(d, dict) else 1
         except Exception:
             cap = 1
+        # PAGANTI, non capienza: il tetto vero e' per quante persone si e' PAGATO (la tassa di
+        # soggiorno e' incassata su `party`). `party` e' FIRMATO nel voucher -> non manomettibile
+        # e non serve interrogare altri archivi. Se manca (voucher storici) resta la capienza.
+        _pagati = v.get("party")
+        if isinstance(_pagati, int) and not isinstance(_pagati, bool) and 0 < _pagati < cap:
+            cap = _pagati
         out = ck.pre_registra(rif, allog, dati.get("ospiti"), cap)
         return (200 if out.get("ok") else 422), out
 
