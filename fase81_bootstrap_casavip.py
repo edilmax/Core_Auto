@@ -81,6 +81,7 @@ class ConfigCasaVIP:
     db_messaggi: str = ":memory:"
     db_domanda: str = ":memory:"       # lista d'attesa + credito fondatore (anti-vuoto)
     db_partner: str = ":memory:"       # candidature programma partner (fase201)
+    db_deposito: str = ":memory:"      # deposito cauzionale: hold sulla carta (fase149)
     db_garanzia: str = ":memory:"      # escrow di garanzia (soldi all'host solo se conforme)
     db_pendenti: str = ":memory:"      # pagamenti in attesa (hold prima del pagamento)
     db_tassa_comunale: str = ":memory:"  # ledger riscossioni tassa di soggiorno (rendicontazione)
@@ -137,6 +138,7 @@ class SistemaCasaVIP:
     notificatore_prenotazione: Any = None
     domanda: Any = None
     partner: Any = None
+    deposito: Any = None
     garanzia: Any = None
     pagamenti_pendenti: Any = None
     tassa_comunale: Any = None
@@ -344,6 +346,15 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     partner = crea_gestore_partner(cfg.db_partner)
     partner.inizializza_schema()
     componenti.append("partner(201)")
+
+    # DEPOSITO CAUZIONALE (fase149): era COSTRUITO ma non raggiungibile da nessuna parte del
+    # prodotto. Qui viene collegato al sistema con archivio DUREVOLE (custodisce hold su carte
+    # = denaro). `capture`/`release` restano NON iniettati: il passaggio al PSP e' una decisione
+    # del fondatore, non un effetto collaterale del cablaggio.
+    from fase149_deposito_cauzionale import crea_deposito_cauzionale
+    deposito = crea_deposito_cauzionale(cfg.db_deposito)
+    deposito.inizializza_schema()
+    componenti.append("deposito_cauzionale(149)")
 
     from fase160_escrow_garanzia import crea_escrow_garanzia
     garanzia = crea_escrow_garanzia(cfg.db_garanzia)
@@ -578,7 +589,7 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           dichiarazione=dichiarazione, noshow=noshow, marketing=marketing,
                           messaggistica=messaggistica, referral=referral,
                           notificatore_prenotazione=notificatore_prenotazione,
-                          domanda=domanda, partner=partner, garanzia=garanzia,
+                          domanda=domanda, partner=partner, deposito=deposito, garanzia=garanzia,
                           pagamenti_pendenti=pagamenti_pendenti, tassa_comunale=tassa_comunale,
                           payout=payout, accettazioni=accettazioni, marche=marche, stripe=provider,
                           connect=_connect, carta=_carta, geocoder=geocoder, checkin=checkin,

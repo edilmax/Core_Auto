@@ -72,6 +72,7 @@ def main() -> None:  # pragma: no cover
         db_messaggi=os.environ.get("DB_MESSAGGI", "data/messaggi.db"),
         db_domanda=os.environ.get("DB_DOMANDA", "data/domanda.db"),
         db_partner=os.environ.get("DB_PARTNER", "data/partner.db"),
+        db_deposito=os.environ.get("DB_DEPOSITO", "data/deposito.db"),
         db_garanzia=os.environ.get("DB_GARANZIA", "data/garanzia.db"),
         db_pendenti=os.environ.get("DB_PENDENTI", "data/pendenti.db"),
         db_tassa_comunale=os.environ.get("DB_TASSA_COMUNALE", "data/tassa_comunale.db"),

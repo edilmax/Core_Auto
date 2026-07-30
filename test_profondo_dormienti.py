@@ -979,7 +979,11 @@ class TestGapDiCablaggio(_BaseDormienti):
     cablato, questo test diventa rosso: e' il promemoria per aggiornare
     REGISTRO_INGEGNERIA sez.2 e per scrivere il collaudo della rotta nuova."""
 
-    SPENTI = ("deposito", "cauzione", "wishlist", "fedelta", "chatbot", "web_push",
+    # ✅ 'deposito' TOLTO dalla lista il 2026-07-30: fase149 e' stato CABLATO (archivio durevole
+    # DB_DEPOSITO, esposto come `sistema.deposito`) — vedi test_deposito_cablato.py. Resta senza
+    # ROTTA, quindi continua a comparire nel test sulle rotte inesistenti qui sotto: mezzo
+    # cablato, come coda e split.
+    SPENTI = ("cauzione", "wishlist", "fedelta", "chatbot", "web_push",
               "push", "traduttore", "gate_identita", "asia")
 
     def test_i_moduli_spenti_non_sono_ancora_nel_sistema(self):
@@ -987,6 +991,11 @@ class TestGapDiCablaggio(_BaseDormienti):
             self.assertIsNone(getattr(self.sis, nome, None),
                               "'%s' e' stato cablato: aggiorna REGISTRO sez.2 e i collaudi"
                               % nome)
+
+    def test_il_deposito_e_cablato_ma_senza_rotta(self):
+        """Il modulo che era «costruito e dimenticato» ora e' nel sistema (fase149), con
+        archivio durevole. La porta d'ingresso per l'utente resta da decidere."""
+        self.assertIsNotNone(self.sis.deposito, "il deposito e' tornato scollegato")
 
     def test_le_rotte_dei_moduli_spenti_non_esistono(self):
         """Nessuna rotta -> l'utente non puo' usarli. 404 e' la prova del buco."""
