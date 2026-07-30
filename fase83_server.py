@@ -4816,7 +4816,14 @@ class RouterHTTP:
                              "-> BLOCCO scrittura DB", ref, _neg, _senza_prova)
                 return {"stato": "rifiutata", "motivo": "invariante_violato", "riferimento": ref}
         except ImportError:
-            pass
+            # `pass` qui rendeva la sparizione INVISIBILE: una rinomina in fase199 spegneva
+            # il blocco su denaro negativo e conferma-senza-prova, in produzione, con tutto
+            # verde e nemmeno una riga di log. Provato: col nome cambiato passa un importo
+            # NEGATIVO. Resta fail-open (una guardia rotta non ferma un flusso valido) ma
+            # ora LO DICE.
+            logger.error("GUARDIA INVARIANTI ASSENTE: fase199_invarianti non importabile -> "
+                         "i controlli su denaro negativo e prova-firmata NON stanno girando",
+                         exc_info=True)
         except Exception:
             logger.warning("guardia invarianti fase199 fallita (ISOLATA, fail-open)", exc_info=True)
         # SINGLE-USE del Credito Fondatore/Viaggio (fase167): la prenotazione e' CONFERMATA ->

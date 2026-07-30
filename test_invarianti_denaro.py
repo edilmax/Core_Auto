@@ -74,6 +74,47 @@ class TestInvariantiDenaro(unittest.TestCase):
             "credito_cents": rnd.choice([100, 500, 5000]),
             "exp": int(time.time()) + 30 * 86400, "nonce": str(rnd.random())})
 
+    def test_il_SERVER_blocca_davvero_su_importo_negativo(self):
+        """LA GUARDIA SUI SOLDI NON ERA MAI STATA VISTA SCATTARE.
+
+        `fase199_invarianti` ha i suoi test, ma NESSUNO provava che il SERVER la usi: il
+        legame fra `fase83._finalizza_prenotazione` e quel modulo non era sorvegliato. E
+        l'importazione e' protetta da `except ImportError: pass`, che non scrive NULLA --
+        quindi bastava rinominare una delle due funzioni (i test del modulo sarebbero
+        rimasti verdi) perche' il blocco su denaro negativo e su conferma-senza-prova
+        sparisse in silenzio, in produzione, con tutto verde.
+
+        Qui si mette un importo NEGATIVO nel corpo e si pretende il rifiuto.
+        VISTO ROSSO: neutralizzando il ramo della guardia, la finalizzazione passa.
+        """
+        out = self.r._finalizza_prenotazione(
+            {"riferimento": "rif-neg", "alloggio_id": self.listings[0],
+             "check_in": "2026-09-05", "check_out": "2026-09-07",
+             "prezzo_guest_cents": -1},                    # <- denaro negativo
+            {"quote_token": "prova-firmata-presente"})
+        self.assertEqual(out.get("stato"), "rifiutata",
+                         "importo NEGATIVO scritto nel DB: %r" % (out,))
+        self.assertEqual(out.get("motivo"), "invariante_violato", out)
+
+    def test_il_SERVER_blocca_la_conferma_SENZA_prova_firmata(self):
+        """I3: nessuna conferma tocca il DB senza il preventivo firmato."""
+        out = self.r._finalizza_prenotazione(
+            {"riferimento": "rif-senza-prova", "alloggio_id": self.listings[0],
+             "check_in": "2026-09-05", "check_out": "2026-09-07",
+             "prezzo_guest_cents": 10000},
+            {})                                            # <- nessun quote_token
+        self.assertEqual(out.get("stato"), "rifiutata",
+                         "conferma senza prova firmata accettata: %r" % (out,))
+        self.assertEqual(out.get("motivo"), "invariante_violato", out)
+
+    def test_il_modulo_espone_ESATTAMENTE_i_nomi_che_il_server_importa(self):
+        """Il `pass` silenzioso rende una rinomina invisibile: qui diventa ROSSA subito."""
+        import fase199_invarianti as inv
+        for nome in ("i3_prova_prima_del_commit", "i4_denaro_non_negativo"):
+            self.assertTrue(callable(getattr(inv, nome, None)),
+                            "fase83 importa %s da fase199: rinominarlo spegne la guardia "
+                            "sui soldi SENZA che nessuno se ne accorga" % nome)
+
     def test_invarianti_su_input_casuali(self):
         rnd = random.Random(2026)
         base = datetime.date(2026, 9, 1)
