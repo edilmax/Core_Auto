@@ -49,6 +49,8 @@ GIORNI_PAYOUT_FERMO = 7         # un bonifico 'maturato' fermo da una settimana 
 GRAZIA_HOLD_ORE = 1             # una notte occupata senza prenotazione da >1h e' una STANZA FANTASMA
 GIORNI_RICONCILIAZIONE = 30     # finestra del confronto con Stripe
 ORE_MARCA_FERMA = 48            # prove legali non piu' datate da un terzo: 2 giri giornalieri saltati
+ORE_GUASTI_ISOLATI = 24         # finestra sugli ERROR del registro: i guasti ingoiati di proposito
+MAX_GUASTI_MOSTRATI = 5         # nell'email si mostrano i primi N, non un muro di righe
 ORE_CAMBIO_FERMO = 26           # cambio valuta (OXR): nessun tasso riuscito da >1 giorno NONOSTANTE
 #                                 la sonda giornaliera = il terzo (OXR) e' giu'. Soglia >24h per
 #                                 non gridare su un singolo blip che si riprende al giro dopo.
@@ -249,6 +251,54 @@ def _hold_fantasma(sistema: Any, ora_ts: int, grazia_ore: int) -> List[Dict[str,
     return inv.orfani(pp.idem_keys(), ora_ts=ora_ts, grazia_sec=max(1, int(grazia_ore)) * 3600)
 
 
+def _guasti_isolati(sistema: Any, ora_ts: int, ore: int) -> Optional[Dict[str, Any]]:
+    """GLI ERRORI CHE FINISCONO DOVE NESSUNO GUARDA.
+
+    Nel solo `fase83_server.py` ci sono ~165 punti in cui un errore viene ingoiato di
+    proposito (isolamento: un pezzo rotto non deve far cadere tutto) e finisce SOLO in
+    `app.log`. In tutto il progetto quel file ha UN lettore: un pannello manuale dietro
+    doppia chiave, ultime 300 righe di un rotante da 5MB. Un guasto isolato su denaro o
+    serrature poteva restare invisibile per sempre. Qui il giro giornaliero lo legge.
+
+    Guarda SOLO gli ERROR, mai i warning: i warning sono ~131 e riguardano anche cose
+    innocue (una miniatura non salvata); gli ERROR sono i casi gravi -- e sul server vero
+    oggi sono ZERO, quindi questo controllo non produce affaticamento da allarmi.
+    Registro assente = impianto appena nato -> silenzio (lezione del falso allarme marche).
+    """
+    import calendar
+    import os
+    # La cartella si ricava dalla CONFIGURAZIONE del sistema, come fanno gli altri controlli
+    # (`_riconciliazione` legge `config.stripe_secret_key`), NON dall'ambiente: un ripiego su
+    # una cartella relativa leggeva l'app.log dello SVILUPPATORE e gridava per i suoi test.
+    # E' il modo-di-rompersi n.8 (locale != produzione), colto da
+    # `test_su_tutto_pulito_il_guardiano_TACE`. In produzione db_finanza=/data/finanza.db.
+    fin = getattr(getattr(sistema, "config", None), "db_finanza", "") or ""
+    dati = os.path.dirname(fin) if fin and fin != ":memory:" else ""
+    if not dati:
+        return None
+    percorso = os.path.join(dati, "app.log")
+    if not os.path.isfile(percorso):
+        return None
+    soglia = ora_ts - max(1, int(ore)) * 3600
+    conta, esempi = 0, []
+    with open(percorso, encoding="utf-8", errors="replace") as f:
+        for riga in f:
+            if " ERROR " not in riga:
+                continue
+            try:
+                # formato di main_casavip: "%(asctime)s %(levelname)s %(name)s %(message)s".
+                # Le date sono nell'ora del container, che in produzione e' UTC.
+                ts = calendar.timegm(time.strptime(riga[:19], "%Y-%m-%d %H:%M:%S"))
+            except Exception:
+                continue                      # riga non databile (continuazione di traceback)
+            if ts < soglia:
+                continue
+            conta += 1
+            if len(esempi) < MAX_GUASTI_MOSTRATI:
+                esempi.append(riga.strip()[:180])
+    return {"conta": conta, "ore": int(ore), "esempi": esempi} if conta else None
+
+
 def scansiona(sistema: Any, *, ora: Any = None,
               giorni_riconciliazione: int = GIORNI_RICONCILIAZIONE,
               grazia_escrow_ore: int = GRAZIA_ESCROW_ORE,
@@ -308,6 +358,10 @@ def scansiona(sistema: Any, *, ora: Any = None,
     if hf:
         anomalie["hold_fantasma"] = hf
 
+    gi = _prova(_guasti_isolati, sistema, ora_ts, ORE_GUASTI_ISOLATI)
+    if gi:
+        anomalie["guasti_isolati"] = gi
+
     if ciechi:
         anomalie["controllo_cieco"] = ciechi
 
@@ -335,6 +389,7 @@ _TITOLI = {
     "cambio_valuta_fermo": "Cambio valuta (OXR) fermo: la stima «≈ nella tua moneta» non si aggiorna",
     "marca_temporale_ferma": "Marca temporale ferma: contratti e giornale NON sono piu' datati da un terzo",
     "controllo_cieco": "Un controllo del Guardiano NON ha potuto girare: su quel fronte siamo CIECHI",
+    "guasti_isolati": "Errori nel registro nelle ultime 24h: guasti ingoiati che nessuno leggerebbe",
 }
 
 

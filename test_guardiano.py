@@ -93,6 +93,81 @@ class TestControlloCieco(_Base):
                       "l'email non spiega che un controllo non ha potuto girare: %s" % html[:400])
 
 
+class TestGuastiIsolatiNelRegistro(_Base):
+    """I GUASTI ISOLATI NON POSSONO FINIRE DOVE NESSUNO GUARDA.
+
+    Nel solo `fase83_server.py` ci sono 165 punti in cui un errore viene ingoiato di
+    proposito (isolamento: un pezzo rotto non deve far cadere tutto) e finisce SOLO nel
+    registro `app.log`. In tutto il progetto quel file ha UN solo lettore: un pannello
+    manuale, dietro doppia chiave, che mostra al massimo le ultime 300 righe di un file
+    rotante da 5MB. Tradotto: un guasto isolato su denaro o serrature poteva restare
+    invisibile per sempre.
+
+    Qui il Guardiano -- che gira gia' ogni giorno e manda gia' l'email -- impara a leggerlo.
+    Guarda SOLO gli ERROR (non i warning): sono i casi gravi, e sul server vero oggi sono
+    ZERO, quindi non produce affaticamento da allarmi (regola 10: un falso allarme e' un
+    difetto).
+
+    VISTO ROSSO: prima di questa correzione il Guardiano non leggeva il registro e restava
+    'pulito' anche con errori freschi dentro.
+    """
+
+    def _sistema_con_registro(self, righe=None):
+        """Sistema il cui `db_finanza` sta in una cartella temporanea: e' da li' che il
+        Guardiano ricava dove leggere `app.log` -- dalla CONFIGURAZIONE, non dall'ambiente.
+        Legarlo a una variabile d'ambiente faceva leggere l'app.log dello SVILUPPATORE."""
+        import os
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        if righe is not None:
+            with open(os.path.join(d, "app.log"), "w", encoding="utf-8") as f:
+                f.write("\n".join(righe) + "\n")
+        return crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"G" * 32, con_registrazione_host=True,
+            db_catalogo="%s/c.db" % d, db_inventario="%s/i.db" % d,
+            db_registro_host="%s/r.db" % d, db_garanzia="%s/g.db" % d,
+            db_payout="%s/y.db" % d, db_pendenti="%s/p.db" % d,
+            db_accettazioni="%s/a.db" % d, db_tassa_comunale="%s/t.db" % d,
+            db_finanza="%s/finanza.db" % d))
+
+    def _riga(self, quando_ts, livello, testo):
+        import datetime
+        t = datetime.datetime.utcfromtimestamp(quando_ts).strftime("%Y-%m-%d %H:%M:%S,000")
+        return "%s %s core_auto.server %s" % (t, livello, testo)
+
+    def test_errori_freschi_nel_registro_sono_un_ALLARME(self):
+        sis = self._sistema_con_registro([
+            self._riga(self.now - 600, "INFO", "avvio ok"),
+            self._riga(self.now - 500, "ERROR", "consumo credito single-use FALLITO"),
+            self._riga(self.now - 400, "ERROR", "RIMBORSO ADMIN INCOMPLETO rif=abc"),
+        ])
+        rep = G.scansiona(sis, ora=lambda: self.now)
+        self.assertFalse(rep["pulito"], "errori freschi nel registro e il Guardiano tace: %r" % rep)
+        self.assertIn("guasti_isolati", rep["anomalie"], rep["anomalie"])
+
+    def test_solo_avvisi_e_informazioni_NON_fanno_gridare(self):
+        """Prova di rimozione: 131 warning nel codice sono normali, non sono allarmi."""
+        sis = self._sistema_con_registro([
+            self._riga(self.now - 300, "INFO", "tutto regolare"),
+            self._riga(self.now - 200, "WARNING", "prova foto: bolla non scritta (ISOLATO)"),
+        ])
+        rep = G.scansiona(sis, ora=lambda: self.now)
+        self.assertTrue(rep["pulito"], "grida su semplici avvisi: %r" % rep["anomalie"])
+
+    def test_errori_VECCHI_non_gridano_per_sempre(self):
+        """Un errore di un mese fa non deve tenere l'allarme acceso in eterno."""
+        sis = self._sistema_con_registro(
+            [self._riga(self.now - 40 * 86400, "ERROR", "roba vecchissima")])
+        rep = G.scansiona(sis, ora=lambda: self.now)
+        self.assertTrue(rep["pulito"], "un errore vecchio grida ancora: %r" % rep["anomalie"])
+
+    def test_registro_ASSENTE_non_e_un_allarme(self):
+        """Impianto appena nato: nessun log -> silenzio (lezione del falso allarme marche)."""
+        sis = self._sistema_con_registro(None)      # cartella vera, nessun app.log dentro
+        rep = G.scansiona(sis, ora=lambda: self.now)
+        self.assertTrue(rep["pulito"], "grida su un impianto senza registro: %r" % rep["anomalie"])
+
+
 class TestEscrowBloccato(_Base):
 
     def test_una_garanzia_scaduta_da_giorni_e_un_allarme(self):
