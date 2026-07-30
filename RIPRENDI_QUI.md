@@ -46,7 +46,7 @@ rossi**, causa riprodotta in laboratorio. Da qui in poi: **una campagna alla vol
 
 ---
 
-## 🔧 STATO 2026-07-30 — 4 INTERVENTI CHIRURGICI (metodo ZERO-BLOAT) · TUTTI ONLINE
+## 🔧 STATO 2026-07-30 — 5 INTERVENTI CHIRURGICI (metodo ZERO-BLOAT)
 
 Direttiva del fondatore: **stop alle campagne, solo correzioni chirurgiche su richiesta esplicita**
 — «modifica la riga sbagliata, vietato aggiungere funzioni wrapper, classi helper o if ridondanti;
@@ -60,6 +60,7 @@ CI Linux verde · deploy col protocollo a rischio zero (backup verificato + punt
 | Valuta storica dei payout (migrazione retroattiva) | **1 istruzione SQL** | 5 | `d535e77` | ✅ |
 | Deposito cauzionale (fase149) cablato | **6 righe** su 3 file | 10 | `6efd8f7` | ✅ |
 | Allarme «marche temporali ferme» | **13 righe** (1 file) | 8 | `7cdeb29` | ✅ |
+| Check-in: tetto ospiti = **PAGANTI**, non capienza | **3 righe** (1 file) | 7 | `8ac1c63` | ⏳ da deployare |
 
 **DETTAGLI CHE CONTANO**
 - **Ricerca**: l'host salva «Roma», l'ospite cercava «roma» → **zero risultati** e messaggio «stiamo
@@ -85,6 +86,29 @@ CI Linux verde · deploy col protocollo a rischio zero (backup verificato + punt
   `test_guardiano.test_su_tutto_pulito_il_guardiano_TACE`. **Un falso allarme è un difetto**: insegna
   a ignorare i rossi. Distinzione: archivio VUOTO = installazione nuova → silenzio; archivio con
   TENTATIVI tutti falliti → allarme.
+- **PAGANTI AL CHECK-IN**: su una casa da 6 posti con prenotazione **pagata per 2**, l'ospite
+  pre-registrava **5 nomi** e otteneva `{"ok": true, "ospiti": 5}` — il check-in confrontava con la
+  **capienza dell'annuncio** invece che con le persone per cui si è PAGATO. Due danni veri: la
+  **tassa di soggiorno** è incassata al preventivo su `party` (fase59:311) → risultava riscossa per
+  **meno teste di quelle presenti**; e il check-in completato **abilita il pass della porta**
+  (fase127.sblocca) dichiarando all'autorità più ospiti dei paganti. `fase127.pre_registra` era
+  **corretto e generico** (valida contro il numero che riceve): il difetto era in **CHI gli passava
+  il numero**. Ora il tetto è **min(paganti, capienza)**; `party` è già **FIRMATO nel voucher**
+  (fase83:4856, letto dal **preventivo firmato** e non dal corpo della richiesta) → non
+  manomettibile e **nessun archivio in più da interrogare**; stessa forma di controllo già usata a
+  4844 (`int`, non booleano, `> 0`). `party` assente (voucher storici) → **resta la capienza**:
+  nessuna prenotazione vecchia diventa irregolare. Scelta del fondatore: strada **RIGOROSA**, una
+  persona in più è **RIFIUTATA (422)**; l'ospite legge il messaggio già tradotto in 8 lingue
+  («Dati non validi: controlla nomi/documenti e capacità»), non un codice grezzo.
+  **Una sola porta di produzione** porta a quella validazione (`fase83:1864`) e **un solo punto**
+  crea i voucher: il fix non è a metà. Suite intera **4617 test OK**.
+- ⚠️ **GAP ROVESCIO TROVATO E NON TOCCATO** (decisione del fondatore): il **preventivo NON confronta
+  il numero di persone con la capienza** dell'annuncio — controlla solo un tetto globale
+  `PARTY_MAX=50` (fase59:236). Si può quindi prenotare per **8 persone una casa da 6** e pagare la
+  tassa di soggiorno per 8: il cliente paga **di più**, non di meno (nessuna frode, nessun buco di
+  cassa per noi), ma è un **dato senza senso nel mondo vero** (modo-di-rompersi n.10) e una
+  prenotazione che l'host non può ospitare. La porta resta comunque sicura: al check-in vince la
+  capienza. Sarebbe un'altra correzione da **una riga**.
 - **VERIFICATO ANCHE**: IP tracking (anti-frode/GDPR) e persistenza marche erano **GIÀ ATTIVI** —
   IP pubblico reale + user-agent nelle prove firmate, 7 marche giornaliere in archivio. Zero righe
   scritte: sarebbe stato bloat.
