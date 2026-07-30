@@ -247,6 +247,22 @@ class TestNessunBucoNelleTabelle(unittest.TestCase):
     def test_I1_le_8_lingue_del_prodotto_sono_le_stesse_ovunque(self):
         """Se un modulo ne dichiara 7 e un altro 8, qualcuno servira' un ripiego."""
         self.assertEqual(set(LINGUE_SUPPORTATE), set(OTTO))
+
+    def test_il_rifiuto_del_checkin_nomina_la_PRENOTAZIONE_non_solo_la_capienza(self):
+        """MODO-DI-ROMPERSI n.3, «testi che mentono» (2026-07-30).
+
+        Dal fix dei paganti (`8ac1c63`) il tetto degli ospiti al check-in e' il MINORE fra le
+        persone PAGATE e la capienza. Il messaggio mostrato al rifiuto diceva solo «controlla
+        nomi/documenti e CAPACITA»: chi ha pagato per 2 e prova con 3 in una casa da 6 avrebbe
+        letto di controllare una capienza che e' GIUSTA, senza capire il vero motivo.
+
+        VISTO ROSSO sul testo vecchio: nessuna delle 8 lingue nominava la prenotazione.
+        """
+        parola = {"it": "prenotazione", "en": "booking", "es": "reserva", "fr": "reservation",
+                  "de": "Buchung", "pt": "reserva", "ja": "予約", "zh": "预订"}
+        msg = SRV.ETICHETTE_UI["v_js_ck_ko"]
+        muti = [lg for lg in OTTO if parola[lg].lower() not in msg[lg].lower()]
+        self.assertEqual(muti, [], "il rifiuto del check-in non spiega il vero limite in: %s" % muti)
         self.assertEqual(set(EM.LINGUE), set(OTTO))
         self.assertEqual(set(BLOG.BLOG_LINGUE), set(OTTO))
         self.assertEqual(set(LEG.LINGUE), set(OTTO))
