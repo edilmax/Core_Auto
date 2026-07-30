@@ -140,17 +140,27 @@ class TestEnvEDeploy(unittest.TestCase):
 
     def test_deploy_md(self):
         """RISCRITTO 2026-07-20: DEPLOY.md documentava il VECCHIO stack (Flask+gunicorn+
-        Postgres, server Aruba, `docker compose` v2) — seguirlo avrebbe rotto il deploy.
-        Ora descrive la procedura VERA del prodotto: rm-first su Compose v1."""
+        Postgres, server Aruba) — seguirlo avrebbe rotto il deploy.
+
+        CORRETTO 2026-07-30: questa guardia PRETENDEVA la riga con `docker-compose` (v1),
+        cioe' inchiodava il documento al comando che **butta giu' il sito**: la v1 muore con
+        `KeyError: 'ContainerConfig'` DOPO aver fermato `casavip_nginx` (~1 minuto di sito
+        irraggiungibile il 2026-07-30, seguendo proprio DEPLOY.md). Sul VPS convivono v1
+        1.29.2 e v2 2.29.7: si usa la **v2**. La guardia ora fa il mestiere opposto —
+        pretende la v2 e **vieta il ritorno della v1**."""
         md = _read("DEPLOY.md")
-        for s in ("docker-compose -f docker-compose.casavip.yml build app",
+        for s in ("docker compose -f docker-compose.casavip.yml build app",
                   "rm -f app backup",                      # la sequenza rm-first
                   "76.13.44.167",                          # il server vero
                   "money_path_pronto",                     # la verifica d'avvio
                   ".env.casavip"):                         # il file dei segreti vero
             self.assertIn(s, md, "DEPLOY.md non documenta: %s" % s)
-        self.assertIn("Docker Compose v1.29.2", md)      # avverte: qui NON c'e' la v2
-        self.assertIn("non funzionano", md)
+        # l'avvertenza sulla v1 rotta, col sintomo e il rimedio: chi legge deve capire PERCHE'
+        for s in ("1.29.2", "2.29.7", "ContainerConfig", "casavip_nginx"):
+            self.assertIn(s, md, "DEPLOY.md non avverte sulla v1 rotta: %s" % s)
+        # e NESSUN comando `docker-compose <opzione>` copiabile per errore (la v1 col trattino)
+        self.assertNotIn("docker-compose -", md,
+                         "DEPLOY.md contiene ancora un comando Compose v1 (col trattino)")
         # ZERO riferimenti al vecchio impianto: nel file non deve restare NEMMENO un comando
         # sbagliato copiabile per errore (2026-07-20: il vecchio DEPLOY.md documentava una
         # sequenza che su questa macchina fallisce con KeyError: ContainerConfig).

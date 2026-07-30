@@ -117,9 +117,50 @@ CI Linux verde · deploy col protocollo a rischio zero (backup verificato + punt
   dall'esterno e residuo `<hash>_casavip_nginx`. Ripristinato con `docker compose` (v2) e container
   ricreato col nome giusto (nessun residuo). **`DEPLOY.md` CORRETTO in 5 punti**: §1 ora impone la
   **v2** e spiega il guasto della v1 col rimedio, §3 tutte le righe passate a `docker compose`,
-  §7 e §8 idem. **LEZIONE**: sul VPS convivono v1 `1.29.2` e v2 `2.29.7`; la nota giusta era nella
-  memoria di sessione, non nel documento ufficiale → **quando le due fonti divergono, si verifica
-  sul campo e si CORREGGE il documento**, che è la fonte per chiunque venga dopo.
+  §7 e §8 idem. **LEZIONE**: la nota giusta era nella memoria di sessione, non nel documento
+  ufficiale → **quando le due fonti divergono, si verifica sul campo e si CORREGGE il documento**,
+  che è la fonte per chiunque venga dopo.
+- ✅ **V1 SRADICATA DAL SERVER (2026-07-30, ordine del fondatore «risolverlo una volta per tutte»)** —
+  tre serrature, tutte provate: **(1)** pacchetto rimosso con `apt purge` — **simulazione fatta
+  prima** (un solo pacchetto in uscita, `docker.io`/`containerd` intatti) e **prima ancora**
+  verificato che *nessun* cron, unità systemd o script della cartella viva la chiamasse (è così che
+  un guasto diventa silenzioso: la lezione di certbot in §8). Container **non toccati**: stessi
+  identificativi e stesso istante di avvio prima e dopo. **(2)** pin `/etc/apt/preferences.d/`
+  a priorità `-1` → `Candidate: (none)`: la `1.29.2` **non è più installabile**; scoperto per strada
+  che su Ubuntu 24.04 il nome è ormai fornito da `docker-compose-v2` (`Provides:`), quindi un
+  `apt install` distratto porta una **v2 sana**. **(3)** segnaposto in `/usr/local/bin` che spiega e
+  **esce con 1**, contro l'errore umano «manca, lo reinstallo». ⚠️ Onestà: il segnaposto **non**
+  blocca apt (lo fa il pin) e **non** lo vedono i cron (`PATH` senza `/usr/local/bin`) — è un
+  cartello, non una serratura; per questo servono tutte tre. **Lato repo la serratura è la guardia**
+  `test_deploy_config.test_deploy_md`, che prima *pretendeva* la riga v1 (benediceva il difetto!) e
+  ora **vieta** qualunque comando v1 nel documento: vista ROSSA rimettendolo, ripristino
+  byte-identico (sha256). Rimossa anche la polvere `/root/Core_Auto` (1,6 MB, 148 file: non un repo
+  git, nessun file assente dal repo vero, nessun mount, 0 cron). **Resta al fondatore**:
+  `/root/orfani-backup-20260720` (72 MB, cita la v1) — è un backup, non lo cancello senza ordine.
+- 🔵 **MESSAGGIO ALL'OSPITE ALLINEATO AL NUOVO LIMITE (1 riga, 8 lingue)**: dopo il fix dei paganti,
+  la frase mostrata al rifiuto («controlla nomi/documenti e **capacità**») **mentiva**: chi ha pagato
+  per 2 e prova con 3 in una casa da 6 avrebbe letto di controllare una capienza che è giusta. È il
+  **modo-di-rompersi n.3, «testi che mentono»** — e l'aveva introdotto la mia stessa correzione.
+  Ora: «controlla nomi/documenti. **Gli ospiti non possono superare le persone della prenotazione**»,
+  in tutte e 8 le lingue, stessa convenzione senza accenti della tabella. Verificato prima che
+  nessun test fosse agganciato a quel testo e che l'altro riferimento alla capienza (riga 467,
+  marcatura schema.org dell'annuncio) sia corretto e non c'entri.
+- 📡 **FACEBOOK: DIAGNOSI CHE RIBALTA L'IPOTESI (2026-07-30, trovata leggendo i log del server)** —
+  il drip pubblicava da 2 giorni con **357 tentativi TUTTI falliti** (`400`), coda ferma a 39 video,
+  e il nostro codice si rassicurava da solo scrivendo «blocco ancora attivo, riprovo al prossimo
+  giro». Diagnosi in **sola lettura** (nessuna pubblicazione, token mai stampato): non è il blocco
+  anti-spam **368** che `drip_facebook.py` presume nel suo docstring, è **`code=200` OAuthException
+  «API access blocked»** = **l'applicazione Meta è bloccata** → **aspettare non serve, nessun
+  tentativo potrà mai riuscire**. Stesso difetto di forma della guardia di `DEPLOY.md`: **uno
+  strumento che benedice il guasto invece di scoprirlo**. **AZIONE FATTA**: riga di cron del drip
+  **commentata** (non cancellata) con la spiegazione dentro il crontab + copia in
+  `/root/_crontab_prima_20260730.bak`; bussare a una porta murata ogni 35 minuti non aiuta e verso
+  Meta peggiora la posizione. **RESTANO ACCESI** il giro video giornaliero (Telegram e Mastodon
+  pubblicano: 3/3 riusciti) e il watchdog. **SERVE IL FONDATORE**: sbloccare l'app su
+  `developers.facebook.com`, poi togliere il cancelletto. La coda dei 39 video è intatta e riparte
+  da dove si era fermata. ⚠️ **Da migliorare quando si riprende** (2 righe): il drip registra solo
+  «400 Bad Request» **senza il corpo della risposta** → è per questo che per 2 giorni nessuno ha
+  potuto distinguere un blocco temporaneo da un'app bloccata. **Osservabile debole = difetto.**
 - ⚠️ **GAP ROVESCIO TROVATO E NON TOCCATO** (decisione del fondatore): il **preventivo NON confronta
   il numero di persone con la capienza** dell'annuncio — controlla solo un tetto globale
   `PARTY_MAX=50` (fase59:236). Si può quindi prenotare per **8 persone una casa da 6** e pagare la

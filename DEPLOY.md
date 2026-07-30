@@ -18,18 +18,41 @@
 | **Dati** | volume Docker `bookinvip_casavip_data`, montato su `/data` |
 | **Segreti** | `/var/www/bookinvip/.env.casavip` — **mai** nel repository |
 
-> ⛔ **USARE `docker compose` (v2, SENZA trattino).** Sul VPS sono installate **entrambe** le
-> versioni (verificato 2026-07-30: v1 `1.29.2` e v2 `2.29.7`), ma **la v1 col trattino è ROTTA**:
-> muore con `KeyError: 'ContainerConfig'` dopo aver **già rinominato e fermato `casavip_nginx`**,
-> quindi lascia il **sito irraggiungibile** e un container-residuo con nome sporco
-> (`<hash>_casavip_nginx`) che al deploy successivo diventa un duplicato.
-> **Costato ~1 minuto di sito giù il 2026-07-30**, seguendo questa stessa pagina quando ancora
-> prescriveva la v1. Riparazione se ricapita:
-> `docker rm -f <hash>_casavip_nginx && docker compose -f docker-compose.casavip.yml up -d`
+> ⛔ **SI USA SOLO `docker compose` (v2, senza trattino): versione `2.29.7`, plugin in
+> `/usr/local/lib/docker/cli-plugins/`.** La vecchia v1 (`1.29.2`) **non esiste più su questa
+> macchina**: è stata **sradicata il 2026-07-30**.
+>
+> **PERCHÉ era pericolosa.** Moriva con `KeyError: 'ContainerConfig'` **dopo** aver già rinominato
+> e fermato `casavip_nginx`: lasciava il **sito irraggiungibile** e un container-residuo col nome
+> sporco (`<hash>_casavip_nginx`) che al deploy successivo sarebbe diventato un duplicato.
+> **Ci è costata ~1 minuto di sito giù il 2026-07-30**, seguendo questa stessa pagina quando
+> ancora prescriveva la v1.
+>
+> **COME è stata sradicata (tre serrature, tutte verificate sul campo):**
+> 1. **pacchetto rimosso** — `apt purge docker-compose`. La simulazione, fatta prima, mostrava un
+>    solo pacchetto in uscita: `docker.io` e `containerd` **non** sono stati toccati, e i container
+>    non si sono nemmeno accorti (identificativi e istante di avvio identici prima e dopo).
+>    Nessun cron, nessuna unità systemd e nessuno script della cartella viva la chiamava: verificato
+>    prima di rimuoverla, perché è così che un guasto diventa silenzioso.
+> 2. **apt non può più rimetterla** — `/etc/apt/preferences.d/99-blocca-compose-v1` la fissa a
+>    priorità `-1`: `apt-cache policy docker-compose` risponde `Candidate: (none)`. Nota utile: su
+>    questo Ubuntu il nome `docker-compose` è ormai **fornito dal pacchetto `docker-compose-v2`**
+>    (`Provides: docker-compose`), quindi anche chi digitasse `apt install docker-compose` in buona
+>    fede otterrebbe una **v2 sana**, non il guasto.
+> 3. **un segnaposto che spiega** — `/usr/local/bin/docker-compose` non è un programma: stampa
+>    perché quel comando non esiste più, indica la v2 e **esce con codice 1**. Serve contro
+>    l'errore umano più probabile: leggere «command not found» e pensare *«manca, lo reinstallo»*.
+>    ⚠️ Il segnaposto **non** blocca apt (quello lo fa il pin del punto 2) e **non** è visibile ai
+>    cron, che usano un `PATH` senza `/usr/local/bin`: è un cartello, non una serratura.
+>
+> **Se un domani serve rimuovere il blocco** (serve una ragione vera, e va scritta qui):
+> `rm /etc/apt/preferences.d/99-blocca-compose-v1`
 >
 > Nota storica: la v1 era l'unica presente ai primi deploy, da cui la vecchia istruzione. Il
 > `rm-first` qui sotto era il rimedio a un *altro* sintomo della stessa v1; con la v2 non serve più,
 > ma **resta innocuo** e lo si tiene perché non tocca il volume dei dati.
+> Il ripristino d'emergenza di nginx, se mai servisse:
+> `docker rm -f casavip_nginx && docker compose -f docker-compose.casavip.yml up -d`
 
 ## 2. Prima di ogni deploy: la suite INTERA deve essere verde
 
@@ -117,7 +140,8 @@ BV_PASS='la-passphrase-segreta' bash deploy/restore_offsite.sh <file.enc> ~/REST
 Il restore verifica ogni database (`PRAGMA integrity_check`) **e la catena hash del libro
 giornale**: se dice "GIORNALE MANOMESSO" quel pacchetto non va usato.
 
-**Ricostruzione da zero** su un server nuovo: installare `docker.io` e `docker-compose`,
+**Ricostruzione da zero** su un server nuovo: installare `docker.io` e il plugin `docker compose`
+(**v2**, mai la v1: vedi §1),
 clonare il repo in `/var/www/bookinvip`, ricreare `.env.casavip` (le chiavi Stripe si
 riprendono da dashboard.stripe.com), creare il volume e copiarci dentro i `.db` restaurati,
 poi `build` + `up -d`. Obiettivo: **meno di un'ora**, DNS e certificato esclusi.

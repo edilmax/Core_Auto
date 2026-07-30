@@ -228,6 +228,21 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### 🔴 SERVE IL FONDATORE — l'applicazione Meta (Facebook) è BLOCCATA
+Trovato il 2026-07-30 leggendo i log del VPS. Il drip pubblicava da 2 giorni: **357 tentativi tutti
+falliti** con `400`, coda ferma a **39 video**. Diagnosi in sola lettura (nessuna pubblicazione,
+token mai stampato): **non** è il blocco anti-spam `368` che `collaudi/drip_facebook.py` presume nel
+proprio docstring, è **`code=200` OAuthException «API access blocked»** → **l'app Meta è bloccata**,
+quindi **aspettare non serve**: nessun tentativo potrà riuscire. La riga di cron del drip è stata
+**commentata** (non cancellata; spiegazione dentro il crontab, copia in
+`/root/_crontab_prima_20260730.bak`). Restano accesi il giro video giornaliero (Telegram e Mastodon
+pubblicano regolarmente) e il watchdog. **Azione del fondatore**: sbloccare l'app su
+`developers.facebook.com` (probabile verifica attività o ricorso), poi togliere il cancelletto dal
+cron. ⚠️ **Miglioramento da 2 righe quando si riprende**: `drip_facebook.py` registra solo
+«400 Bad Request» **senza il corpo della risposta** — è per questo che per due giorni il log ha
+raccontato una favola («blocco temporaneo, riprovo») invece del fatto. **Osservabile debole =
+difetto** (protocollo anti-finti-verdi): loggare `error.code`/`error_subcode`/`message`.
+
 ### 🟡 CANDIDATO CHIRURGICO (1 riga) — il preventivo non guarda la capienza
 Trovato il 2026-07-30 lavorando sul tetto ospiti al check-in, **NON corretto** (fuori dall'ordine
 ricevuto, la decisione è del fondatore). `fase59.prenota`/`quota` validano il numero di persone
