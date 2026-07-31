@@ -165,6 +165,62 @@ class TestPagaStrutturaE2E(unittest.TestCase):
                            "l'online DEVE maturare il payout (se no il test non differenzia)")
         self.assertEqual(self.sys.garanzia.stato(rif).get("stato"), "in_garanzia")
 
+    def test_LA_DECISIONE_sui_soldi_si_osserva_DIRETTAMENTE(self):
+        """OSSERVABILE FORTE: quale RAMO e' stato preso, non cosa risulta alla fine.
+
+        NATO DA UN MUTANTE SOPRAVVISSUTO IN CI il 2026-07-31 (40 uccisi su 41). Il guasto
+        simulato era l'inversione della riga che decide il denaro a valle in
+        `fase83_server._finalizza`:
+
+            if corpo.get("modo_pagamento") != "in_struttura":     ->     == "in_struttura"
+
+        cioe': l'online NON apre piu' la cassaforte e NON registra il payout (l'host non
+        viene pagato), e il paga-in-struttura trattiene un saldo che non abbiamo incassato.
+        Una protezione sui soldi rovesciata.
+
+        PERCHE' NESSUNO LO VEDEVA (misurato, non dedotto): i tre test che qui lo prendono
+        guardano lo STATO FINALE — `payout.riepilogo(...)` e `garanzia.stato(...)`. Ma
+        quello stato lo possono produrre DUE strade diverse: la finalizzazione della
+        prenotazione **e** il webhook di pagamento. Su questo computer la seconda strada non
+        arriva in fondo e il buco si vede; sul runner Linux della CI arriva, e **copre** il
+        ramo mancante: il mutante e' sopravvissuto a tutti e 3 i giri. Un test verde che
+        dice soltanto «non ho visto niente» — e per giunta solo su un sistema operativo.
+        E' il modo di rompersi n.8 (ambiente diverso) applicato a una GUARDIA.
+
+        Qui invece si guarda la DECISIONE: si sostituiscono i due passi a valle con due
+        spie e si pretende che l'online li chiami ENTRAMBI e che l'in-struttura non ne
+        chiami NESSUNO. Nessun archivio, nessun webhook, nessuna rete di mezzo: l'esito non
+        puo' piu' essere prodotto (ne' mascherato) da un'altra strada, su nessun sistema.
+        """
+        classe = type(self.r)
+        veri = {n: getattr(classe, n) for n in ("_apri_garanzia", "_registra_payout")}
+        chiamate = []
+
+        def _spia(nome, vero):
+            def _f(zelf, *a, **k):
+                chiamate.append(nome)
+                return vero(zelf, *a, **k)
+            return _f
+
+        for nome, vero in veri.items():
+            setattr(classe, nome, _spia(nome, vero))
+            self.addCleanup(setattr, classe, nome, vero)
+
+        del chiamate[:]
+        self._prenota("2026-09-10", "2026-09-13")                      # ONLINE (niente modo)
+        self.assertEqual(sorted(set(chiamate)), ["_apri_garanzia", "_registra_payout"],
+                         "PRENOTAZIONE ONLINE: il denaro a valle non e' stato messo in "
+                         "sicurezza. Passi eseguiti: %r. Senza cassaforte l'ospite non e' "
+                         "protetto e senza payout l'host non viene MAI pagato." % (chiamate,))
+
+        del chiamate[:]
+        self._prenota("2026-09-05", "2026-09-08", modo="in_struttura")  # PAGA IN STRUTTURA
+        self.assertEqual([], chiamate,
+                         "PAGA IN STRUTTURA: eseguiti passi sul denaro che NON abbiamo "
+                         "incassato (%r). Il saldo lo prende l'host di persona: trattenere "
+                         "una garanzia o maturare un payout su quei soldi e' un debito "
+                         "verso l'host nato dal nulla." % (chiamate,))
+
     def test_dark_off_ignora_la_scelta(self):
         # con la feature SPENTA, modo=in_struttura viene ignorato -> flusso online
         os.environ["PAGA_STRUTTURA_ATTIVO"] = "0"
