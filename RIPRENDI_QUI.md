@@ -1,3 +1,48 @@
+## ✅ CHIUSO — I 6 FILE DEL PARCHEGGIO SONO ENTRATI (≈464 prove nuove)
+
+Valutati **uno alla volta**: eseguiti contro il repo di oggi, cercati gli ornamenti, e integrati
+solo dopo aver capito ogni rosso. Nessuno è stato accettato «perché verde».
+
+| file | prove | esito |
+|---|---|---|
+| `test_avvio_ostile.py` | 9 | verde subito. Lancia il **prodotto vero** come processo separato e pretende uscita **2**, il messaggio che **nomina la variabile**, e che **nessun file nasca** |
+| `test_avvio_e_ripristino.py` | 31 | **1 rosso vero**: l'inventario degli archivi non conosceva `deposito.db`, cablato il giorno DOPO che il test è stato scritto |
+| `test_dati_reali.py` + `collaudi/dati_realistici.py` | 59 | non si caricava: l'aiutante andava in `collaudi/`, non nella radice |
+| `test_migrazioni_mancanti.py` | 90 | verde subito |
+| `test_contratto_persistenza.py` | 275 | **3 rossi veri**: il contratto congelato non conosceva `host_impronte` (anti-riciclo, di oggi) né `db_deposito` |
+
+**I quattro rossi erano tutti la stessa cosa: la macchina è cresciuta e l'inventario congelato
+non lo sapeva.** Cioè quelle guardie hanno fatto esattamente il loro mestiere. Aggiornate **di
+proposito**, con lo schema letto dal codice **e confermato sull'archivio vero in produzione** —
+mai indovinato. Ognuna poi **rivista rossa** togliendo la dichiarazione appena aggiunta, con
+ripristino byte-identico sha256.
+
+**UN DIFETTO TROVATO E CHIUSO STRADA FACENDO:** `test_avvio_e_ripristino` saltava in silenzio
+se mancava una shell POSIX — la stessa forma già irrigidita stamattina in
+`test_backup_completo`. Su Linux (la CI, e il server) quella shell c'è **sempre**: se manca,
+una guardia sul **ripristino dei dati** sparisce senza dirlo. Ora lì vale **rosso**.
+
+`db_deposito` è dichiarato **SCOPERTO**, non congelato, e scritto perché: la cauzione è un
+*hold* sulla carta dell'ospite — il giorno in cui muove denaro davvero va tolto da lì e congelato.
+
+## 📌 Come era stato impostato (obiettivo scritto PRIMA di aprire un file)
+
+**Obiettivo (scritto PRIMA di aprire un file):** valutare e, se reggono, integrare i 6 file di
+test rimasti in `Desktop/_onda2_parcheggio` (~7.000 righe, 175 prove) mai entrati nel repo.
+**Ordine deciso** (dal più piccolo, così ogni passo è verificabile per intero):
+1. `test_avvio_ostile.py` (336 righe, 9 prove) — è la guardia che `main_casavip.py` **nomina**
+2. `test_avvio_e_ripristino.py` (1171, 31) · 3. `test_dati_reali.py` (1190, 59) +
+`dati_realistici.py` (781, aiutante) · 4. `test_migrazioni_mancanti.py` (1561, 41) ·
+5. `test_contratto_persistenza.py` (1814, 35)
+
+**Metodo per OGNUNO, senza saltare passi:** copiarlo → **eseguirlo** → se rosso, capire se la
+colpa è del test o un difetto vero → **cercare gli ornamenti** (salti, asserzioni che non
+possono fallire, osservabili deboli, valori attesi copiati dal codice) → decidere se integrare,
+integrare correggendo, o **rifiutare scrivendo il motivo** → suite INTERA → commit suo.
+
+**File ammessi:** solo i 6 nomi sopra + questi due documenti. Zero produzione, zero moduli nuovi.
+**La patch vuota è una risposta legittima:** un test che non aggiunge copertura vera non entra.
+
 ## 🔴 2026-07-31 — IL GIUDICE DEI TEST GIUDICAVA CODICE CHE NON STAVA GIRANDO
 
 **Il difetto più grave trovato oggi, e non era nel prodotto: era nel motore di mutazione**,

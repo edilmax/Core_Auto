@@ -228,6 +228,25 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### ✅ FATTO 2026-07-31 (4) — integrati i 6 file del parcheggio (~464 prove)
+Erano scritti il 2026-07-29 e mai entrati nel repo. Valutati uno alla volta (esecuzione, caccia
+agli ornamenti, integrazione solo dopo aver capito ogni rosso). Nessuna riga di produzione
+toccata: **quattro rossi su quattro erano inventari congelati rimasti indietro** rispetto alla
+macchina, ed e' esattamente il mestiere di quelle guardie.
+- `test_avvio_ostile.py` (9) — avvio del prodotto VERO come processo separato: ogni singolo
+  `db_*` in RAM ferma l'accensione, con uscita 2 e il nome della variabile nel messaggio.
+  Include la difesa dal falso allarme (un percorso vero che contiene la parola «memory» resta
+  lecito) e la prova del DANNO: la sonda `/api/health/db` **salta** `:memory:`, quindi senza il
+  cancello all'avvio l'archivio in RAM sarebbe invisibile.
+- `test_avvio_e_ripristino.py` (31) — aggiunto `deposito.db` all'inventario degli archivi che
+  nascono all'accensione (fase149, cablata il 2026-07-30). **Irrigidito il salto**: se manca la
+  shell POSIX, su Linux e' ROSSO (era un salto silenzioso su una guardia del ripristino dati).
+- `test_dati_reali.py` (59) + `collaudi/dati_realistici.py` — l'aiutante va in `collaudi/`.
+- `test_migrazioni_mancanti.py` (90) — verde subito.
+- `test_contratto_persistenza.py` (275) — dichiarati `host_impronte` (anti-riciclo) col suo
+  `pk(impronta)` e `db_deposito` fra gli SCOPERTI. Schemi letti dal codice **e confermati
+  sull'archivio vero in produzione**.
+
 ### ✅ FATTO 2026-07-31 (2) — riparato IL GIUDICE: `collaudi/mutazione_prodotto.py`
 - **`invalida_bytecode(percorso)`** (nuova, 1 funzione, ~10 righe): rimuove il `.pyc` del file
   appena riscritto. Chiamata dopo **tutti e tre** i punti di riscrittura. Senza, Python — che
