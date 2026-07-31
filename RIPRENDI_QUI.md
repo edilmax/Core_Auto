@@ -1,3 +1,71 @@
+## ✅ PRIMO GIRO — ALLARGATA LA MUTAZIONE: 7 BUCHI VERI, il peggiore sulla PORTA ADMIN
+
+**CENSIMENTO (nessun test eseguito):** **6.012 punti di logica sbagliabili** in 152 moduli; i
+41 mutanti a mano ne coprivano **41, cioè lo 0,7%**. Notizia buona e vera: **zero moduli
+completamente scoperti** — ogni pezzo è almeno *nominato* da qualche test. La sorveglianza non
+manca: è **disuguale**. `fase83_server` ha 203 file di test addosso; il **bunker**, che è la
+porta dell'amministratore, ne aveva **uno**.
+
+**PRIMO GIRO, sui due moduli più a rischio** (`fase199_invarianti`, la guardia delle guardie, e
+`fase180_bunker`, il cancello admin): **60 mutanti provati, 17 sopravvissuti** + 83 oltre il
+tetto, dichiarati. Ognuno indagato **eseguendo**, non a occhio.
+
+### 🔴 IL CANCELLO DELL'AMMINISTRATORE — 4 buchi, tutti fail-OPEN
+Il codice di produzione **è corretto**: mancavano le guardie. Se domani qualcuno «semplifica»
+una di quelle righe, la porta si apre e **nessuno se ne accorge**.
+1. **sessione SCADUTA accettata.** La prova esistente controllava **solo il `motivo`**, mai che
+   la risposta fosse «no»: rovesciando `ok: False` in `ok: True` il motivo restava identico e
+   il test passava. Due righe più sotto, la prova sulla revoca asserisce **entrambi** — stessa
+   classe, due misure diverse.
+2. **bunker NON configurato che apre lo stesso** (senza chiave di firma non può verificare
+   nulla: deve dire no).
+3. **secondo fattore accettato su ECCEZIONE**: un guasto qualunque nel calcolo del codice
+   avrebbe aperto a **qualsiasi** codice.
+4. **confine della scadenza** al secondo esatto.
+
+### 🔴 LA GUARDIA DEI SOLDI — 3 buchi
+5. **`i4_denaro_non_negativo(importi or {})`**: con `and` la guardia riceve un dizionario
+   **vuoto** e controlla **il nulla**. Era provata solo *da sola*, mai attraverso chi la
+   chiama — REGOLA FERREA 11 applicata a una guardia.
+6. **pagamento negativo** e 7. **pagamento booleano** (`True` è un intero in Python: varrebbe
+   1 centesimo nato dal nulla) passavano la catena dei tipi.
+
+**Tutti e 7 chiusi**, ognuno **visto rosso** sul guasto vero con ripristino byte-identico sha256.
+
+### ⚪ E 3 dichiarati EQUIVALENTI, con la prova
+Il `max` e il `min` scritti con `z3`: **dimostrato da z3 stesso** che `If(a>b,a,b)` e
+`If(a>=b,a,b)` coincidono per **ogni** coppia di interi (`unsat`). E una riga di `logger` che
+cambia solo il dettaglio della diagnosi. Non sono buchi: nessun test potrebbe ucciderli.
+
+### Cosa resta
+Gli 83 punti oltre il tetto su questi due moduli, e i restanti 150 moduli. Si procede **per
+rischio**, un modulo alla volta — mai in ordine alfabetico.
+
+**Il buco:** 12 moduli su 152 hanno un mutante (**7%**). Sul resto sappiamo che i test sono
+verdi, **non** che vedano qualcosa.
+
+**Il modo SBAGLIATO di chiuderlo** — e va scritto, perché è la tentazione ovvia: generare
+mutanti su tutti i 152 moduli. Sarebbero decine di migliaia, ognuno con la sua esecuzione di
+test: giorni di calcolo, e una valanga di **mutanti equivalenti** che insegna a ignorare
+l'esito. Più copertura sulla carta, meno attenzione nella realtà.
+
+**Il modo giusto, in due tempi:**
+1. **CENSIMENTO** (costa quasi nulla, nessun test eseguito): per ogni modulo di produzione si
+   contano i mutanti *generabili* e i file di test che lo *nominano*. Chi ha mutanti
+   generabili e **zero sorveglianti** è scoperto per certo, e si vede senza provare niente.
+2. **CAMPAGNA PER RISCHIO, un modulo alla volta**: si attacca dove un guasto silenzioso
+   **costa soldi, apre una porta o perde una prova legale** — non in ordine alfabetico. Ogni
+   giro ha un **tetto dichiarato**, e ciò che resta fuori si **stampa**.
+
+**File ammessi:** `collaudi/mutazione_prodotto.py`, `test_pipeline_ci.py`, questi due
+documenti. **Zero produzione, zero file nuovi.**
+
+✅ **AMBITO ALLARGATO PRIMA DI TOCCARE** (2026-07-31, regola 15 applicata come si deve —
+stamattina l'avevo violata): il primo giro della campagna ha trovato **buchi veri nel cancello
+dell'amministratore**, e per chiuderli servono i file delle guardie. Si aggiunge quindi:
+`test_bunker.py` e `test_fase199_invarianti.py`. **Restano fuori i moduli di produzione**:
+finché non è provato che il codice è sbagliato, si scrivono guardie, non si corregge.
+
 ## ✅ CHIUSO — I DIVIETI SONO DIVENTATI HOOK (ordine del fondatore, 2026-07-31)
 
 **Perché:** oggi ho violato la REGOLA FERREA 15 — una regola scritta da me stesso. Un

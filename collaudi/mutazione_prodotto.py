@@ -550,6 +550,19 @@ def test_che_nominano(percorso):
 #  riga, non il numero: cosi' resta valida se il codice si sposta, e smette di valere --
 #  giustamente -- se quella riga cambia.
 EQUIVALENTI_DICHIARATI = {
+    ("fase199_invarianti.py", "mx = z3.If(a1 > b1, a1, b1)", ">", ">="):
+        "DIMOSTRATO CON Z3 il 2026-07-31, non osservato: chiesto al risolutore se esista un "
+        "intero per cui If(a>b,a,b) e If(a>=b,a,b) differiscano -> unsat. Sono lo stesso "
+        "massimo per OGNI coppia di interi. Nessun test potrebbe ucciderlo.",
+    ("fase199_invarianti.py", "mn = z3.If(a2 < b2, a2, b2)", "<", "<="):
+        "Stessa dimostrazione del massimo, applicata al minimo: If(a<b,a,b) e If(a<=b,a,b) "
+        "coincidono per ogni coppia di interi.",
+    ("fase199_invarianti.py",
+     'logger.warning("invarianti: DB illeggibile (ISOLATO): %s", f, exc_info=True)',
+     "True", "False"):
+        "Cambia solo QUANTO dettaglio finisce nel log (la traccia dell'eccezione), non cosa "
+        "fa il programma: nessun comportamento osservabile muta. Resta un peggioramento "
+        "della diagnosi, non un buco nella rete di protezione.",
     ("fase100_dac7.py",
      "return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else 0",
      ">=", ">"):
@@ -645,10 +658,139 @@ def giro_sul_diff(base="HEAD~1", tetto=40, tetto_test=8):
     return esiti, rinunce
 
 
+def moduli_di_produzione():
+    """I file di produzione veri: niente test, niente collaudi, niente archivio storico."""
+    fuori = ("test_", "conftest")
+    return sorted(n for n in os.listdir(REPO)
+                  if n.endswith(".py") and not n.startswith(fuori)
+                  and (n.startswith("fase") or n == "main_casavip.py"))
+
+
+def censimento():
+    """DOVE LA MACCHINA E' SCOPERTA — senza eseguire un solo test.
+
+    Per ogni modulo: quanti mutanti si potrebbero generare (cioe' quanti punti di logica
+    ci sono da sbagliare) e quanti file di test lo NOMINANO (cioe' quanti potrebbero
+    accorgersene). Zero sorveglianti + mutanti generabili = **scoperto per certo**, e si
+    vede in pochi secondi invece che in giorni di calcolo.
+
+    Serve a decidere DOVE attaccare: il rischio non e' distribuito uniformemente, e
+    generare mutanti in ordine alfabetico e' il modo migliore per sprecare una settimana.
+    """
+    righe = []
+    for nome in moduli_di_produzione():
+        percorso = os.path.join(REPO, nome)
+        try:
+            mutanti, _ = genera_mutanti(_leggi_intatto(percorso))
+        except SyntaxError:
+            mutanti = []
+        righe.append({"modulo": nome, "mutanti": len(mutanti),
+                      "sorveglianti": len(test_che_nominano(percorso)),
+                      "righe": sum(1 for _ in io.open(percorso, encoding="utf-8",
+                                                      errors="replace"))})
+    return righe
+
+
+def giro_su_moduli(nomi, tetto=30, tetto_test=6):
+    """La stessa domanda del modo diff, ma su un modulo INTERO scelto per rischio."""
+    esiti, rinunce = [], {"oltre_il_tetto": 0, "senza_sorveglianti": 0, "generatore": {}}
+    for nome in nomi:
+        percorso = os.path.join(REPO, nome)
+        if not os.path.exists(percorso):
+            esiti.append({"file": nome, "riga": 0, "verdetto": "assente", "danno": "file inesistente"})
+            continue
+        sorgente = _leggi_intatto(percorso)
+        mutanti, saltati = genera_mutanti(sorgente)
+        for k, v in saltati.items():
+            rinunce["generatore"][k] = rinunce["generatore"].get(k, 0) + v
+        sorveglianti = test_che_nominano(percorso)
+        righe_testo = sorgente.splitlines()
+        fatti_qui = 0
+        for m in mutanti:
+            motivo = _e_equivalente(nome, righe_testo, m)
+            if motivo:
+                esiti.append({"file": nome, "riga": m["riga"], "verdetto": "equivalente",
+                              "danno": m["danno"], "nota": motivo[:60]})
+                continue
+            if not sorveglianti:
+                rinunce["senza_sorveglianti"] += 1
+                esiti.append({"file": nome, "riga": m["riga"], "verdetto": "scoperto",
+                              "danno": m["danno"],
+                              "nota": "nessun file di test nomina questo modulo"})
+                continue
+            if fatti_qui >= tetto:
+                rinunce["oltre_il_tetto"] += 1
+                continue
+            fatti_qui += 1
+            _riscrivi_intatto(percorso, applica_mutante(sorgente, m))
+            try:
+                verde, _ = esegui(" ".join(sorveglianti[:tetto_test]), timeout=600)
+            finally:
+                _riscrivi_intatto(percorso, sorgente)
+            esiti.append({"file": nome, "riga": m["riga"],
+                          "verdetto": "sopravvissuto" if verde else "ucciso",
+                          "danno": m["danno"],
+                          "nota": "%s -> %s" % (m["vecchio"], m["nuovo"])})
+    return esiti, rinunce
+
+
 def esegui(test_str, timeout=900):
     p = subprocess.run([sys.executable, "-m", "unittest"] + test_str.split(),
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
     return p.returncode == 0, p.stdout.decode("utf-8", "replace")
+
+
+if __name__ == "__main__" and "--censimento" in sys.argv:
+    # DOVE LA MACCHINA E' SCOPERTA, senza eseguire un solo test. Serve a decidere dove
+    # attaccare: generare mutanti in ordine alfabetico spreca una settimana di calcolo.
+    _righe = censimento()
+    _scoperti = [r for r in _righe if r["mutanti"] and not r["sorveglianti"]]
+    _tot_mut = sum(r["mutanti"] for r in _righe)
+    print("=" * 96)
+    print("CENSIMENTO DELLA SORVEGLIANZA — %d moduli di produzione, nessun test eseguito"
+          % len(_righe))
+    print("=" * 96)
+    print("  %-38s %7s %7s %8s" % ("modulo", "righe", "mutanti", "chi lo vede"))
+    for r in sorted(_righe, key=lambda x: (x["sorveglianti"], -x["mutanti"])):
+        if r["mutanti"] == 0 and r["sorveglianti"] > 0:
+            continue                      # niente logica da sbagliare e comunque sorvegliato
+        segno = "  <-- SCOPERTO" if (r["mutanti"] and not r["sorveglianti"]) else ""
+        print("  %-38s %7d %7d %8d%s"
+              % (r["modulo"][:38], r["righe"], r["mutanti"], r["sorveglianti"], segno))
+    print("-" * 96)
+    print("  punti di logica sbagliabili in tutta la macchina: %d" % _tot_mut)
+    print("  moduli SCOPERTI (hanno logica e nessun test li nomina): %d su %d"
+          % (len(_scoperti), len(_righe)))
+    for r in _scoperti:
+        print("::warning title=Modulo SCOPERTO %s::%d punti di logica e NESSUN test lo nomina"
+              % (r["modulo"], r["mutanti"]))
+    sys.exit(0)
+
+
+if __name__ == "__main__" and "--modulo" in sys.argv:
+    _i = sys.argv.index("--modulo")
+    _nomi = [a for a in sys.argv[_i + 1:] if not a.startswith("--")]
+    print("=" * 96)
+    print("MUTANTI GENERATI SU MODULI INTERI: %s" % ", ".join(_nomi))
+    print("=" * 96)
+    _esiti, _rin = giro_su_moduli(_nomi)
+    _sopr = [e for e in _esiti if e["verdetto"] == "sopravvissuto"]
+    _scop = [e for e in _esiti if e["verdetto"] == "scoperto"]
+    for e in _esiti:
+        if e["verdetto"] in ("sopravvissuto", "scoperto", "assente"):
+            print("  %-9s %s:%s  %s  (%s)" % (e["verdetto"].upper(), e["file"], e["riga"],
+                                              e.get("nota", ""), e["danno"][:46]))
+    print("-" * 96)
+    print("provati: %d · uccisi: %d · SOPRAVVISSUTI: %d · scoperti: %d · equivalenti: %d"
+          % (len(_esiti), sum(1 for e in _esiti if e["verdetto"] == "ucciso"),
+             len(_sopr), len(_scop), sum(1 for e in _esiti if e["verdetto"] == "equivalente")))
+    if _rin["oltre_il_tetto"] or any(_rin["generatore"].values()):
+        print("NON PROVATI (dichiarati): oltre il tetto %d · rinunce del generatore %s"
+              % (_rin["oltre_il_tetto"], {k: v for k, v in _rin["generatore"].items() if v}))
+    for e in _sopr + _scop:
+        print("::error title=Punto NON SORVEGLIATO in %s::riga %s -- %s | %s"
+              % (e["file"], e["riga"], e["danno"], e.get("nota", "")))
+    sys.exit(1 if (_sopr or _scop) else 0)
 
 
 if __name__ == "__main__" and "--diff" in sys.argv:
