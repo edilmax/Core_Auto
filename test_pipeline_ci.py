@@ -836,5 +836,126 @@ class TestRegolaDelMutanteInstabile(unittest.TestCase):
         self.assertIn("NON contano", s, "non e' dichiarato che non contano come uccisi")
 
 
+class TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA(unittest.TestCase):
+    """⛔ IL MOTORE DI MUTAZIONE DEVE PROVARE IL GUASTO, NON LA SUA CACHE.
+
+    DIFETTO VERO, TROVATO E PROVATO IL 2026-07-31 (non dedotto).
+    Python non ricompila un modulo se DIMENSIONE e DATA-AL-SECONDO della sorgente
+    coincidono con quelle scritte nell'intestazione del suo `.pyc`. Quasi tutti i mutanti
+    di `collaudi/mutazione_prodotto.py` cambiano un OPERATORE — `!=` diventa `==` — cioe'
+    scrivono ESATTAMENTE LO STESSO NUMERO DI BYTE. Se la riscrittura cade nello stesso
+    secondo della precedente, il processo figlio importa la versione compilata di PRIMA ed
+    esegue il codice NON MUTATO.
+
+    COSA COSTAVA, nelle due direzioni (una guardia sola non basterebbe):
+      · FALSO ROSSO — il motore grida «mutante SOPRAVVISSUTO» per un guasto che non stava
+        girando. Successo davvero: il job `mutazione` della CI e' andato rosso su
+        `fase83_server.py` (protezione soldi invertita) mentre in casa lo stesso mutante
+        moriva. Un'ora di caccia a un fantasma, e un rosso permanente insegna a ignorare
+        il rosso — il danno peggiore.
+      · FALSO VERDE, che e' peggio — un mutante contato fra gli UCCISI senza essere mai
+        stato provato. Il punteggio «41 su 41» diventa una decorazione, e con esso ogni
+        verde della suite che quel punteggio dovrebbe certificare.
+
+    Spiega anche l'«instabilita' del job mutazione sul runner CI» scritta nel motore stesso
+    e attribuita al carico della macchina: non era il carico, era un secondo di orologio.
+    """
+
+    @staticmethod
+    def _motore():
+        import importlib.util
+        import os
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "collaudi", "mutazione_prodotto.py")
+        spec = importlib.util.spec_from_file_location("_mut_cache", p)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def _cavia(self):
+        """Un modulo usa-e-getta, fuori dal progetto: il pericolo si riproduce a comando."""
+        import os
+        import shutil
+        import tempfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        return d, os.path.join(d, "_cavia_mut.py")
+
+    @staticmethod
+    def _scrivi(percorso, segno):
+        import io
+        with io.open(percorso, "w", encoding="utf-8", newline="\n") as f:
+            f.write("SEGNO = '%s'\n" % segno)          # due segni, STESSA dimensione
+
+    @staticmethod
+    def _chiedi(cartella):
+        """Cosa vede DAVVERO un processo nuovo? L'osservabile forte, non il file su disco."""
+        import subprocess
+        import sys
+        r = subprocess.run([sys.executable, "-c", "import _cavia_mut; print(_cavia_mut.SEGNO)"],
+                           cwd=cartella, capture_output=True, text=True)
+        return (r.stdout or "").strip()
+
+    def _prepara_trappola(self):
+        """Sorgente NUOVA con la data della VECCHIA: e' cio' che accade quando due
+        scritture cadono nello stesso secondo, ma riproducibile a comando."""
+        import os
+        d, p = self._cavia()
+        self._scrivi(p, "!=")
+        self.assertEqual("!=", self._chiedi(d), "la cavia non parte")   # nasce il .pyc
+        marca = os.stat(p).st_mtime
+        self._scrivi(p, "==")
+        os.utime(p, (marca, marca))
+        return d, p
+
+    def test_la_trappola_ESISTE_davvero(self):
+        """Prima si dimostra che il pericolo e' reale: senza rimedio il figlio esegue
+        il codice VECCHIO mentre sul disco c'e' quello nuovo."""
+        d, _ = self._prepara_trappola()
+        self.assertEqual("!=", self._chiedi(d),
+                         "la trappola non si riproduce piu': se Python ha cambiato regola "
+                         "di invalidazione, questa guardia va rivista di proposito")
+
+    def test_invalida_bytecode_LA_DISINNESCA(self):
+        d, p = self._prepara_trappola()
+        self._motore().invalida_bytecode(p)
+        self.assertEqual("==", self._chiedi(d),
+                         "dopo l'invalidazione il processo figlio DEVE vedere il codice "
+                         "vero: se no il motore giudica una cosa e ne esegue un'altra")
+
+    def test_invalidare_due_volte_non_esplode(self):
+        """Il .pyc puo' non esserci (prima esecuzione): non e' un errore, e' la condizione
+        che vogliamo. Un'eccezione qui fermerebbe l'intero giro di mutazione."""
+        d, p = self._prepara_trappola()
+        m = self._motore()
+        m.invalida_bytecode(p)
+        m.invalida_bytecode(p)
+
+    def test_il_motore_invalida_dopo_OGNI_riscrittura(self):
+        """LA GUARDIA CHE CONTA (denominatore): non basta che la funzione esista, deve
+        essere CHIAMATA dopo ogni punto in cui un file di produzione viene riscritto.
+        Un punto nuovo che se ne dimentica fa diventare rosso questo test il giorno in
+        cui nasce, invece di regalare mesi di punteggi falsi."""
+        import io
+        import os
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "collaudi", "mutazione_prodotto.py")
+        with io.open(p, encoding="utf-8") as f:
+            righe = f.read().splitlines()
+        riscritture = [n for n, r in enumerate(righe)
+                       if ('io.open(percorso, "w"' in r or "shutil.copy(os.path.join(riserva" in r)
+                       and not r.strip().startswith("#")]
+        self.assertGreaterEqual(len(riscritture), 3,
+                                "denominatore sospetto: trovati solo %d punti di "
+                                "riscrittura, la forma del motore e' cambiata"
+                                % len(riscritture))
+        ciechi = [(n + 1, righe[n].strip()[:60]) for n in riscritture
+                  if "invalida_bytecode" not in "\n".join(righe[n:n + 3])]
+        self.assertEqual([], ciechi,
+                         "questi punti riscrivono un file di produzione senza buttare via "
+                         "la sua versione compilata: il processo figlio potrebbe eseguire "
+                         "il codice VECCHIO. %r" % (ciechi,))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

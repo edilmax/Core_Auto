@@ -25,6 +25,7 @@ sono ora in `test_admin_accounts.py`.
 
 Il codice viene SEMPRE ripristinato, anche se qualcosa va storto.
 """
+import importlib.util
 import io
 import os
 import shutil
@@ -336,6 +337,35 @@ MUTANTI = [
 ]
 
 
+def invalida_bytecode(percorso):
+    """Butta via la versione COMPILATA del file appena riscritto. Ritorna il .pyc rimosso.
+
+    ⛔ SENZA QUESTA RIGA IL GIUDICE GIUDICA CODICE CHE NON STA GIRANDO.
+
+    Python non ricompila un modulo se DIMENSIONE e DATA-AL-SECONDO della sorgente
+    coincidono con quelle scritte nell'intestazione del suo `.pyc`. Quasi tutti i mutanti
+    di questo elenco cambiano un OPERATORE — `!=` diventa `==`, `>=` diventa `>` — cioe'
+    scrivono ESATTAMENTE LO STESSO NUMERO DI BYTE. Se la riscrittura cade nello stesso
+    secondo della precedente, il processo figlio importa il `.pyc` di prima ed esegue il
+    codice NON MUTATO: i test passano, e il motore conclude «mutante SOPRAVVISSUTO» per un
+    guasto che non e' mai esistito. Falso allarme, cioe' un difetto (REGOLA FERREA 10) —
+    e il gemello silenzioso e' peggio: un mutante «ucciso» che non e' mai stato provato.
+
+    PROVATO il 2026-07-31, non dedotto, su un modulo usa-e-getta fuori dal progetto:
+    scritto `SEGNO = '!='`, importato (nasce il .pyc), riscritto `SEGNO = '=='` (stessa
+    dimensione, stesso secondo) -> un processo NUOVO stampava ancora `!=`. Cancellato il
+    `.pyc`, lo stesso processo stampava `==`.
+    Spiega anche la vecchia «instabilita' del job mutazione sulla CI» scritta piu' sotto:
+    non era carico del runner, era un secondo di orologio.
+    """
+    pyc = importlib.util.cache_from_source(percorso)
+    try:
+        os.remove(pyc)
+    except FileNotFoundError:
+        pass                      # non c'era cache: e' gia' la condizione che vogliamo
+    return pyc
+
+
 def esegui(test_str, timeout=900):
     p = subprocess.run([sys.executable, "-m", "unittest"] + test_str.split(),
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
@@ -365,10 +395,12 @@ if __name__ == "__main__":
                 continue
             io.open(percorso, "w", encoding="utf-8", newline="\n").write(
                 testo.replace(orig, mut, 1))
+            invalida_bytecode(percorso)       # il figlio deve vedere IL GUASTO, non la cache
             try:
                 verde, uscita = esegui(test)
             finally:
                 io.open(percorso, "w", encoding="utf-8", newline="\n").write(testo)
+                invalida_bytecode(percorso)   # ...e il mutante dopo non deve vedere QUESTA
             print("\n%2d. %s" % (i, percorso))
             print("    guasto introdotto: %s" % danno)
             if verde:
@@ -406,6 +438,7 @@ if __name__ == "__main__":
     finally:
         for f in file_toccati:
             shutil.copy(os.path.join(riserva, f.replace("/", "_")), f)
+            invalida_bytecode(f)              # l'albero torna sano anche per chi importa dopo
         shutil.rmtree(riserva, ignore_errors=True)
 
     provati = len(MUTANTI) - len(non_applicabili)
@@ -424,12 +457,27 @@ if __name__ == "__main__":
             print("  ? %s" % percorso)
             print("    danno che a volte passa: %s" % danno)
             print("    test che dovrebbero vederlo SEMPRE: %s" % test)
+            # Avviso, non errore: gli incerti NON fanno rosso il job (un intoppo del
+            # runner non deve bloccare la produzione). Ma devono essere VISIBILI a chi
+            # non ha i diritti per scaricare il registro, altrimenti «non conta come
+            # ucciso» resta una frase che nessuno legge mai.
+            print("::warning title=Mutante INCERTO in %s::%s | visto solo a volte dai "
+                  "test: %s" % (percorso, danno, test))
     if sopravvissuti:
         print("\nBUCHI NELLA RETE DI PROTEZIONE:")
         for percorso, danno, test in sopravvissuti:
             print("  X %s" % percorso)
             print("    danno che passerebbe: %s" % danno)
             print("    test che avrebbero dovuto vederlo: %s" % test)
+            # L'ESITO DEVE ESSERE LEGGIBILE DA FUORI. Il registro del job lo scarica solo
+            # chi ha diritti di AMMINISTRATORE sul repository: per tutti gli altri un job
+            # mutazione rosso dice soltanto «exit code 1», che non e' un'informazione. Le
+            # annotazioni invece sono pubbliche. Senza questa riga il buco resta scritto
+            # in un posto dove quasi nessuno puo' guardare -- osservabile debole, cioe' un
+            # difetto (REGOLA FERREA 9). Provato il 2026-07-31 sul job 91155447837:
+            # l'unica cosa leggibile era «Process completed with exit code 1».
+            print("::error title=Mutante SOPRAVVISSUTO in %s::%s | test che avrebbero "
+                  "dovuto vederlo: %s" % (percorso, danno, test))
         sys.exit(1)
     print("\nNESSUN MUTANTE SOPRAVVISSUTO: ogni guasto simulato viene visto dai test.")
     sys.exit(0)
