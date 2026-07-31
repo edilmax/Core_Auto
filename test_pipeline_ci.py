@@ -348,7 +348,8 @@ class TestNeedsDelGateCompleto(unittest.TestCase):
         potrebbero passare a vuoto. Questa lista scritta a mano lo impedisce."""
         self.assertEqual(sorted(self.bloccanti),
                          ["accessibilita", "atheris", "copertura", "full-suite",
-                          "money-smoke", "mutazione", "qualita", "w3c"],
+                          "full-suite-311", "immagine", "money-smoke", "mutazione",
+                          "qualita", "w3c"],
                          "se hai aggiunto un job BLOCCANTE devi aggiornare questa "
                          "lista di proposito, dopo esserti accertato che sia anche "
                          "nei needs del gate: e' il punto in cui la decisione si "

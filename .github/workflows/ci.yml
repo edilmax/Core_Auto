@@ -32,8 +32,8 @@ permissions:
 #  MAPPA DEI JOB — chi blocca e chi no (dichiarato, niente ambiguita')
 # ============================================================================
 #  BLOCCANTI (entrano nel job finale "gate"):
-#    money-smoke · full-suite · copertura · mutazione · qualita · w3c ·
-#    accessibilita · atheris
+#    money-smoke · full-suite · full-suite-311 · copertura · mutazione · qualita ·
+#    w3c · accessibilita · atheris · immagine
 #  NON BLOCCANTI (fuori dal "gate", di proposito):
 #    lint-severo  -> lint severo su codice gia' scritto: informativo, si legge il log
 #    zap          -> gira solo a schedule/manuale, non ad ogni commit
@@ -43,13 +43,41 @@ permissions:
 #  NON BLOCCA SUI RILIEVI (il suo comando finisce con `|| true`, vedi la sua
 #  dichiarazione): resta nel gate perche' se il validatore stesso non gira il job
 #  e' rosso e il gate lo vede, ma un errore HTML da solo non ferma la build.
-#  Gli altri sette bloccano davvero sul contenuto.
+#  Gli altri nove bloccano davvero sul contenuto.
 #
 #  >>> DA FARE A MANO DAL FONDATORE (io non ho accesso alle impostazioni di GitHub):
 #      Settings -> Branches -> Branch protection rule su "master" ->
 #      "Require status checks to pass before merging" -> aggiungere UN SOLO check:
 #      il job chiamato **gate**. E' lui che riassume tutti gli altri: se anche un
 #      solo job bloccante e' rosso, "gate" e' rosso. Non serve elencare gli altri.
+# ============================================================================
+
+# ============================================================================
+#  PARITA' DI AMBIENTE — quale Python gira dove (DICHIARATO, non intuito)
+# ============================================================================
+#  Il modo di rompersi numero 8 di CLAUDE.md ("ambiente diverso: locale !=
+#  produzione") qui era aperto e non dichiarato: la produzione gira dentro
+#  l'immagine di Dockerfile.casavip, la CI girava tutta su un Python diverso.
+#  Verde in CI non voleva dire verde in produzione, e nessuno se ne accorgeva.
+#
+#  L'unica verita' su cosa gira davvero e' la riga FROM del Dockerfile:
+#      PRODUZIONE: python:3.11-slim
+#
+#  VERSIONI DI PYTHON AMMESSE IN QUESTA CI, ognuna con il suo motivo esplicito:
+#      3.11 - MOTIVO: e' la versione della PRODUZIONE. Ci gira la suite (job
+#             full-suite-311, con l'elenco del debito noto dichiarato dentro il
+#             job) e il fuzzing dei motori-soldi (job atheris). Senza questa riga
+#             nessun test vedrebbe mai il Python su cui il prodotto vive davvero.
+#      3.9  - MOTIVO: e' il PAVIMENTO di compatibilita' e insieme il Python del
+#             computer dove la suite si lancia a mano ogni giorno. Se il codice
+#             smette di girarci, il lavoro locale si ferma e il fondatore non
+#             puo' piu' collaudare nulla prima del deploy.
+#
+#  GUARDIA: test_parita_ambiente.py legge la riga FROM di Dockerfile.casavip e
+#  legge questa dichiarazione, e va ROSSO se divergono, se un job usa una
+#  versione non dichiarata qui, se una versione dichiarata non e' piu' usata da
+#  nessuno, o se la versione di PRODUZIONE non e' quella di nessun job che gira
+#  la suite intera. La dichiarazione non e' un commento gentile: e' un dato.
 # ============================================================================
 
 jobs:
@@ -76,6 +104,8 @@ jobs:
 
   # Suite INTERA (piu' lunga): il quadro completo. Installa le dipendenze di test che
   # alcuni test importano (flask/yaml/hypothesis) cosi' girano DAVVERO (non si saltano).
+  # Gira sul PAVIMENTO (3.9). Il gemello sulla versione di PRODUZIONE e' il job
+  # `full-suite-311` qui sotto: vedi la dichiarazione PARITA' DI AMBIENTE in testa.
   full-suite:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -92,6 +122,79 @@ jobs:
         run: pip install -r requirements.txt hypothesis pyyaml coverage
       - name: Suite completa
         run: python -m unittest discover -s . -p "test_*.py"
+
+  # ==========================================================================
+  #  FULL-SUITE-311 — la stessa suite sul Python della PRODUZIONE (3.11)
+  # ==========================================================================
+  #  Buco chiuso il 2026-07-29 (modo di rompersi n. 8: "ambiente diverso").
+  #  La produzione gira su python:3.11-slim; tutta la CI girava su 3.9. Nessun
+  #  test aveva mai visto il Python su cui il prodotto vive davvero.
+  #
+  #  MISURA VERA presa prima di scrivere questo job (suite intera, 4582 test, su
+  #  3.11): **22 rossi** che su 3.9 sono verdi. Non erano un'opinione: sono stati
+  #  eseguiti. Due famiglie, ben distinte:
+  #    (a) 15 rossi VERI di semantica, in 5 moduli - `datetime.fromisoformat` in
+  #        3.11 accetta le forme ISO "di base" che 3.9 rifiutava ('20260905',
+  #        '2026-W36-6'), quindi in PRODUZIONE certe date malformate passano e i
+  #        test che le credono rifiutate cadono. E' un difetto vero del prodotto,
+  #        non della CI, e va corretto alla fonte;
+  #    (b) 7 errori che sono artefatti di Windows (shutil.rmtree su un file
+  #        sqlite ancora aperto -> WinError 32) e su Linux non compaiono.
+  #  Verificato anche che NON c'entra il pacchetto tzdata: su 3.9 CON tzdata
+  #  installato quei 5 moduli restano verdi. La differenza e' proprio 3.11.
+  #
+  #  PERCHE' NON UNA MATRICE 3.9+3.11 SU full-suite: una gamba di matrice non puo'
+  #  essere "meno bloccante" dell'altra senza `continue-on-error`, che qui e'
+  #  vietato nei job bloccanti. Con la matrice il gate sarebbe ROSSO da subito per
+  #  un debito noto: e un rosso permanente insegna a ignorare il rosso, che e' il
+  #  danno peggiore. Quindi: job separato, che BLOCCA su tutto cio' che su 3.11 e'
+  #  gia' verde, e tiene il debito noto in un elenco DICHIARATO e report-only.
+  #
+  #  >>> CRICCHETTO: da questo elenco si possono solo TOGLIERE moduli, mai
+  #      aggiungerne. Quando un modulo viene corretto su 3.11 esce di qui e da
+  #      quel momento e' protetto per sempre. Quando l'elenco arriva a ZERO,
+  #      questo job diventa `unittest discover` puro come full-suite.
+  full-suite-311:
+    name: full-suite-311 (Python di PRODUZIONE, debito dichiarato)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Dipendenze di test
+        run: pip install -r requirements.txt hypothesis pyyaml coverage
+      # I 7 moduli con debito dichiarato (5 di semantica delle date + 2 che su
+      # Windows sciolgono male le cartelle temporanee) restano fuori da QUESTO
+      # comando, che blocca su tutto il resto: oggi sono 388 moduli su 395.
+      - name: Suite su 3.11 meno il debito dichiarato (BLOCCA)
+        run: |
+          ls test_*.py \
+            | grep -vE '^(test_fusi_orari|test_fuso_alloggio|test_fase64_smartpass|test_impossibile_tokyo_honolulu|test_paga_struttura_avanzato|test_fase10_dashboard|test_fase11_report)\.py$' \
+            | sed 's/\.py$//' > moduli_311.txt
+          echo "moduli in prova su 3.11: $(wc -l < moduli_311.txt) (esclusi 7 con debito dichiarato)"
+          if [ "$(wc -l < moduli_311.txt)" -lt 300 ]; then
+            echo "::error title=Elenco sospetto::meno di 300 moduli di test trovati: il filtro ha mangiato la suite."
+            exit 1
+          fi
+          python -m unittest $(cat moduli_311.txt)
+      # Il debito NON sparisce dalla vista: gira lo stesso, e il suo rosso resta
+      # scritto nel log. E' l'unico modo perche' qualcuno lo chiuda.
+      # Il messaggio finale NON e' fisso: dice la verita' misurata in questa run. Se un
+      # giorno il debito passa, la CI lo annuncia e chiede di stringere il cricchetto -
+      # cosi' non resta un elenco di esclusioni che nessuno rilegge piu'.
+      - name: Il debito noto su 3.11 (report-only, deve restare visibile)
+        if: always()
+        run: |
+          if python -m unittest test_fusi_orari test_fuso_alloggio test_fase64_smartpass \
+               test_impossibile_tokyo_honolulu test_paga_struttura_avanzato \
+               test_fase10_dashboard test_fase11_report; then
+            echo "::notice title=Debito su Python 3.11 CHIUSO::i moduli esclusi passano ORA anche sul Python di produzione: toglili dal filtro del passo che blocca (cricchetto) e questo passo sparisce."
+          else
+            echo "::notice title=Debito su Python 3.11::i moduli dichiarati non passano ancora sul Python di PRODUZIONE (misura del 2026-07-29: 15 rossi veri di semantica delle date + artefatti Windows). Vedi il commento del job full-suite-311 in ci.yml."
+          fi
 
   # ==========================================================================
   #  COPERTURA — quanta parte del prodotto vivo i test la attraversano davvero
@@ -363,6 +466,117 @@ jobs:
       - name: Fuzz motori-soldi (max 2 min; crash o invariante rotto = STOP)
         run: python collaudi/fuzz_soldi.py -max_total_time=120 -atheris_runs=500000
 
+  # ==========================================================================
+  #  IMMAGINE — l'artefatto che va in produzione viene COSTRUITO e AVVIATO
+  # ==========================================================================
+  #  Buco chiuso il 2026-07-29. Nessun job costruiva l'immagine: la CI girava sui
+  #  sorgenti sparsi sul runner, con i pacchetti di test installati attorno, e
+  #  l'immagine Docker - l'UNICA cosa che gira davvero sul VPS - non veniva mai
+  #  assemblata ne' avviata. Un commit che rompeva il Dockerfile (una COPY che non
+  #  prende piu' i moduli, una ENV persa, il modulo d'avvio rinominato) passava il
+  #  gate VERDE e si scopriva in produzione, a deploy fatto, col sito giu'.
+  #
+  #  Qui l'artefatto VERO viene: (1) costruito da Dockerfile.casavip; (2) AVVIATO
+  #  con l'ambiente minimo che main_casavip.py pretende - senza HOST_KEY e
+  #  ADMIN_KEY rifiuta di partire, ed e' giusto cosi' (fail-closed); (3) atteso
+  #  finche' il suo HEALTHCHECK non dice 'healthy'; (4) INTERROGATO davvero
+  #  dall'esterno: /api/health deve rispondere 200 col corpo del prodotto, e la
+  #  pagina pubblica deve arrivare (prova che `COPY deploy ./deploy` ha funzionato:
+  #  un'immagine che risponde alle API ma serve una pagina vuota e' rotta lo
+  #  stesso). Poi il container si spegne sempre, anche se un passo fallisce.
+  #
+  #  Niente segreti qui dentro: le chiavi sono FINTE e servono solo a far partire
+  #  il processo. Il container vive meno di un minuto, non e' raggiungibile da
+  #  fuori e non tocca nessun servizio esterno: GEOCODING e POI_OSM spenti,
+  #  MARCA_TEMPORALE spenta (niente chiamate alla TSA), nessuna chiave Stripe,
+  #  nessun SMTP. Guardia statica sul contenuto di questo job:
+  #  test_parita_ambiente.py.
+  immagine:
+    name: immagine (build Dockerfile.casavip + avvio reale + sonda)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Costruisci l'immagine di produzione
+        run: docker build -f Dockerfile.casavip -t casavip-app:ci .
+      - name: Avvia il container con l'ambiente minimo
+        run: |
+          docker run -d --name casavip_ci -p 18080:8080 \
+            -e HOST=0.0.0.0 \
+            -e PORTA=8080 \
+            -e HOST_KEY=chiave-host-finta-solo-per-la-ci \
+            -e ADMIN_KEY=chiave-admin-finta-solo-per-la-ci \
+            -e CASAVIP_SEGRETO=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff \
+            -e DATA_DIR=/data \
+            -e GEOCODING=false \
+            -e POI_OSM=false \
+            -e MARCA_TEMPORALE=0 \
+            casavip-app:ci
+      - name: Aspetta la sonda di salute dell'immagine (HEALTHCHECK 'healthy')
+        run: |
+          for i in $(seq 1 60); do
+            if [ "$(docker inspect -f '{{.State.Running}}' casavip_ci)" != "true" ]; then
+              echo "::error title=Il container si e' spento da solo::l'immagine parte e muore. I log del container sono nel passo qui sotto."
+              exit 1
+            fi
+            STATO="$(docker inspect -f '{{.State.Health.Status}}' casavip_ci)"
+            echo "tentativo $i/60: $STATO"
+            if [ "$STATO" = "healthy" ]; then exit 0; fi
+            if [ "$STATO" = "unhealthy" ]; then
+              echo "::error title=Immagine malata::l'HEALTHCHECK dell'immagine dice 'unhealthy': il server non risponde sulla 8080 dentro il container."
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "::error title=Immagine mai pronta::in 120 secondi l'HEALTHCHECK non e' mai diventato 'healthy'."
+          exit 1
+      - name: Interroga la sonda dall'esterno (200 + corpo del prodotto)
+        run: |
+          CODICE="$(curl -s -o corpo.json -w '%{http_code}' http://127.0.0.1:18080/api/health)"
+          echo "HTTP $CODICE"
+          cat corpo.json
+          echo
+          if [ "$CODICE" != "200" ]; then
+            echo "::error title=Sonda muta::/api/health ha risposto $CODICE invece di 200: l'immagine parte ma non serve niente."
+            exit 1
+          fi
+          CORPO="$(tr -d '[:space:]' < corpo.json)"
+          for ATTESO in '"status":"ok"' '"money_unit":"cents_integer"'; do
+            case "$CORPO" in
+              *"$ATTESO"*)
+                echo "trovato nel corpo: $ATTESO" ;;
+              *)
+                echo "::error title=Corpo inatteso::/api/health ha risposto 200 ma nel corpo manca $ATTESO. Corpo ricevuto: $CORPO"
+                exit 1 ;;
+            esac
+          done
+      - name: La pagina pubblica arriva (prova che COPY deploy ha funzionato)
+        run: |
+          CODICE="$(curl -s -o pagina.html -w '%{http_code}' http://127.0.0.1:18080/)"
+          echo "HTTP $CODICE"
+          if [ "$CODICE" != "200" ]; then
+            echo "::error title=Pagina assente::/ ha risposto $CODICE: l'immagine non contiene il frontend (STATIC_DIR=/app/deploy)."
+            exit 1
+          fi
+          grep -q "<title>Bookin VIP</title>" pagina.html || {
+            echo "::error title=Pagina sbagliata::/ risponde 200 ma non e' la home del prodotto."
+            exit 1
+          }
+      - name: Il container NON gira da root (proprieta' dell'immagine, verificata viva)
+        run: |
+          UID_VERO="$(docker exec casavip_ci id -u)"
+          echo "uid dentro il container: $UID_VERO"
+          if [ "$UID_VERO" != "10001" ]; then
+            echo "::error title=Container da root::l'immagine gira con uid $UID_VERO invece di 10001: la riga USER app del Dockerfile non e' arrivata all'artefatto."
+            exit 1
+          fi
+      - name: Log del container (sempre, e' la diagnosi quando qualcosa e' rosso)
+        if: always()
+        run: docker logs casavip_ci || true
+      - name: Spegni il container
+        if: always()
+        run: docker rm -f casavip_ci || true
+
   # OWASP ZAP: scansione DAST BASELINE (passiva, NON attacca) del sito live. Gira solo su
   # schedule settimanale o avvio manuale -> niente crawl della produzione ad ogni commit.
   # Report-only (|| true): i rilievi restano nel log del job.
@@ -406,12 +620,14 @@ jobs:
     needs:
       - money-smoke
       - full-suite
+      - full-suite-311
       - copertura
       - mutazione
       - qualita
       - w3c
       - accessibilita
       - atheris
+      - immagine
     steps:
       # Nota: i nomi dei job con il trattino si leggono con le parentesi quadre
       # (needs['full-suite']) — e' la forma sicura documentata da GitHub.
@@ -419,12 +635,14 @@ jobs:
         run: |
           echo "money-smoke ....... ${{ needs['money-smoke'].result }}"
           echo "full-suite ........ ${{ needs['full-suite'].result }}"
+          echo "full-suite-311 .... ${{ needs['full-suite-311'].result }}"
           echo "copertura ......... ${{ needs.copertura.result }}"
           echo "mutazione ......... ${{ needs.mutazione.result }}"
           echo "qualita ........... ${{ needs.qualita.result }}"
           echo "w3c ............... ${{ needs.w3c.result }}"
           echo "accessibilita ..... ${{ needs.accessibilita.result }}"
           echo "atheris ........... ${{ needs.atheris.result }}"
+          echo "immagine .......... ${{ needs.immagine.result }}"
           {
             echo "## Esito della CI"
             echo ""
@@ -432,12 +650,14 @@ jobs:
             echo "|---|---|"
             echo "| money-smoke | ${{ needs['money-smoke'].result }} |"
             echo "| full-suite | ${{ needs['full-suite'].result }} |"
+            echo "| full-suite-311 | ${{ needs['full-suite-311'].result }} |"
             echo "| copertura | ${{ needs.copertura.result }} |"
             echo "| mutazione | ${{ needs.mutazione.result }} |"
             echo "| qualita | ${{ needs.qualita.result }} |"
             echo "| w3c | ${{ needs.w3c.result }} |"
             echo "| accessibilita | ${{ needs.accessibilita.result }} |"
             echo "| atheris | ${{ needs.atheris.result }} |"
+            echo "| immagine | ${{ needs.immagine.result }} |"
             echo ""
             echo "I job \`lint-severo\` e \`zap\` sono informativi e non contano qui."
           } >> "$GITHUB_STEP_SUMMARY"

@@ -1,3 +1,84 @@
+## ✅ CHIUSO 2026-07-31 — IL PARCHEGGIO «onda2-non-finita» (parità d'ambiente)
+
+**ESITO.** Suite INTERA **4706 test · 0 fallimenti · 3 skip storici** (esito letto diretto: 0;
+prima del lavoro erano 4660). `ruff` e `bandit` — i due cancelli bloccanti del job `qualita` —
+verdi. Bilancio: **produzione +123 −8 · CI e script +308 −5 · test +563 −1 · documenti +29**,
+con **zero moduli di produzione nuovi, zero dipendenze, zero file `.md` nuovi**. Dei 437 file di
+test, **431 sono byte-identici** a prima del lavoro (impronte sha256 fissate prima di iniziare);
+**nessuna asserzione tolta o allentata**. L'unica riga tolta da un test è l'elenco dei job
+bloccanti, che si allunga perché i job bloccanti ora sono 9.
+
+**I 5 DIFETTI DI PRODUZIONE, VISTI VIVI PRIMA DI TOCCARE UNA RIGA** (eseguiti sul codice di
+`HEAD`, non dedotti — regola «prima di modificare, prova che la modifica manca»):
+1. **La chiave di firma poteva essere quella pubblicata su GitHub.** Con
+   `CASAVIP_SEGRETO=cambiami_64_caratteri_hex` (il segnaposto di `.env.casavip.example`) la
+   chiave HMAC diventava **letteralmente** `b'cambiami_64_caratteri_hex'`; con un refuso (`x`)
+   diventava `b'x000000000000000'`, per via di un `.ljust(16, b"0")`. Con quella si firmano
+   voucher, gettoni host, cookie di sessione e crediti. **Zero errori nei log.**
+2. **Quattro modi di partire spalancati**, tutti misurati col processo ancora vivo dopo 25
+   secondi: `DB_FINANZA=:memory:` · `DB_FINANZA=` (percorso vuoto → sqlite apre un archivio
+   temporaneo che si autocancella) · `ADMIN_KEY` col segnaposto pubblico · `HOST_KEY="   "`.
+   Ora l'avvio **rifiuta e nomina la variabile malata**.
+3. **`fase100_dac7`**: un archivio JSON valido ma non-oggetto dava `AttributeError`; un record
+   senza `pren` dava `KeyError`, con `"pren": "tanti"` dava `ValueError`. Esplodevano i due
+   **scrittori**, non i lettori.
+4. **`fase16_outbox`**: dopo la colonna `priorita` l'indice di fetch **non veniva rifatto**
+   (`CREATE INDEX IF NOT EXISTS` è un no-op silenzioso). Osservabile forte: il piano di SQLite
+   diceva `USE TEMP B-TREE FOR ORDER BY`, cioè riordinava a mano l'intera coda a ogni giro.
+5. **Pannello host**: dopo un pagamento in ritardo la chiave del blocco è `reblock:<rif>`. Tre
+   punti su quattro toglievano il prefisso; il quarto no → una prenotazione **pagata 270,00 EUR
+   valeva 0 cent** di incasso. Non un dato mancante: un dato **sbagliato**.
+
+**LE GUARDIE, TUTTE VISTE ROSSE.** Nove iniezioni chirurgiche, una per difetto, ognuna col suo
+rosso e col **ripristino byte-identico sha256** su 6 file, verde prima e verde dopo. Nuovo file
+`test_parita_ambiente.py` (15 prove): era **dichiarato dentro `ci.yml` e non esisteva**, cioè
+una frase ornamentale. Confronta la riga `FROM` del Dockerfile con la dichiarazione della CI e
+va rosso **nelle due direzioni** (versione usata e non dichiarata · dichiarata e non più usata).
+`test_backup_completo` ora **esegue davvero** `restore_offsite.sh` su pacchetti cifrati veri.
+
+**TRE ERRORI MIEI, TROVATI E CORRETTI STRADA FACENDO** (vanno scritti, servono ai successori):
+un commento del codice parcheggiato nominava i chiamanti sbagliati e l'esecuzione l'ha smentito;
+una mia guardia confrontava l'uid del container con il **codice HTTP 200**, per un'espressione
+troppo golosa; e la prova rossa **si è inchiodata** invece di fallire — tolto il cancello,
+`main()` non rifiutava più e restava un server acceso dentro il test. Ora quel caso è un rosso
+immediato e il ciclo ha un tetto: **un'attesa infinita vale rosso**. Il ciclo fermato a metà
+aveva anche lasciato **un difetto iniettato nell'albero**, trovato rileggendo lo stato invece
+di fidarsi del racconto.
+
+**DUE COSE DICHIARATE, NON NASCOSTE:** (a) i job `full-suite-311` e `immagine` **non sono mai
+stati eseguiti** — Docker non c'è su questo computer, quindi la CI è la loro prima esecuzione;
+(b) la **revisione a contesto fresco** prima del push non c'è stata, perché la direttiva
+chirurgica vieta di lanciare agenti.
+
+---
+
+## 📌 Come era stato impostato il lavoro (obiettivo scritto PRIMA di aprire un file, regola «ogni diff mappa su una riga su disco»,
+`REGISTRO_INGEGNERIA.md:1410`):** portare a termine il lavoro rimasto in `git stash` dal
+2026-07-29 — **parità d'ambiente CI↔produzione** — che ripara 5 difetti veri ma è rimasto
+**senza le guardie che lo sorvegliano**, e dichiara dentro `ci.yml` un file
+(`test_parita_ambiente.py`) **che non esiste**: una frase ornamentale, vietata dalla REGOLA
+FERREA 2.
+
+**File ammessi in questo lavoro (nessun altro, regola «scopo dichiarato prima»):**
+produzione già scritta nel parcheggio — `main_casavip.py`, `fase100_dac7.py`,
+`fase16_outbox.py`, `fase83_server.py`, `deploy/restore_offsite.sh`,
+`.github/workflows/ci.yml`, `test_pipeline_ci.py`; guardie mancanti da scrivere —
+`test_parita_ambiente.py`, `test_avvio_failclosed.py` (esistente, si **somma**),
+`test_backup_completo.py` (esistente, si **somma**). Più questi due documenti.
+**Zero moduli di produzione nuovi, zero dipendenze, zero file `.md` nuovi.**
+
+**Presupposti del codice parcheggiato, VERIFICATI sulla macchina prima di ripristinarlo**
+(regola «quello che ti dicono è un'ipotesi»): `Dockerfile.casavip:5` = `python:3.11-slim` ✔ ·
+`useradd -r -u 10001` + `USER app` ✔ · `STATIC_DIR=/app/deploy` ✔ · `HEALTHCHECK` ✔ ·
+`<title>Bookin VIP</title>` in `deploy/index.html` ✔ · `"money_unit":"cents_integer"` a
+`fase83_server.py:1812` ✔ · i tre segnaposto sono **esattamente** quelli di
+`.env.casavip.example` ✔ · il **manifesto esiste davvero** (`deploy/backup_casavip.sh:48`
+lo scrive, `deploy/pull_offsite.sh:12` lo porta giù) ✔ — senza quest'ultimo il nuovo
+controllo del restore sarebbe stato un **falso allarme permanente**, cioè un difetto
+(REGOLA FERREA 10).
+
+---
+
 ## 🎯 STATO 2026-07-28 — LIVELLO 1 (HAPPY PATH) CHIUSO: 134/134 ROTTE + SCAVO PROFONDO
 
 Direttiva fondatore: **programma di collaudo a 4 LIVELLI**, tutti obbligatori (vedi memoria

@@ -11,6 +11,7 @@ chiunque di ricadere nella lista fissa, e verifica che gli script offsite esista
 import os
 import re
 import sqlite3
+import subprocess
 import tempfile
 import unittest
 
@@ -77,6 +78,156 @@ class TestBackupCompleto(unittest.TestCase):
         finally:
             import shutil
             shutil.rmtree(d, ignore_errors=True)
+
+
+class TestRipristinoAPezziNonPassa(unittest.TestCase):
+    """IL RESTORE VIENE ESEGUITO DAVVERO, non letto.
+
+    DIFETTO PROVATO il 2026-07-29 da una revisione ostile, su due forme distinte:
+
+      · STRACCIATO — il passo [3] prende per OGNI archivio il suo snapshot piu' recente.
+        Se l'ultimo giro di backup e' morto a meta' (disco pieno, container ucciso, un solo
+        `.gz` perso), `finanza.db` torna da ieri e `catalogo.db` da stamattina: prenotazioni
+        senza le righe di giornale che le pagano. Lo script stampava «RESTORE OK — dati
+        integri» e usciva 0.
+      · INCOMPLETO — un pacchetto troncato (tar a meta', pull interrotto) veniva ripristinato
+        e dichiarato OK: host, accettazioni e payout semplicemente non c'erano.
+
+    Chi rimette in piedi il server alle 3 di notte si fida di quella riga verde. Un test che
+    legge il testo dello script non avrebbe visto nulla di tutto questo: la logica sta nel
+    COMPORTAMENTO (e in bash le trappole vere sono le subshell, che cancellano i contatori).
+    Per questo qui si costruisce un pacchetto cifrato vero e si guarda il codice d'uscita.
+    """
+
+    PASS = "passphrase-di-prova-non-e-un-segreto"
+
+    @classmethod
+    def setUpClass(cls):
+        import shutil as _sh
+        cls.bash = _sh.which("bash")
+        cls.openssl = _sh.which("openssl")
+        mancanti = [n for n, v in (("bash", cls.bash), ("openssl", cls.openssl)) if not v]
+        if mancanti:
+            # ⛔ SUL GIUDICE NON SI SALTA. Su Linux (la CI, e il server vero) questi due
+            # strumenti ci sono sempre: se mancano non e' «ambiente diverso», e' una guardia
+            # sul RIPRISTINO DEI DATI che sta per sparire in silenzio -- cioe' esattamente il
+            # difetto che questo file esiste per impedire. Li' vale ROSSO.
+            # Altrove (un computer senza Git Bash) resta un salto DICHIARATO: quella macchina
+            # non puo' nemmeno eseguire il deploy, quindi non puo' verificarlo.
+            if sys.platform.startswith("linux"):
+                raise AssertionError(
+                    "mancano %s: la guardia del restore NON e' stata eseguita, e su Linux "
+                    "questo non e' un salto legittimo" % ", ".join(mancanti))
+            raise unittest.SkipTest(
+                "servono bash e openssl per provare deploy/restore_offsite.sh (mancano: %s)"
+                % ", ".join(mancanti))
+
+    def _db(self, percorso):
+        con = sqlite3.connect(percorso)
+        with con:
+            con.execute("CREATE TABLE t (x INTEGER)")
+            con.execute("INSERT INTO t VALUES (1)")
+        con.close()
+
+    def _pacchetto(self, archivi, manifesto=None):
+        """archivi: [(nome_db, timestamp)] · manifesto: elenco di nomi .db.gz, o None."""
+        import gzip
+        import hashlib
+        import shutil as _sh
+        import tarfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(_sh.rmtree, d, True)
+        dentro = os.path.join(d, "dentro")
+        os.makedirs(dentro)
+        for nome, ts in archivi:
+            crudo = os.path.join(d, "%s-%s.db" % (nome, ts))   # due istantanee, due file
+            self._db(crudo)
+            gz = os.path.join(dentro, "%s-%s.db.gz" % (nome, ts))
+            with open(crudo, "rb") as f, gzip.open(gz, "wb") as g:
+                g.write(f.read())
+            with open(gz, "rb") as f:
+                h = hashlib.sha256(f.read()).hexdigest()
+            with open(gz + ".sha256", "w", encoding="utf-8") as f:
+                f.write("%s  %s\n" % (h, os.path.basename(gz)))
+        if manifesto is not None:
+            ts_man = max(ts for _, ts in archivi)
+            with open(os.path.join(dentro, "MANIFEST-%s.txt" % ts_man), "w",
+                      encoding="utf-8") as f:
+                f.write("# backup manifest %s\n" % ts_man)
+                for riga in manifesto:
+                    f.write(riga + "\n")
+        tgz = os.path.join(d, "backup.tar.gz")
+        with tarfile.open(tgz, "w:gz") as t:
+            for n in sorted(os.listdir(dentro)):
+                t.add(os.path.join(dentro, n), arcname=n)
+        enc = os.path.join(d, "pacchetto.tar.gz.enc")
+        r = subprocess.run([self.openssl, "enc", "-aes-256-cbc", "-pbkdf2", "-iter", "100000",
+                            "-in", tgz, "-out", enc, "-pass", "env:BV_PASS"],
+                           env=dict(os.environ, BV_PASS=self.PASS),
+                           capture_output=True, text=True)
+        self.assertEqual(0, r.returncode, "cifratura del pacchetto di prova fallita: %s" % r.stderr)
+        return d, enc
+
+    def _restore(self, d, enc, parziale=False):
+        env = dict(os.environ, BV_PASS=self.PASS)
+        if parziale:
+            env["BV_RESTORE_PARZIALE"] = "1"
+        script = os.path.join(DEPLOY, "restore_offsite.sh").replace("\\", "/")
+        r = subprocess.run([self.bash, script, enc.replace("\\", "/"),
+                            os.path.join(d, "dest").replace("\\", "/")],
+                           cwd=d, env=env, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=180)
+        return r.returncode, (r.stdout or "") + (r.stderr or "")
+
+    def test_un_pacchetto_SANO_passa(self):
+        """L'altra direzione, obbligatoria: se il controllo nuovo bocciasse anche i pacchetti
+        buoni, il ripristino d'emergenza sarebbe impossibile — un difetto peggiore."""
+        d, enc = self._pacchetto([("finanza", "20260101-000000"),
+                                  ("catalogo", "20260101-000000")],
+                                 manifesto=["finanza-20260101-000000.db.gz",
+                                            "catalogo-20260101-000000.db.gz"])
+        codice, uscita = self._restore(d, enc)
+        self.assertEqual(0, codice, "un pacchetto completo e coerente e' stato RIFIUTATO:\n%s" % uscita)
+        self.assertIn("RESTORE OK", uscita)
+
+    def test_archivi_da_DUE_giri_diversi_vengono_RIFIUTATI(self):
+        d, enc = self._pacchetto([("finanza", "20260101-000000"),
+                                  ("finanza", "20260102-000000"),
+                                  ("catalogo", "20260101-000000")],
+                                 manifesto=["finanza-20260102-000000.db.gz"])
+        codice, uscita = self._restore(d, enc)
+        self.assertNotEqual(0, codice,
+                            "ripristino STRACCIATO (giornale di ieri + catalogo di oggi) "
+                            "dichiarato buono:\n%s" % uscita)
+        self.assertIn("STRACCIATO", uscita)
+
+    def test_un_archivio_del_manifesto_MANCANTE_viene_RIFIUTATO(self):
+        d, enc = self._pacchetto([("finanza", "20260101-000000")],
+                                 manifesto=["finanza-20260101-000000.db.gz",
+                                            "registro_host-20260101-000000.db.gz"])
+        codice, uscita = self._restore(d, enc)
+        self.assertNotEqual(0, codice,
+                            "pacchetto INCOMPLETO dichiarato buono:\n%s" % uscita)
+        self.assertIn("INCOMPLETO", uscita)
+        self.assertIn("registro_host", uscita, "non dice QUALE archivio manca")
+
+    def test_senza_manifesto_non_si_puo_dire_che_e_completo(self):
+        """«Non lo so» non e' «va bene»: un pacchetto troncato ha esattamente questo aspetto."""
+        d, enc = self._pacchetto([("finanza", "20260101-000000")], manifesto=None)
+        codice, uscita = self._restore(d, enc)
+        self.assertNotEqual(0, codice, "pacchetto senza manifesto dichiarato completo:\n%s" % uscita)
+        self.assertIn("NESSUN MANIFESTO", uscita)
+
+    def test_la_scappatoia_dichiarata_funziona_ma_va_SCELTA(self):
+        """Se l'unica copia rimasta e' mista, chi sa cosa sta facendo deve poter procedere —
+        ma consapevolmente, non in silenzio."""
+        d, enc = self._pacchetto([("finanza", "20260101-000000"),
+                                  ("finanza", "20260102-000000"),
+                                  ("catalogo", "20260101-000000")],
+                                 manifesto=["finanza-20260102-000000.db.gz"])
+        codice, uscita = self._restore(d, enc, parziale=True)
+        self.assertEqual(0, codice, "la scappatoia dichiarata non funziona:\n%s" % uscita)
+        self.assertIn("ACCETTATO su tua richiesta", uscita)
 
 
 if __name__ == "__main__":

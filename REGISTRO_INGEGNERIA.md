@@ -228,6 +228,37 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### ✅ FATTO 2026-07-31 — parità d'ambiente CI↔produzione (il parcheggio «onda2»)
+Dettaglio completo e misure in `RIPRENDI_QUI.md` (quella è la fonte). Qui cosa è cambiato nei
+moduli, come impone la direttiva n.4:
+- **`main_casavip.py`** — `_segreto()` diventa **fail-closed**: rifiuta i 3 segnaposto pubblici
+  di `.env.casavip.example` e ogni chiave < 16 byte (prima `CASAVIP_SEGRETO=x` diventava
+  `b"x000000000000000"` per un `.ljust`). Assente resta lecito, ma il ripiego è **casuale**, mai
+  costante. In `main()` tre cancelli nuovi, tutti con `SystemExit(2)` e il **nome della variabile
+  colpevole** nel messaggio: archivio `:memory:`, percorso di archivio **vuoto**, chiave uguale al
+  segnaposto pubblico; `HOST_KEY`/`ADMIN_KEY` ora si leggono con `.strip()` (una chiave di soli
+  spazi valeva come impostata). ⚠️ Il controllo `:memory:` scorre TUTTI i 24 campi `db_*`: una
+  guardia dedicata verifica che `main` li imposti tutti, altrimenti il prodotto non partirebbe.
+- **`fase100_dac7.py`** — `_leggi` degrada a vuoto un JSON valido ma non-oggetto; `_rec`
+  normalizza ogni campo (assente, tipo sbagliato, negativo, booleano-che-finge-numero).
+- **`fase16_outbox.py`** — `inizializza_schema` **rifà l'indice** `idx_outbox_due` se non contiene
+  `priorita` (stesso rimedio già usato in `fase184` per `idx_marca_giorno`). Si rifà **solo se
+  serve**: una guardia verifica che un archivio già giusto non venga ricostruito a ogni avvio.
+- **`fase83_server.py`** — `_arricchisci_metrica` toglie il prefisso `reblock:` come già facevano
+  gli altri 3 punti. Guardia **che conta**: ogni riga che ricava un riferimento da `idem_key`
+  troncandolo deve gestire il prefisso, altrimenti rosso.
+- **`deploy/restore_offsite.sh`** — passi `[3b]`/`[3c]`: rifiuta un ripristino **stracciato**
+  (archivi da giri di backup diversi) o **incompleto** (manca un archivio del manifesto), con
+  scappatoia **dichiarata** `BV_RESTORE_PARZIALE=1`. Tolto un `|| true` (REGOLA FERREA 12) a
+  favore di `find`, che esce 0 anche a mani vuote. Verificato **sulla macchina** che il manifesto
+  esiste davvero (`deploy/backup_casavip.sh:48`): senza, sarebbe stato un falso allarme perenne.
+- **`.github/workflows/ci.yml`** — due job bloccanti nuovi: `full-suite-311` (la suite sul Python
+  di **produzione**, col debito noto in un elenco **dichiarato** e a cricchetto) e `immagine`
+  (costruisce `Dockerfile.casavip`, **avvia** il container, aspetta l'`HEALTHCHECK`, interroga
+  `/api/health` e la home dall'esterno, verifica che non giri da root). Guardia:
+  **`test_parita_ambiente.py`** (nuovo, 15 prove) — era dichiarato dentro `ci.yml` e **non
+  esisteva**.
+
 ### 🟡 PROSSIMO LAVORO — alzare il 20% (prove di guasto sui punti che contano)
 Misurato il 2026-07-30: **395 file di test, solo 81 (20,5%) provano cosa succede quando un pezzo si
 rompe**; nel solo `fase83_server.py` ci sono **165 punti** dove un errore viene ingoiato di

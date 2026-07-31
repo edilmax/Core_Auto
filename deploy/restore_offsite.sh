@@ -8,6 +8,10 @@
 #   2) verifica il checksum di OGNI archivio (nessuna copia corrotta passa);
 #   3) scompatta e RICOSTRUISCE ogni <db>.db dallo snapshot piu' recente
 #      (de-gzip -> file .db pronto per il container);
+#   3b) controlla che gli archivi vengano TUTTI dallo stesso giro di backup e che
+#      non ne manchi nessuno di quelli elencati nel manifesto (un ripristino a
+#      pezzi, con il giornale di ieri e il catalogo di oggi, e' peggio di nessun
+#      ripristino); scappatoia dichiarata per l'emergenza: BV_RESTORE_PARZIALE=1;
 #   4) PROVA d'integrita': ogni DB passa `PRAGMA integrity_check`, e per il
 #      giornale contabile (finanza.db) ricalcola la CATENA DI HASH end-to-end.
 #   5) stampa la cartella pronta: bastera' montarla come volume /data.
@@ -76,8 +80,86 @@ for gz in $(find "$TMP/backup" -name '*.db.gz' | sort); do
 done | sort -u | while read -r db; do
   ultimo="$(ls -1t "$TMP"/backup/"$db"-*.db.gz | head -1)"
   gunzip -c "$ultimo" > "$DEST/$db.db"
+  basename "$ultimo" >> "$TMP/scelti.txt"
   echo "   $db.db  <-  $(basename "$ultimo")"
 done
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [3b] IL RIPRISTINO E' TUTTO INTERO E DI UN SOLO ISTANTE?  (difetto chiuso
+#      2026-07-29 da una revisione ostile: prima non lo chiedeva nessuno)
+#
+#   · STRACCIATO: il passo 3 prende per OGNI archivio il suo snapshot piu' recente.
+#     Se l'ultimo giro di backup e' morto a meta' (disco pieno, container ucciso,
+#     un solo `.gz` perso), finanza.db torna da ieri e catalogo.db da stamattina:
+#     prenotazioni senza le righe di giornale che le pagano. Il vecchio script
+#     stampava "RESTORE OK — dati integri" e usciva 0. PROVATO: 2 giri di backup,
+#     tolto il piu' recente di finanza -> catalogo con 2 alloggi e giornale con 3
+#     righe invece di 5, esito 0, nessun avviso.
+#   · INCOMPLETO: un pacchetto con UN archivio su 23 (offsite troncato, tar a
+#     meta') veniva ripristinato e dichiarato OK: host, accettazioni e payout
+#     semplicemente non c'erano. PROVATO anche questo.
+#
+# Chi rimette in piedi il server alle 3 di notte si fida della riga verde: qui
+# quella riga deve diventare rossa. Scappatoia dichiarata per l'emergenza vera
+# (l'unica copia rimasta E' mista): BV_RESTORE_PARZIALE=1, che declassa il rosso
+# ad avviso — ma va scelto, non subito in silenzio.
+# ─────────────────────────────────────────────────────────────────────────────
+strappi=0
+PARZIALE_OK="${BV_RESTORE_PARZIALE:-0}"
+verde "[3b] stesso giro di backup per tutti gli archivi?"
+if [ -s "$TMP/scelti.txt" ]; then
+  istanti="$(sed -E 's/^.*-([0-9]{8}-[0-9]{6})\.db\.gz$/\1/' "$TMP/scelti.txt" | sort -u)"
+  quanti="$(printf '%s\n' "$istanti" | wc -l | tr -d ' ')"
+  if [ "$quanti" -gt 1 ]; then
+    rosso "   RESTORE STRACCIATO: gli archivi vengono da $quanti giri di backup diversi"
+    printf '%s\n' "$istanti" | while read -r t; do rosso "     istante: $t"; done
+    sed 's/^/     /' "$TMP/scelti.txt" >&2
+    strappi=$((strappi+1))
+  else
+    verde "   tutti dallo stesso istante: $istanti"
+  fi
+else
+  rosso "   nessun archivio ricostruito: il pacchetto non conteneva nessun .db.gz"
+  strappi=$((strappi+1))
+fi
+
+verde "[3c] ci sono TUTTI gli archivi dell'ultimo giro? (manifesto)"
+# `find` esce 0 anche quando non trova nulla: cosi' il caso "manifesto assente" arriva al
+# controllo qui sotto e diventa un ROSSO PARLANTE, invece di far morire lo script muto per
+# via di `set -e`. Niente `|| true` (REGOLA FERREA 12): non serve a nascondere un esito, e
+# infatti non c'e'. Ordinamento per NOME e non per data del file: il nome porta l'istante
+# vero del backup, la data di modifica mente dopo una copia.
+manifesto="$(find "$TMP/backup" -maxdepth 1 -name 'MANIFEST-*.txt' | sort -r | head -1)"
+if [ -n "${manifesto:-}" ] && [ -f "$manifesto" ]; then
+  mancanti=0
+  while IFS= read -r riga; do
+    case "$riga" in ''|'#'*) continue;; esac
+    atteso="$(echo "$riga" | sed -E 's/-[0-9]{8}-[0-9]{6}\.db\.gz$//')"
+    if [ ! -f "$DEST/$atteso.db" ]; then
+      rosso "   MANCA $atteso.db (il manifesto $(basename "$manifesto") lo elenca)"
+      mancanti=$((mancanti+1))
+    fi
+  done < "$manifesto"
+  if [ "$mancanti" -gt 0 ]; then
+    rosso "   RESTORE INCOMPLETO: $mancanti archivi del manifesto non sono stati ripristinati"
+    strappi=$((strappi+1))
+  else
+    verde "   completo: c'e' ogni archivio elencato in $(basename "$manifesto")"
+  fi
+else
+  # Senza manifesto la completezza non e' verificabile: e' esattamente la forma che
+  # prende un pacchetto TRONCATO (tar interrotto, pull a meta'). PROVATO: un pacchetto
+  # col solo finanza.db, senza manifesto, veniva dichiarato "RESTORE OK". "Non lo so"
+  # non e' "va bene": si ferma, e chi sa cosa sta facendo usa BV_RESTORE_PARZIALE=1.
+  rosso "   NESSUN MANIFESTO nel pacchetto: non e' verificabile che sia COMPLETO"
+  rosso "   (un pacchetto troncato ha esattamente questo aspetto)"
+  strappi=$((strappi+1))
+fi
+
+if [ "$strappi" -gt 0 ] && [ "$PARZIALE_OK" = "1" ]; then
+  giallo "   BV_RESTORE_PARZIALE=1: ripristino misto/incompleto ACCETTATO su tua richiesta."
+  strappi=0
+fi
 
 verde "[4] PROVA D'INTEGRITA'…"
 prob=0
@@ -115,10 +197,11 @@ PYEOF
 fi
 
 echo
-if [ "$prob" -eq 0 ]; then
+if [ "$prob" -eq 0 ] && [ "$strappi" -eq 0 ]; then
   verde "RESTORE OK — dati integri in:  $DEST"
   echo  "Passo finale (vedi RIPRENDI_QUI.md): copia questi .db nel volume /data del nuovo server e riavvia."
 else
-  rosso "RESTORE con $prob problemi: NON usare questi dati, prova un pacchetto piu' vecchio."
+  rosso "RESTORE con $((prob+strappi)) problemi: NON usare questi dati, prova un pacchetto piu' vecchio."
+  echo  "(se la copia mista/incompleta e' l'unica rimasta: BV_RESTORE_PARZIALE=1 bash $0 ...)" >&2
   exit 1
 fi
