@@ -101,3 +101,8 @@ htmlcov/
 node_modules/
 !package.json
 video_pubblici/
+
+# I DIVIETI DEVONO VIAGGIARE COL PROGETTO, non restare sul computer di uno solo.
+# `*.json` piu' sopra escluderebbe anche questo: qui l'eccezione, di proposito.
+# (regola d'appendice 17: un divieto che non puo' fermarti non e' un divieto)
+!.claude/settings.json

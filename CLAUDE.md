@@ -44,15 +44,33 @@ automatica fa fallire la suite se i due divergono):
 
 # ⚙️ REGOLA FERREA DI OPERATIVITÀ E PRECISIONE
 
-> ## 📚 QUESTE SONO 14. LE REGOLE SONO **44**.
-> Le altre **30 stanno in `REGISTRO_INGEGNERIA.md`, appendice finale** — ognuna con la
+> ## ⛔ NON DIRE MAI «LE 14 REGOLE». GLI OBBLIGHI SONO **74**, E VALGONO TUTTI.
+> **Contati dai file il 2026-07-31, non a memoria:**
+>
+> | dove | quanti |
+> |---|---|
+> | `CLAUDE.md` — REGOLA ZERO | **5** |
+> | `CLAUDE.md` — REGOLA FERREA (qui sotto) | **15** |
+> | `CLAUDE.md` — modi di rompersi | **11** |
+> | `CLAUDE.md` — collaudi obbligatori | **10** |
+> | `CLAUDE.md` — direttiva finale | **4** |
+> | `REGISTRO_INGEGNERIA.md` — appendice, **solo lì** | **29** |
+> | **TOTALE** | **74** |
+>
+> ⚠️ **Chiamare «le regole» il sottoinsieme che si ha in testa è il modo in cui si perdono
+> le altre.** Successo davvero il 2026-07-31: ho detto «le 14», ho lavorato guardando
+> quelle, e ho violato la n.15 — che quel giorno stava solo nell'appendice. Da allora è
+> qui, e questo cartello esiste perché nessuno rifaccia lo stesso errore.
+>
+> ## 📚 LE ALTRE 29 STANNO NELL'APPENDICE DEL REGISTRO.
+> Le altre **29 stanno in `REGISTRO_INGEGNERIA.md`, appendice finale** — ognuna con la
 > **prova**, la **fonte** (studio, benchmark o `file:riga` del nostro codice) e **come si
 > verifica**. Più le **24 uccise** dai revisori ostili **col motivo**: dice cosa NON rifare.
 >
 > **Vengono da due ricerche mirate (77 agenti, ~4 milioni di token, 2026-07-30).** Non sono
 > opinioni: ogni regola ha una prova.
 >
-> **QUI ci sono le 14 che valgono a OGNI lavoro** e si verificano da fuori. Le altre 30
+> **QUI ci sono le 15 che valgono a OGNI lavoro** e si verificano da fuori. Le altre 29
 > servono **quando fai quel tipo di lavoro**, e vanno lette PRIMA di iniziarlo:
 > · stai per **collaudare** o toccare la **mutazione** → leggi l'appendice, sezione mutanti
 >   (mutanti generati vs scelti a mano · «ucciso solo a volte = IGNOTO») ·
@@ -145,6 +163,16 @@ l'originale? **Un backup non verificato leggibile non è un backup.**
 telefoni, si rifiuta con gentilezza e si trova un'altra strada. Le diagnosi che toccano servizi
 esterni sono **in sola lettura**, non pubblicano nulla e **mascherano i segreti** nell'output.
 *La diagnosi di Facebook ha letto il gettone dal file dei segreti senza mostrarlo mai.*
+
+**15. SCOPO DICHIARATO PRIMA, VERIFICATO DOPO — E L'ELENCO SI AGGIORNA, NON SI SFORA.**
+Prima di aprire il primo file si scrive **quali file si toccheranno**. Se durante il lavoro ne
+serve uno **fuori elenco**: ci si **ferma**, si aggiorna la riga dichiarando **perché**, e solo
+allora si procede. Vietati nello stesso intervento, anche se «migliorano»: rinomine,
+riformattazioni, correzioni di passaggio, «già che c'ero».
+*Successo il 2026-07-31: avevo dichiarato due file, ne ho toccati quattro. Il lavoro in più era
+buono — due guardie cresciute — ma nessuno l'aveva autorizzato, e uno scopo che si allarga da
+solo è il canale principale delle regressioni. Il fondatore se n'è accorto prima di me.*
+**Si verifica dopo:** `git status` deve contenere **esattamente** i file dichiarati.
 
 ---
 

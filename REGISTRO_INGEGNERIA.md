@@ -228,6 +228,37 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### ✅ FATTO 2026-07-31 (6) — I DIVIETI SONO HOOK, NON PROSA
+- **`.claude/settings.json`** (nuovo, VERSIONATO -- serviva un'eccezione in `.gitignore`,
+  che con `*.json` lo escludeva): hook `SessionStart` che esegue `collaudi/regole_avvio.py`,
+  e `permissions.deny` sui comandi che non vanno mai eseguiti (`docker compose down -v` che
+  cancella il volume dei dati, `docker-compose` v1 che spegne il sito, `rm -rf /data`,
+  `--no-verify`, scrittura sui file dei segreti). Scelti con **zero falsi positivi**.
+- **`collaudi/regole_avvio.py`** (nuovo, strumento): stampa la mappa dei **74 obblighi** e i
+  4 casi in cui l'appendice va letta PRIMA; e **conta le regole nei file** confrontandole con
+  i numeri dichiarati in `CLAUDE.md`. Se divergono, GRIDA. Non blocca mai (esce sempre 0) e
+  non esplode mai: un hook che fallisce e' peggio di nessun hook.
+- **`CLAUDE.md`**: la REGOLA FERREA 15 (scopo dichiarato prima, verificato dopo) e' stata
+  **spostata** dall'appendice alla spina dorsale, dopo che l'avevo violata; in testa un
+  cartello vieta di chiamare «le regole» un sottoinsieme.
+- Guardia: `test_pipeline_ci.TestLeRegoleSiLeggonoSEMPRE` (5 prove), vista rossa su 4
+  sparizioni diverse.
+
+### ✅ FATTO 2026-07-31 (5) — GENERATORE DI MUTANTI in `collaudi/mutazione_prodotto.py`
+Nuove funzioni (nessun file nuovo): `genera_mutanti` (pura, `ast`, tre scambi: confronti,
+`and`/`or`, `True`/`False`), `applica_mutante` (taglio al carattere, mai un `replace` cieco),
+`righe_toccate` (il diff da git), `test_che_nominano` (chi puo' vedere il guasto; se e' vuoto
+l'esito e' **SCOPERTO**), `giro_sul_diff`, `_leggi_intatto`/`_riscrivi_intatto` (il giudice non
+lascia tracce: provato con sha256), `EQUIVALENTI_DICHIARATI` (l'unico posto dove un
+sopravvissuto e' perdonato, e ogni voce porta la PROVA).
+Modo d'uso: `python collaudi/mutazione_prodotto.py --diff <base>`; esito 1 + annotazione
+pubblica se una riga cambiata non e' sorvegliata. Guardia: `test_pipeline_ci`,
+`TestGeneratoreDiMutanti` (8 prove, incluso «ogni mutante prodotto COMPILA ancora» -- un
+mutante che non compila e' un falso UCCISO).
+Primo giro: 11 mutanti sul diff di produzione, **3 scoperte vere** (confine dei 16 byte sulla
+chiave di firma non difeso · una guardia dell'outbox che non poteva vedere nulla · un mutante
+equivalente). Dopo le riparazioni: 10 uccisi, 1 equivalente, 0 sopravvissuti.
+
 ### ✅ FATTO 2026-07-31 (4) — integrati i 6 file del parcheggio (~464 prove)
 Erano scritti il 2026-07-29 e mai entrati nel repo. Valutati uno alla volta (esecuzione, caccia
 agli ornamenti, integrazione solo dopo aver capito ogni rosso). Nessuna riga di produzione

@@ -836,6 +836,213 @@ class TestRegolaDelMutanteInstabile(unittest.TestCase):
         self.assertIn("NON contano", s, "non e' dichiarato che non contano come uccisi")
 
 
+class TestLeRegoleSiLeggonoSEMPRE(unittest.TestCase):
+    """⛔ UN DIVIETO CHE NON PUO' FERMARTI NON E' UN DIVIETO (regola 17 dell'appendice).
+
+    Il 2026-07-31 ho violato la REGOLA FERREA 15 — una regola scritta da me stesso — perche'
+    stava in un file che non si ricarica a ogni sessione. La ricerca lo aveva perfino
+    previsto («la compattazione e' amnesia: sopravvive solo CLAUDE.md»). Un regolamento di
+    testo dipende da un lettore che si ricordi di leggerlo: e' una speranza, non un controllo.
+
+    Da qui due cose meccaniche, che non dipendono dalla mia buona volonta':
+      · un hook `SessionStart` stampa gli obblighi PRIMA di qualunque lavoro;
+      · `permissions.deny` blocca i comandi che non devo mai eseguire.
+    E questa guardia esiste perche' anche loro possono sparire in silenzio: un hook
+    cancellato, un file di impostazioni escluso da git, un conteggio che smette di tornare.
+    """
+
+    @staticmethod
+    def _radice():
+        import os
+        return os.path.dirname(os.path.abspath(__file__))
+
+    def _impostazioni(self):
+        import io
+        import json
+        import os
+        p = os.path.join(self._radice(), ".claude", "settings.json")
+        self.assertTrue(os.path.exists(p),
+                        "manca .claude/settings.json: senza, i divieti sono solo prosa")
+        with io.open(p, encoding="utf-8") as f:
+            return json.load(f)          # un JSON rotto qui puo' impedire di lavorare
+
+    def test_esiste_un_hook_che_stampa_le_regole_a_ogni_avvio(self):
+        d = self._impostazioni()
+        comandi = [h.get("command", "")
+                   for blocco in d.get("hooks", {}).get("SessionStart", [])
+                   for h in blocco.get("hooks", [])]
+        self.assertTrue(any("regole_avvio" in c for c in comandi),
+                        "nessun hook SessionStart mostra le regole: tornerebbero a dipendere "
+                        "da qualcuno che si ricordi di leggerle. Comandi trovati: %r" % comandi)
+
+    def test_lo_strumento_dell_hook_ESISTE_ed_esce_zero(self):
+        """Un hook che punta a un file inesistente e' peggio di nessun hook: fa rumore
+        d'errore a ogni avvio e nessuno legge piu' niente."""
+        import os
+        import subprocess
+        import sys
+        p = os.path.join(self._radice(), "collaudi", "regole_avvio.py")
+        self.assertTrue(os.path.exists(p), "l'hook punta a un file che non esiste")
+        r = subprocess.run([sys.executable, p], cwd=self._radice(),
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        self.assertEqual(0, r.returncode,
+                         "lo strumento delle regole esce %s: un hook che fallisce blocca o "
+                         "sporca ogni sessione.\n%s" % (r.returncode, (r.stderr or "")[-400:]))
+        self.assertIn("TOTALE OBBLIGHI", r.stdout, "non stampa la mappa degli obblighi")
+
+    def test_IL_REGOLAMENTO_DICE_IL_VERO_SU_SE_STESSO(self):
+        """LA GUARDIA CHE CONTA. Il regolamento dichiara quanti obblighi ci sono; questo
+        confronta la dichiarazione con il conteggio VERO dei file. Un regolamento che
+        sbaglia il proprio numero e' una guardia che non guarda -- ed e' esattamente cosi'
+        che il 2026-07-31 e' andata persa una regola per un giorno intero.
+        """
+        import os
+        import subprocess
+        import sys
+        r = subprocess.run([sys.executable,
+                            os.path.join(self._radice(), "collaudi", "regole_avvio.py")],
+                           cwd=self._radice(), capture_output=True, text=True,
+                           encoding="utf-8", errors="replace")
+        self.assertNotIn("NON DICE IL VERO", r.stdout,
+                         "i numeri dichiarati in CLAUDE.md non coincidono con le regole "
+                         "davvero presenti nei file:\n%s" % r.stdout[-700:])
+
+    def test_i_divieti_veri_ci_sono_e_coprono_i_comandi_che_distruggono(self):
+        d = self._impostazioni()
+        negati = " | ".join(d.get("permissions", {}).get("deny", []))
+        for pezzo, perche in (
+                ("down -v", "cancella il VOLUME dei dati: 25 archivi, giornale contabile compreso"),
+                ("docker-compose", "la versione 1 spegne il sito (successo il 2026-07-30)"),
+                ("rm -rf /data", "cancella i dati di produzione"),
+                ("--no-verify", "salta i controlli prima di spingere"),
+                (".env", "i file dei segreti non si riscrivono mai (REGOLA FERREA 14)")):
+            self.assertIn(pezzo, negati,
+                          "manca il divieto su %r (%s): resterebbe solo una frase in un "
+                          "documento" % (pezzo, perche))
+
+    def test_le_impostazioni_VIAGGIANO_col_progetto(self):
+        """Un divieto che vive solo sul computer di uno non protegge il progetto. E
+        `.gitignore` ha una riga `*.json` che lo escluderebbe: serve l'eccezione esplicita."""
+        import io
+        import os
+        with io.open(os.path.join(self._radice(), ".gitignore"), encoding="utf-8") as f:
+            ignora = f.read()
+        self.assertIn("!.claude/settings.json", ignora,
+                      "senza l'eccezione in .gitignore le impostazioni restano locali: i "
+                      "divieti non arriverebbero a nessun altro")
+
+
+class TestGeneratoreDiMutanti(unittest.TestCase):
+    """I MUTANTI SI GENERANO DAL CODICE, NON SI SCELGONO A MANO (regola 12 dell'appendice).
+
+    I 41 mutanti scritti a mano toccano 12 moduli su 152: il 92% del motore non ha mai visto
+    un guasto simulato. E li ha scelti la stessa testa che ha scritto i test, quindi
+    confermano i guasti gia' immaginati invece di scoprirne di nuovi.
+
+    Il generatore e' codice NUOVO dentro il GIUDICE: se sbaglia il taglio di un carattere,
+    produce mutanti che non compilano (falsi «uccisi»: il test muore per un errore di
+    sintassi, non perche' ha visto il guasto) oppure muta il punto sbagliato. Per questo qui
+    si prova al carattere, non «piu' o meno».
+    """
+
+    @staticmethod
+    def _motore():
+        import importlib.util
+        import os
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "collaudi", "mutazione_prodotto.py")
+        spec = importlib.util.spec_from_file_location("_mut_gen", p)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_trova_i_confronti_e_li_rovescia_nel_verso_giusto(self):
+        m = self._motore()
+        mut, _ = m.genera_mutanti("def f(x):\n    return x <= 90\n")
+        self.assertEqual(1, len(mut), "atteso esattamente 1 mutante: %r" % (mut,))
+        self.assertEqual(("<=", "<", 2), (mut[0]["vecchio"], mut[0]["nuovo"], mut[0]["riga"]))
+
+    def test_trova_and_e_or(self):
+        m = self._motore()
+        mut, _ = m.genera_mutanti("def f(a, b):\n    return a and b\n")
+        self.assertEqual([("and", "or")], [(x["vecchio"], x["nuovo"]) for x in mut])
+
+    def test_NON_tocca_gli_operatori_dentro_le_stringhe_ne_i_commenti(self):
+        """Un `replace` sul testo colpirebbe anche questi. `ast` vede solo il codice VERO."""
+        m = self._motore()
+        sorgente = ('def f(x):\n'
+                    '    messaggio = "usa == per confrontare"   # e qui and or ==\n'
+                    '    return x > 0\n')
+        mut, _ = m.genera_mutanti(sorgente)
+        self.assertEqual([3], [x["riga"] for x in mut],
+                         "ha mutato una stringa o un commento: %r" % (mut,))
+
+    def test_taglia_al_CARATTERE_giusto_con_due_operatori_uguali_sulla_riga(self):
+        """LA PROVA CHE SEPARA UN GENERATORE DA UN `replace` CIECO. Con due `==` sulla
+        stessa riga, un replace testuale colpisce sempre il primo: qui ognuno ha il suo."""
+        m = self._motore()
+        sorgente = "def f(a, b, c, d):\n    return (a == b) or (c == d)\n"
+        mut, _ = m.genera_mutanti(sorgente)
+        confronti = [x for x in mut if x["tipo"] == "confronto"]
+        self.assertEqual(2, len(confronti), "attesi 2 confronti distinti: %r" % (mut,))
+        primo = m.applica_mutante(sorgente, confronti[0]).splitlines()[1]
+        secondo = m.applica_mutante(sorgente, confronti[1]).splitlines()[1]
+        self.assertEqual("    return (a != b) or (c == d)", primo)
+        self.assertEqual("    return (a == b) or (c != d)", secondo)
+        self.assertNotEqual(primo, secondo, "i due mutanti colpiscono lo stesso punto")
+
+    def test_ogni_mutante_prodotto_COMPILA_ancora(self):
+        """Un mutante che non compila e' un falso UCCISO: il test muore per un errore di
+        sintassi, non perche' ha visto il guasto. Qui si compila davvero, uno per uno."""
+        import ast as _ast
+        import io as _io
+        import os as _os
+        m = self._motore()
+        bersaglio = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                                  "fase98_policy_commissione.py")
+        sorgente = _io.open(bersaglio, encoding="utf-8").read()
+        mut, _s = m.genera_mutanti(sorgente)
+        self.assertGreater(len(mut), 5,
+                           "su un modulo di logica vera attesi piu' di 5 mutanti, trovati %d"
+                           % len(mut))
+        for x in mut:
+            _ast.parse(m.applica_mutante(sorgente, x))       # esplode se il taglio e' storto
+
+    def test_il_mutante_cambia_UNA_riga_sola_e_niente_altro(self):
+        import io as _io
+        import os as _os
+        m = self._motore()
+        bersaglio = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                                  "fase98_policy_commissione.py")
+        sorgente = _io.open(bersaglio, encoding="utf-8").read()
+        mut, _s = m.genera_mutanti(sorgente)
+        prima = sorgente.splitlines()
+        for x in mut[:20]:
+            dopo = m.applica_mutante(sorgente, x).splitlines()
+            self.assertEqual(len(prima), len(dopo), "il mutante ha cambiato il numero di righe")
+            diverse = [i for i, (a, b) in enumerate(zip(prima, dopo)) if a != b]
+            self.assertEqual([x["riga"] - 1], diverse,
+                             "il mutante di riga %d ha toccato anche %r" % (x["riga"], diverse))
+
+    def test_il_diff_restringe_l_ambito(self):
+        """Il generatore va usato SUL DIFF: le righe non toccate non si mutano."""
+        m = self._motore()
+        sorgente = "def f(x, y):\n    a = x > 1\n    b = y < 2\n    return a and b\n"
+        tutti, _ = m.genera_mutanti(sorgente)
+        solo3, _ = m.genera_mutanti(sorgente, righe_ammesse={3})
+        self.assertGreater(len(tutti), len(solo3))
+        self.assertEqual([3], sorted({x["riga"] for x in solo3}))
+
+    def test_le_RINUNCE_sono_contate_e_dichiarate(self):
+        """Un generatore che tace sulle proprie rinunce mente sulla copertura. I confronti
+        a catena si saltano di proposito: devono comparire nel conto."""
+        m = self._motore()
+        _mut, saltati = m.genera_mutanti("def f(a, b, c):\n    return a < b < c\n")
+        self.assertEqual(1, saltati["catena"],
+                         "un confronto a catena non e' stato contato fra le rinunce: %r"
+                         % (saltati,))
+
+
 class TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA(unittest.TestCase):
     """⛔ IL MOTORE DI MUTAZIONE DEVE PROVARE IL GUASTO, NON LA SUA CACHE.
 
