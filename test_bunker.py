@@ -89,6 +89,79 @@ class TestSessione(unittest.TestCase):
         self.assertEqual(self.b.valida_sessione(tok, "203.0.113.5")["motivo"],
                          "sessione_scaduta")
 
+    def test_scaduta_la_RISPOSTA_e_NO_non_solo_il_motivo(self):
+        """IL BUCO TROVATO DALLA MUTAZIONE il 2026-07-31, ed e' da manuale.
+
+        La prova qui sopra controlla SOLO il `motivo` della sessione scaduta, mai che la
+        risposta sia «no». Quindi rovesciando `"ok": False` in `"ok": True` su quella riga
+        il motivo resta identico e il test passa lo stesso: **una sessione amministratore
+        SCADUTA verrebbe accettata**, con la suite tutta verde.
+
+        Due righe piu' sotto, `test_logout_server_side_revoca` fa la cosa giusta e asserisce
+        ENTRAMBI. Stessa classe, due misure diverse: e' l'asimmetria che solo un guasto
+        simulato riesce a vedere.
+
+        Questo cancello e' la porta dell'amministratore -- quella dietro cui si firmano
+        rimborsi e si muovono payout. Qui si asserisce l'ESITO, non il commento all'esito.
+        """
+        tok = self.b.crea_sessione("203.0.113.5")
+        self.clock["t"] += bk.DURATA_SESSIONE_SEC + 1
+        r = self.b.valida_sessione(tok, "203.0.113.5")
+        self.assertIs(False, r["ok"],
+                      "sessione SCADUTA accettata: la porta dell'amministratore resta "
+                      "aperta oltre la scadenza. Risposta: %r" % (r,))
+        self.assertEqual("sessione_scaduta", r["motivo"])
+
+    def test_il_CONFINE_della_scadenza_e_chiuso(self):
+        """Al secondo ESATTO della scadenza la sessione e' gia' morta (`<=`, non `<`).
+        Un mutante che stringe il confine e' sopravvissuto: nessuno provava quel punto."""
+        tok = self.b.crea_sessione("203.0.113.5")
+        self.clock["t"] += bk.DURATA_SESSIONE_SEC          # esattamente l'istante di scadenza
+        r = self.b.valida_sessione(tok, "203.0.113.5")
+        self.assertIs(False, r["ok"],
+                      "al secondo esatto della scadenza la sessione e' ancora valida: "
+                      "una finestra in piu' su una porta d'amministrazione. Risposta: %r" % (r,))
+        self.assertEqual("sessione_scaduta", r["motivo"])
+
+    def test_bunker_NON_CONFIGURATO_non_apre(self):
+        """Senza chiave di firma il cancello non puo' verificare NIENTE: deve dire no.
+        Il mutante che gli fa dire «ok» e' sopravvissuto -- un fail-OPEN sulla porta
+        dell'amministratore, che e' il guasto peggiore possibile su una porta."""
+        spento = bk.crea_bunker(None, password="X", orologio=lambda: self.clock["t"])
+        tok = self.b.crea_sessione("203.0.113.5")
+        r = spento.valida_sessione(tok, "203.0.113.5")
+        self.assertIs(False, r["ok"],
+                      "un bunker senza chiave di firma ha APERTO: fail-open sulla porta "
+                      "dell'amministratore. Risposta: %r" % (r,))
+        self.assertEqual("bunker_non_configurato", r["motivo"])
+
+    def test_il_secondo_fattore_NON_si_apre_su_un_ERRORE(self):
+        """Se il calcolo del codice esplode, il secondo fattore deve dire NO.
+
+        Il mutante che trasforma quel `return False` in `return True` e' sopravvissuto:
+        un guasto qualunque (segreto malformato, libreria assente) avrebbe aperto la porta
+        a QUALSIASI codice. E' il fail-open classico, sul fattore che dovrebbe essere il
+        piu' forte.
+        """
+        vero = bk._codice_at
+
+        def _esplode(*a, **k):
+            raise RuntimeError("calcolo del codice guasto")
+
+        bk._codice_at = _esplode
+        try:
+            self.assertFalse(bk.verifica_totp(SEG_RFC, "287082", ora=59),
+                             "con il calcolo del codice guasto il secondo fattore ha "
+                             "ACCETTATO: qualunque codice aprirebbe")
+            self.assertEqual("", self.b.verifica_secondo_fattore("287082"),
+                             "il bunker riconosce un secondo fattore che non ha potuto "
+                             "verificare")
+        finally:
+            bk._codice_at = vero
+        # e a guasto rientrato il cancello torna a funzionare (niente danno permanente)
+        self.clock["t"] = 59
+        self.assertEqual("totp", self.b.verifica_secondo_fattore("287082"))
+
     def test_manomessa(self):
         tok = self.b.crea_sessione("203.0.113.5")
         self.assertFalse(self.b.valida_sessione(tok + "x", "203.0.113.5")["ok"])
