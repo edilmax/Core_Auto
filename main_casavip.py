@@ -19,15 +19,43 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import servi
 
 
+# Segnaposto di `.env.casavip.example`. Quel file sta su GitHub: usarli sul serio
+# equivale a pubblicare la chiave di firma e la chiave admin. Guardia:
+# test_avvio_e_ripristino.TestFailClosed (e il gemello che li riconferma nell'esempio).
+SEGNAPOSTO_PUBBLICI = ("cambiami_64_caratteri_hex", "cambiami_chiave_host",
+                       "cambiami_chiave_admin")
+
+
 def _segreto() -> bytes:
-    raw = os.environ.get("CASAVIP_SEGRETO", "")
+    """Chiave HMAC del prodotto: firma voucher, gettoni host, cookie di sessione, crediti.
+
+    FAIL-CLOSED (difetto chiuso 2026-07-29): un valore impostato ma DEBOLE non si
+    aggiusta in silenzio, si rifiuta. Prima `CASAVIP_SEGRETO=x` (refuso, variabile
+    troncata) diventava `b"x000000000000000"` — una chiave indovinabile, cioe' la
+    piattaforma spalancata senza un solo errore nei log. Assente resta lecito (comodita'
+    di sviluppo) ma il ripiego e' CASUALE e dichiarato, mai una costante.
+    """
+    raw = os.environ.get("CASAVIP_SEGRETO", "").strip()
     if raw:
+        if raw in SEGNAPOSTO_PUBBLICI:
+            logging.critical(
+                "RIFIUTO DI PARTIRE: CASAVIP_SEGRETO e' ancora il segnaposto di "
+                ".env.casavip.example, che e' PUBBLICO su GitHub: chiunque potrebbe "
+                "firmare voucher e sessioni. Generane uno vero: "
+                "python -c \"import secrets; print(secrets.token_hex(32))\"")
+            raise SystemExit(2)
         try:
             b = bytes.fromhex(raw)
-            if len(b) >= 16:
-                return b
         except ValueError:
-            return raw.encode("utf-8")[:64].ljust(16, b"0")
+            b = raw.encode("utf-8")[:64]        # non e' esadecimale: vale come frase segreta
+        if len(b) >= 16:
+            return b
+        logging.critical(
+            "RIFIUTO DI PARTIRE: CASAVIP_SEGRETO troppo corto (%d byte, ne servono >=16). "
+            "Una chiave corta o riempita di zeri e' INDOVINABILE, e con quella si firmano "
+            "voucher, gettoni host, cookie di sessione e crediti. Generane uno vero: "
+            "python -c \"import secrets; print(secrets.token_hex(32))\"", len(b))
+        raise SystemExit(2)
     import secrets
     b = secrets.token_bytes(32)
     logging.warning("CASAVIP_SEGRETO non impostato: uso un segreto EFFIMERO (solo dev)")
@@ -122,6 +150,30 @@ def main() -> None:  # pragma: no cover
         con_sentinel=os.environ.get("SENTINEL", "").lower() in ("1", "true", "yes"),
         cartella_sentinel=os.environ.get("SENTINEL_DIR") or ".",
     )
+    # ── FAIL-CLOSED sugli archivi IN RAM (difetto chiuso 2026-07-29, revisione ostile) ──
+    # Il gemello travestito del percorso vuoto: `DB_FINANZA=:memory:` (il valore che i
+    # test usano ovunque, quindi il primo candidato a finire in un `.env` per
+    # copia-incolla). La guardia sui percorsi VUOTI (piu' sotto) lo lasciava passare
+    # perche' la stringa non e' vuota, il ciclo delle cartelle qui sotto lo salta di
+    # proposito, e la sonda `/api/health/db` SALTA ANCHE i ":memory:" -> il prodotto
+    # partiva, nessun file nasceva su disco e la sonda rispondeva "ok" senza nemmeno
+    # NOMINARE l'archivio scomparso. E' il modo di rompersi n.1 (dati effimeri), gia'
+    # pagato due volte: recensioni e crediti in RAM, cioe' un credito rispendibile dopo
+    # ogni deploy. In produzione un archivio in memoria non serve MAI.
+    # Sta PRIMA della creazione delle cartelle di proposito: un percorso malato non deve
+    # arrivare a `os.makedirs` (che su un valore come " :memory: " esplode con una traccia
+    # illeggibile invece del motivo). Guardia: test_avvio_ostile.py.
+    _in_ram = [c for c in sorted(vars(ConfigCasaVIP()))
+               if c.startswith("db_")
+               and str(getattr(config, c, "") or "").strip() == ":memory:"]
+    if _in_ram:
+        logging.critical(
+            "RIFIUTO DI PARTIRE: archivio IN MEMORIA per %s. ':memory:' vive dentro il "
+            "processo: i dati (giornale contabile, prove d'accettazione, crediti gia' "
+            "spesi) sparirebbero a ogni riavvio senza un errore, e /api/health/db non "
+            "nominerebbe nemmeno l'archivio. Dai un percorso vero (es. /data/<nome>.db).",
+            ", ".join("DB_" + c[3:].upper() for c in _in_ram))
+        raise SystemExit(2)
     # La cartella va creata per OGNI file, non per una lista scelta a mano: un percorso
     # dimenticato qui fa fallire l'apertura del database al primo avvio su una macchina
     # nuova. Si ricava dalla configurazione, cosi' non si puo' piu' dimenticare nessuno.
@@ -142,12 +194,39 @@ def main() -> None:  # pragma: no cover
     # fail-OPEN: il guasto silenzioso e' peggio del sito giu'. Qui, al confine del deploy,
     # si fallisce CHIUSO: meglio non partire che partire spalancati.
     # (I test non passano da qui: usano crea_router() direttamente, quindi restano invariati.)
-    _mancanti = [n for n in ("HOST_KEY", "ADMIN_KEY") if not os.environ.get(n)]
+    _mancanti = [n for n in ("HOST_KEY", "ADMIN_KEY") if not os.environ.get(n, "").strip()]
     if _mancanti:
         logging.critical(
             "RIFIUTO DI PARTIRE: manca %s. Senza, l'API host/admin sarebbe aperta a chiunque "
             "(es. /api/host/payout?host_id=<altrui>). Impostale in .env.casavip e riavvia.",
             " e ".join(_mancanti))
+        raise SystemExit(2)
+    # Stessa mina, ma travestita: la chiave C'E' ed e' il SEGNAPOSTO dell'esempio, che sta
+    # su GitHub. Un sito "protetto" da una password stampata sul giornale e' un sito aperto.
+    _pubbliche = [n for n in ("HOST_KEY", "ADMIN_KEY")
+                  if os.environ.get(n, "").strip() in SEGNAPOSTO_PUBBLICI]
+    if _pubbliche:
+        logging.critical(
+            "RIFIUTO DI PARTIRE: %s ha ancora il valore segnaposto di .env.casavip.example, "
+            "che e' PUBBLICO su GitHub: equivale a non avere nessuna chiave. "
+            "Genera le chiavi vere con: sh deploy/genera_segreti.sh", " e ".join(_pubbliche))
+        raise SystemExit(2)
+    # ── FAIL-CLOSED sui percorsi degli archivi (difetto chiuso 2026-07-29) ──────────
+    # Una variabile PRESENTE ma VUOTA (`DB_FINANZA=` in un .env modificato a mano) arriva
+    # fino a `sqlite3.connect("")`, che apre un database TEMPORANEO cancellato alla
+    # chiusura della connessione. Siccome ogni chiamata apre la sua connessione, l'archivio
+    # sparisce tra una riga e l'altra ("no such table: libro_giornale") e la sonda
+    # /api/health/db, che SALTA i percorsi vuoti, continua a rispondere "ok": perdita di
+    # prove contabili in perfetto silenzio. Qui si fallisce chiuso, con il nome del colpevole.
+    _vuoti = [c for c in sorted(vars(ConfigCasaVIP()))
+              if c.startswith("db_") and not str(getattr(config, c, "") or "").strip()]
+    if _vuoti:
+        logging.critical(
+            "RIFIUTO DI PARTIRE: percorso di archivio VUOTO per %s. Un percorso vuoto apre "
+            "un database temporaneo che si cancella da solo: i dati (giornale contabile, "
+            "prove d'accettazione, payout) sparirebbero senza un errore. Dai un percorso "
+            "vero (es. /data/<nome>.db) oppure togli del tutto la variabile per usare il "
+            "valore di serie.", ", ".join("DB_" + c[3:].upper() for c in _vuoti))
         raise SystemExit(2)
 
     sistema = crea_sistema(config)
