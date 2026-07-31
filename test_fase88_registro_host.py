@@ -12,6 +12,261 @@ from fase88_registro_host import _hash_password, crea_registro_host
 SEG = b"0123456789abcdef0123456789abcdef"
 
 
+class TestLaRISPOSTAVersoIlMondoEsternoDiceIlVero(unittest.TestCase):
+    """`as_dict` e' cio' che il sito RESTITUISCE a chi si registra o entra: e' il confine fra
+    il registro e il mondo. La mutazione ha rovesciato il suo `ok` e nessuno se n'e' accorto,
+    perche' tutte le prove guardavano l'oggetto interno (`e.ok`) e mai la risposta vera.
+
+    Un successo raccontato come fallimento manda via un host appena registrato; un fallimento
+    raccontato come successo gli fa credere di essere dentro quando non lo e'. In entrambi i
+    casi il registro sarebbe a posto e il cliente no.
+    """
+
+    def setUp(self):
+        self.reg = crea_registro_host(":memory:", SEG)
+
+    def test_il_SUCCESSO_si_racconta_come_successo(self):
+        e = self.reg.registra("nuovo@mail.it", "passwordlunga", accetta_termini=True)
+        d = e.as_dict()
+        self.assertIs(True, d["ok"], "una registrazione RIUSCITA viene raccontata come "
+                                     "fallita: %r" % (d,))
+        self.assertEqual(e.host_id, d["host_id"])
+        self.assertEqual(e.token, d["token"])
+        self.assertNotIn("errore", d, "un successo non deve portare un errore con se'")
+
+    def test_il_FALLIMENTO_si_racconta_come_fallimento(self):
+        e = self.reg.registra("x@y.it", "corta", accetta_termini=True)
+        d = e.as_dict()
+        self.assertIs(False, d["ok"], "un rifiuto viene raccontato come successo: %r" % (d,))
+        self.assertTrue(d.get("errore"), "il rifiuto non dice perche'")
+        self.assertNotIn("token", d,
+                         "una risposta di FALLIMENTO porta con se' un gettone d'accesso")
+
+
+class TestIlTEMPODiVitaDelGettoneNonSiAzzera(unittest.TestCase):
+    """La durata del gettone d'accesso e' validata all'avvio: se il valore e' assurdo si
+    ripiega sul valore di serie. La mutazione ha indebolito quel controllo in due modi e
+    nessuno se n'e' accorto: con `>=` un `ttl=0` verrebbe accettato e ogni gettone nascerebbe
+    GIA' SCADUTO -- nessuno riuscirebbe piu' a entrare, e il motivo sarebbe invisibile."""
+
+    def test_un_ttl_ASSURDO_ripiega_sul_valore_di_serie(self):
+        for cattivo in (0, -1, True, False, "3600", None, 3.5):
+            reg = crea_registro_host(":memory:", SEG, ttl_token=cattivo)
+            e = reg.registra("a@b.it", "passwordlunga", accetta_termini=True)
+            self.assertTrue(e.ok)
+            self.assertEqual(e.host_id, reg.verifica_token(e.token),
+                             "con ttl_token=%r il gettone non vale: ogni host resterebbe "
+                             "fuori dal proprio pannello" % (cattivo,))
+
+    def test_un_ttl_VALIDO_viene_rispettato(self):
+        reg = crea_registro_host(":memory:", SEG, ttl_token=7200)
+        self.assertEqual(7200, reg._ttl, "un ttl valido e' stato scartato")
+
+
+class TestLAntiRicicloNonPerdeIlSuoAPPIGLIOPiuForte(unittest.TestCase):
+    """L'ANTI-RICICLO PROVATO SUI GUASTI, non solo sul caso felice.
+
+    Scritto la mattina del 2026-07-31, la mutazione l'ha passato al setaccio la sera stessa e
+    ha trovato che quasi nessuna delle sue condizioni era sorvegliata. Serve a impedire che un
+    host si cancelli e si ri-iscriva per ripartire dal **-0% dei primi 90 giorni**: e' una
+    protezione sui SOLDI, non un dettaglio.
+
+    IL PIU' GRAVE: `for v in (extra or ())`. Rovesciando quell'`or` in `and`, l'elenco delle
+    impronte EXTRA diventa sempre vuoto -- e le extra sono il **CIN della struttura**, cioe'
+    l'unico identificativo che lo Stato rilascia e che un host **non puo' cambiare**. Email e
+    telefono si cambiano in due minuti; il CIN no. Perdendolo, la protezione resta in piedi
+    solo sulla carta: nessun errore, nessun log, e il primo furbo che si ri-iscrive con
+    un'altra email riparte da zero.
+    """
+
+    def setUp(self):
+        self.reg = crea_registro_host(":memory:", SEG)
+
+    def _riga(self, **campi):
+        base = {"email": "h@mail.it", "telefono": "+393331112233",
+                "codice_fiscale": "RSSMRA80A01H501U", "partita_iva": ""}
+        base.update(campi)
+        return base
+
+    def test_il_CIN_finisce_DAVVERO_fra_le_impronte(self):
+        senza = self.reg._impronte_di(self._riga())
+        con_cin = self.reg._impronte_di(self._riga(), ("IT058091C2XXXXXXXX",))
+        self.assertEqual(len(senza) + 1, len(con_cin),
+                         "il CIN passato come identificativo EXTRA non e' stato impresso: "
+                         "l'anti-riciclo perde l'unico appiglio che l'host non puo' cambiare")
+        self.assertTrue(set(senza).issubset(set(con_cin)),
+                        "le impronte del registro sono cambiate aggiungendo un extra")
+
+    def test_piu_identificativi_extra_contano_TUTTI(self):
+        r = self.reg._impronte_di(self._riga(), ("CIN-UNO", "CIN-DUE"))
+        self.assertEqual(len(set(r)), len(r), "impronte duplicate")
+        self.assertEqual(5, len(r), "attese 3 dal registro + 2 extra, ottenute %d" % len(r))
+
+    def test_i_valori_VUOTI_o_non_testuali_non_diventano_impronte(self):
+        """Un'impronta di stringa vuota sarebbe la STESSA per tutti: un host qualunque
+        risulterebbe «gia' visto» e si vedrebbe negare i 90 giorni che gli spettano.
+        Negarli per sbaglio significa rubargli dei soldi."""
+        pulite = self.reg._impronte_di(self._riga(partita_iva=""))
+        sporche = self.reg._impronte_di(self._riga(partita_iva=""), ("", "   ", None, 12345))
+        self.assertEqual(pulite, sporche,
+                         "un valore vuoto o non testuale e' diventato un'impronta: due host "
+                         "diversi risulterebbero la stessa persona")
+
+    def test_deposita_impronte_RIFIUTA_un_host_id_non_valido(self):
+        for cattivo in ("", None, 123, b"h_1"):
+            self.assertEqual(0, self.reg.deposita_impronte(cattivo),
+                             "host_id non valido accettato: %r" % (cattivo,))
+
+    def test_deposita_impronte_su_host_INESISTENTE_non_inventa_nulla(self):
+        self.assertEqual(0, self.reg.deposita_impronte("h_mai_esistito"))
+
+    def test_il_deposito_e_IDEMPOTENTE(self):
+        """Chiamarlo due volte non deve moltiplicare le impronte ne' spostare la data."""
+        e = self.reg.registra("via@mail.it", "passwordlunga", accetta_termini=True,
+                              telefono="+393334445566")
+        primo = self.reg.deposita_impronte(e.host_id, extra=("CIN-X",))
+        secondo = self.reg.deposita_impronte(e.host_id, extra=("CIN-X",))
+        self.assertEqual(primo, secondo, "il secondo deposito conta un numero diverso")
+        con = self.reg._apri()
+        try:
+            n = con.execute("SELECT COUNT(*) FROM host_impronte").fetchone()[0]
+        finally:
+            con.close()
+        self.assertEqual(primo, n, "le impronte si sono moltiplicate: %d righe per %d impronte"
+                         % (n, primo))
+
+
+class TestIlRipristinoPasswordRIFIUTADavvero(unittest.TestCase):
+    """IL PUNTO PIU' PERICOLOSO TROVATO DALLA MUTAZIONE il 2026-07-31.
+
+    `reset_password` e' il magic-link: chi lo attraversa **cambia la password di un host** ed
+    entra nel suo pannello -- pagamenti, dati, incassi. E' la via classica per impadronirsi di
+    un account.
+
+    Il modulo ha 4 rifiuti in quella funzione (link non valido · link scaduto · password
+    troppo corta · link gia' usato). La mutazione li ha rovesciati tutti e quattro in
+    «accettato» e **nessun test se n'e' accorto**: nel file del registro non c'era una sola
+    prova sul ripristino, e gli altri file che lo nominano provano solo il caso FELICE.
+    Un rifiuto che nessuno verifica e' una porta che sembra chiusa.
+
+    Il codice di produzione E' CORRETTO: qui si aggiungono le guardie che mancavano, piu' i
+    due CONFINI (la scadenza e la lunghezza minima) che nessuno toccava.
+    """
+
+    def setUp(self):
+        self.reg = crea_registro_host(":memory:", SEG)
+        self.e = self.reg.registra("host@mail.it", "passwordlunga", accetta_termini=True)
+        self.assertTrue(self.e.ok)
+
+    def _link(self):
+        t = self.reg.token_reset_password("host@mail.it")
+        self.assertTrue(t, "il magic-link non viene emesso: la prova non vale")
+        return t
+
+    def test_un_link_MANOMESSO_non_cambia_la_password(self):
+        for cattivo in (self._link() + "x", "robaccia", "", None, 12345):
+            e = self.reg.reset_password(cattivo, "nuovapasswordlunga")
+            self.assertFalse(e.ok, "link manomesso ACCETTATO: %r" % (cattivo,))
+            self.assertEqual("link_non_valido", e.errore)
+        # e la password vecchia funziona ancora: nessun effetto collaterale
+        self.assertTrue(self.reg.login("host@mail.it", "passwordlunga").ok)
+
+    def test_un_link_di_ALTRO_TIPO_non_vale_come_ripristino(self):
+        """Un gettone firmato da noi ma nato per un'altra cosa non deve aprire questa porta."""
+        altro = self.reg._firma.codifica({"tipo": "quote", "host_id": self.e.host_id,
+                                          "exp": 9999999999})
+        esito = self.reg.reset_password(altro, "nuovapasswordlunga")
+        self.assertFalse(esito.ok, "un gettone di tipo diverso ha cambiato la password")
+        self.assertEqual("link_non_valido", esito.errore)
+
+    def test_un_link_SCADUTO_non_cambia_la_password(self):
+        orologio = {"t": 1_000_000}
+        reg = crea_registro_host(":memory:", SEG, orologio=lambda: orologio["t"])
+        reg.registra("a@b.it", "passwordlunga", accetta_termini=True)
+        tok = reg.token_reset_password("a@b.it")
+        orologio["t"] += 1801                       # il link dura 30 minuti
+        esito = reg.reset_password(tok, "nuovapasswordlunga")
+        self.assertFalse(esito.ok, "link SCADUTO accettato: la porta resta aperta per sempre")
+        self.assertEqual("link_scaduto", esito.errore)
+        self.assertTrue(reg.login("a@b.it", "passwordlunga").ok)
+
+    def test_un_link_GIA_USATO_non_vale_una_seconda_volta(self):
+        """SINGLE-USE: dentro il link c'e' l'impronta dell'hash attuale, quindi appena la
+        password cambia il link diventa carta straccia. Se non fosse cosi', chiunque abbia
+        visto quel link una volta potrebbe rientrare quando vuole."""
+        tok = self._link()
+        self.assertTrue(self.reg.reset_password(tok, "primanuovapassword").ok)
+        esito = self.reg.reset_password(tok, "secondanuovapassword")
+        self.assertFalse(esito.ok, "il magic-link e' stato riusato: NON e' single-use")
+        self.assertEqual("link_non_valido", esito.errore)
+        # e la password buona resta la prima nuova
+        self.assertTrue(self.reg.login("host@mail.it", "primanuovapassword").ok)
+        self.assertFalse(self.reg.login("host@mail.it", "secondanuovapassword").ok)
+
+    def test_una_password_TROPPO_CORTA_viene_rifiutata_e_il_CONFINE_e_giusto(self):
+        """Il minimo e' 8 caratteri: 7 no, 8 SI. Il mutante che stringeva il confine a 9
+        e' sopravvissuto -- nessuno provava quel punto, e avrebbe rifiutato password
+        legittime senza che nessuno capisse perche'."""
+        esito = self.reg.reset_password(self._link(), "corta12")          # 7
+        self.assertFalse(esito.ok, "password di 7 caratteri accettata")
+        self.assertEqual("password_troppo_corta", esito.errore)
+        for cattiva in (None, 12345678, b"ottobyte"):
+            self.assertFalse(self.reg.reset_password(self._link(), cattiva).ok,
+                             "password non testuale accettata: %r" % (cattiva,))
+        self.assertTrue(self.reg.reset_password(self._link(), "otto1234").ok,
+                        "password di 8 caratteri ESATTI rifiutata: il confine e' storto")
+
+    def test_a_host_SOSPESO_non_si_emette_nemmeno_il_link(self):
+        """Anti-enumerazione: a un host non attivo non si dice «non esiste», si tace --
+        ma soprattutto non gli si apre una porta."""
+        self.reg.sospendi(self.e.host_id) if hasattr(self.reg, "sospendi") else None
+        con = self.reg._apri()
+        con.execute("UPDATE host SET stato='sospeso' WHERE host_id=?", (self.e.host_id,))
+        con.commit()
+        con.close()
+        self.assertIsNone(self.reg.token_reset_password("host@mail.it"),
+                          "emesso un magic-link per un host SOSPESO")
+
+    def test_un_link_IN_MANO_smette_di_valere_se_l_host_viene_SOSPESO(self):
+        """IL CASO CHE MANCAVA, e resta il piu' pericoloso di tutti.
+
+        Provare che a un host sospeso non si EMETTE il link non basta: bisogna provare che
+        un link gia' consegnato smetta di funzionare. Lo scenario e' esattamente quello di
+        un host bloccato per frode che rientra con un link vecchio, si rimette la password
+        e si riprende il pannello -- pagamenti compresi.
+
+        Il controllo di produzione c'e' (`stato != "attivo"` nella riga del rifiuto), ma
+        nessuno lo verificava: il mutante che lo indebolisce era sopravvissuto anche alle
+        cinque guardie nuove qui sopra.
+        """
+        tok = self._link()                      # link consegnato mentre l'host e' attivo
+        con = self.reg._apri()
+        con.execute("UPDATE host SET stato='sospeso' WHERE host_id=?", (self.e.host_id,))
+        con.commit()
+        con.close()
+        esito = self.reg.reset_password(tok, "nuovapasswordlunga")
+        self.assertFalse(esito.ok,
+                         "un host SOSPESO ha cambiato la password con un link ricevuto "
+                         "prima del blocco: rientra nel pannello e nei pagamenti")
+        self.assertEqual("link_non_valido", esito.errore)
+
+    def test_un_link_di_un_host_CANCELLATO_non_vale(self):
+        """L'altra faccia: se la riga dell'host non c'e' piu', il link non deve aprire
+        nulla (ne' esplodere in faccia a chi lo usa)."""
+        tok = self._link()
+        con = self.reg._apri()
+        con.execute("DELETE FROM host WHERE host_id=?", (self.e.host_id,))
+        con.commit()
+        con.close()
+        esito = self.reg.reset_password(tok, "nuovapasswordlunga")
+        self.assertFalse(esito.ok, "link di un host CANCELLATO accettato")
+        self.assertEqual("link_non_valido", esito.errore)
+
+    def test_a_una_email_INESISTENTE_non_si_emette_il_link(self):
+        self.assertIsNone(self.reg.token_reset_password("mai-vista@mail.it"))
+        self.assertIsNone(self.reg.token_reset_password("non-e-una-email"))
+
+
 class TestRegistrazione(unittest.TestCase):
     def setUp(self):
         self.reg = crea_registro_host(":memory:", SEG)

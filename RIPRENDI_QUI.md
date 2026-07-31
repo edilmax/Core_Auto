@@ -1,3 +1,60 @@
+## ✅ 2° BERSAGLIO CHIUSO — `fase88_registro_host`: da 16 sopravvissuti a 6
+
+**Misurato a ogni passo, mai stimato** (30 mutanti provati, 116 oltre il tetto dichiarati):
+
+| dopo | uccisi | sopravvissuti |
+|---|---|---|
+| partenza | 14 | **16** |
+| guardie sul ripristino password | 19 | **11** |
+| + anti-riciclo | 22 | **8** |
+| + risposta esterna e durata gettone | 24 | **6** |
+
+Il file passa da **16 a 35 prove**. Nessuna riga di produzione toccata: il codice era corretto,
+**mancavano le guardie**.
+
+### 🔴 IL PIÙ PERICOLOSO — il ripristino password (presa di controllo dell'account)
+Chi attraversa `reset_password` **cambia la password di un host** ed entra nel suo pannello:
+pagamenti, dati, incassi. Ha **4 rifiuti** — link non valido · scaduto · password troppo corta ·
+link già usato — e **la mutazione li ha rovesciati tutti e quattro in «accettato» senza che
+nessun test se ne accorgesse**: nel file del registro **non c'era una sola prova sul
+ripristino**, e gli altri file che lo nominano provano solo il caso felice.
+
+⚠️ **Il caso peggiore l'ho trovato solo al secondo giro**, dopo aver già scritto cinque guardie:
+un host **sospeso dopo** l'emissione del link rientrava con quel link, si rimetteva la password
+e si riprendeva il pannello. Provare che a un sospeso non si *emetta* il link **non basta**:
+bisogna provare che un link **già in mano** smetta di valere. Cinque su sei non è sei su sei.
+
+### 🔴 L'ANTI-RICICLO — scritto stamattina, quasi tutto scoperto
+`for v in (extra or ())`: rovesciando l'`or`, le impronte **extra** diventano sempre vuote — e
+le extra sono il **CIN della struttura**, l'unico identificativo che rilascia lo Stato e che un
+host **non può cambiare**. Email e telefono si cambiano in due minuti. Perdendolo, la protezione
+resta in piedi solo sulla carta e il primo che si ri-iscrive riparte dal 0%.
+E la direzione opposta, altrettanto costosa: un valore **vuoto** che diventa impronta sarebbe
+**la stessa per tutti** — un host onesto risulterebbe «già visto» e si vedrebbe negare i 90
+giorni che gli spettano, cioè gli si ruberebbero dei soldi.
+
+### 🔴 Il confine col mondo e la durata del gettone
+`as_dict` è ciò che il sito **restituisce** al cliente: tutte le prove guardavano l'oggetto
+interno, mai la risposta vera. E un `ttl=0` accettato farebbe nascere **ogni gettone già
+scaduto**: nessun host entrerebbe più nel proprio pannello, senza un errore da nessuna parte.
+
+### ⏳ RESTANO 6, DA CLASSIFICARE (onestà, non copertura di comodo)
+`87 (>→>=)` · `171 (and→or)` · `189 (True→False, riga di log)` · `200 (and→or)` ·
+`244 ×2 (or→and, <→<=)`. L'analisi a occhio dice **bassa gravità o equivalenti nei fatti**
+(controlli che, indeboliti, portano allo stesso risultato osservabile perché il passo
+successivo li ripesca; e uno stringe il confine, quindi è fail-CLOSED). **Non li dichiaro
+equivalenti senza dimostrarlo**, come è stato fatto con z3 per il `max`: restano APERTI.
+E restano i **116 punti oltre il tetto** su questo stesso modulo.
+
+**Perché questo:** 146 punti di logica, 9 file di test. È **chi entra e chi incassa** — la
+registrazione host, le password, il gettone d'accesso, e da oggi le **impronte anti-riciclo**
+della promozione. Un guasto silenzioso qui apre una porta o regala una promozione.
+
+**File ammessi (dichiarati PRIMA, regola 15):** `test_fase88_registro_host.py`,
+`collaudi/mutazione_prodotto.py` (solo per dichiarare equivalenti **con prova**), questi due
+documenti. **Zero produzione**: finché non è dimostrato che il codice è sbagliato si scrivono
+guardie, non si corregge.
+
 ## ✅ PRIMO GIRO — ALLARGATA LA MUTAZIONE: 7 BUCHI VERI, il peggiore sulla PORTA ADMIN
 
 **CENSIMENTO (nessun test eseguito):** **6.012 punti di logica sbagliabili** in 152 moduli; i

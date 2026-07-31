@@ -228,6 +228,19 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### ✅ FATTO 2026-07-31 (7) — campagna di mutazione: 2 moduli, 13 buchi chiusi
+- **`fase180_bunker` (porta admin)** e **`fase199_invarianti` (guardia dei soldi)**: 60 mutanti,
+  17 sopravvissuti -> **7 buchi veri chiusi**, 3 equivalenti dimostrati (il `max`/`min` con z3:
+  `unsat`, non esiste intero in cui differiscano).
+- **`fase88_registro_host` (identita' e accesso)**: 30 mutanti, **16 -> 6 sopravvissuti** in
+  quattro giri misurati; il file passa da 16 a 35 prove. Chiusi: i 4 rifiuti del **ripristino
+  password** (presa di controllo dell'account) + il caso «host **sospeso dopo** l'emissione del
+  link» + l'**anti-riciclo** (il CIN che spariva dalle impronte; e le impronte vuote che
+  avrebbero negato i 90 giorni a host onesti) + `as_dict` (la risposta verso il cliente) + la
+  durata del gettone.
+- **Nessuna riga di produzione toccata in tutta la campagna**: il codice era corretto,
+  mancavano le guardie.
+
 ### ✅ FATTO 2026-07-31 (6) — I DIVIETI SONO HOOK, NON PROSA
 - **`.claude/settings.json`** (nuovo, VERSIONATO -- serviva un'eccezione in `.gitignore`,
   che con `*.json` lo escludeva): hook `SessionStart` che esegue `collaudi/regole_avvio.py`,
