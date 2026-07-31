@@ -25,6 +25,7 @@ sono ora in `test_admin_accounts.py`.
 
 Il codice viene SEMPRE ripristinato, anche se qualcosa va storto.
 """
+import ast
 import importlib.util
 import io
 import os
@@ -366,10 +367,323 @@ def invalida_bytecode(percorso):
     return pyc
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  GENERATORE DI MUTANTI — dal CODICE, non da un elenco scritto a mano
+# ═══════════════════════════════════════════════════════════════════════════════
+#  PERCHE'. I 41 mutanti qui sopra sono scelti col cervello e restano: valgono. Ma li ha
+#  scritti la stessa testa che ha scritto i test, quindi confermano i guasti gia' immaginati
+#  e non ne scoprono di nuovi. E toccano 12 moduli su 152: il 92% del motore non ha mai visto
+#  un guasto simulato. Un elenco curato a mano non scala e non sorprende.
+#
+#  COSA FA. Legge un file di produzione con `ast` e propone le mutazioni nei punti dove
+#  vivono i difetti di logica veri. Ogni mutante conosce la sua RIGA, cosi' si puo' applicare
+#  il generatore SOLO alle righe che un commit ha toccato: il numero resta piccolo, il giro
+#  veloce, e la domanda diventa quella giusta — «la riga che ho appena scritto, se fosse
+#  sbagliata, se ne accorgerebbe qualcuno?».
+#
+#  COSA NON FA (confini dichiarati, per non spacciare copertura che non c'e'):
+#   · niente aritmetica (`+`→`-`): su un importo produce troppi mutanti EQUIVALENTI, cioe'
+#     rumore che insegna a ignorare l'esito;
+#   · niente operatori a cavallo di due righe: l'operatore si taglia al carattere esatto,
+#     e se non e' sulla stessa riga dei suoi due operandi si SALTA invece di indovinare;
+#   · niente confronti a catena (`a == b == c`): stessa ragione.
+#  Quello che salta viene CONTATO e dichiarato, mai nascosto.
+
+_CONFRONTI = {
+    "Eq":    ("==", "!=", "un uguale diventa un diverso: la condizione si rovescia"),
+    "NotEq": ("!=", "==", "un diverso diventa un uguale: la condizione si rovescia"),
+    "Lt":    ("<", "<=", "un minore stretto include il confine: errore di un passo"),
+    "LtE":   ("<=", "<", "un minore-o-uguale esclude il confine: errore di un passo"),
+    "Gt":    (">", ">=", "un maggiore stretto include il confine: errore di un passo"),
+    "GtE":   (">=", ">", "un maggiore-o-uguale esclude il confine: errore di un passo"),
+}
+
+
+def _taglia_operatore(righe, r_dopo, c_dopo, r_prima, c_prima, simbolo):
+    """Posizione ESATTA di un operatore fra i suoi due operandi, o None se non e' sulla
+    stessa riga (a cavallo si salta: meglio niente che una sostituzione indovinata)."""
+    if r_dopo != r_prima or r_dopo < 1 or r_dopo > len(righe):
+        return None
+    testo = righe[r_dopo - 1]
+    if c_prima > len(testo) or c_dopo > c_prima:
+        return None
+    i = testo[c_dopo:c_prima].find(simbolo)
+    if i < 0:
+        return None
+    return r_dopo, c_dopo + i, c_dopo + i + len(simbolo)
+
+
+def genera_mutanti(sorgente, righe_ammesse=None):
+    """I mutanti proponibili per questo sorgente. Funzione PURA: non tocca il disco.
+
+    `righe_ammesse`: se dato, si generano SOLO i mutanti sulle righe indicate (il diff).
+    Ritorna una lista di dizionari con riga, taglio esatto, testo nuovo, tipo e danno;
+    l'ultima voce, `saltati`, dice quanti punti sono stati riconosciuti ma non mutati e
+    perche' — un generatore che tace sulle proprie rinunce e' un generatore che mente.
+    """
+    albero = ast.parse(sorgente)
+    righe = sorgente.splitlines()
+    ammesse = set(righe_ammesse) if righe_ammesse is not None else None
+    mutanti, saltati = [], {"a_cavallo": 0, "catena": 0, "non_trovato": 0}
+
+    def _aggiungi(nodo_riga, taglio, nuovo, tipo, danno):
+        if taglio is None:
+            saltati["non_trovato"] += 1
+            return
+        r, ci, cf = taglio
+        if ammesse is not None and r not in ammesse:
+            return
+        mutanti.append({"riga": r, "col_inizio": ci, "col_fine": cf, "nuovo": nuovo,
+                        "vecchio": righe[r - 1][ci:cf], "tipo": tipo, "danno": danno})
+
+    for nodo in ast.walk(albero):
+        if isinstance(nodo, ast.Compare):
+            if len(nodo.ops) != 1:
+                saltati["catena"] += 1
+                continue
+            nome = type(nodo.ops[0]).__name__
+            if nome not in _CONFRONTI:
+                continue
+            simbolo, sostituto, danno = _CONFRONTI[nome]
+            taglio = _taglia_operatore(righe, nodo.left.end_lineno, nodo.left.end_col_offset,
+                                       nodo.comparators[0].lineno,
+                                       nodo.comparators[0].col_offset, simbolo)
+            if taglio is None and nodo.left.end_lineno != nodo.comparators[0].lineno:
+                saltati["a_cavallo"] += 1
+                continue
+            _aggiungi(nodo.lineno, taglio, sostituto, "confronto", danno)
+
+        elif isinstance(nodo, ast.BoolOp):
+            simbolo = "and" if isinstance(nodo.op, ast.And) else "or"
+            sostituto = "or" if simbolo == "and" else "and"
+            danno = ("una condizione che doveva valere INSIEME ora basta da sola"
+                     if simbolo == "and" else
+                     "una condizione che bastava da sola ora deve valere INSIEME")
+            for a, b in zip(nodo.values, nodo.values[1:]):
+                taglio = _taglia_operatore(righe, a.end_lineno, a.end_col_offset,
+                                           b.lineno, b.col_offset, simbolo)
+                if taglio is None and a.end_lineno != b.lineno:
+                    saltati["a_cavallo"] += 1
+                    continue
+                _aggiungi(nodo.lineno, taglio, sostituto, "booleano", danno)
+
+        elif isinstance(nodo, ast.Constant) and nodo.value in (True, False) \
+                and isinstance(nodo.value, bool):
+            testo = "True" if nodo.value else "False"
+            if nodo.lineno != nodo.end_lineno:
+                saltati["a_cavallo"] += 1
+                continue
+            riga = righe[nodo.lineno - 1] if nodo.lineno <= len(righe) else ""
+            if riga[nodo.col_offset:nodo.end_col_offset] != testo:
+                saltati["non_trovato"] += 1
+                continue
+            _aggiungi(nodo.lineno, (nodo.lineno, nodo.col_offset, nodo.end_col_offset),
+                      "False" if nodo.value else "True", "costante",
+                      "un interruttore acceso si spegne (o viceversa)")
+
+    mutanti.sort(key=lambda m: (m["riga"], m["col_inizio"]))
+    return mutanti, saltati
+
+
+def applica_mutante(sorgente, mutante):
+    """Il sorgente con QUEL mutante dentro. Taglio al carattere: nessun `replace` cieco,
+    che su una riga con due operatori uguali colpirebbe quello sbagliato."""
+    righe = sorgente.splitlines(True)
+    i = mutante["riga"] - 1
+    riga = righe[i]
+    fine = riga[mutante["col_fine"]:]
+    righe[i] = riga[:mutante["col_inizio"]] + mutante["nuovo"] + fine
+    return "".join(righe)
+
+
+def righe_toccate(base="HEAD~1"):
+    """I file di PRODUZIONE cambiati e le righe nuove, letti da git. {file: {righe}}."""
+    r = subprocess.run(["git", "diff", "-U0", base, "--", "*.py"],
+                       capture_output=True, cwd=REPO)
+    if r.returncode != 0:
+        raise RuntimeError("git diff fallito su %r: %s"
+                           % (base, r.stderr.decode("utf-8", "replace")[:200]))
+    fuori = ("test_", "collaudi/", "_archivio/")
+    toccate, corrente = {}, None
+    for riga in r.stdout.decode("utf-8", "replace").splitlines():
+        if riga.startswith("+++ b/"):
+            nome = riga[6:]
+            base_nome = os.path.basename(nome)
+            corrente = None if (base_nome.startswith(fuori[0])
+                                or nome.startswith(fuori[1:])) else nome
+        elif riga.startswith("@@") and corrente:
+            pezzo = riga.split("+")[1].split("@@")[0].strip()
+            inizio, _, quante = pezzo.partition(",")
+            n = int(quante or 1)
+            if n:
+                toccate.setdefault(corrente, set()).update(
+                    range(int(inizio), int(inizio) + n))
+    return {f: r for f, r in toccate.items() if r and os.path.exists(os.path.join(REPO, f))}
+
+
+def test_che_nominano(percorso):
+    """I file di test che NOMINANO quel modulo: gli unici che possono vederne il guasto.
+
+    Se l'elenco e' VUOTO non serve nemmeno provare: quel codice non e' sorvegliato da
+    nessuno, ed e' un esito -- non un errore da nascondere.
+    """
+    modulo = os.path.basename(percorso)[:-3]
+    trovati = []
+    for nome in sorted(os.listdir(REPO)):
+        if not (nome.startswith("test_") and nome.endswith(".py")):
+            continue
+        try:
+            with io.open(os.path.join(REPO, nome), encoding="utf-8", errors="replace") as f:
+                if modulo in f.read():
+                    trovati.append(nome[:-3])
+        except OSError:
+            continue
+    return trovati
+
+
+# ── MUTANTI EQUIVALENTI, DICHIARATI CON LA PROVA ────────────────────────────────
+#  Un mutante EQUIVALENTE non e' un buco: e' una mutazione che NON cambia il comportamento,
+#  quindi nessun test potrebbe ucciderlo. Segnalarlo per sempre insegna a ignorare gli
+#  allarmi del generatore -- il danno peggiore (REGOLA FERREA 10).
+#  ⚠️ Questo elenco e' l'unico posto dove un sopravvissuto puo' essere «perdonato», quindi
+#  ogni voce porta la PROVA di equivalenza, non un'opinione. La chiave e' il TESTO della
+#  riga, non il numero: cosi' resta valida se il codice si sposta, e smette di valere --
+#  giustamente -- se quella riga cambia.
+EQUIVALENTI_DICHIARATI = {
+    ("fase100_dac7.py",
+     "return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else 0",
+     ">=", ">"):
+        "PROVATO il 2026-07-31 su 11 ingressi (0, 1, -1, 5, -5, True, False, None, 'x', "
+        "3.0, 10^9): 0 risposte diverse. Con v=0 il ramo vero restituisce 0 e il ramo else "
+        "restituisce 0: identico. Nessun test puo' ucciderlo perche' non c'e' niente da "
+        "vedere.",
+}
+
+
+def _e_equivalente(percorso, righe, mutante):
+    riga = righe[mutante["riga"] - 1].strip() if mutante["riga"] <= len(righe) else ""
+    return EQUIVALENTI_DICHIARATI.get(
+        (os.path.basename(percorso), riga, mutante["vecchio"], mutante["nuovo"]))
+
+
+def _leggi_intatto(percorso):
+    """Il file COM'E' sul disco, fine-riga compresi (`newline=""` non traduce nulla)."""
+    with io.open(percorso, encoding="utf-8", newline="") as f:
+        return f.read()
+
+
+def _riscrivi_intatto(percorso, testo):
+    """Riscrive senza toccare i fine-riga.
+
+    ⛔ SERVE PERCHE' UN GIUDICE NON DEVE LASCIARE TRACCE. Scrivendo con `newline="\\n"` un
+    file che sul disco era in stile Windows torna in stile Linux: il contenuto e' identico
+    ma i BYTE no, e `git status` lo segnala come modificato. Successo davvero il 2026-07-31
+    al primo giro sul diff: tre moduli di produzione risultavano cambiati dopo un giro che
+    li aveva ripristinati. Nessuna riga di codice diversa -- ma una traccia del genere, in
+    un'altra sessione, finisce dentro un commit senza che nessuno l'abbia voluta.
+    """
+    # L'invalidazione del bytecode sta QUI DENTRO, subito dopo la scrittura, e non nei
+    # chiamanti: cosi' non e' una cosa da ricordarsi. Ce l'ha insegnato la guardia
+    # `test_il_motore_invalida_dopo_OGNI_riscrittura`, diventata rossa il 2026-07-31 appena
+    # ho spostato la scrittura in questo aiutante -- l'invalidazione era rimasta ai due
+    # chiamanti, e un terzo chiamante futuro se ne sarebbe scordato. Un invariante che
+    # dipende dalla memoria di chi scrive non e' un invariante.
+    with io.open(percorso, "w", encoding="utf-8", newline="") as f:
+        f.write(testo)
+    invalida_bytecode(percorso)
+
+
+def giro_sul_diff(base="HEAD~1", tetto=40, tetto_test=8):
+    """Genera i mutanti SULLE RIGHE APPENA CAMBIATE e chiede: qualcuno se ne accorgerebbe?
+
+    Ritorna (esiti, rinunce). Ogni esito dice riga, guasto e verdetto. I tetti servono a
+    non far durare un giro mezz'ora, e quando tagliano lo DICONO: un tetto silenzioso fa
+    sembrare «coperto» cio' che non e' stato nemmeno provato.
+    """
+    esiti, rinunce = [], {"oltre_il_tetto": 0, "senza_sorveglianti": 0, "generatore": {}}
+    for percorso, righe in sorted(righe_toccate(base).items()):
+        pieno = os.path.join(REPO, percorso)
+        sorgente = _leggi_intatto(pieno)
+        try:
+            mutanti, saltati = genera_mutanti(sorgente, righe)
+        except SyntaxError as e:
+            esiti.append({"file": percorso, "riga": getattr(e, "lineno", 0),
+                          "verdetto": "non_analizzabile", "danno": str(e)[:80]})
+            continue
+        for k, v in saltati.items():
+            rinunce["generatore"][k] = rinunce["generatore"].get(k, 0) + v
+        sorveglianti = test_che_nominano(percorso)
+        righe_testo = sorgente.splitlines()
+        for m in mutanti:
+            motivo = _e_equivalente(percorso, righe_testo, m)
+            if motivo:
+                # Non si prova nemmeno: non c'e' niente da vedere, ed e' scritto perche'.
+                esiti.append({"file": percorso, "riga": m["riga"], "verdetto": "equivalente",
+                              "danno": m["danno"], "nota": motivo[:70]})
+                continue
+            if len(esiti) >= tetto:
+                rinunce["oltre_il_tetto"] += 1
+                continue
+            if not sorveglianti:
+                rinunce["senza_sorveglianti"] += 1
+                esiti.append({"file": percorso, "riga": m["riga"], "verdetto": "scoperto",
+                              "danno": m["danno"],
+                              "nota": "nessun file di test nomina questo modulo"})
+                continue
+            bersaglio = " ".join(sorveglianti[:tetto_test])
+            _riscrivi_intatto(pieno, applica_mutante(sorgente, m))
+            try:
+                verde, _ = esegui(bersaglio, timeout=600)
+            finally:
+                _riscrivi_intatto(pieno, sorgente)
+                invalida_bytecode(pieno)
+            esiti.append({"file": percorso, "riga": m["riga"],
+                          "verdetto": "sopravvissuto" if verde else "ucciso",
+                          "danno": m["danno"],
+                          "nota": "%s -> %s" % (m["vecchio"], m["nuovo"]),
+                          "sorveglianti": len(sorveglianti)})
+    return esiti, rinunce
+
+
 def esegui(test_str, timeout=900):
     p = subprocess.run([sys.executable, "-m", "unittest"] + test_str.split(),
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
     return p.returncode == 0, p.stdout.decode("utf-8", "replace")
+
+
+if __name__ == "__main__" and "--diff" in sys.argv:
+    # MODO DIFF: i mutanti si GENERANO sulle righe appena cambiate, invece di pescarli da
+    # un elenco scritto a mano. La domanda diventa quella giusta: «la riga che ho appena
+    # scritto, se fosse sbagliata, se ne accorgerebbe qualcuno?».
+    _i = sys.argv.index("--diff")
+    _base = sys.argv[_i + 1] if len(sys.argv) > _i + 1 else "HEAD~1"
+    print("=" * 90)
+    print("MUTANTI GENERATI SUL DIFF  (base: %s)" % _base)
+    print("=" * 90)
+    _esiti, _rinunce = giro_sul_diff(_base)
+    _sopr = [e for e in _esiti if e["verdetto"] == "sopravvissuto"]
+    _scop = [e for e in _esiti if e["verdetto"] == "scoperto"]
+    for e in _esiti:
+        print("  %-9s %s:%s  %s  (%s)"
+              % (e["verdetto"].upper(), e["file"], e["riga"], e.get("nota", ""), e["danno"][:52]))
+    print("-" * 90)
+    print("provati: %d · uccisi: %d · SOPRAVVISSUTI: %d · SCOPERTI: %d"
+          % (len(_esiti), sum(1 for e in _esiti if e["verdetto"] == "ucciso"),
+             len(_sopr), len(_scop)))
+    if any(_rinunce["generatore"].values()) or _rinunce["oltre_il_tetto"]:
+        # NIENTE TETTI SILENZIOSI: cio' che non e' stato provato si dice, sempre.
+        print("NON PROVATI (dichiarati): oltre il tetto %d · rinunce del generatore %s"
+              % (_rinunce["oltre_il_tetto"],
+                 {k: v for k, v in _rinunce["generatore"].items() if v}))
+    for e in _sopr + _scop:
+        print("::error title=Riga NON SORVEGLIATA in %s::riga %s -- %s | %s"
+              % (e["file"], e["riga"], e["danno"], e.get("nota", "")))
+    if _sopr or _scop:
+        print("\nQueste righe sono state cambiate e NESSUN test si accorgerebbe se fossero "
+              "sbagliate.")
+        sys.exit(1)
+    print("\nOgni riga cambiata e' sorvegliata: un guasto li' verrebbe visto.")
+    sys.exit(0)
 
 
 if __name__ == "__main__":
