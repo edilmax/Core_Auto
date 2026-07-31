@@ -1,3 +1,74 @@
+## 🔴 2026-07-31 — IL GIUDICE DEI TEST GIUDICAVA CODICE CHE NON STAVA GIRANDO
+
+**Il difetto più grave trovato oggi, e non era nel prodotto: era nel motore di mutazione**,
+cioè in ciò che ci dice se le 4.700 prove vedono davvero qualcosa.
+
+Python non ricompila un modulo se **dimensione** e **data-al-secondo** della sorgente
+coincidono con quelle scritte nel suo `.pyc`. Quasi tutti i mutanti cambiano un **operatore**
+(`!=` → `==`): **stesso numero di byte**. Se la riscrittura cade nello stesso secondo, il
+processo figlio importa la versione compilata di prima ed **esegue il codice non mutato**.
+
+**PROVATO, non dedotto** (modulo usa-e-getta fuori dal progetto): scritto `SEGNO='!='`,
+importato, riscritto `SEGNO='=='` con la stessa dimensione → un processo NUOVO stampava
+ancora `!=`; cancellato il `.pyc` → `==`.
+
+Costava nelle **due direzioni**, e la seconda è peggiore:
+- **falso rosso** — il job `mutazione` della CI è andato rosso su `fase83_server.py`
+  («protezione soldi INVERTITA») mentre in casa lo stesso mutante moriva: un'ora di caccia
+  a un fantasma, e un rosso permanente insegna a ignorare il rosso;
+- **falso verde** — un mutante contato fra gli UCCISI **senza essere mai stato provato**: il
+  punteggio «41 su 41» diventa una decorazione, e con esso ogni verde che dovrebbe certificare.
+
+Spiega anche l'«instabilità del job mutazione sul runner CI» scritta **nel motore stesso** e
+attribuita al carico della macchina: non era il carico, **era un secondo di orologio**.
+
+**RIPARATO**: `invalida_bytecode()` butta la versione compilata dopo **ognuno dei tre punti**
+in cui il motore riscrive un file (mutazione · ripristino nel `finally` · ripristino finale).
+Guardia `test_pipeline_ci.TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA` (5 prove): riproduce
+la trappola a comando, dimostra che l'invalidazione la disinnesca, e **conta i punti di
+riscrittura** pretendendo che ognuno sia seguito dall'invalidazione — vista rossa togliendola.
+Dopo la riparazione: **41 su 41 uccisi, 0 sopravvissuti, 0 incerti**. Nessun buco nuovo.
+
+**IN PIÙ — il buco della mutazione era ILLEGGIBILE.** Quando un mutante sopravvive, il
+dettaglio sta nel registro del job, che GitHub concede solo a chi ha diritti di
+**amministratore** sul repository: per tutti gli altri il rosso diceva soltanto «Process
+completed with exit code 1». Osservabile debole = difetto (REGOLA FERREA 9). Ora il motore
+emette un'**annotazione pubblica** (`::error`) con file, danno e test mancanti — e un
+`::warning` per gli incerti. Provata: tace sul sano, grida col nome esatto sul guasto.
+
+## 🩹 2026-07-31 — UNA PROTEZIONE SUI SOLDI SORVEGLIATA SOLO PER CASO
+
+Il mutante che la CI ha segnalato inverte in `fase83_server._finalizza`:
+`if corpo.get("modo_pagamento") != "in_struttura":` → `==`. Cioè: l'**online** non apre più
+la cassaforte di garanzia e non registra il payout (**l'host non viene mai pagato**), e il
+**paga-in-struttura** trattiene un saldo che non abbiamo mai incassato.
+
+Tre test lo prendevano su Windows e **nessuno su Linux**. Motivo (misurato): guardavano lo
+**stato finale** — `payout.riepilogo` e `garanzia.stato` — che però due strade diverse possono
+produrre: la finalizzazione **e** il webhook di pagamento. Su Linux la seconda arriva in fondo
+e **copre** il ramo mancante. Una guardia che funzionava per caso, e solo su un sistema
+operativo: il modo di rompersi n.8 applicato alla **protezione stessa**.
+
+**CHIUSO** con un osservabile **forte** in `test_paga_struttura_e2e`
+(`test_LA_DECISIONE_sui_soldi_si_osserva_DIRETTAMENTE`): si guarda **quale ramo prende il
+codice**, sostituendo i due passi a valle con due spie. Nessun archivio, nessun webhook,
+nessuna seconda strada che possa mascherarlo. Vista rossa sul mutante
+(`Lists differ: [] != ['_apri_garanzia', '_registra_payout']`), byte-identico al ripristino.
+
+## 📦 2026-07-31 — IL PARCHEGGIO ERA IN DUE POSTI
+
+`_onda2_parcheggio` sul Desktop conteneva **7 file di test (≈8.000 righe, 209 prove)** — fra
+cui proprio le guardie che `ci.yml` e `main_casavip.py` **dichiaravano e che nel repo non
+esistevano**. Non erano mai state scritte: erano parcheggiate **fuori dal progetto**.
+⚠️ **Quella cartella NON va cancellata**: 6 di quei file non sono ancora nel repo
+(`dati_realistici.py`, `test_avvio_e_ripristino.py`, `test_avvio_ostile.py`,
+`test_contratto_persistenza.py`, `test_dati_reali.py`, `test_migrazioni_mancanti.py`) e vanno
+valutati **uno alla volta**: girare, guardare cosa asseriscono davvero, e integrare.
+Il settimo, `test_parita_ambiente.py`, è stato **unito**: la versione parcheggiata (34 prove,
+30 iniezioni già viste rosse) è la base; sopra ci sono i **due controlli** che aveva solo la
+mia (l'uid preteso dalla CI confrontato con quello che il `Dockerfile` crea, e il `<title>`
+preteso confrontato con la home vera) — senza, due rossi permanenti su una macchina sana.
+
 ## ✅ CHIUSO 2026-07-31 — IL PARCHEGGIO «onda2-non-finita» (parità d'ambiente)
 
 **ESITO.** Suite INTERA **4706 test · 0 fallimenti · 3 skip storici** (esito letto diretto: 0;

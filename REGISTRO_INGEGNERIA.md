@@ -228,6 +228,27 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### ✅ FATTO 2026-07-31 (2) — riparato IL GIUDICE: `collaudi/mutazione_prodotto.py`
+- **`invalida_bytecode(percorso)`** (nuova, 1 funzione, ~10 righe): rimuove il `.pyc` del file
+  appena riscritto. Chiamata dopo **tutti e tre** i punti di riscrittura. Senza, Python — che
+  invalida la cache guardando solo **dimensione e data-al-secondo** — riusava il compilato
+  precedente, perché i mutanti cambiano un operatore (`!=`→`==`) e **la dimensione non cambia**.
+  Il figlio eseguiva il codice NON mutato: falsi rossi (successo il 2026-07-31 sul job CI) e,
+  peggio, falsi verdi (mutanti «uccisi» mai provati). Provato su un modulo usa-e-getta.
+- **Annotazioni pubbliche**: `::error` per ogni sopravvissuto (file · danno · test mancanti) e
+  `::warning` per gli incerti. Prima quel dettaglio stava solo nel registro del job, scaricabile
+  **solo da un amministratore** del repository: per tutti gli altri «exit code 1».
+- Guardia: `test_pipeline_ci.TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA` (5 prove), che
+  riproduce la trappola a comando e **conta** i punti di riscrittura.
+- Dopo la riparazione: **41/41 uccisi, 0 sopravvissuti, 0 incerti**.
+
+### ✅ FATTO 2026-07-31 (3) — `fase83_server`: la decisione sui soldi ora è OSSERVABILE
+Il ramo `if corpo.get("modo_pagamento") != "in_struttura":` (apertura garanzia + registrazione
+payout) era sorvegliato solo dallo **stato finale**, che il **webhook** può produrre per conto
+suo: su Linux il mutante che lo inverte sopravviveva. Aggiunto in `test_paga_struttura_e2e` un
+controllo che guarda **quale ramo viene preso** (due spie sui metodi a valle). Nessuna riga di
+produzione cambiata: il difetto era nella GUARDIA, non nel codice.
+
 ### ✅ FATTO 2026-07-31 — parità d'ambiente CI↔produzione (il parcheggio «onda2»)
 Dettaglio completo e misure in `RIPRENDI_QUI.md` (quella è la fonte). Qui cosa è cambiato nei
 moduli, come impone la direttiva n.4:
