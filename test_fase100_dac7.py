@@ -69,5 +69,65 @@ class TestRegistro(unittest.TestCase):
         self.assertTrue(crea_registro_dac7(cfg=ON).visibile("ignoto"))
 
 
+class TestArchivioMalformatoNonEsplode(unittest.TestCase):
+    """DIFETTI PROVATI VIVI il 2026-07-31 sul codice di allora, eseguendo, non deducendo:
+
+      · archivio JSON valido ma NON un oggetto (`[1, 2, 3]` — riparazione a mano, versione
+        vecchia, troncamento): `_leggi` lo restituiva tale e quale e la prima `.get(...)`
+        usciva come `AttributeError: 'list' object has no attribute 'get'`;
+      · record senza il campo `pren` -> `KeyError: 'pren'` da `registra_prenotazione`;
+      · record con `"pren": "tanti"` -> `ValueError: invalid literal for int()`.
+
+    Chi esplodeva erano i due SCRITTORI (`registra_prenotazione`, `imposta_dati_fiscali`), non
+    i lettori: `valuta_dac7` filtrava gia' i tipi. E' il registro DAC7, cioe' un adempimento
+    fiscale: un'eccezione qui ferma la registrazione di una prenotazione VERA.
+    """
+
+    def _reg(self, contenuto):
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        p = os.path.join(d, "dac7.json")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(contenuto)
+        return p
+
+    def test_json_valido_ma_non_oggetto_si_degrada_a_vuoto(self):
+        p = self._reg("[1, 2, 3]")
+        st = RegistroDAC7(p).stato("h1")
+        self.assertEqual((st.prenotazioni, st.ricavi_cents), (0, 0))
+
+    def test_record_senza_campi_si_puo_ancora_SCRIVERE(self):
+        p = self._reg('{"h1": {"ricavi": 500}}')
+        RegistroDAC7(p).registra_prenotazione("h1", 1000)
+        st = RegistroDAC7(p).stato("h1")
+        self.assertEqual(st.prenotazioni, 1)
+
+    def test_campo_di_tipo_sbagliato_ripiega_sul_neutro(self):
+        p = self._reg('{"h1": {"pren": "tanti", "ricavi": null, "dati": false}}')
+        RegistroDAC7(p).registra_prenotazione("h1", 1000)
+        st = RegistroDAC7(p).stato("h1")
+        self.assertEqual((st.prenotazioni, st.ricavi_cents), (1, 1000))
+
+    def test_un_conteggio_NEGATIVO_non_sopravvive(self):
+        """Un numero negativo di prenotazioni abbasserebbe la soglia DAC7: si azzera."""
+        p = self._reg('{"h1": {"pren": -5, "ricavi": -900, "dati": false}}')
+        st = RegistroDAC7(p).stato("h1")
+        self.assertEqual((st.prenotazioni, st.ricavi_cents), (0, 0))
+
+    def test_il_booleano_non_passa_per_un_numero(self):
+        """In Python `True` E' un intero: senza il controllo esplicito, `"pren": true`
+        varrebbe 1 prenotazione nata dal nulla."""
+        p = self._reg('{"h1": {"pren": true, "ricavi": 0, "dati": false}}')
+        st = RegistroDAC7(p).stato("h1")
+        self.assertEqual(st.prenotazioni, 0)
+
+    def test_un_archivio_SANO_non_viene_toccato(self):
+        """L'altra direzione: la normalizzazione non deve riscrivere i dati buoni."""
+        p = self._reg('{"h1": {"pren": 7, "ricavi": 123456, "dati": true}}')
+        st = RegistroDAC7(p).stato("h1")
+        self.assertEqual((st.prenotazioni, st.ricavi_cents, st.dati_forniti),
+                         (7, 123456, True))
+
+
 if __name__ == "__main__":
     unittest.main()

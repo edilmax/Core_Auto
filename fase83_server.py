@@ -9191,7 +9191,12 @@ class RouterHTTP:
         mostrava incasso €0 con prenotazioni reali). Qui si arricchisce dal pendente PAGATO e dalle
         recensioni. Prezzo solo se 'pagato' (un hold non pagato non e' revenue). Isolato."""
         try:
-            rif = str(p.get("idem_key", ""))[:24]
+            # RE-BLOCCO TARDIVO: dopo un pagamento in ritardo la chiave attiva del blocco e'
+            # 'reblock:<rif>' (stesso caso gia' gestito in _host_prenotazioni). Senza togliere
+            # il prefisso, `pp.info` non trova il pendente e quella prenotazione PAGATA valeva
+            # ZERO in revenue/ADR/RevPAR del pannello host: un numero SBAGLIATO, non mancante.
+            _idem = str(p.get("idem_key", ""))
+            rif = _idem[len("reblock:"):] if _idem.startswith("reblock:") else _idem[:24]
             pp = getattr(self._sys, "pagamenti_pendenti", None)
             rec = pp.info(rif) if (pp is not None and rif) else None
             if rec is not None and rec.get("stato") == "pagato":

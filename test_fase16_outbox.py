@@ -7,6 +7,7 @@ anti-SSRF del webhook, ciclo di vita start/stop.
 """
 import os
 import shutil
+import sqlite3
 import tempfile
 import threading
 import time
@@ -431,6 +432,90 @@ class TestPrioritaBackpressure(_Base):
                 "SELECT COUNT(*) AS n FROM outbox WHERE status='pending'").fetchone()["n"]
         finally:
             c.close()
+
+
+class TestMigrazioneRIFALIndice(unittest.TestCase):
+    """DIFETTO PROVATO VIVO il 2026-07-31 su un archivio nato PRIMA della fase 29.
+
+    La migrazione aggiungeva la colonna `priorita` ma NON rifaceva l'indice di fetch:
+    `CREATE INDEX IF NOT EXISTS` su un nome gia' presente e' un no-op SILENZIOSO, quindi un
+    archivio vecchio si teneva per sempre `(status, next_retry_at, id)`.
+
+    OSSERVABILE FORTE, non un proxy: si chiede a SQLite il suo piano di esecuzione. Sul
+    codice di allora conteneva `USE TEMP B-TREE FOR ORDER BY` — cioe' il database
+    riordinava a mano l'intera coda a OGNI giro del dispatcher. La coda dei messaggi e' la
+    strada di email, notifiche e webhook: la priorita' semplicemente non veniva usata.
+    """
+
+    VECCHIA_TABELLA = """CREATE TABLE outbox (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, topic TEXT NOT NULL, partition_key TEXT,
+        payload TEXT NOT NULL, headers TEXT, status TEXT NOT NULL DEFAULT 'pending',
+        retry_count INTEGER NOT NULL DEFAULT 0, max_retries INTEGER NOT NULL DEFAULT 3,
+        next_retry_at TEXT, locked_by TEXT, locked_at TEXT, last_error TEXT,
+        correlation_id TEXT, causation_id TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')), processed_at TEXT)"""
+
+    def _archivio_vecchio(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        p = os.path.join(d, "outbox.db")
+        con = sqlite3.connect(p)
+        with con:
+            con.execute(self.VECCHIA_TABELLA)
+            con.execute("CREATE INDEX idx_outbox_due ON outbox(status, next_retry_at, id)")
+        con.close()
+        return p
+
+    def test_archivio_pre_fase29_ottiene_lindice_GIUSTO(self):
+        p = self._archivio_vecchio()
+        ob.inizializza_schema(p)
+        con = sqlite3.connect(p)
+        try:
+            sql = con.execute("SELECT sql FROM sqlite_master WHERE name='idx_outbox_due'"
+                              ).fetchone()[0]
+            self.assertIn("priorita", sql,
+                          "l'indice di fetch non e' stato rifatto dopo la colonna: %s" % sql)
+            piano = con.execute(
+                "EXPLAIN QUERY PLAN SELECT id FROM outbox WHERE status='pending' "
+                "ORDER BY priorita, next_retry_at, id").fetchall()
+            self.assertFalse(any("TEMP B-TREE" in str(r) for r in piano),
+                             "il database riordina A MANO la coda a ogni giro: l'indice non "
+                             "serve. Piano: %r" % (piano,))
+        finally:
+            con.close()
+
+    def test_archivio_GIA_GIUSTO_non_viene_ricostruito_ogni_volta(self):
+        """L'altra direzione: la riparazione non deve diventare un lavoro a ogni avvio.
+        Si guarda il numero di sequenza interno dell'indice: se cambia, e' stato rifatto."""
+        p = self._archivio_vecchio()
+        ob.inizializza_schema(p)
+        con = sqlite3.connect(p)
+        prima = con.execute("SELECT rootpage FROM sqlite_master WHERE name='idx_outbox_due'"
+                            ).fetchone()[0]
+        con.close()
+        ob.inizializza_schema(p)
+        con = sqlite3.connect(p)
+        try:
+            dopo = con.execute("SELECT rootpage FROM sqlite_master WHERE name='idx_outbox_due'"
+                               ).fetchone()[0]
+            self.assertEqual(prima, dopo,
+                             "l'indice viene DISTRUTTO E RICOSTRUITO a ogni inizializzazione: "
+                             "su una coda grande e' un fermo a ogni avvio")
+        finally:
+            con.close()
+
+    def test_archivio_NUOVO_nasce_gia_con_lindice_giusto(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        p = os.path.join(d, "nuovo.db")
+        ob.inizializza_schema(p)
+        con = sqlite3.connect(p)
+        try:
+            sql = con.execute("SELECT sql FROM sqlite_master WHERE name='idx_outbox_due'"
+                              ).fetchone()[0]
+            self.assertIn("priorita", sql)
+        finally:
+            con.close()
 
 
 if __name__ == "__main__":

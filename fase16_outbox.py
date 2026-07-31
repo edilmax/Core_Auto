@@ -98,6 +98,17 @@ def inizializza_schema(db_path: str) -> None:
             if "priorita" not in colonne:
                 ds.execute(conn, "ALTER TABLE outbox ADD COLUMN "
                                  "priorita INTEGER NOT NULL DEFAULT 1")
+            # ...e l'INDICE di fetch e' cambiato insieme alla colonna. `CREATE INDEX IF NOT
+            # EXISTS` su un nome gia' presente e' un no-op SILENZIOSO: un archivio nato
+            # prima si terrebbe per sempre `(status, next_retry_at, id)` e il dispatcher
+            # ordinerebbe per priorita' senza indice. Si rifa' solo se serve (stesso
+            # rimedio gia' usato in fase184 per `idx_marca_giorno`).
+            riga = ds.execute(conn, "SELECT sql FROM sqlite_master WHERE type='index' "
+                                    "AND name='idx_outbox_due'").fetchone()
+            if riga and riga[0] and "priorita" not in riga[0]:
+                ds.execute(conn, "DROP INDEX idx_outbox_due")
+                ds.execute(conn, "CREATE INDEX IF NOT EXISTS idx_outbox_due "
+                                 "ON outbox(status, priorita, next_retry_at, id)")
 
 
 @dataclass

@@ -62,9 +62,13 @@ class RegistroDAC7:
             return self._mem
         try:
             with open(self._p, encoding="utf-8") as f:
-                return json.load(f) or {}
+                dati = json.load(f)
         except Exception:
             return {}
+        # JSON valido ma NON un oggetto (archivio vecchio, riparazione a mano, bug di una
+        # versione passata): senza questo controllo la prima `d.get(...)` alzava
+        # AttributeError fino in faccia all'utente. Si degrada a vuoto, non si esplode.
+        return dati if isinstance(dati, dict) else {}
 
     def _scrivi(self, d: Dict[str, Dict[str, Any]]) -> None:
         if not self._p:
@@ -84,7 +88,23 @@ class RegistroDAC7:
             logger.warning("RegistroDAC7._scrivi fallita (ISOLATA)", exc_info=True)
 
     def _rec(self, d: Dict[str, Dict[str, Any]], h: str) -> Dict[str, Any]:
-        return d.get(h) or {"pren": 0, "ricavi": 0, "dati": False}
+        """Il record di un host, NORMALIZZATO. Un archivio nato da una versione precedente
+        (o riparato a mano) puo' avere una chiave in meno o un tipo sbagliato.
+        MISURATO il 2026-07-31 sul codice di HEAD, non dedotto: chi esplodeva erano i due
+        SCRITTORI — `registra_prenotazione` (`KeyError: 'pren'` con un record senza quel
+        campo, `ValueError: invalid literal for int()` con `"pren": "tanti"`) e
+        `imposta_dati_fiscali`, che passano dal record grezzo. I tre LETTORI
+        (`stato`/`visibile`/`payout_consentito`) reggevano gia': `valuta_dac7` filtra i tipi.
+        Qui ogni campo assente o non valido ripiega sul valore neutro."""
+        rec = d.get(h)
+        if not isinstance(rec, dict):
+            return {"pren": 0, "ricavi": 0, "dati": False}
+
+        def _n(v):
+            return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else 0
+
+        return {"pren": _n(rec.get("pren")), "ricavi": _n(rec.get("ricavi")),
+                "dati": bool(rec.get("dati"))}
 
     def registra_prenotazione(self, host_id: str, importo_cents: int) -> None:
         d = self._leggi()
