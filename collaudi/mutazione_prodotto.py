@@ -42,6 +42,27 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(REPO)
 
 # (file, testo originale, mutazione, test da eseguire, danno nel mondo reale)
+def classifica_mutante(primo_giro_verde, riverifiche):
+    """UCCISO · SOPRAVVISSUTO · INCERTO — e la terza categoria e' il punto.
+
+    Prima c'erano solo due esiti, e chi moriva *a volte* finiva fra gli UCCISI ("era una
+    flakiness del killer"). Ma un mutante visto solo a volte non dimostra che quel punto sia
+    sorvegliato: dimostra che NON SI SA. Contarlo come ucciso gonfia il numero -- ed e' il
+    numero che dovrebbe dirci la verita' sui test. Meglio un punteggio piu' basso e onesto.
+
+    Non e' teorico: il 2026-07-30 un mutante e' sopravvissuto sulla CI ed e' stato ucciso in
+    locale; l'avevamo archiviato come intoppo del runner. Con questa regola sarebbe rimasto
+    IN SOSPESO -- che era la verita'.
+
+      · primo giro ROSSO           -> UCCISO      (deterministico: i test lo vedono)
+      · verde a TUTTI i giri       -> SOPRAVVISSUTO (buco reale, il job deve diventare rosso)
+      · verde solo a volte         -> INCERTO     (ne' l'uno ne' l'altro: da guardare)
+    """
+    if not primo_giro_verde:
+        return "ucciso"
+    return "sopravvissuto" if all(riverifiche) else "incerto"
+
+
 MUTANTI = [
     # ── I SOLDI ────────────────────────────────────────────────────────────────
     ("fase98_policy_commissione.py",
@@ -332,7 +353,7 @@ if __name__ == "__main__":
     print("accorgerebbero? Un mutante SOPRAVVISSUTO e' un buco nella rete di protezione.")
     print("=" * 90)
 
-    sopravvissuti, uccisi, non_applicabili = [], 0, []
+    sopravvissuti, uccisi, non_applicabili, incerti = [], 0, [], []
     t0 = time.time()
     try:
         for i, (percorso, orig, mut, test, danno) in enumerate(MUTANTI, 1):
@@ -368,13 +389,15 @@ if __name__ == "__main__":
                 for _ in range(2):
                     time.sleep(2)
                     riverifiche.append(esegui(test)[0])
-                if all(riverifiche):
+                esito = classifica_mutante(True, riverifiche)
+                if esito == "sopravvissuto":
                     sopravvissuti.append((percorso, danno, test))
                     print("    ESITO: MUTANTE SOPRAVVISSUTO — i test restano VERDI (3 giri su 3)!")
                 else:
-                    uccisi += 1
-                    print("    ESITO: ucciso alla RI-VERIFICA (primo giro = flaky del killer, "
-                          "non un buco): il mutante viene visto a un giro successivo")
+                    incerti.append((percorso, danno, test))
+                    print("    ESITO: INCERTO — visto solo a volte (%d giri su 3 lo hanno mancato)."
+                          "\n           NON conta come ucciso: quel punto NON e' sorvegliato in "
+                          "modo affidabile." % (1 + sum(1 for x in riverifiche if x)))
             else:
                 uccisi += 1
                 riga = [r for r in uscita.splitlines()
@@ -387,10 +410,20 @@ if __name__ == "__main__":
 
     provati = len(MUTANTI) - len(non_applicabili)
     print("\n" + "=" * 90)
-    print("MUTANTI PROVATI: %d  |  UCCISI: %d  |  SOPRAVVISSUTI: %d  |  %.1f minuti"
-          % (provati, uccisi, len(sopravvissuti), (time.time() - t0) / 60.0))
+    print("MUTANTI PROVATI: %d  |  UCCISI: %d  |  SOPRAVVISSUTI: %d  |  INCERTI: %d  |  %.1f minuti"
+          % (provati, uccisi, len(sopravvissuti), len(incerti), (time.time() - t0) / 60.0))
     if non_applicabili:
         print("non applicabili (il codice e' cambiato): %s" % ", ".join(non_applicabili))
+    if incerti:
+        # NON fanno rosso il job (un intoppo del runner non deve bloccare la produzione) ma
+        # non sono nemmeno UCCISI: quel punto non e' sorvegliato in modo affidabile e va
+        # guardato a mano. Il numero degli uccisi resta cosi' ONESTO.
+        print("\nPUNTI NON SORVEGLIATI IN MODO AFFIDABILE (visti solo a volte — NON contano"
+              " come uccisi):")
+        for percorso, danno, test in incerti:
+            print("  ? %s" % percorso)
+            print("    danno che a volte passa: %s" % danno)
+            print("    test che dovrebbero vederlo SEMPRE: %s" % test)
     if sopravvissuti:
         print("\nBUCHI NELLA RETE DI PROTEZIONE:")
         for percorso, danno, test in sopravvissuti:

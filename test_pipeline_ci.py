@@ -782,5 +782,58 @@ class TestSogliaProvataSulCampo(unittest.TestCase):
                          "il job deve essere rosso" % soglia)
 
 
+class TestRegolaDelMutanteInstabile(unittest.TestCase):
+    """UN MUTANTE UCCISO SOLO A VOLTE NON E' UCCISO: E' IGNOTO.
+
+    Il motore di mutazione e' il giudice dei TEST: rompe il motore di proposito e chiede
+    "i test se ne accorgono?". Ma la sua regola era rovesciata rispetto alla realta': se un
+    mutante sopravviveva al primo giro e moriva a uno dei due successivi, veniva contato
+    fra gli UCCISI ("era una flakiness del killer"). Cosi' il punteggio si GONFIA -- ed e'
+    proprio il numero che dovrebbe dirci la verita' sui test.
+
+    Non e' teorico: il 2026-07-30 un mutante e' sopravvissuto 3 giri su 3 sulla CI ed e'
+    stato ucciso in locale; l'avevamo archiviato come intoppo del runner. Con la regola
+    giusta sarebbe rimasto IN SOSPESO -- che era la verita'.
+
+    Meglio un punteggio piu' BASSO e onesto che uno alto e falso: e' la stessa cosa che
+    vale per i 4.600 test.
+    """
+
+    @staticmethod
+    def _classifica(*a):
+        import importlib.util
+        import os
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "collaudi", "mutazione_prodotto.py")
+        spec = importlib.util.spec_from_file_location("_mut", p)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m.classifica_mutante(*a)
+
+    def test_muore_subito_e_UCCISO(self):
+        """Deterministico: i test lo vedono al primo colpo."""
+        self.assertEqual(self._classifica(False, []), "ucciso")
+
+    def test_sopravvive_a_TUTTI_i_giri_e_un_BUCO(self):
+        """Il job deve diventare rosso: quel punto non e' protetto."""
+        self.assertEqual(self._classifica(True, [True, True]), "sopravvissuto")
+
+    def test_visto_solo_A_VOLTE_e_INCERTO_non_ucciso(self):
+        """LA REGOLA CAMBIATA. Prima questi finivano fra gli UCCISI."""
+        self.assertEqual(self._classifica(True, [False, True]), "incerto")
+        self.assertEqual(self._classifica(True, [True, False]), "incerto")
+        self.assertEqual(self._classifica(True, [False, False]), "incerto")
+
+    def test_il_riepilogo_MOSTRA_gli_incerti(self):
+        """Un dato che non si vede non serve: la riga di riepilogo deve nominarli."""
+        import io
+        import os
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "collaudi", "mutazione_prodotto.py")
+        s = io.open(p, encoding="utf-8", errors="replace").read()
+        self.assertIn("INCERTI:", s, "il riepilogo non mostra gli incerti")
+        self.assertIn("NON contano", s, "non e' dichiarato che non contano come uccisi")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
