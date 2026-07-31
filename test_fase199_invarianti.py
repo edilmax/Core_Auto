@@ -73,6 +73,59 @@ class TestInvariantiDiretti(unittest.TestCase):
                                              "esito_prenotazione": "checkout"}]), [])
 
 
+class TestLaGUARDIADEISOLDIGuardaDavvero(unittest.TestCase):
+    """BUCHI TROVATI DALLA MUTAZIONE il 2026-07-31 su `fase199_invarianti`.
+
+    Questo modulo e' **la guardia delle guardie**: e' lui che impedisce a una prenotazione di
+    confermarsi senza prova firmata e a un importo di diventare negativo. Se non e'
+    sorvegliato, ogni protezione a valle e' un atto di fede.
+
+    Sono stati generati 102 punti di logica sbagliabili e provati i primi 30: 12 sono
+    sopravvissuti, cioe' nessun test si sarebbe accorto del guasto. Qui si chiudono i tre
+    piu' gravi -- gli altri sono equivalenti (un `max` scritto con `z3`, dove `>` e `>=`
+    danno lo stesso numero, e una riga di log).
+    """
+
+    def test_il_controllo_sul_denaro_negativo_riceve_i_DATI_VERI(self):
+        """IL PIU' GRAVE. `verifica_stato` passa `importi or {}` a I4. Rovesciando quell'`or`
+        in `and`, I4 riceve un dizionario VUOTO e controlla il NULLA: la guardia contro il
+        denaro negativo smette di guardare, senza un errore, senza una riga di log.
+
+        Il mutante e' sopravvissuto perche' nessun test chiamava `verifica_stato` con importi
+        negativi: I4 era provato solo da solo, mai attraverso chi lo chiama. E' la REGOLA
+        FERREA 11 -- il difetto sta in CHI CHIAMA -- applicata a una guardia.
+        """
+        esito = verifica_stato(importi={"payout": -1, "incasso": 10})
+        self.assertIn("I4_NEGATIVO", esito,
+                      "un importo NEGATIVO e' passato attraverso verifica_stato senza essere "
+                      "segnalato: la guardia sui soldi ha guardato il vuoto. Esito: %r" % (esito,))
+        self.assertTrue(esito["I4_NEGATIVO"])
+        # e l'altra direzione: con importi sani non deve inventare violazioni
+        self.assertNotIn("I4_NEGATIVO", verifica_stato(importi={"payout": 0, "incasso": 10}))
+
+    def test_un_pagamento_NEGATIVO_viene_respinto(self):
+        """La catena di controllo sui tipi in I2 era attraversata solo da valori sani.
+        Un pagamento negativo e' denaro che esce invece di entrare: va nominato."""
+        viol = i2_bilancio_pagamenti([{"rif": "R1", "totale_dovuto_cents": 100,
+                                       "pagamenti_cents": [50, -30], "stato": "confermata"}])
+        self.assertTrue(viol, "pagamento NEGATIVO accettato senza segnalazione")
+        self.assertIn("negativo", viol[0][1])
+
+    def test_un_pagamento_BOOLEANO_non_passa_per_un_numero(self):
+        """In Python `True` E' un intero: senza il controllo esplicito varrebbe 1 centesimo
+        nato dal nulla. Il mutante che indeboliva quella catena e' sopravvissuto."""
+        viol = i2_bilancio_pagamenti([{"rif": "R2", "totale_dovuto_cents": 100,
+                                       "pagamenti_cents": [True], "stato": "confermata"}])
+        self.assertTrue(viol, "un booleano e' passato per un pagamento valido")
+        self.assertIn("non intero", viol[0][1])
+
+    def test_un_TOTALE_DOVUTO_malformato_viene_respinto(self):
+        for cattivo in (-1, True, "100", None):
+            viol = i2_bilancio_pagamenti([{"rif": "R3", "totale_dovuto_cents": cattivo,
+                                           "pagamenti_cents": [10], "stato": "confermata"}])
+            self.assertTrue(viol, "totale dovuto %r accettato" % (cattivo,))
+
+
 class TestGuardiaPreCommit(unittest.TestCase):
     def test_blocca_doppia_conferma(self):
         esistenti = [_p(1, "A", 0, 5)]
