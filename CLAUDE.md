@@ -44,6 +44,27 @@ automatica fa fallire la suite se i due divergono):
 
 # ⚙️ REGOLA FERREA DI OPERATIVITÀ E PRECISIONE
 
+> ## 📚 QUESTE SONO 14. LE REGOLE SONO **44**.
+> Le altre **30 stanno in `REGISTRO_INGEGNERIA.md`, appendice finale** — ognuna con la
+> **prova**, la **fonte** (studio, benchmark o `file:riga` del nostro codice) e **come si
+> verifica**. Più le **24 uccise** dai revisori ostili **col motivo**: dice cosa NON rifare.
+>
+> **Vengono da due ricerche mirate (77 agenti, ~4 milioni di token, 2026-07-30).** Non sono
+> opinioni: ogni regola ha una prova.
+>
+> **QUI ci sono le 14 che valgono a OGNI lavoro** e si verificano da fuori. Le altre 30
+> servono **quando fai quel tipo di lavoro**, e vanno lette PRIMA di iniziarlo:
+> · stai per **collaudare** o toccare la **mutazione** → leggi l'appendice, sezione mutanti
+>   (mutanti generati vs scelti a mano · «ucciso solo a volte = IGNOTO») ·
+> · stai per **modificare codice esistente** → sezione «prima di modificare, prova che la
+>   modifica manca» (35-65% degli agenti tocca ciò che andava lasciato stare) ·
+> · **sessione lunga o contesto riassunto** → sezione deriva/compattazione ·
+> · stai per **chiudere e dire «fatto»** → sezione prove eseguibili e revisore fresco.
+>
+> ⚠️ Non sono qui per una ragione tecnica precisa: `CLAUDE.md` viene caricato **a ogni
+> sessione**, e allungarlo **peggiora** l'attenzione invece di migliorarla (fenomeno
+> documentato, «context rot»). Un regolamento che nessuno tiene in testa non protegge nulla.
+
 Dettata dal fondatore il **2026-07-30**, dopo una giornata in cui **tre strumenti diversi ci hanno
 rassicurato mentre erano guasti**. Ogni riga qui sotto nasce da un fatto accaduto, non da una
 teoria: dove c'è un esempio, è successo davvero.
