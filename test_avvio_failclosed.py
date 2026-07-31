@@ -149,6 +149,30 @@ class TestSegretoDiFirmaDebole(_BaseAvvio):
         os.environ["CASAVIP_SEGRETO"] = "x"
         self._rifiuta("troppo corto")
 
+    def test_il_CONFINE_dei_16_byte_e_accettato(self):
+        """IL BUCO TROVATO DAL GENERATORE DI MUTANTI il 2026-07-31.
+
+        La soglia e' `len(b) >= 16`. Il mutante che la stringe a `> 16` e' SOPRAVVISSUTO:
+        nessun test asserisce che una chiave di ESATTAMENTE 16 byte sia accettata. Il caso
+        conta perche' 16 byte e' proprio il valore di serie che usano i test e le guide --
+        cioe' il piu' probabile in un `.env` scritto a mano. Con la soglia stretta il
+        prodotto si rifiuterebbe di partire su una chiave legittima: un falso allarme che
+        blocca il deploy.
+
+        Perche' nessuno se ne accorgeva: i test piu' vecchi asseriscono solo il CODICE
+        d'uscita 2, e col mutante l'uscita restava 2 -- ma per il cancello sbagliato.
+        Codice giusto, ragione sbagliata: e' la firma di una guardia che non guarda.
+        """
+        os.environ["CASAVIP_SEGRETO"] = "00112233445566778899aabbccddeeff"   # 16 byte esatti
+        chiave = self._main()._segreto()
+        self.assertEqual(16, len(chiave),
+                         "una chiave di 16 byte esatti deve essere ACCETTATA cosi' com'e'")
+
+    def test_un_byte_SOTTO_il_confine_viene_rifiutato(self):
+        """L'altra direzione del confine: 15 byte non bastano."""
+        os.environ["CASAVIP_SEGRETO"] = "0011223344556677889900112233"      # 14 byte
+        self._rifiuta("troppo corto")
+
     def test_una_frase_segreta_LUNGA_resta_lecita(self):
         """Non e' un test di comodo: dimostra che il rifiuto guarda la FORZA, non il formato.
         Una passphrase non esadecimale di 16+ byte e' legittima e deve passare."""
