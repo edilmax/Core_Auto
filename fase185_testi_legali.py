@@ -43,7 +43,7 @@ LINGUA_CHE_FA_FEDE = "it"
 LINGUA_RIPIEGO = "en"
 
 TERMINI_VERSIONE = "2026-07-21"
-PRIVACY_VERSIONE = "2026-07-21"
+PRIVACY_VERSIONE = "2026-07-31"   # aggiunta la dichiarazione sull'impronta anti-riciclo
 
 # Dati del titolare: UNA sola volta, riusati in tutte le lingue. Se cambiano, cambiano
 # ovunque insieme — impossibile che una traduzione resti con l'indirizzo vecchio.
@@ -716,6 +716,13 @@ In diesem Fall erfolgt die Uebermittlung auf Grundlage von Angemessenheitsbeschl
 oder von der Europaeischen Kommission genehmigten Standardvertragsklauseln.
 
 7. IHRE RECHTE
+Wenn wir Ihr Konto loeschen, bewahren wir ausschliesslich zur Missbrauchsverhinderung und
+auf Grundlage unseres berechtigten Interesses einen UNUMKEHRBAREN FINGERABDRUCK (nicht die
+Daten) von E-Mail, Telefon, Steuernummer und Objektkennzeichen zusammen mit dem Datum der
+ersten Registrierung auf. Aus dem Fingerabdruck lassen sich Ihre Daten nicht
+wiederherstellen und Sie koennen damit nicht kontaktiert werden: er verhindert lediglich,
+dass die Aktion fuer neue Gastgeber durch Loeschen und Neuanmeldung mehrfach in Anspruch
+genommen wird. Widerspruch an {EMAIL}.
 Sie koennen jederzeit verlangen: Auskunft ueber Ihre Daten, Berichtigung, Loeschung,
 Einschraenkung der Verarbeitung, Datenuebertragbarkeit, sowie der auf berechtigtem
 Interesse beruhenden Verarbeitung widersprechen.
@@ -789,6 +796,12 @@ transferencia assenta em decisoes de adequacao ou em clausulas contratuais-tipo 
 pela Comissao Europeia.
 
 7. OS SEUS DIREITOS
+Quando eliminamos a sua conta conservamos, apenas para prevenir abusos e com base no nosso
+interesse legitimo, uma IMPRESSAO IRREVERSIVEL (nao os dados) de email, telefone, numero
+fiscal e codigo de identificacao do alojamento, juntamente com a data do primeiro registo.
+A impressao nao permite recuperar os seus dados nem contacta-lo: impede apenas que a
+promocao para novos Anfitrioes seja obtida mais do que uma vez cancelando e voltando a
+registar-se. Pode opor-se escrevendo para {EMAIL}.
 A qualquer momento pode solicitar: acesso aos seus dados, retificacao, apagamento,
 limitacao do tratamento, portabilidade, e opor-se ao tratamento baseado no interesse
 legitimo.
@@ -855,6 +868,11 @@ versao ITALIANA.
 または欧州委員会が承認した標準契約条項に基づいて行われます。
 
 7. お客様の権利
+アカウントを削除する際、不正利用の防止のみを目的とし、当社の正当な利益に基づき、メール
+アドレス・電話番号・納税者番号・物件識別コードの「不可逆な指紋」（データそのものではあり
+ません）を、初回登録日とともに保存します。指紋からお客様のデータを復元することも、ご連絡
+することもできません。新規ホスト向けの優遇が、退会と再登録によって繰り返し取得されるのを
+防ぐためだけに用います。異議は {EMAIL} までご連絡ください。
 いつでも次を請求できます：データへのアクセス、訂正、削除、処理の制限、データポータビリティ、
 および正当な利益に基づく処理への異議。
 同意に基づく処理については同意を撤回できます。撤回前の処理の適法性には影響しません。
@@ -913,6 +931,10 @@ versao ITALIANA.
 条款进行。
 
 7. 您的权利
+在删除您的账户时，我们仅出于防止滥用的目的、基于我们的正当利益，保留电子邮箱、电话、税号
+及房源识别码的「不可逆指纹」（并非数据本身），以及首次注册日期。该指纹无法还原为您的数据，
+也无法用于联系您：其唯一用途是防止通过注销并重新注册而多次获得面向新房东的优惠。如需反对，
+请写信至 {EMAIL}。
 您可随时要求：访问您的数据、更正、删除、限制处理、数据可携，并可反对基于正当利益的处理。
 在处理基于同意时，您可撤回同意，且不影响撤回前处理的合法性。
 请联系 {EMAIL}。您还有权向监管机关投诉。
@@ -980,6 +1002,12 @@ il trasferimento avviene sulla base di decisioni di adeguatezza o di clausole co
 standard approvate dalla Commissione Europea.
 
 7. I TUOI DIRITTI
+Quando cancelliamo il tuo account conserviamo, per la sola prevenzione degli abusi e sulla
+base del nostro legittimo interesse, un'IMPRONTA IRREVERSIBILE (non i dati) di email,
+telefono, codice fiscale/P.IVA e codice identificativo della struttura, insieme alla data
+di prima iscrizione. Dall'impronta non e' possibile risalire ai tuoi dati ne' contattarti:
+serve solo a impedire che la promozione riservata ai nuovi Host venga ottenuta piu' volte
+cancellandosi e riscrivendosi. Puoi opporti scrivendo a {EMAIL}.
 Puoi chiedere in ogni momento: accesso ai tuoi dati, rettifica, cancellazione, limitazione
 del trattamento, portabilita', e opporti al trattamento fondato sul legittimo interesse.
 Puoi revocare il consenso quando il trattamento si fonda su di esso, senza pregiudicare la
@@ -1050,6 +1078,12 @@ transfer takes place on the basis of adequacy decisions or standard contractual 
 approved by the European Commission.
 
 7. YOUR RIGHTS
+When we delete your account we keep, solely to prevent abuse and on the basis of our
+legitimate interest, an IRREVERSIBLE FINGERPRINT (not the data) of email, phone, tax
+number and property identification code, together with the date of first registration.
+The fingerprint cannot be reversed to your data and cannot be used to contact you: it
+only prevents the new-Host promotion from being obtained more than once by deleting and
+re-registering. You may object by writing to {EMAIL}.
 At any time you may request: access to your data, rectification, erasure, restriction of
 processing, portability, and object to processing based on legitimate interest.
 You may withdraw consent where processing is based on it, without affecting the lawfulness
@@ -1121,6 +1155,12 @@ transferencia se basa en decisiones de adecuacion o en clausulas contractuales t
 aprobadas por la Comision Europea.
 
 7. TUS DERECHOS
+Cuando eliminamos tu cuenta conservamos, unicamente para prevenir abusos y sobre la base
+de nuestro interes legitimo, una HUELLA IRREVERSIBLE (no los datos) de email, telefono,
+numero fiscal y codigo identificativo del alojamiento, junto con la fecha de primer
+registro. La huella no permite recuperar tus datos ni contactarte: solo impide obtener
+mas de una vez la promocion para nuevos Anfitriones cancelandose y volviendo a
+registrarse. Puedes oponerte escribiendo a {EMAIL}.
 En cualquier momento puedes solicitar: acceso a tus datos, rectificacion, supresion,
 limitacion del tratamiento, portabilidad, y oponerte al tratamiento basado en el interes
 legitimo.
@@ -1193,6 +1233,13 @@ transfert repose alors sur des decisions d'adequation ou des clauses contractuel
 approuvees par la Commission europeenne.
 
 7. VOS DROITS
+Lorsque nous supprimons votre compte, nous conservons, uniquement pour prevenir les abus
+et sur la base de notre interet legitime, une EMPREINTE IRREVERSIBLE (et non les donnees)
+de l'e-mail, du telephone, du numero fiscal et du code d'identification du logement, avec
+la date de premiere inscription. L'empreinte ne permet ni de retrouver vos donnees ni de
+vous contacter : elle empeche seulement d'obtenir plusieurs fois la promotion reservee aux
+nouveaux Hotes en se desinscrivant puis en se reinscrivant. Vous pouvez vous y opposer en
+ecrivant a {EMAIL}.
 A tout moment vous pouvez demander : l'acces a vos donnees, leur rectification, leur
 effacement, la limitation du traitement, la portabilite, et vous opposer au traitement
 fonde sur l'interet legitime.

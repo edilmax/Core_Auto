@@ -100,6 +100,14 @@ class FirmaQuote:
     def _mac(self, msg: bytes) -> str:
         return hmac.new(self._segreto, msg, hashlib.sha256).hexdigest()
 
+    def impronta(self, valore: Any) -> str:
+        """IMPRONTA IRREVERSIBILE e stabile di un valore (HMAC con la nostra chiave).
+        Serve a RICONOSCERE un dato senza CONSERVARLO: dall'impronta non si risale al
+        valore, e senza la chiave non se ne puo' nemmeno calcolare una uguale.
+        Normalizza (spazi, maiuscole) perche' 'Mario@X.IT ' e 'mario@x.it' sono la stessa
+        persona."""
+        return self._mac(str(valore or "").strip().lower().encode("utf-8"))
+
     def pin_checkin(self, riferimento: Any) -> str:
         """PIN a 4 cifre per il check-in: deterministico (stesso per cliente e host) ma NON
         indovinabile (HMAC del riferimento col segreto di sistema). Come il PIN di Booking."""

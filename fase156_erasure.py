@@ -164,6 +164,22 @@ def cancella_attivita_host(sistema: Any, host_id: Any, *, forza: bool = False) -
 
     slugs = _slug_host(cat, host_id)                       # PRIMA di cancellare il catalogo
 
+    # ANTI-RICICLO DELLA PROMOZIONE: le impronte si depositano ORA, finche' i dati esistono
+    # ancora. Dopo il DELETE non c'e' piu' niente da impastare e una ri-registrazione
+    # otterrebbe altri 90 giorni a commissione zero. Si conservano SOLO impronte
+    # irreversibili (mai i dati): email, telefono, codice fiscale, P.IVA e il CIN degli
+    # annunci -- CIN e codice fiscale li rilascia lo Stato, non si cambiano con una mail nuova.
+    if reg is not None and hasattr(reg, "deposita_impronte"):
+        cin = []
+        for s in slugs:
+            try:
+                d = cat.dettaglio(s) if (cat is not None and hasattr(cat, "dettaglio")) else None
+                if isinstance(d, dict) and d.get("cin"):
+                    cin.append(str(d["cin"]))
+            except Exception:
+                pass
+        rep["impronte_depositate"] = _safe(lambda h: reg.deposita_impronte(h, extra=cin), host_id)
+
     # --- cancella in ordine sicuro ---
     if inv is not None and hasattr(inv, "cancella_alloggio"):
         rep["cancellati"]["inventario"] = sum(_safe(inv.cancella_alloggio, s) for s in slugs)

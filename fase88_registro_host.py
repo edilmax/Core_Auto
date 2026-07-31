@@ -132,8 +132,79 @@ class RegistroHost:
                         con.execute("ALTER TABLE host ADD COLUMN %s TEXT NOT NULL DEFAULT ''" % col)
                     except sqlite3.OperationalError:
                         pass
+                # ANTI-RICICLO DELLA PROMOZIONE (2026-07-31). La rampa 0%/8%/10% parte da
+                # `creato_ts`. La cancellazione totale (fase156) fa DELETE e non lascia
+                # tracce: ri-registrandosi si otterrebbero altri 90 giorni a commissione
+                # zero. Qui restano SOLO IMPRONTE IRREVERSIBILI (HMAC con la nostra chiave),
+                # MAI i dati: dall'impronta non si risale a niente e non si puo' contattare
+                # nessuno. Serve solo a RICONOSCERE che quella struttura e' gia' stata da noi
+                # e a far ripartire l'anzianita' dalla data VERA.
+                con.execute("""CREATE TABLE IF NOT EXISTS host_impronte (
+                    impronta TEXT PRIMARY KEY,
+                    creato_ts INTEGER NOT NULL,
+                    ts INTEGER NOT NULL)""")
         finally:
             con.close()
+
+    # ── ANTI-RICICLO DELLA PROMOZIONE ────────────────────────────────────────────────
+    def _impronte_di(self, riga: Any, extra: Any = ()) -> list:
+        """Le impronte identificanti di un host. Email e telefono si cambiano; il CODICE
+        FISCALE e il CIN della struttura no -- quelli li rilascia lo Stato, non l'host."""
+        valori = []
+        for campo in ("email", "telefono", "codice_fiscale", "partita_iva"):
+            try:
+                v = riga[campo] if campo in riga.keys() else ""
+            except Exception:
+                v = ""
+            if isinstance(v, str) and v.strip():
+                valori.append(v)
+        for v in (extra or ()):
+            if isinstance(v, str) and v.strip():
+                valori.append(v)
+        return [self._firma.impronta(v) for v in valori]
+
+    def deposita_impronte(self, host_id: Any, *, extra: Any = ()) -> int:
+        """Da chiamare PRIMA di cancellare un host (fase156): conserva le sue impronte con
+        la DATA DI PRIMA ISCRIZIONE, cosi' una ri-registrazione non ricicla la promozione.
+        `extra` = identificativi che non stanno nel registro (es. il CIN dell'annuncio).
+        Ritorna quante impronte sono state depositate. Idempotente."""
+        if not (isinstance(host_id, str) and host_id):
+            return 0
+        con = self._apri()
+        try:
+            r = con.execute("SELECT * FROM host WHERE host_id=?", (host_id,)).fetchone()
+            if r is None:
+                return 0
+            # se l'host era GIA' un ritorno, si conserva la data ORIGINARIA, non la sua
+            nato = int(r["creato_ts"])
+            impronte = self._impronte_di(r, extra)
+            with con:
+                for imp in impronte:
+                    con.execute("INSERT OR IGNORE INTO host_impronte (impronta, creato_ts, ts) "
+                                "VALUES (?,?,?)", (imp, nato, self._now()))
+            return len(impronte)
+        except Exception:
+            logger.error("deposito impronte host FALLITO per %s: una ri-registrazione "
+                         "riciclerebbe la promozione senza che nessuno lo sappia",
+                         host_id, exc_info=True)
+            return 0
+        finally:
+            con.close()
+
+    def _prima_iscrizione(self, con: Any, valori: Any) -> Optional[int]:
+        """La data di PRIMA iscrizione se una di queste impronte l'abbiamo gia' vista.
+        None = host davvero nuovo (e allora i 90 giorni gli spettano: mai negarli per
+        sbaglio, sarebbe rubargli dei soldi)."""
+        piu_vecchia = None
+        for v in valori:
+            if not (isinstance(v, str) and v.strip()):
+                continue
+            r = con.execute("SELECT creato_ts FROM host_impronte WHERE impronta=?",
+                            (self._firma.impronta(v),)).fetchone()
+            if r is not None:
+                t = int(r["creato_ts"])
+                piu_vecchia = t if piu_vecchia is None else min(piu_vecchia, t)
+        return piu_vecchia
 
     def _token(self, host_id: str, email: str) -> str:
         return self._firma.codifica({"tipo": "host_token", "host_id": host_id,
@@ -257,6 +328,10 @@ class RegistroHost:
             if esiste is not None:
                 con.execute("COMMIT")
                 return EsitoHost(False, errore="email_gia_registrata")
+            # ANTI-RICICLO: se queste impronte le abbiamo gia' viste (host cancellato che
+            # torna), l'anzianita' riparte dalla PRIMA iscrizione, non da oggi -> la
+            # promozione 0% dei primi 90 giorni non si ricicla. Host davvero nuovo -> oggi.
+            nato = self._prima_iscrizione(con, (email_n, telefono)) or self._now()
             con.execute(
                 "INSERT INTO host (host_id, email, salt, pw_hash, ragione_sociale, telefono, "
                 "line_token, wechat_webhook, termini_versione, termini_ts, stato, creato_ts) "
@@ -264,7 +339,7 @@ class RegistroHost:
                 (host_id, email_n, salt.hex(), pw_hash, str(ragione_sociale or ""),
                  str(telefono or "").strip(), str(line_token or "").strip(),
                  str(wechat_webhook or "").strip(), str(versione_termini),
-                 self._now(), self._now()))
+                 self._now(), nato))
             con.execute("COMMIT")
             return EsitoHost(True, host_id=host_id, token=self._token(host_id, email_n))
         except Exception:

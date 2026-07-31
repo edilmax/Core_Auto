@@ -105,5 +105,107 @@ class TestToken(unittest.TestCase):
         self.assertIsNone(altro.verifica_token(e.token))       # firma di un altro segreto
 
 
+class TestPromozioneNonSiRicicla(unittest.TestCase):
+    """LA PROMOZIONE 0% DEI PRIMI 90 GIORNI NON SI RICICLA.
+
+    La commissione a rampa (0% primi 90 giorni · 8% fino a un anno · 10% a regime) parte da
+    `creato_ts`. La cancellazione totale (fase156) fa DELETE e non lasciava tracce: bastava
+    farsi cancellare e ri-registrarsi per avere altri 90 giorni a commissione zero, e
+    nessuno se ne sarebbe accorto.
+
+    Ora, PRIMA di cancellare, restano SOLO IMPRONTE IRREVERSIBILI (HMAC con la nostra
+    chiave) di email, telefono, codice fiscale, P.IVA e CIN degli annunci -- MAI i dati.
+    Dall'impronta non si risale a niente e non si puo' contattare nessuno; serve solo a
+    riconoscere che quella struttura e' gia' stata da noi.
+
+    Email e telefono si cambiano in dieci secondi. CODICE FISCALE e CIN no: quelli li
+    rilascia lo Stato. Per questo sono le chiavi che contano davvero.
+
+    ⚠️ E la direzione OPPOSTA vale quanto l'altra: un host DAVVERO NUOVO deve avere i suoi
+    90 giorni. Riconoscerlo per sbaglio significherebbe RUBARGLI dei soldi -- stesso peso
+    di un falso allarme.
+    """
+
+    def setUp(self):
+        self.reg = crea_registro_host(":memory:", SEG)
+
+    def _nato(self, host_id):
+        """`info_host` non espone `creato_ts`: si legge qui, senza aggiungere un metodo alla
+        produzione solo per rendere provabile il test."""
+        con = self.reg._apri()
+        try:
+            r = con.execute("SELECT creato_ts FROM host WHERE host_id=?", (host_id,)).fetchone()
+        finally:
+            con.close()
+        self.assertIsNotNone(r, "host %s non trovato" % host_id)
+        return int(r[0])
+
+    def _invecchia(self, host_id, giorni):
+        """Sposta indietro la data d'iscrizione. Si fa QUI, con una UPDATE nel test: non si
+        aggiunge un metodo alla produzione solo per rendere provabile un test."""
+        con = self.reg._apri()
+        try:
+            with con:
+                con.execute("UPDATE host SET creato_ts=creato_ts-? WHERE host_id=?",
+                            (int(giorni) * 86400, host_id))
+        finally:
+            con.close()
+
+    def test_stessa_email_dopo_la_cancellazione_NON_azzera_l_anzianita(self):
+        e1 = self.reg.registra("furbo@x.it", "passwordlunga", accetta_termini=True,
+                               telefono="+39 333 1234567")
+        self._invecchia(e1.host_id, 200)                 # host di 200 giorni
+        vecchio = self._nato(e1.host_id)
+
+        self.assertGreater(self.reg.deposita_impronte(e1.host_id), 0, "impronte non depositate")
+        self.reg.cancella_host(e1.host_id)
+
+        e2 = self.reg.registra("furbo@x.it", "passwordlunga", accetta_termini=True)
+        self.assertTrue(e2.ok, e2.errore)
+        self.assertEqual(self._nato(e2.host_id), vecchio,
+                         "la promozione si e' riciclata: l'anzianita' e' ripartita da zero")
+
+    def test_email_NUOVA_ma_stesso_telefono_viene_riconosciuto(self):
+        e1 = self.reg.registra("uno@x.it", "passwordlunga", accetta_termini=True,
+                               telefono="+39 333 9999999")
+        self._invecchia(e1.host_id, 200)
+        vecchio = self._nato(e1.host_id)
+        self.reg.deposita_impronte(e1.host_id)
+        self.reg.cancella_host(e1.host_id)
+
+        e2 = self.reg.registra("due@x.it", "passwordlunga", accetta_termini=True,
+                               telefono="+39 333 9999999")      # email nuova, stesso numero
+        self.assertEqual(self._nato(e2.host_id), vecchio,
+                         "cambiando solo l'email la promozione si e' riciclata")
+
+    def test_un_host_DAVVERO_NUOVO_ha_i_suoi_90_giorni(self):
+        """Prova di rimozione: nessun falso riconoscimento, o gli rubiamo la promozione."""
+        e1 = self.reg.registra("vecchio@x.it", "passwordlunga", accetta_termini=True,
+                               telefono="+39 333 1111111")
+        self.reg.deposita_impronte(e1.host_id)
+        self.reg.cancella_host(e1.host_id)
+
+        import time as _t
+        e2 = self.reg.registra("nuovo@x.it", "passwordlunga", accetta_termini=True,
+                               telefono="+39 333 2222222")      # nessun legame col primo
+        self.assertGreaterEqual(self._nato(e2.host_id), int(_t.time()) - 5,
+                                "a un host NUOVO abbiamo rubato i 90 giorni di promozione")
+
+    def test_le_impronte_non_contengono_i_dati(self):
+        """Si conservano IMPRONTE, non dati: nella tabella non dev'esserci nulla di leggibile."""
+        e1 = self.reg.registra("chiaro@x.it", "passwordlunga", accetta_termini=True,
+                               telefono="+39 333 4444444")
+        self.reg.deposita_impronte(e1.host_id)
+        con = self.reg._apri()
+        try:
+            righe = con.execute("SELECT impronta FROM host_impronte").fetchall()
+        finally:
+            con.close()
+        tutto = " ".join(str(r[0]) for r in righe)
+        self.assertGreater(len(righe), 0, "nessuna impronta depositata")
+        self.assertNotIn("chiaro@x.it", tutto, "l'email e' conservata IN CHIARO")
+        self.assertNotIn("4444444", tutto, "il telefono e' conservato IN CHIARO")
+
+
 if __name__ == "__main__":
     unittest.main()
