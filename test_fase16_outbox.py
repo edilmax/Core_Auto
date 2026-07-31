@@ -486,21 +486,49 @@ class TestMigrazioneRIFALIndice(unittest.TestCase):
 
     def test_archivio_GIA_GIUSTO_non_viene_ricostruito_ogni_volta(self):
         """L'altra direzione: la riparazione non deve diventare un lavoro a ogni avvio.
-        Si guarda il numero di sequenza interno dell'indice: se cambia, e' stato rifatto."""
+
+        ⚠️ QUESTA GUARDIA ERA UN ORNAMENTO, e l'ha scoperto il generatore di mutanti il
+        2026-07-31, poche ore dopo che l'avevo scritta. Guardava `rootpage`, cioe' la pagina
+        interna dell'indice -- ma sqlite RIUSA la stessa pagina dopo un DROP+CREATE
+        (misurato: 3 prima, 3 dopo). Quindi la ricostruzione poteva avvenire a ogni avvio e
+        il test restava verde: non poteva vedere niente. Infatti il mutante che rovescia
+        l'`and` in `or` (facendo ricostruire SEMPRE) e' sopravvissuto.
+
+        Ora l'osservabile e' `PRAGMA schema_version`: sqlite lo incrementa a OGNI comando
+        che cambia lo schema, e resta fermo se non si tocca nulla (misurato: 2 -> 4 su
+        DROP+CREATE, poi fermo). Una modifica dello schema non puo' piu' passare inosservata.
+        """
         p = self._archivio_vecchio()
-        ob.inizializza_schema(p)
+        ob.inizializza_schema(p)                       # prima chiamata: RIPARA (giusto)
         con = sqlite3.connect(p)
-        prima = con.execute("SELECT rootpage FROM sqlite_master WHERE name='idx_outbox_due'"
-                            ).fetchone()[0]
+        prima = con.execute("PRAGMA schema_version").fetchone()[0]
+        con.close()
+        ob.inizializza_schema(p)                       # seconda: NON deve toccare nulla
+        con = sqlite3.connect(p)
+        try:
+            dopo = con.execute("PRAGMA schema_version").fetchone()[0]
+            self.assertEqual(prima, dopo,
+                             "lo schema e' stato toccato di nuovo su un archivio GIA' "
+                             "GIUSTO (schema_version %s -> %s): l'indice viene distrutto e "
+                             "ricostruito a ogni avvio, e su una coda grande e' un fermo"
+                             % (prima, dopo))
+        finally:
+            con.close()
+
+    def test_la_riparazione_AVVIENE_davvero_la_prima_volta(self):
+        """L'altra meta' della stessa moneta: se il nuovo osservabile dicesse sempre
+        «fermo», sarebbe cieco al contrario. Sull'archivio vecchio lo schema DEVE cambiare."""
+        p = self._archivio_vecchio()
+        con = sqlite3.connect(p)
+        prima = con.execute("PRAGMA schema_version").fetchone()[0]
         con.close()
         ob.inizializza_schema(p)
         con = sqlite3.connect(p)
         try:
-            dopo = con.execute("SELECT rootpage FROM sqlite_master WHERE name='idx_outbox_due'"
-                               ).fetchone()[0]
-            self.assertEqual(prima, dopo,
-                             "l'indice viene DISTRUTTO E RICOSTRUITO a ogni inizializzazione: "
-                             "su una coda grande e' un fermo a ogni avvio")
+            dopo = con.execute("PRAGMA schema_version").fetchone()[0]
+            self.assertNotEqual(prima, dopo,
+                                "su un archivio PRE-fase29 lo schema non e' stato toccato: "
+                                "la migrazione non e' avvenuta")
         finally:
             con.close()
 
