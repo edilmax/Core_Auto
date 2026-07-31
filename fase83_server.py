@@ -7355,7 +7355,15 @@ class RouterHTTP:
             used = int(res.get("scontato_cents", 0)) if isinstance(res, dict) else 0
             if used > 0:
                 try:
-                    pd.aumenta_payout(ref, used)     # commissione ridotta -> host incassa di più
+                    # ATTENZIONE al valore di ritorno: `aumenta_payout` fa un UPDATE e torna
+                    # False (SENZA sollevare) se non esiste una riga payout per questa
+                    # prenotazione -> il credito sarebbe gia' bruciato e l'aumento mai
+                    # avvenuto, in SILENZIO. E' il caso piu' probabile: la riga la crea un
+                    # passo precedente che a sua volta e' isolato. Trovato dal QUINTO LIBRO
+                    # (riconciliazione credito<->payout) il 2026-07-31.
+                    if not pd.aumenta_payout(ref, used):
+                        raise RuntimeError("aumenta_payout non ha aggiornato nessuna riga "
+                                           "(payout inesistente per %s)" % ref)
                 except Exception:
                     # I due passi NON sono atomici: il credito e' gia' stato bruciato sopra.
                     # Se fallisce qui, l'host paga la commissione PIENA e ha perso il credito

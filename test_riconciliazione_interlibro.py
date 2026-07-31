@@ -258,5 +258,130 @@ class TestRiconciliazioneInterlibro(unittest.TestCase):
                          "payout deve essere sanato a 'maturato' dal retry")
 
 
+class TestQuintoLibroCredito(unittest.TestCase):
+    """IL QUINTO LIBRO — il credito degli host non era riconciliato con nessuno.
+
+    La riconciliazione qui sopra confronta QUATTRO libri: giornale (177), payout (131),
+    escrow (160), tassa (147). Ma i libri che muovono denaro sono CINQUE: manca il
+    CREDITO REFERRAL (76), quello che l'host si guadagna portando altri host e che si
+    scala dalla sua commissione.
+
+    Ed e' esattamente dove stava il difetto peggiore del 2026-07-30: il credito veniva
+    scalato e COMMITTATO, poi l'aumento del payout falliva, e il conteggio quadrava lo
+    stesso perche' quel libro non lo guardava nessuno. L'host perdeva i suoi euro in
+    silenzio.
+
+    L'IDENTITA' (I-H):  credito scalato dal libro 76  ==  aumento del payout
+    Se differiscono, un centesimo e' sparito fra i due libri.
+
+    E la REGOLA DEL GUASTO, che e' la lezione della giornata:
+        dopo un guasto, O I CONTI QUADRANO LO STESSO, O LA DISCREPANZA E' DICHIARATA.
+        Mai in silenzio.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._orig = _stripe.ProviderStripe._fetch_reale
+        _stripe.ProviderStripe._fetch_reale = staticmethod(_fake)
+
+    @classmethod
+    def tearDownClass(cls):
+        _stripe.ProviderStripe._fetch_reale = cls._orig
+
+    def _build(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
+        sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"S" * 32, con_registrazione_host=True,
+            db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db", db_registro_host=f"{d}/r.db",
+            db_accettazioni=f"{d}/a.db", db_pendenti=f"{d}/p.db", db_payout=f"{d}/po.db",
+            db_garanzia=f"{d}/g.db", db_finanza=f"{d}/f.db", db_tassa_comunale=f"{d}/t.db",
+            db_viral=f"{d}/v.db",                      # <- IL QUINTO LIBRO, prima assente
+            commissione_bps=1500, psp_bps=300,
+            stripe_secret_key="sk", stripe_webhook_secret=WH,
+            stripe_success_url="https://x/ok", stripe_cancel_url="https://x/no"))
+        r = crea_router(sis, host_key="hk", admin_key="ak", base_url="https://b.com")
+        self.assertIsNotNone(getattr(sis, "viral", None), "il libro dei crediti dev'essere attivo")
+        return sis, r
+
+    def _payout_di(self, sis, host):
+        rie = sis.payout.riepilogo(host) or {}
+        return sum(int(v.get("maturato", 0)) for v in rie.values() if isinstance(v, dict))
+
+    def _mario_col_credito(self, sis):
+        codice = sis.viral.genera_codice("mario")
+        sis.viral.registra_referee(codice, "lucia")
+        sis.viral.qualifica_referee("lucia", premio_cents=4000)     # Mario ha il premio
+        c = sis.viral.credito_disponibile("mario")
+        self.assertGreater(c, 0, "setup: Mario deve avere credito")
+        return c
+
+    def test_IH_il_credito_scalato_e_UGUALE_allo_sconto_applicato(self):
+        sis, r = self._build()
+        credito_prima = self._mario_col_credito(sis)
+        # come nel flusso vero: la riga del bonifico esiste PRIMA che il credito si scali
+        sis.payout.registra_maturato("PREN-IH", "mario", 85000, "EUR")
+
+        payout_prima = self._payout_di(sis, "mario")
+        r._applica_credito_host("PREN-IH", "mario", 10000)
+        credito_dopo = sis.viral.credito_disponibile("mario")
+        payout_dopo = self._payout_di(sis, "mario")
+
+        scalato = credito_prima - credito_dopo
+        applicato = payout_dopo - payout_prima
+        self.assertGreater(scalato, 0, "setup: il credito doveva essere usato")
+        self.assertEqual(scalato, applicato,
+                         "I-H VIOLATA: dal credito sono spariti %d cent ma al payout ne sono "
+                         "arrivati %d -> %d cent svaniti fra i due libri"
+                         % (scalato, applicato, scalato - applicato))
+
+    def test_SENZA_riga_payout_il_credito_non_sparisce_in_SILENZIO(self):
+        """IL CASO TROVATO DAL QUINTO LIBRO (2026-07-31), il piu' insidioso di tutti.
+
+        `aumenta_payout` fa un UPDATE e torna **False SENZA sollevare** se non esiste una
+        riga payout per quella prenotazione. Il chiamante ignorava il valore di ritorno:
+        credito BRUCIATO, aumento MAI avvenuto, nessuna eccezione, nessun errore nel
+        registro. Silenzio totale -- peggio del caso con l'eccezione, e piu' probabile:
+        la riga payout la crea un passo precedente che a sua volta e' isolato.
+
+        Non e' un caso di laboratorio: e' bastato eseguire l'identita' I-H per inciamparci.
+        VISTO ROSSO: prima non usciva NESSUN log di livello ERROR.
+        """
+        sis, r = self._build()
+        credito_prima = self._mario_col_credito(sis)
+        # NESSUNA riga payout per questa prenotazione (il passo precedente e' fallito)
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            r._applica_credito_host("PREN-ORFANA", "mario", 10000)
+        scalato = credito_prima - sis.viral.credito_disponibile("mario")
+        self.assertGreater(scalato, 0, "il credito e' stato bruciato: e' il caso da dichiarare")
+        unito = " ".join(reg.output)
+        self.assertIn("mario", unito, "non dice DI CHI e' il credito perso: %r" % (reg.output,))
+        self.assertIn(str(scalato), unito,
+                      "non dice QUANTI cent sono spariti (%d): %r" % (scalato, reg.output))
+
+    def test_col_GUASTO_la_discrepanza_esiste_ma_e_DICHIARATA(self):
+        """La regola: dopo un guasto o i conti quadrano, o si sa esattamente di quanto
+        NON quadrano e per chi. Il silenzio non e' ammesso."""
+        import logging
+        sis, r = self._build()
+        credito_prima = self._mario_col_credito(sis)
+        sis.payout.registra_maturato("PREN-KO", "mario", 85000, "EUR")
+
+        class _PayoutRotto:
+            def __init__(self, vero): self._v = vero
+            def __getattr__(self, n): return getattr(self._v, n)
+            def aumenta_payout(self, *a, **k): raise RuntimeError("payout non scrivibile")
+        sis.payout = _PayoutRotto(sis.payout)
+
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            r._applica_credito_host("PREN-KO", "mario", 10000)
+        scalato = credito_prima - sis.viral.credito_disponibile("mario")
+        self.assertGreater(scalato, 0, "il credito e' stato bruciato: e' il caso che ci interessa")
+        unito = " ".join(reg.output)
+        self.assertIn("mario", unito, "la discrepanza non dice DI CHI e': %r" % (reg.output,))
+        self.assertIn(str(scalato), unito,
+                      "la discrepanza non dice DI QUANTO e' (%d cent): %r" % (scalato, reg.output))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
