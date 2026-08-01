@@ -233,6 +233,72 @@ class TestAuditorDB(unittest.TestCase):
         from fase199_invarianti import scansiona_db
         self.assertEqual(scansiona_db("/dir/che/non/esiste/xyz")["violazioni"], {})
 
+    def test_un_DB_ILLEGGIBILE_grida_dicendo_PERCHE_e_non_ferma_la_scansione(self):
+        """⛔ UNA FALSA EQUIVALENZA CORRETTA (2026-08-01).
+
+        Il motore di mutazione aveva in elenco questo punto come «equivalente», con la
+        motivazione: *«cambia solo quanto dettaglio finisce nel log, nessun comportamento
+        osservabile muta»*. **Era falso**, ed e' il tipo di errore piu' pericoloso: una voce
+        di quell'elenco dice allo strumento di NON guardare piu' li', per sempre. Lo stesso
+        identico guasto (`exc_info=True` -> `False`) e' stato ucciso il 2026-08-01 su
+        `fase177`, il che dimostra che e' osservabile eccome.
+
+        E qui pesa piu' che altrove: `scansiona_db` gira **contro i database vivi di
+        produzione**. Se uno smette di leggersi, la traccia dell'eccezione e' l'UNICA cosa
+        che distingue «file corrotto» da «disco pieno» da «permessi» da «schema cambiato».
+        Senza, il registro dice che qualcosa non va e non dice cosa: chi arriva alle 3 di
+        notte riparte da zero.
+
+        Due direzioni, perche' una sola non distingue una guardia sveglia da una che grida
+        sempre: con un archivio rotto DEVE gridare portando la traccia; con archivi sani
+        DEVE tacere.
+        """
+        import io
+        import logging
+        import os
+        import shutil
+        import sqlite3
+        import tempfile
+        from fase199_invarianti import scansiona_db
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        # un archivio sano, che deve continuare a essere letto NONOSTANTE il vicino rotto
+        con = sqlite3.connect(os.path.join(d, "sano.db"))
+        con.execute("CREATE TABLE pren(alloggio_id TEXT, check_in TEXT, check_out TEXT, stato TEXT)")
+        con.execute("INSERT INTO pren VALUES ('A','2026-09-01','2026-09-05','pagato')")
+        con.commit()
+        con.close()
+
+        with self.assertLogs("core_auto.invarianti", level="WARNING") as sano:
+            logging.getLogger("core_auto.invarianti").warning("segnaposto")
+            r = scansiona_db(d)
+        self.assertEqual(1, len(sano.records),
+                         "a archivi sani l'auditor ha gridato: %r" % (sano.output,))
+        self.assertGreaterEqual(r["prenotazioni_lette"], 1)
+
+        # ...e ora uno che sqlite non riesce ad aprire
+        with io.open(os.path.join(d, "rotto.db"), "wb") as f:
+            f.write(b"questo non e' un database sqlite, sono byte a caso" * 40)
+        with self.assertLogs("core_auto.invarianti", level="WARNING") as reg:
+            r = scansiona_db(d)
+        self.assertEqual(1, len(reg.records), "atteso UN allarme, visti %d: %r"
+                         % (len(reg.records), reg.output))
+        # ⛔ OSSERVABILE FORTE: con `exc_info=False` il campo del record vale **False**, che
+        # NON e' `None` -- un `assertIsNotNone` qui passerebbe col guasto dentro (errore che
+        # ho commesso davvero, lo stesso giorno, sulla guardia gemella di fase177).
+        tracce = reg.records[0].exc_info
+        self.assertIsInstance(tracce, tuple,
+                              "l'allarme sul database illeggibile non porta la traccia "
+                              "dell'errore (exc_info=%r): dice CHE non si legge, non PERCHE'"
+                              % (tracce,))
+        self.assertIsInstance(tracce[1], BaseException,
+                              "la traccia non contiene l'eccezione: %r" % (tracce,))
+        self.assertIn("rotto.db", reg.records[0].getMessage(),
+                      "l'allarme non dice QUALE archivio non si legge")
+        # l'isolamento regge: il vicino sano e' stato letto lo stesso
+        self.assertGreaterEqual(r["prenotazioni_lette"], 1,
+                                "un archivio rotto ha fermato la scansione degli altri")
+
 
 class TestRottaBunkerInvarianti(unittest.TestCase):
     def test_rotta_registrata_e_gated(self):

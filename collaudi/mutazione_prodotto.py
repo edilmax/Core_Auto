@@ -557,12 +557,17 @@ EQUIVALENTI_DICHIARATI = {
     ("fase199_invarianti.py", "mn = z3.If(a2 < b2, a2, b2)", "<", "<="):
         "Stessa dimostrazione del massimo, applicata al minimo: If(a<b,a,b) e If(a<=b,a,b) "
         "coincidono per ogni coppia di interi.",
-    ("fase199_invarianti.py",
-     'logger.warning("invarianti: DB illeggibile (ISOLATO): %s", f, exc_info=True)',
-     "True", "False"):
-        "Cambia solo QUANTO dettaglio finisce nel log (la traccia dell'eccezione), non cosa "
-        "fa il programma: nessun comportamento osservabile muta. Resta un peggioramento "
-        "della diagnosi, non un buco nella rete di protezione.",
+    # ⛔ QUI C'ERA UNA FALSA EQUIVALENZA, TOLTA IL 2026-08-01.
+    # Diceva: «`exc_info=True` -> `False` cambia solo quanto dettaglio finisce nel log,
+    # nessun comportamento osservabile muta». **Falso**: il campo `exc_info` del record e'
+    # osservabile, e lo stesso identico guasto e' stato UCCISO su fase177 lo stesso giorno.
+    # Una voce sbagliata in questo elenco e' la peggiore specie di buco: non e' un punto
+    # scoperto, e' un punto che abbiamo ordinato allo strumento di non guardare piu', per
+    # sempre. Ora `fase199` ha la sua guardia (`test_un_DB_ILLEGGIBILE_grida_dicendo_PERCHE`)
+    # e il mutante muore come deve.
+    # ⚠️ LEZIONE PER CHI AGGIUNGE VOCI QUI: «non e' osservabile» va DIMOSTRATO (z3, o una
+    #    prova esaustiva sugli ingressi), mai dedotto. Se la dimostrazione non c'e', la voce
+    #    non va scritta: meglio un sopravvissuto aperto che una cecita' dichiarata.
     ("fase100_dac7.py",
      "return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else 0",
      ">=", ">"):
