@@ -965,8 +965,8 @@ if __name__ == "__main__" and "--diff" in sys.argv:
 
 
 if __name__ == "__main__":
-    riserva = tempfile.mkdtemp
-    recupera_da_interruzione()(prefix="mutazione_")
+    recupera_da_interruzione()          # PRIMA di tutto: un giro ucciso puo' aver lasciato
+    riserva = tempfile.mkdtemp(prefix="mutazione_")   # un mutante dentro un file di produzione
     file_toccati = sorted({m[0] for m in MUTANTI})
     for f in file_toccati:
         shutil.copy(f, os.path.join(riserva, f.replace("/", "_")))
@@ -975,6 +975,19 @@ if __name__ == "__main__":
     print("TEST DI MUTAZIONE — se il motore facesse la cosa sbagliata, i test se ne")
     print("accorgerebbero? Un mutante SOPRAVVISSUTO e' un buco nella rete di protezione.")
     print("=" * 90)
+
+    if "--prova-avvio" in sys.argv:
+        # ⛔ L'AVVIO DEVE ESSERE PROVABILE SENZA MUTARE NIENTE.
+        # Le tre modalita' a flag (--censimento, --modulo, --diff) escono PRIMA di qui, quindi
+        # questo blocco -- rete di recupero, cartella di riserva, copia dei file da proteggere
+        # -- non lo eseguiva nessun test: era l'unico pezzo del giudice senza un giudice.
+        # Il 2026-08-01 ci e' rimasta dentro una riga spezzata a meta' (`tempfile.mkdtemp`
+        # chiamato senza argomenti e poi ri-chiamato sul suo risultato): sintassi valida,
+        # esplosione certa. Se n'e' accorta la CI, DOPO il push. Ora si prova in un secondo.
+        print("AVVIO OK: riserva pronta, %d file di produzione messi al sicuro"
+              % len(file_toccati))
+        shutil.rmtree(riserva, ignore_errors=True)
+        sys.exit(0)
 
     sopravvissuti, uccisi, non_applicabili, incerti = [], 0, [], []
     t0 = time.time()

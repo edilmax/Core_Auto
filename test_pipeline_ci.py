@@ -1382,5 +1382,59 @@ class TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA(unittest.TestCase):
                          "il codice VECCHIO. %r" % (ciechi,))
 
 
+    def test_L_AVVIO_DEL_GIUDICE_E_PROVABILE_E_NON_ESPLODE(self):
+        """⛔ IL GIUDICE ERA L'UNICA COSA SENZA UN GIUDICE.
+
+        DIFETTO VERO, 2026-08-01. Il modo senza argomenti -- quello che gira in CI -- inizia
+        con un blocco che nessun test attraversava: le tre modalita' a flag (`--censimento`,
+        `--modulo`, `--diff`) escono PRIMA. Una modifica mal riuscita ci ha lasciato dentro
+        una riga spezzata a meta':
+
+            riserva = tempfile.mkdtemp
+            recupera_da_interruzione()(prefix="mutazione_")
+
+        Sintassi valida, quindi nessun lint e nessuna compilazione se ne accorge; esplosione
+        certa alla prima esecuzione (`TypeError: 'NoneType' object is not callable`). L'ho
+        scoperto **dalla CI, dopo il push**: cioe' nel posto giusto ma nel momento sbagliato.
+
+        Qui l'avvio si esegue davvero, in un secondo, **senza mutare un solo file**: se
+        qualcuno rompe di nuovo quel blocco, diventa rosso in casa e non su GitHub.
+        """
+        import os
+        import subprocess
+        import sys
+        radice = os.path.dirname(os.path.abspath(__file__))
+        r = subprocess.run([sys.executable, os.path.join(radice, "collaudi",
+                                                         "mutazione_prodotto.py"),
+                            "--prova-avvio"],
+                           cwd=radice, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=180)
+        tutto = (r.stdout or "") + (r.stderr or "")
+        self.assertNotIn("Traceback", tutto,
+                         "l'avvio del giudice esplode: in CI il job muore prima di provare "
+                         "un solo mutante, e il punteggio non esiste.\n%s" % tutto[-800:])
+        self.assertEqual(0, r.returncode,
+                         "l'avvio del giudice esce %s\n%s" % (r.returncode, tutto[-800:]))
+        self.assertIn("AVVIO OK", r.stdout,
+                      "il modo di prova non arriva in fondo al blocco d'avvio: proverebbe "
+                      "meno di quello che dice")
+
+    def test_la_prova_d_avvio_NON_LASCIA_SPORCO(self):
+        """Una prova che modifica i file di produzione sarebbe peggio del difetto che cerca:
+        il giudice copia i file in una riserva, e quella riserva va rimossa. Se restasse,
+        ogni esecuzione lascerebbe una cartella con dentro **codice di produzione**."""
+        import io
+        import os
+        import re
+        radice = os.path.dirname(os.path.abspath(__file__))
+        with io.open(os.path.join(radice, "collaudi", "mutazione_prodotto.py"),
+                     encoding="utf-8") as f:
+            testo = f.read()
+        blocco = testo.split('"--prova-avvio" in sys.argv')[-1].split("sys.exit(0)")[0]
+        self.assertIn("rmtree(riserva", re.sub(r"\s+", " ", blocco),
+                      "il modo di prova non ripulisce la riserva: lascerebbe in giro copie "
+                      "dei file di produzione a ogni esecuzione della suite")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
