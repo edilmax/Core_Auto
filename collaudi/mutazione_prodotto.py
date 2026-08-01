@@ -929,10 +929,19 @@ if __name__ == "__main__" and "--modulo" in sys.argv:
         _k = sys.argv.index("--killer")
         _killer = [a for a in sys.argv[_k + 1:] if not a.startswith("--")]
         _nomi = [n for n in _nomi if n not in _killer]
+    # `--tetto N`: quanti mutanti al massimo per modulo (predefinito 30). Il tetto esiste per
+    # non far durare un giro all'infinito, non per rinunciare: quando i sorveglianti costano
+    # poco (qui 12s) lasciare fuori dei punti sarebbe uno spreco, non una prudenza. Cio' che
+    # resta fuori viene comunque DICHIARATO in fondo al giro, sempre.
+    _tetto = 30
+    if "--tetto" in sys.argv:
+        _t = sys.argv.index("--tetto")
+        _tetto = int(sys.argv[_t + 1])
+        _nomi = [n for n in _nomi if n != sys.argv[_t + 1]]
     print("=" * 96)
     print("MUTANTI GENERATI SU MODULI INTERI: %s" % ", ".join(_nomi))
     print("=" * 96)
-    _esiti, _rin = giro_su_moduli(_nomi, killer=_killer)
+    _esiti, _rin = giro_su_moduli(_nomi, tetto=_tetto, killer=_killer)
     _sopr = [e for e in _esiti if e["verdetto"] == "sopravvissuto"]
     _scop = [e for e in _esiti if e["verdetto"] == "scoperto"]
     for e in _esiti:
