@@ -170,14 +170,25 @@ def cancella_attivita_host(sistema: Any, host_id: Any, *, forza: bool = False) -
     # irreversibili (mai i dati): email, telefono, codice fiscale, P.IVA e il CIN degli
     # annunci -- CIN e codice fiscale li rilascia lo Stato, non si cambiano con una mail nuova.
     if reg is not None and hasattr(reg, "deposita_impronte"):
-        cin = []
+        cin, cin_non_letti = [], []
         for s in slugs:
             try:
                 d = cat.dettaglio(s) if (cat is not None and hasattr(cat, "dettaglio")) else None
                 if isinstance(d, dict) and d.get("cin"):
                     cin.append(str(d["cin"]))
             except Exception:
-                pass
+                # ⛔ NON SI INGOIA IN SILENZIO (2026-08-01). Qui si legge il CIN, cioe'
+                # l'impronta che impedisce a un host di cancellarsi e ri-registrarsi per
+                # riprendersi i 90 giorni a commissione zero. Se la lettura fallisce e
+                # nessuno lo sa, quel buco resta aperto per sempre. Il `pass` nudo di prima
+                # nascondeva anche i DIFETTI: nessun mutante di queste righe era uccidibile
+                # dall'esterno, perche' qualunque cosa andasse storta finiva nello stesso
+                # silenzio. L'isolamento resta (gli altri alloggi si leggono lo stesso):
+                # cambia solo che ora il fallimento si vede.
+                cin_non_letti.append(s)
+                logger.warning("erasure: CIN non letto per %s (ISOLATO)", s, exc_info=True)
+        if cin_non_letti:
+            rep["cin_non_letti"] = cin_non_letti
         rep["impronte_depositate"] = _safe(lambda h: reg.deposita_impronte(h, extra=cin), host_id)
 
     # --- cancella in ordine sicuro ---
@@ -203,8 +214,11 @@ def cancella_attivita_host(sistema: Any, host_id: Any, *, forza: bool = False) -
     if viral is not None and hasattr(viral, "conta_host"):
         residui["referral"] = _safe(viral.conta_host, host_id)
     if reg is not None and hasattr(reg, "esiste_host"):
-        residui["host"] = 1 if (reg.esiste_host(host_id) if hasattr(reg, "esiste_host")
-                                else False) else 0
+        # il secondo `hasattr` che stava qui controllava la STESSA cosa dell'`if` qui sopra:
+        # ramo morto, irraggiungibile. Tolto il 2026-08-01 (lo aveva scovato la mutazione,
+        # che ci sbatteva contro un mutante impossibile da uccidere perche' impossibile da
+        # raggiungere). Meno codice = meno posti dove nascondersi.
+        residui["host"] = 1 if reg.esiste_host(host_id) else 0
 
     rep["residui"] = residui
     rep["ok"] = all(v == 0 for v in residui.values()) if residui else False

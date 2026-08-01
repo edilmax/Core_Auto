@@ -451,6 +451,78 @@ class TestErasureConArchiviINCOMPLETI(unittest.TestCase):
                          "un CIN vuoto e' stato depositato come impronta: %r -- da quel "
                          "momento vale per chiunque" % (visto.get("extra"),))
 
+    def test_un_CIN_NON_LETTO_viene_DETTO_invece_di_sparire(self):
+        """⛔ CORREZIONE DI PRODUZIONE (2026-08-01, autorizzata dal fondatore).
+
+        Qui c'era un `except Exception: pass` **nudo**. Ingoiava tutto, quindi:
+          · un CIN non letto spariva senza che nessuno lo sapesse -- e il CIN e' l'impronta
+            che impedisce a un host di cancellarsi e ri-registrarsi per riprendersi i 90
+            giorni a commissione zero. Il buco restava aperto per sempre, in silenzio;
+          · e nessun mutante di quelle righe era uccidibile dall'esterno, perche' qualunque
+            cosa andasse storta finiva nello stesso silenzio. Lo strato che nasconde gli
+            errori impedisce di provare cio' che ci sta sotto (lezione del 2026-07-31).
+
+        L'isolamento resta -- gli altri alloggi si leggono lo stesso -- cambia solo che il
+        fallimento adesso si vede: nel registro **e** nel rapporto.
+        """
+        import logging
+        from fase156_erasure import cancella_attivita_host
+        visto = {}
+
+        def _esplode(s):
+            raise RuntimeError("catalogo guasto su %s" % s)
+
+        sis = _Sistema(
+            catalogo=_Archivio(alloggi_host=lambda h, limit=None: [{"slug": "casa"},
+                                                                   {"slug": "villa"}],
+                               dettaglio=_esplode,
+                               cancella_alloggi_host=lambda h: 2,
+                               conta_alloggi_host=lambda h: 0),
+            registro_host=_Archivio(
+                # `update`, non `setdefault`: si guarda l'ULTIMA chiamata, senno' la seconda
+                # meta' della prova leggerebbe il risultato della prima e non proverebbe niente
+                deposita_impronte=lambda h, extra=None: visto.update({"extra": extra}) or 1,
+                cancella_host=lambda h: 1, esiste_host=lambda h: False))
+        with self.assertLogs("fase156_erasure", level="WARNING") as reg:
+            rep = cancella_attivita_host(sis, "h1", forza=True)
+        self.assertEqual(["casa", "villa"], rep.get("cin_non_letti"),
+                         "un CIN non letto e' sparito dal rapporto: %r" % (rep,))
+        self.assertTrue(any(r.exc_info for r in reg.records),
+                        "nessuna traccia dell'errore nel registro: %r" % (reg.output,))
+        # l'isolamento NON e' stato sacrificato: le impronte si depositano lo stesso
+        self.assertEqual([], visto.get("extra"))
+        # ...e a catalogo sano il rapporto NON contiene quella chiave (senno' basterebbe
+        # scriverla sempre per far passare la meta' di sopra)
+        sis.catalogo.dettaglio = lambda s: {"cin": "IT-%s" % s}
+        rep2 = cancella_attivita_host(sis, "h1", forza=True)
+        self.assertNotIn("cin_non_letti", rep2)
+        self.assertEqual(["IT-casa", "IT-villa"], visto["extra"])
+
+        # ⛔ E IL TERZO CASO, quello che distingue davvero: un catalogo che NON ESPONE
+        # `dettaglio`. Non e' un guasto -- e' un archivio che quella cosa non la sa fare, e
+        # il modulo e' scritto apposta per reggerlo. Deve saltarlo in silenzio, senza
+        # inventarsi un fallimento. (Senza questo caso il mutante `and`->`or` di quella riga
+        # sopravvive: con un catalogo che ESPLODE le due strade portano allo stesso errore.)
+        senza = _Sistema(
+            catalogo=_Archivio(alloggi_host=lambda h, limit=None: [{"slug": "casa"}],
+                               cancella_alloggi_host=lambda h: 1,
+                               conta_alloggi_host=lambda h: 0),
+            registro_host=_Archivio(
+                deposita_impronte=lambda h, extra=None: visto.update({"extra": extra}) or 1,
+                cancella_host=lambda h: 1, esiste_host=lambda h: False))
+        # NB: qui NON si puo' pretendere «nessun record», perche' la forzatura emette il suo
+        # `critical` (che e' giusto). Si pretende «nessun WARNING»: cioe' nessun GUASTO.
+        with self.assertLogs("fase156_erasure", level="WARNING") as reg3log:
+            rep3 = cancella_attivita_host(senza, "h1", forza=True)
+        self.assertEqual([], [r.getMessage() for r in reg3log.records
+                              if r.levelno == logging.WARNING],
+                         "un catalogo che non espone `dettaglio` ha prodotto un allarme di "
+                         "guasto: non e' rotto, semplicemente quella cosa non la sa fare")
+        self.assertNotIn("cin_non_letti", rep3,
+                         "un catalogo che non espone `dettaglio` e' stato scambiato per un "
+                         "archivio guasto: %r" % (rep3,))
+        self.assertEqual([], visto["extra"])
+
     def test_ogni_guasto_ISOLATO_lascia_la_traccia_dell_errore(self):
         """Le quattro braccia di questo modulo ingoiano i guasti di proposito (un archivio
         rotto non deve fermare gli altri). Proprio per questo la traccia dell'eccezione e'

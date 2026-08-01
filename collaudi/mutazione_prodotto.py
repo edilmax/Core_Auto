@@ -773,15 +773,23 @@ def censimento():
 
 
 def misura_normale(bersaglio, tetto=900):
-    """Quanto ci mette il gruppo di sorveglianti quando il codice e' SANO.
+    """Quanto ci mette il gruppo di sorveglianti quando il codice e' SANO, **e se e' verde**.
 
     Serve a scegliere il tempo massimo con criterio invece che a caso. Misurato il
     2026-08-01 su `fase184_marca_temporale`: 64,7 secondi. Un tetto fisso di 600s era nove
     volte tanto -- e con 30 mutanti che si inchiodano avrebbe fatto CINQUE ORE.
+
+    ⛔ E RESTITUISCE ANCHE IL VERDETTO, che prima veniva buttato via. DIFETTO VERO trovato
+    il 2026-08-01 su `fase156_erasure`: un test era ROSSO gia' sul codice sano (colpa mia,
+    un'asserzione sbagliata) e il giro ha stampato **42 mutanti su 42 uccisi**. Ovvio: se i
+    test falliscono comunque, falliscono anche con ogni guasto dentro, e OGNI mutante
+    risulta «ucciso». Il punteggio perfetto era un artefatto -- la forma piu' beffarda di
+    finto verde, perche' arriva vestita da trionfo. Ora il giudice se ne accorge e si RIFIUTA
+    di giudicare.
     """
     t0 = time.time()
-    esegui(bersaglio, timeout=tetto)
-    return time.time() - t0
+    verde, uscita = esegui(bersaglio, timeout=tetto)
+    return time.time() - t0, verde, uscita
 
 
 def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45, killer=None):
@@ -818,7 +826,20 @@ def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45, killer=None):
         scelti = list(killer) if killer else sorveglianti[:tetto_test]
         bersaglio = " ".join(scelti)
         # si misura il NORMALE prima di rompere qualcosa: cosi' il tetto e' scelto, non subito
-        normale = misura_normale(bersaglio) if sorveglianti else 0.0
+        normale, sano, uscita = misura_normale(bersaglio) if sorveglianti else (0.0, True, "")
+        if sano is not True:
+            # ⛔ NON SI GIUDICA SU UNA BASE ROSSA. Se i sorveglianti falliscono gia' col codice
+            # SANO, falliranno anche con ogni guasto dentro: ogni mutante risulterebbe
+            # «ucciso» e il giro stamperebbe un punteggio pieno senza aver provato niente.
+            # Successo davvero il 2026-08-01 su fase156 (42 su 42, tutto falso).
+            esiti.append({"file": nome, "riga": 0, "verdetto": "base_rossa",
+                          "danno": "i test killer non sono verdi sul codice sano",
+                          "nota": (uscita or "")[-300:]})
+            print("::error title=BASE ROSSA in %s::i test killer NON sono verdi sul codice "
+                  "sano: qualunque punteggio di mutazione sarebbe falso (ogni mutante "
+                  "risulterebbe ucciso). Prima si sistemano i test." % nome)
+            print("\n%s: BASE ROSSA -- giro SALTATO. Killer: %s" % (nome, bersaglio))
+            continue
         rinunce["normale_sec"][nome] = round(normale, 1)
         tetto_sec = max(60, int(3 * normale))
         print("\n%s: %d punti mutabili · sorveglianti %d, usati %d%s · normale %.1fs · "
@@ -945,7 +966,8 @@ if __name__ == "__main__" and "--modulo" in sys.argv:
     _sopr = [e for e in _esiti if e["verdetto"] == "sopravvissuto"]
     _scop = [e for e in _esiti if e["verdetto"] == "scoperto"]
     for e in _esiti:
-        if e["verdetto"] in ("sopravvissuto", "scoperto", "assente", "non_determinabile"):
+        if e["verdetto"] in ("sopravvissuto", "scoperto", "assente", "non_determinabile",
+                             "base_rossa"):
             print("  %-9s %s:%s  %s  (%s)" % (e["verdetto"].upper(), e["file"], e["riga"],
                                               e.get("nota", ""), e["danno"][:46]))
     print("-" * 96)
@@ -969,7 +991,10 @@ if __name__ == "__main__" and "--modulo" in sys.argv:
     for e in _sopr + _scop:
         print("::error title=Punto NON SORVEGLIATO in %s::riga %s -- %s | %s"
               % (e["file"], e["riga"], e["danno"], e.get("nota", "")))
-    sys.exit(1 if (_sopr or _scop) else 0)
+    # una BASE ROSSA e' rossa quanto un sopravvissuto: senza di essa il punteggio non
+    # significa niente, e un punteggio che non significa niente e' peggio di nessuno.
+    _base = [e for e in _esiti if e["verdetto"] == "base_rossa"]
+    sys.exit(1 if (_sopr or _scop or _base) else 0)
 
 
 if __name__ == "__main__" and "--diff" in sys.argv:
