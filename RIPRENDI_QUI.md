@@ -1,3 +1,36 @@
+## 💾 2026-08-01 — 4 POSTI ALLINEATI SU `ab451a3`, E LA CHIAVETTA È **PROVATA**, NON SPERATA
+
+**Computer = GitHub = VPS = chiavetta.** Deploy fatto col protocollo a rischio zero: punto di
+ritorno salvato sul server (`/root/PRE_DEPLOY_20260801_0938.commit` → `d51cf0d`), backup dei
+dati preso **prima** e **riaperto davvero** (25 database su 25, tutti `integrity_check = ok`),
+procedura rm-first con `docker compose` **v2** → **nginx mai toccato, "Up 46 hours"**: zero
+secondi di sito irraggiungibile.
+
+**Verifica sul server vero, nelle due direzioni** (una prova che guarda solo ciò che deve
+funzionare non distingue un sito sano da un sito spalancato):
+`/`, `/api/health`, `/diventa-host`, `/privacy` → **200** · admin senza chiave → **401** ·
+bunker e pannello host senza sessione → **302** · 25 database integri · i 2 lead veri al loro
+posto · **0** errori nei log dopo il riavvio.
+
+**Suite rapida ESEGUITA SUL VPS**, dentro l'immagine di produzione (Python **3.11.15**), su una
+copia in `/tmp` — mai montando la produzione né il volume dei dati, perché *una prova che può
+rovinare ciò che sta provando non è una prova*: **134 test, OK, uscita 0**, e i 25 database
+veri intatti dopo. ⚠️ **Omissione dichiarata**: `test_property_soldi` (1 modulo su 12) non è
+stato eseguito lì — usa `hypothesis`, che nell'immagine di produzione **non c'è e non deve
+esserci**. Gira in CI, dov'era verde.
+
+### 🔑 LA CHIAVETTA `BOOKINVIP USB 2026` — quella che va in cassaforte
+Rigenerata **dal server vivo** (mai dal computer: è l'unica copia che è davvero girata da
+qualche parte). Dentro: 151 moduli · 401 file di test · 34 file in `deploy/` · `.env.casavip`
+con le **chiavi vere** · 25 database · 108 video-spot in `clone_video.tgz` a parte.
+- **I database vengono dal VOLUME DOCKER, dentro il container.** Nella cartella dell'host ce ne
+  sono **18, vecchi**: chi copia da lì ottiene un «backup ok» a cui mancano sette archivi. Ora
+  è scritto anche nel `LEGGIMI-RIPRISTINO.txt` della chiavetta.
+- **PROVA DI RIPRISTINO, non promessa**: i due archivi sono stati estratti in una cartella
+  vuota — come su un VPS nuovo — e ci è girata **l'intera suite: 5264 test, OK, uscita 0**.
+- La cartella di prova è stata **rimossa subito**: conteneva `.env.casavip` con le chiavi vere
+  estratte in chiaro. Sul Desktop resta **una sola** cartella, mai una col nome nuovo.
+
 ## 🔢 IL REGOLAMENTO ORA DICE IL VERO SU SE STESSO — **91 obblighi, due famiglie**
 
 Il conto è stato sbagliato **tre volte** in un giorno (14 → 44 → 74 → 135), e ogni errore

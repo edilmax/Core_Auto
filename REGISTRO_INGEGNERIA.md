@@ -256,6 +256,27 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
   (le regole che non dichiarano come si controllano) · `dichiarato()` (il numero scritto nel
   cartello) · `main()`. STATO: **acceso**, eseguito dall'hook a ogni sessione.
 
+### ✅ FATTO 2026-08-01 (8) — DEPLOY `ab451a3` + CHIAVETTA PROVATA COL RIPRISTINO
+- **Deploy a rischio zero**, procedura rm-first di `DEPLOY.md` §3 con `docker compose` **v2**:
+  punto di ritorno in `/root/PRE_DEPLOY_20260801_0938.commit` (`d51cf0d`), backup dei dati
+  preso PRIMA e **riaperto** (25 db, tutti `integrity_check = ok`, l'archivio si estrae).
+  **`casavip_nginx` mai toccato ("Up 46 hours") → zero interruzione.**
+- **Verifica sul server vivo nelle DUE direzioni**: 4 pagine pubbliche `200`; admin senza
+  chiave `401`; bunker e pannello host senza sessione `302`; 25 db integri; 2 lead veri
+  presenti; 0 errori nei log dopo il riavvio.
+- **Suite rapida sul VPS**, dentro l'immagine di produzione (Python 3.11.15), su copia in
+  `/tmp` **senza montare produzione né volume dati**: `money-smoke`, **134 test, OK, uscita 0**;
+  i 25 db veri intatti dopo. ⚠️ Dichiarato: `test_property_soldi` NON eseguito lì (serve
+  `hypothesis`, assente dall'immagine di produzione **per scelta**); gira in CI, verde.
+- **Chiavetta `BOOKINVIP USB 2026` rigenerata DAL SERVER VIVO**: 151 moduli · 401 test · 34
+  file `deploy/` · `.env.casavip` con le chiavi vere · **25 database presi dal VOLUME DOCKER**
+  (nella cartella dell'host ce ne sono 18, vecchi: copiarli da li' da' un «backup ok» a cui
+  mancano 7 archivi) · 108 video invariati in `clone_video.tgz`.
+- **PROVA DI RIPRISTINO (il pezzo che rende vera la promessa)**: i due archivi estratti in una
+  cartella vuota, come su un VPS nuovo, e **suite INTERA li' dentro: 5264 test, OK, uscita 0**.
+- **Igiene**: la cartella della prova conteneva `.env.casavip` in chiaro -> **rimossa subito**.
+  Sul Desktop resta una sola cartella (nome fisso), la precedente cancellata **dopo** la prova.
+
 ### ✅ FATTO 2026-08-01 (7) — IL REGOLAMENTO DICE IL VERO SU SE STESSO (91 obblighi)
 - **Il conto era sbagliato tre volte** (14 → 44 → 74 → 135) e sempre per la stessa ragione:
   contare da un posto che non e' il file. Chiuso in tre mosse.
