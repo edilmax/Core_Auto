@@ -57,8 +57,12 @@ def _pezzi():
     c = _leggi(CLAUDE)
     return {
         "zero": c.split("REGOLA FERREA")[0],
-        "ferrea": c.split("REGOLA FERREA")[-1].split("LE 17 DIRETTIVE")[0],
-        "direttive": c.split("LE 17 DIRETTIVE")[-1].split("REGOLA DEI 10 COLLAUDI")[0],
+        # ⛔ IL TAGLIO NON SI AGGANCIA A UN NUMERO. Prima diceva "LE 17 DIRETTIVE": il giorno
+        # in cui ne e' arrivata una diciottesima il taglio si sarebbe rotto -- e lo strumento
+        # che deve accorgersi degli errori di conteggio sarebbe stato il primo a sbagliarlo.
+        # Ci si aggancia al testo che NON cambia.
+        "ferrea": c.split("REGOLA FERREA")[-1].split("DIRETTIVE DEL FONDATORE")[0],
+        "direttive": c.split("DIRETTIVE DEL FONDATORE")[-1].split("REGOLA DEI 10 COLLAUDI")[0],
         "collaudi": c.split("REGOLA DEI 10 COLLAUDI")[-1].split("DIRETTIVA OPERATIVA")[0],
         "finale": c.split("DIRETTIVA OPERATIVA")[-1],
         "tutto": c,
@@ -134,7 +138,8 @@ def main():
     print("                                   segnaposto · MAI HEREDOC · inventario prima ·")
     print("                                   spiegare chiaro · decidiamo noi · un pezzo alla")
     print("                                   volta · ispettore · caccia errori · autonomia ·")
-    print("                                   deploy a rischio zero)")
+    print("                                   deploy a rischio zero · UNO STRUMENTO CHE MISURA")
+    print("                                   HA UN CONTROLLO CHE GLI IMPEDISCE DI BARARE)")
     print("     · modi di rompersi ..... %2d   (dati effimeri, cablaggio mancante, ambiente"
           % n["modi"])
     print("                                   diverso, tempo che passa, dato assurdo...)")

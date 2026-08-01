@@ -969,7 +969,7 @@ class TestLeRegoleSiLeggonoSEMPRE(unittest.TestCase):
             "intestazione\n\n## REGOLA FERREA\n"
             "**1. UNA COSA.** prosa.\n**Si verifica:** con un comando.\n\n"
             "**2. ALTRA COSA.** prosa e basta.%s\n\n"
-            "## LE 17 DIRETTIVE\n"
+            "## LE 18 DIRETTIVE DEL FONDATORE\n"
             "**D1. QUALCOSA.** prosa.\n*Si verifica:* cosi'.\n\n"
             "## REGOLA DEI 10 COLLAUDI\n\n## DIRETTIVA OPERATIVA\n")
         vero = m.CLAUDE
@@ -1021,7 +1021,22 @@ class TestLeRegoleSiLeggonoSEMPRE(unittest.TestCase):
         self.assertEqual(15, n["ferrea"], "le regole ferree non sono piu' 15: se il taglio "
                                           "delle sezioni si rompe, ogni conteggio qui sopra "
                                           "diventa aria")
-        self.assertEqual(17, n["direttive"], "le direttive del fondatore non sono piu' 17")
+        # ⛔ NON un numero scritto a mano qui dentro: si confronta il conteggio VERO col
+        # numero che il documento DICHIARA nel proprio titolo. Cosi' la guardia non va
+        # ritoccata a ogni direttiva nuova (e nessuno e' tentato di allinearla senza
+        # guardare), ma resta rossa il giorno in cui il taglio delle sezioni si rompe o il
+        # titolo smette di dire il vero.
+        import io
+        import os
+        with io.open(os.path.join(self._radice(), "CLAUDE.md"), encoding="utf-8") as f:
+            titolo = re.search(r"LE (\d+) DIRETTIVE DEL FONDATORE", f.read())
+        self.assertIsNotNone(titolo, "il titolo delle direttive non dichiara piu' quante sono")
+        self.assertEqual(int(titolo.group(1)), n["direttive"],
+                         "il titolo dice %s direttive ma nel testo ce ne sono %d"
+                         % (titolo.group(1), n["direttive"]))
+        self.assertGreaterEqual(n["direttive"], 18,
+                                "il numero delle direttive del fondatore e' SCESO: una "
+                                "direttiva non si toglie senza che qualcuno lo decida")
 
     @staticmethod
     def _motore_regole():
@@ -1381,6 +1396,99 @@ class TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA(unittest.TestCase):
                          "la sua versione compilata: il processo figlio potrebbe eseguire "
                          "il codice VECCHIO. %r" % (ciechi,))
 
+
+    def test_IL_GIUDICE_NON_PUO_GIUDICARE_SU_UNA_BASE_ROSSA(self):
+        """⛔ DIRETTIVA D18: uno strumento che misura deve avere un controllo MECCANICO che
+        gli impedisca di barare — e quel controllo va a sua volta sorvegliato, se no fra sei
+        mesi sparisce in una «semplificazione» e nessuno se ne accorge.
+
+        DIFETTO VERO, 2026-08-01. Il giudice ha stampato «42 mutanti su 42 UCCISI» mentre un
+        test era ROSSO sul codice sano. Se i test falliscono comunque, falliscono anche con
+        ogni guasto dentro: OGNI mutante risulta «ucciso». Il punteggio pieno era aria — ed e'
+        la forma piu' insidiosa di finto verde, perche' non arriva come un problema, arriva
+        come un trionfo, e nessuno controlla un trionfo.
+
+        Qui si prova la sostanza, non la forma: si costruisce un giudice IDENTICO a quello
+        vero ma con la misura della base tolta, e si pretende che il caso malato passi per
+        sano. Se un domani il controllo venisse rimosso, questo test lo direbbe lo stesso
+        giorno.
+        """
+        import importlib.util
+        import os
+        radice = os.path.dirname(os.path.abspath(__file__))
+        m = self._motore_giudice(radice)
+
+        # (1) la funzione esiste e risponde davvero a "i test sono verdi?" -- una che
+        #     rispondesse sempre `True` sarebbe un ornamento.
+        self.assertTrue(hasattr(m, "base_e_verde"),
+                        "il controllo della base e' sparito dal giudice: senza, un punteggio "
+                        "pieno puo' essere misurato su test gia' rossi")
+        m._BASI.clear()
+        m._BASI["FINTO_VERDE"] = (True, "")
+        m._BASI["FINTO_ROSSO"] = (False, "i test falliscono")
+        self.assertEqual((True, ""), m.base_e_verde("FINTO_VERDE"))
+        self.assertEqual(False, m.base_e_verde("FINTO_ROSSO")[0],
+                         "il controllo dice VERDE anche su una base rossa: non guarda niente")
+
+        # (2) LA GUARDIA CHE CONTA: il controllo dev'essere CHIAMATO in ogni modo che giudica.
+        #     Non basta che esista: deve stare sul percorso, prima di rompere qualcosa.
+        #
+        # ⛔ SI GUARDA L'ALBERO SINTATTICO, NON IL TESTO. La prima versione di questa guardia
+        #    cercava la stringa "base_e_verde" nel sorgente: commentare la riga la lasciava
+        #    lì, e la guardia passava col controllo spento. Provato il 2026-08-01 -- tre
+        #    rimozioni su tre, tutte VERDI. Cioè la prima guardia scritta per la direttiva
+        #    D18 ha fallito D18 al primo colpo. Nell'albero sintattico i commenti non
+        #    esistono: una chiamata commentata sparisce, ed è l'unica cosa che conta.
+        import ast
+        import io
+        with io.open(os.path.join(radice, "collaudi", "mutazione_prodotto.py"),
+                     encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+
+        def chiamate(nodo):
+            return {n.func.id for n in ast.walk(nodo)
+                    if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+
+        pezzi = {}
+        for nodo in albero.body:
+            if isinstance(nodo, ast.FunctionDef) and nodo.name in ("giro_su_moduli",
+                                                                   "giro_sul_diff"):
+                pezzi[nodo.name] = nodo
+            # il modo della CI: `if __name__ == "__main__":` SENZA altre condizioni (gli altri
+            # tre modi hanno anche `and "--flag" in sys.argv`)
+            elif isinstance(nodo, ast.If) and isinstance(nodo.test, ast.Compare):
+                pezzi["modo_ci"] = nodo
+
+        for modo, chiave in (("--modulo (campagne per rischio)", "giro_su_moduli"),
+                             ("--diff (le righe appena scritte)", "giro_sul_diff"),
+                             ("della CI (i 41 mutanti a mano)", "modo_ci")):
+            self.assertIn(chiave, pezzi, "il modo %s non esiste piu' nel giudice" % modo)
+            fatte = chiamate(pezzi[chiave])
+            self.assertTrue(fatte & {"base_e_verde", "misura_normale"},
+                            "il modo %s NON chiama il controllo della base: li' i test "
+                            "potrebbero essere gia' rossi, ogni mutante risulterebbe "
+                            "«ucciso» e il punteggio sarebbe aria. Chiamate trovate: %s"
+                            % (modo, sorted(fatte)))
+        testo = io.open(os.path.join(radice, "collaudi", "mutazione_prodotto.py"),
+                        encoding="utf-8").read()
+
+        # (3) e il verdetto dev'essere ROSSO, non una nota a pie' di pagina: un giro che non
+        #     ha giudicato niente non puo' uscire verde.
+        self.assertIn("base_rossa", testo)
+        coda = testo.split('if __name__ == "__main__":')[-1]
+        self.assertIn("basi_rosse", coda,
+                      "il modo della CI non tiene il conto delle basi rosse: uscirebbe verde "
+                      "dopo aver saltato tutto")
+
+    @staticmethod
+    def _motore_giudice(radice):
+        import importlib.util
+        import os
+        p = os.path.join(radice, "collaudi", "mutazione_prodotto.py")
+        spec = importlib.util.spec_from_file_location("_giudice_base", p)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
 
     def test_L_AVVIO_DEL_GIUDICE_E_PROVABILE_E_NON_ESPLODE(self):
         """⛔ IL GIUDICE ERA L'UNICA COSA SENZA UN GIUDICE.

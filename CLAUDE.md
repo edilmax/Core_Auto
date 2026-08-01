@@ -44,7 +44,7 @@ automatica fa fallire la suite se i due divergono):
 
 # ⚙️ REGOLA FERREA DI OPERATIVITÀ E PRECISIONE
 
-> ## 📌 GLI OBBLIGHI SONO **91**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
+> ## 📌 GLI OBBLIGHI SONO **92**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
 > **Contati dai file il 2026-08-01, non a memoria** (`python collaudi/regole_avvio.py` li
 > ricontrolla a ogni sessione e **grida** se questi numeri non tornano):
 >
@@ -57,8 +57,8 @@ automatica fa fallire la suite se i due divergono):
 > · **29** stanno nell'appendice di `REGISTRO_INGEGNERIA.md`, con prova e fonte per esteso.
 > Più le **24 uccise** dai revisori ostili **col motivo**: dicono cosa NON vale la pena rifare.
 >
-> ### 🧭 GLI ALTRI **47** — nati dai NOSTRI danni
-> Regola zero (**5**) · **17 direttive del fondatore** · modi di rompersi (**11**) ·
+> ### 🧭 GLI ALTRI **48** — nati dai NOSTRI danni
+> Regola zero (**5**) · **18 direttive del fondatore** · modi di rompersi (**11**) ·
 > collaudi (**10**) · direttiva finale (**4**). Non hanno uno studio dietro: hanno una
 > **cicatrice**. Valgono uguale, e da oggi **portano anch'essi il «si verifica così»**.
 >
@@ -189,7 +189,7 @@ solo è il canale principale delle regressioni. Il fondatore se n'è accorto pri
 
 ---
 
-# 🧭 LE 17 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
+# 🧭 LE 18 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
 
 > **Perché stanno qui e non solo in memoria.** Fino al 2026-08-01 vivevano nella memoria di
 > sessione: **non viaggiavano col progetto**. Su un altro computer, o dentro la CI, non
@@ -266,6 +266,36 @@ se va storta.
 leggibile** + `docker compose` v2 + verifica funzionale **nelle due direzioni**. *Si verifica:*
 esistono il file `PRE_DEPLOY_*.commit`, l'immagine `:prec`, la prova di lettura del backup e le
 sonde positive **e** negative dopo lo scambio.
+
+**D18. UNO STRUMENTO CHE MISURA DEVE AVERE UN CONTROLLO MECCANICO CHE GLI IMPEDISCA DI
+BARARE.** Detta dal fondatore il 2026-08-01, dopo che il giudice della mutazione ha stampato
+«42 mutanti su 42 uccisi» mentre un test era **rosso sul codice sano**: se i test falliscono
+comunque, falliscono anche con ogni guasto dentro, e ogni mutante risulta «ucciso». Il
+punteggio pieno era aria. *«La prossima volta la domanda non sarà "ha barato?" ma "ha un
+controllo meccanico che impedisce di barare?"»* — cioè si passa dal **comportamento** alla
+**struttura**: «ha barato?» si chiede dopo, «può barare?» si chiede prima.
+
+⚠️ Onestà sui limiti: un controllo meccanico **non rende l'imbroglio impossibile, lo rende
+rumoroso**. Non impedisce allo strumento di sbagliare — impedisce che lo sbaglio passi per un
+risultato. È tutta lì la differenza fra `42 su 42` (che sembrava un successo) e `BASE ROSSA` +
+uscita 1.
+
+Quattro condizioni, tutte obbligatorie per ogni strumento che **misura** (giudici, guardiani,
+contatori, rapporti):
+1. **Misura prima se stesso.** Deve provare di essere in condizione di misurare, PRIMA di
+   misurare. Un metro storto va scoperto dal metro, non dal muro.
+2. **Provato nelle DUE direzioni.** Grida col guasto dentro **e** tace a macchina sana. Un
+   allarme provato in un verso solo potrebbe gridare sempre — e un allarme sempre acceso
+   viene spento.
+3. **Dichiara cosa NON ha esaminato.** Tetti, esclusioni, salti: sempre scritti. Un taglio
+   silenzioso fa sembrare «coperto» ciò che non è stato nemmeno guardato.
+4. **Il controllo è a sua volta sotto guardia.** Se qualcuno lo toglie, qualcosa diventa rosso
+   **lo stesso giorno**; altrimenti fra sei mesi sparisce in una «semplificazione».
+
+*Si verifica:* per ogni strumento di misura del progetto esiste (a) un controllo delle proprie
+precondizioni che **ferma** il giro invece di stampare un numero, (b) una prova che lo ha visto
+ROSSO su un guasto vero e VERDE a macchina sana, (c) un elenco dichiarato di ciò che è rimasto
+fuori, e (d) una guardia nella suite che fallisce se il controllo (a) viene rimosso.
 
 ---
 

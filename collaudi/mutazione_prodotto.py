@@ -683,6 +683,29 @@ def _riscrivi_intatto(percorso, testo):
     invalida_bytecode(percorso)
 
 
+_BASI = {}
+
+
+def base_e_verde(bersaglio):
+    """I test killer sono verdi sul codice SANO? Ritorna (verde, uscita). Misurato UNA volta
+    per gruppo di killer e tenuto a mente: il costo si paga una sola volta per giro.
+
+    ⛔ SENZA QUESTO CONTROLLO IL GIUDICE BARA, E BARA VERSO L'ALTO.
+    Se i test falliscono gia' col codice sano, falliscono anche con ogni guasto dentro:
+    OGNI mutante risulta «ucciso» e il giro stampa un punteggio pieno senza aver provato
+    niente. Successo il 2026-08-01 su `fase156_erasure`: «42 su 42» con un test rosso in
+    casa. E' la forma piu' insidiosa di finto verde, perche' non arriva come un problema --
+    arriva come un trionfo, e nessuno controlla un trionfo.
+
+    Verificato sulla storia (60 commit): nei due giri con la suite rossa i moduli falliti
+    NON erano fra i killer dei mutanti, quindi i punteggi passati reggono. Ma reggevano per
+    fortuna, non per costruzione: qui la fortuna smette di servire.
+    """
+    if bersaglio not in _BASI:
+        _BASI[bersaglio] = esegui(bersaglio, timeout=900)
+    return _BASI[bersaglio]
+
+
 def giro_sul_diff(base="HEAD~1", tetto=40, tetto_test=8):
     """Genera i mutanti SULLE RIGHE APPENA CAMBIATE e chiede: qualcuno se ne accorgerebbe?
 
@@ -721,6 +744,12 @@ def giro_sul_diff(base="HEAD~1", tetto=40, tetto_test=8):
                               "nota": "nessun file di test nomina questo modulo"})
                 continue
             bersaglio = " ".join(sorveglianti[:tetto_test])
+            _sano, _uscita = base_e_verde(bersaglio)
+            if _sano is not True:
+                esiti.append({"file": percorso, "riga": m["riga"], "verdetto": "base_rossa",
+                              "danno": "i test killer non sono verdi sul codice sano",
+                              "nota": (_uscita or "")[-200:]})
+                continue
             _apri_traccia(pieno, sorgente)
             _riscrivi_intatto(pieno, applica_mutante(sorgente, m))
             try:
@@ -1062,7 +1091,7 @@ if __name__ == "__main__":
         shutil.rmtree(riserva, ignore_errors=True)
         sys.exit(0)
 
-    sopravvissuti, uccisi, non_applicabili, incerti = [], 0, [], []
+    sopravvissuti, uccisi, non_applicabili, incerti, basi_rosse = [], 0, [], [], []
     t0 = time.time()
     try:
         for i, (percorso, orig, mut, test, danno) in enumerate(MUTANTI, 1):
@@ -1071,6 +1100,19 @@ if __name__ == "__main__":
                 non_applicabili.append("%s (testo non trovato)" % percorso)
                 print("\n%2d. %-28s  ? testo non trovato: mutante non applicabile"
                       % (i, percorso))
+                continue
+            # ⛔ LA BASE DEV'ESSERE VERDE PRIMA DI ROMPERE QUALCOSA. Questo e' il modo che
+            # gira in CI e produce il numero che finisce nei documenti: se i suoi killer
+            # fossero gia' rossi, ogni mutante risulterebbe «ucciso» e il punteggio pieno
+            # sarebbe aria. Fino al 2026-08-01 qui non c'era nessun controllo: e' andata
+            # bene per FORTUNA (verificato su 60 commit), non per costruzione.
+            sano, perche = base_e_verde(test)
+            if sano is not True:
+                basi_rosse.append((percorso, test))
+                print("\n%2d. %-28s  ⛔ BASE ROSSA: '%s' non e' verde sul codice sano"
+                      % (i, percorso, test))
+                print("::error title=BASE ROSSA::i killer '%s' falliscono gia' senza mutanti: "
+                      "qualunque punteggio sarebbe falso. %s" % (test, (perche or "")[-200:]))
                 continue
             io.open(percorso, "w", encoding="utf-8", newline="\n").write(
                 testo.replace(orig, mut, 1))
@@ -1126,12 +1168,20 @@ if __name__ == "__main__":
             invalida_bytecode(f)              # l'albero torna sano anche per chi importa dopo
         shutil.rmtree(riserva, ignore_errors=True)
 
-    provati = len(MUTANTI) - len(non_applicabili)
+    provati = len(MUTANTI) - len(non_applicabili) - len(basi_rosse)
     print("\n" + "=" * 90)
     print("MUTANTI PROVATI: %d  |  UCCISI: %d  |  SOPRAVVISSUTI: %d  |  INCERTI: %d  |  %.1f minuti"
           % (provati, uccisi, len(sopravvissuti), len(incerti), (time.time() - t0) / 60.0))
     if non_applicabili:
         print("non applicabili (il codice e' cambiato): %s" % ", ".join(non_applicabili))
+    if basi_rosse:
+        # ⛔ NON e' un dettaglio: ogni riga qui e' un punto che NON e' stato giudicato,
+        # e che senza questo controllo sarebbe finito fra gli "uccisi" gonfiando il totale.
+        print("\n⛔ BASE ROSSA su %d mutanti: i loro test killer falliscono GIA' sul codice "
+              "sano, quindi li' non si puo' giudicare niente. Prima si sistemano i test."
+              % len(basi_rosse))
+        for percorso, test in basi_rosse:
+            print("  ⛔ %-30s killer: %s" % (percorso, test))
     if incerti:
         # NON fanno rosso il job (un intoppo del runner non deve bloccare la produzione) ma
         # non sono nemmeno UCCISI: quel punto non e' sorvegliato in modo affidabile e va
@@ -1163,6 +1213,11 @@ if __name__ == "__main__":
             # l'unica cosa leggibile era «Process completed with exit code 1».
             print("::error title=Mutante SOPRAVVISSUTO in %s::%s | test che avrebbero "
                   "dovuto vederlo: %s" % (percorso, danno, test))
+        sys.exit(1)
+    if basi_rosse:
+        # Una base rossa e' rossa quanto un sopravvissuto: senza di essa il punteggio non
+        # significa niente, e un punteggio che non significa niente e' peggio di nessuno.
+        # Va detto QUI, se no un giro che non ha giudicato nulla uscirebbe verde.
         sys.exit(1)
     print("\nNESSUN MUTANTE SOPRAVVISSUTO: ogni guasto simulato viene visto dai test.")
     sys.exit(0)
