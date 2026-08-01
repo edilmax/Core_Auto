@@ -221,5 +221,318 @@ class TestScatto3Router(unittest.TestCase):
         self.assertEqual(sis.finanza.debiti_host(hid, stato="aperto"), [])
 
 
+class _Carta:
+    """Provider di carta finto: registra COME e' stato chiamato, e risponde a piacere.
+
+    Serve a guardare i PARAMETRI dell'addebito (valuta, importo, identificativi), non solo
+    il risultato: quasi tutti i difetti trovati qui stanno in cio' che viene passato, non in
+    cio' che torna indietro.
+    """
+
+    def __init__(self, stato="riuscito"):
+        self.stato = stato
+        self.chiamate = []
+
+    def addebita(self, **kw):
+        self.chiamate.append(kw)
+        return {"stato": self.stato, "pi": "pi_test", "motivo": "prova"}
+
+
+class _Payout:
+    """Ledger dei payout finto: `elenca` registra con che valuta gli si chiede."""
+
+    def __init__(self, righe=None):
+        self.righe = righe or []
+        self.chiamate = []
+        self.tolti, self.impostati = [], []
+
+    def elenca(self, host_id, stato=None, valuta=None):
+        self.chiamate.append({"host_id": host_id, "stato": stato, "valuta": valuta})
+        return list(self.righe)
+
+    def imposta_importo(self, pid, n):
+        self.impostati.append((pid, n))
+        return True
+
+    def rimuovi(self, pid):
+        self.tolti.append(pid)
+        return True
+
+
+class TestRiscossioneNonPuoSbagliareIDENTIFICATIVI(unittest.TestCase):
+    """⛔ 18 BUCHI VERI nella riscossione, trovati dalla mutazione il 2026-08-01.
+
+    Campagna su tutti e 143 i punti di `fase177_financial_controller`: 97 uccisi, 45
+    sopravvissuti, e **18 di quei 45 stanno nelle due funzioni che spostano denaro davvero**
+    (`riscuoti_debiti`, che trattiene dai bonifici, e `riscuoti_da_carta`, che addebita
+    off-session su una carta salvata via Stripe). Ognuno dei 18 e' stato ri-provato contro
+    TUTTI gli 11 sorveglianti: 18 su 18 sopravvivono anche li', zero falsi allarmi.
+
+    Le prove qui sotto sono raggruppate per PROPRIETA', non una per mutante: diciotto prove
+    che dicono la stessa cosa in diciotto modi sarebbero rumore che nasconde il segnale.
+    """
+
+    def setUp(self):
+        self.fc = crea_financial_controller(":memory:")
+        self.fc.inizializza_schema()
+
+    def _debito(self, valuta="EUR", cents=5000, rif="RIF1", host="h1"):
+        class _NoPayout:
+            def elenca(self, *a, **k):
+                return []
+        self.fc.processa_penale(riferimento=rif, host_id=host, penale_cents=cents,
+                                valuta=valuta, payout=_NoPayout())
+        return self.fc.debiti_host(host, stato="aperto")
+
+    def test_un_identificativo_VUOTO_ferma_tutto_prima_di_toccare_i_soldi(self):
+        """`not (isinstance(x, str) and x)` con un `or` accetta la stringa vuota: e' pur
+        sempre una stringa. Da li' parte una riscossione con un identificativo vuoto --
+        contro i bonifici di chissa' chi, o con un `customer` Stripe vuoto.
+
+        Si pretende il rifiuto **e** che gli archivi non siano stati nemmeno interrogati:
+        un rifiuto che ha gia' chiamato il provider di pagamento non e' un rifiuto.
+        """
+        self._debito()
+        # ⛔ L'OSSERVABILE DEVE STARE AL GRADINO GIUSTO. Prima pretendevo «i payout non
+        # vengono interrogati»: ma col guasto dentro la funzione PROSEGUE, chiede i debiti di
+        # "", non ne trova, e finisce senza toccare i payout -- stesso osservabile, guasto
+        # invisibile (provato: il mutante sopravviveva). Cio' che distingue davvero e' se
+        # l'ARCHIVIO DEI DEBITI viene interrogato: un rifiuto vero non guarda niente.
+        visti = []
+        vero_debiti_host = self.fc.debiti_host
+        self.fc.debiti_host = lambda *a, **k: visti.append((a, k)) or []
+        try:
+            for storto in ("", None, 0, [], 123):
+                p = _Payout([{"prenotazione_id": "P9", "minori": 9999}])
+                e = self.fc.riscuoti_debiti(host_id=storto, payout=p)
+                self.assertEqual(0, e["riscossi_cents"], "host_id %r accettato" % (storto,))
+                self.assertEqual([], visti,
+                                 "con host_id %r ha comunque interrogato l'archivio dei "
+                                 "debiti: il rifiuto non e' avvenuto prima" % (storto,))
+                self.assertEqual([], p.chiamate)
+                c = _Carta()
+                e = self.fc.riscuoti_da_carta(host_id=storto, provider_carta=c,
+                                              customer="cus_1", payment_method="pm_1")
+                self.assertEqual(0, e["incassati_cents"])
+                self.assertEqual([], visti,
+                                 "con host_id %r la riscossione su carta ha comunque "
+                                 "interrogato i debiti" % (storto,))
+                self.assertEqual([], c.chiamate,
+                                 "ha chiamato la carta con host_id %r" % (storto,))
+        finally:
+            self.fc.debiti_host = vero_debiti_host
+        # e gli identificativi Stripe: vuoti o storti -> nessun addebito
+        for cus, pm in (("", "pm_1"), ("cus_1", ""), (None, "pm_1"), ("cus_1", None),
+                        (7, "pm_1"), ("cus_1", [])):
+            c = _Carta()
+            e = self.fc.riscuoti_da_carta(host_id="h1", provider_carta=c,
+                                          customer=cus, payment_method=pm)
+            self.assertEqual([], c.chiamate,
+                             "addebito tentato con customer=%r payment_method=%r" % (cus, pm))
+            self.assertEqual(0, e["incassati_cents"])
+
+    def test_la_VALUTA_del_debito_non_diventa_mai_euro_per_conto_suo(self):
+        """`str(deb.get("valuta") or "EUR")` con un `and` restituisce **sempre "EUR"**.
+
+        Due punti diversi, due danni diversi e tutti e due veri:
+          · nella riscossione sui bonifici si cercherebbero payout in euro per un debito in
+            un'altra valuta -- e il modulo dichiara «STESSA valuta» come sua garanzia;
+          · sulla carta si addebiterebbe **denaro vero nella valuta sbagliata**, con la
+            conversione fatta dalla banca dell'host e a carico suo.
+        """
+        self._debito(valuta="USD", cents=4200, rif="RIFUSD")
+        p = _Payout([])
+        self.fc.riscuoti_debiti(host_id="h1", payout=p)
+        self.assertTrue(p.chiamate, "i payout non sono stati nemmeno interrogati")
+        self.assertEqual(["USD"], sorted({c["valuta"] for c in p.chiamate}),
+                         "il debito e' in USD ma i payout sono stati cercati in: %r"
+                         % ([c["valuta"] for c in p.chiamate],))
+        c = _Carta()
+        self.fc.riscuoti_da_carta(host_id="h1", provider_carta=c,
+                                  customer="cus_1", payment_method="pm_1")
+        self.assertTrue(c.chiamate, "nessun addebito tentato")
+        self.assertEqual(["USD"], sorted({x["valuta"] for x in c.chiamate}),
+                         "addebito su carta nella valuta sbagliata: %r"
+                         % ([x["valuta"] for x in c.chiamate],))
+
+    def test_non_si_riscuote_dal_bonifico_della_prenotazione_del_debito_STESSO(self):
+        """E' una garanzia scritta nel modulo: *«mai il payout della prenotazione del debito
+        stesso»*. Serve perche' quel bonifico e' gia' legato alla prenotazione contestata:
+        prenderlo significherebbe pagarsi due volte con lo stesso denaro, e lasciare
+        scoperta la prenotazione da cui il debito nasce.
+        """
+        self._debito(cents=5000, rif="RIF1")
+        p = _Payout([{"prenotazione_id": "RIF1", "minori": 9999}])   # proprio quella del debito
+        e = self.fc.riscuoti_debiti(host_id="h1", payout=p)
+        self.assertEqual(0, e["riscossi_cents"],
+                         "ha riscosso dal bonifico della prenotazione del debito stesso")
+        self.assertEqual([], p.impostati + [(x, None) for x in p.tolti],
+                         "il payout della prenotazione contestata e' stato toccato: %r"
+                         % (p.impostati + p.tolti,))
+        # ...e il verso opposto: da un ALTRO bonifico si riscuote eccome, se no basterebbe
+        # non riscuotere mai per far passare la meta' di sopra.
+        p2 = _Payout([{"prenotazione_id": "P_ALTRA", "minori": 9999}])
+        e2 = self.fc.riscuoti_debiti(host_id="h1", payout=p2)
+        self.assertEqual(5000, e2["riscossi_cents"], "non riscuote nemmeno dove dovrebbe")
+
+    def test_una_carta_RIFIUTATA_non_si_martella(self):
+        """`prossimo > ora` diventa `>=`: un debito ancora in attesa (backoff) verrebbe
+        ritentato **subito**.
+
+        Il modulo lo dichiara: *«una carta rifiutata non si martella»*. Non e' cortesia: una
+        raffica di tentativi su una carta rifiutata viene letta dalle banche come tentativo
+        di frode, e mette a rischio il conto commerciante -- cioe' la possibilita' stessa di
+        incassare. Il danno non e' il singolo addebito: e' restare senza pagamenti.
+        """
+        self._debito(cents=5000)
+        c1 = _Carta("fallito")
+        self.fc.riscuoti_da_carta(host_id="h1", provider_carta=c1,
+                                  customer="cus_1", payment_method="pm_1", ora_ts=1_000_000)
+        self.assertEqual(1, len(c1.chiamate), "il primo tentativo deve avvenire")
+        aperti = self.fc.debiti_host("h1", stato="aperto")
+        self.assertEqual(1, len(aperti), "dopo un rifiuto il debito resta aperto")
+        self.assertGreater(int(aperti[0]["prossimo_ts"]), 1_000_000,
+                           "nessuna attesa impostata dopo il rifiuto")
+        # ...e adesso, PRIMA che l'attesa sia scaduta, non si ritenta
+        c2 = _Carta("riuscito")
+        self.fc.riscuoti_da_carta(host_id="h1", provider_carta=c2,
+                                  customer="cus_1", payment_method="pm_1", ora_ts=1_000_001)
+        self.assertEqual([], c2.chiamate,
+                         "carta martellata: ritentata mentre era ancora in attesa")
+        # ⛔ IL CONFINE ESATTO, che e' l'unico punto dove `>` e `>=` differiscono: all'istante
+        # PRECISO della scadenza l'attesa e' finita, quindi si ritenta. Provare solo «prima» e
+        # «dopo» lascia vivo il guasto -- misurato: il mutante sopravviveva a entrambe.
+        scadenza = int(aperti[0]["prossimo_ts"])
+        c3 = _Carta("riuscito")
+        self.fc.riscuoti_da_carta(host_id="h1", provider_carta=c3, customer="cus_1",
+                                  payment_method="pm_1", ora_ts=scadenza)
+        self.assertEqual(1, len(c3.chiamate),
+                         "all'istante esatto della scadenza l'attesa e' finita e il "
+                         "ritentativo deve avvenire: un giorno di ritardo a ogni giro")
+
+    def test_un_residuo_a_ZERO_non_muove_niente(self):
+        """`if not nota_id or residuo <= 0: continue` e `if residuo <= 0: break` con `and` o
+        con `<`: un debito gia' saldato (residuo 0) rientrerebbe nel giro. Nel migliore dei
+        casi gira a vuoto; nel peggiore registra movimenti da zero centesimi nel libro che
+        alimenta il DAC7."""
+        self._debito(cents=5000)
+        p = _Payout([{"prenotazione_id": "P1", "minori": 9999}])
+        self.fc.riscuoti_debiti(host_id="h1", payout=p)      # salda tutto
+        self.assertEqual([], self.fc.debiti_host("h1", stato="aperto"))
+        prima = len(self.fc.movimenti("RIF1"))
+        p2 = _Payout([{"prenotazione_id": "P2", "minori": 9999}])
+        e = self.fc.riscuoti_debiti(host_id="h1", payout=p2)
+        self.assertEqual(0, e["riscossi_cents"], "ha riscosso su un debito gia' saldato")
+        self.assertEqual([], p2.impostati + p2.tolti, "ha toccato i payout a debito zero")
+        self.assertEqual(prima, len(self.fc.movimenti("RIF1")),
+                         "ha scritto movimenti nuovi su un debito gia' chiuso")
+
+    def test_un_debito_DEGENERE_non_fa_partire_nessuna_riscossione(self):
+        """⛔ I DUE CONTROLLI CHE PROTEGGONO DA UNO STATO IMPOSSIBILE.
+
+            if not nota_id or residuo <= 0: continue
+
+        Difendono da righe che l'uso normale non produce ma un'interruzione si': un debito
+        rimasto 'aperto' con residuo gia' a zero (scrittura interrotta fra il consumo e
+        l'aggiornamento dello stato), o senza identificativo. Con `and` al posto di `or`, o
+        con `<` al posto di `<=`, quelle righe entrano nel giro:
+          · quella a residuo zero fa interrogare i bonifici per niente;
+          · quella senza identificativo fa scrivere nel giornale un movimento con evento
+            `offset::<pagamento>` -- una riga contabile agganciata a un debito che non ha
+            nome, quindi impossibile da riconciliare e da stornare.
+
+        Le righe si costruiscono con `_debito_scrivi` (metodo interno) perche' l'ingresso
+        pubblico non permette di crearle: e' esattamente il motivo per cui quei due controlli
+        esistono, e l'unico modo di provare che servono davvero.
+        """
+        # (a) debito 'aperto' con residuo gia' a zero
+        self.fc._debito_scrivi("ND-ZERO", "h1", "RIF-ZERO", 0, "EUR", "aperto")
+        p = _Payout([{"prenotazione_id": "P1", "minori": 9999}])
+        e = self.fc.riscuoti_debiti(host_id="h1", payout=p)
+        self.assertEqual(0, e["riscossi_cents"])
+        self.assertEqual([], p.chiamate,
+                         "un debito a residuo zero ha fatto interrogare i bonifici: %r"
+                         % (p.chiamate,))
+        # (b) debito senza identificativo, con residuo VERO
+        self.fc._debito_scrivi("", "h1", "RIF-SENZA-NOME", 5000, "EUR", "aperto")
+        p2 = _Payout([{"prenotazione_id": "P2", "minori": 9999}])
+        e2 = self.fc.riscuoti_debiti(host_id="h1", payout=p2)
+        self.assertEqual(0, e2["riscossi_cents"],
+                         "ha riscosso su un debito senza identificativo")
+        self.assertEqual([], self.fc.movimenti("RIF-SENZA-NOME"),
+                         "ha scritto nel giornale un movimento agganciato a un debito senza "
+                         "nome: impossibile da riconciliare e da stornare")
+
+    def _con_debiti_rotti(self, azione):
+        """Esegue `azione` con l'archivio dei debiti che solleva. Ripristina sempre."""
+        vero = self.fc.debiti_host
+
+        def _rompi(*a, **k):
+            raise RuntimeError("archivio debiti guasto")
+
+        self.fc.debiti_host = _rompi
+        try:
+            return azione()
+        finally:
+            self.fc.debiti_host = vero
+
+    def test_ogni_guasto_ISOLATO_della_riscossione_lascia_la_TRACCIA(self):
+        """Cinque punti di queste due funzioni ingoiano i guasti di proposito: un archivio
+        rotto non deve fermare la riscossione degli altri debiti. Proprio per questo la
+        traccia dell'eccezione e' l'unica cosa che resta -- e qui si parla di denaro che non
+        e' entrato: senza il PERCHE', nessuno sapra' mai se e' un problema di rete, di carta
+        o di archivio.
+
+        ⚠️ Osservabile FORTE: con `exc_info=False` il campo del record vale `False`, che NON
+        e' `None` -- un `assertIsNotNone` passerebbe col guasto dentro.
+        """
+        import logging
+
+        def _esplode(*a, **k):
+            raise RuntimeError("archivio guasto")
+
+        self._debito(cents=5000)
+        casi = []
+        # l'archivio dei debiti stesso illeggibile: e' il PRIMO passo di tutte e due le
+        # funzioni, e se salta non si riscuote niente da nessuno. Senza la traccia, il
+        # registro direbbe solo «non si e' potuto leggere», mai perche'.
+        rotto = _Payout([{"prenotazione_id": "P1", "minori": 9999}])
+        casi.append(("lettura dei debiti (riscossione sui payout)",
+                     lambda: self._con_debiti_rotti(
+                         lambda: self.fc.riscuoti_debiti(host_id="h1", payout=rotto))))
+        casi.append(("lettura dei debiti (riscossione su carta)",
+                     lambda: self._con_debiti_rotti(
+                         lambda: self.fc.riscuoti_da_carta(
+                             host_id="h1", provider_carta=_Carta(),
+                             customer="cus_1", payment_method="pm_1"))))
+        p_rotto = _Payout()
+        p_rotto.elenca = _esplode
+        casi.append(("lettura dei payout",
+                     lambda: self.fc.riscuoti_debiti(host_id="h1", payout=p_rotto)))
+        p_ledger = _Payout([{"prenotazione_id": "P1", "minori": 9999}])
+        p_ledger.imposta_importo = _esplode
+        p_ledger.rimuovi = _esplode
+        casi.append(("aggiornamento del ledger payout",
+                     lambda: self.fc.riscuoti_debiti(host_id="h1", payout=p_ledger)))
+        c = _Carta()
+        c.addebita = _esplode
+        casi.append(("addebito sulla carta",
+                     lambda: self.fc.riscuoti_da_carta(host_id="h1", provider_carta=c,
+                                                       customer="cus_1", payment_method="pm_1")))
+        for nome, azione in casi:
+            with self.assertLogs("core_auto.financial_controller", level="WARNING") as reg:
+                azione()
+            tracce = [r.exc_info for r in reg.records
+                      if r.levelno == logging.WARNING and r.exc_info is not None]
+            self.assertTrue(tracce, "nessun allarme con traccia per il guasto su %s: %r"
+                            % (nome, reg.output))
+            for t in tracce:
+                self.assertIsInstance(t, tuple,
+                                      "l'allarme su %s non porta la traccia (exc_info=%r)"
+                                      % (nome, t))
+                self.assertIsInstance(t[1], BaseException,
+                                      "la traccia su %s non contiene l'eccezione" % nome)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

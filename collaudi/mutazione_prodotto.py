@@ -549,12 +549,19 @@ def test_che_nominano(percorso):
 #  ogni voce porta la PROVA di equivalenza, non un'opinione. La chiave e' il TESTO della
 #  riga, non il numero: cosi' resta valida se il codice si sposta, e smette di valere --
 #  giustamente -- se quella riga cambia.
+# ⛔ LA CHIAVE PORTA ANCHE LA FUNZIONE (dal 2026-08-01): file · FUNZIONE · testo della riga ·
+#    vecchio · nuovo. Senza il nome della funzione, una dichiarazione si estendeva a TUTTE le
+#    righe identiche del file: in `fase177` la riga `if residuo <= 0:` compare in due funzioni
+#    diverse, e dichiararne una avrebbe reso cieca anche l'altra. Una dichiarazione vale SOLO
+#    dove e' stata dimostrata.
 EQUIVALENTI_DICHIARATI = {
-    ("fase199_invarianti.py", "mx = z3.If(a1 > b1, a1, b1)", ">", ">="):
+    ("fase199_invarianti.py", "dimostra_formalmente",
+     "mx = z3.If(a1 > b1, a1, b1)", ">", ">="):
         "DIMOSTRATO CON Z3 il 2026-07-31, non osservato: chiesto al risolutore se esista un "
         "intero per cui If(a>b,a,b) e If(a>=b,a,b) differiscano -> unsat. Sono lo stesso "
         "massimo per OGNI coppia di interi. Nessun test potrebbe ucciderlo.",
-    ("fase199_invarianti.py", "mn = z3.If(a2 < b2, a2, b2)", "<", "<="):
+    ("fase199_invarianti.py", "dimostra_formalmente",
+     "mn = z3.If(a2 < b2, a2, b2)", "<", "<="):
         "Stessa dimostrazione del massimo, applicata al minimo: If(a<b,a,b) e If(a<=b,a,b) "
         "coincidono per ogni coppia di interi.",
     # ⛔ QUI C'ERA UNA FALSA EQUIVALENZA, TOLTA IL 2026-08-01.
@@ -568,14 +575,14 @@ EQUIVALENTI_DICHIARATI = {
     # ⚠️ LEZIONE PER CHI AGGIUNGE VOCI QUI: «non e' osservabile» va DIMOSTRATO (z3, o una
     #    prova esaustiva sugli ingressi), mai dedotto. Se la dimostrazione non c'e', la voce
     #    non va scritta: meglio un sopravvissuto aperto che una cecita' dichiarata.
-    ("fase100_dac7.py",
+    ("fase100_dac7.py", "_n",
      "return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else 0",
      ">=", ">"):
         "PROVATO il 2026-07-31 su 11 ingressi (0, 1, -1, 5, -5, True, False, None, 'x', "
         "3.0, 10^9): 0 risposte diverse. Con v=0 il ramo vero restituisce 0 e il ramo else "
         "restituisce 0: identico. Nessun test puo' ucciderlo perche' non c'e' niente da "
         "vedere.",
-    ("fase177_financial_controller.py",
+    ("fase177_financial_controller.py", "_cent",
      "return v if isinstance(v, int) and not isinstance(v, bool) and v > 0 else 0",
      ">", ">="):
         "DIMOSTRATO CON Z3 il 2026-08-01, non osservato: chiesto al risolutore se esista un "
@@ -584,13 +591,66 @@ EQUIVALENTI_DICHIARATI = {
         "restituisce 0: la stessa cosa. E' la gemella del `_cent` di fase100_dac7 (voce qui "
         "sopra), provata li' su 11 ingressi e qui in forma generale su TUTTI gli interi. "
         "Nessun test puo' ucciderlo: non c'e' niente da vedere.",
+    ("fase177_financial_controller.py", "riscuoti_debiti",
+     "if residuo <= 0:", "<=", "<"):
+        "DIMOSTRATO il 2026-08-01 leggendo il codice, non supposto. Il caso che differisce e' "
+        "UNO: residuo == 0 dentro il giro sulle righe di payout. Col codice sano si esce dal "
+        "giro; col guasto si prosegue e per ogni riga rimanente vale quota = min(disp, 0) = 0, "
+        "quindi `registra(importo_cents=0)` -- che RIFIUTA PRIMA di toccare il database e "
+        "SENZA scrivere un allarme (righe 158-161: la validazione precede `self._apri()`). "
+        "Il residuo non cambia, quindi nemmeno le scritture successive (righe 764-779). "
+        "Stato identico, registro identico: restano solo giri a vuoto. "
+        "⚠️ La premessa NON e' un'opinione: e' sotto guardia in "
+        "`test_copertura_critica.test_un_importo_che_denaro_non_e_viene_RIFIUTATO_PULITO_"
+        "senza_allarme`. Se qualcuno cambiasse `registra` per scrivere o gridare su un "
+        "importo zero, quella guardia diventerebbe rossa e questa dichiarazione andrebbe "
+        "rifatta. ⛔ Vale SOLO in `riscuoti_debiti`: la riga identica in `processa_penale` "
+        "(538) NON e' dimostrata e resta un sopravvissuto aperto.",
+    ("fase177_financial_controller.py", "riscuoti_debiti",
+     "if not pid or pid == rif_deb or disp <= 0:", "<=", "<"):
+        "DIMOSTRATO il 2026-08-01. `disp = _cent(r.get('minori'))` e `_cent` non restituisce "
+        "MAI un negativo, quindi `disp < 0` e' sempre falso e l'unico caso che differisce e' "
+        "disp == 0: col codice sano la riga di payout si salta, col guasto si prosegue con "
+        "quota = min(0, residuo) = 0 e si arriva allo stesso `registra(importo_cents=0)` che "
+        "rifiuta pulito, senza scrivere e senza gridare. Nessuna differenza di stato ne' di "
+        "registro. Stessa premessa sotto guardia della voce qui sopra.",
 }
+
+
+_FUNZIONI = {}
+
+
+def funzione_di(righe, numero):
+    """In quale funzione sta questa riga. Serve alla chiave delle equivalenze dichiarate.
+
+    ⛔ DIFETTO VERO TROVATO IL 2026-08-01, prima che facesse danno. La chiave era
+    (file, testo della riga, vecchio, nuovo) -- SENZA sapere DOVE. In
+    `fase177_financial_controller` la riga `if residuo <= 0:` compare due volte, in due
+    funzioni diverse (`processa_penale` e `riscuoti_debiti`): dichiarare equivalente l'una
+    avrebbe dichiarato CIECA anche l'altra, di cui non era stato dimostrato niente.
+
+    E' la stessa famiglia della falsa equivalenza tolta oggi da `fase199`, ma peggiore: non
+    un errore di giudizio, un **effetto collaterale invisibile del meccanismo**. Una
+    dichiarazione deve valere SOLO dove e' stata dimostrata.
+    """
+    import ast
+    chiave = hash("\n".join(righe))
+    if chiave not in _FUNZIONI:
+        try:
+            albero = ast.parse("\n".join(righe))
+        except SyntaxError:
+            return ""
+        _FUNZIONI[chiave] = sorted((n.lineno, n.end_lineno, n.name) for n in ast.walk(albero)
+                                   if isinstance(n, ast.FunctionDef))
+    dentro = [f for f in _FUNZIONI[chiave] if f[0] <= numero <= f[1]]
+    return dentro[-1][2] if dentro else ""
 
 
 def _e_equivalente(percorso, righe, mutante):
     riga = righe[mutante["riga"] - 1].strip() if mutante["riga"] <= len(righe) else ""
     return EQUIVALENTI_DICHIARATI.get(
-        (os.path.basename(percorso), riga, mutante["vecchio"], mutante["nuovo"]))
+        (os.path.basename(percorso), funzione_di(righe, mutante["riga"]), riga,
+         mutante["vecchio"], mutante["nuovo"]))
 
 
 # ── RETE DI SALVATAGGIO CONTRO L'INTERRUZIONE ───────────────────────────────────
