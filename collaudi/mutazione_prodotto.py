@@ -570,6 +570,15 @@ EQUIVALENTI_DICHIARATI = {
         "3.0, 10^9): 0 risposte diverse. Con v=0 il ramo vero restituisce 0 e il ramo else "
         "restituisce 0: identico. Nessun test puo' ucciderlo perche' non c'e' niente da "
         "vedere.",
+    ("fase177_financial_controller.py",
+     "return v if isinstance(v, int) and not isinstance(v, bool) and v > 0 else 0",
+     ">", ">="):
+        "DIMOSTRATO CON Z3 il 2026-08-01, non osservato: chiesto al risolutore se esista un "
+        "intero v per cui If(v>0, v, 0) e If(v>=0, v, 0) differiscano -> unsat. Differirebbero "
+        "solo in v=0, dove pero' il ramo vero restituisce v (cioe' 0) e il ramo else "
+        "restituisce 0: la stessa cosa. E' la gemella del `_cent` di fase100_dac7 (voce qui "
+        "sopra), provata li' su 11 ingressi e qui in forma generale su TUTTI gli interi. "
+        "Nessun test puo' ucciderlo: non c'e' niente da vedere.",
 }
 
 
@@ -770,7 +779,7 @@ def misura_normale(bersaglio, tetto=900):
     return time.time() - t0
 
 
-def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45):
+def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45, killer=None):
     """La stessa domanda del modo diff, ma su un modulo INTERO scelto per rischio.
 
     DUE LIMITI, ed entrambi DICONO cosa hanno tagliato (mai un taglio silenzioso):
@@ -794,11 +803,23 @@ def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45):
         sorveglianti = test_che_nominano(percorso)
         righe_testo = sorgente.splitlines()
         fatti_qui = 0
-        bersaglio = " ".join(sorveglianti[:tetto_test])
+        # ⛔ UN INSIEME KILLER RIDOTTO VA DICHIARATO, NON SUBITO IN SILENZIO.
+        # I sorveglianti si scelgono in ordine ALFABETICO, che non ha niente a che vedere col
+        # costo: su fase177 il primo (`test_avvio_e_ripristino`) da solo pesa 76s contro i 32s
+        # di tutti gli altri sette insieme, e il tetto dei 45 minuti scadeva senza giudicare
+        # un mutante. Con `killer` si punta ai test che davvero esercitano quel modulo.
+        # ⚠️ Meno test = piu' FACILE sopravvivere: cio' che esce di qui sono CANDIDATI, da
+        #    ri-provare contro TUTTI i sorveglianti prima di chiamarlo buco.
+        scelti = list(killer) if killer else sorveglianti[:tetto_test]
+        bersaglio = " ".join(scelti)
         # si misura il NORMALE prima di rompere qualcosa: cosi' il tetto e' scelto, non subito
         normale = misura_normale(bersaglio) if sorveglianti else 0.0
         rinunce["normale_sec"][nome] = round(normale, 1)
         tetto_sec = max(60, int(3 * normale))
+        print("\n%s: %d punti mutabili · sorveglianti %d, usati %d%s · normale %.1fs · "
+              "tetto %ds" % (nome, len(mutanti), len(sorveglianti), len(scelti),
+                             " (SCELTI A MANO)" if killer else "", normale, tetto_sec))
+        print("  killer: %s" % (bersaglio or "NESSUNO"))
         for m in mutanti:
             motivo = _e_equivalente(nome, righe_testo, m)
             if motivo:
@@ -830,6 +851,12 @@ def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45):
             esiti.append({"file": nome, "riga": m["riga"], "verdetto": _v,
                           "danno": m["danno"],
                           "nota": "%s -> %s" % (m["vecchio"], m["nuovo"])})
+            # ⛔ SI STAMPA SUBITO, non alla fine. Il 2026-08-01 due giri sono stati interrotti
+            # e hanno perso TUTTO il lavoro gia' fatto, perche' il risultato usciva solo in
+            # fondo: quaranta minuti di calcolo spariti senza lasciare una riga.
+            print("  %4d/%-4d riga %-5s %-18s %-9s %s"
+                  % (fatti_qui, min(tetto, len(mutanti)), m["riga"],
+                     "%s -> %s" % (m["vecchio"], m["nuovo"]), _v.upper(), m["danno"][:44]))
     return esiti, rinunce
 
 
@@ -890,10 +917,17 @@ if __name__ == "__main__" and "--modulo" in sys.argv:
     recupera_da_interruzione()
     _i = sys.argv.index("--modulo")
     _nomi = [a for a in sys.argv[_i + 1:] if not a.startswith("--")]
+    # `--killer t1 t2 ...`: sceglie a mano i test che devono uccidere, invece dei primi sei in
+    # ordine alfabetico. Serve quando un sorvegliante lentissimo mangia tutto il tempo del giro.
+    _killer = None
+    if "--killer" in sys.argv:
+        _k = sys.argv.index("--killer")
+        _killer = [a for a in sys.argv[_k + 1:] if not a.startswith("--")]
+        _nomi = [n for n in _nomi if n not in _killer]
     print("=" * 96)
     print("MUTANTI GENERATI SU MODULI INTERI: %s" % ", ".join(_nomi))
     print("=" * 96)
-    _esiti, _rin = giro_su_moduli(_nomi)
+    _esiti, _rin = giro_su_moduli(_nomi, killer=_killer)
     _sopr = [e for e in _esiti if e["verdetto"] == "sopravvissuto"]
     _scop = [e for e in _esiti if e["verdetto"] == "scoperto"]
     for e in _esiti:

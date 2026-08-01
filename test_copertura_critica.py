@@ -1771,6 +1771,107 @@ class TestGiornaleRamiDErrore(_BaseFC):
                           importo_cents=100, valuta="EUR", causale="c")  # niente host
         self.assertEqual(self.fc.aggrega_dac7(2027), {})
 
+    def test_il_DAC7_non_INVENTA_un_host_da_un_soggetto_che_host_non_e(self):
+        """⛔ IL RAPPORTO FISCALE NON PUO' ATTRIBUIRE DENARO A UN HOST INESISTENTE.
+
+        DIFETTO TROVATO DALLA MUTAZIONE (2026-08-01, `fase177:285` e `:290`). Le due righe
+        dicono `if sog.startswith("host:") **and** not d["host"]`. Con un `or` al posto
+        dell'`and` -- un carattere -- il ramo scatta anche quando il soggetto NON e' un host,
+        e `sog[5:]` taglia comunque i primi cinque caratteri: `"piattaforma"` diventa l'host
+        `"forma"`. Quel nome finisce nel **rapporto DAC7 mandato alle autorita' fiscali**, con
+        addosso soldi veri.
+
+        E' peggio di un conto sbagliato: **i totali tornano lo stesso**, sono solo attribuiti
+        alla persona sbagliata -- e non se ne accorge nessuno finche' qualcuno non contesta.
+        La prova esistente qui sopra non poteva vederlo: usa un payout SENZA incasso, che
+        viene scartato prima, per mancanza di data.
+        """
+        # una prenotazione con l'incasso (quindi CON data) ma nessun soggetto che sia un host
+        for rif, tipo in (("R1", "payout_host"), ("R2", "commissione")):
+            self.fc.movimento(tipo="incasso", riferimento=rif, soggetto="ospite",
+                              importo_cents=1000, valuta="EUR", causale="c")
+            self.fc.movimento(tipo=tipo, riferimento=rif, soggetto="piattaforma",
+                              importo_cents=100, valuta="EUR", causale="c")
+        agg = self.fc.aggrega_dac7(2027)
+        self.assertEqual({}, agg,
+                         "il DAC7 ha inventato uno o piu' host da soggetti che host non "
+                         "sono: %r. Con `or` al posto di `and`, 'piattaforma' diventa "
+                         "l'host 'forma' e si prende i soldi nel rapporto fiscale." % (agg,))
+
+
+class TestGiornaleRifiutaCioCheNonEDenaro(_BaseFC):
+    """⛔ IL GIORNALE E' LA VERITA' CONTABILE: CI ENTRA SOLO DENARO VERO.
+
+    Difetti trovati dalla mutazione il 2026-08-01 su `fase177_financial_controller`, righe
+    160 e 191. Sono provati **direttamente su `registra`**, non attraverso `movimento`:
+    quello e' dichiarato *best-effort* e ingoia gli input storti prima di arrivare qui, e
+    provare attraverso uno strato che nasconde gli errori non prova quello strato
+    (lezione del 2026-07-31 su `interpreta_risposta`, sei guardie che uccisero zero mutanti).
+    """
+
+    ARG = dict(tipo="incasso", riferimento="R1", soggetto="host:h1", conto_dare="cassa",
+               conto_avere="debiti", valuta="EUR", causale="c", emittente="sistema")
+
+    def test_un_importo_che_denaro_non_e_viene_RIFIUTATO_PULITO_senza_allarme(self):
+        """`imp > 0` diventa `imp >= 0` e il controllo sull'importo **sparisce**: `_cent` non
+        restituisce mai un negativo, quindi `>= 0` e' sempre vero.
+
+        ⚠️ MISURATO, NON SUPPOSTO: la riga **non finisce comunque nel libro**, perche' lo
+        schema ha `CHECK (importo_cents > 0)`. Il danno vero e' un altro, e piu' insidioso:
+        il rifiuto **pulito** diventa un **errore di database con allarme**. Ogni chiamata
+        con un importo storto scriverebbe «registrazione fallita» nel registro dei soldi --
+        e un falso allarme quotidiano insegna a ignorare gli allarmi, che e' il danno
+        peggiore (REGOLA FERREA sugli allarmi provati nelle due direzioni).
+
+        Quindi la proprieta' difesa qui e' precisa: **la validazione avviene PRIMA di toccare
+        il database**, e un input storto e' silenzioso.
+        """
+        for n, valore in enumerate((0, -1, -5000, True, False, None, "100", 3.5, [1])):
+            with self.assertRaises(AssertionError):        # nessun ERROR: rifiuto pulito
+                with self.assertLogs("core_auto.financial_controller", level="ERROR"):
+                    esito = self.fc.registra(evento_id="E%d" % n, importo_cents=valore,
+                                             **self.ARG)
+                    self.assertIsNone(esito, "il giornale ha accettato un importo che denaro "
+                                             "non e': %r -> %r" % (valore, esito))
+        self.assertEqual(0, self.fc.conta_movimenti(),
+                         "nessuna di quelle righe doveva essere scritta, e invece il libro "
+                         "ne contiene %d" % self.fc.conta_movimenti())
+        # e il verso opposto: con un importo VERO la riga entra. Senza questa meta', una
+        # funzione che rifiutasse SEMPRE passerebbe per rigorosa.
+        self.assertIsNotNone(self.fc.registra(evento_id="OK", importo_cents=1, **self.ARG))
+        self.assertEqual(1, self.fc.conta_movimenti())
+
+    def test_l_allarme_di_registrazione_fallita_PORTA_la_traccia_dell_errore(self):
+        """`exc_info=True` diventa `False`: l'allarme resta, ma **senza dire cosa e' andato
+        storto**. Non sbaglia un centesimo -- rende cieca la diagnosi proprio dove serve, su
+        una scrittura mancata nel libro dei soldi. E' la stessa famiglia del log che riporta
+        solo lo stato HTTP: un allarme che non porta l'informazione utile costringe a
+        ricostruire a mano cio' che la macchina sapeva gia'."""
+        fab = _Fabbrica(_memoria())
+        fc = FinancialController(fab, orologio=lambda: self.TS)
+        fc.inizializza_schema()
+        fab.rompi("INSERT INTO libro_giornale")
+        with self.assertLogs("core_auto.financial_controller", level="ERROR") as reg:
+            self.assertIsNone(fc.registra(evento_id="E1", importo_cents=100, **self.ARG))
+        self.assertEqual(1, len(reg.records), "atteso un solo allarme, visti %d"
+                         % len(reg.records))
+        # ⛔ OSSERVABILE FORTE, e qui la differenza NON e' accademica: con `exc_info=False`
+        # il campo del record vale **False**, che NON e' `None`. Un `assertIsNotNone` qui
+        # passa col guasto dentro -- me ne sono accorto solo rimettendo il mutante vero.
+        # Si pretende quindi l'oggetto che serve davvero: la coppia con dentro l'eccezione.
+        tracce = reg.records[0].exc_info
+        self.assertIsInstance(tracce, tuple,
+                              "l'allarme di registrazione fallita non porta la traccia "
+                              "dell'errore (exc_info=%r): chi lo legge sa CHE e' fallito ma "
+                              "non PERCHE'" % (tracce,))
+        self.assertIsInstance(tracce[1], BaseException,
+                              "la traccia non contiene l'eccezione: %r" % (tracce,))
+        fab.sana()
+        with self.assertRaises(AssertionError):        # a macchina sana NON deve gridare
+            with self.assertLogs("core_auto.financial_controller", level="ERROR"):
+                self.assertIsNotNone(fc.registra(evento_id="E2", importo_cents=100,
+                                                 **self.ARG))
+
 
 class TestNoteRamiDErrore(_BaseFC):
     def test_emetti_nota_rifiuta_documenti_impossibili(self):
