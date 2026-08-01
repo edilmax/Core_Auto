@@ -44,44 +44,42 @@ automatica fa fallire la suite se i due divergono):
 
 # ⚙️ REGOLA FERREA DI OPERATIVITÀ E PRECISIONE
 
-> ## ⛔ NON DIRE MAI «LE 14 REGOLE». GLI OBBLIGHI SONO **74**, E VALGONO TUTTI.
-> **Contati dai file il 2026-07-31, non a memoria:**
+> ## 📌 GLI OBBLIGHI SONO **91**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
+> **Contati dai file il 2026-08-01, non a memoria** (`python collaudi/regole_avvio.py` li
+> ricontrolla a ogni sessione e **grida** se questi numeri non tornano):
 >
-> | dove | quanti |
-> |---|---|
-> | `CLAUDE.md` — REGOLA ZERO | **5** |
-> | `CLAUDE.md` — REGOLA FERREA (qui sotto) | **15** |
-> | `CLAUDE.md` — modi di rompersi | **11** |
-> | `CLAUDE.md` — collaudi obbligatori | **10** |
-> | `CLAUDE.md` — direttiva finale | **4** |
-> | `REGISTRO_INGEGNERIA.md` — appendice, **solo lì** | **29** |
-> | **TOTALE** | **74** |
+> ### 🔬 LE **44** DELLA RICERCA — pagate ~4 milioni di token, 77 agenti, 2026-07-30
+> Sono l'unica famiglia con **fonte esterna** (studio, benchmark, incidente documentato),
+> **prova** e **come si verifica**. Sono nate perché i collaudi davano tutto verde e poi
+> uscivano le sorprese: **44 su 44 dicono come si controllano**, ed è ciò che le distingue
+> da un buon proposito.
+> · **15** sono qui sotto (si ricaricano a OGNI sessione, valgono a ogni lavoro);
+> · **29** stanno nell'appendice di `REGISTRO_INGEGNERIA.md`, con prova e fonte per esteso.
+> Più le **24 uccise** dai revisori ostili **col motivo**: dicono cosa NON vale la pena rifare.
 >
-> ⚠️ **Chiamare «le regole» il sottoinsieme che si ha in testa è il modo in cui si perdono
-> le altre.** Successo davvero il 2026-07-31: ho detto «le 14», ho lavorato guardando
-> quelle, e ho violato la n.15 — che quel giorno stava solo nell'appendice. Da allora è
-> qui, e questo cartello esiste perché nessuno rifaccia lo stesso errore.
+> ### 🧭 GLI ALTRI **47** — nati dai NOSTRI danni
+> Regola zero (**5**) · **17 direttive del fondatore** · modi di rompersi (**11**) ·
+> collaudi (**10**) · direttiva finale (**4**). Non hanno uno studio dietro: hanno una
+> **cicatrice**. Valgono uguale, e da oggi **portano anch'essi il «si verifica così»**.
 >
-> ## 📚 LE ALTRE 29 STANNO NELL'APPENDICE DEL REGISTRO.
-> Le altre **29 stanno in `REGISTRO_INGEGNERIA.md`, appendice finale** — ognuna con la
-> **prova**, la **fonte** (studio, benchmark o `file:riga` del nostro codice) e **come si
-> verifica**. Più le **24 uccise** dai revisori ostili **col motivo**: dice cosa NON rifare.
+> ### ⚠️ TRE VOLTE HO SBAGLIATO IL CONTO, E OGNI VOLTA ERA LO STESSO ERRORE
+> **2026-07-31**: dissi «le 14» e violai la 15 — che quel giorno stava solo nell'appendice.
+> **2026-08-01, mattina**: dissi 74, ma 61 punti stavano **solo nella memoria di sessione**,
+> che **non viaggia col progetto**: su un altro computer, o in CI, non esistevano.
+> **2026-08-01, sera**: mescolai le due famiglie in un unico numero — e mescolare fa perdere
+> di vista proprio ciò che è stato pagato.
+> **Rimedio definitivo:** le direttive del fondatore sono **entrate nel repository** (D1-D17
+> qui sotto), ogni regola dice **come si verifica**, e lo strumento d'avvio conta tutto e
+> **segnala chi non dice come si controlla**. Una regola che non si può controllare non è
+> una regola: è un desiderio.
 >
-> **Vengono da due ricerche mirate (77 agenti, ~4 milioni di token, 2026-07-30).** Non sono
-> opinioni: ogni regola ha una prova.
+> ### 📖 L'APPENDICE VA LETTA **PRIMA** DI INIZIARE, QUANDO:
+> · collaudi o tocchi la **mutazione** · modifichi **codice esistente** ·
+> · la sessione è **lunga o riassunta** · stai per dire **«fatto»**
 >
-> **QUI ci sono le 15 che valgono a OGNI lavoro** e si verificano da fuori. Le altre 29
-> servono **quando fai quel tipo di lavoro**, e vanno lette PRIMA di iniziarlo:
-> · stai per **collaudare** o toccare la **mutazione** → leggi l'appendice, sezione mutanti
->   (mutanti generati vs scelti a mano · «ucciso solo a volte = IGNOTO») ·
-> · stai per **modificare codice esistente** → sezione «prima di modificare, prova che la
->   modifica manca» (35-65% degli agenti tocca ciò che andava lasciato stare) ·
-> · **sessione lunga o contesto riassunto** → sezione deriva/compattazione ·
-> · stai per **chiudere e dire «fatto»** → sezione prove eseguibili e revisore fresco.
->
-> ⚠️ Non sono qui per una ragione tecnica precisa: `CLAUDE.md` viene caricato **a ogni
-> sessione**, e allungarlo **peggiora** l'attenzione invece di migliorarla (fenomeno
-> documentato, «context rot»). Un regolamento che nessuno tiene in testa non protegge nulla.
+> ⚠️ Le 29 non sono qui per una ragione tecnica precisa: `CLAUDE.md` si carica a **ogni**
+> sessione, e allungarlo **peggiora** l'attenzione invece di migliorarla («context rot»).
+> Un regolamento che nessuno tiene in testa non protegge nulla.
 
 Dettata dal fondatore il **2026-07-30**, dopo una giornata in cui **tre strumenti diversi ci hanno
 rassicurato mentre erano guasti**. Ogni riga qui sotto nasce da un fatto accaduto, non da una
@@ -91,6 +89,7 @@ teoria: dove c'è un esempio, è successo davvero.
 idealmente **una riga**. Vietati: codice superfluo, funzioni non chieste, classi helper, `if`/`try`
 ridondanti, file temporanei, commenti spazzatura, dipendenze nuove.
 *Il fix «paganti al check-in» è costato 3 righe; riscrivere il modulo sarebbe stato un errore.*
+**Si verifica:** `git diff --numstat` sul commit — righe di produzione aggiunte sotto la soglia dichiarata, e **zero** file/moduli/dipendenze nuovi non dichiarati.
 
 **2. ZERO TOLLERANZA PER IL VERDE FINTO.** Nessun test, guardia o controllo vale finché non è stato
 **visto fallire** sul guasto vero e poi visto passare, con **ripristino byte-identico (sha256)**.
@@ -98,6 +97,9 @@ Vietate le guardie e le frasi **ornamentali**, che rassicurano senza controllare
 *Tre casi in un giorno: una guardia che **pretendeva** il comando che spegne il sito; un log che
 scriveva «blocco temporaneo, riprovo» mentre l'app era murata; una mia prova rossa che non
 riscriveva il file e passava «senza vedere niente».*
+**Si verifica:** per ogni guardia nuova, nella sessione esistono i tre pezzi — il guasto
+iniettato, l'esito **rosso** letto diretto, e l'impronta **sha256 identica** dopo il ripristino.
+Se manca anche uno solo, quella guardia non vale ancora.
 
 **3. ALLINEAMENTO TOTALE DELLE FONTI DI VERITÀ.** Ogni modifica reale sulla macchina (pacchetti
 rimossi, pin, configurazione) va **subito** riflessa nei documenti, con la verità **verificata sul
@@ -105,6 +107,7 @@ campo**. È **vietato** scrivere nei 5 documenti un'affermazione non provata sul
 se «suona giusta» o se l'ha suggerita qualcun altro.
 *`DEPLOY.md` prescriveva un comando rotto: la nota giusta stava solo in una memoria di sessione.
 Costo: un minuto di sito irraggiungibile.*
+**Si verifica:** ogni affermazione nei 5 documenti ha, nella sessione, il comando che l'ha misurata sulla macchina — altrimenti è un'opinione scritta in un posto ufficiale.
 
 **4. MANI IN TASCA DURANTE I CICLI.** Mentre una suite o un deploy sono in corso sono
 **intoccabili i file del progetto e la macchina che esegue i test**. Vietato: modificare file,
@@ -112,6 +115,7 @@ lanciare una seconda suite, fare trasferimenti pesanti. **Ammesso**: lavoro in *
 altre macchine**. Il divieto non è formale: modificare i file sotto test produce **rossi finti**.
 *Già successo tre volte in un giorno. Misurato: la stessa suite passa da 23 a 27 minuti se la
 macchina lavora in parallelo.*
+**Si verifica:** nessun file del progetto ha data di modifica compresa fra l'inizio e la fine dell'ultimo ciclo (suite o deploy).
 
 **5. PULIZIA RADICALE DELLA POLVERE — MA SOLO DOPO LA PROVA.** Nessun residuo obsoleto deve
 sopravvivere: vecchi backup, script morti, comandi deprecati. Se un comando è pericoloso va
@@ -121,38 +125,46 @@ verificato che il blocco funzioni davvero**, non solo installato.
 cron, unità systemd, script, e file presenti **solo** lì.
 *Una pulizia «ovvia» cancellò `certbot/`: il sito rispondeva, ma il rinnovo del certificato era
 morto **in silenzio**, e si sarebbe scoperto sessanta giorni dopo.*
+**Si verifica:** prima di ogni cancellazione compare la simulazione (`apt -s`, elenco dell'archivio, `git diff`) e la ricerca dei riferimenti vivi; dopo, la prova che il blocco funziona davvero.
 
 **6. SUITE INTERA ANCHE PER UNA VIRGOLA IN UN `.md`.** Nessuna eccezione, nemmeno per la
 documentazione. Eseguire «solo i test che sembrano attinenti» non è consentito.
 *Corretto un documento, eseguite tre guardie invece di tutte: la CI è andata rossa, perché un test
 **leggeva** quel documento.*
+**Si verifica:** l'ultima esecuzione prima del commit è `unittest discover` **completo**, non un elenco di moduli scelti.
 
 **7. IL CODICE D'USCITA SI LEGGE DIRETTO, MAI ATTRAVERSO UN TUBO.** `comando | tail` restituisce
 l'esito di `tail`, non del comando.
 *Un `EXIT=0` su una suite che stampava `FAILED`.*
+**Si verifica:** nel registro della sessione non esiste un `$?` letto dopo un `|`; dove serve un tubo si usa `${PIPESTATUS[0]}`.
 
 **8. LA CI SU LINUX È IL GIUDICE; IL VERDE LOCALE È UN INDIZIO.** Un verde sul computer non
 autorizza né tranquillità né deploy. Dopo ogni push si **guarda la tabella**.
 *Ha colto due volte ciò che il verde locale non vedeva, per differenze fra sistemi operativi.*
+**Si verifica:** dopo ogni push compare la tabella dei job con il verdetto del `gate`, letto dall'API — non «immagino sia verde».
 
 **9. L'OSSERVABILE DEBOLE È UN DIFETTO.** Quando si registra il fallimento di un servizio esterno
 si scrivono **codice, sottocodice e messaggio**, mai il solo stato HTTP.
 *Per due giorni «400 Bad Request» ha reso indistinguibili un blocco temporaneo e un'applicazione
 bloccata: due situazioni con rimedi opposti.*
+**Si verifica:** ogni `logger` su un servizio esterno contiene codice, sottocodice e messaggio; un log col solo stato HTTP è un difetto aperto.
 
 **10. UN FALSO ALLARME È UN DIFETTO QUANTO UN ALLARME MANCATO.** Insegna a ignorare i segnali. Ogni
 allarme si prova nelle **due direzioni**: **tace** quando tutto è a posto, **grida** quando serve.
 *Un allarme nuovo gridava su un impianto appena installato; l'ha colto un test esistente.*
+**Si verifica:** per ogni allarme esistono DUE prove — una che lo fa gridare, una che pretende il suo silenzio a macchina sana.
 
 **11. IL DIFETTO È SPESSO IN CHI CHIAMA, NON NEL PEZZO CHE MOSTRA IL SINTOMO.** Prima di toccare un
 modulo che «sembra sbagliato», si guarda **chi lo usa**. È anche il modo di tenere il diff minimo.
 *Il modulo del check-in era corretto: sbagliava chi gli passava il numero.*
+**Si verifica:** prima di modificare un modulo compare il `grep` dei suoi chiamanti; se il difetto è a monte, il diff tocca il chiamante e non il modulo.
 
 **12. PRIMA DI DISTRUGGERE O SOSTITUIRE, GUARDARE COSA C'È. E MAI `|| true`.** Ogni comando
 distruttivo passa da una **simulazione** (`apt -s`, elenco del contenuto dell'archivio, `git diff`).
 `|| true` è vietato: nasconde i fallimenti.
 *Un comando suggerito cancellava un percorso «alla cieca» che su molte macchine è il collegamento
 alla versione **buona**.*
+**Si verifica:** nessun `|| true` introdotto nel diff (salvo passi di sola diagnosi o pulizia, dichiarati), e ogni comando distruttivo ha la sua simulazione nel registro.
 
 **13. DATE E NOMI NON SONO PROVE: SI GUARDA IL CONTENUTO.** Un archivio si verifica **aprendolo**:
 la correzione è dentro? il commit citato è quello giusto? l'impronta **sha256** coincide con
@@ -163,6 +175,7 @@ l'originale? **Un backup non verificato leggibile non è un backup.**
 telefoni, si rifiuta con gentilezza e si trova un'altra strada. Le diagnosi che toccano servizi
 esterni sono **in sola lettura**, non pubblicano nulla e **mascherano i segreti** nell'output.
 *La diagnosi di Facebook ha letto il gettone dal file dei segreti senza mostrarlo mai.*
+**Si verifica:** `grep -rE 'sk_live_[A-Za-z0-9]{20,}'` sul registro della sessione deve essere **vuoto**, e nessuna risposta contiene password o codici in chiaro.
 
 **15. SCOPO DICHIARATO PRIMA, VERIFICATO DOPO — E L'ELENCO SI AGGIORNA, NON SI SFORA.**
 Prima di aprire il primo file si scrive **quali file si toccheranno**. Se durante il lavoro ne
@@ -173,6 +186,86 @@ riformattazioni, correzioni di passaggio, «già che c'ero».
 buono — due guardie cresciute — ma nessuno l'aveva autorizzato, e uno scopo che si allarga da
 solo è il canale principale delle regressioni. Il fondatore se n'è accorto prima di me.*
 **Si verifica dopo:** `git status` deve contenere **esattamente** i file dichiarati.
+
+---
+
+# 🧭 LE 17 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
+
+> **Perché stanno qui e non solo in memoria.** Fino al 2026-08-01 vivevano nella memoria di
+> sessione: **non viaggiavano col progetto**. Su un altro computer, o dentro la CI, non
+> esistevano — quindi «per sempre» significava «finché dura quella memoria». Ora stanno nel
+> repository, si caricano a ogni sessione e viaggiano con la chiavetta.
+>
+> **Non sono le 44 della ricerca**, e la differenza va detta: le 44 hanno una **fonte esterna**
+> (studio, benchmark, incidente documentato); queste hanno una **cicatrice nostra**. Valgono
+> uguale, ma per una ragione diversa — e ognuna porta **come si verifica**, che è l'unica cosa
+> che separa una regola da un desiderio.
+>
+> Il dettaglio (il *perché* e il *com'è successo*) resta nella memoria di sessione: qui c'è
+> l'ordine e il modo di controllarlo, perché questo file si carica sempre e allungarlo peggiora
+> l'attenzione.
+
+**D1. CHIRURGIA SU RICHIESTA ESPLICITA, ZERO-BLOAT.** Si ripara la riga sbagliata; niente
+wrapper, classi helper, file nuovi, dipendenze. *Si verifica:* righe di produzione aggiunte nel
+commit vicine a zero, e `git status` senza file nuovi non dichiarati.
+
+**D2. LA BATTERIA DI COLLAUDI VALE PER TUTTO, SEMPRE.** Nessun lavoro esce senza i collaudi
+strategici. *Si verifica:* prima di ogni push esiste l'esito della **suite INTERA** con codice
+d'uscita letto diretto.
+
+**D3. I 4 LIVELLI, IN ORDINE.** Happy-path → CI/copertura/regressione → avversariale/mutazione →
+audit mission-critical. *Si verifica:* non si passa a un livello se il precedente non ha un
+esito verde registrato.
+
+**D4. ANTI-VERDI-FINTI: CONTRATTO → CONFINI → INVARIANTI → ASSERZIONI ESATTE.** Pochi test
+forti, un difetto per test, asserzioni sull'esito **e** sull'effetto. *Si verifica:* ogni
+guardia nuova è stata **vista rossa** sul guasto vero, con ripristino **byte-identico sha256**.
+
+**D5. CONSIGLIO DEL MODELLO PRIMA DI INIZIARE.** Si dice quale modello ed effort servono; se
+quello attivo è sbagliato **ci si ferma**. *Si verifica:* la riga «🧭 Metti: /model … /effort …»
+compare prima del primo comando del lavoro.
+
+**D6. LE CHIAVI NON SI CHIEDONO E NON SI STAMPANO.** *Si verifica:* nel registro della sessione
+nessun valore di `sk_live`, password o codice; le diagnosi sui servizi esterni mascherano.
+
+**D7. TRE POSTI SEMPRE ALLINEATI, IL SERVER MAI INDIETRO.** *Si verifica:* `git rev-parse`
+su computer, GitHub e VPS danno **lo stesso valore** (e la chiavetta lo dichiara nella guida).
+
+**D8. NIENTE SEGNAPOSTO: FLUSSI VERI, POI SI PULISCE.** *Si verifica:* nessun `esempio`,
+`test@test`, `TODO` o valore finto nei percorsi che l'utente attraversa.
+
+**D9. MAI HEREDOC PER LE PATCH — SI USA `Write`.** Gli heredoc mangiano gli escape e infilano
+byte invisibili. *Si verifica:* nessun `<<'PY'` nei comandi che modificano file del repo, e
+nessun byte < 32 (esclusi tab/a-capo) nei file toccati. *Mi ha tradito **tre volte** il 2026-08-01.*
+
+**D10. INVENTARIO PRIMA DI COSTRUIRE.** Esistono già ~151 moduli: prima si cerca. *Si verifica:*
+prima di un modulo nuovo compare un `grep`/censimento che dimostra che non c'è già.
+
+**D11. SI SPIEGA IN MODO COMPRENSIBILE.** Il fondatore non è tecnico: niente gergo non spiegato.
+*Si verifica:* ogni termine tecnico nella risposta è accompagnato da cosa significa in pratica.
+
+**D12. LE SCELTE TECNICHE LE DECIDIAMO NOI.** Se due IA divergono su una scelta tecnica si
+discute e si decide; al fondatore si chiede solo di **segreti, soldi veri e strategia**.
+*Si verifica:* le domande poste riguardano solo quelle tre categorie.
+
+**D13. UN COMPARTIMENTO ALLA VOLTA, COL VOSTRO VIA.** *Si verifica:* nessun secondo blocco di
+lavoro inizia prima di un «vai» esplicito.
+
+**D14. ISPETTORE LOCALE PRIMA DELLA VERIFICA MIRATA.** «Controlla tutto» = si passa lo
+strumento locale, poi si guardano solo i sospetti. *Si verifica:* l'analisi di massa è stata
+fatta da uno script, non leggendo file a mano.
+
+**D15. LA CACCIA AGLI ERRORI SI RILANCIA SPESSO.** Mutazione, fuzzing, concorrenza, accessibilità.
+*Si verifica:* l'ultima esecuzione della batteria è registrata con la sua data e il suo esito.
+
+**D16. AUTONOMIA CON TUTTI PROTETTI, E NOI MAI IN PERDITA.** Si decide da soli, proteggendo
+ospite, host e piattaforma. *Si verifica:* ogni scelta che tocca denaro dichiara chi ci perde
+se va storta.
+
+**D17. DEPLOY COL PROTOCOLLO A RISCHIO ZERO.** Punto di ritorno + salvataggio **verificato
+leggibile** + `docker compose` v2 + verifica funzionale **nelle due direzioni**. *Si verifica:*
+esistono il file `PRE_DEPLOY_*.commit`, l'immagine `:prec`, la prova di lettura del backup e le
+sonde positive **e** negative dopo lo scambio.
 
 ---
 

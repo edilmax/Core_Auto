@@ -1,3 +1,94 @@
+## 🔢 IL REGOLAMENTO ORA DICE IL VERO SU SE STESSO — **91 obblighi, due famiglie**
+
+Il conto è stato sbagliato **tre volte** in un giorno (14 → 44 → 74 → 135), e ogni errore
+aveva la stessa forma: **contare da un posto che non è il file**. Ora è chiuso in tre mosse.
+
+**1. Le due famiglie non si mescolano più.** Le **44 della ricerca** (~4 milioni di token, 77
+agenti) sono l'unica famiglia con **fonte esterna, prova e come si verifica**: valgono di più
+non perché siano più importanti, ma perché **si possono smentire**. Gli altri **47** nascono
+dai nostri danni (regola zero 5 · direttive del fondatore 17 · modi di rompersi 11 · collaudi
+10 · direttiva finale 4). **Valgono tutti**: mescolarli in un numero solo faceva perdere di
+vista ciò che era stato pagato.
+
+**2. I 17 obblighi del fondatore sono entrati NEL REPO** (`CLAUDE.md`, D1→D17). Prima stavano
+**solo nella memoria di sessione**: su un altro computer, o dentro la CI, **non esistevano**.
+Ora viaggiano col progetto, e una guardia diventa rossa se qualcuno li riporta fuori.
+
+**3. Ogni regola dice COME SI VERIFICA.** Delle 15 ferree lo dicevano **3**; ora **15 su 15**,
+e **17 su 17** le direttive (le 44 della ricerca lo dicevano già tutte). Una regola che non
+dice cosa guardare non si può far fallire — ed è esattamente la forma che produceva «tutto
+verde» e poi le sorprese.
+
+**La rete:** `collaudi/regole_avvio.py` (hook `SessionStart`) ricontasse **dai file** a ogni
+sessione, mostra le due famiglie separate e **grida** se il numero dichiarato non torna o se
+una regola è muta. 5 guardie in `test_pipeline_ci`, **viste rosse con iniezione di guasto**
+(verifica tolta → `['FERREA 1']`; D9 sparita → segnalata; cartello a 90 con 91 nei file →
+«NON DICE IL VERO»), e `CLAUDE.md` ripristinato con **impronta SHA-256 identica**.
+
+## ✅ 3° BERSAGLIO — `fase184_marca_temporale`: due difetti nel GIUDICE, e una lezione
+
+**È stato il bersaglio più istruttivo, e non per i suoi buchi: per i due difetti che ha
+scoperto nello strumento e per un errore mio nel modo di scrivere le guardie.**
+
+### 🔴 DUE DIFETTI DEL GIUDICE, chiusi
+1. **Il motore MORIVA su un test che si inchioda.** Un mutante ha fatto superare i 600s a
+   un'esecuzione, l'eccezione è salita fino in cima e ha ucciso l'INTERO giro: 112 punti non
+   esaminati per colpa di uno. E c'era un secondo modo di sbagliare, più insidioso: trattare
+   l'attesa infinita come «ucciso» — il vecchio `if verde:` lo avrebbe fatto in silenzio,
+   perché in Python «non lo so» vale falso. Ora gli esiti sono **tre** (ucciso · sopravvissuto
+   · **non determinabile**) e il terzo viene **gridato**. In più il motore ora **misura quanto
+   è normale** (59,8s su questo modulo) e tiene 3× quello, invece di un tetto fisso di 600s
+   che con 30 mutanti avrebbe fatto **cinque ore**; e ha un **tetto di tempo complessivo**.
+2. **Un giro UCCISO lasciava un mutante dentro un file di PRODUZIONE.** Successo due volte in
+   due giorni (`fase184`: `if valore == 0` → `!= 0`). Il `finally` protegge da un'eccezione,
+   **non** da un processo ucciso: quel guasto poteva finire in un commit. Ora il motore lascia
+   una **traccia** di cosa sta mutando e al giro dopo **rimette a posto e GRIDA**.
+
+### ⚠️ L'ERRORE MIO, che vale come regola
+Avevo scritto **sei guardie contro `interpreta_risposta`** — l'ingresso pubblico — e alla
+rimisurazione hanno ucciso **ZERO mutanti**. Motivo: quell'ingresso è avvolto in un
+`try/except` che ingoia tutto, quindi un guasto là sotto esce comunque come «non valido».
+**Provare attraverso uno strato che nasconde gli errori non prova quello strato.**
+Riscritte **direttamente sulle funzioni** dei byte: 3 mutanti uccisi su 5 provati.
+
+### ⏳ COSA RESTA, detto com'è
+- **3 «non determinabili»**: `while n > 0` → `>=` diventa un **ciclo infinito**. Nessuna suite
+  in-processo può dare un verdetto — il processo si pianta. Ma il guasto **non è silenzioso**:
+  il sito si blocca, quindi si vedrebbe subito. Aggiunta comunque una guardia che pretende che
+  quelle tre funzioni **finiscano** entro 3 secondi.
+- **2 sopravvissuti che NON sono buchi**: controlli **ridondanti**, con una seconda linea più a
+  valle che intercetta lo stesso caso. Rompendo solo la prima, il risultato non cambia. Non
+  sono equivalenti e non sono buchi: sono **difesa in profondità**, ed è una cosa buona.
+- **82 punti oltre il tetto** su questo modulo.
+
+## 📌 3° BERSAGLIO — dettaglio storico
+
+**Perché questo:** 112 punti di logica, 8 file di test. È ciò che dà **data certa** ai
+documenti — contratto host, accettazioni, clausole vessatorie. È il modulo che in tribunale
+dimostra **quando** una cosa è stata firmata. Un guasto qui **non si vede**: le prove restano
+al loro posto e smettono di valere, e ce ne accorgeremmo solo davanti a un giudice.
+
+**File ammessi (dichiarati PRIMA, regola 15):** `test_fase184_marca_temporale.py`,
+`collaudi/mutazione_prodotto.py` (solo equivalenti **con prova**), questi due documenti.
+**Zero produzione.**
+
+✅ **AMBITO ALLARGATO PRIMA DI TOCCARE, con il motivo** (regola 15 applicata come si deve):
+il primo giro su questo modulo è **morto a metà** — un'esecuzione di test ha superato i 600
+secondi e l'eccezione ha ucciso l'intero giro. È un **difetto del giudice**: un motore che
+smette di giudicare al primo intoppo non è un motore, e un'attesa infinita **non è né «ucciso»
+né «sopravvissuto»** — è **non determinabile**, e va DETTO, non fatto sparire. Si estende
+quindi la modifica di `collaudi/mutazione_prodotto.py` oltre i soli equivalenti, e si aggiunge
+`test_pipeline_ci.py` per la guardia. (Il file mutato era stato ripristinato **byte-identico**:
+nessun danno.)
+
+✅ **AMBITO ALLARGATO UNA SECONDA VOLTA, col motivo** (2026-08-01): un giro è stato
+**interrotto a metà** e ha lasciato un **mutante dentro `fase184_marca_temporale.py`**
+(`if valore == 0` → `!= 0`). Ripristinato subito da git — contenuto identico al codice
+salvato, verificato in due modi. **È la seconda volta in due giorni**: il `finally` protegge
+da un'eccezione, **non** da un processo ucciso. Serve una **rete di salvataggio**: il motore
+deve lasciare una traccia di cosa sta mutando e, al giro dopo, accorgersene e rimettere a
+posto **gridando**. Senza, un guasto può finire in un commit senza che nessuno lo abbia voluto.
+
 ## ✅ 2° BERSAGLIO CHIUSO — `fase88_registro_host`: da 16 sopravvissuti a 6
 
 **Misurato a ogni passo, mai stimato** (30 mutanti provati, 116 oltre il tetto dichiarati):

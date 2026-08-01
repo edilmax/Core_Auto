@@ -775,5 +775,225 @@ class TestConfigurazione(unittest.TestCase):
                          ("https://qtsp.esempio.eu/tsa",))
 
 
+class TestIMattoniDelFormatoDEVONOFinireEDireIlVero(unittest.TestCase):
+    """LE FUNZIONI DI BASSO LIVELLO, PROVATE DIRETTAMENTE.
+
+    LEZIONE DEL 2026-08-01, e vale piu' delle prove che seguono. Avevo gia' scritto sei
+    guardie contro `interpreta_risposta` -- l'ingresso pubblico -- e non hanno ucciso NEMMENO
+    UN mutante. Motivo: quell'ingresso e' avvolto in un `try/except` che ingoia tutto, quindi
+    un guasto la' sotto esce comunque come «non valido» e il mio osservabile non poteva
+    vedere niente.
+
+    **Provare attraverso uno strato che nasconde gli errori non prova quello strato.**
+    Le funzioni che costruiscono e leggono i byte vanno interrogate DIRETTAMENTE.
+    """
+
+    @staticmethod
+    def _finisce_entro(fn, *a, secondi=3.0):
+        """Esegue `fn` in un filo separato e dice se ha finito in tempo.
+
+        Serve per i tre mutanti che trasformano `while n > 0` in `while n >= 0`: diventano
+        cicli INFINITI, e nessun test normale puo' ucciderli perche' il processo si pianta --
+        infatti risultavano «non determinabili». Qui il ciclo infinito diventa un ROSSO.
+        """
+        import threading
+        esito = {}
+
+        def _corri():
+            try:
+                esito["v"] = fn(*a)
+            except Exception as e:                        # noqa: BLE001
+                esito["e"] = e
+
+        t = threading.Thread(target=_corri, daemon=True)   # daemon: se si pianta, muore col processo
+        t.start()
+        t.join(secondi)
+        return (not t.is_alive()), esito
+
+    def test_i_TRE_COSTRUTTORI_finiscono_sempre(self):
+        finito, esito = self._finisce_entro(mt._der_lunghezza, 300)
+        self.assertTrue(finito, "_der_lunghezza NON FINISCE: ciclo infinito, il sito si pianta")
+        self.assertEqual(b"\x82\x01\x2c", esito.get("v"), "300 in forma lunga e' 82 01 2C")
+
+        finito, esito = self._finisce_entro(mt._der_intero, 1234567)
+        self.assertTrue(finito, "_der_intero NON FINISCE: ciclo infinito")
+        self.assertEqual(b"\x02\x03\x12\xd6\x87", esito.get("v"))
+
+        finito, esito = self._finisce_entro(mt._der_oid, (1, 2, 840, 113549))
+        self.assertTrue(finito, "_der_oid NON FINISCE: ciclo infinito")
+        self.assertEqual(b"\x06\x06\x2a\x86\x48\x86\xf7\x0d", esito.get("v"),
+                         "l'OID RSA di riferimento non e' quello atteso")
+
+    def test_il_CONFINE_della_forma_corta_e_a_128(self):
+        self.assertEqual(b"\x7f", mt._der_lunghezza(127), "127 sta ancora in forma corta")
+        self.assertEqual(b"\x81\x80", mt._der_lunghezza(128), "128 passa alla forma lunga")
+        self.assertEqual(b"\x00", mt._der_lunghezza(0))
+
+    def test_lo_ZERO_e_i_negativi(self):
+        self.assertEqual(b"\x02\x01\x00", mt._der_intero(0), "lo zero DER e' 02 01 00")
+        with self.assertRaises(ValueError):
+            mt._der_intero(-1)
+
+    def test_un_OID_di_DUE_soli_archi_e_legittimo(self):
+        """`if len(archi) < 2: raise`. Col mutante `<= 2` un OID di due archi -- che e'
+        perfettamente legale -- verrebbe rifiutato, e con lui ogni richiesta di marca."""
+        self.assertEqual(b"\x06\x01\x2a", mt._der_oid((1, 2)))
+        with self.assertRaises(ValueError):
+            mt._der_oid((1,))
+
+    def test_il_lettore_all_ESTREMO_dei_byte_non_va_oltre(self):
+        """`if i >= n: return None`. Col mutante `>` si legge un byte che non c'e'."""
+        dati = b"\x30\x00"
+        self.assertIsNone(mt._leggi_tlv(dati, len(dati)),
+                          "il lettore ha provato a leggere OLTRE la fine dei dati")
+        self.assertIsNone(mt._leggi_tlv(b"", 0))
+        self.assertIsNotNone(mt._leggi_tlv(dati, 0), "non legge piu' un TLV valido")
+
+    def test_le_LUNGHEZZE_ASSURDE_in_forma_lunga_sono_rifiutate(self):
+        """`if conta == 0 or conta > 4 or j + conta > n: return None` -- tre condizioni,
+        e ognuna serve: zero byte di lunghezza, troppi byte, oppure una lunghezza che
+        sborda dal pacchetto."""
+        self.assertIsNone(mt._leggi_tlv(b"\x30\x80\x00", 0) if False else
+                          mt._leggi_tlv(b"\x30\x85\x01\x02\x03\x04\x05", 0),
+                          "accettati 5 byte di lunghezza (il massimo sensato e' 4)")
+        self.assertIsNone(mt._leggi_tlv(b"\x30\x84\x01", 0),
+                          "accettata una lunghezza che sborda dal pacchetto")
+        self.assertIsNone(mt._leggi_tlv(b"\x30\x81", 0),
+                          "accettata una forma lunga senza i byte della lunghezza")
+
+    def test_una_lunghezza_su_QUATTRO_byte_e_ancora_legittima(self):
+        """`conta > 4` e' il tetto: quattro byte di lunghezza sono ANCORA validi, cinque no.
+        Col mutante `conta >= 4` verrebbe rifiutato un gettone grande ma perfettamente
+        regolare -- e l'Autorita' li manda cosi' quando il certificato e' incluso."""
+        buono = b"\x30\x84\x00\x00\x00\x02\x01\x02"        # SEQUENCE, lunghezza 2 su 4 byte
+        t = mt._leggi_tlv(buono, 0)
+        self.assertIsNotNone(t, "rifiutata una lunghezza su 4 byte, che e' legittima")
+        self.assertEqual(0x30, t[0])
+        self.assertEqual(2, t[2] - t[1], "la lunghezza letta non e' 2")
+
+    def test_un_TLV_che_NON_AVANZA_non_manda_in_ciclo_il_lettore(self):
+        """`if t[3] <= i: break` in `_figli`: e' la protezione contro un elemento che non
+        fa avanzare la lettura. Senza, il lettore girerebbe per sempre sullo stesso byte."""
+        finito, _ = self._finisce_entro(lambda: list(mt._figli(b"\x30\x00" * 6, 0, 12)))
+        self.assertTrue(finito, "_figli NON FINISCE su elementi che non avanzano")
+
+    def test_e_i_CASI_VERI_continuano_a_funzionare(self):
+        """L'altra direzione: irrigidire i mattoni non deve rompere la costruzione vera."""
+        r = mt.costruisci_richiesta(IMPRONTA, 12345)
+        self.assertTrue(r.startswith(b"\x30"), "la richiesta non e' piu' una SEQUENCE DER")
+        self.assertIn(IMPRONTA, r, "l'impronta non e' piu' dentro la richiesta")
+
+
+class TestIlLettoreDiBYTENonSiFaIngannare(unittest.TestCase):
+    """IL PARSER DEI GETTONI, MESSO ALLA PROVA COI BYTE ROTTI.
+
+    La mutazione del 2026-08-01 ha trovato che quasi tutti i confini del lettore DER/ASN.1
+    non erano sorvegliati: 12 sopravvissuti e 3 che facevano addirittura INCHIODARE i test
+    (cicli `while n > 0` che diventano infiniti con `>=`).
+
+    Prove sui singoli confini sarebbero fragili e non direbbero la cosa importante. La
+    domanda vera su un lettore di byte e' un'altra, e ha due facce:
+      1. dandogli in pasto roba rotta, puo' ESPLODERE in faccia a chi lo usa?
+      2. e — molto peggio — puo' dichiarare VALIDA una prova che non lo e'?
+
+    La seconda e' quella che conta davvero: questo modulo da' **data certa** ai contratti e
+    alle accettazioni. Se accetta un gettone falso, le prove restano al loro posto e
+    smettono di valere -- e ce ne accorgeremmo solo davanti a un giudice.
+
+    ⚠️ Nessuna di queste prove tocca la rete: sono byte costruiti qui dentro.
+    """
+
+    def _buona(self):
+        return _risposta(IMPRONTA, nonce=99)
+
+    def test_una_risposta_TRONCATA_a_QUALSIASI_lunghezza_non_esplode_ne_inganna(self):
+        """Il caso piu' realistico di tutti: la rete taglia la risposta a meta'.
+        Si prova OGNI possibile punto di taglio, non uno scelto a caso."""
+        buona = self._buona()
+        for taglio in range(0, len(buona)):
+            pezzo = buona[:taglio]
+            try:
+                e = mt.interpreta_risposta(pezzo, IMPRONTA, 99)
+            except Exception as exc:                      # noqa: BLE001 - e' il punto
+                self.fail("il lettore ESPLODE su una risposta troncata a %d byte: %s: %s"
+                          % (taglio, type(exc).__name__, exc))
+            if e and e.get("ok"):
+                self.fail("una risposta TRONCATA a %d byte e' stata dichiarata VALIDA: la "
+                          "prova legale non prova piu' niente" % taglio)
+
+    def test_un_BYTE_CAMBIATO_non_rende_valida_una_prova_falsa(self):
+        """Manomissione mirata: si cambia un byte per volta e si pretende che il lettore
+        non dica mai «ok» su qualcosa che non e' piu' il gettone originale."""
+        buona = self._buona()
+        atteso = mt.interpreta_risposta(buona, IMPRONTA, 99)
+        self.assertTrue(atteso["ok"], "la risposta buona non passa: la prova non vale")
+        for i in range(0, len(buona), 7):                 # a campione: uno ogni 7 byte
+            rotta = bytearray(buona)
+            rotta[i] ^= 0xFF
+            try:
+                e = mt.interpreta_risposta(bytes(rotta), IMPRONTA, 99)
+            except Exception as exc:                      # noqa: BLE001
+                self.fail("il lettore ESPLODE cambiando il byte %d: %s: %s"
+                          % (i, type(exc).__name__, exc))
+            if e and e.get("ok"):
+                # un byte cambiato puo' cadere in una zona non significativa: allora l'ora
+                # e l'impronta devono restare quelle vere, altrimenti e' una prova falsa.
+                self.assertEqual(IMPRONTA.hex(), e.get("impronta_hex"),
+                                 "byte %d cambiato: dichiarata valida una marca su un'ALTRA "
+                                 "impronta" % i)
+
+    def test_ROBACCIA_qualunque_non_diventa_mai_una_prova(self):
+        import hashlib
+        for seme in range(60):
+            robaccia = hashlib.sha256(bytes([seme])).digest() * (1 + seme % 5)
+            try:
+                e = mt.interpreta_risposta(robaccia, IMPRONTA, 99)
+            except Exception as exc:                      # noqa: BLE001
+                self.fail("il lettore ESPLODE su byte casuali (seme %d): %s: %s"
+                          % (seme, type(exc).__name__, exc))
+            self.assertFalse(e and e.get("ok"),
+                             "byte casuali (seme %d) dichiarati marca valida" % seme)
+
+    def test_una_LUNGHEZZA_ASSURDA_non_manda_il_lettore_fuori_strada(self):
+        """Bomba classica su un parser: si dichiara una lunghezza enorme in un pacchetto
+        piccolo. Deve rifiutare, non tentare di leggere memoria che non c'e'."""
+        for dichiarata in (b"\x84\x7f\xff\xff\xff", b"\x83\xff\xff\xff", b"\x82\xff\xff"):
+            pacchetto = b"\x30" + dichiarata + b"\x02\x01\x00"
+            try:
+                e = mt.interpreta_risposta(pacchetto, IMPRONTA, 99)
+            except Exception as exc:                      # noqa: BLE001
+                self.fail("lunghezza assurda %r fa ESPLODERE il lettore: %s"
+                          % (dichiarata, exc))
+            self.assertFalse(e and e.get("ok"))
+
+    def test_il_lettore_FINISCE_SEMPRE_anche_sui_casi_peggiori(self):
+        """I tre mutanti che hanno fatto INCHIODARE i test erano cicli `while n > 0`
+        diventati infiniti. Qui si pretende che il lettore termini in fretta anche sugli
+        ingressi piu' cattivi: un parser che non finisce e' un sito che si pianta."""
+        import time as _t
+        casi = [b"\x30\x80" + b"\x30\x80" * 40,          # annidamento indefinito profondo
+                b"\x30\x80" + b"\xff" * 500,
+                b"\x02" + b"\xff" * 300,
+                bytes(2000)]
+        for k, caso in enumerate(casi):
+            t0 = _t.time()
+            try:
+                mt.interpreta_risposta(caso, IMPRONTA, 99)
+            except Exception:                             # noqa: BLE001
+                pass                                      # l'esplosione la giudicano gli altri test
+            durata = _t.time() - t0
+            self.assertLess(durata, 5.0,
+                            "il lettore ci ha messo %.1fs sul caso %d: sospetto ciclo che "
+                            "non finisce" % (durata, k))
+
+    def test_e_la_risposta_BUONA_continua_a_passare(self):
+        """L'altra direzione, obbligatoria: irrigidire il lettore non deve fargli rifiutare
+        i gettoni veri. Un falso allarme qui bloccherebbe TUTTE le marche."""
+        e = mt.interpreta_risposta(self._buona(), IMPRONTA, 99)
+        self.assertTrue(e["ok"], e.get("motivo"))
+        self.assertEqual(IMPRONTA.hex(), e["impronta_hex"])
+        self.assertEqual(99, e["nonce"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

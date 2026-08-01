@@ -247,10 +247,38 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
   e `permissions.deny` sui comandi che non vanno mai eseguiti (`docker compose down -v` che
   cancella il volume dei dati, `docker-compose` v1 che spegne il sito, `rm -rf /data`,
   `--no-verify`, scrittura sui file dei segreti). Scelti con **zero falsi positivi**.
-- **`collaudi/regole_avvio.py`** (nuovo, strumento): stampa la mappa dei **74 obblighi** e i
+- **`collaudi/regole_avvio.py`** (nuovo, strumento): stampa la mappa degli obblighi e i
   4 casi in cui l'appendice va letta PRIMA; e **conta le regole nei file** confrontandole con
   i numeri dichiarati in `CLAUDE.md`. Se divergono, GRIDA. Non blocca mai (esce sempre 0) e
   non esplode mai: un hook che fallisce e' peggio di nessun hook.
+  **Esteso il 2026-08-01** (vedi la voce (7) qui sotto): due famiglie separate e audit di
+  verificabilita'. Funzioni: `conta_regole()` (i numeri veri, dai file) · `senza_verifica()`
+  (le regole che non dichiarano come si controllano) · `dichiarato()` (il numero scritto nel
+  cartello) · `main()`. STATO: **acceso**, eseguito dall'hook a ogni sessione.
+
+### ✅ FATTO 2026-08-01 (7) — IL REGOLAMENTO DICE IL VERO SU SE STESSO (91 obblighi)
+- **Il conto era sbagliato tre volte** (14 → 44 → 74 → 135) e sempre per la stessa ragione:
+  contare da un posto che non e' il file. Chiuso in tre mosse.
+- **`CLAUDE.md` — le 17 direttive del fondatore portate NEL REPO** (D1→D17: chirurgia ·
+  batteria collaudi · 4 livelli · anti-verdi-finti · consiglio modello · **mai credenziali** ·
+  3 posti allineati · niente segnaposto · **MAI HEREDOC, si usa `Write`** · inventario prima ·
+  spiegare comprensibile · le scelte tecniche le decidiamo noi · un compartimento alla volta ·
+  ispettore locale · caccia errori · autonomia · deploy a rischio zero). Prima stavano **solo
+  nella memoria di sessione**: su un altro computer, o in CI, non esistevano.
+- **`CLAUDE.md` — ogni regola dice COME SI VERIFICA**: delle 15 ferree lo dicevano 3, ora
+  **15/15**; direttive **17/17**; le 44 della ricerca lo dicevano gia' tutte. Una regola che
+  non dice cosa guardare non si puo' far fallire: e' un desiderio, non una regola.
+- **Le due famiglie non si mescolano piu'**: 44 della ricerca (fonte esterna + prova) e 47
+  nate dai nostri danni (regola zero 5 · direttive 17 · modi 11 · collaudi 10 · finale 4).
+  Valgono tutti; il totale dichiarato e' **91** e lo strumento lo ricontrolla dai file.
+- **`test_pipeline_ci.py`** (+5 guardie, classe `TestLeRegoleSiLeggonoSEMPRE`): le direttive
+  restano nel repo · nessuna regola muta · **l'audit sa accorgersene** (regolamento malato
+  costruito apposta: deve vederlo, e deve TACERE quando e' sano) · le due famiglie restano
+  distinte e il totale e' la somma dei gruppi.
+- **Viste rosse (iniezione di guasto, non a parole)**: tolto un «Si verifica» → `['FERREA 1']`;
+  D9 rinominata → segnalata come sparita; cartello a 90 con 91 nei file → «NON DICE IL VERO».
+  `CLAUDE.md` ripristinato con **impronta SHA-256 identica** a prima dell'esperimento.
+- **Nessuna riga di produzione toccata**: solo regolamento, strumento e guardie.
 - **`CLAUDE.md`**: la REGOLA FERREA 15 (scopo dichiarato prima, verificato dopo) e' stata
   **spostata** dall'appendice alla spina dorsale, dopo che l'avevo violata; in testa un
   cartello vieta di chiamare «le regole» un sottoinsieme.

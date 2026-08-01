@@ -907,6 +907,133 @@ class TestLeRegoleSiLeggonoSEMPRE(unittest.TestCase):
                          "i numeri dichiarati in CLAUDE.md non coincidono con le regole "
                          "davvero presenti nei file:\n%s" % r.stdout[-700:])
 
+    def test_le_direttive_del_fondatore_VIVONO_NEL_REPO_non_solo_in_memoria(self):
+        """⛔ UN OBBLIGO CHE STA SOLO NELLA MEMORIA DI SESSIONE NON ESISTE ALTROVE.
+
+        Il 2026-08-01 il conto diceva 74 e sembrava coerente, ma diciassette obblighi del
+        fondatore -- chirurgia, mai chiedere credenziali, MAI heredoc, tre posti allineati...
+        -- stavano SOLO nella memoria di sessione: non viaggiavano col progetto. Su un altro
+        computer, o dentro la CI, semplicemente non c'erano. Lo strumento diceva «tutto
+        coerente» e **mentiva senza saperlo**: una guardia che non guarda.
+
+        Il rimedio non e' contarli meglio da un posto che non viaggia -- e' **portarli nel
+        repo**, dove chiunque apra il progetto li trova. Questa guardia pretende che ci
+        restino: se qualcuno li riporta fuori, diventa rossa lo stesso giorno.
+        """
+        import io
+        import os
+        import re
+        with io.open(os.path.join(self._radice(), "CLAUDE.md"), encoding="utf-8") as f:
+            testo = f.read()
+        presenti = set(re.findall(r"^\*\*(D\d+)\.", testo, re.M))
+        attese = set("D%d" % i for i in range(1, 18))
+        self.assertEqual(set(), attese - presenti,
+                         "queste direttive del fondatore sono uscite da CLAUDE.md e "
+                         "tornerebbero a vivere solo in memoria: %r"
+                         % sorted(attese - presenti))
+        for chiave, perche in (
+                ("MAI HEREDOC PER LE PATCH",
+                 "gli heredoc infilano byte di controllo invisibili nelle patch"),
+                ("LE CHIAVI NON SI CHIEDONO E NON SI STAMPANO",
+                 "le credenziali non si chiedono al fondatore e non finiscono nei log"),
+                ("CHIRURGIA SU RICHIESTA ESPLICITA",
+                 "il metodo chirurgico annulla le campagne autonome")):
+            self.assertIn(chiave, testo,
+                          "la direttiva su %r non e' piu' nel repo (%s)" % (chiave, perche))
+
+    def test_OGNI_regola_della_spina_dorsale_dice_COME_SI_VERIFICA(self):
+        """⛔ UNA REGOLA CHE NON DICE COME SI CONTROLLA E' UN DESIDERIO, NON UNA REGOLA.
+
+        E' esattamente la forma che produceva «tutto verde» e poi le sorprese: un obbligo
+        scritto bene, che nessuno puo' smentire perche' non dice cosa guardare. Le 44 della
+        ricerca lo dicono tutte; delle 15 ferree lo diceva solo un terzo finche' non e' stato
+        chiuso il buco.
+        """
+        mute = self._motore_regole().senza_verifica()
+        self.assertEqual([], mute,
+                         "queste regole non dichiarano come si verificano, quindi non si "
+                         "possono far fallire -- e cio' che non puo' fallire non protegge "
+                         "niente: %r" % (mute,))
+
+    def test_L_AUDIT_DI_VERIFICABILITA_SA_DAVVERO_ACCORGERSENE(self):
+        """LA GUARDIA CHE CONTA (iniezione di guasto). Il test qui sopra e' verde: ma sarebbe
+        verde ANCHE se `senza_verifica()` restituisse sempre la lista vuota. Qui gli si mette
+        davanti un regolamento MALATO -- una regola senza il «si verifica» -- e si pretende
+        che la veda. Poi si guarisce quella stessa regola e si pretende che taccia: senza il
+        secondo verso, un controllo che grida sempre passerebbe per sveglio."""
+        import io
+        import os
+        import tempfile
+        m = self._motore_regole()
+        scheletro = (
+            "intestazione\n\n## REGOLA FERREA\n"
+            "**1. UNA COSA.** prosa.\n**Si verifica:** con un comando.\n\n"
+            "**2. ALTRA COSA.** prosa e basta.%s\n\n"
+            "## LE 17 DIRETTIVE\n"
+            "**D1. QUALCOSA.** prosa.\n*Si verifica:* cosi'.\n\n"
+            "## REGOLA DEI 10 COLLAUDI\n\n## DIRETTIVA OPERATIVA\n")
+        vero = m.CLAUDE
+        cartella = tempfile.mkdtemp()
+        try:
+            finto = os.path.join(cartella, "CLAUDE.md")
+            m.CLAUDE = finto
+            with io.open(finto, "w", encoding="utf-8") as f:
+                f.write(scheletro % "")                       # regola 2 MUTA
+            self.assertEqual(["FERREA 2"], m.senza_verifica(),
+                             "l'audit non vede una regola priva del «si verifica»: e' un "
+                             "controllo ornamentale, cioe' il difetto che deve scovare")
+            with io.open(finto, "w", encoding="utf-8") as f:
+                f.write(scheletro % "\n**Si verifica:** guardando il diff.")
+            self.assertEqual([], m.senza_verifica(),
+                             "l'audit segnala una regola che INVECE dice come si verifica: "
+                             "griderebbe sempre, e un allarme sempre acceso viene spento")
+        finally:
+            m.CLAUDE = vero
+            import shutil
+            shutil.rmtree(cartella, ignore_errors=True)
+
+    def test_le_DUE_FAMIGLIE_restano_distinte_e_il_totale_e_la_loro_somma(self):
+        """Le 44 della ricerca sono costate ~4 milioni di gettoni e sono l'unica famiglia con
+        fonte esterna e prova; le altre nascono dai nostri danni. Mescolarle in un numero solo
+        fa perdere di vista cio' che e' stato pagato -- ed e' gia' successo. E il totale deve
+        essere la SOMMA dei gruppi: se un gruppo viene contato due volte, o dimenticato, il
+        cartello torna a mentire."""
+        import os
+        import re
+        import subprocess
+        import sys
+        r = subprocess.run([sys.executable,
+                            os.path.join(self._radice(), "collaudi", "regole_avvio.py")],
+                           cwd=self._radice(), capture_output=True, text=True,
+                           encoding="utf-8", errors="replace")
+        self.assertIn("DELLA RICERCA", r.stdout, "la famiglia della ricerca non e' piu' "
+                                                 "distinta dalle altre")
+        self.assertIn("nati dai NOSTRI danni", r.stdout, "l'altra famiglia non e' piu' "
+                                                         "riconoscibile")
+        n = self._motore_regole().conta_regole()
+        atteso = (n["appendice"] + n["regola_zero"] + n["direttive"]
+                  + n["modi"] + n["collaudi"] + n["finale"])
+        visto = re.search(r"TOTALE OBBLIGHI: (\d+)", r.stdout)
+        self.assertIsNotNone(visto, "lo strumento non dichiara piu' un totale")
+        self.assertEqual(atteso, int(visto.group(1)),
+                         "il totale stampato non e' la somma dei gruppi contati nei file "
+                         "(%d): un gruppo e' contato due volte o dimenticato" % atteso)
+        self.assertEqual(15, n["ferrea"], "le regole ferree non sono piu' 15: se il taglio "
+                                          "delle sezioni si rompe, ogni conteggio qui sopra "
+                                          "diventa aria")
+        self.assertEqual(17, n["direttive"], "le direttive del fondatore non sono piu' 17")
+
+    @staticmethod
+    def _motore_regole():
+        import importlib.util
+        import os
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "collaudi", "regole_avvio.py")
+        spec = importlib.util.spec_from_file_location("_reg_avvio", p)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
     def test_i_divieti_veri_ci_sono_e_coprono_i_comandi_che_distruggono(self):
         d = self._impostazioni()
         negati = " | ".join(d.get("permissions", {}).get("deny", []))
@@ -1032,6 +1159,97 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
         solo3, _ = m.genera_mutanti(sorgente, righe_ammesse={3})
         self.assertGreater(len(tutti), len(solo3))
         self.assertEqual([3], sorted({x["riga"] for x in solo3}))
+
+    def test_un_test_che_si_INCHIODA_non_uccide_il_giudice(self):
+        """⛔ IL MOTORE NON PUO' MORIRE PER UN INTOPPO, NE' CONTARLO COME UN SUCCESSO.
+
+        Successo il 2026-08-01 su `fase184_marca_temporale`: un mutante ha fatto inchiodare
+        i test, `TimeoutExpired` e' salita fino in cima e ha ucciso l'INTERO giro -- 112
+        punti di logica non esaminati per colpa di uno solo.
+
+        E c'e' un secondo modo di sbagliare, piu' insidioso: trattare l'attesa infinita come
+        un mutante UCCISO. Il vecchio `if verde:` lo avrebbe fatto in silenzio (None e'
+        falsy), gonfiando il punteggio con guasti che nessuno ha mai visto morire -- lo
+        stesso difetto del bytecode stantio, in un'altra forma.
+
+        Quindi tre esiti distinti, e questo li prova tutti e tre su un comando vero.
+        """
+        m = self._motore()
+        # tempo che NESSUNA esecuzione puo' rispettare: cosi' la prova e' deterministica
+        # invece di dipendere da quanto e' lenta la macchina in questo momento.
+        verde, uscita = m.esegui("test_pipeline_ci", timeout=0.001)
+        self.assertIsNone(verde,
+                          "un'esecuzione che non finisce nel tempo dato deve valere NON "
+                          "DETERMINABILE (None), non «ucciso»: esito ottenuto %r" % (verde,))
+        self.assertIn("TEMPO SCADUTO", uscita,
+                      "il motore non dice PERCHE' non ha potuto giudicare")
+
+    def test_i_tre_esiti_sono_DISTINTI_e_nessuno_si_confonde_con_gli_altri(self):
+        """Verde/rosso/non-determinabile devono restare tre cose diverse: e' proprio la
+        confusione fra «non lo so» e «e' morto» che gonfia i punteggi."""
+        m = self._motore()
+        passa, _ = m.esegui("test_pipeline_ci.TestLeRegoleSiLeggonoSEMPRE"
+                            ".test_esiste_un_hook_che_stampa_le_regole_a_ogni_avvio")
+        self.assertIs(True, passa, "un test che passa deve dare True (mutante sopravvive)")
+        fallisce, _ = m.esegui("modulo_che_non_esiste_affatto")
+        self.assertIs(False, fallisce, "un test che fallisce deve dare False (mutante ucciso)")
+
+    def test_un_giro_UCCISO_non_lascia_un_guasto_nel_codice(self):
+        """⛔ IL DANNO PEGGIORE CHE QUESTO STRUMENTO POSSA FARE.
+
+        Il `finally` protegge da un'ECCEZIONE, non da un processo UCCISO. E' successo DUE
+        volte in due giorni: un giro fermato a meta' ha lasciato un mutante dentro un file
+        di PRODUZIONE (`fase184_marca_temporale`: `if valore == 0` diventato `!= 0`). Me ne
+        sono accorto solo perche' ho ricontrollato lo stato -- ma un guasto cosi' puo'
+        finire dritto in un commit senza che nessuno l'abbia voluto.
+
+        Qui si mette in scena esattamente quello: una traccia lasciata aperta e un file
+        mutato sul disco. Il recupero deve rimettere a posto il file **e dirlo**: un
+        ripristino silenzioso nasconderebbe proprio l'informazione che serve a capire
+        perche' il giro e' morto.
+        """
+        import io
+        import os
+        import shutil
+        import tempfile
+        m = self._motore()
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        vittima = os.path.join(d, "finto_modulo.py")
+        sano = "def f(x):\n    return x == 0\n"
+        with io.open(vittima, "w", encoding="utf-8", newline="") as f:
+            f.write(sano)
+
+        m._apri_traccia(vittima, sano)                       # come fa prima di mutare
+        with io.open(vittima, "w", encoding="utf-8", newline="") as f:
+            f.write(sano.replace("==", "!="))                # ...e poi viene UCCISO qui
+        self.addCleanup(m._chiudi_traccia)
+
+        import contextlib
+        uscita = io.StringIO()
+        with contextlib.redirect_stdout(uscita):
+            recuperato = m.recupera_da_interruzione()
+
+        with io.open(vittima, encoding="utf-8", newline="") as f:
+            adesso = f.read()
+        self.assertEqual(sano, adesso,
+                         "il file NON e' stato rimesso a posto dopo un giro interrotto: un "
+                         "guasto resterebbe nel codice di produzione")
+        self.assertEqual(vittima, recuperato)
+        self.assertIn("::warning", uscita.getvalue(),
+                      "il recupero e' avvenuto IN SILENZIO: chi guarda la CI non saprebbe "
+                      "che un giro e' morto lasciando un file mutato")
+        self.assertIsNone(m.recupera_da_interruzione(),
+                          "la traccia non e' stata chiusa: il prossimo giro «recupererebbe» "
+                          "un file che non e' mai stato toccato")
+
+    def test_senza_interruzioni_il_recupero_NON_tocca_niente(self):
+        """L'altra direzione (REGOLA FERREA 10): se nessun giro e' stato interrotto, il
+        recupero deve tacere e non muovere un byte. Un falso recupero riscriverebbe file
+        sani con contenuti vecchi -- sarebbe peggio del guasto che previene."""
+        m = self._motore()
+        m._chiudi_traccia()
+        self.assertIsNone(m.recupera_da_interruzione())
 
     def test_le_RINUNCE_sono_contate_e_dichiarate(self):
         """Un generatore che tace sulle proprie rinunce mente sulla copertura. I confronti

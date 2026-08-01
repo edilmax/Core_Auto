@@ -579,6 +579,69 @@ def _e_equivalente(percorso, righe, mutante):
         (os.path.basename(percorso), riga, mutante["vecchio"], mutante["nuovo"]))
 
 
+# ── RETE DI SALVATAGGIO CONTRO L'INTERRUZIONE ───────────────────────────────────
+#  Il `finally` protegge da un'ECCEZIONE, non da un PROCESSO UCCISO. E' successo due volte
+#  in due giorni (2026-07-31 e 2026-08-01): un giro fermato a meta' ha lasciato un mutante
+#  dentro un file di PRODUZIONE. La prima volta me ne sono accorto solo perche' ho
+#  ricontrollato lo stato; la seconda idem. Un guasto cosi' puo' finire in un commit senza
+#  che nessuno l'abbia voluto -- e sarebbe il peggior danno che questo strumento possa fare.
+#
+#  Quindi: prima di mutare si mette da parte l'originale e si scrive una TRACCIA. All'avvio,
+#  se la traccia c'e' ancora, vuol dire che il giro precedente e' stato interrotto: si
+#  rimette a posto il file e si GRIDA. Mai in silenzio: un ripristino silenzioso nasconde
+#  proprio l'informazione che serve a capire perche' il giro e' morto.
+_TRACCIA = os.path.join(tempfile.gettempdir(), "bookinvip_mutazione_in_corso")
+
+
+def _apri_traccia(percorso, sorgente):
+    try:
+        os.makedirs(_TRACCIA, exist_ok=True)
+        with io.open(os.path.join(_TRACCIA, "quale.txt"), "w", encoding="utf-8") as f:
+            f.write(percorso)
+        with io.open(os.path.join(_TRACCIA, "originale.txt"), "w",
+                     encoding="utf-8", newline="") as f:
+            f.write(sorgente)
+    except OSError:
+        pass                      # la rete e' un di piu': non deve impedire il giro
+
+
+def _chiudi_traccia():
+    try:
+        shutil.rmtree(_TRACCIA, ignore_errors=True)
+    except OSError:
+        pass
+
+
+def recupera_da_interruzione():
+    """Se il giro precedente e' stato UCCISO, rimette a posto il file e lo dice. Ritorna il
+    percorso recuperato, o None. Da chiamare all'avvio di ogni modo."""
+    quale = os.path.join(_TRACCIA, "quale.txt")
+    orig = os.path.join(_TRACCIA, "originale.txt")
+    if not (os.path.exists(quale) and os.path.exists(orig)):
+        return None
+    try:
+        with io.open(quale, encoding="utf-8") as f:
+            percorso = f.read().strip()
+        with io.open(orig, encoding="utf-8", newline="") as f:
+            sorgente = f.read()
+        if percorso and os.path.exists(percorso):
+            # si riusa l'aiutante che scrive E invalida: due copie della stessa cosa sono un
+            # difetto in attesa, e la guardia `test_il_motore_invalida_dopo_OGNI_riscrittura`
+            # me l'ha colto qui il 2026-08-01, la terza volta in due giorni.
+            _riscrivi_intatto(percorso, sorgente)
+            print("::warning title=Giro precedente INTERROTTO::%s era rimasto MUTATO ed e' "
+                  "stato rimesso a posto. Un file di produzione con un guasto dentro puo' "
+                  "finire in un commit: controlla il diff." % os.path.basename(percorso))
+            print("  ⚠️  RECUPERO: %s era rimasto mutato dal giro precedente -> ripristinato."
+                  % percorso)
+            return percorso
+    except OSError:
+        pass
+    finally:
+        _chiudi_traccia()
+    return None
+
+
 def _leggi_intatto(percorso):
     """Il file COM'E' sul disco, fine-riga compresi (`newline=""` non traduce nulla)."""
     with io.open(percorso, encoding="utf-8", newline="") as f:
@@ -644,14 +707,18 @@ def giro_sul_diff(base="HEAD~1", tetto=40, tetto_test=8):
                               "nota": "nessun file di test nomina questo modulo"})
                 continue
             bersaglio = " ".join(sorveglianti[:tetto_test])
+            _apri_traccia(pieno, sorgente)
             _riscrivi_intatto(pieno, applica_mutante(sorgente, m))
             try:
                 verde, _ = esegui(bersaglio, timeout=600)
             finally:
                 _riscrivi_intatto(pieno, sorgente)
                 invalida_bytecode(pieno)
-            esiti.append({"file": percorso, "riga": m["riga"],
-                          "verdetto": "sopravvissuto" if verde else "ucciso",
+                _chiudi_traccia()
+            # None = i test non hanno finito: non e' ne' ucciso ne' sopravvissuto.
+            _v = "non_determinabile" if verde is None else (
+                "sopravvissuto" if verde else "ucciso")
+            esiti.append({"file": percorso, "riga": m["riga"], "verdetto": _v,
                           "danno": m["danno"],
                           "nota": "%s -> %s" % (m["vecchio"], m["nuovo"]),
                           "sorveglianti": len(sorveglianti)})
@@ -691,9 +758,30 @@ def censimento():
     return righe
 
 
-def giro_su_moduli(nomi, tetto=30, tetto_test=6):
-    """La stessa domanda del modo diff, ma su un modulo INTERO scelto per rischio."""
-    esiti, rinunce = [], {"oltre_il_tetto": 0, "senza_sorveglianti": 0, "generatore": {}}
+def misura_normale(bersaglio, tetto=900):
+    """Quanto ci mette il gruppo di sorveglianti quando il codice e' SANO.
+
+    Serve a scegliere il tempo massimo con criterio invece che a caso. Misurato il
+    2026-08-01 su `fase184_marca_temporale`: 64,7 secondi. Un tetto fisso di 600s era nove
+    volte tanto -- e con 30 mutanti che si inchiodano avrebbe fatto CINQUE ORE.
+    """
+    t0 = time.time()
+    esegui(bersaglio, timeout=tetto)
+    return time.time() - t0
+
+
+def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45):
+    """La stessa domanda del modo diff, ma su un modulo INTERO scelto per rischio.
+
+    DUE LIMITI, ed entrambi DICONO cosa hanno tagliato (mai un taglio silenzioso):
+      · per mutante: 3 volte il tempo NORMALE del gruppo di test, misurato prima di
+        cominciare. Piu' lungo di cosi' non e' lentezza: e' un ciclo che non finisce.
+      · per giro: `minuti` complessivi. Quando scadono ci si ferma e si stampa quanti punti
+        sono rimasti fuori -- un giro che si allunga senza fine non lo guarda piu' nessuno.
+    """
+    esiti, rinunce = [], {"oltre_il_tetto": 0, "senza_sorveglianti": 0, "generatore": {},
+                          "oltre_il_tempo": 0, "normale_sec": {}}
+    scadenza = time.time() + minuti * 60
     for nome in nomi:
         percorso = os.path.join(REPO, nome)
         if not os.path.exists(percorso):
@@ -706,6 +794,11 @@ def giro_su_moduli(nomi, tetto=30, tetto_test=6):
         sorveglianti = test_che_nominano(percorso)
         righe_testo = sorgente.splitlines()
         fatti_qui = 0
+        bersaglio = " ".join(sorveglianti[:tetto_test])
+        # si misura il NORMALE prima di rompere qualcosa: cosi' il tetto e' scelto, non subito
+        normale = misura_normale(bersaglio) if sorveglianti else 0.0
+        rinunce["normale_sec"][nome] = round(normale, 1)
+        tetto_sec = max(60, int(3 * normale))
         for m in mutanti:
             motivo = _e_equivalente(nome, righe_testo, m)
             if motivo:
@@ -721,26 +814,52 @@ def giro_su_moduli(nomi, tetto=30, tetto_test=6):
             if fatti_qui >= tetto:
                 rinunce["oltre_il_tetto"] += 1
                 continue
+            if time.time() > scadenza:
+                rinunce["oltre_il_tempo"] += 1
+                continue
             fatti_qui += 1
+            _apri_traccia(percorso, sorgente)
             _riscrivi_intatto(percorso, applica_mutante(sorgente, m))
             try:
-                verde, _ = esegui(" ".join(sorveglianti[:tetto_test]), timeout=600)
+                verde, _ = esegui(bersaglio, timeout=tetto_sec)
             finally:
                 _riscrivi_intatto(percorso, sorgente)
-            esiti.append({"file": nome, "riga": m["riga"],
-                          "verdetto": "sopravvissuto" if verde else "ucciso",
+                _chiudi_traccia()
+            _v = "non_determinabile" if verde is None else (
+                "sopravvissuto" if verde else "ucciso")
+            esiti.append({"file": nome, "riga": m["riga"], "verdetto": _v,
                           "danno": m["danno"],
                           "nota": "%s -> %s" % (m["vecchio"], m["nuovo"])})
     return esiti, rinunce
 
 
 def esegui(test_str, timeout=900):
-    p = subprocess.run([sys.executable, "-m", "unittest"] + test_str.split(),
-                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+    """Esegue i test killer. Ritorna (verde, uscita), dove `verde` puo' essere:
+        True  -> i test passano   (il mutante SOPRAVVIVE a questo giro)
+        False -> i test falliscono (il mutante e' UCCISO)
+        None  -> non si sa: i test non hanno finito entro il tempo.
+
+    ⛔ IL TERZO CASO NON ESISTEVA, E IL MOTORE MORIVA. Successo il 2026-08-01 su
+    `fase184_marca_temporale`: un mutante ha fatto inchiodare i test, `TimeoutExpired` e'
+    salita fino in cima e ha ucciso l'INTERO giro -- 112 punti di logica non esaminati per
+    colpa di uno. Un giudice che smette di giudicare al primo intoppo non e' un giudice.
+
+    E soprattutto: un'attesa infinita **non e' un mutante ucciso**. Trattarla come tale
+    (il vecchio `if verde:` con None falsy avrebbe fatto esattamente questo) gonfia il
+    punteggio con guasti che nessuno ha mai visto morire -- lo stesso difetto del bytecode
+    stantio, in un'altra forma. Qui si dice NON DETERMINABILE, e si va avanti.
+    """
+    try:
+        p = subprocess.run([sys.executable, "-m", "unittest"] + test_str.split(),
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return None, "TEMPO SCADUTO dopo %ss: i test non hanno finito. Il mutante potrebbe " \
+                     "aver introdotto un ciclo che non termina." % timeout
     return p.returncode == 0, p.stdout.decode("utf-8", "replace")
 
 
 if __name__ == "__main__" and "--censimento" in sys.argv:
+    recupera_da_interruzione()
     # DOVE LA MACCHINA E' SCOPERTA, senza eseguire un solo test. Serve a decidere dove
     # attaccare: generare mutanti in ordine alfabetico spreca una settimana di calcolo.
     _righe = censimento()
@@ -768,6 +887,7 @@ if __name__ == "__main__" and "--censimento" in sys.argv:
 
 
 if __name__ == "__main__" and "--modulo" in sys.argv:
+    recupera_da_interruzione()
     _i = sys.argv.index("--modulo")
     _nomi = [a for a in sys.argv[_i + 1:] if not a.startswith("--")]
     print("=" * 96)
@@ -777,16 +897,27 @@ if __name__ == "__main__" and "--modulo" in sys.argv:
     _sopr = [e for e in _esiti if e["verdetto"] == "sopravvissuto"]
     _scop = [e for e in _esiti if e["verdetto"] == "scoperto"]
     for e in _esiti:
-        if e["verdetto"] in ("sopravvissuto", "scoperto", "assente"):
+        if e["verdetto"] in ("sopravvissuto", "scoperto", "assente", "non_determinabile"):
             print("  %-9s %s:%s  %s  (%s)" % (e["verdetto"].upper(), e["file"], e["riga"],
                                               e.get("nota", ""), e["danno"][:46]))
     print("-" * 96)
-    print("provati: %d · uccisi: %d · SOPRAVVISSUTI: %d · scoperti: %d · equivalenti: %d"
+    _nd = [e for e in _esiti if e["verdetto"] == "non_determinabile"]
+    print("provati: %d · uccisi: %d · SOPRAVVISSUTI: %d · scoperti: %d · equivalenti: %d "
+          "· NON DETERMINABILI: %d"
           % (len(_esiti), sum(1 for e in _esiti if e["verdetto"] == "ucciso"),
-             len(_sopr), len(_scop), sum(1 for e in _esiti if e["verdetto"] == "equivalente")))
-    if _rin["oltre_il_tetto"] or any(_rin["generatore"].values()):
-        print("NON PROVATI (dichiarati): oltre il tetto %d · rinunce del generatore %s"
-              % (_rin["oltre_il_tetto"], {k: v for k, v in _rin["generatore"].items() if v}))
+             len(_sopr), len(_scop),
+             sum(1 for e in _esiti if e["verdetto"] == "equivalente"), len(_nd)))
+    for e in _nd:
+        # NON fanno rosso il job (un test lento non deve bloccare la produzione) ma non sono
+        # nemmeno uccisi: quel punto NON e' stato esaminato, e va detto a voce alta.
+        print("::warning title=Punto NON ESAMINATO in %s::riga %s -- i test non hanno finito "
+              "in tempo: %s" % (e["file"], e["riga"], e["danno"]))
+    if _rin["oltre_il_tetto"] or _rin.get("oltre_il_tempo") or any(_rin["generatore"].values()):
+        print("NON PROVATI (dichiarati): oltre il tetto %d · oltre il TEMPO %d · rinunce "
+              "del generatore %s · secondi normali per modulo %s"
+              % (_rin["oltre_il_tetto"], _rin.get("oltre_il_tempo", 0),
+                 {k: v for k, v in _rin["generatore"].items() if v},
+                 _rin.get("normale_sec", {})))
     for e in _sopr + _scop:
         print("::error title=Punto NON SORVEGLIATO in %s::riga %s -- %s | %s"
               % (e["file"], e["riga"], e["danno"], e.get("nota", "")))
@@ -794,6 +925,7 @@ if __name__ == "__main__" and "--modulo" in sys.argv:
 
 
 if __name__ == "__main__" and "--diff" in sys.argv:
+    recupera_da_interruzione()
     # MODO DIFF: i mutanti si GENERANO sulle righe appena cambiate, invece di pescarli da
     # un elenco scritto a mano. La domanda diventa quella giusta: «la riga che ho appena
     # scritto, se fosse sbagliata, se ne accorgerebbe qualcuno?».
@@ -809,9 +941,13 @@ if __name__ == "__main__" and "--diff" in sys.argv:
         print("  %-9s %s:%s  %s  (%s)"
               % (e["verdetto"].upper(), e["file"], e["riga"], e.get("nota", ""), e["danno"][:52]))
     print("-" * 90)
-    print("provati: %d · uccisi: %d · SOPRAVVISSUTI: %d · SCOPERTI: %d"
+    _nd = [e for e in _esiti if e["verdetto"] == "non_determinabile"]
+    print("provati: %d · uccisi: %d · SOPRAVVISSUTI: %d · SCOPERTI: %d · NON DETERMINABILI: %d"
           % (len(_esiti), sum(1 for e in _esiti if e["verdetto"] == "ucciso"),
-             len(_sopr), len(_scop)))
+             len(_sopr), len(_scop), len(_nd)))
+    for e in _nd:
+        print("::warning title=Punto NON ESAMINATO in %s::riga %s -- i test non hanno finito "
+              "in tempo: %s" % (e["file"], e["riga"], e["danno"]))
     if any(_rinunce["generatore"].values()) or _rinunce["oltre_il_tetto"]:
         # NIENTE TETTI SILENZIOSI: cio' che non e' stato provato si dice, sempre.
         print("NON PROVATI (dichiarati): oltre il tetto %d · rinunce del generatore %s"
@@ -829,7 +965,8 @@ if __name__ == "__main__" and "--diff" in sys.argv:
 
 
 if __name__ == "__main__":
-    riserva = tempfile.mkdtemp(prefix="mutazione_")
+    riserva = tempfile.mkdtemp
+    recupera_da_interruzione()(prefix="mutazione_")
     file_toccati = sorted({m[0] for m in MUTANTI})
     for f in file_toccati:
         shutil.copy(f, os.path.join(riserva, f.replace("/", "_")))
@@ -859,7 +996,13 @@ if __name__ == "__main__":
                 invalida_bytecode(percorso)   # ...e il mutante dopo non deve vedere QUESTA
             print("\n%2d. %s" % (i, percorso))
             print("    guasto introdotto: %s" % danno)
-            if verde:
+            if verde is None:
+                # TEMPO SCADUTO: non si sa. Contarlo fra gli UCCISI gonfierebbe il punteggio
+                # con un guasto che nessuno ha visto morire -- lo stesso difetto del bytecode
+                # stantio, in un'altra forma. Va detto, e va guardato a mano.
+                incerti.append((percorso, danno, test))
+                print("    ESITO: NON DETERMINABILE -- i test non hanno finito in tempo.")
+            elif verde:
                 # RI-VERIFICA prima di gridare "buco": un survivor puo' essere una FLAKINESS
                 # transitoria del killer (subprocess sotto carico sul runner CI, oppure una rotta
                 # a tempo che al primo giro non ha visto il mutante). Un buco VERO sopravvive in

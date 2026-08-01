@@ -5,18 +5,22 @@ Lo esegue un hook `SessionStart` (vedi `.claude/settings.json`): la sua uscita e
 contesto della sessione PRIMA di ogni altra cosa, quindi non dipende da nessuno che si
 ricordi di leggere.
 
-PERCHE' ESISTE. Il 2026-07-31 ho violato la REGOLA FERREA 15 -- una regola scritta da me
-stesso -- perche' stava nell'appendice del registro invece che nel file che si ricarica a
-ogni sessione. La ricerca lo aveva perfino previsto: «LA COMPATTAZIONE E' AMNESIA: dopo un
-riassunto sopravvive solo CLAUDE.md, tutto cio' che sta altrove viene perso». Un regolamento
-di testo dipende da un lettore che si ricordi di leggerlo; questo strumento toglie di mezzo
-quella dipendenza.
+PERCHE' ESISTE, e la storia conta perche' l'errore si e' ripetuto tre volte:
+  · 2026-07-31 — ho violato la REGOLA FERREA 15 (una regola scritta da me) perche' stava
+    nell'appendice invece che nel file che si ricarica sempre. La ricerca lo aveva perfino
+    previsto: «la compattazione e' amnesia: sopravvive solo CLAUDE.md».
+  · 2026-08-01 mattina — il conto diceva 74, ma altri obblighi stavano SOLO nella memoria di
+    sessione, che NON viaggia col progetto: su un altro computer, o in CI, non esistevano.
+  · 2026-08-01 sera — avevo mescolato in un unico numero le regole della RICERCA (pagate, con
+    fonte e prova) e quelle nate dai nostri danni. Mescolare fa perdere di vista cio' che e'
+    stato pagato.
 
-FA DUE COSE, E LA SECONDA CONTA PIU' DELLA PRIMA:
-  1. stampa la MAPPA degli obblighi -- dove stanno e quando vanno letti;
-  2. CONTA le regole nei file e le confronta con i numeri dichiarati nel regolamento.
-     Se divergono, GRIDA. Un regolamento che mente sul proprio conteggio e' esattamente
-     una guardia che non guarda -- ed e' cosi' che oggi ho perso una regola.
+COSA FA, e la terza cosa e' quella che impedisce all'errore di tornare:
+  1. stampa la MAPPA degli obblighi, in DUE FAMIGLIE distinte;
+  2. CONTA le regole nei file e le confronta con i numeri dichiarati: se divergono, GRIDA;
+  3. controlla che OGNI regola dica **come si verifica**. Una regola che non si puo'
+     controllare non e' una regola: e' un desiderio -- ed e' esattamente il tipo di regola
+     che dava «tutto verde» e poi le sorprese.
 
 Uscita 0 sempre: questo strumento INFORMA, non blocca. I divieti che fermano davvero sono
 i `permissions.deny` di `.claude/settings.json`, che non dipendono dalla mia buona volonta'.
@@ -38,110 +42,143 @@ RADICE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLAUDE = os.path.join(RADICE, "CLAUDE.md")
 REGISTRO = os.path.join(RADICE, "REGISTRO_INGEGNERIA.md")
 
+# Le parole con cui una regola dichiara COME si controlla. Se non c'e' nessuna di queste,
+# quella regola non e' verificabile -- e va segnalata, non lasciata passare.
+SEGNI_DI_VERIFICA = ("Si verifica", "si verifica", "SI VERIFICA")
+
 
 def _leggi(percorso):
     with io.open(percorso, encoding="utf-8", errors="replace") as f:
         return f.read()
 
 
-def conta_regole():
-    """I numeri VERI, contati dai file. Mai a memoria: e' la REGOLA ZERO n.4."""
+def _pezzi():
+    """Le sezioni di CLAUDE.md, separate una volta sola: meno modi di sbagliare."""
     c = _leggi(CLAUDE)
-    zero = c.split("# ⚙️ REGOLA FERREA")[0]
-    ferrea = c.split("# ⚙️ REGOLA FERREA")[-1].split("# 🔟 REGOLA DEI 10 COLLAUDI")[0]
-    collaudi = c.split("# 🔟 REGOLA DEI 10 COLLAUDI")[-1].split("# DIRETTIVA OPERATIVA")[0]
-    direttiva = c.split("# DIRETTIVA OPERATIVA")[-1]
-    appendice = _leggi(REGISTRO).split("# 📚 APPENDICE")[-1]
     return {
-        "regola_zero": len(re.findall(r"^\*\*\d+\.", zero, re.M)),
-        "regola_ferrea": len(re.findall(r"^\*\*\d+\.", ferrea, re.M)),
-        "modi_di_rompersi": len(re.findall(r"^\| \d+ \|", collaudi.split("I 10 COLLAUDI")[0], re.M)),
-        "collaudi": len(re.findall(r"^\| \d+ \|", collaudi.split("I 10 COLLAUDI")[-1], re.M)),
-        "direttiva_finale": len(re.findall(r"^\*\*\d+\.", direttiva, re.M)),
-        "appendice_totale": len(re.findall(r"^\*\*\d+\. ", appendice, re.M)),
+        "zero": c.split("REGOLA FERREA")[0],
+        "ferrea": c.split("REGOLA FERREA")[-1].split("LE 17 DIRETTIVE")[0],
+        "direttive": c.split("LE 17 DIRETTIVE")[-1].split("REGOLA DEI 10 COLLAUDI")[0],
+        "collaudi": c.split("REGOLA DEI 10 COLLAUDI")[-1].split("DIRETTIVA OPERATIVA")[0],
+        "finale": c.split("DIRETTIVA OPERATIVA")[-1],
+        "tutto": c,
     }
 
 
-def dichiarati():
-    """Cosa dice il regolamento di se stesso, per poterlo smentire."""
-    c = _leggi(CLAUDE)
-    m = re.search(r"GLI OBBLIGHI SONO \*\*(\d+)\*\*", c)
-    f = re.search(r"REGOLA FERREA \(qui sotto\) \| \*\*(\d+)\*\*", c)
-    return (int(m.group(1)) if m else None, int(f.group(1)) if f else None)
+def conta_regole():
+    """I numeri VERI, contati dai file. Mai a memoria: e' la REGOLA ZERO n.4."""
+    p = _pezzi()
+    appendice = _leggi(REGISTRO).split("APPENDICE")[-1]
+    coll = p["collaudi"]
+    return {
+        "regola_zero": len(re.findall(r"^\*\*\d+\.", p["zero"], re.M)),
+        "ferrea": len(re.findall(r"^\*\*\d+\.", p["ferrea"], re.M)),
+        "direttive": len(re.findall(r"^\*\*D\d+\.", p["direttive"], re.M)),
+        "modi": len(re.findall(r"^\| \d+ \|", coll.split("I 10 COLLAUDI")[0], re.M)),
+        "collaudi": len(re.findall(r"^\| \d+ \|", coll.split("I 10 COLLAUDI")[-1], re.M)),
+        "finale": len(re.findall(r"^\*\*\d+\.", p["finale"], re.M)),
+        "appendice": len(re.findall(r"^\*\*\d+\. ", appendice, re.M)),
+        "appendice_verificabili": appendice.count("SI VERIFICA COSI"),
+        "uccise": sum(int(x) for x in re.findall(
+            r"Uccise dal revisore ostile in questa ricerca: (\d+)", appendice)),
+    }
+
+
+def senza_verifica():
+    """Le regole che NON dicono come si controllano. Il cuore di tutto lo strumento."""
+    p = _pezzi()
+    fuori = []
+    for etichetta, testo, marca in (("FERREA", p["ferrea"], r"^\*\*(\d+)\."),
+                                    ("DIRETTIVA", p["direttive"], r"^\*\*(D\d+)\.")):
+        blocchi = re.split(marca, testo, flags=re.M)[1:]
+        for numero, corpo in zip(blocchi[0::2], blocchi[1::2]):
+            if not any(k in corpo for k in SEGNI_DI_VERIFICA):
+                fuori.append("%s %s" % (etichetta, numero))
+    return fuori
+
+
+def dichiarato():
+    m = re.search(r"GLI OBBLIGHI SONO \*\*(\d+)\*\*", _leggi(CLAUDE))
+    return int(m.group(1)) if m else None
 
 
 def main():
     n = conta_regole()
-    # l'appendice contiene TUTTE le regole della ricerca; quelle promosse in CLAUDE.md
-    # sono le "ferree", quindi le esclusive dell'appendice sono la differenza.
-    solo_appendice = max(0, n["appendice_totale"] - n["regola_ferrea"])
-    totale = (n["regola_zero"] + n["regola_ferrea"] + n["modi_di_rompersi"]
-              + n["collaudi"] + n["direttiva_finale"] + solo_appendice)
-    tot_dich, ferrea_dich = dichiarati()
+    ricerca = n["appendice"]                       # le 44: 15 in CLAUDE.md + 29 in appendice
+    solo_appendice = max(0, n["appendice"] - n["ferrea"])
+    altri = n["regola_zero"] + n["direttive"] + n["modi"] + n["collaudi"] + n["finale"]
+    totale = ricerca + altri
 
     print("=" * 78)
     print("⛔ REGOLE DEL PROGETTO — si leggono PRIMA di fare qualunque cosa")
     print("=" * 78)
-    print("  CLAUDE.md   REGOLA ZERO ............. %2d   (fonti di verita', niente .md nuovi,"
-          " numeri verificati nel codice)" % n["regola_zero"])
-    print("  CLAUDE.md   REGOLA FERREA .......... %2d   (chirurgia · zero verdi finti · "
-          "documenti allineati · mani in tasca ·" % n["regola_ferrea"])
-    print("                                            pulizia dopo la prova · suite INTERA "
-          "anche per un .md · esito letto diretto ·")
-    print("                                            CI giudice · osservabile forte · "
-          "allarmi nelle due direzioni · difetto nel")
-    print("                                            chiamante · simulare prima di "
-          "distruggere · contenuto non date · chiavi mai")
-    print("                                            stampate · SCOPO DICHIARATO PRIMA E "
-          "VERIFICATO DOPO)")
-    print("  CLAUDE.md   modi di rompersi ....... %2d   (dati effimeri, cablaggio mancante, "
-          "ambiente diverso, ...)" % n["modi_di_rompersi"])
-    print("  CLAUDE.md   collaudi obbligatori ... %2d   (in ordine, mutazione per ULTIMA)"
-          % n["collaudi"])
-    print("  CLAUDE.md   direttiva finale ....... %2d" % n["direttiva_finale"])
-    print("  REGISTRO    appendice, SOLO li' .... %2d   (con prova, fonte e come si verifica)"
-          % solo_appendice)
-    print("  " + "-" * 74)
-    print("  TOTALE OBBLIGHI: %d  —  valgono TUTTI. Non chiamare «le regole» un sottoinsieme:"
-          % totale)
-    print("  e' cosi' che si perdono. (Successo il 2026-07-31: dissi «le 14» e violai la 15.)")
     print()
-    print("  L'APPENDICE VA LETTA **PRIMA** DI INIZIARE, QUANDO:")
-    print("   · collaudi o tocchi la MUTAZIONE          · modifichi CODICE ESISTENTE")
-    print("   · la sessione e' lunga o RIASSUNTA        · stai per dire «FATTO»")
+    print("  🔬 LE %d DELLA RICERCA  (~4 milioni di token, 77 agenti, 2026-07-30)" % ricerca)
+    print("     Unica famiglia con FONTE ESTERNA, PROVA e COME SI VERIFICA.")
+    print("     · %2d in CLAUDE.md ...... si ricaricano SEMPRE, valgono a ogni lavoro"
+          % n["ferrea"])
+    print("     · %2d nell'appendice ... da leggere PRIMA di: mutazione · modificare codice"
+          % solo_appendice)
+    print("                              esistente · sessione lunga o riassunta · dire «fatto»")
+    print("     · %2d uccise dai revisori, col motivo: dicono cosa NON rifare" % n["uccise"])
+    print("     verificabili: %d su %d" % (n["appendice_verificabili"], n["appendice"]))
+    print()
+    print("  🧭 GLI ALTRI %d — nati dai NOSTRI danni, non da uno studio" % altri)
+    print("     · regola zero .......... %2d   (fonti di verita', niente .md nuovi, numeri"
+          % n["regola_zero"])
+    print("                                   verificati nel codice)")
+    print("     · direttive fondatore .. %2d   (chirurgia · collaudi per tutto · 4 livelli ·"
+          % n["direttive"])
+    print("                                   anti-verdi-finti · consiglio modello · mai")
+    print("                                   credenziali · 3 posti allineati · niente")
+    print("                                   segnaposto · MAI HEREDOC · inventario prima ·")
+    print("                                   spiegare chiaro · decidiamo noi · un pezzo alla")
+    print("                                   volta · ispettore · caccia errori · autonomia ·")
+    print("                                   deploy a rischio zero)")
+    print("     · modi di rompersi ..... %2d   (dati effimeri, cablaggio mancante, ambiente"
+          % n["modi"])
+    print("                                   diverso, tempo che passa, dato assurdo...)")
+    print("     · collaudi obbligatori . %2d   (in ordine, mutazione per ULTIMA)" % n["collaudi"])
+    print("     · direttiva finale ..... %2d" % n["finale"])
+    print()
+    print("  " + "-" * 74)
+    print("  TOTALE OBBLIGHI: %d — valgono TUTTI. Non chiamare «le regole» un sottoinsieme:"
+          % totale)
+    print("  è così che si perdono. (Il conto è stato sbagliato tre volte: vedi CLAUDE.md.)")
     print()
 
     guasti = []
-    if tot_dich is not None and tot_dich != totale:
+    dich = dichiarato()
+    if dich is not None and dich != totale:
         guasti.append("il regolamento dichiara %d obblighi ma nei file ce ne sono %d"
-                      % (tot_dich, totale))
-    if ferrea_dich is not None and ferrea_dich != n["regola_ferrea"]:
-        guasti.append("la tabella dichiara %d regole ferree ma ne sono numerate %d"
-                      % (ferrea_dich, n["regola_ferrea"]))
-    numeri = re.findall(r"^\*\*(\d+)\.",
-                        _leggi(CLAUDE).split("# ⚙️ REGOLA FERREA")[-1]
-                        .split("# 🔟 REGOLA DEI 10 COLLAUDI")[0], re.M)
-    if [int(x) for x in numeri] != list(range(1, len(numeri) + 1)):
-        guasti.append("le regole ferree non sono numerate 1..%d senza salti: %s"
-                      % (len(numeri), numeri))
+                      % (dich, totale))
+    if n["appendice_verificabili"] != n["appendice"]:
+        guasti.append("delle %d regole della ricerca solo %d dicono come si verificano"
+                      % (n["appendice"], n["appendice_verificabili"]))
+    mute = senza_verifica()
+    if mute:
+        guasti.append("queste regole NON dicono come si verificano (sono desideri, non "
+                      "regole): %s" % ", ".join(mute))
 
     if guasti:
         print("  🔴 IL REGOLAMENTO NON DICE IL VERO SU SE STESSO:")
         for g in guasti:
             print("     · %s" % g)
         print("     Va corretto PRIMA di lavorare: un regolamento che sbaglia il proprio")
-        print("     conteggio e' una guardia che non guarda.")
+        print("     conteggio, o che contiene regole non controllabili, è una guardia che")
+        print("     non guarda — cioè il difetto che questo progetto esiste per estirpare.")
     else:
-        print("  ✅ Il regolamento dice il vero su se stesso (conteggi verificati adesso).")
+        print("  ✅ Il regolamento dice il vero su se stesso, e OGNI regola dichiara come si")
+        print("     verifica (conteggi rifatti adesso dai file, non a memoria).")
     print("=" * 78)
     return 0
 
 
 if __name__ == "__main__":
-    # ⛔ UN HOOK NON PUO' MAI ROMPERE LA SESSIONE. Se questo strumento esplode (file
-    # spostato, permessi, console esotica) deve DIRLO e uscire 0, non impedire di lavorare.
-    # Il silenzio no: un promemoria che sparisce senza avvisare e' la stessa forma di
-    # guasto che stiamo combattendo -- lo strumento che tace mentre e' rotto.
+    # ⛔ UN HOOK NON PUO' MAI ROMPERE LA SESSIONE. Se questo strumento esplode (file spostato,
+    # permessi, console esotica) deve DIRLO e uscire 0, non impedire di lavorare. Il silenzio
+    # no: un promemoria che sparisce senza avvisare e' la stessa forma di guasto che stiamo
+    # combattendo -- lo strumento che tace mentre e' rotto.
     try:
         sys.exit(main())
     except Exception as _e:                                    # pragma: no cover
