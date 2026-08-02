@@ -417,5 +417,265 @@ class TestPortabilitaPostgres(unittest.TestCase):
         self.assertNotIn("?", sql)
 
 
+class _OraFinta:
+    """Orologio bloccato per il modulo dell'idempotenza.
+
+    Serve perche' due dei buchi stanno ESATTAMENTE sul confine (`<` contro `<=`,
+    `>` contro `>=`): differiscono solo nell'istante preciso della scadenza, che con
+    l'orologio vero non si colpisce mai. Si sostituisce il nome `datetime` dentro il
+    modulo -- che lo ha importato nel proprio spazio -- e lo si rimette a posto dopo.
+    """
+
+    def __init__(self, istante):
+        self.istante = istante
+
+    def __enter__(self):
+        import fase15_idempotency as m
+        self._vero = m.datetime
+        finta = self
+
+        class _DT(self._vero):
+            @classmethod
+            def now(cls, tz=None):
+                return finta.istante
+
+        m.datetime = _DT
+        return self
+
+    def __exit__(self, *a):
+        import fase15_idempotency as m
+        m.datetime = self._vero
+        return False
+
+
+class TestIdempotenzaUndiciBuchiTrovatiDallaMutazione(_BaseIdem):
+    """⛔ UNDICI BUCHI VERI NELL'ANTI-DOPPIO-ADDEBITO (mutazione, 2026-08-02).
+
+    Campagna su tutti e 26 i punti di `fase15_idempotency`: 15 uccisi, 11 sopravvissuti
+    -- il 42% scoperto. Il modulo ha UN SOLO file di prove (questo) e la campagna l'ha
+    usato tutto: nessuna scorciatoia, sono buchi reali.
+
+    E' il modulo che garantisce «esattamente una volta» su escrow, split e rimborsi:
+    quando sbaglia, o si addebita due volte, o non si addebita mai piu'.
+    """
+
+    def _riga(self, key):
+        import sqlite3 as s
+        con = s.connect(self.db)
+        con.row_factory = s.Row
+        try:
+            r = con.execute("SELECT * FROM idempotency_keys WHERE idempotency_key=?",
+                            (key,)).fetchone()
+            return dict(r) if r else None
+        finally:
+            con.close()
+
+    def _sposta_lock_indietro(self, key, minuti):
+        import datetime as dt
+        import sqlite3 as s
+        quando = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=minuti)).isoformat()
+        con = s.connect(self.db)
+        try:
+            with con:
+                con.execute("UPDATE idempotency_keys SET locked_at=? WHERE idempotency_key=?",
+                            (quando, key))
+        finally:
+            con.close()
+        return quando
+
+    # ── I DUE CHE POSSONO FAR PAGARE DUE VOLTE ──────────────────────────────────────
+    def test_un_lock_MORTO_viene_recuperato_e_chi_lo_prende_lo_SA(self):
+        """⛔ IL PEGGIORE DEI UNDICI.
+
+            steal = UPDATE ... WHERE idempotency_key=? AND locked_by=? AND locked_at IS ?
+            if steal.rowcount == 1: return ACQUISITO
+
+        E' il recupero di un lock lasciato da un worker morto. Con `!=` al posto di `==`
+        la logica si ROVESCIA: chi RIESCE a prendere il lock si sente dire «occupato», e
+        chi FALLISCE si sente dire «e' tuo». Due worker che perdono la gara crederebbero
+        entrambi di avere il lock ed eseguirebbero entrambi l'operazione: **doppio
+        addebito**, cioe' esattamente cio' che questo modulo esiste per impedire.
+
+        E il gemello alla riga 262 (`and` -> `or`): il lock morto non verrebbe MAI
+        recuperato, e quella chiave resterebbe bloccata per sempre -- l'operazione non si
+        potrebbe piu' ritentare.
+        """
+        r1 = self.mgr.acquire("K-MORTO", self.fp)
+        self.assertEqual(EsitoAcquisizione.ACQUISITO, r1.esito)
+        # il worker "muore": non chiama ne' store ne' release. Il lock invecchia oltre
+        # la soglia (5 minuti configurati in setUp).
+        self._sposta_lock_indietro("K-MORTO", 6)
+        r2 = self.mgr.acquire("K-MORTO", self.fp)
+        self.assertEqual(EsitoAcquisizione.ACQUISITO, r2.esito,
+                         "un lock morto da 6 minuti NON e' stato recuperato: quella chiave "
+                         "resta bloccata per sempre e l'operazione non si puo' piu' fare "
+                         "(esito visto: %r)" % (r2.esito,))
+        self.assertTrue(r2.token, "recupero dichiarato senza dare il token del lock")
+        self.assertNotEqual(r1.token, r2.token, "ha restituito il token del worker morto")
+        # ...e il verso opposto: un lock VIVO non si ruba
+        r3 = self.mgr.acquire("K-MORTO", self.fp)
+        self.assertEqual(EsitoAcquisizione.IN_CORSO, r3.esito,
+                         "ha rubato un lock ancora vivo: due worker in esecuzione insieme")
+
+    def test_il_confine_ESATTO_del_lock_morto(self):
+        """`(now - locked_at) < lock_timeout` con `<=`: nell'istante PRECISO in cui il lock
+        compie la soglia, il codice sano lo considera morto (e lo recupera), il codice
+        guasto lo considera ancora vivo. Un istante di differenza, ma e' l'unico punto in
+        cui le due versioni si distinguono: provare «prima» e «dopo» lascia vivo il guasto
+        (lezione del 2026-08-01 sul backoff della carta).
+        """
+        import datetime as dt
+        self.assertEqual(EsitoAcquisizione.ACQUISITO,
+                         self.mgr.acquire("K-CONFINE", self.fp).esito)
+        riga = self._riga("K-CONFINE")
+        bloccato = dt.datetime.fromisoformat(riga["locked_at"])
+        # adesso = esattamente locked_at + soglia
+        esatto = bloccato + dt.timedelta(minutes=5)
+        with _OraFinta(esatto):
+            r = self.mgr.acquire("K-CONFINE", self.fp)
+        self.assertEqual(EsitoAcquisizione.ACQUISITO, r.esito,
+                         "all'istante esatto della soglia il lock e' morto e va recuperato; "
+                         "invece: %r" % (r.esito,))
+
+    def test_il_confine_ESATTO_della_risposta_in_cache(self):
+        """`now > expires_at` con `>=`: nell'istante preciso della scadenza, la risposta in
+        cache e' ancora valida (si replica) oppure e' gia' scaduta (si riesegue). Riesguire
+        una volta di troppo su un rimborso significa **rimborsare due volte**."""
+        import datetime as dt
+        r = self.mgr.acquire("K-TTL", self.fp)
+        self.mgr.store("K-TTL", r.token, 200, '{"ok": true}', {})
+        riga = self._riga("K-TTL")
+        scadenza = dt.datetime.fromisoformat(riga["expires_at"])
+        with _OraFinta(scadenza):          # adesso == scadenza, al microsecondo
+            esito = self.mgr.acquire("K-TTL", self.fp)
+        self.assertEqual(EsitoAcquisizione.IN_CACHE, esito.esito,
+                         "all'istante esatto della scadenza la risposta e' ancora valida e "
+                         "va replicata, non rieseguita: %r" % (esito.esito,))
+        with _OraFinta(scadenza + dt.timedelta(seconds=1)):
+            dopo = self.mgr.acquire("K-TTL", self.fp)
+        self.assertEqual(EsitoAcquisizione.ACQUISITO, dopo.esito,
+                         "un secondo DOPO la scadenza la chiave va riacquisita")
+
+    # ── LA CONFIGURAZIONE: quale database, davvero ──────────────────────────────────
+    def test_il_percorso_PASSATO_vince_sull_ambiente(self):
+        """`db_path or os.environ.get("CORE_AUTO_DB", ...)` con un `and`: chi passa un
+        percorso esplicito si ritrova a scrivere **nel database dell'ambiente**. Le chiavi
+        di idempotenza finirebbero in un archivio diverso da quello che il chiamante crede:
+        la protezione dal doppio addebito continua a «funzionare»... su un altro libro.
+        """
+        import os
+        altro = os.path.join(self.tmp, "AMBIENTE.db")
+        os.environ["CORE_AUTO_DB"] = altro
+        IdempotencyManager._reset_instance()
+        mgr = IdempotencyManager(self.db)          # esplicito: deve vincere questo
+        self.assertEqual(self.db, mgr._db_path,
+                         "ha usato il database dell'ambiente invece di quello passato")
+        mgr.acquire("K-DOVE", mgr.fingerprint("POST", "/x", b"{}"))
+        self.assertIsNotNone(self._riga("K-DOVE"),
+                             "la chiave non e' finita nel database indicato")
+        self.assertFalse(os.path.exists(altro),
+                         "ha creato (e usato) il database dell'ambiente: %s" % altro)
+
+    def test_un_secondo_percorso_viene_IGNORATO_e_lo_dice(self):
+        """Il manager e' un singleton: un secondo `IdempotencyManager(altro_db)` NON cambia
+        database -- ed e' giusto -- ma **deve dirlo**, se no chi scrive quella riga crede di
+        aver cambiato archivio e non lo saprà mai. E non deve gridare quando non c'e' niente
+        da segnalare: `if db_path and db_path != self._db_path` con un `or` avvisa anche
+        quando nessun percorso e' stato passato, con `==` avvisa quando e' lo STESSO."""
+        import logging
+        import os
+        altro = os.path.join(self.tmp, "SECONDO.db")
+        with self.assertLogs("core_auto.idempotency", level="WARNING") as reg:
+            m2 = IdempotencyManager(altro)
+        self.assertIs(self.mgr, m2, "il singleton e' stato duplicato")
+        self.assertEqual(self.db, m2._db_path, "il secondo percorso ha cambiato archivio")
+        self.assertTrue(any("IGNORATO" in r.getMessage() for r in reg.records),
+                        "non ha avvisato che il secondo percorso viene ignorato: %r"
+                        % (reg.output,))
+        # ...e TACE quando non c'e' niente da dire (stesso percorso, o nessun percorso)
+        for uguale in (self.db, None):
+            with self.assertRaises(AssertionError):
+                with self.assertLogs("core_auto.idempotency", level="WARNING"):
+                    IdempotencyManager(uguale)
+
+    def test_il_singleton_NON_si_reinizializza(self):
+        """`self._initialized = True` con `False`: ogni costruzione rifarebbe l'intero
+        avvio -- schema compreso -- e soprattutto ricreerebbe la connessione al database
+        sotto i piedi di chi la sta usando."""
+        ds_prima = self.mgr._ds
+        self.assertTrue(self.mgr._initialized)
+        m2 = IdempotencyManager(self.db)
+        self.assertTrue(m2._initialized, "il manager si e' dichiarato NON inizializzato")
+        self.assertIs(ds_prima, m2._ds,
+                      "la connessione al database e' stata ricreata a ogni costruzione: "
+                      "chi la stava usando se la vede cambiare sotto i piedi")
+
+    # ── ROBUSTEZZA ──────────────────────────────────────────────────────────────────
+    def test_il_risultato_di_acquire_e_IMMUTABILE(self):
+        """`@dataclass(frozen=True)` con `False`: il risultato diventa modificabile. Il
+        chiamante potrebbe cambiare l'esito o il token *dopo* averlo ricevuto -- e in un
+        percorso dove «ACQUISITO» significa «puoi addebitare», un esito modificabile e' un
+        permesso che si puo' riscrivere."""
+        import dataclasses
+        r = self.mgr.acquire("K-FROZEN", self.fp)
+        with self.assertRaises(dataclasses.FrozenInstanceError,
+                               msg="il risultato di acquire si puo' modificare"):
+            r.esito = EsitoAcquisizione.IN_CACHE
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            r.token = "token-inventato"
+
+    def test_un_errore_NON_ritentabile_non_viene_ritentato(self):
+        """`if not _is_locked_error(exc) or tentativo == self._acquire_retries: raise` con un
+        `and`: un errore che non c'entra niente col database occupato (una tabella che non
+        esiste, un file corrotto) verrebbe **ritentato tre volte con attesa**, invece di
+        emergere subito. Su un percorso che tiene fermo un pagamento, tre attese inutili
+        sono tre secondi in cui il cliente non sa se ha pagato."""
+        tentativi = {"n": 0}
+        vero = self.mgr._acquire_once
+
+        def _rompi(*a, **k):
+            tentativi["n"] += 1
+            raise sqlite3.OperationalError("no such table: idempotency_keys")
+
+        self.mgr._acquire_once = _rompi
+        try:
+            with self.assertRaises(sqlite3.OperationalError):
+                self.mgr.acquire("K-ROTTA", self.fp)
+        finally:
+            self.mgr._acquire_once = vero
+        self.assertEqual(1, tentativi["n"],
+                         "un errore non ritentabile e' stato ritentato %d volte"
+                         % tentativi["n"])
+
+    def test_un_errore_ISOLATO_lascia_la_traccia(self):
+        """L'ultimo respiro di `acquire` prima di rilanciare: senza la traccia, il registro
+        dice «idempotency acquire fallita» e nessuno sapra' mai perche' -- su un modulo che
+        decide se un pagamento e' gia' stato fatto.
+
+        ⚠️ Osservabile FORTE: con `exc_info=False` il campo vale `False`, che NON e' `None`.
+        """
+        # ⛔ SI ROMPE AL GRADINO GIUSTO. Quel `logger.error` sta DENTRO `_acquire_once`,
+        # non in `acquire`: sostituire `_acquire_once` (come facevo prima) salta proprio il
+        # codice che deve gridare, e la prova diventa verde senza aver provato niente.
+        # Qui si rompe il gradino sotto -- il datastore -- cosi' l'eccezione nasce dove il
+        # modulo se l'aspetta.
+        vero = self.mgr._ds.transaction
+
+        def _rompi(*a, **k):
+            raise sqlite3.OperationalError("disco pieno")
+
+        self.mgr._ds.transaction = _rompi
+        try:
+            with self.assertLogs("core_auto.idempotency", level="ERROR") as reg:
+                with self.assertRaises(sqlite3.OperationalError):
+                    self.mgr.acquire("K-TRACCIA", self.fp)
+        finally:
+            self.mgr._ds.transaction = vero
+        tracce = [r.exc_info for r in reg.records if r.exc_info not in (None, False)]
+        self.assertTrue(tracce, "nessuna traccia dell'errore: %r" % (reg.output,))
+        self.assertIsInstance(tracce[0], tuple)
+        self.assertIsInstance(tracce[0][1], BaseException)
+
+
 if __name__ == "__main__":
     unittest.main()
