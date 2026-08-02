@@ -662,6 +662,26 @@ EQUIVALENTI_DICHIARATI = {
         "quindi nemmeno le scritture successive. ⛔ Questa voce vale SOLO in `processa_penale`: "
         "la riga identica in `riscuoti_debiti` ha la sua dimostrazione a parte -- ed e' "
         "esattamente per questo che la chiave porta il nome della funzione.",
+    ("fase178_watchdog.py", "eta_backup_sec",
+     "if piu_recente is None or m > piu_recente:", ">", ">="):
+        "Si cerca il backup PIU' RECENTE. L'unico caso che differisce e' m == piu_recente: "
+        "col codice sano non si riassegna, col guasto si riassegna LO STESSO VALORE. Il "
+        "risultato finale e' identico per costruzione (e' un massimo), e nessun test puo' "
+        "vedere una differenza che non esiste. Dimostrato il 2026-08-02 leggendo il codice: "
+        "`piu_recente = m` con m == piu_recente non cambia niente.",
+    # NB: il codice FUORI da una funzione ha nome funzione "" (vedi `funzione_di`), non
+    # un'etichetta tipo "<modulo>": scriverla sbagliata fa semplicemente non combaciare la
+    # voce, e il mutante resta -- giustamente -- fra i sopravvissuti.
+    ("fase178_watchdog.py", "",
+     "print(json.dumps(r, ensure_ascii=False))", "False", "True"):
+        "Cambia solo COME i caratteri accentati finiscono nel testo: `ensure_ascii=True` li "
+        "scrive come \\uXXXX. Il JSON resta valido e, una volta LETTO, e' lo STESSO oggetto "
+        "-- verificato: json.loads(dumps(x, True)) == json.loads(dumps(x, False)) per "
+        "costruzione. Chi consuma questa uscita e' il bash del server, che la legge come "
+        "JSON: per lui non cambia nulla. Resta un peggioramento della leggibilita' nei log, "
+        "non un buco nella rete di protezione. ⚠️ Se un domani qualcuno leggesse questa "
+        "uscita CONFRONTANDO I BYTE invece di interpretarla, questa dichiarazione andrebbe "
+        "rifatta.",
     ("fase177_financial_controller.py", "processa_penale",
      "if not pid or pid == riferimento or disp <= 0:", "<=", "<"):
         "`disp = _cent(r.get('minori'))` non e' mai negativo, quindi `disp < 0` e' sempre "

@@ -49,10 +49,29 @@ def verifica_catena_file(percorso: str) -> Dict[str, Any]:
     except sqlite3.Error:
         return {"ok": False, "errore": "apertura_fallita", "righe": 0}
     try:
+        # ⛔ PRIMA SI CHIEDE SE IL FILE SI LEGGE, POI SE LA TABELLA C'E' (2026-08-02).
+        # `sqlite3.connect` RIESCE su qualunque file: non legge niente finche' non gli si
+        # chiede qualcosa. Quindi un libro giornale CORROTTO arrivava alla query, falliva,
+        # e finiva nel ramo «tabella non ancora creata» -> il guardiano rispondeva
+        # {"ok": True, "assente": True}, cioe' ESATTAMENTE come su un'installazione nuova.
+        # Tre situazioni diverse, una sola risposta: «tutto bene».
+        # Difetto VIVO trovato il 2026-08-02 mentre si scrivevano le guardie: se il libro
+        # dei soldi si corrompe (settore guasto, copia interrotta, ripristino a meta') il
+        # guardiano lo dichiara sano, e lui e' il modulo su cui contano tutti gli altri.
+        try:
+            tabelle = {r[0] for r in con.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+        except sqlite3.Error as e:
+            return {"ok": False, "errore": "illeggibile",
+                    "dettaglio": str(e)[:120], "righe": 0}
+        if "libro_giornale" not in tabelle:
+            return {"ok": True, "assente": True, "righe": 0}   # tabella non ancora creata
         try:
             righe = con.execute("SELECT * FROM libro_giornale ORDER BY seq").fetchall()
-        except sqlite3.Error:
-            return {"ok": True, "assente": True, "righe": 0}   # tabella non ancora creata
+        except sqlite3.Error as e:
+            # la tabella C'E' ma non si legge: non e' un'installazione nuova, e' un guasto
+            return {"ok": False, "errore": "lettura_fallita",
+                    "dettaglio": str(e)[:120], "righe": 0}
         prev = "GENESI"
         for r in righe:
             canon = "|".join([r["evento_id"], str(r["ts"]), r["tipo"], r["riferimento"],
