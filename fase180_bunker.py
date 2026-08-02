@@ -99,9 +99,20 @@ class Bunker:
         c = codice.strip() if isinstance(codice, str) else ""
         if verifica_totp(self._totp, c, ora=self._now()):
             return "totp"
-        if self._password and c and hmac.compare_digest(c, self._password):
+        # ⛔ SI CONFRONTANO I BYTE, NON LE STRINGHE (riparato il 2026-08-02).
+        # `hmac.compare_digest` su stringhe accetta SOLO ASCII: con un carattere accentato
+        # SOLLEVA TypeError invece di rispondere «diverso». Difetto VIVO, non un mutante:
+        # `POST /api/bunker/login {"codice": "abcdéf"}` rispondeva **HTTP 500** invece di
+        # 403, cioe' la porta dell'amministrazione diceva «mi hai rotto qualcosa» invece di
+        # «ti ho respinto» -- informazione che a chi bussa non va data -- e riempiva il
+        # registro di tracce a ogni tentativo. Nessuno dei 5303 test lo vedeva.
+        # ⚠️ NON si risolve rifiutando il non-ASCII: una password legittima PUO' avere
+        #    accenti, e la bloccheremmo. Codificando in UTF-8 il confronto resta a tempo
+        #    costante e funziona con qualunque carattere.
+        cb = c.encode("utf-8")
+        if self._password and c and hmac.compare_digest(cb, self._password.encode("utf-8")):
             return "password"
-        if self._break and c and hmac.compare_digest(c, self._break):
+        if self._break and c and hmac.compare_digest(cb, self._break.encode("utf-8")):
             return "break_glass"
         return ""
 

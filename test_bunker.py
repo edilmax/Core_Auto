@@ -327,5 +327,183 @@ class TestBunkerEndpoint(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
 
 
+class TestBunkerSeiBuchiTrovatiDallaMutazione(unittest.TestCase):
+    """⛔ SEI BUCHI VERI NEL CANCELLO DELL'AMMINISTRAZIONE (mutazione, 2026-08-02).
+
+    Campagna su TUTTI e 41 i punti di `fase180_bunker`: 35 uccisi, 6 sopravvissuti. Il
+    modulo ha UN SOLO file di prove -- questo -- e la campagna l'ha usato tutto: non c'e'
+    nessuna scorciatoia che possa aver creato falsi allarmi. Sono sei buchi reali.
+
+    E' il posto da cui si fanno rimborsi, cancellazioni e si tocca l'integrita' del sistema:
+    la porta piu' importante della macchina, con addosso meno prove di quante ne abbia una
+    pagina di marketing.
+    """
+
+    def setUp(self):
+        self.firma = FirmaQuote(b"S" * 32)
+        self.clock = {"t": 1000.0}
+        self.b = bk.crea_bunker(self.firma, totp_secret=SEG_RFC,
+                                password="PasswordSuperAdmin@1",
+                                break_glass="ROMPI-IL-VETRO-9",
+                                orologio=lambda: self.clock["t"])
+
+    def test_un_codice_di_sei_lettere_ACCENTATE_non_fa_esplodere_la_porta(self):
+        """⛔ `if len(c) != _CIFRE or not c.isdigit(): return False` con un `and`.
+
+        Il primo controllo esiste per fermare SUBITO cio' che non e' un codice. Con `and` un
+        testo di sei caratteri non-numerici passa oltre e arriva a `hmac.compare_digest`,
+        che su stringhe NON-ASCII **solleva TypeError** (documentato: «comparing strings with
+        non-ASCII characters is not supported»).
+
+        Risultato: chiunque puo' far ESPLODERE la pagina di accesso al bunker mandando
+        `abcdéf`. Non e' un bypass -- e' un'eccezione non gestita su un ingresso di
+        autenticazione, cioe' la porta dell'amministrazione che smette di aprirsi.
+        """
+        self.clock["t"] = 59
+        for storto in ("abcdéf", "123 45", "abcdef", "12345", "1234567", "", "  1234  ",
+                       "±23456", "12345 "):
+            try:
+                esito = bk.verifica_totp(SEG_RFC, storto, ora=59)
+            except Exception as e:
+                self.fail("il codice %r ha fatto ESPLODERE la verifica: %s: %s"
+                          % (storto, type(e).__name__, e))
+            self.assertFalse(esito, "codice non valido accettato: %r" % (storto,))
+        # ...e attraverso l'ingresso vero, quello che usa la pagina
+        for storto in ("abcdéf", "±23456"):
+            try:
+                self.assertEqual("", self.b.verifica_secondo_fattore(storto))
+            except Exception as e:
+                self.fail("il secondo fattore esplode su %r: %s: %s"
+                          % (storto, type(e).__name__, e))
+        # e il verso opposto: il codice GIUSTO continua a passare
+        self.assertTrue(bk.verifica_totp(SEG_RFC, "287082", ora=59))
+        self.assertEqual("totp", self.b.verifica_secondo_fattore("287082"))
+        self.assertEqual("password", self.b.verifica_secondo_fattore("PasswordSuperAdmin@1"))
+        self.assertEqual("break_glass", self.b.verifica_secondo_fattore("ROMPI-IL-VETRO-9"))
+
+    def test_una_password_CON_ACCENTI_continua_a_funzionare(self):
+        """⛔ LA META' CHE IMPEDISCE DI «RIPARARE» ROMPENDO.
+
+        La riparazione ovvia sarebbe stata «rifiuta tutto cio' che non e' ASCII»: sbagliata,
+        perche' una password legittima puo' contenere accenti (o cinese, o emoji) e la
+        bloccherebbe -- chiudendo fuori dal proprio sistema dei soldi chi l'ha scelta. Si
+        confrontano i BYTE: a tempo costante, e con qualunque carattere.
+
+        Senza questa prova, un domani qualcuno potrebbe «semplificare» con un
+        `if not c.isascii(): return ""` e la suite resterebbe verde.
+        """
+        b = bk.crea_bunker(self.firma, totp_secret=SEG_RFC,
+                           password="PasswòrdÈ-Àccentata-2026",
+                           break_glass="ROMPI-IL-VETRÖ-9",
+                           orologio=lambda: self.clock["t"])
+        self.assertEqual("password", b.verifica_secondo_fattore("PasswòrdÈ-Àccentata-2026"),
+                         "una password con accenti non viene piu' riconosciuta: chi l'ha "
+                         "scelta resta chiuso fuori dal bunker")
+        self.assertEqual("break_glass", b.verifica_secondo_fattore("ROMPI-IL-VETRÖ-9"),
+                         "il codice d'emergenza con accenti non funziona piu': e' proprio "
+                         "quello che serve quando tutto il resto e' gia' andato storto")
+        self.assertEqual("", b.verifica_secondo_fattore("PasswordE-Accentata-2026"),
+                         "accetta la versione SENZA accenti: il confronto non e' esatto")
+        self.assertEqual("", b.verifica_secondo_fattore("altro"))
+
+    def test_una_revoca_che_NON_e_avvenuta_non_dice_di_essere_avvenuta(self):
+        """`revoca` senza firma configurata deve rispondere **False**. Con `True` al posto di
+        `False` risponde «logout fatto» **senza aver revocato niente**: chi chiude la
+        sessione crede di essere uscito, e il token resta valido fino alla scadenza. E' la
+        stessa famiglia del logout del bunker riparato il 2026-07-30 -- che rispondeva `ok`
+        senza aver revocato -- tornata da un'altra porta."""
+        spento = bk.crea_bunker(None, totp_secret=SEG_RFC,
+                                orologio=lambda: self.clock["t"])
+        self.assertFalse(spento.revoca("qualunque-cosa"),
+                         "ha dichiarato una revoca che non poteva avvenire (nessuna firma "
+                         "configurata): chi si disconnette crede di essere uscito")
+        self.assertFalse(spento.valida_sessione("qualunque-cosa", "1.2.3.4")["ok"])
+
+    def test_una_revoca_su_un_token_STORTO_rifiuta_senza_esplodere(self):
+        """`if not isinstance(dati, dict) or dati.get("k") != "bunker" or not
+        dati.get("nonce")` con un `and`: un token manomesso supera i tre controlli e si
+        arriva a `dati["nonce"]` su qualcosa che non ha quel campo -> eccezione non gestita
+        sull'ingresso di logout. Una porta che si rompe quando la spingono storto."""
+        buono = self.b.crea_sessione("1.2.3.4")
+        self.assertTrue(self.b.revoca(buono), "la revoca vera non funziona piu'")
+        senza_nonce = self.firma.codifica({"k": "bunker", "exp": 99999})
+        for storto in (None, "", "non-un-token", 12345, senza_nonce,
+                       self.firma.codifica({"k": "altro", "nonce": "x", "exp": 99999})):
+            try:
+                self.assertFalse(self.b.revoca(storto),
+                                 "revoca accettata su un token storto: %r" % (storto,))
+            except Exception as e:
+                self.fail("la revoca esplode su %r: %s: %s" % (storto, type(e).__name__, e))
+
+    def test_la_lista_dei_revocati_si_SVUOTA_da_sola(self):
+        """`if e <= ora` con `<`: i nonce che scadono **esattamente adesso** non vengono mai
+        buttati via. Su un server che gira per mesi la lista dei revocati cresce e non
+        scende: memoria che si mangia da sola, un logout alla volta. Il modulo lo dichiara --
+        «la denylist si auto-pulisce» -- ed e' una promessa che va mantenuta."""
+        t = self.b.valida_sessione(self.b.crea_sessione("1.2.3.4"), "1.2.3.4")
+        self.assertTrue(t["ok"])
+        tok = self.b.crea_sessione("1.2.3.4")
+        self.assertTrue(self.b.revoca(tok))
+        self.assertEqual(1, len(self.b._revocati), "il nonce revocato non e' stato registrato")
+        # l'orologio arriva ESATTAMENTE alla scadenza di quel nonce
+        scadenza = list(self.b._revocati.values())[0]
+        self.clock["t"] = float(scadenza)
+        self.b.revoca(self.b.crea_sessione("9.9.9.9"))     # un giro qualunque fa pulizia
+        self.assertNotIn(tok, self.b._revocati)
+        self.assertEqual(1, len(self.b._revocati),
+                         "la lista dei revocati non si e' svuotata al momento esatto della "
+                         "scadenza: su un server che gira per mesi cresce e basta (%r)"
+                         % (self.b._revocati,))
+
+    def test_IMPORTARE_il_bunker_non_stampa_e_non_genera_segreti(self):
+        """⛔ `if __name__ == "__main__":` con `!=`.
+
+        Quel blocco e' l'aiutante che genera il segreto TOTP per l'iscrizione al telefono.
+        Con `!=` gira **all'importazione**: ogni volta che il server carica il modulo
+        stamperebbe sullo standard output un `BUNKER_TOTP_SECRET=...` appena generato --
+        cioe' un segreto di autenticazione finito nei log, e per giunta diverso da quello
+        vero. Un segreto in un log e' un segreto bruciato.
+        """
+        import io
+        import runpy
+        import sys
+        vecchio, cattura = sys.stdout, io.StringIO()
+        sys.stdout = cattura
+        try:
+            runpy.run_path("fase180_bunker.py", run_name="fase180_bunker")
+        finally:
+            sys.stdout = vecchio
+        uscita = cattura.getvalue()
+        self.assertEqual("", uscita.strip(),
+                         "importare il bunker stampa qualcosa: %r. Se contiene un segreto, "
+                         "quel segreto e' bruciato." % (uscita[:200],))
+        self.assertNotIn("BUNKER_TOTP_SECRET", uscita)
+
+    def test_l_aiutante_di_iscrizione_funziona_anche_SENZA_argomenti(self):
+        """`seg = sys.argv[1] if len(sys.argv) > 1 else genera_segreto()` con `>=`: lanciato
+        senza argomenti va a prendere `sys.argv[1]` che non esiste -> esplode. E' il comando
+        che il fondatore usa per iscrivere il telefono: se non parte, l'unico modo di
+        configurare il secondo fattore non funziona."""
+        import runpy
+        import sys
+        vecchio_argv, vecchio_out = sys.argv, sys.stdout
+        import io
+        cattura = io.StringIO()
+        sys.argv, sys.stdout = ["fase180_bunker.py"], cattura
+        try:
+            runpy.run_path("fase180_bunker.py", run_name="__main__")
+        except Exception as e:
+            sys.argv, sys.stdout = vecchio_argv, vecchio_out
+            self.fail("l'aiutante di iscrizione esplode senza argomenti: %s: %s"
+                      % (type(e).__name__, e))
+        finally:
+            sys.argv, sys.stdout = vecchio_argv, vecchio_out
+        uscita = cattura.getvalue()
+        self.assertIn("BUNKER_TOTP_SECRET=", uscita,
+                      "l'aiutante non stampa il segreto da mettere nel telefono: %r"
+                      % (uscita[:200],))
+        self.assertIn("otpauth://", uscita, "manca il codice da scansionare")
+
+
 if __name__ == "__main__":
     unittest.main()
