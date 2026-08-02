@@ -1,0 +1,6 @@
+#!/bin/sh
+# ⛔ NON SI SALVA MENTRE UN GIRO DI MUTAZIONE E' APERTO. Vedi collaudi/guardia_commit.py.
+# Sta in deploy/hooks (VERSIONATO) e non in .git/hooks, che non viaggia col progetto:
+# un divieto che vive solo su un computer non protegge nessun altro.
+# Si accende con: sh deploy/installa_hook.sh
+exec python collaudi/guardia_commit.py

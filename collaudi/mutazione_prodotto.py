@@ -614,6 +614,59 @@ EQUIVALENTI_DICHIARATI = {
         "quota = min(0, residuo) = 0 e si arriva allo stesso `registra(importo_cents=0)` che "
         "rifiuta pulito, senza scrivere e senza gridare. Nessuna differenza di stato ne' di "
         "registro. Stessa premessa sotto guardia della voce qui sopra.",
+
+    # ── LA FAMIGLIA DEL CONFINE «ZERO» (2026-08-02) ─────────────────────────────────
+    # Sei voci, una dimostrazione sola, ripetuta per ogni posto perche' la chiave porta la
+    # FUNZIONE: cio' che e' dimostrato in un punto NON vale automaticamente altrove.
+    # LA PREMESSA COMUNE, e non e' un'opinione: `_cent` non restituisce MAI un negativo
+    # (righe 64-65), e `registra` RIFIUTA un importo zero PRIMA di aprire il database e
+    # SENZA scrivere un allarme (righe 158-161: la validazione precede `self._apri()`).
+    # Quindi ogni percorso che con il guasto arriva a `registra(importo_cents=0)` finisce
+    # esattamente dove finiva prima: nessuna scrittura, nessun registro, stesso valore di
+    # ritorno. Restano solo giri a vuoto.
+    # ⚠️ LA PREMESSA E' SOTTO GUARDIA: `test_copertura_critica.
+    #    test_un_importo_che_denaro_non_e_viene_RIFIUTATO_PULITO_senza_allarme`. Se qualcuno
+    #    cambiasse `registra`, quella guardia diventerebbe rossa e QUESTE SEI VOCI andrebbero
+    #    rifatte da capo. Non sono dispense permanenti: sono conclusioni con una premessa.
+    ("fase177_financial_controller.py", "esporta_tutti",
+     "and offset >= 0) else 0", ">=", ">"):
+        "L'unico valore che differisce e' offset == 0: col codice sano la condizione e' vera "
+        "e `off = offset`, cioe' 0; col guasto e' falsa e si prende il ramo `else`, che vale "
+        "0. Stesso numero per la stessa via diversa. Per offset negativo o non intero "
+        "entrambi danno 0. Nessun test puo' vedere la differenza perche' non ce n'e' una.",
+    ("fase177_financial_controller.py", "emetti_nota",
+     "if tipo not in (\"credito\", \"debito\") or imp <= 0 or not (riferimento and soggetto",
+     "<=", "<"):
+        "imp == 0 e' l'unico caso che cambia: col guasto la nota non viene rifiutata subito "
+        "ma si arriva a `registra(importo_cents=0)`, che rifiuta pulito -> `mv is None` -> "
+        "`return None` (riga 400). Stesso valore di ritorno, nessuna nota creata, nessun "
+        "movimento, nessun allarme.",
+    ("fase177_financial_controller.py", "emetti_nota",
+     "if tipo not in (\"credito\", \"debito\") or imp <= 0 or not (riferimento and soggetto",
+     "or", "and"):
+        "In Python `and` lega piu' stretto di `or`, quindi il terzo controllo -- quello sui "
+        "campi obbligatori -- resta comunque da solo e continua a rifiutare. Cambia solo che "
+        "un `tipo` sconosciuto non viene piu' fermato qui: ma poco sotto diventa "
+        "`\"nota_\" + tipo`, che non e' in TIPI_GIORNALE, quindi `registra` lo rifiuta e si "
+        "torna `None` lo stesso. Nessun documento nasce, nessun movimento viene scritto.",
+    ("fase177_financial_controller.py", "processa_penale",
+     "if imp <= 0 or not (riferimento and host_id):", "<=", "<"):
+        "imp == 0: col guasto si prosegue fino a `emetti_nota(importo_cents=0)`, che ha lo "
+        "stesso controllo e restituisce None -> `if nota is None: return None` (riga 516). "
+        "Identico.",
+    ("fase177_financial_controller.py", "processa_penale",
+     "if residuo <= 0:", "<=", "<"):
+        "residuo == 0 dentro il giro sulle righe di payout: col codice sano si esce, col "
+        "guasto si prosegue e per ogni riga rimanente quota = min(disp, 0) = 0, quindi "
+        "`registra(importo_cents=0)` -> None -> `continue` (riga 553). Il residuo non cambia, "
+        "quindi nemmeno le scritture successive. ⛔ Questa voce vale SOLO in `processa_penale`: "
+        "la riga identica in `riscuoti_debiti` ha la sua dimostrazione a parte -- ed e' "
+        "esattamente per questo che la chiave porta il nome della funzione.",
+    ("fase177_financial_controller.py", "processa_penale",
+     "if not pid or pid == riferimento or disp <= 0:", "<=", "<"):
+        "`disp = _cent(r.get('minori'))` non e' mai negativo, quindi `disp < 0` e' sempre "
+        "falso e l'unico caso che differisce e' disp == 0: si prosegue con quota = 0 e si "
+        "arriva allo stesso `registra` che rifiuta pulito. Nessuna differenza osservabile.",
 }
 
 
@@ -1048,10 +1101,20 @@ if __name__ == "__main__" and "--modulo" in sys.argv:
         _t = sys.argv.index("--tetto")
         _tetto = int(sys.argv[_t + 1])
         _nomi = [n for n in _nomi if n != sys.argv[_t + 1]]
+    # `--minuti N`: il tempo massimo del giro (predefinito 45). Come il tetto, esiste per non
+    # far durare un giro all'infinito -- ma quando serve una misura COMPLETA va potuto
+    # alzare, se no si resta con un numero parziale e ci si abitua. Il 2026-08-02 un giro su
+    # 143 punti con sei moduli killer ha lasciato fuori 25 mutanti per scadenza: dichiarati,
+    # ma non esaminati. Cio' che resta fuori viene DETTO in fondo al giro, sempre.
+    _minuti = 45
+    if "--minuti" in sys.argv:
+        _m = sys.argv.index("--minuti")
+        _minuti = int(sys.argv[_m + 1])
+        _nomi = [n for n in _nomi if n != sys.argv[_m + 1]]
     print("=" * 96)
     print("MUTANTI GENERATI SU MODULI INTERI: %s" % ", ".join(_nomi))
     print("=" * 96)
-    _esiti, _rin = giro_su_moduli(_nomi, tetto=_tetto, killer=_killer)
+    _esiti, _rin = giro_su_moduli(_nomi, tetto=_tetto, minuti=_minuti, killer=_killer)
     _sopr = [e for e in _esiti if e["verdetto"] == "sopravvissuto"]
     _scop = [e for e in _esiti if e["verdetto"] == "scoperto"]
     for e in _esiti:

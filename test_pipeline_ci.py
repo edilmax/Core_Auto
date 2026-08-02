@@ -1397,6 +1397,67 @@ class TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA(unittest.TestCase):
                          "il codice VECCHIO. %r" % (ciechi,))
 
 
+    def test_NON_SI_SALVA_MENTRE_UN_GIRO_DI_MUTAZIONE_E_APERTO(self):
+        """⛔ DIRETTIVA D18 applicata al salvataggio: la memoria umana non e' una strategia.
+
+        FATTO VERO, 2026-08-02: tre cicli di mutazione interrotti, e OGNI VOLTA un guasto
+        rimasto dentro un file di PRODUZIONE. L'ultimo faceva rispondere alla macchina
+        «questa penale era gia' stata stornata» anche quando non era vero. Dimostrato che
+        senza blocco quel guasto entra nel salvataggio senza che nulla dica niente.
+
+        La rete di recupero del giudice ha la copia buona, ma ripristina al giro SUCCESSIVO:
+        fra l'interruzione e il giro dopo c'e' una finestra in cui `git add -A` porta il
+        guasto nel commit, poi in produzione, **con tutti i controlli verdi** -- quei punti
+        sono scoperti per definizione, e' il motivo per cui li stiamo mutando.
+
+        Ci ha protetto il fatto che me ne sono ricordato tre volte su tre. Non e' un
+        controllo: e' fortuna con un nome piu' bello.
+        """
+        import os
+        import shutil
+        import tempfile
+        radice = os.path.dirname(os.path.abspath(__file__))
+        m = self._modulo(os.path.join(radice, "collaudi", "guardia_commit.py"),
+                         "_guardia_commit")
+
+        # (1) le DUE direzioni della funzione: con la traccia aperta ferma, senza lascia fare
+        d = tempfile.mkdtemp()
+        try:
+            vuota = os.path.join(d, "non-esiste")
+            self.assertEqual((False, ""), m.mutazione_in_corso(vuota),
+                             "dice che un giro e' aperto quando non c'e' niente: bloccherebbe "
+                             "sempre, e un blocco sempre acceso viene tolto")
+            traccia = os.path.join(d, "aperta")
+            os.makedirs(traccia)
+            with open(os.path.join(traccia, "quale.txt"), "w", encoding="utf-8") as f:
+                f.write("fase177_financial_controller.py")
+            aperta, quale = m.mutazione_in_corso(traccia)
+            self.assertTrue(aperta, "un giro interrotto non viene visto")
+            self.assertIn("fase177", quale, "non dice QUALE file potrebbe essere rotto")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+        # (2) il gancio esiste, e' VERSIONATO (non in .git/hooks, che non viaggia) e chiama
+        #     davvero la guardia. Un gancio che vive solo su un computer non protegge nessuno.
+        gancio = os.path.join(radice, "deploy", "hooks", "pre-commit")
+        self.assertTrue(os.path.exists(gancio),
+                        "il gancio pre-commit non e' piu' nel repository: tornerebbe a "
+                        "esistere solo sul computer di chi l'ha creato")
+        with open(gancio, encoding="utf-8") as f:
+            testo = f.read()
+        self.assertIn("guardia_commit", testo,
+                      "il gancio non chiama piu' la guardia: %r" % testo[:200])
+        self.assertTrue(os.path.exists(os.path.join(radice, "deploy", "installa_hook.sh")),
+                        "manca lo script che accende i ganci su una macchina nuova")
+
+    @staticmethod
+    def _modulo(percorso, nome):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(nome, percorso)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
     def test_IL_GIUDICE_NON_PUO_GIUDICARE_SU_UNA_BASE_ROSSA(self):
         """⛔ DIRETTIVA D18: uno strumento che misura deve avere un controllo MECCANICO che
         gli impedisca di barare — e quel controllo va a sua volta sorvegliato, se no fra sei

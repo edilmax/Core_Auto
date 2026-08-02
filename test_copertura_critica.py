@@ -1799,6 +1799,364 @@ class TestGiornaleRamiDErrore(_BaseFC):
                          "l'host 'forma' e si prende i soldi nel rapporto fiscale." % (agg,))
 
 
+class _LedgerConta:
+    """Ledger payout che REGISTRA come e' stato usato: serve a provare che certe chiamate
+    NON avvengono (un giro a vuoto sui bonifici e' un difetto, non un dettaglio)."""
+
+    def __init__(self, righe=()):
+        self.righe = [dict(r) for r in righe]
+        self.chiamate = []
+        self.maturati = []
+
+    def elenca(self, host_id, stato=None, valuta=None):
+        self.chiamate.append({"host_id": host_id, "stato": stato, "valuta": valuta})
+        return [dict(r) for r in self.righe]
+
+    def imposta_importo(self, pid, minori):
+        return True
+
+    def rimuovi(self, pid):
+        return True
+
+    def registra_maturato(self, pid, host_id, minori, valuta):
+        self.maturati.append({"pid": pid, "host_id": host_id, "minori": minori,
+                              "valuta": valuta})
+        return True
+
+
+class TestLibroDeiSoldiZoneDiConfine(_BaseFC):
+    """⛔ I 27 SOPRAVVISSUTI RIMASTI su `fase177`, dopo che la zona della riscossione e'
+    stata chiusa (2026-08-01). Qui i sei che cambiano il COMPORTAMENTO; gli undici che
+    perdono la traccia d'errore stanno nella classe qui sotto, e i confini a «zero» sono
+    dimostrati equivalenti nell'elenco del giudice, uno per funzione.
+    """
+
+    def test_una_nota_di_DEBITO_non_finisce_sui_conti_del_CREDITO(self):
+        """⛔ L'INVERSIONE DELLA PARTITA DOPPIA.
+
+            dare, avere = (("crediti_vs_host", "ricavi_penali") if tipo == "debito"
+                           else ("costi_rimborsi", "debiti_vs_soggetto"))
+
+        Con `!=` al posto di `==` i conti si scambiano: una penale incassata verrebbe
+        registrata come un RIMBORSO USCITO. I totali restano coerenti -- e' questo che lo
+        rende insidioso -- ma il libro racconta il contrario di quello che e' successo: nel
+        conto economico spariscono i ricavi da penali e compaiono costi per rimborsi mai
+        fatti. E' un errore che si scopre a fine anno, dal commercialista.
+        """
+        nd = self.fc.emetti_nota(tipo="debito", riferimento="R1", soggetto="host:h1",
+                                 importo_cents=5000, valuta="EUR", causale="penale",
+                                 emittente="admin")
+        nc = self.fc.emetti_nota(tipo="credito", riferimento="R2", soggetto="host:h1",
+                                 importo_cents=3000, valuta="EUR", causale="storno",
+                                 emittente="admin")
+        self.assertIsNotNone(nd)
+        self.assertIsNotNone(nc)
+        m1 = [m for m in self.fc.movimenti("R1") if m["tipo"] == "nota_debito"][0]
+        m2 = [m for m in self.fc.movimenti("R2") if m["tipo"] == "nota_credito"][0]
+        self.assertEqual(("crediti_vs_host", "ricavi_penali"),
+                         (m1["conto_dare"], m1["conto_avere"]),
+                         "una nota di DEBITO e' finita sui conti sbagliati: %r" % (dict(m1),))
+        self.assertEqual(("costi_rimborsi", "debiti_vs_soggetto"),
+                         (m2["conto_dare"], m2["conto_avere"]),
+                         "una nota di CREDITO e' finita sui conti sbagliati: %r" % (dict(m2),))
+
+    def test_lo_storno_restituisce_SOLO_cio_che_era_stato_riscosso_su_QUELLA_nota(self):
+        """⛔ SOLDI CHE ESCONO SENZA ESSERE MAI ENTRATI.
+
+        `storna_penale` calcola quanto era gia' stato riscosso leggendo il giornale:
+
+            if m.get("tipo") == "penale_offset" and ev.startswith("offset:<nota>:")
+
+        Con un `or`, conta **anche i movimenti di ALTRE note** sulla stessa prenotazione: il
+        totale «gia' riscosso» si gonfia, e allo storno l'host si vede restituire piu' di
+        quanto gli era stato trattenuto. Non e' un numero sbagliato in un rapporto: e'
+        denaro che rientra in `da_pagare` e che poi gli viene bonificato davvero.
+        """
+        # prima penale, compensata per 1000 sui bonifici
+        p = _LedgerConta([{"prenotazione_id": "P1", "minori": 1000}])
+        a = self.fc.processa_penale(riferimento="R1", host_id="h1", penale_cents=5000,
+                                    valuta="EUR", payout=p)
+        self.assertIsNotNone(a)
+        self.assertEqual(1000, a["offset_cents"])
+        # una SECONDA nota sulla stessa prenotazione, con un suo offset da 700.
+        # (`processa_penale` e' idempotente sul riferimento -- e' voluto -- quindi la
+        # seconda nota si emette a mano, come farebbe un altro flusso: uno storno
+        # parziale, una penale d'altra natura.)
+        b = self.fc.emetti_nota(tipo="debito", riferimento="R1", soggetto="host:h1",
+                                importo_cents=4000, valuta="EUR", causale="altra penale",
+                                emittente="admin", evento_id="penale-bis:R1")
+        self.assertIsNotNone(b, "la seconda nota sulla stessa prenotazione non e' nata")
+        self.assertNotEqual(a["nota_id"], b["nota_id"])
+        self.assertIsNotNone(self.fc.registra(
+            evento_id="offset:%s:P2" % b["nota_id"], tipo="penale_offset",
+            riferimento="R1", soggetto="host:h1", conto_dare="debiti_vs_host_payout",
+            conto_avere="crediti_vs_host", importo_cents=700, valuta="EUR",
+            causale="compensazione della SECONDA nota", emittente="admin"))
+        # ...e uno STORNO di quella seconda nota: il calcolo del riscosso sottrae gli storni,
+        # e deve sottrarre SOLO i propri. Senza questa riga il lato «meno» della coppia resta
+        # scoperto -- protetti gli offset altrui ma non gli storni altrui (misurato).
+        self.assertIsNotNone(self.fc.registra(
+            evento_id="storno-offset:%s:P2" % b["nota_id"], tipo="storno",
+            riferimento="R1", soggetto="host:h1", conto_dare="crediti_vs_host",
+            conto_avere="debiti_vs_host_payout", importo_cents=700, valuta="EUR",
+            causale="storno della compensazione della SECONDA nota", emittente="admin"))
+        rest = _LedgerConta()
+        esito = self.fc.storna_penale(nota_id=a["nota_id"], motivo="errore nostro",
+                                      emittente="admin", payout=rest)
+        self.assertIsNotNone(esito)
+        self.assertEqual(1000, esito["riscosso_cents"],
+                         "lo storno ha contato movimenti di un'ALTRA nota (offset o storni "
+                         "che siano): %r" % (esito,))
+        self.assertEqual([1000], [m["minori"] for m in rest.maturati],
+                         "restituito all'host un importo diverso da quello trattenuto su "
+                         "quella nota: %r" % (rest.maturati,))
+
+    def test_il_MOTIVO_dello_storno_finisce_davvero_nel_documento(self):
+        """`(motivo or "senza motivo")` con un `and` diventa **sempre** «senza motivo». La
+        nota di credito e' un documento contabile: la causale e' l'unica cosa che spiega
+        perche' un addebito e' stato annullato. Perderla significa non poter piu' rispondere
+        a «perche' avete stornato questa penale?» -- ne' a noi, ne' a un controllo."""
+        a = self.fc.processa_penale(riferimento="R9", host_id="h9", penale_cents=2000,
+                                    valuta="EUR", payout=_LedgerConta())
+        with self.assertLogs("core_auto.financial_controller", level="WARNING") as reg:
+            self.fc.storna_penale(nota_id=a["nota_id"],
+                                  motivo="host ricoverato in ospedale",
+                                  emittente="admin", payout=None)
+        causali = [m["causale"] for m in self.fc.movimenti("R9")
+                   if m["tipo"] == "nota_credito"]
+        self.assertTrue(causali, "nessuna nota di credito nel giornale")
+        self.assertIn("host ricoverato in ospedale", causali[0],
+                      "il motivo dello storno e' sparito dal documento: %r" % (causali,))
+        # ⛔ E ANCHE NELLA RIGA DI REGISTRO. Sono due punti distinti dello stesso modulo, con
+        # due `(motivo or ...)` distinti: proteggerne uno lascia vivo l'altro (misurato).
+        # Il registro e' cio' che un amministratore legge per capire cosa e' successo senza
+        # aprire il database: «PENALE_STORNATA ... MOTIVO: -» non spiega niente.
+        annunci = [r.getMessage() for r in reg.records if "PENALE_STORNATA" in r.getMessage()]
+        self.assertTrue(annunci, "lo storno non e' stato annunciato nel registro: %r"
+                        % (reg.output,))
+        self.assertIn("host ricoverato in ospedale", annunci[0],
+                      "il motivo dello storno e' sparito dalla riga di registro: %r"
+                      % (annunci,))
+
+    def test_senza_niente_da_compensare_i_bonifici_non_si_toccano(self):
+        """`if residuo > 0:` con `>=` interroga il ledger dei payout anche quando non c'e'
+        piu' niente da compensare. Sembra innocuo: e' un giro a vuoto su un archivio che in
+        produzione e' condiviso col sito, sotto contesa. Il modulo e' scritto per NON
+        toccare i bonifici quando non serve, ed e' una promessa che va mantenuta."""
+        p = _LedgerConta([{"prenotazione_id": "P1", "minori": 9999}])
+        primo = self.fc.processa_penale(riferimento="R5", host_id="h5", penale_cents=1000,
+                                        valuta="EUR", payout=p)
+        self.assertEqual(1000, primo["offset_cents"], "la prima compensazione non e' avvenuta")
+        prima = len(p.chiamate)
+        # replay: la penale e' gia' interamente compensata -> residuo 0, niente da fare
+        di_nuovo = self.fc.processa_penale(riferimento="R5", host_id="h5", penale_cents=1000,
+                                           valuta="EUR", payout=p)
+        self.assertEqual(0, di_nuovo["residuo_cents"])
+        self.assertEqual(prima, len(p.chiamate),
+                         "ha interrogato i bonifici pur non avendo niente da compensare")
+
+    def test_un_identificativo_STORTO_non_diventa_un_guasto_da_segnalare(self):
+        """`not (isinstance(x, str) and x)` con un `or`: un identificativo che non e' una
+        stringa supera il controllo, il codice ci chiama `.strip()` sopra e l'eccezione
+        finisce nel registro come **guasto dell'archivio**.
+
+        Non e' un guasto: e' una richiesta malformata. Segnalarla come errore riempie il
+        registro di falsi allarmi -- e il guardiano ne manda copia per email ogni giorno.
+        Un allarme che grida per una chiamata sbagliata insegna a ignorare gli allarmi.
+        """
+        import logging
+        for storto in (123, None, [], {}, 3.5):
+            with self.assertRaises(AssertionError):
+                with self.assertLogs("core_auto.financial_controller", level="WARNING"):
+                    self.assertIsNone(self.fc.nota(storto))
+            with self.assertRaises(AssertionError):
+                with self.assertLogs("core_auto.financial_controller", level="WARNING"):
+                    self.assertEqual([], self.fc.note_per_riferimento(storto))
+        # ⛔ E QUI SERVE UN OSSERVABILE DIVERSO. Su `nota` il guasto si vede perche' il codice
+        # chiama `.strip()` su un numero e l'eccezione finisce nel registro. Su
+        # `note_per_riferimento` no: SQLite accetta il numero come parametro senza
+        # protestare, e -- per l'affinita' di tipo della colonna -- lo confronta come TESTO.
+        # Risultato: una richiesta malformata TORNA I DOCUMENTI di una prenotazione vera.
+        # Provato il 2026-08-02: senza questo pezzo il mutante sopravviveva.
+        self.assertIsNotNone(self.fc.emetti_nota(
+            tipo="debito", riferimento="123", soggetto="host:h1", importo_cents=100,
+            valuta="EUR", causale="prenotazione con riferimento numerico", emittente="admin"))
+        self.assertEqual(1, len(self.fc.note_per_riferimento("123")),
+                         "la nota non si trova nemmeno col riferimento giusto")
+        self.assertEqual([], self.fc.note_per_riferimento(123),
+                         "una richiesta malformata (numero invece di stringa) ha restituito "
+                         "i documenti contabili di una prenotazione vera")
+
+    def test_un_LIMITE_malformato_non_fa_esplodere_la_sala_controllo(self):
+        """`isinstance(limit, int) and 0 < limit <= 2000` con un `or`: se `limit` non e' un
+        numero si arriva a confrontarlo con uno -- `0 < "abc"` -- e in Python quello **non e'
+        un errore silenzioso: e' un'eccezione**, sollevata FUORI dal `try`. La sala controllo
+        del bunker smette di aprirsi, e con essa la vista su quanto ci devono gli host."""
+        for storto in ("abc", None, [], 3.5, True):
+            try:
+                r = self.fc.debiti_aperti(limit=storto)
+            except Exception as e:
+                self.fail("limit=%r ha fatto esplodere debiti_aperti: %s: %s"
+                          % (storto, type(e).__name__, e))
+            self.assertIsInstance(r, list)
+
+    def test_il_controller_in_memoria_regge_l_uso_da_PIU_THREAD(self):
+        """`sqlite3.connect(":memory:", check_same_thread=False)` con `True` al posto di
+        `False`: il controller creato in memoria smette di funzionare appena lo tocca un
+        thread diverso da quello che l'ha creato.
+
+        Non e' teoria: il server di produzione serve ogni richiesta su un thread suo. Un
+        `check_same_thread=True` qui vuol dire che il libro dei soldi funziona nei test e si
+        rompe sotto carico -- il modo di rompersi peggiore, perche' non si vede mai in casa.
+        """
+        import threading
+        from fase177_financial_controller import crea_financial_controller
+        fc = crea_financial_controller(":memory:")
+        fc.inizializza_schema()
+        esiti = []
+
+        def _lavora():
+            try:
+                esiti.append(bool(fc.emetti_nota(
+                    tipo="debito", riferimento="RT", soggetto="host:hT", importo_cents=100,
+                    valuta="EUR", causale="da un altro thread", emittente="admin")))
+            except Exception as e:
+                esiti.append("%s: %s" % (type(e).__name__, e))
+
+        t = threading.Thread(target=_lavora)
+        t.start()
+        t.join(30)
+        self.assertEqual([True], esiti,
+                         "il libro dei soldi non regge una chiamata da un altro thread: %r "
+                         "-- in produzione ogni richiesta ne ha uno suo" % (esiti,))
+
+
+class TestOgniGuastoISOLATOdelLibroDeiSoldiPortaLaTRACCIA(_BaseFC):
+    """⛔ UNDICI PUNTI, UNA PROPRIETA' SOLA.
+
+    Undici dei 27 sopravvissuti di `fase177` erano lo stesso identico guasto:
+    `exc_info=True` -> `False`. Non sono undici difetti: e' una proprieta' ripetuta in
+    undici posti, e va difesa una volta sola -- undici prove che dicono la stessa cosa
+    sarebbero rumore che nasconde il segnale.
+
+    Perche' conta proprio in QUESTO modulo: tutte e undici le braccia ingoiano il guasto di
+    proposito (un archivio rotto non deve fermare la contabilita' degli altri). Proprio per
+    questo la traccia e' l'unica cosa che resta. Senza, il registro dice «qualcosa e'
+    fallito» sul libro dei soldi e nessuno sapra' mai cosa: se un bonifico non e' partito,
+    se una nota non e' stata scritta, o se il disco e' pieno.
+
+    ⚠️ Osservabile FORTE: con `exc_info=False` il campo del record vale **False**, che NON e'
+    `None` -- un `assertIsNotNone` passerebbe col guasto dentro (errore commesso davvero il
+    2026-08-01 e corretto misurando).
+    """
+
+    def _guasta(self, *frammenti):
+        """Un controller identico a quello vero, ma con le istruzioni scelte che esplodono."""
+        fab = _Fabbrica(_memoria())
+        fc = FinancialController(fab, orologio=lambda: self.TS)
+        fc.inizializza_schema()
+        fab.rompi(*frammenti)
+        return fc
+
+    def _pretendi_traccia(self, nome, azione):
+        import logging
+        with self.assertLogs("core_auto.financial_controller", level="WARNING") as reg:
+            azione()
+        tracce = [r.exc_info for r in reg.records if r.exc_info not in (None, False)]
+        self.assertTrue(tracce,
+                        "il guasto su %s non lascia nessuna traccia dell'errore: resta "
+                        "«qualcosa e' fallito» e basta. Registro: %r" % (nome, reg.output))
+        for t in tracce:
+            self.assertIsInstance(t, tuple, "traccia non valida su %s: %r" % (nome, t))
+            self.assertIsInstance(t[1], BaseException,
+                                  "la traccia su %s non contiene l'eccezione" % nome)
+
+    def test_le_letture_di_sola_consultazione(self):
+        """`nota`, `note_per_riferimento`, `debiti_aperti`, `somme_periodo`,
+        `incassi_periodo`: se l'archivio non risponde restituiscono vuoto, ed e' giusto --
+        ma DEVONO dire perche', se no la sala controllo mostra «zero debiti aperti» quando
+        in realta' non e' riuscita a guardare."""
+        casi = (
+            ("nota", "SELECT * FROM note WHERE nota_id",
+             lambda fc: fc.nota("ND-2026-000001")),
+            ("note_per_riferimento", "SELECT * FROM note WHERE riferimento",
+             lambda fc: fc.note_per_riferimento("R1")),
+            ("debiti_aperti", "SELECT * FROM debiti WHERE stato",
+             lambda fc: fc.debiti_aperti()),
+            ("somme_periodo", "SELECT tipo, valuta, SUM(importo_cents)",
+             lambda fc: fc.somme_periodo(0)),
+            ("incassi_periodo", "SELECT riferimento, valuta, SUM(importo_cents)",
+             lambda fc: fc.incassi_periodo(0)),
+        )
+        for nome, frammento, azione in casi:
+            fc = self._guasta(frammento)
+            self._pretendi_traccia(nome, lambda: azione(fc))
+
+    def test_le_scritture_che_completano_una_riscossione(self):
+        """`_segna_nota_saldata` e `_debito_backoff`: falliscono in silenzio di proposito
+        (il denaro e' gia' incassato, non si torna indietro). Ma se la nota non passa a
+        «saldata» o l'attesa non viene scritta, il giro dopo ripartira' come se niente
+        fosse -- e senza la traccia nessuno capira' perche'."""
+        fc = self._guasta("UPDATE note SET stato='saldata'")
+        self._pretendi_traccia("_segna_nota_saldata",
+                               lambda: fc._segna_nota_saldata("ND-QUALSIASI"))
+        fc2 = self._guasta("UPDATE debiti SET tentativi")
+        self._pretendi_traccia("_debito_backoff",
+                               lambda: fc2._debito_backoff("ND-X", "h1", "R1", 100, "EUR",
+                                                           1, self.TS))
+
+    def test_le_braccia_che_parlano_col_ledger_dei_bonifici(self):
+        """`processa_penale` e `storna_penale` isolano un ledger payout rotto: la
+        contabilita' non si ferma, il debito resta. Ma «non e' stato possibile compensare»
+        senza il perche' e' inservibile: sono soldi che restano fuori posto."""
+        # lettura dei payout durante la compensazione
+        fc = FinancialController(_Fabbrica(_memoria()), orologio=lambda: self.TS)
+        fc.inizializza_schema()
+        self._pretendi_traccia(
+            "processa_penale (lettura payout)",
+            lambda: fc.processa_penale(riferimento="RX", host_id="hX", penale_cents=1000,
+                                       valuta="EUR",
+                                       payout=_LedgerCheEsplode(su=("elenca",))))
+        # aggiornamento del ledger dopo una compensazione riuscita
+        fc2 = FinancialController(_Fabbrica(_memoria()), orologio=lambda: self.TS)
+        fc2.inizializza_schema()
+        self._pretendi_traccia(
+            "processa_penale (aggiornamento ledger)",
+            lambda: fc2.processa_penale(
+                riferimento="RY", host_id="hY", penale_cents=1000, valuta="EUR",
+                payout=_LedgerCheEsplode(righe=[{"prenotazione_id": "P1", "minori": 400}],
+                                         su=("imposta_importo", "rimuovi"))))
+        # restituzione all'host durante lo storno
+        fc3 = FinancialController(_Fabbrica(_memoria()), orologio=lambda: self.TS)
+        fc3.inizializza_schema()
+        a = fc3.processa_penale(riferimento="RZ", host_id="hZ", penale_cents=1000,
+                                valuta="EUR",
+                                payout=_LedgerConta([{"prenotazione_id": "P1",
+                                                      "minori": 1000}]))
+        self._pretendi_traccia(
+            "storna_penale (restituzione)",
+            lambda: fc3.storna_penale(nota_id=a["nota_id"], motivo="prova",
+                                      emittente="admin",
+                                      payout=_LedgerCheEsplode(su=("registra_maturato",))))
+
+    def test_la_nota_che_non_riesce_a_nascere_dopo_il_giornale(self):
+        """Il caso peggiore del modulo: la riga di giornale e' GIA' scritta e il documento
+        non riesce a nascere. Il modulo lo registra come `error` (non `warning`) perche' e'
+        una spaccatura fra libro e documenti che va sanata a mano -- e senza la traccia non
+        si sa nemmeno da dove cominciare."""
+        import logging
+        fc = self._guasta("INSERT INTO note")
+        with self.assertLogs("core_auto.financial_controller", level="ERROR") as reg:
+            self.assertIsNone(fc.emetti_nota(tipo="debito", riferimento="R1",
+                                             soggetto="host:h1", importo_cents=100,
+                                             valuta="EUR", causale="x", emittente="admin"))
+        tracce = [r.exc_info for r in reg.records if r.exc_info not in (None, False)]
+        self.assertTrue(tracce, "la spaccatura fra giornale e documenti non lascia traccia: "
+                                "%r" % (reg.output,))
+        self.assertIsInstance(tracce[0], tuple)
+        self.assertIsInstance(tracce[0][1], BaseException)
+
+
 class TestGiornaleRifiutaCioCheNonEDenaro(_BaseFC):
     """⛔ IL GIORNALE E' LA VERITA' CONTABILE: CI ENTRA SOLO DENARO VERO.
 
