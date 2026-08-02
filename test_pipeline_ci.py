@@ -1450,6 +1450,21 @@ class TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(radice, "deploy", "installa_hook.sh")),
                         "manca lo script che accende i ganci su una macchina nuova")
 
+        # (3) I GANCI RESTANO SOLO-ASCII. Non perche' `sh` se ne accorga -- i commenti non
+        #     li interpreta -- ma perche' girano su macchine, shell e lingue diverse, e un
+        #     gancio e' l'ultimo posto dove scoprire un problema di codifica. Il 2026-08-02
+        #     il programma chiamato da questo gancio e' ESPLOSO su un simbolo non-ASCII:
+        #     bloccava il commit per il motivo sbagliato, mostrando un traceback al posto
+        #     delle istruzioni. Richiesta esplicita del fondatore, e costa zero mantenerla.
+        for nome in sorted(os.listdir(os.path.join(radice, "deploy", "hooks"))):
+            p = os.path.join(radice, "deploy", "hooks", nome)
+            with open(p, "rb") as f:
+                dati = f.read()
+            fuori = [(i, b) for i, b in enumerate(dati) if b > 126]
+            self.assertEqual([], fuori[:5],
+                             "il gancio %s contiene byte non-ASCII (posizione, valore): %r"
+                             % (nome, fuori[:5]))
+
     @staticmethod
     def _modulo(percorso, nome):
         import importlib.util

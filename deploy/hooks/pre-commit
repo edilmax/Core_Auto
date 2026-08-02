@@ -1,5 +1,11 @@
 #!/bin/sh
-# ⛔ NON SI SALVA MENTRE UN GIRO DI MUTAZIONE E' APERTO. Vedi collaudi/guardia_commit.py.
+# NON SI SALVA MENTRE UN GIRO DI MUTAZIONE E' APERTO. Vedi collaudi/guardia_commit.py.
+# NB: qui dentro SOLO caratteri ASCII, anche nei commenti. Non perche' `sh` se ne accorga
+# -- i commenti non li interpreta -- ma perche' questo file gira come gancio di git su
+# macchine, shell e lingue diverse, ed e' l'ultimo posto dove vogliamo scoprire un problema
+# di codifica. Il 2026-08-02 il programma che questo gancio chiama e' ESPLOSO proprio su un
+# simbolo non-ASCII: bloccava il commit per il motivo sbagliato, mostrando un traceback al
+# posto delle istruzioni. Meno superficie, meno sorprese.
 # Sta in deploy/hooks (VERSIONATO) e non in .git/hooks, che non viaggia col progetto:
 # un divieto che vive solo su un computer non protegge nessun altro.
 # Si accende con: sh deploy/installa_hook.sh
