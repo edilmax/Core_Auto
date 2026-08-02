@@ -44,7 +44,7 @@ automatica fa fallire la suite se i due divergono):
 
 # ⚙️ REGOLA FERREA DI OPERATIVITÀ E PRECISIONE
 
-> ## 📌 GLI OBBLIGHI SONO **92**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
+> ## 📌 GLI OBBLIGHI SONO **93**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
 > **Contati dai file il 2026-08-01, non a memoria** (`python collaudi/regole_avvio.py` li
 > ricontrolla a ogni sessione e **grida** se questi numeri non tornano):
 >
@@ -57,8 +57,8 @@ automatica fa fallire la suite se i due divergono):
 > · **29** stanno nell'appendice di `REGISTRO_INGEGNERIA.md`, con prova e fonte per esteso.
 > Più le **24 uccise** dai revisori ostili **col motivo**: dicono cosa NON vale la pena rifare.
 >
-> ### 🧭 GLI ALTRI **48** — nati dai NOSTRI danni
-> Regola zero (**5**) · **18 direttive del fondatore** · modi di rompersi (**11**) ·
+> ### 🧭 GLI ALTRI **49** — nati dai NOSTRI danni
+> Regola zero (**5**) · **19 direttive del fondatore** · modi di rompersi (**11**) ·
 > collaudi (**10**) · direttiva finale (**4**). Non hanno uno studio dietro: hanno una
 > **cicatrice**. Valgono uguale, e da oggi **portano anch'essi il «si verifica così»**.
 >
@@ -189,7 +189,7 @@ solo è il canale principale delle regressioni. Il fondatore se n'è accorto pri
 
 ---
 
-# 🧭 LE 18 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
+# 🧭 LE 19 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
 
 > **Perché stanno qui e non solo in memoria.** Fino al 2026-08-01 vivevano nella memoria di
 > sessione: **non viaggiavano col progetto**. Su un altro computer, o dentro la CI, non
@@ -296,6 +296,36 @@ contatori, rapporti):
 precondizioni che **ferma** il giro invece di stampare un numero, (b) una prova che lo ha visto
 ROSSO su un guasto vero e VERDE a macchina sana, (c) un elenco dichiarato di ciò che è rimasto
 fuori, e (d) una guardia nella suite che fallisce se il controllo (a) viene rimosso.
+
+**D19. UNA DIFESA DEVE POTER ESSERE MESSA ALLA PROVA SENZA ASPETTARE IL DISASTRO CHE LA
+GIUSTIFICA.** Detta dal fondatore il 2026-08-02, dopo la campagna su `fase179_rate_limit`.
+
+Il codice difensivo — un `if` che non scatta mai, un `try` per un caso «impossibile», un secondo
+controllo dopo il primo — ha una proprietà scomoda: **è indistinguibile da codice morto**. Sembra
+sicurezza, ma nessuno sa se funziona, perché per definizione non viene mai eseguito. E il giorno
+che serve è il giorno in cui la prima difesa ha già ceduto: il momento peggiore per scoprire che
+la seconda era rotta.
+
+Il caso che l'ha generata: due mutanti sopravvivevano perché quei controlli sono **irraggiungibili
+finché `fallito` si comporta bene**. Dichiararli «equivalenti» sarebbe stato tecnicamente
+difendibile e comodo — e avrebbe significato scrivere nero su bianco *«non guardate più lì»* su un
+pezzo di codice il cui unico scopo è reggere quando tutto il resto ha ceduto.
+
+Tre divieti che ne discendono:
+1. **Non si dichiara equivalente un mutante solo perché «oggi non si raggiunge».** Oggi non si
+   raggiunge *per merito di un'altra funzione*: è una conclusione con una premessa, non una
+   proprietà. Il giorno che quella premessa cade, la dichiarazione resta e la cecità pure.
+2. **Non si assume che un controllo funzioni perché «è lì per sicurezza».** Metà del codice
+   difensivo che abbiamo aperto in questi giorni era rotto proprio perché nessuno l'aveva mai
+   eseguito.
+3. **Non si aspetta l'incidente per sapere se la rete regge.** Lo stato «impossibile» si
+   costruisce a mano, adesso, quando costa tre righe.
+
+*Si verifica:* per ogni ramo difensivo (secondo controllo, `except` per un caso che «non capita»,
+guardia di ridondanza) esiste una prova che **inietta a mano lo stato impossibile** ed esegue quel
+ramo **da solo**, dimostrando che regge; e nell'elenco degli equivalenti dichiarati nessuna voce ha
+come motivazione «non è raggiungibile» — solo dimostrazioni sul comportamento (z3, prova esaustiva,
+o percorsi che portano allo stesso stato osservabile).
 
 ---
 

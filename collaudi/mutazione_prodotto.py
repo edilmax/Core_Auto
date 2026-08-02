@@ -662,6 +662,15 @@ EQUIVALENTI_DICHIARATI = {
         "quindi nemmeno le scritture successive. ⛔ Questa voce vale SOLO in `processa_penale`: "
         "la riga identica in `riscuoti_debiti` ha la sua dimostrazione a parte -- ed e' "
         "esattamente per questo che la chiave porta il nome della funzione.",
+    ("fase179_rate_limit.py", "_sfratta_se_serve",
+     "if len(self._m) <= self._max_chiavi:", "<=", "<"):
+        "DIMOSTRATO il 2026-08-02 leggendo il codice. L'unico caso che differisce e' "
+        "len(self._m) == self._max_chiavi: col codice sano si esce subito, col guasto si "
+        "prosegue -- ma la riga dopo calcola `n_da_togliere = len - max`, che li' vale ZERO, "
+        "e `sorted(...)[:0]` e' la lista VUOTA: non viene sfrattata nessuna chiave. Stato "
+        "identico, registro identico; cambia solo qualche ciclo di calcolo sprecato a "
+        "ordinare una lista per poi non usarla. Nessun test puo' vedere una differenza che "
+        "non c'e'.",
     ("fase178_watchdog.py", "eta_backup_sec",
      "if piu_recente is None or m > piu_recente:", ">", ">="):
         "Si cerca il backup PIU' RECENTE. L'unico caso che differisce e' m == piu_recente: "

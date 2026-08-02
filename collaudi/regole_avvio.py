@@ -139,7 +139,8 @@ def main():
     print("                                   spiegare chiaro · decidiamo noi · un pezzo alla")
     print("                                   volta · ispettore · caccia errori · autonomia ·")
     print("                                   deploy a rischio zero · UNO STRUMENTO CHE MISURA")
-    print("                                   HA UN CONTROLLO CHE GLI IMPEDISCE DI BARARE)")
+    print("                                   HA UN CONTROLLO CHE GLI IMPEDISCE DI BARARE ·")
+    print("                                   UNA DIFESA SI PROVA SENZA ASPETTARE IL DISASTRO)")
     print("     · modi di rompersi ..... %2d   (dati effimeri, cablaggio mancante, ambiente"
           % n["modi"])
     print("                                   diverso, tempo che passa, dato assurdo...)")

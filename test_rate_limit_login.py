@@ -137,5 +137,159 @@ class TestLoginThrottle(unittest.TestCase):
         self.assertEqual(s, 200, "un altro IP con chiave giusta deve funzionare")
 
 
+class TestRateLimitOttoBuchiTrovatiDallaMutazione(unittest.TestCase):
+    """⛔ OTTO BUCHI VERI NELLA DIFESA DAL BRUTE-FORCE (mutazione, 2026-08-02).
+
+    Campagna su tutti e 15 i punti di `fase179_rate_limit`: 7 uccisi, 8 sopravvissuti --
+    il 53%, il rapporto peggiore incontrato finora. Un solo file di prove (questo), usato
+    tutto dalla campagna: nessuna scorciatoia, sono buchi reali.
+
+    E' il modulo che impedisce a qualcuno di provare le password a raffica su conti che
+    muovono denaro. Il commento in cima al file lo dice: nginx frena 20 richieste al
+    secondo per IP, ma un brute-force LENTO e distribuito passava indisturbato.
+    """
+
+    def _rl(self, t0=1000.0, **kw):
+        self.clock = {"t": t0}
+        p = dict(soglia=5, finestra_sec=60, base_blocco_sec=60, max_blocco_sec=3600)
+        p.update(kw)
+        return RateLimiter(orologio=lambda: self.clock["t"], **p)
+
+    def test_una_chiave_NON_VALIDA_non_blocca_nessuno_e_non_lascia_traccia(self):
+        """⛔ CINQUE DEGLI OTTO STANNO QUI.
+
+            if not (isinstance(chiave, str) and chiave):
+                return True, 0          # consenti: passa
+                return False, 0         # fallito:  non registra niente
+
+        Tre funzioni (`consenti`, `fallito`, `riuscito`) hanno lo stesso controllo, e in
+        tutte e tre il guasto ha due facce:
+          · con `or` al posto di `and` una chiave vuota SUPERA il controllo e finisce nel
+            registro dei tentativi -- e da quel momento tutti quelli senza chiave
+            condividono lo stesso contatore: bastano cinque falliti a bloccare CHIUNQUE
+            arrivi senza identificativo;
+          · con `True` -> `False` in `consenti`, una chiave non valida viene **respinta
+            subito**: il contrario di quello che serve.
+
+        In tutti e due i casi si trasforma una difesa in un modo per bloccare gli altri.
+        """
+        rl = self._rl()
+        for storta in ("", None, 0, [], {}, 123):
+            # non deve mai bloccare
+            ok, attesa = rl.consenti(storta)
+            self.assertTrue(ok, "una chiave non valida (%r) viene RESPINTA: chi arriva "
+                                "senza identificativo resta fuori" % (storta,))
+            self.assertEqual(0, attesa)
+            # non deve registrare niente, nemmeno dopo molti fallimenti
+            for _ in range(10):
+                bloccato, _a = rl.fallito(storta)
+                self.assertFalse(bloccato,
+                                 "dieci fallimenti su una chiave non valida (%r) hanno "
+                                 "prodotto un blocco: e' un contatore CONDIVISO fra tutti "
+                                 "quelli senza chiave" % (storta,))
+            rl.riuscito(storta)
+        self.assertEqual({}, rl._m,
+                         "una chiave non valida ha lasciato traccia nel registro: %r"
+                         % (rl._m,))
+        # ...e il verso opposto: una chiave VERA viene contata e bloccata come deve
+        for _ in range(5):
+            rl.fallito("mario@esempio.it")
+        self.assertFalse(rl.consenti("mario@esempio.it")[0],
+                         "dopo cinque fallimenti veri la chiave non e' bloccata")
+
+        # ⛔ LA SECONDA DIFESA VA PROVATA DA SOLA.
+        # I controlli in `consenti` e `riuscito` oggi non si raggiungono mai, perche'
+        # `fallito` rifiuta prima le chiavi storte e nel registro non ne entra nessuna. Ma
+        # sono scritti come SECONDA difesa -- e una seconda difesa che non si puo' provare
+        # non e' una difesa: il giorno che la prima cede, nessuno sa se la seconda regge.
+        # Qui lo stato si inietta a mano, cosi' il controllo viene messo alla prova da solo.
+        rl2 = self._rl()
+        for storta in ("", 0):
+            rl2._m[storta] = {"fail": [], "blocco_fino": self.clock["t"] + 9999,
+                              "lockout": 3, "visto": self.clock["t"]}
+            ok, _a = rl2.consenti(storta)
+            self.assertTrue(ok,
+                            "una chiave non valida (%r) viene bloccata leggendo uno stato "
+                            "che non avrebbe mai dovuto esistere: la seconda difesa non "
+                            "regge" % (storta,))
+            rl2.riuscito(storta)
+            self.assertIn(storta, rl2._m,
+                          "`riuscito` ha agito su una chiave non valida (%r): tocca uno "
+                          "stato che non deve nemmeno guardare" % (storta,))
+
+    def test_il_blocco_finisce_all_ISTANTE_ESATTO(self):
+        """`if r["blocco_fino"] > ora` con `>=`: nel momento preciso in cui il blocco
+        scade, il codice sano lascia passare e il codice guasto tiene ancora fuori.
+
+        Un istante solo, ma e' l'unico punto in cui le due versioni si distinguono: provare
+        «durante» e «dopo» lascia vivo il guasto. E dalla parte dell'utente e' la
+        differenza fra «il blocco e' finito» e «il blocco non finisce mai davvero».
+        """
+        rl = self._rl()
+        for _ in range(5):
+            rl.fallito("k")
+        ok, attesa = rl.consenti("k")
+        self.assertFalse(ok, "il blocco non e' scattato")
+        blocco_fino = rl._m["k"]["blocco_fino"]
+        # un istante PRIMA della scadenza: ancora bloccato
+        self.clock["t"] = blocco_fino - 0.001
+        self.assertFalse(rl.consenti("k")[0], "sbloccato prima del tempo")
+        # ESATTAMENTE alla scadenza: libero
+        self.clock["t"] = blocco_fino
+        self.assertTrue(rl.consenti("k")[0],
+                        "all'istante esatto della scadenza il blocco e' finito e deve "
+                        "lasciar passare: invece tiene ancora fuori")
+
+    def test_la_finestra_dei_fallimenti_tiene_il_confine(self):
+        """`[t for t in r["fail"] if t >= taglio]` con `>`: il fallimento che cade
+        ESATTAMENTE sul bordo della finestra viene buttato via.
+
+        Sembra un dettaglio da un secondo, ma sposta la difesa: chi attacca con un ritmo
+        calibrato sul bordo non raggiunge mai la soglia, e il blocco non scatta MAI.
+        E' il brute-force lento che questo modulo esiste per fermare.
+        """
+        rl = self._rl(soglia=3, finestra_sec=60)
+        rl.fallito("k")                      # t=1000
+        self.clock["t"] = 1060.0             # esattamente 60s dopo: il primo e' SUL bordo
+        rl.fallito("k")
+        bloccato, _ = rl.fallito("k")
+        self.assertTrue(bloccato,
+                        "il fallimento sul bordo esatto della finestra e' stato scartato: "
+                        "con un ritmo calibrato sul confine il blocco non scatta mai "
+                        "(fallimenti visti: %r)" % (rl._m.get("k", {}).get("fail"),))
+        # ...e il verso opposto: un fallimento FUORI dalla finestra non deve contare
+        rl2 = self._rl(soglia=3, finestra_sec=60)
+        rl2.fallito("z")
+        self.clock["t"] = 1061.0             # un secondo oltre il bordo
+        rl2.fallito("z")
+        bloccato2, _ = rl2.fallito("z")
+        self.assertFalse(bloccato2,
+                         "un fallimento vecchio oltre la finestra viene ancora contato: "
+                         "si bloccano utenti legittimi per tentativi di ieri")
+
+    def test_lo_SFRATTO_delle_chiavi_vecchie_tiene_il_tetto(self):
+        """`if len(self._m) <= self._max_chiavi: return` con `<`: al numero ESATTO del
+        tetto lo sfratto parte comunque e butta via una chiave che non doveva sparire.
+
+        Il tetto esiste per non farsi riempire la memoria da chi inventa identificativi
+        (anti-DoS). Ma buttare una chiave di troppo significa **azzerare il contatore di
+        qualcuno che stava per essere bloccato**: chi attacca ha solo bisogno di generare
+        rumore per farsi dimenticare.
+        """
+        rl = self._rl()
+        rl._max_chiavi = 3
+        for k in ("a", "b", "c"):
+            self.clock["t"] += 1
+            rl.fallito(k)
+        self.assertEqual(3, len(rl._m),
+                         "al numero esatto del tetto e' gia' stata sfrattata una chiave: "
+                         "%r" % (sorted(rl._m),))
+        self.clock["t"] += 1
+        rl.fallito("d")                       # ora si supera: la piu' vecchia se ne va
+        self.assertEqual(3, len(rl._m), "il tetto non e' stato rispettato: %r" % (sorted(rl._m),))
+        self.assertNotIn("a", rl._m, "sfrattata la chiave sbagliata (non la piu' vecchia)")
+        self.assertIn("d", rl._m)
+
+
 if __name__ == "__main__":
     unittest.main()
