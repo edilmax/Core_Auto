@@ -56,7 +56,7 @@ KW_TECNICA = re.compile(r"tariffa tecnica|costo carta|costo di pagamento|costo d
                         r"tarifa t|frais techniques|technische Geb|taxa t|技術|技术", re.I)
 KW_COMM = re.compile(r"commission|commissione|commissioni|comisi|Provision|comiss|手数料|佣金", re.I)
 # contesti in cui QUALSIASI percentuale e' legittima (non parla di noi)
-KW_ALTRUI = re.compile(r"booking|airbnb|vrbo|expedia|agoda|tripadvisor|hostelworld|OTA|"
+KW_ALTRUI = re.compile(r"booking|airbnb|vrbo|expedia|agoda|tripadvisor|hostelworld|\bOTA\b|"
                        r"coloss|concorren|mercato|competitor|homeaway|market average", re.I)
 # percentuali nostre legittime NON commissionali (penali, sconti, politiche, IVA…)
 KW_ALTRO_NOSTRO = re.compile(r"penale|penalit|cancellazion|rimbors|sconto|non rimborsabile|"

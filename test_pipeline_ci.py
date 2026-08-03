@@ -266,6 +266,81 @@ class TestIgieneDelFile(unittest.TestCase):
         self.assertEqual(dati.count(b"\x0d"), 0,
                          "ci.yml contiene ritorni carrello (CRLF): il runner e' Linux")
 
+    def test_NESSUN_file_python_contiene_byte_di_controllo(self):
+        """⛔ IL CONTROLLO QUI SOPRA GUARDAVA UN FILE SOLO, E INTANTO UN ALTRO ERA GUASTO.
+
+        DIFETTO VERO, trovato il 2026-08-03: `collaudi/audit_coerenza_tariffe.py` conteneva
+        due byte `0x08` (backspace) al posto di `\\b` in una espressione regolare -- la firma
+        esatta di una patch scritta via heredoc, la trappola che questo repo ha gia' pagato
+        piu' volte. Il controllo dei byte invisibili esisteva, ma leggeva **solo `ci.yml`**:
+        una guardia che guarda un file mentre il difetto sta in un altro.
+
+        Conseguenza misurata su quel file: `\\bOTA\\b` era diventato `<BS>OTA<BS>`, e siccome
+        il carattere backspace non compare mai in un testo vero, quella parte della regola
+        **non combaciava mai**. Lo strumento continuava a girare e a dire di aver controllato.
+
+        Qui si guarda TUTTO il codice Python del progetto, una volta sola.
+        """
+        import glob
+        import io
+        import os
+        radice = os.path.dirname(os.path.abspath(__file__))
+        sporchi = []
+        for percorso in sorted(glob.glob(os.path.join(radice, "*.py"))
+                               + glob.glob(os.path.join(radice, "collaudi", "*.py"))):
+            with io.open(percorso, "rb") as f:
+                dati = f.read()
+            trovati = [(i, b) for i, b in enumerate(dati)
+                       if b < 32 and b not in (9, 10, 13)]
+            if trovati:
+                sporchi.append((os.path.relpath(percorso, radice), trovati[:3]))
+        self.assertEqual([], sporchi,
+                         "questi file Python contengono byte di controllo invisibili "
+                         "(firma tipica di una patch via heredoc: uno `\\b` diventato "
+                         "backspace, uno `\\t` diventato tab...). Posizione e valore "
+                         "accanto a ogni file: %r" % (sporchi,))
+
+    def test_la_regex_OTA_riconosce_la_PAROLA_e_non_un_pezzo_di_parola(self):
+        """⛔ LA GUARDIA CHE IMPEDISCE AL DIFETTO DI TORNARE.
+
+        `KW_ALTRUI` serve all'audit delle tariffe per capire quando una percentuale in un
+        documento **parla di altri** (le OTA, i concorrenti) e non di noi: se non riconosce
+        «OTA», quella percentuale viene attribuita a noi e l'audit segnala una tariffa
+        sbagliata che non esiste -- oppure, peggio, cambia il conto di cio' che va corretto.
+
+        Si guarda il COMPORTAMENTO, non il testo del pattern: se qualcuno rimettesse il
+        backspace al posto di `\\b`, «OTA» smetterebbe di combaciare e la prima asserzione
+        diventerebbe rossa. E le altre due impediscono la riparazione sbagliata -- togliere
+        i `\\b` e basta -- che farebbe combaciare anche «OTAKU» e «NOTA».
+
+        La regex si legge dall'albero sintattico: importare il modulo eseguirebbe l'audit.
+        """
+        import ast
+        import io
+        import os
+        percorso = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "collaudi", "audit_coerenza_tariffe.py")
+        with io.open(percorso, encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+        pattern = [n.value.args[0].value for n in ast.walk(albero)
+                   if isinstance(n, ast.Assign)
+                   and getattr(n.targets[0], "id", "") == "KW_ALTRUI"]
+        self.assertEqual(1, len(pattern), "KW_ALTRUI non e' piu' dove ci si aspetta")
+        regola = re.compile(pattern[0], re.I)
+        for testo in ("le OTA prendono il 18%", "prenota su OTA oggi", "il nostro OTA-like"):
+            self.assertTrue(regola.search(testo),
+                            "«OTA» non viene piu' riconosciuta come parola in %r: se al "
+                            "posto di \\b c'e' un byte backspace, quella parte della regola "
+                            "non combacia MAI e l'audit attribuisce a noi percentuali che "
+                            "parlano di altri" % testo)
+        for testo in ("OTAKU", "questa e' una NOTA", "commissione del 15%"):
+            self.assertFalse(regola.search(testo),
+                             "«%s» viene scambiato per un riferimento alle OTA: i confini "
+                             "di parola sono stati tolti invece che riparati" % testo)
+        self.assertNotIn(chr(8), pattern[0],
+                         "il byte backspace e' tornato dentro la regola: e' la firma di una "
+                         "patch via heredoc (D9), non di un editor")
+
     def test_il_controllo_dei_byte_riconoscerebbe_il_difetto(self):
         """Se il criterio smettesse di vedere, questo controllo sarebbe un ornamento."""
         sporco = b"name: x\n\x08jobs:\n\tdue\n" + b"\x5c\x6e"
