@@ -23,6 +23,21 @@ import unittest
 
 RADICE = os.path.dirname(os.path.abspath(__file__))
 
+# ⛔ LA RETE ANTI-INTERRUZIONE — LA STESSA DEL GIUDICE, non una seconda copia.
+# Questo file rompe di proposito tre moduli del PERCORSO DEI SOLDI e li rimette a posto in un
+# `finally`. Ma un `finally` protegge da un'ECCEZIONE, non da un processo UCCISO: il
+# 2026-08-03 una suite intera e' stata fermata e ha lasciato `fase162_pagamenti_pendenti.py`
+# con la whitelist degli stati allargata a «pagato, cancellato, rimborsato». Nessun allarme e'
+# suonato, perche' non c'era nessuna traccia da vedere: l'ho scoperto guardando `git status`.
+# E' il caso peggiore della famiglia, perche' questa suite gira prima di OGNI commit e di OGNI
+# deploy. `_apri_traccia` mette da parte l'originale PRIMA di rompere: da li' in poi
+# `recupera_da_interruzione()` rimette a posto al giro successivo e `collaudi/guardia_commit.py`
+# BLOCCA il salvataggio. Si importa quella VERA: due copie della stessa rete sarebbero due reti
+# che divergono. Importare il modulo non fa nulla da solo -- le sue chiamate al recupero stanno
+# tutte dentro blocchi `if __name__ == "__main__"` (verificato).
+sys.path.insert(0, os.path.join(RADICE, "collaudi"))
+from mutazione_prodotto import _apri_traccia, _chiudi_traccia          # noqa: E402
+
 # (etichetta, file, testo_da_trovare, testo_mutato, [moduli-killer])
 MUTANTI = [
     ("escrow: split host/ospite INVERTITO",
@@ -97,6 +112,10 @@ class TestMutationMoney(unittest.TestCase):
                              % (etichetta, nomefile, originale.count(btrova)))
             h0 = _hash(percorso)
             ucciso = False
+            # la rete PRIMA del salto: se il processo muore fra qui e il ripristino, la
+            # traccia resta e il salvataggio si blocca da solo invece di portare il guasto
+            # dentro un commit
+            _apri_traccia(percorso, originale.decode("utf-8"))
             try:
                 with open(percorso, "wb") as f:
                     f.write(originale.replace(btrova, bmuta, 1))
@@ -106,6 +125,8 @@ class TestMutationMoney(unittest.TestCase):
                 with open(percorso, "wb") as f:
                     f.write(originale)
                 _butta_pyc(percorso)          # nessun bytecode mutato per i posteri
+                _chiudi_traccia()             # ...e la rete si richiude: una traccia lasciata
+                                              # aperta bloccherebbe il commit dopo per NIENTE
             self.assertEqual(_hash(percorso), h0,
                              "%s: file NON ripristinato!" % nomefile)
             print(("UCCISO  " if ucciso else "SOPRAV. ") + etichetta

@@ -1287,6 +1287,28 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
         fallisce, _ = m.esegui("modulo_che_non_esiste_affatto")
         self.assertIs(False, fallisce, "un test che fallisce deve dare False (mutante ucciso)")
 
+    def _traccia_isolata(self, m):
+        """⛔ LA TRACCIA E' UNA SOLA PER TUTTA LA MACCHINA: chi la cancella spegne la rete
+        di una campagna in corso, e da quel momento un file di produzione mutato non e'
+        piu' protetto da `collaudi/guardia_commit.py`.
+
+        Successo davvero il 2026-08-03: i due test qui sotto mettevano in scena
+        l'interruzione sulla traccia VERA e la chiudevano alla fine. Il file rotto era
+        finto -- giusto -- ma la traccia no. Siccome `test_pipeline_ci` e' uno dei 9
+        sorveglianti di `fase184_marca_temporale`, ogni campagna su quel modulo si
+        spegneva la rete da sola a meta' giro: `fase184_marca_temporale.py:336` e' rimasto
+        mutato in produzione senza che nulla lo bloccasse.
+
+        Qui la traccia si punta a una cartella usa-e-getta e si rimette com'era.
+        """
+        import os
+        import shutil
+        import tempfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        self.addCleanup(setattr, m, "_TRACCIA", m._TRACCIA)   # prima: cattura l'originale
+        m._TRACCIA = os.path.join(d, "bookinvip_mutazione_in_corso")
+
     def test_un_giro_UCCISO_non_lascia_un_guasto_nel_codice(self):
         """⛔ IL DANNO PEGGIORE CHE QUESTO STRUMENTO POSSA FARE.
 
@@ -1306,6 +1328,7 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
         import shutil
         import tempfile
         m = self._motore()
+        self._traccia_isolata(m)            # ⛔ mai la traccia condivisa: vedi il metodo
         d = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, d, True)
         vittima = os.path.join(d, "finto_modulo.py")
@@ -1341,6 +1364,7 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
         recupero deve tacere e non muovere un byte. Un falso recupero riscriverebbe file
         sani con contenuti vecchi -- sarebbe peggio del guasto che previene."""
         m = self._motore()
+        self._traccia_isolata(m)            # ⛔ mai la traccia condivisa: vedi il metodo
         m._chiudi_traccia()
         self.assertIsNone(m.recupera_da_interruzione())
 
@@ -1352,6 +1376,126 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
         self.assertEqual(1, saltati["catena"],
                          "un confronto a catena non e' stato contato fra le rinunce: %r"
                          % (saltati,))
+
+
+class TestLaReteAntiInterruzioneNONSiSpegneDaSola(unittest.TestCase):
+    """⛔ IL COLLAUDO DELLA RETE NON DEVE SPEGNERE LA RETE.
+
+    DIFETTO VERO, TROVATO E RIPRODOTTO IL 2026-08-03 (non dedotto).
+    `_TRACCIA` e' UNA SOLA per tutta la macchina: e' la cartella che dice «un giro di
+    mutazione e' aperto», ed e' cio' che fa BLOCCARE il salvataggio a
+    `collaudi/guardia_commit.py`. Due guardie di `TestGeneratoreDiMutanti` mettevano in
+    scena un giro interrotto usando la traccia VERA invece di una propria, e alla fine la
+    CANCELLAVANO (`_chiudi_traccia`, e `recupera_da_interruzione` che la chiude nel suo
+    `finally`).
+
+    Conseguenza misurata, non temuta: `test_pipeline_ci` e' uno dei 9 sorveglianti di
+    `fase184_marca_temporale`. In ogni campagna su quel modulo la sequenza era:
+        1. la campagna apre la traccia e ROMPE il file di produzione;
+        2. la campagna esegue i sorveglianti, fra cui questo file -> TRACCIA CANCELLATA;
+        3. da li' in poi il file e' rotto e NESSUNO lo sa;
+        4. il processo muore -> guasto vivo in produzione, salvataggio NON bloccato.
+    Successo davvero il 2026-08-03: `fase184_marca_temporale.py:336` e' rimasto con
+    `if campi[3][0] == 0x02:` al posto di `!= 0x02` -- nel lettore del token di marca
+    QUALIFICATA, cioe' la prova legale dell'ora certificata.
+
+    E' l'ispettore che collauda l'antincendio usando l'allarme VERO del palazzo e poi,
+    finito il collaudo, lo spegne e va a casa. L'allarme funziona. Il collaudo funziona.
+    Dopo ogni collaudo il palazzo e' senza allarme.
+
+    ⚠️ COSA QUESTA GUARDIA NON ESAMINA (dichiarato, mai taciuto): esegue solo
+    `TestGeneratoreDiMutanti`, la classe dov'era il difetto. Un test di un ALTRO file che
+    cancellasse la traccia condivisa non verrebbe visto da qui.
+    """
+
+    def test_anche_test_mutation_money_APRE_LA_TRACCIA_prima_di_rompere_i_soldi(self):
+        """⛔ LA SUITE ORDINARIA ROMPE IL PERCORSO DEI SOLDI, E LO FACEVA SENZA RETE.
+
+        `test_mutation_money.py` non e' una campagna che si lancia apposta: e' un test della
+        suite di TUTTI I GIORNI. Rompe di proposito tre moduli di PRODUZIONE per chiedere «i
+        test se ne accorgono?»: `fase160_escrow_garanzia` (split host/ospite),
+        `fase162_pagamenti_pendenti` (whitelist degli stati), `fase59_concierge` (netto host).
+        Tutti e tre sul DENARO.
+
+        Rimetteva a posto con un `finally` e il suo commento diceva «niente residui» -- ma un
+        `finally` non protegge da un processo UCCISO, ed e' scritto nero su bianco in
+        `collaudi/mutazione_prodotto.py:739` dopo che era gia' successo tre volte. Non usava
+        la traccia: zero riferimenti. Quindi un'interruzione lasciava un guasto nel codice dei
+        soldi **e `collaudi/guardia_commit.py` non aveva nulla da vedere**.
+
+        SUCCESSO DAVVERO il 2026-08-03: una suite intera e' stata fermata e ha lasciato
+        `fase162_pagamenti_pendenti.py:263` con la whitelist allargata a `pagato, cancellato,
+        rimborsato`. Trovato guardando `git status`, non da un allarme. E' il caso PEGGIORE
+        della famiglia, perche' la suite gira prima di ogni commit e prima di ogni deploy.
+
+        ⚠️ COSA NON ESAMINA (dichiarato): guarda quel file. Un NUOVO test che rompesse la
+        produzione senza rete non verrebbe visto da qui.
+        """
+        import io
+        import os
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "test_mutation_money.py")
+        with io.open(p, encoding="utf-8") as f:
+            righe = f.read().splitlines()
+        # DENOMINATORE: i punti che scrivono il MUTANTE dentro il modulo di produzione.
+        mutazioni = [n for n, r in enumerate(righe)
+                     if "replace(btrova, bmuta, 1)" in r and not r.strip().startswith("#")]
+        self.assertEqual(1, len(mutazioni),
+                         "denominatore cambiato: %d punti che scrivono un mutante invece di "
+                         "1. Se il file e' cambiato di proposito questo numero si aggiorna "
+                         "GUARDANDO i punti nuovi, mai per far tornare il verde. Righe: %r"
+                         % (len(mutazioni), [n + 1 for n in mutazioni]))
+        ciechi = [(n + 1, righe[n].strip()[:60]) for n in mutazioni
+                  if "_apri_traccia" not in "\n".join(righe[max(0, n - 8):n + 1])]
+        self.assertEqual([], ciechi,
+                         "questo punto rompe un modulo del PERCORSO DEI SOLDI senza mettere "
+                         "da parte l'originale con `_apri_traccia`: se la suite viene "
+                         "interrotta li', il guasto resta nel codice dei soldi e nessuno lo "
+                         "sa. %r" % (ciechi,))
+        tutto = "\n".join(righe)
+        self.assertIn("_chiudi_traccia", tutto,
+                      "la traccia viene aperta e mai chiusa: resterebbe li' a bloccare il "
+                      "commit successivo per NIENTE, e un falso allarme e' un difetto quanto "
+                      "uno mancato (CLAUDE.md, regola 10)")
+
+    def test_eseguire_le_guardie_del_giudice_NON_cancella_una_traccia_viva(self):
+        import io
+        import os
+        import shutil
+        import subprocess
+        import sys
+        import tempfile
+        radice = os.path.dirname(os.path.abspath(__file__))
+        # Cartella temporanea NOSTRA: il processo figlio ci puntera' la sua `tempfile.
+        # gettempdir()`, quindi il suo `_TRACCIA` cade qui dentro. Cosi' questa guardia
+        # NON tocca la traccia vera della macchina -- sarebbe lo stesso difetto che vieta.
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        traccia = os.path.join(d, "bookinvip_mutazione_in_corso")
+        os.makedirs(traccia)
+        with io.open(os.path.join(traccia, "quale.txt"), "w", encoding="utf-8") as f:
+            f.write(os.path.join(radice, "fase_finta_di_prova.py"))
+        with io.open(os.path.join(traccia, "originale.txt"), "w", encoding="utf-8") as f:
+            f.write("def f(x):\n    return x == 0\n")
+        self.assertTrue(os.path.isdir(traccia), "precondizione: la traccia dev'esserci")
+
+        amb = dict(os.environ, TMP=d, TEMP=d, TMPDIR=d)
+        esito = subprocess.run(
+            [sys.executable, "-m", "unittest",
+             "test_pipeline_ci.TestGeneratoreDiMutanti",
+             "test_pipeline_ci.TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA"],
+            cwd=radice, env=amb, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        self.assertEqual(0, esito.returncode,
+                         "le guardie del generatore non sono verdi: %s"
+                         % esito.stdout.decode("utf-8", "replace")[-400:])
+
+        self.assertTrue(
+            os.path.isdir(traccia),
+            "ESEGUIRE LE GUARDIE HA CANCELLATO LA TRACCIA di un giro in corso. Da questo "
+            "istante un file di produzione mutato non e' piu' protetto: "
+            "`collaudi/guardia_commit.py` non ha nulla da vedere e lascia salvare il "
+            "guasto. Un test che mette in scena un'interruzione deve usare una traccia "
+            "SUA (cartella temporanea), mai quella condivisa.")
 
 
 class TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA(unittest.TestCase):
@@ -1705,13 +1849,24 @@ class TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA(unittest.TestCase):
         qualcuno rompe di nuovo quel blocco, diventa rosso in casa e non su GitHub.
         """
         import os
+        import shutil
         import subprocess
         import sys
+        import tempfile
         radice = os.path.dirname(os.path.abspath(__file__))
+        # ⛔ CARTELLA TEMPORANEA TUTTA SUA. Lo strumento, a OGNI avvio, chiama
+        # `recupera_da_interruzione()`: se trova una traccia la CONSUMA e RISCRIVE il file
+        # che vi e' indicato. Con la temporanea condivisa questa prova spegneva la rete di
+        # una campagna in corso -- ed e' cosi' che il 2026-08-03 un mutante e' rimasto vivo
+        # in `fase184_marca_temporale.py` senza che il gancio al commit potesse vederlo.
+        # Qui il processo figlio ha la SUA temporanea: recupera nel vuoto e non tocca nessuno.
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        amb = dict(os.environ, TMP=d, TEMP=d, TMPDIR=d)
         r = subprocess.run([sys.executable, os.path.join(radice, "collaudi",
                                                          "mutazione_prodotto.py"),
                             "--prova-avvio"],
-                           cwd=radice, capture_output=True, text=True,
+                           cwd=radice, env=amb, capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=180)
         tutto = (r.stdout or "") + (r.stderr or "")
         self.assertNotIn("Traceback", tutto,

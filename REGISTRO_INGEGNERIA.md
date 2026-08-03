@@ -290,6 +290,66 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
   e fanno apparire «modificati» file dal contenuto **identico**. E' rumore che ha reso la
   diagnosi del 3 agosto piu' difficile — non e' cio' che ha lasciato il guasto vivo.
 
+- 🔴 **SECONDO BUCO, TROVATO LA SERA STESSA: la rete veniva SPENTA DAI COLLAUDI.** La
+  riparazione qui sopra era giusta ma curava un'altra malattia. Rilanciando la campagna su
+  `fase184_marca_temporale.py` il mutante e' rimasto vivo **di nuovo**, e stavolta la traccia
+  non c'era. Causa, riprodotta e misurata (non dedotta): **`_TRACCIA` e' UNA SOLA per tutta la
+  macchina**, e tre punti di `test_pipeline_ci.py` la usavano come se fosse loro —
+  `test_pipeline_ci` e' uno dei **9 sorveglianti** di quel modulo, quindi ogni campagna si
+  spegneva la rete da sola a meta' giro:
+  1. `test_un_giro_UCCISO_non_lascia_un_guasto_nel_codice` apriva e chiudeva la traccia VERA
+     (il file rotto era finto — giusto — ma la traccia no);
+  2. `test_senza_interruzioni_il_recupero_NON_tocca_niente`, idem;
+  3. **il piu' insidioso, perche' non e' un errore:** un test lancia
+     `collaudi/mutazione_prodotto.py --prova-avvio`, e lo strumento a **ogni** avvio chiama
+     `recupera_da_interruzione()`, che CONSUMA la traccia trovata e **riscrive il file che vi e'
+     indicato**. Faceva il suo mestiere — sulla campagna di qualcun altro.
+  **Riparazione:** ognuno dei tre ha ora la **sua** cartella temporanea (i primi due
+  ripuntando `_TRACCIA`, il terzo passando `TMP`/`TEMP`/`TMPDIR` al processo figlio). Nessuna
+  riga di produzione toccata; **zero asserzioni rimosse**, tre aggiunte.
+  **GUARDIA AGGIUNTA** (D20, vista ROSSA due volte): `test_pipeline_ci.py` ->
+  `TestLaReteAntiInterruzioneNONSiSpegneDaSola`. Mette una traccia in una temporanea isolata,
+  esegue in un processo separato le due classi che toccano la rete, e pretende che la traccia
+  sia **ancora li'**. Vista rossa alla prima scrittura (copriva 2 punti su 3), **allargata** e
+  vista rossa di nuovo sul terzo, poi verde. ⚠️ **Dichiarato**: esegue quelle due classi, non
+  l'intero progetto: un test di un ALTRO file che consumasse la traccia non verrebbe visto.
+  **Prova nel mondo vero:** con una traccia viva, `python -m unittest test_pipeline_ci` lasciava
+  `guardia_commit.py` a **uscita 0** (allarme spento); dopo la riparazione resta a **uscita 1**
+  (allarme acceso). Suite intera `Ran 5332 tests · OK (skipped=3)` · uscita 0 (+1 = la guardia).
+  **Lezione, e vale oltre questo caso:** un collaudo che usa l'attrezzo VERO invece di una copia
+  e' l'ispettore che prova l'antincendio con l'allarme del palazzo e poi lo spegne e va a casa.
+  L'allarme funziona, il collaudo funziona, e dopo ogni collaudo il palazzo e' scoperto.
+
+- 🔴🔴 **TERZO BUCO, IL PEGGIORE: la SUITE ORDINARIA rompeva il PERCORSO DEI SOLDI senza rete.**
+  Trovato la sera del 2026-08-03 perche' una suite intera e' stata fermata e ha lasciato
+  `fase162_pagamenti_pendenti.py:263` con la whitelist degli stati allargata da
+  `("in_attesa", "scaduto")` a `("in_attesa", "scaduto", "pagato", "cancellato", "rimborsato")`.
+  Scoperto **guardando `git status`**, non da un allarme.
+  **Causa:** `test_mutation_money.py` non e' una campagna che si lancia apposta — e' un test
+  della suite di TUTTI I GIORNI. Rompe di proposito tre moduli di produzione per chiedere «i
+  test se ne accorgono?»: `fase160_escrow_garanzia` (split host/ospite), `fase162_pagamenti_
+  pendenti` (whitelist stati), `fase59_concierge` (netto host). **Tutti e tre sul DENARO.**
+  Aveva un meccanismo tutto suo, ripristinava in un `finally` e il suo commento dichiarava
+  «niente residui» — ma un `finally` non protegge da un processo UCCISO, ed era gia' scritto in
+  `collaudi/mutazione_prodotto.py:739`. **Zero riferimenti alla traccia**: un'interruzione
+  lasciava il guasto nel codice dei soldi e `guardia_commit.py` non aveva nulla da vedere.
+  E' il caso peggiore della famiglia perche' quella suite gira **prima di ogni commit e di ogni
+  deploy**: il 2026-08-03 due suite su cinque sono state fermate.
+  **Riparazione:** importa e usa la rete VERA (`_apri_traccia` prima di rompere,
+  `_chiudi_traccia` nel `finally` dopo il ripristino) — mai una seconda copia della stessa rete,
+  che sarebbero due reti destinate a divergere. Importare il modulo non fa nulla da solo: le sue
+  chiamate a `recupera_da_interruzione()` stanno tutte dentro blocchi `if __name__ == "__main__"`
+  (verificato prima di importarlo).
+  **GUARDIA AGGIUNTA** (D20, vista ROSSA): `test_pipeline_ci.py` ->
+  `test_anche_test_mutation_money_APRE_LA_TRACCIA_prima_di_rompere_i_soldi`. Denominatore
+  dichiarato: il punto che scrive il mutante dev'essere **1**, e deve avere `_apri_traccia`
+  sopra. Rossa indicando esattamente la riga 102, verde dopo.
+  **Prova nel mondo vero:** guardando dall'esterno mentre gira, `fase162_pagamenti_pendenti.py`
+  risulta mutato **e la traccia c'e'** per tutta la durata; prima della riparazione, nella stessa
+  finestra, il file era mutato e la traccia assente. I 4 mutanti dei soldi restano tutti UCCISI.
+  ⚠️ **Dichiarato**: la guardia sorveglia quel file. Un NUOVO test che rompesse la produzione
+  senza rete non verrebbe visto da li'.
+
 ### ✅ FATTO 2026-08-02/03 (9) — SEI MODULI A ZERO SOPRAVVISSUTI + TRE DIFETTI VIVI
 - **Campagne di mutazione** (tutte con `sorveglianti N, usati N`: nessuna scorciatoia):
   `fase177_financial_controller` 143 punti, 45 buchi -> **0** (+10 equivalenti dimostrati) ·
