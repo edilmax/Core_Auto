@@ -44,7 +44,7 @@ automatica fa fallire la suite se i due divergono):
 
 # ⚙️ REGOLA FERREA DI OPERATIVITÀ E PRECISIONE
 
-> ## 📌 GLI OBBLIGHI SONO **93**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
+> ## 📌 GLI OBBLIGHI SONO **94**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
 > **Contati dai file il 2026-08-01, non a memoria** (`python collaudi/regole_avvio.py` li
 > ricontrolla a ogni sessione e **grida** se questi numeri non tornano):
 >
@@ -57,8 +57,8 @@ automatica fa fallire la suite se i due divergono):
 > · **29** stanno nell'appendice di `REGISTRO_INGEGNERIA.md`, con prova e fonte per esteso.
 > Più le **24 uccise** dai revisori ostili **col motivo**: dicono cosa NON vale la pena rifare.
 >
-> ### 🧭 GLI ALTRI **49** — nati dai NOSTRI danni
-> Regola zero (**5**) · **19 direttive del fondatore** · modi di rompersi (**11**) ·
+> ### 🧭 GLI ALTRI **50** — nati dai NOSTRI danni
+> Regola zero (**5**) · **20 direttive del fondatore** · modi di rompersi (**11**) ·
 > collaudi (**10**) · direttiva finale (**4**). Non hanno uno studio dietro: hanno una
 > **cicatrice**. Valgono uguale, e da oggi **portano anch'essi il «si verifica così»**.
 >
@@ -189,7 +189,7 @@ solo è il canale principale delle regressioni. Il fondatore se n'è accorto pri
 
 ---
 
-# 🧭 LE 19 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
+# 🧭 LE 20 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
 
 > **Perché stanno qui e non solo in memoria.** Fino al 2026-08-01 vivevano nella memoria di
 > sessione: **non viaggiavano col progetto**. Su un altro computer, o dentro la CI, non
@@ -326,6 +326,36 @@ guardia di ridondanza) esiste una prova che **inietta a mano lo stato impossibil
 ramo **da solo**, dimostrando che regge; e nell'elenco degli equivalenti dichiarati nessuna voce ha
 come motivazione «non è raggiungibile» — solo dimostrazioni sul comportamento (z3, prova esaustiva,
 o percorsi che portano allo stesso stato osservabile).
+
+**D20. UN DIFETTO VIVO NON SI RIPARA SUBITO: PRIMA LA GUARDIA, VISTA ROSSA.** Detta dal fondatore
+il 2026-08-03. «Difetto vivo» = un errore vero nel codice che gira in produzione, non un mutante.
+
+**L'ordine è obbligatorio, e sono tre passi:**
+1. **si scrive la guardia** che descrive il comportamento corretto;
+2. **la si esegue e la si vede ROSSA** sul codice di produzione, con l'errore letto per intero;
+3. **solo allora** si ripara, e la si rivede **verde**.
+
+*Perché l'ordine non è un formalismo.* Una prova scritta **dopo** la riparazione può passare per
+il motivo sbagliato: magari non attraversa nemmeno il punto guasto, e nessuno se ne accorge perché
+è verde. Il rosso **prima** è l'unica dimostrazione che quella prova **veda proprio quel difetto**.
+È il «verde finto» applicato al momento in cui nasce la guardia.
+
+*E la seconda metà, che è quella che dura.* Una riparazione senza guardia è una riga cambiata di
+cui fra sei mesi qualcuno chiederà «perché è scritta così?», e la risposta più comoda sarà
+«semplifichiamo». **La guardia è la memoria del difetto**: se qualcuno riscrive quella riga com'era,
+diventa rossa lo stesso giorno. Senza, domani nessuno sa che c'era — e torna.
+
+*In più (non obbligatorio ma vale):* dopo la riparazione, rimettere dentro il difetto vero e
+rivedere il rosso una seconda volta. La prima volta prova che la guardia **becca** il difetto; la
+seconda che **resta capace di beccarlo** dopo che il codice è cambiato.
+
+*Si verifica:* per ogni difetto vivo, nel registro della sessione esistono nell'ordine (a) la
+guardia scritta, (b) la sua esecuzione **rossa** con il messaggio d'errore riportato per intero,
+(c) il diff della riparazione, (d) la stessa guardia **verde**. Se il rosso non c'è, o arriva dopo
+il diff, quella riparazione non è provata — e va rifatta nell'ordine giusto.
+*Successo davvero il 2026-08-02, due volte: la porta del bunker che rispondeva 500 a un codice
+accentato, e il guardiano che dichiarava sano un libro dei soldi corrotto. In tutti e due i casi il
+difetto è stato SCOPERTO dalla guardia diventata rossa, non cercato a mano.*
 
 ---
 

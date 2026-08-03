@@ -926,7 +926,7 @@ class TestLeRegoleSiLeggonoSEMPRE(unittest.TestCase):
         with io.open(os.path.join(self._radice(), "CLAUDE.md"), encoding="utf-8") as f:
             testo = f.read()
         presenti = set(re.findall(r"^\*\*(D\d+)\.", testo, re.M))
-        attese = set("D%d" % i for i in range(1, 20))
+        attese = set("D%d" % i for i in range(1, 21))
         self.assertEqual(set(), attese - presenti,
                          "queste direttive del fondatore sono uscite da CLAUDE.md e "
                          "tornerebbero a vivere solo in memoria: %r"
@@ -969,7 +969,7 @@ class TestLeRegoleSiLeggonoSEMPRE(unittest.TestCase):
             "intestazione\n\n## REGOLA FERREA\n"
             "**1. UNA COSA.** prosa.\n**Si verifica:** con un comando.\n\n"
             "**2. ALTRA COSA.** prosa e basta.%s\n\n"
-            "## LE 19 DIRETTIVE DEL FONDATORE\n"
+            "## LE 20 DIRETTIVE DEL FONDATORE\n"
             "**D1. QUALCOSA.** prosa.\n*Si verifica:* cosi'.\n\n"
             "## REGOLA DEI 10 COLLAUDI\n\n## DIRETTIVA OPERATIVA\n")
         vero = m.CLAUDE
@@ -1034,7 +1034,7 @@ class TestLeRegoleSiLeggonoSEMPRE(unittest.TestCase):
         self.assertEqual(int(titolo.group(1)), n["direttive"],
                          "il titolo dice %s direttive ma nel testo ce ne sono %d"
                          % (titolo.group(1), n["direttive"]))
-        self.assertGreaterEqual(n["direttive"], 19,
+        self.assertGreaterEqual(n["direttive"], 20,
                                 "il numero delle direttive del fondatore e' SCESO: una "
                                 "direttiva non si toglie senza che qualcuno lo decida")
 
