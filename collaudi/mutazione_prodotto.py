@@ -1266,6 +1266,13 @@ if __name__ == "__main__":
                 print("::error title=BASE ROSSA::i killer '%s' falliscono gia' senza mutanti: "
                       "qualunque punteggio sarebbe falso. %s" % (test, (perche or "")[-200:]))
                 continue
+            # ⛔ LA RETE PRIMA DEL SALTO. Fino al 2026-08-03 questo era l'unico dei tre punti
+            # che rompe un file di produzione SENZA aprire la traccia: un giro ucciso qui
+            # lasciava il mutante sul disco e nessuno poteva vederlo -- la rete di recupero
+            # non trovava niente da recuperare, e il gancio al commit niente da bloccare.
+            # Successo davvero: `if ore >= 99999:` al posto di `if ore >= 24:` nella penale
+            # no-show (fase83_server.py:6185), rimasto li' per ore in silenzio.
+            _apri_traccia(percorso, testo)
             io.open(percorso, "w", encoding="utf-8", newline="\n").write(
                 testo.replace(orig, mut, 1))
             invalida_bytecode(percorso)       # il figlio deve vedere IL GUASTO, non la cache
@@ -1274,6 +1281,9 @@ if __name__ == "__main__":
             finally:
                 io.open(percorso, "w", encoding="utf-8", newline="\n").write(testo)
                 invalida_bytecode(percorso)   # ...e il mutante dopo non deve vedere QUESTA
+                _chiudi_traccia()   # la rete si richiude: una traccia lasciata aperta
+                                    # bloccherebbe il commit dopo per NIENTE, e un falso
+                                    # allarme e' un difetto quanto uno mancato (regola 10)
             print("\n%2d. %s" % (i, percorso))
             print("    guasto introdotto: %s" % danno)
             if verde is None:

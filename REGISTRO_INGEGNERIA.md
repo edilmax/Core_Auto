@@ -256,6 +256,40 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
   (le regole che non dichiarano come si controllano) · `dichiarato()` (il numero scritto nel
   cartello) · `main()`. STATO: **acceso**, eseguito dall'hook a ogni sessione.
 
+### ✅ FATTO 2026-08-03 (10) — LA RETE DEL GIUDICE COPRIVA 2 PUNTI SU 3
+- **Difetto vivo nello strumento, terza occorrenza in quattro giorni** (31 lug · 1 ago · 3 ago).
+  `collaudi/mutazione_prodotto.py` rompe un file di produzione in **tre** punti. `_apri_traccia`
+  (riga 752) mette da parte l'originale, ed e' cio' che permette a `recupera_da_interruzione`
+  (riga 771) e a `collaudi/guardia_commit.py` di accorgersi di un giro **UCCISO**. Due punti la
+  aprivano (righe 895 e 1039), **il terzo no** — proprio quello che gira la lista `MUTANTI`. Un
+  `finally` non protegge da un processo ucciso: senza traccia non c'e' niente da recuperare e
+  niente da bloccare al commit.
+- **Cosa e' costato:** un giro ucciso il 2026-08-03 alle 13:05:38 ha lasciato `if ore >= 99999:`
+  al posto di `if ore >= 24:` in `fase83_server.py:6185` — **penale no-show addebitata SEMPRE**,
+  anche a chi disdice con un mese di anticipo. E' rimasto sul disco per ore **senza che nulla
+  gridasse**: il gancio al commit era acceso ma non aveva nessuna traccia da vedere. Riparato con
+  `git checkout HEAD --` (mai a mano), guardia vista ROSSA prima (`USCITA 1`, `failures=2`) e
+  VERDE dopo, suite intera `Ran 5330 tests · OK`. Commit `1dcae1a`.
+- **Riparazione dello strumento:** `_apri_traccia(percorso, testo)` prima della scrittura del
+  mutante e `_chiudi_traccia()` nel `finally` dopo il ripristino — **+2 righe di codice**, la
+  stessa forma gia' usata alle righe 1039-1045. **Zero righe tolte.**
+- **TEST AGGIUNTO** (obbligatorio, e mancava): in `test_pipeline_ci.py`,
+  `test_il_motore_APRE_LA_TRACCIA_prima_di_OGNI_mutante`. E' una guardia **col denominatore
+  dichiarato**: conta i punti che introducono un mutante (devono essere **3**) e pretende che
+  **tutti e tre** aprano la traccia. Vista ROSSA sul codice guasto — indicava esattamente la riga
+  1270 — e VERDE dopo la riparazione. Un quarto punto che se ne dimenticasse la fa diventare
+  rossa il giorno in cui nasce, non sei mesi dopo.
+- **Verifiche che la guardia da sola NON da'** (legge il file come TESTO: sarebbe verde anche su
+  codice spazzatura): `python -m py_compile` uscita **0** · `python collaudi/mutazione_prodotto.py
+  --prova-avvio` -> «AVVIO OK: riserva pronta, 12 file di produzione messi al sicuro», uscita **0**
+  · zero byte invisibili nei due file toccati · suite intera `Ran 5331 tests · OK (skipped=3)`,
+  **+1 esatto** = la guardia nuova ha girato davvero. STATO: **acceso**.
+- ⚠️ **Difetto MINORE lasciato aperto di proposito** (fuori scopo: `CLAUDE.md:246-247` vieta le
+  correzioni «gia' che c'ero» nello stesso intervento): le righe 1269/1275 scrivono con
+  `newline="\n"` invece di passare da `_riscrivi_intatto`, quindi su Windows convertono CRLF->LF
+  e fanno apparire «modificati» file dal contenuto **identico**. E' rumore che ha reso la
+  diagnosi del 3 agosto piu' difficile — non e' cio' che ha lasciato il guasto vivo.
+
 ### ✅ FATTO 2026-08-02/03 (9) — SEI MODULI A ZERO SOPRAVVISSUTI + TRE DIFETTI VIVI
 - **Campagne di mutazione** (tutte con `sorveglianti N, usati N`: nessuna scorciatoia):
   `fase177_financial_controller` 143 punti, 45 buchi -> **0** (+10 equivalenti dimostrati) ·

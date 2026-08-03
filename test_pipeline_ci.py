@@ -1474,6 +1474,48 @@ class TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA(unittest.TestCase):
                          "la sua versione compilata: il processo figlio potrebbe eseguire "
                          "il codice VECCHIO. %r" % (ciechi,))
 
+    def test_il_motore_APRE_LA_TRACCIA_prima_di_OGNI_mutante(self):
+        """LA GUARDIA SORELLA — e mancava proprio nel punto che serviva.
+
+        `_apri_traccia` mette da parte l'originale PRIMA di rompere il file. E' l'unica cosa
+        che permette a `recupera_da_interruzione` e a `collaudi/guardia_commit.py` di
+        accorgersi di un giro UCCISO: il `finally` non protegge da un processo ucciso, e
+        senza traccia non c'e' niente da recuperare e niente da bloccare al commit.
+
+        SUCCESSO DAVVERO, 2026-08-03: il punto che gira la lista `MUTANTI` scriveva il
+        mutante SENZA aprire la traccia. Un giro ucciso ha lasciato `if ore >= 99999:` al
+        posto di `if ore >= 24:` nella penale no-show (fase83_server.py:6185) -- cioe' la
+        penale addebitata SEMPRE, anche a chi disdice con un mese di anticipo. E' rimasto
+        sul disco per ore senza che nulla gridasse, e il gancio al commit non poteva vederlo
+        perche' non c'era nessuna traccia da vedere. Terza volta in quattro giorni (31 lug,
+        1 ago, 3 ago): le prime due erano state chiuse con una rete che copriva due punti
+        su tre, e nessuno aveva contato il denominatore.
+        """
+        import io
+        import os
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "collaudi", "mutazione_prodotto.py")
+        with io.open(p, encoding="utf-8") as f:
+            righe = f.read().splitlines()
+        # DENOMINATORE: i punti che INTRODUCONO un mutante dentro un file di produzione.
+        # Non «ce n'e' almeno uno»: quanti sono, e sono TUTTI coperti?
+        mutazioni = [n for n, r in enumerate(righe)
+                     if ("applica_mutante(sorgente" in r or "replace(orig, mut, 1)" in r)
+                     and not r.strip().startswith("#")
+                     and not r.strip().startswith("def ")]
+        self.assertEqual(3, len(mutazioni),
+                         "denominatore cambiato: %d punti che introducono un mutante invece "
+                         "di 3. Se il motore e' cambiato di proposito questo numero si "
+                         "aggiorna GUARDANDO i punti nuovi uno per uno, mai per far tornare "
+                         "il verde. Righe: %r" % (len(mutazioni), [n + 1 for n in mutazioni]))
+        ciechi = [(n + 1, righe[n].strip()[:60]) for n in mutazioni
+                  if "_apri_traccia" not in "\n".join(righe[max(0, n - 4):n + 1])]
+        self.assertEqual([], ciechi,
+                         "questi punti rompono un file di PRODUZIONE senza mettere da parte "
+                         "l'originale con `_apri_traccia`: se il processo viene ucciso li', "
+                         "il guasto resta sul disco e NE' `recupera_da_interruzione` NE' "
+                         "`collaudi/guardia_commit.py` possono accorgersene. %r" % (ciechi,))
+
 
     def test_NON_SI_SALVA_MENTRE_UN_GIRO_DI_MUTAZIONE_E_APERTO(self):
         """⛔ DIRETTIVA D18 applicata al salvataggio: la memoria umana non e' una strategia.
