@@ -11,6 +11,94 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🌙 2026-08-03 NOTTE — LEGGI QUESTO PER PRIMO: DOVE SIAMO E COSA E' SUCCESSO
+
+**4 POSTI ALLINEATI SU `52b8214`** — computer = GitHub = VPS = chiavetta. CI `gate: success`
+(`zap`, la scansione di sicurezza, **saltato**: dichiarato, non coperto dal verde generale).
+Sito verificato **nelle due direzioni**: pagine pubbliche `200`, admin `401`, bunker e pannello
+host `302`. Container mai toccati (`nginx` su da 4 giorni): nessuno dei tre commit contiene una
+riga di produzione.
+
+### La giornata in una frase
+Un mutante rimasto vivo in produzione ha portato a scoprire che **la rete che doveva impedirlo
+aveva TRE buchi**. Sono stati chiusi tutti e tre, e ognuno e' stato trovato **solo dopo** che il
+precedente sembrava risolto.
+
+### Come funziona la rete (serve per capire tutto il resto)
+Lo strumento di mutazione **rompe di proposito** un file di produzione per chiedere «i test se
+ne accorgono?», poi lo rimette a posto. Prima di rompere lascia un **biglietto** (`_apri_traccia`
+→ una cartella in `%TEMP%\bookinvip_mutazione_in_corso`) con dentro l'originale. Finche' quel
+biglietto c'e', `collaudi/guardia_commit.py` (gancio `pre-commit`, `core.hooksPath=deploy/hooks`)
+**BLOCCA il salvataggio**. Un `finally` non basta: **non protegge da un processo UCCISO**.
+
+### I tre commit di oggi
+```
+1dcae1a  penale no-show rimessa a `>= 24` in fase83_server.py:6185 + causa documentata
+a2570bf  BUCO 1: lo STRUMENTO non apriva la traccia in 1 dei suoi 3 punti (riga 1269)
+52b8214  BUCO 2 e 3: i TEST spegnevano la rete -- il 3 e' quello sui SOLDI
+```
+
+### I tre buchi, in ordine di gravita' crescente
+1. **`collaudi/mutazione_prodotto.py:1269`** scriveva un file di produzione **senza aprire la
+   traccia**. Terza occorrenza in 4 giorni (31 lug · 1 ago · 3 ago).
+2. **`test_pipeline_ci.py`, tre punti** usavano la traccia **VERA** invece di una propria: due
+   guardie la aprivano e chiudevano, e un test lancia `mutazione_prodotto.py --prova-avvio` —
+   e lo strumento a **ogni** avvio chiama `recupera_da_interruzione()`, che **consuma** la
+   traccia trovata e **riscrive il file che vi e' indicato**. Faceva il suo mestiere, sulla
+   campagna di qualcun altro. `test_pipeline_ci` e' uno dei **9 sorveglianti** di
+   `fase184_marca_temporale`: ogni campagna su quel modulo si spegneva la rete da sola.
+3. **🔴 IL PEGGIORE — `test_mutation_money.py`**, che sta nella **SUITE DI TUTTI I GIORNI**,
+   rompe di proposito **tre moduli del percorso dei soldi** (`fase160_escrow_garanzia` split
+   host/ospite · `fase162_pagamenti_pendenti` whitelist stati · `fase59_concierge` netto host)
+   **senza nessuna rete**. Una suite fermata ha lasciato `fase162_pagamenti_pendenti.py:263`
+   con la whitelist allargata: trovato **guardando `git status`**, non da un allarme.
+   Quella suite gira **prima di ogni commit e di ogni deploy**.
+
+**Riparazione:** ognuno ha ora la **sua** cartella temporanea; `test_mutation_money` importa e
+usa la rete VERA (mai una seconda copia: sarebbero due reti destinate a divergere).
+**Tre guardie nuove, tutte viste ROSSE prima** — e una e' stata **allargata** perche' il primo
+verde copriva 2 punti su 3, e il terzo era il peggiore.
+
+### La chiavetta (`Desktop\BOOKINVIP USB 2026`, nome fisso, UNA sola)
+Rigenerata **dal server vivo** su `52b8214`. Prova di ripristino: estratta in cartella vuota →
+`Ran 5333 tests · OK (skipped=3)` · uscita 0. 25 database dal **VOLUME DOCKER** (nella cartella
+host ce ne sono 18, vecchi), copiati con l'API di backup di sqlite3 (non `cp`: un `-wal` pieno
+si perderebbe in silenzio), tutti `integrity_check = ok`. Impronte:
+`clone_progetto.tgz f7bbc642…e84529` · `clone_dati.tgz a68840a4…4a3bb011`.
+**⚠️ SETTE copie vecchie delle chiavi (`.env.casavip.bak*`) sono state LASCIATE FUORI**, dopo
+aver dimostrato che nessuno le usa (i due compose leggono solo `.env.casavip`, zero riscontri in
+tutto l'albero) e che il ripristino gira verde senza. **Non sono state cancellate: restano sul
+VPS in `/var/www/bookinvip/`.** Cancellare configurazione di produzione e' decisione del
+fondatore. `.env` nudo invece C'E': non si e' potuto dimostrare che sia inutile.
+
+### ⚠️ COSA RESTA APERTO (niente di questo e' un incendio)
+1. **La campagna di mutazione su `fase184_marca_temporale.py` NON e' mai stata completata**:
+   112 punti, 9 sorveglianti, ~90 minuti stimati. Due tentativi interrotti.
+   ⛔ Invocazione giusta: `--modulo fase184_marca_temporale.py` **col `.py`** — senza estensione
+   lo strumento stampa «0 sopravvissuti» e **esce 0 senza aver mutato niente** (difetto suo:
+   uno strumento che non puo' misurare deve fermarsi, non dare un numero).
+   ⛔ E servono `--minuti 150` e `--killer` con **tutti e 9** i sorveglianti: i valori di serie
+   (45 minuti, 6 killer alfabetici) danno un punteggio parziale e piu' ottimista del vero.
+2. **Due suite su cinque sono state FERMATE oggi**, non da noi. E' un fatto osservato, **non
+   spiegato**. Ora una interruzione lascia la traccia e blocca il commit, ma la causa resta.
+3. **Le 7 copie vecchie delle chiavi Stripe sul VPS** — decisione del fondatore.
+4. **`zap`** (scansione sicurezza) **saltato** in CI: il verde non lo copre.
+5. **Difetto MINORE**: `mutazione_prodotto.py:1269/1275` scrivono con `newline="\n"` invece di
+   passare da `_riscrivi_intatto` → su Windows convertono CRLF→LF e fanno apparire «modificati»
+   file dal contenuto identico. Rumore, non guasto.
+
+### 💡 LE DUE LEZIONI CHE VALGONO OLTRE OGGI
+- **Ogni guardia dichiara il DENOMINATORE.** «C'e' almeno un punto protetto?» e' verde anche
+  coprendone uno su cento. La domanda giusta e' «**quanti** punti ci sono, e sono TUTTI
+  coperti?». Le guardie nuove contano, e diventano rosse il giorno in cui nasce il punto n+1.
+- **Un collaudo non usa MAI l'attrezzo vero.** E' l'ispettore che prova l'antincendio con
+  l'allarme del palazzo e poi lo spegne e va a casa: l'allarme funziona, il collaudo funziona,
+  e dopo ogni collaudo il palazzo e' scoperto.
+- *(corollario pagato caro oggi)* **un verde che arriva subito e' la cosa piu' pericolosa**:
+  arriva vestito da trionfo, e nessuno controlla un trionfo.
+
+---
+
 ## ✅ 2026-08-03 SERA — MUTANTE RIPARATO, E IL DIFETTO VERO CHE L'HA PERMESSO
 
 **Riparato il 2026-08-03 con la parola «autorizzato» del fondatore.** Dentro `fase83_server.py`,
@@ -217,7 +305,11 @@ secondi di sito irraggiungibile.
 
 **Verifica sul server vero, nelle due direzioni** (una prova che guarda solo ciò che deve
 funzionare non distingue un sito sano da un sito spalancato):
-`/`, `/api/health`, `/diventa-host`, `/privacy` → **200** · admin senza chiave → **401** ·
+`/`, `/api/health`, `/diventa-host.html`, `/privacy.html` → **200** · admin senza chiave → **401** ·
+*(⛔ corretto il 2026-08-03: qui c'era scritto `/diventa-host` e `/privacy` **senza `.html`**, e
+quelle forme rispondono **404**. Nessun utente ci sbatte contro — tutti i 29 collegamenti del
+sito usano la forma con `.html`, verificato — ma un'affermazione non provata in un documento
+ufficiale e' vietata dalla Regola Ferrea 3.)*
 bunker e pannello host senza sessione → **302** · 25 database integri · i 2 lead veri al loro
 posto · **0** errori nei log dopo il riavvio.
 
