@@ -11,7 +11,123 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## ✅ 2026-08-03 SERA — MUTANTE RIPARATO, E IL DIFETTO VERO CHE L'HA PERMESSO
+
+**Riparato il 2026-08-03 con la parola «autorizzato» del fondatore.** Dentro `fase83_server.py`,
+riga 6185, la **penale no-show** aveva `if ore >= 99999:` al posto di `if ore >= 24:`. Con `24`
+la penale non si applica a chi disdice con più di 24 ore di anticipo; con `99999` quel ramo non
+scatta mai e **la penale verrebbe addebitata sempre**, anche a chi disdice con un mese di
+anticipo. **Soldi veri, addebitati a clienti che non li devono.** Il commento della riga 6186
+diceva ancora `# >=24h: solo anticipo`: il codice contraddiceva il proprio commento, ed è la
+firma tipica di un mutante lasciato dentro.
+
+**Non è mai uscito dal computer** (verificato): non nel commit `c238432`, non su GitHub, non sul
+VPS, non sulla chiavetta.
+
+### La sequenza della riparazione, nell'ordine imposto dalla D20
+
+```
+1. GUARDIA VISTA ROSSA, PRIMA di toccare il codice
+   $ python -m unittest test_paga_struttura_avanzato test_fase62_predictive_noshow
+   USCITA 1 · Ran 41 tests · FAILED (failures=2)
+   FAIL test_esattamente_24h_nessuna_penale : 'carta_non_attiva' != 'non_tardiva'
+   FAIL test_estremo_ovest_domani           : 37.562502368821036 not less than 24.0
+                                              (fuso Pacific/Honolulu)
+
+2. RIPARAZIONE — file ripresi INTERI da GitHub, nessuna riga riscritta a mano
+   $ git checkout HEAD -- fase83_server.py fase163_accettazioni.py fase184_marca_temporale.py \
+                          fase81_bootstrap_casavip.py fase98_policy_commissione.py main_casavip.py
+
+3. VERIFICATO da tre letture indipendenti
+   riga 6185 riletta dal disco : '            if ore >= 24:'
+   git diff --exit-code HEAD   : USCITA 0 = identici a GitHub byte per byte
+   git status                  : solo ' M RIPRENDI_QUI.md' (questo documento)
+   sha256 fase83_server.py     : 3f0adfe78a6c4b4dbc6df86bb251bd375c3f9f9908ebaf5942975fef7b219203
+
+4. STESSA GUARDIA VISTA VERDE
+   USCITA 0 · Ran 41 tests in 37.937s · OK
+```
+
+Il rosso è arrivato **prima** del diff, non dopo: è l'unica cosa che dimostra che quella guardia
+veda proprio questo difetto, invece di passare per un altro motivo.
+
+### ⛔ LA CAUSA VERA — e NON è «un'altra IA»
+
+**Due affermazioni che avevo scritto qui il 3 agosto erano FALSE**, e vanno corrette perché
+portavano a una precauzione sbagliata:
+
+1. ~~«se un'altra IA lavora sugli stessi file»~~ → **falso**. Kimi **non ha accesso ai file**:
+   vede soltanto i risultati. Il giro di mutazione l'ha lanciato **una sessione mia**. Attribuire
+   un danno senza prova è esattamente ciò che vieta `REGISTRO_INGEGNERIA.md:1637` («quello che ti
+   dicono è un'ipotesi, non un fatto») — e vale anche per un'ipotesi che ci si costruisce da soli.
+2. ~~«il commit è stato fatto un minuto prima»~~ → **falso: sono 21 minuti.** Commit `c238432`
+   alle **12:42:33**, giro di mutazione iniziato alle **13:03:45**. Quel commit non è mai stato
+   in pericolo, e conteneva 2 soli file, tutti e due documenti (`+39` e `+91` righe, 0 tolte).
+
+**La causa, dimostrata:** la lista dei file dentro `collaudi/mutazione_prodotto.py` e gli orari
+di scrittura sul disco combaciano **nello stesso ordine**.
+
+```
+LISTA in collaudi/mutazione_prodotto.py        ORARIO sul disco
+1  fase98_policy_commissione.py           →    13:03:45
+2  fase81_bootstrap_casavip.py            →    13:03:54
+3  fase163_accettazioni.py                →    13:04:16
+4  fase184_marca_temporale.py             →    13:04:28
+5  fase83_server.py                       →    (mutato e rimesso a posto)
+6  main_casavip.py                        →    13:04:34
+7  fase188_paga_struttura.py              →    13:04:35
+8  fase83_server.py                       →    13:05:38  ← PROCESSO UCCISO QUI
+```
+
+### 🔴 DIFETTO APERTO NELLO STRUMENTO — da riparare (è la TERZA volta)
+
+`collaudi/mutazione_prodotto.py` **ha già** una rete di salvataggio contro l'interruzione
+(`_apri_traccia` riga 752 · `recupera_da_interruzione` riga 771), scritta apposta dopo che la
+stessa cosa era successa il **2026-07-31** e il **2026-08-01**. La rete copre i percorsi delle
+righe **895** e **1039**. **Non copre la riga 1269** — che è proprio quella che ha girato:
+
+```
+riga 1269:  io.open(percorso, "w", ...).write(testo.replace(orig, mut, 1))
+            ↑ scrive un file di PRODUZIONE senza chiamare _apri_traccia()
+```
+
+Conseguenze, tutte verificate sulla macchina:
+- la cartella della traccia **non esisteva**: non è mai stata aperta, quindi
+  `recupera_da_interruzione()` non aveva nulla da recuperare;
+- il `finally` di riga 1317 non ha salvato niente perché — come dice il commento a riga 739,
+  scritto da noi stessi — **un `finally` non protegge da un processo ucciso**;
+- `newline="\n"` alle righe 1269 e 1275 riscrive i fine-riga da CRLF a LF su Windows: è il motivo
+  per cui 5 file risultavano «modificati» pur avendo **diff vuoto**, e ha reso la diagnosi più
+  difficile. L'altro percorso usa `_riscrivi_intatto` (`newline=""`), che li conserva.
+
+**E il buco più grande, che non era mai stato notato:** la rete si sveglia **solo quando qualcuno
+rilancia lo strumento di mutazione**. Nessuno l'ha rilanciato, e il mutante è rimasto sul disco
+per ore **senza che nulla gridasse**. Un recupero che dipende da un gesto volontario non è una
+rete: è un promemoria. Va agganciato a qualcosa che gira comunque (la suite, o il gancio al
+commit `collaudi/guardia_commit.py` — `core.hooksPath` = `deploy/hooks`, attivo su questa
+macchina).
+
+⚠️ **Non riparato in questa sessione, di proposito:** `CLAUDE.md:314` (D13) impone un
+compartimento alla volta, e quello aperto era il mutante. Lo strumento sta in `collaudi/`, dove
+`CLAUDE.md:31-33` stabilisce che B4 non vale allo stesso modo: vale la **D20**, prima la guardia
+vista rossa.
+
+**Obbligo operativo che resta valido:** prima di ogni `git add -A` si legge `git status` e si
+guarda cosa c'è dentro. Mai aggiungere alla cieca.
+
 ## 💾 2026-08-03 — STATO VIVO: 4 POSTI SU `2a4f852`, PIÙ `df55787` DA SPINGERE
+
+**AGGIORNAMENTO DI FINE GIORNATA — questa tabella è superata da:**
+
+| Posto | Commit |
+|---|---|
+| Computer · GitHub | **`c238432`** (`git ls-remote` → `c23843209890ba87905ef7c61a8825f11f74f2e4`) |
+| VPS · chiavetta | **`2a4f852`** (indietro di 2 commit, tutti e due di soli documenti) |
+| Suite INTERA su `c238432` | **`Ran 5330 tests in 1618.469s` · `OK (skipped=3)`** — eseguita e chiusa |
+
+Quindi `df55787` **è stato pushato** insieme a `c238432`, e la suite intera che mancava **è
+stata eseguita ed è verde**. Restano indietro solo VPS e chiavetta, di due commit di sola
+documentazione: nessuna riga di produzione.
 
 | Posto | Commit |
 |---|---|
@@ -22,8 +138,10 @@ Chiavetta rigenerata da `2a4f852` e **provata col ripristino da zero**: archivi 
 cartella vuota, `Ran 5330 tests · OK`. Impronte: `clone_progetto.tgz`
 `2377e409…bda0b` · `clone_dati.tgz` `78cdfb9f…1d9f9`.
 
-⚠️ **La suite INTERA non è stata eseguita dopo `df55787`**: verificato solo `test_pipeline_ci`
-(74 test, verde). Prima cosa da fare alla ripartenza: suite intera, poi push.
+~~⚠️ La suite INTERA non è stata eseguita dopo `df55787`.~~ **FATTO il 2026-08-03:
+`Ran 5330 tests in 1618.469s · OK (skipped=3)`, e `df55787` è stato pushato con `c238432`.**
+⚠️ Ma da rieseguire dopo la riparazione del mutante qui sopra: quel giro è stato fatto
+**prima** che il mutante comparisse sul disco.
 
 ### 🔬 SEI MODULI PORTATI A ZERO SOPRAVVISSUTI (mutazione, 1-3 agosto)
 
