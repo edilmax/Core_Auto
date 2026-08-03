@@ -256,6 +256,45 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
   (le regole che non dichiarano come si controllano) · `dichiarato()` (il numero scritto nel
   cartello) · `main()`. STATO: **acceso**, eseguito dall'hook a ogni sessione.
 
+### ✅ FATTO 2026-08-02/03 (9) — SEI MODULI A ZERO SOPRAVVISSUTI + TRE DIFETTI VIVI
+- **Campagne di mutazione** (tutte con `sorveglianti N, usati N`: nessuna scorciatoia):
+  `fase177_financial_controller` 143 punti, 45 buchi -> **0** (+10 equivalenti dimostrati) ·
+  `fase156_erasure` 42/33 -> **0** · `fase180_bunker` 41/6 -> **0** ·
+  `fase15_idempotency` 26/11 -> **0** · `fase178_watchdog` 27/13 -> **0** ·
+  `fase179_rate_limit` 15/8 -> **0** (+1 equivalente dimostrato).
+  Totale ~296 punti su 6.012 = **~10% della macchina**.
+- **TRE DIFETTI VIVI in produzione** (non mutanti), tutti scoperti da una guardia diventata
+  ROSSA prima della riparazione:
+  1. `fase180_bunker`: `hmac.compare_digest` su STRINGHE accetta solo ASCII -> un codice con
+     un accento SOLLEVAVA. `POST /api/bunker/login {"codice":"abcdéf"}` -> **HTTP 500**, ora
+     **403**. Riparato confrontando i BYTE. ⚠️ NON si risolve rifiutando il non-ASCII: una
+     password legittima puo' avere accenti. Guardia anche su quella meta'.
+  2. `fase178_watchdog`: `sqlite3.connect` riesce su qualunque file, quindi un libro dei
+     soldi CORROTTO finiva nel ramo «tabella non ancora creata» -> `{'ok': True, 'assente':
+     True}`, identico a un'installazione nuova. Ora interroga prima `sqlite_master`:
+     corrotto -> `{'ok': False, 'errore': 'illeggibile'}`. Era il guardiano che dichiara sano
+     cio' che non e' riuscito a guardare.
+  3. `collaudi/audit_coerenza_tariffe.py`: due byte `0x08` al posto di `\b` (firma di una
+     patch via heredoc) -> la parola `OTA` non veniva riconosciuta come «si parla di altri»,
+     e percentuali altrui venivano attribuite a noi. Il controllo dei byte invisibili
+     ESISTEVA ma leggeva **solo `ci.yml`**: ora copre tutti i 604 file Python.
+- **STRUMENTO `collaudi/mutazione_prodotto.py`**, quattro riparazioni: stampa l'esito di ogni
+  mutante appena finisce (due giri interrotti avevano perso tutto) · `--killer` per scegliere
+  i test che devono uccidere (si prendevano in ordine ALFABETICO: su fase177 il primo pesava
+  76s contro i 32s di tutti gli altri) · `--tetto`/`--minuti` · **si RIFIUTA di giudicare su
+  base rossa** (aveva stampato «42 su 42» misurando test gia' rossi) · la chiave degli
+  EQUIVALENTI porta ora il **nome della funzione** (senza, una dichiarazione si estendeva a
+  tutte le righe identiche del file: `if residuo <= 0:` compare in due funzioni di fase177).
+- **NUOVO `collaudi/guardia_commit.py` + `deploy/hooks/pre-commit` + `deploy/installa_hook.sh`**:
+  non si committa mentre un giro di mutazione e' aperto. Tre cicli interrotti in un
+  pomeriggio avevano lasciato un mutante dentro un file di produzione. Gancio VERSIONATO
+  (non in `.git/hooks`, che non viaggia) e **solo-ASCII**, con guardia che lo mantiene tale.
+- **REGOLE NUOVE in `CLAUDE.md`**: **D18** (uno strumento che misura ha un controllo
+  meccanico che gli impedisce di barare) · **D19** (una difesa si prova senza aspettare il
+  disastro che la giustifica) · **D20** (un difetto vivo non si ripara subito: prima la
+  guardia, vista rossa) · **IL BLOCCO**, 6 divieti assoluti in cima al file, stampati per
+  intero dallo strumento d'avvio. Obblighi totali: **100**, contati dai file.
+
 ### ✅ FATTO 2026-08-01 (8) — DEPLOY `ab451a3` + CHIAVETTA PROVATA COL RIPRISTINO
 - **Deploy a rischio zero**, procedura rm-first di `DEPLOY.md` §3 con `docker compose` **v2**:
   punto di ritorno in `/root/PRE_DEPLOY_20260801_0938.commit` (`d51cf0d`), backup dei dati

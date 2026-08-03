@@ -1,3 +1,94 @@
+## ⛔ 2026-08-03 — LEGGI PRIMA I SEI DIVIETI IN CIMA A `CLAUDE.md`
+
+Il fondatore ha dettato un **BLOCCO di 6 divieti assoluti** dopo una sessione in cui ho
+interpretato come autorizzazione frasi che non lo erano, ho usato `sed` per una patch, e ho
+risposto con riassunti dove servivano i dati grezzi. Stanno **in cima a `CLAUDE.md`**, prima
+della Regola Zero, e `python collaudi/regole_avvio.py` **li stampa per intero** a ogni avvio.
+In breve: **solo «procedi al commit» autorizza un commit** · **solo «autorizzato» autorizza
+una modifica alla produzione** · **mai `sed`/heredoc, si usa l'editor** · **mai riassunti al
+posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è verificato** ·
+**mai dichiarare equivalente un mutante senza dimostrazione**. Se ne violi uno: ci si ferma
+e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
+**Si rileggono prima di iniziare un'operazione E dopo averla finita.**
+
+## 💾 2026-08-03 — STATO VIVO: 4 POSTI SU `2a4f852`, PIÙ `df55787` DA SPINGERE
+
+| Posto | Commit |
+|---|---|
+| Computer · GitHub · VPS · chiavetta | **`2a4f852`** (verificati con `git rev-parse` / `ls-remote` / ssh) |
+| In locale, oltre | **`df55787`** «WIP: D21 BLOCCO 6 divieti…» — ⚠️ **da pushare** |
+
+Chiavetta rigenerata da `2a4f852` e **provata col ripristino da zero**: archivi estratti in
+cartella vuota, `Ran 5330 tests · OK`. Impronte: `clone_progetto.tgz`
+`2377e409…bda0b` · `clone_dati.tgz` `78cdfb9f…1d9f9`.
+
+⚠️ **La suite INTERA non è stata eseguita dopo `df55787`**: verificato solo `test_pipeline_ci`
+(74 test, verde). Prima cosa da fare alla ripartenza: suite intera, poi push.
+
+### 🔬 SEI MODULI PORTATI A ZERO SOPRAVVISSUTI (mutazione, 1-3 agosto)
+
+| Modulo | Prima | Dopo |
+|---|---|---|
+| `fase177_financial_controller` (libro dei soldi) | 143 punti · 45 buchi | **0** · 10 equivalenti dimostrati |
+| `fase156_erasure` (diritto all'oblio) | 42 · 33 | **0** |
+| `fase180_bunker` (porta admin) | 41 · 6 | **0** + 1 difetto vivo |
+| `fase15_idempotency` (anti-doppio-addebito) | 26 · 11 | **0** |
+| `fase178_watchdog` (il guardiano) | 27 · 13 | **0** + 1 difetto vivo |
+| `fase179_rate_limit` (anti brute-force) | 15 · 8 | **0** · 1 equivalente dimostrato |
+
+**~296 punti chiusi su 6.012** = circa il **10% della macchina**. È il numero da tenere in
+testa ogni volta che la suite dice verde: 5.330 test verdi dicono che è giusta **dove
+abbiamo guardato**.
+
+### 🔴 TRE DIFETTI VIVI TROVATI E RIPARATI (erano in produzione, non mutanti)
+1. **Bunker, HTTP 500 sulla porta admin**: `hmac.compare_digest` su stringhe accetta solo
+   ASCII — un codice con un accento **sollevava** invece di rispondere «no».
+   `POST /api/bunker/login {"codice":"abcdéf"}` → **500** → ora **403**. Riparato
+   confrontando i **byte** (non rifiutando il non-ASCII: una password legittima può avere
+   accenti, e la bloccheremmo).
+2. **Watchdog, libro dei soldi CORROTTO dichiarato sano**: `sqlite3.connect` riesce su
+   qualunque file, quindi l'errore arrivava alla query e finiva nel ramo «tabella non ancora
+   creata» → `{'ok': True, 'assente': True}`, **identico a un'installazione nuova**. Ora
+   interroga prima `sqlite_master`: corrotto → `{'ok': False, 'errore': 'illeggibile'}`.
+3. **`collaudi/audit_coerenza_tariffe.py`, due byte backspace al posto di `\b`**: la parola
+   `OTA` non veniva più riconosciuta come «si parla di altri», quindi percentuali altrui
+   venivano attribuite a noi. Il controllo dei byte invisibili **esisteva ma leggeva solo
+   `ci.yml`**: ora copre tutti i 604 file Python.
+
+Tutti e tre **scoperti da una guardia diventata rossa**, non cercati a mano: è la ragione
+per cui è nata la direttiva **D20**.
+
+### 📜 QUATTRO REGOLE NUOVE, tutte nate da un danno vero
+- **D18** — uno strumento che misura deve avere un controllo **meccanico** che gli impedisca
+  di barare *(il giudice stampava «42 su 42» misurando una base rossa)*.
+- **D19** — una difesa deve poter essere messa alla prova **senza aspettare il disastro** che
+  la giustifica *(due mutanti «irraggiungibili» che stavo per dichiarare equivalenti)*.
+- **D20** — un difetto vivo **non si ripara subito**: prima la guardia, vista **rossa**.
+- **IL BLOCCO** (6 divieti assoluti, in cima a `CLAUDE.md`).
+Obblighi totali: **100**, contati dai file. Lo strumento d'avvio grida se il numero non torna.
+
+### ▶️ DA DOVE RIPARTIRE, in quest'ordine
+1. **Suite intera** e **push di `df55787`** (non ancora spinto).
+2. **`fase184_marca_temporale`** — inventario già fatto: **112 punti mutabili**, **9
+   sorveglianti**, tetto stimato **~88 minuti** (i sorveglianti costano ~47s a giro).
+   Tocca **prove legali: sì** · **soldi: sì** · **dati personali: no**.
+3. Poi per rischio: `fase189_price_alerts` (39) · `fase154_giurisdizioni_marketing` (42) ·
+   `fase79_dichiarazione` (18). E il grande scoperto resta **`fase83_server`: 1.889 punti**,
+   un terzo di tutta la macchina, mai mutato per intero.
+
+### 🔴 ASPETTA IL FONDATORE (non tecnico: decisioni sue)
+- **`ADMIN_KEY` provvisoria da cambiare** prima del lancio: è il primo fattore che protegge
+  tutto il resto.
+- **Tre moduli legali costruiti e MAI collegati**: `fase151_alloggiati_web` (Questura),
+  `fase103_reverse_charge` (IVA), `fase105_identity_gate` — **zero** file di produzione li
+  chiamano (verificato).
+- **App Meta bloccata**; **privacy e termini mai letti da un avvocato**.
+- **Prove vere coi soldi mai fatte** (scelta sua: alla fine).
+- **Multi-agente**: concordato che si lanciano **alla fine e in SOLA LETTURA**, come
+  controllo; consegnano *sospetti*, non verdetti, e poi il setaccio (146 → 4).
+
+---
+
 ## 💾 2026-08-01 — 4 POSTI ALLINEATI SU `ab451a3`, E LA CHIAVETTA È **PROVATA**, NON SPERATA
 
 **Computer = GitHub = VPS = chiavetta.** Deploy fatto col protocollo a rischio zero: punto di
