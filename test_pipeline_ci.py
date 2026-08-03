@@ -1086,8 +1086,11 @@ class TestLeRegoleSiLeggonoSEMPRE(unittest.TestCase):
         self.assertIn("nati dai NOSTRI danni", r.stdout, "l'altra famiglia non e' piu' "
                                                          "riconoscibile")
         n = self._motore_regole().conta_regole()
-        atteso = (n["appendice"] + n["regola_zero"] + n["direttive"]
+        atteso = (n["appendice"] + n["blocco"] + n["regola_zero"] + n["direttive"]
                   + n["modi"] + n["collaudi"] + n["finale"])
+        self.assertGreaterEqual(n["blocco"], 6,
+                                "i sei divieti assoluti del BLOCCO sono spariti da "
+                                "CLAUDE.md: sono la cosa che si legge per prima")
         visto = re.search(r"TOTALE OBBLIGHI: (\d+)", r.stdout)
         self.assertIsNotNone(visto, "lo strumento non dichiara piu' un totale")
         self.assertEqual(atteso, int(visto.group(1)),

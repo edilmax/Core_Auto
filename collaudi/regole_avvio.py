@@ -56,7 +56,9 @@ def _pezzi():
     """Le sezioni di CLAUDE.md, separate una volta sola: meno modi di sbagliare."""
     c = _leggi(CLAUDE)
     return {
-        "zero": c.split("REGOLA FERREA")[0],
+        # IL BLOCCO sta PRIMA della regola zero: si taglia sul titolo della regola zero.
+        "blocco": c.split("REGOLA ZERO")[0],
+        "zero": c.split("REGOLA ZERO")[-1].split("REGOLA FERREA")[0],
         # ⛔ IL TAGLIO NON SI AGGANCIA A UN NUMERO. Prima diceva "LE 17 DIRETTIVE": il giorno
         # in cui ne e' arrivata una diciottesima il taglio si sarebbe rotto -- e lo strumento
         # che deve accorgersi degli errori di conteggio sarebbe stato il primo a sbagliarlo.
@@ -75,6 +77,7 @@ def conta_regole():
     appendice = _leggi(REGISTRO).split("APPENDICE")[-1]
     coll = p["collaudi"]
     return {
+        "blocco": len(re.findall(r"^\*\*B\d+\.", p["blocco"], re.M)),
         "regola_zero": len(re.findall(r"^\*\*\d+\.", p["zero"], re.M)),
         "ferrea": len(re.findall(r"^\*\*\d+\.", p["ferrea"], re.M)),
         "direttive": len(re.findall(r"^\*\*D\d+\.", p["direttive"], re.M)),
@@ -92,7 +95,8 @@ def senza_verifica():
     """Le regole che NON dicono come si controllano. Il cuore di tutto lo strumento."""
     p = _pezzi()
     fuori = []
-    for etichetta, testo, marca in (("FERREA", p["ferrea"], r"^\*\*(\d+)\."),
+    for etichetta, testo, marca in (("BLOCCO", p["blocco"], r"^\*\*(B\d+)\."),
+                                    ("FERREA", p["ferrea"], r"^\*\*(\d+)\."),
                                     ("DIRETTIVA", p["direttive"], r"^\*\*(D\d+)\.")):
         blocchi = re.split(marca, testo, flags=re.M)[1:]
         for numero, corpo in zip(blocchi[0::2], blocchi[1::2]):
@@ -110,9 +114,25 @@ def main():
     n = conta_regole()
     ricerca = n["appendice"]                       # le 44: 15 in CLAUDE.md + 29 in appendice
     solo_appendice = max(0, n["appendice"] - n["ferrea"])
-    altri = n["regola_zero"] + n["direttive"] + n["modi"] + n["collaudi"] + n["finale"]
+    altri = (n["blocco"] + n["regola_zero"] + n["direttive"] + n["modi"] + n["collaudi"]
+             + n["finale"])
     totale = ricerca + altri
 
+    print("=" * 78)
+    print("⛔⛔ IL BLOCCO — %d DIVIETI ASSOLUTI (prima di tutto, anche della regola zero)"
+          % n["blocco"])
+    print("=" * 78)
+    # ⛔ SI STAMPANO PER INTERO, non si nominano. Un divieto riassunto e' un divieto che
+    # qualcuno dovra' andare a cercare -- e non lo cerchera'. Il testo si legge DAL FILE:
+    # se qualcuno lo cambia, qui cambia; se qualcuno lo toglie, qui sparisce e si vede.
+    for numero, titolo in re.findall(r"^\*\*(B\d+)\. ([^*]+)\*\*", _pezzi()["blocco"], re.M):
+        testo = " ".join(titolo.split())
+        print("  %s. %s" % (numero, testo))
+    print()
+    print("  Se ne violi uno: «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»")
+    print("  Poi ti fermi. Non agisci, non committi, non ripari, non riassumi.")
+    print("  SI RILEGGONO: prima di iniziare un'operazione E dopo averla finita.")
+    print()
     print("=" * 78)
     print("⛔ REGOLE DEL PROGETTO — si leggono PRIMA di fare qualunque cosa")
     print("=" * 78)
@@ -128,6 +148,8 @@ def main():
     print("     verificabili: %d su %d" % (n["appendice_verificabili"], n["appendice"]))
     print()
     print("  🧭 GLI ALTRI %d — nati dai NOSTRI danni, non da uno studio" % altri)
+    print("     · IL BLOCCO ............ %2d   (i sei divieti assoluti, stampati qui sopra)"
+          % n["blocco"])
     print("     · regola zero .......... %2d   (fonti di verita', niente .md nuovi, numeri"
           % n["regola_zero"])
     print("                                   verificati nel codice)")

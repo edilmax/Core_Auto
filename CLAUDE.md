@@ -1,3 +1,65 @@
+# ⛔⛔ IL BLOCCO — 6 DIVIETI ASSOLUTI (vengono PRIMA di tutto, anche della Regola Zero)
+
+Dettati dal fondatore il **2026-08-03**, dopo una sessione in cui ho interpretato come
+autorizzazione frasi che non lo erano, ho usato `sed` per una patch, e ho risposto con
+riassunti dove servivano i dati grezzi. **Non sono consigli: sono divieti.** Si leggono
+**PRIMA** di iniziare qualunque operazione, e **si rileggono DOPO averla finita**.
+
+**B1. NON COMMITTARE MAI finché il fondatore non ha detto esplicitamente «procedi al
+commit».** «Aspetta» non è un via. «Ok» non è un via. «Poi commit push» non è un via.
+Solo **«procedi al commit»** è un via.
+*Si verifica:* nel registro della sessione, prima di ogni `git commit` compare quella frase
+esatta scritta dal fondatore. Se non c'è, quel commit non doveva esistere.
+
+**B2. NON USARE MAI `sed`, heredoc o sostituzioni testuali per modificare un file.** Si usa
+**sempre** l'editor. È la D9, elevata a divieto assoluto perché ha già fatto danno tre volte
+in due giorni: due file di strumenti resi illeggibili e una riparazione che **non è stata
+applicata affatto** (i backslash mangiati, la stringa di sostituzione diventata identica a
+quella da sostituire).
+*Si verifica:* nel registro della sessione nessun `sed -i`, nessuno script con `.replace()`
+su un file del progetto. Unica eccezione ammessa: byte non scrivibili in un messaggio, e
+allora si costruiscono per **valore numerico** e si mostra il conteggio dei byte cambiati
+prima e dopo.
+
+**B3. NON RIASSUMERE MAI al posto dei dati grezzi.** Se il fondatore dice «mostrami», si
+mostrano **il comando eseguito e l'output copiato dal terminale**. Nessuna tabella. Nessun
+riepilogo. Nessuna parafrasi.
+*Si verifica:* ogni risposta a un «mostrami» contiene la riga di comando e l'uscita
+letterale. Una tabella al posto dell'output è una violazione, anche se i numeri sono giusti.
+
+**B4. NON TOCCARE MAI codice di produzione senza il via scritto.** «Ripara» non è un via.
+«Sistemale» non è un via. «Ok» non è un via. Solo **«autorizzato»** è un via. (Per
+`collaudi/` — strumentazione di collaudo, non produzione — il fondatore ha stabilito il
+2026-08-03 che questo divieto non vale allo stesso modo: vale D20.)
+*Si verifica:* per ogni riga cambiata in un `fase*.py` o in `main_casavip.py`, nel registro
+della sessione compare la parola «autorizzato» scritta dal fondatore **prima** della modifica.
+
+**B5. NON PROCEDERE MAI al passo successivo se il precedente non è verificato.** Se vengono
+chieste quattro cose e se ne mostrano tre, ci si ferma. Mai «procedo con quello che ho».
+*Si verifica:* per ogni sequenza richiesta, ogni passo ha il suo esito mostrato prima che
+inizi il successivo; se un esito manca o non è quello specificato, la sequenza si interrompe
+lì e lo si dice.
+
+**B6. NON DICHIARARE MAI equivalente un mutante per comodità.** O c'è una **dimostrazione
+formale** (z3, prova esaustiva sugli ingressi, o percorsi che portano allo stesso stato
+osservabile e verificabile), o quel mutante **resta sopravvissuto**.
+*Si verifica:* ogni voce di `EQUIVALENTI_DICHIARATI` porta la dimostrazione scritta; nessuna
+ha come motivazione «non è raggiungibile» o «non è osservabile» senza prova.
+
+## ⛔ COSA FARE SE SI VIOLA UNO DI QUESTI SEI
+Rispondere **esattamente** così, e poi fermarsi:
+
+> «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
+
+Poi si aspetta. **Non si agisce. Non si committa. Non si ripara. Non si riassume.**
+
+## ⛔ QUANDO SI RILEGGE QUESTO BLOCCO
+**PRIMA** di iniziare qualunque operazione, e **DOPO** averla finita — così la fine di un
+lavoro non diventa l'inizio di una violazione. Lo stampa da solo `collaudi/regole_avvio.py`
+a ogni avvio di sessione; a fine lavoro va rieseguito.
+
+---
+
 # ⛔ REGOLA ZERO — LEGGERE PRIMA DI TOCCARE QUALSIASI COSA (vale per OGNI IA e OGNI persona)
 
 **Questa regola viene prima di tutte le altre.** Vale per Claude e per qualunque altro modello
@@ -44,7 +106,7 @@ automatica fa fallire la suite se i due divergono):
 
 # ⚙️ REGOLA FERREA DI OPERATIVITÀ E PRECISIONE
 
-> ## 📌 GLI OBBLIGHI SONO **94**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
+> ## 📌 GLI OBBLIGHI SONO **100**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
 > **Contati dai file il 2026-08-01, non a memoria** (`python collaudi/regole_avvio.py` li
 > ricontrolla a ogni sessione e **grida** se questi numeri non tornano):
 >
@@ -57,8 +119,9 @@ automatica fa fallire la suite se i due divergono):
 > · **29** stanno nell'appendice di `REGISTRO_INGEGNERIA.md`, con prova e fonte per esteso.
 > Più le **24 uccise** dai revisori ostili **col motivo**: dicono cosa NON vale la pena rifare.
 >
-> ### 🧭 GLI ALTRI **50** — nati dai NOSTRI danni
-> Regola zero (**5**) · **20 direttive del fondatore** · modi di rompersi (**11**) ·
+> ### 🧭 GLI ALTRI **56** — nati dai NOSTRI danni
+> **IL BLOCCO (6 divieti assoluti, in cima a questo file)** · Regola zero (**5**) ·
+> **20 direttive del fondatore** · modi di rompersi (**11**) ·
 > collaudi (**10**) · direttiva finale (**4**). Non hanno uno studio dietro: hanno una
 > **cicatrice**. Valgono uguale, e da oggi **portano anch'essi il «si verifica così»**.
 >
