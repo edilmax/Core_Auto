@@ -79,6 +79,15 @@ una cartella VUOTA — come su un VPS nuovo — e la suite INTERA che gira li' d
 d'uscita letto diretto. E che dentro ci sia il commit giusto **si dimostra**, non si legge dal
 cartello: impronta di **ogni** file tracciato confrontata con HEAD (`git ls-files` +
 `git hash-object --no-filters`), piu' `PRAGMA integrity_check` su ognuno dei 25 database.
+
+⛔ **DUE REGOLE SULL'ORDINE, imparate il 2026-08-04.** (1) **Si pubblica sulla chiavetta SOLO
+dopo che la prova di ripristino e' verde.** Scrivere prima significa distruggere l'unica copia
+**provata** che esiste per metterci una copia che nessuno ha ancora provato. (2) **La generazione
+PRECEDENTE si conserva SULLA chiavetta**, in `precedente_<commit>/` — mai in una cartella
+temporanea del computer, che sparisce da sola: quello non e' conservarla, e' lasciarla nel
+cestino sperando che nessuno lo svuoti. *Fino al 2026-08-04 le tre copie precedenti stavano in
+`AppData\Local\Temp\claude\...`, cioe' gia' perse.* Quante tenerne all'indietro lo decide il
+fondatore: oggi ce n'e' UNA.
 **⚠️ SETTE copie vecchie delle chiavi (`.env.casavip.bak*`) sono state LASCIATE FUORI**, dopo
 aver dimostrato che nessuno le usa (i due compose leggono solo `.env.casavip`, zero riscontri in
 tutto l'albero) e che il ripristino gira verde senza. **Non sono state cancellate: restano sul
