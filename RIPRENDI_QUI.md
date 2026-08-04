@@ -60,16 +60,25 @@ usa la rete VERA (mai una seconda copia: sarebbero due reti destinate a diverger
 verde copriva 2 punti su 3, e il terzo era il peggiore.
 
 ### La chiavetta (`Desktop\BOOKINVIP USB 2026`, nome fisso, UNA sola)
-Rigenerata **dal server vivo** su `0962abb`. Prova di ripristino **rifatta il 2026-08-04, ore
-17:22-17:51** — quella che il documento della chiavetta dichiarava non era mai stata eseguita su
-QUESTI archivi (data di ieri, uscita grezza inesistente): estratta in cartella vuota →
-`Ran 5359 tests in 1714.589s · OK (skipped=3)` · uscita 0, **zero test rossi**, e gli stessi
-401 file di test del progetto vero. Che dentro ci sia davvero `0962abb` non e' dedotto dal nome:
-**693 file tracciati su 693 hanno l'impronta identica a HEAD** (`diff` uscita 0), sia
-nell'archivio sia nella cartella `progetto/`. 25 database dal **VOLUME DOCKER** (nella cartella
-host ce ne sono 18, vecchi), copiati con l'API di backup di sqlite3 (non `cp`: un `-wal` pieno
-si perderebbe in silenzio), tutti `integrity_check = ok` (25 su 25, riaperti oggi). Impronte:
-`clone_progetto.tgz ffd977b3…10e69ce9` · `clone_dati.tgz 067404c2…f0e919eb`.
+⛔ **QUI NON SI SCRIVONO PIU' commit, impronte e numero di test di una generazione.** Scadono a
+ogni rigenerazione, e allora la copia di sicurezza si porta dentro una descrizione FALSA di se
+stessa — che e' peggio di nessuna descrizione, perche' chi la apre il giorno del guasto si fida.
+*Successo il 2026-08-04: la chiavetta conteneva un diario che la dichiarava fatta su `52b8214` con
+`Ran 5333 tests`, mentre era su `0962abb` con altre impronte e altri numeri.* Il difetto non era
+la chiavetta: era **questo paragrafo**, che inchiodava dati destinati a invecchiare.
+**I numeri di OGNI generazione — commit, impronte sha256, esito della prova di ripristino — stanno
+in `LEGGIMI-RIPRISTINO.txt` SULLA chiavetta**, scritti nel momento in cui nasce: e' l'unico posto
+che non puo' mentire, perche' nasce e muore insieme alla copia che descrive.
+
+**Il METODO invece non scade, ed e' questo.** Si rigenera **dal server vivo**, mai dal computer:
+e' l'unica copia che e' davvero girata da qualche parte. I 25 database si prendono dal **VOLUME
+DOCKER** (nella cartella host ce ne sono 18, vecchi) con l'API di backup di sqlite3, **mai `cp`**:
+un `-wal` pieno si perderebbe in silenzio. Le 7 copie vecchie delle chiavi (`.env.casavip.bak*`)
+restano FUORI. Non e' finita finche' non c'e' la **prova di ripristino**: i due archivi estratti in
+una cartella VUOTA — come su un VPS nuovo — e la suite INTERA che gira li' dentro, con il codice
+d'uscita letto diretto. E che dentro ci sia il commit giusto **si dimostra**, non si legge dal
+cartello: impronta di **ogni** file tracciato confrontata con HEAD (`git ls-files` +
+`git hash-object --no-filters`), piu' `PRAGMA integrity_check` su ognuno dei 25 database.
 **⚠️ SETTE copie vecchie delle chiavi (`.env.casavip.bak*`) sono state LASCIATE FUORI**, dopo
 aver dimostrato che nessuno le usa (i due compose leggono solo `.env.casavip`, zero riscontri in
 tutto l'albero) e che il ripristino gira verde senza. **Non sono state cancellate: restano sul
