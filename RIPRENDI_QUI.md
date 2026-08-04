@@ -60,11 +60,16 @@ usa la rete VERA (mai una seconda copia: sarebbero due reti destinate a diverger
 verde copriva 2 punti su 3, e il terzo era il peggiore.
 
 ### La chiavetta (`Desktop\BOOKINVIP USB 2026`, nome fisso, UNA sola)
-Rigenerata **dal server vivo** su `52b8214`. Prova di ripristino: estratta in cartella vuota →
-`Ran 5333 tests · OK (skipped=3)` · uscita 0. 25 database dal **VOLUME DOCKER** (nella cartella
+Rigenerata **dal server vivo** su `0962abb`. Prova di ripristino **rifatta il 2026-08-04, ore
+17:22-17:51** — quella che il documento della chiavetta dichiarava non era mai stata eseguita su
+QUESTI archivi (data di ieri, uscita grezza inesistente): estratta in cartella vuota →
+`Ran 5359 tests in 1714.589s · OK (skipped=3)` · uscita 0, **zero test rossi**, e gli stessi
+401 file di test del progetto vero. Che dentro ci sia davvero `0962abb` non e' dedotto dal nome:
+**693 file tracciati su 693 hanno l'impronta identica a HEAD** (`diff` uscita 0), sia
+nell'archivio sia nella cartella `progetto/`. 25 database dal **VOLUME DOCKER** (nella cartella
 host ce ne sono 18, vecchi), copiati con l'API di backup di sqlite3 (non `cp`: un `-wal` pieno
-si perderebbe in silenzio), tutti `integrity_check = ok`. Impronte:
-`clone_progetto.tgz f7bbc642…e84529` · `clone_dati.tgz a68840a4…4a3bb011`.
+si perderebbe in silenzio), tutti `integrity_check = ok` (25 su 25, riaperti oggi). Impronte:
+`clone_progetto.tgz ffd977b3…10e69ce9` · `clone_dati.tgz 067404c2…f0e919eb`.
 **⚠️ SETTE copie vecchie delle chiavi (`.env.casavip.bak*`) sono state LASCIATE FUORI**, dopo
 aver dimostrato che nessuno le usa (i due compose leggono solo `.env.casavip`, zero riscontri in
 tutto l'albero) e che il ripristino gira verde senza. **Non sono state cancellate: restano sul
