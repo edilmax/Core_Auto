@@ -256,6 +256,69 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
   (le regole che non dichiarano come si controllano) · `dichiarato()` (il numero scritto nel
   cartello) · `main()`. STATO: **acceso**, eseguito dall'hook a ogni sessione.
 
+### ✅ FATTO 2026-08-04 (12) — `fase184_marca_temporale`: i 29 BUCHI CHIUSI, 22 GUARDIE NUOVE
+- **Il numero, prima e dopo:** `80 uccisi · 29 SOPRAVVISSUTI · 3 ignoti` -> **`108 UCCISI ·
+  1 equivalente dimostrato · 3 gia' sorvegliati · 0 BUCHI VERI`** su 112 punti mutabili.
+  Ogni guardia **vista ROSSA sul suo mutante** prima di essere contata buona.
+- **22 guardie nuove** in `test_fase184_marca_temporale.py`, in cinque famiglie: il lettore
+  DER/ASN.1, `interpreta_risposta`, l'archivio delle marche, il giro completo, e i due
+  registri d'errore. Nessuna riga di produzione toccata: un buco di mutazione non si chiude
+  cambiando il codice — il codice e' giusto — si chiude scrivendo il test che manca.
+- **I 3 «NON ESAMINATI» non erano buchi.** `test_i_TRE_COSTRUTTORI_finiscono_sempre` li
+  sorvegliava gia' con un filo a timeout; lo strumento non lo vedeva perche' esegue il MODULO
+  INTERO e gli altri test che chiamano quelle funzioni si piantano per sempre sul mutante.
+  Dimostrato iniettando il mutante ed eseguendo SOLO quella guardia: **3 su 3 ROSSI**, con
+  base verde verificata prima. E' un limite di OSSERVAZIONE dello strumento, non una lacuna.
+- **Riga 136 dichiarata EQUIVALENTE** in `EQUIVALENTI_DICHIARATI`, con dimostrazione PER
+  ESAURIMENTO: `<` e `<=` sugli interi differiscono solo su `valore == 0`, e la riga
+  immediatamente precedente della stessa funzione fa `return` per lo zero. ⚠️ Non e' un
+  «oggi non si raggiunge» alla D19 (quello e' vietato perche' la premessa sta altrove): qui
+  la premessa e' la riga sopra ed e' **inchiodata** dalla guardia esistente su
+  `_der_intero(0)`. Se qualcuno togliesse quel `return`, quella guardia diventa rossa lo
+  stesso giorno e la dichiarazione va rifatta.
+- ⚠️ **Trappola di lettura, misurata:** un giro con SOLO 4 sorveglianti mostra 3 falsi
+  sopravvissuti (righe 319, 615, 741). Muoiono per mano dei 5 esclusi: verificato, 4 mutanti
+  su 4 uccisi col set completo. **Il numero vero si legge sempre con tutti e nove.**
+- 💡 **DUE FINTI VERDI TROVATI SCRIVENDO LE GUARDIE, e valgono oltre questo modulo:**
+  1. `assertIsNotNone(record.exc_info)` **non vede** `exc_info=False`: la libreria mette nel
+     record il valore `False`, non `None`, e l'asserzione passa. Il mutante e' sopravvissuto
+     e me l'ha detto. Serve `assertTrue`. (Nota lasciata nel punto esatto del test.)
+  2. La guardia esistente sulle lunghezze assurde passava **per il motivo sbagliato**: usava
+     cinque byte di lunghezza con VALORE enorme, quindi veniva fermata dal controllo `fine > n`
+     e non dal tetto `conta > 4` che doveva provare. Con un valore piccolo il tetto e' l'unica
+     difesa — ed e' cosi' che i due mutanti sono morti.
+
+### ✅ FATTO 2026-08-04 (11) — `fase184_marca_temporale` MISURATO: 29 BUCHI VERI su 112 punti
+- **Il numero, e non e' bello:** `80 uccisi · 29 SOPRAVVISSUTI · 3 NON ESAMINATI` su 112 punti
+  mutabili. **Copertura reale 71%.** I 3 non esaminati (righe 122, 140, 159) sono ignoti, NON
+  uccisi: contarli fra gli uccisi gonfierebbe il punteggio con guasti che nessuno ha visto morire.
+- **I 29 buchi per famiglia:** 14 interruttori (`True`↔`False`: 376 379 401 465 536 631 676 681
+  712 763 764 781) · 9 condizioni logiche (`and`↔`or`: 197 205 298 375 378 488 616 620 655) ·
+  6 confini (`<`↔`<=`, `>`↔`>=`: 136 197 205 226 258 391).
+- **Cosa vuol dire (e cosa NON vuol dire):** i test sono verdi e il modulo funziona. Vuol dire
+  che se una di quelle 29 righe cambiasse — errore, riscrittura, o un mutante lasciato dentro —
+  **la suite resterebbe verde**. In un modulo che decide se una marca temporale e' QUALIFICATA,
+  un interruttore invertito dichiara qualificata una marca che non lo e': e' la differenza fra
+  una prova che in giudizio sposta l'onere sulla controparte (eIDAS art. 41) e un file inerte.
+  **Trovare un buco non e' chiuderlo: le 29 guardie restano DA SCRIVERE.**
+- **METODO, e serve saperlo perche' il giro unico NON funziona in questo ambiente** (tre
+  tentativi da ~90 minuti, tre interruzioni, e le prime due hanno lasciato un file da ZERO byte).
+  Due passi:
+  1. **~10 min** — 112 punti con i **4** sorveglianti che esercitano davvero il modulo →
+     77 uccisi, 32 SOSPETTI, 3 ignoti. Meno test = piu' facile sopravvivere: **candidati**.
+  2. **~52 min** — i soli sospetti contro **tutti e 9**, generando i mutanti sulle sole 31 righe
+     con `genera_mutanti(sorgente, righe_ammesse=...)` — la stessa funzione del modo `--diff`,
+     mai una copia — da uno script **usa-e-getta nella cartella temporanea**: nessun file nuovo
+     nel progetto (Regola Zero 3). Base VERDE verificata prima di rompere (D18). Rete
+     anti-interruzione attiva: il file di produzione resta protetto anche se lo script muore.
+     Aggiungere i 5 sorveglianti mancanti ha ucciso **3** sospetti su 32.
+  3. ⛔ **`python -u` obbligatorio**: senza, l'uscita resta in memoria e un'interruzione la
+     cancella. E' il motivo per cui i primi due tentativi non hanno lasciato NIENTE.
+- **Le due trappole dello strumento, scoperte sul campo:** `--modulo <nome>` **senza `.py`** fa
+  stampare «0 sopravvissuti» con **uscita 0** senza aver mutato niente (uno strumento che non
+  puo' misurare deve fermarsi, non dare un numero — difetto APERTO); e i valori di serie
+  (45 minuti, 6 killer alfabetici su 9) danno un punteggio parziale e piu' ottimista del vero.
+
 ### ✅ FATTO 2026-08-03 (10) — LA RETE DEL GIUDICE COPRIVA 2 PUNTI SU 3
 - **Difetto vivo nello strumento, terza occorrenza in quattro giorni** (31 lug · 1 ago · 3 ago).
   `collaudi/mutazione_prodotto.py` rompe un file di produzione in **tre** punti. `_apri_traccia`

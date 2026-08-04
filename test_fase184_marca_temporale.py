@@ -578,6 +578,38 @@ class TestGiroCompleto(unittest.TestCase):
         self.assertEqual(len(riuscite), 1,
                          "ma senza archiviare doppioni dello stesso rango")
 
+    def test_il_RIPIEGO_GIA_PRESENTE_si_dichiara_riuscito_e_NON_qualificato(self):
+        """Righe 763-764, trovate scoperte dalla mutazione il 2026-08-04.
+
+        Quando in archivio c'e' gia' un ripiego e il nuovo tentativo torna ancora di rango
+        inferiore, il giro NON archivia un doppione e restituisce
+        `{"ok": True, "saltato": "ripiego_gia_presente", "qualificata": False}`.
+
+        Sono due campi, e sbagliarne uno ha conseguenze opposte:
+        · `ok` a False farebbe credere che la marcatura di oggi sia FALLITA, quando invece
+          la prova c'e' gia' -- e chi legge il registro cerchera' un guasto inesistente;
+        · `qualificata` a True direbbe che abbiamo una prova QUALIFICATA quando abbiamo solo
+          un ripiego, e si smetterebbe di riprovare per ottenere quella vera. In giudizio e'
+          la differenza fra l'art. 41 eIDAS e una data che ci siamo scritti da soli.
+        """
+        primo = mt.marca_i_registri(self.a, accettazioni=_Registro(), finanza=_Finanza(),
+                                    giorno="2026-07-21", url="http://tsa.finta",
+                                    trasporto=self._rete_buona)
+        self.assertTrue(primo["ok"])
+        self.assertFalse(primo["qualificata"], "il primo giro doveva dare un RIPIEGO")
+
+        r = mt.marca_i_registri(self.a, accettazioni=_Registro(), finanza=_Finanza(),
+                                giorno="2026-07-21", url="http://tsa.finta",
+                                trasporto=self._rete_buona)
+        self.assertEqual("ripiego_gia_presente", r.get("saltato"),
+                         "il secondo ripiego doveva essere SALTATO, non archiviato")
+        self.assertIs(True, r["ok"],
+                      "un ripiego gia' presente e' stato dichiarato FALLIMENTO: si cerchera' "
+                      "un guasto che non esiste, e la prova c'e' gia'")
+        self.assertIs(False, r["qualificata"],
+                      "un RIPIEGO e' stato dichiarato QUALIFICATO: si smetterebbe di "
+                      "riprovare, e in causa varrebbe come una data scritta da noi")
+
     def test_una_qualificata_puo_AFFIANCARSI_a_un_ripiego(self):
         """Archivio append-only: la prova migliore si aggiunge, non sostituisce."""
         from test_marca_qualificata import _token_qualificato
@@ -882,6 +914,474 @@ class TestIMattoniDelFormatoDEVONOFinireEDireIlVero(unittest.TestCase):
         r = mt.costruisci_richiesta(IMPRONTA, 12345)
         self.assertTrue(r.startswith(b"\x30"), "la richiesta non e' piu' una SEQUENCE DER")
         self.assertIn(IMPRONTA, r, "l'impronta non e' piu' dentro la richiesta")
+
+
+class TestIBuchiDelLettoreTrovatiDallaMUTAZIONE(unittest.TestCase):
+    """I PUNTI CHE LA MUTAZIONE HA TROVATO SCOPERTI (2026-08-04).
+
+    Campagna sul modulo intero: 112 punti mutabili, 29 SOPRAVVISSUTI -- cioe' 29 righe che
+    si potevano cambiare senza che NESSUNO dei nove file di test se ne accorgesse. Non
+    significa che il codice sia sbagliato: significa che se un giorno una di quelle righe
+    cambiasse -- per errore, per una riscrittura, o per un mutante lasciato dentro come il
+    2026-08-03 -- la suite resterebbe VERDE.
+
+    Qui si chiudono i sei del LETTORE DI BYTE. Ogni prova e' stata costruita calcolando a
+    mano i byte che distinguono il codice giusto dal mutante, e VISTA ROSSA sul mutante
+    prima di essere considerata buona.
+
+    ⚠️ Si interrogano le funzioni DIRETTAMENTE, mai attraverso `interpreta_risposta`: quello
+    e' avvolto in un `try/except` che ingoia tutto, e sei guardie scritte cosi' il 2026-08-01
+    non uccisero nemmeno un mutante. Provare attraverso uno strato che nasconde gli errori
+    non prova quello strato.
+    """
+
+    def test_una_SEQUENCE_VUOTA_in_forma_lunga_e_valida(self):
+        """`j + conta > n` (riga 205). Il tetto `conta > 4` era gia' sorvegliato; QUESTO
+        confronto no. Col mutante `>=`, un elemento i cui byte di lunghezza arrivano
+        esattamente in fondo al pacchetto viene RIFIUTATO anche se e' perfettamente valido.
+
+        `30 81 00` = SEQUENCE vuota, lunghezza 0 dichiarata in forma lunga su 1 byte:
+        n=3, j=2, conta=1 -> j+conta = 3 = n. Col `>` originale passa, col `>=` muore.
+        """
+        t = mt._leggi_tlv(b"\x30\x81\x00", 0)
+        self.assertIsNotNone(t, "rifiutata una SEQUENCE VUOTA in forma lunga, che e' valida")
+        self.assertEqual((0x30, 3, 3, 3), t, "letta male: contenuto vuoto, elemento finito a 3")
+
+    def test_CINQUE_byte_di_lunghezza_sono_rifiutati_ANCHE_se_il_valore_e_piccolo(self):
+        """I due `or` di riga 205, e sono il caso piu' istruttivo di tutta la campagna.
+
+        Una guardia esisteva gia' (`test_le_LUNGHEZZE_ASSURDE_in_forma_lunga_sono_rifiutate`)
+        e usava `30 85 01 02 03 04 05`: cinque byte di lunghezza, ma con un VALORE enorme.
+        Col mutante quel caso viene rifiutato lo stesso -- non dal tetto `conta > 4`, ma dal
+        controllo successivo `fine > n`. **Passava per il motivo sbagliato**, ed e' per questo
+        che i due mutanti sopravvivevano a tutti e nove i file di test.
+
+        Qui la lunghezza sta ancora su cinque byte ma vale 2: nessun altro controllo puo'
+        salvarla, e solo il tetto `conta > 4` la ferma.
+        `30 85 | 00 00 00 00 02 | 01 02` -> n=9, conta=5, j+conta=7 <= 9.
+        """
+        self.assertIsNone(mt._leggi_tlv(b"\x30\x85\x00\x00\x00\x00\x02\x01\x02", 0),
+                          "accettata una lunghezza su CINQUE byte: il tetto di quattro non "
+                          "ferma piu' niente, e un pacchetto malformato entra nel lettore")
+
+    def test_un_elemento_che_NON_AVANZA_viene_fermato_DAVVERO(self):
+        """`if t[3] <= i: break` in `_figli` (riga 226) -- ramo DIFENSIVO.
+
+        Oggi non si raggiunge, perche' `_leggi_tlv` restituisce sempre una fine maggiore
+        dell'inizio. Ma la D19 vieta di dichiararlo equivalente per questo: «oggi non si
+        raggiunge PER MERITO DI UN'ALTRA FUNZIONE, e' una conclusione con una premessa».
+        Lo stato impossibile si costruisce a mano, adesso, che costa tre righe.
+
+        La guardia esistente usa `b"\\x30\\x00"*6`, elementi che avanzano di 2 byte: prova
+        che `_figli` finisce, ma NON attraversa mai questo ramo -- ed e' per questo che il
+        mutante sopravviveva.
+        """
+        import threading
+        vero = mt._leggi_tlv
+        self.addCleanup(setattr, mt, "_leggi_tlv", vero)
+        # un lettore che dichiara di aver finito ESATTAMENTE dove era iniziato
+        mt._leggi_tlv = lambda dati, i: (0x30, i, i, i)
+
+        esito = {}
+
+        def _corri():
+            esito["v"] = list(mt._figli(b"\x30\x00\x30\x00", 0, 4))
+
+        t = threading.Thread(target=_corri, daemon=True)
+        t.start()
+        t.join(3.0)
+        self.assertFalse(t.is_alive(),
+                         "_figli NON SI FERMA su un elemento che non avanza: il lettore "
+                         "girerebbe per sempre sullo stesso byte e il sito si pianterebbe")
+
+    def test_il_TETTO_di_profondita_e_a_24_COMPRESO(self):
+        """`if profondita > 24` (riga 258). Col mutante `>=` il tetto scende a 23 e un
+        OCTET STRING annidato a 24 livelli -- struttura legittima -- non verrebbe piu'
+        trovato: il TSTInfo dentro il CMS sparirebbe e il token risulterebbe illeggibile."""
+        dentro = b"\x04\x01X"                       # OCTET STRING con dentro 'X'
+        for _ in range(24):                          # 24 SEQUENCE annidate intorno
+            dentro = b"\x30" + mt._der_lunghezza(len(dentro)) + dentro
+        trovati = mt._tutti_octet_string(dentro, 0, len(dentro))
+        self.assertIn(b"X", trovati,
+                      "un OCTET STRING a 24 livelli non viene piu' trovato: il tetto e' "
+                      "sceso di uno e il TSTInfo dentro un CMS annidato sparirebbe")
+
+    def test_un_ORARIO_SENZA_LA_Z_non_e_una_prova(self):
+        """`if not t.endswith("Z") or len(t) < 15` (riga 298).
+
+        Nei token RFC 3161 la `Z` finale significa «questo orario e' UTC». Col mutante `and`,
+        una data lunga abbastanza ma SENZA la Z viene ACCETTATA: si prenderebbe per buono un
+        orario di cui non si conosce il fuso. Una marca temporale di cui non sai il fuso non
+        prova niente -- ed e' proprio l'ora certificata che in giudizio sposta l'onere della
+        prova sulla controparte (eIDAS art. 41).
+        """
+        self.assertIsNone(mt._gen_time_a_epoch(b"202608031200000"),
+                          "accettato un orario SENZA la Z finale: fuso ignoto, prova nulla")
+        self.assertIsNotNone(mt._gen_time_a_epoch(b"20260803120000Z"),
+                             "l'altra direzione: un orario CORRETTO deve continuare a passare")
+
+    def test_UN_SOLO_zero_non_chiude_un_contenuto_a_lunghezza_indefinita(self):
+        """Primo `and` di riga 197. Il terminatore del BER indefinito e' DUE zeri, non uno.
+        Col mutante `or`, un singolo `00` chiuderebbe il contenuto in anticipo e il lettore
+        restituirebbe una struttura TRONCATA come se fosse valida.
+
+        `30 80 | 04 01 41 | 00 05 | 00 00`: a meta' c'e' uno `00` seguito da `05`. Il codice
+        giusto NON lo prende per terminatore, prova a leggere un elemento con tag 00 e
+        lunghezza 5 che sborda -> rifiuta tutto. Il mutante lo prende per terminatore e
+        restituisce un elemento.
+        """
+        self.assertIsNone(mt._leggi_tlv(b"\x30\x80\x04\x01\x41\x00\x05\x00\x00", 0),
+                          "un solo 00 ha chiuso il contenuto indefinito: struttura troncata "
+                          "accettata come valida")
+
+    def test_lo_zero_del_terminatore_deve_essere_il_PRIMO_dei_due(self):
+        """Secondo `and` di riga 197. Col mutante la condizione diventa
+        `(dati[k]==0 and k+1<n) or dati[k+1]==0`: basta che il byte SUCCESSIVO sia zero, e
+        il contenuto si chiude nel posto sbagliato.
+
+        `30 80 | 04 00 | 00 00`: a k=2 c'e' `04` (tag) seguito da `00` (lunghezza zero).
+        Il codice giusto legge l'OCTET STRING vuoto e trova il terminatore a k=4.
+        Il mutante si ferma subito a k=2 e restituisce un contenuto vuoto.
+        """
+        t = mt._leggi_tlv(b"\x30\x80\x04\x00\x00\x00", 0)
+        self.assertEqual((0x30, 2, 4, 6), t,
+                         "il contenuto indefinito si e' chiuso nel posto sbagliato: un byte "
+                         "di LUNGHEZZA zero e' stato scambiato per il terminatore")
+
+    def test_il_terminatore_a_UN_BYTE_dalla_fine_non_fa_uscire_dai_byte(self):
+        """`k + 1 < n` di riga 197. Col mutante `<=`, quando manca un solo byte alla fine il
+        lettore legge `dati[k+1]` FUORI dal pacchetto: IndexError, cioe' un'eccezione grezza
+        invece di un rifiuto pulito. Una risposta malformata di una TSA non deve poter far
+        esplodere il lettore.
+
+        `30 80 | 41 00 | 00`: l'ultimo `00` sta esattamente all'ultimo byte.
+        """
+        self.assertIsNone(mt._leggi_tlv(b"\x30\x80\x41\x00\x00", 0),
+                          "il lettore non ha rifiutato pulitamente un contenuto indefinito "
+                          "troncato a un byte dalla fine")
+
+
+class TestIBuchiDelGIROTrovatiDallaMUTAZIONE(unittest.TestCase):
+    """Gli ultimi punti scoperti: la richiesta alla TSA, l'apertura dell'archivio e i due
+    registri d'errore (campagna 2026-08-04).
+
+    Due di questi sono `exc_info=True` nei log. Sembra un dettaglio e non lo e': senza la
+    traccia dell'eccezione, il registro dice CHE qualcosa e' andato storto ma non DOVE --
+    ed e' l'unica cosa che resta quando il guasto e' gia' passato. E' la Regola Ferrea 9,
+    «l'osservabile debole e' un difetto».
+    """
+
+    def _registri_del_logger(self):
+        """Attacca un raccoglitore al logger del modulo e lo stacca a fine prova."""
+        import logging
+        raccolti = []
+
+        class _Raccoglitore(logging.Handler):
+            def emit(self, record):
+                raccolti.append(record)
+
+        h = _Raccoglitore()
+        mt.logger.addHandler(h)
+        self.addCleanup(mt.logger.removeHandler, h)
+        return raccolti
+
+    def test_una_richiesta_NON_COSTRUIBILE_e_un_fallimento_dichiarato(self):
+        """Riga 465. Col mutante `True`, un'impronta di lunghezza sbagliata -- cioe' una
+        richiesta che non si e' nemmeno riusciti a costruire -- verrebbe restituita come
+        marca OTTENUTA. Si archivierebbe un successo per una richiesta mai partita."""
+        r = mt.chiedi_marca(b"troppo-corta")
+        self.assertFalse(r["ok"],
+                         "una richiesta MAI COSTRUITA e' stata dichiarata riuscita")
+        self.assertEqual("richiesta_non_costruita", r["motivo"])
+
+    def test_nessun_allarme_se_una_TSA_qualificata_consegna_una_marca_QUALIFICATA(self):
+        """Riga 488: `if not esito["qualificata"] and indirizzo in TSA_QUALIFICATE`.
+
+        Col mutante `or` l'allarme suona anche quando va tutto bene, perche' basta che
+        l'indirizzo sia nell'elenco dei qualificati. La Regola Ferrea 10 e' esplicita: un
+        FALSO ALLARME e' un difetto quanto un allarme mancato, perche' insegna a ignorare
+        i segnali -- e questo segnala che un prestatore ha perso la qualifica eIDAS.
+        """
+        vero = mt.e_qualificata
+        self.addCleanup(setattr, mt, "e_qualificata", vero)
+        mt.e_qualificata = lambda token: True          # la marca E' qualificata
+        indirizzo = mt.TSA_QUALIFICATE[0]
+        raccolti = self._registri_del_logger()
+        r = mt.chiedi_marca(IMPRONTA, url=indirizzo,
+                            trasporto=lambda u, d, t: _risposta(IMPRONTA, nonce=None))
+        self.assertTrue(r["ok"], "la marca non e' stata ottenuta: prova mal costruita")
+        avvisi = [x for x in raccolti if "NON ha piu'" in str(x.getMessage())]
+        self.assertEqual([], avvisi,
+                         "ALLARME FALSO: e' stato segnalato che un prestatore ha perso la "
+                         "qualifica eIDAS mentre la marca era regolarmente qualificata")
+
+    def test_l_archivio_IN_MEMORIA_si_usa_anche_da_un_altro_filo(self):
+        """Riga 536: `check_same_thread=False`. Col mutante `True`, l'archivio in memoria
+        esplode appena viene usato da un filo diverso da quello che l'ha aperto -- ed e'
+        esattamente cio' che fa il giro di marcatura, che gira in un filo di fondo."""
+        import threading
+        mem = mt.crea_archivio_marche(":memory:")
+        self.assertIsNotNone(mem)
+        esito = {}
+
+        def _da_un_altro_filo():
+            try:
+                esito["v"] = mem.conta()
+            except Exception as e:                     # noqa: BLE001
+                esito["e"] = e
+
+        t = threading.Thread(target=_da_un_altro_filo)
+        t.start()
+        t.join(10)
+        self.assertNotIn("e", esito,
+                         "l'archivio in memoria esplode se usato da un altro filo: %r"
+                         % (esito.get("e"),))
+        self.assertEqual(0, esito.get("v"))
+
+    def test_un_archivio_che_non_si_apre_lascia_la_TRACCIA_dell_errore(self):
+        """Riga 712: `exc_info=True`. Col mutante `False` il registro dice «archivio non
+        inizializzato» e basta: nessuna traccia, nessun perche'. Chi legge il log domani
+        mattina sa che e' successo e non sa dove guardare."""
+        raccolti = self._registri_del_logger()
+        a = mt.crea_archivio_marche(os.path.join(tempfile.mkdtemp(), "non", "esiste", "x.db"))
+        self.assertIsNone(a, "un percorso impossibile ha comunque aperto un archivio")
+        righe = [x for x in raccolti if "archivio non inizializzato" in str(x.getMessage())]
+        self.assertTrue(righe, "l'archivio non si e' aperto e NESSUNO l'ha scritto")
+        # ⛔ NON `assertIsNotNone`: con `exc_info=False` la libreria mette dentro il record
+        # il valore `False`, non `None` -- e `assertIsNotNone(False)` PASSA. Ci sono cascato
+        # scrivendo questa stessa guardia il 2026-08-04, e il mutante e' sopravvissuto.
+        self.assertTrue(righe[0].exc_info,
+                        "il registro dice CHE e' fallito ma non DOVE: la traccia "
+                        "dell'eccezione e' stata persa (exc_info=%r)" % (righe[0].exc_info,))
+
+    def test_un_giro_che_esplode_lascia_la_TRACCIA_dell_errore(self):
+        """Riga 781: `exc_info=True` nel guscio che ISOLA il giro di marcatura. Questo e'
+        il piu' importante dei due: il giro e' avvolto in un `except Exception` apposta per
+        non far cadere il sito, quindi la traccia nel log e' l'UNICA cosa che resta di un
+        guasto la' dentro. Senza, un difetto puo' vivere per mesi dicendo solo «fallito»."""
+        raccolti = self._registri_del_logger()
+        r = mt.marca_i_registri(archivio=None, giorno="2026-08-04")   # archivio None -> esplode
+        self.assertFalse(r["ok"])
+        righe = [x for x in raccolti if "giro fallito" in str(x.getMessage())]
+        self.assertTrue(righe, "il giro e' fallito e nessuno l'ha scritto")
+        # ⛔ vedi la nota nella guardia gemella: `exc_info=False` finisce nel record come
+        # `False`, e un `assertIsNotNone` non lo vedrebbe.
+        self.assertTrue(righe[0].exc_info,
+                        "il giro e' fallito lasciando solo «fallito»: senza la traccia "
+                        "dell'eccezione un difetto qui dentro e' invisibile "
+                        "(exc_info=%r)" % (righe[0].exc_info,))
+
+
+class TestIBuchiDellArchivioTrovatiDallaMUTAZIONE(unittest.TestCase):
+    """I punti scoperti dentro l'ARCHIVIO delle marche (campagna 2026-08-04).
+
+    L'archivio e' il posto dove la prova legale viene conservata. Un guasto qui non fa
+    cadere il sito: fa conservare una prova SBAGLIATA, e ce ne si accorge in causa.
+    Le guardie che seguono controllano il CONTENUTO archiviato, non solo che la scrittura
+    sia andata a buon fine -- «ha scritto» e «ha scritto la cosa giusta» sono due domande
+    diverse, e i mutanti vivono nello scarto.
+    """
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.a = mt.crea_archivio_marche(os.path.join(self.d, "marche.db"))
+
+    def _ok(self):
+        return mt.interpreta_risposta(_risposta(IMPRONTA, nonce=5), IMPRONTA, 5)
+
+    def test_la_POLICY_dichiarata_dall_Autorita_viene_archiviata(self):
+        """Riga 616: `str(esito.get("policy") or "")`. Col mutante `and` il campo diventa
+        SEMPRE vuoto. La policy e' l'OID con cui l'Autorita' dichiara sotto quale regime ha
+        emesso la marca -- e' lei che distingue una marca QUALIFICATA da una ordinaria.
+        Perderla significa archiviare una prova di cui non si sa piu' il regime."""
+        r = self.a.scrivi(giorno="2026-08-04", ambito="registri", impronta=IMPRONTA.hex(),
+                          canonico="X",
+                          esito={"ok": True, "policy": "0.4.0.19422.1.1", "seriale": "7",
+                                 "gen_time": 1780000000, "token": b"\x30\x03\x02\x01\x00"})
+        self.assertTrue(r["ok"])
+        self.assertEqual("0.4.0.19422.1.1", self.a.elenco()[0]["policy"],
+                         "la policy dell'Autorita' NON e' stata archiviata: la marca resta "
+                         "senza il regime sotto cui e' stata emessa")
+
+    def test_il_MOTIVO_di_un_fallimento_viene_archiviato_per_intero(self):
+        """Riga 620: `str(esito.get("motivo") or "errore")`. Col mutante `and` ogni
+        fallimento viene archiviato come generico «errore». Il registro degli insuccessi
+        serve a capire PERCHE' una marca non c'e': appiattirlo lo rende inutile."""
+        self.a.scrivi(giorno="2026-08-04", ambito="registri", impronta=IMPRONTA.hex(),
+                      canonico="X", esito={"ok": False, "motivo": "tsa_irraggiungibile"})
+        self.assertEqual("tsa_irraggiungibile", self.a.elenco()[0]["errore"],
+                         "il motivo vero e' stato sostituito da un generico «errore»: il "
+                         "registro dei fallimenti non dice piu' cosa e' successo")
+
+    def test_una_SECONDA_marca_riuscita_nello_stesso_giorno_si_dichiara_DUPLICATO(self):
+        """Riga 631: `{"ok": ok, "id": None, "duplicato": True}`. Col mutante `False` chi
+        chiama non sa piu' distinguere «l'ho gia' fatto ieri» da «non l'ho fatto»: il giro
+        riproverebbe all'infinito, o peggio si convincerebbe di non avere la marca."""
+        self.a.scrivi(giorno="2026-08-04", ambito="registri", impronta=IMPRONTA.hex(),
+                      canonico="X", esito=self._ok())
+        r2 = self.a.scrivi(giorno="2026-08-04", ambito="registri", impronta=IMPRONTA.hex(),
+                           canonico="X", esito=self._ok())
+        self.assertIs(True, r2.get("duplicato"),
+                      "una seconda marca riuscita nello stesso giorno non viene dichiarata "
+                      "duplicato: chi chiama non sa piu' se la marca c'e' gia'")
+
+    def test_una_riga_SENZA_token_non_restituisce_byte_vuoti_ma_NULLA(self):
+        """Riga 655: `if r is None or not r["token_b64"]: return None`. Col mutante `and`
+        una riga senza token restituisce `b""` invece di `None`. Sono cose diverse: `None`
+        dice «non c'e' nessuna prova», `b""` e' una prova VUOTA -- e chi la salva su file
+        produce un `.tsr` da zero byte che sembra un token e non lo e'."""
+        r = self.a.scrivi(giorno="2026-08-04", ambito="registri", impronta=IMPRONTA.hex(),
+                          canonico="X", esito={"ok": False, "motivo": "rete_giu"})
+        self.assertIsNone(self.a.token(r["id"]),
+                          "una riga senza token ha restituito byte vuoti invece di NULLA: "
+                          "si genererebbe un file .tsr vuoto spacciato per una prova")
+
+    def test_verificare_una_riga_SENZA_token_dice_NO(self):
+        """Riga 676: `return {"ok": False, "motivo": "senza_token"}`. Col mutante `True`
+        una riga priva di token verrebbe dichiarata VERIFICATA. E' il peggiore di questa
+        famiglia: la macchina direbbe «prova valida» dove non c'e' nessuna prova."""
+        r = self.a.scrivi(giorno="2026-08-04", ambito="registri", impronta=IMPRONTA.hex(),
+                          canonico="X", esito={"ok": False, "motivo": "rete_giu"})
+        v = self.a.verifica(r["id"])
+        self.assertFalse(v["ok"], "una riga SENZA TOKEN e' stata dichiarata VERIFICATA")
+        self.assertEqual("senza_token", v["motivo"])
+
+    def test_un_archivio_ILLEGGIBILE_dice_NO(self):
+        """Riga 681: `return {"ok": False, "motivo": "archivio_illeggibile"}`. Col mutante
+        `True`, una riga la cui impronta non e' nemmeno esadecimale -- cioe' un archivio
+        corrotto o manomesso -- verrebbe dichiarata valida senza aver confrontato niente."""
+        r = self.a.scrivi(giorno="2026-08-04", ambito="registri",
+                          impronta="questa-non-e-esadecimale", canonico="X",
+                          esito=self._ok())
+        v = self.a.verifica(r["id"])
+        self.assertFalse(v["ok"],
+                         "un archivio ILLEGGIBILE e' stato dichiarato verificato: si "
+                         "confermerebbe una prova senza averla potuta confrontare")
+        self.assertEqual("archivio_illeggibile", v["motivo"])
+
+
+class TestIBuchiDiInterpretaRispostaTrovatiDallaMUTAZIONE(unittest.TestCase):
+    """I punti scoperti dentro `interpreta_risposta` (campagna 2026-08-04).
+
+    ⚠️ La lezione del 2026-08-01 vale ancora: guardie generiche su questo ingresso non
+    uccidono niente, perche' qualunque guasto esce comunque come «non valido». Qui NON si
+    controlla solo `ok is False`: si pretende anche il MOTIVO ESATTO. E' la differenza fra
+    «ha detto no» e «ha detto no PER LA RAGIONE GIUSTA» -- e i mutanti vivono precisamente
+    in quello scarto, perche' cambiano la ragione lasciando intatto il no.
+    """
+
+    IMPR = b"\x11" * 32
+
+    def test_il_primo_campo_DEVE_essere_lo_stato(self):
+        """Righe 375-376. `if not campi or campi[0][0] != 0x30: return manca_stato`.
+
+        `30 03 | 02 01 00` = SEQUENCE che comincia con un INTEGER invece che con la
+        SEQUENCE di stato. Col mutante `and` il controllo non scatta e si prosegue a leggere
+        una struttura che non c'e'; col mutante `False -> True` la risposta malformata
+        verrebbe dichiarata VALIDA.
+        """
+        r = mt.interpreta_risposta(b"\x30\x03\x02\x01\x00", self.IMPR, 1)
+        self.assertFalse(r["ok"], "una risposta senza il campo di stato e' stata ACCETTATA")
+        self.assertEqual("manca_stato", r["motivo"],
+                         "il motivo non e' quello giusto: il controllo sul primo campo non "
+                         "ha scattato e l'errore e' stato scoperto piu' avanti, per caso")
+
+    def test_una_SEQUENCE_VUOTA_non_fa_esplodere_la_lettura_dello_stato(self):
+        """Sempre riga 375, l'altra meta': con `and` al posto di `or`, una risposta con
+        ZERO campi arriverebbe a `campi[0][0]` su una lista vuota -- IndexError grezzo
+        invece di un rifiuto pulito."""
+        r = mt.interpreta_risposta(b"\x30\x00", self.IMPR, 1)
+        self.assertFalse(r["ok"])
+        self.assertEqual("manca_stato", r["motivo"])
+
+    def test_lo_stato_DEVE_essere_un_INTERO(self):
+        """Righe 378-379. `if not stato_campi or stato_campi[0][0] != 0x02`.
+
+        `30 04 | 30 02 | 04 00` = la SEQUENCE di stato c'e', ma dentro ha un OCTET STRING
+        invece dell'INTEGER dello stato. Col mutante `and` si prosegue e si legge come
+        numero qualcosa che non lo e'; col `False -> True` la risposta viene dichiarata buona.
+        """
+        r = mt.interpreta_risposta(b"\x30\x04\x30\x02\x04\x00", self.IMPR, 1)
+        self.assertFalse(r["ok"], "uno stato che non e' un INTERO e' stato ACCETTATO")
+        self.assertEqual("stato_illeggibile", r["motivo"],
+                         "il motivo non e' quello giusto: si e' letto come numero un campo "
+                         "che non e' un numero, e l'errore e' emerso altrove")
+
+    def test_lo_stato_DEVE_esserci_DAVVERO(self):
+        """Sempre righe 378-379: SEQUENCE di stato VUOTA -> `stato_campi` vuota."""
+        r = mt.interpreta_risposta(b"\x30\x02\x30\x00", self.IMPR, 1)
+        self.assertFalse(r["ok"])
+        self.assertEqual("stato_illeggibile", r["motivo"])
+
+    def test_la_ricerca_del_token_NON_esce_dal_contenuto_della_SEQUENCE(self):
+        """Riga 391: `while i < t[2]`. Col mutante `<=` il ciclo fa UN GIRO IN PIU' quando
+        l'ultimo elemento finisce esattamente dove finisce la SEQUENCE -- e legge byte che
+        stanno FUORI dal contenuto dichiarato, prendendoli per il token.
+
+        Significa archiviare come «marca temporale» dei byte che l'Autorita' non ha mai messo
+        li' dentro. Non e' un errore di stile: e' una prova costruita con materiale estraneo.
+
+        Come il 401, e' distinguibile solo costruendo a mano lo stato che `_figli` e questo
+        ciclo non possono avere naturalmente (usano lo stesso lettore, quindi concordano
+        sempre). La D19 impone di provarlo comunque: il ramo esiste per il giorno in cui
+        smettessero di concordare.
+        """
+        vero_figli = mt._figli
+        self.addCleanup(setattr, mt, "_figli", vero_figli)
+        #  SEQUENCE(5) { SEQUENCE(3){ INTEGER 0 } }  +  04 01 41  FUORI dal contenuto
+        dati = b"\x30\x05" + b"\x30\x03\x02\x01\x00" + b"\x04\x01\x41"
+        n = {"c": 0}
+
+        def _figli_che_dichiara_due_campi(d, a, b):
+            n["c"] += 1
+            if n["c"] == 1:
+                return [(0x30, 4, 7), (0x04, 9, 10)]   # due campi: si supera «manca_token»
+            return vero_figli(d, a, b)
+
+        mt._figli = _figli_che_dichiara_due_campi
+        r = mt.interpreta_risposta(dati, self.IMPR, 1)
+        self.assertFalse(r["ok"])
+        self.assertEqual("token_illeggibile", r["motivo"],
+                         "il ciclo e' uscito dal contenuto della SEQUENCE e ha preso per "
+                         "token dei byte che le stanno FUORI: si archivierebbe come prova "
+                         "materiale che l'Autorita' non ha mai emesso")
+
+    def test_se_il_token_NON_si_riesce_a_isolare_la_risposta_e_RIFIUTATA(self):
+        """Righe 391 e 400-401 -- ramo DIFENSIVO, e la D19 vieta di dichiararlo equivalente
+        solo perche' «oggi non si raggiunge»: oggi non si raggiunge PER MERITO di `_figli`,
+        che concorda sempre con il ciclo che segue. Il giorno che smettessero di concordare,
+        questo ramo e' l'unica cosa fra una risposta illeggibile e un token inventato.
+
+        Lo stato impossibile si costruisce a mano: `_figli` dichiara DUE campi, ma il lettore
+        di elementi si rifiuta di rileggerli. Il ciclo non trova il secondo elemento e deve
+        rifiutare -- non proseguire con un token mai isolato.
+        """
+        vero_figli, vero_tlv = mt._figli, mt._leggi_tlv
+        self.addCleanup(setattr, mt, "_figli", vero_figli)
+        self.addCleanup(setattr, mt, "_leggi_tlv", vero_tlv)
+        dati = b"\x30\x05\x30\x03\x02\x01\x00"     # SEQUENCE { SEQUENCE { INTEGER 0 } }
+        chiamate = {"tlv": 0, "figli": 0}
+
+        def _tlv_bugiardo(d, i):
+            chiamate["tlv"] += 1
+            if chiamate["tlv"] == 1:          # la prima lettura, quella d'ingresso, e' vera
+                return vero_tlv(d, i)
+            return None                        # poi il lettore «non vede piu' niente»
+
+        def _figli_bugiardo(d, a, b):
+            chiamate["figli"] += 1
+            if chiamate["figli"] == 1:
+                return [(0x30, 4, 7), (0x04, 7, 7)]    # dichiara DUE campi: c'e' un token
+            return [(0x02, 6, 7)]                       # lo stato e' un INTERO regolare
+
+        mt._figli = _figli_bugiardo
+        mt._leggi_tlv = _tlv_bugiardo
+        r = mt.interpreta_risposta(dati, self.IMPR, 1)
+        self.assertFalse(r["ok"],
+                         "il token non e' stato isolato eppure la risposta e' stata "
+                         "dichiarata VALIDA: si archivierebbe una prova inesistente")
+        self.assertEqual("token_illeggibile", r["motivo"],
+                         "il motivo non dice che il token e' illeggibile")
 
 
 class TestIlLettoreDiBYTENonSiFaIngannare(unittest.TestCase):

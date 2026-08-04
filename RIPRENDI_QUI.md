@@ -72,8 +72,64 @@ VPS in `/var/www/bookinvip/`.** Cancellare configurazione di produzione e' decis
 fondatore. `.env` nudo invece C'E': non si e' potuto dimostrare che sia inutile.
 
 ### ⚠️ COSA RESTA APERTO (niente di questo e' un incendio)
-1. **La campagna di mutazione su `fase184_marca_temporale.py` NON e' mai stata completata**:
-   112 punti, 9 sorveglianti, ~90 minuti stimati. Due tentativi interrotti.
+1. ✅ **MISURATO il 2026-08-04** (dopo TRE tentativi interrotti). Risultato, ed e' pesante:
+   ```
+   PRIMA (misura del 2026-08-04)        DOPO (stessa giornata, buchi chiusi)
+     80  uccisi                          108  UCCISI
+     29  SOPRAVVISSUTI (buchi veri)        1  EQUIVALENTE dimostrato (riga 136)
+      3  NON ESAMINATI                     3  gia' sorvegliati, DIMOSTRATO
+   copertura reale 71%                  ─────
+                                           0  BUCHI VERI
+   ```
+   ✅ **CHIUSI TUTTI E 29 il 2026-08-04**, con **22 guardie nuove** in
+   `test_fase184_marca_temporale.py`, ognuna **vista ROSSA sul suo mutante** prima di essere
+   contata buona (mai una scritta dopo la riparazione e dichiarata valida).
+   - **I 3 «non esaminati» non erano buchi**: la guardia esisteva gia'
+     (`test_i_TRE_COSTRUTTORI_finiscono_sempre`, che usa un filo con timeout apposta). Lo
+     strumento non la vedeva perche' esegue il MODULO INTERO e gli altri test che chiamano
+     quelle funzioni si piantano per sempre. Dimostrato iniettando il mutante ed eseguendo
+     SOLO quel test: 3 su 3 rossi.
+   - **La riga 136 e' equivalente**, dichiarata in `EQUIVALENTI_DICHIARATI` con dimostrazione
+     PER ESAURIMENTO (non «non e' osservabile»): `<` e `<=` differiscono solo su `valore==0`,
+     e la riga immediatamente precedente nella stessa funzione fa `return` per lo zero. La
+     premessa e' inchiodata da una guardia esistente su `_der_intero(0)`: se qualcuno
+     togliesse quel `return`, diventerebbe rossa e la dichiarazione andrebbe rifatta.
+   - ⚠️ **Un giro con SOLO 4 sorveglianti mostra 3 falsi sopravvissuti** (righe 319, 615, 741):
+     muoiono per mano dei 5 esclusi. Verificato: 4 mutanti su 4 uccisi con tutti e nove.
+     Il numero vero si legge sempre col set completo.
+   **I 29 buchi, per famiglia:** 14 interruttori (`True`↔`False`: righe 376 379 401 465 536 631
+   676 681 712 763 764 781) · 9 condizioni logiche (`and`↔`or`: 197 205 298 375 378 488 616 620
+   655) · 6 confini (`<`↔`<=`, `>`↔`>=`: 136 197 205 226 258 391).
+   ⚠️ **Non significa che il modulo sia rotto**: i test sono verdi e il codice fa il suo lavoro.
+   Significa che se un giorno una di quelle 29 righe cambiasse — per errore, per una riscrittura,
+   o per un mutante lasciato dentro — **la suite resterebbe verde e nessuno se ne accorgerebbe**.
+   In un modulo che decide «questa marca temporale e' QUALIFICATA si' o no», un interruttore
+   invertito significa dichiarare qualificata una marca che non lo e'. E' la differenza fra una
+   prova che in giudizio sposta l'onere sulla controparte e un file senza valore.
+   💡 **DUE LEZIONI PAGATE SUL CAMPO, e valgono oltre questo modulo:**
+   - **Una mia guardia era un FINTO VERDE.** Per provare che la traccia dell'errore non si
+     perde avevo scritto `assertIsNotNone(record.exc_info)`. Ma `logger.error(...,
+     exc_info=False)` non mette `None` nel record: ci mette **`False`**, e
+     `assertIsNotNone(False)` **passa**. Il mutante e' sopravvissuto e me l'ha detto. Serve
+     `assertTrue`. La nota e' scritta nel punto esatto del test.
+   - **Un test puo' passare per il motivo sbagliato.** La guardia sulle lunghezze assurde
+     usava `30 85 01 02 03 04 05`: cinque byte di lunghezza, ma con VALORE enorme, quindi
+     veniva rifiutata dal controllo successivo e non dal tetto che doveva provare. Con un
+     valore piccolo (`30 85 00 00 00 00 02 01 02`) il tetto e' l'unica cosa che la ferma —
+     ed e' cosi' che i due mutanti sono morti.
+   **COME e' stato ottenuto** (un giro unico da 90 minuti in questo ambiente NON arriva in fondo:
+   tre tentativi, tre interruzioni). Due passi:
+   - PASSO 1 (~10 min): 112 punti con i **4** sorveglianti che esercitano davvero il modulo
+     (`test_fase184_marca_temporale`, `test_marca_qualificata`, `test_marca_temporale_server`,
+     `test_qualifica_catena`) → 77 uccisi, 32 SOSPETTI, 3 ignoti. Meno test = piu' facile
+     sopravvivere: **candidati, non verdetto**.
+   - PASSO 2 (~52 min): i soli sospetti ri-provati contro **tutti e 9**, con
+     `genera_mutanti(sorgente, righe_ammesse=...)` (la stessa funzione del modo `--diff`) da uno
+     script usa-e-getta nella cartella temporanea — nessun file nuovo nel progetto. Base VERDE
+     verificata prima di rompere (D18). Aggiungere i 5 sorveglianti mancanti ha ucciso **3**
+     sospetti su 32: gli altri 29 reggono a tutto.
+   - ⛔ **`python -u` e' obbligatorio**: senza, l'uscita resta in memoria e un'interruzione lascia
+     un file da ZERO byte (successo due volte).
    ⛔ Invocazione giusta: `--modulo fase184_marca_temporale.py` **col `.py`** — senza estensione
    lo strumento stampa «0 sopravvissuti» e **esce 0 senza aver mutato niente** (difetto suo:
    uno strumento che non puo' misurare deve fermarsi, non dare un numero).

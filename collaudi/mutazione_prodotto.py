@@ -555,6 +555,21 @@ def test_che_nominano(percorso):
 #    diverse, e dichiararne una avrebbe reso cieca anche l'altra. Una dichiarazione vale SOLO
 #    dove e' stata dimostrata.
 EQUIVALENTI_DICHIARATI = {
+    ("fase184_marca_temporale.py", "_der_intero", "if valore < 0:", "<", "<="):
+        "DIMOSTRATO PER ESAURIMENTO il 2026-08-04, non dedotto. `<` e `<=` sugli interi "
+        "differiscono in UN SOLO punto: valore == 0. E lo zero non puo' arrivare a questa "
+        "riga, perche' la riga IMMEDIATAMENTE PRECEDENTE nella stessa funzione fa "
+        "`if valore == 0: return _der(0x02, b'\\x00')` -- un return incondizionato. Quindi "
+        "a questa riga vale sempre valore != 0, e sull'intero dominio residuo le due "
+        "condizioni coincidono. Nessun ingresso puo' distinguerle: non c'e' niente da "
+        "distinguere. "
+        "⚠️ NON e' un «oggi non si raggiunge» alla D19: quello e' vietato perche' la "
+        "premessa sta in un'ALTRA funzione e puo' cadere senza che nessuno se ne accorga. "
+        "Qui la premessa e' la riga sopra, nella stessa funzione, ed e' gia' inchiodata da "
+        "una guardia esistente: `test_fase184_marca_temporale.TestDER."
+        "test_intero_zero_e_piccoli` pretende che `_der_intero(0)` valga b'\\x02\\x01\\x00'. "
+        "Se qualcuno togliesse quel return, quella guardia diventerebbe rossa lo stesso "
+        "giorno e questa dichiarazione andrebbe rifatta.",
     ("fase199_invarianti.py", "dimostra_formalmente",
      "mx = z3.If(a1 > b1, a1, b1)", ">", ">="):
         "DIMOSTRATO CON Z3 il 2026-07-31, non osservato: chiesto al risolutore se esista un "
