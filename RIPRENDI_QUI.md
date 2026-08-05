@@ -11,6 +11,152 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## ✅ 2026-08-05 (5) — FATTA: IL GIUDICE HA IMPARATO `is` E `in` (+1279 punti veri)
+
+### ✅ ESITO
+Ordine D20 rispettato. **Prima la rete**, poi l'estensione: `test_OGNI_MUTANTE_GENERATO_COMPILA`
+prende OGNI mutante di OGNI modulo di produzione, lo applica in memoria e pretende che sia
+Python valido — **7.658 mutanti su 152 moduli, 2 minuti a ogni suite** (costo dichiarato). E'
+la rete contro il modo esatto in cui un giudice mente: un taglio sbagliato di un carattere fa
+morire il killer di errore di sintassi, e il mutante viene contato UCCISO.
+Poi la guardia sui quattro operatori nuovi, **vista rossa** (`[] != [4 attesi]`), poi le
+quattro righe in `_CONFRONTI`. Zero produzione.
+```
+fase162   mutabili 82 -> 91 · rinunce 31 -> 22 · TOTALE 113 invariato (nessun punto inventato)
+campagna  91 provati · 89 UCCISI · 2 sopravvissuti (gli stessi due gia' dichiarati)
+          -> tutti e 9 i punti nuovi UCCISI, compresa la riga 263
+```
+
+### 🔴 CIO' CHE QUESTA ESTENSIONE HA SCOPERCHIATO, e non lo aveva chiesto nessuno
+Insegnare `is`/`in` al giudice ha fatto comparire **1279 punti in tutta la macchina** che prima
+per lo strumento **non esistevano**. Fra questi, **98 stanno nei 7 moduli gia' setacciati nei
+giorni scorsi**:
+```
+fase184_marca_temporale        28   fase177_financial_controller   24
+fase88_registro_host           21   fase199_invarianti             14
+fase180_bunker                  5   fase160_escrow_garanzia         4
+fase179_rate_limit              2                    TOTALE su 7:  98
+```
+⚠️ **Quindi lo «ZERO BUCHI» di `fase184` del 2026-08-04 NON E' PIU' COMPLETO**, e neanche il
+«34 su 35» di `fase160`. Non e' una regressione e quei moduli non sono peggiorati: **e' il
+metro che si e' allungato**, e quei punti c'erano da sempre. Un numero vecchio misurato con un
+metro corto va riscritto, non difeso.
+▶️ **Ne discende il prossimo lavoro, in ordine di denaro:** ripassare `fase177` (24) e
+`fase160` (4) — sono i soldi — poi `fase184` (28, la prova legale dell'ora) e
+`fase88` (21, identita' e accessi).
+
+---
+
+## 🎯 2026-08-05 (5) — DICHIARATO PRIMA DI APRIRLO: INSEGNARE AL GIUDICE `is` E `in`
+
+**Scopo (una frase):** i 9 punti di `fase162` (e **1290** in tutta la macchina) che lo strumento
+**dichiara** di non saper rompere — `is`, `is not`, `in`, `not in` — diventano punti VERI,
+generati e provati come tutti gli altri. Via del fondatore: «sì procedi», 2026-08-05.
+
+**Perche' ora.** Dopo il setaccio su `fase162` il conto e' 80 uccisi su 82 **provabili**, ma i
+punti veri sono **113**: 31 lo strumento non li sa nemmeno rompere. Non e' che siano difficili
+da sorvegliare — e' che il **generatore non sa scrivere quel guasto**. Dei 31: 9 operatori
+sconosciuti (guasto UNIVOCO: `is`->`is not`, `in`->`not in`), 14 dentro confronti a catena
+(serve scegliere QUALE dei due operatori tagliare), 8 a cavallo di due righe (non sa dove sia
+il carattere e **rinuncia invece di indovinare**, che e' la scelta giusta).
+**Si parte dai 9**, dove il guasto non ha ambiguita'. Le altre due famiglie restano aperte e
+dichiarate: si toccano solo dopo, e con piu' rete.
+
+**⛔ IL RISCHIO, ed e' il motivo dell'ordine.** Il generatore TAGLIA CARATTERI dentro un file
+di produzione. Se sbaglia il taglio di un carattere il mutante **non compila**, il test muore
+per errore di sintassi invece che per aver visto il guasto, e lo strumento lo conta
+**«ucciso»**: il punteggio sale e la protezione non c'e'. E' il modo esatto in cui un giudice
+mente, ed e' gia' successo in questo progetto (il «42 su 42» del 2026-08-01).
+**Quindi la prima guardia non e' sui mutanti nuovi: e' che OGNI mutante generato COMPILI.**
+Vale per quelli di oggi e per ogni estensione futura.
+
+**FILE AMMESSI, e nessun altro:**
+- `collaudi/mutazione_prodotto.py` (l'elenco degli operatori del generatore)
+- `test_pipeline_ci.py` (le due guardie)
+- `test_fase162_hold_pagamento.py` (le guardie sui punti nuovi che risultassero scoperti)
+- `REGISTRO_INGEGNERIA.md` e `RIPRENDI_QUI.md` a lavoro finito
+⛔ **ZERO file di produzione.**
+
+---
+
+## ✅ 2026-08-05 (4) — FATTO: IL SETACCIO SU `fase162_pagamenti_pendenti` (i pagamenti in attesa)
+
+### ✅ ESITO — da 27 buchi a 2, in tre misure
+```
+PASSO 1   3 killer veloci    82 provati ·  7 uccisi · 75 sopravvissuti   <- CANDIDATI
+PASSO 2  11 sorveglianti     82 provati · 55 uccisi · 27 BUCHI VERI      <- 48 erano FALSI
+FINALE   +26 guardie nuove   82 provati · 80 uccisi ·  2 dichiarati
+DOPO `is`/`in` (lavoro 5)    91 provati · 89 uccisi ·  2 dichiarati
+```
+**Quarantotto candidati erano falsi**: senza il passo 2 sarebbero diventati 48 guardie inutili,
+scritte per difendere punti gia' difesi. E' tutta li' la ragione del metodo in due passi.
+Produzione **ripristinata byte-identica** dopo ogni giro (sha256 verificato), traccia chiusa.
+
+**Le quattro guardie che contano di piu':**
+- **riga 154** — `salva_stripe_session` promette nel suo commento «merge, MAI sovrascrive il
+  resto», e nessuno lo verificava: col guasto il corpo della prenotazione veniva riscritto da
+  zero e **spariva il prezzo concordato col cliente**.
+- **riga 397** — cancellare una prenotazione **inesistente** ESPLODEVA invece di rispondere
+  «no», dentro il percorso che applica la **penale all'host**.
+- **riga 236** — un soggiorno di **zero notti** entrava nel conto **DAC7**: il numero di
+  locazioni dichiarato al fisco non corrispondeva alla realta'.
+- **riga 263** — scritta **a mano, col guasto iniettato**, perche' lo strumento non sapeva
+  rompere `not in`: e' il cancello che decide se un pagamento puo' essere SCRITTO. Pretende
+  che dai due stati confermabili si scriva e da **tutti** gli altri no. Se qualcuno
+  riallargasse quella lista — successo davvero il 2026-08-03 — diventa rossa lo stesso giorno.
+
+**⛔ I DUE SOPRAVVISSUTI RESTANO APERTI E DICHIARATI, non coperti con guardie finte:**
+`:106` (`> -> >=` su `tassa_cents`) e `:507` (`and -> or` in `da_invitare_recensione`). In
+tutti e due i percorsi convergono sullo stesso risultato osservabile: una guardia li' passerebbe
+sia col codice sano sia col codice rotto, cioe' sarebbe teatro. ⚠️ Non li dichiaro
+**equivalenti**: quella e' una dichiarazione definitiva che richiede una dimostrazione (B6), e
+qui c'e' solo una traccia del codice. Meglio due sopravvissuti aperti che una cecita' dichiarata.
+
+**⛔ E UNA COSA CHE HO SBAGLIATO IO, scritta perche' non si ripeta.** Leggendo il modulo
+**mentre la campagna girava** ho letto `or` dove il codice ha `and`, e ho annunciato un difetto
+di produzione che non esisteva: in quell'istante il giudice teneva quel file **rotto di
+proposito**, e ho guardato il mutante credendo di guardare il codice. E' la versione umana del
+«falso killer» chiuso poche ore prima nelle guardie. **Durante una campagna un file di
+produzione non si legge dal disco.**
+
+---
+
+## 🎯 2026-08-05 (4) — DICHIARATO PRIMA DI APRIRLO: IL SETACCIO SU `fase162_pagamenti_pendenti`
+
+**Scopo (una frase):** chiedere, punto per punto, «se questo si rompesse, un test se ne
+accorgerebbe?» sul modulo che tiene i **pagamenti in attesa** — soldi di un ospite gia'
+impegnati ma non ancora incassati. Via del fondatore: «via», 2026-08-05.
+
+**Il denominatore, misurato e onesto** (lo strumento riparato oggi):
+```
+82 mutabili + 31 rinunce dichiarate = 113 punti · 13 file di test lo nominano
+```
+Stamattina lo stesso comando avrebbe detto 97: i 16 in piu' sono i punti che il generatore
+non sa rompere e che fino a oggi non dichiarava.
+
+**FILE AMMESSI, e nessun altro:**
+- `test_fase162_hold_pagamento.py` e `test_fase162_logger.py` — le guardie nuove (D10: i posti
+  esistono gia', non si creano file)
+- `REGISTRO_INGEGNERIA.md` e `RIPRENDI_QUI.md` a lavoro finito
+⛔ **ZERO file di produzione.** Un buco di mutazione **non si chiude cambiando il codice** — il
+codice e' giusto — si chiude scrivendo il test che manca. Se emergesse un difetto VERO di
+produzione ci si ferma e si chiede «autorizzato».
+
+**⛔ DUE PERICOLI SPECIFICI DI QUESTO MODULO, da non ripetere:**
+1. **`test_mutation_money` NON puo' stare fra i killer.** E' fra i 13 sorveglianti, ma rompe
+   lui stesso `fase162` con la propria traccia: due processi che mutano lo STESSO file di
+   produzione insieme. Va escluso a mano.
+2. **Lotti brevi, e stato verificato fra un lotto e l'altro.** Oggi i giri lunghi sono morti 3
+   volte su 6, e uno ha lasciato un guasto dentro proprio questo file (`:263`, la whitelist
+   degli stati allargata). La rete l'ha preso, ma la finestra di esposizione si tiene corta:
+   dopo OGNI giro, `git status` e la traccia PRIMA di rilanciare.
+
+**Metodo in due passi (non facoltativo):** pochi killer -> **candidati**; poi i candidati
+ri-provati contro **TUTTI** i sorveglianti -> buchi veri. Con 5 killer su `fase160` i
+sopravvissuti risultavano 23, con 13 erano 20: **tre erano falsi.**
+
+---
+
 ## ✅ 2026-08-05 (3) — FATTA: L'ALLARME DEL GUARDIANO NON E' PIU' QUASI SPENTO
 
 **⛔ TOCCA LA PRODUZIONE. Il fondatore ha scritto «autorizzato» il 2026-08-05**, dopo che il
@@ -317,12 +463,15 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-python -m unittest discover -b     ->  Ran 5394 tests · OK (skipped=4) · uscita 0
+python -m unittest discover -b     ->  Ran 5422 tests · OK (skipped=4) · uscita 0
 ```
-Il conto torna alla riga: **5374 + 20 prove nuove = 5394** — 14 sulla guardia dello schedario
-(4+2+3+3+2), 4 sul generatore, 2 sull'allarme del Guardiano. I giri precedenti, ognuno col
-suo conto esatto: `Ran 5385` con 11, `Ran 5388 in 3622.712s` con 14,
-`Ran 5389 in 3803.435s` con 15, `Ran 5392 in 3035.959s` con 18.
+Il conto torna alla riga: **5374 + 48 prove nuove = 5422** — 14 sulla guardia dello schedario
+(4+2+3+3+2), 6 sul generatore, 2 sull'allarme del Guardiano, **26 sui pagamenti in attesa**.
+I giri precedenti, ognuno col suo conto esatto: `Ran 5385` con 11, `Ran 5388` con 14,
+`Ran 5389` con 15, `Ran 5392` con 18, `Ran 5394 in 2122.191s` con 20.
+⚠️ **La suite si e' allungata di ~2 minuti** e il motivo e' dichiarato: la rete
+`test_OGNI_MUTANTE_GENERATO_COMPILA` applica e ricompila 7.658 mutanti su 152 moduli a ogni
+esecuzione. E' il prezzo per poter estendere il giudice senza scommettere sul taglio.
 
 ### 🟠 UN NUMERO CHE NON TORNA, scritto invece di essere arrotondato
 La base senza le prove nuove e' **5374**, mentre i documenti dichiaravano **5379** su

@@ -1205,6 +1205,18 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
 
         Le altre tre rinunce (`a_cavallo`, `catena`, `non_trovato`) erano gia' contate: questa
         no, ed era l'unica che riguardava una FAMIGLIA INTERA di operatori.
+
+        ⛔ IL VALORE ATTESO E' CAMBIATO NEL POMERIGGIO DEL 2026-08-05, e non per far passare
+        una modifica: perche' lo strumento e' MIGLIORATO. `is`/`is not`/`in`/`not in` adesso
+        li sa rompere davvero (vedi `test_IL_GENERATORE_SA_ROMPERE_ANCHE_is_e_in`), quindi
+        non sono piu' una rinuncia: sono punti provati. Contarli ancora fra le rinunce
+        significherebbe contarli DUE volte nel denominatore.
+        La ragione per cui questa prova esiste — **un generatore che tace sulle proprie
+        rinunce mente sulla copertura** — non e' cambiata di una virgola, e qui sotto e'
+        verificata sulle famiglie che restano rinunciate: le catene e gli operatori a
+        cavallo di due righe. Il verdetto complessivo (mutanti + rinunce = punti veri) e'
+        inchiodato su TUTTA la macchina da `test_IL_DENOMINATORE_DICHIARATO_COINCIDE_CON_UN_
+        ORACOLO_INDIPENDENTE`, che e' la guardia che non si puo' aggirare.
         """
         m = self._motore()
         cavia = ("def f(x, elenco):\n"
@@ -1218,19 +1230,24 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
                  "        return 4\n"
                  "    return 0\n")
         mutanti, saltati = m.genera_mutanti(cavia)
-        self.assertEqual([], [x for x in mutanti if x["tipo"] == "confronto"],
-                         "il generatore dice di saper rompere `is`/`in`: se e' vero questa "
-                         "prova va rifatta di proposito, se no sta producendo un guasto che "
-                         "non sa costruire. Mutanti: %r" % (mutanti,))
-        self.assertEqual(4, saltati.get("operatore_ignoto"),
-                         "QUATTRO operatori che il generatore non sa rompere sono stati "
-                         "saltati IN SILENZIO: il denominatore esce piu' piccolo del vero e "
-                         "un punto mai guardato sembra coperto. E' la D18 punto 3 violata "
-                         "dentro lo strumento che misura. Rinunce dichiarate: %r" % (saltati,))
-        self.assertEqual(4, sum(saltati.values()),
-                         "le rinunce contate non tornano col totale: qualche altra famiglia "
-                         "viene conteggiata due volte o non conteggiata affatto. %r"
-                         % (saltati,))
+        self.assertEqual(4, len([x for x in mutanti if x["tipo"] == "confronto"]),
+                         "i quattro `is`/`in` non vengono piu' rotti: sono tornati a essere "
+                         "punti dichiarati e mai provati. Mutanti: %r" % (mutanti,))
+        self.assertEqual(0, sum(saltati.values()),
+                         "li rompe E li conta ancora fra le rinunce: il denominatore "
+                         "conterebbe due volte gli stessi punti. %r" % (saltati,))
+
+        # ── LA RAGIONE DELLA PROVA, sulle famiglie ANCORA rinunciate ──────────────────
+        # Un confronto a catena resta fuori dalla portata del generatore (due operatori,
+        # e sceglierne uno a caso sarebbe un guasto indovinato). Deve essere CONTATO.
+        _mut, catene = m.genera_mutanti("def g(x):\n    return 0 < x <= 5\n")
+        self.assertEqual(2, catene["catena"],
+                         "una catena con DUE operatori non e' contata per due: il "
+                         "denominatore esce corto e la copertura sembra piu' alta di com'e'. "
+                         "%r" % (catene,))
+        self.assertEqual(2, sum(catene.values()),
+                         "le rinunce non tornano col totale: qualche famiglia viene contata "
+                         "due volte o non contata affatto. %r" % (catene,))
 
     def test_IL_DENOMINATORE_DICHIARATO_COINCIDE_CON_UN_ORACOLO_INDIPENDENTE(self):
         """⛔ ORACOLO INDIPENDENTE (collaudo n.5), su TUTTA la macchina, non su una cavia.
@@ -1310,22 +1327,27 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
         VERDE davanti a tutt'e due le rotture.
         """
         m = self._motore()
-        sorgente = ("def f(x, y, elenco):\n"
-                    "    if x is None or y is None:\n"
+        # Due catene sulla riga 2 (due operatori ciascuna) e una sulla riga 4. Le catene sono
+        # la famiglia che il generatore rinuncia a rompere ANCHE dopo aver imparato `is`/`in`:
+        # con due operatori nella stessa espressione, sceglierne uno sarebbe un guasto
+        # indovinato -- e meglio niente che indovinato.
+        sorgente = ("def f(x, y):\n"
+                    "    if 0 < x <= 5 and 0 < y <= 5:\n"
                     "        return 1\n"
-                    "    if x in elenco:\n"
+                    "    if 0 < x <= 9:\n"
                     "        return 2\n"
                     "    return 0\n")
         _mut, tutto = m.genera_mutanti(sorgente)
-        self.assertEqual(3, tutto["operatore_ignoto"],
-                         "attesi 3 punti rinunciati (due `is` sulla riga 2 e un `in` sulla "
-                         "riga 4): se ne conta 2, il contatore conta le RIGHE invece dei "
-                         "PUNTI e il denominatore torna corto. %r" % (tutto,))
+        self.assertEqual(6, tutto["catena"],
+                         "attesi 6 punti rinunciati (due catene da due operatori sulla riga "
+                         "2, una sulla riga 4): se ne conta meno, il contatore conta le "
+                         "RIGHE o i NODI invece dei PUNTI, e il denominatore torna corto. %r"
+                         % (tutto,))
 
-        # Solo la riga 4 (`x in elenco`) e' nel diff: le rinunce delle righe non toccate NON
-        # devono comparire, o il riepilogo dichiara come «non provato» tutto il resto del file.
+        # Solo la riga 4 e' nel diff: le rinunce delle righe non toccate NON devono comparire,
+        # o il riepilogo dichiara come «non provato» tutto il resto del file.
         _mut, solo_diff = m.genera_mutanti(sorgente, righe_ammesse={4})
-        self.assertEqual(1, sum(solo_diff.values()),
+        self.assertEqual(2, sum(solo_diff.values()),
                          "in modo diff le rinunce sono quelle di TUTTO IL FILE invece che "
                          "delle righe cambiate: la riga «NON PROVATI (dichiarati)» si "
                          "accenderebbe a ogni giro, e un allarme sempre acceso viene spento. "
@@ -1358,6 +1380,118 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
             "il campo `rinunce` c'e' ma vale zero ovunque: sarebbe un ornamento, e sappiamo "
             "per misura che nella macchina ci sono centinaia di punti che il generatore non "
             "sa rompere")
+
+    def test_OGNI_MUTANTE_GENERATO_COMPILA(self):
+        """⛔ LA RETE CHE DEVE ESISTERE PRIMA DI OGNI ESTENSIONE DEL GENERATORE.
+
+        Il generatore TAGLIA CARATTERI dentro un file di produzione. Se sbaglia il taglio di
+        un solo carattere, il mutante **non compila**: il test killer muore per errore di
+        sintassi invece che per aver visto il guasto, e lo strumento lo conta **«UCCISO»**.
+        Il punteggio sale e la protezione non c'e'. E' il modo esatto in cui un giudice mente
+        — la stessa famiglia del «42 su 42» del 2026-08-01, misurato su test gia' rossi.
+
+        Qui si prende OGNI mutante che il generatore propone su OGNI modulo di produzione, lo
+        si applica davvero (in memoria: nessun file toccato) e si pretende che il risultato
+        sia Python valido. E' la rete che rende sicuro estendere l'elenco degli operatori:
+        senza, ogni operatore nuovo e' una scommessa sul taglio.
+
+        ⛔ COSA NON FA (D18 punto 3): non dice che il mutante sia SENSATO, solo che e'
+        sintatticamente valido. Un mutante che compila ma non cambia niente resta un problema
+        diverso (l'equivalenza), e se ne occupa lo schedario.
+        """
+        import ast
+        import glob
+        import os
+        m = self._motore()
+        radice = os.path.dirname(os.path.abspath(__file__))
+        rotti, esaminati, mutanti_totali = [], 0, 0
+        for percorso in sorted(glob.glob(os.path.join(radice, "fase*.py"))
+                               + glob.glob(os.path.join(radice, "main_casavip.py"))):
+            try:
+                sorgente = m._leggi_intatto(percorso)
+                ast.parse(sorgente)
+            except (SyntaxError, OSError, ValueError):
+                continue
+            esaminati += 1
+            mutanti, _saltati = m.genera_mutanti(sorgente)
+            for mu in mutanti:
+                mutanti_totali += 1
+                try:
+                    ast.parse(m.applica_mutante(sorgente, mu))
+                except SyntaxError as e:
+                    rotti.append("  %s:%s  %s -> %s   %s"
+                                 % (os.path.basename(percorso), mu["riga"], mu["vecchio"],
+                                    mu["nuovo"], e))
+                    if len(rotti) >= 10:
+                        break
+            if len(rotti) >= 10:
+                break
+        self.assertGreaterEqual(esaminati, 100,
+                                "esaminati solo %d moduli: la rete sta guardando quasi nulla"
+                                % esaminati)
+        self.assertGreater(mutanti_totali, 1000,
+                           "solo %d mutanti generati in tutta la macchina: il generatore sta "
+                           "producendo troppo poco perche' questo verde valga qualcosa"
+                           % mutanti_totali)
+        self.assertEqual(
+            [], rotti,
+            "DENOMINATORE: %d moduli, %d mutanti applicati e ricompilati. Questi NON sono "
+            "Python valido: il killer morirebbe di errore di sintassi e il giudice li "
+            "conterebbe come UCCISI, cioe' punteggio pieno su protezione assente.\n%s"
+            % (esaminati, mutanti_totali, "\n".join(rotti)))
+
+    def test_IL_GENERATORE_SA_ROMPERE_ANCHE_is_e_in(self):
+        """⛔ I 1290 PUNTI CHE LO STRUMENTO DICHIARAVA DI NON SAPER ROMPERE.
+
+        `is`, `is not`, `in`, `not in` non erano nel suo elenco di operatori: da oggi li
+        DICHIARA fra le rinunce (era la riparazione del 2026-08-05), ma dichiarare non e'
+        provare. Un punto che nessuno prova non e' un punto sicuro.
+
+        Il guasto qui e' UNIVOCO — `is` <-> `is not`, `in` <-> `not in` — e per questo si
+        parte da loro: nessuna ambiguita' su quale carattere tagliare. Le catene
+        (`0 < x <= 5`, due operatori) e gli operatori a cavallo di due righe restano fuori,
+        dichiarati, e si toccheranno con piu' rete.
+
+        ⚠️ IL CASO CHE FA PIU' PAURA, ed e' provato qui sotto: `for s in lista` NON deve
+        diventare `for s not in lista`, che non e' Python valido. Non lo diventa perche' il
+        `for` di una comprensione non e' un confronto (`ast.Compare`) e il generatore guarda
+        l'albero sintattico, non il testo — ma «non succede» va dimostrato, non supposto.
+        """
+        m = self._motore()
+        sorgente = ("def f(x, elenco, righe):\n"
+                    "    if x is None:\n"
+                    "        return 1\n"
+                    "    if x is not None:\n"
+                    "        return 2\n"
+                    "    if x in elenco:\n"
+                    "        return 3\n"
+                    "    if x not in elenco:\n"
+                    "        return 4\n"
+                    "    return [r for r in righe if r]\n")
+        mutanti, saltati = m.genera_mutanti(sorgente)
+        fatti = sorted((mu["vecchio"], mu["nuovo"]) for mu in mutanti)
+        self.assertEqual(
+            [("in", "not in"), ("is", "is not"), ("is not", "is"), ("not in", "in")], fatti,
+            "il generatore non produce i quattro guasti attesi su `is`/`is not`/`in`/`not "
+            "in`: quei punti restano dichiarati e mai provati. Trovati: %r · rinunce: %r"
+            % (fatti, saltati))
+        self.assertEqual(0, saltati["operatore_ignoto"],
+                         "li genera ma li conta ancora fra le rinunce: il denominatore "
+                         "conterebbe due volte gli stessi punti. %r" % (saltati,))
+        # ⛔ E OGNUNO DEI QUATTRO DEVE COMPILARE: `for r in righe` non e' un confronto e non
+        #    va toccato: se lo fosse, `for r not in righe` non sarebbe Python valido.
+        import ast
+        for mu in mutanti:
+            testo = m.applica_mutante(sorgente, mu)
+            try:
+                ast.parse(testo)
+            except SyntaxError as e:
+                self.fail("il mutante %s -> %s alla riga %s non compila (%s):\n%s"
+                          % (mu["vecchio"], mu["nuovo"], mu["riga"], e, testo))
+        self.assertNotIn("for r not in righe", "\n".join(
+            m.applica_mutante(sorgente, mu) for mu in mutanti),
+            "ha mutato il `for` di una comprensione: non e' un confronto, e il risultato non "
+            "sarebbe nemmeno Python valido")
 
     def test_NON_tocca_gli_operatori_dentro_le_stringhe_ne_i_commenti(self):
         """Un `replace` sul testo colpirebbe anche questi. `ast` vede solo il codice VERO."""

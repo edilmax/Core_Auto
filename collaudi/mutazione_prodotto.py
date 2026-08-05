@@ -396,6 +396,20 @@ _CONFRONTI = {
     "LtE":   ("<=", "<", "un minore-o-uguale esclude il confine: errore di un passo"),
     "Gt":    (">", ">=", "un maggiore stretto include il confine: errore di un passo"),
     "GtE":   (">=", ">", "un maggiore-o-uguale esclude il confine: errore di un passo"),
+    # ── INSEGNATI AL GIUDICE IL 2026-08-05 ──────────────────────────────────────────────
+    # Erano 1290 punti in tutta la macchina che lo strumento dichiarava di non saper
+    # rompere: un cancello come `if r["stato"] not in ("in_attesa","scaduto")` -- quello che
+    # decide se un pagamento puo' essere scritto -- non era mai stato messo alla prova.
+    # Si parte da questi quattro perche' il guasto e' UNIVOCO: non c'e' da scegliere quale
+    # carattere tagliare, come invece succede nelle catene (`0 < x <= 5`).
+    # ⛔ La rete che rende sicura questa estensione e' `test_pipeline_ci.
+    # TestGeneratoreDiMutanti.test_OGNI_MUTANTE_GENERATO_COMPILA`: un taglio sbagliato
+    # produce un mutante che non compila, il killer muore di errore di sintassi e il giudice
+    # lo conta UCCISO -- punteggio pieno su protezione assente.
+    "Is":    ("is", "is not", "un «e' proprio quello» diventa «e' un altro»: il ramo si rovescia"),
+    "IsNot": ("is not", "is", "un «e' un altro» diventa «e' proprio quello»: il ramo si rovescia"),
+    "In":    ("in", "not in", "un «e' nell'elenco» diventa «non c'e'»: il cancello si rovescia"),
+    "NotIn": ("not in", "in", "un «non c'e' nell'elenco» diventa «c'e'»: il cancello si rovescia"),
 }
 
 

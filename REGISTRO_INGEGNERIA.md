@@ -370,7 +370,9 @@ indebolita), `collaudi/mutazione_prodotto.py` **+253 −71**,
 `test_fase160_escrow_garanzia.py` **+44 −7**, e **+4 −2 di PRODUZIONE** in
 `fase160_escrow_garanzia.py` (due righe, col «autorizzato» scritto prima). **Zero dipendenze,
 zero file nuovi, zero rilievi di lint nuovi.**
-Suite intera dopo tutto: `Ran 5394 tests · OK (skipped=4) · uscita 0` (**5374 + 20**).
+Suite intera dopo tutto: `Ran 5422 tests · OK (skipped=4) · uscita 0` (**5374 + 48**: 20 del
+mattino, 26 sui pagamenti in attesa, 2 sul giudice). ⚠️ La suite si e' allungata di ~2 minuti,
+e il motivo e' dichiarato: la rete che ricompila 7.658 mutanti a ogni esecuzione.
 Lo schedario passa da **16 voci a 13**: tre dichiarazioni false tolte in una giornata.
 
 | # | Controllo | Come e' stato visto ROSSO |
@@ -434,6 +436,41 @@ dimostrazione sia GIUSTA — se potessero, sarebbero il dimostratore; non esamin
 di una `traccia`; non vedono i tipi troppo larghi diversi da `Any` (es. `object`); e se
 qualcuno **cancellasse** le classi, nulla diventerebbe rosso: il controllo interno impedisce di
 **indebolirle**, non di **toglierle**.
+
+### ✅ FATTO 2026-08-05 (sera) — `fase162_pagamenti_pendenti` SETACCIATO, e il metro allungato
+
+**(a) Il setaccio sui pagamenti in attesa.** Metodo in due passi, obbligatorio:
+`3 killer -> 82 provati, 75 sopravvissuti (CANDIDATI)` · `11 sorveglianti -> 27 BUCHI VERI`
+(**48 candidati erano falsi**) · `+26 guardie -> 80 uccisi` · dopo l'estensione del giudice
+`91 provati · 89 UCCISI · 2 dichiarati`. Zero produzione, impronta sha256 identica a ogni giro.
+Insieme killer DICHIARATO: fuori `test_mutation_money` (rompe lui stesso quel file: due
+processi sullo stesso file di produzione) e `test_pipeline_ci` (lo nomina in due commenti e non
+ne esercita una riga — un sorvegliante di carta).
+Le guardie che pesano: **:154** il corpo della prenotazione veniva riscritto da zero
+agganciando Stripe (spariva il prezzo concordato) · **:397** cancellare una prenotazione
+inesistente ESPLODEVA dentro il percorso della penale host · **:236** un soggiorno di zero
+notti entrava nel conto DAC7 · **:263** scritta a mano col guasto iniettato, il cancello che
+decide se un pagamento puo' essere scritto.
+Due sopravvissuti restano **aperti e dichiarati** (`:106`, `:507`): i percorsi convergono sullo
+stesso risultato osservabile e una guardia sarebbe teatro. Non dichiarati equivalenti: per
+quello serve una dimostrazione (B6), non una traccia.
+
+**(b) Il giudice ha imparato `is`, `is not`, `in`, `not in`.** Erano 1290 punti che dichiarava
+di non saper rompere. Prima la RETE — `test_OGNI_MUTANTE_GENERATO_COMPILA`, che applica e
+ricompila **7.658 mutanti su 152 moduli** (2 minuti a suite, costo dichiarato): senza, un
+taglio sbagliato di un carattere fa morire il killer di sintassi e il giudice conta UCCISO.
+Poi la guardia sui nuovi operatori, vista rossa, poi quattro righe in `_CONFRONTI`.
+⚠️ **CONSEGUENZA CHE RISCRIVE NUMERI VECCHI: +1279 punti veri in tutta la macchina**, di cui
+**98 nei 7 moduli gia' setacciati** (fase184 28 · fase177 24 · fase88 21 · fase199 14 ·
+fase180 5 · fase160 4 · fase179 2). **Lo «zero buchi» di `fase184` del 2026-08-04 non e' piu'
+completo**, e neanche il «34 su 35» di `fase160`: non sono peggiorati, e' il **metro** che si
+e' allungato. ▶️ Da ripassare in ordine di denaro: `fase177` (24), `fase160` (4), poi
+`fase184` (28) e `fase88` (21).
+
+**⛔ UNA COSA SBAGLIATA DA ME, scritta perche' non si ripeta:** ho letto un file di produzione
+**mentre la campagna lo teneva mutato** e ho annunciato un difetto che non esisteva (`or` al
+posto di `and`). E' la versione umana del «falso killer» chiuso poche ore prima nelle guardie.
+**Durante una campagna un file di produzione non si legge dal disco.**
 
 ### 🔴 APERTO 2026-08-04 — CINQUE COSE LASCIATE IN FILA (nate dalla campagna escrow)
 Nessuna e' un incendio; tutte hanno la loro prova gia' fatta, manca l'esecuzione.
