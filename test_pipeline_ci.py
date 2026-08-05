@@ -1187,6 +1187,178 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
         mut, _ = m.genera_mutanti("def f(a, b):\n    return a and b\n")
         self.assertEqual([("and", "or")], [(x["vecchio"], x["nuovo"]) for x in mut])
 
+    def test_CONTA_GLI_OPERATORI_CHE_NON_SA_ROMPERE_invece_di_tacerli(self):
+        """⛔ D18 PUNTO 3: UNO STRUMENTO CHE MISURA DICHIARA COSA NON HA ESAMINATO.
+
+        Il generatore conosce solo i confronti fra numeri (`==`, `!=`, `<`, `<=`, `>`, `>=`).
+        Le espressioni `is`, `is not`, `in`, `not in` non le sa rompere, e fin qui e' una
+        rinuncia legittima: meglio niente che una sostituzione indovinata. Il difetto e' che
+        le saltava **senza contarle** -- e allora il denominatore esce piu' piccolo del vero,
+        e un punto che nessuno ha mai guardato sembra un punto coperto.
+
+        MISURATO IL 2026-08-04 su `fase160_escrow_garanzia`, non dedotto: il denominatore vero
+        era **43 e non 39**. Fra i quattro punti muti c'era `r["stato"] not in attesi`, cioe'
+        **la sola condizione che decide se un movimento di denaro e' permesso**. Non era
+        scoperta -- romperla fa fallire un test esistente -- ma nessuno l'aveva mai messa alla
+        prova, e lo strumento non aveva mai detto di non averla guardata. Sono due cose
+        diverse, e la seconda e' quella che rende un punteggio una decorazione.
+
+        Le altre tre rinunce (`a_cavallo`, `catena`, `non_trovato`) erano gia' contate: questa
+        no, ed era l'unica che riguardava una FAMIGLIA INTERA di operatori.
+        """
+        m = self._motore()
+        cavia = ("def f(x, elenco):\n"
+                 "    if x is None:\n"
+                 "        return 1\n"
+                 "    if x is not None:\n"
+                 "        return 2\n"
+                 "    if x in elenco:\n"
+                 "        return 3\n"
+                 "    if x not in elenco:\n"
+                 "        return 4\n"
+                 "    return 0\n")
+        mutanti, saltati = m.genera_mutanti(cavia)
+        self.assertEqual([], [x for x in mutanti if x["tipo"] == "confronto"],
+                         "il generatore dice di saper rompere `is`/`in`: se e' vero questa "
+                         "prova va rifatta di proposito, se no sta producendo un guasto che "
+                         "non sa costruire. Mutanti: %r" % (mutanti,))
+        self.assertEqual(4, saltati.get("operatore_ignoto"),
+                         "QUATTRO operatori che il generatore non sa rompere sono stati "
+                         "saltati IN SILENZIO: il denominatore esce piu' piccolo del vero e "
+                         "un punto mai guardato sembra coperto. E' la D18 punto 3 violata "
+                         "dentro lo strumento che misura. Rinunce dichiarate: %r" % (saltati,))
+        self.assertEqual(4, sum(saltati.values()),
+                         "le rinunce contate non tornano col totale: qualche altra famiglia "
+                         "viene conteggiata due volte o non conteggiata affatto. %r"
+                         % (saltati,))
+
+    def test_IL_DENOMINATORE_DICHIARATO_COINCIDE_CON_UN_ORACOLO_INDIPENDENTE(self):
+        """⛔ ORACOLO INDIPENDENTE (collaudo n.5), su TUTTA la macchina, non su una cavia.
+
+        Un secondo conteggio, scritto qui e per conto suo, ricalcola da zero quanti punti di
+        logica ci sono in ogni modulo di produzione -- **per OPERATORE, non per nodo** -- e
+        pretende che coincida con quello che il generatore dichiara (mutanti + rinunce). Se i
+        due numeri divergono, lo strumento sta pubblicando un denominatore piu' piccolo del
+        vero: la forma di bugia piu' comoda, perche' fa salire la percentuale di copertura
+        senza che nessuno abbia guardato niente in piu'.
+
+        ⛔ E' NATO DA UN ERRORE MIO, il 2026-08-05. Avevo scritto nel diario che dopo la
+        riparazione delle rinunce silenziose «`fase160` dichiara 43 punti, esattamente il
+        denominatore vero contato a mano il 2026-08-04». Erano d'accordo, ed erano **tutte e
+        due sbagliate**: i punti veri sono 46. Le catene (`0 < limite <= 500`) contengono DUE
+        operatori mutabili e venivano contate come UNA rinuncia sola. Due misure che si
+        confermano a vicenda non sono una verifica -- e la sola cosa che l'ha vista e' stato
+        un conteggio scritto SEPARATAMENTE, che e' esattamente questa prova.
+
+        Misurato prima della riparazione: **44 moduli su 152** dichiaravano un denominatore
+        corto, per **109 punti** in tutta la macchina.
+        """
+        import ast
+        import glob
+        import os
+        m = self._motore()
+        radice = os.path.dirname(os.path.abspath(__file__))
+        corti, esaminati = [], 0
+        for percorso in sorted(glob.glob(os.path.join(radice, "fase*.py"))
+                               + glob.glob(os.path.join(radice, "main_casavip.py"))):
+            try:
+                sorgente = m._leggi_intatto(percorso)
+                albero = ast.parse(sorgente)
+            except (SyntaxError, OSError, ValueError):
+                continue          # non analizzabile: lo dicono altri collaudi, non questo
+            esaminati += 1
+            # L'oracolo: ogni OPERATORE che il generatore sa (o dovrebbe sapere) rompere.
+            veri = (sum(len(n.ops) for n in ast.walk(albero) if isinstance(n, ast.Compare))
+                    + sum(len(n.values) - 1 for n in ast.walk(albero)
+                          if isinstance(n, ast.BoolOp))
+                    + sum(1 for n in ast.walk(albero)
+                          if isinstance(n, ast.Constant) and isinstance(n.value, bool)))
+            mutanti, saltati = m.genera_mutanti(sorgente)
+            dichiarati = len(mutanti) + sum(saltati.values())
+            if dichiarati != veri:
+                corti.append("  %s: punti veri %d, dichiarati %d (mancano %d)"
+                             % (os.path.basename(percorso), veri, dichiarati,
+                                veri - dichiarati))
+        self.assertGreaterEqual(esaminati, 100,
+                                "esaminati solo %d moduli: l'oracolo sta guardando quasi "
+                                "nulla e il suo verde non varrebbe niente" % esaminati)
+        self.assertEqual(
+            [], corti,
+            "DENOMINATORE: %d moduli di produzione esaminati, %d dichiarano MENO punti di "
+            "quanti ne contiene il loro codice, per %d punti in totale. Un punto non "
+            "dichiarato non e' un punto sicuro: e' un punto che nessuno ha mai guardato, e "
+            "tacerlo fa salire la percentuale senza guardare niente in piu'.\n%s"
+            % (esaminati, len(corti), sum(int(r.rsplit(" ", 1)[1].strip(")"))
+                                          for r in corti), "\n".join(corti[:20])))
+
+    def test_LE_RINUNCE_SEGUONO_IL_DIFF_e_si_contano_PER_PUNTO_non_per_riga(self):
+        """⛔ DUE MODI DI SBAGLIARE UN CONTATORE, che la prima cavia non sapeva vedere.
+
+        (1) **Per riga invece che per punto.** Due operatori ignoti sulla STESSA riga sono due
+        rinunce, non una. Se si contasse per riga, il denominatore tornerebbe corto nello
+        stesso modo in cui lo era per le catene.
+
+        (2) **In modo `--diff` le rinunce devono riguardare il DIFF**, non tutto il file. Il
+        giro sul diff genera mutanti solo sulle righe appena cambiate: se le rinunce le conta
+        su tutto il file, il riepilogo dichiara «non provati» centinaia di punti che non
+        c'entrano nulla con la modifica -- e la riga «NON PROVATI (dichiarati)» si accende a
+        OGNI giro. Un allarme sempre acceso viene spento, ed e' un difetto quanto un allarme
+        mancato (regola ferrea 10). Su `fase83_server.py` erano 452 punti di rumore fisso.
+
+        Trovati il 2026-08-05 da una revisione a contesto fresco, che ha misurato che la prima
+        cavia -- quattro operatori, uno per riga, nessuna catena, nessun filtro -- restava
+        VERDE davanti a tutt'e due le rotture.
+        """
+        m = self._motore()
+        sorgente = ("def f(x, y, elenco):\n"
+                    "    if x is None or y is None:\n"
+                    "        return 1\n"
+                    "    if x in elenco:\n"
+                    "        return 2\n"
+                    "    return 0\n")
+        _mut, tutto = m.genera_mutanti(sorgente)
+        self.assertEqual(3, tutto["operatore_ignoto"],
+                         "attesi 3 punti rinunciati (due `is` sulla riga 2 e un `in` sulla "
+                         "riga 4): se ne conta 2, il contatore conta le RIGHE invece dei "
+                         "PUNTI e il denominatore torna corto. %r" % (tutto,))
+
+        # Solo la riga 4 (`x in elenco`) e' nel diff: le rinunce delle righe non toccate NON
+        # devono comparire, o il riepilogo dichiara come «non provato» tutto il resto del file.
+        _mut, solo_diff = m.genera_mutanti(sorgente, righe_ammesse={4})
+        self.assertEqual(1, sum(solo_diff.values()),
+                         "in modo diff le rinunce sono quelle di TUTTO IL FILE invece che "
+                         "delle righe cambiate: la riga «NON PROVATI (dichiarati)» si "
+                         "accenderebbe a ogni giro, e un allarme sempre acceso viene spento. "
+                         "%r" % (solo_diff,))
+
+    def test_IL_CENSIMENTO_DICHIARA_ANCHE_I_PUNTI_CHE_NON_SA_ROMPERE(self):
+        """⛔ IL CENSIMENTO E' LA TABELLA CON CUI SI DECIDE DOVE ATTACCARE, e taceva.
+
+        `censimento()` buttava via le rinunce (`mutanti, _ = genera_mutanti(...)`): la riga
+        piu' citata del progetto -- «punti di logica sbagliabili in tutta la macchina: 6014» --
+        contava solo cio' che il generatore SA rompere, e ometteva **1290 operatori** `is`/`in`
+        piu' le catene. Conseguenza concreta, non teorica: un modulo scritto quasi tutto a
+        `not in` / `is None` compare con pochi «mutanti», non risulta «SCOPERTO», e nessuno lo
+        guarda -- mentre la sua logica non e' mai stata messa alla prova da niente.
+
+        E' la D18 punto 3 lasciata aperta nel consumatore piu' letto, dopo averla chiusa nel
+        generatore. Trovata il 2026-08-05 da una revisione a contesto fresco.
+        """
+        m = self._motore()
+        righe = m.censimento()
+        self.assertGreaterEqual(len(righe), 100,
+                                "il censimento guarda troppo pochi moduli: %d" % len(righe))
+        senza = [r["modulo"] for r in righe if "rinunce" not in r]
+        self.assertEqual([], senza[:10],
+                         "%d moduli su %d non dichiarano le rinunce nel censimento: la "
+                         "tabella con cui si sceglie dove attaccare mostra un denominatore "
+                         "piu' piccolo del vero" % (len(senza), len(righe)))
+        self.assertGreater(
+            sum(r["rinunce"] for r in righe), 0,
+            "il campo `rinunce` c'e' ma vale zero ovunque: sarebbe un ornamento, e sappiamo "
+            "per misura che nella macchina ci sono centinaia di punti che il generatore non "
+            "sa rompere")
+
     def test_NON_tocca_gli_operatori_dentro_le_stringhe_ne_i_commenti(self):
         """Un `replace` sul testo colpirebbe anche questi. `ast` vede solo il codice VERO."""
         m = self._motore()
@@ -1370,12 +1542,27 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
 
     def test_le_RINUNCE_sono_contate_e_dichiarate(self):
         """Un generatore che tace sulle proprie rinunce mente sulla copertura. I confronti
-        a catena si saltano di proposito: devono comparire nel conto."""
+        a catena si saltano di proposito: devono comparire nel conto.
+
+        ⛔ IL VALORE ATTESO E' PASSATO DA 1 A 2 IL 2026-08-05, e non per far passare una
+        modifica: perche' 1 era SBAGLIATO. `a < b < c` e' UN nodo ma contiene DUE operatori,
+        e ognuno dei due e' un punto che si puo' rompere per conto suo. Contando per nodo, il
+        denominatore usciva corto su **44 moduli su 152**, per **109 punti** in tutta la
+        macchina -- e la percentuale di copertura saliva senza che nessuno guardasse niente
+        in piu'. La prova che 2 e' il numero giusto non e' un'opinione ne' il codice nuovo:
+        e' `test_IL_DENOMINATORE_DICHIARATO_COINCIDE_CON_UN_ORACOLO_INDIPENDENTE`, un
+        conteggio scritto SEPARATAMENTE che confronta i due numeri su ogni modulo.
+        """
         m = self._motore()
-        _mut, saltati = m.genera_mutanti("def f(a, b, c):\n    return a < b < c\n")
-        self.assertEqual(1, saltati["catena"],
-                         "un confronto a catena non e' stato contato fra le rinunce: %r"
-                         % (saltati,))
+        mutanti, saltati = m.genera_mutanti("def f(a, b, c):\n    return a < b < c\n")
+        self.assertEqual(2, saltati["catena"],
+                         "un confronto a catena e' contato PER NODO invece che per "
+                         "OPERATORE: `a < b < c` sono DUE punti rinunciati, non uno, e "
+                         "contarne uno solo accorcia il denominatore. %r" % (saltati,))
+        self.assertEqual((0, 2), (len(mutanti), len(mutanti) + sum(saltati.values())),
+                         "l'invariante in piccolo: zero mutanti generati su una catena, e "
+                         "mutanti + rinunce = i punti veri della riga (2). %r"
+                         % (mutanti, ))
 
 
 class TestLaReteAntiInterruzioneNONSiSpegneDaSola(unittest.TestCase):
@@ -1893,6 +2080,971 @@ class TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA(unittest.TestCase):
         self.assertIn("rmtree(riserva", re.sub(r"\s+", " ", blocco),
                       "il modo di prova non ripulisce la riserva: lascerebbe in giro copie "
                       "dei file di produzione a ogni esecuzione della suite")
+
+
+def _righe_dello_schedario(motore, nome_file):
+    """Le righe del file COME SAREBBE SENZA IL GUASTO -- anche mentre una campagna di
+    mutazione lo tiene rotto di proposito. `None` se il file non esiste piu'.
+
+    Serve alle guardie sullo schedario degli equivalenti, che questo file nomina: da quando
+    lo nomina, `test_che_nominano` conta `test_pipeline_ci` fra i SORVEGLIANTI di quei
+    moduli, e una guardia che leggesse il file mutato diventerebbe rossa facendo contare il
+    mutante come «ucciso» senza che nessun comportamento sia stato sorvegliato.
+
+    Il giudice, prima di rompere, mette da parte l'originale nella traccia anti-interruzione.
+    Se una traccia e' aperta su QUESTO file, si giudica quell'originale.
+    ⛔ SOLA LETTURA, sempre: consumare la traccia spegnerebbe la rete di una campagna viva --
+    e' il difetto del 2026-08-03, quando furono i test a spegnerla.
+
+    ⛔ IL BUCO CHE RESTA, dichiarato invece che tappato con un'euristica. Una campagna uccisa
+    lascia la traccia APERTA (succede: due giri su quattro il 2026-08-05). Se in quello stato
+    qualcuno modifica DAVVERO la riga sotto una dimostrazione, i controlli 1 e 3 giudicano
+    l'originale della traccia e restano verdi a torto. Non c'e' un segnale che distingua in
+    modo affidabile «campagna viva» da «traccia dimenticata» -- in tutti e due i casi il file
+    su disco differisce dall'originale -- e una guardia che scegliesse la sorgente «che fa
+    passare il test» sarebbe il peggior disegno possibile. Quel che rende accettabile il buco
+    e' che NON PUO' ATTRAVERSARE UN COMMIT: finche' la traccia esiste,
+    `collaudi/guardia_commit.py` blocca il salvataggio e dice quale file guardare. La finestra
+    cieca vive solo in locale, ed e' rumorosa.
+    """
+    traccia = getattr(motore, "_TRACCIA", "") or ""
+    quale = os.path.join(traccia, "quale.txt")
+    originale = os.path.join(traccia, "originale.txt")
+    if traccia and os.path.exists(quale) and os.path.exists(originale):
+        try:
+            with io.open(quale, encoding="utf-8") as f:
+                sotto_i_ferri = f.read().strip()
+            if (sotto_i_ferri
+                    and os.path.basename(sotto_i_ferri) == os.path.basename(nome_file)):
+                with io.open(originale, encoding="utf-8", newline="") as f:
+                    return f.read().splitlines()
+        except OSError:
+            pass           # la traccia e' un di piu': se non si legge, si giudica il disco
+    pieno = os.path.join(motore.REPO, nome_file)
+    if not os.path.exists(pieno):
+        return None
+    return motore._leggi_intatto(pieno).splitlines()
+
+
+class TestLoSchedarioDegliEquivalenti_1_ANCORAGGIO(unittest.TestCase):
+    """⛔ LA GUARDIA SULLO SCHEDARIO DEGLI EQUIVALENTI — controllo 1 di 4: ANCORAGGIO.
+
+    `EQUIVALENTI_DICHIARATI`, in `collaudi/mutazione_prodotto.py`, e' l'unico posto del
+    progetto dove un errore diventa CECITA' PERMANENTE. Una voce li' dentro dice al giudice
+    della mutazione: «questo guasto non provarlo piu', non c'e' niente da vedere» -- e da
+    quel momento il punteggio esce PIENO senza che quel punto sia mai piu' messo alla prova.
+    Un buco SCOPERTO almeno si vede nel riepilogo; un buco PERDONATO non si vede mai piu'.
+
+    TRE VOCI FALSE IN QUATTRO GIORNI, e nessun test guardava lo schedario:
+      · 31 lug -- fase100 (DAC7), `_n`  provata su 11 ingressi: dominio piu' piccolo della firma
+      · 1 ago  -- fase177/`_cent`      dichiarata perfino con z3, e sbagliata lo stesso
+      · 4 ago  -- fase160/`_cent`      ritirata prima del commit da una revisione fresca
+    Le prime due sono ancora dentro. La **D18 punto 4** -- «il controllo e' a sua volta sotto
+    guardia» -- non era soddisfatta proprio sulla manopola che trasforma un buco in uno zero.
+
+    ⛔ COSA QUESTA GUARDIA NON FA, DETTO PRIMA (D18 punto 3).
+    Non giudica se una dimostrazione sia GIUSTA: se potesse, sarebbe lei il dimostratore.
+    Il 2026-08-05 un controllo a parole chiave scritto al volo ha accusato a torto NOVE
+    dichiarazioni serie -- un controllo debole con verdetto forte e' PEGGIO di nessun
+    controllo, perche' insegna a ignorare i rossi (regola ferrea 10). Restano fuori, e sono
+    i controlli 2, 3 e 4 dello stesso piano: i campi strutturati (`metodo`, `dominio`,
+    `data`, `prova`), il confronto DOMINIO >= FIRMA, e le frasi vietate dal divieto B6.
+
+    QUI si controlla UNA cosa sola, con un confronto ESATTO dove i falsi allarmi non sono
+    possibili: **la voce aggancia ancora qualcosa di vivo?** La chiave e'
+    (file, funzione, testo della riga, vecchio, nuovo), ed e' esattamente cio' che
+    `_e_equivalente` va a cercare. Scritta col TESTO e non col numero, la voce regge se il
+    codice si SPOSTA -- ed e' giusto cosi'. Ma se quella riga e' CAMBIATA, o e' finita in
+    un'altra funzione, o il file non c'e' piu', la voce non descrive piu' niente: o il codice
+    e' cambiato senza rifare la dimostrazione, o e' un residuo. In tutti e due i casi serve
+    l'occhio di una persona, e il modo di chiederlo e' un rosso.
+    """
+
+    @staticmethod
+    def _motore():
+        """Il giudice caricato a parte, con un nome tutto suo: si interroga il modulo VERO,
+        non una copia delle sue regole scritta qui dentro."""
+        import importlib.util
+        p = os.path.join(QUI, "collaudi", "mutazione_prodotto.py")
+        spec = importlib.util.spec_from_file_location("_schedario_equivalenti", p)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    @classmethod
+    def _perche_non_aggancia(cls, motore, chiave):
+        """`None` se la voce aggancia una riga viva; altrimenti il MOTIVO, per esteso.
+
+        Si usa `funzione_di` DEL GIUDICE, non una copia scritta qui: cio' che conta non e' se
+        la riga esiste «secondo il test», ma se la chiave puo' ancora combaciare dentro
+        `_e_equivalente` -- l'unico posto dove una voce fa effetto.
+        """
+        nome_file, funzione, testo, vecchio, _nuovo = chiave
+        righe = _righe_dello_schedario(motore, nome_file)
+        if righe is None:
+            return "il file non esiste piu' nel repository"
+        numeri = [n for n, r in enumerate(righe, 1) if r.strip() == testo]
+        if not numeri:
+            return "nessuna riga del file e' piu' uguale a %r" % testo
+        dentro = [n for n in numeri if motore.funzione_di(righe, n) == funzione]
+        if not dentro:
+            altrove = sorted({motore.funzione_di(righe, n) or "<fuori da ogni funzione>"
+                              for n in numeri})
+            return ("la riga %r esiste ma NON dentro %r: sta in %s (righe %r)"
+                    % (testo, funzione, altrove, numeri))
+        if vecchio not in testo:
+            return ("la riga aggancia, ma il pezzo dichiarato %r non compare piu' in %r: "
+                    "il giudice non generera' mai quel guasto su questa riga"
+                    % (vecchio, testo))
+        return None
+
+    def test_IL_CONTROLLO_SA_DIRE_DI_NO_e_SA_DIRE_DI_SI(self):
+        """⛔ D18 punti 1 e 2: uno strumento che misura prova PRIMA di essere in condizione
+        di misurare, e si prova nelle DUE direzioni.
+
+        Un controllo che rispondesse sempre «va bene» passerebbe anche sullo schedario piu'
+        marcio, e sarebbe la peggiore specie di ornamento: uno che porta il nome di una
+        difesa. Qui il controllo viene messo davanti a una cavia usa-e-getta, fuori dal
+        progetto, dove la verita' e' nota per costruzione: **una voce buona e i QUATTRO modi
+        di essere morta**. Se un domani qualcuno lo indebolisse fino a non saper piu' dire di
+        no, questo test diventerebbe rosso lo stesso giorno.
+
+        Il terzo caso non e' teorico: e' il difetto vero corretto il 2026-08-01. La riga
+        `if v < 0:` compare in DUE funzioni della cavia, esattamente come `if residuo <= 0:`
+        in `fase177`, e dichiararne una non deve rendere cieca l'altra.
+        """
+        motore = self._motore()
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        with io.open(os.path.join(d, "cavia_schedario.py"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            f.write("def paga(v):\n"
+                    "    if v < 0:\n"
+                    "        return 0\n"
+                    "    return v\n"
+                    "\n"
+                    "\n"
+                    "def rimborsa(v):\n"
+                    "    if v < 0:\n"
+                    "        return 1\n"
+                    "    return v\n")
+        motore.REPO = d
+
+        buona = ("cavia_schedario.py", "paga", "if v < 0:", "<", "<=")
+        self.assertIsNone(self._perche_non_aggancia(motore, buona),
+                          "il controllo accusa una voce SANA: un falso allarme insegna a "
+                          "ignorare i rossi, ed e' un difetto quanto un allarme mancato")
+
+        for chiave, pezzo_atteso in (
+                (("mai_esistito.py", "paga", "if v < 0:", "<", "<="),
+                 "non esiste piu'"),
+                (("cavia_schedario.py", "paga", "if v < 999:", "<", "<="),
+                 "nessuna riga del file"),
+                (("cavia_schedario.py", "funzione_sparita", "if v < 0:", "<", "<="),
+                 "NON dentro"),
+                (("cavia_schedario.py", "paga", "if v < 0:", ">=", ">"),
+                 "non compare piu'")):
+            motivo = self._perche_non_aggancia(motore, chiave)
+            self.assertIsNotNone(motivo,
+                                 "il controllo NON vede una voce morta (%r): con questo "
+                                 "buco lo schedario potrebbe marcire in silenzio" % (chiave,))
+            self.assertIn(pezzo_atteso, motivo,
+                          "vede il problema ma lo racconta male: chi legge il rosso deve "
+                          "capire SUBITO perche' la voce e' morta. Voce %r, motivo %r"
+                          % (chiave, motivo))
+
+        # E la diagnosi del terzo caso dice anche DOVE sta davvero quella riga: senza, il
+        # rosso obbliga a rileggersi il file a mano.
+        motivo = self._perche_non_aggancia(
+            motore, ("cavia_schedario.py", "funzione_sparita", "if v < 0:", "<", "<="))
+        self.assertIn("paga", motivo)
+        self.assertIn("rimborsa", motivo,
+                      "non elenca tutte le funzioni in cui quella riga vive davvero: %r"
+                      % motivo)
+
+    def test_NON_DIVENTA_UN_KILLER_FALSO_durante_una_campagna_di_mutazione(self):
+        """⛔ DIFETTO DI QUESTA GUARDIA STESSA, trovato il 2026-08-05 PRIMA che facesse danno.
+
+        Questo file nomina `fase177_financial_controller`, quindi `test_che_nominano` lo conta
+        fra i suoi SORVEGLIANTI. Durante una campagna il giudice
+        rompe di proposito una riga di quel modulo e lancia anche questa suite: se la guardia
+        leggesse il file ROTTO direbbe «la voce non aggancia piu' niente», diventerebbe rossa,
+        e il giudice conterebbe quel mutante come UCCISO. Ucciso da cosa? Da un test che ha
+        notato che il SORGENTE e' cambiato, non che il COMPORTAMENTO e' sbagliato. E' il
+        gonfiaggio del punteggio -- esattamente cio' che questo progetto caccia da giorni, e
+        sarebbe entrato dalla porta di una guardia scritta per impedirlo.
+
+        Il rimedio NON e' spegnere la guardia: una guardia che si spegne da sola e' la lezione
+        del 2026-08-03, quando furono i test a spegnere la rete anti-interruzione. E' leggere
+        la sorgente VERA. Il giudice, prima di rompere, mette da parte l'originale nella
+        traccia; se una traccia e' aperta su QUEL file, la guardia giudica quell'originale.
+        ⛔ In SOLA LETTURA: consumare la traccia vera spegnerebbe la rete di una campagna viva.
+        """
+        import io
+        motore = self._motore()
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        cavia = os.path.join(d, "cavia_schedario.py")
+        sano = ("def paga(v):\n"
+                "    if v < 0:\n"
+                "        return 0\n"
+                "    return v\n")
+        with io.open(cavia, "w", encoding="utf-8", newline="\n") as f:
+            f.write(sano)
+        motore.REPO = d
+        voce = ("cavia_schedario.py", "paga", "if v < 0:", "<", "<=")
+        self.assertIsNone(self._perche_non_aggancia(motore, voce), "la cavia nasce sana")
+
+        # ⛔ UNA TRACCIA TUTTA SUA, mai quella vera: la traccia vera appartiene a una
+        # campagna che potrebbe essere in corso adesso, e toccarla e' il difetto del 3 agosto.
+        t = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, t, True)
+        motore._TRACCIA = t
+        with io.open(os.path.join(t, "quale.txt"), "w", encoding="utf-8") as f:
+            f.write(cavia)
+        with io.open(os.path.join(t, "originale.txt"), "w", encoding="utf-8", newline="") as f:
+            f.write(sano)
+        # ...e ora il file su disco e' ROTTO DI PROPOSITO, come durante una campagna
+        with io.open(cavia, "w", encoding="utf-8", newline="\n") as f:
+            f.write(sano.replace("if v < 0:", "if v <= 0:"))
+        self.assertIsNone(
+            self._perche_non_aggancia(motore, voce),
+            "la guardia giudica il file ROTTO DI PROPOSITO invece dell'originale messo da "
+            "parte dal giudice: diventerebbe rossa durante ogni campagna sui moduli che "
+            "questo file nomina, e ogni mutante su quelle righe risulterebbe UCCISO senza "
+            "che nessun comportamento sia stato davvero sorvegliato")
+
+        # E LA DIREZIONE OPPOSTA: senza campagna in corso, lo stesso file cambiato e' rosso.
+        # Se non lo fosse, la guardia avrebbe smesso di guardare invece di guardare meglio.
+        shutil.rmtree(t, ignore_errors=True)
+        motivo = self._perche_non_aggancia(motore, voce)
+        self.assertIsNotNone(motivo,
+                             "senza traccia aperta un file davvero cambiato DEVE essere "
+                             "rosso: altrimenti la guardia si e' spenta, non affinata")
+        self.assertIn("nessuna riga del file", motivo)
+
+    def test_OGNI_VOCE_dello_schedario_HA_LA_FORMA_CHE_QUESTA_GUARDIA_SA_LEGGERE(self):
+        """IL DENOMINATORE, prima del giudizio (D18 punto 3: niente tagli silenziosi).
+
+        Se qualcuno aggiungesse una voce con una chiave di forma diversa, il controllo qui
+        sotto la salterebbe senza dire niente -- e una voce non esaminata sembrerebbe una
+        voce sana. Quindi prima si pretende che OGNI voce sia una chiave a cinque campi di
+        testo: file, funzione, riga, vecchio, nuovo. Nessuna esclusa, nessuna «quasi».
+        """
+        voci = self._motore().EQUIVALENTI_DICHIARATI
+        self.assertGreaterEqual(
+            len(voci), 1,
+            "lo schedario e' VUOTO: o l'elenco e' stato svuotato, o questa guardia sta "
+            "leggendo la cosa sbagliata. In tutti e due i casi il verde qui sotto non "
+            "significherebbe niente, perche' non avrebbe esaminato nulla")
+        storte = [k for k in voci
+                  if not (isinstance(k, tuple) and len(k) == 5
+                          and all(isinstance(x, str) for x in k))]
+        self.assertEqual([], storte,
+                         "queste voci non hanno la forma (file, funzione, riga, vecchio, "
+                         "nuovo): il controllo di ancoraggio non saprebbe esaminarle e le "
+                         "salterebbe in silenzio. Voci su %d totali: %r"
+                         % (len(voci), storte))
+
+    def test_OGNI_VOCE_dello_schedario_AGGANCIA_UNA_RIGA_VIVA(self):
+        """⛔ LA GUARDIA. Una voce che non aggancia piu' niente e' una voce MORTA.
+
+        Non e' un dettaglio di forma: e' il segnale che il codice sotto la dimostrazione si e'
+        mosso. La dimostrazione parlava di UNA riga precisa dentro UNA funzione precisa; se
+        quella riga oggi e' diversa, la prova non e' piu' stata fatta su cio' che c'e'. Il
+        pericolo non e' solo la voce che smette di valere -- quella e' innocua, il mutante
+        torna semplicemente fra i sopravvissuti -- e' che nessuno se ne accorga MAI, e che
+        l'elenco si riempia di dichiarazioni che parlano di un codice che non esiste piu'.
+
+        Falsi allarmi impossibili: e' un confronto ESATTO fra il testo dichiarato e il testo
+        sul disco, letto con lo stesso lettore del giudice. Se questo diventa rosso, o si
+        rifa' la dimostrazione sulla riga di oggi, o la voce si toglie.
+        """
+        motore = self._motore()
+        voci = motore.EQUIVALENTI_DICHIARATI
+        morte = []
+        for chiave in sorted(voci):
+            motivo = self._perche_non_aggancia(motore, chiave)
+            if motivo:
+                morte.append("  %s · %s · %s -> %s\n      %s"
+                             % (chiave[0], chiave[1] or "<fuori da ogni funzione>",
+                                chiave[3], chiave[4], motivo))
+        self.assertEqual(
+            [], morte,
+            "DENOMINATORE: %d voci dichiarate, tutte esaminate. Queste %d NON agganciano "
+            "piu' nessuna riga viva del sorgente, quindi perdonano un guasto che non "
+            "esiste piu' nella forma in cui era stato dimostrato:\n%s"
+            % (len(voci), len(morte), "\n".join(morte)))
+
+
+class TestLoSchedarioDegliEquivalenti_2_CAMPI_STRUTTURATI(unittest.TestCase):
+    """⛔ CONTROLLO 2 di 4: OGNI VOCE DICHIARA `metodo`, `dominio`, `data`, `prova`.
+
+    Il controllo 1 chiede se la voce aggancia ancora il codice. Questo chiede una cosa
+    diversa e piu' scomoda: **la voce dice COME e' stata dimostrata, e SU QUALE DOMINIO?**
+
+    Finche' la motivazione e' prosa libera, nessuna macchina puo' chiedersi niente: si puo'
+    scrivere «e' evidente» e ottenere lo stesso silenzio che si ottiene con una prova vera.
+    Con quattro campi la domanda diventa possibile -- ed e' il controllo 3 a farla: *una
+    prova esaustiva o z3 copre davvero tutto il dominio che la funzione accetta?* Le tre
+    voci false di questi quattro giorni erano tutte la stessa cosa, e senza il campo
+    `dominio` accanto al campo `metodo` quella forma comune resta invisibile.
+
+    ⛔ COSA NON FA (D18 punto 3). Non giudica il CONTENUTO della prova: pretende che i campi
+    ci siano, che il metodo sia uno dei tre ammessi e che la data sia una data. Una prova
+    scritta male ma nei campi giusti passa di qui -- e deve passare, perche' un controllo
+    che pretendesse di giudicare le dimostrazioni sarebbe il dimostratore, ed e' l'errore
+    che il 2026-08-05 ha prodotto nove accuse sbagliate. Il giudizio sul contenuto resta
+    umano; questa guardia serve a rendere quel giudizio POSSIBILE.
+
+    ⛔ E IL VINCOLO CHE NON SI PUO' ROMPERE: il lettore `_e_equivalente` deve continuare a
+    restituire TESTO. I suoi due soli consumatori (`mutazione_prodotto.py:905` e `:1052`)
+    fanno `motivo[:70]` e `motivo[:60]`: con un dizionario il giro morirebbe con un
+    TypeError **dopo** aver gia' rotto un file di produzione. C'e' una prova apposta.
+    """
+
+    CAMPI = ("metodo", "dominio", "data", "prova")
+    # Insieme CHIUSO, ed e' chiuso apposta: «non e' raggiungibile» e «non e' osservabile»
+    # non sono metodi di dimostrazione (divieto B6, direttiva D19). Se non rientra in uno
+    # di questi tre, quel mutante resta un sopravvissuto dichiarato.
+    METODI = ("esaustiva", "traccia", "z3")
+
+    @staticmethod
+    def _motore():
+        import importlib.util
+        p = os.path.join(QUI, "collaudi", "mutazione_prodotto.py")
+        spec = importlib.util.spec_from_file_location("_schedario_campi", p)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    @classmethod
+    def _guasto_della_voce(cls, voce):
+        """`None` se la voce e' in regola; altrimenti il motivo.
+
+        Prende SOLO il valore, non la chiave: cosi' la stessa identica regola si puo' mettere
+        alla prova su voci finte, nelle due direzioni, senza toccare lo schedario vero. Una
+        regola che si puo' provare solo sui dati veri non si puo' provare rossa.
+        """
+        if not isinstance(voce, dict):
+            return ("e' prosa libera (%s), non quattro campi: nessuna macchina puo' "
+                    "chiedersi su quale dominio sia stata fatta la prova"
+                    % type(voce).__name__)
+        mancanti = [c for c in cls.CAMPI if c not in voce]
+        extra = [c for c in sorted(voce) if c not in cls.CAMPI]
+        if mancanti or extra:
+            return "campi mancanti %r, campi non previsti %r" % (mancanti, extra)
+        vuoti = [c for c in cls.CAMPI if not isinstance(voce[c], str) or not voce[c].strip()]
+        if vuoti:
+            return "campi vuoti o non testuali: %r" % (vuoti,)
+        if voce["metodo"] not in cls.METODI:
+            return ("metodo %r: non e' uno dei tre ammessi %r. «non e' raggiungibile» e "
+                    "«non e' osservabile» NON sono metodi di dimostrazione (divieto B6)"
+                    % (voce["metodo"], list(cls.METODI)))
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", voce["data"]):
+            return ("data %r non e' nella forma AAAA-MM-GG: senza data non si sa se la prova "
+                    "e' piu' vecchia del codice" % voce["data"])
+        return None
+
+    def test_OGNI_VOCE_PORTA_I_QUATTRO_CAMPI_E_UN_METODO_AMMESSO(self):
+        """LA GUARDIA. Il denominatore e' dichiarato: N voci, tutte esaminate, e chi ne
+        aggiunge una senza campi diventa rosso LO STESSO GIORNO (D18 punto 4)."""
+        voci = self._motore().EQUIVALENTI_DICHIARATI
+        self.assertGreaterEqual(len(voci), 1,
+                                "schedario vuoto: questa guardia non esaminerebbe nulla e "
+                                "il suo verde non significherebbe niente")
+        guasti = []
+        for chiave in sorted(voci):
+            motivo = self._guasto_della_voce(voci[chiave])
+            if motivo:
+                guasti.append("  %s · %s · %s -> %s\n      %s"
+                              % (chiave[0], chiave[1] or "<fuori da ogni funzione>",
+                                 chiave[3], chiave[4], motivo))
+        self.assertEqual(
+            [], guasti,
+            "DENOMINATORE: %d voci dichiarate, tutte esaminate; %d non sono in regola. Ogni "
+            "voce deve dichiarare metodo (%s), dominio, data e prova -- CAMPI, non prosa:\n%s"
+            % (len(voci), len(guasti), "/".join(self.METODI), "\n".join(guasti)))
+
+    def test_IL_LETTORE_RESTITUISCE_TESTO_perche_chi_lo_usa_lo_TAGLIA(self):
+        """⛔ IL CONTRATTO CHE NON SI PUO' ROMPERE, provato ESEGUENDOLO.
+
+        Non si guarda la forma del dizionario: si chiama `_e_equivalente` come lo chiama il
+        giudice, su una voce VERA e sulle righe VERE del file, e si pretende un testo che si
+        possa tagliare. Se qualcuno domani facesse restituire il dizionario intero, il giro
+        di mutazione esploderebbe con un TypeError **dopo** aver gia' scritto il guasto
+        dentro un file di produzione: il momento peggiore possibile per morire.
+        """
+        motore = self._motore()
+        chiave = sorted(motore.EQUIVALENTI_DICHIARATI)[0]
+        # ⛔ LA SORGENTE VERA, non il disco: durante una campagna il file e' rotto di
+        # proposito e questa prova fallirebbe facendo contare il mutante come UCCISO. E' lo
+        # stesso falso killer chiuso nel controllo 1, e qui era rimasto aperto.
+        righe = _righe_dello_schedario(motore, chiave[0])
+        numeri = [n for n, r in enumerate(righe, 1)
+                  if r.strip() == chiave[2] and motore.funzione_di(righe, n) == chiave[1]]
+        self.assertTrue(numeri,
+                        "la voce %r non aggancia: questa prova non starebbe esercitando il "
+                        "lettore su niente (e il controllo 1 e' gia' rosso)" % (chiave,))
+        motivo = motore._e_equivalente(
+            chiave[0], righe, {"riga": numeri[0], "vecchio": chiave[3], "nuovo": chiave[4]})
+        self.assertIsInstance(motivo, str,
+                              "il lettore restituisce %s invece di testo: i due consumatori "
+                              "fanno motivo[:70] e motivo[:60] e morirebbero a meta' "
+                              "campagna, a file di produzione gia' rotto"
+                              % type(motivo).__name__)
+        self.assertTrue(motivo.strip(),
+                        "il lettore restituisce testo VUOTO: `if motivo:` sarebbe falso e il "
+                        "mutante verrebbe provato lo stesso (direzione sicura, ma la voce "
+                        "non varrebbe piu' niente e nessuno lo saprebbe)")
+        # ⛔ E l'ingresso sbagliato non deve ESPLODERE: una voce lasciata in prosa non perdona
+        # nulla (direzione sicura) invece di far morire il giro con un TypeError a meta'
+        # campagna, cioe' a file di produzione gia' rotto.
+        motore.EQUIVALENTI_DICHIARATI = dict(motore.EQUIVALENTI_DICHIARATI)
+        motore.EQUIVALENTI_DICHIARATI[chiave] = "una voce nel vecchio formato, in prosa"
+        self.assertIsNone(
+            motore._e_equivalente(chiave[0], righe,
+                                  {"riga": numeri[0], "vecchio": chiave[3],
+                                   "nuovo": chiave[4]}),
+            "una voce in PROSA fa esplodere il lettore invece di non perdonare niente: lo "
+            "strumento avrebbe un modo di morire che prima non aveva, e morirebbe nel punto "
+            "peggiore")
+
+
+class TestLoSchedarioDegliEquivalenti_3_DOMINIO_MAGGIORE_DELLA_FIRMA(unittest.TestCase):
+    """⛔ CONTROLLO 3 di 4: UNA PROVA VALE QUANTO IL MODELLO SU CUI E' FATTA.
+
+    Questa e' la guardia che i tre errori di questi giorni chiedevano. Tutti e tre avevano
+    LA STESSA FORMA, ed e' una forma controllabile a macchina:
+
+        _cent(v: Any)  /  _n(v senza tipo)      la funzione accetta QUALUNQUE COSA
+        prova: "tutti gli interi" (o z3)         il dominio della prova e' PIU' PICCOLO
+        cosa mancava:                            le sottoclassi di int -> tipo restituito
+                                                 diverso, e quindi un test che le distingue
+
+    Anche quella dichiarata con z3: il risolutore ragiona sugli INTERI, la funzione accetta
+    `Any`. Non ha sbagliato il risolutore -- gli era stata fatta la domanda sbagliata.
+
+    LA REGOLA: se il `metodo` e' `esaustiva` o `z3` e la funzione ha anche UN SOLO argomento
+    senza tipo o annotato `Any`, la prova non copre il dominio. Rosso.
+
+    ⚠️ L'ESTRATTORE GUARDA ANCHE GLI ARGOMENTI DOPO L'ASTERISCO (`kwonlyargs`). La prima
+    versione scritta il 2026-08-05 li saltava e mostrava «nessun argomento» per quattro
+    funzioni di `fase177`, che li hanno tutti dopo l'asterisco: un estrattore cieco avrebbe
+    dato il VERDE proprio dove serviva guardare. `self` e `cls` non contano: non sono
+    ingressi, e contarli renderebbe rosso ogni metodo del progetto.
+
+    ⛔ COSA NON ESAMINA (D18 punto 3), detto prima:
+      · le voci con metodo `traccia`: li' la prova non e' un dominio ma un percorso, e
+        giudicarla e' lavoro umano (resta la D19: una traccia che si appoggia a un'ALTRA
+        funzione e' fragile, e le quattro voci da rileggere sono elencate in RIPRENDI_QUI);
+      · le voci che agganciano codice FUORI da ogni funzione: non c'e' una firma da leggere;
+      · i tipi troppo larghi diversi da `Any` (per esempio `object`): la regola dichiarata
+        e' «senza tipo o `Any`», e allargarla di nascosto sarebbe un'altra regola;
+      · il CONTENUTO della prova, che questa guardia non sa e non deve giudicare.
+    """
+
+    ESIGENTI = ("esaustiva", "z3")
+
+    @staticmethod
+    def _motore():
+        import importlib.util
+        p = os.path.join(QUI, "collaudi", "mutazione_prodotto.py")
+        spec = importlib.util.spec_from_file_location("_schedario_dominio", p)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    @classmethod
+    def _e_any(cls, annotazione):
+        """`Any` scritto in uno qualunque dei modi che lo rendono DAVVERO `Any`: `Any`,
+        `typing.Any`, la stringa `"Any"`, e `Optional[Any]` / `Union[..., Any]` -- che sono
+        `Any` con un nome piu' lungo.
+
+        ⛔ NON conta `Dict[str, Any]` ne' `List[Any]`: li' l'argomento e' vincolato a essere
+        un dizionario o una lista, quindi il dominio NON e' «qualunque cosa» e chiamarlo tale
+        sarebbe un falso allarme -- il difetto che vale quanto un allarme mancato.
+        """
+        import ast
+        if annotazione is None:
+            return False
+        if isinstance(annotazione, ast.Name):
+            return annotazione.id == "Any"
+        if isinstance(annotazione, ast.Attribute):
+            return annotazione.attr == "Any"
+        if isinstance(annotazione, ast.Constant) and isinstance(annotazione.value, str):
+            return annotazione.value.strip().strip("'\"") == "Any"
+        if isinstance(annotazione, ast.Subscript):
+            base = annotazione.value
+            nome = base.id if isinstance(base, ast.Name) else getattr(base, "attr", "")
+            if nome not in ("Optional", "Union"):
+                return False
+            dentro = annotazione.slice
+            if dentro.__class__.__name__ == "Index":        # Python <= 3.8
+                dentro = dentro.value
+            pezzi = dentro.elts if isinstance(dentro, ast.Tuple) else [dentro]
+            return any(cls._e_any(p) for p in pezzi)
+        return False
+
+    @classmethod
+    def _scoperti(cls, motore, chiave):
+        """(applicabile, elenco degli argomenti senza tipo o `Any`, nota).
+
+        `applicabile` e' False quando non c'e' una firma da leggere: codice fuori da ogni
+        funzione, o voce che non aggancia (di quella si occupa il controllo 1).
+        """
+        import ast
+        nome_file, funzione, testo = chiave[0], chiave[1], chiave[2]
+        if not funzione:
+            return False, [], "aggancia codice fuori da ogni funzione: nessuna firma"
+        righe = _righe_dello_schedario(motore, nome_file)
+        if righe is None:
+            return False, [], "il file non esiste piu' (lo dice il controllo 1)"
+        numeri = [n for n, r in enumerate(righe, 1)
+                  if r.strip() == testo and motore.funzione_di(righe, n) == funzione]
+        if not numeri:
+            return False, [], "la voce non aggancia (lo dice il controllo 1)"
+        albero = ast.parse("\n".join(righe))
+        # ⛔ TUTTE le righe che combaciano, non solo la prima: la voce le perdona TUTTE, e
+        # leggere la firma di una sola sarebbe di nuovo una dichiarazione che vale oltre il
+        # punto dove e' stata guardata -- la famiglia del difetto del 2026-08-01.
+        scoperti, firme = [], []
+        for numero in numeri:
+            dentro = [n for n in ast.walk(albero)
+                      if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+                      and n.lineno <= numero <= n.end_lineno]
+            if not dentro:
+                continue
+            nodo = sorted(dentro, key=lambda n: n.lineno)[-1]
+            a = nodo.args
+            tutti = list(getattr(a, "posonlyargs", [])) + list(a.args) + list(a.kwonlyargs)
+            for extra in (a.vararg, a.kwarg):
+                if extra is not None:
+                    tutti.append(extra)
+            firme.append("%s(%s)" % (nodo.name, ", ".join(x.arg for x in tutti)))
+            for x in tutti:
+                if (x.arg not in ("self", "cls")
+                        and (x.annotation is None or cls._e_any(x.annotation))
+                        and x.arg not in scoperti):
+                    scoperti.append(x.arg)
+        if not firme:
+            return False, [], "nessuna funzione contiene la riga"
+        return True, scoperti, " · ".join(sorted(set(firme)))
+
+    @classmethod
+    def _violazione(cls, motore, chiave, voce):
+        """(stato, motivo), con stato in: `non_si_applica` · `saltata` · `in_regola` ·
+        `violazione`.
+
+        ⛔ `saltata` ESISTE APPOSTA (D18 punto 3). La prima versione restituiva «in regola»
+        anche quando non c'era nessuna firma da leggere, e il messaggio diceva «tutte
+        esaminate»: una voce saltata in silenzio sembra identica a una voce sana, ed e' il
+        taglio silenzioso che questo progetto vieta dentro gli strumenti che misurano.
+        """
+        if not isinstance(voce, dict) or voce.get("metodo") not in cls.ESIGENTI:
+            return "non_si_applica", None
+        applicabile, scoperti, nota = cls._scoperti(motore, chiave)
+        if not applicabile:
+            return "saltata", nota
+        if not scoperti:
+            return "in_regola", None
+        return "violazione", (
+            "metodo %r su dominio %r, ma la firma %s accetta QUALUNQUE COSA in %r: la prova "
+            "e' fatta su un dominio PIU' PICCOLO di quello che la funzione accetta, quindi "
+            "non copre i casi che stanno fuori dal modello (per esempio una SOTTOCLASSE di "
+            "int)" % (voce.get("metodo"), voce.get("dominio", "")[:60], nota, scoperti))
+
+    def test_IL_CONTROLLO_SA_DIRE_DI_NO_e_VEDE_DOPO_L_ASTERISCO(self):
+        """⛔ D18 punti 1 e 2, piu' la trappola dichiarata nel piano.
+
+        Quattro casi su una cavia usa-e-getta dove la verita' e' nota per costruzione:
+        firma tipata -> tace · firma senza tipo -> grida · argomento `Any` DOPO l'asterisco
+        (e `self` davanti) -> grida lo stesso, perche' e' esattamente il punto in cui la
+        prima versione dell'estrattore era cieca · metodo `traccia` -> non si applica.
+        """
+        import io
+        motore = self._motore()
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        with io.open(os.path.join(d, "cavia_firme.py"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            f.write("from typing import Any, Dict, Optional\n"
+                    "\n"
+                    "\n"
+                    "def tipata(v: int):\n"
+                    "    if v < 0:\n"
+                    "        return 0\n"
+                    "    return v\n"
+                    "\n"
+                    "\n"
+                    "def senza_tipo(v):\n"
+                    "    if v < 1:\n"
+                    "        return 0\n"
+                    "    return v\n"
+                    "\n"
+                    "\n"
+                    "def travestito(v: Optional[Any]):\n"
+                    "    if v < 3:\n"
+                    "        return 0\n"
+                    "    return v\n"
+                    "\n"
+                    "\n"
+                    "def vincolato(v: Dict[str, Any]):\n"
+                    "    if len(v) < 4:\n"
+                    "        return 0\n"
+                    "    return v\n"
+                    "\n"
+                    "\n"
+                    "class Cassa:\n"
+                    "    def dopo_asterisco(self, *, quanto: Any = None):\n"
+                    "        if quanto < 2:\n"
+                    "            return 0\n"
+                    "        return quanto\n")
+        motore.REPO = d
+        z3 = {"metodo": "z3", "dominio": "gli interi", "data": "2026-08-05", "prova": "x"}
+        esa = {"metodo": "esaustiva", "dominio": "gli interi", "data": "2026-08-05",
+               "prova": "x"}
+        tra = {"metodo": "traccia", "dominio": "un percorso", "data": "2026-08-05",
+               "prova": "x"}
+
+        buona = ("cavia_firme.py", "tipata", "if v < 0:", "<", "<=")
+        self.assertEqual(("in_regola", None), self._violazione(motore, buona, esa),
+                         "accusa una firma TUTTA TIPATA: falso allarme, e un falso allarme "
+                         "insegna a ignorare i rossi")
+
+        nuda = ("cavia_firme.py", "senza_tipo", "if v < 1:", "<", "<=")
+        stato, motivo = self._violazione(motore, nuda, esa)
+        self.assertEqual("violazione", stato,
+                         "non vede un argomento SENZA TIPO: e' il caso di `_n` in fase100 "
+                         "(DAC7), uno dei tre errori veri")
+        self.assertIn("'v'", motivo)
+
+        stella = ("cavia_firme.py", "dopo_asterisco", "if quanto < 2:", "<", "<=")
+        stato, motivo = self._violazione(motore, stella, z3)
+        self.assertEqual("violazione", stato,
+                         "NON VEDE GLI ARGOMENTI DOPO L'ASTERISCO: e' la trappola dichiarata "
+                         "nel piano, e quattro funzioni di fase177 hanno tutti gli argomenti "
+                         "li'")
+        self.assertIn("'quanto'", motivo)
+        self.assertNotIn("'self'", motivo,
+                         "conta `self` fra gli ingressi: cosi' ogni metodo del progetto "
+                         "diventerebbe rosso, e un allarme sempre acceso viene spento")
+
+        # `Optional[Any]` E' `Any` con un nome piu' lungo, e va visto...
+        travestito = ("cavia_firme.py", "travestito", "if v < 3:", "<", "<=")
+        stato, motivo = self._violazione(motore, travestito, esa)
+        self.assertEqual("violazione", stato,
+                         "`Optional[Any]` non viene riconosciuto: e' `Any`, e il limite "
+                         "dichiarato («i tipi larghi DIVERSI da Any») non lo copre -- sarebbe "
+                         "un buco, non una scelta")
+
+        # ...ma `Dict[str, Any]` NO: li' l'argomento e' vincolato a essere un dizionario.
+        vincolato = ("cavia_firme.py", "vincolato", "if len(v) < 4:", "<", "<=")
+        self.assertEqual(("in_regola", None), self._violazione(motore, vincolato, esa),
+                         "accusa `Dict[str, Any]`: il dominio NON e' qualunque cosa, e "
+                         "gridare qui sarebbe un falso allarme")
+
+        self.assertEqual(("non_si_applica", None), self._violazione(motore, nuda, tra),
+                         "applica la regola anche al metodo `traccia`, che non parla di "
+                         "domini ma di percorsi: sarebbe un'altra regola, non dichiarata")
+
+    # Le voci `traccia` che stanno su una funzione con un argomento senza tipo o `Any`. NON
+    # sono approvate: sono un DEBITO DICHIARATO. Il numero e' inchiodato perche' la via piu'
+    # comoda per aggirare il controllo 3 non e' allargare l'insieme dei metodi (quello lo
+    # blocca il controllo 4) ma scrivere `traccia` al posto di `esaustiva`: la dimostrazione
+    # tolta il 2026-08-05 da `_n` era LETTERALMENTE una traccia, e chi la riscrivesse in buona
+    # fede la classificherebbe cosi' uscendo dal controllo senza accorgersene.
+    TRACCE_SU_FIRMA_LARGA = 5
+
+    def test_LA_SCAPPATOIA_DEL_METODO_TRACCIA_E_CONTATA_E_INCHIODATA(self):
+        """⛔ IL BUCO CHE RESTA, misurato invece che raccontato (D18 punto 3 + punto 4).
+
+        Il controllo 3 si applica solo a `esaustiva` e `z3`, perche' una `traccia` non parla
+        di domini ma di percorsi: e' la regola dichiarata, e allargarla di nascosto sarebbe
+        un'altra regola. Ma il `metodo` lo dichiara chi scrive la voce, e nessuno lo verifica
+        contro il testo della prova: scrivere `traccia` DISARMA il controllo.
+
+        Qui quelle voci si contano, e il numero sta in `TRACCE_SU_FIRMA_LARGA` qui sopra.
+        Oggi sono tutte su `fase177` con l'argomento `payout` senza tipo, e sono le stesse che
+        `RIPRENDI_QUI.md` elenca gia' come «da rileggere» perche' la loro traccia si appoggia
+        al comportamento di un'ALTRA funzione -- cio' che la D19 vieta. Non sono approvate:
+        sono un debito con un numero sopra.
+
+        Se qualcuno ne aggiunge una in piu' -- per esempio riscrivendo come `traccia` una
+        dimostrazione appena tolta -- questo diventa rosso LO STESSO GIORNO. E se il debito
+        viene pagato, il numero scende e va aggiornato qui: in quella direzione il rosso e'
+        una buona notizia.
+        """
+        motore = self._motore()
+        voci = motore.EQUIVALENTI_DICHIARATI
+        larghe = []
+        for chiave in sorted(voci):
+            voce = voci[chiave]
+            if not isinstance(voce, dict) or voce.get("metodo") != "traccia":
+                continue
+            applicabile, scoperti, nota = self._scoperti(motore, chiave)
+            if applicabile and scoperti:
+                larghe.append("  %s · %s · %s -> %s\n      firma %s, scoperti %r"
+                              % (chiave[0], chiave[1], chiave[3], chiave[4], nota, scoperti))
+        self.assertEqual(
+            self.TRACCE_SU_FIRMA_LARGA, len(larghe),
+            "il numero di voci `traccia` su una firma che accetta qualunque cosa e' passato "
+            "da %d a %d. IN SU: qualcuno ha aggiunto una dichiarazione che il controllo 3 non "
+            "guarda -- e' la scappatoia, va guardata a mano. IN GIU': il debito e' stato "
+            "pagato, si aggiorna il numero qui e si scrive perche' nel registro. Mai per far "
+            "tornare il verde.\n%s"
+            % (self.TRACCE_SU_FIRMA_LARGA, len(larghe), "\n".join(larghe) or "  (nessuna)"))
+
+    def test_NESSUNA_PROVA_ESAUSTIVA_O_Z3_STA_SU_UN_DOMINIO_TROPPO_PICCOLO(self):
+        """LA GUARDIA, sui dati veri. Il denominatore e' dichiarato: quante voci esigenti
+        ci sono, e sono TUTTE esaminate."""
+        motore = self._motore()
+        voci = motore.EQUIVALENTI_DICHIARATI
+        esigenti = [k for k, v in voci.items()
+                    if isinstance(v, dict) and v.get("metodo") in self.ESIGENTI]
+        self.assertGreaterEqual(len(esigenti), 1,
+                                "nessuna voce dichiara una prova esaustiva o z3: o lo "
+                                "schedario e' cambiato forma, o questa guardia sta "
+                                "esaminando il vuoto e il suo verde non vale niente")
+        guasti, saltate = [], []
+        for chiave in sorted(esigenti):
+            stato, motivo = self._violazione(motore, chiave, voci[chiave])
+            etichetta = "  %s · %s · %s -> %s\n      %s" % (chiave[0], chiave[1], chiave[3],
+                                                            chiave[4], motivo)
+            if stato == "violazione":
+                guasti.append(etichetta)
+            elif stato == "saltata":
+                saltate.append(etichetta)
+        # ⛔ LE SALTATE SI DICHIARANO ANCHE QUANDO NON SONO UN ERRORE: «tutte esaminate» detto
+        # mentre qualcuna e' stata saltata e' esattamente il taglio silenzioso della D18
+        # punto 3, e sarebbe qui dentro la guardia scritta per impedirlo.
+        self.assertEqual(
+            [], guasti,
+            "DENOMINATORE: %d voci su %d dichiarano una prova esaustiva o z3; %d ESAMINATE, "
+            "%d SALTATE (senza una firma da leggere), %d stanno su un dominio piu' piccolo "
+            "della firma. Una dimostrazione formale vale quanto il modello su cui e' "
+            "fatta.\nVIOLAZIONI:\n%s\nSALTATE (dichiarate, non esaminate):\n%s"
+            % (len(esigenti), len(voci), len(esigenti) - len(saltate), len(saltate),
+               len(guasti), "\n".join(guasti) or "  (nessuna)",
+               "\n".join(saltate) or "  (nessuna)"))
+
+
+class TestLoSchedarioDegliEquivalenti_4_NIENTE_FRASI_AL_POSTO_DI_UNA_PROVA(unittest.TestCase):
+    """⛔ CONTROLLO 4 di 4: «NON E' RAGGIUNGIBILE» NON E' UNA DIMOSTRAZIONE (divieto B6, D19).
+
+    Il divieto B6 dice che o c'e' una dimostrazione, o quel mutante resta un sopravvissuto; e
+    la D19 vieta esplicitamente la motivazione «oggi non si raggiunge», perche' e' una
+    conclusione con una premessa che sta in un'ALTRA funzione e puo' cadere in silenzio.
+
+    ⛔ COME E' FATTO QUESTO CONTROLLO, ed e' la parte che conta.
+    NON cerca parole nel testo libero. Il 2026-08-05 un controllo a parole chiave scritto al
+    volo ha accusato a torto NOVE dichiarazioni serie -- perche' una prova onesta CITA le
+    frasi vietate per spiegare perche' NON si sta appoggiando a loro (la voce di `fase184` ne
+    e' l'esempio: dice «NON e' un "oggi non si raggiunge" alla D19»). Un controllo debole con
+    verdetto forte e' peggio di nessun controllo.
+
+    Guarda invece il campo `metodo`, che e' un insieme CHIUSO di tre valori. Una motivazione
+    del tipo «non e' raggiungibile» non ha dove entrare: non e' un metodo, e non lo diventa.
+    E la sola via per farcela entrare -- allargare l'insieme -- e' proprio cio' che il primo
+    test qui sotto rende rumoroso. E' la D18 punto 4 applicata a se stessa: il controllo e' a
+    sua volta sotto guardia, e allargarlo di nascosto diventa rosso lo stesso giorno.
+
+    ⛔ COSA NON FA (D18 punto 3): non giudica se una `traccia` sia una traccia onesta. Una
+    traccia che si appoggia al comportamento di un'ALTRA funzione e' fragile per la D19, e
+    riconoscerlo e' lavoro umano: le quattro voci da rileggere sono elencate in
+    `RIPRENDI_QUI.md`, non nascoste qui dentro.
+    """
+
+    VIETATI = ("non e' raggiungibile", "non e' osservabile", "non capita mai",
+               "e' evidente", "ovvio")
+
+    @staticmethod
+    def _motore():
+        import importlib.util
+        p = os.path.join(QUI, "collaudi", "mutazione_prodotto.py")
+        spec = importlib.util.spec_from_file_location("_schedario_frasi", p)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_L_INSIEME_DEI_METODI_E_CHIUSO_E_NON_SI_ALLARGA_DI_NASCOSTO(self):
+        """⛔ LA GUARDIA SULLA GUARDIA (D18 punto 4).
+
+        La via piu' comoda per far passare una voce che non ha una dimostrazione non e'
+        scrivere una prova falsa: e' aggiungere un valore all'elenco dei metodi ammessi. Una
+        riga, e da quel momento «non e' raggiungibile» sarebbe un metodo. Qui l'elenco e'
+        inchiodato: allargarlo resta possibile -- e a volte sara' giusto -- ma diventa un
+        atto DELIBERATO e VISIBILE, non una riga che passa in mezzo a un'altra modifica.
+        """
+        atteso = ("esaustiva", "traccia", "z3")
+        self.assertEqual(
+            atteso, TestLoSchedarioDegliEquivalenti_2_CAMPI_STRUTTURATI.METODI,
+            "l'elenco dei metodi ammessi e' cambiato. Se e' voluto, si cambia ANCHE questa "
+            "riga e si scrive perche' nel registro d'ingegneria: un metodo nuovo e' un modo "
+            "nuovo di perdonare un mutante per sempre. Se non e' voluto, e' il buco: "
+            "atteso %r, trovato %r"
+            % (atteso, TestLoSchedarioDegliEquivalenti_2_CAMPI_STRUTTURATI.METODI))
+
+    def test_UNA_FRASE_AL_POSTO_DI_UN_METODO_VIENE_RIFIUTATA(self):
+        """LE DUE DIREZIONI, sulla regola vera (non su una copia): le frasi vietate messe nel
+        campo `metodo` vengono respinte una per una, e una voce onesta passa."""
+        regola = TestLoSchedarioDegliEquivalenti_2_CAMPI_STRUTTURATI._guasto_della_voce
+        for frase in self.VIETATI:
+            voce = {"metodo": frase, "dominio": "tutto", "data": "2026-08-05",
+                    "prova": "sembra una spiegazione e non e' una dimostrazione"}
+            motivo = regola(voce)
+            self.assertIsNotNone(motivo,
+                                 "%r passa come metodo di dimostrazione: e' esattamente cio' "
+                                 "che il divieto B6 vieta" % frase)
+            self.assertIn("B6", motivo)
+        buona = {"metodo": "traccia", "dominio": "il caso `x == 0`", "data": "2026-08-05",
+                 "prova": "seguito il codice fino allo stato finale: identico."}
+        self.assertIsNone(regola(buona),
+                          "respinge una voce ONESTA: un falso allarme qui insegna a "
+                          "ignorare i rossi, ed e' un difetto quanto un allarme mancato")
+
+    def test_NESSUNA_VOCE_VERA_SI_GIUSTIFICA_CON_UNA_FRASE(self):
+        """LA GUARDIA SUI DATI VERI. Oggi e' verde perche' il controllo 2 tiene chiuso
+        l'insieme dei metodi; diventerebbe rossa il giorno in cui una voce ci provasse, ed e'
+        per quel giorno che esiste. Il denominatore e' dichiarato: tutte le voci, nessuna
+        esclusa."""
+        voci = self._motore().EQUIVALENTI_DICHIARATI
+        self.assertGreaterEqual(len(voci), 1, "schedario vuoto: non esaminerebbe nulla")
+        colpevoli = []
+        for chiave in sorted(voci):
+            voce = voci[chiave]
+            metodo = voce.get("metodo", "") if isinstance(voce, dict) else str(voce)
+            if metodo not in TestLoSchedarioDegliEquivalenti_2_CAMPI_STRUTTURATI.METODI:
+                colpevoli.append("  %s · %s · %s -> %s\n      metodo dichiarato: %r"
+                                 % (chiave[0], chiave[1] or "<fuori da ogni funzione>",
+                                    chiave[3], chiave[4], metodo[:80]))
+        self.assertEqual(
+            [], colpevoli,
+            "DENOMINATORE: %d voci dichiarate, tutte esaminate; %d si giustificano con "
+            "qualcosa che non e' un metodo di dimostrazione. O c'e' una dimostrazione, o quel "
+            "mutante resta un SOPRAVVISSUTO (divieto B6):\n%s"
+            % (len(voci), len(colpevoli), "\n".join(colpevoli)))
+
+
+class TestLoSchedarioDegliEquivalenti_5_UNA_PROVA_PERDONA_UN_PUNTO_SOLO(unittest.TestCase):
+    """⛔ CONTROLLO 5: UNA VOCE NON PUO' SPEGNERE DUE PUNTI CON UNA PROVA SOLA.
+
+    E' la stessa famiglia del difetto vero corretto il 2026-08-01 — una dichiarazione che si
+    estende OLTRE il punto dove e' stata dimostrata — ma un passo piu' in fondo. Allora la
+    chiave non portava il nome della FUNZIONE, e `if residuo <= 0:` dichiarata in un posto
+    rendeva cieco anche l'altro. Oggi la chiave non porta la COLONNA: se la stessa riga
+    contiene lo stesso operatore **due volte**, una prova sola li perdona **tutti e due**.
+
+    DIFETTO VERO, TROVATO IL 2026-08-05 e non dedotto. In `fase177_financial_controller`:
+        `if tipo not in ("credito", "debito") or imp <= 0 or not (riferimento and soggetto...`
+    ci sono DUE `or`. La voce dichiarata ragionava sul primo («cambia solo che un `tipo`
+    sconosciuto non viene piu' fermato qui»), e intanto spegneva anche il secondo. Che NON e'
+    equivalente: tabella di verita' su tutte e 8 le combinazioni, due differiscono --
+        tipo valido · importo > 0 · CAMPI OBBLIGATORI MANCANTI -> il sano rifiuta, il mutante
+        crea la nota (causale vuota) e scrive una riga di GIORNALE;
+        tipo valido · IMPORTO <= 0 · campi presenti            -> il sano rifiuta, il mutante prosegue.
+    E' il modulo dei SOLDI, e quel punto era spento dal 2026-08-02.
+
+    LA REGOLA: si contano i mutanti VERI che il generatore produce, si calcola la chiave di
+    ognuno come fa `_e_equivalente`, e si pretende che nessuna voce ne perdoni piu' di uno.
+    Non e' un ragionamento: e' un conteggio sui punti veri di quei file.
+
+    ⛔ COSA NON FA (D18 punto 3): non pretende che ogni voce ne perdoni ALMENO uno. Una voce
+    che oggi non aggancia nessun mutante e' inerte, non pericolosa, e il generatore ha
+    rinunce dichiarate che cambiano nel tempo: farne un rosso sarebbe un falso allarme in
+    attesa. Il numero delle voci inerti viene comunque DETTO nel messaggio.
+    """
+
+    @staticmethod
+    def _motore():
+        import importlib.util
+        p = os.path.join(QUI, "collaudi", "mutazione_prodotto.py")
+        spec = importlib.util.spec_from_file_location("_schedario_conteggio", p)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    @staticmethod
+    def _quanti_perdona(motore):
+        """{chiave dello schedario: quanti mutanti VERI perdona}. Conta solo cio' che il
+        generatore produce davvero, non cio' che si immagina."""
+        import collections
+        conta = collections.Counter()
+        for nome in sorted({k[0] for k in motore.EQUIVALENTI_DICHIARATI}):
+            righe = _righe_dello_schedario(motore, nome)
+            if righe is None:
+                continue                      # file sparito: lo dice il controllo 1
+            mutanti, _saltati = motore.genera_mutanti("\n".join(righe))
+            for mu in mutanti:
+                n = mu["riga"]
+                riga = righe[n - 1].strip() if n <= len(righe) else ""
+                chiave = (nome, motore.funzione_di(righe, n), riga,
+                          mu["vecchio"], mu["nuovo"])
+                if chiave in motore.EQUIVALENTI_DICHIARATI:
+                    conta[chiave] += 1
+        return conta
+
+    def test_IL_CONTEGGIO_SA_VEDERE_DUE_PUNTI_SOTTO_UNA_PROVA_SOLA(self):
+        """⛔ D18 punti 1 e 2: prima si prova che il contatore sa contare fino a due.
+
+        Un contatore che dicesse sempre «uno» darebbe il verde su qualunque schedario. Qui la
+        verita' e' nota per costruzione: una riga con UN operatore e una riga con lo STESSO
+        operatore DUE VOLTE, in una cavia usa-e-getta fuori dal progetto.
+        """
+        import io
+        motore = self._motore()
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        with io.open(os.path.join(d, "cavia_conteggio.py"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            f.write("def una_volta(a, b):\n"
+                    "    if a or b:\n"
+                    "        return 1\n"
+                    "    return 0\n"
+                    "\n"
+                    "\n"
+                    "def due_volte(a, b, c):\n"
+                    "    if a or b or c:\n"
+                    "        return 1\n"
+                    "    return 0\n")
+        motore.REPO = d
+        sola = ("cavia_conteggio.py", "una_volta", "if a or b:", "or", "and")
+        doppia = ("cavia_conteggio.py", "due_volte", "if a or b or c:", "or", "and")
+        finta = {"metodo": "traccia", "dominio": "x", "data": "2026-08-05", "prova": "x"}
+        motore.EQUIVALENTI_DICHIARATI = {sola: finta, doppia: finta}
+
+        conta = self._quanti_perdona(motore)
+        self.assertEqual(1, conta.get(sola),
+                         "una riga con UN solo operatore deve contare 1: se conta di piu' il "
+                         "controllo accuserebbe a torto ogni voce onesta")
+        self.assertEqual(2, conta.get(doppia),
+                         "una riga con lo STESSO operatore DUE VOLTE deve contare 2: se conta "
+                         "1, il controllo non vede proprio il difetto per cui esiste, e una "
+                         "prova sola continuerebbe a spegnere due punti")
+
+    def test_NESSUNA_VOCE_PERDONA_PIU_DI_UN_MUTANTE(self):
+        """LA GUARDIA, sui punti veri generati dal giudice. Denominatore dichiarato: quante
+        voci ci sono, quante agganciano almeno un mutante, quante ne perdonano piu' di uno."""
+        motore = self._motore()
+        voci = motore.EQUIVALENTI_DICHIARATI
+        conta = self._quanti_perdona(motore)
+        inerti = len(voci) - len(conta)
+        troppe = []
+        for chiave, n in sorted(conta.items()):
+            if n > 1:
+                troppe.append("  %s · %s · %r · %s -> %s\n      una prova sola spegne %d "
+                              "punti diversi sulla stessa riga"
+                              % (chiave[0], chiave[1] or "<fuori da ogni funzione>",
+                                 chiave[2][:70], chiave[3], chiave[4], n))
+        self.assertEqual(
+            [], troppe,
+            "DENOMINATORE: %d voci dichiarate, %d agganciano almeno un mutante vero, %d sono "
+            "inerti (dichiarato, non e' un errore). Queste %d perdonano PIU' DI UN PUNTO con "
+            "UNA sola dimostrazione: la chiave non porta la colonna, quindi lo stesso "
+            "operatore ripetuto sulla stessa riga viene spento tutto insieme -- e la prova ne "
+            "descrive uno solo. E' la stessa famiglia del difetto del 2026-08-01, un passo "
+            "piu' in fondo:\n%s"
+            % (len(voci), len(conta), inerti, len(troppe), "\n".join(troppe)))
 
 
 if __name__ == "__main__":

@@ -11,26 +11,165 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🎯 2026-08-05 — PROSSIMO LAVORO DICHIARATO PRIMA DI APRIRLO: LA GUARDIA SULLO SCHEDARIO
+## ✅ 2026-08-05 (3) — FATTA: L'ALLARME DEL GUARDIANO NON E' PIU' QUASI SPENTO
+
+**⛔ TOCCA LA PRODUZIONE. Il fondatore ha scritto «autorizzato» il 2026-08-05**, dopo che il
+punto era stato descritto per esteso (era il punto 5 dell'elenco aperto del 2026-08-04).
+
+### ✅ ESITO — due righe di produzione, ordine D20 rispettato
+```
+GUARDIE VISTE ROSSE PRIMA, sul codice di produzione di oggi:
+  aperte(limit=True)          con 2 escrow aperti  ->  ne restituiva 1   (1 != 2)
+  aperte_scadute(limit=True)  con 2 escrow scaduti ->  ne restituiva 1   (1 != 2)
+RIPARAZIONE: `and not isinstance(limit, bool)` -- la stessa difesa che `contestate()` ha
+             gia' alla riga 246. git diff --numstat: 4 aggiunte, 2 tolte (due righe spezzate)
+DOPO: test_fase160_escrow_garanzia  Ran 33 tests · OK · uscita 0
+```
+**Perche' contava:** `fase186_guardiano` usa quei due metodi per accorgersi degli escrow
+bloccati — soldi di un ospite fermi in cassaforte. Con l'elenco troncato a UNA riga l'allarme
+non taceva: **gridava piano**, che e' peggio, perche' continuava a sembrare acceso.
+⚠️ Le guardie pretendono **due** escrow: con uno solo il difetto e' invisibile (1 troncato a 1
+fa sempre 1), ed e' esattamente il motivo per cui le guardie gemelle sul limite zero, che ne
+aprivano uno solo, non lo vedevano.
+
+**Scopo (una frase):** `aperte()` e `aperte_scadute()` accettano `limit=True` e restituiscono
+**UNA riga sola**, mentre `contestate()` i booleani li scarta gia'. Sono i due metodi con cui
+`fase186_guardiano` si accorge degli escrow bloccati: un elenco troncato a 1 e' un **allarme
+quasi spento**. In Python `True` E' un intero che vale 1, quindi `0 < True <= 2000` e' vero e
+`LIMIT ?` diventa `LIMIT 1`.
+
+**FILE AMMESSI, e nessun altro:**
+- `fase160_escrow_garanzia.py` — **PRODUZIONE**: due righe, `and not isinstance(limit, bool)`,
+  la stessa identica difesa che `contestate()` ha alla riga 246. Nessun modulo, nessuna
+  funzione, nessuna dipendenza in piu'.
+- `test_fase160_escrow_garanzia.py` — le due guardie nuove. ⚠️ **Dichiarata anche una
+  correzione di passaggio, per non farla di nascosto:** la descrizione di quel file dice «il
+  denominatore vero e' 43, non 35», numero che il lavoro (2) di oggi ha **dimostrato
+  sbagliato** — sono **46**. Si corregge li' perche' una cifra falsa in un documento e' un
+  difetto, non un dettaglio.
+- `REGISTRO_INGEGNERIA.md` e `RIPRENDI_QUI.md` a lavoro finito.
+
+**Ordine imposto (D20):** e' un **difetto vivo**, quindi prima la guardia, **vista rossa** sul
+codice di produzione di oggi, con l'errore letto per intero; solo dopo le due righe.
+
+---
+
+## ✅ 2026-08-05 (2) — FATTA: LE RINUNCE SILENZIOSE DEL GENERATORE, ORA CONTATE
+
+**Scopo (una frase):** far dire allo strumento di mutazione **quanti punti non ha nemmeno
+guardato**, invece di tacerli — e' l'ultima violazione della **D18 punto 3** («uno strumento
+che misura DICHIARA cosa NON ha esaminato») rimasta dentro lo strumento stesso.
+
+### ⛔ PRIMA VERSIONE SBAGLIATA, E IL PERCHE' VALE PIU' DELLA CORREZIONE
+Alle 4 del pomeriggio avevo scritto qui: *«`fase160` dichiara ora **43** punti — esattamente
+il denominatore vero contato a mano il 2026-08-04»*, e l'avevo presentato come una conferma.
+**Era sbagliato, e lo erano tutti e due i numeri.** I punti veri sono **46**.
+
+Le catene (`0 < limite <= 500`) contengono **DUE** operatori mutabili e venivano contate come
+**UNA** rinuncia sola — `saltati["catena"] += 1` invece di `+= len(nodo.ops)`. Il conteggio a
+mano del 4 agosto aveva fatto lo stesso errore, e quando la misura automatica ci e' arrivata
+sopra ho scambiato **due misure d'accordo fra loro** per una verifica. Non lo e': se sbagliano
+allo stesso modo, concordano. E' la lezione piu' cara della giornata.
+
+L'ha vista solo un **conteggio scritto SEPARATAMENTE** — un oracolo indipendente che, su
+**tutti i 152 moduli**, confronta cio' che lo strumento dichiara con cio' che il codice
+contiene. Ora quell'oracolo e' una guardia della suite, e gira in 1 secondo:
+```
+PRIMA della riparazione:  44 moduli su 152 dichiaravano MENO punti del vero · 109 mancanti
+DOPO:                     0 moduli discordanti
+fase160_escrow_garanzia.py    35 mutabili + 11 rinunce =  46 punti   (diceva 43, poi 39)
+fase162_pagamenti_pendenti.py 82 mutabili + 31 rinunce = 113 punti   (diceva 106, poi 97)
+```
+
+### ✅ ESITO, e cosa e' stato riparato in tutto
+Ordine D20 rispettato per ognuna: guardia scritta, **vista rossa**, poi la riparazione.
+1. **Le rinunce si contano** (`operatore_ignoto`): rossa con `4 != None`.
+2. **Le catene si contano per OPERATORE, non per nodo**: rossa su **44 moduli, 109 punti**.
+3. **In modo `--diff` le rinunce seguono il diff**: erano quelle di tutto il file — su
+   `fase83_server.py` **514 punti di rumore fisso** che accendevano la riga «NON PROVATI» a
+   ogni giro. Un allarme sempre acceso viene spento (regola ferrea 10). Ora: **zero**.
+4. **Il censimento dichiara le rinunce**: era la tabella con cui si decide DOVE attaccare, e
+   ometteva **1644 punti** — il 21% della logica della macchina.
+```
+punti di logica sbagliabili in tutta la macchina: 6014
+punti che il generatore NON sa rompere (dichiarati): 1644
+punti di logica TOTALI, esaminabili o no: 7658
+```
+⚠️ **Una guardia esistente e' stata CORRETTA, non indebolita:** `test_le_RINUNCE_sono_contate_e_dichiarate`
+pretendeva `catena == 1` su `a < b < c`; ora pretende **2**, che e' il numero vero. Il valore
+vecchio non e' stato allargato per far passare una modifica: e' stato smentito da un conteggio
+indipendente, e la prova che lo dimostra e' nella suite accanto.
+
+🟠 **UN DIFETTO MINORE DICHIARATO E NON RIPARATO:** in `giro_su_moduli` le rinunce si sommano
+anche per i moduli **saltati per BASE ROSSA**, mescolando «rinuncia dichiarata» con «giro non
+fatto». La riparazione sarebbe due righe, ma non so provarla senza costruire una base rossa
+vera: **meglio un difetto dichiarato che una riparazione non provata.**
+
+**Perche' adesso.** Il generatore conosce solo i confronti fra numeri: le espressioni tipo
+`e' None` / `non e' nell'elenco` non le sa rompere, **e non le conta nemmeno**
+(`collaudi/mutazione_prodotto.py:445`). Il 2026-08-04 si e' misurato che su `fase160` il
+denominatore vero era **43 e non 39**: quattro punti saltati **in silenzio**, e fra questi la
+riga `r["stato"] not in attesi`, **la sola condizione che decide se un movimento di denaro e'
+permesso**. Un tetto dichiarato e' prudenza; un taglio silenzioso fa sembrare «coperto» cio'
+che nessuno ha guardato — ed e' lo stesso difetto che oggi la revisione a contesto fresco ha
+trovato dentro il controllo 3 («tutte esaminate» mentre ne saltava alcune).
+
+**FILE AMMESSI, e nessun altro:**
+- `collaudi/mutazione_prodotto.py` (il contatore delle rinunce del generatore)
+- `test_pipeline_ci.py` (la guardia che pretende il conteggio)
+- `REGISTRO_INGEGNERIA.md` e `RIPRENDI_QUI.md` a lavoro finito
+⛔ **ZERO file di produzione.** Se serve toccarne uno: ci si ferma e si chiede «autorizzato».
+
+**Ordine imposto (D20):** prima la guardia che pretende il conteggio, **vista rossa**, poi il
+contatore. Mai il contrario: una prova scritta dopo puo' passare per il motivo sbagliato.
+
+---
+
+## ✅ 2026-08-05 — FATTA: LA GUARDIA SULLO SCHEDARIO DEGLI EQUIVALENTI
 
 **Scopo (una frase):** mettere sotto guardia `EQUIVALENTI_DICHIARATI`, l'elenco dei mutanti
 dichiarati «impossibili da uccidere» — l'unico posto del progetto dove **un errore diventa
 cecita' permanente**, perche' una voce lo esclude dalle prove PER SEMPRE e il punteggio esce
 pieno lo stesso.
 
-**FILE AMMESSI, e nessun altro:**
-- `collaudi/mutazione_prodotto.py`  (lo schedario e il suo lettore `_e_equivalente`)
-- `test_mutazione_strumento.py` **oppure** un file di test gia' esistente che sorvegli lo
-  strumento — ⛔ **prima si cerca** (D10: inventario prima di costruire), si crea solo se non
-  c'e' gia' un posto giusto
-- `REGISTRO_INGEGNERIA.md` e `RIPRENDI_QUI.md` a lavoro finito
-⛔ **ZERO file di produzione.** Se serve toccarne uno: ci si ferma e si chiede «autorizzato».
+**FILE AMMESSI dichiarati PRIMA, e i quattro toccati DAVVERO** (regola ferrea 15, si verifica
+con `git status`):
+- `collaudi/mutazione_prodotto.py` — lo schedario e il suo lettore `_e_equivalente` ✔
+- un file di test gia' esistente che sorvegli lo strumento: **`test_pipeline_ci.py`** ✔
+  (D10 rispettata: `test_mutazione_strumento.py` **non** e' stato creato, perche' il posto
+  giusto c'era gia' — quel file sorvegliava gia' generatore, rete anti-interruzione e base
+  rossa dello strumento di mutazione)
+- `REGISTRO_INGEGNERIA.md` e `RIPRENDI_QUI.md` a lavoro finito ✔
+⛔ **ZERO file di produzione toccati.** Il codice di `fase*.py` non ha una riga cambiata: i due
+moduli mutati durante le misure sono tornati **byte-identici**, sha256 verificato prima e dopo.
+
+### ✅ L'ESITO IN CINQUE RIGHE
+1. **La guardia c'e'**: **5 controlli**, **14 prove nuove** (4+2+3+3+2), in
+   `test_pipeline_ci.py`. Con i lavori (2) e (3) fanno **20 prove nuove in giornata**.
+   `git diff --numstat` di tutta la giornata: **+1157 −5** su `test_pipeline_ci.py` (le 5
+   righe tolte sono UNA guardia esistente **corretta e rafforzata**, non indebolita: vedi il
+   lavoro (2)), **+253 −71** sullo strumento, **+44 −7** su `test_fase160_escrow_garanzia.py`,
+   e **+4 −2** di PRODUZIONE in `fase160_escrow_garanzia.py` — due righe sole, col
+   «autorizzato» scritto prima. Zero dipendenze, zero file nuovi. Ruff: **nessun rilievo
+   nuovo** su nessuno dei file toccati (7 preesistenti in `test_pipeline_ci.py`, 7
+   preesistenti in `test_fase160_escrow_garanzia.py`, 0 in produzione).
+2. **Il controllo 3 ha trovato da solo due voci false** — sui dati veri, senza iniettare
+   niente. Tolte, e i due mutanti tornano SOPRAVVISSUTI dichiarati.
+3. **Sopravvissuti ricomparsi, misurati**: `fase100_dac7` da 4 a 5 sopravvissuti (equivalenti
+   1 -> 0); il `_cent` di `fase177` provato contro **tutti e 12** i sorveglianti,
+   `Ran 802 tests · OK` **col guasto dentro** = SOPRAVVISSUTO.
+4. **Il controllo 5 ne ha trovata una TERZA**, e l'ha trovata la revisione a contesto fresco:
+   una voce sola che spegneva **due** punti, uno dei quali NON equivalente, su un modulo dei
+   SOLDI. Tolta. Lo schedario passa da **16 voci a 13**.
+5. **Due difetti delle guardie stesse** trovati e chiusi prima che facessero danno: il «falso
+   killer» (sotto) e un secondo, identico, che era rimasto aperto nel controllo 2.
 
 ### PERCHE' ADESSO: tre voci false in quattro giorni
 `31 lug` fase100_dac7/_n · `1 ago` fase177/_cent (dichiarata con z3) · `4 ago notte` la mia su
-fase160/_cent, ritirata prima del commit da una revisione a contesto fresco. **Le prime due sono
-ancora dentro.** E nessun test guarda quello schedario: la **D18 punto 4** («il controllo e' a
-sua volta sotto guardia») non e' soddisfatta.
+fase160/_cent, ritirata prima del commit da una revisione a contesto fresco.
+✅ **Le prime due sono state tolte il 2026-08-05**, e a trovarle e' stata la guardia nuova, non
+una persona. La **D18 punto 4** («il controllo e' a sua volta sotto guardia») e' ora soddisfatta
+per questo schedario.
 
 ### ⛔ LA TRAPPOLA DA NON RIPETERE
 Una guardia **non puo' verificare che una dimostrazione sia GIUSTA** — se potesse, sarebbe lei
@@ -61,20 +200,168 @@ fase178.eta_backup_sec   dir_backup:str traccia del codice    -> verde
 **Becca le due sbagliate, tace sulle buone.** E' la condizione 2 della D18, verificata sui dati
 reali prima di scrivere il codice.
 
-### I QUATTRO CONTROLLI DA IMPLEMENTARE (in quest'ordine, ognuno visto ROSSO prima)
-1. **ANCORAGGIO** — per ogni voce, (file, funzione, testo della riga) deve esistere nel sorgente
-   VIVO. Una voce che non aggancia piu' niente e' morta: o il codice e' cambiato senza rifare la
-   prova, o e' un residuo. Rosso. *(Zero falsi allarmi possibili: e' un confronto esatto.)*
+### I CINQUE CONTROLLI, E COME OGNUNO E' STATO VISTO ROSSO PRIMA (D20)
+1. **ANCORAGGIO** — (file, funzione, testo della riga) deve esistere nel sorgente VIVO.
+   *Rosso come:* nessun difetto vivo (tutte e 16 le voci agganciavano), quindi **due guasti
+   iniettati** nello schedario — un nome di funzione sbagliato (l'errore contro cui il file
+   stesso metteva in guardia in un commento, e che finora non beccava nessuno) e una riga
+   cambiata sotto la prova. Rosso su entrambi, con la diagnosi che dice **dove sta davvero**
+   quella riga; ripristino **sha256 identico**.
 2. **CAMPI STRUTTURATI + DENOMINATORE** — ogni voce dichiara `metodo` (z3 | esaustiva |
-   traccia), `dominio`, `data`, `prova`. Non prosa: campi. La guardia conta le voci e pretende
-   che TUTTE li abbiano. Chi ne aggiunge una senza campi diventa rosso lo stesso giorno (D18 §4).
-3. **DOMINIO >= FIRMA** — se `metodo` e' `esaustiva` o `z3` e la funzione ha anche un solo
-   argomento **senza tipo o `Any`**, la prova NON copre il dominio: rosso. ⚠️ L'estrattore deve
-   guardare anche gli argomenti dopo l'asterisco (`kwonlyargs`): la prima versione scritta il
-   2026-08-05 li saltava e mostrava «nessun argomento» per quattro funzioni di fase177.
-4. **FRASI VIETATE** — «non e' raggiungibile» / «non e' osservabile» come UNICA motivazione
-   (B6). ⚠️ Da fare per ultimo e con cura: e' il controllo che ha gia' prodotto nove falsi
-   allarmi. Deve guardare il campo `metodo`, non cercare parole nel testo libero.
+   traccia), `dominio`, `data`, `prova`. *Rosso come:* **su tutte e 16** le voci, che erano
+   prosa libera. Poi convertite una per una, **testo delle prove invariato**.
+   ⚠️ Vincolo scoperto e messo sotto guardia: `_e_equivalente` deve continuare a restituire
+   **testo**, perche' i suoi due soli consumatori fanno `motivo[:70]` e `motivo[:60]`. Con un
+   dizionario il giro morirebbe **dopo** aver gia' rotto un file di produzione.
+3. **DOMINIO >= FIRMA** — se `metodo` e' `esaustiva`/`z3` e la funzione ha anche un solo
+   argomento **senza tipo o `Any`**, la prova non copre il dominio.
+   *Rosso come:* **sui dati veri, senza iniettare niente.** Ha trovato da solo le 2 voci
+   false su 5 esigenti, e ha taciuto sulle 3 buone. `dimostra_formalmente()` non prende
+   argomenti, quindi le due voci z3 di `fase199` restano giustamente verdi.
+   ⚠️ L'estrattore guarda anche gli argomenti dopo l'asterisco (`kwonlyargs`) e ignora
+   `self`/`cls`: contarli renderebbe rosso ogni metodo, e un allarme sempre acceso viene spento.
+4. **NIENTE FRASI AL POSTO DI UNA PROVA** (B6) — guarda il campo `metodo`, che e' un insieme
+   **CHIUSO** di tre valori; non cerca parole nel testo libero, che e' l'errore da nove falsi
+   allarmi (una prova onesta CITA le frasi vietate per dire che NON si appoggia a loro).
+   *Rosso come:* allargando di nascosto l'insieme dei metodi con «non e' raggiungibile» —
+   che e' la via piu' comoda per far passare una voce senza dimostrazione. Due guardie rosse
+   su tre; ripristino **sha256 identico**.
+
+5. **UNA PROVA PERDONA UN PUNTO SOLO** — si contano i mutanti VERI che il generatore produce
+   e si pretende che nessuna voce ne spenga piu' di uno.
+   *Rosso come:* **sui dati veri**, su una voce vera. Nato da un rilievo della revisione a
+   contesto fresco (sotto).
+
+### 🔴 IL DIFETTO CHE HA TROVATO IL CONTROLLO 3 (e non l'ha cercato una persona)
+`fase100_dac7`/`_n` — firma `def _n(v):`, **senza tipo** — e `fase177_financial_controller`/
+`_cent` — firma `def _cent(v: Any)` — dichiaravano una prova **sugli interi** (una perfino con
+z3) su funzioni che accettano **qualunque cosa**. Una **sottoclasse di `int`** che vale 0 le
+distingue: l'originale restituisce l'oggetto, il mutante restituisce `0`. Voci **tolte**, con
+la lapide che spiega perche' — cosi' nessuno le riscrive fra sei mesi.
+
+**Misure, comandi ed esiti** (killer ridotto e DICHIARATO; produzione ripristinata byte-identica):
+```
+fase100_dac7  PRIMA  provati 18 · uccisi 13 · SOPRAVVISSUTI 4 · equivalenti 1   121 s
+fase100_dac7  DOPO   provati 18 · uccisi 13 · SOPRAVVISSUTI 5 · equivalenti 0   129 s
+                     riga 104  >= -> >   SOPRAVVISSUTO   <- il buco e' RICOMPARSO
+fase177/_cent DOPO   contro TUTTI e 12 i sorveglianti:  Ran 802 tests in 184.162s · OK
+                     VERDETTO: SOPRAVVISSUTO   (802 test verdi COL GUASTO DENTRO)
+```
+
+### 👁️‍🗨️ LA REVISIONE A CONTESTO FRESCO HA TROVATO UNA TERZA VOCE FALSA (appendice 19)
+*Chi scrive non giudica.* Un secondo lettore, che vedeva **solo il diff e i criteri** e non il
+ragionamento che l'aveva prodotto, ha consegnato **10 rilievi**. Passati al setaccio uno per
+uno: **7 confermati e riparati**, 1 corretto in parte (il mio primo script di verifica
+sovrastimava, e il conteggio giusto ne trovava meno), 2 osservazioni senza intervento.
+
+**Il piu' grave era vero, ed era sui SOLDI.** In `fase177_financial_controller`:
+```
+if tipo not in ("credito", "debito") or imp <= 0 or not (riferimento and soggetto ...
+                                    ^^                ^^     DUE `or` sulla stessa riga
+```
+La chiave dello schedario e' (file, funzione, riga, vecchio, nuovo): **non porta la COLONNA**.
+Quindi quell'unica voce spegneva **tutti e due** i punti, mentre la prova ne descriveva uno
+solo. Il secondo **non e' equivalente** — tabella di verita' su tutte e 8 le combinazioni, due
+differiscono, e sono due modi di far nascere un documento che non doveva nascere:
+```
+tipo valido · importo > 0 · CAMPI OBBLIGATORI MANCANTI -> il sano rifiuta, il guasto CREA la
+                                                          nota (causale vuota) + riga di GIORNALE
+tipo valido · IMPORTO <= 0 · campi presenti            -> il sano rifiuta, il guasto prosegue
+```
+Era spento dal 2026-08-02. **Tolta** (la chiave non permette di dichiarare «solo il primo
+`or`», e inventare una colonna vorrebbe dire cambiare anche il generatore: meglio due
+sopravvissuti aperti che una cecita' su un punto che tocca il denaro), e ora c'e' il
+**controllo 5** che li conta.
+💡 E' la **stessa famiglia** del difetto del 2026-08-01, un passo piu' in fondo: allora alla
+chiave mancava la FUNZIONE e una dichiarazione rendeva cieca la riga gemella in un'altra
+funzione; adesso mancava la COLONNA. **Una dichiarazione vale solo dove e' stata dimostrata**,
+e ogni volta il confine era piu' sottile di come sembrava.
+
+**Gli altri sei riparati:** un secondo **falso killer** rimasto aperto nel controllo 2 (leggeva
+il disco invece della sorgente vera) · il controllo 3 diceva «tutte esaminate» **saltandone
+alcune in silenzio** (D18 punto 3, dentro la guardia scritta per applicarlo) · leggeva la firma
+della **prima** riga soltanto mentre la voce le perdona tutte · non riconosceva `Optional[Any]`,
+che *e'* `Any` · il lettore **esplodeva** con `TypeError` su una voce lasciata in prosa (ora non
+perdona nulla: direzione sicura) · una **tautologia** (`assertEqual(x[:70], x[:70])`) dentro il
+file che predica il contrario · e `test_pipeline_ci` era diventato **sorvegliante di carta** di
+un modulo che non prova, solo per averlo nominato in un commento.
+
+**E la scappatoia che resta, contata invece che raccontata:** il controllo 3 si applica solo a
+`esaustiva` e `z3`, ma il metodo lo dichiara chi scrive la voce -- scrivere `traccia` lo
+**disarma**, e la dimostrazione tolta da `_n` era letteralmente una traccia. Oggi le voci
+`traccia` su una firma che accetta qualunque cosa sono **5**, tutte su `fase177` con `payout`
+senza tipo, e sono le stesse gia' elencate come «da rileggere» per la D19. Il numero e'
+**inchiodato in una guardia**: chi ne aggiunge una sesta diventa rosso lo stesso giorno.
+
+### ⛔ IL FALSO KILLER — un difetto della guardia stessa, chiuso prima che facesse danno
+Da quando `test_pipeline_ci.py` **nomina** `fase100_dac7` e `fase177`, `test_che_nominano` lo
+conta fra i loro **sorveglianti**. Durante una campagna il giudice rompe di proposito una riga
+di quei moduli e lancia anche quella suite: la guardia avrebbe letto il file **rotto**, sarebbe
+diventata rossa, e il mutante sarebbe stato contato **UCCISO**. Ucciso da cosa? Da un test che
+ha notato che il *sorgente* e' cambiato, non che il *comportamento* e' sbagliato — cioe'
+gonfiaggio del punteggio, entrato dalla porta di una guardia scritta per impedirlo.
+**Rimedio: non spegnere la guardia** (e' la lezione del 3 agosto, quando furono i test a
+spegnere la rete) ma **leggere la sorgente vera** dall'originale che il giudice mette da parte
+nella traccia, **in sola lettura**. Visto rosso prima, provato nelle due direzioni, e poi
+confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha ucciso.
+
+### ⛔ COSA QUESTE GUARDIE NON FANNO (dichiarato prima, D18 punto 3)
+- **Non giudicano se una dimostrazione sia giusta.** Se potessero, sarebbero il dimostratore.
+- **Non esaminano il contenuto di una `traccia`**: una traccia che si appoggia a un'ALTRA
+  funzione e' fragile per la D19, e riconoscerlo resta lavoro umano (le 4 voci da rileggere
+  sono qui sotto).
+- **Non vedono i tipi troppo larghi diversi da `Any`** (per esempio `object`): la regola
+  dichiarata e' «senza tipo o `Any`», e allargarla di nascosto sarebbe un'altra regola.
+- **Se qualcuno cancellasse le classi, nulla diventerebbe rosso**: il controllo interno
+  impedisce di **indebolirle**, non di **toglierle**.
+
+### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
+```
+python -m unittest discover -b     ->  Ran 5394 tests · OK (skipped=4) · uscita 0
+```
+Il conto torna alla riga: **5374 + 20 prove nuove = 5394** — 14 sulla guardia dello schedario
+(4+2+3+3+2), 4 sul generatore, 2 sull'allarme del Guardiano. I giri precedenti, ognuno col
+suo conto esatto: `Ran 5385` con 11, `Ran 5388 in 3622.712s` con 14,
+`Ran 5389 in 3803.435s` con 15, `Ran 5392 in 3035.959s` con 18.
+
+### 🟠 UN NUMERO CHE NON TORNA, scritto invece di essere arrotondato
+La base senza le prove nuove e' **5374**, mentre i documenti dichiaravano **5379** su
+`91ebce0`: ne mancano 5. **Non e' una perdita**, ed e' misurato:
+`git grep -c "    def test_"` da' **5033 metodi** e **401 file di test** identici a `8022808`
+e a `HEAD`. Nessun test e' sparito dal codice: la differenza sta nella **raccolta** fra
+ambienti (i conteggi 5333/5359 dello stesso giorno, repo contro chiavetta, lo mostravano
+gia'). Causa esatta **non identificata**: resta aperta, non spiegata a meta'.
+
+### 🟠 LA SUITE LUNGA CHE MUORE — oggi 2 volte su 4, e la seconda e' quella che insegna
+Primo giro ucciso **al 4,7%** (log 68.876 byte contro 1.457.548 di un giro intero), stesso
+schema del 2026-08-04 (quattro volte di fila). Ripulite **1.527 cartelle temporanee** lasciate
+da giri uccisi (esclusi di proposito lo scratchpad e `bookinvip_mutazione_in_corso`).
+⚠️ **Non e' la causa**: quella spiegazione era gia' stata **falsificata** il 2026-08-04, e
+ripulire era comunque giusto. La causa resta ignota.
+
+### 🔴🛡️ IL SECONDO GIRO UCCISO HA LASCIATO UN MUTANTE IN PRODUZIONE — E LA RETE L'HA PRESO
+Ucciso al **79%**, cioe' **dentro `test_mutation_money`**, che rompe di proposito tre moduli
+del percorso dei soldi. Sul disco e' rimasto questo, in un file di PRODUZIONE:
+```
+- if r["stato"] not in ("in_attesa", "scaduto"):
++ if r["stato"] not in ("in_attesa", "scaduto", "pagato", "cancellato", "rimborsato"):
+      fase162_pagamenti_pendenti.py:263 -- la whitelist degli stati ALLARGATA
+```
+E' **lo stesso identico guasto del 2026-08-03**, quello che allora rimase in produzione per
+ore senza che nulla gridasse, perche' la rete aveva tre buchi. Oggi, per la prima volta su un
+caso VERO e non simulato, ha funzionato in ogni pezzo:
+```
+traccia aperta su fase162            registrata dal giudice PRIMA di rompere
+collaudi/guardia_commit.py           uscita 1: SALVATAGGIO BLOCCATO, col file indicato
+recupera_da_interruzione()           ha ripristinato e ha GRIDATO (::warning), mai in silenzio
+git diff HEAD --stat                 vuoto · impronta tornata a E330605709F3D612
+guardia_commit dopo il recupero      uscita 0 · git status di nuovo coi soli 4 file dichiarati
+```
+💡 **La lezione vale oltre l'episodio:** una suite uccisa non lascia il sistema com'era, lo
+lascia **peggiore** — e la differenza fra il 3 agosto e oggi non e' la fortuna, e' che qualcuno
+aveva contato il denominatore e chiuso tutti e tre i buchi. ⚠️ **Da qui in avanti: dopo OGNI
+giro interrotto si guarda `git status` e la traccia PRIMA di rilanciare.** Il costo di
+saltarlo e' un guasto sui soldi dentro un commit, con tutti i controlli verdi.
 
 ### ✅ CHIAVETTA RIGENERATA E PROVATA IL 2026-08-05 — QUATTRO POSTI ALLINEATI SU `91ebce0`
 Era indietro di un commit **con codice vero** dentro (282 righe di guardie + 13 dello
@@ -102,9 +389,13 @@ precedente si conserva SULLA chiavetta.* Scritta il 2026-08-04, applicata il 202
 50 minuti sulla chiavetta c'e' rimasta la copia vecchia mentre la nuova veniva provata in una
 cartella temporanea. Se la prova fosse fallita, non avremmo perso niente.
 
-### POI, e solo dopo che la guardia e' verde:
-5. Togliere le due voci sbagliate (`fase100_dac7`, `fase177/_cent`), **rimisurando il punteggio
-   di quei due moduli prima e dopo**: toglierle fa ricomparire un sopravvissuto in ognuno.
+### ▶️ COSA RESTA DI QUESTO COMPARTIMENTO
+5. ✅ **FATTO** — le due voci sbagliate sono state tolte e i punteggi rimisurati prima e dopo
+   (numeri qui sopra). ⚠️ **Onesta' sulla misura:** il «prima» con un giro vero e' stato fatto
+   su `fase100_dac7`; su `fase177` il «prima» non e' stato ri-eseguito, perche' con la voce
+   dentro quel mutante non veniva **mai eseguito** (verdetto `equivalente` per costruzione) —
+   ed e' l'unica cosa che il giro avrebbe potuto dire. Il «dopo» su `fase177` e' invece il piu'
+   forte possibile: **tutti e 12** i sorveglianti, non un sottoinsieme.
 6. Rileggere le **4 voci «da rileggere»** (fase177 `riscuoti_debiti` ×2 e `processa_penale`,
    fase178 §15): il caso centrale e' tracciato bene, ma una parte del ragionamento si appoggia a
    un'ALTRA funzione («`_cent` non e' mai negativo», «chi legge l'uscita e' bash») — ed e'
@@ -222,13 +513,11 @@ peggiore.** Prima di rilanciare qualcosa che e' morto, si guarda cosa ha lasciat
   mai guardato, e la guardia la scrive un essere umano o non la scrive nessuno.
 
 ### ▶️ COSA RESTA IN FILA (l'elenco per esteso, con le prove, sta in `REGISTRO_INGEGNERIA.md`)
-1. 🔴 **Ritirare le due equivalenze gemelle** (`fase100_dac7`, `fase177_financial_controller`):
-   si smontano con lo stesso argomento di stanotte. Va rimisurato il punteggio di quei due
-   moduli prima e dopo, perche' toglierle fa ricomparire un buco in ognuno.
-2. 🔴 **Una guardia sullo schedario degli equivalenti** (D18 punto 4). Oggi **nessun test lo
-   guarda**, ed e' la manopola che trasforma un buco in uno zero. Una voce falsa c'e' gia'
-   stata (1 agosto) e stanotte ne stava per entrare una seconda: **due volte in quattro
-   giorni**, ed e' l'unico posto del progetto dove un errore diventa cecita' permanente.
+1. ✅ **FATTO il 2026-08-05** — le due equivalenze gemelle sono state ritirate e i punteggi
+   rimisurati prima e dopo: il buco e' ricomparso in entrambi i moduli, come previsto.
+2. ✅ **FATTO il 2026-08-05** — la guardia sullo schedario esiste (4 controlli, ognuno visto
+   rosso prima), e il controllo 3 ha trovato da solo le due voci false. Dettagli e limiti
+   dichiarati in cima a questo file.
 3. 🟠 **Contare le rinunce silenziose** dello strumento (`mutazione_prodotto.py:445`), cosi'
    il denominatore torna onesto. Ordine D20: prima la guardia, vista rossa.
 4. 🟠 **`mutazione_prodotto.py:1269/1275`** e il rumore dei fine riga (vedi lezione qui sopra).

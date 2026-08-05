@@ -424,11 +424,23 @@ def genera_mutanti(sorgente, righe_ammesse=None):
     albero = ast.parse(sorgente)
     righe = sorgente.splitlines()
     ammesse = set(righe_ammesse) if righe_ammesse is not None else None
-    mutanti, saltati = [], {"a_cavallo": 0, "catena": 0, "non_trovato": 0}
+    mutanti, saltati = [], {"a_cavallo": 0, "catena": 0, "non_trovato": 0,
+                            "operatore_ignoto": 0}
+
+    def _rinuncia(riga, categoria, quante=1):
+        """⛔ UNA RINUNCIA SI CONTA SOLO SE RIGUARDA UNA RIGA CHE STIAMO ESAMINANDO.
+        In modo `--diff` si generano mutanti solo sulle righe cambiate: dichiarare le rinunce
+        di TUTTO il file farebbe accendere la riga «NON PROVATI (dichiarati)» a ogni singolo
+        giro (452 punti di rumore fisso su `fase83_server.py`), e un allarme sempre acceso
+        viene spento -- che e' un difetto quanto un allarme mancato (regola ferrea 10).
+        Trovato il 2026-08-05 da una revisione a contesto fresco."""
+        if ammesse is not None and riga not in ammesse:
+            return
+        saltati[categoria] += quante
 
     def _aggiungi(nodo_riga, taglio, nuovo, tipo, danno):
         if taglio is None:
-            saltati["non_trovato"] += 1
+            _rinuncia(nodo_riga, "non_trovato")
             return
         r, ci, cf = taglio
         if ammesse is not None and r not in ammesse:
@@ -439,17 +451,34 @@ def genera_mutanti(sorgente, righe_ammesse=None):
     for nodo in ast.walk(albero):
         if isinstance(nodo, ast.Compare):
             if len(nodo.ops) != 1:
-                saltati["catena"] += 1
+                # ⛔ SI CONTA PER OPERATORE, NON PER NODO. `0 < limite <= 500` e' UN nodo ma
+                # DUE punti mutabili, e contarlo come una rinuncia sola faceva uscire un
+                # denominatore corto: 44 moduli su 152, 109 punti in tutta la macchina.
+                # Scoperto il 2026-08-05 da una revisione a contesto fresco, dopo che avevo
+                # scritto nel diario che 43 era «il denominatore vero di fase160»: erano 46.
+                # Il conteggio a mano del 2026-08-04 diceva 43 anche lui -- due misure
+                # d'accordo fra loro ed entrambe sbagliate. Ora c'e' un oracolo indipendente
+                # che le confronta: `test_pipeline_ci.TestGeneratoreDiMutanti.
+                # test_IL_DENOMINATORE_DICHIARATO_COINCIDE_CON_UN_ORACOLO_INDIPENDENTE`.
+                _rinuncia(nodo.lineno, "catena", len(nodo.ops))
                 continue
             nome = type(nodo.ops[0]).__name__
             if nome not in _CONFRONTI:
+                # ⛔ `is`, `is not`, `in`, `not in`: il generatore non li sa rompere, ed e' una
+                # rinuncia legittima -- ma va CONTATA. Prima si saltavano in silenzio, e il
+                # denominatore usciva piu' piccolo del vero: su `fase160` erano 43 punti e ne
+                # dichiarava 39. Fra i quattro muti c'era `r["stato"] not in attesi`, la sola
+                # condizione che decide se un movimento di denaro e' permesso. Un punto che lo
+                # strumento non esamina non e' un punto sicuro: e' un punto che nessuno ha mai
+                # guardato, e tacerlo lo fa sembrare coperto (D18 punto 3).
+                _rinuncia(nodo.lineno, "operatore_ignoto")
                 continue
             simbolo, sostituto, danno = _CONFRONTI[nome]
             taglio = _taglia_operatore(righe, nodo.left.end_lineno, nodo.left.end_col_offset,
                                        nodo.comparators[0].lineno,
                                        nodo.comparators[0].col_offset, simbolo)
             if taglio is None and nodo.left.end_lineno != nodo.comparators[0].lineno:
-                saltati["a_cavallo"] += 1
+                _rinuncia(nodo.lineno, "a_cavallo")
                 continue
             _aggiungi(nodo.lineno, taglio, sostituto, "confronto", danno)
 
@@ -463,7 +492,7 @@ def genera_mutanti(sorgente, righe_ammesse=None):
                 taglio = _taglia_operatore(righe, a.end_lineno, a.end_col_offset,
                                            b.lineno, b.col_offset, simbolo)
                 if taglio is None and a.end_lineno != b.lineno:
-                    saltati["a_cavallo"] += 1
+                    _rinuncia(nodo.lineno, "a_cavallo")
                     continue
                 _aggiungi(nodo.lineno, taglio, sostituto, "booleano", danno)
 
@@ -471,11 +500,11 @@ def genera_mutanti(sorgente, righe_ammesse=None):
                 and isinstance(nodo.value, bool):
             testo = "True" if nodo.value else "False"
             if nodo.lineno != nodo.end_lineno:
-                saltati["a_cavallo"] += 1
+                _rinuncia(nodo.lineno, "a_cavallo")
                 continue
             riga = righe[nodo.lineno - 1] if nodo.lineno <= len(righe) else ""
             if riga[nodo.col_offset:nodo.end_col_offset] != testo:
-                saltati["non_trovato"] += 1
+                _rinuncia(nodo.lineno, "non_trovato")
                 continue
             _aggiungi(nodo.lineno, (nodo.lineno, nodo.col_offset, nodo.end_col_offset),
                       "False" if nodo.value else "True", "costante",
@@ -554,31 +583,64 @@ def test_che_nominano(percorso):
 #    righe identiche del file: in `fase177` la riga `if residuo <= 0:` compare in due funzioni
 #    diverse, e dichiararne una avrebbe reso cieca anche l'altra. Una dichiarazione vale SOLO
 #    dove e' stata dimostrata.
+# ⛔ IL VALORE E' A CAMPI, NON PROSA (dal 2026-08-05). Quattro campi obbligatori:
+#      metodo   uno di: "z3" | "esaustiva" | "traccia". Insieme CHIUSO: «non e' raggiungibile»
+#               e «non e' osservabile» NON sono metodi di dimostrazione (divieto B6, D19).
+#      dominio  su COSA e' stata fatta la prova. E' il campo che ha reso visibile la forma
+#               comune delle tre voci false: una prova fatta su un dominio PIU' PICCOLO di
+#               quello che la firma della funzione accetta (`v` senza tipo, `v: Any`).
+#               Una dimostrazione formale vale quanto il modello su cui e' fatta.
+#      data     AAAA-MM-GG. Serve a sapere se la prova e' piu' vecchia del codice.
+#      prova    il testo della dimostrazione, invariato. E' l'unico campo che esce da
+#               `_e_equivalente`, perche' i consumatori lo tagliano.
+#    Sotto guardia in `test_pipeline_ci.py`, classi `TestLoSchedarioDegliEquivalenti_*`:
+#    ancoraggio al sorgente vivo, presenza dei campi, e dominio >= firma. Chi aggiunge una
+#    voce senza campi diventa rosso lo stesso giorno (D18 punto 4).
 EQUIVALENTI_DICHIARATI = {
-    ("fase184_marca_temporale.py", "_der_intero", "if valore < 0:", "<", "<="):
-        "DIMOSTRATO PER ESAURIMENTO il 2026-08-04, non dedotto. `<` e `<=` sugli interi "
-        "differiscono in UN SOLO punto: valore == 0. E lo zero non puo' arrivare a questa "
-        "riga, perche' la riga IMMEDIATAMENTE PRECEDENTE nella stessa funzione fa "
-        "`if valore == 0: return _der(0x02, b'\\x00')` -- un return incondizionato. Quindi "
-        "a questa riga vale sempre valore != 0, e sull'intero dominio residuo le due "
-        "condizioni coincidono. Nessun ingresso puo' distinguerle: non c'e' niente da "
-        "distinguere. "
-        "⚠️ NON e' un «oggi non si raggiunge» alla D19: quello e' vietato perche' la "
-        "premessa sta in un'ALTRA funzione e puo' cadere senza che nessuno se ne accorga. "
-        "Qui la premessa e' la riga sopra, nella stessa funzione, ed e' gia' inchiodata da "
-        "una guardia esistente: `test_fase184_marca_temporale.TestDER."
-        "test_intero_zero_e_piccoli` pretende che `_der_intero(0)` valga b'\\x02\\x01\\x00'. "
-        "Se qualcuno togliesse quel return, quella guardia diventerebbe rossa lo stesso "
-        "giorno e questa dichiarazione andrebbe rifatta.",
+    ("fase184_marca_temporale.py", "_der_intero", "if valore < 0:", "<", "<="): {
+        "metodo": "esaustiva",
+        "dominio": "tutti gli interi. La firma e' `_der_intero(valore: int)`: nessun "
+                   "argomento senza tipo, quindi il dominio della prova coincide con "
+                   "quello che la funzione accetta.",
+        "data": "2026-08-04",
+        "prova":
+            "DIMOSTRATO PER ESAURIMENTO il 2026-08-04, non dedotto. `<` e `<=` sugli interi "
+            "differiscono in UN SOLO punto: valore == 0. E lo zero non puo' arrivare a questa "
+            "riga, perche' la riga IMMEDIATAMENTE PRECEDENTE nella stessa funzione fa "
+            "`if valore == 0: return _der(0x02, b'\\x00')` -- un return incondizionato. Quindi "
+            "a questa riga vale sempre valore != 0, e sull'intero dominio residuo le due "
+            "condizioni coincidono. Nessun ingresso puo' distinguerle: non c'e' niente da "
+            "distinguere. "
+            "⚠️ NON e' un «oggi non si raggiunge» alla D19: quello e' vietato perche' la "
+            "premessa sta in un'ALTRA funzione e puo' cadere senza che nessuno se ne accorga. "
+            "Qui la premessa e' la riga sopra, nella stessa funzione, ed e' gia' inchiodata da "
+            "una guardia esistente: `test_fase184_marca_temporale.TestDER."
+            "test_intero_zero_e_piccoli` pretende che `_der_intero(0)` valga b'\\x02\\x01\\x00'. "
+            "Se qualcuno togliesse quel return, quella guardia diventerebbe rossa lo stesso "
+            "giorno e questa dichiarazione andrebbe rifatta.",
+    },
     ("fase199_invarianti.py", "dimostra_formalmente",
-     "mx = z3.If(a1 > b1, a1, b1)", ">", ">="):
-        "DIMOSTRATO CON Z3 il 2026-07-31, non osservato: chiesto al risolutore se esista un "
-        "intero per cui If(a>b,a,b) e If(a>=b,a,b) differiscano -> unsat. Sono lo stesso "
-        "massimo per OGNI coppia di interi. Nessun test potrebbe ucciderlo.",
+     "mx = z3.If(a1 > b1, a1, b1)", ">", ">="): {
+        "metodo": "z3",
+        "dominio": "ogni coppia di interi z3. `a1` e `b1` sono `z3.Int` dichiarati DENTRO "
+                   "la funzione, e `dimostra_formalmente()` non prende argomenti: non c'e' "
+                   "nessun ingresso esterno che possa stare fuori dal modello.",
+        "data": "2026-07-31",
+        "prova":
+            "DIMOSTRATO CON Z3 il 2026-07-31, non osservato: chiesto al risolutore se esista un "
+            "intero per cui If(a>b,a,b) e If(a>=b,a,b) differiscano -> unsat. Sono lo stesso "
+            "massimo per OGNI coppia di interi. Nessun test potrebbe ucciderlo.",
+    },
     ("fase199_invarianti.py", "dimostra_formalmente",
-     "mn = z3.If(a2 < b2, a2, b2)", "<", "<="):
-        "Stessa dimostrazione del massimo, applicata al minimo: If(a<b,a,b) e If(a<=b,a,b) "
-        "coincidono per ogni coppia di interi.",
+     "mn = z3.If(a2 < b2, a2, b2)", "<", "<="): {
+        "metodo": "z3",
+        "dominio": "ogni coppia di interi z3, come la voce del massimo qui sopra: `a2` e "
+                   "`b2` sono `z3.Int` locali e la funzione non prende argomenti.",
+        "data": "2026-07-31",
+        "prova":
+            "Stessa dimostrazione del massimo, applicata al minimo: If(a<b,a,b) e If(a<=b,a,b) "
+            "coincidono per ogni coppia di interi.",
+    },
     # ⛔ QUI C'ERA UNA FALSA EQUIVALENZA, TOLTA IL 2026-08-01.
     # Diceva: «`exc_info=True` -> `False` cambia solo quanto dettaglio finisce nel log,
     # nessun comportamento osservabile muta». **Falso**: il campo `exc_info` del record e'
@@ -590,13 +652,26 @@ EQUIVALENTI_DICHIARATI = {
     # ⚠️ LEZIONE PER CHI AGGIUNGE VOCI QUI: «non e' osservabile» va DIMOSTRATO (z3, o una
     #    prova esaustiva sugli ingressi), mai dedotto. Se la dimostrazione non c'e', la voce
     #    non va scritta: meglio un sopravvissuto aperto che una cecita' dichiarata.
-    ("fase100_dac7.py", "_n",
-     "return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else 0",
-     ">=", ">"):
-        "PROVATO il 2026-07-31 su 11 ingressi (0, 1, -1, 5, -5, True, False, None, 'x', "
-        "3.0, 10^9): 0 risposte diverse. Con v=0 il ramo vero restituisce 0 e il ramo else "
-        "restituisce 0: identico. Nessun test puo' ucciderlo perche' non c'e' niente da "
-        "vedere.",
+    # ⛔ QUI C'ERA LA TERZA FALSA EQUIVALENZA, TOLTA IL 2026-08-05 -- ed e' la prima che non
+    # ha trovato una persona: l'ha trovata una GUARDIA, sui dati veri, senza iniettare niente
+    # (`test_pipeline_ci.TestLoSchedarioDegliEquivalenti_3_DOMINIO_MAGGIORE_DELLA_FIRMA`).
+    # Diceva: `fase100_dac7.py` / `_n` / `>=` -> `>`, «PROVATO su 11 ingressi: 0 risposte
+    # diverse», dal 2026-07-31.
+    # PERCHE' ERA FALSA: la firma e' `def _n(v):` -- SENZA TIPO, quindi accetta qualunque
+    # cosa -- mentre la prova ragionava sugli interi. Una prova vale quanto il modello su cui
+    # e' fatta, e quel modello era piu' piccolo del dominio della funzione. Con una
+    # SOTTOCLASSE di int che vale 0 (`class N(int)`, o un `IntEnum`):
+    #     originale (v >= 0 vero) -> restituisce l'OGGETTO, di tipo N
+    #     mutante   (v >  0 falso) -> restituisce 0, di tipo int
+    # Sono distinguibili, e il test che lo ucciderebbe si scrive: `assertIs(type(_n(N(0))), N)`.
+    # E' la stessa identica forma della gemella di `fase177/_cent` (tolta oggi, poco sotto) e
+    # di quella di `fase160/_cent` ritirata il 2026-08-04 prima del commit: tre volte lo stesso
+    # errore, e la terza l'ha vista una macchina invece di una persona.
+    # ⚠️ Quel mutante ora e' un SOPRAVVISSUTO dichiarato, non un equivalente. Misurato sullo
+    # stesso insieme killer prima e dopo (`test_dati_reali test_fase100_dac7`, insieme RIDOTTO
+    # e dichiarato): prima 18 provati · 13 uccisi · 4 sopravvissuti · 1 equivalente; dopo,
+    # l'esito e' scritto in `RIPRENDI_QUI.md`. Meglio un sopravvissuto aperto che una cecita'
+    # dichiarata.
     # ⛔ QUI STAVA PER FINIRE LA SECONDA FALSA EQUIVALENZA, RITIRATA IL 2026-08-04 PRIMA DEL
     # COMMIT. Avevo dichiarato equivalente `fase160_escrow_garanzia.py` / `_cent` / `>=`->`>`
     # «su TUTTO il dominio», con una prova su 2018 ingressi. La prova era INCOMPLETA: la firma
@@ -610,17 +685,30 @@ EQUIVALENTI_DICHIARATI = {
     # una revisione a CONTESTO FRESCO (appendice 19) rifiutando la mia dimostrazione: chi
     # scrive non giudica. Vale la stessa lezione scritta qui sopra il 2026-08-01, e stavolta
     # e' stata pagata prima del commit invece che dopo.
-    ("fase177_financial_controller.py", "_cent",
-     "return v if isinstance(v, int) and not isinstance(v, bool) and v > 0 else 0",
-     ">", ">="):
-        "DIMOSTRATO CON Z3 il 2026-08-01, non osservato: chiesto al risolutore se esista un "
-        "intero v per cui If(v>0, v, 0) e If(v>=0, v, 0) differiscano -> unsat. Differirebbero "
-        "solo in v=0, dove pero' il ramo vero restituisce v (cioe' 0) e il ramo else "
-        "restituisce 0: la stessa cosa. E' la gemella del `_cent` di fase100_dac7 (voce qui "
-        "sopra), provata li' su 11 ingressi e qui in forma generale su TUTTI gli interi. "
-        "Nessun test puo' ucciderlo: non c'e' niente da vedere.",
+    # ⛔ QUI C'ERA LA QUARTA FALSA EQUIVALENZA, TOLTA IL 2026-08-05 dalla stessa guardia e per
+    # lo stesso motivo. Diceva: `fase177_financial_controller.py` / `_cent` / `>` -> `>=`,
+    # «DIMOSTRATO CON Z3 il 2026-08-01: unsat», ed era la piu' pericolosa delle quattro perche'
+    # portava il timbro di un DIMOSTRATORE AUTOMATICO.
+    # PERCHE' ERA FALSA: z3 ragiona sugli INTERI; la firma e' `def _cent(v: Any) -> int:`, cioe'
+    # accetta QUALUNQUE COSA. Non ha sbagliato il risolutore -- gli era stata fatta la domanda
+    # sbagliata, e la risposta giusta a una domanda sbagliata sembra identica a una prova.
+    # Con `class Cent(int)` che vale 0, o un `IntEnum`:
+    #     originale (v > 0 falso)  -> restituisce 0, di tipo int
+    #     mutante   (v >= 0 vero)  -> restituisce l'OGGETTO, di tipo Cent
+    # Distinguibili: `assertIs(type(_cent(Cent(0))), int)` e' vero sull'originale e falso sul
+    # mutante. ⚠️ E' un modulo dei SOLDI: `_cent` normalizza gli importi in centesimi, e un
+    # tipo diverso in uscita si propaga a chi lo scrive nel giornale.
+    # ⚠️ Quel mutante ora e' un SOPRAVVISSUTO dichiarato, non un equivalente.
+    # 💡 LA LEZIONE, che vale piu' delle due voci: **una dimostrazione formale vale quanto il
+    # modello su cui e' fatta**. Il modo di controllarlo a macchina e' confrontare il dominio
+    # dichiarato con la FIRMA, ed e' il controllo 3 della guardia sullo schedario.
     ("fase177_financial_controller.py", "riscuoti_debiti",
-     "if residuo <= 0:", "<=", "<"):
+     "if residuo <= 0:", "<=", "<"): {
+        "metodo": "traccia",
+        "dominio": "il solo caso che differisce, `residuo == 0`, seguito lungo il codice "
+                   "fino allo stato finale.",
+        "data": "2026-08-01",
+        "prova":
         "DIMOSTRATO il 2026-08-01 leggendo il codice, non supposto. Il caso che differisce e' "
         "UNO: residuo == 0 dentro il giro sulle righe di payout. Col codice sano si esce dal "
         "giro; col guasto si prosegue e per ogni riga rimanente vale quota = min(disp, 0) = 0, "
@@ -634,14 +722,21 @@ EQUIVALENTI_DICHIARATI = {
         "importo zero, quella guardia diventerebbe rossa e questa dichiarazione andrebbe "
         "rifatta. ⛔ Vale SOLO in `riscuoti_debiti`: la riga identica in `processa_penale` "
         "(538) NON e' dimostrata e resta un sopravvissuto aperto.",
+    },
     ("fase177_financial_controller.py", "riscuoti_debiti",
-     "if not pid or pid == rif_deb or disp <= 0:", "<=", "<"):
+     "if not pid or pid == rif_deb or disp <= 0:", "<=", "<"): {
+        "metodo": "traccia",
+        "dominio": "il solo caso che differisce, `disp == 0`, seguito lungo il codice fino "
+                   "allo stato finale (`disp` viene da `_cent`, che non e' mai negativo).",
+        "data": "2026-08-01",
+        "prova":
         "DIMOSTRATO il 2026-08-01. `disp = _cent(r.get('minori'))` e `_cent` non restituisce "
         "MAI un negativo, quindi `disp < 0` e' sempre falso e l'unico caso che differisce e' "
         "disp == 0: col codice sano la riga di payout si salta, col guasto si prosegue con "
         "quota = min(0, residuo) = 0 e si arriva allo stesso `registra(importo_cents=0)` che "
         "rifiuta pulito, senza scrivere e senza gridare. Nessuna differenza di stato ne' di "
         "registro. Stessa premessa sotto guardia della voce qui sopra.",
+    },
 
     # ── LA FAMIGLIA DEL CONFINE «ZERO» (2026-08-02) ─────────────────────────────────
     # Sei voci, una dimostrazione sola, ripetuta per ogni posto perche' la chiave porta la
@@ -657,41 +752,82 @@ EQUIVALENTI_DICHIARATI = {
     #    cambiasse `registra`, quella guardia diventerebbe rossa e QUESTE SEI VOCI andrebbero
     #    rifatte da capo. Non sono dispense permanenti: sono conclusioni con una premessa.
     ("fase177_financial_controller.py", "esporta_tutti",
-     "and offset >= 0) else 0", ">=", ">"):
+     "and offset >= 0) else 0", ">=", ">"): {
+        "metodo": "traccia",
+        "dominio": "il solo valore che differisce, `offset == 0`, piu' i due rami per "
+                   "offset negativo o non intero.",
+        "data": "2026-08-02",
+        "prova":
         "L'unico valore che differisce e' offset == 0: col codice sano la condizione e' vera "
         "e `off = offset`, cioe' 0; col guasto e' falsa e si prende il ramo `else`, che vale "
         "0. Stesso numero per la stessa via diversa. Per offset negativo o non intero "
         "entrambi danno 0. Nessun test puo' vedere la differenza perche' non ce n'e' una.",
+    },
     ("fase177_financial_controller.py", "emetti_nota",
      "if tipo not in (\"credito\", \"debito\") or imp <= 0 or not (riferimento and soggetto",
-     "<=", "<"):
+     "<=", "<"): {
+        "metodo": "traccia",
+        "dominio": "il solo caso che differisce, `imp == 0`, seguito fino al valore di "
+                   "ritorno.",
+        "data": "2026-08-02",
+        "prova":
         "imp == 0 e' l'unico caso che cambia: col guasto la nota non viene rifiutata subito "
         "ma si arriva a `registra(importo_cents=0)`, che rifiuta pulito -> `mv is None` -> "
         "`return None` (riga 400). Stesso valore di ritorno, nessuna nota creata, nessun "
         "movimento, nessun allarme.",
-    ("fase177_financial_controller.py", "emetti_nota",
-     "if tipo not in (\"credito\", \"debito\") or imp <= 0 or not (riferimento and soggetto",
-     "or", "and"):
-        "In Python `and` lega piu' stretto di `or`, quindi il terzo controllo -- quello sui "
-        "campi obbligatori -- resta comunque da solo e continua a rifiutare. Cambia solo che "
-        "un `tipo` sconosciuto non viene piu' fermato qui: ma poco sotto diventa "
-        "`\"nota_\" + tipo`, che non e' in TIPI_GIORNALE, quindi `registra` lo rifiuta e si "
-        "torna `None` lo stesso. Nessun documento nasce, nessun movimento viene scritto.",
+    },
+    # ⛔ QUI C'ERA LA QUINTA FALSA EQUIVALENZA, TOLTA IL 2026-08-05, e non era sbagliata la
+    # dimostrazione: era sbagliato CIO' CHE COPRIVA. Diceva:
+    # `emetti_nota` / `if tipo not in ("credito","debito") or imp <= 0 or not (...)` / `or`->`and`.
+    # Quella riga contiene **DUE** `or`, e la chiave non porta la COLONNA: una prova sola ne
+    # spegneva DUE. Il testo ragionava sul primo (il `tipo` sconosciuto, che poi `registra`
+    # rifiuta comunque) e nessuno si era accorto che perdonava anche il secondo.
+    # IL SECONDO NON E' EQUIVALENTE -- tabella di verita' su tutte e 8 le combinazioni, due
+    # differiscono, e sono due modi di far nascere un documento che non doveva nascere:
+    #     tipo valido · imp > 0 · CAMPI OBBLIGATORI MANCANTI -> il sano rifiuta; col guasto la
+    #         nota viene creata (causale vuota) e viene scritta una riga di GIORNALE;
+    #     tipo valido · IMPORTO <= 0 · campi presenti        -> il sano rifiuta; col guasto si
+    #         prosegue.
+    # E' il modulo dei SOLDI, e quel punto era spento dal 2026-08-02.
+    # ⛔ PERCHE' TOLTA E NON RISTRETTA: la chiave e' (file, funzione, riga, vecchio, nuovo).
+    # Senza la colonna non esiste modo di dichiarare «solo il primo `or`», e inventare una
+    # colonna vorrebbe dire cambiare anche il generatore. Meglio DUE sopravvissuti aperti che
+    # una cecita' dichiarata su un punto che tocca il denaro.
+    # 💡 E' la stessa famiglia del difetto del 2026-08-01 (una dichiarazione che si estende
+    # oltre dove e' stata dimostrata) un passo piu' in fondo: allora mancava la FUNZIONE nella
+    # chiave, adesso manca la COLONNA. Ora c'e' una guardia che conta -- controllo 5.
     ("fase177_financial_controller.py", "processa_penale",
-     "if imp <= 0 or not (riferimento and host_id):", "<=", "<"):
+     "if imp <= 0 or not (riferimento and host_id):", "<=", "<"): {
+        "metodo": "traccia",
+        "dominio": "il solo caso che differisce, `imp == 0`, seguito fino al valore di "
+                   "ritorno.",
+        "data": "2026-08-02",
+        "prova":
         "imp == 0: col guasto si prosegue fino a `emetti_nota(importo_cents=0)`, che ha lo "
         "stesso controllo e restituisce None -> `if nota is None: return None` (riga 516). "
         "Identico.",
+    },
     ("fase177_financial_controller.py", "processa_penale",
-     "if residuo <= 0:", "<=", "<"):
+     "if residuo <= 0:", "<=", "<"): {
+        "metodo": "traccia",
+        "dominio": "il solo caso che differisce, `residuo == 0`, seguito lungo il giro "
+                   "sulle righe di payout fino allo stato finale.",
+        "data": "2026-08-02",
+        "prova":
         "residuo == 0 dentro il giro sulle righe di payout: col codice sano si esce, col "
         "guasto si prosegue e per ogni riga rimanente quota = min(disp, 0) = 0, quindi "
         "`registra(importo_cents=0)` -> None -> `continue` (riga 553). Il residuo non cambia, "
         "quindi nemmeno le scritture successive. ⛔ Questa voce vale SOLO in `processa_penale`: "
         "la riga identica in `riscuoti_debiti` ha la sua dimostrazione a parte -- ed e' "
         "esattamente per questo che la chiave porta il nome della funzione.",
+    },
     ("fase179_rate_limit.py", "_sfratta_se_serve",
-     "if len(self._m) <= self._max_chiavi:", "<=", "<"):
+     "if len(self._m) <= self._max_chiavi:", "<=", "<"): {
+        "metodo": "traccia",
+        "dominio": "il solo caso che differisce, `len(self._m) == self._max_chiavi`, "
+                   "seguito fino alla riga che calcola quante chiavi sfrattare.",
+        "data": "2026-08-02",
+        "prova":
         "DIMOSTRATO il 2026-08-02 leggendo il codice. L'unico caso che differisce e' "
         "len(self._m) == self._max_chiavi: col codice sano si esce subito, col guasto si "
         "prosegue -- ma la riga dopo calcola `n_da_togliere = len - max`, che li' vale ZERO, "
@@ -699,18 +835,30 @@ EQUIVALENTI_DICHIARATI = {
         "identico, registro identico; cambia solo qualche ciclo di calcolo sprecato a "
         "ordinare una lista per poi non usarla. Nessun test puo' vedere una differenza che "
         "non c'e'.",
+    },
     ("fase178_watchdog.py", "eta_backup_sec",
-     "if piu_recente is None or m > piu_recente:", ">", ">="):
+     "if piu_recente is None or m > piu_recente:", ">", ">="): {
+        "metodo": "traccia",
+        "dominio": "il solo caso che differisce, `m == piu_recente`, seguito fino al "
+                   "risultato finale del massimo.",
+        "data": "2026-08-02",
+        "prova":
         "Si cerca il backup PIU' RECENTE. L'unico caso che differisce e' m == piu_recente: "
         "col codice sano non si riassegna, col guasto si riassegna LO STESSO VALORE. Il "
         "risultato finale e' identico per costruzione (e' un massimo), e nessun test puo' "
         "vedere una differenza che non esiste. Dimostrato il 2026-08-02 leggendo il codice: "
         "`piu_recente = m` con m == piu_recente non cambia niente.",
+    },
     # NB: il codice FUORI da una funzione ha nome funzione "" (vedi `funzione_di`), non
     # un'etichetta tipo "<modulo>": scriverla sbagliata fa semplicemente non combaciare la
     # voce, e il mutante resta -- giustamente -- fra i sopravvissuti.
     ("fase178_watchdog.py", "",
-     "print(json.dumps(r, ensure_ascii=False))", "False", "True"):
+     "print(json.dumps(r, ensure_ascii=False))", "False", "True"): {
+        "metodo": "traccia",
+        "dominio": "l'uscita della riga, seguita fino a chi la consuma (il bash del server, "
+                   "che la interpreta come JSON).",
+        "data": "2026-08-02",
+        "prova":
         "Cambia solo COME i caratteri accentati finiscono nel testo: `ensure_ascii=True` li "
         "scrive come \\uXXXX. Il JSON resta valido e, una volta LETTO, e' lo STESSO oggetto "
         "-- verificato: json.loads(dumps(x, True)) == json.loads(dumps(x, False)) per "
@@ -719,11 +867,18 @@ EQUIVALENTI_DICHIARATI = {
         "non un buco nella rete di protezione. ⚠️ Se un domani qualcuno leggesse questa "
         "uscita CONFRONTANDO I BYTE invece di interpretarla, questa dichiarazione andrebbe "
         "rifatta.",
+    },
     ("fase177_financial_controller.py", "processa_penale",
-     "if not pid or pid == riferimento or disp <= 0:", "<=", "<"):
+     "if not pid or pid == riferimento or disp <= 0:", "<=", "<"): {
+        "metodo": "traccia",
+        "dominio": "il solo caso che differisce, `disp == 0`, seguito fino allo stato "
+                   "finale (`disp` viene da `_cent`, che non e' mai negativo).",
+        "data": "2026-08-02",
+        "prova":
         "`disp = _cent(r.get('minori'))` non e' mai negativo, quindi `disp < 0` e' sempre "
         "falso e l'unico caso che differisce e' disp == 0: si prosegue con quota = 0 e si "
         "arriva allo stesso `registra` che rifiuta pulito. Nessuna differenza osservabile.",
+    },
 }
 
 
@@ -758,9 +913,21 @@ def funzione_di(righe, numero):
 
 def _e_equivalente(percorso, righe, mutante):
     riga = righe[mutante["riga"] - 1].strip() if mutante["riga"] <= len(righe) else ""
-    return EQUIVALENTI_DICHIARATI.get(
+    voce = EQUIVALENTI_DICHIARATI.get(
         (os.path.basename(percorso), funzione_di(righe, mutante["riga"]), riga,
          mutante["vecchio"], mutante["nuovo"]))
+    # ⛔ DI QUI ESCE SEMPRE TESTO, MAI IL DIZIONARIO. I due soli consumatori tagliano il
+    # risultato (`motivo[:70]` e `motivo[:60]`): restituire la voce intera farebbe morire il
+    # giro con un TypeError DOPO aver gia' rotto un file di produzione. I campi `metodo`,
+    # `dominio` e `data` servono alla guardia dello schedario, non al giro di mutazione.
+    # Sotto guardia in `test_pipeline_ci.TestLoSchedarioDegliEquivalenti_2_CAMPI_STRUTTURATI.
+    # test_IL_LETTORE_RESTITUISCE_TESTO_perche_chi_lo_usa_lo_TAGLIA`.
+    # ⛔ E SI GUARDA ANCHE IL TIPO IN INGRESSO, non solo quello in uscita: una voce lasciata
+    # nel formato storico (prosa, com'erano tutte fino al 2026-08-05) farebbe esplodere il
+    # giro con `TypeError: string indices must be integers`. Qui invece non perdona nulla --
+    # la direzione SICURA, perche' il mutante viene provato invece che saltato -- e la guardia
+    # dei campi lo dice rosso alla prima esecuzione della suite.
+    return voce["prova"] if isinstance(voce, dict) else None
 
 
 # ── RETE DI SALVATAGGIO CONTRO L'INTERRUZIONE ───────────────────────────────────
@@ -961,10 +1128,17 @@ def censimento():
     for nome in moduli_di_produzione():
         percorso = os.path.join(REPO, nome)
         try:
-            mutanti, _ = genera_mutanti(_leggi_intatto(percorso))
+            mutanti, saltati = genera_mutanti(_leggi_intatto(percorso))
         except SyntaxError:
-            mutanti = []
+            mutanti, saltati = [], {}
+        # ⛔ LE RINUNCE ENTRANO NELLA TABELLA. Prima si buttavano via (`mutanti, _ = ...`) e
+        # questa e' la tabella con cui si decide DOVE attaccare: un modulo scritto quasi tutto
+        # a `not in` / `is None` compariva con pochi «mutanti», non risultava SCOPERTO, e
+        # nessuno lo guardava -- mentre la sua logica non era mai stata messa alla prova.
+        # Erano 1290 operatori invisibili in tutta la macchina. D18 punto 3, lasciata aperta
+        # nel consumatore piu' letto dopo averla chiusa nel generatore (2026-08-05).
         righe.append({"modulo": nome, "mutanti": len(mutanti),
+                      "rinunce": sum(saltati.values()),
                       "sorveglianti": len(test_che_nominano(percorso)),
                       "righe": sum(1 for _ in io.open(percorso, encoding="utf-8",
                                                       errors="replace"))})
@@ -1121,15 +1295,23 @@ if __name__ == "__main__" and "--censimento" in sys.argv:
     print("CENSIMENTO DELLA SORVEGLIANZA — %d moduli di produzione, nessun test eseguito"
           % len(_righe))
     print("=" * 96)
-    print("  %-38s %7s %7s %8s" % ("modulo", "righe", "mutanti", "chi lo vede"))
+    print("  %-38s %7s %7s %8s %8s" % ("modulo", "righe", "mutanti", "rinunce",
+                                       "chi lo vede"))
     for r in sorted(_righe, key=lambda x: (x["sorveglianti"], -x["mutanti"])):
-        if r["mutanti"] == 0 and r["sorveglianti"] > 0:
+        if r["mutanti"] == 0 and r["rinunce"] == 0 and r["sorveglianti"] > 0:
             continue                      # niente logica da sbagliare e comunque sorvegliato
-        segno = "  <-- SCOPERTO" if (r["mutanti"] and not r["sorveglianti"]) else ""
-        print("  %-38s %7d %7d %8d%s"
-              % (r["modulo"][:38], r["righe"], r["mutanti"], r["sorveglianti"], segno))
+        segno = "  <-- SCOPERTO" if ((r["mutanti"] or r["rinunce"])
+                                     and not r["sorveglianti"]) else ""
+        print("  %-38s %7d %7d %8d %8d%s"
+              % (r["modulo"][:38], r["righe"], r["mutanti"], r["rinunce"],
+                 r["sorveglianti"], segno))
     print("-" * 96)
+    _tot_rin = sum(r["rinunce"] for r in _righe)
     print("  punti di logica sbagliabili in tutta la macchina: %d" % _tot_mut)
+    # ⛔ SI DICHIARA ANCHE CIO' CHE IL GENERATORE NON SA ROMPERE. Un punto non esaminato non
+    # e' un punto sicuro: e' un punto che nessuno ha mai guardato (D18 punto 3).
+    print("  punti che il generatore NON sa rompere e NON prova (dichiarati): %d" % _tot_rin)
+    print("  punti di logica TOTALI, esaminabili o no: %d" % (_tot_mut + _tot_rin))
     print("  moduli SCOPERTI (hanno logica e nessun test li nomina): %d su %d"
           % (len(_scoperti), len(_righe)))
     for r in _scoperti:

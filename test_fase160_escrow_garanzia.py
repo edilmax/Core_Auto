@@ -208,13 +208,20 @@ class TestBuchiDiMutazione(unittest.TestCase):
          mano per vederla rossa.
       Fa 19 + 1 = 20 prove nuove, con 34 uccisi su 35 e 1 sopravvissuto dichiarato.
 
-    ⚠️ IL DENOMINATORE VERO E' 43, NON 35. Oltre ai 35 punti mutati, lo strumento rinuncia
-    su 4 punti e lo DICHIARA (3 confronti a catena, 1 operatore a cavallo di due righe) e
-    ne salta altri 4 IN SILENZIO — `is`, `is not`, `not in` non sono nel suo elenco di
-    confronti (`collaudi/mutazione_prodotto.py:445`) e non incrementano nessun contatore di
-    rinuncia. Fra quei 4 muti c'e' la riga 126, `r["stato"] not in attesi`: **il cancello che
-    decide se una transizione che muove denaro e' permessa**. Non e' scoperto (invertirlo fa
-    fallire `test_conferma_rilascia_tutto_allhost`), ma nessuno l'ha mai messo alla prova.
+    ⚠️ IL DENOMINATORE VERO E' 46, NON 35 — e per un giorno intero questa riga ha detto 43.
+    Oltre ai 35 punti mutati lo strumento rinuncia su **11**: 1 operatore a cavallo di due
+    righe, **6** dentro i confronti a catena (3 catene da 2 operatori ciascuna) e 4 operatori
+    che non sa rompere (`is`, `is not`, `not in`). ⛔ **Il 43 era sbagliato in due modi, tutti
+    e due corretti il 2026-08-05:** i 4 muti non venivano contati affatto, e le catene
+    venivano contate **per nodo invece che per operatore**. Il conteggio a mano del
+    2026-08-04 aveva fatto lo stesso secondo errore, e quando lo strumento riparato ci e'
+    arrivato sopra le due misure sembravano confermarsi: **non lo facevano — sbagliavano allo
+    stesso modo**. L'ha visto solo un conteggio scritto SEPARATAMENTE, oggi guardia della
+    suite (`test_pipeline_ci.TestGeneratoreDiMutanti.
+    test_IL_DENOMINATORE_DICHIARATO_COINCIDE_CON_UN_ORACOLO_INDIPENDENTE`).
+    Fra i 4 muti c'e' la riga 126, `r["stato"] not in attesi`: **il cancello che decide se
+    una transizione che muove denaro e' permessa**. Non e' scoperto (invertirlo fa fallire
+    `test_conferma_rilascia_tutto_allhost`), ma nessuno l'ha mai messo alla prova.
 
     ⚠️ Il numero si legge SOLO con tutti e 13 i sorveglianti (compreso `test_happy_soldi`,
     che esercita l'escrow senza nominare il modulo, quindi lo strumento non lo vede da
@@ -440,6 +447,36 @@ class TestBuchiDiMutazione(unittest.TestCase):
         self.g.apri("PE", 5000, ora_checkin_ts=1000)
         self.assertEqual(len(self.g.aperte(limit=0)), 1,
                          "limite zero preso per buono: il Guardiano non vede piu' nulla")
+
+    # ── L'ALLARME QUASI SPENTO (2026-08-05, difetto VIVO, «autorizzato» dal fondatore) ────
+    #
+    # In Python `True` E' un intero e vale 1. `contestate()` lo sa e lo scarta (riga 246:
+    # `not isinstance(limit, bool)`); `aperte()` e `aperte_scadute()` NO, quindi
+    # `0 < True <= 2000` e' vero, `lim` resta `True`, e SQLite esegue `LIMIT 1`.
+    # Sono i due metodi con cui `fase186_guardiano` si accorge degli escrow bloccati: un
+    # elenco troncato a UNA riga non e' un allarme rotto, e' un allarme che grida piano --
+    # peggio, perche' continua a sembrare acceso.
+    # ⚠️ Le due guardie qui sotto pretendono DUE righe: con una sola l'errore sarebbe
+    # invisibile (1 troncato a 1 fa sempre 1), ed e' il motivo per cui le guardie gemelle
+    # sul limite zero, che aprono un escrow solo, non lo vedevano.
+
+    def test_riga311_aperte_scarta_un_limite_BOOLEANO(self):
+        self.g.apri("PF1", 5000, ora_checkin_ts=1000)
+        self.g.apri("PF2", 6000, ora_checkin_ts=1000)
+        self.assertEqual(len(self.g.aperte(limit=True)), 2,
+                         "`limit=True` e' stato preso per il numero 1: il Guardiano vede UN "
+                         "escrow aperto su due e crede che gli altri non esistano. L'allarme "
+                         "non tace -- grida piano, che e' peggio")
+
+    def test_riga291_aperte_scadute_scarta_un_limite_BOOLEANO(self):
+        self.g.apri("PG1", 5000, ora_checkin_ts=1000, finestra_ore=24)
+        self.g.apri("PG2", 6000, ora_checkin_ts=1000, finestra_ore=24)
+        self.clock["t"] = 10 ** 9
+        self.assertEqual(len(self.g.aperte_scadute(limit=True)), 2,
+                         "`limit=True` preso per il numero 1: degli escrow IN RITARDO (uno "
+                         "stato impossibile: il giro orario avrebbe gia' dovuto pagarli) il "
+                         "Guardiano ne vede uno solo, e gli altri restano bloccati in "
+                         "silenzio con dentro i soldi di un ospite")
 
     # ── IL MODO :memory: (riga 348) ───────────────────────────────────────────────────────
 

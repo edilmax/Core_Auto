@@ -288,7 +288,8 @@ class EscrowGaranzia:
         now = self._now() if not (isinstance(ora_ts, int) and not isinstance(ora_ts, bool)) \
             else ora_ts
         soglia = now - max(0, int(grazia_ore)) * 3600
-        lim = limit if isinstance(limit, int) and 0 < limit <= 2000 else 500
+        lim = limit if isinstance(limit, int) and not isinstance(limit, bool) \
+            and 0 < limit <= 2000 else 500
         con = self._apri()
         try:
             righe = con.execute(
@@ -308,7 +309,8 @@ class EscrowGaranzia:
         Serve al Guardiano per segnalare IN ANTICIPO un'incoerenza (es. escrow ancora aperto
         su una prenotazione gia' rimborsata) PRIMA che scatti il rilascio: `aperte_scadute`
         vede solo il rilascio gia' passato, questo vede anche quello che scattera' fra giorni."""
-        lim = limit if isinstance(limit, int) and 0 < limit <= 2000 else 500
+        lim = limit if isinstance(limit, int) and not isinstance(limit, bool) \
+            and 0 < limit <= 2000 else 500
         con = self._apri()
         try:
             righe = con.execute(
