@@ -11,7 +11,137 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🌙 2026-08-03 NOTTE — LEGGI QUESTO PER PRIMO: DOVE SIAMO E COSA E' SUCCESSO
+## 💰 2026-08-04 SERA — LEGGI QUESTO PER PRIMO: `fase160_escrow_garanzia` DA 43% A ZERO BUCHI
+
+**Il modulo che divide i soldi fra piattaforma, host e ospite.**
+
+*Cos'e' successo, in parole normali:* si rompe il motore **di proposito**, un pezzetto alla
+volta, e ogni volta si chiede «i test se ne accorgono?». Se non se ne accorgono, quel pezzetto
+non e' sorvegliato da nessuno: il giorno che sbaglia davvero, la suite resta verde e i soldi
+finiscono alla persona sbagliata. Ogni pezzetto rotto si chiama **punto** (o «mutante»); se un
+test lo becca si dice **ucciso**, se nessuno lo becca **sopravvissuto** = buco.
+
+Numeri letti da comandi, non a memoria:
+
+```
+PASSO 0  censimento        35 punti · 12 test lo sorvegliano (+1 che lo strumento non vede)
+PASSO 1  5 test accesi     35 provati · 12 uccisi · 23 sospetti   <- CANDIDATI, non verdetto
+PASSO 2  13 test accesi    23 provati ·  3 uccisi · 20 BUCHI VERI <- solo il 43% sorvegliato
+GUARDIE  20 nuove          19 buchi chiusi + 1 lasciato APERTO e dichiarato
+FINALE   35 x 13 test      35 provati · 34 UCCISI · 1 SOPRAVVISSUTO
+```
+
+**Nessuna riga di produzione toccata.** Un buco di mutazione non si chiude cambiando il codice
+— il codice e' giusto — si chiude scrivendo il test che manca.
+
+### 🔴 NON E' «ZERO BUCHI»: UNO RESTA APERTO, E IL PERCHE' VALE PIU' DEL NUMERO
+Per un'ora sulla carta erano zero. Avevo dichiarato **equivalente** l'ultimo punto (riga 43):
+«equivalente» vuol dire *«romperlo non cambia niente, quindi nessun test potra' mai beccarlo»*
+— ed e' una dichiarazione **definitiva**: da quel momento lo strumento non lo prova piu', mai
+piu'. L'avevo provato su 2018 ingressi diversi.
+
+Una **revisione a contesto fresco** — un secondo lettore che non aveva scritto il codice e
+vedeva solo le modifiche — l'ha **smontata**: la funzione accetta *qualunque* cosa, e i miei
+2018 ingressi non contenevano un caso che bastava a distinguerli. Voce **ritirata prima del
+commit**, punto lasciato aperto. Nel file c'era gia' scritto, tre righe sopra:
+*«meglio un sopravvissuto aperto che una cecita' dichiarata»*.
+
+⚠️ **E le altre due voci gemelle dello stesso tipo si smontano allo stesso modo** — verificato,
+non supposto: una era stata dichiarata perfino con un **dimostratore automatico (z3)**. Non ha
+sbagliato lui: gli era stata fatta la domanda sbagliata. **Una dimostrazione formale vale
+quanto il modello su cui e' fatta.**
+
+### ⚠️ IL DENOMINATORE VERO E' 43, NON 39 — E 4 PUNTI LI SALTA IN SILENZIO
+Il generatore **rinuncia** su 4 punti e lo DICHIARA (3 confronti «a catena» come
+`0 < limite <= 500`, 1 operatore spezzato fra due righe). Ma ne salta **altri 4 senza dirlo**:
+conosce solo i confronti fra numeri, e le espressioni tipo `e' None` / `non e' nell'elenco`
+non le sa rompere — e non le conta nemmeno (`collaudi/mutazione_prodotto.py:445`).
+Fra quei 4 muti c'e' la **riga 126**, `r["stato"] not in attesi`: **la sola condizione che
+decide se un movimento di denaro e' permesso**. Non e' scoperta (romperla fa fallire un test
+esistente), ma nessuno l'aveva mai messa alla prova, e lo strumento non aveva mai detto di non
+averla guardata. E' la **D18 punto 3** violata dentro lo strumento che misura.
+Delle 4 rinunce dichiarate, **tre erano gia' coperte**; la quarta ha avuto la sua guardia, con
+il guasto **iniettato a mano** perche' lo strumento non lo produce.
+
+### ⛔ QUATTRO TRAPPOLE DELLO STRUMENTO, MISURATE OGGI
+1. **`--tetto` vale 30 di serie**: su 35 punti ne lascia fuori 5. Alzarlo SEMPRE (`--tetto 100`).
+2. **`--censimento` non accetta modulo ne' tetto**: stampa la tabella di tutta la macchina e si
+   legge la riga che serve. Misurato il **2026-08-04**: **6014 punti in 152 moduli, 0 moduli
+   SCOPERTI** (il 2026-07-31 erano **6.012**: due punti in piu', nati dal codice scritto in
+   mezzo — non e' una contraddizione, e' una data diversa). «0 SCOPERTI» significa solo che
+   ogni modulo ha **almeno un test che lo nomina**: NON che qualcuno se ne accorgerebbe.
+   `fase160` era al 43% pur avendo 12 sorveglianti.
+3. **Un sorvegliante puo' essere INVISIBILE**: `test_che_nominano` cerca il NOME del modulo nei
+   test, e `test_happy_soldi` esercita l'escrow senza nominarlo. Va messo a mano nei `--killer`,
+   se no compaiono falsi sopravvissuti.
+4. **Il metodo in due passi non e' facoltativo**: con 5 killer i sopravvissuti erano 23, con 13
+   sono 20. **Tre erano falsi.**
+
+### 🔴 I DUE BUCHI PIU' GRAVI (righe 162 e 174)
+`if imp <= 0` in `chiudi_proporzionale` e `risolvi`. Con `<` al posto di `<=`, una garanzia da
+**zero euro** non viene piu' fermata: la pratica si chiude come «risolta» senza assegnare un
+centesimo a nessuno, e lo stato `in_garanzia` sparisce per sempre. Per provarle si e' dovuto
+**costruire a mano lo stato impossibile** (una riga con importo 0, che `apri()` vieta).
+Dichiararlo irraggiungibile sarebbe stato comodo, e la **D19 lo vieta**: la premessa sta in
+un'altra funzione e puo' cadere in silenzio.
+
+### ⛔ DUE COSE CHE HO SBAGLIATO IO, scritte perche' non si ripetano
+1. **Non ho dichiarato QUI l'elenco dei file che avrei toccato, PRIMA di aprirli.** L'ho detto
+   a voce nella sessione, e una sessione non viaggia col progetto. E' la regola ferrea 15 e
+   l'appendice 2, e tutte le campagne precedenti l'avevano rispettata (`:625`, `:698`, `:762`…).
+   **Non la sistemo scrivendola adesso: sarebbe retrodatare.** I file toccati sono verificabili
+   da `git status` e sono quattro: `test_fase160_escrow_garanzia.py`,
+   `collaudi/mutazione_prodotto.py`, questo file e `REGISTRO_INGEGNERIA.md`. Zero produzione.
+2. **Avevo scritto i numeri nei documenti PRIMA di far girare la suite intera.** Un «fatto»
+   senza il comando e il suo codice d'uscita non e' una notizia: e' un compito (appendice 10).
+   Ora il numero c'e': `Ran 5379 tests · OK · uscita 0`, che e' `5359 + 20` esatti.
+
+### ⚠️ LE SUITE INTERROTTE: quattro di fila, e la causa NON e' quella che pensavo
+Stasera la suite intera e' stata fermata **quattro volte**, a `76% → 4% → 0,3% → 0,08%`.
+Avevo concluso che la colpa fosse delle **58.205 cartelle temporanee** lasciate indietro dai
+giri uccisi (i test le creano e le puliscono alla fine; un processo ucciso alla fine non ci
+arriva). Le ho ripulite — ed era comunque giusto farlo — ma **la suite si e' fermata lo stesso**:
+spiegazione **falsificata**, e lo scrivo invece di lasciarla scritta come se avesse retto.
+Ha funzionato invece `python -m unittest discover -b`, che tiene l'uscita dei test in memoria e
+la stampa **solo per i falliti**: da 8 MB di registro scritti su disco a 1,4 MB. Stesso identico
+giudizio, stesso codice d'uscita. ⚠️ **Un solo campione: e' un'ipotesi che ha funzionato, non
+una causa dimostrata.** Se succede di nuovo, il sospetto e' l'I/O sul file di registro.
+💡 E una lezione che vale a se': **una suite uccisa non lascia il sistema com'era, lo lascia
+peggiore.** Prima di rilanciare qualcosa che e' morto, si guarda cosa ha lasciato indietro.
+
+### 💡 DUE LEZIONI CHE VALGONO OLTRE QUESTO MODULO
+- **Un'impronta che non torna va capita, non arrotondata.** Dopo il ripristino a mano la sha256
+  era DIVERSA. Non era un danno: il file prima aveva fine riga Unix (LF), lasciato dal difetto
+  noto di `mutazione_prodotto.py:1269/1275` (`newline="\n"` su Windows), e il `git checkout`
+  l'ha riportato alla forma canonica CRLF — `git hash-object` = blob di HEAD, `git diff`
+  uscita 0. **Dimostrato**: convertendo il file attuale CRLF->LF si riottiene esattamente
+  l'impronta di prima. Ma per un momento il controllo della regola 2 e' sembrato violato, ed e'
+  il costo vero di quel difetto: **fa fallire proprio il controllo che deve dire la verita'**.
+- **Un punto che lo strumento non esamina non e' un punto sicuro.** E' un punto che nessuno ha
+  mai guardato, e la guardia la scrive un essere umano o non la scrive nessuno.
+
+### ▶️ COSA RESTA IN FILA (l'elenco per esteso, con le prove, sta in `REGISTRO_INGEGNERIA.md`)
+1. 🔴 **Ritirare le due equivalenze gemelle** (`fase100_dac7`, `fase177_financial_controller`):
+   si smontano con lo stesso argomento di stanotte. Va rimisurato il punteggio di quei due
+   moduli prima e dopo, perche' toglierle fa ricomparire un buco in ognuno.
+2. 🔴 **Una guardia sullo schedario degli equivalenti** (D18 punto 4). Oggi **nessun test lo
+   guarda**, ed e' la manopola che trasforma un buco in uno zero. Una voce falsa c'e' gia'
+   stata (1 agosto) e stanotte ne stava per entrare una seconda: **due volte in quattro
+   giorni**, ed e' l'unico posto del progetto dove un errore diventa cecita' permanente.
+3. 🟠 **Contare le rinunce silenziose** dello strumento (`mutazione_prodotto.py:445`), cosi'
+   il denominatore torna onesto. Ordine D20: prima la guardia, vista rossa.
+4. 🟠 **`mutazione_prodotto.py:1269/1275`** e il rumore dei fine riga (vedi lezione qui sopra).
+5. 🟡 **DECISIONE TUA (tocca la produzione):** `aperte()` e `aperte_scadute()` accettano
+   `limit=True` e restituiscono **una riga sola**, mentre `contestate()` lo scarta. Sono i due
+   metodi con cui il Guardiano si accorge degli escrow bloccati: un elenco troncato a 1 e' un
+   allarme quasi spento. Oggi nessuno passa un booleano, ma la D19 dice che «oggi non capita»
+   non e' un argomento. Serve la parola «autorizzato».
+6. ▶️ **Il prossimo modulo del denaro**: `fase162_pagamenti_pendenti`. Il censimento dice dove
+   guardare: **6014 punti in 152 moduli**, e alla mutazione ne sono passati **10**.
+
+---
+
+## 🌙 2026-08-03 NOTTE — DOVE SIAMO E COSA E' SUCCESSO
 
 **4 POSTI ALLINEATI SU `52b8214`** — computer = GitHub = VPS = chiavetta. CI `gate: success`
 (`zap`, la scansione di sicurezza, **saltato**: dichiarato, non coperto dal verde generale).

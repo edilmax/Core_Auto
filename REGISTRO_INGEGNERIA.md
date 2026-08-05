@@ -228,6 +228,131 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### ✅ FATTO 2026-08-04 (13) — `fase160_escrow_garanzia`: 19 BUCHI CHIUSI + 1 APERTO, 20 GUARDIE
+- **Il modulo che divide i soldi** fra piattaforma, host e ospite. Il numero, prima e dopo:
+  `35 punti · 15 uccisi · 20 SOPRAVVISSUTI` (copertura reale **43%**) -> **`35 provati ·
+  34 UCCISI · 1 SOPRAVVISSUTO dichiarato`**.
+- ⚠️ **NON e' «zero sopravvissuti».** Per un'ora lo e' stato, sulla carta: avevo dichiarato
+  EQUIVALENTE il mutante della riga 43 (`_cent`, `>=` -> `>`) con una prova su 2018 ingressi.
+  Una **revisione a contesto fresco** (appendice 19) l'ha REFUTATA: la firma e' `_cent(v: Any)`
+  e i 2018 ingressi non contenevano nessuna **sottoclasse di `int`**. Con `class Cent(int)` o
+  un `IntEnum` che vale 0, l'originale restituisce l'OGGETTO (tipo `Cent`) e il mutante
+  restituisce `0` (tipo `int`): distinguibili, e un test che lo uccide esiste davvero
+  (`assertIs(type(_cent(Cent(0))), Cent)`). La voce e' stata **RITIRATA prima del commit** e
+  il mutante resta **sopravvissuto e dichiarato**. Vale la regola scritta nello schedario
+  stesso: *meglio un sopravvissuto aperto che una cecita' dichiarata* — un equivalente non
+  viene piu' eseguito, mai piu'.
+- ⚠️ **IL DENOMINATORE VERO E' 43, NON 39 — e 4 punti li salta IN SILENZIO.** Oltre ai 35
+  mutati, lo strumento rinuncia su 4 punti e li DICHIARA (`catena` 3 = i tetti
+  `0 < limit <= 500` in `contestate` e `0 < limit <= 2000` in `aperte_scadute`/`aperte`;
+  `a_cavallo` 1 = l'`and` che va a capo in `contestate`, righe 246-247). Ma ne salta **altri
+  4 senza contarli**: `_CONFRONTI` (`collaudi/mutazione_prodotto.py:392`) conosce solo
+  `== != < <= > >=`, e alla riga 445 gli operatori `is`, `is not`, `in`, `not in` finiscono
+  in un `continue` **che non incrementa nessun contatore di rinuncia**. In `fase160` sono le
+  righe 124 (`r is None`), **126 (`r["stato"] not in attesi`)**, 209 (`salta_se is not None`)
+  e 333 (`r is None`). **La 126 e' il cancello della macchina a stati**: la sola condizione
+  che decide se una transizione che muove denaro e' permessa. Non e' scoperta — invertirla fa
+  fallire `test_conferma_rilascia_tutto_allhost` — ma **nessuno l'ha mai messa alla prova, e
+  lo strumento non ha mai detto di non averla guardata**. E' una violazione della **D18 punto
+  3** dentro lo strumento che misura: «dichiara cosa NON hai esaminato».
+- **Delle 4 rinunce dichiarate, tre erano gia' coperte** dalle guardie scritte per altri
+  punti; la quarta ha avuto la sua guardia apposita
+  (`test_riga247_contestate_scarta_un_limite_zero`), **col guasto iniettato A MANO** perche'
+  lo strumento non lo produce (`AssertionError: 0 != 2`, poi ripristino). Resta fuori la
+  **meta' alta di tutte e tre le catene** (`limit <= N` -> `<`), osservabile solo con
+  esattamente N righe: **dichiarato**, non spacciato per coperto.
+- **20 guardie nuove** in `test_fase160_escrow_garanzia.py` (da 11 a 31 prove), in sei
+  famiglie: i cinque rifiuti di id non valido · i due confini su importo ZERO · i tre
+  «non trovata» · l'apertura della garanzia · i tetti delle liste · il modo `:memory:`.
+  **Nessuna riga di produzione toccata**: il codice era giusto, mancavano i test.
+  *La contabilita', che da sola non torna:* 19 sopravvissuti hanno avuto ognuno la sua
+  guardia; il ventesimo (riga 43) resta APERTO; e una guardia in piu' (`test_riga247`) non
+  nasce da un mutante ma da un punto che il generatore non sa rompere. Fa 19 + 1 = 20.
+- **PROVA DEL ROSSO, meccanica:** rimessi dentro i 22 mutanti delle righe bucate con
+  **SOLO** `test_fase160_escrow_garanzia` come killer -> **19 uccisi, 3 vivi** (i tre della
+  riga 43: due gia' uccisi al PASSO 2 da altri sorveglianti, uno e' il sopravvissuto vero).
+  ⚠️ **Perche' l'inferenza regge**, ed e' un punto sottile: quel file contiene anche le 11
+  prove VECCHIE, quindi «muore con quel file acceso» non basterebbe da solo. Regge perche'
+  quei 19 erano **sopravvissuti al PASSO 2, che includeva gia' quello stesso file con le sue
+  11 prove**: le vecchie non li uccidevano. L'unica cosa cambiata sono le guardie nuove.
+- **SUITE INTERA dopo l'ultima scrittura:** `Ran 5379 tests in 1532.414s · OK (skipped=3) ·
+  uscita 0`, zero rossi in formato unittest. **5379 = 5359 + 20 esatti**: le venti guardie
+  hanno girato davvero, non sono state raccolte per sbaglio.
+- ⚠️ **I DUE BUCHI PIU' GRAVI erano le righe 162 e 174** (`if imp <= 0` in
+  `chiudi_proporzionale` e `risolvi`). Con `<` al posto di `<=`, una garanzia da **zero
+  euro** non viene piu' fermata: la pratica si chiude come «risolta» senza assegnare un
+  centesimo a nessuno, e lo stato `in_garanzia` sparisce per sempre. Per provarle si e'
+  dovuto **costruire a mano lo stato impossibile** (riga con importo 0, che `apri()` vieta):
+  dichiararlo irraggiungibile sarebbe stato comodo e la **D19 lo vieta**, perche' la
+  premessa sta in un'altra funzione e puo' cadere in silenzio.
+- 💡 **LA LEZIONE PIU' CARA DELLA GIORNATA, e non e' sull'escrow: una dimostrazione si scrive
+  sul DOMINIO DICHIARATO, non su quello che ci si immagina.** `_cent(v: Any)` accetta
+  qualunque cosa; io avevo enumerato 2018 ingressi e concluso «su TUTTO il dominio». Bastava
+  una sottoclasse di `int` per smentirmi. Non l'ho vista perche' ero dentro il lavoro da tre
+  ore: l'ha vista un contesto NUOVO, che aveva solo il diff e i criteri. E' esattamente il
+  motivo per cui l'appendice 19 esiste — *chi scrive non giudica* — e stavolta il costo e'
+  stato pagato **prima** del commit invece che il giorno in cui qualcuno si fida.
+- 🔴 **E LE ALTRE DUE VOCI GEMELLE SONO REFUTABILI ALLO STESSO MODO — VERIFICATO, non
+  supposto.** Lo stesso `_cent`/`_n` esiste in tre moduli del denaro, e due portano una
+  dichiarazione di equivalenza scritta con lo stesso ragionamento incompleto:
+  ```
+  fase100_dac7.py      _n     (>= -> >)   originale C(0)->tipo C    mutante->tipo int   DISTINGUIBILI
+  fase177_...py        _cent  (>  -> >=)  originale C(0)->tipo int  mutante->tipo C     DISTINGUIBILI
+  ```
+  ⚠️ **La seconda era stata dichiarata con z3**, e vale la lezione piu' grande della giornata:
+  **una dimostrazione formale vale quanto il MODELLO su cui e' fatta.** z3 ragiona sugli
+  INTERI e ha provato che i valori coincidono; nessuno gli ha chiesto del **tipo restituito**,
+  che in Python e' osservabile. Il risolutore non ha sbagliato: ha risposto alla domanda che
+  gli e' stata fatta.
+  ⛔ **NON toccate stanotte, di proposito:** togliere quelle due voci cambia il punteggio di
+  mutazione di due altri moduli del denaro, e nessuno ha rifatto quelle campagne. Va fatto
+  come compartimento a se' (D13), misurando prima e dopo.
+- ⚠️ **TRAPPOLE DELLO STRUMENTO, misurate oggi (valgono per ogni campagna futura):**
+  1. **`--tetto` vale 30 di serie.** Il modulo ha 35 punti: cinque sarebbero rimasti fuori
+     (dichiarati in fondo, ma chi legge il totale non se ne accorge). Va alzato SEMPRE.
+  2. **`--censimento` non accetta ne' un modulo ne' un tetto**: fa la tabella di TUTTA la
+     macchina e si legge la riga che interessa. Totale odierno: **6014 punti di logica in
+     152 moduli, 0 moduli SCOPERTI** (ognuno ha almeno un test che lo nomina -- il che NON
+     vuol dire che qualcuno se ne accorgerebbe: fase160 era al 43% con 12 sorveglianti).
+  3. **Un sorvegliante puo' essere INVISIBILE allo strumento.** `test_che_nominano` cerca il
+     NOME DEL MODULO dentro i file di test: `test_happy_soldi` esercita l'escrow senza mai
+     nominarlo, quindi lo strumento vedeva 12 sorveglianti invece di 13. Va aggiunto a mano
+     nei `--killer`, altrimenti compaiono falsi sopravvissuti.
+  4. **Il metodo in due passi resta obbligatorio.** Con 5 killer i sopravvissuti erano 23;
+     con 13 sono 20: **tre erano FALSI**, morti appena accesi gli altri occhi. Il numero si
+     scrive solo dopo il secondo passo.
+
+### 🔴 APERTO 2026-08-04 — CINQUE COSE LASCIATE IN FILA (nate dalla campagna escrow)
+Nessuna e' un incendio; tutte hanno la loro prova gia' fatta, manca l'esecuzione.
+1. **Ritirare le due equivalenze gemelle** (`fase100_dac7.py`/`_n`, `fase177_...`/`_cent`):
+   refutabili con una sottoclasse di `int`, verificato. Compartimento a se': va rimisurato il
+   punteggio dei due moduli prima e dopo, perche' toglierle fa ricomparire un sopravvissuto
+   in ognuno.
+2. **`collaudi/mutazione_prodotto.py:445` — le rinunce SILENZIOSE** (`is`, `is not`, `in`,
+   `not in` scartati senza contatore). Viola la D18 punto 3. Riparazione minima: un
+   `saltati["operatore_ignoto"] += 1` prima del `continue`, cosi' il denominatore torna
+   onesto. Ordine D20: prima la guardia che pretende il conteggio, vista rossa.
+3. **Una guardia su `EQUIVALENTI_DICHIARATI`** (D18 punto 4: «il controllo e' a sua volta
+   sotto guardia»). Oggi nessun test guarda quello schedario, ed e' la manopola che
+   trasforma un sopravvissuto in uno zero. Una voce falsa c'e' gia' stata (1 ago) e stanotte
+   ne stava per entrare una seconda: due volte in quattro giorni. La guardia deve pretendere
+   che ogni motivazione contenga una prova (z3 / esaustiva / stato osservabile) e rifiutare
+   «non e' raggiungibile» / «non e' osservabile».
+4. **`collaudi/mutazione_prodotto.py:1269/1275`** scrivono con `newline="\n"` invece di
+   passare da `_riscrivi_intatto`: su Windows convertono CRLF->LF e fanno apparire
+   «modificati» file dal contenuto identico. ⚠️ **Correzione a una diagnosi precedente:** non
+   e' solo lo strumento — **anche l'editor scrive LF**, quindi il rumore resta anche
+   riparando quelle due righe. Il costo vero e' che fa **fallire il controllo dell'impronta
+   sha256** della regola ferrea 2, cioe' proprio il controllo che deve dire la verita'.
+5. **DECISIONE DEL FONDATORE (tocca la produzione, serve «autorizzato»):** `aperte()` e
+   `aperte_scadute()` (`fase160:291` e `:311`) accettano `limit=True` e restituiscono **UNA
+   riga sola**, mentre `contestate()` (`:246`) i booleani li scarta. Sono i due metodi che
+   `fase186_guardiano` usa per accorgersi degli escrow bloccati: un elenco troncato a 1 e' un
+   allarme quasi spento. Oggi nessun chiamante vivo passa un booleano (`fase186` passa 2000
+   fisso), ma la D19 dice che «oggi non si raggiunge grazie a un'altra funzione» non e' un
+   argomento di sicurezza. Riparazione: aggiungere `and not isinstance(limit, bool)` come in
+   `contestate`. **Non toccato: e' codice di produzione.**
+
 ### ✅ FATTO 2026-07-31 (7) — campagna di mutazione: 2 moduli, 13 buchi chiusi
 - **`fase180_bunker` (porta admin)** e **`fase199_invarianti` (guardia dei soldi)**: 60 mutanti,
   17 sopravvissuti -> **7 buchi veri chiusi**, 3 equivalenti dimostrati (il `max`/`min` con z3:

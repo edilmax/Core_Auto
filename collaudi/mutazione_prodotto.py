@@ -597,6 +597,19 @@ EQUIVALENTI_DICHIARATI = {
         "3.0, 10^9): 0 risposte diverse. Con v=0 il ramo vero restituisce 0 e il ramo else "
         "restituisce 0: identico. Nessun test puo' ucciderlo perche' non c'e' niente da "
         "vedere.",
+    # ⛔ QUI STAVA PER FINIRE LA SECONDA FALSA EQUIVALENZA, RITIRATA IL 2026-08-04 PRIMA DEL
+    # COMMIT. Avevo dichiarato equivalente `fase160_escrow_garanzia.py` / `_cent` / `>=`->`>`
+    # «su TUTTO il dominio», con una prova su 2018 ingressi. La prova era INCOMPLETA: la firma
+    # e' `_cent(v: Any)` e i 2018 ingressi contenevano solo interi puri e non-interi, mai una
+    # SOTTOCLASSE di int. Con `class Cent(int)` o un `IntEnum` che vale 0:
+    #     originale (v >= 0 vero)  -> restituisce l'OGGETTO, tipo Cent
+    #     mutante   (v >  0 falso) -> restituisce 0, tipo int
+    # Sono distinguibili, e un test che uccide il mutante esiste davvero:
+    #     assertIs(type(_cent(Cent(0))), Cent)   ->  True sull'originale, False sul mutante.
+    # Quindi quel mutante resta SOPRAVVISSUTO e dichiarato tale, non equivalente. L'ha trovata
+    # una revisione a CONTESTO FRESCO (appendice 19) rifiutando la mia dimostrazione: chi
+    # scrive non giudica. Vale la stessa lezione scritta qui sopra il 2026-08-01, e stavolta
+    # e' stata pagata prima del commit invece che dopo.
     ("fase177_financial_controller.py", "_cent",
      "return v if isinstance(v, int) and not isinstance(v, bool) and v > 0 else 0",
      ">", ">="):
