@@ -322,6 +322,37 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
      con 13 sono 20: **tre erano FALSI**, morti appena accesi gli altri occhi. Il numero si
      scrive solo dopo il secondo passo.
 
+### ✅ FATTO 2026-08-05 (14) — CHIAVETTA RIGENERATA E PROVATA: quattro posti su `91ebce0`
+- **Perche':** era indietro di un commit **con codice vero** (282 righe di guardie nuove + 13
+  dello strumento), non solo diario. La regola scritta il 2026-08-04 dice di rigenerarla quando
+  cambia il CODICE, e i file di test sono codice.
+- **L'ordine imposto, applicato per la prima volta a un caso vero:**
+  ```
+  archivi dal server VIVO su 91ebce0    1058 voci · 0 copie vecchie delle chiavi · 25 database
+  impronte prima/dopo il trasferimento  identiche (d158a48b… e d1eb7338…)
+  commit dentro l'archivio              DIMOSTRATO: 693 file su 693 uguali a HEAD, diff 0
+  PROVA DI RIPRISTINO in cartella vuota Ran 5379 tests in 1624.938s · OK · uscita 0 · 0 rossi
+  generazione precedente messa da parte precedente_5198451/, riaperta e verificata
+  SOLO ALLORA pubblicata
+  ```
+  Per 50 minuti sulla chiavetta e' rimasta la copia vecchia mentre la nuova veniva provata in
+  una cartella temporanea: se la prova fosse fallita, non si sarebbe perso niente.
+- 🔴 **DUE ERRORI BECCATI DAI CONTROLLI, non dalla fortuna** (e nessuno dei due sarebbe emerso
+  guardando solo «e' andato tutto bene?»):
+  1. la cartella di sicurezza era stata chiamata `precedente_8022808` mentre dentro c'era
+     **`5198451`**. L'ha visto il controllo che riapre la copia messa da parte e legge il
+     commit che dichiara. Un nome falso su un backup manda qualcuno a cercare il codice
+     sbagliato il giorno peggiore. Ora il nome di ogni `precedente_*` si verifica contro il
+     LEGGIMI che contiene, e sono **due**: `precedente_5198451` e `precedente_0962abb`.
+  2. il documento della chiavetta dichiarava «**108 video-spot**» da giorni. Contati:
+     **54 .mp4 + 54 .jpg + 1 cartella = 109 voci**. Erano 54 video e 54 copertine, sommati e
+     chiamati tutti video. Mai contati da nessuno: una frase scritta e mai verificata, che e'
+     precisamente cio' che la **regola ferrea 3** vieta nei documenti ufficiali.
+- **20 controlli eseguiti uno per uno** prima di dichiarare fatto (prova di ripristino ×4,
+  conservazione della generazione precedente ×2, pubblicazione e verifica del contenuto ×7,
+  chiusura ×7). Elenco e prove nella sessione; i numeri di questa generazione stanno nel
+  `LEGGIMI-RIPRISTINO.txt` SULLA chiavetta, non qui: nel diario scadrebbero.
+
 ### 🔴 APERTO 2026-08-04 — CINQUE COSE LASCIATE IN FILA (nate dalla campagna escrow)
 Nessuna e' un incendio; tutte hanno la loro prova gia' fatta, manca l'esecuzione.
 1. **Ritirare le due equivalenze gemelle** (`fase100_dac7.py`/`_n`, `fase177_...`/`_cent`):

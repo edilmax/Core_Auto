@@ -76,23 +76,31 @@ reali prima di scrivere il codice.
    (B6). ⚠️ Da fare per ultimo e con cura: e' il controllo che ha gia' prodotto nove falsi
    allarmi. Deve guardare il campo `metodo`, non cercare parole nel testo libero.
 
-### ⚠️ DUE COSE IN SOSPESO AL 2026-08-05 mattina, verificate a macchina (non a memoria)
-1. **LA CHIAVETTA E' INDIETRO DI UN COMMIT, E STAVOLTA CON CODICE VERO.** Dichiara `5198451`,
-   la macchina e' su `8022808`. Il divario NON e' solo diario come il giorno prima:
-   ```
-   test_fase160_escrow_garanzia.py   +282 righe   <- le 20 guardie nuove
-   collaudi/mutazione_prodotto.py     +13 righe   <- la falsa equivalenza ritirata
-   REGISTRO_INGEGNERIA.md + RIPRENDI_QUI.md      <- documenti
-   ```
-   La regola scritta il 2026-08-04 dice di rigenerarla **quando cambia il codice**, e i file di
-   test SONO codice. **Va rigenerata**, con l'ordine imposto: archivi dal server vivo -> prova
-   di ripristino VERDE in cartella vuota -> **solo allora** si pubblica, dopo aver messo la
-   generazione attuale in `precedente_8022808/`. Costa ~50 minuti.
-   💡 *Consiglio, non decisione:* farlo **alla fine** del lavoro sulla guardia, cosi' si paga
-   una volta sola invece di due. Ma va fatto: il rischio oggi e' che se computer e VPS
-   sparissero insieme, la copia offline non avrebbe le guardie di stanotte (GitHub si').
-2. **Questa sezione stessa non e' ancora committata.** Sopravvive a un `/clear` perche' e' un
-   file su disco, ma non e' in git: si salva col lavoro, come tutte le campagne precedenti.
+### ✅ CHIAVETTA RIGENERATA E PROVATA IL 2026-08-05 — QUATTRO POSTI ALLINEATI SU `91ebce0`
+Era indietro di un commit **con codice vero** dentro (282 righe di guardie + 13 dello
+strumento), non solo diario. Rigenerata con l'ordine imposto, e per la prima volta l'ordine e'
+stato applicato a un caso vero:
+```
+archivi dal server VIVO su 91ebce0     1058 voci · 0 copie vecchie delle chiavi · 25 database
+impronte prima/dopo il trasferimento   identiche
+commit dentro l'archivio               DIMOSTRATO: 693 file su 693 uguali a HEAD
+PROVA DI RIPRISTINO in cartella vuota  Ran 5379 tests in 1624.938s · OK · uscita 0 · 0 rossi
+solo ALLORA pubblicata                 con la generazione prima messa in precedente_5198451/
+```
+**Due errori beccati dai controlli, non dalla fortuna:**
+- la cartella di sicurezza era stata chiamata `precedente_8022808` mentre dentro c'era
+  `5198451`. Un nome falso su una copia di sicurezza manda qualcuno a cercare il codice
+  sbagliato il giorno peggiore. Ora il nome di ogni `precedente_*` **e' verificato contro il
+  LEGGIMI che contiene**.
+- il documento della chiavetta dichiarava «**108 video-spot**» da giorni. Contati: sono
+  **54 video + 54 copertine .jpg**. Nessuno li aveva mai contati: una frase scritta e mai
+  verificata, che e' esattamente cio' che la regola 3 vieta nei documenti ufficiali.
+
+### 💡 LA REGOLA CHE HA RETTO ALLA PROVA DEI FATTI
+*Si pubblica sulla chiavetta SOLO dopo che la prova di ripristino e' verde, e la generazione
+precedente si conserva SULLA chiavetta.* Scritta il 2026-08-04, applicata il 2026-08-05: per
+50 minuti sulla chiavetta c'e' rimasta la copia vecchia mentre la nuova veniva provata in una
+cartella temporanea. Se la prova fosse fallita, non avremmo perso niente.
 
 ### POI, e solo dopo che la guardia e' verde:
 5. Togliere le due voci sbagliate (`fase100_dac7`, `fase177/_cent`), **rimisurando il punteggio
