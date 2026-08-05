@@ -11,7 +11,100 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 💰 2026-08-04 SERA — LEGGI QUESTO PER PRIMO: `fase160_escrow_garanzia` DA 43% A ZERO BUCHI
+## 🎯 2026-08-05 — PROSSIMO LAVORO DICHIARATO PRIMA DI APRIRLO: LA GUARDIA SULLO SCHEDARIO
+
+**Scopo (una frase):** mettere sotto guardia `EQUIVALENTI_DICHIARATI`, l'elenco dei mutanti
+dichiarati «impossibili da uccidere» — l'unico posto del progetto dove **un errore diventa
+cecita' permanente**, perche' una voce lo esclude dalle prove PER SEMPRE e il punteggio esce
+pieno lo stesso.
+
+**FILE AMMESSI, e nessun altro:**
+- `collaudi/mutazione_prodotto.py`  (lo schedario e il suo lettore `_e_equivalente`)
+- `test_mutazione_strumento.py` **oppure** un file di test gia' esistente che sorvegli lo
+  strumento — ⛔ **prima si cerca** (D10: inventario prima di costruire), si crea solo se non
+  c'e' gia' un posto giusto
+- `REGISTRO_INGEGNERIA.md` e `RIPRENDI_QUI.md` a lavoro finito
+⛔ **ZERO file di produzione.** Se serve toccarne uno: ci si ferma e si chiede «autorizzato».
+
+### PERCHE' ADESSO: tre voci false in quattro giorni
+`31 lug` fase100_dac7/_n · `1 ago` fase177/_cent (dichiarata con z3) · `4 ago notte` la mia su
+fase160/_cent, ritirata prima del commit da una revisione a contesto fresco. **Le prime due sono
+ancora dentro.** E nessun test guarda quello schedario: la **D18 punto 4** («il controllo e' a
+sua volta sotto guardia») non e' soddisfatta.
+
+### ⛔ LA TRAPPOLA DA NON RIPETERE
+Una guardia **non puo' verificare che una dimostrazione sia GIUSTA** — se potesse, sarebbe lei
+il dimostratore. Il 2026-08-05 ho scritto al volo un controllo a parole chiave e ha **accusato a
+torto NOVE dichiarazioni serie**: un controllo debole con verdetto forte e' peggio di nessun
+controllo. La domanda giusta non e' «come verifico la prova» ma **«cosa hanno in comune gli
+errori veri?»**.
+
+### 💡 LA FORMA COMUNE DEI TRE ERRORI, ed e' controllabile a macchina
+Tutti e tre sono **una prova fatta su un dominio piu' piccolo di quello che la funzione
+accetta**:
+```
+_cent(v: Any)  /  _n(v: senza tipo)      la funzione accetta QUALUNQUE COSA
+prova: "tutti gli interi" (o z3)          dominio PIU' PICCOLO della firma
+mancava:                                  le sottoclassi di int -> tipo restituito diverso
+```
+Anche quella con z3: il risolutore ragiona sugli INTERI, la funzione accetta `Any`.
+**Una dimostrazione formale vale quanto il modello su cui e' fatta.**
+
+### ✅ LA REGOLA, GIA' PROVATA NELLE DUE DIREZIONI SUI DATI VERI (2026-08-05)
+```
+fase100_dac7._n          v SENZA TIPO   esaustiva su interi   -> ROSSO   (ed e' sbagliata)
+fase177._cent            v: Any         z3 sugli interi       -> ROSSO   (ed e' sbagliata)
+fase184._der_intero      valore: int    esaustiva su interi   -> verde   (ed e' solida)
+fase179._sfratta_se_serve ora: float    traccia del codice    -> verde
+fase178.eta_backup_sec   dir_backup:str traccia del codice    -> verde
+```
+**Becca le due sbagliate, tace sulle buone.** E' la condizione 2 della D18, verificata sui dati
+reali prima di scrivere il codice.
+
+### I QUATTRO CONTROLLI DA IMPLEMENTARE (in quest'ordine, ognuno visto ROSSO prima)
+1. **ANCORAGGIO** — per ogni voce, (file, funzione, testo della riga) deve esistere nel sorgente
+   VIVO. Una voce che non aggancia piu' niente e' morta: o il codice e' cambiato senza rifare la
+   prova, o e' un residuo. Rosso. *(Zero falsi allarmi possibili: e' un confronto esatto.)*
+2. **CAMPI STRUTTURATI + DENOMINATORE** — ogni voce dichiara `metodo` (z3 | esaustiva |
+   traccia), `dominio`, `data`, `prova`. Non prosa: campi. La guardia conta le voci e pretende
+   che TUTTE li abbiano. Chi ne aggiunge una senza campi diventa rosso lo stesso giorno (D18 §4).
+3. **DOMINIO >= FIRMA** — se `metodo` e' `esaustiva` o `z3` e la funzione ha anche un solo
+   argomento **senza tipo o `Any`**, la prova NON copre il dominio: rosso. ⚠️ L'estrattore deve
+   guardare anche gli argomenti dopo l'asterisco (`kwonlyargs`): la prima versione scritta il
+   2026-08-05 li saltava e mostrava «nessun argomento» per quattro funzioni di fase177.
+4. **FRASI VIETATE** — «non e' raggiungibile» / «non e' osservabile» come UNICA motivazione
+   (B6). ⚠️ Da fare per ultimo e con cura: e' il controllo che ha gia' prodotto nove falsi
+   allarmi. Deve guardare il campo `metodo`, non cercare parole nel testo libero.
+
+### ⚠️ DUE COSE IN SOSPESO AL 2026-08-05 mattina, verificate a macchina (non a memoria)
+1. **LA CHIAVETTA E' INDIETRO DI UN COMMIT, E STAVOLTA CON CODICE VERO.** Dichiara `5198451`,
+   la macchina e' su `8022808`. Il divario NON e' solo diario come il giorno prima:
+   ```
+   test_fase160_escrow_garanzia.py   +282 righe   <- le 20 guardie nuove
+   collaudi/mutazione_prodotto.py     +13 righe   <- la falsa equivalenza ritirata
+   REGISTRO_INGEGNERIA.md + RIPRENDI_QUI.md      <- documenti
+   ```
+   La regola scritta il 2026-08-04 dice di rigenerarla **quando cambia il codice**, e i file di
+   test SONO codice. **Va rigenerata**, con l'ordine imposto: archivi dal server vivo -> prova
+   di ripristino VERDE in cartella vuota -> **solo allora** si pubblica, dopo aver messo la
+   generazione attuale in `precedente_8022808/`. Costa ~50 minuti.
+   💡 *Consiglio, non decisione:* farlo **alla fine** del lavoro sulla guardia, cosi' si paga
+   una volta sola invece di due. Ma va fatto: il rischio oggi e' che se computer e VPS
+   sparissero insieme, la copia offline non avrebbe le guardie di stanotte (GitHub si').
+2. **Questa sezione stessa non e' ancora committata.** Sopravvive a un `/clear` perche' e' un
+   file su disco, ma non e' in git: si salva col lavoro, come tutte le campagne precedenti.
+
+### POI, e solo dopo che la guardia e' verde:
+5. Togliere le due voci sbagliate (`fase100_dac7`, `fase177/_cent`), **rimisurando il punteggio
+   di quei due moduli prima e dopo**: toglierle fa ricomparire un sopravvissuto in ognuno.
+6. Rileggere le **4 voci «da rileggere»** (fase177 `riscuoti_debiti` ×2 e `processa_penale`,
+   fase178 §15): il caso centrale e' tracciato bene, ma una parte del ragionamento si appoggia a
+   un'ALTRA funzione («`_cent` non e' mai negativo», «chi legge l'uscita e' bash») — ed e'
+   esattamente cio' che la **D19** vieta.
+
+---
+
+## 💰 2026-08-04 SERA — `fase160_escrow_garanzia` DA 43% A 34 SU 35
 
 **Il modulo che divide i soldi fra piattaforma, host e ospite.**
 
