@@ -11,6 +11,63 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🚧 2026-08-06 SERA — IL CANCELLO HA DATO VERDE CON META' DEI CONTROLLI MORTI
+
+**L'unione è FATTA e verificata dentro, non sullo schermo.** `master` = **`a67eef6`**, e il suo
+albero (`75a3d19`) è **identico** a quello di `79dbf99`, che la CI aveva giudicato 13 su 13.
+Le richieste **#1 e #2 risultano entrambe `merged: True`**. Computer allineato, albero pulito.
+
+**Poi la CI su `master` (run 627) è andata rossa in DUE tentativi:**
+
+| | job non verdi | perché | esito del `gate` |
+|---|---|---|---|
+| tent. 1 | `full-suite-311` `copertura` `w3c` `qualita` `atheris` | morti in «Set up job»: `Failed to resolve action download info` · `Service Unavailable` · `Bad Gateway` | 🟢 **success** |
+| tent. 2 | `atheris` `copertura` `full-suite-311` → `cancelled` | `The job was not acquired by Runner of type hosted even after multiple attempts` | 🟢 **success** |
+
+**La causa dei rossi non è nostra, e lo dice una fonte esterna** (collaudo 7, giudice non
+nostro): bollettino ufficiale GitHub, incidente **`critical` su Actions aperto alle 15:22** —
+quindici minuti prima della nostra run — e `Actions: major_outage` alle 16:40. `qualita` e
+`w3c`, rilanciati, sono passati: il codice sta bene.
+
+**⛔ Il difetto VERO è l'altro: il `gate` — l'unico check che protegge `master` — ha concluso
+`success` DUE VOLTE** col passo «VERDETTO ROSSO» **saltato**. La seconda volta gli esiti erano
+`cancelled`, cioè **una delle tre parole che la sua condizione dichiara di sorvegliare**.
+Confronto con le run rosse passate (**620** `full-suite`, **595** `mutazione`): lì i job erano
+caduti su un **contenuto** guasto e il passo era scattato regolarmente. La differenza è nei job
+che **non partono affatto**: dove non arriva nessun verdetto, non c'è nessuna parola brutta da
+trovare, e «non ho trovato niente di rotto» diventa «va tutto bene».
+
+**⛔ COSA NON È MISURATO** (D18 punto 3): il **meccanismo**. Il log del gate risponde `403`
+senza credenziali e le credenziali non si toccano, quindi non sappiamo se `needs.*.result`
+fosse incompleto o se l'orchestratore avesse compilato male il registro (fra le note della run
+compare anche un `Internal server error`). **La riparazione non dipende da quale delle due sia
+vera** — ed è il motivo per cui è stata scelta così.
+
+**LA RIPARAZIONE, NELL'ORDINE DI D20** — prima la guardia, **vista rossa**
+(`FAILED (failures=10)` · uscita 1), poi la correzione:
+- `test_pipeline_ci.py` → classe **`TestUnJobCheNonConsegnaNiente`** (6 prove) e il valutatore
+  impara a giudicare il quarto termine invece di rifiutarlo;
+- `.github/workflows/ci.yml` → il gate smette di chiedersi «c'è scritto `failure`?» e si chiede
+  **«sono arrivati tutti e dieci, e sono tutti `success`?»**
+  (`join(needs.*.result, ' ') != 'success … success'`). Un controllo che **sparisce** e un
+  controllo **bocciato** diventano indistinguibili, che è come dev'essere;
+- 🔒 **la stringa è sotto guardia**: il test la **ricalcola** dal numero di job nei `needs`.
+  Aggiungere un bloccante senza allungarla fa rosso **lo stesso giorno**;
+- 🔒 `test_LA_CONDIZIONE_DI_IERI_SAREBBE_ROSSA_QUI` inchioda il rosso nella suite per sempre:
+  se qualcuno riscrive la condizione com'era, torna rossa da sola.
+
+⚠️ **Il verde di questa riparazione è LOCALE, e il verde locale è un indizio** (regola ferrea 8):
+GitHub era a terra e **la CI vera non l'ha ancora giudicata**. Va guardata la tabella dei job al
+primo giro utile.
+
+**⏳ RESTA APERTO, in quest'ordine:**
+1. **Rilanciare i tre job annullati** su
+   `https://github.com/edilmax/Core_Auto/actions/runs/31116671519` — `atheris` (fuzzing sui
+   motori-soldi), `copertura` (soglia 82%), `full-suite-311` (Python di **produzione**)
+   **non hanno mai girato su `master`**.
+2. **Il VPS è ancora su `02579be`**, fermo di proposito: servono la CI verde e «autorizzato».
+3. 🚫 **Non unire nulla mentre Actions è guasto**: finché dura, il bollino verde non prova niente.
+
 ## 🔴🔴 2026-08-06 — LA COSA PIU' GRAVE APERTA OGGI, E NON E' NEL CODICE
 
 **Il server vivo accetta l'accesso come amministratore CON UNA PASSWORD, e nessuno blocca chi
@@ -677,10 +734,48 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5437 test
-AMBIENTE: Windows · Python 3.9 · hypothesis+pyyaml+coverage installati
+SUITE ATTUALE: Ran 5443 test
+AMBIENTE: Windows · Python 3.9.10 · hypothesis 6.141.1 + pyyaml + coverage installati
+          · ⚠️ bash E openssl nel PATH (`C:\Program Files\Git\usr\bin`) — vedi qui sotto
 COMANDO:  python -m unittest discover -s . -p "test_*.py"
 ```
+📌 **Da 5437 a 5443** (2026-08-06 sera, albero `a67eef6` + le 6 guardie nuove sul cancello):
+**rimisurato, non sommato** —
+`python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"`
+→ `5443`. La differenza di 6 è un **riscontro** dopo la misura, non la sua origine: chi la usa
+come origine sta rifacendo l'errore di `Ran 5429`. La guardia
+`test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO` è andata **rossa da sola**
+(`5437 != 5443`) prima che me ne accorgessi io — è il primo caso in cui D22 si è fatta valere
+senza un essere umano di mezzo.
+
+### ⛔ 2026-08-06 — CINQUE GUARDIE SI SPENGONO IN SILENZIO SE MANCA `openssl` NEL PATH
+Il primo giro di quella sera ha stampato **`Ran 5438`** mentre il caricatore ne contava **5443**.
+Non era un errore di somma (5443 nomi, tutti diversi, zero doppioni, zero moduli non
+importabili): erano **cinque test che esistono e non venivano eseguiti**, tutti in
+`test_backup_completo.TestRipristinoAPezziNonPassa` — cioè le guardie su **come si rimette in
+piedi il server da un backup**.
+
+**Il meccanismo, e perché non si vede.** Quel `setUpClass` salta l'intera classe se non trova
+`bash` e `openssl` (su Linux invece è `AssertionError`, cioè ROSSO: lì il salto non è legittimo).
+Quando è `setUpClass` a saltare, unittest registra **UN solo salto** e **non conta i 5 test** nel
+totale `Ran`; e in modalità verbosa stampa `skipped '...'` **senza il nome della classe**. Quindi
+il segnale c'è, ma è muto: `skipped=3` → `skipped=4`, e cinque controlli spariti.
+Il conto torna alla riga: **5437 (ieri) + 6 (guardie nuove) − 5 (saltate) = 5438.**
+
+**La causa non era il codice: era la shell.** `openssl` non è nel `PATH` di PowerShell, pur
+essendo installato in `C:\Program Files\Git\usr\bin\openssl.exe`. Con gli strumenti a posto le
+cinque passano (`Ran 5 tests · OK · uscita 0`). ⚠️ Attenzione anche a `bash`: senza il PATH di
+Git risolve a `C:\Windows\system32\bash.exe`, che è quello di **WSL**, non quello di Git.
+
+**COME SI LANCIA LA SUITE SU QUESTO COMPUTER, per non perderle:**
+```powershell
+$env:PATH = "C:\Program Files\Git\usr\bin;C:\Program Files\Git\bin;" + $env:PATH
+python -m unittest discover -s . -p "test_*.py"
+```
+💡 **La lezione oltre il caso:** un salto dichiarato *è* legittimo, ma **un salto che non dice il
+proprio nome è una zona cieca**. Qui il numero dichiarato non ha nascosto niente — l'ha
+**scoperto**, perché a fare da spia è stato il disaccordo fra chi *elenca* i test e chi li
+*esegue*. Quando i due numeri divergono, non si sceglie il più comodo: si va a vedere.
 Esito di quel giro: **OK (skipped=3) · uscita 0**. ⚠️ **La durata qui non si scrive:** cambia a
 ogni giro e a ogni macchina, e soprattutto scriverla e' una trappola logica — la riga fa parte
 dell'albero misurato, quindi il numero e' gia' falso nell'istante in cui si salva il file. I tempi
