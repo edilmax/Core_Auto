@@ -1398,34 +1398,126 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
         ⛔ COSA NON FA (D18 punto 3): non dice che il mutante sia SENSATO, solo che e'
         sintatticamente valido. Un mutante che compila ma non cambia niente resta un problema
         diverso (l'equivalenza), e se ne occupa lo schedario.
+
+        ⚡ PERCHE' NON RI-ANALIZZA IL FILE INTERO (2026-08-06). La prima versione lo faceva e
+        la CI e' passata da ~10 a **23m42s**. Un controllo che raddoppia l'attesa e' un
+        controllo che prima o poi qualcuno spegne, e allora non protegge piu' niente.
+        Ora si analizza solo la **funzione piu' interna** che contiene la riga mutata (con
+        ripiego sull'istruzione di primo livello, e sul file intero se nemmeno quella c'e').
+        La premessa e' una proprieta' della grammatica, non un'euristica: un blocco si analizza
+        in modo indipendente, quindi se quello mutato e' valido e il resto del file **non e'
+        cambiato** (la mutazione tocca una riga sola e non ne cambia il numero), il file e'
+        valido.
+        ⛔ MISURATO, NON DEDOTTO, su 7275 mutanti veri di 151 moduli, con TRE tipi di guasto
+        iniettati apposta nel generatore (operatore doppio, parentesi non chiusa, parola
+        chiave ripetuta):
+            file intero (la verita')   186,8 s -> 544 mutanti rotti
+            istruzione di 1o livello   116,4 s -> 544, stesso identico insieme
+            funzione piu' interna        2,9 s -> 544, stesso identico insieme
+        Non «lo stesso numero»: lo **stesso insieme**, confrontato mutante per mutante --
+        zero mancati, zero falsi allarmi. Due conteggi uguali possono nascondere due insiemi
+        diversi, ed e' per questo che il confronto e' sugli insiemi.
+        ⚠️ Il costo NON era `applica_mutante` che ricostruisce il file (misurato: 3,8 s in
+        tutto): era l'analisi sintattica, che cresce con le righe del frammento. La prima
+        spiegazione che mi ero dato era sbagliata, e la misura l'ha smentita.
+        ⛔ Le due condizioni della premessa sono VERIFICATE a ogni giro, non assunte: se la
+        mutazione cambiasse il numero di righe, o se la riga cadesse fuori da ogni istruzione
+        (puo' capitare), si ricade sull'analisi del FILE INTERO -- e quante volte succede
+        viene DETTO nel messaggio.
         """
         import ast
         import glob
         import os
         m = self._motore()
         radice = os.path.dirname(os.path.abspath(__file__))
-        rotti, esaminati, mutanti_totali = [], 0, 0
+        rotti, esaminati, mutanti_totali, interi, righe_lette = [], 0, 0, 0, 0
         for percorso in sorted(glob.glob(os.path.join(radice, "fase*.py"))
                                + glob.glob(os.path.join(radice, "main_casavip.py"))):
             try:
                 sorgente = m._leggi_intatto(percorso)
-                ast.parse(sorgente)
+                albero = ast.parse(sorgente)
             except (SyntaxError, OSError, ValueError):
                 continue
             esaminati += 1
+            quante_righe = len(sorgente.splitlines())
+
+            def _intervallo(nodo):
+                """Righe del nodo, decoratori compresi: stanno PRIMA del `def` e non sono in
+                `lineno`, e senza di loro un mutante su una riga decorata cadrebbe fuori."""
+                return (min([nodo.lineno] + [d.lineno
+                                             for d in getattr(nodo, "decorator_list", [])]),
+                        nodo.end_lineno, nodo.col_offset)
+
+            # Due mappe: le funzioni (la piu' INTERNA che contiene la riga) e, come ripiego,
+            # le istruzioni di primo livello.
+            funzioni = [_intervallo(n) for n in ast.walk(albero)
+                        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+            cima = [(a, b, 0) for a, b, _c in (_intervallo(n) for n in albero.body)]
             mutanti, _saltati = m.genera_mutanti(sorgente)
             for mu in mutanti:
                 mutanti_totali += 1
+                testo = m.applica_mutante(sorgente, mu)
+                righe = testo.splitlines()
+                blocco = None
+                if len(righe) == quante_righe:          # premessa 1: righe invariate
+                    for elenco in (funzioni, cima):     # premessa 2: dentro un blocco
+                        for a, b, col in elenco:
+                            if a <= mu["riga"] <= b and (blocco is None or a > blocco[0]):
+                                blocco = (a, b, col)
+                        if blocco is not None:
+                            break
+                pezzo = None
+                if blocco is not None:
+                    pezzo = righe[blocco[0] - 1:blocco[1]]
+                    # Una funzione dentro una classe e' indentata: per analizzarla da sola le
+                    # si toglie l'indentazione, la stessa a tutte le righe.
+                    # ⛔ PREMESSA 3, VERIFICATA E NON ASSUNTA: `x[col:]` e' un taglio di
+                    # CARATTERI, non un dedent. Su una riga meno indentata del `def` mangia
+                    # codice vero -- un commento a colonna 0 dentro un metodo diventa
+                    # `ta a colonna zero`, il frammento non compila, e il rosso accusa il
+                    # generatore MENTRE IL GENERATORE E' SANO. Un falso allarme che punta al
+                    # posto sbagliato: il difetto peggiore che questa rete possa avere.
+                    # Oggi nel progetto non esistono righe cosi' (verificato), ma «oggi non
+                    # capita» non e' un argomento (D19): se la premessa cade, si ricade sul
+                    # file intero come per le altre due. Trovato dalla revisione a contesto
+                    # fresco il 2026-08-06.
+                    if blocco[2]:
+                        if any(x[:blocco[2]].strip() for x in pezzo):
+                            pezzo = None
+                        else:
+                            pezzo = [x[blocco[2]:] for x in pezzo]
+                if pezzo is None:
+                    frammento, interi = testo, interi + 1
+                else:
+                    frammento = "\n".join(pezzo)
+                righe_lette += frammento.count("\n") + 1
                 try:
-                    ast.parse(m.applica_mutante(sorgente, mu))
+                    ast.parse(frammento)
                 except SyntaxError as e:
+                    # Si riporta solo `e.msg`, non l'eccezione intera: la posizione che porta
+                    # dentro e' relativa al FRAMMENTO analizzato, e stampare due numeri di riga
+                    # diversi manda chi legge il rosso a cercare nel punto sbagliato. La
+                    # posizione VERA e' quella che scriviamo noi, `file:riga`.
                     rotti.append("  %s:%s  %s -> %s   %s"
                                  % (os.path.basename(percorso), mu["riga"], mu["vecchio"],
-                                    mu["nuovo"], e))
+                                    mu["nuovo"], e.msg))
                     if len(rotti) >= 10:
                         break
             if len(rotti) >= 10:
                 break
+        # ⛔ PRIMA IL DIFETTO VERO, POI I CONTROLLI SUL DENOMINATORE. L'ordine non e' estetico:
+        #    la prima versione controllava prima il denominatore, e siccome la ricerca si ferma
+        #    ai primi 10 mutanti rotti, il conteggio dei moduli restava fermo a 10 e il rosso
+        #    diceva «la rete sta guardando quasi nulla» invece di «il giudice produce Python
+        #    non valido». L'allarme suonava e gridava il motivo SBAGLIATO -- un osservabile
+        #    debole, che manda chi legge a cercare nel posto sbagliato. Trovato il 2026-08-06
+        #    vedendola rossa per la prima volta, con un operatore guasto iniettato apposta.
+        self.assertEqual(
+            [], rotti,
+            "IL GENERATORE PRODUCE PYTHON NON VALIDO (primi %d, la ricerca si ferma qui): il "
+            "killer morirebbe di errore di SINTASSI invece che per aver visto il guasto, e il "
+            "giudice conterebbe quei mutanti come UCCISI -- punteggio pieno su protezione "
+            "assente.\n%s" % (len(rotti), "\n".join(rotti)))
         self.assertGreaterEqual(esaminati, 100,
                                 "esaminati solo %d moduli: la rete sta guardando quasi nulla"
                                 % esaminati)
@@ -1433,12 +1525,52 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
                            "solo %d mutanti generati in tutta la macchina: il generatore sta "
                            "producendo troppo poco perche' questo verde valga qualcosa"
                            % mutanti_totali)
-        self.assertEqual(
-            [], rotti,
-            "DENOMINATORE: %d moduli, %d mutanti applicati e ricompilati. Questi NON sono "
-            "Python valido: il killer morirebbe di errore di sintassi e il giudice li "
-            "conterebbe come UCCISI, cioe' punteggio pieno su protezione assente.\n%s"
-            % (esaminati, mutanti_totali, "\n".join(rotti)))
+        # ⛔ SI DICHIARA QUANTE VOLTE SI E' RICADUTI SUL FILE INTERO. Non e' un errore -- e' la
+        #    via sicura quando la premessa non regge -- ma se diventasse la norma, la rete
+        #    sarebbe tornata lenta senza che nessuno se ne accorgesse.
+        # ⛔ IL NUMERO DEI RIPIEGHI E' INCHIODATO A UN VALORE PICCOLO, non a un tetto che non
+        #    puo' scattare. Il vecchio (`mutanti // 10` = 727) era decorazione: un ripiego
+        #    costa ~2232 righe, quindi a 265 ripieghi scatta gia' il cricchetto sul rapporto e
+        #    quello sui ripieghi non fallisce MAI. Oggi i ripieghi sono **0**.
+        #    ⚠️ Non si pretende zero: ricadere sul file intero e' la via SICURA quando una
+        #    premessa non regge (una riga meno indentata del `def` e' Python legale), e farne
+        #    un rosso punirebbe codice corretto. Si pretende che restino un'eccezione.
+        self.assertLess(interi, 50,
+                        "ricaduta sull'analisi del file INTERO %d volte su %d mutanti (oggi "
+                        "sono 0): non e' un errore -- e' la via sicura quando una premessa non "
+                        "regge -- ma se diventa la norma la rete e' tornata lenta senza che si "
+                        "veda. Va capito PERCHE', non alzato il numero."
+                        % (interi, mutanti_totali))
+        # ⛔ IL CRICCHETTO SUL LAVORO — e si misura il LAVORO, non il TEMPO, per una ragione
+        #    misurata il 2026-08-06: la stessa suite sulla stessa macchina e' passata da 1785 a
+        #    3818 secondi nello stesso giorno (rumore 2,14x, ±1000 s), mentre il rallentamento
+        #    da intercettare ne valeva 90. Un cricchetto sul TEMPO griderebbe sui giri lenti
+        #    normali -- e un falso allarme e' un difetto quanto un allarme mancato.
+        #    Le righe analizzate invece sono un numero DETERMINISTICO: identico su ogni
+        #    macchina e a ogni giro. Falsi allarmi impossibili per costruzione.
+        #    Con la vecchia strategia (file intero) erano 16.238.763: questo tetto avrebbe
+        #    gridato subito, invece di far scoprire il rallentamento al fondatore su una
+        #    pagina web il giorno dopo.
+        #    ⚠️ Chi lo alza deve scrivere PERCHE' nel registro, come si fa col numero della
+        #    copertura. Alzarlo per far tornare il verde e' la stessa cosa che allargare un
+        #    valore atteso perche' il codice non lo raggiunge.
+        # ⛔ SI INCHIODA IL RAPPORTO righe/mutante, NON IL TOTALE. Il totale cresce anche per
+        #    BUONI motivi: il 2026-08-05 insegnare `is`/`in` al generatore ha aggiunto 1279
+        #    punti veri (+18% in un solo commit), e altre due famiglie di operatori o trenta
+        #    moduli nuovi porterebbero il totale al tetto SENZA nessuna regressione -- col
+        #    rosso che manda a cercare una lentezza che non c'e'. Il rapporto invece dipende
+        #    solo dalla STRATEGIA: 56 righe per mutante guardando la funzione piu' interna,
+        #    ~2232 tornando all'istruzione di primo livello. Sono 40 volte di distanza: un
+        #    tetto a 200 tace su qualunque crescita legittima e grida su un ritorno indietro.
+        #    (Rilievo della revisione a contesto fresco, 2026-08-06.)
+        per_mutante = righe_lette / float(max(mutanti_totali, 1))
+        self.assertLess(per_mutante, 200,
+                        "la rete analizza %.0f righe per mutante (%d righe su %d mutanti): "
+                        "e' tornata pesante, e il costo si paga a OGNI giro di CI due volte "
+                        "(suite intera + copertura). Oggi ne analizza ~56 guardando la "
+                        "funzione piu' interna; tornando all'istruzione di primo livello "
+                        "sarebbero ~2232. Va capito COSA e' cambiato nella STRATEGIA, non "
+                        "alzato il tetto." % (per_mutante, righe_lette, mutanti_totali))
 
     def test_IL_GENERATORE_SA_ROMPERE_ANCHE_is_e_in(self):
         """⛔ I 1290 PUNTI CHE LO STRUMENTO DICHIARAVA DI NON SAPER ROMPERE.
@@ -3179,6 +3311,226 @@ class TestLoSchedarioDegliEquivalenti_5_UNA_PROVA_PERDONA_UN_PUNTO_SOLO(unittest
             "descrive uno solo. E' la stessa famiglia del difetto del 2026-08-01, un passo "
             "piu' in fondo:\n%s"
             % (len(voci), len(conta), inerti, len(troppe), "\n".join(troppe)))
+
+
+class TestIlCronometroNonPuoMENTIRE(unittest.TestCase):
+    """⛔ `collaudi/cronometro_suite.py` — LA PRIMA GUARDIA NON E' SUI TEMPI.
+
+    Quello strumento esiste per accorgersi che la macchina rallenta: il 2026-08-05 una guardia
+    nuova ha piu' che raddoppiato la CI (da ~10 a 23m42s) e **nessun controllo l'ha detto** --
+    l'ha notato il fondatore leggendo una tabella su GitHub il giorno dopo.
+
+    Ma se un domani quel cronometro prendesse il posto di `python -m unittest discover` nel job
+    che fa da cancello principale, un suo difetto costerebbe molto piu' della lentezza: uscire
+    **verde con test rossi dentro**, oppure eseguire **meno test** di quelli veri. Il cancello
+    sembrerebbe chiuso e sarebbe aperto, e nessuno lo saprebbe.
+
+    Per questo qui si prova, PRIMA di ogni cosa e nelle DUE direzioni:
+      1. scopre ESATTAMENTE gli stessi test di `unittest discover` -- non uno di meno;
+      2. esce **1** su una suite rossa e **0** su una verde -- provato eseguendolo davvero;
+      3. il tetto sui tempi grida quando serve e TACE quando non serve;
+      4. un rosso vince sempre sul tetto: prima si guarda il rosso.
+    """
+
+    SCRIPT = os.path.join(QUI, "collaudi", "cronometro_suite.py")
+
+    def _cavia(self, nome, corpo):
+        """Un modulo di test usa-e-getta, FUORI dal repository: si raggiunge con PYTHONPATH,
+        cosi' la prova non lascia file dentro il progetto."""
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        with io.open(os.path.join(d, nome + ".py"), "w", encoding="utf-8", newline="\n") as f:
+            f.write(corpo)
+        return d
+
+    def _esegui(self, cartella, argomenti):
+        amb = dict(os.environ)
+        amb["PYTHONPATH"] = cartella + os.pathsep + amb.get("PYTHONPATH", "")
+        return subprocess.run([sys.executable, self.SCRIPT] + argomenti,
+                              cwd=QUI, env=amb, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=300)
+
+    def test_scopre_ESATTAMENTE_gli_stessi_test_di_unittest_discover(self):
+        """⛔ LA PIU' IMPORTANTE. Un cronometro che ne esegue anche UNO di meno e' un cancello
+        che sembra chiuso ed e' aperto: la suite direbbe «tutto verde» avendo saltato roba."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("_cronometro", self.SCRIPT)
+        cro = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cro)
+        # ⛔ SI CONFRONTANO GLI INSIEMI, NON I CONTEGGI. Due numeri uguali possono nascondere
+        #    due insiemi diversi: un filtro che toglie un modulo da 40 prove mentre un altro
+        #    ne raccoglie 40 fa tornare il conto e non esegue piu' niente di quello che
+        #    contava. E' la stessa regola usata per dimostrare l'equivalenza delle strategie
+        #    della rete («non lo stesso numero: lo stesso insieme»), che qui mancava proprio
+        #    nella guardia dichiarata «LA PIU' IMPORTANTE» (revisione a contesto fresco,
+        #    2026-08-06).
+        # ⚠️ `carica([])` — con argv VUOTO: se leggesse `sys.argv` di questo processo, un giro
+        #    lanciato con `--moduli` gli farebbe scoprire un sottoinsieme e questa guardia
+        #    diventerebbe rossa per il motivo sbagliato.
+        def _ids(suite):
+            fuori = []
+            for t in suite:
+                if isinstance(t, unittest.TestSuite):
+                    fuori.extend(_ids(t))
+                else:
+                    fuori.append(t.id())
+            return fuori
+
+        suo = sorted(_ids(cro.carica([])))
+        vero = sorted(_ids(unittest.defaultTestLoader.discover(
+            QUI, pattern="test_*.py", top_level_dir=QUI)))
+        mancanti = sorted(set(vero) - set(suo))
+        aggiunti = sorted(set(suo) - set(vero))
+        self.assertEqual(
+            ([], []), (mancanti[:10], aggiunti[:10]),
+            "il cronometro NON esegue lo stesso insieme di `unittest discover`: %d test "
+            "sparirebbero e %d comparirebbero dal nulla. Quelli che sparirebbero non li "
+            "eseguirebbe piu' nessuno, e il verde della suite varrebbe di meno senza che si "
+            "veda.\n  spariti: %r\n  comparsi: %r"
+            % (len(mancanti), len(aggiunti), mancanti[:10], aggiunti[:10]))
+        self.assertGreater(len(vero), 1000,
+                           "la scoperta trova solo %d test: sta guardando la cartella "
+                           "sbagliata, e questo confronto non proverebbe niente" % len(vero))
+
+    def test_esce_UNO_su_una_suite_ROSSA_e_ZERO_su_una_VERDE(self):
+        """Le due direzioni sul VERDETTO, eseguendo lo strumento vero: e' la proprieta' che
+        rende accettabile metterlo sul percorso del cancello principale."""
+        verde = self._cavia("zz_cavia_verde", "import unittest\n"
+                                              "\n"
+                                              "class T(unittest.TestCase):\n"
+                                              "    def test_va_bene(self):\n"
+                                              "        self.assertEqual(2, 1 + 1)\n")
+        r = self._esegui(verde, ["--moduli", "zz_cavia_verde"])
+        self.assertEqual(0, r.returncode,
+                         "su una suite VERDE esce %d invece di 0: la CI sarebbe rossa sempre, "
+                         "e un rosso permanente insegna a ignorare il rosso.\n%s"
+                         % (r.returncode, (r.stdout + r.stderr)[-600:]))
+
+        rossa = self._cavia("zz_cavia_rossa", "import unittest\n"
+                                              "\n"
+                                              "class T(unittest.TestCase):\n"
+                                              "    def test_fallisce(self):\n"
+                                              "        self.assertEqual(3, 1 + 1)\n")
+        r = self._esegui(rossa, ["--moduli", "zz_cavia_rossa"])
+        self.assertEqual(1, r.returncode,
+                         "⛔ SU UNA SUITE ROSSA ESCE %d INVECE DI 1: il cancello principale "
+                         "sarebbe MORTO -- verde con test rossi dentro, e nessuno lo "
+                         "saprebbe.\n%s" % (r.returncode, (r.stdout + r.stderr)[-600:]))
+
+    def test_ZERO_TEST_ESEGUITI_non_e_un_successo(self):
+        """⛔ IL CANCELLO CHE SEMBRA CHIUSO ED E' APERTO.
+
+        `unittest` considera **riuscita** una suite vuota: senza un controllo esplicito, uno
+        strumento che non trova niente da eseguire esce **verde**. Trovato dalla revisione a
+        contesto fresco il 2026-08-06: bastava `--moduli --tetto-secondi 30` (il valore
+        dell'opzione seguente veniva letto come nome di modulo, l'elenco restava vuoto) per
+        avere `Ran 0 tests ... OK` e **uscita 0**. E' esattamente lo scenario che la docstring
+        di questa classe dichiara di scongiurare.
+        E' anche la D18 punto 1: uno strumento che misura si FERMA invece di stampare un
+        numero, quando non e' in condizione di misurare.
+        """
+        d = self._cavia("zz_cavia_vuota", "import unittest\n")
+        r = self._esegui(d, ["--moduli", "--tetto-secondi", "30"])
+        self.assertNotEqual(0, r.returncode,
+                            "con ZERO test eseguiti esce 0: il cancello sembrerebbe chiuso ed "
+                            "e' aperto.\n%s" % (r.stdout + r.stderr)[-500:])
+        self.assertIn("ZERO TEST", (r.stdout + r.stderr).upper(),
+                      "si ferma ma non dice PERCHE': chi legge non sa che non ha eseguito nulla")
+
+    def test_un_OPZIONE_SCRITTA_MALE_non_spegne_l_allarme_in_silenzio(self):
+        """`--tetto 30` invece di `--tetto-secondi 30` lasciava il tetto SPENTO senza dire
+        niente: sembrava che avesse controllato e non aveva controllato nulla. Per uno
+        strumento candidato a fare da cancello e' la stessa famiglia della suite vuota."""
+        d = self._cavia("zz_cavia_ok", "import unittest\n"
+                                       "\n"
+                                       "class T(unittest.TestCase):\n"
+                                       "    def test_ok(self):\n"
+                                       "        pass\n")
+        r = self._esegui(d, ["--moduli", "zz_cavia_ok", "--tetto", "30"])
+        self.assertNotEqual(0, r.returncode,
+                            "un'opzione sconosciuta viene ignorata e il giro esce verde: il "
+                            "tetto resta spento e nessuno se ne accorge.\n%s" % r.stdout[-400:])
+        self.assertIn("opzione sconosciuta", r.stdout + r.stderr)
+
+    def test_il_tetto_GRIDA_quando_serve_e_TACE_quando_non_serve(self):
+        """Un allarme provato in una direzione sola potrebbe gridare sempre -- e un allarme
+        sempre acceso viene spento (regola ferrea 10).
+
+        ⚠️ L'attesa e' di 0,2 s e non di 2: provare le due direzioni non richiede di essere
+        lenti, e sei secondi di `sleep` dentro il lavoro la cui tesi e' «i test lenti vengono
+        spenti» erano una contraddizione (revisione a contesto fresco, 2026-08-06)."""
+        lenta = self._cavia("zz_cavia_lenta", "import time\n"
+                                              "import unittest\n"
+                                              "\n"
+                                              "class T(unittest.TestCase):\n"
+                                              "    def test_lento_ma_sano(self):\n"
+                                              "        time.sleep(0.2)\n")
+        r = self._esegui(lenta, ["--moduli", "zz_cavia_lenta", "--tetto-secondi", "0.05"])
+        self.assertEqual(1, r.returncode,
+                         "un test da 0,2 secondi non fa scattare il tetto di 0,05: il "
+                         "cronometro non vede la lentezza che deve vedere.\n%s"
+                         % r.stdout[-600:])
+        self.assertIn("OLTRE IL TETTO", r.stdout,
+                      "scatta ma non dice QUALE test e' lento: chi legge non sa dove guardare")
+        self.assertIn("zz_cavia_lenta", r.stdout)
+
+        r = self._esegui(lenta, ["--moduli", "zz_cavia_lenta", "--tetto-secondi", "5"])
+        self.assertEqual(0, r.returncode,
+                         "lo stesso test SANO fa scattare un tetto di 5 secondi: il tetto "
+                         "griderebbe sempre, e un allarme sempre acceso viene tolto.\n%s"
+                         % r.stdout[-600:])
+        self.assertNotIn("OLTRE IL TETTO", r.stdout)
+
+        # ...e senza tetto non deve gridare mai, che e' la condizione di oggi.
+        r = self._esegui(lenta, ["--moduli", "zz_cavia_lenta"])
+        self.assertEqual(0, r.returncode,
+                         "senza `--tetto-secondi` impone un tetto lo stesso: una soglia scelta "
+                         "prima di conoscere la varianza e' un falso allarme in attesa")
+
+    def test_un_rosso_vince_SEMPRE_sul_tetto(self):
+        """Un test lento su una suite rossa e' un problema minore: il verdetto non deve mai
+        essere sostituito da quello sui tempi, ne' in un verso ne' nell'altro."""
+        rossa = self._cavia("zz_cavia_rossa2", "import unittest\n"
+                                               "\n"
+                                               "class T(unittest.TestCase):\n"
+                                               "    def test_fallisce(self):\n"
+                                               "        self.assertTrue(False)\n")
+        r = self._esegui(rossa, ["--moduli", "zz_cavia_rossa2", "--tetto-secondi", "999"])
+        self.assertEqual(1, r.returncode,
+                         "con un tetto larghissimo una suite ROSSA esce 0: il tetto ha "
+                         "coperto il verdetto vero.\n%s" % (r.stdout + r.stderr)[-600:])
+
+    def test_ogni_LENTO_DICHIARATO_porta_il_suo_MOTIVO(self):
+        """L'elenco delle esenzioni e' il posto dove la lentezza si nasconde. Una voce senza
+        motivo scritto e' un permesso a tempo indeterminato che nessuno rilegge."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("_cronometro_lenti", self.SCRIPT)
+        cro = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cro)
+        senza = [k for k, v in cro.LENTI_DICHIARATI.items()
+                 if not isinstance(v, str) or len(v.strip()) < 30]
+        self.assertEqual([], senza,
+                         "queste esenzioni non portano un motivo scritto (o e' troppo corto "
+                         "per esserlo): %r" % senza)
+        # ⛔ E OGNI ESENZIONE DEVE PUNTARE A UN TEST CHE ESISTE DAVVERO. Il giorno che quel
+        #    test viene rinominato, l'esenzione resterebbe li' per sempre senza che niente
+        #    diventi rosso -- e l'elenco delle esenzioni e' il posto dove la lentezza si
+        #    nasconde (revisione a contesto fresco, 2026-08-06).
+        def _ids(suite):
+            fuori = []
+            for t in suite:
+                if isinstance(t, unittest.TestSuite):
+                    fuori.extend(_ids(t))
+                else:
+                    fuori.append(t.id())
+            return fuori
+
+        veri = set(_ids(cro.carica([])))
+        fantasmi = sorted(k for k in cro.LENTI_DICHIARATI if k not in veri)
+        self.assertEqual([], fantasmi,
+                         "queste esenzioni puntano a test che NON ESISTONO piu': sono permessi "
+                         "a tempo indeterminato che nessuno rilegge, e coprirebbero un test "
+                         "nuovo che prendesse lo stesso nome. %r" % fantasmi)
 
 
 if __name__ == "__main__":

@@ -437,6 +437,71 @@ di una `traccia`; non vedono i tipi troppo larghi diversi da `Any` (es. `object`
 qualcuno **cancellasse** le classi, nulla diventerebbe rosso: il controllo interno impedisce di
 **indebolirle**, non di **toglierle**.
 
+### 🔴 APERTO 2026-08-06 — IL SERVER VIVO ACCETTA LE PASSWORD (la cosa piu' grave in fila)
+Misurato in sola lettura sul VPS con `sshd -T` (la configurazione EFFETTIVA chiesta al demone;
+un `grep` sul file dava una risposta parziale — osservabile debole):
+`permitrootlogin yes` · `passwordauthentication yes` · `fail2ban` **non installato** · firewall
+`ufw` **inattivo** · **36.674 tentativi falliti in 7 giorni** (~5.200/giorno) · 223 accessi
+riusciti **tutti con chiave, zero con password** · aggiornamenti automatici attivi, 0 in attesa.
+Nessuno e' entrato, ma non c'e' nessun muro: solo una serratura sotto martellamento continuo.
+**⛔ NON TOCCATO: e' produzione, serve «autorizzato»** — e due delle quattro riparazioni
+possono **chiudere fuori anche noi**. Ordine e protocollo (prova `sshd -t`, sessione aperta
+durante il riavvio, verifica da una connessione NUOVA, una alla volta) in `RIPRENDI_QUI.md`.
+Rete sotto la rete: la console del pannello Hostinger entra senza SSH.
+🟠 In piu': il repository e' **pubblico** (nessuna chiave e' mai entrata nella storia — 779
+commit setacciati con la regola stretta, zero riscontri; 0 fork), e il cancello `gate` su
+GitHub **si puo' scavalcare** (`Bypassed rule violations` nel push del 2026-08-06).
+
+### ✅ FATTO 2026-08-06 — `collaudi/cronometro_suite.py` (NUOVO strumento) + due cricchetti
+- **`collaudi/cronometro_suite.py`** — *creazione:* 2026-08-06. *Scopo:* misurare il tempo di
+  OGNI test e stampare i piu' lenti, perche' il 2026-08-05 una guardia nuova ha piu' che
+  raddoppiato la CI (da ~10 a 23m42s) e **nessun controllo l'ha detto**. *Logica:* discovery
+  identica a `unittest discover`, runner di `unittest` con un `TestResult` che cronometra; il
+  verdetto lo da' `unittest`, non lui. *Dipendenze/env:* nessuna (solo stdlib). *STATO:*
+  **ACCESO come strumento, NON come cancello** — il tetto si attiva solo con `--tetto-secondi N`
+  e `ci.yml` **non e' stato toccato**: per rendere bloccante una soglia serve il rumore dei
+  tempi per-test su piu' giri, e oggi ce n'e' **uno solo**. *Come si accende:* quando ci saranno
+  3-5 giri di dati, `--tetto-secondi 150` (soglia proposta: il test piu' lento oggi e' 73,44 s,
+  quindi muta anche col doppio di rumore) e il comando del job `full-suite`.
+  *Sotto guardia:* `test_pipeline_ci.TestIlCronometroNonPuoMENTIRE`, 5 prove, e **la prima non
+  e' sui tempi**: scopre esattamente gli stessi test, esce 1 su suite rossa e 0 su verde, il
+  tetto grida e tace, un rosso vince sempre sul tetto, ogni esenzione porta il motivo.
+  ⛔ Quelle guardie hanno gia' trovato un difetto vero nello strumento (il valore di
+  `--tetto-secondi` finiva fra i nomi dei moduli: **verde per il motivo sbagliato**).
+  ⛔ **E una REVISIONE A CONTESTO FRESCO ne ha trovati altri 12, tutti reali** (2026-08-06,
+  appendice 19). I due gravi: (1) con la suite **VUOTA** lo strumento usciva **0** — `unittest`
+  considera riuscita una suite senza test — cioe' proprio «il cancello che sembra chiuso ed e'
+  aperto» che le sue guardie dichiaravano di scongiurare; (2) il «dedent» della rete e' un
+  taglio di CARATTERI: su una riga meno indentata del `def` (un commento a colonna 0 dentro un
+  metodo e' Python legale) mangiava codice vero e produceva un **falso allarme che accusava il
+  generatore mentre il generatore era sano**. Riparati tutti e dodici, ognuno con la sua
+  guardia; le due riparazioni gravi hanno guardie nuove perche' non possano tornare.
+  Fra gli altri: il confronto della scoperta era sui **conteggi** e non sugli **insiemi**
+  (due numeri uguali nascondono due insiemi diversi); `carica()` leggeva `sys.argv` globale e
+  la guardia si auto-sabotava nel modo d'uso principale; un'opzione scritta male spegneva
+  l'allarme in silenzio; il tempo di `setUpClass`/import era invisibile allo strumento il cui
+  unico scopo e' trovare i rallentamenti (ora **dichiarato e stampato**); i **tre numeri
+  diversi** per la stessa quantita' nei documenti (405.475 / 408.217 / ~405.000), che se fosse
+  davvero invariante sarebbe uno solo.
+- **Cricchetto sul LAVORO** (bloccante, dentro `test_OGNI_MUTANTE_GENERATO_COMPILA`): inchioda
+  le **righe per mutante**, numero **deterministico**: `152 moduli · 7.299 mutanti · 408.217
+  righe · 55,9 righe/mutante · tetto 200 (margine 3,6x) · 0 ricadute sul file intero`.
+  Visto rosso col tetto abbassato. ⚠️ **Si misura il lavoro e non il tempo** perche' la stessa
+  suite sulla stessa macchina e' passata da **1785 a 3818 secondi** nello stesso giorno
+  (rumore 2,14x) mentre il rallentamento da intercettare ne valeva 90: un cricchetto sul tempo
+  totale griderebbe sui giri lenti normali. ⚠️ E si inchioda il **rapporto** e non il totale
+  perche' il totale cresce anche per buoni motivi (+1279 punti in un commit quando il giudice
+  ha imparato `is`/`in`): un tetto sul totale sarebbe un falso allarme in attesa.
+  ⚠️ **Limite dichiarato:** un modulo che non passa `ast.parse` viene saltato in silenzio, e
+  la CI gira la suite su **due versioni di Python** (3.9 e 3.11): un file con sintassi non
+  supportata dalla piu' vecchia esce dal denominatore su un giro e non sull'altro.
+- **La rete resa 10 volte piu' veloce** (90 s → 9,3 s): analizza la **funzione piu' interna**
+  invece del file intero. Dimostrata equivalente sui dati veri con 3 guasti iniettati: file
+  intero 186,8 s → 544 rotti, funzione 2,9 s → **544, stesso identico insieme**.
+  Dove andavano i 14 minuti, letto dall'API pubblica di GitHub: `copertura` +830 s,
+  `full-suite` +789 s, `full-suite-311` +791 s — la stessa quantita' su tutti e tre, la firma
+  di un solo pezzo di lavoro. Previsione: giro di CI di nuovo a ~11-12 minuti.
+
 ### ✅ FATTO 2026-08-05 (sera) — `fase162_pagamenti_pendenti` SETACCIATO, e il metro allungato
 
 **(a) Il setaccio sui pagamenti in attesa.** Metodo in due passi, obbligatorio:

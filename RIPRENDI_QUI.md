@@ -11,6 +11,220 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🔴🔴 2026-08-06 — LA COSA PIU' GRAVE APERTA OGGI, E NON E' NEL CODICE
+
+**Il server vivo accetta l'accesso come amministratore CON UNA PASSWORD, e nessuno blocca chi
+sbaglia.** Misurato in sola lettura sul VPS (`sshd -T`, cioe' la configurazione EFFETTIVA
+chiesta al demone -- non un grep sul file, che dava una risposta parziale):
+```
+permitrootlogin        yes
+passwordauthentication yes        <- SSH accetta le password
+maxauthtries           6
+fail2ban               NON INSTALLATO
+firewall (ufw)         INATTIVO        porte aperte: 22, 80, 443
+tentativi falliti negli ultimi 7 giorni:  36.674   (~5.200 al giorno)
+accessi riusciti: 223 -- TUTTI con chiave, ZERO con password
+chiavi autorizzate: 2 (#hostinger-managed-key · edilmax)
+aggiornamenti di sicurezza in attesa: 0 · unattended-upgrades: ATTIVO
+```
+**Nessuno e' entrato** (zero accessi riusciti con password nei 7 giorni di giornale). Ma non
+c'e' nessun muro: c'e' solo una serratura, e ci battono sopra cinquemila volte al giorno.
+L'unica cosa fra un estraneo e il computer che custodisce i soldi e' **quanto e' lunga la
+password di root**.
+
+**⛔ NON TOCCATO: e' produzione, serve «autorizzato».** E due di queste riparazioni hanno un
+modo di andare male peggiore di qualunque cosa vista finora: **chiudere fuori anche noi**.
+
+**Le quattro riparazioni, in ordine di quanto contano:**
+1. `PasswordAuthentication no` — i 36.674 tentativi diventano inutili in un colpo. ⚠️ Se la
+   chiave non funzionasse ci si chiude fuori: si prova `sshd -t` PRIMA, si tiene la sessione
+   aperta durante il riavvio, e si verifica da una connessione NUOVA prima di chiudere.
+2. `PermitRootLogin prohibit-password` — anche se una password trapelasse, non apre.
+3. **`fail2ban`** — chi sbaglia troppe volte viene bandito da solo.
+4. **Firewall `ufw`** attivo con 22/80/443 — cosi' un servizio futuro non si affaccia per
+   sbaglio. ⚠️ Una regola sbagliata taglia fuori tutti: si applica per ultima.
+**Rete sotto la rete:** Hostinger ha una console dal pannello che entra senza SSH.
+
+### 🟠 E DUE ALTRI FATTI SULLA SICUREZZA, misurati il 2026-08-06
+- **Il repository e' PUBBLICO** (`private: false`, verificato via API). Nessuna chiave e' mai
+  entrata nella storia — **779 commit passati al setaccio** con la regola stretta
+  (`sk_live_[A-Za-z0-9]{20,}`, `whsec_...`): **zero riscontri**, quindi metterlo privato e'
+  una scelta pulita e non c'e' niente da revocare. Copie/fork: **0**, stelle 0, osservatori 0.
+  ⚠️ Il rischio del pubblico non e' «ci copiano il codice» (il vantaggio sono gli host, il
+  dominio, il conto Stripe): e' che `DEPLOY.md` pubblica **l'indirizzo del server** e la suite
+  descrive **ogni difesa e ogni buco dichiarato aperto**, riga per riga. E' una mappa.
+- **Il cancello `gate` su GitHub si puo' SCAVALCARE.** Il push del 2026-08-06 ha risposto
+  `Bypassed rule violations ... Required status check "gate" is expected`: la regola c'e', ma
+  chi ha i permessi la salta. Un divieto che non puo' fermarti non e' un divieto (appendice
+  17). Si toglie il permesso di bypass agli amministratori nelle impostazioni del repository.
+
+---
+
+## 🎯 2026-08-06 (7) — DICHIARATO PRIMA DI APRIRLO: UN CANCELLO CONTRO IL RALLENTAMENTO
+
+**Scopo (una frase):** dare una **guardia meccanica** alla regola che oggi ho rotto tre volte —
+«un numero si misura, non si ricorda» — nella forma che serve davvero: che un rallentamento
+della macchina diventi **rosso da solo**, invece di essere notato dal fondatore su una pagina
+web il giorno dopo. Via: «sì costruiscilo», 2026-08-06.
+
+### ⛔ LA MISURA CHE HA CAMBIATO IL DISEGNO, fatta PRIMA di scrivere una riga
+La stessa suite, sulla stessa macchina, nello stesso giorno:
+```
+5422 test in 1785 s   <- il giro con PIU' test e' il PIU' VELOCE
+5385 test in 3818 s   <- meno test, piu' del doppio del tempo
+```
+**Rumore 2,14x (±1000 s). Il rallentamento da intercettare valeva 90 s.** Segnale undici volte
+piu' piccolo del rumore: **un cricchetto sul TEMPO TOTALE non e' costruibile onestamente** —
+o grida sui giri lenti normali (e un falso allarme e' un difetto quanto un allarme mancato,
+regola ferrea 10), o e' cosi' largo da non gridare mai. Non si costruisce.
+
+### COSA SI COSTRUISCE, e perche' regge
+**A. CRICCHETTO SUL LAVORO, non sul tempo.** Le righe che una guardia analizza sono un numero
+**deterministico**: identico su ogni macchina e a ogni giro. La rete «ogni mutante compila»
+ne analizzava **16.238.763**, ora **408.217**. Un tetto li' avrebbe gridato subito, e **non
+puo' dare falsi allarmi per costruzione**. Questo si puo' rendere bloccante SUBITO.
+
+**B. TETTO SUL TEMPO DEL SINGOLO TEST.** Regge dove il totale non regge: 0,1 s e 90 s restano
+distinguibili anche col doppio di rumore. ⛔ Ma la soglia si sceglie **dopo** aver misurato il
+rumore dei tempi per-test, che oggi nessuno misura. Quindi: prima lo strumento che cronometra
+(**non bloccante**), poi i dati, poi il cancello. Mettere una soglia prima di conoscere la
+varianza e' esattamente l'errore commesso stamattina.
+
+**FILE AMMESSI:** `test_pipeline_ci.py` · `collaudi/cronometro_suite.py` (NUOVO: non esiste un
+posto dove misurare i tempi per-test — verificato) · `.github/workflows/ci.yml` (il fondatore
+ha autorizzato: e' la macchina che giudica) · `REGISTRO_INGEGNERIA.md` e `RIPRENDI_QUI.md`.
+⛔ ZERO file di produzione.
+
+**⛔ IL RISCHIO PIU' GRANDE, e detta l'ordine dei collaudi.** Se il job `full-suite` passa dal
+comando di sempre a uno strumento nuovo, un difetto in quello strumento potrebbe farlo uscire
+**verde con test rossi dentro**: il cancello principale morto, e nessuno lo saprebbe. Quindi la
+PRIMA guardia non e' sui tempi: e' che lo strumento **scopra gli stessi test** e **esca 1 su
+una suite rossa**, provato nelle due direzioni su suite finte costruite apposta.
+
+### ✅ ESITO — costruito A, misurato per B, e `ci.yml` NON toccato
+**A. Il cricchetto sul lavoro e' BLOCCANTE da subito**, dentro
+`test_OGNI_MUTANTE_GENERATO_COMPILA`. Visto **rosso** col tetto abbassato
+(`408217 not less than 400000`) e verde con quello vero.
+⚠️ **Inchioda il RAPPORTO, non il totale** (correzione del 2026-08-06, rilievo della revisione
+a contesto fresco): il totale cresce anche per BUONI motivi — insegnare `is`/`in` al giudice ha
+aggiunto **+1279** punti in un solo commit, +18% — e un tetto sul totale avrebbe gridato
+«e' tornata pesante» mandando a cercare una regressione che non c'e'. Il rapporto dipende solo
+dalla strategia. **I numeri veri, uno solo e non tre:**
+```
+152 moduli · 7.299 mutanti · 408.217 righe analizzate
+55,9 righe per mutante   tetto 200   margine 3,6x
+ricadute sull'analisi del file intero: 0
+per confronto: tornando all'istruzione di primo livello sarebbero ~2.232 righe/mutante (40x)
+```
+
+**B. Il cronometro c'e', e NON e' bloccante.** `collaudi/cronometro_suite.py`: misura il tempo
+di ogni test e stampa i piu' lenti; il tetto si accende **solo** con `--tetto-secondi N`.
+**5 guardie, e la prima non e' sui tempi** (`TestIlCronometroNonPuoMENTIRE`): scopre ESATTAMENTE
+gli stessi test di `unittest discover`; esce **1 su suite rossa e 0 su verde** (provato
+eseguendolo davvero); il tetto **grida e tace**; un rosso **vince sempre** sul tetto; ogni
+esenzione porta il motivo.
+⛔ **Le sue guardie hanno gia' trovato un difetto vero nello strumento**: con
+`--moduli x --tetto-secondi 30` il numero `30` finiva fra i **nomi dei moduli da eseguire** →
+suite rossa per un modulo inesistente, e il controllo sul tetto passava lo stesso: **un verde
+per il motivo sbagliato**.
+
+**I dati per la soglia, che prima non esistevano** (giro intero, `Ran ... OK`, 27 minuti):
+```
+73,44 s  test_isolamento_multi_host.test_isolamento_ripetuto      <- il piu' lento
+50,19 s  test_mutation_money  [LENTO DICHIARATO]
+42,21 s  test_invarianti_denaro.test_invarianti_su_input_casuali
+35,35 s  test_simulazione_anno · 34,59 s test_stress_dual_persona
+```
+→ **soglia proposta: 150 s** — muta su tutto cio' che esiste oggi anche col doppio di rumore,
+e avrebbe gridato sulla rete che sulla CI ne costava ~790.
+
+**⛔ `ci.yml` NON e' stato toccato, ed e' una scelta.** Il fondatore aveva autorizzato di
+toccarlo, ma per rendere bloccante il tetto serve il rumore dei tempi **per-test** su piu'
+giri, e oggi ne ho **uno solo**. Mettere una soglia prima di conoscere la varianza e' l'errore
+commesso stamattina, e non si rifa' lo stesso giorno in cui lo si e' scritto.
+
+### 📊 DOVE ANDAVANO I 14 MINUTI — misurato dall'API pubblica di GitHub, non estrapolato
+```
+                copertura   full-suite   full-suite-311
+#624 (mio)         1407 s       1225 s          1212 s
+#623                577 s        436 s           421 s
+#622                570 s        533 s           420 s
+crescita           +830 s       +789 s          +791 s
+```
+Tutti e tre i job che eseguono la suite cresciuti **della stessa quantita'**: la firma di UN
+solo pezzo di lavoro aggiunto a tutti e tre — la rete. Sulla CI costava ~790 s dove qui ne
+costava 140: quella macchina e' ~6 volte piu' lenta per questo lavoro.
+**Previsione, da confermare al prossimo giro:** `copertura` da 1407 a ~670 s, il giro intero
+intorno agli **11-12 minuti**. Consumo: da ~70 a ~33 minuti-job per push (conta per la quota
+se il repository diventa privato).
+
+---
+
+## 🎯 2026-08-06 (6) — DICHIARATO PRIMA DI APRIRLO: LA RETE COSTA 14 MINUTI DI CI
+
+**Scopo (una frase):** la rete `test_OGNI_MUTANTE_GENERATO_COMPILA`, scritta il 2026-08-05, ha
+piu' che RADDOPPIATO il tempo della CI (**da ~10 a 23m42s**, giro #624) — e va resa veloce
+senza perdere un solo mutante. Via del fondatore: «misura dove vanno i 14 minuti», 2026-08-06.
+
+**MISURATO PRIMA DI TOCCARE (non ipotizzato):**
+```
+la rete da sola, esecuzione normale       266 s
+la stessa, sotto misura di copertura      405 s   (moltiplicatore 1,5x)
+```
+La suite intera gira DUE volte in CI (job `full-suite` e job `copertura`); i job sono
+paralleli, quindi il giro dura quanto il piu' lento — ed e' `copertura`. I 266 s non erano i
+«~2 minuti» che avevo dichiarato: quella misura era di PRIMA che il giudice imparasse `is`/`in`,
+e i 1279 punti nuovi hanno raddoppiato il lavoro della rete. **Un numero misurato in un momento
+e riportato come se valesse sempre**: lo stesso errore che ho passato la giornata a inseguire.
+
+**⛔ E UNA COSA PEGGIORE, TROVATA MISURANDO: QUELLA RETE NON L'HO MAI VISTA ROSSA.**
+L'ho scritta, vista verde, e chiamata «la rete che rende sicuro estendere il giudice». Un
+controllo mai visto fallire non e' un controllo: e' un ornamento con un bel nome. Va sanato
+PRIMA di ottimizzarla, o non si saprebbe mai se l'ottimizzazione l'ha accecata.
+
+**ORDINE IMPOSTO:** (1) vederla ROSSA con un guasto vero iniettato nel generatore ·
+(2) renderla veloce · (3) rivederla ROSSA con lo STESSO guasto · (4) rimisurare il costo.
+
+**IDEA DA VERIFICARE, non da assumere:** oggi per ogni mutante ri-analizza il file INTERO
+(`fase83_server.py` sono ~10.000 righe × ~450 mutanti). Basta analizzare la sola istruzione di
+primo livello che contiene la riga mutata: se quella e' valida e il resto del file non e'
+cambiato, il file e' valido. **Da dimostrare col rosso, non da dare per buono.**
+
+### ✅ ESITO — 90 s → 9 s, e due errori miei corretti dalla misura
+**Prima l'ho vista ROSSA** (era la prima volta da quando esiste: un controllo mai visto fallire
+non e' un controllo), e vedendola rossa ho scoperto che **gridava il motivo sbagliato** —
+diceva «la rete sta guardando quasi nulla» invece di «il giudice produce Python non valido»,
+perche' il controllo sul denominatore veniva prima di quello sul difetto. Corretto l'ordine.
+
+**Poi la misura ha smentito la mia spiegazione.** Credevo che il costo fosse `applica_mutante`
+che ricostruisce il file per ogni mutante: **misurato 3,8 s in tutto**. Il costo era l'analisi
+sintattica, che cresce con le righe del frammento — e in questo progetto un'istruzione di primo
+livello e' spesso una **classe da mille righe**. Scendendo alla **funzione piu' interna**
+(dedentata):
+```
+strategia                     tempo    mutanti rotti trovati (con 3 guasti iniettati)
+file intero (la verita')     186,8 s   544
+istruzione di 1o livello     116,4 s   544   stesso identico insieme
+FUNZIONE piu' interna          2,9 s   544   stesso identico insieme
+```
+Non «lo stesso numero»: lo **stesso insieme**, confrontato mutante per mutante — zero mancati,
+zero falsi allarmi. Poi **rivista rossa** con lo stesso guasto dopo l'ottimizzazione: 10 rotti
+trovati prima, 10 dopo. Un'ottimizzazione che l'avesse accecata sarebbe stata invisibile.
+Costo finale nella suite: **9,3 s** normale, **10 s** sotto copertura (era ~140 e ~116).
+
+**⛔ E TRE NUMERI CHE AVEVO DETTO SBAGLIATI, corretti qui perche' restino corretti:**
+«costa ~2 minuti» (misurato prima che il giudice imparasse `is`/`in`), «causa confermata» (non
+avevo mai misurato la CI), «risparmio 271 s» (misura sporca, si contraddiceva con un'altra mia
+misura di dieci minuti prima). Tutti e tre lo stesso errore: **un numero dichiarato come fatto
+senza la misura che lo regge nel posto che conta.** E' la regola che oggi ha piu' bisogno di
+una guardia meccanica, perche' e' l'unica che ho rotto tre volte in un giorno.
+
+**FILE AMMESSI:** `test_pipeline_ci.py` · `REGISTRO_INGEGNERIA.md` e `RIPRENDI_QUI.md` a
+lavoro finito. ⛔ ZERO produzione. (`collaudi/mutazione_prodotto.py` solo se serve iniettare
+il guasto per vedere il rosso, e in quel caso **ripristinato byte-identico**, sha256 verificato.)
+
+---
+
 ## ✅ 2026-08-05 (5) — FATTA: IL GIUDICE HA IMPARATO `is` E `in` (+1279 punti veri)
 
 ### ✅ ESITO
@@ -463,10 +677,12 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-python -m unittest discover -b     ->  Ran 5422 tests · OK (skipped=4) · uscita 0
+python -m unittest discover -b     ->  Ran 5429 tests · OK (skipped=4) · uscita 0
 ```
-Il conto torna alla riga: **5374 + 48 prove nuove = 5422** — 14 sulla guardia dello schedario
-(4+2+3+3+2), 6 sul generatore, 2 sull'allarme del Guardiano, **26 sui pagamenti in attesa**.
+Il conto torna alla riga: **5374 + 55 prove nuove = 5429** — 14 sulla guardia dello schedario
+(4+2+3+3+2), 6 sul generatore, 2 sull'allarme del Guardiano, 26 sui pagamenti in attesa,
+**7 sul cronometro** (5 piu' le 2 nate dalla revisione: suite vuota e opzione scritta male).
+Il giro precedente, prima delle riparazioni della revisione: `Ran 5427 in 1363.006s · OK`.
 I giri precedenti, ognuno col suo conto esatto: `Ran 5385` con 11, `Ran 5388` con 14,
 `Ran 5389` con 15, `Ran 5392` con 18, `Ran 5394 in 2122.191s` con 20.
 ⚠️ **La suite si e' allungata di ~2 minuti** e il motivo e' dichiarato: la rete
