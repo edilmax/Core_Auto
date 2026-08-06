@@ -228,6 +228,76 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### ✅ FATTO 2026-08-06 (15) — D21 e D22: il contesto a meta', e i numeri che portano la misura
+- **D21 — al 50% del contesto si salva tutto, si allinea tutto e si RICOMINCIA DA CAPO.** Soglia
+  **fissata dal fondatore**: e' una scelta di budget, non una misura. Il motivo non e' il
+  salvataggio: oltre meta' contesto l'IA **non smette di rispondere**, continua **con lo stesso
+  tono sicuro** mettendoci dentro numeri mai misurati. Il fenomeno e' gia' documentato
+  nell'appendice, ricerca «sessioni lunghe»: **#1** (la compattazione e' amnesia, doc ufficiale)
+  · **#5** (Chroma *Context Rot*) · **#7** (arXiv 2505.06120, **-39%** dal singolo turno al
+  multi-turno). Il degrado e' **continuo**: il 50% non e' un gradino, e' dove ci fermiamo noi.
+  ⚠️ La prima stesura diceva «la prova e' nostra, non uno studio»: **falso**, e dentro una fonte
+  di verita'. L'ha trovato una revisione a contesto fresco citando le righe dell'appendice.
+- **D22 — un numero si scrive solo con la misura che lo regge, e dove si puo' con una guardia.**
+  Nata da `Ran 5429`: un totale **calcolato a mente** (`5427 + 2` invece di `+ 7`) finito in
+  `RIPRENDI_QUI.md` come se fosse stato misurato. Costo reale: la sessione dopo ha fermato tutto
+  per capire da dove venissero 5 test che nessuno aveva aggiunto. Misure vere, su alberi puliti
+  (`git worktree`): `02579be` → **5427**, `eefc28e` → **5434**, differenza **+7**, cioe' proprio
+  le prove nuove che il documento elencava mentre ne sommava 2.
+- **3 GUARDIE NUOVE in `test_pipeline_ci.py`, tutte viste ROSSE prima:**
+  `test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO` (confronta la riga `SUITE ATTUALE:` di
+  `RIPRENDI_QUI.md` col conteggio vero del caricatore; **al primo giro ha preteso 5437 da sola**,
+  cioe' le 3 guardie di questo commit) ·
+  `test_L_AUDIT_VEDE_TUTTI_E_TRE_I_NUMERI_CHE_IL_REGOLAMENTO_DICHIARA`
+  (iniezione di guasto su ognuno dei tre numeri, **piu' la prova che tace sul testo sano**) ·
+  `test_LA_STAMPA_D_AVVIO_DICE_LE_STESSE_PAROLE_DEL_REGOLAMENTO`.
+- **`collaudi/regole_avvio.py` — due difetti veri, trovati dalle guardie nuove:** (a) confrontava
+  **un solo numero su tre** — «GLI ALTRI N» e «N direttive del fondatore» erano lettera morta e
+  potevano mentire restando verdi (giusti per attenzione, non per costruzione); (b) tagliava le
+  sezioni sull'**ultima occorrenza delle parole** invece che sul titolo: la citazione «(REGOLA
+  ZERO 3)» dentro D21 ha spostato un confine di 300 righe e fatto scendere un conteggio da 5 a 4.
+  Ora si aggancia alla **riga di titolo**, e ogni sezione comincia **dopo** il proprio titolo —
+  dettaglio non estetico: il titolo dei collaudi contiene «I 10 COLLAUDI», la stringa su cui piu'
+  sotto si dividono i modi di rompersi dai collaudi.
+- **Obblighi totali: 102** (44 della ricerca + 58 nati dai nostri danni), contati dai file.
+- ⚠️ **La difesa contro i falsi allarmi era essa stessa una zona cieca.** Nella guardia sul
+  numero avevo messo un `skipTest` per il caso «un modulo non si importa, il conteggio non e'
+  confrontabile»: sembrava prudenza, era un test che si assolve da solo e sparisce dal rapporto
+  come «skipped». L'ha visto `test_gli_skip_interni_sono_solo_per_l_ambiente` (in
+  `test_suite_senza_zone_cieche.py`) alla suite intera. Ora si asserisce in **tutti e due** i
+  rami: un modulo che non si importa e' un difetto per conto suo, non un'attenuante.
+- **✅ CHIUSA UNA QUESTIONE APERTA DA GIORNI, misurando invece di sottrarre.** Il documento
+  diceva «la base e' 5374 ma i documenti dichiaravano 5379: ne mancano 5, causa non
+  identificata». Misurata la base in una copia isolata di `91ebce0`: **5379**. Non mancava
+  niente — **5374 non era mai stato misurato**. Il conto torna alla riga: `5379 + 55 = 5434`,
+  `+3 = 5437`. E anche la varianza fra ambienti ha un nome adesso: **sono le dipendenze
+  opzionali, non l'interprete** (stesso albero: 3.9 con `hypothesis` → 5437, 3.11 senza → 5362,
+  e i 75 mancanti sono esattamente i test dei 4 moduli che non si importano).
+- **SECONDA revisione a contesto fresco: 17 gap.** Tre gravi, tutti veri: (1) la guardia sul
+  numero metteva un'**uguaglianza esatta** su una grandezza che il repo stesso registrava come
+  instabile fra ambienti — un cancello messo **prima** di conoscere la varianza; ora l'ambiente
+  e' dichiarato sulla riga e l'uguaglianza si pretende solo dove l'ambiente e' completo, con
+  un'asserzione (mai uno `skipTest`) anche nell'altro ramo. (2) «le prove nuove sono 60, non
+  55» era **un numero calcolato a mente dentro il commit che introduce D22**: sostituito dalla
+  catena misurata. (3) `_confini` tornava `(None, None)` e Python se lo mangiava in silenzio
+  (`c[:None]` e' una fetta legale): rinominare un titolo lasciava lo strumento **verde** con i
+  confini a spazzatura. Ora e' un guasto dichiarato, con la sua iniezione.
+  Fra i minori chiusi: la stampa d'avvio non stampava la seconda meta' di un titolo e nessuno
+  la confrontava (ora i titoli si **leggono dal file**, tutti e 22, col denominatore dichiarato);
+  «Contati dai file il 2026-08-01» mentre il numero era cambiato; il «si verifica» di D21
+  dichiarava in violazione anche le sessioni corte; D21 non citava la #21, che e' la regola piu'
+  vicina. **Restano dichiarati e non chiusi:** «29 nell'appendice» e' una sottrazione con un
+  operando contestato (14 vs 15), e i quattro lanci di `regole_avvio.py` in subprocess
+  potrebbero condividere un helper.
+- **PRIMA revisione a contesto fresco: 12 gap, 11 accettati.** I tre piu' gravi erano tutti sulla
+  regola nuova: il «si verifica» definiva la violazione alla **compattazione** invece che al 50%
+  (una sessione che salvava al 90% passava il controllo); l'innesco era affidato all'auto-stima
+  dell'IA, cioe' allo strumento che la regola stessa dichiara inaffidabile (attrito con D18); e
+  il passo (4) ordinava di spingere e deployare **prima** del paragrafo che ricorda B1/B4. Il
+  dodicesimo resta come **limite noto e dichiarato**: la guardia dimostra che una direttiva
+  *esiste*, non che dica ancora quello che diceva.
+- **Zero righe di produzione.**
+
 ### ✅ FATTO 2026-08-04 (13) — `fase160_escrow_garanzia`: 19 BUCHI CHIUSI + 1 APERTO, 20 GUARDIE
 - **Il modulo che divide i soldi** fra piattaforma, host e ospite. Il numero, prima e dopo:
   `35 punti · 15 uccisi · 20 SOPRAVVISSUTI` (copertura reale **43%**) -> **`35 provati ·
@@ -436,6 +506,71 @@ dimostrazione sia GIUSTA — se potessero, sarebbero il dimostratore; non esamin
 di una `traccia`; non vedono i tipi troppo larghi diversi da `Any` (es. `object`); e se
 qualcuno **cancellasse** le classi, nulla diventerebbe rosso: il controllo interno impedisce di
 **indebolirle**, non di **toglierle**.
+
+### 🔴 APERTO 2026-08-06 — IL SERVER VIVO ACCETTA LE PASSWORD (la cosa piu' grave in fila)
+Misurato in sola lettura sul VPS con `sshd -T` (la configurazione EFFETTIVA chiesta al demone;
+un `grep` sul file dava una risposta parziale — osservabile debole):
+`permitrootlogin yes` · `passwordauthentication yes` · `fail2ban` **non installato** · firewall
+`ufw` **inattivo** · **36.674 tentativi falliti in 7 giorni** (~5.200/giorno) · 223 accessi
+riusciti **tutti con chiave, zero con password** · aggiornamenti automatici attivi, 0 in attesa.
+Nessuno e' entrato, ma non c'e' nessun muro: solo una serratura sotto martellamento continuo.
+**⛔ NON TOCCATO: e' produzione, serve «autorizzato»** — e due delle quattro riparazioni
+possono **chiudere fuori anche noi**. Ordine e protocollo (prova `sshd -t`, sessione aperta
+durante il riavvio, verifica da una connessione NUOVA, una alla volta) in `RIPRENDI_QUI.md`.
+Rete sotto la rete: la console del pannello Hostinger entra senza SSH.
+🟠 In piu': il repository e' **pubblico** (nessuna chiave e' mai entrata nella storia — 779
+commit setacciati con la regola stretta, zero riscontri; 0 fork), e il cancello `gate` su
+GitHub **si puo' scavalcare** (`Bypassed rule violations` nel push del 2026-08-06).
+
+### ✅ FATTO 2026-08-06 — `collaudi/cronometro_suite.py` (NUOVO strumento) + due cricchetti
+- **`collaudi/cronometro_suite.py`** — *creazione:* 2026-08-06. *Scopo:* misurare il tempo di
+  OGNI test e stampare i piu' lenti, perche' il 2026-08-05 una guardia nuova ha piu' che
+  raddoppiato la CI (da ~10 a 23m42s) e **nessun controllo l'ha detto**. *Logica:* discovery
+  identica a `unittest discover`, runner di `unittest` con un `TestResult` che cronometra; il
+  verdetto lo da' `unittest`, non lui. *Dipendenze/env:* nessuna (solo stdlib). *STATO:*
+  **ACCESO come strumento, NON come cancello** — il tetto si attiva solo con `--tetto-secondi N`
+  e `ci.yml` **non e' stato toccato**: per rendere bloccante una soglia serve il rumore dei
+  tempi per-test su piu' giri, e oggi ce n'e' **uno solo**. *Come si accende:* quando ci saranno
+  3-5 giri di dati, `--tetto-secondi 150` (soglia proposta: il test piu' lento oggi e' 73,44 s,
+  quindi muta anche col doppio di rumore) e il comando del job `full-suite`.
+  *Sotto guardia:* `test_pipeline_ci.TestIlCronometroNonPuoMENTIRE`, 5 prove, e **la prima non
+  e' sui tempi**: scopre esattamente gli stessi test, esce 1 su suite rossa e 0 su verde, il
+  tetto grida e tace, un rosso vince sempre sul tetto, ogni esenzione porta il motivo.
+  ⛔ Quelle guardie hanno gia' trovato un difetto vero nello strumento (il valore di
+  `--tetto-secondi` finiva fra i nomi dei moduli: **verde per il motivo sbagliato**).
+  ⛔ **E una REVISIONE A CONTESTO FRESCO ne ha trovati altri 12, tutti reali** (2026-08-06,
+  appendice 19). I due gravi: (1) con la suite **VUOTA** lo strumento usciva **0** — `unittest`
+  considera riuscita una suite senza test — cioe' proprio «il cancello che sembra chiuso ed e'
+  aperto» che le sue guardie dichiaravano di scongiurare; (2) il «dedent» della rete e' un
+  taglio di CARATTERI: su una riga meno indentata del `def` (un commento a colonna 0 dentro un
+  metodo e' Python legale) mangiava codice vero e produceva un **falso allarme che accusava il
+  generatore mentre il generatore era sano**. Riparati tutti e dodici, ognuno con la sua
+  guardia; le due riparazioni gravi hanno guardie nuove perche' non possano tornare.
+  Fra gli altri: il confronto della scoperta era sui **conteggi** e non sugli **insiemi**
+  (due numeri uguali nascondono due insiemi diversi); `carica()` leggeva `sys.argv` globale e
+  la guardia si auto-sabotava nel modo d'uso principale; un'opzione scritta male spegneva
+  l'allarme in silenzio; il tempo di `setUpClass`/import era invisibile allo strumento il cui
+  unico scopo e' trovare i rallentamenti (ora **dichiarato e stampato**); i **tre numeri
+  diversi** per la stessa quantita' nei documenti (405.475 / 408.217 / ~405.000), che se fosse
+  davvero invariante sarebbe uno solo.
+- **Cricchetto sul LAVORO** (bloccante, dentro `test_OGNI_MUTANTE_GENERATO_COMPILA`): inchioda
+  le **righe per mutante**, numero **deterministico**: `152 moduli · 7.299 mutanti · 408.217
+  righe · 55,9 righe/mutante · tetto 200 (margine 3,6x) · 0 ricadute sul file intero`.
+  Visto rosso col tetto abbassato. ⚠️ **Si misura il lavoro e non il tempo** perche' la stessa
+  suite sulla stessa macchina e' passata da **1785 a 3818 secondi** nello stesso giorno
+  (rumore 2,14x) mentre il rallentamento da intercettare ne valeva 90: un cricchetto sul tempo
+  totale griderebbe sui giri lenti normali. ⚠️ E si inchioda il **rapporto** e non il totale
+  perche' il totale cresce anche per buoni motivi (+1279 punti in un commit quando il giudice
+  ha imparato `is`/`in`): un tetto sul totale sarebbe un falso allarme in attesa.
+  ⚠️ **Limite dichiarato:** un modulo che non passa `ast.parse` viene saltato in silenzio, e
+  la CI gira la suite su **due versioni di Python** (3.9 e 3.11): un file con sintassi non
+  supportata dalla piu' vecchia esce dal denominatore su un giro e non sull'altro.
+- **La rete resa 10 volte piu' veloce** (90 s → 9,3 s): analizza la **funzione piu' interna**
+  invece del file intero. Dimostrata equivalente sui dati veri con 3 guasti iniettati: file
+  intero 186,8 s → 544 rotti, funzione 2,9 s → **544, stesso identico insieme**.
+  Dove andavano i 14 minuti, letto dall'API pubblica di GitHub: `copertura` +830 s,
+  `full-suite` +789 s, `full-suite-311` +791 s — la stessa quantita' su tutti e tre, la firma
+  di un solo pezzo di lavoro. Previsione: giro di CI di nuovo a ~11-12 minuti.
 
 ### ✅ FATTO 2026-08-05 (sera) — `fase162_pagamenti_pendenti` SETACCIATO, e il metro allungato
 

@@ -106,8 +106,8 @@ automatica fa fallire la suite se i due divergono):
 
 # ⚙️ REGOLA FERREA DI OPERATIVITÀ E PRECISIONE
 
-> ## 📌 GLI OBBLIGHI SONO **100**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
-> **Contati dai file il 2026-08-01, non a memoria** (`python collaudi/regole_avvio.py` li
+> ## 📌 GLI OBBLIGHI SONO **102**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
+> **Contati dai file il 2026-08-06, non a memoria** (`python collaudi/regole_avvio.py` li
 > ricontrolla a ogni sessione e **grida** se questi numeri non tornano):
 >
 > ### 🔬 LE **44** DELLA RICERCA — pagate ~4 milioni di token, 77 agenti, 2026-07-30
@@ -119,9 +119,9 @@ automatica fa fallire la suite se i due divergono):
 > · **29** stanno nell'appendice di `REGISTRO_INGEGNERIA.md`, con prova e fonte per esteso.
 > Più le **24 uccise** dai revisori ostili **col motivo**: dicono cosa NON vale la pena rifare.
 >
-> ### 🧭 GLI ALTRI **56** — nati dai NOSTRI danni
+> ### 🧭 GLI ALTRI **58** — nati dai NOSTRI danni
 > **IL BLOCCO (6 divieti assoluti, in cima a questo file)** · Regola zero (**5**) ·
-> **20 direttive del fondatore** · modi di rompersi (**11**) ·
+> **22 direttive del fondatore** · modi di rompersi (**11**) ·
 > collaudi (**10**) · direttiva finale (**4**). Non hanno uno studio dietro: hanno una
 > **cicatrice**. Valgono uguale, e da oggi **portano anch'essi il «si verifica così»**.
 >
@@ -131,7 +131,7 @@ automatica fa fallire la suite se i due divergono):
 > che **non viaggia col progetto**: su un altro computer, o in CI, non esistevano.
 > **2026-08-01, sera**: mescolai le due famiglie in un unico numero — e mescolare fa perdere
 > di vista proprio ciò che è stato pagato.
-> **Rimedio definitivo:** le direttive del fondatore sono **entrate nel repository** (D1-D17
+> **Rimedio definitivo:** le direttive del fondatore sono **entrate nel repository** (D1-D22
 > qui sotto), ogni regola dice **come si verifica**, e lo strumento d'avvio conta tutto e
 > **segnala chi non dice come si controlla**. Una regola che non si può controllare non è
 > una regola: è un desiderio.
@@ -252,7 +252,7 @@ solo è il canale principale delle regressioni. Il fondatore se n'è accorto pri
 
 ---
 
-# 🧭 LE 20 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
+# 🧭 LE 22 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
 
 > **Perché stanno qui e non solo in memoria.** Fino al 2026-08-01 vivevano nella memoria di
 > sessione: **non viaggiavano col progetto**. Su un altro computer, o dentro la CI, non
@@ -419,6 +419,67 @@ il diff, quella riparazione non è provata — e va rifatta nell'ordine giusto.
 *Successo davvero il 2026-08-02, due volte: la porta del bunker che rispondeva 500 a un codice
 accentato, e il guardiano che dichiarava sano un libro dei soldi corrotto. In tutti e due i casi il
 difetto è stato SCOPERTO dalla guardia diventata rossa, non cercato a mano.*
+
+**D21. AL 50% DEL CONTESTO SI SALVA TUTTO, SI ALLINEA TUTTO E SI RICOMINCIA DA CAPO.** Soglia
+**fissata dal fondatore** il 2026-08-06: è una scelta di budget, non una misura. Il motivo è che oltre
+metà contesto l'IA **non smette di rispondere** — continua **con lo stesso tono sicuro**, mettendoci
+dentro numeri mai misurati. Il fenomeno è documentato nell'appendice di `REGISTRO_INGEGNERIA.md`,
+ricerca «sessioni lunghe», regole **#1** (la compattazione è amnesia) · **#5** (*Context Rot*: si
+degrada al crescere dell'input) · **#7** (arXiv 2505.06120: **-39%** dal singolo turno al
+multi-turno) · **#21** (una sessione un compito, `/clear` dopo due correzioni — il suo «si verifica»
+nomina già la finestra «oltre metà piena»). Il degrado è **continuo**: il 50% non è un gradino, è
+dove ci fermiamo noi.
+
+**Cosa si fa a metà, in quest'ordine:** (1) si **smette di aprire lavoro nuovo**; (2) **suite intera**
+verde, codice d'uscita letto diretto; (3) ciò che si è imparato si scrive **in `RIPRENDI_QUI.md`**,
+con la riga di changelog in `REGISTRO_INGEGNERIA.md` (direttiva finale 4) e **mai un file nuovo**
+(REGOLA ZERO 3) — ⛔ il blocco `## SESSIONE DERAGLIATA <data>` della #7 è **un'altra cosa** e non si
+riusa qui: quello serve a una sessione impantanata, questo è un passaggio di consegne sano;
+(4) **dopo il via** — B1 «procedi al commit», B4 «autorizzato» — il lavoro va in **tutti i
+posti**: computer → GitHub (ramo + richiesta di unione: `master` è chiuso dal cancello) → VPS (D17) →
+chiavetta; **senza il via non si committa, non si tocca produzione, non si deploya**: si prepara, si
+chiede e si aspetta, e il lavoro resta sul computer; (5) **`/clear`**, e si riparte con un prompt che
+dice **dove guardare e cosa verificare**, mai «ricorda che».
+
+*Chi dice che siamo a metà.* L'unica fonte che fa fede è la **barra del fondatore** («% context
+used»). La stima dell'IA **non fa fede** — è lo strumento che questa regola stessa dichiara
+inaffidabile — e può solo **anticipare** il punto, mai spostarlo più in là; quando la usa, la dichiara
+come stima e mostra il numero da cui la ricava.
+
+*Se si deve comunque proseguire oltre:* da lì in poi **nessuna affermazione senza la misura nello
+stesso messaggio**. Niente numeri a memoria, nessun «ho verificato» senza sotto il comando e l'uscita.
+
+*Si verifica:* il blocco di allineamento esiste **fuori** dalla conversazione (in `RIPRENDI_QUI.md`) e
+riporta: la **percentuale letta** quando è stato scritto, `git status`, l'esito della **suite intera**
+col codice d'uscita, l'impronta (`sha`) del lavoro e i posti in cui si trova, e la richiesta esplicita
+del via. **Violazione** = si è **superato** il 50% senza che quel blocco esista, **oppure** il blocco
+riporta una percentuale **maggiore di 50**. Sotto il 50% non c'è niente da scrivere e niente da
+violare.
+*Limite dichiarato (D18 punto 3):* questa direttiva **non ha una guardia meccanica**, e non può
+averla — nessun test può leggere la percentuale di contesto di una sessione. Le guardie in
+`test_pipeline_ci.py` dimostrano che il **testo** della regola esiste nel repository, non che sia
+stata applicata. L'unica cosa che la fa scattare davvero è chi legge la barra.
+
+**D22. UN NUMERO SI SCRIVE SOLO CON LA MISURA CHE LO REGGE — E DOVE SI PUÒ, CON UNA GUARDIA.** Non
+ripete REGOLA ZERO 4 («i numeri non si ricordano a memoria») né REGOLA FERREA 3 («vietato scrivere
+un'affermazione non provata»): **le affila**, aggiungendo le due cose che a quelle mancavano — il
+**commit** accanto alla cifra, e la **guardia** dove una macchina può ricontrollare. Dettata dal
+fondatore il **2026-08-06**, dopo aver perso tempo su `Ran 5429`: un totale **calcolato a mente**
+(5427 + 2 invece di + 7) è finito in `RIPRENDI_QUI.md` come se fosse stato misurato, e la sessione
+dopo ha dovuto fermare tutto per capire da dove venissero cinque test che nessuno aveva aggiunto.
+Ogni cifra che descrive lo **stato attuale** della macchina — test, moduli, punti di mutazione,
+obblighi — porta con sé, sulla stessa riga o in quella sotto, **il comando che l'ha prodotta** e **il
+commit su cui è stata misurata**. Un numero ottenuto sommandone altri **non è misurato**: o si rifà la
+misura, o non si scrive. E dove una macchina può ricontrollare, la prosa non basta: si mette una
+**guardia**, perché un obbligo affidato alla buona volontà si rompe di nuovo.
+
+*Si verifica:* `test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO` confronta la cifra dichiarata in
+`RIPRENDI_QUI.md` col conteggio reale del caricatore di test; e `collaudi/regole_avvio.py` confronta
+**tutti e tre** i numeri che `CLAUDE.md` dichiara su se stesso (totale · «gli altri» · direttive) col
+conteggio rifatto dai file, non con quello che ricorda chi scrive.
+⚠️ **Una guardia sul conteggio conta, non giudica** (appendice #14, fonte Inozemtseva): duplicare
+200 test la soddisferebbe alla perfezione. Il numero dice quanto è stato **eseguito**, mai quanto è
+stato **coperto**: quello lo dice solo la larghezza di mutazione.
 
 ---
 
