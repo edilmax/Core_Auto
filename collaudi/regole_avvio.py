@@ -52,21 +52,59 @@ def _leggi(percorso):
         return f.read()
 
 
+def _confini(c, nome):
+    """Dove comincia e dove finisce la RIGA DI TITOLO che contiene `nome`.
+
+    ⛔ SI AGGANCIA AL TITOLO (`# ...`), NON ALLA PRESENZA DELLE PAROLE NEL TESTO.
+    Il 2026-08-06 una direttiva nuova ha citato «REGOLA ZERO 3» nel proprio corpo: il taglio
+    di prima prendeva l'ULTIMA occorrenza delle parole, quindi il confine di una sezione e'
+    saltato in avanti di 300 righe e un conteggio e' sceso da 5 a 4. Se ne e' accorto il
+    controllo dei totali -- ma un travaso fra due gruppi che lascia la somma invariata
+    sarebbe passato in silenzio, ed e' il tipo di guasto peggiore.
+    ⛔ E IL TAGLIO NON SI AGGANCIA A UN NUMERO. Prima diceva "LE 17 DIRETTIVE": il giorno in
+    cui ne e' arrivata una diciottesima si sarebbe rotto -- e lo strumento che deve
+    accorgersi degli errori di conteggio sarebbe stato il primo a sbagliarlo.
+    """
+    m = re.compile(r"^#+ .*" + re.escape(nome), re.M).search(c)
+    return (m.start(), m.end()) if m else (None, None)
+
+
+SEZIONI = ("REGOLA ZERO", "REGOLA FERREA", "DIRETTIVE DEL FONDATORE",
+           "REGOLA DEI 10 COLLAUDI", "DIRETTIVA OPERATIVA")
+
+
+def titoli_mancanti():
+    """I titoli di sezione che il taglio NON trova. Senza questo, il metro storto non si
+    accorge di esserlo.
+
+    ⛔ `_confini` torna `(None, None)` quando un titolo non c'e', e in Python `c[:None]` e
+    `c[None:x]` sono fette **legali**: nessuna eccezione, nessun rosso, e i conteggi
+    verrebbero da confini di spazzatura mentre lo strumento stampa il suo bollino verde.
+    Bastava rinominare un titolo. L'ha visto una revisione a contesto fresco il 2026-08-06,
+    non un test -- ed e' D18 punto 1 («un metro storto va scoperto dal metro») violata proprio
+    dal file che esiste per applicarla.
+    """
+    c = _leggi(CLAUDE)
+    return [nome for nome in SEZIONI if _confini(c, nome) == (None, None)]
+
+
 def _pezzi():
     """Le sezioni di CLAUDE.md, separate una volta sola: meno modi di sbagliare."""
     c = _leggi(CLAUDE)
+    zero, ferrea = _confini(c, "REGOLA ZERO"), _confini(c, "REGOLA FERREA")
+    direttive = _confini(c, "DIRETTIVE DEL FONDATORE")
+    collaudi, finale = _confini(c, "REGOLA DEI 10 COLLAUDI"), _confini(c, "DIRETTIVA OPERATIVA")
+    # Ogni sezione comincia DOPO il proprio titolo e finisce PRIMA del successivo. Il "dopo"
+    # non e' un dettaglio: il titolo dei collaudi contiene "I 10 COLLAUDI", la stringa su cui
+    # piu' sotto si dividono i modi di rompersi dai collaudi. Includerlo li conterebbe male.
     return {
-        # IL BLOCCO sta PRIMA della regola zero: si taglia sul titolo della regola zero.
-        "blocco": c.split("REGOLA ZERO")[0],
-        "zero": c.split("REGOLA ZERO")[-1].split("REGOLA FERREA")[0],
-        # ⛔ IL TAGLIO NON SI AGGANCIA A UN NUMERO. Prima diceva "LE 17 DIRETTIVE": il giorno
-        # in cui ne e' arrivata una diciottesima il taglio si sarebbe rotto -- e lo strumento
-        # che deve accorgersi degli errori di conteggio sarebbe stato il primo a sbagliarlo.
-        # Ci si aggancia al testo che NON cambia.
-        "ferrea": c.split("REGOLA FERREA")[-1].split("DIRETTIVE DEL FONDATORE")[0],
-        "direttive": c.split("DIRETTIVE DEL FONDATORE")[-1].split("REGOLA DEI 10 COLLAUDI")[0],
-        "collaudi": c.split("REGOLA DEI 10 COLLAUDI")[-1].split("DIRETTIVA OPERATIVA")[0],
-        "finale": c.split("DIRETTIVA OPERATIVA")[-1],
+        # IL BLOCCO sta PRIMA della regola zero: finisce dove comincia il suo titolo.
+        "blocco": c[:zero[0]],
+        "zero": c[zero[1]:ferrea[0]],
+        "ferrea": c[ferrea[1]:direttive[0]],
+        "direttive": c[direttive[1]:collaudi[0]],
+        "collaudi": c[collaudi[1]:finale[0]],
+        "finale": c[finale[1]:],
         "tutto": c,
     }
 
@@ -106,8 +144,25 @@ def senza_verifica():
 
 
 def dichiarato():
-    m = re.search(r"GLI OBBLIGHI SONO \*\*(\d+)\*\*", _leggi(CLAUDE))
-    return int(m.group(1)) if m else None
+    """I numeri che il regolamento dichiara SU SE STESSO. Sono TRE, non uno.
+
+    Fino al 2026-08-06 qui si leggeva solo il totale: «GLI ALTRI **N**» e «**N** direttive
+    del fondatore» erano lettera morta, e potevano dire il falso lasciando lo strumento
+    verde -- cioe' esattamente la modalita' di guasto che questo file esiste per scovare.
+    L'ha trovato una revisione a contesto fresco, non un test: i numeri erano giusti per
+    attenzione, non per costruzione (D22).
+    """
+    c = _leggi(CLAUDE)
+
+    def _numero(schema):
+        m = re.search(schema, c)
+        return int(m.group(1)) if m else None
+
+    return {
+        "totale": _numero(r"GLI OBBLIGHI SONO \*\*(\d+)\*\*"),
+        "altri": _numero(r"GLI ALTRI \*\*(\d+)\*\*"),
+        "direttive": _numero(r"\*\*(\d+) direttive del fondatore\*\*"),
+    }
 
 
 def main():
@@ -153,17 +208,16 @@ def main():
     print("     · regola zero .......... %2d   (fonti di verita', niente .md nuovi, numeri"
           % n["regola_zero"])
     print("                                   verificati nel codice)")
-    print("     · direttive fondatore .. %2d   (chirurgia · collaudi per tutto · 4 livelli ·"
+    print("     · direttive fondatore .. %2d   (i titoli, letti dal file, uno per riga:)"
           % n["direttive"])
-    print("                                   anti-verdi-finti · consiglio modello · mai")
-    print("                                   credenziali · 3 posti allineati · niente")
-    print("                                   segnaposto · MAI HEREDOC · inventario prima ·")
-    print("                                   spiegare chiaro · decidiamo noi · un pezzo alla")
-    print("                                   volta · ispettore · caccia errori · autonomia ·")
-    print("                                   deploy a rischio zero · UNO STRUMENTO CHE MISURA")
-    print("                                   HA UN CONTROLLO CHE GLI IMPEDISCE DI BARARE ·")
-    print("                                   UNA DIFESA SI PROVA SENZA ASPETTARE IL DISASTRO ·")
-    print("                                   PRIMA LA GUARDIA ROSSA, POI LA RIPARAZIONE)")
+    # ⛔ I TITOLI SI LEGGONO DAL FILE, NON SI RISCRIVONO A MANO. Qui c'era un elenco scritto a
+    # mano: e' rimasto indietro di una direttiva e la stampa e' nata GIA' diversa dal titolo
+    # vero, senza che nulla lo dicesse (2026-08-06, visto da una revisione a contesto fresco).
+    # Cosi' invece non possono piu' divergere: sono la stessa stringa. E' lo schema gia' usato
+    # per IL BLOCCO qui sopra -- e una guardia in test_pipeline_ci.py pretende che ogni titolo
+    # compaia qui, col denominatore dichiarato (quante sono, e ci sono TUTTE?).
+    for numero, titolo in re.findall(r"^\*\*(D\d+)\. ([^*]+)\*\*", _pezzi()["direttive"], re.M):
+        print("        %-4s %s" % (numero, " ".join(titolo.split())))
     print("     · modi di rompersi ..... %2d   (dati effimeri, cablaggio mancante, ambiente"
           % n["modi"])
     print("                                   diverso, tempo che passa, dato assurdo...)")
@@ -177,10 +231,16 @@ def main():
     print()
 
     guasti = []
+    for nome in titoli_mancanti():
+        guasti.append("titolo di sezione «%s» non trovato: il taglio non e' affidabile e "
+                      "TUTTI i conteggi qui sopra sono da buttare" % nome)
     dich = dichiarato()
-    if dich is not None and dich != totale:
-        guasti.append("il regolamento dichiara %d obblighi ma nei file ce ne sono %d"
-                      % (dich, totale))
+    for chiave, dice, vero in (("obblighi in totale", dich["totale"], totale),
+                               ("obblighi «nati dai nostri danni»", dich["altri"], altri),
+                               ("direttive del fondatore", dich["direttive"], n["direttive"])):
+        if dice is not None and dice != vero:
+            guasti.append("il regolamento dichiara %d %s ma nei file ce ne sono %d"
+                          % (dice, chiave, vero))
     if n["appendice_verificabili"] != n["appendice"]:
         guasti.append("delle %d regole della ricerca solo %d dicono come si verificano"
                       % (n["appendice"], n["appendice_verificabili"]))

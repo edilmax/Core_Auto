@@ -677,25 +677,61 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-python -m unittest discover -b     ->  Ran 5429 tests · OK (skipped=4) · uscita 0
+SUITE ATTUALE: Ran 5437 test
+AMBIENTE: Windows · Python 3.9 · hypothesis+pyyaml+coverage installati
+COMANDO:  python -m unittest discover -s . -p "test_*.py"
 ```
-Il conto torna alla riga: **5374 + 55 prove nuove = 5429** — 14 sulla guardia dello schedario
-(4+2+3+3+2), 6 sul generatore, 2 sull'allarme del Guardiano, 26 sui pagamenti in attesa,
-**7 sul cronometro** (5 piu' le 2 nate dalla revisione: suite vuota e opzione scritta male).
-Il giro precedente, prima delle riparazioni della revisione: `Ran 5427 in 1363.006s · OK`.
-I giri precedenti, ognuno col suo conto esatto: `Ran 5385` con 11, `Ran 5388` con 14,
-`Ran 5389` con 15, `Ran 5392` con 18, `Ran 5394 in 2122.191s` con 20.
+Esito di quel giro: **OK (skipped=3) · uscita 0**. ⚠️ **La durata qui non si scrive:** cambia a
+ogni giro e a ogni macchina, e soprattutto scriverla e' una trappola logica — la riga fa parte
+dell'albero misurato, quindi il numero e' gia' falso nell'istante in cui si salva il file. I tempi
+li misura `collaudi/cronometro_suite.py`, che lo fa di mestiere. ⚠️ L'esito sta **fuori** dalla
+riga sorvegliata apposta: la guardia sa confrontare un numero, non sa se la suite era verde, e
+una riga che dichiara «OK» senza che nessuno lo verifichi sarebbe di nuovo una parola creduta
+sulla fiducia. ⚠️ E l'**ambiente e' dichiarato** perche' il conteggio **non e' invariante**: lo
+stesso albero, con un interprete che non trova le dipendenze opzionali, ne raccoglie di meno
+(misurato: 4 moduli non importabili → 5362). Vedi la sezione «un numero che non torna».
+
+⚠️ **Qui c'era scritto `Ran 5429`, ed era falso** — non per una misura andata male, ma per una
+misura **mai fatta**: il totale era stato calcolato a mente (`5427 + 2`) contando solo 2 delle
+**7** prove nuove che questa stessa pagina elenca qui sotto. La sessione dopo ha dovuto fermare
+tutto per capire da dove venissero cinque test che nessuno aveva aggiunto.
+**Rimisurato tutto su alberi puliti** (`git worktree`, cartella isolata, stesso interprete):
+`91ebce0` → **5379** · `02579be` → **5427** · `eefc28e` → **5434** · questo albero → **5437**.
+Il conto ora torna alla riga, e ogni addendo e' misurato:
+**5379 (base) + 55 (prove nuove del giro) = 5434**, **+ 3 (le guardie di questo commit) = 5437**.
+🔒 **Da oggi non dipende piu' dall'attenzione di nessuno:** la guardia
+`test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO` (in `test_pipeline_ci.py`) confronta la
+riga `SUITE ATTUALE:` qui sopra col conteggio vero del caricatore di test, **quando l'ambiente
+e' quello dichiarato**; altrove pretende che la riga dichiari ambiente e comando. Chi aggiunge
+un test e non aggiorna questa riga trova rosso **lo stesso giorno** (D22).
+⚠️ **Quella guardia conta, non giudica** (appendice #14): duplicare 200 test la soddisferebbe
+alla perfezione. Cio' che misura la qualita' e' la larghezza di mutazione, non il conteggio.
+Le prove nuove di quel giro: 14 sulla guardia dello schedario (4+2+3+3+2), 6 sul generatore,
+2 sull'allarme del Guardiano, 26 sui pagamenti in attesa, **7 sul cronometro** (5 piu' le 2
+nate dalla revisione: suite vuota e opzione scritta male).
+I giri precedenti, ognuno col suo conto: `Ran 5385` con 11, `Ran 5388` con 14, `Ran 5389` con
+15, `Ran 5392` con 18, `Ran 5394 in 2122.191s` con 20, `Ran 5427 in 1363.006s` prima delle
+riparazioni della revisione.
 ⚠️ **La suite si e' allungata di ~2 minuti** e il motivo e' dichiarato: la rete
 `test_OGNI_MUTANTE_GENERATO_COMPILA` applica e ricompila 7.658 mutanti su 152 moduli a ogni
 esecuzione. E' il prezzo per poter estendere il giudice senza scommettere sul taglio.
 
-### 🟠 UN NUMERO CHE NON TORNA, scritto invece di essere arrotondato
-La base senza le prove nuove e' **5374**, mentre i documenti dichiaravano **5379** su
-`91ebce0`: ne mancano 5. **Non e' una perdita**, ed e' misurato:
-`git grep -c "    def test_"` da' **5033 metodi** e **401 file di test** identici a `8022808`
-e a `HEAD`. Nessun test e' sparito dal codice: la differenza sta nella **raccolta** fra
-ambienti (i conteggi 5333/5359 dello stesso giorno, repo contro chiavetta, lo mostravano
-gia'). Causa esatta **non identificata**: resta aperta, non spiegata a meta'.
+### ✅ IL NUMERO CHE NON TORNAVA — CHIUSO il 2026-08-06, misurando invece di sottrarre
+La base era dichiarata **5374** contro i **5379** dei documenti su `91ebce0`, e mancavano 5
+test senza spiegazione. **Misurata adesso in una copia isolata di `91ebce0`: 5379.** Non
+mancava niente: **5374 non era mai stato misurato** — era una sottrazione fatta a mente, la
+stessa mano che aveva prodotto `Ran 5429`. Il conto torna alla riga: `5379 + 55 = 5434`.
+✅ **E anche la varianza fra ambienti ha un nome adesso**, dopo un anno di «causa non
+identificata»: **sono le dipendenze opzionali, non l'interprete**. Misurato sullo stesso
+albero, stesso comando, due interpreti di questo computer:
+`3.9 (con hypothesis) → 5437` · `3.11 (senza hypothesis) → 5362`, e i 75 mancanti sono
+esattamente i test dei 4 moduli che non si importano senza quella libreria
+(`test_fase15_idempotency` · `test_fase199_invarianti` · `test_property_soldi` ·
+`test_stateful_api`). In CI la libreria e' installata in **tutti e due** i giri, quindi li'
+il conto resta intero — ma **non e' stato verificato su Linux**, e per questo la riga
+`SUITE ATTUALE:` dichiara l'ambiente e la guardia pretende l'uguaglianza esatta **solo dove
+l'ambiente e' completo**: un cancello messo prima di conoscere la varianza e' un falso
+allarme che aspetta il suo giorno.
 
 ### 🟠 LA SUITE LUNGA CHE MUORE — oggi 2 volte su 4, e la seconda e' quella che insegna
 Primo giro ucciso **al 4,7%** (log 68.876 byte contro 1.457.548 di un giro intero), stesso
@@ -1296,7 +1332,7 @@ con le **chiavi vere** · 25 database · 108 video-spot in `clone_video.tgz` a p
 - La cartella di prova è stata **rimossa subito**: conteneva `.env.casavip` con le chiavi vere
   estratte in chiaro. Sul Desktop resta **una sola** cartella, mai una col nome nuovo.
 
-## 🔢 IL REGOLAMENTO ORA DICE IL VERO SU SE STESSO — **91 obblighi, due famiglie**
+## 🔢 IL REGOLAMENTO DICE IL VERO SU SE STESSO — **91 obblighi, due famiglie** (al 2026-08-01)
 
 Il conto è stato sbagliato **tre volte** in un giorno (14 → 44 → 74 → 135), e ogni errore
 aveva la stessa forma: **contare da un posto che non è il file**. Ora è chiuso in tre mosse.

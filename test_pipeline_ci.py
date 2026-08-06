@@ -1001,7 +1001,7 @@ class TestLeRegoleSiLeggonoSEMPRE(unittest.TestCase):
         with io.open(os.path.join(self._radice(), "CLAUDE.md"), encoding="utf-8") as f:
             testo = f.read()
         presenti = set(re.findall(r"^\*\*(D\d+)\.", testo, re.M))
-        attese = set("D%d" % i for i in range(1, 21))
+        attese = set("D%d" % i for i in range(1, 23))
         self.assertEqual(set(), attese - presenti,
                          "queste direttive del fondatore sono uscite da CLAUDE.md e "
                          "tornerebbero a vivere solo in memoria: %r"
@@ -1012,7 +1012,11 @@ class TestLeRegoleSiLeggonoSEMPRE(unittest.TestCase):
                 ("LE CHIAVI NON SI CHIEDONO E NON SI STAMPANO",
                  "le credenziali non si chiedono al fondatore e non finiscono nei log"),
                 ("CHIRURGIA SU RICHIESTA ESPLICITA",
-                 "il metodo chirurgico annulla le campagne autonome")):
+                 "il metodo chirurgico annulla le campagne autonome"),
+                ("AL 50% DEL CONTESTO SI SALVA TUTTO, SI ALLINEA TUTTO E SI RICOMINCIA DA CAPO",
+                 "oltre meta' contesto l'IA afferma con lo stesso tono numeri mai misurati"),
+                ("UN NUMERO SI SCRIVE SOLO CON LA MISURA CHE LO REGGE",
+                 "un totale calcolato a mente e' finito in RIPRENDI_QUI.md come misurato")):
             self.assertIn(chiave, testo,
                           "la direttiva su %r non e' piu' nel repo (%s)" % (chiave, perche))
 
@@ -1112,9 +1116,186 @@ class TestLeRegoleSiLeggonoSEMPRE(unittest.TestCase):
         self.assertEqual(int(titolo.group(1)), n["direttive"],
                          "il titolo dice %s direttive ma nel testo ce ne sono %d"
                          % (titolo.group(1), n["direttive"]))
-        self.assertGreaterEqual(n["direttive"], 20,
+        self.assertGreaterEqual(n["direttive"], 22,
                                 "il numero delle direttive del fondatore e' SCESO: una "
                                 "direttiva non si toglie senza che qualcuno lo decida")
+
+    def test_LA_STAMPA_D_AVVIO_DICE_LE_STESSE_PAROLE_DEL_REGOLAMENTO(self):
+        """⛔ NIENTE PAROLE RISCRITTE A MANO: LA STAMPA E IL REGOLAMENTO SONO LA STESSA FONTE.
+
+        Il 2026-08-06 l'elenco delle direttive stampato all'avvio era prosa scritta a mano:
+        era rimasto indietro di una direttiva, e una frase e' nata GIA' diversa dal titolo
+        vero senza che nulla lo dicesse. Un promemoria che dice una cosa diversa dalla regola
+        e' peggio di nessun promemoria, perche' viene letto per primo e ci si fida.
+        ⛔ E QUI SI DICHIARA IL DENOMINATORE: non «c'e' questa frase?», ma «ci sono TUTTE?».
+        Un `assertIn` su un testo intero non sa quanti posti ha saltato (appendice #15), per
+        questo prima si pretende che i titoli estratti siano tanti quante le direttive.
+        """
+        import os
+        import re
+        import subprocess
+        import sys
+        m = self._motore_regole()
+        titoli = re.findall(r"^\*\*(D\d+)\. ([^*]+)\*\*", m._pezzi()["direttive"], re.M)
+        quante = m.conta_regole()["direttive"]
+        self.assertEqual(quante, len(titoli),
+                         "i titoli estratti sono %d ma le direttive contate sono %d: il "
+                         "denominatore di questa guardia non regge piu', e senza denominatore "
+                         "non si sa quanti posti sono stati saltati" % (len(titoli), quante))
+        r = subprocess.run([sys.executable,
+                            os.path.join(self._radice(), "collaudi", "regole_avvio.py")],
+                           cwd=self._radice(), capture_output=True, text=True,
+                           encoding="utf-8", errors="replace")
+        for numero, titolo in titoli:
+            atteso = " ".join(titolo.split())
+            self.assertIn(atteso, r.stdout,
+                          "lo strumento d'avvio non stampa il titolo di %s con le stesse "
+                          "parole del regolamento: chi legge all'avvio riceve una regola "
+                          "diversa da quella scritta. Manca: %r" % (numero, atteso))
+
+    def test_L_AUDIT_VEDE_TUTTI_E_TRE_I_NUMERI_CHE_IL_REGOLAMENTO_DICHIARA(self):
+        """LA GUARDIA CHE CONTA (iniezione di guasto, D22).
+
+        Fino al 2026-08-06 lo strumento confrontava SOLO «GLI OBBLIGHI SONO N»: «GLI ALTRI N»
+        e «N direttive del fondatore» erano lettera morta e potevano dire il falso restando
+        verdi -- i numeri erano giusti per attenzione, non per costruzione. Qui si sporca un
+        numero alla volta sul testo VERO e si pretende che lo strumento gridi; poi si pretende
+        che taccia sul testo sano, perche' un allarme sempre acceso viene spento.
+        """
+        import contextlib
+        import io
+        import os
+        import re
+        import shutil
+        import tempfile
+        m = self._motore_regole()
+        with io.open(m.CLAUDE, encoding="utf-8") as f:
+            sano = f.read()
+        vero = m.CLAUDE
+        cartella = tempfile.mkdtemp()
+        try:
+            finto = os.path.join(cartella, "CLAUDE.md")
+            m.CLAUDE = finto
+            # ⛔ La sostituzione avviene sulla COPIA in memoria, mai sul file del progetto
+            # (B2). Il file vero non viene mai riaperto in scrittura.
+            for schema, sporco, atteso in (
+                    (r"GLI OBBLIGHI SONO \*\*\d+\*\*", "GLI OBBLIGHI SONO **777**",
+                     "dichiara 777 obblighi in totale"),
+                    (r"GLI ALTRI \*\*\d+\*\*", "GLI ALTRI **777**",
+                     "dichiara 777 obblighi «nati dai nostri danni»"),
+                    (r"\*\*\d+ direttive del fondatore\*\*",
+                     "**777 direttive del fondatore**",
+                     "dichiara 777 direttive del fondatore"),
+                    # ⛔ E IL TAGLIO DELLE SEZIONI: si rinomina un TITOLO. Prima del
+                    # 2026-08-06 questo lasciava lo strumento VERDE con i confini a
+                    # spazzatura, perche' `c[:None]` in Python e' una fetta legale.
+                    (r"^# .*REGOLA ZERO", "# ⛔ LE FONDAMENTA",
+                     "titolo di sezione «REGOLA ZERO» non trovato")):
+                malato = re.sub(schema, sporco, sano, count=1, flags=re.M)
+                self.assertNotEqual(sano, malato,
+                                    "l'iniezione non ha cambiato niente: il regolamento non "
+                                    "contiene piu' %r, quindi questa guardia non prova nulla"
+                                    % schema)
+                with io.open(finto, "w", encoding="utf-8") as f:
+                    f.write(malato)
+                uscita = io.StringIO()
+                with contextlib.redirect_stdout(uscita):
+                    m.main()
+                # ⛔ NON basta «ha gridato»: si pretende che abbia gridato PER QUESTO. Un
+                # allarme che suona per il motivo sbagliato passerebbe lo stesso.
+                self.assertIn(atteso, uscita.getvalue(),
+                              "lo strumento non vede il guasto %r: e' lettera morta e puo' "
+                              "mentire restando verde.\n%s"
+                              % (sporco, uscita.getvalue()[-600:]))
+            with io.open(finto, "w", encoding="utf-8") as f:
+                f.write(sano)
+            uscita = io.StringIO()
+            with contextlib.redirect_stdout(uscita):
+                m.main()
+            self.assertNotIn("NON DICE IL VERO", uscita.getvalue(),
+                             "lo strumento grida sul regolamento SANO: un allarme che suona "
+                             "sempre viene spento, e allora non protegge piu' niente")
+        finally:
+            m.CLAUDE = vero
+            shutil.rmtree(cartella, ignore_errors=True)
+
+    def test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO(self):
+        """⛔ UN NUMERO CALCOLATO A MENTE NON E' UN NUMERO MISURATO (D22).
+
+        Il 2026-08-06 `RIPRENDI_QUI.md` dichiarava `Ran 5429` per un albero che ne conteneva
+        5434: il totale era stato ottenuto sommando (5427 + 2 invece di + 7) invece di rifare
+        la misura, e la sessione dopo ha dovuto fermare tutto per capire da dove venissero
+        cinque test che nessuno aveva aggiunto. Questa guardia ricontrolla la cifra dichiarata
+        contro il conteggio VERO del caricatore: se qualcuno aggiunge test e non aggiorna il
+        documento, diventa rossa lo stesso giorno.
+
+        ⛔ COSA QUESTA GUARDIA NON FA, dichiarato (D18 punto 3):
+          · CONTA, NON GIUDICA. Duplicare 200 test la soddisferebbe alla perfezione
+            (appendice #14): la qualita' la misura la larghezza di mutazione, non il totale.
+          · IL NUMERO NON E' INVARIANTE FRA AMBIENTI. Misurato il 2026-08-06 sullo stesso
+            albero: 3.9 con `hypothesis` -> 5437; 3.11 senza -> 5362, perche' 4 moduli non si
+            importano. Per questo l'uguaglianza esatta si pretende SOLO dove l'ambiente e'
+            completo; dove non lo e' si pretende comunque qualcosa (mai un `skipTest`), cioe'
+            che il dichiarato sia MAGGIORE del raccolto: un ambiente monco puo' solo
+            raccoglierne meno. Un cancello messo prima di conoscere la varianza e' un falso
+            allarme che aspetta il suo giorno.
+          · EFFETTO COLLATERALE: `discover()` importa i moduli di test del repo. Dentro la
+            suite intera sono gia' importati e costa ~1s; lanciata da sola, questa guardia
+            esegue il codice a livello di modulo di tutti i file di test.
+        """
+        import io
+        import os
+        import re
+        import unittest as _unittest
+        radice = self._radice()
+        with io.open(os.path.join(radice, "RIPRENDI_QUI.md"), encoding="utf-8") as f:
+            pagina = f.read()
+        dichiarato = re.search(r"SUITE ATTUALE: Ran (\d+) test", pagina)
+        self.assertIsNotNone(dichiarato,
+                             "RIPRENDI_QUI.md non dichiara piu' `SUITE ATTUALE: Ran N test`: "
+                             "senza quella riga il numero della suite torna a vivere nella "
+                             "testa di chi scrive, che e' da dove veniva quello sbagliato")
+        # D22: la cifra da sola non basta mai. Deve dire DOVE e' stata misurata e CON COSA,
+        # altrimenti fra sei mesi nessuno sa se il numero vale per questo computer o per la CI.
+        for etichetta in ("AMBIENTE:", "COMANDO:"):
+            self.assertIn(etichetta, pagina,
+                          "la riga `SUITE ATTUALE:` non dichiara piu' %r: un numero senza "
+                          "l'ambiente e il comando che l'hanno prodotto non e' una misura, "
+                          "e' un ricordo (D22)" % etichetta)
+        suite = _unittest.defaultTestLoader.discover(radice, pattern="test_*.py")
+
+        def _foglie(s):
+            for x in s:
+                if isinstance(x, _unittest.TestSuite):
+                    for y in _foglie(x):
+                        yield y
+                else:
+                    yield x
+
+        rotti = sorted({t.id() for t in _foglie(suite)
+                        if type(t).__name__ == "_FailedTest"})
+        # ⛔ QUI C'ERA UN `skipTest`, ED ERA UNA ZONA CIECA. Il ragionamento sembrava
+        # prudente ("se un modulo non si importa il numero non e' confrontabile, taccio per
+        # non dare un falso allarme"), ma un test che si assolve da solo sparisce dal
+        # rapporto come «skipped» e nessuno lo legge piu': lo vieta
+        # `test_gli_skip_interni_sono_solo_per_l_ambiente`, che ha visto rossa proprio
+        # questa riga. Si asserisce in TUTTI E DUE i rami -- ma non la stessa cosa, perche'
+        # un ambiente senza le dipendenze opzionali raccoglie meno test senza che nessuno
+        # abbia sbagliato niente.
+        atteso, raccolti = int(dichiarato.group(1)), suite.countTestCases()
+        if rotti:
+            self.assertGreater(
+                atteso, raccolti,
+                "in questo ambiente %d moduli non si importano (%r) e il caricatore raccoglie "
+                "%d test: il numero dichiarato (%d) dovrebbe essere MAGGIORE, perche' un "
+                "ambiente monco puo' solo raccoglierne meno. Se e' minore, il documento e' "
+                "vecchio davvero (D22)." % (len(rotti), rotti, raccolti, atteso))
+        else:
+            self.assertEqual(
+                atteso, raccolti,
+                "RIPRENDI_QUI.md dichiara %d test ma il caricatore ne trova %d, e qui "
+                "l'ambiente e' completo (nessun modulo non importabile): la cifra e' stata "
+                "scritta senza rifare la misura (D22)." % (atteso, raccolti))
 
     @staticmethod
     def _motore_regole():
