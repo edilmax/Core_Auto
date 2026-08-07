@@ -13,7 +13,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: bd2d419
+CONSEGNE AGGIORNATE A: 42edded
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -36,24 +36,42 @@ stessa, che è peggio di nessuna descrizione, perché chi la apre il giorno del 
 ⚠️ La guardia `TestIlPassaggioDiConsegneNonRestaINDIETRO` **non protegge da questo**: conta i
 commit, non verifica che i numeri scritti siano veri. Lo dichiara da sé, ed è il suo limite.
 
-**I quattro posti si LEGGONO, non si ricordano. Sono quattro comandi:**
+**I quattro posti si LEGGONO, non si ricordano. Sono CINQUE comandi, non quattro:**
 ```
 git rev-parse --short HEAD                                          (computer)
 git rev-parse --short origin/master                                 (GitHub)
-ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'   (VPS)
+ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'   (VPS: i FILE)
+ssh root@76.13.44.167 'docker inspect --format="{{.Image}}" casavip_app'      (VPS: cio' che GIRA)
 la riga «Commit codice:» in  Desktop\BOOKINVIP USB 2026\LEGGIMI-RIPRISTINO.txt  (chiavetta)
 ```
+⛔ **IL QUARTO COMANDO NON E' UN DI PIU', ED E' STATO AGGIUNTO PERCHE' MANCAVA.** `git rev-parse`
+sul server legge i **file su disco**; il sito gira dentro un contenitore costruito da
+un'**immagine**, che puo' essere di giorni prima. Il 2026-08-07 sera, subito dopo un'unione, il
+VPS diceva `42edded` mentre serviva un'immagine di **34 ore prima**, senza le due riparazioni
+appena fatte: «quattro posti allineati» sarebbe stato **vero sui file e falso su cio' che
+l'utente riceveva**. Fino a quel giorno il buco era invisibile perche' tutti i commit erano di
+soli documenti — repository e immagine coincidevano **per fortuna, non per costruzione**.
+🔒 Ora c'e' una guardia: `TestIlControlloDeiQuattroPostiVedeCIOCHEGIRA` in `test_pipeline_ci.py`
+pretende che questo comando resti scritto **qui dentro**, non altrove nel file. Se qualcuno lo
+toglie «semplificando», la suite diventa rossa lo stesso giorno.
 E per lo stato delle richieste di unione — **il 2026-08-06 il passaggio di consegne ne dichiarava
 una unita che era aperta, ed è costata una mattina**:
 ```
 https://api.github.com/repos/edilmax/Core_Auto/pulls?state=all
 https://api.github.com/repos/edilmax/Core_Auto/branches/master
 ```
-📌 **La chiavetta resta indietro apposta** finché non cambia il **codice**: i commit di soli
-documenti non giustificano un'ora di rigenerazione, e il suo foglio dichiara sempre il commit che
-contiene davvero — quindi è una copia onesta, non una copia che mente.
-La trafila completa della chiavetta (archivi dal server vivo + prova di ripristino + confronto di
-**ogni** impronta) costa circa **un'ora**: il metodo è più giù, nella sezione «La chiavetta».
+🔴 **LA CHIAVETTA ORA È INDIETRO SUL CODICE, e la vecchia regola NON vale più.** Sta su
+`0740ad2`; da lì sono cambiati **`fase81_bootstrap_casavip.py` e `fase88_registro_host.py`** (le
+due riparazioni della commissione del 2026-08-07). Finora valeva «resta indietro apposta finché
+non cambia il **codice**, quindi è una copia onesta»: quella frase descriveva un mondo in cui i
+commit erano di soli documenti, e **quel mondo è finito il 7 agosto sera**.
+👉 Delle due, una: **o si rigenera** (~1 ora, metodo più giù nella sezione «La chiavetta»), **o
+si scrive sul suo foglio che il motore dentro è vecchio di due riparazioni**. Ciò che non si può
+fare è lasciarla lì e continuare a chiamarla «copia onesta»: chi la apre il giorno del guasto si
+fida del cartello.
+📌 Il controllo che lo dice in un colpo:
+`git diff --name-only 0740ad2 HEAD | grep -E "^(fase|main_casavip|deploy/|requirements|Dockerfile)"`
+— se stampa qualcosa, la chiavetta è indietro **sul motore**, non sui documenti.
 
 ### ✅ COSA È STATO FATTO (6-7 agosto)
 - **Il `gate` — l'unico controllo che protegge `master` — diceva VERDE con job bloccanti che non
@@ -97,6 +115,13 @@ La trafila completa della chiavetta (archivi dal server vivo + prova di ripristi
   produzione** — il numero vero lo calcola `fase98` (che tronca), mentre il `README.md` descrive
   `fase43` come «aritmetica esatta» e il registro la elenca ACCESA. Da sola è disordine, non un
   danno, ma documento e macchina divergono: è la voce **#3** dell'appendice, ancora aperta.
+- 🚀 **LE DUE RIPARAZIONI SONO IN PRODUZIONE**, col protocollo D17 e **zero secondi di sito
+  irraggiungibile**. La prova non è «le ho spinte» ma **`docker exec casavip_app grep -c …` → 1**
+  per entrambe: sono dentro l'immagine che gira. `money_path_pronto: True · avvisi: []`,
+  `verifica_produzione.py` 190 controlli 0 violazioni. Dettaglio nella voce **(21)** del registro.
+  ⛔ **E il deploy ha fatto vedere una zona cieca del controllo dei quattro posti**: `git
+  rev-parse` sul VPS legge i **file**, non l'immagine. I comandi ora sono **cinque**, e c'è una
+  guardia che impedisce di toglierli (vedi in cima).
 
 ### ⏳ COSA RESTA — in ordine di quanto costa se va male
 0. 💯 **AREA A — continua.** Chiuse **entrambe** le strade per cui la commissione ripiegava in
@@ -974,7 +999,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5448 test
+SUITE ATTUALE: Ran 5450 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis 6.141.1 + pyyaml + coverage installati
           · ⚠️ bash E openssl nel PATH (`C:\Program Files\Git\usr\bin`) — vedi qui sotto
 COMANDO:  python -m unittest discover -s . -p "test_*.py"
