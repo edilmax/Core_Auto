@@ -231,5 +231,157 @@ class TestRipristinoAPezziNonPassa(unittest.TestCase):
         self.assertIn("ACCETTATO su tua richiesta", uscita)
 
 
+class TestGliStrumentiDiSalvataggioNONVIVONOSOLOSULSERVER(unittest.TestCase):
+    """⛔ UNO STRUMENTO DI SALVATAGGIO CHE VIVE SOLO SULLA MACCHINA CHE DEVE SALVARE
+    MUORE INSIEME A LEI.
+
+    Trovato il 2026-08-07. I cinque strumenti con cui si genera e si verifica la
+    chiavetta -- l'unica copia completa del prodotto -- stavano SOLO in `/root` sul
+    VPS. Il giorno in cui quel server non c'e' piu' (che e' l'unico giorno in cui
+    servono) non ci sono nemmeno loro: non stanno nel repository, e non stanno
+    nemmeno dentro la chiavetta che loro stessi costruiscono. Chi ripristina si
+    ritrova i dati e non il modo di rifarli.
+
+    E uno dei cinque era anche SBAGLIATO. `impacchetta.sh` copiava i 25 database con
+    `tar czf ... *.db`, che ha esattamente il difetto di `cp`: prende il file `.db` e
+    lascia fuori il `-wal` accanto, dove SQLite tiene cio' che e' appena stato
+    scritto. Misura di quel giorno: 0 file `-wal` presenti in quell'istante, quindi
+    il tar prendeva tutto -- PER FORTUNA, NON PER COSTRUZIONE. Con traffico vero la
+    prenotazione in corso nell'istante del tar sparisce dal backup senza un errore,
+    e lo si scopre il giorno del ripristino, che e' il giorno peggiore.
+
+    L'ultima prova di questa classe non e' un `grep`: esegue lo strumento VERO su un
+    database col WAL sporco e pretende di riavere tutte le righe -- e nello stesso
+    giro dimostra che la copia ingenua le perde davvero.
+    """
+
+    STRUMENTI = ("impacchetta.sh", "copia_db.py", "verifica_impronte.sh",
+                 "verifica_pacchetti.sh", "prova_accensione.sh")
+
+    def _leggi(self, nome):
+        with open(os.path.join(DEPLOY, nome), encoding="utf-8") as f:
+            return f.read()
+
+    def test_i_cinque_strumenti_stanno_nel_repository(self):
+        mancanti = [n for n in self.STRUMENTI
+                    if not os.path.exists(os.path.join(DEPLOY, n))]
+        self.assertEqual([], mancanti,
+                         "questi strumenti di salvataggio NON sono nel repository: %r. "
+                         "Se vivono solo in /root sul VPS, il giorno del guasto muoiono "
+                         "insieme alla macchina che dovevano salvare -- e non finiscono "
+                         "nemmeno dentro la chiavetta, che li contiene solo se stanno "
+                         "qui" % mancanti)
+
+    def test_impacchetta_NON_tocca_la_cartella_dei_database_VIVI(self):
+        """La prima stesura di questa guardia era SBAGLIATA, e l'ha detto il rosso.
+
+        Vietava `tar ... *.db` ovunque nel file. Cosi' colpiva due cose innocenti: il
+        commento che RACCONTA il difetto vecchio (cioe' la memoria che D20 vuole
+        conservare) e il `tar` sulle copie GIA' messe in salvo in /tmp/bk_chiavetta,
+        che sono esattamente il risultato corretto. Una guardia che non sa distinguere
+        l'attrezzo dal punto in cui lo si usa costringe a cancellare la spiegazione
+        pur di farla tacere.
+
+        L'invariante vero e' un altro, ed e' piu' semplice: la cartella dei database
+        VIVI si tocca SOLO attraverso copia_db.py, che li legge con l'API di backup di
+        sqlite3. Nessuna riga eseguibile di questo script ha motivo di nominare /data.
+        """
+        s = self._leggi("impacchetta.sh")
+        codice = "\n".join(r for r in s.splitlines() if not r.lstrip().startswith("#"))
+        self.assertNotIn(
+            "/data", codice,
+            "impacchetta.sh nomina /data (la cartella dei database VIVI) in una riga "
+            "ESEGUIBILE. I 25 archivi si prendono solo attraverso copia_db.py: un "
+            "`tar`/`cp` diretto su /data lascia fuori il -wal accanto, dove SQLite "
+            "tiene cio' che e' appena stato scritto, e con traffico vero la "
+            "prenotazione in corso sparisce dal backup senza un errore")
+        self.assertIn("copia_db.py", codice,
+                      "impacchetta.sh non usa copia_db.py: i database si copiano con "
+                      "l'API di backup di sqlite3, che legge ATTRAVERSO il motore e "
+                      "quindi vede anche cio' che sta nel WAL")
+
+    def test_copia_db_usa_l_API_di_backup_e_APRE_le_copie(self):
+        s = self._leggi("copia_db.py")
+        self.assertIn(".backup(", s,
+                      "copia_db.py non usa piu' Connection.backup(): senza quella e' "
+                      "una copia di file come le altre, col difetto del WAL")
+        self.assertIn("integrity_check", s,
+                      "copia_db.py non apre piu' le copie: un archivio che non si apre "
+                      "non e' un archivio, e lo si deve scoprire adesso e non il giorno "
+                      "del guasto")
+
+    def test_LA_COPIA_VIENE_ESEGUITA_DAVVERO_e_salva_cio_che_sta_nel_WAL(self):
+        """Non un `grep`: lo strumento vero, su un database nello stato del server vivo.
+
+        Si costruisce un database in modalita' WAL, ci si scrivono 500 righe e si
+        LASCIA LA CONNESSIONE APERTA senza checkpoint -- e' esattamente lo stato in cui
+        si trova il server mentre qualcuno sta prenotando. In quell'istante:
+          · copiare il solo file `.db` (cio' che faceva `tar *.db`) restituisce un
+            database SENZA quelle righe: il difetto, dimostrato qui e non raccontato;
+          · `copia_db.py` deve restituirle tutte e 500.
+
+        Se domani qualcuno «semplifica» copia_db.py in una copia di file, questa prova
+        diventa rossa lo stesso giorno: e' la memoria del difetto, non la sua cronaca.
+        """
+        import shutil
+        srcdir = tempfile.mkdtemp()
+        dstdir = tempfile.mkdtemp()
+        con = None
+        try:
+            percorso = os.path.join(srcdir, "prova.db")
+            con = sqlite3.connect(percorso)
+            modo = con.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+            self.assertEqual("wal", str(modo).lower(),
+                             "il database di prova non e' in WAL: cosi' la prova non "
+                             "starebbe misurando niente (verde finto)")
+            con.execute("PRAGMA wal_autocheckpoint=0")
+            con.execute("CREATE TABLE prenotazioni (x INTEGER)")
+            con.executemany("INSERT INTO prenotazioni VALUES (?)",
+                            [(i,) for i in range(500)])
+            con.commit()          # scritte e confermate, ma ancora dentro il -wal
+            self.assertTrue(os.path.exists(percorso + "-wal"),
+                            "nessun file -wal: senza, la prova non distingue le due "
+                            "copie e direbbe verde per il motivo sbagliato")
+
+            def righe(p):
+                c = sqlite3.connect(p)
+                try:
+                    return c.execute("SELECT COUNT(*) FROM prenotazioni").fetchone()[0]
+                except sqlite3.DatabaseError:
+                    return -1     # la tabella non c'e' proprio: peggio ancora
+                finally:
+                    c.close()
+
+            # (a) LA COPIA INGENUA: il solo file .db, cioe' cio' che prende `tar *.db`.
+            #     Sta in srcdir con un'estensione diversa apposta, cosi' il glob *.db
+            #     di copia_db.py non se la ritrova fra i sorgenti.
+            ingenua = os.path.join(srcdir, "prova.copiaingenua")
+            with open(percorso, "rb") as f, open(ingenua, "wb") as g:
+                g.write(f.read())
+            self.assertNotEqual(500, righe(ingenua),
+                                "la copia del solo file .db contiene TUTTE le righe: "
+                                "allora questa prova non dimostra piu' il difetto e va "
+                                "rifatta, non cancellata")
+
+            # (b) LO STRUMENTO VERO, eseguito.
+            amb = dict(os.environ)
+            amb["COPIA_DB_SORGENTE"] = srcdir
+            amb["COPIA_DB_DESTINAZIONE"] = dstdir
+            p = subprocess.run([sys.executable, os.path.join(DEPLOY, "copia_db.py")],
+                               env=amb, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            uscita = p.stdout.decode("utf-8", "replace")
+            self.assertEqual(0, p.returncode,
+                             "copia_db.py e' uscito con codice %d:\n%s" % (p.returncode, uscita))
+            self.assertEqual(500, righe(os.path.join(dstdir, "prova.db")),
+                             "copia_db.py ha PERSO le righe che stavano nel WAL: e' "
+                             "tornato a copiare il file invece di usare l'API di backup "
+                             "di sqlite3.\n%s" % uscita)
+        finally:
+            if con is not None:
+                con.close()
+            shutil.rmtree(srcdir, ignore_errors=True)
+            shutil.rmtree(dstdir, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

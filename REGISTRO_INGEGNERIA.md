@@ -228,6 +228,166 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### ✅ FATTO 2026-08-07 notte (23) — GLI STRUMENTI DI SALVATAGGIO, E UN DIFETTO CHE NON C'ERA
+
+**Due lavori. Il secondo è finito in dieci minuti perché era già chiuso, e accorgersene è
+stato il guadagno vero della serata.**
+
+---
+
+#### A. I CINQUE ATTREZZI VIVEVANO SOLO SULLA MACCHINA CHE DEVONO SALVARE
+
+Gli strumenti con cui si genera e si verifica la chiavetta stavano **solo in `/root` sul VPS**.
+È la forma pura del difetto: *lo strumento per salvare la macchina muore insieme alla macchina*.
+E non erano nemmeno dentro la chiavetta — che li conterrà **da ora**, perché `clone_progetto.tgz`
+impacchetta l'albero del progetto, e adesso ci stanno dentro.
+
+Ora sono in `deploy/`: `impacchetta.sh` · `copia_db.py` · `verifica_impronte.sh` ·
+`verifica_pacchetti.sh` · `prova_accensione.sh`. I tre già corretti sono stati **copiati byte per
+byte** dal server e non ritrascritti a mano — impronte confrontate una per una, tre su tre
+identiche. Una ritrascrittura di 3.500 byte di shell è un'occasione di errore senza nessun
+guadagno.
+
+**⛔ IL DIFETTO, e quanto vale davvero.** `impacchetta.sh` prendeva i 25 database così:
+```
+docker exec casavip_app sh -c 'cd /data && tar czf /tmp/d.tgz *.db'
+```
+Un `tar` dei soli `*.db` ha **esattamente** il difetto di `cp`: prende il file `.db` e lascia
+fuori il `-wal` accanto, dove SQLite tiene ciò che è appena stato scritto. Con traffico vero, la
+prenotazione in corso nell'istante del tar sparisce dal backup **senza un errore**, e lo si
+scopre il giorno del ripristino, che è il giorno peggiore.
+
+**⚠️ E QUI LA MISURA DI IERI ERA IMPRECISA — rimisurata stanotte invece che ereditata.** La voce
+(22) diceva «*0 file `-wal`, perché l'app apre e chiude le connessioni una per operazione e
+all'ultima chiusura SQLite riversa e cancella il WAL*». Alle **18:42 UTC** i file `-wal` in
+`/data` sono **20 su 25**, non zero:
+```
+find /data -name "*-wal" | wc -l         -> 20
+find /data -name "*-wal" -size +0 | wc -l -> 0        <- TUTTI VUOTI
+-rw-r--r-- 1 app app 0 2026-08-07 16:51:05  /data/accettazioni.db-wal
+-rw-r--r-- 1 app app 0 2026-08-07 18:31:03  /data/domanda.db-wal
+```
+Le due ore, 16:51 e 18:31, sono **i due giri del backup**: quello di ieri sera e quello di
+stanotte. Cioè quei file **li lascia lo strumento stesso**, con le sue connessioni in sola
+lettura — non il traffico del sito, e non vengono «cancellati alla chiusura».
+**La conclusione operativa però non cambia, ed è il punto:** sono tutti **a zero byte**, quindi
+oggi un `tar` prenderebbe comunque tutto. Il difetto resta **latente, non attivo** — «per
+fortuna, non per costruzione» — ed è esattamente il motivo per cui si ripara **adesso**, mentre
+i database sono quasi vuoti, e non il giorno in cui ci sarà dentro una prenotazione vera.
+
+**D20, nell'ordine, tre passi più i due facoltativi:**
+1. guardia scritta — `TestGliStrumentiDiSalvataggioNONVIVONOSOLOSULSERVER`, in
+   `test_backup_completo.py` (D10: è già la casa delle guardie sul backup, nessun file nuovo);
+2. **vista ROSSA**, 4 prove su 4: `FAILED (failures=2, errors=2)`, uscita 1
+   (`AssertionError: Lists differ: [] != ['impacchetta.sh', 'copia_db.py', …]`);
+3. riparazione, poi **verde**: `Ran 13 tests · OK · uscita 0` (le 9 preesistenti tutte ancora
+   verdi);
+4. **difetto rimesso dentro e rivista ROSSA una seconda volta**
+   (`AssertionError: '/data' unexpectedly found in …`);
+5. ripristino verificato con `sha256sum -c` → **OK**, `a8e26ec1…` identica prima e dopo.
+
+**🔬 La guardia non è un `grep`.** L'ultima delle quattro prove **esegue lo strumento vero**:
+costruisce un database in WAL, ci scrive 500 righe, **lascia la connessione aperta senza
+checkpoint** — lo stato in cui si trova il server mentre qualcuno prenota — e poi pretende due
+cose opposte nello stesso giro: che la **copia ingenua** del solo `.db` *non* abbia le 500 righe
+(il difetto, dimostrato e non raccontato) e che **`copia_db.py`** le restituisca tutte. Se
+domani qualcuno «semplifica» quello strumento in una copia di file, questa prova diventa rossa
+lo stesso giorno. Per poterlo eseguire, `copia_db.py` legge i due percorsi da
+`COPIA_DB_SORGENTE`/`COPIA_DB_DESTINAZIONE` con **i valori del server come predefiniti**: sul
+VPS non cambia niente.
+
+**⚠️ LA PRIMA STESURA DELLA GUARDIA ERA SBAGLIATA, E L'HA DETTO IL ROSSO.** Vietava
+`tar … *.db` ovunque nel file. Così colpiva due cose innocenti: il **commento che racconta il
+difetto vecchio** (cioè la memoria che D20 esiste per conservare) e il `tar` sulle copie **già**
+messe in salvo in `/tmp/bk_chiavetta`, che sono il risultato corretto. Una guardia che non
+distingue l'attrezzo dal punto in cui lo si usa costringe a **cancellare la spiegazione** pur di
+farla tacere. L'invariante vero è più stretto e più semplice: **nessuna riga eseguibile di
+`impacchetta.sh` nomina `/data`** — la cartella viva si tocca solo attraverso `copia_db.py`.
+
+**La prova sul server, senza distruggere niente** (D17: si simula prima di distruggere). Non è
+stato rilanciato `impacchetta.sh` intero, che avrebbe sovrascritto `clone_dati.tgz`, cioè la
+sorgente della chiavetta attuale. È stata eseguita **la sola parte cambiata**, scrivendo in un
+file di prova:
+```
+docker exec -i casavip_app python3 -  <  deploy/copia_db.py
+   -> 25 database, byte_orig/byte_copia, integrita' "ok" su TUTTI, uscita 0
+   -> prenotazioni.db: 0 byte sul disco -> copia VALIDA di 4096 (un file da 0 byte non si apre)
+tar dalle copie + docker cp -> /root/_prova_dati.tgz : 40263 byte, 25 database dentro
+clone_dati.tgz PRIMA 40264 byte 16:51:33  ·  DOPO 40264 byte 16:51:33  (intatto)
+poi pulizia, e verifica che non resti niente
+```
+
+**⛔ E UNA MISURA HA CAMBIATO IL DISEGNO, invece di confermarlo.** Lo strumento entra nel
+contenitore dallo **standard input** (`docker exec -i … python3 -`) e non come file copiato.
+Non è eleganza: dentro il contenitore si gira come utente `app` (uid 10001), `/tmp` ha lo
+**sticky bit** (`drwxrwxrwt`), e un file messo lì da `docker cp` resta di **root**. Misurato sul
+campo, su un residuo della sera prima:
+```
+-rw-r--r-- 1 root root 2056 /tmp/copia_db.py      <- lasciato dal giro precedente
+uid=10001(app) gid=999(app)
+rm: cannot remove '/tmp/copia_db.py': Operation not permitted     (uscita 1)
+```
+Con `docker cp` + pulizia, `set -e` avrebbe **ucciso lo script sull'ultima riga**, dopo aver
+prodotto gli archivi: un fallimento che non nomina la sua causa, come i due della prova di
+accensione. Il residuo di 2 KB è stato tolto la notte stessa (via «autorizzato»,
+`docker exec -u root … rm -f`): `/tmp` dentro il contenitore è ora **vuoto**, contenitore
+`running healthy`, sito **200** dall'esterno.
+
+✅ **E LA VECCHIA `impacchetta.sh` DIFETTOSA NON È PIÙ SUL SERVER** (stessa autorizzazione).
+Finché stava in `/root`, bastava lanciarla per ottenere un backup che **sembra** riuscito —
+ed è la forma peggiore, perché nessuno va a ricontrollare un backup che ha detto di sì.
+Sostituita insieme a `copia_db.py`; impronte sul server ora **identiche byte per byte** a quelle
+del repository (`a8e26ec1…` · `a887cf08…`), righe eseguibili che nominano `/data`: **0**.
+Prima di sovrascrivere, verificato che **nessun cron e nessuno script** le richiami — i due
+lavori pianificati sono `deploy/watchdog.sh` ogni 10 minuti e `collaudi/giro_video.py` alle 9:20,
+e non nominano né l'uno né l'altro: si lanciano solo a mano.
+⚠️ **Da qui nascono due copie** (in `/root` e in `deploy/`), e restano tali finché il commit non
+arriva sul server: da quel momento vale quella del repository e le due in `/root` vanno tolte,
+altrimenti prima o poi divergono e nessuno sa quale sia quella buona.
+⚠️ E in `/root` restano **nove script di giri passati** (`deploy2.sh`, `pre_deploy.sh`,
+`prova2.sh`, `verifica_deploy.sh`…). Non sono difettosi: il problema è che **nessuno sa più
+quale sia quello buono**, ed è lo stesso male, un passo più in là. Vanno guardati uno per uno.
+
+⚠️ **E la chiavetta va rigenerata dopo il commit**: `deploy/` rientra nel controllo del motore
+(`git diff --name-only <commit-chiavetta> HEAD | grep -E "^(fase|main_casavip|deploy/|…)"`), che
+da quel momento stamperà cinque righe.
+
+---
+
+#### B. AREA A (a) — «`fase43` o si collega o si dichiara morta»: **era già morta, e per iscritto**
+
+Il compito diceva: *`fase43_commissione` è elencata ACCESA nel registro e il `README.md` la
+descrive come «aritmetica esatta», ma nessun file di produzione la importa — documento e
+macchina non possono dire cose diverse.* **Verificato: non dicono cose diverse. La premessa era
+falsa in tutte e due le metà**, e veniva dalla nota scritta la sera prima nella voce (20).
+
+| affermazione | verifica | esito |
+|---|---|---|
+| «elencata come ACCESA nella tabella §1» | la tabella che la contiene è la **§5, «INVENTARIO COMPLETO (auto-generato — tutte le fasi)»**; la sua colonna è **«Agganci»** e per `fase43` dice `—`. La §1 (🟢 ACCESO e LIVE) riguarda **`fase57+`** | ❌ falsa |
+| «descritta dal `README.md` come "aritmetica esatta"» | `README.md` è di **224 righe** e **non nomina `fase43` nemmeno una volta**; «aritmetica esatta» in tutto il repository compariva **solo** in quella frase e nella sua gemella in `RIPRENDI_QUI.md` | ❌ falsa: **si citava da sola** |
+| «nessun file di produzione la importa» | chiusura degli import da `main_casavip.py`: **88 moduli fase**, `fase43` **non c'è**. I suoi unici importatori non di collaudo sono `fase45_pricing` e `fase46_esploratore`, **anch'essi irraggiungibili** | ✅ vera |
+
+E il registro **la dichiarava già morta**, per esteso, nella sezione **§4 ⚪ LEGACY**: «*Mango
+funnel fase43–55 … Superati dallo stack CasaVIP (fase57+). NON deployati, NON toccare per il
+prodotto attuale*».
+
+**📌 E la dichiarazione è già MECCANICA, non solo scritta.** `test_copertura_onesta.py` ha
+`legacy_risvegliato()`, che diventa rossa il giorno in cui un modulo **misurato** anche solo
+**nomina** `fase43_commissione` — «*non basta guardare gli `import`: un
+`import_module("fase43_commissione")` o una tabella di nomi in chiaro riaccenderebbe il vecchio
+stack lasciandolo fuori dalla misura*». La sua capacità di fallire è provata a sua volta
+(`TestIlControlloSaFallire`). Eseguita: `Ran 17 tests · OK · uscita 0`.
+
+**Quindi: niente da collegare, niente da dichiarare, nessuna riga di produzione toccata.**
+Corretta solo la **prosa** che mentiva, qui e in `RIPRENDI_QUI.md`.
+
+⛔ **La lezione, ed è la stessa di ieri con l'appendice.** Una nota scritta a fine serata su una
+«scoperta di passaggio» **non è una misura**: qui ha inventato una divergenza fra documento e
+macchina che non esisteva, e sarebbe costata mezza giornata di lavoro su un difetto immaginario.
+Il costo di verificarla è stato di **tre `grep` e un censimento degli import**. *Prima di
+lavorare su ciò che un documento dichiara, si misura ciò che la macchina fa* — e la prosa, che
+è l'unica parte senza guardia, si corregge subito.
+
 ### ✅ FATTO 2026-08-07 (22) — CHIAVETTA RIGENERATA, E LA PROVA CHE MANCAVA DA SEMPRE
 
 **Rigenerata su `e3fca06`** col metodo scritto (dal server vivo, mai dal computer). Ma la cosa
@@ -271,12 +431,16 @@ buco lo avrebbe scoperto qualcuno il giorno del guasto, con il sito giù.*
 **0 file `-wal`** al momento (l'app apre e chiude le connessioni una per operazione, e all'ultima
 chiusura SQLite riversa e cancella il WAL). Quindi oggi il `tar` prende tutto — **per fortuna,
 non per costruzione**: con traffico vero, una prenotazione in corso nell'istante del `tar`
-sparirebbe. Stanotte i 25 database sono stati copiati con l'API vera (`Connection.backup()`),
+sparirebbe.
+⚠️ **Questa misura è stata rifatta stanotte e la spiegazione fra parentesi NON regge**: i `-wal`
+sono **20 su 25** e non zero, li lascia lo **strumento di backup stesso** con le sue connessioni
+in sola lettura, e non vengono cancellati alla chiusura. Sono però **tutti a zero byte**, quindi
+la conclusione operativa resta quella. Numeri e comandi nella voce **(23)**. Stanotte i 25 database sono stati copiati con l'API vera (`Connection.backup()`),
 `integrity_check` su ognuno. Effetto visibile: `prenotazioni.db` era **0 byte** sul disco, la
 copia è un database **vuoto ma valido** di 4096 byte — un file da zero byte non si apre.
-▶️ **Da fare:** `impacchetta.sh` va corretto **e portato nel repository**: oggi vive solo in
-`/root` sul VPS, quindi lo strumento per fare il backup muore insieme alla macchina che deve
-salvare, e non è nemmeno sulla chiavetta.
+✅ **FATTO la notte stessa**, voce **(23)**: `impacchetta.sh` è corretto (passa da `copia_db.py`)
+ed è nel repository insieme agli altri quattro, in `deploy/`. Da lì entra anche nella chiavetta,
+perché `clone_progetto.tgz` impacchetta l'albero del progetto.
 
 **📖 `GUIDA-VPS-NUOVA.txt`, nuova, SULLA chiavetta e non nel repo** (REGOLA ZERO 3: niente `.md`
 nuovi). Sta in un file **suo** e non dentro `LEGGIMI-RIPRISTINO.txt` perché quel foglio contiene
@@ -399,8 +563,12 @@ che conta.
 
 Cercavo *quale* delle due `commissione_cents` calcola il numero vero. Risposta: **`fase98`**
 (troncamento); **`fase43` (Decimal HALF_UP) non è importata da nessun file di produzione** — è
-codice morto sul percorso vivo, pur essendo elencata come ACCESA nella tabella §1 e descritta
-dal `README.md` come «aritmetica esatta». **Da sola è disordine (appendice #3), non un danno.**
+codice morto sul percorso vivo. **Da sola è disordine (appendice #3), non un danno.**
+
+⚠️ **La coda di questa frase era FALSA ed è stata tolta il 2026-08-07 notte** (misure nella
+voce **(23)**). Diceva: «*pur essendo elencata come ACCESA nella tabella §1 e descritta dal
+`README.md` come "aritmetica esatta"*». Nessuna delle due metà regge, e insieme inventavano
+una divergenza fra documento e macchina che **non esiste**.
 
 **Il danno era tre righe sotto** (`fase81_bootstrap_casavip.py:258`): `except Exception: pass`.
 Dentro quel `try` stanno le letture che decidono se un host paga **0%, 5%, 8% o 10%**. Se una
