@@ -13,7 +13,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 42edded
+CONSEGNE AGGIORNATE A: a4f7a24
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -116,9 +116,16 @@ acceso, e chi non lo sa ci perde un'ora.
   commissione. Si alza solo ciò che è giustificato: far gridare tutti i ~131 warning
   significherebbe allenare tutti a ignorarli (regola ferrea 10).
   📌 Scoperta di passaggio: **`fase43_commissione` non è importata da NESSUN file di
-  produzione** — il numero vero lo calcola `fase98` (che tronca), mentre il `README.md` descrive
-  `fase43` come «aritmetica esatta» e il registro la elenca ACCESA. Da sola è disordine, non un
-  danno, ma documento e macchina divergono: è la voce **#3** dell'appendice, ancora aperta.
+  produzione** — il numero vero lo calcola `fase98`, che tronca.
+  ⚠️ **La seconda metà di questa frase era FALSA, ed è stata corretta il 2026-08-07 notte.**
+  Diceva che il `README.md` descrive `fase43` come «aritmetica esatta» e che il registro la
+  elenca ACCESA, e concludeva che documento e macchina divergono. **Verificato: non divergono.**
+  Il `README.md` (224 righe) non nomina `fase43` **nemmeno una volta**, e «aritmetica esatta» in
+  tutto il repository esisteva **solo dentro quella frase e la sua gemella nel registro** — si
+  citava da sola. La tabella che elenca `fase43` è la **§5, inventario completo auto-generato di
+  TUTTE le fasi**, con colonna «Agganci» = `—`; la §1 (🟢 ACCESO e LIVE) riguarda `fase57+`. E la
+  §4 la dichiara già morta per esteso: «Mango funnel fase43–55 … NON deployati, NON toccare».
+  Dettaglio e misure nella voce **(23)** del registro.
 - 🚀 **LE DUE RIPARAZIONI SONO IN PRODUZIONE**, col protocollo D17 e **zero secondi di sito
   irraggiungibile**. La prova non è «le ho spinte» ma **`docker exec casavip_app grep -c …` → 1**
   per entrambe: sono dentro l'immagine che gira. `money_path_pronto: True · avvisi: []`,
@@ -126,16 +133,52 @@ acceso, e chi non lo sa ci perde un'ora.
   ⛔ **E il deploy ha fatto vedere una zona cieca del controllo dei quattro posti**: `git
   rev-parse` sul VPS legge i **file**, non l'immagine. I comandi ora sono **cinque**, e c'è una
   guardia che impedisce di toglierli (vedi in cima).
+- 🧰 **GLI STRUMENTI DI SALVATAGGIO SONO ENTRATI NEL REPOSITORY** (7 agosto, notte). I cinque
+  attrezzi con cui si genera e si verifica la chiavetta vivevano **solo in `/root` sul VPS**:
+  lo strumento per salvare la macchina moriva **insieme alla macchina**, e non era nemmeno
+  dentro la chiavetta che lui stesso costruisce. Ora stanno in `deploy/` (`impacchetta.sh` ·
+  `copia_db.py` · `verifica_impronte.sh` · `verifica_pacchetti.sh` · `prova_accensione.sh`), e
+  i tre già corretti sono stati copiati **byte per byte** dal server, non ritrascritti a mano:
+  impronte confrontate una per una.
+  ⛔ **E `impacchetta.sh` è stato riparato.** Impacchettava i 25 database con
+  `cd /data && tar czf … *.db`, che ha lo stesso difetto di `cp`: prende il file `.db` e lascia
+  fuori il `-wal` accanto, dove SQLite tiene ciò che è appena stato scritto. Ora passa da
+  `copia_db.py`, che usa l'**API di backup di sqlite3** e apre ogni copia con
+  `PRAGMA integrity_check`. Ordine di D20 fino in fondo: guardia scritta → **vista ROSSA**
+  (`FAILED (failures=2, errors=2)`) → riparazione → verde (`Ran 13 · OK`) → **difetto rimesso
+  dentro e rivista rossa una seconda volta** → ripristino `sha256sum -c` **OK**.
+  🔬 **La guardia non è un `grep`:** esegue lo strumento **vero** su un database col WAL sporco
+  e pretende di riavere tutte e 500 le righe, dopo aver dimostrato nello stesso giro che la
+  copia ingenua le perde davvero. E la parte cambiata è stata eseguita **sul server**, senza
+  toccare `clone_dati.tgz`: **25 database, integrità ok su tutti, uscita 0**.
+  ⚠️ **La prima stesura della guardia era SBAGLIATA, e l'ha detto il rosso.** Vietava
+  `tar … *.db` ovunque nel file, quindi colpiva due cose innocenti: il commento che *racconta*
+  il difetto vecchio, e il `tar` sulle copie **già** messe in salvo — cioè il risultato giusto.
+  Una guardia che non distingue l'attrezzo dal punto in cui lo si usa costringe a cancellare la
+  spiegazione pur di farla tacere. L'invariante vero è più stretto: **nessuna riga eseguibile di
+  `impacchetta.sh` nomina `/data`**. Dettaglio e misure nella voce **(23)** del registro.
+  ✅ **E il server è allineato** (via «autorizzato»): la vecchia `impacchetta.sh` difettosa in
+  `/root` è stata sostituita — impronte identiche byte per byte a quelle del repository — e il
+  residuo di 2 KB dentro il contenitore è stato tolto. Sito `200` dall'esterno, contenitore
+  `running healthy`, i cinque posti fermi dov'erano. ⚠️ Finché il commit non arriva sul server
+  esistono **due copie** degli strumenti (`/root` e `deploy/`): quando arriva, quelle in `/root`
+  vanno tolte, altrimenti divergono.
 
 ### ⏳ COSA RESTA — in ordine di quanto costa se va male
 0. 💯 **AREA A — continua.** Chiuse **entrambe** le strade per cui la commissione ripiegava in
-   silenzio (vedi sopra). ▶️ Prossimi bersagli della stessa area, in ordine: **(a)** `fase43`
-   dichiarata ACCESA nel registro ma **importata da zero file di produzione** — o si collega o
-   si dichiara morta, ma documento e macchina non possono dire cose diverse (appendice #3);
-   **(b)** il resto dei numeri che l'ospite vede: valuta (`fase99`), sconti lunghi, tassa di
-   soggiorno (`fase66`), split (`fase65`/`133`). L'ordine delle cinque aree: **A numeri
-   visibili · B valore regalato (referral/crediti) · C dati da tenere · D doppia prenotazione ·
-   E catena intera**.
+   silenzio (vedi sopra). ✅ **Il bersaglio (a) — `fase43` — era GIÀ CHIUSO**, e accorgersene è
+   costato dieci minuti invece di mezza giornata di lavoro su un difetto inesistente: non c'era
+   niente da collegare né da dichiarare, perché la **§4 del registro la dà già per morta** e una
+   **guardia meccanica la tiene morta** — `test_copertura_onesta.py` (`legacy_risvegliato`)
+   diventa rossa il giorno in cui un modulo misurato anche solo **nomina**
+   `fase43_commissione`, in qualunque forma, `import_module("…")` compreso. Misura: chiusura
+   degli import da `main_casavip.py` = **88 moduli fase**, `fase43` non c'è, e non ci sono
+   nemmeno `fase45` e `fase46`, i suoi due unici importatori non di collaudo. `Ran 17 · OK`.
+   Voce **(23)** del registro.
+   ▶️ **Prossimo bersaglio: (b)** il resto dei numeri che l'ospite vede — valuta (`fase99`),
+   sconti lunghi, tassa di soggiorno (`fase66`), split (`fase65`/`133`). L'ordine delle cinque
+   aree: **A numeri visibili · B valore regalato (referral/crediti) · C dati da tenere ·
+   D doppia prenotazione · E catena intera**.
 1. 🟡 **`fail2ban` è ancora assente** — ma dopo la chiusura della password vale poco: un bot che
    non può più riuscire fa solo rumore nei registri. Non è più la cosa più grave aperta.
 2. 💰 **23 moduli dei soldi su 25 mai passati al setaccio dei mutanti.** Ordine deciso dal
@@ -1003,7 +1046,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5450 test
+SUITE ATTUALE: Ran 5454 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis 6.141.1 + pyyaml + coverage installati
           · ⚠️ bash E openssl nel PATH (`C:\Program Files\Git\usr\bin`) — vedi qui sotto
 COMANDO:  python -m unittest discover -s . -p "test_*.py"
