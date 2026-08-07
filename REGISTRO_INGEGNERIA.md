@@ -228,6 +228,62 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### ✅ FATTO 2026-08-07 (19) — LA SERRATURA DEL SERVER CHIUSA (zero righe di progetto toccate)
+
+**Cos'era rotto.** Il VPS accettava l'accesso come `root` **con una password**: `sshd -T` dava
+`permitrootlogin yes` + `passwordauthentication yes`, e il giudice esterno (`ssh -o
+PreferredAuthentications=none`, senza credenziali) rispondeva `Permission denied
+(publickey,password)`. Nessun `fail2ban`, `ufw` spento, `iptables -P INPUT ACCEPT` senza una
+regola. Via del fondatore: **«autorizzato»**.
+
+**Prima di riparare: la prova che nessuno fosse entrato** (otto controlli, sola lettura).
+`Accepted password` su tutti i registri disponibili (5 lug → 7 ago) = **0**. Un solo utente
+uid 0. `/etc/passwd` fermo al 24 giugno. Una sola `authorized_keys` in tutta la macchina.
+`dpkg -V` = 4 righe, **tutte** file di configurazione → nessun programma alterato (uscita 0).
+`suid` = elenco standard Ubuntu. Nessuna connessione in uscita, nessun processo estraneo,
+nessun `curl|bash` in 1.356 righe di cronologia. I 19 accessi con chiavi ignote venivano tutti
+da `169.254.0.1` = terminale del browser Hostinger, **che entra con la chiave**.
+
+**⛔ LA TRAPPOLA, ed è il pezzo che vale oltre il caso.** `sshd_config.d/` conteneva **due file
+in contraddizione**: `50-cloud-init.conf` → `PasswordAuthentication yes`, `60-cloudimg-settings.
+conf` → `no`. SSH legge in ordine alfabetico e tiene la **prima** risposta: vinceva il 50, e il
+file «giusto» era **testo morto**. Scrivere `no` in fondo a `sshd_config` non avrebbe cambiato
+nulla — un verde finto perfetto: la modifica c'è, il comportamento no. Rimedio:
+**`00-blocca-password.conf`**, che viene letto prima di tutti e vince anche se cloud-init
+riscrivesse il suo (`ssh_pwauth: true` è tuttora nella sua config applicata).
+
+**Il metodo, riusabile per ogni modifica che può chiuderti fuori** (D19 + D17): si **prova il
+paracadute prima di saltare** (`systemd-run --on-active=25` con un marcatore, **visto scattare**),
+poi si arma il ritorno automatico a 300 s, poi si scrive il file **con l'editor** e lo si copia
+con `scp` — mai `sed`, mai heredoc (B2) — verificando **sha256 identico ai due capi** e zero
+byte < 32; `sshd -t` con **uscita letta diretta**, e se non è 0 il file si rimuove da solo;
+`reload`, non `restart`; prova **nelle due direzioni** da una connessione **nuova**; e solo
+allora si disarma. Fatto due volte (serratura e firewall), **zero secondi di disservizio**.
+
+**Esito misurato.** Giudice esterno: da `(publickey,password)` a **`(publickey)`**. Chiave
+ancora funzionante da connessione nuova (uscita 0). `ufw` **attivo** con 22/80/443 +
+`169.254.0.0/16`, `enabled` all'avvio; le catene Docker (`DOCKER-USER`, `DOCKER-FORWARD`)
+restano **prima** di quelle di ufw e il contenitore parla ancora con internet (prova esplicita:
+uscita TCP dal container, uscita 0). Sito: `verifica_produzione.py` → **190 controlli, 0
+violazioni, uscita 0**, prima e dopo. `git status` vuoto: **zero file del progetto toccati**.
+
+**Due scoperte che cambiano i documenti.**
+1. **Il «36.674 tentativi a settimana» era una fotografia del picco**, non uno stato. Il diario
+   di sistema tiene 7 giorni; la misura vera sta in `/var/log/auth.log*`: **37.163** in totale
+   (5 lug → 7 ago), di cui **36.083 verso root**, concentrati in **tre assalti** (12 lug 5.055 ·
+   30 lug 14.350 · 31 lug 15.437) e **75 in tutto** dal 1° agosto. Due indirizzi soli:
+   `89.181.198.25` (29.768) e `85.215.58.26` (5.973).
+2. **Esiste già un firewall a monte che non possiamo vedere.** Da fuori rispondono solo 22/80/443
+   e le altre porte **cadono nel vuoto**; ma il server, verso se stesso, le **rifiuta subito** →
+   i pacchetti muoiono **prima** della macchina (pannello Hostinger). `ufw` è stato acceso lo
+   stesso perché quel filtro **non si può vedere, provare, né sapere se cambia**. ⚠️ Da ora le
+   porte si aprono in **due posti**: cambiarne uno solo darà «non funziona» senza spiegazione.
+
+**Un numero che si muoveva mentre lo misuravo** (D22, caso nuovo): gli accessi riusciti sono
+passati da 1.888 a 1.909 fra due misure a un minuto di distanza — **le mie stesse connessioni**.
+Il numero da scrivere non era quello, era lo **zero** degli accessi con password, che non si
+muove. Un contatore che include l'osservatore va dichiarato tale o non va scritto.
+
 ### ✅ FATTO 2026-08-07 (18) — QUATTRO POSTI ALLINEATI, E IL CANCELLO PROVATO SUL CAMPO
 - **`master` = `9465f7a`** (richieste **#3** e **#4** unite). Computer, GitHub e **VPS** allineati;
   chiavetta su `0740ad2`, indietro di due commit **di soli documenti** — dichiarato, non nascosto.

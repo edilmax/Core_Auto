@@ -13,7 +13,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 303e989
+CONSEGNE AGGIORNATE A: e36945e
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -67,11 +67,14 @@ La trafila completa della chiavetta (archivi dal server vivo + prova di ripristi
 - **VPS allineato** col protocollo D17, **zero secondi di sito irraggiungibile**. Il paracadute
   `:prec` era agganciato a un'immagine di **cinque giorni prima**: ri-agganciato.
 - **Chiavetta rigenerata** dal server vivo, con prova di ripristino verde e 694 impronte su 694.
+- 🔴➡️🟢 **LA SERRATURA DEL SERVER È CHIUSA** (7 agosto, via «autorizzato»). La porta non offre
+  più la password, `root` entra solo con la chiave, e il firewall locale è acceso. **Prima di
+  toccarla, otto controlli hanno dimostrato che NESSUNO era entrato.** Dettaglio e misure nella
+  sezione «LA SERRATURA DEL SERVER» più sotto.
 
 ### ⏳ COSA RESTA — in ordine di quanto costa se va male
-1. 🔴 **Il server accetta root+password.** 36.674 tentativi in 7 giorni, `fail2ban` assente,
-   firewall spento. Non è nel codice ed è la cosa più grave aperta. Serve «autorizzato», e **due
-   delle quattro riparazioni possono chiudere fuori anche noi**.
+1. 🟡 **`fail2ban` è ancora assente** — ma dopo la chiusura della password vale poco: un bot che
+   non può più riuscire fa solo rumore nei registri. Non è più la cosa più grave aperta.
 2. 💰 **23 moduli dei soldi su 25 mai passati al setaccio dei mutanti.** Ordine deciso dal
    fondatore: commissioni · divisione · voucher · rimborsi e cauzioni · Stripe · payout · le
    **dispute** (da LOCALIZZARE: non esiste un modulo con quel nome).
@@ -175,8 +178,7 @@ GitHub Actions è guarito (`operational`, incidente chiuso dopo ~15 ore). Da lì
   Tre generazioni precedenti conservate SULLA chiavetta, ognuna con data, commit e contenuto.
 
 **⏳ RESTA APERTO, in ordine di quanto costa se va male:**
-1. 🔴 **Il server accetta root+password** — vedi la sezione qui sotto. Non è nel codice ed è la
-   cosa più grave aperta. Serve «autorizzato».
+1. ✅ ~~Il server accetta root+password~~ — **CHIUSO il 2026-08-07**, vedi la sezione qui sotto.
 2. 💰 **I mutanti sui moduli dei soldi.** Dei **25 moduli che toccano i soldi ne sono stati
    setacciati 2** (`fase177`, `fase160`): **23 mai passati al setaccio**. Ordine deciso dal
    fondatore: commissioni (`fase43`+`fase98`) · divisione (`fase65`+`fase133`) · voucher
@@ -197,39 +199,114 @@ GitHub Actions è guarito (`operational`, incidente chiuso dopo ~15 ore). Da lì
 6. **Il repository è PUBBLICO** e metterlo privato è pulito (nessuna chiave nella storia,
    verificata su 779 commit).
 
-## 🔴🔴 2026-08-06 — LA COSA PIU' GRAVE APERTA OGGI, E NON E' NEL CODICE
+## 🟢 2026-08-07 — LA SERRATURA DEL SERVER: CHIUSA (era la cosa piu' grave aperta)
 
-**Il server vivo accetta l'accesso come amministratore CON UNA PASSWORD, e nessuno blocca chi
-sbaglia.** Misurato in sola lettura sul VPS (`sshd -T`, cioe' la configurazione EFFETTIVA
-chiesta al demone -- non un grep sul file, che dava una risposta parziale):
+Via del fondatore: **«autorizzato»**, 2026-08-07. Prima di toccare, otto controlli in sola
+lettura; poi la riparazione, provata **nelle due direzioni**; zero file del progetto toccati.
+
+### 1. LA PROVA CHE NESSUNO ERA ENTRATO — otto controlli, tutti puliti
+Il primo dovere non era chiudere: era sapere se qualcuno fosse gia' dentro.
 ```
-permitrootlogin        yes
-passwordauthentication yes        <- SSH accetta le password
-maxauthtries           6
-fail2ban               NON INSTALLATO
-firewall (ufw)         INATTIVO        porte aperte: 22, 80, 443
-tentativi falliti negli ultimi 7 giorni:  36.674   (~5.200 al giorno)
-accessi riusciti: 223 -- TUTTI con chiave, ZERO con password
-chiavi autorizzate: 2 (#hostinger-managed-key · edilmax)
-aggiornamenti di sicurezza in attesa: 0 · unattended-upgrades: ATTIVO
+Accepted password  su TUTTI i registri (5 lug -> 7 ago):   0        <- mai, nemmeno una volta
+Accepted publickey                                       1.909      (1.890 chiave edilmax +
+                                                                     19 console del browser)
+utenti con uid 0                                             1  (solo root)
+/etc/passwd modificato l'ultima volta                2026-06-24  (giorno zero: nessun utente creato)
+cartelle authorized_keys in tutta la macchina                1  (/root/.ssh, 2 chiavi)
+dpkg -V  (i programmi combaciano coi pacchetti?)     4 righe, TUTTE file di configurazione
+                                                     -> ZERO programmi alterati, uscita 0
+programmi suid                                       esattamente l'elenco standard Ubuntu
+lavori programmati                                   2, e sono i nostri (watchdog, giro video)
+connessioni verso l'esterno                          nessuna
+comandi «scarica ed esegui» in 1.356 righe di storia  nessuno
 ```
-**Nessuno e' entrato** (zero accessi riusciti con password nei 7 giorni di giornale). Ma non
-c'e' nessun muro: c'e' solo una serratura, e ci battono sopra cinquemila volte al giorno.
-L'unica cosa fra un estraneo e il computer che custodisce i soldi e' **quanto e' lunga la
-password di root**.
+⚠️ **Il numero 1.909 cresce a ogni nostra connessione** (ogni comando ne aggiunge uno): fra due
+misure a un minuto di distanza era passato da 1.888 a 1.909. Il numero che **non si muove**, ed
+e' quello che conta, e' lo **zero** degli accessi con password.
 
-**⛔ NON TOCCATO: e' produzione, serve «autorizzato».** E due di queste riparazioni hanno un
-modo di andare male peggiore di qualunque cosa vista finora: **chiudere fuori anche noi**.
+**I 19 accessi con chiavi sconosciute avevano fatto paura, ed erano innocui:** vengono tutti da
+`169.254.0.1`, l'indirizzo interno dell'ipervisore, cioe' il **terminale del browser di
+Hostinger** (sessioni del 5, 10 e 19 luglio). Ognuna genera una chiave nuova: 19 sessioni, 19
+impronte. La RSA «no comment» in `authorized_keys` e' quella avanzata dalla sessione del 10
+luglio. **Entra con la CHIAVE, non con la password** -> chiudere la password non l'ha chiusa.
 
-**Le quattro riparazioni, in ordine di quanto contano:**
-1. `PasswordAuthentication no` — i 36.674 tentativi diventano inutili in un colpo. ⚠️ Se la
-   chiave non funzionasse ci si chiude fuori: si prova `sshd -t` PRIMA, si tiene la sessione
-   aperta durante il riavvio, e si verifica da una connessione NUOVA prima di chiudere.
-2. `PermitRootLogin prohibit-password` — anche se una password trapelasse, non apre.
-3. **`fail2ban`** — chi sbaglia troppe volte viene bandito da solo.
-4. **Firewall `ufw`** attivo con 22/80/443 — cosi' un servizio futuro non si affaccia per
-   sbaglio. ⚠️ Una regola sbagliata taglia fuori tutti: si applica per ultima.
-**Rete sotto la rete:** Hostinger ha una console dal pannello che entra senza SSH.
+**E il 30-31 luglio, i due giorni dei 29.787 tentativi?** Toccati 31 file: 28 in `/root` (i
+nostri backup) e **3 soli fuori**, tutti spiegati -- `/etc/ld.so.cache` (si rigenera da sola),
+il pin apt e `docker-compose` v2 (messi da noi il 30). E il riavvio di ssh alle 06:52 del 31 era
+`upgrade openssl 3.0.13-0ubuntu3.11 -> 3.0.13-0ubuntu3.12`: **l'aggiornamento automatico di
+Ubuntu, non una persona.**
+
+### 2. ⛔ IL NUMERO «36.674 A SETTIMANA» DESCRIVEVA UN MOMENTO, NON UNO STATO
+Era stato misurato **il 31 luglio, dentro il picco**, e riletto oggi faceva credere a un assedio
+in corso che non c'era. Il diario di sistema tiene solo 7 giorni (`MaxRetentionSec=7day`): la
+misura vera sta in `/var/log/auth.log*`, e sono **tre assalti**, non una pioggia costante.
+```
+Failed password, giorno per giorno (5 lug -> 7 ago, totale 37.163, di cui 36.083 verso root):
+  12 lug   5.055        30 lug  14.350        31 lug  15.437
+  dal 1 agosto in poi:  30 · 2 · 0 · 1 · 33 · 8 · 1   = 75 in sette giorni
+Due soli indirizzi hanno fatto quasi tutto: 89.181.198.25 (29.768) e 85.215.58.26 (5.973)
+```
+**La lezione (D22):** un numero senza la sua data e' una fotografia spacciata per un ritratto.
+
+### 3. LA RIPARAZIONE, E LA TRAPPOLA CHE L'AVREBBE RESA INUTILE
+Nella cartella `sshd_config.d` c'erano **due file che si contraddicevano**:
+`50-cloud-init.conf` diceva `PasswordAuthentication yes`, `60-cloudimg-settings.conf` diceva
+`no`. **Vinceva il 50**, perche' SSH legge in ordine alfabetico e tiene la PRIMA risposta: il
+file «giusto» era **testo morto**. ⛔ Quindi scrivere `no` in fondo a `sshd_config` **non
+avrebbe fatto niente** -- e sarebbe stato un verde finto perfetto.
+Percio' il file nuovo si chiama **`00-blocca-password.conf`**: viene letto prima di tutti e
+vince anche se cloud-init riscrivesse il suo (`ssh_pwauth: true` e' ancora nella sua config).
+```
+PRIMA:  Permission denied (publickey,password).      <- il giudice esterno, senza credenziali
+DOPO:   Permission denied (publickey).
+        + connessione NUOVA con la chiave: dentro, uscita 0
+sshd -T:  passwordauthentication no · permitrootlogin without-password
+          kbdinteractiveauthentication no · pubkeyauthentication yes
+firewall ufw: ATTIVO, 22/80/443 + 169.254.0.0/16, abilitato all'avvio
+sito dopo il lavoro: verifica_produzione.py -> 190 controlli, 0 violazioni, uscita 0
+```
+
+### 4. IL METODO CHE RENDE SICURA UNA MODIFICA CHE PUO' CHIUDERTI FUORI (riusabile)
+Non serve tenere una sessione aperta e sperare: si **arma un paracadute e lo si prova prima**.
+```
+1. si prova che i timer scattano davvero:  systemd-run --on-active=25 ... (visto scattare)
+2. si arma il ritorno automatico:          systemd-run --on-active=300 --unit=paracadute-...
+3. si scrive il file con l'EDITOR e lo si copia con scp (mai sed, mai heredoc -- B2)
+   -> impronta sha256 identica ai due capi, zero byte invisibili
+4. sshd -t  (uscita letta diretta, senza tubi) -- se non e' 0, il file si toglie da solo
+5. systemctl reload  (non restart: le connessioni aperte non cadono)
+6. si prova nelle DUE direzioni da una connessione NUOVA
+7. solo allora si disarma il paracadute
+```
+Fatto due volte oggi (serratura e firewall), zero secondi di disservizio.
+
+### 5. ⚠️ ESISTE GIA' UN FIREWALL A MONTE, E NON POSSIAMO VEDERLO
+Misurato da fuori: rispondono **solo 22, 80 e 443**; tutte le altre porte **cadono nel vuoto**
+(nessun rifiuto). Ma il server, verso se stesso, quelle porte le **rifiuta subito**: quindi a
+buttare via i pacchetti e' qualcosa **prima** della macchina -- il firewall del pannello
+Hostinger. Il `ufw` locale e' stato acceso lo stesso, e la ragione e' una sola: **quel filtro
+non possiamo ne' vederlo, ne' provarlo, ne' sapere se un giorno cambia.** Una protezione che non
+puoi mettere alla prova non e' una protezione su cui appoggiarti da sola.
+⚠️ **Conseguenza da ricordare:** ora le porte si aprono in DUE posti (pannello Hostinger + `ufw`
+sul server). Chi un domani espone un servizio nuovo e ne cambia uno solo vedra' «non funziona»
+senza capire perche'.
+
+### 6. COSA NON E' STATO GUARDATO (D18 punto 3)
+- **Il firewall del pannello Hostinger**: sta fuori dalla macchina, da dentro non si vede.
+- **Cosa succede a un riavvio**: non provato, perche' significherebbe riavviare il server. E'
+  esattamente il motivo per cui il file si chiama `00-` e `ufw` risulta `enabled` all'avvio.
+- **Se il terminale del browser di Hostinger si apre oggi**: sappiamo che ha funzionato a
+  luglio, non che funzioni adesso. E' il paracadute di ultima istanza: va provato **prima** di
+  averne bisogno.
+
+### 7. COSA RESTA SU QUESTO FRONTE
+- 🟡 **`fail2ban`** non c'e'. Dopo la chiusura vale poco (un bot che non puo' riuscire fa solo
+  rumore), ma toglie il rumore dai registri. Costo basso, urgenza bassa.
+- 🟢 **La chiave RSA di Hostinger** resta dov'e'. Toglierla sarebbe teatro: chi possiede
+  l'ipervisore controlla gia' la macchina da sotto, e ci costerebbe la porta d'emergenza.
+- 🔑 **La password di root non e' piu' una via d'ingresso da internet.** Resta utile solo per la
+  console d'emergenza del pannello. Cambiarla con una lunga e' buona igiene, non piu' urgenza —
+  e **la digita il fondatore**: non si chiede e non si stampa (D6).
 
 ### 🟠 E DUE ALTRI FATTI SULLA SICUREZZA, misurati il 2026-08-06
 - **Il repository e' PUBBLICO** (`private: false`, verificato via API). Nessuna chiave e' mai
