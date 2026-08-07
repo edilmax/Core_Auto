@@ -106,8 +106,8 @@ automatica fa fallire la suite se i due divergono):
 
 # ⚙️ REGOLA FERREA DI OPERATIVITÀ E PRECISIONE
 
-> ## 📌 GLI OBBLIGHI SONO **102**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
-> **Contati dai file il 2026-08-06, non a memoria** (`python collaudi/regole_avvio.py` li
+> ## 📌 GLI OBBLIGHI SONO **103**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
+> **Contati dai file il 2026-08-07, non a memoria** (`python collaudi/regole_avvio.py` li
 > ricontrolla a ogni sessione e **grida** se questi numeri non tornano):
 >
 > ### 🔬 LE **44** DELLA RICERCA — pagate ~4 milioni di token, 77 agenti, 2026-07-30
@@ -119,9 +119,9 @@ automatica fa fallire la suite se i due divergono):
 > · **29** stanno nell'appendice di `REGISTRO_INGEGNERIA.md`, con prova e fonte per esteso.
 > Più le **24 uccise** dai revisori ostili **col motivo**: dicono cosa NON vale la pena rifare.
 >
-> ### 🧭 GLI ALTRI **58** — nati dai NOSTRI danni
+> ### 🧭 GLI ALTRI **59** — nati dai NOSTRI danni
 > **IL BLOCCO (6 divieti assoluti, in cima a questo file)** · Regola zero (**5**) ·
-> **22 direttive del fondatore** · modi di rompersi (**11**) ·
+> **23 direttive del fondatore** · modi di rompersi (**11**) ·
 > collaudi (**10**) · direttiva finale (**4**). Non hanno uno studio dietro: hanno una
 > **cicatrice**. Valgono uguale, e da oggi **portano anch'essi il «si verifica così»**.
 >
@@ -131,7 +131,7 @@ automatica fa fallire la suite se i due divergono):
 > che **non viaggia col progetto**: su un altro computer, o in CI, non esistevano.
 > **2026-08-01, sera**: mescolai le due famiglie in un unico numero — e mescolare fa perdere
 > di vista proprio ciò che è stato pagato.
-> **Rimedio definitivo:** le direttive del fondatore sono **entrate nel repository** (D1-D22
+> **Rimedio definitivo:** le direttive del fondatore sono **entrate nel repository** (D1-D23
 > qui sotto), ogni regola dice **come si verifica**, e lo strumento d'avvio conta tutto e
 > **segnala chi non dice come si controlla**. Una regola che non si può controllare non è
 > una regola: è un desiderio.
@@ -252,7 +252,7 @@ solo è il canale principale delle regressioni. Il fondatore se n'è accorto pri
 
 ---
 
-# 🧭 LE 22 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
+# 🧭 LE 23 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
 
 > **Perché stanno qui e non solo in memoria.** Fino al 2026-08-01 vivevano nella memoria di
 > sessione: **non viaggiavano col progetto**. Su un altro computer, o dentro la CI, non
@@ -326,9 +326,27 @@ ospite, host e piattaforma. *Si verifica:* ogni scelta che tocca denaro dichiara
 se va storta.
 
 **D17. DEPLOY COL PROTOCOLLO A RISCHIO ZERO.** Punto di ritorno + salvataggio **verificato
-leggibile** + `docker compose` v2 + verifica funzionale **nelle due direzioni**. *Si verifica:*
-esistono il file `PRE_DEPLOY_*.commit`, l'immagine `:prec`, la prova di lettura del backup e le
-sonde positive **e** negative dopo lo scambio.
+leggibile** + **`docker compose` v2** + verifica funzionale **nelle due direzioni**.
+
+⛔ **`docker compose` (DUE PAROLE) è la v2. `docker-compose` col trattino è la v1 e BUTTA GIÙ
+nginx**, cioè il sito. Sul VPS la v1 è stata disinstallata e **bloccata apposta**, con un
+segnaposto che lo spiega a chi la digita (`DEPLOY.md` §1). ⚠️ Il *file* si chiama
+`docker-compose.casavip.yml` **col** trattino: quello è il suo nome, non il comando. Vederli
+insieme nella stessa riga è normale.
+
+⛔ **L'immagine `:prec` va RI-AGGANCIATA a quella che gira DAVVERO, prima dello scambio.** Il
+2026-08-07 puntava a un'immagine di **cinque giorni prima** mentre il sito ne serviva una di 16
+ore: un paracadute agganciato all'immagine sbagliata è peggio di nessun paracadute, perché ci si
+salta convinti di tornare all'ultimo stato buono.
+
+⛔ **La sonda negativa deve usare un indirizzo CHE ESISTE.** `/admin` risponde **404** — «questa
+pagina non c'è», non «sei bloccato» — quindi come prova di sicurezza vale zero. Gli indirizzi
+veri, misurati: `/api/admin/*` → **401**, `/api/bunker/*` → **403**. Li interroga già
+`collaudi/verifica_produzione.py`: si usa quello, non si inventano percorsi.
+
+*Si verifica:* esistono il file `PRE_DEPLOY_*.commit`, l'immagine `:prec` **ri-agganciata**
+all'immagine viva, la prova di lettura del backup, e le sonde positive **e** negative dopo lo
+scambio, ognuna su un indirizzo che risponde diverso da 404.
 
 **D18. UNO STRUMENTO CHE MISURA DEVE AVERE UN CONTROLLO MECCANICO CHE GLI IMPEDISCA DI
 BARARE.** Detta dal fondatore il 2026-08-01, dopo che il giudice della mutazione ha stampato
@@ -480,6 +498,33 @@ conteggio rifatto dai file, non con quello che ricorda chi scrive.
 ⚠️ **Una guardia sul conteggio conta, non giudica** (appendice #14, fonte Inozemtseva): duplicare
 200 test la soddisferebbe alla perfezione. Il numero dice quanto è stato **eseguito**, mai quanto è
 stato **coperto**: quello lo dice solo la larghezza di mutazione.
+
+**D23. IL COMANDO E L'AMBIENTE CON CUI GUARDI FANNO PARTE DELLA MISURA.** Dettata dal fondatore il
+**2026-08-07**, dopo una giornata in cui il codice era sano e a mentire sono stati **gli strumenti
+con cui lo guardavo**.
+
+Un controllo può essere **spento dal modo in cui lo esegui**, e il risultato non è rosso: è
+**verde**. È il verde peggiore di tutti, perché non ha guardato niente. Quattro modi, tutti visti
+in un giorno solo:
+
+1. **Un tubo che si mangia l'esito.** `comando | filtro` restituisce l'esito del *filtro*. È già la
+   regola ferrea 7, ed è successo lo stesso: quindi la regola da sola non basta. Si scrive l'uscita
+   su **file** e si legge il codice d'uscita **diretto**.
+2. **Un `2>$null` che nasconde il motivo.** Uno script è fallito e l'errore era stato zittito da me:
+   restava solo «uscita 1», cioè un guasto senza nome.
+3. **Un ambiente monco che spegne le guardie in silenzio.** Senza `openssl` nel PATH, le **cinque
+   guardie sul ripristino dei backup** si mettono da parte in blocco — e `unittest` registra **UN
+   solo salto**, **senza il nome della classe**, e non conta quei test nel totale `Ran`. Cinque
+   controlli spariti e nessuno che lo dica.
+4. **Una sonda su un indirizzo che non esiste.** `/admin` → **404** usato come prova che l'area
+   riservata è chiusa: un controllo che *non può* fallire, cioè un ornamento.
+
+*Si verifica:* per ogni controllo che dichiara un esito, nella sessione compaiono (a) il **comando
+esatto**, (b) l'**ambiente** in cui è girato (interprete, dipendenze, e il `PATH` quando conta),
+(c) il **codice d'uscita letto senza tubi**, e (d) per le sonde, la prova che l'indirizzo
+interrogato **risponde qualcosa di diverso da 404**. E un numero che cala senza spiegazione — test
+**raccolti** contro test **eseguiti** — non si arrotonda e non si sceglie il più comodo: si insegue
+finché non ha un nome.
 
 ---
 
