@@ -60,18 +60,22 @@ una unita che era aperta, ed è costata una mattina**:
 https://api.github.com/repos/edilmax/Core_Auto/pulls?state=all
 https://api.github.com/repos/edilmax/Core_Auto/branches/master
 ```
-🔴 **LA CHIAVETTA ORA È INDIETRO SUL CODICE, e la vecchia regola NON vale più.** Sta su
-`0740ad2`; da lì sono cambiati **`fase81_bootstrap_casavip.py` e `fase88_registro_host.py`** (le
-due riparazioni della commissione del 2026-08-07). Finora valeva «resta indietro apposta finché
-non cambia il **codice**, quindi è una copia onesta»: quella frase descriveva un mondo in cui i
-commit erano di soli documenti, e **quel mondo è finito il 7 agosto sera**.
-👉 Delle due, una: **o si rigenera** (~1 ora, metodo più giù nella sezione «La chiavetta»), **o
-si scrive sul suo foglio che il motore dentro è vecchio di due riparazioni**. Ciò che non si può
-fare è lasciarla lì e continuare a chiamarla «copia onesta»: chi la apre il giorno del guasto si
-fida del cartello.
-📌 Il controllo che lo dice in un colpo:
-`git diff --name-only 0740ad2 HEAD | grep -E "^(fase|main_casavip|deploy/|requirements|Dockerfile)"`
-— se stampa qualcosa, la chiavetta è indietro **sul motore**, non sui documenti.
+✅ **CHIAVETTA RIGENERATA su `e3fca06`** (2026-08-07 ore 19:23), con **TRE** prove, non una:
+**694 impronte su 694** identiche al commit · **prova di ripristino** in cartella VUOTA
+(`Ran 5450 · OK (skipped=3) · uscita 0`) · e la **prova di accensione** nuova, che è quella che
+risponde alla domanda vera del fondatore — *«se la carico su una VPS funziona?»*
+📌 **La vecchia regola («resta indietro apposta finché non cambia il codice») non vale più come
+scusa**: il 7 agosto sera il codice è cambiato per la prima volta dopo settimane di soli
+documenti. Il controllo che lo dice in un colpo, da rifare a ogni commit di prodotto:
+`git diff --name-only <commit-chiavetta> HEAD | grep -E "^(fase|main_casavip|deploy/|requirements|Dockerfile)"`
+— se stampa qualcosa, la chiavetta è indietro **sul motore**, non sui documenti, e va rigenerata.
+⚠️ **E la chiavetta è ancora una cartella su `C:`**, cioè lo stesso disco del progetto: protegge
+da «ho rotto il repository», **non** dal disco che muore o dal computer rubato. Va copiata su un
+supporto fisico — è un gesto che può fare solo il fondatore, ed è scritto anche sul suo foglio.
+📖 Sulla chiavetta ora c'è anche **`GUIDA-VPS-NUOVA.txt`**, che NON scade: DNS (senza rompere la
+posta, che sta su Hostinger e non passa dalla VPS), riemissione del certificato e **l'ordine
+giusto** — nginx non parte senza certificato ma il certificato di solito si prende con nginx
+acceso, e chi non lo sa ci perde un'ora.
 
 ### ✅ COSA È STATO FATTO (6-7 agosto)
 - **Il `gate` — l'unico controllo che protegge `master` — diceva VERDE con job bloccanti che non

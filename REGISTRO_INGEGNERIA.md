@@ -228,6 +228,79 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### ✅ FATTO 2026-08-07 (22) — CHIAVETTA RIGENERATA, E LA PROVA CHE MANCAVA DA SEMPRE
+
+**Rigenerata su `e3fca06`** col metodo scritto (dal server vivo, mai dal computer). Ma la cosa
+che vale oltre la serata è che il **requisito è stato riformulato dal fondatore**, e il vecchio
+metodo non lo copriva:
+
+> *«deve essere il backup di tutto: in emergenza caricata su una VPS funziona, o anche se cambio
+> VPS carico e funziona, e deve essere uguale a quella che gira sulla VPS»*
+
+⛔ **La prova di ripristino dimostra che il CODICE è completo (la suite gira). NON dimostra che
+si ACCENDE.** Sono due cose diverse, e la seconda è quella che serve il giorno del guasto.
+
+**LE TRE PROVE, e la terza è nuova:**
+```
+(a) DENTRO C'E' e3fca06, dimostrato file per file (non letto dal cartello)
+    694 tracciati · 694 impronte IDENTICHE · 0 diverse · 0 assenti · 25 db integrity ok
+    ⚠️ eseguita SUL SERVER: farla su Windows darebbe differenze finte su ogni file di
+       testo (CRLF) e si perderebbe un'ora a inseguire un fantasma
+(b) RIPRISTINO: archivi in cartella creata VUOTA, suite intera li' dentro
+    1068 file · 25 db · Ran 5450 tests in 1604.032s · OK (skipped=3) · uscita 0
+(c) ACCENSIONE (NUOVA): immagine costruita DAI FILE DELLA CHIAVETTA, avviata isolata
+    /api/health -> 200 in 2s · / -> 200 · money_path_pronto: True · avvisi: [] · 0 errori
+```
+
+**⛔ LA PROVA (c) HA TROVATO UN BUCO VERO NELLE ISTRUZIONI, al primo colpo.** È fallita così:
+```
+PermissionError: [Errno 13] Permission denied: '/data/app.log'
+sqlite3.OperationalError: attempt to write a readonly database
+```
+Dentro il contenitore l'applicazione **non gira da amministratore** (utente `app`, uid 10001 gid
+999, misurato con `docker exec casavip_app id`). Chi ripristina copia i database **da root**, e
+l'applicazione non ci può scrivere. **Il sito non parte, con due errori che non nominano la
+causa.** La guida che avevo appena scritto diceva `cp /src/*.db /data/` e **si sarebbe fermata
+lì**. Rimedio (`chown -R 10001:999 /data`) scritto sulla chiavetta. *Senza questa prova, quel
+buco lo avrebbe scoperto qualcuno il giorno del guasto, con il sito giù.*
+
+**⛔ E `impacchetta.sh` sul VPS NON FA QUELLO CHE IL METODO SCRITTO DICE.** Riga 19:
+`docker exec casavip_app sh -c 'cd /data && tar czf /tmp/d.tgz *.db'`. Ma il metodo prescrive
+*«l'API di backup di sqlite3, **mai `cp`**: un `-wal` pieno si perderebbe in silenzio»* — e un
+`tar` dei soli `*.db` ha **esattamente lo stesso difetto di `cp`**. *Quanto è grave oggi:* misurati
+**0 file `-wal`** al momento (l'app apre e chiude le connessioni una per operazione, e all'ultima
+chiusura SQLite riversa e cancella il WAL). Quindi oggi il `tar` prende tutto — **per fortuna,
+non per costruzione**: con traffico vero, una prenotazione in corso nell'istante del `tar`
+sparirebbe. Stanotte i 25 database sono stati copiati con l'API vera (`Connection.backup()`),
+`integrity_check` su ognuno. Effetto visibile: `prenotazioni.db` era **0 byte** sul disco, la
+copia è un database **vuoto ma valido** di 4096 byte — un file da zero byte non si apre.
+▶️ **Da fare:** `impacchetta.sh` va corretto **e portato nel repository**: oggi vive solo in
+`/root` sul VPS, quindi lo strumento per fare il backup muore insieme alla macchina che deve
+salvare, e non è nemmeno sulla chiavetta.
+
+**📖 `GUIDA-VPS-NUOVA.txt`, nuova, SULLA chiavetta e non nel repo** (REGOLA ZERO 3: niente `.md`
+nuovi). Sta in un file **suo** e non dentro `LEGGIMI-RIPRISTINO.txt` perché quel foglio contiene
+i numeri di *una generazione* e scade a ogni rigenerazione, mentre il metodo per rimettere in
+piedi il sito **non scade** — è la lezione del 2026-08-04 applicata prima di sbagliare. Dentro,
+tutto misurato: DNS su Hostinger (`pixel`/`byte.dns-parking.com`), **due soli record A** da
+cambiare, e in grande **cosa NON toccare** (`MX mx1/mx2.hostinger.com` e SPF: la posta non passa
+dalla VPS); il certificato che **non è sulla chiavetta e non deve esserci**; e il tranello
+dell'uovo e la gallina — `nginx` pretende il certificato (riga 37 della sua configurazione) ma il
+modo normale di ottenerlo vuole nginx acceso → prima `certbot --standalone`, poi si accende.
+
+**Video NON rigenerati, e non per pigrizia:** dimostrato che sono identici — impronta di tutti e
+108 i file per parte, `d3ec6e29…` su entrambi. 283 MB risparmiati con una misura invece che con
+una speranza.
+
+⚠️ **Quattro volte in una serata lo strumento ha mentito, non la cosa misurata** — ed è la
+lezione ricorrente (D23): il `tar` di MSYS legge `C:\Users\…` come «host C» ed esce 2 senza
+estrarre niente (la prova di ripristino avrebbe girato su una **cartella vuota** dichiarandosi
+verde); i `grep` con le barre rovesciate dentro `ssh` dentro PowerShell hanno stampato **zeri
+finti** su un archivio pieno; il `sha256sum` di Windows scrive `impronta *nome` e quello di Linux
+`impronta  nome`, e il confronto ha detto **«tutti e 108 i video sono diversi»** quando erano
+identici; e una sonda su `/api/admin/lista` ha risposto **404** — che è esattamente l'ornamento
+che D17 vieta, rifatto da me la sera stessa in cui l'avevo scritto.
+
 ### ✅ FATTO 2026-08-07 (21) — IL DEPLOY, E LA ZONA CIECA CHE HA FATTO VEDERE
 
 **Le due riparazioni della commissione sono IN PRODUZIONE**, col protocollo D17 e **zero secondi
