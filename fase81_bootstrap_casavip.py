@@ -256,7 +256,15 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
             bps = commissione_bps_fonte(fonte, numero, bps_marketplace=bps_mkt)
             return commissione_cents(netto, bps)
         except Exception:
-            pass
+            # Il RIPIEGO resta (rifiutare una prenotazione perche' un archivio ha
+            # singhiozzato sarebbe peggio del male), ma non puo' essere MUTO: qui
+            # sparisce la rampa di lancio e un host dei primi 90 giorni paga il
+            # regime pieno invece di 0%. Era un `pass`: nessuna riga, da nessuna
+            # parte. Ora e' ERROR perche' e' il livello che il Guardiano legge
+            # davvero (`fase186._guasti_isolati` ignora dichiaratamente i warning).
+            logger.error("COMMISSIONE: rampa di lancio NON applicata (alloggio %r) -> "
+                         "ripiego sul regime %d bps: l'host puo' aver pagato piu' del "
+                         "dovuto", slug, _bps, exc_info=True)
         return max(0, netto * _bps // 10000)
 
     def _tassa_alloggio(slug, *, notti, ospiti, imponibile):

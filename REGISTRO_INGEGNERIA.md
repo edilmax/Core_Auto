@@ -228,6 +228,113 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### ✅ FATTO 2026-08-07 (20) — L'APPENDICE RICONTROLLATA, E IL PRIMO DIFETTO DELL'AREA A
+
+**Perché il ricontrollo viene PRIMA del lavoro.** L'appendice delle 44 regole è una mappa del
+**30 luglio**: descrive difetti *vivi a quella data*. Costruirci sopra un piano senza
+riverificarla significa lavorare su fantasmi e sentirsi produttivi. Ricontrollate una per una
+le **13 voci che descrivono uno stato del nostro codice** (le altre sono regole di condotta e
+non hanno uno stato da misurare):
+
+| # | Regola | Oggi | Prova |
+|---|---|---|---|
+| 12 | I mutanti si generano, non si scelgono | 🟢 chiusa | il generatore esiste ed è sotto guardia |
+| 13 | «Ucciso solo a volte» = IGNOTO | 🟢 chiusa | `"sopravvissuto" if all(riverifiche) else "incerto"` |
+| 17 | Il guardiano dice cosa **ha guardato** | 🟢 chiusa | lista `ciechi` → `anomalie["controllo_cieco"]` |
+| 18 | `curl` fallisce sugli errori HTTP | 🟢 chiusa | `curl -sSf` (`deploy/watchdog.sh:52`) |
+| 20 | Un registro che non risponde non regala soldi | 🟢 chiusa | `_consuma_credito` → `"errore"`, il chiamante **rifiuta e libera la stanza** |
+| 21 | Vietato `except ImportError: pass` sulle guardie | 🟢 chiusa | `logger.error("GUARDIA INVARIANTI ASSENTE…")` |
+| 22 | Il log non è una destinazione | 🟢 chiusa | `fase186._guasti_isolati` legge `app.log` (finestra 24h) |
+| 19 | Non rispondere 200 se i passi falliscono | 🟡 metà | il campo `passi_falliti` c'è, **lo stato resta 200** (la regola chiede 409) |
+| 9 | I comandi distruttivi **rifiutano** | 🟡 metà | 10 voci in `deny`, **niente su `DROP`/`DELETE` senza `WHERE`** |
+| — | Hook che possono fermarti (2ª ricerca, 17-18) | 🔴 quasi assenti | solo `SessionStart`; **nessun `PreToolUse`, nessun `Stop`** |
+| 3 | Una sola implementazione per funzione pubblica | 🔴 aperta, identica | **28** nomi duplicati · **315** file di scarto |
+| 23 | Costruito ≠ collegato | 🔴 aperta, identica | gli **stessi 15** moduli senza importatori di produzione |
+| 20b | MEMORY.md sotto il tetto | 🟢 ok | 18.475 byte su 25.600 (72%) · 49 righe su 200 |
+
+**Sette chiuse, tre a metà, tre aperte.** ⚠️ Limite dichiarato (D18.3): il n.23 si misura contando
+gli **import scritti** — un modulo lanciato come programma a sé (`fase38_backup`) risulterebbe
+orfano pur essendo vivo, quindi i 15 vanno confermati uno per uno, non a blocco.
+⚠️ **Un buco visto sul campo e non presente nell'appendice:** i divieti in `.claude/settings.json`
+bloccano `rm -rf /data` scritto così, ma **non vedono nulla** dentro `ssh root@… "…"` — cioè
+esattamente la forma con cui si lavora sul VPS. La protezione è sul computer, non sulla macchina
+che conta.
+
+---
+
+**AREA A — «i numeri che l'ospite vede». Primo difetto trovato e chiuso.**
+
+Cercavo *quale* delle due `commissione_cents` calcola il numero vero. Risposta: **`fase98`**
+(troncamento); **`fase43` (Decimal HALF_UP) non è importata da nessun file di produzione** — è
+codice morto sul percorso vivo, pur essendo elencata come ACCESA nella tabella §1 e descritta
+dal `README.md` come «aritmetica esatta». **Da sola è disordine (appendice #3), non un danno.**
+
+**Il danno era tre righe sotto** (`fase81_bootstrap_casavip.py:258`): `except Exception: pass`.
+Dentro quel `try` stanno le letture che decidono se un host paga **0%, 5%, 8% o 10%**. Se una
+inciampa, si ripiega sul regime pieno **senza scrivere una riga da nessuna parte**.
+
+*Raggiungibile?* Sì, e verificato al chiamante: `catalogo.host_di_alloggio` (`fase57:645`) apre
+il database con `try/finally` e **nessun `except`** → un `database is locked` esce dal metodo e
+arriva al `pass`. (Invece `giorni_da_registrazione` cattura da sola: vedi «resta aperto».)
+
+*Chi ci rimette:* l'host **dei primi 90 giorni** — esattamente quello a cui la campagna promette
+«0% per tre mesi». E **era già successo**: il commento sopra documenta il FIX 2026-07-20 in cui
+la rampa non era MAI stata applicata. Riparato il dato che non arrivava, **lasciato il tappo che
+nasconderebbe la prossima volta**.
+
+**D20, nell'ordine, e la regola ferrea 2 fino in fondo:**
+1. guardia scritta (`TestIlRipiegoDellaCommissioneNonPuoEssereMUTO`, in `test_promo_lancio_e2e.py`);
+2. **vista ROSSA**: `AssertionError: [] is not true : … l'host ha pagato 1000 centesimi invece di
+   0 … Messaggi ERROR raccolti: []` · `FAILED (failures=1)` · uscita 1. Le due metà dicono cose
+   diverse: la prima (`1000 > 0`) **passa** e dimostra che il danno è reale; la seconda fallisce
+   e dimostra che è muto;
+3. riparazione: **una sola istruzione** (`logger.error` col nome dell'alloggio e i bps di
+   ripiego). Il ripiego **resta** — rifiutare una prenotazione perché un archivio ha singhiozzato
+   sarebbe peggio del male. È il livello ERROR perché è quello che il Guardiano legge davvero;
+4. **verde**: `Ran 10 tests · OK · uscita 0` (le 9 prove preesistenti tutte ancora verdi);
+5. **difetto rimesso dentro e rivisto ROSSO una seconda volta**, poi ripristino **`sha256sum -c`
+   → OK**, impronta `2a7b13af…` identica prima e dopo.
+
+Diff: produzione **+9 −1** (di cui 6 righe sono il *perché*), collaudo **+84**. Zero moduli, zero
+funzioni, zero dipendenze nuove.
+
+**✅ E LA SECONDA STRADA, chiusa lo stesso giorno** (guardia sua, un difetto per prova).
+`giorni_da_registrazione` (`fase88:708`) cattura da sola e ripiega su «host vecchissimo»
+scrivendo un **`logger.warning`** — ma `fase186._guasti_isolati:263` dichiara di leggere **SOLO
+gli ERROR, mai i warning**. Stesso danno, stessa vittima, stessa invisibilità, **percorso
+diverso**: non passa dal `pass` di `fase81`.
+
+⛔ **La prova che erano DUE difetti e non due modi di dire lo stesso:** eseguite insieme, la
+guardia della prima strada è rimasta **verde** mentre la seconda era **rossa**. Se avessimo
+chiuso solo la prima, un difetto identico sarebbe rimasto vivo **con l'aria di essere risolto** —
+che è la forma peggiore, perché nessuno lo cerca più.
+
+*La scelta, e perché non l'altra.* Alzato a **ERROR quel singolo warning**, non insegnato al
+Guardiano a leggere i warning. Motivi: (1) quel metodo **esiste solo** per la rampa della
+commissione — lo dice la sua stessa descrizione — quindi un suo fallimento è **sempre** un fatto
+di soldi; (2) l'altra via toccherebbe uno **strumento di misura**, e D18 gli imporrebbe quattro
+condizioni tutte sue; (3) i warning sono ~131 e molti innocui: farli gridare tutti significa
+**allenare tutti a ignorarli**, e un falso allarme è un difetto quanto uno mancato (regola
+ferrea 10). Il difetto non era che il Guardiano ignora i warning: era che **quel** messaggio non
+era un warning.
+
+⚠️ **`numero_host` resta warning, e non per pigrizia:** verificato leggendo `fase98`, non
+assumendo dal commento — `commissione_bps_fonte` chiama `commissione_bps_per_host` passando lo
+**stesso valore** a `bps_fondatori` e `bps_dopo`, quindi l'ordinale è neutralizzato per
+costruzione e un suo fallimento **non muove la commissione di un centesimo**. Non esiste una
+terza strada. Si alza solo ciò che è giustificato.
+
+Stesso ciclo completo anche qui: guardia scritta → **ROSSA** (`[] is not true … l'host ha pagato
+1000 centesimi invece di 0`) → una istruzione cambiata → **verde** (`Ran 11 · OK` sulla rampa,
+`Ran 35 · OK` sul registro host) → **difetto rimesso dentro e rivista ROSSA** → ripristino
+`sha256sum -c` → **OK** (`6a17ccdf…` identica).
+Diff totale della voce (20): produzione **+18 −2** su due file (di cui 12 righe sono il *perché*),
+collaudo **+159**, documenti **+99**. Zero moduli, zero funzioni, zero dipendenze nuove.
+
+⚠️ **Un controllo che avevo scritto sbagliato, corretto:** avevo contato i «byte invisibili» con
+un filtro che toglieva anche le lettere accentate dei commenti italiani — misurava altro. Rifatto
+sui byte < 32 esclusi tab/a-capo: **0** in tutti e tre i file toccati.
+
 ### ✅ FATTO 2026-08-07 (19) — LA SERRATURA DEL SERVER CHIUSA (zero righe di progetto toccate)
 
 **Cos'era rotto.** Il VPS accettava l'accesso come `root` **con una password**: `sshd -T` dava
