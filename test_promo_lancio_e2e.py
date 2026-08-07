@@ -241,5 +241,164 @@ class TestFailSafe(BasePromo):
                          "host ignoto: deve valere il regime 10%, non lo 0% della promo")
 
 
+class TestIlRipiegoDellaCommissioneNonPuoEssereMUTO(BasePromo):
+    """Il ripiego che fa pagare il 10% a chi deve pagare 0% non lascia TRACCIA.
+
+    `fase81._comm_alloggio` avvolge le letture del registro host in un unico
+    `try / except Exception: pass` e ripiega sulla commissione di regime.
+    Il ripiego in se' e' GIUSTO -- rifiutare una prenotazione perche' un archivio
+    ha singhiozzato sarebbe peggio del male. Il difetto e' che e' MUTO:
+
+      `catalogo.host_di_alloggio` (fase57:645) apre il database con `try/finally`
+      e NESSUN `except`: un "database is locked" esce dal metodo, arriva al `pass`
+      di `fase81:258` e la rampa di lancio sparisce senza che venga scritta
+      una sola riga da nessuna parte.
+
+    Chi ci rimette e' l'host nei primi 90 giorni -- esattamente quello a cui la
+    campagna di reclutamento promette "0% per tre mesi". Paga il 10% e nessuno
+    dei due lo sa.
+
+    Perche' nessuna guardia esistente lo prende: le otto prove di questo file
+    coprono gli scaglioni, il canale diretto, la contraddizione con la
+    trasparenza e i casi fail-safe -- ma NESSUNA fa inciampare il registro.
+    E' D19: un ramo difensivo che nessuno esercita e' indistinguibile da codice
+    morto, e il giorno che serve e' il giorno in cui e' troppo tardi per scoprirlo.
+
+    ⚠️ Esiste una SECONDA strada verso lo stesso danno, che merita una guardia
+    sua e non e' coperta qui (un difetto per prova): `giorni_da_registrazione`
+    (fase88:708) cattura da sola e scrive un `logger.WARNING` -- ma il Guardiano
+    (`fase186._guasti_isolati`) legge dichiaratamente SOLO gli ERROR, mai i
+    warning. Anche quella strada, quindi, non arriva a nessuno.
+
+    Questa guardia NON pretende che il ripiego smetta di ripiegare: pretende
+    che GRIDI, a un livello che il Guardiano legge davvero.
+    """
+
+    def test_se_il_registro_inciampa_il_ripiego_deve_GRIDARE(self):
+        import logging
+
+        sis, r = self._sistema(promo=True, bps=1000)
+        self._host_con_alloggio(r)
+
+        # PREMESSA: senza guasti, un host registrato oggi paga 0%. Se questa cade,
+        # il resto della prova non significa niente e va sistemata prima lei.
+        sano = self._quote(r)["commissione_cents"]
+        self.assertEqual(sano, 0,
+                         "premessa rotta: un host registrato oggi deve pagare 0%")
+
+        raccolti = []
+
+        class _Raccogli(logging.Handler):
+            def emit(self, record):
+                if record.levelno >= logging.ERROR:
+                    raccolti.append(record.getMessage())
+
+        def _archivio_rotto(_slug):
+            raise sqlite3.OperationalError("database is locked")
+
+        orecchio = _Raccogli()
+        logging.getLogger().addHandler(orecchio)
+        originale = sis.catalogo.host_di_alloggio
+        sis.catalogo.host_di_alloggio = _archivio_rotto
+        try:
+            rotto = self._quote(r, giorni_avanti=5)["commissione_cents"]
+        finally:
+            sis.catalogo.host_di_alloggio = originale
+            logging.getLogger().removeHandler(orecchio)
+
+        # (a) L'EFFETTO: il danno esiste davvero, non e' teorico.
+        self.assertGreater(
+            rotto, sano,
+            "col registro rotto l'host paga PIU' del dovuto (%d invece di %d centesimi): "
+            "e' il danno che questa guardia sorveglia" % (rotto, sano))
+
+        # (b) L'ESITO: e qualcuno deve poterlo sapere. Il Guardiano legge gli ERROR:
+        #     un warning, o il silenzio, non arrivano a nessuno.
+        pertinenti = [m for m in raccolti
+                      if any(p in m.lower() for p in ("commission", "rampa", "scaglione"))]
+        self.assertTrue(
+            pertinenti,
+            "la rampa di lancio e' sparita e l'host ha pagato %d centesimi invece di %d, "
+            "ma NESSUN messaggio di livello ERROR lo dice: il ripiego di "
+            "`fase81._comm_alloggio` e' muto (`except Exception: pass`) e il Guardiano "
+            "(`fase186._guasti_isolati`) legge solo gli ERROR. "
+            "Messaggi ERROR raccolti durante il preventivo: %r" % (rotto, sano, raccolti))
+
+    def test_anche_la_SECONDA_strada_deve_arrivare_a_qualcuno(self):
+        """L'ALTRA porta verso lo stesso danno, e non passa dal `pass` di fase81.
+
+        `giorni_da_registrazione` (fase88:708) cattura da sola e ripiega su un numero
+        enorme = "host vecchissimo" = nessuno sconto di lancio. Scrive, ma scrive un
+        `logger.warning` -- e `fase186._guasti_isolati` dichiara di leggere SOLO gli
+        ERROR, mai i warning (scelta motivata: i warning sono ~131 e molti innocui).
+        Risultato: l'host dei primi 90 giorni paga il regime pieno e il messaggio
+        finisce dove nessuno lo legge. Un messaggio che nessuno legge non e' un
+        messaggio: e' il `pass` di prima, scritto piu' lungo.
+
+        Quel metodo esiste SOLO per la rampa della commissione (lo dice la sua stessa
+        descrizione): un suo fallimento e' SEMPRE un fatto di soldi, mai rumore.
+        Percio' il livello giusto e' ERROR, ed e' la` una parola sola -- non si insegna
+        al Guardiano a leggere i warning, che significherebbe farne gridare 131 e
+        allenare tutti a ignorarli (regola ferrea 10: un falso allarme e' un difetto
+        quanto un allarme mancato).
+
+        ⚠️ `numero_host` fallisce nello stesso modo e resta un warning A RAGIONE:
+        verificato che `commissione_bps_fonte` passa lo stesso valore a `bps_fondatori`
+        e `bps_dopo`, quindi l'ordinale NON tocca la commissione. Si alza solo cio'
+        che e' giustificato.
+        """
+        import logging
+
+        sis, r = self._sistema(promo=True, bps=1000)
+        self._host_con_alloggio(r)
+        sano = self._quote(r)["commissione_cents"]
+        self.assertEqual(sano, 0,
+                         "premessa rotta: un host registrato oggi deve pagare 0%")
+
+        raccolti = []
+
+        class _Raccogli(logging.Handler):
+            def emit(self, record):
+                if record.levelno >= logging.ERROR:
+                    raccolti.append(record.getMessage())
+
+        class _ConnessioneRotta:
+            """Archivio che risponde ma non serve: e' cosi' che si rompe davvero."""
+            def execute(self, *_a, **_k):
+                raise sqlite3.OperationalError("database is locked")
+
+            def close(self):
+                pass
+
+        orecchio = _Raccogli()
+        logging.getLogger().addHandler(orecchio)
+        originale = sis.registro_host._apri
+        sis.registro_host._apri = lambda: _ConnessioneRotta()
+        try:
+            rotto = self._quote(r, giorni_avanti=7)["commissione_cents"]
+        finally:
+            sis.registro_host._apri = originale
+            logging.getLogger().removeHandler(orecchio)
+
+        # (a) L'EFFETTO: l'anzianita' non si legge -> "host vecchissimo" -> niente rampa.
+        self.assertGreater(
+            rotto, sano,
+            "col registro degli host irraggiungibile l'anzianita' non si legge e la rampa "
+            "sparisce: l'host paga %d invece di %d centesimi" % (rotto, sano))
+
+        # (b) L'ESITO: e deve arrivare a chi guarda, cioe' al livello ERROR.
+        pertinenti = [m for m in raccolti
+                      if any(p in m.lower()
+                             for p in ("giorni_da_registrazione", "anzianit", "rampa",
+                                       "commission", "scaglione"))]
+        self.assertTrue(
+            pertinenti,
+            "l'host ha pagato %d centesimi invece di %d perche' non si e' potuta leggere "
+            "la sua anzianita', e l'unica traccia e' un `logger.warning` "
+            "(`fase88:708`) che il Guardiano NON legge (`fase186._guasti_isolati` "
+            "guarda solo gli ERROR, dichiarato a riga 263). "
+            "Messaggi ERROR raccolti durante il preventivo: %r" % (rotto, sano, raccolti))
+
+
 if __name__ == "__main__":
     unittest.main()

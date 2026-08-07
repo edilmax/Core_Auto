@@ -705,7 +705,15 @@ class RegistroHost:
                 return 10**9
             return max(0, (now - int(row[0])) // 86400)
         except Exception:
-            logger.warning("giorni_da_registrazione fallita (ISOLATA -> grande)", exc_info=True)
+            # ERROR, non warning: questo metodo esiste SOLO per la rampa di lancio della
+            # commissione, quindi un suo fallimento e' SEMPRE un fatto di soldi -- l'host
+            # viene trattato come "vecchissimo" e perde lo scaglione a cui ha diritto.
+            # Il Guardiano (`fase186._guasti_isolati`) legge dichiaratamente solo gli
+            # ERROR: come warning questa riga finiva dove non la leggeva nessuno, cioe'
+            # valeva quanto un `pass` scritto piu' lungo.
+            logger.error("ANZIANITA' HOST non leggibile (ISOLATA -> host trattato come "
+                         "vecchissimo): la rampa di lancio NON si applica e l'host puo' "
+                         "pagare piu' del dovuto", exc_info=True)
             return 10**9
         finally:
             con.close()

@@ -13,7 +13,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: e36945e
+CONSEGNE AGGIORNATE A: bd2d419
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -71,8 +71,42 @@ La trafila completa della chiavetta (archivi dal server vivo + prova di ripristi
   più la password, `root` entra solo con la chiave, e il firewall locale è acceso. **Prima di
   toccarla, otto controlli hanno dimostrato che NESSUNO era entrato.** Dettaglio e misure nella
   sezione «LA SERRATURA DEL SERVER» più sotto.
+- 🔎 **L'APPENDICE È STATA RICONTROLLATA VOCE PER VOCE** (7 agosto): delle 13 che descrivono uno
+  stato del *nostro* codice, **7 erano già chiuse, 3 a metà, 3 aperte**. Lavorarci sopra alla
+  cieca sarebbe costato mezza settimana su difetti che non esistono più. Tabella nella voce (20)
+  del registro. ⚠️ **L'appendice è una mappa del 30 luglio: si ricontrolla prima di usarla.**
+- 💯 **AREA A — LA COMMISSIONE RIPIEGAVA IN SILENZIO, per DUE strade** (via «autorizzato»).
+  Un host dei primi 90 giorni, che deve pagare **0%**, poteva pagare il **10%** senza che
+  venisse scritta una riga da nessuna parte — ed è esattamente quello a cui la campagna promette
+  «0% per tre mesi». Le due strade, **distinte davvero** (la guardia della prima è rimasta verde
+  mentre la seconda era rossa):
+  · **`fase81._comm_alloggio`** avvolgeva le letture del registro in `except Exception: pass`;
+    `catalogo.host_di_alloggio` (`fase57:645`) apre il database **senza `except`**, quindi un
+    «database is locked» ci arrivava davvero;
+  · **`fase88.giorni_da_registrazione`** cattura da sola e ripiega su «host vecchissimo»
+    scrivendo un **warning** — e il Guardiano legge **solo gli ERROR** (`fase186:263`,
+    dichiarato). Un messaggio che nessuno legge è un `pass` scritto più lungo.
+  Per ognuna, l'ordine di D20 fino in fondo: guardia **vista ROSSA** (`1000 centesimi invece di
+  0` · `messaggi ERROR: []`), riparazione di **una sola istruzione**, verde, **difetto rimesso
+  dentro e rivista rossa una seconda volta**, ripristino **`sha256 -c` OK**.
+  ⚠️ **`numero_host` resta warning A RAGIONE**, verificato e non assunto: `commissione_bps_fonte`
+  passa lo stesso valore a `bps_fondatori` e `bps_dopo`, quindi l'ordinale **non tocca** la
+  commissione. Si alza solo ciò che è giustificato: far gridare tutti i ~131 warning
+  significherebbe allenare tutti a ignorarli (regola ferrea 10).
+  📌 Scoperta di passaggio: **`fase43_commissione` non è importata da NESSUN file di
+  produzione** — il numero vero lo calcola `fase98` (che tronca), mentre il `README.md` descrive
+  `fase43` come «aritmetica esatta» e il registro la elenca ACCESA. Da sola è disordine, non un
+  danno, ma documento e macchina divergono: è la voce **#3** dell'appendice, ancora aperta.
 
 ### ⏳ COSA RESTA — in ordine di quanto costa se va male
+0. 💯 **AREA A — continua.** Chiuse **entrambe** le strade per cui la commissione ripiegava in
+   silenzio (vedi sopra). ▶️ Prossimi bersagli della stessa area, in ordine: **(a)** `fase43`
+   dichiarata ACCESA nel registro ma **importata da zero file di produzione** — o si collega o
+   si dichiara morta, ma documento e macchina non possono dire cose diverse (appendice #3);
+   **(b)** il resto dei numeri che l'ospite vede: valuta (`fase99`), sconti lunghi, tassa di
+   soggiorno (`fase66`), split (`fase65`/`133`). L'ordine delle cinque aree: **A numeri
+   visibili · B valore regalato (referral/crediti) · C dati da tenere · D doppia prenotazione ·
+   E catena intera**.
 1. 🟡 **`fail2ban` è ancora assente** — ma dopo la chiusura della password vale poco: un bot che
    non può più riuscire fa solo rumore nei registri. Non è più la cosa più grave aperta.
 2. 💰 **23 moduli dei soldi su 25 mai passati al setaccio dei mutanti.** Ordine deciso dal
@@ -940,7 +974,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5446 test
+SUITE ATTUALE: Ran 5448 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis 6.141.1 + pyyaml + coverage installati
           · ⚠️ bash E openssl nel PATH (`C:\Program Files\Git\usr\bin`) — vedi qui sotto
 COMANDO:  python -m unittest discover -s . -p "test_*.py"
