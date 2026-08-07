@@ -1506,6 +1506,107 @@ class TestLeRegoleSiLeggonoSEMPRE(unittest.TestCase):
                       "divieti non arriverebbero a nessun altro")
 
 
+# ---------------------------------------------------------------------------
+#  IL PASSAGGIO DI CONSEGNE NON PUO' RESTARE INDIETRO RISPETTO AL LAVORO.
+#
+#  Perche' esiste. D21 dice di scrivere il passaggio di consegne, ma per mesi non
+#  e' successo, e il fondatore l'ha detto con parole sue: «ogni volta che riapro
+#  una chat, dice che l'altra non ha scritto». Il difetto non e' pigrizia: il
+#  blocco si scrive ALLA FINE, cioe' nel momento peggiore -- contesto pieno,
+#  sessione che puo' essere interrotta. Cosi' il lavoro resta e la memoria no.
+#
+#  Fino al 2026-08-07 quell'obbligo era affidato alla buona volonta', e D22 dice
+#  gia' come va a finire: «un obbligo affidato alla buona volonta' si rompe di
+#  nuovo». Qui diventa un muro: se il documento resta indietro, la suite e' ROSSA
+#  -- e siccome non si committa con la suite rossa, non si puo' andare avanti
+#  lasciando le consegne vecchie. E' D18: non «ha barato?» ma «puo' barare?».
+#
+#  ⛔ COSA QUESTA GUARDIA NON FA, dichiarato (D18 punto 3):
+#    · NON giudica se il testo delle consegne sia UTILE. Conta i commit, non le
+#      idee: si puo' soddisfarla scrivendo sciocchezze. Serve a impedire il
+#      silenzio, non a garantire la qualita'.
+#    · NON puo' misurare dove il commit dichiarato non esiste: nella copia
+#      estratta della chiavetta (niente `.git`) e sulla CI, che scarica con
+#      profondita' 1. Li' NON si salta -- si pretende comunque che la riga esista
+#      e sia un commit ben formato. Un salto silenzioso sarebbe la zona cieca che
+#      questo progetto ha gia' pagato.
+# ---------------------------------------------------------------------------
+_RIGA_CONSEGNE = re.compile(r"^CONSEGNE AGGIORNATE A:\s*([0-9a-fA-F]{7,40})\s*$", re.M)
+
+
+def consegne_troppo_indietro(quanti_commit):
+    """Il giudizio, isolato dal resto perche' si possa provare da solo.
+
+    UNO e' il commit che porta le consegne stesse: quello e' sano. DUE vuol dire
+    che dopo aver scritto le consegne si e' committato altro lavoro senza
+    toccarle. `None` = non misurabile qui (vedi la dichiarazione qui sopra).
+    """
+    return quanti_commit is not None and quanti_commit > 1
+
+
+def _commit_da_allora(sha, radice):
+    """Quanti commit VERI (le fusioni non contano) da `sha` a HEAD, o None."""
+    import subprocess
+    try:
+        esito = subprocess.run(
+            ["git", "rev-list", "--count", "--no-merges", "%s..HEAD" % sha],
+            cwd=radice, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except OSError:
+        return None
+    if esito.returncode != 0:
+        return None
+    try:
+        return int(esito.stdout.decode("utf-8", "replace").strip())
+    except ValueError:
+        return None
+
+
+class TestIlPassaggioDiConsegneNonRestaINDIETRO(unittest.TestCase):
+    """Chi apre una chat nuova deve trovare scritto dove siamo, non doverlo chiedere."""
+
+    def setUp(self):
+        import io
+        percorso = os.path.join(QUI, "RIPRENDI_QUI.md")
+        with io.open(percorso, encoding="utf-8") as f:
+            self.pagina = f.read()
+
+    def test_LA_RIGA_C_E_ED_E_UN_COMMIT(self):
+        trovato = _RIGA_CONSEGNE.search(self.pagina)
+        self.assertIsNotNone(
+            trovato,
+            "RIPRENDI_QUI.md non ha la riga `CONSEGNE AGGIORNATE A: <commit>`: senza "
+            "quella riga nessuno puo' sapere se il passaggio di consegne descrive il "
+            "lavoro di adesso o quello di tre settimane fa (D21)")
+        self.sha = trovato.group(1)
+
+    def test_NON_SI_LAVORA_DUE_COMMIT_SENZA_AGGIORNARLE(self):
+        trovato = _RIGA_CONSEGNE.search(self.pagina)
+        self.assertIsNotNone(trovato, "manca la riga `CONSEGNE AGGIORNATE A:`")
+        quanti = _commit_da_allora(trovato.group(1), QUI)
+        if quanti is None:
+            # Non misurabile (copia estratta senza `.git`, o clone superficiale).
+            # Non si salta: si pretende comunque la forma della riga.
+            self.assertRegex(trovato.group(1), r"^[0-9a-fA-F]{7,40}$")
+            return
+        self.assertFalse(
+            consegne_troppo_indietro(quanti),
+            "dal commit dichiarato nelle consegne (%s) sono passati %d commit di "
+            "lavoro: il passaggio di consegne descrive uno stato che non esiste "
+            "piu'. Aggiorna il blocco in cima a RIPRENDI_QUI.md e rimetti in quella "
+            "riga il commit di HEAD prima di committare (D21)."
+            % (trovato.group(1), quanti))
+
+    def test_IL_GIUDIZIO_SA_DIRE_SI_E_NO(self):
+        """Le due direzioni: se dicesse sempre la stessa cosa non varrebbe niente."""
+        self.assertFalse(consegne_troppo_indietro(0), "zero commit dopo: e' sano")
+        self.assertFalse(consegne_troppo_indietro(1),
+                         "UNO e' il commit che porta le consegne stesse: e' sano")
+        self.assertTrue(consegne_troppo_indietro(2), "due commit dopo: e' indietro")
+        self.assertTrue(consegne_troppo_indietro(37))
+        self.assertFalse(consegne_troppo_indietro(None),
+                         "dove non si puo' misurare non si inventa un rosso")
+
+
 class TestGeneratoreDiMutanti(unittest.TestCase):
     """I MUTANTI SI GENERANO DAL CODICE, NON SI SCELGONO A MANO (regola 12 dell'appendice).
 

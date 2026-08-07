@@ -460,9 +460,23 @@ chiede e si aspetta, e il lavoro resta sul computer; (5) **`/clear`**, e si ripa
 dice **dove guardare e cosa verificare**, mai «ricorda che».
 
 *Chi dice che siamo a metà.* L'unica fonte che fa fede è la **barra del fondatore** («% context
-used»). La stima dell'IA **non fa fede** — è lo strumento che questa regola stessa dichiara
-inaffidabile — e può solo **anticipare** il punto, mai spostarlo più in là; quando la usa, la dichiara
-come stima e mostra il numero da cui la ricava.
+used», si legge col comando `/context`). La stima dell'IA **non fa fede** — è lo strumento che questa
+regola stessa dichiara inaffidabile — e può solo **anticipare** il punto, mai spostarlo più in là;
+quando la usa, la dichiara come stima e mostra il numero da cui la ricava.
+
+⛔ **«AL 50% **O PRIMA**» — e il «prima» è un INNESCO MECCANICO, non una sensazione.** Aggiunto dal
+fondatore il **2026-08-07**, dopo una sessione in cui l'IA ha segnalato tre volte «siamo oltre metà»
+e ha continuato lo stesso, perché aspettava un numero che non poteva leggere. *«Perché sia tu, sia
+le precedenti, sia quelle future non lo rispettano? Da soli non riuscite?»* — no: una regola
+appoggiata a un numero che l'IA non vede è appoggiata alla buona volontà, e **un obbligo affidato
+alla buona volontà si rompe di nuovo** (D22). Quindi il blocco di consegne si scrive **anche** —
+senza aspettare nessuna percentuale — **ogni volta che si chiude un blocco di lavoro**, cioè quando
+si arriva a «commit fatto + posti allineati» e **prima di aprire qualunque cosa nuova**. È un evento
+che si vede, capita 2-3 volte al giorno, e non richiede di misurare niente.
+*Successo davvero il 2026-08-07:* tre blocchi chiusi in una giornata (riparazione del cancello ·
+deploy · chiavetta) e **zero** blocchi di consegne scritti, perché li si aspettava dalla
+percentuale. Il costo non è teorico: `RIPRENDI_QUI.md` è rimasto per ore a dichiarare il server
+indietro e GitHub guasto, quando erano entrambe cose già risolte.
 
 *Se si deve comunque proseguire oltre:* da lì in poi **nessuna affermazione senza la misura nello
 stesso messaggio**. Niente numeri a memoria, nessun «ho verificato» senza sotto il comando e l'uscita.

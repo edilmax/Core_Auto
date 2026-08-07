@@ -11,6 +11,88 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
+
+CONSEGNE AGGIORNATE A: 9465f7a
+
+*Questa riga non è decorativa: la legge la guardia
+`test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
+sopra passa più di un commit di lavoro, **la suite diventa ROSSA** — e siccome non si committa con
+la suite rossa, non si può andare avanti lasciando indietro queste consegne. Chi aggiorna il blocco
+rimette qui il commit di `HEAD`.*
+
+*Scritto applicando **D21**. La percentuale di contesto **non è stata letta**: il fondatore non
+aveva la barra sotto mano e l'IA non può misurarla da sé — è il buco che D21 dichiara di avere, e
+per cui dal 2026-08-07 il blocco si scrive **anche** a ogni blocco di lavoro chiuso, senza aspettare
+nessun numero. Si legge col comando `/context`.*
+
+### ⛔ IL PRIMO GESTO: CONTROLLARE, NON RICORDARE
+```
+computer   9465f7a      GitHub   9465f7a      VPS   9465f7a      chiavetta   0740ad2
+```
+**Non crederci: verificalo.** Un passaggio di consegne sbagliato è già costato una mattina intera —
+il 2026-08-06 dichiarava unita la richiesta #1, e l'API rispondeva `merged: false`.
+```
+https://api.github.com/repos/edilmax/Core_Auto/branches/master
+https://api.github.com/repos/edilmax/Core_Auto/pulls?state=all
+git rev-parse HEAD                                   (sul computer)
+ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse HEAD'
+```
+**La chiavetta è indietro di due commit e NON è un errore:** quei due toccano **solo `CLAUDE.md` e
+`REGISTRO_INGEGNERIA.md`**. Il suo foglio dichiara `0740ad2` ed è esattamente `0740ad2`, provato.
+Si rigenera al prossimo lavoro che tocca il **codice**: la trafila completa costa circa un'ora.
+
+### ✅ COSA È STATO FATTO (6-7 agosto)
+- **Il `gate` — l'unico controllo che protegge `master` — diceva VERDE con job bloccanti che non
+  avevano consegnato nessun esito.** Successo **due volte** durante il guasto di GitHub Actions del
+  6 agosto. Riparato: ora pretende il proprio **denominatore** («sono arrivati tutti e dieci, e sono
+  tutti `success`?») invece di cercare la parola `failure` fra gli esiti arrivati. **Provato sul
+  campo nelle due direzioni**: rosso quando `copertura` è caduta, verde quando è rientrata.
+- **6 guardie nuove** (`TestUnJobCheNonConsegnaNiente`), viste ROSSE prima della riparazione.
+- **D23** (il comando e l'ambiente fanno parte della misura) e **`docker compose` v2 dentro D17**.
+  Obblighi totali: **103**, ricontati dallo strumento.
+- **VPS allineato** col protocollo D17, **zero secondi di sito irraggiungibile**. Il paracadute
+  `:prec` era agganciato a un'immagine di **cinque giorni prima**: ri-agganciato.
+- **Chiavetta rigenerata** dal server vivo, con prova di ripristino verde e 694 impronte su 694.
+
+### ⏳ COSA RESTA — in ordine di quanto costa se va male
+1. 🔴 **Il server accetta root+password.** 36.674 tentativi in 7 giorni, `fail2ban` assente,
+   firewall spento. Non è nel codice ed è la cosa più grave aperta. Serve «autorizzato», e **due
+   delle quattro riparazioni possono chiudere fuori anche noi**.
+2. 💰 **23 moduli dei soldi su 25 mai passati al setaccio dei mutanti.** Ordine deciso dal
+   fondatore: commissioni · divisione · voucher · rimborsi e cauzioni · Stripe · payout · le
+   **dispute** (da LOCALIZZARE: non esiste un modulo con quel nome).
+   ⛔ Si comincia misurandone **uno** e cronometrandolo: da lì si decide quanti farne.
+3. 🔌 **Il cablaggio, che i mutanti non vedono.** La mutazione prova la logica *dentro* un pezzo,
+   mai che sia **collegato** a ciò che l'utente vede.
+4. 🎭 **La prova generale** sul sito vero con soldi veri e piccoli. I database di produzione sono
+   **quasi vuoti**: i percorsi dei soldi non hanno mai girato con dati veri.
+5. ⚠️ **`copertura` è instabile**: stesso albero, verde/rosso/verde. Non è la soglia (84,7% contro
+   82): cade il passo «Suite completa SOTTO MISURA».
+6. **Il repository è PUBBLICO**; metterlo privato è pulito (779 commit setacciati, zero chiavi).
+
+### ⛔ GLI ERRORI DI QUESTA SESSIONE, perché non si ripetano
+Sono nel registro d'ingegneria, voci **(17)** e **(18)**, ognuno con l'indicazione. I tre che
+contano di più:
+1. **Una sonda che non poteva fallire**: `/admin` risponde `404`, e stavo per usarla come prova che
+   l'area riservata è chiusa. **Un 404 non prova mai che qualcosa sia protetto.**
+2. **Ho detto che `fase177` aveva «24 punti mai provati»**, facendolo sembrare scoperto. È a **ZERO
+   sopravvissuti**: i 24 sono punti *nuovi*, comparsi perché il metro si è allungato. **Prima di
+   dire che una cosa è scoperta, si legge la riga del documento che dice com'è messa.**
+3. **Questo file è rimasto per ore a dichiarare cose già fatte** («il VPS è indietro», «GitHub è
+   guasto»). La direttiva finale 4 non chiede solo di aggiungere: chiede di **togliere ciò che è
+   completato**. Un elenco di cose da fare già fatte è una bugia lenta.
+
+### 🔧 DUE FATTI DELL'AMBIENTE CHE COSTANO TEMPO SE NON SI SANNO
+```powershell
+# la suite si lancia COSÌ, altrimenti 5 guardie sul ripristino dei backup si spengono in silenzio
+$env:PATH = "C:\Program Files\Git\usr\bin;C:\Program Files\Git\bin;" + $env:PATH
+python -m unittest discover -s . -p "test_*.py"
+```
+E **i comandi in sottofondo di questa sessione vengono uccisi dall'ambiente** (5 volte in una
+notte). Le cose lunghe si lanciano **staccate** (`Start-Process pwsh -File ...`) e scrivono l'esito
+su file: così sopravvivono anche alla chiusura della chat.
+
 ## 🚧 2026-08-06 SERA — IL CANCELLO HA DATO VERDE CON META' DEI CONTROLLI MORTI
 
 **L'unione è FATTA e verificata dentro, non sullo schermo.** `master` = **`a67eef6`**, e il suo
@@ -60,13 +142,47 @@ vera** — ed è il motivo per cui è stata scelta così.
 GitHub era a terra e **la CI vera non l'ha ancora giudicata**. Va guardata la tabella dei job al
 primo giro utile.
 
-**⏳ RESTA APERTO, in quest'ordine:**
-1. **Rilanciare i tre job annullati** su
-   `https://github.com/edilmax/Core_Auto/actions/runs/31116671519` — `atheris` (fuzzing sui
-   motori-soldi), `copertura` (soglia 82%), `full-suite-311` (Python di **produzione**)
-   **non hanno mai girato su `master`**.
-2. **Il VPS è ancora su `02579be`**, fermo di proposito: servono la CI verde e «autorizzato».
-3. 🚫 **Non unire nulla mentre Actions è guasto**: finché dura, il bollino verde non prova niente.
+### ✅ COM'È FINITA — chiuso il 2026-08-07 mattina
+GitHub Actions è guarito (`operational`, incidente chiuso dopo ~15 ore). Da lì, in ordine:
+- **richiesta #4 unita** → `master` = **`9465f7a`**, che porta dentro anche D23 e `docker compose`
+  v2 in D17. Prima era stata unita la **#3** → `0740ad2`, con la riparazione del cancello.
+- **La riparazione del cancello ha superato la prova sul campo, in ENTRAMBE le direzioni**:
+  ROSSO sulla run 629 tentativo 1 (quando `copertura` è caduta) e VERDE al tentativo 2. Prima
+  diceva «tutto bene» davanti a job che non avevano consegnato niente.
+- **I tre job che non avevano mai girato su `master` sono passati**: `atheris` (fuzzing sui
+  motori-soldi), `copertura`, `full-suite-311` (il Python di produzione).
+- **VPS allineato** col protocollo D17: punto di ritorno scritto leggendo il server, paracadute
+  `:prec` **ri-agganciato** (puntava a un'immagine di 5 giorni prima), 25 salvataggi **aperti e
+  letti**, e sonde nelle due direzioni (pubbliche `200`, riservate `401`/`403`).
+  ⚠️ **Zero secondi di sito irraggiungibile**: fra server e `master` cambiavano solo documenti,
+  collaudi e CI — nessun file di prodotto — quindi è bastato `git pull`, senza ricostruire.
+- **Chiavetta rigenerata dal server vivo su `0740ad2`** con prova di ripristino verde
+  (`Ran 5443 · OK (skipped=3) · uscita 0`), **694 impronte su 694** identiche al commit,
+  25 database integri, e i video verificati **aprendo l'archivio**: 54 filmati + 54 copertine.
+  Tre generazioni precedenti conservate SULLA chiavetta, ognuna con data, commit e contenuto.
+
+**⏳ RESTA APERTO, in ordine di quanto costa se va male:**
+1. 🔴 **Il server accetta root+password** — vedi la sezione qui sotto. Non è nel codice ed è la
+   cosa più grave aperta. Serve «autorizzato».
+2. 💰 **I mutanti sui moduli dei soldi.** Dei **25 moduli che toccano i soldi ne sono stati
+   setacciati 2** (`fase177`, `fase160`): **23 mai passati al setaccio**. Ordine deciso dal
+   fondatore: commissioni (`fase43`+`fase98`) · divisione (`fase65`+`fase133`) · voucher
+   (`fase167`) · rimborsi e cauzioni (`fase111`+`fase149`) · binari Stripe (`fase85`/`87`/`101`)
+   · payout (`fase131`) · **le dispute, che vanno prima LOCALIZZATE** (non esiste un modulo con
+   quel nome: la logica è sparsa fra server, concierge ed escrow).
+   ⛔ Si comincia misurando **uno** e cronometrandolo: da quel numero si decide quanti farne.
+3. 🔌 **Il cablaggio, che i mutanti non vedono.** La mutazione prova la logica *dentro* un pezzo,
+   mai che il pezzo sia **collegato** a ciò che l'utente vede (modo di rompersi n.2, caso reale:
+   promo 0% mai applicata). Serve la mappa dei pannelli generata **dal codice**
+   (`collaudi/mappa_scoperta.py` esiste già) e, per ognuno, «è collegato a qualcosa che una
+   persona vede o riceve?».
+4. 🎭 **La prova generale**: un giro vero sul sito vero, con soldi veri e piccoli, col fondatore
+   che guarda lo schermo. ⚠️ Misurato il 2026-08-07: i database di produzione sono **quasi vuoti**
+   (0-3 righe), quindi **i percorsi dei soldi non hanno mai girato con dati veri**.
+5. ⚠️ **`copertura` è instabile** (stesso albero: verde, rosso, verde). Non è la soglia: cade il
+   passo «Suite completa SOTTO MISURA». Un test che va verde o rosso a caso è un difetto.
+6. **Il repository è PUBBLICO** e metterlo privato è pulito (nessuna chiave nella storia,
+   verificata su 779 commit).
 
 ## 🔴🔴 2026-08-06 — LA COSA PIU' GRAVE APERTA OGGI, E NON E' NEL CODICE
 
@@ -734,7 +850,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5443 test
+SUITE ATTUALE: Ran 5446 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis 6.141.1 + pyyaml + coverage installati
           · ⚠️ bash E openssl nel PATH (`C:\Program Files\Git\usr\bin`) — vedi qui sotto
 COMANDO:  python -m unittest discover -s . -p "test_*.py"
@@ -860,6 +976,11 @@ giro interrotto si guarda `git status` e la traccia PRIMA di rilanciare.** Il co
 saltarlo e' un guasto sui soldi dentro un commit, con tutti i controlli verdi.
 
 ### ✅ CHIAVETTA RIGENERATA E PROVATA IL 2026-08-05 — QUATTRO POSTI ALLINEATI SU `91ebce0`
+> ⏪ **STORIA, non stato attuale.** La chiavetta è stata rigenerata di nuovo il **2026-08-07** su
+> `0740ad2`, e la generazione `91ebce0` è conservata SULLA chiavetta in `precedente_91ebce0\`.
+> Lo stato di oggi sta in cima a questo file; i numeri di ogni generazione stanno nel suo
+> `LEGGIMI-RIPRISTINO.txt`, l'unico posto che non può invecchiare male perché nasce e muore
+> insieme alla copia che descrive.
 Era indietro di un commit **con codice vero** dentro (282 righe di guardie + 13 dello
 strumento), non solo diario. Rigenerata con l'ordine imposto, e per la prima volta l'ordine e'
 stato applicato a un caso vero:
