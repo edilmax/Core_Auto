@@ -1607,6 +1607,62 @@ class TestIlPassaggioDiConsegneNonRestaINDIETRO(unittest.TestCase):
                          "dove non si puo' misurare non si inventa un rosso")
 
 
+class TestIlControlloDeiQuattroPostiVedeCIOCHEGIRA(unittest.TestCase):
+    """⛔ `git rev-parse` sul VPS legge il REPOSITORY, non l'immagine che GIRA.
+
+    Trovato sul campo il 2026-08-07 sera. Il passaggio di consegne prescrive quattro
+    comandi per misurare i quattro posti, e per il server dice `git rev-parse --short
+    HEAD`. Quel comando risponde col commit dei FILE SU DISCO -- ma il sito gira dentro
+    un contenitore costruito da un'IMMAGINE, e l'immagine puo' essere di giorni prima.
+
+    Quella sera e' successo esattamente questo: dopo l'unione, il VPS diceva `42edded`
+    mentre serviva un'immagine di 34 ore prima, senza le due riparazioni appena fatte.
+    «Quattro posti allineati» sarebbe stato VERO sui file e FALSO su cio' che l'utente
+    riceveva -- il verde peggiore, quello che non ha guardato la cosa giusta (D23).
+
+    Fino al 2026-08-07 il difetto era invisibile perche' tutti i commit erano di soli
+    documenti: il repository e l'immagine coincidevano per fortuna, non per costruzione.
+
+    Questa guardia non puo' misurare il server (la suite gira anche senza rete e senza
+    chiavi): pretende che le ISTRUZIONI nominino il controllo giusto. E' lo stesso
+    genere di `TestIlPassaggioDiConsegneNonRestaINDIETRO` -- e ne condivide il limite,
+    dichiarato: verifica che il metodo sia scritto, non che qualcuno lo esegua.
+    """
+
+    def setUp(self):
+        import io
+        with io.open(os.path.join(QUI, "RIPRENDI_QUI.md"), encoding="utf-8") as f:
+            self.pagina = f.read()
+
+    def test_LE_ISTRUZIONI_DICONO_COME_SI_LEGGE_L_IMMAGINE_VIVA(self):
+        self.assertIn(
+            "docker inspect", self.pagina,
+            "il passaggio di consegne non dice da nessuna parte come si legge l'IMMAGINE "
+            "che gira sul server. Con i soli `git rev-parse` si puo' dichiarare «quattro "
+            "posti allineati» mentre il sito serve codice di giorni prima: e' successo il "
+            "2026-08-07. Il comando e' `docker inspect --format=\"{{.Image}}\" casavip_app`")
+
+    def test_IL_CONTROLLO_E_NELLA_SEZIONE_DEI_QUATTRO_POSTI(self):
+        """Non basta che la parola esista da qualche parte: deve stare DOVE si guarda.
+
+        Una guardia che si accontenta di «la stringa c'e' in qualche punto del file» e'
+        la ricaduta esatta di `server_tokens off` (appendice #15): non sa quanti posti
+        ha saltato. Qui si pretende che stia vicino ai quattro comandi, cioe' dove la
+        legge chi apre una chat nuova.
+        """
+        marcatore = "I quattro posti si LEGGONO"
+        i = self.pagina.find(marcatore)
+        self.assertNotEqual(i, -1,
+                            "sparita la riga «I quattro posti si LEGGONO»: senza quella, "
+                            "il primo gesto di ogni sessione non e' piu' scritto")
+        finestra = self.pagina[i:i + 2500]
+        self.assertIn(
+            "docker inspect", finestra,
+            "«docker inspect» c'e' nel documento ma NON nella sezione dei quattro posti: "
+            "chi apre una chat nuova legge quella, e li' troverebbe ancora solo i "
+            "`git rev-parse`, che non vedono l'immagine viva")
+
+
 class TestGeneratoreDiMutanti(unittest.TestCase):
     """I MUTANTI SI GENERANO DAL CODICE, NON SI SCELGONO A MANO (regola 12 dell'appendice).
 

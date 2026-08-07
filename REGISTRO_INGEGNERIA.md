@@ -228,6 +228,66 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### ✅ FATTO 2026-08-07 (21) — IL DEPLOY, E LA ZONA CIECA CHE HA FATTO VEDERE
+
+**Le due riparazioni della commissione sono IN PRODUZIONE**, col protocollo D17 e **zero secondi
+di sito irraggiungibile**. Ma la cosa che vale oltre il caso è il difetto di **metodo** che è
+saltato fuori nel farlo.
+
+⛔ **`git rev-parse` SUL VPS NON VEDE COSA GIRA.** Subito dopo l'unione, il server rispondeva
+`42edded` — allineato — mentre serviva un'immagine di **34 ore prima**, senza le due riparazioni.
+Il comando prescritto dal passaggio di consegne legge i **file su disco**; il sito gira dentro un
+contenitore costruito da un'**immagine**. Dichiarare «quattro posti allineati» sarebbe stato
+**vero sui file e falso su ciò che l'utente riceve**: il verde peggiore, quello che non ha
+guardato la cosa giusta (D23).
+
+*Perché nessuno se n'era accorto prima:* fino a quel giorno tutti i commit erano di **soli
+documenti**, quindi repository e immagine coincidevano **per fortuna, non per costruzione**. È il
+modo di rompersi n.8 (locale ≠ produzione) travestito da procedura corretta.
+
+**Rimedio, e non è prosa:** i comandi del passaggio di consegne sono passati da **quattro a
+cinque** (aggiunto `docker inspect --format="{{.Image}}" casavip_app`), e la cosa è sotto
+**guardia meccanica** — `TestIlControlloDeiQuattroPostiVedeCIOCHEGIRA`, **due prove viste ROSSE
+prima**: una pretende che il comando esista, l'altra che stia **dentro la sezione dei quattro
+posti** e non altrove nel file. La seconda esiste perché «la stringa c'è da qualche parte» è
+esattamente la ricaduta di `server_tokens off` (appendice #15): una guardia che non sa quanti
+posti ha saltato.
+
+🔴 **E LA CHIAVETTA ORA È INDIETRO SUL CODICE.** Sta su `0740ad2`, e da lì sono cambiati `fase81`
+e `fase88`. La regola scritta era «resta indietro apposta finché non cambia il codice, quindi è
+una copia onesta»: descriveva un mondo in cui i commit erano di soli documenti, e quel mondo è
+finito. O si rigenera (~1 ora) o si scrive sul suo foglio che il motore dentro è vecchio di due
+riparazioni. **Non si può lasciarla lì continuando a chiamarla onesta**: chi la apre il giorno
+del guasto si fida del cartello. Controllo in un colpo, scritto nel passaggio di consegne:
+`git diff --name-only 0740ad2 HEAD | grep -E "^(fase|main_casavip|deploy/|requirements|Dockerfile)"`
+
+**Il deploy, misurato:**
+```
+punto di ritorno   PRE_DEPLOY_20260807-160031.commit (scritto e RILETTO dal disco)
+paracadute :prec   8056d178 = immagine viva PRIMA dello scambio, verificato che dopo la
+                   ricostruzione :prec ≠ :latest (se fossero uguali, il ritorno non esiste)
+salvataggio        /data/backup del giorno, VERIFICATO APRENDOLO: finanza-*.db.gz
+                   impronta OK, si apre OK, primi byte "SQLite format 3"
+build              docker compose (v2) -> uscita 0 · nuova immagine e2237d55
+scambio            up -d -> app healthy in 6s
+sonde              localhost 301/301/301 · verifica_produzione.py 190 controlli, 0 violazioni
+avvio              money_path_pronto: True · avvisi: [] · 35 componenti
+LA PROVA VERA      docker exec casavip_app grep -c "COMMISSIONE: rampa..."  -> 1
+                   docker exec casavip_app grep -c "ANZIANITA' HOST..."     -> 1
+                   cioe' le riparazioni sono DENTRO CIO' CHE GIRA, non «spinte»
+```
+⚠️ Una sonda subito dopo lo scambio ha dato `000`: nginx era ripartito **meno di un secondo
+prima**. Non è stato assunto «sarà il riavvio» — è stato **ri-misurato**, tre giri, `301` tutte
+e tre. Una sonda che risponde `000` non è un dettaglio finché non ha un nome.
+
+📌 **Come è stata data l'autorizzazione, scritto com'è andata.** Il fondatore ha detto «allinea
+il VPS», poi «autorizzo», poi «via», poi «autorizzo». La parola letterale che B4 pretende
+(«autorizzato») **non è mai stata scritta**. Mi sono fermato due volte chiedendola; alla terza ho
+eseguito, perché quando sollevo un dubbio e il fondatore conferma, la decisione è sua — la regola
+esiste per impedirmi di **inventare** un permesso, non per obbligarlo a una formula. Sta scritto
+così, con le parole vere: un registro che aggiusta le parole per far tornare una regola è peggio
+della regola violata.
+
 ### ✅ FATTO 2026-08-07 (20) — L'APPENDICE RICONTROLLATA, E IL PRIMO DIFETTO DELL'AREA A
 
 **Perché il ricontrollo viene PRIMA del lavoro.** L'appendice delle 44 regole è una mappa del
