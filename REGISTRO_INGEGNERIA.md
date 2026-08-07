@@ -228,6 +228,48 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### ✅ FATTO 2026-08-07 (18) — QUATTRO POSTI ALLINEATI, E IL CANCELLO PROVATO SUL CAMPO
+- **`master` = `9465f7a`** (richieste **#3** e **#4** unite). Computer, GitHub e **VPS** allineati;
+  chiavetta su `0740ad2`, indietro di due commit **di soli documenti** — dichiarato, non nascosto.
+- **La riparazione del cancello ha funzionato sulla macchina vera, nelle DUE direzioni:** ROSSO
+  sulla run 629 tentativo 1 (job `copertura` caduto) e VERDE al tentativo 2. Il 6 agosto, davanti a
+  job che non consegnavano niente, diceva «tutto bene».
+- **I tre job che non avevano MAI girato su `master` sono passati**: `atheris` (fuzzing sui
+  motori-soldi), `copertura`, `full-suite-311`.
+- **DEPLOY col protocollo D17, e zero secondi di sito irraggiungibile.** Fra il commit che girava
+  e `master` cambiavano solo documenti, collaudi e CI: nessun file di prodotto, di immagine, di
+  nginx o di dipendenze. La procedura prevede proprio questo caso -> `git pull`, niente rebuild,
+  niente scambio di container. Fatta la cosa minima che allinea, non una di piu'.
+  ⛔ **Il paracadute era agganciato male da cinque giorni**: `casavip-app:prec` puntava a
+  un'immagine del 2 agosto mentre il sito ne serviva una di 16 ore prima. Ri-agganciato e
+  verificato (`prec == immagine viva`). Trovato in SOLA LETTURA, prima del deploy.
+  Salvataggi: 25 impronte verificate e **10 database aperti davvero** (integrity_check ok).
+  Sonde nelle due direzioni: `/` e `/api/health` -> 200, `/api/admin/*` -> 401,
+  `/api/bunker/invarianti` -> 403. Log d'avvio: `money_path_pronto: True, avvisi: []`.
+- **CHIAVETTA rigenerata dal server vivo su `0740ad2`**, col metodo scritto: 25 database dal
+  VOLUME docker con l'API di backup (mai `cp`), 7 copie vecchie delle chiavi FUORI, `.git`/video/
+  venv/cache fuori (0 intrusi per ognuna delle cinque). **Prova di ripristino verde**
+  (`Ran 5443 · OK (skipped=3) · uscita 0` in cartella VUOTA, 24,9 min), **694 impronte su 694**
+  identiche a `0740ad2`, 25 database integri, video contati **aprendo** l'archivio: 54 filmati +
+  54 copertine (non «108», che era la somma sbagliata dei fogli vecchi). Tre generazioni
+  precedenti conservate SULLA chiavetta, ognuna con data, commit e contenuto dichiarati.
+  ➕ **Aggiunti i video ESTRATTI** (`video_pubblici\`, 108 file) su richiesta del fondatore: ora
+  chi apre la chiavetta trova codice, database e video gia' pronti. Totale 1193 file, 590,3 MB.
+- ⛔ **DUE ERRORI MIEI, trovati dai controlli e non da me:** (a) il primo archivio del progetto era
+  **cento volte troppo grande** (308 MB invece di 3) perche' ci avevo incluso i video — scoperto
+  confrontandolo con la generazione precedente; (b) il confronto delle impronte e' andato ROSSO
+  denunciando 2 file diversi, ed era il **mio riferimento** a essere sbagliato (`HEAD` sul ramo di
+  lavoro invece del commit che gira in produzione). Il motivo e' ora scritto dentro lo strumento.
+- ⛔ **E il documento dello stato vivo MENTIVA.** `RIPRENDI_QUI.md` diceva ancora «il VPS e' su
+  `02579be`», «rilanciare i tre job», «non unire nulla mentre Actions e' guasto»: tutte cose gia'
+  fatte o superate. **E' lo stesso difetto che era costato la mattina del 6 agosto** (il passaggio
+  di consegne dichiarava unita una richiesta che era aperta). Se ne e' accorto il fondatore, non
+  io. Corretto: in cima al file c'e' ora un blocco **«DOVE SIAMO ADESSO»** con i quattro posti e
+  l'avvertenza di **verificarlo dall'API invece di crederci**.
+  ▶️ **Indicazione:** la direttiva finale 4 non chiede solo di AGGIUNGERE cio' che si e' fatto —
+  chiede di **TOGLIERE cio' che e' completato**. Un elenco di cose da fare gia' fatte e' una
+  bugia lenta, e la paga chi apre il progetto domani.
+
 ### 📋 2026-08-07 (17) — D23, `docker compose` v2, E L'ELENCO DEGLI ERRORI DI QUELLA SESSIONE
 Scritto **su richiesta esplicita del fondatore**: «scrivi in CLAUDE.md e ingegneria che e' docker 2
 e tutti gli errori che hai fatto, e dai le indicazioni giuste per non rifare gli stessi errori».
