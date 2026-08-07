@@ -13,7 +13,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 9465f7a
+CONSEGNE AGGIORNATE A: 303e989
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -26,21 +26,34 @@ aveva la barra sotto mano e l'IA non può misurarla da sé — è il buco che D2
 per cui dal 2026-08-07 il blocco si scrive **anche** a ogni blocco di lavoro chiuso, senza aspettare
 nessun numero. Si legge col comando `/context`.*
 
-### ⛔ IL PRIMO GESTO: CONTROLLARE, NON RICORDARE
+### ⛔ IL PRIMO GESTO: MISURARE I QUATTRO POSTI. QUI NON C'È SCRITTO DOVE SONO.
+⛔ **E non è una dimenticanza: è una regola.** Un commit scritto qui **nasce già vecchio** — lo si
+scrive prima del commit che lo cambierà. Il 2026-08-07 questo blocco ha dichiarato per ore
+`VPS 9465f7a` mentre il server era su `0740ad2`, e poi tutti e tre i numeri sono diventati falsi
+al primo commit successivo. È **la stessa trappola** che il progetto aveva già imparato per la
+chiavetta: *«qui non si scrivono più commit… la copia si porta dentro una descrizione FALSA di se
+stessa, che è peggio di nessuna descrizione, perché chi la apre il giorno del guasto si fida»*.
+⚠️ La guardia `TestIlPassaggioDiConsegneNonRestaINDIETRO` **non protegge da questo**: conta i
+commit, non verifica che i numeri scritti siano veri. Lo dichiara da sé, ed è il suo limite.
+
+**I quattro posti si LEGGONO, non si ricordano. Sono quattro comandi:**
 ```
-computer   9465f7a      GitHub   9465f7a      VPS   9465f7a      chiavetta   0740ad2
+git rev-parse --short HEAD                                          (computer)
+git rev-parse --short origin/master                                 (GitHub)
+ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'   (VPS)
+la riga «Commit codice:» in  Desktop\BOOKINVIP USB 2026\LEGGIMI-RIPRISTINO.txt  (chiavetta)
 ```
-**Non crederci: verificalo.** Un passaggio di consegne sbagliato è già costato una mattina intera —
-il 2026-08-06 dichiarava unita la richiesta #1, e l'API rispondeva `merged: false`.
+E per lo stato delle richieste di unione — **il 2026-08-06 il passaggio di consegne ne dichiarava
+una unita che era aperta, ed è costata una mattina**:
 ```
-https://api.github.com/repos/edilmax/Core_Auto/branches/master
 https://api.github.com/repos/edilmax/Core_Auto/pulls?state=all
-git rev-parse HEAD                                   (sul computer)
-ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse HEAD'
+https://api.github.com/repos/edilmax/Core_Auto/branches/master
 ```
-**La chiavetta è indietro di due commit e NON è un errore:** quei due toccano **solo `CLAUDE.md` e
-`REGISTRO_INGEGNERIA.md`**. Il suo foglio dichiara `0740ad2` ed è esattamente `0740ad2`, provato.
-Si rigenera al prossimo lavoro che tocca il **codice**: la trafila completa costa circa un'ora.
+📌 **La chiavetta resta indietro apposta** finché non cambia il **codice**: i commit di soli
+documenti non giustificano un'ora di rigenerazione, e il suo foglio dichiara sempre il commit che
+contiene davvero — quindi è una copia onesta, non una copia che mente.
+La trafila completa della chiavetta (archivi dal server vivo + prova di ripristino + confronto di
+**ogni** impronta) costa circa **un'ora**: il metodo è più giù, nella sezione «La chiavetta».
 
 ### ✅ COSA È STATO FATTO (6-7 agosto)
 - **Il `gate` — l'unico controllo che protegge `master` — diceva VERDE con job bloccanti che non
