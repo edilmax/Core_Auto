@@ -228,6 +228,74 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### ✅ FATTO 2026-08-06 (16) — il `gate` diceva VERDE quando un job non consegnava NIENTE
+- **IL DIFETTO, visto sul campo e due volte.** Run **627** su `a67eef6`: al tentativo 1 cinque
+  job bloccanti sono morti in «Set up job» (`Failed to resolve action download info` ·
+  `Service Unavailable` · `Bad Gateway`); al tentativo 2 tre non hanno mai ottenuto una macchina
+  (`The job was not acquired by Runner of type hosted even after multiple attempts`, esito
+  `cancelled`). **In tutti e due i casi il `gate` ha concluso `success`** col passo «VERDETTO
+  ROSSO» **saltato** — e `cancelled` e' UNA DELLE TRE PAROLE che quella condizione dichiara di
+  sorvegliare. Il `gate` e' l'unico check richiesto dalla protezione di `master`.
+- **NON e' una regressione nostra:** sulle run rosse **620** (`full-suite`) e **595**
+  (`mutazione`) il passo era scattato regolarmente. La differenza non e' il job, e' **il modo di
+  cadere**: quelli morti sul contenuto lasciano un esito, quelli che non partono non lasciano
+  niente. Causa esterna confermata da una fonte non nostra (collaudo 7): bollettino GitHub,
+  incidente **`critical` su Actions dalle 15:22**, `major_outage` alle 16:40.
+- ⛔ **DICHIARATO NON MISURATO (D18 punto 3):** il **meccanismo**. Il log del gate risponde `403`
+  senza credenziali e le credenziali non si toccano (regola ferrea 14), quindi non e' provato se
+  `needs.*.result` fosse incompleto o se l'orchestratore avesse compilato male il registro (fra
+  le note della run compare anche un `Internal server error`). **La riparazione e' stata scelta
+  apposta perche' regge sotto ENTRAMBE le ipotesi.**
+- **LA RIPARAZIONE — `.github/workflows/ci.yml`, UNA riga di condizione.** Aggiunto il quarto
+  termine: `join(needs.*.result, ' ') != 'success … success'`. Il gate smette di cercare una
+  parola brutta fra gli esiti **arrivati** e pretende il proprio **DENOMINATORE**: dieci esiti,
+  tutti `success`. Un controllo che **sparisce** diventa indistinguibile da un controllo
+  **bocciato**. Le tre righe precedenti restano: **nominano** i modi di fallire e ognuna e'
+  provata da sola. Aggiornato anche il messaggio `::error`, che ora spiega la riga **vuota**
+  (osservabile forte, regola ferrea 9).
+- **LE 6 GUARDIE NUOVE in `test_pipeline_ci.py`, classe `TestUnJobCheNonConsegnaNiente`, VISTE
+  ROSSE PRIMA** (`FAILED (failures=10)` · uscita 1, sul `ci.yml` ancora guasto):
+  `test_UN_JOB_CHE_NON_CONSEGNA_L_ESITO_FA_SCATTARE_IL_ROSSO` (da 1 a 9 esiti mancanti) ·
+  `test_ZERO_ESITI_ARRIVATI_NON_E_UN_SUCCESSO` ·
+  `test_TUTTI_ARRIVATI_E_TUTTI_VERDI_RESTA_VERDE` (l'altra direzione: non deve gridare a macchina
+  sana) · `test_CONTARE_NON_FA_PERDERE_DI_VISTA_I_ROSSI_NORMALI` ·
+  `test_IL_DENOMINATORE_DICHIARATO_E_RICALCOLATO_DAI_NEEDS` (la stringa non si legge: si **rifa'**
+  dal numero di `needs`, cosi' un bloccante aggiunto senza allungarla fa rosso lo stesso giorno) ·
+  `test_LA_CONDIZIONE_DI_IERI_SAREBBE_ROSSA_QUI` (inchioda il rosso nella suite **per sempre**, e
+  la sua seconda meta' dimostra che il valutatore non e' guasto: la condizione vecchia i rossi
+  VERI li vedeva).
+- **Il valutatore ha imparato il quarto termine invece di rifiutarlo** (`_scomponi`,
+  `denominatore_preteso`, `verdetto_rosso_completo`). Era il guardiano a fare il suo mestiere:
+  **rifiuta apposta le forme che non sa giudicare**, quindi cambiare il cancello obbliga a
+  insegnargli la forma nuova. Nessuna protezione vecchia e' stata indebolita: le 27 guardie
+  preesistenti su `ci.yml` restano verdi.
+- ⛔ **DUE SCORCIATOIE SCARTATE, e vanno dette:** (a) far fallire il passo con un comando diverso
+  da `exit 1`, cosi' il conteggio «un solo punto di rottura» non se ne accorge — e' **aggirare**
+  una guardia, non ripararla; (b) rilassare il test vecchio perche' dava fastidio.
+- ⚠️ **Il verde e' LOCALE.** GitHub era a terra: **la CI vera non ha ancora giudicato questa
+  riparazione** (regola ferrea 8: il verde locale e' un indizio). Va guardata la tabella dei job
+  al primo giro utile.
+- **D22 si e' fatta valere DA SOLA, per la prima volta senza un umano di mezzo:**
+  `test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO` e' andata rossa (`5437 != 5443`) prima
+  che me ne accorgessi. Numero **rimisurato** col caricatore su questo albero: **5443**.
+- 🔦 **E QUEL NUMERO HA SCOPERTO UNA ZONA CIECA VERA, che non c'entra col cancello.** Il giro
+  intero stampava `Ran 5438` mentre il caricatore contava `5443`: **cinque test che esistono e
+  non venivano eseguiti**, tutti in `test_backup_completo.TestRipristinoAPezziNonPassa` — le
+  guardie su **come si rimette in piedi il server da un backup**. Verificato che non era un
+  errore di conteggio: 5443 nomi, tutti diversi, 0 doppioni, 0 moduli non importabili.
+  **Causa:** quel `setUpClass` salta l'intera classe senza `bash` e `openssl`, e `openssl` non
+  e' nel `PATH` di PowerShell (pero' e' installato: `C:\Program Files\Git\usr\bin`). Con gli
+  strumenti a posto le cinque passano (`Ran 5 tests · OK · uscita 0`).
+  ⛔ **PERCHE' NON SI VEDEVA:** quando e' `setUpClass` a saltare, unittest registra **UN solo
+  salto**, **non conta i 5 test** nel totale `Ran`, e in verboso stampa `skipped '...'` **senza
+  il nome della classe**. Il conto torna alla riga: `5437 + 6 − 5 = 5438`, e `skipped` 3 → 4.
+  ⚠️ Attenzione anche a `bash`: senza il PATH di Git risolve a `C:\Windows\system32\bash.exe`,
+  che e' quello di **WSL**. Il modo giusto di lanciare la suite su questo computer e' scritto in
+  `RIPRENDI_QUI.md`. Su Linux (CI e server) il salto e' gia' vietato: li' e' `AssertionError`.
+  💡 **Lezione oltre il caso:** un salto dichiarato e' legittimo, ma **un salto che non dice il
+  proprio nome e' una zona cieca**. A fare da spia e' stato il disaccordo fra chi ELENCA i test
+  e chi li ESEGUE: quando i due numeri divergono non si sceglie il piu' comodo, si va a vedere.
+
 ### ✅ FATTO 2026-08-06 (15) — D21 e D22: il contesto a meta', e i numeri che portano la misura
 - **D21 — al 50% del contesto si salva tutto, si allinea tutto e si RICOMINCIA DA CAPO.** Soglia
   **fissata dal fondatore**: e' una scelta di budget, non una misura. Il motivo non e' il

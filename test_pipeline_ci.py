@@ -212,8 +212,19 @@ def _comandi_di_controllo(job):
 # ---------------------------------------------------------------------------
 _TERMINE = re.compile(r"^contains\(\s*needs\.\*\.result\s*,\s*'([a-z_]+)'\s*\)$")
 
+# Il termine del DENOMINATORE: non cerca una parola brutta fra gli esiti arrivati,
+# pretende che siano arrivati TUTTI e siano TUTTI verdi. E' l'unico dei quattro che
+# vede il caso "nessun verdetto affatto" (2026-08-06, run 627).
+_TERMINE_DENOMINATORE = re.compile(
+    r"^join\(\s*needs\.\*\.result\s*,\s*' '\s*\)\s*!=\s*'((?:success )*success)'$")
 
-def stati_catturati(espressione):
+
+def _scomponi(espressione):
+    """Spezza la condizione del verdetto nei suoi termini, senza fidarsi.
+
+    Restituisce (stati_cercati, denominatore_preteso). Il denominatore e' None se
+    quel termine non c'e': ed e' proprio la sua assenza il difetto del 2026-08-06.
+    """
     corpo = espressione.strip()
     if corpo.startswith("${{") and corpo.endswith("}}"):
         corpo = corpo[3:-2].strip()
@@ -222,14 +233,32 @@ def stati_catturati(espressione):
                          "servirebbero PIU' job rossi insieme per far scattare il "
                          "rosso, e un job rosso da solo passerebbe. Va in OR.")
     stati = []
+    denominatore = None
     for parte in corpo.split("||"):
-        trovato = _TERMINE.match(parte.strip())
-        if trovato is None:
-            raise ValueError("termine non riconosciuto nella condizione del verdetto: "
-                             "%r (atteso: contains(needs.*.result, '<esito>'))"
-                             % parte.strip())
-        stati.append(trovato.group(1))
-    return stati
+        pezzo = parte.strip()
+        trovato = _TERMINE.match(pezzo)
+        if trovato is not None:
+            stati.append(trovato.group(1))
+            continue
+        contato = _TERMINE_DENOMINATORE.match(pezzo)
+        if contato is not None:
+            if denominatore is not None:
+                raise ValueError("il termine del denominatore compare due volte")
+            denominatore = contato.group(1)
+            continue
+        raise ValueError("termine non riconosciuto nella condizione del verdetto: "
+                         "%r (attesi: contains(needs.*.result, '<esito>') oppure "
+                         "join(needs.*.result, ' ') != '<tutti success>')" % pezzo)
+    return stati, denominatore
+
+
+def stati_catturati(espressione):
+    return _scomponi(espressione)[0]
+
+
+def denominatore_preteso(espressione):
+    """La stringa di `success` che la condizione pretende, o None se non conta."""
+    return _scomponi(espressione)[1]
 
 
 def verdetto_rosso(stati, risultati):
@@ -576,6 +605,150 @@ class TestCondizioneDelVerdetto(unittest.TestCase):
                 else ("needs.%s.result" % job)
             self.assertIn(riferimento, testo,
                           "il riepilogo del gate non mostra l'esito di %r" % job)
+
+
+# ---------------------------------------------------------------------------
+#  Il caso che nessuno scenario copriva: un job che NON CONSEGNA NIENTE.
+#
+#  Tutti gli scenari qui sopra costruiscono SEMPRE un elenco lungo quanto i
+#  needs e ne guastano una casella. Il 2026-08-06 la realta' ne ha prodotto un
+#  altro, e due volte di fila, sulla run 627 del commit a67eef6:
+#    - tentativo 1: cinque job bloccanti morti nel passo "Set up job"
+#      ("Failed to resolve action download info", "Service Unavailable");
+#    - tentativo 2: tre job bloccanti mai partiti
+#      ("The job was not acquired by Runner of type hosted").
+#  In tutti e due i casi il gate ha concluso `success` con il passo del verdetto
+#  rosso SALTATO. La seconda volta gli esiti erano `cancelled`, cioe' una delle
+#  tre parole che la sua condizione dichiara per iscritto di sorvegliare.
+#
+#  COSA E' MISURATO E COSA NO (D22, e non si imbroglia). Misurato dall'API:
+#  gli esiti dei job, l'esito del gate, i passi saltati, le note di GitHub e
+#  l'incidente "critical" su Actions aperto alle 15:22. NON misurato: il
+#  MECCANISMO. Il log del gate risponde 403 senza credenziali e le credenziali
+#  non si toccano, quindi non sappiamo se `needs.*.result` fosse incompleto
+#  oppure se l'orchestratore abbia compilato male il registro (fra le note della
+#  run compare anche un "Internal server error").
+#
+#  Percio' questa guardia NON pretende di aver capito il meccanismo: pretende la
+#  proprieta' che regge in ENTRAMBI i casi. "C'e' scritto da qualche parte
+#  `failure`?" e' cieco per omissione; "sono arrivati TUTTI, e sono tutti
+#  `success`?" no. E' la stessa lezione gia' pagata dalla rete di mutazione:
+#  ogni guardia dichiara il proprio DENOMINATORE, non solo quanti rotti ha visto.
+# ---------------------------------------------------------------------------
+
+
+def verdetto_rosso_completo(espressione, esiti_arrivati):
+    """Come GitHub valuta la condizione INTERA, denominatore compreso.
+
+    `esiti_arrivati` e' l'elenco degli esiti che sono davvero arrivati: puo'
+    essere piu' corto dei needs, ed e' esattamente il caso che il valutatore
+    precedente non sapeva rappresentare.
+    """
+    stati, denominatore = _scomponi(espressione)
+    if denominatore is not None and " ".join(esiti_arrivati) != denominatore:
+        return True
+    return verdetto_rosso(stati, esiti_arrivati)
+
+
+class TestUnJobCheNonConsegnaNiente(unittest.TestCase):
+    """Un esito che NON ARRIVA deve pesare quanto un esito ROSSO.
+
+    Un job che non ottiene mai una macchina non e' "assente": e' un controllo
+    che non e' stato fatto. Se il gate lo tratta come silenzio-assenso, il
+    semaforo unico che protegge master diventa verde proprio nel momento in cui
+    la CI e' meno affidabile - cioe' quando serve di piu'.
+    """
+
+    def setUp(self):
+        self.doc = _doc_ci()
+        gate = self.doc["jobs"][GATE]
+        self.quanti = len(gate["needs"])
+        rossi = [p for p in _passi(gate)
+                 if isinstance(p.get("run"), str) and "exit 1" in p["run"]]
+        self.assertEqual(len(rossi), 1,
+                         "nel gate deve esserci UNO e un solo passo che lo fa "
+                         "fallire; trovati %d" % len(rossi))
+        self.condizione = rossi[0]["if"]
+        self.stati = stati_catturati(self.condizione)
+
+    def test_UN_JOB_CHE_NON_CONSEGNA_L_ESITO_FA_SCATTARE_IL_ROSSO(self):
+        """Il caso vero del 2026-08-06: tre job annullati e gate VERDE."""
+        for mancanti in range(1, self.quanti):
+            presenti = ["success"] * (self.quanti - mancanti)
+            with self.subTest(mancanti=mancanti):
+                self.assertTrue(
+                    verdetto_rosso_completo(self.condizione, presenti),
+                    "%d job bloccanti su %d non hanno consegnato NESSUN esito e "
+                    "il gate resta VERDE: cerca la parola 'failure' fra gli "
+                    "esiti arrivati invece di contare quanti ne dovevano "
+                    "arrivare, quindi un controllo che sparisce e' "
+                    "indistinguibile da un controllo passato"
+                    % (mancanti, self.quanti))
+
+    def test_ZERO_ESITI_ARRIVATI_NON_E_UN_SUCCESSO(self):
+        """Il caso estremo: non ha girato NIENTE, e il gate dice VERDE."""
+        self.assertTrue(
+            verdetto_rosso_completo(self.condizione, []),
+            "con ZERO esiti ricevuti il gate e' verde: e' il verde piu' finto "
+            "possibile, perche' non e' stato controllato proprio niente")
+
+    def test_TUTTI_ARRIVATI_E_TUTTI_VERDI_RESTA_VERDE(self):
+        """L'altra direzione. Una guardia che grida sempre viene spenta, e un
+        falso allarme e' un difetto quanto un allarme mancato (regola ferrea 10)."""
+        self.assertFalse(
+            verdetto_rosso_completo(self.condizione, ["success"] * self.quanti),
+            "il gate diventa rosso anche a macchina sana: cosi' nessuno potrebbe "
+            "piu' unire niente, e in due giorni qualcuno toglierebbe il controllo")
+
+    def test_CONTARE_NON_FA_PERDERE_DI_VISTA_I_ROSSI_NORMALI(self):
+        """Il denominatore si AGGIUNGE ai tre esiti sorvegliati, non li sostituisce."""
+        for posizione in range(self.quanti):
+            for cattivo in ESITI_NON_VERDI:
+                arrivati = ["success"] * self.quanti
+                arrivati[posizione] = cattivo
+                with self.subTest(job=posizione, esito=cattivo):
+                    self.assertTrue(
+                        verdetto_rosso_completo(self.condizione, arrivati),
+                        "il job in posizione %d con esito %r passerebbe "
+                        "indisturbato" % (posizione, cattivo))
+
+    def test_IL_DENOMINATORE_DICHIARATO_E_RICALCOLATO_DAI_NEEDS(self):
+        """La stringa nel file non si legge: si RIFA' dal numero di job.
+
+        E' il pezzo che impedisce alla riparazione di marcire: chi aggiunge un
+        job bloccante senza allungare quella riga trova rosso lo stesso giorno.
+        """
+        dichiarato = denominatore_preteso(self.condizione)
+        self.assertIsNotNone(
+            dichiarato,
+            "la condizione del verdetto non conta quanti esiti sono arrivati: "
+            "e' cieca per omissione, ed e' il difetto visto il 2026-08-06")
+        self.assertEqual(
+            dichiarato, " ".join(["success"] * self.quanti),
+            "il gate dichiara un numero di esiti attesi diverso dai suoi %d "
+            "needs: uno dei due mente" % self.quanti)
+
+    def test_LA_CONDIZIONE_DI_IERI_SAREBBE_ROSSA_QUI(self):
+        """VISTO ROSSO, e inchiodato nella suite per sempre.
+
+        Se un domani qualcuno riscrive la condizione com'era prima del
+        2026-08-06, questa guardia ridiventa rossa lo stesso giorno. E la
+        seconda meta' del test dimostra che il valutatore non e' rotto: quella
+        condizione i rossi VERI li vedeva benissimo.
+        """
+        ieri = ("${{ contains(needs.*.result, 'failure') "
+                "|| contains(needs.*.result, 'cancelled') "
+                "|| contains(needs.*.result, 'skipped') }}")
+        self.assertFalse(
+            verdetto_rosso_completo(ieri, ["success"] * (self.quanti - 1)),
+            "la condizione di ieri avrebbe dovuto lasciar scappare un job che "
+            "non consegna niente: se non e' cosi', questa guardia non sta "
+            "misurando il difetto che dice di misurare")
+        self.assertTrue(
+            verdetto_rosso_completo(
+                ieri, ["success"] * (self.quanti - 1) + ["failure"]),
+            "la condizione di ieri vedeva i rossi veri: se qui risultasse cieca "
+            "anche a quelli, il valutatore sarebbe guasto")
 
 
 class TestJobCopertura(unittest.TestCase):

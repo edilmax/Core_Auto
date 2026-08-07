@@ -661,10 +661,48 @@ jobs:
             echo ""
             echo "I job \`lint-severo\` e \`zap\` sono informativi e non contano qui."
           } >> "$GITHUB_STEP_SUMMARY"
+      # ----------------------------------------------------------------------
+      #  LA QUARTA CONDIZIONE: IL DENOMINATORE. Aggiunta il 2026-08-06.
+      # ----------------------------------------------------------------------
+      #  Le prime tre righe cercano una parola BRUTTA fra gli esiti arrivati.
+      #  Sono cieche per omissione: se un esito non arriva affatto, non c'e'
+      #  nessuna parola brutta da trovare e il gate conclude VERDE.
+      #
+      #  Non e' teoria, e' successo: run 627 sul commit a67eef6, DUE VOLTE.
+      #  Tentativo 1 - cinque job bloccanti morti in "Set up job" durante
+      #  l'incidente "critical" di GitHub Actions aperto alle 15:22 ("Failed to
+      #  resolve action download info", "Service Unavailable", "Bad Gateway").
+      #  Tentativo 2 - tre job mai partiti ("The job was not acquired by Runner
+      #  of type hosted even after multiple attempts"), esito `cancelled`, cioe'
+      #  UNA DELLE TRE PAROLE che queste righe dichiarano di sorvegliare.
+      #  In tutti e due i casi: passo SALTATO, gate `success`, master protetto
+      #  da un semaforo verde che non aveva controllato niente.
+      #
+      #  ONESTA' SUI LIMITI (D18 punto 3): non sappiamo il MECCANISMO. Il log
+      #  del gate richiede credenziali e le credenziali non si toccano, quindi
+      #  non e' misurato se `needs.*.result` fosse incompleto o se
+      #  l'orchestratore avesse sbagliato a compilarlo (nelle note della run
+      #  compare anche un "Internal server error"). Questa riga non pretende di
+      #  aver capito la causa: pretende la proprieta' che regge in ENTRAMBI i
+      #  casi. Chiedere "sono arrivati TUTTI, e sono tutti success?" non e'
+      #  cieco per omissione; chiedere "c'e' scritto failure?" si'.
+      #
+      #  Le prime tre righe NON sono ridondanti da togliere: NOMINANO i modi di
+      #  fallire, e ognuna e' provata da sola in test_pipeline_ci.py. La quarta
+      #  aggiunge il caso che non ha nome: nessun verdetto affatto.
+      #
+      #  >>> LA STRINGA E' SOTTO GUARDIA: test_pipeline_ci.py la RICALCOLA dal
+      #      numero di job nei `needs` e va ROSSO se divergono. Aggiungere un job
+      #      bloccante senza allungare questa riga fa fallire la suite lo stesso
+      #      giorno - non fra sei mesi, quando il conto non torna piu' a nessuno.
       - name: VERDETTO ROSSO se un job bloccante non e' verde
-        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        if: >-
+          ${{ contains(needs.*.result, 'failure')
+          || contains(needs.*.result, 'cancelled')
+          || contains(needs.*.result, 'skipped')
+          || join(needs.*.result, ' ') != 'success success success success success success success success success success' }}
         run: |
-          echo "::error title=CI ROSSA::Almeno un job bloccante non e' verde. Guarda la tabella qui sopra: il job con esito diverso da 'success' e' quello da aprire."
+          echo "::error title=CI ROSSA::Almeno un job bloccante non e' verde, OPPURE non ha consegnato nessun esito. Guarda la tabella qui sopra: se un job ha esito diverso da 'success' e' quello da aprire; se una riga e' VUOTA quel job non e' mai partito (guasto di GitHub o runner mai assegnato) e il suo controllo NON e' stato fatto."
           exit 1
       - name: VERDETTO VERDE
         run: echo "Tutti i job bloccanti sono verdi. La CI e' VERDE."
