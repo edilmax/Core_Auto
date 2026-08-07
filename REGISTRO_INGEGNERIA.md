@@ -228,6 +228,89 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### 📋 2026-08-07 (17) — D23, `docker compose` v2, E L'ELENCO DEGLI ERRORI DI QUELLA SESSIONE
+Scritto **su richiesta esplicita del fondatore**: «scrivi in CLAUDE.md e ingegneria che e' docker 2
+e tutti gli errori che hai fatto, e dai le indicazioni giuste per non rifare gli stessi errori».
+
+#### 🐳 `docker compose` v2 — ORA E' IN `CLAUDE.md`, DENTRO D17
+Prima stava solo in `DEPLOY.md`, che si legge **al momento del deploy**: troppo tardi, perche' chi
+sbaglia quel comando lo sbaglia mentre sta gia' lavorando sul server vivo. Adesso e' in D17, che si
+ricarica a ogni sessione.
+- **`docker compose` (DUE parole) = v2.** E' l'unica ammessa; sul VPS gira la `2.29.7`.
+- **`docker-compose` (col trattino) = v1: BUTTA GIU' nginx**, cioe' il sito. Sul server e' stata
+  **disinstallata e bloccata**, e al suo posto c'e' un segnaposto che lo spiega a chi la digita.
+- ⚠️ **Il FILE si chiama `docker-compose.casavip.yml`, col trattino.** E' il suo nome, non il
+  comando: `docker compose -f docker-compose.casavip.yml up -d` e' **corretto**. Vederli insieme
+  sulla stessa riga confonde, e va detto una volta per tutte invece di rispiegarlo ogni volta.
+
+#### ⛔ GLI ERRORI CHE HO FATTO, uno per uno, con l'indicazione per non rifarli
+Nessuno ha prodotto danni — il prodotto non e' mai stato toccato — ma tutti hanno **fatto perdere
+tempo**, e tre avrebbero potuto produrre un **verde che non prova niente**.
+
+1. **Ho letto l'esito attraverso un tubo.** `python ... | Select-Object -Last 40` e poi il codice
+   d'uscita. E' gia' vietato dalla regola ferrea 7, e l'ho fatto lo stesso.
+   ▶️ **Indicazione:** l'uscita si **scrive su file** (`> file 2>&1`) e il codice si legge subito
+   dopo, sulla riga successiva. Mai un filtro fra il comando e l'esito.
+2. **Ho zittito gli errori con `2>$null`.** Uno script e' fallito e il motivo era stato nascosto da
+   me: restava «uscita 1», cioe' un guasto senza nome.
+   ▶️ **Indicazione:** `2>$null` **mai** su un comando di cui si vuole l'esito. Il rumore si toglie
+   con `-W ignore::ResourceWarning`, che spegne una famiglia dichiarata, non tutto.
+3. **Ho scritto un file dentro la cartella del progetto.** Uno script d'analisi salvava
+   `id_caricatore.txt` nella radice del repo: avrebbe sporcato `git status` e la regola ferrea 15.
+   ▶️ **Indicazione:** ogni file di appoggio nasce con un **percorso assoluto** nella cartella
+   temporanea, mai relativo alla cartella corrente.
+4. **Ho copiato per sbaglio i `.py` del progetto nella cartella di appoggio.** Un `Copy-Item` messo
+   li' senza motivo. Ripuliti subito, ma potevano far scoprire test doppi.
+   ▶️ **Indicazione:** non si copiano file del progetto per «comodita'». Si passa il percorso.
+5. **Un filtro cieco.** Cercavo le righe conclusive con un `Select-String` che, essendo
+   insensibile alle maiuscole, ha preso **tutti** gli `ok` della suite: duemila righe inutili.
+   ▶️ **Indicazione:** i filtri sull'output di un test si scrivono **ancorati** (`^Ran `, `^OK`) e
+   **sensibili alle maiuscole**.
+6. **⛔ Il piu' grave: una sonda che non poteva fallire.** Avevo annunciato che avrei verificato
+   l'area riservata su `/admin`. Quell'indirizzo **non esiste**: risponde `404`. Se l'avessi usata
+   come prova di sicurezza, avrei avuto un verde costruito da me — esattamente il difetto che
+   questo progetto esiste per scovare. Trovato **prima** di usarlo, ma per fortuna, non per metodo.
+   ▶️ **Indicazione:** una sonda negativa si prende da `collaudi/verifica_produzione.py`, che gli
+   indirizzi veri li conosce gia' (`/api/admin/*` → 401, `/api/bunker/*` → 403). E in ogni caso
+   **un 404 non e' mai la prova che qualcosa e' protetto**.
+7. **Ho descritto male lo stato di `fase177` al fondatore.** Ho detto «24 punti mai provati sul
+   modulo dei soldi», facendo sembrare che ci fosse una falla. La verita', scritta nei documenti:
+   `fase177` e' a **ZERO sopravvissuti** (143 punti, 45 buchi chiusi); i 24 sono punti **nuovi**,
+   comparsi perche' il giudice ha imparato `is`/`in` — «e' il metro che si e' allungato».
+   L'ha corretto il fondatore, non io. ▶️ **Indicazione:** prima di dire a qualcuno che una cosa e'
+   scoperta, si **legge la riga del documento** che dice com'e' messa. Un allarme sbagliato costa
+   fiducia, e la fiducia e' l'unica cosa che non si ripara con un commit.
+
+#### 🌍 DUE FATTI DELL'AMBIENTE, non errori ma trappole che tornano
+- **Su questo computer la suite va lanciata con gli attrezzi nel PATH**, altrimenti **cinque
+  guardie sul ripristino dei backup si spengono in blocco** e nessuno lo dice (unittest registra UN
+  salto solo, senza il nome della classe, e non conta quei 5 test nel totale `Ran`):
+  ```powershell
+  $env:PATH = "C:\Program Files\Git\usr\bin;C:\Program Files\Git\bin;" + $env:PATH
+  python -m unittest discover -s . -p "test_*.py"
+  ```
+  ⚠️ Senza quel PATH, `bash` risolve a `C:\Windows\system32\bash.exe`, che e' quello di **WSL**.
+- **I comandi lanciati in sottofondo da questa sessione vengono UCCISI dall'ambiente** (successo 5
+  volte in una notte, mai per mano del fondatore). Le cose lunghe — suite, sorveglianze — si
+  lanciano **staccate** (`Start-Process pwsh -File ...`) e scrivono l'esito su file: cosi'
+  sopravvivono anche alla chiusura della chat.
+
+#### ✅ COSA E' ANDATO BENE, e va detto perche' e' ripetibile
+- Il numero della suite che non tornava (`5443` raccolti contro `5438` eseguiti) **non e' stato
+  arrotondato**: inseguito fino al nome dei cinque test. E' cosi' che si e' trovata la zona cieca.
+- Il paracadute del server (`:prec`) e' stato trovato agganciato a un'immagine di **cinque giorni
+  prima** — in sola lettura, **prima** del deploy e non durante.
+- Il cancello riparato ha funzionato sulla macchina vera **nelle due direzioni**: ROSSO quando
+  `copertura` e' caduta (run 629 tentativo 1), VERDE quando e' rientrata (tentativo 2).
+
+#### ⚠️ RESTA APERTO: `copertura` E' INSTABILE
+Stesso albero (`93c5741`), stesso job: **verde** sulla richiesta #3, **rosso** su `master` mezz'ora
+dopo, **verde** al rilancio. Non e' la soglia (misurata **84,7%** contro un minimo di 82): a cadere
+e' il passo «Suite completa SOTTO MISURA», cioe' la suite **con lo strumento di coverage attaccato**
+— mentre `full-suite`, senza strumento, passa sempre. Il commento in `ci.yml` prevedeva proprio
+questo. ⛔ **Un test che va verde o rosso a caso e' esso stesso un difetto** (regola dei 10
+collaudi): va aperto, ma non e' stato aperto oggi.
+
 ### ✅ FATTO 2026-08-06 (16) — il `gate` diceva VERDE quando un job non consegnava NIENTE
 - **IL DIFETTO, visto sul campo e due volte.** Run **627** su `a67eef6`: al tentativo 1 cinque
   job bloccanti sono morti in «Set up job» (`Failed to resolve action download info` ·
