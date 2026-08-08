@@ -57,6 +57,18 @@ qualcosa, serve la ricostruzione.
 ▶️ **PROSSIMO LAVORO: il rimborso che non lascia traccia** (voce 0-ZERO-BIS qui sotto). È un
 difetto dei soldi, trovato misurando, e viene prima di tutto il resto.
 
+### 💡 SI PUÒ PROVARE COL PYTHON DELLA CI, SUL COMPUTER — e nessuno lo sapeva
+
+Scoperto il 2026-08-08 pagandolo con una CI rossa. La suite locale gira su **Python 3.9**, la CI
+su **3.11**: una guardia nuova era verde qui e rossa là (`KeyError: '__notes__'` — su 3.11 il
+modulo `logging` accede a `e.__notes__`, PEP 678, e la mia finta eccezione esplodeva lì dentro).
+**Ma `py -3.11` esiste su questo computer.** Quindi il divario si chiude prima di spingere:
+```powershell
+py -3.11 -m unittest test_<quello_toccato>      # la stessa versione della CI
+```
+⚠️ Non sostituisce la CI (Linux ≠ Windows resta), ma toglie di mezzo la differenza che oggi è
+costata un giro rosso: **modo di rompersi n.8, ambiente diverso.**
+
 ### ⚠️ ECCEZIONE DICHIARATA ALLA REGOLA FERREA 6 — la suite locale NON è arrivata in fondo
 
 **Il commit finale del 2026-08-08 è stato fatto SENZA un giro locale completo**, e va scritto

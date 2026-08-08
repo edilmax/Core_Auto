@@ -129,7 +129,17 @@ class TestQuandoStripeRIFIUTA_SiDEVESapereIlPERCHE(unittest.TestCase):
         from fase101_stripe_connect import ProviderConnect
 
         class _EccezioneOstile(Exception):
-            def __getattr__(self, nome):        # qualunque accesso esplode
+            def __getattr__(self, nome):
+                # ⛔ I DUNDER DEVONO COMPORTARSI NORMALMENTE. La prima stesura sollevava
+                #    KeyError per QUALUNQUE attributo, dunder compresi: piu' ostile della
+                #    realta'. Su Python 3.11 il modulo `logging` accede a `e.__notes__`
+                #    mentre formatta l'eccezione (PEP 678) -> `KeyError: '__notes__'`, e
+                #    la prova falliva in CI restando VERDE in locale su 3.9.
+                #    Modo di rompersi n.8: ambiente diverso. L'ha preso la CI, non io.
+                #    Un `HTTPError` con `fp` chiuso -- il caso VERO che si sta imitando --
+                #    esplode su `read`/`code`, non sui dunder.
+                if nome.startswith("__"):
+                    raise AttributeError(nome)
                 raise KeyError(nome)
 
         def f(url, body, headers):
