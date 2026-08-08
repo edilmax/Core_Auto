@@ -131,8 +131,51 @@ class ProviderConnect:
             body = urllib.parse.urlencode(params).encode()
             r = self._fetch(url, body, headers)
             return r if isinstance(r, dict) else None
-        except Exception:
-            logger.warning("Connect POST %s fallita (ISOLATA)", url, exc_info=True)
+        except Exception as e:
+            # ⛔ IL MOTIVO STA NEL CORPO DELLA RISPOSTA, E LO BUTTAVAMO VIA (2026-08-08).
+            #    Il fondatore premeva «Collega Stripe» e vedeva `stripe_non_disponibile`;
+            #    nei registri restava solo «fallita». Stripe invece rispondeva:
+            #    «You must complete your platform profile to use Connect...» -- cioe' ci
+            #    diceva esattamente cosa fare. Costo del non leggerlo: 15 minuti per
+            #    ritrovare una frase gia' scritta; per un host vero, che se ne va.
+            #    REGOLA FERREA 9: di un servizio esterno si scrivono CODICE e MESSAGGIO.
+            #    E il livello e' ERROR, non warning: `fase186:263` dichiara di leggere
+            #    solo gli ERROR, quindi un warning qui e' un difetto invisibile.
+            #    ⛔ E TUTTA LA LETTURA STA DENTRO UN `try`, COMPRESO IL `getattr`.
+            #    Prima stava fuori, e il 2026-08-08 ha rotto l'isolamento: `getattr(e,
+            #    "read", None)` NON protegge da un'eccezione sollevata dentro
+            #    `__getattr__` (sopprime solo AttributeError), e su un HTTPError con
+            #    `fp` chiuso e' uscito un `KeyError: 'file'`. Risultato: la diagnostica
+            #    esplodeva MENTRE gestiva un'eccezione, e l'errore usciva da `_post`.
+            #    L'ha preso `test_stripe_500_sul_transfer_non_solleva`, e a cascata la
+            #    prova che il bonifico da fare a mano resti tracciato: un guasto di
+            #    Stripe avrebbe potuto far perdere la traccia dei soldi dovuti a un host.
+            #    UNA DIAGNOSTICA CHE PUO' SOLLEVARE E' PEGGIO DI NESSUNA DIAGNOSTICA.
+            #    ⛔ DUE `try` SEPARATI, e nemmeno lo stato HTTP sta fuori. Alla prima
+            #    correzione avevo protetto solo la lettura del corpo, e il
+            #    `getattr(e, "code", "?")` dentro la riga di registro passava dallo
+            #    STESSO `__getattr__` ostile: `KeyError: 'code'`, e l'errore usciva
+            #    di nuovo. Qui NIENTE che tocchi l'oggetto dell'eccezione sta fuori
+            #    da un `try`.
+            tipo = codice = msg = ""
+            stato = "?"
+            try:
+                stato = e.code
+            except Exception:
+                pass
+            try:
+                leggi = getattr(e, "read", None)
+                if callable(leggi):
+                    err = (json.loads(leggi().decode("utf-8", "replace") or "{}")
+                           or {}).get("error", {})
+                    tipo = str(err.get("type", ""))
+                    codice = str(err.get("code", ""))
+                    msg = str(err.get("message", ""))
+            except Exception:
+                pass                          # corpo illeggibile: resta il resto
+            logger.error("Connect POST %s FALLITA: stato=%s tipo=%s codice=%s -- %s",
+                         url, stato, tipo or "-", codice or "-",
+                         msg or repr(e), exc_info=True)
             return None
 
     def crea_account(self, email: str = "") -> Optional[str]:

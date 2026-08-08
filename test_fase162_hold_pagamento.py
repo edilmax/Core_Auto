@@ -469,5 +469,88 @@ class TestBuchiDiMutazione(unittest.TestCase):
                              "stanza che non c'e' piu'" % stato)
 
 
+class TestSeLHoldNonSiSCRIVE_DEVEGRIDARE(unittest.TestCase):
+    """⛔ SE LA REGISTRAZIONE DELL'HOLD FALLISCE, NON PUO' FALLIRE IN SILENZIO.
+
+    Nata dalla PROVA GENERALE del 2026-08-08 -- non da un mutante. Su un banco isolato
+    con Stripe di prova sono state fatte prenotazioni vere: pagate, registrate in
+    contabilita', con le date bloccate. Poi una cancellazione, e li' il buco:
+
+        date liberate       SI
+        rimborso REGISTRATO NO -- nessuna riga, nessuna marcatura
+        dovuto all'host     invariato, per una prenotazione CANCELLATA
+
+    Il perche' sta in `fase83`: la cancellazione marca il pendente «da rimborsare», ma
+    solo `if _pp is not None and _rec is not None`. Sul banco il pendente NON C'ERA --
+    e la sua registrazione (`fase83:5243`) e' avvolta in:
+
+        except Exception:
+            logger.warning("registrazione hold pagamento fallita (ignorata)")
+
+    Cioe': se quella scrittura fallisce, la prenotazione prosegue come se niente fosse,
+    l'ospite paga, e da nessuna parte resta il record che serve a rimborsarlo. Il
+    silenzio e' al livello WARNING, che `fase186:263` dichiara di NON leggere.
+
+    ⚠️ Onesta' sullo stato: che sul banco sia scattato PROPRIO questo `except` non e'
+    stato dimostrato -- il contenitore e' stato smontato prima di leggerne i registri.
+    Ma la riparazione vale comunque, per due motivi: (a) un fallimento silenzioso su un
+    record che serve ai rimborsi e' un difetto per le regole di questo progetto (D19,
+    regola ferrea 9, e i due gemelli chiusi il 2026-08-07); (b) facendolo GRIDARE, il
+    prossimo giro di dieci prenotazioni dira' da solo se e' lui la causa. La
+    riparazione diventa lo strumento che chiude l'indagine.
+    """
+
+    # ⛔ NON si eredita da TestFlussoHold: erediterebbe anche i suoi test, che
+    #    verrebbero RIESEGUITI qui. Duplicare prove gonfia il conteggio senza
+    #    coprire niente di nuovo -- ed e' il modo di ingannare le guardie che i
+    #    documenti di questo progetto nominano per primo. Si riusa solo il
+    #    montaggio, chiamandolo esplicitamente.
+    def setUp(self):
+        TestFlussoHold.setUp(self)
+
+    def tearDown(self):
+        TestFlussoHold.tearDown(self)
+
+    def g(self, *a, **k):
+        return TestFlussoHold.g(self, *a, **k)
+
+    def _book(self):
+        return TestFlussoHold._book(self)
+
+    def _rompi_la_registrazione(self):
+        def esplode(*a, **k):
+            raise RuntimeError("disco pieno")
+        self.sis.pagamenti_pendenti.registra = esplode
+
+    def test_il_fallimento_e_un_ERROR_che_NOMINA_la_prenotazione(self):
+        self._rompi_la_registrazione()
+        with self.assertLogs("core_auto", level="INFO") as reg:
+            b = self._book()
+        rif = b.get("riferimento", "")
+        errori = [r for r in reg.records if r.levelname == "ERROR"]
+        self.assertTrue(errori,
+                        "la registrazione dell'hold e' fallita e nei registri non c'e' un "
+                        "solo ERROR: il Guardiano legge solo quelli, quindi questo "
+                        "fallimento e' invisibile. Livelli visti: %r"
+                        % [r.levelname for r in reg.records])
+        testo = "\n".join(r.getMessage() for r in errori)
+        self.assertIn(rif, testo,
+                      "l'allarme non nomina la prenotazione (%s): senza il riferimento "
+                      "non si puo' andare a ripararla a mano.\nRegistrato: %s" % (rif, testo))
+
+    def test_ma_la_prenotazione_NON_deve_cadere(self):
+        """L'altra direzione: gridare non e' esplodere.
+
+        Se il registro degli hold ha un problema, l'ospite che sta prenotando non deve
+        vedere un errore: la prenotazione prosegue, e il grido resta per noi.
+        """
+        self._rompi_la_registrazione()
+        with self.assertLogs("core_auto", level="INFO"):
+            b = self._book()
+        self.assertTrue(b.get("riferimento"),
+                        "la prenotazione e' caduta: il rimedio ha creato un danno "
+                        "peggiore del difetto")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -245,19 +245,26 @@
     <div id="sc_msg" style="margin-top:.6rem;font-size:.9rem"></div>
   </div>
 
+  <!-- ⛔ ICONA 🛡️ E NON 💳, E DOPO GLI INCASSI (2026-08-08). Questa scheda e' l'unica del
+       pannello che chiede soldi ALL'HOST invece di dargliene, e stava subito accanto a
+       «Ricevi i pagamenti» CON LA STESSA ICONA. Il fondatore ha letto questa per prima e ha
+       pensato «qui c'e' qualcosa che non mi torna»: se lo pensa lui che il progetto lo
+       conosce, un host che arriva da fuori se ne va. L'emoji sta FUORI dallo span tradotto,
+       quindi il cambio vale in tutte le lingue senza toccare il dizionario.
+       Modo di rompersi n.3 -- «testi che mentono» -- trovato guardando, non da un test. -->
+  <div class="card" id="cardPayout" style="display:none">
+    <h2>💰 <span data-i18n="pay_h">I tuoi incassi</span></h2>
+    <p class="hint" style="font-size:.9rem" data-i18n="pay_p">Riepilogo per valuta. In maturazione = prenotazioni confermate, soldi tuoi a fine soggiorno · In transito = in pagamento · Pagato = già versato.</p>
+    <div id="payout_lista" style="margin-top:.8rem;font-size:.9rem"></div>
+  </div>
+
   <div class="card" id="cardCarta" style="display:none">
-    <h2>💳 <span data-i18n="ca_h">Aggiungi una carta (Host Verificato+)</span></h2>
+    <h2>🛡️ <span data-i18n="ca_h">Aggiungi una carta (Host Verificato+)</span></h2>
     <p class="hint" style="font-size:.9rem" data-i18n="ca_p">Facoltativo. Aggiungendo una carta ottieni il badge "Host Verificato+" e bonifici prioritari. Ci serve solo come garanzia: verrebbe usata unicamente per saldare una penale di cancellazione che i tuoi incassi futuri non coprono. La carta va direttamente a Stripe — noi non vediamo mai il numero.</p>
     <div id="ca_stato" style="margin:.5rem 0;font-size:.9rem"></div>
     <p class="hint" id="ca_mandato" style="font-size:.78rem;color:#5e6f8d;border-left:3px solid #d7e8e0;padding-left:.6rem;margin:.5rem 0"></p>
     <button id="btnCartaLink" style="background:#0f4c3a" data-i18n="ca_btn">Aggiungi carta</button>
     <div id="ca_msg" style="margin-top:.6rem;font-size:.9rem"></div>
-  </div>
-
-  <div class="card" id="cardPayout" style="display:none">
-    <h2>💰 <span data-i18n="pay_h">I tuoi incassi</span></h2>
-    <p class="hint" style="font-size:.9rem" data-i18n="pay_p">Riepilogo per valuta. In maturazione = prenotazioni confermate, soldi tuoi a fine soggiorno · In transito = in pagamento · Pagato = già versato.</p>
-    <div id="payout_lista" style="margin-top:.8rem;font-size:.9rem"></div>
   </div>
 
   <div class="key" id="cardKey">
