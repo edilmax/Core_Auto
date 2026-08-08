@@ -13,7 +13,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: c87945d
+CONSEGNE AGGIORNATE A: 4913d73
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -21,10 +21,26 @@ sopra passa più di un commit di lavoro, **la suite diventa ROSSA** — e siccom
 la suite rossa, non si può andare avanti lasciando indietro queste consegne. Chi aggiorna il blocco
 rimette qui il commit di `HEAD`.*
 
-*Scritto applicando **D21**. La percentuale di contesto **non è stata letta**: il fondatore non
-aveva la barra sotto mano e l'IA non può misurarla da sé — è il buco che D21 dichiara di avere, e
-per cui dal 2026-08-07 il blocco si scrive **anche** a ogni blocco di lavoro chiuso, senza aspettare
-nessun numero. Si legge col comando `/context`.*
+*Scritto applicando **D21**, e stavolta **la percentuale È STATA LETTA**: il fondatore ha eseguito
+`/context` → **44% (439,4k su 1M)**. È la prima volta che questo blocco porta il numero che D21
+pretende, invece della nota che spiega perché manca. Sotto il 50%, quindi non c'è violazione: si
+scrive perché **un blocco di lavoro si è chiuso**, che è l'altro innesco — quello che si vede.*
+
+**LO STATO AL MOMENTO DELLA CONSEGNA, misurato:**
+```
+contesto letto      44%  (/context, dal fondatore)
+computer            4913d73     GitHub 4913d73     VPS file 4913d73
+VPS immagine viva   62b89f0a  (costruita da d727247; i due commit dopo sono SOLI documenti,
+                    quindi nessuna ricostruzione dovuta -- DEPLOY.md §3 lo dice per i .md)
+chiavetta           e3fca06  -> DA RIGENERARE: il controllo sul motore stampa 5 righe
+git status          pulito
+suite intera        Ran 5454 tests in 1441.479s · OK (skipped=3) · uscita 0
+CI                  gate: success su 43271b4, 1267eb6 e 777abff (13 controlli, 0 non verdi)
+richieste unite     #11 #12 #13, tutte verificate merged=True rileggendo l'API
+sito                https / -> 200 · /api/health -> 200 · 190 controlli, 0 violazioni
+```
+▶️ **Il prossimo lavoro è la PROVA GENERALE** (voce 0-ZERO qui sotto): il primo pagamento vero
+di questo progetto. Prima di quella, **niente altro**.
 
 ### ⛔ IL PRIMO GESTO: MISURARE I QUATTRO POSTI. QUI NON C'È SCRITTO DOVE SONO.
 ⛔ **E non è una dimenticanza: è una regola.** Un commit scritto qui **nasce già vecchio** — lo si
@@ -176,6 +192,44 @@ acceso, e chi non lo sa ci perde un'ora.
   nella voce **(23)**.
 
 ### ⏳ COSA RESTA — in ordine di quanto costa se va male
+0-ZERO. 🎭 **LA PROVA GENERALE — È IL PRIMO LAVORO DELLA PROSSIMA SESSIONE.** Deciso dal
+   fondatore il 2026-08-08 dopo una discussione che vale più della decisione: *«se non funzionano
+   e non segnano le cose reali che devono fare è un casino, fallimento prima di iniziare»*.
+   Ha ragione, **ma i mutanti non rispondono a quella paura**: giudicano i collaudi, non il
+   prodotto, e non guardano mai se i pezzi sono **collegati** (è il punto 3 di questa lista,
+   dichiarato). A quella paura risponde solo una prenotazione vera.
+
+   **⛔ TRE COSE GIÀ MISURATE, PRIMA DI SPENDERE UN CENTESIMO** (`docker exec casavip_app
+   python3 -c` con `sqlite3` in sola lettura sui database di produzione, 2026-08-08):
+   ```
+   catalogo.alloggi          0     <- sul sito vivo NON C'E' UN SOLO ANNUNCIO
+   registro_host.host        1     <- il fondatore (rox***), attivo, termini v1.0
+   prenotazioni.db           NESSUNA TABELLA  <- lo schema non e' MAI stato creato:
+                                      in produzione non e' mai esistita una prenotazione
+   finanza.libro_giornale    0
+   ```
+   ⛔ **E il campo che conta: `stripe_account_id` dell'host è VUOTO.** Verificato nel codice,
+   non assunto: il pagamento dell'ospite passa da `fase85.crea_link` (sessione normale → **i
+   soldi arrivano alla piattaforma**), quindi la prenotazione **funziona lo stesso**; ma il
+   pagamento *verso l'host* è un trasferimento separato (`fase83:5550 connect.trasferisci`) che
+   **pretende** quell'id. Oggi si fermerebbe. *È esattamente il difetto che i mutanti non
+   trovano mai: il pezzo è perfetto e non è **collegato**.* Il bottone per collegarlo sta nel
+   pannello host (`fase83:5592` `crea_account` + `link_onboarding`).
+
+   **I PASSI** (al fondatore servono ~10 minuti; il resto lo fa l'IA):
+   1. il **fondatore** crea l'annuncio *Casa Milano test*, **5 € a notte** — ⛔ **non 0,50**:
+      è esattamente il minimo di Stripe per l'euro, e con l'arrotondamento il 3% tecnico
+      diventa invisibile (il 3% di 0,50 € è 1,5 centesimi). A 5 € i numeri si leggono;
+   2. il **fondatore** prenota e paga con la sua carta;
+   3. l'**IA** guarda dentro, uno per uno: prenotazione registrata · commissione giusta
+      (**0% nei primi 90 giorni + 3% tecnico SEMPRE**) · divisione dei soldi · riga nel libro
+      giornale che torna con Stripe · email partite;
+   4. l'**IA** rimborsa e verifica che **anche il rimborso** sia registrato;
+   5. l'**IA** cancella l'annuncio di prova e scrive cosa è tornato e cosa no.
+
+   ⚠️ Il pagamento **verso l'host** resta fuori dal giro finché il conto Stripe non è collegato.
+   Se il fondatore lo collega prima, si prova anche quello — ed è la metà più delicata.
+
 0. 💯 **AREA A — continua.** Chiuse **entrambe** le strade per cui la commissione ripiegava in
    silenzio (vedi sopra). ✅ **Il bersaglio (a) — `fase43` — era GIÀ CHIUSO**, e accorgersene è
    costato dieci minuti invece di mezza giornata di lavoro su un difetto inesistente: non c'era
