@@ -7080,8 +7080,18 @@ class RouterHTTP:
             info = (reg.info_host(hid) or {}) if (reg and hid) else {}
         except Exception:
             info = {}
+        # ⛔ NON SI OFFRE UNA GARANZIA CHE NON SI PUO' INCASSARE (2026-08-08, trovato
+        # dal fondatore guardando il pannello). Prima bastava che ESISTESSE il provider
+        # -- cioe' la chiave Stripe -- e la scheda «Aggiungi carta» compariva; ma
+        # l'addebito vero e' gated da SCATTO3_ATTIVO, che in produzione NON e' impostata.
+        # Risultato: si chiedeva all'host il numero di una carta che non avremmo potuto
+        # addebitare. Ora i due interruttori dicono la stessa cosa. Stessa lettura usata
+        # dallo sweep in `riscuoti_debiti_carta`, per non averne due che possono divergere.
+        import os as _os
+        _addebito_acceso = _os.environ.get("SCATTO3_ATTIVO", "0") == "1"
         return 200, {"carta_collegata": bool(info.get("stripe_payment_method")),
-                     "attivo": getattr(self._sys, "carta", None) is not None}
+                     "attivo": (getattr(self._sys, "carta", None) is not None
+                                and _addebito_acceso)}
 
     def riscuoti_debiti_carta(self):
         """SWEEP Scatto ③ (gated SCATTO3_ATTIVO): per gli host con debiti 'aperto' scoperti

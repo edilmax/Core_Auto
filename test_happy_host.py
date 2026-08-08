@@ -867,7 +867,18 @@ class TestStrumentiHost(_BaseHost):
                          "acct_finto_1")
 
     def test_carta_link_e_stato(self):
-        st, prima = self.chiama("GET", "/api/host/carta_stato", atteso=200)
+        # ⛔ Dal 2026-08-08 la scheda della carta si offre SOLO se l'addebito e'
+        #    acceso (SCATTO3_ATTIVO). Prima bastava che esistesse la chiave Stripe:
+        #    si chiedeva all'host il numero di una carta che non avremmo potuto
+        #    incassare. Qui l'interruttore si accende perche' questo e' il mondo in
+        #    cui quella funzione DEVE funzionare -- girare l'atteso a False avrebbe
+        #    fatto sparire in silenzio la copertura di /api/host/carta_link.
+        import os as _os
+        _os.environ["SCATTO3_ATTIVO"] = "1"
+        try:
+            st, prima = self.chiama("GET", "/api/host/carta_stato", atteso=200)
+        finally:
+            _os.environ.pop("SCATTO3_ATTIVO", None)
         self.assertEqual(prima, {"carta_collegata": False, "attivo": True})
         st, out = self.chiama("POST", "/api/host/carta_link", atteso=200)
         self.assertEqual(out["url"], "https://carta.stripe.finto/sess")

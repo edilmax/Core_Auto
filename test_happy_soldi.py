@@ -589,6 +589,12 @@ class TestRotteSoldi(_BaseSoldi):
 
     def test_carta_link_e_stato(self):
         """POST /api/host/carta_link -> 200 col mandato · GET /api/host/carta_stato -> 200."""
+        # ⛔ Dal 2026-08-08 «attivo» pretende anche SCATTO3_ATTIVO: non si offre una
+        #    garanzia che non si puo' incassare. Qui si accende, perche' e' il mondo
+        #    in cui la funzione deve funzionare.
+        import os as _os
+        _os.environ["SCATTO3_ATTIVO"] = "1"
+        self.addCleanup(_os.environ.pop, "SCATTO3_ATTIVO", None)
         s, prima = self.g("GET", "/api/host/carta_stato", None, self.tk)
         self.assertEqual((s, prima), (200, {"carta_collegata": False, "attivo": True}))
         s, link = self.g("POST", "/api/host/carta_link", {}, self.tk)

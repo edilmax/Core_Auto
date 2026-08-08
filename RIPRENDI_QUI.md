@@ -1138,7 +1138,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5454 test
+SUITE ATTUALE: Ran 5457 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis 6.141.1 + pyyaml + coverage installati
           · ⚠️ bash E openssl nel PATH (`C:\Program Files\Git\usr\bin`) — vedi qui sotto
 COMANDO:  python -m unittest discover -s . -p "test_*.py"
