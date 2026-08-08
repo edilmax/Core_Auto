@@ -13,7 +13,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 6a5b8b7
+CONSEGNE AGGIORNATE A: 45e893e
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -23,8 +23,26 @@ rimette qui il commit di `HEAD`.*
 
 ### 🟢 2026-08-08 SERA — DUE RIPARAZIONI, E UNA DIAGNOSI SMENTITA DAI FATTI
 
-⛔ **NON COMMITTATO: manca «procedi al commit».** Tutto il lavoro è **solo sul computer**;
-il VPS è stato rimesso esattamente com'era (`fase83_server.py` -> `30ff4d37af7175a8`, verificato).
+✅ **UNITO E IN PRODUZIONE.** Richiesta **#19** `merged=True` -> `master 45e893e`; CI sul ramo
+`0e2b2ff` con **`gate: success`** (12 lavori verdi, `zap` saltato per scelta dichiarata) — cioè
+il giudice aveva già parlato *prima* dell'unione. Deploy fatto col protocollo **D17**:
+
+```
+punto di ritorno  PRE_DEPLOY_20260808-201343.commit  RILETTO -> 6a5b8b7
+paracadute :prec  era 1c6df6dc (VECCHIA) -> ri-agganciato a 3c5c3a15
+                  ⛔ QUARTA VOLTA IN QUATTRO GIORNI che era agganciato male
+salvataggio       finanza-20260808-151544.db.gz  APERTO: "SQLite format 3"
+scambio           app healthy in 6s · nginx MAI riavviato (Up 28 hours)
+sonde             https / 200 · /api/health 200 · /api/bunker/invarianti 403
+giudice           verifica_produzione.py -> 190 controlli, 0 violazioni, uscita 0
+LA PROVA VERA     dentro il contenitore che gira:
+                  "RIMBORSO DOVUTO NON REGISTRATO" 1 · "rimborso dovuto per
+                  cancellazione ospite" 1 · chiamate vere tipo="rimborso" 3
+                  e fase83 nel contenitore = fase83 su disco (sha256 uguali)
+```
+**I posti, misurati dopo il deploy:** computer `45e893e` · GitHub `45e893e` · VPS file
+`45e893e` · immagine viva `0c7eb303` (paracadute `3c5c3a15`) · chiavetta `9670e11`
+⏳ **da rigenerare: stavolta è cambiato il MOTORE** (`fase83_server.py`), non solo i documenti.
 
 **① IL BANCO DI PROVA MISURAVA UN'ALTRA MACCHINA.** Partiva coi soli `--env-file` e gli
 mancavano le **18** variabili del blocco `environment:` del compose (**14** dicono dove
@@ -60,13 +78,21 @@ sbagliato DOPO l'accensione** (buco che il controllo di fedeltà, girando all'av
 📌 I controlli non eseguibili finiscono in un elenco **«NON ESEGUITI»**: non spariscono in
 silenzio, perché un salto silenzioso fa sembrare coperto ciò che nessuno ha guardato.
 
-**LO STATO, misurato:** computer `6a5b8b7` + modifiche non committate · GitHub `6a5b8b7` ·
-VPS file `6a5b8b7` · immagine viva `3c5c3a15` · chiavetta `9670e11` (indietro di **soli
-documenti**: il comando di controllo stampa 0 righe).
-File toccati: `collaudi/banco_prova.sh` · `collaudi/fedelta_banco.py` (nuovo) ·
-`collaudi/giro_banco.py` · `test_pipeline_ci.py` · `test_cancellazione_money.py` ·
-`fase83_server.py` · `RIPRENDI_QUI.md` · `REGISTRO_INGEGNERIA.md`.
-`ruff` **invariato** su tutti (stessi avvisi di `HEAD`, stesse regole); il file nuovo passa pulito.
+**④ IL CATALOGO DEGLI SBAGLI** (ordine del fondatore: *«bisogna scrivere tutti gli sbagli per
+non ripeterli più»*). **10 voci in cima a `CLAUDE.md`**, subito dopo i sei divieti — quindi si
+caricano a **ogni** sessione — e `collaudi/regole_avvio.py` le **annuncia a ogni avvio**
+contando le voci **dal file** (D22: un catalogo che cresce con un numero fermo è già una bugia).
+Non sono obblighi nuovi: sono quelli che ci sono già, visti dal lato in cui si rompono.
+I due che valgono oltre il caso: **quando una misura è assurda il primo sospetto va allo
+strumento, non al codice** · **prima di scegliere l'attrezzo, si guarda CHI LEGGE il registro**.
+
+**FILE TOCCATI dal lavoro del 2026-08-08 sera:** `collaudi/banco_prova.sh` ·
+`collaudi/fedelta_banco.py` (nuovo) · `collaudi/giro_banco.py` · `collaudi/regole_avvio.py` ·
+`test_pipeline_ci.py` · `test_cancellazione_money.py` · `fase83_server.py` · `CLAUDE.md` ·
+`RIPRENDI_QUI.md` · `REGISTRO_INGEGNERIA.md`.
+`ruff` **invariato** su tutti (stessi avvisi di `HEAD`, stesse regole); i file nuovi passano puliti.
+⚠️ *Lo stato dei posti sta scritto UNA SOLA VOLTA, nel riquadro qui sopra dopo il deploy.
+Scriverlo due volte è come è nato lo sbaglio **S10**: una delle due copie invecchia e mente.*
 
 *Scritto applicando **D21**, e stavolta **la percentuale È STATA LETTA**: il fondatore ha eseguito
 `/context` → **44% (439,4k su 1M)**. È la prima volta che questo blocco porta il numero che D21

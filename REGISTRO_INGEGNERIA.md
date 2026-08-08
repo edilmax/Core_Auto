@@ -264,6 +264,13 @@ questa taceva: **cablaggio mancante**, non scelta di progetto.
   l'allarme provato **anche a gridare** (regola 10). Più
   `test_LE_DUE_CANCELLAZIONI_LASCIANO_LO_STESSO_TIPO_DI_TRACCIA`, che pretende `tipo="rimborso"`
   almeno **3 volte** in `fase83_server.py`: se una strada tace, rosso lo stesso giorno.
+· ⛔ **E anche quella guardia aveva un buco, trovato dopo il deploy contando le occorrenze
+  sul contenitore vivo: erano 4, non 3.** Contava anche i **commenti**, e il commento che
+  spiega la scelta ne contiene uno: con 3 chiamate vere + 1 commento, cancellarne una lasciava
+  il conto a 3 e la guardia **taceva**. Ora conta solo le righe **eseguibili**, ed è stata
+  vista **rossa** rendendo muta una delle tre strade (`2 not greater than or equal to 3`).
+  *Un controllo che un commento può soddisfare non controlla niente* — è la stessa forma del
+  difetto che questa voce documenta, ricomparsa dentro la sua stessa riparazione.
 
 **MODIFICATO `collaudi/giro_banco.py`** — da 1 host a **15 host × 15 prenotazioni**, più
 pannello admin, super-admin (bunker), controversie, voucher + chat, calendario prima/dopo,
