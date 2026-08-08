@@ -534,5 +534,89 @@ class TestRiscossioneNonPuoSbagliareIDENTIFICATIVI(unittest.TestCase):
                                       "la traccia su %s non contiene l'eccezione" % nome)
 
 
+class TestNonSiChiedeUnaCartaCheNonSiPUOAddebitare(unittest.TestCase):
+    """⛔ NON SI CHIEDE UNA GARANZIA CHE NON SI PUO' USARE.
+
+    Trovato dal FONDATORE il 2026-08-08, guardando il pannello host -- non da un
+    test. La sua obiezione, con parole sue: «se sono dentro il pannello host e dice
+    di collegare una carta, li' va messo l'IBAN, non il numero della carta col CVC».
+
+    Aveva ragione, e la misura lo conferma: la scheda della carta compariva perche'
+    ESISTE LA CHIAVE STRIPE (`self._sys.carta is not None`), mentre l'addebito vero
+    e' spento da un interruttore DIVERSO, `SCATTO3_ATTIVO`, che vale "0" per difetto
+    ed e' assente in produzione (misurato nel contenitore vivo: NON IMPOSTATA).
+
+    Cioe' chiedevamo all'host il numero della sua carta per una garanzia che non
+    avremmo potuto incassare. Tutto il costo di fiducia, zero beneficio -- e nel
+    momento peggiore, mentre si recluta il primo host vero.
+
+    ⚠️ Non e' un difetto di sicurezza: il numero non passa da noi (si digita su
+    Stripe, a noi torna solo `cus_...`/`pm_...`; cercato nel codice: zero occorrenze
+    di numero carta, CVC, scadenza). E' un difetto di COERENZA: due interruttori che
+    governano la stessa funzione e dicono cose diverse.
+
+    La riparazione e' una riga: la scheda compare solo se l'addebito e' acceso.
+    Il giorno che il fondatore mette SCATTO3_ATTIVO=1, torna da sola.
+
+    ⚠️ Questa e' la famiglia di difetti che la piramide dei test NON prende: nessuno
+    aveva scritto la regola «non chiederla se non puoi usarla», quindi non c'era
+    niente da far fallire. Lo dicono i documenti del progetto: «i test provano che il
+    codice fa quello che dice; nessuno chiedeva cosa vede una persona».
+    """
+
+    def _monta(self):
+        # si riusa il montaggio di TestScatto3Router senza ereditarne i test (che
+        # verrebbero rieseguiti). `_build` non usa `self` per altro.
+        return TestScatto3Router._build(self)
+
+    def _stato(self, r, tok):
+        return r.gestisci("GET", "/api/host/carta_stato", {}, None, {"X-Host-Token": tok})
+
+    def test_la_scheda_NON_si_offre_se_l_addebito_e_spento(self):
+        sis, r, tok, hid = self._monta()
+        os.environ.pop("SCATTO3_ATTIVO", None)
+        st, out = self._stato(r, tok)
+        self.assertEqual(200, st, out)
+        self.assertFalse(
+            out.get("attivo"),
+            "il pannello host OFFRE la carta di garanzia (attivo=True) mentre "
+            "l'addebito e' spento (SCATTO3_ATTIVO assente): stiamo chiedendo il "
+            "numero di una carta che non potremmo mai incassare. Due interruttori "
+            "sulla stessa funzione devono dire la stessa cosa")
+
+    def test_la_scheda_SI_offre_quando_l_addebito_e_acceso(self):
+        """L'altra direzione, obbligatoria: un allarme provato in un verso solo
+        potrebbe gridare sempre, e un allarme sempre acceso viene spento."""
+        sis, r, tok, hid = self._monta()
+        os.environ["SCATTO3_ATTIVO"] = "1"
+        try:
+            st, out = self._stato(r, tok)
+        finally:
+            os.environ.pop("SCATTO3_ATTIVO", None)
+        self.assertEqual(200, st, out)
+        self.assertTrue(
+            out.get("attivo"),
+            "con l'addebito ACCESO la scheda deve tornare disponibile: se restasse "
+            "spenta, la riparazione avrebbe ucciso la funzione invece di allinearla")
+
+    def test_e_senza_il_provider_resta_spenta_comunque(self):
+        """Terzo caso, che la riparazione non deve perdere: se manca la chiave
+        Stripe non c'e' provider, e allora la scheda non si offre nemmeno con
+        l'interruttore acceso -- altrimenti si offrirebbe un bottone che non apre
+        niente."""
+        sis, r, tok, hid = self._monta()
+        sis.carta = None
+        os.environ["SCATTO3_ATTIVO"] = "1"
+        try:
+            st, out = self._stato(r, tok)
+        finally:
+            os.environ.pop("SCATTO3_ATTIVO", None)
+        self.assertEqual(200, st, out)
+        self.assertFalse(
+            out.get("attivo"),
+            "senza provider carta la scheda si offre lo stesso: il bottone "
+            "«Aggiungi carta» non aprirebbe niente")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
