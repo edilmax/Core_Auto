@@ -13,7 +13,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: f8de0dd
+CONSEGNE AGGIORNATE A: 9670e11
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -49,7 +49,7 @@ DEPLOY, protocollo D17, zero secondi di sito irraggiungibile
                      "Connect POST %s FALLITA" 1 · "HOLD PAGAMENTO NON REGISTRATO" 1
                      "il rimborso va eseguito A MANO" 2 · host.html aggiornato 1
 
-CHIAVETTA, generazione f8de0dd (la precedente SPOSTATA in precedente_e3fca06\)
+CHIAVETTA, generazione 9670e11 (le precedenti SPOSTATE in precedente_f8de0dd e _e3fca06\)
   (a) 702 impronte su 702 IDENTICHE · 0 diverse · 0 assenti · 25 db integri
   (b) copia estratta in cartella VUOTA: 1061 file · 5463 prove raccolte ·
       0 moduli non importabili
@@ -64,9 +64,9 @@ CHIAVETTA, generazione f8de0dd (la precedente SPOSTATA in precedente_e3fca06\)
 **LO STATO AL MOMENTO DELLA CONSEGNA, misurato:**
 ```
 contesto letto      44% a inizio blocco · 63% alla chiusura  (/context, dal fondatore)
-computer            f8de0dd     GitHub f8de0dd     VPS file f8de0dd
-VPS immagine viva   1c6df6dc  (costruita da f8de0dd) · paracadute :prec 62b89f0a
-chiavetta           f8de0dd  -> RIGENERATA oggi, tre prove (vedi sopra)
+computer            9670e11     GitHub 9670e11     VPS file 9670e11
+VPS immagine viva   3c5c3a15  (costruita da 9670e11; 152 file confrontati uno per uno) · paracadute :prec 62b89f0a
+chiavetta           9670e11  -> RIGENERATA, e il controllo sul motore non stampa NIENTE
 suite intera        Ran 5457 tests in 1491.241s · OK (skipped=3) · uscita 0
 CI                  gate: success su 43271b4 · 1267eb6 · 777abff · 757b23e · 4f66f05
 richieste unite     #11 #12 #13 #14 #15, tutte verificate merged=True rileggendo l'API
