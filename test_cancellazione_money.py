@@ -310,5 +310,157 @@ class TestCancellazioneGuastiSilenziosi(TestCancellazioneMoney):
         self.assertEqual(catturati, [], "grida su una cancellazione riuscita: %r" % (catturati,))
 
 
+class TestLaCancellazioneLasciaTracciaNeiConti(TestCancellazioneMoney):
+    """⛔ L'email promette i soldi indietro; i conti non sanno che sono dovuti.
+
+    MISURATO IL 2026-08-08 su banco di prova fedele, 15 prenotazioni vere con Stripe in
+    modalita' prova: 13 pagate, 6 cancellate. Per tutte e 6:
+        pendente 'rimborsato'  ·  payout 'trattenuto'  ·  tassa 'stornata'  ·  giornale:
+        DUE righe (l'incasso e la commissione di quando fu pagata) e NESSUNA riga di
+        rimborso. 6 su 6.
+    Cioe': la stanza torna libera, l'ospite riceve l'email che gli promette 10 EUR, e
+    nella contabilita' non risulta che quei 10 EUR siano dovuti.
+
+    LE DUE STRADE NON SI COMPORTANO ALLO STESSO MODO, ed e' li' il difetto. Quando
+    rimborsa l'ADMIN (`fase83._admin_rimborso`) una riga nel giornale viene scritta. Quando
+    cancella l'OSPITE col voucher, no. Due cammini verso lo stesso stato, uno dei due muto:
+    non e' una scelta di progetto, e' un CABLAGGIO MANCANTE (modo di rompersi n.2).
+
+    PERCHE' LO STESSO `tipo="rimborso"` DELLE ALTRE DUE STRADE, e non un attrezzo piu'
+    raffinato. La prima stesura di questa riparazione usava una NOTA DI CREDITO, che in
+    astratto e' piu' corretta: alla cancellazione il denaro non e' ancora uscito (il
+    rimborso e' manuale), e nel modello dei conti `rimborso` significa «uscito».
+    ⛔ Ma `fase177.aggrega_dac7` aggrega per host SOLO i tipi che conosce, e `rimborso` e'
+    uno di quelli; `nota_credito` no. Con la nota, la STESSA cancellazione sarebbe finita
+    nel report fiscale dell'host se la faceva l'HOST, e NON se la faceva l'OSPITE: due
+    report diversi per lo stesso fatto. **Un'imprecisione uniforme e' meglio di una
+    correttezza a macchie**, e allineare le tre strade e' la riparazione, non il contrario.
+    La lezione: prima di scegliere l'attrezzo «migliore», si guarda CHI LEGGE il registro.
+    """
+
+    def _rimborsi(self, rif):
+        return [m for m in self.sys.finanza.movimenti(rif) if m.get("tipo") == "rimborso"]
+
+    def test_UNA_CANCELLAZIONE_PAGATA_LASCIA_LA_RIGA_NEL_GIORNALE(self):
+        b = self._prenota("2026-11-05", "2026-11-07")
+        rif = b["riferimento"]
+        self._webhook(rif)                                   # il cliente HA pagato
+        s, canc = self.g("POST", "/api/concierge/cancella",
+                         {"voucher_token": b["voucher_token"]})
+        self.assertEqual(s, 200, canc)
+        promesso = canc["rimborso_cents"]
+        self.assertGreater(promesso, 0,
+                           "senza rimborso promesso questo test non proverebbe niente")
+        righe = self._rimborsi(rif)
+        self.assertEqual(
+            1, len(righe),
+            "cancellazione pagata con %d cents promessi all'ospite e %d righe di rimborso "
+            "nel giornale: l'email promette i soldi e la contabilita' non lo sa. Se il "
+            "cliente chiede «dov'e' il mio rimborso» non c'e' una lista dove guardare."
+            % (promesso, len(righe)))
+        self.assertEqual(
+            promesso, righe[0]["importo_cents"],
+            "la riga non porta la cifra PROMESSA all'ospite: una cifra sbagliata nei "
+            "conti e' peggio di nessuna cifra, perche' qualcuno ci si fida")
+        self.assertIn(rif, righe[0]["soggetto"],
+                      "la riga non dice DI CHI e' il rimborso")
+
+    def test_LE_DUE_CANCELLAZIONI_LASCIANO_LO_STESSO_TIPO_DI_TRACCIA(self):
+        """L'invariante che giustifica la scelta dell'attrezzo, e che impedisce a una
+        «migliorìa» futura di far divergere di nuovo le due strade.
+
+        Se cancella l'HOST (`fase83` scrive gia' la sua «SCATOLA NERA del RIMBORSO») e se
+        cancella l'OSPITE, il fatto e' lo stesso -- soldi dovuti indietro -- e il registro
+        che li conta (`aggrega_dac7`) e' lo stesso. Devono quindi lasciare lo STESSO tipo.
+        """
+        import io
+        import os as _os
+        percorso = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                                 "fase83_server.py")
+        with io.open(percorso, encoding="utf-8") as f:
+            sorgente = f.read()
+        quante = sorgente.count('tipo="rimborso"')
+        self.assertGreaterEqual(
+            quante, 3,
+            "le strade che devono lasciare la riga di rimborso sono TRE (rimborso admin, "
+            "cancellazione host, cancellazione ospite) ma `tipo=\"rimborso\"` compare %d "
+            "volte: una di esse e' muta, oppure usa un attrezzo diverso e finira' in un "
+            "report fiscale diverso" % quante)
+
+    def test_NON_SI_INVENTA_UN_DEBITO_MAI_PROMESSO(self):
+        """Prova di rimozione. Una cancellazione su prenotazione MAI pagata non promette
+        niente: se scrivesse comunque una nota, ci creeremmo da soli un debito verso
+        qualcuno che non ci ha mai dato un euro."""
+        b = self._prenota("2026-11-15", "2026-11-17")
+        rif = b["riferimento"]
+        s, canc = self.g("POST", "/api/concierge/cancella",
+                         {"voucher_token": b["voucher_token"]})
+        self.assertEqual(s, 200, canc)
+        self.assertEqual(0, canc["rimborso_cents"])
+        self.assertEqual(
+            [], self._rimborsi(rif),
+            "riga di rimborso su soldi MAI incassati: un debito inventato dal nulla")
+
+    def test_SE_I_CONTI_SONO_IRRAGGIUNGIBILI_IL_GUARDIANO_LO_SENTE(self):
+        """L'ALTRA direzione dell'allarme (regola ferrea 10) e la prova che D19 pretende:
+        una difesa si mette alla prova adesso, non il giorno del disastro. Qui il libro dei
+        conti viene rotto a mano e si esige DUE cose insieme:
+          · la cancellazione RIESCE lo stesso -- i conti sono la scatola nera, non devono
+            mai rompere un movimento di denaro gia' avvenuto;
+          · il registro GRIDA con un ERROR che NOMINA la prenotazione, perche' fase186:263
+            legge solo gli ERROR: un warning qui sarebbe un `pass` scritto piu' lungo.
+        """
+        import logging
+        catturati = []
+
+        class _Spia(logging.Handler):
+            def emit(self, record):
+                if record.levelno >= logging.ERROR:
+                    catturati.append(record.getMessage())
+
+        reg = logging.getLogger("core_auto")
+        h = _Spia()
+        reg.addHandler(h)
+        self.addCleanup(lambda: reg.removeHandler(h))
+
+        def _esplode(**kw):
+            raise RuntimeError("libro dei conti irraggiungibile")
+
+        originale = self.sys.finanza.movimento
+        self.sys.finanza.movimento = _esplode
+        self.addCleanup(setattr, self.sys.finanza, "movimento", originale)
+
+        b = self._prenota("2026-11-25", "2026-11-27")
+        rif = b["riferimento"]
+        self._webhook(rif)
+        s, canc = self.g("POST", "/api/concierge/cancella",
+                         {"voucher_token": b["voucher_token"]})
+        self.assertEqual(s, 200, "un guasto dei CONTI ha rotto la cancellazione: %r" % (canc,))
+        self.assertGreater(canc["rimborso_cents"], 0)
+        gridati = [m for m in catturati if "RIMBORSO DOVUTO NON REGISTRATO" in m]
+        self.assertEqual(
+            1, len(gridati),
+            "i conti erano irraggiungibili e nessuno ha gridato: l'ospite ha in mano una "
+            "promessa scritta e noi non abbiamo l'obbligazione da nessuna parte. "
+            "ERROR catturati: %r" % (catturati,))
+        self.assertIn(rif, gridati[0],
+                      "l'allarme non nomina la prenotazione: chi lo legge domani non sa "
+                      "su quale rimborso intervenire")
+
+    def test_UN_REPLAY_NON_SCRIVE_DUE_RIGHE(self):
+        """Stesso principio di `test_replay_cancellazione_non_conia_crediti`: il doppio
+        click, o il tentativo ripetuto, non deve raddoppiare un'obbligazione di denaro.
+        Qui l'idempotenza viene dall'`evento_id` 'rimborso:<rif>' di `fase177.movimento`."""
+        b = self._prenota("2026-11-20", "2026-11-22")
+        rif = b["riferimento"]
+        self._webhook(rif)
+        self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
+        self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
+        righe = self._rimborsi(rif)
+        self.assertEqual(1, len(righe),
+                         "due cancellazioni hanno prodotto %d righe di rimborso: il "
+                         "debito verso l'ospite e' raddoppiato" % len(righe))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -6150,6 +6150,42 @@ class RouterHTTP:
         if not pagato_davvero:
             tassa = 0                          # mai versata -> niente da rimborsare
         rimborso_totale = r.get("rimborso_cents", 0) + tassa
+        # LA CONTABILITA' DEVE SAPERE CHE QUEI SOLDI SONO DOVUTI. Difetto MISURATO il
+        # 2026-08-08 su banco fedele, 15 prenotazioni: 6 cancellate, e per tutte e 6 il
+        # giornale aveva solo l'incasso e la commissione di quando furono pagate. L'email
+        # qui sotto promette il rimborso all'ospite e i conti non ne sapevano niente:
+        # alla domanda «dov'e' il mio rimborso» non c'era una lista dove guardare.
+        # Quando rimborsa l'ADMIN una riga viene scritta (_admin_rimborso): due cammini
+        # verso lo stesso stato, uno muto. Cablaggio mancante, non scelta di progetto.
+        # ⛔ STESSO `tipo="rimborso"` DELLE ALTRE DUE STRADE, e non un attrezzo piu' raffinato.
+        # `fase177.aggrega_dac7` somma per host SOLO quel tipo: con una nota di credito (in
+        # astratto piu' corretta, perche' il denaro non e' ancora uscito) la STESSA
+        # cancellazione finirebbe nel report fiscale se la fa l'host e NON se la fa l'ospite.
+        # Due report diversi per lo stesso fatto e' peggio di un'imprecisione uniforme.
+        # ⚠️ DICHIARATO: `evento_id` vale 'rimborso:<rif>' ed e' idempotente, quindi se poi
+        # l'admin esegue un rimborso di importo DIVERSO il giornale tiene QUESTO. E' una
+        # proprieta' che le altre due strade hanno gia': non nasce qui.
+        if pagato_davvero and rimborso_totale > 0:
+            self._giornale(tipo="rimborso", riferimento=rif, soggetto="ospite:" + str(rif),
+                           importo_cents=int(rimborso_totale),
+                           valuta=v.get("valuta", "EUR"),
+                           causale="rimborso dovuto per cancellazione ospite")
+            # E SI VERIFICA CHE SIA ATTERRATA, non che sia stata chiamata. `_giornale`
+            # isola i guasti degradandoli a WARNING, e fase186:263 dichiara di leggere
+            # SOLO gli ERROR: qui l'email ha gia' promesso i soldi all'ospite, quindi un
+            # warning sarebbe un `pass` scritto piu' lungo. Guardare l'EFFETTO becca anche
+            # il caso in cui il movimento torni None in silenzio.
+            try:
+                _fc = getattr(self._sys, "finanza", None)
+                _scritta = (_fc is None or any(
+                    m.get("tipo") == "rimborso" for m in _fc.movimenti(str(rif))))
+            except Exception:
+                _scritta = False
+            if not _scritta:
+                logger.error("RIMBORSO DOVUTO NON REGISTRATO NEI CONTI | rif %s | %d "
+                             "cents promessi all'ospite via email: registrarlo A MANO dal "
+                             "pannello, o quei soldi non risultano dovuti da nessuna parte",
+                             rif, rimborso_totale)
         # il credito nasce dal trattenuto ORIGINALE della politica: il taglio anti-perdita
         # (tetto di cassa) non deve MAI coniare Credito Viaggio nuovo dal nulla.
         cv_cents, cv_token = self._credito_anti_rimpianto(tratt_originale,

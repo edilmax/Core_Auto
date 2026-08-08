@@ -4044,5 +4044,191 @@ class TestIlCronometroNonPuoMENTIRE(unittest.TestCase):
                          "nuovo che prendesse lo stesso nome. %r" % fantasmi)
 
 
+class TestIlBancoDiProvaMisuraLaStessaMacchinaDellaProduzione(unittest.TestCase):
+    """⛔ Un banco con un ambiente diverso non prova il prodotto: prova un'ALTRA macchina.
+
+    MISURATO IL 2026-08-08, non ipotizzato. `collaudi/banco_prova.sh` accendeva la copia
+    di prova con `--env-file .env.casavip` e basta. La produzione riceve altre DICIOTTO
+    variabili dal blocco `environment:` di `docker-compose.casavip.yml`, e QUATTORDICI di
+    quelle dicono DOVE salvare i database. Senza, `main_casavip.py:105` ripiega sul
+    percorso RELATIVO `data/pendenti.db`, cioe' dentro il contenitore invece che nel
+    volume montato: 13 database -- fra cui `pendenti`, `payout`, `garanzia`,
+    `accettazioni` e le marche temporali (valore legale) -- finivano in `/app/data`, che
+    muore con il contenitore.
+
+    Il compose stesso lo dice, in un commento scritto dopo che era gia' successo:
+        DB_MARCHE: /data/marche.db  # senza questa riga i token finirebbero in /app/data
+    Il banco riproduceva ESATTAMENTE il guasto che quel file esiste per impedire.
+
+    QUANTO E' COSTATO. La «prova generale» del 2026-08-08 ha dichiarato «la catena dei
+    soldi REGGE» e ha concluso che la cancellazione non lasciava traccia del rimborso.
+    Rimisurato la sera stessa su un giro da 15 prenotazioni: la traccia C'ERA -- 6
+    pendenti su 6 marcati `rimborsato`, 6 payout su 6 `trattenuto`, 6 tasse su 6
+    stornate -- ma stava in `/app/data/pendenti.db`, che nessuno guardava, e che
+    `docker rm -f` aveva cancellato davvero. Una diagnosi intera sbagliata, e un difetto
+    scritto nel passaggio di consegne che non era quello vero.
+
+    D18: uno strumento che MISURA deve avere un controllo meccanico che gli impedisca di
+    barare. Quel controllo sta in `collaudi/fedelta_banco.py` -- in Python e NON dentro
+    lo script di shell -- proprio perche' cosi' lo si puo' provare nelle DUE direzioni
+    da qui. Un controllo che nessuno puo' vedere fallire non e' un controllo.
+
+    ⛔ COSA QUESTA GUARDIA NON FA, dichiarato (D18 punto 3):
+      · NON accende un banco e NON parla con docker: la suite gira senza rete, senza
+        server e senza chiavi. Prova il GIUDIZIO (Python puro) nelle due direzioni, e
+        pretende che lo script lo CHIAMI e si FERMI sul verdetto negativo.
+      · Che qualcuno esegua davvero lo script, questo non lo dimostra -- come le sue
+        sorelle sul passaggio di consegne. E' il suo limite, ed e' scritto.
+    """
+
+    # Le DICIOTTO variabili che il 2026-08-08 la produzione aveva e il banco no.
+    # Misurate cosi', non ricordate (D22):
+    #   docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' <contenitore>
+    #   | cut -d= -f1 | sort -u   ->  poi `comm -13 banco produzione`
+    MANCAVANO_IL_2026_08_08 = (
+        "BASE_URL", "DB_ACCETTAZIONI", "DB_ADMIN_ACCOUNTS", "DB_CREDITO_USATI",
+        "DB_DEPOSITO", "DB_DOMANDA", "DB_GARANZIA", "DB_MARCHE", "DB_MESSAGGI",
+        "DB_PARTNER", "DB_PAYOUT", "DB_PENDENTI", "DB_RECENSIONI",
+        "DB_TASSA_COMUNALE", "FILE_REFERRAL", "PAGAMENTO_BPS", "UPLOAD_DIR",
+        "VIDEO_DIR",
+    )
+
+    def _fb(self):
+        from collaudi import fedelta_banco
+        return fedelta_banco
+
+    def setUp(self):
+        import io
+        self.percorso_sh = os.path.join(QUI, "collaudi", "banco_prova.sh")
+        with io.open(self.percorso_sh, encoding="utf-8") as f:
+            self.sh = f.read()
+
+    # ------------------------------------------------------------------
+    # IL GIUDIZIO, PROVATO NELLE DUE DIREZIONI (D18 punto 2)
+    # ------------------------------------------------------------------
+    def test_IL_GIUDIZIO_SA_DIRE_SI_E_NO(self):
+        """Se dicesse sempre la stessa cosa non varrebbe niente."""
+        fb = self._fb()
+        self.assertFalse(fb.banco_infedele([], []),
+                         "stesse variabili e nessun database fuori posto: e' FEDELE")
+        self.assertTrue(fb.banco_infedele(["DB_PENDENTI"], []),
+                        "manca una variabile alla produzione: NON e' fedele")
+        self.assertTrue(fb.banco_infedele([], ["pendenti.db"]),
+                        "un database dentro il contenitore: NON e' fedele")
+
+    def test_IL_GIUDIZIO_VEDE_IL_DIFETTO_VERO_DEL_2026_08_08(self):
+        """Il caso reale, non uno inventato: le 18 misurate quel giorno."""
+        fb = self._fb()
+        mancanti = fb.variabili_mancanti(
+            nomi_produzione=("PATH", "DB_FINANZA") + self.MANCAVANO_IL_2026_08_08,
+            nomi_banco=("PATH", "DB_FINANZA"))
+        self.assertEqual(sorted(self.MANCAVANO_IL_2026_08_08), mancanti)
+        self.assertTrue(fb.banco_infedele(mancanti, []),
+                        "il difetto vero del 2026-08-08 deve essere giudicato INFEDELE")
+
+    def test_UN_BANCO_CON_PIU_VARIABILI_NON_E_UN_ERRORE(self):
+        """Non-compiacenza al contrario: il banco puo' avere roba in piu' (la chiave di
+        prova). Cio' che conta e' che non gli MANCHI niente della produzione."""
+        fb = self._fb()
+        self.assertEqual([], fb.variabili_mancanti(
+            nomi_produzione=("DB_PENDENTI",),
+            nomi_banco=("DB_PENDENTI", "GIRI", "STRIPE_WEBHOOK_SECRET")))
+
+    def test_I_DATABASE_FUORI_POSTO_SONO_L_IMPRONTA_DEL_DIFETTO(self):
+        """Non la configurazione: l'EFFETTO. E' l'unica prova che non si puo' discutere."""
+        fb = self._fb()
+        self.assertEqual(
+            ["garanzia.db", "payout.db", "pendenti.db"],
+            fb.database_fuori_posto(["app.log", "pendenti.db", "payout.db", "garanzia.db"]),
+            "i .db dentro il contenitore vanno elencati; il resto (log) no")
+        self.assertEqual([], fb.database_fuori_posto([]),
+                         "cartella vuota = nessun database fuori posto")
+        self.assertEqual([], fb.database_fuori_posto(["app.log", "campagna_stato.json"]),
+                         "un log dentro il contenitore e' normale: non e' un database")
+
+    # ------------------------------------------------------------------
+    # LO SCRIPT DEL BANCO LO CHIAMA DAVVERO, E SI FERMA
+    # ------------------------------------------------------------------
+    def test_LO_SCRIPT_PRENDE_L_AMBIENTE_DAL_CONTENITORE_CHE_GIRA(self):
+        """Non da un elenco ricopiato a mano: quello marcisce il giorno che il compose
+        cambia, e nessuno se ne accorge finche' non costa una diagnosi sbagliata."""
+        import io
+        self.assertIn(
+            "fedelta_banco.py ambiente", self.sh,
+            "banco_prova.sh non deriva l'ambiente dal contenitore di produzione: "
+            "con i soli --env-file gli mancano le 18 variabili del blocco "
+            "`environment:` del compose, 14 delle quali dicono dove salvare i "
+            "database (misurato il 2026-08-08)")
+        # E il MECCANISMO deve stare nello strumento: e' li' che si legge l'ambiente
+        # del contenitore VIVO. Pretenderlo su entrambi i file impedisce di svuotare
+        # la chiamata lasciandone solo il nome.
+        with io.open(os.path.join(QUI, "collaudi", "fedelta_banco.py"),
+                     encoding="utf-8") as f:
+            strumento = f.read()
+        self.assertIn("docker", strumento, "lo strumento non parla col contenitore vero")
+        self.assertIn(
+            "Config.Env", strumento,
+            "lo strumento non legge le variabili del contenitore "
+            "(`docker inspect --format '{{range .Config.Env}}...`)")
+
+    def test_LO_SCRIPT_NON_RICOPIA_A_MANO_L_ELENCO_DEI_DATABASE(self):
+        """Il modo esatto in cui questo difetto tornerebbe.
+
+        Qualcuno «semplifica» incollando le `DB_*` dentro lo script: funziona il primo
+        giorno e diventa una bugia il giorno che il compose ne aggiunge una -- e in
+        silenzio, perche' un elenco c'e' e sembra completo. E' la stessa forma del
+        difetto che questa classe documenta: non l'assenza di un controllo, ma un
+        controllo che ha smesso di guardare la cosa vera.
+        """
+        eseguibili = [r for r in self.sh.splitlines()
+                      if r.strip() and not r.lstrip().startswith("#")]
+        incollate = [r.strip() for r in eseguibili if re.search(r"\bDB_[A-Z_]+=", r)]
+        self.assertEqual(
+            [], incollate,
+            "banco_prova.sh assegna a mano dei percorsi di database invece di "
+            "derivarli dal contenitore che gira: %r" % incollate)
+
+    def test_LO_SCRIPT_CHIAMA_IL_CONTROLLO_DI_FEDELTA(self):
+        self.assertIn(
+            "fedelta_banco.py", self.sh,
+            "banco_prova.sh non chiama collaudi/fedelta_banco.py: senza, il banco puo' "
+            "partire con un ambiente diverso dalla produzione e MISURARE UN'ALTRA "
+            "MACCHINA senza dirlo a nessuno (D18)")
+
+    def test_IL_CONTROLLO_FERMA_NON_SI_LIMITA_AD_AVVISARE(self):
+        """La lezione del controllo sulla chiave di Stripe, gia' scritta in questo stesso
+        script: «un avviso stampato non basta, perche' al giro dopo non lo legge
+        nessuno». Qui si pretende che il verdetto negativo porti a un'uscita, e VICINO
+        alla chiamata -- non «da qualche parte nel file», che e' la ricaduta di
+        `server_tokens off` (appendice #15).
+        """
+        i = self.sh.find("fedelta_banco.py controlla")
+        self.assertNotEqual(
+            i, -1,
+            "il controllo di fedelta' non viene ESEGUITO: nominarlo in un commento non "
+            "controlla niente. Serve la chiamata `fedelta_banco.py controlla ...`")
+        prima = self.sh[max(0, i - 200):i]
+        self.assertIn(
+            "if !", prima,
+            "il controllo di fedelta' viene eseguito ma il suo esito non viene nemmeno "
+            "guardato: senza `if !` il verdetto negativo passa inosservato")
+        self.assertIn(
+            "exit 1", self.sh[i:i + 600],
+            "il controllo di fedelta' viene guardato ma non ferma niente: un banco "
+            "infedele partirebbe lo stesso e i suoi numeri sembrerebbero veri. E' la "
+            "lezione gia' scritta nel passo [5] di questo stesso script: «un avviso "
+            "stampato non basta, perche' al giro dopo non lo legge nessuno»")
+
+    def test_LO_SCRIPT_DICHIARA_COSA_NON_COPIA(self):
+        """D18 punto 3. I segreti NON si copiano dalla produzione al banco: un banco che
+        gira con la chiave vera e' un banco che puo' muovere soldi veri. Se pero' la cosa
+        resta implicita, un domani qualcuno la scopre col danno."""
+        self.assertIn(
+            "SEGRETI", self.sh.upper(),
+            "banco_prova.sh non dichiara che i segreti della produzione NON vengono "
+            "copiati nel banco: un taglio silenzioso fa sembrare «copiato tutto» cio' "
+            "che di proposito non lo e'")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
