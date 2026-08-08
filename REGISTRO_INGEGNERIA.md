@@ -341,12 +341,56 @@ del repository (`a8e26ec1…` · `a887cf08…`), righe eseguibili che nominano `
 Prima di sovrascrivere, verificato che **nessun cron e nessuno script** le richiami — i due
 lavori pianificati sono `deploy/watchdog.sh` ogni 10 minuti e `collaudi/giro_video.py` alle 9:20,
 e non nominano né l'uno né l'altro: si lanciano solo a mano.
-⚠️ **Da qui nascono due copie** (in `/root` e in `deploy/`), e restano tali finché il commit non
-arriva sul server: da quel momento vale quella del repository e le due in `/root` vanno tolte,
-altrimenti prima o poi divergono e nessuno sa quale sia quella buona.
-⚠️ E in `/root` restano **nove script di giri passati** (`deploy2.sh`, `pre_deploy.sh`,
-`prova2.sh`, `verifica_deploy.sh`…). Non sono difettosi: il problema è che **nessuno sa più
-quale sia quello buono**, ed è lo stesso male, un passo più in là. Vanno guardati uno per uno.
+✅ **E LE DUE COPIE SONO STATE RIDOTTE A UNA** la notte stessa, dopo il deploy (sotto). I cinque
+strumenti vivono ora **solo** in `deploy/`: quelli in `/root` sono stati tolti **dopo** aver
+dimostrato, uno per uno, che la copia nel repository era arrivata sul server ed era **identica**
+(`a8e26ec1…` · `a887cf08…` · `db6342eb…` · `713d43bf…` · `c4595fec…`) e che **nessuno li
+richiamava** (zero cron, zero script).
+⛔ **E qui il controllo si è fermato per un motivo falso, che vale la pena scrivere.** Il primo
+giro ha dichiarato «1 riferimento trovato: NON tolgo niente» — corretto come comportamento,
+sbagliato come dato: **il riferimento era lo script stesso**, che stava in `/root` e conteneva le
+stringhe che stava cercando. Rifatto escludendo sé stesso e i due file cercati: **zero**. È
+ancora D23 — lo strumento che mente, non la cosa misurata — e stavolta ha mentito **in favore
+della prudenza**, che è il verso meno dannoso ma non per questo giusto.
+⚠️ **In `/root` restano 15 script di giri passati**, non nove come avevo scritto: il conteggio
+sbagliato guardava solo i `*.sh` e si perdeva sei file `.py` (`env_update.py`, `fb_final.py`,
+`fb_setup.py`, `ig_activate.py`, `ig_test.py`, `meta_activate.py`). *Misurato:*
+`ls -1 /root/*.sh /root/*.py | wc -l` → **15**, più **17** file `PRE_DEPLOY_*.commit`
+accumulati. Non sono difettosi: il problema è che **nessuno sa più quale sia quello buono**, ed
+è lo stesso male un passo più in là. Vanno guardati uno per uno, e non è stato fatto.
+
+**🚀 IL DEPLOY, col protocollo D17 e zero secondi di sito irraggiungibile.** Fatto perché i
+cinque strumenti stanno in `deploy/`, che il `Dockerfile` copia dentro l'immagine: senza
+ricostruire, i file sul server sarebbero stati più nuovi dell'immagine, e chi controlla i cinque
+posti domani avrebbe visto una differenza benigna **che sembra un problema**. Le eccezioni da
+ricordare sono il modo in cui questo progetto si è fatto male più volte.
+```
+punto di ritorno   /root/PRE_DEPLOY_20260808-060105.commit  scritto e RILETTO -> a4f7a24
+paracadute :prec   era 8056d178 (VECCHIA) -> ri-agganciato a e2237d55, cioe' l'immagine
+                   che stava servendo il sito in quel momento. La trappola era li' di nuovo.
+salvataggio        finanza-20260808-040132.db.gz  gzip -t integro, primi byte aperti:
+                   "SQLite format 3"  -- verificato APRENDOLO, non guardando la data
+build              docker compose (v2) -> nuova immagine 62b89f0a, diversa da :prec
+                   (se fossero uguali il ritorno non esisterebbe: controllato)
+scambio            rm-first di DEPLOY.md §3 -> app healthy in 6s, nginx MAI giu' (Up 14h)
+avvio              money_path_pronto: True · avvisi: []
+sonde              https / -> 200 · /api/health -> 200 · /api/bunker/invarianti -> 403
+giudice            collaudi/verifica_produzione.py -> 190 controlli, 0 violazioni, uscita 0
+                   (eseguito sull'HOST: collaudi/ non e' dentro l'immagine)
+LA PROVA VERA      i 152 file di produzione DENTRO il contenitore = HEAD d727247,
+                   confrontati uno per uno; e i 5 strumenti sono PRESENTI in /app/deploy/,
+                   con 0 righe eseguibili che nominano /data
+```
+⛔ **E tre difetti nella MIA verifica, trovati rileggendola invece che fidandomene.**
+(1) le prime sonde giravano su `http://localhost`, dove **tutto** risponde `301` — il rimando a
+HTTPS di nginx arriva prima dell'applicazione: misuravano nginx, non i permessi; (2)
+`verifica_produzione.py` **non è nell'immagine** (il `Dockerfile` non copia `collaudi/`), quindi
+il giudice non era mai partito; (3) lo script stampava **`uscita: 0`** su quel comando fallito,
+perché leggevo `$?` **dopo un tubo** — la regola ferrea 7, violata nel gesto stesso di
+verificare. ⚠️ E una sonda negativa resta un ornamento anche nella versione rifatta:
+`/api/admin/lista` → **404**, cioè quell'indirizzo non esiste. D17 lo dice testualmente — *«li
+interroga già `collaudi/verifica_produzione.py`: si usa quello, non si inventano percorsi»* — e
+l'ho inventato lo stesso. Ciò che regge è il giudice, non la mia sonda.
 
 ⚠️ **E la chiavetta va rigenerata dopo il commit**: `deploy/` rientra nel controllo del motore
 (`git diff --name-only <commit-chiavetta> HEAD | grep -E "^(fase|main_casavip|deploy/|…)"`), che

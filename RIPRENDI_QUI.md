@@ -162,12 +162,18 @@ acceso, e chi non lo sa ci perde un'ora.
   Una guardia che non distingue l'attrezzo dal punto in cui lo si usa costringe a cancellare la
   spiegazione pur di farla tacere. L'invariante vero è più stretto: **nessuna riga eseguibile di
   `impacchetta.sh` nomina `/data`**. Dettaglio e misure nella voce **(23)** del registro.
-  ✅ **E il server è allineato** (via «autorizzato»): la vecchia `impacchetta.sh` difettosa in
-  `/root` è stata sostituita — impronte identiche byte per byte a quelle del repository — e il
-  residuo di 2 KB dentro il contenitore è stato tolto. Sito `200` dall'esterno, contenitore
-  `running healthy`, i cinque posti fermi dov'erano. ⚠️ Finché il commit non arriva sul server
-  esistono **due copie** degli strumenti (`/root` e `deploy/`): quando arriva, quelle in `/root`
-  vanno tolte, altrimenti divergono.
+  ✅ **E IL SERVER È ALLINEATO PER DAVVERO** (8 agosto, via «autorizzato»), col protocollo D17 e
+  **zero secondi di sito irraggiungibile**: `nginx` non è mai stato riavviato (`Up 14h` durante
+  tutto lo scambio), app `healthy` in **6 secondi**. Il paracadute `:prec` era di nuovo agganciato
+  a un'immagine **vecchia** (`8056d178`) ed è stato ri-agganciato a quella viva prima di toccare
+  qualsiasi cosa — è la seconda volta in due giorni che quella trappola scatta.
+  Prova finale: i **152 file di produzione dentro il contenitore** sono identici a `d727247`,
+  confrontati uno per uno; `verifica_produzione.py` **190 controlli, 0 violazioni, uscita 0**.
+  ⛔ **E tre difetti nella mia stessa verifica**, corretti rileggendola: sonde su
+  `http://localhost` che davano `301` a tutto (misuravano il rimando di nginx, non i permessi) ·
+  il giudice che non era mai partito perché `collaudi/` non sta nell'immagine · e un
+  **`uscita: 0` su un comando fallito**, perché avevo letto l'esito dopo un tubo. Dettaglio
+  nella voce **(23)**.
 
 ### ⏳ COSA RESTA — in ordine di quanto costa se va male
 0. 💯 **AREA A — continua.** Chiuse **entrambe** le strade per cui la commissione ripiegava in
@@ -187,9 +193,13 @@ acceso, e chi non lo sa ci perde un'ora.
 0-bis. 🔑 **LA CHIAVETTA VA RIGENERATA** (~1 ora, metodo nella voce (22)). Il controllo sul
    motore stampa **cinque righe**: i cinque strumenti di salvataggio entrati in `deploy/`.
    Finché non si rigenera, la copia di emergenza **non contiene gli attrezzi per rifarsi**.
-   ⚠️ E vanno tolte le **due copie in `/root`** sul VPS appena il commit arriva sul server:
-   oggi ci sono sia lì sia in `deploy/`, identiche byte per byte — ma due copie identiche oggi
-   sono due copie diverse fra un mese.
+   ✅ **Le due copie in `/root` sono state tolte** l'8 agosto, dopo il deploy: i cinque strumenti
+   vivono ora **in un solo posto** (`deploy/`, e dentro l'immagine che gira). Tolti solo **dopo**
+   aver dimostrato impronta per impronta che la copia del repository era arrivata sul server, e
+   che nessun cron li richiamava.
+   ⚠️ In `/root` restano **15** script di giri passati (misurato: `ls -1 /root/*.sh /root/*.py |
+   wc -l`; il «nove» scritto prima guardava solo i `*.sh`) più **17** `PRE_DEPLOY_*.commit`.
+   Nessuno è difettoso: il problema è che nessuno sa più quale sia quello buono.
 
 0-ter. ▶️ **IL PROSSIMO LAVORO È `fase99_multicurrency` (valuta), scelto dal fondatore.**
    Misure per partire, già prese: 270 righe · **35 punti rompibili** · 0 rinunce · **10 file di
