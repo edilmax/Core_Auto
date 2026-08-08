@@ -13,7 +13,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 9f8c545
+CONSEGNE AGGIORNATE A: f8de0dd
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -35,13 +35,38 @@ comincia a metterci numeri non misurati. Su un difetto dei soldi è il momento p
 *Rimedio applicato:* da 63% in poi ogni numero di questo blocco porta sotto il comando che
 l'ha prodotto, e non è stato aperto nessun lavoro nuovo.
 
+✅ **DEPLOY FATTO E CHIAVETTA RIGENERATA (2026-08-08, via «autorizzato»).**
+```
+DEPLOY, protocollo D17, zero secondi di sito irraggiungibile
+  punto di ritorno   PRE_DEPLOY_20260808-142954.commit  RILETTO -> 4913d73
+  paracadute :prec   era e2237d55 (VECCHIA) -> ri-agganciato a 62b89f0a
+                     ⛔ TERZA VOLTA IN TRE GIORNI che era agganciato male
+  salvataggio        finanza-20260808-120229.db.gz  APERTO: "SQLite format 3"
+  scambio            app healthy in 6s · nginx MAI riavviato (Up 22 hours)
+  sonde              https / 200 · /api/health 200 · /api/bunker/invarianti 403
+  giudice            verifica_produzione.py -> 190 controlli, 0 violazioni, uscita 0
+  LA PROVA VERA      le riparazioni sono DENTRO il contenitore che gira:
+                     "Connect POST %s FALLITA" 1 · "HOLD PAGAMENTO NON REGISTRATO" 1
+                     "il rimborso va eseguito A MANO" 2 · host.html aggiornato 1
+
+CHIAVETTA, generazione f8de0dd (la precedente SPOSTATA in precedente_e3fca06\)
+  (a) 702 impronte su 702 IDENTICHE · 0 diverse · 0 assenti · 25 db integri
+  (b) copia estratta in cartella VUOTA: 1061 file · 5463 prove raccolte ·
+      0 moduli non importabili
+  (c) accensione: /api/health 200 in 2s · / 200 · money_path_pronto True · 0 errori
+  ⚠️ La suite intera DENTRO la copia non e' stata eseguita: vedi il foglio della
+     chiavetta, punto 2(b), col perche' e con cosa la copre.
+  📌 Prima generazione costruita con `impacchetta.sh` RIPARATO: i 25 database presi
+     con l'API di backup di sqlite3 e non col `tar`. E la prima che contiene
+     GLI ATTREZZI PER RIFARSI (deploy/*.sh + collaudi/*).
+```
+
 **LO STATO AL MOMENTO DELLA CONSEGNA, misurato:**
 ```
 contesto letto      44% a inizio blocco · 63% alla chiusura  (/context, dal fondatore)
-computer            9f8c545     GitHub 9f8c545
-VPS file            4913d73  -> INDIETRO DI DUE COMMIT
-VPS immagine viva   62b89f0a  (costruita da d727247)
-chiavetta           e3fca06  -> DA RIGENERARE: il controllo sul motore stampa 5 righe
+computer            f8de0dd     GitHub f8de0dd     VPS file f8de0dd
+VPS immagine viva   1c6df6dc  (costruita da f8de0dd) · paracadute :prec 62b89f0a
+chiavetta           f8de0dd  -> RIGENERATA oggi, tre prove (vedi sopra)
 suite intera        Ran 5457 tests in 1491.241s · OK (skipped=3) · uscita 0
 CI                  gate: success su 43271b4 · 1267eb6 · 777abff · 757b23e · 4f66f05
 richieste unite     #11 #12 #13 #14 #15, tutte verificate merged=True rileggendo l'API
@@ -136,8 +161,8 @@ iniziata e non scritta è una cosa persa, e nessuna guardia se ne accorge.*
 | 2 | riparazione di `fase101` (messaggio di Stripe buttato via) | ✅ **FATTA** (via «autorizzato»): legge il corpo, scrive tipo/codice/messaggio, livello **ERROR**. 4 guardie, viste rosse. ⛔ **E la prima stesura ha ROTTO L'ISOLAMENTO** — vedi qui sotto: è la cosa più importante imparata oggi |
 | 2b | l'ingoio della registrazione del pendente (`fase83:5243`) | ✅ **FATTA**: da `warning("ignorata")` a **ERROR che nomina la prenotazione**. 2 guardie, vista rossa (`Livelli visti: ['WARNING']`). ⛔ E ora è anche **lo strumento che chiude l'indagine**: se al giro delle dieci prenotazioni quell'ERROR compare, la causa è confermata |
 | 2c | la nota «rimborso PSP da eseguire quando Stripe è live» | ✅ **corretta** in «il rimborso va eseguito A MANO dal pannello admin» (2 occorrenze). ⚠️ **Senza guardia, dichiarato**: è un testo, non un comportamento; nessun collaudo la pretendeva |
-| 3 | deploy sul VPS | 🔴 **da fare** — e ora c'è l'attrezzo: **`deploy/protocollo_d17.sh prima\|scambio\|dopo`**. *Era anch'esso nella cartella temporanea della chat: è la terza volta in un giorno che incontro lo stesso difetto — strumenti in `/root`, banco di prova, deploy. `DEPLOY.md` descrive la procedura a parole, ma i tre pezzi che D17 aggiunge (punto di ritorno **riletto**, paracadute **ri-agganciato**, salvataggio **aperto**) sono proprio quelli che a parole si saltano: il paracadute era sbagliato **due volte in due giorni**.* |
-| 4 | chiavetta da rigenerare | 🔴 non iniziata (promessa tre volte) |
+| 3 | deploy sul VPS | ✅ **FATTO** l'8 agosto, protocollo D17, zero secondi di sito irraggiungibile (misure in cima) — e ora c'è l'attrezzo: **`deploy/protocollo_d17.sh prima\|scambio\|dopo`**. *Era anch'esso nella cartella temporanea della chat: è la terza volta in un giorno che incontro lo stesso difetto — strumenti in `/root`, banco di prova, deploy. `DEPLOY.md` descrive la procedura a parole, ma i tre pezzi che D17 aggiunge (punto di ritorno **riletto**, paracadute **ri-agganciato**, salvataggio **aperto**) sono proprio quelli che a parole si saltano: il paracadute era sbagliato **due volte in due giorni**.* |
+| 4 | chiavetta da rigenerare | ✅ **FATTA** su `f8de0dd`: 702/702 impronte · copia estratta con 5463 prove raccolte e 0 moduli non importabili · accensione verde. Generazione vecchia **spostata**, non cancellata. Prima generazione col backup dei database fatto con l'API vera, e prima che contiene **gli attrezzi per rifarsi**. ⏳ Resta il gesto che può fare solo il fondatore: **copiarla su un supporto fisico** |
 | 5 | i **15** script vecchi in `/root` | ✅ **guardati uno per uno** (2026-08-08): 9 sono deploy/verifica dell'1-3 agosto, superati dal protocollo D17 · 6 sono attivazioni Meta/Instagram del 13-14 luglio, una tantum. ⛔ **Il rischio vero era un altro ed è escluso: ZERO segreti in chiaro** (`EA…`/`sk_…`/`whsec_…`/token Telegram → 0 occorrenze su tutti e 15). Cancellarli è pulizia, non sicurezza: decide il fondatore |
 | 6 | `fase99_multicurrency` | ⚪ mai toccata: la prova generale ha preso il suo posto, ed è stato giusto |
 | 7 | i tre moduli dei soldi coi mutanti (`fase98` · `fase65/133` · `fase111`) | ⚪ proposti, mai iniziati |
