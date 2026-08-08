@@ -13,7 +13,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 4913d73
+CONSEGNE AGGIORNATE A: 9f8c545
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -26,21 +26,127 @@ rimette qui il commit di `HEAD`.*
 pretende, invece della nota che spiega perché manca. Sotto il 50%, quindi non c'è violazione: si
 scrive perché **un blocco di lavoro si è chiuso**, che è l'altro innesco — quello che si vede.*
 
+🔴 **RILETTO A FINE SESSIONE: 63% (627,3k su 1M).** Il blocco esisteva già — scritto a 44%,
+quindi la lettera di D21 è salva — ma **è stato superato il 50% continuando a lavorare**, ed è
+la cosa che D21 esiste per impedire. Da 44% a 63% ci sono stati: la prova generale, la scoperta
+del rimborso senza traccia e quella di Stripe. Non è tempo sprecato, ma **andava chiuso a metà
+e ripreso fresco**: da oltre metà l'IA continua a rispondere *con lo stesso tono sicuro* e
+comincia a metterci numeri non misurati. Su un difetto dei soldi è il momento peggiore.
+*Rimedio applicato:* da 63% in poi ogni numero di questo blocco porta sotto il comando che
+l'ha prodotto, e non è stato aperto nessun lavoro nuovo.
+
 **LO STATO AL MOMENTO DELLA CONSEGNA, misurato:**
 ```
-contesto letto      44%  (/context, dal fondatore)
-computer            4913d73     GitHub 4913d73     VPS file 4913d73
-VPS immagine viva   62b89f0a  (costruita da d727247; i due commit dopo sono SOLI documenti,
-                    quindi nessuna ricostruzione dovuta -- DEPLOY.md §3 lo dice per i .md)
+contesto letto      44% a inizio blocco · 63% alla chiusura  (/context, dal fondatore)
+computer            9f8c545     GitHub 9f8c545
+VPS file            4913d73  -> INDIETRO DI DUE COMMIT
+VPS immagine viva   62b89f0a  (costruita da d727247)
 chiavetta           e3fca06  -> DA RIGENERARE: il controllo sul motore stampa 5 righe
-git status          pulito
-suite intera        Ran 5454 tests in 1441.479s · OK (skipped=3) · uscita 0
-CI                  gate: success su 43271b4, 1267eb6 e 777abff (13 controlli, 0 non verdi)
-richieste unite     #11 #12 #13, tutte verificate merged=True rileggendo l'API
-sito                https / -> 200 · /api/health -> 200 · 190 controlli, 0 violazioni
+suite intera        Ran 5457 tests in 1491.241s · OK (skipped=3) · uscita 0
+CI                  gate: success su 43271b4 · 1267eb6 · 777abff · 757b23e · 4f66f05
+richieste unite     #11 #12 #13 #14 #15, tutte verificate merged=True rileggendo l'API
+sito                casavip_app Up 5 hours (healthy) -- mai toccato dalla prova generale
 ```
-▶️ **Il prossimo lavoro è la PROVA GENERALE** (voce 0-ZERO qui sotto): il primo pagamento vero
-di questo progetto. Prima di quella, **niente altro**.
+🔴 **IL VPS VA AGGIORNATO, E STAVOLTA CON RICOSTRUZIONE.** Fra `4913d73` e `9f8c545` c'è
+`fase83_server.py`, cioè **codice di produzione**: non basta il `git pull` dei documenti.
+Finché non si deploya (protocollo **D17**), **il sito vero continua a offrire agli host la
+scheda «Aggiungi carta»** che la riparazione ha spento. Il controllo in un colpo:
+`git diff --name-only <commit-VPS> master | grep -E "^(fase|main_casavip)"` — se stampa
+qualcosa, serve la ricostruzione.
+
+▶️ **PROSSIMO LAVORO: il rimborso che non lascia traccia** (voce 0-ZERO-BIS qui sotto). È un
+difetto dei soldi, trovato misurando, e viene prima di tutto il resto.
+
+### 💡 SI PUÒ PROVARE COL PYTHON DELLA CI, SUL COMPUTER — e nessuno lo sapeva
+
+Scoperto il 2026-08-08 pagandolo con una CI rossa. La suite locale gira su **Python 3.9**, la CI
+su **3.11**: una guardia nuova era verde qui e rossa là (`KeyError: '__notes__'` — su 3.11 il
+modulo `logging` accede a `e.__notes__`, PEP 678, e la mia finta eccezione esplodeva lì dentro).
+**Ma `py -3.11` esiste su questo computer.** Quindi il divario si chiude prima di spingere:
+```powershell
+py -3.11 -m unittest test_<quello_toccato>      # la stessa versione della CI
+```
+⚠️ Non sostituisce la CI (Linux ≠ Windows resta), ma toglie di mezzo la differenza che oggi è
+costata un giro rosso: **modo di rompersi n.8, ambiente diverso.**
+
+### ⚠️ ECCEZIONE DICHIARATA ALLA REGOLA FERREA 6 — la suite locale NON è arrivata in fondo
+
+**Il commit finale del 2026-08-08 è stato fatto SENZA un giro locale completo**, e va scritto
+perché la regola dice «suite intera anche per una virgola in un `.md`, nessuna eccezione».
+
+*Il fatto, misurato tre volte:*
+```
+15:13:53 -> 15:28:46   uccisa a 15 min   nessuna riga "Ran"   0 prove rosse
+15:30:16 -> 15:44:42   uccisa a 14 min   nessuna riga "Ran"   0 prove rosse
+15:47:07 -> 16:02:03   uccisa a 15 min   nessuna riga "Ran"   0 prove rosse
+```
+Non è un test rosso: il file di uscita **si interrompe a metà di una riga**, senza traccia di
+errore (`grep MemoryError|Killed|Fatal Python` → 0). È il processo terminato dall'esterno. Nello
+stesso periodo l'ambiente ha ucciso **anche due attese in sottofondo**, dichiarandolo
+esplicitamente (`status: killed`) — ed è la conferma che il problema è l'ambiente, non il codice.
+
+⛔ **E qui ho quasi lasciato scritta una cosa falsa.** Al secondo tentativo stavo per annotare
+«la suite muore dopo 14 minuti, guasto da cercare», il che avrebbe mandato la sessione dopo a
+caccia di un difetto inesistente. Il fatto vero è che **un file di uscita troncato non è un
+esito**, e leggerlo come tale è lo stesso errore del «verde finto», al contrario.
+
+*Cosa vale come giudizio, allora:* la **regola ferrea 8** — «la CI su Linux è il giudice; il
+verde locale è un indizio». La suite intera gira in CI su una macchina che non la uccide, ed è
+quello il verdetto su questo commit. In più, prima del commit sono stati eseguiti in locale e
+verdi: `test_fase101_stripe_connect` + `test_fase162_hold_pagamento` + `test_integrazione_servizi`
+(**168 prove, OK**) e il conteggio col caricatore (**5463**).
+⚠️ **Limite dichiarato:** non è la stessa cosa di un giro completo. Se la CI è rossa su qualcosa
+che non ho toccato, la causa è da cercare lì e non nell'ambiente.
+
+### ⛔ LA LEZIONE PIÙ CARA DEL 2026-08-08: **una diagnostica che può sollevare è peggio di
+### nessuna diagnostica**
+
+Riparando l'osservabile debole di `fase101` (scrivere il motivo di Stripe invece di «fallita»)
+**ho rotto la garanzia di isolamento**, cioè il mestiere stesso di quel codice. Due volte di
+fila, e la seconda dopo aver «già corretto»:
+
+1. `getattr(e, "read", None)` messo **fuori** dal `try`. Sembra innocuo, ma `getattr` con un
+   valore di ripiego sopprime **solo `AttributeError`**: un `HTTPError` con `fp` chiuso solleva
+   `KeyError: 'file'` dal suo `__getattr__`, e **l'eccezione usciva da `_post`**;
+2. corretto quello, restava `getattr(e, "code", "?")` **dentro la riga di registro** — stesso
+   `__getattr__`, stesso esito: `KeyError: 'code'`.
+
+*Cosa costava davvero:* `trasferisci` esplodeva, e la riga che registra «bonifico da fare a
+mano» non veniva mai eseguita. **Un guasto di Stripe avrebbe potuto far perdere la traccia dei
+soldi dovuti a un host** — per aver aggiunto un messaggio più bello nei registri.
+
+*Chi l'ha preso:* `test_integrazione_servizi.test_stripe_500_sul_transfer_non_solleva`, una
+guardia che esisteva già. **Non l'ho trovato io: l'ha trovato la suite intera**, ed è il motivo
+per cui la regola ferrea 6 non ammette eccezioni nemmeno per un `.md`. La prova mirata su
+`test_fase101` era verde in tutti e due i casi.
+
+*Regola che ne discende, e vale oltre il caso:* **niente che tocchi l'oggetto di un'eccezione
+sta fuori da un `try`** — nemmeno un `getattr` con valore di ripiego, nemmeno la lettura di un
+codice di stato. Il ramo che gestisce un guasto è l'ultimo posto dove ci si può permettere di
+sollevarne un altro. La memoria è in `test_un_ECCEZIONE_OSTILE_non_rompe_l_isolamento`.
+
+### 🧾 COSA È RIMASTO A METÀ — chiesto dal fondatore, «tu hai iniziato, cosa non hai finito»
+*Sono i fili con sopra il mio nome. Elencarli è l'unico modo perché non spariscano: una cosa
+iniziata e non scritta è una cosa persa, e nessuna guardia se ne accorge.*
+
+| # | cosa | a che punto è |
+|---|---|---|
+| 1 | **perché non c'è riga nei pagamenti pendenti** | 🟡 **sospetto forte trovato** (`fase83:5243`, `except` che ingoia con un warning), **ma non dimostrato**: ho smontato il banco prima di leggerne i registri |
+| 1b | **rifare la prova con DIECI prenotazioni** (idea del fondatore) | ⚪ da fare, ed è il modo giusto di chiudere il punto 1 |
+| 2 | riparazione di `fase101` (messaggio di Stripe buttato via) | ✅ **FATTA** (via «autorizzato»): legge il corpo, scrive tipo/codice/messaggio, livello **ERROR**. 4 guardie, viste rosse. ⛔ **E la prima stesura ha ROTTO L'ISOLAMENTO** — vedi qui sotto: è la cosa più importante imparata oggi |
+| 2b | l'ingoio della registrazione del pendente (`fase83:5243`) | ✅ **FATTA**: da `warning("ignorata")` a **ERROR che nomina la prenotazione**. 2 guardie, vista rossa (`Livelli visti: ['WARNING']`). ⛔ E ora è anche **lo strumento che chiude l'indagine**: se al giro delle dieci prenotazioni quell'ERROR compare, la causa è confermata |
+| 2c | la nota «rimborso PSP da eseguire quando Stripe è live» | ✅ **corretta** in «il rimborso va eseguito A MANO dal pannello admin» (2 occorrenze). ⚠️ **Senza guardia, dichiarato**: è un testo, non un comportamento; nessun collaudo la pretendeva |
+| 3 | deploy sul VPS | 🔴 **da fare** — e ora c'è l'attrezzo: **`deploy/protocollo_d17.sh prima\|scambio\|dopo`**. *Era anch'esso nella cartella temporanea della chat: è la terza volta in un giorno che incontro lo stesso difetto — strumenti in `/root`, banco di prova, deploy. `DEPLOY.md` descrive la procedura a parole, ma i tre pezzi che D17 aggiunge (punto di ritorno **riletto**, paracadute **ri-agganciato**, salvataggio **aperto**) sono proprio quelli che a parole si saltano: il paracadute era sbagliato **due volte in due giorni**.* |
+| 4 | chiavetta da rigenerare | 🔴 non iniziata (promessa tre volte) |
+| 5 | i **15** script vecchi in `/root` | ✅ **guardati uno per uno** (2026-08-08): 9 sono deploy/verifica dell'1-3 agosto, superati dal protocollo D17 · 6 sono attivazioni Meta/Instagram del 13-14 luglio, una tantum. ⛔ **Il rischio vero era un altro ed è escluso: ZERO segreti in chiaro** (`EA…`/`sk_…`/`whsec_…`/token Telegram → 0 occorrenze su tutti e 15). Cancellarli è pulizia, non sicurezza: decide il fondatore |
+| 6 | `fase99_multicurrency` | ⚪ mai toccata: la prova generale ha preso il suo posto, ed è stato giusto |
+| 7 | i tre moduli dei soldi coi mutanti (`fase98` · `fase65/133` · `fase111`) | ⚪ proposti, mai iniziati |
+| 8 | le due schede 💳 | ✅ **RIPARATA** (via «autorizzato»): la garanzia ora è **🛡️** e sta **dopo** gli incassi. Ordine: 💳 «Ricevi i pagamenti» → 💰 «I tuoi incassi» → 🛡️ «Aggiungi una carta». L'emoji sta **fuori** dallo `<span>` tradotto, quindi il cambio vale in **tutte le lingue** senza toccare il dizionario (diff di 2 righe invece di 13 traduzioni) |
+| 9 | prova con **5 € veri** | ⏸️ ferma sul questionario Stripe |
+
+**Aspettano il fondatore:** il questionario di piattaforma su Stripe · «autorizzato» per il
+deploy · «autorizzato» per la riparazione di `fase101` · la chiavetta su un supporto fisico
+(deciso: la mette in cassaforte a lavoro finito).
 
 ### ⛔ IL PRIMO GESTO: MISURARE I QUATTRO POSTI. QUI NON C'È SCRITTO DOVE SONO.
 ⛔ **E non è una dimenticanza: è una regola.** Un commit scritto qui **nasce già vecchio** — lo si
@@ -192,7 +298,164 @@ acceso, e chi non lo sa ci perde un'ora.
   nella voce **(23)**.
 
 ### ⏳ COSA RESTA — in ordine di quanto costa se va male
-0-ZERO. 🎭 **LA PROVA GENERALE — È IL PRIMO LAVORO DELLA PROSSIMA SESSIONE.** Deciso dal
+0-ZERO-BIS. 🔴 **IL RIMBORSO NON LASCIA TRACCIA — trovato dalla prova generale, 2026-08-08.**
+   **È il primo bersaglio della prossima sessione.** Non è un mutante e non è una supposizione:
+   è stato misurato facendo una prenotazione vera su Stripe di prova e poi cancellandola.
+   ```
+   date liberate            SI    (4 -> 2 giorni occupati)
+   rimborso eseguito        NO    -- ed e' per PROGETTO: e' manuale, /api/admin/rimborso
+   rimborso REGISTRATO      NO    -- nessuna riga in contabilita', nessuna marcatura
+   dovuto all'host          1940 PRIMA -> 1940 DOPO, per una prenotazione CANCELLATA
+   ```
+   **La stanza torna libera, l'ospite riceve un'email che gli promette 10 €, e da nessuna parte
+   resta scritto che quei 10 € vanno restituiti.** Se il cliente chiede «dov'è il mio rimborso»,
+   non c'è una lista dove guardare.
+
+   *Cosa fa davvero la cancellazione* (`fase83:6098-6160`, letto, non supposto): riallinea il
+   payout · storna la tassa di soggiorno (con tombstone anti-concorrenza) · revoca lo smart-pass
+   · e **marca il pendente come «da rimborsare»** — col commento «*se era pagata = rimborso
+   manuale in corso*». Quindi il progetto **sa** che il rimborso è manuale.
+   ⛔ **Il buco è che quella marcatura sta dentro `if _pp is not None and _rec is not None`, e
+   nel giro misurato il database dei pagamenti pendenti era VUOTO** — nessuna riga per quella
+   prenotazione, quindi la marcatura non è mai avvenuta.
+   ▶️ **PERCHÉ NON C'È LA RIGA NEI PENDENTI — sospetto FORTE, non dimostrato.**
+   Trovato leggendo il codice: `fase83:5243` **è** la strada della prenotazione immediata e
+   chiama `pp.registra(...)` mettendo proprio lo stato `in_attesa_pagamento` che si vede nella
+   risposta. Ma è avvolta in:
+   ```python
+   except Exception:
+       logger.warning("registrazione hold pagamento fallita (ignorata)", exc_info=True)
+   ```
+   Un'eccezione ingoiata con un **warning**, che `fase186:263` dichiara di non leggere. Se è
+   questo, la catena è: registrazione fallita in silenzio → niente riga → la cancellazione non
+   trova nulla da marcare → **il rimborso senza traccia è la CONSEGUENZA, non la causa**.
+   ⛔ **MA NON È DIMOSTRATO, e la colpa è di come ho lavorato:** i registri del banco stavano
+   dentro il contenitore, e **ho smontato il contenitore prima di leggerli**. Distrutta la prova,
+   resta il sospetto. *Un ramo `except` che ingoia è un sospetto, non un colpevole, finché non
+   lo si vede scattare.*
+   👉 **Come si chiude, alla prossima sessione:** si rialza il banco, si fa il giro, e **si
+   leggono i log PRIMA di smontare** (`docker logs banco_prova_app | grep "hold pagamento"`).
+   Se il warning c'è: causa confermata, e la riparazione è alzarlo a ERROR e non ingoiarlo.
+   Se non c'è: il ramo non è stato nemmeno raggiunto, e allora il difetto è più a monte.
+   📌 In produzione `pendenti.db` **ha** la tabella (0 righe) e il warning ha **0 occorrenze** —
+   ma lì non c'è mai stata una prenotazione, quindi non dimostra niente in nessuna direzione.
+   ⚠️ E una frase da correggere: la cancellazione restituisce sempre la nota «*rimborso PSP da
+   eseguire quando Stripe e' live*» — testo **fisso**, scritto quando Stripe non era ancora
+   collegato. Oggi Stripe è live da settimane: quella frase descrive un mondo che non esiste più.
+   ⚠️ Verificato: `grep "v1/refunds"` su tutti i `fase*.py` → **zero occorrenze**. Nessuna riga
+   di questo progetto chiama l'API dei rimborsi di Stripe.
+
+0-ZERO. ✅ **LA PROVA GENERALE È STATA FATTA (2026-08-08) — e la catena dei soldi REGGE.**
+   Fatta su un **banco isolato** (copia del sito sul VPS, porta chiusa al pubblico, dati vuoti,
+   Stripe in **modalità prova**), poi smontato. Il sito vero non è stato toccato: `casavip_app
+   Up 5 hours (healthy)` per tutta la durata.
+   ```
+   IL PREVENTIVO (Casa Milano test, 5 EUR x 2 notti)
+     prezzo_listino_cents     1000     2 x 500                       OK
+     commissione_cents           0     0% primi 90 giorni: LA RAMPA FUNZIONA
+     costo_pagamento_cents      30     3% tecnico, sempre dovuto     OK
+     netto_host_cents          970     1000 - 0 - 30                 OK
+   STRIPE VERO (di prova)
+     sessione cs_test_a1r9...  livemode False  importo 1000 eur
+     metadata: {"riferimento": "ad30fd26..."}  <- la nostra prenotazione, dentro Stripe
+   IL LIBRO GIORNALE, dopo il webhook di pagamento
+     1  incasso      cassa_piattaforma -> debiti_vs_host      1000 EUR
+     2  commissione  debiti_vs_host    -> ricavi_commissioni    30 EUR
+     catena di impronte: INTEGRA
+   IL SALDO
+     dovuto all'host          970   <- coincide col preventivo, al centesimo
+     /api/host/payout         {"EUR": {"maturato": 970}}
+   LE DATE
+     22 e 23 agosto: occupate 1 su 1, con movimento 'blocco' e riferimento
+   ```
+   **Questa è la risposta alla domanda del fondatore** («*e se non registra le cose reali che
+   deve registrare?*»): preventivo, pagamento, partita doppia, saldo host e blocco date **dicono
+   tutti lo stesso numero**.
+   ⚠️ **Limiti dichiarati, cioè cosa NON è stato provato:** (a) il gesto di digitare la carta
+   sulla pagina di Stripe — serve un browser; provato invece che la sessione la crea Stripe
+   davvero; (b) il bonifico **verso** l'host — serve il conto Stripe collegato, oggi bloccato dal
+   questionario di piattaforma; (c) tutto in modalità prova: le regole che valgono **solo** in
+   modalità vera non si vedono da lì (vedi `stripe_non_disponibile` più sotto — modo di rompersi
+   n.8, *ambiente diverso*).
+   📌 **Metodo, se si rifà:** `deploy/prova_accensione.sh` è il modello; il banco si costruisce
+   dal repository (non dalla chiavetta), con `--env-file` doppio così la chiave di prova non
+   finisce mai nella riga di comando. ⛔ E il controllo «con quale Stripe sono partito» deve
+   **fermare**, non solo avvisare: una copia di prova partita con la chiave vera è una copia che
+   muove soldi veri.
+
+0-ZERO-QUATER. 🔴 **«Collega Stripe» NON FUNZIONA, e per due motivi diversi** (2026-08-08).
+   Trovato dal fondatore premendo il bottone nel pannello host. Vedeva:
+   `❌ stripe_non_disponibile` — un messaggio che non dice niente.
+   **La causa vera, in una frase chiarissima che Stripe ci mandava dal primo clic:**
+   > *«You must complete your platform profile to use Connect and create live connected
+   > accounts. Visit your dashboard at
+   > https://dashboard.stripe.com/connect/accounts/overview to answer the questionnaire.»*
+   👉 **Tocca al fondatore:** compilare il questionario di piattaforma su Stripe. Senza, nessun
+   host potrà mai essere pagato in automatico. Confermato da fonte esterna (il cruscotto errori
+   di Stripe stesso: `invalid_request_error` su `POST /v1/accounts`, 4 occorrenze).
+   ⛔ **E il difetto NOSTRO, che è quello che costa:** `fase101._post` fa
+   `except Exception: logger.warning("Connect POST %s fallita (ISOLATA)")` e **butta via il
+   corpo della risposta**, dove Stripe scrive il motivo. Tre conseguenze:
+   1. l'osservabile è debole (**regola ferrea 9**): resta «fallita», senza codice né messaggio;
+   2. è un **warning**, e `fase186:263` dichiara di leggere **solo gli ERROR** → il Guardiano
+      non vede niente. È identico al difetto chiuso il 7 agosto su `fase88`;
+   3. l'host vede `stripe_non_disponibile` e se ne va, e noi non sappiamo nemmeno che è successo.
+   ▶️ Riparazione proposta (serve «autorizzato»): leggere `HTTPError.read()`, scrivere **codice,
+   sottocodice e messaggio** di Stripe, alzare a **ERROR**, e mostrare all'host una frase utile.
+   ⚠️ *Costo misurato del non averlo fatto:* **quindici minuti** per ritrovare una frase che era
+   già lì, scritta, dal primo tentativo.
+
+0-ZERO-QUINQUIES. 🟡 **DUE SCHEDE 💳 CHE DICONO COSE OPPOSTE** (2026-08-08, trovata dal
+   fondatore leggendo il pannello). Nel pannello host, una accanto all'altra:
+   · «💳 **Ricevi i pagamenti in automatico**» → ti paghiamo (è quella che serve);
+   · «💳 **Aggiungi una carta**» → ti addebitiamo (facoltativa, ora spenta).
+   Stessa icona, significato opposto, e la seconda scritta in modo più insistente della prima.
+   Il fondatore ha letto la seconda e ha pensato *«qui c'è qualcosa che non mi torna»* — se lo
+   pensa lui che il progetto lo conosce, un host che arriva da fuori se ne va.
+   ▶️ Riparazione proposta (tocca `deploy/host.html`, serve «autorizzato»): icona diversa per la
+   garanzia (🔒 o 🛡️), titolo che dice cosa **non** è («*non serve per pagarti*»), spostata
+   **dopo** gli incassi, e mai proposta durante l'iscrizione.
+   ⚠️ È il **modo di rompersi n.3** — «testi che mentono» — e i documenti dicono già che quel
+   tipo lì lo trova solo il fondatore guardando il sito, mai un test.
+
+0-ZERO-SEXIES. 🔟 **RIFARE LA PROVA CON DIECI PRENOTAZIONI — deciso dal fondatore, 2026-08-08.**
+   *«la nuova chat rifà la prova con dieci prenotazioni, e siamo più sicuri»* — ed è giusto:
+   **una prenotazione può andare bene per caso, dieci no.** E con dieci si vedono le cose che
+   si rompono **solo quando ce n'è più di una**: date che si accavallano, conti che si sommano,
+   la seconda prenotazione sulla stessa stanza, il pendente che scade mentre un'altra paga.
+   ✅ **GLI ATTREZZI SONO NEL REPOSITORY, non da riscrivere** — `collaudi/banco_prova.sh` e
+   `collaudi/giro_banco.py`. *Erano nati nella cartella temporanea della chat, cioè sarebbero
+   morti con lei: è lo stesso difetto riparato la notte prima («lo strumento vive solo dove
+   muore»), che stavo per rifare dodici ore dopo. Se ne è accorto il fondatore.*
+   ```
+   sh /var/www/bookinvip/collaudi/banco_prova.sh          # accende il banco
+   docker exec -i banco_prova_app python3 -  <  collaudi/giro_banco.py    # i dieci giri
+   GIRI=3 ...                                             # per un giro corto
+   ```
+   `giro_banco.py` fa già i dieci casi giusti: pagate le pari, cancellate le dispari, **la n.3
+   duplica le date della n.2 e DEVE essere rifiutata**, l'ultima resta non pagata. E controlla i
+   **totali**: somma incassi = pagate × prezzo · commissione = 3% di ognuno · dovuto agli host =
+   incassi − commissioni · catena di impronte integra.
+
+   **Come si fa:**
+   1. si rialza il banco isolato (serve `/root/.env.prova` con la chiave di prova, permessi 600:
+      il formato è scritto in testa a `banco_prova.sh`);
+   2. **dieci giri**, non uno: alcuni pagati, alcuni cancellati, almeno due sulle **stesse date**
+      (una deve essere rifiutata), uno lasciato scadere senza pagare;
+   3. ⛔ **si leggono i registri del contenitore PRIMA di smontarlo** — è l'errore fatto ieri:
+      smontato il banco, persa la prova di *perché* la registrazione del pendente non avviene;
+   4. si controllano i **totali**, non solo il singolo caso: la somma degli incassi deve
+      quadrare col libro giornale, e il dovuto agli host con la somma dei netti.
+   ✅ **LE RIPARAZIONI CHE USCIRANNO DA QUESTO GIRO SONO GIÀ AUTORIZZATE.** Detto dal fondatore
+   il 2026-08-08: *«dopo, quando farà le 10 prenotazioni, se c'è qualcosa lo ripara — ancora
+   autorizzato»*. Vale per i difetti **trovati da quel giro**, con l'ordine di D20 (guardia
+   prima, vista rossa) e la suite intera prima di ogni commit. Non vale per aprire lavori nuovi.
+   ⚠️ La chiave di prova serve di nuovo: il fondatore la prende da
+   `dashboard.stripe.com/test/apikeys` (sezione **Chiavi standard → Chiave privata**, dietro il
+   bottone «Rivela»; **non** la tabella «Chiavi con limitazioni», che è quella sbagliata e ci ha
+   fatto perdere mezz'ora). La si mette in un file, **mai in chat**, e si cancella a fine giro.
+
+0-ZERO-TER. 🎭 **LA PROVA GENERALE VERA (5 € veri) — resta da fare.** Deciso dal
    fondatore il 2026-08-08 dopo una discussione che vale più della decisione: *«se non funzionano
    e non segnano le cose reali che devono fare è un casino, fallimento prima di iniziare»*.
    Ha ragione, **ma i mutanti non rispondono a quella paura**: giudicano i collaudi, non il
@@ -1138,7 +1401,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5457 test
+SUITE ATTUALE: Ran 5463 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis 6.141.1 + pyyaml + coverage installati
           · ⚠️ bash E openssl nel PATH (`C:\Program Files\Git\usr\bin`) — vedi qui sotto
 COMANDO:  python -m unittest discover -s . -p "test_*.py"

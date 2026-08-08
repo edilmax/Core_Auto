@@ -4251,7 +4251,7 @@ class RouterHTTP:
                      "idempotente": bool(getattr(e, "idempotente", False)),
                      "passi_falliti": _falliti,
                      "nota": ("date liberate; payout trattenuto ed escrow chiuso; "
-                              "rimborso PSP da eseguire quando Stripe e' live") if not _falliti
+                              "il rimborso va eseguito A MANO dal pannello admin") if not _falliti
                              else ("date liberate, ma ATTENZIONE: questi passi NON sono riusciti "
                                    "e vanno fatti a mano -> " + ", ".join(_falliti))}
 
@@ -5246,7 +5246,22 @@ class RouterHTTP:
                         scadenza_ts=scad)
             corpo["stato"] = "in_attesa_pagamento"   # confermata SOLO dopo il webhook di pagamento
         except Exception:
-            logger.warning("registrazione hold pagamento fallita (ignorata)", exc_info=True)
+            # ⛔ ERROR, NON WARNING (2026-08-08, trovato dalla PROVA GENERALE).
+            #    Se questa scrittura fallisce, la prenotazione prosegue e l'ospite paga,
+            #    ma il record del pendente NON ESISTE. Conseguenza misurata sul banco:
+            #    alla cancellazione, `_pp`/`_rec` sono vuoti (fase83:6117) e la marcatura
+            #    «da rimborsare» non avviene -> le date si liberano, l'ospite riceve
+            #    un'email che gli promette il rimborso, e da NESSUNA PARTE resta scritto
+            #    che quei soldi vanno restituiti.
+            #    Era un warning, e `fase186:263` dichiara di leggere SOLO gli ERROR:
+            #    invisibile per costruzione, esattamente come i due gemelli chiusi il
+            #    2026-08-07 (`fase81._comm_alloggio` e `fase88.giorni_da_registrazione`).
+            #    Il riferimento nel messaggio non e' decorazione: senza, non si sa QUALE
+            #    prenotazione andare a riparare a mano.
+            logger.error("HOLD PAGAMENTO NON REGISTRATO per %s: la prenotazione prosegue "
+                         "ma senza il record dei pendenti, quindi un'eventuale "
+                         "cancellazione NON lascera' traccia del rimborso dovuto -> "
+                         "verificare a mano questa prenotazione", ref, exc_info=True)
 
     def _apri_garanzia(self, ref, netto_host_cents, allog, ci):
         try:
@@ -6157,7 +6172,7 @@ class RouterHTTP:
                      "credito_viaggio_cents": cv_cents, "credito_viaggio_token": cv_token,
                      "nota": (("nessun addebito: non avevi ancora pagato, non c'e' nulla da "
                                "rimborsare.") if not pagato_davvero else
-                              ("date liberate; rimborso PSP da eseguire quando Stripe e' live."
+                              ("date liberate; il rimborso va eseguito A MANO dal pannello admin."
                                + (" Hai un Credito Viaggio per la prossima prenotazione."
                                   if cv_cents else "")))}
 
