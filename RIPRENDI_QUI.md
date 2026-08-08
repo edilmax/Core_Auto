@@ -13,13 +13,60 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 9670e11
+CONSEGNE AGGIORNATE A: 6a5b8b7
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
 sopra passa più di un commit di lavoro, **la suite diventa ROSSA** — e siccome non si committa con
 la suite rossa, non si può andare avanti lasciando indietro queste consegne. Chi aggiorna il blocco
 rimette qui il commit di `HEAD`.*
+
+### 🟢 2026-08-08 SERA — DUE RIPARAZIONI, E UNA DIAGNOSI SMENTITA DAI FATTI
+
+⛔ **NON COMMITTATO: manca «procedi al commit».** Tutto il lavoro è **solo sul computer**;
+il VPS è stato rimesso esattamente com'era (`fase83_server.py` -> `30ff4d37af7175a8`, verificato).
+
+**① IL BANCO DI PROVA MISURAVA UN'ALTRA MACCHINA.** Partiva coi soli `--env-file` e gli
+mancavano le **18** variabili del blocco `environment:` del compose (**14** dicono dove
+salvare i database): 13 database finivano in `/app/data`, che muore col contenitore.
+Il banco riproduceva *esattamente* il guasto che il compose esiste per impedire.
+Ora l'ambiente si **prende dal contenitore vero** e un controllo **FERMA** il banco se non è
+fedele. Le due direzioni, misurate sulla macchina vera:
+```
+PRIMA:  MANCANTI 18 · database fuori posto 13 · uscita 1
+DOPO:   MANCANTI  0 · database fuori posto  0 · uscita 0
+```
+Nuovo strumento `collaudi/fedelta_banco.py` (il giudizio è in **Python**, non nello script di
+shell, proprio perché così la suite lo prova nelle DUE direzioni — D18).
+Guardia: `test_pipeline_ci.TestIlBancoDiProvaMisuraLaStessaMacchinaDellaProduzione`
+(9 prove, **vista rossa** con l'elenco incollato a mano, ripristino sha256 identico).
+
+**② IL RIMBORSO NON LASCIAVA TRACCIA NEI CONTI** — vedi la voce 0-ZERO-BIS più sotto per la
+diagnosi sbagliata e perché conta. Le strade erano **tre** (admin · host · ospite) e solo
+quella dell'ospite taceva: riparata con lo **stesso `tipo="rimborso"`** delle altre due
+(+36 righe in `fase83_server.py`, la maggior parte commento). Guardia vista ROSSA prima,
+difetto rimesso dentro e rivista rossa una **seconda** volta, allarme provato **anche a
+gridare** (regola 10), e in più si verifica che la riga sia **atterrata** — non che sia
+stata chiamata, perché `_giornale` degrada i guasti a warning e il Guardiano legge solo ERROR.
+
+**③ IL GIRO SUL BANCO ORA È 15 HOST × 15 PRENOTAZIONI + I PANNELLI** (`collaudi/giro_banco.py`).
+Eseguito sul banco fedele con Stripe di prova: **`PASSI: 34 · OK: 34 · NON OK: 0 · NON
+ESEGUITI: 0`**. Dentro ci sono le cose che con UN host non si potevano nemmeno vedere:
+isolamento fra host (403 sul calendario altrui), i soldi **host per host**, voucher + chat,
+calendario occupato e poi liberato, controversia coi soldi che si fermano, pannello admin
+(anche le prove NEGATIVE: chiave sbagliata -> 401, senza chiave -> 401), super-admin col
+secondo fattore e le sue 7 letture, e il controllo che **nessun database nasca nel posto
+sbagliato DOPO l'accensione** (buco che il controllo di fedeltà, girando all'avvio, non vede).
+📌 I controlli non eseguibili finiscono in un elenco **«NON ESEGUITI»**: non spariscono in
+silenzio, perché un salto silenzioso fa sembrare coperto ciò che nessuno ha guardato.
+
+**LO STATO, misurato:** computer `6a5b8b7` + modifiche non committate · GitHub `6a5b8b7` ·
+VPS file `6a5b8b7` · immagine viva `3c5c3a15` · chiavetta `9670e11` (indietro di **soli
+documenti**: il comando di controllo stampa 0 righe).
+File toccati: `collaudi/banco_prova.sh` · `collaudi/fedelta_banco.py` (nuovo) ·
+`collaudi/giro_banco.py` · `test_pipeline_ci.py` · `test_cancellazione_money.py` ·
+`fase83_server.py` · `RIPRENDI_QUI.md` · `REGISTRO_INGEGNERIA.md`.
+`ruff` **invariato** su tutti (stessi avvisi di `HEAD`, stesse regole); il file nuovo passa pulito.
 
 *Scritto applicando **D21**, e stavolta **la percentuale È STATA LETTA**: il fondatore ha eseguito
 `/context` → **44% (439,4k su 1M)**. È la prima volta che questo blocco porta il numero che D21
@@ -323,7 +370,63 @@ acceso, e chi non lo sa ci perde un'ora.
   nella voce **(23)**.
 
 ### ⏳ COSA RESTA — in ordine di quanto costa se va male
-0-ZERO-BIS. 🔴 **IL RIMBORSO NON LASCIA TRACCIA — trovato dalla prova generale, 2026-08-08.**
+0-ZERO-BIS. ✅ **CHIUSO IL 2026-08-08 SERA — ma la diagnosi qui sotto era SBAGLIATA, e
+   sapere PERCHÉ vale più della riparazione.**
+
+   ⛔ **COSA ERA STATO CREDUTO** (il testo originale è rimasto qui sotto, per intero, come
+   promemoria): «il database dei pagamenti pendenti era VUOTO, quindi la marcatura non è mai
+   avvenuta; sospetto forte sull'`except` che ingoia a `fase83:5243`».
+
+   ⛔ **COSA È STATO MISURATO** (banco fedele, 15 prenotazioni vere su Stripe di prova):
+   ```
+   /app/data/pendenti.db   tabella pendenti, righe: 14      <- LE RIGHE C'ERANO
+   /data/pendenti.db       non esiste
+   "hold pagamento" nei registri: 0 occorrenze              <- quell'except NON è mai
+                                                               stato raggiunto: SMENTITO
+   pendenti  : pagato 7 · rimborsato 6 · scaduto 1          <- la marcatura AVVIENE
+   payout    : maturato 7 · trattenuto 6                    <- i soldi si fermano
+   tassa     : 6 su 6 stornate
+   ```
+   **Si guardava il file sbagliato.** Il banco di prova partiva senza le 18 variabili
+   d'ambiente del compose, e 13 database — pendenti, payout, garanzia, accettazioni, marche
+   temporali — finivano DENTRO il contenitore invece che nel volume. `docker rm -f` li
+   cancellava davvero: ecco perché «smontando il banco si è persa la prova».
+
+   💡 **LA LEZIONE, che vale oltre il caso:** *quando una misura è assurda, il primo sospetto
+   va allo strumento, non al codice.* Un ramo `except` è un sospetto comodo perché è visibile;
+   un banco che scrive nel posto sbagliato non si vede, e per questo costa una diagnosi intera.
+
+   ⛔ **IL DIFETTO VERO, che c'era davvero:** il giornale contabile non registrava niente per
+   le cancellazioni (`6 su 6` senza riga), mentre l'email prometteva il rimborso all'ospite.
+   **Le strade erano TRE e solo una taceva:** `_admin_rimborso` scriveva la riga nel giornale,
+   la cancellazione dell'**host** pure («SCATOLA NERA del RIMBORSO all'ospite»), la
+   cancellazione self-service dell'**ospite** no. Cablaggio mancante, non scelta di progetto.
+   **Riparato** con lo stesso `tipo="rimborso"` delle altre due.
+   ⛔ **E qui la prima stesura era sbagliata, corretta prima del commit.** Avevo usato una
+   NOTA DI CREDITO, che in astratto è più corretta (il denaro non è ancora uscito). Ma
+   `fase177.aggrega_dac7` aggrega per host **solo i tipi che conosce**, e `nota_credito` non
+   è fra quelli: la **stessa** cancellazione sarebbe finita nel report fiscale se la faceva
+   l'host e **no** se la faceva l'ospite. *Un'imprecisione uniforme è meglio di una
+   correttezza a macchie.* **Lezione: prima di scegliere l'attrezzo «migliore», si guarda
+   CHI LEGGE il registro.**
+   Guardia vista ROSSA (`0 righe di rimborso su 20000 cents promessi`), difetto rimesso dentro
+   e rivista rossa, allarme provato **anche a gridare**, ripristino sha256 identico.
+   Nuova guardia `test_LE_DUE_CANCELLAZIONI_LASCIANO_LO_STESSO_TIPO_DI_TRACCIA`: pretende che
+   `tipo="rimborso"` compaia almeno **3** volte in `fase83_server.py` — se una strada tace o
+   usa un attrezzo diverso, rosso lo stesso giorno.
+
+   ⚠️ **RESTA APERTO, e non l'ho toccato di proposito:** il giornale continua a dire
+   `debiti_vs_host 12610` mentre il cruscotto dei bonifici ne considera pagabili `6790`
+   (differenza `5820` = la quota host delle 6 cancellate). Si chiude quando l'admin ESEGUE
+   il rimborso (allora parte la riga `rimborso` che sistema anche il DAC7): è uno stato di
+   passaggio, non un buco — ma ora è documentato da una nota numerata invece che da niente.
+   Toccare quel pezzo vuol dire inventare tipi di movimento nuovi e cambiare gli **export
+   fiscali certificati**: è una decisione del fondatore, non un effetto collaterale.
+
+   ---
+   *Segue il testo ORIGINALE del 2026-08-08 mattina, lasciato per intero perché la
+   diagnosi sbagliata è essa stessa l'insegnamento. NON si usa per decidere.*
+
    **È il primo bersaglio della prossima sessione.** Non è un mutante e non è una supposizione:
    è stato misurato facendo una prenotazione vera su Stripe di prova e poi cancellandola.
    ```
@@ -1426,10 +1529,18 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5463 test
-AMBIENTE: Windows · Python 3.9.10 · hypothesis 6.141.1 + pyyaml + coverage installati
-          · ⚠️ bash E openssl nel PATH (`C:\Program Files\Git\usr\bin`) — vedi qui sotto
-COMANDO:  python -m unittest discover -s . -p "test_*.py"
+SUITE ATTUALE: Ran 5484 test
+AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
+          · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
+            le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
+            entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3.
+COMANDO:  python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"
+MISURATO SU: 6a5b8b7 + le modifiche non committate del 2026-08-08 sera
+GIRO REALE DEL 2026-08-08 sera (uscita letta diretta, senza tubi):
+          Ran 5478 tests in 4020.192s · FAILED (failures=1, skipped=4) · uscita 1
+          L'UNICO fallimento era QUESTA riga, che dichiarava ancora 5463: la guardia
+          D22 ha fatto esattamente il suo mestiere. Zero difetti nel codice.
+          5484 raccolti − 5478 eseguiti = i 5 di openssl, non un mistero.
 ```
 📌 **Da 5437 a 5443** (2026-08-06 sera, albero `a67eef6` + le 6 guardie nuove sul cancello):
 **rimisurato, non sommato** —

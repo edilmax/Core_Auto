@@ -228,6 +228,56 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### ✅ FATTO 2026-08-08 sera (24) — IL BANCO MENTIVA, E LA DIAGNOSI DEL GIORNO PRIMA ERA SBAGLIATA
+
+**Modulo NUOVO: `collaudi/fedelta_banco.py`** — *creato 2026-08-08.*
+· **Scopo:** dire se la copia di prova misura la STESSA macchina della produzione, e **fermare**
+  il banco se non è così. · **Logica:** confronta i NOMI delle variabili d'ambiente del
+  contenitore di prova con quelle del contenitore vero (`docker inspect … .Config.Env`) e cerca
+  i `.db` nati **dentro** il contenitore invece che nel volume — l'impronta osservabile del
+  difetto. Il giudizio è in tre funzioni pure (`variabili_mancanti`, `database_fuori_posto`,
+  `banco_infedele`) **apposta perché la suite possa provarlo nelle DUE direzioni** (D18).
+· **Dipendenze:** solo `docker` sulla macchina host; nessuna libreria. · **STATO: ACCESO**,
+  chiamato da `collaudi/banco_prova.sh` ai passi `[2b]` (deriva l'ambiente) e `[5b]` (verdetto,
+  esce 1 e smonta). · **Non copia i SEGRETI** dalla produzione al banco: li salta per criterio
+  (nome che contiene KEY/SECRET/TOKEN/…), non per elenco.
+· **Guardia:** `test_pipeline_ci.TestIlBancoDiProvaMisuraLaStessaMacchinaDellaProduzione`
+  (9 prove) — **vista rossa** iniettando il guasto vero (l'elenco `DB_*` incollato a mano),
+  ripristino **sha256 identico**.
+
+**MODIFICATO `fase83_server.py` — `_cancella_prenotazione`** (+36 righe, la maggior parte
+commento; via «autorizzato»). Alla cancellazione di una prenotazione **pagata** con rimborso > 0
+viene scritta la riga `self._giornale(tipo="rimborso", …)`, **la stessa** che scrivono già
+`_admin_rimborso` e la cancellazione dell'host. Prima: l'email prometteva i soldi all'ospite e il
+giornale non ne sapeva niente — `6 cancellate su 6` senza una riga. Le strade sono **tre** e solo
+questa taceva: **cablaggio mancante**, non scelta di progetto.
+· ⛔ **Prima stesura sbagliata, corretta prima del commit:** usava `emetti_nota(tipo="credito")`,
+  in astratto più corretta (il denaro non è ancora uscito). Ma `aggrega_dac7` aggrega per host
+  **solo i tipi che conosce** e `nota_credito` non è fra quelli: la stessa cancellazione sarebbe
+  finita nel report fiscale se la faceva l'host e **no** se la faceva l'ospite. *Prima di
+  scegliere l'attrezzo «migliore», si guarda CHI LEGGE il registro.*
+· **Non si limita a chiamare: verifica che la riga sia ATTERRATA** (`fc.movimenti(rif)`), perché
+  `_giornale` degrada i guasti a **warning** e `fase186:263` legge solo gli **ERROR**. Becca
+  anche il caso in cui il movimento torni `None` in silenzio.
+· **Guardia:** `test_cancellazione_money.TestLaCancellazioneLasciaTracciaNeiConti` (5 prove) —
+  vista **rossa** prima, difetto **rimesso dentro** e rivista rossa una seconda volta, e
+  l'allarme provato **anche a gridare** (regola 10). Più
+  `test_LE_DUE_CANCELLAZIONI_LASCIANO_LO_STESSO_TIPO_DI_TRACCIA`, che pretende `tipo="rimborso"`
+  almeno **3 volte** in `fase83_server.py`: se una strada tace, rosso lo stesso giorno.
+
+**MODIFICATO `collaudi/giro_banco.py`** — da 1 host a **15 host × 15 prenotazioni**, più
+pannello admin, super-admin (bunker), controversie, voucher + chat, calendario prima/dopo,
+i conti **host per host**, e il controllo che nessun database nasca nel posto sbagliato **dopo**
+l'accensione. I controlli non eseguibili finiscono in un elenco «NON ESEGUITI»: mai un salto
+silenzioso. Eseguito sul banco fedele: `PASSI 34 · OK 34 · NON OK 0 · NON ESEGUITI 0`.
+· **Tolto** il controllo «dovuto agli host = incassi − commissioni»: era vero **per
+  costruzione** e sarebbe passato verde anche cancellando tutte le prenotazioni.
+
+**⏳ RESTA DA DECIDERE (fondatore):** il giornale tiene `debiti_vs_host` e la commissione sulle
+prenotazioni cancellate finché l'admin non esegue il rimborso (scostamento misurato: `5820`
+cents su 6 cancellate). Si chiude da sé all'esecuzione del rimborso. Correggerlo prima
+vorrebbe dire **nuovi tipi di movimento** e toccare gli **export fiscali certificati**.
+
 ### ✅ FATTO 2026-08-07 notte (23) — GLI STRUMENTI DI SALVATAGGIO, E UN DIFETTO CHE NON C'ERA
 
 **Due lavori. Il secondo è finito in dieci minuti perché era già chiuso, e accorgersene è
