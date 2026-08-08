@@ -72,7 +72,10 @@ docker logs "$NOME" 2>&1 | grep -icE "traceback|critical" || true
 echo
 echo "=== ALTRE DUE SONDE (una pagina e una porta CHIUSA) ==="
 curl -s -o /dev/null -w "  /            -> %{http_code}\n" "http://127.0.0.1:$PORTA/"
-curl -s -o /dev/null -w "  /api/admin/lista -> %{http_code}   (deve NON essere 200)\n" "http://127.0.0.1:$PORTA/api/admin/lista"
+# ⛔ NON /api/admin/lista: risponde 404, cioe' «questa pagina non c'e'», e un 404 non
+#    prova MAI che qualcosa sia protetto -- e' l'ornamento che D17 vieta, ed era rimasto
+#    qui dentro fino all'8 agosto. L'indirizzo giusto ESISTE e risponde 403.
+curl -s -o /dev/null -w "  /api/bunker/invarianti -> %{http_code}   (atteso 403; un 404 vorrebbe dire che sto interrogando un indirizzo che non esiste)\n" "http://127.0.0.1:$PORTA/api/bunker/invarianti"
 
 echo
 echo "=== SMONTO TUTTO ==="

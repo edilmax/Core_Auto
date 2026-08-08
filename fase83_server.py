@@ -5954,7 +5954,11 @@ class RouterHTTP:
     def _cancella_prenotazione(self, body):
         """Cancellazione SELF-SERVICE dell'ospite: presenta il voucher firmato -> il sistema
         calcola il rimborso secondo la politica (fase111, in cents) e LIBERA le date
-        (fase58.rilascia). Il rimborso PSP vero parte quando Stripe e' live (gated)."""
+        (fase58.rilascia). ⛔ IL RIMBORSO ALL'OSPITE NON PARTE DA SOLO: va eseguito A MANO
+        dal pannello admin (/api/admin/rimborso). Nessuna riga di questo progetto chiama
+        l'API dei rimborsi di Stripe -- verificato l'8 agosto: `grep v1/refunds` -> 0.
+        (Qui c'era scritto «parte quando Stripe e' live», ma Stripe e' live da settimane:
+        era una frase di un mondo che non esiste piu', e mandava fuori strada chi legge.)"""
         import datetime
         dati = self._json(body)
         if dati is None:
