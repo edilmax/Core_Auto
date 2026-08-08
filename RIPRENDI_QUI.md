@@ -13,7 +13,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: a4f7a24
+CONSEGNE AGGIORNATE A: c87945d
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -69,6 +69,11 @@ scusa**: il 7 agosto sera il codice è cambiato per la prima volta dopo settiman
 documenti. Il controllo che lo dice in un colpo, da rifare a ogni commit di prodotto:
 `git diff --name-only <commit-chiavetta> HEAD | grep -E "^(fase|main_casavip|deploy/|requirements|Dockerfile)"`
 — se stampa qualcosa, la chiavetta è indietro **sul motore**, non sui documenti, e va rigenerata.
+🔴 **ESEGUITO il 2026-08-07 notte: stampa CINQUE righe**, i cinque strumenti nuovi in `deploy/`.
+La chiavetta **va rigenerata**, e stavolta il motivo è buono: sono proprio gli attrezzi per
+rifarla, che fino a ieri non erano dentro la copia che avrebbero dovuto ricostruire.
+⚠️ Non sono codice del prodotto — il sito non cambia — ma il controllo non distingue, **e fa
+bene a non distinguere**: sarebbe il primo passo per giustificare la prossima riga saltata.
 ⚠️ **E la chiavetta è ancora una cartella su `C:`**, cioè lo stesso disco del progetto: protegge
 da «ho rotto il repository», **non** dal disco che muore o dal computer rubato. Va copiata su un
 supporto fisico — è un gesto che può fare solo il fondatore, ed è scritto anche sul suo foglio.
@@ -179,6 +184,29 @@ acceso, e chi non lo sa ci perde un'ora.
    sconti lunghi, tassa di soggiorno (`fase66`), split (`fase65`/`133`). L'ordine delle cinque
    aree: **A numeri visibili · B valore regalato (referral/crediti) · C dati da tenere ·
    D doppia prenotazione · E catena intera**.
+0-bis. 🔑 **LA CHIAVETTA VA RIGENERATA** (~1 ora, metodo nella voce (22)). Il controllo sul
+   motore stampa **cinque righe**: i cinque strumenti di salvataggio entrati in `deploy/`.
+   Finché non si rigenera, la copia di emergenza **non contiene gli attrezzi per rifarsi**.
+   ⚠️ E vanno tolte le **due copie in `/root`** sul VPS appena il commit arriva sul server:
+   oggi ci sono sia lì sia in `deploy/`, identiche byte per byte — ma due copie identiche oggi
+   sono due copie diverse fra un mese.
+
+0-ter. ▶️ **IL PROSSIMO LAVORO È `fase99_multicurrency` (valuta), scelto dal fondatore.**
+   Misure per partire, già prese: 270 righe · **35 punti rompibili** · 0 rinunce · **10 file di
+   collaudo la nominano** · **12 moduli di produzione la importano** · accesa e LIVE dal
+   2026-07-22 (chiave OXR sul VPS).
+   ⛔ **NON si comincia dai mutanti.** La regola dei 10 collaudi dice che la mutazione va per
+   **ultima**, «perché è l'unica che giudica **i test**, non il codice: ha senso solo quando gli
+   altri nove sono già verdi». Quindi: prima i nove (cablaggio · avvio reale · oracolo
+   indipendente · plausibilità sui numeri veri · occhio del fondatore · fuzzing/estremi ·
+   giudice esterno · audit dei testi · caccia ai finti verdi), **poi** il setaccio — e il primo
+   setaccio si **cronometra**, perché da quel numero si decide quanti altri farne.
+   ⚠️ Fuori dai soldi, i buchi più larghi del censimento sono altrove e non vanno dimenticati:
+   `fase173_motore_seo` **62** punti rompibili con **un solo** collaudo che lo nomina,
+   `fase72_digital_twin` **58** con uno, `fase189_price_alerts` **49** con uno.
+   *(misurati con `python collaudi/mutazione_prodotto.py --censimento`, uscita 0, su `c87945d`;
+   colonne: righe · mutanti · rinunce · chi lo vede)*
+
 1. 🟡 **`fail2ban` è ancora assente** — ma dopo la chiusura della password vale poco: un bot che
    non può più riuscire fa solo rumore nei registri. Non è più la cosa più grave aperta.
 2. 💰 **23 moduli dei soldi su 25 mai passati al setaccio dei mutanti.** Ordine deciso dal
