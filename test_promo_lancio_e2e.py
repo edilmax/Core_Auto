@@ -400,5 +400,84 @@ class TestIlRipiegoDellaCommissioneNonPuoEssereMUTO(BasePromo):
             "Messaggi ERROR raccolti durante il preventivo: %r" % (rotto, sano, raccolti))
 
 
+class TestRiIscrizioneSullaStessaStruttura(BasePromo):
+    """IL BUCO DEL CIN — misurato il 2026-08-09 su 120 host (scenario B3).
+
+    Cosa era rotto (provato con prenotazioni vere, non a lettura): l'impronta del CIN
+    VIENE depositata alla cancellazione — `fase156` la legge dagli annunci e la passa a
+    `deposita_impronte`, e un collaudo lo sorvegliava gia' — ma alla registrazione si
+    confrontano SOLO email e telefono (`fase88:334`), cioe' le due cose che chiunque
+    cambia in cinque minuti. Chi si cancellava e tornava con contatti nuovi sulla STESSA
+    struttura si riprendeva 90 giorni a commissione zero.
+
+    Perche' nessuna guardia lo prendeva: era sorvegliato il DEPOSITO dell'impronta, mai
+    il PRELIEVO. Meta' meccanismo provato, meta' no — la stessa forma del guasto del
+    2026-07-20.
+
+    L'osservabile e' FORTE di proposito: non la data nel database, ma la COMMISSIONE
+    DAVVERO ADDEBITATA su un preventivo. La data e' il meccanismo; la commissione e' il
+    danno, ed e' l'unica cosa che l'host vede sul suo bonifico.
+    """
+    CIN_A = "IT058091C2X5V0ABCD"
+    CIN_B = "IT058091C2X5V0WXYZ"
+    OTTO_PER_CENTO = PREZZO * 800 // 10000
+
+    def _host_con_cin(self, r, email, slug, cin, telefono):
+        s, c = self._g(r, "POST", "/api/host/registrazione",
+                       {"email": email, "password": "password1", "telefono": telefono,
+                        "accetta_termini": True, "accetta_clausole": True,
+                        "accetta_privacy": True, "doc_sha256": doc_sha256(),
+                        "versione": CONTRATTO_HOST_VERSIONE})
+        self.assertEqual(s, 201, c)
+        tk = {"X-Host-Token": c["token"]}
+        oggi = datetime.date.today()
+        s, o = self._g(r, "POST", "/api/host/pubblica",
+                       {"slug": slug, "titolo": "Casa", "citta": "Roma", "paese": "IT",
+                        "cin": cin, "prezzo_notte_cents": PREZZO, "capacita": 4}, tk)
+        self.assertEqual(s, 201, o)
+        self._g(r, "POST", "/api/host/disponibilita_range",
+                {"alloggio_id": slug, "da": oggi.isoformat(),
+                 "a": (oggi + datetime.timedelta(days=20)).isoformat(),
+                 "unita_totali": 5, "prezzo_netto_cents": PREZZO}, tk)
+        return c["host_id"], tk
+
+    def test_stessa_struttura_contatti_nuovi_NON_ricicla_la_promozione(self):
+        from fase156_erasure import cancella_attivita_host
+        sis, r = self._sistema()
+        hid, _tk = self._host_con_cin(r, "primo@x.it", "casa-a", self.CIN_A, "+39 333 0000001")
+        self._invecchia(hid, 200)                        # host di 200 giorni -> 8%
+        self.assertEqual(self._quote(r, slug="casa-a")["commissione_cents"],
+                         self.OTTO_PER_CENTO,
+                         "PREMESSA FALLITA: un host di 200 giorni deve gia' pagare l'8%")
+
+        rep = cancella_attivita_host(sis, hid, forza=True)
+        self.assertGreater(rep.get("impronte_depositate", 0), 0,
+                           "le impronte non sono state depositate: la prova non vale nulla")
+
+        # torna: email NUOVA, telefono NUOVO, ma la stessa casa (stesso CIN)
+        self._host_con_cin(r, "secondo@x.it", "casa-b", self.CIN_A, "+39 333 0000002")
+        addebitata = self._quote(r, slug="casa-b")["commissione_cents"]
+        self.assertEqual(
+            addebitata, self.OTTO_PER_CENTO,
+            "PROMOZIONE RICICLATA: sulla stessa struttura (CIN %s) si addebitano %d "
+            "centesimi invece di %d. L'impronta del CIN e' in cassaforte ma nessuno la "
+            "rilegge, quindi bastano un'email e un telefono nuovi per riprendersi 90 "
+            "giorni a commissione zero." % (self.CIN_A, addebitata, self.OTTO_PER_CENTO))
+
+    def test_una_struttura_DIVERSA_conserva_i_suoi_90_giorni(self):
+        """Prova di rimozione: guai a riconoscere chi non c'entra — gli ruberemmo la promozione."""
+        from fase156_erasure import cancella_attivita_host
+        sis, r = self._sistema()
+        hid, _tk = self._host_con_cin(r, "tizio@x.it", "casa-a", self.CIN_A, "+39 333 1111111")
+        self._invecchia(hid, 200)
+        cancella_attivita_host(sis, hid, forza=True)
+
+        # host davvero nuovo, altra casa, altro CIN: la promozione gli SPETTA
+        self._host_con_cin(r, "caio@x.it", "casa-c", self.CIN_B, "+39 333 2222222")
+        self.assertEqual(self._quote(r, slug="casa-c")["commissione_cents"], 0,
+                         "a un host NUOVO, su una struttura MAI vista, abbiamo rubato i "
+                         "90 giorni di promozione")
+
+
 if __name__ == "__main__":
     unittest.main()
