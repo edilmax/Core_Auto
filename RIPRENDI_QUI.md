@@ -13,7 +13,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 45e893e
+CONSEGNE AGGIORNATE A: e4d40b0
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -40,9 +40,34 @@ LA PROVA VERA     dentro il contenitore che gira:
                   cancellazione ospite" 1 · chiamate vere tipo="rimborso" 3
                   e fase83 nel contenitore = fase83 su disco (sha256 uguali)
 ```
-**I posti, misurati dopo il deploy:** computer `45e893e` · GitHub `45e893e` · VPS file
-`45e893e` · immagine viva `0c7eb303` (paracadute `3c5c3a15`) · chiavetta `9670e11`
-⏳ **da rigenerare: stavolta è cambiato il MOTORE** (`fase83_server.py`), non solo i documenti.
+**⑤ CHIAVETTA RIGENERATA su `e4d40b0`** (2026-08-09 ore 00:30), dal **server vivo**, con le
+**tre** prove e non una:
+```
+(a) impronte   703 su 703 IDENTICHE · 0 diverse · 0 assenti · 25 database integri
+(b) completa   estratta in cartella VUOTA: 1062 file · 151 moduli fase · 401 test
+               · .env.casavip presente · 5484 prove raccolte · 0 moduli non importabili
+(c) accensione /api/health 200 in 2s · / 200 · /api/bunker/invarianti 403
+               money_path_pronto True · avvisi [] · errori nel log 0
+trasferimento  impronte sha256 identiche fra server e chiavetta
+```
+Generazione precedente **spostata** in `precedente_9670e11\`, non cancellata. Totale 610 MB.
+⏳ **Resta il gesto che può fare solo il fondatore: copiarla su un supporto fisico** — oggi
+vive su `C:`, lo stesso disco del progetto: protegge da «ho rotto il repository», **non** dal
+disco che muore.
+
+**I POSTI, misurati alla chiusura del 2026-08-09:** computer `e4d40b0` · GitHub `e4d40b0` ·
+VPS file `e4d40b0` · **immagine viva `0c7eb303`** (paracadute `3c5c3a15`) · chiavetta `e4d40b0`.
+⚠️ L'immagine è ferma a `45e893e` **ed è giusto così**: fra `45e893e` e `e4d40b0` non c'è
+codice di produzione (solo documenti, test e uno strumento di collaudo), quindi il `git pull`
+basta e la ricostruzione non serve. Il controllo che lo dice:
+`git diff --name-only 45e893e e4d40b0 | grep -E "^(fase|main_casavip|Dockerfile|requirements)"`
+→ **stampa 0 righe**.
+
+📌 **Il banco di prova è stato smontato** (aveva finito), ma **`/root/.env.prova` resta sul VPS
+con permessi 600**: è la chiave di prova di Stripe (`sk_test`, non può muovere un euro vero) e
+lasciarla evita di ridisturbare il fondatore al prossimo giro. Si toglie con
+`rm /root/.env.prova` — dichiarato qui perché una credenziale lasciata in giro **senza dirlo**
+è un'altra cosa.
 
 **① IL BANCO DI PROVA MISURAVA UN'ALTRA MACCHINA.** Partiva coi soli `--env-file` e gli
 mancavano le **18** variabili del blocco `environment:` del compose (**14** dicono dove
