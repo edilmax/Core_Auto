@@ -234,7 +234,7 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 · **Il difetto, misurato su 120 host** (non letto): l'anti-riciclo della promozione deposita
   alla cancellazione le impronte di email, telefono, codice fiscale, P.IVA **e del CIN degli
-  annunci** (`fase156:192`), ma la registrazione (`fase88:334`) confronta **solo email e
+  annunci** (`fase156:192`), ma la registrazione (`registra()`, `fase88:374`) confronta **solo email e
   telefono** — le due cose che chiunque cambia in cinque minuti. Chi si cancellava e tornava
   con contatti nuovi **sulla stessa struttura** si riprendeva 90 giorni a commissione zero:
   2.400-3.000 EUR a testa. **Il CIN lo rilascia lo Stato e non si cambia**, ed era già in
@@ -259,7 +259,7 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
   `test_promo_lancio_e2e.py` (+ i due documenti). `ruff`: zero rilievi prima, zero dopo.
 
 ⚠️ **Resta aperto, dichiarato:** all'«età ignota» si arriva da **tre** porte e solo una GRIDA.
-`fase81:246` (alloggio senza proprietario risolvibile) e `fase88:704` (host non trovato)
+`fase81:246` (alloggio senza proprietario risolvibile) e `fase88:745` (host non trovato)
 applicano il 10% **in silenzio**. La direzione è giusta e va lasciata — **prendere troppo è
 recuperabile, prendere troppo poco no** — ma serve che si veda, e un giro che ripassi i conti
 e restituisca la differenza. Vedi il blocco del 2026-08-09 in cima a `RIPRENDI_QUI.md`.
