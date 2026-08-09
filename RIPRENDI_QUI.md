@@ -13,7 +13,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 9ae7115
+CONSEGNE AGGIORNATE A: 1a662f1
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -30,7 +30,7 @@ Niente caccia ai mutanti modulo per modulo: la domanda era **la macchina funzion
 #### 🔴 IL DIFETTO, TROVATO MISURANDO E NON LEGGENDO
 L'anti-riciclo della promozione (`host_impronte`, 2026-07-31) **esiste e funziona a metà**.
 Alla cancellazione si depositano le impronte di email, telefono, codice fiscale, P.IVA **e
-del CIN** degli annunci; alla registrazione (`fase88:334`) si confrontano **solo email e
+del CIN** degli annunci; alla registrazione (`registra()`, `fase88:374`) si confrontano **solo email e
 telefono**, cioè le due cose che chiunque cambia in cinque minuti. Il CIN lo rilascia lo
 Stato e non si cambia — ma nessuno andava a rileggerlo.
 **Era sorvegliato il DEPOSITO dell'impronta, mai il PRELIEVO**: c'era perfino un collaudo
@@ -106,7 +106,7 @@ finché non dichiara la raggiungibilità. 💡 Buona notizia dentro: l'appendice
    qualcosa che nessuno ha scritto: basta un `PROMO_LANCIO=0` e muore in silenzio.
 2. **All'«età ignota» si arriva da tre porte e solo una GRIDA**: l'eccezione scrive un ERROR
    (e c'è la guardia `test_se_il_registro_inciampa_il_ripiego_deve_GRIDARE`), ma «alloggio
-   senza proprietario risolvibile» (`fase81:246`) e «host non trovato» (`fase88:704`) applicano
+   senza proprietario risolvibile» (`fase81:246`) e «host non trovato» (`fase88:745`) applicano
    il 10% **in silenzio**. La direzione (10%, non 0%) è giusta e va lasciata: **prendere troppo
    è recuperabile, prendere troppo poco no**. Serve che si veda, e un giro che ripassi i conti
    e restituisca la differenza.
@@ -123,6 +123,161 @@ ESISTE**: il comando vero è questo). Esito: `15 OK · 3 FALLITI · 0 saltati`.
   che non può incassare**. Fatto dire alla macchina: `{"errore": "pagamento_non_disponibile"}`.
   È il fail-safe che funziona — e sul banco del VPS con chiave vera 13 prenotazioni su 13
   sono state pagate.
+
+### ▶️ IL PROSSIMO BLOCCO, DECISO DAL FONDATORE: **IL LATO CLIENTE, IN TUTTE LE SUE SFUMATURE**
+
+*Scritto QUI e non in una chat, perché una chat sparisce con `/clear` e il progetto no. È
+l'errore già pagato il 2026-08-01: 61 punti che vivevano solo nella memoria di sessione e su
+un altro computer non esistevano.*
+
+**Perché adesso:** il lato **host** è stato martellato (120 host, rampa, bonifici, anti-riciclo);
+il lato **ospite** no. Sul banco erano 15 prenotazioni, tutte della stessa forma.
+
+**LE ROTTE DELL'OSPITE** — inventario già fatto, letto dal codice, non da ricordare:
+```
+cerca e prezzo   catalogo · mappa · quote · trasparenza · tassa · preventivo/email · lingue · i18n
+prenota          concierge/book · concierge/cancella · concierge/manifest
+paga in gruppo   split/preview · split/crea · split/paga · split/stato
+dopo             voucher/prova · voucher/messaggi · voucher/messaggio · messaggi
+                 checkin/pre_registra · checkin/stato · recensioni
+se va storto     garanzia/stato · garanzia/conferma · garanzia/contesta
+legale           contratto · legale/documento
+```
+
+**LE DIMENSIONI DA INCROCIARE:**
+· **3 modi di pagare**: online · **in struttura** (anticipo + saldo sul posto) · **diviso fra più persone**
+· **2 modi di prenotare**: immediata · **su richiesta** (l'host approva)
+· **4 politiche di cancellazione**: flessibile · moderata · rigida · non rimborsabile
+· **dentro o fuori la finestra di ripensamento** (48h, rimborso 100% se l'arrivo è ≥72h)
+· **chi cancella**: l'ospite · l'host (rimborso pieno + penale) · nessuno si presenta (no-show)
+· **dopo**: voucher · PIN d'ingresso · chat con l'host · check-in digitale · recensione
+· **se va storto**: cauzione · contestazione · rimborso
+· **contorno**: tassa di soggiorno · valuta · 8 lingue · credito/voucher · referral
+
+Solo le prime quattro fanno **48 combinazioni**.
+
+⚠️ **NON È TERRA VERGINE — non rifare ciò che c'è già** (D10). Coperti oggi:
+`test_chat_controversia` (chat + prove + arbitro) · `test_fase113_messaggistica` (10 prove, fra
+cui il **mascheramento di email e telefono in 4 varianti** — è ciò che impedisce a host e ospite
+di scambiarsi il numero e prenotare fuori piattaforma, quindi è una guardia sul **fatturato**) ·
+`test_bombardamento_chat_prove` (6) · `test_bombardamento_split` + `test_bombardamento_split_router`
++ `test_e2e_varianti` (7) + `test_fase65_split_payment` · **check-in: 5 file** (`digitale`,
+`paganti`, `pass_solo_se_pagato`, `ramo`, `revoca`).
+
+💡 **DOVE SONO PROBABILMENTE I BUCHI:** i singoli pezzi sono provati, le **COMBINAZIONI** quasi
+mai. Esempio concreto mai provato: *«paga in struttura + su richiesta + politica rigida +
+cancella dentro la finestra di ripensamento»* — chi paga quanto, e a chi?
+Il buco del CIN chiuso oggi era esattamente di questa forma: due metà provate, la giunzione no.
+
+📌 **Il collegamento che non si vede** (`fase83_server.py:933`): *«CHAT COL TUO HOST + PROVE FOTO
+— in controversia le vede anche l'arbitro»*. La chat **non è un accessorio**: ciò che ospite e
+host si scrivono è la **prova su cui si decide chi prende i soldi**. Va collaudata come un
+percorso del denaro.
+
+**IL METODO, e non è facoltativo** (nato dai 5 giri buttati il 2026-08-09):
+1. **Prova in piccolo prima.** Uno script per 100 ospiti si prova con **2**.
+2. **Rileggi prima di premere invio**: i nomi da `grep`, mai a memoria; e controlla **l'ordine dei
+   passi** — leggere una misura *prima* del punto in cui la cosa avviene è l'errore più subdolo.
+3. **Osservabile forte**: i **soldi addebitati** e ciò che l'ospite riceve, mai lo stato interno.
+4. Un lavoro lungo **si stacca** dallo strumento che lo lancia e scrive da sé il codice d'uscita.
+5. La suite intera dura **~66 minuti**: i controlli mirati si fanno **prima**, non dopo.
+
+**GLI ATTREZZI DI OGGI, messi nel repository perché non sparissero** (erano nel temporaneo):
+· `collaudi/raggiungibilita.py` — cammina gli import da `main_casavip.py` e dice quali moduli la
+  produzione **accende davvero**. È ciò che ha trovato i 63 moduli morti su 151, e vede una cosa
+  che la guardia dell'appendice 23 **non può vedere** (quella conta chi importa, non chi si accende).
+· `collaudi/prova_bonifico_host.py` — la prova che i soldi arrivano sul conto dell'host, che
+  `giro_banco.py` dichiara di NON fare. Gira dentro il banco, con Stripe di prova.
+
+### 📋 LE COSE DA FARE, TUTTE — scritte il 2026-08-09 per ordine del fondatore
+
+*«Non deve rimanere nella tua memoria: appena faccio clear sparisce tutto e non sappiamo
+nulla.»* Ha ragione, ed è l'errore già pagato il 2026-08-01. Qui c'è **tutto** quello che
+sappiamo essere aperto, con il perché e la trappola di ognuno.
+
+#### 💰 TOCCANO I SOLDI — prima di avere volume, non prima del primo host
+1. **Le due porte mute sull'«età ignota».** All'età sconosciuta si arriva da **tre** strade e
+   solo una GRIDA: `fase81:246` (il ramo `if hid:` in `_comm_alloggio` — alloggio senza
+   proprietario risolvibile) e `fase88:745` (il `return 10**9` in `giorni_da_registrazione` —
+   host non trovato) applicano il 10% **in silenzio**. ⛔ **La direzione va lasciata così**:
+   prendere troppo è recuperabile, prendere troppo poco no. Serve che si VEDA.
+   *(I numeri di riga si spostano a ogni modifica — si cercano per NOME di funzione.)*
+2. **Un giro che ripassa i conti e restituisce il maltolto.** Confronta ciò che è stato
+   addebitato con lo scaglione a cui l'host aveva diritto quel giorno (i dati sono già tutti nel
+   libro giornale) e rimborsa la differenza. Così l'errore non solo si vede: **si ripara da solo**.
+3. **La riconciliazione automatica con Stripe, ogni giorno.** Un conto **scritto separatamente**
+   che confronta il nostro libro giornale con la realtà di Stripe e **manda un messaggio se non
+   tornano**. È il pezzo che vale di più: è l'unico che risponde a «i conti tornano davvero?»
+   senza fidarsi del codice che li ha scritti. (`fase182` esiste come **bottone manuale mai
+   schedulato** — vedi la memoria del guardiano stati impossibili.)
+4. **Nessun BATTITO sui cicli dei soldi.** `grep` su tutta la produzione: **zero** righe che
+   scrivano o leggano un battito, e `/data/battiti/` non esiste sul VPS. Il watchdog sa solo che
+   il sito risponde, non che i cicli di fondo sono vivi. È l'appendice 11, gravità alta, **mai
+   implementata**. Il caso peggiore (`_tick_hold`, `fase83:10162`: *«questo thread, daemon,
+   nessuno lo riavvia, MUORE IN SILENZIO -> gli hold non scadono più -> le stanze restano
+   bloccate PER SEMPRE mentre il sito sembra funzionare»*) è già coperto da un `try/except`
+   dentro il ciclo, ma se il thread non parte affatto non se ne accorge nessuno.
+5. **Due dei tre numeri dei soldi NON sono dichiarati in produzione.** `COMMISSIONE_BPS` (1000)
+   e `PROMO_LANCIO` (`true`) vivono di **valore di ripiego**; solo `PAGAMENTO_BPS=300` è scritta.
+   Oggi i ripieghi sono giusti, ma **la promessa dello 0% agli host poggia su qualcosa che nessuno
+   ha scritto**: basta un `PROMO_LANCIO=0` e muore in silenzio, senza un allarme.
+
+#### 🤝 TOCCANO LA FIDUCIA DELL'HOST
+6. **IL TASTO ACCETTA/RIFIUTA DENTRO TELEGRAM** *(chiesto dal fondatore il 2026-08-09)*.
+   Oggi l'host riceve l'avviso e deve aprire il link, arrivare al pannello e approvare lì.
+   Va fatto in modo che **prema il tasto dentro Telegram e il pannello si aggiorni da solo**.
+   *Cosa c'è già:* `/api/host/richieste/approva` (l'approvazione esiste), `CanaleTelegram`
+   (`fase152:124`), il webhook `/api/telegram/webhook` (`fase83:8840`).
+   *Cosa manca:* (a) `reply_markup` con `inline_keyboard` nel `sendMessage` — oggi manda **solo
+   testo**; (b) la gestione del `callback_query` nel webhook — oggi gestisce **solo `/start`**, e
+   `callback_query` **non è gestito da nessuna parte in tutta la produzione**.
+   ⛔ **TRE CONTROLLI OBBLIGATORI, perché quel click APPROVA una prenotazione** (muove soldi e
+   blocca una casa): **(1)** il `callback_data` **firmato** e **con scadenza**, come già fa
+   `_tg_verifica_payload` per il `/start`; **(2)** il `chat_id` che preme dev'essere **quello
+   salvato per quell'host** — la firma da sola non basta; **(3)** **doppio click idempotente**:
+   su Telegram si preme due volte per abitudine, la seconda deve dire «già approvata».
+   ⛔ E **una sola implementazione**: il tasto chiama la STESSA funzione del pannello, mai una
+   seconda copia (è la regola nata dalle due `commissione_cents` che divergevano sui soldi).
+7. **Una promessa che il prodotto non mantiene.** Collegando Telegram, il sistema risponde
+   *«riceverai gli avvisi di prenotazione, **coi tasti Approva/Rifiuta**»* (`fase83:8866`).
+   **Quei tasti non esistono.** O si mettono (punto 6), o si tolgono le parole: la legge il primo
+   host nel momento in cui decide se fidarsi.
+8. **DMARC a `p=none` e senza `rua=`.** SPF e DKIM ci sono (il DKIM acceso il 2026-08-09 e
+   verificato su Google/Cloudflare/Quad9). Il DMARC così com'è **non fa niente e non riporta
+   niente**: va aggiunto un indirizzo per i rapporti e, dopo qualche giorno di email vere,
+   alzato a `p=quarantine`. Si fa dal pannello Hostinger.
+
+#### 👁️ QUELLO CHE SERVE AL FONDATORE, NON ALLA MACCHINA
+9. **Un messaggio al giorno, tre righe:** quante prenotazioni, quanti soldi entrati, quanti
+   usciti, quante anomalie. ⛔ **E la regola è: se quel messaggio NON arriva, quello è l'allarme.**
+   È il modo in cui una persona non tecnica tiene il polso di una macchina automatica, senza
+   leggere un registro. Il canale Telegram è già collegato in produzione.
+10. **Provare il PULSANTE ROSSO insieme al fondatore, sul banco.** Il kill-switch globale
+    (`fase191`, pannello super-admin `/api/bunker/blocco_globale`, o `BLOCCO_GLOBALE=1` a livello
+    server) congela le **quattro** cose che muovono denaro: prenotazioni (`fase83:4645`), rimborsi
+    (`:4182`), bonifici (`:5489`), addebiti carta (`:6231`), lasciando il sito navigabile.
+    ⛔ Non è una cosa da leggere in un documento **il giorno che serve**: va vista accendersi e
+    spegnersi prima.
+
+#### 🧹 MANUTENZIONE E VERITÀ NEI DOCUMENTI
+11. **`CLAUDE.md:700` dice di lanciare `python collaudi/protocollo.py`: quel file NON ESISTE.**
+    Il comando vero è **`python collaudi/batteria.py`**.
+12. **6.620 cartelle temporanee** lasciate dai giri uccisi: la suite passa da ~25 a **66 minuti**.
+    La cancellazione di massa è stata **RIFIUTATA dalla protezione del sistema** (`Remove-Item on
+    system path 'C:' is blocked`): serve un altro modo, e finché non c'è ogni giro costa il doppio.
+13. **63 moduli su 151 non sono raggiungibili dalla produzione** (`collaudi/raggiungibilita.py`).
+    Non è un difetto in sé, ma **va deciso cosa farne**: fra i morti c'è
+    `fase151_alloggiati_web` — la comunicazione degli ospiti alla Questura, che è un **obbligo di
+    legge**. Se doveva essere acceso, è un problema più serio della mutazione.
+14. **La tabella «dove attaccare» del censimento di mutazione è metà rumore** finché non dichiara
+    la raggiungibilità: dei 15 moduli in cima, **8 sono morti**.
+
+#### ✅ CHIUSI IL 2026-08-09, per non riaprirli per sbaglio
+· Il **questionario di piattaforma Stripe** NON blocca più niente (`transfers: active`, 0 richieste).
+· Il **bonifico all'host** funziona (provato, `tr_1U2S69JMRnB73twqzoa0JZnm`).
+· Il **DKIM** è acceso e verificato in tutto il mondo.
+· Il **buco del CIN** è chiuso e **in produzione**.
+· `fase160_escrow_garanzia` era già stato setacciato il 2026-08-04: **non rifarlo.**
 
 ### 🟢 2026-08-08 SERA — DUE RIPARAZIONI, E UNA DIAGNOSI SMENTITA DAI FATTI
 
