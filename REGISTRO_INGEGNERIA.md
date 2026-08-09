@@ -228,6 +228,42 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### ✅ FATTO 2026-08-09 (25) — IL BUCO DEL CIN: L'IMPRONTA C'ERA, NESSUNO LA RILEGGEVA
+
+**Nessun modulo nuovo** (D10: i posti esistevano già). **+138 righe, ZERO tolte.**
+
+· **Il difetto, misurato su 120 host** (non letto): l'anti-riciclo della promozione deposita
+  alla cancellazione le impronte di email, telefono, codice fiscale, P.IVA **e del CIN degli
+  annunci** (`fase156:192`), ma la registrazione (`fase88:334`) confronta **solo email e
+  telefono** — le due cose che chiunque cambia in cinque minuti. Chi si cancellava e tornava
+  con contatti nuovi **sulla stessa struttura** si riprendeva 90 giorni a commissione zero:
+  2.400-3.000 EUR a testa. **Il CIN lo rilascia lo Stato e non si cambia**, ed era già in
+  cassaforte: semplicemente nessuno andava a prenderlo.
+· **Perché nessuna guardia lo prendeva:** era sorvegliato il **DEPOSITO** dell'impronta
+  (`test_il_CIN_finisce_DAVVERO_fra_le_impronte`), **mai il PRELIEVO**. Mezzo meccanismo
+  provato, mezzo no — la stessa forma esatta del guasto del 2026-07-20.
+· **La riparazione:** `fase88_registro_host.riconosci_ritorno()` rilegge le impronte per gli
+  identificativi che **alla registrazione non esistono ancora**, e `fase83_server._host_pubblica`
+  la chiama quando il CIN entra nel sistema, cioè pubblicando. La garanzia è **MECCANICA, non
+  a parole**: `UPDATE … WHERE creato_ts > ?` — la data può solo andare **indietro**, quindi il
+  metodo non può ringiovanire nessuno nemmeno con impronte sbagliate. Fallimento a **ERROR**
+  (non warning): è il livello che `fase186._guasti_isolati` legge davvero.
+· **Ordine D20 rispettato, e la guardia vista rossa DUE volte:** scritta → ROSSA (`0 != 800`)
+  → riparata → VERDE → **riparazione staccata → ROSSA di nuovo, stesso messaggio** → riattaccata
+  → VERDE, con `git diff --numstat` ricontato a ogni passo (19/40/79, zero tolte).
+· **Osservabile FORTE:** la COMMISSIONE ADDEBITATA su un preventivo, non la data nel database.
+  La data è il meccanismo; la commissione è ciò che l'host vede sul bonifico.
+· **Prova di rimozione inclusa:** un host davvero nuovo su una struttura mai vista conserva i
+  suoi 90 giorni — guai a riconoscere chi non c'entra, gli ruberemmo la promozione.
+· **STATO: ACCESO.** File toccati: `fase88_registro_host.py`, `fase83_server.py`,
+  `test_promo_lancio_e2e.py` (+ i due documenti). `ruff`: zero rilievi prima, zero dopo.
+
+⚠️ **Resta aperto, dichiarato:** all'«età ignota» si arriva da **tre** porte e solo una GRIDA.
+`fase81:246` (alloggio senza proprietario risolvibile) e `fase88:704` (host non trovato)
+applicano il 10% **in silenzio**. La direzione è giusta e va lasciata — **prendere troppo è
+recuperabile, prendere troppo poco no** — ma serve che si veda, e un giro che ripassi i conti
+e restituisca la differenza. Vedi il blocco del 2026-08-09 in cima a `RIPRENDI_QUI.md`.
+
 ### ✅ FATTO 2026-08-08 sera (24) — IL BANCO MENTIVA, E LA DIAGNOSI DEL GIORNO PRIMA ERA SBAGLIATA
 
 **Modulo NUOVO: `collaudi/fedelta_banco.py`** — *creato 2026-08-08.*

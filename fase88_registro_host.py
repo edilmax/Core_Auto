@@ -206,6 +206,46 @@ class RegistroHost:
                 piu_vecchia = t if piu_vecchia is None else min(piu_vecchia, t)
         return piu_vecchia
 
+    def riconosci_ritorno(self, host_id: Any, valori: Any = ()) -> Optional[int]:
+        """Rilegge le impronte per gli identificativi che alla REGISTRAZIONE non esistono
+        ancora — il CIN della struttura, il codice fiscale, la P.IVA — e, se quella
+        struttura l'abbiamo gia' vista, riporta l'anzianita' alla data di PRIMA iscrizione.
+
+        Perche' serve (buco MISURATO il 2026-08-09 su 120 host, scenario B3): `registra()`
+        puo' confrontare solo email e telefono (riga 334), cioe' le due cose che chiunque
+        cambia in cinque minuti; il CIN lo rilascia lo Stato e non si cambia con una mail
+        nuova. L'impronta era gia' in cassaforte da `deposita_impronte`, ma nessuno andava
+        a prenderla: era sorvegliato il DEPOSITO, mai il PRELIEVO.
+
+        Si sposta SOLO INDIETRO, e non per correttezza formale: l'`AND creato_ts>?` e' la
+        garanzia MECCANICA che questo metodo non possa mai ringiovanire un host, nemmeno
+        se le impronte fossero sbagliate — regalargli 90 giorni di promozione sarebbe
+        esattamente il danno che deve impedire.
+
+        Ritorna la data applicata, o None se non c'era niente da correggere. Isolato, e il
+        fallimento e' ERROR (non warning): qui si decide una commissione, e il Guardiano
+        `fase186._guasti_isolati` legge dichiaratamente solo gli ERROR."""
+        if not (isinstance(host_id, str) and host_id):
+            return None
+        con = self._apri()
+        try:
+            prima = self._prima_iscrizione(con, valori)
+            if prima is None:
+                return None                    # struttura mai vista: i 90 giorni gli spettano
+            with con:
+                cambiate = con.execute(
+                    "UPDATE host SET creato_ts=? WHERE host_id=? AND creato_ts>?",
+                    (int(prima), str(host_id), int(prima))).rowcount
+            return int(prima) if cambiate else None
+        except Exception:
+            logger.error("ANTI-RICICLO: rilettura impronte FALLITA per %s: una "
+                         "ri-iscrizione sulla stessa struttura puo' aver riciclato i 90 "
+                         "giorni a commissione zero senza che nessuno lo sappia",
+                         host_id, exc_info=True)
+            return None
+        finally:
+            con.close()
+
     def _token(self, host_id: str, email: str) -> str:
         return self._firma.codifica({"tipo": "host_token", "host_id": host_id,
                                      "email": email, "exp": self._now() + self._ttl})

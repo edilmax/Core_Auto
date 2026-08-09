@@ -13,13 +13,116 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: e4d40b0
+CONSEGNE AGGIORNATE A: 9ae7115
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
 sopra passa più di un commit di lavoro, **la suite diventa ROSSA** — e siccome non si committa con
 la suite rossa, non si può andare avanti lasciando indietro queste consegne. Chi aggiorna il blocco
 rimette qui il commit di `HEAD`.*
+
+### 💰 2026-08-09 — IL BUCO DEL CIN: 90 GIORNI GRATIS CHE SI POTEVANO RIPRENDERE
+
+**Il fondatore ha cambiato rotta:** «lo devo fare funzionare e contattare i primi host, fai
+il test completo oltre le mutazioni, una volta sola, e non dobbiamo più tornare indietro».
+Niente caccia ai mutanti modulo per modulo: la domanda era **la macchina funziona davvero?**
+
+#### 🔴 IL DIFETTO, TROVATO MISURANDO E NON LEGGENDO
+L'anti-riciclo della promozione (`host_impronte`, 2026-07-31) **esiste e funziona a metà**.
+Alla cancellazione si depositano le impronte di email, telefono, codice fiscale, P.IVA **e
+del CIN** degli annunci; alla registrazione (`fase88:334`) si confrontano **solo email e
+telefono**, cioè le due cose che chiunque cambia in cinque minuti. Il CIN lo rilascia lo
+Stato e non si cambia — ma nessuno andava a rileggerlo.
+**Era sorvegliato il DEPOSITO dell'impronta, mai il PRELIEVO**: c'era perfino un collaudo
+(`test_il_CIN_finisce_DAVVERO_fra_le_impronte`) che dimostrava che il CIN finiva in
+cassaforte, e nessuno aveva mai controllato che qualcuno la aprisse. **Mezzo meccanismo
+provato, mezzo no: la stessa forma esatta del guasto del 2026-07-20.**
+
+Misurato su **120 host**, tre modi di provarci (`scratchpad/centoventi_host.py`):
+```
+B1  stessa email                  eta' prima:200  dopo:200  -> RICONOSCIUTO
+B2  stesso telefono, email nuova   eta' prima:200  dopo:200  -> RICONOSCIUTO
+B3  email E telefono NUOVI,        eta' prima:200  dopo:  0  -> ⛔ HA RIPRESO LA PROMO
+    stessa struttura (stesso CIN)
+```
+Vale **2.400-3.000 EUR per host** che ci prova (90 giorni a 0% invece che 8-10%).
+
+#### ✅ CHIUSO, CON L'ORDINE D20 RISPETTATO
+```
+1. guardia scritta        -> ROSSA:  0 != 800 centesimi
+2. riparazione innestata  -> VERDE
+3. riparazione STACCATA   -> ROSSA di nuovo, stesso identico messaggio
+4. riattaccata            -> VERDE, e le righe tornano esatte (19/40/79)
+```
+Il passo 3 è quello che conta: dimostra che la guardia è rossa **per il difetto**.
+**+138 righe, ZERO righe tolte** — nessuna riga esistente cancellata o riscritta.
+- `fase88_registro_host.py` — `riconosci_ritorno()`: rilegge le impronte per gli
+  identificativi che alla registrazione **non esistono ancora**. La garanzia è **meccanica**,
+  non a parole: `UPDATE ... WHERE creato_ts > ?` — la data può solo andare **indietro**, quindi
+  questo metodo non può ringiovanire nessuno nemmeno se le impronte fossero sbagliate.
+- `fase83_server.py` — la chiamata alla pubblicazione (il CIN entra nel sistema lì), isolata
+  come il blocco SEO accanto ma con il fallimento a **ERROR**: è il livello che il Guardiano legge.
+- `test_promo_lancio_e2e.py` — la guardia **e una prova di rimozione**: un host davvero nuovo,
+  su una struttura mai vista, deve conservare i suoi 90 giorni (guai a rubarglieli).
+- Osservabile **forte**: la COMMISSIONE ADDEBITATA su un preventivo, non la data nel database.
+  La data è il meccanismo; la commissione è ciò che l'host vede sul bonifico.
+
+#### ✅ LA RAMPA 0% → 8% → 10% + 3%: VERIFICATA, NON CREDUTA
+Gli scatti sono stati **fatti trovare alla macchina** (scorsi tutti i giorni 0..800 cercando
+dove cambia il numero), non confermati: **esattamente due, al giorno 90 e al giorno 365.**
+Su 200 EUR: host tiene **194,00 → 178,00 → 174,00**; link diretto **184,00** a qualunque età.
+Tariffa tecnica 6,00 EUR presente a **tutte** le età, anche a commissione zero.
+Età ignota → 10% su 10 valori assurdi provati: **non regala mai lo 0% per errore**.
+Su 120 host: 18 allo 0% · 40 all'8% · 62 al 10%, e i conti tornano **host per host**.
+
+#### 🟢 LO STATO DEGLI ESTERNI, LETTO DALLE MACCHINE VERE
+- **Stripe NON blocca più i pagamenti agli host.** `payouts_enabled: True` · **`transfers:
+  active`** · `currently_due: 0` · `past_due: 0`. Il «questionario di piattaforma» che i
+  documenti indicavano come **il blocco più serio** è chiuso.
+- **Il bonifico all'host FUNZIONA**, e nessun collaudo l'aveva mai provato: sul banco in
+  modalità prova, 10 passi su 10, con la stessa funzione della produzione →
+  `tr_1U2S69JMRnB73twqzoa0JZnm`, 1000 centesimi sul conto giusto, riletto da Stripe.
+- **DKIM acceso dal fondatore e verificato dall'esterno** (410 caratteri, chiave RSA intera,
+  visibile su Google, Cloudflare e Quad9). SPF già c'era. ⏳ Resta **DMARC a `p=none`** senza
+  `rua=`: da alzare a `quarantine` dopo qualche giorno di email vere.
+- Email di produzione: `smtp.hostinger.com:465` accetta le credenziali (provato LOGIN+QUIT,
+  nessun invio).
+
+#### 🗺️ IL 42% DELLA MACCHINA NON È ACCESO — e la guardia esistente non lo vede
+Camminando gli import da `main_casavip.py` (bias generoso: conta anche gli import dentro le
+funzioni, quindi se dice MORTO lo è davvero): **88 raggiungibili su 151 · 63 NO.**
+Confermato da tre lati: i 15 «a zero importatori» dell'appendice 23 sono tutti dentro i 63;
+`fase35_pagamenti` è importato solo da `fase36_booking_api` e `fase41_admin_panel`, **morti
+anche loro**. ⚠️ **La guardia dell'appendice 23 conta CHI IMPORTA, non CHI SI ACCENDE**: un
+grappolo di moduli morti che si importano a vicenda si copre da solo. Dei 15 moduli in cima
+alla tabella «dove attaccare» del censimento, **8 sono morti** — quella tabella è metà rumore
+finché non dichiara la raggiungibilità. 💡 Buona notizia dentro: l'appendice 3 temeva due
+`commissione_cents` divergenti sui soldi (`fase43` e `fase98`); **`fase43` è fra i morti.**
+
+#### ⚠️ TRE COSE APERTE, tutte sui soldi e tutte piccole
+1. **Due dei tre numeri dei soldi non sono dichiarati in produzione**: `COMMISSIONE_BPS` e
+   `PROMO_LANCIO` funzionano per **valore di ripiego** (1000 e `true`); solo `PAGAMENTO_BPS=300`
+   è impostata. Oggi i ripieghi sono giusti, ma la promessa dello 0% agli host poggia su
+   qualcosa che nessuno ha scritto: basta un `PROMO_LANCIO=0` e muore in silenzio.
+2. **All'«età ignota» si arriva da tre porte e solo una GRIDA**: l'eccezione scrive un ERROR
+   (e c'è la guardia `test_se_il_registro_inciampa_il_ripiego_deve_GRIDARE`), ma «alloggio
+   senza proprietario risolvibile» (`fase81:246`) e «host non trovato» (`fase88:704`) applicano
+   il 10% **in silenzio**. La direzione (10%, non 0%) è giusta e va lasciata: **prendere troppo
+   è recuperabile, prendere troppo poco no**. Serve che si veda, e un giro che ripassi i conti
+   e restituisca la differenza.
+3. **6.620 cartelle temporanee** dai giri uccisi rallentano la suite (66 min contro ~25). La
+   pulizia di massa è stata **rifiutata dalla protezione del sistema**: serve un altro modo.
+
+#### 🧪 LA BATTERIA COMPLETA — 15 fasi su 18, e i tre rossi sono spiegati tutti
+`python collaudi/batteria.py` (⛔ **`CLAUDE.md:700` dice `collaudi/protocollo.py`, che NON
+ESISTE**: il comando vero è questo). Esito: `15 OK · 3 FALLITI · 0 saltati`.
+- `1. Suite` e `6c. Multi-vettore` → **TIMEOUT**, non guasti: tetti troppo stretti su una
+  macchina rallentata dalle cartelle temporanee.
+- `8. Behavioral host` → **non è un rosso**: il lanciatore locale usa una chiave Stripe finta,
+  il link di pagamento non si crea, e la macchina **si rifiuta di confermare una prenotazione
+  che non può incassare**. Fatto dire alla macchina: `{"errore": "pagamento_non_disponibile"}`.
+  È il fail-safe che funziona — e sul banco del VPS con chiave vera 13 prenotazioni su 13
+  sono state pagate.
 
 ### 🟢 2026-08-08 SERA — DUE RIPARAZIONI, E UNA DIAGNOSI SMENTITA DAI FATTI
 
@@ -1580,18 +1683,23 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5484 test
+SUITE ATTUALE: Ran 5486 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3.
 COMANDO:  python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"
-MISURATO SU: 6a5b8b7 + le modifiche non committate del 2026-08-08 sera
-GIRO REALE DEL 2026-08-08 sera (uscita letta diretta, senza tubi):
-          Ran 5478 tests in 4020.192s · FAILED (failures=1, skipped=4) · uscita 1
-          L'UNICO fallimento era QUESTA riga, che dichiarava ancora 5463: la guardia
-          D22 ha fatto esattamente il suo mestiere. Zero difetti nel codice.
-          5484 raccolti − 5478 eseguiti = i 5 di openssl, non un mistero.
+MISURATO SU: 9ae7115 + le modifiche non committate del 2026-08-09 (buco del CIN)
+GIRO REALE DEL 2026-08-09 (staccato dallo strumento che lo lancia, uscita in fondo al file):
+          Ran 5481 tests in 3985.307s · FAILED (failures=1, skipped=4) · uscita 1
+          L'UNICO fallimento era QUESTA riga, che dichiarava ancora 5484 mentre le due
+          guardie nuove sul buco del CIN portavano il totale a 5486: la guardia D22 ha
+          fatto il suo mestiere per la SECONDA volta di fila. Zero difetti nel codice.
+          5486 raccolti − 5481 eseguiti = i 5 di openssl, non un mistero.
+          ⚠️ 66 minuti invece dei ~25 di riferimento: 6.620 cartelle temporanee lasciate
+          indietro dai giri uccisi. Non sono un difetto, sono attrito — e la pulizia di
+          massa e' stata RIFIUTATA dalla protezione del sistema, quindi resta aperta.
+GIRO PRECEDENTE (2026-08-08 sera, su 6a5b8b7): Ran 5478 · stesso identico esito.
 ```
 📌 **Da 5437 a 5443** (2026-08-06 sera, albero `a67eef6` + le 6 guardie nuove sul cancello):
 **rimisurato, non sommato** —

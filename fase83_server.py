@@ -8078,6 +8078,25 @@ class RouterHTTP:
         imgs = [Immagine(u, i) for i, u in enumerate(raw_imgs)
                 if isinstance(u, str)]
         id_num = self._sys.catalogo.pubblica(scheda, imgs)
+        # ANTI-RICICLO DELLA PROMOZIONE (buco MISURATO e chiuso il 2026-08-09). Il CIN lo
+        # rilascia lo Stato: non si cambia con un'email nuova. Alla registrazione non
+        # esiste ancora — li' si possono confrontare solo email e telefono (fase88:334) —
+        # quindi il confronto con le impronte si rifa' QUI, la prima volta che quel codice
+        # entra nel sistema. Senza questa riga bastava cancellarsi e tornare con contatti
+        # nuovi sulla STESSA casa per riprendersi 90 giorni a commissione zero.
+        # ISOLATO (un guasto non deve impedire di pubblicare) ma ERROR, non warning:
+        # se tace, la piattaforma regala la commissione e non lo sa nessuno.
+        try:
+            _reg_ar = getattr(self._sys, "registro_host", None)
+            _prop = hid or self._sys.catalogo.host_di_alloggio(scheda.slug)
+            if _reg_ar is not None and _prop and scheda.cin:
+                if _reg_ar.riconosci_ritorno(_prop, (scheda.cin,)):
+                    logger.info("ANTI-RICICLO: host %s riconosciuto sulla struttura %s: "
+                                "anzianita' riportata alla PRIMA iscrizione", _prop, scheda.slug)
+        except Exception:
+            logger.error("ANTI-RICICLO: rilettura impronte FALLITA sull'annuncio %r: una "
+                         "ri-iscrizione sulla stessa struttura puo' aver riciclato la "
+                         "promozione", scheda.slug, exc_info=True)
         # MOTORE SEO AUTONOMO (fase173): appena l'host pubblica, il motore valuta la pagina
         # e (se IndexNow e' acceso) avvisa i motori. ISOLATO: mai rompe la pubblicazione.
         try:
