@@ -188,6 +188,15 @@ def main():
     print("  Poi ti fermi. Non agisci, non committi, non ripari, non riassumi.")
     print("  SI RILEGGONO: prima di iniziare un'operazione E dopo averla finita.")
     print()
+    # IL CATALOGO DEGLI SBAGLI (ordine del fondatore, 2026-08-08): sta in cima a CLAUDE.md,
+    # subito dopo i sei divieti. Il numero si CONTA dal file, non si scrive a mano (D22):
+    # un catalogo che cresce e un numero che resta fermo e' la prima bugia del documento.
+    _sbagli = re.findall(r"^\*\*(S\d+)\. ", _leggi(CLAUDE), re.M)
+    print("  🩹 IL CATALOGO DEGLI SBAGLI — %d voci, in cima a CLAUDE.md subito dopo questi"
+          % len(_sbagli))
+    print("     divieti. Sono errori FATTI DAVVERO, ognuno con la data, come si e' visto e")
+    print("     la riga che lo impedisce. SI RILEGGE PRIMA DI DIRE «FATTO».")
+    print()
     print("=" * 78)
     print("⛔ REGOLE DEL PROGETTO — si leggono PRIMA di fare qualunque cosa")
     print("=" * 78)

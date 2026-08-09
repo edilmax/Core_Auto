@@ -378,14 +378,20 @@ class TestLaCancellazioneLasciaTracciaNeiConti(TestCancellazioneMoney):
         percorso = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
                                  "fase83_server.py")
         with io.open(percorso, encoding="utf-8") as f:
-            sorgente = f.read()
-        quante = sorgente.count('tipo="rimborso"')
+            righe = f.read().splitlines()
+        # ⛔ SOLO LE RIGHE ESEGUIBILI. La prima stesura contava anche i commenti, e il
+        # commento che spiega questa scelta ne contiene uno: con 3 chiamate vere + 1
+        # commento, cancellarne una lasciava il conto a 3 e la guardia taceva. Un
+        # controllo che un commento puo' soddisfare non controlla niente.
+        vere = [r for r in righe
+                if 'tipo="rimborso"' in r and not r.lstrip().startswith("#")]
         self.assertGreaterEqual(
-            quante, 3,
+            len(vere), 3,
             "le strade che devono lasciare la riga di rimborso sono TRE (rimborso admin, "
-            "cancellazione host, cancellazione ospite) ma `tipo=\"rimborso\"` compare %d "
-            "volte: una di esse e' muta, oppure usa un attrezzo diverso e finira' in un "
-            "report fiscale diverso" % quante)
+            "cancellazione host, cancellazione ospite) ma le chiamate VERE con "
+            "`tipo=\"rimborso\"` sono %d: una di esse e' muta, oppure usa un attrezzo "
+            "diverso e finira' in un report fiscale diverso.\n%s"
+            % (len(vere), "\n".join("   " + r.strip()[:90] for r in vere)))
 
     def test_NON_SI_INVENTA_UN_DEBITO_MAI_PROMESSO(self):
         """Prova di rimozione. Una cancellazione su prenotazione MAI pagata non promette

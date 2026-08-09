@@ -60,6 +60,81 @@ a ogni avvio di sessione; a fine lavoro va rieseguito.
 
 ---
 
+# 🩹 IL CATALOGO DEGLI SBAGLI — si rilegge PRIMA di dire «fatto»
+
+> **Ordine del fondatore, 2026-08-08:** *«bisogna scrivere tutti gli sbagli per non
+> ripeterli più, così la nuova chat la obbligo a leggere e rileggere e non capitano più».*
+>
+> **Perché sta qui e non in un file nuovo.** Un elenco che nessuno rilegge non protegge
+> niente; `CLAUDE.md` si carica a **ogni** sessione, e i file nuovi sono vietati (REGOLA
+> ZERO 3). **Non sono nuovi obblighi**: sono quelli che già ci sono, visti dal lato in cui
+> si rompono. Ognuno è uno sbaglio **fatto davvero**, con la data, come si è visto, e la
+> riga che lo impedisce.
+
+**S1. HO CONFRONTATO DUE COSE VUOTE E HO SCRITTO «UGUALI».** *(2026-08-08)* Un controllo
+sulle impronte di `fase186_guardiano_stati.py` — nome che avevo **inventato** — ha stampato
+`UGUALI` confrontando due stringhe vuote.
+*Si impedisce così:* un confronto che riceve il **vuoto** non dice «uguali», dice **«misura
+non valida»** e si ferma. Il vuoto non è un valore: è l'assenza di misura.
+
+**S2. HO INVENTATO NOMI INVECE DI LEGGERLI.** *(2026-08-08, due volte in un'ora:
+`fase186_guardiano_stati.py`, `fase98_prezzi.py`)*
+*Si impedisce così:* un nome di file, funzione o rotta si prende da un `ls`/`grep`, **mai
+dalla memoria**; e un controllo che non trova il bersaglio è **ROSSO**, non muto.
+
+**S3. HO CERCATO IL COLPEVOLE NEL CODICE MENTRE MENTIVA LO STRUMENTO.** *(2026-08-08)* Una
+diagnosi intera spesa su un `except` innocente: il difetto vero era che il banco di prova
+scriveva i database in un posto che moriva con lui.
+*Si impedisce così:* **quando una misura è assurda, il primo sospetto va allo strumento, non
+al codice.** Un ramo `except` è un sospetto comodo perché si vede; uno strumento che misura
+la macchina sbagliata non si vede — ed è per questo che costa di più.
+
+**S4. HO CHIAMATO «VARIABILI» QUELLO CHE ERANO RIGHE.** *(2026-08-08)* «125 contro 88» mi ha
+mandato a caccia di 37 variabili che non esistevano: erano doppioni della stessa.
+*Si impedisce così:* un numero dichiara **cosa conta** — righe o nomi distinti, raccolti o
+eseguiti — altrimenti non è un numero, è un'impressione con le cifre.
+
+**S5. HO SCELTO L'ATTREZZO PIÙ ELEGANTE SENZA GUARDARE CHI LEGGE.** *(2026-08-08)* Una nota
+di credito al posto della riga di rimborso: più corretta in astratto, e avrebbe fatto finire
+la **stessa** cancellazione nel report fiscale solo se la faceva l'host.
+*Si impedisce così:* **prima di scegliere l'attrezzo, si guarda CHI LEGGE il registro.**
+Un'imprecisione uniforme è meglio di una correttezza a macchie.
+
+**S6. HO SCRITTO UNA GUARDIA CHE UN COMMENTO POTEVA SODDISFARE.** *(2026-08-08)* Contava
+`tipo="rimborso"` ovunque nel sorgente, commenti compresi: cancellando una chiamata vera il
+conto restava buono e la guardia taceva.
+*Si impedisce così:* una guardia che conta nel sorgente conta solo le righe **eseguibili**,
+e la si vede rossa **togliendo la cosa vera**, non una a caso.
+
+**S7. HO SCRITTO UN CONTROLLO CHE DAVA OK QUANDO LA PREMESSA MANCAVA.** *(2026-08-08)*
+«controversia OK» anche quando la controversia non era stata nemmeno aperta.
+*Si impedisce così:* se manca la premessa il controllo **non è verde: è NON ESEGUITO**, e
+finisce in un elenco che si legge in fondo al rapporto.
+
+**S8. HO LANCIATO UN LAVORO DA 70 MINUTI CON UN GUINZAGLIO DA 10.** *(2026-08-08)* La suite
+è stata uccisa a metà e il file troncato somigliava a un esito.
+*Si impedisce così:* un lavoro lungo si **stacca** dallo strumento che lo lancia e **si
+scrive da solo il codice d'uscita in fondo al file**. Senza quella riga finale, quel file
+non è un esito e non si commenta.
+
+**S9. HO RISPOSTO CON TANTE CAUTELE CHE NON SI CAPIVA SE ERA FATTO.** *(2026-08-08)* Il
+fondatore ha dovuto chiedere tre volte «risolto?», e una volta «rispondi solo sì o no».
+*Si impedisce così:* **prima la risposta, poi i dettagli.** Una cautela che nasconde la
+risposta non è prudenza: è disinformazione gentile.
+
+**S10. HO LASCIATO IL DOCUMENTO A DICHIARARE IL FALSO.** *(2026-08-08)* Il blocco di consegne
+diceva «NON COMMITTATO» mentre il lavoro era già unito **e** in produzione.
+*Si impedisce così:* il documento si aggiorna **nello stesso momento** in cui cambia la
+macchina — non «dopo», perché il «dopo» è dove si perde.
+
+> ⚠️ **E il più testardo di tutti, che non è mio ma del progetto:** il paracadute `:prec`
+> agganciato all'immagine sbagliata — **quattro volte in quattro giorni** (2026-08-05, -07,
+> -08 e -08 sera). Non lo prende la buona volontà: lo prende **D17 punto [1b]**, che lo
+> ri-aggancia e si ferma se non coincide. È la prova che un obbligo affidato alla memoria
+> si rompe di nuovo, e uno affidato a un attrezzo no.
+
+---
+
 # ⛔ REGOLA ZERO — LEGGERE PRIMA DI TOCCARE QUALSIASI COSA (vale per OGNI IA e OGNI persona)
 
 **Questa regola viene prima di tutte le altre.** Vale per Claude e per qualunque altro modello
