@@ -11,7 +11,16 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🚦 2026-08-10 — RIPARTI DA QUI. TUTTO PRONTO, NIENTE COMMITTATO.
+## 🚦 2026-08-10 — RIPARTI DA QUI. COMMITTATO E UNITO; MANCA SOLO IL SERVER.
+
+> ✅ **`fd3268b` — computer = GitHub `master`, allineati, zero file in sospeso**
+> (richiesta di unione **#24** unita alle 22:04, verificata con `git merge-base
+> --is-ancestor`, non guardando il colore dell'icona: il 2026-08-06 una richiesta
+> *sembrava* unita e l'API diceva `merged: false`).
+> ⛔ **IL VPS È ANCORA INDIETRO e il sito prende ancora il 3%.** Il deploy ha bisogno
+> di un **«autorizzato»** nuovo e delle DUE TRAPPOLE qui sotto. La chiavetta va rifatta.
+> Il testo che segue descrive il lavoro **com'era prima del commit**: si legge per capire
+> *cosa* è stato fatto, non per sapere dove sta.
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro e poi agisci. Il resto è dettaglio.**
 
