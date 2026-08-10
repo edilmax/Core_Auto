@@ -99,7 +99,11 @@ class TestEmailLocalizzata(unittest.TestCase):
                                     "ma come CONFRONTO")
 
     def test_dichiara_la_tariffa_tecnica_in_ogni_lingua(self):
-        """Nessun host puo' essere reclutato senza sapere del 3% sempre dovuto."""
+        """Nessun host puo' essere reclutato senza sapere della tariffa sempre dovuta."""
+        # la cifra si prende DAL MOTORE: scritta a mano qui, il giorno che cambia questa
+        # prova resta verde su una bugia (era "3%" fino al 2026-08-09).
+        import fase89_jurisdiction_outreach as _o
+        atteso = "%d%%" % (_o._tecnica_bps() // 100)
         for paese, lingua in [("MX", "es"), ("US", "en"), ("IT", "it"), ("FR", "fr"),
                               ("DE", "de"), ("BR", "pt")]:
             c = Contatto("Prova", "a@b." + paese.lower(), paese,
@@ -107,7 +111,8 @@ class TestEmailLocalizzata(unittest.TestCase):
             r = componi_email_prima_emilia(c, 1500, link_opt_out="https://x/stop",
                                            lingua=lingua)
             self.assertIsNotNone(r, lingua)
-            self.assertIn("3%", r[2], "la mail in %s non nomina la tariffa tecnica" % lingua)
+            self.assertIn(atteso, r[2],
+                          "la mail in %s non nomina la tariffa tecnica %s" % (lingua, atteso))
             self.assertIn("0%", r[2], "la mail in %s non nomina la promo" % lingua)
 
     def test_opt_out_obbligatorio(self):

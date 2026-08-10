@@ -32,8 +32,33 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
 
-PSP_BPS = 300          # 3% tariffa tecnica, come in produzione
+def _dal_motore(chiave):
+    """La tariffa tecnica VERA, letta dai default di `main_casavip.py`.
+
+    Qui c'era `PSP_BPS = 300  # come in produzione`. Il 2026-08-10 la produzione e'
+    passata a 5%% + 0,25 EUR e questa riga e' rimasta indietro: il commento diceva il
+    falso, ma soprattutto questo E2E continuava a collaudare un listino che non esiste
+    piu' -- e proprio nel periodo di PROMO, dove la commissione e' 0%% e la tariffa
+    tecnica e' l'UNICA cosa che paga Stripe. Ora la cifra non e' scritta qui.
+    """
+    import io as _io
+    import re as _re
+    _qui = os.path.dirname(os.path.abspath(__file__))
+    with _io.open(os.path.join(_qui, "main_casavip.py"), encoding="utf-8") as f:
+        _src = f.read()
+    _m = _re.search(chiave + r'["\']\s*,\s*["\'](\d+)["\']', _src)
+    assert _m, "main_casavip.py non dichiara piu' il default %s" % chiave
+    return int(_m.group(1))
+
+
+PSP_BPS = _dal_motore("PAGAMENTO_BPS")        # tariffa tecnica, presa dal motore
+PSP_FISSO = _dal_motore("PAGAMENTO_FISSO_CENTS")   # la quota fissa che Stripe prende
 PREZZO = 10000         # 100.00 EUR / notte
+
+
+def _tecnica(importo):
+    """Quanto costa la tariffa tecnica su `importo`: percentuale PIU' quota fissa."""
+    return (importo * PSP_BPS) // 10000 + PSP_FISSO
 
 
 def _fake_fetch(url, body, headers):
@@ -61,7 +86,8 @@ class BasePromo(unittest.TestCase):
             db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db", db_registro_host=self.db_reg,
             db_accettazioni=f"{d}/a.db", db_pendenti=f"{d}/p.db", db_messaggi=f"{d}/m.db",
             db_garanzia=f"{d}/g.db", db_recensioni=f"{d}/rec.db",
-            commissione_bps=bps, psp_bps=PSP_BPS, promo_lancio_attiva=promo,
+            commissione_bps=bps, psp_bps=PSP_BPS, psp_fisso_cents=PSP_FISSO,
+            promo_lancio_attiva=promo,
             stripe_secret_key="sk", stripe_webhook_secret="whsec_x",
             stripe_success_url="https://x/ok", stripe_cancel_url="https://x/no"))
         r = crea_router(sis, host_key="hk", admin_key="ak", base_url="https://bookinvip.com")
@@ -129,15 +155,16 @@ class TestRampaSuPrenotazioneVera(BasePromo):
                                                    q["commissione_cents"]))
 
     def test_promo_giorno_zero_azzera_davvero_la_commissione(self):
-        """Il caso che era ROTTO: host di oggi -> 0 di commissione, resta solo il 3%."""
+        """Il caso che era ROTTO: host di oggi -> 0 di commissione, resta la sola
+        tariffa tecnica (ed e' l'unica cosa che paga Stripe in tutta la promo)."""
         sis, r = self._sistema(promo=True)
         hid, _tk = self._host_con_alloggio(r)
         self._invecchia(hid, 0)
         q = self._quote(r)
         self.assertEqual(q["commissione_cents"], 0, "la promo 0% non e' stata applicata!")
-        self.assertEqual(q["costo_pagamento_cents"], PREZZO * PSP_BPS // 10000)
-        # l'host tiene tutto MENO la sola tariffa tecnica
-        self.assertEqual(q["netto_host_cents"], PREZZO - (PREZZO * PSP_BPS // 10000))
+        self.assertEqual(q["costo_pagamento_cents"], _tecnica(PREZZO))
+        # l'host tiene tutto MENO la sola tariffa tecnica (percentuale + quota fissa)
+        self.assertEqual(q["netto_host_cents"], PREZZO - _tecnica(PREZZO))
 
     def test_invariante_soldi_a_ogni_eta(self):
         """ospite == host + commissione + tariffa tecnica, sempre, a ogni scaglione."""
@@ -166,8 +193,11 @@ class TestCanaleDiretto(BasePromo):
             q = self._quote(r, fonte="diretto")
             self.assertEqual(q["commissione_cents"], PREZZO * 500 // 10000,
                              "diretto a %d giorni: dovrebbe essere 5%%" % giorni)
-            self.assertEqual(q["costo_pagamento_cents"], PREZZO * PSP_BPS // 10000)
-            self.assertEqual(q["netto_host_cents"], PREZZO - 500 - 300)   # 92.00 su 100.00
+            self.assertEqual(q["costo_pagamento_cents"], _tecnica(PREZZO))
+            # il «5 + 5» del fondatore: commissione diretta 5% + tariffa tecnica 5%
+            # (piu' la quota fissa) = 10% tutto compreso, e all'host resta il resto.
+            self.assertEqual(q["netto_host_cents"],
+                             PREZZO - (PREZZO * 500 // 10000) - _tecnica(PREZZO))
 
 
 class TestNienteContraddizione(BasePromo):

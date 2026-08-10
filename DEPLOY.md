@@ -69,6 +69,40 @@ git add -A && git commit -m "descrizione del lavoro" && git push origin master
 
 ## 3. Deploy — procedura "rm-first" (obbligatoria)
 
+### ⛔ [1b] PRIMA DI TUTTO: AGGANCIARE IL PARACADUTE ALL'IMMAGINE CHE GIRA DAVVERO
+
+**Questo è il passo che è mancato quattro volte in quattro giorni** (2026-08-05, -07, -08 e
+-08 sera). `CLAUDE.md` lo prescriveva da giorni come «D17 punto [1b]» — ma **il punto [1b]
+in questo file non esisteva**, e chi deploya segue questo file. Scritto il 2026-08-10, dopo
+aver cercato invano `prec`, `docker tag` e `paracadute` in tutta la procedura.
+
+`casavip-app:prec` è l'immagine a cui si torna se il deploy va male. Se punta a qualcosa di
+diverso da ciò che sta girando **adesso**, saltare col paracadute ti riporta a uno stato che
+non è l'ultimo buono: **è peggio di non avere paracadute**, perché ci si butta convinti.
+
+```bash
+cd /var/www/bookinvip
+VIVA=$(docker inspect casavip_app --format '{{.Image}}')
+echo "immagine viva: $VIVA"
+docker tag "$VIVA" casavip-app:prec
+# e SI FERMA se non coincide: un paracadute che "sembra" agganciato non vale niente
+test "$(docker inspect casavip-app:prec --format '{{.Id}}')" = "$VIVA" \
+  || { echo "PARACADUTE NON AGGANCIATO -> NON PROCEDERE"; exit 1; }
+echo "$(git rev-parse HEAD)" > "PRE_DEPLOY_$(date +%Y%m%d_%H%M%S).commit"
+```
+
+**Come si torna indietro** (se la verifica del §4 va male):
+```bash
+docker tag casavip-app:prec casavip-app:latest && \
+docker compose -f docker-compose.casavip.yml up -d --force-recreate app
+```
+
+⚠️ **`:prec` va agganciata PRIMA del `build`**, non dopo: dopo il build l'etichetta `:latest`
+punta già alla nuova, e si finirebbe per agganciare il paracadute alla stessa immagine che si
+sta installando — cioè a niente.
+
+### Poi lo scambio
+
 Da eseguire sul VPS, **in questo ordine**:
 
 ```bash
@@ -126,6 +160,27 @@ I tre valori **devono coincidere**.
 Se il lavoro introduce una variabile nuova che governa **denaro o percorsi di database**,
 va scritta in `/var/www/bookinvip/.env.casavip` **PRIMA** del deploy: altrimenti il
 container parte e va in errore (già successo, ~3 minuti di sito giù).
+
+### ⛔ E il contrario, che è più subdolo: una variabile VECCHIA che vince sul codice nuovo
+
+**La variabile sul server batte sempre il valore scritto nel codice.** Se si cambia un
+numero in `main_casavip.py` ma sul server esiste ancora la variabile col valore vecchio, il
+deploy riesce, i test sono verdi, il sito **continua a fare come prima** — e non se ne
+accorge nessuno. È il verde falso perfetto: nulla è rotto, semplicemente la riparazione non
+è arrivata.
+
+**In attesa al prossimo deploy** (misurato il 2026-08-09 con `docker exec casavip_app env`):
+
+| variabile sul VPS | valore attuale | cosa fare |
+|---|---|---|
+| `PAGAMENTO_BPS` | **`300`** (il 3% vecchio) | **toglierla**, o portarla a `500` |
+| `PAGAMENTO_BPS_ESTERA` | non c'è | lasciar valere il codice (`700`), o scriverla |
+| `PAGAMENTO_FISSO_CENTS` | non c'è | lasciar valere il codice (`25`), o scriverla |
+
+**Come si controlla che la riparazione sia arrivata davvero**, dopo lo scambio:
+```bash
+docker exec casavip_app env | grep -E '^PAGAMENTO_' || echo 'nessuna: valgono i default del codice'
+```
 
 ## 6. Backup e ripristino
 

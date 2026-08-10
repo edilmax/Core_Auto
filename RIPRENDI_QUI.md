@@ -11,9 +11,335 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🚦 2026-08-10 — RIPARTI DA QUI. TUTTO PRONTO, NIENTE COMMITTATO.
+
+> **Se sei una chat nuova: leggi SOLO questo riquadro e poi agisci. Il resto è dettaglio.**
+
+**COSA C'È SUL COMPUTER (non committato, non in produzione, il sito gira ancora col 3%):**
+`49 file modificati + 3 nuovi = 52 · +1643 righe −298`
+— misurato con `git status --porcelain` e `git diff --shortstat` il **2026-08-10 alle 18:37**,
+sopra il commit `fce0c54`. I tre nuovi sono `collaudi/conti_stripe.py`,
+`collaudi/incroci_ospite.py` e `collaudi/baseline_tariffe.txt`. **Se il conto che trovi è
+diverso, qualcuno ha lavorato dopo di me: fermati e guarda cosa, prima di committare.**
+Tutti sullo stesso lavoro:
+**la tariffa tecnica era SOTTO COSTO ed è passata da 3% secco a 5% + 0,25 € (7% se
+l'annuncio non è in euro).**
+
+**I QUATTRO LIVELLI DI COLLAUDO SONO STATI FATTI, in ordine (D3). Esiti misurati:**
+
+| livello | comando | esito |
+|---|---|---|
+| ①② unitari+integrazione | `python -m unittest discover -s . -p "test_*.py"` | ✅ **`Ran 5487 in 4027s` · `OK (skipped=4)` · ZERO rossi** (2026-08-10, 20:56) |
+| ①② coerenza tariffe | `python collaudi/audit_coerenza_tariffe.py` | ✅ da **47 righe da esaminare a 0** · uscita 0 |
+| ①② conti contro Stripe | `python collaudi/conti_stripe.py` | ✅ **tutte le carte coperte a qualunque importo** · uscita 0 |
+| ③ E2E percorso | `python collaudi/percorso_e2e.py` | ✅ 15 passi, 0 blocchi, uscita 0 |
+| ③ E2E 120 ospiti + **Stripe VERO** | `scratchpad/cento_ospiti_stripe.py --ospiti 120` | ✅ **120/120**, margine **+625,60 €** su 34.020 € |
+| ③ E2E banco 15 host | `collaudi/giro_banco.py` | ✅ **19 OK · 0 rossi · 7 dichiarati non eseguiti** · uscita 0 |
+| ④ mutazione piccoli | `fase188` + `fase69` | 14 provati · 6 uccisi · 8 sopravvissuti (**tutti preesistenti**) |
+| ④ mutazione `fase59` | 112 mutanti, **nessuno lasciato fuori** | **48 uccisi · 64 sopravvissuti** (era 15 con 2 killer: **vedi sotto**) |
+
+### ⛔ LE TRE COSE DA FARE, IN QUEST'ORDINE
+
+**1. ✅ `giro_banco` — FATTO** il 2026-08-10 alle 18:5x: **19 OK · 0 rossi · 7 dichiarati non
+eseguiti**, uscita 0. Per rifarlo (server **pulito ogni volta**: il banco usa email fisse e al
+secondo giro dà `email_gia_registrata`; la porta è **8080 cablata** in `giro_banco.py:35`, non
+c'è nessuna variabile per cambiarla):
+```powershell
+$sk = (Select-String -Path "C:\Users\MaxDanno\Desktop\stripe.com prova.txt" -Pattern "sk_test_[A-Za-z0-9]+" -AllMatches).Matches[0].Value
+$env:STRIPE_SECRET_KEY=$sk; $env:STRIPE_WEBHOOK_SECRET="whsec_banco_prova"; $env:ADMIN_KEY="ak"
+$env:PAGAMENTO_BPS="500"; $env:PAGAMENTO_BPS_ESTERA="700"; $env:PAGAMENTO_FISSO_CENTS="25"
+$env:PYTHONPATH="C:\Users\MaxDanno\Desktop\Core_Auto"
+python collaudi/avvia_server_visivo.py 8080      # in un processo staccato
+python collaudi/giro_banco.py
+```
+I 7 non eseguiti sono dichiarati: bunker senza password (2) e i 5 controlli che leggono i
+database in `/data`, che esistono solo dentro Docker.
+💡 **Un finto verde in meno**: la «catena di impronte del libro giornale» risultava **OK su un
+giornale di ZERO righe** — il ciclo non girava mai e il verdetto usciva verde lo stesso. Ora
+si dichiara NON ESEGUITO (sbaglio S7: premessa mancante ≠ verde).
+
+**2. SUITE INTERA un'ultima volta** (regola ferrea 6: vale anche per una virgola in un `.md`).
+
+⛔⛔ **PRIMA DI LANCIARE, RIMISURA E RISCRIVI `SUITE ATTUALE:` QUI SOTTO.** Costa **2 secondi**
+e va fatto **anche se non ti pare di aver aggiunto test** (rinominarne uno basta a spostare il
+conto). Saltare questo passo è costato **tre giri da un'ora** — il 2026-08-10 due volte nella
+stessa giornata: la suite finisce dopo 63 minuti, l'unico rosso è la guardia D22 che dice «il
+documento dichiara N, io ne trovo N+2», si corregge il documento… e la regola ferrea 6 obbliga
+a rifare la suite intera per quella cifra. Il numero **non dipende dall'esecuzione**: lo dà il
+caricatore da fermo.
+```powershell
+python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"
+# scrivi quel numero in `SUITE ATTUALE:` qui sotto, POI lancia
+```
+⛔ **Lanciarla con `Start-Process`, MAI col meccanismo di sottofondo dello strumento**: quello
+viene ucciso a fine turno — è già costato due giri da 4 minuti.
+```powershell
+Start-Process python -ArgumentList "-m","unittest","discover","-s",".","-p","test_*.py" `
+  -RedirectStandardOutput "<scratchpad>\suite.txt" -RedirectStandardError "<scratchpad>\suite.err" `
+  -NoNewWindow -WorkingDirectory "C:\Users\MaxDanno\Desktop\Core_Auto"
+```
+Dura **~65 minuti**. Il verdetto (`Ran N` / `OK` / `FAILED`) lo scrive unittest in fondo a `.err`.
+⚠️ Se la guardia `test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO` è rossa, **non è un
+difetto**: è il numero dichiarato qui sotto (`SUITE ATTUALE:`) rimasto indietro. Rimisurarlo col
+caricatore e riscriverlo. È già successo **tre volte**.
+
+**3. CHIEDERE IL VIA E SPEDIRE.** Servono le parole esatte: **«procedi al commit»** (B1) e
+**«autorizzato»** (B4). Poi: computer → GitHub → VPS con **D17** → chiavetta.
+
+⛔ **Su `master` NON si spinge più.** Il cancello blocca `git push origin master` (prima passava
+con «Bypassed rule violations»). La strada è: **ramo nuovo → push del ramo → richiesta di
+unione → unione**. Il lavoro finisce comunque su `master`, solo non per la porta principale.
+⚠️ **`gh` NON è installato su questa macchina** (verificato il 2026-08-10, né in Bash né in
+PowerShell): la richiesta di unione **non si apre da riga di comando**. Dopo il push del ramo,
+GitHub stampa il link da aprire — oppure la si apre dal sito. Non provare `gh pr create`:
+risponde `command not found` e sembra un guasto.
+⚠️ E **controllare che la richiesta sia stata UNITA davvero**, non solo aperta: il 2026-08-06 il
+fondatore credeva unita la richiesta #1, e l'API diceva `merged: false`. **Si controlla, non si
+ricorda.**
+
+### ⛔⛔ LE DUE TRAPPOLE DEL DEPLOY — senza queste il lavoro è inutile
+
+**(a) Sul VPS `.env.casavip` contiene `PAGAMENTO_BPS=300`.** La variabile d'ambiente **vince sul
+codice**: va **tolta** (o portata a `500`), altrimenti il sito continua a prendere il 3% con tutti
+i test verdi. Verifica DOPO lo scambio:
+`docker exec casavip_app env | grep -E '^PAGAMENTO_'`
+
+**(b) `docker-compose.casavip.yml` forzava `PAGAMENTO_BPS: "300"`** e il blocco `environment:`
+**vince su `env_file`**: togliere la variabile dal `.env` non sarebbe bastato. **La riga è già
+stata tolta** in questo lavoro — non rimetterla.
+
+### ⚠️ COSA NON È STATO GUARDATO (dichiarato, D18 punto 3) — non spacciarlo per coperto
+
+- **I 64 sopravvissuti di `fase59`**, misurati il 2026-08-10 con **12 sorveglianti** sui 23 che
+  nominano quel file (prima erano 2, e i sopravvissuti sembravano 97: **la maggior parte non
+  erano buchi, erano punti che nessuno dei due test scelti attraversava**). Dove cadono:
+  **36** in `quota` · **11** in `prenota` · **9** in `_sconto_credito` · 8 altrove.
+  ⛔ Non sono 64 difetti: sono **64 punti dove un difetto non verrebbe visto**.
+  ⚠️ **Perché mancano ancora sorveglianti, ed è una scelta dichiarata**: `test_invarianti_denaro`
+  costa **115s**, `test_happy_conti` **116s**, `test_profondo_valute` **112s** (misurati). Coi
+  lenti dentro, lo stesso giro passa da **40 minuti a oltre quattro ore**. Il modo giusto di
+  chiuderli è un **terzo giro mirato sui soli sopravvissuti dei soldi** (`prenota` +
+  `_sconto_credito` = 20 punti) coi sorveglianti lenti — non su tutti e 112.
+- **`fase59:350`** (`if totale > 0` → `>=`) resta un **SOPRAVVISSUTO dichiarato**. Sembra
+  irraggiungibile (un preventivo a zero non dovrebbe esistere) ma **non è dimostrato**, e **B6**
+  vieta di chiamarlo equivalente senza prova.
+- **I costi Stripe Connect** (0,25% + 0,10 € a bonifico, 2 €/mese per host attivo) sono **letti dal
+  listino, non misurati**: non c'è ancora un bonifico vero.
+- **`giro_banco`** non può misurare giornale, payout e bunker su una macchina senza Docker.
+
+### 💰 QUANTO MANCA SUI SOLDI — il censimento vero (misurato il 2026-08-10)
+
+`python collaudi/mutazione_prodotto.py --censimento` → **7333 punti di logica sbagliabili in 152
+moduli**, 364 che il generatore non sa rompere, **0 moduli che nessun test nomina**.
+⛔ Ma **essere nominato non è essere coperto**: è tutta lì la differenza, e questa tabella la misura.
+
+**Moduli dei SOLDI GIÀ passati dal giudice — 4, per ~173 punti:**
+`fase59_concierge` (112 · 48 uccisi) · `fase160_escrow_garanzia` (39 · 34 uccisi) ·
+`fase100_dac7` (18 · 13 uccisi) · `fase188_paga_struttura` (4).
+
+**Moduli dei SOLDI MAI passati dal giudice — 16, per 516 punti.** *(punti · quanti test lo nominano)*
+
+| modulo | punti | lo nominano |
+|---|---|---|
+| `fase162_pagamenti_pendenti` | 91 | 13 |
+| `fase131_payout_dashboard` | 62 | 11 |
+| `fase65_split_payment` | 59 | 4 |
+| `fase101_stripe_connect` | 50 | 7 |
+| `fase43_commissione` | 31 | 5 |
+| `fase147_tassa_comunale` | 29 | 6 |
+| `fase85_pagamenti_stripe` | 26 | 77 |
+| `fase66_tassa_soggiorno` | 25 | **2** |
+| `fase44_prezzo` | 25 | 4 |
+| `fase35_pagamenti` | 25 | 7 |
+| `fase133_split_quote_uguali` | 24 | **2** |
+| `fase98_policy_commissione` | 18 | 15 |
+| `fase87_stripe_webhook` | 15 | 59 |
+| `fase119_calendario_prezzi` | 15 | **2** |
+| `fase111_cancellazione` | 11 | 4 |
+| `fase167_credito_single_use` | 10 | **1** |
+
+**Sui soldi siamo a circa un quarto** (173 giudicati contro 516 no).
+
+⛔ **La colonna che conta è la terza, non la seconda.** Il rischio non sta dove c'è più codice:
+sta dove c'è **meno sorveglianza**. `fase167_credito_single_use` ha **un solo test** che lo
+nomina, ed è il modulo che impedisce di **spendere due volte lo stesso credito**.
+⚠️ **Trappola**: `fase85_pagamenti_stripe` (77) e `fase87_stripe_webhook` (59) *sembrano* i più
+sorvegliati. Quei test li nominano perché li **fingono**, per non chiamare Stripe davvero.
+**Nominare non è provare**: non darli per coperti senza passarli al giudice.
+
+### ▶️ IL PROSSIMO BLOCCO, GIÀ DECISO — «I QUATTRO CIECHI DEI SOLDI»
+
+Metodo confermato dal fondatore il 2026-08-10: **blocchi piccoli, e su ognuno tutti e quattro i
+livelli in ordine** (unitari → integrazione → E2E → mutazione). L'ordine dei blocchi lo decide
+**rischio × cecità**, non la dimensione.
+
+**Blocco 1 — `fase167_credito_single_use` (10 punti, 1 test), poi `fase66_tassa_soggiorno` (25,
+2), `fase133_split_quote_uguali` (24, 2), `fase119_calendario_prezzi` (15, 2).**
+74 punti in tutto, tutti sui soldi, tutti quasi ciechi. Si comincia da `fase167` perché un
+difetto lì è **denaro che si spende due volte**.
+
+Perché non `fase162` (91 punti) per primo, anche se è il più grosso: ha **13** test che lo
+guardano, cioè è il **meno cieco** del gruppo. Va fatto, ma dopo.
+
+💡 **Regola pratica per il giro di mutazione** (misurata oggi, vale per tutti i blocchi): i
+sorveglianti si scelgono **cronometrandoli**, non a intuito. Ogni mutante paga **tutto** l'insieme
+killer, che gira in un solo processo e **non si ferma al primo rosso**. Oggi tre moduli da ~115s
+avrebbero portato un giro da 40 minuti a **oltre quattro ore** sugli stessi punti.
+```bash
+for m in test_a test_b; do s=$(date +%s); python -m unittest $m >/dev/null 2>&1; echo "$(( $(date +%s)-s ))s $m"; done
+```
+⛔ E `--minuti` va **PRIMA** di `--killer`, se no il numero finisce nell'elenco dei killer e il
+giro muore con `ModuleNotFoundError: No module named '25'`.
+
+⛔ **Al deploy: togliere `PAGAMENTO_BPS=300` dal VPS.**
+
+### 🔴 IL DIFETTO, trovato dal fondatore con un caso vero
+*«Se uno prenota una stanza una notte, come facevo io nelle Filippine, totale 13 euro con tasse
+e tutto — con il 5% ci paghi la Stripe?»* No. E il difetto era più grosso della domanda.
+
+`fase59_concierge.py` calcolava il costo carta come **percentuale secca** (`totale * 300 // 10000`).
+Stripe **non** prende una percentuale pura: prende **percentuale + 0,25 EUR a transazione**, e
+**+2%** se deve convertire la valuta. Misurato (`collaudi/conti_stripe.py`, listino Italia letto
+il 2026-08-09):
+
+```
+carta europea standard  1,5% + 0,25   -> il 3% copriva solo sopra  16,66 EUR
+carta britannica        2,5% + 0,25   -> solo sopra  50,00 EUR
+carta europea premium   2,8% + 0,25   -> solo sopra 125,00 EUR
+carta internazionale    3,15% + 0,25  -> MAI, a nessun importo (3% < 3,15%)
++ cambio valuta         5,15% + 0,25  -> MAI, e il buco CRESCE con l'importo
+```
+
+⚠️ **La perdita cresce con la cifra**: −0,52 EUR su 13 EUR ma **−11,00 EUR su 500 EUR** (carta
+internazionale + cambio, in promozione). E i **primi 90 giorni la commissione è 0%**, quindi in
+quella finestra — cioè adesso, coi primi host — **non c'è niente che assorba la perdita**.
+In più il **bonifico all'host** costa a sua volta (**0,25% + 0,10 EUR**, più **2 EUR/mese** per
+host attivo, Stripe Connect) e **non era coperto da nulla**.
+
+### ⛔ LA GUARDIA C'ERA, ED ERA UN ORNAMENTO
+`test_mai_in_perdita_copre_stripe` confrontava il 3% con la carta **migliore** (1,5%) su 100 EUR:
+`300 > 175`, verde per sempre. **Il suo stesso commento dichiarava di sapere che il caso peggiore
+valeva 315** — cioè più dei nostri 300 — e poi misurava l'altro. È il modo di rompersi **n°4**
+(controllo che non controlla). Sostituita da
+`test_la_tariffa_tecnica_copre_la_carta_PEGGIORE_a_OGNI_importo`, che prova **6 importi × 2 valute**
+e **legge i valori di produzione da `main_casavip.py`**: se qualcuno li riabbassa, rossa da sola.
+
+### ✅ FATTO, con l'ordine D20 rispettato (4 passi, tutti visti)
+```
+1. guardia scritta        -> ROSSA  (39<65 su 13 EUR ... 1500<1600 su 500 EUR)
+2. riparazione innestata  -> VERDE  (6 test, uscita 0)
+3. riparazione STACCATA   -> ROSSA di nuovo, con scarti DIVERSI (1,3,7,15,30,75 cents)
+4. riattaccata            -> VERDE
+```
+Il passo 3 conta: gli scarti **cambiano**, quindi la guardia misura la percentuale e non altro.
+
+**Nuova tariffa, decisa dal fondatore: 5% + 0,25 EUR · 7% + 0,25 EUR sugli annunci NON in euro.**
+⛔ **Perché 5 e non 4** (deciso il 2026-08-10, dopo essere passati da 3,5 → 4 → 5): il costo
+Stripe **dipende dalla nazione della carta** (1,5% europea standard → 3,25% extra-UE) e al
+preventivo **non sappiamo con che carta pagherà l'ospite**. Il 5% copre la PEGGIORE con 1,75
+punti di margine. Il 4 dava 0,75 punti: era stato scelto quando il costo si credeva 3,15%
+(listino), e dopo la misura vera (3,25%) **nessuno era tornato a ricontrollare la decisione**.
+💡 E torna il conto che il fondatore ricordava: sul **link diretto** l'host paga **5% di
+commissione + 5% di spese = 10% tutto compreso**. Il suo «5 + 5».
+Il 6% non è prudenza: **misurato** che il conto Stripe è italiano e tiene **solo euro**
+(`country: IT`, `default_currency: eur`, nessun altro saldo), quindi un annuncio in altra valuta
+viene convertito **per forza**.
+
+File già allineati: `fase59_concierge.py` (due parametri nuovi, default 0 = comportamento storico
+per chi non li passa) · `fase81_bootstrap_casavip.py` · `main_casavip.py` · `fase163_accettazioni.py`
+(**contratto IT+EN, versione alzata a `2026-08-09`** → scatta la ri-accettazione) ·
+`fase185_testi_legali.py` (**termini in 8 lingue**, versione a `2026-08-09`) · `README.md` ·
+`CLAUDE.md` · `deploy/host.html` (IT+EN) · `deploy/kit-marketing.html` · `deploy/bunker.html` ·
+`deploy/diventa-host.html` (**solo IT**) · `test_fase59_costo_pagamento.py` ·
+`test_trasparenza_costi.py` (agganciato al motore con `TECNICA`/`RX_TECNICA`).
+
+### ✅ LA CODA È CHIUSA — e ha scoperchiato lo stesso difetto in altri tre posti
+
+**(a) `fase188_paga_struttura` ignorava la conversione.** Aveva già il modello giusto —
+fisso + 3,25% + i **30 centesimi di sicurezza voluti dal fondatore** — ma **niente cambio
+valuta**, e non aveva nemmeno un parametro per sapere in che valuta fosse l'annuncio.
+Misurato: coperto fino a ~150 €, poi **−18 cents su 200 €** e **−81 su 500**. Aggiunti
+`GATEWAY_BPS_CAMBIO = 200` e `valuta_estera`, passati dai **due** chiamanti in `fase83` con
+ripiego **dalla parte giusta** (nel dubbio: estera). ⛔ Ed è un difetto **vivo**:
+`PAGA_STRUTTURA_ATTIVO=1` è acceso in produzione.
+
+**(b) 🔴 Il confronto che convince l'host mostrava il doppio.** `fase69_trasparenza` non
+toglieva la tariffa tecnica dal netto, e `fase83._trasparenza` non gliela passava (non si
+poteva nemmeno). Misurato sulla rotta vera, su 100 €: *«con noi guadagni in più»* diceva
+**800** quando il vero è **400**. L'ironia: il commento di `fase83:6598` spiega a lungo di
+aver riparato **esattamente questo per la commissione**. Metà meccanismo riparato, metà no.
+
+**(c) Lo stesso `300` scritto a mano in quattro posti** (`main_casavip`, `fase185`,
+`fase89`, i test) — e **tre** di quei posti avevano il commento «mai una cifra scritta a
+mano qui». Ora i test la **leggono dal motore** (`TECNICA`/`RX_TECNICA`, `_tecnica_bps()`).
+
+⚠️ **NON riscrivere la storia**: i `3%` più in basso in questo file e in
+`REGISTRO_INGEGNERIA.md` sono **registrazioni di com'era allora** e vanno lasciate.
+
+### 💼 DA PORTARE AL COMMERCIALISTA — il forfettario cambia i conti (2026-08-10)
+
+Ricordato dal fondatore: *«io ho la partita IVA in Italia, regime forfettario, e pago molto
+più di loro che hanno base nei paesi meno tassati»*. Non è una lamentela: **cambia i numeri**.
+
+1. **Nel forfettario i costi NON si deducono**: si paga sul lordo incassato. Quindi i ~3,25
+   punti di tariffa tecnica che girano a Stripe **fanno comunque reddito imponibile**. I
+   colossi (Olanda, Irlanda) li deducono. A parità di percentuale dichiarata, **il nostro
+   margine reale è più basso del loro** — e questo giustifica di stare larghi, non stretti.
+2. **La soglia degli 85.000 € si consuma più in fretta.** `fase98:184` (`fattura_startup_cents`,
+   «MODULO 3 tutela forfettario») calcola `GMV_max ≈ 85k / 10% ≈ 850k`: **quel numero è
+   vecchio**, era sulla sola commissione al 10%. Con commissione + tariffa tecnica si incassa
+   il **15%**, quindi il tetto scende a **~566.000 € di prenotazioni**. E la funzione conta
+   solo `host_fee + guest_fee` (il vecchio split mai acceso): **non conta la tariffa tecnica**,
+   quindi oggi SOTTOSTIMA il consumo della soglia.
+3. ⛔ **La domanda vera, che decide tutto e non la può decidere l'IA**: la tariffa tecnica è
+   **nostro ricavo** (e allora conta negli 85k e ci si paga le tasse sopra) oppure è un
+   **anticipo per conto dell'host** (e allora non conta)? Cambia il tetto e cambia il netto.
+   Da chiedere al commercialista **prima** di avere volume, non dopo.
+
+### 🧪 LE PROVE SU STRIPE VERO (chiave `sk_test`, mai stampata)
+Fino a ieri ogni banco sostituiva Stripe con un finto: provava la nostra aritmetica e basta.
+- **120 addebiti + 60 rimborsi**: la tariffa copre in **120 casi su 120**; **0 rimborsi su
+  60** hanno restituito la commissione → **360,80 €** bruciati e mai recuperati.
+- **120 ospiti nel sistema vero**: **120 link di pagamento creati DAVVERO da Stripe**, 40
+  cancellazioni con rimborso vero. Su **34.020 €** di prenotazioni la tariffa tecnica copre
+  Stripe con **+285,50 €**; col vecchio 3% sarebbe finita a **−170,30 €**.
+- **Correzione al listino**: la carta extra-UE costa **3,25% + 0,25 €**, non 3,15% come dice
+  la pagina dei prezzi (675 su 20000 e 67 su 1300 sono esattamente 3,25%+25). Il vecchio 3%
+  era ancora più sotto costo di quanto si pensasse.
+- Gli attrezzi stanno in `scratchpad/` (usa-e-getta, chiave sul Desktop): non entrano nel
+  repository perché contengono il percorso della chiave.
+
+### ⛔⛔ IL TRAPPOLONE DEL DEPLOY — senza questo la riparazione non serve a niente
+Sul VPS `.env.casavip` contiene **`PAGAMENTO_BPS=300`**. **La variabile d'ambiente vince sul codice**:
+se si deploya così, il sito continua a prendere il 3% e tutto questo lavoro è **un verde falso
+perfetto**. Va tolta (o portata a **500**) **nello stesso momento del deploy**, e vanno aggiunte
+`PAGAMENTO_BPS_ESTERA=700` e `PAGAMENTO_FISSO_CENTS=25` (oppure lasciate ai default del codice).
+
+### 📌 ALTRE DUE COSE MISURATE OGGI, non ancora affrontate
+1. 🔴 **`PAGA_STRUTTURA_ATTIVO=1` è ACCESO in produzione**, mentre **tre commenti del sorgente**
+   lo danno per spento (`fase83_server.py:4763`, `:6021`, `:6800`). Oggi non fa danno — zero
+   annunci pubblicati (`/api/catalogo` → `{"totale":0}`) — ma **si accende da solo col primo host**.
+   Il fondatore non ha ancora detto se l'ha acceso lui di proposito.
+2. 🟢 **Il lato ospite regge**: banco nuovo `collaudi/incroci_ospite.py`, **24 combinazioni su 24
+   verdi** in 56 s (non 48: lo split è un **calcolatore parcheggiato** e «in struttura + su
+   richiesta» è **impossibile per costruzione**, `fase83:4666` esce prima di `:4670`). L'invariante
+   che conta: su «paga in struttura» si rende **al massimo l'anticipo**, mai il prezzo pieno.
+
+### 🧾 IL PERCHÉ DELLA SCELTA, per non ridiscuterlo da capo
+Il fondatore aveva chiesto di **trattenere una quota sui rimborsi** («l'host ce la dà gratis e noi
+non la diamo»). **Scartato dopo aver letto le fonti**: Airbnb dichiara che *«for reservations in
+Italy … the service fee may be refundable if you cancel any time before check-in»* — cioè in Italia
+**restituisce** la propria quota, ed è il terreno su cui volevamo mettere il piede. Recuperare il
+**costo** (Stripe non restituisce la commissione sul rimborso) è tutt'altra cosa ed è difendibile.
+⛔ E **il Credito Viaggio NON si tocca**: `_archivio/STRATEGIA_CANCELLAZIONE.md` §3 dice che è lo
+**scudo** contro le clausole vessatorie (Dir. 93/13 + UK CRA 2015) e che è **ricavo futuro, non
+un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
+
+---
+
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 1a662f1
+CONSEGNE AGGIORNATE A: fce0c54
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -1838,14 +2164,28 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5486 test
+SUITE ATTUALE: Ran 5492 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3.
 COMANDO:  python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"
-MISURATO SU: 9ae7115 + le modifiche non committate del 2026-08-09 (buco del CIN)
-GIRO REALE DEL 2026-08-09 (staccato dallo strumento che lo lancia, uscita in fondo al file):
+MISURATO SU: fce0c54 + le modifiche non committate del 2026-08-10 (tariffa tecnica 5%+0,25)
+GIRO REALE DEL 2026-08-10 (staccato con `Start-Process`, verdetto scritto da unittest):
+          Ran 5483 tests in 3854.405s · FAILED (failures=1, skipped=4)
+          L'UNICO fallimento era QUESTA riga, che dichiarava ancora 5486 mentre le due
+          guardie nuove (cambio valuta in fase188 · tariffa tecnica nel confronto fase69)
+          portavano il totale a 5488. **TERZA volta di fila** che la guardia D22 becca il
+          numero fermo: non e' sfortuna, e' che aggiornare un documento a mano si dimentica
+          sempre — ed e' esattamente perche' quella guardia esiste. Zero difetti nel codice.
+          5488 raccolti − 5483 eseguiti = i 5 di openssl, non un mistero.
+          ⛔ TRAPPOLA DELLO STRUMENTO, costata due giri da 4 minuti: la suite lanciata col
+          meccanismo di sottofondo dello strumento viene UCCISA alla fine del turno; quella
+          lanciata con `Start-Process ... -RedirectStandardOutput` sopravvive. La prova era
+          gia' nella stessa sessione (i giri Stripe da 120, lanciati cosi', erano arrivati
+          in fondo): due metodi a confronto sotto gli occhi, e li ho confrontati solo dopo
+          la seconda morte.
+GIRO PRECEDENTE (2026-08-09, su 9ae7115 + buco del CIN):
           Ran 5481 tests in 3985.307s · FAILED (failures=1, skipped=4) · uscita 1
           L'UNICO fallimento era QUESTA riga, che dichiarava ancora 5484 mentre le due
           guardie nuove sul buco del CIN portavano il totale a 5486: la guardia D22 ha

@@ -131,8 +131,25 @@ def main() -> None:  # pragma: no cover
         commissione_bps=int(os.environ.get("COMMISSIONE_BPS", "1000")),  # 10% a regime (marketplace)
         # rampa di lancio (land-grab): nuovi host 0% per ~3 mesi -> 8% fino a 1 anno -> 10% a regime
         promo_lancio_attiva=os.environ.get("PROMO_LANCIO", "true").lower() in ("1", "true", "yes", "si"),
-        # costo carta a carico host (copre Stripe -> noi mai in perdita); 300 bps = 3% (come Vrbo)
-        psp_bps=int(os.environ.get("PAGAMENTO_BPS", "300")),
+        # COSTO CARTA a carico host: deve COPRIRE Stripe, che prende percentuale + QUOTA
+        # FISSA (0,25 EUR) e in piu' il 2% se deve CONVERTIRE la valuta. Il 3% secco di
+        # prima era sotto costo: sotto 16,66 EUR con qualunque carta, e a QUALUNQUE importo
+        # con una carta non europea (3,15%). Misura e conti: `collaudi/conti_stripe.py`.
+        # Il conto Stripe e' italiano e tiene solo euro (misurato il 2026-08-09), quindi un
+        # annuncio prezzato in altra valuta viene convertito per forza -> tariffa maggiorata.
+        # 5% (euro) e 7% (valuta estera) + 0,25 EUR fissi. Scelti dal fondatore il 2026-08-10
+        # con l'ordine di stare LARGHI DI UN PUNTO sul costo, e il motivo e' solido: il costo
+        # Stripe DIPENDE DALLA NAZIONE DELLA CARTA, e al momento del preventivo non sappiamo
+        # con che carta paghera' l'ospite. Il margine copre proprio quel non-sapere.
+        # Costo VERO misurato sull'API (120 addebiti in modalita' prova): carta extra-UE
+        # 3,25% + 0,25 EUR; +2% se Stripe deve convertire (conto italiano, tiene solo euro).
+        #   euro   -> 5% contro 3,25% = 1,75 punti di margine
+        #   estera -> 7% contro 5,25% = 1,75 punti di margine
+        # ⛔ Serve soprattutto NEI PRIMI 90 GIORNI: li' la commissione e' 0% e questa tariffa
+        # e' l'UNICA cosa che paga Stripe. Se scende, in promozione si perde su ogni incasso.
+        psp_bps=int(os.environ.get("PAGAMENTO_BPS", "500")),
+        psp_bps_valuta_estera=int(os.environ.get("PAGAMENTO_BPS_ESTERA", "700")),
+        psp_fisso_cents=int(os.environ.get("PAGAMENTO_FISSO_CENTS", "25")),
         stripe_secret_key=os.environ.get("STRIPE_SECRET_KEY", ""),
         stripe_success_url=os.environ.get("STRIPE_SUCCESS_URL", ""),
         stripe_cancel_url=os.environ.get("STRIPE_CANCEL_URL", ""),

@@ -16,7 +16,8 @@ COSA PRENDIAMO ONLINE (subito, dalla carta, tutto nostro):
      zero rischio di non essere pagati (meglio di Booking che fattura l'host a fine mese);
   2. la FEE di servizio paga-in-struttura (1.50/notte, a carico OSPITE);
   3. la COPERTURA CARTA (costo Stripe del caso peggiore extra-UE + 30c di sicurezza), assorbita
-     dall'host come la tariffa tecnica 3% -> BookinVIP NON ci perde MAI, nemmeno su 1 notte con
+     dall'host come la tariffa tecnica (5%, 7% in valuta estera) -> BookinVIP NON ci perde
+     MAI, nemmeno su 1 notte con
      carta straniera (l'obiezione del fondatore, verificata dal test).
 
 Il SALDO (prezzo - quello che abbiamo preso noi) lo paga l'ospite all'host, DI PERSONA. Quei
@@ -40,6 +41,14 @@ FEE_PER_NOTTE_CENTS = 150          # sovrapprezzo OSPITE per il paga-in-struttur
 GATEWAY_MINIMO_CENTS = 50          # 0.50: pavimento su addebiti piccoli
 GATEWAY_FISSO_CENTS = 55           # 0.55 = 0.25 fisso Stripe + 0.30 sicurezza
 GATEWAY_BPS = 325                  # 3.25%: il caso peggiore extra-UE
+# +2% quando l'annuncio NON e' nella valuta in cui incassiamo: Stripe deve CONVERTIRE.
+# Il conto e' italiano e tiene SOLO euro (misurato il 2026-08-09 sul conto vero:
+# country IT, default_currency eur, nessun altro saldo), quindi la conversione non e'
+# evitabile. MISURATO sull'API vera: la commissione torna in due voci separate, carta e
+# conversione. Senza questa riga «paga in struttura» era SOTTO COSTO sopra i ~150 EUR
+# (-18 cents su 200 EUR, -81 su 500) -- e la funzione non aveva nemmeno un modo per
+# sapere in che valuta fosse l'annuncio.
+GATEWAY_BPS_CAMBIO = 200           # 2%: conversione valutaria
 
 
 def _intero(v: Any, default: int = 0) -> int:
@@ -53,10 +62,12 @@ def _intero(v: Any, default: int = 0) -> int:
 
 def calcola(prezzo_cents: Any, notti: Any, commissione_cents: Any, *,
             psp_bps: int = 300,
+            valuta_estera: bool = False,
             fee_per_notte_cents: int = FEE_PER_NOTTE_CENTS,
             gateway_minimo_cents: int = GATEWAY_MINIMO_CENTS,
             gateway_fisso_cents: int = GATEWAY_FISSO_CENTS,
-            gateway_bps: int = GATEWAY_BPS) -> Dict[str, int]:
+            gateway_bps: int = GATEWAY_BPS,
+            gateway_bps_cambio: int = GATEWAY_BPS_CAMBIO) -> Dict[str, int]:
     """Ripartizione 'paga in struttura' per UN soggiorno (tutti cents interi).
 
     Input: prezzo TOTALE del soggiorno (== prezzo online pulito), notti, commissione gia'
@@ -77,10 +88,14 @@ def calcola(prezzo_cents: Any, notti: Any, commissione_cents: Any, *,
     fee = max(0, _intero(fee_per_notte_cents, 0)) * n            # a carico OSPITE
     ospite_totale = prezzo + fee
 
+    # se l'annuncio non e' nella valuta in cui incassiamo, al caso peggiore della carta si
+    # AGGIUNGE la conversione: senza, la copertura resta sotto costo (misurato).
+    bps_gw = gateway_bps + (max(0, _intero(gateway_bps_cambio, 0)) if valuta_estera else 0)
+
     def _gw(addebito: int) -> int:
-        # copre il costo Stripe caso PEGGIORE (fisso+sicurezza + 3.25% extra-UE), mai sotto il
-        # minimo, mai sotto la tariffa tecnica psp. L'host lo assorbe (come il 3%).
-        per_stripe = gateway_fisso_cents + addebito * gateway_bps // 10000
+        # copre il costo Stripe caso PEGGIORE (fisso+sicurezza + 3.25% extra-UE, + 2% se
+        # c'e' la conversione), mai sotto il minimo, mai sotto la tariffa tecnica psp.
+        per_stripe = gateway_fisso_cents + addebito * bps_gw // 10000
         per_psp = bps * addebito // 10000
         return max(gateway_minimo_cents, per_stripe, per_psp)
 

@@ -154,8 +154,15 @@ class TestMultiValuta(_Base):
         q, b = self.prenota("casa-jpy", ci, co)
         self.assertEqual(b.get("modo_pagamento"), "in_struttura", b)
         self.assertEqual((q.get("valuta") or "").upper(), "JPY")
-        # gli importi tornano con fase188 sugli stessi numeri (yen interi)
-        atteso = PS.calcola(q["totale_cents"], q["notti"], q["commissione_cents"])
+        # gli importi tornano con fase188 sugli stessi numeri (yen interi).
+        # ⛔ `valuta_estera=True` NON e' un dettaglio del test: l'annuncio e' in yen e noi
+        # incassiamo in euro, quindi Stripe deve CONVERTIRE e aggiunge il 2% (misurato il
+        # 2026-08-10 sull'API vera: la commissione torna in due voci separate). Prima del
+        # 2026-08-10 `calcola` non aveva nemmeno un modo per saperlo, e la copertura carta
+        # restava sotto costo. Qui si chiede l'atteso ESATTAMENTE come lo chiede la
+        # produzione: se le due strade divergessero, questa riga diventerebbe rossa.
+        atteso = PS.calcola(q["totale_cents"], q["notti"], q["commissione_cents"],
+                            valuta_estera=True)
         self.assertEqual(b["anticipo_online_cents"], atteso["anticipo_online_cents"])
         self.assertEqual(b["saldo_in_loco_cents"], atteso["saldo_in_loco_cents"])
         # INVARIANTE soldi anche in yen: anticipo + saldo == totale + fee
@@ -164,8 +171,13 @@ class TestMultiValuta(_Base):
         # il link addebita l'anticipo in valuta jpy
         ant = [x for x in _BODIES if "in_struttura" in x][-1]
         self.assertIn("currency%5D=jpy", ant)
-        # non si perde: l'anticipo copre Stripe peggiore anche in yen
-        self.assertGreater(b["anticipo_online_cents"] - (25 + b["anticipo_online_cents"] * 325 // 10000), 0)
+        # non si perde: l'anticipo copre Stripe peggiore anche in yen, CONVERSIONE COMPRESA
+        # (3,25% carta + 2% cambio + fisso). ⚠️ Limite dichiarato: lo yen ha 0 decimali, e
+        # la quota fissa di Stripe non e' 25 unita' in JPY -- qui e' una stima prudente per
+        # eccesso, non una fattura.
+        self.assertGreater(
+            b["anticipo_online_cents"] - (25 + b["anticipo_online_cents"] * 525 // 10000), 0,
+            "in yen l'anticipo non copre Stripe con la conversione")
 
     def test_penale_in_yen_e_la_prima_notte(self):
         self.pubblica("casa-jpy2", valuta="JPY", prezzo=30000, giorni_da_oggi=0)

@@ -29,6 +29,32 @@ from fase163_accettazioni import doc_sha256, CONTRATTO_HOST_VERSIONE
 WHSEC = "whsec_simulazione"
 
 
+def _dal_motore(chiave):
+    """La tariffa tecnica VERA, letta dai default di `main_casavip.py`.
+
+    Questa e' la SIMULAZIONE TOTALE: il suo valore sta tutto nell'essere uguale alla
+    produzione. Con `psp_bps=300` scritto a mano simulava, dal 2026-08-10, un listino
+    che la produzione non pratica piu'.
+    """
+    import io as _io
+    import re as _re
+    _qui = os.path.dirname(os.path.abspath(__file__))
+    with _io.open(os.path.join(_qui, "main_casavip.py"), encoding="utf-8") as f:
+        _src = f.read()
+    _m = _re.search(chiave + r'["\']\s*,\s*["\'](\d+)["\']', _src)
+    assert _m, "main_casavip.py non dichiara piu' il default %s" % chiave
+    return int(_m.group(1))
+
+
+PSP_BPS = _dal_motore("PAGAMENTO_BPS")
+PSP_FISSO = _dal_motore("PAGAMENTO_FISSO_CENTS")
+
+
+def _tecnica(importo):
+    """Tariffa tecnica su `importo`: percentuale PIU' quota fissa, come in produzione."""
+    return (importo * PSP_BPS) // 10000 + PSP_FISSO
+
+
 def _fake_fetch(url, body, headers):     # Stripe finto: sessione con url+id, nessuna rete
     return {"url": "https://checkout.stripe.test/" + secrets.token_hex(6),
             "id": "cs_test_" + secrets.token_hex(8)}
@@ -50,7 +76,7 @@ class TestSimulazioneTotale(unittest.TestCase):
             db_tassa_comunale=f"{d}/t.db", db_payout=f"{d}/pay.db",
             db_accettazioni=f"{d}/acc.db", file_referral=f"{d}/ref.json",
             con_registrazione_host=True, con_mcp=True,
-            commissione_bps=1000, psp_bps=300,
+            commissione_bps=1000, psp_bps=PSP_BPS, psp_fisso_cents=PSP_FISSO,
             stripe_secret_key="sk_test_sim", stripe_webhook_secret=WHSEC,
             stripe_success_url="https://bookinvip.com/grazie.html",
             stripe_cancel_url="https://bookinvip.com/annullato.html")
@@ -144,13 +170,13 @@ class TestSimulazioneTotale(unittest.TestCase):
 
     def test_03_preventivo_numeri_e_scadenza(self):
         # casa-1 = 'rigida' (nessuno sconto), prezzo 9000. 2 notti = 18000; comm 10% = 1800;
-        # carta 3% del totale = 540; host = 18000 - 1800 - 540.
+        # tariffa tecnica del totale (percentuale + quota fissa); host = 18000 - 1800 - essa.
         s, q = self._quote("casa-1")
         self.assertEqual(s, 200, q)
         self.assertEqual(q["prezzo_guest_cents"], 18000)   # ospite prezzo pulito
         self.assertEqual(q["commissione_cents"], 1800)     # 10%
-        self.assertEqual(q["costo_pagamento_cents"], 540)  # 3% host, sul totale
-        self.assertEqual(q["netto_host_cents"], 18000 - 1800 - 540)
+        self.assertEqual(q["costo_pagamento_cents"], _tecnica(18000))   # a carico host
+        self.assertEqual(q["netto_host_cents"], 18000 - 1800 - _tecnica(18000))
         self.assertTrue(q.get("scade_a", 0) > int(time.time()))   # countdown reale
         # casa-0 è 'non_rimborsabile' -> sconto onesto -12% all'ospite (14080 invece di 16000)
         s, q0 = self._quote("casa-0")

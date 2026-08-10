@@ -152,14 +152,25 @@ def confronta(prezzo_riferimento_cents: int, *,
 
 def confronta_piattaforma(prezzo_riferimento_cents: int, piattaforma: str, *,
                           commissione_nostra_bps: int = 1000,   # 10% marketplace (caso tipico)
+                          psp_bps: int = 0,
                           sconto_guest_cents: int = 0,
                           tassa_soggiorno_cents: int = 0) -> Confronto:
     """Confronto usando il benchmark di una piattaforma nota (booking/airbnb/...).
-    Piattaforma sconosciuta -> usa il default della PoliticaConfronto."""
+    Piattaforma sconosciuta -> usa il default della PoliticaConfronto.
+
+    `psp_bps`: la TARIFFA TECNICA, che va tolta dal netto mostrato all'host. Fino al
+    2026-08-10 non si poteva nemmeno passare, e il chiamante non la passava: il prospetto
+    mostrava all'host un netto PIU' ALTO di quello che avrebbe incassato davvero. E' lo
+    stesso difetto che il commento di `fase83._trasparenza` dichiara di aver riparato per
+    la commissione -- riparato a meta'.
+    ⚠️ Dichiarato (D18 punto 3): qui si applica solo la PERCENTUALE. La quota fissa per
+    transazione (0,25 EUR) non entra nel prospetto: e' un'approssimazione che sotto-stima
+    la tariffa di pochi centesimi, non un buco a nostro favore da nascondere."""
     ota_bps = OTA_BENCHMARK_BPS.get(str(piattaforma).strip().lower(),
                                     PoliticaConfronto().commissione_ota_bps)
     return confronta(prezzo_riferimento_cents,
                      politica=PoliticaConfronto(commissione_ota_bps=ota_bps,
-                                                commissione_nostra_bps=commissione_nostra_bps),
+                                                commissione_nostra_bps=commissione_nostra_bps,
+                                                psp_bps=psp_bps),
                      sconto_guest_cents=sconto_guest_cents,
                      tassa_soggiorno_cents=tassa_soggiorno_cents)

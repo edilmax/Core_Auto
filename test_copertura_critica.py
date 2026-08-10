@@ -528,7 +528,8 @@ class TestTestiLegaliRamiDErrore(unittest.TestCase):
         try:
             self.assertEqual(legali._percentuali(),
                              {"promo": 0, "giorni_promo": 90, "fase1": 8,
-                              "regime": 10, "diretto": 5, "tecnica": 3})
+                              "regime": 10, "diretto": 5, "tecnica": 5,
+                              "tecnica_estera": 7, "fisso": "0,25"})
         finally:
             if vecchio is None:
                 os.environ.pop("PAGAMENTO_BPS", None)

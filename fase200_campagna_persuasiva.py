@@ -58,11 +58,11 @@ ANGOLI: List[Dict[str, str]] = [
                 "l'ospite paga 0%. bookinvip.com"},
     {"chiave": "autorita", "nome": "Autorità (trasparenza)",
      "istruzione": "Leva AUTORITÀ tramite TRASPARENZA RADICALE: diciamo il costo PRIMA della firma. "
-                   "C'è una tariffa tecnica del 3% che copre solo la carta e su cui non guadagniamo "
-                   "nulla. L'onestà come forza. «Senza sorprese.»",
+                   "C'è una tariffa tecnica del 5% + 0,25 € a prenotazione, che copre il costo di "
+                   "incassare e di bonificare. L'onestà come forza. «Senza sorprese.»",
      "soggetto": "clean elegant modern interior in {citta}, transparent glass, natural light, honest premium feel",
-     "ripiego": "Ti diciamo il costo PRIMA, non dopo: 3% tecnico che copre solo la carta, zero guadagno "
-                "per noi. L'ospite paga 0%. Basta sorprese. bookinvip.com"},
+     "ripiego": "Ti diciamo il costo PRIMA, non dopo: tariffa tecnica 5% + 0,25 € a prenotazione, che "
+                "copre incasso e bonifico. L'ospite paga 0%. Basta sorprese. bookinvip.com"},
     {"chiave": "simpatia", "nome": "Simpatia",
      "istruzione": "Leva SIMPATIA: parla come una persona vera, non un'azienda. Il fondatore che "
                    "accompagna l'host di persona, nella sua lingua. Caldo, umano, diretto.",
@@ -115,15 +115,15 @@ _ORDINE_LINGUA = {
 # Ripiego in INGLESE (universale) per le citta' non italiane quando l'AI e' spenta (mai italiano fuori Italia).
 RIPIEGO_EN = {
     "reciprocita": "Publish your place in {citta} on BookinVIP: 0% commission for your first 90 days, "
-                   "only a 3% technical fee. Message me to start. bookinvip.com",
+                   "only a technical fee of 5% + EUR 0.25. Message me to start. bookinvip.com",
     "unita": "Join the founding class of hosts in {citta}. 0% commission for 90 days, guests pay 0% fee. "
              "Message me: bookinvip.com",
     "scarsita": "I'm hand-picking the first hosts in {citta} — few spots. 0% commission for 90 days. "
                 "Message me to join BookinVIP. bookinvip.com",
     "riprova_sociale": "Hosts in {citta} are joining BookinVIP. 0% commission for 90 days, guests pay 0% "
                        "fee. Be among the first: bookinvip.com",
-    "autorita": "We tell you the cost before you sign: a 3% technical fee that only covers the card, we "
-                "earn nothing on it. Guests pay 0%. No surprises. bookinvip.com",
+    "autorita": "We tell you the cost before you sign: a technical fee of 5% + EUR 0.25 per booking, "
+                "covering collection and payout. Guests pay 0%. No surprises. bookinvip.com",
     "simpatia": "No call center: I set up your account and guide you myself. Ten minutes and the photos "
                 "of your place in {citta}. bookinvip.com",
     "coerenza": "The first step is small: ten minutes and the photos of your place in {citta}. We handle "
@@ -249,15 +249,15 @@ class GeneratoreCampagna:
             "Sei un copywriter pubblicitario esperto (scuola Ogilvy) che scrive per BookinVIP, una nuova "
             "piattaforma di prenotazioni di alloggi che parte a %s. Fatti reali e SPECIFICI da usare: "
             "l'host pubblica gratis con 0%% di commissione per i primi 90 giorni (poi 8%%, poi 10%%); "
-            "l'ospite paga sempre 0%% di fee; c'e' una tariffa tecnica del 3%% dichiarata PRIMA della "
-            "firma (copre solo la carta, noi non ci guadagniamo). Promessa del brand: «Il tuo viaggio, "
+            "l'ospite paga sempre 0%% di fee; c'e' una tariffa tecnica del 5%% + 0,25 EUR a prenotazione, "
+            "dichiarata PRIMA della firma (copre incasso e bonifico). Promessa del brand: «Il tuo viaggio, "
             "senza sorprese».\n\n"
             "Scrivi UNA sola didascalia da social per invitare un HOST di %s a pubblicare il suo "
             "alloggio, applicando questa leva psicologica:\n%s\n\n"
             "Regole di copywriting, rispettale TUTTE:\n"
             "- Massimo 280 caratteri.\n"
             "- La prima frase e' un aggancio che promette un beneficio concreto.\n"
-            "- SPECIFICO e concreto: usa i numeri veri (0%%, 90 giorni, 3%%), mai vago o generico.\n"
+            "- SPECIFICO e concreto: usa i numeri veri (0%%, 90 giorni, 5%% + 0,25 EUR), mai vago.\n"
             "- UN solo beneficio e UN solo invito all'azione chiaro (es. «scrivimi» oppure «bookinvip.com»).\n"
             "- Linguaggio semplice e onesto: niente frasi furbe, niente superlativi gonfiati, niente promesse false.\n"
             "- NIENTE emoji. NIENTE hashtag. NIENTE virgolette attorno al testo.\n"

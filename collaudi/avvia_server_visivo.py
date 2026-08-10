@@ -34,8 +34,20 @@ def _prepara(porta):
         db_accettazioni=f"{d}/acc.db", db_pendenti=f"{d}/p.db", db_payout=f"{d}/pay.db",
         db_garanzia=f"{d}/g.db", db_tassa_comunale=f"{d}/t.db",
         bunker_password="SuperPw@1",   # accende il SUPER-ADMIN (bunker) per il collaudo dei 3 ruoli
-        commissione_bps=1000, psp_bps=0, stripe_secret_key="sk_test_visivo",
-        stripe_webhook_secret="whsec_v", stripe_success_url="http://localhost/ok",
+        commissione_bps=1000,
+        # ⛔ PILOTABILI DALL'AMBIENTE (2026-08-10), con gli stessi valori di prima come
+        # ripiego: erano incisi qui dentro, e `collaudi/giro_banco.py` — che parla con
+        # QUESTO server e legge le chiavi dal PROPRIO ambiente — non riusciva a far pagare
+        # nemmeno una prenotazione: chiave finta -> nessun link -> la macchina si rifiuta
+        # (fail-safe giusto). Il giro finiva "0 pagate" e misurava la configurazione del
+        # banco invece del prodotto. E con `psp_bps=0` la tariffa tecnica non veniva
+        # nemmeno esercitata.
+        psp_bps=int(os.environ.get("PAGAMENTO_BPS", "0") or 0),
+        psp_bps_valuta_estera=int(os.environ.get("PAGAMENTO_BPS_ESTERA", "0") or 0),
+        psp_fisso_cents=int(os.environ.get("PAGAMENTO_FISSO_CENTS", "0") or 0),
+        stripe_secret_key=os.environ.get("STRIPE_SECRET_KEY", "sk_test_visivo"),
+        stripe_webhook_secret=os.environ.get("STRIPE_WEBHOOK_SECRET", "whsec_v"),
+        stripe_success_url="http://localhost/ok",
         stripe_cancel_url="http://localhost/no"))
     r = crea_router(sistema, host_key="hk", admin_key="ak",
                     base_url="http://127.0.0.1:%d" % porta)

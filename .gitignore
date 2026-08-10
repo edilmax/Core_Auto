@@ -106,3 +106,17 @@ video_pubblici/
 # `*.json` piu' sopra escluderebbe anche questo: qui l'eccezione, di proposito.
 # (regola d'appendice 17: un divieto che non puo' fermarti non e' un divieto)
 !.claude/settings.json
+
+# Rapporto RIGENERATO a ogni giro dell'audit delle tariffe: e' un'uscita, non una
+# decisione. Se fosse versionato, la suite (che ora esegue l'audit) sporcherebbe
+# l'albero a ogni esecuzione -- e la regola ferrea 4 vieta che un ciclo modifichi i
+# file del progetto mentre gira.
+collaudi/rapporto_coerenza.txt
+# ⛔ LO SCHEDARIO DELL'AUDIT DEVE VIAGGIARE COL PROGETTO.
+# `collaudi/baseline_tariffe.txt` NON e' un'uscita: e' lo SCHEDARIO delle righe gia'
+# lette e giudicate legittime da una persona -- una decisione, come EQUIVALENTI_DICHIARATI.
+# Il 2026-08-10 si e' scoperto che non era in git, e non per dimenticanza: la riga
+# `*.txt` qui sopra lo escludeva **in silenzio**. Viveva su un computer solo, e in CI
+# l'audit sarebbe partito senza schedario -- cioe' rosso per finta, ogni volta.
+# Qui l'eccezione, di proposito, come per `.claude/settings.json`.
+!collaudi/baseline_tariffe.txt

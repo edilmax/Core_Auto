@@ -21,8 +21,20 @@ import fase188_paga_struttura as PS
 
 
 def _stripe_peggiore(importo_cents):
-    """Costo Stripe caso PEGGIORE (carta extra-UE/commerciale): 0.25 fisso + 3.25%."""
+    """Costo Stripe caso PEGGIORE (carta extra-UE/commerciale): 0.25 fisso + 3.25%.
+    CONFERMATO sull'API vera il 2026-08-09 (modalita' prova): 67 cents su 1300 e 675 su
+    20000 sono esattamente 3,25% + 25."""
     return 25 + importo_cents * 325 // 10000
+
+
+def _stripe_peggiore_valuta_estera(importo_cents):
+    """Come sopra, MA quando l'annuncio non e' nella valuta in cui incassiamo: Stripe deve
+    CONVERTIRE e aggiunge il 2%. Il conto e' italiano e tiene solo euro (misurato:
+    `country: IT`, `default_currency: eur`, nessun altro saldo), quindi su un annuncio in
+    altra valuta la conversione non e' evitabile.
+    MISURATO sull'API vera: la commissione torna in DUE voci separate -- carta e
+    conversione (es. `stripe_fee=346` + `stripe_fee=587` su un addebito da 200 USD)."""
+    return 25 + importo_cents * 525 // 10000
 
 
 class TestConti(unittest.TestCase):
@@ -59,6 +71,33 @@ class TestConti(unittest.TestCase):
         self.assertGreater(guadagno_reale, 0,
                            "su 1 notte 0%% NON dobbiamo perdere: guadagno=%d" % guadagno_reale)
         self.assertEqual(r["fee_cents"], 150, "la fee 1 notte deve essere 1.50")
+
+    def test_valuta_estera_il_gateway_deve_coprire_ANCHE_la_conversione(self):
+        """Se l'annuncio non e' nella valuta in cui incassiamo, Stripe CONVERTE e aggiunge
+        il 2%: la copertura carta deve tenerne conto, altrimenti «paga in struttura» va
+        sotto costo esattamente come ci andava il vecchio 3% secco.
+
+        MISURATO il 2026-08-10 prima della riparazione (`fase188.calcola` senza saperlo):
+            prezzo  50 EUR -> gateway  83, costo estera  71  -> coperto (il margine regge)
+            prezzo 200 EUR -> gateway 134, costo estera 152  -> SCOPERTO di 18
+            prezzo 500 EUR -> gateway 234, costo estera 315  -> SCOPERTO di 81
+        Sotto i ~150 EUR i 30 centesimi di sicurezza voluti dal fondatore bastano da soli;
+        sopra, il buco CRESCE con l'importo -- la stessa forma del difetto principale.
+
+        ⛔ E' un difetto VIVO, non teorico: `PAGA_STRUTTURA_ATTIVO=1` e' acceso in
+        produzione (misurato sul contenitore vero il 2026-08-09)."""
+        for prezzo in (5000, 10000, 20000, 50000, 100000):
+            with self.subTest(prezzo=prezzo):
+                r = PS.calcola(prezzo, 2, prezzo * 10 // 100, valuta_estera=True)
+                anticipo = r["anticipo_online_cents"]
+                atteso = _stripe_peggiore_valuta_estera(anticipo)
+                self.assertGreaterEqual(
+                    r["gateway_cents"], atteso,
+                    "annuncio in valuta estera su %d cents: la copertura carta rende %d "
+                    "ma Stripe (carta + conversione) costa %d sull'anticipo di %d -> "
+                    "ci rimettiamo %d cents"
+                    % (prezzo, r["gateway_cents"], atteso, anticipo,
+                       atteso - r["gateway_cents"]))
 
     def test_host_prende_uguale_online_o_struttura(self):
         # l'host incassa prezzo - commissione - gateway: la fee NON lo tocca (la paga l'ospite)

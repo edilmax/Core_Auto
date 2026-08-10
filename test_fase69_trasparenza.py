@@ -86,6 +86,25 @@ class TestPiattaforma(unittest.TestCase):
         self.assertEqual(c.commissione_ota_cents,
                          (10000 * OTA_BENCHMARK_BPS["booking"]) // 10000)
 
+    def test_il_confronto_deve_poter_dire_la_TARIFFA_TECNICA(self):
+        """Il confronto «con Booking incassi X, con noi Y» e' l'arma che converte l'host:
+        se il netto che gli mostriamo NON toglie la tariffa tecnica, gli stiamo promettendo
+        piu' di quanto incassera'.
+
+        ⛔ Difetto trovato il 2026-08-10: `confronta_piattaforma` non aveva nemmeno un modo
+        per ricevere la tariffa tecnica, e `fase83._trasparenza` non gliela passava -> nel
+        prospetto valeva ZERO. L'ironia e' che il commento di `fase83:6598` spiega a lungo
+        di aver riparato ESATTAMENTE questo per la COMMISSIONE («la trasparenza lo
+        sotto-stimava»): meta' meccanismo riparato, meta' no -- la stessa forma del buco
+        del CIN."""
+        senza = confronta_piattaforma(10000, "booking", commissione_nostra_bps=1000)
+        con = confronta_piattaforma(10000, "booking", commissione_nostra_bps=1000,
+                                    psp_bps=400)
+        self.assertEqual(con.host_netto_nostro_cents,
+                         senza.host_netto_nostro_cents - 400,
+                         "la tariffa tecnica non viene tolta dal netto mostrato all'host")
+        self.assertLess(con.host_netto_nostro_cents, senza.host_netto_nostro_cents)
+
     def test_piattaforma_ignota_default(self):
         c = confronta_piattaforma(10000, "ota-mai-vista")
         atteso = (10000 * PoliticaConfronto().commissione_ota_bps) // 10000

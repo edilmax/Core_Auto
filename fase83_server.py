@@ -3823,7 +3823,8 @@ class RouterHTTP:
             return 503, {"errore": "service_unavailable"}
 
     def _bunker_costi_tecnici(self, query, headers):
-        """PROSPETTO TARIFFA TECNICA (3% Stripe) — solo Bunker. Separa quanto la tariffa ha
+        """PROSPETTO TARIFFA TECNICA (5% + 0,25 €; 7% se l'annuncio non e' in euro) — solo
+        Bunker. Separa quanto la tariffa ha
         davvero coperto da quanto e' andato PERSO sui rimborsi: Stripe non restituisce la sua
         fetta, quindi ogni prenotazione rimborsata lascia un costo a carico della piattaforma
         che prima non compariva da nessuna parte (buco trovato nell'audit del 2026-07-20)."""
@@ -4748,6 +4749,21 @@ class RouterHTTP:
         except Exception:
             return "immediata"
 
+    def _valuta_estera(self, corpo):
+        """Vero se l'ANNUNCIO non e' nella valuta in cui INCASSIAMO: in quel caso Stripe deve
+        convertire e aggiunge il 2% (misurato il 2026-08-09 sull'API vera, due voci separate
+        nella commissione; il conto e' italiano e tiene SOLO euro, quindi la conversione non
+        e' evitabile). Serve a `fase188` per non tenere una copertura carta sotto costo.
+        FAIL-SAFE DALLA PARTE GIUSTA: nel dubbio si assume ESTERA. Sbagliare per eccesso costa
+        all'host una frazione di punto; sbagliare per difetto la conversione la paghiamo noi."""
+        try:
+            cfg = getattr(self._sys, "config", None)
+            incasso = str(getattr(cfg, "valuta", "EUR") or "EUR").upper()
+            annuncio = str((corpo or {}).get("valuta") or incasso).upper()
+            return annuncio != incasso
+        except Exception:
+            return True
+
     def _forse_paga_struttura(self, corpo, dati):
         """FASE 2 - PAGA IN STRUTTURA (solo instant-book, DARK finche' PAGA_STRUTTURA_ATTIVO=1).
         Se l'ospite ha scelto 'in_struttura' E l'annuncio lo accetta E la feature e' accesa:
@@ -4780,7 +4796,8 @@ class RouterHTTP:
             comm = comm if isinstance(comm, int) and not isinstance(comm, bool) else 0
             import fase188_paga_struttura as _ps
             notti = _notti_count(corpo.get("check_in", ""), corpo.get("check_out", ""))
-            r = _ps.calcola(totale, notti, comm)
+            r = _ps.calcola(totale, notti, comm,
+                            valuta_estera=self._valuta_estera(corpo))
             link = stripe.crea_link_anticipo({
                 "anticipo_cents": r["anticipo_online_cents"],
                 "saldo_cents": r["saldo_in_loco_cents"],
@@ -6607,7 +6624,12 @@ class RouterHTTP:
             prezzo = 0
         ota = query.get("ota", "booking")
         bps = self._commissione_bps_display(headers)
-        return 200, confronta_piattaforma(prezzo, ota, commissione_nostra_bps=bps).as_dict()
+        # LA TARIFFA TECNICA VA TOLTA DAL NETTO MOSTRATO. Fino al 2026-08-10 non veniva
+        # passata (e non si poteva nemmeno): il prospetto prometteva all'host un netto piu'
+        # alto di quello vero -- lo stesso difetto che la docstring qui sopra dichiara di
+        # aver riparato per la COMMISSIONE, lasciato aperto sull'altra meta'.
+        return 200, confronta_piattaforma(prezzo, ota, commissione_nostra_bps=bps,
+                                          psp_bps=self._psp_bps()).as_dict()
 
     def _commissione_bps_display(self, headers):
         """bps della NOSTRA commissione MARKETPLACE da mostrare in trasparenza — coerente con la
@@ -6810,7 +6832,9 @@ class RouterHTTP:
                 nn = corpo.get("notti")
                 if (accetta and isinstance(tot, int) and not isinstance(tot, bool) and tot > 0):
                     import fase188_paga_struttura as _ps
-                    r = _ps.calcola(tot, nn, comm if isinstance(comm, int) and not isinstance(comm, bool) else 0)
+                    r = _ps.calcola(tot, nn,
+                                    comm if isinstance(comm, int) and not isinstance(comm, bool) else 0,
+                                    valuta_estera=self._valuta_estera(corpo))
                     corpo["paga_in_struttura"] = {
                         "accettato": True,
                         "ospite_paga_totale_cents": r["ospite_paga_totale_cents"],
