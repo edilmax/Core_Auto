@@ -25,7 +25,19 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > Paracadute `:prec` riagganciato all'immagine viva **prima** del build (puntava a
 > un'altra: **quinta volta**), punto di ritorno `PRE_DEPLOY_20260810_203907.commit`,
 > copia `finanza-20260810-200808.db.gz` aperta e verificata (`integrity_check: ok`).
-> ⛔ **Resta solo la CHIAVETTA da rifare** (D7: quattro posti allineati).
+> ✅ **CHIAVETTA RIGENERATA** il 2026-08-10 sera. **I QUATTRO POSTI SONO ALLINEATI SU
+> `cd95f73`**: computer = GitHub = VPS = chiavetta.
+> Rifatta **dal server vivo** (`deploy/impacchetta.sh`, non dal computer: è l'unica copia
+> che è davvero girata da qualche parte) e con **PROVA DI RIPRISTINO fatta PRIMA di
+> toccare la chiavetta**: il pacchetto estratto in una cartella vuota dà
+> **`Ran 5487 · OK (skipped=4)`**, gli stessi test della macchina vera. Se fosse stato
+> rotto, la generazione buona era ancora al suo posto — stesso principio del paracadute.
+> ⚠️ **La chiavetta vecchia aveva dentro `PAGAMENTO_BPS = 300`**: ripristinando da lì si
+> tornava sotto costo senza accorgersene. Verificata **per contenuto, non per data**
+> (regola 13): 151 moduli · 401 test · `.env.casavip` dentro · `500/700/25` ·
+> la riparazione di `fase59` · la guardia dell'audit. 25 database, integrità 0 errori.
+> Generazione precedente **spostata** in `precedente_fce0c54`, non cancellata (ce ne sono 9).
+> ⏳ Resta il gesto che può fare solo il fondatore: **copiarla su un supporto fisico**.
 > ⚠️ **Scoperto sul server: `PAGA_STRUTTURA_ATTIVO=1` è ACCESO in produzione** — «paga
 > in struttura» è vivo adesso. Non era una delle cose da decidere: è già decisa, e va
 > saputo.
