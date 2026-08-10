@@ -218,8 +218,16 @@ def p5_coerenza():
             d = json.loads(corpo)
             testo = d.get("testo", "")
             check("P5", "contratto-completo", len(testo) > 5000, "%d caratteri" % len(testo))
-            check("P5", "contratto-nomina-la-tariffa-tecnica-3",
-                  re.search(r"3\s*%", testo) is not None, "ART. 6-BIS assente!")
+            # ⛔ QUI C'ERA UN `3` SCRITTO A MANO, E IL 2026-08-10 HA DATO UN ROSSO FALSO
+            # esattamente al deploy che portava online il 5%: la sonda cercava «3 %» nel
+            # contratto vivo, non lo trovava piu' (giustamente) e gridava «ART. 6-BIS
+            # assente». Il nome del controllo diceva perfino la cifra. Ora la prende dal
+            # motore, come le altre due sonde di questo blocco: cambia il motore, cambia
+            # la pretesa. Un controllo che nomina un numero invecchia col numero.
+            _tec_it = _tariffa_tecnica_del_motore()
+            check("P5", "contratto-nomina-la-tariffa-tecnica",
+                  re.search(r"%d\s*%%" % _tec_it, testo) is not None,
+                  "ART. 6-BIS non nomina il %d%%!" % _tec_it)
             check("P5", "contratto-ha-lart-6-bis", "6-BIS" in testo)
             check("P5", "contratto-ha-le-clausole-vessatorie",
                   "1341" in testo and "1342" in testo)

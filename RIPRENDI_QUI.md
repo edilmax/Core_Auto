@@ -17,8 +17,18 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > (richiesta di unione **#24** unita alle 22:04, verificata con `git merge-base
 > --is-ancestor`, non guardando il colore dell'icona: il 2026-08-06 una richiesta
 > *sembrava* unita e l'API diceva `merged: false`).
-> ⛔ **IL VPS È ANCORA INDIETRO e il sito prende ancora il 3%.** Il deploy ha bisogno
-> di un **«autorizzato»** nuovo e delle DUE TRAPPOLE qui sotto. La chiavetta va rifatta.
+> ✅ **DEPLOY FATTO il 2026-08-10 alle 20:47** — il VPS gira su `c2ea5dd`, contenitori
+> `healthy`, e **il sito applica la tariffa nuova**: `docker exec casavip_app env` non
+> ha più nessuna `PAGAMENTO_*` (arrivava dal compose, non dal `.env` — vedi (a) sotto),
+> quindi valgono i default del codice `500 / 700 / 25`.
+> `collaudi/verifica_produzione.py` → **190 controlli, 0 violazioni, uscita 0**.
+> Paracadute `:prec` riagganciato all'immagine viva **prima** del build (puntava a
+> un'altra: **quinta volta**), punto di ritorno `PRE_DEPLOY_20260810_203907.commit`,
+> copia `finanza-20260810-200808.db.gz` aperta e verificata (`integrity_check: ok`).
+> ⛔ **Resta solo la CHIAVETTA da rifare** (D7: quattro posti allineati).
+> ⚠️ **Scoperto sul server: `PAGA_STRUTTURA_ATTIVO=1` è ACCESO in produzione** — «paga
+> in struttura» è vivo adesso. Non era una delle cose da decidere: è già decisa, e va
+> saputo.
 > Il testo che segue descrive il lavoro **com'era prima del commit**: si legge per capire
 > *cosa* è stato fatto, non per sapere dove sta.
 
@@ -108,10 +118,20 @@ ricorda.**
 
 ### ⛔⛔ LE DUE TRAPPOLE DEL DEPLOY — senza queste il lavoro è inutile
 
-**(a) Sul VPS `.env.casavip` contiene `PAGAMENTO_BPS=300`.** La variabile d'ambiente **vince sul
-codice**: va **tolta** (o portata a `500`), altrimenti il sito continua a prendere il 3% con tutti
-i test verdi. Verifica DOPO lo scambio:
-`docker exec casavip_app env | grep -E '^PAGAMENTO_'`
+**(a) ⛔ QUESTA TRAPPOLA ERA SCRITTA SBAGLIATA, e il 2026-08-10 l'ho misurata.** Il documento
+diceva per due giorni «sul VPS `.env.casavip` contiene `PAGAMENTO_BPS=300`». **Falso**: nel
+`.env.casavip` non c'è **nessuna** `PAGAMENTO_*`. Il `300` arrivava **solo** dal blocco
+`environment:` del `docker-compose` sul server — cioè la trappola (b), che è **una sola**, non
+due. Chi ha scritto la (a) l'ha dedotta invece di guardare.
+Il `git pull` del deploy ha tolto quella riga e **la variabile è sparita da sola**: nessuna
+modifica a mano sul server. Verificato dopo lo scambio, ed è la prova che vale:
+```bash
+docker exec casavip_app env | grep -E '^PAGAMENTO_'     # deve NON stampare niente
+docker exec casavip_app grep -nE 'PAGAMENTO_(BPS|BPS_ESTERA|FISSO_CENTS)"' /app/main_casavip.py
+```
+💡 La lezione, che vale oltre il caso: **una variabile può arrivare da tre posti** (`environment:`
+del compose · `env_file` · l'ambiente della macchina) e **il compose vince sugli altri**. Non si
+cerca dove *si pensa* che sia: si chiede al contenitore vivo `docker exec ... env`.
 
 **(b) `docker-compose.casavip.yml` forzava `PAGAMENTO_BPS: "300"`** e il blocco `environment:`
 **vince su `env_file`**: togliere la variabile dal `.env` non sarebbe bastato. **La riga è già
