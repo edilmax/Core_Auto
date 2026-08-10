@@ -379,6 +379,57 @@ class TestIgieneDelFile(unittest.TestCase):
         self.assertEqual(sporco.count(b"\x09"), 1)
         self.assertEqual(sporco.count(b"\x5c\x6e"), 1)
 
+    def test_L_AUDIT_DELLE_TARIFFE_VIENE_ESEGUITO_DAVVERO(self):
+        """⛔ L'AUDIT ESISTEVA E NESSUNO LO FACEVA GIRARE.
+
+        Trovato il 2026-08-10, ed e' il difetto che ha reso possibile tutta la
+        giornata precedente. Questo file conteneva gia' due guardie sull'audit delle
+        tariffe -- ma guardavano **com'e' fatto** (che la sua regola non contenesse
+        byte invisibili), non **che dicesse la verita'**. Nessuno lo eseguiva: era un
+        bottone da premere a mano, e chi non se lo ricordava aveva una suite verde con
+        dentro cifre vecchie. Quando il 2026-08-09 la tariffa tecnica e' cambiata,
+        **47 righe** in tutto il progetto sono rimaste indietro, e la suite era verde.
+
+        Ora l'audit gira dentro la suite. Se domani ricompare una percentuale che il
+        motore non applica -- in un testo pubblico, in un contratto, in un test -- la
+        suite diventa ROSSA lo stesso giorno, invece di aspettare che qualcuno se ne
+        accorga.
+
+        ⚠️ Cosa NON garantisce (D18 punto 3): confronta le cifre trovate con lo
+        SCHEDARIO `collaudi/baseline_tariffe.txt`, cioe' con le righe gia' lette e
+        giudicate legittime da una persona. Non giudica da solo se una cifra sia
+        giusta: dice che ne e' comparsa una NUOVA e che va letta. Uno schedario
+        gonfiato a caso disarma questa guardia -- come per gli EQUIVALENTI_DICHIARATI.
+        """
+        import subprocess
+        import sys as _sys
+        radice = os.path.dirname(os.path.abspath(__file__))
+        attrezzo = os.path.join(radice, "collaudi", "audit_coerenza_tariffe.py")
+        self.assertTrue(os.path.exists(attrezzo),
+                        "l'audit delle tariffe non c'e' piu': senza di lui nessuno "
+                        "confronta le percentuali dei testi con quelle del motore")
+        schedario = os.path.join(radice, "collaudi", "baseline_tariffe.txt")
+        self.assertTrue(
+            os.path.exists(schedario),
+            "manca %s: senza schedario l'audit tratta OGNI cifra come nuova e questa "
+            "guardia diventa un allarme sempre acceso (cioe' un allarme che si spegne). "
+            "Lo schedario va versionato: non e' un'uscita, e' una decisione." % schedario)
+        esito = subprocess.run([_sys.executable, attrezzo], cwd=radice,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        if esito.returncode != 0:
+            rapporto = os.path.join(radice, "collaudi", "rapporto_coerenza.txt")
+            coda = ""
+            if os.path.exists(rapporto):
+                testo = io.open(rapporto, encoding="utf-8", errors="replace").read()
+                taglio = testo.find("CIFRE NUOVE DA ESAMINARE")
+                coda = testo[taglio:taglio + 2000] if taglio >= 0 else testo[-2000:]
+            self.fail(
+                "l'audit delle tariffe esce %d: c'e' almeno una percentuale che il "
+                "motore non applica, oppure una cifra NUOVA mai esaminata.\n"
+                "Si rilancia a mano con:  python collaudi/audit_coerenza_tariffe.py\n"
+                "Il rapporto completo sta in collaudi/rapporto_coerenza.txt\n\n%s"
+                % (esito.returncode, coda))
+
     def test_il_file_si_carica_come_yaml_ed_e_una_pipeline(self):
         doc = _doc_ci()
         self.assertIsInstance(doc, dict)

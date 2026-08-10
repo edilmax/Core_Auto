@@ -27,6 +27,26 @@ import urllib.error
 import urllib.request
 
 BASE = "https://bookinvip.com"
+
+
+def _tariffa_tecnica_del_motore():
+    """La tariffa tecnica in percento, LETTA dal default di `main_casavip.py`.
+
+    ⛔ Non si scrive a mano qui. Questa e' la sonda che si usa per DIRE SE IL DEPLOY E'
+    ANDATO BENE: con la cifra incisa dentro, il giorno che la tariffa cambia dichiara
+    ROTTO un sito giusto -- e si perde tempo a cercare un guasto che non c'e'.
+    Successo il 2026-08-10: cercava "3%" mentre la tariffa era diventata 5%.
+    Se non riesce a leggerla NON tira a indovinare: solleva, e il giro si ferma."""
+    import io as _io
+    percorso = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "main_casavip.py")
+    with _io.open(percorso, encoding="utf-8", errors="replace") as f:
+        src = f.read()
+    m = re.search(r'PAGAMENTO_BPS["\']\s*,\s*["\'](\d+)["\']', src)
+    if not m:
+        raise RuntimeError("PAGAMENTO_BPS non trovato in main_casavip.py: questa sonda "
+                           "non e' in condizione di misurare e si ferma invece di indovinare")
+    return int(m.group(1)) // 100
 VIOL = []
 CONTA = {"n": 0}
 
@@ -177,10 +197,15 @@ def p5_coerenza():
     testo = corpo.decode("utf-8", "replace") if st == 200 else ""
     check("P5", "pagina-commissioni-viva", st == 200 and len(testo) > 1000)
     if testo:
-        # la tariffa tecnica 3% DEVE essere dichiarata (era la bugia scoperta il 20/07)
-        check("P5", "tariffa-tecnica-3-dichiarata",
-              re.search(r"3\s*%", testo) is not None,
-              "la pagina non nomina il 3%")
+        # La tariffa tecnica DEVE essere dichiarata (era la bugia scoperta il 20/07).
+        # ⛔ La cifra si prende DAL MOTORE, non si scrive qui: fino al 2026-08-10 questa
+        # sonda cercava "3%" a mano, e il giorno che la tariffa e' passata al 5% avrebbe
+        # dichiarato ROTTO un sito giusto -- proprio mentre la si usa per verificare il
+        # deploy. Un controllo con la cifra incisa dentro invecchia col primo cambio.
+        _tec = _tariffa_tecnica_del_motore()
+        check("P5", "tariffa-tecnica-dichiarata",
+              re.search(r"%d\s*%%" % _tec, testo) is not None,
+              "la pagina non nomina il %d%%" % _tec)
         check("P5", "promo-zero-dichiarata",
               re.search(r"0\s*%", testo) is not None)
     st, _, _ = chiedi("/contratto-host.html")
@@ -210,8 +235,10 @@ def p5_coerenza():
     if st == 200:
         try:
             t = json.loads(corpo).get("testo", "")
-            check("P5", "contratto-inglese-nomina-il-3",
-                  re.search(r"3\s*%", t) is not None, "versione EN senza 3%")
+            _tec_en = _tariffa_tecnica_del_motore()
+            check("P5", "contratto-inglese-nomina-la-tariffa",
+                  re.search(r"%d\s*%%" % _tec_en, t) is not None,
+                  "versione EN senza %d%%" % _tec_en)
         except Exception:
             pass
     # coerenza fra pagina tariffe e API trasparenza

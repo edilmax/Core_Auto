@@ -38,6 +38,22 @@ import video_render as V            # noqa: E402
 import pubblica_video as P          # noqa: E402
 import giro_video as G              # noqa: E402
 
+
+def _tariffa_tecnica_del_motore():
+    """La tariffa tecnica in percento, LETTA dal default di `main_casavip.py`.
+    Non si scrive a mano: una cifra incisa dentro un test invecchia al primo cambio e
+    fa diventare rosso un codice giusto (successo il 2026-08-10, 3% -> 5%).
+    Se non la trova NON tira a indovinare: fa fallire la prova con un motivo chiaro."""
+    _p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                      if os.path.basename(os.path.dirname(os.path.abspath(__file__))) == "collaudi"
+                      else os.path.dirname(os.path.abspath(__file__)), "main_casavip.py")
+    with io.open(_p, encoding="utf-8", errors="replace") as _f:
+        _m = re.search(r'PAGAMENTO_BPS["\']\s*,\s*["\'](\d+)["\']', _f.read())
+    if not _m:
+        raise AssertionError("PAGAMENTO_BPS non trovato in main_casavip.py: questa prova "
+                             "non e' in condizione di misurare e si ferma")
+    return int(_m.group(1)) // 100
+
 JPEG = b"\xff\xd8\xff" + b"\x00" * 4000
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 4000
 
@@ -642,11 +658,20 @@ class TestGiroVideo(unittest.TestCase):
         cx = G._caption("xx", "Testville", "testville", "mastodon")
         self.assertIn("Do you own a place in Testville?", cx)
 
-    def test_tre_percento_sempre_dichiarato(self):
-        # regola d'oro del progetto: il 3% tecnico SEMPRE detto, in OGNI lingua
-        # (il francese scrive «3 %» con lo spazio, il turco «%3»: entrambi leciti)
+    def test_la_tariffa_tecnica_sempre_dichiarata(self):
+        """Regola d'oro del progetto: la tariffa tecnica va SEMPRE detta, in OGNI lingua
+        (il francese scrive «5 %» con lo spazio, il turco «%5»: entrambi leciti).
+
+        ⛔ Si chiamava `test_tre_percento_sempre_dichiarato` e cercava «3» a mano: il
+        2026-08-10, passando al 5%, e' diventato rosso pur essendo GIUSTE sia le
+        didascalie sia la regola. Il numero stava perfino nel NOME del test.
+        Ora la cifra si prende DAL MOTORE: cosi' il test verifica la REGOLA («la tariffa
+        e' dichiarata») invece della CIFRA DI QUEL GIORNO, e non invecchia piu'."""
+        tec = _tariffa_tecnica_del_motore()
         for lingua, tpl in G.CAPTION.items():
-            self.assertTrue(re.search(r"3\s*%|%\s*3", tpl), "3%% assente in " + lingua)
+            self.assertTrue(re.search(r"%d\s*%%|%%\s*%d" % (tec, tec), tpl),
+                            "la tariffa tecnica (%d%%) non e' dichiarata in %s"
+                            % (tec, lingua))
             self.assertIn("{c}", tpl, lingua)
             self.assertIn("{link}", tpl, lingua)
             compilata = tpl.format(c="X", link="Y")     # nessun segnaposto orfano

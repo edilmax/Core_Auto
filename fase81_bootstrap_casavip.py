@@ -49,7 +49,9 @@ class ConfigCasaVIP:
     valuta: str = "EUR"
     commissione_bps: int = 1000         # commissione CORE marketplace in basis-point: 10% a regime
     promo_lancio_attiva: bool = False   # rampa di lancio 0%->8%->10% per anzianità host (land-grab; attivare al go-live)
-    psp_bps: int = 0                    # costo carta a carico HOST (bps); default 0, la PROD lo mette a 300 (3%) via main
+    psp_bps: int = 0                    # costo carta a carico HOST (bps); default 0, la PROD lo mette via main
+    psp_bps_valuta_estera: int = 0      # idem su annunci NON in euro: Stripe converte e aggiunge il 2%
+    psp_fisso_cents: int = 0            # quota FISSA per transazione (Stripe: percentuale + 0,25 EUR)
     # Referral host-porta-host: premio al referente SOLO dopo che l'invitato produce (mai in perdita)
     referral_benvenuto_cents: int = 1000        # €10 di benvenuto al nuovo host all'iscrizione
     referral_premio_cents: int = 4000           # €40 al referente quando l'invitato si qualifica
@@ -304,7 +306,10 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                                 commissione=lambda netto: max(0, netto * _bps // 10000),
                                 commissione_alloggio=_comm_alloggio,
                                 tassa_alloggio=_tassa_alloggio, tasso_cambio=_tasso,
-                                psp_bps=cfg.psp_bps, credito_store=credito_usati)
+                                psp_bps=cfg.psp_bps,
+                                psp_bps_valuta_estera=cfg.psp_bps_valuta_estera,
+                                psp_fisso_cents=cfg.psp_fisso_cents,
+                                credito_store=credito_usati)
     componenti.append("concierge(59)")
 
     # 3c) smart-pass per il self check-in (incluso nel voucher)

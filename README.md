@@ -95,20 +95,59 @@ se divergono.
 Rampa in `fase98.commissione_bps_lancio`, accesa dalla variabile `PROMO_LANCIO`
 (**attiva in produzione**). Il regime segue `COMMISSIONE_BPS` (default `1000` = 10%).
 
-### 🔴 Tariffa tecnica 3% — SEMPRE dovuta
+### 🔴 Tariffa tecnica 5% + 0,25 € — SEMPRE dovuta (7% se l'annuncio non è in euro)
 
-Oltre alla commissione, l'host paga **sempre** una **tariffa tecnica fissa del 3%**
-dell'importo della transazione (`PAGAMENTO_BPS=300`), a copertura del gateway di pagamento
-(**Stripe**). **Si applica in OGNI periodo, anche quando la commissione è 0%.** Su questa riga
-la piattaforma **non guadagna nulla** (puro transito) ma **non ci rimette mai**.
+Oltre alla commissione, l'host paga **sempre** una **tariffa tecnica del 5% + 0,25 €**
+per transazione (`PAGAMENTO_BPS=500`, `PAGAMENTO_FISSO_CENTS=25`), a copertura dei costi di
+**incasso** e di **pagamento**. Sugli annunci prezzati in **valuta diversa dall'euro** è del
+**7% + 0,25 €** (`PAGAMENTO_BPS_ESTERA=700`), perché il gateway deve **convertire**.
+
+**Perché 5 e non 4** (scelta del fondatore, 2026-08-10): il costo Stripe **dipende dalla
+nazione della carta** (1,5% europea standard → 3,25% extra-UE), e al momento del preventivo
+**non sappiamo con che carta pagherà l'ospite**. Il 5% copre la peggiore con **1,75 punti**
+di margine, non la media. È il margine che assorbe quel non-sapere.
+**Si applica in OGNI periodo, anche quando la commissione è 0%.**
+
+**Perché 7 e non 5 sulla valuta estera — il ragionamento è «5 + 2»**, e il 2 è la
+conversione. Il conto Stripe è **italiano e tiene solo euro** (misurato il 2026-08-09 sul
+conto vero: `country IT`, `default_currency eur`), quindi un annuncio prezzato in dollari o
+sterline **deve** essere convertito e Stripe aggiunge **+2%**, che torna come **voce
+separata** nella commissione. Il conto:
+
+| | costo Stripe misurato | tariffa tecnica | margine |
+|---|---|---|---|
+| annuncio in **euro** | 3,25% + 0,25 € | **5% + 0,25 €** | **1,75 punti** |
+| annuncio in **altra valuta** | 3,25% + 2% = 5,25% + 0,25 € | **7% + 0,25 €** | **1,75 punti** |
+
+Il 7 non è una cifra scelta a caso: è ciò che tiene **lo stesso identico margine nei due
+casi**. Lasciando 5% anche fuori euro si andrebbe a **−0,25 punti**, cioè **sotto costo**.
+⚠️ Serve soprattutto **nei primi 90 giorni**: lì la commissione è **0%** e questa tariffa è
+l'**unica** cosa che paga Stripe.
+
+⚠️ **Perché non è più 3% secco** (misurato il 2026-08-09, `collaudi/conti_stripe.py`): Stripe
+non prende una percentuale pura, prende **percentuale + 0,25 € a transazione**, e **+2%** se
+deve convertire la valuta. Col 3% eravamo **sotto costo** sotto i 16,66 € con qualunque carta,
+e **a qualunque importo** con una carta non europea (**3,25%**, misurato sull'API vera: il
+listino diceva 3,15%). In più il **bonifico all'host**
+costa a sua volta (**0,25% + 0,10 €**, più **2 €/mese** per host attivo) e non era coperto da
+nulla. Nei primi 90 giorni, con commissione 0%, quella perdita non la assorbiva nessuno.
+
+Non è più un puro transito: **a seconda della carta e dell'importo il costo reale può essere
+inferiore o superiore alla tariffa.** Il contratto lo dice con queste parole (ART. 6-BIS): la
+vecchia frase «non consegue alcun margine» non sarebbe più vera e **è stata tolta**.
 
 ```
 prezzo_ospite = netto_host + commissione + tariffa_tecnica     ← identità sempre vera
-netto_host    = prezzo − commissione − (totale × 3%)
+netto_host    = prezzo − commissione − (totale × 5% + 25c)     ← 7% se valuta ≠ EUR
 ```
 
 Esempio su **100 €**, host appena registrato, marketplace: commissione **0 €** + tariffa tecnica
-**3 €** → **l'host incassa 97 €**. A regime: 10 € + 3 € → **l'host incassa 87 €**.
+**5,25 €** → **l'host incassa 94,75 €**. A regime: 10 € + 5,25 € → **l'host incassa 84,75 €**.
+Sul **link diretto**: 5 € + 5,25 € → **l'host incassa 89,75 €** (è il «5 + 5» del fondatore:
+5% di commissione più 5% di spese, cioè **10% tutto compreso** su ciò che porta lui).
+
+Guardia: `test_fase59_costo_pagamento.test_la_tariffa_tecnica_copre_la_carta_PEGGIORE_a_OGNI_importo`
+legge i valori **da `main_casavip.py`** e diventa rossa se qualcuno li riabbassa sotto il costo.
 
 Dov'è dichiarato al pubblico: riquadro "Promozione Lancio" nel pannello host,
 `deploy/commissioni.html`, `deploy/termini.html` §5 e **ART. 6-BIS del Contratto Host**.
@@ -179,7 +218,9 @@ I valori veri vivono **solo** in `/var/www/bookinvip/.env.casavip` sul VPS (mai 
 | Variabile | Cosa governa |
 |---|---|
 | `COMMISSIONE_BPS` | commissione a regime (default `1000` = 10%) |
-| `PAGAMENTO_BPS` | **tariffa tecnica** (default `300` = 3%) |
+| `PAGAMENTO_BPS` | **tariffa tecnica** su annunci in euro (default `500` = 5%) |
+| `PAGAMENTO_BPS_ESTERA` | tariffa tecnica su annunci in **altra valuta** (default `700` = 7%: il gateway converte) |
+| `PAGAMENTO_FISSO_CENTS` | quota **fissa** per transazione (default `25` = 0,25 €: Stripe la prende sempre) |
 | `PROMO_LANCIO` | accende la rampa 0→8→10% (default `true`) |
 | `MARCA_TEMPORALE` · `TSA_URL` · `MARCA_SOLO_QUALIFICATA` | ora certificata da un'Autorità **qualificata** europea (default acceso; prestatore sostituibile) |
 | `STRIPE_SECRET_KEY` · `STRIPE_WEBHOOK_SECRET` | pagamenti (in produzione sono chiavi **LIVE**) |

@@ -552,7 +552,8 @@ class PagamentiPendenti:
             con.close()
 
     def aggrega_costi_tecnici(self, *, limit: int = 20000) -> Dict[str, Any]:
-        """PROSPETTO DELLA TARIFFA TECNICA (3% Stripe) — per il super-admin e il commercialista.
+        """PROSPETTO DELLA TARIFFA TECNICA (5% + 0,25 EUR; 7% se l'annuncio non e' in euro)
+    — per il super-admin e il commercialista.
 
         Perche' esiste (buco trovato nell'audit del 2026-07-20): la tariffa tecnica finisce
         dentro la riga 'commissione' del giornale e NON viene mai stornata quando si rimborsa.

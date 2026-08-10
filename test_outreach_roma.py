@@ -1,9 +1,13 @@
 """GUARDIA — reclutamento host di ROMA (fase89.componi_email_prima_roma): 8 lingue SINCRONIZZATE
 con la web app (it/en/es/fr/de/pt/ja/zh), cifre REALI di fase98, opt-out obbligatorio (GDPR),
-e la tariffa tecnica 3% dichiarata in OGNI lingua (regola d'oro: dirla PRIMA della firma).
+e la tariffa tecnica dichiarata in OGNI lingua (regola d'oro: dirla PRIMA della firma).
 
 Vista ROSSA: se manca una lingua, se una cifra non si aggiorna, se resta un {segnaposto}, o se
-sparisce il 3% da una lingua, questi asserti falliscono.
+sparisce la tariffa tecnica da una lingua, questi asserti falliscono.
+
+⛔ La CIFRA non e' scritta qui e non deve esserlo: si legge dal motore (`_tecnica_bps()`).
+Questo file diceva «3%» fino al 2026-08-10, e la prosa e' rimasta indietro al primo cambio.
+Un commento che nomina la cifra puo' diventare falso; uno che non la nomina, no.
 """
 import unittest
 
@@ -59,7 +63,11 @@ class TestOutreachRoma(unittest.TestCase):
         # onestà: la tariffa tecnica va detta PRIMA della firma, in TUTTE le lingue
         for lng in LINGUE_WEBAPP:
             _l, _o, corpo = O.componi_email_prima_roma(_c(), 1000, link_opt_out=OPT, lingua=lng)
-            self.assertIn("3%", corpo, "%s: manca la tariffa tecnica 3%% (disonesto)" % lng)
+            # la cifra si prende DAL MOTORE: scriverla a mano qui e' come tacerla,
+            # perche' il giorno che cambia il test resta verde su una bugia.
+            _t = "%d%%" % (O._tecnica_bps() // 100)
+            self.assertIn(_t, corpo, "%s: manca la tariffa tecnica %s (disonesto)"
+                          % (lng, _t))
 
     def test_optout_obbligatorio_e_email_valida(self):
         self.assertIsNone(O.componi_email_prima_roma(_c(), 1000, link_opt_out="", lingua="it"),

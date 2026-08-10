@@ -231,7 +231,10 @@ def m5():
                            {"Stripe-Signature": firma_di_test(pl, "whsec_x", int(time.time()))})
         if s2 != 200:
             viol("M5-webhook", det="s=%s" % s2)
-        # payout maturato = netto host (prezzo - 0 commissione - 3% tecnico)
+        # payout maturato = netto host (prezzo - 0 commissione - tariffa tecnica).
+        # NB: questo banco fissa da se' `PSP = 300` e lo passa esplicitamente, quindi qui il
+        # 3% e' la SUA scelta, non la tariffa di produzione (5% + 0,25 dal 2026-08-10).
+        # E' legittimo: un collaudo che sceglie la propria tariffa resta indipendente.
         atteso_host = 20000 - (20000 * PSP // 10000)
         info = sis.payout.info(rif) if getattr(sis, "payout", None) else None
         if info is None:

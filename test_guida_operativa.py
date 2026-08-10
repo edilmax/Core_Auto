@@ -27,6 +27,25 @@ def _leggi(p):
         return f.read()
 
 
+def _tecnica_dal_motore():
+    """Le due tariffe tecniche VERE, lette dai default di `main_casavip.py`.
+
+    Qui c'erano due cifre scritte a mano (`3`), e il 2026-08-10 sono diventate
+    tutte e due FALSE nello stesso momento: la prima pretendeva che una guida
+    corretta al 5%% dichiarasse il 3%%, la seconda rifiutava il 7%% della valuta
+    estera come "percentuale inventata". Erano verdi solo perche' la pagina non
+    nomina le commissioni -- una mina che scoppiava alla prima riga aggiunta.
+    Adesso la cifra non e' scritta qui: cambia il motore, cambia la pretesa.
+    """
+    src = _leggi(os.path.join(QUI, "main_casavip.py"))
+    fuori = []
+    for chiave in ("PAGAMENTO_BPS", "PAGAMENTO_BPS_ESTERA"):
+        m = re.search(chiave + r'["\']\s*,\s*["\'](\d+)["\']', src)
+        assert m, "main_casavip.py non dichiara piu' il default %s" % chiave
+        fuori.append(int(m.group(1)) // 100)
+    return fuori[0], fuori[1]
+
+
 class TestGuidaOperativa(unittest.TestCase):
 
     def setUp(self):
@@ -56,12 +75,13 @@ class TestGuidaOperativa(unittest.TestCase):
         from fase83_server import PENALE_HOST_BPS
         from fase98_policy_commissione import (BPS_DIRETTO, LANCIO_BPS_FASE1,
                                                LANCIO_BPS_REGIME)
+        _tec, _tec_est = _tecnica_dal_motore()
         ammesse = {0, 100,
                    PENALE_HOST_BPS // 100,
                    BPS_DIRETTO // 100,
                    LANCIO_BPS_FASE1 // 100,
                    LANCIO_BPS_REGIME // 100,
-                   3}                       # tariffa tecnica
+                   _tec, _tec_est}          # tariffa tecnica: euro e valuta estera
         senza_marcatori = re.sub(r"<[^>]+>", " ", self.testo)
         trovate = {int(x) for x in re.findall(r"(\d{1,3})\s?%", senza_marcatori)}
         inventate = sorted(trovate - ammesse)
@@ -69,7 +89,7 @@ class TestGuidaOperativa(unittest.TestCase):
                          "la guida cita percentuali che il motore non applica: %s "
                          "(ammesse: %s)" % (inventate, sorted(ammesse)))
 
-    def test_se_parla_di_commissione_deve_dire_il_3(self):
+    def test_se_parla_di_commissione_deve_dire_la_tariffa_tecnica(self):
         """Chi promette una percentuale di commissione deve dichiarare anche la tariffa
         tecnica sempre dovuta.
 
@@ -86,18 +106,21 @@ class TestGuidaOperativa(unittest.TestCase):
         """
         parla = re.search(r"commission|provvigion|trattenut[ao]\s+d[ai]\s+noi",
                           self.testo, re.I)
+        _tec, _tec_est = _tecnica_dal_motore()
         if parla:
             self.assertRegex(
-                self.testo, r"3\s?%",
-                "parla di commissioni (%r) senza dichiarare la tariffa tecnica"
-                % parla.group(0))
+                self.testo, r"(%d|%d)\s?%%" % (_tec, _tec_est),
+                "parla di commissioni (%r) senza dichiarare la tariffa tecnica "
+                "(%d%% in euro, %d%% in valuta estera)"
+                % (parla.group(0), _tec, _tec_est))
             return
         # ramo di esenzione: va DIMOSTRATO, non dato per buono
         for parola in ("commission", "provvigion", "percentuale che tratteniamo"):
             self.assertNotRegex(
                 self.testo, parola,
                 "l'esenzione non vale piu': la guida ha cominciato a parlare di "
-                "commissioni (%r) e ora deve dichiarare il 3%%" % parola)
+                "commissioni (%r) e ora deve dichiarare la tariffa tecnica (%d%%)"
+                % (parola, _tec))
 
     def test_nessun_segreto_nella_pagina(self):
         for spia in ("sk_live", "sk_test", "whsec_", "BUNKER_PASSWORD", "ADMIN_KEY"):

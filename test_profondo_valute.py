@@ -81,8 +81,37 @@ from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
 
 WHSEC = "whsec_profondo_valute"
 COMM_BPS = 1000            # 10% marketplace, a carico host
-PSP_BPS = 300              # 3% tariffa tecnica, SEMPRE dovuta dall'host
+
+
+def _dal_motore(chiave):
+    """Le tariffe tecniche VERE, lette dai default di `main_casavip.py`.
+
+    Qui c'era `PSP_BPS = 300`, e l'ironia e' che proprio QUESTO file -- quello che
+    collauda le valute -- non sapeva che il 2026-08-10 la tariffa tecnica e' diventata
+    DIVERSA sugli annunci fuori euro (7%% invece di 5%%, perche' Stripe deve convertire
+    e si prende un 2%% in piu'). Collaudava sei valute applicandone una sola. Ora le
+    cifre vengono dal motore, e l'oracolo distingue i due casi.
+    """
+    import io as _io
+    import re as _re
+    _qui = os.path.dirname(os.path.abspath(__file__))
+    with _io.open(os.path.join(_qui, "main_casavip.py"), encoding="utf-8") as f:
+        _src = f.read()
+    _m = _re.search(chiave + r'["\']\s*,\s*["\'](\d+)["\']', _src)
+    assert _m, "main_casavip.py non dichiara piu' il default %s" % chiave
+    return int(_m.group(1))
+
+
+PSP_BPS = _dal_motore("PAGAMENTO_BPS")              # annunci nella valuta d'incasso
+PSP_BPS_ESTERA = _dal_motore("PAGAMENTO_BPS_ESTERA")   # annunci in un'altra valuta
+PSP_FISSO = _dal_motore("PAGAMENTO_FISSO_CENTS")    # quota fissa, in tutti e due i casi
+VALUTA_INCASSO = "EUR"     # il default di ConfigCasaVIP: il conto Stripe tiene solo euro
 OSPITI = 2
+
+
+def _psp_di(valuta):
+    """5%% se l'annuncio e' nella valuta in cui incassiamo, 7%% se Stripe deve convertire."""
+    return PSP_BPS if str(valuta).upper() == VALUTA_INCASSO else PSP_BPS_ESTERA
 
 # (valuta ISO, cifre decimali reali). Tre famiglie di esponente: 2, 0 e 3.
 VALUTE = (("EUR", 2), ("USD", 2), ("GBP", 2), ("JPY", 0), ("KRW", 0), ("BHD", 3))
@@ -119,7 +148,7 @@ def _params_stripe():
     return dict(urllib.parse.parse_qsl(str(corpo)))
 
 
-def _oracolo(prezzo, notti, ospiti, tassa_pp):
+def _oracolo(prezzo, notti, ospiti, tassa_pp, valuta=VALUTA_INCASSO):
     """ORACOLO INDIPENDENTE: rifa' il conto da zero dal contratto, in interi.
 
     Non chiama il motore e non ne importa nulla: se motore e oracolo divergono, uno dei
@@ -130,7 +159,9 @@ def _oracolo(prezzo, notti, ospiti, tassa_pp):
     comm = netto * COMM_BPS // 10000             # nostra commissione (dedotta all'host)
     tassa = tassa_pp * notti * ospiti            # pass-through verso la citta'
     totale = netto + tassa                       # quello che l'ospite paga DAVVERO
-    costo = totale * PSP_BPS // 10000            # tariffa tecnica 3% sul totale addebitato
+    # tariffa tecnica sul totale addebitato: percentuale (maggiorata se Stripe deve
+    # convertire) PIU' la quota fissa che Stripe prende a ogni transazione.
+    costo = totale * _psp_di(valuta) // 10000 + (PSP_FISSO if totale > 0 else 0)
     if netto - comm < costo:                     # confine: mai in perdita, si rifiuta
         return None
     return {"prezzo_netto_cents": netto,
@@ -185,7 +216,9 @@ class _Banco(unittest.TestCase):
             db_garanzia=d + "/g.db", db_finanza=d + "/f.db", db_messaggi=d + "/m.db",
             db_checkin=d + "/ck.db", db_split=d + "/sp.db", db_tassa_comunale=d + "/t.db",
             db_recensioni=d + "/rec.db", db_viral=d + "/v.db", db_domanda=d + "/dom.db",
-            commissione_bps=COMM_BPS, psp_bps=PSP_BPS, stripe_secret_key="sk",
+            commissione_bps=COMM_BPS, psp_bps=PSP_BPS,
+            psp_bps_valuta_estera=PSP_BPS_ESTERA, psp_fisso_cents=PSP_FISSO,
+            stripe_secret_key="sk",
             stripe_webhook_secret=WHSEC, stripe_success_url="https://x/ok",
             stripe_cancel_url="https://x/ko"))
         cls.posta = _Posta()
@@ -310,7 +343,7 @@ class TestGrigliaAritmetica(_Banco):
         """
         ci = (self.oggi + datetime.timedelta(days=3)).isoformat()
         for slug, valuta, _esp, prezzo, notti, tassa_pp in self._casi():
-            atteso = _oracolo(prezzo, notti, OSPITI, tassa_pp)
+            atteso = _oracolo(prezzo, notti, OSPITI, tassa_pp, valuta)
             if atteso is None:
                 continue                                    # ramo del rifiuto: test a parte
             with self.subTest(valuta=valuta, prezzo=prezzo, notti=notti):
@@ -332,7 +365,7 @@ class TestGrigliaAritmetica(_Banco):
         """Un secondo calcolo, scritto separatamente, ricalcola tutto e confronta."""
         ci = (self.oggi + datetime.timedelta(days=3)).isoformat()
         for slug, valuta, _esp, prezzo, notti, tassa_pp in self._casi():
-            atteso = _oracolo(prezzo, notti, OSPITI, tassa_pp)
+            atteso = _oracolo(prezzo, notti, OSPITI, tassa_pp, valuta)
             if atteso is None:
                 continue
             with self.subTest(valuta=valuta, prezzo=prezzo, notti=notti):
@@ -355,7 +388,7 @@ class TestGrigliaAritmetica(_Banco):
         ci = (self.oggi + datetime.timedelta(days=3)).isoformat()
         visti = 0
         for slug, valuta, _esp, prezzo, notti, tassa_pp in self._casi():
-            if _oracolo(prezzo, notti, OSPITI, tassa_pp) is not None:
+            if _oracolo(prezzo, notti, OSPITI, tassa_pp, valuta) is not None:
                 continue
             visti += 1
             with self.subTest(valuta=valuta, prezzo=prezzo, notti=notti):
@@ -370,7 +403,7 @@ class TestGrigliaAritmetica(_Banco):
         eccesso a carico dell'host; e la somma delle parti resta il soggiorno esatto."""
         ci = (self.oggi + datetime.timedelta(days=3)).isoformat()
         for slug, valuta, _esp, prezzo, notti, tassa_pp in self._casi():
-            atteso = _oracolo(prezzo, notti, OSPITI, tassa_pp)
+            atteso = _oracolo(prezzo, notti, OSPITI, tassa_pp, valuta)
             if atteso is None:
                 continue
             with self.subTest(valuta=valuta, prezzo=prezzo, notti=notti):
@@ -381,12 +414,14 @@ class TestGrigliaAritmetica(_Banco):
                 costo, tot = q["costo_pagamento_cents"], q["totale_cents"]
                 self.assertEqual(comm, netto * COMM_BPS // 10000,
                                  "commissione non e' il floor esatto del 10%%")
-                self.assertEqual(costo, tot * PSP_BPS // 10000,
-                                 "tariffa tecnica non e' il floor esatto del 3%%")
+                _psp = _psp_di(valuta)
+                self.assertEqual(costo, tot * _psp // 10000 + PSP_FISSO,
+                                 "tariffa tecnica non e' il floor esatto di %d bps "
+                                 "+ %d cent (valuta %s)" % (_psp, PSP_FISSO, valuta))
                 self.assertLessEqual(comm * 10000, netto * COMM_BPS,
                                      "commissione arrotondata per ECCESSO: unita' presa "
                                      "all'host che non ci spetta")
-                self.assertLessEqual(costo * 10000, tot * PSP_BPS,
+                self.assertLessEqual((costo - PSP_FISSO) * 10000, tot * _psp,
                                      "tariffa tecnica arrotondata per ECCESSO")
                 self.assertEqual(q["netto_host_cents"] + comm + costo, netto,
                                  "il soggiorno non si ripartisce esattamente fra host, "

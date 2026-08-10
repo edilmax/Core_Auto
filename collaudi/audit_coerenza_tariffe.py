@@ -47,7 +47,16 @@ L_REG = _num(f98, r'LANCIO_BPS_REGIME\s*=\s*(\d+)')
 PROMO = "true" in (re.search(r'PROMO_LANCIO["\']\s*,\s*["\'](\w+)["\']', main) or
                    [None, "true"])[1].lower()
 
-TECNICA = PSP // 100                      # 3
+TECNICA = PSP // 100                      # 5
+# La tariffa tecnica NON e' un numero solo: sugli annunci prezzati in valuta diversa da
+# quella in cui incassiamo, Stripe deve CONVERTIRE e aggiunge il 2%, quindi la tariffa e'
+# piu' alta (2026-08-10). Senza saperlo, questo audit segnalava come ANOMALIA ogni riga
+# corretta che nomina la tariffa estera: decine di falsi allarmi a ogni giro. E un allarme
+# che grida sempre viene spento -- e' la regola ferrea 10, un falso allarme e' un difetto
+# quanto un allarme mancato.
+_PSP_EST = _num(main, r'PAGAMENTO_BPS_ESTERA["\']\s*,\s*["\'](\d+)["\']')
+TECNICA_ESTERA = (_PSP_EST // 100) if _PSP_EST else TECNICA
+TECNICHE = {TECNICA, TECNICA_ESTERA}      # es. {5, 7}
 NOSTRE_COMM = {0, DIRETTO // 100, L_F1 // 100, L_REG // 100, COMM // 100}   # {0,5,8,10}
 
 # ── 2) vocabolario ───────────────────────────────────────────────────────────
@@ -107,13 +116,14 @@ for percorso in file_da_scansionare():
         # CSS/markup con percentuali di larghezza dentro righe che citano commissioni
         cifre = {c for c in cifre if c <= 100}
         if tec:
-            fuori = {c for c in cifre if c != TECNICA and c not in NOSTRE_COMM and c != 100}
+            fuori = {c for c in cifre
+                     if c not in TECNICHE and c not in NOSTRE_COMM and c != 100}
             if fuori and not KW_ALTRO_NOSTRO.search(riga):
-                anomalie.append((rel, n, "tariffa tecnica != %d%%" % TECNICA,
+                anomalie.append((rel, n, "tariffa tecnica fuori da %s" % sorted(TECNICHE),
                                  sorted(fuori), riga.strip()[:130]))
         elif com:
             fuori = {c for c in cifre
-                     if c not in NOSTRE_COMM and c != TECNICA and c != 100}
+                     if c not in NOSTRE_COMM and c not in TECNICHE and c != 100}
             if fuori and not KW_ALTRO_NOSTRO.search(riga):
                 anomalie.append((rel, n, "commissione fuori da %s" % sorted(NOSTRE_COMM),
                                  sorted(fuori), riga.strip()[:130]))
@@ -128,7 +138,8 @@ print("  commissione regime (COMMISSIONE_BPS): %d bps = %d%%" % (COMM, COMM // 1
 print("  canale diretto (BPS_DIRETTO)    : %d bps = %d%%" % (DIRETTO, DIRETTO // 100))
 print("  rampa lancio: 0%% per %d giorni -> %d%% fino a %d giorni -> %d%% a regime  (attiva: %s)"
       % (L_GRATIS, L_F1 // 100, L_GG1, L_REG // 100, "SI" if PROMO else "NO"))
-print("  percentuali NOSTRE ammesse: %s + tecnica %d%%" % (sorted(NOSTRE_COMM), TECNICA))
+print("  percentuali NOSTRE ammesse: %s + tecnica %s (euro / valuta estera col cambio)"
+      % (sorted(NOSTRE_COMM), sorted(TECNICHE)))
 print("-" * 78)
 print("SCANSIONE: %d file esaminati, %d righe con percentuale+parola-chiave di costo"
       % (esaminate, righe_rilevanti))

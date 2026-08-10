@@ -15,7 +15,15 @@ services:
       HOST: "0.0.0.0"
       PORTA: "8080"
       BASE_URL: "https://bookinvip.com"   # dominio assoluto per link email/voucher/sitemap/SEO
-      PAGAMENTO_BPS: "300"           # costo carta 3% a carico host (copre Stripe -> noi mai in perdita)
+      # ⛔ QUI C'ERA `PAGAMENTO_BPS: "300"`, ED ERA UNA TRAPPOLA DOPPIA (tolto il 2026-08-10).
+      # (a) il blocco `environment:` VINCE su `env_file`: togliere la variabile da
+      #     .env.casavip sul server NON sarebbe bastato, il compose l'avrebbe rimessa a 300;
+      # (b) il 3% era SOTTO COSTO (Stripe: 3,25% + 0,25 EUR, +2% sul cambio -- misurato
+      #     sull'API vera il 2026-08-09), quindi il sito avrebbe continuato a perderci
+      #     mentre il codice e i test dicevano il contrario: un verde falso perfetto.
+      # Ora la tariffa la decide UN SOLO POSTO: i default di `main_casavip.py`
+      # (PAGAMENTO_BPS=500 · PAGAMENTO_BPS_ESTERA=700 · PAGAMENTO_FISSO_CENTS=25).
+      # Se un giorno serve forzarla, si mette in .env.casavip, NON qui.
       DB_CATALOGO: /data/catalogo.db
       DB_INVENTARIO: /data/inventario.db
       DB_REGISTRO_HOST: /data/registro_host.db   # account host self-service (durevole)

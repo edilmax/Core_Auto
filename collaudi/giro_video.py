@@ -149,38 +149,43 @@ for _c in CITTA_SEED:
         _gia.add(_s)
         TAPPE.append((_s, _c, LINGUA_ONDATA.get(_c, "en"), VOCE_ONDATA.get(_c)))
 
-# ── DIDASCALIE per lingua ({c}=città, {link}=landing con UTM). Regola d'oro: il 3% SEMPRE detto. ─
+# ── DIDASCALIE per lingua ({c}=città, {link}=landing con UTM).
+# ⛔ REGOLA D'ORO: la TARIFFA TECNICA va SEMPRE detta, e con la cifra VERA.
+# Il 2026-08-10 e' passata dal 3% al 5% + 0,25 EUR (7% + 0,25 sugli annunci non in euro) e
+# queste sedici didascalie stavano ancora dicendo 3%: sono i testi dei video che vanno agli
+# host VERI, cioe' un numero sbagliato detto prima della firma. Le ha trovate
+# `collaudi/audit_coerenza_tariffe.py`, non una persona.
 CAPTION = {
     "it": "Hai una casa a {c}? Mettila a reddito senza pensieri: 0% commissioni per i primi 90 "
-          "giorni, solo una tariffa tecnica del 3% dichiarata prima. L'ospite non paga nulla. {link}",
+          "giorni, solo una tariffa tecnica del 5% + 0,25 € dichiarata prima. L'ospite non paga nulla. {link}",
     "en": "Do you own a place in {c}? Put it to work: 0% commission for the first 90 days, only a "
-          "3% technical fee, told upfront. Guests pay nothing. {link}",
+          "5% + EUR 0.25 technical fee, told upfront. Guests pay nothing. {link}",
     "es": "¿Tienes una casa en {c}? Ponla a trabajar: 0% de comisión los primeros 90 días, solo una "
-          "tarifa técnica del 3%, dicha antes. El huésped no paga nada. {link}",
+          "tarifa técnica del 5% + 0,25 €, dicha antes. El huésped no paga nada. {link}",
     "fr": "Vous avez un logement à {c} ? Mettez-le en location : 0 % de commission pendant 90 jours, "
-          "seulement 3 % de frais techniques, annoncés d'avance. Le voyageur ne paie rien. {link}",
+          "seulement 5 % + 0,25 € de frais techniques, annoncés d'avance. Le voyageur ne paie rien. {link}",
     "de": "Sie haben eine Wohnung in {c}? Vermieten Sie sie: 0% Provision in den ersten 90 Tagen, "
-          "nur eine 3% Technikgebühr, vorab gesagt. Gäste zahlen nichts. {link}",
+          "nur eine Technikgebühr von 5% + 0,25 €, vorab gesagt. Gäste zahlen nichts. {link}",
     "pt": "Tem uma casa em {c}? Ponha-a a render: 0% de comissão nos primeiros 90 dias, apenas uma "
-          "taxa técnica de 3%, dita antes. O hóspede não paga nada. {link}",
+          "taxa técnica de 5% + 0,25 €, dita antes. O hóspede não paga nada. {link}",
     "nl": "Heeft u een woning in {c}? Verhuur zonder verrassingen: 0% commissie de eerste 90 dagen, "
-          "alleen 3% technische kosten, vooraf gemeld. Gasten betalen niets. {link}",
+          "alleen 5% + € 0,25 technische kosten, vooraf gemeld. Gasten betalen niets. {link}",
     "tr": "{c} şehrinde eviniz mi var? Sürpriz yok: ilk 90 gün %0 komisyon, yalnızca önceden "
-          "söylenen %3 teknik ücret. Misafir hiçbir şey ödemez. {link}",
-    "ru": "У вас есть жильё в городе {c}? 0% комиссии первые 90 дней, только технический сбор 3%, "
+          "söylenen %5 + 0,25 € teknik ücret. Misafir hiçbir şey ödemez. {link}",
+    "ru": "У вас есть жильё в городе {c}? 0% комиссии первые 90 дней, только технический сбор 5% + 0,25 €, "
           "о нём говорим заранее. Гости не платят ничего. {link}",
-    "id": "Punya properti di {c}? Komisi 0% selama 90 hari pertama, hanya biaya teknis 3%, "
+    "id": "Punya properti di {c}? Komisi 0% selama 90 hari pertama, hanya biaya teknis 5% + €0,25, "
           "diberitahukan di awal. Tamu tidak membayar apa pun. {link}",
-    "vi": "Bạn có nhà tại {c}? 0% hoa hồng trong 90 ngày đầu, chỉ 3% phí kỹ thuật, thông báo "
+    "vi": "Bạn có nhà tại {c}? 0% hoa hồng trong 90 ngày đầu, chỉ 5% + 0,25 € phí kỹ thuật, thông báo "
           "trước. Khách không trả gì. {link}",
-    "ko": "{c}에 숙소를 갖고 계신가요? 첫 90일 수수료 0%, 기술 수수료는 3%뿐, 사전에 안내합니다. "
+    "ko": "{c}에 숙소를 갖고 계신가요? 첫 90일 수수료 0%, 기술 수수료는 5% + 0,25유로뿐, 사전에 안내합니다. "
           "게스트 부담 없음. {link}",
-    "zh": "您在{c}有房源吗？前90天0%佣金，仅3%技术费，事先说明。房客零费用。{link}",
-    "th": "มีที่พักใน {c} ไหม? 90 วันแรกค่าคอมมิชชั่น 0% มีเพียงค่าธรรมเนียมเทคนิค 3% "
+    "zh": "您在{c}有房源吗？前90天0%佣金，仅5% + 0,25欧元技术费，事先说明。房客零费用。{link}",
+    "th": "มีที่พักใน {c} ไหม? 90 วันแรกค่าคอมมิชชั่น 0% มีเพียงค่าธรรมเนียมเทคนิค 5% + 0.25 ยูโร "
           "แจ้งล่วงหน้า ผู้เข้าพักไม่จ่ายอะไรเลย {link}",
-    "ja": "{c}に物件をお持ちですか？最初の90日間は手数料0%、技術手数料は3%のみ、事前にお伝えします。"
+    "ja": "{c}に物件をお持ちですか？最初の90日間は手数料0%、技術手数料は5% + 0,25ユーロのみ、事前にお伝えします。"
           "ゲストの負担はゼロ。{link}",
-    "ar": "هل لديك عقار في {c}؟ عمولة 0% لأول 90 يومًا، فقط رسوم تقنية 3% نعلنها مسبقًا. "
+    "ar": "هل لديك عقار في {c}؟ عمولة 0% لأول 90 يومًا، فقط رسوم تقنية 5% + 0.25 يورو نعلنها مسبقًا. "
           "الضيف لا يدفع شيئًا. {link}",
 }
 

@@ -127,6 +127,67 @@ diceva «NON COMMITTATO» mentre il lavoro era già unito **e** in produzione.
 *Si impedisce così:* il documento si aggiorna **nello stesso momento** in cui cambia la
 macchina — non «dopo», perché il «dopo» è dove si perde.
 
+**S11. HO MISURATO NELL'AMBIENTE SBAGLIATO E MI SAREBBE RISULTATO UN MISTERO.** *(2026-08-10)*
+La suite raccoglieva 5490 test e ne eseguiva 5485: cinque spariti. Ho cercato la causa
+(`openssl` nel PATH) **da Bash, dove c'è** — mentre la suite era partita **da PowerShell, dove
+non c'è**. Bash e PowerShell su questa macchina hanno **PATH diversi**: la stessa domanda dà
+due risposte opposte.
+*Si impedisce così:* **la verifica si fa nella stessa shell che ha eseguito la cosa.** Se il
+comando è partito da PowerShell, si controlla da PowerShell. È D23 punto 3 vista dal lato in
+cui si rompe: l'ambiente non è il contorno della misura, **è parte della misura**.
+
+**S12. HO INVENTATO IL NOME DI UNA VARIABILE D'AMBIENTE.** *(2026-08-10)* Ho lanciato il banco
+degli host con `$env:BANCO_PORTA="8081"`, convinto che esistesse. **Non esiste**: la porta è
+cablata a `giro_banco.py:35`. Risultato: il banco ha interrogato una porta vuota e ha stampato
+**21 rossi finti**, che per un istante sembravano un disastro. È la S2 (mai inventare nomi)
+sopravvissuta a due giorni di distanza, in una forma nuova: non un file, una **variabile**.
+*Si impedisce così:* prima di passare una variabile d'ambiente a uno strumento, `grep` del suo
+nome **dentro quello strumento**. Se non c'è, quella variabile non fa niente — e il silenzio
+non te lo dice.
+
+**S13. HO DATO PER SCONTATO CHE UN FILE FOSSE IN GIT.** *(2026-08-10)* Ho versionato lo
+schedario dell'attrezzo che confronta le tariffe, e ho verificato «a occhio» che comparisse.
+Non compariva: la riga `*.txt` del `.gitignore` lo escludeva **in silenzio**. Sarebbe finito in
+CI **senza schedario**, cioè rosso per finta a ogni giro — e il rimedio sembrava già applicato.
+*Si impedisce così:* «l'ho aggiunto a git» si dimostra con **`git add --dry-run <file>`** o con
+`git status --porcelain`, mai leggendo il `.gitignore` e concludendo. Un'esclusione può stare
+in una riga scritta mesi prima, per tutt'altro motivo.
+
+**S14. HO SCRITTO IL NUMERO DEI TEST DOPO LA SUITE INVECE CHE PRIMA.** *(2026-08-10, due volte
+in un giorno; tre in tutto)* La guardia D22 pretende che `RIPRENDI_QUI.md` dichiari quanti test
+esistono. Aggiungerne uno la fa diventare rossa — e siccome la correzione tocca un `.md`, la
+regola ferrea 6 obbliga a **rifare la suite intera per una cifra**. Costo: **tre ore** su codice
+che non era cambiato.
+*Si impedisce così:* il conteggio **non dipende dall'esecuzione**, lo dà il caricatore da fermo
+in due secondi. Si misura e si scrive **PRIMA** di lanciare:
+`python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"`
+Vale **anche quando non ti pare di aver aggiunto test**: rinominarne uno basta a spostare il conto.
+
+**S15. HO CREDUTO AL VERDETTO DI UNO STRUMENTO SENZA GUARDARE CON CHE MODELLO CONTAVA.**
+*(2026-08-10)* L'attrezzo dei conti ha stampato **«la tariffa tecnica NON copre Stripe A NESSUN
+IMPORTO»**: stavo per riferire una perdita. Non era vero. L'attrezzo dichiarava da sé, due righe
+sopra, «percentuale SECCA, nessuna quota fissa» e «zero transazioni vere»: **era lui a essere
+rimasto indietro**, e confrontava il costo con un prezzo che non pratichiamo più.
+*Si impedisce così:* prima di riferire il verdetto di uno strumento, si leggono **le premesse
+che stampa su di sé**. Le aveva scritte in chiaro. È la S3 («quando la misura è assurda, sospetta
+lo strumento») estesa al caso peggiore: **una misura non assurda, solo sbagliata**.
+
+**S16. HO MODIFICATO UN TEST E MI SONO PORTATO VIA DUE RIGHE DI QUELLO PRIMA.** *(2026-08-10)*
+Inserendo un metodo nuovo ho ancorato la modifica a righe che **non erano la fine** del metodo
+precedente: due asserzioni sono finite dentro il mio, e il test è esploso con `NameError` su una
+variabile che non poteva esistere lì.
+*Si impedisce così:* prima di inserire un metodo si **legge fino alla riga vuota che chiude** il
+precedente. Un `NameError` su una variabile di un altro test non è mai un difetto del prodotto:
+è una modifica che ha tagliato dove non doveva.
+
+**S17. HO SCRITTO IL VECCHIO NUMERO NEI COMMENTI CHE SPIEGAVANO IL NUOVO.** *(2026-08-10, sei
+volte)* Mentre riparavo file che dichiaravano una tariffa superata, ho lasciato la cifra vecchia
+nei **miei** commenti nuovi, nei nomi dei test e perfino nel commento della riga che serve a
+impedire le cifre scritte a mano.
+*Si impedisce così:* la regola l'ha dettata il fondatore ed è più forte di «aggiorna il
+commento»: **un commento non nomina la cifra.** Si scrive «la tariffa tecnica», non «il 5%». Un
+commento che non nomina il numero **non può diventare falso** — e un nome di test nemmeno.
+
 > ⚠️ **E il più testardo di tutti, che non è mio ma del progetto:** il paracadute `:prec`
 > agganciato all'immagine sbagliata — **quattro volte in quattro giorni** (2026-08-05, -07,
 > -08 e -08 sera). Non lo prende la buona volontà: lo prende **D17 punto [1b]**, che lo
@@ -168,8 +229,12 @@ Verità corrente (se cambia nel codice, va aggiornata anche nel `README.md`, e u
 automatica fa fallire la suite se i due divergono):
 - commissione host: **0%** primi 90 giorni · **8%** fino a 1 anno · **10%** a regime
   (marketplace) · **5%** sempre sul link diretto · **0%** a carico dell'ospite;
-- **tariffa tecnica 3% SEMPRE dovuta dall'host**, anche a commissione 0% (gateway Stripe,
-  margine piattaforma zero);
+- **tariffa tecnica 5% + 0,25 € SEMPRE dovuta dall'host** — **7% + 0,25 €** se l'annuncio è
+  prezzato in valuta diversa dall'euro (il gateway deve convertire) — anche a commissione 0%.
+  ⛔ Era «3%, margine piattaforma zero»: **misurato sotto costo il 2026-08-09**
+  (`collaudi/conti_stripe.py`). Stripe prende percentuale **+ 0,25 € fissi**, e **+2%** sul
+  cambio; e il **bonifico all'host** costa altri **0,25% + 0,10 €**. Il margine ora **non è
+  zero e non si dichiara zero**: dipende dalla carta e dall'importo, e il contratto lo dice;
 - registrazione e ri-accettazione: **3 spunte obbligatorie** (Contratto · clausole vessatorie
   artt. 1341-1342 c.c. · Privacy GDPR), pulsante bloccato lato browser **e** rifiuto `422` lato
   server, con prova firmata **HMAC-SHA256** (versione, impronta del testo, IP, dispositivo, ora).

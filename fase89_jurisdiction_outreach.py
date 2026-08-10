@@ -181,10 +181,12 @@ def _intero_bps(v: Any) -> int:
 
 
 def _tecnica_bps() -> int:
-    """La tariffa tecnica VERA: dall'ambiente in produzione, altrimenti il default 300
-    (3%) dichiarato in main_casavip.py. Mai una cifra scritta a mano qui."""
+    """La tariffa tecnica VERA: dall'ambiente in produzione, altrimenti il default 400
+    (4%) dichiarato in main_casavip.py. Mai una cifra scritta a mano qui.
+    (2026-08-09: era 300. Il 3% secco era SOTTO COSTO -- Stripe prende percentuale + 0,25
+    EUR fissi, e +2% sul cambio. Misura: `collaudi/conti_stripe.py`.)"""
     import os
-    return _intero_bps(os.environ.get("PAGAMENTO_BPS", "300")) or 300
+    return _intero_bps(os.environ.get("PAGAMENTO_BPS", "400")) or 400
 
 
 # TRASPARENZA (2026-07-21). Queste email vanno a HOST VERI. Prima promettevano una

@@ -156,6 +156,8 @@ class ProtocolloConcierge:
                  link_pagamento: Optional[Callable[[Dict[str, Any]], Optional[str]]] = None,
                  ttl_quote_sec: int = 900, valuta: str = "EUR",
                  psp_bps: int = 0,
+                 psp_bps_valuta_estera: int = 0,
+                 psp_fisso_cents: int = 0,
                  credito_store: Any = None,
                  orologio: Optional[Callable[[], int]] = None) -> None:
         self._inv = inventario
@@ -171,6 +173,22 @@ class ProtocolloConcierge:
         # paga sempre il prezzo pulito (0%). Copre la fee Stripe -> noi MAI in perdita. bps, cap 20%.
         self._psp_bps = max(0, min(2000, int(psp_bps))) if isinstance(psp_bps, int) \
             and not isinstance(psp_bps, bool) else 0
+        # QUOTA FISSA per transazione. Stripe non prende una percentuale pura: prende
+        # percentuale + 0,25 EUR a transazione. Senza questa riga eravamo SOTTO COSTO su
+        # ogni prenotazione piccola con QUALUNQUE carta (sotto 16,66 EUR anche con la carta
+        # europea piu' economica). Trovato dal fondatore il 2026-08-09 con un caso vero:
+        # una stanza da 13 EUR. Misura e conti: `collaudi/conti_stripe.py`.
+        self._psp_fisso = max(0, min(1000, int(psp_fisso_cents))) \
+            if isinstance(psp_fisso_cents, int) and not isinstance(psp_fisso_cents, bool) else 0
+        # VALUTA ESTERA. Il conto Stripe e' italiano e tiene SOLO euro (misurato il
+        # 2026-08-09 sul conto vero: `country: IT`, `default_currency: eur`, nessun altro
+        # saldo), quindi un annuncio prezzato in un'altra valuta viene per forza CONVERTITO
+        # da Stripe, che aggiunge il 2%. Se non impostata si ricade sulla tariffa normale
+        # (comportamento storico invariato per chi non la passa).
+        _est = max(0, min(2000, int(psp_bps_valuta_estera))) \
+            if isinstance(psp_bps_valuta_estera, int) \
+            and not isinstance(psp_bps_valuta_estera, bool) else 0
+        self._psp_bps_estera = _est or self._psp_bps
         self._tasso = tasso_cambio                     # (da, a)->tasso mid (solo display indicativo)
         self._link = link_pagamento
         self._ttl = max(60, int(ttl_quote_sec))
@@ -324,7 +342,12 @@ class ProtocolloConcierge:
             # COSTO SERVIZIO PAGAMENTI (carta): a carico dell'HOST, dedotto dal suo incasso.
             # Copre la fee Stripe sul TOTALE addebitato -> noi MAI in perdita. L'ospite paga
             # SEMPRE il prezzo pulito (0%): il totale non cambia, cambia solo il netto host.
-            costo_pagamento = (totale * self._psp_bps) // 10000
+            # La tariffa dipende dalla VALUTA DELL'ANNUNCIO: se non e' quella in cui
+            # incassiamo, Stripe converte e aggiunge il 2%. E la quota fissa c'e' sempre.
+            # (Prima era una percentuale SECCA: il perche' sta nel costruttore.)
+            _psp = self._psp_bps if str(valuta).upper() == str(self._valuta).upper() \
+                else self._psp_bps_estera
+            costo_pagamento = (totale * _psp) // 10000 + (self._psp_fisso if totale > 0 else 0)
             # PREZZO NON SOSTENIBILE: se il costo carta supera quel che resta all'host
             # (prezzi da centesimi + tassa alta), NESSUNO deve rimetterci: il preventivo
             # viene rifiutato onestamente invece di far "sparire" la differenza a nostro
@@ -435,7 +458,9 @@ class ProtocolloConcierge:
     def _sconto_credito(self, token: Any, netto: int, comm: int,
                         valuta: str = "EUR") -> Tuple[int, str]:
         """Sconto Credito Fondatore: verifica il token firmato e applica al MASSIMO quanto la
-        nostra commissione puo' assorbire restando sopra i costi (Stripe ~2.9%+0.25 + buffer).
+        nostra commissione puo' assorbire restando sopra i costi (Stripe MISURATO il 2026-08-09
+        sull'API vera: 3,25% + 0,25 EUR sulla carta peggiore, +2% se converte -- il vecchio
+        commento diceva ~2,9% + 0,25, che era una stima e per difetto).
         Non falsificabile, non scaduto. Se non c'e' margine -> 0 (mai in perdita).
         SINGLE-USE (fase167): un credito GIA' SPESO non sconta piu' (`usato`). Ritorna
         (sconto, credito_id) dove credito_id = firma del token (per consumarlo al book)."""
@@ -467,7 +492,14 @@ class ProtocolloConcierge:
                 return 0, ""
             cr = v.get("credito_cents", 0)
             cr = cr if (_intero(cr) and cr > 0) else 0
-            costo = netto * 290 // 10000 + 25 + 200      # Stripe stimato + buffer prudenziale
+            # Costo Stripe MISURATO il 2026-08-09 sull'API vera (chiave di prova, 120
+            # addebiti): 3,25% + 0,25 EUR sulla carta peggiore, +2% quando il conto deve
+            # CONVERTIRE (e' italiano e tiene solo euro). Qui c'era `290` -- 2,9%, una
+            # stima per difetto rimasta indietro mentre il commento della funzione, tre
+            # righe sopra, dichiarava gia' la cifra giusta. Su 1000 EUR in valuta estera
+            # il pavimento lasciava passare 21,50 EUR piu' del suo stesso limite.
+            _bps = 325 if str(valuta or "EUR").upper() == str(self._valuta).upper() else 525
+            costo = netto * _bps // 10000 + 25 + 200     # + buffer prudenziale di 2 EUR
             margine_disponibile = max(0, comm - costo)   # quanto possiamo regalare senza perdere
             return max(0, min(cr, margine_disponibile)), credito_id
         except Exception:

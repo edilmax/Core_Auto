@@ -228,6 +228,162 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### ▶️ IL PIANO DI LAVORO, deciso col fondatore il 2026-08-10
+
+**Metodo, confermato da lui:** *blocchi piccoli, e su ognuno tutti e quattro i livelli in
+ordine* — unitari → integrazione → E2E → **mutazione (il Giudice)**. Un blocco deve stare
+**dentro una sessione sola** (D21: a metà contesto si salva e si riparte).
+
+**L'ordine dei blocchi lo decide `rischio × cecità`, non la dimensione.** Il censimento del
+2026-08-10 dice che sui soldi siamo a **~un quarto**: 4 moduli giudicati (~173 punti) contro
+**16 mai giudicati (516 punti)**. La tabella completa, con quanti test nominano ciascuno, sta
+in `RIPRENDI_QUI.md` sezione «QUANTO MANCA SUI SOLDI».
+
+| blocco | moduli | punti | perché in questo ordine |
+|---|---|---|---|
+| **1** | `fase167_credito_single_use` · `fase66_tassa_soggiorno` · `fase133_split_quote_uguali` · `fase119_calendario_prezzi` | 74 | **i quattro più ciechi**: 1, 2, 2 e 2 test li nominano. `fase167` per primo: un difetto lì è **denaro speso due volte** |
+| **2** | `fase43_commissione` · `fase98_policy_commissione` · `fase111_cancellazione` | 60 | la catena della commissione e dei rimborsi, dove i numeri si incrociano |
+| **3** | `fase65_split_payment` · `fase133` (già fatto in 1) · `fase101_stripe_connect` | 109 | i soldi che si dividono e quelli che escono verso l'host |
+| **4** | `fase162_pagamenti_pendenti` · `fase131_payout_dashboard` | 153 | i più grossi ma i **meno ciechi** (13 e 11 test): ultimi apposta |
+| **5** | `fase85_pagamenti_stripe` · `fase87_stripe_webhook` | 41 | ⚠️ **sembrano** i più coperti (77 e 59 test) ma quei test li **fingono**: nominare non è provare |
+
+⛔ **Prima di ogni blocco si guarda se il modulo è ACCESO**: 63 moduli su 151 non sono
+raggiungibili dalla produzione, e setacciare un modulo spento è tempo buttato.
+
+💡 **Regola pratica del giro di mutazione, misurata il 2026-08-10 e valida per tutti i blocchi:**
+i sorveglianti si scelgono **cronometrandoli**, non a intuito. Ogni mutante paga **tutto**
+l'insieme killer (gira in un processo solo e **non si ferma al primo rosso**): tre moduli da
+~115s hanno portato un giro da 40 minuti a **oltre quattro ore** sugli stessi punti.
+⛔ E `--minuti` va **PRIMA** di `--killer`.
+
+**Restano quattro decisioni del fondatore, non lavoro tecnico** (dettaglio in `RIPRENDI_QUI.md`):
+il minimo sulle prenotazioni piccolissime · se accendere il pavimento di `fase188` (**è un
+aumento di prezzo su «paga in struttura»**, non una riparazione: oggi quel `300` è inerte) · la
+domanda al commercialista sul forfettario · `PAGA_STRUTTURA_ATTIVO` sul `.env` **del server**
+(qui non lo accende nessuno, quindi vale il ripiego `"0"` = spento).
+
+### ✅ FATTO 2026-08-10 (26) — LA TARIFFA TECNICA ERA SOTTO COSTO: 3% SECCO → 5% + 0,25 €
+
+⛔ **La cifra finale è 5% (euro) e 7% (valuta estera)**, non 4 e 6. Il 4 era stato scelto
+quando il costo si credeva 3,15% (letto dal listino); dopo averlo **misurato** a 3,25% nessuno
+era tornato a ricontrollare se desse ancora il punto di margine chiesto dal fondatore — non lo
+dava (0,75). Il motivo del 5 è solido: **il costo dipende dalla nazione della carta e al
+preventivo non si sa con quale pagherà l'ospite**, quindi si copre la peggiore, non la media.
+💡 E torna il «5 + 5» che il fondatore ricordava: sul **link diretto** l'host paga 5% di
+commissione + 5% di spese = **10% tutto compreso**.
+
+**Nessun modulo nuovo** (D10). Due attrezzi nuovi in `collaudi/`: `conti_stripe.py` (i conti
+contro il listino) e `incroci_ospite.py` (le 24 combinazioni del lato ospite).
+
+· **Il difetto.** `fase59_concierge.py:327` calcolava il costo della carta come
+  **percentuale secca** (`totale * psp_bps // 10000`). Stripe non funziona così: prende
+  **percentuale + 0,25 € a transazione**, e **+2%** se deve convertire la valuta. Col 3%
+  eravamo **sotto costo** sotto i 16,66 € con qualunque carta e **a qualunque importo** con
+  una carta non europea. Trovato dal fondatore con un caso vero: *«una stanza una notte
+  nelle Filippine, 13 euro con tasse e tutto — con il 5% ci paghi la Stripe?»*
+· **Perché nessuna guardia lo prendeva.** `test_mai_in_perdita_copre_stripe` confrontava il
+  3% con la carta **migliore** (1,5%) su 100 €: `300 > 175`, verde per sempre. Il suo stesso
+  commento dichiarava di sapere che il caso peggiore valeva 315 — cioè più dei nostri 300 —
+  e poi misurava l'altro. **Modo di rompersi n°4**: controllo che non controlla.
+· **La misura, chiesta a Stripe e non al listino** (chiave di prova, `sk_test`):
+  carta extra-UE = **3,25% + 0,25 €** (non 3,15% come dice la pagina dei prezzi: 675 su
+  20000 e 67 su 1300 sono esattamente 3,25%+25) · conversione = **+2%**, che torna come
+  **seconda voce separata** nella commissione · **la commissione NON torna sul rimborso**:
+  0 su 60 rimborsi provati. Il conto è italiano e tiene **solo euro**, quindi un annuncio
+  in altra valuta viene convertito per forza.
+· **Le prove**: **120 addebiti + 60 rimborsi** su Stripe vero → la tariffa nuova copre in
+  **120 casi su 120**; **120 ospiti** attraverso il sistema vero (120 link di pagamento
+  creati davvero da Stripe, 40 cancellazioni con rimborso vero) → su 34.020 € di
+  prenotazioni la tariffa tecnica copre Stripe con **+285,50 €**; col vecchio 3% sarebbe
+  finita a **−170,30 €**.
+· **L'ordine D20 rispettato**, quattro passi visti: guardia ROSSA (39<65 su 13 €) →
+  riparazione VERDE → riparazione **STACCATA**, rossa di nuovo **con scarti diversi** →
+  riattaccata VERDE.
+· **La stessa forma del difetto in altri tre posti**, tutti chiusi:
+  **(a)** `fase188_paga_struttura` aveva già il modello giusto (fisso + 3,25% + i 30
+  centesimi di sicurezza voluti dal fondatore) ma **ignorava la conversione**: sotto costo
+  di 18 cents su 200 € e **81 su 500** — e la funzione non aveva nemmeno un parametro per
+  sapere la valuta. Aggiunto `GATEWAY_BPS_CAMBIO = 200` e `valuta_estera`, passato dai due
+  chiamanti in `fase83` con ripiego **dalla parte giusta** (nel dubbio: estera).
+  **(b)** `fase69_trasparenza` + `fase83._trasparenza`: il confronto «con Booking incassi X,
+  con noi Y» **non toglieva la tariffa tecnica** — su 100 € mostrava all'host un guadagno
+  extra di **800 quando il vero è 400**, il doppio. Ironia: il commento di `fase83:6598`
+  spiega a lungo di aver riparato esattamente questo **per la commissione**. Metà
+  meccanismo riparato, metà no — la stessa forma del buco del CIN.
+  **(c)** lo stesso `300` era scritto **a mano in quattro posti** (`main_casavip`,
+  `fase185_testi_legali`, `fase89_jurisdiction_outreach`, i test), e tre di quei posti
+  avevano il commento «mai una cifra scritta a mano qui». Ora i test lo **leggono dal
+  motore** (`TECNICA`/`RX_TECNICA`, `_tecnica_bps()`): cambia in un posto, cambia ovunque.
+· **Documenti e legale allineati nello stesso momento** (S10): contratto host IT+EN con
+  versione a **`2026-08-09`** (→ scatta la ri-accettazione) · termini di servizio **in 8
+  lingue**, versione a `2026-08-09` · `README.md` · `CLAUDE.md` · pannello host in 8 lingue
+  · kit marketing · pagina commissioni · `diventa-host` · bunker · email agli host in 8
+  lingue · `fase200` campagna.
+  ⛔ **Tolta ovunque la frase «la Piattaforma non consegue alcun margine»**: con una tariffa
+  che copre la carta peggiore sarebbe **falsa dentro un contratto**. Al suo posto: «a
+  seconda del circuito e dell'importo il costo può essere inferiore o superiore».
+· **Guardia nuova**: `test_la_tariffa_tecnica_copre_la_carta_PEGGIORE_a_OGNI_importo` prova
+  6 importi × 2 valute e **legge i valori di produzione da `main_casavip.py`** — se qualcuno
+  li riabbassa sotto il costo, la suite diventa rossa da sola (D22).
+· ⛔ **AL DEPLOY**: sul VPS `.env.casavip` contiene `PAGAMENTO_BPS=300`. **La variabile
+  vince sul codice**: va **tolta** (o portata al valore che dichiara `main_casavip.py`),
+  altrimenti il sito continua col vecchio listino e la riparazione è un verde falso perfetto.
+
+### ✅ FATTO 2026-08-10 (27) — LA SORVEGLIANZA ERA CIECA PROPRIO SUL CAMBIO APPENA FATTO
+
+Il fondatore ha chiesto di «controllare tutto riguardo la percentuale cambiata, in modo da
+non tornare più indietro a correggere». Il prodotto era già giusto: **a essere rimasto
+indietro era chi doveva accorgersi degli errori.** Sette punti, tutti visti rossi prima.
+
+· **`test_guida_operativa`: DUE difetti in una guardia sola.** Pretendeva che una pagina
+  pubblica corretta al 5% dichiarasse il **3%**, e rifiutava il **7%** della valuta estera
+  come «percentuale inventata». Era verde solo perché quella pagina non nomina le
+  commissioni: **una mina che scoppiava alla prima riga aggiunta.** Ora legge dal motore.
+· **`collaudi/conti_stripe.py` gridava il falso.** Dichiarava da sé «percentuale SECCA,
+  nessuna quota fissa» e «zero transazioni vere»: non sapeva dei **0,25 € fissi**, non
+  sapeva del **7%**, e usava il **3,15% del listino** invece del **3,25% misurato**. Per
+  questo diceva «non copriamo MAI» sul cambio valuta — confrontava il costo con un prezzo
+  che non pratichiamo. Riparato: tutte le carte coperte **a qualunque importo**, uscita 0.
+  Provato nelle due direzioni: rimettendo il vecchio listino, togliendo i 25 centesimi, o
+  togliendo il 7% → **rosso** ogni volta.
+· **Cinque file di collaudo simulavano un listino morto**, e non erano file qualsiasi:
+  `test_promo_lancio_e2e` (l'E2E della **promo**, dove la commissione è 0% e la tariffa
+  tecnica è l'**unica** cosa che paga Stripe) · `test_happy_conti` (l'**oracolo
+  indipendente**, il collaudo n. 5: un oracolo fermo non è un secondo parere, è un
+  testimone che ripete a memoria) · `test_profondo_valute` (il file **delle valute**, che
+  applicava una tariffa sola a sei valute) · `test_happy_soldi` · `test_simulazione_totale`.
+  Tutti agganciati al motore. Prova che non sono ciechi: togliendo la maggiorazione dal
+  solo oracolo di `test_profondo_valute` saltano fuori **80 fallimenti**.
+· **`fase59:495` — difetto vero sui soldi, trovato partendo dai mutanti sopravvissuti.**
+  Il pavimento dello sconto col credito stimava Stripe al **2,9%** mentre il commento tre
+  righe sopra dichiarava già il 3,25% misurato. Effetto misurato: il paracadute lasciava
+  passare **21,50 €** oltre il proprio limite su 1000 € in valuta estera. **Non è una
+  perdita** (la tariffa tecnica copre Stripe a parte): è un limite che prometteva una cosa
+  e ne faceva un'altra. Riparato **col via esplicito del fondatore** (B4), guardia vista
+  rossa prima, poi verde, poi **rossa di nuovo** col difetto rimesso, ripristino
+  **byte-identico** (sha256).
+· ⛔ **IL BUCO STRUTTURALE, ed è questo che chiude la giornata**: l'audit delle percentuali
+  **esisteva e nessuno lo eseguiva**. Due guardie lo sorvegliavano già — ma guardavano
+  *com'era fatto*, non *che dicesse la verità*. Era un bottone da premere a mano, e chi non
+  se lo ricordava aveva una suite verde con dentro cifre vecchie. Ora
+  `test_L_AUDIT_DELLE_TARIFFE_VIENE_ESEGUITO_DAVVERO` lo fa girare **dentro la suite**.
+  Provato iniettando «la nostra commissione host è del 22%» in un documento: **beccato**;
+  tolto, impronta identica e verde.
+· **Lo schedario dell'audit non era in git.** `collaudi/baseline_tariffe.txt` viveva solo su
+  un computer: in CI l'audit sarebbe partito **senza schedario**, cioè rosso per finta. Ora
+  è versionato (è una **decisione**, non un'uscita); il rapporto rigenerato a ogni giro è
+  invece in `.gitignore`, se no la suite sporcherebbe l'albero mentre gira (regola ferrea 4).
+· **Audit di coerenza: da 47 righe da esaminare a 0.** Le 30 rimaste sono state lette una
+  per una e registrate: storia nei changelog, `_archivio` (che per REGOLA ZERO 2 non si
+  segue mai), valori scelti dai test unitari, commenti che raccontano il cambio.
+· **Mutazione su `fase59_concierge.py`** (112 punti, nessuno lasciato fuori dal tetto o dal
+  tempo): **15 → 36 → 48 uccisi** al crescere dei sorveglianti. La misura che ha deciso
+  tutto: `test_invarianti_denaro` costa **115s**, i quattro veloci insieme **4s** — coi
+  lenti dentro il giro sarebbe passato da 40 minuti a **oltre quattro ore** sugli stessi
+  punti. ⚠️ **Restano 64 sopravvissuti, dichiarati**: 36 in `quota`, 11 in `prenota`, 9 in
+  `_sconto_credito`, 8 altrove. Non sono 64 difetti: sono 64 punti dove un difetto **non
+  verrebbe visto**. È il vero «quanto manca» di questo modulo.
+
 ### ✅ FATTO 2026-08-09 (25) — IL BUCO DEL CIN: L'IMPRONTA C'ERA, NESSUNO LA RILEGGEVA
 
 **Nessun modulo nuovo** (D10: i posti esistevano già). **+138 righe, ZERO tolte.**

@@ -42,13 +42,57 @@ def _psp_bps_default():
     return int(m.group(1))
 
 
+# La cifra della tariffa tecnica si scrive UNA VOLTA SOLA e si prende DAL MOTORE.
+# Il 2026-08-09, quando e' passata dal 3% al 4% + 0,25 EUR, questo file aveva TECNICA
+# scritto a mano in una quindicina di punti ed e' diventato lui il documento che
+# dichiarava il falso -- proprio il difetto che esiste per impedire. Ora non puo' piu'
+# succedere: cambia il motore, cambia la pretesa.
+TECNICA = "%d%%" % (_psp_bps_default() // 100)          # la cifra viene dal motore
+RX_TECNICA = r"%d\s?%%" % (_psp_bps_default() // 100)   # idem, con lo spazio facoltativo
+# ⛔ Qui c'era un commento «es. "4%"», scritto a mano il 2026-08-10 e diventato falso lo
+# stesso giorno. Su una riga che esiste APPOSTA per impedire i numeri scritti a mano.
+# Un commento che nomina la cifra puo' diventare falso; uno che non la nomina, no.
+
+
 class TestAncoraggioAlCodice(unittest.TestCase):
     """Il numero scritto nei testi DEVE essere quello che il motore applica davvero."""
+
+    def test_i_ripieghi_di_fase185_combaciano_con_main(self):
+        """`fase185._percentuali()` ha una SUA copia dei ripieghi della tariffa tecnica.
+        Se diverge da `main_casavip.py`, i TERMINI DI SERVIZIO in 8 lingue dichiarano una
+        cifra diversa da quella che il motore addebita davvero — un documento legale che
+        dice il falso.
+
+        ⛔ SUCCESSO DAVVERO il 2026-08-10: la tariffa e' passata da 4 a 5, `main` e' stato
+        aggiornato e questa copia no. Per un po' i termini in otto lingue hanno dichiarato
+        il 4% mentre si addebitava il 5%. Nessuno se ne sarebbe accorto: nessun test
+        confrontava le due copie. Adesso una macchina le confronta."""
+        import os as _os
+        import fase185_testi_legali as _tl
+        vecchi = {k: _os.environ.pop(k, None)
+                  for k in ("PAGAMENTO_BPS", "PAGAMENTO_BPS_ESTERA", "PAGAMENTO_FISSO_CENTS")}
+        try:
+            p = _tl._percentuali()          # senza variabili d'ambiente -> parlano i ripieghi
+        finally:
+            for k, v in vecchi.items():
+                if v is not None:
+                    _os.environ[k] = v
+        self.assertEqual(p["tecnica"], _psp_bps_default() // 100,
+                         "fase185 ripiega su %d%% ma main dichiara %d%%: i termini in 8 "
+                         "lingue direbbero una cifra diversa da quella addebitata"
+                         % (p["tecnica"], _psp_bps_default() // 100))
+        m = re.search(r'PAGAMENTO_BPS_ESTERA["\']\s*,\s*["\'](\d+)["\']', _leggi("main_casavip.py"))
+        self.assertIsNotNone(m, "main_casavip.py non dichiara piu' PAGAMENTO_BPS_ESTERA: "
+                                "questa prova non e' in condizione di misurare, e si ferma")
+        estera = int(m.group(1))
+        self.assertEqual(p["tecnica_estera"], estera // 100,
+                         "fase185 ripiega su %d%% per la valuta estera, main dichiara %d%%"
+                         % (p["tecnica_estera"], estera // 100))
 
     def test_tariffa_tecnica_dichiarata_uguale_al_codice(self):
         bps = _psp_bps_default()
         self.assertEqual(bps % 100, 0, "tariffa non intera: i testi '3%%' andrebbero rivisti")
-        atteso = "%d%%" % (bps // 100)                    # 300 bps -> "3%"
+        atteso = "%d%%" % (bps // 100)                    # 300 bps -> TECNICA
         self.assertIn(atteso, _leggi("deploy/host.html"),
                       "deploy/host.html non dichiara la tariffa tecnica %s del codice"
                       % atteso)
@@ -69,11 +113,11 @@ class TestAncoraggioAlCodice(unittest.TestCase):
         self.assertEqual(LANCIO_BPS_REGIME // 100, 10)
         self.assertEqual(BPS_DIRETTO // 100, 5)
         host = _leggi("deploy/host.html")
-        for atteso in ("90 giorni", "8%", "10%", "5%", "3%"):
+        for atteso in ("90 giorni", "8%", "10%", "5%", TECNICA):
             self.assertIn(atteso, host, "dashboard host: manca '%s'" % atteso)
         for lang in ("it", "en"):
             t = CONTRATTO_HOST[lang]
-            for atteso in ("90", "8%", "10%", "5%", "3%"):
+            for atteso in ("90", "8%", "10%", "5%", TECNICA):
                 self.assertIn(atteso, t, "contratto %s: manca '%s'" % (lang, atteso))
 
 
@@ -94,8 +138,8 @@ class TestDashboardHost(unittest.TestCase):
             self.assertEqual(self.host.count(chiave + ':"'), 2,
                              "la chiave %s deve esistere in it E en (fallback EN per le altre)"
                              % chiave)
-        self.assertIn("tariffa tecnica fissa del 3%", self.host)
-        self.assertIn("fixed 3% technical fee", self.host)
+        self.assertIn("tariffa tecnica del " + TECNICA, self.host)
+        self.assertIn("technical fee of " + TECNICA, self.host)
         self.assertIn("sempre attiva", self.host)          # vale in OGNI periodo
         self.assertIn("always active", self.host)
 
@@ -103,12 +147,12 @@ class TestDashboardHost(unittest.TestCase):
         """Il campo prezzo diceva 'ricevi questo meno la commissione' e basta: bugia per
         omissione a 0% di commissione. Ogni traduzione deve nominare la tariffa tecnica."""
         for frase in re.findall(r'h_prezzo_osp:"([^"]*)"', self.host):
-            self.assertIn("3%", frase, "h_prezzo_osp senza tariffa tecnica: %r" % frase)
+            self.assertIn(TECNICA, frase, "h_prezzo_osp senza tariffa tecnica: %r" % frase)
         self.assertGreaterEqual(len(re.findall(r'h_prezzo_osp:"', self.host)), 8,
                                 "attese 8 lingue per h_prezzo_osp")
         # anche il link diretto ("solo 5%") deve dire che il 3% si aggiunge
         for frase in re.findall(r'dir_p:"([^"]*)"', self.host):
-            self.assertIn("3%", frase, "dir_p senza tariffa tecnica: %r" % frase)
+            self.assertIn(TECNICA, frase, "dir_p senza tariffa tecnica: %r" % frase)
 
     def test_traduzioni_non_rotte(self):
         """Il testo i18n sostituisce textContent: niente tag dentro gli span tradotti."""
@@ -121,20 +165,33 @@ class TestContratto(unittest.TestCase):
         t = CONTRATTO_HOST["it"]
         self.assertIn("ART. 6-BIS", t)
         self.assertIn("TARIFFA TECNICA", t)
-        self.assertIn("3% (tre per cento)", t)
+        # La cifra si RICAVA DAL MOTORE, non si riscrive qui: riscriverla a mano e'
+        # esattamente il difetto che questo file esiste per impedire.
+        self.assertIn("%d%% (" % (_psp_bps_default() // 100), t)
         self.assertIn("SEMPRE dovuta", t)
         self.assertIn("anche nei", t)            # "...anche nei periodi in cui la Commissione e' 0%"
         self.assertIn("Stripe", t)
-        self.assertIn("non consegue alcun margine", t)
+        # La QUOTA FISSA e la maggiorazione sulla VALUTA ESTERA devono essere dichiarate:
+        # senza, il contratto direbbe meno di quanto addebitiamo davvero.
+        self.assertIn("per ogni transazione", t)
+        self.assertIn("valuta diversa dall'euro", t)
+        # La vecchia riga pretendeva "non consegue alcun margine". Con una tariffa che deve
+        # coprire la carta PEGGIORE quella frase e' FALSA, e sarebbe falsa dentro un
+        # contratto. Ora si pretende il contrario: che il contratto dica il vero.
+        self.assertNotIn("non consegue alcun margine", t)
+        self.assertIn("inferiore o superiore alla tariffa", t)
 
     def test_articolo_6bis_en(self):
         t = CONTRATTO_HOST["en"]
         self.assertIn("ART. 6-BIS", t)
         self.assertIn("TECHNICAL FEE", t)
-        self.assertIn("3% (three per cent)", t)
+        self.assertIn("%d%% (" % (_psp_bps_default() // 100), t)
         self.assertIn("ALWAYS due", t)
         self.assertIn("Stripe", t)
-        self.assertIn("makes no margin", t)
+        self.assertIn("per transaction", t)
+        self.assertIn("other than the euro", t)
+        self.assertNotIn("makes no margin", t)
+        self.assertIn("higher than the fee", t)
 
     def test_versione_aggiornata_e_impronta_coerente(self):
         self.assertNotEqual(CONTRATTO_HOST_VERSIONE, "2026-07-11",
@@ -242,13 +299,13 @@ class TestTerminiPubblici(unittest.TestCase):
     def test_i_termini_dicono_il_3_in_tutte_le_lingue(self):
         """Una sola lingua che tace la tariffa basta a rendere disonesta la promessa."""
         mute = [lg for lg in TL.LINGUE
-                if not re.search(r"3\s?%", TL.testo_termini(lg))]
+                if not re.search(RX_TECNICA, TL.testo_termini(lg))]
         self.assertEqual(mute, [], "lingue che non dichiarano il 3%%: %s" % mute)
 
     def test_pagina_commissioni_resta_coerente(self):
-        """La pagina Commissioni era gia' onesta: non deve perdere il 3%."""
+        """La pagina Commissioni era gia' onesta: non deve perdere la tariffa tecnica."""
         c = _leggi("deploy/commissioni.html")
-        self.assertIn("3%", c)
+        self.assertIn(TECNICA, c)
         self.assertIn("costo carta", c)
 
 
@@ -287,13 +344,14 @@ class TestPagineCheReclutanoHost(unittest.TestCase):
         for nome in self.PAGINE_HOST:
             testo = self._leggi(nome)
             self.assertRegex(
-                testo, r"3\s?%",
+                testo, RX_TECNICA,
                 "%s parla agli host di percentuali ma NON nomina la tariffa tecnica "
                 "del 3%%: e' la stessa mancanza di trasparenza chiusa il 2026-07-20."
                 % nome)
 
     def test_nessuna_promessa_di_zero_costi_nascosti_senza_il_3(self):
-        """"Zero commissioni nascoste" e' una promessa: vale solo se il 3% e' scritto."""
+        """"Zero commissioni nascoste" e' una promessa: vale solo se la tariffa tecnica
+        e' scritta nella stessa frase."""
         import re
         # Sulle pagine di RECLUTAMENTO la promessa e il 3% devono stare VICINI: chi le
         # legge scorre pochi secondi. Sulle pagine tariffarie/legali (commissioni,
@@ -308,7 +366,7 @@ class TestPagineCheReclutanoHost(unittest.TestCase):
                         r"[^\"><]{0,25}(?:nascost\w*|hidden|ocult\w*|cach\w*|"
                         r"versteckt\w*|隠れ|隐藏)[^\"><]{0,70}")
             for frase in re.findall(promessa, testo, re.I):
-                self.assertIn("3%", frase,
+                self.assertIn(TECNICA, frase,
                               "%s promette '%s' senza nominare il 3%% nella stessa frase"
                               % (nome, frase.strip()))
 
@@ -317,7 +375,7 @@ class TestPagineCheReclutanoHost(unittest.TestCase):
         anche l'argomento piu' forte che abbiamo."""
         testo = self._leggi("kit-marketing.html")
         self.assertIn("90 giorni", testo, "il kit non nomina la promo 0% dei 90 giorni")
-        self.assertIn("3%", testo)
+        self.assertIn(TECNICA, testo)
         # "iscriversi e pubblicare e' gratis" e' VERO (si paga solo sulla prenotazione):
         # cio' che non deve piu' esserci e' un "10%" secco venduto come LA commissione,
         # perche' nasconde sia la rampa sia il 3%.
@@ -338,11 +396,11 @@ class TestPagineCheReclutanoHost(unittest.TestCase):
 
 
 class TestEmailAgliHost(unittest.TestCase):
-    """GUARDIA — anche le EMAIL agli host devono dire il 3%.
+    """GUARDIA — anche le EMAIL agli host devono dire la tariffa tecnica.
 
     TROVATO IL 2026-07-21: l'email di BENVENUTO (la prima cosa che un host legge)
     diceva "10% dal marketplace" — mentre nei primi 90 giorni paga 0% — e "nessun
-    costo fisso", senza nominare mai la tariffa tecnica del 3%, sempre dovuta.
+    costo fisso", senza nominare mai la tariffa tecnica, sempre dovuta.
     Le pagine erano state sistemate, le email no.
     """
 
@@ -354,7 +412,7 @@ class TestEmailAgliHost(unittest.TestCase):
         """La trasparenza sul 3% e' la prima cosa che un host legge: non puo' mancare in
         nessuna delle 8 lingue (o in una si prometterebbe qualcosa di diverso)."""
         from fase86_email import LINGUE
-        mute = [lg for lg in LINGUE if not __import__("re").search(r"3\s?%",
+        mute = [lg for lg in LINGUE if not __import__("re").search(RX_TECNICA,
                                                                    self._benvenuto(lg))]
         self.assertEqual(mute, [], "il 3%% manca nelle lingue: %s" % mute)
 
@@ -374,7 +432,7 @@ class TestEmailAgliHost(unittest.TestCase):
         corpo = re.sub(r"<[^>]+>", " ", self._benvenuto("it"))
         for m in re.finditer(r"[Nn]essun[^.]{0,80}costo[^.]{0,80}\.", corpo):
             frase = m.group(0)
-            self.assertRegex(frase, r"3\s?%",
+            self.assertRegex(frase, RX_TECNICA,
                              "promessa '%s' senza il 3%% nella stessa frase" % frase.strip())
 
     def test_le_percentuali_vengono_dal_motore(self):

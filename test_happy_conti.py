@@ -21,7 +21,7 @@ Le cinque cose che questo file fissa:
      calendario una per una — non moltiplica il prezzo base — e lo sconto lungo e la
      commissione poggiano su quella somma vera.
   C) RAMPA COMMISSIONI — host nuovo 0% -> 8% (>=90gg) -> 10% (>=365gg); link diretto 5%
-     sempre; tariffa tecnica 3% SEMPRE presente anche a commissione 0; e soprattutto
+     sempre; tariffa tecnica SEMPRE presente anche a commissione 0; e soprattutto
      l'OSPITE PAGA LO STESSO IMPORTO in tutti e tre gli scaglioni (0% a suo carico: la
      commissione la sente solo l'host sul suo netto).
   D) CONTRATTO JSON — chiavi obbligatorie, tipi, denaro in centesimi INTERI (mai float, mai
@@ -35,7 +35,8 @@ VISTE ROSSE (regola aurea: nessun verde vale finche' non e' stato visto rosso).
 e ognuno ha fatto fallire il test indicato:
    1-2. fase98 `stato_scaglione` appiattito a regime -> test_tre_scaglioni_esatti_ai_bordi e
         test_ospite_paga_lo_stesso_in_tutti_gli_scaglioni ROSSI;
-   3.   fase59 `_psp_bps=0` (tariffa tecnica regalata) -> test_tariffa_tecnica_tre_percento_sempre;
+   3.   fase59 `_psp_bps=0` (tariffa tecnica regalata) ->
+        test_tariffa_tecnica_sempre_dovuta_anche_a_commissione_zero;
    4.   fase98 `commissione_bps_fonte` che ignora la fonte -> test_link_diretto_sempre_cinque_percento;
    5.   fase57 `sconto_lungo_di`->(0,0) -> test_soglie_settimana_e_mese,
         test_sconto_finanziato_dall_host_mai_da_noi e il caso JPY;
@@ -70,7 +71,28 @@ from fase98_policy_commissione import (BPS_DIRETTO, LANCIO_BPS_FASE1, LANCIO_BPS
 from fase99_multicurrency import esponente
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
 
-PSP_BPS = 300          # tariffa tecnica: 3% SEMPRE dovuta dall'host (README regola 4)
+def _dal_motore(chiave):
+    """La tariffa tecnica VERA, letta dai default di `main_casavip.py`.
+
+    Qui c'era `PSP_BPS = 300  # (README regola 4)`. Il 2026-08-10 il README e la
+    produzione sono passati a 5%% + 0,25 EUR e questa riga e' rimasta indietro: non solo
+    il commento citava una regola che ormai diceva altro, ma l'ORACOLO INDIPENDENTE di
+    questo file -- il collaudo n. 5, quello che ricalcola tutto da zero -- ricalcolava
+    un listino che non esiste piu'. Un oracolo fermo non e' un secondo parere: e' un
+    testimone che ripete a memoria. Ora la cifra viene dal motore.
+    """
+    import io as _io
+    import re as _re
+    _qui = os.path.dirname(os.path.abspath(__file__))
+    with _io.open(os.path.join(_qui, "main_casavip.py"), encoding="utf-8") as f:
+        _src = f.read()
+    _m = _re.search(chiave + r'["\']\s*,\s*["\'](\d+)["\']', _src)
+    assert _m, "main_casavip.py non dichiara piu' il default %s" % chiave
+    return int(_m.group(1))
+
+
+PSP_BPS = _dal_motore("PAGAMENTO_BPS")             # tariffa tecnica, dal motore
+PSP_FISSO = _dal_motore("PAGAMENTO_FISSO_CENTS")   # + la quota fissa per transazione
 COMM_BPS = 1000        # commissione marketplace a regime: 10%
 SCONTO_NR_BPS = 1200   # non-rimborsabile: -12% sul netto (finanziato dall'host)
 
@@ -108,7 +130,9 @@ def oracolo_preventivo(*, prezzo_notte=None, notti=None, prezzi_notti=None, ospi
     notti_tass = min(notti, tassa_max_notti) if tassa_max_notti > 0 else notti
     tassa = tassa_pp_notte_cents * notti_tass * ospiti + tassa_perc_bps * netto // 10000
     totale = guest + tassa
-    tariffa_tecnica = totale * psp_bps // 10000
+    # percentuale PIU' quota fissa: Stripe prende tutte e due, e la fissa e' quella che
+    # sulle prenotazioni piccole faceva la differenza fra coprire il costo e rimetterci.
+    tariffa_tecnica = totale * psp_bps // 10000 + (PSP_FISSO if totale > 0 else 0)
     return {"prezzo_listino_cents": listino,
             "sconto_soggiorno_lungo_cents": sconto_lungo,
             "sconto_non_rimborsabile_cents": sconto_nr,
@@ -123,7 +147,7 @@ def oracolo_preventivo(*, prezzo_notte=None, notti=None, prezzi_notti=None, ospi
 
 class _Base(unittest.TestCase):
     """Sistema vero + router vero, con i parametri della PRODUZIONE (main_casavip.py):
-    commissione 10% a regime, rampa di lancio ACCESA, tariffa tecnica 3%."""
+    commissione 10% a regime, rampa di lancio ACCESA, tariffa tecnica dal motore."""
 
     def setUp(self):
         self.d = tempfile.mkdtemp(prefix="happy_conti_")
@@ -141,7 +165,8 @@ class _Base(unittest.TestCase):
             db_registro_host=self.db_reg, db_accettazioni=self.d + "/a.db",
             db_pendenti=self.d + "/p.db", db_payout=self.d + "/po.db",
             db_garanzia=self.d + "/g.db", db_finanza=self.d + "/f.db",
-            commissione_bps=COMM_BPS, psp_bps=PSP_BPS, promo_lancio_attiva=True,
+            commissione_bps=COMM_BPS, psp_bps=PSP_BPS, psp_fisso_cents=PSP_FISSO,
+            promo_lancio_attiva=True,
             stripe_secret_key="sk", stripe_webhook_secret="whsec_happy",
             stripe_success_url="https://x/ok", stripe_cancel_url="https://x/ko"))
         self.r = crea_router(self.sis, host_key="hk", admin_key="ak",
@@ -429,7 +454,7 @@ class TestSconti(_Base):
 
     def test_sconto_finanziato_dall_host_mai_da_noi(self):
         """Lo sconto lo paga l'host (netto piu' basso), non la piattaforma: la commissione
-        resta il 10% del netto SCONTATO e la tariffa tecnica copre sempre il 3%."""
+        resta il 10% del netto SCONTATO e la tariffa tecnica resta comunque dovuta."""
         self.invecchia(LANCIO_GIORNI_FASE1 + 30)
         slug = self.pubblica("chi-paga", 10000, giorni=45, sconto_settimana_bps=2000,
                              politica_cancellazione="non_rimborsabile")
@@ -443,10 +468,12 @@ class TestSconti(_Base):
         self.assertEqual(q["sconto_non_rimborsabile_cents"], 6720, q)   # 12% di 56000
         self.assertEqual(q["prezzo_guest_cents"], 49280, q)             # l'ospite paga QUESTO
         self.assertEqual(q["commissione_cents"], 4928, q)               # 10% del netto SCONTATO
-        self.assertEqual(q["costo_pagamento_cents"], 1478, q)           # 3% del totale
-        self.assertEqual(q["netto_host_cents"], 42874, q)               # lo sconto lo paga l'host
+        _tec = 49280 * PSP_BPS // 10000 + PSP_FISSO      # tariffa tecnica sul totale
+        self.assertEqual(q["costo_pagamento_cents"], _tec, q)
+        self.assertEqual(q["netto_host_cents"], 49280 - 4928 - _tec, q)  # lo sconto lo paga l'host
         self.assertEqual(q["commissione_cents"], q["prezzo_netto_cents"] * COMM_BPS // 10000, q)
-        self.assertEqual(q["costo_pagamento_cents"], q["totale_cents"] * PSP_BPS // 10000, q)
+        self.assertEqual(q["costo_pagamento_cents"],
+                         q["totale_cents"] * PSP_BPS // 10000 + PSP_FISSO, q)
         self.identita_conto(q, "chi paga lo sconto")
 
 
@@ -549,16 +576,23 @@ class TestRampaEOspiteZero(_Base):
                              "diretto a %d giorni: non e' il 5%% (%r)" % (giorni, q))
             self.identita_conto(q, "diretto %d giorni" % giorni)
 
-    def test_tariffa_tecnica_tre_percento_sempre(self):
-        """3% SEMPRE dovuto dall'host, anche quando la commissione e' 0% (README regola 4)."""
+    def test_tariffa_tecnica_sempre_dovuta_anche_a_commissione_zero(self):
+        """La tariffa tecnica e' SEMPRE dovuta dall'host, anche a commissione 0%.
+
+        Il nome diceva `tre_percento` e la cifra era scritta nel messaggio d'errore:
+        due punti che il 2026-08-10 sono diventati falsi insieme. Ora la pretesa viene
+        dal motore -- percentuale PIU' quota fissa -- e il nome non nomina piu' nessun
+        numero, cosi' non puo' invecchiare.
+        """
         for giorni in (0, LANCIO_GIORNI_GRATIS, LANCIO_GIORNI_FASE1):
             self.invecchia(giorni)
             for fonte in ("marketplace", "diretto"):
                 q = self.quota(self.slug, notti=2, ospiti=2, fonte=fonte)
                 ctx = "%d giorni, %s" % (giorni, fonte)
                 self.assertEqual(q["costo_pagamento_cents"],
-                                 q["totale_cents"] * PSP_BPS // 10000,
-                                 "%s: tariffa tecnica != 3%% del totale (%r)" % (ctx, q))
+                                 q["totale_cents"] * PSP_BPS // 10000 + PSP_FISSO,
+                                 "%s: la tariffa tecnica non e' quella del motore "
+                                 "(%d bps + %d cent) (%r)" % (ctx, PSP_BPS, PSP_FISSO, q))
                 self.assertGreater(q["costo_pagamento_cents"], 0,
                                    "%s: tariffa tecnica ASSENTE (%r)" % (ctx, q))
         self.invecchia(0)

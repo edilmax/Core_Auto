@@ -206,64 +206,70 @@ def _leva_rotante(citta):
     return PSICO_ROTANTI[int(hashlib.md5(("leva:" + citta).encode("utf-8")).hexdigest(), 16) % 3]
 SCHERMO = {
     "it": ["{citta}.", "Mettila a reddito,\nsenza sorprese.", "0% commissioni\nper 90 giorni",
-           "3% tecnico,\ndetto prima.", "BookinVIP\nbookinvip.com"],
+           "5% + 0,25 € tecnico,\ndetto prima.", "BookinVIP\nbookinvip.com"],
     "en": ["{citta}.", "Earn from it,\nno surprises.", "0% commission\nfor 90 days",
-           "3% technical fee,\ntold upfront.", "BookinVIP\nbookinvip.com"],
+           "5% + €0.25 technical fee,\ntold upfront.", "BookinVIP\nbookinvip.com"],
     "es": ["{citta}.", "Ponla a trabajar,\nsin sorpresas.", "0% de comisión\ndurante 90 días",
-           "3% técnico,\ndicho antes.", "BookinVIP\nbookinvip.com"],
+           "5% + 0,25 € técnico,\ndicho antes.", "BookinVIP\nbookinvip.com"],
     "fr": ["{citta}.", "Mettez-le en location,\nsans surprises.", "0 % de commission\npendant 90 jours",
-           "3 % techniques,\nannoncés d'avance.", "BookinVIP\nbookinvip.com"],
+           "5 % + 0,25 € techniques,\nannoncés d'avance.", "BookinVIP\nbookinvip.com"],
     "de": ["{citta}.", "Vermieten,\nohne Überraschungen.", "0% Provision\nfür 90 Tage",
-           "3% Technikgebühr,\nvorab gesagt.", "BookinVIP\nbookinvip.com"],
+           "5% + 0,25 € Technikgebühr,\nvorab gesagt.", "BookinVIP\nbookinvip.com"],
     "pt": ["{citta}.", "Ponha-a a render,\nsem surpresas.", "0% de comissão\npor 90 dias",
-           "3% técnica,\ndita antes.", "BookinVIP\nbookinvip.com"],
+           "5% + 0,25 € técnica,\ndita antes.", "BookinVIP\nbookinvip.com"],
     "nl": ["{citta}.", "Verhuur zonder\nverrassingen.", "0% commissie\nvoor 90 dagen",
-           "3% technische kosten,\nvooraf gemeld.", "BookinVIP\nbookinvip.com"],
+           "5% + € 0,25 technische kosten,\nvooraf gemeld.", "BookinVIP\nbookinvip.com"],
     "tr": ["{citta}.", "Evinizi gelire çevirin,\nsürpriz yok.", "90 gün boyunca\n%0 komisyon",
-           "%3 teknik ücret,\nönceden söylenir.", "BookinVIP\nbookinvip.com"],
+           "%5 + 0,25 € teknik ücret,\nönceden söylenir.", "BookinVIP\nbookinvip.com"],
     "ru": ["{citta}.", "Сдавайте жильё\nбез сюрпризов.", "0% комиссии\n90 дней",
-           "3% техсбор,\nоб этом заранее.", "BookinVIP\nbookinvip.com"],
+           "5% + 0,25 € техсбор,\nоб этом заранее.", "BookinVIP\nbookinvip.com"],
     "id": ["{citta}.", "Sewakan tanpa\nkejutan.", "Komisi 0%\nselama 90 hari",
-           "Biaya teknis 3%,\ndiberitahu di awal.", "BookinVIP\nbookinvip.com"],
+           "Biaya teknis 5% + €0,25,\ndiberitahu di awal.", "BookinVIP\nbookinvip.com"],
     "vi": ["{citta}.", "Cho thuê,\nkhông bất ngờ.", "0% hoa hồng\ntrong 90 ngày",
-           "3% phí kỹ thuật,\nbáo trước.", "BookinVIP\nbookinvip.com"],
+           "5% + 0,25 € phí kỹ thuật,\nbáo trước.", "BookinVIP\nbookinvip.com"],
     "ko": ["{citta}.", "숙소를 수익으로,\n부담 없이.", "첫 90일\n수수료 0%",
-           "기술 수수료 3%,\n사전 안내.", "BookinVIP\nbookinvip.com"],
+           "기술 수수료 5% + 0,25유로,\n사전 안내.", "BookinVIP\nbookinvip.com"],
     "zh": ["{citta}.", "轻松出租，\n没有意外。", "前90天\n0%佣金",
-           "3%技术费，\n事先说明。", "BookinVIP\nbookinvip.com"],
+           "5% + 0,25欧元技术费，\n事先说明。", "BookinVIP\nbookinvip.com"],
     "th": ["{citta}.", "ปล่อยเช่า\nไม่มีเซอร์ไพรส์", "ค่าคอมมิชชั่น 0%\n90 วันแรก",
-           "ค่าเทคนิค 3%\nแจ้งล่วงหน้า", "BookinVIP\nbookinvip.com"],
+           "ค่าเทคนิค 5%\nแจ้งล่วงหน้า", "BookinVIP\nbookinvip.com"],
     "ja": ["{citta}.", "手間なく貸して、\n収入に。", "最初の90日間\n手数料0%",
-           "技術手数料3%、\n事前にお伝え。", "BookinVIP\nbookinvip.com"],
+           "技術手数料5% + 0,25ユーロ、\n事前にお伝え。", "BookinVIP\nbookinvip.com"],
 }
 VOCE_RIPIEGO = {
     "it": ["Hai una casa a {citta}?", "Mettila a reddito, senza pensieri.",
            "I primi novanta giorni pubblichi a zero commissioni.",
-           "Solo un tre per cento tecnico, dichiarato prima. L'ospite non paga nulla.",
+           "Solo un cinque per cento tecnico piu' venticinque centesimi, dichiarato prima. "
+           "L'ospite non paga nulla.",
            "BookinVIP. Il tuo viaggio, senza sorprese."],
     "en": ["Do you own a place in {citta}?", "Put it to work, effortlessly.",
            "For the first ninety days you list with zero commission.",
-           "Only a three percent technical fee, told upfront. Guests pay nothing.",
+           "Only a five percent technical fee plus twenty-five cents, told upfront. "
+           "Guests pay nothing.",
            "BookinVIP. Your trip, without surprises."],
     "es": ["¿Tienes una casa en {citta}?", "Ponla a trabajar, sin preocupaciones.",
            "Los primeros noventa días publicas con cero comisión.",
-           "Solo una tarifa técnica del tres por ciento, dicha antes. El huésped no paga nada.",
+           "Solo una tarifa técnica del cinco por ciento más veinticinco céntimos, dicha antes. "
+           "El huésped no paga nada.",
            "BookinVIP. Tu viaje, sin sorpresas."],
     "fr": ["Vous avez un logement à {citta} ?", "Mettez-le en location, sans souci.",
            "Pendant les quatre-vingt-dix premiers jours, zéro commission.",
-           "Seulement trois pour cent de frais techniques, annoncés d'avance. Le voyageur ne paie rien.",
+           "Seulement cinq pour cent de frais techniques plus vingt-cinq centimes, annoncés "
+           "d'avance. Le voyageur ne paie rien.",
            "BookinVIP. Votre voyage, sans surprises."],
     "de": ["Haben Sie eine Wohnung in {citta}?", "Vermieten Sie sie, ganz ohne Aufwand.",
            "In den ersten neunzig Tagen listen Sie mit null Prozent Provision.",
-           "Nur drei Prozent Technikgebühr, vorab gesagt. Gäste zahlen nichts.",
+           "Nur fünf Prozent Technikgebühr plus fünfundzwanzig Cent, vorab gesagt. "
+           "Gäste zahlen nichts.",
            "BookinVIP. Ihre Reise, ohne Überraschungen."],
     "pt": ["Tem uma casa em {citta}?", "Ponha-a a render, sem preocupações.",
            "Nos primeiros noventa dias publica com zero comissão.",
-           "Apenas uma taxa técnica de três por cento, dita antes. O hóspede não paga nada.",
+           "Apenas uma taxa técnica de cinco por cento mais vinte e cinco cêntimos, dita antes. "
+           "O hóspede não paga nada.",
            "BookinVIP. A sua viagem, sem surpresas."],
     "ja": ["{citta}に物件をお持ちですか？", "手間なく貸し出して、収入に。",
            "最初の90日間は手数料ゼロで掲載できます。",
-           "技術手数料は3%のみ。事前にきちんとお伝えします。ゲストは何も払いません。",
+           "技術手数料は5%と25セントのみ。事前にきちんとお伝えします。ゲストは何も払いません。",
            "BookinVIP。あなたの旅を、驚きなしで。"],
 }
 
@@ -356,13 +362,13 @@ def _groq_copione(api_key, citta, lingua, n, leva=None):
             "controllo": "il CONTROLLO: prezzi, calendario e regole li decide lui, sempre",
         }[leva]
         struttura = ("1) aggancio con la citta'  2) metti a reddito senza pensieri  "
-                     "3) l'offerta 0%/90 giorni  4) la trasparenza del 3%  "
+                     "3) l'offerta 0%/90 giorni  4) la trasparenza del 5% + 0,25 EUR  "
                      "5) IL CONTO come PERDITA (fatti esatti: su 100 euro a notte, con i grandi "
                      "portali il proprietario PERDE 15 euro ogni notte; da noi 0 per 90 giorni)  "
                      "6) " + descr_leva + ".")
     else:
         struttura = ("1) aggancio con la citta'  2) metti a reddito senza pensieri  "
-                     "3) l'offerta 0%/90 giorni  4) la trasparenza del 3%  "
+                     "3) l'offerta 0%/90 giorni  4) la trasparenza del 5% + 0,25 EUR  "
                      "5) invito: BookinVIP, bookinvip.com.")
     regole = ("Regole: le battute 1-4 max 12 parole; le battute 5 e 6 piu' RICCHE, fino a 22 "
               "parole l'una (anche due frasi). " if leva
@@ -371,7 +377,7 @@ def _groq_copione(api_key, citta, lingua, n, leva=None):
         "%s\n\nSei un copywriter pubblicitario (scuola Ogilvy). Scrivi il copione PARLATO di uno spot "
         "video di %d battute per invitare un HOST di %s a pubblicare la sua casa su BookinVIP. "
         "Fatti veri: 0%% commissione i primi 90 giorni (poi 8%%), l'ospite paga 0%%, una tariffa tecnica "
-        "del 3%% detta PRIMA della firma. Promessa: «Il tuo viaggio, senza sorprese».\n"
+        "del 5%% piu' 0,25 EUR detta PRIMA della firma. Promessa: «Il tuo viaggio, senza sorprese».\n"
         "Struttura le %d battute cosi': %s\n%s"
         "Parlato naturale, NIENTE emoji, NIENTE virgolette. "
         "Rispondi SOLO con le %d battute separate dal carattere '|', nient'altro. "

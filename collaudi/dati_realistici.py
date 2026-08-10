@@ -94,8 +94,16 @@ REF_JP = "IDEM-JP-000003"
 REF_ORFANO = "IDEM-ORF-00001"          # punta a un alloggio e a un host spariti
 REF_ANNO_PRIMA = "IDEM-2025-9001"      # esercizio fiscale precedente
 
-CONTRATTO_VERSIONE_CORRENTE = "2026-07-20"    # deve combaciare con fase163
-CONTRATTO_VERSIONE_VECCHIA = "2026-01-11"
+# ⛔ QUESTO VALORE SI SCRIVE A MANO, E DEVE RESTARE COSI'. Il corpus non importa il
+# prodotto (lo pretende `test_il_corpus_e_scritto_senza_il_prodotto`): se leggesse la
+# versione da fase163 il collaudo confronterebbe il prodotto con se stesso e non
+# potrebbe piu' accorgersi di niente. Provato il 2026-08-10: agganciarlo al motore fa
+# diventare rossa quella guardia, ed e' giusto cosi'.
+# Quando fase163 alza la versione, questa riga si aggiorna A MANO -- e chi se ne
+# dimentica lo scopre subito, perche' `test_una_versione_vecchia_del_contratto_obbliga_a_
+# riaccettare` diventa rossa. E' il segnale, non un fastidio.
+CONTRATTO_VERSIONE_CORRENTE = "2026-08-10"    # deve combaciare con fase163 (a mano)
+CONTRATTO_VERSIONE_VECCHIA = "2026-01-11"     # una versione DAVVERO vecchia, mai corrente
 PRIVACY_VERSIONE_CORRENTE = "2026-07-20"
 
 TITOLO_ROMA = "Attico «da sogno» a Trastevere \U0001f3db️ — l’affaccio sulle cupole"

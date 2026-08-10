@@ -42,7 +42,7 @@ LINGUA_CHE_FA_FEDE = "it"
 # caso di divergenza fa fede l'italiano — la clausola resta dentro ogni versione.
 LINGUA_RIPIEGO = "en"
 
-TERMINI_VERSIONE = "2026-07-21"
+TERMINI_VERSIONE = "2026-08-10"   # tariffa tecnica: 3% secco -> 5% + 0,25 EUR (7% valuta estera)
 PRIVACY_VERSIONE = "2026-07-31"   # aggiunta la dichiarazione sull'impronta anti-riciclo
 
 # Dati del titolare: UNA sola volta, riusati in tutte le lingue. Se cambiano, cambiano
@@ -62,14 +62,26 @@ def _percentuali() -> Dict[str, int]:
         from fase98_policy_commissione import (BPS_DIRETTO, LANCIO_BPS_FASE1,
                                                LANCIO_BPS_REGIME,
                                                LANCIO_GIORNI_GRATIS)
-        tecnica = int(os.environ.get("PAGAMENTO_BPS", "300") or 300)
+        # ⛔ QUESTI RIPIEGHI DEVONO COMBACIARE CON I DEFAULT DI `main_casavip.py`.
+        # Non e' un consiglio: il 2026-08-10 la tariffa e' passata da 4 a 5, main e' stato
+        # aggiornato e QUESTA copia no -> i termini in 8 lingue hanno continuato a dichiarare
+        # il 4% mentre il motore addebitava il 5%. Un documento legale che dice una cifra
+        # diversa da quella addebitata. Ora lo sorveglia
+        # `test_trasparenza_costi.test_i_ripieghi_di_fase185_combaciano_con_main`.
+        tecnica = int(os.environ.get("PAGAMENTO_BPS", "500") or 500)
+        # Stripe non prende una percentuale pura: prende percentuale + QUOTA FISSA, e in
+        # piu' il 2% quando deve CONVERTIRE la valuta (il conto e' italiano e tiene solo
+        # euro). Misurato il 2026-08-09: `collaudi/conti_stripe.py`.
+        estera = int(os.environ.get("PAGAMENTO_BPS_ESTERA", "700") or 700)
+        fisso = int(os.environ.get("PAGAMENTO_FISSO_CENTS", "25") or 25)
         return {"promo": 0, "giorni_promo": LANCIO_GIORNI_GRATIS,
                 "fase1": LANCIO_BPS_FASE1 // 100, "regime": LANCIO_BPS_REGIME // 100,
-                "diretto": BPS_DIRETTO // 100, "tecnica": tecnica // 100}
+                "diretto": BPS_DIRETTO // 100, "tecnica": tecnica // 100,
+                "tecnica_estera": estera // 100, "fisso": "%d,%02d" % (fisso // 100, fisso % 100)}
     except Exception:
         logger.warning("percentuali non leggibili dal motore", exc_info=True)
         return {"promo": 0, "giorni_promo": 90, "fase1": 8, "regime": 10,
-                "diretto": 5, "tecnica": 3}
+                "diretto": 5, "tecnica": 5, "tecnica_estera": 7, "fisso": "0,25"}
 
 
 def _penale() -> int:
@@ -118,9 +130,13 @@ Commissione di piattaforma: {PROMO}% per i primi {GG} giorni dalla registrazione
 {FASE1}% fino a un anno, poi {REGIME}% a regime, sulle prenotazioni provenienti dal
 marketplace; {DIRETTO}% sulle prenotazioni provenienti dal link diretto dell'Host.
 TARIFFA TECNICA: oltre alla commissione, resta a carico esclusivo dell'Host una tariffa
-tecnica fissa pari al {TECNICA}% dell'importo della transazione, SEMPRE DOVUTA in ogni
-periodo — anche quando la commissione e' {PROMO}% — a copertura dei costi del gestore di
-pagamento. Su tale voce la Piattaforma non consegue alcun margine.
+tecnica pari al {TECNICA}% dell'importo della transazione piu' {FISSO} EUR per transazione
+({TECNICA_EST}% piu' {FISSO} EUR sugli annunci prezzati in valuta diversa dall'euro, poiche'
+il gestore di pagamento applica un onere di conversione), SEMPRE DOVUTA in ogni periodo —
+anche quando la commissione e' {PROMO}% — a copertura dei costi di incasso e di pagamento.
+A seconda del circuito della carta usata dall'Ospite e dell'importo della transazione, il
+costo effettivamente sostenuto dalla Piattaforma puo' risultare inferiore o superiore alla
+tariffa.
 
 6. INCASSI E BONIFICI
 La quota dell'Host resta in garanzia fino alla conferma dell'Ospite o al rilascio
@@ -187,10 +203,13 @@ data.
 Platform commission: {PROMO}% for the first {GG} days from registration, then {FASE1}% up
 to one year, then {REGIME}% thereafter, on bookings originating from the marketplace;
 {DIRETTO}% on bookings originating from the Host's own direct link.
-TECHNICAL FEE: in addition to the commission, a fixed technical fee of {TECNICA}% of the
-transaction amount is borne solely by the Host and is ALWAYS DUE in every period —
-including while the commission is {PROMO}% — to cover payment provider costs. The Platform
-earns no margin on this item.
+TECHNICAL FEE: in addition to the commission, a technical fee of {TECNICA}% of the
+transaction amount plus EUR {FISSO} per transaction ({TECNICA_EST}% plus EUR {FISSO} for
+listings priced in a currency other than the euro, as the payment provider applies a
+conversion charge) is borne solely by the Host and is ALWAYS DUE in every period —
+including while the commission is {PROMO}% — to cover collection and payout costs.
+Depending on the card scheme used by the Guest and on the transaction amount, the cost
+actually borne by the Platform may be lower or higher than the fee.
 
 6. PAYOUTS
 The Host's share is held in guarantee until the Guest's confirmation or the automatic
@@ -259,9 +278,13 @@ despues {FASE1}% hasta un ano y {REGIME}% en regimen ordinario, sobre las reserv
 procedentes del marketplace; {DIRETTO}% sobre las reservas procedentes del enlace directo
 del Anfitrion.
 TARIFA TECNICA: ademas de la comision, queda a cargo exclusivo del Anfitrion una tarifa
-tecnica fija igual al {TECNICA}% del importe de la transaccion, SIEMPRE DEBIDA en
-cualquier periodo — tambien cuando la comision es del {PROMO}% — para cubrir los costes
-del proveedor de pago. La Plataforma no obtiene ningun margen sobre este concepto.
+tecnica igual al {TECNICA}% del importe de la transaccion mas {FISSO} EUR por transaccion
+({TECNICA_EST}% mas {FISSO} EUR en los anuncios con precio en moneda distinta del euro, ya
+que el proveedor de pago aplica un cargo de conversion), SIEMPRE DEBIDA en cualquier
+periodo — tambien cuando la comision es del {PROMO}% — para cubrir los costes de cobro y
+de pago. Segun la red de la tarjeta utilizada por el Huesped y el importe de la
+transaccion, el coste realmente soportado por la Plataforma puede ser inferior o superior
+a la tarifa.
 
 6. COBROS Y TRANSFERENCIAS
 La parte del Anfitrion permanece en garantia hasta la confirmacion del Huesped o hasta la
@@ -331,9 +354,13 @@ l'inscription, puis {FASE1}% jusqu'a un an, puis {REGIME}% en regime courant, su
 reservations issues de la place de marche ; {DIRETTO}% sur les reservations issues du
 lien direct de l'Hote.
 FRAIS TECHNIQUES : outre la commission, restent a la charge exclusive de l'Hote des frais
-techniques fixes egaux a {TECNICA}% du montant de la transaction, TOUJOURS DUS quelle que
-soit la periode — y compris lorsque la commission est de {PROMO}% — afin de couvrir les
-couts du prestataire de paiement. La Plateforme ne realise aucune marge sur ce poste.
+techniques egaux a {TECNICA}% du montant de la transaction plus {FISSO} EUR par transaction
+({TECNICA_EST}% plus {FISSO} EUR pour les annonces libellees dans une devise autre que
+l'euro, le prestataire de paiement appliquant des frais de conversion), TOUJOURS DUS quelle
+que soit la periode — y compris lorsque la commission est de {PROMO}% — afin de couvrir les
+couts d'encaissement et de versement. Selon le reseau de la carte utilisee par le Voyageur
+et selon le montant, le cout reellement supporte par la Plateforme peut etre inferieur ou
+superieur aux frais.
 
 6. ENCAISSEMENTS ET VIREMENTS
 La part de l'Hote reste sous sequestre jusqu'a la confirmation du Voyageur ou jusqu'a la
@@ -402,10 +429,14 @@ speichert keine Kartendaten.
 Plattformprovision: {PROMO}% in den ersten {GG} Tagen ab der Registrierung, danach
 {FASE1}% bis zu einem Jahr, danach {REGIME}% im Regelbetrieb, auf Buchungen aus dem
 Marktplatz; {DIRETTO}% auf Buchungen ueber den Direktlink des Gastgebers.
-TECHNISCHES ENTGELT: neben der Provision traegt ausschliesslich der Gastgeber ein festes
-technisches Entgelt in Hoehe von {TECNICA}% des Transaktionsbetrags, das in JEDEM
-Zeitraum STETS GESCHULDET ist — auch wenn die Provision {PROMO}% betraegt — zur Deckung
-der Kosten des Zahlungsdienstleisters. Die Plattform erzielt hierauf keine Marge.
+TECHNISCHES ENTGELT: neben der Provision traegt ausschliesslich der Gastgeber ein
+technisches Entgelt in Hoehe von {TECNICA}% des Transaktionsbetrags zuzueglich {FISSO} EUR
+je Transaktion ({TECNICA_EST}% zuzueglich {FISSO} EUR bei Inseraten, die nicht in Euro
+ausgezeichnet sind, da der Zahlungsdienstleister ein Umrechnungsentgelt berechnet), das in
+JEDEM Zeitraum STETS GESCHULDET ist — auch wenn die Provision {PROMO}% betraegt — zur
+Deckung der Einzugs- und Auszahlungskosten. Je nach Kartennetz des Gastes und je nach
+Betrag koennen die tatsaechlichen Kosten der Plattform niedriger oder hoeher als das
+Entgelt ausfallen.
 
 6. EINNAHMEN UND UEBERWEISUNGEN
 Der Anteil des Gastgebers verbleibt bis zur Bestaetigung durch den Gast oder bis zur von
@@ -473,10 +504,13 @@ os dados do cartao.
 Comissao de plataforma: {PROMO}% nos primeiros {GG} dias apos o registo, depois {FASE1}%
 ate um ano e {REGIME}% em regime normal, sobre as reservas provenientes do marketplace;
 {DIRETTO}% sobre as reservas provenientes da ligacao direta do Anfitriao.
-TAXA TECNICA: alem da comissao, fica a cargo exclusivo do Anfitriao uma taxa tecnica fixa
-igual a {TECNICA}% do montante da transacao, SEMPRE DEVIDA em qualquer periodo — tambem
-quando a comissao e de {PROMO}% — para cobrir os custos do prestador de pagamento. A
-Plataforma nao obtem qualquer margem sobre esta rubrica.
+TAXA TECNICA: alem da comissao, fica a cargo exclusivo do Anfitriao uma taxa tecnica
+igual a {TECNICA}% do montante da transacao mais {FISSO} EUR por transacao ({TECNICA_EST}%
+mais {FISSO} EUR nos anuncios com preco em moeda diferente do euro, dado que o prestador de
+pagamento aplica um encargo de conversao), SEMPRE DEVIDA em qualquer periodo — tambem
+quando a comissao e de {PROMO}% — para cobrir os custos de cobranca e de pagamento.
+Consoante a rede do cartao usado pelo Hospede e o montante da transacao, o custo
+efetivamente suportado pela Plataforma pode ser inferior ou superior a taxa.
 
 6. RECEBIMENTOS E TRANSFERENCIAS
 A parte do Anfitriao permanece em garantia ate a confirmacao do Hospede ou ate a
@@ -530,7 +564,7 @@ BookinVIP は宿泊施設を所有・運営・管理しません。宿泊契約�
 
 5. ホストが負担する費用
 プラットフォーム手数料：登録から {GG} 日間は {PROMO}%、その後1年までは {FASE1}%、以降は {REGIME}%（マーケットプレイス経由の予約）。ホストの直接リンク経由の予約は {DIRETTO}%。
-技術手数料：上記手数料に加え、取引金額の {TECNICA}% に相当する固定の技術手数料をホストが専ら負担します。これは手数料が {PROMO}% の期間を含むすべての期間において常に発生し、決済代行会社の実費を賄うものです。本項目についてプラットフォームは利益を得ません。
+技術手数料：上記手数料に加え、取引金額の {TECNICA}% に1件あたり {FISSO} ユーロを加えた技術手数料をホストが専ら負担します（ユーロ以外の通貨で価格を設定した掲載については {TECNICA_EST}% に {FISSO} ユーロ。決済代行会社が両替手数料を課すためです）。これは手数料が {PROMO}% の期間を含むすべての期間において常に発生し、入金および送金に要する費用を賄うものです。ゲストが利用するカードの種別および取引金額によっては、プラットフォームが実際に負担する費用が本手数料を下回ることも上回ることもあります。
 
 6. 入金および送金
 ホストの取り分は、ゲストの確認または本プラットフォームが定める自動解除まで保管され、その後連携口座へ送金されます。法令が要求する場合（税務上の本人確認義務等）、送金は規定の履行まで保留されることがあります。
@@ -572,7 +606,7 @@ BookinVIP 不拥有、不经营也不控制任何住宿。住宿合同直接在�
 
 5. 房东承担的费用
 平台佣金：自注册起前 {GG} 天为 {PROMO}%，其后至一年为 {FASE1}%，之后为 {REGIME}%（适用于来自平台市场的预订）；来自房东专属链接的预订为 {DIRETTO}%。
-技术服务费：除佣金外，房东需单独承担相当于交易金额 {TECNICA}% 的固定技术服务费，在任何时期均应支付——包括佣金为 {PROMO}% 的期间——用以支付支付机构的成本。平台在该项上不获取任何利润。
+技术服务费：除佣金外，房东需单独承担相当于交易金额 {TECNICA}% 加每笔 {FISSO} 欧元的技术服务费（以欧元以外货币定价的房源为 {TECNICA_EST}% 加 {FISSO} 欧元，因为支付机构会收取货币转换费用），在任何时期均应支付——包括佣金为 {PROMO}% 的期间——用以支付收款与付款的成本。视房客所用银行卡的卡组织及交易金额而定，平台实际承担的成本可能低于或高于该服务费。
 
 6. 收款与转账
 房东应得款项将托管至房客确认或平台规定的自动释放为止，随后转入已绑定账户。当法律要求时（税务身份识别义务），转账可能被暂缓，直至完成合规手续。
@@ -605,6 +639,7 @@ def _componi(modello: str, versione: str) -> str:
         IND=GESTORE["indirizzo"], EMAIL=GESTORE["email"],
         PROMO=p["promo"], GG=p["giorni_promo"], FASE1=p["fase1"],
         REGIME=p["regime"], DIRETTO=p["diretto"], TECNICA=p["tecnica"],
+        TECNICA_EST=p["tecnica_estera"], FISSO=p["fisso"],
         PENALE=_penale())
 
 

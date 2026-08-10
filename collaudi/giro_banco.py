@@ -35,6 +35,41 @@ import urllib.request
 BASE = "http://127.0.0.1:8080"
 PREZZO = 500                 # 5,00 EUR a notte
 NOTTI = 2
+
+
+def _default_di_main(nome, default):
+    """Legge un default da `main_casavip.py` invece di riscriverlo qui: una cifra incisa in
+    un banco invecchia col primo cambio e fa dichiarare rotto un sistema sano."""
+    import io as _io
+    import os as _os
+    import re as _re
+    p = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+                      "main_casavip.py")
+    try:
+        with _io.open(p, encoding="utf-8", errors="replace") as f:
+            m = _re.search(nome + r'["\']\s*,\s*["\'](\d+)["\']', f.read())
+        return int(m.group(1)) if m else default
+    except Exception:
+        return default
+
+
+def _psp_bps_del_motore():
+    return _default_di_main("PAGAMENTO_BPS", 500)
+
+
+def _psp_fisso_del_motore():
+    return _default_di_main("PAGAMENTO_FISSO_CENTS", 25)
+
+
+def _commissione_bps_del_banco():
+    """La commissione che il SERVER DEL BANCO sta applicando davvero. Non e' per forza
+    quella di produzione: l'avviatore locale non accende la rampa di lancio, quindi vale
+    il regime. Si legge dall'ambiente perche' e' lo stesso da cui la prende il server."""
+    import os as _os
+    v = _os.environ.get("COMMISSIONE_BPS")
+    if v and v.isdigit():
+        return int(v)
+    return 1000     # il valore che `avvia_server_visivo.py` passa a ConfigCasaVIP
 QUANTE = int(os.environ.get("GIRI", "15"))
 esiti = []
 non_eseguiti = []
@@ -326,16 +361,23 @@ if contesa:
                     {"voucher_token": vt_c, "motivo": "la stanza non e' come nell'annuncio"})
     passo("l'ospite apre la contestazione", s == 200, 200, "%s %s" % (s, out))
     c = db("payout")
-    stato = None
-    if c is not None:
+    if c is None:
+        # Stesso caso del libro giornale: il database sta in /data, cioe' SOLO dentro il
+        # contenitore. Senza, questo controllo non e' rosso -- e' NON ESEGUITO. Segnarlo
+        # rosso insegnerebbe a ignorare i rossi, che e' il modo di perdere quello vero.
+        saltato("i soldi dell'host si FERMANO (payout trattenuto)",
+                "il database payout sta in /data (solo dentro il contenitore): "
+                "su questa macchina non e' leggibile, quindi NON si misura")
+    else:
+        stato = None
         try:
             r = c.execute("SELECT stato FROM payout WHERE prenotazione_id=?",
                           (rif_contesa,)).fetchone()
             stato = r[0] if r else None
         finally:
             c.close()
-    passo("i soldi dell'host si FERMANO (payout trattenuto)", stato == "trattenuto",
-          "trattenuto", stato)
+        passo("i soldi dell'host si FERMANO (payout trattenuto)", stato == "trattenuto",
+              "trattenuto", stato)
 else:
     saltato("controversia", "la prenotazione n.2 non e' pagata e viva")
 
@@ -420,11 +462,32 @@ elif CHIAVE:
 print("\n-- [8] I CONTI, E QUESTA VOLTA HOST PER HOST --")
 print("     (con UN host solo questo controllo non esisterebbe nemmeno)")
 g = giornale()
+# ⛔ IL GIORNALE SI LEGGE DA `/data` o `/app/data`, cioe' SOLO dentro il contenitore.
+# Su una macchina senza Docker `giornale()` torna sempre vuoto, e prima di questa riga i
+# tre controlli qui sotto finivano ROSSI: il banco dichiarava guasto cio' che non poteva
+# nemmeno guardare. E' l'errore opposto al salto silenzioso, ma costa uguale -- un falso
+# allarme insegna a ignorare i rossi (regola ferrea 10). Ora, se il libro non e'
+# leggibile, i tre controlli sono NON ESEGUITI: un buco dichiarato, non un guasto finto.
+_libro_leggibile = db("finanza") is not None
+if not _libro_leggibile:
+    for _n in ("somma degli incassi = pagate x prezzo",
+               "tariffa tecnica su ogni incasso",
+               "ogni cancellazione pagata lascia la sua riga di rimborso nel giornale"):
+        saltato(_n, "il libro giornale sta in /data (solo dentro il contenitore): "
+                    "su questa macchina non e' leggibile, quindi NON si misura")
 inc = sum(i for _, t, _, _, i, _, _ in g if t == "incasso")
 com = sum(i for _, t, _, _, i, _, _ in g if t == "commissione")
-passo("somma degli incassi = pagate x prezzo", inc == pagate * PREZZO * NOTTI,
-      "%d (%d x %d)" % (pagate * PREZZO * NOTTI, pagate, PREZZO * NOTTI), inc)
-passo("commissione = 3%% di ogni incasso", com == pagate * 30, pagate * 30, com)
+if _libro_leggibile:
+    passo("somma degli incassi = pagate x prezzo", inc == pagate * PREZZO * NOTTI,
+          "%d (%d x %d)" % (pagate * PREZZO * NOTTI, pagate, PREZZO * NOTTI), inc)
+# La riga del giornale "commissione" contiene commissione + tariffa tecnica. Qui l'host e'
+# appena nato (promo, commissione 0%), quindi resta la sola tariffa tecnica.
+# ⛔ La cifra si RICAVA dal motore: era scritta a mano (`pagate * 30`, cioe' il 3% di 10 EUR)
+# e il 2026-08-10, passando al 5% + 0,25, avrebbe dichiarato rotto un banco sano.
+_atteso_tec = (PREZZO * NOTTI * _psp_bps_del_motore()) // 10000 + _psp_fisso_del_motore()
+if _libro_leggibile:
+    passo("tariffa tecnica = %d cents su ogni incasso" % _atteso_tec,
+          com == pagate * _atteso_tec, pagate * _atteso_tec, com)
 
 # I SOLDI DI UN HOST NON FINISCONO A UN ALTRO. E' il controllo che con un host solo non
 # si puo' fare, e sostituisce quello vecchio ("dovuto = incassi - commissioni"), che era
@@ -436,10 +499,16 @@ for _hid, tok, slug in host:
         sballati.append((slug, "payout non leggibile (%s)" % s))
         continue
     mio = int(((out.get("payout") or {}).get("EUR") or {}).get("maturato", 0) or 0)
+    # Quanto DEVE vedere l'host: il prezzo meno la commissione e meno la tariffa tecnica.
+    # ⛔ Qui c'era `- 30` scritto a mano (il 3% di 10 EUR): il 2026-08-10, passando al
+    # 5% + 0,25, questo controllo dichiarava sballati TUTTI e 15 gli host pur essendo i
+    # conti giusti. Ora le due voci si RICAVANO dal motore, come tutto il resto.
+    _tec = (PREZZO * NOTTI * _psp_bps_del_motore()) // 10000 + _psp_fisso_del_motore()
+    _comm = (PREZZO * NOTTI * _commissione_bps_del_banco()) // 10000
     atteso = 0
     for (_i, rif, _vt, sl, pagata, cancellata) in fatte:
         if sl == slug and pagata and not cancellata and rif != rif_contesa:
-            atteso += PREZZO * NOTTI - 30
+            atteso += PREZZO * NOTTI - _comm - _tec
     if mio != atteso:
         sballati.append((slug, "vede %d, gli spetta %d" % (mio, atteso)))
 passo("ogni host vede SOLO i propri soldi", not sballati, "nessuno sballato",
@@ -451,8 +520,9 @@ passo("ogni host vede SOLO i propri soldi", not sballati, "nessuno sballato",
 # non lo sapevano, e la stessa cancellazione finiva nel report fiscale solo se la faceva
 # l'host. `-1` = la lettura e' fallita, che non e' «zero».
 righe_rimborso = sum(1 for _, t, _, _, _, _, _ in g if t == "rimborso")
-passo("ogni cancellazione pagata lascia la sua riga di rimborso nel giornale",
-      righe_rimborso == cancellate, cancellate, righe_rimborso)
+if _libro_leggibile:
+    passo("ogni cancellazione pagata lascia la sua riga di rimborso nel giornale",
+          righe_rimborso == cancellate, cancellate, righe_rimborso)
 
 prev, rotta = "GENESI", None
 for seq, _, _, _, _, ph, h in g:
@@ -460,8 +530,18 @@ for seq, _, _, _, _, ph, h in g:
         rotta = seq
         break
     prev = h
-passo("catena di impronte del libro giornale", rotta is None, "integra",
-      "rotta alla riga %s" % rotta)
+# ⛔ SENZA RIGHE, QUESTO CONTROLLO PASSAVA SENZA GUARDARE NIENTE. Il 2026-08-10 il banco
+# ha stampato «catena integra: OK» su un giornale di ZERO righe: il ciclo qui sopra non
+# gira mai, `rotta` resta None e il verdetto e' verde. E' lo sbaglio S7 — premessa
+# mancante = NON ESEGUITO, non verde — e in questo stesso file gli altri controlli che
+# leggono il giornale lo dichiaravano gia'. Questo era rimasto indietro da solo.
+if not _libro_leggibile or not g:
+    saltato("catena di impronte del libro giornale",
+            "il libro giornale sta in /data (solo dentro il contenitore) oppure e' vuoto: "
+            "senza righe la catena non si puo' verificare, quindi NON si misura")
+else:
+    passo("catena di impronte del libro giornale", rotta is None, "integra",
+          "rotta alla riga %s" % rotta if rotta is not None else "integra")
 
 # ---------------------------------------------------------------------------
 # [9] NESSUN DATABASE NATO NEL POSTO SBAGLIATO

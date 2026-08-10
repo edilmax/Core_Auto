@@ -27,9 +27,9 @@ Rotte coperte (20) e stato atteso:
   POST /api/host/carta_link        200 | GET  /api/host/carta_stato      200
 
 CONTI ATTESI (annuncio 200,00 EUR/notte, 2 notti, 2 ospiti, tassa 3,00 pp/notte;
-commissione marketplace 10%, costo carta 3% a carico HOST):
+commissione marketplace 10%, tariffa tecnica a carico HOST letta dal motore):
     soggiorno  40000  |  tassa 1200  |  TOTALE OSPITE 41200
-    commissione 4000  |  costo carta 1236 (3% di 41200)  |  netto host 34764
+    commissione 4000  |  tariffa tecnica = percentuale del totale + quota fissa
     invariante: totale == netto_host + commissione + costo_carta + tassa
 
 Coperto anche il CREDITO (token firmato, non e' una rotta a se': viaggia dentro
@@ -82,8 +82,37 @@ NETTO = PREZZO_NOTTE * NOTTI                 # 40000  soggiorno di listino
 TASSA = TASSA_PP_NOTTE * NOTTI * PARTY       #  1200  tassa di soggiorno (pass-through)
 TOTALE = NETTO + TASSA                       # 41200  quello che l'ospite paga DAVVERO
 COMMISSIONE = 4000                           # 10% di 40000 (marketplace, a carico host)
-COSTO_CARTA = 1236                           # 3% di 41200 (a carico host)
-NETTO_HOST = NETTO - COMMISSIONE - COSTO_CARTA   # 34764
+
+
+def _dal_motore(chiave):
+    """La tariffa tecnica VERA, letta dai default di `main_casavip.py`.
+
+    Qui c'era `COSTO_CARTA = 1236  # 3% di 41200`, e il 2026-08-10 e' diventato falso:
+    la produzione prende percentuale PIU' 0,25 EUR fissi. Una cifra copiata a mano in un
+    file che si chiama «happy soldi» e' la piu' pericolosa di tutte, perche' e' quella
+    che si guarda per sapere «quanto entra davvero». Ora viene dal motore.
+    """
+    import io as _io
+    import re as _re
+    _qui = os.path.dirname(os.path.abspath(__file__))
+    with _io.open(os.path.join(_qui, "main_casavip.py"), encoding="utf-8") as f:
+        _src = f.read()
+    _m = _re.search(chiave + r'["\']\s*,\s*["\'](\d+)["\']', _src)
+    assert _m, "main_casavip.py non dichiara piu' il default %s" % chiave
+    return int(_m.group(1))
+
+
+PSP_BPS = _dal_motore("PAGAMENTO_BPS")
+PSP_FISSO = _dal_motore("PAGAMENTO_FISSO_CENTS")
+
+
+def _tecnica(importo):
+    """La tariffa tecnica su `importo`: percentuale PIU' quota fissa."""
+    return (importo * PSP_BPS) // 10000 + PSP_FISSO
+
+
+COSTO_CARTA = _tecnica(TOTALE)               # tariffa tecnica sul totale (a carico host)
+NETTO_HOST = NETTO - COMMISSIONE - COSTO_CARTA
 
 
 def _fake_stripe_fetch(url, body, headers):
@@ -139,7 +168,8 @@ class _BaseSoldi(unittest.TestCase):
             db_garanzia=d + "/g.db", db_finanza=d + "/f.db", db_messaggi=d + "/m.db",
             db_checkin=d + "/ck.db", db_split=d + "/sp.db", db_tassa_comunale=d + "/t.db",
             db_recensioni=d + "/rec.db", db_viral=d + "/v.db", db_domanda=d + "/dom.db",
-            commissione_bps=1000, psp_bps=300, stripe_secret_key="sk",
+            commissione_bps=1000, psp_bps=PSP_BPS, psp_fisso_cents=PSP_FISSO,
+            stripe_secret_key="sk",
             stripe_webhook_secret=WHSEC, stripe_success_url="https://x/ok",
             stripe_cancel_url="https://x/ko"))
         self.posta = _Posta()
@@ -273,8 +303,9 @@ class TestCamminoSoldi(_BaseSoldi):
         self.assertEqual(q["tassa_soggiorno_cents"], TASSA)
         self.assertEqual(q["totale_cents"], NETTO - 500 + TASSA)    # 40700
         self.assertEqual(q["commissione_cents"], COMMISSIONE)       # lo sconto esce da QUI
-        self.assertEqual(q["costo_pagamento_cents"], 1221)          # 3% del nuovo totale
-        self.assertEqual(q["netto_host_cents"], NETTO - COMMISSIONE - 1221)  # 34779
+        _tec = _tecnica(NETTO - 500 + TASSA)     # tariffa tecnica sul nuovo totale
+        self.assertEqual(q["costo_pagamento_cents"], _tec)
+        self.assertEqual(q["netto_host_cents"], NETTO - COMMISSIONE - _tec)
         # conservazione col credito: totale == netto + comm + carta + tassa - sconto
         self.assertEqual(q["totale_cents"],
                          q["netto_host_cents"] + q["commissione_cents"]

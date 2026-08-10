@@ -91,7 +91,11 @@ class TestModuloTestiLegali(unittest.TestCase):
             self.assertIn("%d%%" % (bps // 100), testo,
                           "manca la percentuale %d%% del motore" % (bps // 100))
         self.assertIn("%d giorni" % LANCIO_GIORNI_GRATIS, testo)
-        self.assertRegex(testo, r"3%", "i termini non dichiarano la tariffa tecnica")
+        # la tariffa tecnica si prende DAL MOTORE, non si riscrive qui: e' il numero che
+        # `_percentuali()` passa al modello, e questa prova becca il caso in cui il
+        # segnaposto sparisce dal testo e i termini smettono di dichiararla.
+        _tec = "%d%%" % self.tl._percentuali()["tecnica"]
+        self.assertIn(_tec, testo, "i termini non dichiarano la tariffa tecnica " + _tec)
 
     def test_la_penale_e_quella_del_motore(self):
         from fase83_server import PENALE_HOST_BPS
