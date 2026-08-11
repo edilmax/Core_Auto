@@ -262,6 +262,63 @@ aumento di prezzo su «paga in struttura»**, non una riparazione: oggi quel `30
 domanda al commercialista sul forfettario · `PAGA_STRUTTURA_ATTIVO` sul `.env` **del server**
 (qui non lo accende nessuno, quindi vale il ripiego `"0"` = spento).
 
+### ✅ FATTO 2026-08-11 (28) — IL PARACADUTE SBAGLIATO: SEI VOLTE, E LA DIAGNOSI ERA SBAGLIATA
+
+**Deploy fatto**, tre posti allineati su `b8f63f9`, `verifica_produzione.py` → **190 controlli,
+0 violazioni, uscita 0**. Ma la cosa che vale è quello che si è capito **durante** il deploy.
+
+· **Il fatto.** Al passo [1b] il paracadute `casavip-app:prec` puntava a un'immagine di **45
+  ore** prima, mentre il sito ne serviva una di 14. Tirando la maniglia si sarebbe tornati
+  **oltre** il deploy della tariffa del 2026-08-10, rimettendo online quella **sotto costo**,
+  in silenzio, convinti di essere tornati all'ultimo stato buono. **Sesta volta in sei giorni.**
+· ⛔ **La diagnosi corrente era SBAGLIATA, e questo è il punto.** Non mancava lo strumento:
+  `deploy/protocollo_d17.sh` esiste dal **2026-08-07**, ri-aggancia `:prec` e **si ferma da
+  solo** se non coincide. Ha fallito perché **era FACOLTATIVO**: le tre fasi erano
+  indipendenti, quindi si poteva fare `scambio` senza `prima` — o deployare a mano saltando
+  tutto, che è esattamente ciò che è successo. 💡 **Sei fallimenti non sono sei distrazioni:
+  sono una procedura senza obbligo.** È la stessa malattia del gancio pre-commit, scoperta lo
+  stesso giorno e curata con la stessa medicina — **rendere meccanico ciò che dipendeva dal
+  ricordarsene**.
+· **La cura.** `prima` scrive un **gettone** (immagine viva + commit + ora, scritto **e
+  riletto**); `scambio` lo **pretende** come precondizione e si ferma con un motivo che si
+  distingue — `GETTONE_MANCANTE` · `GETTONE_SCADUTO` (>1 ora: nel frattempo l'immagine viva
+  può essere cambiata) · `GETTONE_ILLEGGIBILE`. Dopo lo scambio il gettone **si consuma**:
+  vale per **uno** scambio, non per la giornata, altrimenti un secondo deploy passerebbe col
+  paracadute agganciato all'immagine di prima — cioè di nuovo alla cosa sbagliata.
+· **Le guardie** (`test_pipeline_ci.TestIlDeployNonPuoSALTAREIlPassoDiSicurezza`, 3):
+  **eseguono lo script per davvero** (fase nuova `gettone`, che non tocca né git né docker) e
+  ne leggono il codice d'uscita — una che cercasse parole nel sorgente la soddisferebbe anche
+  un commento (S6). Viste **ROSSE** prima (3 fallimenti) e provate nelle **due direzioni**:
+  rifiuta senza gettone e con gettone vecchio, **lascia passare** con gettone fresco.
+· 💡 **Una S11 evitata per un soffio, e vale più della riparazione.** Al primo giro le tre
+  guardie **si mettevano da parte in silenzio**: `shutil.which("sh")` dà `None` **da
+  PowerShell**, che è la shell da cui gira la suite — mentre da Bash `sh` c'è. Sarebbero state
+  **tre verdi che non guardavano niente**, la zona cieca peggiore perché ha l'aspetto della
+  copertura. Ora `sh` lo **cercano** accanto a `git` (Git per Windows se lo porta dietro).
+  ⛔ E **mai** `C:\Windows\system32\bash.exe`: quello è WSL, un'altra macchina con un altro
+  filesystem — sarebbe la S11 al contrario.
+· 🎯 **E UNA GUARDIA DEL PROGETTO HA BECCATO ME — è la parte che vale di più.** Dopo il
+  ripiego restava uno `skipTest` per il caso «`sh` non trovato»: sembrava prudenza. La suite
+  intera è andata **ROSSA** su
+  `test_suite_senza_zone_cieche.test_gli_skip_interni_sono_solo_per_l_ambiente`: *«un
+  `skipTest` deciso da ciò che il test dovrebbe verificare è un controllo che si assolve da
+  solo. Asserisci in ENTRAMBI i rami invece di saltare»*. ⛔ **E la scorciatoia era servita:**
+  `SALTI_AMBIENTALI` accetta la parola «non installato» — bastava **riscrivere il motivo** per
+  far tacere la guardia. Una parola. Non si fa: aggirare un controllo cambiando una frase è il
+  verde finto in forma pura. ✅ Fatto invece ciò che la guardia chiede: **due rami che
+  asseriscono entrambi** (col `sh` si esegue lo script, senza si asserisce che il controllo
+  esista e che `scambio` ci passi **prima** del `git pull`), col ramo povero **dichiarato più
+  debole** (legge il sorgente: S6) e **provato a mano** fingendo una macchina senza `sh` (D19).
+  Costo: **un giro di suite da 68 minuti**. 💡 Un regolamento vale quando ferma **chi lo ha
+  scritto**, non solo gli altri.
+· ⛔ **Limite dichiarato** (D18 punto 3): nessun controllo può impedire di digitare
+  `docker compose build` a mano. Si rende la strada giusta **l'unica facile** e lo scarto
+  **rumoroso**; chi vuole aggirare, aggira. Dirlo è meglio che far credere il contrario. E le
+  guardie non provano le fasi `prima`/`scambio` per intero: servono docker e il VPS.
+· **Chiuso anche il buco di processo di stamattina**: il ramo `chiavetta-cd95f73` era stato
+  spedito ma la richiesta di unione **non era mai stata aperta** (l'ultima era la #26). È
+  entrato nella **#27** insieme al lavoro di oggi.
+
 ### ✅ FATTO 2026-08-11 (27) — BLOCCO 1 / `fase167`: UN CREDITO POTEVA ESSERE ONORATO DUE VOLTE
 
 Primo modulo del piano «i quattro ciechi dei soldi», scelto per **rischio × cecità**, non per
@@ -324,9 +381,11 @@ toccato per **1 sola riga eseguibile**, e 10 collaudi nuovi in un file di test c
   inesistente, **tace** su uno vero e sorvegliato — regola ferrea 10). La guardia **esegue
   l'attrezzo** e ne legge il codice d'uscita: una che contasse parole nel sorgente la
   soddisferebbe anche un commento (S6).
-  ⚠️ **Dichiarato ciò che NON è stato verificato** (D18 punto 3): riparato **solo** il modo
-  `--modulo`, l'unico in cui il difetto è stato visto. Gli altri modi (`--diff`,
-  `--censimento`, il giro normale) hanno uscite proprie e **non sono stati provati**.
+  ✅ **Gli altri modi sono stati poi VERIFICATI** (nel pomeriggio dello stesso giorno; prima
+  qui c'era scritto «non provati»). Il verdetto `"assente"` esiste **solo** dentro
+  `giro_su_moduli:1197` e nel blocco del modo `--modulo`: gli altri **non possono nemmeno
+  produrlo**, quindi non hanno quel buco; `--censimento` esce 0 perché è un **elenco**, non un
+  giudizio. Misurato con una ricerca su tutto il file, non dedotto.
   **(b) `fase83_server.py`, commento di `_consuma_credito`.** Dichiarava «FAIL-OPEN: un errore
   → la prenotazione PROCEDE» mentre il codice restituisce `"errore"` e la prenotazione viene
   **rifiutata**. Il fail-open c'era davvero fino al 2026-07-30: è arrivata la riparazione,

@@ -21,7 +21,60 @@
 set -e
 FASE="${1:-}"
 C="docker compose -f docker-compose.casavip.yml"
-cd /var/www/bookinvip
+# I due valori qui sotto si possono sovrascrivere SOLO per poter provare questo script: in
+# produzione valgono i predefiniti. Senza, le guardie del passo di sicurezza non potrebbero
+# eseguirlo affatto -- e una difesa che non si puo' mettere alla prova e' indistinguibile da
+# codice morto (D19).
+RADICE="${RADICE_D17:-/var/www/bookinvip}"
+GETTONE="${GETTONE_D17:-/root/.d17_gettone}"
+FRESCHEZZA=3600     # un `prima` vale un'ora: dopo, l'immagine viva puo' essere gia' cambiata
+cd "$RADICE"
+
+# ⛔ IL PASSO DI SICUREZZA NON E' UN CONSIGLIO: E' UNA PRECONDIZIONE DELLO SCAMBIO.
+# Il paracadute e' finito agganciato all'immagine sbagliata SEI volte in sei giorni. Il
+# 2026-08-11 si e' capito perche': non mancava lo strumento -- questo file esiste dal
+# 2026-08-07 e il controllo [1b] funziona -- mancava l'OBBLIGO di passarci. Le tre fasi erano
+# indipendenti, quindi si poteva fare `scambio` senza aver mai fatto `prima`, o deployare a
+# mano saltando tutto (che e' esattamente cio' che e' successo). Una procedura corretta che si
+# puo' saltare non e' un controllo: e' la stessa malattia del gancio pre-commit, scoperta lo
+# stesso giorno. Da qui in poi `scambio` PRETENDE la prova che `prima` sia stata fatta, e da poco.
+pretendi_gettone() {
+  if [ ! -f "$GETTONE" ]; then
+    echo "GETTONE_MANCANTE: non risulta eseguita la fase 'prima'."
+    echo "  Senza, il paracadute :prec puo' puntare a un'immagine vecchia: tirando la"
+    echo "  maniglia si tornerebbe indietro OLTRE l'ultimo stato buono, in silenzio."
+    echo "  Rimedio:  sh deploy/protocollo_d17.sh prima"
+    return 1
+  fi
+  # `|| true` DICHIARATO (regola ferrea 12): non nasconde niente, perche' il valore letto
+  # viene validato subito sotto e l'assenza diventa un rifiuto esplicito.
+  EPOCA=$(grep '^epoca=' "$GETTONE" | cut -d= -f2 || true)
+  if [ -z "$EPOCA" ]; then
+    echo "GETTONE_ILLEGGIBILE: $GETTONE non dice quando e' stato scritto."
+    echo "  Un gettone che non si sa quando e' nato non prova niente."
+    echo "  Rimedio:  sh deploy/protocollo_d17.sh prima"
+    return 1
+  fi
+  ETA=$(( $(date +%s) - EPOCA ))
+  if [ "$ETA" -gt "$FRESCHEZZA" ] || [ "$ETA" -lt 0 ]; then
+    echo "GETTONE_SCADUTO: la fase 'prima' risale a ${ETA}s fa (limite ${FRESCHEZZA}s)."
+    echo "  Nel frattempo l'immagine che gira puo' essere cambiata: il paracadute non e'"
+    echo "  piu' una prova, e' un ricordo."
+    echo "  Rimedio:  sh deploy/protocollo_d17.sh prima"
+    return 1
+  fi
+  echo "  gettone OK: la fase 'prima' e' stata fatta ${ETA}s fa"
+  return 0
+}
+
+# --------------------------------------------------------------- GETTONE ----
+# Solo il controllo, senza toccare ne' git ne' docker. Esiste perche' le guardie possano
+# ESEGUIRLO DAVVERO invece di cercare parole nel sorgente (una guardia che conta nel testo
+# la soddisferebbe anche un commento -- sbaglio S6).
+if [ "$FASE" = "gettone" ]; then
+  pretendi_gettone || exit 1
+  exit 0
+fi
 
 # ---------------------------------------------------------------- PRIMA ----
 if [ "$FASE" = "prima" ]; then
@@ -56,11 +109,27 @@ if [ "$FASE" = "prima" ]; then
   echo "=== [1d] STATO PRIMA DELLO SCAMBIO"
   docker ps --format "  {{.Names}} | {{.Status}}"
   echo "  commit dei file: $PRIMA"
+
+  echo
+  echo "=== [1e] GETTONE — la prova, scritta E RILETTA, che questo passo e' stato fatto"
+  {
+    echo "epoca=$(date +%s)"
+    echo "immagine=$VIVA"
+    echo "commit=$PRIMA"
+  } > "$GETTONE"
+  echo "  scritto:  $GETTONE"
+  echo "  RILETTO:  $(tr '\n' ' ' < "$GETTONE")"
+  [ -s "$GETTONE" ] || { echo "  ⛔ il gettone e' VUOTO — MI FERMO"; exit 1; }
+  echo "  Da adesso 'scambio' puo' partire, e solo per i prossimi ${FRESCHEZZA}s."
   exit 0
 fi
 
 # -------------------------------------------------------------- SCAMBIO ----
 if [ "$FASE" = "scambio" ]; then
+  echo "=== [2z] IL PASSO DI SICUREZZA E' STATO FATTO? (precondizione, non consiglio)"
+  pretendi_gettone || exit 1
+
+  echo
   echo "=== [2a] PRENDO IL CODICE NUOVO"
   git pull --ff-only
   echo "  commit dei file ora: $(git rev-parse --short HEAD)"
@@ -101,6 +170,14 @@ if [ "$FASE" = "scambio" ]; then
   echo "=== [2f] L'IMMAGINE CHE GIRA E' QUELLA NUOVA?"
   echo "  gira:    $(docker inspect --format='{{.Image}}' casavip_app)"
   echo "  :latest  $NUOVA"
+
+  echo
+  echo "=== [2g] CONSUMO IL GETTONE — vale per UNO scambio, non per la giornata"
+  # Se restasse, un secondo deploy piu' tardi passerebbe col paracadute agganciato
+  # all'immagine di PRIMA di questo: cioe' di nuovo alla cosa sbagliata, che e' il difetto
+  # che questo controllo esiste per impedire.
+  rm -f "$GETTONE"
+  echo "  tolto: $GETTONE  (il prossimo scambio dovra' rifare 'prima')"
   exit 0
 fi
 
