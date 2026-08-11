@@ -241,7 +241,7 @@ in `RIPRENDI_QUI.md` sezione «QUANTO MANCA SUI SOLDI».
 
 | blocco | moduli | punti | perché in questo ordine |
 |---|---|---|---|
-| **1** | `fase167_credito_single_use` · `fase66_tassa_soggiorno` · `fase133_split_quote_uguali` · `fase119_calendario_prezzi` | 74 | **i quattro più ciechi**: 1, 2, 2 e 2 test li nominano. `fase167` per primo: un difetto lì è **denaro speso due volte** |
+| **1** | ✅ `fase167_credito_single_use` **FATTO 2026-08-11** (11/11 mutanti uccisi, 1 difetto vero chiuso) · ▶️ `fase66_tassa_soggiorno` · `fase133_split_quote_uguali` · `fase119_calendario_prezzi` | 74 | **i quattro più ciechi**: 1, 2, 2 e 2 test li nominano. `fase167` per primo: un difetto lì è **denaro speso due volte** — e infatti ce n'era uno |
 | **2** | `fase43_commissione` · `fase98_policy_commissione` · `fase111_cancellazione` | 60 | la catena della commissione e dei rimborsi, dove i numeri si incrociano |
 | **3** | `fase65_split_payment` · `fase133` (già fatto in 1) · `fase101_stripe_connect` | 109 | i soldi che si dividono e quelli che escono verso l'host |
 | **4** | `fase162_pagamenti_pendenti` · `fase131_payout_dashboard` | 153 | i più grossi ma i **meno ciechi** (13 e 11 test): ultimi apposta |
@@ -261,6 +261,81 @@ il minimo sulle prenotazioni piccolissime · se accendere il pavimento di `fase1
 aumento di prezzo su «paga in struttura»**, non una riparazione: oggi quel `300` è inerte) · la
 domanda al commercialista sul forfettario · `PAGA_STRUTTURA_ATTIVO` sul `.env` **del server**
 (qui non lo accende nessuno, quindi vale il ripiego `"0"` = spento).
+
+### ✅ FATTO 2026-08-11 (27) — BLOCCO 1 / `fase167`: UN CREDITO POTEVA ESSERE ONORATO DUE VOLTE
+
+Primo modulo del piano «i quattro ciechi dei soldi», scelto per **rischio × cecità**, non per
+dimensione. **Nessun modulo nuovo, nessuna dipendenza nuova** (D1/D10): un file di produzione
+toccato per **1 sola riga eseguibile**, e 10 collaudi nuovi in un file di test che esisteva già.
+
+· **Acceso, verificato prima di spenderci sopra un'ora.** `collaudi/raggiungibilita.py`:
+  151 moduli · 88 raggiungibili · **63 morti**, e `fase167` non è fra i 63. Conferma positiva,
+  non per assenza: `fase81_bootstrap_casavip.py:299` lo importa nel cablaggio della produzione.
+· **Il difetto.** `consuma(credito_id, riferimento)` identifica una prenotazione dal suo
+  **riferimento**. Con riferimento **vuoto** non poteva più distinguere «è lo stesso book che
+  riprova» da «è un book diverso», e rispondeva **`stesso`** — che `fase83_server.py:4862`
+  interpreta come «conferma pure». Lo stesso credito pagava **due soggiorni**. Il ripiego
+  vuoto è in produzione: `fase83_server.py:4824`, `ref = corpo.get("riferimento", "")`.
+· **Perché nessuna guardia lo prendeva.** I 7 collaudi che c'erano passano **sempre** un
+  riferimento vero (in `fase59:547` è `idem[:24]`, la firma del preventivo). Provavano il
+  percorso buono, mai quello ambiguo. **Non era un modulo scoperto: era un confine scoperto** —
+  e i confini si trovano solo scrivendo prima il contratto (D4), non leggendo il codice.
+· **Non era teorico.** La guardia di livello ② è stata vista **rossa attraverso il codice vero
+  del server** (`RouterHTTP._consuma_credito` sopra il registro vero), non solo sul registro
+  isolato. Oggi il buco è chiuso **da fuori** — cioè perché chi chiama si comporta bene: è la
+  D19 punto 1, «una conclusione con una premessa». Ora si difende da solo.
+· **La riparazione**, `fase167:115`: `return "stesso" if (rif and r["riferimento"] == rif)
+  else "diverso"`. Vuoto = mai uguale a niente, **nemmeno a un altro vuoto**. `+9 −2` righe, di
+  cui 8 sono commento e docstring.
+· **D20 nei quattro passi, più la riprova**: guardia scritta → **ROSSA**
+  (`AssertionError: 2 != 1 · esiti=['nuovo','stesso']`) → riparazione → **VERDE** → difetto
+  **rimesso dentro** → **rossa di nuovo** → ritolto → verde, ripristino **byte-identico**
+  (`sha256 4C767FEA639EEC0CA00961C8DE2BFECFAC717315F8CF15443B51FE90AF08068A`).
+· **I quattro livelli, in ordine (D3), esiti misurati:** ① 6 collaudi nuovi · ② 4 collaudi
+  nuovi · ③ **E2E contro Stripe VERO** (chiave di prova): **15 passi, 15 OK, 0 rossi** —
+  l'importo addebitato letto **dalla API di Stripe** (`56175`) coincide con il nostro, cioè lo
+  sconto del credito arriva davvero fin sulla carta · ④ **mutazione: 11 punti su 11 UCCISI**,
+  0 sopravvissuti, **0 equivalenti dichiarati** (B6: nessuna scorciatoia).
+· **Il Giudice ha trovato un buco che nessun ragionamento aveva visto**: mutante riga 129,
+  `check_same_thread` da `False` a `True`, **sopravvissuto**. Il registro `:memory:` è il
+  **ripiego predefinito** (`fase81:97`) e il server è multi-filo, ma **ogni** collaudo sulla
+  concorrenza usa un file su disco. Chiuso **scrivendo il test che mancava, non cambiando il
+  codice**. In produzione il ripiego non si prende — verificato sul VPS:
+  `DB_CREDITO_USATI=/data/credito_usati.db`, file vero da 12288 byte nel volume Docker.
+· **Un finto allarme evitato (S15).** L'E2E è uscito rosso su «lo sconto non è pari al
+  nominale del credito»: **sbagliavo io**, non il prodotto. Il credito è tagliato apposta al
+  margine che la commissione può assorbire (`fase59:501-504`), e l'oracolo indipendente lo
+  conferma alla cifra: `6000 − 1975 − 200 = 3825`, esattamente lo sconto applicato. Il
+  pavimento regge: dopo lo sconto restano **2175** contro **1975** di costo Stripe (D16).
+· **Due difetti di ATTREZZI trovati strada facendo, e RIPARATI nello stesso commit.** Messi
+  qui apposta: ogni commit obbliga a rifare la suite (**68 minuti**, misurati due volte oggi:
+  `4115.429s` e `3955.643s`), quindi separarli sarebbe costato **tre** attese invece di una. E
+  il rischio in produzione non cambia — `collaudi/` non gira mai sul server, e in `fase83` è
+  cambiato **solo un commento**.
+  **(a) `collaudi/mutazione_prodotto.py` usciva 0 quando il modulo NON ESISTE.** Basta
+  dimenticare il `.py` nel nome: stampa `ASSENTE — file inesistente` e **esce verde**. Un
+  refuso, e il giudizio più severo del progetto diventa un verde **che non ha guardato niente**
+  — in CI sarebbe passato liscio. È la **D18 violata dentro lo strumento che deve farla
+  rispettare a tutti gli altri**, ed è la stessa forma di S1: *il vuoto non è un risultato, è
+  assenza di misura*. Riparato aggiungendo `assente` ai verdetti che fanno uscita 1, con
+  annotazione `::error` perché in CI si veda **perché**. Guardia
+  `TestIlGiudiceNonPuoUscireVERDESenzaAverMisurato` in `test_pipeline_ci.py`, vista **ROSSA**
+  prima (`AssertionError: 0 == 0`) e provata nelle **due direzioni** (grida sul modulo
+  inesistente, **tace** su uno vero e sorvegliato — regola ferrea 10). La guardia **esegue
+  l'attrezzo** e ne legge il codice d'uscita: una che contasse parole nel sorgente la
+  soddisferebbe anche un commento (S6).
+  ⚠️ **Dichiarato ciò che NON è stato verificato** (D18 punto 3): riparato **solo** il modo
+  `--modulo`, l'unico in cui il difetto è stato visto. Gli altri modi (`--diff`,
+  `--censimento`, il giro normale) hanno uscite proprie e **non sono stati provati**.
+  **(b) `fase83_server.py`, commento di `_consuma_credito`.** Dichiarava «FAIL-OPEN: un errore
+  → la prenotazione PROCEDE» mentre il codice restituisce `"errore"` e la prenotazione viene
+  **rifiutata**. Il fail-open c'era davvero fino al 2026-07-30: è arrivata la riparazione,
+  **non** il commento (S10). Cambiato **solo il commento**, zero comportamento — e scritto
+  «vedi il chiamante» invece del numero di riga, perché i numeri di riga invecchiano ed è
+  esattamente così che quel commento era diventato falso.
+· ⚠️ **Trappola dell'attrezzo di mutazione, pagata oggi:** `--killer` **divora tutto ciò che
+  lo segue** (riga 1346), quindi va **PER ULTIMO**. Ordine giusto, provato:
+  `--modulo X.py --tetto N --minuti M --killer test_a test_b`.
 
 ### ✅ FATTO 2026-08-10 (26) — LA TARIFFA TECNICA ERA SOTTO COSTO: 3% SECCO → 5% + 0,25 €
 

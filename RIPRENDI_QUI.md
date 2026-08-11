@@ -11,6 +11,110 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🚦 2026-08-11 — RIPARTI DA QUI. BLOCCO 1 / `fase167`: I QUATTRO LIVELLI SONO CHIUSI.
+
+> **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
+>
+> ⛔ **PRIMA DI TUTTO, UNA COSA RIMASTA INDIETRO E CHE NESSUNO AVEVA VISTO.** Il computer e'
+> su **`e15311e`**, GitHub `master` e il VPS su **`cd95f73`**: un commit di differenza. Il
+> ramo `chiavetta-cd95f73` e' stato **spedito** su GitHub ma la richiesta di unione **non e'
+> mai stata aperta** — misurato dall'API, l'ultima e' la **#26**, la #27 non esiste. Non e'
+> «aperta e non unita»: e' «mai chiesta». La differenza e' **un solo file** (`RIPRENDI_QUI.md`,
+> +13 −1), quindi il codice e' identico ovunque; ma il diario del server dichiara il falso
+> (S10). ⚠️ Il 2026-08-06 era gia' successo qualcosa di simile: **si controlla, non si ricorda.**
+>
+> ### ✅ COSA E' STATO FATTO OGGI — `fase167_credito_single_use`, tutti e 4 i livelli (D3)
+> Il modulo era **il piu' cieco del censimento dei soldi** (un solo file di test lo nominava)
+> e **non era mai passato davanti al Giudice** (`grep fase167 collaudi/mutazione_prodotto.py`
+> → 0). Prima si e' verificato che fosse **ACCESO**: `collaudi/raggiungibilita.py` dice
+> 151 moduli, 88 raggiungibili, 63 morti, e `fase167` **non e' fra i 63**; conferma positiva
+> in `fase81_bootstrap_casavip.py:299`.
+>
+> | livello | esito **misurato**, non ricordato |
+> |---|---|
+> | ① unitari | 6 collaudi nuovi · `Ran 17 · OK` sul file, uscita 0 |
+> | ② integrazione | 4 collaudi nuovi su `RouterHTTP._consuma_credito` + registro vero |
+> | ③ E2E **Stripe VERO** (chiave di prova) | **15 passi, 15 OK, 0 rossi**, uscita 0 |
+> | ④ mutazione (il Giudice) | **11 punti su 11 UCCISI · 0 sopravvissuti · 0 equivalenti**, uscita 0 |
+>
+> ### ⛔ IL DIFETTO TROVATO E RIPARATO — un credito onorato DUE volte
+> `consuma()` riconosceva una prenotazione dal suo **riferimento**. Con riferimento **vuoto**
+> non sapeva piu' distinguere «e' lo stesso book che riprova» da «e' un book diverso», e nel
+> dubbio rispondeva **`stesso`** — che `fase83:4862` interpreta come «vai, conferma». Lo
+> stesso credito pagava **due soggiorni**. Il ripiego vuoto e' scritto in produzione:
+> `fase83_server.py:4824`, `ref = corpo.get("riferimento", "")`.
+> **Non era teorico:** la guardia di livello ② e' stata vista rossa **attraverso il codice
+> vero del server**, non solo sul registro isolato.
+> **Riparazione: UNA riga eseguibile** in `fase167:115` — `rif and r["riferimento"] == rif`.
+> Vuoto = mai uguale a niente, nemmeno a un altro vuoto.
+> **D20 rispettata nei 4 passi + la riprova:** guardia scritta → **ROSSA** (`2 != 1 · esiti=
+> ['nuovo','stesso']`) → riparazione → **VERDE** → difetto **rimesso dentro** → **rossa di
+> nuovo** → ritolto → verde, con ripristino **byte-identico** (`sha256 4C767FEA…`).
+>
+> ### 💡 LE TRE COSE CHE VALGONO OLTRE QUESTO CASO
+> **(a) «Nominare non e' provare» vale anche al contrario: il censimento contava i FILE.**
+> «Un solo test lo nomina» faceva pensare a un modulo scoperto; dentro quel file c'erano gia'
+> **7 collaudi buoni**. Il lavoro vero non era coprire da zero, era **trovare cosa quei 7 non
+> potevano vedere** — e si trova solo scrivendo prima il **contratto** (D4).
+> **(b) Il Giudice ha trovato un buco che nessun ragionamento aveva visto.** Mutante riga 129,
+> `check_same_thread` da `False` a `True`: **sopravvissuto**. Il registro `:memory:` e' il
+> **ripiego predefinito** (`fase81:97`) e il server e' multi-filo, ma tutti i collaudi sulla
+> concorrenza usano un file su disco. **Chiuso scrivendo il test che mancava, non cambiando il
+> codice.** (In produzione il ripiego non si prende: `DB_CREDITO_USATI=/data/credito_usati.db`,
+> file vero da 12288 byte, verificato sul VPS — quindi i crediti spesi sopravvivono ai riavvii.)
+> **(c) Ho quasi riferito una perdita che non c'era (S15).** L'E2E e' uscito rosso su «lo
+> sconto non e' pari al nominale»: **sbagliavo io**, non il prodotto. Il credito e' tagliato
+> apposta al margine (`fase59:501-504`), e il conto rifatto a mano lo conferma alla cifra:
+> commissione 6000 − costo Stripe 1975 − buffer 200 = **3825**, ed e' esattamente lo sconto
+> applicato. Il pavimento **regge**: dopo lo sconto restano 2175 contro 1975 di costo (D16).
+>
+> ### ⏳ COSA C'E' DENTRO QUESTO COMMIT
+> Il fondatore ha dato **entrambe** le parole il 2026-08-11: **«autorizzato»** (B4) e
+> **«procedi al commit»** (B1). **Sette** file, tutti dichiarati **prima** di aprirli
+> (regola ferrea 15) e verificabili con `git status`:
+> · `fase167_credito_single_use.py` — produzione, **+9 −2**, di cui **1 sola riga eseguibile**
+> · `test_credito_single_use.py` — +10 collaudi
+> · `test_pipeline_ci.py` — +2 guardie sul giudice della mutazione
+> · `collaudi/mutazione_prodotto.py` — l'attrezzo non esce piu' verde senza aver misurato
+> · `fase83_server.py` — **solo un commento** che dichiarava il falso
+> · `REGISTRO_INGEGNERIA.md` · `RIPRENDI_QUI.md`
+> ⛔ **Cio' che gira davvero sul server e' UNA riga.** Tutto il resto e' collaudi, attrezzi e
+> commenti: il rischio in produzione e' quello di una riga sola, non di sette file.
+> ▶️ **Il prossimo modulo del Blocco 1 e' `fase66_tassa_soggiorno`** (25 punti, 2 test lo
+> nominano), poi `fase133_split_quote_uguali`, poi `fase119_calendario_prezzi`.
+>
+> ### 🩹 DUE DIFETTI DI ATTREZZI, TROVATI STRADA FACENDO — E RIPARATI NELLO STESSO GIRO
+> Messi qui dentro **apposta**: ogni commit obbliga a rifare la suite (68 minuti misurati),
+> quindi tre commit separati sarebbero stati **tre** attese. Il rischio in produzione non
+> cambia — `collaudi/` non gira mai sul server e in `fase83` e' cambiato **solo un commento**.
+>
+> **1. ✅ `collaudi/mutazione_prodotto.py` usciva 0 quando il modulo NON ESISTE.** Sbagli il
+> nome e ti dice verde: `--modulo fase167_credito_single_use` (senza `.py`) →
+> `ASSENTE — file inesistente`, **uscita 0**. Un refuso, e il giudizio piu' severo del progetto
+> diventa un verde **che non ha guardato niente** — in CI sarebbe passato liscio per mesi.
+> E' la **D18 violata dentro lo strumento che deve farla rispettare agli altri**, ed e' la
+> stessa forma dello sbaglio S1: il vuoto non e' un risultato, e' assenza di misura.
+> **Guardia `TestIlGiudiceNonPuoUscireVERDESenzaAverMisurato`** (in `test_pipeline_ci.py`),
+> vista **ROSSA** prima (`AssertionError: 0 == 0`) e provata nelle **due direzioni** — grida
+> sul modulo inesistente **e tace** su un modulo vero e sorvegliato (regola ferrea 10).
+> La guardia **esegue l'attrezzo davvero** e ne legge il codice d'uscita: una che contasse
+> parole nel sorgente la soddisferebbe anche un commento (S6).
+> ⚠️ **Dichiarato cio' che NON ho verificato** (D18 punto 3): ho riparato **solo** il modo
+> `--modulo`, l'unico in cui ho visto il difetto. Gli altri modi (`--diff`, `--censimento`, il
+> giro normale) hanno le loro uscite e **non le ho provate**: potrebbero avere la stessa forma.
+> **2. ✅ `fase83_server.py` dichiarava il falso nel commento di `_consuma_credito`.** Diceva
+> «FAIL-OPEN: un errore → la prenotazione PROCEDE», mentre il codice restituisce `"errore"` e
+> la prenotazione viene **rifiutata**. Il fail-open c'era davvero fino al 2026-07-30: e'
+> arrivata la riparazione, **non** il commento (S10). Cambiato **solo il commento**, zero
+> comportamento. ⚠️ Scritto **«vedi il chiamante»** invece del numero di riga: i numeri di riga
+> invecchiano, ed e' esattamente cosi' che quel commento era diventato falso.
+>
+> ⚠️ **E la trappola dell'attrezzo di mutazione, che costa un giro intero se la ripaghi:**
+> `--killer` **divora tutto cio' che lo segue**, quindi va messo **PER ULTIMO** (`_killer =
+> [a for a in sys.argv[_k+1:] if not a.startswith("--")]`, riga 1346). E' per questo che
+> `--minuti` deve stare prima: se no il numero finisce nell'elenco dei sorveglianti.
+> Ordine giusto, provato: `--modulo X.py --tetto N --minuti M --killer test_a test_b`.
+
 ## 🚦 2026-08-10 — RIPARTI DA QUI. COMMITTATO E UNITO; MANCA SOLO IL SERVER.
 
 > ✅ **`fd3268b` — computer = GitHub `master`, allineati, zero file in sospeso**
@@ -380,7 +484,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: fce0c54
+CONSEGNE AGGIORNATE A: e15311e
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -2205,13 +2309,18 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5492 test
+SUITE ATTUALE: Ran 5504 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3.
 COMANDO:  python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"
-MISURATO SU: fce0c54 + le modifiche non committate del 2026-08-10 (tariffa tecnica 5%+0,25)
+MISURATO SU: e15311e + le modifiche non committate del 2026-08-11 (BLOCCO 1 / fase167:
+             10 collaudi nuovi in `test_credito_single_use.py`, da 5492 a 5502; piu' 2
+             guardie sul giudice della mutazione in `test_pipeline_ci.py` → 5504).
+             Ambiente riverificato DA POWERSHELL il 2026-08-11 (S11: la stessa domanda da'
+             due risposte fra Bash e PowerShell): identico a quello dichiarato qui sopra —
+             Python 3.9.10, hypothesis/pyyaml/coverage presenti, openssl ASSENTE.
 GIRO REALE DEL 2026-08-10 (staccato con `Start-Process`, verdetto scritto da unittest):
           Ran 5483 tests in 3854.405s · FAILED (failures=1, skipped=4)
           L'UNICO fallimento era QUESTA riga, che dichiarava ancora 5486 mentre le due
