@@ -1,5 +1,17 @@
 #!/bin/sh
-# NON SI SALVA MENTRE UN GIRO DI MUTAZIONE E' APERTO. Vedi collaudi/guardia_commit.py.
+# DUE CONTROLLI PRIMA DI OGNI SALVATAGGIO. Il primo che fallisce ferma tutto.
+#
+#   1. collaudi/guardia_commit.py     -> non si salva mentre un giro di mutazione e' APERTO
+#   2. collaudi/prima_di_dire_fatto.py -> gli otto controlli sul LAVORO (conto dei test,
+#      riga delle consegne, skipTest ciechi, ambiente, byte invisibili, artefatti lasciati
+#      fuori dal repository, scopo dichiarato)
+#
+# PERCHE' IL SECONDO E' STATO AGGIUNTO (2026-08-11). Questa macchina aveva guardie sul
+# CODICE e sui DOCUMENTI, e ZERO sul LAVORO. Le guardie che ci salvano esistevano gia': il
+# difetto era QUANDO giravano -- dentro un ciclo da 68 minuti, invece che in due secondi
+# qui. Lo stesso giorno uno `skipTest` e' costato 68 minuti, il conto dei test ~3 ore in
+# tre occasioni, e un E2E contro Stripe vero da 11 KB si e' salvato PER FORTUNA.
+#
 # NB: qui dentro SOLO caratteri ASCII, anche nei commenti. Non perche' `sh` se ne accorga
 # -- i commenti non li interpreta -- ma perche' questo file gira come gancio di git su
 # macchine, shell e lingue diverse, ed e' l'ultimo posto dove vogliamo scoprire un problema
@@ -9,4 +21,5 @@
 # Sta in deploy/hooks (VERSIONATO) e non in .git/hooks, che non viaggia col progetto:
 # un divieto che vive solo su un computer non protegge nessun altro.
 # Si accende con: sh deploy/installa_hook.sh
-exec python collaudi/guardia_commit.py
+python collaudi/guardia_commit.py || exit 1
+exec python collaudi/prima_di_dire_fatto.py

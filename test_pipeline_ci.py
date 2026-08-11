@@ -1586,14 +1586,36 @@ class TestLeRegoleSiLeggonoSEMPRE(unittest.TestCase):
 _RIGA_CONSEGNE = re.compile(r"^CONSEGNE AGGIORNATE A:\s*([0-9a-fA-F]{7,40})\s*$", re.M)
 
 
-def consegne_troppo_indietro(quanti_commit):
-    """Il giudizio, isolato dal resto perche' si possa provare da solo.
+_PRE_VOLO = []          # cache: il modulo si carica una volta sola
 
-    UNO e' il commit che porta le consegne stesse: quello e' sano. DUE vuol dire
-    che dopo aver scritto le consegne si e' committato altro lavoro senza
-    toccarle. `None` = non misurabile qui (vedi la dichiarazione qui sopra).
+
+def _pre_volo():
+    """`collaudi/prima_di_lanciare.py`, caricato una volta sola."""
+    if not _PRE_VOLO:
+        import importlib.util
+        p = os.path.join(QUI, "collaudi", "prima_di_lanciare.py")
+        spec = importlib.util.spec_from_file_location("_pv_condiviso", p)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        _PRE_VOLO.append(m)
+    return _PRE_VOLO[0]
+
+
+def consegne_troppo_indietro(quanti_commit):
+    """⛔ IL GIUDIZIO NON STA PIU' QUI: sta in `collaudi/prima_di_lanciare.py`, e questa
+    funzione lo CHIAMA.
+
+    UNO e' il commit che porta le consegne stesse: quello e' sano. DUE vuol dire che dopo
+    aver scritto le consegne si e' committato altro lavoro senza toccarle. `None` = non
+    misurabile qui (vedi la dichiarazione qui sopra).
+
+    Perche' e' stato spostato il 2026-08-11: lo stesso criterio serve in due momenti --
+    dentro la suite (dove diventa un rosso, dopo 68 minuti) e PRIMA di lanciarla (dove
+    costa 5 centesimi di secondo). Tenerne due copie e' la malattia che questo progetto ha
+    pagato sei volte in un giorno solo: lo stesso fatto scritto due volte, e la seconda
+    copia che resta indietro senza che nessuno se ne accorga. Un posto solo, due chiamanti.
     """
-    return quanti_commit is not None and quanti_commit > 1
+    return _pre_volo().consegne_troppo_indietro(quanti_commit)
 
 
 def _commit_da_allora(sha, radice):
@@ -4462,6 +4484,695 @@ class TestIlDeployNonPuoSALTAREIlPassoDiSicurezza(unittest.TestCase):
         self.assertEqual(uscita, 0,
                          "col passo di sicurezza fatto, il deploy deve poter proseguire: %r"
                          % (testo[-400:],))
+
+
+class _GuardieSugliAttrezziDelLavoro(unittest.TestCase):
+    """Appoggi comuni alle guardie sul PRE-VOLO e sul PRE-FATTO.
+
+    ⛔ PERCHE' QUESTE GUARDIE ESISTONO (D18 punto 4). `collaudi/prima_di_lanciare.py` e
+    `collaudi/prima_di_dire_fatto.py` sono strumenti che MISURANO, e uno strumento che
+    misura deve avere un controllo meccanico che gli impedisca di barare. Senza queste
+    guardie, fra sei mesi una «semplificazione» toglie un controllo e nessuno se ne
+    accorge -- che e' esattamente come il gancio pre-commit era rimasto spento e il
+    paracadute agganciato all'immagine sbagliata per sei giorni.
+
+    Non leggono il sorgente degli attrezzi: li ESEGUONO. Una guardia che cerca parole in
+    un file la soddisferebbe anche un commento (sbaglio S6).
+    """
+    RADICE = QUI
+
+    @classmethod
+    def _carica(cls, nome, etichetta):
+        import importlib.util
+        percorso = os.path.join(cls.RADICE, "collaudi", nome)
+        spec = importlib.util.spec_from_file_location(etichetta, percorso)
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+        return modulo
+
+    @classmethod
+    def pv(cls):
+        return cls._carica("prima_di_lanciare.py", "_pv_sotto_guardia")
+
+    @classmethod
+    def pf(cls):
+        return cls._carica("prima_di_dire_fatto.py", "_pf_sotto_guardia")
+
+    def _esegui(self, attrezzo, *argomenti):
+        """Lo strumento eseguito DAVVERO, col codice d'uscita letto diretto (regola
+        ferrea 7: `comando | filtro` restituisce l'esito del filtro)."""
+        avvio = time.time()
+        esito = subprocess.run(
+            [sys.executable, os.path.join("collaudi", attrezzo)] + list(argomenti),
+            cwd=self.RADICE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        return (esito.returncode, esito.stdout.decode("utf-8", "replace"),
+                time.time() - avvio)
+
+    def _pagina_sana(self):
+        with io.open(os.path.join(self.RADICE, "RIPRENDI_QUI.md"), encoding="utf-8") as f:
+            return f.read()
+
+
+class TestIlPreVoloVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
+    """🛫 I sei controlli che costano DUE SECONDI e che l'11 agosto sono stati pagati in
+    SESSANTOTTO MINUTI, perche' le stesse guardie giravano in fondo alla suite."""
+
+    def test_ESEGUITO_DAVVERO_PRODUCE_UN_RAPPORTO_COMPLETO(self):
+        uscita, testo, _ = self._esegui("prima_di_lanciare.py")
+        for numero in range(1, 7):
+            self.assertRegex(
+                testo, r"\b%d\. " % numero,
+                "il controllo %d non compare nel rapporto: un pre-volo che perde per "
+                "strada un controllo e' un pre-volo che dice verde senza aver guardato "
+                "tutto.\n%s" % (numero, testo[-1200:]))
+        self.assertIn("COSA QUESTO CONTROLLO NON HA ESAMINATO", testo,
+                      "D18 punto 3: uno strumento che misura dichiara SEMPRE cosa ha "
+                      "lasciato fuori. Un taglio silenzioso fa sembrare «coperto» cio' "
+                      "che non e' stato nemmeno guardato")
+        self.assertIn("CRONOMETRO:", testo,
+                      "il pre-volo si mette da solo sotto cronometro: se diventa lento "
+                      "viene abbandonato, e allora non protegge piu' niente")
+        self.assertIn("VERDETTO:", testo, "deve dire un verdetto, non solo elencare")
+        self.assertIn(uscita, (0, 1), "uscita inattesa: %r" % uscita)
+
+    def test_IL_CODICE_D_USCITA_NON_PUO_MENTIRE_SUL_RAPPORTO(self):
+        """⛔ IL CONTROLLO MECCANICO CHE IMPEDISCE DI BARARE (D18).
+
+        Questa e' la guardia che vale di piu', ed e' scritta apposta per NON dipendere
+        dalla macchina: non pretende che il pre-volo sia verde qui (su Linux la riga
+        AMBIENTE descrive un'altra macchina, e sarebbe un falso rosso). Pretende che il
+        codice d'uscita e il rapporto DICANO LA STESSA COSA. Uno strumento che stampa
+        rossi e poi esce 0 e' il verde peggiore di tutti: il giudice della mutazione l'ha
+        gia' fatto una volta, stampando «42 mutanti su 42 uccisi» su una base rossa."""
+        uscita, testo, _ = self._esegui("prima_di_lanciare.py")
+        corpo = testo.split("COSA QUESTO CONTROLLO NON HA ESAMINATO")[0]
+        rossi = len(re.findall(r"^  ROSSO ", corpo, re.M))
+        non_eseguiti = len(re.findall(r"^  NON ESEGUITO ", corpo, re.M))
+        if rossi or non_eseguiti:
+            self.assertEqual(
+                uscita, 1,
+                "il rapporto elenca %d rossi e %d non eseguiti, ma lo strumento e' uscito "
+                "%d: un'uscita che non segue il rapporto e' uno strumento che bara.\n%s"
+                % (rossi, non_eseguiti, uscita, testo[-1500:]))
+        else:
+            self.assertEqual(
+                uscita, 0,
+                "il rapporto non ha nessun rosso e nessun non-eseguito, ma lo strumento "
+                "e' uscito %d: allora grida sempre, e un allarme sempre acceso viene "
+                "spento (regola ferrea 10).\n%s" % (uscita, testo[-1500:]))
+
+    def test_STAMPA_I_SEI_DIVIETI_PRIMA_DI_TUTTO(self):
+        """⛔ ORDINE DEL FONDATORE, 2026-08-11: «LE REGOLE SI LEGGONO PRIMA E DOPO OGNI
+        OPERAZIONE». Era l'ultima cosa affidata al ricordarsene, e il ricordarsene in
+        questo progetto ha gia' fallito abbastanza volte da non poterci contare."""
+        uscita, testo, _ = self._esegui("prima_di_lanciare.py")
+        for divieto in ("B1.", "B2.", "B3.", "B4.", "B5.", "B6."):
+            self.assertIn(divieto, testo,
+                          "il pre-volo non stampa piu' %s: i divieti tornerebbero a "
+                          "dipendere da chi si ricorda di rileggerli" % divieto)
+        self.assertLess(
+            testo.index("B1."), testo.index("PRE-VOLO"),
+            "i divieti vanno stampati PRIMA dei controlli: si leggono prima di iniziare "
+            "un'operazione, non dopo averla gia' fatta")
+
+    def _togli_la_riga(self, pagina, riconoscitore, schema):
+        """Toglie una riga di dati e PRETENDE che sia sparita davvero, chiedendolo allo
+        stesso riconoscitore che usa lo strumento.
+
+        ⛔ NASCE DA UN ROSSO VERO, il 2026-08-11, e la lezione vale piu' della riparazione.
+        La prima versione faceva `pagina.replace("CONSEGNE AGGIORNATE A:", ..., 1)`. Quel
+        giorno il documento aveva appena preso una FRASE che nominava quella riga (per
+        spiegare una correzione), e la frase stava PRIMA. La sostituzione ha colpito la
+        frase; la riga vera e' rimasta intatta; lo strumento l'ha letta e ha risposto
+        correttamente OK; e il test ha accusato lo strumento di essere un ornamento.
+
+        💡 **Era il verde finto applicato all'INIEZIONE**: un test convinto di aver messo
+        dentro un guasto senza averlo messo. `assertNotEqual(sana, malata)` non bastava --
+        qualcosa era cambiato davvero, solo non la cosa che conta. Da qui la regola:
+        un'iniezione non si dichiara riuscita perche' il testo e' cambiato, ma perche' il
+        riconoscitore dello strumento **non trova piu' cio' che cercava**.
+        """
+        self.assertIsNotNone(
+            riconoscitore.search(pagina),
+            "nel documento SANO la riga non c'e' nemmeno: questa prova non proverebbe "
+            "niente, e passerebbe per il motivo sbagliato")
+        malata = re.sub(schema, "RIGA-TOLTA-DALLA-GUARDIA", pagina, count=1, flags=re.M)
+        self.assertIsNone(
+            riconoscitore.search(malata),
+            "l'iniezione NON ha tolto la riga che lo strumento cerca: ha colpito "
+            "qualcos'altro (una frase che la nomina?), e allora questa prova sta per "
+            "accusare uno strumento sano")
+        return malata
+
+    def test_OGNI_CONTROLLO_GRIDA_COL_GUASTO_DENTRO(self):
+        """D18 punto 2, prima meta'. Un allarme provato in un verso solo potrebbe gridare
+        sempre -- oppure mai. I guasti si iniettano su COPIE in memoria: il file vero non
+        viene mai riaperto in scrittura (B2)."""
+        pv = self.pv()
+        sana = self._pagina_sana()
+
+        conto_sbagliato = re.sub(r"^SUITE ATTUALE: Ran \d+ test",
+                                 "SUITE ATTUALE: Ran 1 test", sana, count=1, flags=re.M)
+        detto = pv._RIGA_SUITE.search(conto_sbagliato)
+        self.assertIsNotNone(detto, "l'iniezione ha rotto la riga invece di cambiarla")
+        self.assertEqual("1", detto.group(1),
+                         "l'iniezione non ha cambiato IL NUMERO che lo strumento legge: "
+                         "avrebbe accusato uno strumento sano")
+
+        casi = [
+            ("1 conto dei test sbagliato",
+             lambda: pv.controllo_1_conto_dei_test(radice=self.RADICE,
+                                                   pagina=conto_sbagliato)),
+            ("1 la riga del conto sparita",
+             lambda: pv.controllo_1_conto_dei_test(
+                 radice=self.RADICE,
+                 pagina=self._togli_la_riga(sana, pv._RIGA_SUITE,
+                                            r"^SUITE ATTUALE: Ran \d+ test.*$"))),
+            ("2 la riga delle consegne sparita",
+             lambda: pv.controllo_2_consegne(
+                 radice=self.RADICE,
+                 pagina=self._togli_la_riga(sana, pv._RIGA_CONSEGNE,
+                                            r"^CONSEGNE AGGIORNATE A:.*$"))),
+            ("4 Python diverso da quello dichiarato",
+             lambda: pv.controllo_4_ambiente(pagina=sana, radice=self.RADICE,
+                                             quale_python="0.0.0")),
+            ("4 una libreria dichiarata che non c'e'",
+             lambda: pv.controllo_4_ambiente(pagina=sana, radice=self.RADICE,
+                                             moduli_presenti=set())),
+        ]
+        for nome, fai in casi:
+            with self.subTest(caso=nome):
+                stato, dettaglio = fai()
+                self.assertEqual(
+                    pv.ROSSO, stato,
+                    "col guasto «%s» dentro, il pre-volo NON grida: e' un ornamento.\n"
+                    "  ha detto: %s — %s" % (nome, stato, dettaglio[:300]))
+
+    def test_IL_CONTROLLO_DELLE_CONSEGNE_GRIDA_SU_UN_COMMIT_VECCHIO(self):
+        """⛔ IL FIXTURE DEVE ESSERE UN COMMIT VERO, e la prima versione di questa guardia
+        lo ha dimostrato costando un giro: con un valore inventato (`4b825dc`, l'albero
+        vuoto di git) lo strumento risponde NON ESEGUITO -- «git non conosce questo
+        commit» -- e ha ragione, perche' dove non si puo' misurare non si inventa un
+        rosso. Un fixture sbagliato avrebbe fatto passare per ornamento un controllo sano.
+
+        Qui l'antenato si CHIEDE A GIT: il terzo commit di lavoro a ritroso ha per
+        definizione due commit dopo di se', che e' esattamente la soglia."""
+        pv = self.pv()
+        sana = self._pagina_sana()
+        antenato = subprocess.run(
+            ["git", "rev-list", "--no-merges", "--skip=2", "-n", "1", "HEAD"],
+            cwd=self.RADICE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        misurabile = antenato.returncode == 0 and antenato.stdout.strip()
+        if misurabile:
+            sha = antenato.stdout.decode("utf-8", "replace").strip()[:7]
+            malata = re.sub(r"^CONSEGNE AGGIORNATE A: .*$",
+                            "CONSEGNE AGGIORNATE A: " + sha, sana, count=1, flags=re.M)
+            self.assertNotEqual(sana, malata,
+                                "l'iniezione non ha cambiato niente: questa guardia non "
+                                "proverebbe nulla")
+            stato, dettaglio = pv.controllo_2_consegne(radice=self.RADICE, pagina=malata)
+            self.assertEqual(pv.ROSSO, stato,
+                             "consegne ferme a %s (due commit di lavoro fa) e il pre-volo "
+                             "non grida: %s" % (sha, dettaglio[:300]))
+            self.assertIn(sha, dettaglio, "deve dire da QUALE commit sono ferme")
+        # ⛔ Si asserisce in ENTRAMBI i rami, mai uno `skipTest`: dove git non risponde
+        # resta comunque vero che il giudizio sa dire si' e no.
+        self.assertFalse(pv.consegne_troppo_indietro(0), "zero commit dopo: e' sano")
+        self.assertFalse(pv.consegne_troppo_indietro(1),
+                         "UNO e' il commit che porta le consegne stesse: e' sano")
+        self.assertTrue(pv.consegne_troppo_indietro(2), "due commit dopo: e' indietro")
+        self.assertTrue(pv.consegne_troppo_indietro(37))
+        self.assertFalse(pv.consegne_troppo_indietro(None),
+                         "dove non si puo' misurare non si inventa un rosso")
+
+    def test_IL_CONTROLLO_DELLA_MUTAZIONE_GRIDA_SU_UNA_TRACCIA_APERTA(self):
+        """Un giro di mutazione interrotto lascia un guasto DENTRO un file di produzione:
+        e' successo tre volte in un giorno solo. La traccia finta si costruisce in una
+        cartella temporanea, MAI in quella vera -- che bloccherebbe i commit sul serio."""
+        pv = self.pv()
+        cartella = tempfile.mkdtemp()
+        try:
+            finta = os.path.join(cartella, "bookinvip_mutazione_in_corso")
+            os.makedirs(finta)
+            with io.open(os.path.join(finta, "quale.txt"), "w", encoding="utf-8") as f:
+                f.write("fase59_prezzi.py")
+            stato, dettaglio = pv.controllo_5_traccia_mutazione(radice=self.RADICE,
+                                                                traccia=finta)
+            self.assertEqual(pv.ROSSO, stato,
+                             "con un giro di mutazione APERTO non si lancia niente: %s"
+                             % dettaglio[:300])
+            self.assertIn("fase59_prezzi.py", dettaglio,
+                          "deve dire QUALE file potrebbe essere rotto, altrimenti chi "
+                          "legge non sa dove guardare")
+            stato_sano, _ = pv.controllo_5_traccia_mutazione(
+                radice=self.RADICE, traccia=os.path.join(cartella, "che-non-esiste"))
+            self.assertEqual(pv.OK, stato_sano,
+                             "senza traccia deve TACERE: l'altra direzione (regola "
+                             "ferrea 10)")
+        finally:
+            shutil.rmtree(cartella, ignore_errors=True)
+
+    def test_IL_CONTROLLO_DEI_BYTE_VEDE_LA_FIRMA_DELL_HEREDOC(self):
+        """Il difetto vero del 2026-08-03: `\\bOTA\\b` diventato `<BS>OTA<BS>` in
+        `audit_coerenza_tariffe.py`. Quella parte della regola non combaciava MAI, e lo
+        strumento continuava a girare dicendo di aver controllato."""
+        pv = self.pv()
+        cartella = tempfile.mkdtemp()
+        try:
+            with io.open(os.path.join(cartella, "sporco.py"), "wb") as f:
+                f.write(b'KW = re.compile("\x08OTA\x08")\n')
+            with io.open(os.path.join(cartella, "pulito.py"), "wb") as f:
+                f.write(b'KW = re.compile(r"\\bOTA\\b")\n')
+            stato, dettaglio = pv.controllo_6_byte_di_controllo(radice=cartella,
+                                                                quali=["sporco.py"])
+            self.assertEqual(pv.ROSSO, stato, "non vede il backspace: %s" % dettaglio[:300])
+            stato_ok, _ = pv.controllo_6_byte_di_controllo(radice=cartella,
+                                                           quali=["pulito.py"])
+            self.assertEqual(pv.OK, stato_ok,
+                             "su un file pulito deve tacere, altrimenti e' un allarme che "
+                             "suona sempre")
+        finally:
+            shutil.rmtree(cartella, ignore_errors=True)
+
+    def test_E_TACE_A_MACCHINA_SANA(self):
+        """D18 punto 2, seconda meta'. I valori dell'ambiente si iniettano coincidenti con
+        la dichiarazione, cosi' la guardia dice la stessa cosa su Windows e su Linux: un
+        cancello che dipende dalla macchina e' un falso allarme che aspetta il suo giorno."""
+        pv = self.pv()
+        sana = self._pagina_sana()
+        atteso = re.search(r"Python (\d+\.\d+\.\d+)", sana)
+        self.assertIsNotNone(atteso, "la riga AMBIENTE non dichiara piu' un Python")
+        stato, dettaglio = pv.controllo_4_ambiente(
+            pagina=sana, radice=self.RADICE, quale_python=atteso.group(1),
+            quale_openssl=not re.search(r"openssl\s+NON\s+nel\s+PATH", sana, re.I),
+            moduli_presenti={"hypothesis", "yaml", "coverage"})
+        self.assertEqual(pv.OK, stato,
+                         "sulla macchina esattamente DICHIARATA il controllo grida lo "
+                         "stesso: %s" % dettaglio[:400])
+
+    def test_UN_CONTROLLO_CHE_ESPLODE_DIVENTA_NON_ESEGUITO_NON_VERDE(self):
+        """Sbaglio S7: se manca la premessa il controllo non e' verde, e' NON ESEGUITO. Un
+        controllo che esplode non ha misurato niente."""
+        pv = self.pv()
+
+        def scoppia(radice=None):
+            raise RuntimeError("il metro si e' rotto")
+
+        esiti = pv.giro(self.RADICE, ((99, "un controllo che esplode", scoppia),))
+        self.assertEqual(pv.NON_ESEGUITO, esiti[0].stato,
+                         "un controllo che esplode deve diventare NON ESEGUITO, non "
+                         "sparire e non passare per verde")
+        rossi, non_eseguiti = pv.verdetto(esiti)
+        self.assertEqual(1, len(non_eseguiti),
+                         "il verdetto deve CONTARLO: un non-eseguito ignorato e' una zona "
+                         "cieca con l'aspetto della copertura")
+
+    def test_SI_FERMA_SE_NON_E_IN_CONDIZIONE_DI_MISURARE(self):
+        """D18 punto 1: un metro storto va scoperto dal metro, non dal muro."""
+        pv = self.pv()
+        cartella = tempfile.mkdtemp()
+        try:
+            mancanti = pv._precondizioni(cartella)
+            self.assertTrue(mancanti,
+                            "su una cartella vuota il pre-volo si crede in grado di "
+                            "misurare: stamperebbe un verdetto che non ha misurato")
+        finally:
+            shutil.rmtree(cartella, ignore_errors=True)
+        self.assertEqual([], pv._precondizioni(self.RADICE),
+                         "sulla radice vera non deve inventarsi impedimenti")
+
+    def test_RESTA_SOTTO_IL_TETTO_DICHIARATO(self):
+        """⛔ LA TRAPPOLA DA NON RIPAGARE. Se il pre-volo diventa lento la gente smette di
+        lanciarlo, e allora non protegge piu' niente -- e' il modo esatto in cui un
+        controllo corretto muore. Il tetto e' dichiarato nello strumento e non si puo'
+        alzare a piacere per far passare questa guardia: qui si pretende che resti basso.
+
+        ⛔ La soglia di fallimento e' generosa apposta (tre volte il tetto): una macchina
+        di CI lenta non deve produrre un rosso finto -- un falso allarme e' un difetto
+        quanto un allarme mancato. Serve a prendere una REGRESSIONE vera, non un secondo
+        di scarto. Misurato il 2026-08-11 su questo computer: 2,44 secondi."""
+        pv = self.pv()
+        self.assertLessEqual(pv.TETTO_SECONDI, 10.0,
+                             "il tetto e' stato alzato sopra i 10 secondi: cosi' la "
+                             "guardia sulla velocita' non guarda piu' niente")
+        uscita, testo, muro = self._esegui("prima_di_lanciare.py")
+        detto = re.search(r"CRONOMETRO: ([\d.]+)s", testo)
+        self.assertIsNotNone(detto,
+                             "il pre-volo non si mette piu' sotto cronometro: senza la "
+                             "misura, «deve restare veloce» torna a essere un auspicio")
+        self.assertLess(float(detto.group(1)), pv.TETTO_SECONDI * 3,
+                        "il pre-volo dichiara %ss contro un tetto di %ss: e' diventato "
+                        "lento, e un pre-volo lento viene abbandonato"
+                        % (detto.group(1), pv.TETTO_SECONDI))
+        self.assertLess(muro, 60.0,
+                        "il pre-volo ha impiegato %.1fs di orologio vero: qualcuno gli ha "
+                        "fatto fare il lavoro della suite" % muro)
+
+    def test_IL_CRITERIO_DEGLI_SKIP_NON_E_UNA_COPIA(self):
+        """⛔ LA MALATTIA DI QUESTO PROGETTO E' LO STESSO FATTO SCRITTO DUE VOLTE, con la
+        seconda copia che resta indietro (sei volte in un giorno, il 2026-08-09). Il
+        criterio sugli `skipTest` vive in `test_suite_senza_zone_cieche.skip_sospetti` e
+        il pre-volo lo CHIAMA. Se qualcuno lo togliesse di li' e lo ricopiasse
+        nell'attrezzo, questa guardia non se ne accorgerebbe leggendo il sorgente -- e
+        allora si prova al contrario: si costruisce una radice dove quella funzione NON
+        c'e' e si pretende che il pre-volo lo DICA invece di arrangiarsi."""
+        pv = self.pv()
+        cartella = tempfile.mkdtemp()
+        try:
+            with io.open(os.path.join(cartella, "test_suite_senza_zone_cieche.py"), "w",
+                         encoding="utf-8") as f:
+                f.write("# una versione senza `skip_sospetti`\n")
+            stato, dettaglio = pv.controllo_3_skip_interni(radice=cartella)
+            self.assertEqual(
+                pv.NON_ESEGUITO, stato,
+                "senza `skip_sospetti` il pre-volo dovrebbe fermarsi e dirlo. Se invece "
+                "risponde %r vuol dire che si e' fatto una copia propria del criterio, e "
+                "una copia resta indietro." % stato)
+            self.assertIn("skip_sospetti", dettaglio,
+                          "deve dire cosa manca, non solo che qualcosa manca")
+        finally:
+            shutil.rmtree(cartella, ignore_errors=True)
+        # e sulla radice vera la funzione c'e' e risponde
+        self.assertEqual(pv.OK, pv.controllo_3_skip_interni(radice=self.RADICE)[0],
+                         "sulla radice vera il criterio deve rispondere, non fermarsi")
+
+
+class TestIlPreFattoVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
+    """🛬 I tre controlli che l'11 agosto sono stati fatti A MANO, o non fatti affatto."""
+
+    def test_CONTROLLO_7_UN_ATTREZZO_ORFANO_E_UN_ROSSO(self):
+        """Il caso vero: un E2E contro Stripe VERO da 11 KB -- l'unico collaudo che prova i
+        crediti contro Stripe vero -- rimasto fuori dal repository e ritrovato PER FORTUNA,
+        rileggendo. Nessuna guardia lo vedeva."""
+        pf = self.pf()
+        cartella = tempfile.mkdtemp()
+        try:
+            with io.open(os.path.join(cartella, "attrezzo_mai_portato_dentro.py"), "w",
+                         encoding="utf-8") as f:
+                f.write("# lavoro che il giorno che serve non c'e'\n")
+            stato, dettaglio = pf.controllo_7_artefatti_fuori(radice=self.RADICE,
+                                                              cartelle=[cartella])
+            self.assertEqual(pf.ROSSO, stato,
+                             "un `.py` fuori dal repository, senza nessun file con quel "
+                             "nome dentro, deve essere un ROSSO: %s" % dettaglio[:300])
+            self.assertIn("attrezzo_mai_portato_dentro.py", dettaglio,
+                          "deve dire QUALE file, altrimenti non serve a niente")
+            # l'altra direzione: un nome che nel repository esiste gia' non e' orfano
+            os.remove(os.path.join(cartella, "attrezzo_mai_portato_dentro.py"))
+            with io.open(os.path.join(cartella, "guardia_commit.py"), "w",
+                         encoding="utf-8") as f:
+                f.write("# copia di lavoro di un file che sta gia' in collaudi/\n")
+            self.assertEqual(
+                pf.OK,
+                pf.controllo_7_artefatti_fuori(radice=self.RADICE, cartelle=[cartella])[0],
+                "un nome che esiste gia' nel repository non e' un orfano: gridare qui "
+                "sarebbe un falso allarme a ogni commit")
+        finally:
+            shutil.rmtree(cartella, ignore_errors=True)
+
+    def test_CONTROLLO_8_LO_SCOPO_CHE_SI_ALLARGA_DA_SOLO(self):
+        """Regola ferrea 15. «Avevo dichiarato due file, ne ho toccati quattro. Il lavoro
+        in piu' era buono, ma uno scopo che si allarga da solo e' il canale principale
+        delle regressioni.»"""
+        pf = self.pf()
+        casi = (
+            ("toccato un file fuori elenco", ["a.py"], ["a.py", "fase83_server.py"],
+             pf.ROSSO),
+            ("toccati esattamente quelli dichiarati", ["a.py", "b/c.py"],
+             ["b/c.py", "a.py"], pf.OK),
+            ("dichiarato in piu' e non toccato: NOTA, non rosso", ["a.py", "b.py"],
+             ["a.py"], pf.OK),
+            ("le barre di Windows non fanno un falso rosso", [r"collaudi\x.py"],
+             ["collaudi/x.py"], pf.OK),
+        )
+        for nome, dichiarati, toccati, atteso in casi:
+            with self.subTest(caso=nome):
+                stato, dettaglio = pf.controllo_8_scopo(
+                    radice=self.RADICE, dichiarati=dichiarati, toccati=toccati)
+                self.assertEqual(atteso, stato, "%s -> %s: %s"
+                                 % (nome, stato, dettaglio[:300]))
+        # ⛔ La traccia si punta a un percorso CHE NON ESISTE. La prima versione di questa
+        # guardia leggeva la traccia VERA della macchina: verde su questo computer (dove
+        # uno scopo era stato dichiarato) e rossa in CI. Un test che dipende da dove lo
+        # lanci e' la forma piu' subdola di verde finto (S11).
+        cartella = tempfile.mkdtemp()
+        try:
+            mai = os.path.join(cartella, "nessuna-traccia.txt")
+            senza, dettaglio = pf.controllo_8_scopo(radice=self.RADICE, dichiarati=None,
+                                                    toccati=["a.py"], traccia=mai)
+        finally:
+            shutil.rmtree(cartella, ignore_errors=True)
+        self.assertEqual(pf.NON_ESEGUITO, senza,
+                         "senza scopo dichiarato non si puo' giudicare: e' NON ESEGUITO, "
+                         "che non e' un successo (S7). Rispondere OK sarebbe il verde "
+                         "peggiore di tutti")
+        self.assertIn("prima_di_lanciare.py --scopo", dettaglio,
+                      "un blocco deve dire come si sblocca, altrimenti viene aggirato")
+
+    def test_CONTROLLO_9_IL_MESSAGGIO_DI_COMMIT_NELLE_DUE_DIREZIONI(self):
+        pf = self.pf()
+        buono = ("un lavoro vero\n\nCo-Authored-By: Claude Opus 5 (1M context) "
+                 "<noreply@anthropic.com>\n")
+        casi = (
+            ("un messaggio in ordine", buono, pf.OK),
+            ("vuoto", "\n# solo commenti di git\n", pf.ROSSO),
+            ("con un segnaposto", buono.replace("un lavoro vero", "__DA_RIEMPIRE__"),
+             pf.ROSSO),
+            ("con caratteri non-ASCII", buono.replace("vero", "vero \u2014 ecco"),
+             pf.ROSSO),
+            ("senza la firma", "un lavoro senza firma\n", pf.ROSSO),
+            ("una fusione non ha bisogno della firma",
+             "Merge pull request #28 from edilmax/ramo\n", pf.OK),
+            ("le righe commentate da git non contano",
+             buono + "\n# __DA_RIEMPIRE__ questa la mette git\n", pf.OK),
+        )
+        for nome, testo, atteso in casi:
+            with self.subTest(caso=nome):
+                stato, dettaglio = pf.controllo_9_messaggio(testo=testo)
+                self.assertEqual(atteso, stato, "%s -> %s: %s"
+                                 % (nome, stato, dettaglio[:300]))
+
+    def test_IL_PATH_NON_SI_CONFRONTA_MA_IL_RESTO_SI(self):
+        """⛔ LA GUARDIA CHE IMPEDISCE ALLA RINUNCIA DI DIVENTARE UNA ZONA CIECA.
+
+        Il 2026-08-11, al primo giro vero dentro il gancio `pre-commit`, il controllo
+        sull'ambiente e' uscito ROSSO: i ganci di git girano sotto `sh`, dove Git per
+        Windows porta `/mingw64/bin/openssl`, mentre da PowerShell -- la shell da cui
+        parte la suite -- openssl non c'e'. La stessa domanda, due risposte opposte: e' lo
+        sbaglio S11 preso dallo strumento su se stesso.
+
+        La cura e' stata spegnere il confronto sul PATH nel solo pre-fatto. Una cura
+        cosi' e' pericolosa: la prossima «semplificazione» potrebbe spegnere tutto il
+        controllo, e nessuno se ne accorgerebbe perche' resterebbe verde. Qui si pretende
+        che il pre-fatto abbia perso SOLO il PATH e continui a vedere tutto il resto.
+
+        ⛔ E QUESTA GUARDIA HA GIA' SBAGLIATO UNA VOLTA, il 2026-08-11: era VERDE su
+        Windows e ROSSA in CI. Una delle tre asserzioni non iniettava la versione di
+        Python e usava quella vera: su questo computer e' esattamente la `3.9.10`
+        dichiarata, su Linux no. Da qui la regola: **si iniettano TUTTI i valori
+        dell'ambiente, anche quelli che qui sarebbero giusti.** Un valore vero lasciato
+        passare lega la guardia alla macchina su cui gira, ed e' la forma piu' subdola di
+        verde finto -- quella che si scopre solo davanti al giudice (regola ferrea 8).
+        """
+        pv, pf = self.pv(), self.pf()
+        sana = self._pagina_sana()
+        atteso = re.search(r"Python (\d+\.\d+\.\d+)", sana)
+        self.assertIsNotNone(atteso, "la riga AMBIENTE non dichiara piu' un Python: "
+                                     "questa guardia non avrebbe piu' niente da iniettare")
+        # La macchina ESATTAMENTE come la dichiara il documento, costruita a mano: cosi'
+        # questa guardia dice la stessa cosa su Windows, su Linux e su qualunque Python.
+        sano = dict(pagina=sana, radice=self.RADICE, confronta_path=False,
+                    quale_python=atteso.group(1), quale_openssl=True,
+                    moduli_presenti={"hypothesis", "yaml", "coverage"})
+
+        stato, dettaglio = pv.controllo_4_ambiente(**sano)
+        self.assertEqual(pv.OK, stato,
+                         "col PATH spento openssl non deve piu' contare: %s"
+                         % dettaglio[:300])
+        self.assertIn("NON ho confrontato il PATH", dettaglio,
+                      "una rinuncia si DICHIARA (D18 punto 3): un taglio silenzioso fa "
+                      "sembrare «coperto» cio' che non e' stato guardato")
+
+        # ⛔ E NON BASTA CHE SIA ROSSO: si pretende che sia rosso PER QUESTO. Un allarme
+        # che suona per il motivo sbagliato passerebbe lo stesso, e la rinuncia sul PATH
+        # potrebbe essersi mangiata il resto senza che nessuno se ne accorga.
+        stato, dettaglio = pv.controllo_4_ambiente(**dict(sano, quale_python="0.0.0"))
+        self.assertEqual(pv.ROSSO, stato,
+                         "col PATH spento il controllo non vede piu' nemmeno un Python "
+                         "sbagliato: non e' stato ristretto, e' stato accecato")
+        self.assertIn("Python dichiarato", dettaglio,
+                      "e' rosso, ma non per il Python: %s" % dettaglio[:300])
+
+        stato, dettaglio = pv.controllo_4_ambiente(**dict(sano, moduli_presenti=set()))
+        self.assertEqual(pv.ROSSO, stato,
+                         "col PATH spento non vede piu' una libreria dichiarata e assente")
+        self.assertIn("non si importa", dettaglio,
+                      "e' rosso, ma non per la libreria mancante: %s" % dettaglio[:300])
+
+        numeri = [n for n, _, _ in pf.CONTROLLI]
+        self.assertEqual(list(range(1, 9)), sorted(numeri),
+                         "il pre-fatto deve avere tutti e otto i controlli, non sette: %r"
+                         % (numeri,))
+
+    def test_STAMPA_I_SEI_DIVIETI_DOPO_AVER_FINITO(self):
+        """«Si rileggono prima di iniziare un'operazione E DOPO averla finita, cosi' la
+        fine di un lavoro non diventa l'inizio di una violazione.» Il pre-fatto e' il
+        «dopo»: gira quando si sta per salvare, cioe' quando B1 e B4 contano di piu'."""
+        uscita, testo, _ = self._esegui("prima_di_dire_fatto.py")
+        for divieto in ("B1.", "B2.", "B3.", "B4.", "B5.", "B6."):
+            self.assertIn(divieto, testo,
+                          "il pre-fatto non stampa piu' %s" % divieto)
+        self.assertLess(
+            testo.index("PRE-FATTO"), testo.index("B1."),
+            "nel pre-fatto i divieti vanno DOPO i controlli: e' il momento del «dopo "
+            "averla finita»")
+
+    def test_IL_CODICE_D_USCITA_NON_PUO_MENTIRE_SUL_RAPPORTO(self):
+        """Lo stesso controllo anti-imbroglio del pre-volo, sul pre-fatto."""
+        uscita, testo, _ = self._esegui("prima_di_dire_fatto.py")
+        corpo = testo.split("COSA QUESTO CONTROLLO NON HA ESAMINATO")[0]
+        guasti = (len(re.findall(r"^  ROSSO ", corpo, re.M))
+                  + len(re.findall(r"^  NON ESEGUITO ", corpo, re.M)))
+        self.assertEqual(
+            0 if guasti == 0 else 1, uscita,
+            "il rapporto elenca %d fra rossi e non-eseguiti, ma lo strumento e' uscito "
+            "%d: l'uscita deve seguire il rapporto.\n%s" % (guasti, uscita, testo[-1500:]))
+
+
+class TestIGanciDiGitCHIAMANODavveroGliAttrezzi(_GuardieSugliAttrezziDelLavoro):
+    """⛔ UN CONTROLLO CORRETTO CHE NESSUNO CHIAMA NON E' UN CONTROLLO.
+
+    E' la lezione piu' cara del 2026-08-11, imparata due volte nello stesso giorno: il
+    gancio pre-commit era SPENTO, e il protocollo di deploy era FACOLTATIVO. Tutti e due
+    scritti bene. Qui i ganci si ESEGUONO per davvero -- una guardia che cercasse il nome
+    dell'attrezzo dentro lo script la soddisferebbe anche un commento (S6).
+    """
+
+    @staticmethod
+    def _trova_sh():
+        """`sh` NON e' nel PATH di PowerShell su questa macchina, ma ESISTE: Git per
+        Windows se lo porta dietro. Arrendersi al primo `which` metterebbe da parte queste
+        guardie proprio dove si lavora (S11).
+        ⛔ `bash` di C:\\Windows\\system32 e' WSL: un'altra macchina. Non si usa."""
+        trovato = shutil.which("sh")
+        if trovato:
+            return trovato
+        git = shutil.which("git")
+        if git:
+            base = os.path.dirname(os.path.dirname(git))
+            for rel in (("bin", "sh.exe"), ("usr", "bin", "sh.exe")):
+                p = os.path.join(base, *rel)
+                if os.path.exists(p):
+                    return p
+        return ""
+
+    def setUp(self):
+        self.sh = self._trova_sh()
+
+    def _sorgente(self, gancio):
+        with io.open(os.path.join(self.RADICE, "deploy", "hooks", gancio),
+                     encoding="utf-8") as f:
+            return f.read()
+
+    def _senza_sh(self, gancio, atteso):
+        """RAMO POVERO, e sta qui invece di uno `skipTest`. Saltare farebbe sparire questa
+        guardia dal rapporto come «skipped» e nessuno la leggerebbe piu'; e il motivo «sh
+        non installato» passerebbe pure per ambientale, cioe' basterebbe una PAROLA per
+        zittirla. Si asserisce lo stesso qualcosa di vero, dichiarando che e' piu' debole:
+        questa legge il sorgente, e un sorgente lo soddisfa anche un commento (S6)."""
+        self.assertIn(atteso, self._sorgente(gancio),
+                      "il gancio %s non nomina piu' %r" % (gancio, atteso))
+
+    def test_I_GANCI_SONO_ASCII_PURO(self):
+        """Girano su macchine, shell e lingue diverse: e' l'ultimo posto dove si vuole
+        scoprire un problema di codifica. Il 2026-08-02 il programma chiamato dal gancio
+        e' ESPLOSO su un simbolo non-ASCII, mostrando un traceback al posto delle
+        istruzioni -- e un blocco che non dice come si sblocca viene aggirato."""
+        for gancio in ("pre-commit", "commit-msg"):
+            with self.subTest(gancio=gancio):
+                with io.open(os.path.join(self.RADICE, "deploy", "hooks", gancio),
+                             "rb") as f:
+                    dati = f.read()
+                cattivi = sorted({b for b in dati if b > 127 or (b < 32
+                                                                 and b not in (9, 10, 13))})
+                self.assertEqual([], cattivi,
+                                 "%s contiene byte fuori dall'ASCII: %r" % (gancio, cattivi))
+
+    def test_IL_GANCIO_COMMIT_MSG_RIFIUTA_E_ACCETTA(self):
+        """Le due direzioni, sul gancio ESEGUITO. E' l'unico gancio a cui git passa il
+        messaggio: al `pre-commit` non esiste ancora."""
+        if not self.sh:
+            return self._senza_sh("commit-msg", "--messaggio")
+        cartella = tempfile.mkdtemp()
+        try:
+            buono = os.path.join(cartella, "buono.txt")
+            with io.open(buono, "w", encoding="utf-8") as f:
+                f.write("un lavoro vero\n\nCo-Authored-By: Claude Opus 5 (1M context) "
+                        "<noreply@anthropic.com>\n")
+            e = subprocess.run([self.sh, "deploy/hooks/commit-msg", buono],
+                               cwd=self.RADICE, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT)
+            self.assertEqual(0, e.returncode,
+                             "un messaggio in ordine deve passare: %r"
+                             % e.stdout.decode("utf-8", "replace")[-400:])
+            cattivo = os.path.join(cartella, "cattivo.txt")
+            with io.open(cattivo, "w", encoding="utf-8") as f:
+                f.write("un lavoro senza firma\n")
+            e = subprocess.run([self.sh, "deploy/hooks/commit-msg", cattivo],
+                               cwd=self.RADICE, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT)
+            testo = e.stdout.decode("utf-8", "replace")
+            self.assertNotEqual(0, e.returncode,
+                                "un messaggio senza firma non deve passare: %r"
+                                % testo[-400:])
+            self.assertIn("Co-Authored-By", testo,
+                          "deve dire COSA manca, non solo che qualcosa non va")
+        finally:
+            shutil.rmtree(cartella, ignore_errors=True)
+
+    def test_IL_GANCIO_PRE_COMMIT_CHIAMA_DAVVERO_IL_PRE_FATTO(self):
+        """Non si cerca il nome nello script: si guarda se nell'uscita compare il rapporto
+        del pre-fatto. Quello lo puo' produrre solo l'attrezzo eseguito davvero."""
+        if not self.sh:
+            return self._senza_sh("pre-commit", "prima_di_dire_fatto.py")
+        e = subprocess.run([self.sh, "deploy/hooks/pre-commit"], cwd=self.RADICE,
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        testo = e.stdout.decode("utf-8", "replace")
+        self.assertIn("PRE-FATTO", testo,
+                      "il gancio pre-commit non esegue il pre-fatto: un controllo che "
+                      "nessuno chiama non e' un controllo.\n%s" % testo[-800:])
+        self.assertRegex(testo, r"\b8\. ",
+                         "il rapporto del pre-fatto arriva monco: manca il controllo 8")
+
+    def test_IL_PRE_COMMIT_SI_FERMA_PRIMA_SE_UNA_MUTAZIONE_E_APERTA(self):
+        """L'ORDINE CONTA, e qui si dimostra. Se un giro di mutazione e' rimasto aperto, un
+        file di PRODUZIONE puo' contenere un guasto messo di proposito: il gancio deve
+        fermarsi SUBITO, senza nemmeno arrivare agli altri otto controlli.
+
+        La traccia finta si costruisce in una cartella temporanea e si punta lo strumento
+        li' con `TMP`/`TEMP` (`tempfile.gettempdir()` li legge): la traccia VERA non viene
+        mai toccata -- crearla per davvero bloccherebbe i commit di chi lavora."""
+        if not self.sh:
+            return self._senza_sh("pre-commit", "guardia_commit.py")
+        cartella = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(cartella, "bookinvip_mutazione_in_corso"))
+            amb = dict(os.environ)
+            amb["TMP"] = amb["TEMP"] = amb["TMPDIR"] = cartella
+            e = subprocess.run([self.sh, "deploy/hooks/pre-commit"], cwd=self.RADICE,
+                               env=amb, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            testo = e.stdout.decode("utf-8", "replace")
+            self.assertNotEqual(0, e.returncode,
+                                "con un giro di mutazione aperto il gancio deve fermare "
+                                "il salvataggio: %r" % testo[-400:])
+            self.assertIn("SALVATAGGIO BLOCCATO", testo,
+                          "deve dire perche' si e' fermato: %r" % testo[-400:])
+            self.assertNotIn(
+                "PRE-FATTO", testo,
+                "il gancio e' arrivato al pre-fatto nonostante la mutazione aperta: i due "
+                "controlli non sono in serie, e il primo non ferma piu' niente")
+        finally:
+            shutil.rmtree(cartella, ignore_errors=True)
 
 
 if __name__ == "__main__":

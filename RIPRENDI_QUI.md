@@ -11,23 +11,69 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🚦 2026-08-11 — RIPARTI DA QUI. BLOCCO 1 / `fase167`: I QUATTRO LIVELLI SONO CHIUSI.
+## 🚦 2026-08-11 — RIPARTI DA QUI. LE GUARDIE SUL **LAVORO**: PRE-VOLO E PRE-FATTO.
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
 >
-> ✅ **DEPLOY FATTO il 2026-08-11**, e i **tre posti sono allineati su `b8f63f9`**:
-> computer = GitHub `master` = VPS. `collaudi/verifica_produzione.py` → **190 controlli,
-> 0 violazioni, uscita 0** (P3 «porte chiuse» compreso: le sonde negative, non solo quelle
-> che dicono «risponde»). La riga riparata e' stata verificata **dentro il contenitore vivo**
-> (`docker exec casavip_app grep` → riga 115), non dedotta dal commit.
-> ⏳ Manca solo la **chiavetta** (`cd95f73`): e' il gesto fisico del fondatore.
+> ### 🛫 PRIMA COSA DA FARE, SEMPRE — costa DUE SECONDI
+> ```powershell
+> python collaudi/prima_di_lanciare.py --scopo <i file che toccherai>
+> ```
+> Sei controlli che prima giravano **dentro un ciclo da 68 minuti**: conto dei test ·
+> riga delle consegne · `skipTest` ciechi · ambiente · mutazione aperta · byte invisibili.
+> Stampa anche i **sei divieti**, perche' si leggono prima di ogni operazione. Uscita 0 = si
+> puo' lanciare la suite. E al commit ci pensa `collaudi/prima_di_dire_fatto.py`, che i ganci
+> di git chiamano da soli — non dipende piu' dal ricordarsene.
+> ⛔ **Il pre-fatto pretende che il pre-volo sia girato prima** (gli serve lo scopo
+> dichiarato). Se ti blocca al commit, il messaggio ti dice il comando: sono 4 secondi.
 >
-> ✅ **RISOLTO ANCHE IL BUCO DI PROCESSO DI STAMATTINA.** Il ramo `chiavetta-cd95f73` era
+> ### 📍 DOVE SIAMO — misurato l'11 agosto, ma **RIMISURALO**, non fidarti di questa riga
+> | posto | comando | valore |
+> |---|---|---|
+> | computer | `git rev-parse --short HEAD` | `191defc` |
+> | GitHub | `git rev-parse --short origin/master` | `191defc` |
+> | VPS | `ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'` | `191defc` |
+> | chiavetta | gesto fisico del fondatore | ⏳ `cd95f73` |
+>
+> ⛔ **E `git rev-parse` sul VPS legge il REPOSITORY, non l'immagine che GIRA.** Verificato
+> **dentro il contenitore vivo** l'11 agosto: `docker exec casavip_app grep` trova la riga
+> riparata di `fase167` alla **riga 115**, e l'immagine `casavip-app:latest` e' stata creata
+> alle **14:12:57 UTC**, col paracadute `:prec` un passo indietro. Non dedotto dal commit.
+>
+> 💡 **E il deploy e' andato in DUE passaggi, non uno.** `b8f63f9` (il lavoro su `fase167`,
+> `verifica_produzione.py` → **190 controlli, 0 violazioni, uscita 0**) e poi `191defc`, che
+> porta il passo di sicurezza obbligatorio del deploy. ⚠️ Il secondo commit (`d96e4bb`) tocca
+> **solo** `REGISTRO_INGEGNERIA.md`, `RIPRENDI_QUI.md`, `deploy/protocollo_d17.sh` e
+> `test_pipeline_ci.py`: **zero codice dell'applicazione** (`git diff --name-only
+> b8f63f9 191defc`). Per questo l'immagine che gira e' corretta a prescindere da quale dei due
+> commit l'abbia costruita — misurato, non sperato.
+>
+> ✅ **RISOLTO ANCHE IL BUCO DI PROCESSO DELL'11 MATTINA.** Il ramo `chiavetta-cd95f73` era
 > stato **spedito** su GitHub ma la richiesta di unione **non era mai stata aperta** —
 > misurato dall'API: l'ultima era la **#26**, la #27 non esisteva. Non «aperta e non unita»:
-> **mai chiesta**. E' finito dentro la richiesta **#27** insieme al lavoro di oggi, quindi si
-> e' chiuso da solo. ⚠️ Era gia' successo il 2026-08-06: **si controlla, non si ricorda** —
-> e infatti l'ha trovato il primo comando della sessione, non la memoria.
+> **mai chiesta**. E' finito dentro la richiesta **#27** insieme al lavoro di quel giorno.
+> ⚠️ Era gia' successo il 2026-08-06: **si controlla, non si ricorda** — e infatti l'ha trovato
+> il primo comando della sessione, non la memoria.
+>
+> ### 🩹 LE DUE COSE LASCIATE INDIETRO APPOSTA SONO STATE SISTEMATE
+> Erano state lasciate perche' una suite era in corso, e toccare i file del progetto durante un
+> ciclo produce **rossi finti** (regola ferrea 4). **(a)** la riga `CONSEGNE AGGIORNATE A:`
+> diceva `e15311e` ed era **2 commit di lavoro indietro** (misurato: `git rev-list --count
+> --no-merges e15311e..HEAD` → **2**), quindi la sua guardia sarebbe stata rossa: ora dice
+> `191defc` e la misura da' **0**. **(b)** questo riquadro raccontava il deploy su `b8f63f9`
+> ignorando il secondo: ora li racconta tutti e due. **Costo: zero** — fatte insieme al lavoro
+> di oggi, dentro lo stesso giro di suite, che era esattamente il motivo per cui erano state
+> rimandate.
+>
+> ### ▶️ IL PROSSIMO LAVORO
+> `fase66_tassa_soggiorno` (Blocco 1), poi `fase133_split_quote_uguali`, poi
+> `fase119_calendario_prezzi`. ⛔ **Il piano nel registro e' stato corretto in due punti**:
+> `fase43_commissione` e' **codice morto** ed e' uscito dal Blocco 2 (31 punti che non vanno
+> fatti), `fase147_tassa_comunale` e' **vivo** e non stava in nessun blocco: e' entrato.
+> Misurato con `raggiungibilita.py` e `mutazione_prodotto.py --censimento`, non ricordato.
+> 🏁 E la **riga d'arrivo** — 15 condizioni di «finito» e la lista chiusa di cosa resta — ora
+> sta in `REGISTRO_INGEGNERIA.md` §2-bis, non piu' solo in una memoria di sessione che **non
+> viaggia con la chiavetta**.
 >
 > ### ✅ COSA E' STATO FATTO OGGI — `fase167_credito_single_use`, tutti e 4 i livelli (D3)
 > Il modulo era **il piu' cieco del censimento dei soldi** (un solo file di test lo nominava)
@@ -262,12 +308,27 @@ python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='t
 ```
 ⛔ **Lanciarla con `Start-Process`, MAI col meccanismo di sottofondo dello strumento**: quello
 viene ucciso a fine turno — è già costato due giri da 4 minuti.
+⛔⛔ **E IL CODICE D'USCITA VA FATTO SCRIVERE IN FONDO AL FILE** (sbaglio **S8**: *«senza
+quella riga finale, quel file non è un esito»*). Lanciando `python` diretto con
+`Start-Process`, quando il processo finisce **il numero è perso**: resta solo il verdetto in
+prosa di unittest. Successo il 2026-08-11 sera: suite finita, verdetto `FAILED` leggibile,
+**codice d'uscita non recuperabile**. Si lancia un **lancianotte** che lo scrive da sé.
+Scriverlo nella cartella temporanea di sessione, non nel repository (regola ferrea 4: un file
+nuovo dentro il progetto mentre la suite gira produce **rossi finti**).
 ```powershell
-Start-Process python -ArgumentList "-m","unittest","discover","-s",".","-p","test_*.py" `
-  -RedirectStandardOutput "<scratchpad>\suite.txt" -RedirectStandardError "<scratchpad>\suite.err" `
+# 1) il lancianotte, in <scratchpad>\lancia_suite.ps1 — SENZA TUBI (regola ferrea 7):
+#      Set-Location "C:\Users\MaxDanno\Desktop\Core_Auto"
+#      python -m unittest discover -s . -p "test_*.py" *> "<scratchpad>\suite.err"
+#      $c = $LASTEXITCODE
+#      Add-Content "<scratchpad>\suite.err" -Value "CODICE D'USCITA DELLA SUITE: $c"
+# 2) e lo si stacca:
+Start-Process powershell -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","<scratchpad>\lancia_suite.ps1" `
   -NoNewWindow -WorkingDirectory "C:\Users\MaxDanno\Desktop\Core_Auto"
 ```
-Dura **~65 minuti**. Il verdetto (`Ran N` / `OK` / `FAILED`) lo scrive unittest in fondo a `.err`.
+⛔ `*>` è una **redirezione**, non un tubo: `$LASTEXITCODE` subito dopo è quello di `python`.
+Con `python … | Tee-Object` sarebbe l'esito di `Tee-Object` (regola ferrea 7, già pagata).
+Dura **~68 minuti** (misurato il 2026-08-11: **4096 secondi**). Il verdetto (`Ran N` / `OK` /
+`FAILED`) e ora anche il **codice d'uscita** stanno in fondo a `.err`.
 ⚠️ Se la guardia `test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO` è rossa, **non è un
 difetto**: è il numero dichiarato qui sotto (`SUITE ATTUALE:`) rimasto indietro. Rimisurarlo col
 caricatore e riscriverlo. È già successo **tre volte**.
@@ -538,7 +599,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: e15311e
+CONSEGNE AGGIORNATE A: 191defc
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -2363,20 +2424,31 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5507 test
+SUITE ATTUALE: Ran 5529 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3.
 COMANDO:  python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"
-MISURATO SU: b8f63f9 + le modifiche non committate del 2026-08-11 pomeriggio. Il conto, per
-             addendi misurati e non sommati a mente: 5492 (partenza) + 10 (collaudi di
-             `fase167` in `test_credito_single_use.py`) = 5502 · + 2 (guardie sul giudice
-             della mutazione) = 5504 · + 3 (guardie sul passo di sicurezza del deploy,
-             `TestIlDeployNonPuoSALTAREIlPassoDiSicurezza`) = **5507**.
+MISURATO SU: 191defc + le modifiche non committate del 2026-08-11 sera (pre-volo e pre-fatto).
+             ⛔ NON SOMMATO A MENTE: il caricatore, da fermo, ha stampato **5529** (D22 —
+             un totale ottenuto sommando altri numeri non e' misurato, ed e' cosi' che il
+             2026-08-06 ando' perso mezzo pomeriggio). Il controllo di coerenza, questo si'
+             per addendi: 5507 (di partenza) + 22 (le guardie nuove sul pre-volo, sul
+             pre-fatto e sui ganci di git) = 5529, e coincide.
+             🛫 E QUESTA VOLTA IL NUMERO L'HA PRESO UN ATTREZZO, NON L'ATTENZIONE DI
+             NESSUNO: `python collaudi/prima_di_lanciare.py` e' uscito ROSSO in **1,14
+             secondi** dicendo «dichiara 5507, il caricatore ne raccoglie 5529». E' lo
+             sbaglio S14 — tre ore in tre occasioni — visto PRIMA di lanciare la suite
+             invece che dopo 68 minuti di attesa. E' il motivo per cui quell'attrezzo esiste.
              Ambiente riverificato DA POWERSHELL il 2026-08-11 (S11: la stessa domanda da'
              due risposte fra Bash e PowerShell): identico a quello dichiarato qui sopra —
              Python 3.9.10, hypothesis/pyyaml/coverage presenti, openssl ASSENTE.
+             ⚠️ E DA `sh` LA RISPOSTA E' OPPOSTA: `command -v openssl` -> `/mingw64/bin/openssl`.
+             Non e' un difetto ne' una contraddizione: e' che Git per Windows porta con se'
+             il suo openssl e i ganci di git girano sotto `sh`. Per questo il pre-fatto NON
+             confronta il PATH e lo DICHIARA, mentre il pre-volo lo confronta: quello gira
+             nella shell da cui parte davvero la suite.
 GIRO REALE DEL 2026-08-10 (staccato con `Start-Process`, verdetto scritto da unittest):
           Ran 5483 tests in 3854.405s · FAILED (failures=1, skipped=4)
           L'UNICO fallimento era QUESTA riga, che dichiarava ancora 5486 mentre le due

@@ -165,14 +165,20 @@ def dichiarato():
     }
 
 
-def main():
-    n = conta_regole()
-    ricerca = n["appendice"]                       # le 44: 15 in CLAUDE.md + 29 in appendice
-    solo_appendice = max(0, n["appendice"] - n["ferrea"])
-    altri = (n["blocco"] + n["regola_zero"] + n["direttive"] + n["modi"] + n["collaudi"]
-             + n["finale"])
-    totale = ricerca + altri
+def stampa_i_divieti(n=None):
+    """I SEI DIVIETI, per intero. Sta in una funzione a se' perche' lo chiamano in TRE.
 
+    ⛔ ORDINE DEL FONDATORE, 2026-08-11, dato a meta' sessione: «LE REGOLE SI LEGGONO
+    PRIMA E DOPO OGNI OPERAZIONE». Fino a quel momento «rileggerle dopo» era affidato al
+    ricordarsene -- ed e' esattamente la categoria di obbligo che questo progetto ha
+    dimostrato rompersi di nuovo. Adesso lo fanno gli attrezzi:
+        collaudi/regole_avvio.py        -> a ogni avvio di sessione
+        collaudi/prima_di_lanciare.py   -> PRIMA di ogni operazione lunga
+        collaudi/prima_di_dire_fatto.py -> DOPO, prima di ogni commit
+    Il testo sta in un posto solo (`CLAUDE.md`) e lo stampa una funzione sola: tre copie
+    a mano sarebbero tre cose che divergono, che e' la malattia di sempre.
+    """
+    n = n or conta_regole()
     print("=" * 78)
     print("⛔⛔ IL BLOCCO — %d DIVIETI ASSOLUTI (prima di tutto, anche della regola zero)"
           % n["blocco"])
@@ -197,6 +203,17 @@ def main():
     print("     divieti. Sono errori FATTI DAVVERO, ognuno con la data, come si e' visto e")
     print("     la riga che lo impedisce. SI RILEGGE PRIMA DI DIRE «FATTO».")
     print()
+
+
+def main():
+    n = conta_regole()
+    ricerca = n["appendice"]                       # le 44: 15 in CLAUDE.md + 29 in appendice
+    solo_appendice = max(0, n["appendice"] - n["ferrea"])
+    altri = (n["blocco"] + n["regola_zero"] + n["direttive"] + n["modi"] + n["collaudi"]
+             + n["finale"])
+    totale = ricerca + altri
+
+    stampa_i_divieti(n)
     print("=" * 78)
     print("⛔ REGOLE DEL PROGETTO — si leggono PRIMA di fare qualunque cosa")
     print("=" * 78)

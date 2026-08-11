@@ -42,9 +42,46 @@ SALTI_AMBIENTALI = ("postgres", "node", "database_url", "rete", "network",
                     "non installato", "non raggiungibile", "legacy", "flask")
 
 
-def _file_di_test():
-    return sorted(n for n in os.listdir(QUI)
+def _file_di_test(cartella=None):
+    return sorted(n for n in os.listdir(cartella or QUI)
                   if n.startswith("test_") and n.endswith(".py"))
+
+
+def skip_sospetti(radice=None):
+    """I test che si assolvono da soli, come ELENCO -- non come asserzione.
+
+    ⛔ STA QUI FUORI, E NON DENTRO IL METODO DI TEST, PER UNA RAGIONE PRECISA. Questo
+    criterio serve in due momenti diversi: dentro la suite (dove diventa un rosso) e
+    PRIMA di lanciarla (`collaudi/prima_di_lanciare.py`, dove costa 2,6 secondi invece
+    di 68 minuti). Ricopiarlo nell'attrezzo avrebbe creato due esemplari della stessa
+    regola, e la seconda copia resta indietro: e' la malattia che questo progetto ha
+    gia' pagato sei volte in un giorno solo. Un posto solo, due chiamanti.
+
+    Restituisce una lista di stringhe «file:riga  codice», vuota se e' tutto a posto.
+    """
+    radice = radice or QUI
+    sospetti = []
+    for nome in _file_di_test(radice):
+        if nome == os.path.basename(__file__):
+            continue
+        try:
+            with io.open(os.path.join(radice, nome), encoding="utf-8") as f:
+                testo = f.read()
+            albero = ast.parse(testo)
+        except SyntaxError:
+            continue
+        righe = testo.splitlines()
+        for n in ast.walk(albero):
+            if not (isinstance(n, ast.Call)
+                    and isinstance(n.func, ast.Attribute)
+                    and n.func.attr == "skipTest"):
+                continue
+            riga = righe[n.lineno - 1] if n.lineno <= len(righe) else ""
+            motivo = riga.lower()
+            if any(a in motivo for a in SALTI_AMBIENTALI):
+                continue
+            sospetti.append("%s:%d  %s" % (nome, n.lineno, riga.strip()[:74]))
+    return sospetti
 
 
 def _albero(nome):
@@ -100,28 +137,11 @@ class TestNessunTestSiAssolveDaSolo(unittest.TestCase):
 
     def test_gli_skip_interni_sono_solo_per_l_ambiente(self):
         """Un `skipTest` deciso da cio' che il test dovrebbe verificare e' un controllo
-        che si spegne da solo. Uno deciso dall'ambiente e' legittimo."""
-        sospetti = []
-        for nome in _file_di_test():
-            if nome == os.path.basename(__file__):
-                continue
-            try:
-                with io.open(os.path.join(QUI, nome), encoding="utf-8") as f:
-                    testo = f.read()
-                albero = ast.parse(testo)
-            except SyntaxError:
-                continue
-            righe = testo.splitlines()
-            for n in ast.walk(albero):
-                if not (isinstance(n, ast.Call)
-                        and isinstance(n.func, ast.Attribute)
-                        and n.func.attr == "skipTest"):
-                    continue
-                riga = righe[n.lineno - 1] if n.lineno <= len(righe) else ""
-                motivo = riga.lower()
-                if any(a in motivo for a in SALTI_AMBIENTALI):
-                    continue
-                sospetti.append("%s:%d  %s" % (nome, n.lineno, riga.strip()[:74]))
+        che si spegne da solo. Uno deciso dall'ambiente e' legittimo.
+
+        Il criterio sta in `skip_sospetti()` qui sopra, e non qui dentro, perche' lo
+        chiama anche il pre-volo (`collaudi/prima_di_lanciare.py`): un posto solo."""
+        sospetti = skip_sospetti()
         self.assertEqual(
             sospetti, [],
             "Questi test si assolvono da soli per una condizione che riguarda cio' che "

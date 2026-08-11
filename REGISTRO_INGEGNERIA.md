@@ -242,13 +242,39 @@ in `RIPRENDI_QUI.md` sezione «QUANTO MANCA SUI SOLDI».
 | blocco | moduli | punti | perché in questo ordine |
 |---|---|---|---|
 | **1** | ✅ `fase167_credito_single_use` **FATTO 2026-08-11** (11/11 mutanti uccisi, 1 difetto vero chiuso) · ▶️ `fase66_tassa_soggiorno` · `fase133_split_quote_uguali` · `fase119_calendario_prezzi` | 74 | **i quattro più ciechi**: 1, 2, 2 e 2 test li nominano. `fase167` per primo: un difetto lì è **denaro speso due volte** — e infatti ce n'era uno |
-| **2** | `fase43_commissione` · `fase98_policy_commissione` · `fase111_cancellazione` | 60 | la catena della commissione e dei rimborsi, dove i numeri si incrociano |
+| **2** | ⛔ `fase43_commissione` **TOLTO: è CODICE MORTO** · `fase98_policy_commissione` · `fase111_cancellazione` · ✅ `fase147_tassa_comunale` **AGGIUNTO: è VIVO e il piano se lo dimenticava** | **58** (18+11+29) | la catena della commissione e dei rimborsi, dove i numeri si incrociano — più la tassa comunale, che è l'altra metà della coppia di `fase66` |
 | **3** | `fase65_split_payment` · `fase133` (già fatto in 1) · `fase101_stripe_connect` | 109 | i soldi che si dividono e quelli che escono verso l'host |
 | **4** | `fase162_pagamenti_pendenti` · `fase131_payout_dashboard` | 153 | i più grossi ma i **meno ciechi** (13 e 11 test): ultimi apposta |
 | **5** | `fase85_pagamenti_stripe` · `fase87_stripe_webhook` | 41 | ⚠️ **sembrano** i più coperti (77 e 59 test) ma quei test li **fingono**: nominare non è provare |
 
 ⛔ **Prima di ogni blocco si guarda se il modulo è ACCESO**: 63 moduli su 151 non sono
 raggiungibili dalla produzione, e setacciare un modulo spento è tempo buttato.
+
+### ⛔ LE DUE CORREZIONI AL PIANO — misurate il 2026-08-11, non ricordate
+
+Il piano qui sopra mandava a lavorare su **codice spento** e dimenticava un modulo **acceso**.
+Finché non si correggeva, il primo errore costava una sessione intera buttata sul nulla e il
+secondo lasciava un modulo dei soldi fuori da ogni blocco — cioè mai giudicato, per sempre.
+
+| comando | esito |
+|---|---|
+| `python collaudi/raggiungibilita.py` | 151 moduli · **88 raggiungibili** · **63 morti**. Fra i morti: `fase35_pagamenti`, `fase43_commissione`, `fase44_prezzo`. `fase147_tassa_comunale` **NON** è fra i morti |
+| `python collaudi/mutazione_prodotto.py --censimento` | `fase43` 31 mutanti · `fase98` 18 · `fase111` 11 · **`fase147` 29, e 6 test lo vedono** |
+
+· ⛔ **`fase43_commissione` è uscito dal Blocco 2**: 370 righe e 31 punti di mutazione, tutti
+  su codice che la produzione **non raggiunge**. Erano **31 punti su 506 buttati**, e con
+  `fase35` e `fase44` (anch'essi morti) fanno **81 punti che non vanno fatti**.
+· ✅ **`fase147_tassa_comunale` è entrato nel Blocco 2**: è **vivo**, tocca i soldi, ha 29
+  punti — e **non stava in nessun blocco**. Messo qui e non nel Blocco 1 perché è la coppia
+  naturale di `fase66_tassa_soggiorno` senza sforare la dimensione di un blocco; spostarlo
+  è una decisione da prendere, non un errore da correggere.
+· 💡 **Lo strumento dichiara da sé il proprio bias**, ed è per questo che ci si può contare:
+  *«bias GENEROSO: se dice MORTO, è morto»*. Un modulo che risulta vivo potrebbe essere morto;
+  uno che risulta morto **non è raggiungibile**, punto.
+· ⚠️ **Il censimento conta 152 moduli, la raggiungibilità 151, e la differenza ha un nome**
+  (D23: un numero che non torna si insegue finché non ha un nome): sono i **151 `fase*.py`
+  più `main_casavip.py`**, che il censimento include perché è produzione anche lui — misurato,
+  non dedotto (`--censimento` lo elenca con 261 righe e 24 mutanti).
 
 💡 **Regola pratica del giro di mutazione, misurata il 2026-08-10 e valida per tutti i blocchi:**
 i sorveglianti si scelgono **cronometrandoli**, non a intuito. Ogni mutante paga **tutto**
@@ -261,6 +287,211 @@ il minimo sulle prenotazioni piccolissime · se accendere il pavimento di `fase1
 aumento di prezzo su «paga in struttura»**, non una riparazione: oggi quel `300` è inerte) · la
 domanda al commercialista sul forfettario · `PAGA_STRUTTURA_ATTIVO` sul `.env` **del server**
 (qui non lo accende nessuno, quindi vale il ripiego `"0"` = spento).
+
+### 🏁 LA RIGA D'ARRIVO — 15 condizioni di «FINITO» e la lista CHIUSA di cosa resta
+
+**Deciso col fondatore il 2026-08-11**, dopo la sua frase *«siamo in ballo da più di 4/6 mesi,
+questo progetto è la mia vita e lo voglio portare a termine»*. ⛔ **Scritto qui e non solo in
+memoria: la memoria di sessione non viaggia con la chiavetta, e un traguardo che vive in un
+posto solo è un traguardo che si perde** (è già successo alle direttive del fondatore, entrate
+nel repository per questo stesso motivo).
+
+**La misura che ha cambiato la strategia.** Cercando **11** tecniche di verifica fra le più
+avanzate che esistano, **10 erano già in casa** (concorrenza 69 file · seed deterministici 53 ·
+replay 47 · oracolo indipendente 23 · caos 12 · mutazione 8 · hypothesis 8 · model-based 7 ·
+z3 5 · atheris 4). L'unico zero era **metamorfico**.
+⛔ **Quindi il collo di bottiglia NON è la profondità del metodo, è la LARGHEZZA:** dieci
+tecniche applicate al 30% dei moduli dei soldi. Aggiungere strumenti **allontana** dalla fine
+invece di avvicinarla — «trova tutto» è il modo in cui i progetti come questo non finiscono
+mai. Serve una lista **chiusa**, non una lunga.
+
+> **«Finito» non è «tutto verde».** È: *per ogni modo in cui questo può rompersi, qualcuno se
+> ne accorgerebbe.* Zero difetti non è raggiungibile; il traguardo giusto è **nessun difetto
+> può costare soldi in silenzio** — o viene impedito, o **grida**.
+
+**F — I SOLDI (7 condizioni, ognuna con come si verifica)**
+- **F1** ogni modulo **vivo** dei soldi è passato dal Giudice (0 sopravvissuti, o dimostrazione).
+  *Si verifica:* `collaudi/raggiungibilita.py` dà i vivi; per ognuno un giro con data e commit.
+- **F2** ogni euro che entra e che esce mosso **davvero** su Stripe vero almeno una volta
+  (incasso · rimborso · commissione · tariffa tecnica · **bonifico host** · storno).
+  *Si verifica:* un identificativo Stripe vero per voce. ⚠️ Il bonifico all'host: **1 sola volta**.
+- **F3** nessuno stato impossibile passa inosservato. *Si verifica:* `collaudi/stati_impossibili.py`.
+- **F4** i numeri hanno senso **sui dati veri**. ⚠️ Oggi `collaudi/plausibilita.py` esamina **1 riga**.
+- **F5** i testi pubblici coincidono col motore. *Si verifica:* `collaudi/audit_coerenza_tariffe.py`.
+- **F6** **si sa CHI PERDE se va storta**, per ogni percorso del denaro. ⚠️ **Non c'è: è la più
+  scoperta**, ed è la domanda che farebbe un investitore o un giudice.
+- **F7** tutto quanto sopra sorvegliato da una **macchina**, non dalla memoria. È la regola che
+  l'11 agosto ha pagato **tre volte**: gancio pre-commit, paracadute del deploy e guardie sul
+  lavoro erano scritti bene ed erano **spenti, facoltativi o inesistenti**.
+
+**P — IL PERCORSO** (prenotazione → voucher → comunicazioni → controversia) *(bozza da misurare)*
+- **P1** una notte non si vende **mai** due volte. *Parziale:* `stati_impossibili.py` + test di gara.
+- **P2** un voucher vale **solo dopo il pagamento** e **una volta sola**. *Parziale:* `percorso_e2e.py`.
+- **P3** ogni **comunicazione** (email · Telegram) è partita davvero almeno una volta, nella
+  lingua giusta, e **se non parte qualcuno lo sa**. ⚠️ Il DKIM manca.
+- **P4** ogni **controversia** apribile è apribile davvero e ha un esito. ⚠️ Attenzione a **S7**.
+- **P5** il **calendario** dell'host riflette la realtà, e le modifiche che arrivano da fuori
+  (iCal, Telegram, channel manager) **non creano overbooking**.
+
+**T — I TESTI** (coerenza su tutti i pannelli) *(bozza da misurare)*
+- **T1** nessuna cifra scritta a mano: tutte **lette dal motore**. *Coperto da* F5.
+- **T2** ogni pagina pubblica esiste in **tutte** le lingue dichiarate. È il **modo di rompersi
+  n° 11**, e lo trovò il fondatore guardando il sito, non un test. ⚠️ ~1034 parole non tradotte.
+- **T3** contratto e termini portano la **versione**, e cambiarli fa scattare la ri-accettazione.
+
+**LA LISTA CHIUSA — ~12-15 sessioni (stima, NON misura)**
+- **12 moduli vivi** dei soldi da giudicare → 4-6 sessioni. ⛔ **81 punti su 506 NON vanno
+  fatti**: vedi le due correzioni al piano qui sopra.
+- **F6** (chi perde) + **test metamorfici** → 1 sessione. ⛔ Il metamorfico **solo
+  sull'aritmetica del denaro**, non su tutto.
+- **CodeQL** → 30 minuti, **gratis finché il repository è pubblico**. Nessun intervento del fondatore.
+- **Orologi di prova Stripe** (test clocks) → 1 sessione: fa passare il tempo davvero (hold,
+  maturazione payout, finestre di penale). È il giudice esterno più vicino ai soldi che manca.
+- **Il DENOMINATORE** → 1 sessione, **priorità alta**. Un attrezzo che elenca **dalla macchina**
+  quante rotte, email, pagine e lingue esistono, e per ognuna se un collaudo la attraversa.
+  Trasforma «cosa sto dimenticando?» in un numero. ⛔ **Due strade indipendenti sono arrivate
+  alla stessa conclusione**: la ricerca esterna su Anthropic e il nostro «ogni guardia dichiara
+  il denominatore».
+- **Il BATTITO in produzione sui cicli dei soldi** → mezza sessione. Oggi i controlli girano
+  **quando li lanciamo noi**: se il giro dei pagamenti muore alle 3 di notte **nessuno lo sa
+  fino al giorno dopo**.
+- **Asserzioni accese sui percorsi del denaro** (spazio positivo E negativo) → 1-2 sessioni.
+  ⚠️ Prima serve una decisione del fondatore: `fase199_invarianti` oggi è **fail-open** per
+  scelta dichiarata, e sui soldi la scuola opposta (TigerStyle: *«è molto meglio smettere di
+  funzionare che continuare in uno stato sbagliato»*) dice il contrario. Il progetto c'era già
+  arrivato da solo il 2026-07-30, quando il consumo del credito è passato a **RIFIUTA**.
+- **Agenti in sola lettura** → 1 sessione, **e SOLO dopo F1**. Resa storica: **146 sospetti → 4
+  correzioni vere** (97% rumore).
+
+**⛔ IL CRITERIO PER DIRE DI NO.** Uno strumento nuovo entra **solo se trova difetti che le 10
+tecniche esistenti non possono trovare**. Altrimenti resta fuori e la riga d'arrivo non si sposta.
+*Scartati col motivo:* scanner di dipendenze (le dipendenze sono **zero**) · strumenti di carico
+(i test di stress interni sono più realistici) · type-checker severo (migliaia di segnalazioni,
+quasi tutte rumore) · **DST col metodo FoundationDB** (rendere pluggable tempo e disco:
+settimane di ristrutturazione) — ⛔ **ma NON la DST via ipervisore** (Antithesis: nessuna
+modifica al codice, e il sito gira già in Docker; è una decisione di **soldi** del fondatore,
+non tecnica) · **TLA+** (il rischio è che la specifica si scolli dal codice — già successo con
+z3: *una dimostrazione vale quanto il modello su cui è fatta*).
+
+### ✅ FATTO 2026-08-11 (29) — LE GUARDIE SUL **LAVORO**: il PRE-VOLO e il PRE-FATTO
+
+**Ordine esplicito del fondatore:** *«basta con questi sbagli, non esiste. Trova il sistema che
+non si ripetano più in futuro. Il tempo è denaro e noi non ne possiamo perdere»* — e *«fallo
+PRIMA di `fase66`»*.
+
+⛔ **LA DIAGNOSI: non erano nove sbagli, era UNO.** Questa macchina aveva guardie sul **CODICE**
+e guardie sui **DOCUMENTI**, e **zero guardie sul LAVORO**. E il dato che inchioda il problema
+non è che quelle guardie mancassero: **esistevano già**. Il difetto era **QUANDO giravano** —
+dentro un ciclo da 68 minuti. Controlli da due secondi messi in fondo a un'ora di attesa.
+
+| sbaglio dell'11 agosto | chi lo prendeva | costo |
+|---|---|---|
+| uno `skipTest` zona cieca | guardia **dentro la suite** | **68 minuti** |
+| conto dei test non aggiornato (3 volte) | guardia **dentro la suite** | **~3 ore** |
+| riga `CONSEGNE AGGIORNATE A:` indietro | guardia **dentro la suite** | lasciato alla sessione dopo |
+| E2E Stripe da 11 KB fuori dal repository | **NESSUNO** — trovato per fortuna | rischio: rifarlo |
+
+· **🛫 `collaudi/prima_di_lanciare.py` — 6 controlli, misurati in 2,44 secondi** (tetto
+  dichiarato: 10). Conto dei test == conto vero · consegne ≤ 1 commit indietro · nessuno
+  `skipTest` che si assolve da solo · ambiente == quello dichiarato · nessun giro di mutazione
+  aperto · nessun byte invisibile nei file toccati. `--scopo <file...>` dichiara cosa si
+  toccherà e lascia una traccia (stesso meccanismo della mutazione).
+· **🛬 `collaudi/prima_di_dire_fatto.py` — gli stessi 6 più 3**: niente artefatti fuori dal
+  repository · i file cambiati sono quelli dichiarati (regola ferrea 15) · il messaggio di
+  commit (nessun segnaposto, ASCII puro, firma). Lo chiamano i ganci, non la memoria:
+  `deploy/hooks/pre-commit` per i primi otto, `deploy/hooks/commit-msg` per il nono — che è
+  **l'unico gancio a cui git passa il messaggio**: al `pre-commit` non esiste ancora.
+· **Il primo giro vero ha subito ripagato l'attrezzo, due volte.** Il pre-fatto ha trovato in
+  **0,08 secondi** i due attrezzi orfani fuori dal repository (`e2e_credito_stripe.py`, 11.383
+  byte — **l'unico collaudo che prova i crediti contro Stripe VERO**; e `sentinella_ci.py`).
+  E il pre-volo ha preso in **1,14 secondi** il conto dei test rimasto indietro (5507 contro
+  5529): è lo sbaglio **S14**, quello da tre ore, visto **prima** invece che dopo.
+· 🎯 **E HA PRESO LA S11 SU SE STESSO, che è la scoperta della giornata.** Al primo giro dentro
+  il gancio `pre-commit` il controllo sull'ambiente è uscito **ROSSO**, e aveva ragione: i
+  ganci di git girano sotto `sh`, dove Git per Windows porta `/mingw64/bin/openssl`, mentre da
+  **PowerShell** — la shell da cui parte la suite — openssl **non c'è**. La stessa domanda, due
+  risposte opposte. ⛔ Ma un giudizio giusto **nel posto sbagliato** è un allarme che suona a
+  ogni salvataggio, e un allarme che suona sempre viene **spento**: era esattamente la trappola
+  da non ripagare. Cura: il pre-volo confronta **tutto** (è la shell giusta), il pre-fatto
+  confronta solo ciò che **non dipende dalla shell** (Python e librerie, che vengono
+  dall'interprete) e **DICHIARA** di aver lasciato fuori il PATH. E una guardia
+  (`test_IL_PATH_NON_SI_CONFRONTA_MA_IL_RESTO_SI`) pretende che la rinuncia sia **solo** quella:
+  col PATH spento il controllo deve ancora vedere un Python sbagliato e una libreria assente,
+  altrimenti non è stato ristretto, è stato **accecato**.
+· **Le quattro condizioni D18, tutte rispettate e tutte provate.** (1) Misura prima se stesso:
+  `_precondizioni()` ferma il giro invece di stampare un numero. (2) Provato nelle **due
+  direzioni**: **32 prove** — 16 sul pre-volo, 16 sul pre-fatto — che gridano col guasto dentro
+  e tacciono a macchina sana. (3) Dichiara cosa **non** ha esaminato, a ogni giro. (4) È sotto
+  guardia: **25 collaudi nuovi** in `test_pipeline_ci.py`, e sono stati **visti ROSSI**
+  togliendo un controllo dall'attrezzo (`il controllo 6 non compare nel rapporto` ·
+  `[1,2,3,4,5,6,7,8] != [1,2,3,4,5,7,8]`), con ripristino **byte-identico**
+  (`sha256 1CC4905E…`).
+· ⛔ **IL CONTROLLO CHE VALE DI PIÙ, e non pretende il verde**:
+  `test_IL_CODICE_D_USCITA_NON_PUO_MENTIRE_SUL_RAPPORTO`. Non chiede che il pre-volo sia verde
+  (su Linux la riga `AMBIENTE:` descrive un'altra macchina: sarebbe un falso rosso). Chiede che
+  **il codice d'uscita e il rapporto dicano la stessa cosa**. Uno strumento che stampa rossi e
+  poi esce 0 è il verde peggiore di tutti — ed è già successo, col giudice della mutazione che
+  stampava «42 mutanti su 42 uccisi» su una base rossa.
+· **Un posto solo, due chiamanti** (contro la malattia di sempre: lo stesso fatto scritto due
+  volte e la seconda copia che resta indietro). Il criterio sugli `skipTest` è uscito dal metodo
+  di test ed è diventato `test_suite_senza_zone_cieche.skip_sospetti()`, che ora chiamano in
+  due. Il giudizio sulle consegne è passato in `prima_di_lanciare.consegne_troppo_indietro()`, e
+  `test_pipeline_ci.py` **lo importa** invece di tenerne una copia. La stampa dei sei divieti è
+  diventata `regole_avvio.stampa_i_divieti()`, che ora chiamano in **tre**.
+· **⛔ «LE REGOLE SI LEGGONO PRIMA E DOPO OGNI OPERAZIONE»** — ordine del fondatore dato a
+  metà sessione, dopo che le avevo lette all'inizio e poi avevo chiuso quattro operazioni senza
+  rileggerle. Non era un divieto violato: era il **modo** in cui i divieti vanno tenuti, e stava
+  nell'unico posto che questo progetto ha dimostrato non reggere — la memoria di chi lavora.
+  Adesso lo fanno gli attrezzi: il pre-volo stampa i sei divieti **prima** dei controlli, il
+  pre-fatto **dopo**, quando si sta per salvare e B1 e B4 contano più che mai.
+· **I due attrezzi orfani sono entrati, e sono stati riparati entrando.** Tutti e due avevano
+  `C:\Users\MaxDanno\Desktop\...` cablato dentro: su Linux o in CI sarebbero stati **rotti in
+  partenza senza dirlo**. Ora la radice si **ricava** da dove sta il file. ⛔ La chiave di prova
+  di Stripe resta **fuori** dal repository (`STRIPE_TEST_KEY_FILE` la sposta): verificato che
+  fra i file tracciati non esista nessuna chiave vera (`git grep -E "sk_(test|live)_[A-Za-z0-9]{20,}"`
+  → **nessuna corrispondenza**).
+· 🔴 **IL PRIMO GIRO DI SUITE È ANDATO ROSSO, E L'HA PRESO UNA GUARDIA DI OGGI CONTRO SÉ
+  STESSA.** `Ran 5524 tests in 4096.848s · FAILED (failures=1, skipped=4)`. L'unico rosso:
+  `test_OGNI_CONTROLLO_GRIDA_COL_GUASTO_DENTRO`, caso «la riga delle consegne sparita» —
+  *«col guasto dentro, il pre-volo NON grida: è un ornamento»*.
+  ⛔ **Ma il pre-volo aveva ragione, e il difetto era nel TEST.** L'iniezione faceva
+  `pagina.replace("CONSEGNE AGGIORNATE A:", ..., 1)`, cioè colpiva la **prima** occorrenza.
+  Nel frattempo il riquadro in cima a `RIPRENDI_QUI.md` aveva preso una **frase** che nominava
+  quella riga per spiegare la correzione (a) — e quella frase sta **prima**. La sostituzione ha
+  colpito la frase, **la riga vera è rimasta intatta**, lo strumento l'ha letta e ha risposto
+  correttamente `OK`. Misurato: `Select-String "CONSEGNE AGGIORNATE A:"` → **riga 60** (la
+  frase) e **riga 587** (il dato).
+  💡 **LA LEZIONE, che vale oltre questo caso: era il verde finto applicato all'INIEZIONE.** Un
+  test convinto di aver messo dentro un guasto senza averlo messo. E `assertNotEqual(sana,
+  malata)` **non bastava** — qualcosa era cambiato davvero, solo non la cosa che conta. Da qui
+  la regola nuova, in `_togli_la_riga()`: *un'iniezione non si dichiara riuscita perché il testo
+  è cambiato, ma perché il riconoscitore dello strumento **non trova più ciò che cercava**.*
+  ⛔ **E il documento ha ucciso il test, non il codice**: quando quelle guardie erano state
+  provate, la frase non esisteva ancora. È il **modo di rompersi n° 9** (il cuore cambia, la
+  guardia resta sul vecchio) applicato a un `.md`.
+  ✅ Riparato anche a monte: `_RIGA_SUITE` è ora **ancorata a inizio riga** come già lo era
+  `_RIGA_CONSEGNE`. Misurato, non supposto: con una frase «…la riga `SUITE ATTUALE: Ran 999
+  test` non è un dato…» messa sopra, la regola ancorata legge **5529** e quella non ancorata
+  legge **999**. ⚠️ **Limite dichiarato:** protegge dalle menzioni in mezzo a un discorso, **non**
+  da una frase scritta a colonna zero — lì non c'è differenza fra un dato e una frase, e la
+  prima versione di quel commento prometteva di più di quanto l'ancoraggio faccia. L'ha
+  smentita la prova.
+· ⛔ **E UNA MANCANZA MIA, SULLA PROCEDURA DI LANCIO** (sbaglio **S8**). La suite è stata
+  lanciata con `Start-Process python …`: finito il processo, il **codice d'uscita numerico non
+  era più recuperabile**: restava solo il verdetto in prosa di unittest. *«Senza quella riga
+  finale, quel file non è un esito.»* Le istruzioni in `RIPRENDI_QUI.md` sono state corrette:
+  ora si passa da un lancianotte che scrive `CODICE D'USCITA DELLA SUITE: N` in fondo al file,
+  con `*>` (redirezione, **non** un tubo: `$LASTEXITCODE` subito dopo è quello di `python`).
+· ⛔ **LIMITI DICHIARATI** (D18 punto 3). Il pre-volo **non esegue nemmeno un test**: dice se la
+  suite può partire, non se passerà — non sostituisce la regola ferrea 6. Gli artefatti orfani
+  li cerca in `DA_METTERE_IN_collaudi` accanto al progetto (più le cartelle elencate in
+  `BOOKINVIP_CARTELLE_DI_LAVORO`): un file lasciato in una cartella qualsiasi del disco non lo
+  vede nessuno. Il controllo 8 pretende che il pre-volo sia girato prima — **è voluto**, ed è il
+  modo in cui «si dichiara lo scopo prima di aprire il primo file» smette di dipendere dalla
+  memoria; senza traccia è `NON ESEGUITO`, che **non è un successo** (S7). E la regola ferrea 15
+  dice «esattamente i file dichiarati»: qui è rosso **solo** chi tocca fuori elenco — aver
+  dichiarato un file e non averlo toccato è una **nota**, perché accorgersi che un file non
+  serviva è buona pratica, non un difetto.
 
 ### ✅ FATTO 2026-08-11 (28) — IL PARACADUTE SBAGLIATO: SEI VOLTE, E LA DIAGNOSI ERA SBAGLIATA
 
