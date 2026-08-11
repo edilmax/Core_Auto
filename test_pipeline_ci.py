@@ -4964,26 +4964,51 @@ class TestIlPreFattoVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
         La cura e' stata spegnere il confronto sul PATH nel solo pre-fatto. Una cura
         cosi' e' pericolosa: la prossima «semplificazione» potrebbe spegnere tutto il
         controllo, e nessuno se ne accorgerebbe perche' resterebbe verde. Qui si pretende
-        che il pre-fatto abbia perso SOLO il PATH e continui a vedere tutto il resto."""
+        che il pre-fatto abbia perso SOLO il PATH e continui a vedere tutto il resto.
+
+        ⛔ E QUESTA GUARDIA HA GIA' SBAGLIATO UNA VOLTA, il 2026-08-11: era VERDE su
+        Windows e ROSSA in CI. Una delle tre asserzioni non iniettava la versione di
+        Python e usava quella vera: su questo computer e' esattamente la `3.9.10`
+        dichiarata, su Linux no. Da qui la regola: **si iniettano TUTTI i valori
+        dell'ambiente, anche quelli che qui sarebbero giusti.** Un valore vero lasciato
+        passare lega la guardia alla macchina su cui gira, ed e' la forma piu' subdola di
+        verde finto -- quella che si scopre solo davanti al giudice (regola ferrea 8).
+        """
         pv, pf = self.pv(), self.pf()
         sana = self._pagina_sana()
-        senza_path = dict(pagina=sana, radice=self.RADICE, confronta_path=False)
-        self.assertEqual(
-            pv.ROSSO,
-            pv.controllo_4_ambiente(quale_python="0.0.0", **senza_path)[0],
-            "col PATH spento il controllo non vede piu' nemmeno un Python sbagliato: "
-            "non e' stato ristretto, e' stato accecato")
-        self.assertEqual(
-            pv.ROSSO,
-            pv.controllo_4_ambiente(moduli_presenti=set(), **senza_path)[0],
-            "col PATH spento non vede piu' una libreria dichiarata e assente")
-        stato, dettaglio = pv.controllo_4_ambiente(quale_openssl=True, **senza_path)
+        atteso = re.search(r"Python (\d+\.\d+\.\d+)", sana)
+        self.assertIsNotNone(atteso, "la riga AMBIENTE non dichiara piu' un Python: "
+                                     "questa guardia non avrebbe piu' niente da iniettare")
+        # La macchina ESATTAMENTE come la dichiara il documento, costruita a mano: cosi'
+        # questa guardia dice la stessa cosa su Windows, su Linux e su qualunque Python.
+        sano = dict(pagina=sana, radice=self.RADICE, confronta_path=False,
+                    quale_python=atteso.group(1), quale_openssl=True,
+                    moduli_presenti={"hypothesis", "yaml", "coverage"})
+
+        stato, dettaglio = pv.controllo_4_ambiente(**sano)
         self.assertEqual(pv.OK, stato,
                          "col PATH spento openssl non deve piu' contare: %s"
-                         % dettaglio[:200])
+                         % dettaglio[:300])
         self.assertIn("NON ho confrontato il PATH", dettaglio,
                       "una rinuncia si DICHIARA (D18 punto 3): un taglio silenzioso fa "
                       "sembrare «coperto» cio' che non e' stato guardato")
+
+        # ⛔ E NON BASTA CHE SIA ROSSO: si pretende che sia rosso PER QUESTO. Un allarme
+        # che suona per il motivo sbagliato passerebbe lo stesso, e la rinuncia sul PATH
+        # potrebbe essersi mangiata il resto senza che nessuno se ne accorga.
+        stato, dettaglio = pv.controllo_4_ambiente(**dict(sano, quale_python="0.0.0"))
+        self.assertEqual(pv.ROSSO, stato,
+                         "col PATH spento il controllo non vede piu' nemmeno un Python "
+                         "sbagliato: non e' stato ristretto, e' stato accecato")
+        self.assertIn("Python dichiarato", dettaglio,
+                      "e' rosso, ma non per il Python: %s" % dettaglio[:300])
+
+        stato, dettaglio = pv.controllo_4_ambiente(**dict(sano, moduli_presenti=set()))
+        self.assertEqual(pv.ROSSO, stato,
+                         "col PATH spento non vede piu' una libreria dichiarata e assente")
+        self.assertIn("non si importa", dettaglio,
+                      "e' rosso, ma non per la libreria mancante: %s" % dettaglio[:300])
+
         numeri = [n for n, _, _ in pf.CONTROLLI]
         self.assertEqual(list(range(1, 9)), sorted(numeri),
                          "il pre-fatto deve avere tutti e otto i controlli, non sette: %r"
