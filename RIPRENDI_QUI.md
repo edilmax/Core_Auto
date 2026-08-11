@@ -15,13 +15,19 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
 >
-> ⛔ **PRIMA DI TUTTO, UNA COSA RIMASTA INDIETRO E CHE NESSUNO AVEVA VISTO.** Il computer e'
-> su **`e15311e`**, GitHub `master` e il VPS su **`cd95f73`**: un commit di differenza. Il
-> ramo `chiavetta-cd95f73` e' stato **spedito** su GitHub ma la richiesta di unione **non e'
-> mai stata aperta** — misurato dall'API, l'ultima e' la **#26**, la #27 non esiste. Non e'
-> «aperta e non unita»: e' «mai chiesta». La differenza e' **un solo file** (`RIPRENDI_QUI.md`,
-> +13 −1), quindi il codice e' identico ovunque; ma il diario del server dichiara il falso
-> (S10). ⚠️ Il 2026-08-06 era gia' successo qualcosa di simile: **si controlla, non si ricorda.**
+> ✅ **DEPLOY FATTO il 2026-08-11**, e i **tre posti sono allineati su `b8f63f9`**:
+> computer = GitHub `master` = VPS. `collaudi/verifica_produzione.py` → **190 controlli,
+> 0 violazioni, uscita 0** (P3 «porte chiuse» compreso: le sonde negative, non solo quelle
+> che dicono «risponde»). La riga riparata e' stata verificata **dentro il contenitore vivo**
+> (`docker exec casavip_app grep` → riga 115), non dedotta dal commit.
+> ⏳ Manca solo la **chiavetta** (`cd95f73`): e' il gesto fisico del fondatore.
+>
+> ✅ **RISOLTO ANCHE IL BUCO DI PROCESSO DI STAMATTINA.** Il ramo `chiavetta-cd95f73` era
+> stato **spedito** su GitHub ma la richiesta di unione **non era mai stata aperta** —
+> misurato dall'API: l'ultima era la **#26**, la #27 non esisteva. Non «aperta e non unita»:
+> **mai chiesta**. E' finito dentro la richiesta **#27** insieme al lavoro di oggi, quindi si
+> e' chiuso da solo. ⚠️ Era gia' successo il 2026-08-06: **si controlla, non si ricorda** —
+> e infatti l'ha trovato il primo comando della sessione, non la memoria.
 >
 > ### ✅ COSA E' STATO FATTO OGGI — `fase167_credito_single_use`, tutti e 4 i livelli (D3)
 > Il modulo era **il piu' cieco del censimento dei soldi** (un solo file di test lo nominava)
@@ -99,15 +105,63 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > sul modulo inesistente **e tace** su un modulo vero e sorvegliato (regola ferrea 10).
 > La guardia **esegue l'attrezzo davvero** e ne legge il codice d'uscita: una che contasse
 > parole nel sorgente la soddisferebbe anche un commento (S6).
-> ⚠️ **Dichiarato cio' che NON ho verificato** (D18 punto 3): ho riparato **solo** il modo
-> `--modulo`, l'unico in cui ho visto il difetto. Gli altri modi (`--diff`, `--censimento`, il
-> giro normale) hanno le loro uscite e **non le ho provate**: potrebbero avere la stessa forma.
+> ✅ **E gli altri modi ADESSO SONO VERIFICATI** (prima era dichiarato «non provati»). La
+> parola `"assente"` esiste **solo** dentro `giro_su_moduli` (riga 1197) e nel blocco del modo
+> `--modulo`: gli altri modi **non possono nemmeno produrre quel verdetto**, quindi non hanno
+> quel buco. `--censimento` esce 0 perche' e' un **elenco**, non un giudizio. Misurato, non
+> dedotto: `Select-String '"assente"'` su tutto il file da' tre righe, tutte nel modo riparato.
 > **2. ✅ `fase83_server.py` dichiarava il falso nel commento di `_consuma_credito`.** Diceva
 > «FAIL-OPEN: un errore → la prenotazione PROCEDE», mentre il codice restituisce `"errore"` e
 > la prenotazione viene **rifiutata**. Il fail-open c'era davvero fino al 2026-07-30: e'
 > arrivata la riparazione, **non** il commento (S10). Cambiato **solo il commento**, zero
 > comportamento. ⚠️ Scritto **«vedi il chiamante»** invece del numero di riga: i numeri di riga
 > invecchiano, ed e' esattamente cosi' che quel commento era diventato falso.
+>
+> ### 🪂 IL PARACADUTE SBAGLIATO — SEI VOLTE IN SEI GIORNI, E FINALMENTE SI SA PERCHE'
+> **La diagnosi era sbagliata, ed e' la scoperta che vale di piu' della giornata.** Non
+> mancava lo strumento: `deploy/protocollo_d17.sh` esiste dal **2026-08-07**, ri-aggancia
+> `:prec` e **si ferma da solo** se non coincide (fase `prima`, controllo [1b]). Ha fallito
+> per un motivo diverso: **era FACOLTATIVO.** Le tre fasi erano indipendenti, quindi si poteva
+> fare `scambio` senza `prima` — o deployare a mano saltando tutto, che e' **esattamente cio'
+> che e' successo l'11 agosto**, con `:prec` fermo a un'immagine di **45 ore** prima. Tirando
+> la maniglia si sarebbe tornati **oltre** il deploy della tariffa, rimettendo online quella
+> **sotto costo**, in silenzio.
+> 💡 **E' la stessa malattia del gancio pre-commit, scoperta lo stesso giorno:** un controllo
+> corretto che si puo' saltare **non e' un controllo**. Sei fallimenti non sono sei
+> distrazioni: sono una procedura senza obbligo.
+> ✅ **La cura, la stessa:** il passo di sicurezza diventa una **PRECONDIZIONE**. `prima`
+> lascia un **gettone** (immagine viva + commit + ora); `scambio` lo **pretende** fresco
+> (≤1 ora) e si ferma con `GETTONE_MANCANTE` / `GETTONE_SCADUTO` / `GETTONE_ILLEGGIBILE`; dopo
+> lo scambio il gettone **si consuma**, cosi' un secondo deploy piu' tardi non passa col
+> paracadute agganciato all'immagine di prima. Tre guardie in `test_pipeline_ci.py`
+> (`TestIlDeployNonPuoSALTAREIlPassoDiSicurezza`) che **eseguono lo script davvero** — viste
+> ROSSE prima, e provate nelle **due direzioni**.
+> ⛔ **Onesta' sul limite:** nessun controllo puo' impedire di digitare `docker compose build`
+> a mano. La strada giusta diventa l'unica facile e lo scarto diventa rumoroso; chi vuole
+> aggirare, aggira. Dirlo e' meglio che far credere il contrario.
+> 💡 **E una S11 evitata per un soffio:** le tre guardie nuove all'inizio **si mettevano da
+> parte in silenzio** (`sh` non e' nel PATH di PowerShell, che e' la shell della suite) — tre
+> verdi che non guardavano niente. Ora `sh` lo **cercano** (Git per Windows se lo porta
+> dietro). ⛔ Mai `C:\Windows\system32\bash.exe`: quello e' WSL, un'altra macchina.
+>
+> ### 🎯 E POI UNA GUARDIA DEL PROGETTO HA BECCATO ME — vale piu' di tutto il resto
+> Messo il ripiego, restava uno `skipTest` per il caso «`sh` non trovato». Sembrava prudenza.
+> La suite intera e' andata **ROSSA** su
+> `test_suite_senza_zone_cieche.test_gli_skip_interni_sono_solo_per_l_ambiente`:
+> *«Un `skipTest` deciso da cio' che il test dovrebbe verificare e' un controllo che si
+> assolve da solo: sparisce dal rapporto come skipped e nessuno lo legge piu'. **Asserisci in
+> ENTRAMBI i rami invece di saltare.**»*
+> ⛔ **E la tentazione era servita su un piatto:** `SALTI_AMBIENTALI` accetta la parola «non
+> installato», quindi sarebbe bastato **riscrivere il motivo** per far tacere la guardia. Una
+> parola. Non si fa: aggirare un controllo con una parola e' il verde finto in forma pura.
+> ✅ Fatto invece cio' che la guardia chiede: niente skip, **due rami che asseriscono
+> entrambi** — col `sh` si esegue lo script per davvero, senza si asserisce almeno che il
+> controllo esista e che `scambio` ci passi **prima** del `git pull`. Il ramo povero e'
+> **dichiarato piu' debole** (legge il sorgente: lo soddisferebbe anche un commento, S6) ed e'
+> stato **provato a mano** fingendo una macchina senza `sh` — perche' un ramo difensivo mai
+> eseguito e' indistinguibile da codice morto (D19).
+> 💡 **La lezione:** il costo e' stato un giro di suite da 68 minuti, e li rifarei. Un
+> regolamento vale quando ferma **chi lo ha scritto**, non solo gli altri.
 >
 > ⚠️ **E la trappola dell'attrezzo di mutazione, che costa un giro intero se la ripaghi:**
 > `--killer` **divora tutto cio' che lo segue**, quindi va messo **PER ULTIMO** (`_killer =
@@ -2309,15 +2363,17 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5504 test
+SUITE ATTUALE: Ran 5507 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3.
 COMANDO:  python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"
-MISURATO SU: e15311e + le modifiche non committate del 2026-08-11 (BLOCCO 1 / fase167:
-             10 collaudi nuovi in `test_credito_single_use.py`, da 5492 a 5502; piu' 2
-             guardie sul giudice della mutazione in `test_pipeline_ci.py` → 5504).
+MISURATO SU: b8f63f9 + le modifiche non committate del 2026-08-11 pomeriggio. Il conto, per
+             addendi misurati e non sommati a mente: 5492 (partenza) + 10 (collaudi di
+             `fase167` in `test_credito_single_use.py`) = 5502 · + 2 (guardie sul giudice
+             della mutazione) = 5504 · + 3 (guardie sul passo di sicurezza del deploy,
+             `TestIlDeployNonPuoSALTAREIlPassoDiSicurezza`) = **5507**.
              Ambiente riverificato DA POWERSHELL il 2026-08-11 (S11: la stessa domanda da'
              due risposte fra Bash e PowerShell): identico a quello dichiarato qui sopra —
              Python 3.9.10, hypothesis/pyyaml/coverage presenti, openssl ASSENTE.

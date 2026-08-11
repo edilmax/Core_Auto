@@ -69,6 +69,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 import yaml
@@ -4334,6 +4335,133 @@ class TestIlGiudiceNonPuoUscireVERDESenzaAverMisurato(unittest.TestCase):
             uscita, 0,
             "su un modulo vero e sorvegliato il giudice deve tacere: uscita=%d\n%s"
             % (uscita, testo[-500:]))
+
+
+class TestIlDeployNonPuoSALTAREIlPassoDiSicurezza(unittest.TestCase):
+    """Il paracadute agganciato all'immagine sbagliata: SEI volte in sei giorni.
+
+    IL 2026-08-11 LA DIAGNOSI E' CAMBIATA. Non mancava lo strumento: `deploy/protocollo_d17.sh`
+    esiste dal 2026-08-07, ri-aggancia `:prec` e si FERMA se non coincide (fase `prima`). Ha
+    fallito per un motivo diverso: era FACOLTATIVO. Le tre fasi erano indipendenti, quindi si
+    poteva chiamare `scambio` senza aver mai fatto `prima` -- ed e' esattamente cio' che e'
+    successo quel giorno, deployando a mano passo per passo. Il paracadute puntava a
+    un'immagine di 45 ORE prima: tirando la maniglia il sito sarebbe tornato indietro OLTRE il
+    deploy della tariffa, rimettendo online quella sotto costo, in silenzio.
+
+    E' la stessa malattia del gancio pre-commit, scoperta lo stesso giorno: una procedura
+    corretta che si puo' saltare non e' un controllo. La cura e' la stessa: il passo di
+    sicurezza smette di essere un consiglio e diventa una PRECONDIZIONE.
+
+    Queste guardie ESEGUONO lo script per davvero (fase `gettone`, che non tocca ne' git ne'
+    docker) e ne leggono il codice d'uscita. Una guardia che cercasse parole nel sorgente la
+    soddisferebbe anche un commento (sbaglio S6).
+
+    ⛔ COSA NON PROVANO, dichiarato (D18 punto 3): non provano le fasi `prima`/`scambio` per
+    intero -- servono docker e il VPS. Provano il CONTROLLO nuovo, che e' la parte che oggi
+    non c'era. E nessun controllo puo' impedire a qualcuno di digitare `docker compose build`
+    a mano: quello resta possibile, e va detto invece di far credere il contrario.
+    """
+    RADICE = os.path.dirname(os.path.abspath(__file__))
+
+    @staticmethod
+    def _trova_sh():
+        """`sh` NON e' nel PATH di PowerShell su questa macchina, ma ESISTE: Git per Windows
+        se lo porta dietro. Arrendersi al primo `which` avrebbe messo da parte queste tre
+        guardie proprio dove si lavora -- tre verdi che non guardano niente, cioe' la zona
+        cieca peggiore (S11: la stessa domanda da' due risposte fra Bash e PowerShell).
+        ⛔ `bash` di C:\\Windows\\system32 e' WSL: un'altra macchina con un altro filesystem.
+        Non si usa."""
+        trovato = shutil.which("sh")
+        if trovato:
+            return trovato
+        git = shutil.which("git")
+        if git:
+            base = os.path.dirname(os.path.dirname(git))
+            for rel in (("bin", "sh.exe"), ("usr", "bin", "sh.exe")):
+                p = os.path.join(base, *rel)
+                if os.path.exists(p):
+                    return p
+        return ""
+
+    def setUp(self):
+        self.sh = self._trova_sh()
+        self.dir = tempfile.mkdtemp()
+
+    def _almeno_la_struttura(self, marcatore):
+        """RAMO POVERO, e sta qui invece di uno `skipTest` per una ragione precisa.
+
+        Saltare avrebbe fatto sparire queste guardie dal rapporto come «skipped», e uno
+        skip deciso da cio' che il test dovrebbe verificare e' un controllo che si assolve
+        da solo (lo dice `test_suite_senza_zone_cieche`, che infatti ha beccato la prima
+        versione di questa classe). Il motivo «`sh` non installato» sarebbe pure passato per
+        ambientale -- cioe' sarebbe bastata una PAROLA per zittire la guardia. Non si fa.
+
+        Quindi: senza `sh` non si esegue lo script, ma si asserisce lo stesso qualcosa di
+        vero -- che il controllo ESISTA e che `scambio` ci passi PRIMA del `git pull`.
+        ⛔ E' piu' debole, e va detto: una guardia che legge il sorgente la soddisferebbe
+        anche un commento (S6). E' la rete di riserva, non la rete."""
+        with io.open(os.path.join(self.RADICE, "deploy", "protocollo_d17.sh"),
+                     encoding="utf-8") as f:
+            testo = f.read()
+        self.assertIn(marcatore, testo,
+                      "lo script deve saper dire %r" % (marcatore,))
+        pezzi = testo.split('if [ "$FASE" = "scambio" ]', 1)
+        self.assertEqual(len(pezzi), 2, "manca la fase 'scambio' nello script")
+        coda = pezzi[1]
+        i_controllo, i_pull = coda.find("pretendi_gettone"), coda.find("git pull")
+        self.assertNotEqual(i_controllo, -1, "'scambio' non pretende il gettone")
+        self.assertNotEqual(i_pull, -1, "'scambio' non fa piu' il git pull?")
+        self.assertLess(i_controllo, i_pull,
+                        "il passo di sicurezza deve venire PRIMA di prendere il codice nuovo")
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def _lancia(self):
+        amb = dict(os.environ)
+        amb["RADICE_D17"] = self.dir
+        amb["GETTONE_D17"] = os.path.join(self.dir, "gettone")
+        e = subprocess.run([self.sh, os.path.join("deploy", "protocollo_d17.sh"), "gettone"],
+                           cwd=self.RADICE, env=amb,
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        return e.returncode, e.stdout.decode("utf-8", "replace")
+
+    def _scrivi_gettone(self, epoca):
+        with open(os.path.join(self.dir, "gettone"), "w", encoding="utf-8") as f:
+            f.write("epoca=%d\nimmagine=sha256:finta\ncommit=abc1234\n" % epoca)
+
+    def test_SENZA_il_passo_prima_il_deploy_si_RIFIUTA(self):
+        """Il caso vero del 2026-08-11: si arriva allo scambio senza aver mai agganciato il
+        paracadute. Deve fermarsi, e deve dire PERCHE'."""
+        if not self.sh:
+            return self._almeno_la_struttura("GETTONE_MANCANTE")
+        uscita, testo = self._lancia()
+        self.assertIn("GETTONE_MANCANTE", testo,
+                      "deve dire quale controllo ha fallito: %r" % (testo[-400:],))
+        self.assertNotEqual(uscita, 0,
+                            "senza il passo di sicurezza il deploy non puo' proseguire")
+
+    def test_un_gettone_VECCHIO_non_vale(self):
+        """Un `prima` fatto ieri non protegge il deploy di oggi: nel frattempo l'immagine che
+        gira puo' essere cambiata, e il paracadute punterebbe di nuovo alla cosa sbagliata."""
+        if not self.sh:
+            return self._almeno_la_struttura("GETTONE_SCADUTO")
+        self._scrivi_gettone(int(time.time()) - 4 * 3600)
+        uscita, testo = self._lancia()
+        self.assertIn("GETTONE_SCADUTO", testo,
+                      "deve distinguere 'vecchio' da 'mancante': %r" % (testo[-400:],))
+        self.assertNotEqual(uscita, 0, "un gettone scaduto non autorizza lo scambio")
+
+    def test_un_gettone_FRESCO_lascia_passare(self):
+        """L'ALTRA direzione, obbligatoria (regola ferrea 10): un blocco che grida sempre
+        viene disattivato, e allora non protegge piu' niente."""
+        if not self.sh:
+            return self._almeno_la_struttura("gettone OK")
+        self._scrivi_gettone(int(time.time()))
+        uscita, testo = self._lancia()
+        self.assertEqual(uscita, 0,
+                         "col passo di sicurezza fatto, il deploy deve poter proseguire: %r"
+                         % (testo[-400:],))
 
 
 if __name__ == "__main__":
