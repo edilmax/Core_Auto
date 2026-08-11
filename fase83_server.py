@@ -6343,9 +6343,14 @@ class RouterHTTP:
     def _consuma_credito(self, corpo, ref):
         """Segna come USATO il Credito Fondatore/Viaggio applicato a questa prenotazione (fase167).
         Ritorna l'esito dello store: 'nuovo' (prima volta), 'stesso' (replay idempotente dello
-        STESSO book), 'diverso' (credito gia' speso su un'ALTRA prenotazione) — o None se non c'e'
-        nulla da consumare / store assente / errore. FAIL-OPEN: un errore -> None -> la
-        prenotazione PROCEDE (mai bloccare una prenotazione legittima per un guasto del registro)."""
+        STESSO book), 'diverso' (credito gia' speso su un'ALTRA prenotazione), 'errore'
+        (l'archivio e' guasto e NON abbiamo potuto bruciarlo) — o None se non c'e' nulla da
+        consumare / store assente.
+        ⛔ NON e' fail-open, e questo commento lo diceva: 'diverso' e 'errore' fanno RIFIUTARE
+        la prenotazione e liberare la stanza (vedi il chiamante, subito dopo la guardia
+        invarianti). Il fail-open c'era davvero fino al 2026-07-30, e confermava con lo sconto
+        gia' applicato mentre il credito restava spendibile all'infinito: la riparazione e'
+        arrivata, il commento no. Rimasto falso fino al 2026-08-11 (sbaglio S10)."""
         store = getattr(self._sys, "credito_usati", None)
         if store is None:
             return None

@@ -1399,7 +1399,16 @@ if __name__ == "__main__" and "--modulo" in sys.argv:
     # una BASE ROSSA e' rossa quanto un sopravvissuto: senza di essa il punteggio non
     # significa niente, e un punteggio che non significa niente e' peggio di nessuno.
     _base = [e for e in _esiti if e["verdetto"] == "base_rossa"]
-    sys.exit(1 if (_sopr or _scop or _base) else 0)
+    # Un modulo ASSENTE non e' "zero problemi": e' ZERO MISURE. Bastava dimenticare il `.py`
+    # nel nome e il giro non esaminava niente e usciva VERDE -- il giudizio piu' severo del
+    # progetto ridotto a decorazione da un refuso, e in CI sarebbe passato liscio. Il vuoto
+    # non e' un risultato, e' assenza di misura (D18 punto 1: lo strumento prova di essere
+    # in condizione di misurare PRIMA di misurare).
+    _ass = [e for e in _esiti if e["verdetto"] == "assente"]
+    for e in _ass:
+        print("::error title=NIENTE DA MISURARE in %s::%s -- il nome del modulo vuole il "
+              "suffisso .py (i sorveglianti invece NO)" % (e["file"], e["danno"]))
+    sys.exit(1 if (_sopr or _scop or _base or _ass) else 0)
 
 
 if __name__ == "__main__" and "--diff" in sys.argv:

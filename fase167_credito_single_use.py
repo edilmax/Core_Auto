@@ -90,7 +90,9 @@ class RegistroCreditiUsati:
 
     def consuma(self, credito_id: Any, riferimento: Any) -> str:
         """Consuma il credito per QUESTA prenotazione. ATOMICO. Ritorna nuovo|stesso|diverso.
-        credito_id vuoto -> 'nuovo' (nessun credito da tracciare: non blocca nulla)."""
+        credito_id vuoto -> 'nuovo' (nessun credito da tracciare: non blocca nulla).
+        riferimento vuoto -> MAI 'stesso': non identifica una prenotazione, quindi un secondo
+        tentativo senza riferimento e' 'diverso' (altrimenti sarebbe un doppio consumo)."""
         if not (isinstance(credito_id, str) and credito_id.strip()):
             return "nuovo"
         rif = str(riferimento or "")
@@ -105,7 +107,12 @@ class RegistroCreditiUsati:
                 con.execute("COMMIT")
                 return "nuovo"
             con.execute("COMMIT")
-            return "stesso" if r["riferimento"] == rif else "diverso"
+            # Un riferimento VUOTO non identifica nessuna prenotazione, quindi non puo' MAI
+            # valere come "e' lo stesso book che sta riprovando". Senza il `rif and`, due
+            # prenotazioni DIVERSE arrivate entrambe senza riferimento (il chiamante ha un
+            # ripiego a stringa vuota) si vedevano come un replay -> stesso credito onorato
+            # due volte. Vuoto = mai uguale a niente, nemmeno a un altro vuoto.
+            return "stesso" if (rif and r["riferimento"] == rif) else "diverso"
         except Exception:
             try:
                 con.execute("ROLLBACK")

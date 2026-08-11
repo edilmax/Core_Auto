@@ -4281,5 +4281,60 @@ class TestIlBancoDiProvaMisuraLaStessaMacchinaDellaProduzione(unittest.TestCase)
             "che di proposito non lo e'")
 
 
+class TestIlGiudiceNonPuoUscireVERDESenzaAverMisurato(unittest.TestCase):
+    """D18: uno strumento che MISURA deve avere un controllo meccanico che gli impedisca di
+    barare — e il giudice della mutazione e' lo strumento che quel principio dovrebbe far
+    rispettare a tutti gli altri.
+
+    IL DIFETTO, VISTO DAVVERO il 2026-08-11. Chiesto un modulo col nome sbagliato
+    (`--modulo fase167_credito_single_use`, senza `.py`), l'attrezzo ha stampato
+    `ASSENTE — file inesistente` ed e' uscito **0**. Cioe': un refuso nel nome, e il giudizio
+    piu' severo del progetto diventa un verde che **non ha guardato niente**. In CI sarebbe
+    passato liscio, e per mesi avremmo creduto di avere una rete dove non c'era nulla.
+
+    E' la stessa forma dello sbaglio S1 (confrontare due vuoti e scrivere «uguali»): il vuoto
+    non e' un risultato, e' assenza di misura. Ed e' il caso peggiore della D18 punto 1 — lo
+    strumento deve provare di essere in condizione di misurare PRIMA di misurare.
+
+    La guardia ESEGUE l'attrezzo davvero e ne legge il codice d'uscita: una guardia che
+    contasse parole nel sorgente la soddisferebbe anche un commento (sbaglio S6).
+    """
+    RADICE = os.path.dirname(os.path.abspath(__file__))
+
+    def _esegui(self, *argomenti):
+        """Lancia il giudice come processo a se' e restituisce (uscita, testo)."""
+        esito = subprocess.run(
+            [sys.executable, os.path.join("collaudi", "mutazione_prodotto.py")]
+            + list(argomenti),
+            cwd=self.RADICE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return esito.returncode, esito.stdout.decode("utf-8", "replace")
+
+    def test_modulo_INESISTENTE_non_esce_verde(self):
+        """Il verso in cui deve GRIDARE."""
+        uscita, testo = self._esegui("--modulo", "fase_che_non_esiste_MAI.py",
+                                     "--tetto", "1", "--minuti", "1")
+        self.assertIn("assente", testo.lower(),
+                      "l'attrezzo deve DIRE che il modulo non c'e': %r" % (testo[-500:],))
+        self.assertNotEqual(
+            uscita, 0,
+            "un giro che non ha esaminato NEMMENO UN PUNTO non puo' uscire verde: "
+            "uscita=%d\n%s" % (uscita, testo[-500:]))
+
+    def test_su_un_modulo_VERO_e_sorvegliato_resta_verde(self):
+        """L'ALTRA direzione, obbligatoria (regola ferrea 10: un falso allarme e' un difetto
+        quanto un allarme mancato). Un allarme provato in un verso solo potrebbe gridare
+        sempre — e un allarme sempre acceso viene spento. Qui il giudice deve TACERE su un
+        modulo che esiste ed e' sorvegliato."""
+        uscita, testo = self._esegui("--modulo", "fase167_credito_single_use.py",
+                                     "--tetto", "1", "--minuti", "6",
+                                     "--killer", "test_credito_single_use")
+        self.assertNotIn("assente", testo.lower(),
+                         "il modulo esiste: non deve risultare assente: %r" % (testo[-500:],))
+        self.assertEqual(
+            uscita, 0,
+            "su un modulo vero e sorvegliato il giudice deve tacere: uscita=%d\n%s"
+            % (uscita, testo[-500:]))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
