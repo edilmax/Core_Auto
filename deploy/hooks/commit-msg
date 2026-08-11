@@ -1,0 +1,21 @@
+#!/bin/sh
+# IL MESSAGGIO DI COMMIT PASSA DI QUI, E DA NESSUN'ALTRA PARTE.
+#
+# Perche' esiste un gancio a se' invece di mettere il controllo nel `pre-commit`: al
+# `pre-commit` il messaggio NON ESISTE ANCORA. Git lo scrive dopo, e lo passa soltanto a
+# questo gancio, come primo argomento ($1 = il file che lo contiene). Metterlo nell'altro
+# sarebbe stato un controllo che non puo' guardare la cosa che deve guardare -- cioe' un
+# ornamento (regola dei 10 collaudi, modo di rompersi n.4).
+#
+# Cosa pretende (collaudi/prima_di_dire_fatto.py, controllo 9):
+#   - nessun segnaposto tipo __DA_RIEMPIRE__
+#   - ASCII puro: questi messaggi passano per shell, ganci e terminali con codifiche
+#     diverse, ed e' l'ultimo posto dove si vuole scoprire un problema di codifica
+#   - la riga della firma Co-Authored-By, tranne che nelle fusioni (quelle le scrive git)
+# Il 2026-08-11 questi tre controlli sono stati fatti A MANO. Fatti a mano vuol dire che
+# un giorno non si fanno.
+#
+# NB: qui dentro SOLO caratteri ASCII, per la stessa ragione del gancio `pre-commit`.
+# Sta in deploy/hooks (VERSIONATO) e non in .git/hooks, che non viaggia col progetto.
+# Si accende con: sh deploy/installa_hook.sh
+exec python collaudi/prima_di_dire_fatto.py --messaggio "$1"
