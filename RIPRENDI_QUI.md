@@ -11,7 +11,7 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🚦 2026-08-12 — RIPARTI DA QUI. CINQUE DIFETTI SUI SOLDI CHIUSI; **MANCA SOLO IL DEPLOY**.
+## 🚦 2026-08-12 — RIPARTI DA QUI. IL GUARDIANO DEL PIANO **FERMA IL COMMIT**; `fase133` DA FARE.
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
 >
@@ -26,6 +26,64 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > di git chiamano da soli — non dipende piu' dal ricordarsene.
 > ⛔ **Il pre-fatto pretende che il pre-volo sia girato prima** (gli serve lo scopo
 > dichiarato). Se ti blocca al commit, il messaggio ti dice il comando: sono 4 secondi.
+>
+> ### 🛡️ FATTO IL 2026-08-12 SERA — IL LAVORO OBBLIGATORIO N.1: il guardiano del piano
+> Il fatto «`faseNN` e' FATTO» era scritto **a mano in tre posti**, e il 12 agosto ne era
+> stato aggiornato **uno solo**: due documenti mandavano a rifare `fase66` che era finito.
+> Adesso lo sorveglia una macchina: `collaudi/piano_dei_soldi.py` (il giudizio, in **un posto
+> solo**) + `test_piano_dei_soldi.py` (18 collaudi) + `controllo_10` nel **pre-fatto**.
+> ⛔ **Il pezzo che conta e' il controllo 10, non i collaudi.** Prima il guardiano girava solo
+> dentro la suite, cioe' dentro un ciclo da 25 minuti: **si poteva committare un piano
+> contraddittorio**. Ora il gancio di git lo esegue in **0,06 secondi**. Provato sul gancio
+> VERO, non dedotto: `sh deploy/hooks/pre-commit` → **uscita 1**, `Commit fermo`, e il
+> messaggio nomina il modulo E il blocco. Ripristino byte-identico (`sha256 4226CABB…`).
+> ✅ **Quattro modi di rompersi sorvegliati**, non due: contraddizione fra posti (12 agosto) ·
+> modulo «da fare» che e' **codice morto** (11 agosto) · modulo **fuori da ogni blocco**
+> (`fase147`, e il confronto fra stati non poteva vederlo) · **i conti** scritti a mano che non
+> tornano. ✅ **Giudice: 6 mutanti, 6 uccisi, 0 equivalenti** — e il giudice sa dire anche
+> «sopravvissuto», se no «6 su 6» sarebbe aria come il `42 su 42` del 2026-08-01.
+> ⛔ **IL BUCO CHE RESTA APERTO, ed e' dichiarato dentro l'attrezzo** (`NON_CONTROLLO`):
+> **un modulo puo' risultare VIVO e avere dentro codice morto.** `raggiungibilita.py` conta gli
+> IMPORT, non i SIMBOLI usati. Vedi la riga su `fase133` qui sotto: non e' teoria.
+>
+> ### ▶️ `fase133_split_quote_uguali` — NON FATTA, ma **preparata**, e c'e' una sorpresa
+> ⛔ **NON e' stata toccata**: zero righe cambiate, `git status` lo conferma. Fatto solo il
+> lavoro di lettura, e ha cambiato la dimensione del compito. **Misurato, non dedotto:**
+> ```
+> riparti_uguale     2 usi in produzione  (fase83_server.py:6747-6748)
+> SplitQuoteUguali   0        crea_split_quote 0        crea_gruppo 0
+> rotta: POST /api/split/preview -> fase83_server.py:1849  (viva, e il frontend la chiama:
+>        deploy/index.html:669, mostra «= X–Y a testa»)
+> ```
+> **La produzione raggiunge ~9 righe su 142.** La classe `SplitQuoteUguali` -- `crea_gruppo`,
+> `paga`, `stato`, tutto lo stato SQLite, ~110 righe -- **non e' istanziabile da nessun punto**.
+> Il modulo e' «vivo» e dentro e' **morto al 94%**.
+> ⚠️ **Non e' un secondo `fase43`** (quello era morto tutto): qui c'e' un pezzo vivo e va
+> giudicato. Il lavoro non si salta, **si restringe** -- ed e' restringere che l'11 agosto ha
+> risparmiato 31 punti. **Primo passo per chi riprende:** `python collaudi/mutazione_prodotto.py
+> --censimento` e guardare **quanti dei 24 punti** cadono su `riparti_uguale` e quanti sulla
+> classe morta. Setacciare quelli morti sarebbe ripetere l'errore dell'11 agosto.
+> ⚠️ **E `SplitQuoteUguali` non e' una promessa tradita:** nessuna pagina promette «paga la tua
+> quota», e gli endpoint per farlo **non esistono**. Verificato. È codice in più, non un buco.
+>
+> 🔴 **E LA CONSEGUENZA GROSSA, che non riguarda `fase133` ma TUTTI gli 11 moduli del piano.**
+> L'ordine del piano lo decide **«rischio × cecità»**, e la cecità si misura in punti di
+> mutazione per modulo. Ma se quei punti includono codice che la produzione **non esegue**, la
+> classifica è tarata su numeri gonfiati. **Va misurato prima di ordinare altro lavoro**, e
+> nessuno strumento del progetto oggi lo dice.
+>
+> ### 4️⃣ I QUATTRO SOSPETTI SU `riparti_uguale` E DINTORNI — da provare, NON verdetti
+> Il metodo che ha funzionato su `fase66`: contratto → cosa i collaudi non vedono → **i
+> confini**, che è dove stavano tutti i difetti veri.
+> **1.** `stato()` dà `{}` sia se il gruppo **non esiste** sia se il database **esplode**
+> (righe 125 e 133): è **la forma esatta** del difetto di `fase66`, «invalido» e «assente»
+> trattati come la stessa cosa. **2.** `paga()` dà `False` per **tre** casi diversi e — a
+> differenza di `crea_gruppo` — **non logga niente** (regola ferrea 9, e `#22` «il log non è
+> una destinazione»). **3.** `completato: pagato == totale` con totale **0** dà **True** senza
+> che nessuno abbia pagato, e `riparti_uguale(0, 3)` → `[0,0,0]` è accettato. **4.**
+> `riparti_uguale(100, 10**9)` costruisce una lista da **un miliardo** di elementi: «BLINDATO:
+> input invalido → []» non copre un `n` valido ed enorme.
+> ⚠️ **I sospetti 1-3 sono sulla classe MORTA**: prima di lavorarci, decidere se vale.
 >
 > ### ✅ IL DEPLOY E' FATTO, E LE RIPARAZIONI SONO VIVE IN PRODUZIONE
 > Il 12 agosto sono stati riparati **cinque difetti sui soldi** (tassa di soggiorno), uniti su
@@ -71,16 +129,29 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > che guarda la cosa sbagliata produce una scoperta che non esiste: **si controlla sempre il
 > codice d'uscita prima di credere a un verdetto**, anche al proprio.
 >
-> ### 📍 DOVE SIAMO — misurato il 12 agosto, ma **RIMISURALO**, non fidarti di questa riga
+> ### 📍 DOVE SIAMO — misurato il **12 agosto sera**, ma **RIMISURALO**, non fidarti di questa riga
 > | posto | comando | valore |
 > |---|---|---|
-> | computer | `git rev-parse --short HEAD` | `8ab5386` |
-> | GitHub | `git rev-parse --short origin/master` | `8ab5386` |
-> | VPS | `ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'` | ✅ `8ab5386` **deploy fatto** |
-> | chiavetta | cartella `Desktop\BOOKINVIP USB 2026` | ✅ `a082185` (⏳ resta la copia FISICA) |
+> | computer | `git rev-parse --short HEAD` | `fc3aaa5` · `git status --porcelain` vuoto |
+> | GitHub | `git ls-remote origin refs/heads/master` | `fc3aaa5` |
+> | VPS | `ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'` | `a082185` — ⚠️ **due unioni indietro, ma di soli DOCUMENTI** |
+> | chiavetta | cartella `Desktop\BOOKINVIP USB 2026` | `a082185` (⏳ resta la copia FISICA) |
 >
-> ✅ **La richiesta #30 e' UNITA DAVVERO**, non solo chiusa: letto dall'API,
-> `merged: True`, `merged_at 2026-08-12T09:30:56Z`, commit di unione `8ab5386`.
+> ⚠️ **IL VPS NON HA LO STESSO HASH DEL COMPUTER, e va DETTO invece di lasciarlo scoprire.**
+> Misurato, non dedotto: `git diff --stat a082185 fc3aaa5` → **3 file, ZERO righe di
+> applicazione** (`REGISTRO_INGEGNERIA.md` · `RIPRENDI_QUI.md` · `collaudi/regole_avvio.py`).
+> Quindi **il motore che gira in produzione e' lo stesso**: D7 «il server mai indietro» regge sul
+> **codice**, non sull'hash, e un deploy per due documenti piu' un attrezzo di collaudo sarebbe
+> rischio senza guadagno (il VPS ha **una sola CPU**). ⛔ **Ma appena un commit tocca un
+> `fase*.py`, questa riga non basta piu' e ci vuole il deploy.**
+>
+> ✅ **Le richieste dalla #29 alla #33 sono UNITE DAVVERO**, non solo chiuse — riletto dall'API
+> il 12 agosto sera, `merged: True` per tutte e cinque, e ogni commit di unione combacia con la
+> catena locale: `#29 2c142f5` · `#30 8ab5386` · `#31 a082185` · `#32 7c0ee7c` · `#33 fc3aaa5`.
+> ⛔ **`gh` NON e' installato su questo computer** (misurato: non nel PATH, non nelle cartelle
+> standard): l'API si interroga in diretta, `Invoke-RestMethod` su `api.github.com` — il
+> repository e' pubblico, quindi non serve nessun gettone. Chi cerca `gh` e non lo trova non
+> concluda che l'API sia irraggiungibile.
 > ✅ **E la CI e' VERDE su tutti e 13 i controlli** (12 success + 1 skipped, 0 non verdi),
 > compresi i tre che contano: `full-suite`, **`full-suite-311`** (il Python di PRODUZIONE, dove
 > il 2026-08-11 il verde locale era diventato rosso) e `immagine` (l'immagine Docker si
@@ -295,18 +366,25 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > ⚠️ E quel foglio era **fermo a `fce0c54`, due generazioni indietro**: descriveva una chiavetta
 > che non esisteva piu'. Riscritto da capo, ogni numero misurato.
 >
-> ### ⏳ I CINQUE LAVORI OBBLIGATORI — **te li stampa la macchina, non questo documento**
+> ### ⏳ I LAVORI OBBLIGATORI — **te li stampa la macchina, non questo documento**
 > Il fondatore, il 2026-08-12: *«queste vanno fatte, scrivilo in modo che TUTTE le chat le
 > facciano»*. Scriverle in un `.md` **non basta**, ed e' dimostrato dai fatti dello stesso
 > giorno: il piano dei soldi era in tre punti, ne era stato aggiornato **uno solo**, e due
 > documenti mandavano a rifare `fase66` che era gia' finito.
 > ✅ **Per questo la lista vive in `collaudi/regole_avvio.py`**, che un hook `SessionStart`
 > esegue **prima di ogni altra cosa**: la vedi appena apri una chat, senza doverla cercare.
-> **1.** il guardiano del piano dei soldi (`test_piano_dei_soldi.py`) — mezza sessione
-> **2.** **CodeQL** — 30 minuti, gratis (il repository e' pubblico), zero intervento del fondatore
-> **3.** **orologi di prova Stripe** — 1 sessione: il giudice esterno piu' vicino ai soldi che manca
-> **4.** **metamorfico** — mezza sessione, ⛔ SOLO sull'aritmetica del denaro
-> **5.** **il DENOMINATORE** — 1 sessione, priorita' alta: trasforma «cosa sto dimenticando?»
+> ⛔ **DA CINQUE SONO SCESI A QUATTRO — e il conto NON si scrive qui.** Erano cinque il
+> 12 agosto mattina; il primo e' stato fatto quel pomeriggio. La cifra la dice
+> `python collaudi/regole_avvio.py`, e questo riquadro **non la ripete piu'**: scriverla
+> qui vorrebbe dire tenere lo stesso numero in **tre** posti (l'attrezzo e i due documenti)
+> ed e' la malattia che il lavoro appena finito serve a curare. *Non si cura una malattia
+> creandone un altro caso nella riga che la descrive.*
+> **✅ 0.** ~~il guardiano del piano dei soldi (`test_piano_dei_soldi.py`)~~ — **FATTO il
+> 2026-08-12**: 14 collaudi + una guardia in `test_pipeline_ci.py` che lo tiene in piedi.
+> **1.** **CodeQL** — 30 minuti, gratis (il repository e' pubblico), zero intervento del fondatore
+> **2.** **orologi di prova Stripe** — 1 sessione: il giudice esterno piu' vicino ai soldi che manca
+> **3.** **metamorfico** — mezza sessione, ⛔ SOLO sull'aritmetica del denaro
+> **4.** **il DENOMINATORE** — 1 sessione, priorita' alta: trasforma «cosa sto dimenticando?»
 > in un numero
 > ⛔ **Ognuno dichiara QUANDO E' FINITO**, e non e' un vezzo: «fai CodeQL» senza criterio e'
 > come «trova tutto», non finisce mai. Se qualcuno aggiunge una voce senza quel criterio, lo
@@ -892,7 +970,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: a082185
+CONSEGNE AGGIORNATE A: fc3aaa5
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -2717,7 +2795,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5567 test
+SUITE ATTUALE: Ran 5589 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

@@ -86,6 +86,11 @@ COSA_NON_GUARDA = pv.COSA_NON_GUARDA + (
     "cioe' da `sh`, che ha un PATH diverso dalla shell che lancera' la suite: da qui la "
     "risposta sarebbe opposta senza che nessuno abbia sbagliato niente (S11). Quel "
     "confronto lo fa il PRE-VOLO, che gira nella shell giusta",
+    "il controllo 10 dichiara i PROPRI limiti dentro `collaudi/piano_dei_soldi.py` "
+    "(`NON_CONTROLLO`, che li stampa con `python collaudi/piano_dei_soldi.py`), e non si "
+    "ricopiano qui: sarebbero una seconda copia che resta indietro. Il piu' grosso: un "
+    "modulo puo' risultare VIVO e avere dentro codice morto, perche' `raggiungibilita.py` "
+    "conta gli IMPORT e non i SIMBOLI usati -- misurato su `fase133`, ~9 righe vive su 142",
 )
 
 
@@ -259,13 +264,122 @@ def controllo_4_ambiente_senza_il_path(radice=RADICE):
     return pv.controllo_4_ambiente(radice=radice, confronta_path=False)
 
 
+# --------------------------------------------------------------------------------------
+# 10. il piano dei soldi non si contraddice
+# --------------------------------------------------------------------------------------
+# PERCHE' STA QUI E NON SOLO NELLA SUITE. Il guardiano `test_piano_dei_soldi.py` gira dentro
+# `unittest discover`, cioe' dentro un ciclo da ~25 minuti. Finche' era solo li', si POTEVA
+# committare un piano contraddittorio e lo si scopriva mezz'ora dopo -- o alla CI, dopo il
+# push. E' esattamente il difetto di TEMPO che questo file esiste per curare («il difetto era
+# QUANDO giravano»), applicato a se stesso. Il giudizio costa 0,1 secondi.
+# ⛔ E' anche la regola 23 dell'appendice, «COSTRUITO != COLLEGATO»: un controllo che nessuno
+# esegue nel momento della decisione misura se stesso, non il lavoro.
+#
+# ⛔ PERCHE' 10 E NON 9. Il 9 esiste: e' `controllo_9_messaggio`, e vive FUORI da `CONTROLLI`
+# perche' gira su un altro gancio (`commit-msg`), l'unico a cui git passa il messaggio. Il
+# buco nella numerazione e' voluto e dichiarato: riusare il 9 renderebbe ambigui i rapporti.
+def controllo_10_piano_dei_soldi(radice=RADICE, registro=None, consegne=None, morti=None):
+    """I tre posti che dichiarano «faseNN e' FATTO» dicono la stessa cosa?
+
+    ⛔ Il giudizio NON e' scritto qui: sta in `collaudi/piano_dei_soldi.py`, in un posto solo,
+    e lo usano anche `test_piano_dei_soldi.py` e chiunque a mano. Una seconda copia del
+    criterio sarebbe la malattia che quel guardiano esiste per curare.
+    I tre testi si possono INIETTARE, ed e' quello che permette di provare questo controllo
+    nelle due direzioni senza sporcare i documenti veri (D19).
+    """
+    try:
+        import piano_dei_soldi as pds
+    except ImportError as errore:
+        return (NON_ESEGUITO,
+                "`collaudi/piano_dei_soldi.py` non si importa (%s): il giudizio sul piano "
+                "dei soldi non c'e' piu'. Non e' un verde -- e' il controllo che manca."
+                % errore)
+    if morti is None:
+        try:
+            import raggiungibilita
+            morti = raggiungibilita.cammina()[1]
+        except Exception as errore:
+            return (NON_ESEGUITO,
+                    "`collaudi/raggiungibilita.py` non risponde (%s): senza l'elenco dei "
+                    "moduli morti non posso dire se il piano manda a setacciare codice che "
+                    "la produzione non raggiunge" % errore)
+    try:
+        if registro is None:
+            registro = pds.leggi(pds.REGISTRO, radice)
+        if consegne is None:
+            consegne = pds.leggi(pds.CONSEGNE, radice)
+    except OSError as errore:
+        return (NON_ESEGUITO, "non riesco a leggere i documenti del piano: %s" % errore)
+    try:
+        va_bene, righe = pds.rapporto(registro, consegne, morti)
+        quanti = len(set(m for m, _s, _d in pds.osservazioni(registro, consegne)))
+    except pds.MisuraNonValida as errore:
+        return (NON_ESEGUITO, "%s" % errore)
+    if not va_bene:
+        return (ROSSO, "\n      ".join(righe))
+    return (OK, "%d moduli dei soldi, i tre posti sono d'accordo e nessuno di quelli «da "
+                "fare» e' codice morto" % quanti)
+
+
 CONTROLLI = tuple(
     (numero, nome, controllo_4_ambiente_senza_il_path if numero == 4 else funzione)
     for numero, nome, funzione in pv.CONTROLLI
 ) + (
     (7, "niente artefatti miei fuori dal repository", controllo_7_artefatti_fuori),
     (8, "i file cambiati sono quelli dichiarati", controllo_8_scopo),
+    (10, "il piano dei soldi non si contraddice", controllo_10_piano_dei_soldi),
 )
+
+
+def batteria_dal_regolamento(radice=RADICE):
+    """Le righe della tabella dei 10 collaudi, lette da `CLAUDE.md`. `[]` se non si trova.
+
+    ⛔ IL TESTO NON E' SCRITTO QUI. Ricopiare la tabella renderebbe questo promemoria capace
+    di dire il falso il giorno che la tabella cambia -- e sarebbe esattamente il difetto che
+    D24 nasce per impedire: lo stesso fatto in due posti, e la copia che resta indietro.
+    ⛔ Si taglia DOPO il titolo «I 10 COLLAUDI, IN QUEST'ORDINE» perche' poco sopra c'e' la
+    tabella degli 11 modi di rompersi, che ha la stessa forma: senza il taglio si stamperebbe
+    quella, cioe' il promemoria sbagliato con l'aria di essere giusto.
+    """
+    try:
+        with io.open(os.path.join(radice, "CLAUDE.md"), encoding="utf-8") as f:
+            testo = f.read()
+    except OSError:
+        return []
+    coda = testo.split("I 10 COLLAUDI, IN QUEST'ORDINE")[-1]
+    return re.findall(r"^\|\s*(\d+)\s*\|([^|]+)\|([^|]+)\|", coda, re.M)
+
+
+def stampa_la_batteria(radice=RADICE):
+    """⛔ D24 — prima di dire «fatto» si rilegge LA BATTERIA, non solo i sei divieti.
+
+    Dettata dal fondatore il 2026-08-12, dopo che avevo dichiarato «provata nelle due
+    direzioni» avendo passato i livelli ① e ② e ZERO dei dieci collaudi, col giudice esterno
+    e la CI mai sfiorati. Un divieto non violato non e' una dimostrazione che funziona.
+    """
+    righe = batteria_dal_regolamento(radice)
+    print("=" * 86)
+    print("⛔⛔ E LA BATTERIA? (D24) — si rilegge PRIMA e DOPO, e «i test» sono anche "
+          "QUELLI ESTERNI")
+    print("=" * 86)
+    if not righe:
+        print("  ⛔ LA TABELLA DEI 10 COLLAUDI NON SI TROVA in CLAUDE.md.")
+        print("     Non e' un verde: e' il promemoria che ha smesso di funzionare. Va")
+        print("     riletta a mano, sezione «REGOLA DEI 10 COLLAUDI».")
+    else:
+        for numero, nome, cerca in righe:
+            print("  %2s. %-30s %s" % (numero, nome.strip().replace("**", "")[:30],
+                                       cerca.strip().replace("**", "")[:44]))
+        print()
+        print("  Per OGNUNO: l'esito, OPPURE il motivo dichiarato per cui non si applica.")
+        print("  Un collaudo senza esito e senza motivo non e' un successo: e' NON ESEGUITO")
+        print("  (sbaglio S7), e sarebbe il verde peggiore -- quello che non ha guardato.")
+    print()
+    print("  ⛔ E «QUELLI ESTERNI» sono le due cose che questo computer NON puo' darti:")
+    print("     · il GIUDICE ESTERNO (collaudo 7): uno strumento NON nostro che conferma")
+    print("     · la CI SU LINUX (regola ferrea 8): il verde locale e' un INDIZIO. Il")
+    print("       giudice e' la tabella dei job letta dall'API, mai «immagino sia verde»")
+    print("=" * 86)
 
 
 def main(argv=None):
@@ -305,6 +419,7 @@ def main(argv=None):
     print()
     print("⛔⛔ E ADESSO SI RILEGGONO, PERCHE' HAI FINITO — e stai per salvare.")
     pv.stampa_divieti(radice)
+    stampa_la_batteria(radice)
 
     rossi, non_eseguiti = pv.verdetto(esiti)
     print("=" * 86)
