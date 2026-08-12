@@ -11,7 +11,7 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🚦 2026-08-12 — RIPARTI DA QUI. IL PRE-VOLO E' IN PRODUZIONE, E SI E' GIA' RIPAGATO.
+## 🚦 2026-08-12 — RIPARTI DA QUI. CINQUE DIFETTI SUI SOLDI CHIUSI; **MANCA SOLO IL DEPLOY**.
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
 >
@@ -27,13 +27,32 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > ⛔ **Il pre-fatto pretende che il pre-volo sia girato prima** (gli serve lo scopo
 > dichiarato). Se ti blocca al commit, il messaggio ti dice il comando: sono 4 secondi.
 >
+> ### 🔴 LA PRIMA COSA CHE DEVI SAPERE: **IL SERVER E' INDIETRO. IL DEPLOY NON E' STATO FATTO.**
+> Il 12 agosto sono stati riparati **cinque difetti sui soldi** (tassa di soggiorno) e uniti su
+> `master` con la richiesta **#30**. **Sul VPS non ci sono.** Il sito che gira in questo momento
+> ha ancora dentro tutti e cinque, compreso quello che fa pagare **161,00 EUR in piu'**
+> all'ospite se l'host sbaglia a scrivere il tetto delle notti.
+> ⚠️ **Oggi non puo' fare danno**, e questo va detto per non spaventare inutilmente: in
+> produzione ci sono **0 annunci** e nessuna `TASSE_SOGGIORNO` (misurato dentro il contenitore
+> il 12 agosto, `catalogo.db` -> `annunci: 0`). Ma **il giorno che entra il primo host il
+> codice deve gia' essere quello nuovo.** Il deploy non e' stato fatto perche' il fondatore non
+> l'ha ancora autorizzato: **non e' una dimenticanza, e' un passo che aspetta la sua parola.**
+>
 > ### 📍 DOVE SIAMO — misurato il 12 agosto, ma **RIMISURALO**, non fidarti di questa riga
 > | posto | comando | valore |
 > |---|---|---|
-> | computer | `git rev-parse --short HEAD` | `2c142f5` |
-> | GitHub | `git rev-parse --short origin/master` | `2c142f5` |
-> | VPS | `ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'` | `2c142f5` |
+> | computer | `git rev-parse --short HEAD` | `8ab5386` |
+> | GitHub | `git rev-parse --short origin/master` | `8ab5386` |
+> | VPS | `ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'` | 🔴 `2c142f5` **INDIETRO** |
 > | chiavetta | gesto fisico del fondatore | ⏳ `cd95f73` |
+>
+> ✅ **La richiesta #30 e' UNITA DAVVERO**, non solo chiusa: letto dall'API,
+> `merged: True`, `merged_at 2026-08-12T09:30:56Z`, commit di unione `8ab5386`.
+> ✅ **E la CI e' VERDE su tutti e 13 i controlli** (12 success + 1 skipped, 0 non verdi),
+> compresi i tre che contano: `full-suite`, **`full-suite-311`** (il Python di PRODUZIONE, dove
+> il 2026-08-11 il verde locale era diventato rosso) e `immagine` (l'immagine Docker si
+> costruisce, **si avvia davvero** e risponde alla sonda). Anche `mutazione` e' verde: i quattro
+> mutanti nuovi girano sul giudice, quindi se quei difetti tornano la CI diventa rossa da sola.
 >
 > ⛔ **E `git rev-parse` sul VPS legge il REPOSITORY, non l'immagine che GIRA.** Misurato
 > **dentro la macchina viva** il 12 agosto: `docker inspect casavip_app` dice
@@ -219,8 +238,21 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > l'incidente che a questo progetto era gia' costato un difetto sui soldi in produzione: la
 > differenza fra allora e oggi non e' la prudenza di chi lavora, e' che adesso c'e' la rete.
 >
-> ### ▶️ IL PROSSIMO LAVORO
-> `fase133_split_quote_uguali`, poi `fase119_calendario_prezzi`.
+> ### ▶️ COSA FARE, IN QUEST'ORDINE
+> **1. 🔴 IL DEPLOY** — e' l'unica cosa in sospeso di questo blocco. Il VPS e' a `2c142f5`,
+> `master` e' a `8ab5386`. Serve la parola del fondatore, poi si segue il **protocollo D17**
+> (`deploy/protocollo_d17.sh`: fase `prima` -> `scambio`, il gettone e' obbligatorio) e alla
+> fine `collaudi/verifica_produzione.py`. ⛔ **`docker compose` v2, mai `docker-compose` v1**:
+> quello butta giu' il sito. ⛔ E si guarda l'immagine **dentro** il contenitore, non il commit
+> del repository.
+> **2. 🔑 LA CHIAVETTA**, ferma a `cd95f73`: gesto fisico del fondatore.
+> **3. ▶️ IL MODULO DOPO**: `fase133_split_quote_uguali`, poi `fase119_calendario_prezzi`.
+> 💡 **E questo e' il metodo che ha funzionato su `fase66`, da rifare uguale sugli altri 10:**
+> verificare che il modulo sia **acceso** -> leggere il **contratto** -> chiedersi cosa i
+> collaudi esistenti **non possono vedere** -> guardare i **confini** con chi lo usa (i difetti
+> veri erano tutti li', non nell'aritmetica) -> **E2E sulla catena vera** -> e il Giudice per
+> **ultimo**. ⛔ L'E2E non si salta dicendo «e' gia' coperto»: il 12 agosto ha trovato il
+> difetto piu' grave dei cinque, che i livelli ① e ② **non potevano vedere per costruzione**.
 > ⛔ **Il piano nel registro e' stato corretto in due punti**:
 > `fase43_commissione` e' **codice morto** ed e' uscito dal Blocco 2 (31 punti che non vanno
 > fatti), `fase147_tassa_comunale` e' **vivo** e non stava in nessun blocco: e' entrato.
@@ -229,7 +261,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > sta in `REGISTRO_INGEGNERIA.md` §2-bis, non piu' solo in una memoria di sessione che **non
 > viaggia con la chiavetta**.
 >
-> ### ✅ COSA E' STATO FATTO OGGI — `fase167_credito_single_use`, tutti e 4 i livelli (D3)
+> ### ✅ IL BLOCCO PRECEDENTE (2026-08-11) — `fase167_credito_single_use`, tutti e 4 i livelli (D3)
 > Il modulo era **il piu' cieco del censimento dei soldi** (un solo file di test lo nominava)
 > e **non era mai passato davanti al Giudice** (`grep fase167 collaudi/mutazione_prodotto.py`
 > → 0). Prima si e' verificato che fosse **ACCESO**: `collaudi/raggiungibilita.py` dice
@@ -476,9 +508,15 @@ nuovo dentro il progetto mentre la suite gira produce **rossi finti**).
 #      $c = $LASTEXITCODE
 #      Add-Content "<scratchpad>\suite.err" -Value "CODICE D'USCITA DELLA SUITE: $c"
 # 2) e lo si stacca:
-Start-Process powershell -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","<scratchpad>\lancia_suite.ps1" `
+Start-Process pwsh -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","<scratchpad>\lancia_suite.ps1" `
   -NoNewWindow -WorkingDirectory "C:\Users\MaxDanno\Desktop\Core_Auto"
 ```
+⛔⛔ **`pwsh`, NON `powershell`** — corretto il 2026-08-12 dopo averlo pagato. `Start-Process
+powershell` su questa macchina fallisce con *«%1 non è un'applicazione di Win32 valida»* e la
+suite **non parte affatto**, mentre il comando sembra andato a buon fine: si scopre solo
+guardando che il file non esiste. Qui c'è solo PowerShell 7 (`C:\Program Files\PowerShell\
+7-preview\pwsh.exe`), e `powershell` (il 5.1 di Windows) non è avviabile. È la stessa trappola
+già in `CLAUDE.md` per i comandi normali, che però era rimasta scritta male **proprio qui**.
 ⛔ `*>` è una **redirezione**, non un tubo: `$LASTEXITCODE` subito dopo è quello di `python`.
 Con `python … | Tee-Object` sarebbe l'esito di `Tee-Object` (regola ferrea 7, già pagata).
 ⛔⛔ **E LA RIGA FINALE C'E' ANCHE SE LA SUITE E' STATA UCCISA.** Scoperto il 2026-08-12: il
@@ -767,7 +805,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 2c142f5
+CONSEGNE AGGIORNATE A: 8ab5386
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui

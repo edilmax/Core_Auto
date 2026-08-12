@@ -378,7 +378,18 @@ modifica al codice, e il sito gira già in Docker; è una decisione di **soldi**
 non tecnica) · **TLA+** (il rischio è che la specifica si scolli dal codice — già successo con
 z3: *una dimostrazione vale quanto il modello su cui è fatta*).
 
-### ✅ FATTO 2026-08-12 (30) — `fase66_tassa_soggiorno`: TRE DIFETTI, TUTTI CONTRO L'OSPITE
+### ✅ FATTO 2026-08-12 (30) — `fase66` + `fase57`: **CINQUE DIFETTI, TUTTI CONTRO L'OSPITE**
+
+> **STATO DI CHIUSURA, misurato.** Unito su `master` con la richiesta **#30** — `merged: True`,
+> `merged_at 2026-08-12T09:30:56Z`, commit di unione **`8ab5386`** (letto dall'API, non dedotto
+> dal colore di un'icona). **CI verde su 13 controlli** (12 success + 1 skipped, 0 non verdi),
+> compresi `full-suite`, **`full-suite-311`** (il Python di PRODUZIONE) e `immagine` (l'immagine
+> Docker si costruisce, si avvia davvero e risponde alla sonda). Suite locale prima del commit:
+> `Ran 5562 tests · OK (skipped=4) · uscita 0`.
+> 🔴 **DEPLOY NON FATTO: il VPS è fermo a `2c142f5`.** Non è una dimenticanza — è il passo che
+> aspetta la parola del fondatore. Finché non si deploya, il sito serve il codice **con dentro
+> tutti e cinque i difetti**. ⚠️ Oggi non può fare danno (in produzione **0 annunci** e nessuna
+> `TASSE_SOGGIORNO`, misurato dentro il contenitore), ma il giorno del primo host sì.
 
 **Primo modulo del Blocco 1.** Verificato **acceso** prima di toccarlo (`raggiungibilita.py`:
 151 moduli, 88 raggiungibili, 63 morti, `fase66` **non** fra i 63; usato da `fase59`, `fase83`,
