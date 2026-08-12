@@ -295,14 +295,50 @@ def valida_scheda(data: Any) -> Tuple[bool, str, Optional[SchedaAlloggio]]:
     if not isinstance(pol, str) or pol not in POLITICHE_CANCELLAZIONE:
         pol = "flessibile"
 
-    def _tax(nome: str, tetto: int) -> int:
-        x = data.get(nome, 0)
-        return x if (_intero(x) and 0 <= x <= tetto) else 0
-    t_pp = _tax("tassa_pp_notte_cents", MAX_CENTS)
-    t_max = _tax("tassa_max_notti", 366)
-    t_perc = _tax("tassa_perc_bps", 10000)
-    sc_sett = _tax("sconto_settimana_bps", 9000)   # max 90% (guardia anti-errore)
-    sc_mese = _tax("sconto_mese_bps", 9000)
+    # ⛔ UN VALORE DI DENARO NON VALIDO SI RIFIUTA, NON SI AZZERA (riparato 2026-08-12).
+    #
+    # Prima questi cinque campi erano gli UNICI di `valida_scheda` che, davanti a un valore
+    # sbagliato, lo schiacciavano su 0 invece di rifiutare la scheda come fa ogni altro
+    # campo. Sembrava prudenza. Era la perdita, perche' per `tassa_max_notti` lo **0 e'
+    # anche il default e significa «NESSUN TETTO»** (vedi `regola_tassa_di` qui sotto, e
+    # l'oracolo indipendente di `test_happy_conti`). Quindi un valore invalido diventava
+    # indistinguibile da «non l'ho impostato» -- e «non l'ho impostato» e' la lettura piu'
+    # CARA per l'ospite.
+    #
+    # MISURATO SULLA CATENA VERA (30 notti, 2 ospiti, 350 cents a persona/notte):
+    #     l'host scrive  7  -> tassa  4900 cents
+    #     l'host scrive -1  -> tassa 21000 cents, e `pubblica` risponde 201
+    # 161,00 EUR in piu' addebitati all'ospite per un refuso, senza un avviso a nessuno.
+    #
+    # E' il criterio scritto in REGISTRO_INGEGNERIA §2-bis: *nessun difetto puo' costare
+    # soldi in silenzio -- o viene impedito, o GRIDA*. Qui si fa tutt'e due: la scheda
+    # viene rifiutata (422) e il messaggio dice QUALE campo, cosi' l'host lo corregge.
+    #
+    # ⚠️ «NON IMPOSTATO» RESTA LEGITTIMO: campo assente, `null` e stringa vuota valgono 0,
+    # perche' un modulo lasciato in bianco non e' un errore dell'host -- e rifiutarlo
+    # impedirebbe di pubblicare un annuncio senza tassa, che e' il caso piu' comune al
+    # mondo. E' la stessa distinzione di `fase66._regola_malformata`: «assente» e
+    # «invalido» sono due cose diverse, e confonderle e' il difetto di oggi.
+    # ⚠️ I valori si raccolgono in un dizionario LOCALE: `valida_scheda` non deve modificare
+    # il corpo che le viene passato. Una funzione di validazione che riscrive il suo
+    # ingresso e' una sorpresa per ogni chiamante, e qui il chiamante e' il server.
+    _tasse = {}
+    for _campo, _tetto in (("tassa_pp_notte_cents", MAX_CENTS),
+                           ("tassa_max_notti", 366),
+                           ("tassa_perc_bps", 10000),
+                           ("sconto_settimana_bps", 9000),   # max 90% (guardia anti-errore)
+                           ("sconto_mese_bps", 9000)):
+        _v = data.get(_campo, 0)
+        if _v is None or _v == "":
+            _v = 0
+        if not (_intero(_v) and 0 <= _v <= _tetto):
+            return False, _campo + "_non_valido", None
+        _tasse[_campo] = _v
+    t_pp = _tasse["tassa_pp_notte_cents"]
+    t_max = _tasse["tassa_max_notti"]
+    t_perc = _tasse["tassa_perc_bps"]
+    sc_sett = _tasse["sconto_settimana_bps"]
+    sc_mese = _tasse["sconto_mese_bps"]
     modal = data.get("modalita_prenotazione", "immediata")
     if not isinstance(modal, str) or modal not in MODALITA_PRENOTAZIONE:
         modal = "immediata"

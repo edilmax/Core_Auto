@@ -85,6 +85,38 @@ MUTANTI = [
      "test_promo_lancio_e2e test_fase81_bootstrap_casavip",
      "la rampa salta: promo 0% mai applicata (E' IL BUG VERO DEL 2026-07-20)"),
 
+    # ── LA TASSA DI SOGGIORNO (fase66) — i tre guasti VERI del 2026-08-12 ──────
+    # Non mutanti immaginati: sono esattamente i tre difetti trovati e riparati quel
+    # giorno, rimessi qui perche' se tornano il Giudice li deve vedere in CI.
+    ("fase66_tassa_soggiorno.py",
+     "    if _regola_malformata(regola):",
+     "    if False:",
+     "test_fase66_tassa_soggiorno",
+     "una regola malformata (cap notti -1) torna a valere come «nessun cap»: "
+     "l'ospite paga 210,00 EUR invece di 49,00 per lo stesso soggiorno"),
+
+    ("fase66_tassa_soggiorno.py",
+     "        return CalcoloTassa(0, 0, 0, notti_tass, ospiti_tass, regola.valuta)",
+     "        return CalcoloTassa(MAX_CENTS, fissa, perc, notti_tass, ospiti_tass, regola.valuta)",
+     "test_fase66_tassa_soggiorno",
+     "la cintura anti-abuso torna a tagliare il totale lasciando intatte le componenti: "
+     "tassa != fissa + percentuale e la riconciliazione non torna piu'"),
+
+    ("fase66_tassa_soggiorno.py",
+     "            if ppn < 0 or perc < 0 or (maxn is not None and maxn < 0):",
+     "            if False:",
+     "test_fase66_tassa_soggiorno",
+     "una riga di configurazione con un meno di troppo torna a essere «aggiustata» "
+     "invece che scartata: la citta' perde il tetto notti e l'ospite paga di piu'"),
+
+    ("fase57_vetrina.py",
+     "        if not (_intero(_v) and 0 <= _v <= _tetto):",
+     "        if False:",
+     "test_tassa_pre_acquisto test_fase66_tassa_soggiorno",
+     "i valori di tassa/sconto tornano a essere AZZERATI invece che rifiutati: e lo zero, "
+     "per `tassa_max_notti`, significa NESSUN TETTO -> l'ospite paga la tassa su tutte le "
+     "notti per un refuso dell'host, e `pubblica` risponde 201 senza avvisare nessuno"),
+
     # ── LE PROVE LEGALI ────────────────────────────────────────────────────────
     ("fase163_accettazioni.py",
      "if riferimento:\n            canonico += \"|\" + str(riferimento)",
