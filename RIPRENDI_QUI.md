@@ -295,6 +295,26 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > ⚠️ E quel foglio era **fermo a `fce0c54`, due generazioni indietro**: descriveva una chiavetta
 > che non esisteva piu'. Riscritto da capo, ogni numero misurato.
 >
+> ### ⏳ I CINQUE LAVORI OBBLIGATORI — **te li stampa la macchina, non questo documento**
+> Il fondatore, il 2026-08-12: *«queste vanno fatte, scrivilo in modo che TUTTE le chat le
+> facciano»*. Scriverle in un `.md` **non basta**, ed e' dimostrato dai fatti dello stesso
+> giorno: il piano dei soldi era in tre punti, ne era stato aggiornato **uno solo**, e due
+> documenti mandavano a rifare `fase66` che era gia' finito.
+> ✅ **Per questo la lista vive in `collaudi/regole_avvio.py`**, che un hook `SessionStart`
+> esegue **prima di ogni altra cosa**: la vedi appena apri una chat, senza doverla cercare.
+> **1.** il guardiano del piano dei soldi (`test_piano_dei_soldi.py`) — mezza sessione
+> **2.** **CodeQL** — 30 minuti, gratis (il repository e' pubblico), zero intervento del fondatore
+> **3.** **orologi di prova Stripe** — 1 sessione: il giudice esterno piu' vicino ai soldi che manca
+> **4.** **metamorfico** — mezza sessione, ⛔ SOLO sull'aritmetica del denaro
+> **5.** **il DENOMINATORE** — 1 sessione, priorita' alta: trasforma «cosa sto dimenticando?»
+> in un numero
+> ⛔ **Ognuno dichiara QUANDO E' FINITO**, e non e' un vezzo: «fai CodeQL» senza criterio e'
+> come «trova tutto», non finisce mai. Se qualcuno aggiunge una voce senza quel criterio, lo
+> strumento **grida** (provato nelle due direzioni).
+> ⛔ **E non sono un test rosso, di proposito**: quattro rossi permanenti al terzo giorno non
+> li guarda piu' nessuno — *un allarme che suona sempre viene spento*. Si informa a ogni
+> avvio; il rosso sta sulla lista che si corrompe, non sui lavori aperti.
+>
 > ### ▶️ COSA FARE, IN QUEST'ORDINE
 > **1. ✅ IL DEPLOY E' FATTO** (vedi sopra). Per il prossimo: **protocollo D17**
 > (`deploy/protocollo_d17.sh`: `prima` -> `scambio` -> `dopo`, il gettone e' obbligatorio) e
@@ -661,32 +681,36 @@ stata tolta** in questo lavoro — non rimetterla.
 moduli**, 364 che il generatore non sa rompere, **0 moduli che nessun test nomina**.
 ⛔ Ma **essere nominato non è essere coperto**: è tutta lì la differenza, e questa tabella la misura.
 
-**Moduli dei SOLDI GIÀ passati dal giudice — 4, per ~173 punti:**
+**Moduli dei SOLDI GIÀ passati dal giudice — 6:**
 `fase59_concierge` (112 · 48 uccisi) · `fase160_escrow_garanzia` (39 · 34 uccisi) ·
-`fase100_dac7` (18 · 13 uccisi) · `fase188_paga_struttura` (4).
+`fase100_dac7` (18 · 13 uccisi) · `fase188_paga_struttura` (4) ·
+✅ **`fase167_credito_single_use`** (11 su 11 uccisi, 2026-08-11, **1 difetto vero chiuso**) ·
+✅ **`fase66_tassa_soggiorno`** (24 su 24 uccisi, **0 sopravvissuti, 0 equivalenti dichiarati**,
+2026-08-12, **5 difetti veri chiusi**).
 
-**Moduli dei SOLDI MAI passati dal giudice — 16, per 516 punti.** *(punti · quanti test lo nominano)*
+**Moduli dei SOLDI CHE RESTANO — 11, per 400 punti.** *(rimisurato col censimento il
+2026-08-12; ⛔ **rimisuralo**, non fidarti di questa tabella: i numeri invecchiano)*
 
-| modulo | punti | lo nominano |
-|---|---|---|
-| `fase162_pagamenti_pendenti` | 91 | 13 |
-| `fase131_payout_dashboard` | 62 | 11 |
-| `fase65_split_payment` | 59 | 4 |
-| `fase101_stripe_connect` | 50 | 7 |
-| `fase43_commissione` | 31 | 5 |
-| `fase147_tassa_comunale` | 29 | 6 |
-| `fase85_pagamenti_stripe` | 26 | 77 |
-| `fase66_tassa_soggiorno` | 25 | **2** |
-| `fase44_prezzo` | 25 | 4 |
-| `fase35_pagamenti` | 25 | 7 |
-| `fase133_split_quote_uguali` | 24 | **2** |
-| `fase98_policy_commissione` | 18 | 15 |
-| `fase87_stripe_webhook` | 15 | 59 |
-| `fase119_calendario_prezzi` | 15 | **2** |
-| `fase111_cancellazione` | 11 | 4 |
-| `fase167_credito_single_use` | 10 | **1** |
+| modulo | punti | lo nominano | blocco |
+|---|---|---|---|
+| `fase162_pagamenti_pendenti` | 91 | 13 | 4 |
+| `fase131_payout_dashboard` | 62 | 11 | 4 |
+| `fase65_split_payment` | 59 | 4 | 3 |
+| `fase101_stripe_connect` | 50 | 7 | 3 |
+| `fase147_tassa_comunale` | 29 | 6 | 2 |
+| `fase85_pagamenti_stripe` | 26 | 77 | 5 |
+| `fase133_split_quote_uguali` | 24 | **2** | **1 ← il prossimo** |
+| `fase98_policy_commissione` | 18 | 15 | 2 |
+| `fase87_stripe_webhook` | 15 | 59 | 5 |
+| `fase119_calendario_prezzi` | 15 | **2** | **1 ← e poi questo** |
+| `fase111_cancellazione` | 11 | 4 | 2 |
 
-**Sui soldi siamo a circa un quarto** (173 giudicati contro 516 no).
+⛔ **FUORI DALL'ELENCO PERCHÉ SONO CODICE MORTO** (`raggiungibilita.py`, 2026-08-11):
+`fase43_commissione` (31) · `fase44_prezzo` (25) · `fase35_pagamenti` (25) = **81 punti che NON
+vanno fatti**. Erano in questa tabella e mandavano a lavorare sul nulla.
+
+**Il Blocco 1 è quasi chiuso**: restano `fase133` (24) e `fase119` (15) = **39 punti**, i due
+moduli più ciechi che restano (2 test li nominano ciascuno).
 
 ⛔ **La colonna che conta è la terza, non la seconda.** Il rischio non sta dove c'è più codice:
 sta dove c'è **meno sorveglianza**. `fase167_credito_single_use` ha **un solo test** che lo
@@ -701,8 +725,9 @@ Metodo confermato dal fondatore il 2026-08-10: **blocchi piccoli, e su ognuno tu
 livelli in ordine** (unitari → integrazione → E2E → mutazione). L'ordine dei blocchi lo decide
 **rischio × cecità**, non la dimensione.
 
-**Blocco 1 — `fase167_credito_single_use` (10 punti, 1 test), poi `fase66_tassa_soggiorno` (25,
-2), `fase133_split_quote_uguali` (24, 2), `fase119_calendario_prezzi` (15, 2).**
+**Blocco 1 — ✅ `fase167_credito_single_use` FATTO (2026-08-11) · ✅ `fase66_tassa_soggiorno`
+FATTO (2026-08-12, 5 difetti veri) · ▶️ `fase133_split_quote_uguali` (24 punti, 2 test) ·
+`fase119_calendario_prezzi` (15, 2).** Restano 39 punti e il blocco è chiuso.
 74 punti in tutto, tutti sui soldi, tutti quasi ciechi. Si comincia da `fase167` perché un
 difetto lì è **denaro che si spende due volte**.
 

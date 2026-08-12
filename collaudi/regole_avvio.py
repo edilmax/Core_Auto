@@ -205,6 +205,111 @@ def stampa_i_divieti(n=None):
     print()
 
 
+# ─────────────────────────────────────────────────────────────────────────────────────
+#  I LAVORI OBBLIGATORI CHE NESSUNA CHAT DEVE POTER DIMENTICARE
+# ─────────────────────────────────────────────────────────────────────────────────────
+# PERCHE' STANNO QUI E NON IN UN DOCUMENTO. Il 2026-08-12 il fondatore ha chiesto: «queste
+# vanno fatte, scrivilo in modo che TUTTE le chat le facciano». Scriverle in un `.md` non
+# basta, ed e' dimostrato dai fatti di quello stesso giorno: il piano dei soldi era scritto
+# in tre punti diversi e ne era stato aggiornato uno solo, cosi' due documenti dicevano
+# ancora «`fase66` e' il prossimo da fare» quando era gia' finito. Una chat nuova l'avrebbe
+# rifatto da capo. Questo file invece lo esegue un hook `SessionStart`: la sua uscita entra
+# nel contesto PRIMA di ogni altra cosa, quindi non dipende da chi si ricorda di leggere.
+#
+# ⛔ E NON SONO UN TEST ROSSO, DI PROPOSITO. L'istinto sarebbe «finche' non sono fatti la
+# suite e' rossa». Sarebbe la trappola gia' pagata da questo progetto: *un allarme che suona
+# sempre viene spento*. Quattro rossi permanenti al terzo giorno non li guarda piu' nessuno,
+# e si sarebbe peggiorata la situazione. Qui si INFORMA a ogni avvio; il rosso sta dove
+# serve, cioe' su una lista che si corrompe (vedi `fatto_quando` qui sotto).
+#
+# ⛔ OGNI VOCE DEVE DIRE QUANDO E' FINITA. E' la stessa regola che questo file applica gia'
+# alle norme: una cosa che non si puo' controllare non e' un lavoro, e' un desiderio -- e
+# «fai CodeQL» senza criterio e' come «trova tutto»: non finisce mai. Se qualcuno aggiunge
+# una voce senza `fatto_quando`, lo strumento GRIDA (vedi `main`).
+LAVORI_IN_SOSPESO = (
+    {
+        "nome": "il guardiano del piano dei soldi — test_piano_dei_soldi.py",
+        "costo": "mezza sessione",
+        "priorita": "PRIMA DI RIPRENDERE I MODULI",
+        "perche": "il fatto «faseNN e' FATTO» va scritto a mano in TRE posti; il 12 agosto "
+                  "ne e' stato aggiornato uno solo e gli altri due mandavano a rifare un "
+                  "lavoro gia' finito",
+        "fatto_quando": "un collaudo estrae dai documenti l'insieme dei moduli marcati FATTO "
+                        "e quello dei moduli DA FARE ed e' ROSSO se un modulo sta in tutti e "
+                        "due; ed e' ROSSO se un modulo «da fare» risulta codice morto per "
+                        "raggiungibilita.py (difetto dell'11 agosto: fase43 era nel piano, "
+                        "31 punti che stavano per essere buttati)",
+    },
+    {
+        "nome": "CodeQL",
+        "costo": "30 minuti",
+        "priorita": "SUBITO: e' il piu' economico di tutti",
+        "perche": "analisi statica di sicurezza, GRATIS finche' il repository e' pubblico "
+                  "(lo e'), e non richiede nessun intervento del fondatore",
+        "fatto_quando": "esiste .github/workflows/codeql.yml, gira su master, ed e' VERDE — "
+                        "oppure i suoi rilievi sono scritti e triati uno per uno, col motivo",
+    },
+    {
+        "nome": "orologi di prova Stripe (test clocks)",
+        "costo": "1 sessione",
+        "priorita": "ALTA: e' il giudice esterno piu' vicino ai soldi che manca",
+        "perche": "fanno passare il TEMPO davvero: oggi hold, maturazione dei bonifici e "
+                  "finestre di penale non sono mai stati visti scadere sul serio",
+        "fatto_quando": "un collaudo crea un test clock, avanza il tempo e verifica ALMENO "
+                        "tre cose: l'hold che scade · il payout che matura a 24h · una "
+                        "finestra di penale — con identificativi Stripe VERI nel registro",
+    },
+    {
+        "nome": "collaudi metamorfici sull'aritmetica del denaro",
+        "costo": "mezza sessione",
+        "priorita": "MEDIA — e va fatto insieme a F6 «chi perde se va storta»",
+        "perche": "e' l'UNICA delle 11 tecniche di verifica avanzata che il progetto non ha "
+                  "(le altre 10 erano gia' in casa)",
+        "fatto_quando": "esistono relazioni provate sull'aritmetica dei soldi, per esempio: "
+                        "raddoppiare le notti raddoppia la componente fissa · un ospite "
+                        "esente in piu' non cambia la tassa · l'ordine in cui si applicano "
+                        "gli sconti non cambia il totale. ⛔ SOLO sull'aritmetica del denaro, "
+                        "non su tutto: allargarlo e' il modo in cui questi progetti non "
+                        "finiscono mai",
+    },
+    {
+        "nome": "il DENOMINATORE",
+        "costo": "1 sessione",
+        "priorita": "ALTA",
+        "perche": "trasforma «cosa sto dimenticando?» in un NUMERO. Due strade indipendenti "
+                  "sono arrivate alla stessa conclusione: la ricerca esterna e la nostra "
+                  "regola «ogni guardia dichiara il denominatore»",
+        "fatto_quando": "un attrezzo elenca DALLA MACCHINA quante rotte HTTP, email, pagine "
+                        "pubbliche e lingue esistono, e per ognuna dice se un collaudo la "
+                        "attraversa; e stampa quante NON sono attraversate",
+    },
+)
+
+
+def lavori_senza_criterio():
+    """Le voci che non dicono quando sono finite: sono desideri, non lavori."""
+    return [v.get("nome", "(senza nome)") for v in LAVORI_IN_SOSPESO
+            if not str(v.get("fatto_quando", "")).strip()]
+
+
+def stampa_i_lavori_in_sospeso():
+    print("=" * 78)
+    print("⏳ LAVORI OBBLIGATORI IN SOSPESO — %d  (decisi dal fondatore, non opzionali)"
+          % len(LAVORI_IN_SOSPESO))
+    print("=" * 78)
+    for i, v in enumerate(LAVORI_IN_SOSPESO, 1):
+        print("  %d. %s" % (i, v["nome"]))
+        print("     costo: %s  ·  priorita': %s" % (v["costo"], v["priorita"]))
+        print("     perche': %s" % v["perche"])
+        print("     ✅ FATTO QUANDO: %s" % v["fatto_quando"])
+        print()
+    print("  ⛔ Quando ne finisci uno, TOGLILO DA QUESTA LISTA nello stesso commit del")
+    print("     lavoro: una lista che resta indietro rimanda a rifare cose gia' fatte, ed e'")
+    print("     esattamente il difetto del 2026-08-12 che ha reso necessaria questa lista.")
+    print("=" * 78)
+    print()
+
+
 def main():
     n = conta_regole()
     ricerca = n["appendice"]                       # le 44: 15 in CLAUDE.md + 29 in appendice
@@ -214,6 +319,7 @@ def main():
     totale = ricerca + altri
 
     stampa_i_divieti(n)
+    stampa_i_lavori_in_sospeso()
     print("=" * 78)
     print("⛔ REGOLE DEL PROGETTO — si leggono PRIMA di fare qualunque cosa")
     print("=" * 78)
@@ -274,6 +380,12 @@ def main():
     if mute:
         guasti.append("queste regole NON dicono come si verificano (sono desideri, non "
                       "regole): %s" % ", ".join(mute))
+    # Stessa asta per i lavori in sospeso: uno che non dice quando e' finito non si chiude
+    # mai, perche' nessuno puo' dimostrare di averlo chiuso.
+    senza = lavori_senza_criterio()
+    if senza:
+        guasti.append("questi lavori in sospeso non dicono QUANDO sono finiti (sono "
+                      "desideri, non lavori): %s" % ", ".join(senza))
 
     if guasti:
         print("  🔴 IL REGOLAMENTO NON DICE IL VERO SU SE STESSO:")
