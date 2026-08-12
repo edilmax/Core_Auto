@@ -77,7 +77,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > | computer | `git rev-parse --short HEAD` | `8ab5386` |
 > | GitHub | `git rev-parse --short origin/master` | `8ab5386` |
 > | VPS | `ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'` | ✅ `8ab5386` **deploy fatto** |
-> | chiavetta | gesto fisico del fondatore | ⏳ `cd95f73` |
+> | chiavetta | cartella `Desktop\BOOKINVIP USB 2026` | ✅ `a082185` (⏳ resta la copia FISICA) |
 >
 > ✅ **La richiesta #30 e' UNITA DAVVERO**, non solo chiusa: letto dall'API,
 > `merged: True`, `merged_at 2026-08-12T09:30:56Z`, commit di unione `8ab5386`.
@@ -271,6 +271,30 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > l'incidente che a questo progetto era gia' costato un difetto sui soldi in produzione: la
 > differenza fra allora e oggi non e' la prudenza di chi lavora, e' che adesso c'e' la rete.
 >
+> ### 🔑 CHIAVETTA RIGENERATA su `a082185` — E CI HA TROVATO UN DIFETTO NELLE ISTRUZIONI
+> Rifatta **dal server vivo** (`deploy/impacchetta.sh`), con le prove PRIMA di toccarla:
+> impronte identiche fra server e computer · **714 file tracciati su 714 con impronta
+> IDENTICA** (`verifica_impronte.sh`, 0 diversi, 0 mancanti) · **25 database integri, 0 rotti**
+> · generazione precedente **spostata** in `precedente_cd95f73\` (sono dieci, mai cancellate).
+> ⚠️ Il confronto delle impronte si fa **sul server**, mai su Windows: qui i CRLF farebbero
+> risultare «diverso» ogni file di testo, e si perde un'ora a inseguire fantasmi.
+> 💡 **714 e non 1075** perche' in `progetto\` ci sono anche i file NON tracciati da git, fra
+> cui `.env.casavip` con le chiavi vere: la chiavetta e' la **cartella di lavoro del server**,
+> non solo il codice pubblico. GitHub da solo non rimetterebbe online il sito.
+>
+> 🔴 **IL DIFETTO, ed era nel posto peggiore: le ISTRUZIONI DI RIPRISTINO.**
+> La suite lanciata dentro la copia estratta esce **ROSSA con 9 test**, tutti sul pre-volo e
+> sul pre-fatto. Motivo misurato: *«non e' un repository git (.git assente)»* — il pacchetto
+> esclude `.git` apposta, e quei due attrezzi **si rifiutano correttamente di misurare** senza
+> (D18 punto 1). Gli attrezzi si comportano bene; erano le istruzioni a non dare le condizioni.
+> ✅ Provato, non dedotto: rifatti `git init` + `git commit` + `sh deploy/installa_hook.sh`
+> dentro la copia, quegli stessi nove danno **`Ran 22 tests · OK`**.
+> ⛔ **Perche' e' grave: chi ripristina nel giorno piu' brutto vede nove rossi e conclude che
+> il salvataggio e' corrotto — e butta via una copia sana.** Il `LEGGIMI-RIPRISTINO.txt` sulla
+> chiavetta adesso **apre** con quel riquadro e i due comandi.
+> ⚠️ E quel foglio era **fermo a `fce0c54`, due generazioni indietro**: descriveva una chiavetta
+> che non esisteva piu'. Riscritto da capo, ogni numero misurato.
+>
 > ### ▶️ COSA FARE, IN QUEST'ORDINE
 > **1. ✅ IL DEPLOY E' FATTO** (vedi sopra). Per il prossimo: **protocollo D17**
 > (`deploy/protocollo_d17.sh`: `prima` -> `scambio` -> `dopo`, il gettone e' obbligatorio) e
@@ -278,7 +302,9 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > v1**: quello butta giu' il sito. ⛔ E si guarda l'immagine **dentro** il contenitore.
 > ⚠️ **Il VPS ha UNA sola CPU**: non ci si lancia la suite per fare esperimenti, si rallenta
 > il sito vero.
-> **2. 🔑 LA CHIAVETTA**, ferma a `cd95f73`: gesto fisico del fondatore.
+> **2. ✅ LA CHIAVETTA E' RIGENERATA su `a082185`** (vedi il riquadro qui sotto). ⏳ Resta
+> solo il gesto fisico del fondatore: copiare `Desktop\BOOKINVIP USB 2026` (656 MB) su un
+> supporto vero e metterlo in cassaforte — dentro c'e' `.env.casavip` con le chiavi Stripe.
 > **3. 🐛 IL TEST INTERMITTENTE** (vedi il debito qui sopra): al prossimo rosso della CI il
 > nome arriva da solo nel riepilogo della run. **Non chiuderlo rilanciando il job finche' non
 > diventa verde**: quello lo nasconde, non lo ripara.
@@ -841,7 +867,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 8ab5386
+CONSEGNE AGGIORNATE A: a082185
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui

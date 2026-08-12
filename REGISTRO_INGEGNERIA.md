@@ -560,6 +560,59 @@ fosse sbagliata, sarebbero sbagliate tutte e due allo stesso modo. Dice una cosa
 per un'altra strada. E la griglia è un **campione ragionato sui confini**, non l'infinito: è
 dichiarata in `GRIGLIA`, in chiaro, non nascosta nel codice.
 
+### 🔑 CHIAVETTA su `a082185` — e la prova di ripristino ha trovato un difetto **nelle ISTRUZIONI**
+
+Rigenerata **dal server vivo** (`deploy/impacchetta.sh`: è l'unica copia che è davvero girata da
+qualche parte), con le prove fatte **prima** di toccare la generazione buona — stesso principio
+del paracadute.
+
+| prova | esito |
+|---|---|
+| archivio = server, **file per file** (`verifica_impronte.sh`) | **714 tracciati su 714 IDENTICI** · 0 diversi · 0 mancanti · uscita 0 |
+| impronte del viaggio server → computer | identiche (`107700cc…` / `cb47e3fc…`) |
+| database | **25 integri, 0 rotti**, aperti uno per uno |
+| contenuto | 1075 file · 151 moduli · 401 test · `.env.casavip` presente |
+
+⚠️ **Il confronto delle impronte gira SUL SERVER, mai su Windows**: qui i fine-riga CRLF
+farebbero risultare «diverso» ogni file di testo. Sarebbero fantasmi, e costerebbero un'ora.
+💡 **714 e non 1075**: gli altri sono i file che stanno sul server e **non** in git — fra cui
+`.env.casavip` con le chiavi vere di Stripe, che in un repository pubblico non deve esserci mai.
+La chiavetta è la **cartella di lavoro del server**, non solo il codice pubblico: con GitHub da
+solo il sito non si rimette online.
+
+🔴 **IL DIFETTO TROVATO, E STAVA NEL POSTO PEGGIORE.** La suite lanciata dentro la copia estratta
+esce **ROSSA con 9 test**, tutti sul pre-volo e sul pre-fatto. Il motivo, letto e non dedotto:
+
+```
+"...prova_ripristino non e' un repository git (.git assente)"
+PRE-FATTO NON ESEGUITO - non sono in condizione di misurare (D18 punto 1)
+```
+
+Il pacchetto esclude `.git` **apposta** (non serve a far girare il sito e pesa), e i due attrezzi
+nati il 2026-08-11 **si rifiutano correttamente di misurare** senza un repository. **Gli attrezzi
+si comportano bene**: erano le istruzioni di ripristino a non dare loro le condizioni.
+
+✅ **Provato, non supposto:** rifatti `git init` + `git commit` + `sh deploy/installa_hook.sh`
+dentro la copia, quegli stessi nove danno **`Ran 22 tests · OK`**. Il pacchetto è sano; gli altri
+5553 test erano già passati al primo colpo.
+
+⛔ **Perché è grave, ed è il genere di difetto che si paga una volta sola ma carissima:** chi
+ripristina **nel giorno più brutto** vede nove test rossi e conclude che il salvataggio è
+corrotto — e butta via una copia perfettamente sana. Il `LEGGIMI-RIPRISTINO.txt` sulla chiavetta
+adesso **apre** con quel riquadro, i due comandi e le due misure a confronto.
+
+⚠️ **E quel foglio era fermo a `fce0c54`, DUE generazioni indietro**: descriveva una chiavetta che
+non esisteva più, con numeri e impronte di un altro pacchetto. Riscritto da capo, ogni numero
+misurato al momento. 💡 È la stessa malattia di sempre — *lo stesso fatto scritto in due posti e
+la seconda copia che resta indietro* — arrivata fin dentro il paracadute.
+
+⚠️ **Un'altra trappola ripresa in faccia lo stesso giorno:** cercando i backup ho guardato
+`/data/backup` **sull'host** e li ho visti fermi al 31 luglio. Falso: sull'host restano file
+vecchi, il volume vero è **dentro il contenitore**, dove ci sono **350 archivi e il più recente è
+di oggi** (`casavip_backup` gira `backup_casavip.sh` ogni 6 ore). È la trappola dei «18 database
+vecchi», già scritta — e presa lo stesso. **Le trappole scritte non impediscono l'errore: lo
+rendono riconoscibile in trenta secondi invece che in un giorno.**
+
 ### 🐛 DEBITO APERTO E DICHIARATO: **UN TEST CHE MENTE OGNI TANTO, E NON SI SA QUALE**
 
 ⛔ **La prova che esiste è inattaccabile.** Il 2026-08-12, sul commit `6b086d5` (due soli `.md`),
