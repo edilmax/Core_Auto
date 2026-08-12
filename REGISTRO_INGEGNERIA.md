@@ -234,14 +234,17 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 ordine* — unitari → integrazione → E2E → **mutazione (il Giudice)**. Un blocco deve stare
 **dentro una sessione sola** (D21: a metà contesto si salva e si riparte).
 
-**L'ordine dei blocchi lo decide `rischio × cecità`, non la dimensione.** Il censimento del
-2026-08-10 dice che sui soldi siamo a **~un quarto**: 4 moduli giudicati (~173 punti) contro
-**16 mai giudicati (516 punti)**. La tabella completa, con quanti test nominano ciascuno, sta
-in `RIPRENDI_QUI.md` sezione «QUANTO MANCA SUI SOLDI».
+**L'ordine dei blocchi lo decide `rischio × cecità`, non la dimensione.**
+📊 **DOVE SIAMO, rimisurato col censimento il 2026-08-12** (⛔ rimisuralo, non fidarti):
+**6 moduli dei soldi giudicati** · **11 che restano, per 400 punti**. Erano «16 per 516» il
+2026-08-10: due sono stati fatti (`fase167`, `fase66`) e **tre sono usciti perché sono codice
+morto** (`fase43` 31 · `fase44` 25 · `fase35` 25 = **81 punti che non vanno fatti**).
+La tabella completa, con quanti test nominano ciascuno e il blocco di appartenenza, sta in
+`RIPRENDI_QUI.md` sezione «QUANTO MANCA SUI SOLDI».
 
 | blocco | moduli | punti | perché in questo ordine |
 |---|---|---|---|
-| **1** | ✅ `fase167_credito_single_use` **FATTO 2026-08-11** (11/11 mutanti uccisi, 1 difetto vero chiuso) · ▶️ `fase66_tassa_soggiorno` · `fase133_split_quote_uguali` · `fase119_calendario_prezzi` | 74 | **i quattro più ciechi**: 1, 2, 2 e 2 test li nominano. `fase167` per primo: un difetto lì è **denaro speso due volte** — e infatti ce n'era uno |
+| **1** | ✅ `fase167_credito_single_use` **FATTO 2026-08-11** (11/11 uccisi, 1 difetto vero) · ✅ `fase66_tassa_soggiorno` **FATTO 2026-08-12** (24/24 uccisi, **0 sopravvissuti e 0 equivalenti**, **5 difetti veri**) · ▶️ `fase133_split_quote_uguali` (24) · `fase119_calendario_prezzi` (15) | 74, **ne restano 39** | **i quattro più ciechi**: 1, 2, 2 e 2 test li nominano. `fase167` per primo: un difetto lì è **denaro speso due volte** — e infatti ce n'era uno. Su `fase66` ce n'erano **cinque**, tutti che facevano pagare di più all'ospite |
 | **2** | ⛔ `fase43_commissione` **TOLTO: è CODICE MORTO** · `fase98_policy_commissione` · `fase111_cancellazione` · ✅ `fase147_tassa_comunale` **AGGIUNTO: è VIVO e il piano se lo dimenticava** | **58** (18+11+29) | la catena della commissione e dei rimborsi, dove i numeri si incrociano — più la tassa comunale, che è l'altra metà della coppia di `fase66` |
 | **3** | `fase65_split_payment` · `fase133` (già fatto in 1) · `fase101_stripe_connect` | 109 | i soldi che si dividono e quelli che escono verso l'host |
 | **4** | `fase162_pagamenti_pendenti` · `fase131_payout_dashboard` | 153 | i più grossi ma i **meno ciechi** (13 e 11 test): ultimi apposta |
@@ -367,6 +370,37 @@ mai. Serve una lista **chiusa**, non una lunga.
   arrivato da solo il 2026-07-30, quando il consumo del credito è passato a **RIFIUTA**.
 - **Agenti in sola lettura** → 1 sessione, **e SOLO dopo F1**. Resa storica: **146 sospetti → 4
   correzioni vere** (97% rumore).
+
+### ⏳ I CINQUE LAVORI OBBLIGATORI VIVONO NELLA MACCHINA, NON IN QUESTA PAGINA (2026-08-12)
+
+**Ordine del fondatore:** *«queste vanno fatte, scrivilo in modo che TUTTE le chat le facciano»*.
+⛔ **Scriverle qui non sarebbe bastato**, ed è dimostrato dai fatti dello stesso giorno: il piano
+dei soldi era scritto in **tre** punti, ne è stato aggiornato **uno solo**, e due documenti
+mandavano a rifare `fase66` che era già finito. Un obbligo che dipende dal ricordarsi di
+rileggere il documento giusto **resta indietro**.
+
+✅ **La lista vive in `collaudi/regole_avvio.py`** (`LAVORI_IN_SOSPESO`), che un hook
+`SessionStart` esegue **prima di ogni altra cosa**: la sua uscita entra nel contesto di ogni
+chat, appena si apre. Non c'è modo di non vederla.
+
+| # | lavoro | costo | priorità |
+|---|---|---|---|
+| 1 | il guardiano del piano dei soldi (`test_piano_dei_soldi.py`) | mezza sessione | prima di riprendere i moduli |
+| 2 | **CodeQL** | 30 minuti | subito: il più economico |
+| 3 | **orologi di prova Stripe** | 1 sessione | alta |
+| 4 | **metamorfico** (⛔ solo sull'aritmetica del denaro) | mezza sessione | media, con F6 |
+| 5 | **il DENOMINATORE** | 1 sessione | alta |
+
+⛔ **Ogni voce dichiara QUANDO È FINITA**, ed è la stessa regola che questo progetto applica alle
+norme: *una cosa che non si può controllare non è un lavoro, è un desiderio*. «Fai CodeQL» senza
+criterio è come «trova tutto»: non finisce mai. Se qualcuno aggiunge una voce senza quel
+criterio, `regole_avvio.py` **grida** — provato nelle due direzioni (grida col guasto dentro,
+tace a macchina sana).
+
+⛔ **E NON sono un test rosso, di proposito.** L'istinto sarebbe «finché non sono fatti la suite è
+rossa»: sarebbe la trappola già pagata — *un allarme che suona sempre viene spento*, e quattro
+rossi permanenti al terzo giorno non li guarda più nessuno. Si **informa** a ogni avvio; il rosso
+sta dove serve, cioè su una lista che si **corrompe**.
 
 **⛔ IL CRITERIO PER DIRE DI NO.** Uno strumento nuovo entra **solo se trova difetti che le 10
 tecniche esistenti non possono trovare**. Altrimenti resta fuori e la riga d'arrivo non si sposta.
