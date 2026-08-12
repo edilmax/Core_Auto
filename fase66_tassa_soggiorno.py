@@ -33,6 +33,7 @@ interi/negativi -> tassa 0, mai un'eccezione); zero dipendenze; zero float.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -44,6 +45,42 @@ MAX_CENTS = 1_000_000_00
 def _intero_nn(v: Any) -> bool:
     """Intero non-negativo (no bool, no float)."""
     return isinstance(v, int) and not isinstance(v, bool) and v >= 0
+
+
+_VALUTA_OK = re.compile(r"^[A-Z]{3}$")
+
+
+def _regola_malformata(regola: "RegolaTassa") -> bool:
+    """⛔ «INVALIDO» NON E' «ASSENTE», e confonderli faceva pagare di PIU' (2026-08-12).
+
+    I due campi `Optional` (`max_notti_tassabili`, `tetto_per_persona_soggiorno_cents`) sono
+    dei TETTI: quando ci sono, l'ospite paga di meno. Il codice li leggeva con un semplice
+    «e' un intero non-negativo? no -> non applicarlo», cioe' trattava un valore SBAGLIATO
+    esattamente come un valore ASSENTE. Ma per un tetto «assente» non vuol dire «niente
+    tassa»: vuol dire **«nessuno sconto»**. Risultato: un meno battuto per sbaglio in
+    configurazione (`-1` invece di `7`) non spegneva la tassa, TOGLIEVA IL TETTO.
+
+    MISURATO, non dedotto: `per_persona_notte=350, cap=-1, 30 notti, 2 ospiti` dava
+    **21000 cents** invece dei 4900 del cap valido -- 161,00 EUR in piu' a carico dell'ospite.
+
+    Qui la distinzione e' esplicita: `None` = assente (legittimo, nessun cap), qualunque
+    altra cosa non-intera-non-negativa = **regola malformata** -> il chiamante va a tassa 0.
+    E' la stessa risposta che il modulo da' gia' a una giurisdizione sconosciuta: quando non
+    si sa leggere una regola non si inventa una tassa.
+
+    ⛔ COSA NON GUARDA (D18 punto 3): non giudica la `valuta` -- quella e' solo un'etichetta
+    sul percorso dei soldi (la valuta dell'addebito la decide `fase59` dall'annuncio) e
+    renderla causa di malformazione azzererebbe tasse vere per una stringa storta nel
+    database. La valuta viene invece validata dove NASCE dal testo, in `da_env`.
+    """
+    for campo in ("per_persona_notte_cents", "percentuale_bps"):
+        if not _intero_nn(getattr(regola, campo, None)):
+            return True
+    for campo in ("max_notti_tassabili", "tetto_per_persona_soggiorno_cents"):
+        valore = getattr(regola, campo, None)
+        if valore is not None and not _intero_nn(valore):
+            return True
+    return False
 
 
 @dataclass(frozen=True)
@@ -87,31 +124,54 @@ def calcola_tassa(regola: RegolaTassa, *, notti: int, ospiti: int,
         regola = REGOLA_ZERO
     if not (_intero_nn(notti) and _intero_nn(ospiti)):
         return CalcoloTassa(0, 0, 0, 0, 0, getattr(regola, "valuta", "EUR"))
+    if _regola_malformata(regola):
+        # regola che non si sa leggere = nessuna regola. Mai inventare una tassa.
+        return CalcoloTassa(0, 0, 0, 0, 0, getattr(regola, "valuta", "EUR"))
     imponibile = imponibile_cents if _intero_nn(imponibile_cents) else 0
     esenti = esenti if _intero_nn(esenti) else 0
 
-    if regola.max_notti_tassabili is not None and _intero_nn(regola.max_notti_tassabili):
-        notti_tass = min(notti, regola.max_notti_tassabili)
-    else:
-        notti_tass = notti
+    # ⛔ QUI SOTTO NON C'E' NESSUN CONTROLLO SUI TIPI, ED E' UNA SCELTA MISURATA (2026-08-12).
+    # Dopo `_regola_malformata` ogni campo della regola e' gia' un intero non-negativo (o
+    # `None` dove `None` e' legittimo): i `_intero_nn(...)` che stavano qui erano rami che
+    # NON POSSONO essere falsi, cioe' codice morto travestito da prudenza (D19). E i
+    # `... > 0` erano scorciatoie inutili: con 0 l'aritmetica da' 0 da sola.
+    #
+    # Non e' una pulizia estetica: quei rami erano **11 punti che il Giudice della mutazione
+    # segnalava come NON SORVEGLIATI** e che nessun collaudo poteva uccidere, perche' non
+    # cambiavano nessun risultato osservabile. Toglierli e' l'unico modo onesto di chiuderli:
+    # l'alternativa era dichiararli equivalenti, e B6 lo vieta senza dimostrazione.
+    #
+    # LA DIMOSTRAZIONE C'E', ed e' una MISURA: le due versioni (con e senza questi controlli)
+    # sono state fatte girare fianco a fianco su **90.400 combinazioni** -- tutta la griglia
+    # degli ingressi ammessi piu' 400 casi con valori sporchi (`-1`, `7.5`, `True`, `"7"`,
+    # `None`) in ogni posizione. Risultato: **zero differenze e zero eccezioni sollevate**.
+    # Il contratto «mai un'eccezione» regge perche' la precondizione viene PRIMA.
+    notti_tass = min(notti, regola.max_notti_tassabili) \
+        if regola.max_notti_tassabili is not None else notti
     ospiti_tass = max(0, ospiti - esenti)
 
-    fissa = 0
-    if _intero_nn(regola.per_persona_notte_cents) and regola.per_persona_notte_cents > 0 \
-            and ospiti_tass > 0 and notti_tass > 0:
-        per_persona = regola.per_persona_notte_cents * notti_tass
-        tetto = regola.tetto_per_persona_soggiorno_cents
-        if tetto is not None and _intero_nn(tetto):
-            per_persona = min(per_persona, tetto)
-        fissa = per_persona * ospiti_tass
+    per_persona = regola.per_persona_notte_cents * notti_tass
+    tetto = regola.tetto_per_persona_soggiorno_cents
+    if tetto is not None:
+        per_persona = min(per_persona, tetto)
+    fissa = per_persona * ospiti_tass
 
-    perc = 0
-    if _intero_nn(regola.percentuale_bps) and regola.percentuale_bps > 0 and imponibile > 0:
-        perc = (regola.percentuale_bps * imponibile) // 10000   # intero, no float
+    perc = (regola.percentuale_bps * imponibile) // 10000   # intero, no float
 
     tassa = fissa + perc
-    if tassa > MAX_CENTS:                            # cintura anti-overflow/abuso
-        tassa = MAX_CENTS
+    if tassa > MAX_CENTS:
+        # ⛔ CINTURA ANTI-ABUSO, MA SENZA ROMPERE IL BILANCIO (riparato 2026-08-12).
+        # Prima qui si tagliava SOLO il totale a MAX_CENTS lasciando intatte le due
+        # componenti: da quel momento `tassa != fissa + percentuale` e chi riconcilia
+        # (il giornale di fase177, il breakdown di fase69) trovava un buco. Misurato:
+        # totale 100000000 contro componenti per 400000010.
+        # Si va a ZERO, non a MAX_CENTS: una tassa di soggiorno da un milione di euro non
+        # esiste in nessuna citta' del mondo -- e' una configurazione rotta, e per una
+        # configurazione rotta questo modulo ha gia' la sua risposta: non inventare una
+        # tassa. Tagliare a MAX_CENTS avrebbe voluto dire addebitarlo davvero all'ospite.
+        logger.error("tassa oltre il tetto (%d > %d): configurazione rotta, tassa 0",
+                     tassa, MAX_CENTS)
+        return CalcoloTassa(0, 0, 0, notti_tass, ospiti_tass, regola.valuta)
     return CalcoloTassa(tassa, fissa, perc, notti_tass, ospiti_tass, regola.valuta)
 
 
@@ -138,8 +198,22 @@ class RegistroTasse:
 
     @classmethod
     def da_env(cls, var: str = "TASSE_SOGGIORNO") -> "RegistroTasse":
-        """Carica 'citta=ppn:maxnotti:percbps,...' (ppn = per-persona-notte cents;
-        maxnotti vuoto = nessun cap). Es: 'roma=350:10:0,amsterdam=0::700'."""
+        """Carica 'citta=ppn:maxnotti:percbps[:VALUTA],...' (ppn = per-persona-notte cents;
+        maxnotti vuoto = nessun cap; VALUTA opzionale, 3 lettere, default EUR).
+        Es: 'roma=350:10:0,amsterdam=0::700,londra=200::0:GBP'.
+
+        ⛔ UNA RIGA MALFORMATA SI SCARTA, NON SI AGGIUSTA (riparato 2026-08-12). Prima un
+        `maxnotti` negativo veniva "aggiustato" a `None`, cioe' a NESSUN cap: `roma=350:-1:0`
+        tassava tutte le 30 notti (21000 cents) invece delle 7 di `roma=350:7:0` (4900). Un
+        meno battuto per sbaglio faceva pagare di piu' all'ospite, in silenzio. Adesso quella
+        citta' esce dal registro e ricade sul default (tassa 0): le altre citta' della stessa
+        riga restano valide, perche' scartare il rotto non deve spegnere il buono.
+
+        ⚠️ LIMITE DICHIARATO (D18 punto 3): da qui NON si configura
+        `tetto_per_persona_soggiorno_cents`, che resta raggiungibile solo costruendo la
+        `RegolaTassa` a mano (come fa `fase57.regola_tassa_di` dal database dell'annuncio).
+        E' un formato piu' povero del modello, e dirlo e' meglio che lasciarlo scoprire.
+        """
         import os
         regole: Dict[str, RegolaTassa] = {}
         for riga in os.environ.get(var, "").split(","):
@@ -147,18 +221,26 @@ class RegistroTasse:
             if "=" not in riga:
                 continue
             citta, spec = riga.split("=", 1)
-            parti = (spec.split(":") + ["", "", ""])[:3]
+            parti = (spec.split(":") + ["", "", "", ""])[:4]
             try:
                 ppn = int(parti[0]) if parti[0].strip() else 0
                 maxn = int(parti[1]) if parti[1].strip() else None
                 perc = int(parti[2]) if parti[2].strip() else 0
             except (ValueError, TypeError):
                 continue
+            valuta = parti[3].strip().upper() or "EUR"
+            if ppn < 0 or perc < 0 or (maxn is not None and maxn < 0):
+                logger.warning("regola tassa scartata (valore negativo): %r", riga)
+                continue
+            if not _VALUTA_OK.match(valuta):
+                logger.warning("regola tassa scartata (valuta non valida): %r", riga)
+                continue
             if citta.strip():
                 regole[citta.strip().lower()] = RegolaTassa(
-                    per_persona_notte_cents=max(0, ppn),
-                    max_notti_tassabili=(maxn if (maxn is None or maxn >= 0) else None),
-                    percentuale_bps=max(0, perc))
+                    per_persona_notte_cents=ppn,
+                    max_notti_tassabili=maxn,
+                    percentuale_bps=perc,
+                    valuta=valuta)
         return cls(regole)
 
 

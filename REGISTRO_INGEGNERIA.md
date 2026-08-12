@@ -340,8 +340,13 @@ mai. Serve una lista **chiusa**, non una lunga.
 - **T3** contratto e termini portano la **versione**, e cambiarli fa scattare la ri-accettazione.
 
 **LA LISTA CHIUSA — ~12-15 sessioni (stima, NON misura)**
-- **12 moduli vivi** dei soldi da giudicare → 4-6 sessioni. ⛔ **81 punti su 506 NON vanno
-  fatti**: vedi le due correzioni al piano qui sopra.
+- ~~**12 moduli vivi** dei soldi da giudicare~~ → **11**, dal 2026-08-12: `fase66` è passato
+  (24 mutanti su 24 uccisi, **0 sopravvissuti**, 0 equivalenti dichiarati). Restano **4-6
+  sessioni**. ⛔ **81 punti su 506 NON vanno fatti**: vedi le due correzioni al piano qui sopra.
+  💡 **E il primo modulo ha già insegnato come si fanno gli altri undici:** i difetti veri non
+  stavano nell'aritmetica, stavano **ai confini** — nel passaggio dove un modulo traduce un
+  valore per un altro e, traducendo, **cancella la prova che era rotto**. Sui prossimi si parte
+  da lì, non dal calcolo. E il livello che li ha trovati è stato l'**E2E**, non i test unitari.
 - **F6** (chi perde) + **test metamorfici** → 1 sessione. ⛔ Il metamorfico **solo
   sull'aritmetica del denaro**, non su tutto.
 - **CodeQL** → 30 minuti, **gratis finché il repository è pubblico**. Nessun intervento del fondatore.
@@ -373,11 +378,208 @@ modifica al codice, e il sito gira già in Docker; è una decisione di **soldi**
 non tecnica) · **TLA+** (il rischio è che la specifica si scolli dal codice — già successo con
 z3: *una dimostrazione vale quanto il modello su cui è fatta*).
 
+### ✅ FATTO 2026-08-12 (30) — `fase66_tassa_soggiorno`: TRE DIFETTI, TUTTI CONTRO L'OSPITE
+
+**Primo modulo del Blocco 1.** Verificato **acceso** prima di toccarlo (`raggiungibilita.py`:
+151 moduli, 88 raggiungibili, 63 morti, `fase66` **non** fra i 63; usato da `fase59`, `fase83`,
+`fase57`, `fase81`, `fase69`, `fase147`). Censimento: **166 righe, 25 punti di mutazione, 2 file
+di test che lo vedono**, e **mai passato davanti al Giudice**.
+
+⛔ **UN DIFETTO SOLO, DETTO BENE: «INVALIDO» E «ASSENTE» ERANO LA STESSA COSA.** I due campi
+`Optional` (`max_notti_tassabili`, `tetto_per_persona_soggiorno_cents`) sono dei **tetti**:
+quando ci sono, l'ospite paga **meno**. Il codice li leggeva con «è un intero non-negativo? no →
+non applicarlo», cioè trattava un valore **sbagliato** come un valore **assente**. Ma per un
+tetto «assente» non vuol dire «niente tassa»: vuol dire **«nessuno sconto»**. Quindi un meno
+battuto per sbaglio in configurazione non spegneva la tassa: **toglieva il tetto**.
+
+| caso | notti tassate | tassa |
+|---|---|---|
+| `cap=7` (valido) | 7 | **4900 cents** |
+| `cap=-1` (invalido) | 30 | **21000 cents** |
+
+**161,00 EUR in più a carico dell'ospite**, in silenzio — e in una direzione sola: mai a nostro
+danno, sempre a danno del cliente. Il modulo prometteva di sé *«validazione fail-closed (input
+non interi/negativi → tassa 0)»*: era una promessa **scritta e non mantenuta**.
+
+· **Difetto 2 — la cintura anti-abuso rompeva il bilancio.** Oltre `MAX_CENTS` si tagliava
+  **solo il totale**, lasciando intatte le due componenti: da lì `tassa != fissa + percentuale`
+  e chi riconcilia (il giornale di `fase177`, il breakdown di `fase69`) trovava un buco.
+  Misurato: totale `100000000` contro componenti per `400000010`. **Ora si va a zero**: una
+  tassa di soggiorno da un milione di euro non esiste in nessuna città, è una configurazione
+  rotta — e per una configurazione rotta questo modulo ha già la sua risposta, non inventare
+  una tassa. Tagliare a `MAX_CENTS` avrebbe voluto dire **addebitarlo davvero**.
+· **Difetto 3 — `da_env` "aggiustava" invece di scartare.** `roma=350:-1:0` diventava «Roma,
+  nessun tetto». Ora la riga si scarta e la città ricade sul default (tassa 0), **ma le altre
+  città della stessa riga restano valide**: scartare il rotto non deve spegnere il buono.
+· **Difetto 4 (etichetta, non soldi) — `da_env` non sapeva dire la valuta**, quindi ogni regola
+  da configurazione nasceva `EUR` e l'endpoint pubblico `/api/tassa` mostrava **200 EUR** per
+  Londra. Aggiunto un campo opzionale (`citta=ppn:maxnotti:perc[:VALUTA]`), retrocompatibile.
+  ⚠️ Dichiarato che da lì **non** si configura il tetto per-persona: è un formato più povero del
+  modello, e dirlo è meglio che lasciarlo scoprire.
+
+✅ **D20 nei quattro passi + la riprova.** 7 guardie → **ROSSE**, ognuna col messaggio che nomina
+il suo difetto (`0 != 21000`, `0 != 100000000`, `'GBP' != 'EUR'`) → riparazione → **VERDI** →
+difetto **rimesso dentro** → **le stesse 7 rosse, stessi nomi** → ritolto, ripristino
+**byte-identico** (`sha256 1F730CA1…` prima e dopo).
+
+### 🔴 DIFETTO 5, IL PIÙ GRAVE — **AZZERARE NON È CHIUDERE**, e prima l'avevo scritto al contrario
+
+⛔ **A metà giornata avevo concluso — e messo per iscritto in QUESTO registro e in
+`RIPRENDI_QUI.md` — che la terza porta fosse «già chiusa a monte»**, perché `fase57._tax()`
+azzera ogni valore fuori limite prima del database. Su quella conclusione avevo deciso di **non**
+riparare `fase57`, e avevo perfino scritto una guardia che *certificava l'azzeramento*: una
+guardia verde che sanciva il difetto. **La conclusione era falsa.**
+
+**Azzerare non è chiudere, quando lo zero significa «nessun limite».** Nella tabella `alloggi`
+lo `0` di `tassa_max_notti` è anche il **default**, e `regola_tassa_di` lo legge come **«nessun
+tetto»** (`mx if mx > 0 else None`; e l'**oracolo indipendente** di `test_happy_conti:130` dice
+lo stesso, quindi la convenzione è voluta, non un incidente). Il sanificatore quindi non fermava
+il valore rotto: lo trasformava nella lettura **più cara per l'ospite**, cancellando ogni traccia
+dell'errore. `fase66` riceveva un `None` legittimo e non poteva accorgersi di niente — **la
+riparazione di `fase66` non copriva questa strada, e non poteva**.
+
+**MISURATO SULLA CATENA VERA** (`pubblica` → `disponibilita_range` → `quote`; 30 notti, 2 ospiti,
+350 cents a persona/notte):
+
+| l'host scrive | `pubblica` risponde | nel database | tassa addebitata |
+|---|---|---|---|
+| `7` (corretto) | 201 | 7 | **4900** |
+| `-1` (refuso) | **201** | 0 | **21000** |
+| `7.5` | **201** | 0 | **21000** |
+
+**+161,00 EUR addebitati all'ospite per un refuso, e nessun avviso a nessuno.** È la violazione
+esatta del criterio scritto in §2-bis: *«nessun difetto può costare soldi in silenzio — o viene
+impedito, o GRIDA»*.
+
+✅ **Riparato in `fase57.valida_scheda`**: i cinque campi di tassa/sconto ora fanno **rifiutare**
+la scheda (`422` + `dettaglio: <campo>_non_valido`) invece di essere azzerati. ⛔ Erano gli
+**unici cinque campi** di quella funzione a comportarsi così: tutti gli altri già rifiutavano —
+il difetto era l'eccezione, non la regola. ⚠️ «Non impostato» resta legittimo (campo assente,
+`null`, stringa vuota → 0): rifiutarlo impedirebbe di pubblicare un annuncio senza tassa, che è
+il caso più comune al mondo. È la stessa distinzione «assente ≠ invalido» del difetto 1.
+
+💡 **LA LEZIONE, che vale più del difetto.** Avevo guardato il sanificatore e mi ero fermato lì.
+**Un valore «reso sicuro» non è sicuro finché non si guarda che cosa SIGNIFICA quel valore per
+chi lo legge dopo.** Due moduli della stessa catena, lo stesso numero, significati opposti.
+⛔ E l'ha trovato **l'E2E** — cioè esattamente il livello che stavo per dichiarare «già coperto»
+dopo aver letto un file solo. Il programma a 4 livelli non è burocrazia: il livello ③ ha trovato
+ciò che i livelli ① e ② non potevano vedere, **per costruzione**.
+
+### ⚖️ IL GIUDICE DELLA MUTAZIONE SU `fase66` — e le due cose che ha trovato lui
+
+| giro | provati | uccisi | sopravvissuti |
+|---|---|---|---|
+| prima delle sue richieste | 30 | 14 | **16** |
+| dopo le 6 guardie che ha chiesto | 35 | 24 | **11** |
+| dopo la semplificazione | **24** | **24** | **🏁 0** |
+
+🏁 **F1 SODDISFATTA per `fase66`: 0 sopravvissuti e ZERO equivalenti dichiarati** — cioè senza
+aggiungere nessuna zona cieca nuova allo schedario.
+
+Le tre riparazioni sono anche entrate nella **lista scritta a mano** di
+`collaudi/mutazione_prodotto.py` — quella che gira in **CI** — ognuna col suo danno nel mondo
+reale. Se tornano, il Giudice le rivede.
+
+💡 **(a) Le mie guardie non attraversavano un ramo intero.** Tutte usavano un
+`per_persona_notte_cents` **valido** e rompevano solo i campi `Optional`: il primo ciclo di
+`_regola_malformata` non lo percorreva nessuno. Un file «coperto» con dentro un ramo mai
+eseguito. L'ha visto il mutante, non il ragionamento.
+💡 **(b) DUE RIPARAZIONI SI COPRIVANO A VICENDA — e questa vale oltre il caso.** La guardia su
+`da_env` osservava la **tassa risultante**: col controllo di `da_env` rotto restava **verde lo
+stesso**, perché più a valle interveniva l'altra riparazione. Stava misurando la seconda difesa
+credendo di misurare la prima. Ora osserva il **registro** (la città non deve proprio entrarci),
+non l'effetto. ⛔ *La difesa in profondità è una virtù del prodotto e una trappola per i test:
+quando due lucchetti proteggono la stessa porta, il test di uno va scritto guardando quel
+lucchetto, non la porta.*
+⚠️ **E una precedenza di operatori**: `A and B or C` si legge `(A and B) or C`. Un controllo con
+tre condizioni in `or` va provato **una condizione alla volta**, altrimenti si verifica la più
+comoda e le altre due restano scoperte.
+
+### 🧮 GLI 11 SOPRAVVISSUTI CHIUSI **TOGLIENDO CODICE**, NON DICHIARANDOLI EQUIVALENTI
+
+Erano tutti della stessa famiglia (righe 133-149): rami dove la condizione mutata cambia **se** si
+entra nel ramo, ma dentro il ramo **0 produce 0** comunque (`per_persona = pp * 0`,
+`fissa = per_persona * 0`, `perc = bps * 0 // 10000`). Nessun collaudo poteva ucciderli, perché
+**non cambiavano nessun risultato osservabile**.
+
+⛔ **La strada facile era `EQUIVALENTI_DICHIARATI`. Non è stata presa**: è l'unico posto dove un
+errore diventa **cecità permanente**, e B6 vieta di scriverci senza dimostrazione.
+
+✅ **La strada giusta era accorgersi che quei controlli erano diventati RIDONDANTI.** Dopo
+`_regola_malformata` ogni campo della regola è già un intero non-negativo (o `None` dove `None` è
+legittimo): i `_intero_nn(...)` erano rami **che non possono essere falsi** — codice morto
+travestito da prudenza (D19) — e i `... > 0` erano scorciatoie inutili, perché con 0 l'aritmetica
+dà 0 da sola. Tolti, quei mutanti **spariscono invece di essere assolti**. Un punto che non
+esiste non ha bisogno di essere sorvegliato.
+
+🔬 **E l'equivalenza è stata MISURATA, non affermata.** Le due versioni (con e senza i controlli)
+sono state fatte girare fianco a fianco su **90.400 combinazioni**: tutta la griglia degli
+ingressi ammessi, più 400 casi con valori sporchi (`-1`, `7.5`, `True`, `"7"`, `None`) in **ogni**
+posizione. Risultato: **zero differenze e zero eccezioni sollevate** — quest'ultima è la prova
+che il contratto «mai un'eccezione» regge, perché la precondizione viene prima dell'aritmetica.
+
+### 🗄️ `collaudi/oracolo_tassa.py` — ⛔ UNA DIMOSTRAZIONE CHE VIVE IN /TMP NON È UNA DIMOSTRAZIONE
+
+La prova qui sopra era nata in una cartella temporanea. **Sarebbe sparita a fine sessione**,
+lasciando come unica traccia la mia parola dentro un commento del codice — cioè il valore che ha
+una dimostrazione che nessun altro può rifare. È la lezione degli attrezzi orfani trovati **per
+fortuna** il 2026-08-11, applicata prima che costasse qualcosa.
+
+Ora la versione **prudente** (`calcola_tassa` com'era prima della rimozione) vive nel repository
+come **oracolo indipendente**, e un collaudo della suite la rimette alla prova **a ogni giro**:
+`test_la_versione_vera_coincide_con_quella_PRUDENTE`. Costo misurato: **0,53 secondi** per 90.400
+combinazioni — abbastanza poco da non essere mai un motivo per toglierlo.
+
+✅ **Provato nelle DUE direzioni** (regola ferrea 10): `test_L_ORACOLO_GRIDA_se_la_funzione_e_SBAGLIATA`
+gli passa una funzione sbagliata di **un solo centesimo** e pretende che gridi. Un oracolo che sa
+dire soltanto «uguali» è indistinguibile da un oracolo rotto. ⛔ È il motivo per cui `confronta()`
+**accetta** la funzione da giudicare invece di cablarla: senza quell'appiglio, la prova che
+l'oracolo funziona non si potrebbe nemmeno scrivere. Il guasto iniettato è minuscolo apposta — i
+difetti sui soldi di questo progetto sono stati quasi tutti **da un passo**: un giorno, un
+confine, un arrotondamento.
+
+⚠️ **LIMITE DICHIARATO** (D18 punto 3): l'oracolo **non** dice che la formula sia giusta — se
+fosse sbagliata, sarebbero sbagliate tutte e due allo stesso modo. Dice una cosa sola: che
+**togliere non ha cambiato**. La correttezza la sorvegliano i numeri esatti dei collaudi di
+`test_fase66_tassa_soggiorno` e l'oracolo indipendente di `test_happy_conti`, che rifà il conto
+per un'altra strada. E la griglia è un **campione ragionato sui confini**, non l'infinito: è
+dichiarata in `GRIGLIA`, in chiaro, non nascosta nel codice.
+
+### 🕸️ LA RETE ANTI-INTERRUZIONE SI È RIPAGATA — E LA COLPA ERA MIA
+
+Per risparmiare 50 minuti ho **ucciso la suite** a metà giro (il codice stava per cambiare
+ancora, quindi quel giro sarebbe stato buttato). Dentro girava un giro di mutazione, e il guasto
+è rimasto **dentro `fase162_pagamenti_pendenti.py`** — un file dei **pagamenti**. Il mutante
+aggiungeva `"pagato", "cancellato", "rimborsato"` all'elenco degli stati che escono **prima**
+della scrittura: un pagamento già pagato sarebbe stato **rilavorato**.
+
+✅ **L'ha preso il pre-volo in 0,07 secondi**, al primo comando successivo, prima di qualunque
+altra cosa. Recuperato con la procedura scritta: `git checkout HEAD -- <file>` (⛔ **non**
+`git checkout -- <file>`, che ripristina dall'area di salvataggio: la differenza è già costata
+una volta, il 2026-08-02), `git diff HEAD` **vuoto**, traccia rimossa.
+
+⛔ **Lezione: «uccido la suite tanto la rifaccio» non è gratis.** È esattamente l'incidente che a
+questo progetto era già costato un difetto sui soldi **in produzione**. La differenza fra allora
+e oggi non è la prudenza di chi lavora — è che adesso c'è la rete, e ha funzionato al primo colpo.
+
 ### ✅ FATTO 2026-08-11 (29) — LE GUARDIE SUL **LAVORO**: il PRE-VOLO e il PRE-FATTO
 
 **Ordine esplicito del fondatore:** *«basta con questi sbagli, non esiste. Trova il sistema che
 non si ripetano più in futuro. Il tempo è denaro e noi non ne possiamo perdere»* — e *«fallo
 PRIMA di `fase66`»*.
+
+**Chiuso su `2c142f5`** (richiesta di unione **#29**, unita alle **00:13** del 12 agosto; il
+lavoro sta in `3cb4ab1` + `4b55851`). **Deploy fatto** la stessa notte: tre posti allineati,
+immagine `casavip-app:latest` = `sha256:4e829e9f…` creata alle **22:14:26 UTC**, contenitore
+avviato alle **22:14:50 UTC**, `verifica_produzione.py` → **190 controlli, 0 violazioni, uscita
+0** (rimisurato il 12 agosto: 17,8 s, certificato valido ancora 42 giorni).
+✅ **E il protocollo D17 è stato seguito davvero, provato dagli oggetti che lascia** e non dal
+ricordo: punto di ritorno `/root/PRE_DEPLOY_20260811-221350.commit` contenente `191defc` (lo
+stato **precedente**, che è ciò che un punto di ritorno deve contenere) e gettone
+`/root/.d17_gettone` **inesistente**, cioè **consumato** dallo scambio come impone il passo
+[2g]. ⛔ Il gettone vive in `/root/`, **non** in `/var/www/bookinvip`: cercarlo nella cartella
+del progetto fa trovare solo punti di ritorno vecchi e fa concludere, sbagliando, che il
+protocollo sia stato saltato.
 
 ⛔ **LA DIAGNOSI: non erano nove sbagli, era UNO.** Questa macchina aveva guardie sul **CODICE**
 e guardie sui **DOCUMENTI**, e **zero guardie sul LAVORO**. E il dato che inchioda il problema
@@ -476,6 +678,33 @@ dentro un ciclo da 68 minuti. Controlli da due secondi messi in fondo a un'ora d
   da una frase scritta a colonna zero — lì non c'è differenza fra un dato e una frase, e la
   prima versione di quel commento prometteva di più di quanto l'ancoraggio faccia. L'ha
   smentita la prova.
+· 🔴 **POI È ANDATA ROSSA LA CI, E QUESTO È IL ROSSO CHE VALE DI PIÙ** — commit `4b55851`, un
+  file solo (`test_pipeline_ci.py`, **+38 −13**). Su Linux
+  `test_IL_PATH_NON_SI_CONFRONTA_MA_IL_RESTO_SI` ha dato `'OK' != 'ROSSO'`: **verde su Windows,
+  rosso in CI**. È la regola ferrea 8 in forma pura — *il verde locale è un indizio, il giudice
+  è la CI*.
+  **La causa:** una delle tre asserzioni **non iniettava** la versione di Python e usava quella
+  vera. Su questo computer è esattamente la `3.9.10` che il documento dichiara, quindi
+  combaciava **per coincidenza**; su Linux no.
+  ⛔ **È il SECONDO test dipendente dall'ambiente scritto nella stessa sessione.** Il primo
+  leggeva la traccia vera della macchina e l'ha preso la suite; questo l'ha preso la CI. Stessa
+  forma: una guardia che passa dove la lanci e cade altrove. La regola sta adesso **dentro il
+  test**, per non riscoprirla una terza volta: *si iniettano **TUTTI** i valori dell'ambiente,
+  anche quelli che qui sarebbero giusti. Un valore vero lasciato passare lega la guardia alla
+  macchina su cui gira.*
+  ✅ **E una cosa che prima mancava: ogni rosso dev'essere rosso PER IL MOTIVO GIUSTO.** Non
+  basta che il controllo gridi — il test pretende ora che il messaggio **nomini** il Python o la
+  libreria mancante. Un allarme che suona per la ragione sbagliata passerebbe lo stesso, e la
+  rinuncia sul PATH potrebbe essersi mangiata il resto senza che nessuno se ne accorga.
+  ✅ **Prova dell'INDIPENDENZA, non «adesso passa»:** costruito un mondo dove il documento
+  dichiara Python `9.9.9` e il valore iniettato è `9.9.9`. Se il controllo consultasse ancora
+  l'interprete vero (`3.9.10`) uscirebbe ROSSO. **Tace.** Quindi guarda solo ciò che gli viene
+  iniettato, e darà la stessa risposta su Windows, su Linux e su 3.11.
+  ⛔ **Nessun cambiamento agli attrezzi:** il pre-volo e il pre-fatto avevano **ragione**, il
+  difetto era nel test che li giudicava. 💡 Sommato al rosso della suite qui sopra, il conto
+  della giornata è: **due guardie nuove su tre difetti, e tutti e tre erano nelle guardie, non
+  negli strumenti**. Uno strumento giudicato da un test debole è uno strumento non giudicato.
+
 · ⛔ **E UNA MANCANZA MIA, SULLA PROCEDURA DI LANCIO** (sbaglio **S8**). La suite è stata
   lanciata con `Start-Process python …`: finito il processo, il **codice d'uscita numerico non
   era più recuperabile**: restava solo il verdetto in prosa di unittest. *«Senza quella riga

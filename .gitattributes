@@ -1,5 +1,12 @@
 # Gli script di shell DEVONO restare LF: con CRLF Linux fallisce ("bad interpreter: ^M").
 *.sh        text eol=lf
+
+# ⛔ I GANCI DI GIT NON HANNO ESTENSIONE (`pre-commit`, `commit-msg`), quindi la regola
+# `*.sh` qui sopra NON li prende. Senza questa riga, un clone su Windows se li ritrova con
+# CRLF, `#!/bin/sh` diventa `#!/bin/sh^M` e i ganci muoiono con "bad interpreter" -- cioe'
+# il pre-volo e il pre-fatto smettono di girare IN SILENZIO, che e' il modo peggiore in cui
+# un controllo puo' sparire: nessuno vede un errore, si vede solo che non blocca piu' niente.
+deploy/hooks/*  text eol=lf
 deploy/init-letsencrypt.sh text eol=lf
 deploy/backup_casavip.sh   text eol=lf
 

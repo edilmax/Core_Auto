@@ -11,7 +11,7 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🚦 2026-08-11 — RIPARTI DA QUI. LE GUARDIE SUL **LAVORO**: PRE-VOLO E PRE-FATTO.
+## 🚦 2026-08-12 — RIPARTI DA QUI. IL PRE-VOLO E' IN PRODUZIONE, E SI E' GIA' RIPAGATO.
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
 >
@@ -27,26 +27,37 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > ⛔ **Il pre-fatto pretende che il pre-volo sia girato prima** (gli serve lo scopo
 > dichiarato). Se ti blocca al commit, il messaggio ti dice il comando: sono 4 secondi.
 >
-> ### 📍 DOVE SIAMO — misurato l'11 agosto, ma **RIMISURALO**, non fidarti di questa riga
+> ### 📍 DOVE SIAMO — misurato il 12 agosto, ma **RIMISURALO**, non fidarti di questa riga
 > | posto | comando | valore |
 > |---|---|---|
-> | computer | `git rev-parse --short HEAD` | `191defc` |
-> | GitHub | `git rev-parse --short origin/master` | `191defc` |
-> | VPS | `ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'` | `191defc` |
+> | computer | `git rev-parse --short HEAD` | `2c142f5` |
+> | GitHub | `git rev-parse --short origin/master` | `2c142f5` |
+> | VPS | `ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'` | `2c142f5` |
 > | chiavetta | gesto fisico del fondatore | ⏳ `cd95f73` |
 >
-> ⛔ **E `git rev-parse` sul VPS legge il REPOSITORY, non l'immagine che GIRA.** Verificato
-> **dentro il contenitore vivo** l'11 agosto: `docker exec casavip_app grep` trova la riga
-> riparata di `fase167` alla **riga 115**, e l'immagine `casavip-app:latest` e' stata creata
-> alle **14:12:57 UTC**, col paracadute `:prec` un passo indietro. Non dedotto dal commit.
+> ⛔ **E `git rev-parse` sul VPS legge il REPOSITORY, non l'immagine che GIRA.** Misurato
+> **dentro la macchina viva** il 12 agosto: `docker inspect casavip_app` dice
+> `Image: sha256:4e829e9f…`, e `docker images casavip-app` dice che quella `:latest` e' stata
+> creata alle **22:14:26 UTC** dell'11 — col contenitore avviato alle **22:14:50 UTC** e il
+> paracadute `:prec` fermo a `16c629ad…` delle **14:12:34 UTC**, cioe' un deploy indietro,
+> che e' esattamente dove deve stare. Non dedotto dal commit.
 >
-> 💡 **E il deploy e' andato in DUE passaggi, non uno.** `b8f63f9` (il lavoro su `fase167`,
-> `verifica_produzione.py` → **190 controlli, 0 violazioni, uscita 0**) e poi `191defc`, che
-> porta il passo di sicurezza obbligatorio del deploy. ⚠️ Il secondo commit (`d96e4bb`) tocca
-> **solo** `REGISTRO_INGEGNERIA.md`, `RIPRENDI_QUI.md`, `deploy/protocollo_d17.sh` e
-> `test_pipeline_ci.py`: **zero codice dell'applicazione** (`git diff --name-only
-> b8f63f9 191defc`). Per questo l'immagine che gira e' corretta a prescindere da quale dei due
-> commit l'abbia costruita — misurato, non sperato.
+> 💡 **L'11 agosto i deploy sono stati TRE, non uno**, e vale la pena saperlo perche' i
+> documenti che ne raccontano uno solo sembrano in contraddizione con la macchina:
+> **(1)** `b8f63f9` (il lavoro su `fase167`) · **(2)** `191defc` (il passo di sicurezza
+> obbligatorio del deploy) · **(3)** `2c142f5` alle **22:14 UTC**, il pre-volo e il pre-fatto.
+> ⚠️ Fra (1) e (2) cambiavano **solo** documenti e attrezzi, **zero codice dell'applicazione**
+> (`git diff --name-only b8f63f9 191defc`): per questo l'immagine era corretta a prescindere
+> da quale dei due l'avesse costruita.
+>
+> ✅ **IL TERZO DEPLOY HA SEGUITO IL PROTOCOLLO D17, e si prova dagli oggetti che lascia**,
+> non dal ricordo: il punto di ritorno `/root/PRE_DEPLOY_20260811-221350.commit` contiene
+> `191defc` (lo stato **di prima**, giusto), e il gettone `/root/.d17_gettone` **non esiste
+> piu'** — cioe' e' stato **consumato** dallo scambio, com'e' scritto al passo [2g]. Un
+> gettone ancora li' avrebbe voluto dire scambio non arrivato in fondo.
+> ⛔ E il gettone si scrive in **`/root/`**, non in `/var/www/bookinvip`: cercandolo nella
+> cartella del progetto si trovano solo file vecchi e si conclude, sbagliando, che il
+> protocollo sia stato saltato. E' successo il 12 agosto, per due minuti.
 >
 > ✅ **RISOLTO ANCHE IL BUCO DI PROCESSO DELL'11 MATTINA.** Il ramo `chiavetta-cd95f73` era
 > stato **spedito** su GitHub ma la richiesta di unione **non era mai stata aperta** —
@@ -55,19 +66,162 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > ⚠️ Era gia' successo il 2026-08-06: **si controlla, non si ricorda** — e infatti l'ha trovato
 > il primo comando della sessione, non la memoria.
 >
-> ### 🩹 LE DUE COSE LASCIATE INDIETRO APPOSTA SONO STATE SISTEMATE
-> Erano state lasciate perche' una suite era in corso, e toccare i file del progetto durante un
-> ciclo produce **rossi finti** (regola ferrea 4). **(a)** la riga `CONSEGNE AGGIORNATE A:`
-> diceva `e15311e` ed era **2 commit di lavoro indietro** (misurato: `git rev-list --count
-> --no-merges e15311e..HEAD` → **2**), quindi la sua guardia sarebbe stata rossa: ora dice
-> `191defc` e la misura da' **0**. **(b)** questo riquadro raccontava il deploy su `b8f63f9`
-> ignorando il secondo: ora li racconta tutti e due. **Costo: zero** — fatte insieme al lavoro
-> di oggi, dentro lo stesso giro di suite, che era esattamente il motivo per cui erano state
-> rimandate.
+> ### 🩹 LE DUE COSE LASCIATE INDIETRO SONO STATE SISTEMATE — **DUE VOLTE**, E LA SECONDA INSEGNA
+> Si lasciano indietro perche' una suite e' in corso, e toccare i file del progetto durante un
+> ciclo produce **rossi finti** (regola ferrea 4).
+> **L'11 agosto:** **(a)** la riga delle consegne diceva `e15311e` ed era **2 commit di lavoro
+> indietro**; **(b)** questo riquadro raccontava un deploy solo. Sistemate quel giorno.
+> **Il 12 agosto, la STESSA COPPIA era di nuovo indietro** — e nello stesso identico modo: la
+> riga diceva `191defc`, sopra ci erano finiti `3cb4ab1` e `4b55851`, e la misura dava di nuovo
+> **2** (`git rev-list --count --no-merges 191defc..HEAD`). Rimessa a `2c142f5`: la misura da'
+> **0**.
+> 💡 **La lezione vera non e' «le ho sistemate», e' che si ripresenta ogni volta.** Non e' una
+> dimenticanza da correggere una volta per tutte: e' una **conseguenza strutturale** della
+> regola ferrea 4 — l'ultimo commit di un blocco arriva sempre DOPO l'ultima suite, quindi il
+> documento nasce indietro **per costruzione**. Per questo la guardia serve e per questo va
+> pagata **all'inizio della sessione dopo**, quando costa secondi, invece che dentro un ciclo
+> da 68 minuti. Il 12 agosto l'ha presa il **pre-volo**, in **0,07 secondi**, prima che
+> qualunque altra cosa partisse.
+> ⚠️ **E chi la sistema non deve credere ai documenti che sta correggendo:** i numeri qui sopra
+> (`190 controlli, 0 violazioni`, l'immagine viva, il gettone) sono stati **rimisurati il 12
+> agosto**, non ricopiati dalla versione precedente di questo riquadro. Ricopiarli sarebbe
+> stato il modo piu' comodo di scrivere un documento aggiornato e **falso**.
+>
+> ### 🔴 IL ROSSO DELLA CI — `4b55851`, la guardia che passava qui e cadeva dal giudice
+> Dopo `3cb4ab1` la **CI su Linux** ha bocciato `test_IL_PATH_NON_SI_CONFRONTA_MA_IL_RESTO_SI`
+> con `'OK' != 'ROSSO'`: **verde su Windows, rosso in CI**. E' la regola ferrea 8 in forma
+> pura — *il verde locale e' un indizio, il giudice e' la CI*.
+> **La causa:** una delle tre asserzioni **non iniettava** la versione di Python e usava quella
+> vera. Su questo computer e' esattamente la `3.9.10` che il documento dichiara, quindi
+> combaciava per **coincidenza**; su Linux no.
+> ⛔ **E' il SECONDO test dipendente dall'ambiente scritto nella stessa sessione** — il primo
+> leggeva la traccia vera della macchina e l'ha preso la suite. Stessa forma. La regola sta
+> adesso **dentro il test**, per non riscoprirla una terza volta: *si iniettano **TUTTI** i
+> valori dell'ambiente, anche quelli che qui sarebbero giusti. Un valore vero lasciato passare
+> lega la guardia alla macchina su cui gira.*
+> ✅ **E una cosa che prima mancava: ogni rosso dev'essere rosso PER IL MOTIVO GIUSTO.** Non
+> basta che il controllo gridi: il test pretende ora che il messaggio **nomini** il Python o la
+> libreria mancante. Un allarme che suona per la ragione sbagliata passerebbe lo stesso, e la
+> rinuncia sul PATH potrebbe essersi mangiata il resto senza che nessuno se ne accorga.
+> ✅ **Prova dell'indipendenza, non «adesso passa»:** costruito un mondo dove il documento
+> dichiara Python `9.9.9` e il valore iniettato e' `9.9.9`. Se il controllo consultasse ancora
+> l'interprete vero (`3.9.10`) uscirebbe ROSSO. **Tace.** Quindi guarda solo cio' che gli viene
+> iniettato, e dara' la stessa risposta su Windows, su Linux e su 3.11.
+> ⛔ **Nessun cambiamento agli attrezzi** (`+38 −13`, un file solo: `test_pipeline_ci.py`): il
+> pre-volo e il pre-fatto avevano **ragione**, il difetto era nel test che li giudicava.
+>
+> ### 💸 FATTO IL 2026-08-12 — `fase66_tassa_soggiorno`: TRE DIFETTI VERI, TUTTI CONTRO L'OSPITE
+> Il modulo prometteva di se stesso *«fail-closed: input non interi/negativi -> tassa 0»*.
+> **Faceva il contrario**, e la forma del difetto vale oltre questo caso: trattava
+> **«invalido» e «assente» come la stessa cosa**. Per i due campi `Optional`
+> (`max_notti_tassabili`, `tetto_per_persona_soggiorno_cents`) «assente» non significa
+> «niente tassa»: significa **«nessuno sconto»**. Quindi un meno battuto per sbaglio non
+> spegneva la tassa, **toglieva il tetto**. Misurato: cap `-1` invece di `7` ->
+> **21000 cents invece di 4900**, cioe' 161,00 EUR in piu' a carico dell'ospite, in silenzio.
+> · **(2)** la cintura anti-abuso tagliava il totale a `MAX_CENTS` **senza toccare le
+> componenti**: da li' in poi `tassa != fissa + percentuale` e la riconciliazione non tornava
+> (misurato: totale 100000000 contro componenti per 400000010). Ora si va a **zero**: una
+> tassa da un milione di euro e' una configurazione rotta, non una tassa.
+> · **(3)** `da_env` «aggiustava» le righe malformate invece di scartarle.
+> ✅ **D20 nei quattro passi + la riprova:** 7 guardie scritte -> viste **ROSSE** (e ognuna col
+> messaggio che nomina il suo difetto) -> riparazione -> **VERDI** -> difetto **rimesso dentro**
+> -> **le stesse 7 rosse, stessi nomi** -> ritolto, ripristino **byte-identico**
+> (`sha256 1F730CA1…` prima e dopo).
+> ### 🔴 IL QUARTO DIFETTO, ED E' IL PIU' GRAVE: **AZZERARE NON E' CHIUDERE**
+> ⛔ **Al mattino avevo scritto — qui e nel registro — una conclusione FALSA**, e su quella
+> avevo deciso di non riparare `fase57`. Diceva: «la terza porta e' gia' chiusa a monte,
+> perche' `_tax` azzera i valori negativi prima del database». **Falsa.**
+> **Azzerare non e' chiudere, quando lo zero significa «nessun limite».** Nella tabella
+> `alloggi` lo `0` di `tassa_max_notti` e' anche il **default**, e `regola_tassa_di` lo legge
+> come **«nessun tetto»** (`mx if mx > 0 else None`; l'oracolo indipendente di
+> `test_happy_conti` dice lo stesso). Quindi il sanificatore non fermava il valore rotto: lo
+> trasformava nella lettura **piu' cara per l'ospite**, e cancellava ogni traccia dell'errore.
+> `fase66` riceveva un `None` legittimo: la riparazione di `fase66` **non poteva** coprirlo.
+> **MISURATO SULLA CATENA VERA** (pubblica → disponibilita' → preventivo, 30 notti, 2 ospiti):
+> ```
+> host scrive  7 (corretto) -> pubblica 201 -> nel db 7 -> tassa  4900
+> host scrive -1 (refuso)   -> pubblica 201 -> nel db 0 -> tassa 21000
+> host scrive 7.5           -> pubblica 201 -> nel db 0 -> tassa 21000
+> ```
+> **+161,00 EUR addebitati per un refuso, e `pubblica` risponde 201: nessun avviso a nessuno.**
+> ✅ **Riparato in `fase57.valida_scheda`**, che ora **rifiuta** (`422` +
+> `dettaglio: tassa_max_notti_non_valido`) invece di azzerare. Quei cinque campi erano gli
+> **unici** di quella funzione che azzeravano in silenzio: tutti gli altri gia' rifiutavano.
+> ⚠️ «Non impostato» resta legittimo (assente · `null` · stringa vuota → 0), se no nessun host
+> potrebbe piu' pubblicare senza tassa.
+> 💡 **LA LEZIONE, e vale piu' del difetto:** avevo guardato il sanificatore e mi ero fermato
+> li'. **Un valore «reso sicuro» non e' sicuro finche' non si guarda cosa SIGNIFICA quel valore
+> per chi lo legge dopo.** Due moduli della stessa catena, lo stesso numero, significati
+> opposti. ⛔ E l'ha trovato **l'E2E** — cioe' esattamente il livello che stavo per saltare
+> dichiarandolo «gia' coperto» dopo aver letto un file solo.
+>
+> ### ⚖️ IL GIUDICE SU `fase66` — mai visto prima d'ora, e ora e' a ZERO
+> | giro | provati | uccisi | sopravvissuti |
+> |---|---|---|---|
+> | primo | 30 | 14 | **16** |
+> | dopo le 6 guardie chieste da lui | 35 | 24 | **11** |
+> | dopo la semplificazione | **24** | **24** | **0** |
+> 🏁 **F1 e' soddisfatta per `fase66`: 0 sopravvissuti, e ZERO equivalenti dichiarati** —
+> cioe' nessuna zona cieca nuova nello schedario. Le quattro riparazioni sono anche entrate
+> nella lista scritta a mano di `collaudi/mutazione_prodotto.py`, quella che gira in **CI**:
+> se questi difetti tornano, il Giudice li rivede. ⛔ Verificato che tutte e quattro le righe
+> originali combacino **una volta sola** col codice: un mutante che non trova la sua riga e'
+> un verde che non guarda niente.
+> 💡 **Due lezioni che il ragionamento non aveva visto, e che le ha trovate lui:**
+> **(a) le mie guardie sulla regola malformata usavano TUTTE un `per_persona` valido**, quindi
+> il primo ramo del controllo non lo attraversava nessuno: un file «coperto» con un ramo mai
+> percorso. **(b) Due riparazioni si coprivano a vicenda**: la guardia su `da_env` guardava la
+> *tassa* risultante e restava verde anche col controllo rotto, perche' piu' a valle
+> interveniva l'altra riparazione. Ora guarda il **registro**, non l'effetto. ⛔ *La difesa in
+> profondita' e' una virtu' del prodotto e una trappola per i test.*
+> ⚠️ **E una precedenza di operatori mi ha fregato:** `A and B or C` si legge `(A and B) or C`,
+> quindi un controllo con tre condizioni in `or` va provato **una condizione alla volta**.
+>
+> ### 🧮 GLI 11 SOPRAVVISSUTI CHIUSI **TOGLIENDO CODICE**, NON DICHIARANDOLI EQUIVALENTI
+> Erano tutti della stessa famiglia (righe 133-149): rami dove la condizione mutata cambia
+> **se** si entra nel ramo, ma dentro il ramo **0 produce 0** comunque (`per_persona = pp * 0`,
+> `fissa = per_persona * 0`, `perc = bps * 0 // 10000`). Nessun collaudo poteva ucciderli,
+> perche' **non cambiavano nessun risultato osservabile**.
+> ⛔ **La strada facile era `EQUIVALENTI_DICHIARATI`. Non e' stata presa**: e' l'unico posto
+> dove un errore diventa **cecita' permanente**, e B6 vieta di scriverci senza dimostrazione.
+> ✅ **La strada giusta era che quei controlli erano diventati RIDONDANTI**: dopo
+> `_regola_malformata` ogni campo e' gia' un intero non-negativo, quindi i `_intero_nn(...)`
+> erano rami **che non possono essere falsi** — codice morto travestito da prudenza (D19). E i
+> `... > 0` erano scorciatoie: con 0 l'aritmetica da' 0 da sola. Tolti, i mutanti **spariscono
+> invece di essere assolti**.
+> 🔬 **E l'equivalenza e' stata MISURATA, non affermata**: le due versioni fatte girare fianco
+> a fianco su **90.400 combinazioni** (tutta la griglia degli ingressi ammessi + 400 casi con
+> `-1`, `7.5`, `True`, `"7"`, `None` in ogni posizione) → **zero differenze, zero eccezioni**.
+> Il contratto «mai un'eccezione» regge perche' la precondizione viene **prima**.
+> 🗄️ ⛔ **E LA DIMOSTRAZIONE NON VIVE PIU' IN UNA CARTELLA TEMPORANEA.** All'inizio stava
+> nello scratchpad: sarebbe sparita a fine sessione lasciando solo la mia parola dentro un
+> commento — cioe' esattamente il valore che ha una dimostrazione che nessuno puo' rifare.
+> Adesso la versione **prudente** (quella di prima) vive in **`collaudi/oracolo_tassa.py`** e
+> un collaudo la rimette alla prova **a ogni giro di suite**, in **0,53 secondi**. Se un
+> domani le due versioni smettessero di coincidere, si saprebbe subito invece che dai soldi.
+> ✅ **Ed e' provato nelle DUE direzioni** (regola ferrea 10): con una funzione sbagliata di
+> **un solo centesimo** l'oracolo **grida**. Un oracolo che sa dire solo «uguali» e'
+> indistinguibile da un oracolo rotto — per questo `confronta()` accetta la funzione da
+> giudicare invece di cablarla.
+> ⚠️ **Limite dichiarato:** l'oracolo **non** dice che la formula sia GIUSTA (sarebbero
+> sbagliate tutte e due allo stesso modo): dice che **togliere non ha cambiato**. La
+> correttezza la sorvegliano i numeri esatti dei collaudi e l'oracolo di `test_happy_conti`.
+>
+> ### 🕸️ E LA RETE ANTI-INTERRUZIONE SI E' RIPAGATA, PER COLPA MIA
+> Per risparmiare 50 minuti ho **ucciso la suite** a meta' giro. Dentro girava un giro di
+> mutazione, e il guasto e' rimasto **dentro `fase162_pagamenti_pendenti.py`** — un file dei
+> **pagamenti**. Il mutante aggiungeva `"pagato", "cancellato", "rimborsato"` all'elenco degli
+> stati che escono prima della scrittura: un pagamento gia' pagato sarebbe stato **rilavorato**.
+> ✅ **L'ha preso il pre-volo in 0,07 secondi**, al primo comando dopo, prima di qualunque
+> altra cosa. Recuperato con la procedura scritta (`git checkout HEAD -- <file>`, **non**
+> `git checkout --`: la differenza e' gia' costata una volta), `git diff HEAD` vuoto, traccia
+> rimossa. ⛔ **Lezione: «uccido la suite tanto la rifaccio» non e' gratis.** E' esattamente
+> l'incidente che a questo progetto era gia' costato un difetto sui soldi in produzione: la
+> differenza fra allora e oggi non e' la prudenza di chi lavora, e' che adesso c'e' la rete.
 >
 > ### ▶️ IL PROSSIMO LAVORO
-> `fase66_tassa_soggiorno` (Blocco 1), poi `fase133_split_quote_uguali`, poi
-> `fase119_calendario_prezzi`. ⛔ **Il piano nel registro e' stato corretto in due punti**:
+> `fase133_split_quote_uguali`, poi `fase119_calendario_prezzi`.
+> ⛔ **Il piano nel registro e' stato corretto in due punti**:
 > `fase43_commissione` e' **codice morto** ed e' uscito dal Blocco 2 (31 punti che non vanno
 > fatti), `fase147_tassa_comunale` e' **vivo** e non stava in nessun blocco: e' entrato.
 > Misurato con `raggiungibilita.py` e `mutazione_prodotto.py --censimento`, non ricordato.
@@ -327,7 +481,21 @@ Start-Process powershell -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass",
 ```
 ⛔ `*>` è una **redirezione**, non un tubo: `$LASTEXITCODE` subito dopo è quello di `python`.
 Con `python … | Tee-Object` sarebbe l'esito di `Tee-Object` (regola ferrea 7, già pagata).
-Dura **~68 minuti** (misurato il 2026-08-11: **4096 secondi**). Il verdetto (`Ran N` / `OK` /
+⛔⛔ **E LA RIGA FINALE C'E' ANCHE SE LA SUITE E' STATA UCCISA.** Scoperto il 2026-08-12: il
+lancianotte scrive `CODICE D'USCITA DELLA SUITE: N` **appena `python` esce, per qualunque
+motivo** — se il processo viene ucciso scrive `-1`. Quindi «il file ha la riga finale» **NON**
+significa «la suite e' finita»: una sorveglianza che aspetta solo quella riga annuncia
+«FINITA» su un giro morto, ed e' successo. **Si guardano TRE cose insieme**: la riga
+`Ran N tests`, il verdetto `OK`, e il codice d'uscita **uguale a 0**. Due su tre non bastano.
+
+⏱️ **QUANTO DURA: DUE MISURE CHE NON COINCIDONO, e la seconda non e' spiegata.**
+  · 2026-08-11 → **4096 secondi** (~68 minuti), `Ran 5524`
+  · 2026-08-12 → **1479 secondi** (~25 minuti), `Ran 5560`, stessi 4 saltati
+**2,8 volte piu' veloce con piu' test.** ⛔ Non e' stato capito perche', e finche' non lo e'
+**nessuno dei due numeri e' affidabile per pianificare**: o l'11 la macchina era occupata da
+qualcos'altro, o il 12 qualcosa non ha girato davvero. Chi riprende in mano questa riga la
+misuri di nuovo e chiuda la questione, invece di ereditare un numero di cui non ci si fida.
+Il verdetto (`Ran N` / `OK` /
 `FAILED`) e ora anche il **codice d'uscita** stanno in fondo a `.err`.
 ⚠️ Se la guardia `test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO` è rossa, **non è un
 difetto**: è il numero dichiarato qui sotto (`SUITE ATTUALE:`) rimasto indietro. Rimisurarlo col
@@ -599,7 +767,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 191defc
+CONSEGNE AGGIORNATE A: 2c142f5
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -2424,13 +2592,21 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5529 test
+SUITE ATTUALE: Ran 5567 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3.
 COMANDO:  python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"
-MISURATO SU: 191defc + le modifiche non committate del 2026-08-11 sera (pre-volo e pre-fatto).
+MISURATO SU: 2c142f5 + il lavoro su `fase66`/`fase57` del 2026-08-12 (non ancora committato).
+             ⛔ IL NUMERO L'HA DATO IL CARICATORE, NON UNA SOMMA A MENTE (D22): 5567.
+             Controllo di coerenza, questo si' per addendi: 5529 (di partenza, rimisurato dal
+             pre-volo ad albero pulito) + 30 (guardie su `fase66`) + 6 (guardie E2E sulla
+             catena vera, in `test_tassa_pre_acquisto`) + 2 (l'oracolo della tassa e la prova
+             che l'oracolo grida) = 5567, e coincide.
+             ⛔ Delle 36, sei le ha chieste il GIUDICE della mutazione e sei sono nate da un
+             mio errore: la prima versione di `TestAZZERARE_NON_E_CHIUDERE` certificava una
+             conclusione FALSA, ed e' stata riscritta dopo che l'E2E l'ha smentita.
              ⛔ NON SOMMATO A MENTE: il caricatore, da fermo, ha stampato **5529** (D22 —
              un totale ottenuto sommando altri numeri non e' misurato, ed e' cosi' che il
              2026-08-06 ando' perso mezzo pomeriggio). Il controllo di coerenza, questo si'
