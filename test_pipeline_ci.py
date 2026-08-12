@@ -5010,8 +5010,14 @@ class TestIlPreFattoVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
                       "e' rosso, ma non per la libreria mancante: %s" % dettaglio[:300])
 
         numeri = [n for n, _, _ in pf.CONTROLLI]
-        self.assertEqual(list(range(1, 9)), sorted(numeri),
-                         "il pre-fatto deve avere tutti e otto i controlli, non sette: %r"
+        # ⛔ IL 9 MANCA DI PROPOSITO, e non e' una dimenticanza: `controllo_9_messaggio` vive
+        # FUORI da `CONTROLLI` perche' gira sul gancio `commit-msg`, l'unico a cui git passa
+        # il messaggio. E l'elenco e' ESATTO, non un minimo: un `assertGreaterEqual` qui
+        # lascerebbe sparire un controllo in silenzio.
+        self.assertEqual([1, 2, 3, 4, 5, 6, 7, 8, 10], sorted(numeri),
+                         "i controlli del pre-fatto non sono quelli attesi: %r. Se ne hai "
+                         "aggiunto uno, aggiorna questo elenco nello stesso commit; se ne e' "
+                         "sparito uno, il pre-fatto ha smesso di guardare qualcosa"
                          % (numeri,))
 
     def test_STAMPA_I_SEI_DIVIETI_DOPO_AVER_FINITO(self):
@@ -5026,6 +5032,72 @@ class TestIlPreFattoVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
             testo.index("PRE-FATTO"), testo.index("B1."),
             "nel pre-fatto i divieti vanno DOPO i controlli: e' il momento del «dopo "
             "averla finita»")
+
+    def test_IL_PRE_FATTO_RILEGGE_ANCHE_LA_BATTERIA(self):
+        """⛔ D24, dettata dal fondatore il 2026-08-12: «leggere prima e dopo tutte le regole
+        E I TEST e quelli esterni prima e dopo ogni operazione».
+
+        I sei divieti li stampava gia'. Mancava LA BATTERIA -- ed e' la differenza fra «non ho
+        violato un divieto» e «ho dimostrato che funziona»: quel giorno avevo scritto «provata
+        nelle due direzioni» avendo passato i livelli ① e ② e **zero** dei dieci collaudi, col
+        giudice esterno e la CI mai sfiorati.
+        ⛔ E QUI SI DICHIARA IL DENOMINATORE (appendice #15): non «c'e' un collaudo?», ma «ci
+        sono TUTTI?». I nomi si contano da `CLAUDE.md` con un conto INDIPENDENTE, non con la
+        funzione che si sta giudicando -- se no il confronto sarebbe con se stesso.
+        """
+        import io
+        import os
+        import re
+        import shutil
+        import tempfile
+        from collaudi import prima_di_dire_fatto as pf
+
+        with io.open(os.path.join(QUI, "CLAUDE.md"), encoding="utf-8") as f:
+            coda = f.read().split("I 10 COLLAUDI, IN QUEST'ORDINE")[-1]
+        nomi = [n.strip().replace("**", "") for _num, n, _c
+                in re.findall(r"^\|\s*(\d+)\s*\|([^|]+)\|([^|]+)\|", coda, re.M)]
+        self.assertGreaterEqual(
+            len(nomi), 10,
+            "in CLAUDE.md trovo solo %d collaudi nella tabella: il denominatore di questa "
+            "guardia non regge piu', e senza denominatore non so quanti ne ha saltati il "
+            "pre-fatto" % len(nomi))
+
+        uscita, testo, _ = self._esegui("prima_di_dire_fatto.py")
+        self.assertIn("E LA BATTERIA?", testo,
+                      "il pre-fatto non rilegge piu' la batteria: D24 e' tornata a dipendere "
+                      "dal ricordarsene, e un obbligo affidato alla memoria si rompe di nuovo")
+        mancanti = [n for n in nomi if n[:25] not in testo]
+        self.assertEqual(
+            [], mancanti,
+            "il pre-fatto stampa la batteria ma ne SALTA %d: %s. Un promemoria incompleto e' "
+            "peggio di nessun promemoria, perche' chi lo legge crede di aver visto tutto"
+            % (len(mancanti), ", ".join(mancanti)))
+        for esterno in ("GIUDICE ESTERNO", "CI SU LINUX"):
+            self.assertIn(esterno, testo,
+                          "manca il promemoria su «%s»: sono le DUE cose che questo computer "
+                          "non puo' dare da solo, ed e' la meta' dell'ordine del fondatore "
+                          "(«e quelli esterni»)" % esterno)
+        self.assertLess(
+            testo.index("B1."), testo.index("E LA BATTERIA?"),
+            "la batteria va DOPO i sei divieti: prima quello che vieta, poi quello che "
+            "dimostra")
+
+        # LE DUE DIREZIONI: senza la tabella il promemoria deve GRIDARE, non tacere.
+        cartella = tempfile.mkdtemp()
+        try:
+            with io.open(os.path.join(cartella, "CLAUDE.md"), "w", encoding="utf-8") as f:
+                f.write("un CLAUDE.md senza la tabella dei collaudi\n")
+            self.assertEqual(
+                [], pf.batteria_dal_regolamento(cartella),
+                "su un CLAUDE.md senza la tabella la funzione inventa delle righe: allora "
+                "non le sta leggendo dal regolamento")
+            self.assertEqual(
+                [], pf.batteria_dal_regolamento(os.path.join(cartella, "non-esiste")),
+                "su una cartella inesistente deve dire «niente», non esplodere: il pre-fatto "
+                "gira dentro un gancio di git e un traceback li' blocca il commit per il "
+                "motivo sbagliato (e' gia' successo il 2026-08-02)")
+        finally:
+            shutil.rmtree(cartella, ignore_errors=True)
 
     def test_IL_CODICE_D_USCITA_NON_PUO_MENTIRE_SUL_RAPPORTO(self):
         """Lo stesso controllo anti-imbroglio del pre-volo, sul pre-fatto."""
@@ -5173,6 +5245,128 @@ class TestIGanciDiGitCHIAMANODavveroGliAttrezzi(_GuardieSugliAttrezziDelLavoro):
                 "controlli non sono in serie, e il primo non ferma piu' niente")
         finally:
             shutil.rmtree(cartella, ignore_errors=True)
+
+
+class TestIlGuardianoDelPianoDeiSoldiHaANCORAIDENTI(unittest.TestCase):
+    """D18 PUNTO 4 — se qualcuno lo smonta, qualcosa diventa rosso LO STESSO GIORNO.
+
+    `test_piano_dei_soldi.py` impedisce due difetti capitati davvero: un modulo dichiarato
+    FATTO in un posto e DA FARE in un altro (2026-08-12, sarebbe costato una sessione intera
+    a rifare `fase66`), e un modulo «da fare» che e' codice morto (2026-08-11, `fase43` con
+    31 punti di mutazione su codice che la produzione non raggiunge).
+
+    ⛔ PERCHE' QUESTA GUARDIA ESISTE, e non basta il guardiano stesso. Un attrezzo che
+    protegge se stesso non protegge niente: se il file viene cancellato in una
+    «semplificazione», con lui spariscono i suoi 14 collaudi e **nessuno se ne accorge**.
+    Qui l'`import` fallisce e la suite diventa rossa subito.
+    ⛔ E NON CONTA PAROLE NEL SORGENTE: chiama le funzioni del giudizio con il guasto dentro.
+    Una guardia che cercasse `contraddizioni` nel testo del file la soddisferebbe anche un
+    commento (sbaglio S6).
+    """
+
+    def test_IL_GIUDIZIO_SA_DIRE_SI_E_NO(self):
+        """Le due direzioni sul giudizio nudo, senza passare dai documenti."""
+        from collaudi import piano_dei_soldi as pds
+        rotto = [("fase901", pds.FATTO, "posto A"), ("fase901", pds.DA_FARE, "posto B")]
+        self.assertIn(
+            "fase901", pds.contraddizioni(rotto),
+            "il giudizio non vede piu' lo stesso modulo dichiarato FATTO in un posto e DA "
+            "FARE in un altro: e' il difetto del 2026-08-12, e senza questo una chat nuova "
+            "rifa' da capo un lavoro finito")
+        self.assertEqual(
+            {}, pds.contraddizioni([("fase901", pds.FATTO, "posto A"),
+                                    ("fase901", pds.FATTO, "posto B")]),
+            "grida anche quando i posti sono D'ACCORDO: un allarme sempre acceso viene "
+            "spento (regola ferrea 10)")
+        self.assertEqual(
+            ["fase902"],
+            pds.da_fare_ma_morti([("fase902", pds.DA_FARE, "posto A")], ["fase902_x"]),
+            "il giudizio non incrocia piu' il piano con la raggiungibilita': e' il difetto "
+            "dell'11 agosto, 31 punti di lavoro su codice morto")
+        self.assertEqual(
+            [], pds.da_fare_ma_morti([("fase902", pds.DA_FARE, "posto A")], ["fase903_x"]),
+            "dice morto un modulo che non e' nell'elenco dei morti")
+
+    def test_I_TRE_POSTI_VERI_SONO_ANCORA_LEGGIBILI_E_D_ACCORDO(self):
+        """Il giudizio sano non basta: va provato che i documenti VERI lo attraversino.
+
+        Se un'ancora non si trovasse piu' (prosa riscritta, sezione spostata), gli estrattori
+        alzano `MisuraNonValida` e questo test e' rosso -- che e' il verso giusto: un
+        guardiano che sui documenti riscritti resta verde e' peggio di nessun guardiano,
+        perche' rassicura senza aver guardato (sbaglio S1).
+        """
+        from collaudi import piano_dei_soldi as pds
+        tutte = pds.osservazioni(pds.leggi(pds.REGISTRO), pds.leggi(pds.CONSEGNE))
+        distinti = set(m for m, _s, _d in tutte)
+        self.assertGreaterEqual(
+            len(distinti), 15,
+            "il guardiano legge solo %d moduli dai tre posti: al 2026-08-12 erano 20 (6 "
+            "fatti + 11 da fare + 3 morti). Un denominatore che crolla e' un controllo che "
+            "ha smesso di guardare, non un piano che si e' accorciato" % len(distinti))
+        self.assertEqual(
+            {}, pds.contraddizioni(tutte),
+            "i tre posti del piano dei soldi si contraddicono: esegui "
+            "`python collaudi/piano_dei_soldi.py` per il dettaglio, modulo per modulo")
+
+    def test_IL_CONTROLLO_10_DEL_PRE_FATTO_FERMA_DAVVERO_IL_COMMIT(self):
+        """⛔ IL GIUDIZIO GIUSTO IN UN POSTO CHE NESSUNO INTERROGA NON FERMA NIENTE.
+
+        Fino al 2026-08-12 il guardiano viveva SOLO nella suite, cioe' dentro un ciclo da
+        ~25 minuti: si POTEVA committare un piano contraddittorio e lo si scopriva mezz'ora
+        dopo, o alla CI dopo il push. Questa guardia pretende che il pre-fatto -- quello che
+        i ganci di git chiamano da soli -- abbia il controllo E che sappia dire SI e NO.
+        ⛔ Non conta parole nel sorgente: CHIAMA il controllo col guasto dentro (S6).
+        """
+        from collaudi import piano_dei_soldi as pds
+        from collaudi import prima_di_dire_fatto as pf
+
+        sano_reg = ("\U0001f4ca **DOVE SIAMO, rimisurato col censimento il 2026-01-01**:\n"
+                    "**1 moduli dei soldi giudicati** · **1 che restano, per 24 punti**. "
+                    "uno sono stati fatti (`fase901`) e **uno e' codice\nmorto** "
+                    "(`fase903` 31 = **31 punti che non vanno fatti**).\n\n"
+                    "| **1** | ✅ `fase901_a` **FATTO** · ▶️ `fase902_b` (24) | 24 |\n\n")
+        sano_con = ("**Moduli dei SOLDI GIÀ passati dal giudice — 1:**\n"
+                    "✅ **`fase901_a`** (11 su 11).\n\n"
+                    "**Moduli dei SOLDI CHE RESTANO — 1, per 24 punti.**\n\n"
+                    "| `fase902_b` | 24 | **2** | 1 |\n\n"
+                    "⛔ **FUORI DALL'ELENCO PERCHÈ SONO CODICE MORTO**:\n"
+                    "`fase903_c` (31) = **31 punti che NON vanno fatti**.\n\n")
+
+        stato, dettaglio = pf.controllo_10_piano_dei_soldi(
+            registro=sano_reg, consegne=sano_con, morti=["fase999_inesistente"])
+        self.assertEqual(pf.OK, stato,
+                         "il controllo 10 grida su un piano SANO: un allarme sempre acceso "
+                         "viene spento entro tre giorni (regola ferrea 10). %s" % dettaglio)
+
+        rotto = sano_reg.replace("▶️ `fase902_b` (24)", "✅ `fase902_b` **FATTO**")
+        self.assertNotEqual(rotto, sano_reg, "l'iniezione non ha cambiato niente")
+        stato, dettaglio = pf.controllo_10_piano_dei_soldi(
+            registro=rotto, consegne=sano_con, morti=["fase999_inesistente"])
+        self.assertEqual(pf.ROSSO, stato,
+                         "col piano contraddittorio il pre-fatto NON ferma il commit: il "
+                         "guardiano e' un allarme in una stanza vuota")
+        self.assertIn("fase902", dettaglio,
+                      "e' rosso, ma non nomina il modulo colpevole: %s" % dettaglio[:400])
+
+        stato, dettaglio = pf.controllo_10_piano_dei_soldi(
+            registro=sano_reg, consegne=sano_con, morti=["fase902_b"])
+        self.assertEqual(pf.ROSSO, stato,
+                         "un modulo «da fare» che la produzione non raggiunge non ferma il "
+                         "commit: e' il difetto dell'11 agosto, 31 punti buttati")
+
+        # E il vuoto NON e' un verde: senza documenti leggibili e' NON ESEGUITO (S1/S7).
+        stato, _d = pf.controllo_10_piano_dei_soldi(
+            registro="niente", consegne="niente", morti=[])
+        self.assertEqual(pf.NON_ESEGUITO, stato,
+                         "su documenti illeggibili il controllo esce OK: e' il verde "
+                         "peggiore di tutti, quello che non ha guardato niente")
+
+        numeri = [n for n, _, _ in pf.CONTROLLI]
+        self.assertIn(10, numeri,
+                      "il controllo 10 non e' nell'elenco che i ganci di git eseguono: "
+                      "esiste ma non lo chiama nessuno (regola 23, «costruito != "
+                      "collegato»). Numeri presenti: %r" % (numeri,))
+        self.assertTrue(pds.NON_CONTROLLO, "il giudizio non dichiara piu' i suoi limiti")
 
 
 if __name__ == "__main__":

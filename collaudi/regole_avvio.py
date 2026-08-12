@@ -226,20 +226,14 @@ def stampa_i_divieti(n=None):
 # alle norme: una cosa che non si puo' controllare non e' un lavoro, e' un desiderio -- e
 # «fai CodeQL» senza criterio e' come «trova tutto»: non finisce mai. Se qualcuno aggiunge
 # una voce senza `fatto_quando`, lo strumento GRIDA (vedi `main`).
+# ✅ FATTO il 2026-08-12 e TOLTO da questa lista nello stesso commit, com'e' scritto sotto:
+#    «il guardiano del piano dei soldi — test_piano_dei_soldi.py». Vive in
+#    `test_piano_dei_soldi.py` (14 collaudi) piu' una guardia in `test_pipeline_ci.py` che lo
+#    tiene in piedi (D18 punto 4: se il file sparisce, l'import fallisce e la suite e' rossa
+#    lo stesso giorno). Visto ROSSO sui documenti VERI su ENTRAMBI i difetti che sorveglia --
+#    `fase66` FATTO qui e DA FARE la' (12 agosto), e `fase43` morto rimesso nel piano
+#    (11 agosto) -- con ripristino byte-identico dopo ognuno.
 LAVORI_IN_SOSPESO = (
-    {
-        "nome": "il guardiano del piano dei soldi — test_piano_dei_soldi.py",
-        "costo": "mezza sessione",
-        "priorita": "PRIMA DI RIPRENDERE I MODULI",
-        "perche": "il fatto «faseNN e' FATTO» va scritto a mano in TRE posti; il 12 agosto "
-                  "ne e' stato aggiornato uno solo e gli altri due mandavano a rifare un "
-                  "lavoro gia' finito",
-        "fatto_quando": "un collaudo estrae dai documenti l'insieme dei moduli marcati FATTO "
-                        "e quello dei moduli DA FARE ed e' ROSSO se un modulo sta in tutti e "
-                        "due; ed e' ROSSO se un modulo «da fare» risulta codice morto per "
-                        "raggiungibilita.py (difetto dell'11 agosto: fase43 era nel piano, "
-                        "31 punti che stavano per essere buttati)",
-    },
     {
         "nome": "CodeQL",
         "costo": "30 minuti",

@@ -371,7 +371,197 @@ mai. Serve una lista **chiusa**, non una lunga.
 - **Agenti in sola lettura** → 1 sessione, **e SOLO dopo F1**. Resa storica: **146 sospetti → 4
   correzioni vere** (97% rumore).
 
-### ⏳ I CINQUE LAVORI OBBLIGATORI VIVONO NELLA MACCHINA, NON IN QUESTA PAGINA (2026-08-12)
+### ✅ FATTO 2026-08-12 — IL GUARDIANO DEL PIANO DEI SOLDI: `test_piano_dei_soldi.py`
+
+**Cos'era il problema.** Il fatto «`faseNN` è FATTO» era scritto **a mano in tre posti**: la
+tabella dei blocchi in §2-bis, il riepilogo «DOVE SIAMO» poche righe sopra, e la tabella
+«QUANTO MANCA SUI SOLDI» in `RIPRENDI_QUI.md`. Il 12 agosto ne è stato aggiornato **uno solo**:
+gli altri due dicevano ancora che `fase66` era «il prossimo da fare» quando era finito, con
+cinque difetti sui soldi chiusi dentro. **Una chat nuova avrebbe rifatto da capo un lavoro
+finito** — una sessione intera. L'ha trovato il fondatore chiedendo «la prossima chat sa queste
+cose?», non un controllo. 💡 *Un fatto che dipende dal ricordarsi di copiarlo in tre posti prima
+o poi resta indietro: la cura è una macchina, non una promessa.*
+
+**Cosa fa, e il DENOMINATORE** (misurato, non stimato): legge i tre posti e ne ricava **40
+dichiarazioni su 20 moduli distinti** — **6 FATTO** · **11 DA FARE** · **3 CODICE MORTO** — che
+è esattamente l'intero piano dei soldi. Poi:
+· è **ROSSO** se un modulo sta in due stati fra posti diversi (difetto del **12 agosto**);
+· è **ROSSO** se un modulo «da fare» è **codice morto**, incrociando con
+  `collaudi/raggiungibilita.py` (difetto dell'**11 agosto**: `fase43_commissione` era nel
+  Blocco 2 con 31 punti di mutazione su codice che la produzione non raggiunge — **31 punti su
+  506 che stavano per essere buttati**);
+· pretende che i **conti** dichiarati a mano combacino fra i due documenti **e** con la
+  lunghezza degli elenchi: `6` giudicati · `11` che restano · `400` punti (= la somma vera
+  della colonna) · `81` punti morti. Un elenco senza denominatore non dice quanto manca.
+
+**D20 nei quattro passi, su ENTRAMBI i difetti, e sui documenti VERI — non su copie.**
+Rimessi dentro uno alla volta e visti **ROSSI**, ognuno col colpevole **nominato**:
+```
+fase66 -> DA FARE   in: RIPRENDI_QUI.md tabella che RESTANO
+fase66 -> FATTO     in: REGISTRO blocco 1, REGISTRO riepilogo, RIPRENDI_QUI passati dal giudice
+        + due guardie indipendenti: «CHE RESTANO 11» ma 12 righe · «per 400 punti» ma somma 425
+fase43 -> [] != ['fase43']        (il modulo morto rimesso nel piano)
+```
+Ripristino **byte-identico** dopo ognuno: `RIPRENDI_QUI.md` `sha256 12B6B871…`,
+`REGISTRO_INGEGNERIA.md` `sha256 E8A5FE16…`, uguali prima e dopo.
+
+**D18 punto 4 — la guardia sul guardiano.** `TestIlGuardianoDelPianoDeiSoldiHaANCORAIDENTI` in
+`test_pipeline_ci.py` **chiama le funzioni del giudizio col guasto dentro**: una che cercasse
+parole nel sorgente la soddisferebbe anche un commento (S6). Provata nelle due direzioni: col
+file rinominato via, `ModuleNotFoundError` e **uscita 1**; rimesso, `sha256 45CA4388…` identica.
+Se qualcuno cancella il guardiano in una «semplificazione», la suite è rossa **lo stesso giorno**.
+
+### 🔴 IL DIFETTO PIÙ GRAVE ERA IL MIO, E L'HA TROVATO LA DOMANDA DEL FONDATORE
+
+*«hai letto tutti i test da fare e poi quelli esterni, le regole vanno rispettate»* — no, non
+li avevo passati. Rileggendo **le 44 regole dell'appendice** (§3795-4065) sono venuti fuori
+**cinque** buchi, e uno era grosso.
+
+⛔ **Il guardiano non era COLLEGATO a chi decide.** Girava solo dentro `unittest discover`,
+cioè dentro un ciclo da ~25 minuti: **si poteva committare un piano contraddittorio** e lo si
+scopriva mezz'ora dopo, o alla CI dopo il push. È la regola **#23** dell'appendice
+(*«COSTRUITO ≠ COLLEGATO: un modulo che nessuno importa ha test verdi che misurano se
+stessi»*) e, peggio, è **il difetto di TEMPO che `prima_di_dire_fatto.py` esiste per curare**,
+applicato a se stesso.
+✅ **Riparato: `controllo_10_piano_dei_soldi` in `collaudi/prima_di_dire_fatto.py`**, che i
+ganci di git chiamano da soli. Costa **0,06 secondi**. Il pre-fatto ora ha **9 controlli**
+(1-8 + 10; ⛔ il **9** manca di proposito: `controllo_9_messaggio` vive fuori da `CONTROLLI`
+perché gira sul gancio `commit-msg`, l'unico a cui git passa il messaggio).
+
+✅ **E l'E2E è stato fatto DAVVERO, sul gancio vero** — è il livello che stavo per saltare
+dicendo «è già coperto», cioè esattamente il modo vietato dalla riga 336 di `RIPRENDI_QUI.md`:
+```
+sh deploy/hooks/pre-commit   ->  USCITA 1
+ROSSO  10. il piano dei soldi non si contraddice   0.06s
+   fase133 -> DA FARE  in: REGISTRO blocco 3, RIPRENDI_QUI tabella che RESTANO
+   fase133 -> FATTO    in: REGISTRO blocco 1
+VERDETTO: ⛔ NON E' FATTO — Commit fermo.
+```
+Ripristino **byte-identico** (`sha256 4226CABB…`). Il guardiano non è più un allarme in una
+stanza vuota.
+
+### 🧬 IL GIUDICE SUL GIUDIZIO — 6 mutanti, 6 uccisi, 0 equivalenti dichiarati
+
+`collaudi/mutazione_prodotto.py` giudica i `fase*.py` della produzione: **un attrezzo dentro
+`collaudi/` non lo guarda nessuno**. Quindi il giudizio è stato rotto di proposito, **un
+mutante per ogni decisione che prende** (appendice **#12**: *i mutanti si generano, non si
+scelgono a mano*), e ognuno porta **l'ingresso che lo uccide**:
+
+| mutante | ucciso da |
+|---|---|
+| ① il ramo `CODICE MORTO` in `stato_della_voce` | il piano **sano** (produce un falso allarme) |
+| ② il *case* di `FATTO` (il tranello di «già fatto») | una voce con `(gia' fatto in 1)` |
+| ③ la soglia di `contraddizioni` (`>1` → `>2`) | il difetto del 12 agosto |
+| ④ l'intersezione di `da_fare_ma_morti` | un modulo del piano dichiarato morto |
+| ⑤ la differenza di `orfani_senza_blocco` | il difetto di `fase147` |
+| ⑥ il blocco dei conti dentro `rapporto` | un titolo che dichiara 9 su una tabella da 1 |
+
+⛔ **La mutazione è IN MEMORIA, il file su disco non viene toccato**: B2 vieta le sostituzioni
+testuali sui file, e un collaudo che riscrive un attrezzo vero lascerebbe il guasto dentro se
+il giro muore a metà — è già capitato, ed è costato un difetto sui soldi in produzione.
+⛔ **E il giudice è provato nelle DUE direzioni** (D18 punto 2): un mutante che cambia solo un
+simbolo decorativo risulta **SOPRAVVISSUTO**, e un mutante che non trova il suo bersaglio
+**GRIDA** invece di passare per verde. Senza questa prova, «6 su 6 uccisi» sarebbe aria —
+è lo stesso `42 su 42` del 2026-08-01 che aveva il punteggio pieno e la base rossa.
+
+### 🩹 GLI ALTRI QUATTRO BUCHI CHE LA RILETTURA HA TROVATO
+
+**(a) `#14` — avevo esibito un conteggio come prova.** «14 collaudi», «+16 test»: è la cifra
+che la regola vieta di usare come segno di qualità, perché duplicare 200 test la soddisferebbe.
+La misura vera è la **larghezza di mutazione**, e allora era **zero**. Ora è 6 su 6.
+
+**(b) `#9` — la guardia aveva visto IL BUG, non IL COMPORTAMENTO.** Avevo iniettato i due
+difetti storici esatti e mi ero fermato lì. La regola pretende ≥3 varianti equivalenti: ora
+sono **quattro**, e ognuna un modo di rompersi che altrimenti non sapremmo — un altro modulo ·
+la coppia di stati **FATTO-contro-MORTO**, mai esercitata · il difetto **dentro un posto solo**
+(due blocchi della stessa tabella) · il nome **intero in un posto e abbreviato nell'altro**.
+
+**(c) L'oracolo indipendente ha trovato un buco che il ragionamento non aveva visto.**
+Cercare contraddizioni **non può** vedere un modulo **assente** da un posto: chi sta in un
+posto solo non contraddice nessuno. È il difetto di `fase147_tassa_comunale` — *vivo, dei
+soldi, e in nessun blocco*, cioè **mai giudicato per sempre**. Chiuso con
+`orfani_senza_blocco`, visto **ROSSO** togliendo `fase119` dal Blocco 1 (`[] != ['fase119']`)
+con ripristino byte-identico — e **gli altri 17 collaudi restavano verdi**, che è la prova che
+guarda qualcosa che nessun altro guardava.
+
+**(d) Ho inquinato la metrica con cui si sceglie il lavoro.** Nominare `fase133`/`fase66`/
+`fase43` negli **esempi** dei collaudi ha fatto salire il conto dei «test che li nominano» da
+2 a 5 — cioè la colonna con cui il piano decide **quale modulo è più cieco**. È la trappola
+scritta a `RIPRENDI_QUI.md:718` (*«fase85 ha 77 test che lo nominano ma lo FINGONO»*). I moduli
+finti adesso si chiamano **`fase9NN`**; i nomi veri restano solo dove la voce vera **è**
+l'oggetto della prova.
+
+### ⚙️ COME È FATTO — il giudizio in UN POSTO, tre chiamanti
+
+`collaudi/piano_dei_soldi.py` tiene **tutti** i criteri e **tutto** il testo dei rossi;
+`test_piano_dei_soldi.py` e il pre-fatto lo **importano**. Il precedente è
+`consegne_troppo_indietro` in `prima_di_lanciare.py:145`, importata da `test_pipeline_ci.py`
+invece di essere ricopiata, con lo stesso commento. ⛔ Senza questo, il pre-fatto avrebbe
+dovuto importare un *collaudo* per decidere se fermare un commit — direzione sbagliata — o
+tenerne una copia, che è la malattia stessa.
+⛔ E `rapporto()` copre **tutti e quattro** i modi di rompersi, non i due evidenti: *quello che
+manca lì non ferma nessun commit*, perché è la funzione che il gancio chiama.
+
+### 🧭 D24 — NUOVA DIRETTIVA DEL FONDATORE (2026-08-12): le regole **E I TEST** si rileggono
+
+*«leggere prima e dopo tutte le regole e i test e quelli esterni prima e dopo ogni operazione»*.
+
+⛔ **Non ripete l'obbligo di rileggere IL BLOCCO**, che riguarda i sei divieti: lo **estende**
+alla **batteria dei 10 collaudi** e a **quelli esterni**. La differenza è quella fra «non ho
+violato un divieto» e «ho dimostrato che funziona» — e in questa sessione era esattamente il
+buco: livelli ① e ② passati, **zero** dei dieci collaudi, giudice esterno e CI mai sfiorati.
+
+**Cosa è cambiato nella macchina, non nelle intenzioni.** I sei divieti li stampavano già
+`regole_avvio.py` all'avvio e `prima_di_dire_fatto.py` al commit. Misurato:
+`grep -c "10 COLLAUDI\|batteria"` su entrambi dava **0** — la metà «e i test» dell'ordine non
+esisteva. Ora il pre-fatto stampa la batteria **leggendo la tabella da `CLAUDE.md`**, mai
+ricopiandola: una copia potrebbe dire il falso il giorno che la tabella cambia, ed è il difetto
+che D24 nasce per impedire. E stampa anche le **due cose che il computer non può dare da solo**
+— il giudice non-nostro e la tabella dei job della CI letta dall'API.
+
+**Provata nelle due direzioni** (`test_IL_PRE_FATTO_RILEGGE_ANCHE_LA_BATTERIA`, e il nome è
+citato *dentro* D24, quindi se sparisse il regolamento dichiarerebbe il falso):
+· dichiara il **denominatore** — conta i collaudi in `CLAUDE.md` con un conto **indipendente**,
+  non con la funzione che sta giudicando, e pretende che il pre-fatto li stampi **tutti**;
+· togliendo la riga `stampa_la_batteria(radice)` diventa **ROSSA** —
+  *«il pre-fatto non rilegge più la batteria: D24 è tornata a dipendere dal ricordarsene»* —
+  con ripristino byte-identico (`sha256 897C99A7…`);
+· su un `CLAUDE.md` senza tabella **non inventa righe**, e su una cartella inesistente **non
+  esplode**: gira dentro un gancio di git, e un traceback lì blocca il commit per il motivo
+  sbagliato (già capitato il 2026-08-02).
+
+⚠️ **I conti del regolamento sono saliti, e li ha ricontati la macchina:** obblighi **103 → 104**,
+«gli altri» **59 → 60**, direttive **23 → 24**, in quattro punti di `CLAUDE.md`.
+`collaudi/regole_avvio.py` conferma leggendo dai file: *«il regolamento dice il vero su se
+stesso»*, uscita 0. ⛔ Quei numeri **non si aggiornano a mano sperando**: lo strumento grida.
+
+**⚠️ LE DUE TRAPPOLE CHE HANNO GUIDATO IL PROGETTO DEL FILE, e non erano prevedibili a mente.**
+Il marcatore **non è la spunta verde**, e leggerla avrebbe prodotto due falsi allarmi su moduli
+che nessuno ha finito:
+· `✅ fase147_tassa_comunale **AGGIUNTO: è VIVO**` ha la spunta ed è **DA FARE** (aggiunto al
+  piano, non completato);
+· nel Blocco 3 c'è `fase133 (già fatto in 1)`, che vuol dire «già **elencato** nel Blocco 1».
+  Un `.upper()` l'avrebbe trasformato in `FATTO` e il guardiano avrebbe gridato su `fase133`.
+Il marcatore vero è **`FATTO` in maiuscolo**, e il *case* è parte del giudizio. 💡 **Un falso
+allarme è un difetto quanto un allarme mancato** (regola ferrea 10): insegna a ignorare i
+segnali, e un guardiano che grida a torto viene spento entro tre giorni.
+
+**🔁 E LA MALATTIA SI È RIPRESENTATA DENTRO LA SUA PROPRIA CURA.** Togliere il lavoro finito
+dalla lista dei lavori obbligatori ha fatto scendere il conto da **cinque a quattro** — e quel
+numero era scritto in **tre** posti: `collaudi/regole_avvio.py` e i due documenti. 💡 *La cifra
+adesso non sta più in nessun documento:* la dice `python collaudi/regole_avvio.py`, che è
+l'unico che la **conta** invece di ricordarla. Scriverla di nuovo qui sarebbe stato creare un
+caso nuovo della malattia nella riga che la descrive.
+
+⛔ **COSA QUESTO GUARDIANO NON CONTROLLA** (D18 punto 3, e le righe sono stampate **dentro il
+messaggio di ogni rosso**, così si leggono quando servono): non dice se un modulo dichiarato
+FATTO lo sia **davvero** (quello lo dice solo il Giudice della mutazione, non un documento) ·
+non confronta i punti per-modulo col censimento vero, solo la somma col totale dichiarato ·
+conosce **tre** posti, quelli del 2026-08-12: **se qualcuno ne apre un quarto, non lo sa** ·
+eredita il bias GENEROSO di `raggiungibilita.py` (se dice MORTO è morto; un «vivo» potrebbe non
+partire mai) · non giudica i moduli che non sono dei soldi.
+
+### ⏳ I LAVORI OBBLIGATORI VIVONO NELLA MACCHINA, NON IN QUESTA PAGINA (2026-08-12)
 
 **Ordine del fondatore:** *«queste vanno fatte, scrivilo in modo che TUTTE le chat le facciano»*.
 ⛔ **Scriverle qui non sarebbe bastato**, ed è dimostrato dai fatti dello stesso giorno: il piano
@@ -385,11 +575,17 @@ chat, appena si apre. Non c'è modo di non vederla.
 
 | # | lavoro | costo | priorità |
 |---|---|---|---|
-| 1 | il guardiano del piano dei soldi (`test_piano_dei_soldi.py`) | mezza sessione | prima di riprendere i moduli |
-| 2 | **CodeQL** | 30 minuti | subito: il più economico |
-| 3 | **orologi di prova Stripe** | 1 sessione | alta |
-| 4 | **metamorfico** (⛔ solo sull'aritmetica del denaro) | mezza sessione | media, con F6 |
-| 5 | **il DENOMINATORE** | 1 sessione | alta |
+| ✅ | ~~il guardiano del piano dei soldi (`test_piano_dei_soldi.py`)~~ | **FATTO 2026-08-12** | uscito dalla lista nello stesso commit |
+| 1 | **CodeQL** | 30 minuti | subito: il più economico |
+| 2 | **orologi di prova Stripe** | 1 sessione | alta |
+| 3 | **metamorfico** (⛔ solo sull'aritmetica del denaro) | mezza sessione | media, con F6 |
+| 4 | **il DENOMINATORE** | 1 sessione | alta |
+
+⛔ **QUANTI SONO NON STA SCRITTO QUI, E NON È PIGRIZIA.** Erano cinque; il primo è stato fatto
+il 2026-08-12 e togliendolo la cifra è cambiata in **tre** posti — l'attrezzo e questi due
+documenti. Il numero lo dice `python collaudi/regole_avvio.py`, che è l'unico che lo **conta**
+invece di ricordarlo. Scriverlo anche qui sarebbe creare un nuovo caso della malattia dentro
+la riga che la descrive: *lo stesso fatto in tre posti, e la copia più lontana resta indietro*.
 
 ⛔ **Ogni voce dichiara QUANDO È FINITA**, ed è la stessa regola che questo progetto applica alle
 norme: *una cosa che non si può controllare non è un lavoro, è un desiderio*. «Fai CodeQL» senza

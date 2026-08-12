@@ -246,7 +246,7 @@ automatica fa fallire la suite se i due divergono):
 
 # ⚙️ REGOLA FERREA DI OPERATIVITÀ E PRECISIONE
 
-> ## 📌 GLI OBBLIGHI SONO **103**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
+> ## 📌 GLI OBBLIGHI SONO **104**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
 > **Contati dai file il 2026-08-07, non a memoria** (`python collaudi/regole_avvio.py` li
 > ricontrolla a ogni sessione e **grida** se questi numeri non tornano):
 >
@@ -259,9 +259,9 @@ automatica fa fallire la suite se i due divergono):
 > · **29** stanno nell'appendice di `REGISTRO_INGEGNERIA.md`, con prova e fonte per esteso.
 > Più le **24 uccise** dai revisori ostili **col motivo**: dicono cosa NON vale la pena rifare.
 >
-> ### 🧭 GLI ALTRI **59** — nati dai NOSTRI danni
+> ### 🧭 GLI ALTRI **60** — nati dai NOSTRI danni
 > **IL BLOCCO (6 divieti assoluti, in cima a questo file)** · Regola zero (**5**) ·
-> **23 direttive del fondatore** · modi di rompersi (**11**) ·
+> **24 direttive del fondatore** · modi di rompersi (**11**) ·
 > collaudi (**10**) · direttiva finale (**4**). Non hanno uno studio dietro: hanno una
 > **cicatrice**. Valgono uguale, e da oggi **portano anch'essi il «si verifica così»**.
 >
@@ -271,7 +271,7 @@ automatica fa fallire la suite se i due divergono):
 > che **non viaggia col progetto**: su un altro computer, o in CI, non esistevano.
 > **2026-08-01, sera**: mescolai le due famiglie in un unico numero — e mescolare fa perdere
 > di vista proprio ciò che è stato pagato.
-> **Rimedio definitivo:** le direttive del fondatore sono **entrate nel repository** (D1-D23
+> **Rimedio definitivo:** le direttive del fondatore sono **entrate nel repository** (D1-D24
 > qui sotto), ogni regola dice **come si verifica**, e lo strumento d'avvio conta tutto e
 > **segnala chi non dice come si controlla**. Una regola che non si può controllare non è
 > una regola: è un desiderio.
@@ -392,7 +392,7 @@ solo è il canale principale delle regressioni. Il fondatore se n'è accorto pri
 
 ---
 
-# 🧭 LE 23 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
+# 🧭 LE 24 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
 
 > **Perché stanno qui e non solo in memoria.** Fino al 2026-08-01 vivevano nella memoria di
 > sessione: **non viaggiavano col progetto**. Su un altro computer, o dentro la CI, non
@@ -679,6 +679,38 @@ esatto**, (b) l'**ambiente** in cui è girato (interprete, dipendenze, e il `PAT
 interrogato **risponde qualcosa di diverso da 404**. E un numero che cala senza spiegazione — test
 **raccolti** contro test **eseguiti** — non si arrotonda e non si sceglie il più comodo: si insegue
 finché non ha un nome.
+
+**D24. LE REGOLE E LA BATTERIA SI RILEGGONO PRIMA E DOPO OGNI OPERAZIONE — E «I TEST»
+COMPRENDONO QUELLI ESTERNI.** Dettata dal fondatore il **2026-08-12**: *«leggere prima e dopo
+tutte le regole e i test e quelli esterni prima e dopo ogni operazione»*.
+
+**Non ripete l'obbligo di rileggere IL BLOCCO** (quello riguarda i sei divieti): lo **estende**
+alla **batteria dei 10 collaudi** e a **quelli esterni** — il giudice non-nostro e la CI su
+Linux. La differenza non è formale: è la differenza fra «non ho violato un divieto» e «ho
+dimostrato che funziona».
+
+*Com'è nata, e non è un'ipotesi.* Quel giorno avevo scritto «guardia scritta e provata nelle
+due direzioni» avendo passato i livelli ① e ② e **zero** dei dieci collaudi, col giudice
+esterno e la CI mai sfiorati. Il fondatore ha chiesto se li avessi letti. Rileggendo **le 44
+dell'appendice** sono venuti fuori **cinque** buchi, e il più grave era che il guardiano
+appena scritto **non era collegato al gancio del commit**: girava solo dentro un ciclo da 25
+minuti, quindi un piano contraddittorio si poteva salvare e lo si scopriva mezz'ora dopo. È la
+regola **#23** («COSTRUITO ≠ COLLEGATO») e nessun divieto lo avrebbe mai fatto emergere.
+
+⛔ **E non è affidata alla buona volontà, perché così si rompe di nuovo** (è la lezione di
+D22 e del paracadute `:prec`, sbagliato quattro volte in quattro giorni). I sei divieti li
+stampano già `regole_avvio.py` all'avvio e `prima_di_dire_fatto.py` al commit; da oggi il
+pre-fatto stampa **anche la batteria**, leggendo la tabella dei 10 collaudi **da questo file**
+invece di ricopiarla — una copia potrebbe dire il falso il giorno che la tabella cambia, ed è
+esattamente il difetto che questa direttiva nasce per impedire.
+
+*Si verifica:* prima di ogni «fatto», nel registro della sessione compare per **ognuno** dei
+dieci collaudi l'esito **oppure il motivo dichiarato** per cui non si applica — un collaudo
+senza esito e senza motivo non è un successo, è **NON ESEGUITO** (sbaglio S7). E per «quelli
+esterni» compaiono le due cose che il computer da solo non può dare: l'esito di uno strumento
+**non nostro** (collaudo 7) e la **tabella dei job della CI** letta dall'API (regola ferrea 8),
+mai «immagino sia verde». La guardia meccanica è
+`test_IL_PRE_FATTO_RILEGGE_ANCHE_LA_BATTERIA` in `test_pipeline_ci.py`.
 
 ---
 
