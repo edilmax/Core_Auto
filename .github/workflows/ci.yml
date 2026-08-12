@@ -120,8 +120,47 @@ jobs:
       # cricchetto e pretende di vederlo uscire diverso da zero sotto la soglia.
       - name: Dipendenze di test
         run: pip install -r requirements.txt hypothesis pyyaml coverage
+      # ⛔ IL REGISTRO VA SU FILE, NON DENTRO UN TUBO (regola ferrea 7). Il 2026-08-12
+      # questo job e' andato rosso e il nome del test caduto NON si e' potuto leggere:
+      # GitHub tronca il log a schermo ("This step has been truncated due to its large
+      # size") proprio dove sta il riassunto, e l'API dei log risponde 403 senza diritti
+      # da amministratore. Risultato: un rosso vero, e nessuno in grado di dire QUALE
+      # test fosse. Sono state buttate ore a cercarlo di rimbalzo.
+      #
+      # `|| ESITO=$?` piu' `exit ${ESITO:-0}` conserva ESATTAMENTE il codice d'uscita di
+      # python: niente `| tee` (un tubo restituisce l'esito dell'ULTIMO comando, ed e'
+      # gia' costato una volta a questo progetto) e niente `|| true`, che disarmerebbe il
+      # gate. Il `cat` serve perche' il log resti anche a schermo, come prima.
       - name: Suite completa
-        run: python -m unittest discover -s . -p "test_*.py"
+        run: |
+          python -m unittest discover -s . -p "test_*.py" > suite.log 2>&1 || ESITO=$?
+          cat suite.log
+          exit ${ESITO:-0}
+
+      # I nomi dei test caduti nel RIEPILOGO della run: poche righe, impossibili da
+      # troncare, e visibili a chiunque possa leggere il repository -- senza permessi
+      # speciali e senza scaricare niente. E' il muro contro cui si e' sbattuto oggi.
+      - name: I test caduti, nel riepilogo (si legge senza permessi)
+        if: failure()
+        run: |
+          {
+            echo "## Test caduti in \`full-suite\`"
+            echo ""
+            echo '```'
+            grep -E '^(FAIL|ERROR):' suite.log || echo "(nessuna riga FAIL:/ERROR:: la suite e' morta prima del riassunto)"
+            echo '```'
+            echo ""
+            echo "_Registro completo: allegato \`suite-log-full-suite\` di questa run._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # E il registro INTERO come allegato, per quando il riepilogo non basta.
+      - name: Il registro intero come allegato
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: suite-log-full-suite
+          path: suite.log
+          retention-days: 14
 
   # ==========================================================================
   #  FULL-SUITE-311 — la stessa suite sul Python della PRODUZIONE (3.11)

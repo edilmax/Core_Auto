@@ -386,10 +386,14 @@ z3: *una dimostrazione vale quanto il modello su cui è fatta*).
 > compresi `full-suite`, **`full-suite-311`** (il Python di PRODUZIONE) e `immagine` (l'immagine
 > Docker si costruisce, si avvia davvero e risponde alla sonda). Suite locale prima del commit:
 > `Ran 5562 tests · OK (skipped=4) · uscita 0`.
-> 🔴 **DEPLOY NON FATTO: il VPS è fermo a `2c142f5`.** Non è una dimenticanza — è il passo che
-> aspetta la parola del fondatore. Finché non si deploya, il sito serve il codice **con dentro
-> tutti e cinque i difetti**. ⚠️ Oggi non può fare danno (in produzione **0 annunci** e nessuna
-> `TASSE_SOGGIORNO`, misurato dentro il contenitore), ma il giorno del primo host sì.
+> ✅ **DEPLOY FATTO** il 2026-08-12 col protocollo D17: VPS su `8ab5386`, sonde `200`/`200`,
+> sonda negativa **403**, `verifica_produzione` → **190 controlli, 0 violazioni, uscita 0**,
+> gettone consumato. ⚠️ Al passo [1b] il paracadute `:prec` era di nuovo agganciato a
+> un'immagine **vecchia** ed è stato ri-agganciato a quella viva: **la trappola costata sei
+> volte in sei giorni, presa dall'attrezzo e non dall'attenzione di nessuno.**
+> ⛔ **E la riparazione è stata provata ESEGUENDOLA dentro il contenitore vivo**, non dedotta
+> dal commit: `cap -1` → **0 cents** (prima 21000), `cap 7` → 4900 invariato, e
+> `valida_scheda` rifiuta `-1`/`7.5`/`-350` accettando il valido e l'assente.
 
 **Primo modulo del Blocco 1.** Verificato **acceso** prima di toccarlo (`raggiungibilita.py`:
 151 moduli, 88 raggiungibili, 63 morti, `fase66` **non** fra i 63; usato da `fase59`, `fase83`,
@@ -555,6 +559,55 @@ fosse sbagliata, sarebbero sbagliate tutte e due allo stesso modo. Dice una cosa
 `test_fase66_tassa_soggiorno` e l'oracolo indipendente di `test_happy_conti`, che rifà il conto
 per un'altra strada. E la griglia è un **campione ragionato sui confini**, non l'infinito: è
 dichiarata in `GRIGLIA`, in chiaro, non nascosta nel codice.
+
+### 🐛 DEBITO APERTO E DICHIARATO: **UN TEST CHE MENTE OGNI TANTO, E NON SI SA QUALE**
+
+⛔ **La prova che esiste è inattaccabile.** Il 2026-08-12, sul commit `6b086d5` (due soli `.md`),
+i job della CI sono partiti **tutti allo stesso istante** (10:41:26-27 UTC):
+
+| job | comando | durata | esito |
+|---|---|---|---|
+| `full-suite` | `python -m unittest discover -s . -p "test_*.py"` | 9m26s | 🔴 **rosso** |
+| `copertura` | `coverage run -m unittest discover -s . -p "test_*.py"` | 11m37s | ✅ **verde** |
+
+**Stessa suite, stesso Python 3.9, stesso Linux, stesso commit, stesso momento.** Non è l'ora del
+giorno (sono partiti insieme), non è la versione di Python, non è il contenuto del commit. È un
+test **non deterministico** — la categoria che questo progetto chiama **INCERTO**: *«non dimostra
+che il codice sia rotto, dimostra che NON SI SA»*.
+
+💡 **UN SOSPETTATO GIÀ SCAGIONATO, con la misura e non con l'intuito.**
+`test_RESTA_SOTTO_IL_TETTO_DICHIARATO` fallisce quando la macchina è **lenta** — e il job più
+lento (`copertura`, +2 minuti) è proprio quello **verde**. Quindi il difetto si manifesta quando
+le cose vanno **veloci**: è la firma di una gara fra processi, o di due eventi che cadono nello
+stesso istante di orologio (due `time.time()` consecutivi che danno lo stesso valore).
+
+⛔ **NON riprodotto su Windows in SEI giri interi** della suite in un giorno (tre di lavoro + tre
+di caccia dedicata, tutti `Ran 5562 · OK`). O vive dal lato Linux, o è più raro di così.
+⚠️ **Il VPS non è un banco di prova**: ha **una sola CPU**, e occuparla 25 minuti per cercare un
+difetto nei test vorrebbe dire rallentare il sito vero. Scartato per questo, non per pigrizia.
+
+✅ **LA CURA È STRUTTURALE, NON UNA CACCIA: la CI adesso consegna il nome da sola.** Il motivo
+per cui si è persa mezza giornata è che il nome **non si poteva leggere**: GitHub tronca il log a
+schermo (*«This step has been truncated due to its large size»*) proprio sul riassunto finale, e
+l'API dei log risponde `403 — Must have admin rights`. Ora il job `full-suite` scrive il registro
+su file, mette i **nomi dei test caduti nel riepilogo della run** (poche righe, non troncabili,
+leggibili senza permessi) e allega il **registro intero**. ⛔ Senza tubi: `|| ESITO=$?` più
+`exit ${ESITO:-0}` conserva esattamente il codice d'uscita di python (regola ferrea 7), e non
+c'è nessun `|| true` che disarmerebbe il gate.
+🔜 **Come si chiude:** al prossimo rosso si legge il nome e si ripara. ⛔ **Non si chiude
+rilanciando il job finché diventa verde**: quello nasconde il difetto, non lo toglie.
+
+### 🩹 E UNA LEZIONE PAGATA DURANTE LA CACCIA STESSA — il mio attrezzo ha mentito
+
+Lo script di caccia dichiarava «**BECCATO AL GIRO 4**». Era **falso**, due volte:
+il giro 4 era quello che **avevo ucciso io** cinque minuti prima (`uscita=-1`, campo `Ran`
+**vuoto**), e il filtro cercava le righe che iniziano con `ERROR:` — pescando i **messaggi di log
+dell'applicazione** (`ERROR:core_auto.server:…`) e scambiandoli per fallimenti di test.
+
+💡 **È la stessa malattia che il progetto insegue nel prodotto, applicata all'attrezzo che la
+cerca:** un rilevatore che guarda la cosa sbagliata produce una scoperta che non esiste. Si è
+salvato solo perché il codice d'uscita era `-1` e il campo `Ran` era vuoto. **Regola: prima di
+credere a un verdetto si guarda il codice d'uscita — anche al proprio.**
 
 ### 🕸️ LA RETE ANTI-INTERRUZIONE SI È RIPAGATA — E LA COLPA ERA MIA
 

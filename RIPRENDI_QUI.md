@@ -27,23 +27,56 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > ⛔ **Il pre-fatto pretende che il pre-volo sia girato prima** (gli serve lo scopo
 > dichiarato). Se ti blocca al commit, il messaggio ti dice il comando: sono 4 secondi.
 >
-> ### 🔴 LA PRIMA COSA CHE DEVI SAPERE: **IL SERVER E' INDIETRO. IL DEPLOY NON E' STATO FATTO.**
-> Il 12 agosto sono stati riparati **cinque difetti sui soldi** (tassa di soggiorno) e uniti su
-> `master` con la richiesta **#30**. **Sul VPS non ci sono.** Il sito che gira in questo momento
-> ha ancora dentro tutti e cinque, compreso quello che fa pagare **161,00 EUR in piu'**
-> all'ospite se l'host sbaglia a scrivere il tetto delle notti.
-> ⚠️ **Oggi non puo' fare danno**, e questo va detto per non spaventare inutilmente: in
-> produzione ci sono **0 annunci** e nessuna `TASSE_SOGGIORNO` (misurato dentro il contenitore
-> il 12 agosto, `catalogo.db` -> `annunci: 0`). Ma **il giorno che entra il primo host il
-> codice deve gia' essere quello nuovo.** Il deploy non e' stato fatto perche' il fondatore non
-> l'ha ancora autorizzato: **non e' una dimenticanza, e' un passo che aspetta la sua parola.**
+> ### ✅ IL DEPLOY E' FATTO, E LE RIPARAZIONI SONO VIVE IN PRODUZIONE
+> Il 12 agosto sono stati riparati **cinque difetti sui soldi** (tassa di soggiorno), uniti su
+> `master` con la richiesta **#30** e **messi in produzione** con il protocollo D17.
+> ⛔ **Provato ESEGUENDO dentro il contenitore vivo, non dedotto dal commit:**
+> ```
+> cap  7 (valido)   -> tassa 4900 cents
+> cap -1 (invalido) -> tassa    0 cents      <- prima erano 21000
+> cap notti -1 in pubblicazione -> ok=False  motivo=tassa_max_notti_non_valido
+> VALIDO cap 7 / NIENTE tassa   -> ok=True   (la riparazione non ha accecato niente)
+> ```
+> D17 nei tre passi: punto di ritorno `2c142f5` riletto dal disco · ⚠️ il paracadute `:prec`
+> era agganciato a un'immagine **vecchia** ed e' stato ri-agganciato a quella viva (**la
+> trappola costata sei volte in sei giorni, presa dall'attrezzo**) · backup verificato
+> **aprendolo** (`SQLite format 3`) · sito sano dopo **6 secondi**, `money_path_pronto: True` ·
+> sonde `200`/`200`, sonda **negativa 403** · `verifica_produzione`: **190 controlli, 0
+> violazioni, uscita 0** · gettone consumato.
+>
+> ### ⚠️ IL DEBITO APERTO: **C'E' UN TEST CHE MENTE OGNI TANTO, E NON SI SA QUALE**
+> ⛔ **La prova che esiste e' inattaccabile**, e va letta prima di dire «sara' stata una
+> combinazione»: il 2026-08-12 sul commit `6b086d5` i job della CI sono partiti **tutti allo
+> stesso istante** (10:41:26-27 UTC) e
+> ```
+> full-suite   python -m unittest discover ...       9m26s   ROSSO
+> copertura    coverage run -m unittest discover ... 11m37s  VERDE
+> ```
+> **Stessa suite, stesso Python 3.9, stesso Linux, stesso commit, stesso momento: uno rosso e
+> uno verde.** Non e' l'ora del giorno, non e' la versione di Python, non e' il contenuto del
+> commit (erano due soli `.md`). E' un test **non deterministico**.
+> 💡 **Un sospettato gia' SCAGIONATO, con la misura:** `test_RESTA_SOTTO_IL_TETTO_DICHIARATO`
+> cade quando la macchina e' *lenta* — e il job **piu' lento (`copertura`, +2 minuti) e' quello
+> VERDE**. Quindi il difetto salta fuori quando le cose vanno **veloci**: firma di una gara fra
+> processi, o di due eventi che cadono nello stesso istante di orologio.
+> ⛔ **NON riprodotto su Windows in SEI giri interi** della suite (tre di lavoro + tre di
+> caccia, tutti `Ran 5562 · OK`): o vive dal lato Linux, o e' piu' raro di cosi'.
+> ✅ **Per questo la CI adesso lo CONSEGNA da sola** (vedi `full-suite` in `ci.yml`): al
+> prossimo rosso i nomi dei test caduti finiscono nel **riepilogo della run** e il registro
+> intero in un **allegato**. Oggi non si sono potuti leggere: GitHub tronca il log a schermo
+> proprio sul riassunto, e l'API risponde `403` senza diritti da amministratore.
+> ⛔ **E UNA LEZIONE PAGATA DURANTE LA CACCIA STESSA:** il mio script cercava le righe che
+> iniziano con `ERROR:` e ha pescato i **messaggi di log dell'applicazione**, annunciando
+> «BECCATO» su un giro che avevo **ucciso io** (`uscita=-1`, campo `Ran` vuoto). Un rilevatore
+> che guarda la cosa sbagliata produce una scoperta che non esiste: **si controlla sempre il
+> codice d'uscita prima di credere a un verdetto**, anche al proprio.
 >
 > ### 📍 DOVE SIAMO — misurato il 12 agosto, ma **RIMISURALO**, non fidarti di questa riga
 > | posto | comando | valore |
 > |---|---|---|
 > | computer | `git rev-parse --short HEAD` | `8ab5386` |
 > | GitHub | `git rev-parse --short origin/master` | `8ab5386` |
-> | VPS | `ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'` | 🔴 `2c142f5` **INDIETRO** |
+> | VPS | `ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'` | ✅ `8ab5386` **deploy fatto** |
 > | chiavetta | gesto fisico del fondatore | ⏳ `cd95f73` |
 >
 > ✅ **La richiesta #30 e' UNITA DAVVERO**, non solo chiusa: letto dall'API,
@@ -239,14 +272,17 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > differenza fra allora e oggi non e' la prudenza di chi lavora, e' che adesso c'e' la rete.
 >
 > ### ▶️ COSA FARE, IN QUEST'ORDINE
-> **1. 🔴 IL DEPLOY** — e' l'unica cosa in sospeso di questo blocco. Il VPS e' a `2c142f5`,
-> `master` e' a `8ab5386`. Serve la parola del fondatore, poi si segue il **protocollo D17**
-> (`deploy/protocollo_d17.sh`: fase `prima` -> `scambio`, il gettone e' obbligatorio) e alla
-> fine `collaudi/verifica_produzione.py`. ⛔ **`docker compose` v2, mai `docker-compose` v1**:
-> quello butta giu' il sito. ⛔ E si guarda l'immagine **dentro** il contenitore, non il commit
-> del repository.
+> **1. ✅ IL DEPLOY E' FATTO** (vedi sopra). Per il prossimo: **protocollo D17**
+> (`deploy/protocollo_d17.sh`: `prima` -> `scambio` -> `dopo`, il gettone e' obbligatorio) e
+> alla fine `collaudi/verifica_produzione.py`. ⛔ **`docker compose` v2, mai `docker-compose`
+> v1**: quello butta giu' il sito. ⛔ E si guarda l'immagine **dentro** il contenitore.
+> ⚠️ **Il VPS ha UNA sola CPU**: non ci si lancia la suite per fare esperimenti, si rallenta
+> il sito vero.
 > **2. 🔑 LA CHIAVETTA**, ferma a `cd95f73`: gesto fisico del fondatore.
-> **3. ▶️ IL MODULO DOPO**: `fase133_split_quote_uguali`, poi `fase119_calendario_prezzi`.
+> **3. 🐛 IL TEST INTERMITTENTE** (vedi il debito qui sopra): al prossimo rosso della CI il
+> nome arriva da solo nel riepilogo della run. **Non chiuderlo rilanciando il job finche' non
+> diventa verde**: quello lo nasconde, non lo ripara.
+> **4. ▶️ IL MODULO DOPO**: `fase133_split_quote_uguali`, poi `fase119_calendario_prezzi`.
 > 💡 **E questo e' il metodo che ha funzionato su `fase66`, da rifare uguale sugli altri 10:**
 > verificare che il modulo sia **acceso** -> leggere il **contratto** -> chiedersi cosa i
 > collaudi esistenti **non possono vedere** -> guardare i **confini** con chi lo usa (i difetti
