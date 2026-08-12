@@ -236,17 +236,17 @@ ordine* — unitari → integrazione → E2E → **mutazione (il Giudice)**. Un 
 
 **L'ordine dei blocchi lo decide `rischio × cecità`, non la dimensione.**
 📊 **DOVE SIAMO, rimisurato col censimento il 2026-08-12** (⛔ rimisuralo, non fidarti):
-**6 moduli dei soldi giudicati** · **11 che restano, per 400 punti**. Erano «16 per 516» il
-2026-08-10: due sono stati fatti (`fase167`, `fase66`) e **tre sono usciti perché sono codice
+**7 moduli dei soldi giudicati** · **10 che restano, per 376 punti**. Erano «16 per 516» il
+2026-08-10: tre sono stati fatti (`fase167`, `fase66`, `fase133`) e **tre sono usciti perché sono codice
 morto** (`fase43` 31 · `fase44` 25 · `fase35` 25 = **81 punti che non vanno fatti**).
 La tabella completa, con quanti test nominano ciascuno e il blocco di appartenenza, sta in
 `RIPRENDI_QUI.md` sezione «QUANTO MANCA SUI SOLDI».
 
 | blocco | moduli | punti | perché in questo ordine |
 |---|---|---|---|
-| **1** | ✅ `fase167_credito_single_use` **FATTO 2026-08-11** (11/11 uccisi, 1 difetto vero) · ✅ `fase66_tassa_soggiorno` **FATTO 2026-08-12** (24/24 uccisi, **0 sopravvissuti e 0 equivalenti**, **5 difetti veri**) · ▶️ `fase133_split_quote_uguali` (24) · `fase119_calendario_prezzi` (15) | 74, **ne restano 39** | **i quattro più ciechi**: 1, 2, 2 e 2 test li nominano. `fase167` per primo: un difetto lì è **denaro speso due volte** — e infatti ce n'era uno. Su `fase66` ce n'erano **cinque**, tutti che facevano pagare di più all'ospite |
+| **1** | ✅ `fase167_credito_single_use` **FATTO 2026-08-11** (11/11 uccisi, 1 difetto vero) · ✅ `fase66_tassa_soggiorno` **FATTO 2026-08-12** (24/24 uccisi, **0 sopravvissuti e 0 equivalenti**, **5 difetti veri**) · ✅ `fase133_split_quote_uguali` **FATTO 2026-08-12** (15/22 uccisi, **0 sopravvissuti sul codice VIVO**, 7 dichiarati su codice morto, **1 difetto vero: memoria senza tetto da rotta pubblica**) · ▶️ `fase119_calendario_prezzi` (15) | 74, **ne restano 15** | **i quattro più ciechi**: 1, 2, 2 e 2 test li nominano. `fase167` per primo: un difetto lì è **denaro speso due volte** — e infatti ce n'era uno. Su `fase66` ce n'erano **cinque**, tutti che facevano pagare di più all'ospite |
 | **2** | ⛔ `fase43_commissione` **TOLTO: è CODICE MORTO** · `fase98_policy_commissione` · `fase111_cancellazione` · ✅ `fase147_tassa_comunale` **AGGIUNTO: è VIVO e il piano se lo dimenticava** | **58** (18+11+29) | la catena della commissione e dei rimborsi, dove i numeri si incrociano — più la tassa comunale, che è l'altra metà della coppia di `fase66` |
-| **3** | `fase65_split_payment` · `fase133` (già fatto in 1) · `fase101_stripe_connect` | 109 | i soldi che si dividono e quelli che escono verso l'host |
+| **3** | `fase65_split_payment` · ✅ `fase133` **FATTO 2026-08-12** (era elencato nel Blocco 1) · `fase101_stripe_connect` | 109 | i soldi che si dividono e quelli che escono verso l'host |
 | **4** | `fase162_pagamenti_pendenti` · `fase131_payout_dashboard` | 153 | i più grossi ma i **meno ciechi** (13 e 11 test): ultimi apposta |
 | **5** | `fase85_pagamenti_stripe` · `fase87_stripe_webhook` | 41 | ⚠️ **sembrano** i più coperti (77 e 59 test) ma quei test li **fingono**: nominare non è provare |
 
@@ -370,6 +370,77 @@ mai. Serve una lista **chiusa**, non una lunga.
   arrivato da solo il 2026-07-30, quando il consumo del credito è passato a **RIFIUTA**.
 - **Agenti in sola lettura** → 1 sessione, **e SOLO dopo F1**. Resa storica: **146 sospetti → 4
   correzioni vere** (97% rumore).
+
+### ✅ FATTO 2026-08-12 — `fase133`: UNA RICHIESTA PUBBLICA DA 40 BYTE POTEVA BUTTARE GIÙ IL SITO
+
+**Il difetto, e sta al CONFINE — non nell'aritmetica.** `fase83_server.py:6748` passa
+`dati.get("n")` — un numero che arriva dal **browser** — dritto a `riparti_uguale`, dietro
+`POST /api/split/preview`. Quella rotta è **pubblica**: `gestisci` (`:1757`) chiama `_instrada`
+senza nessun controllo di sessione, e fra la riga 1797 e la 1849 non c'è **un solo `if`** di
+autenticazione. Il modulo dichiarava di sé *«BLINDATO: input invalido → []»*: **falso**, perché
+un `n` enorme non è *invalido* per i suoi controlli — è un intero positivo, quindi passa.
+
+**Misurato, non estrapolato:**
+```
+n=1.000.000 -> 0,035 s   8.448.728 byte
+n=4.000.000 -> 0,145 s  34.724.184 byte      crescita LINEARE in n
+```
+A `n=10**9` la richiesta chiede ~8,7 GB (questa sì è un'estrapolazione, e va detto): il
+processo muore. ⚠️ **Il rate limit non copre questo:** non servono mille richieste, ne basta
+**una** da quaranta byte. Sul VPS, che ha **una sola CPU**, l'effetto è il sito giù.
+⚠️ **In produzione ci sono 0 annunci**, quindi nessuno l'ha mai sfruttato.
+
+✅ **Riparato con `MAX_PARTECIPANTI = 1000` e DUE righe eseguibili** (`0 < n <= MAX`). Il numero
+dichiara chi ci perde (D16): troppo basso e un gruppo legittimo non divide più il conto, e ci
+perde l'host; mille lascia due ordini di grandezza di margine e costa pochi kilobyte.
+⛔ **Rifiuta, non tronca:** troncare risponderebbe a una domanda diversa in silenzio, ed è la
+lezione di `fase66` — «azzerare un valore invalido» lo trasformava nella lettura più cara.
+
+**D20 nei quattro passi + la riprova:** guardia scritta → **ROSSA**
+(`[] != [1, 1, 1, … 5999953 caratteri]`, cioè due milioni di elementi allocati) → riparazione →
+**VERDE**, col test crollato da **6,25 s a 0,002 s** → difetto **rimesso dentro** → **rossa di
+nuovo**, e il tempo risalito a 6,17 s → ritolto, ripristino **byte-identico** (`900818F6…`).
+💡 **E la riprova ha insegnato qualcosa:** `test_IL_MODULO_DICHIARA_UN_TETTO` è rimasto **verde**
+col difetto dentro, perché avevo tolto solo l'*uso* della costante. **Dichiarare un tetto e
+applicarlo sono due cose**: una guardia che controlla solo l'esistenza della costante è un
+ornamento. Serve la coppia.
+
+**I quattro livelli, tutti (D3).** ③ l'E2E **non è stato saltato** — è il livello che il
+2026-08-12 aveva trovato il difetto più grave di `fase66`: attraversa la rotta vera col router
+vero, pretende **400 `parametri_non_validi`** su `n` assurdo **e 200 con `[3334,3333,3333]`** su
+un gruppo normale, perché `deploy/index.html:669` usa davvero quell'anteprima e riparare un
+difetto rompendo una cosa che funziona è un difetto nuovo.
+
+### ⚖️ IL GIUDICE: 22 provati · 15 uccisi · 7 sopravvissuti — e i 7 dicono una cosa
+
+Primo giro **9 sopravvissuti**; due erano su codice **VIVO**, righe 43 e 46, e sono **lo stesso
+buco**: il confine `totale = 0`. Nessun collaudo lo copriva — `test_invalidi` provava `-5` e
+`"x"`, mai **lo zero**, che è il confine e non un caso strano. Era il sospetto n.3 della mia
+lista, ma **il ragionamento non basta: l'ha confermato il Giudice**.
+✅ **Chiuso SCRIVENDO IL TEST CHE MANCAVA, non cambiando il codice**, e quel test **dichiara una
+scelta** che prima non era scritta da nessuna parte: *zero è un totale legittimo, e tre persone
+che dividono zero prendono zero ciascuna*. Coi mutanti la rotta avrebbe risposto **400** su un
+totale che non ha niente di invalido. Ora chi sposta quel confine trova rosso lo stesso giorno.
+
+⛔ **I 7 CHE RESTANO NON SONO DICHIARATI EQUIVALENTI** (B6, e D19: *«oggi non si raggiunge» è
+una conclusione con una premessa, non una proprietà*). Sono tutti dentro `SplitQuoteUguali`
+(righe 99·99·103·121·122·135·161), cioè `crea_gruppo`/`paga`/`crea_split_quote`: **codice che
+la produzione non raggiunge**, misurato — zero chiamate a `crea_split_quote` in tutto il
+progetto fuori dai test. **Zero sopravvissuti sul codice vivo.** Cosa farne di quella classe —
+collaudarla, cancellarla o collegarla — è una decisione di prodotto, non tecnica.
+
+🔴 **E IL DATO CHE VALE PIÙ DEL MODULO, confermato da DUE strumenti indipendenti.** Il Giudice
+ha speso **7 dei suoi 9 rilievi su cadaveri**. La produzione raggiunge **~9 righe su 142** di
+questo file (solo `riparti_uguale`, da `fase83_server.py:6747`), perché `raggiungibilita.py`
+conta gli **import** e non i **simboli usati**. Quindi la classifica **«rischio × cecità»** che
+ordina gli 11 moduli dei soldi è tarata su numeri gonfiati, e **nessuno strumento del progetto
+oggi lo dice**. ⚠️ Prima di attaccare `fase119` (15 punti) vale la stessa domanda: *quanti di
+quei punti sono su codice che la produzione esegue?*
+
+⚠️ **Costo del giro, da sapere prima di rifarlo:** ogni mutante paga **tutto** l'insieme dei
+test guardiani, e l'E2E costruisce un sistema vero — quindi quel costo si paga **22 volte**.
+Il giro è passato da 36,9 s a 27,7 s di mutazione pura ma **oltre dieci minuti** in tutto. È la
+regola già pagata: *i sorveglianti si scelgono cronometrandoli, non a intuito*.
 
 ### ✅ FATTO 2026-08-12 — IL GUARDIANO DEL PIANO DEI SOLDI: `test_piano_dei_soldi.py`
 
