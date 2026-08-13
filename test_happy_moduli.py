@@ -520,6 +520,13 @@ CODICI_VISIBILI = (
     # preventivo via email (index.html)
     "campi_mancanti", "non_disponibile", "gia_inviato_riprova_piu_tardi",
     "troppe_richieste_per_questa_email", "email_non_disponibile", "invio_fallito",
+    # pannello host — calendario prezzi (`GET /api/host/calendario_prezzi`).
+    # ⛔ 2026-08-13: questi QUATTRO finivano grezzi in faccia all'host, e nessuna
+    # guardia poteva vederlo: l'elenco qui sopra e' compilato A MANO, quindi il
+    # denominatore non era «i codici che il server restituisce» ma «quelli che
+    # qualcuno si e' ricordato di scrivere». Tre c'erano da prima; il quarto
+    # (`range_date_non_valido`) e' nato quel giorno insieme alla rotta che lo usa.
+    "alloggio_mancante", "date_mancanti", "non_tuo", "range_date_non_valido",
 )
 
 

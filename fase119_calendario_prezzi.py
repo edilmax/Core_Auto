@@ -34,9 +34,41 @@ def _giorni(da: str, a: str) -> List[str]:
         return []
 
 
+def _distanza(oggi: Optional[str], giorno: str) -> int:
+    """Giorni che mancano da `oggi` al `giorno`, per il fattore temporale di fase106.
+
+    `oggi` si INIETTA e non si legge qui dentro: chiamare `date.today()` in una
+    funzione di calcolo la rende impura e lega i suoi collaudi all'orologio di
+    sistema (Haki Benita, «Stop Using datetime.now!»; Adam Johnson 2020 —
+    e appendice R1 punto 4, che raccomanda date relative o orologio iniettato).
+    Se la data non si puo' leggere si torna 30, cioe' ESATTAMENTE il default del
+    motore: nessun fattore applicato, mai un numero inventato.
+
+    ⛔ Lo stesso vale per un giorno GIA' TRASCORSO. Il calendario dell'host
+    mostra anche il passato, e li' lo sconto «ultimo minuto» non ha senso: una
+    notte del mese scorso non si riempie svendendola. La prima versione di
+    questa funzione restituiva la distanza negativa, il motore la leggeva come
+    `<= 2` e applicava -15% a giorni gia' finiti; l'ha vista `test_prezzo_
+    dinamico_applicato`, che esisteva da prima e pretendeva 13000 su una data
+    ormai passata."""
+    from datetime import date
+    try:
+        if oggi is None:
+            o = date.today()
+        else:
+            y0, m0, g0 = (int(x) for x in str(oggi).split("-"))
+            o = date(y0, m0, g0)
+        y1, m1, g1 = (int(x) for x in str(giorno).split("-"))
+        d = (date(y1, m1, g1) - o).days
+        return d if d >= 0 else 30
+    except Exception:
+        return 30
+
+
 def costruisci_calendario(slug: str, da: str, a: str, *,
                           stato_giorno: Callable[[str, str], Dict[str, Any]],
                           occupazione_bps: int = 5000,
+                          oggi: Optional[str] = None,
                           pol: dyn.PoliticaPrezzo = dyn.PoliticaPrezzo()
                           ) -> List[Dict[str, Any]]:
     """Per ogni giorno: stato (libero/prenotato/chiuso) + prezzo base + prezzo dinamico."""
@@ -65,7 +97,12 @@ def costruisci_calendario(slug: str, da: str, a: str, *,
                 stato = "chiuso"
             else:
                 stato = "libero"
-            din = dyn.calcola_prezzo(base, occupazione_bps=occupazione_bps, data=g, pol=pol)
+            # il motore ha DUE fattori temporali (last-minute -15%, anticipo +5%)
+            # e finora non riceveva mai la distanza: restavano a 10000 per sempre.
+            # Il tempo all'arrivo e' un fattore standard del ricavo alberghiero
+            # (Mews 2026, Lighthouse, PriceLabs), non un'aggiunta nostra.
+            din = dyn.calcola_prezzo(base, occupazione_bps=occupazione_bps, data=g,
+                                     giorni_all_arrivo=_distanza(oggi, g), pol=pol)
             celle.append({"giorno": g, "stato": stato, "prezzo_cents": base,
                           "prezzo_dinamico_cents": din["prezzo_cents"],
                           "moltiplicatore_bps": din.get("moltiplicatore_bps", 10000)})

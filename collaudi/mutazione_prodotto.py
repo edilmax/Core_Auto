@@ -97,6 +97,46 @@ MUTANTI = [
      "elemento, quindi UNA richiesta da quaranta byte fa allocare memoria lineare in n e "
      "il processo muore. Misurato: 4 milioni -> 34 MB, crescita lineare"),
 
+    # ── IL CALENDARIO PREZZI (fase119) — i tre difetti VERI del 2026-08-13 ─────
+    # Il file non aveva NEMMENO UN mutante: i suoi test verdi non erano mai stati
+    # giudicati (appendice #12). Questi non sono guasti immaginati, sono i tre
+    # difetti misurati sul router vero quel giorno, piu' il quarto che la
+    # riparazione stessa aveva introdotto e che un test gia' esistente ha ripreso.
+    ("fase83_server.py",
+     '                            if isinstance(r, dict))',
+     '                            if isinstance(r, dict) and not r.get("chiuso"))',
+     "test_calendario_prezzi",
+     "l'occupazione torna a non vedere le notti VENDUTE che l'host ha poi chiuso: "
+     "un alloggio pieno al 100% risulta mezzo pieno e il prezzo suggerito crolla "
+     "del 23,1% (misurato: 14300 -> 11000 su base 10000). L'host abbassa il prezzo "
+     "proprio quando e' pieno, ed e' la schermata su cui decide"),
+
+    ("fase83_server.py",
+     "        if not celle:",
+     "        if False:",
+     "test_calendario_prezzi",
+     "torna il «200 muto»: un range oltre i 366 giorni, due date invertite o una "
+     "stringa che non e' una data ricevono di nuovo 200 con `celle: []`, cioe' la "
+     "stessa risposta di «non hai caricato nulla». L'host non puo' sapere di aver "
+     "sbagliato a chiedere e guarda un calendario vuoto senza spiegazione"),
+
+    ("fase119_calendario_prezzi.py",
+     "                                     giorni_all_arrivo=_distanza(oggi, g), pol=pol)",
+     "                                     pol=pol)",
+     "test_fase119_calendario_prezzi",
+     "i due fattori temporali del motore (last-minute -15%, anticipo +5%) tornano "
+     "STACCATI e valgono 10000 per sempre: nella settimana prima dell'arrivo, quando "
+     "le OTA svendono, il nostro suggerito resta al prezzo pieno"),
+
+    ("fase119_calendario_prezzi.py",
+     "        return d if d >= 0 else 30",
+     "        return d",
+     "test_fase119_calendario_prezzi",
+     "i giorni GIA' TRASCORSI tornano a prendere lo sconto «ultimo minuto»: il motore "
+     "legge la distanza negativa come «<= 2 giorni» e sconta del 15% notti che non si "
+     "possono piu' vendere. E' il difetto che la riparazione del 2026-08-13 aveva "
+     "introdotto, ripreso da `test_prezzo_dinamico_applicato` che esisteva gia'"),
+
     ("fase66_tassa_soggiorno.py",
      "    if _regola_malformata(regola):",
      "    if False:",

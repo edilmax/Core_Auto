@@ -228,6 +228,85 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### 🔴 «FATTO» NEL PIANO DEI SOLDI COPRE **DUE COSE DIVERSE** — trovato dal fondatore, 2026-08-13
+
+**Non l'ha trovato uno strumento: l'ha trovato lui**, dicendo *«altre fasi le avevamo già
+fatte, ma non con questo metodo»*. Aveva ragione, ed è la seconda volta che un suo dubbio
+scopre un numero che nessun controllo segnalava (la prima furono i «63 moduli morti»).
+
+⚠️ **Numeri presi da `RIPRENDI_QUI.md:948-956`, NON rimisurati** — vanno rifatti col Giudice:
+
+| modulo | punti | uccisi | **scoperti** |
+|---|---|---|---|
+| `fase59_concierge` | 112 | 48 | **64** |
+| `fase160_escrow_garanzia` | 39 | 34 | 5 |
+| `fase100_dac7` | 18 | 13 | 5 |
+| `fase188_paga_struttura` | 4 | *non dichiarato* | ? |
+| `fase167` · `fase66` · `fase119` | 11 · 24 · 17 | tutti | **0** |
+| `fase133` | 22 | 15 | 7, **tutti su codice morto e dichiarati** |
+
+**Il difetto è nella parola, non nei moduli.** Il piano conta chi è **passato sotto** il
+giudice, non chi ha **superato l'esame**: i quattro del Blocco 1 hanno zero punti scoperti,
+i quattro di prima ne hanno **74 in tutto** che nessuno ha mai chiuso. Su `fase59` da sola
+restano **64 punti su 112** senza protezione — più di tutto il Blocco 2 (58).
+
+🔴 **E il guardiano lo dichiara da sé, a ogni giro**: *«non dice se un modulo dichiarato FATTO
+lo sia DAVVERO»*. Quel limite era scritto e nessuno lo leggeva come un lavoro da fare.
+
+**Cosa fare, in quest'ordine.** ① **Rimisurare** i quattro (il numero viene da un documento e
+i documenti qui hanno già mentito). ② Decidere se conviene prima il **Blocco 2** (58 punti
+nuovi) o **rifinire `fase59`** (64 punti già scoperti). ⛔ Il secondo è peggiore *proprio
+perché* è dichiarato FATTO: un buco su un modulo che il piano dà per chiuso non lo va a
+guardare nessuno. ③ Far dire al guardiano la differenza fra «giudicato» e «chiuso»,
+altrimenti la stessa confusione torna al prossimo blocco.
+
+### 🧪 I COLLAUDI CHE SUL BLOCCO 1 NON SONO STATI FATTI — dichiarati, non nascosti
+
+D24 pretende, per ognuno dei dieci, l'esito **oppure il motivo**. Sul lavoro del 2026-08-13:
+
+| # | collaudo | stato |
+|---|---|---|
+| 3 | **Avvio reale + persistenza** | ❌ **NON FATTO**: i collaudi usano il router in cartella temporanea, `main_casavip.py` non è mai stato avviato davvero |
+| 4 | Neuroni | ⚠️ **parziale**: i tre livelli sono stati attraversati, ma senza un collaudo dedicato ai casi terminali annidati |
+| 6 | Fuzzing, concorrenza, estremi | ⚠️ **parziale**: valori limite ed esaustivi sì (0 unità, date invertite, bool/stringhe/None, 216 quaterne). **Concorrenza NO** |
+| 7 | Giudice esterno | ⚠️ **parziale**: `node --check` su `app.js` uscita 0, ma la **CI su Linux** è l'unico giudice che conta e va letta dall'API dopo il push |
+
+⛔ Valgono per **tutti** i moduli dei soldi, non solo per `fase119`: nessuno dei quattro del
+Blocco 1 ha visto l'avvio reale né una prova di concorrenza. Chi apre il Blocco 2 lo sappia
+**prima**, non dopo.
+
+### 🏷️ «DA NOI DEVE COSTARE SEMPRE MENO CHE SU BOOKING» — oggi è MOSTRATO, non GARANTITO
+
+**Domanda del fondatore, 2026-08-13**, e la risposta è a metà sì. Misurato quel giorno:
+
+```
+fase83_server.py:6798   from fase125_confronto_guest import confronta_guest   -> VIVO
+deploy/index.html:613   mostra all'ospite «risparmi X € (-Y%)»                -> VIVO
+fase125_confronto_guest.py:17-20   ota_markup_host_bps = 1500   (15%)
+                                   ota_guest_fee_bps   = 1400   (14%)
+                                   ota_dcc_bps         =  400   (4%)
+                                   nostra_guest_fee_bps=    0   (0% all'ospite)
+grep fase190_rate_parity            -> nessun import dalla produzione: DORMIENTE
+```
+
+**Cosa c'è.** L'ospite da noi paga **0%** di commissione mentre le OTA caricano markup +
+commissione ospite, e il sito glielo dice in faccia. Questo funziona ed è acceso.
+
+**⚠️ Cosa NON c'è, ed è il punto.** Quel confronto è una **stima con percentuali scritte
+fisse nel codice**: nessuno va a leggere quanto costa *davvero* quell'alloggio su Booking
+oggi. Quindi **niente garantisce** che da noi costi meno: se un host mette da noi un prezzo
+più alto del suo su Booking, **nessun controllo lo impedisce e nessun allarme lo dice**.
+`fase190_rate_parity` — il tasto «ho trovato lo stesso alloggio a meno» — esiste ma è
+**scollegato dal sito**.
+
+⛔ **Non è un lavoro da aprire di slancio**: un confronto vero richiede di leggere prezzi
+altrui (fattibilità legale e tecnica da verificare **prima**, non dopo). Il primo passo
+onesto è decidere **quale delle due strade**: (a) accendere `fase190` e affidarsi alla
+segnalazione dell'ospite, che costa poco ed è già costruito; (b) un confronto misurato, che
+è un progetto a sé. ⚠️ Legato a questo: il difetto ② di `fase119` (i fattori temporali
+staccati) ci rendeva **meno** competitivi proprio nella settimana in cui le OTA svendono —
+riparato il 2026-08-13.
+
 ### 💸 DA CHIUDERE PRIMA DEL PRIMO HOST — **IL RIMBORSO ALL'OSPITE NON PARTE DA SOLO**
 
 **Misurato il 2026-08-13** (commit `bf2e1b6`), ed è più grave di «è manuale»: **non è manuale
@@ -259,16 +338,17 @@ ordine* — unitari → integrazione → E2E → **mutazione (il Giudice)**. Un 
 **dentro una sessione sola** (D21: a metà contesto si salva e si riparte).
 
 **L'ordine dei blocchi lo decide `rischio × cecità`, non la dimensione.**
-📊 **DOVE SIAMO, rimisurato col censimento il 2026-08-12** (⛔ rimisuralo, non fidarti):
-**7 moduli dei soldi giudicati** · **10 che restano, per 376 punti**. Erano «16 per 516» il
-2026-08-10: tre sono stati fatti (`fase167`, `fase66`, `fase133`) e **tre sono usciti perché sono codice
+📊 **DOVE SIAMO, rimisurato col censimento il 2026-08-13** (⛔ rimisuralo, non fidarti):
+**8 moduli dei soldi giudicati** · **9 che restano, per 361 punti**. Erano «16 per 516» il
+2026-08-10: quattro sono stati fatti (`fase167`, `fase66`, `fase133`, `fase119`) e **tre sono usciti perché sono codice
 morto** (`fase43` 31 · `fase44` 25 · `fase35` 25 = **81 punti che non vanno fatti**).
+✅ **Col `fase119` il BLOCCO 1 è chiuso**: era l'ultimo dei quattro ciechi.
 La tabella completa, con quanti test nominano ciascuno e il blocco di appartenenza, sta in
 `RIPRENDI_QUI.md` sezione «QUANTO MANCA SUI SOLDI».
 
 | blocco | moduli | punti | perché in questo ordine |
 |---|---|---|---|
-| **1** | ✅ `fase167_credito_single_use` **FATTO 2026-08-11** (11/11 uccisi, 1 difetto vero) · ✅ `fase66_tassa_soggiorno` **FATTO 2026-08-12** (24/24 uccisi, **0 sopravvissuti e 0 equivalenti**, **5 difetti veri**) · ✅ `fase133_split_quote_uguali` **FATTO 2026-08-12** (15/22 uccisi, **0 sopravvissuti sul codice VIVO**, 7 dichiarati su codice morto, **1 difetto vero: memoria senza tetto da rotta pubblica**) · ▶️ `fase119_calendario_prezzi` (15) | 74, **ne restano 15** | **i quattro più ciechi**: 1, 2, 2 e 2 test li nominano. `fase167` per primo: un difetto lì è **denaro speso due volte** — e infatti ce n'era uno. Su `fase66` ce n'erano **cinque**, tutti che facevano pagare di più all'ospite |
+| **1** | ✅ `fase167_credito_single_use` **FATTO 2026-08-11** (11/11 uccisi, 1 difetto vero) · ✅ `fase66_tassa_soggiorno` **FATTO 2026-08-12** (24/24 uccisi, **0 sopravvissuti e 0 equivalenti**, **5 difetti veri**) · ✅ `fase133_split_quote_uguali` **FATTO 2026-08-12** (15/22 uccisi, **0 sopravvissuti sul codice VIVO**, 7 dichiarati su codice morto, **1 difetto vero: memoria senza tetto da rotta pubblica**) · ✅ `fase119_calendario_prezzi` **FATTO 2026-08-13** (17/17 uccisi, **0 sopravvissuti e 0 equivalenti dichiarati**, **3 difetti veri** + 1 introdotto dalla riparazione e ripreso da un test già esistente) | 74, **BLOCCO 1 CHIUSO** | **i quattro più ciechi**: 1, 2, 2 e 2 test li nominano. `fase167` per primo: un difetto lì è **denaro speso due volte** — e infatti ce n'era uno. Su `fase66` ce n'erano **cinque**, tutti che facevano pagare di più all'ospite |
 | **2** | ⛔ `fase43_commissione` **TOLTO: è CODICE MORTO** · `fase98_policy_commissione` · `fase111_cancellazione` · ✅ `fase147_tassa_comunale` **AGGIUNTO: è VIVO e il piano se lo dimenticava** | **58** (18+11+29) | la catena della commissione e dei rimborsi, dove i numeri si incrociano — più la tassa comunale, che è l'altra metà della coppia di `fase66` |
 | **3** | `fase65_split_payment` · ✅ `fase133` **FATTO 2026-08-12** (era elencato nel Blocco 1) · `fase101_stripe_connect` | 109 | i soldi che si dividono e quelli che escono verso l'host |
 | **4** | `fase162_pagamenti_pendenti` · `fase131_payout_dashboard` | 153 | i più grossi ma i **meno ciechi** (13 e 11 test): ultimi apposta |
@@ -460,6 +540,112 @@ un salvataggio di sei giorni prima **credendo di aver fatto quello di oggi**, e 
 giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
+
+### ✅ FATTO 2026-08-13 — `fase119_calendario_prezzi`: **il BLOCCO 1 dei soldi è CHIUSO**
+
+**Esito del Giudice: 17 punti su 17 uccisi · 0 sopravvissuti · 0 equivalenti dichiarati**
+(`python collaudi/mutazione_prodotto.py --modulo fase119_calendario_prezzi.py --killer
+test_fase119_calendario_prezzi test_calendario_prezzi`, uscita 0 letta diretta; 1 rinuncia del
+generatore dichiarata: `a_cavallo`). Il modulo non aveva **nemmeno un mutante** nella lista
+scritta a mano: i suoi test verdi non erano mai stati giudicati (appendice #12). Ora ne ha 4.
+
+**⛔ I TRE DIFETTI VERI, tutti misurati sul router vero prima di toccare una riga.**
+
+**① L'occupazione non vedeva le notti VENDUTE che l'host aveva chiuso** — *il grave, sui soldi*.
+`_host_calendario_prezzi` calcolava l'occupazione saltando i giorni `chiuso` **sia al
+numeratore sia al denominatore**. Ma «chiuso» e «invenduto» sono cose diverse: chiudere una
+data già venduta è pratica normale, e il prodotto lo riconosceva già (bug #35, «venduta vince
+su chiusa»). *Misurato:* 4 notti vendute → suggerito **14300**; le stesse 4, sempre vendute, poi
+chiuse → **11000**, cioè **−23,1%**. Con tutte chiuse il denominatore andava a **zero** e si
+ripiegava sul default 5000 bps («mezzo pieno») mentre l'alloggio era **pieno al 100%**.
+L'host abbassava il prezzo proprio quando era pieno, sulla schermata su cui decide.
+*Riparato* (`fase83_server.py:8754-8760`): dal denominatore resta fuori solo il chiuso-**e**-
+invenduto — è la definizione di settore, «rooms available excludes out-of-order» (Preno,
+SiteMinder, RoomMaster 2026) — mentre il venduto conta **sempre**, da entrambi i lati.
+*Guardie:* `TestChiudereNonSvuotaLOccupazione` (2 test, uno con oracolo indipendente).
+
+**② I due fattori temporali del motore erano STACCATI.** `costruisci_calendario` non passava
+mai `giorni_all_arrivo` a `fase106`, che restava al default 30: last-minute (**−15%**) e
+anticipo (**+5%**) valevano 10000 **per sempre**, su ogni giorno. È il modo di rompersi n.2
+(cablaggio mancante), lo stesso della «promo 0% mai applicata» — e lo stesso difetto che era
+già stato riparato **accanto**, sull'occupazione, senza accorgersi del tempo. Effetto
+commerciale: nella settimana prima dell'arrivo, quando le OTA svendono, il nostro suggerito
+restava al prezzo pieno. *Il lead time è un fattore standard del ricavo alberghiero* (Mews
+2026, Lighthouse, PriceLabs — voce R2). *Riparato:* nuovo `_distanza(oggi, giorno)` e parametro
+**`oggi` INIETTATO**, mai `date.today()` dentro la funzione (Haki Benita, «Stop Using
+datetime.now!»; Adam Johnson 2020), così il modulo resta PURO e i collaudi non dipendono
+dall'orologio — cioè non si crea una bomba a tempo nuova (appendice R1 punto 4).
+
+**③ Il «200 muto».** Un range oltre il tetto, due date invertite o una stringa che non è una
+data ricevevano tutte **200 con `celle: []`**: la stessa identica risposta di «non hai caricato
+nulla». L'host non poteva sapere di aver sbagliato e guardava un calendario vuoto senza una
+parola. *Riparato:* **422** con codice `range_date_non_valido`, come già faceva
+`date_mancanti`; il pannello sa già tradurlo (`fraseErrore`). Il giudizio **non è duplicato**:
+decide `costruisci_calendario`, così il tetto resta scritto in un posto solo.
+*Fonte:* «Returning 200 OK with an error indicator is incorrect practice» (DevEssentials; Ben
+Nadel; oneuptime 2026).
+
+**⚠️ ④ IL DIFETTO CHE HA INTRODOTTO LA RIPARAZIONE STESSA, e chi l'ha preso.** La prima
+versione di `_distanza` restituiva la distanza **negativa** per un giorno già trascorso; il
+motore la leggeva come «≤ 2 giorni» e applicava **−15% a notti che non si possono più
+vendere**. Non l'ha trovato una guardia nuova: l'ha trovato `test_prezzo_dinamico_applicato`,
+**che esisteva da prima** e pretendeva 13000 su una data ormai passata (dava 11050). È la
+prova pratica della regola «i test si sommano, non si sottraggono»: la tentazione era
+aggiornare l'atteso, e sarebbe stato un difetto messo in produzione con la sua benedizione.
+*Riparato:* distanza negativa → 30, cioè il default del motore. *Guardia:*
+`test_un_giorno_gia_passato_non_prende_lo_sconto_ultimo_minuto` (4 date: ieri, una settimana
+fa, un mese fa, e **oggi** che invece deve restare last-minute).
+
+**🔍 DUE COSE CHE HA TROVATO IL METODO, NON IL CODICE.**
+· **Un campione può mentire dove una prova esaustiva no.** Avevo concluso che l'ordine dei
+fattori non cambiasse il prezzo: lo diceva un controllo su **due** quaterne. La prova su
+**tutte e 216** dice il contrario — **13 quaterne su 216 (6,0%)** sono sensibili all'ordine,
+scarto **1 punto base** (1 centesimo su 100 €, **1 € su 10.000 €**). Oggi l'ordine è fisso,
+quindi nessuno ci perde: è una **fragilità**, non un difetto vivo, e la guardia la **congela**
+(`test_permutazione_l_ordine_dei_fattori_sposta_al_massimo_un_bps`) così non può crescere.
+· **Un mio collaudo era VERDE col difetto dentro.** `test_tre_distanze_diverse…` chiedeva solo
+che tre moltiplicatori fossero *diversi*: lo erano già per stagione e weekend. Riscritto contro
+l'oracolo indipendente calcolato sulla distanza vera di ognuno.
+
+**📏 E UNA CIFRA CHE ERA SBAGLIATA NEI MIEI STESSI COMMENTI.** Il tetto del range guarda la
+**differenza fra le date**, che è una notte in meno del numero di celle: il range più lungo
+accettato ha `.days == 366`, cioè **367 celle**, non 366. L'ha fatto venire fuori il mutante di
+riga 26, sopravvissuto proprio perché il confine vero non era coperto da nessun test.
+
+**I 4 MUTANTI SOPRAVVISSUTI AL PRIMO GIRO, e come sono stati chiusi.** Riga 26 (`> 366` →
+`>=`) · riga 94 (`unita > 0` → `>= 0`, che mostrava «prenotato» un giorno con zero unità) ·
+riga 110 (`exc_info=True` → `False`, che toglie la traccia dell'errore dal registro e rende
+cieca la diagnosi — regola ferrea 9) · riga 122 (`and` → `or` in `_importo`, per cui `True`
+diventava 1 centesimo e una stringa faceva **esplodere** `'%d' %` fuori dal `try`).
+⛔ **Nessuno è stato dichiarato equivalente** (B6): per ognuno è stato **misurato** l'ingresso
+che distingue il codice sano dal mutante, e quell'ingresso è l'asserzione della guardia.
+
+**Prova di iniezione (regola ferrea 2).** Difetto ① rimesso a mano → guardia **ROSSA** (9900 ≠
+14300, uscita 1) → ripristino → **sha256 IDENTICO**
+(`965EAB5C280DEBA6D45037F6837D944D81C5147AD2DBE2F03853152F7CAD616B`) → guardia verde, uscita 0.
+
+**⚠️ ⑤ IL DIFETTO CHE HA TROVATO UNA DOMANDA, NON UN COLLAUDO.** Alla domanda del fondatore
+«hai fatto tutti i test?» è saltato fuori che il codice d'errore nuovo — e **altri tre che
+c'erano da prima** — non avevano nessuna frase: `BV.fraseErrore` (`deploy/app.js:180`) fa
+`return String(cod)`, quindi l'host avrebbe letto **`❌ range_date_non_valido`** in faccia.
+🔴 **E nessuna guardia poteva vederlo, per costruzione**: `CODICI_VISIBILI`
+(`test_happy_moduli.py:513`) è un elenco **compilato a mano**, e il calendario prezzi non
+c'era affatto. Il denominatore non era «i codici che il server restituisce» ma «quelli che
+qualcuno si è ricordato di scrivere» — appendice #15 vista dal lato in cui si rompe.
+*Riparato:* i **quattro** codici della rotta (`alloggio_mancante`, `date_mancanti`, `non_tuo`,
+`range_date_non_valido`) messi **prima** sotto sorveglianza — guardia vista **ROSSA**, «0 lingue
+su 8» per tutti e quattro — e poi tradotti in **tutte e 8 le lingue**. `node --check` su
+`app.js`: uscita **0** (giudice esterno, strumento non nostro).
+⛔ **Il `?v=1` di `app.js` NON è stato bumpato, ed è una scelta misurata**, non una
+dimenticanza: la cache lunga di nginx è **solo** su `/video/` (`nginx.casavip.ssl.conf:95-97`)
+e `_statico` non manda né `Cache-Control` né `Last-Modified` (`fase83_server.py:9710-9731`),
+quindi il browser non ha base per la freschezza euristica (RFC 9111 §4.2.2) e deve
+rivalidare. Toccare sei file HTML per un problema non dimostrato sarebbe stato bloat (D1).
+
+**STATO: ACCESO in produzione** — `GET /api/host/calendario_prezzi` era già vivo
+(`fase83_server.py:1935`, pannello host `deploy/host.html:1339`). Nessuna dipendenza nuova,
+nessun file nuovo, nessuna variabile d'ambiente. **Test: +16** (5603 → 5619).
+⚠️ **Non è ancora in produzione sul VPS**: il deploy richiede «autorizzato» ed è separato.
 
 ### ✅ FATTO 2026-08-13 — LE BOMBE A TEMPO: **13 test che sarebbero diventati rossi DA SOLI**
 
@@ -4221,6 +4407,61 @@ cablata che ha smesso di essere futura). Come si trovano gli altri, senza gridar
 - **`libfaketime`**: coprirebbe anche i processi figli (il nostro unico caso «non
   giudicabile»), ma **non gira su Windows**. Resta **il miglioramento naturale per la CI
   su Linux**: chi lo raccoglie, sappia che la strada e' gia' studiata e questa e' la fonte.
+
+
+### R2 — 2026-08-13 · Il calendario dei PREZZI: occupazione, tempo all'arrivo, range invalidi
+
+**Le domande.** Tre, tutte nate da difetti misurati su `fase119_calendario_prezzi`:
+(a) le notti CHIUSE devono contare nell'occupazione che muove il prezzo dinamico?
+(b) il tempo che manca all'arrivo e' un fattore di prezzo vero o una nostra invenzione?
+(c) una richiesta con date invalide si risponde 200-vuoto o con un errore?
+
+**Le fonti lette** (quattro ricerche distinte, 2026-08-13):
+- Occupazione: **Preno**, *How to Calculate Occupancy Rates* · **SiteMinder**, *Calculate your
+  Occupancy Rate* · **RoomMaster 2026**, *Hotel Occupancy Rate: Formula* · **Synoveo**,
+  *What Is Hotel Occupancy Rate*.
+- Tempo all'arrivo: **Mews 2026**, *Dynamic Pricing in Hotels* · **Lighthouse**, *Hotel dynamic
+  pricing: how it works* · **PriceLabs**, *Hotel Revenue Management* · arXiv **2601.12175**,
+  *Lead-Time Compositions: Nights vs Revenue on Airbnb*.
+- Errori HTTP: **DevEssentials**, *HTTP Status Codes for REST APIs: 400 vs 422* · **Ben
+  Nadel**, *HTTP Status Codes For Invalid Data* · **oneuptime 2026**, *How to Design Error
+  Responses in REST APIs* (RFC 7807).
+- Relazioni metamorfiche: **Hillel Wayne**, *Metamorphic Testing* · **Segura et al.**, *A
+  Survey on Metamorphic Testing*, IEEE TSE 2016 · arXiv **2211.12003** · fixed-point:
+  **specbranch.com**, *Fixed Point Arithmetic*.
+- Orologio iniettato: **Haki Benita**, *Stop Using datetime.now!* · **Adam Johnson 2020**,
+  *Python: mock the current date and time*.
+
+**Cosa dicono, e cosa abbiamo fatto.**
+1. Occupazione = **venduto / vendibile**; dal denominatore si tolgono le camere *fisicamente*
+   invendibili («most industry benchmarks remove OOO rooms from the denominator»), ma il
+   numeratore e' «rooms **sold**». ⚠️ **Questa fonte ci ha CORRETTI in meglio**: avevamo
+   concluso «e' sbagliato saltare i giorni chiusi», ed era troppo largo. Lo sbaglio vero era
+   piu' stretto — saltare anche le notti chiuse **che erano state vendute** — e la riparazione
+   e' uscita piu' piccola e piu' giusta di quella che avevamo in testa.
+2. Il **lead time / time to arrival** e' elencato accanto a occupazione e stagionalita' fra i
+   fattori standard del prezzo dinamico alberghiero. Non e' un'aggiunta nostra: era un pezzo
+   **gia' costruito** in `fase106` e mai collegato.
+3. «Returning 200 OK with an error indicator in the body is incorrect practice»; **422** per
+   una richiesta ben formata che viola una regola di dominio, con un corpo che dice quale.
+4. Il tempo si passa **come parametro**: «calling today or now inside functions is a bad
+   design». Da qui il parametro `oggi` di `costruisci_calendario`.
+5. Senza oracolo comodo si verificano **relazioni** fra input trasformati (scala, monotonia,
+   permutazione); e la **divisione intera non e' lineare**, quindi in una catena di
+   moltiplicatori l'ordine puo' spostare il risultato.
+
+⛔ **Cosa NON abbiamo adottato, e perche'.**
+- **RFC 7807 / «Problem Details»** (l'oggetto d'errore standard con `type`, `title`, `detail`):
+  cambierebbe la forma di **ogni** risposta d'errore del server e il modo in cui il pannello
+  le legge (`fraseErrore`). E' una riscrittura, non una riparazione: vietata da D1 e dalla
+  regola ferrea 1. Abbiamo usato la forma che il progetto gia' ha, `{"errore": "codice"}`.
+- **Rendere esatta la catena dei moltiplicatori** (accumulare e dividere una volta sola,
+  invece di troncare a ogni passo): sposterebbe dei prezzi di 1 punto base su 13 quaterne
+  su 216. Tocca il motore dei soldi per un difetto che oggi **non fa perdere nessuno**, e
+  l'ordine e' fisso. Congelato con una guardia invece che cambiato.
+- **`hypothesis` per le relazioni metamorfiche**: e' gia' installato, ma qui i valori possibili
+  sono un insieme **chiuso e piccolo** (216 quaterne), quindi la prova **esaustiva** e' piu'
+  forte di quella casuale — e infatti e' lei ad aver trovato il caso che il campione mancava.
 
 
 ### Ricerca: Errori delle IA sul codice altrui + storia del repo — 23 regole sopravvissute
