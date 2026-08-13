@@ -88,8 +88,25 @@ class _Base(unittest.TestCase):
                {"alloggio_id": "casa", "da": da, "a": a, "unita_totali": 1,
                 "prezzo_netto_cents": 20000}, {"X-Host-Token": self.tok})
 
+    def _fra(self, giorni):
+        """Una data scritta come INTENZIONE. ⛔ 2026-08-13: `test_prenotazione_futura_e_un_
+        obbligo` cablava `2026-09-05/08` e sarebbe diventato rosso DA SOLO il **2026-09-09**,
+        quando quella prenotazione avrebbe smesso di essere futura -- lo STESSO difetto che
+        alle 00:03 del 2026-08-13 ha fatto diventare rosso `test_fase156_erasure`, sullo
+        stesso identico obbligo (`prenotazioni_attive`). L'intenzione non scade."""
+        import datetime
+        return (datetime.date.today() + datetime.timedelta(days=giorni)).isoformat()
+
     def _prenota_e_paga(self, ci, co):
-        self._apri_disponibilita("2026-08-01", "2026-12-31")
+        # ⛔ FINESTRA RELATIVA, non cablata: deve coprire sia le date fisse dei test che non
+        # dipendono dal calendario, sia quelle relative di chi ha bisogno del futuro. Una
+        # finestra cablata («2026-12-31») e' a sua volta una bomba, solo con la miccia piu'
+        # lunga: il giorno che scade, i soggiorni relativi cadono fuori dal periodo aperto.
+        # ⚠️ La finestra NON puo' essere larga a piacere: `disponibilita_range` ha un tetto
+        # sui giorni e sopra quello risponde senza aprire NIENTE -- misurato il 2026-08-13
+        # provando -60/+420, che dava `409 non_disponibile` alla prenotazione dopo. Restando
+        # RELATIVA si sposta insieme all'orologio, quindi copre sempre i soggiorni dei test.
+        self._apri_disponibilita(self._fra(-30), self._fra(90))
         st, q = self.g("POST", "/api/concierge/quote",
                        {"alloggio_id": "casa", "check_in": ci, "check_out": co,
                         "party": 2})
@@ -120,12 +137,14 @@ class TestObblighiPendenti(_Base):
         self.assertEqual(veri, {}, "un host senza attivita' risulta con obblighi: %s" % o)
 
     def test_prenotazione_futura_e_un_obbligo(self):
-        self._prenota_e_paga("2026-09-05", "2026-09-08")
+        # «futura» si scrive «fra venti giorni», non «5 settembre»: e' il nome stesso del
+        # test a pretendere il futuro, e una cifra sul calendario un giorno lo smentisce
+        self._prenota_e_paga(self._fra(20), self._fra(23))
         self.assertIn("prenotazioni_attive", self._obblighi())
 
     def test_payout_dovuto_e_un_obbligo(self):
         """Dopo una prenotazione pagata l'host ha un payout 'maturato' = soldi in ballo."""
-        self._prenota_e_paga("2026-09-05", "2026-09-08")
+        self._prenota_e_paga(self._fra(20), self._fra(23))
         o = self._obblighi()
         self.assertTrue("payout_dovuto" in o or "escrow_aperto" in o,
                         "una prenotazione pagata non risulta come soldo in ballo: %s" % o)
@@ -134,7 +153,7 @@ class TestObblighiPendenti(_Base):
 class TestNonSiCancellaConSoldiInBallo(_Base):
 
     def test_host_con_prenotazione_NON_si_cancella(self):
-        self._prenota_e_paga("2026-09-05", "2026-09-08")
+        self._prenota_e_paga(self._fra(20), self._fra(23))
         st, rep = self._cancella_host()
         self.assertEqual(st, 409,
                          "un host con una prenotazione pagata e' stato CANCELLATO: %s" % rep)
@@ -147,7 +166,7 @@ class TestNonSiCancellaConSoldiInBallo(_Base):
         self.assertTrue(rep.get("ok"))
 
     def test_forza_cancella_ma_registra_cosa_cera(self):
-        self._prenota_e_paga("2026-09-05", "2026-09-08")
+        self._prenota_e_paga(self._fra(20), self._fra(23))
         st, rep = self._cancella_host(forza=True)
         self.assertIn("forzato_nonostante", rep,
                       "la cancellazione forzata non registra cosa c'era in ballo: %s" % rep)

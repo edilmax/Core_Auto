@@ -246,8 +246,8 @@ automatica fa fallire la suite se i due divergono):
 
 # ⚙️ REGOLA FERREA DI OPERATIVITÀ E PRECISIONE
 
-> ## 📌 GLI OBBLIGHI SONO **104**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
-> **Contati dai file il 2026-08-07, non a memoria** (`python collaudi/regole_avvio.py` li
+> ## 📌 GLI OBBLIGHI SONO **105**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
+> **Contati dai file il 2026-08-13, non a memoria** (`python collaudi/regole_avvio.py` li
 > ricontrolla a ogni sessione e **grida** se questi numeri non tornano):
 >
 > ### 🔬 LE **44** DELLA RICERCA — pagate ~4 milioni di token, 77 agenti, 2026-07-30
@@ -259,9 +259,9 @@ automatica fa fallire la suite se i due divergono):
 > · **29** stanno nell'appendice di `REGISTRO_INGEGNERIA.md`, con prova e fonte per esteso.
 > Più le **24 uccise** dai revisori ostili **col motivo**: dicono cosa NON vale la pena rifare.
 >
-> ### 🧭 GLI ALTRI **60** — nati dai NOSTRI danni
+> ### 🧭 GLI ALTRI **61** — nati dai NOSTRI danni
 > **IL BLOCCO (6 divieti assoluti, in cima a questo file)** · Regola zero (**5**) ·
-> **24 direttive del fondatore** · modi di rompersi (**11**) ·
+> **25 direttive del fondatore** · modi di rompersi (**11**) ·
 > collaudi (**10**) · direttiva finale (**4**). Non hanno uno studio dietro: hanno una
 > **cicatrice**. Valgono uguale, e da oggi **portano anch'essi il «si verifica così»**.
 >
@@ -271,7 +271,7 @@ automatica fa fallire la suite se i due divergono):
 > che **non viaggia col progetto**: su un altro computer, o in CI, non esistevano.
 > **2026-08-01, sera**: mescolai le due famiglie in un unico numero — e mescolare fa perdere
 > di vista proprio ciò che è stato pagato.
-> **Rimedio definitivo:** le direttive del fondatore sono **entrate nel repository** (D1-D24
+> **Rimedio definitivo:** le direttive del fondatore sono **entrate nel repository** (D1-D25
 > qui sotto), ogni regola dice **come si verifica**, e lo strumento d'avvio conta tutto e
 > **segnala chi non dice come si controlla**. Una regola che non si può controllare non è
 > una regola: è un desiderio.
@@ -392,7 +392,7 @@ solo è il canale principale delle regressioni. Il fondatore se n'è accorto pri
 
 ---
 
-# 🧭 LE 24 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
+# 🧭 LE 25 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
 
 > **Perché stanno qui e non solo in memoria.** Fino al 2026-08-01 vivevano nella memoria di
 > sessione: **non viaggiavano col progetto**. Su un altro computer, o dentro la CI, non
@@ -711,6 +711,43 @@ esterni» compaiono le due cose che il computer da solo non può dare: l'esito d
 **non nostro** (collaudo 7) e la **tabella dei job della CI** letta dall'API (regola ferrea 8),
 mai «immagino sia verde». La guardia meccanica è
 `test_IL_PRE_FATTO_RILEGGE_ANCHE_LA_BATTERIA` in `test_pipeline_ci.py`.
+
+**D25. PRIMA SI LEGGE COME L'HA GIÀ RISOLTO IL MONDO — FONTI VERE, PIÙ DI UNA, E POI SI FA
+QUELLO CHE DICONO.** Dettata dal fondatore il **2026-08-13**: *«fai prima una ricerca
+ingegneristica online, fonti vere verificate e aggiornate, leggi, e dopo fai quello che si
+dice. Non ti fermare solo a una ricerca, falle approfondite, e vale per tutti i lavori e
+anche futuri, così non si sbaglia più e non si va a caso. 0 bugie e imbrogli. Io lo scopro.»*
+
+*Com'è nata, e non è un'ipotesi.* Quel giorno avevo progettato da solo l'attrezzo che trova i
+test che scadono, e ci avevo messo dentro **tre difetti**: lo scarto d'orologio applicato due
+volte (chiesti 200 giorni, ottenuti 400), l'orologio di **SQLite** non spostato, e i
+**processi figli** che vedono l'ora vera. Non erano difetti geniali: sono i **tre classici
+noti** del *clock mocking*, scritti nella documentazione delle librerie che esistono apposta.
+Dieci minuti di lettura avrebbero risparmiato tre falsi allarmi — e un attrezzo che accusa
+innocenti **viene spento**, cioè il lavoro si autodistrugge.
+
+⛔ **I TRE CONFINI, perché senza si creano contraddizioni con regole già scritte** (trovate
+prima di scrivere questa, non dopo):
+1. **Non contraddice REGOLA ZERO 1.** Le fonti esterne dicono **come si fa bene una cosa**; i
+   5 documenti ufficiali dicono **com'è fatta la NOSTRA macchina oggi**. Sono due piani
+   diversi: ⛔ nessun articolo di internet è mai fonte di verità su una nostra tariffa, un
+   nostro modulo o un nostro numero — quelli si verificano nel codice.
+2. **Non autorizza NIENTE di nuovo.** Se la fonte dice «usa la libreria X», questa direttiva
+   **non basta** a installarla: D1 e la regola ferrea 1 vietano dipendenze, file e riscritture
+   non chiesti. Si riporta cosa dice la fonte e **si chiede**. *Successo subito: le fonti
+   consigliano `freezegun`/`time-machine`, che qui non si possono aggiungere da soli.*
+3. **Completa D10, non la sostituisce.** D10 guarda **dentro casa** (esiste già da noi?);
+   questa guarda **fuori** (come l'ha risolto chi c'è già passato). Si fanno tutt'e due, in
+   quest'ordine: prima fuori per il metodo, poi dentro per non ricostruire.
+
+*Si verifica:* per ogni scelta tecnica non banale, nel registro della sessione compaiono
+**almeno due ricerche distinte** con le **fonti citate per nome e anno**, e accanto alla
+scelta è scritto **cosa dice la fonte** — oppure la frase esplicita «non ho letto niente, sto
+ragionando», che è ammessa ma va detta. Le fonti per esteso vanno **nell'appendice di
+`REGISTRO_INGEGNERIA.md`**, non qui: questo file si carica a ogni sessione e allungarlo
+peggiora l'attenzione. ⚠️ **Limite dichiarato (D18 punto 3):** nessuna guardia meccanica può
+sapere se ho letto davvero; questa direttiva è verificabile solo **leggendo il registro**, ed
+è per questo che «0 bugie» è la parte che il fondatore ha detto per ultima.
 
 ---
 

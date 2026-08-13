@@ -393,10 +393,13 @@ inesistente e insegna a rilanciare la suite «che tanto poi passa» — che è c
 difetto vero. ⛔ **E il debito sul test che mente ogni tanto RESTA APERTO:** quello del 12 agosto
 erano due job partiti nello **stesso istante** sullo stesso commit, uno rosso e uno verde. Sono
 due difetti diversi e non si confondono.
-🔜 **Il lavoro che ne nasce è entrato in `LAVORI_IN_SOSPESO`:** **62 file di test** contengono
-date fisse di agosto 2026. Né il pre-volo né il pre-fatto le cercano — per questo erano verdi
-tutti e due, e il fondatore aveva ragione a dire *«queste cose bisogna farle prima»*: il rimedio
-non è l'attenzione, è **il controllo che oggi non c'è**.
+🔜 **Il lavoro che ne nasce è entrato in `LAVORI_IN_SOSPESO`** — ✅ **ed è stato CHIUSO lo
+stesso giorno**: vedi «FATTO 2026-08-13 — LE BOMBE A TEMPO». ⛔ **Il numero scritto qui sotto
+era sbagliato** e si tiene solo come cicatrice: dicevo «62 file con date fisse di agosto
+2026», mentre il censimento vero (via AST, commit `bf2e1b6`) ne conta **1667 in 156 file** —
+e quasi tutte **innocue**. Cercarle col testo sarebbe stato un allarme su 1667 punti, cioè un
+allarme spento entro tre giorni. Il rimedio non è l'attenzione ed **è arrivato**: si sposta
+l'orologio e si guarda chi diventa rosso (`collaudi/bombe_a_tempo.py` + `controllo_7`).
 
 ### 🚀 DEPLOY 2026-08-13 — la porta è chiusa NEL SITO VERO, e una trappola nuova sulla chiavetta
 
@@ -433,6 +436,69 @@ un salvataggio di sei giorni prima **credendo di aver fatto quello di oggi**, e 
 giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
+
+### ✅ FATTO 2026-08-13 — LE BOMBE A TEMPO: **13 test che sarebbero diventati rossi DA SOLI**
+
+**Cos'era il problema, e non è teoria.** Il 2026-08-13 alle **00:03**
+`test_fase156_erasure.test_host_con_prenotazione_e_RIFIUTATO_senza_forza` è diventato rosso
+**da solo**: cablava `check_out 2026-08-12` per una prenotazione che il suo commento
+dichiarava FUTURA, e a mezzanotte il 12 è passato. ⚠️ *Un test che scade è peggio di un test
+mancante*: manda a cercare per mezz'ora un difetto che non esiste, e insegna a rilanciare la
+suite «che tanto poi passa» — che è esattamente come si nasconde un difetto vero.
+
+**⛔ LA STRADA FACILE È SBAGLIATA, E IL NUMERO LO DIMOSTRA.** Cercare le date col testo trova
+**1667 date cablate in 156 file** (censimento via AST, commit `bf2e1b6`), e quasi nessuna è
+pericolosa: un allarme su 1667 punti verrebbe spento entro tre giorni (regola ferrea 10).
+⚠️ Il numero **«62 file»** che girava nei documenti era **sbagliato**. E nessuna analisi del
+TESTO poteva bastare: nel caso vero la data cablata **non stava nel test che falliva**,
+stava nel suo apparecchio di preparazione.
+
+**✅ Quindi si misura il COMPORTAMENTO.** `collaudi/bombe_a_tempo.py` sposta l'orologio e
+guarda chi diventa rosso: **verde a orologio fermo + rosso a orologio spostato = bomba,
+dimostrata**. Poi, per dimezzamenti, trova **il giorno esatto** in cui esplode, e quel
+confine lo **verifica nelle due direzioni** (verde il giorno prima, rosso quel giorno) invece
+di dedurlo. `controllo_7` nel **pre-volo** legge lo schedario in **0,03 s** e grida su ciò
+che scade entro **30 giorni** — soglia presa dalla pratica industriale (appendice R1), non
+inventata. ⛔ Schedario più vecchio di 30 giorni → **ROSSO**: una misura scaduta non è una
+misura (D22).
+
+**🔴 L'ATTREZZO HA AVUTO CINQUE DIFETTI, E TRE ACCUSAVANO TEST SANI.** È la parte che vale
+più del lavoro, ed è tutta misurata:
+
+| # | difetto | chi accusava da innocente | come si è visto |
+|---|---|---|---|
+| 1 | scarto applicato **due volte** (200 → 400 giorni) | tutti | due numeri che dovevano coincidere e non coincidevano |
+| 2 | l'orologio **dentro SQLite** non spostato | `test_fase8_feedback`, `test_fase9_notifiche` | il `'now'` di SQLite letto nel sorgente |
+| 3 | i **processi figli** vedono l'ora vera | `test_pipeline_ci` (gettone deploy) | `-34560000s` = esattamente lo scarto |
+| 4 | due passate **nello stesso processo** | `test_happy_admin` | stesso test: 1 rosso in-processo, 0 in processo nuovo |
+| 5 | **`time.gmtime()`** legge l'orologio di sistema | `test_dac7_blocco_payout` | «oggi 2027-01-01, anno chiesto 2026» |
+
+💡 **Nessuno dei cinque si vedeva leggendo il codice.** Si sono visti solo **confrontando due
+numeri che dovevano coincidere** e aprendo i casi uno per uno. Se avessi riferito la prima
+lista («17 bombe, due esplodono sabato») avremmo «riparato» **tre controlli sani**, fra cui
+quello che blocca i pagamenti quando mancano i dati fiscali. ⚠️ `freezegun` e `time-machine`
+hanno **lo stesso buco n.2**: è un limite noto degli strumenti di riferimento (appendice R1).
+
+**Le 13 riparate**, tutte verificate verdi a **oggi, +30 e +400 giorni**: `fase83_server`
+(recensioni) · `cancellazione_host_sicura` · `ical_export` ×2 · `recensioni_anti_fake` ·
+`escrow_gia_liquidato` ×2 · `tassa_pre_acquisto` · `elimina_annuncio` ·
+`admin_host_stesso_istante` ×2 · `host_prenotazioni_archivio` · `e2e_funzionale`.
+La prima sarebbe esplosa il **2026-09-02**. Giro di conferma: **0 bombe**.
+
+⚠️ **DUE TRAPPOLE DELLA RIPARAZIONE, pagate:** ① rendere relativa la finestra di
+disponibilità **e lasciare cablati i soggiorni** crea bombe NUOVE (successo su
+`test_cancellazione_host_sicura`: 3 test rotti a +400) — si allinea tutto il file, e si
+verifica **il file intero**, non il singolo test; ② la finestra non può essere larga a
+piacere: `disponibilita_range` ha un tetto e sopra quello **non apre niente** (`409
+non_disponibile`).
+
+⛔ **COSA RESTA NON MISURATO, e si dichiara:** `test_un_gettone_FRESCO_lascia_passare` avvia
+uno script di shell → **non giudicabile**, mai «sano». Lo coprirebbe `libfaketime`, ora nella
+lista dei lavori obbligatori con la prova da 5 minuti da fare **per prima** (⛔ solo Linux).
+
+**Sotto guardia** (D18 punto 4): `test_pipeline_ci.TestLeBombeATempo`, 7 collaudi che fissano
+i cinque difetti sopra — se qualcuno «semplifica» l'orologio, i falsi allarmi tornano **lo
+stesso giorno**. Suite intera: `Ran 5598 tests in 1546.742s · OK (skipped=4)`, uscita 0.
 
 ### ✅ FATTO 2026-08-12 — `fase133`: UNA RICHIESTA PUBBLICA DA 40 BYTE POTEVA BUTTARE GIÙ IL SITO
 
@@ -1196,7 +1262,7 @@ dentro un ciclo da 68 minuti. Controlli da due secondi messi in fondo a un'ora d
   suite può partire, non se passerà — non sostituisce la regola ferrea 6. Gli artefatti orfani
   li cerca in `DA_METTERE_IN_collaudi` accanto al progetto (più le cartelle elencate in
   `BOOKINVIP_CARTELLE_DI_LAVORO`): un file lasciato in una cartella qualsiasi del disco non lo
-  vede nessuno. Il controllo 8 pretende che il pre-volo sia girato prima — **è voluto**, ed è il
+  vede nessuno. Il controllo 9 pretende che il pre-volo sia girato prima — **è voluto**, ed è il
   modo in cui «si dichiara lo scopo prima di aprire il primo file» smette di dipendere dalla
   memoria; senza traccia è `NON ESEGUITO`, che **non è un successo** (S7). E la regola ferrea 15
   dice «esattamente i file dichiarati»: qui è rosso **solo** chi tocca fuori elenco — aver
@@ -4067,6 +4133,70 @@ revisori, perche' anche quello e' informazione: dice cosa NON vale la pena rifar
 **Come si usa**: `CLAUDE.md` per lavorare (la spina dorsale + le regole per fase); questa
 appendice **quando serve il dettaglio** o si vuole risalire alla fonte. Non e' materiale da
 leggere tutto: e' materiale da CONSULTARE.
+
+
+## 📡 RICERCHE SUCCESSIVE (D25) — ⛔ NON fanno parte delle 44
+
+**Leggere prima di aggiungere qui.** Le **44** sopra sono un insieme **chiuso e contato**
+(2026-07-30, 68 candidate - 24 uccise). Le ricerche fatte DOPO, per obbligo di **D25**,
+si scrivono **in questa sezione separata** e **non alterano quel conto**: mescolarle
+farebbe mentire i numeri che `CLAUDE.md` dichiara su se stesso, ed e' esattamente il
+tipo di contraddizione che D25 nasce per evitare.
+
+Ogni voce porta: **la domanda** · **le fonti** (nome e anno) · **cosa dicono** · **cosa
+abbiamo deciso** · ⛔ **cosa NON abbiamo adottato e perche'** -- quest'ultima e' la parte
+che si dimentica sempre, ed e' quella che impedisce alla sessione dopo di rifare la
+strada gia' scartata.
+
+---
+
+### R1 — 2026-08-13 · Il TEMPO nei test: come si trovano i test che scadono da soli
+
+**La domanda.** Un test e' diventato rosso da solo a mezzanotte del 2026-08-13 (una data
+cablata che ha smesso di essere futura). Come si trovano gli altri, senza gridare su
+1667 date innocue?
+
+**Le fonti lette** (quattro ricerche distinte, 2026-08-13):
+- *An empirical analysis of flaky tests*, *Luo, Hariri, Eloussi, Marinov*, **FSE 2014** --
+  201 commit di correzione su progetti Apache. https://dl.acm.org/doi/10.1145/2635868.2635920
+- *Test flakiness' causes, detection, impact and responses: a multivocal review*,
+  **Journal of Systems and Software 2023**.
+  https://www.sciencedirect.com/science/article/pii/S0164121223002327
+- **freezegun** (https://github.com/spulec/freezegun) e **time-machine**
+  (https://betterstack.com/community/guides/testing/time-machine-vs-freezegun/)
+- **libfaketime** (wolfcw, https://github.com/wolfcw/libfaketime) e il suo involucro
+  Python https://github.com/simon-weber/python-libfaketime
+- Pratica industriale sulle scadenze in CI:
+  https://dev.to/funkysi1701/testing-for-expiring-ssl-certificates-2dmj
+
+**Cosa dicono.**
+1. **«Time» e' UNA DELLE 10 CAUSE RADICE** riconosciute dei test instabili (Luo et al.):
+   non e' una stranezza nostra, e' una categoria studiata.
+2. **`freezegun` e `time-machine` NON spostano `datetime('now')` di SQLite**: mockano
+   Python, non il motore del database. E' un limite **noto** degli strumenti di riferimento
+   -- e qui e' costato **due falsi allarmi su diciassette** prima che me ne accorgessi.
+3. **`libfaketime` (LD_PRELOAD) sposta l'orologio dell'INTERO processo e dei figli**,
+   database e script esterni compresi, perche' intercetta le funzioni di libc.
+   ⛔ **Solo Linux/macOS**: sul PC di sviluppo (Windows) non si puo' usare.
+4. La cura raccomandata per i test non e' truccare l'orologio: e' **non dipendere
+   dall'orologio globale** -- orologio iniettato (`IClock`) o **date relative a oggi**.
+5. Pratica industriale sulle scadenze: si avvisa **PRIMA**, con una soglia (fallisce se
+   mancano meno di ~30 giorni), non quando la cosa e' gia' scaduta.
+
+**Cosa abbiamo deciso.**
+- L'attrezzo nostro sposta **Python E SQLite** da un'unica sorgente di verita' (il punto 2
+  qui sopra: le librerie standard non bastavano).
+- La soglia d'allarme e' **30 giorni**, presa dalla pratica industriale (punto 5), non
+  inventata.
+- Le riparazioni seguono il punto 4: **date relative**, mai cifre sul calendario.
+
+⛔ **Cosa NON abbiamo adottato, e perche'.**
+- **`freezegun` / `time-machine`**: sarebbero **dipendenze nuove**, vietate da D1 e dalla
+  regola ferrea 1 senza il via del fondatore. In piu' non risolvono SQLite, che qui e' il
+  caso che conta.
+- **`libfaketime`**: coprirebbe anche i processi figli (il nostro unico caso «non
+  giudicabile»), ma **non gira su Windows**. Resta **il miglioramento naturale per la CI
+  su Linux**: chi lo raccoglie, sappia che la strada e' gia' studiata e questa e' la fonte.
 
 
 ### Ricerca: Errori delle IA sul codice altrui + storia del repo — 23 regole sopravvissute

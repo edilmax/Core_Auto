@@ -1,0 +1,14 @@
+{
+ "bombe": [],
+ "candidati": 143,
+ "commit": "bf2e1b6",
+ "eseguiti": 2649,
+ "esito": "OK",
+ "file_di_test": 402,
+ "misurato_il": "2026-08-13",
+ "non_giudicabili": [
+  "test_pipeline_ci.TestIlDeployNonPuoSALTAREIlPassoDiSicurezza.test_un_gettone_FRESCO_lascia_passare"
+ ],
+ "orizzonte_giorni": 400,
+ "rossi_a_orologio_fermo": []
+}

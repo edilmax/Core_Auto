@@ -22,6 +22,19 @@ def _sistema():
     return crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG))
 
 
+def _fra(giorni):
+    """Una data NEL FUTURO scritta come INTENZIONE, non come cifra sul calendario.
+
+    ⛔ Serve dove il test ha bisogno che il soggiorno debba ANCORA ARRIVARE. Le date
+    cablate del resto di questo file vanno benissimo dove l'esito non dipende da «e'
+    futuro o passato?»; qui invece dipende, e una cifra sul calendario prima o poi passa.
+    Misurato il 2026-08-13: `TestRecensioni.test_flusso_completo` sarebbe diventato rosso
+    DA SOLO il **2026-09-02**, il giorno in cui il suo check-out ha smesso di essere futuro.
+    L'intenzione non scade; una cifra sul calendario si'."""
+    import datetime
+    return (datetime.date.today() + datetime.timedelta(days=giorni)).isoformat()
+
+
 def _popola(sys):
     from fase57_vetrina import SchedaAlloggio
     sys.catalogo.pubblica(SchedaAlloggio(host_id="h", slug="casa", titolo="Casa",
@@ -727,11 +740,21 @@ class TestRecensioni(unittest.TestCase):
     def setUp(self):
         self.sys = _sistema()
         _popola(self.sys)
+        # ⛔ QUI IL SOGGIORNO DEVE ESSERE NEL FUTURO, e non e' un dettaglio: il diritto di
+        # recensione nasce con `nbf = check-out`, quindi `test_flusso_completo` pretende
+        # `troppo_presto`. Con le date cablate (2026-09-01/02) quel «troppo presto» sarebbe
+        # diventato falso da solo il 2026-09-02. La disponibilita' si carica sugli stessi
+        # giorni relativi: se no il soggiorno cade fuori dal periodo aperto e il test
+        # diventerebbe rosso per un motivo nuovo, inventato dalla riparazione.
+        self.ci, self.co = _fra(20), _fra(21)
+        for g in (self.ci, self.co):
+            self.sys.inventario.imposta_disponibilita("casa", g, unita_totali=1,
+                                                      prezzo_netto_cents=10000)
         self.r = crea_router(self.sys)
 
     def _prenota(self):
         q = self.r.gestisci("POST", "/api/concierge/quote", body=json.dumps(
-            {"alloggio_id": "casa", "check_in": "2026-09-01", "check_out": "2026-09-02"}))
+            {"alloggio_id": "casa", "check_in": self.ci, "check_out": self.co}))
         b = self.r.gestisci("POST", "/api/concierge/book", body=json.dumps(
             {"quote_token": q[1]["quote_token"], "email": "g@x.it"}))
         return b
@@ -769,8 +792,10 @@ class TestRecensioni(unittest.TestCase):
         # lo smart-pass e' un vero pass d'ingresso verificabile (fase64)
         from fase64_smartpass import VerificatorePass
         from fase83_server import _importo  # noqa
+        # l'orologio finto del verificatore deve stare sul giorno del CHECK-IN vero di
+        # questa classe: prima era la stessa cifra cablata, adesso e' la stessa intenzione
         ver = VerificatorePass(self.sys.firma, orologio=lambda: __import__(
-            "fase64_smartpass")._epoch_da_data_ora("2026-09-01", 16))
+            "fase64_smartpass")._epoch_da_data_ora(self.ci, 16))
         self.assertTrue(ver.verifica(corpo["smart_pass"], "casa").consentito)
 
     def test_pagina_voucher(self):

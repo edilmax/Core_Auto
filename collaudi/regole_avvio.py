@@ -233,27 +233,18 @@ def stampa_i_divieti(n=None):
 #    lo stesso giorno). Visto ROSSO sui documenti VERI su ENTRAMBI i difetti che sorveglia --
 #    `fase66` FATTO qui e DA FARE la' (12 agosto), e `fase43` morto rimesso nel piano
 #    (11 agosto) -- con ripristino byte-identico dopo ognuno.
+# ✅ FATTO il 2026-08-13 e TOLTO da questa lista nello stesso commit: «le BOMBE A TEMPO nei
+#    test». Vive in `collaudi/bombe_a_tempo.py` (sposta l'orologio di Python, di SQLite e di
+#    `gmtime`, e guarda CHI diventa rosso) + `controllo_7` nel PRE-VOLO, che legge lo
+#    schedario in 0,03 s e grida su cio' che scade entro 30 giorni + 7 guardie in
+#    `test_pipeline_ci.TestLeBombeATempo`. Trovate e riparate **13 bombe** (la prima sarebbe
+#    esplosa il 2026-09-02); il giro di conferma dice **0**.
+#    ⛔ LA LEZIONE CHE VALE PIU' DEL LAVORO: la strada «cerca le date col grep» era sbagliata
+#    e MISURATA sbagliata -- 1667 date cablate in 156 file, quasi tutte innocue. E l'attrezzo
+#    ha avuto CINQUE difetti (scarto doppio · SQLite fermo · processi figli · stesso processo
+#    per le due passate · `time.gmtime`), ognuno dei quali accusava test SANI: tre li aveva
+#    gia' accusati. Si sono visti solo aprendo i casi uno per uno, mai leggendo il codice.
 LAVORI_IN_SOSPESO = (
-    {
-        "nome": "le BOMBE A TEMPO nei test — date cablate che scadono da sole",
-        "costo": "mezza sessione",
-        "priorita": "ALTA: e' l'unico difetto che arriva SENZA che nessuno tocchi il codice",
-        "perche": "il 2026-08-13 alle 00:03 `test_fase156_erasure` e' diventato rosso da solo: "
-                  "cablava `check_out 2026-08-12` per una prenotazione che il suo commento "
-                  "dichiarava FUTURA, e a mezzanotte il 12 e' passato. Rosso 3 su 3, quindi "
-                  "deterministico. Misurato: 62 file di test contengono date fisse di agosto "
-                  "2026, e ne' il pre-volo ne' il pre-fatto le cercano -- erano verdi tutti e "
-                  "due. Un test che scade manda a cercare per mezz'ora un difetto che non "
-                  "esiste, e insegna a rilanciare la suite finche' passa: cosi' si nasconde "
-                  "un difetto vero",
-        "fatto_quando": "un controllo del PRE-VOLO elenca i test che confrontano una data "
-                        "CABLATA col presente e grida su quelle gia' passate o che passano "
-                        "entro N giorni; provato nelle due direzioni (grida sulla data scaduta, "
-                        "tace su una data relativa a oggi) e dichiara quanti file ha esaminato "
-                        "sul totale. ⛔ NON basta cercare `2026-`: una data in un commento o in "
-                        "una stringa senza confronto e' innocua, e un falso allarme su 62 file "
-                        "farebbe spegnere il controllo entro tre giorni",
-    },
     {
         "nome": "CodeQL",
         "costo": "30 minuti",
@@ -262,6 +253,31 @@ LAVORI_IN_SOSPESO = (
                   "(lo e'), e non richiede nessun intervento del fondatore",
         "fatto_quando": "esiste .github/workflows/codeql.yml, gira su master, ed e' VERDE — "
                         "oppure i suoi rilievi sono scritti e triati uno per uno, col motivo",
+    },
+    {
+        "nome": "libfaketime in CI — il giudice ESTERNO sull'orologio (solo Linux)",
+        "costo": "5 minuti la prova che apre o chiude la strada, poi mezza sessione il job",
+        "priorita": "MEDIA — ⛔ il PRIMO passo e' la prova da 5 minuti: puo' chiudere la strada",
+        "perche": "il nostro attrezzo (`collaudi/bombe_a_tempo.py`) sposta l'orologio di Python "
+                  "E di SQLite, ma NON quello dei processi FIGLI: e' un limite che dichiara da "
+                  "se', ed e' il motivo per cui un test del deploy risulta «non giudicabile». "
+                  "`libfaketime` (LD_PRELOAD) intercetta l'orologio a livello di libc, quindi "
+                  "copre TUTTO -- figli, database, script di shell -- e sarebbe anche un "
+                  "GIUDICE ESTERNO (collaudo 7: uno strumento non nostro che ci controlla). "
+                  "⛔ Non gira su Windows, quindi non sul PC del fondatore: solo in CI, che "
+                  "gira su `ubuntu-latest` (verificato in .github/workflows/ci.yml). "
+                  "Fonti e limiti per esteso: REGISTRO_INGEGNERIA.md, appendice, voce R1",
+        "fatto_quando": "PRIMA la prova che apre o chiude la strada, e costa 5 minuti: un job "
+                        "che sotto `faketime '+400d'` stampa la data vista da Python E quella "
+                        "vista da SQLite (`SELECT date('now')`). ⛔ Se una delle due NON si "
+                        "sposta la strada e' chiusa e si scrive perche': il vDSO del kernel puo' "
+                        "rispondere «che ore sono» scavalcando la libreria intercettata, e "
+                        "allora l'orologio resta fermo e il giro dice «nessuna bomba» -- un "
+                        "FALSO SILENZIO, peggio di un falso allarme. SOLO se la prova passa: un "
+                        "job che rilancia la suite a +400 giorni e confronta i rossi con quelli "
+                        "a orologio fermo. ⚠️ Altri limiti noti da mettere in conto: non "
+                        "falsifica i clock monotoni, e il suo involucro Python non e' "
+                        "thread-safe (noi useremmo il COMANDO, non l'involucro)",
     },
     {
         "nome": "orologi di prova Stripe (test clocks)",

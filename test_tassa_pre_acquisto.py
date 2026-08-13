@@ -12,6 +12,19 @@ SEG = b"t" * 32
 HK = {"X-Host-Key": "hk"}
 
 
+def _fra(giorni):
+    """Una data scritta come INTENZIONE, non come cifra sul calendario.
+
+    ⛔ `test_cancellazione_rimborsa_anche_la_tassa` pretende il rimborso PIENO, che la
+    politica flessibile concede solo se all'arrivo manca abbastanza tempo. Con le date
+    cablate (2027-01-10/12) sarebbe diventato rosso da solo il **2027-01-10**, misurato il
+    2026-08-13: il rimborso sarebbe sceso da 20800 a 10800 e nessuno avrebbe toccato una
+    riga di codice. ⚠️ E questo test guarda i SOLDI dell'ospite: un rosso qui, il giorno
+    che arriva, sembra un difetto sulla tassa e manda a cercare dove non c'e' niente."""
+    import datetime
+    return (datetime.date.today() + datetime.timedelta(days=giorni)).isoformat()
+
+
 class TestTassaPreAcquisto(unittest.TestCase):
     def setUp(self):
         d = self.dir = tempfile.mkdtemp()
@@ -35,12 +48,12 @@ class TestTassaPreAcquisto(unittest.TestCase):
         body.update(tax)
         self.g("POST", "/api/host/pubblica", body, HK)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa",
-                "da": "2027-01-01", "a": "2027-01-31", "unita_totali": 1,
+                "da": _fra(1), "a": _fra(60), "unita_totali": 1,
                 "prezzo_netto_cents": 10000}, HK)
 
     def _quote(self, party=2):
         _, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": "casa",
-                      "check_in": "2027-01-10", "check_out": "2027-01-12", "party": party})
+                      "check_in": _fra(20), "check_out": _fra(22), "party": party})
         return q
 
     def test_tassa_calcolata_e_mostrata_pre_acquisto(self):
@@ -61,7 +74,7 @@ class TestTassaPreAcquisto(unittest.TestCase):
         # il book riporta totale_cents (= soggiorno + tassa): e' quello che Stripe addebita
         self._pubblica(tassa_pp_notte_cents=200)
         _, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": "casa",
-                      "check_in": "2027-01-10", "check_out": "2027-01-12", "party": 2})
+                      "check_in": _fra(20), "check_out": _fra(22), "party": 2})
         _, b = self.g("POST", "/api/concierge/book",
                       {"quote_token": q["quote_token"], "email": "o@x.it"})
         self.assertEqual(b["totale_cents"], 20800)            # 20000 soggiorno + 800 tassa
@@ -70,7 +83,7 @@ class TestTassaPreAcquisto(unittest.TestCase):
     def test_cancellazione_rimborsa_anche_la_tassa(self):
         self._pubblica(tassa_pp_notte_cents=200)              # flessibile (default) + tassa
         _, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": "casa",
-                      "check_in": "2027-01-10", "check_out": "2027-01-12", "party": 2})
+                      "check_in": _fra(20), "check_out": _fra(22), "party": 2})
         _, b = self.g("POST", "/api/concierge/book",
                       {"quote_token": q["quote_token"], "email": "o@x.it"})
         _, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
@@ -179,10 +192,10 @@ class TestTassaPreAcquisto(unittest.TestCase):
                 "titolo": "C2", "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 9000,
                 "capacita": 2, "servizi": [], "immagini": [], "valuta": "EUR"}, HK)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa2",
-                "da": "2027-01-01", "a": "2027-01-31", "unita_totali": 1,
+                "da": _fra(1), "a": _fra(60), "unita_totali": 1,
                 "prezzo_netto_cents": 9000}, HK)
         _, q2 = self.g("POST", "/api/concierge/quote", {"alloggio_id": "casa2",
-                       "check_in": "2027-01-10", "check_out": "2027-01-12", "party": 1})
+                       "check_in": _fra(20), "check_out": _fra(22), "party": 1})
         self.assertEqual(q2["valuta"], "EUR")
 
 

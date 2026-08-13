@@ -84,8 +84,12 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
                        "prezzo_notte_cents": 15000, "capacita": 2,
                        "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         self.assertEqual(s, 201)
+        # ⛔ RELATIVA: due test di questa classe pretendono un soggiorno che deve ANCORA
+        # arrivare (il rimborso «pieno» dipende dalla politica flessibile, che guarda
+        # quanto manca all'arrivo). Con le date cablate sarebbero diventati rossi da soli
+        # il 2026-09-20 e il 2026-10-10 -- misurato il 2026-08-13.
         s, _ = self.g("POST", "/api/host/disponibilita_range",
-                      {"alloggio_id": "casa-liq", "da": "2026-09-01", "a": "2027-06-30",
+                      {"alloggio_id": "casa-liq", "da": self._fra(1), "a": self._fra(150),
                        "unita_totali": 1, "prezzo_netto_cents": 15000},
                       {"X-Host-Token": self.tok})
         self.assertEqual(s, 200)
@@ -96,6 +100,12 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
     def g(self, metodo, path, body=None, headers=None, query=None):
         return self.r.gestisci(metodo, path, query or {},
                                json.dumps(body) if body is not None else None, headers or {})
+
+    @staticmethod
+    def _fra(giorni):
+        """Una data scritta come INTENZIONE, non come cifra sul calendario."""
+        import datetime
+        return (datetime.date.today() + datetime.timedelta(days=giorni)).isoformat()
 
     def _prenota_e_paga(self, ci, co):
         s, q = self.g("POST", "/api/concierge/quote",
@@ -118,7 +128,7 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
     def test_cancella_dopo_conferma_escrow_non_supera_incasso(self):
         """Escrow gia' RILASCIATO all'host (l'ospite ha confermato 'tutto ok') e poi
         cancellazione: il rimborso promesso non puo' MAI superare cio' che resta in cassa."""
-        b = self._prenota_e_paga("2026-09-20", "2026-09-22")
+        b = self._prenota_e_paga(self._fra(20), self._fra(22))
         rif, pagato = b["riferimento"], int(b["prezzo_guest_cents"])
 
         s, ok = self.g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
@@ -146,7 +156,7 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
     def test_cancella_escrow_ancora_in_garanzia_rimborso_pieno_invariato(self):
         """NON-REGRESSIONE: se i soldi sono ANCORA in garanzia (nessuna liquidazione),
         la cancellazione deve continuare a rimborsare per intero secondo la politica."""
-        b = self._prenota_e_paga("2026-10-10", "2026-10-12")
+        b = self._prenota_e_paga(self._fra(40), self._fra(42))
         rif, pagato = b["riferimento"], int(b["prezzo_guest_cents"])
         self.assertEqual(self.sys.garanzia.stato(rif)["stato"], "in_garanzia")
 
@@ -161,7 +171,7 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
         """Stessa falla per la via 'risolto': disputa arbitrata (parte all'host, parte
         rimborsata) e poi cancellazione self-service -> il secondo rimborso non puo'
         sommarsi alla quota gia' liquidata all'host."""
-        b = self._prenota_e_paga("2026-11-05", "2026-11-07")
+        b = self._prenota_e_paga(self._fra(60), self._fra(62))
         rif, pagato = b["riferimento"], int(b["prezzo_guest_cents"])
         s, _ = self.g("POST", "/api/garanzia/contesta",
                       {"voucher_token": b["voucher_token"], "motivo": "wifi assente"})
@@ -185,7 +195,7 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
         """L'host che ha GIA' incassato l'escrow non puo' auto-cancellare: rimborserebbe
         il cliente al 100% con i soldi gia' usciti (perdita = netto - penale 15%),
         farmabile da una coppia host+ospite complice."""
-        b = self._prenota_e_paga("2026-12-01", "2026-12-03")
+        b = self._prenota_e_paga(self._fra(80), self._fra(82))
         rif = b["riferimento"]
         s, _ = self.g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
         self.assertEqual(s, 200)
@@ -202,7 +212,7 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
     def test_host_cancella_normale_invariata(self):
         """NON-REGRESSIONE: con l'escrow ancora in garanzia la cancellazione host
         continua a funzionare (cliente rimborsato 100%, penale all'host)."""
-        b = self._prenota_e_paga("2027-01-10", "2027-01-12")
+        b = self._prenota_e_paga(self._fra(100), self._fra(102))
         rif = b["riferimento"]
         self.assertEqual(self.sys.garanzia.stato(rif)["stato"], "in_garanzia")
         s, out = self.g("POST", "/api/host/cancella", {"riferimento": rif},

@@ -55,8 +55,11 @@ class TestRecensioniAntiFake(unittest.TestCase):
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa", "titolo": "Casa", "citta": "Roma", "prezzo_notte_cents": 50000,
                 "capacita": 4, "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
+        # ⛔ RELATIVA: `test_recensione_pagata_ammessa` pretende `troppo_presto`, cioe' un
+        # soggiorno che deve ANCORA arrivare. Con le date cablate (2026-09-15/18) sarebbe
+        # diventato rosso da solo il **2026-09-18** -- misurato il 2026-08-13.
         self.g("POST", "/api/host/disponibilita_range",
-               {"alloggio_id": "casa", "da": "2026-09-01", "a": "2026-09-30",
+               {"alloggio_id": "casa", "da": self._fra(1), "a": self._fra(60),
                 "unita_totali": 2, "prezzo_netto_cents": 50000}, {"X-Host-Token": self.tok})
 
     def tearDown(self):
@@ -64,6 +67,12 @@ class TestRecensioniAntiFake(unittest.TestCase):
 
     def g(self, m, p, b=None, h=None):
         return self.r.gestisci(m, p, {}, json.dumps(b) if b is not None else None, h or {})
+
+    @staticmethod
+    def _fra(giorni):
+        """Una data scritta come INTENZIONE, non come cifra sul calendario."""
+        import datetime
+        return (datetime.date.today() + datetime.timedelta(days=giorni)).isoformat()
 
     def _book(self, ci, co):
         s, q = self.g("POST", "/api/concierge/quote",
@@ -79,7 +88,7 @@ class TestRecensioniAntiFake(unittest.TestCase):
                         {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
 
     def test_recensione_senza_pagamento_bloccata(self):
-        b = self._book("2026-09-05", "2026-09-08")           # hold NON pagato
+        b = self._book(self._fra(10), self._fra(13))         # hold NON pagato
         s, res = self.g("POST", "/api/recensioni",
                         {"token": b["diritto_recensione"], "voto": 5, "testo": "finta"})
         self.assertEqual(s, 402, res)
@@ -88,7 +97,7 @@ class TestRecensioniAntiFake(unittest.TestCase):
                          "REGRESSIONE: recensione finta senza pagamento entrata")
 
     def test_recensione_pagata_ammessa(self):
-        b = self._book("2026-09-15", "2026-09-18")
+        b = self._book(self._fra(20), self._fra(23))
         self._paga(b["riferimento"])                         # ora e' pagata
         # NBF (2026-07-20, stile Booking/Agoda): pagata MA soggiorno non ancora fatto ->
         # il diritto emesso al book (nbf=check-out) rifiuta con troppo_presto

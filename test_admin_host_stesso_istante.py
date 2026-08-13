@@ -41,7 +41,17 @@ SEG = b"h" * 32
 HK = {"X-Host-Key": "hk"}
 AK = {"X-Admin-Key": "ak"}
 WHSEC = "whsec_test"
-CHECK_IN, CHECK_OUT = "2027-04-10", "2027-04-12"
+def _fra(giorni):
+    """Una data scritta come INTENZIONE, non come cifra sul calendario. ⛔ Qui c'era
+    `2027-04-10/12`: misurato il 2026-08-13, questi due test sarebbero diventati rossi da
+    soli il **2027-04-02**. Riguardano un rimborso e una cancellazione nello stesso istante,
+    cioe' i SOLDI: un rosso lassu' sembra un difetto sui rimborsi e manda a cercare per
+    ore dove non c'e' niente."""
+    import datetime
+    return (datetime.date.today() + datetime.timedelta(days=giorni)).isoformat()
+
+
+CHECK_IN, CHECK_OUT = _fra(30), _fra(32)
 
 
 class TestAdminHostStessoIstante(unittest.TestCase):
@@ -62,7 +72,7 @@ class TestAdminHostStessoIstante(unittest.TestCase):
                "prezzo_notte_cents": 10000, "capacita": 2, "servizi": [], "immagini": [],
                "tassa_pp_notte_cents": 200}, HK)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "hotel",
-               "da": "2027-04-01", "a": "2027-04-30", "unita_totali": unita,
+               "da": _fra(1), "a": _fra(60), "unita_totali": unita,
                "prezzo_netto_cents": 10000}, HK)
         self._seq = 0
 
