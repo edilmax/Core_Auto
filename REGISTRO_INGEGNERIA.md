@@ -277,7 +277,24 @@ Blocco 1 ha visto l'avvio reale né una prova di concorrenza. Chi apre il Blocco
 
 ### 🏷️ «DA NOI DEVE COSTARE SEMPRE MENO CHE SU BOOKING» — oggi è MOSTRATO, non GARANTITO
 
-**Domanda del fondatore, 2026-08-13**, e la risposta è a metà sì. Misurato quel giorno:
+⛔ **ORDINE DEL FONDATORE, 2026-08-13, parole sue:** *«L'importante è che siamo più bassi di
+Booking, Agoda, Expedia e tutti i colossi: noi abbiamo le commissioni più basse e dobbiamo
+avere gli stessi prezzi che danno a loro. Sistemiamola in un modo intelligente dove l'host
+non può mentire.»*
+
+**Sono DUE requisiti, e il secondo è quello difficile.**
+① **Il prezzo finale per l'ospite da noi deve essere più basso.** Questo è già vero **per
+costruzione**, a una condizione: che l'host ci dia lo stesso prezzo base. L'ospite da noi
+paga **0%**, le OTA caricano markup + commissione ospite. La matematica lavora per noi.
+② **L'host deve darci lo STESSO prezzo base che dà alle OTA, e non deve poter mentire.**
+Qui oggi **non c'è niente**. È un problema di *incentivi e verifica*, non di aritmetica.
+
+💡 **La leva probabilmente NON è uno scraper** (leggere prezzi altrui ha vincoli legali da
+verificare **prima**, D25): è il **contratto host**. Si può rendere *conveniente* dire la
+verità — per esempio una commissione più bassa a chi dimostra la parità — invece di
+rincorrere chi mente. La decisione è del fondatore: tocca soldi veri e strategia (D12).
+
+Misurato il 2026-08-13, e la risposta è a metà sì:
 
 ```
 fase83_server.py:6798   from fase125_confronto_guest import confronta_guest   -> VIVO
@@ -645,7 +662,27 @@ rivalidare. Toccare sei file HTML per un problema non dimostrato sarebbe stato b
 **STATO: ACCESO in produzione** — `GET /api/host/calendario_prezzi` era già vivo
 (`fase83_server.py:1935`, pannello host `deploy/host.html:1339`). Nessuna dipendenza nuova,
 nessun file nuovo, nessuna variabile d'ambiente. **Test: +16** (5603 → 5619).
-⚠️ **Non è ancora in produzione sul VPS**: il deploy richiede «autorizzato» ed è separato.
+
+✅ **IN PRODUZIONE dal 2026-08-13 sera**, commit `5be7e85`, i tre posti allineati. CI **13
+job / 0 falliti**; richiesta di unione **#40 unita**, verificata dall'API con una **seconda**
+chiamata. Verifica dopo lo scambio: `verifica_produzione.py` **190 controlli / 0 violazioni**,
+log d'avvio `money_path_pronto: True, avvisi: []`, le 4 frasi d'errore lette **dal sito vero**
+in **8 lingue su 8**, `/api/host/calendario_prezzi` senza token → **401** (viva e chiusa, non
+un 404 che non proverebbe niente). Il sito non è mai andato giù.
+
+🪂 **DUE COSE TROVATE DAL DEPLOY, e vanno sapute prima del prossimo.**
+· **Il paracadute era agganciato all'immagine SBAGLIATA**: `casavip-app:prec` puntava a una
+di **34 ore** prima mentre ne girava una di **14**. È il difetto già fatto **quattro volte in
+quattro giorni**; il passo `[1b]` di `DEPLOY.md` l'ha ri-agganciato **e verificato** (i due
+id devono coincidere, altrimenti si ferma). ⚠️ Non è un caso isolato: **si sgancia da solo a
+ogni deploy**, quindi `[1b]` non è facoltativo, è il primo passo.
+· **Il controllo dei backup mentiva PER ASSENZA**: `PRAGMA integrity_check` stampava righe
+**vuote**, e stavo per leggerle come «tutto a posto». Non c'erano dati sani: **non c'era
+`sqlite3`**, né sull'host né nel container. È lo sbaglio **S1** (il vuoto non è un valore) e
+la **S11** (l'ambiente è parte della misura) nello stesso punto. Rifatto con **Python**, che
+c'è: **25 database su 25 `ok`**, 0 rotti, 0 non giudicati, con il denominatore dichiarato.
+⛔ I 25 database stanno **dentro** il container (`docker exec casavip_app`), non sull'host:
+un controllo lanciato da fuori guarda una macchina che non è quella dei dati.
 
 ### ✅ FATTO 2026-08-13 — LE BOMBE A TEMPO: **13 test che sarebbero diventati rossi DA SOLI**
 

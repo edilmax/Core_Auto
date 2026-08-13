@@ -24,12 +24,28 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > python collaudi/prima_di_lanciare.py          # 7 controlli, il 7º è nuovo
 > python collaudi/piano_dei_soldi.py            # quante fasi dei soldi restano
 > ```
-> **Stato al momento della scrittura:** computer e GitHub su **`704883d`** (richiesta #37
-> **unita**, verificata dall'API con una seconda chiamata). Una seconda richiesta (**#38**,
-> solo la riga `CONSEGNE AGGIORNATE A:`) era in attesa della CI. ⚠️ **Il VPS è fermo a
-> `bf2e1b6` ED È CORRETTO COSÌ**: questo lavoro **non tocca una riga di produzione** (solo
-> test, `collaudi/` e documenti), quindi il sito è identico. Il deploy richiede
-> «autorizzato» e **non è urgente**.
+> **Stato al momento della scrittura (2026-08-13 sera):** ✅ **I TRE POSTI SONO ALLINEATI su
+> `5be7e85`** — computer, GitHub e **VPS**. Richiesta di unione **#40 UNITA**, verificata
+> dall'API con una **seconda** chiamata (`merged=True`), CI **13 job / 0 falliti**.
+> ✅ **Il lavoro di `fase119` È IN PRODUZIONE**, deploy fatto col protocollo D17.
+> ⛔ **Questa riga invecchia: rimisurala coi comandi qui sopra, non fidarti.**
+>
+> 🪂 **Al deploy il paracadute era agganciato all'immagine SBAGLIATA** (`:prec` puntava a una
+> di **34 ore** prima, mentre ne girava una di 14): è il difetto già fatto **quattro volte in
+> quattro giorni**, e stavolta il passo `[1b]` di `DEPLOY.md` l'ha ri-agganciato **e
+> verificato** (i due id devono coincidere, altrimenti si ferma). ⚠️ **Succederà ancora**: il
+> paracadute si sgancia da solo a ogni deploy, il passo `[1b]` non è facoltativo.
+>
+> 🔍 **E il controllo dei backup mentiva per assenza:** `PRAGMA integrity_check` stampava righe
+> **vuote** perché **`sqlite3` non esiste** né sull'host né nel container — non perché i dati
+> fossero sani (sbaglio **S1**: il vuoto non è un valore). Rifatto con **Python**, che c'è:
+> **25 database su 25 `ok`**, 0 rotti, 0 non giudicati. ⛔ I db stanno **dentro** il container
+> (`docker exec casavip_app`), non sull'host.
+>
+> ✅ **Verificato sul sito VERO, non dedotto:** le 4 frasi d'errore nuove sono in `app.js`
+> pubblico **in 8 lingue su 8**, `/api/host/calendario_prezzi` senza token risponde **401**
+> (viva e chiusa, non 404), `verifica_produzione.py` **190 controlli / 0 violazioni**,
+> log d'avvio `money_path_pronto: True, avvisi: []`.
 >
 > ### ✅ FATTO OGGI — `fase119_calendario_prezzi`: **17/17 uccisi, BLOCCO 1 CHIUSO**
 > ⛔ **NON RIFARLO.** Dettaglio per esteso nel registro, voce «FATTO 2026-08-13 —
@@ -1205,7 +1221,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 092f379
+CONSEGNE AGGIORNATE A: 5be7e85
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
