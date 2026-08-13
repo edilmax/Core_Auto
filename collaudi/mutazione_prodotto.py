@@ -88,6 +88,15 @@ MUTANTI = [
     # ── LA TASSA DI SOGGIORNO (fase66) — i tre guasti VERI del 2026-08-12 ──────
     # Non mutanti immaginati: sono esattamente i tre difetti trovati e riparati quel
     # giorno, rimessi qui perche' se tornano il Giudice li deve vedere in CI.
+    ("fase133_split_quote_uguali.py",
+     "        and 0 < n <= MAX_PARTECIPANTI else 0",
+     "        and n > 0 else 0",
+     "test_fase133_split_quote_uguali",
+     "il tetto sui partecipanti torna a non esistere: `n` arriva da una rotta PUBBLICA "
+     "(/api/split/preview, nessuna sessione) e la lista si costruisce elemento per "
+     "elemento, quindi UNA richiesta da quaranta byte fa allocare memoria lineare in n e "
+     "il processo muore. Misurato: 4 milioni -> 34 MB, crescita lineare"),
+
     ("fase66_tassa_soggiorno.py",
      "    if _regola_malformata(regola):",
      "    if False:",

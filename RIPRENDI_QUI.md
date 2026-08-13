@@ -11,7 +11,7 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🚦 2026-08-12 — RIPARTI DA QUI. IL GUARDIANO DEL PIANO **FERMA IL COMMIT**; `fase133` DA FARE.
+## 🚦 2026-08-12 — RIPARTI DA QUI. GUARDIANO + `D24` + `fase133`: resta **solo `fase119`** nel Blocco 1.
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
 >
@@ -46,9 +46,29 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > **un modulo puo' risultare VIVO e avere dentro codice morto.** `raggiungibilita.py` conta gli
 > IMPORT, non i SIMBOLI usati. Vedi la riga su `fase133` qui sotto: non e' teoria.
 >
-> ### ▶️ `fase133_split_quote_uguali` — NON FATTA, ma **preparata**, e c'e' una sorpresa
-> ⛔ **NON e' stata toccata**: zero righe cambiate, `git status` lo conferma. Fatto solo il
-> lavoro di lettura, e ha cambiato la dimensione del compito. **Misurato, non dedotto:**
+> ### ✅ `fase133_split_quote_uguali` — **FATTA**, tutti e quattro i livelli, 1 difetto GRAVE
+> ⛔ **IL DIFETTO: una richiesta HTTP PUBBLICA da quaranta byte poteva far allocare gigabyte
+> al server e buttare giu' il sito.** `n` arriva dal **browser** (`fase83_server.py:6748`,
+> `POST /api/split/preview`) e non aveva **nessun tetto**; il modulo si dichiarava «BLINDATO»
+> ed era **falso**, perche' un `n` enorme non e' *invalido*: e' un intero positivo, quindi
+> passa. Misurato: **4 milioni -> 34 MB, crescita LINEARE**. ⚠️ Il rate limit non copre
+> questo: **ne basta UNA** richiesta, e il VPS ha una sola CPU. ⚠️ In produzione ci sono
+> **0 annunci**: nessuno l'ha mai sfruttato.
+> ✅ Riparato con `MAX_PARTECIPANTI = 1000`, **due righe eseguibili**, e visto **ROSSO PRIMA**
+> (due milioni di elementi allocati), con ripristino byte-identico e il difetto **rimesso
+> dentro** per la riprova. Il mutante e' entrato nella lista del Giudice che gira **in CI**.
+> ⚖️ **Giudice: 22 provati · 15 uccisi · ZERO sopravvissuti sul codice VIVO.** I 7 che restano
+> sono tutti dentro `SplitQuoteUguali` (codice morto): **dichiarati, ⛔ NON equivalenti** (B6 +
+> D19). ⛔ **Cosa farne di quella classe e' una decisione TUA**, non tecnica.
+> 💡 **Il buco che ha trovato il Giudice, e non il ragionamento:** il confine **`totale = 0`**.
+> `test_invalidi` provava `-5` e `"x"`, mai **lo zero**. Chiuso **scrivendo il test che
+> mancava**, che ora **dichiara una scelta** prima scritta in nessun posto: *zero e' un totale
+> legittimo, e tre persone che dividono zero prendono zero ciascuna*.
+> ⚠️ **Costo del giro, da sapere prima di rifarlo:** ogni mutante paga TUTTO l'insieme dei
+> guardiani, e l'E2E costruisce un sistema vero -> quel costo si paga **22 volte** (oltre dieci
+> minuti). *I sorveglianti si scelgono cronometrandoli, non a intuito.*
+>
+> **E il quadro sulla raggiungibilita' resta valido, misurato:**
 > ```
 > riparti_uguale     2 usi in produzione  (fase83_server.py:6747-6748)
 > SplitQuoteUguali   0        crea_split_quote 0        crea_gruppo 0
@@ -759,14 +779,17 @@ stata tolta** in questo lavoro — non rimetterla.
 moduli**, 364 che il generatore non sa rompere, **0 moduli che nessun test nomina**.
 ⛔ Ma **essere nominato non è essere coperto**: è tutta lì la differenza, e questa tabella la misura.
 
-**Moduli dei SOLDI GIÀ passati dal giudice — 6:**
+**Moduli dei SOLDI GIÀ passati dal giudice — 7:**
+✅ **`fase133_split_quote_uguali`** (15 su 22 uccisi, 2026-08-12, **0 sopravvissuti sul codice
+VIVO**; i 7 che restano sono tutti su `SplitQuoteUguali`, che la produzione non raggiunge —
+dichiarati, ⛔ **non** equivalenti. **1 difetto vero: memoria senza tetto da rotta pubblica**) ·
 `fase59_concierge` (112 · 48 uccisi) · `fase160_escrow_garanzia` (39 · 34 uccisi) ·
 `fase100_dac7` (18 · 13 uccisi) · `fase188_paga_struttura` (4) ·
 ✅ **`fase167_credito_single_use`** (11 su 11 uccisi, 2026-08-11, **1 difetto vero chiuso**) ·
 ✅ **`fase66_tassa_soggiorno`** (24 su 24 uccisi, **0 sopravvissuti, 0 equivalenti dichiarati**,
 2026-08-12, **5 difetti veri chiusi**).
 
-**Moduli dei SOLDI CHE RESTANO — 11, per 400 punti.** *(rimisurato col censimento il
+**Moduli dei SOLDI CHE RESTANO — 10, per 376 punti.** *(rimisurato col censimento il
 2026-08-12; ⛔ **rimisuralo**, non fidarti di questa tabella: i numeri invecchiano)*
 
 | modulo | punti | lo nominano | blocco |
@@ -777,7 +800,6 @@ moduli**, 364 che il generatore non sa rompere, **0 moduli che nessun test nomin
 | `fase101_stripe_connect` | 50 | 7 | 3 |
 | `fase147_tassa_comunale` | 29 | 6 | 2 |
 | `fase85_pagamenti_stripe` | 26 | 77 | 5 |
-| `fase133_split_quote_uguali` | 24 | **2** | **1 ← il prossimo** |
 | `fase98_policy_commissione` | 18 | 15 | 2 |
 | `fase87_stripe_webhook` | 15 | 59 | 5 |
 | `fase119_calendario_prezzi` | 15 | **2** | **1 ← e poi questo** |
@@ -787,8 +809,9 @@ moduli**, 364 che il generatore non sa rompere, **0 moduli che nessun test nomin
 `fase43_commissione` (31) · `fase44_prezzo` (25) · `fase35_pagamenti` (25) = **81 punti che NON
 vanno fatti**. Erano in questa tabella e mandavano a lavorare sul nulla.
 
-**Il Blocco 1 è quasi chiuso**: restano `fase133` (24) e `fase119` (15) = **39 punti**, i due
-moduli più ciechi che restano (2 test li nominano ciascuno).
+**Il Blocco 1 è a un modulo dalla chiusura**: resta `fase119_calendario_prezzi` (**15 punti**,
+2 test lo nominano). ⚠️ E prima di attaccarlo vale la stessa domanda che su `fase133` ha
+cambiato il compito: **quanti di quei 15 punti sono su codice che la produzione raggiunge?**
 
 ⛔ **La colonna che conta è la terza, non la seconda.** Il rischio non sta dove c'è più codice:
 sta dove c'è **meno sorveglianza**. `fase167_credito_single_use` ha **un solo test** che lo
@@ -2795,7 +2818,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5589 test
+SUITE ATTUALE: Ran 5596 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

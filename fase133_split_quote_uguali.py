@@ -6,6 +6,14 @@ CONSERVAZIONE ESATTA al centesimo (largest-remainder: i primi resti prendono +1)
 durevole opzionale dei pagamenti per partecipante + completamento. Complementare a fase65
 (split generico): qui split equo deterministico + helper di ripartizione resti. PURO per il
 calcolo; store SQLite per lo stato. BLINDATO: input invalido → [] / no-op.
+
+⛔ E «BLINDATO» include un TETTO sul numero di quote, perché il numero arriva da una rotta
+PUBBLICA: `fase83_server.py` passa `dati.get("n")` del browser dritto a `riparti_uguale`
+(`POST /api/split/preview`, senza sessione). Un intero positivo enorme era «valido» per i
+controlli e faceva costruire la lista elemento per elemento: misurato il 2026-08-12, la
+memoria cresce LINEARMENTE in n (4 milioni → 34 MB), quindi una singola richiesta da quaranta
+byte poteva chiedere gigabyte e uccidere il processo. Il rate limit non protegge da questo:
+non servono mille richieste, ne basta una. Il tetto è `MAX_PARTECIPANTI`, qui sotto.
 """
 from __future__ import annotations
 
@@ -17,11 +25,24 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 logger = logging.getLogger("core_auto.split_quote_uguali")
 
 
+# Quante quote al massimo. Chi ci perde se il numero è sbagliato (D16): troppo BASSO e un
+# gruppo legittimo non riesce più a dividere il conto, e ci perde l'host; troppo ALTO e non
+# protegge niente. Un gruppo vero di persone che dividono un soggiorno sta in decine: questo
+# lascia due ordini di grandezza di margine e costa comunque pochi kilobyte per richiesta.
+MAX_PARTECIPANTI = 1000
+
+
 def riparti_uguale(totale_cents: Any, n: Any) -> List[int]:
-    """N quote intere che sommano ESATTAMENTE a totale_cents (i primi (resto) hanno +1)."""
+    """N quote intere che sommano ESATTAMENTE a totale_cents (i primi (resto) hanno +1).
+
+    ⛔ `n` OLTRE `MAX_PARTECIPANTI` viene RIFIUTATO, non troncato: troncare risponderebbe a una
+    domanda diversa da quella fatta, in silenzio -- ed è la lezione di `fase66`, dove «azzerare
+    un valore invalido» lo trasformava nella lettura più cara e cancellava la prova dell'errore.
+    """
     tot = totale_cents if isinstance(totale_cents, int) and \
         not isinstance(totale_cents, bool) and totale_cents >= 0 else -1
-    k = n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else 0
+    k = n if isinstance(n, int) and not isinstance(n, bool) \
+        and 0 < n <= MAX_PARTECIPANTI else 0
     if tot < 0 or k == 0:
         return []
     base, resto = divmod(tot, k)
