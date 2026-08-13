@@ -37,9 +37,16 @@ class TestElimina(unittest.TestCase):
         s,_=self.g("POST","/api/host/alloggio_elimina",{"slug":"sbagliato"})
         self.assertEqual(s,401)
     def test_bloccato_con_prenotazioni_future(self):
-        for gg in ("2027-01-01","2027-01-02"):
+        # ⛔ «FUTURE» sta nel NOME del test, quindi si scrive «fra N giorni». Con le date
+        # cablate (2027-01-01/03) sarebbe diventato rosso da solo il **2027-01-04**:
+        # quelle prenotazioni avrebbero smesso di essere future e l'annuncio si sarebbe
+        # potuto cancellare, cioe' il test avrebbe smesso di sorvegliare «mai clienti
+        # senza stanza» senza che nessuno se ne accorgesse. Misurato il 2026-08-13.
+        import datetime
+        fra = lambda n: (datetime.date.today() + datetime.timedelta(days=n)).isoformat()
+        for gg in (fra(30), fra(31)):
             self.sys.inventario.imposta_disponibilita("sbagliato",gg,unita_totali=1,prezzo_netto_cents=9000)
-        self.sys.inventario.blocca("sbagliato","2027-01-01","2027-01-03",idem_key="b",origine="t")
+        self.sys.inventario.blocca("sbagliato",fra(30),fra(32),idem_key="b",origine="t")
         s,d=self.g("POST","/api/host/alloggio_elimina",{"slug":"sbagliato"},{"X-Host-Token":self.tok})
         self.assertEqual(s,409,d)                     # mai clienti senza stanza
         self.assertIsNotNone(self.sys.catalogo.dettaglio_owner("sbagliato"))

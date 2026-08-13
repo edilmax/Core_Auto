@@ -23,6 +23,12 @@ __pycache__/
 ricombinato_*.py
 *.log
 *.json
+# ⛔ ECCEZIONE VOLUTA: lo schedario delle bombe a tempo DEVE viaggiare col progetto, se no
+# in CI (e su qualunque altro computer) il `controllo_7` del pre-volo non trova niente da
+# leggere e risponde «NON ESEGUITO» -- cioe' smette di proteggere restando silenzioso.
+# Preso il 2026-08-13 con `git add --dry-run`, non a occhio: e' lo sbaglio S13, dove una
+# riga scritta mesi prima per tutt'altro motivo esclude un file NUOVO senza dirlo.
+!collaudi/bombe_a_tempo.json
 forensic_logs/
 quantum_linker.log
 super_linker_logs/

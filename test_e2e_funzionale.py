@@ -20,6 +20,18 @@ PUB = {"host_id": "demo", "slug": "casa-roma", "titolo": "Casa Roma", "citta": "
        "servizi": ["wifi"], "immagini": ["https://x/y.jpg"]}
 
 
+def _fra(giorni):
+    """Una data scritta come INTENZIONE, non come cifra sul calendario.
+
+    ⛔ QUI L'INTENZIONE E' «SOGGIORNO APPENA CONCLUSO», e va detta: il passo 05 recensisce
+    subito dopo, e il diritto di recensione vale dal check-out per **90 giorni**. Con le
+    date cablate (2026-07-14/16) il soggiorno invecchiava da solo: misurato il 2026-08-13,
+    passata quella finestra il test sarebbe diventato rosso senza che nessuno toccasse una
+    riga -- e siccome e' l'E2E, il rosso sembra «il flusso di prenotazione e' guasto»."""
+    import datetime
+    return (datetime.date.today() + datetime.timedelta(days=giorni)).isoformat()
+
+
 class TestE2EFunzionale(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -48,7 +60,7 @@ class TestE2EFunzionale(unittest.TestCase):
         s, _ = self.g("POST", "/api/host/pubblica", PUB, HK)
         self.assertIn(s, (200, 201))
         s, _ = self.g("POST", "/api/host/disponibilita_range",
-                      {"alloggio_id": "casa-roma", "da": "2026-07-01", "a": "2026-07-31",
+                      {"alloggio_id": "casa-roma", "da": _fra(-30), "a": _fra(-1),
                        "unita_totali": 1, "prezzo_netto_cents": 10000}, HK)
         self.assertEqual(s, 200)
 
@@ -59,8 +71,8 @@ class TestE2EFunzionale(unittest.TestCase):
 
     def test_03_quote_marketplace_0pct_ospite(self):
         s, q = self.g("POST", "/api/concierge/quote",
-                      {"alloggio_id": "casa-roma", "check_in": "2026-07-10",
-                       "check_out": "2026-07-12", "party": 2})
+                      {"alloggio_id": "casa-roma", "check_in": _fra(-25),
+                       "check_out": _fra(-23), "party": 2})
         self.assertEqual(s, 200)
         self.assertEqual(q["commissione_cents"], 3000)        # 15% su 20000
         self.assertEqual(q["prezzo_guest_cents"], 20000)      # ospite paga pulito (0% fee)
@@ -68,16 +80,16 @@ class TestE2EFunzionale(unittest.TestCase):
 
     def test_04_quote_diretto_5pct(self):
         s, q = self.g("POST", "/api/concierge/quote",
-                      {"alloggio_id": "casa-roma", "check_in": "2026-07-20",
-                       "check_out": "2026-07-22", "party": 2, "fonte": "diretto"})
+                      {"alloggio_id": "casa-roma", "check_in": _fra(-20),
+                       "check_out": _fra(-18), "party": 2, "fonte": "diretto"})
         self.assertEqual(s, 200)
         self.assertEqual(q["commissione_cents"], 1000)        # 5% su 20000
         self.assertEqual(q["netto_host_cents"], 19000)
 
     def test_05_book_conferma_voucher_smartpass_recensione(self):
         s, q = self.g("POST", "/api/concierge/quote",
-                      {"alloggio_id": "casa-roma", "check_in": "2026-07-14",
-                       "check_out": "2026-07-16", "party": 2})
+                      {"alloggio_id": "casa-roma", "check_in": _fra(-14),
+                       "check_out": _fra(-12), "party": 2})
         s, b = self.g("POST", "/api/concierge/book",
                       {"quote_token": q["quote_token"], "email": "ospite@x.it"})
         self.assertEqual(s, 201)                              # CREATED
@@ -95,8 +107,8 @@ class TestE2EFunzionale(unittest.TestCase):
     def test_06_host_pannello(self):
         for p, q in (("/api/host/metriche", {}), ("/api/host/alloggi", {"host_id": "demo"}),
                      ("/api/host/export", {}),
-                     ("/api/host/calendario", {"alloggio": "casa-roma", "da": "2026-07-01",
-                                               "a": "2026-07-05"})):
+                     ("/api/host/calendario", {"alloggio": "casa-roma", "da": _fra(-30),
+                                               "a": _fra(-26)})):
             self.assertEqual(self.g("GET", p, headers=HK, query=q)[0], 200, p)
 
     def test_07_referral_link_assoluto(self):

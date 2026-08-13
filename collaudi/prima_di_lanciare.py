@@ -118,6 +118,10 @@ COSA_NON_GUARDA = (
     "l'ambiente lo confronta con quello DICHIARATO in RIPRENDI_QUI.md: se la "
     "dichiarazione e' sbagliata, il confronto e' sbagliato con lei",
     "gli `skipTest` li giudica sui file `test_*.py` della radice, non su `collaudi/`",
+    "le bombe a tempo NON le cerca adesso: legge lo schedario gia' misurato da "
+    "`collaudi/bombe_a_tempo.py` (cercarle davvero costa ~25 minuti). Se quello schedario e' "
+    "vecchio di piu' di 30 giorni questo controllo diventa ROSSO invece di tacere, perche' "
+    "una misura scaduta non e' una misura",
 )
 
 
@@ -452,6 +456,35 @@ def controllo_6_byte_di_controllo(radice=RADICE, quali=None):
 
 
 # --------------------------------------------------------------------------------------
+# 7. nessuna bomba a tempo sta per esplodere
+# --------------------------------------------------------------------------------------
+def controllo_7_bombe_a_tempo(radice=RADICE, schedario=None):
+    """Il 2026-08-13 alle 00:03 un test e' diventato rosso DA SOLO, e ci sono volute mezz'ora
+    e tre esecuzioni per capire che il codice era sano: era passata mezzanotte.
+
+    ⛔ IL GIUDIZIO NON STA QUI: sta in `collaudi/bombe_a_tempo.py`, che e' il posto dove
+    quella conoscenza vive. Qui si LEGGE lo schedario che quell'attrezzo ha prodotto -- una
+    copia del criterio resterebbe indietro il giorno che il criterio cambia.
+
+    ⛔ E NON SI CERCANO LE DATE COL TESTO. Misurato il 2026-08-13: nei test ci sono **1667
+    date cablate in 156 file**, e quasi nessuna e' pericolosa. Un allarme su 1667 punti
+    verrebbe spento entro tre giorni, e un allarme spento non protegge niente (regola ferrea
+    10). Ogni voce dello schedario e' invece **dimostrata**: quel test e' stato visto verde
+    oggi e rosso a quella data precisa."""
+    percorso = os.path.join(radice, "collaudi", "bombe_a_tempo.py")
+    if not os.path.isfile(percorso):
+        return (NON_ESEGUITO, "collaudi/bombe_a_tempo.py non c'e' piu': senza di lui nessuno "
+                              "sorveglia i test che scadono da soli, e il ritorno di quel "
+                              "difetto non lo vedrebbe nessuno fino a mezzanotte")
+    spec = importlib.util.spec_from_file_location("_bombe_prevolo", percorso)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    if schedario is None:
+        schedario = modulo.leggi_schedario()
+    return modulo.giudizio_dallo_schedario(schedario)
+
+
+# --------------------------------------------------------------------------------------
 # la traccia dello scopo
 # --------------------------------------------------------------------------------------
 def scrivi_scopo(file_dichiarati, radice=RADICE, percorso=None):
@@ -489,6 +522,7 @@ CONTROLLI = (
     (4, "l'ambiente e' quello dichiarato", controllo_4_ambiente),
     (5, "nessun giro di mutazione aperto", controllo_5_traccia_mutazione),
     (6, "nessun byte invisibile nei file toccati", controllo_6_byte_di_controllo),
+    (7, "nessuna bomba a tempo sta per esplodere", controllo_7_bombe_a_tempo),
 )
 
 

@@ -122,7 +122,7 @@ def _nomi_python_nel_repo(radice):
     return nomi
 
 
-def controllo_7_artefatti_fuori(radice=RADICE, cartelle=None):
+def controllo_8_artefatti_fuori(radice=RADICE, cartelle=None):
     cartelle = cartelle_di_transito(radice) if cartelle is None else list(cartelle)
     esistenti = [c for c in cartelle if os.path.isdir(c)]
     if not esistenti:
@@ -171,7 +171,7 @@ def confronta_scopo(dichiarati, toccati):
     return sorted(b - a), sorted(a - b)
 
 
-def controllo_8_scopo(radice=RADICE, dichiarati=None, toccati=None, traccia=None):
+def controllo_9_scopo(radice=RADICE, dichiarati=None, toccati=None, traccia=None):
     """`traccia` serve alle guardie per puntare a una traccia che NON esiste e provare il
     ramo «nessuno scopo dichiarato». Senza questo parametro la guardia leggeva la traccia
     VERA della macchina su cui girava: verde qui, rossa in CI -- cioe' un test che dipende
@@ -325,8 +325,14 @@ CONTROLLI = tuple(
     (numero, nome, controllo_4_ambiente_senza_il_path if numero == 4 else funzione)
     for numero, nome, funzione in pv.CONTROLLI
 ) + (
-    (7, "niente artefatti miei fuori dal repository", controllo_7_artefatti_fuori),
-    (8, "i file cambiati sono quelli dichiarati", controllo_8_scopo),
+    # ⛔ QUESTI NUMERI CONTINUANO QUELLI DEL PRE-VOLO, NON RIPARTONO DA CAPO. Il 2026-08-13
+    # il pre-volo ha preso un controllo nuovo (il 7, le bombe a tempo) e qui c'erano DUE
+    # controlli numerati 7: la guardia `test_IL_PATH_NON_SI_CONFRONTA_MA_IL_RESTO_SI` l'ha
+    # visto subito (`[..., 7, 7, 8, 10]`). Chi aggiunge un controllo al pre-volo deve far
+    # scalare anche questi -- e i NOMI delle funzioni seguono il numero, se no fra sei mesi
+    # `controllo_7_*` sara' il controllo 8 e chi legge inseguira' un numero che mente.
+    (8, "niente artefatti miei fuori dal repository", controllo_8_artefatti_fuori),
+    (9, "i file cambiati sono quelli dichiarati", controllo_9_scopo),
     (10, "il piano dei soldi non si contraddice", controllo_10_piano_dei_soldi),
 )
 

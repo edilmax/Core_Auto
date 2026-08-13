@@ -26,7 +26,18 @@ SEG = b"h" * 32
 HK = {"X-Host-Key": "hk"}
 AK = {"X-Admin-Key": "ak"}
 WHSEC = "whsec_test"
-CI, CO = "2027-09-10", "2027-09-12"      # soggiorno nel FUTURO -> etichetta 'futura'
+def _fra(giorni):
+    """Una data scritta come INTENZIONE, non come cifra sul calendario."""
+    import datetime
+    return (datetime.date.today() + datetime.timedelta(days=giorni)).isoformat()
+
+
+# ⛔ IL COMMENTO QUI ACCANTO DICEVA GIA' TUTTO — «soggiorno nel FUTURO» — e sotto c'era
+# scritto `2027-09-10`. Misurato il 2026-08-13: sarebbe diventato rosso da solo il
+# **2027-09-10**, il giorno in cui quel futuro sarebbe diventato passato e l'etichetta
+# 'futura' non sarebbe piu' stata giusta. 💡 Quando un commento deve spiegare che una
+# cifra significa «futuro», la cifra e' gia' sbagliata: si scrive l'intenzione.
+CI, CO = _fra(30), _fra(32)              # soggiorno nel FUTURO -> etichetta 'futura'
 
 
 class TestArchivioPrenotazioni(unittest.TestCase):
@@ -47,7 +58,7 @@ class TestArchivioPrenotazioni(unittest.TestCase):
                "prezzo_notte_cents": 10000, "capacita": 2, "servizi": [], "immagini": [],
                "tassa_pp_notte_cents": 200}, HK)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "hotel",
-               "da": "2027-09-01", "a": "2027-09-30", "unita_totali": 10,
+               "da": _fra(1), "a": _fra(60), "unita_totali": 10,
                "prezzo_netto_cents": 10000}, HK)
         self._seq = 0
 

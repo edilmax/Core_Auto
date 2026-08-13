@@ -62,6 +62,7 @@ Le 23.436 righe e i 6.488 rami coincidono con i numeri dichiarati nel commento d
 `copertura`: la misura del job e' quella vera, non una cifra ricordata a memoria.
 """
 
+import datetime
 import io
 import os
 import re
@@ -4539,7 +4540,7 @@ class TestIlPreVoloVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
 
     def test_ESEGUITO_DAVVERO_PRODUCE_UN_RAPPORTO_COMPLETO(self):
         uscita, testo, _ = self._esegui("prima_di_lanciare.py")
-        for numero in range(1, 7):
+        for numero in range(1, 8):
             self.assertRegex(
                 testo, r"\b%d\. " % numero,
                 "il controllo %d non compare nel rapporto: un pre-volo che perde per "
@@ -4857,6 +4858,211 @@ class TestIlPreVoloVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
                          "sulla radice vera il criterio deve rispondere, non fermarsi")
 
 
+class TestLeBombeATempo(_GuardieSugliAttrezziDelLavoro):
+    """💣 L'attrezzo che trova i test che diventano rossi DA SOLI.
+
+    ⛔ PERCHE' QUESTE GUARDIE, E PERCHE' PROPRIO QUESTE. Il 2026-08-13 ho scritto
+    `collaudi/bombe_a_tempo.py` e la prima versione aveva TRE difetti, tutti misurati:
+      1. lo scarto d'orologio applicato DUE volte (chiesti 200 giorni, ottenuti 400);
+      2. l'orologio di SQLite non spostato -> due test SANI accusati di essere bombe;
+      3. i processi figli, che vedono l'ora vera -> un terzo innocente accusato.
+    Nessuno dei tre si vede leggendo il codice: si vedono solo confrontando due numeri che
+    dovevano coincidere. Queste guardie fissano quei tre confronti, cosi' se qualcuno
+    «semplifica» l'orologio i falsi allarmi tornano lo stesso giorno, non fra sei mesi.
+
+    ⛔ E GIRANO IN UN PROCESSO A PARTE. Installare l'orologio finto dentro la suite
+    falserebbe tutti gli altri test: questo attrezzo si interroga da FUORI."""
+
+    @classmethod
+    def bt(cls):
+        return cls._carica("bombe_a_tempo.py", "_bombe_sotto_guardia")
+
+    def _orologio(self, giorni):
+        """Le date viste dai due orologi, chieste a un processo separato."""
+        uscita, testo, _ = self._esegui("bombe_a_tempo.py", "--prova-orologio", str(giorni))
+        self.assertEqual(0, uscita, "la diagnosi dell'orologio e' fallita:\n%s" % testo)
+        letti = {}
+        for riga in testo.splitlines():
+            if " " in riga:
+                chiave, _, valore = riga.partition(" ")
+                letti[chiave.strip()] = valore.strip()
+        return letti
+
+    def test_L_ATTREZZO_SI_VEDE_GRIDARE_E_TACERE_PRIMA_DI_GIUDICARE(self):
+        """D18 punto 2. Due test gemelli con la STESSA intenzione: uno con la data cablata,
+        uno che la calcola da oggi. Passato il tempo, il primo deve esplodere e il secondo
+        no. Un allarme mai visto gridare e' un ornamento."""
+        uscita, testo, _ = self._esegui("bombe_a_tempo.py", "--autoprova")
+        self.assertEqual(0, uscita,
+                         "l'autoprova dell'attrezzo e' fallita: non si comporta come "
+                         "promette, quindi non puo' giudicare nessuno.\n%s" % testo[-1500:])
+        self.assertIn("COSA QUESTO ATTREZZO NON HA ESAMINATO", testo,
+                      "D18 punto 3: deve dichiarare sempre cosa ha lasciato fuori")
+
+    def test_LO_SCARTO_NON_SI_APPLICA_DUE_VOLTE(self):
+        """⛔ IL DIFETTO VERO N.1, misurato il 2026-08-13: `date.today()` in CPython chiede
+        l'ora a `time.time()`. Spostando ANCHE `date` oltre a `time`, lo scarto si sommava:
+        chiesti 200 giorni, ottenuti 400. Un orologio che mente del doppio non trova bombe:
+        ne INVENTA."""
+        for giorni in (1, 200):
+            with self.subTest(giorni=giorni):
+                letti = self._orologio(giorni)
+                self.assertEqual(
+                    letti["atteso"], letti["python_date"],
+                    "chiesti %d giorni: `date.today()` dice %s invece di %s. Se la "
+                    "differenza e' il DOPPIO dello scarto, qualcuno ha rimesso il patch su "
+                    "`datetime.date` sopra quello su `time.time` (difetto del 2026-08-13)."
+                    % (giorni, letti["python_date"], letti["atteso"]))
+                self.assertEqual(letti["atteso"], letti["python_now"],
+                                 "`datetime.now()` non coincide con `date.today()`: i due "
+                                 "orologi di Python si sono disallineati fra loro")
+                # ⛔ DIFETTO VERO N.5, 2026-08-13: `time.gmtime()` e `time.localtime()`
+                # leggono l'orologio di SISTEMA, non `time.time()`. Non spostandoli,
+                # `test_dac7_blocco_payout` chiedeva l'anno 2026 mentre i suoi movimenti
+                # erano datati 2027, e risultava una bomba pur essendo sano.
+                for chiave in ("time_gmtime", "time_local"):
+                    self.assertEqual(
+                        letti["atteso"], letti[chiave],
+                        "%s dice %s invece di %s: un pezzo dell'orologio e' rimasto "
+                        "indietro, e i test che chiedono l'ANNO da li' verranno accusati "
+                        "da innocenti" % (chiave, letti[chiave], letti["atteso"]))
+
+    def test_L_OROLOGIO_SPOSTA_ANCHE_QUELLO_DENTRO_IL_DATABASE(self):
+        """⛔ IL DIFETTO VERO N.2, e vale piu' degli altri: `freezegun` e `time-machine` --
+        le due librerie standard di Python -- NON spostano `datetime('now')` di SQLite. E'
+        un limite NOTO (fonte in REGISTRO_INGEGNERIA.md, appendice R1). Qui e' costato DUE
+        test sani accusati di essere bombe: il test scriveva col nostro orologio e il
+        database giudicava col suo."""
+        letti = self._orologio(200)
+        self.assertEqual(
+            letti["atteso"], letti["sqlite_now"],
+            "SQLite vede %s mentre Python vede %s: i due orologi litigano, e ogni test che "
+            "chiede l'ora al database verra' accusato di essere una bomba senza esserlo."
+            % (letti["sqlite_now"], letti["atteso"]))
+        self.assertEqual(
+            "2026-07-01", letti["sqlite_fissa"],
+            "una data FISSA dentro SQLite si e' mossa: l'attrezzo non sta spostando "
+            "l'orologio, sta riscrivendo i dati. Sarebbe molto peggio di non funzionare")
+
+    def test_UN_TEST_CHE_AVVIA_PROCESSI_ESTERNI_NON_E_GIUDICABILE(self):
+        """⛔ IL DIFETTO VERO N.3: il figlio vede l'ora VERA mentre il padre la vede
+        spostata, e il disaccordo lo crea l'attrezzo. Un caso cosi' NON va contato fra le
+        bombe (sarebbe un innocente) ne' fra i sani (non l'abbiamo giudicato): va
+        dichiarato. E' lo sbaglio S7 applicato a questo attrezzo."""
+        bt = self.bt()
+        self.assertTrue(
+            bt.avvia_processi("test_pipeline_ci",
+                              "TestIlDeployNonPuoSALTAREIlPassoDiSicurezza", self.RADICE),
+            "questa classe avvia davvero processi esterni (lo fa `_esegui`): se l'attrezzo "
+            "non se ne accorge, la conta come bomba e accusa un innocente")
+        self.assertIn("PROCESSI FIGLI", " ".join(bt.NON_GUARDA),
+                      "il limite va DICHIARATO a ogni giro, non solo conosciuto")
+
+    def test_IL_GIUDIZIO_GRIDA_SU_UNA_BOMBA_VICINA_E_TACE_SU_UNA_LONTANA(self):
+        """Le due direzioni sul giudizio che legge il PRE-VOLO. Gli schedari sono finti e
+        costruiti qui: quello vero non viene mai toccato."""
+        bt = self.bt()
+        oggi = datetime.date.today()
+
+        def schedario(giorni, misurato=0):
+            return {"esito": "OK",
+                    "misurato_il": str(oggi - datetime.timedelta(days=misurato)),
+                    "commit": "abc1234", "candidati": 150, "file_di_test": 402,
+                    "eseguiti": 2670, "non_giudicabili": [],
+                    "bombe": [{"test": "test_finto.TestFinto.test_scade",
+                               "giorni": giorni, "confine_confermato": True,
+                               "esplode_il": str(oggi + datetime.timedelta(days=giorni))}]}
+
+        stato, dettaglio = bt.giudizio_dallo_schedario(schedario(3), oggi=oggi)
+        self.assertEqual("ROSSO", stato,
+                         "una bomba che esplode fra TRE giorni e il controllo tace: "
+                         "e' un ornamento. Ha detto: %s" % dettaglio[:200])
+        self.assertIn("test_finto", dettaglio, "deve dire QUALE test, non solo che ce n'e' uno")
+
+        stato_ok, dett_ok = bt.giudizio_dallo_schedario(schedario(200), oggi=oggi)
+        self.assertEqual("OK", stato_ok,
+                         "una bomba a 200 giorni fa gridare il controllo a ogni pre-volo: "
+                         "un allarme sempre acceso viene spento (regola ferrea 10). "
+                         "Ha detto: %s" % dett_ok[:200])
+
+        # ⛔ DUE BOMBE LO STESSO GIORNO: difetto VERO del 2026-08-13, trovato dal giro vero e
+        # non da questa guardia, che allora provava una bomba SOLA. `vicine.sort()` su
+        # coppie (giorni, dizionario) confronta i dizionari quando i giorni pareggiano, e
+        # scoppia con TypeError -- cioe' il controllo NON dice «attento», dice «non ho
+        # misurato». E' successo davvero: `test_ical_export` ha DUE test che scadono lo
+        # stesso giorno, ed e' il caso piu' normale del mondo, non un caso limite.
+        doppia = schedario(5)
+        doppia["bombe"].append(dict(doppia["bombe"][0], test="test_finto.TestFinto.test_2"))
+        stato_doppio, dett_doppio = bt.giudizio_dallo_schedario(doppia, oggi=oggi)
+        self.assertEqual("ROSSO", stato_doppio,
+                         "con DUE bombe che scadono lo stesso giorno il giudizio deve "
+                         "gridare come con una: se qui esce NON ESEGUITO, l'ordinamento sta "
+                         "confrontando i dizionari. Ha detto: %s" % dett_doppio[:200])
+        self.assertIn("test_finto.TestFinto.test_2", dett_doppio,
+                      "deve elencarle TUTTE e due: perderne una per strada e' una zona "
+                      "cieca con l'aspetto della copertura")
+
+        # il confine esatto, misurato dalla soglia dichiarata e non da una cifra a mano
+        soglia = bt.GIORNI_ALLARME
+        self.assertEqual("ROSSO", bt.giudizio_dallo_schedario(schedario(soglia), oggi=oggi)[0],
+                         "sulla soglia esatta (%d giorni) deve gridare" % soglia)
+        self.assertEqual("OK", bt.giudizio_dallo_schedario(schedario(soglia + 1),
+                                                          oggi=oggi)[0],
+                         "un giorno oltre la soglia deve tacere")
+
+    def test_UNO_SCHEDARIO_VECCHIO_E_ROSSO_E_SENZA_SCHEDARIO_E_NON_ESEGUITO(self):
+        """⛔ Le due porte da cui rientrerebbe il difetto. Una misura scaduta non e' una
+        misura (D22), e un controllo senza dati non e' verde: e' NON ESEGUITO (S7)."""
+        bt = self.bt()
+        oggi = datetime.date.today()
+        vecchio = {"esito": "OK", "commit": "abc1234", "bombe": [], "non_giudicabili": [],
+                   "candidati": 150, "file_di_test": 402, "eseguiti": 2670,
+                   "misurato_il": str(oggi - datetime.timedelta(
+                       days=bt.GIORNI_SCHEDARIO_VECCHIO + 1))}
+        stato, dettaglio = bt.giudizio_dallo_schedario(vecchio, oggi=oggi)
+        self.assertEqual("ROSSO", stato,
+                         "uno schedario piu' vecchio della soglia deve gridare: se tace, "
+                         "il controllo continua a rassicurare su una misura scaduta")
+        self.assertIn("ricordo", dettaglio, "deve dire PERCHE', non solo che e' vecchio")
+
+        fresco = dict(vecchio, misurato_il=str(oggi))
+        self.assertEqual("OK", bt.giudizio_dallo_schedario(fresco, oggi=oggi)[0],
+                         "su uno schedario fresco e senza bombe deve tacere")
+
+        self.assertEqual("NON ESEGUITO", bt.giudizio_dallo_schedario(None, oggi=oggi)[0],
+                         "senza schedario il controllo non ha misurato niente: chiamarlo "
+                         "verde sarebbe il verde peggiore di tutti (S7)")
+        rossi_prima = {"esito": "NON ESEGUITO", "misurato_il": str(oggi),
+                       "rossi_a_orologio_fermo": ["test_x.T.test_y"], "bombe": []}
+        self.assertEqual("NON ESEGUITO",
+                         bt.giudizio_dallo_schedario(rossi_prima, oggi=oggi)[0],
+                         "se a orologio FERMO qualcosa era gia' rosso, il verdetto sul "
+                         "tempo non vale: non si saprebbe chi ha causato il rosso")
+
+    def test_IL_CONTROLLO_7_DEL_PREVOLO_CHIEDE_IL_GIUDIZIO_A_QUESTO_ATTREZZO(self):
+        """⛔ REGOLA #23, «COSTRUITO ≠ COLLEGATO». Il pezzo che conta non e' l'attrezzo: e'
+        che il pre-volo lo CHIAMI. E deve chiamarlo, non ricopiarne il criterio -- una
+        copia resta indietro il giorno che il criterio cambia (gia' pagato sei volte)."""
+        pv = self.pv()
+        numeri = [n for n, _, _ in pv.CONTROLLI]
+        self.assertIn(7, numeri,
+                      "il controllo 7 e' sparito dal pre-volo: le bombe a tempo tornerebbero "
+                      "a essere scoperte solo a mezzanotte, da un rosso misterioso")
+        oggi = datetime.date.today()
+        finto = {"esito": "OK", "misurato_il": str(oggi), "commit": "abc1234",
+                 "candidati": 1, "file_di_test": 1, "eseguiti": 1, "non_giudicabili": [],
+                 "bombe": [{"test": "test_iniettato.T.test_scade", "giorni": 1,
+                            "confine_confermato": True,
+                            "esplode_il": str(oggi + datetime.timedelta(days=1))}]}
+        stato, dettaglio = pv.controllo_7_bombe_a_tempo(radice=self.RADICE,
+                                                        schedario=finto)
+        self.assertEqual(pv.ROSSO, stato,
+                         "col guasto dentro (una bomba che esplode domani) il pre-volo NON "
+                         "grida: e' un ornamento. Ha detto: %s" % dettaglio[:200])
+        self.assertIn("test_iniettato", dettaglio,
+                      "il pre-volo deve riportare il giudizio VERO, non riassumerlo")
+
+
 class TestIlPreFattoVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
     """🛬 I tre controlli che l'11 agosto sono stati fatti A MANO, o non fatti affatto."""
 
@@ -4870,7 +5076,7 @@ class TestIlPreFattoVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
             with io.open(os.path.join(cartella, "attrezzo_mai_portato_dentro.py"), "w",
                          encoding="utf-8") as f:
                 f.write("# lavoro che il giorno che serve non c'e'\n")
-            stato, dettaglio = pf.controllo_7_artefatti_fuori(radice=self.RADICE,
+            stato, dettaglio = pf.controllo_8_artefatti_fuori(radice=self.RADICE,
                                                               cartelle=[cartella])
             self.assertEqual(pf.ROSSO, stato,
                              "un `.py` fuori dal repository, senza nessun file con quel "
@@ -4884,7 +5090,7 @@ class TestIlPreFattoVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
                 f.write("# copia di lavoro di un file che sta gia' in collaudi/\n")
             self.assertEqual(
                 pf.OK,
-                pf.controllo_7_artefatti_fuori(radice=self.RADICE, cartelle=[cartella])[0],
+                pf.controllo_8_artefatti_fuori(radice=self.RADICE, cartelle=[cartella])[0],
                 "un nome che esiste gia' nel repository non e' un orfano: gridare qui "
                 "sarebbe un falso allarme a ogni commit")
         finally:
@@ -4907,7 +5113,7 @@ class TestIlPreFattoVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
         )
         for nome, dichiarati, toccati, atteso in casi:
             with self.subTest(caso=nome):
-                stato, dettaglio = pf.controllo_8_scopo(
+                stato, dettaglio = pf.controllo_9_scopo(
                     radice=self.RADICE, dichiarati=dichiarati, toccati=toccati)
                 self.assertEqual(atteso, stato, "%s -> %s: %s"
                                  % (nome, stato, dettaglio[:300]))
@@ -4918,7 +5124,7 @@ class TestIlPreFattoVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
         cartella = tempfile.mkdtemp()
         try:
             mai = os.path.join(cartella, "nessuna-traccia.txt")
-            senza, dettaglio = pf.controllo_8_scopo(radice=self.RADICE, dichiarati=None,
+            senza, dettaglio = pf.controllo_9_scopo(radice=self.RADICE, dichiarati=None,
                                                     toccati=["a.py"], traccia=mai)
         finally:
             shutil.rmtree(cartella, ignore_errors=True)
@@ -5014,7 +5220,7 @@ class TestIlPreFattoVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
         # FUORI da `CONTROLLI` perche' gira sul gancio `commit-msg`, l'unico a cui git passa
         # il messaggio. E l'elenco e' ESATTO, non un minimo: un `assertGreaterEqual` qui
         # lascerebbe sparire un controllo in silenzio.
-        self.assertEqual([1, 2, 3, 4, 5, 6, 7, 8, 10], sorted(numeri),
+        self.assertEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], sorted(numeri),
                          "i controlli del pre-fatto non sono quelli attesi: %r. Se ne hai "
                          "aggiunto uno, aggiorna questo elenco nello stesso commit; se ne e' "
                          "sparito uno, il pre-fatto ha smesso di guardare qualcosa"

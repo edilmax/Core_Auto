@@ -11,9 +11,59 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🚦 2026-08-12 — RIPARTI DA QUI. GUARDIANO + `D24` + `fase133`: resta **solo `fase119`** nel Blocco 1.
+## 🚦 2026-08-13 — RIPARTI DA QUI. **BOMBE A TEMPO CHIUSE (13)** + `D25`. Nel Blocco 1 resta **solo `fase119`**.
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
+>
+> ### 💣 FATTO IL 2026-08-13 — I TEST CHE DIVENTAVANO ROSSI DA SOLI: **13 riparati, 0 restano**
+> **Il lavoro obbligatorio n.1 è chiuso** e tolto dalla lista nello stesso commit.
+> `collaudi/bombe_a_tempo.py` **sposta l'orologio** (Python + SQLite + `gmtime`) e guarda CHI
+> diventa rosso: **verde a orologio fermo + rosso a orologio spostato = bomba, dimostrata**.
+> Poi per dimezzamenti trova **il giorno esatto**, e lo verifica nelle due direzioni.
+> `controllo_7` nel **pre-volo** legge lo schedario in **0,03 s** e grida su ciò che scade
+> entro **30 giorni** — *prima*, non dopo. ⛔ Se lo schedario ha più di 30 giorni diventa
+> **ROSSO**: una misura scaduta non è una misura.
+>
+> ⛔ **LA STRADA FACILE ERA SBAGLIATA, ED È MISURATA.** Cercare le date col testo (`grep
+> 2026-`) trova **1667 date cablate in 156 file**, quasi tutte innocue: un allarme su 1667
+> punti si spegne in tre giorni. ⚠️ E il numero «62 file» che girava nei documenti **era
+> sbagliato**. Nessuna analisi del TESTO poteva funzionare: nel caso vero la data cablata non
+> stava nemmeno nel test che falliva, stava nel suo apparecchio di preparazione.
+>
+> 🔴 **L'ATTREZZO HA AVUTO CINQUE DIFETTI, E TRE ACCUSAVANO TEST SANI.** Vale più del lavoro:
+> ① scarto applicato **due volte** (chiesti 200 giorni, ottenuti 400) · ② l'orologio **dentro
+> SQLite** non spostato (`freezegun` e `time-machine` **non lo fanno**: limite noto, fonte in
+> appendice R1) · ③ i **processi figli**, che vedono l'ora vera · ④ le due passate **nello
+> stesso processo**, con le date calcolate all'import già congelate · ⑤ **`time.gmtime()`**,
+> che legge l'orologio di sistema e non `time.time()`.
+> **Assolti dopo il controllo: `test_happy_admin`, `test_dac7_blocco_payout`,
+> `test_pipeline_ci` (gettone deploy).** 💡 Nessuno dei cinque si vedeva leggendo il codice:
+> si sono visti solo **confrontando due numeri che dovevano coincidere**, e aprendo i casi
+> uno per uno. Se avessi riferito la prima lista, avremmo «riparato» tre controlli sani.
+>
+> ⚠️ **RESTA UNA COSA NON MISURATA, e si dichiara:** `test_un_gettone_FRESCO_lascia_passare`
+> avvia uno script di shell, che vede l'ora vera → **non giudicabile**, mai «sano». La
+> coprirebbe `libfaketime`, ora **nella lista dei lavori obbligatori** con la prova da 5
+> minuti da fare per prima (⛔ solo Linux: in CI, non sul PC).
+>
+> 🗣️ **NUOVA DIRETTIVA `D25`** (fondatore, oggi): **prima si legge come l'ha già risolto il
+> mondo** — fonti vere, **più di una**, poi si fa quello che dicono. Nata da questi cinque
+> difetti: erano i tre classici noti del *clock mocking*, scritti nella documentazione delle
+> librerie che esistono apposta. ⛔ Con **tre confini** dentro, per non contraddire le regole
+> già scritte: non è fonte di verità sulla NOSTRA macchina · **non autorizza dipendenze
+> nuove** (le fonti dicono «usa `freezegun`», e D1 lo vieta) · completa D10, non la sostituisce.
+> Le fonti per esteso: `REGISTRO_INGEGNERIA.md`, appendice, **voce R1**.
+>
+> ✅ **Suite intera**: `Ran 5598 tests in 1546.742s · OK (skipped=4)`, uscita **0** letta
+> diretta. ⚠️ Il caricatore ne raccoglie **5603**: i 5 di scarto sono le guardie `openssl`,
+> che questa shell non ha — dichiarato nella riga `AMBIENTE`.
+>
+> ▶️ **IL PROSSIMO LAVORO È `fase119_calendario_prezzi`**, l'ultimo del Blocco 1 dei soldi.
+> Rimisurato oggi: **15 punti di mutazione, e 12 su 15 sono su codice che la produzione
+> ESEGUE** (`costruisci_calendario` 8 · `_giorni` 4). I 3 restanti stanno in
+> `calendario_html`, che ha **zero chiamanti** fuori dai test. ⚠️ La rotta è viva e il
+> pannello host la chiama (`deploy/host.html:1339`), ma **da lì non si muove un euro**: è la
+> schermata dove l'host *legge* il prezzo suggerito.
 >
 > ### 🛫 PRIMA COSA DA FARE, SEMPRE — costa DUE SECONDI
 > ```powershell
@@ -49,9 +99,11 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > ⛔ **E IL DEBITO SUL TEST CHE MENTE OGNI TANTO RESTA APERTO:** questo era deterministico,
 > quello del 2026-08-12 no (due job partiti nello **stesso istante** sullo stesso commit, uno
 > rosso e uno verde). Sono due cose diverse e non si confondono.
-> 🔜 **Il lavoro che ne nasce e' nella lista dei lavori obbligatori** (`regole_avvio.py`):
-> **62 file di test** contengono date fisse di agosto 2026, cioe' altre bombe che scatteranno.
-> Ne' il pre-volo ne' il pre-fatto le cercano: per questo non l'hanno vista, ed erano verdi.
+> ✅ **IL LAVORO CHE NE NASCEVA È CHIUSO** (2026-08-13, riquadro in cima): 13 bombe riparate,
+> giro di conferma **0**. ⛔ **Il numero «62 file» scritto qui era SBAGLIATO** e resta solo
+> come cicatrice: sono **1667 date in 156 file**, e quasi tutte innocue — per questo cercarle
+> col testo non poteva funzionare. Adesso le trova `collaudi/bombe_a_tempo.py`, e il
+> `controllo_7` del pre-volo grida su quelle che scadono entro 30 giorni.
 >
 > ### 🚀 DEPLOY FATTO E CHIAVETTA RIGENERATA — 2026-08-13, i quattro posti su `7147444`
 > **Protocollo D17 nei tre passi**, tutti a uscita 0. ⚠️ Il passo `prima` ha preso di nuovo **la
@@ -2890,7 +2942,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5596 test
+SUITE ATTUALE: Ran 5603 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

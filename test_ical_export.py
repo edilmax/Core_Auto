@@ -15,6 +15,18 @@ from fase163_accettazioni import doc_sha256, CONTRATTO_HOST_VERSIONE
 
 
 class TestIcalExport(unittest.TestCase):
+
+    @staticmethod
+    def _fra(giorni):
+        """Una data scritta come INTENZIONE, non come cifra sul calendario."""
+        import datetime
+        return (datetime.date.today() + datetime.timedelta(days=giorni)).isoformat()
+
+    @staticmethod
+    def _comp(iso):
+        """La stessa data nel formato compatto che usa iCal (20260910)."""
+        return iso.replace("-", "")
+
     def setUp(self):
         self.d = tempfile.mkdtemp()
         self.sys = crea_sistema(ConfigCasaVIP(
@@ -27,11 +39,19 @@ class TestIcalExport(unittest.TestCase):
                       {"slug": "casa", "titolo": "Casa", "citta": "Roma",
                        "prezzo_notte_cents": 10000, "capacita": 2}, {"X-Host-Token": self.tok})
         self.assertEqual(s, 201)
-        # apro le date poi prenoto (blocco inventario) -> deve comparire nel feed
-        for g in ("2026-09-10", "2026-09-11"):
+        # ⛔ DATE RELATIVE, e la storia di questo punto vale piu' della riparazione. Il
+        # 2026-07-19 questo test era «date-dipendente» (con certi «oggi» i due periodi
+        # finivano adiacenti e l'export li FONDEVA) e fu riparato **cablando le date**:
+        # 2026-09-10..12 e 2026-09-20..23. Ha funzionato per tre settimane e poi e' diventato
+        # una BOMBA A TEMPO, misurata il 2026-08-13: sarebbe stato rosso da solo il
+        # **2026-09-11**, perche' il feed esporta il futuro e quelle date sarebbero passate.
+        # 💡 La cura non era cablare: era tenere il DIVARIO fra i due periodi (che era il
+        # difetto vero) scrivendolo come intenzione. Cosi' vale per qualunque «oggi».
+        self.pren0, self.pren1 = self._fra(28), self._fra(30)   # nostra prenotazione [0,1)
+        for g in (self._fra(28), self._fra(29)):
             self.sys.inventario.imposta_disponibilita("casa", g, unita_totali=1,
                                                       prezzo_netto_cents=10000)
-        self.sys.inventario.blocca("casa", "2026-09-10", "2026-09-12",
+        self.sys.inventario.blocca("casa", self.pren0, self.pren1,
                                    idem_key="b1", origine="test")
 
     def tearDown(self):
@@ -58,8 +78,8 @@ class TestIcalExport(unittest.TestCase):
         ics = self.r._ical_export(token)
         self.assertIn("BEGIN:VCALENDAR", ics)
         self.assertIn("BEGIN:VEVENT", ics)
-        self.assertIn("DTSTART;VALUE=DATE:20260910", ics)
-        self.assertIn("DTEND;VALUE=DATE:20260912", ics)
+        self.assertIn("DTSTART;VALUE=DATE:" + self._comp(self.pren0), ics)
+        self.assertIn("DTEND;VALUE=DATE:" + self._comp(self.pren1), ics)
 
     def test_solo_proprietario(self):
         altro = self._reg("h2@ic.it")
@@ -80,7 +100,9 @@ class TestIcalExport(unittest.TestCase):
         # certe date di "oggi" il blocco finiva ADIACENTE al 09-10 e l'export li FONDEVA
         # in un unico range (DTSTART:20260910 spariva) = test date-dipendente. Ora fisso
         # e non adiacente (09-20..23), robusto a qualsiasi "oggi" prima di settembre 2026.
-        imp0 = datetime.date(2026, 9, 20)
+        # dieci giorni DOPO la fine della nostra prenotazione: il divario e' la cosa che
+        # conta (adiacenti, l'export li fonde in un range solo e l'asserzione crolla)
+        imp0 = datetime.date.today() + datetime.timedelta(days=40)
         imp1 = imp0 + datetime.timedelta(days=3)          # import: [imp0, imp1) esclusivo
         comp = lambda s: s.isoformat().replace("-", "")
         # IMPORT da "Airbnb" via endpoint reale
@@ -96,8 +118,9 @@ class TestIcalExport(unittest.TestCase):
                       q={"alloggio": "casa"})
         token = unquote(d["url"].split("/ical/")[1][:-4])
         feed = self.r._ical_export(token)
-        # la NOSTRA prenotazione (setUp: 2026-09-10..12) c'e' ancora
-        self.assertIn("DTSTART;VALUE=DATE:20260910", feed, "persa la nostra prenotazione")
+        # la NOSTRA prenotazione (setUp: fra 28 e 30 giorni) c'e' ancora
+        self.assertIn("DTSTART;VALUE=DATE:" + self._comp(self.pren0), feed,
+                      "persa la nostra prenotazione")
         # la data IMPORTATA ora si propaga nel feed (DTEND esclusivo = imp1)
         self.assertIn("DTSTART;VALUE=DATE:" + comp(imp0), feed,
                       "REGRESSIONE: blocco importato NON esportato -> overbooking cross-canale")
