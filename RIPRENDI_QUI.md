@@ -11,7 +11,7 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🚦 2026-08-13 — RIPARTI DA QUI. **BOMBE A TEMPO CHIUSE (13)** + `D25`. Nel Blocco 1 resta **solo `fase119`**.
+## 🚦 2026-08-13 — RIPARTI DA QUI. ✅ **IL BLOCCO 1 DEI SOLDI È CHIUSO** (`fase119`: 17/17, 3 difetti veri). Prima: bombe a tempo (13) + `D25`.
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
 >
@@ -31,22 +31,63 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > test, `collaudi/` e documenti), quindi il sito è identico. Il deploy richiede
 > «autorizzato» e **non è urgente**.
 >
-> ### ▶️ COSA FARE ADESSO — `fase119_calendario_prezzi`, e il terreno è GIÀ MISURATO
-> ⛔ **NON rimisurare quello che segue: è del 2026-08-13, commit `bf2e1b6`.**
+> ### ✅ FATTO OGGI — `fase119_calendario_prezzi`: **17/17 uccisi, BLOCCO 1 CHIUSO**
+> ⛔ **NON RIFARLO.** Dettaglio per esteso nel registro, voce «FATTO 2026-08-13 —
+> `fase119_calendario_prezzi`». In breve, **tre difetti veri più uno mio**:
 > ```
-> censimento:  fase119_calendario_prezzi.py   108 righe · 15 mutanti · 1 rinuncia · 2 sorveglianti
-> dove cadono: costruisci_calendario 8  ·  _giorni 4  ·  _importo 3
-> VIVO:   GET /api/host/calendario_prezzi -> fase83_server.py:1935 -> :8728
->         importa SOLO costruisci_calendario, e il pannello host la chiama davvero
->         (deploy/host.html:1339, mostra «↑/↓ base»)
-> MORTO:  calendario_html (righe 94-108) ZERO chiamanti fuori dai test; _importo e
->         _COLORE servono solo a lei -> 3 punti su 15 sono su codice che nessuno esegue
+> ① l'occupazione non vedeva le notti VENDUTE che l'host aveva poi chiuso
+>   -> suggerito 14300 -> 11000 (-23,1%); con tutte chiuse ripiegava su «mezzo pieno»
+>      mentre l'alloggio era pieno al 100%. L'host abbassava il prezzo quando era PIENO.
+> ② i due fattori temporali del motore erano STACCATI (mai passato giorni_all_arrivo)
+>   -> last-minute -15% e anticipo +5% valevano 10000 per sempre, su ogni giorno
+> ③ «200 muto»: range oltre il tetto, date invertite o non-date -> 200 con celle vuote,
+>   identico a «non hai caricato nulla» -> ora 422 range_date_non_valido
+> ④ INTRODOTTO DA ME e ripreso da un test che c'era GIA': la distanza negativa di un
+>   giorno passato veniva letta come «ultimo minuto» e scontava del 15% notti finite
 > ```
-> 💡 **12 punti su 15 (80%) sono su codice che la produzione ESEGUE** — l'opposto di
-> `fase133`, dove erano vive 9 righe su 142. Il lavoro qui **non è sprecato**.
-> ⚠️ **Ma da quella schermata non si muove un euro**: è dove l'host *legge* il prezzo
-> suggerito, non dove si incassa. Il danno peggiore è un host che decide su un numero
-> sbagliato. Metodo: i **quattro livelli in ordine**, mutazione per ultima.
+> 💡 **Le tre lezioni che valgono più del lavoro:**
+> · **un campione può mentire dove l'esaustivo no** — su 2 quaterne «l'ordine dei fattori
+> non conta»; su **tutte e 216** conta, in **13 casi (6,0%)**, per 1 punto base. Congelato
+> con una guardia, non cambiato: l'ordine è fisso e oggi non ci perde nessuno.
+> · **un mio collaudo era VERDE col difetto dentro** (chiedeva solo che tre numeri fossero
+> *diversi*: lo erano già per stagione e weekend). Riscritto contro l'oracolo.
+> · **il tetto del range sta sui GIORNI, non sulle celle**: il massimo accettato è
+> `.days == 366`, cioè **367 celle**. I miei stessi commenti dicevano 366: falso.
+> ⛔ **Nessun mutante dichiarato equivalente**: per ognuno dei 4 sopravvissuti è stato
+> **misurato** l'ingresso che lo smaschera, e quell'ingresso è l'asserzione.
+>
+> ### 🔴 SCOPERTO OGGI DAL FONDATORE — **«FATTO» copre DUE COSE DIVERSE**
+> Non l'ha trovato uno strumento: l'ha trovato lui, dicendo *«altre fasi le avevamo già
+> fatte, ma non con questo metodo»*. È la **seconda volta** che un suo dubbio scopre un
+> numero che nessun controllo segnalava (la prima furono i «63 moduli morti»).
+> ⚠️ **Numeri da `RIPRENDI_QUI.md:948-956`, NON rimisurati — vanno rifatti col Giudice:**
+> ```
+> fase59_concierge     112 punti ·  48 uccisi -> 64 SCOPERTI   <- più di tutto il Blocco 2
+> fase160_escrow        39 punti ·  34 uccisi ->  5 scoperti
+> fase100_dac7          18 punti ·  13 uccisi ->  5 scoperti
+> fase188_paga_strut     4 punti ·  esito NON DICHIARATO
+> ---- contro i quattro del Blocco 1: ----
+> fase167 11/11 · fase66 24/24 · fase119 17/17 -> 0 scoperti
+> fase133 15/22 -> 7 scoperti, tutti su codice MORTO e dichiarati
+> ```
+> 💡 **Il piano conta chi è passato SOTTO il giudice, non chi ha SUPERATO l'esame.** E il
+> guardiano lo dichiara da sé a ogni giro (*«non dice se un modulo dichiarato FATTO lo sia
+> DAVVERO»*): il limite era scritto, e nessuno lo leggeva come un lavoro da fare.
+>
+> ### ⚠️ I COLLAUDI CHE SUL BLOCCO 1 NON SONO STATI FATTI (dichiarati, non nascosti)
+> **3. Avvio reale** ❌ mai avviato `main_casavip.py` davvero · **4. Neuroni** ⚠️ parziale ·
+> **6. Concorrenza** ❌ non provata · **7. Giudice esterno** ⚠️ `node --check` sì, CI su
+> Linux solo dopo il push. ⛔ Valgono per **tutti e quattro** i moduli del Blocco 1.
+>
+> ### ▶️ COSA FARE ADESSO — decidere fra due, e prima RIMISURARE
+> **(a)** il **BLOCCO 2**: `fase98` (18) · `fase111` (11) · `fase147` (29) = 58 punti nuovi.
+> **(b)** rifinire **`fase59`**: 64 punti già scoperti su un modulo dichiarato FATTO.
+> 💡 Il consiglio è **(b)**: un buco su un modulo che il piano dà per chiuso è peggio,
+> **proprio perché nessuno lo va a guardare**. Ma il numero viene da un documento, e qui i
+> documenti hanno già mentito: **prima si rimisura col Giudice, poi si decide.**
+> ⛔ E su qualunque dei due, la domanda che su `fase133` ha cambiato il compito:
+> *quanti di quei punti sono su codice che la produzione ESEGUE?*
+> (`raggiungibilita.py` conta gli **import**, non i **simboli usati**.)
 >
 > ### 🧾 COSE VERE SCOPERTE OGGI CHE NON C'ENTRANO COL LAVORO (non perderle)
 > ⛔ **IL RIMBORSO ALL'OSPITE NON PARTE DA SOLO, E NON È «MANUALE DAL NOSTRO PANNELLO»: È
@@ -945,7 +986,13 @@ stata tolta** in questo lavoro — non rimetterla.
 moduli**, 364 che il generatore non sa rompere, **0 moduli che nessun test nomina**.
 ⛔ Ma **essere nominato non è essere coperto**: è tutta lì la differenza, e questa tabella la misura.
 
-**Moduli dei SOLDI GIÀ passati dal giudice — 7:**
+**Moduli dei SOLDI GIÀ passati dal giudice — 8:**
+✅ **`fase119_calendario_prezzi`** (17 su 17 uccisi, 2026-08-13, **0 sopravvissuti e 0
+equivalenti dichiarati**, **3 difetti veri chiusi**: l'occupazione che non vedeva le notti
+vendute-e-chiuse −23,1% · i due fattori temporali del motore mai collegati · il «200 muto»
+sulle richieste invalide. Più un quarto **introdotto dalla riparazione stessa** — lo sconto
+ultimo-minuto applicato a giorni già passati — ripreso da `test_prezzo_dinamico_applicato`,
+che esisteva da prima) ·
 ✅ **`fase133_split_quote_uguali`** (15 su 22 uccisi, 2026-08-12, **0 sopravvissuti sul codice
 VIVO**; i 7 che restano sono tutti su `SplitQuoteUguali`, che la produzione non raggiunge —
 dichiarati, ⛔ **non** equivalenti. **1 difetto vero: memoria senza tetto da rotta pubblica**) ·
@@ -955,8 +1002,8 @@ dichiarati, ⛔ **non** equivalenti. **1 difetto vero: memoria senza tetto da ro
 ✅ **`fase66_tassa_soggiorno`** (24 su 24 uccisi, **0 sopravvissuti, 0 equivalenti dichiarati**,
 2026-08-12, **5 difetti veri chiusi**).
 
-**Moduli dei SOLDI CHE RESTANO — 10, per 376 punti.** *(rimisurato col censimento il
-2026-08-12; ⛔ **rimisuralo**, non fidarti di questa tabella: i numeri invecchiano)*
+**Moduli dei SOLDI CHE RESTANO — 9, per 361 punti.** *(rimisurato col censimento il
+2026-08-13; ⛔ **rimisuralo**, non fidarti di questa tabella: i numeri invecchiano)*
 
 | modulo | punti | lo nominano | blocco |
 |---|---|---|---|
@@ -968,7 +1015,6 @@ dichiarati, ⛔ **non** equivalenti. **1 difetto vero: memoria senza tetto da ro
 | `fase85_pagamenti_stripe` | 26 | 77 | 5 |
 | `fase98_policy_commissione` | 18 | 15 | 2 |
 | `fase87_stripe_webhook` | 15 | 59 | 5 |
-| `fase119_calendario_prezzi` | 15 | **2** | **1 ← e poi questo** |
 | `fase111_cancellazione` | 11 | 4 | 2 |
 
 ⛔ **FUORI DALL'ELENCO PERCHÉ SONO CODICE MORTO** (`raggiungibilita.py`, 2026-08-11):
@@ -2984,7 +3030,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5603 test
+SUITE ATTUALE: Ran 5619 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

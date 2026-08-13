@@ -8751,10 +8751,21 @@ class RouterHTTP:
             if callable(rng):
                 byday = rng(slug, da, a)
                 stato_fn = lambda _s, g: byday.get(g)
-                tot_u = sum(r.get("unita_totali", 0) for r in byday.values()
-                            if isinstance(r, dict) and not r.get("chiuso"))
+                # Occupazione = VENDUTO / VENDIBILE. Dal denominatore si tolgono
+                # solo le notti FISICAMENTE invendibili -- e' la definizione di
+                # settore (Preno, SiteMinder, RoomMaster 2026: «rooms available
+                # excludes out-of-order») -- ma una notte GIA' VENDUTA resta
+                # venduta anche se l'host l'ha poi chiusa, ed e' la stessa
+                # priorita' «venduta vince su chiusa» del bug #35.
+                # Prima spariva da entrambi i lati: 4 notti vendute e poi chiuse
+                # facevano crollare il suggerito da 14300 a 11000 (-23,1%), e con
+                # TUTTE chiuse il denominatore andava a zero e si ripiegava sul
+                # default «mezzo pieno» mentre l'alloggio era pieno al 100%.
+                tot_u = sum((r.get("unita_occupate", 0) if r.get("chiuso")
+                             else r.get("unita_totali", 0))
+                            for r in byday.values() if isinstance(r, dict))
                 tot_o = sum(r.get("unita_occupate", 0) for r in byday.values()
-                            if isinstance(r, dict) and not r.get("chiuso"))
+                            if isinstance(r, dict))
                 if isinstance(tot_u, int) and tot_u > 0 and isinstance(tot_o, int):
                     occ_bps = min(10000, max(0, tot_o * 10000 // tot_u))
             celle = costruisci_calendario(slug, da, a, stato_giorno=stato_fn,
@@ -8762,6 +8773,16 @@ class RouterHTTP:
         except Exception:
             logger.error("calendario prezzi: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
+        # Un range non valido (oltre il tetto di 366 giorni, date invertite, o
+        # una stringa che non e' una data) produce ZERO celle: rispondere 200 con
+        # una lista vuota lo rende indistinguibile da «non hai caricato nulla».
+        # «Returning 200 OK with an error indicator is incorrect practice»
+        # (DevEssentials; Ben Nadel; oneuptime 2026): la validazione fallita e'
+        # un 422 con un codice leggibile, come gia' fa `date_mancanti` qui sopra.
+        # Il giudizio NON e' duplicato: e' `costruisci_calendario` a decidere cosa
+        # sia un range valido, cosi' il tetto resta scritto in un posto solo.
+        if not celle:
+            return 422, {"errore": "range_date_non_valido"}
         return 200, {"celle": celle}
 
     def _ical_link(self, query, headers):
