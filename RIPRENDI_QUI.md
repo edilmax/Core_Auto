@@ -15,6 +15,48 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
 >
+> ### 📦 PASSAGGIO DI CONSEGNE (D21) — scritto al **55% di contesto**, sessione del 2026-08-13
+> **⛔ PRIMA MISURA, POI AGISCI. Non fidarti dei commit scritti qui: invecchiano.**
+> ```powershell
+> git rev-parse --short HEAD ; git status --porcelain
+> git ls-remote origin refs/heads/master
+> ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'
+> python collaudi/prima_di_lanciare.py          # 7 controlli, il 7º è nuovo
+> python collaudi/piano_dei_soldi.py            # quante fasi dei soldi restano
+> ```
+> **Stato al momento della scrittura:** computer e GitHub su **`704883d`** (richiesta #37
+> **unita**, verificata dall'API con una seconda chiamata). Una seconda richiesta (**#38**,
+> solo la riga `CONSEGNE AGGIORNATE A:`) era in attesa della CI. ⚠️ **Il VPS è fermo a
+> `bf2e1b6` ED È CORRETTO COSÌ**: questo lavoro **non tocca una riga di produzione** (solo
+> test, `collaudi/` e documenti), quindi il sito è identico. Il deploy richiede
+> «autorizzato» e **non è urgente**.
+>
+> ### ▶️ COSA FARE ADESSO — `fase119_calendario_prezzi`, e il terreno è GIÀ MISURATO
+> ⛔ **NON rimisurare quello che segue: è del 2026-08-13, commit `bf2e1b6`.**
+> ```
+> censimento:  fase119_calendario_prezzi.py   108 righe · 15 mutanti · 1 rinuncia · 2 sorveglianti
+> dove cadono: costruisci_calendario 8  ·  _giorni 4  ·  _importo 3
+> VIVO:   GET /api/host/calendario_prezzi -> fase83_server.py:1935 -> :8728
+>         importa SOLO costruisci_calendario, e il pannello host la chiama davvero
+>         (deploy/host.html:1339, mostra «↑/↓ base»)
+> MORTO:  calendario_html (righe 94-108) ZERO chiamanti fuori dai test; _importo e
+>         _COLORE servono solo a lei -> 3 punti su 15 sono su codice che nessuno esegue
+> ```
+> 💡 **12 punti su 15 (80%) sono su codice che la produzione ESEGUE** — l'opposto di
+> `fase133`, dove erano vive 9 righe su 142. Il lavoro qui **non è sprecato**.
+> ⚠️ **Ma da quella schermata non si muove un euro**: è dove l'host *legge* il prezzo
+> suggerito, non dove si incassa. Il danno peggiore è un host che decide su un numero
+> sbagliato. Metodo: i **quattro livelli in ordine**, mutazione per ultima.
+>
+> ### 🧾 COSE VERE SCOPERTE OGGI CHE NON C'ENTRANO COL LAVORO (non perderle)
+> ⛔ **IL RIMBORSO ALL'OSPITE NON PARTE DA SOLO, E NON È «MANUALE DAL NOSTRO PANNELLO»: È
+> FUORI DALLA NOSTRA MACCHINA.** Misurato il 2026-08-13: `grep v1/refunds` in produzione →
+> **0** (compare solo dentro un test). Il pulsante `/api/admin/rimborso` fa quattro cose —
+> cancella, libera le date, trattiene il payout, scrive nel giornale — ma **non muove un
+> euro**: i soldi li deve rimandare una persona dal cruscotto di Stripe, e **niente
+> avvisa**. Oggi non fa danno (0 annunci, 0 prenotazioni vere), ⚠️ **ma va chiuso prima
+> del primo host**. Riferimento: `fase83_server.py:5974-5978`, che lo dichiara già.
+>
 > ### 💣 FATTO IL 2026-08-13 — I TEST CHE DIVENTAVANO ROSSI DA SOLI: **13 riparati, 0 restano**
 > **Il lavoro obbligatorio n.1 è chiuso** e tolto dalla lista nello stesso commit.
 > `collaudi/bombe_a_tempo.py` **sposta l'orologio** (Python + SQLite + `gmtime`) e guarda CHI
@@ -1117,7 +1159,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 7147444
+CONSEGNE AGGIORNATE A: 704883d
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui

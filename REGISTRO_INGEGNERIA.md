@@ -228,6 +228,30 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 ## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
 
+### 💸 DA CHIUDERE PRIMA DEL PRIMO HOST — **IL RIMBORSO ALL'OSPITE NON PARTE DA SOLO**
+
+**Misurato il 2026-08-13** (commit `bf2e1b6`), ed è più grave di «è manuale»: **non è manuale
+dal nostro pannello, è FUORI dalla nostra macchina.**
+
+```
+grep v1/refunds  su tutti i fase*.py  ->  0     (compare solo dentro un test)
+fase83_server.py:5974   ⛔ IL RIMBORSO ALL'OSPITE NON PARTE DA SOLO: va eseguito A MANO
+fase83_server.py:4175   _admin_rimborso: "Il rimborso Stripe vero si esegue quando il PSP e' attivo (gated)"
+```
+
+Il pulsante `POST /api/admin/rimborso` fa **quattro** cose — cancella la prenotazione, libera
+le date sull'inventario, **trattiene il payout** all'host, scrive la riga nel giornale
+contabile — ma **non muove un euro**. I soldi all'ospite li deve rimandare **una persona**,
+entrando nel cruscotto di Stripe. ⚠️ **E niente avvisa che vada fatto.**
+
+⚠️ **Oggi non fa danno** perché in produzione ci sono **0 annunci e 0 prenotazioni vere**.
+⛔ **Ma è un buco vero il giorno del primo host**: un ospite che cancella di notte non rivede
+i suoi soldi finché qualcuno non se ne accorge a mano. Chi lo chiude decida anche **chi perde
+se va storta** (D16), perché qui a perderci è l'ospite.
+💡 Nota di metodo: il commento in `fase83_server.py:5977` racconta che lì c'era scritto
+«parte quando Stripe è live» — ed è rimasto a dichiarare il falso **per settimane** dopo che
+Stripe era live. È lo sbaglio **S10** (il documento che dichiara il falso) dentro un commento.
+
 ### ▶️ IL PIANO DI LAVORO, deciso col fondatore il 2026-08-10
 
 **Metodo, confermato da lui:** *blocchi piccoli, e su ognuno tutti e quattro i livelli in
