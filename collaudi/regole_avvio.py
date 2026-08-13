@@ -235,6 +235,26 @@ def stampa_i_divieti(n=None):
 #    (11 agosto) -- con ripristino byte-identico dopo ognuno.
 LAVORI_IN_SOSPESO = (
     {
+        "nome": "le BOMBE A TEMPO nei test — date cablate che scadono da sole",
+        "costo": "mezza sessione",
+        "priorita": "ALTA: e' l'unico difetto che arriva SENZA che nessuno tocchi il codice",
+        "perche": "il 2026-08-13 alle 00:03 `test_fase156_erasure` e' diventato rosso da solo: "
+                  "cablava `check_out 2026-08-12` per una prenotazione che il suo commento "
+                  "dichiarava FUTURA, e a mezzanotte il 12 e' passato. Rosso 3 su 3, quindi "
+                  "deterministico. Misurato: 62 file di test contengono date fisse di agosto "
+                  "2026, e ne' il pre-volo ne' il pre-fatto le cercano -- erano verdi tutti e "
+                  "due. Un test che scade manda a cercare per mezz'ora un difetto che non "
+                  "esiste, e insegna a rilanciare la suite finche' passa: cosi' si nasconde "
+                  "un difetto vero",
+        "fatto_quando": "un controllo del PRE-VOLO elenca i test che confrontano una data "
+                        "CABLATA col presente e grida su quelle gia' passate o che passano "
+                        "entro N giorni; provato nelle due direzioni (grida sulla data scaduta, "
+                        "tace su una data relativa a oggi) e dichiara quanti file ha esaminato "
+                        "sul totale. ⛔ NON basta cercare `2026-`: una data in un commento o in "
+                        "una stringa senza confronto e' innocua, e un falso allarme su 62 file "
+                        "farebbe spegnere il controllo entro tre giorni",
+    },
+    {
         "nome": "CodeQL",
         "costo": "30 minuti",
         "priorita": "SUBITO: e' il piu' economico di tutti",

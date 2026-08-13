@@ -371,6 +371,69 @@ mai. Serve una lista **chiusa**, non una lunga.
 - **Agenti in sola lettura** → 1 sessione, **e SOLO dopo F1**. Resa storica: **146 sospetti → 4
   correzioni vere** (97% rumore).
 
+### ⏰ 2026-08-13 — IL «TEST INTERMITTENTE» ERA UNA DATA SCADUTA A MEZZANOTTE
+
+`test_fase156_erasure.test_host_con_prenotazione_e_RIFIUTATO_senza_forza` è diventato **rosso da
+solo**, senza che nessuno avesse toccato una riga. **Misurato:**
+```
+suite di fase133   commit d8e3a54  2026-08-13 00:03:53   Ran 5591  OK
+suite dopo         stesso codice   2026-08-13 09:00      Ran 5591  FAILED (1)
+AssertionError: 'prenotazioni_attive' not found in {'payout_dovuto':…, 'escrow_aperto': 1}
+```
+**La causa:** cablava `check_in 2026-08-10 / check_out 2026-08-12` e il commento dichiarava una
+prenotazione **FUTURA**. A mezzanotte il 12 è passato → la prenotazione non è più futura →
+`prenotazioni_attive` sparisce dagli obblighi. ⛔ **Rosso 3 su 3: deterministico**, non una gara
+fra processi. Riparato con date **calcolate da oggi** (+3/+5 giorni) → **verde 3 su 3**.
+
+💡 **La regola:** se serve una prenotazione NEL FUTURO si scrive «nel futuro», non una data che
+un giorno sarà passata. **L'intenzione non scade; una cifra sul calendario sì.** Modo di
+rompersi **7**, «il tempo che passa».
+⚠️ **Un test che scade è peggio di un test mancante:** manda a cercare per mezz'ora un difetto
+inesistente e insegna a rilanciare la suite «che tanto poi passa» — che è come si nasconde un
+difetto vero. ⛔ **E il debito sul test che mente ogni tanto RESTA APERTO:** quello del 12 agosto
+erano due job partiti nello **stesso istante** sullo stesso commit, uno rosso e uno verde. Sono
+due difetti diversi e non si confondono.
+🔜 **Il lavoro che ne nasce è entrato in `LAVORI_IN_SOSPESO`:** **62 file di test** contengono
+date fisse di agosto 2026. Né il pre-volo né il pre-fatto le cercano — per questo erano verdi
+tutti e due, e il fondatore aveva ragione a dire *«queste cose bisogna farle prima»*: il rimedio
+non è l'attenzione, è **il controllo che oggi non c'è**.
+
+### 🚀 DEPLOY 2026-08-13 — la porta è chiusa NEL SITO VERO, e una trappola nuova sulla chiavetta
+
+**Protocollo D17, tre passi, tutti uscita 0.** Il passo `prima` ha ri-agganciato il paracadute
+`:prec` da `4e829e9f` (**un deploy indietro**) a `827111af`, l'immagine che stava servendo il
+sito: **quinta volta in sei giorni**, e ancora una volta l'ha presa l'attrezzo e non la memoria.
+Backup verificato **aprendolo** · sito sano dopo **6 s**, `money_path_pronto: True` · sonde
+`200`/`200` + **negativa 403** su un indirizzo che esiste · `verifica_produzione` **190 controlli
+0 violazioni** · gettone consumato · commit `7147444` letto **dentro** il contenitore.
+
+✅ **La riparazione provata dal FUORI, non dedotta dal commit:**
+```
+docker exec casavip_app  ->  MAX_PARTECIPANTI 1000 · n=2000000 -> [] · n=3 -> [3334,3333,3333]
+POST https://bookinvip.com/api/split/preview    n=999999999 -> 400    n=3 -> 200
+```
+
+🔑 **Chiavetta rifatta dal server vivo:** 1077 file · 151 moduli · 402 test · `.env.casavip`
+dentro · 25 database 0 non integri · impronte **identiche** server↔computer (`851e13f0…`,
+`9de41ed1…`). Generazione precedente **spostata** in `precedente_a082185\` — sono **undici**,
+mai cancellate. ⛔ **La copia fisica si fa A MACCHINA FINITA, e non si chiede prima** —
+decisione del fondatore del 2026-08-13: finché la macchina non è finita **e dichiarata sicura**
+la cartella resta sul PC e si aggiorna. Chiederla durante la costruzione è fuori tempo: una
+copia in cassaforte di un lavoro in corso è obsoleta il giorno dopo, e il rischio vero è
+**ripristinare dalla versione sbagliata**, non lo spazio occupato.
+
+🔴 **LA TRAPPOLA, e vale più del deploy.** `clone_progetto.tgz` esiste in **TRE** posti sul
+server e **due sono vecchi di giorni**: `/root/` (il vero, `impacchetta.sh:12`),
+`/root/chiavetta_nuova/` (**6 giorni** prima) e `/tmp/` (**8 giorni** prima).
+⛔ **La cartella che si chiama `chiavetta_nuova` contiene la copia più VECCHIA**, e ci sono
+cascato: ho scaricato da lì. **A prenderlo è stato il confronto coi byte che lo script dichiara
+— non il mio occhio** (3.321.619 contro 3.820.494 attesi). È la regola ferrea 13 in forma pura:
+*date e nomi non sono prove, si guarda il contenuto.* Chi si fida del nome mette in cassaforte
+un salvataggio di sei giorni prima **credendo di aver fatto quello di oggi**, e lo scopre il
+giorno del disastro — quando è troppo tardi per rimediare.
+💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
+quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
+
 ### ✅ FATTO 2026-08-12 — `fase133`: UNA RICHIESTA PUBBLICA DA 40 BYTE POTEVA BUTTARE GIÙ IL SITO
 
 **Il difetto, e sta al CONFINE — non nell'aritmetica.** `fase83_server.py:6748` passa

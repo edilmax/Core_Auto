@@ -27,6 +27,77 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > ⛔ **Il pre-fatto pretende che il pre-volo sia girato prima** (gli serve lo scopo
 > dichiarato). Se ti blocca al commit, il messaggio ti dice il comando: sono 4 secondi.
 >
+> ### ⏰ IL «TEST INTERMITTENTE» NON ERA INTERMITTENTE: ERA UNA DATA SCADUTA A MEZZANOTTE
+> `test_fase156_erasure.test_host_con_prenotazione_e_RIFIUTATO_senza_forza` e' diventato ROSSO
+> **da solo**, senza che nessuno avesse toccato una riga di codice. **Misurato, non ipotizzato:**
+> ```
+> suite di fase133  -> commit d8e3a54  2026-08-13 00:03:53   Ran 5591  OK
+> suite dopo        -> stesso codice   2026-08-13 09:00      Ran 5591  FAILED (1)
+> AssertionError: 'prenotazioni_attive' not found in {'payout_dovuto':…, 'escrow_aperto': 1}
+> ```
+> **La causa:** il test cablava `check_in 2026-08-10 / check_out 2026-08-12` e il suo commento
+> diceva «questo host ha una prenotazione **FUTURA**». A mezzanotte il 12 e' passato, la
+> prenotazione ha smesso di essere futura, e `prenotazioni_attive` e' sparito dagli obblighi.
+> ⛔ **Rosso 3 volte su 3: deterministico, non una gara fra processi.** Riparato con date
+> **calcolate da oggi** (soggiorno fra +3 e +5 giorni) → **verde 3 su 3**.
+> 💡 **La regola:** se un test ha bisogno di una prenotazione NEL FUTURO si scrive «nel futuro»,
+> non una data che un giorno sara' passata. **L'intenzione non scade; una cifra sul calendario
+> si'.** E' il modo di rompersi **7** della lista («il tempo che passa»).
+> ⚠️ **UN TEST CHE SCADE E' PEGGIO DI UN TEST MANCANTE:** manda a cercare per mezz'ora un
+> difetto che non esiste, e insegna a rilanciare la suite «che tanto poi passa» — che e'
+> esattamente come si nasconde un difetto vero.
+> ⛔ **E IL DEBITO SUL TEST CHE MENTE OGNI TANTO RESTA APERTO:** questo era deterministico,
+> quello del 2026-08-12 no (due job partiti nello **stesso istante** sullo stesso commit, uno
+> rosso e uno verde). Sono due cose diverse e non si confondono.
+> 🔜 **Il lavoro che ne nasce e' nella lista dei lavori obbligatori** (`regole_avvio.py`):
+> **62 file di test** contengono date fisse di agosto 2026, cioe' altre bombe che scatteranno.
+> Ne' il pre-volo ne' il pre-fatto le cercano: per questo non l'hanno vista, ed erano verdi.
+>
+> ### 🚀 DEPLOY FATTO E CHIAVETTA RIGENERATA — 2026-08-13, i quattro posti su `7147444`
+> **Protocollo D17 nei tre passi**, tutti a uscita 0. ⚠️ Il passo `prima` ha preso di nuovo **la
+> trappola piu' testarda del progetto**: il paracadute `:prec` era agganciato a `4e829e9f`,
+> cioe' a **un deploy indietro**, e l'attrezzo l'ha ri-agganciato a `827111af` (l'immagine che
+> stava servendo il sito). Quinta volta in sei giorni, e ancora una volta non l'ha presa la
+> buona volonta': l'ha presa `deploy/protocollo_d17.sh`.
+> Backup verificato **aprendolo** (`SQLite format 3`) · sito sano dopo **6 secondi**,
+> `money_path_pronto: True` · sonde `200`/`200` e sonda **negativa 403** su un indirizzo che
+> ESISTE · `verifica_produzione`: **190 controlli, 0 violazioni** · gettone **consumato** ·
+> e dentro il contenitore che gira c'e' `7147444`, guardato **dentro** e non dedotto.
+>
+> ✅ **LA PORTA E' CHIUSA NEL SITO VERO, provata dal FUORI su HTTPS:**
+> ```
+> docker exec casavip_app  ->  tetto 1000 · n=2000000 -> []  · n=3 -> [3334,3333,3333]
+> POST https://bookinvip.com/api/split/preview   n=999999999 -> 400   n=3 -> 200
+> ```
+>
+> 🔑 **Chiavetta rifatta dal server vivo** (`deploy/impacchetta.sh`): **1077 file · 151 moduli ·
+> 402 file di test · `.env.casavip` dentro · 25 database, 0 non integri**. Impronte **identiche**
+> fra server e computer (`851e13f0…` progetto, `9de41ed1…` dati) e byte esatti. Generazione
+> precedente **spostata** in `precedente_a082185\` (sono **undici**, mai cancellate). Il
+> `LEGGIMI-RIPRISTINO.txt` riscritto coi numeri misurati, non ricopiati.
+> ⛔ **NON CHIEDERE LA COPIA FISICA. DECISIONE DEL FONDATORE, 2026-08-13, «una volta sola per
+> sempre»:** la macchina **non e' finita** (restano test, **test con mezzi esterni**, fasi), e
+> **finche' non e' finita e dichiarata sicura la cartella chiavetta RESTA SUL PC** e si
+> aggiorna. Alla fine: copia su supporto vero, cassaforte, **piu' copie**. 💡 Chiederla adesso
+> era **fuori tempo**: una copia in cassaforte di un lavoro in corso e' obsoleta il giorno dopo,
+> e il rischio vero non e' lo spazio, e' **ripristinare dalla versione sbagliata**.
+> ⛔ E non si scrive piu' «⏳ resta il gesto del fondatore» come lavoro in sospeso: **non lo e'**.
+>
+> 🔴 **TRAPPOLA NUOVA, E VALE PIU' DEL DEPLOY: `clone_progetto.tgz` ESISTE IN TRE POSTI SUL
+> SERVER, E DUE SONO VECCHI DI GIORNI.**
+> ```
+> /root/clone_progetto.tgz          3.820.494   oggi      <- il vero (impacchetta.sh:12)
+> /root/chiavetta_nuova/clone_...   3.321.619   6 giorni prima
+> /tmp/clone_progetto.tgz           3.404.837   8 giorni prima
+> ```
+> ⛔ **La cartella che si chiama `chiavetta_nuova` contiene la copia piu' VECCHIA.** Ci sono
+> cascato: ho scaricato da li' e i byte non tornavano. **A prenderlo e' stato il confronto coi
+> byte dichiarati dallo script, non il mio occhio** — regola ferrea 13, «date e nomi non sono
+> prove: si guarda il contenuto». Chi si fida del nome mette in cassaforte un salvataggio di sei
+> giorni prima **credendo di aver fatto quello di oggi**, e lo scopre il giorno del disastro.
+> 💡 Da qui in avanti: si scarica **solo da `/root/`**, e si confrontano **byte e sha256** con
+> quelli che `impacchetta.sh` stampa. Sono due comandi e chiudono la questione.
+>
 > ### 🛡️ FATTO IL 2026-08-12 SERA — IL LAVORO OBBLIGATORIO N.1: il guardiano del piano
 > Il fatto «`faseNN` e' FATTO» era scritto **a mano in tre posti**, e il 12 agosto ne era
 > stato aggiornato **uno solo**: due documenti mandavano a rifare `fase66` che era finito.
@@ -152,18 +223,18 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > ### 📍 DOVE SIAMO — misurato il **12 agosto sera**, ma **RIMISURALO**, non fidarti di questa riga
 > | posto | comando | valore |
 > |---|---|---|
-> | computer | `git rev-parse --short HEAD` | `fc3aaa5` · `git status --porcelain` vuoto |
-> | GitHub | `git ls-remote origin refs/heads/master` | `fc3aaa5` |
-> | VPS | `ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'` | `a082185` — ⚠️ **due unioni indietro, ma di soli DOCUMENTI** |
-> | chiavetta | cartella `Desktop\BOOKINVIP USB 2026` | `a082185` (⏳ resta la copia FISICA) |
+> | computer | `git rev-parse --short HEAD` | `7147444` · `git status --porcelain` vuoto |
+> | GitHub | `git ls-remote origin refs/heads/master` | `7147444` |
+> | VPS | `ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'` | ✅ `7147444` **deploy fatto** |
+> | chiavetta | `Desktop\BOOKINVIP USB 2026` | ✅ `7147444` — **sul PC fino a macchina finita** |
 >
-> ⚠️ **IL VPS NON HA LO STESSO HASH DEL COMPUTER, e va DETTO invece di lasciarlo scoprire.**
-> Misurato, non dedotto: `git diff --stat a082185 fc3aaa5` → **3 file, ZERO righe di
-> applicazione** (`REGISTRO_INGEGNERIA.md` · `RIPRENDI_QUI.md` · `collaudi/regole_avvio.py`).
-> Quindi **il motore che gira in produzione e' lo stesso**: D7 «il server mai indietro» regge sul
-> **codice**, non sull'hash, e un deploy per due documenti piu' un attrezzo di collaudo sarebbe
-> rischio senza guadagno (il VPS ha **una sola CPU**). ⛔ **Ma appena un commit tocca un
-> `fase*.py`, questa riga non basta piu' e ci vuole il deploy.**
+> ✅ **TUTTI E QUATTRO I POSTI ALLINEATI**, misurati il 2026-08-13 alle 06:40 — ⛔ rimisurali.
+> ✅ **Le richieste dalla #29 alla #35 sono UNITE DAVVERO**, `merged: True` riletto dall'API:
+> `#33 fc3aaa5` · `#34 c5846a3` · `#35 7147444`.
+> ⛔ **`gh` NON e' installato su questo computer** (misurato: non nel PATH, non nelle cartelle
+> standard): l'API si interroga con `Invoke-RestMethod`, e le credenziali si prendono da
+> `git credential fill` **senza mai stamparle** (D6). Chi cerca `gh` e non lo trova non concluda
+> che l'API sia irraggiungibile.
 >
 > ✅ **Le richieste dalla #29 alla #33 sono UNITE DAVVERO**, non solo chiuse — riletto dall'API
 > il 12 agosto sera, `merged: True` per tutte e cinque, e ogni commit di unione combacia con la
@@ -421,7 +492,8 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > ⚠️ **Il VPS ha UNA sola CPU**: non ci si lancia la suite per fare esperimenti, si rallenta
 > il sito vero.
 > **2. ✅ LA CHIAVETTA E' RIGENERATA su `a082185`** (vedi il riquadro qui sotto). ⏳ Resta
-> solo il gesto fisico del fondatore: copiare `Desktop\BOOKINVIP USB 2026` (656 MB) su un
+> la copia su supporto vero, che il fondatore fara' **A MACCHINA FINITA** e non prima
+> (decisione del 2026-08-13, ⛔ non chiedergliela): copiare `Desktop\BOOKINVIP USB 2026` (656 MB) su un
 > supporto vero e metterlo in cassaforte — dentro c'e' `.env.casavip` con le chiavi Stripe.
 > **3. 🐛 IL TEST INTERMITTENTE** (vedi il debito qui sopra): al prossimo rosso della CI il
 > nome arriva da solo nel riepilogo della run. **Non chiuderlo rilanciando il job finche' non
@@ -993,7 +1065,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: fc3aaa5
+CONSEGNE AGGIORNATE A: 7147444
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui

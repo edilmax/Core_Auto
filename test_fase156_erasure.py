@@ -1,6 +1,7 @@
 """Test 'tasto cancella tutto + verifica ovunque' (fase156): registra host -> pubblica ->
 disponibilita -> prenota -> messaggio, poi cancella_attivita_host -> tutto rimosso da OGNI
 archivio + verifica residui 0. Endpoint admin + idempotenza."""
+import datetime
 import json
 import shutil
 import tempfile
@@ -13,6 +14,22 @@ from fase156_erasure import cancella_attivita_host
 SEG = b"e" * 32
 HK = {"X-Host-Key": "hk"}
 AK = {"X-Admin-Key": "ak"}
+
+# ⛔ DATE CALCOLATE DA OGGI, MAI CABLATE — e questo commento e' una cicatrice, non prudenza.
+# Il 2026-08-13 alle 00:03 questo test e' diventato ROSSO DA SOLO, senza che nessuno avesse
+# toccato una riga: la suite di poche ore prima era verde. Aveva `check_out 2026-08-12`, e a
+# mezzanotte quella prenotazione ha smesso di essere FUTURA -- quindi non era piu' un obbligo
+# pendente e `prenotazioni_attive` e' sparito dagli obblighi.
+# E' il modo di rompersi 7 della lista, «il tempo che passa», ed e' peggio di un test mancante:
+# un test che scade manda a cercare per mezz'ora un difetto che non esiste, e insegna a
+# rilanciare la suite «che tanto poi passa» -- che e' come si nasconde un difetto vero.
+# 💡 La regola: se un test ha bisogno di una prenotazione NEL FUTURO, si scrive «nel futuro»,
+# non una data che un giorno sara' passata. L'intenzione non scade; una cifra sul calendario si'.
+_OGGI = datetime.date.today()
+DISPO_DA = (_OGGI - datetime.timedelta(days=1)).isoformat()
+DISPO_A = (_OGGI + datetime.timedelta(days=40)).isoformat()
+CHECK_IN = (_OGGI + datetime.timedelta(days=3)).isoformat()
+CHECK_OUT = (_OGGI + datetime.timedelta(days=5)).isoformat()
 
 
 class TestErasure(unittest.TestCase):
@@ -32,10 +49,10 @@ class TestErasure(unittest.TestCase):
             "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
             "servizi": [], "immagini": ["https://x/y.jpg"]}, HK)
         self.g("POST", "/api/host/disponibilita_range", {
-            "alloggio_id": "casa", "da": "2026-08-01", "a": "2026-08-31",
+            "alloggio_id": "casa", "da": DISPO_DA, "a": DISPO_A,
             "unita_totali": 1, "prezzo_netto_cents": 10000}, HK)
         _, q = self.g("POST", "/api/concierge/quote", {
-            "alloggio_id": "casa", "check_in": "2026-08-10", "check_out": "2026-08-12",
+            "alloggio_id": "casa", "check_in": CHECK_IN, "check_out": CHECK_OUT,
             "party": 1})
         self.g("POST", "/api/concierge/book",
                 {"quote_token": q["quote_token"], "email": "o@x.it"})
