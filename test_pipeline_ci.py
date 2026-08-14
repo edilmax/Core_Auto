@@ -432,6 +432,50 @@ class TestIgieneDelFile(unittest.TestCase):
                 "Il rapporto completo sta in collaudi/rapporto_coerenza.txt\n\n%s"
                 % (esito.returncode, coda))
 
+    def test_L_AUDIT_MILLIMETRICO_VIENE_ESEGUITO_DAVVERO(self):
+        """⛔ LO STESSO DIFETTO DELL'AUDIT QUI SOPRA, RITROVATO IL 2026-08-14.
+
+        `collaudi/audit_millimetrico.py` confronta i 5 documenti ufficiali col motore
+        vero: conteggi, percorsi, rotte, tariffe, logica dei consensi, variabili
+        d'ambiente. Lo chiamavano soltanto `campagna_totale.py` e `piramide.py`, cioe'
+        due attrezzi d'officina che si lanciano **a mano**. Non stava nella suite, non
+        stava nel gancio del commit, non stava in CI: le sue discrepanze restavano
+        invisibili finche' qualcuno non si ricordava di premere il bottone.
+
+        Misurato quel giorno su `f835496`: usciva **1** con **5** discrepanze -- fra cui
+        tre conteggi del README rimasti indietro (149/390/13 invece di 151/402/14) -- e
+        la suite era **verde lo stesso**. E' la regola #23, COSTRUITO non e' COLLEGATO,
+        sullo stesso attrezzo e per la seconda volta: il test qui sopra nacque
+        il 2026-08-10 per identica ragione, e nessuno estese la lezione al vicino.
+
+        Costa **0,11 s** (misurato il 2026-08-14): tenerlo acceso non ha un prezzo.
+
+        ⚠️ Cosa NON garantisce (D18 punto 3): l'audit dice che i documenti e il motore
+        **si raccontano la stessa cosa**, non che il motore faccia la cosa **giusta**.
+        Che la tariffa tecnica non scenda sotto costo lo giudica
+        `test_fase59_costo_pagamento`, non questo.
+        """
+        import subprocess
+        import sys as _sys
+        radice = os.path.dirname(os.path.abspath(__file__))
+        attrezzo = os.path.join(radice, "collaudi", "audit_millimetrico.py")
+        self.assertTrue(os.path.exists(attrezzo),
+                        "l'audit millimetrico non c'e' piu': senza di lui nessuno "
+                        "confronta i 5 documenti ufficiali col motore, e i numeri dei "
+                        "documenti tornano a invecchiare in silenzio")
+        esito = subprocess.run([_sys.executable, attrezzo], cwd=radice,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        if esito.returncode != 0:
+            uscita = esito.stdout.decode("utf-8", errors="replace")
+            taglio = uscita.find("VERDETTO:")
+            coda = uscita[taglio:taglio + 2000] if taglio >= 0 else uscita[-2000:]
+            self.fail(
+                "l'audit millimetrico esce %d: almeno un'affermazione dei 5 documenti "
+                "ufficiali non corrisponde piu' al motore.\n"
+                "Si rilancia a mano con:  python collaudi/audit_millimetrico.py\n"
+                "Ogni rosso nomina il colpevole con atteso= e trovato=.\n\n%s"
+                % (esito.returncode, coda))
+
     def test_il_file_si_carica_come_yaml_ed_e_una_pipeline(self):
         doc = _doc_ci()
         self.assertIsInstance(doc, dict)
