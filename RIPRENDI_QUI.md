@@ -11,7 +11,69 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🚦 2026-08-14 (sera) — RIPARTI DA QUI. ⚖️ **`fase59` CHIUSO A 106/114** e il verdetto è **GIUDICATO**, non «fatto»
+## 🚦 2026-08-14 (notte) — RIPARTI DA QUI. ✅ **DUE UNIONI FATTE** · 🧭 **C'È UN PIANO DI 10 PEZZI, IN MEMORIA**
+
+> **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
+> **⛔ PRIMA MISURA, POI AGISCI. I commit scritti qui invecchiano.**
+> ```powershell
+> git rev-parse --short HEAD ; git status --porcelain
+> git ls-remote origin refs/heads/master
+> ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'
+> python collaudi/prima_di_lanciare.py
+> python collaudi/piano_dei_soldi.py
+> ```
+>
+> ### ✅ FATTO E UNITO — ⛔ NON RIFARLO
+> **① `fase59_concierge`** (unione `50835cd`, CI 15/15): 42 punti scoperti → **7**.
+> Il file di test è passato da **28 a 102**. Verdetto D26: **GIUDICATO**, non «fatto».
+> **② La rete anti-interruzione** (unione `6c542d3`, CI 15/15): il biglietto è **uno per
+> FILE**, non uno per macchina. Difetto **visto dal vivo**: `fase59` rotto sul disco e la
+> traccia che indicava `fase162`.
+> Dettaglio per esteso nel registro, voci «FATTO 2026-08-14 (sera)» e «(notte)».
+>
+> ### 📍 STATO DEI TRE POSTI
+> computer = GitHub = **`6c542d3`**. ⚠️ **Il VPS è a `d05ff53`, due unioni indietro** — e va
+> bene: quelle due contengono **solo test, `collaudi/` e `.md`**, che il Dockerfile **non
+> copia**. Il sito che gira è identico. Aggiornarlo richiede «autorizzato» e **non serve**.
+>
+> ### 🧭 IL PIANO — sta in MEMORIA, non qui
+> `bookinvip-piano-dieci-pezzi` e `bookinvip-ricerca-industriale` si ricaricano da soli a
+> ogni sessione. In due righe: **pezzo 0 fatto**; i prossimi sono **1** (il Giudice deve
+> uscire ROSSO se ha saltato punti: oggi ne salta 84 su 114 ed esce 0) e **2** (ri-confermare
+> un «ucciso», perché un test instabile gonfia il punteggio).
+> ⛔ **I pezzi 3 e 4 (copertura + niente mutanti sui log) vanno PRIMA del Blocco 2**, o si
+> butta via metà del lavoro.
+>
+> ### 🔴 DUE DIFETTI DEGLI STRUMENTI ANCORA APERTI
+> · **Il codice d'uscita del Giudice non guarda i punti saltati**
+>   (`sys.exit(1 if (_sopr or _scop or _base or _ass) else 0)`): col tetto di serie (30) su un
+>   modulo da 114 punti ne salta **84**, lo dichiara a schermo, ed **esce 0**.
+> · **Il recupero non distingue un giro MORTO da uno VIVO**: se un giro parte mentre un altro
+>   sta provando un mutante, gli rimette a posto il file sotto i piedi. **Ragionato, non
+>   misurato.** Nel frattempo: ⛔ **mai due giri di mutazione insieme.**
+>
+> ### 🆕 DUE SCOPERTE DI STANOTTE, da non perdere
+> · 🔴 **`fase135_ical_bidirezionale.py` non è mai stato esaminato** per il rischio che la
+>   ricerca sulle prenotazioni chiama **«prenotazioni fantasma»**: iCal ha un ritardo di
+>   **15 minuti-2 ore**, e in quella finestra una data risulta libera mentre è già presa.
+> · ✅ **Abbiamo già l'architrave che l'industria chiede**: la prenotazione è una **macchina a
+>   stati con transizioni dimostrate con z3** (`test_fase199_transizioni`, 7 test verdi).
+>   ⛔ I moduli veri sono **`fase199_invarianti.py`** e **`fase186_guardiano.py`**; i nomi
+>   `fase199_transizioni.py` e `fase186_guardiano_stati.py` **NON ESISTONO** (sbaglio S2,
+>   quasi rifatto stanotte).
+>
+> ### ⚠️ COSA NON È STATO FATTO, dichiarato
+> · **`z3`, `hypothesis`, `coverage` e `mypy` sono INSTALLATI e quasi non usati**: è il
+>   livello che l'industria chiama «metodi formali leggeri», già pagato e mai acceso.
+> · **Nessuna sorveglianza degli invarianti dei soldi in PRODUZIONE** (il «pezzo 8»): è il
+>   buco più grosso che abbiamo, e vale più di tutto il Blocco 2.
+> · **`fase160` · `fase100` · `fase188` restano da rimisurare**: i loro numeri vengono ancora
+>   da un documento, e i documenti qui hanno mentito **due volte** (di 22 punti su `fase59`,
+>   e di **sei volte** sul Blocco 2: diceva 58 punti, il censimento vero ne conta **361**).
+> · ⚠️ **Il rimborso all'ospite NON parte da solo** (`grep v1/refunds` in produzione → 0):
+>   resta la cosa più grave aperta, da chiudere **prima del primo host**.
+
+## 🚦 2026-08-14 (sera) — ⚖️ **`fase59` CHIUSO A 106/114** e il verdetto è **GIUDICATO**, non «fatto»
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
 >
@@ -1384,7 +1446,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: d05ff53
+CONSEGNE AGGIORNATE A: 6c542d3
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
