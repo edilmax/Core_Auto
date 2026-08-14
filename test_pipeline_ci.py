@@ -4877,9 +4877,16 @@ class TestLeBombeATempo(_GuardieSugliAttrezziDelLavoro):
     def bt(cls):
         return cls._carica("bombe_a_tempo.py", "_bombe_sotto_guardia")
 
-    def _orologio(self, giorni):
-        """Le date viste dai due orologi, chieste a un processo separato."""
-        uscita, testo, _ = self._esegui("bombe_a_tempo.py", "--prova-orologio", str(giorni))
+    def _orologio(self, giorni, istante=None):
+        """Le date viste dai due orologi, chieste a un processo separato.
+
+        `istante` (secondi dall'epoca) COSTRUISCE l'ora del giorno da provare invece di
+        subire quella in cui capita di girare: senza, il difetto del 2026-08-14 si vedeva
+        un'ora su ventiquattro -- cioe' quasi mai, e mai in CI (dove l'orologio e' UTC)."""
+        argomenti = ["--prova-orologio", str(giorni)]
+        if istante is not None:
+            argomenti.append(repr(float(istante)))
+        uscita, testo, _ = self._esegui("bombe_a_tempo.py", *argomenti)
         self.assertEqual(0, uscita, "la diagnosi dell'orologio e' fallita:\n%s" % testo)
         letti = {}
         for riga in testo.splitlines():
@@ -4920,12 +4927,17 @@ class TestLeBombeATempo(_GuardieSugliAttrezziDelLavoro):
                 # leggono l'orologio di SISTEMA, non `time.time()`. Non spostandoli,
                 # `test_dac7_blocco_payout` chiedeva l'anno 2026 mentre i suoi movimenti
                 # erano datati 2027, e risultava una bomba pur essendo sano.
-                for chiave in ("time_gmtime", "time_local"):
+                # ⛔ OGNI OROLOGIO CON LA SUA ZONA (difetto del 2026-08-14): `gmtime`
+                # risponde in UTC, `localtime` in ora locale. Per un'ora al giorno stanno in
+                # giorni DIVERSI, e un solo valore atteso ne accusava uno dei due da
+                # innocente -- tre guardie sane rosse a mezzanotte.
+                for chiave, zona in (("time_gmtime", "atteso_utc"),
+                                     ("time_local", "atteso")):
                     self.assertEqual(
-                        letti["atteso"], letti[chiave],
+                        letti[zona], letti[chiave],
                         "%s dice %s invece di %s: un pezzo dell'orologio e' rimasto "
                         "indietro, e i test che chiedono l'ANNO da li' verranno accusati "
-                        "da innocenti" % (chiave, letti[chiave], letti["atteso"]))
+                        "da innocenti" % (chiave, letti[chiave], letti[zona]))
 
     def test_L_OROLOGIO_SPOSTA_ANCHE_QUELLO_DENTRO_IL_DATABASE(self):
         """⛔ IL DIFETTO VERO N.2, e vale piu' degli altri: `freezegun` e `time-machine` --
@@ -4934,15 +4946,54 @@ class TestLeBombeATempo(_GuardieSugliAttrezziDelLavoro):
         test sani accusati di essere bombe: il test scriveva col nostro orologio e il
         database giudicava col suo."""
         letti = self._orologio(200)
+        # `date('now')` di SQLite e' documentato in UTC: va confrontato con l'attesa UTC,
+        # non con quella locale (difetto del 2026-08-14).
         self.assertEqual(
-            letti["atteso"], letti["sqlite_now"],
+            letti["atteso_utc"], letti["sqlite_now"],
             "SQLite vede %s mentre Python vede %s: i due orologi litigano, e ogni test che "
             "chiede l'ora al database verra' accusato di essere una bomba senza esserlo."
-            % (letti["sqlite_now"], letti["atteso"]))
+            % (letti["sqlite_now"], letti["atteso_utc"]))
         self.assertEqual(
             "2026-07-01", letti["sqlite_fissa"],
             "una data FISSA dentro SQLite si e' mossa: l'attrezzo non sta spostando "
             "l'orologio, sta riscrivendo i dati. Sarebbe molto peggio di non funzionare")
+
+    def test_L_OROLOGIO_REGGE_A_TUTTE_LE_24_ORE_DEL_GIORNO(self):
+        """⛔ IL DIFETTO DEL 2026-08-14, e la ragione per cui questa guardia esiste in
+        questa forma. Tre guardie SANE sono diventate rosse a mezzanotte: l'attesa si
+        calcolava sommando giorni al CALENDARIO locale, mentre l'orologio si sposta in
+        SECONDI. Le due aritmetiche divergono a cavallo della mezzanotte.
+
+        ⚠️ E il pezzo che conta piu' del difetto: quella finestra dura UN'ORA su 24, e in CI
+        non si apre MAI, perche' li' l'orologio e' UTC. Una guardia che puo' gridare solo in
+        quell'ora, e solo sul computer di casa, non e' verificabile a comando -- cioe' e' un
+        ornamento (regola dei 10 collaudi). Qui l'ora del giorno si COSTRUISCE (D19) e si
+        prova il giro intero: se qualcuno rimette l'aritmetica di calendario, questo diventa
+        rosso SUBITO e a qualunque ora, invece che la notte dopo.
+
+        ⛔ E prova anche che servono DUE attese e non una: alle 01:00 `gmtime` e SQLite (UTC)
+        stanno in un giorno diverso da `date.today()` e `localtime` (locale). Con un solo
+        atteso il difetto non sparirebbe, si sposterebbe di un'ora -- misurato: 23 ore su 24
+        coperte invece di 24 su 24."""
+        mezzanotte = datetime.datetime.combine(datetime.date.today(), datetime.time(0, 0))
+        zone = (("python_date", "atteso"), ("python_now", "atteso"),
+                ("time_local", "atteso"), ("time_gmtime", "atteso_utc"),
+                ("sqlite_now", "atteso_utc"))
+        # Entrambe le distanze del difetto originale: a 1 giorno si vede il salto di
+        # mezzanotte, a 200 anche il cambio dell'ora legale (agosto e' UTC+2, marzo UTC+1).
+        for ora in range(24):
+            istante = (mezzanotte + datetime.timedelta(hours=ora)).timestamp()
+            for giorni in (1, 200):
+                with self.subTest(ora=ora, giorni=giorni):
+                    letti = self._orologio(giorni, istante=istante)
+                    for chiave, zona in zone:
+                        self.assertEqual(
+                            letti[zona], letti[chiave],
+                            "alle %02d:00, con %d giorni di scarto, %s dice %s mentre "
+                            "l'attesa della SUA zona e' %s: o l'orologio e' rimasto "
+                            "indietro, o l'attesa e' tornata a contare giorni di "
+                            "calendario invece che secondi."
+                            % (ora, giorni, chiave, letti[chiave], letti[zona]))
 
     def test_UN_TEST_CHE_AVVIA_PROCESSI_ESTERNI_NON_E_GIUDICABILE(self):
         """⛔ IL DIFETTO VERO N.3: il figlio vede l'ora VERA mentre il padre la vede

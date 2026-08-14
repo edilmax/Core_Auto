@@ -87,6 +87,7 @@ NON_GUARDA = (
 # l'orologio finto: Python + SQLite, da un'unica sorgente di verita'
 # --------------------------------------------------------------------------------------
 _SCARTO = [0]
+_BASE = [None]
 _vero_time = _time.time
 _vero_gmtime = _time.gmtime
 _vero_localtime = _time.localtime
@@ -97,7 +98,11 @@ _installato = [False]
 
 
 def _adesso():
-    return _vero_time() + _SCARTO[0] * 86400.0
+    # `_BASE` esiste per UNA ragione sola: permettere di costruire a mano l'ora del giorno
+    # in cui le due zone litigano, invece di aspettare mezzanotte per scoprirlo (D19). Se
+    # nessuno la imposta vale l'ora vera, cioe' il comportamento di sempre.
+    base = _vero_time() if _BASE[0] is None else _BASE[0]
+    return base + _SCARTO[0] * 86400.0
 
 
 class _DataOra(_vera_dt):
@@ -167,6 +172,27 @@ def vai_a(giorni):
 
 def oggi_vero():
     return _vera_dt.fromtimestamp(_vero_time()).date()
+
+
+def attese(istante, giorni):
+    """Le due date che l'orologio spostato DEVE mostrare, calcolate come le calcola lui:
+    in SECONDI (`istante + giorni*86400`), non in giorni di calendario.
+
+    ⛔ IL DIFETTO CHE QUESTA FUNZIONE CHIUDE, misurato il 2026-08-14: l'attesa si calcolava
+    sommando giorni al CALENDARIO locale, mentre l'orologio si sposta in SECONDI. Le due
+    aritmetiche coincidono quasi sempre e divergono a cavallo della mezzanotte -- e quella
+    notte tre guardie sane sono risultate rosse.
+
+    ⛔ E PERCHE' SONO DUE, non una. `date.today()`, `datetime.now()` e `time.localtime()`
+    rispondono in ora LOCALE; `time.gmtime()` e il `date('now')` di SQLite rispondono in
+    UTC. Per un'ora al giorno le due zone stanno in giorni DIVERSI: un solo valore atteso
+    non puo' accontentarle entrambe, e chi resta indietro viene accusato da innocente.
+    Misurato: un solo atteso calcolato in secondi copre 23 ore su 24 -- non ripara il
+    difetto, lo SPOSTA di un'ora. Due attese ne coprono 24 su 24.
+    """
+    spostato = istante + giorni * 86400.0
+    return (_vera_dt.fromtimestamp(spostato).date(),
+            _vera_dt.utcfromtimestamp(spostato).date())
 
 
 # --------------------------------------------------------------------------------------
@@ -554,13 +580,21 @@ def main(argv=None):
         # guardie di `test_pipeline_ci.py`, che lo interrogano da fuori e leggono queste
         # righe. Stampa quello che i DUE orologi vedono, cosi' un doppio conteggio o un
         # SQLite rimasto indietro si vedono a occhio nudo invece di falsare un verdetto.
-        giorni = int(argv[argv.index("--prova-orologio") + 1])
-        atteso = oggi_vero() + _dt.timedelta(days=giorni)
+        _i = argv.index("--prova-orologio")
+        giorni = int(argv[_i + 1])
+        # ISTANTE opzionale (secondi dall'epoca): serve alla guardia delle 24 ore per
+        # COSTRUIRE a mano l'ora in cui le due zone stanno in giorni diversi, invece di
+        # aspettare mezzanotte per accorgersene (D19). Senza, vale l'ora vera di adesso.
+        if len(argv) > _i + 2 and not argv[_i + 2].startswith("--"):
+            _BASE[0] = float(argv[_i + 2])
+        atteso, atteso_utc = attese(
+            _vero_time() if _BASE[0] is None else _BASE[0], giorni)
         installa_orologio()
         vai_a(giorni)
         con = _sq.connect(":memory:")
         print("chiesto      %d" % giorni)
         print("atteso       %s" % atteso)
+        print("atteso_utc   %s" % atteso_utc)
         print("python_date  %s" % _dt.date.today())
         print("python_now   %s" % _dt.datetime.now().date())
         print("time_gmtime  %s" % _time.strftime("%Y-%m-%d", _time.gmtime()))

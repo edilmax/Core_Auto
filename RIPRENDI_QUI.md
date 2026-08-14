@@ -11,6 +11,85 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🚦 2026-08-14 — RIPARTI DA QUI. ✅ **`fase59` RIMISURATO** (il piano mentiva) · ✅ **il test che mentiva a mezzanotte è CHIUSO** · ✅ **CodeQL esiste**
+
+> **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
+>
+> ### 📦 PASSAGGIO DI CONSEGNE (D21) — scritto a ~1/3 di contesto, sessione del 2026-08-14
+> **⛔ PRIMA MISURA, POI AGISCI. I commit scritti qui invecchiano.**
+> ```powershell
+> git rev-parse --short HEAD ; git status --porcelain
+> git ls-remote origin refs/heads/master
+> ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'
+> python collaudi/prima_di_lanciare.py          # 7 controlli
+> python collaudi/piano_dei_soldi.py            # quante fasi dei soldi restano
+> ```
+>
+> ### ✅ FATTO OGGI — ⛔ NON RIFARLO
+> **① `fase59` rimisurato col Giudice: il piano diceva 112·48·64, la verità è 114·72·42.**
+> Passo 1 (5 sorveglianti) dava 69 scoperti; passo 2 (22 sorveglianti) ne dà **42**:
+> **27 erano FALSI**. Il metodo in due passi **non è opzionale**. 252 minuti, 0 lasciati fuori.
+> ⛔ **39 dei 42 sono su codice che la produzione ESEGUE** (non è `fase133`): verificato con
+> `fase83_server:6795`→`quota`, `:4648`→`prenota`, manifest **200** sul sito vero, e il log
+> d'avvio del container che elenca `concierge(59)` + `mcp(60)` con `avvisi: []`.
+>
+> **② Il «test che mente ogni tanto» è IDENTIFICATO e RIPARATO: era il FUSO ORARIO.**
+> L'attesa contava *giorni di calendario locale*, l'orologio si sposta in *secondi*. Rosse solo
+> fra le **00:00 e le 02:00** italiane, mai in CI (là è UTC). Ora l'attesa è calcolata in
+> secondi e ce ne sono **DUE** (locale + UTC): con una sola si copre 23 ore su 24, cioè il
+> difetto si SPOSTA di un'ora invece di chiudersi. Guardia nuova
+> `test_L_OROLOGIO_REGGE_A_TUTTE_LE_24_ORE_DEL_GIORNO`: **costruisce** l'ora (D19) e prova
+> 24 ore × 2 distanze in 4 secondi — vista rossa col difetto dentro, verde senza, sha256 identico.
+>
+> **③ CodeQL ESISTE** (`.github/workflows/codeql.yml`, Python, `security-extended`, **v4** perché
+> la v3 muore a dicembre 2026). ⚠️ **NON toglierlo dai lavori obbligatori finché non lo vedi
+> girare VERDE dall'API**: il criterio scritto è «esiste **e gira** ed è verde».
+>
+> ### 🎯 IL LAVORO VERO, PRONTO DA ATTACCARE: i 42 buchi di `fase59`
+> ⛔ **Non sono difetti: sono punti dove un difetto NON verrebbe visto.** Si chiudono
+> **scrivendo i test che mancano**, NON cambiando il codice (nessun difetto del prodotto è
+> emerso). Mappa già fatta — non rifare la misura:
+> ```
+> quota (11)            299x2 confini SCONTO LUNGO (7 e 28 notti) · 300 sconto=0
+>                       318 commissione<0 · 320 commissione==netto
+>                       329x2 prezzo ospite ==0 e ==MAX_CENTS · 338x2 tassa==0 · 350 · 359
+> prenota (9)           516 · 538 · 541 · 543 · 550x2 · 570 · 575 · 592
+> _sconto_credito (6)   474 credito che scade ESATTAMENTE adesso · 491 guardia CROSS-VALUTA
+>                       (quella che impedisce a 5 EUR di valere 500 JPY) · 494 credito==0 · 467 · 484
+> scopri (4)            231 · 242 · 243 · 247
+> manifest (2) 206·209  ·  _link_isolato (2) 641·643  ·  dettaglio 612  ·  _valuta_alloggio 452
+> _stringa 69  ·  impronta 109  ·  codifica 118
+> registra_concierge (3) 664·669·674  <- CODICE MORTO in produzione: NON vale la pena
+> ```
+> 🧭 **Il giro per riprovare** (misurato: 252 min con 22 sorveglianti, 8 min con i 5 veloci):
+> ```powershell
+> python collaudi/mutazione_prodotto.py --modulo fase59_concierge.py --tetto 120 --minuti 300 --killer test_fase59_concierge test_fase59_costo_pagamento test_fase59_codice_pin test_fase59_host_aware test_cambio_indicativo test_fase83_server test_happy_conti test_copertura_critica test_mutation_money test_bunker test_migrazioni_mancanti test_parita_ambiente test_integrazione_servizi test_stripe_giu_al_book test_happy_altro test_email_ciclo test_fase64_smartpass test_recensioni_categorie test_checkin_ramo test_fase158_domanda test_fase60_mcp_server test_fase63_recensioni
+> ```
+> ⛔ `--killer` va SEMPRE per ULTIMO (divora ciò che segue) · `--tetto` di serie è **30**: con
+> 114 punti ne lascerebbe fuori 84 **in silenzio** · per iterare in fretta usa i **5 veloci**
+> (8 minuti), e il giro completo solo per il numero definitivo.
+> ⛔ **`test_pipeline_ci` è FUORI dai killer di proposito**: è un sorvegliante **FANTASMA**,
+> nomina `fase59` solo in una docstring (riga 2456) e non ne esegue una riga.
+>
+> ### 🔴 DUE DIFETTI DEGLI STRUMENTI, trovati oggi — valgono più del lavoro
+> · **Il Giudice lascia l'albero SPORCO**: dopo ogni giro **11 file di PRODUZIONE** risultano
+>   modificati (solo fine riga LF→CRLF, contenuto identico). ⛔ Chi committa senza guardare se
+>   li porta dentro. Si rimettono con `git checkout -- <file>`, ma **prima** si verifica con
+>   `git diff --ignore-cr-at-eol --numstat` che sia davvero solo quello.
+> · **`--diff` dichiara «ogni riga cambiata è sorvegliata» con `provati: 0`**: sui file di
+>   collaudo non genera mutanti e promette lo stesso. È lo sbaglio S1 — **il vuoto non è un
+>   valore**. Se tocchi solo `collaudi/` o `test_*`, quella prova **non vale**: rompi la riga
+>   a mano e guarda chi diventa rosso.
+>
+> ### ⚠️ COSA NON È STATO FATTO, dichiarato
+> · **I 42 buchi**: nessuno chiuso. Questa sessione era la MISURA.
+> · Collaudi **3** (avvio reale) e **6** (concorrenza): non fatti. **1·4·5·8**: non applicabili.
+> · **`fase160` · `fase100` · `fase188` restano da rimisurare** (i loro numeri vengono ancora
+>   da un documento, e su `fase59` quel documento aveva torto di 22 punti).
+> · **JavaScript fuori da CodeQL** (una riga per accenderlo, ma apre rilievi da triare).
+> · ⚠️ **Il rimborso all'ospite NON parte da solo** (`grep v1/refunds` in produzione → 0):
+>   resta la cosa più grave aperta, da chiudere **prima del primo host**.
+
 ## 🚦 2026-08-13 — RIPARTI DA QUI. ✅ **IL BLOCCO 1 DEI SOLDI È CHIUSO** (`fase119`: 17/17, 3 difetti veri). Prima: bombe a tempo (13) + `D25`.
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
@@ -76,12 +155,15 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > Non l'ha trovato uno strumento: l'ha trovato lui, dicendo *«altre fasi le avevamo già
 > fatte, ma non con questo metodo»*. È la **seconda volta** che un suo dubbio scopre un
 > numero che nessun controllo segnalava (la prima furono i «63 moduli morti»).
-> ⚠️ **Numeri da `RIPRENDI_QUI.md:948-956`, NON rimisurati — vanno rifatti col Giudice:**
+> ✅ **`fase59` RIMISURATO IL 2026-08-14 — il documento diceva il falso.** Vero: **114 punti ·
+> 72 uccisi · 42 scoperti**, di cui **39 su codice che la produzione ESEGUE** e 3 su codice morto.
+> ⛔ **27 dei 69 «scoperti» del primo giro erano FALSI**: il metodo in due passi non è opzionale.
+> ⚠️ **Gli altri tre restano da rimisurare** (numeri da `RIPRENDI_QUI.md:948-956`, NON rimisurati):
 > ```
-> fase59_concierge     112 punti ·  48 uccisi -> 64 SCOPERTI   <- più di tutto il Blocco 2
-> fase160_escrow        39 punti ·  34 uccisi ->  5 scoperti
-> fase100_dac7          18 punti ·  13 uccisi ->  5 scoperti
-> fase188_paga_strut     4 punti ·  esito NON DICHIARATO
+> fase59_concierge  ✅ 114 punti ·  72 uccisi -> 42 SCOPERTI (39 vivi + 3 morti)  RIMISURATO
+> fase160_escrow        39 punti ·  34 uccisi ->  5 scoperti     <- da rimisurare
+> fase100_dac7          18 punti ·  13 uccisi ->  5 scoperti     <- da rimisurare
+> fase188_paga_strut     4 punti ·  esito NON DICHIARATO         <- da rimisurare
 > ---- contro i quattro del Blocco 1: ----
 > fase167 11/11 · fase66 24/24 · fase119 17/17 -> 0 scoperti
 > fase133 15/22 -> 7 scoperti, tutti su codice MORTO e dichiarati
@@ -95,15 +177,20 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > **6. Concorrenza** ❌ non provata · **7. Giudice esterno** ⚠️ `node --check` sì, CI su
 > Linux solo dopo il push. ⛔ Valgono per **tutti e quattro** i moduli del Blocco 1.
 >
-> ### ▶️ COSA FARE ADESSO — decidere fra due, e prima RIMISURARE
-> **(a)** il **BLOCCO 2**: `fase98` (18) · `fase111` (11) · `fase147` (29) = 58 punti nuovi.
-> **(b)** rifinire **`fase59`**: 64 punti già scoperti su un modulo dichiarato FATTO.
-> 💡 Il consiglio è **(b)**: un buco su un modulo che il piano dà per chiuso è peggio,
-> **proprio perché nessuno lo va a guardare**. Ma il numero viene da un documento, e qui i
-> documenti hanno già mentito: **prima si rimisura col Giudice, poi si decide.**
-> ⛔ E su qualunque dei due, la domanda che su `fase133` ha cambiato il compito:
-> *quanti di quei punti sono su codice che la produzione ESEGUE?*
-> (`raggiungibilita.py` conta gli **import**, non i **simboli usati**.)
+> ### ▶️ COSA FARE ADESSO — la scelta è FATTA e la misura pure (2026-08-14)
+> Scelta **(b)**, e la rimisura le ha dato ragione: `fase59` è dichiarato FATTO nel piano, la
+> produzione lo esegue a **ogni preventivo e ogni prenotazione**, e ha **42 punti scoperti** —
+> **39 su codice caldo**. Il Blocco 2 (`fase98` 18 · `fase111` 11 · `fase147` 29 = 58) resta dopo.
+> ⛔ **IL LAVORO VERO NON È INIZIATO: i 42 buchi sono ancora aperti.** Si chiudono **scrivendo i
+> test che mancano**, non cambiando il codice — nessun difetto del prodotto è emerso finora.
+> Dove sono: `quota` **11** · `prenota` **9** · `_sconto_credito` **6** · `scopri` 4 · `manifest` 2
+> · `_link_isolato` 2 · altri 5 · (`registra_concierge` 3 = codice morto, **non vale la pena**).
+> 🧭 Il giro che serve per riprovare, già misurato (252 minuti, 0 lasciati fuori):
+> ```powershell
+> python collaudi/mutazione_prodotto.py --modulo fase59_concierge.py --tetto 120 --minuti 300 --killer <i 22, tutti tranne test_pipeline_ci>
+> ```
+> ⛔ `--killer` va SEMPRE per ultimo (divora ciò che segue) e `--tetto` di serie è **30**: con 114
+> punti ne lascerebbe fuori 84 **in silenzio**.
 >
 > ### 🧾 COSE VERE SCOPERTE OGGI CHE NON C'ENTRANO COL LAVORO (non perderle)
 > ⛔ **IL RIMBORSO ALL'OSPITE NON PARTE DA SOLO, E NON È «MANUALE DAL NOSTRO PANNELLO»: È
@@ -3046,7 +3133,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5619 test
+SUITE ATTUALE: Ran 5620 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

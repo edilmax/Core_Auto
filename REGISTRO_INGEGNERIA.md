@@ -234,11 +234,14 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 fatte, ma non con questo metodo»*. Aveva ragione, ed è la seconda volta che un suo dubbio
 scopre un numero che nessun controllo segnalava (la prima furono i «63 moduli morti»).
 
-⚠️ **Numeri presi da `RIPRENDI_QUI.md:948-956`, NON rimisurati** — vanno rifatti col Giudice:
+⚠️ **Numeri presi da `RIPRENDI_QUI.md:948-956`, NON rimisurati** — vanno rifatti col Giudice.
+✅ **`fase59` È STATO RIMISURATO il 2026-08-14** (voce «FATTO 2026-08-14» nel changelog): il
+documento diceva **112 · 48 · 64**, la misura vera dice **114 · 72 · 42**, di cui **39 su codice
+che la produzione esegue**. Gli altri tre della lista **restano da rimisurare**.
 
 | modulo | punti | uccisi | **scoperti** |
 |---|---|---|---|
-| `fase59_concierge` | 112 | 48 | **64** |
+| `fase59_concierge` ✅ rimisurato | ~~112~~ **114** | ~~48~~ **72** | ~~64~~ **42** (39 vivi + 3 morti) |
 | `fase160_escrow_garanzia` | 39 | 34 | 5 |
 | `fase100_dac7` | 18 | 13 | 5 |
 | `fase188_paga_struttura` | 4 | *non dichiarato* | ? |
@@ -557,6 +560,85 @@ un salvataggio di sei giorni prima **credendo di aver fatto quello di oggi**, e 
 giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
+
+### ✅ FATTO 2026-08-14 — `fase59` RIMISURATO (il piano diceva il falso) + IL TEST CHE MENTIVA A MEZZANOTTE
+
+**Nessuna riga di produzione toccata.** Tre file: `collaudi/bombe_a_tempo.py` (+37/-3),
+`test_pipeline_ci.py` (+59/-8), `RIPRENDI_QUI.md` (+1/-1).
+
+#### ① `fase59_concierge` rimisurato col Giudice — i numeri del piano erano SBAGLIATI
+
+| | documento | passo 1 (5 sorveglianti) | **passo 2 (22 sorveglianti)** |
+|---|---|---|---|
+| punti | 112 | 114 | **114** |
+| uccisi | 48 | 45 | **72** |
+| scoperti | **64** | 69 | **42** |
+
+`--tetto 120 --minuti 300`, **0 lasciati fuori** per tetto o tempo · 0 equivalenti dichiarati ·
+0 non determinabili · 252 minuti · rinunce del generatore `{a_cavallo: 4, catena: 6}`.
+
+💡 **Il metodo in due passi non è un formalismo: 27 dei 69 erano FALSI sopravvissuti**, morti
+appena accesi gli altri occhi. Chi si ferma al passo 1 pubblica un numero gonfiato del 64%.
+
+⛔ **E la domanda di `fase133` ha ricevuto risposta opposta:** dei 42, **39 stanno su codice che
+la produzione ESEGUE** (`quota` 11 · `prenota` 9 · `_sconto_credito` 6 · `scopri` 4 · `manifest` 2
+· `_link_isolato` 2 · altri 5), **3 su codice morto** (`registra_concierge`, che solo un test usa).
+Verificato sul campo, non dedotto: `fase83_server:6795`→`quota`, `:4648`→`prenota`,
+`GET /api/concierge/manifest` risponde **200** sul sito vero, e il log d'avvio del container
+elenca `concierge(59)` e `mcp(60)` con `avvisi: []`.
+⚠️ **Un sorvegliante FANTASMA**: `test_pipeline_ci` risulta fra i 23 perché nomina `fase59` in una
+**docstring** (riga 2456) e non ne esegue una riga. È il gemello opposto del sorvegliante
+invisibile del 2026-08-02: lo strumento cerca il NOME nel testo, e il nome può stare in un commento.
+
+#### ② IL TEST CHE MENTIVA OGNI TANTO: identificato, era il FUSO ORARIO
+
+Il punto lasciato **aperto e senza nome**. La suite del 2026-08-14 è partita rossa: 3 guardie in
+`TestLeBombeATempo`. **Nessuna era un difetto del prodotto.**
+
+· **Il difetto.** L'attrezzo sposta l'orologio di `giorni × 86400` **secondi**; l'attesa si
+  calcolava sommando giorni al **calendario locale** (`oggi_vero() + timedelta`). Due aritmetiche
+  diverse: coincidono quasi sempre, divergono a cavallo della mezzanotte.
+· **Perché nessuno l'aveva visto:** in CI l'orologio è **UTC**, e lì la finestra non si apre MAI.
+  Si vedeva solo sul computer di casa, e solo fra le 00:00 e le 02:00.
+· **Perché servono DUE attese e non una** (misurato, non supposto): `date.today()`,
+  `datetime.now()` e `localtime` rispondono in **locale**; `gmtime` e il `date('now')` di SQLite
+  in **UTC**. Un solo atteso calcolato in secondi copre **23 ore su 24** — sposta il difetto di
+  un'ora invece di chiuderlo. Due ne coprono **24 su 24**.
+· **La guardia nuova** `test_L_OROLOGIO_REGGE_A_TUTTE_LE_24_ORE_DEL_GIORNO`: **COSTRUISCE** l'ora
+  del giorno (D19) invece di aspettare mezzanotte, e prova 24 ore × 2 distanze in 4 secondi. Vista
+  **ROSSA** col difetto rimesso dentro (`alle 00:00 … python_date dice 2027-03-01`), **VERDE** una
+  volta tolto, file **byte-identico** (sha256 `40DB7973…FE56`). Rotta anche la riga nuova di
+  `_adesso()`: **4 test rossi**, quindi è sorvegliata davvero.
+· ⚠️ **La riga 495 (`autoprova`) ha lo stesso schema e REGGE — ma per MARGINE, non per
+  protezione**: il bersaglio è a +20 giorni e la prova sposta di +25, quindi un giorno di scarto
+  non ribalta l'esito. Misurato costruendo le 00:30: riuscita in entrambi i casi. Se qualcuno
+  stringe quel margine, il difetto torna e **nessuna guardia lo dice**.
+· ⚠️ **Restano due usi di `oggi_vero()` NON toccati** (righe 333 e 347, `esplode_il` e
+  `misurato_il`): finiscono nel **rapporto**, non in un giudizio. A mezzanotte possono dichiarare
+  un giorno di scarto sulla data d'esplosione. Non riparati di proposito: nessun difetto
+  dimostrato, e la regola ferrea 1 vieta il «già che c'ero».
+
+#### ③ DUE DIFETTI DEGLI STRUMENTI, trovati per caso e più pericolosi del lavoro stesso
+
+· 🔴 **Il Giudice della mutazione lascia l'albero SPORCO.** Dopo i due giri, `git status` mostrava
+  **14 file modificati** invece dei 3 dichiarati: **11 sono di PRODUZIONE**, con contenuto
+  identico e **solo i fine riga** cambiati (LF→CRLF), perché l'attrezzo li riscrive per iniettare
+  i mutanti e li ripristina alla maniera di Windows. ⛔ Chi committa senza guardare **si porta
+  dentro 11 file di produzione senza averlo deciso**. L'ho visto solo perché avevo dichiarato
+  prima quali file dovevo toccare (regola ferrea 15) e i conti non tornavano.
+· 🔴 **`--diff` dichiara «tutto sorvegliato» dopo aver esaminato ZERO righe.** Sui file di
+  collaudo non genera mutanti (guarda solo i moduli di produzione) e stampa comunque *«Ogni riga
+  cambiata è sorvegliata: un guasto lì verrebbe visto»* con `provati: 0`. È lo sbaglio **S1** nella
+  forma peggiore: **il vuoto non è un valore**, e qui viene presentato come una promessa.
+
+#### ④ Cosa NON è stato fatto, dichiarato
+
+**I 42 buchi di `fase59` non sono stati chiusi**: questa era la MISURA. Collaudo **3** (avvio
+reale) e **6** (concorrenza) non fatti; **1**, **4**, **5**, **8** non applicabili (nessuna
+modifica al prodotto). Esterni: CI **13 job / 0 falliti** su `cccf8ec` letta dall'API, `curl`
+sul sito vero **200** con TLS valido, **ZAP verde ma del 10/08 su `fce0c54`**, non su oggi.
+⚠️ **CodeQL continua a non esistere** (un solo workflow in `.github/workflows/`): è il lavoro
+obbligatorio **n.1**, priorità «SUBITO», e nessuno lo ha ancora raccolto.
 
 ### ✅ FATTO 2026-08-13 — `fase119_calendario_prezzi`: **il BLOCCO 1 dei soldi è CHIUSO**
 
