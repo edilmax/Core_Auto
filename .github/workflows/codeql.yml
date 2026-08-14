@@ -1,0 +1,87 @@
+name: CodeQL
+
+# ============================================================================
+#  ANALISI STATICA DI SICUREZZA — il lavoro obbligatorio n.1
+# ============================================================================
+#  Trova classi di difetti che i test non cercano (iniezioni, percorsi non
+#  sanificati, segreti nel codice, deserializzazioni pericolose). E' GRATIS
+#  finche' il repository e' pubblico, e lo e'.
+#
+#  ⛔ PERCHE' UN FILE, e non il "default setup" dell'interfaccia web. Il default
+#  si accende con un interruttore e il file resta NASCOSTO: qui la regola zero
+#  vuole che ogni cosa sia leggibile nel repository, e il lavoro obbligatorio
+#  pretende esattamente `.github/workflows/codeql.yml`. Un impianto che non si
+#  puo' leggere non si puo' nemmeno controllare.
+#
+#  ⛔ PERCHE' v4 E NON v3, che e' quella scritta in quasi tutti gli esempi in
+#  giro. Misurato il 2026-08-14 sul changelog ufficiale di `github/codeql-action`:
+#  la v2 e' morta a gennaio 2025 e la **v3 viene deprecata a dicembre 2026** --
+#  fra quattro mesi. Scrivere v3 oggi significa piantare una bomba a tempo, ed e'
+#  esattamente il difetto che abbiamo appena finito di riparare altrove.
+#  ⛔ E le major NON si mischiano dentro lo stesso workflow: la documentazione lo
+#  dichiara non supportato. `init` e `analyze` stanno sulla stessa versione.
+#
+#  ⛔ STA FUORI DAL `gate` DI `ci.yml`, DI PROPOSITO. Un rilievo di sicurezza va
+#  letto e giudicato da una persona; murare il commit di chiunque passi di li'
+#  per altro insegnerebbe solo ad aggirarlo. Il suo esito si legge, non blocca.
+#
+#  ⛔ COSA QUESTO CONTROLLO NON ESAMINA (D18 punto 3):
+#   · **JavaScript** (`app.js`, ~pagine pubbliche) resta FUORI per ora: aggiungerlo
+#     e' una riga (`languages: python, javascript-typescript`), ma apre un elenco
+#     di rilievi da triare uno per uno, e un elenco che nessuno legge e' un
+#     allarme spento. Si accende come compartimento a se' (D13).
+#   · usa `security-extended`, NON `security-and-quality`: la seconda aggiunge
+#     query di STILE e manutenibilita' che su ~48.000 righe producono rumore.
+#     Qui si cerca la SICUREZZA, e un falso allarme costa quanto un allarme
+#     mancato (regola ferrea 10).
+#   · non vede i segreti gia' committati in passato: quello e' un altro attrezzo.
+#   · non sostituisce NESSUN collaudo: dice dove il codice e' fragile, non se il
+#     prodotto funziona.
+# ============================================================================
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  schedule:
+    # lunedi' 04:00 UTC: un'ora DOPO la scansione ZAP di `ci.yml` (03:00), cosi'
+    # le due non si contendono la macchina ne' si confondono nei rapporti.
+    - cron: '0 4 * * 1'
+  workflow_dispatch: {}
+
+# Il minimo indispensabile, niente di piu': sono le due righe che la
+# documentazione dichiara obbligatorie per l'analisi avanzata.
+permissions:
+  contents: read
+  security-events: write
+
+# Se arriva un commit nuovo mentre l'analisi gira sul precedente, quella vecchia
+# viene annullata: l'unica che conta e' quella sull'ultimo codice.
+concurrency:
+  group: codeql-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analisi:
+    name: CodeQL (python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Prendi il codice
+        uses: actions/checkout@v4
+
+      - name: Prepara CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: python
+          queries: security-extended
+
+      # ⛔ NIENTE `autobuild`: Python non si compila. Quel passo qui non farebbe
+      # nulla, e un passo che non fa nulla e' un passo che un giorno qualcuno
+      # legge come "il progetto viene costruito", che e' falso.
+      - name: Analizza
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:python"
