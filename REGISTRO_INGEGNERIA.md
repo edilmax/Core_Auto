@@ -241,7 +241,7 @@ che la produzione esegue**. Gli altri tre della lista **restano da rimisurare**.
 
 | modulo | punti | uccisi | **scoperti** |
 |---|---|---|---|
-| `fase59_concierge` ✅ rimisurato | ~~112~~ **114** | ~~48~~ **72** | ~~64~~ **42** (39 vivi + 3 morti) |
+| `fase59_concierge` ⚖️ **GIUDICATO 2026-08-14 sera** | ~~112~~ **114** | ~~48~~ ~~72~~ **106** | ~~64~~ ~~42~~ **8** (tutti dimostrati indistinguibili) |
 | `fase160_escrow_garanzia` | 39 | 34 | 5 |
 | `fase100_dac7` | 18 | 13 | 5 |
 | `fase188_paga_struttura` | 4 | *non dichiarato* | ? |
@@ -250,8 +250,14 @@ che la produzione esegue**. Gli altri tre della lista **restano da rimisurare**.
 
 **Il difetto è nella parola, non nei moduli.** Il piano conta chi è **passato sotto** il
 giudice, non chi ha **superato l'esame**: i quattro del Blocco 1 hanno zero punti scoperti,
-i quattro di prima ne hanno **74 in tutto** che nessuno ha mai chiuso. Su `fase59` da sola
-restano **64 punti su 112** senza protezione — più di tutto il Blocco 2 (58).
+i quattro di prima ne avevano **74 in tutto** che nessuno aveva mai chiuso.
+
+✅ **La sera del 2026-08-14 quelli di `fase59` sono stati chiusi**: da 42 a **8**, e gli 8
+sono dimostrati **indistinguibili** (rompere il codice lì non produce alcun difetto visibile).
+Verdetto **GIUDICATO**, non «fatto», perché la condizione 2 di D26 pretende zero e uno degli
+8 **non è dichiarabile** per un limite della chiave dello schedario — voce «FATTO 2026-08-14
+(sera)» nel changelog. Restano scoperti quelli di `fase160` (5), `fase100` (5) e
+`fase188` (non dichiarato), che **vengono ancora da un documento** e vanno rimisurati.
 
 🔴 **E il guardiano lo dichiara da sé, a ogni giro**: *«non dice se un modulo dichiarato FATTO
 lo sia DAVVERO»*. Quel limite era scritto e nessuno lo leggeva come un lavoro da fare.
@@ -560,6 +566,151 @@ un salvataggio di sei giorni prima **credendo di aver fatto quello di oggi**, e 
 giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
+
+### ⚖️ FATTO 2026-08-14 (sera) — `fase59_concierge`: **106 punti su 114 chiusi**, e il verdetto è **GIUDICATO**, non «fatto»
+
+**Nessuna riga di produzione toccata.** Due file: `test_fase59_concierge.py` (+~1000/-2,
+da 28 a **102** test) e `RIPRENDI_QUI.md`. Suite **5694 raccolti · 5689 eseguiti · OK ·
+uscita 0** (lo scarto di 5 è `openssl` fuori dal PATH, D23 punto 3).
+
+#### Il numero, con la misura che lo regge (D22)
+
+| | prima di oggi | **adesso** |
+|---|---|---|
+| punti di mutazione (censimento rifatto) | 114 | **114** |
+| uccisi **da tutti e 22 i sorveglianti** | 72 | — |
+| uccisi **dal solo `test_fase59_concierge`** | 45 | **106** |
+| sopravvissuti al solo file di `fase59` | 69 | **8** |
+| rinunce del generatore | 10 | **10** (4 `a_cavallo` + 6 `catena`) |
+| punti lasciati fuori da tetto o tempo | 0 | **0** |
+
+```
+python collaudi/mutazione_prodotto.py --modulo fase59_concierge.py --tetto 120 \
+       --minuti 90 --killer test_fase59_concierge                       # 10 minuti
+provati: 114 · uccisi: 106 · SOPRAVVISSUTI: 8 · scoperti: 0 · equivalenti: 0
+
+... e con TUTTI E 22 i sorveglianti (4h 56m):                           # collaudo 10
+provati: 114 · uccisi: 104 · SOPRAVVISSUTI: 7 · equivalenti: 0 · NON DETERMINABILI: 3
+```
+misurato su `d05ff53` + il lavoro non ancora committato di questa sessione.
+💡 **Il file di `fase59` da solo uccide più di quanto uccidessero prima tutti e ventidue
+i sorveglianti messi insieme** (106 contro 72).
+
+⛔ **VERBALE DEL GIRO, in forma fissa (lo leggerà il guardiano):**
+```
+GIRO fase59_concierge · 2026-08-14 · d05ff53 · punti 114 · uccisi 104 · sopravvissuti 7 · non_determinabili 3 · rinunce 10 · sorveglianti 22 · verdetto GIUDICATO
+```
+
+🔴 **E il giro COMPLETO ha prodotto due difetti di misura, che valgono più del punteggio.**
+1. **3 NON DETERMINABILI** (righe 284×2 e 296): *«i test non hanno finito in tempo»*. Con 22
+   sorveglianti un giro costa **146,9 s** contro i ~9 s con uno solo, e il tetto scade. Non
+   sono sopravvissuti: sono punti **non giudicati**, e vanno contati a parte.
+2. ⛔ **UN «UCCISO» FALSO.** Con un sorvegliante la riga **299 col 89** sopravvive; con 22
+   risulta uccisa. Ma provando **8 sorveglianti uno per uno** (base sana verde per tutti e
+   otto, quindi la misura vale) **nessuno la vede**: 102→102, 83→83, 170→170, 126→126… È
+   quasi certamente un test caduto per un ALTRO motivo proprio in quel momento — e i tre
+   timeout immediatamente precedenti dicono che la macchina era in affanno. Sospettato
+   numero uno: il sorvegliante che **avvia a sua volta un giro di mutazione**.
+   💡 **Un mutante contato «ucciso» perché è caduto qualcos'altro è un verde finto**, ed è
+   il modo in cui un punteggio di mutazione si gonfia da solo. ⚠️ Limite: provati **8
+   sorveglianti su 22** — non posso escludere che uno degli altri 14 lo uccida davvero.
+
+⚠️ **Conseguenza sul metodo, misurata oggi e non teorica:** il giro completo **non è
+strettamente migliore** di quello veloce. Più sorveglianti alzano gli uccisi, ma allungano
+ogni prova da 9 a 147 secondi e introducono **timeout** e **falsi uccisi**. Il giro veloce
+resta la misura da usare per lavorare; il completo serve solo per il verbale.
+
+#### ⛔ I 3 difetti trovati erano MIEI, e li ha trovati la macchina — non io
+
+1. **Sette guardie finte.** Avevo scritto `assertIsNotNone(rec.exc_info)` per pretendere che
+   i log portino la traccia dell'errore. Ma `exc_info=False` **non produce `None`: produce
+   `False`**, e `False` non è `None` → la guardia restava **verde col guasto dentro**. Sette
+   punti (righe 247·359·484·538·570·612·643) sembravano protetti e non lo erano. Le ha
+   scoperte il Giudice, non la lettura. Riparate con `assertIsInstance(rec.exc_info, tuple)`.
+   💡 *Una guardia che pretende «non è nullo» da un campo che vale `False` è un ornamento:
+   la domanda giusta non è «c'è qualcosa?», è «c'è LA COSA?».*
+2. **Un byte NULL invisibile** dentro il file dei test: Python rifiutava di leggerlo
+   (`source code string cannot contain null bytes`). Riparato con l'unica eccezione ammessa
+   da B2 — byte costruito per **valore numerico**, con il conteggio prima/dopo mostrato:
+   byte di controllo **1 → 0**, dimensione **+3** esatti.
+3. **Una percentuale in un commento.** `audit_coerenza_tariffe.py` ha reso **rossa la suite**
+   per una cifra nuova in un mio commento. È lo sbaglio **S17**: un commento non nomina il
+   numero, così non può diventare falso. Riparato, audit di nuovo a **uscita 0**.
+
+⛔ **Nel PRODOTTO non è emerso nessun difetto**: i 42 punti erano posti dove un difetto non
+sarebbe stato visto, non difetti. Chiusi **scrivendo i test che mancavano**, mai cambiando il
+codice.
+
+#### Gli 8 sopravvissuti: DIMOSTRATI indistinguibili, e NON dichiarati equivalenti
+
+Costruito un **dimostratore meccanico** (`prova_equivalenza.py`, nello scratchpad): carica il
+modulo sano e quello guasto **fianco a fianco in memoria** — il file di produzione non viene
+mai toccato, `sha256` identico prima e dopo — e confronta l'uscita **intera** (stato, corpo,
+payload del token decodificato) su **3000 casi** scelti per attraversare ogni confine.
+
+| esito | mutanti | cosa cambia in uscita |
+|---|---|---|
+| indistinguibili anche sui TIPI | 299c89 · 300 · 350 · 467 · 494 | **niente** |
+| indistinguibili nel JSON che esce | 318 · 320 · 338 | solo il **tipo** di un oggetto interno, mai il JSON |
+
+E la riga 299 porta **due** mutanti identici (`>`→`>=`, colonne 53 e 89): misurato quale è
+quale, iniettando il modulo guasto in `sys.modules` — **col 53 ROSSO** (lo uccide
+`test_a_VENTOTTO_notti_senza_sconto_mese_vale_quello_settimana`, ed era una differenza di
+**soldi** vera), **col 89 VERDE**. Base sul codice sano verde prima di misurare (D18).
+
+🔴 **PERCHÉ NON SONO STATI DICHIARATI EQUIVALENTI — ed è un limite della MACCHINA, non pigrizia.**
+La chiave di `EQUIVALENTI_DICHIARATI` è *(file · funzione · testo della riga · vecchio · nuovo)*
+e **non contiene la colonna**. Sulla riga 299 i due mutanti hanno chiave **identica**: una
+dichiarazione sola ne perdonerebbe **due**, e `TestLoSchedarioDegliEquivalenti_5` diventa
+rossa — giustamente, perché è esattamente il difetto vero del 2026-08-05 su `fase177`, dove
+una voce spense un secondo punto sui soldi per tre giorni. Quindi **299c89 non è
+dichiarabile**, e siccome da solo basta a tenere il conto sopra zero, dichiarare gli altri 7
+non cambierebbe il verdetto: sarebbe **cecità permanente comprata a beneficio zero**. Non fatto.
+
+#### L'esame di D26, condizione per condizione
+
+| # | condizione | esito |
+|---|---|---|
+| 1 | punti dichiarati = censimento rifatto | ✅ 114 = 114 |
+| 2 | punti scoperti = ZERO | ❌ **7 sopravvissuti + 3 non giudicati**, i 7 dimostrati indistinguibili ma non dichiarati |
+| 3 | rinunce dichiarate una per una | ✅ 10 (4 `a_cavallo` + 6 `catena`) |
+| 4 | data + commit + elenco sorveglianti | ✅ 2026-08-14 · `d05ff53`+lavoro locale · **22 sorveglianti scelti a mano** |
+| 5 | i dieci collaudi con esito o motivo | ✅ tutti e dieci, sotto |
+
+⛔ **La condizione 2 manca ⇒ si scrive «GIUDICATO», non «FATTO».** È la regola, e vale anche
+quando la sostanza è a posto: gli 8 punti non sono buchi, sono posti dove rompere il codice
+**non produce alcun difetto**. Ma la forma non è soddisfatta, e la forma esiste perché una
+volta la sostanza sembrava a posto e non lo era.
+
+#### I 10 collaudi — esito, mai «non applicabile» senza motivo
+
+| # | collaudo | esito |
+|---|---|---|
+| 1 | Guardia rossa sul vecchio | ✅ 114 guasti rimessi dentro uno per uno, **106 visti rossi** |
+| 2 | Cablaggio anello per anello | ✅ sul sito VERO: `/api/concierge/manifest` **200**, quote su slug ignoto **404**, book senza token **400** — le guardie appena scritte |
+| 3 | **Avvio reale + persistenza** | ✅ **mai fatto prima**: `main_casavip.py` avviato davvero (pid 19620), prenotazione via HTTP, spento, **riavviato** (pid 10052), le date risultano ancora occupate. 22 file `.db` sul disco, nessun `:memory:`. 5 controlli, 0 rossi |
+| 4 | Neuroni | ✅ 2 casi annidati (mese + non-rimborsabile + commissione + tassa + carta), con arrotondamenti scomodi |
+| 5 | Oracolo indipendente | ✅ secondo calcolo coi **razionali esatti** (`Fraction`) invece dell'intero: concorda voce per voce su 7 casi |
+| 6 | **Fuzzing, concorrenza, estremi** | ✅ **mai fatto prima**: 900 giri di ingressi assurdi (seme FISSO 20260814) senza una sola eccezione · 10 corse × 24 agenti sulla stessa stanza, sempre **1 sola** conferma · confine 366/367 notti · party 1/50 |
+| 7 | Giudice esterno | ✅ `curl.exe` (non nostro) sul sito vero + `verifica_produzione.py`: **190 controlli, 0 violazioni**, certificato valido 40 giorni |
+| 8 | Audit dei testi | ✅ `audit_coerenza_tariffe.py` **uscita 0**, «nessuna cifra nuova» (dopo aver riparato il mio commento) |
+| 9 | Caccia ai finti verdi | ✅ F2-F6 tutti **0**; i 10 sospetti sono salti d'ambiente dichiarati (z3, node, postgres, flask) |
+| 10 | Mutazione (per ultima) | ✅ giro completo con **22 sorveglianti**, 4h 56m — con due difetti di misura, sopra |
+| **E2E** | **il viaggio COMPLETO dell'ospite** (fuori dai 10, livello 3 della batteria) | ✅ **13 controlli, 0 rossi** su `main_casavip.py` avviato davvero: scopre → cerca → preventivo (**i conti tornano: 24000 = host + noi + carta**) → **prova a barare sul prezzo e viene RIFIUTATO** → prenota → un secondo agente riceve 409 → il doppio invio dà lo **stesso riferimento** → cancella (rimborso 25200, date liberate) → **spegne e riaccende**: tutto ancora lì |
+
+#### ⛔ COSA NON È STATO ESAMINATO — dichiarato, non nascosto (D18 punto 3)
+
+- **Il dimostratore prova 3000 casi, non tutti**: dimostra che nessuno di QUEI casi distingue
+  i mutanti, non che nessun ingresso al mondo lo faccia.
+- **`registra_concierge` è SPENTO in produzione**: verificato col giudice esterno,
+  `/concierge/manifest` sul sito vero risponde **404** (la produzione usa il router di
+  `fase83` su `/api/concierge/*`). I suoi 3 punti sono stati chiusi lo stesso, con un test
+  Flask, invece di dichiararli equivalenti per comodità.
+- **La CI su Linux non ha ancora visto questo lavoro**: non è committato, e senza commit non
+  c'è giro. Va letta dall'API **dopo** il push, mai «immagino sia verde».
+- **`main_casavip.py` dichiara nel suo uso solo `HOST_KEY`**, ma pretende anche `ADMIN_KEY`
+  (riga 214) e rifiuta di partire senza. La documentazione d'uso è incompleta — trovato
+  facendo il collaudo 3, non corretto (fuori dallo scopo dichiarato).
 
 ### ✅ FATTO 2026-08-14 — `fase59` RIMISURATO (il piano diceva il falso) + IL TEST CHE MENTIVA A MEZZANOTTE
 

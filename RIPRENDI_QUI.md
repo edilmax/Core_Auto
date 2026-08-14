@@ -11,7 +11,83 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🚦 2026-08-14 — RIPARTI DA QUI. ✅ **`fase59` RIMISURATO** (il piano mentiva) · ✅ **il test che mentiva a mezzanotte è CHIUSO** · ✅ **CodeQL esiste**
+## 🚦 2026-08-14 (sera) — RIPARTI DA QUI. ⚖️ **`fase59` CHIUSO A 106/114** e il verdetto è **GIUDICATO**, non «fatto»
+
+> **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
+>
+> ### 📦 PASSAGGIO DI CONSEGNE (D21) — sessione del 2026-08-14, sera
+> **⛔ PRIMA MISURA, POI AGISCI. I commit scritti qui invecchiano.**
+> ```powershell
+> git rev-parse --short HEAD ; git status --porcelain
+> git ls-remote origin refs/heads/master
+> ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'
+> python collaudi/prima_di_lanciare.py     # 7 controlli
+> python collaudi/piano_dei_soldi.py       # lo stato del piano
+> ```
+>
+> ### ✅ FATTO — ⛔ NON RIFARLO (dettaglio per esteso nel registro, voce «FATTO 2026-08-14 (sera)»)
+> **I 42 buchi di `fase59` sono CHIUSI: da 42 sopravvissuti a 8.** Il file dei test è passato
+> da **28 a 102** test. Misura, non ricordo:
+> ```
+> 1 sorvegliante  (10 min):  provati 114 · uccisi 106 · SOPRAVVISSUTI 8
+> 22 sorveglianti (4h 56m):  provati 114 · uccisi 104 · SOPRAVVISSUTI 7 · NON DETERMINABILI 3
+> rinunce del generatore: {'a_cavallo': 4, 'catena': 6}
+> ```
+> 💡 Il solo `test_fase59_concierge` ora uccide **106**; prima **tutti e ventidue** i
+> sorveglianti insieme ne uccidevano **72**.
+>
+> 🔴 **IL GIRO COMPLETO NON È MIGLIORE DI QUELLO VELOCE — misurato, non teorico.** Con 22
+> sorveglianti ogni prova passa da ~9 a **146,9 secondi**: 3 punti sono andati in **timeout**
+> (righe 284×2 e 296, «i test non hanno finito in tempo») e **uno risulta UCCISO per finta**
+> (riga 299 col 89: provati 8 sorveglianti uno per uno con base sana verde, **nessuno lo
+> vede**). ⛔ **Un mutante contato ucciso perché è caduto qualcos'altro gonfia il punteggio.**
+> Per lavorare si usa il giro VELOCE; il completo serve solo a scrivere il verbale.
+>
+> ✅ **E2E FATTO: 13 controlli, 0 rossi** sul server vero — compreso l'agente ostile che prova
+> a pagare 1 invece di 24000 e viene rifiutato, e i conti che tornano al centesimo.
+>
+> ⛔ **NESSUN difetto del prodotto è emerso.** I 3 difetti trovati erano **miei**, e li ha
+> trovati la macchina: ① sette guardie **finte** (`assertIsNotNone(exc_info)` è verde col
+> guasto dentro, perché `exc_info=False` vale `False`, non `None`); ② un **byte NULL**
+> invisibile nel file dei test; ③ una **percentuale in un commento** (sbaglio S17) che ha
+> reso rossa la suite intera.
+>
+> ### ⚖️ PERCHÉ «GIUDICATO» E NON «FATTO» — e non è pigrizia
+> Gli 8 sopravvissuti sono **dimostrati indistinguibili** da un dimostratore meccanico
+> (3000 casi, modulo sano e guasto caricati fianco a fianco in memoria, file di produzione
+> mai toccato, `sha256` identico prima e dopo): rompere il codice lì **non cambia niente**
+> di ciò che esce. Ma **uno degli 8 non è DICHIARABILE**: la chiave dello schedario degli
+> equivalenti è *(file · funzione · testo riga · vecchio · nuovo)* e **non porta la
+> colonna**; la riga 299 ha **due** mutanti `>`→`>=` (col 53 e col 89), quindi una
+> dichiarazione sola ne perdonerebbe due e `TestLoSchedarioDegliEquivalenti_5` diventa
+> rossa — giustamente, è il difetto vero del 2026-08-05 su `fase177`.
+> ⛔ Siccome quell'uno basta a tenere il conto sopra zero, dichiarare gli altri 7 sarebbe
+> **cecità permanente a beneficio zero**: NON fatto. D26 condizione 2 non è soddisfatta →
+> si scrive **giudicato**.
+>
+> 🧭 **LA DECISIONE CHE ASPETTA IL FONDATORE:** far portare **la colonna** alla chiave dello
+> schedario (in `collaudi/mutazione_prodotto.py` + le sue 5 guardie). È l'unica strada per
+> cui un modulo con due operatori uguali sulla stessa riga possa mai arrivare a «FATTO».
+> Alternativa peggiore: spezzare la riga 299 in produzione, cioè rifattorizzare il prodotto
+> per far contento un attrezzo (D1 lo vieta).
+>
+> ### 🧭 IL METODO PER LE FASI CHE RESTANO — misurato oggi, non teorico
+> ⛔ **Non serve il giro da 4 ore ogni volta.** Due passi:
+> 1. giro **veloce** col solo file della fase (**~10 minuti**);
+> 2. **se arriva a zero, ci si ferma**: aggiungere sorveglianti può solo ALZARE gli uccisi,
+>    mai abbassarli. Il giro completo serve **solo** se restano sopravvissuti.
+>
+> ### ⚠️ COSA NON È STATO FATTO, dichiarato
+> · **La CI su Linux non ha visto questo lavoro**: non è committato. Da leggere dall'API
+>   **dopo** il push, mai «immagino sia verde».
+> · **`fase160` · `fase100` · `fase188` restano da rimisurare** (i numeri vengono ancora da
+>   un documento, e su `fase59` quel documento aveva torto di 22 punti).
+> · **`main_casavip.py` documenta solo `HOST_KEY`** ma pretende anche **`ADMIN_KEY`**
+>   (riga 214) e rifiuta di partire senza: trovato facendo il collaudo 3, non corretto.
+> · ⚠️ **Il rimborso all'ospite NON parte da solo** (`grep v1/refunds` in produzione → 0):
+>   resta la cosa più grave aperta, da chiudere **prima del primo host**.
+
+## 🚦 2026-08-14 — ✅ **`fase59` RIMISURATO** (il piano mentiva) · ✅ **il test che mentiva a mezzanotte è CHIUSO** · ✅ **CodeQL esiste**
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
 >
@@ -1308,7 +1384,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 03ff633
+CONSEGNE AGGIORNATE A: d05ff53
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -3133,7 +3209,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5620 test
+SUITE ATTUALE: Ran 5694 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
