@@ -246,7 +246,7 @@ automatica fa fallire la suite se i due divergono):
 
 # ⚙️ REGOLA FERREA DI OPERATIVITÀ E PRECISIONE
 
-> ## 📌 GLI OBBLIGHI SONO **105**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
+> ## 📌 GLI OBBLIGHI SONO **106**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
 > **Contati dai file il 2026-08-13, non a memoria** (`python collaudi/regole_avvio.py` li
 > ricontrolla a ogni sessione e **grida** se questi numeri non tornano):
 >
@@ -259,9 +259,9 @@ automatica fa fallire la suite se i due divergono):
 > · **29** stanno nell'appendice di `REGISTRO_INGEGNERIA.md`, con prova e fonte per esteso.
 > Più le **24 uccise** dai revisori ostili **col motivo**: dicono cosa NON vale la pena rifare.
 >
-> ### 🧭 GLI ALTRI **61** — nati dai NOSTRI danni
+> ### 🧭 GLI ALTRI **62** — nati dai NOSTRI danni
 > **IL BLOCCO (6 divieti assoluti, in cima a questo file)** · Regola zero (**5**) ·
-> **25 direttive del fondatore** · modi di rompersi (**11**) ·
+> **26 direttive del fondatore** · modi di rompersi (**11**) ·
 > collaudi (**10**) · direttiva finale (**4**). Non hanno uno studio dietro: hanno una
 > **cicatrice**. Valgono uguale, e da oggi **portano anch'essi il «si verifica così»**.
 >
@@ -271,7 +271,7 @@ automatica fa fallire la suite se i due divergono):
 > che **non viaggia col progetto**: su un altro computer, o in CI, non esistevano.
 > **2026-08-01, sera**: mescolai le due famiglie in un unico numero — e mescolare fa perdere
 > di vista proprio ciò che è stato pagato.
-> **Rimedio definitivo:** le direttive del fondatore sono **entrate nel repository** (D1-D25
+> **Rimedio definitivo:** le direttive del fondatore sono **entrate nel repository** (D1-D26
 > qui sotto), ogni regola dice **come si verifica**, e lo strumento d'avvio conta tutto e
 > **segnala chi non dice come si controlla**. Una regola che non si può controllare non è
 > una regola: è un desiderio.
@@ -392,7 +392,7 @@ solo è il canale principale delle regressioni. Il fondatore se n'è accorto pri
 
 ---
 
-# 🧭 LE 25 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
+# 🧭 LE 26 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
 
 > **Perché stanno qui e non solo in memoria.** Fino al 2026-08-01 vivevano nella memoria di
 > sessione: **non viaggiavano col progetto**. Su un altro computer, o dentro la CI, non
@@ -748,6 +748,42 @@ ragionando», che è ammessa ma va detta. Le fonti per esteso vanno **nell'appen
 peggiora l'attenzione. ⚠️ **Limite dichiarato (D18 punto 3):** nessuna guardia meccanica può
 sapere se ho letto davvero; questa direttiva è verificabile solo **leggendo il registro**, ed
 è per questo che «0 bugie» è la parte che il fondatore ha detto per ultima.
+
+**D26. UN MODULO NON È «FATTO» FINCHÉ NON HA SUPERATO L'ESAME — e a dirlo dev'essere una
+macchina, non una parola scritta a mano.** Dettata dal fondatore il **2026-08-14**, dopo aver
+chiesto: *«quindi non c'è modo di finire mai una fase, se i controlli vengono fatti a metà?»*
+
+*La causa non erano i controlli a metà: era la PAROLA.* Nel piano dei soldi «FATTO» significava
+*«questo modulo è passato sotto il Giudice»*, non *«ha superato l'esame»* — due cose diverse
+nella stessa colonna. Così `fase59_concierge` risultava chiuso mentre aveva **42 punti
+scoperti**, 39 dei quali su codice che la produzione esegue a ogni preventivo e ogni
+prenotazione.
+
+**Un modulo è FATTO quando valgono TUTTE queste, non alcune:**
+1. i **punti** dichiarati coincidono col censimento **rifatto adesso** (su `fase59` il documento
+   diceva 112, il vero era 114);
+2. i punti **scoperti sono ZERO**. È l'unico esito che non peggiora guardandolo meglio: più
+   sorveglianti possono solo **alzare** gli uccisi, mai abbassarli — quindi «tutti uccisi» regge,
+   mentre un punteggio parziale cambia a seconda di quanti occhi hai acceso (`fase59`: 45 uccisi
+   con 5 sorveglianti, **72** con 22, sugli stessi identici punti);
+3. le **rinunce** del generatore sono dichiarate una per una: un punto che nessuno sa rompere non
+   è un punto sicuro, è un punto **mai guardato**;
+4. il giro porta **data, commit e l'elenco dei sorveglianti usati**: un punteggio senza l'elenco
+   degli occhi accesi non è confrontabile con nessun altro, e sembra migliore o peggiore del vero;
+5. i **dieci collaudi** hanno l'esito **oppure** il motivo dichiarato (D24).
+
+⛔ **E la parte che separa questa direttiva da un buon proposito.** Non basta scriverlo qui. Il
+guardiano `collaudi/piano_dei_soldi.py` oggi controlla soltanto che i tre documenti **dicano la
+stessa cosa**, e lo dichiara da sé a ogni giro: *«non dice se un modulo dichiarato FATTO lo sia
+DAVVERO»*. Quel limite era scritto nero su bianco e nessuno lo leggeva come un lavoro da fare.
+Finché il guardiano non **pretende la prova**, questa direttiva è affidata alla buona volontà —
+e la buona volontà qui si è rotta ogni volta (D22, e il paracadute `:prec` sbagliato quattro
+volte in quattro giorni).
+
+*Si verifica:* per ogni modulo dichiarato FATTO nel piano dei soldi esiste, nel registro, il giro
+del Giudice con **data · commit · punti · uccisi · scoperti · rinunce · sorveglianti usati**; e il
+guardiano diventa ROSSO se un «FATTO» non ha la sua prova. Un modulo che è solo passato sotto il
+Giudice si scrive **«giudicato»**, mai «fatto».
 
 ---
 
