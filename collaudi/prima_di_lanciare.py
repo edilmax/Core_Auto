@@ -397,13 +397,17 @@ def controllo_5_traccia_mutazione(radice=RADICE, traccia=None):
     spec = importlib.util.spec_from_file_location("_guardia_commit_prevolo", percorso)
     modulo = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(modulo)
-    aperta, quale = modulo.mutazione_in_corso(traccia)
+    # ⛔ `quali` e' un ELENCO dal 2026-08-14: i biglietti sono uno per FILE, e possono
+    # essere piu' d'uno (il Giudice gira anche dentro se stesso). Nominarne uno solo
+    # darebbe una falsa fine: si rimette a posto quel file e si lancia con l'altro rotto.
+    aperta, quali = modulo.mutazione_in_corso(traccia)
     if aperta:
-        return (ROSSO, "un giro di mutazione risulta APERTO (file coinvolto: %s). Quel "
-                       "file potrebbe contenere un guasto messo di proposito: lanciare la "
-                       "suite adesso significa giudicare codice rotto. Istruzioni "
-                       "complete: python collaudi/guardia_commit.py"
-                % (quale or "non indicato"))
+        elenco = ", ".join(quali) if quali else "non indicato"
+        return (ROSSO, "un giro di mutazione risulta APERTO (%d file coinvolto/i: %s). "
+                       "Quel file potrebbe contenere un guasto messo di proposito: "
+                       "lanciare la suite adesso significa giudicare codice rotto. "
+                       "Istruzioni complete: python collaudi/guardia_commit.py"
+                % (len(quali), elenco))
     return (OK, "nessun giro di mutazione aperto")
 
 

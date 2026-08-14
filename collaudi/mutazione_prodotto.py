@@ -26,6 +26,7 @@ sono ora in `test_admin_accounts.py`.
 Il codice viene SEMPRE ripristinato, anche se qualcosa va storto.
 """
 import ast
+import hashlib
 import importlib.util
 import io
 import os
@@ -1039,53 +1040,133 @@ def _e_equivalente(percorso, righe, mutante):
 _TRACCIA = os.path.join(tempfile.gettempdir(), "bookinvip_mutazione_in_corso")
 
 
+def _biglietto(percorso):
+    """La cartella del biglietto di QUEL file: UN biglietto per FILE, non uno per tutta
+    la macchina.
+
+    ⛔ PERCHE' (difetto vivo, 2026-08-14, visto GUARDANDO e non da un controllo). Il
+    Giudice puo' girare DENTRO se stesso: `test_mutation_money` esegue un proprio giro su
+    `fase162_pagamenti_pendenti.py`, ed e' allo stesso tempo uno dei sorveglianti di un
+    giro esterno E parte di OGNI suite da 27 minuti. Con una casella sola, chi finiva per
+    primo cancellava il biglietto dell'altro, e da quel momento un file di produzione
+    ROTTO non era piu' sorvegliato da nessuno: `guardia_commit.py` rispondeva «via
+    libera». Misurato dal vivo, due campioni durante un giro su `fase59`:
+        git status -> M fase59_concierge.py · traccia -> fase162_pagamenti_pendenti.py
+        fase59 con sha256 DIVERSO           · traccia -> ASSENTE
+
+    ⛔ La chiave e' il FILE, non il processo: cosi' due giri annidati non si pestano
+    nemmeno dentro lo stesso processo, e la cosa si puo' mettere alla prova. Se due giri
+    rompessero lo STESSO file, `originale.txt` sarebbe comunque lo stesso sorgente sano:
+    il ripristino resta corretto.
+    ⛔ E si calcola AL MOMENTO, non all'import: i collaudi spostano `_TRACCIA` su una
+    cartella usa-e-getta (`_traccia_isolata`), e un valore congelato tornerebbe a puntare
+    a quella vera -- cioe' spegnerebbe la rete di una campagna in corso.
+    """
+    impronta = hashlib.sha256(os.path.abspath(percorso).encode("utf-8")).hexdigest()[:16]
+    return os.path.join(_TRACCIA, "giro_" + impronta)
+
+
+def biglietti_aperti(traccia=None):
+    """[(cartella, percorso_quale, percorso_originale)] per OGNI giro aperto.
+
+    ⛔ Comprende anche il formato VECCHIO (i due file direttamente in `_TRACCIA`): un giro
+    interrotto PRIMA di questa riparazione resterebbe altrimenti orfano per sempre, e il
+    suo file di produzione rotto non lo recupererebbe piu' nessuno.
+    """
+    radice = traccia or _TRACCIA
+    aperti = []
+    q_vecchio = os.path.join(radice, "quale.txt")
+    o_vecchio = os.path.join(radice, "originale.txt")
+    if os.path.exists(q_vecchio) and os.path.exists(o_vecchio):
+        aperti.append((radice, q_vecchio, o_vecchio))
+    try:
+        for nome in sorted(os.listdir(radice)):
+            cartella = os.path.join(radice, nome)
+            q = os.path.join(cartella, "quale.txt")
+            o = os.path.join(cartella, "originale.txt")
+            if os.path.isdir(cartella) and os.path.exists(q) and os.path.exists(o):
+                aperti.append((cartella, q, o))
+    except OSError:
+        pass
+    return aperti
+
+
 def _apri_traccia(percorso, sorgente):
     try:
-        os.makedirs(_TRACCIA, exist_ok=True)
-        with io.open(os.path.join(_TRACCIA, "quale.txt"), "w", encoding="utf-8") as f:
+        mio = _biglietto(percorso)
+        os.makedirs(mio, exist_ok=True)
+        with io.open(os.path.join(mio, "quale.txt"), "w", encoding="utf-8") as f:
             f.write(percorso)
-        with io.open(os.path.join(_TRACCIA, "originale.txt"), "w",
+        with io.open(os.path.join(mio, "originale.txt"), "w",
                      encoding="utf-8", newline="") as f:
             f.write(sorgente)
     except OSError:
         pass                      # la rete e' un di piu': non deve impedire il giro
 
 
-def _chiudi_traccia():
+def _chiudi_traccia(percorso=None):
+    """Chiude il biglietto di QUEL file. Senza argomento chiude TUTTO -- e resta senza
+    argomento solo dove chiudere tutto e' giusto (il recupero, che li ha appena
+    ripristinati tutti).
+
+    ⛔ La cartella madre si toglie SOLO se e' rimasta vuota: se dentro c'e' il biglietto
+    di un altro giro, cancellarla spegnerebbe la sua rete. E' esattamente il difetto del
+    2026-08-14 (vedi `_biglietto`), e `os.rmdir` fallisce apposta su una cartella piena:
+    e' il controllo meccanico, non la buona volonta'.
+    """
     try:
-        shutil.rmtree(_TRACCIA, ignore_errors=True)
+        if percorso is None:
+            shutil.rmtree(_TRACCIA, ignore_errors=True)
+            return
+        shutil.rmtree(_biglietto(percorso), ignore_errors=True)
+        try:
+            os.rmdir(_TRACCIA)
+        except OSError:
+            pass                  # ci sono altri giri aperti: la loro rete resta accesa
     except OSError:
         pass
 
 
 def recupera_da_interruzione():
-    """Se il giro precedente e' stato UCCISO, rimette a posto il file e lo dice. Ritorna il
-    percorso recuperato, o None. Da chiamare all'avvio di ogni modo."""
-    quale = os.path.join(_TRACCIA, "quale.txt")
-    orig = os.path.join(_TRACCIA, "originale.txt")
-    if not (os.path.exists(quale) and os.path.exists(orig)):
-        return None
-    try:
-        with io.open(quale, encoding="utf-8") as f:
-            percorso = f.read().strip()
-        with io.open(orig, encoding="utf-8", newline="") as f:
-            sorgente = f.read()
-        if percorso and os.path.exists(percorso):
-            # si riusa l'aiutante che scrive E invalida: due copie della stessa cosa sono un
-            # difetto in attesa, e la guardia `test_il_motore_invalida_dopo_OGNI_riscrittura`
-            # me l'ha colto qui il 2026-08-01, la terza volta in due giorni.
-            _riscrivi_intatto(percorso, sorgente)
-            print("::warning title=Giro precedente INTERROTTO::%s era rimasto MUTATO ed e' "
-                  "stato rimesso a posto. Un file di produzione con un guasto dentro puo' "
-                  "finire in un commit: controlla il diff." % os.path.basename(percorso))
-            print("  ⚠️  RECUPERO: %s era rimasto mutato dal giro precedente -> ripristinato."
-                  % percorso)
-            return percorso
-    except OSError:
-        pass
-    finally:
-        _chiudi_traccia()
-    return None
+    """Se un giro precedente e' stato UCCISO, rimette a posto i file e lo dice.
+
+    Ritorna il PRIMO percorso recuperato (o None), ma li ripristina **TUTTI**: dal
+    2026-08-14 i biglietti sono uno per file, e fermarsi al primo lascerebbe rotti gli
+    altri -- cioe' rifarebbe il difetto che questa riparazione chiude.
+
+    ⛔ COSA NON FA, dichiarato (D18 punto 3): non distingue un giro **morto** da uno
+    **vivo**. Se un giro nuovo parte mentre un altro sta gia' provando un mutante, questo
+    recupero gli rimette a posto il file sotto i piedi e gli chiude il biglietto: quel
+    mutante viene giudicato sul codice SANO, e l'esito non vale. E' un difetto diverso da
+    quello chiuso qui (ragionato il 2026-08-14, **non misurato**), e per chiuderlo servono
+    il proprietario scritto nel biglietto e una guardia sua -- non si tocca di slancio.
+    Nel frattempo vale la regola: **mai due giri di mutazione insieme.**
+    """
+    primo = None
+    for _cartella, quale, orig in biglietti_aperti():
+        try:
+            with io.open(quale, encoding="utf-8") as f:
+                percorso = f.read().strip()
+            with io.open(orig, encoding="utf-8", newline="") as f:
+                sorgente = f.read()
+            if percorso and os.path.exists(percorso):
+                # si riusa l'aiutante che scrive E invalida: due copie della stessa cosa sono
+                # un difetto in attesa, e la guardia
+                # `test_il_motore_invalida_dopo_OGNI_riscrittura` me l'ha colto qui il
+                # 2026-08-01, la terza volta in due giorni.
+                _riscrivi_intatto(percorso, sorgente)
+                print("::warning title=Giro precedente INTERROTTO::%s era rimasto MUTATO ed "
+                      "e' stato rimesso a posto. Un file di produzione con un guasto dentro "
+                      "puo' finire in un commit: controlla il diff."
+                      % os.path.basename(percorso))
+                print("  ⚠️  RECUPERO: %s era rimasto mutato dal giro precedente -> "
+                      "ripristinato." % percorso)
+                if primo is None:
+                    primo = percorso
+        except OSError:
+            continue
+    _chiudi_traccia()          # senza argomento: li abbiamo appena ripristinati TUTTI
+    return primo
 
 
 def _leggi_intatto(percorso):
@@ -1189,7 +1270,7 @@ def giro_sul_diff(base="HEAD~1", tetto=40, tetto_test=8):
             finally:
                 _riscrivi_intatto(pieno, sorgente)
                 invalida_bytecode(pieno)
-                _chiudi_traccia()
+                _chiudi_traccia(pieno)      # SOLO il proprio biglietto (2026-08-14)
             # None = i test non hanno finito: non e' ne' ucciso ne' sopravvissuto.
             _v = "non_determinabile" if verde is None else (
                 "sopravvissuto" if verde else "ucciso")
@@ -1339,7 +1420,7 @@ def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45, killer=None):
                 verde, _ = esegui(bersaglio, timeout=tetto_sec)
             finally:
                 _riscrivi_intatto(percorso, sorgente)
-                _chiudi_traccia()
+                _chiudi_traccia(percorso)   # SOLO il proprio biglietto (2026-08-14)
             _v = "non_determinabile" if verde is None else (
                 "sopravvissuto" if verde else "ucciso")
             esiti.append({"file": nome, "riga": m["riga"], "verdetto": _v,
@@ -1595,7 +1676,8 @@ if __name__ == "__main__":
             finally:
                 io.open(percorso, "w", encoding="utf-8", newline="\n").write(testo)
                 invalida_bytecode(percorso)   # ...e il mutante dopo non deve vedere QUESTA
-                _chiudi_traccia()   # la rete si richiude: una traccia lasciata aperta
+                _chiudi_traccia(percorso)   # SOLO il proprio biglietto (2026-08-14).
+                                    # la rete si richiude: una traccia lasciata aperta
                                     # bloccherebbe il commit dopo per NIENTE, e un falso
                                     # allarme e' un difetto quanto uno mancato (regola 10)
             print("\n%2d. %s" % (i, percorso))

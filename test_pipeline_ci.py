@@ -2392,6 +2392,108 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
         m._chiudi_traccia()
         self.assertIsNone(m.recupera_da_interruzione())
 
+    def test_DUE_GIRI_INSIEME_non_si_spengono_la_rete_a_vicenda(self):
+        """⛔ D20 — DIFETTO VIVO trovato il 2026-08-14 GUARDANDO, non da un controllo.
+
+        Il Giudice puo' girare DENTRO se stesso: `test_mutation_money` esegue un proprio
+        giro di mutazione su `fase162_pagamenti_pendenti.py`, ed e' allo stesso tempo uno
+        dei sorveglianti di un giro esterno E parte di OGNI suite da 27 minuti. Con una
+        casella sola per tutta la macchina, chi finisce per primo cancella il biglietto
+        dell'altro: da quel momento un file di produzione ROTTO non e' piu' sorvegliato,
+        `collaudi/guardia_commit.py` risponde «via libera», e il guasto puo' arrivare su
+        master e sul server **con tutti i controlli verdi**.
+
+        VISTO DAL VIVO quel giorno, in due campioni distinti durante un giro su `fase59`:
+            git status -> M fase59_concierge.py  ·  traccia -> fase162_pagamenti_pendenti.py
+            fase59 con sha256 DIVERSO            ·  traccia -> ASSENTE
+
+        ⚠️ Il progetto lo SAPEVA: la docstring di `_traccia_isolata`, qui sopra, descrive
+        esattamente questo danno -- ma lo aggirava nei collaudi invece di chiuderlo alla
+        radice. Un aggiramento nei test non protegge la produzione.
+        """
+        import contextlib
+        import io
+        import os
+        import shutil
+        import tempfile
+        m = self._motore()
+        self._traccia_isolata(m)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+
+        a = os.path.join(d, "modulo_esterno.py")
+        b = os.path.join(d, "modulo_annidato.py")
+        sano_a = "def f(x):\n    return x >= 0\n"
+        sano_b = "def g(x):\n    return x <= 0\n"
+        for percorso, sano in ((a, sano_a), (b, sano_b)):
+            with io.open(percorso, "w", encoding="utf-8", newline="") as f:
+                f.write(sano)
+
+        m._apri_traccia(a, sano_a)                      # il giro ESTERNO mette da parte A
+        with io.open(a, "w", encoding="utf-8", newline="") as f:
+            f.write(sano_a.replace(">=", ">"))          # ...e lo rompe
+        self.addCleanup(m._chiudi_traccia)
+
+        m._apri_traccia(b, sano_b)                      # il giro ANNIDATO apre il SUO
+        try:
+            m._chiudi_traccia(b)          # come DEVE chiudere: solo il proprio biglietto
+        except TypeError:
+            m._chiudi_traccia()           # come fa OGGI: cancella tutto, anche l'altrui
+
+        # A e' ancora ROTTO sul disco. La rete deve saperlo ancora.
+        uscita = io.StringIO()
+        with contextlib.redirect_stdout(uscita):
+            recuperato = m.recupera_da_interruzione()
+        with io.open(a, encoding="utf-8", newline="") as f:
+            adesso = f.read()
+        self.assertEqual(
+            sano_a, adesso,
+            "IL GIRO ANNIDATO HA SPENTO LA RETE DEL GIRO ESTERNO: il file rotto NON e' "
+            "stato rimesso a posto. Da qui un guasto sui soldi arriva in un commit con "
+            "tutti i controlli verdi -- e' il difetto visto dal vivo il 2026-08-14.")
+        self.assertEqual(a, recuperato,
+                         "il recupero non nomina il file che era rimasto rotto")
+        self.assertIn("::warning", uscita.getvalue(),
+                      "il recupero e' avvenuto IN SILENZIO: chi guarda la CI non saprebbe "
+                      "che un giro e' morto lasciando un file mutato")
+
+    def test_la_guardia_al_commit_ELENCA_TUTTI_i_giri_aperti(self):
+        """L'altra meta': non basta che la rete regga, deve anche DIRLO per intero.
+
+        Se due giri sono aperti e la guardia ne nomina uno solo, chi legge rimette a posto
+        quel file, vede «via libera» e committa **l'altro** ancora rotto. Una guardia che
+        dichiara meno di quello che sa e' peggio di una che tace: da' una falsa fine.
+        """
+        import importlib.util
+        import io
+        import os
+        import shutil
+        import tempfile
+        _p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "collaudi", "guardia_commit.py")
+        _spec = importlib.util.spec_from_file_location("_gc_elenco", _p)
+        gc_mod = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(gc_mod)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        traccia = os.path.join(d, "bookinvip_mutazione_in_corso")
+        for nome, quale in (("giro_uno", "/prod/fase_alfa.py"),
+                            ("giro_due", "/prod/fase_beta.py")):
+            os.makedirs(os.path.join(traccia, nome))
+            with io.open(os.path.join(traccia, nome, "quale.txt"), "w",
+                         encoding="utf-8") as f:
+                f.write(quale)
+            with io.open(os.path.join(traccia, nome, "originale.txt"), "w",
+                         encoding="utf-8") as f:
+                f.write("sano\n")
+        aperta, quali = gc_mod.mutazione_in_corso(traccia)
+        self.assertTrue(aperta, "due giri aperti e la guardia dice «via libera»")
+        testo = quali if isinstance(quali, str) else "\n".join(quali)
+        for atteso in ("fase_alfa.py", "fase_beta.py"):
+            self.assertIn(atteso, testo,
+                          "la guardia nomina solo una parte dei giri aperti: chi rimette a "
+                          "posto quel file crede di aver finito e committa l'altro rotto")
+
     def test_le_RINUNCE_sono_contate_e_dichiarate(self):
         """Un generatore che tace sulle proprie rinunce mente sulla copertura. I confronti
         a catena si saltano di proposito: devono comparire nel conto.
@@ -2727,16 +2829,21 @@ class TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA(unittest.TestCase):
         d = tempfile.mkdtemp()
         try:
             vuota = os.path.join(d, "non-esiste")
-            self.assertEqual((False, ""), m.mutazione_in_corso(vuota),
+            # ⛔ IL CONTRATTO E' CAMBIATO IL 2026-08-14: il secondo valore e' un ELENCO,
+            # non una stringa, perche' i giri aperti possono essere PIU' D'UNO (il Giudice
+            # gira anche dentro se stesso). Il controllo qui sotto e' lo stesso di prima --
+            # «niente aperto, nessun nome» -- scritto nella forma nuova.
+            self.assertEqual((False, []), m.mutazione_in_corso(vuota),
                              "dice che un giro e' aperto quando non c'e' niente: bloccherebbe "
                              "sempre, e un blocco sempre acceso viene tolto")
             traccia = os.path.join(d, "aperta")
             os.makedirs(traccia)
             with open(os.path.join(traccia, "quale.txt"), "w", encoding="utf-8") as f:
                 f.write("fase177_financial_controller.py")
-            aperta, quale = m.mutazione_in_corso(traccia)
+            aperta, quali = m.mutazione_in_corso(traccia)
             self.assertTrue(aperta, "un giro interrotto non viene visto")
-            self.assertIn("fase177", quale, "non dice QUALE file potrebbe essere rotto")
+            self.assertIn("fase177", "\n".join(quali),
+                          "non dice QUALE file potrebbe essere rotto")
         finally:
             shutil.rmtree(d, ignore_errors=True)
 

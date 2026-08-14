@@ -567,6 +567,95 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🕸️ FATTO 2026-08-14 (notte) — **LA RETE ANTI-INTERRUZIONE NON SI CANCELLA PIÙ DA SOLA**
+
+**Nessuna riga di produzione toccata.** Tre file, tutti strumentazione:
+`collaudi/mutazione_prodotto.py`, `collaudi/guardia_commit.py`, `test_pipeline_ci.py`.
+
+#### Il difetto, trovato GUARDANDO e non da un controllo
+
+Il Giudice rompe un file di produzione, prova, e ripara. Fra il «rompi» e il «ripara» tiene
+un **biglietto** che dice quale file è rotto: lo leggono `recupera_da_interruzione()` e
+`collaudi/guardia_commit.py`, che **blocca il salvataggio**. Ma il biglietto era **UNA
+CASELLA SOLA per tutta la macchina** (`_TRACCIA`), e chi finiva faceva
+`shutil.rmtree(_TRACCIA)` — cioè cancellava **anche il biglietto altrui**.
+
+⛔ **E il Giudice gira DENTRO se stesso**: `test_mutation_money` esegue un proprio giro su
+`fase162_pagamenti_pendenti.py`, ed è **sia** uno dei sorveglianti di un giro esterno **sia**
+parte di **ogni suite da 27 minuti**.
+
+**Misurato dal vivo durante il giro su `fase59`, due campioni distinti:**
+```
+git status  ->  M fase59_concierge.py            traccia ->  fase162_pagamenti_pendenti.py
+fase59 con sha256 DIVERSO dall'originale         traccia ->  ASSENTE
+```
+Cioè: **un file di produzione dei soldi rotto sul disco, e la rete che sorvegliava un altro
+file.** Se la macchina fosse morta lì, `guardia_commit.py` avrebbe risposto «via libera» e il
+guasto sarebbe arrivato su `master` e sul server **con tutti i controlli verdi**. È la stessa
+famiglia del 3 e del 5 agosto, in forma nuova: allora la rete copriva 2 punti su 3, adesso li
+copre tutti e tre ma **non regge un giro dentro un altro**.
+
+⚠️ **Il progetto lo sapeva e lo aggirava.** La docstring di `_traccia_isolata` in
+`test_pipeline_ci.py` descriveva già il danno — *«chi la cancella spegne la rete di una
+campagna in corso»* — ma la soluzione era isolare la traccia **nei collaudi**. Un
+aggiramento nei test non protegge la produzione.
+
+#### La riparazione (D20: prima la guardia, VISTA ROSSA)
+
+**Le due guardie, scritte per prime e viste rosse sul codice di allora:**
+```
+FAIL test_DUE_GIRI_INSIEME_non_si_spengono_la_rete_a_vicenda
+     'return x >= 0' != 'return x > 0'   <- il file era rimasto ROTTO
+FAIL test_la_guardia_al_commit_ELENCA_TUTTI_i_giri_aperti
+     'fase_alfa.py' not found in ''      <- con due giri aperti non nominava nessuno
+```
+Poi la riparazione, e tutte e 20 le guardie della classe verdi.
+
+**Cosa cambia:** il biglietto ora è **uno per FILE** (`_biglietto()`, chiave = impronta del
+percorso). 💡 **La chiave è il file, non il processo**: così due giri annidati non si pestano
+nemmeno dentro lo stesso processo — ed è l'unico modo per poterlo mettere alla prova.
+Chi chiude passa il proprio percorso; la cartella madre si toglie **solo se è rimasta vuota**
+(`os.rmdir` fallisce apposta su una cartella piena: è il controllo meccanico, non la buona
+volontà). `recupera_da_interruzione()` li percorre **tutti** e grida un nome per ognuno;
+`guardia_commit.py` li **elenca tutti** — una guardia che ne nomina uno solo dà una falsa
+fine, e chi rimette a posto quel file committa l'altro ancora rotto.
+⛔ Legge anche il **formato vecchio** (file dritti nella cartella madre): un giro interrotto
+*prima* di questa riparazione resterebbe altrimenti orfano per sempre.
+
+#### 🩹 UN ERRORE MIO, colto dalla suite: ho cambiato un contratto senza guardare chi chiama
+
+`mutazione_in_corso()` restituiva `(aperta, "un file")`; l'ho fatta restituire
+`(aperta, [file...])` e ho aggiornato **solo** il chiamante che avevo sotto gli occhi. La
+suite è diventata rossa in due punti — e i due erano **lo stesso difetto**, uno che
+rimbalzava sull'altro:
+```
+FAIL test_NON_SI_SALVA_MENTRE_UN_GIRO_DI_MUTAZIONE_E_APERTO
+     (False, '') != (False, [])
+FAIL test_eseguire_le_guardie_del_giudice_NON_cancella_una_traccia_viva
+     0 != 1   <- eseguiva le guardie del generatore, che erano rosse per la riga sopra
+```
+⚠️ E cercando **tutti** i chiamanti invece del solo colpevole che aveva gridato, ne è saltato
+fuori un **terzo** che nessuna delle due rosse nominava: `collaudi/prima_di_lanciare.py:400`,
+che avrebbe stampato `['a', 'b']` al posto dei nomi dei file.
+💡 È la **regola ferrea 11** (*il difetto è spesso in chi chiama*) applicata a me stesso: un
+cambio di contratto si accompagna sempre a un `grep` di **tutti** i chiamanti, non a
+«aggiorno quello che si lamenta». Le guardie esistenti sono state aggiornate al contratto
+nuovo **senza indebolire cosa controllano**: `(False, "")` è diventato `(False, [])`, e
+`assertIn("fase177", quale)` è diventato lo stesso controllo sull'elenco unito.
+
+#### ⛔ COSA NON È STATO ESAMINATO (D18 punto 3)
+
+- **Il recupero non distingue un giro MORTO da uno VIVO.** Se un giro nuovo parte mentre un
+  altro sta provando un mutante, gli rimette a posto il file sotto i piedi e gli chiude il
+  biglietto: quel mutante verrebbe giudicato sul codice **sano**. È un difetto **diverso**
+  da quello chiuso qui, **ragionato e non misurato**: per chiuderlo serve il proprietario
+  scritto nel biglietto e una guardia sua. Nel frattempo vale la regola: **mai due giri
+  insieme.** ⚠️ Potrebbe spiegare l'«ucciso falso» della riga 299 visto lo stesso giorno.
+- **Resta aperto il secondo difetto del Giudice** (il «pezzo 1»): il codice d'uscita
+  (`sys.exit(1 if (_sopr or _scop or _base or _ass) else 0)`) **non guarda i punti saltati**
+  per tetto o per tempo. Un giro col tetto di serie (30) su un modulo da 114 punti ne salta
+  84, lo **dichiara** a schermo, e **esce 0**.
+
 ### ⚖️ FATTO 2026-08-14 (sera) — `fase59_concierge`: **106 punti su 114 chiusi**, e il verdetto è **GIUDICATO**, non «fatto»
 
 **Nessuna riga di produzione toccata.** Due file: `test_fase59_concierge.py` (+~1000/-2,
