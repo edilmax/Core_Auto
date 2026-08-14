@@ -39,32 +39,63 @@ except Exception:
 TRACCIA = os.path.join(tempfile.gettempdir(), "bookinvip_mutazione_in_corso")
 
 
+def _legge(percorso):
+    try:
+        with open(percorso, encoding="utf-8", errors="replace") as f:
+            return f.read().strip()
+    except Exception:
+        return ""
+
+
 def mutazione_in_corso(traccia=None):
-    """(aperta, quale_file). `aperta` e' True se un giro di mutazione non e' stato chiuso."""
+    """(aperta, [file...]). `aperta` e' True se almeno un giro non e' stato chiuso.
+
+    ⛔ ELENCA **TUTTI** I GIRI APERTI, non uno. Dal 2026-08-14 i biglietti sono uno per
+    file (vedi `_biglietto` in `collaudi/mutazione_prodotto.py`), perche' il Giudice puo'
+    girare dentro se stesso. Se qui se ne nominasse uno solo, chi legge rimetterebbe a
+    posto quel file, vedrebbe «via libera» e committerebbe **l'altro ancora rotto**: una
+    guardia che dichiara meno di quello che sa da' una falsa fine, ed e' peggio di una che
+    tace. Legge anche il formato VECCHIO (i file dritti nella cartella madre), se no un
+    giro interrotto prima di quella riparazione resterebbe invisibile per sempre.
+    """
     t = traccia or TRACCIA
     if not os.path.isdir(t):
-        return False, ""
-    quale = ""
+        return False, []
+    quali = []
+    vecchio = _legge(os.path.join(t, "quale.txt"))
+    if vecchio:
+        quali.append(vecchio)
     try:
-        with open(os.path.join(t, "quale.txt"), encoding="utf-8", errors="replace") as f:
-            quale = f.read().strip()
-    except Exception:
+        for nome in sorted(os.listdir(t)):
+            cartella = os.path.join(t, nome)
+            if os.path.isdir(cartella):
+                q = _legge(os.path.join(cartella, "quale.txt"))
+                if q:
+                    quali.append(q)
+    except OSError:
         pass
-    return True, quale
+    # ⛔ la cartella c'e' ma nessun biglietto dentro: NON e' «via libera». Il giudizio resta
+    # «aperto», perche' il vuoto non e' un valore -- e' assenza di misura (sbaglio S1).
+    return True, quali
 
 
 def main(argv=None):
-    aperta, quale = mutazione_in_corso()
+    aperta, quali = mutazione_in_corso()
     if not aperta:
         return 0
     print("=" * 78)
-    print("⛔ SALVATAGGIO BLOCCATO — un giro di mutazione risulta APERTO")
+    print("⛔ SALVATAGGIO BLOCCATO — %d giro/i di mutazione risulta/no APERTO/I"
+          % max(1, len(quali)))
     print("=" * 78)
     print("Il giudice della mutazione rompe un file di produzione, prova, e lo ripara.")
-    print("Questa traccia dice che un giro NON e' stato chiuso: il file qui sotto potrebbe")
-    print("contenere un guasto messo di proposito, e finirebbe nel salvataggio.")
+    print("Questa traccia dice che un giro NON e' stato chiuso: i file qui sotto potrebbero")
+    print("contenere un guasto messo di proposito, e finirebbero nel salvataggio.")
     print("")
-    print("  file coinvolto: %s" % (quale or "(non indicato)"))
+    if quali:
+        for q in quali:
+            print("  file coinvolto: %s" % q)
+    else:
+        print("  file coinvolto: (non indicato)")
     print("  traccia:        %s" % TRACCIA)
     print("")
     print("COSA FARE, in ordine:")
