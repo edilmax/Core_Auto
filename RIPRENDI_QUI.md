@@ -11,6 +11,65 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🚦 2026-08-14 (tarda notte) — RIPARTI DA QUI. 🔗 **L'AUDIT DEI 5 DOCUMENTI ORA GIRA NELLA SUITE**
+
+> **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
+> **⛔ PRIMA MISURA, POI AGISCI. I commit scritti qui invecchiano.**
+> ```powershell
+> git rev-parse --short HEAD ; git status --porcelain
+> git ls-remote origin refs/heads/master
+> ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'
+> python collaudi/prima_di_lanciare.py
+> python collaudi/audit_millimetrico.py     # da oggi lo esegue anche la suite
+> ```
+>
+> ### ✅ FATTO — ⛔ NON RIFARLO (per esteso nel registro, voce «FATTO 2026-08-14 (tarda notte)»)
+> `audit_millimetrico.py` usciva **1 con 5 discrepanze** e la suite era **verde lo stesso**,
+> perché nessuno lo eseguiva: lo chiamavano solo due attrezzi d'officina, a mano. Ora lo
+> esegue `test_L_AUDIT_MILLIMETRICO_VIENE_ESEGUITO_DAVVERO` (`test_pipeline_ci.py`, classe
+> `TestIgieneDelFile`). Le 5 discrepanze sono chiuse: **3 erano numeri vecchi nel `README.md`**
+> (149/390/13 → **151/402/14**, i veri), **2 erano l'attrezzo** fermo all'era del 3%.
+>
+> ### 💸 SUI SOLDI NON C'ERA NESSUN DIFETTO — misurato, non dedotto
+> L'esempio pubblico «l'host incassa **94,75 €** / **84,75 €**» (`README.md:145`) torna col
+> motore, **0,25 € fissi compresi**. A mentire era `audit_millimetrico.py`, che teneva
+> **97/87 cablati** e **dimenticava la quota fissa**. Ora legge `PAGAMENTO_FISSO_CENTS` dal
+> motore: **nessuna cifra cablata resta** in quel controllo.
+>
+> ### 📍 STATO DEI TRE POSTI
+> ⚠️ Il VPS è a `d05ff53`, **TRE** unioni indietro — il riquadro qui sotto dice «due» ed è
+> invecchiato. Misurato, non dedotto: `git diff --name-only d05ff53..f835496` dà **7 file,
+> tutti in `collaudi/`, `test_*` o `.md`**, cioè **zero produzione**. Il sito che gira è
+> identico: aggiornarlo non serve, e richiederebbe comunque «autorizzato».
+>
+> ### ✅ CodeQL ESCE DAI LAVORI IN SOSPESO
+> Sulla CI di `f835496` il lavoro **CodeQL (python) = success**, letto dall'**API** (non
+> «immagino sia verde»). Era una richiesta rimasta in sospeso: risulta **fatta**.
+>
+> ### 🧪 LA CI HA PRESO SUBITO CIÒ CHE IL VERDE LOCALE NON VEDEVA (regola ferrea 8)
+> Suite locale **verde**, CI su Linux **ROSSA** al primo giro, e a fallire era **la guardia
+> nuova**. Causa: l'audit pretendeva che esistessero `data/` e `contatti/`, che `.gitignore`
+> esclude **apposta** (righe 13 e 6). Sul computer di chi lavora ci sono; in una **copia
+> pulita** no. ⛔ E `data` taceva **per fortuna, non per costruzione**: qualche test la crea
+> durante il giro, quindi l'esito dipendeva dall'**ordine dei test**.
+> ✅ Riparato **al contrario**, e ora vale di più: quei due si controllano pretendendo che
+> l'**esclusione ci sia ancora**. `contatti/` sono elenchi di persone vere e il repository è
+> **PUBBLICO**: se qualcuno togliesse quella riga, finirebbero online al primo `git add -A`.
+> Un controllo che non poteva passare è diventato **una guardia sulla privacy**.
+> 💡 Il metodo che è costato secondi invece di 26 minuti: **`git clone` in una cartella
+> temporanea** riproduce esattamente ciò che vede la CI (solo i file tracciati). Provato lì
+> verde, e poi rosso togliendo l'esclusione. *Prova in piccolo prima.*
+>
+> ### 🔴 QUELLO CHE RESTA APERTO, DICHIARATO
+> · **L'audit non è nel pre-fatto.** Costa **0,11 s**: potrebbe fermare il commit in un decimo
+>   di secondo invece che dopo **25 minuti** di suite. È la stessa lezione da cui nacque D24
+>   (COSTRUITO ≠ COLLEGATO applicato a *chi decide*), e qui è applicata **a metà**.
+> · I due difetti degli strumenti di stanotte **restano**: il Giudice **esce 0 pur saltando 84
+>   punti su 114**, e il recupero **non distingue un giro morto da uno vivo**.
+> · **Nessuna sorveglianza degli invarianti dei soldi in PRODUZIONE** (pezzo 8): il buco più
+>   grosso, e vale più di tutto il Blocco 2.
+> · ⚠️ **Il rimborso all'ospite non parte da solo** — da chiudere **prima del primo host**.
+
 ## 🚦 2026-08-14 (notte) — RIPARTI DA QUI. ✅ **DUE UNIONI FATTE** · 🧭 **C'È UN PIANO DI 10 PEZZI, IN MEMORIA**
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
@@ -1446,7 +1505,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 6c542d3
+CONSEGNE AGGIORNATE A: 42fde28
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -3271,12 +3330,16 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5696 test
+SUITE ATTUALE: Ran 5697 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3.
 COMANDO:  python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"
+MISURATO SU: f835496 + la guardia nuova `test_L_AUDIT_MILLIMETRICO_VIENE_ESEGUITO_DAVVERO`
+             del 2026-08-14 (non ancora committata). Da 5696 a 5697: **+1**, un test solo.
+             ⛔ IL NUMERO L'HA DATO IL CARICATORE DA FERMO (D22), e l'ho scritto **PRIMA**
+             di lanciare la suite, non dopo: e' lo sbaglio S14, gia' costato tre ore.
 MISURATO SU: 2c142f5 + il lavoro su `fase66`/`fase57` del 2026-08-12 (non ancora committato).
              ⛔ IL NUMERO L'HA DATO IL CARICATORE, NON UNA SOMMA A MENTE (D22): 5567.
              Controllo di coerenza, questo si' per addendi: 5529 (di partenza, rimisurato dal

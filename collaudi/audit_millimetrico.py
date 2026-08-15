@@ -52,14 +52,32 @@ ok("file di test dichiarati", "%d file di test" % n_test in R, "%d file di test"
 ok("pagine deploy dichiarate", "%d pagine" % n_html in R, "%d pagine" % n_html,
    (re.search(r"(\d+) pagine", R) or ["", "?"])[1])
 
-# ogni percorso citato nell'albero deve esistere
+# Ogni percorso citato nell'albero deve esistere -- MA SOLO QUELLI CHE STANNO DAVVERO NEL
+# REPOSITORY. `data/` e `contatti/` sono esclusi apposta da .gitignore (righe 13 e 6):
+# pretendere che ESISTANO faceva passare l'audit sul computer di chi lavora, dove ci sono, e
+# cadere in una COPIA PULITA, dove git non li porta. Trovato il 2026-08-14 dalla CI su Linux
+# il giorno in cui questo audit e' entrato nella suite -- prima non lo eseguiva nessuno.
+# ⛔ `data` per giunta taceva per FORTUNA, non per costruzione: qualche test la crea durante
+# il giro, quindi l'esito dipendeva dall'ORDINE dei test. Regola ferrea 8 in forma pura.
 for percorso in ("main_casavip.py", "deploy/index.html", "deploy/host.html",
                  "deploy/admin.html", "deploy/bunker.html", "deploy/commissioni.html",
                  "deploy/termini.html", "deploy/privacy.html", "deploy/contratto-host.html",
-                 "deploy/app.js", "data", "legale", "contatti", "_archivio",
+                 "deploy/app.js", "legale", "_archivio",
                  "Dockerfile.casavip", "docker-compose.casavip.yml"):
     ok("esiste il percorso citato: %s" % percorso,
        os.path.exists(os.path.join(REPO, percorso)))
+
+# ...e i due che stanno FUORI si controllano AL CONTRARIO: l'esclusione dev'esserci ancora.
+# Non e' pignoleria: `contatti/` sono elenchi di persone vere e questo repository e' PUBBLICO
+# (lo e' per avere CodeQL gratis). Se qualcuno togliesse quella riga da .gitignore, quei dati
+# finirebbero online al primo `git add -A`, e nessuno se ne accorgerebbe. Cosi' invece
+# diventa rosso lo stesso giorno. Un controllo che non poteva passare e' diventato una guardia.
+GITIGNORE = leggi(".gitignore")
+for percorso in ("data", "contatti"):
+    ok("resta FUORI dal repository, come deve: %s" % percorso,
+       ("%s/" % percorso) in GITIGNORE,
+       "%s/ elencata in .gitignore" % percorso,
+       "ASSENTE: finirebbe online al primo `git add -A`")
 
 print()
 print("=" * 76)
@@ -75,6 +93,7 @@ print("=" * 76)
 print("3) TARIFFE: README == COSTANTI DEL MOTORE")
 print("=" * 76)
 psp = int(re.search(r'PAGAMENTO_BPS["\']\s*,\s*["\'](\d+)["\']', MAIN).group(1))
+fisso = int(re.search(r'PAGAMENTO_FISSO_CENTS["\']\s*,\s*["\'](\d+)["\']', MAIN).group(1))
 comm = int(re.search(r'COMMISSIONE_BPS["\']\s*,\s*["\'](\d+)["\']', MAIN).group(1))
 promo_def = re.search(r'PROMO_LANCIO["\']\s*,\s*["\'](\w+)["\']', MAIN).group(1)
 diretto = int(re.search(r"BPS_DIRETTO\s*=\s*(\d+)", F98).group(1))
@@ -83,8 +102,9 @@ f1 = int(re.search(r"LANCIO_BPS_FASE1\s*=\s*(\d+)", F98).group(1))
 gg1 = int(re.search(r"LANCIO_GIORNI_FASE1\s*=\s*(\d+)", F98).group(1))
 reg = int(re.search(r"LANCIO_BPS_REGIME\s*=\s*(\d+)", F98).group(1))
 
-ok("tariffa tecnica %d%% dichiarata" % (psp // 100), "tariffa tecnica fissa del %d%%" % (psp // 100) in R,
-   "%d%%" % (psp // 100))
+frase_tariffa = "tariffa tecnica del %d%% + 0,%02d €" % (psp // 100, fisso)
+ok("tariffa tecnica dichiarata, quota fissa compresa", frase_tariffa in R, frase_tariffa,
+   (re.search(r"tariffa tecnica del [^\n*]+", R) or ["?"])[0])
 ok("PAGAMENTO_BPS=%d citato" % psp, "PAGAMENTO_BPS=%d" % psp in R, "PAGAMENTO_BPS=%d" % psp)
 ok("primi %d giorni -> 0%%" % gratis, ("primi **%d giorni**" % gratis) in R and "**0%**" in R)
 ok("fino a 1 anno -> %d%%" % (f1 // 100), "**%d%%**" % (f1 // 100) in R)
@@ -100,13 +120,18 @@ ok("il 3%% e' dichiarato SEMPRE dovuto", "SEMPRE dovuta" in R and
    "anche quando la commissione è 0%" in R)
 ok("ospite paga 0%", "l'ospite paga sempre **0%**" in R or "ospite paga sempre **0%**" in R)
 
-# l'esempio numerico del README deve tornare col motore
-esempio_ok = ("l'host incassa 97 €" in R) and ("l'host incassa 87 €" in R)
-calc0 = 10000 - 0 - (10000 * psp // 10000)          # 9700 = 97.00
-calcreg = 10000 - (10000 * reg // 10000) - (10000 * psp // 10000)   # 8700 = 87.00
-ok("esempio 100 EUR: host 97 (promo) e 87 (regime)",
-   esempio_ok and calc0 == 9700 and calcreg == 8700,
-   "97/87", "%d/%d" % (calc0 // 100, calcreg // 100))
+# l'esempio numerico del README deve tornare col motore -- QUOTA FISSA COMPRESA.
+# Nulla di cablato qui: se il motore cambia, cambia l'atteso e il README deve seguirlo.
+# Che quei valori non scendano SOTTO COSTO non lo giudica questo audit, ma
+# test_fase59_costo_pagamento.test_la_tariffa_tecnica_copre_la_carta_PEGGIORE_a_OGNI_importo.
+calc0 = 10000 - 0 - (10000 * psp // 10000) - fisso                          # promo: commissione 0%
+calcreg = 10000 - (10000 * reg // 10000) - (10000 * psp // 10000) - fisso   # a regime
+e0 = "%d,%02d" % (calc0 // 100, calc0 % 100)
+ereg = "%d,%02d" % (calcreg // 100, calcreg % 100)
+esempio_ok = (("l'host incassa %s €" % e0) in R) and (("l'host incassa %s €" % ereg) in R)
+ok("esempio 100 EUR: host %s (promo) e %s (regime)" % (e0, ereg), esempio_ok,
+   "%s/%s" % (e0, ereg),
+   "/".join(re.findall(r"l'host incassa ([\d,]+) €", R)) or "?")
 
 print()
 print("=" * 76)

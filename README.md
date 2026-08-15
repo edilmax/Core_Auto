@@ -42,9 +42,9 @@ competitivo è il **take-rate più basso del mercato**, reso possibile dall'auto
 ```
 Core_Auto/
 ├── main_casavip.py             avvio del prodotto: legge le variabili d'ambiente e compone il sistema
-├── fase*.py                    149 moduli del motore (uno per funzione — indice in REGISTRO_INGEGNERIA.md)
-├── test_*.py                   390 file di test (la suite INTERA deve essere verde prima di ogni deploy)
-├── deploy/                     ciò che vede il browser: 13 pagine + app.js + configurazioni nginx
+├── fase*.py                    151 moduli del motore (uno per funzione — indice in REGISTRO_INGEGNERIA.md)
+├── test_*.py                   402 file di test (la suite INTERA deve essere verde prima di ogni deploy)
+├── deploy/                     ciò che vede il browser: 14 pagine + app.js + configurazioni nginx
 │   ├── index.html              vetrina, ricerca, mappa, checkout (ospite)
 │   ├── host.html               pannello host: pubblica, calendario, incassi, consensi
 │   ├── admin.html              pannello operativo ("Field")
@@ -53,7 +53,9 @@ Core_Auto/
 │   └── app.js                  fonte unica: escape, valute, lingua, rete, scudo anti-doppio-clic
 ├── data/                       database SQLite (in produzione è un volume Docker; mai nel repo)
 ├── collaudi/                   strumenti d'officina: collaudi profondi e audit (NON entrano nell'immagine)
-├── legale/ · contatti/         materiali di supporto
+├── legale/                     materiali di supporto
+├── contatti/                   ⛔ SOLO in locale, esclusa da `.gitignore`: sono elenchi di
+│                               persone vere e questo repository è PUBBLICO
 ├── _archivio/                  SOLO memoria storica: cifre e piani SUPERATI, da non seguire
 ├── Dockerfile.casavip          immagine del prodotto
 └── docker-compose.casavip.yml  servizi in produzione: app · nginx · backup

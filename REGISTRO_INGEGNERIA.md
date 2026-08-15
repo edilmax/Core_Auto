@@ -567,6 +567,101 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🔗 FATTO 2026-08-14 (tarda notte) — **L'AUDIT DEI 5 DOCUMENTI ERA SCOLLEGATO, E GRIDAVA A VUOTO**
+
+**Nessuna riga di produzione toccata.** Cinque file, tutti documenti o strumentazione:
+`README.md`, `RIPRENDI_QUI.md`, `REGISTRO_INGEGNERIA.md`, `collaudi/audit_millimetrico.py`,
+`test_pipeline_ci.py`.
+
+#### Il difetto: COSTRUITO ≠ COLLEGATO, sullo stesso attrezzo per la SECONDA volta
+
+`python collaudi/audit_millimetrico.py` usciva **1** con **5 discrepanze**, e la suite era
+**verde lo stesso**. Motivo: lo chiamavano soltanto `campagna_totale.py` e `piramide.py`, due
+attrezzi d'officina che si lanciano **a mano**. Non stava nella suite, non stava nel gancio del
+commit, non stava in CI — quindi le sue discrepanze restavano invisibili finché qualcuno non si
+ricordava di premere il bottone. È la regola **#23**, e il gemello
+`test_L_AUDIT_DELLE_TARIFFE_VIENE_ESEGUITO_DAVVERO` nacque il **2026-08-10** per **identica
+ragione** su un attrezzo vicino: la lezione non fu estesa al vicino di casa.
+
+#### Le 5 discrepanze, e da che parte stava la bugia (misurato, non dedotto)
+
+| discrepanza | il vero | il dichiarato | chi aveva torto |
+|---|---|---|---|
+| moduli `fase*.py` | 151 | 149 | **`README.md`** rimasto indietro |
+| file di test | 402 | 390 | **`README.md`** rimasto indietro |
+| pagine in `deploy/` | 14 | 13 | **`README.md`** rimasto indietro |
+| frase della tariffa tecnica | «tariffa tecnica del 5% + 0,25 €» | — | **l'attrezzo**: cercava «fissa del 5%», che il README non usa più |
+| esempio su 100 € | 94,75 / 84,75 | 97/87 attesi | **l'attrezzo**, fermo all'era del 3% |
+
+⛔ **Sui soldi non c'era nessun difetto, ed è la parte che conta.** Il motore ha
+`PAGAMENTO_BPS` di serie **500** (`main_casavip.py:150`) e `PAGAMENTO_FISSO_CENTS` **25**
+(riga 152); `LANCIO_BPS_REGIME` è **1000** (`fase98_policy_commissione.py:77`). Il conto vero:
+`10000 − 0 − 500 − 25 = 9475` e `10000 − 1000 − 500 − 25 = 8475`, cioè **94,75 €** e **84,75 €**
+— esattamente ciò che `README.md:145` dichiara in pubblico. A mentire era
+`audit_millimetrico.py:105-109`, che teneva **97/87 cablati a mano** e la cui formula
+**dimenticava i 0,25 € fissi**. È lo sbaglio **S15**: credere al verdetto di uno strumento senza
+guardare con che modello conta. Il sospetto è andato allo strumento perché i numeri veri li
+avevano già misurati `ls fase*.py` e `ls test_*.py`, non perché lo strumento sembrasse strano.
+
+#### La riparazione
+
+· i tre conteggi del `README.md` portati ai valori veri (**151 · 402 · 14**);
+· `audit_millimetrico.py` ora **legge la quota fissa dal motore** (`PAGAMENTO_FISSO_CENTS`)
+  invece di ricordarla, e costruisce l'atteso dai valori del motore: **niente più cifre
+  cablate**, quindi il giorno che la tariffa cambia il rosso arriva da solo invece di restare
+  congelato su un'epoca finita;
+· `test_L_AUDIT_MILLIMETRICO_VIENE_ESEGUITO_DAVVERO` in `test_pipeline_ci.py` (classe
+  `TestIgieneDelFile`, accanto al gemello del 2026-08-10): **l'audit gira dentro la suite**.
+
+#### Le prove, nelle due direzioni (regola ferrea 2)
+
+Rotto il `README.md` su **tutti e cinque** i punti in una volta: **cinque rossi distinti**,
+ognuno col proprio nome e con `atteso=`/`trovato=`. Poi rotto **un punto solo** con la guardia
+nuova attiva: rossa, e il messaggio nomina il colpevole — `moduli fase*.py dichiarati |
+atteso=151 moduli | trovato=150`. Ripristino **byte-identico** verificato col `sha256`
+(`AF981D5C…E145C78`), e riverde dopo.
+
+#### I numeri, con la misura che li regge
+
+· audit: **0,11 s** (cronometrato su `f835496`) — abbastanza poco da poter stare **anche** nel
+  gancio del commit, che però è una decisione a sé e non è stata presa qui;
+· suite: da **5696** a **5697** test — caricatore da fermo, scritto **prima** di lanciare (S14);
+· i file di test restano **402**: la guardia è entrata in un file **esistente**, non in uno
+  nuovo (D10 — l'inventario ha trovato il precedente già in casa).
+
+#### 🧪 POI LA CI HA PRESO UN SESTO DIFETTO, CHE IL VERDE LOCALE NON POTEVA VEDERE
+
+Suite locale verde (`Ran 5692`, uscita 0), **CI su Linux ROSSA** al primo giro — e a fallire era
+proprio la guardia appena scritta, cioè ha funzionato. Il messaggio nominava il colpevole:
+`esiste il percorso citato: contatti`. L'audit pretendeva che esistessero **`data/` e
+`contatti/`**, che `.gitignore` esclude **apposta** (righe 13 e 6): sul computer di chi lavora
+ci sono, in una **copia pulita** no. ⛔ E `data` taceva **per fortuna, non per costruzione** —
+qualche test la crea durante il giro, quindi quell'esito dipendeva dall'**ordine dei test**: un
+rosso che sarebbe arrivato prima o poi, a caso, e sembrato instabilità.
+
+**Riparato al contrario, e ora vale di più.** Invece di togliere i due percorsi e basta, si
+pretende che l'**esclusione ci sia ancora**: `contatti/` sono elenchi di persone vere e questo
+repository è **PUBBLICO** (lo è per avere CodeQL gratis). Se qualcuno togliesse quella riga da
+`.gitignore`, quei dati finirebbero online al primo `git add -A` e nessuno se ne accorgerebbe.
+Provata nelle due direzioni: verde con l'esclusione, rossa senza, col messaggio
+`ASSENTE: finirebbe online al primo git add -A`. Un controllo che **non poteva passare** è
+diventato **una guardia sulla privacy**.
+
+💡 **Il metodo, che è costato secondi invece di 26 minuti + un giro di CI:** `git clone` del
+repository in una cartella temporanea riproduce **esattamente** ciò che vede Linux, perché porta
+solo i file **tracciati**. Verificato lì il verde, e lì dentro provato anche il rosso togliendo
+l'esclusione — senza toccare un solo file del progetto, quindi senza bisogno di ripristini.
+È «prova in piccolo prima» applicata a una differenza fra sistemi operativi.
+
+#### ⚠️ Cosa NON è coperto (D18 punto 3)
+
+· l'audit dice che documenti e motore **si raccontano la stessa cosa**, non che il motore faccia
+  la cosa **giusta**: che la tariffa tecnica non scenda sotto costo lo giudica
+  `test_fase59_costo_pagamento`, non lui;
+· 🔴 **l'audit NON è ancora nel pre-fatto**: chi committa un documento sbagliato lo scopre dalla
+  suite (**25 minuti**), non in **0,1 secondi** come accade per il piano dei soldi. È
+  esattamente la lezione da cui nacque D24, e **resta aperta**.
+
 ### 🕸️ FATTO 2026-08-14 (notte) — **LA RETE ANTI-INTERRUZIONE NON SI CANCELLA PIÙ DA SOLA**
 
 **Nessuna riga di produzione toccata.** Tre file, tutti strumentazione:
