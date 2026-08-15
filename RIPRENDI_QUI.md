@@ -11,7 +11,226 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🚦 2026-08-15 (5) — RIPARTI DA QUI. 🔒 **LA RETE CHE TOGLIEVA IL PIN LO RIMETTEVA DENTRO**
+## 🚦 2026-08-15 (9) — 🧱 **IL PIANO NON È PIÙ UN FOGLIO: È UNA MACCHINA IN DIECI BLOCCHI**
+
+> **Ordine del fondatore, con le sue parole:** *«perché non mettiamo ordine una volta per
+> tutte? Se non mettiamo a posto questo cazzo di foglio, ogni chat fa quel che vuole.»*
+> Aveva ragione, e la prova stava nel codice — non nelle opinioni.
+>
+> ### 🔴 LA DIAGNOSI, MISURATA
+> Il guardiano che doveva far rispettare il piano, `collaudi/piano_dei_soldi.py`, prova a
+> capirlo **leggendo la prosa** dei documenti con espressioni regolari:
+> `_ANCORA_GIUDICATI = re.compile(r"passati dal giudice — (\d+)")`. Una macchina che
+> **indovina un tema**: cambia una parola e diventa cieca. Ecco perché ogni chat poteva
+> riscrivere il piano e nessuno se ne accorgeva.
+>
+> ### ✅ COSA È STATO FATTO (finito e provato sul disco, NON committato)
+> **Si è girato il verso:** prima la chat scriveva il racconto e la macchina provava a
+> leggerlo; adesso la macchina tiene i **dati** e il racconto **lo stampa lei**.
+> · **`collaudi/piano.py`** (nuovo): i **dieci blocchi per mestiere** — soldi · prenotazioni
+>   · identità e accessi · prezzi e tasse · legale · esperienza ospite · host · infrastruttura
+>   · crescita · core legacy. Ognuno dichiara **i suoi moduli**, **gli strumenti d'ingegneria**
+>   che deve superare (presi dalla ricerca del 14/08, con fonte accanto) e **quando è finito**.
+>   Copre **tutti e 151** i moduli: 24+12+9+12+10+15+8+14+27+20.
+> · **`collaudi/regole_avvio.py`**: il gancio `SessionStart` ora stampa anche i blocchi, e
+>   soprattutto **misura da solo i 5 lavori in sospeso** invece di elencarli a mano.
+> · **11 guardie** in `test_pipeline_ci.py`, tutte **viste rosse** prima di valere.
+>
+> ### 🩹 IL VERDE FINTO SCOPERTO DAL MIO STESSO ATTREZZO, UN MINUTO DOPO AVERLO SCRITTO
+> Le prove cercavano parole (`test_clock`, `DENOMINATORE DELLA MACCHINA`) che erano scritte
+> **dentro le prove stesse**: la ricerca trovava **se stessa**, e due lavori mai iniziati
+> risultavano ✅ FATTO. È lo sbaglio **S6** in forma nuova — *una prova non può essere
+> soddisfatta dal testo della prova*. Riparato (il file che dichiara la prova è escluso dalla
+> ricerca) e chiuso da una guardia che prova **il meccanismo**, non lo stato del momento:
+> `test_UNA_PROVA_NON_PUO_ESSERE_SODDISFATTA_DAL_TESTO_DELLA_PROVA`.
+>
+> ### 🔴 E LA LISTA DEI LAVORI IN SOSPESO **MENTIVA DAVVERO**
+> Teneva **CodeQL al primo posto fra i lavori da fare** mentre `.github/workflows/codeql.yml`
+> esisteva ed era **verde su master** (API GitHub, `conclusion=success` su `6118d35`). Adesso
+> ogni voce porta la sua **prova meccanica** e lo stato lo rifà la macchina a ogni avvio:
+> ```
+> 1. CodeQL ................. ⚠️  METÀ    (il file c'è; il verde lo dice l'API, non il disco)
+> 2. libfaketime in CI ...... ⏳ DA FARE  (nessun job nomina faketime)
+> 3. orologi Stripe ......... ⏳ DA FARE  (nessun collaudo crea un test clock)
+> 4. metamorfici sui soldi .. ⚠️  METÀ    (esistono su fase119 prezzi, non sull'aritmetica)
+> 5. il DENOMINATORE ........ ⏳ DA FARE  (mappa_scoperta.py ne fa un pezzo: si parte da lì)
+> ```
+>
+> ### 📋 LA VERIFICA INDIPENDENTE DELLA CHAT VECCHIA (richiesta dal fondatore)
+> **FATTO davvero:** CodeQL verde · CI verde · sentinella verde ogni ~30 min · unioni #42→#51
+> tutte `merged=True` · `audit_millimetrico.py` esce **0** ed è **nella suite** · webhook Stripe
+> con firma HMAC-SHA256 + tempo costante + anti-replay 300 s.
+> **NON fatto, e ancora aperto:** pezzo **A** (z3 assente da `requirements.txt`, la CI installa
+> solo `hypothesis pyyaml coverage` → `skipTest`) · pezzo **1** (`mutazione_prodotto.py:1573`
+> non conta le rinunce) · pezzi **3-4** (0 occorrenze di copertura/nodi aridi nel Giudice) ·
+> pezzo **B** (`_split_crea:7057`, `_split_paga:7076` ricevono solo `body`) · iCal (0 difese
+> dal ritardo) · 🔴 **rimborso all'ospite: `v1/refunds` → 0 righe di codice**.
+> **Numeri dei documenti trovati falsi:** `CLAUDE.md` 898 → **745** · `fase135` 82 → **64** ·
+> la memoria diceva l'audit «esce 1 con 5 contraddizioni» → esce **0**.
+>
+> ### ⛔ COSA DEVE FARE CHI LEGGE ADESSO
+> Il lavoro sul disco è **finito e provato**, manca solo la suite intera e il commit — vale
+> per questo riquadro **e** per il (8) qui sotto, sono lo stesso commit. I file attesi da
+> `git status --porcelain` sono **cinque**: `REGISTRO_INGEGNERIA.md` · `RIPRENDI_QUI.md` ·
+> `collaudi/regole_avvio.py` · `test_pipeline_ci.py` · **`collaudi/piano.py`** (nuovo).
+> ⛔ Nessun file di produzione toccato: **nessun deploy**.
+
+## 🚦 2026-08-15 (8) — ⛔⛔ **C'È LAVORO NON COMMITTATO SUL DISCO. CHIUDILO TU, PRIMA DI TUTTO.**
+
+> **La sessione precedente si è fermata all'85% di contesto (D21) con il lavoro FINITO sul
+> disco ma NON committato.** Non è un lavoro interrotto a metà: è completo e provato, manca
+> solo l'ultimo giro di suite e il commit. ⛔ **Non rifarlo. Non ripensarlo. Chiudilo.**
+>
+> ### PRIMA MISURA (i comandi, in quest'ordine)
+> ```powershell
+> git status --porcelain      # attesi 4 file modificati, nessuno nuovo
+> git rev-parse --short HEAD  # atteso 6118d35
+> ```
+> **I quattro file che devono comparire, e nient'altro:**
+> `REGISTRO_INGEGNERIA.md` · `RIPRENDI_QUI.md` · `collaudi/regole_avvio.py` ·
+> `test_pipeline_ci.py`
+> ⛔ Se ne compaiono altri, **fermati e chiedi**: qualcuno ha toccato il progetto nel frattempo.
+>
+> ### COSA C'È DENTRO, e perché non va rifatto
+> ① **il piano nel registro** (blocco `PIANO-INIZIO`/`PIANO-FINE`) e ② **`regole_avvio.py` che
+> lo LEGGE e lo STAMPA** a ogni sessione dal gancio `SessionStart` — è il motivo per cui stai
+> leggendo il piano adesso senza doverlo cercare; ③ **tre guardie** in `test_pipeline_ci.py`
+> (`TestIlGancioSTAMPAIlPiano`), **già viste rosse** togliendo il marcatore dal registro, con
+> ripristino verificato al `sha256`; ④ i **documenti del deploy** di stasera.
+>
+> ### I PASSI PER CHIUDERE, esatti
+> ```powershell
+> python collaudi/prima_di_lanciare.py --scopo REGISTRO_INGEGNERIA.md RIPRENDI_QUI.md collaudi/regole_avvio.py test_pipeline_ci.py collaudi/piano.py
+> python -m unittest discover -s . -p "test_*.py"        # ~28 min, attesi 5734 raccolti
+> ```
+> ⚠️ **Il conteggio dichiarato è 5734** (misurato col caricatore il 2026-08-15, S14: era 5723,
+> +11 col piano dei dieci blocchi del riquadro (9) qui sopra): se il pre-volo lo contesta,
+> qualcosa è cambiato — indaga, non correggere il numero.
+> ⚠️ **Lo scarto raccolti/eseguiti è 5**, le guardie `openssl` che PowerShell non ha (D23.3).
+> Poi: chiedi **«procedi al commit»** (B1) → commit → ramo + richiesta di unione (`master` è
+> chiuso dal cancello) → **cancello verde letto dall'API** → unisci → verifica `merged=True`.
+> ⛔ **Nessun deploy**: questo commit non tocca codice di produzione.
+>
+> ### ⚠️ E SUBITO DOPO, PRIMA DEL PEZZO «A»: L'INDICE DELLA MEMORIA STA PER TRONCARSI
+> Avviso automatico del 2026-08-15: `memory/MEMORY.md` è a **19,8 KB** su un limite di
+> **24,4 KB**. Oltre quella soglia **smette di essere letto per intero** — cioè la memoria del
+> progetto si troncherebbe **in silenzio**, che è il guasto peggiore che conosciamo.
+> **Da fare:** compattarlo sotto i **17 KB** — *una riga per voce*, il dettaglio spostato nei
+> file di argomento (non cancellato), e le voci vecchie unite o tolte.
+> ⛔ Non è pulizia estetica: è la stessa famiglia dei difetti chiusi oggi — uno strumento che
+> smette di funzionare senza dirlo.
+
+## 🚦 2026-08-15 (7) — **PASSAGGIO DI CONSEGNE (D21, contesto 85%)**
+
+> ### ⛔ IL PRIMO LAVORO NON È SCEGLIERE COSA FARE: È LEGGERE IL PIANO
+> **Il gancio `SessionStart` (in `.claude/settings.json`) lancia `collaudi/regole_avvio.py`,
+> che stampa le REGOLE — cioè COME lavorare — ma NON stampa IL PIANO, cioè COSA fare e in
+> che ordine.** Per questo ogni chat nuova conosce il metodo e ignora il piano, e si
+> ricomincia da capo. **Il fondatore l'ha fatto notare il 2026-08-15, e aveva ragione.**
+>
+> ⛔ **Quindi, chat nuova: PRIMA DI DECIDERE QUALUNQUE COSA, apri e leggi PER INTERO**
+> (la riga di riassunto nell'indice **non basta** — è l'errore fatto oggi):
+> ```
+> C:\Users\MaxDanno\.claude\projects\C--Users-MaxDanno\memory\bookinvip-piano-dieci-pezzi.md
+> C:\Users\MaxDanno\.claude\projects\C--Users-MaxDanno\memory\bookinvip-ricerca-industriale.md
+> ```
+>
+> ### 🔴 IL LAVORO NUMERO 1, DECISO COL FONDATORE E NON ANCORA FATTO
+> **Far stampare il piano dal gancio**, così nessuna chat può saltarlo:
+> · il piano (l'elenco ordinato dei pezzi) va scritto **in `REGISTRO_INGEGNERIA.md`**, non in
+>   memoria — la cartella della memoria **non esiste** su un'altra macchina né in CI;
+> · `collaudi/regole_avvio.py` deve **leggerlo da lì e stamparlo** (⛔ NON ricopiarlo: una
+>   copia resta indietro, è il difetto inseguito tutto il 15/08);
+> · guardia che diventa **rossa** se quella stampa sparisce (D18 punto 4).
+>
+> ### 🔴 POI IL PEZZO «A» DEL PIANO — DUE RIGHE, E CHIUDE UN VERDE FINTO **VIVO OGGI**
+> **Misurato il 2026-08-15:** `z3-solver` **non è in `requirements.txt`** e la CI installa solo
+> `hypothesis pyyaml coverage`. I due file con le **dimostrazioni matematiche sugli invarianti
+> dei soldi** (`test_fase199_invarianti.py`, `test_fase199_transizioni.py`) fanno
+> `skipTest("z3 non installato")` → **in CI quelle prove NON GIRANO e la tabella resta verde.**
+> ⚠️ **I `skipped=4` che scorrono a ogni suite sono anche quelli**: li ho visti passare tutto
+> il giorno senza chiedermi quali fossero. È D23 (*«un numero che cala si insegue finché non ha
+> un nome»*) applicata ai 5 di `openssl` e **non** ai 4 saltati.
+> **Ordine del piano da lì:** **A → 1 → 2 → C → B** *(col «autorizzato»)* **→ 3 → 4 → 5…**
+> ⛔ Il piano avverte: *«A, 1 e 2 vanno fatti PRIMA di scrivere un solo test nuovo: misurare
+> con strumenti che mentono è peggio che non misurare»*. Il 15/08 ne sono stati scritti ~20.
+>
+> ### 📋 REVISIONE DEI PAGAMENTI (fatta il 15/08, NIENTE ancora riparato)
+> Richiesta dal fondatore su `fase85_pagamenti_stripe.py` (⛔ **non** `fase35`, che è **codice
+> morto**). Quattro rilievi, **tutti da riparare col suo «autorizzato»** e con la guardia rossa
+> prima (D20):
+> 1. 🔴 **manca `Idempotency-Key` verso Stripe** (`fase85:103`). Il percorso che la fa mordere:
+>    `fase83_server.py:5220-5226` — se Stripe va in timeout si torna `503` e il commento
+>    **invita a ricliccare**; se la prima chiamata era arrivata, la seconda crea **una seconda
+>    sessione pagabile** per la stessa prenotazione. È il «double spend» che temeva lui;
+> 2. 🟠 **osservabile debole** (regola ferrea 9): `except Exception -> None`, il corpo
+>    dell'errore Stripe non è mai letto → timeout e «importo non valido» indistinguibili;
+> 3. 🟠 **riferimento vuoto non bloccato**: crea una sessione pagabile senza riferimento → se
+>    pagata, soldi non collegabili a nessuna prenotazione (fantasma `solo_stripe`);
+> 4. 🟡 `expires_at` dipende dall'**orologio della VPS**: se deriva, tutti i link falliscono e
+>    per via del rilievo 2 non si saprebbe perché.
+> ✅ **Verificati SANI:** valute senza decimali (`fase99.esponente`, JPY→0, KWD→3: il numero
+> passato a Stripe è giusto) · doppio clic sul book (`:4788`, mai un secondo link) · firma del
+> webhook (`:7108-7115`, 400 se non torna, 503 fail-closed) · nessun riprova automatico.
+> ⚠️ I campi si chiamano `_cents` ma contengono **unità minori**: il nome mente, i valori no.
+>
+> ### 📌 ORDINE PERMANENTE DEL FONDATORE (2026-08-15), vale in OGNI chat
+> **«Non usiamo agenti né logiche autonome. Solo puro codice deterministico.»** Le IA servono a
+> **costruire** il codice, mai a stare **dentro** il codice che muove soldi o serrature.
+> In memoria: `bookinvip-solo-codice-deterministico`.
+
+## 🚦 2026-08-15 (6) — ✅ **TUTTO IN PRODUZIONE, I TRE POSTI ALLINEATI**
+
+> **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
+> **⛔ PRIMA MISURA, POI AGISCI. I commit scritti qui invecchiano.**
+> ```powershell
+> git rev-parse --short HEAD ; git status --porcelain
+> git ls-remote origin refs/heads/master
+> ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'
+> curl -s https://bookinvip.com/api/health     # deve dire "guardiano": "ok"
+> python collaudi/prima_di_lanciare.py
+> ```
+>
+> ### ✅ STATO ALLA CHIUSURA DELLA GIORNATA — misurato, non ricordato
+> **computer = GitHub = VPS = `6118d35`.** Per la prima volta i tre posti coincidono.
+> `{"status": "ok", "money_unit": "cents_integer", "guardiano": "ok"}` · sentinella esterna
+> su GitHub: **success**.
+>
+> ### 🚀 DUE DEPLOY, ZERO MINUTI DI SITO IRRAGGIUNGIBILE
+> Tutti e due col **`deploy/protocollo_d17.sh`**, mai a mano. `casavip_nginx` è rimasto
+> `Running` per l'intera operazione in entrambi i casi; app sana in **6 secondi**; sonde
+> **200/200**, negativa **403** su un indirizzo che esiste; giudice del progetto **190
+> controlli, 0 violazioni**.
+> ⛔ **Il deploy si fa SOLO con quello script.** Al primo giro ha trovato il paracadute
+> `:prec` agganciato a un'immagine di **giorni prima**: saltare con quello sarebbe stato
+> peggio che non averlo. Non l'ha impedito la memoria — l'ha impedito l'attrezzo, che
+> ri-aggancia **e poi verifica che coincida**.
+> ⚠️ Che `:prec` risulti «indietro di uno» **all'inizio di ogni deploy è normale**, per
+> costruzione: è il senso del passo `prima`. Diverso è trovarlo indietro di giorni.
+>
+> ### ✅ I DUE DIFETTI DEL PIN SONO CHIUSI **IN PRODUZIONE**, verificati DENTRO il contenitore
+> ```
+> 1) PIN mostrato come PIN su 3000 voucher NON pagati : 0   (atteso 0)
+> 2) prezzi CORROTTI perche' coincidevano col PIN     : 0 su 50   (atteso 0)
+> ```
+> Non «l'ho spinto»: eseguito **dentro `casavip_app`**, sul codice che serve il sito.
+>
+> ### 🔴 COSA RESTA APERTO — in ordine di valore
+> 1. ⚠️ **Il rimborso all'ospite non parte da solo** (`grep v1/refunds` in produzione → 0).
+>    È la cosa più grave rimasta sul **prodotto**, e va chiusa **prima del primo host**:
+>    non è sorveglianza, sono soldi di una persona vera.
+> 2. **Il denominatore**: «tutto quadra» su **zero prenotazioni** si legge come su mille.
+>    In produzione `/data/prenotazioni.db` è **0 byte**. Il guardiano è onesto ma vuoto.
+> 3. **`_escrow_bloccati`** (`fase186_guardiano.py`, riga ~100) ha lo **stesso schema del
+>    `None`** riparato oggi: `return []` se manca l'archivio, indistinguibile da «nessun
+>    escrow bloccato». Serve il suo «autorizzato», ed è mezz'ora.
+> 4. **L'ultimo miglio della sorveglianza**: GitHub può ritardare o saltare i giri
+>    programmati. Un servizio dedicato (UptimeRobot, gratis) sarebbe puntuale — richiede un
+>    account che apra il fondatore.
+> 5. **Le lezioni non propagate**: oggi ne è costata una (il PIN nudo). Vale la pena cercare
+>    le altre — una conoscenza che vive in **un solo** file è un difetto che aspetta.
+
+## 🚦 2026-08-15 (5) — 🔒 **LA RETE CHE TOGLIEVA IL PIN LO RIMETTEVA DENTRO**
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
 > **⛔ PRIMA MISURA, POI AGISCI. I commit scritti qui invecchiano.**
@@ -1721,7 +1940,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 1064947
+CONSEGNE AGGIORNATE A: 6118d35
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -3546,12 +3765,16 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5720 test
+SUITE ATTUALE: Ran 5734 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3.
 COMANDO:  python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"
+MISURATO SU: 6118d35 + IL PIANO DEI DIECI BLOCCHI del 2026-08-15 (non ancora committato):
+             6 guardie in `TestIlPianoDeiDieciBlocchiNONPuoDivergereDallaMACCHINA` + 5 in
+             `TestLaListaDeiLavoriNONPuoMENTIRE`, tutte in `test_pipeline_ci.py`.
+             Da 5723 a 5734: **+11**. Caricatore da fermo, scritto PRIMA di lanciare (S14).
 MISURATO SU: 23f5c45 + la SENTINELLA ESTERNA del 2026-08-15 (non ancora committata): 4
              guardie sulla salute in `test_watchdog.py` + 6 sul workflow in
              `test_pipeline_ci.py`. Da 5708 a 5718: **+10**. Caricatore da fermo, PRIMA di
