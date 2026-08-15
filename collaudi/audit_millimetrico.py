@@ -52,14 +52,32 @@ ok("file di test dichiarati", "%d file di test" % n_test in R, "%d file di test"
 ok("pagine deploy dichiarate", "%d pagine" % n_html in R, "%d pagine" % n_html,
    (re.search(r"(\d+) pagine", R) or ["", "?"])[1])
 
-# ogni percorso citato nell'albero deve esistere
+# Ogni percorso citato nell'albero deve esistere -- MA SOLO QUELLI CHE STANNO DAVVERO NEL
+# REPOSITORY. `data/` e `contatti/` sono esclusi apposta da .gitignore (righe 13 e 6):
+# pretendere che ESISTANO faceva passare l'audit sul computer di chi lavora, dove ci sono, e
+# cadere in una COPIA PULITA, dove git non li porta. Trovato il 2026-08-14 dalla CI su Linux
+# il giorno in cui questo audit e' entrato nella suite -- prima non lo eseguiva nessuno.
+# ⛔ `data` per giunta taceva per FORTUNA, non per costruzione: qualche test la crea durante
+# il giro, quindi l'esito dipendeva dall'ORDINE dei test. Regola ferrea 8 in forma pura.
 for percorso in ("main_casavip.py", "deploy/index.html", "deploy/host.html",
                  "deploy/admin.html", "deploy/bunker.html", "deploy/commissioni.html",
                  "deploy/termini.html", "deploy/privacy.html", "deploy/contratto-host.html",
-                 "deploy/app.js", "data", "legale", "contatti", "_archivio",
+                 "deploy/app.js", "legale", "_archivio",
                  "Dockerfile.casavip", "docker-compose.casavip.yml"):
     ok("esiste il percorso citato: %s" % percorso,
        os.path.exists(os.path.join(REPO, percorso)))
+
+# ...e i due che stanno FUORI si controllano AL CONTRARIO: l'esclusione dev'esserci ancora.
+# Non e' pignoleria: `contatti/` sono elenchi di persone vere e questo repository e' PUBBLICO
+# (lo e' per avere CodeQL gratis). Se qualcuno togliesse quella riga da .gitignore, quei dati
+# finirebbero online al primo `git add -A`, e nessuno se ne accorgerebbe. Cosi' invece
+# diventa rosso lo stesso giorno. Un controllo che non poteva passare e' diventato una guardia.
+GITIGNORE = leggi(".gitignore")
+for percorso in ("data", "contatti"):
+    ok("resta FUORI dal repository, come deve: %s" % percorso,
+       ("%s/" % percorso) in GITIGNORE,
+       "%s/ elencata in .gitignore" % percorso,
+       "ASSENTE: finirebbe online al primo `git add -A`")
 
 print()
 print("=" * 76)

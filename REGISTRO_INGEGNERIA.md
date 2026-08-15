@@ -629,6 +629,30 @@ atteso=151 moduli | trovato=150`. Ripristino **byte-identico** verificato col `s
 · i file di test restano **402**: la guardia è entrata in un file **esistente**, non in uno
   nuovo (D10 — l'inventario ha trovato il precedente già in casa).
 
+#### 🧪 POI LA CI HA PRESO UN SESTO DIFETTO, CHE IL VERDE LOCALE NON POTEVA VEDERE
+
+Suite locale verde (`Ran 5692`, uscita 0), **CI su Linux ROSSA** al primo giro — e a fallire era
+proprio la guardia appena scritta, cioè ha funzionato. Il messaggio nominava il colpevole:
+`esiste il percorso citato: contatti`. L'audit pretendeva che esistessero **`data/` e
+`contatti/`**, che `.gitignore` esclude **apposta** (righe 13 e 6): sul computer di chi lavora
+ci sono, in una **copia pulita** no. ⛔ E `data` taceva **per fortuna, non per costruzione** —
+qualche test la crea durante il giro, quindi quell'esito dipendeva dall'**ordine dei test**: un
+rosso che sarebbe arrivato prima o poi, a caso, e sembrato instabilità.
+
+**Riparato al contrario, e ora vale di più.** Invece di togliere i due percorsi e basta, si
+pretende che l'**esclusione ci sia ancora**: `contatti/` sono elenchi di persone vere e questo
+repository è **PUBBLICO** (lo è per avere CodeQL gratis). Se qualcuno togliesse quella riga da
+`.gitignore`, quei dati finirebbero online al primo `git add -A` e nessuno se ne accorgerebbe.
+Provata nelle due direzioni: verde con l'esclusione, rossa senza, col messaggio
+`ASSENTE: finirebbe online al primo git add -A`. Un controllo che **non poteva passare** è
+diventato **una guardia sulla privacy**.
+
+💡 **Il metodo, che è costato secondi invece di 26 minuti + un giro di CI:** `git clone` del
+repository in una cartella temporanea riproduce **esattamente** ciò che vede Linux, perché porta
+solo i file **tracciati**. Verificato lì il verde, e lì dentro provato anche il rosso togliendo
+l'esclusione — senza toccare un solo file del progetto, quindi senza bisogno di ripristini.
+È «prova in piccolo prima» applicata a una differenza fra sistemi operativi.
+
 #### ⚠️ Cosa NON è coperto (D18 punto 3)
 
 · l'audit dice che documenti e motore **si raccontano la stessa cosa**, non che il motore faccia

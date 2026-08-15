@@ -53,7 +53,9 @@ Core_Auto/
 │   └── app.js                  fonte unica: escape, valute, lingua, rete, scudo anti-doppio-clic
 ├── data/                       database SQLite (in produzione è un volume Docker; mai nel repo)
 ├── collaudi/                   strumenti d'officina: collaudi profondi e audit (NON entrano nell'immagine)
-├── legale/ · contatti/         materiali di supporto
+├── legale/                     materiali di supporto
+├── contatti/                   ⛔ SOLO in locale, esclusa da `.gitignore`: sono elenchi di
+│                               persone vere e questo repository è PUBBLICO
 ├── _archivio/                  SOLO memoria storica: cifre e piani SUPERATI, da non seguire
 ├── Dockerfile.casavip          immagine del prodotto
 └── docker-compose.casavip.yml  servizi in produzione: app · nginx · backup

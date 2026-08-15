@@ -46,6 +46,20 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > Sulla CI di `f835496` il lavoro **CodeQL (python) = success**, letto dall'**API** (non
 > «immagino sia verde»). Era una richiesta rimasta in sospeso: risulta **fatta**.
 >
+> ### 🧪 LA CI HA PRESO SUBITO CIÒ CHE IL VERDE LOCALE NON VEDEVA (regola ferrea 8)
+> Suite locale **verde**, CI su Linux **ROSSA** al primo giro, e a fallire era **la guardia
+> nuova**. Causa: l'audit pretendeva che esistessero `data/` e `contatti/`, che `.gitignore`
+> esclude **apposta** (righe 13 e 6). Sul computer di chi lavora ci sono; in una **copia
+> pulita** no. ⛔ E `data` taceva **per fortuna, non per costruzione**: qualche test la crea
+> durante il giro, quindi l'esito dipendeva dall'**ordine dei test**.
+> ✅ Riparato **al contrario**, e ora vale di più: quei due si controllano pretendendo che
+> l'**esclusione ci sia ancora**. `contatti/` sono elenchi di persone vere e il repository è
+> **PUBBLICO**: se qualcuno togliesse quella riga, finirebbero online al primo `git add -A`.
+> Un controllo che non poteva passare è diventato **una guardia sulla privacy**.
+> 💡 Il metodo che è costato secondi invece di 26 minuti: **`git clone` in una cartella
+> temporanea** riproduce esattamente ciò che vede la CI (solo i file tracciati). Provato lì
+> verde, e poi rosso togliendo l'esclusione. *Prova in piccolo prima.*
+>
 > ### 🔴 QUELLO CHE RESTA APERTO, DICHIARATO
 > · **L'audit non è nel pre-fatto.** Costa **0,11 s**: potrebbe fermare il commit in un decimo
 >   di secondo invece che dopo **25 minuti** di suite. È la stessa lezione da cui nacque D24
@@ -1491,7 +1505,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 6c542d3
+CONSEGNE AGGIORNATE A: 42fde28
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
