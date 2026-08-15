@@ -567,6 +567,96 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🛰️ FATTO 2026-08-15 — **LA SENTINELLA ESTERNA: LA TESTA CHE NON MUORE COL SERVER**
+
+**File nuovo: `.github/workflows/sentinella.yml`.** Produzione toccata: `fase83_server.py`
+(la salute espone lo stato del battito). Guardie: 4 in `test_watchdog.py` + 6 in
+`test_pipeline_ci.py`. Autorizzato dal fondatore il 2026-08-15.
+
+#### Il buco, e perché non bastava il watchdog che c'era
+
+`deploy/watchdog.sh` gira **sul VPS**: se il VPS muore, muore con lui e nessuno grida. Il
+progetto lo sapeva — prevedeva una **seconda testa** (`REMOTO=1`) da lanciare **a mano dal PC
+del fondatore**. E «a mano» vuol dire **mai**.
+
+⛔ **Perché NON sul PC del fondatore, benché fosse quello che aveva chiesto.** Un sorvegliante
+sul suo computer controlla solo quando il computer è acceso: le altre ore tace, e «tutto bene»
+e «io ero spento» diventano **indistinguibili**. Sarebbe stata la stessa malattia di questa
+notte, ricostruita in un posto nuovo. Glielo si è detto e si è scelto altro.
+
+#### La scelta: GitHub Actions, decisa e non messa ai voti
+
+⚠️ **Nota di metodo, ed è un errore mio da non ripetere:** avevo preparato tre opzioni con
+tabella comparativa e chiesto al fondatore di scegliere. Risposta: *«IO NON SO RIPONDERE
+RICERCA E LA COSA MIGLIORE»*. **Un menu di opzioni tecniche è una domanda**, anche quando è ben
+fatto — e le scelte tecniche le decidiamo noi (**D12**). Se so abbastanza da costruire la
+tabella, so abbastanza da decidere.
+
+**Decisione, coi numeri:** GitHub Actions è fuori dal VPS, fuori da casa, **sempre acceso**,
+gratis sui repository pubblici, **non richiede nessun account nuovo né credenziali** (regola
+ferrea 14), e **vive nel repository**, quindi viaggia col progetto. Scartato UptimeRobot come
+*primo* passo (sarebbe l'ultimo miglio: puntuale, ma serve un account che apra il fondatore).
+
+#### La mossa che la rende forte: la salute racconta anche il di dentro
+
+Una testa esterna il volume Docker **non lo vede**: può solo fare una richiesta HTTP. Perciò
+`/api/health` — l'indirizzo che `watchdog.sh` interroga già — porta ora anche
+`"guardiano": "ok" | "muto" | "sconosciuto"`. **Una sola richiesta dice due cose: il sito
+risponde, e la sentinella dei soldi è viva.**
+
+⛔ Due precauzioni non negoziabili, entrambe sotto guardia:
+· **`status` resta `"ok"` anche col guardiano muto.** Se cambiasse, nginx e il watchdog del VPS
+  crederebbero che il **sito** è giù mentre è solo cieco: spegnerebbero un sito **sano** dentro
+  i monitoraggi. Quel falso allarme farebbe più danno del difetto (regola ferrea 10);
+· se il battito **non è misurabile** si dice `"sconosciuto"`, **mai** `"ok"`. È lo sbaglio S7 —
+  e in questa stessa famiglia di indirizzi era **già costato caro**: `/api/health/db` *«saltava
+  i percorsi vuoti e continuava a dire ok»* sopra una perdita di soldi.
+
+#### 🔴 L'ALLARME GRIDAVA SEMPRE, E L'HO PRESO PRIMA CHE GIRASSE UNA VOLTA
+
+Invece di fidarmi della forma, ho **estratto lo script dal workflow e l'ho eseguito** con un
+`curl` finto. Primo esito: **falliva in tutti e sei gli scenari**, compresi i due in cui doveva
+tacere. Un allarme sempre acceso viene spento da chi lo riceve: sarebbe stato **peggio di non
+averlo**.
+
+⚠️ **E la causa non era la sentinella: era il mio banco di prova** — su Git Bash i percorsi nel
+`PATH` vanno in stile POSIX (`/c/...`), quindi il finto `curl` non veniva mai chiamato e girava
+quello vero contro un indirizzo inventato. Ancora **S3** («quando la misura è assurda, sospetta
+lo strumento») e **S11** (l'ambiente è parte della misura). Corretto il banco, la sentinella è
+risultata giusta in **sei direzioni su sei**:
+
+| scenario | atteso | esito |
+|---|---|---|
+| tutto a posto | tace | ✅ |
+| guardiano **muto** | grida | ✅ |
+| stato non misurabile | grida | ✅ |
+| campo assente (server non aggiornato) | tollera | ✅ |
+| HTTP 500 | grida | ✅ |
+| `status` non ok | grida | ✅ |
+
+#### Le guardie, e perché non somigliano al precedente di casa
+
+Il test gemello (`test_email_ciclo.py:287`) prova il cablaggio dei tick cercando **una stringa
+nel sorgente**: un **commento** la soddisferebbe (sbaglio S6). Qui le ricerche si fanno **dopo
+aver tolto i commenti** — e la prova che funziona è arrivata dal vivo: togliendo il controllo
+sul guardiano muto, la parola «muto» **restava nei commenti** e la guardia è diventata **rossa
+lo stesso**. Tutte provate rompendo il file e ripristinandolo **byte-identico**
+(`sha256 263C1152…10D97D`).
+
+#### ⚠️ Limiti dichiarati (D18 punto 3) — questa testa NON è perfetta
+
+· GitHub **documenta** che i lavori programmati possono essere **ritardati o saltati** sotto
+  carico → i minuti sono **dispari** (7/22/37/52), non 0 o 30 dove passa l'ondata di tutti;
+· GitHub stessa **ha mancato il proprio 99,9%** più volte nel 2025-26. *Chi guarda GitHub?
+  Nessuno.* Una catena di sorveglianti ha **sempre** un ultimo anello scoperto: il mestiere è
+  renderlo il più affidabile possibile e **dichiararlo**, non fingere che non ci sia;
+· GitHub **disattiva** i lavori programmati dopo **60 giorni** di inattività del repository;
+· 🔴 **TOLLERANZA TEMPORANEA**: finché non si fa il **deploy**, il campo `guardiano` non esiste
+  sul server, e la sua **assenza non fa fallire** — altrimenti griderebbe ogni 15 minuti su un
+  sito sano. **Quel ramo va tolto subito dopo il primo deploy**, o un campo sparito passerà
+  inosservato per sempre. È sotto guardia: un test pretende che sia scritto come temporaneo e
+  con scritto **quando** va tolto.
+
 ### 💓 FATTO 2026-08-15 — **SE IL GUARDIANO DEI SOLDI SMETTEVA DI BATTERE, NESSUNO LO SAPEVA**
 
 **Moduli di PRODUZIONE toccati: `fase178_watchdog.py` e `fase83_server.py`** — col «autorizzo»

@@ -460,8 +460,16 @@ class TestAvvioDaZero(unittest.TestCase):
 
         stato, _h, corpo = self.app.get("/api/health")
         self.assertEqual(stato, 200)
-        self.assertEqual(_corpo_json(corpo),
+        salute = _corpo_json(corpo)
+        # I campi stabili restano fissati esatti. `guardiano` (aggiunto il 2026-08-15) VARIA
+        # col battito del Guardiano dei soldi, quindi si fissa l'INSIEME dei valori ammessi:
+        # e' un contratto piu' STRETTO di prima, non piu' largo -- un valore inventato fa
+        # rosso. Lo legge la sentinella esterna su GitHub, che il volume non lo vede e da
+        # fuori puo' solo fare una richiesta HTTP.
+        self.assertEqual({k: v for k, v in salute.items() if k != "guardiano"},
                          {"status": "ok", "money_unit": "cents_integer"})
+        self.assertIn(salute.get("guardiano"), ("ok", "muto", "sconosciuto"),
+                      "stato del Guardiano non riconoscibile dalla salute: %r" % (salute,))
 
     def test_il_sito_funziona_senza_nessun_dato(self):
         """Vetrina vuota, non rotta: la prima persona che arriva vede un sito, non un 500."""

@@ -1,0 +1,117 @@
+# =============================================================================
+#  SENTINELLA ESTERNA — la testa che NON muore col server
+# =============================================================================
+# Perche' esiste. `deploy/watchdog.sh` gira SUL VPS: se il VPS muore, muore anche lui, e
+# nessuno grida. E' il difetto che la ricerca sul «dead man's switch» chiama fondamentale:
+# «se il server cade, cadono insieme il lavoro e il suo controllo». Il progetto lo sapeva
+# gia' -- il commento di watchdog.sh dice «un guardiano dentro la stanza in fiamme non
+# chiama i pompieri» -- e prevedeva una seconda testa da lanciare A MANO dal PC del
+# fondatore (REMOTO=1). A mano vuol dire mai.
+#
+# ⛔ PERCHE' NON SUL PC DEL FONDATORE. Un sorvegliante sul suo computer controlla solo
+# quando il computer e' acceso, e le altre ore tace: «tutto bene» e «io ero spento»
+# diventano indistinguibili. Sarebbe la stessa malattia, ricostruita altrove.
+#
+# ⛔ PERCHE' QUI. GitHub Actions e' fuori dal VPS, fuori da casa, sempre acceso, gratis sui
+# repository pubblici, non richiede nessun account nuovo ne' nessuna credenziale, e vive
+# NEL REPOSITORY: viaggia col progetto, come le regole.
+#
+# ⚠️ LIMITI DICHIARATI (D18 punto 3) — questa testa NON e' perfetta, e va detto:
+#   · GitHub documenta che le esecuzioni programmate possono essere RITARDATE o SALTATE
+#     sotto carico. Percio' i minuti scelti sono dispari (7/22/37/52) e non 0 o 30, dove
+#     passa l'ondata di tutti: e' il rimedio noto, non una superstizione;
+#   · GitHub stessa ha mancato il proprio 99,9% piu' volte nel 2025-26. Chi guarda GitHub?
+#     Nessuno. Una catena di sorveglianti ha SEMPRE un ultimo anello scoperto: il mestiere
+#     e' renderlo il piu' affidabile possibile e DICHIARARLO, non fingere che non ci sia;
+#   · GitHub disattiva i lavori programmati dopo 60 giorni di inattivita' del repository;
+#   · l'ultimo miglio sarebbe un servizio dedicato (UptimeRobot, gratis fino a 50 controlli):
+#     e' puntuale e fa solo quel mestiere, ma richiede un account che deve aprire il
+#     fondatore. Non e' stato fatto, e non e' coperto.
+#
+# COME GRIDA: se un controllo fallisce, il lavoro va ROSSO e GitHub manda l'email al
+# proprietario del repository. Nessun segreto, nessun gettone, niente da configurare.
+# =============================================================================
+name: Sentinella esterna
+
+on:
+  schedule:
+    # ogni ~15 minuti, a minuti DISPARI: vedi i limiti dichiarati qui sopra
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  # un giro alla volta, e i giri in coda NON si annullano: un controllo annullato
+  # sarebbe un controllo che non ha guardato, cioe' un silenzio scambiato per pace
+  group: sentinella-esterna
+  cancel-in-progress: false
+
+jobs:
+  il-sito-risponde-e-la-sentinella-e-viva:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Interroga la salute dal di fuori
+        env:
+          URL: https://bookinvip.com/api/health
+        run: |
+          set -u
+          # NIENTE `|| true` (regola ferrea 12: nasconde i fallimenti). L'esito si legge
+          # diretto, mai attraverso un tubo (regola ferrea 7).
+          CODE="$(curl -sS -m 20 -o corpo.json -w '%{http_code}' "$URL")" || CODE=000
+          echo "HTTP $CODE"
+          echo "--- corpo ---"
+          cat corpo.json || true   # solo diagnosi: il verdetto NON dipende da questa riga
+          echo
+          echo "-------------"
+
+          if [ "$CODE" != "200" ]; then
+            echo "::error::IL SITO NON RISPONDE (HTTP $CODE). Questa e' la testa ESTERNA:"
+            echo "::error::se il VPS fosse morto, il watchdog che gira SUL VPS non lo direbbe."
+            exit 1
+          fi
+
+          # `status` deve essere ok. Si estrae con python3 (c'e' di serie sul runner):
+          # niente `grep` su JSON, che e' il modo classico di leggere una cosa per un'altra.
+          STATO="$(python3 -c "import json;print(json.load(open('corpo.json')).get('status',''))")"
+          if [ "$STATO" != "ok" ]; then
+            echo "::error::la salute risponde ma dichiara status=$STATO"
+            exit 1
+          fi
+
+          # Lo stato del Guardiano dei soldi, visto DA FUORI.
+          G="$(python3 -c "import json;print(json.load(open('corpo.json')).get('guardiano','ASSENTE'))")"
+          echo "guardiano: $G"
+
+          if [ "$G" = "ASSENTE" ]; then
+            # ⚠️ TOLLERANZA TEMPORANEA, DICHIARATA. Il campo esiste dal 2026-08-15 ma il
+            # server lo servira' solo DOPO il prossimo deploy: fino ad allora pretenderlo
+            # farebbe gridare questo controllo ogni 15 minuti su un sito sano, e un allarme
+            # sempre acceso viene spento (regola ferrea 10).
+            # ⛔ QUESTO RAMO VA TOLTO SUBITO DOPO IL PRIMO DEPLOY che porta il campo online:
+            # finche' resta, un campo sparito passerebbe inosservato. E' scritto anche fra i
+            # lavori aperti in RIPRENDI_QUI.md.
+            echo "::warning::il campo 'guardiano' non c'e': il server non ha ancora il codice"
+            echo "::warning::del 2026-08-15. Serve il DEPLOY. Fino ad allora questa testa"
+            echo "::warning::controlla solo che il sito risponda, non che il Guardiano viva."
+            exit 0
+          fi
+
+          if [ "$G" = "muto" ]; then
+            echo "::error::IL GUARDIANO DEI SOLDI NON BATTE PIU'. Il sito risponde, ma nessuno"
+            echo "::error::sta piu' confrontando i nostri conti con Stripe. Si guarda"
+            echo "::error::/data/guardiano_ultimo_giro sul VPS e i log del container."
+            exit 1
+          fi
+
+          if [ "$G" != "ok" ]; then
+            # «sconosciuto» = il battito non e' misurabile. NON e' un successo: e' un
+            # controllo che non ha potuto guardare (sbaglio S7), e in produzione non
+            # dovrebbe mai capitare perche' il giornale sta su disco.
+            echo "::error::stato del Guardiano NON MISURABILE ($G): su quel fronte siamo ciechi."
+            exit 1
+          fi
+
+          echo "OK: il sito risponde e il Guardiano dei soldi e' vivo."

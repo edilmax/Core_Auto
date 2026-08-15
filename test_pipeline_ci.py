@@ -492,6 +492,115 @@ class TestIgieneDelFile(unittest.TestCase):
             self.assertTrue(_passi(job), "il job %r non ha passi" % nome)
 
 
+class TestLaSentinellaEsterna(unittest.TestCase):
+    """LA TESTA CHE NON MUORE COL SERVER — e la guardia che le sta addosso.
+
+    `deploy/watchdog.sh` gira SUL VPS: se il VPS muore, muore con lui e nessuno grida. La
+    seconda testa prevista dal progetto (`REMOTO=1`, dal PC del fondatore) era **manuale**, e
+    a mano vuol dire mai. `.github/workflows/sentinella.yml` la rende automatica su macchine
+    di GitHub: fuori dal VPS, fuori da casa, sempre accesa, senza account nuovi.
+
+    ⚠️ Questa classe verifica la FORMA, non il comportamento: che il file ci sia, che sia
+    programmato, che interroghi la salute e che sia capace di FALLIRE. Il comportamento lo
+    esercita GitHub stessa ogni 15 minuti, e un giro rosso si vede nella tabella dei job.
+
+    ⛔ Le ricerche nel testo si fanno DOPO aver tolto i commenti: una guardia che cerca una
+    stringa nel sorgente e' soddisfatta da un commento (sbaglio S6), ed e' esattamente il
+    difetto del test gemello in `test_email_ciclo.py:287`.
+    """
+
+    PERCORSO = os.path.join(QUI, ".github", "workflows", "sentinella.yml")
+
+    def _doc(self):
+        self.assertTrue(os.path.exists(self.PERCORSO),
+                        "la sentinella esterna non c'e' piu': senza di lei, se il VPS muore "
+                        "nessuno se ne accorge, perche' l'altro watchdog muore con lui")
+        with io.open(self.PERCORSO, encoding="utf-8") as f:
+            return yaml.safe_load(f)
+
+    def _script(self):
+        """Il testo degli step `run`, SENZA commenti e senza righe vuote."""
+        righe = []
+        for job in (self._doc().get("jobs") or {}).values():
+            for passo in (job.get("steps") or []):
+                for riga in (passo.get("run") or "").splitlines():
+                    pulita = riga.strip()
+                    if pulita and not pulita.startswith("#"):
+                        righe.append(pulita)
+        self.assertTrue(righe, "la sentinella non esegue NESSUN comando: e' un ornamento")
+        return "\n".join(righe)
+
+    def test_e_PROGRAMMATA_e_avviabile_a_mano(self):
+        doc = self._doc()
+        on = doc.get(True) or doc.get("on") or {}      # PyYAML legge `on:` come booleano True
+        sched = on.get("schedule") or []
+        self.assertTrue(sched, "la sentinella non e' programmata: girerebbe solo a mano, "
+                               "cioe' mai -- ed e' il difetto che nasce per riparare")
+        self.assertIn("workflow_dispatch", on,
+                      "non si puo' avviare a mano: e' il modo di PROVARLA senza aspettare")
+
+    def test_i_MINUTI_sono_dispari_e_non_e_una_superstizione(self):
+        """GitHub documenta che i lavori programmati possono essere RITARDATI o SALTATI sotto
+        carico, e il carico si concentra al minuto 0 e 30, dove tutti programmano. I minuti
+        dispari sono il rimedio noto. Se qualcuno rimettesse `0 * * * *`, la sentinella
+        diventerebbe la piu' probabile a saltare -- e un controllo saltato e' un silenzio."""
+        on = self._doc().get(True) or self._doc().get("on") or {}
+        for voce in (on.get("schedule") or []):
+            minuti = str(voce.get("cron", "")).split(" ")[0]
+            self.assertNotIn(minuti, ("0", "30", "0,30"),
+                             "programmata nell'ora di punta di GitHub (%r): e' li' che i "
+                             "giri vengono ritardati o saltati" % (minuti,))
+            self.assertTrue(any(c.isdigit() for c in minuti),
+                            "il campo dei minuti non e' un numero: %r" % (minuti,))
+
+    def test_INTERROGA_la_salute_del_sito_vero(self):
+        s = self._script()
+        doc_txt = io.open(self.PERCORSO, encoding="utf-8").read()
+        self.assertIn("/api/health", doc_txt,
+                      "la sentinella non interroga la salute: non guarda niente")
+        self.assertIn("curl", s, "nessuna richiesta HTTP fuori dai commenti: e' un ornamento")
+
+    def test_PUO_FALLIRE_davvero(self):
+        """Un controllo che non puo' fallire e' un ornamento (regola dei 10 collaudi, modo 4).
+        Qui si pretende che esistano uscite diverse da zero e che nessuno abbia messo un
+        `|| true` sulle righe che decidono (regola ferrea 12: nasconde i fallimenti)."""
+        s = self._script()
+        self.assertIn("exit 1", s,
+                      "la sentinella non esce MAI con errore: qualunque cosa trovi, il lavoro "
+                      "resta verde e nessuno viene avvisato")
+        for riga in s.splitlines():
+            if "|| true" in riga:
+                self.assertIn("cat ", riga,
+                              "`|| true` su una riga che decide: nasconde il fallimento "
+                              "(regola ferrea 12). Riga: %r" % (riga,))
+        self.assertNotIn("continue-on-error", io.open(self.PERCORSO, encoding="utf-8").read(),
+                         "il lavoro e' dichiarato non-bloccante: griderebbe nel vuoto")
+
+    def test_UN_GUARDIANO_MUTO_fa_fallire_il_giro(self):
+        """E' la ragione per cui questa sentinella esiste: vedere DA FUORI che la sentinella
+        interna e' morta. Se `muto` non facesse fallire, guarderebbe solo che il sito
+        risponde -- cioe' meta' del lavoro, con l'aria di averlo fatto tutto."""
+        s = self._script()
+        self.assertIn("muto", s,
+                      "la sentinella non guarda lo stato del Guardiano dei soldi: controlla "
+                      "solo che il sito risponda, e un Guardiano morto le sfugge")
+
+    def test_LA_TOLLERANZA_TEMPORANEA_E_DICHIARATA_E_CIRCOSCRITTA(self):
+        """Il campo `guardiano` arriva in produzione solo col prossimo deploy: fino ad allora
+        la sua ASSENZA non fa fallire, o la sentinella griderebbe ogni 15 minuti su un sito
+        sano. E' una scelta giusta e PERICOLOSA: se resta per sempre, un campo sparito
+        passera' inosservato. Qui si pretende che sia scritta come temporanea, col motivo e
+        con quando va tolta -- cosi' chi legge il file sa che e' un debito, non un progetto."""
+        testo = io.open(self.PERCORSO, encoding="utf-8").read()
+        self.assertIn("ASSENTE", testo)
+        self.assertIn("TOLLERANZA TEMPORANEA", testo,
+                      "il ramo che perdona il campo assente non e' dichiarato temporaneo: "
+                      "fra sei mesi nessuno sapra' che era un debito")
+        self.assertIn("DOPO IL PRIMO DEPLOY", testo,
+                      "non e' scritto QUANDO va tolta la tolleranza: una scadenza che non "
+                      "esiste non scade")
+
+
 class TestTrigger(unittest.TestCase):
     """Il gate deve girare sui push E sulle pull request, senza vie di fuga."""
 

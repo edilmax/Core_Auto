@@ -11,7 +11,51 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🚦 2026-08-15 (2) — RIPARTI DA QUI. 💓 **ORA SI GRIDA ANCHE SE IL GUARDIANO SMETTE DI BATTERE**
+## 🚦 2026-08-15 (3) — RIPARTI DA QUI. 🛰️ **C'È UNA SENTINELLA FUORI, E IL DEPLOY È IL PROSSIMO PASSO**
+
+> **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
+> **⛔ PRIMA MISURA, POI AGISCI. I commit scritti qui invecchiano.**
+> ```powershell
+> git rev-parse --short HEAD ; git status --porcelain
+> git ls-remote origin refs/heads/master
+> ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'
+> python collaudi/prima_di_lanciare.py
+> curl -s https://bookinvip.com/api/health          # deve contenere "guardiano" DOPO il deploy
+> ```
+>
+> ### 🔴 LA COSA PIÙ IMPORTANTE: NIENTE DI OGGI GIRA IN PRODUZIONE
+> Il battito del Guardiano e il campo `guardiano` nella salute stanno **nel repository**, non
+> sul server: i `fase*.py` entrano nell'immagine Docker, quindi **serve un DEPLOY (D17)**.
+> ⛔ Il fondatore era fuori e il deploy **non è stato autorizzato**: si fa **insieme a lui**.
+> Non è urgente — il difetto riparato esisteva da sempre e non sta facendo danni.
+>
+> ### ✅ FATTO — ⛔ NON RIFARLO (per esteso nel registro, voce «FATTO 2026-08-15 🛰️»)
+> `deploy/watchdog.sh` gira **sul VPS**: se il VPS muore, muore con lui. La seconda testa
+> prevista (`REMOTO=1` dal PC) era **manuale**, cioè **mai**. Ora c'è
+> **`.github/workflows/sentinella.yml`**: ogni ~15 minuti da macchine GitHub interroga
+> `/api/health`, e **fallisce** se il sito non risponde **o se il Guardiano dei soldi è muto**.
+> Un giro rosso manda l'email al proprietario del repository. Nessun account, nessun segreto.
+> 💡 **La mossa che la rende forte**: `/api/health` ora porta anche
+> `"guardiano": ok|muto|sconosciuto`, così **una sola richiesta da fuori vede anche il di
+> dentro**. ⛔ `status` resta `"ok"` anche col Guardiano muto: cambiarlo farebbe credere a
+> nginx che il **sito** è giù, spegnendo un sito sano nei monitoraggi.
+>
+> ### 💡 L'ALLARME GRIDAVA SEMPRE, E L'HO PRESO PRIMA CHE GIRASSE UNA VOLTA
+> Non mi sono fidato della forma: ho **estratto lo script ed eseguito** con un `curl` finto.
+> Falliva in **tutti e sei** gli scenari, compresi i due in cui doveva tacere — e un allarme
+> sempre acceso viene spento. ⚠️ Causa: **il mio banco**, non la sentinella (su Git Bash il
+> `PATH` vuole percorsi `/c/...`). Corretto: **sei direzioni su sei** giuste.
+>
+> ### 🔴 COSA RESTA APERTO, in ordine di valore
+> 1. **IL DEPLOY** — senza, tutto il lavoro di oggi è solo nel repository;
+> 2. ⛔ **la TOLLERANZA nella sentinella va TOLTA subito dopo il deploy**: finché c'è, un campo
+>    `guardiano` sparito passa inosservato. È scritta nel workflow ed è sotto guardia;
+> 3. **il denominatore**: «tutto quadra» su **zero prenotazioni** si legge come su mille;
+> 4. **`_escrow_bloccati`** ha lo stesso schema del `None` (riga 100): non riparato, fuori scopo;
+> 5. **l'ultimo miglio**: un servizio dedicato (UptimeRobot, gratis) sarebbe puntuale dove
+>    GitHub è ritardabile. Serve un account che apra il fondatore.
+
+## 🚦 2026-08-15 (2) — 💓 **ORA SI GRIDA ANCHE SE IL GUARDIANO SMETTE DI BATTERE**
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
 > **⛔ PRIMA MISURA, POI AGISCI. I commit scritti qui invecchiano.**
@@ -1590,7 +1634,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: d89c5f8
+CONSEGNE AGGIORNATE A: 23f5c45
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -3415,12 +3459,16 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5708 test
+SUITE ATTUALE: Ran 5718 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3.
 COMANDO:  python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"
+MISURATO SU: 23f5c45 + la SENTINELLA ESTERNA del 2026-08-15 (non ancora committata): 4
+             guardie sulla salute in `test_watchdog.py` + 6 sul workflow in
+             `test_pipeline_ci.py`. Da 5708 a 5718: **+10**. Caricatore da fermo, PRIMA di
+             lanciare (S14) -- e la guardia D22 mi ha gia' fermato una volta su questa cifra.
 MISURATO SU: d89c5f8 + le otto guardie di `TestBattitoDelGuardiano` in `test_watchdog.py`,
              del 2026-08-15 (non ancora committate). Da 5700 a 5708: **+8**. Caricatore da
              fermo, scritto PRIMA di lanciare (S14).
