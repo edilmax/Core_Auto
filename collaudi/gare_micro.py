@@ -163,8 +163,14 @@ def g1_pin_vs_pagamento(d, sis, r, g, tk, oggi):
     s, rif, vt, _ = _book(g, sis, slug, ci, co, "g1@micro.it")
     pin = sis.firma.pin_checkin(rif)
     # marcatori ESATTI della riga PIN (il PIN nudo e' 4 cifre: collide con date/prezzi)
-    mk_pin = 'color:#1e3c72">%s</strong>' % pin
-    mk_lock = 'color:#1e3c72">&#128274;</strong>'
+    # 2026-08-15: questi due marcatori erano COPIE della forma disegnata dal prodotto, e le
+    # copie restano indietro. Ora la definizione e' UNA SOLA, dentro il prodotto, e si
+    # importa: se domani lo stile cambia, questo collaudo segue senza che nessuno se lo
+    # ricordi. (Il lucchetto era l'entita' numerica `&#128274;`, che CONTIENE le cifre
+    # 128274: per i PIN 1282/2827/8274 la rete difensiva rimetteva dentro il PIN che doveva
+    # togliere. Ora e' il carattere vero, senza cifre.)
+    mk_pin = SRV.riga_pin_voucher(pin)
+    mk_lock = SRV.riga_pin_voucher("\U0001F512")
     mk_paga = "Completa il pagamento per attivare il voucher"
 
     if ROSSO == "g1":

@@ -845,6 +845,22 @@ PENALE_HOST_BPS = 1500
 HOLD_APPROVAZIONE_SEC = 86100
 
 
+def riga_pin_voucher(valore: Any) -> str:
+    """LA RIGA DEL PIN DEL VOUCHER, DEFINITA IN UN POSTO SOLO.
+
+    Esiste perche' questa forma la conoscevano in TRE posti -- la pagina che la disegna, la
+    rete difensiva che la sorveglia, e `collaudi/gare_micro.py` che la verifica -- ognuno con
+    la sua copia. Una cosa vera scritta in piu' posti resta vera solo finche' nessuno ne
+    cambia uno: il giorno che lo stile cambia, la rete smette di catturare **in silenzio**.
+
+    Serve anche a chi sorveglia: cercare il PIN come QUATTRO CIFRE NUDE dentro l'HTML e'
+    ambiguo, perche' una pagina e' piena di cifre (prezzi, date, totali) e un PIN di 4 cifre
+    ci finisce dentro per caso ~1 volta su 1500 (misurato il 2026-08-15). Cercare questa riga
+    invece toglie l'ambiguita': o c'e' il PIN messo come PIN, o non c'e'.
+    """
+    return "<strong style=\"font-size:1.15rem;color:#1e3c72\">%s</strong>" % valore
+
+
 def pagina_voucher_html(sistema: Any, token: Any, lingua: Any = None) -> Optional[str]:
     """Voucher di conferma (server-rendered, stampabile, multilingua). Verifica la firma
     del token (non falsificabile). None se assente/manomesso/non un voucher.
@@ -1149,7 +1165,7 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: Any = None) -> Optiona
         "<div style=\"font-weight:700;color:#1e3c72;font-size:1.3rem\">BookinVIP</div>"
         "<h1>✓ %s</h1>"
         "<div class=\"r\"><span>%s</span><strong style=\"letter-spacing:.05em\">%s</strong></div>"
-        "<div class=\"r\"><span>%s</span><strong style=\"font-size:1.15rem;color:#1e3c72\">%s</strong></div>"
+        "<div class=\"r\"><span>%s</span>%s</div>"
         "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
         "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
         "<div class=\"r\"><span>%s</span><strong>%s %s</strong></div>"
@@ -1159,7 +1175,7 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: Any = None) -> Optiona
         e(lng), e(_ui("voucher_ok", lng)),
         e(_ui("rif", lng)), e(_codice_pren),
         e(_ui("v_pin_label", lng)),
-        (e(_pin_checkin) if _pagato else "&#128274;"),      # PIN reale SOLO a pagamento avvenuto
+        riga_pin_voucher(e(_pin_checkin) if _pagato else "\U0001F512"),  # PIN SOLO se pagato
         e(_ui("dal", lng)), e(str(dati.get("check_in", ""))),
         e(_ui("al", lng)), e(str(dati.get("check_out", ""))),
         e(_ui("totale", lng)), e(prezzo), e(str(dati.get("valuta", "EUR"))),
@@ -1169,9 +1185,14 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: Any = None) -> Optiona
     # ═══ GUARDIA FISICA (direttiva fondatore): un voucher NON pagato non deve MAI contenere il PIN
     # reale né i tasti di controversia/garanzia. Se — per qualunque motivo — trapelassero, li togliamo
     # e lo denunciamo nei log. Con il gate a monte questa non scatta mai: è la seconda rete.
-    if not _pagato and (_pin_checkin in pagina or "/api/garanzia/" in pagina):
+    # ⛔ Si cerca la RIGA del PIN, non le quattro cifre nude: una pagina e' piena di cifre e un
+    # PIN di 4 ci finisce dentro per caso (~1 su 1500, misurato il 2026-08-15). Col confronto
+    # ingenuo questa rete gridava al lupo su pagine sane E sostituiva il prezzo o la data che
+    # aveva coinciso -- cioe' corrompeva un numero che l'ospite legge, per difendersi da niente.
+    _pin_esposto = riga_pin_voucher(_pin_checkin)
+    if not _pagato and (_pin_esposto in pagina or "/api/garanzia/" in pagina):
         logger.error("VOUCHER non pagato con PIN/controversia esposti (rif=%s): rimozione difensiva", _ref)
-        pagina = pagina.replace(_pin_checkin, "&#128274;").replace("/api/garanzia/", "#")
+        pagina = pagina.replace(_pin_esposto, riga_pin_voucher("\U0001F512")).replace("/api/garanzia/", "#")
     return pagina
 
 

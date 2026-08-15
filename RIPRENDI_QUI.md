@@ -11,7 +11,52 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🚦 2026-08-15 (4) — RIPARTI DA QUI. 🚀 **DEPLOY FATTO: I TRE POSTI SONO ALLINEATI**
+## 🚦 2026-08-15 (5) — RIPARTI DA QUI. 🔒 **LA RETE CHE TOGLIEVA IL PIN LO RIMETTEVA DENTRO**
+
+> **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
+> **⛔ PRIMA MISURA, POI AGISCI. I commit scritti qui invecchiano.**
+>
+> ### 🔴 LA LEZIONE PIÙ IMPORTANTE DI OGGI: UNA CI ROSSA CHE SEMBRAVA INSTABILITÀ
+> Dopo il deploy la CI è andata rossa su un commit che **non toccava produzione**:
+> `I3 VIOLATO: PIN check-in esposto PRIMA del pagamento`. La spiegazione comoda era
+> «hypothesis è instabile» — ⛔ **ed era un difetto vero.**
+> Il voucher sostituiva il PIN col lucchetto **`&#128274;`**, che **contiene le cifre
+> 128274**: per i PIN `1282`/`2827`/`8274` la rete **rimetteva dentro** il PIN che doveva
+> togliere. Misurato: **2 casi su 3000** voucher non pagati, ed erano esattamente quei valori.
+> ✅ Riparato (segnaposto senza cifre): **0 su 3000**. D20 completo, difetto rimesso dentro e
+> ribeccato, `sha256` verificato.
+>
+> ### 💡 DUE COSE DA NON DIMENTICARE
+> · **Il PIN dipende dal SEGRETO.** Avevo quasi archiviato il difetto perché il PIN citato
+>   dalla CI non era fra i tre — ma l'avevo calcolato col segreto del MIO banco. Un numero
+>   preso dall'ambiente sbagliato (**S11**) mi stava facendo scartare la spiegazione giusta.
+> · **Il progetto lo sapeva già, in un angolo solo.** `collaudi/gare_micro.py:165` dice
+>   *«il PIN nudo e' 4 cifre: collide con date/prezzi»* e cerca la **riga esatta**.
+>   `test_stateful_api.py:397` usa il confronto ingenuo. Era **una lezione imparata e non
+>   propagata** — ed è il motivo per cui è tornata a costare.
+>
+> ### ✅ CHIUSA ANCHE LA SECONDA META', LO STESSO GIORNO
+> La rete cercava **quattro cifre nude**: se il PIN coincideva con un prezzo o una data
+> scattava lo stesso, gridava `CRITICAL` su una pagina sana e **sostituiva quel numero**
+> (2 su 3000). ✅ Ora la riga del PIN ha **UNA definizione sola** — `riga_pin_voucher()` in
+> `fase83_server.py` — e la importano il prodotto, la rete, `test_stateful_api.py` e
+> `collaudi/gare_micro.py`, che prima ne tenevano **copie**. Prima erano **tre** i posti che
+> conoscevano quella forma; adesso è **uno**.
+>
+> ### 💡 TRE ROSSI, E NESSUNO ERA DEL PRODOTTO
+> · la mia guardia cercava il prezzo **con la virgola**, la pagina lo scrive **col punto**;
+> · l'altra pretendeva che 4 cifre qualsiasi non comparissero mai — ma l'anno è **2026**:
+>   avevo ricostruito lo stesso difetto che stavo riparando, dall'altro lato del vetro;
+> · la prima ri-iniezione era **a metà**, e la guardia verde **aveva ragione**.
+> ⛔ Quando una misura sorprende, il primo sospetto va allo strumento (**S3**) — e stavolta
+> lo strumento ero io.
+>
+> ### ⚠️ CONTROLLATO ANCHE IL FRONTE NON CHIESTO: l'EMAIL È A POSTO
+> `fase86_email.py` ha un suo blocco PIN e lo riceve come **parametro**: la protezione sta nel
+> chiamante. Verificati **entrambi** (`fase83_server.py:5013` e `:6466`): tutti e due gated sul
+> pagamento. Nessun difetto — ma andava guardato, perche' un'email **si manda**.
+
+## 🚦 2026-08-15 (4) — 🚀 **DEPLOY FATTO: I TRE POSTI SONO ALLINEATI**
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
 > **⛔ PRIMA MISURA, POI AGISCI. I commit scritti qui invecchiano.**
@@ -3501,7 +3546,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5718 test
+SUITE ATTUALE: Ran 5720 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
