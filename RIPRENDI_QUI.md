@@ -11,6 +11,53 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🚦 2026-08-15 — RIPARTI DA QUI. 🛡️ **IL GUARDIANO DEI SOLDI DICEVA «TUTTO QUADRA» SENZA GUARDARE**
+
+> **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
+> **⛔ PRIMA MISURA, POI AGISCI. I commit scritti qui invecchiano.**
+> ```powershell
+> git rev-parse --short HEAD ; git status --porcelain
+> git ls-remote origin refs/heads/master
+> ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'
+> python collaudi/prima_di_lanciare.py
+> ssh root@76.13.44.167 'docker logs --since 48h casavip_app 2>&1 | grep -i guardian'
+> ```
+>
+> ### 🎯 IL «PEZZO 8» NON ERA DA COSTRUIRE: ERA GIÀ COSTRUITO E ACCESO
+> ⛔ **«Nessun battito sui cicli dei soldi in produzione» è FALSO**, e va tolto dalla memoria.
+> `fase182_riconciliazione.py` confronta Stripe col nostro giornale **al centesimo**, e
+> `fase186_guardiano.py` lo richiama in un **tick giornaliero** che batte davvero — misurato
+> sui log del VPS: `20:26:06` il 13, `20:26:07` il 14, a 24 ore esatte. `ALERT_EMAIL` e le
+> chiavi Stripe sono configurate in produzione. **D10 ha risparmiato il lavoro intero.**
+>
+> ### ✅ FATTO — ⛔ NON RIFARLO (per esteso nel registro, voce «FATTO 2026-08-15»)
+> `_riconciliazione` usciva con **`None` in due situazioni opposte**: «Stripe non c'è, non ho
+> guardato» (riga 76) e «ho guardato, tutto quadra» (riga 84). Lo stesso valore, e `_prova`
+> segna come ciechi **solo** i controlli che sollevano un'eccezione. Risultato: `pulito: True`
+> su un fronte mai guardato. 💡 Il commento alla riga 316 descriveva **esattamente** questa
+> malattia e la curava — per **una forma su due**.
+> ✅ Ora c'è il campo **`non_eseguiti`**, fuori da `anomalie` (niente falso allarme: la regola
+> ferrea 10 lo considera grave quanto un allarme mancato) e **stampato nell'email**.
+> D20 rispettato: 2 guardie **viste rosse**, riparate, riverdi, difetto **rimesso dentro** e
+> ribeccato, ripristino `sha256` identico.
+>
+> ### 🔴 COSA RESTA APERTO SU QUESTO FRONTE, dichiarato
+> · **Il verde non dichiara il denominatore.** «Tutto quadra» su **zero prenotazioni** si legge
+>   identico a «tutto quadra» su mille — e in produzione `/data/prenotazioni.db` è **0 byte**.
+> · 🔴 **Se il battito si ferma, nessuno se ne accorge**: manca l'allarme sull'**assenza** del
+>   tick. È il buco più grosso rimasto, e vale più delle altre due.
+> · **`_escrow_bloccati` ha lo stesso schema** (`return []` se manca l'archivio, riga 100):
+>   non riparato, fuori scopo — serve il suo «autorizzato».
+> · Il messaggio giornaliero sta in **`fase83_server.py`**, che era fuori dallo scopo dichiarato.
+>
+> ### 🔬 DUE COSE DELLA RICERCA, verificate alla fonte il 2026-08-15
+> · ⛔ **I «sei metodi AWS» non li ho trovati**: la pagina ufficiale (*Well-Architected, FSI
+>   Lens, Payments*) parla di cifratura, tokenizzazione e PCI DSS. Non citarli come «lo dice AWS».
+> · ✅ **La sostanza della ricerca regge**, ritrovata per strade indipendenti: la cosa utile è
+>   di **Stripe**, che dichiara i `BalanceTransaction` *«possono fare da tuo libro mastro»* —
+>   immutabili, creati da loro. È il **giudice esterno** applicato ai soldi veri.
+> · ⚠️ **iCal: le fonti dicono 15-30 minuti**, non «15 minuti-2 ore». Numero nostro da rivedere.
+
 ## 🚦 2026-08-14 (tarda notte) — RIPARTI DA QUI. 🔗 **L'AUDIT DEI 5 DOCUMENTI ORA GIRA NELLA SUITE**
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
@@ -3330,12 +3377,15 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5697 test
+SUITE ATTUALE: Ran 5700 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3.
 COMANDO:  python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"
+MISURATO SU: 15f7175 + le tre guardie di `TestControlloCiecoSILENZIOSO` in
+             `test_guardiano.py`, del 2026-08-15 (non ancora committate). Da 5697 a 5700:
+             **+3**. Caricatore da fermo, scritto PRIMA di lanciare (S14).
 MISURATO SU: f835496 + la guardia nuova `test_L_AUDIT_MILLIMETRICO_VIENE_ESEGUITO_DAVVERO`
              del 2026-08-14 (non ancora committata). Da 5696 a 5697: **+1**, un test solo.
              ⛔ IL NUMERO L'HA DATO IL CARICATORE DA FERMO (D22), e l'ho scritto **PRIMA**
