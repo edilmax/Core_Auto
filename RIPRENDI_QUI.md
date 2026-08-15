@@ -11,7 +11,45 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🚦 2026-08-15 — RIPARTI DA QUI. 🛡️ **IL GUARDIANO DEI SOLDI DICEVA «TUTTO QUADRA» SENZA GUARDARE**
+## 🚦 2026-08-15 (2) — RIPARTI DA QUI. 💓 **ORA SI GRIDA ANCHE SE IL GUARDIANO SMETTE DI BATTERE**
+
+> **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
+> **⛔ PRIMA MISURA, POI AGISCI. I commit scritti qui invecchiano.**
+> ```powershell
+> git rev-parse --short HEAD ; git status --porcelain
+> git ls-remote origin refs/heads/master
+> ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'
+> python collaudi/prima_di_lanciare.py
+> ssh root@76.13.44.167 'ls -la /var/lib/docker/volumes/bookinvip_casavip_data/_data/guardiano_ultimo_giro'
+> ```
+>
+> ### ✅ FATTO — ⛔ NON RIFARLO (per esteso nel registro, voce «FATTO 2026-08-15 💓»)
+> Tutti i nostri allarmi gridavano **quando qualcosa va storto**. Nessuno gridava **quando un
+> segnale atteso non arriva**. Il Guardiano dei soldi girava in un thread daemon: se moriva,
+> i log **tacevano** — e un guardiano morto era indistinguibile da uno che non trova niente.
+> ✅ Ora il tick lascia un **battito** (`/data/guardiano_ultimo_giro`) in fondo al giro **e solo
+> se il giro è riuscito**, e `watchdog.sh` — che gira **ogni 10 minuti** e grida su Telegram —
+> se ne accorge oltre le **25 ore** (24 + 1 di grazia, come prescrivono le fonti).
+> ⛔ **`deploy/watchdog.sh` non è stato toccato**: la logica sta nel modulo puro `fase178`.
+>
+> ### 💡 DUE ROSSI FINTI SMASCHERATI, e valgono più del codice
+> · **Il test end-to-end accusava il battito mentre a non partire erano i tick.** I tick NON
+>   nascono in `crea_router`: nascono dentro **`servi()`** (`fase83_server.py:9598`). Con
+>   `crea_router` restava vivo **un solo thread**. Se avessi «riparato» il prodotto avrei rotto
+>   una cosa che funzionava (sbaglio S3). Rifatto con `servi()` vera in un thread: **0,1 s**.
+> · **Il precedente in casa era una guardia debole e non l'ho copiata.**
+>   `test_email_ciclo.py:287` prova il cablaggio dei tick cercando **una stringa nel sorgente**:
+>   un commento la soddisferebbe (S6). Qui il battito **o compare sul disco o non compare**.
+>
+> ### 🔴 COSA RESTA APERTO
+> · **La seconda testa (`REMOTO=1` dal PC) è MANUALE.** Se il VPS muore del tutto, l'allarme
+>   dipende da qualcuno che lancia quel comando. La ricerca è categorica: *«se il server cade,
+>   cadono insieme il lavoro e il suo controllo»*. **Automatizzarla è il prossimo passo utile.**
+> · **Il denominatore**: il battito dice che il Guardiano ha girato, non che abbia guardato
+>   qualcosa. Con **zero prenotazioni** in produzione gira su un insieme vuoto.
+> · **`_escrow_bloccati`** ha lo stesso schema del `None` (riga 100): non riparato, fuori scopo.
+
+## 🚦 2026-08-15 — 🛡️ **IL GUARDIANO DEI SOLDI DICEVA «TUTTO QUADRA» SENZA GUARDARE**
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
 > **⛔ PRIMA MISURA, POI AGISCI. I commit scritti qui invecchiano.**
@@ -1552,7 +1590,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 42fde28
+CONSEGNE AGGIORNATE A: d89c5f8
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -3377,12 +3415,15 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5700 test
+SUITE ATTUALE: Ran 5708 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3.
 COMANDO:  python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"
+MISURATO SU: d89c5f8 + le otto guardie di `TestBattitoDelGuardiano` in `test_watchdog.py`,
+             del 2026-08-15 (non ancora committate). Da 5700 a 5708: **+8**. Caricatore da
+             fermo, scritto PRIMA di lanciare (S14).
 MISURATO SU: 15f7175 + le tre guardie di `TestControlloCiecoSILENZIOSO` in
              `test_guardiano.py`, del 2026-08-15 (non ancora committate). Da 5697 a 5700:
              **+3**. Caricatore da fermo, scritto PRIMA di lanciare (S14).

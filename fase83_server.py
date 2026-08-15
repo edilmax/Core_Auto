@@ -10199,6 +10199,23 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                                         daemon=True).start()
                     else:
                         logger.info("GUARDIANO: nessuno stato anomalo (tutto quadra)")
+                    # IL BATTITO (dead man's switch), in fondo e SOLO se il giro e' arrivato
+                    # fin qui: se `scansiona` esplode, l'except qui sotto prende il controllo
+                    # e il battito NON viene lasciato. Cosi' `watchdog.sh` -- che gira ogni
+                    # 10 minuti sul VPS e grida su Telegram -- se ne accorge entro 25 ore
+                    # invece che MAI. Prima un Guardiano morto in silenzio era
+                    # indistinguibile da un Guardiano che non trova niente: i log tacevano
+                    # in tutti e due i casi, e il silenzio somiglia alla pace.
+                    try:
+                        import os as _osb
+                        from fase178_watchdog import segna_battito_guardiano
+                        _dbf = getattr(getattr(sistema, "config", None), "db_finanza", "") or ""
+                        segna_battito_guardiano(_osb.path.dirname(_dbf))
+                    except Exception:
+                        # ISOLATO: un battito non lasciato non deve mai fermare il Guardiano.
+                        # E sbaglia dalla parte giusta -- al massimo il watchdog grida, cioe'
+                        # dice «non so se sta girando», che in quel momento e' la verita'.
+                        logger.error("guardiano: battito non lasciato (ISOLATO)", exc_info=True)
                 except Exception:
                     logger.error("guardiano: giro fallito (thread TENUTO VIVO)", exc_info=True)
                 _tg.sleep(86400)                       # una volta al giorno

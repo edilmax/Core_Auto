@@ -30,6 +30,20 @@ from typing import Any, Dict, List, Optional
 # database il cui giornale va verificato per la catena hash
 DB_GIORNALE = "finanza"
 
+# ── IL BATTITO DEL GUARDIANO DEI SOLDI (dead man's switch) ───────────────────
+# `fase186_guardiano` confronta i nostri conti con Stripe una volta al giorno, in un thread
+# daemon. Se quel thread muore, i log semplicemente TACCIONO -- e il silenzio somiglia alla
+# pace: nessuno grida sull'ASSENZA. Qui la logica e' rovesciata rispetto a un allarme
+# normale: si grida quando un segnale ATTESO non arriva.
+# Il nome del file sta in UN POSTO SOLO, qui: chi scrive il battito (`fase83_server.py`, il
+# tick) importa questa costante invece di ripeterla. Lo stesso fatto in due posti, con la
+# seconda copia che resta indietro, e' il difetto che abbiamo inseguito tutta la notte.
+NOME_BATTITO = "guardiano_ultimo_giro"
+# 24 ore di intervallo + 1 di grazia. La grazia non e' prudenza generica: serve a non
+# trasformare un ritardo normale in un allarme, e un allarme che grida per niente viene
+# spento da chi lo riceve (regola ferrea 10, che lo considera grave quanto uno mancato).
+MAX_ETA_BATTITO_SEC = 25 * 3600
+
 
 # ── verifiche read-only ─────────────────────────────────────────────────────
 def verifica_catena_file(percorso: str) -> Dict[str, Any]:
@@ -104,6 +118,42 @@ def eta_backup_sec(dir_backup: str, *, ora: Optional[int] = None) -> Optional[in
     return None if piu_recente is None else max(0, ora - piu_recente)
 
 
+def segna_battito_guardiano(dir_dati: str, *, ora: Optional[int] = None) -> bool:
+    """Lascia il battito. Lo chiama il tick giornaliero ALLA FINE e SOLO se il giro e'
+    riuscito: se il Guardiano muore a meta', non deve restare un battito che dice «sto bene».
+
+    Ritorna False invece di sollevare quando non c'e' una cartella vera -- `db_finanza` vale
+    `:memory:` di serie, e `os.path.dirname(":memory:")` e' la stringa vuota. Timbrare un
+    battito in un posto che non esiste sarebbe un segnale FINTO, cioe' peggio di nessun
+    segnale: rassicura. E un guasto qui non deve mai far cadere il giro del Guardiano.
+    """
+    if not dir_dati or not os.path.isdir(dir_dati):
+        return False
+    ora = ora if isinstance(ora, int) else int(time.time())
+    try:
+        percorso = os.path.join(dir_dati, NOME_BATTITO)
+        with open(percorso, "w") as f:
+            f.write("%d\n" % ora)
+        os.utime(percorso, (ora, ora))     # l'eta' si legge dall'mtime, non dal contenuto
+        return True
+    except OSError:
+        return False
+
+
+def eta_battito_guardiano_sec(dir_dati: str, *, ora: Optional[int] = None) -> Optional[int]:
+    """Eta' (secondi) dell'ultimo battito. None se non c'e': o non ha mai girato, o qualcuno
+    l'ha cancellato -- e le due cose vanno trattate uguale, perche' in tutti e due i casi
+    NON SAPPIAMO se il Guardiano sta girando."""
+    ora = ora if isinstance(ora, int) else int(time.time())
+    if not dir_dati:
+        return None
+    try:
+        m = int(os.path.getmtime(os.path.join(dir_dati, NOME_BATTITO)))
+    except OSError:
+        return None
+    return max(0, ora - m)
+
+
 def db_presenti(dir_dati: str) -> List[str]:
     """Prefissi dei .db presenti nella cartella dati (per notare un DB sparito)."""
     if not os.path.isdir(dir_dati):
@@ -123,7 +173,8 @@ def spazio_disco_pct(percorso: str) -> Optional[int]:
 
 # ── decisione PURA (misure -> verdetto): testabile senza I/O ─────────────────
 def valuta(misure: Dict[str, Any], *, max_eta_backup_sec: int = 8 * 3600,
-           max_disco_pct: int = 85, db_attesi: Optional[List[str]] = None
+           max_disco_pct: int = 85, db_attesi: Optional[List[str]] = None,
+           max_eta_battito_sec: int = MAX_ETA_BATTITO_SEC
            ) -> Dict[str, Any]:
     """misure: {catena:{ok,..}, eta_backup_sec:int|None, disco_pct:int|None,
     db_presenti:[...], uptime_ok:bool|None}. Ritorna {ok, allarmi:[...], dettagli}."""
@@ -152,6 +203,23 @@ def valuta(misure: Dict[str, Any], *, max_eta_backup_sec: int = 8 * 3600,
                             "msg": "ultimo backup vecchio di %dh (soglia %dh)"
                                    % (eta // 3600, max_eta_backup_sec // 3600)})
 
+    # Stessa disciplina del backup qui sopra: la chiave ASSENTE vuol dire «non l'ho
+    # guardato», e non si giudica cio' che non si e' guardato. Senza questo, il watchdog in
+    # modalita' REMOTA (dal PC, che il volume del server non lo vede) griderebbe «guardiano
+    # muto» a ogni giro: un falso allarme perenne, cioe' un allarme che finisce spento.
+    if "eta_battito_guardiano_sec" in misure:
+        eb = misure.get("eta_battito_guardiano_sec")
+        if eb is None:
+            allarmi.append({"cod": "guardiano_muto", "grav": "critico",
+                            "msg": "il Guardiano dei soldi non ha lasciato NESSUN battito: "
+                                   "o non ha mai girato, o il segnale e' sparito. I conti "
+                                   "contro Stripe potrebbero non essere piu' controllati"})
+        elif eb > max_eta_battito_sec:
+            allarmi.append({"cod": "guardiano_muto", "grav": "critico",
+                            "msg": "il Guardiano dei soldi non batte da %dh (soglia %dh): "
+                                   "nessuno sta piu' confrontando i nostri conti con Stripe"
+                                   % (eb // 3600, max_eta_battito_sec // 3600)})
+
     disco = misure.get("disco_pct")
     if isinstance(disco, int) and disco >= max_disco_pct:
         allarmi.append({"cod": "disco", "grav": "critico" if disco >= 95 else "avviso",
@@ -169,7 +237,8 @@ def valuta(misure: Dict[str, Any], *, max_eta_backup_sec: int = 8 * 3600,
 
 def diagnosi(*, dir_dati: str, dir_backup: str, uptime_ok: Optional[bool] = None,
              max_eta_backup_sec: int = 8 * 3600, max_disco_pct: int = 85,
-             db_attesi: Optional[List[str]] = None) -> Dict[str, Any]:
+             db_attesi: Optional[List[str]] = None,
+             max_eta_battito_sec: int = MAX_ETA_BATTITO_SEC) -> Dict[str, Any]:
     """Raccoglie le misure reali (read-only) e le valuta. `uptime_ok` lo passa il
     chiamante (il bash lo misura da FUORI: un processo interno non puo' dire di essere
     morto)."""
@@ -177,11 +246,13 @@ def diagnosi(*, dir_dati: str, dir_backup: str, uptime_ok: Optional[bool] = None
         "uptime_ok": uptime_ok,
         "catena": verifica_catena_file(os.path.join(dir_dati, DB_GIORNALE + ".db")),
         "eta_backup_sec": eta_backup_sec(dir_backup),
+        "eta_battito_guardiano_sec": eta_battito_guardiano_sec(dir_dati),
         "disco_pct": spazio_disco_pct(dir_dati),
         "db_presenti": db_presenti(dir_dati),
     }
     return valuta(misure, max_eta_backup_sec=max_eta_backup_sec,
-                  max_disco_pct=max_disco_pct, db_attesi=db_attesi)
+                  max_disco_pct=max_disco_pct, db_attesi=db_attesi,
+                  max_eta_battito_sec=max_eta_battito_sec)
 
 
 if __name__ == "__main__":   # pragma: no cover — CLI per il bash
