@@ -119,7 +119,7 @@ jobs:
       # riproduce dal vivo, in una cartella sterile, il comando di soglia usato dal
       # cricchetto e pretende di vederlo uscire diverso da zero sotto la soglia.
       - name: Dipendenze di test
-        run: pip install -r requirements.txt hypothesis pyyaml coverage
+        run: pip install -r requirements.txt hypothesis pyyaml coverage z3-solver
       # ⛔ IL REGISTRO VA SU FILE, NON DENTRO UN TUBO (regola ferrea 7). Il 2026-08-12
       # questo job e' andato rosso e il nome del test caduto NON si e' potuto leggere:
       # GitHub tronca il log a schermo ("This step has been truncated due to its large
@@ -204,7 +204,7 @@ jobs:
           python-version: '3.11'
           cache: pip
       - name: Dipendenze di test
-        run: pip install -r requirements.txt hypothesis pyyaml coverage
+        run: pip install -r requirements.txt hypothesis pyyaml coverage z3-solver
       # I 7 moduli con debito dichiarato (5 di semantica delle date + 2 che su
       # Windows sciolgono male le cartelle temporanee) restano fuori da QUESTO
       # comando, che blocca su tutto il resto: oggi sono 388 moduli su 395.
@@ -281,7 +281,7 @@ jobs:
           python-version: '3.9'
           cache: pip
       - name: Dipendenze di test + coverage
-        run: pip install -r requirements.txt hypothesis pyyaml coverage
+        run: pip install -r requirements.txt hypothesis pyyaml coverage z3-solver
       - name: Suite completa SOTTO MISURA (righe + rami)
         run: coverage run -m unittest discover -s . -p "test_*.py"
       # Da qui in poi "if: always()": anche se la suite e' rossa, il report di

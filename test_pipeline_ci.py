@@ -1394,6 +1394,121 @@ class TestNienteScappatoie(unittest.TestCase):
                     "'skipped'" % nome)
 
 
+class TestLeDIMOSTRAZIONIMatematicheGIRANODavveroInCI(unittest.TestCase):
+    """LE PROVE PIU' FORTI CHE ABBIAMO ERANO VERDI PERCHE' NON VENIVANO ESEGUITE.
+
+    ⛔ Misurato il 2026-08-15, ed e' il pezzo **A** del piano. `z3-solver` non e' fra le
+    dipendenze installate dalla CI (`pip install -r requirements.txt hypothesis pyyaml
+    coverage`), quindi in CI `test_fase199_invarianti` e `test_fase199_transizioni` fanno
+    `skipTest("z3 non installato")`: **35 test** che dimostrano matematicamente le leggi dei
+    soldi e le transizioni delle prenotazioni **si saltano puliti**, e la tabella dei job
+    resta VERDE. Sul computer del fondatore girano (z3 c'e'), quindi il buco era invisibile
+    proprio dove si guarda di piu'.
+
+    E' la forma peggiore di verde finto: non un test debole, ma un test forte **che non
+    viene eseguito**. Un guasto nel nucleo degli invarianti passerebbe il cancello.
+
+    ⛔ PERCHE' LA CURA NON E' `requirements.txt`. Quel file e' l'elenco di cio' che finisce
+    **dentro l'immagine di produzione**: infilarci un risolutore matematico che il sito non
+    usa mai gonfia il server per niente (regola ferrea 1, D1). z3 e' uno strumento **di
+    collaudo**, quindi va nella riga d'installazione dei job che lanciano la suite -- e
+    questa guardia pretende tutt'e due le cose insieme.
+    """
+
+    @staticmethod
+    def _job_esegue_le_prove_z3(passi):
+        """Il job arriva a `test_fase199_*`? Due modi, e servono tutt'e due.
+
+        ⚠️ La prima versione di questa guardia cercava solo `unittest discover` e si e'
+        lasciata sfuggire `full-suite-311`, che lancia la stessa suite con un elenco
+        generato (`python -m unittest $(cat moduli_311.txt)`). Un job invisibile a una
+        guardia e' peggio di nessuna guardia: da' la sensazione di essere coperti.
+        ⛔ Al contrario `money-smoke` elenca a mano dodici moduli dei soldi e NON tocca
+        `fase199`: obbligarlo a installare z3 sarebbe spreco, e un falso allarme e' un
+        difetto quanto un allarme mancato (regola ferrea 10).
+        """
+        for p in passi:
+            run = p.get("run")
+            if not isinstance(run, str) or "-m unittest" not in run:
+                continue
+            # (a) tutta la suite: `discover`, oppure un elenco GENERATO -> ci passa dentro
+            if "discover" in run or "$(" in run:
+                return True
+            # (b) elenco scritto a mano che nomina proprio quei test
+            if "test_fase199" in run:
+                return True
+        return False
+
+    def test_OGNI_job_che_esegue_le_prove_z3_LE_INSTALLA(self):
+        """La formulazione conta: non «la riga 122 contiene z3», ma «ogni job che arriva a
+        quei test installa la libreria». Cosi' la guardia sopravvive a una rinomina, e un
+        job aggiunto domani senza z3 diventa rosso da solo."""
+        doc = _doc_ci()
+        senza = []
+        for nome, job in doc["jobs"].items():
+            passi = _passi(job)
+            if not self._job_esegue_le_prove_z3(passi):
+                continue
+            installa = any(isinstance(p.get("run"), str)
+                           and "z3-solver" in p["run"] for p in passi)
+            if not installa:
+                senza.append(nome)
+        self.assertEqual(
+            [], senza,
+            "questi job arrivano alle dimostrazioni matematiche ma NON installano "
+            "z3-solver: %s. Li' quelle prove si saltano in silenzio e la tabella resta "
+            "verde -- cioe' il cancello proteggerebbe master senza aver controllato le "
+            "prove piu' forti che abbiamo" % ", ".join(sorted(senza)))
+
+    def test_LA_GUARDIA_VEDE_ANCHE_IL_JOB_CHE_NON_USA_discover(self):
+        """Prova del METODO, non dello stato: e' il buco vero che avevo lasciato il
+        2026-08-15. Se qualcuno restringesse il riconoscimento a `discover`, `full-suite-311`
+        tornerebbe invisibile e nessuno se ne accorgerebbe."""
+        finto = [{"run": "python -m unittest $(cat moduli_311.txt)"}]
+        self.assertTrue(self._job_esegue_le_prove_z3(finto),
+                        "un job che lancia la suite con un elenco GENERATO non viene "
+                        "riconosciuto: resterebbe senza z3 e senza allarme")
+        a_mano = [{"run": "python -m unittest test_paga_struttura test_conservazione_denaro"}]
+        self.assertFalse(self._job_esegue_le_prove_z3(a_mano),
+                         "un job che elenca a mano moduli che NON toccano fase199 viene "
+                         "obbligato a installare z3: e' un falso allarme, e i falsi "
+                         "allarmi insegnano a ignorare i segnali (regola ferrea 10)")
+
+    def test_z3_NON_entra_nell_immagine_di_produzione(self):
+        """L'altra meta', e non e' pignoleria: la scorciatoia comoda sarebbe metterlo in
+        `requirements.txt`, e funzionerebbe. Ma quel file costruisce il server: ci
+        entrerebbe un risolutore matematico che il sito non chiama mai. Uno strumento di
+        collaudo non viaggia col prodotto."""
+        import io as _io
+        percorso = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "requirements.txt")
+        with _io.open(percorso, encoding="utf-8") as f:
+            elenco = f.read()
+        self.assertNotIn(
+            "z3", elenco.lower(),
+            "z3 e' finito in requirements.txt: cosi' entra nell'immagine di produzione, "
+            "dove non serve a niente. Va nella riga d'installazione dei job di collaudo")
+
+    def test_le_prove_z3_si_saltano_SOLO_per_la_libreria_mancante(self):
+        """S7 e D23: un salto e' ammesso solo se dipende dall'AMBIENTE, mai da cio' che il
+        test dovrebbe verificare. Se domani qualcuno allargasse quella condizione, i 35 test
+        potrebbero assolversi da soli per un altro motivo e nessuno se ne accorgerebbe."""
+        import io as _io
+        radice = os.path.dirname(os.path.abspath(__file__))
+        for nome in ("test_fase199_invarianti.py", "test_fase199_transizioni.py"):
+            with _io.open(os.path.join(radice, nome), encoding="utf-8") as f:
+                testo = f.read()
+            self.assertIn("import z3", testo,
+                          "%s non prova piu' a importare z3: il salto non e' piu' legato "
+                          "alla libreria" % nome)
+            for riga in testo.splitlines():
+                if "skipTest(" in riga:
+                    self.assertIn("z3", riga,
+                                  "%s ha uno skipTest che NON parla di z3 (%r): un test "
+                                  "che si assolve da solo per un motivo diverso "
+                                  "dall'ambiente sparisce dal rapporto" % (nome, riga.strip()))
+
+
 class TestSogliaProvataSulCampo(unittest.TestCase):
     """PUNTO 3: il comando del cricchetto viene ESEGUITO, non letto.
 
