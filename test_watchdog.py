@@ -220,6 +220,88 @@ class TestBattitoDelGuardiano(unittest.TestCase):
                          "ha scritto un battito in una cartella inesistente")
 
 
+class TestLaSaluteDiceSeIlGuardianoEVIVO(unittest.TestCase):
+    """DA FUORI SI DEVE POTER VEDERE CHE LA SENTINELLA INTERNA E' MORTA.
+
+    Il battito (classe qui sopra) e' un file dentro il volume del server, e lo legge il
+    watchdog che gira SUL VPS. Ma la ricerca sul «dead man's switch» e' categorica: *«se il
+    server cade, cadono insieme il lavoro e il suo controllo»*. Serve una testa FUORI -- e una
+    testa fuori il volume non lo vede: puo' solo fare una richiesta HTTP.
+
+    Percio' `/api/health` -- l'indirizzo che `watchdog.sh` interroga gia' (`WATCHDOG_URL`) --
+    porta ANCHE lo stato del battito. Una sola richiesta dice due cose: il sito risponde, e la
+    sentinella dei soldi e' viva.
+
+    ⛔ DUE PRECAUZIONI, CHE SONO LA DIFFERENZA FRA UN BENE E UN DANNO:
+
+    1. `status` resta **"ok"** anche col Guardiano muto. Se cambiasse, nginx e il watchdog del
+       VPS crederebbero che il SITO e' giu' mentre e' soltanto cieco: si spegnerebbe un sito
+       sano dentro i monitoraggi. Un falso allarme di quel calibro fa piu' danno del difetto
+       che vorrebbe segnalare (regola ferrea 10).
+    2. Se il battito non e' MISURABILE (giornale in memoria, cartella assente) si dice
+       **"sconosciuto"**, mai "ok". E' lo sbaglio S7 -- e in questa stessa famiglia di
+       indirizzi e' GIA' SUCCESSO: *«la sonda /api/health/db SALTA i percorsi vuoti, quindi
+       continuava a dire ok»* (`test_avvio_e_ripristino.py:28`), sopra una perdita di soldi.
+    """
+
+    def _sistema(self, cartella=None):
+        d = cartella if cartella is not None else tempfile.mkdtemp()
+        if cartella is None:
+            self.addCleanup(shutil.rmtree, d, True)
+        return crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"h" * 32, db_catalogo="%s/c.db" % d,
+            db_inventario="%s/i.db" % d, db_registro_host="%s/r.db" % d,
+            db_pendenti="%s/p.db" % d, db_finanza="%s/finanza.db" % d)), d
+
+    def _salute(self, sis):
+        stato, corpo = crea_router(sis, host_key="hk", admin_key="ak").gestisci(
+            "GET", "/api/health", {}, None, {})[:2]
+        return stato, corpo
+
+    def test_col_battito_FRESCO_la_salute_dice_che_il_guardiano_e_vivo(self):
+        sis, d = self._sistema()
+        wd.segna_battito_guardiano(d)
+        stato, corpo = self._salute(sis)
+        self.assertEqual(stato, 200)
+        self.assertEqual(corpo.get("guardiano"), "ok",
+                         "la salute non dice che il Guardiano e' vivo: da fuori nessuno puo' "
+                         "accorgersi che la sentinella dei soldi e' morta. Risposta: %r" % (corpo,))
+
+    def test_col_guardiano_MUTO_lo_dice_MA_status_resta_ok(self):
+        """L'errore che farebbe piu' danno del difetto: spegnere un sito sano."""
+        sis, d = self._sistema()
+        wd.segna_battito_guardiano(d, ora=int(time.time()) - 40 * 3600)   # 40 ore fa
+        stato, corpo = self._salute(sis)
+        self.assertEqual(corpo.get("guardiano"), "muto",
+                         "battito di 40 ore e la salute non lo segnala: %r" % (corpo,))
+        self.assertEqual(stato, 200, "un Guardiano muto NON e' un sito giu'")
+        self.assertEqual(corpo.get("status"), "ok",
+                         "`status` e' cambiato per colpa del Guardiano: nginx e il watchdog "
+                         "del VPS crederanno che il sito e' GIU' mentre e' solo cieco, e "
+                         "spegneranno un sito sano nei monitoraggi. Risposta: %r" % (corpo,))
+
+    def test_se_NON_E_MISURABILE_dice_sconosciuto_e_non_ok(self):
+        """Giornale in memoria: non c'e' nessuna cartella dove il battito possa esistere.
+        Rispondere "ok" sarebbe dichiarare sano cio' che non si e' guardato (S7)."""
+        sis = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=b"h" * 32))
+        _stato, corpo = self._salute(sis)
+        self.assertEqual(corpo.get("guardiano"), "sconosciuto",
+                         "senza una cartella il battito non e' misurabile, e dirlo «ok» "
+                         "sarebbe un verde che non ha guardato niente: %r" % (corpo,))
+
+    def test_la_salute_non_puo_ESPLODERE_per_colpa_del_battito(self):
+        """La pagina della salute la interroga nginx e il watchdog ogni 10 minuti: se si
+        rompesse per un guasto nel controllo del battito, avremmo trasformato una diagnosi
+        in un guasto. La lettura sta dentro un `try` e in caso di problemi dice «sconosciuto»."""
+        sis, d = self._sistema()
+        rotto = os.path.join(d, wd.NOME_BATTITO)
+        os.mkdir(rotto)            # una CARTELLA dove ci si aspetta un file: getmtime confonde
+        stato, corpo = self._salute(sis)
+        self.assertEqual(stato, 200, "la salute e' esplosa per colpa del battito")
+        self.assertIn(corpo.get("guardiano"), ("ok", "muto", "sconosciuto"),
+                      "stato del guardiano non riconoscibile: %r" % (corpo,))
+
+
 class TestVerificheReali(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()

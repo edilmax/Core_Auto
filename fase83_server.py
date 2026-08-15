@@ -1809,7 +1809,8 @@ class RouterHTTP:
         if not self._sys.attivo:
             return 503, {"errore": "sistema_spento"}
         if metodo == "GET" and path == "/api/health":
-            return 200, {"status": "ok", "money_unit": "cents_integer"}
+            return 200, {"status": "ok", "money_unit": "cents_integer",
+                         "guardiano": self._stato_battito_guardiano()}
         if metodo == "GET" and path == "/api/lingue":
             return 200, {"lingue": list(LINGUE_SUPPORTATE)}
         if metodo == "GET" and path == "/api/i18n":
@@ -3235,6 +3236,37 @@ class RouterHTTP:
             return 503, {"errore": "service_unavailable"}
         return 200, {"csv": csv_txt, "anno": anno,
                      "integro": ("# FINE REPORT DAC7 - INTEGRITÀ:" in csv_txt)}
+
+    def _stato_battito_guardiano(self) -> str:
+        """«ok» · «muto» · «sconosciuto» — lo stato del battito del Guardiano dei soldi,
+        esposto su `/api/health` perche' lo legga la testa ESTERNA.
+
+        Perche' passa da qui e non dal file: una sentinella fuori dal server (GitHub Actions,
+        o il PC) il volume Docker NON lo vede. Puo' solo fare una richiesta HTTP. Cosi' una
+        sola richiesta dice due cose: il sito risponde, e la sentinella dei soldi e' viva.
+
+        ⛔ NON tocca mai `status`. Un Guardiano muto non e' un sito giu': far credere il
+        contrario a nginx e a `watchdog.sh` spegnerebbe un sito SANO dentro i monitoraggi, e
+        un falso allarme di quel calibro fa piu' danno del difetto (regola ferrea 10).
+        ⛔ Se non e' misurabile dice «sconosciuto», mai «ok»: dichiarare sano cio' che non si
+        e' guardato e' lo sbaglio S7, e in questa stessa famiglia di indirizzi e' gia'
+        costato caro -- `/api/health/db` «saltava i percorsi vuoti e continuava a dire ok»
+        sopra una perdita di soldi.
+        """
+        try:
+            import os as _osh
+            from fase178_watchdog import (MAX_ETA_BATTITO_SEC,
+                                          eta_battito_guardiano_sec)
+            dbf = getattr(getattr(self._sys, "config", None), "db_finanza", "") or ""
+            eta = eta_battito_guardiano_sec(_osh.path.dirname(dbf))
+            if eta is None:
+                return "sconosciuto"
+            return "ok" if eta <= MAX_ETA_BATTITO_SEC else "muto"
+        except Exception:
+            # La salute non deve poter fallire per colpa di una diagnosi: un guasto QUI
+            # trasformerebbe uno strumento di misura in un guasto del prodotto.
+            logger.error("salute: stato del battito non leggibile (ISOLATO)", exc_info=True)
+            return "sconosciuto"
 
     def _bunker_guardiano(self, headers):
         """IL GUARDIANO DEGLI STATI IMPOSSIBILI (fase186) a richiesta: lo stesso controllo
