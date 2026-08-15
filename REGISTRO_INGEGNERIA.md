@@ -567,6 +567,86 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 💓 FATTO 2026-08-15 — **SE IL GUARDIANO DEI SOLDI SMETTEVA DI BATTERE, NESSUNO LO SAPEVA**
+
+**Moduli di PRODUZIONE toccati: `fase178_watchdog.py` e `fase83_server.py`** — col «autorizzo»
+del fondatore, 2026-08-15. Guardie in `test_watchdog.py` (8 nuove).
+⛔ **`deploy/watchdog.sh`: ZERO righe.** Lo scambio è stato chiesto e concesso: la logica va nel
+modulo **puro e testabile**, non nel bash, che è solo orchestrazione (lo dichiara il suo stesso
+commento). Metterla nel bash sarebbe stata **logica duplicata in un posto non testabile**.
+
+#### Il buco: la logica rovesciata che non avevamo
+
+Tutti i nostri allarmi gridano **quando qualcosa va storto**. Nessuno gridava **quando un
+segnale atteso non arriva**. Il Guardiano dei soldi gira in un thread daemon: se moriva, i log
+semplicemente **tacevano** — e il silenzio somiglia alla pace. Un guardiano morto era
+**indistinguibile** da un guardiano che non trova niente.
+
+#### D25 — la ricerca, e la cosa che ha cambiato il progetto
+
+Il modello si chiama **dead man's switch**: il lavoro lascia un segnale alla fine di ogni giro;
+se non arriva entro il tempo previsto, scatta l'allarme. Due prescrizioni hanno cambiato scelte
+concrete, non solo confermato quel che pensavo:
+· ⛔ **il sorvegliante dev'essere FUORI dal sorvegliato** — *«se il server cade, cadono insieme
+  il lavoro e il suo controllo»*. Un allarme dentro l'applicazione non serve nel caso che deve
+  coprire. 💡 **E qui non abbiamo dovuto inventare niente:** `deploy/watchdog.sh` ha già **DUE
+  TESTE** (VPS + `REMOTO=1` dal PC) e il suo commento dice la stessa frase della ricerca —
+  *«un guardiano dentro la stanza in fiamme non chiama i pompieri»*;
+· **la soglia è intervallo + grazia**: 24h + 1h = **25 ore**. Non è prudenza generica: serve a
+  non trasformare un ritardo normale in un allarme, e un allarme che grida per niente **viene
+  spento** (regola ferrea 10).
+
+#### D10 — di nuovo: era quasi tutto già lì
+
+`watchdog.sh` gira **ogni 10 minuti** dal crontab del VPS (misurato), grida su **Telegram**, ha
+l'**anti-spam**, e passa già `--dati` **sulla cartella dove il battito viene scritto**. Mancava
+solo l'anello: il battito da lasciare e il controllo che lo guarda. In produzione
+`DB_FINANZA=/data/finanza.db` (misurato sul server) → la cartella è `/data`, **esattamente il
+volume che il watchdog già legge**.
+
+#### Cosa è stato aggiunto
+
+· `fase178_watchdog.py`: `NOME_BATTITO`, `MAX_ETA_BATTITO_SEC` (25h), `segna_battito_guardiano`,
+  `eta_battito_guardiano_sec`, l'allarme `guardiano_muto` in `valuta()` e la misura in
+  `diagnosi()`. **Il nome del file sta in un posto solo**: chi scrive lo importa da qui;
+· `fase83_server.py`: il tick timbra il battito **in fondo e solo se il giro è arrivato lì**. Se
+  `scansiona` esplode, l'`except` prende il controllo e **il battito non viene lasciato** — così
+  il watchdog se ne accorge entro 25 ore invece che mai.
+
+#### 🔴 DUE ROSSI FINTI SMASCHERATI, ed è la parte che vale
+
+**① Il test end-to-end accusava il battito mentre a non partire erano i tick.** Avevo scritto la
+prova con `crea_router`, come fa un test vicino. Rosso. Diagnosi invece di riparare: **un solo
+thread vivo, il principale**. I tick non nascono nel router — nascono dentro **`servi()`**
+(`fase83_server.py:9598`), fra l'apertura del socket (10116) e `serve_forever()` (10335). Se
+avessi «riparato» il prodotto avrei rotto qualcosa che funzionava. È lo sbaglio **S3**: quando
+la misura è assurda, il primo sospetto va allo strumento.
+✅ Rifatto avviando **`servi()` vera** in un thread daemon con `porta=0`: battito sul disco in
+**0,1 secondi**.
+
+**② Il precedente in casa era una guardia debole, e non l'ho copiata.**
+`test_email_ciclo.py:287` verifica il cablaggio dei tick con `inspect.getsource` + ricerca di una
+stringa: **un commento la soddisferebbe** (sbaglio S6). Qui il battito **o compare sul disco o
+non compare**.
+
+#### Le prove, nell'ordine di D20
+
+1. 8 guardie scritte; 2. **viste rosse**: 3 FAIL (l'allarme non esisteva) + 2 ERROR (le funzioni
+non esistevano), e **2 già verdi** — le due direzioni del silenzio, che dovevano reggere;
+3. riparazione; 4. **riverdi**: 8 su 8, e i 27 del file; 5. *in più (D20)*: **timbro tolto** dal
+tick → la guardia del cablaggio è tornata rossa; ripristino **byte-identico**,
+`sha256 0AF3F5DF…0E0EEF` prima e dopo.
+
+#### ⚠️ Cosa NON è coperto (D18 punto 3)
+
+· la seconda testa (`REMOTO=1` dal PC) è **manuale**: se il VPS muore del tutto, l'allarme
+  dipende da qualcuno che lancia quel comando. Non è automatizzata, e non lo è nemmeno adesso;
+· il battito dice **che il Guardiano ha girato**, non che abbia guardato qualcosa di utile: con
+  **zero prenotazioni** in produzione, gira su un insieme vuoto. È il **denominatore**, che
+  resta aperto;
+· `servi()` è `# pragma: no cover`: la guardia nuova la esercita davvero, ma la copertura
+  dichiarata di quella funzione resta zero e il numero non lo dice.
+
 ### 🛡️ FATTO 2026-08-15 — **IL GUARDIANO DEI SOLDI DICEVA «TUTTO QUADRA» SENZA AVER GUARDATO**
 
 **Modulo di produzione toccato: `fase186_guardiano.py`** — col «autorizzato» del fondatore,

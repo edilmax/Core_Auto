@@ -68,6 +68,158 @@ class TestValutaPura(unittest.TestCase):
         self.assertIn("finanza", r["allarmi"][0]["msg"])
 
 
+class TestBattitoDelGuardiano(unittest.TestCase):
+    """SE IL GUARDIANO DEI SOLDI SMETTE DI BATTERE, NESSUNO SE NE ACCORGE.
+
+    `fase186_guardiano` gira in un thread daemon e confronta i nostri conti con Stripe una
+    volta al giorno. Misurato sui log del VPS il 2026-08-15: batte davvero, alle 20:26, a 24
+    ore esatte. Ma se quel thread morisse, o il tick smettesse, i log semplicemente
+    TACEREBBERO -- e il silenzio somiglia alla pace. Nessuno grida sull'ASSENZA.
+
+    E' il buco che l'industria chiama «dead man's switch», e la logica e' rovesciata rispetto
+    a un allarme normale: invece di gridare quando qualcosa va storto, si grida quando un
+    segnale ATTESO non arriva. Il lavoro lascia un battito alla fine di ogni giro; se il
+    battito non arriva entro il tempo previsto, scatta l'allarme.
+
+    ⛔ Il segnale va lasciato ALLA FINE e SOLO SE il giro e' riuscito: se il guardiano muore a
+    meta', non deve restare un battito che dice «sto bene».
+
+    LA SOGLIA E' 25 ORE, NON 24, e non e' un numero scelto a occhio: le fonti prescrivono
+    «intervallo + grazia» (24h + 1h) proprio per non gridare su un ritardo normale. Un allarme
+    che grida per niente viene spento da chi lo riceve -- regola ferrea 10, che considera il
+    falso allarme grave quanto quello mancato.
+
+    Sta qui e non altrove perche' `watchdog.sh` gira gia' ogni 10 minuti sul VPS (crontab
+    misurato il 2026-08-15), grida gia' su Telegram, ha gia' l'anti-spam, e passa gia'
+    `--dati` sulla cartella dove il battito viene scritto. Non serve un impianto nuovo:
+    serve un anello.
+    """
+
+    def test_un_battito_FRESCO_non_fa_gridare_nessuno(self):
+        """L'altra direzione (D18 punto 2): a macchina sana deve TACERE."""
+        r = wd.valuta({"eta_battito_guardiano_sec": 3600})
+        self.assertEqual([a["cod"] for a in r["allarmi"]], [],
+                         "grida su un guardiano che ha battuto un'ora fa: %r" % (r["allarmi"],))
+
+    def test_un_battito_VECCHIO_grida_e_dice_da_quanto(self):
+        r = wd.valuta({"eta_battito_guardiano_sec": 30 * 3600})
+        cod = [a["cod"] for a in r["allarmi"]]
+        self.assertIn("guardiano_muto", cod,
+                      "il guardiano non batte da 30 ore e nessuno lo dice: %r" % (r,))
+        a = r["allarmi"][cod.index("guardiano_muto")]
+        self.assertEqual(a["grav"], "critico",
+                         "un guardiano fermo sui SOLDI non e' un avviso: e' critico")
+        self.assertIn("30", a["msg"], "il messaggio non dice da quanto tempo: %r" % (a,))
+
+    def test_un_battito_MAI_LASCIATO_grida(self):
+        """Nessun file = o non ha mai girato, o qualcuno l'ha cancellato. Vale uguale."""
+        r = wd.valuta({"eta_battito_guardiano_sec": None})
+        cod = [a["cod"] for a in r["allarmi"]]
+        self.assertIn("guardiano_muto", cod, "battito assente scambiato per silenzio: %r" % (r,))
+        self.assertEqual(r["allarmi"][cod.index("guardiano_muto")]["grav"], "critico")
+
+    def test_se_NON_e_stato_misurato_non_si_GIUDICA(self):
+        """La disciplina che questo modulo applica gia' ai backup (riga 143): la chiave
+        ASSENTE significa «non l'ho guardato», e non si giudica cio' che non si e' guardato.
+        Senza questo, il watchdog in modalita' REMOTA (dal PC, che il volume non lo vede)
+        griderebbe «guardiano muto» a ogni giro: un falso allarme perenne."""
+        r = wd.valuta({"uptime_ok": True})
+        self.assertNotIn("guardiano_muto", [a["cod"] for a in r["allarmi"]],
+                         "giudica un battito che non ha misurato: %r" % (r["allarmi"],))
+
+    def test_LA_SOGLIA_E_INTERVALLO_PIU_GRAZIA_non_un_numero_a_caso(self):
+        """24h esatte NON devono gridare (il giro puo' ritardare di poco); oltre le 25 si'.
+
+        Il margine di un'ora e' quello che le fonti prescrivono per un lavoro giornaliero, ed
+        esiste per non trasformare la normale variazione dei tempi in un allarme.
+        """
+        self.assertEqual([a["cod"] for a in wd.valuta(
+            {"eta_battito_guardiano_sec": 24 * 3600})["allarmi"]], [],
+            "grida a 24 ore esatte: il giro puo' ritardare di minuti, e un allarme che "
+            "scatta per un ritardo normale viene spento (regola ferrea 10)")
+        self.assertIn("guardiano_muto", [a["cod"] for a in wd.valuta(
+            {"eta_battito_guardiano_sec": 25 * 3600 + 1})["allarmi"]],
+            "oltre intervallo + grazia il guardiano e' fermo, e va detto")
+
+    def test_il_battito_si_SCRIVE_e_si_RILEGGE(self):
+        """La misura vera, non la funzione pura: scrivo il battito e ne rileggo l'eta'."""
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        self.assertIsNone(wd.eta_battito_guardiano_sec(d),
+                          "prima di ogni giro il battito non c'e': deve dire None, non 0")
+        wd.segna_battito_guardiano(d, ora=1000)
+        self.assertEqual(wd.eta_battito_guardiano_sec(d, ora=1600), 600,
+                         "l'eta' del battito non torna")
+
+    def test_IL_TICK_LASCIA_DAVVERO_IL_BATTITO(self):
+        """COLLAUDO 2 — CABLAGGIO: non basta che la funzione esista, deve chiamarla qualcuno.
+
+        Qui NON si cerca una stringa nel sorgente: un commento la soddisferebbe (sbaglio S6).
+        Si avvia il router VERO, che fa partire il tick del Guardiano, e si pretende che il
+        battito compaia sul disco. E' l'unico modo di sapere che l'anello e' attaccato -- ed
+        e' la lezione che questo progetto ha gia' pagato tre volte in due giorni: l'audit dei
+        documenti scollegato, il campo `non_eseguiti` che nessuno stampava, e questo.
+
+        Se qualcuno domani togliesse la riga del battito dal tick, `fase178` resterebbe
+        perfetto e testato -- e l'allarme sull'assenza non scatterebbe MAI, perche' il
+        segnale non arriverebbe mai. Questo test diventa rosso lo stesso giorno.
+
+        ⛔ PERCHE' `servi()` E NON `crea_router()`. I tick NON nascono nel router: nascono
+        dentro `servi()` (fase83_server.py:9598), fra l'apertura del socket (10116) e
+        `serve_forever()` (10335). Provato: con `crea_router` restava vivo UN SOLO thread, il
+        principale, e questo test dava un rosso FINTO -- accusava il battito mentre a non
+        partire erano i tick. Quindi `servi()` gira in un thread daemon: parte davvero, e
+        `serve_forever()` blocca solo quel thread, che muore col processo.
+
+        ⚠️ E deliberatamente NON si usa `inspect.getsource` per cercare la riga nel sorgente,
+        come fa il test gemello in `test_email_ciclo.py:287`: quella e' una guardia che un
+        COMMENTO soddisferebbe (sbaglio S6). Qui il battito o compare sul disco o non compare.
+        """
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"h" * 32, db_catalogo="%s/c.db" % d,
+            db_inventario="%s/i.db" % d, db_registro_host="%s/r.db" % d,
+            db_pendenti="%s/p.db" % d, db_finanza="%s/finanza.db" % d))
+        # La premessa: il tick nasce solo se il sistema ha pendenti E inventario
+        # (fase83_server.py:10164). Senza questa verifica il test potrebbe passare o
+        # fallire per un motivo che non c'entra niente col battito (sbaglio S7).
+        self.assertIsNotNone(getattr(sis, "pagamenti_pendenti", None),
+                             "premessa non valida: senza `pagamenti_pendenti` il tick del "
+                             "Guardiano non nasce proprio, e questo test non prova niente")
+        self.assertIsNotNone(getattr(sis, "inventario", None),
+                             "premessa non valida: senza `inventario` il tick non nasce")
+        import threading as _thr
+        from fase83_server import servi
+        _thr.Thread(target=servi, args=(sis,), daemon=True,
+                    kwargs={"host": "127.0.0.1", "porta": 0,   # porta 0 = la sceglie il sistema
+                            "host_key": "hk", "admin_key": "ak"}).start()
+        percorso = os.path.join(d, wd.NOME_BATTITO)
+        for _ in range(200):                  # il tick e' un thread: gli si da' tempo di girare
+            if os.path.exists(percorso):
+                break
+            time.sleep(0.05)
+        self.assertTrue(
+            os.path.exists(percorso),
+            "il tick del Guardiano e' partito ma NON ha lasciato il battito: la funzione "
+            "esiste e nessuno la chiama, quindi l'allarme sull'assenza non scattera' mai "
+            "(regola #23: COSTRUITO non e' COLLEGATO)")
+        eta = wd.eta_battito_guardiano_sec(d)
+        self.assertIsNotNone(eta, "il battito c'e' sul disco ma non si riesce a rileggerne l'eta'")
+        self.assertLess(eta, 120,
+                        "il battito c'e' ma e' vecchio di %rs: non l'ha lasciato questo giro" % eta)
+
+    def test_senza_una_CARTELLA_VERA_il_battito_non_si_scrive(self):
+        """`db_finanza` vale `:memory:` di serie: `os.path.dirname(":memory:")` e' la stringa
+        vuota. Timbrare un battito in un posto che non esiste sarebbe un segnale FINTO --
+        peggio di nessun segnale, perche' rassicura. Deve dire di no, non esplodere."""
+        self.assertFalse(wd.segna_battito_guardiano(""),
+                         "ha finto di scrivere un battito senza una cartella")
+        self.assertFalse(wd.segna_battito_guardiano(os.path.join(tempfile.gettempdir(),
+                                                                 "cartella_che_non_esiste_xyz")),
+                         "ha scritto un battito in una cartella inesistente")
+
+
 class TestVerificheReali(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
