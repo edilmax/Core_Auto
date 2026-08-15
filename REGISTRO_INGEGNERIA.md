@@ -567,6 +567,67 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🚀 FATTO 2026-08-15 — **DEPLOY: IL LAVORO DI OGGI È IN PRODUZIONE, E VERIFICATO DA FUORI**
+
+Autorizzato dal fondatore («fai il deploy»). Eseguito col **`deploy/protocollo_d17.sh`**, non a
+mano — D10: l'attrezzo esisteva già e fa i tre passi nell'ordine obbligatorio. ⛔ Prima di
+eseguirlo è stata **verificata l'impronta `sha256` del file sul server contro quella locale**:
+identiche, quindi leggere il proprio file era leggere ciò che sarebbe girato.
+
+#### 🔴 IL PARACADUTE ERA AGGANCIATO ALL'IMMAGINE SBAGLIATA. ANCORA.
+
+```
+:prec PRIMA:   sha256:d3c97a63caf5f891...
+immagine viva: sha256:4eb853a4ed77a2e7...
+```
+Se il deploy fosse andato male e si fosse tirata la maniglia, si sarebbe tornati a uno stato che
+**non era l'ultimo buono** — convinti del contrario. È il difetto che `CLAUDE.md` racconta come
+sbagliato **sei volte in sei giorni**, e la settima volta **non l'ha impedito la memoria: l'ha
+impedito l'attrezzo**, che ri-aggancia e poi *verifica che coincida*. La differenza fra un
+obbligo affidato alla buona volontà e uno affidato a una macchina, misurata sul campo.
+
+#### Il deploy, coi numeri
+
+`d05ff53 → 1064947` · 17 file · build dell'immagine nuova **mentre il sito girava su quella
+vecchia** · `:latest` ≠ `:prec` verificato (altrimenti il ritorno non esisterebbe) ·
+**`casavip_nginx` è rimasto `Running` per tutta l'operazione: il sito non è mai andato giù** ·
+app **sana dopo 6 secondi** · `money_path_pronto: True` · `avvisi: []` · gettone **consumato**
+(un `prima` vale per **uno** scambio, non per la giornata).
+
+Salvataggio verificato **aprendolo**, non guardando la data: `gzip -t` integro e primi byte
+`SQLite format 3`.
+
+#### Le prove, dopo
+
+· sonde positive `/` e `/api/health` → **200 e 200**;
+· sonda negativa `/api/bunker/invarianti` → **403**. ⛔ Su un indirizzo che **esiste**: un 404
+  non prova mai che qualcosa sia protetto;
+· giudice del progetto sul sito vero: **190 controlli, 0 violazioni**;
+· dentro il contenitore: commit `1064947`, immagine viva = `:latest`, paracadute = la precedente.
+
+#### 🎯 E le tre verifiche che erano il MOTIVO del deploy
+
+```
+{"status": "ok", "money_unit": "cents_integer", "guardiano": "ok"}
+/data/guardiano_ultimo_giro   11 byte, scritto 12:41
+12:41:05 INFO GUARDIANO: nessuno stato anomalo (tutto quadra)
+```
+E poi la prova che chiude il cerchio, **da fuori**: un giro vero della sentinella su macchine
+GitHub contro il sito vero →
+`HTTP 200 · guardiano: ok · OK: il sito risponde e il Guardiano dei soldi e' vivo.`
+
+#### ✅ IL DEBITO È STATO CHIUSO LO STESSO GIORNO, NON «QUANDO CAPITA»
+
+La sentinella **tollerava** l'assenza del campo `guardiano` finché il server non aveva il codice.
+Condizione soddisfatta alle 12:41 → perdono **tolto** subito. Da adesso un campo che sparisce è
+un **allarme**. Riprovati i sei scenari eseguendo lo script: l'unico cambiato è quello voluto —
+*campo sparito* da **tollera** a **grida**. La guardia è stata **rovesciata** di conseguenza:
+non pretende più che la tolleranza sia dichiarata temporanea, ma che **non esista più alcuna
+uscita a zero** nello script.
+
+💡 *Un «temporaneo» che nessuno toglie diventa cecità permanente, ed è il modo più comune in cui
+una rete di sicurezza si allarga fino a non prendere più niente.*
+
 ### 🛰️ FATTO 2026-08-15 — **LA SENTINELLA ESTERNA: LA TESTA CHE NON MUORE COL SERVER**
 
 **File nuovo: `.github/workflows/sentinella.yml`.** Produzione toccata: `fase83_server.py`

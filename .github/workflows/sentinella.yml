@@ -86,17 +86,21 @@ jobs:
           echo "guardiano: $G"
 
           if [ "$G" = "ASSENTE" ]; then
-            # ⚠️ TOLLERANZA TEMPORANEA, DICHIARATA. Il campo esiste dal 2026-08-15 ma il
-            # server lo servira' solo DOPO il prossimo deploy: fino ad allora pretenderlo
-            # farebbe gridare questo controllo ogni 15 minuti su un sito sano, e un allarme
-            # sempre acceso viene spento (regola ferrea 10).
-            # ⛔ QUESTO RAMO VA TOLTO SUBITO DOPO IL PRIMO DEPLOY che porta il campo online:
-            # finche' resta, un campo sparito passerebbe inosservato. E' scritto anche fra i
-            # lavori aperti in RIPRENDI_QUI.md.
-            echo "::warning::il campo 'guardiano' non c'e': il server non ha ancora il codice"
-            echo "::warning::del 2026-08-15. Serve il DEPLOY. Fino ad allora questa testa"
-            echo "::warning::controlla solo che il sito risponda, non che il Guardiano viva."
-            exit 0
+            # DEBITO CHIUSO IL 2026-08-15. Per qualche ora questo ramo TOLLERAVA l'assenza
+            # del campo, perche' il server non aveva ancora il codice che lo espone e
+            # pretenderlo avrebbe fatto gridare questo controllo ogni 15 minuti su un sito
+            # sano -- un allarme sempre acceso viene spento (regola ferrea 10).
+            # Il deploy e' stato fatto e VERIFICATO dall'esterno lo stesso giorno
+            # (`guardiano: ok` letto da un giro vero di questa sentinella), quindi la
+            # tolleranza e' stata tolta: da adesso un campo che sparisce E' un allarme.
+            # ⛔ Non rimettere questo perdono "per sicurezza": senza campo, questa testa
+            # controlla solo che il sito risponda, cioe' meta' del lavoro con l'aria di
+            # averlo fatto tutto.
+            echo "::error::IL CAMPO 'guardiano' E' SPARITO dalla salute. O il server e'"
+            echo "::error::tornato a una versione vecchia, o qualcuno l'ha tolto: in tutti"
+            echo "::error::e due i casi da fuori NON si vede piu' se il Guardiano dei soldi"
+            echo "::error::e' vivo, e questa sentinella e' diventata cieca a meta'."
+            exit 1
           fi
 
           if [ "$G" = "muto" ]; then

@@ -11,7 +11,49 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🚦 2026-08-15 (3) — RIPARTI DA QUI. 🛰️ **C'È UNA SENTINELLA FUORI, E IL DEPLOY È IL PROSSIMO PASSO**
+## 🚦 2026-08-15 (4) — RIPARTI DA QUI. 🚀 **DEPLOY FATTO: I TRE POSTI SONO ALLINEATI**
+
+> **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
+> **⛔ PRIMA MISURA, POI AGISCI. I commit scritti qui invecchiano.**
+> ```powershell
+> git rev-parse --short HEAD ; git status --porcelain
+> git ls-remote origin refs/heads/master
+> ssh root@76.13.44.167 'cd /var/www/bookinvip && git rev-parse --short HEAD'
+> curl -s https://bookinvip.com/api/health     # deve contenere "guardiano": "ok"
+> python collaudi/prima_di_lanciare.py
+> ```
+>
+> ### ✅ IL LAVORO DI IERI-OGGI È IN PRODUZIONE E VERIFICATO DA FUORI
+> Deploy col **`deploy/protocollo_d17.sh`** (non a mano), `d05ff53 → 1064947`.
+> **`casavip_nginx` non è mai andato giù**, app sana in 6 secondi, `money_path_pronto: True`.
+> Sonde **200/200**, negativa **403** su un indirizzo che esiste, giudice del progetto
+> **190 controlli 0 violazioni**. La salute risponde `"guardiano": "ok"` e il battito è sul
+> disco (`/data/guardiano_ultimo_giro`). Un giro vero della sentinella su GitHub, contro il
+> sito vero, ha letto **`guardiano: ok`**.
+>
+> ### 🔴 IL PARACADUTE ERA AGGANCIATO ALL'IMMAGINE SBAGLIATA — LA SETTIMA VOLTA
+> `:prec` puntava a `d3c97a63…` mentre girava `4eb853a4…`. Tirare la maniglia avrebbe
+> riportato a uno stato **che non era l'ultimo buono**. 💡 Non l'ha impedito la memoria:
+> **l'ha impedito l'attrezzo**, che ri-aggancia e poi *verifica che coincida*. ⛔ Quindi il
+> deploy si fa **sempre** con `protocollo_d17.sh`, mai a mano.
+>
+> ### ✅ IL DEBITO DELLA SENTINELLA È CHIUSO
+> La tolleranza sul campo `guardiano` assente è stata **tolta lo stesso giorno**: adesso un
+> campo che sparisce **è un allarme**. Riprovati i sei scenari eseguendo lo script vero.
+>
+> ### 🔴 COSA RESTA APERTO, in ordine di valore
+> 1. **il denominatore**: «tutto quadra» su **zero prenotazioni** si legge come su mille —
+>    in produzione `/data/prenotazioni.db` è **0 byte**;
+> 2. **`_escrow_bloccati`** (`fase186_guardiano.py`, riga ~100) ha lo **stesso schema del
+>    `None`** riparato oggi: `return []` quando manca l'archivio, indistinguibile da «nessun
+>    escrow bloccato». Serve il suo «autorizzato»;
+> 3. **l'ultimo miglio della sorveglianza**: GitHub può **ritardare o saltare** i giri
+>    programmati. Un servizio dedicato (UptimeRobot, gratis) sarebbe puntuale — richiede un
+>    account che apra il fondatore;
+> 4. ⚠️ **il rimborso all'ospite non parte da solo** — la cosa più grave ancora aperta sul
+>    prodotto, da chiudere **prima del primo host**.
+
+## 🚦 2026-08-15 (3) — 🛰️ **LA SENTINELLA ESTERNA**
 
 > **Se sei una chat nuova: leggi SOLO questo riquadro, poi VERIFICA, poi agisci.**
 > **⛔ PRIMA MISURA, POI AGISCI. I commit scritti qui invecchiano.**
@@ -1634,7 +1676,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 23f5c45
+CONSEGNE AGGIORNATE A: 1064947
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
