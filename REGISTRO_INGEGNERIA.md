@@ -32,10 +32,10 @@
   ci entra (regola ferrea 1). Sta nella riga d'installazione dei **tre** job che eseguono la
   suite (`full-suite`, `full-suite-311`, `copertura`), e una guardia pretende **tutt'e due** le
   cose: che ogni job che arriva a quelle prove installi z3, e che z3 **non** finisca in
-  `requirements.txt`. Prova nelle due direzioni: nucleo di I2 guastato
-  (`somma > dovuto` → `somma > dovuto + 1`) → le 35 dimostrazioni **rosse**, con il
-  controesempio esatto `[D = 0, saldato = False, S = 1]`; ripristinato → verdi, `sha256`
-  identico (`00192BCA…`).
+  `requirements.txt`. ✅ **Verificato in CI, non dedotto:** i saltati sono calati **da 5 a 3**
+  (08ce8b0 → 2044582) e il registro del job dice `Successfully installed z3-solver-5.0.0.0`.
+  Saltavano **due** test, e quei due portano **16 dimostrazioni formali** (3 invarianti + 13
+  teoremi sulle transizioni).
 - **1** · il **Giudice esce ROSSO se ha saltato punti** (oggi ne salta 84 su 114 ed esce 0)
 - **2** · **ri-confermare un «ucciso»** rieseguendolo (un test instabile gonfia il punteggio)
 - **C** · sgonfiare `CLAUDE.md` in blocchi meccanici — ⛔ e **aggiornare `conta_regole()` nello
@@ -628,11 +628,21 @@ quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 `test_pipeline_ci.py` (4 guardie), `REGISTRO_INGEGNERIA.md`, `RIPRENDI_QUI.md`.
 
 **Il difetto.** `z3-solver` non era fra le dipendenze installate dalla CI, quindi in CI
-`test_fase199_invarianti` e `test_fase199_transizioni` facevano `skipTest("z3 non
-installato")`: **35 test** che dimostrano matematicamente le leggi dei soldi e le transizioni
-delle prenotazioni **si saltavano puliti**, e la tabella dei job restava VERDE. Sul computer
-del fondatore giravano (z3 c'è): il buco era invisibile proprio dove si guarda di più. Un
-guasto nel nucleo degli invarianti avrebbe passato il cancello.
+`test_invarianti_critici_dimostrati` e `test_tutti_i_teoremi_dimostrati` facevano
+`skipTest("z3 non installato")` e la tabella dei job restava VERDE. Sul computer del
+fondatore giravano (z3 c'è): il buco era invisibile proprio dove si guarda di più. Un guasto
+nel nucleo degli invarianti avrebbe passato il cancello.
+
+⚠️ **CORREZIONE DI UN NUMERO MIO (D22).** Durante il lavoro ho ripetuto «**35 test** si
+saltavano»: **falso**, e me l'ha smontato la misura del prima/dopo in CI, dove i saltati sono
+calati **da 5 a 3** — cioè **due**. I 35 sono il totale dei test di quei due file (28 + 7), e
+33 girano benissimo senza z3. **A saltare erano DUE test.** Il fatto vero è più forte del
+numero sbagliato: quei due portano **SEDICI dimostrazioni formali** — 3 invarianti
+(`I1_zero_double_booking`, `I2_atomicita_finanziaria`, `I3_isolamento_pii`) e **13 teoremi**
+sulle transizioni (terminale assorbente · mai pagato da terminale · monotona senza cicli ·
+pagato assorbente · mai ritorno in coda · cicli solo coppia hold · conservazione dell'escrow
+con clamp · idempotenza di eventi, payout e webhook). Sedici prove matematiche sui soldi e
+sugli stati, **nessuna delle quali veniva eseguita dal giudice**.
 
 **La cura, e perché NON `requirements.txt`.** Quel file costruisce l'**immagine di
 produzione**: infilarci un risolutore matematico che il sito non usa mai gonfia il server per
@@ -650,12 +660,20 @@ allarme, e un falso allarme è un difetto quanto un allarme mancato (regola ferr
 
 **La prova nelle due direzioni (D18 punto 2).** Guastato il nucleo di I2
 (`somma > dovuto` → `somma > dovuto + 1`, cioè un centesimo pagato in più non veniva più
-segnalato): le 35 dimostrazioni sono diventate **rosse**, e z3 non si è limitato a fallire —
-ha stampato il **controesempio esatto**: `CONTROESEMPIO [D = 0, saldato = False, S = 1]`.
-Ripristinato: 35 verdi, `sha256` **identico** (`00192BCA45B2E1E9E…`).
-⚠️ **Limite dichiarato:** questo dimostra che quelle prove sanno diventare rosse *qui*. Che
-girino davvero *in CI* lo dirà il primo giro sul ramo, dove il numero dei saltati deve
-**calare**: va letto, non dato per buono.
+segnalato): `test_invarianti_critici_dimostrati` è diventato **rosso** (`Ran 35 tests`,
+`failures=1` — gli altri 34 non toccano quel nucleo e sono rimasti verdi, com'era giusto), e
+z3 non si è limitato a fallire: ha stampato il **controesempio esatto**
+`CONTROESEMPIO [D = 0, saldato = False, S = 1]`. Ripristinato: 35 verdi, `sha256` **identico**
+(`00192BCA45B2E1E9E…`).
+
+✅ **E LA PROVA CHE CONTA DAVVERO, letta in CI e non dedotta** — stesso ambiente, prima e dopo:
+```
+PRIMA  commit 08ce8b0 (senza z3)   Ran 5734 tests in 527.875s   OK (skipped=5)
+DOPO   commit 2044582 (con z3)     Ran 5738 tests in 479.650s   OK (skipped=3)
+```
+e nel registro del job: `Successfully installed ... z3-solver-5.0.0.0 ...`. I 3 che restano
+sono i test Postgres live (nessun database raggiungibile in CI). ⛔ Era questo il numero da
+guardare: senza, «ho aggiunto un pacchetto a un file YAML» non dimostrava niente.
 
 ### 🧱 FATTO 2026-08-15 (notte, 2) — **IL PIANO NON È PIÙ UN FOGLIO: È UNA MACCHINA IN 10 BLOCCHI**
 

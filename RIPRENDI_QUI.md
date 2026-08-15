@@ -18,10 +18,19 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > `REGISTRO_INGEGNERIA.md` · `RIPRENDI_QUI.md`. ⛔ Zero produzione, **nessun deploy**.
 >
 > ### COSA C'ERA CHE NON ANDAVA
-> In CI `z3-solver` non veniva installato, quindi **35 test** — le dimostrazioni matematiche
-> sulle leggi dei soldi e sulle transizioni delle prenotazioni — facevano `skipTest` e **la
-> tabella restava verde**. Sul computer giravano (z3 c'è): il buco era invisibile proprio
-> dove si guarda di più.
+> In CI `z3-solver` non veniva installato, quindi `test_invarianti_critici_dimostrati` e
+> `test_tutti_i_teoremi_dimostrati` facevano `skipTest` e **la tabella restava verde**. Sul
+> computer giravano (z3 c'è): il buco era invisibile proprio dove si guarda di più.
+>
+> ⚠️ **CORREZIONE DI UN NUMERO MIO (D22):** durante il lavoro ho ripetuto «**35 test** si
+> saltavano». **Falso**, e me l'ha smontato la misura in CI: i saltati sono calati da 5 a 3,
+> cioè **due**. I 35 sono il totale di quei due file; 33 girano senza z3. Il fatto vero è più
+> forte del numero sbagliato: quei **due** test portano **SEDICI dimostrazioni formali** — 3
+> invarianti (`I1_zero_double_booking`, `I2_atomicita_finanziaria`, `I3_isolamento_pii`) e
+> **13 teoremi** sulle transizioni (terminale assorbente · mai pagato da terminale · monotona
+> senza cicli · pagato assorbente · mai ritorno in coda · conservazione dell'escrow ·
+> idempotenza di eventi, payout e webhook). Sedici prove sui soldi e sugli stati, e **nessuna
+> veniva eseguita dal giudice**.
 >
 > ### LA CURA — tre parole, e non dove sembrava ovvio
 > `z3-solver` aggiunto alla riga d'installazione dei **tre** job che eseguono la suite
@@ -31,17 +40,21 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 >
 > ### LA PROVA (D18 punto 2, nelle due direzioni)
 > Guastato il nucleo di I2 (`somma > dovuto` → `somma > dovuto + 1`: un centesimo pagato in
-> più non veniva più segnalato) → **35 rossi**, e z3 ha stampato il controesempio esatto:
+> più non veniva più segnalato) → `Ran 35 tests`, **`failures=1`**, e z3 non si è limitato a
+> fallire, ha stampato il controesempio esatto:
 > ```
 > AssertionError: 'CONTROESEMPIO [D = 0, saldato = False, S = 1]' != 'DIMOSTRATO'
 > ```
 > Ripristinato → 35 verdi, `sha256` **identico** (`00192BCA45B2E1E9E…`).
 >
-> ### ⚠️ COSA RESTA DA VERIFICARE, E NON DARLO PER BUONO
-> Questo prova che quelle prove sanno diventare rosse **qui**. Che girino davvero **in CI** lo
-> dice solo il primo giro sul ramo: **il numero dei saltati deve CALARE**. Va letto dal
-> registro del job, non immaginato. Se non cala, `pip install z3-solver` è fallito in
-> silenzio e siamo punto e a capo, con un verde ancora più convincente di prima.
+> ### ✅ E LA VERIFICA IN CI, LETTA E NON DEDOTTA
+> ```
+> PRIMA  08ce8b0 (senza z3)   Ran 5734 tests in 527.875s   OK (skipped=5)
+> DOPO   2044582 (con z3)     Ran 5738 tests in 479.650s   OK (skipped=3)
+> registro del job: Successfully installed ... z3-solver-5.0.0.0 ...
+> ```
+> I 3 rimasti sono i test Postgres live (nessun database in CI). ⛔ Era questo il numero da
+> guardare: senza, «ho aggiunto un pacchetto a un file YAML» non dimostrava niente.
 >
 > ### ⚠️ LA GUARDIA AVEVA UN BUCO, E VALE COME LEZIONE
 > La prima versione cercava `unittest discover` e **non vedeva `full-suite-311`**, che lancia
@@ -1981,7 +1994,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 6118d35
+CONSEGNE AGGIORNATE A: 2044582
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
