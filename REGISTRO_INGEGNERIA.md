@@ -567,6 +567,98 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🛡️ FATTO 2026-08-15 — **IL GUARDIANO DEI SOLDI DICEVA «TUTTO QUADRA» SENZA AVER GUARDATO**
+
+**Modulo di produzione toccato: `fase186_guardiano.py`** — col «autorizzato» del fondatore,
+2026-08-15. Guardie in `test_guardiano.py`. Diff: **poche righe**, nessuna logica di calcolo
+toccata.
+
+#### Com'è nata: cercavo il «pezzo 8» e l'ho trovato già costruito
+
+Il piano diceva di costruire la sorveglianza dei soldi in produzione. **D10 (inventario prima
+di costruire) ha risparmiato il lavoro intero**: `fase182_riconciliazione.py` esiste già e
+confronta ogni sessione pagata di Stripe col nostro giornale immutabile, **al centesimo e per
+valuta**, nominando tre fantasmi (`solo_stripe` = webhook perso · `solo_giornale` ·
+`importo_diverso`). Ed è **collegato**: `fase186_guardiano.py` lo richiama in un tick
+giornaliero, e `ALERT_EMAIL` è configurata.
+
+⛔ **Quindi «nessun battito sui cicli dei soldi in produzione» era FALSO.** Misurato sui log
+del VPS il 2026-08-15:
+```
+2026-08-13 20:26:06  GUARDIANO: nessuno stato anomalo (tutto quadra)
+2026-08-14 20:26:07  GUARDIANO: nessuno stato anomalo (tutto quadra)
+```
+Un colpo al giorno, a 24 ore esatte. Il battito c'è.
+
+#### Il difetto vero, che è più sottile e peggiore
+
+`_riconciliazione` usciva con **`None` in due situazioni opposte**: riga 76 «Stripe non è
+configurato, NON HO GUARDATO» e riga 84 «ho guardato e tutto quadra». Chi chiama riceveva lo
+stesso identico valore. E `_prova` mette fra i **controlli ciechi** solo chi **solleva
+un'eccezione** — un `None` tranquillo non lascia traccia da nessuna parte: niente anomalia,
+niente cieco, `conta` resta 0, **`pulito: True`**.
+
+💡 **La parte che fa impressione:** il commento a `scansiona` (riga 316) descrive **esattamente**
+questa malattia — *«un controllo fallito NON è un controllo pulito: se sparisse e basta, conta
+resterebbe 0 e il report direbbe "tutto a posto" mentre siamo CIECHI»* — e la cura c'era. Curava
+**una forma su due**: quella rumorosa. La silenziosa passava dal buco che il commento dichiarava
+chiuso.
+
+⚠️ **E lo stesso schema è in `_escrow_bloccati`** (riga 100): `return []` quando l'archivio delle
+garanzie non c'è, indistinguibile da «nessun escrow bloccato». **Non riparato in questo giro** —
+è fuori dallo scopo dichiarato, e va fatto col suo «autorizzato».
+
+#### Misurato, non dedotto
+
+Sul banco di prova di `test_guardiano.py`, che non passa nessuna chiave Stripe
+(`ConfigCasaVIP.stripe_secret_key` vale `""` di serie, `fase81:59`):
+```
+chiave stripe nel banco: VUOTA -> _riconciliazione esce alla riga 76
+pulito = True | conta = 0 | anomalie = []
+il rapporto dichiara cosa NON ha guardato? False
+```
+🔴 Cioè il test **«su tutto pulito il Guardiano TACE»**, in cima a quel file, **passava
+appoggiandosi al difetto**: dichiarava sano un guardiano che aveva saltato il confronto dei
+conti con la banca.
+
+#### La riparazione, e perché NON è «alzare un allarme»
+
+Trasformare «non ho guardato» in un'anomalia avrebbe mandato un'email al giorno su una macchina
+sana: un **falso allarme**, che la regola ferrea 10 considera grave quanto un allarme mancato
+perché insegna a ignorare i segnali. La forma giusta è quella che il progetto usa già ovunque,
+dal pre-volo al pre-fatto: **i NON ESEGUITI si dichiarano a parte**.
+
+· `NON_ESEGUITO`, marcatore distinto da `None`, confrontato con `is` **prima** del test di
+  verità (qualunque marcatore non vuoto sarebbe VERO in `if ric:` e diventerebbe un allarme);
+· `scansiona` restituisce un campo **`non_eseguiti`**, fuori da `anomalie`: non entra in `conta`
+  e non tocca `pulito`, quindi nessun falso allarme — ma il rapporto adesso lo **porta**;
+· `riassunto_html` lo **stampa nell'email**, con un colore diverso dagli allarmi: non è
+  «qualcosa non va», è «su questo fronte non sappiamo». Senza questo pezzo sarebbe un campo che
+  non legge nessuno — costruito ma non collegato, regola #23.
+
+#### Le prove, nell'ordine di D20
+
+1. tre guardie scritte in `TestControlloCiecoSILENZIOSO`;
+2. **viste rosse sul codice di produzione**: 2 FAIL («il rapporto non lo dichiara da nessuna
+   parte», «l'email non lo dice») e 1 verde — quella che pretende il **silenzio**, che doveva
+   già passare e fa da freno contro il falso allarme (D18 punto 2);
+3. riparazione;
+4. **riverdi**: 3 su 3, e tutti i 18 test del file, più i 41 dei moduli vicini.
+5. *In più (D20 lo consiglia):* difetto **rimesso dentro** dopo la riparazione → di nuovo 2
+   rosse, quindi la guardia **resta capace di beccarlo** anche col codice cambiato. Ripristino
+   **byte-identico**, `sha256 1701A77B…0628CC` prima e dopo.
+
+#### ⚠️ Cosa resta aperto, dichiarato (D18 punto 3)
+
+· **il verde non dichiara ancora il denominatore**: «tutto quadra» su **zero prenotazioni** si
+  legge identico a «tutto quadra» su mille. In produzione `/data/prenotazioni.db` è **0 byte**
+  (misurato il 2026-08-15), quindi oggi quel verde è vero ma vuoto;
+· 🔴 **se il battito si ferma, nessuno se ne accorge**: i log tacciono e il silenzio somiglia
+  alla pace. Manca del tutto un allarme sull'**assenza** del tick;
+· `_escrow_bloccati` ha lo stesso schema del `None`, non riparato qui;
+· il messaggio giornaliero in `fase83_server.py` dice ancora «tutto quadra» senza nominare i
+  non eseguiti: **`fase83_server.py` è fuori dallo scopo dichiarato** di questo intervento.
+
 ### 🔗 FATTO 2026-08-14 (tarda notte) — **L'AUDIT DEI 5 DOCUMENTI ERA SCOLLEGATO, E GRIDAVA A VUOTO**
 
 **Nessuna riga di produzione toccata.** Cinque file, tutti documenti o strumentazione:

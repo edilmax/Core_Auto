@@ -62,6 +62,17 @@ _STATI_RIMBORSO = ("rimborsato", "cancellata_host")
 # esclusi di proposito: il primo e' gia' corretto, il secondo e' perdita gia' realizzata.
 _STATI_PAYOUT_VERSO_HOST = ("maturato", "in_transito")
 
+# «NON HO GUARDATO» non e' «TUTTO A POSTO», e nemmeno un'anomalia: e' un NON ESEGUITO, e va
+# DICHIARATO (sbaglio S7). Senza questo marcatore `_riconciliazione` usciva con None sia
+# quando Stripe non c'e' sia quando i conti tornano: due cose opposte, lo stesso valore. Chi
+# chiama non poteva distinguerle, quindi il rapporto diceva «pulito» avendo saltato il
+# controllo piu' importante che ha -- misurato il 2026-08-15 sul banco di `test_guardiano.py`:
+# `pulito=True, conta=0, anomalie=[]` con la chiave Stripe vuota.
+# ⚠️ Si confronta con `is` PRIMA del test di verita': qualunque marcatore non vuoto sarebbe
+# VERO dentro `if ric:` e finirebbe fra le anomalie, cioe' diventerebbe un falso allarme
+# (regola ferrea 10: grave quanto un allarme mancato, perche' insegna a ignorare i segnali).
+NON_ESEGUITO = "__non_eseguito__"
+
 
 def _ora(ora: Any) -> int:
     return int((ora or time.time)())
@@ -69,11 +80,12 @@ def _ora(ora: Any) -> int:
 
 def _riconciliazione(sistema: Any, giorni: int) -> Optional[Dict[str, Any]]:
     """Confronto con Stripe (fase182), solo se Stripe e il giornale sono configurati.
-    None se non applicabile (non e' un'anomalia: e' che non c'e' Stripe da confrontare)."""
+    `NON_ESEGUITO` se manca la premessa -- e NON None, perche' None qui sotto significa gia'
+    «ho guardato e tutto quadra»: i due casi devono restare distinguibili da chi chiama."""
     sk = getattr(getattr(sistema, "config", None), "stripe_secret_key", "") or ""
     fc = getattr(sistema, "finanza", None)
     if not sk or fc is None:
-        return None
+        return NON_ESEGUITO
     try:
         from fase182_riconciliazione import riconcilia
         rep = riconcilia(fc, sk, giorni=giorni)
@@ -317,6 +329,9 @@ def scansiona(sistema: Any, *, ora: Any = None,
     # resterebbe 0 e il report direbbe «tutto a posto» mentre siamo CIECHI su quel fronte
     # (verificato: con un archivio guasto usciva pulito=True, conta=0, anomalie={}).
     ciechi: list = []
+    # ...e i controlli che non hanno nemmeno POTUTO girare, per mancanza di premesse. Sono
+    # una terza categoria: non anomalie (niente allarme) e non silenzio (niente «pulito»).
+    non_eseguiti: list = []
 
     def _prova(f, *a):
         try:
@@ -327,6 +342,10 @@ def scansiona(sistema: Any, *, ora: Any = None,
             return None
 
     ric = _prova(_riconciliazione, sistema, giorni_riconciliazione)
+    if ric is NON_ESEGUITO:                    # `is`, e PRIMA di `if ric:` (vedi NON_ESEGUITO)
+        non_eseguiti.append("riconciliazione_stripe: manca la chiave Stripe o il giornale, "
+                            "i conti NON sono stati confrontati con la banca")
+        ric = None
     if ric:
         anomalie["riconciliazione_stripe"] = ric
 
@@ -373,7 +392,11 @@ def scansiona(sistema: Any, *, ora: Any = None,
         return 1 if v else 0
 
     conta = sum(_conta(v) for v in anomalie.values())
+    # `non_eseguiti` sta FUORI da `anomalie` di proposito: non entra in `conta` e non tocca
+    # `pulito`, cosi' una macchina sana senza Stripe non manda un allarme ogni giorno. Ma
+    # adesso il rapporto lo PORTA, e chi lo legge sa su cosa non abbiamo guardato.
     return {"pulito": conta == 0, "conta": conta, "anomalie": anomalie,
+            "non_eseguiti": non_eseguiti,
             "ts": ora_ts, "soglie": {"grazia_escrow_ore": grazia_escrow_ore,
                                      "giorni_payout_fermo": giorni_payout_fermo,
                                      "giorni_riconciliazione": giorni_riconciliazione}}
@@ -413,6 +436,18 @@ def riassunto_html(report: Dict[str, Any]) -> str:
             "background:#fdecec\"><strong>%s</strong>%s<div style=\"color:#5e6f8d;"
             "font-size:.85rem;margin-top:.3rem\">%s</div></div>"
             % (e(titolo), (" (%s)" % n if n != "" else ""), campione))
+    # I NON ESEGUITI vanno nell'email, o restano un campo che non legge nessuno: costruito
+    # non basta, dev'essere COLLEGATO a chi decide. Colore diverso dagli allarmi apposta --
+    # non e' «qualcosa non va», e' «su questo fronte non sappiamo».
+    ne = report.get("non_eseguiti") or []
+    if ne:
+        righe.append(
+            "<div style=\"margin:.8rem 0;padding:.6rem .9rem;border-left:3px solid #b8860b;"
+            "background:#fdf6e3\"><strong>Controlli NON ESEGUITI (%d)</strong>"
+            "<div style=\"color:#5e6f8d;font-size:.85rem;margin-top:.3rem\">Non hanno trovato "
+            "nulla perche' non hanno potuto guardare. Su questi fronti non sappiamo.<br>%s"
+            "</div></div>"
+            % (len(ne), "<br>".join(e(str(x)[:180]) for x in ne)))
     return (
         "<div style=\"font-family:sans-serif;max-width:640px\">"
         "<h2 style=\"color:#c0392b\">&#9888; Il Guardiano ha trovato %d stato/i anomalo/i</h2>"

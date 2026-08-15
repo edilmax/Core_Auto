@@ -93,6 +93,92 @@ class TestControlloCieco(_Base):
                       "l'email non spiega che un controllo non ha potuto girare: %s" % html[:400])
 
 
+class TestControlloCiecoSILENZIOSO(_Base):
+    """LA STESSA MALATTIA DELLA CLASSE QUI SOPRA, MA SENZA RUMORE -- e per questo peggiore.
+
+    `TestControlloCieco` copre la forma RUMOROSA: un archivio esplode, `_prova` cattura
+    l'eccezione e mette il controllo fra i ciechi. Funziona.
+
+    Ma `_riconciliazione` (fase186_guardiano.py) esce con `None` in DUE situazioni diverse:
+      · riga 76 -> Stripe non e' configurato: NON HO GUARDATO;
+      · riga 84 -> `rep["ok"]`: HO GUARDATO E TUTTO QUADRA.
+    Chi chiama riceve lo stesso identico valore, e `_prova` mette fra i ciechi **solo chi
+    solleva un'eccezione**. Quindi la prima situazione non lascia traccia da nessuna parte:
+    niente anomalia, niente cieco, `conta` resta 0, `pulito` diventa True. Non c'e' nemmeno
+    una riga di log, mentre la forma rumorosa almeno ne scrive una.
+
+    E' esattamente il buco che il commento a `scansiona` (riga 316) dichiara di aver chiuso:
+    *«un controllo fallito NON e' un controllo pulito»*. Chiuso per una forma su due.
+
+    MISURATO il 2026-08-15 sul banco di prova di questo file, che non passa nessuna chiave
+    Stripe (`ConfigCasaVIP.stripe_secret_key` vale "" di serie, fase81:59):
+        pulito = True | conta = 0 | anomalie = []
+    Cioe' il Guardiano dichiara tutto a posto AVENDO SALTATO il confronto dei conti con la
+    banca, che e' il controllo piu' importante che ha. Il test «su tutto pulito il Guardiano
+    TACE», in cima a questo file, oggi passa APPOGGIANDOSI a questo difetto.
+
+    ⛔ E la riparazione non puo' essere «alzare un allarme»: senza Stripe non c'e' nessuna
+    anomalia da segnalare, e gridare sarebbe un FALSO ALLARME (regola ferrea 10, che li
+    considera gravi quanto un allarme mancato -- insegnano a ignorare i segnali). La forma
+    giusta e' quella che il progetto usa gia' ovunque, dal pre-volo al pre-fatto: i
+    NON ESEGUITI si dichiarano A PARTE, e un non eseguito non e' un successo (sbaglio S7).
+    """
+
+    def _pretendi_niente_stripe(self):
+        """La premessa di questi tre test: il banco NON ha una chiave Stripe.
+
+        Non la si IMPOSTA (`ConfigCasaVIP` e' un dataclass frozen: assegnare solleva
+        `FrozenInstanceError`), la si VERIFICA. E la si verifica invece di darla per buona,
+        perche' il giorno che qualcuno mettesse una chiave nel banco questi tre test
+        smetterebbero di provare cio' che dicono e resterebbero verdi: e' lo sbaglio S7,
+        un controllo che da' OK quando la premessa manca.
+        """
+        self.assertFalse(
+            getattr(self.sys.config, "stripe_secret_key", "") or "",
+            "premessa non valida: il banco di prova ha una chiave Stripe, quindi la "
+            "riconciliazione VIENE eseguita e questi test non provano piu' niente")
+
+    def test_SENZA_STRIPE_il_rapporto_DICHIARA_di_non_aver_guardato(self):
+        """Il Guardiano deve dire cosa NON ha potuto controllare, non solo cosa ha trovato."""
+        self._pretendi_niente_stripe()
+        rep = G.scansiona(self.sys, ora=lambda: self.now)
+        non_eseguiti = rep.get("non_eseguiti") or []
+        self.assertTrue(
+            any("riconcili" in str(c) for c in non_eseguiti),
+            "il confronto dei conti con Stripe NON e' stato eseguito (manca la chiave) e il "
+            "rapporto non lo dichiara da nessuna parte: dice «tutto quadra» su un fronte che "
+            "non ha nemmeno guardato. Rapporto: %r" % (rep,))
+
+    def test_ma_NON_diventa_un_FALSO_ALLARME(self):
+        """L'altra direzione (D18 punto 2): dichiararlo non vuol dire gridare.
+
+        Senza Stripe non c'e' NIENTE che non va: c'e' una cosa che non si e' potuta
+        guardare. Se questa distinzione si perde, il Guardiano manda un'email ogni giorno
+        su una macchina sana -- e un allarme sempre acceso viene spento da chi lo riceve.
+        """
+        self._pretendi_niente_stripe()
+        rep = G.scansiona(self.sys, ora=lambda: self.now)
+        self.assertTrue(rep["pulito"],
+                        "senza Stripe non c'e' nessuna ANOMALIA: c'e' un controllo non "
+                        "eseguito. Trasformarlo in allarme e' un falso allarme: %r" % (rep,))
+        self.assertEqual(rep["conta"], 0, "un non eseguito non si conta fra le anomalie")
+        self.assertNotIn("riconciliazione_stripe", rep["anomalie"])
+
+    def test_e_CHI_LEGGE_L_EMAIL_lo_vede(self):
+        """COSTRUITO non basta: dev'essere COLLEGATO a chi decide (regola #23).
+
+        Un rapporto che dichiara i non eseguiti in un campo che nessuno stampa non protegge
+        nessuno. Il gemello rumoroso ha gia' la sua prova (`test_e_l_email_di_allarme_lo
+        _scrive`): qui si pretende la stessa cosa per la forma silenziosa.
+        """
+        self._pretendi_niente_stripe()
+        rep = G.scansiona(self.sys, ora=lambda: self.now)
+        html = G.riassunto_html(rep).lower()
+        self.assertIn("non eseguit", html,
+                      "l'email non dice che un controllo non ha potuto girare, quindi chi la "
+                      "legge crede che sia stato guardato tutto: %s" % html[:400])
+
+
 class TestGuastiIsolatiNelRegistro(_Base):
     """I GUASTI ISOLATI NON POSSONO FINIRE DOVE NESSUNO GUARDA.
 
