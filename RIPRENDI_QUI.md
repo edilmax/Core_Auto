@@ -11,6 +11,44 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🚦 2026-08-15 (10) — 🔬 **PEZZO A FATTO: LE PROVE PIÙ FORTI NON SONO PIÙ VERDI PER FINTA**
+
+> **Sul disco, finito e provato, NON committato.** Attesi da `git status --porcelain`
+> **quattro** file: `.github/workflows/ci.yml` · `test_pipeline_ci.py` ·
+> `REGISTRO_INGEGNERIA.md` · `RIPRENDI_QUI.md`. ⛔ Zero produzione, **nessun deploy**.
+>
+> ### COSA C'ERA CHE NON ANDAVA
+> In CI `z3-solver` non veniva installato, quindi **35 test** — le dimostrazioni matematiche
+> sulle leggi dei soldi e sulle transizioni delle prenotazioni — facevano `skipTest` e **la
+> tabella restava verde**. Sul computer giravano (z3 c'è): il buco era invisibile proprio
+> dove si guarda di più.
+>
+> ### LA CURA — tre parole, e non dove sembrava ovvio
+> `z3-solver` aggiunto alla riga d'installazione dei **tre** job che eseguono la suite
+> (`full-suite`, `full-suite-311`, `copertura`). ⛔ **NON** in `requirements.txt`: quello
+> costruisce l'immagine di produzione, e un risolutore matematico che il sito non chiama mai
+> non ci deve entrare. Una guardia pretende **tutt'e due** le cose.
+>
+> ### LA PROVA (D18 punto 2, nelle due direzioni)
+> Guastato il nucleo di I2 (`somma > dovuto` → `somma > dovuto + 1`: un centesimo pagato in
+> più non veniva più segnalato) → **35 rossi**, e z3 ha stampato il controesempio esatto:
+> ```
+> AssertionError: 'CONTROESEMPIO [D = 0, saldato = False, S = 1]' != 'DIMOSTRATO'
+> ```
+> Ripristinato → 35 verdi, `sha256` **identico** (`00192BCA45B2E1E9E…`).
+>
+> ### ⚠️ COSA RESTA DA VERIFICARE, E NON DARLO PER BUONO
+> Questo prova che quelle prove sanno diventare rosse **qui**. Che girino davvero **in CI** lo
+> dice solo il primo giro sul ramo: **il numero dei saltati deve CALARE**. Va letto dal
+> registro del job, non immaginato. Se non cala, `pip install z3-solver` è fallito in
+> silenzio e siamo punto e a capo, con un verde ancora più convincente di prima.
+>
+> ### ⚠️ LA GUARDIA AVEVA UN BUCO, E VALE COME LEZIONE
+> La prima versione cercava `unittest discover` e **non vedeva `full-suite-311`**, che lancia
+> la stessa suite con un elenco generato. Un job invisibile a una guardia è peggio di nessuna
+> guardia: dà la sensazione di essere coperti. Riconoscimento riscritto su «arriva a quei
+> test», con una guardia che prova **il metodo** e non lo stato del momento.
+
 ## 🚦 2026-08-15 (9) — 🧱 **IL PIANO NON È PIÙ UN FOGLIO: È UNA MACCHINA IN DIECI BLOCCHI**
 
 > **Ordine del fondatore, con le sue parole:** *«perché non mettiamo ordine una volta per
@@ -68,12 +106,15 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > **Numeri dei documenti trovati falsi:** `CLAUDE.md` 898 → **745** · `fase135` 82 → **64** ·
 > la memoria diceva l'audit «esce 1 con 5 contraddizioni» → esce **0**.
 >
-> ### ⛔ COSA DEVE FARE CHI LEGGE ADESSO
-> Il lavoro sul disco è **finito e provato**, manca solo la suite intera e il commit — vale
-> per questo riquadro **e** per il (8) qui sotto, sono lo stesso commit. I file attesi da
-> `git status --porcelain` sono **cinque**: `REGISTRO_INGEGNERIA.md` · `RIPRENDI_QUI.md` ·
-> `collaudi/regole_avvio.py` · `test_pipeline_ci.py` · **`collaudi/piano.py`** (nuovo).
-> ⛔ Nessun file di produzione toccato: **nessun deploy**.
+> ### ✅ CHIUSO — unito il 2026-08-15 alle 20:07
+> Richiesta **#52**, `merged=True` **riletto dall'API** (non dedotto dalla risposta del
+> comando), commit d'unione **`f83c0b6`**. CI: `CodeQL success` · `BookinVIP CI success`.
+> Vale anche per il riquadro (8) qui sotto: erano lo stesso commit.
+> ⛔ **Il VPS resta a `6118d35`, ed è GIUSTO così.** Questo commit non contiene niente che
+> giri in produzione. Fare `git pull` sul server senza ricostruire fabbricherebbe la bugia
+> del 2026-08-07: i file direbbero `f83c0b6` mentre l'immagine servirebbe `6118d35`. Repo e
+> immagine devono coincidere **per costruzione**, non per fortuna: si allinea al primo
+> deploy vero.
 
 ## 🚦 2026-08-15 (8) — ⛔⛔ **C'È LAVORO NON COMMITTATO SUL DISCO. CHIUDILO TU, PRIMA DI TUTTO.**
 
@@ -3765,13 +3806,16 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5734 test
+SUITE ATTUALE: Ran 5738 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3.
 COMANDO:  python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"
-MISURATO SU: 6118d35 + IL PIANO DEI DIECI BLOCCHI del 2026-08-15 (non ancora committato):
+MISURATO SU: f83c0b6 + IL PEZZO A del 2026-08-15 (z3 acceso in CI, non ancora committato):
+             4 guardie in `TestLeDIMOSTRAZIONIMatematicheGIRANODavveroInCI`.
+             Da 5734 a 5738: **+4**. Caricatore da fermo, scritto PRIMA di lanciare (S14).
+MISURATO SU: 6118d35 + IL PIANO DEI DIECI BLOCCHI del 2026-08-15 (unito con #52):
              6 guardie in `TestIlPianoDeiDieciBlocchiNONPuoDivergereDallaMACCHINA` + 5 in
              `TestLaListaDeiLavoriNONPuoMENTIRE`, tutte in `test_pipeline_ci.py`.
              Da 5723 a 5734: **+11**. Caricatore da fermo, scritto PRIMA di lanciare (S14).

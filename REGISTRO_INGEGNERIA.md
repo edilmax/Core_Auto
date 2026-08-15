@@ -27,11 +27,15 @@
 > `memory/bookinvip-piano-dieci-pezzi.md`, che va **aperto e letto**: qui c'è l'ordine.
 
 <!-- PIANO-INIZIO: lo legge collaudi/regole_avvio.py. Non ricopiare altrove. -->
-- **A** · accendere **`z3` in CI** (`requirements.txt` + passo d'installazione) — **~2 righe**
-  ⛔ MISURATO 2026-08-15: `z3-solver` non è installato, quindi `test_fase199_invarianti` e
-  `test_fase199_transizioni` fanno `skipTest` e **le dimostrazioni matematiche sugli
-  invarianti dei soldi NON girano in CI**, mentre la tabella resta verde. Sono anche i
-  `skipped` che scorrono a ogni suite. Guardia: si guasta un nucleo di `fase199` → CI **rossa**.
+- **A** · ✅ **FATTO 2026-08-15** — `z3` acceso in CI. ⛔ **NON** in `requirements.txt`, che
+  costruisce l'immagine di produzione: un risolutore matematico che il sito non chiama mai non
+  ci entra (regola ferrea 1). Sta nella riga d'installazione dei **tre** job che eseguono la
+  suite (`full-suite`, `full-suite-311`, `copertura`), e una guardia pretende **tutt'e due** le
+  cose: che ogni job che arriva a quelle prove installi z3, e che z3 **non** finisca in
+  `requirements.txt`. Prova nelle due direzioni: nucleo di I2 guastato
+  (`somma > dovuto` → `somma > dovuto + 1`) → le 35 dimostrazioni **rosse**, con il
+  controesempio esatto `[D = 0, saldato = False, S = 1]`; ripristinato → verdi, `sha256`
+  identico (`00192BCA…`).
 - **1** · il **Giudice esce ROSSO se ha saltato punti** (oggi ne salta 84 su 114 ed esce 0)
 - **2** · **ri-confermare un «ucciso»** rieseguendolo (un test instabile gonfia il punteggio)
 - **C** · sgonfiare `CLAUDE.md` in blocchi meccanici — ⛔ e **aggiornare `conta_regole()` nello
@@ -617,6 +621,41 @@ un salvataggio di sei giorni prima **credendo di aver fatto quello di oggi**, e 
 giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
+
+### 🔬 FATTO 2026-08-15 (notte, 3) — **PEZZO A: LE PROVE PIÙ FORTI ERANO VERDI PERCHÉ NON GIRAVANO**
+
+**Nessuna riga di produzione toccata.** File: `.github/workflows/ci.yml` (3 parole),
+`test_pipeline_ci.py` (4 guardie), `REGISTRO_INGEGNERIA.md`, `RIPRENDI_QUI.md`.
+
+**Il difetto.** `z3-solver` non era fra le dipendenze installate dalla CI, quindi in CI
+`test_fase199_invarianti` e `test_fase199_transizioni` facevano `skipTest("z3 non
+installato")`: **35 test** che dimostrano matematicamente le leggi dei soldi e le transizioni
+delle prenotazioni **si saltavano puliti**, e la tabella dei job restava VERDE. Sul computer
+del fondatore giravano (z3 c'è): il buco era invisibile proprio dove si guarda di più. Un
+guasto nel nucleo degli invarianti avrebbe passato il cancello.
+
+**La cura, e perché NON `requirements.txt`.** Quel file costruisce l'**immagine di
+produzione**: infilarci un risolutore matematico che il sito non usa mai gonfia il server per
+niente (regola ferrea 1, D1). z3 è uno strumento **di collaudo**, quindi sta nella riga
+d'installazione dei tre job che eseguono la suite — `full-suite`, `full-suite-311`,
+`copertura`. Diff: **tre parole**.
+
+**⚠️ La prima guardia aveva un buco, e l'ha trovato lei stessa.** Cercava `unittest discover`
+e non vedeva `full-suite-311`, che lancia la stessa suite con un elenco generato
+(`python -m unittest $(cat moduli_311.txt)`). Un job invisibile a una guardia è peggio di
+nessuna guardia: dà la sensazione di essere coperti. Riconoscimento riscritto su «arriva a
+quei test», con una guardia che prova **il metodo** e non lo stato. ⛔ E `money-smoke` resta
+fuori apposta: elenca a mano dodici moduli e non tocca `fase199` — obbligarlo sarebbe un falso
+allarme, e un falso allarme è un difetto quanto un allarme mancato (regola ferrea 10).
+
+**La prova nelle due direzioni (D18 punto 2).** Guastato il nucleo di I2
+(`somma > dovuto` → `somma > dovuto + 1`, cioè un centesimo pagato in più non veniva più
+segnalato): le 35 dimostrazioni sono diventate **rosse**, e z3 non si è limitato a fallire —
+ha stampato il **controesempio esatto**: `CONTROESEMPIO [D = 0, saldato = False, S = 1]`.
+Ripristinato: 35 verdi, `sha256` **identico** (`00192BCA45B2E1E9E…`).
+⚠️ **Limite dichiarato:** questo dimostra che quelle prove sanno diventare rosse *qui*. Che
+girino davvero *in CI* lo dirà il primo giro sul ramo, dove il numero dei saltati deve
+**calare**: va letto, non dato per buono.
 
 ### 🧱 FATTO 2026-08-15 (notte, 2) — **IL PIANO NON È PIÙ UN FOGLIO: È UNA MACCHINA IN 10 BLOCCHI**
 
