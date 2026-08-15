@@ -585,20 +585,32 @@ class TestLaSentinellaEsterna(unittest.TestCase):
                       "la sentinella non guarda lo stato del Guardiano dei soldi: controlla "
                       "solo che il sito risponda, e un Guardiano morto le sfugge")
 
-    def test_LA_TOLLERANZA_TEMPORANEA_E_DICHIARATA_E_CIRCOSCRITTA(self):
-        """Il campo `guardiano` arriva in produzione solo col prossimo deploy: fino ad allora
-        la sua ASSENZA non fa fallire, o la sentinella griderebbe ogni 15 minuti su un sito
-        sano. E' una scelta giusta e PERICOLOSA: se resta per sempre, un campo sparito
-        passera' inosservato. Qui si pretende che sia scritta come temporanea, col motivo e
-        con quando va tolta -- cosi' chi legge il file sa che e' un debito, non un progetto."""
-        testo = io.open(self.PERCORSO, encoding="utf-8").read()
-        self.assertIn("ASSENTE", testo)
-        self.assertIn("TOLLERANZA TEMPORANEA", testo,
-                      "il ramo che perdona il campo assente non e' dichiarato temporaneo: "
-                      "fra sei mesi nessuno sapra' che era un debito")
-        self.assertIn("DOPO IL PRIMO DEPLOY", testo,
-                      "non e' scritto QUANDO va tolta la tolleranza: una scadenza che non "
-                      "esiste non scade")
+    def test_UN_CAMPO_SPARITO_E_UN_ALLARME_non_un_perdono(self):
+        """IL DEBITO E' STATO CHIUSO IL 2026-08-15, E QUESTA GUARDIA IMPEDISCE DI RIAPRIRLO.
+
+        Per qualche ora la sentinella TOLLERAVA l'assenza del campo `guardiano`: il server non
+        aveva ancora il codice che lo espone, e pretenderlo avrebbe fatto gridare il controllo
+        ogni 15 minuti su un sito sano -- e un allarme sempre acceso viene spento (regola
+        ferrea 10). Era una scelta giusta e PERICOLOSA: un «temporaneo» che nessuno toglie
+        diventa cecita' permanente, ed e' il modo piu' comune in cui una rete di sicurezza si
+        allarga fino a non prendere piu' niente.
+
+        Il deploy e' stato fatto e verificato DALL'ESTERNO lo stesso giorno -- un giro vero di
+        questa sentinella ha letto `guardiano: ok` sul sito -- quindi il perdono e' stato
+        tolto lo stesso giorno, non "quando capita".
+
+        ⛔ Da adesso: se il campo sparisce (server tornato a una versione vecchia, oppure
+        qualcuno che lo rimuove) la sentinella GRIDA. Senza quel campo controllerebbe solo che
+        il sito risponda, cioe' meta' del lavoro con l'aria di averlo fatto tutto.
+        """
+        s = self._script()
+        self.assertIn("ASSENTE", s,
+                      "la sentinella non distingue piu' il caso «campo assente»: un server "
+                      "tornato a una versione vecchia passerebbe inosservato")
+        self.assertNotIn("exit 0", s,
+                         "c'e' di nuovo un'uscita a ZERO esplicita nello script: era il "
+                         "perdono per il campo assente, tolto il 2026-08-15 dopo il deploy. "
+                         "Rimetterlo rende questa testa cieca a meta'")
 
 
 class TestTrigger(unittest.TestCase):

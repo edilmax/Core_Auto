@@ -567,6 +567,162 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🔒 FATTO 2026-08-15 — **LA RETE CHE TOGLIE IL PIN RIMETTEVA DENTRO IL PIN**
+
+**Modulo di PRODUZIONE toccato: `fase83_server.py`** (due righe), col «AUTORIZZO» del
+fondatore. Guardia in `test_fase59_codice_pin.py`; adeguato `collaudi/gare_micro.py`.
+
+#### Come è saltato fuori: la CI rossa che sembrava instabilità
+
+Dopo il deploy la CI è andata **rossa** sulla richiesta #51 — un commit che **non toccava
+codice di produzione**. Il test a esplorazione casuale diceva:
+`I3 VIOLATO: PIN check-in esposto PRIMA del pagamento (stato 'in_attesa')`.
+
+⛔ La spiegazione comoda era **«hypothesis è instabile»**. È il modo esatto in cui un difetto
+vero si traveste da rumore e resta lì per sempre.
+
+#### Il meccanismo, ed è pulito da raccontare
+
+Il voucher ha **due difese**: il PIN si scrive solo a pagamento avvenuto, e una **seconda
+rete** lo toglie se trapelasse. La seconda rete lo sostituiva col lucchetto **`&#128274;`** —
+che **contiene le cifre `128274`**. Il PIN è di **4 cifre**, quindi:
+
+> se il PIN è `1282`, `2827` o `8274`, la sostituzione **rimette dentro il PIN** che doveva
+> togliere. La rete non sapeva pulire **sé stessa**.
+
+**Misurato**, non dedotto: su 3000 voucher non pagati il PIN restava **2 volte**, ed erano
+**esattamente** `2827` e `1282`. Nessun altro valore. Dopo la riparazione: **0 su 3000**.
+
+#### 🔍 Un mio inciampo, che vale la pena raccontare
+
+Per un pezzo ho escluso questa spiegazione perché il PIN citato dalla CI era `5414`, che non è
+fra i tre. Sbagliavo: **il PIN dipende dal segreto HMAC**, e io l'avevo calcolato col segreto
+del mio banco di prova, non con quello della CI. Lo stesso riferimento dà PIN diversi con
+segreti diversi — verificato. Un numero preso dall'ambiente sbagliato mi aveva quasi fatto
+archiviare il difetto come irriproducibile (**S11**: l'ambiente è parte della misura).
+
+#### 💡 E il progetto lo sapeva già, in un altro angolo
+
+`collaudi/gare_micro.py:165` porta scritto: *«marcatori ESATTI della riga PIN (il PIN nudo e'
+4 cifre: collide con date/prezzi)»*, e infatti cerca la **riga esatta**. La conoscenza c'era —
+in **uno** strumento. `test_stateful_api.py:397` usa il confronto ingenuo, ed è per questo che
+è lui a diventare rosso. Non era ignoranza: era **una lezione imparata e non propagata**.
+
+#### La riparazione
+
+Il segnaposto è ora il **carattere vero** del lucchetto (`\U0001F512`), scritto come sequenza
+di escape **così il sorgente resta ASCII** e il valore a runtime non contiene cifre. Il
+voucher dichiara `<meta charset="UTF-8">`, quindi si vede identico a prima.
+⚠️ Nel file esistono **altre 7 entità numeriche**: se una di quelle finisse nel voucher,
+porterebbe con sé nuovi PIN «impuliti». La guardia nuova le prenderebbe lo stesso, perché
+**non cabla nessun numero**: si fa dire dalla pagina quali sequenze di 4 cifre contiene.
+
+#### Le prove, nell'ordine di D20
+
+1. guardia scritta; 2. **vista rossa** sul codice di produzione — e ha nominato i colpevoli da
+sola: `[('p16642','1282'), ('p3503','2827'), ('p9855','8274')]`; 3. riparazione; 4. verde, e
+**0 su 3000** alla misura diretta; 5. *in più*: difetto **rimesso dentro** → di nuovo rossa.
+⚠️ La prima ri-iniezione era **a metà** (solo una delle due righe) e la guardia restava verde:
+**aveva ragione lei**, perché con la seconda riga riparata la rete puliva davvero. Rimesse
+entrambe, è tornata rossa. Ripristino verificato col `sha256` (`D28CB2B2…3BAC2C`).
+
+#### ✅ SECONDA PARTE, stesso giorno: LA RETE NON CERCA PIÙ QUATTRO CIFRE NUDE
+
+La rete cercava `_pin_checkin in pagina`, cioè **quattro cifre dentro tutto l'HTML**. Ma una
+pagina è piena di cifre, e un PIN di 4 ci finisce dentro per caso: quando succedeva, la rete
+**gridava `CRITICAL` su una pagina sana** e **sostituiva quel numero** — cioè corrompeva un
+prezzo o una data che l'ospite legge, per difendersi da niente. Misurato: **2 su 3000**.
+
+✅ Ora la riga del PIN ha **UNA definizione sola** — `riga_pin_voucher()` in
+`fase83_server.py` — e la usano tutti: la pagina che la disegna, la rete che la sorveglia,
+`test_stateful_api.py` e `collaudi/gare_micro.py`, che prima ne tenevano **copie**.
+La rete cerca **quella riga**: o c'è il PIN messo come PIN, o non c'è. Niente ambiguità.
+
+**Prima erano TRE i posti che conoscevano quella forma** (il prodotto, `gare_micro.py`, e
+l'email con uno stile suo). Adesso è **uno**.
+
+#### 🔴 TRE ROSSI, E NESSUNO ERA DEL PRODOTTO — vale la pena averli scritti
+
+· la guardia sul falso allarme cercava il prezzo **con la virgola**, e la pagina lo scrive
+  **col punto**: rossa per colpa mia, non del codice. *Misurato invece che supposto.*
+· la guardia sul segnaposto pretendeva che **quattro cifre qualsiasi** non comparissero mai —
+  ma l'anno delle date è **2026**. Era ingenua **esattamente come** l'asserzione che aveva reso
+  rossa la CI: avevo ricostruito lo stesso difetto dall'altro lato del vetro.
+· la prima ri-iniezione del difetto era **a metà** (una riga su due) e la guardia restava
+  verde: **aveva ragione lei**, perché con l'altra riga riparata la rete puliva davvero.
+
+💡 Tutti e tre dicono la stessa cosa: **quando una misura sorprende, il primo sospetto va allo
+strumento** (S3) — e stavolta lo strumento ero io.
+
+#### ⚠️ Verificato anche il fronte che non era stato chiesto
+
+`fase86_email.py:573` ha un **suo** blocco PIN, con uno stile diverso. Il PIN gli arriva come
+**parametro**, quindi la protezione sta nel chiamante: controllati **entrambi** i chiamanti
+(`fase83_server.py:5013` e `:6466`) — tutti e due **gated** sul pagamento, il secondo con il
+commento giusto (*«niente PIN prima del pagamento, nemmeno all'host»*). **Nessun difetto.**
+Verificato, non supposto: un'email si manda, e sarebbe stata peggio di una pagina.
+
+### 🚀 FATTO 2026-08-15 — **DEPLOY: IL LAVORO DI OGGI È IN PRODUZIONE, E VERIFICATO DA FUORI**
+
+Autorizzato dal fondatore («fai il deploy»). Eseguito col **`deploy/protocollo_d17.sh`**, non a
+mano — D10: l'attrezzo esisteva già e fa i tre passi nell'ordine obbligatorio. ⛔ Prima di
+eseguirlo è stata **verificata l'impronta `sha256` del file sul server contro quella locale**:
+identiche, quindi leggere il proprio file era leggere ciò che sarebbe girato.
+
+#### 🔴 IL PARACADUTE ERA AGGANCIATO ALL'IMMAGINE SBAGLIATA. ANCORA.
+
+```
+:prec PRIMA:   sha256:d3c97a63caf5f891...
+immagine viva: sha256:4eb853a4ed77a2e7...
+```
+Se il deploy fosse andato male e si fosse tirata la maniglia, si sarebbe tornati a uno stato che
+**non era l'ultimo buono** — convinti del contrario. È il difetto che `CLAUDE.md` racconta come
+sbagliato **sei volte in sei giorni**, e la settima volta **non l'ha impedito la memoria: l'ha
+impedito l'attrezzo**, che ri-aggancia e poi *verifica che coincida*. La differenza fra un
+obbligo affidato alla buona volontà e uno affidato a una macchina, misurata sul campo.
+
+#### Il deploy, coi numeri
+
+`d05ff53 → 1064947` · 17 file · build dell'immagine nuova **mentre il sito girava su quella
+vecchia** · `:latest` ≠ `:prec` verificato (altrimenti il ritorno non esisterebbe) ·
+**`casavip_nginx` è rimasto `Running` per tutta l'operazione: il sito non è mai andato giù** ·
+app **sana dopo 6 secondi** · `money_path_pronto: True` · `avvisi: []` · gettone **consumato**
+(un `prima` vale per **uno** scambio, non per la giornata).
+
+Salvataggio verificato **aprendolo**, non guardando la data: `gzip -t` integro e primi byte
+`SQLite format 3`.
+
+#### Le prove, dopo
+
+· sonde positive `/` e `/api/health` → **200 e 200**;
+· sonda negativa `/api/bunker/invarianti` → **403**. ⛔ Su un indirizzo che **esiste**: un 404
+  non prova mai che qualcosa sia protetto;
+· giudice del progetto sul sito vero: **190 controlli, 0 violazioni**;
+· dentro il contenitore: commit `1064947`, immagine viva = `:latest`, paracadute = la precedente.
+
+#### 🎯 E le tre verifiche che erano il MOTIVO del deploy
+
+```
+{"status": "ok", "money_unit": "cents_integer", "guardiano": "ok"}
+/data/guardiano_ultimo_giro   11 byte, scritto 12:41
+12:41:05 INFO GUARDIANO: nessuno stato anomalo (tutto quadra)
+```
+E poi la prova che chiude il cerchio, **da fuori**: un giro vero della sentinella su macchine
+GitHub contro il sito vero →
+`HTTP 200 · guardiano: ok · OK: il sito risponde e il Guardiano dei soldi e' vivo.`
+
+#### ✅ IL DEBITO È STATO CHIUSO LO STESSO GIORNO, NON «QUANDO CAPITA»
+
+La sentinella **tollerava** l'assenza del campo `guardiano` finché il server non aveva il codice.
+Condizione soddisfatta alle 12:41 → perdono **tolto** subito. Da adesso un campo che sparisce è
+un **allarme**. Riprovati i sei scenari eseguendo lo script: l'unico cambiato è quello voluto —
+*campo sparito* da **tollera** a **grida**. La guardia è stata **rovesciata** di conseguenza:
+non pretende più che la tolleranza sia dichiarata temporanea, ma che **non esista più alcuna
+uscita a zero** nello script.
+
+💡 *Un «temporaneo» che nessuno toglie diventa cecità permanente, ed è il modo più comune in cui
+una rete di sicurezza si allarga fino a non prendere più niente.*
+
 ### 🛰️ FATTO 2026-08-15 — **LA SENTINELLA ESTERNA: LA TESTA CHE NON MUORE COL SERVER**
 
 **File nuovo: `.github/workflows/sentinella.yml`.** Produzione toccata: `fase83_server.py`

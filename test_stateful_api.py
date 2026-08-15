@@ -43,7 +43,8 @@ from hypothesis.stateful import (Bundle, RuleBasedStateMachine, consumes, invari
 
 import fase85_pagamenti_stripe as _stripe
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
-from fase83_server import crea_router, pagina_voucher_html, sweep_hold_una_passata
+from fase83_server import (crea_router, pagina_voucher_html, riga_pin_voucher,
+                           sweep_hold_una_passata)
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
 
@@ -390,11 +391,19 @@ class MacchinaBookinVIP(RuleBasedStateMachine):
             pagina = pagina_voucher_html(self.sis, p["vt"], "it")
             assert pagina, "voucher non renderizzato per %s" % rif
             pin = firma.pin_checkin(rif)
+            # ⛔ SI CERCA LA RIGA DEL PIN, NON LE QUATTRO CIFRE NUDE. Il PIN e' di 4 cifre e
+            # una pagina e' piena di cifre: l'anno delle date e' «2026», i prezzi sono
+            # numeri. Col confronto nudo questa asserzione diventava rossa PER CASO (successo
+            # davvero il 2026-08-15: CI rossa, un'ora di indagine, e la spiegazione comoda
+            # sarebbe stata «hypothesis e' instabile»). La forma giusta era gia' in casa, in
+            # un angolo solo: `collaudi/gare_micro.py:165`. Adesso la definizione e' UNA,
+            # dentro il prodotto, e la importano tutti.
+            riga = riga_pin_voucher(pin)
             if stati.get(rif) == "pagato":
-                assert pin in pagina, \
+                assert riga in pagina, \
                     "controllo positivo I3: prenotazione PAGATA ma PIN assente (%s)" % rif
             else:
-                assert pin not in pagina, \
+                assert riga not in pagina, \
                     "I3 VIOLATO: PIN check-in esposto PRIMA del pagamento (rif %s, " \
                     "stato %r)" % (rif, stati.get(rif))
                 sp = (firma.decodifica(p["vt"]) or {}).get("smart_pass") or ""
