@@ -492,6 +492,251 @@ class TestIgieneDelFile(unittest.TestCase):
             self.assertTrue(_passi(job), "il job %r non ha passi" % nome)
 
 
+class TestIlGancioSTAMPAIlPiano(unittest.TestCase):
+    """UNA CHAT NUOVA DEVE TROVARSI DAVANTI IL PIANO, NON DOVERLO CERCARE.
+
+    Il gancio `SessionStart` (`.claude/settings.json`) lancia `collaudi/regole_avvio.py` a
+    ogni sessione. Fino al 2026-08-15 stampava le REGOLE -- come lavorare -- ma non il PIANO,
+    cioe' COSA fare e in che ordine: ogni chat nuova conosceva il metodo e sceglieva da sola.
+    L'ha fatto notare il fondatore -- *«se ogni volta non viene letto siamo a punto a capo»* --
+    dopo che questa stessa sessione aveva ignorato il piano per ore, avendone letto solo la
+    riga di riassunto nell'indice.
+
+    ⛔ Un piano che vive in un file che nessuno apre non e' un piano: e' un desiderio. Questa
+    guardia esiste perche' la stampa non possa sparire in silenzio (D18 punto 4).
+    """
+
+    def test_il_piano_ESISTE_nel_registro_e_lo_strumento_lo_LEGGE(self):
+        import collaudi.regole_avvio as ra
+        piano = ra.leggi_piano()
+        self.assertTrue(piano,
+                        "il blocco PIANO-INIZIO/PIANO-FINE non c'e' piu' in "
+                        "REGISTRO_INGEGNERIA.md: il gancio non ha piu' niente da stampare, e "
+                        "ogni chat nuova ricomincera' a scegliere da sola")
+        self.assertIn("**A**", piano, "il piano non nomina piu' il primo pezzo in ordine")
+
+    def test_lo_strumento_lo_STAMPA_davvero(self):
+        """Non basta che sappia leggerlo: deve finire sullo schermo. Si esegue il programma
+        VERO e si guarda la sua uscita -- non si cerca una stringa nel sorgente, che un
+        commento soddisferebbe (sbaglio S6)."""
+        import subprocess
+        import sys as _sys
+        radice = os.path.dirname(os.path.abspath(__file__))
+        esito = subprocess.run([_sys.executable, os.path.join(radice, "collaudi",
+                                                             "regole_avvio.py")],
+                               cwd=radice, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        uscita = esito.stdout.decode("utf-8", errors="replace")
+        self.assertIn("IL PIANO", uscita,
+                      "il gancio non stampa piu' il piano: una chat nuova non lo vedra'")
+        self.assertIn("bookinvip-piano-dieci-pezzi", uscita,
+                      "non dice piu' DOVE leggere il piano per esteso: la riga di riassunto "
+                      "nell'indice non basta, ed e' l'errore da cui nasce questa guardia")
+
+    def test_il_piano_NON_e_RICOPIATO_dentro_lo_strumento(self):
+        """La malattia di tutta la giornata del 2026-08-15: la stessa cosa scritta in due
+        posti, e la seconda copia che resta indietro. Il piano deve stare in UN posto solo --
+        il registro -- e lo strumento deve LEGGERLO."""
+        import io as _io
+        sorgente = _io.open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                         "collaudi", "regole_avvio.py"),
+                            encoding="utf-8").read()
+        for pezzo in ("copertura decide cosa mutare", "revisore indipendente",
+                      "tre uscite"):
+            self.assertNotIn(pezzo, sorgente,
+                             "il testo del piano e' stato RICOPIATO dentro regole_avvio.py "
+                             "(%r): il giorno che il piano cambia, questa copia restera' "
+                             "indietro e stampera' il falso. Si legge dal registro." % pezzo)
+
+
+class TestIlPianoDeiDieciBlocchiNONPuoDivergereDallaMACCHINA(unittest.TestCase):
+    """IL PIANO E' DATI, E CHI LI CONTRADDICE DIVENTA ROSSO LO STESSO GIORNO.
+
+    Nato il 2026-08-15 da un'osservazione del fondatore: *«se non mettiamo a posto questo
+    foglio, ogni chat fa quel che vuole»*. Aveva ragione, e la prova stava nel codice:
+    `collaudi/piano_dei_soldi.py` cerca di capire il piano con espressioni regolari sulla
+    PROSA dei documenti (`re.compile(r"passati dal giudice - (\\d+)")`). Una macchina che
+    prova a indovinare un tema: cambia una parola e diventa cieca.
+
+    `collaudi/piano.py` gira il verso: il piano e' una struttura di DATI (dieci blocchi per
+    mestiere, coi moduli e gli strumenti d'ingegneria che devono superare), e il racconto lo
+    stampa la macchina. Queste guardie servono a una cosa sola: che quei dati non possano
+    divergere dalla macchina vera senza che qualcosa diventi rosso.
+
+    ⛔ Ognuna e' stata vista ROSSA prima di valere (D4, D20): l'iniezione avviene in memoria,
+    passando un elenco di moduli finto, cosi' la prova non tocca il disco (D19).
+    """
+
+    def _piano(self):
+        import collaudi.piano as p
+        return p
+
+    def test_ogni_modulo_del_progetto_sta_in_ESATTAMENTE_un_blocco(self):
+        """La difesa contro «costruito e dimenticato». Un `fase*.py` nuovo che nessuno
+        classifica non e' un dettaglio burocratico: e' un pezzo di macchina di cui nessuno
+        ha deciso chi lo collauda -- e qui ne sono gia' stati contati a decine."""
+        p = self._piano()
+        problemi = p.contraddizioni()
+        self.assertEqual([], problemi,
+                         "il piano dei dieci blocchi non coincide piu' con la macchina:\n  - "
+                         + "\n  - ".join(problemi))
+
+    def test_DIVENTA_ROSSA_se_un_modulo_nuovo_non_e_in_nessun_blocco(self):
+        """La direzione che conta: la guardia deve GRIDARE col guasto dentro. Senza questa
+        prova sarebbe un ornamento -- un controllo che non puo' fallire (modo 4)."""
+        p = self._piano()
+        finto = set(p.moduli_sul_disco()) | {"fase999_mai_classificato"}
+        problemi = p.contraddizioni(sul_disco=finto)
+        self.assertTrue(any("FUORI DA OGNI BLOCCO" in x for x in problemi),
+                        "ho aggiunto un modulo che nessun blocco conosce e la guardia ha "
+                        "taciuto: allora non vedrebbe nemmeno un modulo vero dimenticato")
+
+    def test_DIVENTA_ROSSA_se_un_blocco_nomina_un_modulo_che_NON_esiste(self):
+        """Sbaglio S2: i nomi si leggono, non si inventano (`fase186_guardiano_stati.py` fu
+        inventato due volte in un'ora). Un piano che nomina fantasmi manda a lavorare su
+        file che non ci sono."""
+        p = self._piano()
+        veri = p.moduli_sul_disco()
+        sparito = sorted(p.moduli_nel_piano())[0]
+        problemi = p.contraddizioni(sul_disco=set(veri) - {sparito})
+        self.assertTrue(any("NON ESISTONO" in x for x in problemi),
+                        "ho tolto dal disco un modulo che il piano dichiara e la guardia ha "
+                        "taciuto: il piano potrebbe nominare fantasmi per sempre")
+
+    def test_se_non_vede_NESSUN_modulo_dice_MISURA_NON_VALIDA_e_non_VERDE(self):
+        """Sbaglio S1: un confronto che riceve il vuoto non dice «uguali», dice «misura non
+        valida». Il vuoto non e' un valore: e' l'assenza di misura. E' anche D18 punto 1 --
+        uno strumento misura prima se stesso."""
+        p = self._piano()
+        problemi = p.contraddizioni(sul_disco=set())
+        self.assertTrue(problemi, "con zero moduli visti la guardia e' rimasta VERDE: e' il "
+                                  "verde peggiore, quello di chi non ha guardato niente")
+        self.assertTrue(any("MISURA NON VALIDA" in x for x in problemi),
+                        "con zero moduli visti deve dire che la misura NON e' valida, non "
+                        "inventare un verdetto: %r" % problemi)
+
+    def test_ogni_blocco_dichiara_QUANDO_e_finito_e_CON_QUALI_strumenti(self):
+        """Un blocco senza condizione d'arrivo e senza attrezzi non e' un lavoro: e' un
+        desiderio. E' la stessa regola che `regole_avvio.lavori_senza_criterio()` applica ai
+        lavori in sospeso, portata sui blocchi."""
+        p = self._piano()
+        for b in p.BLOCCHI:
+            self.assertTrue(b["finito_quando"],
+                            "il blocco «%s» non dice quando e' finito" % b["nome"])
+            self.assertTrue(b["attrezzi"],
+                            "il blocco «%s» non dice con quali strumenti lo si dimostra"
+                            % b["nome"])
+            self.assertTrue(b["moduli"],
+                            "il blocco «%s» non contiene nessun modulo" % b["nome"])
+            for a in b["attrezzi"]:
+                self.assertIn(a, p.ATTREZZI,
+                              "il blocco «%s» chiede l'attrezzo %r, che non e' in cassetta"
+                              % (b["nome"], a))
+
+    def test_il_gancio_di_avvio_STAMPA_i_dieci_blocchi(self):
+        """Non basta che il file esista: deve finire sullo schermo di ogni chat nuova. Si
+        esegue il programma VERO e si guarda la sua uscita, non si cerca una stringa nel
+        sorgente -- che un commento soddisferebbe (sbaglio S6)."""
+        import subprocess
+        import sys as _sys
+        radice = os.path.dirname(os.path.abspath(__file__))
+        esito = subprocess.run([_sys.executable, os.path.join(radice, "collaudi",
+                                                             "regole_avvio.py")],
+                               cwd=radice, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        uscita = esito.stdout.decode("utf-8", errors="replace")
+        self.assertIn("BLOCCHI", uscita,
+                      "il gancio non stampa piu' i blocchi: una chat nuova non sapra' quale "
+                      "modulo appartiene a quale mestiere, e ricominciera' a scegliere da sola")
+        for atteso in ("SOLDI E PAGAMENTI", "PRENOTAZIONI E INVENTARIO"):
+            self.assertIn(atteso, uscita,
+                          "il gancio non nomina piu' il blocco %r" % atteso)
+
+
+class TestLaListaDeiLavoriNONPuoMENTIRE(unittest.TestCase):
+    """LA LISTA DEI LAVORI IN SOSPESO SI MISURA DA SOLA — perche' mentiva davvero.
+
+    Il 2026-08-15 il fondatore ha chiesto: *«come faccio a sapere se la chat vecchia ha
+    fatto tutto quello che c'e' scritto?»*. Misurando, la risposta e' stata imbarazzante:
+    la lista teneva **CodeQL al primo posto fra i lavori DA FARE** mentre
+    `.github/workflows/codeql.yml` esisteva ed era **verde su master** (API GitHub,
+    conclusion=success su 6118d35). Una lista scritta a mano resta indietro sempre, e chi
+    la legge rifa' lavoro gia' fatto -- che e' esattamente il difetto del 2026-08-12 da cui
+    quella lista era nata.
+
+    Da qui: ogni voce porta una PROVA meccanica, e lo stato lo rifa' la macchina a ogni
+    avvio invece di leggerlo scritto.
+    """
+
+    def _ra(self):
+        import collaudi.regole_avvio as ra
+        return ra
+
+    def test_ogni_lavoro_in_sospeso_dice_COME_si_controlla(self):
+        """Non basta dire QUANDO e' finito (`fatto_quando`): serve dire CHI lo va a vedere.
+        Fra le due c'e' la differenza fra una regola e un desiderio."""
+        ra = self._ra()
+        senza = ra.lavori_senza_prova()
+        self.assertEqual([], senza,
+                         "questi lavori non dicono come si controlla se sono finiti, quindi "
+                         "il loro stato tornera' a essere una frase scritta a mano: %s"
+                         % ", ".join(senza))
+
+    def test_UNA_PROVA_NON_PUO_ESSERE_SODDISFATTA_DAL_TESTO_DELLA_PROVA(self):
+        """⛔ VERDE FINTO VERO, 2026-08-15, vissuto pochi minuti dopo aver scritto le prove.
+
+        Le parole cercate ("test_clock", "DENOMINATORE DELLA MACCHINA") sono scritte dentro
+        `regole_avvio.py`, nelle prove stesse: la ricerca trovava SE STESSA e due lavori mai
+        iniziati risultavano ✅ FATTO. E' lo sbaglio S6 in forma nuova -- una guardia che il
+        proprio commento poteva soddisfare.
+
+        Questa guardia prova il MECCANISMO, non lo stato del momento: cerca nella cartella
+        `collaudi/` una parola che (oggi) vive solo dentro `regole_avvio.py`, e pretende che
+        quel file non venga contato. Cosi' resta valida anche il giorno che i lavori si
+        faranno davvero.
+        """
+        ra = self._ra()
+        radice = os.path.dirname(os.path.abspath(__file__))
+        trovati = ra._testo_dentro(radice, "collaudi", "", ".py",
+                                   "DENOMINATORE DELLA MACCHINA")
+        self.assertNotIn("regole_avvio.py", trovati,
+                         "la ricerca conta il file che DICHIARA la prova: cosi' un lavoro "
+                         "mai iniziato risulta fatto, perche' la parola cercata e' scritta "
+                         "nella prova stessa")
+
+    def test_lo_stato_e_MISURATO_e_diventa_DA_FARE_se_la_prova_non_trova_niente(self):
+        """La direzione che conta: puntato su una cartella vuota, ogni lavoro deve tornare
+        DA FARE. Se restasse FATTO vorrebbe dire che lo stato e' scritto, non misurato."""
+        import tempfile
+        ra = self._ra()
+        with tempfile.TemporaryDirectory() as vuota:
+            for v in ra.LAVORI_IN_SOSPESO:
+                esito, _perche = ra.stato_del_lavoro(v, base=vuota)
+                self.assertEqual("DA FARE", esito,
+                                 "su una cartella vuota il lavoro «%s» risulta %r: quello "
+                                 "stato non lo sta misurando nessuno" % (v["nome"], esito))
+
+    def test_un_lavoro_SENZA_prova_viene_denunciato_non_dato_per_buono(self):
+        """S7: se manca la premessa il controllo non e' verde, e' NON ESEGUITO."""
+        ra = self._ra()
+        esito, perche_lo_dico = ra.stato_del_lavoro({"nome": "finto senza prova"})
+        self.assertEqual("SENZA PROVA", esito,
+                         "una voce senza prova e' passata come se fosse a posto: %r"
+                         % perche_lo_dico)
+
+    def test_il_gancio_STAMPA_lo_stato_misurato_accanto_a_ogni_lavoro(self):
+        """Si esegue il programma VERO e si guarda l'uscita: cercare la stringa nel sorgente
+        sarebbe soddisfatto da un commento (sbaglio S6)."""
+        import subprocess
+        import sys as _sys
+        radice = os.path.dirname(os.path.abspath(__file__))
+        esito = subprocess.run([_sys.executable, os.path.join(radice, "collaudi",
+                                                             "regole_avvio.py")],
+                               cwd=radice, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        uscita = esito.stdout.decode("utf-8", errors="replace")
+        self.assertIn("STATO MISURATO ADESSO", uscita,
+                      "il gancio non stampa piu' lo stato misurato dei lavori in sospeso: "
+                      "si torna a una lista scritta a mano, che resta indietro sempre")
+
+
 class TestLaSentinellaEsterna(unittest.TestCase):
     """LA TESTA CHE NON MUORE COL SERVER — e la guardia che le sta addosso.
 

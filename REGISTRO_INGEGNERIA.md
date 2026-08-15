@@ -12,6 +12,57 @@
 
 ---
 
+## 🧭 IL PIANO — L'ORDINE DEI LAVORI (lo stampa il gancio a OGNI sessione)
+
+> **Perché sta qui e non in memoria.** La cartella della memoria vive sul computer del
+> fondatore: su un'altra macchina, o dentro la CI, **non esiste**. Questo file viaggia col
+> progetto. ⛔ **E perché in un blocco delimitato:** `collaudi/regole_avvio.py` lo **legge da
+> qui e lo stampa** all'avvio di ogni sessione — non lo ricopia. Una copia resta indietro, ed
+> è il difetto che il 2026-08-15 è costato una CI rossa e un difetto in produzione.
+>
+> **Com'è nato questo blocco.** Il gancio stampava le **regole** (come lavorare) ma non il
+> **piano** (cosa fare, in che ordine): ogni chat nuova conosceva il metodo e ignorava il
+> piano. L'ha fatto notare il fondatore — *«se ogni volta non viene letto siamo a punto a
+> capo»* — e aveva ragione. Il dettaglio per esteso resta in
+> `memory/bookinvip-piano-dieci-pezzi.md`, che va **aperto e letto**: qui c'è l'ordine.
+
+<!-- PIANO-INIZIO: lo legge collaudi/regole_avvio.py. Non ricopiare altrove. -->
+- **A** · accendere **`z3` in CI** (`requirements.txt` + passo d'installazione) — **~2 righe**
+  ⛔ MISURATO 2026-08-15: `z3-solver` non è installato, quindi `test_fase199_invarianti` e
+  `test_fase199_transizioni` fanno `skipTest` e **le dimostrazioni matematiche sugli
+  invarianti dei soldi NON girano in CI**, mentre la tabella resta verde. Sono anche i
+  `skipped` che scorrono a ogni suite. Guardia: si guasta un nucleo di `fase199` → CI **rossa**.
+- **1** · il **Giudice esce ROSSO se ha saltato punti** (oggi ne salta 84 su 114 ed esce 0)
+- **2** · **ri-confermare un «ucciso»** rieseguendolo (un test instabile gonfia il punteggio)
+- **C** · sgonfiare `CLAUDE.md` in blocchi meccanici — ⛔ e **aggiornare `conta_regole()` nello
+  stesso commit**, o la guardia dei numeri diventa rossa
+- **B** · chiudere le due rotte pubbliche che **scrivono senza identità** (`_split_crea`,
+  `_split_paga`) — ⛔ tocca produzione: serve **«autorizzato»**
+- **3** · la **copertura decide cosa mutare** (non si lavora su codice che la produzione non esegue)
+- **4** · niente mutanti sui **nodi aridi**, uno per riga — ⛔ **MA I LOG NON SI SOPPRIMONO**:
+  la falsa equivalenza fu tolta il 2026-08-01 perché **falsa**, e il 14/08 quei mutanti hanno
+  scoperto **sette guardie finte**
+- **5** · il Giudice **scrive da sé la scheda**, il guardiano la pretende
+- **6** · le **tre uscite** di DO-178C per ogni punto scoperto (manca un test · manca un
+  requisito · il codice è estraneo e si toglie)
+- **7** · ✅ **FATTO 2026-08-15** — la coda dei lavori è un **elenco misurato**, non un racconto:
+  `collaudi/piano.py` tiene i **dieci blocchi per mestiere** (tutti i 151 moduli, ognuno in
+  esattamente un blocco, con gli strumenti d'ingegneria e le condizioni d'arrivo), e i **5
+  lavori in sospeso** portano ognuno la sua **prova meccanica** — lo stato lo rifà la macchina
+  a ogni avvio. ⛔ Nasce perché quella lista **mentiva**: teneva CodeQL fra i lavori da fare
+  mentre era verde su master. Resta aperto il pezzo **5** (gli strumenti scrivono da sé la
+  scheda): finché non c'è, **nessun blocco può risultare FINITO**, e il file lo dice.
+- **8** · ✅ **FATTO 2026-08-15** — il battito dei soldi in produzione + sentinella esterna
+- **9** · un **revisore indipendente** sulle modifiche
+- **10** · usare davvero **`hypothesis`** e **`z3`** (già installati e quasi mai accesi)
+
+⛔ **A, 1 e 2 vanno fatti PRIMA di scrivere un solo test nuovo**: misurare con strumenti che
+mentono è peggio che non misurare. ⛔ **3 e 4 vanno PRIMA del Blocco 2 dei soldi**, o si butta
+via metà del lavoro.
+🔴 **Fuori piano ma prima di tutto**: il **rimborso all'ospite non parte da solo** — è prodotto,
+non metodo, e sono soldi di una persona vera. Da chiudere prima del primo host.
+<!-- PIANO-FINE -->
+
 ## 1) 🟢 ACCESO e LIVE in produzione (il prodotto reale, stack "CasaVIP", fase57+)
 Money-path completo (prenota → hold/pagamento → escrow → payout), pannelli, marketing.
 
@@ -566,6 +617,135 @@ un salvataggio di sei giorni prima **credendo di aver fatto quello di oggi**, e 
 giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
+
+### 🧱 FATTO 2026-08-15 (notte, 2) — **IL PIANO NON È PIÙ UN FOGLIO: È UNA MACCHINA IN 10 BLOCCHI**
+
+**Nessuna riga di produzione toccata.** File: `collaudi/piano.py` (**nuovo**),
+`collaudi/regole_avvio.py`, `test_pipeline_ci.py` (11 guardie), `REGISTRO_INGEGNERIA.md`,
+`RIPRENDI_QUI.md`.
+
+**Com'è nato.** Il fondatore: *«perché non mettiamo ordine una volta per tutte? Se non
+mettiamo a posto questo foglio, ogni chat fa quel che vuole.»* La diagnosi era esatta, e la
+prova stava nel codice: `collaudi/piano_dei_soldi.py` capisce il piano **leggendo la prosa**
+con espressioni regolari (`re.compile(r"passati dal giudice — (\d+)")`). Una macchina che
+prova a indovinare un tema: cambia una parola e diventa cieca.
+
+**La cura — si è girato il verso.** Prima: la chat scrive il racconto, la macchina prova a
+leggerlo. Adesso: la macchina tiene i **dati**, e il racconto **lo stampa lei**.
+`collaudi/piano.py` **è** il piano, non lo descrive: dieci blocchi per mestiere, ognuno con i
+suoi moduli, gli strumenti d'ingegneria che deve superare (dalla ricerca del 14/08, con la
+fonte accanto) e le condizioni d'arrivo.
+
+**Cosa garantisce meccanicamente:** ogni `fase*.py` sta in **esattamente un** blocco (151 su
+151: 24+12+9+12+10+15+8+14+27+20) · nessun blocco nomina moduli inesistenti (S2) · nessun
+modulo ha due padroni · ogni attrezzo dichiarato esiste · **nessun blocco può dirsi FINITO**
+finché gli strumenti non scrivono da sé la scheda (pezzo 5), e lo dice a voce alta invece di
+dare un verde comodo. **Limiti dichiarati** (D18 punto 3): «coperto» qui significa *nominato
+da un test*, non *eseguito*; non misura mutazione né copertura di riga.
+
+**🩹 Il verde finto che ha scoperto il mio stesso attrezzo, un minuto dopo la nascita.** Le
+prove dei lavori in sospeso cercavano parole (`test_clock`, `DENOMINATORE DELLA MACCHINA`)
+che erano scritte **dentro le prove stesse**: la ricerca trovava **se stessa** e due lavori mai
+iniziati risultavano ✅ FATTO. È lo sbaglio **S6** in forma nuova — **una prova non può essere
+soddisfatta dal testo della prova**. Riparato escludendo dalla ricerca il file che dichiara la
+prova, e chiuso da una guardia che prova **il meccanismo** e non lo stato del momento, così
+resta valida il giorno che quei lavori si faranno davvero.
+
+**🔴 E la lista dei lavori in sospeso mentiva.** Teneva **CodeQL al primo posto fra i lavori da
+fare** mentre `.github/workflows/codeql.yml` esisteva ed era **verde su master** (API GitHub,
+`conclusion=success` su `6118d35`). Ora ogni voce porta la sua prova meccanica e tre esiti
+possibili — FATTO · METÀ · DA FARE — dove **METÀ** è la parte onesta: *«quello che vive qui c'è;
+quello che vive fuori, in CI o su Stripe, questo strumento non lo può vedere»*. Misurato al
+2026-08-15: CodeQL METÀ · libfaketime DA FARE · orologi Stripe DA FARE · metamorfici METÀ ·
+denominatore DA FARE.
+
+**Guardie (11, tutte viste rosse prima di valere).** `TestIlPianoDeiDieciBlocchiNONPuoDiverge
+reDallaMACCHINA` (6) e `TestLaListaDeiLavoriNONPuoMENTIRE` (5) in `test_pipeline_ci.py`.
+Prove eseguite: modulo finto iniettato sul disco → uscita **1** col nome esatto, poi rimosso →
+uscita **0** con `sha256` **identico** (`590D6A52…`) · collegamento del gancio staccato → guardia
+**rossa**, ripristinato → `sha256` identico (`36E732F7…`) · difetto del verde finto rimesso
+dentro → guardia **rossa**, riparato → `sha256` identico (`90A0E2DC…`).
+
+### 🧭 FATTO 2026-08-15 (notte) — **IL PIANO ORA LO STAMPA IL GANCIO, NON LA BUONA VOLONTÀ**
+
+**Nessuna riga di produzione toccata.** File: `REGISTRO_INGEGNERIA.md` (il blocco del piano),
+`collaudi/regole_avvio.py` (lo legge e lo stampa), `test_pipeline_ci.py` (tre guardie),
+`RIPRENDI_QUI.md` (consegne).
+
+#### Il difetto, trovato dal fondatore
+
+Il gancio `SessionStart` (`.claude/settings.json`) lanciava già `collaudi/regole_avvio.py`, che
+stampa **le regole** — cioè *come* lavorare. Non stampava **il piano**, cioè *cosa* fare e in
+che ordine. Risultato: ogni chat nuova conosceva il metodo e **sceglieva da sola**.
+
+⛔ **La prova è questa sessione stessa.** Ho lavorato ore seguendo gli eventi invece del piano,
+avendone letto solo la **riga di riassunto** nell'indice della memoria. Il file completo l'ho
+aperto **alla fine**, e conteneva un ordine preciso (**A → 1 → 2 → C → B → 3 → 4**) e un
+avvertimento che avevo violato: *«A, 1 e 2 vanno fatti PRIMA di scrivere un solo test nuovo»* —
+mentre ne avevo scritti una ventina. Il fondatore l'ha detto in una riga: *«se ogni volta non
+viene letto siamo a punto a capo»*.
+
+#### La riparazione
+
+Il piano sta nel **registro** (non in memoria: quella cartella **non esiste** su un'altra
+macchina né in CI), fra i marcatori `PIANO-INIZIO`/`PIANO-FINE`. `regole_avvio.py` lo **legge
+da lì e lo stampa** — ⛔ **non lo ricopia**: una copia resterebbe indietro, ed è il difetto che
+lo stesso giorno era già costato una CI rossa (la riga del PIN scritta in tre posti).
+
+💡 **E se il blocco sparisce, il gancio lo DICE**: `⛔ IL BLOCCO DEL PIANO NON C'E' PIU'…
+RIMETTILO prima di decidere cosa fare`. Un promemoria che sparisce in silenzio è la stessa
+malattia che tutto questo esiste per curare.
+
+#### Le prove (regola ferrea 2, nelle due direzioni)
+
+Tolto il marcatore dal registro → **due guardie rosse** e il gancio che lo dichiara; rimesso →
+verdi, con `sha256` **identico**. La terza guardia è quella che vale di più: **fallisce se
+qualcuno ricopia il testo del piano dentro il programma**. Il piano può stare in un posto solo.
+
+#### ⚠️ Limite dichiarato
+
+Il gancio **stampa**; non può obbligare a leggere. Ma la differenza fra «sta in un file che
+qualcuno forse apre» e «te lo trovi davanti prima del primo messaggio» è la stessa che passa
+fra un desiderio e un controllo.
+
+### 🚀 FATTO 2026-08-15 (sera) — **SECONDO DEPLOY: I TRE POSTI SONO ALLINEATI**
+
+Autorizzato dal fondatore («se è tutto corretto fai il deploy»), eseguito col
+**`protocollo_d17.sh`**. ⛔ La condizione è stata **verificata prima di partire**: il commit
+di unione `6118d35` è uno sha **nuovo**, e la sua CI stava ancora girando — quindi si è
+aspettato il **cancello verde su master**, non quello del ramo. Misurato anche che il
+contenuto di `6118d35` fosse **identico** a `3633993` (già giudicato), e che rispetto al VPS
+cambiasse **un solo file di produzione**: `fase83_server.py` (+25 −4).
+
+#### I numeri
+
+`1064947 → 6118d35` · immagine nuova costruita **mentre il sito girava su quella vecchia** ·
+`:latest` ≠ `:prec` verificato · **`casavip_nginx` `Running` per tutta l'operazione** · app
+**sana in 6 secondi** · `money_path_pronto: True` · `avvisi: []` · gettone consumato.
+Sonde **200/200**, negativa **403**, giudice del progetto **190 controlli 0 violazioni**.
+Salvataggio verificato **aprendolo**: `gzip -t` integro, primi byte `SQLite format 3`.
+
+#### 🎯 La verifica che era il MOTIVO del deploy, fatta DENTRO il contenitore vivo
+
+```
+1) PIN mostrato come PIN su 3000 voucher NON pagati : 0   (atteso 0)
+2) prezzi CORROTTI perche' coincidevano col PIN     : 0 su 50   (atteso 0)
+ESITO: TUTTO A POSTO
+```
+Eseguita dentro `casavip_app` con un segreto **di prova** (regola ferrea 14: i segreti veri
+non si toccano e non si stampano) — quindi a essere esercitato è **il codice deployato**.
+Verificato anche a occhio nel contenitore: `riga_pin_voucher` alla riga 848, e **nessun
+`128274`** nel file.
+
+#### Stato finale
+
+**computer = GitHub = VPS = `6118d35`.** `/api/health` risponde `"guardiano": "ok"`, e la
+sentinella esterna su GitHub, interrogando il sito vero, esce **success**.
+
+⚠️ Nota sul paracadute, per non generare falsi allarmi in futuro: all'inizio di **ogni**
+deploy `:prec` risulta indietro di uno, **per costruzione** — è esattamente il senso del passo
+`prima`, che lo ri-aggancia. Diverso è trovarlo indietro di **giorni**, com'è successo al
+primo deploy di oggi: quello è il difetto che il protocollo esiste per impedire.
 
 ### 🔒 FATTO 2026-08-15 — **LA RETE CHE TOGLIE IL PIN RIMETTEVA DENTRO IL PIN**
 

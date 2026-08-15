@@ -253,6 +253,14 @@ LAVORI_IN_SOSPESO = (
                   "(lo e'), e non richiede nessun intervento del fondatore",
         "fatto_quando": "esiste .github/workflows/codeql.yml, gira su master, ed e' VERDE — "
                         "oppure i suoi rilievi sono scritti e triati uno per uno, col motivo",
+        "prova": {
+            "tipo": "file",
+            "bersagli": (".github/workflows/codeql.yml",),
+            "parziale": "il VERDE su master questo strumento NON lo puo' vedere: si legge "
+                        "dalla tabella dei job via API (regola ferrea 8). ⛔ Misurato il "
+                        "2026-08-15 su 6118d35: conclusion=success. Prima di rifarlo, guarda.",
+            "se_manca": "il file del flusso di lavoro non c'e'",
+        },
     },
     {
         "nome": "libfaketime in CI — il giudice ESTERNO sull'orologio (solo Linux)",
@@ -278,6 +286,13 @@ LAVORI_IN_SOSPESO = (
                         "a orologio fermo. ⚠️ Altri limiti noti da mettere in conto: non "
                         "falsifica i clock monotoni, e il suo involucro Python non e' "
                         "thread-safe (noi useremmo il COMANDO, non l'involucro)",
+        "prova": {
+            "tipo": "testo",
+            "dove": ((".github/workflows", "", ".yml"),),
+            "cerca": "faketime",
+            "se_manca": "nessun job della CI nomina faketime: la prova da 5 minuti non "
+                        "e' mai stata fatta",
+        },
     },
     {
         "nome": "orologi di prova Stripe (test clocks)",
@@ -288,6 +303,13 @@ LAVORI_IN_SOSPESO = (
         "fatto_quando": "un collaudo crea un test clock, avanza il tempo e verifica ALMENO "
                         "tre cose: l'hold che scade · il payout che matura a 24h · una "
                         "finestra di penale — con identificativi Stripe VERI nel registro",
+        "prova": {
+            "tipo": "testo",
+            "dove": (("", "test_", ".py"), ("collaudi", "", ".py")),
+            "cerca": "test_clock",
+            "se_manca": "nessun collaudo crea un orologio di prova Stripe: hold, payout e "
+                        "penale non sono mai stati visti scadere davvero",
+        },
     },
     {
         "nome": "collaudi metamorfici sull'aritmetica del denaro",
@@ -301,6 +323,16 @@ LAVORI_IN_SOSPESO = (
                         "gli sconti non cambia il totale. ⛔ SOLO sull'aritmetica del denaro, "
                         "non su tutto: allargarlo e' il modo in cui questi progetti non "
                         "finiscono mai",
+        "prova": {
+            "tipo": "testo",
+            "dove": (("", "test_", ".py"),),
+            "cerca": "metamorf",
+            "parziale": "misurato il 2026-08-15: esiste `TestRelazioniMetamorfiche` in "
+                        "test_fase119_calendario_prezzi.py. ⛔ Il lavoro chiede l'aritmetica "
+                        "del DENARO (tassa, commissione, ordine degli sconti): va guardato "
+                        "se quelle relazioni la coprono, o se coprono solo il calendario",
+            "se_manca": "nessun collaudo prova relazioni metamorfiche",
+        },
     },
     {
         "nome": "il DENOMINATORE",
@@ -312,6 +344,14 @@ LAVORI_IN_SOSPESO = (
         "fatto_quando": "un attrezzo elenca DALLA MACCHINA quante rotte HTTP, email, pagine "
                         "pubbliche e lingue esistono, e per ognuna dice se un collaudo la "
                         "attraversa; e stampa quante NON sono attraversate",
+        "prova": {
+            "tipo": "testo",
+            "dove": (("collaudi", "", ".py"),),
+            "cerca": "DENOMINATORE DELLA MACCHINA",
+            "se_manca": "nessun attrezzo elenca rotte, email, pagine e lingue col loro "
+                        "denominatore. ⚠️ `collaudi/mappa_scoperta.py` ne fa un PEZZO "
+                        "(rotte e moduli mai nominati): si parte da li', non da zero",
+        },
     },
 )
 
@@ -322,13 +362,112 @@ def lavori_senza_criterio():
             if not str(v.get("fatto_quando", "")).strip()]
 
 
+def lavori_senza_prova():
+    """Le voci che non dicono COME si controlla se sono finite.
+
+    Non e' la stessa cosa di `lavori_senza_criterio()`. Quella chiede: «e' scritto quando
+    e' finito?». Questa chiede: «e' scritto **chi lo va a vedere**?». Fra le due c'e' tutta
+    la differenza fra una regola e un desiderio -- ed e' la stessa distinzione che il
+    regolamento applica a se stesso col «si verifica:» di ogni direttiva.
+    """
+    return [v.get("nome", "(senza nome)") for v in LAVORI_IN_SOSPESO if not v.get("prova")]
+
+
+def _c_e_il_file(base, relativo):
+    return os.path.isfile(os.path.join(base, relativo.replace("/", os.sep)))
+
+
+def _testo_dentro(base, cartella, inizio, fine, ago):
+    """I file di `cartella` (nome che inizia/finisce come detto) che contengono `ago`.
+
+    Sola lettura, tollerante: un file illeggibile si salta invece di far esplodere il
+    gancio -- ma NON si conta come «trovato», perche' un errore non e' una prova.
+
+    ⛔ QUESTO FILE E' ESCLUSO DALLA RICERCA, e non e' un dettaglio: e' un verde finto vero,
+    successo il 2026-08-15 pochi minuti dopo aver scritto queste prove. Le parole cercate
+    ("test_clock", "DENOMINATORE DELLA MACCHINA") sono scritte QUI DENTRO, nelle prove
+    stesse: la ricerca trovava se stessa e due lavori mai iniziati risultavano ✅ FATTO.
+    E' lo sbaglio S6 (una guardia che un commento poteva soddisfare) in forma nuova:
+    **una prova non puo' essere soddisfatta dal testo della prova.**
+    """
+    dove = os.path.join(base, cartella) if cartella else base
+    try:
+        nomi = os.listdir(dove)
+    except OSError:
+        return []
+    io_stesso = os.path.basename(os.path.abspath(__file__))
+    trovati = []
+    for n in nomi:
+        if not (n.startswith(inizio) and n.endswith(fine)):
+            continue
+        if n == io_stesso and os.path.abspath(dove) == os.path.dirname(
+                os.path.abspath(__file__)):
+            continue
+        percorso = os.path.join(dove, n)
+        if not os.path.isfile(percorso):
+            continue
+        try:
+            with io.open(percorso, encoding="utf-8", errors="replace") as f:
+                if ago.lower() in f.read().lower():
+                    trovati.append(n)
+        except OSError:
+            continue
+    return trovati
+
+
+def stato_del_lavoro(v, base=None):
+    """Il lavoro e' finito? Lo dice una MISURA, non la voce dell'elenco.
+
+    ⛔ PERCHE' ESISTE (2026-08-15). Il fondatore ha chiesto: *«come faccio a sapere se la
+    chat vecchia ha fatto tutto quello che c'e' scritto?»*. Misurando, si e' scoperto che
+    questa lista **mentiva**: metteva **CodeQL al primo posto fra i lavori da fare** mentre
+    `.github/workflows/codeql.yml` esisteva ed era **verde su master** (letto dall'API).
+    Una lista scritta a mano resta indietro sempre: e' la stessa malattia del paracadute
+    `:prec` (sbagliato quattro volte in quattro giorni) e la cura e' la stessa -- toglierla
+    dalla buona volonta' e darla a un attrezzo.
+
+    Tre esiti, mai due (S7: se manca la premessa non e' «verde», e' «non eseguito»):
+      FATTO    la prova meccanica e' soddisfatta per intero
+      META'    la parte che vive QUI c'e'; quella che vive FUORI (CI, API, Stripe) questo
+               strumento non la puo' vedere, e lo dice invece di indovinare
+      DA FARE  la prova non trova niente
+    """
+    base = base or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    prova = v.get("prova")
+    if not prova:
+        return ("SENZA PROVA", "questa voce non dice come si controlla: e' un desiderio")
+
+    tipo = prova.get("tipo")
+    if tipo == "file":
+        trovati = [b for b in prova["bersagli"] if _c_e_il_file(base, b)]
+    elif tipo == "testo":
+        trovati = []
+        for cartella, inizio, fine in prova["dove"]:
+            trovati += ["%s/%s" % (cartella or ".", n)
+                        for n in _testo_dentro(base, cartella, inizio, fine, prova["cerca"])]
+    else:
+        return ("SENZA PROVA", "tipo di prova sconosciuto: %r" % tipo)
+
+    if not trovati:
+        return ("DA FARE", prova.get("se_manca", "la prova non trova niente sul disco"))
+    dettaglio = ", ".join(sorted(trovati)[:4])
+    if prova.get("parziale"):
+        return ("META'", "trovato: %s — ma %s" % (dettaglio, prova["parziale"]))
+    return ("FATTO", "trovato: %s" % dettaglio)
+
+
 def stampa_i_lavori_in_sospeso():
     print("=" * 78)
     print("⏳ LAVORI OBBLIGATORI IN SOSPESO — %d  (decisi dal fondatore, non opzionali)"
           % len(LAVORI_IN_SOSPESO))
     print("=" * 78)
+    segno = {"FATTO": "✅ FATTO", "META'": "⚠️  META'", "DA FARE": "⏳ DA FARE",
+             "SENZA PROVA": "🔴 SENZA PROVA"}
     for i, v in enumerate(LAVORI_IN_SOSPESO, 1):
+        esito, perche_lo_dico = stato_del_lavoro(v)
         print("  %d. %s" % (i, v["nome"]))
+        print("     STATO MISURATO ADESSO: %s — %s"
+              % (segno.get(esito, esito), perche_lo_dico))
         print("     costo: %s  ·  priorita': %s" % (v["costo"], v["priorita"]))
         print("     perche': %s" % v["perche"])
         print("     ✅ FATTO QUANDO: %s" % v["fatto_quando"])
@@ -336,6 +475,10 @@ def stampa_i_lavori_in_sospeso():
     print("  ⛔ Quando ne finisci uno, TOGLILO DA QUESTA LISTA nello stesso commit del")
     print("     lavoro: una lista che resta indietro rimanda a rifare cose gia' fatte, ed e'")
     print("     esattamente il difetto del 2026-08-12 che ha reso necessaria questa lista.")
+    print("  ⛔ E lo «STATO MISURATO ADESSO» non e' scritto qui da nessuno: lo rifa' la")
+    print("     macchina a ogni avvio. Nasce il 2026-08-15, quando questa lista teneva")
+    print("     CodeQL al primo posto fra i lavori da fare mentre era gia' VERDE su master:")
+    print("     una lista scritta a mano resta indietro sempre, e chi legge rifa' il lavoro.")
     print("=" * 78)
     print()
 
@@ -427,8 +570,112 @@ def main():
     else:
         print("  ✅ Il regolamento dice il vero su se stesso, e OGNI regola dichiara come si")
         print("     verifica (conteggi rifatti adesso dai file, non a memoria).")
+    stampa_piano()
+    stampa_i_blocchi()
     print("=" * 78)
     return 0
+
+
+PIANO_INIZIO = "<!-- PIANO-INIZIO"
+PIANO_FINE = "<!-- PIANO-FINE"
+
+
+def leggi_piano(radice=None):
+    """L'ordine dei lavori, LETTO da `REGISTRO_INGEGNERIA.md` fra i due marcatori.
+
+    ⛔ Si LEGGE, non si ricopia. Una copia del piano dentro questo file resterebbe indietro il
+    giorno che il piano cambia -- ed e' esattamente il difetto che il 2026-08-15 e' costato una
+    CI rossa e un difetto in produzione (la riga del PIN scritta in tre posti).
+
+    Ritorna la stringa vuota se il blocco non c'e': chi chiama lo DICE, non tace (S7).
+    """
+    base = radice or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        with io.open(os.path.join(base, "REGISTRO_INGEGNERIA.md"), encoding="utf-8") as f:
+            testo = f.read()
+    except OSError:
+        return ""
+    i = testo.find(PIANO_INIZIO)
+    j = testo.find(PIANO_FINE)
+    if i < 0 or j <= i:
+        return ""
+    corpo = testo[testo.find("\n", i) + 1:j]
+    return corpo.strip()
+
+
+def stampa_piano():
+    """Il gancio stampa le REGOLE (come lavorare) e da oggi anche IL PIANO (cosa fare).
+
+    Nato il 2026-08-15 da un'osservazione del fondatore: *«se ogni volta non viene letto siamo
+    a punto a capo»*. Aveva ragione -- una chat nuova riceveva il metodo e non l'ordine dei
+    lavori, e ricominciava a scegliere da sola. Un piano che vive solo in un file che nessuno
+    apre non e' un piano: e' un desiderio.
+    """
+    piano = leggi_piano()
+    print()
+    print("=" * 78)
+    print("🧭 IL PIANO — L'ORDINE DEI LAVORI (letto da REGISTRO_INGEGNERIA.md, non ricopiato)")
+    print("=" * 78)
+    if not piano:
+        # Non si tace: un promemoria sparito senza avviso e' la stessa forma di guasto che
+        # tutto questo strumento esiste per combattere.
+        print("  ⛔ IL BLOCCO DEL PIANO NON C'E' PIU' in REGISTRO_INGEGNERIA.md")
+        print("     (cercavo i marcatori PIANO-INIZIO / PIANO-FINE).")
+        print("     Qualcuno l'ha tolto o rinominato: RIMETTILO prima di decidere cosa fare.")
+        return
+    for riga in piano.splitlines():
+        print("  " + riga)
+    print()
+    print("  ⛔ PRIMA DI SCEGLIERE COSA FARE, apri e leggi PER INTERO (la riga di riassunto")
+    print("     nell'indice NON basta -- e' l'errore fatto il 2026-08-15):")
+    print("       memory/bookinvip-piano-dieci-pezzi.md")
+    print("       memory/bookinvip-ricerca-industriale.md")
+
+
+def stampa_i_blocchi():
+    """I DIECI BLOCCHI della macchina, misurati adesso da `collaudi/piano.py`.
+
+    ⛔ Perche' e' separato dal piano qui sopra, e non e' un doppione. Il blocco
+    `PIANO-INIZIO/PIANO-FINE` dice **in che ordine si lavora adesso** (gli attrezzi da
+    accendere: z3 in CI, il Giudice che esce rosso...). Questo dice **com'e' fatta la
+    macchina**: dieci mestieri, quali moduli stanno in ognuno, con quali strumenti
+    d'ingegneria si dimostra che sono finiti. Il primo e' la rotta di oggi, il secondo e'
+    la mappa: servono tutti e due, e nessuno dei due si scrive a mano.
+
+    Nato il 2026-08-15 dall'osservazione del fondatore: *«se non mettiamo a posto questo
+    foglio, ogni chat fa quel che vuole»*. La cura non e' scrivere meglio il foglio: e'
+    smettere di far decidere a un foglio. Qui il piano e' DATI, e chi li contraddice
+    diventa rosso lo stesso giorno.
+    """
+    print()
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import piano as _piano
+        blocchi = sorted(_piano.BLOCCHI, key=lambda b: b["ordine"])
+        sul_disco = _piano.moduli_sul_disco()
+        nominati = _piano.moduli_nominati_dai_test()
+        problemi = _piano.contraddizioni()
+    except Exception as exc:  # un gancio non rompe mai la sessione: lo DICE
+        print("  ⚠️  non riesco a leggere collaudi/piano.py (%s: %s)"
+              % (exc.__class__.__name__, exc))
+        print("     Va guardato: senza quel file nessuno sa piu' quale modulo sta in quale")
+        print("     blocco, ed e' cosi' che i pezzi diventano «costruiti e dimenticati».")
+        return
+    print("=" * 78)
+    print("🧱 LA MACCHINA IN %d BLOCCHI — misurati adesso, non ricordati "
+          "(python collaudi/piano.py)" % len(blocchi))
+    print("=" * 78)
+    for b in blocchi:
+        s = _piano.stato_del_blocco(b, sul_disco, nominati)
+        print("  %2d. %-34s %3d moduli · %d mai nominati da un test"
+              % (b["ordine"], b["nome"], s["moduli"], len(s["scoperti"])))
+    print("  ⛔ «nominato da un test» NON vuol dire eseguito: e' il limite dichiarato N1.")
+    print("     Nessun blocco puo' dirsi FINITO finche' gli strumenti non scrivono da soli")
+    print("     la loro scheda (pezzo 5 del piano). Il dettaglio: python collaudi/piano.py")
+    if problemi:
+        print("  🔴 IL PIANO E LA MACCHINA NON COINCIDONO — %d contraddizioni:" % len(problemi))
+        for p in problemi:
+            print("     · %s" % p)
 
 
 if __name__ == "__main__":
