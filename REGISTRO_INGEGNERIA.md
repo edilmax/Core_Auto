@@ -622,6 +622,60 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 💸 FATTO 2026-08-16 — **IL RIMBORSO ALL'OSPITE PARTE DA SOLO (era il buco più grave sul prodotto)**
+
+**⛔ TOCCA PRODUZIONE**, col «autorizzato» del fondatore (2026-08-16). File: `fase83_server.py`,
+`fase85_pagamenti_stripe.py`, `fase162_pagamenti_pendenti.py`, `test_admin_rimborso_money.py`,
+`REGISTRO_INGEGNERIA.md`, `RIPRENDI_QUI.md`.
+
+**Il difetto, detto come lo vedeva l'ospite.** `_admin_rimborso` faceva tutto tranne la cosa
+che il suo nome promette: liberava le date, tratteneva il payout, stornava la tassa, revocava
+lo smart-pass, chiudeva l'escrow, marcava il pendente, scriveva la riga a giornale — e poi
+rispondeva, testualmente, *«il rimborso va eseguito A MANO dal pannello admin»*.
+`grep v1/refunds` su tutto il progetto dava **zero**: in tutta la vita della macchina nessuno
+ha mai chiesto a Stripe di restituire un euro. Il database diceva «rimborsato»; sul conto
+dell'ospite non arrivava niente finché una persona non se ne ricordava.
+
+**La ricerca prima di progettare (D25, due fonti distinte).** ① Stripe indica la chiave di
+idempotenza come pratica obbligatoria sui rimborsi (*«use idempotency keys when creating
+refunds to prevent duplicates if your server retries»*). ② Sugli **addebiti con destinazione**
+*«rimborsare un addebito NON tocca i trasferimenti»*: serve `reverse_transfer`, altrimenti
+l'ospite riceve i soldi e l'host li tiene — perdita piena. ③ La Checkout Session in
+`mode=payment` porta `payment_intent` (documentazione ufficiale dell'oggetto), quindi
+l'identificativo del pagamento arriva **gratis** nel webhook che già gestiamo.
+
+**Le tre modifiche, nessuna inventata.**
+· `fase162.salva_stripe_session(rif, cs_id, payment_intent=None)` — salva anche `pi_...`.
+  Parametro **opzionale**: i chiamanti vecchi continuano a funzionare.
+· `fase85.rimborsa(pi, importo, chiave_idem)` — `POST /v1/refunds` con **`Idempotency-Key`**
+  stabile (`rimborso:<riferimento>`). Ritorna sempre un dict **col motivo**, mai `None`:
+  «rimborso fallito» senza il perché non dice nemmeno se ritentare (regola ferrea 9).
+· `fase83._admin_rimborso` — chiama il rimborso **solo** se i passi di sicurezza sono riusciti.
+
+**⛔ La regola del denaro, scritta nel codice (D16 «mai in perdita»).** Se `payout_trattenuto`
+è fallito l'host potrebbe essere già stato pagato: restituire lì significa pagare **due volte**
+la stessa prenotazione, e la seconda la paghiamo noi. Quattro esiti, tutti dichiarati nella
+risposta (`rimborso_stripe`): passi falliti → **non si rimborsa** · mai pagata → niente da
+restituire (nessun falso allarme) · **pagata ma senza `pi_`** → **allarme**, a mano (è il
+silenzio pericoloso) · tutto a posto → parte, e la risposta porta l'id Stripe vero.
+
+**⚠️ Niente `reverse_transfer`, ed è una scelta misurata, non una dimenticanza.** L'ospite paga
+con `crea_link` (Checkout normale: incassa la piattaforma) e all'host si bonifica **dopo**,
+allo sblocco dell'escrow (`fase101`). Al momento del rimborso il trasferimento non è partito.
+🔴 **Se un giorno si passasse agli addebiti con destinazione, quella riga diventerebbe una
+perdita piena**: l'avvertimento è scritto nel codice, accanto alla riga che lo riguarda.
+
+**La prova (D20, e le guardie guardano la cosa giusta).** Controllano **la chiamata a Stripe**,
+non lo stato nel database — perché lo stato «rimborsato» era già verde *prima*, su una macchina
+che non restituiva un centesimo.
+```
+PRIMA:  0 != 1 : a Stripe NON e' arrivata nessuna richiesta di rimborso
+        Chiamate viste: ['https://api.stripe.com/v1/checkout/sessions']
+DOPO:   Ran 9 tests, OK
+RI-INIETTATO il difetto peggiore (il codice dichiara "eseguito (re_FINTO)" senza chiamare
+        Stripe): 3 guardie ROSSE -> ripristinato, sha256 identico (3D46FF58...)
+```
+
 ### 🔬 FATTO 2026-08-15 (notte, 3) — **PEZZO A: LE PROVE PIÙ FORTI ERANO VERDI PERCHÉ NON GIRAVANO**
 
 **Nessuna riga di produzione toccata.** File: `.github/workflows/ci.yml` (3 parole),

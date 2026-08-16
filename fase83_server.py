@@ -4274,11 +4274,13 @@ class RouterHTTP:
             except Exception:
                 logger.warning("admin rimborso: chiusura garanzia fallita (ignorata)", exc_info=True)
                 _falliti.append("escrow_annullato")
+        _era_pagato, _pi, _tot, _valuta = False, "", 0, "EUR"
         pp = getattr(self._sys, "pagamenti_pendenti", None)
         if pp is not None:
             try:
                 rec = pp.info(rif)
                 if rec is not None and rec.get("stato") != "rimborsato":
+                    _era_pagato = (rec.get("stato") == "pagato")
                     pp.marca_da_rimborsare(rif)        # blocca il transfer + nessuna conferma tardiva
                     # SCATOLA NERA del rimborso admin (importo = totale ospite dal record)
                     import json as _jr
@@ -4287,14 +4289,61 @@ class RouterHTTP:
                     except Exception:
                         dj = {}
                     tot = int(dj.get("totale_cents", 0) or dj.get("prezzo_guest_cents", 0) or 0)
+                    _tot = tot
+                    _valuta = dj.get("valuta") or "EUR"
+                    _pi = str(dj.get("stripe_pi") or "")
                     if tot > 0:
                         self._giornale(tipo="rimborso", riferimento=rif, soggetto="ospite:" + rif,
-                                       importo_cents=tot, valuta=dj.get("valuta") or "EUR",
+                                       importo_cents=tot, valuta=_valuta,
                                        causale="rimborso disposto da admin")
             except Exception:
                 logger.warning("admin rimborso: invalidazione pendente fallita (ignorata)",
                                exc_info=True)
                 _falliti.append("pendente_invalidato")
+        # ⛔ E QUI I SOLDI TORNANO DAVVERO INDIETRO. Fino al 2026-08-16 tutto quello che sta
+        # sopra avveniva e poi la risposta diceva «il rimborso va eseguito A MANO»: per l'ospite
+        # la differenza non e' tecnica, il database diceva 'rimborsato' e sul suo conto non
+        # arrivava niente. `grep v1/refunds` dava zero su tutto il progetto.
+        #
+        # ⛔ SI RESTITUISCE SOLO SE I PASSI DI SICUREZZA SONO RIUSCITI (D16, mai in perdita).
+        # Se `payout_trattenuto` e' fallito, l'host puo' essere gia' stato pagato: rimborsare
+        # li' significa pagare DUE volte la stessa prenotazione, e la seconda la paghiamo noi.
+        # Nel dubbio i soldi NON partono da soli: si grida e decide una persona.
+        _rimborso = ""
+        if not _era_pagato:
+            _rimborso = "nessun incasso da restituire (la prenotazione non risulta pagata)"
+        elif not _pi:
+            # Incassata ma senza l'identificativo del pagamento: NON e' un silenzio innocuo.
+            _rimborso = ("PAGATA ma pagamento non identificabile (nessun pi_): "
+                         "da restituire A MANO dal pannello Stripe")
+            _falliti.append("soldi_restituiti")
+            logger.error("RIMBORSO: prenotazione %s risulta PAGATA ma senza stripe_pi: i soldi "
+                         "vanno restituiti a mano", rif)
+        elif _falliti:
+            _rimborso = ("NON tentato: i passi di sicurezza non sono riusciti (%s), l'host "
+                         "potrebbe essere gia' stato pagato" % ", ".join(_falliti))
+        elif _tot <= 0:
+            _rimborso = "importo non determinabile dal record: da restituire A MANO"
+            _falliti.append("soldi_restituiti")
+        else:
+            _sp = getattr(self._sys, "stripe", None)
+            if _sp is None or not hasattr(_sp, "rimborsa"):
+                _rimborso = "provider Stripe assente: da restituire A MANO"
+                _falliti.append("soldi_restituiti")
+            else:
+                # Chiave STABILE per questa prenotazione: un ritentativo di rete o un doppio
+                # clic non possono restituire i soldi due volte (Stripe scarta il duplicato).
+                _es = _sp.rimborsa(_pi, _tot, "rimborso:" + rif)
+                if isinstance(_es, dict) and _es.get("ok"):
+                    _rimborso = "eseguito (%s)" % (_es.get("id") or "")
+                    logger.info("RIMBORSO ESEGUITO rif=%s importo=%d %s stripe=%s",
+                                rif, _tot, _valuta, _es.get("id") or "")
+                else:
+                    motivo = (_es or {}).get("motivo") if isinstance(_es, dict) else "risposta_non_dict"
+                    _rimborso = "NON eseguito (%s): da restituire A MANO" % motivo
+                    _falliti.append("soldi_restituiti")
+                    logger.error("RIMBORSO FALLITO rif=%s importo=%d %s -> %s",
+                                 rif, _tot, _valuta, motivo)
         if _falliti:
             # Le date SONO libere (il rilascio e' riuscito, e' la prima cosa che si fa), ma i
             # passi che mettono in sicurezza i soldi e la PORTA no: va detto, non taciuto.
@@ -4304,10 +4353,12 @@ class RouterHTTP:
         return 200, {"stato": "rimborsato", "date_liberate": True,
                      "idempotente": bool(getattr(e, "idempotente", False)),
                      "passi_falliti": _falliti,
+                     "rimborso_stripe": _rimborso,
                      "nota": ("date liberate; payout trattenuto ed escrow chiuso; "
-                              "il rimborso va eseguito A MANO dal pannello admin") if not _falliti
+                              "soldi all'ospite: " + _rimborso) if not _falliti
                              else ("date liberate, ma ATTENZIONE: questi passi NON sono riusciti "
-                                   "e vanno fatti a mano -> " + ", ".join(_falliti))}
+                                   "e vanno fatti a mano -> " + ", ".join(_falliti)
+                                   + " | soldi all'ospite: " + _rimborso)}
 
     def _admin_controversie(self, query, headers):
         """Elenco delle CONTROVERSIE aperte (garanzie contestate): l'operatore le vede, sente
@@ -7130,9 +7181,14 @@ class RouterHTTP:
             # per sempre su questa prenotazione. ISOLATO: mai bloccare la conferma.
             try:
                 cs_id = (dati or {}).get("object", {}).get("id", "")
+                # E l'identificativo del PAGAMENTO (pi_...), che viaggia nello stesso evento
+                # (Checkout Session in mode=payment): e' l'unico modo di sapere poi QUALE
+                # pagamento restituire. Fino al 2026-08-16 non lo salvava nessuno, e il
+                # rimborso all'ospite andava eseguito A MANO dal pannello Stripe.
+                pi_id = (dati or {}).get("object", {}).get("payment_intent", "")
                 pp_ = getattr(self._sys, "pagamenti_pendenti", None)
                 if pp_ is not None and rif and hasattr(pp_, "salva_stripe_session"):
-                    pp_.salva_stripe_session(rif, cs_id)
+                    pp_.salva_stripe_session(rif, cs_id, pi_id)
             except Exception:
                 logger.warning("salvataggio cs_ fallito (ISOLATO)", exc_info=True)
             logger.info("Stripe: pagamento CONFERMATO per riferimento '%s'", rif)
