@@ -34,11 +34,19 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from fase61_localizzazione import Localizzatore, LINGUE_SUPPORTATE
 
 logger = logging.getLogger("core_auto.server")
+
+# La FORMA di un riferimento di prenotazione. MISURATA, non supposta: su 300 riferimenti
+# generati dal vero (`fase59:547`, `idem[:24]` della firma) l'esito e' sempre
+# `hmac-sha256:e9a39409f6d8` -- 24 caratteri, alfabeto `[0-9a-f:-]`. Qui si accetta un po'
+# piu' largo perche' altre strade usano prefissi (`reblock:`, `cancel_`), ma MAI spazi,
+# a-capo o byte di controllo: e' quello il punto.
+_RIFERIMENTO_VALIDO = re.compile(r"\A[A-Za-z0-9:_.-]{1,64}\Z")
 
 
 # Stringhe UI per il frontend (chrome), multilingua. Fallback -> 'en' -> chiave.
@@ -4596,7 +4604,17 @@ class RouterHTTP:
         if dati is None:
             return 400, {"errore": "json_non_valido"}
         rif = dati.get("riferimento")
-        if not (isinstance(rif, str) and rif):
+        # ⛔ UN RIFERIMENTO CHE NON HA LA FORMA DI UN RIFERIMENTO NON ENTRA, e non e'
+        # pignoleria sul formato: questo valore arriva dal CORPO della richiesta e finisce nel
+        # REGISTRO, che il Guardiano (fase186) legge ogni giorno per accorgersi dei guasti sui
+        # soldi. Un a-capo qui dentro fabbrica righe di allarme FALSE proprio nel posto dove
+        # guardiamo per sapere se e' tutto a posto -- e rimbalzava anche nella risposta.
+        # Trovato da CodeQL sulla richiesta di unione #59 (7 allarmi gravi), non da noi.
+        # ⚠️ Che oggi sia sfruttabile non e' dimostrato: con un riferimento inventato il
+        # giornale non trova niente e si esce prima. Ma «oggi non si raggiunge» dipende dal
+        # comportamento di un'altra funzione, quindi e' una conclusione con una premessa e non
+        # una proprieta' (D19): qui diventa una proprieta'.
+        if not (isinstance(rif, str) and _RIFERIMENTO_VALIDO.match(rif)):
             return 422, {"errore": "campi_non_validi"}
         # ⛔ FRENO 4: la scheda si RICALCOLA adesso. Tutto quello che arriva dal browser --
         # importo compreso -- viene ignorato: una cifra che sceglie chi chiama la rotta e' una

@@ -686,9 +686,11 @@ mostrerebbe un bottone che il pulsante rifiuta — o, molto peggio, il contrario
   cosa che gli interessa. Ora dice che i soldi tornano sul metodo di pagamento usato, **senza
   promettere tempi che non dipendono da noi**.
 
-**✅ SUITE INTERA:** `Ran 5761 tests in 1618.862s` · `OK (skipped=4)` · **uscita 0** letta
-diretta (scritta dal lancianotte in fondo al file, S8). 5766 raccolti − 5761 eseguiti = lo
-**scarto noto di 5** (guardie `openssl`, dichiarato nella riga AMBIENTE).
+**✅ SUITE INTERA (dopo la riparazione CodeQL):** `Ran 5763 tests in 1631.660s` ·
+`OK (skipped=4)` · **uscita 0** letta diretta (scritta dal lancianotte in fondo al file, S8).
+5768 raccolti − 5763 eseguiti = lo **scarto noto di 5** (guardie `openssl`, dichiarato nella
+riga AMBIENTE). *(Il giro precedente, prima delle 2 guardie sul riferimento ostile:
+`Ran 5761 in 1618.862s`, stesso esito.)*
 
 ⚠️ **IL PRIMO GIRO ERA ROSSO — 7 rossi, e tutti sani.** Vale la pena scriverlo perché due
 guardie già esistenti hanno preso due miei buchi che io non avevo previsto:
@@ -709,6 +711,31 @@ guardie già esistenti hanno preso due miei buchi che io non avevo previsto:
 paginazione oltre 100 rimborsi per pagamento · il tetto di **50 righe** per apertura
 (dichiarato nella risposta come `tetto` e `non_esaminati`) · nessuna prova su **soldi veri**
 di questa strada: il collaudo del 16 agosto passò dal pannello, cioè dall'altra.
+
+🔴 **E POI CODEQL HA TROVATO UNA COSA CHE NOI NON AVEVAMO VISTO** (richiesta di unione #59:
+**14 allarmi nuovi, 7 gravi**, tutti nel codice di questo lavoro). La regola: `py/log-injection`
+e `py/clear-text-logging-sensitive-data`. La sostanza: **`riferimento` arriva dal CORPO della
+richiesta e finisce nel registro** — e rimbalzava anche nella risposta.
+
+⛔ **Perché qui è peggio che altrove:** il **Guardiano (fase186) legge gli ERROR del registro
+ogni giorno**, ed è così che un guasto sui soldi diventa visibile entro 24 ore. Chi può
+infilare un a-capo in un riferimento può **scrivere righe di allarme false nel posto dove
+guardiamo per sapere se è tutto a posto**: inventare un rimborso mai avvenuto, o annegare
+quello vero.
+
+⚠️ **Onestà sul rischio, perché conta:** non è dimostrato che oggi sia sfruttabile — con un
+riferimento inventato il giornale non trova niente e si esce prima di scrivere. Ma «oggi non
+si raggiunge» **dipende dal comportamento di un'altra funzione**: è una conclusione con una
+premessa, non una proprietà (**D19**). Riparato al confine, dove diventa una proprietà: un
+riferimento che non ha la forma di un riferimento **non entra** (`_RIFERIMENTO_VALIDO`,
+`fase83_server.py:44`). La forma è **misurata su 300 riferimenti veri**, non supposta:
+`hmac-sha256:e9a39409f6d8`, 24 caratteri, alfabeto `[0-9a-f:-]`.
+
+💡 **E la guardia rossa ha mostrato una seconda perdita che non avevo visto:** la risposta 404
+**rimandava indietro la stringa ostile tal quale**. Chiusa dalla stessa riparazione.
+Guardie: `test_UN_RIFERIMENTO_OSTILE_NON_PUO_SCRIVERE_NEL_REGISTRO` (vista rossa: `404 != 422`,
+con la stringa iniettata nel corpo della risposta) + `test_UN_RIFERIMENTO_VERO_NON_VIENE_RIFIUTATO`
+(prova di rimozione: il controllo nuovo deve tacere sui riferimenti veri).
 
 ⚠️ **COSTO DICHIARATO, da diradare quando ci saranno prenotazioni vere.** Il pannello si
 ricarica **ogni 60 secondi** e ogni ricarica fa una scansione del giornale più fino a **~100

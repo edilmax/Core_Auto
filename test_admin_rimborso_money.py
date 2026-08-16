@@ -782,6 +782,85 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
                          "grida su prenotazioni che non hanno nulla da restituire: un allarme "
                          "che grida sempre viene spento. %r" % (corpo,))
 
+    def test_UN_RIFERIMENTO_OSTILE_NON_PUO_SCRIVERE_NEL_REGISTRO(self):
+        """⛔ TROVATO DA CODEQL SULLA RICHIESTA DI UNIONE #59 (14 allarmi, 7 gravi), non da
+        noi: `riferimento` arriva dal corpo della richiesta e finisce nel registro.
+
+        Perche' qui e' peggio che altrove: **il Guardiano (fase186) legge gli ERROR del
+        registro ogni giorno** — e' cosi' che un guasto sui soldi diventa visibile entro 24
+        ore. Chi puo' infilare un a-capo dentro un riferimento puo' scrivere righe di allarme
+        FALSE nel posto dove guardiamo per sapere se e' tutto a posto: puo' inventare un
+        rimborso che non c'e' stato, o annegare quello vero.
+
+        ⚠️ ONESTA' SUL RISCHIO: non ho dimostrato che oggi sia sfruttabile davvero (con un
+        riferimento inventato il giornale non trova niente e la rotta esce 404 senza
+        scrivere). Ma «oggi non si raggiunge» e' una conclusione **con una premessa**, non una
+        proprieta' — e la premessa e' il comportamento di un'altra funzione (D19). Il giorno
+        che cade, la cecita' resta. Qui si chiude come proprieta': un riferimento che non ha
+        la forma di un riferimento non entra, e quindi non puo' finire da nessuna parte.
+
+        Un riferimento vero e' `hmac-sha256:e9a39409f6d8` — 24 caratteri, misurato su 300
+        generati: alfabeto `[0-9a-f:-]`. Niente spazi, niente a-capo, niente byte di controllo.
+        """
+        import logging as _lg
+
+        class _Cattura(_lg.Handler):
+            def __init__(self):
+                _lg.Handler.__init__(self)
+                self.righe = []
+
+            def emit(self, record):
+                try:
+                    self.righe.append(record.getMessage())
+                except Exception:
+                    self.righe.append(str(record.msg))
+
+        class _GiornaleRotto:
+            def __getattr__(self, nome):
+                def _boom(*a, **k):
+                    raise RuntimeError("giornale guasto")
+                return _boom
+
+        ostile = ("hmac-sha256:aaaaaaaaaaaa\n"
+                  "2026-08-16 03:00:00 ERROR core_auto.server RIMBORSO ESEGUITO "
+                  "rif=vittima importo=9999999 stripe=re_falso")
+        # Forzo il ramo che SCRIVE davvero nel registro: senza, la prova non attraversa
+        # il punto guasto e sarebbe verde per il motivo sbagliato.
+        self.sys.finanza = _GiornaleRotto()
+        cattura = _Cattura()
+        radice = _lg.getLogger("core_auto")
+        radice.addHandler(cattura)
+        try:
+            s, res = self.g("POST", "/api/admin/rimborsa_dovuto",
+                            {"riferimento": ostile}, {"X-Admin-Key": "ak"})
+        finally:
+            radice.removeHandler(cattura)
+        self.assertEqual(s, 422,
+                         "un riferimento con un a-capo dentro non e' un riferimento: va "
+                         "rifiutato al confine, non trascinato dentro. Risposta: %r" % (res,))
+        scritte = "\n".join(cattura.righe)
+        self.assertNotIn("RIMBORSO ESEGUITO", scritte,
+                         "il registro contiene una riga di allarme FABBRICATA da chi ha "
+                         "chiamato la rotta: il Guardiano legge di qui. Scritte: %r"
+                         % (cattura.righe,))
+        for riga in cattura.righe:
+            self.assertNotIn("\n", riga,
+                             "una riga del registro contiene un a-capo scelto da FUORI: da "
+                             "li' in poi chi legge il registro vede due righe dove ce n'era "
+                             "una, e la seconda l'ha scritta un estraneo. Riga: %r" % (riga,))
+
+    def test_UN_RIFERIMENTO_VERO_NON_VIENE_RIFIUTATO(self):
+        """Prova di rimozione (regola ferrea 10): il controllo nuovo deve TACERE sui
+        riferimenti veri, o e' un falso allarme che blocca rimborsi legittimi — e un allarme
+        che grida sempre viene spento."""
+        rif, _ = self._cancella_da_ospite("2026-09-19", "2026-09-21", "pi_ospite_13")
+        self.assertRegex(rif, r"^[A-Za-z0-9:_.-]{1,64}$",
+                         "setup: il riferimento vero non passa nemmeno la forma attesa")
+        s, res = self.g("POST", "/api/admin/rimborsa_dovuto",
+                        {"riferimento": rif}, {"X-Admin-Key": "ak"})
+        self.assertNotEqual(s, 422,
+                           "un riferimento VERO viene rifiutato come malformato: %r" % (res,))
+
     def test_LA_LISTA_E_CHIUSA_A_CHI_NON_E_ADMIN(self):
         """La lista dice chi ha pagato quanto e chi aspetta dei soldi: e' un elenco di dati
         personali e finanziari. Senza chiave si risponde 401, non la lista."""

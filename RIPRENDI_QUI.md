@@ -44,7 +44,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 >
 > **✅ SUITE INTERA VERDE, uscita letta diretta:**
 > ```
-> Ran 5761 tests in 1618.862s
+> Ran 5763 tests in 1631.660s
 > OK (skipped=4)
 > CODICE D'USCITA DELLA SUITE: 0
 > ```
@@ -55,6 +55,16 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > nessuno, e il router dichiarava 134 rotte contro 136. 💡 **Lì ho trovato una terza cosa:**
 > in quel giro il webhook non portava il `payment_intent`, quindi **nessun rimborso di quel
 > collaudo poteva partire davvero** — la strada dei soldi era finta. Ora c'è.
+>
+> 🔴 **E POI CODEQL HA VISTO UNA COSA CHE NOI NON AVEVAMO VISTO** (PR #59: **14 allarmi, 7
+> gravi**, tutti nel codice di oggi). Il `riferimento` arriva dal corpo della richiesta e
+> finisce **nel registro** — quello che il Guardiano legge ogni giorno per accorgersi dei
+> guasti sui soldi. Chi ci mette dentro un a-capo può **scrivere righe di allarme false** lì.
+> ⚠️ Non è provato che oggi sia sfruttabile, ma «oggi non si raggiunge» dipende da un'altra
+> funzione: è una premessa, non una proprietà (D19). Riparato **al confine**, con la forma del
+> riferimento **misurata su 300 veri** (`hmac-sha256:e9a39409f6d8`). 💡 E la guardia rossa ha
+> mostrato una **seconda** perdita che non avevo visto: la risposta rimandava indietro la
+> stringa ostile tal quale.
 >
 > ⚠️ **Resta aperto:** l'automatico (per scelta) · **nessuna prova su soldi veri di QUESTA
 > strada** — il collaudo del 16 agosto passò dal pannello, cioè dall'altra · il punto 2 della
@@ -2414,7 +2424,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 04ba051
+CONSEGNE AGGIORNATE A: d7cac87
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -4239,7 +4249,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5766 test
+SUITE ATTUALE: Ran 5768 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
