@@ -323,8 +323,32 @@ def controllo_4_ambiente(pagina=None, radice=RADICE, quale_python=None, quale_op
     pre-fatto confronta solo cio' che NON dipende dalla shell -- la versione di Python e
     le librerie, che vengono dall'interprete -- e DICHIARA di aver lasciato fuori il PATH.
 
+    ⛔⛔ E DAL 2026-08-16 QUESTA NON E' PIU' UN'ASSUNZIONE: E' UN CONTROLLO.
+    La riga qui sopra («misurato dalla shell che lancera' la suite») era un PRESUPPOSTO
+    scritto benissimo, e chi legge questo file lo violava lo stesso -- successo il
+    2026-08-16, poche ore dopo aver letto proprio queste righe: pre-volo lanciato da Git
+    Bash mentre la suite parte da PowerShell. La funzione non aveva modo di sapere dove
+    stava girando, e si fidava del chiamante. E' D18 condizione 1 mancante nel controllo
+    che serve a farla rispettare: **il metro non sapeva di essere storto.**
+    ⛔ Il caso pericoloso non e' quello capitato (falso ROSSO, si perde tempo): e' il falso
+    VERDE. Se la riga AMBIENTE dichiarasse «openssl presente» e qualcuno controllasse da
+    Git Bash -- dove openssl C'E' -- questo direbbe «a posto», e poi la suite girerebbe da
+    PowerShell **senza cinque guardie sul ripristino dei backup**, tolte IN BLOCCO con un
+    solo salto senza nome. Percio' qui non basta avvisare: ci si RIFIUTA di rispondere.
+
     I parametri servono alle guardie per fingere una macchina diversa senza toccare
     questa: una difesa che non si puo' mettere alla prova non si sa se regge (D19)."""
+    # Git Bash/MSYS lascia `MSYSTEM` nell'ambiente; PowerShell no. E' l'impronta che
+    # distingue le due shell, e quindi i due PATH.
+    if confronta_path and os.environ.get("MSYSTEM"):
+        return (NON_ESEGUITO,
+                "sto girando sotto Git Bash/MSYS (MSYSTEM=%s), che ha un PATH DIVERSO da "
+                "quello di PowerShell, da cui parte la suite: alla stessa domanda su "
+                "`openssl` le due shell rispondono in modo opposto (S11), quindi da qui "
+                "un giudizio sull'ambiente non varrebbe niente -- e potrebbe valere meno "
+                "di niente, dicendo «a posto» mentre cinque guardie spariscono in "
+                "silenzio. RILANCIA IL PRE-VOLO DALLA SHELL CHE LANCERA' LA SUITE."
+                % os.environ.get("MSYSTEM"))
     if pagina is None:
         pagina = _leggi(os.path.join(radice, "RIPRENDI_QUI.md"))
     trovato = _RIGA_AMBIENTE.search(pagina)

@@ -11,6 +11,52 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🚦 2026-08-16 (14) — 📏 **IL METRO NON SAPEVA DI ESSERE STORTO. ADESSO SE NE ACCORGE DA SÉ**
+
+> **Ordine del fondatore:** *«i tuoi errori se sono fondati non devono ripeterli più nessuno,
+> nessuna nuova chat, dobbiamo usare controlli più rigidi.»*
+>
+> **L'errore, ed è mio.** Ho lanciato il pre-volo da **Git Bash** mentre la suite parte da
+> **PowerShell**. Le due shell hanno PATH diversi — misurato: `openssl` è
+> `/mingw64/bin/openssl` da Bash e **ASSENTE** da PowerShell — quindi il controllo ha risposto
+> alla domanda sbagliata e ha accusato un documento che diceva il vero.
+>
+> ### ⛔ LA PARTE CHE FA MALE: QUELLO STRUMENTO LO SAPEVA GIÀ
+> La prima riga della sua descrizione dice, testualmente: *«MISURATO DALLA SHELL CHE LANCERA'
+> LA SUITE, non da un'altra (S11/D23)»*. L'avvertimento c'era, scritto benissimo, **nel file
+> che avevo aperto poche ore prima — e l'ho fatto lo stesso.**
+> 💡 **È la prova, pagata sul campo, che un obbligo affidato alla buona volontà si rompe di
+> nuovo anche quando è scritto benissimo.** Quella riga era un **presupposto**, non un
+> controllo: la funzione non aveva modo di sapere dove stava girando.
+>
+> ### 🔴 IL CASO PERICOLOSO NON È QUELLO CHE MI È CAPITATO
+> A me è uscito un falso **rosso**: si perde tempo. La stessa cecità produce il falso **verde**:
+> se domani la riga AMBIENTE dicesse «openssl presente» e qualcuno controllasse da Git Bash —
+> dove **c'è** — il controllo direbbe «a posto», e la suite girerebbe da PowerShell **senza le
+> cinque guardie sul ripristino dei backup**, tolte in blocco con **un solo salto senza nome**.
+>
+> ### LA STRETTA, E PERCHÉ NON È UN AVVISO
+> Git Bash lascia `MSYSTEM` nell'ambiente, PowerShell no. Se il controllo si accorge di girare
+> lì, sulla parte che dipende dal PATH **non risponde**: esce `NON ESEGUITO`, che qui non è mai
+> un successo e fa uscire il pre-volo con **codice 1**. ⛔ Un avviso lo si legge e si tira
+> dritto; questo **blocca**.
+> ```
+> da BASH       : NON ESEGUITO ... «RILANCIA DALLA SHELL CHE LANCERA' LA SUITE»   uscita 1
+> da POWERSHELL : OK            4. l'ambiente e' quello dichiarato   (giudica davvero)
+> ```
+> D20 nei cinque passi: ROSSA (`'NON ESEGUITO' != 'OK'`) → riparata → VERDE → difetto rimesso
+> dentro → ROSSA → ripristinato, **sha256 `CDE17660…5079` identico**. 20 guardie verdi.
+>
+> ### 💡 E LA LEZIONE OPERATIVA, CHE VALE PIÙ DELLA RIPARAZIONE
+> **I controlli corti costano 3 secondi e vedono ciò che la suite scopre in 30 minuti.** Si
+> lanciano **PRIMA**, e **dalla shell che lancerà la suite**:
+> ```powershell
+> python collaudi\prima_di_lanciare.py      # 7 controlli, ~3 s
+> python collaudi\prima_di_dire_fatto.py    # 10 controlli, ~3 s
+> ```
+> Oggi ho pagato un giro intero per non averlo fatto; subito dopo lo stesso controllo ha preso
+> in 3 secondi il conteggio dei test disallineato, che sarebbe costato **un altro** giro.
+
 ## 🚦 2026-08-16 (13) — 🎭 **LA LISTA DEI LAVORI DICHIARAVA FATTO UN LAVORO SUI SOLDI MAI INIZIATO**
 
 > ⛔ **Il verde finto del 15 agosto era tornato, spostato di un file.** Il lavoro «orologi di
@@ -3996,7 +4042,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5744 test
+SUITE ATTUALE: Ran 5745 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

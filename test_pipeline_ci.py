@@ -5446,6 +5446,77 @@ class TestIlPreVoloVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
                          "sulla macchina esattamente DICHIARATA il controllo grida lo "
                          "stesso: %s" % dettaglio[:400])
 
+    def test_IL_METRO_SI_ACCORGE_DA_SE_DI_ESSERE_NELLA_SHELL_SBAGLIATA(self):
+        """⛔ D18 CONDIZIONE 1: «misura prima se stesso. Un metro storto va scoperto dal
+        metro, non dal muro.» Scritta il 2026-08-16, dopo averlo sbagliato io.
+
+        `controllo_4_ambiente` porta scritto in cima, dalla sua prima riga: *«MISURATO
+        DALLA SHELL CHE LANCERA' LA SUITE, non da un'altra (S11/D23)»*. Ma quella frase
+        era un **presupposto**, non un controllo: la funzione non aveva modo di sapere in
+        che shell stava girando, e si fidava di chi la chiamava. Il 2026-08-16 l'ho
+        lanciata da Git Bash mentre la suite parte da PowerShell, e ha risposto sulla
+        domanda sbagliata. La frase c'era, scritta in chiaro, nel file che avevo appena
+        letto -- ed e' la prova che **un obbligo affidato alla buona volonta' si rompe di
+        nuovo, anche quando e' scritto benissimo**.
+
+        ⛔ E IL CASO PERICOLOSO NON E' QUELLO CHE MI E' CAPITATO. A me e' uscito un falso
+        ROSSO, che fa perdere tempo e basta. Ma la stessa cecita' produce il falso VERDE:
+        se un domani la riga AMBIENTE dichiarasse «openssl presente» e qualcuno
+        controllasse da Git Bash -- dove `openssl` C'E' -- il controllo direbbe «ambiente
+        a posto», e poi la suite girerebbe da PowerShell **senza cinque guardie sul
+        ripristino dei backup**, che `unittest` toglie IN BLOCCO registrando un solo salto
+        senza nome (D23 punto 3). Nessuno se ne accorgerebbe.
+
+        Percio' qui non basta un avviso: sulla parte che dipende dal PATH il controllo
+        deve rifiutarsi di rispondere -- `NON ESEGUITO`, che in questo progetto **non e'
+        mai un successo** (sbaglio S7) e fa uscire il pre-volo con codice 1.
+
+        Le DUE direzioni (D18 condizione 2), perche' un allarme provato in un verso solo
+        potrebbe gridare sempre -- e un allarme sempre acceso viene spento.
+        """
+        pv = self.pv()
+        sana = self._pagina_sana()
+        atteso = re.search(r"Python (\d+\.\d+\.\d+)", sana)
+        self.assertIsNotNone(atteso, "la riga AMBIENTE non dichiara piu' un Python")
+        comuni = dict(pagina=sana, radice=self.RADICE, quale_python=atteso.group(1),
+                      moduli_presenti={"hypothesis", "yaml", "coverage"})
+
+        def con_msystem(valore):
+            """Finge (o toglie) l'impronta che Git Bash lascia nell'ambiente."""
+            vecchio = os.environ.get("MSYSTEM")
+            if valore is None:
+                os.environ.pop("MSYSTEM", None)
+            else:
+                os.environ["MSYSTEM"] = valore
+            try:
+                return pv.controllo_4_ambiente(**comuni)
+            finally:
+                if vecchio is None:
+                    os.environ.pop("MSYSTEM", None)
+                else:
+                    os.environ["MSYSTEM"] = vecchio
+
+        # DIREZIONE 1 — shell estranea: deve RIFIUTARSI, non rispondere.
+        stato, dettaglio = con_msystem("MINGW64")
+        self.assertEqual(
+            pv.NON_ESEGUITO, stato,
+            "il pre-volo sta girando sotto Git Bash (MSYSTEM), dove il PATH e' un altro, "
+            "e invece di dichiararsi NON in grado di misurare ha dato un giudizio sul "
+            "PATH: e' un metro che non sa di essere storto (D18 condizione 1).\n"
+            "  ha detto: %s - %s" % (stato, dettaglio[:300]))
+        self.assertIn("shell", dettaglio.lower(),
+                      "il rifiuto non dice che il problema e' la SHELL, quindi chi legge "
+                      "non sa cosa fare: %s" % dettaglio[:300])
+
+        # DIREZIONE 2 — shell giusta: deve tornare a GIUDICARE, o sarebbe un cancello
+        # che non si apre mai, cioe' un controllo spento.
+        stato2, dettaglio2 = con_msystem(None)
+        self.assertNotEqual(
+            pv.NON_ESEGUITO, stato2,
+            "senza MSYSTEM siamo nella shell che lancia la suite: qui il controllo DEVE "
+            "giudicare. Se si rifiuta sempre, non protegge niente e verra' tolto.\n"
+            "  ha detto: %s - %s" % (stato2, dettaglio2[:300]))
+
     def test_UN_CONTROLLO_CHE_ESPLODE_DIVENTA_NON_ESEGUITO_NON_VERDE(self):
         """Sbaglio S7: se manca la premessa il controllo non e' verde, e' NON ESEGUITO. Un
         controllo che esplode non ha misurato niente."""

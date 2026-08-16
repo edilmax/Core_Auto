@@ -622,6 +622,63 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 📏 FATTO 2026-08-16 (4) — **IL METRO NON SAPEVA DI ESSERE STORTO: ORA SE NE ACCORGE DA SÉ**
+
+File toccati: `collaudi/prima_di_lanciare.py`, `test_pipeline_ci.py`, più i due documenti.
+**Nessun codice di produzione.** Ordine del fondatore: *«i tuoi errori se sono fondati non
+devono ripeterli più nessuno, nessuna nuova chat, dobbiamo usare controlli più rigidi»*.
+
+**L'errore, ed è mio.** Ho lanciato `collaudi/prima_di_lanciare.py` da **Git Bash**, mentre la
+suite parte da **PowerShell**. Su questa macchina le due shell hanno PATH diversi: misurato
+adesso, `openssl` è `/mingw64/bin/openssl` da Bash e **ASSENTE** da PowerShell. Il controllo
+dell'ambiente ha quindi risposto alla domanda sbagliata e ha gridato «openssl c'è» contro un
+documento che diceva il vero.
+
+**⛔ E la parte che fa male: quello strumento lo sapeva già.** La prima riga della sua
+descrizione dice, testualmente, *«MISURATO DALLA SHELL CHE LANCERA' LA SUITE, non da un'altra
+(S11/D23)»*, e racconta pure che la stessa cosa era capitata **allo strumento stesso** dentro i
+ganci di git. L'avvertimento c'era, scritto benissimo, **nel file che avevo aperto poche ore
+prima — e l'ho fatto lo stesso.** 💡 È la dimostrazione, pagata sul campo, che **un obbligo
+affidato alla buona volontà si rompe di nuovo anche quando è scritto benissimo**: quella riga
+era un **presupposto**, non un controllo, e la funzione non aveva modo di sapere dove girava.
+
+**🔴 IL CASO PERICOLOSO NON È QUELLO CAPITATO.** A me è uscito un falso **rosso**: si perde
+tempo e basta. La stessa cecità produce il falso **verde**: se un domani la riga AMBIENTE
+dichiarasse «openssl presente» e qualcuno controllasse da Git Bash — dove `openssl` **c'è** —
+il controllo direbbe «ambiente a posto», e poi la suite girerebbe da PowerShell **senza le
+cinque guardie sul ripristino dei backup**, che `unittest` toglie IN BLOCCO registrando **un
+solo salto senza nome** (D23 punto 3). Nessuno se ne accorgerebbe.
+
+**La riparazione: D18 condizione 1 applicata al controllo che serve a farla rispettare** —
+*«misura prima se stesso; un metro storto va scoperto dal metro, non dal muro»*. Git Bash/MSYS
+lascia `MSYSTEM` nell'ambiente, PowerShell no: è l'impronta che distingue le due shell e quindi
+i due PATH. Se il controllo si accorge di girare lì, sulla parte che dipende dal PATH **non
+risponde**: esce `NON ESEGUITO`, che in questo progetto non è mai un successo (S7) e fa uscire
+il pre-volo con codice 1. ⛔ Non un avviso: un avviso si legge e si tira dritto.
+
+**Provato nelle due direzioni, nei test E nel mondo vero:**
+```
+da BASH        : NON ESEGUITO  4. l'ambiente e' quello dichiarato
+                 «sto girando sotto Git Bash/MSYS (MSYSTEM=MINGW64) ... RILANCIA IL
+                  PRE-VOLO DALLA SHELL CHE LANCERA' LA SUITE»          uscita 1
+da POWERSHELL  : OK            4. l'ambiente e' quello dichiarato       (giudica davvero)
+```
+D20 in tutti e cinque i passi: guardia → ROSSA (`'NON ESEGUITO' != 'OK'`, con lo strumento che
+diceva *«OK - coincide con la riga AMBIENTE»* fingendo Git Bash) → riparata → VERDE → difetto
+rimesso dentro → ROSSA di nuovo → ripristinato, **sha256 `CDE17660…5079` identico**.
+
+**⚠️ Il `confronta_path=False` del pre-fatto resta e NON è la stessa cosa** (20 guardie verdi lo
+confermano): quello è il caso *dichiarato* in cui il PATH non si guarda apposta, perché al
+commit non si sta lanciando nessuna suite e un allarme che suona a ogni salvataggio viene
+spento (regola ferrea 10). La stretta nuova copre il caso **non dichiarato**: chi *crede* di
+essere nella shell giusta e non lo è.
+
+**💡 E la lezione operativa, misurata oggi:** i controlli corti (`prima_di_lanciare` 7 in ~3 s,
+`prima_di_dire_fatto` 10 in ~3 s) vedono ciò che la suite scopre in **30 minuti**. Vanno
+lanciati **prima**, e **dalla shell che lancerà la suite**. Oggi l'ho pagato con un giro intero
+buttato; subito dopo, lo stesso controllo ha preso in 3 secondi il conteggio dei test
+disallineato che sarebbe costato un altro giro.
+
 ### 🎭 FATTO 2026-08-16 (3) — **IL VERDE FINTO ERA TORNATO, SPOSTATO DI UN FILE**
 
 File toccati: `collaudi/regole_avvio.py` (la riparazione), `test_pipeline_ci.py` (la guardia),
