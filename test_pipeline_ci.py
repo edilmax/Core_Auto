@@ -702,6 +702,49 @@ class TestLaListaDeiLavoriNONPuoMENTIRE(unittest.TestCase):
                          "mai iniziato risulta fatto, perche' la parola cercata e' scritta "
                          "nella prova stessa")
 
+    def test_NESSUNA_PROVA_E_SODDISFATTA_DAL_FILE_CHE_LA_RACCONTA(self):
+        """⛔ LO STESSO VERDE FINTO, TORNATO SPOSTATO DI UN FILE — 2026-08-16.
+
+        La riparazione del 2026-08-15 escludeva dalla ricerca UN file solo (`regole_avvio.py`,
+        e per giunta solo nella propria cartella). Ma la prova non vive piu' in un file solo:
+        da quando esiste la guardia qui sopra, le parole cercate sono scritte anche QUI, in
+        `test_pipeline_ci.py` -- che sta nella radice e comincia per `test_`, cioe' proprio
+        dove la prova del lavoro «orologi di prova Stripe» va a cercare.
+
+        Risultato misurato il 2026-08-16: quel lavoro risultava ✅ FATTO ed era soddisfatto da
+        UN SOLO file, `test_pipeline_ci.py`, con UNA sola occorrenza della parola, dentro il
+        commento che racconta il difetto -- e ZERO usi veri dell'API di Stripe (`test_helpers`,
+        `TestClock`: assenti). Nessuno ha mai creato un orologio di prova, e la lista diceva
+        di si'. E' il lavoro che la lista stessa chiama «il giudice esterno piu' vicino ai
+        soldi che manca»: il verde finto stava proprio sul denaro.
+
+        ⛔ QUESTA GUARDIA E' GENERALE, e lo e' apposta. Non chiede «il lavoro 3 e' a posto?»
+        -- quella domanda diventerebbe falsa il giorno che il lavoro si fa davvero. Chiede che
+        NESSUNA prova, presente o futura, sia soddisfatta da uno dei file che COSTITUISCONO
+        l'impianto delle prove. Vale ancora il giorno che i lavori si faranno, e vale per i
+        lavori che verranno aggiunti domani.
+        """
+        ra = self._ra()
+        radice = os.path.dirname(os.path.abspath(__file__))
+        # I file che SONO la prova: la lista con le sue ricerche, e la guardia che la protegge.
+        # Se uno di questi soddisfa una prova, la prova sta leggendo se stessa.
+        impianto = ("regole_avvio.py", os.path.basename(os.path.abspath(__file__)))
+        colpevoli = []
+        for v in ra.LAVORI_IN_SOSPESO:
+            prova = v.get("prova")
+            if not prova or prova.get("tipo") != "testo":
+                continue
+            for cartella, inizio, fine in prova["dove"]:
+                for n in ra._testo_dentro(radice, cartella, inizio, fine, prova["cerca"]):
+                    if n in impianto:
+                        colpevoli.append("«%s» risulta soddisfatto da %s (cerca %r)"
+                                         % (v["nome"], n, prova["cerca"]))
+        self.assertEqual([], colpevoli,
+                         "una prova e' soddisfatta dal testo che la racconta: il lavoro "
+                         "risulta fatto perche' la parola cercata e' scritta nell'impianto "
+                         "delle prove, non perche' qualcuno l'abbia fatto -> %s"
+                         % "; ".join(colpevoli))
+
     def test_lo_stato_e_MISURATO_e_diventa_DA_FARE_se_la_prova_non_trova_niente(self):
         """La direzione che conta: puntato su una cartella vuota, ogni lavoro deve tornare
         DA FARE. Se restasse FATTO vorrebbe dire che lo stato e' scritto, non misurato."""
@@ -5402,6 +5445,77 @@ class TestIlPreVoloVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
         self.assertEqual(pv.OK, stato,
                          "sulla macchina esattamente DICHIARATA il controllo grida lo "
                          "stesso: %s" % dettaglio[:400])
+
+    def test_IL_METRO_SI_ACCORGE_DA_SE_DI_ESSERE_NELLA_SHELL_SBAGLIATA(self):
+        """⛔ D18 CONDIZIONE 1: «misura prima se stesso. Un metro storto va scoperto dal
+        metro, non dal muro.» Scritta il 2026-08-16, dopo averlo sbagliato io.
+
+        `controllo_4_ambiente` porta scritto in cima, dalla sua prima riga: *«MISURATO
+        DALLA SHELL CHE LANCERA' LA SUITE, non da un'altra (S11/D23)»*. Ma quella frase
+        era un **presupposto**, non un controllo: la funzione non aveva modo di sapere in
+        che shell stava girando, e si fidava di chi la chiamava. Il 2026-08-16 l'ho
+        lanciata da Git Bash mentre la suite parte da PowerShell, e ha risposto sulla
+        domanda sbagliata. La frase c'era, scritta in chiaro, nel file che avevo appena
+        letto -- ed e' la prova che **un obbligo affidato alla buona volonta' si rompe di
+        nuovo, anche quando e' scritto benissimo**.
+
+        ⛔ E IL CASO PERICOLOSO NON E' QUELLO CHE MI E' CAPITATO. A me e' uscito un falso
+        ROSSO, che fa perdere tempo e basta. Ma la stessa cecita' produce il falso VERDE:
+        se un domani la riga AMBIENTE dichiarasse «openssl presente» e qualcuno
+        controllasse da Git Bash -- dove `openssl` C'E' -- il controllo direbbe «ambiente
+        a posto», e poi la suite girerebbe da PowerShell **senza cinque guardie sul
+        ripristino dei backup**, che `unittest` toglie IN BLOCCO registrando un solo salto
+        senza nome (D23 punto 3). Nessuno se ne accorgerebbe.
+
+        Percio' qui non basta un avviso: sulla parte che dipende dal PATH il controllo
+        deve rifiutarsi di rispondere -- `NON ESEGUITO`, che in questo progetto **non e'
+        mai un successo** (sbaglio S7) e fa uscire il pre-volo con codice 1.
+
+        Le DUE direzioni (D18 condizione 2), perche' un allarme provato in un verso solo
+        potrebbe gridare sempre -- e un allarme sempre acceso viene spento.
+        """
+        pv = self.pv()
+        sana = self._pagina_sana()
+        atteso = re.search(r"Python (\d+\.\d+\.\d+)", sana)
+        self.assertIsNotNone(atteso, "la riga AMBIENTE non dichiara piu' un Python")
+        comuni = dict(pagina=sana, radice=self.RADICE, quale_python=atteso.group(1),
+                      moduli_presenti={"hypothesis", "yaml", "coverage"})
+
+        def con_msystem(valore):
+            """Finge (o toglie) l'impronta che Git Bash lascia nell'ambiente."""
+            vecchio = os.environ.get("MSYSTEM")
+            if valore is None:
+                os.environ.pop("MSYSTEM", None)
+            else:
+                os.environ["MSYSTEM"] = valore
+            try:
+                return pv.controllo_4_ambiente(**comuni)
+            finally:
+                if vecchio is None:
+                    os.environ.pop("MSYSTEM", None)
+                else:
+                    os.environ["MSYSTEM"] = vecchio
+
+        # DIREZIONE 1 — shell estranea: deve RIFIUTARSI, non rispondere.
+        stato, dettaglio = con_msystem("MINGW64")
+        self.assertEqual(
+            pv.NON_ESEGUITO, stato,
+            "il pre-volo sta girando sotto Git Bash (MSYSTEM), dove il PATH e' un altro, "
+            "e invece di dichiararsi NON in grado di misurare ha dato un giudizio sul "
+            "PATH: e' un metro che non sa di essere storto (D18 condizione 1).\n"
+            "  ha detto: %s - %s" % (stato, dettaglio[:300]))
+        self.assertIn("shell", dettaglio.lower(),
+                      "il rifiuto non dice che il problema e' la SHELL, quindi chi legge "
+                      "non sa cosa fare: %s" % dettaglio[:300])
+
+        # DIREZIONE 2 — shell giusta: deve tornare a GIUDICARE, o sarebbe un cancello
+        # che non si apre mai, cioe' un controllo spento.
+        stato2, dettaglio2 = con_msystem(None)
+        self.assertNotEqual(
+            pv.NON_ESEGUITO, stato2,
+            "senza MSYSTEM siamo nella shell che lancia la suite: qui il controllo DEVE "
+            "giudicare. Se si rifiuta sempre, non protegge niente e verra' tolto.\n"
+            "  ha detto: %s - %s" % (stato2, dettaglio2[:300]))
 
     def test_UN_CONTROLLO_CHE_ESPLODE_DIVENTA_NON_ESEGUITO_NON_VERDE(self):
         """Sbaglio S7: se manca la premessa il controllo non e' verde, e' NON ESEGUITO. Un

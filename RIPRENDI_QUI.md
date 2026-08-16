@@ -11,6 +11,100 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🚦 2026-08-16 (14) — 📏 **IL METRO NON SAPEVA DI ESSERE STORTO. ADESSO SE NE ACCORGE DA SÉ**
+
+> **Ordine del fondatore:** *«i tuoi errori se sono fondati non devono ripeterli più nessuno,
+> nessuna nuova chat, dobbiamo usare controlli più rigidi.»*
+>
+> **L'errore, ed è mio.** Ho lanciato il pre-volo da **Git Bash** mentre la suite parte da
+> **PowerShell**. Le due shell hanno PATH diversi — misurato: `openssl` è
+> `/mingw64/bin/openssl` da Bash e **ASSENTE** da PowerShell — quindi il controllo ha risposto
+> alla domanda sbagliata e ha accusato un documento che diceva il vero.
+>
+> ### ⛔ LA PARTE CHE FA MALE: QUELLO STRUMENTO LO SAPEVA GIÀ
+> La prima riga della sua descrizione dice, testualmente: *«MISURATO DALLA SHELL CHE LANCERA'
+> LA SUITE, non da un'altra (S11/D23)»*. L'avvertimento c'era, scritto benissimo, **nel file
+> che avevo aperto poche ore prima — e l'ho fatto lo stesso.**
+> 💡 **È la prova, pagata sul campo, che un obbligo affidato alla buona volontà si rompe di
+> nuovo anche quando è scritto benissimo.** Quella riga era un **presupposto**, non un
+> controllo: la funzione non aveva modo di sapere dove stava girando.
+>
+> ### 🔴 IL CASO PERICOLOSO NON È QUELLO CHE MI È CAPITATO
+> A me è uscito un falso **rosso**: si perde tempo. La stessa cecità produce il falso **verde**:
+> se domani la riga AMBIENTE dicesse «openssl presente» e qualcuno controllasse da Git Bash —
+> dove **c'è** — il controllo direbbe «a posto», e la suite girerebbe da PowerShell **senza le
+> cinque guardie sul ripristino dei backup**, tolte in blocco con **un solo salto senza nome**.
+>
+> ### LA STRETTA, E PERCHÉ NON È UN AVVISO
+> Git Bash lascia `MSYSTEM` nell'ambiente, PowerShell no. Se il controllo si accorge di girare
+> lì, sulla parte che dipende dal PATH **non risponde**: esce `NON ESEGUITO`, che qui non è mai
+> un successo e fa uscire il pre-volo con **codice 1**. ⛔ Un avviso lo si legge e si tira
+> dritto; questo **blocca**.
+> ```
+> da BASH       : NON ESEGUITO ... «RILANCIA DALLA SHELL CHE LANCERA' LA SUITE»   uscita 1
+> da POWERSHELL : OK            4. l'ambiente e' quello dichiarato   (giudica davvero)
+> ```
+> D20 nei cinque passi: ROSSA (`'NON ESEGUITO' != 'OK'`) → riparata → VERDE → difetto rimesso
+> dentro → ROSSA → ripristinato, **sha256 `CDE17660…5079` identico**. 20 guardie verdi.
+>
+> ### 💡 E LA LEZIONE OPERATIVA, CHE VALE PIÙ DELLA RIPARAZIONE
+> **I controlli corti costano 3 secondi e vedono ciò che la suite scopre in 30 minuti.** Si
+> lanciano **PRIMA**, e **dalla shell che lancerà la suite**:
+> ```powershell
+> python collaudi\prima_di_lanciare.py      # 7 controlli, ~3 s
+> python collaudi\prima_di_dire_fatto.py    # 10 controlli, ~3 s
+> ```
+> Oggi ho pagato un giro intero per non averlo fatto; subito dopo lo stesso controllo ha preso
+> in 3 secondi il conteggio dei test disallineato, che sarebbe costato **un altro** giro.
+
+## 🚦 2026-08-16 (13) — 🎭 **LA LISTA DEI LAVORI DICHIARAVA FATTO UN LAVORO SUI SOLDI MAI INIZIATO**
+
+> ⛔ **Il verde finto del 15 agosto era tornato, spostato di un file.** Il lavoro «orologi di
+> prova Stripe» — che la lista stessa chiama *«il giudice esterno più vicino ai soldi che
+> manca»* — risultava **✅ FATTO**. Non lo è: **nessuno ha mai creato un orologio di prova.**
+>
+> **Come faceva a risultare fatto.** La prova cerca la parola `test_clock` fra i `test_*.py`
+> della radice. La riparazione di ieri escludeva **un file solo**; ma la **guardia** che
+> protegge quella riparazione vive in `test_pipeline_ci.py`, che sta nella radice e comincia
+> per `test_`. La parola era scritta lì **una volta sola, nel commento che racconta il difetto**.
+> ```
+> 3 orologi di prova Stripe   cerca 'test_clock'  -> ['test_pipeline_ci.py']
+> test_pipeline_ci.py contiene 'test_clock' 1 volte
+>    uso reale 'test_helpers' : False      uso reale 'TestClock' : False
+> ```
+> Gli altri quattro lavori sono sani (controllati): il difetto era su **una prova sola**, e
+> quella sola era sul denaro.
+>
+> ### 💡 LA LEZIONE — la prova non è un file, è un IMPIANTO, e l'impianto CRESCE
+> Ogni riparazione si porta dietro la guardia che la difende, e quella guardia **deve nominare
+> la cosa da cui difende**. Così il testo della prova si allarga, e un'esclusione scritta come
+> «me stesso» smette di bastare **il giorno che "me stesso" diventa due file**. Non è sfortuna:
+> è la forma che questo difetto prende **ogni volta che lo si ripara**. Chi lo ripara la
+> prossima volta guardi *quanti* file compongono l'impianto, non *quale*.
+>
+> ### ⛔ UNA RIPARAZIONE PIÙ ELEGANTE ESISTEVA, ED È STATA SCARTATA
+> Ignorare tutto ciò che sta nei commenti ucciderebbe l'intera classe di difetti. **Ma
+> romperebbe la prova del lavoro #5**, che cerca una frase (`DENOMINATORE DELLA MACCHINA`) che
+> un'attuazione vera *stamperebbe*, cioè scriverebbe dentro una stringa. **Una riparazione che
+> ne rompe un'altra non è una riparazione.** Fatta quella modesta: i file che *sono* la prova
+> non possono soddisfarla, e adesso sono due invece di uno.
+>
+> ### LA PROVA (D20, tutti e cinque i passi)
+> ```
+> ROSSA per il motivo giusto:
+>    «orologi di prova Stripe (test clocks)» risulta soddisfatto da
+>    test_pipeline_ci.py (cerca 'test_clock')
+> riparata -> VERDE (Ran 6 tests, OK)
+> difetto RIMESSO DENTRO -> ROSSA di nuovo (uscita 1)
+> ripristinato -> sha256 8193BB31...4A9D IDENTICO prima e dopo
+> ```
+>
+> ### ⛔ E LA CONSEGUENZA VOLUTA: I LAVORI IN SOSPESO SONO AUMENTATI, NON DIMINUITI
+> Il #3 è tornato da ✅ a **⏳ DA FARE**. Non è un peggioramento: quel ✅ era falso, e una lista
+> corta che mente manda a **saltare un lavoro sui soldi**. 🔴 Chi riprende: gli orologi di prova
+> Stripe sono **da fare davvero**, e il criterio d'arrivo è già scritto nella lista (hold che
+> scade · payout che matura a 24h · finestra di penale, **con identificativi Stripe veri**).
+
 ## 🚦 2026-08-16 (12) — 🚀 **IL RIMBORSO È IN PRODUZIONE: I TRE POSTI SONO ALLINEATI**
 
 > **Fatto, misurato, niente da riprendere.** I tre posti dicono lo stesso commit — misurato
@@ -2123,7 +2217,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 5d91ca2
+CONSEGNE AGGIORNATE A: 5c17a55
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -3948,7 +4042,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5743 test
+SUITE ATTUALE: Ran 5745 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
