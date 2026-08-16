@@ -622,6 +622,77 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 💶 2026-08-16 (5) — **PRIMO RIMBORSO VERO** · 🔴 **E TRE DIFETTI VIVI DA CHIUDERE**
+
+**✅ FATTO: il ciclo del rimborso è attraversato su soldi veri.** Annuncio creato, prenotazione
+pagata con carta vera (`sk_live`), rimborso eseguito dal pannello admin. Tre conferme, una
+esterna: database `rimborsato` · Stripe `re_3U53IsJMRnB73twq1QLzUCu9 succeeded 1,00 EUR` ·
+pagina dell'ospite *«i fondi sono stati riaccreditati»*. È il **primo euro restituito nella
+vita della macchina**: stamattina `grep v1/refunds` dava zero. La catena ha retto per intero —
+`pi_` salvato al pagamento → pannello → Stripe — e senza il primo anello (aggiunto oggi) sarebbe
+rimasto «rimborsato» a schermo con zero sul conto dell'ospite.
+
+---
+
+#### 🔴 DA FARE 1 — **SUL RIMBORSO PIENO CI RIMETTIAMO NOI LA COMMISSIONE STRIPE**
+*(ordine del fondatore 2026-08-16: «da sistemare, io non devo rimetterci»)*
+
+**Misurato su Stripe, non dedotto:**
+```
+INCASSO   +1,00   commissione 0,27   netto +0,73
+RIMBORSO  -1,00   commissione 0,00   netto -1,00
+saldo del conto piattaforma:            -0,27 EUR
+```
+All'ospite torna **sempre l'intero importo**; la commissione **non viene restituita a noi**.
+Su 300 € cancellati a rimborso pieno sono **≈ 4,75 € persi ogni volta**.
+
+**Causa, letta nel codice:** `fase111_cancellazione.calcola_rimborso` calcola
+`rimborso = pulizia + (soggiorno × percentuale)` e **non sottrae mai il costo del pagamento**.
+Le penali funzionano: quando trattengono 50% o 100%, il trattenuto copre Stripe. **Il buco è
+solo sui rimborsi al 100%**, e i casi sono due:
+1. politica **flessibile** oltre le 24h dall'arrivo → 100%
+2. **finestra di ripensamento** (48h dall'acquisto) → 100%, vince su ogni politica
+
+⛔ **Il caso 2 NON si tocca**: quel 100% copre obblighi di legge (California SB 644, Brasile
+art. 49). Si può intervenire **solo** sul caso 1.
+💡 Il campo esiste già: `costo_pagamento_cents` è conservato nel record del pendente, e
+`fase162` scrive a giornale *«commissione Stripe non restituita su rimborsi/storni»*. **È
+tracciato ma mai usato in detrazione.** E i documenti dicevano già che recuperare il COSTO
+(diverso dal tenersi la propria quota) è difendibile: pensato, mai costruito.
+⚠️ Prima di scrivere codice serve la **decisione del fondatore** fra tre strade: assorbire ·
+trattenere dichiarandolo nelle condizioni · assorbire solo nella finestra legale.
+
+**⛔ LA LEZIONE DI METODO, e vale più del difetto.** Nessuno dei **5740** test l'ha mai fatta
+emergere: **tutti verificano che il calcolo sia giusto, nessuno chiede «e chi ci rimette?»**.
+È il buco **F6** già dichiarato nella riga d'arrivo dei soldi, trovato non da uno strumento ma
+da una persona che ha pagato un euro e ha detto *«c'è qualcosa che non torna»*.
+
+#### 🔴 DA FARE 2 — **IL PREZZO VIVE IN DUE POSTI E POSSONO DIVERGERE IN SILENZIO**
+```
+alloggi.prezzo_notte_cents     =  100  (1 EUR)   -> vetrina, scheda, dati strutturati per Google
+inventario.prezzo_netto_cents  = 9000  (90 EUR)  -> preventivo e pagamento
+```
+Misurato sul sito vero: la pagina pubblicava `"price": "1.00"` mentre la cassa chiedeva 90 €.
+**Espone un prezzo e ne addebita un altro, anche ai motori di ricerca.** Il pannello ha due voci
+di prezzo e **nessuna guardia pretende che coincidano**; cambiandone una l'altra resta (dopo la
+correzione di un giorno, **29 su 30** erano ancora a 90 €).
+🔴 Viola l'ordine *«l'host non deve poter mentire»* — e qui non serve un host disonesto: **lo fa
+la macchina da sola**. In UE esporre un prezzo e addebitarne un altro è materia di tutela del
+consumatore, non solo un difetto tecnico.
+
+#### ⚠️ DA FARE 3 (minore) — **IL PERCORSO DEL BUNKER FA PERDERE IL POSTO E LA CHIAVE**
+«Rimborsa» chiede lo sblocco super-admin; lo sblocco porta **dentro il bunker**, dove quella
+operazione non esiste, e tornando indietro **il campo della chiave admin è vuoto**. Il
+collegamento è sano (sessione 15 min in `sessionStorage`, sopravvive alla navigazione
+admin↔bunker): **è il percorso a essere sbagliato**. Un operatore di fretta si blocca.
+⛔ *Nota: avevo dichiarato «il tasto non può funzionare» dopo aver cercato solo in
+`fase83_server.py` invece che in `deploy/admin.html`. Conclusione tratta da una ricerca
+incompleta, corretta subito — il difetto vero era un altro.*
+
+**Stato alla chiusura:** annuncio di prova in **BOZZA**, verificato dalla strada pubblica
+(`pagina 404` · `catalogo totale 0` · `mappa 1 indirizzo`). In produzione: **0 annunci**,
+**1 host** senza `stripe_account_id` (il bonifico all'host non l'ha mai attraversato nessuno).
+
 ### 📏 FATTO 2026-08-16 (4) — **IL METRO NON SAPEVA DI ESSERE STORTO: ORA SE NE ACCORGE DA SÉ**
 
 File toccati: `collaudi/prima_di_lanciare.py`, `test_pipeline_ci.py`, più i due documenti.

@@ -11,6 +11,87 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🚦 2026-08-16 (15) — 💶 **UN EURO VERO È TORNATO INDIETRO — e pagandolo abbiamo scoperto che CI RIMETTIAMO NOI**
+
+> ✅ **IL RIMBORSO FUNZIONA DAVVERO, SU SOLDI VERI.** Non è più «provato dai test»: è successo.
+> Il fondatore ha creato un annuncio, ha prenotato e pagato con la sua carta (`sk_live`), e il
+> rimborso è partito. **Tre conferme indipendenti, una delle quali non è nostra:**
+> ```
+> nostro database        -> stato: rimborsato
+> Stripe (API)           -> re_3U53IsJMRnB73twq1QLzUCu9  succeeded  1,00 EUR
+> pagina vista dall'ospite -> "i fondi sono stati riaccreditati sul tuo conto"
+> ```
+> ⛔ **La seconda riga è quella che conta**: «rimborsato» nel database era già verde PRIMA, su
+> una macchina che non restituiva un centesimo. Stamattina `grep v1/refunds` dava **zero** in
+> tutto il progetto. Questo è **il primo euro restituito nella vita della macchina**.
+> Ha retto la catena intera: `pi_` salvato al pagamento (il pezzo di stamattina) → pannello →
+> Stripe. Mancando il primo anello, sarebbe rimasto «rimborsato» a schermo e zero sul conto.
+>
+> ### 🔴 E QUI LA SCOPERTA CHE VALE PIÙ DEL TEST — L'HA TROVATA IL FONDATORE, PAGANDO UN EURO
+> ```
+> INCASSO   +1,00   commissione Stripe 0,27   netto  +0,73
+> RIMBORSO  -1,00   commissione resa   0,00   netto  -1,00
+>                                             ─────────────
+> saldo del conto piattaforma, misurato:              -0,27 EUR
+> ```
+> **All'ospite torna SEMPRE l'intero importo. La commissione non gliela toglie nessuno: la
+> perde la PIATTAFORMA, e non la recupera più.** Su 1 € fa ridere (0,27). **Su una prenotazione
+> da 300 € cancellata a rimborso pieno sono circa 4,75 € persi, ogni volta.**
+>
+> ⛔ **`fase111_cancellazione.calcola_rimborso` NON sottrae MAI il costo Stripe.** Letto nel
+> codice: `rimborso = pulizia + (soggiorno × percentuale)`. Le penali esistono e funzionano
+> (flessibile/moderata/rigida/non_rimborsabile), e **quando trattengono il 50% o il 100% il
+> trattenuto copre Stripe**. Ci si rimette **solo sui rimborsi al 100%**, e i casi sono **due**:
+> · **politica flessibile** a più di 24h dall'arrivo → 100%
+> · **finestra di ripensamento** (48h dall'acquisto) → 100%, **vince su qualunque politica**
+>
+> ⚠️ **La finestra di ripensamento NON si può toccare**: quel 100% copre obblighi di legge
+> (California SB 644, Brasile art. 49). Il caso su cui si può intervenire è **solo** il primo.
+>
+> 💡 **Non è un difetto: è un pezzo mai costruito** — e neanche un'idea nuova. Nei documenti era
+> già scritto che *«recuperare il COSTO, visto che Stripe non restituisce la commissione, è
+> tutt'altra cosa dal tenersi la propria quota, ed è difendibile»*. Pensato, giudicato
+> legittimo, **mai finito nel codice**.
+>
+> 🗣️ **ORDINE DEL FONDATORE (2026-08-16): «da sistemare, io non devo rimetterci».** Le strade
+> sono tre e la scelta è sua: assorbirlo come costo di acquisizione · trattenerlo dichiarandolo
+> nelle condizioni · assorbirlo solo dentro la finestra legale e trattenerlo fuori.
+>
+> ⛔ **E la lezione di metodo, che vale oltre il caso.** Nessuno dei **5740** test l'aveva mai
+> fatta emergere, perché **tutti verificano se il calcolo è giusto e nessuno chiede «e chi ci
+> rimette?»**. È il buco **F6** già dichiarato («chi perde se va storta non esiste ancora»),
+> trovato non da uno strumento ma da una persona che ha pagato un euro e ha detto *«c'è
+> qualcosa che non torna»*. **Due volte in un giorno il fondatore ha visto quello che i test
+> non vedevano** (l'altra: il prezzo doppio qui sotto).
+>
+> ### 🔴 ALTRO DIFETTO VIVO, TROVATO LO STESSO GIORNO: IL PREZZO VIVE IN DUE POSTI
+> ```
+> alloggi.prezzo_notte_cents     =  100  (1 EUR)   <- VETRINA, scheda, e dati per GOOGLE
+> inventario.prezzo_netto_cents  = 9000  (90 EUR)  <- PREVENTIVO e PAGAMENTO
+> ```
+> Misurato sul sito vero: i dati strutturati pubblicavano `"price": "1.00"` mentre la cassa
+> chiedeva **90 €**. ⛔ **Espone un prezzo e ne addebita un altro, anche ai motori di ricerca.**
+> Non è colpa dell'host: il pannello ha **due voci di prezzo**, una sopra e una sotto, e
+> **niente controlla che siano d'accordo**. Cambiandone una l'altra resta.
+> 🔴 È esattamente ciò che l'ordine del fondatore vieta (*«l'host non deve poter mentire»*) —
+> e qui **non serve nemmeno un host disonesto: lo fa la macchina da sola**.
+> ⚠️ Dopo la correzione di UN giorno restavano **29 giorni su 30 a 90 €** con l'annuncio a 1 €.
+>
+> ### ⚠️ TERZO, MINORE: IL PERCORSO DEL BUNKER FA PERDERE IL POSTO
+> Il tasto «Rimborsa» chiede lo sblocco super-admin; lo sblocco **ti porta dentro il bunker**,
+> dove quell'operazione non esiste, **e tornando indietro il campo della chiave admin è vuoto**.
+> Il collegamento è sano (la sessione vive 15 min in `sessionStorage` e sopravvive alla
+> navigazione): **è il percorso a essere sbagliato, non il codice.** Un operatore di fretta si
+> blocca lì. ⛔ *Nota di metodo: avevo dichiarato «il tasto non può funzionare» dopo aver
+> cercato solo in `fase83_server.py` invece che in `deploy/admin.html` — una conclusione tratta
+> da una ricerca incompleta. Il difetto vero era un altro.*
+>
+> ### ✅ STATO ALLA CHIUSURA
+> Annuncio di prova **messo in BOZZA** e verificato **dalla strada pubblica**, non dal database:
+> `pagina -> 404` · `catalogo -> totale 0` · `mappa del sito -> 1 (solo home)`.
+> ⚠️ In produzione restano **0 annunci** e **1 host** (senza `stripe_account_id`: il bonifico
+> all'host non è ancora stato attraversato da nessuno).
+
 ## 🚦 2026-08-16 (14) — 📏 **IL METRO NON SAPEVA DI ESSERE STORTO. ADESSO SE NE ACCORGE DA SÉ**
 
 > **Ordine del fondatore:** *«i tuoi errori se sono fondati non devono ripeterli più nessuno,
@@ -2217,7 +2298,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 5c17a55
+CONSEGNE AGGIORNATE A: 7d30804
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
