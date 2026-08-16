@@ -165,6 +165,55 @@ class ProviderStripe:
             return {"ok": False, "id": "",
                     "motivo": "%s: %s" % (exc.__class__.__name__, exc)}
 
+    # Rimborsi che valgono come denaro GIA' USCITO (o in uscita). Un rimborso 'failed' o
+    # 'canceled' NON ha restituito niente: contarlo come fatto toglierebbe la riga dalla lista
+    # di chi aspetta lasciando l'ospite senza i suoi soldi E senza nessuno che lo sappia --
+    # il peggiore dei due errori possibili. Gli stati sono quelli dichiarati dalla
+    # documentazione Stripe (oggetto Refund, campo `status`: pending, requires_action,
+    # succeeded, failed, canceled).
+    STATI_RIMBORSO_VIVO = ("succeeded", "pending", "requires_action")
+
+    def rimborsi_di(self, payment_intent: Any) -> Dict[str, Any]:
+        """CHIEDE A STRIPE se su quel pagamento e' gia' uscito un rimborso. E' la meta' LETTA
+        del rimborso, e senza di essa la lista dei rimborsi dovuti dovrebbe fidarsi del nostro
+        database -- che il 2026-08-16 diceva 'rimborsato' su una prenotazione dove non era
+        partito un centesimo. La verita' su dove sono i soldi ce l'ha chi li muove.
+
+        ⛔ `ok=False` NON SIGNIFICA «nessun rimborso»: significa «NON LO SO». Confondere le due
+        cose e' il modo esatto in cui si rimborsa due volte la stessa persona, o in cui una
+        lista vuota si legge come «niente da fare» mentre nessuno ha potuto guardare. Percio'
+        l'esito della domanda (`ok`) e la risposta (`rimborsi`) stanno in campi diversi, e chi
+        chiama e' costretto a distinguerli.
+
+        ⚠️ DICHIARATO (D18 condizione 3): si leggono i primi 100 rimborsi di quel pagamento e
+        NON si segue la paginazione. Una prenotazione con piu' di 100 rimborsi parziali non
+        esiste nel nostro prodotto; se un giorno esistesse, questa funzione ne vedrebbe solo
+        una parte -- e la sottostima porta a rimborsare di nuovo, quindi va rifatta prima.
+
+        Ritorna sempre un dict: {'ok', 'rimborsi', 'rimborsato_cents', 'motivo'}."""
+        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+            return {"ok": False, "rimborsi": [], "rimborsato_cents": 0,
+                    "motivo": "payment_intent_assente"}
+        try:
+            from urllib.parse import urlencode
+            url = RIMBORSI_URL + "?" + urlencode([("payment_intent", payment_intent),
+                                                  ("limit", "100")])
+            resp = self._fetch(url, None, {"Authorization": "Bearer " + self._key})
+            if not (isinstance(resp, dict) and isinstance(resp.get("data"), list)):
+                # Stripe ha risposto qualcosa che non e' un elenco: non e' «nessun rimborso»,
+                # e' una risposta che non so leggere. Va detta per intero (regola ferrea 9).
+                return {"ok": False, "rimborsi": [], "rimborsato_cents": 0,
+                        "motivo": "risposta_inattesa: %r" % (resp,)}
+            vivi = [r for r in resp["data"] if isinstance(r, dict)
+                    and str(r.get("status") or "") in self.STATI_RIMBORSO_VIVO]
+            return {"ok": True, "rimborsi": vivi, "motivo": "",
+                    "rimborsato_cents": sum(int(r.get("amount") or 0) for r in vivi)}
+        except Exception as exc:
+            logger.error("Stripe: LETTURA RIMBORSI FALLITA pi=%s -> %s: %s",
+                         payment_intent, exc.__class__.__name__, exc, exc_info=True)
+            return {"ok": False, "rimborsi": [], "rimborsato_cents": 0,
+                    "motivo": "%s: %s" % (exc.__class__.__name__, exc)}
+
     def crea_link_anticipo(self, dati: Dict[str, Any]) -> Optional[str]:
         """PAGA IN STRUTTURA: Checkout Session che addebita SUBITO solo l'ANTICIPO
         (commissione + fee + copertura carta = tutto NOSTRO, fase188) E salva la carta per la
@@ -234,7 +283,11 @@ class ProviderStripe:
     def _fetch_reale(url: str, body: bytes,
                      headers: Dict[str, str]) -> Dict[str, Any]:  # pragma: no cover
         import urllib.request
-        req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+        # Il metodo lo decide il CORPO, non il chiamante: con un corpo si scrive (POST), senza
+        # si legge (GET). Serve a `rimborsi_di`, che INTERROGA Stripe invece di muovere denaro.
+        # Cablarlo a POST manderebbe una scrittura vuota all'elenco dei rimborsi.
+        req = urllib.request.Request(url, data=body, headers=headers,
+                                     method=("POST" if body else "GET"))
         with urllib.request.urlopen(req, timeout=15) as r:
             return json.loads(r.read())
 

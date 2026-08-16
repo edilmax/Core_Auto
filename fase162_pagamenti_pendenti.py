@@ -437,6 +437,25 @@ class PagamentiPendenti:
         finally:
             con.close()
 
+    def pagati_recenti(self, *, limit: int = 50) -> List[Dict[str, Any]]:
+        """Le prenotazioni PAGATE piu' recenti, per la riconciliazione con Stripe.
+
+        Serve alla domanda INVERSA, quella che nessuno faceva: *«Stripe ha restituito dei
+        soldi su una prenotazione che per noi e' ancora viva?»*. Senza, il confronto coi conti
+        di chi muove il denaro varrebbe in un senso solo — e una divergenza a nostro sfavore
+        resterebbe invisibile finche' non la trova un commercialista.
+
+        Bounded di proposito: chi chiama dichiara quante ne ha guardate e quante no."""
+        lim = limit if isinstance(limit, int) and not isinstance(limit, bool) \
+            and 0 < limit <= 500 else 50
+        con = self._apri()
+        try:
+            righe = con.execute("SELECT * FROM pendenti WHERE stato='pagato' "
+                                "ORDER BY creato_ts DESC LIMIT ?", (lim,)).fetchall()
+            return [self._riga(r) for r in righe]
+        finally:
+            con.close()
+
     def attivi_per_alloggio(self, alloggio_id: Any, *,
                             ora_ts: Optional[int] = None) -> List[Dict[str, Any]]:
         """Hold/richieste ANCORA VIVI per un alloggio ('in_attesa' = in attesa di pagamento,

@@ -622,6 +622,143 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### ✅ 2026-08-16 (7) — **LA LISTA DEI RIMBORSI DOVUTI È COSTRUITA** (il difetto (6) è chiuso sul computer)
+
+**Cosa c'è adesso che ieri non c'era.** Chi ha pagato, ha cancellato e aspetta i suoi soldi
+compare in una lista dentro il pannello admin, con un pulsante che glieli restituisce. Il
+rimborso resta **MANUALE**, per decisione del fondatore: *«se la macchina sbaglia ci rimetto
+conti, fiducia, credibilità»*. L'automatico si accende dopo.
+
+⚠️ **Costruito e provato sul computer. NON è ancora committato né in produzione** (B1/D17).
+
+**I sei punti del progetto, uno per uno, e dove stanno:**
+
+| # | Punto | Dove | Guardia |
+|---|---|---|---|
+| 1 | la lista si **calcola**, non si scrive | `_rimborso_dovuto_scheda` legge il **giornale immutabile** (fase177) | `test_LA_CANCELLAZIONE_DELL_OSPITE_FINISCE_NELLA_LISTA` |
+| 2 | la verità la dice **Stripe** | `fase85.rimborsi_di()` — `GET /v1/refunds?payment_intent=` | `test_LA_VERITA_LA_DICE_STRIPE_NON_IL_NOSTRO_DATABASE` + i due sensi |
+| 3 | prima di cliccare si vede tutto | 5 campi + `bottone` + `manca` | `test_PRIMA_DI_CLICCARE_SI_VEDE_TUTTO` · `test_SE_MANCA_UN_DATO_IL_BOTTONE_NON_C_E` |
+| 4 | i **quattro freni** | tutti in `_rimborso_dovuto_scheda` / `_admin_rimborsa_dovuto` | 4 guardie `test_FRENO_*` |
+| 5 | il tempo è visibile | `attesa_ore` + `in_attesa` in cima al pannello | `test_IL_TEMPO_E_VISIBILE_E_IL_CONTO_STA_IN_CIMA` |
+| 6 | lo strumento controlla se stesso | `controllabile` + `motivo_non_controllabile` | `test_SE_NON_PUO_INTERROGARE_STRIPE_NON_DICE_LISTA_VUOTA` |
+
+⛔ **LA COSA TROVATA MISURANDO, CHE HA CAMBIATO IL PROGETTO.** `fase162.pulisci_vecchi()`
+**cancella** i record in stato `rimborsato` più vecchi di **26 ore** (default `eta_sec=93600`,
+riga 483). Una lista costruita sui pendenti — la scelta ovvia — avrebbe perso per primo
+**proprio chi ha aspettato di più**: il difetto del punto 1 in una forma che nessuno avrebbe
+sospettato, perché la riga *c'è* il primo giorno. Per questo la lista si regge sul **giornale
+immutabile**, che non si purga mai; il `pi_` si legge dal pendente finché esiste, e quando non
+c'è più **la riga resta ma senza pulsante**, dichiarando cosa manca. Guardia dedicata:
+`test_LA_RIGA_NON_PUO_MANCARE_ANCHE_SE_IL_PENDENTE_E_STATO_PURGATO`, che purga il record di
+proposito e pretende che la riga sopravviva.
+
+**Come si prova, e com'è stato provato davvero (D20 · regola ferrea 2):**
+- le **16 guardie della lista** sono state scritte PRIMA della riparazione e **viste rosse**,
+  tutte e 16 con lo stesso motivo giusto: `404 {'errore': 'rotta_non_trovata'}` — la lista non
+  esisteva. Nessuna era rossa per un guasto del banco: la preparazione (prenota → paga →
+  l'ospite cancella) passava in tutte, e confermava che la politica calcola un rimborso `> 0`
+  mentre a Stripe non arrivava niente;
+- le **5 guardie del cablaggio** (il pannello) sono state provate **iniettando il guasto vero**:
+  tolto il ramo `controllabile===false` e tolto il caricamento all'apertura → **esattamente 2
+  rosse, le altre 3 verdi** (nessun falso allarme); ripristino **byte-identico**
+  (`sha256 8858065B…C64A`, 83466 byte, prima e dopo).
+
+**Le tre rotte / funzioni nuove:**
+- `fase85.rimborsi_di(pi)` — la metà **letta** di Stripe. `ok=False` significa **«non lo so»**,
+  mai «nessun rimborso». Conta solo gli stati `succeeded|pending|requires_action` (fonte:
+  docs.stripe.com/api/refunds/object): un rimborso `failed` non ha restituito niente, e
+  contarlo come fatto toglierebbe la riga lasciando l'ospite senza soldi **e** senza nessuno
+  che lo sappia. ⚠️ Dichiarato: legge i primi 100 e non pagina.
+- `fase162.pagati_recenti(limit)` — serve alla domanda **inversa**: *«Stripe ha rimborsato una
+  prenotazione che per noi è viva?»*. Senza, il confronto varrebbe in un senso solo.
+- `fase83`: `GET /api/admin/rimborsi_dovuti` (sola lettura) · `POST /api/admin/rimborsa_dovuto`
+  (il pulsante, protetto come `_admin_rimborso`: bunker + ruolo + kill-switch).
+
+⛔ **Il giudizio sta in UN POSTO SOLO** (`_rimborso_dovuto_scheda`): la lista e il pulsante
+fanno la stessa domanda alla stessa funzione. Se vivesse in due posti, prima o poi la lista
+mostrerebbe un bottone che il pulsante rifiuta — o, molto peggio, il contrario.
+
+**Corretti nello stesso lavoro (sbaglio S10, testi che dichiarano il falso):**
+- la descrizione di `_cancella_prenotazione` diceva ancora *«nessuna riga di questo progetto
+  chiama l'API dei rimborsi di Stripe — verificato l'8 agosto»*: vero allora, **falso dal 16**;
+- la `nota` che legge **il CLIENTE** alla cancellazione diceva *«il rimborso va eseguito A MANO
+  dal pannello admin»* — gli raccontava un nostro processo interno e non gli diceva l'unica
+  cosa che gli interessa. Ora dice che i soldi tornano sul metodo di pagamento usato, **senza
+  promettere tempi che non dipendono da noi**.
+
+**✅ SUITE INTERA (dopo le due riparazioni CodeQL):** `Ran 5764 tests in 1576.741s` ·
+`OK (skipped=4)` · **uscita 0** letta diretta (scritta dal lancianotte in fondo al file, S8).
+5769 raccolti − 5764 eseguiti = lo **scarto noto di 5** (guardie `openssl`, dichiarato nella
+riga AMBIENTE). *(I giri precedenti, stesso esito: `Ran 5761 in 1618.862s` prima delle guardie
+sul riferimento ostile, `Ran 5763 in 1631.660s` dopo la prima riparazione.)*
+
+⚠️ **IL PRIMO GIRO ERA ROSSO — 7 rossi, e tutti sani.** Vale la pena scriverlo perché due
+guardie già esistenti hanno preso due miei buchi che io non avevo previsto:
+1. **il cricchetto delle traduzioni** (`test_il_debito_di_traduzione_non_cresce`): avevo
+   messo le 16 chiavi nuove solo in IT/EN dando per buono che `T()` ripiega sull'inglese. Vero,
+   ma il debito saliva **91 → 107** in 6 lingue. ⛔ Risposto **traducendo**, non alzando il
+   tetto: alzare il tetto di un cricchetto è disattivarlo;
+2. **il giro ostile** (`test_giro_completo_tutte_le_rotte`): le due rotte nuove non erano
+   esercitate da nessuno («copertura bucata») e il router ne dichiarava **134 contro 136**.
+   💡 **E lì è saltata fuori una terza cosa, più grossa delle due:** in quel giro il webhook
+   **non portava il `payment_intent`**, quindi `_admin_rimborso` non poteva chiamare Stripe e
+   **nessun rimborso di quel collaudo partiva davvero** — la strada dei soldi era finta pur
+   essendo verde. Ora il webhook lo porta (Stripe lo fornisce sempre in `mode=payment`) e il
+   finto provider **ricorda** i rimborsi creati, così il giro può distinguere «i soldi sono
+   tornati» da «l'abbiamo tolto noi dalla lista».
+
+⚠️ **Cosa NON è stato fatto, e va detto:** il rimborso **automatico** (per scelta) · la
+paginazione oltre 100 rimborsi per pagamento · il tetto di **50 righe** per apertura
+(dichiarato nella risposta come `tetto` e `non_esaminati`) · nessuna prova su **soldi veri**
+di questa strada: il collaudo del 16 agosto passò dal pannello, cioè dall'altra.
+
+🔴 **E POI CODEQL HA TROVATO UNA COSA CHE NOI NON AVEVAMO VISTO** (richiesta di unione #59:
+**14 allarmi nuovi, 7 gravi**, tutti nel codice di questo lavoro). La regola: `py/log-injection`
+e `py/clear-text-logging-sensitive-data`. La sostanza: **`riferimento` arriva dal CORPO della
+richiesta e finisce nel registro** — e rimbalzava anche nella risposta.
+
+⛔ **Perché qui è peggio che altrove:** il **Guardiano (fase186) legge gli ERROR del registro
+ogni giorno**, ed è così che un guasto sui soldi diventa visibile entro 24 ore. Chi può
+infilare un a-capo in un riferimento può **scrivere righe di allarme false nel posto dove
+guardiamo per sapere se è tutto a posto**: inventare un rimborso mai avvenuto, o annegare
+quello vero.
+
+⚠️ **Onestà sul rischio, perché conta:** non è dimostrato che oggi sia sfruttabile — con un
+riferimento inventato il giornale non trova niente e si esce prima di scrivere. Ma «oggi non
+si raggiunge» **dipende dal comportamento di un'altra funzione**: è una conclusione con una
+premessa, non una proprietà (**D19**). Riparato al confine, dove diventa una proprietà: un
+riferimento che non ha la forma di un riferimento **non entra** (`_RIFERIMENTO_VALIDO`,
+`fase83_server.py:44`). La forma è **misurata su 300 riferimenti veri**, non supposta:
+`hmac-sha256:e9a39409f6d8`, 24 caratteri, alfabeto `[0-9a-f:-]`.
+
+💡 **E la guardia rossa ha mostrato una seconda perdita che non avevo visto:** la risposta 404
+**rimandava indietro la stringa ostile tal quale**. Chiusa dalla stessa riparazione.
+Guardie: `test_UN_RIFERIMENTO_OSTILE_NON_PUO_SCRIVERE_NEL_REGISTRO` (vista rossa: `404 != 422`,
+con la stringa iniettata nel corpo della risposta) + `test_UN_RIFERIMENTO_VERO_NON_VIENE_RIFIUTATO`
+(prova di rimozione: il controllo nuovo deve tacere sui riferimenti veri).
+
+🔁 **E LA SECONDA VOLTA CODEQL AVEVA ANCORA RAGIONE.** Dopo la riparazione al confine i 14
+allarmi erano **identici**: il controllo con l'espressione regolare non e' riconosciuto come
+barriera. E il punto vero non era il riconoscimento, era la sostanza: **quel controllo mette
+in sicurezza la ROTTA, non la funzione.** `_rimborso_dovuto_scheda` e' chiamata anche dalla
+lista, e domani da qualcun altro: se la garanzia vive solo nel chiamante, il giorno che nasce
+un secondo chiamante la garanzia cade **senza che nessuno tocchi questa funzione** — quindi
+senza che nessuno se ne accorga. E' **D19** in forma pura.
+
+⛔ Ora la garanzia sta **dove si scrive**: `_rif_per_registro()` (`fase83_server.py:51`) toglie
+tutto cio' che non e' `[A-Za-z0-9:_.-]`, ed e' usata in **tutte e 7** le scritture (misurato:
+8 occorrenze = 1 definizione + 7 usi). Il controllo al confine **resta**: dicono due cose
+diverse — quello *cosa accettiamo*, questa *cosa scriviamo*. Guardia:
+`test_LA_SCHEDA_NON_SCRIVE_NEL_REGISTRO_QUELLO_CHE_LE_DANNO`, che chiama la funzione
+**direttamente scavalcando la rotta** ed e' stata vista rossa con la riga di allarme
+fabbricata dentro il messaggio d'errore.
+
+⚠️ **COSTO DICHIARATO, da diradare quando ci saranno prenotazioni vere.** Il pannello si
+ricarica **ogni 60 secondi** e ogni ricarica fa una scansione del giornale più fino a **~100
+chiamate a Stripe** (50 righe dovute + 50 pagate per il controllo inverso). Con 0 annunci in
+produzione oggi costa **zero**. Il pezzo da diradare è il **controllo inverso**: è una
+riconciliazione contabile, non ha bisogno di girare ogni minuto.
+
 ### 🔴🔴 2026-08-16 (6) — **LA CANCELLAZIONE DELL'OSPITE NON RESTITUISCE I SOLDI**
 
 **È la cosa più grave aperta.** Trovata dal fondatore ragionando, non da uno strumento:
