@@ -11,14 +11,88 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🚦 2026-08-16 (12) — 🚀 **IL RIMBORSO È IN PRODUZIONE: I TRE POSTI SONO ALLINEATI**
+
+> **Fatto, misurato, niente da riprendere.** I tre posti dicono lo stesso commit — misurato
+> dopo lo scambio, non dedotto:
+> ```
+> computer : 82db9a9    GitHub : 82db9a9    VPS : 82db9a9
+> ```
+> Il VPS era rimasto indietro di **due** unioni (#53 z3 in CI · #54 il rimborso): stava a
+> `6118d35`.
+>
+> ### ⛔ LA DOMANDA GIUSTA NON È «È COMMITTATO?», È «È DENTRO L'IMMAGINE CHE GIRA?»
+> Un commit unito non è codice in esecuzione: fra i due c'è un `build`. Quindi la prova non è
+> stata letta da git, è stata chiesta **al contenitore vivo** (`docker exec`), ed è la sola che
+> distingue «l'abbiamo scritto» da «l'ospite riavrà i suoi soldi»:
+> ```
+> RIMBORSI_URL           : https://api.stripe.com/v1/refunds
+> ProviderStripe.rimborsa : True
+> salva_stripe_session accetta payment_intent : True
+> il pannello admin CHIAMA rimborsa           : True
+> la vecchia frase "A MANO dal pannello admin" e' sparita : True
+> ```
+> È il **collaudo 2** (cablaggio) applicato al deploy: senza queste righe si sarebbe scritto
+> «rimborso online» avendo provato soltanto che era su GitHub.
+>
+> ### LE MISURE, con il comando che le regge (D22)
+> · **suite intera** sul computer prima di toccare il server: `Ran 5738 tests in 1860.706s` ·
+>   `OK (skipped=4)` · **codice d'uscita 0** (letto dal file, senza tubi). Raccolti dal
+>   caricatore **5743**: lo scarto **5** è quello già noto e dichiarato — le guardie `openssl`
+>   che il PATH di PowerShell non ha (S11/D23), non un numero che cala senza nome.
+> · **CI su Linux** (regola ferrea 8, letta dall'API sul commit `82db9a9`, mai «immagino sia
+>   verde»): `gate` · `full-suite` · `full-suite-311` · `mutazione` · `money-smoke` ·
+>   `copertura` · `immagine` · `accessibilita` · `atheris` · `w3c` · `qualita` **tutti success**;
+>   `zap` skipped. **CodeQL: success.**
+> · **richiesta di unione #54**: `merged=True`, `merge_sha=82db9a9` — *controllata, non ricordata*
+>   (il 2026-08-06 una risultava unita e l'API diceva `merged: false`).
+> · **sito vero dopo lo scambio**: `/` → **200**, `/api/health` → **200**; sonde **negative**
+>   `/api/admin/prenotazioni` → **401**, `/api/bunker/stato` → **403** — negano, non rispondono
+>   404, quindi sono prove e non ornamenti (D17).
+> · `collaudi/verifica_produzione.py`: **190 controlli, 0 violazioni**, uscita **0**.
+> · avvio pulito: `money_path_pronto: True, avvisi: []`. Certificato valido ancora **38 giorni**.
+>
+> ### 🪂 IL PARACADUTE ERA AGGANCIATO ALL'IMMAGINE SBAGLIATA — ed è NORMALE, ed è il motivo per cui [1b] esiste
+> Prima dello scambio `casavip-app:prec` puntava a `9d28a94b…` mentre l'immagine viva era
+> `80fcf893…`. **Non è un guasto nuovo**: fra un deploy e l'altro `:prec` conserva l'immagine
+> dell'aggancio precedente, quindi **invecchia da sola**. Il punto è che chi salta senza
+> ri-agganciare torna a uno stato che non è l'ultimo buono — *peggio di non avere paracadute,
+> perché ci si butta convinti*. Il passo [1b] l'ha ri-agganciata e **ha preteso la coincidenza**
+> prima di lasciar partire il build:
+> ```
+> dopo l'aggancio :prec = sha256:80fcf893754e7e59e2463b3dc7cb77e327c82d68825d84f51db8128b7fd33b7d
+> PARACADUTE AGGANCIATO E VERIFICATO (coincide con l'immagine viva)
+> punto di ritorno: PRE_DEPLOY_20260816_081052.commit -> 6118d35
+> ```
+> 💡 La lezione: **una difesa che invecchia da sola non va ricordata, va ri-verificata ogni
+> volta da chi la usa.** Quattro deploy in quattro giorni l'avevano dimenticata; il passo che
+> la pretende è nel documento dal 2026-08-10 e da allora non è più successo.
+>
+> ### ⚠️ COSA NON È STATO PROVATO — dichiarato, non nascosto (D18 punto 3)
+> · **Nessun rimborso vero è stato eseguito su Stripe in produzione.** È provato che il verbo
+>   c'è, che l'admin lo chiama e che i test lo vedono partire; **non** che Stripe abbia
+>   restituito un euro davvero. Il primo rimborso vero va **guardato a mano** sul pannello.
+> · **In produzione ci sono 0 pendenti** (misurato: `pendenti totali 0`, `pagati 0`), quindi il
+>   codice nuovo non ha ancora incontrato un caso reale.
+> · **Le prenotazioni pagate PRIMA di questo deploy non hanno `stripe_pi`** e non si rimborsano
+>   da sole: rispondono *«PAGATA ma pagamento non identificabile: da restituire A MANO»* e
+>   **gridano**. Oggi sono zero, quindi non c'è nessuna sanatoria da fare — ma se un giorno se
+>   ne trovasse una, quello è il motivo.
+
 ## 🚦 2026-08-16 (11) — 💸 **I SOLDI TORNANO INDIETRO DA SOLI: IL RIMBORSO ALL'OSPITE È CHIUSO**
 
-> **Sul disco, finito e provato, NON committato.** Attesi da `git status --porcelain`
-> **sei** file: `fase83_server.py` · `fase85_pagamenti_stripe.py` ·
-> `fase162_pagamenti_pendenti.py` · `test_admin_rimborso_money.py` ·
-> `REGISTRO_INGEGNERIA.md` · `RIPRENDI_QUI.md`.
-> ⛔ **TOCCA PRODUZIONE** (col «autorizzato» del fondatore, 2026-08-16): al prossimo deploy
-> va online, e il VPS non è più indietro «apposta».
+> ✅ **UNITO E IN PRODUZIONE dal 2026-08-16** — vedi il riquadro (12) qui sopra.
+> ⛔ **QUESTO RIQUADRO HA DICHIARATO IL FALSO PER ORE.** Diceva *«sul disco, finito e provato,
+> NON committato, attesi sei file da `git status --porcelain`»* mentre il lavoro era già
+> **committato** (`b503bb0`) **e unito** (richiesta #54, `merged=True`). Chi ha ripreso in mano
+> la sessione ha trovato l'albero **pulito** e ha dovuto misurare per capire chi mentiva.
+> È lo **sbaglio S10** — *il documento si aggiorna nello stesso momento in cui cambia la
+> macchina, non «dopo», perché il «dopo» è dove si perde* — ed è costato: senza la misura si
+> sarebbe cercato per un pezzo del lavoro perduto che invece era già su GitHub.
+> 💡 La lezione che vale oltre il caso: **chi scrive «non committato» sta descrivendo un istante,
+> e un istante invecchia**. Il riquadro nuovo non dice più dove sta il lavoro: dice il **commit**,
+> e il commit lo si controlla in due secondi.
+> ⛔ **TOCCA PRODUZIONE** (col «autorizzato» del fondatore, 2026-08-16).
 >
 > ### IL BUCO, DETTO COME LO VEDEVA L'OSPITE
 > `_admin_rimborso` faceva **tutto** tranne la cosa che il suo nome promette: liberava le

@@ -622,6 +622,53 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🚀 FATTO 2026-08-16 (2) — **TERZO DEPLOY: IL RIMBORSO È IN PRODUZIONE, I TRE POSTI ALLINEATI**
+
+File toccati: `RIPRENDI_QUI.md`, `REGISTRO_INGEGNERIA.md` — **nessun codice di produzione**: il
+codice era già scritto, unito e autorizzato (voce qui sotto), qui si è solo **messo online** e
+**registrato**. Procedura `DEPLOY.md` §3, protocollo a rischio zero (D17).
+
+**I tre posti, misurati dopo lo scambio:** computer `82db9a9` · GitHub `82db9a9` · VPS `82db9a9`.
+Il VPS stava a `6118d35`, indietro di **due** unioni (#53 z3 in CI · #54 il rimborso).
+
+**⛔ La prova che conta non è il commit, è il contenitore vivo.** Fra «unito» e «in esecuzione»
+c'è un `build`: la verifica è stata chiesta con `docker exec` all'immagine che gira —
+`ProviderStripe.rimborsa: True`, il pannello admin **la chiama**, e la vecchia frase *«va
+eseguito A MANO dal pannello admin»* **non c'è più** nel sorgente in produzione. È il collaudo 2
+(cablaggio) applicato al deploy: senza, si sarebbe dichiarato «online» avendo provato soltanto
+che era su GitHub.
+
+**Le misure, col comando che le regge (D22):** suite intera sul computer prima di toccare il
+server → `Ran 5738 tests in 1860.706s`, `OK (skipped=4)`, **uscita 0** (letta dal file, senza
+tubi; raccolti 5743, scarto **5** = le guardie `openssl` assenti dal PATH di PowerShell, già
+dichiarato) · CI su Linux letta **dall'API** su `82db9a9`: `gate`, `full-suite`,
+`full-suite-311`, `mutazione`, `money-smoke`, `copertura`, `immagine` tutti `success`, `zap`
+skipped, **CodeQL success** · richiesta #54 `merged=True`, `merge_sha=82db9a9` (controllata,
+non ricordata) · `collaudi/verifica_produzione.py` **190 controlli, 0 violazioni**, uscita 0 ·
+sonde negative `/api/admin/*` → **401**, `/api/bunker/*` → **403** (negano, non 404) ·
+`money_path_pronto: True, avvisi: []`.
+
+**🪂 Il paracadute era agganciato all'immagine sbagliata, e non è un guasto nuovo.** Prima dello
+scambio `:prec` puntava a `9d28a94b…`, l'immagine viva era `80fcf893…`: fra un deploy e l'altro
+`:prec` **invecchia da sola**, perché conserva l'aggancio precedente. Il passo [1b] l'ha
+ri-agganciata e **preteso la coincidenza** prima del build (`PARACADUTE AGGANCIATO E
+VERIFICATO`), col punto di ritorno in `PRE_DEPLOY_20260816_081052.commit` → `6118d35`.
+💡 **Una difesa che invecchia da sola non si ricorda: si ri-verifica ogni volta da chi la usa.**
+
+**⚠️ Cosa NON è provato (D18 punto 3):** nessun rimborso vero è ancora partito su Stripe in
+produzione — è provato il cablaggio, non che un euro sia tornato indietro davvero: **il primo
+rimborso vero va guardato a mano**. In produzione ci sono **0 pendenti** (misurato), quindi il
+codice non ha ancora incontrato un caso reale. Le prenotazioni pagate **prima** di questo deploy
+non hanno `stripe_pi`: non si rimborsano da sole, rispondono *«da restituire A MANO»* e
+**gridano** — oggi sono zero, quindi nessuna sanatoria da fare.
+
+**🩹 E una bugia trovata nei documenti, non da un controllo.** `RIPRENDI_QUI.md` riquadro (11)
+dichiarava *«sul disco, NON committato, attesi sei file da `git status --porcelain`»* mentre il
+lavoro era **già committato e unito**: l'albero era pulito e chi ha ripreso la sessione ha
+dovuto misurare per capire chi mentiva. È lo **sbaglio S10**. Corretto nello stesso commit.
+💡 **Chi scrive «non committato» descrive un istante, e un istante invecchia**: il riquadro nuovo
+non dice più *dove sta* il lavoro, dice il **commit** — che si controlla in due secondi.
+
 ### 💸 FATTO 2026-08-16 — **IL RIMBORSO ALL'OSPITE PARTE DA SOLO (era il buco più grave sul prodotto)**
 
 **⛔ TOCCA PRODUZIONE**, col «autorizzato» del fondatore (2026-08-16). File: `fase83_server.py`,
