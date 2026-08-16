@@ -622,6 +622,93 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🔴🔴 2026-08-16 (6) — **LA CANCELLAZIONE DELL'OSPITE NON RESTITUISCE I SOLDI**
+
+**È la cosa più grave aperta.** Trovata dal fondatore ragionando, non da uno strumento:
+*«il rimborso l'ho fatto io dal pannello senza che l'ospite l'abbia richiesto — sono forme
+diverse»*.
+
+**Due strade portano a un rimborso, e il 2026-08-16 ne è stata riparata UNA:**
+```
+_admin_rimborso        (pannello admin)   -> riparato, chiama rimborsa(), provato su soldi veri
+_cancella_prenotazione (l'OSPITE cancella) -> NON chiama rimborsa(): i soldi non partono
+```
+Misurato: `grep "\.rimborsa("` in produzione dà **un solo punto**, `fase83_server.py:4336`,
+dentro il pannello admin. L'altro esito (`fase35_pagamenti.py:257`) è in un modulo fra quelli
+**provati morti a mano**.
+
+**Lo dichiara il codice stesso**, nella descrizione di `_cancella_prenotazione`:
+*«⛔ IL RIMBORSO ALL'OSPITE NON PARTE DA SOLO: va eseguito A MANO dal pannello admin.»*
+
+**Effetto su un cliente vero:** cancella, il sistema calcola il dovuto secondo la politica,
+**libera le date**, risponde «cancellata» — e **i soldi restano fermi** finché una persona non
+entra nel pannello. È il difetto chiuso stamattina, sulla strada che conta di più.
+
+⛔ **Perché il collaudo su soldi veri non poteva vederlo:** il rimborso di prova è stato fatto
+**dal pannello**, cioè sull'unica strada che funzionava.
+💡 **LA LEZIONE: non basta «questa strada funziona?», serve «QUANTE strade portano qui?»** — la
+riparazione è stata fatta dove il documento indicava, senza contare gli ingressi. È la regola
+«ogni guardia dichiara il denominatore» applicata alle **vie d'accesso**, non ai test.
+
+⚠️ **Da correggere nello stesso lavoro:** la descrizione di `_cancella_prenotazione` dice
+ancora *«nessuna riga di questo progetto chiama l'API dei rimborsi di Stripe — verificato l'8
+agosto»*. Era vero l'8 agosto, **non lo è più dal 16**: lasciarla manda fuori strada chi legge
+(sbaglio S10).
+
+⚠️ **E quando si ripara, la politica va rispettata**: la cancellazione dell'ospite non
+restituisce sempre tutto — `fase111` calcola la quota secondo flessibile/moderata/rigida. Il
+rimborso da inviare a Stripe è **quello calcolato**, non il totale pagato.
+
+---
+
+#### 🏗️ IL PROGETTO DELLA RIPARAZIONE — deciso col fondatore il 2026-08-16
+
+⛔ **PREMESSA ONESTA, e va letta prima:** «zero errori garantiti» **non esiste**, e nessuna
+certificazione lo dà. Quello che questo progetto garantisce è diverso e più solido:
+**nessun errore può passare in silenzio.** Ogni modo di rompersi ha qualcosa che lo prende.
+
+🗣️ **DECISIONE DEL FONDATORE: all'inizio il rimborso si fa A MANO, non automatico.** Il motivo
+non è tecnico ed è giusto: *«se la macchina sbaglia ci rimetto conti, fiducia, credibilità e
+salta tutto»*. All'inizio il costo di un errore automatico non è un rimborso sbagliato: è la
+fiducia, che è l'unica cosa che c'è. L'automatico si accende **dopo**, quando la lista avrà
+funzionato molte volte di fila — **prima si guadagna la fiducia, poi si toglie il dito.**
+
+**1. ⛔ LA LISTA NON SI SCRIVE: SI CALCOLA.** È il pezzo che regge tutto il resto.
+Se la cancellazione *inserisce una riga* in una coda, un fallimento di quel passo (errore,
+riavvio, blocco) **fa sparire la riga e nessuno lo saprà mai**: il cliente aspetta per sempre.
+Invece la lista è una **domanda rifatta a ogni apertura**: *«quali prenotazioni sono state
+pagate, poi cancellate, e non hanno ancora un rimborso su Stripe?»*. Così **una riga non può
+mancare**, perché nessuno deve ricordarsi di scriverla: esiste per il solo fatto che quella
+prenotazione è in quello stato. Elimina la dimenticanza alla radice invece di rincorrerla.
+
+**2. LA VERITÀ LA DICE STRIPE, NON NOI.** La lista non guarda il nostro stato: **chiede a
+Stripe** se su quel `pi_` esiste un `re_`. Chiude in modo definitivo il difetto del 16 agosto
+(database «rimborsato», Stripe zero): quella riga sarebbe rimasta **rossa**. E vale **nei due
+sensi** — se Stripe ha rimborsato e noi non lo sappiamo, è comunque un allarme.
+
+**3. PRIMA DI CLICCARE SI VEDE TUTTO:** pagato · dovuto secondo la politica · da quanto aspetta
+· date liberate? · passi di sicurezza riusciti? ⛔ **Se manca uno di questi il bottone NON
+c'è** — non «c'è ma sconsigliato»: un bottone premibile quando non si deve, prima o poi si preme.
+
+**4. I QUATTRO FRENI SUL DENARO** (aritmetici, non opinioni): mai più di quanto ha pagato ·
+mai due volte (chiave d'idempotenza stabile: rete che cade o doppio clic non raddoppiano) ·
+mai se il payout all'host è già partito (si pagherebbe due volte, la seconda a carico nostro) ·
+mai una cifra scritta a mano (la calcola `fase111`, l'operatore la conferma).
+
+**5. IL TEMPO DIVENTA VISIBILE.** Riga che invecchia = più rossa; il numero di righe in attesa
+sta in cima al pannello. In UE i rimborsi hanno un termine di legge: **una coda senza scadenza
+non è una coda, è un cassetto.**
+
+**6. LO STRUMENTO CONTROLLA SE STESSO (D18 condizione 1).** Se non riesce a interrogare Stripe
+**non deve mostrare una lista vuota**: deve dire *«non ho potuto controllare»*. Lista vuota =
+«niente da fare»; lista non caricata = «non lo so». ⛔ **Confonderle è il modo esatto in cui un
+cassiere si convince che la cassa è a posto.**
+
+**COME SI PROVA (D20, nelle due direzioni):** si rompe di proposito ogni pezzo e **ogni volta
+deve gridare** — cancellazione senza riga in lista · Stripe che non risponde · doppio clic ·
+importo maggiore del pagato · payout host già partito · rete assente. Finché non lo si è visto
+gridare, non vale.
+
 ### 💶 2026-08-16 (5) — **PRIMO RIMBORSO VERO** · 🔴 **E TRE DIFETTI VIVI DA CHIUDERE**
 
 **✅ FATTO: il ciclo del rimborso è attraversato su soldi veri.** Annuncio creato, prenotazione
