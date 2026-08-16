@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""GIRO OSTILE SU TUTTE E 134 LE ROTTE — verifica INDIPENDENTE (revisore avverso).
+"""GIRO OSTILE SU TUTTE E 136 LE ROTTE — verifica INDIPENDENTE (revisore avverso).
 
 Tesi da REFUTARE: «ogni rotta risponde correttamente a una richiesta valida».
 Questo file NON riusa nulla dei collaudi happy-path per fetta: costruisce un mondo suo
@@ -20,7 +20,7 @@ del corpo sono verificati, e dove ha senso si controlla un VALORE VERO (un id, u
 un conteggio). `DORMIENTI` elenca le DUE sole rotte che rispondono 503 per progetto
 (connettore spento senza chiave): sono dichiarate qui, non nascoste.
 
-ROTTE ESCLUSE: nessuna. Tutte e 134 sono esercitate sul router vero; l'ultimo blocco del
+ROTTE ESCLUSE: nessuna. Tutte e 136 sono esercitate sul router vero; l'ultimo blocco del
 test lo DIMOSTRA confrontando le rotte visitate con quelle estratte dal sorgente di
 `_instrada` (se non coincidono, il test fallisce dicendo quali mancano).
 
@@ -68,8 +68,26 @@ def _g(i):
     return (BASE + datetime.timedelta(days=i)).isoformat()
 
 
+# Rimborsi creati dal finto Stripe, per `pi_`. Senza MEMORIA non si potrebbe distinguere
+# «la riga esce dalla lista perche' i soldi sono tornati» da «esce perche' l'abbiamo tolta noi».
+_RIMBORSI_FINTI = {}
+
+
 def _fake_stripe(url, body, headers):
     import secrets
+    from urllib.parse import urlparse, parse_qs
+    if "/refunds" in url and not body:
+        # LETTURA — GET /v1/refunds?payment_intent=...  (docs.stripe.com/api/refunds/list)
+        pi = (parse_qs(urlparse(url).query).get("payment_intent") or [""])[0]
+        return {"object": "list", "data": list(_RIMBORSI_FINTI.get(pi, []))}
+    if "/refunds" in url:
+        campi = parse_qs(body.decode("utf-8"))
+        pi = (campi.get("payment_intent") or [""])[0]
+        rid = "re_" + secrets.token_hex(8)
+        _RIMBORSI_FINTI.setdefault(pi, []).append(
+            {"id": rid, "status": "succeeded",
+             "amount": int((campi.get("amount") or ["0"])[0] or 0)})
+        return {"id": rid, "status": "succeeded", "object": "refund"}
     return {"url": "https://stripe.finto/x", "id": "cs_" + secrets.token_hex(8)}
 
 
@@ -243,8 +261,12 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
         return b
 
     def paga(self, rif):
+        # `payment_intent` c'e' SEMPRE su una Checkout Session in mode=payment (lo dichiara
+        # la documentazione Stripe). Senza, nessun rimborso di questo giro poteva partire
+        # davvero: il pagamento non era identificabile e la strada dei soldi restava finta.
         pl = json.dumps({"type": "checkout.session.completed",
                          "data": {"object": {"id": "cs_" + rif[:10],
+                                             "payment_intent": "pi_" + rif[:10],
                                              "metadata": {"riferimento": rif}}}})
         self.chiama("POST", "/api/payments/webhook", 200, [("ricevuto", bool)],
                     raw=pl,
@@ -656,6 +678,19 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
                     body={"alloggio_id": slug, "check_in": _g(13), "check_out": _g(14),
                           "idem_key": rec_rimb.get("idem_key")}, headers=BK,
                     valore={"stato": "rimborsato", "date_liberate": True})
+        # LISTA DEI RIMBORSI DOVUTI: chi ha pagato, ha cancellato e aspetta ancora i suoi
+        # soldi. ⛔ `controllabile` e' obbligatorio nel corpo: senza, una lista vuota si
+        # legge come «niente da fare» anche quando nessuno ha potuto guardare.
+        self.chiama("GET", "/api/admin/rimborsi_dovuti", 200,
+                    [("controllabile", bool), ("rimborsi", list), ("in_attesa", int),
+                     ("allarmi", list)], headers=ADM)
+        # ⛔ IL PULSANTE NON RESTITUISCE DUE VOLTE. Il rimborso qui sopra e' gia' partito
+        # verso Stripe: premere di nuovo NON deve inviare una seconda richiesta, e a dirlo
+        # dev'essere Stripe (che lo conferma), non il nostro stato -- che diceva 'rimborsato'
+        # anche il 16 agosto, quando su Stripe non era arrivato un centesimo.
+        self.chiama("POST", "/api/admin/rimborsa_dovuto", 200, [("stato", str)],
+                    body={"riferimento": b_rimb["riferimento"]}, headers=BK,
+                    valore={"stato": "gia_rimborsato"})
 
         # ── BUNKER: sala di controllo ────────────────────────────────────────────────
         self.chiama("GET", "/api/bunker/stato", 200, [("bunker", bool), ("diagnosi", dict)],
@@ -764,7 +799,7 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
         inesistenti = provate - dichiarate
         self.assertEqual(inesistenti, set(),
                          "provate rotte che il router non dichiara: %s" % sorted(inesistenti))
-        self.assertEqual(len(dichiarate), 134,
+        self.assertEqual(len(dichiarate), 136,
                          "il router ha %d rotte: la mappa del collaudo va aggiornata"
                          % len(dichiarate))
         # nessuna 5xx inattesa: solo le due dormienti dichiarate

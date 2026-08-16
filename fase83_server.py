@@ -2026,6 +2026,10 @@ class RouterHTTP:
             return self._admin_alloggio_stato(body, headers)
         if metodo == "POST" and path == "/api/admin/rimborso":
             return self._admin_rimborso(body, headers)
+        if metodo == "GET" and path == "/api/admin/rimborsi_dovuti":
+            return self._admin_rimborsi_dovuti(query, headers)   # chi aspetta i suoi soldi
+        if metodo == "POST" and path == "/api/admin/rimborsa_dovuto":
+            return self._admin_rimborsa_dovuto(body, headers)    # il pulsante, uno per volta
         if metodo == "GET" and path == "/api/admin/controversie":
             return self._admin_controversie(query, headers)
         if metodo == "POST" and path == "/api/admin/controversia/risolvi":
@@ -4360,6 +4364,274 @@ class RouterHTTP:
                                    "e vanno fatti a mano -> " + ", ".join(_falliti)
                                    + " | soldi all'ospite: " + _rimborso)}
 
+    # Quante righe si esaminano a ogni apertura del pannello. Bounded per non trasformare
+    # l'apertura in centinaia di chiamate a Stripe. Quante NON sono state guardate finisce
+    # nella risposta: un taglio silenzioso fa sembrare «coperto» cio' che nessuno ha guardato
+    # (D18 condizione 3).
+    RIMBORSI_TETTO = 50
+
+    def _rimborso_dovuto_scheda(self, rif):
+        """LA SCHEDA DI UN RIMBORSO DOVUTO — e il giudizio sta QUI, in un posto solo.
+
+        La lista e il pulsante fanno la STESSA domanda alla STESSA funzione. Se il giudizio
+        vivesse in due posti, prima o poi la lista mostrerebbe un bottone che il pulsante
+        rifiuta — o, molto peggio, il contrario.
+
+        ⛔ LA RIGA NON SI SCRIVE, SI CALCOLA. La sua esistenza non dipende da nessuno che si
+        sia ricordato di metterla in una coda: dipende dallo STATO. Se la cancellazione
+        inserisse una riga da qualche parte, un errore o un riavvio in quel punto la farebbe
+        sparire e nessuno lo saprebbe mai — il cliente aspetterebbe per sempre.
+
+        ⛔ E SI REGGE SUL GIORNALE IMMUTABILE (fase177), non sui pendenti: `fase162.
+        pulisci_vecchi()` cancella i record 'rimborsato' piu' vecchi di 26 ore, quindi una
+        lista costruita li' sopra perderebbe per primo proprio chi ha aspettato di piu'.
+
+        Ritorna `(riga, stripe_ok)`. `riga` e' None quando per quella prenotazione non risulta
+        dovuto niente. `stripe_ok` False significa **«non lo so»**, MAI «nessun rimborso»:
+        confondere le due cose e' il modo esatto in cui si rimborsa due volte la stessa
+        persona (fonte: docs.stripe.com/api/refunds/list).
+        """
+        import time as _t
+        fc = getattr(self._sys, "finanza", None)
+        sp = getattr(self._sys, "stripe", None)
+        if fc is None:
+            return None, False
+        try:
+            movimenti = [m for m in fc.movimenti(str(rif))
+                         if (m.get("tipo") or "") == "rimborso"]
+        except Exception:
+            logger.error("rimborsi dovuti: giornale illeggibile per %s", rif, exc_info=True)
+            return None, False
+        if not movimenti:
+            return None, True          # niente da restituire: non e' un guasto, e' la pace
+        mov = movimenti[-1]
+        dovuto = int(mov.get("importo_cents") or 0)
+        manca = []
+        # ── cosa sappiamo del pagamento (il pendente puo' essere gia' stato purgato) ──
+        pagato, pi_, date_liberate, rec = 0, "", False, None
+        try:
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            rec = pp.info(str(rif)) if pp is not None else None
+        except Exception:
+            logger.warning("rimborsi dovuti: pendente illeggibile per %s", rif, exc_info=True)
+        if rec is not None:
+            try:
+                dj = json.loads(rec.get("corpo_json") or "{}")
+            except Exception:
+                dj = {}
+            pagato = int(dj.get("totale_cents", 0) or dj.get("prezzo_guest_cents", 0) or 0)
+            pi_ = str(dj.get("stripe_pi") or "")
+            # Il rilascio delle date e' la PRIMA cosa che fa la cancellazione, e senza di
+            # esso non si arriva mai a questi stati: se lo stato c'e', le date sono libere.
+            date_liberate = rec.get("stato") in ("rimborsato", "cancellata_host")
+        if not pi_:
+            manca.append("payment_intent")
+        if pagato <= 0:
+            manca.append("importo_pagato")
+        if not date_liberate:
+            manca.append("date_liberate")
+        if dovuto <= 0:
+            manca.append("importo_dovuto")
+        # ── FRENO 1: mai piu' di quanto ha pagato (aritmetica, non opinione) ──
+        if 0 < pagato < dovuto:
+            manca.append("dovuto_maggiore_del_pagato")
+            logger.error("RIMBORSO DOVUTO INCOERENTE | rif %s | dovuto %d > pagato %d: la "
+                         "differenza la metteremmo noi", rif, dovuto, pagato)
+        # ── FRENO 3: se l'host e' gia' stato pagato, rimborsare paga DUE volte (D16) ──
+        passi_ok = False
+        try:
+            pd = getattr(self._sys, "payout", None)
+            stato_payout = str(pd.stato_di(str(rif)) or "") if pd is not None else ""
+            passi_ok = stato_payout != "pagato"
+            if not passi_ok:
+                manca.append("payout_gia_pagato")
+        except Exception:
+            # Non sapere in che stato e' il payout NON e' un dettaglio: nel dubbio i soldi
+            # non partono da soli, si grida e decide una persona.
+            manca.append("stato_payout_sconosciuto")
+            logger.warning("rimborsi dovuti: stato payout illeggibile per %s", rif,
+                           exc_info=True)
+        # ── PUNTO 2: LA VERITA' LA DICE STRIPE, NON IL NOSTRO DATABASE ──
+        gia, stripe_ok, motivo_stripe = False, False, "provider Stripe assente"
+        if not pi_:
+            stripe_ok, motivo_stripe = True, ""   # senza pagamento non c'e' nulla da chiedere
+        elif sp is not None and hasattr(sp, "rimborsi_di"):
+            esito = sp.rimborsi_di(pi_)
+            stripe_ok = bool(isinstance(esito, dict) and esito.get("ok"))
+            motivo_stripe = "" if stripe_ok else str((esito or {}).get("motivo") or "")
+            gia = bool(stripe_ok and int((esito or {}).get("rimborsato_cents") or 0) > 0)
+        if not stripe_ok:
+            manca.append("verifica_stripe")
+        riga = {"riferimento": str(rif), "pagato_cents": pagato, "dovuto_cents": dovuto,
+                "valuta": str(mov.get("valuta") or "EUR"),
+                "attesa_ore": max(0, (int(_t.time()) - int(mov.get("ts") or 0)) // 3600),
+                "date_liberate": date_liberate, "passi_sicurezza_ok": passi_ok,
+                "payment_intent": pi_, "gia_rimborsato": gia, "manca": manca,
+                "motivo_stripe": motivo_stripe,
+                # ⛔ «Se manca uno di questi il bottone NON c'e'» — non «c'e' ma sconsigliato»:
+                # un bottone premibile quando non si deve, prima o poi si preme.
+                "bottone": (not manca) and not gia}
+        return riga, stripe_ok
+
+    def _admin_rimborsi_dovuti(self, query, headers):
+        """LA LISTA DI CHI ASPETTA I SUOI SOLDI. Read-only.
+
+        Nasce il 2026-08-16, quando si e' scoperto che delle DUE strade che portano a un
+        rimborso ne era stata riparata una sola: l'ospite che cancella da solo si vede
+        liberare le date, riceve «cancellata» — e i soldi restano fermi finche' una persona
+        non entra qui. Decisione del fondatore: all'inizio il rimborso si fa A MANO, con
+        questa lista e un pulsante. L'automatico si accende dopo, quando la lista avra'
+        funzionato molte volte di fila: prima si guadagna la fiducia, poi si toglie il dito.
+
+        ⛔ LISTA VUOTA = «niente da fare». LISTA NON CARICATA = «non lo so». Confonderle e'
+        il modo esatto in cui un cassiere si convince che la cassa e' a posto — percio' se
+        non si riesce a interrogare Stripe (o il giornale e' spento) questa rotta NON
+        risponde «zero»: risponde `controllabile: false` col motivo (D18 condizione 1)."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        fc = getattr(self._sys, "finanza", None)
+        sp = getattr(self._sys, "stripe", None)
+        if fc is None:
+            return 200, {"controllabile": False, "in_attesa": 0, "rimborsi": [], "allarmi": [],
+                         "motivo_non_controllabile":
+                             "il giornale immutabile (fase177) non e' attivo: la domanda «chi "
+                             "aspetta un rimborso?» non si puo' nemmeno porre"}
+        if sp is None or not hasattr(sp, "rimborsi_di"):
+            return 200, {"controllabile": False, "in_attesa": 0, "rimborsi": [], "allarmi": [],
+                         "motivo_non_controllabile":
+                             "il provider Stripe non e' attivo: senza chiedere a lui non si sa "
+                             "quali rimborsi sono gia' partiti, e la lista sarebbe un'opinione"}
+        # ── i candidati vengono dal GIORNALE, che non perde una riga ──
+        try:
+            dovuti = [m for m in fc.stream_giornale() if (m.get("tipo") or "") == "rimborso"]
+        except Exception:
+            logger.error("rimborsi dovuti: giornale illeggibile", exc_info=True)
+            return 200, {"controllabile": False, "in_attesa": 0, "rimborsi": [], "allarmi": [],
+                         "motivo_non_controllabile": "il giornale non e' leggibile in questo "
+                                                     "momento: la lista NON e' vuota, e' ignota"}
+        esaminati = dovuti[-self.RIMBORSI_TETTO:]
+        righe, controllabile, motivi = [], True, []
+        visti = set()
+        for mov in reversed(esaminati):            # i piu' recenti in cima
+            rif = str(mov.get("riferimento") or "")
+            if not rif or rif in visti:
+                continue
+            visti.add(rif)
+            riga, stripe_ok = self._rimborso_dovuto_scheda(rif)
+            if not stripe_ok:
+                controllabile = False
+                if riga is not None and riga.get("motivo_stripe"):
+                    motivi.append("%s: %s" % (rif, riga["motivo_stripe"]))
+            if riga is not None and not riga.get("gia_rimborsato"):
+                righe.append(riga)
+        # ⛔ NEI DUE SENSI: se Stripe ha restituito dei soldi su una prenotazione che per noi
+        # e' ancora viva, i conti divergono e nessuno se ne accorgerebbe mai.
+        allarmi = []
+        try:
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            recenti = pp.pagati_recenti(limit=self.RIMBORSI_TETTO) \
+                if (pp is not None and hasattr(pp, "pagati_recenti")) else []
+        except Exception:
+            logger.warning("rimborsi dovuti: elenco pagati illeggibile", exc_info=True)
+            recenti = []
+        for rec in recenti:
+            try:
+                dj = json.loads(rec.get("corpo_json") or "{}")
+            except Exception:
+                continue
+            pi_ = str(dj.get("stripe_pi") or "")
+            if not pi_:
+                continue
+            esito = sp.rimborsi_di(pi_)
+            if not (isinstance(esito, dict) and esito.get("ok")):
+                controllabile = False
+                motivi.append("%s: %s" % (rec.get("riferimento"),
+                                          (esito or {}).get("motivo") or "lettura fallita"))
+                continue
+            quanto = int(esito.get("rimborsato_cents") or 0)
+            if quanto <= 0:
+                continue
+            allarmi.append({"riferimento": rec.get("riferimento"), "payment_intent": pi_,
+                            "rimborsato_su_stripe_cents": quanto,
+                            "motivo": "Stripe ha restituito dei soldi su una prenotazione che "
+                                      "per noi risulta PAGATA e mai cancellata: i conti "
+                                      "divergono"})
+            logger.error("DIVERGENZA CONTI | rif %s | Stripe ha rimborsato %d cents su una "
+                         "prenotazione che per noi e' pagata e viva: verificare a mano",
+                         rec.get("riferimento"), quanto)
+        if not controllabile:
+            for r in righe:
+                r["bottone"] = False       # non si preme senza aver potuto verificare
+        return 200, {
+            "controllabile": controllabile,
+            "motivo_non_controllabile": ("non si e' potuto verificare su Stripe: "
+                                         + "; ".join(motivi[:5])) if not controllabile else "",
+            "in_attesa": len(righe), "rimborsi": righe, "allarmi": allarmi,
+            # D18 condizione 3: si dichiara cosa NON e' stato guardato.
+            "tetto": self.RIMBORSI_TETTO,
+            "non_esaminati": max(0, len(dovuti) - len(esaminati)),
+            "nota": ("i soldi NON partono da soli: ogni riga si esegue a mano col pulsante. "
+                     "Una riga senza pulsante non e' pronta: dice cosa manca.")}
+
+    def _admin_rimborsa_dovuto(self, body, headers):
+        """IL PULSANTE. Restituisce all'ospite l'importo DOVUTO di UNA prenotazione.
+
+        ⛔ Non e' `_admin_rimborso`, e la differenza sono soldi: quello nasce da una decisione
+        dell'admin e restituisce il TOTALE pagato; questo chiude una cancellazione gia'
+        avvenuta e restituisce quanto la politica (fase111) ha calcolato allora — cifra che
+        sta scritta nel giornale immutabile, non nella richiesta.
+
+        I QUATTRO FRENI, tutti prima che esca un centesimo: mai piu' del pagato · mai due
+        volte (si richiede a Stripe adesso, piu' `Idempotency-Key` stabile) · mai se il payout
+        all'host e' gia' partito · mai una cifra scritta a mano."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        if not self._bunker_ok_o_field(headers, azione="rimborso"):
+            return 403, {"errore": "bunker_richiesto"}
+        if not self._puo_azione(headers, "rimborso"):   # 'supporto' non muove soldi
+            return 403, {"errore": "permesso_negato_ruolo"}
+        if self._transazioni_bloccate():
+            return 503, {"errore": "transazioni_sospese"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        rif = dati.get("riferimento")
+        if not (isinstance(rif, str) and rif):
+            return 422, {"errore": "campi_non_validi"}
+        # ⛔ FRENO 4: la scheda si RICALCOLA adesso. Tutto quello che arriva dal browser --
+        # importo compreso -- viene ignorato: una cifra che sceglie chi chiama la rotta e' una
+        # cifra scritta a mano su soldi veri.
+        riga, stripe_ok = self._rimborso_dovuto_scheda(rif)
+        if riga is None:
+            return 404, {"errore": "nessun_rimborso_dovuto", "riferimento": rif}
+        if riga.get("gia_rimborsato"):
+            # Doppio clic: non e' un errore, e' un lavoro gia' fatto. 200, e Stripe lo conferma.
+            return 200, {"stato": "gia_rimborsato", "riferimento": rif,
+                         "nota": "Stripe conferma che i soldi sono gia' tornati indietro: "
+                                 "nessuna seconda richiesta inviata"}
+        if not stripe_ok or not riga.get("bottone"):
+            logger.error("RIMBORSO DOVUTO RIFIUTATO | rif %s | manca: %r", rif, riga.get("manca"))
+            return 409, {"stato": "rifiutato", "riferimento": rif, "manca": riga.get("manca"),
+                         "nota": "i soldi NON partono finche' manca uno di questi elementi: "
+                                 "nel dubbio decide una persona"}
+        sp = getattr(self._sys, "stripe", None)
+        # Chiave STABILE: la stessa di `_admin_rimborso`, cosi' le due strade non possono
+        # restituire due volte gli stessi soldi nemmeno usando rotte diverse.
+        esito = sp.rimborsa(riga["payment_intent"], int(riga["dovuto_cents"]), "rimborso:" + rif)
+        if not (isinstance(esito, dict) and esito.get("ok")):
+            motivo = (esito or {}).get("motivo") if isinstance(esito, dict) else "risposta_non_dict"
+            logger.error("RIMBORSO DOVUTO FALLITO rif=%s importo=%d %s -> %s",
+                         rif, riga["dovuto_cents"], riga["valuta"], motivo)
+            return 502, {"stato": "non_eseguito", "riferimento": rif, "motivo": motivo,
+                         "nota": "la riga resta in lista: nessun rimborso e' partito"}
+        logger.info("RIMBORSO DOVUTO ESEGUITO rif=%s importo=%d %s stripe=%s",
+                    rif, riga["dovuto_cents"], riga["valuta"], esito.get("id") or "")
+        return 200, {"stato": "rimborsato", "riferimento": rif,
+                     "importo_cents": riga["dovuto_cents"], "valuta": riga["valuta"],
+                     "stripe_refund_id": esito.get("id") or "",
+                     "nota": "soldi restituiti all'ospite; la riga esce dalla lista solo "
+                             "perche' Stripe lo conferma, non perche' l'abbiamo tolta noi"}
+
     def _admin_controversie(self, query, headers):
         """Elenco delle CONTROVERSIE aperte (garanzie contestate): l'operatore le vede, sente
         le parti, e decide lo split del rimborso. Read-only."""
@@ -6075,11 +6347,23 @@ class RouterHTTP:
     def _cancella_prenotazione(self, body):
         """Cancellazione SELF-SERVICE dell'ospite: presenta il voucher firmato -> il sistema
         calcola il rimborso secondo la politica (fase111, in cents) e LIBERA le date
-        (fase58.rilascia). ⛔ IL RIMBORSO ALL'OSPITE NON PARTE DA SOLO: va eseguito A MANO
-        dal pannello admin (/api/admin/rimborso). Nessuna riga di questo progetto chiama
-        l'API dei rimborsi di Stripe -- verificato l'8 agosto: `grep v1/refunds` -> 0.
-        (Qui c'era scritto «parte quando Stripe e' live», ma Stripe e' live da settimane:
-        era una frase di un mondo che non esiste piu', e mandava fuori strada chi legge.)"""
+        (fase58.rilascia).
+
+        ⛔ IL RIMBORSO ALL'OSPITE NON PARTE DA QUI, ED E' UNA SCELTA, NON UNA DIMENTICANZA.
+        Decisione del fondatore del 2026-08-16: all'inizio il rimborso si esegue A MANO, dalla
+        lista del pannello (`GET /api/admin/rimborsi_dovuti` -> `POST /api/admin/rimborsa_
+        dovuto`) — *«se la macchina sbaglia ci rimetto conti, fiducia, credibilita'»*.
+        L'automatico si accende dopo, quando la lista avra' funzionato molte volte di fila.
+
+        ⛔ MA LA RIGA IN QUELLA LISTA NON DIPENDE DA QUESTA FUNZIONE, e non deve mai
+        dipenderne: la lista si CALCOLA dallo stato (giornale immutabile + Stripe), non si
+        scrive. Se qui si inserisse una riga in una coda, un errore o un riavvio in questo
+        punto la farebbe sparire e il cliente aspetterebbe per sempre.
+
+        ⚠️ Fino al 2026-08-16 qui c'era scritto *«nessuna riga di questo progetto chiama l'API
+        dei rimborsi di Stripe -- verificato l'8 agosto»*. Era vero l'8 agosto e NON lo e' piu':
+        `fase85.rimborsa()` esiste, ed e' chiamata da `_admin_rimborso` e da
+        `_admin_rimborsa_dovuto`. Lasciarla mandava fuori strada chi legge (sbaglio S10)."""
         import datetime
         dati = self._json(body)
         if dati is None:
@@ -6333,7 +6617,14 @@ class RouterHTTP:
                      "credito_viaggio_cents": cv_cents, "credito_viaggio_token": cv_token,
                      "nota": (("nessun addebito: non avevi ancora pagato, non c'e' nulla da "
                                "rimborsare.") if not pagato_davvero else
-                              ("date liberate; il rimborso va eseguito A MANO dal pannello admin."
+                              # ⛔ Questo testo lo legge un CLIENTE, non un tecnico. Diceva «il
+                              # rimborso va eseguito A MANO dal pannello admin»: gli raccontava
+                              # un nostro processo interno e non gli diceva l'unica cosa che gli
+                              # interessa -- se e quando rivede i suoi soldi. Niente promesse sui
+                              # tempi che non dipendono da noi (la banca ci mette i suoi giorni).
+                              ("Cancellazione registrata e date liberate. Il rimborso torna sul "
+                               "metodo di pagamento che hai usato; la tua banca puo' impiegare "
+                               "qualche giorno lavorativo per accreditarlo."
                                + (" Hai un Credito Viaggio per la prossima prenotazione."
                                   if cv_cents else "")))}
 

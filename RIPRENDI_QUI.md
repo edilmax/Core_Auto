@@ -11,9 +11,65 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🚦 2026-08-16 (17) — ✅ **LA LISTA DEI RIMBORSI È COSTRUITA — il difetto (16) è chiuso sul computer**
+
+> ⚠️ **NON committato, NON in produzione.** Sta sul computer, provato. Serve «procedi al
+> commit» (B1) e poi il deploy col protocollo D17.
+>
+> **Cosa fa adesso il pannello.** Chi ha pagato, ha cancellato e aspetta i suoi soldi compare
+> in una lista in cima ad `admin.html`, col numero di chi aspetta e da quante ore. Ogni riga
+> mostra **pagato · gli spetta · date liberate · soldi in sicurezza**, e un pulsante che
+> restituisce i soldi. ⛔ **Manuale, come deciso**: i soldi non partono da soli.
+>
+> **Il pezzo che regge tutto:** la lista **non è scritta da nessuno**, si ricalcola a ogni
+> apertura dal **giornale immutabile** + una domanda a Stripe (*«su questo pagamento esiste già
+> un `re_`?»*). Nessuno deve ricordarsi di mettere in coda una riga — quindi nessuno può
+> dimenticarsene.
+>
+> 🔎 **Trovato misurando, e ha cambiato il progetto:** `fase162.pulisci_vecchi()` **cancella** i
+> record `rimborsato` più vecchi di **26 ore**. Costruire la lista sui pendenti — la scelta
+> ovvia — avrebbe fatto sparire per primo **proprio chi ha aspettato di più**, e la riga c'è il
+> primo giorno, quindi nessuno se ne sarebbe accorto provando. Per questo la fonte è il
+> giornale. C'è una guardia che purga il record di proposito e pretende che la riga resti.
+>
+> **Provato come dice D20, non a parole:** le **16 guardie della lista scritte PRIMA** e viste
+> **rosse tutte e 16** (`404 rotta_non_trovata`, il motivo giusto); le **5 del pannello** provate
+> **iniettando il guasto vero** → 2 rosse attese, 3 verdi, ripristino **byte-identico**
+> (`sha256 8858065B…C64A`, 83466 byte).
+>
+> **File toccati (5):** `fase85_pagamenti_stripe.py` · `fase162_pagamenti_pendenti.py` ·
+> `fase83_server.py` · `deploy/admin.html` · `test_admin_rimborso_money.py`.
+> *(Dichiarati 3 di produzione; `deploy/admin.html` è il pannello — senza, la rotta esisteva e
+> non la vedeva nessuno: modo di rompersi #2. Il test è collaudo, non produzione.)*
+>
+> **✅ SUITE INTERA VERDE, uscita letta diretta:**
+> ```
+> Ran 5761 tests in 1618.862s
+> OK (skipped=4)
+> CODICE D'USCITA DELLA SUITE: 0
+> ```
+> ⚠️ **Il PRIMO giro era ROSSO (7 rossi), e i rossi erano sani.** Due guardie che già
+> c'erano hanno preso due miei buchi: (1) il **cricchetto delle traduzioni** — avevo aggiunto
+> 16 chiavi solo in IT/EN e il debito saliva 91→107 in 6 lingue; risposto **traducendole**,
+> non alzando il tetto; (2) il **giro ostile** — le due rotte nuove non erano esercitate da
+> nessuno, e il router dichiarava 134 rotte contro 136. 💡 **Lì ho trovato una terza cosa:**
+> in quel giro il webhook non portava il `payment_intent`, quindi **nessun rimborso di quel
+> collaudo poteva partire davvero** — la strada dei soldi era finta. Ora c'è.
+>
+> ⚠️ **Resta aperto:** l'automatico (per scelta) · **nessuna prova su soldi veri di QUESTA
+> strada** — il collaudo del 16 agosto passò dal pannello, cioè dall'altra · il punto 2 della
+> lista qui sotto (la commissione sui rimborsi pieni, strada C) è **ancora da fare** · e un
+> **costo** da tenere d'occhio: il pannello si ricarica ogni 60 s e ogni ricarica fa fino a
+> ~100 chiamate a Stripe (50 righe + 50 pagate per il controllo inverso). Con 0 annunci in
+> produzione oggi è **zero**; quando ci saranno prenotazioni vere, il controllo inverso va
+> diradato — non serve ogni minuto.
+
 ## 🚦 2026-08-16 (16) — 🔴🔴 **LA CANCELLAZIONE DELL'OSPITE NON RESTITUISCE I SOLDI — LA STRADA RIPARATA OGGI ERA L'ALTRA**
 
-> ⛔⛔ **QUESTA È LA COSA PIÙ GRAVE APERTA. SI LEGGE PRIMA DI TUTTO IL RESTO.**
+> ✅ **RIPARATO SUL COMPUTER IL 2026-08-16 — vedi il riquadro (17) qui sopra.** Questo blocco
+> resta perché racconta **com'è stato trovato** e perché il collaudo su soldi veri non poteva
+> vederlo: è la lezione, non lo stato. ⛔ Lo stato è nel (17): costruito e provato, **non
+> ancora committato né in produzione**.
 > Trovata dal fondatore **ragionando**, non da uno strumento: *«il rimborso l'ho fatto io dal
 > pannello senza che l'ospite l'abbia richiesto — sono forme diverse»*.
 >
@@ -4183,7 +4239,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5745 test
+SUITE ATTUALE: Ran 5766 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
