@@ -32,6 +32,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 logger = logging.getLogger("core_auto.pagamenti_stripe")
 
 STRIPE_URL = "https://api.stripe.com/v1/checkout/sessions"
+RIMBORSI_URL = "https://api.stripe.com/v1/refunds"
 
 
 def _intero_pos(v: Any) -> bool:
@@ -107,6 +108,62 @@ class ProviderStripe:
             logger.warning("Stripe: creazione link fallita (ISOLATA -> None)",
                            exc_info=True)
             return None
+
+    def rimborsa(self, payment_intent: Any, importo_cents: Any,
+                 chiave_idem: Any) -> Dict[str, Any]:
+        """RESTITUISCE i soldi all'ospite. E' l'unica funzione del progetto che fa uscire
+        denaro verso un cliente, e fino al 2026-08-16 non esisteva: il pannello admin faceva
+        tutti i passi di sicurezza e poi diceva *«il rimborso va eseguito A MANO»*.
+
+        ⛔ `chiave_idem` NON e' un dettaglio: senza `Idempotency-Key` un ritentativo di rete
+        (o un doppio clic) restituisce i soldi DUE volte, ed e' il rovescio esatto del doppio
+        pagamento -- con la differenza che questa volta a perderci siamo noi. La documentazione
+        Stripe la indica come pratica obbligatoria proprio sui rimborsi. La chiave dev'essere
+        **stabile per quel rimborso**: la sceglie il chiamante, che sa qual e' la prenotazione.
+
+        ⚠️ NIENTE `reverse_transfer` qui, ed e' una scelta misurata, non una dimenticanza:
+        l'ospite paga con `crea_link` (Checkout normale, incassa la PIATTAFORMA) e all'host si
+        bonifica dopo, allo sblocco dell'escrow (fase101). Al momento del rimborso il
+        trasferimento all'host non e' ancora partito -- e il chiamante deve averlo trattenuto
+        PRIMA di chiamare qui. Se un giorno si passasse agli addebiti con destinazione
+        (`transfer_data[destination]`), questa riga diventerebbe una perdita piena: la
+        documentazione Stripe avverte che rimborsare un addebito NON tocca i trasferimenti.
+
+        Ritorna sempre un dict, mai None: `{'ok': bool, 'id': 're_...', 'motivo': str}`.
+        Il motivo c'e' anche quando va male, perche' un osservabile debole e' un difetto
+        (regola ferrea 9): «rimborso fallito» senza il perche' non si sa nemmeno se ritentare.
+        """
+        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+            return {"ok": False, "id": "", "motivo": "payment_intent_assente"}
+        if not _intero_pos(importo_cents):
+            return {"ok": False, "id": "", "motivo": "importo_non_valido"}
+        if not (isinstance(chiave_idem, str) and chiave_idem.strip()):
+            return {"ok": False, "id": "", "motivo": "chiave_idempotenza_assente"}
+        try:
+            from urllib.parse import urlencode
+            params: List[Tuple[str, str]] = [
+                ("payment_intent", payment_intent),
+                ("amount", str(int(importo_cents))),
+                ("metadata[origine]", "bookinvip_admin"),
+            ]
+            body = urlencode(params).encode("utf-8")
+            headers = {"Authorization": "Bearer " + self._key,
+                       "Content-Type": "application/x-www-form-urlencoded",
+                       "Idempotency-Key": chiave_idem.strip()}
+            resp = self._fetch(RIMBORSI_URL, body, headers)
+            rid = resp.get("id") if isinstance(resp, dict) else None
+            if isinstance(rid, str) and rid.startswith("re_"):
+                return {"ok": True, "id": rid,
+                        "motivo": str((resp or {}).get("status") or "creato")}
+            # Non e' un'eccezione: Stripe ha risposto qualcosa che non e' un rimborso.
+            # Va detto per intero, non ridotto a un booleano.
+            return {"ok": False, "id": "", "motivo": "risposta_inattesa: %r" % (resp,)}
+        except Exception as exc:
+            logger.error("Stripe: RIMBORSO FALLITO pi=%s importo=%r -> %s: %s",
+                         payment_intent, importo_cents, exc.__class__.__name__, exc,
+                         exc_info=True)
+            return {"ok": False, "id": "",
+                    "motivo": "%s: %s" % (exc.__class__.__name__, exc)}
 
     def crea_link_anticipo(self, dati: Dict[str, Any]) -> Optional[str]:
         """PAGA IN STRUTTURA: Checkout Session che addebita SUBITO solo l'ANTICIPO

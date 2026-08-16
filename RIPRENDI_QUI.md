@@ -11,6 +11,61 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🚦 2026-08-16 (11) — 💸 **I SOLDI TORNANO INDIETRO DA SOLI: IL RIMBORSO ALL'OSPITE È CHIUSO**
+
+> **Sul disco, finito e provato, NON committato.** Attesi da `git status --porcelain`
+> **sei** file: `fase83_server.py` · `fase85_pagamenti_stripe.py` ·
+> `fase162_pagamenti_pendenti.py` · `test_admin_rimborso_money.py` ·
+> `REGISTRO_INGEGNERIA.md` · `RIPRENDI_QUI.md`.
+> ⛔ **TOCCA PRODUZIONE** (col «autorizzato» del fondatore, 2026-08-16): al prossimo deploy
+> va online, e il VPS non è più indietro «apposta».
+>
+> ### IL BUCO, DETTO COME LO VEDEVA L'OSPITE
+> `_admin_rimborso` faceva **tutto** tranne la cosa che il suo nome promette: liberava le
+> date, tratteneva il payout, stornava la tassa, revocava lo smart-pass, chiudeva l'escrow,
+> marcava il pendente, scriveva la riga a giornale — e poi rispondeva, testualmente,
+> *«il rimborso va eseguito A MANO dal pannello admin»*. `grep v1/refunds` su tutto il
+> progetto dava **zero**: in tutta la vita della macchina **nessuno ha mai chiesto a Stripe di
+> restituire un euro**. Il database diceva «rimborsato» e sul conto dell'ospite non arrivava
+> niente finché una persona non se ne ricordava.
+>
+> ### COS'È CAMBIATO — tre pezzi, nessuno inventato
+> · **`fase162`**: il webhook salva anche `payment_intent` (`pi_...`). Prima si conservava solo
+>   `cs_` — e senza l'identificativo del pagamento **non c'è modo di dire a Stripe quale
+>   pagamento restituire**. Arriva gratis nello stesso evento (documentazione Stripe: la
+>   Checkout Session in `mode=payment` lo dichiara presente).
+> · **`fase85.rimborsa()`**: il verbo che mancava. `POST /v1/refunds` con **`Idempotency-Key`**
+>   stabile (`rimborso:<riferimento>`). Ritorna sempre un dict col **motivo**, mai `None`:
+>   «rimborso fallito» senza il perché non dice nemmeno se ritentare (regola ferrea 9).
+> · **`fase83._admin_rimborso`**: chiama il rimborso **solo se i passi di sicurezza sono
+>   riusciti**.
+>
+> ### ⛔ LA REGOLA DEL DENARO, SCRITTA NEL CODICE (D16)
+> Se `payout_trattenuto` è fallito, **l'host potrebbe essere già stato pagato**: restituire lì
+> significa pagare due volte la stessa prenotazione, e la seconda la paghiamo noi. Quindi:
+> ```
+> passi di sicurezza falliti      -> NON si rimborsa, si grida, decide una persona
+> prenotazione mai pagata         -> niente da restituire (nessun falso allarme)
+> PAGATA ma senza pi_             -> ALLARME: da restituire a mano (silenzio pericoloso)
+> tutto a posto                   -> parte il rimborso, e la risposta dice l'id Stripe vero
+> ```
+> ⚠️ **Niente `reverse_transfer`, ed è una scelta misurata:** l'ospite paga con `crea_link`
+> (incassa la piattaforma) e all'host si bonifica **dopo**, allo sblocco escrow (`fase101`).
+> Al momento del rimborso il trasferimento non è partito. 🔴 **Se un giorno si passasse agli
+> addebiti con destinazione, quella riga diventerebbe una perdita piena** — Stripe avverte che
+> rimborsare un addebito non tocca i trasferimenti. È scritto nel codice, accanto alla riga.
+>
+> ### LA PROVA (D20, nelle due direzioni)
+> Le guardie controllano **la chiamata a Stripe**, non lo stato nel database — perché lo stato
+> «rimborsato» era già verde **prima**, su una macchina che non restituiva un centesimo.
+> ```
+> PRIMA:  0 != 1 : a Stripe NON e' arrivata nessuna richiesta di rimborso
+>         Chiamate viste: ['https://api.stripe.com/v1/checkout/sessions']
+> DOPO:   Ran 9 tests, OK
+> RI-INIETTATO il difetto peggiore (dichiara "eseguito (re_FINTO)" senza chiamare Stripe):
+>         3 guardie ROSSE  ->  ripristinato, sha256 identico (3D46FF58...)
+> ```
+
 ## 🚦 2026-08-15 (10) — 🔬 **PEZZO A FATTO: LE PROVE PIÙ FORTI NON SONO PIÙ VERDI PER FINTA**
 
 > **Sul disco, finito e provato, NON committato.** Attesi da `git status --porcelain`
@@ -1994,7 +2049,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 2044582
+CONSEGNE AGGIORNATE A: 5d91ca2
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -3819,13 +3874,16 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5738 test
+SUITE ATTUALE: Ran 5743 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3.
 COMANDO:  python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"
-MISURATO SU: f83c0b6 + IL PEZZO A del 2026-08-15 (z3 acceso in CI, non ancora committato):
+MISURATO SU: 5d91ca2 + IL RIMBORSO AUTOMATICO del 2026-08-16 (non ancora committato):
+             5 guardie in `TestIlRimborsoARRIVADavveroAllOspite`.
+             Da 5738 a 5743: **+5**. Caricatore da fermo, scritto PRIMA di lanciare (S14).
+MISURATO SU: f83c0b6 + IL PEZZO A del 2026-08-15 (z3 acceso in CI, unito con #53):
              4 guardie in `TestLeDIMOSTRAZIONIMatematicheGIRANODavveroInCI`.
              Da 5734 a 5738: **+4**. Caricatore da fermo, scritto PRIMA di lanciare (S14).
 MISURATO SU: 6118d35 + IL PIANO DEI DIECI BLOCCHI del 2026-08-15 (unito con #52):

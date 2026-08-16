@@ -134,14 +134,26 @@ class PagamentiPendenti:
         finally:
             con.close()
 
-    def salva_stripe_session(self, riferimento: Any, cs_id: Any) -> bool:
+    def salva_stripe_session(self, riferimento: Any, cs_id: Any,
+                             payment_intent: Any = None) -> bool:
         """AUDIT CONSOLE (prerequisito): salva l'id sessione Stripe (cs_...) arrivato col
         webhook, dentro corpo_json (merge, MAI sovrascrive il resto). Da qui in poi lo
         shadow-check Stripe della scheda contabile puo' verificare il pagamento alla fonte.
-        Idempotente e ISOLATO (un fallimento qui non tocca la conferma del pagamento)."""
+        Idempotente e ISOLATO (un fallimento qui non tocca la conferma del pagamento).
+
+        ⛔ E SALVA ANCHE `payment_intent` (pi_...), che serve a RESTITUIRE i soldi. Fino al
+        2026-08-16 non lo conservava nessuno: `grep v1/refunds` su tutto il progetto dava
+        **zero**, e il rimborso all'ospite andava fatto a mano dal pannello Stripe. Senza
+        questo identificativo non c'e' modo di dire a Stripe QUALE pagamento restituire.
+        Arriva gratis nello stesso evento `checkout.session.completed`: la documentazione
+        Stripe lo dichiara presente sulla Checkout Session in `mode=payment` (che e' la
+        nostra). Parametro OPZIONALE: i chiamanti vecchi continuano a funzionare, e una
+        prenotazione senza `pi_` semplicemente non si rimborsa da sola (non si indovina)."""
         if not (isinstance(riferimento, str) and riferimento
                 and isinstance(cs_id, str) and cs_id.startswith("cs_")):
             return False
+        pi = payment_intent if (isinstance(payment_intent, str)
+                                and payment_intent.startswith("pi_")) else None
         import json as _j
         con = self._apri()
         try:
@@ -156,9 +168,11 @@ class PagamentiPendenti:
                         dj = {}
                 except Exception:
                     dj = {}
-                if dj.get("stripe_cs") == cs_id:
+                if dj.get("stripe_cs") == cs_id and (pi is None or dj.get("stripe_pi") == pi):
                     return True                       # gia' salvato (retry webhook)
                 dj["stripe_cs"] = cs_id
+                if pi is not None:
+                    dj["stripe_pi"] = pi
                 con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
                             (_j.dumps(dj, ensure_ascii=False), riferimento))
                 return True
