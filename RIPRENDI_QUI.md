@@ -11,6 +11,66 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🚦 2026-08-16 (16) — 🔴🔴 **LA CANCELLAZIONE DELL'OSPITE NON RESTITUISCE I SOLDI — LA STRADA RIPARATA OGGI ERA L'ALTRA**
+
+> ⛔⛔ **QUESTA È LA COSA PIÙ GRAVE APERTA. SI LEGGE PRIMA DI TUTTO IL RESTO.**
+> Trovata dal fondatore **ragionando**, non da uno strumento: *«il rimborso l'ho fatto io dal
+> pannello senza che l'ospite l'abbia richiesto — sono forme diverse»*.
+>
+> **CI SONO DUE STRADE VERSO UN RIMBORSO, E OGGI NE È STATA RIPARATA UNA SOLA:**
+> ```
+> _admin_rimborso        (pannello admin)  -> RIPARATO oggi, chiama rimborsa(), PROVATO su soldi veri
+> _cancella_prenotazione (l'OSPITE cancella) -> NON chiama rimborsa(). I soldi NON partono.
+> ```
+> Misurato: `grep "\.rimborsa("` su tutta la produzione dà **un solo punto**,
+> `fase83_server.py:4336`, che è **dentro il pannello admin**.
+> *(L'altro esito, `fase35_pagamenti.py:257`, è in un modulo fra quelli provati MORTI a mano.)*
+>
+> **E lo dice il codice stesso**, nella descrizione di `_cancella_prenotazione`:
+> > *«⛔ IL RIMBORSO ALL'OSPITE NON PARTE DA SOLO: va eseguito A MANO dal pannello admin.»*
+>
+> **Cosa succede oggi a un cliente vero che cancella:** il sistema calcola quanto gli spetta
+> secondo la politica, **libera le date**, gli risponde «cancellata» — e **i soldi restano
+> fermi** finché una persona non entra nel pannello e li manda a mano. Esattamente il difetto
+> chiuso stamattina, **sulla strada che conta di più**.
+>
+> ⛔ **PERCHÉ IL COLLAUDO DI OGGI NON POTEVA VEDERLO:** il rimborso di prova è stato fatto
+> **dal pannello**, cioè sull'unica strada che funzionava. 💡 **La lezione: non basta chiedersi
+> «questa strada funziona?», bisogna chiedersi «QUANTE strade portano qui?»** — la riparazione
+> di stamattina è stata fatta dove il documento indicava, senza contare gli ingressi.
+>
+> ⚠️ **La descrizione di `_cancella_prenotazione` è ora PARZIALMENTE FALSA**: dice ancora
+> *«nessuna riga di questo progetto chiama l'API dei rimborsi di Stripe»*, vero l'8 agosto e
+> **non più dal 16**. Va corretta nello stesso lavoro, o manda fuori strada chi legge (S10).
+>
+> ### 🏗️ IL PROGETTO DELLA RIPARAZIONE È GIÀ SCRITTO — non si ridiscute, si costruisce
+> Sta in `REGISTRO_INGEGNERIA.md`, voce **2026-08-16 (6)**, sei punti + come si prova.
+> ⛔ **«Zero errori garantiti» non esiste**: si garantisce che **nessun errore passi in
+> silenzio**. 🗣️ **Decisione del fondatore: all'inizio il rimborso si fa A MANO**, con una
+> lista nel pannello — *«se la macchina sbaglia ci rimetto conti, fiducia, credibilità»*.
+> L'automatico si accende dopo: **prima si guadagna la fiducia, poi si toglie il dito.**
+> 💡 Il punto che regge tutto: **la lista non si scrive, si CALCOLA** («quali prenotazioni
+> pagate e cancellate non hanno un rimborso su Stripe?»), così una riga **non può mancare** —
+> e **la verità la dice Stripe, non il nostro database**, nei due sensi.
+>
+> ### 📋 LE COSE APERTE, RIORDINATE PER GRAVITÀ
+> 1. 🔴🔴 **la cancellazione dell'ospite non restituisce i soldi** (questa)
+> 2. 🔴 **la commissione sui rimborsi pieni** — decisione presa: **strada C**, il costo entra
+>    nella tariffa tecnica dell'host (come già fa `fase188` per «paga in struttura»:
+>    *«il gateway lo assorbe l'HOST → BookinVIP non ci perde MAI»*). ⛔ Scartata la **B**
+>    (trattenere all'ospite): la vetrina promette **«cancellazione gratuita»**, e trattenere
+>    lì renderebbe falsa quella parola — lo stesso difetto che l'ordine del fondatore vieta.
+>    ⚠️ La trattenuta **non è una cifra fissa**: 0,27 € su 1 €, ~4,75 € su 300 €, ~6,25 € su
+>    400 € (parte fissa 0,25 € **misurata**; la percentuale **non è nota con certezza** e va
+>    letta dalle condizioni del conto Stripe, non dedotta da un pagamento da un euro).
+>    💡 Il misuratore esiste già: `fase162.aggrega_costi_tecnici()` separa la tariffa tecnica
+>    **coperta** da quella **PERSA** su rimborsi/cancellazioni. Si parte da lì.
+>    🔎 Ricerca fatta (D25): gli alloggi con date precise sono **esclusi dal diritto di recesso
+>    UE** (art. 16 Dir. 2011/83), quindi le penali contrattuali sono ammesse — ma **dedurre
+>    costi da un rimborso promesso «gratuito» resta ingannevole**, ed è il motivo della C.
+> 3. **il prezzo vive in due posti** (vetrina 1 € · cassa 90 €)
+> 4. **il percorso del bunker** fa perdere il posto e la chiave
+
 ## 🚦 2026-08-16 (15) — 💶 **UN EURO VERO È TORNATO INDIETRO — e pagandolo abbiamo scoperto che CI RIMETTIAMO NOI**
 
 > ✅ **IL RIMBORSO FUNZIONA DAVVERO, SU SOLDI VERI.** Non è più «provato dai test»: è successo.
@@ -2298,7 +2358,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 7d30804
+CONSEGNE AGGIORNATE A: 04ba051
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
