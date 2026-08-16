@@ -383,25 +383,40 @@ def _testo_dentro(base, cartella, inizio, fine, ago):
     Sola lettura, tollerante: un file illeggibile si salta invece di far esplodere il
     gancio -- ma NON si conta come «trovato», perche' un errore non e' una prova.
 
-    ⛔ QUESTO FILE E' ESCLUSO DALLA RICERCA, e non e' un dettaglio: e' un verde finto vero,
-    successo il 2026-08-15 pochi minuti dopo aver scritto queste prove. Le parole cercate
-    ("test_clock", "DENOMINATORE DELLA MACCHINA") sono scritte QUI DENTRO, nelle prove
+    ⛔ L'IMPIANTO DELLE PROVE E' ESCLUSO DALLA RICERCA, e non e' un dettaglio: e' un verde
+    finto vero, successo il 2026-08-15 pochi minuti dopo aver scritto queste prove. Le parole
+    cercate ("test_clock", "DENOMINATORE DELLA MACCHINA") sono scritte QUI DENTRO, nelle prove
     stesse: la ricerca trovava se stessa e due lavori mai iniziati risultavano ✅ FATTO.
     E' lo sbaglio S6 (una guardia che un commento poteva soddisfare) in forma nuova:
     **una prova non puo' essere soddisfatta dal testo della prova.**
+
+    ⛔⛔ E IL 2026-08-16 E' TORNATO, SPOSTATO DI UN FILE. La riparazione di ieri escludeva UN
+    file solo -- questo. Ma da quando esiste la guardia che protegge la riparazione, le stesse
+    parole vivono anche in `test_pipeline_ci.py`, che sta nella RADICE e comincia per `test_`:
+    cioe' esattamente dove la prova degli «orologi di prova Stripe» va a cercare. Misurato:
+    quel lavoro risultava ✅ FATTO soddisfatto da UN solo file, con UNA sola occorrenza della
+    parola, dentro il commento che racconta il difetto -- e ZERO usi veri dell'API di Stripe.
+    💡 La lezione, che vale oltre il caso: **la prova non e' un file, e' un IMPIANTO** -- e
+    l'impianto cresce, perche' ogni riparazione si porta dietro la guardia che la difende.
+    Escludere "me stesso" non basta piu' il giorno che "me stesso" diventa due file.
+
+    ⚠️ LIMITE DICHIARATO (D18 punto 3): l'esclusione e' per NOME, quindi un file che si
+    chiamasse cosi' in un'altra cartella non verrebbe contato lo stesso. Sono due nomi unici
+    nel progetto, e restano riservati all'impianto delle prove: non si usino per altro.
     """
     dove = os.path.join(base, cartella) if cartella else base
     try:
         nomi = os.listdir(dove)
     except OSError:
         return []
-    io_stesso = os.path.basename(os.path.abspath(__file__))
+    # I file che SONO la prova: questa lista con le sue ricerche, e la guardia che la protegge.
+    # Se uno di questi soddisfa una prova, la prova sta leggendo se stessa.
+    impianto = (os.path.basename(os.path.abspath(__file__)), "test_pipeline_ci.py")
     trovati = []
     for n in nomi:
         if not (n.startswith(inizio) and n.endswith(fine)):
             continue
-        if n == io_stesso and os.path.abspath(dove) == os.path.dirname(
-                os.path.abspath(__file__)):
+        if n in impianto:
             continue
         percorso = os.path.join(dove, n)
         if not os.path.isfile(percorso):

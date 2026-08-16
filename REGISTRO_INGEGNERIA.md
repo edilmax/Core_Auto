@@ -622,6 +622,68 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🎭 FATTO 2026-08-16 (3) — **IL VERDE FINTO ERA TORNATO, SPOSTATO DI UN FILE**
+
+File toccati: `collaudi/regole_avvio.py` (la riparazione), `test_pipeline_ci.py` (la guardia),
+più i due documenti. **Nessun codice di produzione.**
+
+**Il difetto.** La lista dei lavori in sospeso dichiarava **✅ FATTO** il lavoro «orologi di
+prova Stripe (test clocks)» — quello che la lista stessa chiama *«il giudice esterno più vicino
+ai soldi che manca»*. Non era fatto: **nessuno ha mai creato un orologio di prova Stripe.**
+
+**Perché risultava fatto.** La prova cerca la parola `test_clock` in due posti: i `test_*.py`
+della radice e `collaudi/*.py`. La riparazione del 2026-08-15 escludeva **un file solo**
+(`regole_avvio.py`). Ma da quel giorno esiste anche la **guardia** che protegge la riparazione,
+e vive in `test_pipeline_ci.py` — che sta nella radice e comincia per `test_`, cioè esattamente
+dove la prova va a cercare. La parola era scritta lì, **una volta sola, dentro il commento che
+racconta il difetto**.
+
+**Misurato, non dedotto** (`collaudi/` interrogato con la sua stessa funzione):
+```
+3 orologi di prova Stripe   cerca 'test_clock'  -> ['test_pipeline_ci.py']
+test_pipeline_ci.py contiene 'test_clock' 1 volte
+   uso reale 'test_helpers'     : False
+   uso reale 'TestClock'        : False
+   uso reale '/v1/test_helpers' : False
+```
+Gli altri quattro lavori sono sani: il #4 lo soddisfa un file vero, il #2 e il #5 non trovano
+niente e lo dicono. **Il difetto era su una prova sola** — e quella sola era sul denaro.
+
+**💡 LA LEZIONE, che vale oltre il caso: la prova non è un file, è un IMPIANTO — e l'impianto
+cresce.** Ogni riparazione si porta dietro la guardia che la difende, e quella guardia deve
+*nominare* la cosa da cui difende. Così il testo della prova si allarga, e un'esclusione scritta
+come «me stesso» smette di bastare **il giorno che "me stesso" diventa due file**. Non è
+sfortuna: è la forma che questo difetto prende ogni volta che lo si ripara.
+
+**La riparazione, e una scartata.** Si poteva far ignorare alla ricerca tutto ciò che sta nei
+commenti — ucciderebbe l'intera classe. ⛔ **Scartata perché ne romperebbe un'altra:** la prova
+del lavoro #5 cerca la frase `DENOMINATORE DELLA MACCHINA`, che un'attuazione vera **stamperebbe**,
+cioè scriverebbe dentro una stringa. Una riparazione che ne rompe un'altra non è una riparazione.
+Fatta invece quella modesta e nella direzione già scelta dal progetto: **i file che *sono* la
+prova non possono soddisfarla**, e adesso sono due invece di uno.
+⚠️ Limite dichiarato (D18 punto 3): l'esclusione è **per nome**, quindi un file con quel nome in
+un'altra cartella non verrebbe contato lo stesso. Sono due nomi unici nel progetto, e restano
+riservati all'impianto delle prove.
+
+**La guardia è generale, non sul caso singolo.** `test_NESSUNA_PROVA_E_SODDISFATTA_DAL_FILE_CHE_LA_RACCONTA`
+non chiede «il lavoro 3 è a posto?» — quella domanda diventerebbe falsa il giorno che il lavoro
+si fa. Chiede che **nessuna** prova, presente o futura, sia soddisfatta da un file dell'impianto.
+
+**D20 rispettato in tutti e cinque i passi:**
+```
+guardia scritta -> ROSSA per il motivo giusto:
+   «orologi di prova Stripe (test clocks)» risulta soddisfatto da
+   test_pipeline_ci.py (cerca 'test_clock')
+-> riparata -> VERDE (Ran 6 tests, OK)
+-> difetto RIMESSO DENTRO -> ROSSA di nuovo (uscita 1, un solo fallimento)
+-> ripristinato: sha256 8193BB31...4A9D IDENTICO prima e dopo
+```
+
+**⛔ CONSEGUENZA VOLUTA: i lavori in sospeso AUMENTANO.** Il #3 è tornato da ✅ a ⏳ DA FARE
+(*«nessun collaudo crea un orologio di prova Stripe: hold, payout e penale non sono mai stati
+visti scadere davvero»*). Non è un peggioramento: quel ✅ era falso, e una lista corta che mente
+manda a saltare un lavoro sui soldi. È esattamente il motivo per cui questa lista è nata.
+
 ### 🚀 FATTO 2026-08-16 (2) — **TERZO DEPLOY: IL RIMBORSO È IN PRODUZIONE, I TRE POSTI ALLINEATI**
 
 File toccati: `RIPRENDI_QUI.md`, `REGISTRO_INGEGNERIA.md` — **nessun codice di produzione**: il

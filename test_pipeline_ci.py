@@ -702,6 +702,49 @@ class TestLaListaDeiLavoriNONPuoMENTIRE(unittest.TestCase):
                          "mai iniziato risulta fatto, perche' la parola cercata e' scritta "
                          "nella prova stessa")
 
+    def test_NESSUNA_PROVA_E_SODDISFATTA_DAL_FILE_CHE_LA_RACCONTA(self):
+        """⛔ LO STESSO VERDE FINTO, TORNATO SPOSTATO DI UN FILE — 2026-08-16.
+
+        La riparazione del 2026-08-15 escludeva dalla ricerca UN file solo (`regole_avvio.py`,
+        e per giunta solo nella propria cartella). Ma la prova non vive piu' in un file solo:
+        da quando esiste la guardia qui sopra, le parole cercate sono scritte anche QUI, in
+        `test_pipeline_ci.py` -- che sta nella radice e comincia per `test_`, cioe' proprio
+        dove la prova del lavoro «orologi di prova Stripe» va a cercare.
+
+        Risultato misurato il 2026-08-16: quel lavoro risultava ✅ FATTO ed era soddisfatto da
+        UN SOLO file, `test_pipeline_ci.py`, con UNA sola occorrenza della parola, dentro il
+        commento che racconta il difetto -- e ZERO usi veri dell'API di Stripe (`test_helpers`,
+        `TestClock`: assenti). Nessuno ha mai creato un orologio di prova, e la lista diceva
+        di si'. E' il lavoro che la lista stessa chiama «il giudice esterno piu' vicino ai
+        soldi che manca»: il verde finto stava proprio sul denaro.
+
+        ⛔ QUESTA GUARDIA E' GENERALE, e lo e' apposta. Non chiede «il lavoro 3 e' a posto?»
+        -- quella domanda diventerebbe falsa il giorno che il lavoro si fa davvero. Chiede che
+        NESSUNA prova, presente o futura, sia soddisfatta da uno dei file che COSTITUISCONO
+        l'impianto delle prove. Vale ancora il giorno che i lavori si faranno, e vale per i
+        lavori che verranno aggiunti domani.
+        """
+        ra = self._ra()
+        radice = os.path.dirname(os.path.abspath(__file__))
+        # I file che SONO la prova: la lista con le sue ricerche, e la guardia che la protegge.
+        # Se uno di questi soddisfa una prova, la prova sta leggendo se stessa.
+        impianto = ("regole_avvio.py", os.path.basename(os.path.abspath(__file__)))
+        colpevoli = []
+        for v in ra.LAVORI_IN_SOSPESO:
+            prova = v.get("prova")
+            if not prova or prova.get("tipo") != "testo":
+                continue
+            for cartella, inizio, fine in prova["dove"]:
+                for n in ra._testo_dentro(radice, cartella, inizio, fine, prova["cerca"]):
+                    if n in impianto:
+                        colpevoli.append("«%s» risulta soddisfatto da %s (cerca %r)"
+                                         % (v["nome"], n, prova["cerca"]))
+        self.assertEqual([], colpevoli,
+                         "una prova e' soddisfatta dal testo che la racconta: il lavoro "
+                         "risulta fatto perche' la parola cercata e' scritta nell'impianto "
+                         "delle prove, non perche' qualcuno l'abbia fatto -> %s"
+                         % "; ".join(colpevoli))
+
     def test_lo_stato_e_MISURATO_e_diventa_DA_FARE_se_la_prova_non_trova_niente(self):
         """La direzione che conta: puntato su una cartella vuota, ogni lavoro deve tornare
         DA FARE. Se restasse FATTO vorrebbe dire che lo stato e' scritto, non misurato."""
