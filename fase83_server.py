@@ -49,6 +49,22 @@ logger = logging.getLogger("core_auto.server")
 _RIFERIMENTO_VALIDO = re.compile(r"\A[A-Za-z0-9:_.-]{1,64}\Z")
 
 
+def _rif_per_registro(rif: Any) -> str:
+    """Rende un riferimento SICURO da scrivere nel registro -- sempre, chiunque lo passi.
+
+    ⛔ NON e' un doppione del controllo al confine: quello dice cosa ACCETTIAMO, questo dice
+    cosa SCRIVIAMO. Il primo mette in sicurezza una rotta; il secondo mette in sicurezza il
+    REGISTRO, anche il giorno in cui nascera' un secondo chiamante che non convalida niente --
+    e quel giorno nessuno tocchera' questa funzione, quindi nessuno si accorgera' che la
+    garanzia e' caduta (D19: una difesa non deve dipendere dal comportamento di un altro).
+
+    Perche' vale la pena: il registro e' dove il Guardiano (fase186) guarda ogni giorno per
+    sapere se un guasto sui soldi e' avvenuto. Una riga FABBRICATA li' dentro non e' un
+    difetto qualunque: e' un difetto nello strumento con cui si vedono i difetti."""
+    pulito = re.sub(r"[^A-Za-z0-9:_.-]", "", str(rif))[:64]
+    return pulito or "riferimento_vuoto_o_illeggibile"
+
+
 # Stringhe UI per il frontend (chrome), multilingua. Fallback -> 'en' -> chiave.
 ETICHETTE_UI: Dict[str, Dict[str, str]] = {
     # --- ricerca / risultati ---
@@ -4408,7 +4424,8 @@ class RouterHTTP:
             movimenti = [m for m in fc.movimenti(str(rif))
                          if (m.get("tipo") or "") == "rimborso"]
         except Exception:
-            logger.error("rimborsi dovuti: giornale illeggibile per %s", rif, exc_info=True)
+            logger.error("rimborsi dovuti: giornale illeggibile per %s",
+                         _rif_per_registro(rif), exc_info=True)
             return None, False
         if not movimenti:
             return None, True          # niente da restituire: non e' un guasto, e' la pace
@@ -4421,7 +4438,8 @@ class RouterHTTP:
             pp = getattr(self._sys, "pagamenti_pendenti", None)
             rec = pp.info(str(rif)) if pp is not None else None
         except Exception:
-            logger.warning("rimborsi dovuti: pendente illeggibile per %s", rif, exc_info=True)
+            logger.warning("rimborsi dovuti: pendente illeggibile per %s",
+                           _rif_per_registro(rif), exc_info=True)
         if rec is not None:
             try:
                 dj = json.loads(rec.get("corpo_json") or "{}")
@@ -4444,7 +4462,8 @@ class RouterHTTP:
         if 0 < pagato < dovuto:
             manca.append("dovuto_maggiore_del_pagato")
             logger.error("RIMBORSO DOVUTO INCOERENTE | rif %s | dovuto %d > pagato %d: la "
-                         "differenza la metteremmo noi", rif, dovuto, pagato)
+                         "differenza la metteremmo noi",
+                         _rif_per_registro(rif), dovuto, pagato)
         # ── FRENO 3: se l'host e' gia' stato pagato, rimborsare paga DUE volte (D16) ──
         passi_ok = False
         try:
@@ -4457,8 +4476,8 @@ class RouterHTTP:
             # Non sapere in che stato e' il payout NON e' un dettaglio: nel dubbio i soldi
             # non partono da soli, si grida e decide una persona.
             manca.append("stato_payout_sconosciuto")
-            logger.warning("rimborsi dovuti: stato payout illeggibile per %s", rif,
-                           exc_info=True)
+            logger.warning("rimborsi dovuti: stato payout illeggibile per %s",
+                           _rif_per_registro(rif), exc_info=True)
         # ── PUNTO 2: LA VERITA' LA DICE STRIPE, NON IL NOSTRO DATABASE ──
         gia, stripe_ok, motivo_stripe = False, False, "provider Stripe assente"
         if not pi_:
@@ -4628,7 +4647,8 @@ class RouterHTTP:
                          "nota": "Stripe conferma che i soldi sono gia' tornati indietro: "
                                  "nessuna seconda richiesta inviata"}
         if not stripe_ok or not riga.get("bottone"):
-            logger.error("RIMBORSO DOVUTO RIFIUTATO | rif %s | manca: %r", rif, riga.get("manca"))
+            logger.error("RIMBORSO DOVUTO RIFIUTATO | rif %s | manca: %r",
+                         _rif_per_registro(rif), riga.get("manca"))
             return 409, {"stato": "rifiutato", "riferimento": rif, "manca": riga.get("manca"),
                          "nota": "i soldi NON partono finche' manca uno di questi elementi: "
                                  "nel dubbio decide una persona"}
@@ -4639,11 +4659,12 @@ class RouterHTTP:
         if not (isinstance(esito, dict) and esito.get("ok")):
             motivo = (esito or {}).get("motivo") if isinstance(esito, dict) else "risposta_non_dict"
             logger.error("RIMBORSO DOVUTO FALLITO rif=%s importo=%d %s -> %s",
-                         rif, riga["dovuto_cents"], riga["valuta"], motivo)
+                         _rif_per_registro(rif), riga["dovuto_cents"], riga["valuta"], motivo)
             return 502, {"stato": "non_eseguito", "riferimento": rif, "motivo": motivo,
                          "nota": "la riga resta in lista: nessun rimborso e' partito"}
         logger.info("RIMBORSO DOVUTO ESEGUITO rif=%s importo=%d %s stripe=%s",
-                    rif, riga["dovuto_cents"], riga["valuta"], esito.get("id") or "")
+                    _rif_per_registro(rif), riga["dovuto_cents"], riga["valuta"],
+                    esito.get("id") or "")
         return 200, {"stato": "rimborsato", "riferimento": rif,
                      "importo_cents": riga["dovuto_cents"], "valuta": riga["valuta"],
                      "stripe_refund_id": esito.get("id") or "",

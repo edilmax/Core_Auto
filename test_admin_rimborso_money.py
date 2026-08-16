@@ -849,6 +849,61 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
                              "li' in poi chi legge il registro vede due righe dove ce n'era "
                              "una, e la seconda l'ha scritta un estraneo. Riga: %r" % (riga,))
 
+    def test_LA_SCHEDA_NON_SCRIVE_NEL_REGISTRO_QUELLO_CHE_LE_DANNO(self):
+        """⛔ LA DIFESA NON DEVE DIPENDERE DA CHI CHIAMA (D19).
+
+        Il controllo al confine (`_admin_rimborsa_dovuto` rifiuta 422) e' giusto e resta, ma
+        rende sicura **quella rotta**, non la funzione: `_rimborso_dovuto_scheda` e' chiamata
+        anche dalla lista, e domani da qualcun altro. Se la garanzia «nel registro non finisce
+        un a-capo scelto da fuori» vive solo nel chiamante, il giorno che nasce un secondo
+        chiamante la garanzia sparisce **senza che nessuno tocchi questa funzione**.
+
+        Qui la funzione viene chiamata DIRETTAMENTE, scavalcando la rotta: e' il modo di
+        provare che regge da sola. E' anche cio' che CodeQL continuava a segnalare dopo la
+        prima riparazione -- aveva ragione lui.
+        """
+        import logging as _lg
+
+        class _Cattura(_lg.Handler):
+            def __init__(self):
+                _lg.Handler.__init__(self)
+                self.righe = []
+
+            def emit(self, record):
+                try:
+                    self.righe.append(record.getMessage())
+                except Exception:
+                    self.righe.append(str(record.msg))
+
+        class _GiornaleRotto:
+            def __getattr__(self, nome):
+                def _boom(*a, **k):
+                    raise RuntimeError("giornale guasto")
+                return _boom
+
+        ostile = ("hmac-sha256:bbbbbbbbbbbb\n"
+                  "2026-08-17 04:00:00 ERROR core_auto.server RIMBORSO ESEGUITO "
+                  "rif=vittima importo=8888888 stripe=re_inventato")
+        self.sys.finanza = _GiornaleRotto()
+        cattura = _Cattura()
+        radice = _lg.getLogger("core_auto")
+        radice.addHandler(cattura)
+        try:
+            self.r._rimborso_dovuto_scheda(ostile)     # chiamata DIRETTA, senza la rotta
+        finally:
+            radice.removeHandler(cattura)
+        self.assertTrue(cattura.righe,
+                        "setup: doveva scrivere qualcosa nel registro, altrimenti la prova "
+                        "non attraversa il punto guasto ed e' verde per il motivo sbagliato")
+        for riga in cattura.righe:
+            self.assertNotIn("\n", riga,
+                             "una riga del registro contiene un a-capo arrivato da fuori: chi "
+                             "legge il registro vede due righe dove ce n'era una, e la seconda "
+                             "l'ha scritta un estraneo. Riga: %r" % (riga,))
+            self.assertNotIn("RIMBORSO ESEGUITO", riga,
+                             "riga di allarme FABBRICATA da chi ha passato il riferimento: il "
+                             "Guardiano legge di qui per sapere se e' tutto a posto. %r" % (riga,))
+
     def test_UN_RIFERIMENTO_VERO_NON_VIENE_RIFIUTATO(self):
         """Prova di rimozione (regola ferrea 10): il controllo nuovo deve TACERE sui
         riferimenti veri, o e' un falso allarme che blocca rimborsi legittimi — e un allarme

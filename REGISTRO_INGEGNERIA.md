@@ -686,11 +686,11 @@ mostrerebbe un bottone che il pulsante rifiuta — o, molto peggio, il contrario
   cosa che gli interessa. Ora dice che i soldi tornano sul metodo di pagamento usato, **senza
   promettere tempi che non dipendono da noi**.
 
-**✅ SUITE INTERA (dopo la riparazione CodeQL):** `Ran 5763 tests in 1631.660s` ·
+**✅ SUITE INTERA (dopo le due riparazioni CodeQL):** `Ran 5764 tests in 1576.741s` ·
 `OK (skipped=4)` · **uscita 0** letta diretta (scritta dal lancianotte in fondo al file, S8).
-5768 raccolti − 5763 eseguiti = lo **scarto noto di 5** (guardie `openssl`, dichiarato nella
-riga AMBIENTE). *(Il giro precedente, prima delle 2 guardie sul riferimento ostile:
-`Ran 5761 in 1618.862s`, stesso esito.)*
+5769 raccolti − 5764 eseguiti = lo **scarto noto di 5** (guardie `openssl`, dichiarato nella
+riga AMBIENTE). *(I giri precedenti, stesso esito: `Ran 5761 in 1618.862s` prima delle guardie
+sul riferimento ostile, `Ran 5763 in 1631.660s` dopo la prima riparazione.)*
 
 ⚠️ **IL PRIMO GIRO ERA ROSSO — 7 rossi, e tutti sani.** Vale la pena scriverlo perché due
 guardie già esistenti hanno preso due miei buchi che io non avevo previsto:
@@ -736,6 +736,22 @@ riferimento che non ha la forma di un riferimento **non entra** (`_RIFERIMENTO_V
 Guardie: `test_UN_RIFERIMENTO_OSTILE_NON_PUO_SCRIVERE_NEL_REGISTRO` (vista rossa: `404 != 422`,
 con la stringa iniettata nel corpo della risposta) + `test_UN_RIFERIMENTO_VERO_NON_VIENE_RIFIUTATO`
 (prova di rimozione: il controllo nuovo deve tacere sui riferimenti veri).
+
+🔁 **E LA SECONDA VOLTA CODEQL AVEVA ANCORA RAGIONE.** Dopo la riparazione al confine i 14
+allarmi erano **identici**: il controllo con l'espressione regolare non e' riconosciuto come
+barriera. E il punto vero non era il riconoscimento, era la sostanza: **quel controllo mette
+in sicurezza la ROTTA, non la funzione.** `_rimborso_dovuto_scheda` e' chiamata anche dalla
+lista, e domani da qualcun altro: se la garanzia vive solo nel chiamante, il giorno che nasce
+un secondo chiamante la garanzia cade **senza che nessuno tocchi questa funzione** — quindi
+senza che nessuno se ne accorga. E' **D19** in forma pura.
+
+⛔ Ora la garanzia sta **dove si scrive**: `_rif_per_registro()` (`fase83_server.py:51`) toglie
+tutto cio' che non e' `[A-Za-z0-9:_.-]`, ed e' usata in **tutte e 7** le scritture (misurato:
+8 occorrenze = 1 definizione + 7 usi). Il controllo al confine **resta**: dicono due cose
+diverse — quello *cosa accettiamo*, questa *cosa scriviamo*. Guardia:
+`test_LA_SCHEDA_NON_SCRIVE_NEL_REGISTRO_QUELLO_CHE_LE_DANNO`, che chiama la funzione
+**direttamente scavalcando la rotta** ed e' stata vista rossa con la riga di allarme
+fabbricata dentro il messaggio d'errore.
 
 ⚠️ **COSTO DICHIARATO, da diradare quando ci saranno prenotazioni vere.** Il pannello si
 ricarica **ogni 60 secondi** e ogni ricarica fa una scansione del giornale più fino a **~100
