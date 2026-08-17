@@ -169,13 +169,26 @@ deploy riesce, i test sono verdi, il sito **continua a fare come prima** — e n
 accorge nessuno. È il verde falso perfetto: nulla è rotto, semplicemente la riparazione non
 è arrivata.
 
-**In attesa al prossimo deploy** (misurato il 2026-08-09 con `docker exec casavip_app env`):
+✅ **RISOLTO — rimisurato il 2026-08-17 prima del deploy** (`docker exec casavip_app env |
+grep -E '^PAGAMENTO_'` → **nessuna riga**): sul VPS non esiste più nessuna `PAGAMENTO_*`,
+quindi valgono i **default del codice** — tariffa tecnica **5% + 0,25 €**, **7%** in valuta
+estera. ⚠️ Questa tabella dichiarava una `PAGAMENTO_BPS` con la **percentuale superata** come
+«in attesa al prossimo deploy»: era **il documento** rimasto indietro, non il server (S10).
 
-| variabile sul VPS | valore attuale | cosa fare |
+| variabile sul VPS | stato misurato 2026-08-17 | cosa vale |
 |---|---|---|
-| `PAGAMENTO_BPS` | **`300`** (il 3% vecchio) | **toglierla**, o portarla a `500` |
-| `PAGAMENTO_BPS_ESTERA` | non c'è | lasciar valere il codice (`700`), o scriverla |
-| `PAGAMENTO_FISSO_CENTS` | non c'è | lasciar valere il codice (`25`), o scriverla |
+| `PAGAMENTO_BPS` | **assente** | il valore del codice |
+| `PAGAMENTO_BPS_ESTERA` | assente | il valore del codice |
+| `PAGAMENTO_FISSO_CENTS` | assente | il valore del codice |
+
+⛔ **Qui le cifre non si scrivono, e non è pigrizia:** una tariffa ricopiata in un documento
+diventa falsa il giorno che cambia nel motore, e nessuno se ne accorge (sbaglio S17, capitato
+sei volte in un giorno). La tariffa vera sta in `README.md` e nel codice, con la guardia che
+li confronta.
+
+⛔ **Il controllo resta obbligatorio a ogni deploy**, e non perché oggi è a posto: una
+variabile vecchia che vince sul codice nuovo è il verde falso perfetto — nulla è rotto,
+semplicemente la riparazione non è arrivata.
 
 **Come si controlla che la riparazione sia arrivata davvero**, dopo lo scambio:
 ```bash

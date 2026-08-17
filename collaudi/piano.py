@@ -152,8 +152,20 @@ BLOCCHI = (
         "attrezzi": ("z3", "hypothesis", "mutazione", "oracolo", "orologio", "conti",
                      "produzione", "stati_impossibili", "e2e"),
         "finito_quando": (
-            "le dimostrazioni z3 sugli invarianti GIRANO in CI (oggi si saltano: pezzo A)",
-            "il rimborso all'ospite parte DA SOLO (oggi `v1/refunds` -> 0 righe di codice)",
+            "le dimostrazioni z3 sugli invarianti GIRANO in CI, e i test che le portano "
+            "NON risultano saltati",
+            # ⛔ CORRETTA IL 2026-08-17, e la correzione conta piu' del testo. Diceva: «il
+            # rimborso all'ospite parte DA SOLO». Ma il 2026-08-16 il fondatore ha deciso
+            # l'opposto -- a mano, con la lista e il pulsante: «se la macchina sbaglia ci
+            # rimetto conti, fiducia, credibilita'». Una riga d'arrivo che descrive un
+            # obiettivo ABBANDONATO non si spunta mai: chi arriva dopo lavora per far
+            # sparire una casella che non doveva esserci, oppure dichiara «finito» a caso.
+            # La riga d'arrivo vera non e' COME partono i soldi, e' SE arrivano.
+            "i soldi tornano DAVVERO all'ospite da OGNI strada che porta a un rimborso, non "
+            "solo da quella che qualcuno si e' ricordato di provare (il 2026-08-16 le strade "
+            "erano due e ne funzionava una). ⛔ L'AUTOMATICO NON e' la riga d'arrivo di "
+            "questo blocco: e' una decisione del fondatore, e si accende dopo -- prima si "
+            "guadagna la fiducia, poi si toglie il dito",
             "gli orologi di prova Stripe hanno visto scadere hold, payout e penale davvero",
             "esistono le relazioni metamorfiche sull'aritmetica del denaro",
             "zero punti di mutazione scoperti sul codice che la produzione ESEGUE",

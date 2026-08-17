@@ -67,6 +67,55 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > mutante nel catalogo rende la CI rossa se il filtro sparisce** — senza quello, un
 > «archiviato» è una promessa che nessuno ricontrolla.
 >
+> ### 🔴🔴 IL LAVORO PIÙ IMPORTANTE: **QUATTRO STRADE SU SETTE NON ARRIVANO NELLA LISTA**
+> Il fondatore ha ordinato di **contare tutti i percorsi** prima di costruire, *«senza fare lo
+> sbaglio che vedevate solo uno e ignoravate il resto»*. Contati: **sette** strade portano a
+> «il cliente ha dei soldi da riavere», **quattro non ci arrivano**. La tabella con file e riga
+> sta nel piano (`REGISTRO_INGEGNERIA.md`, fra `PIANO-INIZIO`/`PIANO-FINE`).
+>
+> ⚠️ **Il sistema anti-doppia-prenotazione FUNZIONA** — non è quello il difetto. È proprio
+> perché si rifiuta di dare la stanza due volte che il cliente resta pagante e senza stanza:
+> **il sovra-affitto è evitato, il rimborso è quello che avanza.**
+>
+> ⛔ **Riparazione: le quattro strade scrivono nel giornale** (`_giornale(tipo="rimborso", …)`),
+> una riga ciascuna. Da lì entrano nella stessa lista. **Prima questo, poi l'interruttore.**
+>
+> ### 🎛️ POI L'INTERRUTTORE «A MANO / DA SOLO» (ordine del fondatore, 2026-08-17)
+> *«Il rimborso automatico c'era già ed era provato, solo dal pannello. Abbiamo scelto a mano
+> perché siamo all'inizio e ci rimettiamo la faccia. Ma io devo poter decidere, cliccando dei
+> bottoni.»* Serve un comando nel pannello che il fondatore gira quando vuole. ⛔ Vale per
+> **tutte e sette** le strade, non per quelle che ci ricordiamo.
+>
+> ### 🔬 LA RICERCA AWS — dove siamo davvero sui SEI metodi
+> AWS non sceglie un metodo, ne usa **sei**. Il nostro stato, rimisurato:
+>
+> | metodo AWS | da noi |
+> |---|---|
+> | model checking / prove formali | ✅ `z3` — **e ora gira in CI** (3 job: `ci.yml` 122, 207, 284) |
+> | test a proprietà (`hypothesis`) | 🟡 installato, **acceso su pochi moduli** (pezzo 10) |
+> | fuzzing | ✅ job `atheris` verde in CI |
+> | iniezione di guasti | ✅ è la mutazione — 60 mutanti, 60 uccisi |
+> | simulazione deterministica | 🟡 esiste (semi deterministici, banchi), non censita |
+> | **verifica a tempo di esecuzione (PObserve)** | 🟡 **il pezzo 8 è fatto** (battito + sentinella esterna, `guardiano: ok` nella salute) — ⛔ **ma nessuno ha verificato che gli INVARIANTI dei soldi siano controllati sul traffico vero**: è la casella «invarianti verificati in PRODUZIONE» del Blocco 1, ancora aperta |
+>
+> ⛔ **Da rimisurare, non da credere:** la ricerca in memoria diceva «z3 non è in CI» ed era
+> **vecchia di due giorni**. Corretta il 2026-08-17. **Anche la ricerca invecchia.**
+>
+> ### ⚖️ E LE LEGGI — ricerca fatta il 2026-08-17, tre buchi trovati
+> ✅ **Legale far pagare 5% + 0,25 € (7% in valuta estera) agli host**: nessun tetto europeo, e
+> il divieto di sovrapprezzo PSD2 non ci tocca (vale verso il consumatore, e la nostra tariffa
+> non cambia col metodo di pagamento — cambia con la **valuta**). ✅ Il **CIN** è a posto:
+> obbligatorio per pubblicare in Italia, validato, **esposto in vetrina**.
+> 🔴 **Manca:** (1) la **trasmissione dati alle autorità** (Reg. UE 2024/1028, in vigore dal
+> **20 maggio 2026**, cioè già adesso — nel codice non c'è niente); (2) il **preavviso di 15
+> giorni** prima di cambiare condizioni o tariffe agli host (Reg. UE 2019/1150 — abbiamo la
+> ri-accettazione, che arriva quando l'host torna, non 15 giorni prima); (3) il CIN lo
+> controlliamo **solo nella forma**, non che esista davvero. ⚠️ Multe italiane: fino a **5.000 €
+> per annuncio** senza codice esposto. 💡 **Con 0 annunci oggi non violiamo niente in pratica:
+> vanno chiusi PRIMA del primo host vero.** Non confermato da fonte primaria: ogni quanto vanno
+> trasmessi i dati, e se le piattaforme piccole hanno obblighi ridotti — **due domande precise
+> per l'avvocato**.
+>
 > ### ⚠️ DUE COSE MISURATE OGGI CHE NON SONO DIFETTI, MA VANNO SAPUTE
 > 1. **La produzione ha avuto un buco di rete alle 05:47 UTC del 17/08.** La testa esterna ha
 >    visto `curl: (28) timed out, HTTP 000`. Indagato: nella finestra 05:40-05:55 a nginx sono
@@ -80,9 +129,26 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 >    **controllo inverso** («Stripe ha rimborsato qualcosa che per noi è vivo?») va diradato:
 >    è una riconciliazione contabile, non ha bisogno di girare ogni minuto.
 >
-> ### ⛔ E RESTA FUORI, come prima
-> Il **deploy** (il VPS è a `bfcca09`, indietro di tre unioni): serve **«autorizzato»** e il
-> protocollo D17. E il rimborso **automatico** resta spento per decisione del fondatore.
+> ### ✅ E IL DEPLOY È STATO FATTO — 2026-08-17 08:14 UTC
+> **I tre posti sono allineati a `9bf294b`.** La lista dei rimborsi è **in produzione**.
+> Protocollo D17 rispettato passo per passo, e il punto [1b] **è servito davvero**: il
+> paracadute `:prec` puntava a `80fcf893…` mentre girava `1d453fbe…` — era agganciato
+> **all'immagine sbagliata**, il difetto costato quattro volte in quattro giorni. Ri-agganciato
+> e verificato prima del build.
+>
+> **Le prove, non le impressioni:** salvataggio verificato **leggibile** (`sha256sum -c` → OK,
+> poi aperto davvero: `integrity_check: ok`) · avvio pulito (`'avvisi': []`,
+> `money_path_pronto: True`) · sonde **nelle due direzioni** — home 200 · salute 200 ·
+> `/api/admin/prenotazioni` **401** · `/api/bunker/stato` **403** · e la rotta nuova
+> **`/api/admin/rimborsi_dovuti` → 401**, cioè esiste in produzione ed è chiusa ·
+> `collaudi/verifica_produzione.py` **190 controlli, 0 violazioni** (certificato valido ancora
+> 37 giorni).
+>
+> 💡 **E una buona notizia trovata misurando:** `DEPLOY.md` §5 elencava `PAGAMENTO_BPS=300`
+> (il 3% vecchio) come «in attesa al prossimo deploy». **Sul server non c'è più**: valgono i
+> default del codice (5% + 0,25 €). Era il documento a essere rimasto indietro, corretto.
+>
+> ⛔ **Resta fuori:** il rimborso **automatico**, spento per decisione del fondatore.
 
 ## 🚦 2026-08-16 (17) — ✅ **LA LISTA DEI RIMBORSI È COSTRUITA — il difetto (16) è chiuso sul computer**
 
