@@ -366,6 +366,28 @@ MUTANTI = [
      "le prenotazioni GIA' rimborsate tornano in lista: l'operatore le ripreme una per "
      "una, convinto di lavorare su una coda vera"),
 
+    # ── L'ORACOLO E LA CONCORRENZA: i due collaudi che mancavano (5 e 6) ─────────
+    # Questi due mutanti esistono per DIMOSTRARE che quei due collaudi vedono davvero il
+    # guasto che dicono di vedere. Senza, sarebbero due verdi mai visti rossi.
+    ("fase111_cancellazione.py",
+     "    rimborso = fee + (soggiorno * bps // 10000)            # pulizia sempre resa",
+     "    rimborso = pagato",
+     "test_admin_rimborso_money test_fase111_cancellazione",
+     "IL MOTORE DEI RIMBORSI SBAGLIA E NESSUNO LO CONFRONTA CON NIENTE: la politica non "
+     "conta piu', si restituisce sempre il 100%. Su una 'rigida' a due giorni dall'arrivo "
+     "l'host perde tutto cio' che la sua politica gli garantiva. E' il guasto che solo un "
+     "SECONDO calcolo indipendente puo' vedere: tutti gli altri test chiedono al sistema "
+     "quanto spetta e poi verificano che mostri quel numero -- sbaglierebbero insieme"),
+
+    ("fase83_server.py",
+     '        esito = sp.rimborsa(riga["payment_intent"], int(riga["dovuto_cents"]), "rimborso:" + rif)',
+     '        esito = sp.rimborsa(riga["payment_intent"], int(riga["dovuto_cents"]), "rimborso:" + rif + str(id(riga)))',
+     "test_admin_rimborso_money",
+     "LA CHIAVE D'IDEMPOTENZA NON E' PIU' STABILE: ogni richiesta ne porta una diversa, "
+     "quindi Stripe non puo' piu' riconoscere il duplicato. Due operatori che premono nello "
+     "stesso istante restituiscono i soldi DUE VOLTE all'ospite. E' l'unica rete che "
+     "separa due richieste simultanee: il nostro codice, da solo, non le separa"),
+
     # ── E LE DUE DIFESE DEL REGISTRO (trovate da CodeQL, non da noi) ─────────────
     ("fase83_server.py",
      '    pulito = re.sub(r"[^A-Za-z0-9:_.-]", "", str(rif))[:64]',

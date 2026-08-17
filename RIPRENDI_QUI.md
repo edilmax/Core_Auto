@@ -44,7 +44,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 >
 > **✅ SUITE INTERA VERDE, uscita letta diretta:**
 > ```
-> Ran 5766 tests in 1639.896s
+> Ran 5768 tests in 1593.779s
 > OK (skipped=4)
 > CODICE D'USCITA DELLA SUITE: 0
 > ```
@@ -75,6 +75,15 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > un freno provato solo quando non serve non è provato. Chiusi scrivendo i **due test che
 > mancavano** (non toccando il codice): ora **58 su 58 uccisi, 0 sopravvissuti**, e il file di
 > produzione ha lo stesso sha256 prima e dopo.
+>
+> 🔬 **E I DUE COLLAUDI «PARZIALI» SONO CHIUSI — il secondo era un mio FINTO VERDE.**
+> L'**oracolo indipendente** rifà il conto senza importare `fase111` (aritmetica scritta
+> diversa apposta) su 4 casi che coprono 100% / 50% / 0% e il ripensamento. La **concorrenza
+> vera** passava… ma il mutante che rende instabile la chiave d'idempotenza **sopravviveva**:
+> i due fili partivano insieme e non si incontravano mai — il primo finiva tutto il giro prima
+> che il secondo cominciasse. 💡 **Far partire due fili insieme non basta a creare una gara:
+> bisogna farli incontrare nel punto giusto.** Ora si aspettano dentro la creazione del
+> rimborso. Esito: **60 mutanti, 60 uccisi, 0 sopravvissuti.**
 >
 > ⚠️ **Resta aperto:** l'automatico (per scelta) · **nessuna prova su soldi veri di QUESTA
 > strada** — il collaudo del 16 agosto passò dal pannello, cioè dall'altra · il punto 2 della
@@ -4259,7 +4268,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5771 test
+SUITE ATTUALE: Ran 5773 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
