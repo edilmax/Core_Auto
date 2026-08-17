@@ -108,6 +108,18 @@ sua quota parte subito. Renderla premibile significa **allentare due freni sui s
 decisione del fondatore, non un lavoro tecnico. Il rimborso resta manuale da Stripe, come dice
 già la `nota` della rotta.
 
+🧹 **E UN LAVORO NUOVO, CHIESTO DAL FONDATORE IL 2026-08-17 — misurato, non ricordato.**
+*«Cosa devo fare prima di dire fatto»* risponde oggi in **CINQUE posti** (`CLAUDE.md` ·
+`REGISTRO_INGEGNERIA.md` · `collaudi/piano.py` · `collaudi/prima_di_dire_fatto.py` · e fuori dal
+computer: CI, Stripe, CodeQL). Serve **un foglio solo**. ⛔ **Non un riassunto scritto a mano** —
+sarebbe la sesta copia e invecchierebbe, come la lista AWS il 2026-08-17: si fa **stampandolo
+dalla macchina**, che legge dai posti che possiedono i fatti e misura lo stato **adesso**.
+🔴 **E c'è roba morta ancora scritta che DECIDE il lavoro:** «63 moduli morti» compare in **otto
+punti** ed è **falso** (sono 59, e 34 sono solo **spenti**) — `REGISTRO_INGEGNERIA.md:486` lo usa
+come istruzione per scegliere su cosa lavorare; «81 punti che non vanno fatti» in **cinque**.
+💡 Regola che ne esce: **un numero sullo stato della macchina non si scrive, si produce quando
+lo si legge.** Dettagli, righe e metodo: `RIPRENDI_QUI.md`, blocco (19), punto **7bis**.
+
 🎛️ **ORA TOCCA ALL'INTERRUTTORE, chiesto dal fondatore il 2026-08-17.** Il rimborso automatico
 **esiste già** ed era provato: mancava solo che partisse dalla strada dell'ospite. La decisione
 di farlo a mano è **reversibile per scelta, non per mancanza**. Serve un comando nel pannello:

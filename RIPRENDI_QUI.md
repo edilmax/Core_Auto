@@ -13,8 +13,27 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 ## 🟢 2026-08-17 (19) — **LE SETTE STRADE SCRIVONO TUTTE NEL GIORNALE — e il pulsante non sparisce più**
 
-> **Via del fondatore:** «autorizzato e test tutti aws». Codice di produzione toccato con quel
-> permesso scritto (B4). ⛔ **Nessun commit**: manca «procedi al commit» (B1).
+> **Via del fondatore:** «autorizzato», poi «procedi al commit». ✅ **CHIUSO E IN PRODUZIONE.**
+>
+> ```
+> computer 44b2f43  ·  GitHub 44b2f43  ·  VPS 44b2f43   (unione #64, verificata dall'API)
+> suite locale      Ran 5785 · EXIT 0        (5790 raccolti, scritti PRIMA di lanciare)
+> mutazione diff    14/14 uccisi · 0 sopravvissuti · EXIT 0
+> CI su Linux       15 job · 0 rossi (full-suite · 311 · copertura · mutazione · CodeQL · gate)
+> giudice esterno   Stripe vero in prova: 25 passi · 25 OK
+> produzione        avvisi: [] · money_path_pronto: True · home 200 · salute 200
+>                   admin 401 · bunker 403 · verifica_produzione.py 190 controlli, 0 violazioni
+> paracadute        :prec = immagine viva, stesso sha256 (il passo mancato 4 volte in 4 giorni)
+> ```
+>
+> ⚠️ **GitHub ha risposto 503 al PRIMO tentativo di unione**, e l'API diceva `merged=False`.
+> Fidarsi della prima risposta avrebbe prodotto un «unito» falso con `master` intatto — è già
+> capitato **due volte**. Unita al secondo tentativo e riverificata. **Si controlla sempre.**
+>
+> 🔴 **E il record vero l'abbiamo perso**, come previsto: il codice vecchio l'ha purgato prima
+> che il deploy arrivasse (era a 24,8 ore su una soglia di 26). Costo in denaro **zero** (quel
+> rimborso era già uscito dal pannello); costo in tracce: la prova del primo rimborso vero non
+> c'è più. Dalle prossime cancellazioni non ricapita.
 >
 > ### 🔴 LA COSA PIÙ IMPORTANTE, ed è quella che nessuno cercava
 > **Il pulsante «Rimborsa» spariva quasi sempre, e non in un caso raro: in quello normale.**
@@ -103,8 +122,82 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > 2. ⚖️ **Il pulsante sulla strada 4**, se il fondatore vuole allentare i due freni.
 > 3. 🔒 **23 allarmi CodeQL** mai guardati (elenco e metodo nel blocco (18)).
 > 4. ⚖️ **Le tre cose legali** prima del primo host (blocco (18)).
-> 5. 🔬 **I metodi AWS ancora aperti**: orologi di prova Stripe · relazioni metamorfiche sul
->    denaro · **invarianti dei soldi verificati sul traffico VERO** (il sesto metodo).
+> 5. 💸 **IL PROSPETTO DEL COMMERCIALISTA DICE 30 DOVE STRIPE HA PRESO 27.** Misurato sul
+>    record vero (1,00 EUR): `costo_pagamento_cents = 30`, cioè **la nostra tariffa** (5% +
+>    0,25), messa sotto l'etichetta «Stripe non restituisce la sua commissione ... costo di
+>    servizio sostenuto». Sono due voci contabili diverse — **costo sostenuto** contro **ricavo
+>    mancato** — e l'errore scala: su 200 EUR direbbe 10,25 invece di ~3,25, **tre volte tanto**.
+>    Nasce da UNA riga, `fase59_concierge.py:350`, dove il nome era corretto finché la tariffa
+>    era il 3% a margine zero: dal 2026-08-09 (5% + 0,25) i due numeri si sono separati e il
+>    nome è diventato falso. **Non è un errore di calcolo: è un nome diventato falso**, ed è per
+>    questo che nessun test lo vedeva. ✅ Riparazione già disegnata e l'impianto **esiste già**:
+>    `fase85` chiede a Stripe la commissione effettiva (`balance_transaction.fee`), `fase162:176`
+>    sa già aggiungere un campo al record dopo il pagamento (è così che entra lo `stripe_pi`), e
+>    se Stripe non risponde il prospetto dice **«non lo so»** invece di ripiegare sulla nostra
+>    percentuale. Trovato dal fondatore **confrontando col mondo vero**, non da un collaudo.
+>
+> 6. 🔴 **QUATTRO STRUMENTI CHE UNA LISTA DICEVA FATTI E NON ESISTONO** (misurati il 2026-08-17,
+>    non ricordati):
+>    - **la guardia sull'ambiente della shell NON esiste** in `collaudi/regole_avvio.py`. Oggi
+>      la suite è girata **cinque volte** con 5 guardie sui backup **saltate in silenzio**
+>      (`openssl` fuori dal PATH di PowerShell), e ogni volta l'ho dichiarato **a mano**. È lo
+>      sbaglio S11 ancora aperto: una dichiarazione affidata a chi scrive è precisamente ciò che
+>      questo progetto ha imparato a non fare. **È la più economica delle quattro.**
+>    - **le impronte sha256 NON sono nei ganci di git.** I ganci stanno in `deploy/hooks` (non
+>      `.git/hooks`, `core.hooksPath` lo dice) e sono due: `commit-msg` e `pre-commit`. Nessuno
+>      guarda un `sha256`. I confronti di oggi — dopo ogni giro di mutazione — **li ho fatti io
+>      a mano, quattro volte**. Se me ne dimenticassi, nessuno se ne accorgerebbe.
+>    - **orologi di prova Stripe**: mai fatti (lavoro in sospeso n.3). ⚠️ La chiave di prova
+>      ESISTE (`sk_test`, nel file fuori dal repository) e l'impianto per usarla c'è già:
+>      `collaudi/e2e_rimborso_stripe.py` e `collaudi/e2e_credito_stripe.py` parlano con Stripe
+>      vero. Manca solo l'oggetto `test_clock`.
+>    - **`libfaketime`**: mai fatto (lavoro n.2). ⛔ Il primo passo è la prova da 5 minuti che
+>      può **chiudere** la strada: il vDSO del kernel può scavalcare la libreria.
+>
+> 7bis. 🧹 **UN FOGLIO SOLO PER I CONTROLLI — e togliere la roba morta.** Chiesto dal fondatore
+>    il 2026-08-17: *«sono tanti e quelli dobbiamo farli per forza. Poi c'erano altri che sono
+>    scritti ma che non usiamo più, perché sono ancora scritti? Tanta roba da eliminare. Bisogna
+>    fare un foglio solo.»* Misurato prima di scriverlo, non ricordato:
+>
+>    **(a) Il foglio ESISTE ma copre i MODULI, non i controlli.** `collaudi/piano.py` — nato il
+>    2026-08-15 dalle parole del fondatore *«se non mettiamo a posto questo foglio, ogni chat fa
+>    quel che vuole»* — tiene i 10 blocchi dei moduli e i 5 lavori in sospeso. Ma la domanda
+>    **«cosa devo fare prima di dire fatto, e l'ho fatto?»** oggi risponde in **CINQUE posti**:
+>    `CLAUDE.md` (6 divieti · 17 sbagli · 15 ferree · 26 direttive · 11 modi · 10 collaudi · 4
+>    finali) · `REGISTRO_INGEGNERIA.md` (11 tecniche · il piano · 29 in appendice) ·
+>    `collaudi/piano.py` (10 blocchi · 5 lavori) · `collaudi/prima_di_dire_fatto.py` (10
+>    controlli al commit) · e **fuori dal computer** (tabella della CI · Stripe vero · CodeQL).
+>
+>    ⛔ **NON si ripara scrivendo un riassunto**: sarebbe la **SESTA copia**, e invecchierebbe —
+>    è esattamente ciò che è successo il 2026-08-17 con la lista AWS. Il meccanismo giusto è già
+>    stato usato **due volte nello stesso giorno** (il blocco `PIANO`, il blocco `TECNICHE`):
+>    **un foglio solo, STAMPATO dalla macchina** a ogni avvio, che **legge** dai posti che
+>    possiedono ogni fatto invece di ricopiarli, e mette accanto a ognuno lo **stato misurato
+>    adesso**. Il precedente esiste già nei 5 lavori in sospeso, e nacque perché quella lista
+>    **mentiva su CodeQL**.
+>
+>    **(b) I numeri sbagliati sono ancora scritti, e uno DECIDE il lavoro:**
+>    - «**63 moduli morti**» compare in **otto punti** fra i due documenti. ⛔ È **SBAGLIATO**:
+>      sono **59**, e **34 sono solo SPENTI**, non morti (si accendono con un token). E
+>      `REGISTRO_INGEGNERIA.md:486` lo usa come **istruzione** — *«prima di ogni blocco si guarda
+>      se il modulo è acceso: 63 su 151 non sono raggiungibili»* — quindi si decide **su cosa
+>      lavorare** con un numero falso. È il danno vero, perché la classifica «rischio × cecità»
+>      ci si appoggia.
+>    - «**81 punti che non vanno fatti**» compare in **cinque punti** (i due documenti +
+>      `collaudi/piano_dei_soldi.py`).
+>    - `collaudi/raggiungibilita.py` **dichiara da sé** il proprio limite: parte da **un solo
+>      punto d'ingresso su quattro** e ignora `app.py`. Il numero nasce già monco.
+>
+>    💡 **La regola che ne esce, e vale oltre questo lavoro:** un numero che descrive lo stato
+>    della macchina **non si scrive** in un documento — si **produce** quando lo si legge.
+>    Scritto, invecchia in silenzio; e un numero invecchiato che serve a **decidere** è peggio
+>    di nessun numero.
+>
+> 7. 🔬 **Il sesto metodo AWS, l'unico buco vero che resta sulle tecniche**: nessuno ha
+>    verificato che **gli invarianti dei soldi tengano sul traffico VERO**. Il battito e la
+>    sentinella esterna sorvegliano che la macchina risponda, non che le regole del denaro
+>    tengano su ciò che passa davvero. ✅ E ora ha un invariante concreto da sorvegliare, che
+>    prima non esisteva: *nessuno aspetta con una riga pagabile non pagata*.
 
 ## 🧭 2026-08-17 (18) — **PASSAGGIO DI CONSEGNE (D21) — contesto letto: 58%**
 
@@ -2692,7 +2785,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: d781e8d
+CONSEGNE AGGIORNATE A: 44b2f43
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
