@@ -622,6 +622,59 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 📋 2026-08-17 (1) — **IL CRUSCOTTO CODEQL MISURATO: 164 APERTI, 65 GRAVI** (e i 14 di ieri archiviati)
+
+**I 14 allarmi nati dal lavoro sui rimborsi sono archiviati** col motivo, uno per uno
+(`dismissed_reason: false positive`, verificato dall'API: `dismissed: 14`). Reggono perché la
+difesa non è una promessa: `_rif_per_registro()` toglie tutto ciò che non è `[A-Za-z0-9:_.-]`,
+c'è una guardia vista rossa, e **un mutante nel catalogo rende la CI rossa se il filtro
+sparisce**. ⛔ Senza quel mutante, «archiviato» sarebbe una promessa che nessuno ricontrolla.
+
+⚠️ **Ma archiviandoli si è scoperto che il cruscotto non era vuoto prima.** Misurato dall'API
+il 2026-08-17: **164 allarmi aperti, 99 medi e 65 gravi**, con numeri **bassi (#7-#28)** —
+cioè i più vecchi del repository, fermi da quando CodeQL è stato acceso. Questo *è* il «lavoro
+obbligatorio n.1», la cui riga d'arrivo dice: verde **oppure** rilievi triati uno per uno col
+motivo. Ora sappiamo quanti sono.
+
+| famiglia | quanti | stato |
+|---|---|---|
+| `py/log-injection` + `py/clear-text-logging-sensitive-data` | **135** | stessa famiglia dei 14 archiviati — **quasi certamente** falsi positivi, ⛔ **non verificati** |
+| `py/path-injection` | **6** | ✅ **giudicati falsi positivi leggendo**: `percorso_statico_sicuro` (`fase83_server.py:9893`) fa basename → niente dotfile → niente NUL → `realpath` + `commonpath`. Doppia cintura |
+| tutto il resto | **23** | 🔴 **mai guardati**: l'elenco esatto coi numeri d'allarme è nel riquadro (18) di `RIPRENDI_QUI.md` |
+
+⛔ **Da dove si comincia, e perché:** `#27`/`#28` `py/clear-text-storage-sensitive-data`
+(`fase83_server.py:2252` e `:2277`) — è l'unica classe **diversa** dal logging: non una riga
+scritta nel registro, ma un dato che **resta su disco**. Poi i 7
+`py/weak-sensitive-data-hashing`: se uno è su una password o un token, è vero.
+
+💡 **Trappola misurata:** `dismissed_comment` accetta **massimo 280 caratteri**. Il primo
+tentativo è stato rifiutato con `422 ... 323 were supplied`, e ha rifiutato tutti e 14 in
+blocco. Si misura la lunghezza **prima** di mandare.
+
+### 🌐 2026-08-17 (2) — **UN BUCO DI RETE IN PRODUZIONE ALLE 05:47 UTC — e non era nostro**
+
+La testa esterna (`il-sito-risponde-e-la-sentinella-e-viva`) è andata **rossa** una volta su
+sei: `curl: (28) Connection timed out after 20002 milliseconds`, `HTTP 000`.
+
+**Cosa dicono i dati grezzi, invece dell'impressione:**
+```
+finestra 05:40-05:55, righe arrivate a nginx: 2
+  76.13.44.167 [17/Aug/2026:05:40:01] "GET /api/health HTTP/2.0" 200
+  76.13.44.167 [17/Aug/2026:05:50:01] "GET /api/health HTTP/2.0" 200
+```
+Tutte e due dal **VPS stesso** (il watchdog interno), tutte e due `200`. **La richiesta di
+GitHub delle 05:47 non è mai arrivata al server.** Applicazione viva: uptime 53 giorni,
+`casavip_app` e `casavip_backup` «healthy», nessun riavvio. Adesso il sito risponde in
+**292 ms** con `{"status": "ok", "guardiano": "ok"}`.
+
+💡 **Il valore della testa ESTERNA, e il suo limite, nello stesso episodio:** il watchdog
+interno diceva «tutto bene» ed **aveva ragione** — l'applicazione era sana. La testa esterna
+diceva «non risponde» e **aveva ragione anche lei** — da fuori il sito era irraggiungibile.
+Non si contraddicono: rispondono a due domande diverse. Il rosso esterno non dice sempre «il
+nostro codice è rotto», e leggerlo così porterebbe a spegnerlo.
+⚠️ **Isolato** (le altre 5 teste della notte sono verdi). **Se si ripete è un pattern**, e
+allora la domanda è per Hostinger, non per noi.
+
 ### ✅ 2026-08-16 (7) — **LA LISTA DEI RIMBORSI DOVUTI È COSTRUITA** (il difetto (6) è chiuso sul computer)
 
 **Cosa c'è adesso che ieri non c'era.** Chi ha pagato, ha cancellato e aspetta i suoi soldi

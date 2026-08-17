@@ -11,6 +11,79 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🧭 2026-08-17 (18) — **PASSAGGIO DI CONSEGNE (D21) — contesto letto: 58%**
+
+> ⚠️ **Percentuale letta con `/context` dal fondatore: 58%.** Oltre la soglia dei 50, quindi
+> questo blocco esiste per obbligo, non per scelta. ⛔ **Il lavoro qui sotto è stato fermato
+> di proposito, non dimenticato.**
+>
+> ### ✅ COSA È CHIUSO (tutto unito in `master`, CI verde)
+> `a0de70b` la lista dei rimborsi · `309e1da` i due freni scoperti dalla mutazione ·
+> `4fe1748` oracolo indipendente e concorrenza vera. Batteria dei 10 collaudi: **10 su 10 con
+> esito**, nessun «parziale». Mutazione **60 su 60 uccisi**. Suite `Ran 5768 · OK · uscita 0`.
+>
+> ### 🔴 IL LAVORO CHE ASPETTA LA CHAT NUOVA: **23 allarmi CodeQL da giudicare**
+> Il cruscotto ha **164 allarmi aperti** (misurato dall'API il 2026-08-17), **65 gravi**.
+> Di questi:
+> - **135** sono la famiglia «valore scritto nel registro» (`py/log-injection`,
+>   `py/clear-text-logging-sensitive-data`): **stessa famiglia dei 14 archiviati oggi**,
+>   quasi certamente falsi positivi come quelli — ⛔ ma *quasi certamente* **non è**
+>   *verificato*, e sono su codice che nessuno ha guardato;
+> - **6** `py/path-injection`: **letti e giudicati falsi positivi** oggi. La difesa è vera e
+>   doppia (`percorso_statico_sicuro`, `fase83_server.py:9893`: basename → niente dotfile →
+>   niente NUL → `realpath` + `commonpath`). CodeQL non sa leggere `basename`/`commonpath`
+>   come barriere. ⚠️ Giudicati **leggendo**, non con un collaudo;
+> - **23 MAI GUARDATI**, ed è qui che si comincia. Numeri d'allarme **bassi (#7-#28, #66)**:
+>   sono i **più vecchi del repository**, fermi da quando CodeQL è stato acceso.
+>
+> ```
+> #27 #28  [GRAVE] py/clear-text-storage-sensitive-data   fase83_server.py:2252 e :2277
+> #7 #8 #9 #10 #11 #12 #13  [GRAVE] py/weak-sensitive-data-hashing
+>          fase105_identity_gate.py:26 · fase107_traduzione_annunci.py:33
+>          fase59_concierge.py:101 · fase87_stripe_webhook.py:63
+>          fase83_server.py:2430 e :9063 · test_profondo_lingue.py:192
+> #19..#25 [GRAVE] py/incomplete-url-substring-sanitization  (6 su 7 nei COLLAUDI)
+> #14 #15  [GRAVE] py/insecure-protocol   fase197_canale_nostr.py:180 ·
+>                                          collaudi/verifica_produzione.py:183
+> #26      [GRAVE] py/bad-tag-filter      test_caos_rete.py:32
+> #16 #17  [medio] py/http-response-splitting  fase83_server.py:10135 e :10163
+> #66      [medio] py/stack-trace-exposure     fase36_booking_api.py:71
+> #18      [medio] py/overly-large-range       fase200_campagna_persuasiva.py:160
+> ```
+>
+> ⛔ **DA DOVE COMINCIARE, e perché:** `#27` e `#28` — **memorizzazione in chiaro di dati
+> sensibili**. È l'unica classe **diversa** dal logging: lì non si tratta di una riga scritta
+> nel registro, ma di un dato che **resta su disco**. Poi `py/weak-sensitive-data-hashing`
+> (7): se uno di quei sette è su una **password** o su un **token**, è vero. Gli altri stanno
+> quasi tutti nei collaudi, e valgono meno.
+>
+> ⛔ **COME SI GIUDICANO** (già fatto oggi sui 14, si copia il metodo): si legge il punto, si
+> cerca la barriera, e **se la barriera c'è si archivia col motivo** — API `PATCH
+> /repos/edilmax/Core_Auto/code-scanning/alerts/<numero>`, `dismissed_reason: "false
+> positive"`, `dismissed_comment` **massimo 280 caratteri** (misurati prima di mandare: il
+> primo tentativo di oggi è stato rifiutato con 422 a 323 caratteri).
+> ⛔ **Se la barriera NON c'è, non si archivia: si ripara**, e prima la guardia (D20).
+> 💡 E se si archivia, il motivo dev'essere verificabile: sui 14 di oggi regge perché **un
+> mutante nel catalogo rende la CI rossa se il filtro sparisce** — senza quello, un
+> «archiviato» è una promessa che nessuno ricontrolla.
+>
+> ### ⚠️ DUE COSE MISURATE OGGI CHE NON SONO DIFETTI, MA VANNO SAPUTE
+> 1. **La produzione ha avuto un buco di rete alle 05:47 UTC del 17/08.** La testa esterna ha
+>    visto `curl: (28) timed out, HTTP 000`. Indagato: nella finestra 05:40-05:55 a nginx sono
+>    arrivate **2 richieste in tutto**, tutte e due dal watchdog interno, tutte e due `200` —
+>    **quella di GitHub non è mai arrivata**. Applicazione viva (53 giorni di uptime, container
+>    «healthy», nessun riavvio). Rete fra GitHub e il server, non nostra. Isolato: le altre 5
+>    teste della stessa notte sono verdi. 💡 **Se si ripete, allora è un pattern e va guardato
+>    con Hostinger.**
+> 2. **Il pannello dei rimborsi si ricarica ogni 60 s** e ogni ricarica può fare fino a ~100
+>    chiamate a Stripe. Con 0 annunci costa **zero**; quando ci saranno prenotazioni vere, il
+>    **controllo inverso** («Stripe ha rimborsato qualcosa che per noi è vivo?») va diradato:
+>    è una riconciliazione contabile, non ha bisogno di girare ogni minuto.
+>
+> ### ⛔ E RESTA FUORI, come prima
+> Il **deploy** (il VPS è a `bfcca09`, indietro di tre unioni): serve **«autorizzato»** e il
+> protocollo D17. E il rimborso **automatico** resta spento per decisione del fondatore.
+
 ## 🚦 2026-08-16 (17) — ✅ **LA LISTA DEI RIMBORSI È COSTRUITA — il difetto (16) è chiuso sul computer**
 
 > ⚠️ **NON committato, NON in produzione.** Sta sul computer, provato. Serve «procedi al
@@ -2443,7 +2516,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: a0de70b
+CONSEGNE AGGIORNATE A: 4fe1748
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
