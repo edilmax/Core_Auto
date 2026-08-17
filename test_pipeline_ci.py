@@ -6372,5 +6372,76 @@ class TestIlGuardianoDelPianoDeiSoldiHaANCORAIDENTI(unittest.TestCase):
         self.assertTrue(pds.NON_CONTROLLO, "il giudizio non dichiara piu' i suoi limiti")
 
 
+class TestLaListaDelleTecnicheStaInUnPostoSolo(unittest.TestCase):
+    """⛔ UNA LISTA SOLA, UN FILE SOLO, LETTA DA QUALUNQUE CHAT.
+
+    Ordine del fondatore, 2026-08-17: *«va corretto sono 11 e deve rimanere solo quello e
+    nessun altro file cosi' evitiamo che capiti ancora e quello va letto da qualunque chat»*.
+
+    **Il fatto che l'ha generata, e non e' un'ipotesi.** `RIPRENDI_QUI.md` conteneva una
+    SECONDA lista delle tecniche di verifica -- «i sei metodi AWS», con la sua tabella -- e una
+    sessione intera ha ragionato su quel numero: ha perfino cercato online tecniche «mancanti»
+    che il progetto ha gia' in casa, arrivando a un passo dall'aggiungere strumenti nuovi in un
+    progetto che ha bisogno del contrario. La lista vera dice **11**, e sta in
+    `REGISTRO_INGEGNERIA.md` fra `TECNICHE-INIZIO`/`TECNICHE-FINE`.
+
+    Tre guardie, perche' i modi di rompersi sono tre: il blocco **sparisce** · il blocco
+    **mente sul proprio totale** · qualcuno apre una **seconda lista** da un'altra parte.
+    """
+
+    def _blocco(self):
+        import collaudi.regole_avvio as ra
+        return ra, ra.leggi_tecniche(QUI)
+
+    def test_IL_BLOCCO_C_E_E_DICHIARA_IL_SUO_TOTALE(self):
+        ra, blocco = self._blocco()
+        self.assertTrue(
+            blocco, "il blocco delle tecniche non c'e' piu' in REGISTRO_INGEGNERIA.md "
+                    "(marcatori TECNICHE-INIZIO / TECNICHE-FINE): senza di lui il gancio "
+                    "d'avvio non ha niente da stampare e ogni chat riparte a indovinare")
+        _contate, dichiarate = ra.conta_tecniche(blocco)
+        self.assertIsNotNone(
+            dichiarate, "il blocco non dichiara `TOTALE DICHIARATO: N`: senza quel numero "
+                        "nessuna macchina puo' accorgersi che la lista e' cambiata, e torna a "
+                        "essere un elenco custodito dalla buona volonta' (D22)")
+
+    def test_IL_NUMERO_DICHIARATO_E_QUELLO_CONTATO(self):
+        """⛔ Il numero non si crede, si conta. Quello delle regole ha mentito TRE volte
+        (75 -> 103 -> 104) finche' a scriverlo era una persona invece di una macchina."""
+        ra, blocco = self._blocco()
+        contate, dichiarate = ra.conta_tecniche(blocco)
+        self.assertEqual(
+            contate, dichiarate,
+            "la lista delle tecniche MENTE SU SE STESSA: dichiara %r, ne ho contate %d. "
+            "Correggi `TOTALE DICHIARATO:` oppure la lista." % (dichiarate, contate))
+
+    def test_NESSUN_ALTRO_FILE_TIENE_UNA_SECONDA_LISTA(self):
+        """⛔ La seconda lista e' il difetto, non la ridondanza. Qui si cerca in TUTTI i
+        documenti ufficiali la frase che dichiara un totale diverso, e la si pretende assente
+        -- tranne dentro il blocco vero, che la cita come storia di cio' che e' stato corretto.
+        """
+        ra, blocco = self._blocco()
+        sospetta = re.compile(r"(?:\b6\b|sei|SEI)\s+metodi", re.IGNORECASE)
+        colpevoli = []
+        for nome in ("README.md", "RIPRENDI_QUI.md", "DEPLOY.md", "CLAUDE.md",
+                     "REGISTRO_INGEGNERIA.md"):
+            percorso = os.path.join(QUI, nome)
+            if not os.path.exists(percorso):
+                continue
+            with io.open(percorso, encoding="utf-8") as f:
+                testo = f.read()
+            if nome == "REGISTRO_INGEGNERIA.md" and blocco:
+                testo = testo.replace(blocco, "")      # il blocco vero puo' citare la storia
+            for riga in testo.splitlines():
+                if sospetta.search(riga):
+                    colpevoli.append("%s: %s" % (nome, riga.strip()[:110]))
+        self.assertEqual(
+            colpevoli, [],
+            "c'e' una SECONDA lista dei metodi di verifica fuori dal blocco unico: e' cosi' "
+            "che il 2026-08-17 una sessione ha ragionato sul numero sbagliato. Togli la "
+            "seconda e mettici un rimando a REGISTRO_INGEGNERIA.md "
+            "(TECNICHE-INIZIO/TECNICHE-FINE). Trovate: %r" % (colpevoli,))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

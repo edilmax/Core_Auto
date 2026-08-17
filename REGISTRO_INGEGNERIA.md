@@ -63,36 +63,56 @@
 ⛔ **A, 1 e 2 vanno fatti PRIMA di scrivere un solo test nuovo**: misurare con strumenti che
 mentono è peggio che non misurare. ⛔ **3 e 4 vanno PRIMA del Blocco 2 dei soldi**, o si butta
 via metà del lavoro.
-🟡 **Fuori piano ma prima di tutto — AGGIORNATO 2026-08-17, ed è cambiato.** Era: *«il rimborso
-all'ospite non parte da solo»*. ✅ **I soldi adesso partono davvero** e la lista è in produzione
-(`9bf294b`). ⛔ **MA contando le strade se n'è scoperto il seguito, ed è più grosso:**
+🟢 **Fuori piano ma prima di tutto — AGGIORNATO 2026-08-17 (secondo giro).** ✅ **LE SETTE
+STRADE ORA SCRIVONO TUTTE NEL GIORNALE**, quindi entrano tutte nella stessa lista. Ognuna
+riparata col metodo D20: guardia scritta, **vista rossa** sul codice di produzione,
+riparazione, guardia rivista verde.
 
-**SETTE strade portano a «il cliente ha dei soldi da riavere». TRE arrivano nella lista, QUATTRO no.**
-
-| # | strada | scrive nel giornale? | in lista? |
-|---|---|---|---|
-| 1 | l'ospite cancella (`_cancella_prenotazione`) | ✅ | ✅ |
-| 2 | l'host cancella (`_host_cancella`) | ✅ | ✅ |
-| 3 | l'admin rimborsa dal pannello (`_admin_rimborso`) | ✅ | paga subito |
-| 4 | **controversia risolta** (`_admin_controversia_risolvi`) | ❌ | 🔴 **NO** |
-| 5 | **pagamento tardivo su stanza già ripresa** (`fase83:7783`) | ❌ | 🔴 **NO** |
-| 6 | **anticipo tardivo, stessa cosa** (`fase83:7860`) | ❌ | 🔴 **NO** |
-| 7 | **pagamento su prenotazione non confermabile** (`fase83:7755`) | ❌ | 🔴 **NO** — scrive solo un ERROR nel log |
+| # | strada | nel giornale | in lista | pulsante |
+|---|---|---|---|---|
+| 1 | l'ospite cancella (`_cancella_prenotazione`) | ✅ | ✅ | ✅ |
+| 2 | l'host cancella (`_host_cancella`) | ✅ | ✅ | ✅ |
+| 3 | l'admin rimborsa dal pannello (`_admin_rimborso`) | ✅ | paga subito | — |
+| 4 | controversia risolta (`_admin_controversia_risolvi`) | ✅ **17/08** | ✅ | ⚠️ **no, ed è voluto** |
+| 5 | pagamento tardivo su stanza ripresa (`_conferma_pagamento`) | ✅ **17/08** | ✅ | ✅ |
+| 6 | anticipo tardivo «paga in struttura» (`_conferma_struttura`) | ✅ **17/08** | ✅ | ✅ |
+| 7 | pagamento su prenotazione non confermabile (`_conferma_pagamento`) | ✅ **17/08** | ✅ | ✅ |
 
 ⚠️ **Il sistema anti-doppia-prenotazione FUNZIONA** (`reblock:` con chiave fresca, e il commento
 spiega il difetto del replay che era stato chiuso): due persone nella stessa stanza non succede.
 💡 **Ed è proprio perché si rifiuta che nasce il debito**: il cliente ha pagato e non ha la
 stanza. Il sovra-affitto è evitato, il **rimborso** è quello che avanza.
 
-⛔ **RIPARAZIONE: le quattro strade devono scrivere nel giornale** quanto spetta all'ospite
-(`_giornale(tipo="rimborso", …)`, una riga per strada). Da lì entrano tutte nella stessa lista.
-**Prima questo, poi l'interruttore** — o si accende la luce in tre stanze su sette.
+💰 **Sulla 6 la cifra NON è il totale, è l'ANTICIPO** (`anticipo_online_cents`): nella «paga in
+struttura» online arriva solo quello, il saldo lo incassa l'host di persona. Restituire il
+totale renderebbe denaro mai ricevuto — perdita nostra su un disguido di nessuno. La guardia
+pretende che l'anticipo sia **minore** del totale, o dichiara di non star provando niente.
 
-🎛️ **E POI L'INTERRUTTORE, chiesto dal fondatore il 2026-08-17.** Il rimborso automatico
+🔴 **E RIPARANDOLE SE N'È TROVATA UNA A MONTE, PIÙ GRAVE: il pulsante spariva quasi sempre.**
+`fase162.pulisci_vecchi()` cancellava i record in stato `rimborsato` più vecchi di 26 ore
+**contate da `creato_ts`, cioè dalla PRENOTAZIONE** (`fase162:119`), non dalla cancellazione.
+Con quel record se ne andava lo `stripe_pi`, che vive **solo lì**: chi prenotava il 1° settembre
+e cancellava il 20 perdeva il pulsante alla **prima** pulizia utile — il caso NORMALE, non uno
+raro. Tutti i documenti dicevano «chi aspetta da più di 26 ore», dando per scontato che
+l'orologio partisse dall'attesa: era una premessa sbagliata, e sopra ci era stata costruita una
+rinuncia deliberata (`assertFalse(bottone)`). ✅ **Chiuso**: `rimborsato` non si purga più — lo
+stato gemello `cancellata_host` non veniva già purgato, erano due stati di chiusura trattati in
+modo diverso senza motivo. Guardia: `test_LA_PURGA_NON_PUO_PORTARE_VIA_CHI_DEVE_RICEVERE_SOLDI`.
+Sei collaudi davano per buona la vecchia regola e sono stati riportati sul loro vero invariante
+(costruiscono «il pendente non c'è» con `rimuovi()`, non con la politica di ritenzione).
+
+⚠️ **LIMITE DICHIARATO SULLA STRADA 4** (D18 punto 3): la riga compare, il **pulsante no**. Lì
+il soggiorno c'è stato davvero, quindi le date sono legittimamente occupate e il freno «date
+liberate» non passa; nello split parziale scatta anche «l'host è già stato pagato», perché la
+sua quota parte subito. Renderla premibile significa **allentare due freni sui soldi**: è una
+decisione del fondatore, non un lavoro tecnico. Il rimborso resta manuale da Stripe, come dice
+già la `nota` della rotta.
+
+🎛️ **ORA TOCCA ALL'INTERRUTTORE, chiesto dal fondatore il 2026-08-17.** Il rimborso automatico
 **esiste già** ed era provato: mancava solo che partisse dalla strada dell'ospite. La decisione
 di farlo a mano è **reversibile per scelta, non per mancanza**. Serve un comando nel pannello:
 **«a mano» / «da solo»**, che il fondatore gira quando vuole. ⛔ Vale per **tutte e sette** le
-strade, non per quelle che ci ricordiamo.
+strade, non per quelle che ci ricordiamo — e adesso tutte e sette sono davvero in lista.
 <!-- PIANO-FINE -->
 
 ## 1) 🟢 ACCESO e LIVE in produzione (il prodotto reale, stack "CasaVIP", fase57+)
@@ -512,14 +532,66 @@ memoria: la memoria di sessione non viaggia con la chiavetta, e un traguardo che
 posto solo è un traguardo che si perde** (è già successo alle direttive del fondatore, entrate
 nel repository per questo stesso motivo).
 
-**La misura che ha cambiato la strategia.** Cercando **11** tecniche di verifica fra le più
-avanzate che esistano, **10 erano già in casa** (concorrenza 69 file · seed deterministici 53 ·
-replay 47 · oracolo indipendente 23 · caos 12 · mutazione 8 · hypothesis 8 · model-based 7 ·
-z3 5 · atheris 4). L'unico zero era **metamorfico**.
-⛔ **Quindi il collo di bottiglia NON è la profondità del metodo, è la LARGHEZZA:** dieci
-tecniche applicate al 30% dei moduli dei soldi. Aggiungere strumenti **allontana** dalla fine
-invece di avvicinarla — «trova tutto» è il modo in cui i progetti come questo non finiscono
-mai. Serve una lista **chiusa**, non una lunga.
+<!-- TECNICHE-INIZIO: lo legge collaudi/regole_avvio.py e le CONTA. Un posto solo, mai ricopiata. -->
+### 🔬 LE TECNICHE DI VERIFICA — LA LISTA UNICA E CHIUSA
+
+TOTALE DICHIARATO: 11
+
+⛔⛔ **QUESTE 11 SONO NOSTRE. AWS NON C'ENTRA.** Va detto in cima perché confonderle è già
+costato una sessione: questa lista è stata contata **da noi** il 2026-08-11 cercando le
+tecniche di verifica più avanzate che esistono (10 le avevamo già, 1 no). AWS è **una fonte
+esterna con cui ci confrontiamo**, non l'origine di questo elenco, e il suo articolo enumera
+un insieme **diverso** — che si sovrappone al nostro ma non coincide. ⛔ E non si confonde
+nemmeno con i **10 collaudi obbligatori** di `CLAUDE.md`: quelli non sono tecniche, sono dieci
+**punti di vista** da attraversare in ordine, mutazione per ultima. Tre liste, tre scopi.
+
+⛔ **Questa è l'UNICA lista delle tecniche del progetto, e sta solo qui.** Non se ne aprono
+altre, in nessun file: il 2026-08-17 una seconda lista («i sei metodi AWS», scritta in
+`RIPRENDI_QUI.md`) ha fatto ragionare una sessione intera sul numero sbagliato. Due liste che
+dicono cose diverse sono il difetto, non la ridondanza. ⛔ E il numero qui sopra **non si
+crede**: `collaudi/regole_avvio.py` conta le righe e **grida** se non torna — lo stesso
+conteggio delle regole ha mentito tre volte (75 → 103 → 104) finché a contarlo era una persona.
+
+- **concorrenza** — due cose nello stesso istante: la gara si vede? · in casa
+- **seed deterministici** — lo stesso guasto si riproduce a comando, non per fortuna · in casa
+- **replay** — il fatto già avvenuto si riesegue e deve dare lo stesso esito · in casa
+- **oracolo indipendente** — un secondo conto, scritto DIVERSO, che ricalcola da zero · in casa
+- **caos** — si spegne qualcosa a caso mentre gira · in casa
+- **mutazione** — si rompe il motore di proposito: i test se ne accorgono? · in casa
+- **test a proprietà (hypothesis)** — non i casi che scegliamo noi, centinaia generati · in casa
+- **model-based** — la macchina degli stati dice quali transizioni esistono · in casa
+- **prove formali (z3)** — teoremi su invarianti, non esempi · in casa
+- **fuzzing (atheris)** — ingressi assurdi a valanga · in casa
+- **metamorfico** — relazioni fra due esiti invece di un valore atteso · ✅ **ACCESO il
+  2026-08-17**, e per la prima volta: `TestRelazioniMetamorficheSullaControversia` in
+  `test_property_soldi.py`, sull'aritmetica dello split di una controversia. ⛔ Al primo giro ha
+  trovato una relazione **FALSA scritta da me**, non un difetto del prodotto (la divisione
+  intera non si distribuisce sul raddoppio: 1 al 50% da' 0, ma 2 al 50% da' 1) — ed è
+  esattamente per questo che vale. ⚠️ **Resta da allargare**: è accesa su UN punto, non su
+  tutta l'aritmetica del denaro
+
+⛔ **IL COLLO DI BOTTIGLIA NON È LA PROFONDITÀ, È LA LARGHEZZA.** Dieci tecniche in casa,
+applicate a circa un terzo dei moduli dei soldi. **Aggiungere strumenti ALLONTANA dalla fine**
+— «trova tutto» è il modo in cui i progetti come questo non finiscono mai. La lista è **chiusa**:
+una tecnica nuova entra solo col via del fondatore, e la domanda giusta non è «quale ci manca?»
+ma «a quali moduli non è ancora applicata?». ⚠️ **Le larghezze non si scrivono qui**: le conta
+uno strumento. Un numero scritto a mano in un documento invecchia (D22); l'ultima misura è del
+2026-08-11 e va rifatta, non ricopiata.
+
+⚠️ **CORREZIONE 2026-08-17 — e il suo limite dichiarato.** Un altro file diceva «AWS: sei
+metodi». È **incompleto**: Brooker e Desai, *Systems Correctness Practices at AWS* (ACM Queue
+22(6), 2024 · CACM 2025) enumerano **model checking · fuzzing · test a proprietà · iniezione di
+guasti · simulazione deterministica · simulazione a eventi · validazione a tempo d'esecuzione
+delle tracce**, più le specifiche formali usate come **oracolo**, e nominano strumenti che noi
+non tracciamo (**Kani** per prove sul CODICE, **Dafny**, **P**). ⛔ **Non ho letto il testo
+integrale** (ACM ha risposto 403): la lista viene da due riassunti concordi e va riconfermata
+sul PDF prima di considerarla definitiva — questo è «lo dice il documento», non «misurato».
+💡 E per il suo DATABASE (Aurora DSQL) AWS usa metodi formali + **simulazione deterministica** +
+**iniezione di guasti**: tutte e tre già nelle 11. ⛔ Il **TLP** (Ternary Logic Partitioning,
+SQLancer/Rigger) **NON è di AWS**: è ricerca sui database, e non va attribuito ad AWS. Lo si usa
+come *forma* della prova sull'SQL, con hypothesis + oracolo indipendente — senza aggiungere
+niente alla lista (guardia: `TestLaPurgaNonPuoPerdereChiAspettaISoldi` in `test_property_soldi.py`).
+<!-- TECNICHE-FINE -->
 
 > **«Finito» non è «tutto verde».** È: *per ogni modo in cui questo può rompersi, qualcuno se
 > ne accorgerebbe.* Zero difetti non è raggiungibile; il traguardo giusto è **nessun difetto

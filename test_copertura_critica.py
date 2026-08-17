@@ -905,15 +905,19 @@ class TestPagamentiPendentiRamiDErrore(unittest.TestCase):
         self.assertIs(self.pp.segna_invito_recensione("R1"), True)
         self.assertEqual(self.pp.da_invitare_recensione(oggi="2027-05-05"), [])
 
-    def test_pulisci_vecchi_toglie_solo_scaduti_e_rimborsati(self):
+    def test_pulisci_vecchi_toglie_gli_scaduti_e_LASCIA_i_rimborsati(self):
+        """⛔ Prima ne toglieva DUE. Dal 2026-08-17 'rimborsato' non si purga: quel record e'
+        l'unico posto dove vive lo `stripe_pi`, cioe' l'unico modo di restituire i soldi."""
         self._reg("R1")
         self._reg("R2")
         self.pp.scadi("R1")
         self.pp.marca_da_rimborsare("R2")
         self._reg("R3")
         self.assertEqual(self.pp.pulisci_vecchi(ora_ts=1000), 0)      # troppo recenti
-        self.assertEqual(self.pp.pulisci_vecchi(ora_ts=1000 + 93600 + 1), 2)
+        self.assertEqual(self.pp.pulisci_vecchi(ora_ts=1000 + 93600 + 1), 1)
         self.assertIsNone(self.pp.info("R1"))
+        self.assertEqual(self.pp.info("R2")["stato"], "rimborsato",
+                         "buttato via il record di chi deve ancora ricevere i soldi")
         self.assertEqual(self.pp.info("R3")["stato"], "in_attesa")    # il vivo resta
 
     def test_prospetto_tariffa_tecnica_separa_incassato_e_PERDITA(self):

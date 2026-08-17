@@ -4758,6 +4758,25 @@ class RouterHTTP:
                     pd.registra_maturato(rif, riga["host_id"], quota_host, riga["valuta"])
             # la parte che spetta all'host parte da sola verso il suo conto (Connect)
             self._trasferisci_all_host(rif, quota_host)
+        # SCATOLA NERA DEL RIMBORSO. Senza questa riga la decisione dell'arbitro vive solo
+        # nella risposta HTTP di questo istante, e il cliente non entra nella lista di chi
+        # aspetta i suoi soldi: esiste solo nella memoria di chi ha arbitrato.
+        # ⚠️ LIMITE DICHIARATO: la riga comparirà SENZA pulsante. Qui il soggiorno c'è stato
+        # davvero, quindi le date sono legittimamente occupate e il freno «date liberate» non
+        # passa; nello split parziale scatta anche «l'host è già stato pagato», perché la sua
+        # quota parte subito qui sopra. È voluto: si chiude la cecità, non si allenta un freno
+        # sui soldi. Il rimborso Stripe resta manuale, come dice già la `nota` qui sotto.
+        try:
+            _pp = getattr(self._sys, "pagamenti_pendenti", None)
+            _dj = json.loads(((_pp.info(rif) if _pp is not None else None) or {})
+                             .get("corpo_json") or "{}")
+        except Exception:
+            _dj = {}
+        self._giornale(tipo="rimborso", riferimento=rif, soggetto="ospite:" + str(rif),
+                       importo_cents=int(out.get("ospite_rimborso_cents", rimborso) or 0),
+                       valuta=_dj.get("valuta") or "EUR",
+                       evento_id="rimborso_controversia:" + str(rif),
+                       causale="rimborso deciso dall'arbitro (controversia risolta)")
         self._email_esito_controversia(rif, out.get("ospite_rimborso_cents", rimborso))
         return 200, {"stato": "risolta", "riferimento": rif,
                      "rimborso_cliente_cents": out.get("ospite_rimborso_cents", rimborso),
@@ -7755,6 +7774,27 @@ class RouterHTTP:
                 logger.error("RIMBORSARE: pagamento ricevuto per '%s' in stato '%s' (non "
                              "confermabile: prenotazione cancellata/non approvata). Rimborsare "
                              "manualmente dal dashboard Stripe.", rif, stato)
+                # SCATOLA NERA DEL RIMBORSO. I soldi sono arrivati per una prenotazione che
+                # non si può onorare: vanno restituiti per intero. Senza questa riga il
+                # cliente non entra nella lista dei rimborsi dovuti (che nasce dal giornale)
+                # e l'unica traccia resta il registro qui sopra — era la sola delle sette
+                # strade a non lasciare nemmeno un segno nel database.
+                # ⛔ NON si marca il pendente: in stato 'in_attesa_host' le date possono
+                # essere ancora bloccate, e portarlo a 'rimborsato' lo toglierebbe allo
+                # sweeper lasciandole occupate per sempre. La riga compare lo stesso e
+                # dichiara da sé cosa manca perché il pulsante non ci sia.
+                try:
+                    _dj = json.loads(rec.get("corpo_json") or "{}")
+                except Exception:
+                    _dj = {}
+                self._giornale(tipo="rimborso", riferimento=rif,
+                               soggetto="ospite:" + str(rif),
+                               importo_cents=int(_dj.get("totale_cents", 0)
+                                                 or _dj.get("prezzo_guest_cents", 0) or 0),
+                               valuta=_dj.get("valuta") or "EUR",
+                               evento_id="rimborso_non_confermabile:" + str(rif),
+                               causale="rimborso dovuto: pagamento su prenotazione non "
+                                       "confermabile (stato %s)" % stato)
                 return
             # PAGA IN STRUTTURA: percorso SEPARATO. L'anticipo e' nostro, il saldo (con la
             # tassa) lo incassa l'host DI PERSONA -> nessuna tassa da registrare, nessun payout
@@ -7783,6 +7823,22 @@ class RouterHTTP:
                         pp.marca_da_rimborsare(rif)
                     except Exception:
                         pass
+                    # SCATOLA NERA DEL RIMBORSO. Senza questa riga il cliente non entra nella
+                    # lista dei rimborsi dovuti -- che nasce dal giornale -- e l'unica traccia
+                    # resta il registro qui sopra, che qualcuno deve RICORDARSI di leggere: un
+                    # registro non è una coda di lavoro. Non ha avuto NIENTE in cambio, quindi
+                    # gli spetta tutto il pagato. Idempotente su `evento_id`.
+                    try:
+                        _dj = json.loads(rec.get("corpo_json") or "{}")
+                    except Exception:
+                        _dj = {}
+                    self._giornale(tipo="rimborso", riferimento=rif,
+                                   soggetto="ospite:" + str(rif),
+                                   importo_cents=int(_dj.get("totale_cents", 0)
+                                                     or _dj.get("prezzo_guest_cents", 0) or 0),
+                                   valuta=_dj.get("valuta") or "EUR",
+                                   evento_id="rimborso_tardivo:" + str(rif),
+                                   causale="rimborso dovuto: pagamento tardivo su stanza presa")
                     return
                 # ri-bloccata con successo: i flussi futuri (cancellazione/rimborso) devono
                 # accoppiarsi al blocco ATTIVO -> registro la chiave fresca sul record.
@@ -7860,6 +7916,20 @@ class RouterHTTP:
                         pp.marca_da_rimborsare(rif)
                 except Exception:
                     pass
+                # SCATOLA NERA DEL RIMBORSO. ⛔ L'importo è l'ANTICIPO, non il totale: online
+                # è arrivato solo quello, il saldo lo avrebbe incassato l'host di persona.
+                # Restituire il totale renderebbe denaro mai ricevuto — una perdita nostra su
+                # un disguido che non è colpa di nessuno. Idempotente su `evento_id`.
+                try:
+                    _dj = json.loads(rec.get("corpo_json") or "{}")
+                except Exception:
+                    _dj = {}
+                self._giornale(tipo="rimborso", riferimento=rif,
+                               soggetto="ospite:" + str(rif),
+                               importo_cents=int(_dj.get("anticipo_online_cents", 0) or 0),
+                               valuta=_dj.get("valuta") or "EUR",
+                               evento_id="rimborso_anticipo_tardivo:" + str(rif),
+                               causale="rimborso dovuto: anticipo su stanza già presa")
                 return
             try:
                 pp = getattr(self._sys, "pagamenti_pendenti", None)

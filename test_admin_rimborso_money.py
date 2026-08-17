@@ -590,6 +590,414 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
                 return r
         return None
 
+    def _paga_tardi_su_stanza_rubata(self, ci, co, pi_id):
+        """STRADA 5: il cliente prenota, l'attesa scade, un ALTRO si prende la stanza, e solo
+        dopo arriva il suo pagamento. Il re-blocco fallisce -- ed e' GIUSTO che fallisca, e'
+        il sistema anti-doppia-prenotazione che fa il suo dovere -- ma il cliente resta con i
+        soldi fuori e senza stanza."""
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": "casa", "check_in": ci, "check_out": co, "party": 2})
+        self.assertEqual(s, 200, q)
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "cli@ld.it"})
+        self.assertEqual(s, 201, b)
+        rif = b["riferimento"]
+        pp = self.sys.pagamenti_pendenti
+        rec = pp.info(rif)
+        self.assertIsNotNone(rec, "setup: il pendente deve esistere")
+        # lo sweeper: attesa scaduta -> 'scaduto', e le date tornano libere
+        pp.scadi(rif)
+        self.sys.inventario.rilascia("casa", ci, co,
+                                     idem_key=(rec.get("idem_key") or ("hold_" + rif)))
+        # un altro cliente si prende la stanza, e ne ha pieno diritto
+        ladro = self.sys.inventario.blocca("casa", ci, co, idem_key="veloce_" + rif)
+        self.assertTrue(getattr(ladro, "ok", False),
+                        "setup: dopo il rilascio la stanza doveva essere libera")
+        # ...e solo ADESSO arriva il pagamento del primo
+        pl = json.dumps({"type": "checkout.session.completed",
+                         "data": {"object": {"id": "cs_" + pi_id, "payment_intent": pi_id,
+                                             "metadata": {"riferimento": rif}}}})
+        self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
+                        {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
+        self.assertEqual(pp.info(rif)["stato"], "rimborsato",
+                         "setup: stanza presa da altri -> il pagatore tardivo va rimborsato")
+        return rif
+
+    # ── LE STRADE CHE NON ARRIVANO IN LISTA ─────────────────────────────────
+    # Contate il 2026-08-17 su ordine del fondatore («conta tutti i percorsi, senza fare lo
+    # sbaglio che vedevate solo uno e ignoravate il resto»): SETTE strade portano a «il
+    # cliente ha dei soldi da riavere», TRE ci arrivano. Queste sono le altre.
+    def test_STRADA_5_PAGAMENTO_TARDIVO_SU_STANZA_GIA_PRESA_FINISCE_NELLA_LISTA(self):
+        """⛔ Il sistema anti-doppia-prenotazione FUNZIONA, e non e' quello il difetto: e'
+        proprio perche' si rifiuta di dare la stessa stanza due volte che il cliente resta
+        pagante e senza stanza. Il sovra-affitto e' evitato, il RIMBORSO e' quello che avanza.
+
+        Oggi quel punto marca il pendente e scrive `logger.error("RIMBORSARE: ...")` -- ma NON
+        scrive nel giornale immutabile, e la lista dei rimborsi dovuti nasce dal giornale.
+        Quel cliente non compare da nessuna parte: nessuno gli restituira' i soldi, perche'
+        nessuno sa che aspetta. Un registro che qualcuno deve RICORDARSI di leggere non e'
+        una coda di lavoro.
+
+        VISTO ROSSO sul codice di produzione: la riga in lista non c'e'."""
+        rif = self._paga_tardi_su_stanza_rubata("2026-09-18", "2026-09-20", "pi_tardivo_1")
+        pagato = self._totale_ospite(rif)
+        self.assertGreater(pagato, 0, "setup: il cliente deve aver pagato qualcosa")
+        riga = self._riga(self._lista(), rif)
+        self.assertIsNotNone(
+            riga, "ha PAGATO, non ha la stanza, e non compare fra chi aspetta un rimborso")
+        self.assertEqual(riga.get("dovuto_cents"), pagato,
+                         "non ha avuto NIENTE in cambio: gli spetta tutto quello che ha "
+                         "pagato, non una parte. Riga: %r" % (riga,))
+        self.assertTrue(riga.get("bottone"),
+                        "la riga c'e' ma non si puo' premere: %r" % (riga,))
+
+    def test_STRADA_7_PAGAMENTO_SU_PRENOTAZIONE_NON_CONFERMABILE_FINISCE_NELLA_LISTA(self):
+        """⛔ LA PIU' SILENZIOSA DELLE QUATTRO. Il cliente cancella PRIMA di pagare -- quindi
+        non gli spetta niente, e infatti nel giornale non finisce nessuna riga -- ma il suo
+        link di pagamento e' ancora vivo e il pagamento arriva lo stesso. Adesso i soldi sono
+        da noi e la prenotazione non c'e' piu': non si puo' confermare (e giustamente non si
+        conferma), quindi gli spetta tutto indietro.
+
+        Oggi quel punto scrive SOLO `logger.error("RIMBORSARE: ...")` e torna: niente
+        marchio, niente giornale, niente lista. E' l'unica delle sette che non lascia nemmeno
+        un segno nel database -- l'unica traccia e' una riga di registro.
+
+        VISTO ROSSO sul codice di produzione: la riga in lista non c'e'."""
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": "casa", "check_in": "2026-09-22",
+                       "check_out": "2026-09-24", "party": 2})
+        self.assertEqual(s, 200, q)
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "cli@ld.it"})
+        self.assertEqual(s, 201, b)
+        rif, vt = b["riferimento"], b["voucher_token"]
+        # cancella PRIMA di pagare: non ha versato niente, non gli spetta niente
+        s, canc = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual(s, 200, canc)
+        self.assertIsNone(self._riga(self._lista(), rif),
+                          "setup: senza aver pagato non deve esserci nessun rimborso dovuto")
+        # ...ma il link di pagamento era ancora vivo, e il pagamento arriva lo stesso
+        pl = json.dumps({"type": "checkout.session.completed",
+                         "data": {"object": {"id": "cs_tardi7", "payment_intent": "pi_tardi7",
+                                             "metadata": {"riferimento": rif}}}})
+        self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
+                        {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
+        riga = self._riga(self._lista(), rif)
+        self.assertIsNotNone(
+            riga, "i soldi sono arrivati su una prenotazione che non esiste piu', e chi li ha "
+                  "versati non compare fra chi aspetta un rimborso: l'unica traccia e' una "
+                  "riga di registro che qualcuno deve ricordarsi di leggere")
+        self.assertGreater(riga.get("dovuto_cents", 0), 0,
+                           "gli spetta indietro tutto quello che e' arrivato: %r" % (riga,))
+
+    def test_STRADA_6_ANTICIPO_TARDIVO_SU_STANZA_GIA_PRESA_FINISCE_NELLA_LISTA(self):
+        """⛔ COME LA 5, MA CON UNA CIFRA DIVERSA -- ed e' la cifra il punto. Nella «paga in
+        struttura» online arriva SOLO l'anticipo: il saldo lo incassa l'host di persona.
+        Restituire il totale renderebbe denaro che non abbiamo mai ricevuto, cioe' una
+        perdita nostra su un disguido che non e' colpa di nessuno.
+
+        VISTO ROSSO sul codice di produzione: la riga in lista non c'e'."""
+        import os
+        prec = os.environ.get("PAGA_STRUTTURA_ATTIVO")
+        os.environ["PAGA_STRUTTURA_ATTIVO"] = "1"
+        try:
+            ci, co = "2026-09-25", "2026-09-27"
+            s, q = self.g("POST", "/api/concierge/quote",
+                          {"alloggio_id": "casa", "check_in": ci, "check_out": co, "party": 2})
+            self.assertEqual(s, 200, q)
+            s, b = self.g("POST", "/api/concierge/book",
+                          {"quote_token": q["quote_token"], "email": "cli@ld.it",
+                           "modo_pagamento": "in_struttura"})
+            self.assertEqual(s, 201, b)
+            self.assertEqual(b.get("modo_pagamento"), "in_struttura",
+                             "setup: doveva essere una prenotazione in struttura: %r" % (b,))
+            anticipo = int(b["anticipo_online_cents"])
+            self.assertGreater(anticipo, 0, "setup: l'anticipo dev'essere > 0")
+            self.assertLess(anticipo, int(q["totale_cents"]),
+                            "setup: l'anticipo dev'essere MENO del totale, altrimenti la "
+                            "prova non distingue le due cifre e non prova niente")
+            rif = b["riferimento"]
+            pp = self.sys.pagamenti_pendenti
+            rec = pp.info(rif)
+            self.assertIsNotNone(rec, "setup: il pendente deve esistere")
+            pp.scadi(rif)
+            self.sys.inventario.rilascia("casa", ci, co,
+                                         idem_key=(rec.get("idem_key") or ("hold_" + rif)))
+            ladro = self.sys.inventario.blocca("casa", ci, co, idem_key="veloce_ps_" + rif)
+            self.assertTrue(getattr(ladro, "ok", False),
+                            "setup: dopo il rilascio la stanza doveva essere libera")
+            pl = json.dumps({"type": "checkout.session.completed",
+                             "data": {"object": {"id": "cs_ps", "payment_intent": "pi_ps",
+                                                 "metadata": {"riferimento": rif}}}})
+            self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
+                            {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
+            riga = self._riga(self._lista(), rif)
+            self.assertIsNotNone(
+                riga, "ha versato l'anticipo, non ha la stanza, e non compare fra chi aspetta "
+                      "un rimborso")
+            self.assertEqual(
+                riga.get("dovuto_cents"), anticipo,
+                "l'importo non e' l'anticipo: restituire il totale rende denaro mai incassato "
+                "online -- il saldo lo avrebbe preso l'host di persona. Riga: %r" % (riga,))
+        finally:
+            if prec is None:
+                os.environ.pop("PAGA_STRUTTURA_ATTIVO", None)
+            else:
+                os.environ["PAGA_STRUTTURA_ATTIVO"] = prec
+
+    def test_STRADA_4_CONTROVERSIA_RISOLTA_FINISCE_NELLA_LISTA(self):
+        """⛔ LA QUARTA STRADA, e l'unica diversa dalle altre tre: qui il soggiorno C'E' STATO.
+        L'arbitro decide che all'ospite spetta indietro una parte della somma in garanzia, la
+        risposta dice «esegui il rimborso Stripe di questo importo (manuale, controllato)» --
+        e li' finisce. Nessuna riga nel giornale, quindi nessuna riga nella lista: quel
+        cliente esiste solo nella memoria di chi ha arbitrato quel giorno.
+
+        ⚠️ LIMITE DICHIARATO (D18 punto 3): la riga compare, il PULSANTE no, e non e' un
+        difetto di questa riparazione. Il freno «date liberate» pretende una prenotazione
+        chiusa, e qui le date sono legittimamente occupate perche' l'ospite ha davvero
+        soggiornato. Rendere premibile questa riga significa allentare DUE freni sui soldi --
+        le date, e «l'host e' gia' stato pagato», che nello split parziale scatta di proposito
+        perche' la quota host parte subito. E' una decisione separata: qui si chiude la
+        cecita', non si tocca un freno.
+
+        VISTO ROSSO sul codice di produzione: la riga in lista non c'e'."""
+        rif, vt = self._prenota_e_paga("2026-09-28", "2026-09-30", "pi_controversia")
+        s, c = self.g("POST", "/api/garanzia/contesta", {"voucher_token": vt})
+        self.assertEqual(s, 200, "setup: la contestazione deve riuscire: %r" % (c,))
+        s, out = self.g("POST", "/api/admin/controversia/risolvi",
+                        {"riferimento": rif, "percentuale_ospite": 100},
+                        {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, "setup: l'arbitrato deve riuscire: %r" % (out,))
+        dovuto = int(out.get("rimborso_cliente_cents") or 0)
+        self.assertGreater(dovuto, 0,
+                           "setup: al 100%% all'ospite deve spettare qualcosa: %r" % (out,))
+        riga = self._riga(self._lista(), rif)
+        self.assertIsNotNone(
+            riga, "l'arbitro ha deciso che gli spettano dei soldi, e quel cliente non compare "
+                  "fra chi aspetta: la decisione vive solo nella risposta HTTP di quel momento")
+        self.assertEqual(riga.get("dovuto_cents"), dovuto,
+                         "l'importo in lista non e' quello deciso dall'arbitro: %r" % (riga,))
+
+    def test_LA_VALUTA_NEL_GIORNALE_E_QUELLA_VERA_NON_SEMPRE_EURO(self):
+        """⛔ QUESTO BUCO L'HA TROVATO LA MUTAZIONE, NON IO — ed e' il motivo per cui esiste.
+
+        Le quattro strade riparate il 2026-08-17 scrivono `valuta=_dj.get("valuta") or "EUR"`,
+        e TUTTE le guardie che avevo scritto erano in euro. Nove mutanti sono sopravvissuti
+        perche' nessun collaudo costruiva una prenotazione in valuta straniera. Il piu' grave
+        (`or` -> `and`) trasforma `"USD" and "EUR"` in **"EUR"**: una prenotazione in dollari
+        finirebbe nel giornale contabile come una riga in euro, e i due importi non sono
+        confrontabili. Un altro (`is not` -> `is`) svuota il record e ottiene lo stesso danno.
+
+        ⚠️ E non e' un caso di laboratorio: il nostro regolamento prevede annunci non-euro
+        PER PROGETTO (tariffa tecnica 7% + 0,25 in valuta diversa dall'euro), e il giornale
+        dichiara di non sommare mai valute diverse.
+
+        💡 Un buco di mutazione si chiude scrivendo il test che manca, non cambiando il codice:
+        cambiare il codice per far tacere un mutante significa scrivere «non guardate piu' li'»
+        su una riga che tocca i soldi."""
+        s, _ = self.g("POST", "/api/host/pubblica",
+                      {"slug": "casa-usd", "titolo": "Casa USD", "citta": "Roma",
+                       "prezzo_notte_cents": 50000, "capacita": 4, "valuta": "USD",
+                       "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
+        self.assertEqual(s, 201, "setup: l'annuncio in USD non e' stato pubblicato")
+        self.g("POST", "/api/host/disponibilita_range",
+               {"alloggio_id": "casa-usd", "da": "2026-10-01", "a": "2026-10-31",
+                "unita_totali": 1, "prezzo_netto_cents": 50000}, {"X-Host-Token": self.tok})
+
+        def valute(rif):
+            return [m.get("valuta") for m in self.sys.finanza.movimenti(str(rif))
+                    if (m.get("tipo") or "") == "rimborso"]
+
+        def paga(rif, pi_id):
+            pl = json.dumps({"type": "checkout.session.completed",
+                             "data": {"object": {"id": "cs_" + pi_id, "payment_intent": pi_id,
+                                                 "metadata": {"riferimento": rif}}}})
+            self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
+                            {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
+
+        def prenota(ci, co):
+            s, q = self.g("POST", "/api/concierge/quote",
+                          {"alloggio_id": "casa-usd", "check_in": ci, "check_out": co,
+                           "party": 2})
+            self.assertEqual(s, 200, q)
+            self.assertEqual(q.get("valuta"), "USD",
+                             "setup: il preventivo non e' in dollari, la prova non prova "
+                             "niente: %r" % (q,))
+            s, b = self.g("POST", "/api/concierge/book",
+                          {"quote_token": q["quote_token"], "email": "cli@usd.it"})
+            self.assertEqual(s, 201, b)
+            return b["riferimento"], b["voucher_token"]
+
+        # ── STRADA 5: pagamento tardivo su stanza ripresa, in dollari ──
+        ci, co = "2026-10-04", "2026-10-06"
+        rif5, _ = prenota(ci, co)
+        pp = self.sys.pagamenti_pendenti
+        rec = pp.info(rif5)
+        pp.scadi(rif5)
+        self.sys.inventario.rilascia("casa-usd", ci, co,
+                                     idem_key=(rec.get("idem_key") or ("hold_" + rif5)))
+        ladro = self.sys.inventario.blocca("casa-usd", ci, co, idem_key="veloce_usd")
+        self.assertTrue(getattr(ladro, "ok", False), "setup: la stanza doveva essere libera")
+        paga(rif5, "pi_usd_5")
+        self.assertEqual(valute(rif5), ["USD"],
+                         "STRADA 5: il giornale ha segnato la valuta sbagliata su una "
+                         "prenotazione in dollari: %r" % (valute(rif5),))
+
+        # ── STRADA 7: pagamento su prenotazione non confermabile, in dollari ──
+        rif7, vt7 = prenota("2026-10-10", "2026-10-12")
+        s, _ = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt7})
+        self.assertEqual(s, 200)
+        self.assertEqual(valute(rif7), [],
+                         "setup: senza aver pagato non deve esistere nessun rimborso")
+        paga(rif7, "pi_usd_7")
+        self.assertEqual(valute(rif7), ["USD"],
+                         "STRADA 7: valuta sbagliata nel giornale: %r" % (valute(rif7),))
+
+        # ── STRADA 4: controversia risolta, in dollari ──
+        rif4, vt4 = prenota("2026-10-16", "2026-10-18")
+        paga(rif4, "pi_usd_4")
+        s, cst = self.g("POST", "/api/garanzia/contesta", {"voucher_token": vt4})
+        self.assertEqual(s, 200, "setup: contestazione non aperta: %r" % (cst,))
+        s, out = self.g("POST", "/api/admin/controversia/risolvi",
+                        {"riferimento": rif4, "percentuale_ospite": 100},
+                        {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, "setup: arbitrato fallito: %r" % (out,))
+        self.assertEqual(valute(rif4), ["USD"],
+                         "STRADA 4 (controversia): valuta sbagliata nel giornale: %r"
+                         % (valute(rif4),))
+
+        # ── STRADA 6: anticipo «paga in struttura», in dollari ──
+        # ⛔ Questa mancava nel primo giro e un mutante e' sopravvissuto proprio qui: la
+        # valuta della strada 6 non era sorvegliata da nessuno.
+        import os as _os
+        prec = _os.environ.get("PAGA_STRUTTURA_ATTIVO")
+        _os.environ["PAGA_STRUTTURA_ATTIVO"] = "1"
+        try:
+            ci6, co6 = "2026-10-22", "2026-10-24"
+            s, q6 = self.g("POST", "/api/concierge/quote",
+                           {"alloggio_id": "casa-usd", "check_in": ci6, "check_out": co6,
+                            "party": 2})
+            self.assertEqual(s, 200, q6)
+            s, b6 = self.g("POST", "/api/concierge/book",
+                           {"quote_token": q6["quote_token"], "email": "cli@usd.it",
+                            "modo_pagamento": "in_struttura"})
+            self.assertEqual(s, 201, b6)
+            self.assertEqual(b6.get("modo_pagamento"), "in_struttura",
+                             "setup: doveva essere in struttura: %r" % (b6,))
+            rif6 = b6["riferimento"]
+            rec6 = pp.info(rif6)
+            pp.scadi(rif6)
+            self.sys.inventario.rilascia("casa-usd", ci6, co6,
+                                         idem_key=(rec6.get("idem_key") or ("hold_" + rif6)))
+            l6 = self.sys.inventario.blocca("casa-usd", ci6, co6, idem_key="veloce_usd_6")
+            self.assertTrue(getattr(l6, "ok", False), "setup: stanza doveva essere libera")
+            paga(rif6, "pi_usd_6")
+            self.assertEqual(valute(rif6), ["USD"],
+                             "STRADA 6 (anticipo in struttura): valuta sbagliata nel "
+                             "giornale: %r" % (valute(rif6),))
+        finally:
+            if prec is None:
+                _os.environ.pop("PAGA_STRUTTURA_ATTIVO", None)
+            else:
+                _os.environ["PAGA_STRUTTURA_ATTIVO"] = prec
+
+    def test_UN_RECORD_SENZA_totale_cents_NON_PERDE_L_IMPORTO(self):
+        """⛔ ANCHE QUESTO L'HA TROVATO LA MUTAZIONE, e nasce da D19.
+
+        Le righe nuove scrivono `int(_dj.get("totale_cents", 0) or
+        _dj.get("prezzo_guest_cents", 0) or 0)`: un ripiego per i record che portano solo
+        `prezzo_guest_cents`. Due mutanti sono sopravvissuti proprio su quel ripiego, perche'
+        nessun collaudo costruiva un record fatto cosi' -- e un ramo difensivo che nessuno
+        esegue e' indistinguibile da codice morto (D19). Il giorno che serve e' il giorno in
+        cui il primo campo manca: il momento peggiore per scoprire che il secondo era rotto.
+
+        Lo stato si costruisce A MANO, adesso, che costa tre righe: si toglie `totale_cents`
+        dal record e si lascia `prezzo_guest_cents`. Se il ripiego non regge, il giornale
+        registra ZERO e quel cliente non compare fra chi aspetta i suoi soldi."""
+        import os as _os
+        import sqlite3 as _sq
+        ci, co = "2026-09-06", "2026-09-08"
+        rif, _vt = self._prenota_e_paga_senza_pagare(ci, co)
+        pp = self.sys.pagamenti_pendenti
+        rec = pp.info(rif)
+        dj = json.loads(rec.get("corpo_json") or "{}")
+        atteso = int(dj.get("totale_cents") or 0)
+        self.assertGreater(atteso, 0, "setup: il record deve avere un totale da spostare")
+        dj["prezzo_guest_cents"] = atteso          # resta SOLO questo
+        dj.pop("totale_cents", None)               # il primo campo NON c'e' piu'
+        con = _sq.connect(_os.path.join(self.dir, "p.db"))
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                        (json.dumps(dj), rif))
+        con.close()
+        self.assertIsNone(json.loads(pp.info(rif)["corpo_json"]).get("totale_cents"),
+                          "setup: `totale_cents` doveva essere sparito dal record")
+        # ── e adesso la strada 5: pagamento tardivo su stanza ripresa ──
+        pp.scadi(rif)
+        self.sys.inventario.rilascia("casa", ci, co,
+                                     idem_key=(rec.get("idem_key") or ("hold_" + rif)))
+        ladro = self.sys.inventario.blocca("casa", ci, co, idem_key="veloce_legacy")
+        self.assertTrue(getattr(ladro, "ok", False), "setup: stanza doveva essere libera")
+        pl = json.dumps({"type": "checkout.session.completed",
+                         "data": {"object": {"id": "cs_legacy", "payment_intent": "pi_legacy",
+                                             "metadata": {"riferimento": rif}}}})
+        self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
+                        {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
+        importi = [int(m.get("importo_cents") or 0)
+                   for m in self.sys.finanza.movimenti(str(rif))
+                   if (m.get("tipo") or "") == "rimborso"]
+        self.assertEqual(importi, [atteso],
+                         "STRADA 5: senza `totale_cents` il ripiego su `prezzo_guest_cents` "
+                         "non regge: il giornale ha registrato %r invece di %d, e quel cliente "
+                         "non compare fra chi aspetta i suoi soldi" % (importi, atteso))
+
+        # ── LA STESSA COSA SULLA STRADA 7, e non e' pignoleria ──
+        # ⛔ Il primo giro di questa guardia copriva solo la strada 5, e la mutazione ha
+        # lasciato VIVO il mutante gemello sulla strada 7: la stessa riga, in un percorso che
+        # avevo dimenticato. Due righe identiche non sono una guardia sola: ognuna va
+        # attraversata dal suo percorso, o una delle due resta cieca.
+        ci7, co7 = "2026-09-11", "2026-09-13"
+        rif7, vt7 = self._prenota_e_paga_senza_pagare(ci7, co7)
+        rec7 = pp.info(rif7)
+        dj7 = json.loads(rec7.get("corpo_json") or "{}")
+        atteso7 = int(dj7.get("totale_cents") or 0)
+        self.assertGreater(atteso7, 0, "setup: serve un totale da spostare")
+        dj7["prezzo_guest_cents"] = atteso7
+        dj7.pop("totale_cents", None)
+        con = _sq.connect(_os.path.join(self.dir, "p.db"))
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                        (json.dumps(dj7), rif7))
+        con.close()
+        # cancella PRIMA di pagare -> la prenotazione non e' piu' confermabile...
+        s, canc = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt7})
+        self.assertEqual(s, 200, canc)
+        # ...e il pagamento arriva comunque, perche' il link era ancora vivo
+        pl7 = json.dumps({"type": "checkout.session.completed",
+                          "data": {"object": {"id": "cs_legacy7",
+                                              "payment_intent": "pi_legacy7",
+                                              "metadata": {"riferimento": rif7}}}})
+        self.r.gestisci("POST", "/api/payments/webhook", {}, pl7,
+                        {"Stripe-Signature": firma_di_test(pl7, WH, int(time.time()))})
+        importi7 = [int(m.get("importo_cents") or 0)
+                    for m in self.sys.finanza.movimenti(str(rif7))
+                    if (m.get("tipo") or "") == "rimborso"]
+        self.assertEqual(importi7, [atteso7],
+                         "STRADA 7: senza `totale_cents` il ripiego non regge e i soldi "
+                         "arrivati su una prenotazione che non esiste piu' non vengono "
+                         "reclamati da nessuno: registrato %r invece di %d"
+                         % (importi7, atteso7))
+
+    def _prenota_e_paga_senza_pagare(self, ci, co):
+        """Prenota e NON paga: serve a costruire stati che il pagamento chiuderebbe."""
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": "casa", "check_in": ci, "check_out": co, "party": 2})
+        self.assertEqual(s, 200, q)
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "cli@ld.it"})
+        self.assertEqual(s, 201, b)
+        return b["riferimento"], b["voucher_token"]
+
     # ── PUNTO 1: la lista si CALCOLA ────────────────────────────────────────
     def test_LA_CANCELLAZIONE_DELL_OSPITE_FINISCE_NELLA_LISTA(self):
         """⛔ LA GUARDIA DEL DIFETTO. Un cliente vero paga, cancella, e oggi i suoi soldi
@@ -612,19 +1020,18 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
                          "cancellazione (%d): %r" % (canc["rimborso_cents"], riga))
 
     def test_LA_RIGA_NON_PUO_MANCARE_ANCHE_SE_IL_PENDENTE_E_STATO_PURGATO(self):
-        """⛔ IL PUNTO 1 NELLA SUA FORMA PIU' DURA, e nasce da una misura fatta oggi:
-        `fase162.pulisci_vecchi()` CANCELLA i record in stato 'rimborsato' piu' vecchi di 26
-        ore. Una lista costruita sui pendenti perderebbe la riga di chi aspetta da piu' di un
-        giorno -- cioe' proprio chi ha aspettato di piu'.
+        """⛔ IL PUNTO 1 NELLA SUA FORMA PIU' DURA: la riga si regge sul GIORNALE IMMUTABILE
+        (fase177), che non si purga mai, e non sulla tabella dei pendenti.
 
-        La lista si regge quindi sul GIORNALE IMMUTABILE (fase177), che non si purga mai.
-        Qui il record pendente viene purgato di proposito: la riga deve restare."""
+        ⚠️ Dal 2026-08-17 la pulizia di routine NON tocca piu' lo stato 'rimborsato' (con
+        quel record se ne andava lo `stripe_pi`, cioe' il pulsante). Ma il pendente puo'
+        sparire lo stesso -- rimozione diretta, perdita, ripristino parziale -- e in quel
+        caso la riga deve restare visibile lo stesso, dicendo cosa manca. Qui il record
+        viene tolto di proposito."""
         rif, _ = self._cancella_da_ospite("2026-09-10", "2026-09-12", "pi_ospite_2")
         self.assertIsNotNone(self._riga(self._lista(), rif), "setup: la riga dev'esserci prima")
-        # 26 ore dopo: l'housekeeping passa e porta via il pendente
-        rimossi = self.sys.pagamenti_pendenti.pulisci_vecchi(
-            ora_ts=int(time.time()) + 200000)
-        self.assertGreaterEqual(rimossi, 1, "setup: la purga doveva rimuovere il pendente")
+        self.assertTrue(self.sys.pagamenti_pendenti.rimuovi(rif),
+                        "setup: il pendente doveva esistere per poterlo togliere")
         self.assertIsNone(self.sys.pagamenti_pendenti.info(rif), "setup: pendente ancora vivo")
         riga = self._riga(self._lista(), rif)
         self.assertIsNotNone(
@@ -637,6 +1044,55 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         self.assertIn("payment_intent", riga.get("manca") or [],
                       "la riga non dichiara COSA manca: l'operatore non sa perche' non puo' "
                       "premere, e un dato mancante taciuto e' un finto verde")
+
+    def test_LA_PURGA_NON_PUO_PORTARE_VIA_CHI_DEVE_RICEVERE_SOLDI(self):
+        """⛔ IL PULSANTE NON PUO' SPARIRE PERCHE' SIAMO STATI NOI A BUTTARE VIA IL DATO.
+
+        Il collaudo qui sopra prova la cosa giusta -- senza `pi_` il bottone non c'e',
+        altrimenti sarebbe un rimborso alla cieca -- ma la sua PREMESSA era sbagliata, e la
+        differenza sono i soldi di una persona vera. `pulisci_vecchi` non conta le ore dalla
+        CANCELLAZIONE: le conta da `creato_ts`, che si scrive alla PRENOTAZIONE e non si
+        aggiorna mai (fase162:119 e fase162:512). Quindi chi prenota il 1 settembre e cancella
+        il 20 non aspetta 26 ore: perde il pulsante alla PRIMA pulizia utile.
+
+        Qui la pulizia passa 27 ore dopo la PRENOTAZIONE -- cioe', nel mondo vero, un minuto
+        dopo la cancellazione. Il record di chi deve ancora ricevere soldi deve essere ancora
+        li'. Lo stato gemello `cancellata_host` non viene purgato affatto dalla stessa riga
+        SQL: sono due stati di chiusura trattati in modo diverso, e quello che si rompe e'
+        l'incoerente.
+
+        ⛔ Non chiede di mostrare il bottone senza `pi_` (quel freno resta): chiede di non
+        DISTRUGGERE il `pi_` di chi aspetta.
+
+        VISTO ROSSO sul codice di produzione: il pendente viene cancellato, `pi_` si perde,
+        `manca` contiene `payment_intent` e la riga resta in lista senza bottone -- per
+        sempre, su ogni cancellazione avvenuta piu' di un giorno dopo la prenotazione."""
+        ora_prenotazione = int(time.time())
+        rif, canc = self._cancella_da_ospite("2026-09-14", "2026-09-16", "pi_ospite_purga")
+        self.assertGreater(canc.get("rimborso_cents", 0), 0,
+                           "setup: la politica flessibile deve rendere qualcosa: %r" % (canc,))
+        prima = self._riga(self._lista(), rif)
+        self.assertIsNotNone(prima, "setup: la riga deve esserci prima della pulizia")
+        self.assertTrue(prima.get("bottone"),
+                        "setup: prima della pulizia il bottone c'e': %r" % (prima,))
+        # `fase83_server.py:9992` chiama `pulisci_vecchi()` senza argomenti: orologio vero e
+        # soglia di 26 ore misurata su `creato_ts`. Qui si riproduce quel passaggio.
+        self.sys.pagamenti_pendenti.pulisci_vecchi(ora_ts=ora_prenotazione + 27 * 3600)
+        self.assertIsNotNone(
+            self.sys.pagamenti_pendenti.info(rif),
+            "la pulizia di routine ha portato via il record di una prenotazione che deve "
+            "ancora restituire dei soldi: con lui se ne va il `pi_`, e quel rimborso non si "
+            "puo' piu' eseguire dal pannello. Lo stato 'cancellata_host' non viene purgato: "
+            "'rimborsato' non puo' essere trattato in modo diverso")
+        riga = self._riga(self._lista(), rif)
+        self.assertIsNotNone(riga, "la riga e' sparita dalla lista dopo la pulizia")
+        self.assertNotIn("payment_intent", riga.get("manca") or [],
+                         "il `pi_` e' stato perso da una pulizia di routine: %r" % (riga,))
+        self.assertTrue(
+            riga.get("bottone"),
+            "il bottone non c'e' piu' dopo una pulizia di routine: il rimborso A MANO che il "
+            "fondatore ha chiesto diventa impossibile dal pannello proprio nel caso NORMALE "
+            "(si cancella giorni dopo aver prenotato). Riga: %r" % (riga,))
 
     # ── PUNTO 2: la verita' la dice Stripe ──────────────────────────────────
     def test_LA_VERITA_LA_DICE_STRIPE_NON_IL_NOSTRO_DATABASE(self):
@@ -1230,6 +1686,39 @@ class TestIlPannelloEDAVVEROCollegato(unittest.TestCase):
                                  "deploy", "admin.html")
         with _io.open(percorso, encoding="utf-8") as f:
             cls.HTML = f.read()
+
+    def test_la_cifra_della_controversia_si_scrive_in_EURO_non_solo_in_PERCENTO(self):
+        """⛔ ORDINE DEL FONDATORE, 2026-08-17: *«le controversie io devo scegliere la cifra da
+        dare a uno e all'altro»*.
+
+        Il pannello accettava **solo una percentuale intera** (`admin.html`, campo `pct_`), e
+        la cifra la calcolava lui: `Math.round(importo * pct / 100)`. Con 347,50 € in garanzia
+        NON ESISTE una percentuale intera che dia 200,00 € — quindi l'importo che l'arbitro ha
+        deciso, e che deve poter dichiarare, **non era scrivibile**. Non e' una comodita': su
+        una decisione arbitrale la cifra e' il contenuto della decisione.
+
+        💡 Il motore accettava GIA' la cifra esatta (`rimborso_ospite_cents`, e il suo ramo
+        viene PRIMA di quello della percentuale): mancava solo il campo nel pannello. Ed e' la
+        regola 23 in forma nuova — **costruito ≠ raggiungibile**: una possibilita' che il
+        motore offre e che nessuna interfaccia espone, per chi la usa non esiste.
+
+        ⚠️ Il limite superiore lo impone il SERVER (`min(rimborso, importo)`), non il browser:
+        il campo aiuta, non protegge.
+
+        VISTO ROSSO sul pannello di produzione: nessun campo in euro, e la richiesta partiva
+        sempre e solo con `percentuale_ospite`."""
+        self.assertIn(
+            "rimborso_ospite_cents", self.HTML,
+            "il pannello non manda MAI la cifra esatta: si puo' scrivere solo una percentuale, "
+            "quindi l'importo deciso dall'arbitro resta non dichiarabile")
+        self.assertIn(
+            "eur_${i}", self.HTML,
+            "manca il campo in EURO accanto a quello in percento: la cifra da dare all'ospite "
+            "non si puo' scrivere")
+        self.assertIn(
+            "ctr_host", self.HTML,
+            "il pannello non mostra quanto resta all'host: l'arbitro decide due cifre e ne "
+            "vede una sola")
 
     def test_il_pannello_chiama_le_due_rotte(self):
         self.assertIn("/api/admin/rimborsi_dovuti", self.HTML,
