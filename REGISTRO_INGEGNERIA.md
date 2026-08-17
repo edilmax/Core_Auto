@@ -63,8 +63,36 @@
 ⛔ **A, 1 e 2 vanno fatti PRIMA di scrivere un solo test nuovo**: misurare con strumenti che
 mentono è peggio che non misurare. ⛔ **3 e 4 vanno PRIMA del Blocco 2 dei soldi**, o si butta
 via metà del lavoro.
-🔴 **Fuori piano ma prima di tutto**: il **rimborso all'ospite non parte da solo** — è prodotto,
-non metodo, e sono soldi di una persona vera. Da chiudere prima del primo host.
+🟡 **Fuori piano ma prima di tutto — AGGIORNATO 2026-08-17, ed è cambiato.** Era: *«il rimborso
+all'ospite non parte da solo»*. ✅ **I soldi adesso partono davvero** e la lista è in produzione
+(`9bf294b`). ⛔ **MA contando le strade se n'è scoperto il seguito, ed è più grosso:**
+
+**SETTE strade portano a «il cliente ha dei soldi da riavere». TRE arrivano nella lista, QUATTRO no.**
+
+| # | strada | scrive nel giornale? | in lista? |
+|---|---|---|---|
+| 1 | l'ospite cancella (`_cancella_prenotazione`) | ✅ | ✅ |
+| 2 | l'host cancella (`_host_cancella`) | ✅ | ✅ |
+| 3 | l'admin rimborsa dal pannello (`_admin_rimborso`) | ✅ | paga subito |
+| 4 | **controversia risolta** (`_admin_controversia_risolvi`) | ❌ | 🔴 **NO** |
+| 5 | **pagamento tardivo su stanza già ripresa** (`fase83:7783`) | ❌ | 🔴 **NO** |
+| 6 | **anticipo tardivo, stessa cosa** (`fase83:7860`) | ❌ | 🔴 **NO** |
+| 7 | **pagamento su prenotazione non confermabile** (`fase83:7755`) | ❌ | 🔴 **NO** — scrive solo un ERROR nel log |
+
+⚠️ **Il sistema anti-doppia-prenotazione FUNZIONA** (`reblock:` con chiave fresca, e il commento
+spiega il difetto del replay che era stato chiuso): due persone nella stessa stanza non succede.
+💡 **Ed è proprio perché si rifiuta che nasce il debito**: il cliente ha pagato e non ha la
+stanza. Il sovra-affitto è evitato, il **rimborso** è quello che avanza.
+
+⛔ **RIPARAZIONE: le quattro strade devono scrivere nel giornale** quanto spetta all'ospite
+(`_giornale(tipo="rimborso", …)`, una riga per strada). Da lì entrano tutte nella stessa lista.
+**Prima questo, poi l'interruttore** — o si accende la luce in tre stanze su sette.
+
+🎛️ **E POI L'INTERRUTTORE, chiesto dal fondatore il 2026-08-17.** Il rimborso automatico
+**esiste già** ed era provato: mancava solo che partisse dalla strada dell'ospite. La decisione
+di farlo a mano è **reversibile per scelta, non per mancanza**. Serve un comando nel pannello:
+**«a mano» / «da solo»**, che il fondatore gira quando vuole. ⛔ Vale per **tutte e sette** le
+strade, non per quelle che ci ricordiamo.
 <!-- PIANO-FINE -->
 
 ## 1) 🟢 ACCESO e LIVE in produzione (il prodotto reale, stack "CasaVIP", fase57+)
@@ -621,6 +649,76 @@ un salvataggio di sei giorni prima **credendo di aver fatto quello di oggi**, e 
 giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
+
+### 🏁 2026-08-17 (4) — **LA RIGA D'ARRIVO DEL BLOCCO DEI SOLDI DESCRIVEVA UN OBIETTIVO ABBANDONATO**
+
+Il fondatore ha chiesto una cosa semplice — *«il blocco dei soldi è finito?»* — e l'ha chiesta
+alla macchina, non a me. `python collaudi/piano.py` elenca **sei** condizioni per il Blocco 1.
+Guardandole una per una:
+
+| condizione | stato vero |
+|---|---|
+| dimostrazioni z3 in CI | ⚠️ **voce vecchia**: diceva «oggi si saltano», ma `z3-solver` è installato in **tre** job (`ci.yml` righe 122, 207, 284) |
+| «il rimborso all'ospite parte **DA SOLO**» | 🔴 **contraddiceva una decisione del fondatore** |
+| orologi di prova Stripe | aperta davvero |
+| relazioni metamorfiche sui soldi | aperta davvero |
+| zero punti scoperti dalla mutazione | aperta davvero |
+| invarianti verificati in produzione | aperta davvero |
+
+⛔ **IL PUNTO CHE VALE, ed è un modo di rompersi nuovo per noi.** La riga d'arrivo diceva che
+il blocco è finito quando *«il rimborso parte da solo»*. Ma il **2026-08-16 il fondatore ha
+deciso l'opposto**: a mano, con la lista e il pulsante — *«se la macchina sbaglia ci rimetto
+conti, fiducia, credibilità»*. Quella casella **non si sarebbe spuntata mai**, e non per
+lavoro mancante: perché descriveva un **obiettivo abbandonato**.
+
+💡 **È peggio di un documento che invecchia su un numero.** Un numero sbagliato lo si
+rimisura; una riga d'arrivo sbagliata fa lavorare qualcuno **nella direzione sbagliata** —
+o, peggio, lo costringe a dichiarare «finito» a caso perché la casella non si chiude in
+nessun modo onesto. Il blocco dei soldi sarebbe rimasto «non finito» per sempre.
+
+✅ **Corretta** (`collaudi/piano.py:155-166`): la riga d'arrivo non è **COME** partono i soldi,
+è **SE arrivano** — *«i soldi tornano davvero all'ospite da OGNI strada che porta a un
+rimborso, non solo da quella che qualcuno si è ricordato di provare»*. L'automatico è
+dichiarato esplicitamente **fuori** dalla riga d'arrivo, con la ragione. E la voce su z3 non
+porta più un «oggi» che può marcire.
+
+### 🚀 2026-08-17 (3) — **DEPLOY: LA LISTA DEI RIMBORSI È IN PRODUZIONE** (`9bf294b`, tre posti allineati)
+
+**Autorizzato dal fondatore, protocollo D17 passo per passo.** Il pannello che restituisce i
+soldi a chi aspetta è online.
+
+⛔ **IL PUNTO [1b] È SERVITO DAVVERO, e questa è la notizia.** Il paracadute `casavip-app:prec`
+puntava a `80fcf893…` mentre in produzione girava `1d453fbe…`: **agganciato all'immagine
+sbagliata**, esattamente il difetto costato **quattro volte in quattro giorni** (05, 07, 08 e
+08 sera di agosto). Se il deploy fosse andato male e si fosse saltato col paracadute, si
+tornava a uno stato che **non era l'ultimo buono** — peggio che non averlo, perché ci si butta
+convinti. Ri-agganciato e **verificato che coincidesse** prima del build; punto di ritorno
+scritto (`PRE_DEPLOY_20260817_081246.commit` → `bfcca09`).
+
+**Le prove raccolte, in ordine:**
+- **salvataggio verificato LEGGIBILE**, non «esistente»: `sha256sum -c` → `OK`, poi il file
+  decompresso e **aperto davvero** → `integrity_check: ok` (backup delle 08:11 dello stesso
+  giorno). ⚠️ Al primo tentativo avevo preso il file `.sha256` invece del `.db.gz` e sqlite ha
+  risposto `file is not a database`: l'errore era **mio**, ed è servito;
+- **avvio pulito**: `'avvisi': [], 'money_path_pronto': True`, 35 componenti;
+- **sonde nelle DUE direzioni** (D17, e mai su un indirizzo che risponde 404):
+  home **200** · `/api/health` **200** · `/api/admin/prenotazioni` **401** ·
+  `/api/bunker/stato` **403** · e la rotta nuova **`/api/admin/rimborsi_dovuti` → 401**, cioè
+  **esiste in produzione ed è chiusa** (il cablaggio provato sul sito vero, non sul banco);
+- `collaudi/verifica_produzione.py`: **190 controlli, 0 violazioni**, uscita 0 — certificato
+  valido ancora **37 giorni**;
+- tre posti: computer `9bf294b` · GitHub `9bf294b` · VPS `9bf294b`.
+
+💡 **E una cosa buona trovata misurando prima di agire:** `DEPLOY.md` §5 teneva una
+`PAGAMENTO_BPS` con la **percentuale superata** fra le cose «in attesa al prossimo deploy».
+Misurato: **sul server non c'è più nessuna `PAGAMENTO_*`**, quindi vale il codice. Era il
+**documento** rimasto indietro, non il server — corretto lì (sbaglio S10).
+⛔ Il controllo resta obbligatorio a ogni deploy: una variabile vecchia che vince sul codice
+nuovo è il verde falso perfetto — nulla è rotto, semplicemente la riparazione non è arrivata.
+
+⚠️ **Cosa NON cambia con questo deploy:** il rimborso resta **manuale** (decisione del
+fondatore) · in produzione ci sono **0 annunci**, quindi la lista è vuota e lo sarà finché non
+c'è il primo host vero · **la strada nuova non è ancora stata attraversata da soldi veri**.
 
 ### 📋 2026-08-17 (1) — **IL CRUSCOTTO CODEQL MISURATO: 164 APERTI, 65 GRAVI** (e i 14 di ieri archiviati)
 
