@@ -686,11 +686,11 @@ mostrerebbe un bottone che il pulsante rifiuta — o, molto peggio, il contrario
   cosa che gli interessa. Ora dice che i soldi tornano sul metodo di pagamento usato, **senza
   promettere tempi che non dipendono da noi**.
 
-**✅ SUITE INTERA (dopo le due riparazioni CodeQL):** `Ran 5764 tests in 1576.741s` ·
-`OK (skipped=4)` · **uscita 0** letta diretta (scritta dal lancianotte in fondo al file, S8).
-5769 raccolti − 5764 eseguiti = lo **scarto noto di 5** (guardie `openssl`, dichiarato nella
-riga AMBIENTE). *(I giri precedenti, stesso esito: `Ran 5761 in 1618.862s` prima delle guardie
-sul riferimento ostile, `Ran 5763 in 1631.660s` dopo la prima riparazione.)*
+**✅ SUITE INTERA (dopo CodeQL e dopo i due freni scoperti dalla mutazione):**
+`Ran 5766 tests in 1639.896s` · `OK (skipped=4)` · **uscita 0** letta diretta (scritta dal
+lancianotte in fondo al file, S8). 5771 raccolti − 5766 eseguiti = lo **scarto noto di 5**
+(guardie `openssl`, dichiarato nella riga AMBIENTE). *(I giri precedenti, stesso esito:
+`Ran 5761 in 1618.862s` · `Ran 5763 in 1631.660s` · `Ran 5764 in 1576.741s`.)*
 
 ⚠️ **IL PRIMO GIRO ERA ROSSO — 7 rossi, e tutti sani.** Vale la pena scriverlo perché due
 guardie già esistenti hanno preso due miei buchi che io non avevo previsto:
@@ -752,6 +752,49 @@ diverse — quello *cosa accettiamo*, questa *cosa scriviamo*. Guardia:
 `test_LA_SCHEDA_NON_SCRIVE_NEL_REGISTRO_QUELLO_CHE_LE_DANNO`, che chiama la funzione
 **direttamente scavalcando la rotta** ed e' stata vista rossa con la riga di allarme
 fabbricata dentro il messaggio d'errore.
+
+### 🧬 LA MUTAZIONE, E I DUE FRENI CHE NESSUNO SORVEGLIAVA
+
+⛔ **Il verde del job `mutazione` in CI non voleva dire quello che sembrava.** Letto il suo
+registro invece del suo colore: `MUTANTI PROVATI: 50 | UCCISI: 50 | SOPRAVVISSUTI: 0`. Sono
+**50 guasti scritti a mano**, un catalogo — e **nessuno dei 50 toccava il codice di oggi**,
+perché i mutanti li scrive una persona e per il codice nuovo non li aveva scritti nessuno.
+Quel verde diceva *«i 50 guasti di prima si vedono ancora»*, non *«il codice di oggi è
+protetto»*. È il **denominatore**: uno strumento che risponde a una domanda diversa da quella
+che sembra.
+
+**Scritti 8 mutanti nuovi** (i quattro freni · la verità che dice Stripe · il bottone · le due
+difese del registro). Primo giro:
+
+```
+MUTANTI PROVATI: 58  |  UCCISI: 56  |  SOPRAVVISSUTI: 2  |  INCERTI: 0  |  8.9 minuti
+```
+
+🔴 **I due sopravvissuti erano due dei QUATTRO FRENI SUI SOLDI**, e sopravvivevano per la
+stessa ragione: **nessun collaudo costruiva mai lo stato in cui quel freno serve.**
+- **Freno 1** (`if 0 < pagato < dovuto:` → `if False:`): la lista avrebbe proposto di
+  restituire **più di quanto l'ospite ha versato**, col bottone premibile. Nessun test creava
+  mai una riga con dovuto > pagato.
+- **Freno 3** (`passi_ok = stato_payout != "pagato"` → `True`): si sarebbe rimborsato anche
+  con il **bonifico all'host già partito** — la stessa prenotazione pagata due volte, la
+  seconda a carico nostro (la PERDITA PIENA che D16 vieta). L'unico test esistente rompeva il
+  payout con un'eccezione, cioè attraversava il ramo `except`, **non** quello del confronto.
+
+💡 **La lezione, che vale oltre questo lavoro:** un freno provato solo nel caso in cui *non
+serve* non è provato. Tutti e due i miei test toccavano il freno da un lato che non lo
+metteva alla prova, ed erano verdi.
+
+⛔ **Chiusi scrivendo i due test che mancavano, non toccando il codice** — e per ognuno è
+stato **misurato** l'ingresso che distingue il sano dal guasto (B6: nessun equivalente
+dichiarato): un giornale che dichiara 10× l'incassato · un payout portato a `pagato` seguendo
+le transizioni vere (`trattenuto → in_transito → pagato`), non scritto a mano nel database.
+
+```
+MUTANTI PROVATI: 58  |  UCCISI: 58  |  SOPRAVVISSUTI: 0  |  INCERTI: 0  |  7.4 minuti
+NESSUN MUTANTE SOPRAVVISSUTO: ogni guasto simulato viene visto dai test.
+```
+✅ Uscita 0, e `fase83_server.py` con lo **stesso sha256 prima e dopo** i due giri
+(`9706F89D…6E49`, 679774 byte): il Giudice ha rimesso a posto tutto ciò che aveva rotto.
 
 ⚠️ **COSTO DICHIARATO, da diradare quando ci saranno prenotazioni vere.** Il pannello si
 ricarica **ogni 60 secondi** e ogni ricarica fa una scansione del giornale più fino a **~100

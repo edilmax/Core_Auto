@@ -315,6 +315,73 @@ MUTANTI = [
      "test_stanza_fantasma",
      "il filtro dei pendenti INVERTITO: si libererebbe la prenotazione LEGITTIMA e si terrebbe la fantasma"),
 
+    # ── LA LISTA DEI RIMBORSI DOVUTI (2026-08-16) — i quattro freni sul denaro ───
+    # Costruita il 16 agosto per chiudere il difetto «la cancellazione dell'ospite non
+    # restituisce i soldi». I suoi test erano verdi, ma verde non vuol dire sorvegliato:
+    # qui si chiede se, rompendo ogni singolo freno, qualcuno se ne accorge.
+    ("fase83_server.py",
+     "        if 0 < pagato < dovuto:",
+     "        if False:",
+     "test_admin_rimborso_money",
+     "FRENO 1 SPENTO: la lista propone di restituire PIU' di quanto l'ospite ha versato, "
+     "e il bottone resta premibile. La differenza esce dalla nostra cassa, una volta per "
+     "ogni riga sbagliata, e nessuno se ne accorge finche' non tornano i conti"),
+
+    ("fase83_server.py",
+     '            passi_ok = stato_payout != "pagato"',
+     "            passi_ok = True",
+     "test_admin_rimborso_money",
+     "FRENO 3 SPENTO: si rimborsa l'ospite anche quando il bonifico all'host e' GIA' "
+     "partito. La stessa prenotazione viene pagata DUE volte, e la seconda la paghiamo "
+     "noi -- e' esattamente la PERDITA PIENA che D16 vieta"),
+
+    ("fase83_server.py",
+     '            gia = bool(stripe_ok and int((esito or {}).get("rimborsato_cents") or 0) > 0)',
+     "            gia = False",
+     "test_admin_rimborso_money",
+     "LA VERITA' NON LA DICE PIU' STRIPE: un rimborso gia' partito non viene visto, la "
+     "riga resta in lista e l'operatore la ripreme. L'ospite riceve il doppio. E' il "
+     "difetto del 16 agosto (database 'rimborsato', Stripe zero) girato al contrario"),
+
+    ("fase83_server.py",
+     '                "bottone": (not manca) and not gia}',
+     '                "bottone": True}',
+     "test_admin_rimborso_money",
+     "IL BOTTONE C'E' SEMPRE, anche su una riga a cui manca il pagamento o l'importo: "
+     "«un bottone premibile quando non si deve, prima o poi si preme», e quel clic non "
+     "restituisce niente mentre fa credere il contrario"),
+
+    ("fase83_server.py",
+     '        esito = sp.rimborsa(riga["payment_intent"], int(riga["dovuto_cents"]), "rimborso:" + rif)',
+     '        esito = sp.rimborsa(riga["payment_intent"], int(dati.get("importo_cents") or riga["dovuto_cents"]), "rimborso:" + rif)',
+     "test_admin_rimborso_money",
+     "FRENO 4 SPENTO: l'importo torna a poterlo scegliere CHI CHIAMA LA ROTTA, invece "
+     "di essere quello calcolato dalla politica (fase111) e scritto nel giornale. Chi "
+     "arriva alla rotta decide quanto esce dalla cassa"),
+
+    ("fase83_server.py",
+     '            if riga is not None and not riga.get("gia_rimborsato"):',
+     "            if riga is not None:",
+     "test_admin_rimborso_money",
+     "le prenotazioni GIA' rimborsate tornano in lista: l'operatore le ripreme una per "
+     "una, convinto di lavorare su una coda vera"),
+
+    # ── E LE DUE DIFESE DEL REGISTRO (trovate da CodeQL, non da noi) ─────────────
+    ("fase83_server.py",
+     '    pulito = re.sub(r"[^A-Za-z0-9:_.-]", "", str(rif))[:64]',
+     "    pulito = str(rif)",
+     "test_admin_rimborso_money",
+     "il registro torna a scrivere quello che gli danno: chi passa un riferimento con "
+     "un a-capo dentro FABBRICA righe di allarme false nel posto dove il Guardiano "
+     "(fase186) guarda ogni giorno per sapere se un guasto sui soldi e' avvenuto"),
+
+    ("fase83_server.py",
+     "        if not (isinstance(rif, str) and _RIFERIMENTO_VALIDO.match(rif)):",
+     "        if not (isinstance(rif, str) and rif):",
+     "test_admin_rimborso_money",
+     "la rotta sui soldi torna ad accettare qualunque stringa come riferimento, e a "
+     "rimandarla indietro tal quale nella risposta d'errore"),
+
     # ══ LE GUARDIE DI SICUREZZA: firme, gate, permessi, anti-abuso ════════════════
     # I soldi hanno gia' i loro mutanti (sopra). Qui si attacca l'ALTRO lato: chi ENTRA.
     # Ogni mutazione qui e' un modo realistico in cui una porta resta aperta — e nessuno
