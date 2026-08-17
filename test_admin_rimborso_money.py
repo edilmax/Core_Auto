@@ -654,7 +654,82 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
                         "non dichiara cosa manca: l'operatore vede un bottone spento e non sa "
                         "cosa fare -- e quello che non si sa fare non si fa")
 
+    def _totale_ospite(self, rif):
+        rec = self.sys.pagamenti_pendenti.info(rif) or {}
+        dj = json.loads(rec.get("corpo_json") or "{}")
+        return int(dj.get("totale_cents", 0) or dj.get("prezzo_guest_cents", 0) or 0)
+
+    @staticmethod
+    def _rimborsi_inviati():
+        return [c for c in CHIAMATE_LISTA if "/refunds" in c["url"] and c["body"]]
+
     # ── PUNTO 4: i quattro freni sul denaro ─────────────────────────────────
+    # ⛔ I DUE QUI SOTTO NON LI HO SCRITTI PERCHE' MI SONO VENUTI IN MENTE: li ha trovati
+    # LA MUTAZIONE. Spegnendo il freno 1 e il freno 3 i test restavano VERDI — 3 giri su 3
+    # ognuno — cioe' due dei quattro freni sui soldi non erano sorvegliati da nessuno,
+    # perche' nessun collaudo costruiva mai lo stato in cui quel freno serve.
+    # Un buco di mutazione si chiude scrivendo il test che manca, non cambiando il codice.
+    def test_FRENO_1_UNA_RIGA_CHE_CHIEDE_PIU_DEL_PAGATO_NON_HA_IL_BOTTONE(self):
+        """L'ingresso che distingue il codice sano dal guasto, MISURATO e non dichiarato (B6):
+        una prenotazione incassata X, il cui giornale dichiara dovuto 10 volte X.
+
+        Come ci si arriva nel mondo vero: un errore nel calcolo della politica, o una tassa
+        contata due volte. Il freno non serve quando i conti tornano — serve **quel** giorno,
+        ed e' l'unico giorno in cui nessuno lo sta guardando."""
+        rif, vt = self._prenota_e_paga("2026-09-04", "2026-09-06", "pi_ospite_14")
+        pagato = self._totale_ospite(rif)
+        self.assertGreater(pagato, 0, "setup: il totale incassato dev'essere noto")
+        # `evento_id` vale 'rimborso:<rif>' ed e' IDEMPOTENTE: questa riga scritta PRIMA
+        # vince sulla cancellazione che segue, che trovera' l'evento gia' presente.
+        self.sys.finanza.movimento(tipo="rimborso", riferimento=rif,
+                                   soggetto="ospite:" + rif, importo_cents=pagato * 10,
+                                   valuta="EUR", causale="prova: dovuto maggiore del pagato")
+        s, canc = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual(s, 200, canc)
+        riga = self._riga(self._lista(), rif)
+        self.assertIsNotNone(riga, "setup: la riga dev'essere in lista")
+        self.assertGreater(riga["dovuto_cents"], riga["pagato_cents"],
+                           "setup: il giornale doveva dichiarare piu' dell'incassato: %r" % (riga,))
+        self.assertIn("dovuto_maggiore_del_pagato", riga.get("manca") or [],
+                      "la lista propone di restituire piu' di quanto l'ospite ha versato e "
+                      "non lo dichiara: %r" % (riga,))
+        self.assertFalse(riga.get("bottone"),
+                         "il bottone e' premibile su una riga che farebbe uscire dalla cassa "
+                         "piu' di quanto e' entrato: la differenza la mettiamo noi (D16)")
+        s, res = self.g("POST", "/api/admin/rimborsa_dovuto",
+                        {"riferimento": rif}, {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 409, "il pulsante doveva rifiutare: %r" % (res,))
+        self.assertEqual(self._rimborsi_inviati(), [],
+                         "sono partiti soldi per un importo maggiore dell'incassato")
+
+    def test_FRENO_3_SE_IL_BONIFICO_ALL_HOST_E_GIA_PARTITO_NON_SI_RIMBORSA(self):
+        """L'ingresso che distingue: il payout di quella prenotazione e' in stato `pagato`.
+
+        ⛔ E' la PERDITA PIENA che D16 vieta: l'host ha gia' incassato, e se restituiamo
+        anche all'ospite la stessa prenotazione e' stata pagata DUE volte — la seconda con
+        soldi nostri. Il percorso e' quello vero (`trattenuto -> in_transito -> pagato`), non
+        una scrittura a mano nel database: le transizioni sono quelle che il modulo consente."""
+        rif, _ = self._cancella_da_ospite("2026-09-08", "2026-09-10", "pi_ospite_15")
+        self.assertTrue(self.sys.payout.aggiorna_stato(rif, "in_transito"), "setup")
+        self.assertTrue(self.sys.payout.aggiorna_stato(rif, "pagato"), "setup")
+        self.assertEqual(self.sys.payout.stato_di(rif), "pagato",
+                         "setup: il bonifico all'host doveva risultare gia' partito")
+        riga = self._riga(self._lista(), rif)
+        self.assertIsNotNone(riga, "setup: la riga dev'essere in lista")
+        self.assertIn("payout_gia_pagato", riga.get("manca") or [],
+                      "l'host e' gia' stato pagato e la lista non lo dichiara: %r" % (riga,))
+        self.assertFalse(riga.get("passi_sicurezza_ok"),
+                         "dice che i soldi sono in sicurezza mentre sono gia' usciti: %r" % (riga,))
+        self.assertFalse(riga.get("bottone"),
+                         "il bottone e' premibile: un clic e la stessa prenotazione e' pagata "
+                         "due volte, la seconda a carico nostro")
+        s, res = self.g("POST", "/api/admin/rimborsa_dovuto",
+                        {"riferimento": rif}, {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 409, "il pulsante doveva rifiutare: %r" % (res,))
+        self.assertEqual(self._rimborsi_inviati(), [],
+                         "PERDITA PIENA: rimborsato l'ospite su una prenotazione il cui "
+                         "bonifico all'host era gia' partito")
+
     def test_FRENO_MAI_PIU_DI_QUANTO_HA_PAGATO(self):
         """Freno 1 (aritmetico, non un'opinione). Il dovuto non puo' superare l'incassato: se
         succede e' un difetto del calcolo, e va fermato PRIMA di diventare un bonifico."""

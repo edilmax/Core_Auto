@@ -44,7 +44,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 >
 > **✅ SUITE INTERA VERDE, uscita letta diretta:**
 > ```
-> Ran 5764 tests in 1576.741s
+> Ran 5766 tests in 1639.896s
 > OK (skipped=4)
 > CODICE D'USCITA DELLA SUITE: 0
 > ```
@@ -65,6 +65,16 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > riferimento **misurata su 300 veri** (`hmac-sha256:e9a39409f6d8`). 💡 E la guardia rossa ha
 > mostrato una **seconda** perdita che non avevo visto: la risposta rimandava indietro la
 > stringa ostile tal quale.
+>
+> 🧬 **E LA MUTAZIONE HA TROVATO CHE DUE DEI QUATTRO FRENI SUI SOLDI NON ERANO SORVEGLIATI.**
+> Il job verde in CI non voleva dire quello che sembrava: sono **50 guasti scritti a mano**, e
+> nessuno toccava il codice di oggi. Scritti **8 mutanti nuovi** → primo giro **56 uccisi su
+> 58, 2 sopravvissuti**: spegnendo il freno «mai più del pagato» e il freno «mai se il
+> bonifico all'host è già partito», i miei test restavano **verdi 3 giri su 3**. Sopravvivevano
+> per la stessa ragione: **nessun collaudo costruiva mai lo stato in cui quel freno serve** —
+> un freno provato solo quando non serve non è provato. Chiusi scrivendo i **due test che
+> mancavano** (non toccando il codice): ora **58 su 58 uccisi, 0 sopravvissuti**, e il file di
+> produzione ha lo stesso sha256 prima e dopo.
 >
 > ⚠️ **Resta aperto:** l'automatico (per scelta) · **nessuna prova su soldi veri di QUESTA
 > strada** — il collaudo del 16 agosto passò dal pannello, cioè dall'altra · il punto 2 della
@@ -2424,7 +2434,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: d7cac87
+CONSEGNE AGGIORNATE A: a0de70b
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -4249,7 +4259,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5769 test
+SUITE ATTUALE: Ran 5771 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
