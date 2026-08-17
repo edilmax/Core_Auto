@@ -164,7 +164,13 @@ def main():
                   "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
                   "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
         if s != 201:
-            print("ROSSO: registrazione host fallita: %r" % (c,))
+            # ⛔ IL CORPO NON SI STAMPA: contiene il token dell'host, che e' una credenziale
+            # (regola ferrea 14 / D6). Trovato da CodeQL su questo file il 2026-08-17, ed era
+            # un allarme VERO -- non un falso positivo: `%r` della risposta avrebbe scritto il
+            # token in chiaro nel registro del collaudo. Si stampa lo stato, che basta a
+            # capire cosa e' andato storto, e non e' un segreto.
+            print("ROSSO: registrazione host fallita (stato %s; corpo non stampato: "
+                  "contiene il token dell'host)" % s)
             return 1
         tok = c["token"]
         g("POST", "/api/host/pubblica",
@@ -180,11 +186,16 @@ def main():
                       {"alloggio_id": "villa-rimb", "check_in": ci, "check_out": co,
                        "party": 2})
             if st != 200:
-                raise SystemExit("preventivo fallito (%s): %r" % (st, q))
+                # Nessun corpo negli errori: la risposta del preventivo porta il
+                # `quote_token` e quella del book il `voucher_token` -- due credenziali.
+                raise SystemExit("preventivo fallito (stato %s; corpo non stampato: "
+                                 "contiene il quote_token)" % st)
             st, b = g("POST", "/api/concierge/book",
                       {"quote_token": q["quote_token"], "email": "ospite.rimb@bookinvip.com"})
             if st != 201:
-                raise SystemExit("book fallito (%s): %r" % (st, b))
+                raise SystemExit("book fallito (stato %s; corpo non stampato: contiene il "
+                                 "voucher_token). errore=%r"
+                                 % (st, (b or {}).get("errore")))
             return q, b
 
         def paga_su_stripe(totale):

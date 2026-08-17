@@ -537,6 +537,14 @@ nel repository per questo stesso motivo).
 
 TOTALE DICHIARATO: 11
 
+⛔⛔ **QUESTE 11 SONO NOSTRE. AWS NON C'ENTRA.** Va detto in cima perché confonderle è già
+costato una sessione: questa lista è stata contata **da noi** il 2026-08-11 cercando le
+tecniche di verifica più avanzate che esistono (10 le avevamo già, 1 no). AWS è **una fonte
+esterna con cui ci confrontiamo**, non l'origine di questo elenco, e il suo articolo enumera
+un insieme **diverso** — che si sovrappone al nostro ma non coincide. ⛔ E non si confonde
+nemmeno con i **10 collaudi obbligatori** di `CLAUDE.md`: quelli non sono tecniche, sono dieci
+**punti di vista** da attraversare in ordine, mutazione per ultima. Tre liste, tre scopi.
+
 ⛔ **Questa è l'UNICA lista delle tecniche del progetto, e sta solo qui.** Non se ne aprono
 altre, in nessun file: il 2026-08-17 una seconda lista («i sei metodi AWS», scritta in
 `RIPRENDI_QUI.md`) ha fatto ragionare una sessione intera sul numero sbagliato. Due liste che
@@ -554,8 +562,13 @@ conteggio delle regole ha mentito tre volte (75 → 103 → 104) finché a conta
 - **model-based** — la macchina degli stati dice quali transizioni esistono · in casa
 - **prove formali (z3)** — teoremi su invarianti, non esempi · in casa
 - **fuzzing (atheris)** — ingressi assurdi a valanga · in casa
-- **metamorfico** — se raddoppio le notti il fisso raddoppia: relazioni fra due esiti, non un
-  valore atteso · 🔴 **L'UNICO CHE MANCA** (aperto solo sull'aritmetica del denaro, non su tutto)
+- **metamorfico** — relazioni fra due esiti invece di un valore atteso · ✅ **ACCESO il
+  2026-08-17**, e per la prima volta: `TestRelazioniMetamorficheSullaControversia` in
+  `test_property_soldi.py`, sull'aritmetica dello split di una controversia. ⛔ Al primo giro ha
+  trovato una relazione **FALSA scritta da me**, non un difetto del prodotto (la divisione
+  intera non si distribuisce sul raddoppio: 1 al 50% da' 0, ma 2 al 50% da' 1) — ed è
+  esattamente per questo che vale. ⚠️ **Resta da allargare**: è accesa su UN punto, non su
+  tutta l'aritmetica del denaro
 
 ⛔ **IL COLLO DI BOTTIGLIA NON È LA PROFONDITÀ, È LA LARGHEZZA.** Dieci tecniche in casa,
 applicate a circa un terzo dei moduli dei soldi. **Aggiungere strumenti ALLONTANA dalla fine**

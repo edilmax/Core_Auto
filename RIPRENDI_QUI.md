@@ -4517,7 +4517,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5783 test
+SUITE ATTUALE: Ran 5790 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
@@ -4531,6 +4531,10 @@ MISURATO SU: d781e8d + LE QUATTRO STRADE + LA PURGA + LA LISTA UNICA (2026-08-17
              · 5778 -> 5782 (+4): `TestLaPurgaNonPuoPerdereChiAspettaISoldi` (la riga SQL
                provata come SQL, in `test_property_soldi.py`) + le tre guardie di
                `TestLaListaDelleTecnicheStaInUnPostoSolo` in `test_pipeline_ci.py`.
+             · 5783 -> 5790 (+7): le due guardie che CHIUDONO I BUCHI DI MUTAZIONE (valuta
+               straniera su quattro strade · record senza `totale_cents`) + le due prove
+               formali z3 (il teorema e la prova che sa fallire) + le tre relazioni
+               metamorfiche sulla controversia.
              · 5782 -> 5783 (+1): la guardia sul campo in EURO della controversia.
                ⛔ Questo +1 me l'ha trovato IL GANCIO, non io: avevo scritto 5782 e poi
                aggiunto una guardia. È lo sbaglio S14 preso in flagrante da una macchina —

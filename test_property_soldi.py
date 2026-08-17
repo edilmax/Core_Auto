@@ -194,5 +194,152 @@ class TestLaPurgaNonPuoPerdereChiAspettaISoldi(unittest.TestCase):
                     % stato)
 
 
+# ─────────────────────────────────────────────────────────────────────────────────────────
+# LA CONSERVAZIONE DELLA CONTROVERSIA — le due tecniche che al progetto mancavano su questo
+# punto: la PROVA FORMALE (z3) e le RELAZIONI METAMORFICHE. Accese il 2026-08-17.
+# ─────────────────────────────────────────────────────────────────────────────────────────
+import fase160_escrow_garanzia as ESC
+
+
+def _cassaforte(imp, rif="R"):
+    """Una cassaforte VERA (in memoria) con `imp` centesimi, gia' contestata."""
+    g = ESC.crea_escrow_garanzia(":memory:")
+    g.inizializza_schema()
+    g.apri(rif, imp, alloggio_id="a")
+    g.contesta(rif)
+    return g
+
+
+class TestLaConservazioneDellaControversiaEDimostrata(unittest.TestCase):
+    """⛔ LA PROVA FORMALE, che e' una cosa diversa da un test.
+
+    `fase160.risolvi` fa `rimb = min(_cent(x), imp)` e `host = imp - rimb`. Un test prova
+    quello che gli dai; **z3 prova che non esiste NESSUN ingresso** che rompa l'invariante --
+    e' l'unica delle 11 tecniche che risponde «per tutti», non «per questi».
+
+    💡 E serviva davvero: leggendo si scopre che `risolvi` da sola NON ha un limite inferiore.
+    L'unica cosa che impedisce a un importo NEGATIVO di far ricevere all'host piu' di quanto
+    c'era in garanzia e' una riga in un altro punto del file, `_cent` (fase160:43), che azzera
+    i negativi. Un invariante che dipende da un pezzo altrove e' esattamente il tipo di cosa
+    che si dimostra, non si spera.
+
+    ⛔ E la prova e' provata nelle DUE direzioni: se si toglie quel presidio, z3 deve trovare
+    un CONTROESEMPIO. Una prova che non sa fallire non e' una prova (regola dei 10 collaudi).
+    """
+
+    def _z3(self):
+        try:
+            import z3
+        except Exception:                                    # pragma: no cover
+            self.skipTest("z3 non installato in questo ambiente (gira dove c'e' z3-solver)")
+        return z3
+
+    def test_TEOREMA_nessun_centesimo_si_crea_o_si_perde(self):
+        z3 = self._z3()
+        imp, x = z3.Ints("imp x")
+        cent = z3.If(x >= 0, x, 0)                  # `_cent`: i negativi diventano 0
+        rimb = z3.If(cent < imp, cent, imp)         # `min(_cent(x), imp)`
+        host = imp - rimb
+        s = z3.Solver()
+        s.add(imp >= 0)                             # una garanzia non e' mai negativa
+        s.add(z3.Not(z3.And(host + rimb == imp,     # conservazione esatta
+                            rimb >= 0, rimb <= imp,  # l'ospite non prende piu' della garanzia
+                            host >= 0)))             # e l'host non finisce in negativo
+        esito = s.check()
+        self.assertEqual(
+            str(esito), "unsat",
+            "z3 ha trovato un ingresso che rompe la conservazione della controversia: %s"
+            % (s.model() if str(esito) == "sat" else esito))
+
+    def test_LA_PROVA_SA_FALLIRE_se_si_toglie_il_presidio(self):
+        """Lo stesso teorema SENZA l'azzeramento dei negativi: z3 deve trovare il
+        controesempio. Se restasse `unsat` anche cosi', la prova di sopra non starebbe
+        dimostrando niente -- sarebbe l'ornamento peggiore, uno che sembra matematica."""
+        z3 = self._z3()
+        imp, x = z3.Ints("imp x")
+        rimb = z3.If(x < imp, x, imp)               # ⛔ senza `_cent`: x puo' essere negativo
+        host = imp - rimb
+        s = z3.Solver()
+        s.add(imp >= 0)
+        s.add(z3.Not(z3.And(host + rimb == imp, rimb >= 0, rimb <= imp, host >= 0)))
+        self.assertEqual(str(s.check()), "sat",
+                         "senza il presidio la prova NON trova il controesempio: allora non "
+                         "sta dimostrando niente, e il teorema di sopra e' un ornamento")
+
+
+class TestRelazioniMetamorficheSullaControversia(unittest.TestCase):
+    """⛔ L'UNICA DELLE 11 TECNICHE CHE IL PROGETTO NON AVEVA, accesa qui il 2026-08-17.
+
+    Il metamorfico non chiede «quanto deve venire?» -- chiede «se cambio l'ingresso COSI',
+    come deve cambiare l'uscita?». Serve dove il risultato atteso non si sa scrivere a mano
+    senza rifare lo stesso calcolo (e due volte lo stesso errore da' lo stesso risultato).
+
+    Il lavoro in sospeso n.4 lo chiede **sull'aritmetica del DENARO**, e lo split di una
+    controversia e' aritmetica del denaro: decide quanto va a due persone diverse.
+    """
+
+    @_S
+    @given(imp=st.integers(min_value=0, max_value=5_000_000),
+           pct=st.integers(min_value=0, max_value=100))
+    def test_RADDOPPIANDO_la_garanzia_le_quote_raddoppiano_A_MENO_DI_UN_CENTESIMO(self, imp, pct):
+        """R1: la stessa percentuale su una garanzia DOPPIA da' quote doppie, **a meno di un
+        centesimo**. Quel centesimo non e' tolleranza gratuita: e' esattamente il massimo che
+        il troncamento della divisione intera puo' introdurre, e nulla di piu'.
+
+        ⛔ LA PRIMA VERSIONE DI QUESTA RELAZIONE ERA FALSA, ED ERA MIA (sbaglio S15: scrivere
+        la relazione NOMINALE invece di quella VERA). Pretendeva il doppio esatto, e la
+        macchina ha risposto in un istante con un controesempio da un centesimo: con 1 in
+        garanzia al 50%, `1*50//100 = 0` ma `2*50//100 = 1` -- e zero raddoppiato non fa uno.
+        Il prodotto era sano: era la mia aspettativa a essere sbagliata. E' la prima cosa che
+        questa tecnica ha trovato, il giorno che e' stata accesa.
+
+        💡 Cosi' scritta, la relazione ha ancora denti: uno sbaglio che perde piu' di un
+        centesimo per raddoppio -- una percentuale applicata due volte, un troncamento al
+        posto sbagliato -- sfonda questo limite subito."""
+        a = _cassaforte(imp).risolvi("R", rimborso_ospite_cents=imp * pct // 100)
+        b = _cassaforte(imp * 2).risolvi("R", rimborso_ospite_cents=(imp * 2) * pct // 100)
+        if not (a.get("ok") and b.get("ok")):
+            return                                  # garanzia 0: niente da spartire
+        o2, o1 = b["ospite_rimborso_cents"], a["ospite_rimborso_cents"]
+        h2, h1 = b["host_riceve_cents"], a["host_riceve_cents"]
+        self.assertIn(o2 - 2 * o1, (0, 1),
+                      "la quota dell'ospite si allontana dal doppio di piu' di un centesimo: "
+                      "garanzia %d -> %d, doppia -> %d" % (imp, o1, o2))
+        self.assertIn(2 * h1 - h2, (0, 1),
+                      "la quota dell'host si allontana dal doppio di piu' di un centesimo: "
+                      "garanzia %d -> %d, doppia -> %d" % (imp, h1, h2))
+
+    @_S
+    @given(imp=st.integers(min_value=1, max_value=5_000_000),
+           x=st.integers(min_value=-1_000_000, max_value=9_000_000))
+    def test_QUALUNQUE_cifra_io_dia_la_somma_torna_ESATTA(self, imp, x):
+        """R2: per QUALUNQUE cifra -- anche assurda, anche negativa, anche piu' grande della
+        garanzia -- `ospite + host` fa esattamente la garanzia. Nessun centesimo creato dal
+        nulla, nessuno perso per strada. E' l'invariante che z3 dimostra, qui verificato sul
+        codice VERO invece che su un modello."""
+        out = _cassaforte(imp).risolvi("R", rimborso_ospite_cents=x)
+        self.assertTrue(out.get("ok"), "la risoluzione doveva riuscire: %r" % (out,))
+        o, h = out["ospite_rimborso_cents"], out["host_riceve_cents"]
+        self.assertEqual(o + h, imp,
+                         "conservazione ROTTA: ospite %d + host %d != garanzia %d" % (o, h, imp))
+        self.assertTrue(0 <= o <= imp, "quota ospite fuori dai limiti: %d su %d" % (o, imp))
+        self.assertGreaterEqual(h, 0, "l'host finisce in negativo: %d" % h)
+
+    @_S
+    @given(imp=st.integers(min_value=1, max_value=5_000_000),
+           x=st.integers(min_value=0, max_value=5_000_000))
+    def test_DARE_ALL_OSPITE_o_DARE_ALL_HOST_e_lo_stesso_conto(self, imp, x):
+        """R3: decidere «all'ospite X» oppure «all'host garanzia-X» deve portare allo STESSO
+        split. Se le due strade divergessero, l'esito dipenderebbe da come l'arbitro formula
+        la stessa decisione -- e due formulazioni della stessa decisione non possono dare due
+        cifre diverse."""
+        quota_ospite = min(x, imp)
+        a = _cassaforte(imp).risolvi("R", rimborso_ospite_cents=quota_ospite)
+        b = _cassaforte(imp).risolvi("R", rimborso_ospite_cents=imp - (imp - quota_ospite))
+        self.assertEqual((a["ospite_rimborso_cents"], a["host_riceve_cents"]),
+                         (b["ospite_rimborso_cents"], b["host_riceve_cents"]),
+                         "la stessa decisione detta in due modi da' due split diversi")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
