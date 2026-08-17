@@ -108,17 +108,23 @@ sua quota parte subito. Renderla premibile significa **allentare due freni sui s
 decisione del fondatore, non un lavoro tecnico. Il rimborso resta manuale da Stripe, come dice
 già la `nota` della rotta.
 
-🧹 **E UN LAVORO NUOVO, CHIESTO DAL FONDATORE IL 2026-08-17 — misurato, non ricordato.**
-*«Cosa devo fare prima di dire fatto»* risponde oggi in **CINQUE posti** (`CLAUDE.md` ·
+🧹 ✅ **IL FOGLIO UNICO DEI CONTROLLI È FATTO** (chiesto dal fondatore il 2026-08-17).
+*«Cosa devo fare prima di dire fatto»* rispondeva in **CINQUE posti** (`CLAUDE.md` ·
 `REGISTRO_INGEGNERIA.md` · `collaudi/piano.py` · `collaudi/prima_di_dire_fatto.py` · e fuori dal
-computer: CI, Stripe, CodeQL). Serve **un foglio solo**. ⛔ **Non un riassunto scritto a mano** —
-sarebbe la sesta copia e invecchierebbe, come la lista AWS il 2026-08-17: si fa **stampandolo
-dalla macchina**, che legge dai posti che possiedono i fatti e misura lo stato **adesso**.
-🔴 **E c'è roba morta ancora scritta che DECIDE il lavoro:** «63 moduli morti» compare in **otto
-punti** ed è **falso** (sono 59, e 34 sono solo **spenti**) — `REGISTRO_INGEGNERIA.md:486` lo usa
-come istruzione per scegliere su cosa lavorare; «81 punti che non vanno fatti» in **cinque**.
-💡 Regola che ne esce: **un numero sullo stato della macchina non si scrive, si produce quando
-lo si legge.** Dettagli, righe e metodo: `RIPRENDI_QUI.md`, blocco (19), punto **7bis**.
+computer: CI, Stripe, CodeQL). Adesso c'è **`python collaudi/foglio_unico.py`**: **nove voci**,
+e nessuna contiene una copia — ognuna dice **chi possiede il fatto** e ci va a **misurarlo
+adesso**. Lo stampa `regole_avvio.py` a ogni avvio e `prima_di_dire_fatto.py` a ogni commit.
+⛔ **Non è un riassunto**: sarebbe stato la sesta copia, e sarebbe invecchiato come la lista
+AWS il 2026-08-17.
+🔴 **E il numero che DECIDEVA il lavoro era falso.** `collaudi/raggiungibilita.py` camminava da
+**un ingresso su tre** (`main_casavip.py`, ignorando `app.py` e `fase83_server.py`): dichiarava
+morti quattro moduli vivi, fra cui **`fase17_money` e `fase15_idempotency`**. Il numero era
+scritto a mano in dieci righe dei documenti, e una lo usava come **istruzione** per scegliere su
+cosa lavorare. ✅ Riparato con l'ordine D20 (guardia
+`TestLaRaggiungibilitaNONPuoGuardareUnIngressoSOLO`, vista rossa prima), e dai documenti il
+numero è stato **tolto**: al suo posto c'è il comando che lo produce.
+💡 Regola che ne esce, e adesso ha una macchina che la applica (voce 7 del foglio): **un numero
+sullo stato della macchina non si scrive, si produce quando lo si legge.**
 
 🎛️ **ORA TOCCA ALL'INTERRUTTORE, chiesto dal fondatore il 2026-08-17.** Il rimborso automatico
 **esiste già** ed era provato: mancava solo che partisse dalla strada dell'ospite. La decisione
@@ -347,7 +353,8 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 
 **Non l'ha trovato uno strumento: l'ha trovato lui**, dicendo *«altre fasi le avevamo già
 fatte, ma non con questo metodo»*. Aveva ragione, ed è la seconda volta che un suo dubbio
-scopre un numero che nessun controllo segnalava (la prima furono i «63 moduli morti»).
+scopre un numero che nessun controllo segnalava (la prima fu il conto dei moduli che la
+produzione non raggiunge, gonfiato perché lo strumento camminava da un ingresso solo).
 
 ⚠️ **Numeri presi da `RIPRENDI_QUI.md:948-956`, NON rimisurati** — vanno rifatti col Giudice.
 ✅ **`fase59` È STATO RIMISURATO il 2026-08-14** (voce «FATTO 2026-08-14» nel changelog): il
@@ -495,8 +502,15 @@ La tabella completa, con quanti test nominano ciascuno e il blocco di appartenen
 | **4** | `fase162_pagamenti_pendenti` · `fase131_payout_dashboard` | 153 | i più grossi ma i **meno ciechi** (13 e 11 test): ultimi apposta |
 | **5** | `fase85_pagamenti_stripe` · `fase87_stripe_webhook` | 41 | ⚠️ **sembrano** i più coperti (77 e 59 test) ma quei test li **fingono**: nominare non è provare |
 
-⛔ **Prima di ogni blocco si guarda se il modulo è ACCESO**: 63 moduli su 151 non sono
-raggiungibili dalla produzione, e setacciare un modulo spento è tempo buttato.
+⛔ **Prima di ogni blocco si guarda se il modulo è ACCESO**: setacciare un modulo che la
+produzione non raggiunge è tempo buttato. ⛔ **Il numero non è scritto qui, e non deve
+esserlo**: lo produce `python collaudi/raggiungibilita.py`, che va lanciato. Fino al
+2026-08-17 qui c'era una cifra, ed era **falsa** — quello strumento camminava da un ingresso
+su tre e seppelliva vivi. Un numero scritto a mano che serve a **decidere su cosa lavorare**
+è peggio di nessun numero.
+⚠️ E «non raggiungibile» non vuol dire **morto**: molti sono **SPENTI**, cioè finiti e in
+attesa di un gettone. Chi possiede quel fatto è la scheda del modulo qui sotto (STATO e come
+si accende), non il camminatore degli import.
 
 ### ⛔ LE DUE CORREZIONI AL PIANO — misurate il 2026-08-11, non ricordate
 
@@ -506,12 +520,15 @@ secondo lasciava un modulo dei soldi fuori da ogni blocco — cioè mai giudicat
 
 | comando | esito |
 |---|---|
-| `python collaudi/raggiungibilita.py` | 151 moduli · **88 raggiungibili** · **63 morti**. Fra i morti: `fase35_pagamenti`, `fase43_commissione`, `fase44_prezzo`. `fase147_tassa_comunale` **NON** è fra i morti |
+| `python collaudi/raggiungibilita.py` | ⛔ **i conti li stampa lui, qui non si ricopiano** (D22). Quello che resta vero a prescindere dal numero: `fase35_pagamenti`, `fase43_commissione` e `fase44_prezzo` **non** sono raggiungibili; `fase147_tassa_comunale` **sì** |
 | `python collaudi/mutazione_prodotto.py --censimento` | `fase43` 31 mutanti · `fase98` 18 · `fase111` 11 · **`fase147` 29, e 6 test lo vedono** |
 
-· ⛔ **`fase43_commissione` è uscito dal Blocco 2**: 370 righe e 31 punti di mutazione, tutti
-  su codice che la produzione **non raggiunge**. Erano **31 punti su 506 buttati**, e con
-  `fase35` e `fase44` (anch'essi morti) fanno **81 punti che non vanno fatti**.
+· ⛔ **`fase43_commissione` è uscito dal Blocco 2**: i suoi punti di mutazione stanno **tutti**
+  su codice che la produzione **non raggiunge**, e con `fase35` e `fase44` (anch'essi non
+  raggiungibili) sono punti che **non vanno fatti**. ⛔ **Quanti siano non si scrive qui**: lo
+  dicono `python collaudi/raggiungibilita.py` e `python collaudi/mutazione_prodotto.py
+  --censimento`, insieme. Ciò che regge nel tempo è la **regola**, non la cifra: non si mutano
+  moduli che la produzione non accende.
 · ✅ **`fase147_tassa_comunale` è entrato nel Blocco 2**: è **vivo**, tocca i soldi, ha 29
   punti — e **non stava in nessun blocco**. Messo qui e non nel Blocco 1 perché è la coppia
   naturale di `fase66_tassa_soggiorno` senza sforare la dimensione di un blocco; spostarlo
@@ -642,7 +659,9 @@ niente alla lista (guardia: `TestLaPurgaNonPuoPerdereChiAspettaISoldi` in `test_
 **LA LISTA CHIUSA — ~12-15 sessioni (stima, NON misura)**
 - ~~**12 moduli vivi** dei soldi da giudicare~~ → **11**, dal 2026-08-12: `fase66` è passato
   (24 mutanti su 24 uccisi, **0 sopravvissuti**, 0 equivalenti dichiarati). Restano **4-6
-  sessioni**. ⛔ **81 punti su 506 NON vanno fatti**: vedi le due correzioni al piano qui sopra.
+  sessioni**. ⛔ **Una parte dei punti NON va fatta** perché sta su codice che la produzione non
+  raggiunge: il conto vero, e le due correzioni al piano, stanno qui sopra — dove un guardiano
+  li rilegge. Qui non si ricopia (D22).
   💡 **E il primo modulo ha già insegnato come si fanno gli altri undici:** i difetti veri non
   stavano nell'aritmetica, stavano **ai confini** — nel passaggio dove un modulo traduce un
   valore per un altro e, traducendo, **cancella la prova che era rotto**. Sui prossimi si parte
@@ -733,6 +752,87 @@ un salvataggio di sei giorni prima **credendo di aver fatto quello di oggi**, e 
 giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
+
+### 🧾 2026-08-17 (5) — **IL FOGLIO UNICO DEI CONTROLLI, e tre numeri che ora li produce una macchina**
+
+**Creato** `collaudi/foglio_unico.py` (nuovo, ~330 righe): **dieci voci**, ognuna dichiara **chi
+possiede il fatto** e va a **misurarlo adesso**. Non contiene copie. Lo chiamano
+`collaudi/regole_avvio.py` (avvio: informa) e `collaudi/prima_di_dire_fatto.py` (commit:
+conferma) — appendice 23, «costruito ≠ collegato». Dipendenze: nessuna nuova.
+**Fonti (D25):** Beyer et al., *Site Reliability Engineering*, O'Reilly 2016, cap. 27 (la lista
+si **pota**, non si allunga: a Google serviva un vicepresidente per aggiungere una domanda) ·
+Gawande, *The Checklist Manifesto*, 2009 (**DO-CONFIRM**, killer items, 5-9). ⚠️ Il capitolo SRE
+letto alla fonte; Gawande da riassunti concordi — «lo dice il documento», non «misurato».
+
+**Modificato** `collaudi/raggiungibilita.py`: camminava da **un ingresso su tre**. Ora dichiara
+`INGRESSI` e parte da tutti quelli che esistono; se non ne esiste nessuno solleva
+`NessunIngresso` invece di dichiarare morto tutto (S1: il vuoto non è una misura). Il numero è
+uscito dall'intestazione: **lo produce lui, non lo scrive nessuno**.
+🔴 Il difetto seppelliva vivi **`fase17_money`** e **`fase15_idempotency`**, e quel conto era
+scritto in dieci righe dei documenti — una lo usava come **istruzione** per scegliere il lavoro.
+Guardia `TestLaRaggiungibilitaNONPuoGuardareUnIngressoSOLO`, **vista rossa** prima (D20): non
+pretende un numero, pretende una **relazione**.
+
+**Modificato** `collaudi/mutazione_prodotto.py`: `_chiudi_traccia` straccia il biglietto **solo
+dopo aver confrontato lo sha256** (nuova `_tornato_identico`), e **nel dubbio non chiude**.
+Prima il biglietto spariva anche se il ripristino aveva scritto byte diversi senza sollevare →
+`guardia_commit.py` rispondeva «via libera» su un file di produzione mutato. ⛔ **Nessun gancio
+nuovo**: `pre-commit` chiamava già `guardia_commit.py`, mancava che il biglietto fosse onesto.
+Guardie: `TestIlBigliettoNONSiStracciaSeIlFileNONEDavveroTornato` (3, due viste rosse).
+
+**Voce 10 = sbaglio S11 chiuso** dopo sette giorni: quante guardie spegne la shell da cui lanci.
+Il conto (oggi **5**, `TestRipristinoAPezziNonPassa`) lo produce il parser di Python, non chi
+scrive il rapporto. `unittest` di suo dichiara **un** salto senza nome, e non li conta in `Ran`.
+
+**Voce 7 = la macchina anti-deriva**: rimisura i numeri che uno strumento produce e li confronta
+con quel che i 5 documenti scrivono. Lista **chiusa e curata**: ci entra solo ciò che una
+macchina sa produrre **e** che non ha già una guardia. ⚠️ Al primo giro faceva **9 falsi allarmi
+su 30**: stretta a una direzione sola e al tema della riga (*un falso allarme è un difetto
+quanto un allarme mancato*). La **data esenta** (D22).
+
+⛔ **`81 punti` NON è stato tolto, ed è una correzione al piano**: `collaudi/piano_dei_soldi.py`
+lo **legge** da due documenti e diventa rosso se divergono — è sorvegliato, non morto.
+Cancellarlo avrebbe accecato un guardiano che funziona. Regola: **prima di togliere un numero
+si guarda chi lo legge.**
+⚠️ **`34 spenti` non è stato confermato** (col metodo disponibile ne risultano 11): non ha una
+misura che lo regge, quindi non si usa.
+
+✅ **RIPARATO col via «autorizzato» (2026-08-17): IL LIBRO CONTABILE DICEVA IL FALSO SUI SOLDI.**
+Trovato leggendo il giornale di produzione dopo il **primo pagamento vero** (1,00 €, incassato
+e rimborsato 16 minuti dopo). Il libro dichiarava cassa **0**, un **ricavo** di 30 su una
+prenotazione annullata e un **debito di 70 verso l'host** per un soggiorno mai avvenuto —
+mentre il saldo Stripe era **−0,27 €**. ⛔ La partita doppia **quadrava a zero**: era
+formalmente giusta e sostanzialmente falsa, ed è per questo che nessun controllo gridava.
+**Nessuno poteva vederlo**: in `fase177_financial_controller.py` non esisteva **nessuna funzione
+che calcolasse i saldi** — c'era `verifica_catena`, che prova che il libro non è stato
+**manomesso**, non che dica il **vero**. Due cose diverse, e avevamo solo la prima.
+
+**Modificato** `fase177_financial_controller.py`: tre movimenti nuovi (`costo_gateway`,
+`debito_all_ospite`, `storno_commissione`), più `saldi()` e `storna_prenotazione()` — che legge
+gli importi **dal giornale**, così nessun chiamante può far uscire un numero diverso da quello
+registrato. ⚠️ Limite dichiarato: il rimborso **parziale** non è coperto (l'host trattiene una
+penale, quindi parte della commissione è davvero guadagnata) — si preferisce **non fare e
+dirlo**.
+**Modificato** `fase83_server.py`: lo storno sta dentro `_giornale`, **non** nelle sette rotte
+che rimborsano — le strade sono sette e sono già state dimenticate due volte in due giorni.
+Più `_costo_gateway_dal_gestore`, che chiede a Stripe la commissione effettiva e la scrive in
+**due posti da una sola lettura** (libro e record), così non possono divergere.
+**Modificato** `fase85_pagamenti_stripe.py`: `commissione_effettiva(pi)` —
+`pi → latest_charge → balance_transaction.fee`, provata con chiamate vere sul conto live. Se
+Stripe non risponde dice **«non lo so»**, mai una stima.
+**Modificato** `fase162_pagamenti_pendenti.py`: `salva_costo_gateway` + il prospetto del
+commercialista ora ha **tre voci** — ricavo mancato · costo vero deducibile · **non
+determinato** (che non è zero).
+**Guardie**: 4 in `test_conservazione_denaro` (una sull'albero sintattico: pretende che il
+server le CHIAMI davvero) + 3 in `test_fase162_hold_pagamento`, tutte **viste rosse prima**.
+Batteria dei soldi dopo la riparazione: **126 test, 0 rossi**.
+⚠️ **E il piano di riparazione che i documenti davano per pronto si appoggiava su un impianto
+inesistente**: `fase85` non nominava `balance_transaction`; l'unico che tocca quell'API è
+`fase182_riconciliazione.py:85`, che **non legge `fee`**. Il pezzo è stato scritto adesso.
+🔴 **Resta il difetto vero, ed è più grande**: su una cancellazione dell'ospite la piattaforma
+**ci rimette la fetta del gestore** (misurato: −0,27 € su 1 €, ~−3,25 € su 200 €). La cura non
+è spostare il costo su qualcuno, è **non prendere i soldi subito** — dettagli, fonti e limiti
+in `RIPRENDI_QUI.md`, blocco (20).
 
 ### 🏁 2026-08-17 (4) — **LA RIGA D'ARRIVO DEL BLOCCO DEI SOLDI DESCRIVEVA UN OBIETTIVO ABBANDONATO**
 
@@ -2980,8 +3080,8 @@ z3: *una dimostrazione vale quanto il modello su cui è fatta*).
 > dal commit: `cap -1` → **0 cents** (prima 21000), `cap 7` → 4900 invariato, e
 > `valida_scheda` rifiuta `-1`/`7.5`/`-350` accettando il valido e l'assente.
 
-**Primo modulo del Blocco 1.** Verificato **acceso** prima di toccarlo (`raggiungibilita.py`:
-151 moduli, 88 raggiungibili, 63 morti, `fase66` **non** fra i 63; usato da `fase59`, `fase83`,
+**Primo modulo del Blocco 1.** Verificato **acceso** prima di toccarlo (`raggiungibilita.py`
+lo dà raggiungibile — il conto lo stampa lui, qui non si ricopia; usato da `fase59`, `fase83`,
 `fase57`, `fase81`, `fase69`, `fase147`). Censimento: **166 righe, 25 punti di mutazione, 2 file
 di test che lo vedono**, e **mai passato davanti al Giudice**.
 
@@ -3487,8 +3587,8 @@ Primo modulo del piano «i quattro ciechi dei soldi», scelto per **rischio × c
 dimensione. **Nessun modulo nuovo, nessuna dipendenza nuova** (D1/D10): un file di produzione
 toccato per **1 sola riga eseguibile**, e 10 collaudi nuovi in un file di test che esisteva già.
 
-· **Acceso, verificato prima di spenderci sopra un'ora.** `collaudi/raggiungibilita.py`:
-  151 moduli · 88 raggiungibili · **63 morti**, e `fase167` non è fra i 63. Conferma positiva,
+· **Acceso, verificato prima di spenderci sopra un'ora.** `collaudi/raggiungibilita.py` dà
+  `fase167` **raggiungibile** (i conti li stampa lui, qui non si ricopiano). Conferma positiva,
   non per assenza: `fase81_bootstrap_casavip.py:299` lo importa nel cablaggio della produzione.
 · **Il difetto.** `consuma(credito_id, riferimento)` identifica una prenotazione dal suo
   **riferimento**. Con riferimento **vuoto** non poteva più distinguere «è lo stesso book che

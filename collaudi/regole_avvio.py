@@ -588,8 +588,32 @@ def main():
     stampa_piano()
     stampa_tecniche()
     stampa_i_blocchi()
+    stampa_il_foglio()
     print("=" * 78)
     return 0
+
+
+def stampa_il_foglio():
+    """🧾 IL FOGLIO UNICO DEI CONTROLLI — l'ultima cosa che si legge all'avvio.
+
+    Sta in fondo di proposito: sopra c'e' il METODO (le regole) e la ROTTA (il piano); questo
+    e' il quadro degli strumenti, cioe' com'e' messa la macchina **adesso**. Nato il
+    2026-08-17 da una richiesta del fondatore: *«Bisogna fare un foglio solo»* -- perche'
+    «cosa devo fare prima di dire fatto» rispondeva in cinque posti diversi.
+
+    ⛔ NON RICOPIA NIENTE. Il foglio vive in `collaudi/foglio_unico.py`, che per ogni voce dice
+    chi possiede il fatto e va a misurarlo. Qui si CHIAMA, non si riscrive: una seconda copia
+    sarebbe esattamente il difetto che il foglio esiste per curare.
+    """
+    try:
+        import foglio_unico
+        foglio_unico.stampa(foglio_unico.giro(RADICE), breve=True)
+    except Exception as exc:                     # un gancio non rompe mai la sessione: lo DICE
+        print()
+        print("  ⚠️  IL FOGLIO UNICO DEI CONTROLLI NON SI STAMPA (%s: %s)"
+              % (exc.__class__.__name__, exc))
+        print("     Va guardato: senza di lui «cosa devo fare prima di dire fatto» torna a")
+        print("     rispondere in cinque posti diversi. Comando: python collaudi/foglio_unico.py")
 
 
 PIANO_INIZIO = "<!-- PIANO-INIZIO"

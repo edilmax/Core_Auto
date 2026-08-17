@@ -11,6 +11,350 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🧾 2026-08-17 (20) — **UN FOGLIO SOLO, E TRE NUMERI CHE ADESSO LI PRODUCE UNA MACCHINA**
+
+> **Stato dei tre posti, misurato adesso (non ricordato):**
+> ```
+> computer master 44b2f43 · GitHub master 44b2f43 · VPS 44b2f43   -> ALLINEATI
+> ramo consegne-foglio-unico 1f3f5f3 (spinto)
+> RICHIESTA #65: state=open  merged=False   <- NON UNITA. Terza volta che un
+>                documento la dava per chiusa: si chiede all'API, sempre.
+> CI su 1f3f5f3: 14 job · gate=success · unico rosso CodeQL, e NON e' nostro
+>                (`HttpError: No server is currently available`, il 503 di GitHub,
+>                tre volte dentro lo stesso job). Basta rilanciarlo.
+> test_pipeline_ci: Ran 215 · 0 rossi (dopo l'aggiornamento di SUITE ATTUALE)
+> ```
+>
+> ### 🔴 IL NUMERO CHE DECIDEVA IL LAVORO ERA FALSO, E LA CAUSA NON ERA «È VECCHIO»
+> `collaudi/raggiungibilita.py` camminava dagli import di **un ingresso solo**
+> (`main_casavip.py`) mentre sul disco ce ne sono **tre** — mancavano `app.py` e
+> `fase83_server.py`. Misurato adesso: da un ingresso **63 morti**, da tutti e tre **59**.
+> I quattro seppelliti vivi sono `fase13_protocollo_finale`, **`fase15_idempotency`**,
+> **`fase17_money`**, `fase23_datastore`.
+>
+> 💡 **Il verso in cui sbagliava era quello brutto.** Il file prometteva un bias generoso —
+> *«se dice MORTO, e' morto davvero»* — e quella promessa era **falsa**. Un attrezzo che
+> dichiara di sbagliare in un verso e sbaglia nell'altro è peggio di uno senza promesse (S15).
+> E non era un numero decorativo: `REGISTRO_INGEGNERIA.md` lo usava come **istruzione** per
+> scegliere su cosa lavorare, e la classifica «rischio × cecità» dei moduli dei soldi ci si
+> appoggiava — su moduli che si chiamano `money` e `idempotency`.
+>
+> ✅ Riparato con l'ordine D20. La guardia
+> `TestLaRaggiungibilitaNONPuoGuardareUnIngressoSOLO` **vista rossa prima**:
+> ```
+> AssertionError: {'app.py': ['fase13_protocollo_finale', 'fase15_idempotency',
+>                            'fase17_money', 'fase23_datastore']} != {}
+> ```
+> ⛔ Non pretende un **numero** (invecchia), pretende una **relazione**: se un ingresso vero
+> raggiunge un modulo, quel modulo non è morto. Regge anche a 200 moduli.
+>
+> ### 🧾 IL FOGLIO UNICO — `python collaudi/foglio_unico.py`
+> «Cosa devo fare prima di dire fatto» rispondeva in **cinque posti**. Adesso in **uno**, e
+> **non è una copia**: ogni voce dice **chi possiede il fatto** e ci va a **misurarlo adesso**.
+> Dieci voci; lo stampa `regole_avvio.py` a ogni avvio **e** `prima_di_dire_fatto.py` a ogni
+> commit (appendice 23, «costruito ≠ collegato»: all'avvio informa, al commit conferma).
+>
+> **Cosa dice la ricerca, e ha corretto l'istinto invece di confermarlo (D25).**
+> · **Beyer et al., *Site Reliability Engineering*, O'Reilly 2016, cap. 27** — Google la lista
+> di lancio la tiene **curata a mano**, e il pericolo che nomina è il **gonfiarsi**: *«è facile
+> che cresca fino a diventare ingestibile»*, al punto che aggiungere una domanda richiedeva
+> l'approvazione di un **vicepresidente**. Il valore sta nella **potatura**. Da lì: dieci voci,
+> e l'undicesima entra solo col tuo via, dicendo prima quale esce.
+> · **Gawande, *The Checklist Manifesto*, 2009** — **DO-CONFIRM** (si lavora, poi ci si ferma e
+> si conferma) contro READ-DO, e solo i **killer items**, 5-9. Questo foglio è un DO-CONFIRM.
+> ⚠️ Il capitolo SRE l'ho letto alla fonte (sre.google); di Gawande **riassunti concordi**, non
+> il testo: «lo dice il documento», non «misurato».
+>
+> ### 🔬 LA VOCE 7 — la macchina che impedisce al numero falso di tornare
+> Rimisura i numeri che uno strumento produce e li confronta con quel che i 5 documenti
+> scrivono. **Lista chiusa e curata**: ci entra solo ciò che (a) una macchina sa produrre e
+> (b) non ha già una guardia. Ha trovato **14 colpi su 10 righe**, tutti veri.
+> ⚠️ **Al primo giro faceva nove falsi allarmi su trenta** (`3 morti` erano punti di
+> mutazione, `167` veniva da `fase167`, `15` dalla parola «raggiungibilità» seguita da un
+> numero). Stretta: una direzione sola (il numero **davanti** alla parola) e la riga deve
+> parlare di moduli. *Un falso allarme è un difetto quanto un allarme mancato.*
+> ⛔ **La data esenta** (D22): «misurato il 2026-08-09: N morti» è una misura storica col suo
+> appoggio, e si tiene. Un numero nudo no.
+>
+> ### 🔐 LE IMPRONTA sha256 SONO ENTRATE NELLA RETE — non le confronto più io
+> **Il buco, e non era quello già chiuso.** La rete protegge dal giro **ucciso**: biglietto
+> aperto → `guardia_commit.py` (che il gancio `pre-commit` esegue) blocca. Ma il biglietto si
+> stracciava **senza guardare il file**:
+> ```
+> finally:
+>     _riscrivi_intatto(pieno, sorgente)   # rimetto a posto
+>     _chiudi_traccia(pieno)               # e straccio il biglietto — SENZA VERIFICARE
+> ```
+> Se la riscrittura **solleva**, il `finally` propaga e il biglietto resta (bene). Ma se
+> riscrive **byte diversi senza sollevare** — disco pieno che tronca, fine-riga tradotti — il
+> biglietto spariva lo stesso, `guardia_commit` rispondeva **«via libera»**, e un file di
+> produzione col guasto dentro entrava nel commit **con tutti i controlli verdi**.
+> ✅ Chiuso: `_chiudi_traccia` straccia il biglietto **solo** dopo aver confrontato lo sha256
+> (`_tornato_identico`), e **nel dubbio non chiude**. ⛔ **Nessun gancio nuovo**: quello che
+> serviva c'era già, mancava che il biglietto fosse onesto (regola ferrea 1).
+> 💡 Il 2026-08-17 quel confronto l'ho fatto **a mano quattro volte**, e quattro volte su
+> quattro è andata bene. È esattamente ciò che D18 rifiuta: non «ha barato?», ma «**può**
+> barare?».
+>
+> ### ⚙️ S11 CHIUSO DOPO SETTE GIORNI — la voce 10
+> `openssl` non sta nel PATH di PowerShell, quindi `TestRipristinoAPezziNonPassa` si mette da
+> parte **in blocco**. `unittest` stampa **UN** salto, senza il nome della classe, e i suoi
+> metodi **non entrano nel totale `Ran`**. Quante guardie sono? **5**, contate adesso col
+> parser di Python — non da me. Difendono che un salvataggio cifrato **si rimetta insieme**.
+>
+> ### ⚠️ «34 SPENTI» NON L'HO POTUTO CONFERMARE, E QUINDI NON SI USA
+> Col metodo che ho (cercare nel registro le righe che nominano il modulo) ne risultano **11**,
+> non 34. Quel numero non ha una misura che lo regge. Ciò che è misurato: *non raggiungibile
+> ≠ morto*, e chi possiede quel fatto è la scheda del modulo nel registro.
+>
+> ### ⛔ «81 PUNTI» NON È LO STESSO CASO DI «63», E TOGLIERLO AVREBBE FATTO DANNO
+> Sembrava roba morta da eliminare in cinque punti. **Non lo è**: `piano_dei_soldi.py` lo
+> **legge** (`_CONTO_MORTI`) da `REGISTRO_INGEGNERIA.md` **e** da `RIPRENDI_QUI.md` e diventa
+> rosso se divergono — è un numero **sorvegliato**, e cancellarlo avrebbe accecato un guardiano
+> che funziona. Tolta solo la copia sciolta che nessuno controllava.
+> 💡 Regola: prima di togliere un numero si guarda **chi lo legge**.
+>
+> ### 💸 I 30 CENTESIMI — **ORA È MISURATO SU STRIPE VERO, NON PIÙ DEDOTTO DAL LISTINO**
+> Il fondatore ha ricordato l'origine: *«abbiamo fatto la prova con l'alloggio a 1 euro e
+> Stripe si è presa 27 centesimi»*. Andato a leggere il conto **live**, in sola lettura
+> (ferrea 14, chiave mai stampata), dal contenitore `casavip_app`:
+> ```
+> BALANCE TRANSACTIONS SUL CONTO LIVE: 2   (è l'unico pagamento vero mai passato)
+> charge  EUR  importo=100  fee=27  netto=73   ch_3U53IsJMRnB73twq1Vr2rHmz
+>              fee_details: stripe_fee = 27 EUR ("Stripe processing fees")
+> refund  EUR  importo=-100 fee= 0  netto=-100  re_3U53IsJMRnB73twq1QLzUCu9
+> ```
+> ✅ **27 confermato dalla fonte.** Fino a oggi quel numero veniva dal listino
+> (`https://stripe.com/it/pricing`, letto il 2026-08-09) perché
+> `GET /v1/balance_transactions` rispondeva `"data": []`. `collaudi/conti_stripe.py` dichiara
+> da sé, nella sua intestazione, *«il giorno che ce ne saranno, la verità va riletta da lì»*:
+> **quel giorno è arrivato**.
+>
+> 🔴 **E IL RIMBORSO HA `fee: 0` — cioè Stripe i 27 NON li ha restituiti.** È la prova diretta
+> di quello che il prospetto dichiara a parole. Quindi, su quella prenotazione:
+> · **costo davvero sostenuto e non recuperato = 27** (deducibile)
+> · **nostro ricavo mancato = 30** (la tariffa che non abbiamo incassato — *non* un costo)
+> Il prospetto ne dichiara **uno solo**, e sceglie quello sbagliato. Su 200 € lo scarto passa
+> da 3 centesimi a **~7 €**: dichiarerebbe 10,25 dove il costo vero è ~3,25.
+>
+> ### 🔴🔴 E LEGGENDO IL LIBRO È SALTATO FUORI IL DIFETTO VERO — **QUANDO CANCELLA IL CLIENTE, CI RIMETTIAMO NOI**
+> Ordine del fondatore, 2026-08-17: *«il concetto era quello: quando lo fa il cliente, io non
+> ci devo perdere soldi»*. Oggi **ci perdiamo**, ed è misurato, non temuto.
+>
+> Le tre righe che il giornale immutabile ha scritto davvero (lette da `/data/finanza.db` in
+> produzione, sola lettura) e i saldi che ne escono:
+> ```
+> seq 1  incasso      100  cassa_piattaforma / debiti_vs_host
+> seq 2  commissione   30  debiti_vs_host    / ricavi_commissioni
+> seq 3  rimborso     100  debiti_vs_ospite  / cassa_piattaforma
+>
+> SALDI (dare positivo)   cassa_piattaforma    0   <- in realtà siamo a -27
+>                         debiti_vs_host     -70   <- debito verso l'host per un soggiorno MAI avvenuto
+>                         ricavi_commissioni -30   <- RICAVO su una prenotazione annullata
+>                         debiti_vs_ospite  +100
+>                         somma di controllo   0   <- la partita doppia QUADRA
+> ```
+> 💡 **È formalmente giusta e sostanzialmente falsa, ed è per questo che nessuno ha gridato.**
+> Il libro quadra a zero perché ogni riga ha il suo contropartita — ma su una prenotazione
+> annullata dichiara un **guadagno** di 30, un **debito** di 70 verso l'host, e una **cassa a
+> zero** mentre il denaro vero è **−27**.
+>
+> ⛔ **E NESSUNO POTEVA VEDERLO**: in `fase177_financial_controller.py` **non esiste nessuna
+> funzione che calcoli i saldi dei conti**. C'è `verifica_catena`, che dimostra che il libro
+> non è stato **manomesso** — non che dica il **vero**. Avevamo la prova dell'integrità e
+> nessuna prova della correttezza, e le due cose sembrano la stessa finché non le separi.
+>
+> **I tre pezzi del difetto**, separati apposta perché si riparano in tre momenti diversi:
+> 1. il **costo vero del gateway non entra mai nel libro**: `incasso` scrive 100, in cassa ne
+>    arrivano 73, e i 27 non stanno da nessuna parte;
+> 2. la **commissione non si storna** al rimborso: resta ricavo per sempre (su 200 € sono
+>    **10,25 €** di ricavo mai avvenuto);
+> 3. il **debito verso l'host non si azzera**: restiamo debitori di 70 per un soggiorno che non
+>    c'è stato.
+>
+> ✅ Tre guardie scritte e **viste rosse**, ed è un **replay della transazione vera** (non un
+> caso inventato): `test_conservazione_denaro.TestQuandoCANCELLAILCLIENTELaPiattaformaNONDeveRIMETTERCI`.
+> ```
+> AssertionError: 0 != -27 : il libro dice che in cassa il saldo e' +0, ma il denaro vero
+> e' -27 [...] su 200 EUR la stessa strada costa circa 3,25 EUR a ogni cancellazione.
+> ```
+>
+> ### ⚖️ CHI PAGA LA FETTA — **LA DOMANDA ERA SBAGLIATA, E L'HA VISTO IL FONDATORE**
+> *«Ma cosa c'entra l'host se il cliente prenota poi disdice?»* — **niente**, e avevo proposto
+> quella strada a torto. L'host ha bloccato il calendario, non ha incassato nulla e non ha
+> cancellato lui: fargli pagare la fetta è farla pagare a chi ha già perso. **Strada tolta.**
+>
+> 💡 **E la ricerca (D25) dice che la domanda giusta non è «chi paga», è «perché la stiamo
+> pagando».**
+> · **Stripe, documentazione ufficiale** (`docs.stripe.com/refunds` e
+>   `docs.stripe.com/payments/place-a-hold-on-a-payment-method`, lette il 2026-08-17): la
+>   commissione dell'addebito originale **non viene restituita** su un rimborso — confermato,
+>   ed è ciò che abbiamo misurato (`fee: 0` sul rimborso vero). Ma **annullare
+>   un'autorizzazione PRIMA dell'acquisizione non costa NIENTE**, e Stripe lo raccomanda
+>   proprio per il nostro caso: *«se la tua attività elabora un volume elevato di rimborsi
+>   vicini al momento della transazione, consigliamo di usare autorizzazione e acquisizione
+>   manuali per ridurre i costi di rimborso»*.
+> · **Airbnb** (centro assistenza, letto il 2026-08-17): se l'ospite cancella entro la finestra
+>   di rimborso riceve indietro **tutto, commissione di servizio compresa**, e dal payout
+>   dell'host **non viene tolto niente**. Cioè: **la piattaforma se lo assorbe, e l'host non
+>   c'entra** — esattamente l'istinto del fondatore.
+> · **Booking.com**: la commissione resta dovuta sulle prenotazioni **non rimborsabili** —
+>   cioè nell'unico caso in cui **l'host incassa davvero**.
+>
+> ### 🛠️ LA STRADA CHE ANNULLA LA PERDITA INVECE DI SPOSTARLA
+> **Non catturare i soldi subito.** Oggi l'addebito è immediato (misurato: charge alle 12:36,
+> rimborso alle 12:52 — la fetta era già presa). Con `capture_method=manual` sulla sessione di
+> Checkout — che è **esattamente l'API che `fase85` già usa** — si autorizza e si acquisisce
+> dopo. Se la cancellazione arriva prima dell'acquisizione, **il PaymentIntent si annulla e
+> non paga nessuno: né noi, né l'ospite, né l'host.** I soldi non si muovono proprio.
+>
+> ⏱️ **Il limite, misurato e non ricordato** (tabella nella pagina Stripe sopra): l'autorizzazione
+> su carta online tiene **7 giorni** (Visa 7 per transazione avviata dal cliente, Mastercard /
+> Amex / Discover 7; Visa 5 se avviata dall'esercente). Esiste l'**autorizzazione estesa** per
+> finestre più lunghe. Il nostro **ripensamento è a 48 ore** (`_entro_ripensamento`): sta
+> comodamente dentro i 7 giorni. Quindi **tutte le cancellazioni «ci ho ripensato subito» —
+> cioè il caso appena provato dal fondatore — costerebbero ZERO.**
+>
+> ⚠️ **Cosa NON copre**, dichiarato: una prenotazione fatta a tre mesi con politica flessibile e
+> cancellata a una settimana dall'arrivo. Lì l'acquisizione è già avvenuta e la fetta è persa
+> davvero. Per quei casi la scelta resta, e per l'ordine del fondatore e il precedente Airbnb è
+> **la piattaforma** — ma **scritta nel libro**, così è visibile e si può mettere a bilancio,
+> invece di sparire come oggi.
+> ✅ E il caso in cui l'host c'entra davvero esiste ed è uno solo: quando **l'host trattiene una
+> penale** (`host_tiene`), cioè quando incassa. È la stessa regola di Booking.com.
+>
+> ⛔ Qualunque strada si scelga, i pezzi **1** e **2** vanno riparati lo stesso: sono il libro
+> che dice il falso, e restano falsi anche se la fetta la paghiamo noi per scelta.
+>
+> ### 🔎 «IL RECORD L'ABBIAMO PERSO» — SÌ DAL NOSTRO DATABASE, **NO DA STRIPE**
+> L'altra sessione aveva ragione sul database: `fase162.pulisci_vecchi()` ha purgato quel
+> record (è il difetto chiuso nel blocco (19) — la soglia contata da `creato_ts` invece che
+> dalla cancellazione). Ma **Stripe tiene il suo libro mastro**, e i due movimenti sono lì con
+> i loro identificativi. 💡 **Non si è persa la prova: si è persa la NOSTRA copia della prova.**
+> È un'ottima notizia per la riparazione, perché il dato che serve non è mai stato nostro.
+>
+> ### 🛠️ LA STRADA DELLA RIPARAZIONE, PROVATA CON CHIAMATE VERE (non disegnata)
+> ```
+> record.stripe_pi           <- fase162 lo salva già (è così che funziona il pulsante)
+>   GET /payment_intents/pi_3U53IsJMRnB73twq1ph2Ezqy   -> latest_charge = ch_3U53Is...
+>   GET /charges/ch_3U53Is...                          -> balance_transaction = txn_3U53Is...
+>   GET /balance_transactions/txn_3U53Is...            -> fee = 27  ·  net = 73
+> ```
+> ⚠️ **E una trappola misurata, che sarebbe stata un'ipotesi comoda e sbagliata**: il
+> `riferimento` della prenotazione **NON è nei metadata del charge** (`metadata: {}`) — sta
+> nella *checkout session*. Legare il costo alla prenotazione passando dai metadata del charge
+> non funzionerebbe. Si parte da `stripe_pi`, che abbiamo già in casa.
+>
+> `aggrega_costi_tecnici` somma `costo_pagamento_cents` — **la nostra tariffa** — e la mette
+> sotto l'etichetta *«commissione Stripe non restituita»*. Sono due voci contabili diverse:
+> **costo sostenuto** contro **ricavo mancato**.
+> ✅ Tre guardie scritte e **viste rosse** in
+> `test_fase162_hold_pagamento.TestIlProspettoDelCommercialistaNONSpacciaLaNostraTariffaPerStripe`
+> (la cifra · il «non lo so» quando Stripe non risponde · l'etichetta).
+> 🔴 **La riparazione tocca `fase162` e `fase83`: ferma finché non arriva «autorizzato» (B4).**
+> ⚠️ **E il piano di riparazione si appoggiava su un impianto che NON esiste**: il blocco (19)
+> diceva *«`fase85` chiede a Stripe la commissione effettiva (`balance_transaction.fee`)»*.
+> Misurato: in `fase85_pagamenti_stripe.py` **la parola non compare**. L'unico posto che tocca
+> quell'API è `fase182_riconciliazione.py:85`, che somma per categoria e **non legge mai
+> `fee`**, né lo lega a una prenotazione. Il pezzo va scritto.
+>
+> ### 🎛️ L'INTERRUTTORE «a mano / da solo» — progettato, non costruito
+> ⛔ **Nessun modulo nuovo** (D10): si riusa `fase191_blocco_globale.BloccoGlobale`, il
+> fratello del tasto rosso — ha già `attivo()`, `imposta(attivo, motivo=, chi=)`, la env
+> autorevole e il flag a caldo. Serve una seconda istanza (`RIMBORSO_AUTOMATICO`) e una rotta.
+> 💡 **E l'automatico deve passare dagli STESSI quattro freni del pulsante**, cioè dalla stessa
+> scheda `_rimborso_dovuto_scheda`: due strade che muovono soldi con due giudizi diversi sono
+> il difetto che questo progetto trova ogni volta. Tocca produzione: **serve «autorizzato»**.
+>
+> ### ✅ RIPARATO — via del fondatore: «autorizzato» (2026-08-17)
+> **Il libro contabile adesso dice il vero.** Tre movimenti che non esistevano, in
+> `fase177_financial_controller.py`:
+> ```
+> costo_gateway       costi_gateway      / cassa_piattaforma   la fetta che il gestore trattiene
+> debito_all_ospite   debiti_vs_host     / debiti_vs_ospite    alla cancellazione il dovuto cambia padrone
+> storno_commissione  ricavi_commissioni / debiti_vs_ospite    su un rimborso totale non e' piu' dovuta
+> ```
+> Rifatto il conto sulla stessa prova da 1 €: cassa **−27** · costi_gateway **+27** ·
+> ricavi **0** · debiti_vs_host **0** · debiti_vs_ospite **0**. Il libro e il saldo Stripe
+> dicono finalmente **lo stesso numero**.
+>
+> ✅ **E `saldi()` adesso esiste.** Prima il controllore finanziario aveva solo
+> `verifica_catena` — che dimostra che il libro non è stato **manomesso**, non che dica il
+> **vero**. È per questo che tre righe false erano invisibili: nessuno guardava i conti.
+>
+> ⛔ **Lo storno sta dentro `_giornale`, non nelle sette rotte che rimborsano — di proposito.**
+> Le strade sono **sette**, e questo progetto le ha già dimenticate due volte in due giorni
+> (una su due il 16, quattro su sette il 17). Un obbligo da ripetere in sette punti si rompe di
+> nuovo: così non può sfuggirne nessuna, perché passano tutte da quella riga. Idempotente.
+> ⛔ **Gli importi non li passa chi chiama: li legge il giornale.** È lo stesso freno del
+> pulsante dei rimborsi — nessun chiamante può far uscire un numero diverso da quello scritto.
+> ⚠️ **LIMITE DICHIARATO (D18 punto 3): il rimborso PARZIALE non è coperto.** Lì l'host
+> trattiene una penale, quindi una parte della commissione è davvero guadagnata e stornarla
+> tutta sarebbe un secondo errore al posto del primo. Si preferisce **non fare e dirlo**: il
+> caso resta aperto e va affrontato a parte.
+>
+> ✅ **`fase85.commissione_effettiva(pi)`** — chiede a Stripe quanto ha preso davvero
+> (`pi → latest_charge → balance_transaction.fee`). Se non risponde dice **«non lo so»**
+> (`ok=False` col motivo), e chi chiama lo dichiara invece di ripiegare sulla nostra
+> percentuale: rimettere dentro il numero sbagliato con l'aria di averlo verificato sarebbe
+> peggio del difetto di partenza.
+>
+> ✅ **Il prospetto del commercialista ha tre voci, non una**:
+> `perdite` = **ricavo tecnico mancato** (non è un costo) · `costo_stripe_irrecuperabile` =
+> il costo vero, deducibile, **letto dal gestore** · `costo_stripe_sconosciuto` = **non
+> determinato**, che non è zero ed è un dato da recuperare prima di chiudere il periodo.
+>
+> ✅ **Lo stesso numero, una sola lettura, due scriventi che non possono divergere**: il libro
+> (contabilità) e il record (prospetto) ricevono la fee dalla **stessa** chiamata a Stripe.
+>
+> ✅ **Guardie**: 4 in `test_conservazione_denaro` (di cui una sull'albero sintattico, che
+> pretende che il server le CHIAMI davvero — appendice 23) + 3 in
+> `test_fase162_hold_pagamento`. Tutte **viste rosse prima**. Batteria dei soldi dopo la
+> riparazione: **126 test, 0 rossi**.
+>
+> ### 📁 FILE TOCCATI (dichiarati prima di aprirli, regola ferrea 15)
+> Produzione (col via «autorizzato»): `fase177_financial_controller.py` (3 movimenti + `saldi`
+> + `storna_prenotazione` + `costo_gateway`) · `fase83_server.py` (lo storno dentro `_giornale`
+> + `_costo_gateway_dal_gestore`) · `fase85_pagamenti_stripe.py` (`commissione_effettiva`) ·
+> `fase162_pagamenti_pendenti.py` (`salva_costo_gateway` + le tre voci del prospetto).
+> Strumenti: `collaudi/foglio_unico.py` (**nuovo**) · `collaudi/costo_vero_stripe.py`
+> (**nuovo**: leggeva da una cartella temporanea — è il controllo 8 del pre-fatto) ·
+> `collaudi/raggiungibilita.py` (tutti gli
+> ingressi) · `collaudi/regole_avvio.py` (chiama il foglio) · `collaudi/prima_di_dire_fatto.py`
+> (idem) · `collaudi/mutazione_prodotto.py` (lo sha256 nel biglietto).
+> Collaudi: `test_pipeline_ci.py` (+16 guardie) · `test_fase162_hold_pagamento.py` (+3, rosse).
+> Documenti: `REGISTRO_INGEGNERIA.md` · `RIPRENDI_QUI.md`.
+> ⛔ **Non toccati**, e dichiarati nello scopo perché è lì che andrà la riparazione:
+> `fase162_pagamenti_pendenti.py` · `fase83_server.py` · `deploy/bunker.html`.
+>
+> ### ⏭️ COSA RESTA — in ordine di valore, e il primo vale più di tutti gli altri
+> 1. 🔴🔴 **NON PRENDERE I SOLDI SUBITO** (`capture_method=manual` sulla sessione di Checkout —
+>    la stessa API che `fase85` già usa). È l'unica strada che **annulla** la perdita invece di
+>    spostarla: se la cancellazione arriva prima dell'acquisizione, il pagamento si annulla e
+>    **non paga nessuno**. Fonte: documentazione Stripe, che lo raccomanda per questo identico
+>    caso. Finestra misurata: **7 giorni** su carta online (Visa 5 se avviata dall'esercente);
+>    il nostro ripensamento è a **48 ore**, quindi ci sta dentro.
+>    ⛔ **NON È UNA RIGA, ed è per questo che va fatto come blocco a sé.** Cambia *quando* il
+>    denaro si muove: il webhook non può più scrivere `incasso` alla conferma della sessione,
+>    serve qualcuno che acquisisca dopo 48h, e **se quel passaggio salta il cliente ha una
+>    prenotazione confermata e i soldi non arrivano mai** — un guasto peggiore dei 27 centesimi
+>    che stiamo curando. Vuole le sue guardie e il suo allarme.
+>    💡 Il momento giusto è **adesso**: in produzione ci sono **zero annunci**, quindi si può
+>    fare bene invece che in fretta.
+> 2. 📉 **UN ALLARME SUL SALDO STRIPE.** Il 2026-08-17 il saldo è andato a **−0,27 €** e
+>    **nessuno lo guardava**: l'ha visto il fondatore sulla dashboard. `collaudi/costo_vero_stripe.py`
+>    ora sa calcolarlo e grida se il netto è sotto zero — manca che qualcuno lo esegua da solo.
+> 3. 🎛️ **L'interruttore «a mano / da solo»** — ⛔ **nessun modulo nuovo**: si riusa
+>    `fase191_blocco_globale.BloccoGlobale` (il fratello del tasto rosso), che ha già
+>    `attivo()`, `imposta(attivo, motivo=, chi=)`, la env autorevole e il flag a caldo.
+>    ⛔ E l'automatico deve passare dagli **stessi quattro freni** del pulsante, cioè dalla
+>    stessa `_rimborso_dovuto_scheda`: due strade che muovono soldi con due giudizi diversi
+>    sono il difetto che questo progetto trova ogni volta. **Nasce spento**, e ad accenderlo è
+>    un gesto del fondatore — la sua stessa regola: *«prima si guadagna la fiducia, poi si
+>    toglie il dito»*.
+> 4. ⚖️ **Il rimborso PARZIALE** (limite dichiarato sopra): lo storno oggi non lo copre.
+> 5. 🔁 **Rilanciare CodeQL** sulla #65 (rosso di GitHub, non nostro) e poi unirla.
+
 ## 🟢 2026-08-17 (19) — **LE SETTE STRADE SCRIVONO TUTTE NEL GIORNALE — e il pulsante non sparisce più**
 
 > **Via del fondatore:** «autorizzato», poi «procedi al commit». ✅ **CHIUSO E IN PRODUZIONE.**
@@ -176,17 +520,35 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 >    adesso**. Il precedente esiste già nei 5 lavori in sospeso, e nacque perché quella lista
 >    **mentiva su CodeQL**.
 >
->    **(b) I numeri sbagliati sono ancora scritti, e uno DECIDE il lavoro:**
->    - «**63 moduli morti**» compare in **otto punti** fra i due documenti. ⛔ È **SBAGLIATO**:
->      sono **59**, e **34 sono solo SPENTI**, non morti (si accendono con un token). E
->      `REGISTRO_INGEGNERIA.md:486` lo usa come **istruzione** — *«prima di ogni blocco si guarda
->      se il modulo è acceso: 63 su 151 non sono raggiungibili»* — quindi si decide **su cosa
->      lavorare** con un numero falso. È il danno vero, perché la classifica «rischio × cecità»
->      ci si appoggia.
->    - «**81 punti che non vanno fatti**» compare in **cinque punti** (i due documenti +
->      `collaudi/piano_dei_soldi.py`).
->    - `collaudi/raggiungibilita.py` **dichiara da sé** il proprio limite: parte da **un solo
->      punto d'ingresso su quattro** e ignora `app.py`. Il numero nasce già monco.
+>    **(b) I numeri sbagliati erano ancora scritti, e uno DECIDEVA il lavoro. ✅ CHIUSO.**
+>    ⛔ **E il conto scritto qui sopra era anch'esso sbagliato**, il che è la dimostrazione più
+>    breve della regola: dicevo «otto punti fra i due documenti» e «cinque». Misurati col
+>    `grep`: le occorrenze erano **dodici in tre file** e **nove in tre file** — perché nessuno
+>    aveva guardato dentro `collaudi/raggiungibilita.py`, cioè lo strumento che quel numero lo
+>    **produce**. *Anche il numero che contava i numeri sbagliati era sbagliato.*
+>    - 🔴 **La causa, e non era «una cifra vecchia».** `collaudi/raggiungibilita.py` camminava
+>      dal solo `main_casavip.py`, mentre sul disco gli ingressi sono **tre** (`app.py` e
+>      `fase83_server.py` sono gli altri). Quattro moduli risultavano cadaveri mentre la
+>      produzione li accende: **`fase17_money`**, **`fase15_idempotency`**,
+>      `fase13_protocollo_finale`, `fase23_datastore`. Lo strumento prometteva di sbagliare in
+>      un verso solo (*«se dice MORTO, è morto davvero»*) e sbagliava **nell'altro** — cioè
+>      seppelliva vivi, ed erano i moduli dei soldi che il piano esclude dal lavoro quando li
+>      crede morti.
+>    - ✅ **Riparato con l'ordine D20**: guardia `TestLaRaggiungibilitaNONPuoGuardareUnIngressoSOLO`
+>      in `test_pipeline_ci.py`, **vista rossa** (`{'app.py': ['fase13_protocollo_finale',
+>      'fase15_idempotency', 'fase17_money', 'fase23_datastore']}`), poi verde. La guardia non
+>      pretende un **numero** — pretende una **relazione**: se un ingresso vero raggiunge un
+>      modulo, quel modulo non è morto. Regge anche il giorno che i moduli diventano 200.
+>    - ✅ **E i numeri sono usciti dai documenti**: al loro posto c'è il comando che li produce.
+>      A impedire che tornino c'è la **voce 7 del foglio unico**, che li rimisura e confronta.
+>      ⚠️ Al primo giro quella voce ha prodotto **nove falsi allarmi su trenta** (un `«3 morti»`
+>      che erano punti di mutazione, un `167` che veniva da `fase167`): stretta, perché *un
+>      falso allarme è un difetto quanto un allarme mancato*.
+>    - ⚠️ **«34 sono solo SPENTI» NON l'ho potuto confermare**: col metodo che ho (cercare nel
+>      registro le righe che nominano il modulo) ne risultano **11**, non 34. Il numero 34 non
+>      ha una misura che lo regge, quindi **non si usa**. Ciò che è misurato è: non
+>      raggiungibile **≠** morto, e chi possiede quel fatto è la scheda del modulo nel
+>      registro, non il camminatore degli import.
 >
 >    💡 **La regola che ne esce, e vale oltre questo lavoro:** un numero che descrive lo stato
 >    della macchina **non si scrive** in un documento — si **produce** quando lo si legge.
@@ -1631,7 +1993,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > ### 🔴 SCOPERTO OGGI DAL FONDATORE — **«FATTO» copre DUE COSE DIVERSE**
 > Non l'ha trovato uno strumento: l'ha trovato lui, dicendo *«altre fasi le avevamo già
 > fatte, ma non con questo metodo»*. È la **seconda volta** che un suo dubbio scopre un
-> numero che nessun controllo segnalava (la prima furono i «63 moduli morti»).
+> numero che nessun controllo segnalava (la prima fu il conto dei moduli non raggiungibili).
 > ✅ **`fase59` RIMISURATO IL 2026-08-14 — il documento diceva il falso.** Vero: **114 punti ·
 > 72 uccisi · 42 scoperti**, di cui **39 su codice che la produzione ESEGUE** e 3 su codice morto.
 > ⛔ **27 dei 69 «scoperti» del primo giro erano FALSI**: il metodo in due passi non è opzionale.
@@ -2232,7 +2594,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > Il modulo era **il piu' cieco del censimento dei soldi** (un solo file di test lo nominava)
 > e **non era mai passato davanti al Giudice** (`grep fase167 collaudi/mutazione_prodotto.py`
 > → 0). Prima si e' verificato che fosse **ACCESO**: `collaudi/raggiungibilita.py` dice
-> 151 moduli, 88 raggiungibili, 63 morti, e `fase167` **non e' fra i 63**; conferma positiva
+> `fase167` **raggiungibile** (i conti li stampa lo strumento, qui non si ricopiano); conferma positiva
 > in `fase81_bootstrap_casavip.py:299`.
 >
 > | livello | esito **misurato**, non ricordato |
@@ -2860,10 +3222,13 @@ Su 120 host: 18 allo 0% · 40 all'8% · 62 al 10%, e i conti tornano **host per 
 - Email di produzione: `smtp.hostinger.com:465` accetta le credenziali (provato LOGIN+QUIT,
   nessun invio).
 
-#### 🗺️ IL 42% DELLA MACCHINA NON È ACCESO — e la guardia esistente non lo vede
-Camminando gli import da `main_casavip.py` (bias generoso: conta anche gli import dentro le
-funzioni, quindi se dice MORTO lo è davvero): **88 raggiungibili su 151 · 63 NO.**
-Confermato da tre lati: i 15 «a zero importatori» dell'appendice 23 sono tutti dentro i 63;
+#### 🗺️ UNA FETTA DELLA MACCHINA NON È ACCESA — e la guardia esistente non lo vede
+Camminando gli import dagli ingressi della produzione (bias generoso: conta anche gli import
+dentro le funzioni, quindi se dice MORTO lo è davvero). ⛔ **I conti li stampa
+`python collaudi/raggiungibilita.py`, qui non si scrivono** — e la cifra che stava in questa
+riga era **falsa**: veniva da un ingresso solo su tre (riparato il 2026-08-17).
+Confermato da tre lati: i 15 «a zero importatori» dell'appendice 23 sono tutti fra i non
+raggiungibili;
 `fase35_pagamenti` è importato solo da `fase36_booking_api` e `fase41_admin_panel`, **morti
 anche loro**. ⚠️ **La guardia dell'appendice 23 conta CHI IMPORTA, non CHI SI ACCENDE**: un
 grappolo di moduli morti che si importano a vicenda si copre da solo. Dei 15 moduli in cima
@@ -2956,7 +3321,7 @@ percorso del denaro.
 
 **GLI ATTREZZI DI OGGI, messi nel repository perché non sparissero** (erano nel temporaneo):
 · `collaudi/raggiungibilita.py` — cammina gli import da `main_casavip.py` e dice quali moduli la
-  produzione **accende davvero**. È ciò che ha trovato i 63 moduli morti su 151, e vede una cosa
+  produzione **accende davvero**. È ciò che ha trovato i moduli mai accesi, e vede una cosa
   che la guardia dell'appendice 23 **non può vedere** (quella conta chi importa, non chi si accende).
 · `collaudi/prova_bonifico_host.py` — la prova che i soldi arrivano sul conto dell'host, che
   `giro_banco.py` dichiara di NON fare. Gira dentro il banco, con Stripe di prova.
@@ -4610,11 +4975,15 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5790 test
+SUITE ATTUALE: Ran 5816 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
-            le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
+            le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3.
+            ✅ DAL 2026-08-17 QUEL NUMERO NON LO SCRIVO PIU' IO: lo produce la voce 10
+            del foglio unico (`python collaudi/foglio_unico.py`), che conta i metodi
+            della classe spenta col parser di Python e dice quale shell li sta
+            spegnendo. Era lo sbaglio S11, aperto da sette giorni.
 COMANDO:  python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"
 MISURATO SU: d781e8d + LE QUATTRO STRADE + LA PURGA + LA LISTA UNICA (2026-08-17, non
              ancora committato). Due misure successive, entrambe col caricatore da fermo e

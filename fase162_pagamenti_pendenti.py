@@ -182,6 +182,53 @@ class PagamentiPendenti:
         finally:
             con.close()
 
+    def salva_costo_gateway(self, riferimento: Any, fee_cents: Any) -> bool:
+        """Scrive sul record quanto si e' preso il GESTORE davvero (`balance_transaction.fee`).
+
+        ⛔ NON E' `costo_pagamento_cents`, ed e' tutta la differenza: quello e' la NOSTRA
+        tariffa tecnica (5% + 0,25), un RICAVO che tratteniamo all'host. Questo e' il COSTO che
+        Stripe trattiene a noi, e su un rimborso **non torna indietro**. Finche' la tariffa era
+        «3% a margine zero» i due numeri quasi coincidevano e chiamare l'uno con l'altro non
+        faceva danno; dal 2026-08-09 (5% + 0,25) si sono separati, e il prospetto per il
+        commercialista ha cominciato a dichiarare un costo che non era mai stato sostenuto.
+        Misurato sul primo pagamento vero: noi 30, Stripe 27. Su 200 EUR: 10,25 contro ~3,25.
+
+        ⛔ Nessun ripiego: chi non ha il dato NON chiama questa funzione. Un campo assente il
+        prospetto lo conta fra gli **sconosciuti**; un campo riempito con una stima sarebbe una
+        bugia che sembra una misura.
+        Idempotente. Isolata: qualunque errore -> False, record invariato.
+        """
+        if not (isinstance(riferimento, str) and riferimento):
+            return False
+        if not (isinstance(fee_cents, int) and not isinstance(fee_cents, bool)
+                and fee_cents >= 0):
+            return False
+        import json as _j
+        con = self._apri()
+        try:
+            with con:
+                r = con.execute("SELECT corpo_json FROM pendenti WHERE riferimento=?",
+                                (riferimento,)).fetchone()
+                if r is None:
+                    return False
+                try:
+                    dj = _j.loads(r["corpo_json"] or "{}")
+                    if not isinstance(dj, dict):
+                        dj = {}
+                except Exception:
+                    dj = {}
+                if dj.get("costo_stripe_reale_cents") == fee_cents:
+                    return True                       # gia' salvato (retry webhook)
+                dj["costo_stripe_reale_cents"] = fee_cents
+                con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                            (_j.dumps(dj, ensure_ascii=False), riferimento))
+                return True
+        except Exception:
+            logger.warning("salva_costo_gateway fallita (ISOLATA)", exc_info=True)
+            return False
+        finally:
+            con.close()
+
     def cerca_prenotazioni(self, termine: Any, *, limit: int = 10, offset: int = 0
                            ) -> Dict[str, Any]:
         """RICERCA OPERATIVA (Field, Incremento 7): prenotazioni per RIFERIMENTO (prefisso,
@@ -615,6 +662,11 @@ class PagamentiPendenti:
             and 0 < limit <= 100000 else 20000
         vuoto = {"conteggio": 0, "cents": 0}
         out: Dict[str, Any] = {"incassate": dict(vuoto), "perdite": dict(vuoto),
+                               # ⛔ DUE VOCI NUOVE, 2026-08-17, e sono la riparazione di un
+                               # errore che scalava: quello che Stripe TRATTIENE davvero, e
+                               # quante prenotazioni non lo sanno. Vedi `salva_costo_gateway`.
+                               "costo_stripe_irrecuperabile": dict(vuoto),
+                               "costo_stripe_sconosciuto": dict(vuoto),
                                "coperto_cents": 0, "per_valuta": {}, "letti": 0}
         con = self._apri()
         try:
@@ -645,13 +697,40 @@ class PagamentiPendenti:
                                                       "conteggio": 0})
             v["conteggio"] += 1
             v["perdite_cents" if persa else "incassate_cents"] += costo
+            # ⛔ LE DUE VOCI CHE MANCAVANO, e valgono solo sulle prenotazioni PERSE: e' li' che
+            # il costo del gestore diventa irrecuperabile, perche' sul rimborso Stripe la sua
+            # fetta NON la restituisce (misurato: `fee: 0` sulla riga di rimborso).
+            if persa:
+                reale = dj.get("costo_stripe_reale_cents")
+                if isinstance(reale, int) and not isinstance(reale, bool) and reale >= 0:
+                    out["costo_stripe_irrecuperabile"]["conteggio"] += 1
+                    out["costo_stripe_irrecuperabile"]["cents"] += reale
+                else:
+                    # ⛔ NIENTE RIPIEGO SULLA NOSTRA TARIFFA. Rimettere dentro `costo` sarebbe
+                    # il difetto del 2026-08-17 rimesso al suo posto, con l'aria di essere
+                    # stato verificato. Un buco DICHIARATO si colma; un buco riempito con una
+                    # stima non lo trova piu' nessuno (sbaglio S7).
+                    out["costo_stripe_sconosciuto"]["conteggio"] += 1
         out["coperto_cents"] = out["incassate"]["cents"] - out["perdite"]["cents"]
         # ETICHETTE FISCALI ESPLICITE (2026-07-21): il commercialista deve leggere la voce e
-        # sapere subito cosa farne, senza interpretare. La quota Stripe su una prenotazione
-        # rimborsata NON e' recuperabile: e' un costo di servizio sostenuto e non ribaltato.
+        # sapere subito cosa farne, senza interpretare.
+        # ⛔ CORRETTE IL 2026-08-17, e non era un dettaglio di parole. `perdite` somma
+        # `costo_pagamento_cents`, cioe' la NOSTRA tariffa: e' un RICAVO CHE NON ABBIAMO
+        # INCASSATO, non un costo che abbiamo sostenuto. Chiamarla «commissione Stripe non
+        # restituita» attribuiva a Stripe un numero che Stripe non ha mai visto, e gonfiava
+        # una deduzione: su 200 EUR dichiarava 10,25 dove il costo vero e' ~3,25 (misurato sul
+        # conto live). Le due voci ora sono separate e ognuna dice cosa e'.
         out["incassate"]["voce_fiscale"] = "Ricavo tecnico coperto (tariffa ribaltata all'host)"
-        out["perdite"]["voce_fiscale"] = ("COSTO TECNICO IRRECUPERABILE — perdita deducibile "
-                                          "(commissione Stripe non restituita su rimborsi/storni)")
+        out["perdite"]["voce_fiscale"] = (
+            "RICAVO TECNICO MANCATO — la tariffa tecnica non incassata su prenotazioni "
+            "rimborsate/cancellate. NON e' un costo sostenuto: e' un mancato guadagno")
+        out["costo_stripe_irrecuperabile"]["voce_fiscale"] = (
+            "COSTO TECNICO IRRECUPERABILE — perdita deducibile (commissione del gestore di "
+            "pagamento trattenuta e non restituita sul rimborso), letta dal gestore")
+        out["costo_stripe_sconosciuto"]["voce_fiscale"] = (
+            "NON DETERMINATO — prenotazioni rimborsate per cui la commissione effettiva del "
+            "gestore non e' stata letta. NON e' zero: e' un dato che manca, e va recuperato "
+            "prima di chiudere il periodo")
         return out
 
     def info(self, riferimento: Any) -> Optional[Dict[str, Any]]:

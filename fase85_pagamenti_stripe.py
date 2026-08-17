@@ -33,6 +33,11 @@ logger = logging.getLogger("core_auto.pagamenti_stripe")
 
 STRIPE_URL = "https://api.stripe.com/v1/checkout/sessions"
 RIMBORSI_URL = "https://api.stripe.com/v1/refunds"
+# Le tre tappe per sapere quanto si e' preso Stripe DAVVERO (vedi `commissione_effettiva`):
+# pagamento -> addebito -> movimento di saldo, dove vive il campo `fee`.
+PAGAMENTI_URL = "https://api.stripe.com/v1/payment_intents"
+ADDEBITI_URL = "https://api.stripe.com/v1/charges"
+MOVIMENTI_URL = "https://api.stripe.com/v1/balance_transactions"
 
 
 def _intero_pos(v: Any) -> bool:
@@ -213,6 +218,60 @@ class ProviderStripe:
                          payment_intent, exc.__class__.__name__, exc, exc_info=True)
             return {"ok": False, "rimborsi": [], "rimborsato_cents": 0,
                     "motivo": "%s: %s" % (exc.__class__.__name__, exc)}
+
+    def commissione_effettiva(self, payment_intent: Any) -> Dict[str, Any]:
+        """QUANTO SI E' PRESO STRIPE DAVVERO su quel pagamento — la META' che ci mancava.
+
+        ⛔ PERCHE' ESISTE (2026-08-17). Il prospetto per il commercialista dichiarava come
+        «commissione Stripe non restituita» la NOSTRA tariffa tecnica (5% + 0,25). Sono due
+        voci contabili diverse -- **costo sostenuto** contro **ricavo mancato** -- e i due
+        numeri si sono separati il 2026-08-09, quando la tariffa ha smesso di essere «3% a
+        margine zero». Misurato sul primo pagamento vero (1,00 EUR): noi dichiaravamo **30**,
+        Stripe si era presa **27**. Su 200 EUR lo scarto diventa **~7 EUR**.
+
+        ⛔ E NON SI STIMA. Se Stripe non risponde, questa funzione dice **«non lo so»**
+        (`ok=False` col motivo), e chi chiama deve dirlo invece di ripiegare sulla nostra
+        percentuale: rimettere dentro il numero sbagliato con l'aria di averlo verificato
+        sarebbe peggio del difetto di partenza. E' la stessa distinzione di `rimborsi_di`:
+        `ok=False` non significa «zero», significa «nessuno ha potuto guardare» (sbaglio S7).
+
+        LA STRADA, provata con chiamate vere sul conto LIVE il 2026-08-17:
+            pi_3U53Is... -> latest_charge ch_3U53Is... -> balance_transaction txn_3U53Is...
+            -> fee = 27  ·  net = 73
+        ⚠️ NON passa dai metadata del charge: sono **vuoti** (misurato). Il riferimento della
+        prenotazione vive nella sessione di Checkout — chi ci si fosse appoggiato avrebbe
+        costruito un legame che non lega niente. Si parte dallo `stripe_pi`, che `fase162`
+        salva gia' sul record.
+
+        Ritorna sempre un dict: {'ok', 'fee_cents', 'netto_cents', 'valuta', 'motivo'}.
+        """
+        vuoto = {"ok": False, "fee_cents": 0, "netto_cents": 0, "valuta": "", "motivo": ""}
+        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+            return dict(vuoto, motivo="payment_intent_assente")
+        intestazione = {"Authorization": "Bearer " + self._key}
+        try:
+            pi = self._fetch(PAGAMENTI_URL + "/" + payment_intent, None, intestazione)
+            addebito = (pi or {}).get("latest_charge")
+            if not addebito:
+                # Non e' «commissione zero»: e' un pagamento senza addebito (non catturato,
+                # fallito, o gia' annullato). Dirlo e' l'unica risposta onesta.
+                return dict(vuoto, motivo="nessun addebito sul pagamento (stato %r)"
+                            % ((pi or {}).get("status"),))
+            ch = self._fetch(ADDEBITI_URL + "/" + str(addebito), None, intestazione)
+            movimento = (ch or {}).get("balance_transaction")
+            if not movimento:
+                return dict(vuoto, motivo="addebito senza balance_transaction: la commissione "
+                                          "non e' ancora stata calcolata da Stripe")
+            bt = self._fetch(MOVIMENTI_URL + "/" + str(movimento), None, intestazione)
+            if not isinstance(bt, dict) or "fee" not in bt:
+                return dict(vuoto, motivo="risposta_inattesa: %r" % (bt,))
+            return {"ok": True, "fee_cents": int(bt.get("fee") or 0),
+                    "netto_cents": int(bt.get("net") or 0),
+                    "valuta": str(bt.get("currency") or "").upper(), "motivo": ""}
+        except Exception as exc:
+            logger.error("Stripe: LETTURA COMMISSIONE EFFETTIVA FALLITA pi=%s -> %s: %s",
+                         payment_intent, exc.__class__.__name__, exc, exc_info=True)
+            return dict(vuoto, motivo="%s: %s" % (exc.__class__.__name__, exc))
 
     def crea_link_anticipo(self, dati: Dict[str, Any]) -> Optional[str]:
         """PAGA IN STRUTTURA: Checkout Session che addebita SUBITO solo l'ANTICIPO

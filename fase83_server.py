@@ -3628,20 +3628,34 @@ class RouterHTTP:
                 yield emetti(buf.getvalue())
             inc = (costi.get("incassate") or {}).get("cents", 0)
             per = (costi.get("perdite") or {}).get("cents", 0)
-            yield emetti("\r\n# PROSPETTO TARIFFA TECNICA (Stripe) - classificazione fiscale\r\n")
+            # ⛔ CORRETTO IL 2026-08-17: questo prospetto dichiarava la NOSTRA tariffa come
+            # «costo irrecuperabile deducibile». Sono due voci diverse — ricavo mancato contro
+            # costo sostenuto — e il commercialista le deve leggere separate.
+            _irr = costi.get("costo_stripe_irrecuperabile") or {}
+            _ign = costi.get("costo_stripe_sconosciuto") or {}
+            yield emetti("\r\n# PROSPETTO TARIFFA TECNICA - classificazione fiscale\r\n")
             yield emetti("voce,classificazione_fiscale,prenotazioni,importo_cents,importo\r\n")
             yield emetti("tariffa_tecnica_incassata,RICAVO TECNICO COPERTO (ribaltato all'host),"
                          "%d,%d,%.2f\r\n"
                          % ((costi.get("incassate") or {}).get("conteggio", 0), inc, inc / 100.0))
-            yield emetti("perdita_tecnica_su_rimborsi,COSTO TECNICO IRRECUPERABILE - perdita "
-                         "deducibile,%d,%d,%.2f\r\n"
+            yield emetti("tariffa_tecnica_non_incassata,RICAVO TECNICO MANCATO - NON e' un "
+                         "costo sostenuto,%d,%d,%.2f\r\n"
                          % ((costi.get("perdite") or {}).get("conteggio", 0), per, per / 100.0))
+            yield emetti("commissione_gestore_non_restituita,COSTO TECNICO IRRECUPERABILE - "
+                         "perdita deducibile,%d,%d,%.2f\r\n"
+                         % (_irr.get("conteggio", 0), _irr.get("cents", 0),
+                            _irr.get("cents", 0) / 100.0))
+            yield emetti("commissione_gestore_NON_DETERMINATA,DATO MANCANTE - non e' zero,"
+                         "%d,,\r\n" % _ign.get("conteggio", 0))
             yield emetti("coperto_netto,saldo,,%d,%.2f\r\n"
                          % (inc - per, (inc - per) / 100.0))
-            yield emetti("# nota,Stripe NON restituisce la sua commissione sui rimborsi: quel "
-                         "costo resta definitivamente a carico della piattaforma e non e' "
-                         "ribaltabile sull'host (payout annullato). Portare in deduzione come "
-                         "costo di servizio sostenuto.\r\n")
+            yield emetti("# nota,Il gestore di pagamento NON restituisce la sua commissione sui "
+                         "rimborsi: QUELLA e' la perdita deducibile ed e' la riga "
+                         "commissione_gestore_non_restituita. La tariffa tecnica non incassata "
+                         "e' invece un RICAVO MANCATO e non va portata in deduzione: dichiararla "
+                         "come costo gonfierebbe la voce (misurato: su 200 EUR 10,25 contro "
+                         "~3,25 reali). Le prenotazioni NON DETERMINATE non valgono zero: "
+                         "il dato va recuperato dal gestore prima di chiudere il periodo.\r\n")
             yield emetti("\r\n# MARCHE TEMPORALI - ora certificata da un'Autorita' terza "
                          "(RFC 3161)\r\n")
             yield emetti("# L'ora NON e' dichiarata da BookinVIP: ogni riga e' un token "
@@ -3917,15 +3931,28 @@ class RouterHTTP:
         try:
             rep = pp.aggrega_costi_tecnici()
             rep["tariffa_tecnica_bps"] = self._psp_bps()
-            rep["nota"] = ("COSTO TECNICO IRRECUPERABILE (perdita deducibile): e' la tariffa "
-                           "tecnica di prenotazioni poi rimborsate o cancellate. Stripe NON "
-                           "restituisce la sua commissione sui rimborsi, quindi quel costo "
-                           "resta definitivamente a carico della piattaforma e non e' "
-                           "ribaltabile sull'host (il suo payout viene annullato). Voce da "
-                           "portare in deduzione come costo di servizio sostenuto.")
+            # ⛔ CORRETTA IL 2026-08-17. Questa nota diceva che `perdite` e' un «COSTO TECNICO
+            # IRRECUPERABILE ... da portare in deduzione», ma `perdite` somma la NOSTRA tariffa
+            # tecnica: e' un RICAVO CHE NON ABBIAMO INCASSATO, non un costo che abbiamo
+            # sostenuto. Portarlo in deduzione gonfiava una voce fiscale — misurato sul primo
+            # pagamento vero: noi 30, Stripe 27; su 200 EUR sarebbero 10,25 contro ~3,25.
+            # Le due cose ora hanno due voci, e chi legge non deve piu' interpretare.
+            rep["nota"] = (
+                "DUE VOCI DIVERSE, e vanno tenute separate. (1) RICAVO TECNICO MANCATO: e' la "
+                "nostra tariffa tecnica su prenotazioni poi rimborsate o cancellate — non e' "
+                "un costo sostenuto, e' un guadagno che non c'e' stato. (2) COSTO TECNICO "
+                "IRRECUPERABILE (perdita deducibile): e' la commissione che il GESTORE DI "
+                "PAGAMENTO ha trattenuto e che sul rimborso NON restituisce — quella si', "
+                "resta a carico della piattaforma. (3) NON DETERMINATO: prenotazioni "
+                "rimborsate per cui quella commissione non e' stata letta dal gestore. NON e' "
+                "zero: e' un dato mancante, e va recuperato prima di chiudere il periodo.")
             rep["classificazione_fiscale"] = {
                 "incassate": rep["incassate"].get("voce_fiscale", ""),
-                "perdite": rep["perdite"].get("voce_fiscale", "")}
+                "perdite": rep["perdite"].get("voce_fiscale", ""),
+                "costo_stripe_irrecuperabile":
+                    rep.get("costo_stripe_irrecuperabile", {}).get("voce_fiscale", ""),
+                "costo_stripe_sconosciuto":
+                    rep.get("costo_stripe_sconosciuto", {}).get("voce_fiscale", "")}
             logger.info("AUDIT | BUNKER costi tecnici consultati | IP: %s",
                         self._client_ip(headers))
             return 200, rep
@@ -5782,12 +5809,87 @@ class RouterHTTP:
             if not (isinstance(importo_cents, int) and not isinstance(importo_cents, bool)
                     and importo_cents > 0):
                 return
+            # ⛔⛔ UN RIMBORSO NON E' SOLO DENARO CHE ESCE: CHIUDE CIO' CHE LA PRENOTAZIONE
+            # AVEVA APERTO. Prima di scrivere la riga di rimborso, cio' che dovevamo all'host
+            # passa all'ospite e la commissione si storna (fase177.storna_prenotazione, che
+            # legge gli importi DAL GIORNALE: nessun chiamante puo' far uscire un numero
+            # diverso da quello registrato).
+            #
+            # ⛔ STA QUI, E NON NELLE SETTE ROTTE CHE RIMBORSANO, DI PROPOSITO. Le strade che
+            # portano a un rimborso sono SETTE, e questo progetto le ha gia' dimenticate due
+            # volte -- il 2026-08-16 ne era stata riparata una sola su due, il 2026-08-17 ne
+            # mancavano quattro su sette. Un obbligo affidato a chi si ricorda di ripeterlo in
+            # sette punti si rompe di nuovo: qui non puo' sfuggirne nessuna, perche' passano
+            # tutte da questa riga. Idempotente sull'evento_id: retry e doppi clic non
+            # raddoppiano niente.
+            #
+            # ⛔ E NON E' UN EFFETTO COLLATERALE NASCOSTO: e' l'altra meta' della stessa
+            # scrittura contabile. Il difetto del 2026-08-17 e' nato proprio dall'averle
+            # separate -- il libro segnava un RICAVO di 30 su una prenotazione annullata.
+            if tipo == "rimborso" and hasattr(fc, "storna_prenotazione"):
+                try:
+                    esito = fc.storna_prenotazione(riferimento=str(riferimento),
+                                                   rimborso_cents=int(importo_cents))
+                    if esito.get("parziale"):
+                        logger.info("RIMBORSO PARZIALE su %s: lo storno della commissione NON "
+                                    "e' stato fatto (l'host trattiene una penale). Limite "
+                                    "dichiarato, non una dimenticanza.", riferimento)
+                except Exception:
+                    # ISOLATO come tutto il giornale: la scatola nera non ferma i soldi veri.
+                    logger.warning("storno prenotazione fallito (ISOLATO) su %s",
+                                   riferimento, exc_info=True)
             fc.movimento(tipo=tipo, riferimento=str(riferimento),
                          soggetto=str(soggetto), importo_cents=int(importo_cents),
                          valuta=str(valuta or "EUR"), causale=str(causale),
                          evento_id=evento_id)
         except Exception:
             logger.warning("giornale movimento '%s' fallito (ISOLATO)", tipo, exc_info=True)
+
+    def _costo_gateway_dal_gestore(self, riferimento, dati_json, host_id, valuta):
+        """Chiede a Stripe quanto si e' preso DAVVERO su quel pagamento e lo scrive nel libro.
+
+        ⛔ COMPLETAMENTE ISOLATO, come tutto il giornale: i soldi si sono gia' mossi, e la
+        scatola nera non deve mai poterli fermare.
+        ⛔ E SILENZIOSO SOLO SE NON C'E' NIENTE DA DIRE: se Stripe non risponde si REGISTRA il
+        motivo (regola ferrea 9 — mai il solo stato, sempre codice e messaggio). Un buco
+        dichiarato si puo' colmare dopo; un buco muto no.
+        ⚠️ Il costo si sa solo DOPO l'incasso, e solo se abbiamo lo `stripe_pi` sul record:
+        senza quello non si indovina. E' lo stesso identificativo su cui si regge il pulsante
+        dei rimborsi, quindi se manca qui manca anche li' — e lo si vede.
+        """
+        try:
+            fc = getattr(self._sys, "finanza", None)
+            sp = getattr(self._sys, "stripe", None)
+            if fc is None or sp is None or not hasattr(sp, "commissione_effettiva"):
+                return
+            if not hasattr(fc, "costo_gateway"):
+                return
+            pi = str((dati_json or {}).get("stripe_pi") or "")
+            if not pi:
+                logger.info("costo gateway non registrabile su %s: manca lo stripe_pi sul "
+                            "record (lo stesso che serve al pulsante dei rimborsi)",
+                            riferimento)
+                return
+            esito = sp.commissione_effettiva(pi)
+            if not (isinstance(esito, dict) and esito.get("ok")):
+                logger.warning("costo gateway NON LETTO su %s: %s — il prospetto lo contera' "
+                               "fra gli sconosciuti, non fra i costi",
+                               riferimento, (esito or {}).get("motivo") or "motivo assente")
+                return
+            fee = int(esito.get("fee_cents") or 0)
+            fc.costo_gateway(riferimento=str(riferimento), soggetto="host:" + str(host_id),
+                             fee_cents=fee,
+                             valuta=str(esito.get("valuta") or valuta or "EUR"))
+            # ⛔ LO STESSO NUMERO, DA UNA SOLA LETTURA, IN DUE POSTI CHE NON POSSONO DIVERGERE.
+            # Il libro (fase177) serve alla contabilita'; il record (fase162) serve al prospetto
+            # del commercialista, che legge i pendenti e non il giornale. Scriverli da due
+            # letture diverse sarebbe la malattia di sempre -- lo stesso fatto in due posti, e
+            # la copia che resta indietro. Qui la lettura e' UNA e i due scriventi la ricevono.
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            if pp is not None and hasattr(pp, "salva_costo_gateway"):
+                pp.salva_costo_gateway(str(riferimento), fee)
+        except Exception:
+            logger.warning("costo gateway fallito (ISOLATO) su %s", riferimento, exc_info=True)
 
     def _dac7_payout_bloccato(self, host_id):
         """ENFORCEMENT DAC7 (art. proc. dovuta diligenza, Dir. UE 2021/514): (bloccato,
@@ -7721,6 +7823,17 @@ class RouterHTTP:
                                    soggetto="host:" + str(hid), importo_cents=_comm_netta,
                                    valuta=val, evento_id="commissione:" + str(rif),
                                    causale="commissione piattaforma (comm+costo carta-credito)")
+                # ⛔ E QUANTO SI E' PRESO IL GESTORE: la riga che mancava, e senza la quale il
+                # libro dichiara di avere in cassa soldi che non ci sono. `incasso` scrive il
+                # LORDO; sul conto arriva il NETTO. Misurato sul primo pagamento vero:
+                # incasso 100, in cassa 73, e i 27 di differenza non stavano in nessuna riga --
+                # finche' il rimborso ha portato il saldo Stripe a **-0,27 EUR** mentre il
+                # nostro libro diceva **0** e per giunta un ricavo di 30.
+                # ⛔ IL NUMERO SI CHIEDE A CHI LI HA PRESI, non si stima con la nostra tariffa:
+                # sono due voci diverse (costo sostenuto contro ricavo). Se Stripe non
+                # risponde NON si scrive niente e resta il buco dichiarato -- il prospetto lo
+                # conta fra gli «sconosciuti» invece di riempirlo con una cifra inventata.
+                self._costo_gateway_dal_gestore(rif, dj, hid, val)
             if isinstance(rec, dict) and int(rec.get("tassa_cents", 0) or 0) > 0:
                 self._giornale(tipo="tassa_incassata", riferimento=rif,
                                soggetto="comune:" + str(rec.get("comune", "")),

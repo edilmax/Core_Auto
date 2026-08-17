@@ -951,9 +951,35 @@ class TestPagamentiPendentiRamiDErrore(unittest.TestCase):
         self.assertEqual(out["per_valuta"], {
             "EUR": {"incassate_cents": 300, "perdite_cents": 120, "conteggio": 2},
             "USD": {"incassate_cents": 0, "perdite_cents": 80, "conteggio": 1}})
-        self.assertIn("IRRECUPERABILE", out["perdite"]["voce_fiscale"])
+        # ⛔ QUI PRIMA C'ERA `assertIn("IRRECUPERABILE", out["perdite"]["voce_fiscale"])`, e
+        # difendeva il difetto: `perdite` somma la NOSTRA tariffa, che e' un ricavo mancato,
+        # non un costo sostenuto. Adesso si pretende di piu' -- che le due voci siano separate
+        # e che quella sbagliata non possa tornare.
+        self.assertIn("MANCATO", out["perdite"]["voce_fiscale"].upper())
+        self.assertNotIn("stripe", out["perdite"]["voce_fiscale"].lower())
         self.assertIn("Ricavo tecnico", out["incassate"]["voce_fiscale"])
+        # Nessuna delle due rimborsate porta la commissione VERA del gestore: quindi il costo
+        # deducibile e' ZERO e le sconosciute sono DUE. ⛔ Zero e "non lo so" sono cose diverse,
+        # e il prospetto deve tenerle distinte invece di ripiegare sulla nostra percentuale.
+        self.assertEqual(out["costo_stripe_irrecuperabile"]["cents"], 0)
+        self.assertEqual(out["costo_stripe_sconosciuto"]["conteggio"], 2)
         self.assertEqual(self.pp.aggrega_costi_tecnici(limit=0)["letti"], 7)  # limit clampato
+
+    def test_prospetto_usa_la_commissione_VERA_del_gestore_quando_c_e(self):
+        """L'altra direzione: col dato del gestore presente, il costo deducibile e' QUELLO —
+        non la nostra tariffa. Senza questa prova, la casella «irrecuperabile» potrebbe
+        restare a zero per sempre e nessuno se ne accorgerebbe."""
+        self._reg("R1", corpo_json=json.dumps({"costo_pagamento_cents": 1025,
+                                               "costo_stripe_reale_cents": 325,
+                                               "valuta": "EUR"}))
+        self.pp.conferma("R1")
+        self.pp.marca_da_rimborsare("R1")
+        out = self.pp.aggrega_costi_tecnici()
+        self.assertEqual(out["perdite"]["cents"], 1025, "il ricavo mancato e' la nostra tariffa")
+        self.assertEqual(out["costo_stripe_irrecuperabile"]["cents"], 325,
+                         "il costo deducibile deve essere quello che il GESTORE ha trattenuto, "
+                         "non la nostra tariffa: su 200 EUR sono 3,25 contro 10,25")
+        self.assertEqual(out["costo_stripe_sconosciuto"]["conteggio"], 0)
 
     def test_prospetto_tariffa_tecnica_con_db_rotto_e_vuoto_mai_esplode(self):
         self._reg("P1", corpo_json=json.dumps({"costo_pagamento_cents": 300}))
@@ -962,6 +988,8 @@ class TestPagamentiPendentiRamiDErrore(unittest.TestCase):
         out = self.pp.aggrega_costi_tecnici()
         self.assertEqual(out, {"incassate": {"conteggio": 0, "cents": 0},
                                "perdite": {"conteggio": 0, "cents": 0},
+                               "costo_stripe_irrecuperabile": {"conteggio": 0, "cents": 0},
+                               "costo_stripe_sconosciuto": {"conteggio": 0, "cents": 0},
                                "coperto_cents": 0, "per_valuta": {}, "letti": 0})
 
 

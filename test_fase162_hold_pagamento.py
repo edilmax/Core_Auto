@@ -552,5 +552,125 @@ class TestSeLHoldNonSiSCRIVE_DEVEGRIDARE(unittest.TestCase):
                         "peggiore del difetto")
 
 
+class TestIlProspettoDelCommercialistaNONSpacciaLaNostraTariffaPerStripe(unittest.TestCase):
+    """💸 30 CENTESIMI DOVE STRIPE NE HA PRESI 27 — e su 200 EUR diventa TRE VOLTE TANTO.
+
+    **Il fatto, trovato dal fondatore confrontando col mondo vero, non da un collaudo.** Il
+    prospetto per il commercialista (`aggrega_costi_tecnici`) somma `costo_pagamento_cents` e
+    lo mette sotto l'etichetta *«COSTO TECNICO IRRECUPERABILE — perdita deducibile
+    (commissione Stripe non restituita su rimborsi/storni)»*. Ma `costo_pagamento_cents` **non
+    e' la commissione di Stripe**: e' la NOSTRA tariffa tecnica (5% + 0,25 EUR, 7% in valuta
+    estera), calcolata a `fase59_concierge.py:350` e trattenuta all'host.
+
+    **Perche' il nome era vero e non lo e' piu'.** Finche' la tariffa era il *«3%, margine
+    piattaforma zero»*, i due numeri quasi coincidevano e chiamare l'uno con l'altro non
+    faceva danno. Dal 2026-08-09 la tariffa e' **5% + 0,25** (misurata sotto costo,
+    `collaudi/conti_stripe.py`) e i due si sono separati. **Non e' un errore di calcolo: e' un
+    nome diventato falso** — ed e' per questo che nessun test lo vedeva. Il calcolo e'
+    giusto, e deve restare: la tariffa DEVE coprire la carta peggiore, o ci rimettiamo noi
+    (`test_fase59_costo_pagamento.py`).
+
+    **Sono due voci contabili diverse, e l'errore scala:**
+      · quel che Stripe **trattiene davvero** e non restituisce = **costo sostenuto**, deducibile
+      · quel che noi **non incassiamo** = **ricavo mancato**, che non e' un costo deducibile
+    Su 1,00 EUR: noi 30, Stripe ~27. Su 200 EUR: noi **10,25 EUR**, Stripe ~**3,25 EUR** —
+    il prospetto dichiarerebbe **tre volte** il costo vero. Un prospetto fiscale che gonfia
+    una deduzione non e' un dettaglio di etichetta.
+
+    ⛔ E LA RIPARAZIONE NON PUO' STIMARE. Il costo vero lo sa solo Stripe
+    (`balance_transaction.fee` del pagamento). Se Stripe non risponde, il prospetto deve dire
+    **«non lo so»**: ripiegare sulla nostra percentuale rimetterebbe dentro esattamente il
+    numero sbagliato, con l'aria di essere stato verificato.
+
+    ⚠️ **MISURATO, NON LETTO** (2026-08-17): il blocco delle consegne diceva che l'impianto
+    c'era gia' — *«`fase85` chiede a Stripe la commissione effettiva (`balance_transaction.fee`)»*.
+    **Non e' vero**: in `fase85_pagamenti_stripe.py` la parola `balance_transaction` non
+    compare. L'unico posto che tocca quell'API e' `fase182_riconciliazione.py:85`, che somma
+    le transazioni per categoria e **non legge mai il campo `fee`**, ne' lo lega a una
+    prenotazione. Il pezzo che manca va scritto: non e' li' che aspetta.
+    """
+
+    # I numeri dell'esempio: una prenotazione da 200 EUR (20000 cents).
+    NOSTRA_TARIFFA = 1025          # 5% di 20000 + 25 fissi  -> quello che tratteniamo all'host
+    STRIPE_DAVVERO = 325           # 1,5% + 0,25 (carta europea) -> quello che Stripe trattiene
+
+    def setUp(self):
+        self.clock = {"t": 1000}
+        self.p = crea_pagamenti_pendenti(":memory:", orologio=lambda: self.clock["t"])
+        self.p.inizializza_schema()
+
+    def _rimborsata(self, riferimento, **corpo):
+        """Una prenotazione pagata e poi rimborsata: il caso in cui la tariffa e' persa."""
+        d = {"riferimento": riferimento, "alloggio_id": "casa", "check_in": "2027-01-10",
+             "check_out": "2027-01-12", "idem_key": "", "tassa_cents": 0, "comune": "",
+             "host_id": "h", "email": "", "quote_token": "",
+             "corpo_json": json.dumps(dict({"valuta": "EUR"}, **corpo)),
+             "scadenza_ts": 10 ** 9, "stato": "rimborsato", "promemoria_ts": 0,
+             "creato_ts": 1000}
+        con = self.p._apri()
+        try:
+            with con:
+                con.execute(
+                    "INSERT INTO pendenti (riferimento, alloggio_id, check_in, check_out, "
+                    "idem_key, tassa_cents, comune, host_id, email, quote_token, corpo_json, "
+                    "scadenza_ts, stato, promemoria_ts, creato_ts) VALUES (:riferimento,"
+                    ":alloggio_id,:check_in,:check_out,:idem_key,:tassa_cents,:comune,"
+                    ":host_id,:email,:quote_token,:corpo_json,:scadenza_ts,:stato,"
+                    ":promemoria_ts,:creato_ts)", d)
+        finally:
+            con.close()
+
+    def test_il_costo_deducibile_e_quello_che_STRIPE_ha_preso_non_la_NOSTRA_tariffa(self):
+        """La cifra. Con la commissione vera nota, il prospetto deve dichiarare QUELLA."""
+        self._rimborsata("P200", costo_pagamento_cents=self.NOSTRA_TARIFFA,
+                         costo_stripe_reale_cents=self.STRIPE_DAVVERO)
+        esito = self.p.aggrega_costi_tecnici()
+        deducibile = (esito.get("costo_stripe_irrecuperabile") or {}).get("cents")
+        self.assertEqual(
+            deducibile, self.STRIPE_DAVVERO,
+            "il prospetto per il commercialista dichiara %r di costo Stripe irrecuperabile, "
+            "ma Stripe ne ha trattenuti %d: la cifra che sta usando e' la NOSTRA tariffa "
+            "(%d), che e' un RICAVO MANCATO, non un costo sostenuto. Su 200 EUR sono %.2f EUR "
+            "dichiarati invece di %.2f: una deduzione gonfiata di tre volte."
+            % (deducibile, self.STRIPE_DAVVERO, self.NOSTRA_TARIFFA,
+               self.NOSTRA_TARIFFA / 100.0, self.STRIPE_DAVVERO / 100.0))
+
+    def test_se_la_commissione_VERA_non_si_sa_il_prospetto_dice_NON_LO_SO(self):
+        """Il ripiego silenzioso. Senza il dato di Stripe non si stima: si dichiara il buco.
+
+        ⛔ Ripiegare sulla nostra percentuale sarebbe il difetto di oggi rimesso dentro con
+        l'aria di essere stato verificato — e nessuno saprebbe piu' distinguere una cifra
+        letta da Stripe da una inventata da noi (S7: senza la premessa non e' verde, e' NON
+        ESEGUITO)."""
+        self._rimborsata("P404", costo_pagamento_cents=self.NOSTRA_TARIFFA)   # nessun dato Stripe
+        esito = self.p.aggrega_costi_tecnici()
+        sconosciuti = (esito.get("costo_stripe_sconosciuto") or {}).get("conteggio")
+        self.assertEqual(
+            sconosciuti, 1,
+            "una prenotazione rimborsata senza la commissione vera di Stripe non compare fra "
+            "gli sconosciuti (trovato %r): il prospetto sta tacendo su un buco, oppure ci ha "
+            "messo dentro la nostra tariffa spacciandola per un dato letto da Stripe."
+            % (sconosciuti,))
+        deducibile = (esito.get("costo_stripe_irrecuperabile") or {}).get("cents", 0)
+        self.assertEqual(
+            deducibile, 0,
+            "senza il dato di Stripe il costo deducibile dichiarato e' %d invece di 0: e' la "
+            "nostra tariffa entrata dalla finestra. Una stima messa dove il commercialista "
+            "legge un costo sostenuto e' peggio di una casella vuota." % deducibile)
+
+    def test_la_voce_fiscale_della_NOSTRA_tariffa_non_dice_STRIPE(self):
+        """L'etichetta. E' da qui che l'errore e' nato: un nome corretto nel 2026-07 e
+        diventato falso il 2026-08-09, senza che nessuna riga cambiasse."""
+        self._rimborsata("P1", costo_pagamento_cents=self.NOSTRA_TARIFFA)
+        esito = self.p.aggrega_costi_tecnici()
+        etichetta = str((esito.get("perdite") or {}).get("voce_fiscale") or "")
+        self.assertNotIn(
+            "stripe", etichetta.lower(),
+            "la voce che somma la NOSTRA tariffa (%d cents) si chiama %r: attribuisce a "
+            "Stripe un numero che Stripe non ha mai visto. Va chiamata per quello che e' — "
+            "ricavo tecnico mancato — e il costo di Stripe va in una voce sua."
+            % (self.NOSTRA_TARIFFA, etichetta))
+
+
 if __name__ == "__main__":
     unittest.main()

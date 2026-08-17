@@ -1193,19 +1193,72 @@ def _apri_traccia(percorso, sorgente):
         pass                      # la rete e' un di piu': non deve impedire il giro
 
 
+def _tornato_identico(percorso):
+    """(uguale, motivo): il file sul disco e' tornato IDENTICO AL BYTE all'originale?
+
+    ⛔ PERCHE' ESISTE (2026-08-17). Il biglietto si stracciava **senza guardare il file**.
+    Lo schema e' sempre `_riscrivi_intatto(...)` seguito da `_chiudi_traccia(...)`: se la
+    riscrittura SOLLEVA, il `finally` propaga e il biglietto resta (bene). Ma se riscrive
+    **byte diversi senza sollevare** -- disco pieno che tronca, fine-riga tradotti, una
+    codifica che cambia sotto -- il biglietto spariva lo stesso, `collaudi/guardia_commit.py`
+    rispondeva «via libera», e un file di produzione col guasto dentro entrava nel commit
+    **con tutti i controlli verdi**.
+
+    Finora a guardare ero io: il 2026-08-17 ho confrontato gli sha256 **a mano, quattro
+    volte**. Ha funzionato quattro volte su quattro -- ed e' esattamente cio' che D18
+    rifiuta: la domanda non e' «ha barato?», e' «PUO' barare?». *«La memoria umana non e'
+    una strategia»* sta scritto in cima a `guardia_commit.py` dal 2026-08-02.
+
+    ⛔ NEL DUBBIO NON SI CHIUDE. Se l'originale o il file non si riescono a leggere, questa
+    funzione dice **no**: non e' un verde, e' un controllo che non ha potuto guardare
+    (sbaglio S7). Il biglietto resta, e `guardia_commit.py` spiega da se' come toglierlo a
+    mano. Un biglietto di troppo costa un minuto; uno di meno costa un guasto in produzione.
+    """
+    mio = _biglietto(percorso)
+    try:
+        with io.open(os.path.join(mio, "originale.txt"), encoding="utf-8", newline="") as f:
+            atteso = f.read()
+    except OSError:
+        return (False, "l'originale del biglietto non si legge: non posso dimostrare che il "
+                       "file sia tornato quello di prima")
+    try:
+        adesso = _leggi_intatto(percorso)
+    except OSError as errore:
+        return (False, "il file non si rilegge (%s): il ripristino non e' dimostrato" % errore)
+    a = hashlib.sha256(atteso.encode("utf-8")).hexdigest()
+    b = hashlib.sha256(adesso.encode("utf-8")).hexdigest()
+    if a != b:
+        return (False, "sha256 DIVERSO — atteso %s, trovato %s" % (a[:16], b[:16]))
+    return (True, a[:16])
+
+
 def _chiudi_traccia(percorso=None):
-    """Chiude il biglietto di QUEL file. Senza argomento chiude TUTTO -- e resta senza
-    argomento solo dove chiudere tutto e' giusto (il recupero, che li ha appena
-    ripristinati tutti).
+    """Chiude il biglietto di QUEL file, **e solo se il file e' tornato identico al byte**.
+    Senza argomento chiude TUTTO -- e resta senza argomento solo dove chiudere tutto e'
+    giusto (il recupero, che li ha appena ripristinati tutti).
 
     ⛔ La cartella madre si toglie SOLO se e' rimasta vuota: se dentro c'e' il biglietto
     di un altro giro, cancellarla spegnerebbe la sua rete. E' esattamente il difetto del
     2026-08-14 (vedi `_biglietto`), e `os.rmdir` fallisce apposta su una cartella piena:
     e' il controllo meccanico, non la buona volonta'.
+
+    ⛔ E DAL 2026-08-17 IL BIGLIETTO NON E' PIU' UNA FORMALITA': si straccia solo dopo aver
+    confrontato l'impronta (vedi `_tornato_identico`). Il gancio che serviva c'era gia' --
+    `deploy/hooks/pre-commit` chiama `collaudi/guardia_commit.py` -- mancava che il biglietto
+    fosse ONESTO. Un pezzo in meno, non uno in piu' (regola ferrea 1).
     """
     try:
         if percorso is None:
             shutil.rmtree(_TRACCIA, ignore_errors=True)
+            return
+        uguale, motivo = _tornato_identico(percorso)
+        if not uguale:
+            # ⛔ MAI IN SILENZIO. Il biglietto che resta e' la protezione; senza il grido,
+            # chi lavora scopre il blocco al commit e non sa perche'.
+            print("::error title=RIPRISTINO NON DIMOSTRATO::%s — %s. Il biglietto resta "
+                  "APERTO e il salvataggio restera' bloccato: guarda `git diff HEAD -- %s`."
+                  % (os.path.basename(percorso), motivo, percorso))
+            print("  ⛔ RIPRISTINO NON DIMOSTRATO su %s: %s" % (percorso, motivo))
             return
         shutil.rmtree(_biglietto(percorso), ignore_errors=True)
         try:

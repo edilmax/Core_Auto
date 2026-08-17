@@ -6443,5 +6443,522 @@ class TestLaListaDelleTecnicheStaInUnPostoSolo(unittest.TestCase):
             "(TECNICHE-INIZIO/TECNICHE-FINE). Trovate: %r" % (colpevoli,))
 
 
+class TestLaRaggiungibilitaNONPuoGuardareUnIngressoSOLO(unittest.TestCase):
+    """⛔ IL NUMERO CHE DECIDE SU COSA SI LAVORA NASCEVA MONCO.
+
+    **Il fatto, misurato il 2026-08-17 e non ricordato.** `collaudi/raggiungibilita.py`
+    cammina dagli import a partire da UN solo file (`main_casavip.py`) e dichiara «63 moduli
+    morti su 151». Ma sul disco gli ingressi che esistono sono TRE -- `main_casavip.py`,
+    `app.py`, `fase83_server.py` -- e partendo da tutti e tre i morti sono **59**. Quattro
+    moduli venivano dichiarati cadaveri mentre la produzione li accende.
+
+    **Perche' e' un difetto vivo e non una sfumatura.** Quel numero non sta in un rapporto che
+    nessuno legge: `REGISTRO_INGEGNERIA.md` lo usa come ISTRUZIONE -- *«prima di ogni blocco si
+    guarda se il modulo e' acceso: 63 su 151 non sono raggiungibili»* -- e la classifica
+    «rischio x cecita'» che ordina i moduli dei soldi ci si appoggia. Si decideva **su cosa
+    lavorare** con un numero sbagliato, e nessuno strumento lo diceva.
+
+    ⛔ E il verso in cui sbaglia e' quello brutto. Il file dichiara da se' un bias GENEROSO --
+    *«se dice MORTO, e' morto davvero»* -- e quella promessa era **falsa**: chiamava morti
+    quattro moduli vivi. Un attrezzo che promette di sbagliare in un verso e sbaglia
+    nell'altro e' peggio di un attrezzo senza promesse (S15).
+
+    Le guardie sono tre, una per modo di rompersi: l'ingresso dimenticato · gli ingressi non
+    dichiarati · il numero ricopiato a mano in un documento invece che prodotto.
+    """
+
+    # ⛔ SCRITTI QUI E NON LETTI DALLO STRUMENTO, DI PROPOSITO. Se li leggessi da
+    # `raggiungibilita.INGRESSI` la guardia direbbe soltanto «lo strumento e' d'accordo con se
+    # stesso», che e' il verde piu' vuoto di tutti: cancellando un ingresso resterebbe verde.
+    # Il denominatore lo porta la guardia, non il sorvegliato (regola: ogni guardia dichiara
+    # il proprio denominatore).
+    INGRESSI_VERI = ("main_casavip.py", "app.py", "fase83_server.py")
+
+    def _modulo(self):
+        sys.path.insert(0, os.path.join(QUI, "collaudi"))
+        import raggiungibilita
+        return raggiungibilita
+
+    def test_GLI_INGRESSI_DI_QUESTA_GUARDIA_ESISTONO_SUL_DISCO(self):
+        """Il metro si misura prima del muro (D18 punto 1): se questi nomi non esistessero
+        piu', le due guardie sotto girerebbero a vuoto stampando verde. E' lo sbaglio S2 --
+        i nomi si leggono, non si ricordano -- applicato alla guardia stessa."""
+        mancanti = [n for n in self.INGRESSI_VERI
+                    if not os.path.isfile(os.path.join(QUI, n))]
+        self.assertEqual(
+            mancanti, [],
+            "questa guardia nomina ingressi che sul disco non ci sono piu' (%r): finche' e' "
+            "cosi' non sta provando niente, e il suo verde e' un ornamento. Aggiorna l'elenco "
+            "leggendolo dal disco." % (mancanti,))
+
+    def test_UN_MODULO_RAGGIUNTO_DA_UN_INGRESSO_VERO_NON_PUO_RISULTARE_MORTO(self):
+        """⛔ LA GUARDIA CHE VEDE IL DIFETTO. Non pretende un numero (un numero invecchia,
+        D22): pretende una RELAZIONE -- se un ingresso vero raggiunge un modulo, quel modulo
+        non e' morto. Regge anche il giorno che i moduli diventano 200."""
+        r = self._modulo()
+        _vivi, morti, _tutti = r.cammina(QUI)
+        accusati = {}
+        for ingresso in self.INGRESSI_VERI:
+            if not os.path.isfile(os.path.join(QUI, ingresso)):
+                continue
+            raggiunti = r.cammina(QUI, partenza=ingresso)[0]
+            sbagliati = sorted(raggiunti & morti)
+            if sbagliati:
+                accusati[ingresso] = sbagliati
+        self.assertEqual(
+            accusati, {},
+            "`raggiungibilita.py` dichiara MORTI dei moduli che un ingresso VERO della "
+            "produzione raggiunge, e il file promette il contrario («se dice MORTO, e' morto "
+            "davvero»). Deve partire da TUTTI gli ingressi che esistono, non da uno. "
+            "Accusati a torto: %r" % (accusati,))
+
+    def test_LO_STRUMENTO_DICHIARA_DA_DOVE_PARTE(self):
+        """Un attrezzo che misura dichiara cosa NON ha esaminato (D18 punto 3). Qui la cosa
+        non esaminata era un ingresso intero, e il file non lo diceva."""
+        r = self._modulo()
+        ingressi = getattr(r, "INGRESSI", None)
+        # ⛔ NON basta «non e' nullo»: una tupla vuota, o piena di nomi inventati, passerebbe.
+        # E' la lezione del 2026-08-14 (sette guardie verdi col guasto dentro perche'
+        # `exc_info=False` non e' `None`): si chiede LA COSA, del tipo giusto.
+        self.assertIsInstance(
+            ingressi, tuple,
+            "`raggiungibilita.py` non dichiara `INGRESSI`: da dove parte il cammino resta "
+            "un dettaglio sepolto nel codice, e il giorno che ne nasce un quarto nessuno se "
+            "ne accorge")
+        esistono = [n for n in ingressi if os.path.isfile(os.path.join(QUI, n))]
+        self.assertEqual(
+            sorted(esistono), sorted(ingressi),
+            "`INGRESSI` nomina file che sul disco non ci sono: dichiarati %r, esistono %r"
+            % (sorted(ingressi), sorted(esistono)))
+        self.assertGreaterEqual(
+            len(ingressi), len(self.INGRESSI_VERI),
+            "`INGRESSI` ne dichiara %d, ma sul disco ce ne sono almeno %d: un ingresso "
+            "dimenticato e' esattamente il difetto del 2026-08-17"
+            % (len(ingressi), len(self.INGRESSI_VERI)))
+
+
+class TestLaSuiteRIFIUTADiGirareDallaShellSBAGLIATA(unittest.TestCase):
+    """🚫 LA SHELL FA PARTE DELLA MISURA — e questa guardia nasce da un errore MIO.
+
+    **Il fatto, 2026-08-17, poche ore dopo aver documentato lo sbaglio S11.** Ho lanciato la
+    suite intera da **Git Bash** invece che da PowerShell. Risultato: `Ran 5813 tests` e
+    **sei rossi**, di cui tre erano solo la conseguenza della shell — il pre-volo si rifiutava
+    (giustamente) di giudicare un ambiente che non e' quello da cui parte la suite. Mezz'ora
+    di macchina buttata, e per un istante sei rossi che sembravano difetti del prodotto.
+
+    ⛔ **E il verso peggiore e' l'altro.** Da Git Bash `openssl` **c'e'**, da PowerShell **no**:
+    la stessa domanda da' due risposte opposte. Un giro fatto dalla shell sbagliata puo'
+    quindi eseguire guardie che nella shell vera **si spengono in silenzio** — e allora il
+    verde dichiara coperto cio' che nessuno ha guardato. E' D23 punto 3, ed e' il tipo di
+    verde che questo progetto esiste per estirpare.
+
+    💡 **L'ha chiesta il fondatore** (2026-08-17): *«rileva l'ambiente di esecuzione del
+    terminale e blocca l'avvio dei test se rileva una shell errata, che potrebbe nascondere
+    il salto dei test di backup»*. Aveva ragione, e l'ho dimostrato cadendoci io.
+
+    ⛔ **NON e' un promemoria: e' un ROSSO.** Un avviso stampato si legge quando si e' gia'
+    aspettato mezz'ora; un rosso rende il giro **non spacciabile per buono**, che e' il punto.
+
+    ⛔⛔ **E NON SI SALTA SU LINUX, benche' li' il caso non esista.** La prima stesura faceva
+    `skipTest` fuori da Windows, e **due guardie indipendenti l'hanno bocciata** nello stesso
+    giro (`controllo_3_skip_interni` del pre-volo e `test_gli_skip_interni_sono_solo_per_
+    l_ambiente`): *«un test che si assolve da solo sparisce dal rapporto come skipped e nessuno
+    lo legge piu'; asserisci in ENTRAMBI i rami invece di saltare»*. Avevano ragione, e la
+    correzione ha reso la guardia **piu' forte**: `MSYSTEM` lo imposta **soltanto** MSYS/Git
+    for Windows, quindi su Linux e su PowerShell e' vuoto per costruzione. Pretendere che sia
+    vuoto **sempre** e' lo stesso invariante senza nessun salto — e vale anche in CI, dove
+    prima non avrebbe guardato niente.
+    """
+
+    def test_la_suite_non_gira_da_GIT_BASH(self):
+        # ⛔ Nessun `if` sul sistema operativo e nessun salto: l'invariante e' unico. `MSYSTEM`
+        # esiste solo dentro MSYS/Git Bash; su Linux (CI) e da PowerShell e' vuoto, quindi
+        # questa riga e' verde per costruzione dove il caso non si pone, e rossa dove si pone.
+        msys = os.environ.get("MSYSTEM", "")
+        self.assertFalse(
+            msys,
+            "SUITE LANCIATA DALLA SHELL SBAGLIATA (MSYSTEM=%r: Git Bash/MSYS).\n"
+            "        Da qui `openssl` C'E', da PowerShell NO: le guardie sul ripristino dei "
+            "backup si comportano in modo diverso, e questo giro NON misura la stessa "
+            "macchina che misurera' il prossimo (sbaglio S11, direttiva D23 punto 3).\n"
+            "        ⛔ Il risultato di questa suite NON vale. Rilanciala da PowerShell:\n"
+            "            python -m unittest discover -s . -p \"test_*.py\"\n"
+            "        Il numero dei test dichiarato in RIPRENDI_QUI.md (`SUITE ATTUALE:`) e' "
+            "misurato in QUELLA shell, e la riga `AMBIENTE:` lo dice." % (msys,))
+
+    def test_LA_GUARDIA_SA_DIRE_QUAL_E_LA_SHELL_GIUSTA(self):
+        """D18 punto 1: il metro si misura prima del muro. Se domani `MSYSTEM` sparisse dai
+        nomi che MSYS imposta, la guardia sopra tacerebbe per sempre e nessuno lo saprebbe —
+        quindi qui si pretende che la variabile su cui si regge esista almeno come concetto
+        noto, e che la riga AMBIENTE dichiari la shell."""
+        with io.open(os.path.join(QUI, "RIPRENDI_QUI.md"), encoding="utf-8") as f:
+            testo = f.read()
+        self.assertIn(
+            "AMBIENTE:", testo,
+            "`RIPRENDI_QUI.md` non dichiara piu' l'ambiente della misura: senza quella riga "
+            "nessuno sa in quale shell il numero della suite e' stato contato, e il confronto "
+            "fra due giri non vale niente (D22 + D23)")
+
+
+class TestIlBigliettoNONSiStracciaSeIlFileNONEDavveroTornato(unittest.TestCase):
+    """🔐 L'IMPRONTA sha256 ENTRA NELLA RETE — finora la confrontavo A MANO.
+
+    **Il buco, e non e' quello gia' chiuso.** La rete anti-interruzione protegge dal giro
+    UCCISO: se il processo muore fra il «rompi» e il «ripara», il biglietto resta aperto e
+    `collaudi/guardia_commit.py` -- che il gancio `pre-commit` esegue -- blocca il
+    salvataggio. Quella parte funziona.
+
+    Ma il biglietto si stracciava **senza guardare il file**. Lo schema e' sempre questo:
+
+        finally:
+            _riscrivi_intatto(pieno, sorgente)     # rimetto a posto
+            _chiudi_traccia(pieno)                 # e straccio il biglietto
+
+    Se la riscrittura solleva, il `finally` propaga e il biglietto resta (bene). Ma se
+    riscrive **byte diversi** senza sollevare -- disco pieno che tronca, fine-riga tradotti,
+    una codifica che cambia sotto -- il biglietto viene stracciato lo stesso, `guardia_commit`
+    risponde **«via libera»**, e un file di produzione col guasto dentro entra nel commit con
+    tutti i controlli verdi. E' esattamente il danno peggiore che questo strumento possa
+    fare, per una strada che nessuno sorvegliava.
+
+    **Finora a guardare era io.** Il 2026-08-17 ho confrontato gli sha256 a mano **quattro
+    volte**, dopo ogni giro. Ha funzionato quattro volte su quattro — e *«la memoria umana
+    non e' una strategia»* e' scritto in cima a `guardia_commit.py`. D18: la domanda non e'
+    «ha barato?», e' «puo' barare?».
+
+    ⛔ E LA RIPARAZIONE NON AGGIUNGE UN GANCIO NUOVO. Il gancio che serve c'e' gia' e gia'
+    chiama `guardia_commit.py`: basta che il biglietto diventi **onesto** — si straccia solo
+    se il file e' tornato identico al byte. Un pezzo in meno, non uno in piu' (regola ferrea 1).
+    """
+
+    def _motore(self):
+        sys.path.insert(0, os.path.join(QUI, "collaudi"))
+        import mutazione_prodotto
+        return mutazione_prodotto
+
+    def _guardia(self):
+        sys.path.insert(0, os.path.join(QUI, "collaudi"))
+        import guardia_commit
+        return guardia_commit
+
+    def _traccia_isolata(self, m):
+        """⛔ MAI LA TRACCIA VERA. Un collaudo che usa la traccia condivisa spegne la rete di
+        una campagna in corso: e' il difetto del 2026-08-03, che lascio' `fase184` mutato in
+        produzione. Qui si punta a una cartella usa-e-getta e si rimette com'era."""
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        self.addCleanup(setattr, m, "_TRACCIA", m._TRACCIA)
+        m._TRACCIA = os.path.join(d, "bookinvip_mutazione_in_corso")
+
+    def _vittima(self, testo):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        percorso = os.path.join(d, "finto_modulo.py")
+        with io.open(percorso, "w", encoding="utf-8", newline="") as f:
+            f.write(testo)
+        return percorso
+
+    SANO = "def f(x):\n    return x == 0\n"
+    MUTATO = "def f(x):\n    return x != 0\n"
+
+    def test_un_ripristino_FALLITO_NON_puo_stracciare_il_biglietto(self):
+        """La direzione «grida»: il file NON e' tornato quello di prima, quindi la rete resta
+        accesa e il salvataggio resta bloccato."""
+        m, g = self._motore(), self._guardia()
+        self._traccia_isolata(m)
+        percorso = self._vittima(self.SANO)
+        m._apri_traccia(percorso, self.SANO)
+        # il «ripristino» va storto SENZA sollevare: sul disco resta il mutante.
+        with io.open(percorso, "w", encoding="utf-8", newline="") as f:
+            f.write(self.MUTATO)
+        m._chiudi_traccia(percorso)
+        aperta, quali = g.mutazione_in_corso(m._TRACCIA)
+        self.assertTrue(
+            aperta,
+            "il biglietto e' stato stracciato mentre sul disco c'e' ancora il mutante: da "
+            "questo momento `guardia_commit.py` risponde «via libera» e un file di produzione "
+            "col guasto dentro entra nel commit con tutti i controlli verdi")
+        self.assertIn(
+            percorso, quali,
+            "la rete e' rimasta accesa ma non dice QUALE file e' rotto (%r): una guardia che "
+            "sa meno di quello che potrebbe manda a cercare alla cieca" % (quali,))
+
+    def test_un_ripristino_RIUSCITO_chiude_il_biglietto(self):
+        """La direzione «tace». Se il file e' tornato identico al byte, il biglietto DEVE
+        sparire: un allarme che resta acceso a lavoro finito blocca ogni commit successivo,
+        e un allarme sempre acceso viene spento (regola ferrea 10)."""
+        m, g = self._motore(), self._guardia()
+        self._traccia_isolata(m)
+        percorso = self._vittima(self.SANO)
+        m._apri_traccia(percorso, self.SANO)
+        with io.open(percorso, "w", encoding="utf-8", newline="") as f:
+            f.write(self.MUTATO)                      # il giro rompe
+        m._riscrivi_intatto(percorso, self.SANO)      # e ripara davvero
+        m._chiudi_traccia(percorso)
+        aperta, quali = g.mutazione_in_corso(m._TRACCIA)
+        self.assertFalse(
+            aperta,
+            "il file e' tornato identico ma il biglietto e' rimasto aperto (%r): da qui in "
+            "poi ogni salvataggio sarebbe bloccato per un guasto che non c'e', e la prima "
+            "cosa che si fa con un allarme che suona a vuoto e' spegnerlo" % (quali,))
+
+    def test_UN_ALTRO_giro_aperto_non_viene_travolto(self):
+        """⛔ La rete non e' rientrante per caso: `test_mutation_money` apre un giro DENTRO un
+        giro. Chiudere il proprio biglietto non deve toccare quello di un altro file — e
+        nemmeno quando il proprio ripristino e' andato storto."""
+        m, g = self._motore(), self._guardia()
+        self._traccia_isolata(m)
+        mio = self._vittima(self.SANO)
+        altrui = self._vittima(self.SANO)
+        m._apri_traccia(mio, self.SANO)
+        m._apri_traccia(altrui, self.SANO)
+        with io.open(mio, "w", encoding="utf-8", newline="") as f:
+            f.write(self.MUTATO)                      # il MIO ripristino fallisce
+        m._chiudi_traccia(mio)
+        _aperta, quali = g.mutazione_in_corso(m._TRACCIA)
+        self.assertIn(altrui, quali,
+                      "il biglietto di un ALTRO giro e' sparito: da quel momento il suo file "
+                      "di produzione non e' piu' protetto da nessuno (difetto del 2026-08-14)")
+        self.assertIn(mio, quali,
+                      "il mio biglietto e' sparito col mutante ancora sul disco")
+
+
+class TestIlFoglioUnicoDeiControlli(unittest.TestCase):
+    """🧾 UN FOGLIO SOLO — e le guardie che gli impediscono di diventare la SESTA copia.
+
+    Ordine del fondatore, 2026-08-17: *«sono tanti e quelli dobbiamo farli per forza. Poi
+    c'erano altri che sono scritti ma che non usiamo piu', perche' sono ancora scritti? Tanta
+    roba da eliminare. Bisogna fare un foglio solo.»*
+
+    Il pericolo non e' che il foglio manchi: e' che diventi **un riassunto**. Un riassunto
+    invecchia -- e' successo il 2026-08-17 con la lista dei metodi AWS, che ha fatto ragionare
+    una sessione intera sul numero sbagliato. Quindi qui si pretendono tre cose diverse:
+    che il foglio sia **collegato** ai due momenti che contano · che ogni voce **punti a un
+    posto che esiste** invece di contenere il fatto · e che la voce che sorveglia i numeri
+    funzioni **nelle due direzioni** (grida sul numero sbagliato, tace su quello giusto).
+    """
+
+    def _foglio(self):
+        sys.path.insert(0, os.path.join(QUI, "collaudi"))
+        import foglio_unico
+        return foglio_unico
+
+    # ── il foglio e' COLLEGATO (appendice 23: costruito != collegato) ──────────────────
+    def test_IL_FOGLIO_E_COLLEGATO_AI_DUE_MOMENTI_CHE_CONTANO(self):
+        """All'AVVIO informa, al COMMIT conferma. Se qualcuno stacca una delle due chiamate,
+        questa guardia diventa rossa lo stesso giorno (D18 punto 4).
+
+        ⛔ SI GUARDA L'ALBERO SINTATTICO, NON IL TESTO — e non e' eleganza, e' una guardia
+        gia' vista mentire. Scritta come «la parola `foglio_unico` compare nel file», il
+        2026-08-17 e' rimasta VERDE con la chiamata cancellata: bastava che la parola
+        sopravvivesse in un commento o in una docstring. E' esattamente lo sbaglio **S6**
+        (*«ho scritto una guardia che un commento poteva soddisfare»*), ricomparso a nove
+        giorni di distanza in un file nuovo. Un commento non produce un nodo `Call`.
+        """
+        import ast
+        scollegati = []
+        for nome in ("collaudi/regole_avvio.py", "collaudi/prima_di_dire_fatto.py"):
+            with io.open(os.path.join(QUI, nome.replace("/", os.sep)), encoding="utf-8") as f:
+                albero = ast.parse(f.read())
+            chiamate = {
+                n.func.attr
+                for n in ast.walk(albero)
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and isinstance(n.func.value, ast.Name) and n.func.value.id == "foglio_unico"
+            }
+            mancanti = {"giro", "stampa"} - chiamate
+            if mancanti:
+                scollegati.append("%s non chiama foglio_unico.%s"
+                                  % (nome, "/".join(sorted(mancanti))))
+        self.assertEqual(
+            scollegati, [],
+            "il foglio unico non e' piu' CHIAMATO (non basta che sia nominato): %r. "
+            "Costruito ma scollegato e' un controllo che misura se stesso invece del lavoro "
+            "(appendice 23). All'avvio informa, al commit conferma: servono tutt'e due."
+            % (scollegati,))
+
+    def test_OGNI_VOCE_PUNTA_A_UN_POSTO_CHE_ESISTE(self):
+        """⛔ LA GUARDIA CONTRO LA SESTA COPIA. Una voce vale solo se dice CHI possiede il
+        fatto; se il posto non esiste, quella voce ha smesso di puntare e ha cominciato a
+        raccontare. E' lo sbaglio S2 (i nomi si leggono, non si ricordano)."""
+        fu = self._foglio()
+        rotte = []
+        for titolo, possiede, _funzione in fu.VOCI:
+            self.assertTrue(possiede.strip(), "la voce %r non dice chi possiede il fatto"
+                            % titolo)
+            for pezzo in re.findall(r"[A-Za-z_][A-Za-z0-9_./]*\.(?:py|md)|deploy/hooks/",
+                                    possiede):
+                if not os.path.exists(os.path.join(QUI, pezzo.replace("/", os.sep))):
+                    rotte.append("%s -> %s" % (titolo, pezzo))
+        self.assertEqual(
+            rotte, [],
+            "queste voci puntano a un posto che non esiste piu': %r. Un foglio che punta nel "
+            "vuoto e' diventato un riassunto, ed e' esattamente cio' che non doveva "
+            "diventare." % (rotte,))
+
+    def test_UNA_VOCE_CHE_ESPLODE_NON_DIVENTA_VERDE(self):
+        """D18 punto 2, e sbaglio S7: se manca la premessa il controllo non e' verde, e'
+        NON ESEGUITO. Un giro che inghiotte l'errore e stampa ✅ sarebbe il verde peggiore."""
+        fu = self._foglio()
+        def _esplode(_radice):
+            raise RuntimeError("misura impossibile, di proposito")
+        vere = fu.VOCI
+        try:
+            fu.VOCI = (("voce che esplode", "CLAUDE.md", _esplode),)
+            esiti = fu.giro(QUI)
+        finally:
+            fu.VOCI = vere
+        self.assertEqual(len(esiti), 1)
+        self.assertEqual(
+            esiti[0][3], fu.NON_ESEGUITO,
+            "una voce che esplode e' uscita %r invece di NON ESEGUITO: il giro sta "
+            "inghiottendo gli errori e stampando un verde che non ha guardato niente"
+            % (esiti[0][3],))
+
+    # ── la voce 7, provata NELLE DUE DIREZIONI su documenti finti ─────────────────────
+    def _finto_progetto(self, righe_documento):
+        """Un progetto in miniatura: un ingresso, due moduli (uno vivo, uno morto) e un
+        documento. Cosi' la prova non tocca i documenti veri (D19) e non dipende da quanti
+        moduli abbia il progetto oggi."""
+        cartella = tempfile.mkdtemp(prefix="foglio_unico_")
+        self.addCleanup(shutil.rmtree, cartella, True)
+        with io.open(os.path.join(cartella, "main_casavip.py"), "w", encoding="utf-8") as f:
+            f.write("import fase1_vivo\n")
+        for nome in ("fase1_vivo.py", "fase2_morto.py"):
+            with io.open(os.path.join(cartella, nome), "w", encoding="utf-8") as f:
+                f.write("# niente\n")
+        with io.open(os.path.join(cartella, "CLAUDE.md"), "w", encoding="utf-8") as f:
+            f.write(righe_documento)
+        return cartella
+
+    def test_LA_VOCE_7_GRIDA_SUL_NUMERO_SBAGLIATO(self):
+        """La direzione «grida». Nel finto progetto i moduli non raggiunti sono 1: un
+        documento che ne scrive 7 sta mentendo sullo stato della macchina."""
+        fu = self._foglio()
+        dove = self._finto_progetto("Il piano: 7 moduli morti, si lavora su quelli vivi.\n")
+        colpevoli, guasto = fu.numeri_scritti_a_mano(dove)
+        self.assertIsNone(guasto, "la misura non e' riuscita: %s" % guasto)
+        self.assertTrue(
+            colpevoli,
+            "la voce 7 NON ha visto un numero sbagliato scritto a mano (il documento dice 7, "
+            "la macchina misura 1): e' una guardia che non puo' fallire, cioe' un ornamento")
+
+    def test_LA_VOCE_7_TACE_SUL_NUMERO_GIUSTO(self):
+        """La direzione «tace». Un falso allarme e' un difetto quanto un allarme mancato
+        (regola ferrea 10): un allarme che suona sempre viene spento."""
+        fu = self._foglio()
+        dove = self._finto_progetto("Il piano: 1 moduli morti, si lavora su quelli vivi.\n")
+        colpevoli, guasto = fu.numeri_scritti_a_mano(dove)
+        self.assertIsNone(guasto, "la misura non e' riuscita: %s" % guasto)
+        self.assertEqual(
+            colpevoli, [],
+            "la voce 7 grida su un numero GIUSTO: %r. Un falso allarme insegna a ignorare "
+            "lo strumento, e allora non protegge piu' niente." % (colpevoli,))
+
+    def test_LA_VOCE_7_NON_GRIDA_SU_UNA_MISURA_STORICA_NE_SU_ALTRI_MESTIERI(self):
+        """Le due rinunce dichiarate, provate invece che promesse.
+
+        (a) **la data esenta** — D22 dice che un numero si scrive con la misura che lo regge:
+            «misurato il 2026-08-09: 7 moduli morti» e' una misura storica, non
+            un'affermazione su oggi, e si tiene.
+        (b) **il tema conta** — la parola «morti» vale anche per i punti di mutazione. Al
+            primo giro questa voce ha prodotto nove falsi allarmi su trenta proprio cosi'
+            (`39 vivi + 3 morti` erano mutanti, non moduli).
+        """
+        fu = self._foglio()
+        dove = self._finto_progetto(
+            "Misurato il 2026-08-09: 7 moduli morti su 151.\n"
+            "fase59_concierge 114 punti, 72 uccisi -> 42 scoperti (39 vivi + 3 morti)\n")
+        colpevoli, guasto = fu.numeri_scritti_a_mano(dove)
+        self.assertIsNone(guasto, "la misura non e' riuscita: %s" % guasto)
+        self.assertEqual(
+            colpevoli, [],
+            "la voce 7 ha gridato su una misura storica (che porta la sua data) o su un "
+            "numero di un altro mestiere (punti di mutazione, non moduli): %r" % (colpevoli,))
+
+    # ── la voce 10: quante guardie spegne la shell (sbaglio S11, aperto per sette giorni) ──
+    def test_LA_VOCE_10_CONTA_LE_GUARDIE_SPENTE_COL_PARSER_NON_COL_GREP(self):
+        """⛔ IL NUMERO CHE FINORA SCRIVEVO A MANO. Il 2026-08-17 la suite e' girata cinque
+        volte e ogni volta ho dichiarato **io** che «5 guardie sui backup sono saltate»: una
+        dichiarazione affidata a chi scrive e' precisamente cio' che questo progetto ha
+        imparato a non fare (S11, D22).
+
+        Si conta con `ast`, non col `grep`: un `def test_` dentro un commento o una docstring
+        non produce un nodo dell'albero, quindi non puo' gonfiare il conto (sbaglio S6).
+        """
+        fu = self._foglio()
+        for v in fu.GUARDIE_CHE_DIPENDONO_DAL_PATH:
+            quanti = fu._metodi_di_prova(QUI, v["file"], v["classe"])
+            self.assertIsInstance(
+                quanti, int,
+                "la voce 10 non trova %s::%s: sta stampando un conto su una classe che non "
+                "esiste piu'" % (v["file"], v["classe"]))
+            self.assertGreater(
+                quanti, 0,
+                "%s::%s risulta con zero metodi di prova: o la classe si e' svuotata, o il "
+                "conto e' rotto — e in tutt'e due i casi il foglio direbbe «non si spegne "
+                "niente» mentre qualcosa si spegne" % (v["file"], v["classe"]))
+
+    def test_LA_VOCE_10_DIVENTA_ROSSA_SE_LA_CLASSE_SORVEGLIATA_SPARISCE(self):
+        """D18 punto 1: il metro storto va scoperto dal metro. Se qualcuno rinomina la classe,
+        il conto scenderebbe a zero e il foglio direbbe «tutto a posto» — cioe' il verde
+        peggiore, quello che non ha guardato niente."""
+        fu = self._foglio()
+        vere = fu.GUARDIE_CHE_DIPENDONO_DAL_PATH
+        try:
+            fu.GUARDIE_CHE_DIPENDONO_DAL_PATH = ({
+                "file": "test_backup_completo.py",
+                "classe": "ClasseCheNonEsistePiu",
+                "attrezzi": ("openssl",),
+                "cosa_difende": "niente, e' la prova",
+            },)
+            stato, dettaglio = fu._v10_ambiente(QUI)
+        finally:
+            fu.GUARDIE_CHE_DIPENDONO_DAL_PATH = vere
+        self.assertEqual(
+            stato, fu.ROSSO,
+            "con la classe sorvegliata sparita la voce 10 e' uscita %r (%s) invece di ROSSO: "
+            "sta stampando un conto finto con l'aria di una misura" % (stato, dettaglio))
+
+    def test_LA_VOCE_10_TACE_QUANDO_GLI_ATTREZZI_CI_SONO(self):
+        """L'altra direzione (D18 punto 2). Un allarme provato in un verso solo potrebbe
+        gridare sempre — e un allarme sempre acceso viene spento (regola ferrea 10). Qui si
+        punta a un attrezzo che c'e' di sicuro: l'interprete con cui gira questo test."""
+        import os as _os
+        fu = self._foglio()
+        vere = fu.GUARDIE_CHE_DIPENDONO_DAL_PATH
+        interprete = _os.path.basename(sys.executable).replace(".exe", "")
+        try:
+            fu.GUARDIE_CHE_DIPENDONO_DAL_PATH = ({
+                "file": "test_backup_completo.py",
+                "classe": "TestRipristinoAPezziNonPassa",
+                "attrezzi": (interprete,),
+                "cosa_difende": "niente, e' la prova",
+            },)
+            spente, _dettagli, rotte = fu.guardie_spente_dalla_shell(QUI)
+        finally:
+            fu.GUARDIE_CHE_DIPENDONO_DAL_PATH = vere
+        self.assertEqual(rotte, [], "la prova stessa e' rotta: %r" % (rotte,))
+        self.assertEqual(
+            spente, 0,
+            "la voce 10 dichiara %d guardie spente mentre l'attrezzo che chiede (%r) e' "
+            "presente: e' un falso allarme, e un falso allarme e' un difetto quanto un "
+            "allarme mancato" % (spente, interprete))
+
+    def test_SENZA_INGRESSI_LA_VOCE_7_NON_E_VERDE_MA_NON_ESEGUITA(self):
+        """S1: il vuoto non e' un valore, e' l'assenza di misura. Se il camminatore non ha da
+        dove partire, il foglio non deve dire «nessun numero sbagliato» -- non ha guardato."""
+        fu = self._foglio()
+        cartella = tempfile.mkdtemp(prefix="foglio_unico_vuoto_")
+        self.addCleanup(shutil.rmtree, cartella, True)
+        with io.open(os.path.join(cartella, "CLAUDE.md"), "w", encoding="utf-8") as f:
+            f.write("999 moduli morti\n")
+        stato, dettaglio = fu._v7_numeri(cartella)
+        self.assertEqual(
+            stato, fu.NON_ESEGUITO,
+            "senza nessun ingresso la voce 7 e' uscita %r (%s): un controllo che non ha "
+            "potuto misurare non e' un verde" % (stato, dettaglio))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

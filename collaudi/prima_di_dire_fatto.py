@@ -388,6 +388,32 @@ def stampa_la_batteria(radice=RADICE):
     print("=" * 86)
 
 
+def stampa_il_foglio(radice=RADICE):
+    """🧾 IL FOGLIO UNICO — «cosa devo fare prima di dire fatto, e l'ho fatto?»
+
+    ⛔ QUI E' IL SUO POSTO PIU' IMPORTANTE, ed e' il motivo per cui e' collegato a DUE ganci e
+    non solo all'avvio di sessione. All'avvio il foglio informa; qui e' il momento della
+    DECISIONE -- si sta per salvare. E' la regola 23 dell'appendice, «COSTRUITO != COLLEGATO»:
+    un controllo che nessuno esegue nel momento in cui si decide misura se stesso, non il
+    lavoro. Questo progetto l'ha gia' pagata due volte (il guardiano del piano dei soldi che
+    girava solo dentro la suite da 25 minuti, e le impronte sha256 confrontate a mano).
+
+    ⛔ NON FERMA IL COMMIT, e la rinuncia si dichiara (D18 punto 3). Il verdetto del pre-fatto
+    resta quello dei suoi dieci controlli: il foglio e' un DO-CONFIRM (Gawande, 2009) -- ti
+    mette davanti lo stato misurato, non decide al posto tuo. Farlo bloccare significherebbe
+    duplicare i giudizi in due posti, cioe' la malattia da curare.
+    """
+    print()
+    try:
+        import foglio_unico
+        foglio_unico.stampa(foglio_unico.giro(radice), breve=True)
+    except Exception as exc:                      # noqa: BLE001 — lo DICE, non tace
+        print("⚠️  IL FOGLIO UNICO DEI CONTROLLI NON SI STAMPA (%s: %s)"
+              % (exc.__class__.__name__, exc))
+        print("   Non e' un verde: e' il promemoria che ha smesso di funzionare.")
+        print("   Comando: python collaudi/foglio_unico.py")
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     radice = RADICE
@@ -426,6 +452,7 @@ def main(argv=None):
     print("⛔⛔ E ADESSO SI RILEGGONO, PERCHE' HAI FINITO — e stai per salvare.")
     pv.stampa_divieti(radice)
     stampa_la_batteria(radice)
+    stampa_il_foglio(radice)
 
     rossi, non_eseguiti = pv.verdetto(esiti)
     print("=" * 86)
