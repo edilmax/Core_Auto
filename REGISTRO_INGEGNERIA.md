@@ -686,11 +686,11 @@ mostrerebbe un bottone che il pulsante rifiuta — o, molto peggio, il contrario
   cosa che gli interessa. Ora dice che i soldi tornano sul metodo di pagamento usato, **senza
   promettere tempi che non dipendono da noi**.
 
-**✅ SUITE INTERA (dopo CodeQL e dopo i due freni scoperti dalla mutazione):**
-`Ran 5766 tests in 1639.896s` · `OK (skipped=4)` · **uscita 0** letta diretta (scritta dal
-lancianotte in fondo al file, S8). 5771 raccolti − 5766 eseguiti = lo **scarto noto di 5**
-(guardie `openssl`, dichiarato nella riga AMBIENTE). *(I giri precedenti, stesso esito:
-`Ran 5761 in 1618.862s` · `Ran 5763 in 1631.660s` · `Ran 5764 in 1576.741s`.)*
+**✅ SUITE INTERA (finale, dopo l'oracolo e la concorrenza):** `Ran 5768 tests in 1593.779s` ·
+`OK (skipped=4)` · **uscita 0** letta diretta (scritta dal lancianotte in fondo al file, S8).
+5773 raccolti − 5768 eseguiti = lo **scarto noto di 5** (guardie `openssl`, dichiarato nella
+riga AMBIENTE). *(I giri precedenti, stesso esito: `Ran 5761 in 1618.862s` ·
+`Ran 5763 in 1631.660s` · `Ran 5764 in 1576.741s` · `Ran 5766 in 1639.896s`.)*
 
 ⚠️ **IL PRIMO GIRO ERA ROSSO — 7 rossi, e tutti sani.** Vale la pena scriverlo perché due
 guardie già esistenti hanno preso due miei buchi che io non avevo previsto:
@@ -795,6 +795,49 @@ NESSUN MUTANTE SOPRAVVISSUTO: ogni guasto simulato viene visto dai test.
 ```
 ✅ Uscita 0, e `fase83_server.py` con lo **stesso sha256 prima e dopo** i due giri
 (`9706F89D…6E49`, 679774 byte): il Giudice ha rimesso a posto tutto ciò che aveva rotto.
+
+### 🔬 I DUE COLLAUDI CHE ERANO «PARZIALI» — chiusi, e il secondo era un FINTO VERDE
+
+Il fondatore non ha accettato i due «motivo dichiarato» della batteria. Aveva ragione, e sul
+**5** avevo anche sbagliato a ragionare: il freno 4 vieta di prendere l'importo **dalla
+richiesta**, non vieta a un *collaudo* di ricalcolarlo per conto suo.
+
+**① ORACOLO INDIPENDENTE (collaudo 5).** `_oracolo_rimborso` in `test_admin_rimborso_money.py`
+rifà il conto **senza importare `fase111`**, dalla politica pubblica, e con un'aritmetica
+scritta diversa apposta (**percento** invece di **bps**). Quattro casi che attraversano tutti i
+rami: flessibile→100%, moderata→50%, rigida→0% a due giorni dall'arrivo, più la finestra di
+ripensamento che vince su tutte. ⚠️ Date **relative a oggi**, mai cablate: una data fissa in un
+collaudo è una bomba a tempo. 💡 Il punto: tutti gli altri test chiedono al sistema quanto
+spetta e poi verificano che mostri quel numero — **se il motore sbagliasse, sbaglierebbero
+insieme**. Provato dal mutante su `fase111` (`rimborso = pagato`): ucciso.
+
+**② CONCORRENZA VERA (collaudo 6) — e qui il Giudice ha smascherato un mio finto verde.**
+Il collaudo «due operatori nello stesso istante» passava. Poi il mutante che rende **instabile
+la chiave d'idempotenza** — cioè rompe l'unica protezione che quel collaudo dice di
+sorvegliare — è **SOPRAVVISSUTO** (60 provati, 59 uccisi, 1 vivo).
+
+⛔ **Il motivo, ed è la lezione:** i due fili partivano insieme ma **non si incontravano mai**.
+Il primo faceva tutto il giro (chiedi a Stripe → rimborsa) prima che il secondo cominciasse, e
+il secondo trovava «già rimborsato» e non chiamava nemmeno. **Passava perché la gara non
+avveniva**, non perché la protezione reggesse: un doppio clic lento travestito da prova di
+concorrenza. 💡 **Far partire due fili insieme non basta a creare una gara: bisogna farli
+incontrare nel punto giusto.**
+
+Riparato con un **secondo cancelletto dentro il finto Stripe**: i due fili si aspettano nella
+creazione del rimborso, cioè quando tutti e due hanno già chiesto «esiste?» e si sono sentiti
+dire di no. Quella è la finestra vera.
+
+🔎 **Ricerca (D25, docs.stripe.com/api/idempotent_requests):** richieste successive con la
+stessa chiave tornano lo stesso risultato — ⚠️ ma l'esito idempotente viene salvato **solo dopo
+che l'esecuzione è iniziata**, quindi due richieste davvero simultanee possono confliggere ed
+essere ritentabili. **Non è una rete perfetta**, ed è scritto nel collaudo: il nostro codice da
+solo non separa due richieste simultanee, a separarle è la chiave stabile.
+
+```
+MUTANTI PROVATI: 60  |  UCCISI: 60  |  SOPRAVVISSUTI: 0  |  INCERTI: 0  |  9.0 minuti
+NESSUN MUTANTE SOPRAVVISSUTO: ogni guasto simulato viene visto dai test.
+```
+✅ `fase83_server.py` con lo stesso sha256 prima e dopo (`9706F89D…6E49`).
 
 ⚠️ **COSTO DICHIARATO, da diradare quando ci saranno prenotazioni vere.** Il pannello si
 ricarica **ogni 60 secondi** e ogni ricarica fa una scansione del giornale più fino a **~100

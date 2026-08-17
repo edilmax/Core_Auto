@@ -386,8 +386,43 @@ class TestIlRimborsoARRIVADavveroAllOspite(unittest.TestCase):
 # LA LISTA DEI RIMBORSI DOVUTI — le guardie del progetto in 6 punti (2026-08-16)
 # ─────────────────────────────────────────────────────────────────────────────
 
-STRIPE_FINTO = {"rimborsi_per_pi": {}, "esplode": False}
+import threading
+
+STRIPE_FINTO = {"rimborsi_per_pi": {}, "per_chiave": {}, "esplode": False,
+                "barriera_rimborso": None}
 CHIAMATE_LISTA = []
+_SERRATURA_FINTO_STRIPE = threading.Lock()
+
+
+# ── L'ORACOLO INDIPENDENTE (collaudo 5) ─────────────────────────────────────────
+# ⛔ Scritto QUI a mano dalla politica PUBBLICA (100% / 50% / 0% a scaglioni di giorni),
+# NON importato da `fase111`: importarlo non sarebbe un secondo calcolo, sarebbe lo stesso
+# calcolo chiamato due volte -- e due volte lo stesso errore da' lo stesso risultato.
+# Anche l'aritmetica e' scritta diversa apposta: `fase111` lavora in bps (x/10000), qui in
+# percento (x/100). Se un giorno una delle due divergesse, il confronto lo direbbe.
+POLITICHE_ORACOLO = {
+    "flessibile": ((1, 100), (0, 50)),
+    "moderata": ((5, 100), (1, 50), (0, 0)),
+    "rigida": ((30, 100), (7, 50), (0, 0)),
+}
+
+
+def _oracolo_rimborso(pagato_cents, giorni_all_arrivo, politica, entro_ripensamento):
+    """SECONDO CALCOLO, scritto separatamente, che ricalcola da zero quanto spetta.
+
+    Serve a rispondere a una domanda che nessun altro collaudo fa: *«e se fosse il MOTORE a
+    sbagliare?»*. Tutti gli altri test confrontano il prodotto con se stesso; questo lo
+    confronta con un conto fatto da un'altra parte."""
+    if pagato_cents <= 0:
+        return 0
+    # La finestra di ripensamento vince su qualunque politica dell'host, ma non su un
+    # soggiorno ormai imminente (arrivo sotto i 3 giorni).
+    if entro_ripensamento and giorni_all_arrivo >= 3:
+        return pagato_cents
+    for soglia, percento in POLITICHE_ORACOLO[politica]:
+        if giorni_all_arrivo >= soglia:
+            return pagato_cents * percento // 100
+    return 0
 
 
 def _fetch_stripe_con_memoria(url, body, headers):
@@ -412,13 +447,40 @@ def _fetch_stripe_con_memoria(url, body, headers):
                 "data": list(STRIPE_FINTO["rimborsi_per_pi"].get(pi, []))}
     if "/refunds" in url:
         # SCRITTURA — POST /v1/refunds
+        # ⛔ QUI IL FINTO STRIPE DEDUPLICA SULL'`Idempotency-Key`, come quello vero: senza
+        # questo comportamento il collaudo sulla concorrenza direbbe «due rimborsi partiti»
+        # e accuserebbe un innocente. La documentazione (docs.stripe.com/api/idempotent_
+        # requests) e' esplicita: richieste successive con la stessa chiave tornano lo STESSO
+        # risultato. ⚠️ E dichiara anche il limite: l'esito viene salvato solo DOPO che
+        # l'esecuzione e' iniziata, quindi due richieste davvero simultanee possono
+        # confliggere ed essere ritentabili -- non e' una rete perfetta, e' una rete.
         campi = parse_qs(body.decode("utf-8"))
         pi = (campi.get("payment_intent") or [""])[0]
-        rid = "re_" + secrets.token_hex(4)
-        STRIPE_FINTO["rimborsi_per_pi"].setdefault(pi, []).append(
-            {"id": rid, "status": "succeeded",
-             "amount": int((campi.get("amount") or ["0"])[0] or 0)})
-        return {"id": rid, "status": "succeeded", "object": "refund"}
+        chiave = {k.lower(): v for k, v in (headers or {}).items()}.get("idempotency-key", "")
+        # ⛔ IL CANCELLETTO CHE FORZA LA GARA VERA. Senza, i due fili non si incontrano mai:
+        # il primo finisce tutto il giro (chiedi a Stripe -> rimborsa) prima che il secondo
+        # arrivi, il secondo vede «gia' rimborsato» e non chiama nemmeno. Il collaudo passava
+        # perche' la gara NON AVVENIVA, non perche' la protezione reggeva -- e infatti il
+        # Giudice della mutazione l'ha smascherato: la chiave resa instabile sopravviveva.
+        # Qui i due fili si aspettano DENTRO la creazione del rimborso, cioe' tutti e due
+        # hanno gia' chiesto «esiste?» e si sono sentiti dire di no. E' la finestra vera.
+        barriera = STRIPE_FINTO.get("barriera_rimborso")
+        if barriera is not None:
+            try:
+                barriera.wait()
+            except Exception:
+                pass
+        with _SERRATURA_FINTO_STRIPE:
+            if chiave and chiave in STRIPE_FINTO["per_chiave"]:
+                return dict(STRIPE_FINTO["per_chiave"][chiave])
+            rid = "re_" + secrets.token_hex(4)
+            risposta = {"id": rid, "status": "succeeded", "object": "refund"}
+            if chiave:
+                STRIPE_FINTO["per_chiave"][chiave] = risposta
+            STRIPE_FINTO["rimborsi_per_pi"].setdefault(pi, []).append(
+                {"id": rid, "status": "succeeded",
+                 "amount": int((campi.get("amount") or ["0"])[0] or 0)})
+        return dict(risposta)
     return {"url": "https://t/" + secrets.token_hex(4), "id": "cs_" + secrets.token_hex(4)}
 
 
@@ -461,7 +523,9 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
     def setUp(self):
         del CHIAMATE_LISTA[:]
         STRIPE_FINTO["rimborsi_per_pi"] = {}
+        STRIPE_FINTO["per_chiave"] = {}
         STRIPE_FINTO["esplode"] = False
+        STRIPE_FINTO["barriera_rimborso"] = None
         self.dir = tempfile.mkdtemp()
         d = self.dir
         # ⛔ `db_finanza` NON e' un dettaglio del banco: il giornale immutabile e' la sola
@@ -990,6 +1054,156 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
                         {"riferimento": rif}, {"X-Admin-Key": "ak"})
         self.assertNotEqual(s, 422,
                            "un riferimento VERO viene rifiutato come malformato: %r" % (res,))
+
+    # ── COLLAUDO 5: L'ORACOLO INDIPENDENTE ──────────────────────────────────
+    def test_ORACOLO_INDIPENDENTE_L_IMPORTO_IN_LISTA_RICALCOLATO_DA_ZERO(self):
+        """⛔ LA DOMANDA CHE NESSUN ALTRO COLLAUDO FA: **e se fosse il motore a sbagliare?**
+
+        Tutti gli altri test confrontano il prodotto con se stesso: chiedono al sistema
+        quanto spetta e poi verificano che la lista mostri quel numero. Se `fase111`
+        sbagliasse, sbaglierebbero **insieme** e resterebbero verdi.
+
+        Qui il conto lo rifa' `_oracolo_rimborso`, scritto a mano dalla politica pubblica,
+        senza importare `fase111` e con un'aritmetica scritta diversa apposta (percento
+        invece di bps). Se i due divergono, uno dei due ha torto -- ed e' il momento di
+        scoprirlo, non quando lo scopre un ospite.
+
+        ⚠️ Date RELATIVE a oggi, mai cablate: una data fissa in un collaudo e' una bomba a
+        tempo che esplode il giorno che nessuno se lo aspetta."""
+        import datetime as _dt
+        oggi = _dt.date.today()
+
+        def _g(n):
+            return (oggi + _dt.timedelta(days=n)).isoformat()
+
+        # Quattro casi scelti per attraversare TUTTI i rami: le tre percentuali della
+        # politica (100/50/0) e la finestra di ripensamento, che vince su tutte.
+        casi = [
+            ("flex", "flessibile", 2, "arrivo fra 2 giorni: la flessibile rende tutto"),
+            ("mod", "moderata", 2, "arrivo fra 2 giorni: la moderata rende meta'"),
+            ("rig", "rigida", 2, "arrivo fra 2 giorni: la rigida non rende niente"),
+            ("rip", "rigida", 40, "arrivo lontano: il ripensamento vince sulla rigida"),
+        ]
+        for slug, politica, fra, _perche in casi:
+            self.g("POST", "/api/host/pubblica",
+                   {"slug": slug, "titolo": "Casa " + slug, "citta": "Roma",
+                    "prezzo_notte_cents": 50000, "capacita": 4,
+                    "politica_cancellazione": politica}, {"X-Host-Token": self.tok})
+            self.g("POST", "/api/host/disponibilita_range",
+                   {"alloggio_id": slug, "da": _g(0), "a": _g(60),
+                    "unita_totali": 1, "prezzo_netto_cents": 50000},
+                   {"X-Host-Token": self.tok})
+
+        provati = 0
+        for i, (slug, politica, fra, perche) in enumerate(casi):
+            ci, co = _g(fra), _g(fra + 2)
+            s, q = self.g("POST", "/api/concierge/quote",
+                          {"alloggio_id": slug, "check_in": ci, "check_out": co, "party": 2})
+            self.assertEqual(s, 200, "setup %s: %r" % (slug, q))
+            s, b = self.g("POST", "/api/concierge/book",
+                          {"quote_token": q["quote_token"], "email": "cli@or.it"})
+            self.assertEqual(s, 201, "setup %s: %r" % (slug, b))
+            rif, vt = b["riferimento"], b["voucher_token"]
+            pl = json.dumps({"type": "checkout.session.completed",
+                             "data": {"object": {"id": "cs_or%d" % i,
+                                                 "payment_intent": "pi_oracolo_%d" % i,
+                                                 "metadata": {"riferimento": rif}}}})
+            self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
+                            {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
+            pagato = self._totale_ospite(rif)
+            self.assertGreater(pagato, 0, "setup %s: incasso ignoto" % slug)
+            s, canc = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+            self.assertEqual(s, 200, "setup %s: %r" % (slug, canc))
+
+            atteso = _oracolo_rimborso(pagato, fra, politica, entro_ripensamento=True)
+            riga = self._riga(self._lista(), rif)
+            if atteso == 0:
+                self.assertIsNone(
+                    riga, "%s (%s): l'oracolo dice che non spetta NIENTE, e la lista "
+                          "propone comunque un rimborso: %r" % (slug, perche, riga))
+                provati += 1
+                continue
+            self.assertIsNotNone(riga, "%s (%s): l'oracolo dice che spettano %d cents e la "
+                                       "riga non c'e'" % (slug, perche, atteso))
+            self.assertEqual(
+                riga["dovuto_cents"], atteso,
+                "%s (%s): DUE CONTI DIVERSI sulla stessa cancellazione. Il motore dice %d, "
+                "il secondo calcolo dice %d su %d pagati a %d giorni dall'arrivo con "
+                "politica '%s'. Uno dei due ha torto."
+                % (slug, perche, riga["dovuto_cents"], atteso, pagato, fra, politica))
+            provati += 1
+        self.assertEqual(provati, len(casi),
+                         "setup: non tutti i casi sono stati attraversati")
+
+    # ── COLLAUDO 6: LA CONCORRENZA VERA ─────────────────────────────────────
+    def test_DUE_OPERATORI_NELLO_STESSO_ISTANTE_NON_RIMBORSANO_DUE_VOLTE(self):
+        """⛔ NON e' il doppio clic (gia' provato altrove): sono DUE PERSONE, due richieste
+        davvero simultanee, che nessun controllo «guarda-poi-agisci» puo' separare.
+
+        Il buco c'e' ed e' onesto dirlo: fra il momento in cui chiediamo a Stripe «esiste
+        gia' un rimborso?» e il momento in cui glielo chiediamo di fare, passa del tempo.
+        Due richieste possono attraversare quella finestra insieme, e **il nostro codice da
+        solo non le separa**. Cio' che le separa e' l'`Idempotency-Key` STABILE: e' la nostra
+        meta' del contratto, e questa prova verifica proprio quella.
+
+        🔎 Ricerca (D25, docs.stripe.com/api/idempotent_requests): richieste successive con
+        la stessa chiave tornano lo stesso risultato. ⚠️ Limite dichiarato dalla stessa
+        fonte: l'esito idempotente viene salvato solo DOPO che l'esecuzione e' iniziata,
+        quindi due richieste *davvero* simultanee possono confliggere ed essere ritentabili.
+        Non e' una rete perfetta -- ma senza una chiave stabile non ci sarebbe rete affatto,
+        e sarebbero due rimborsi veri."""
+        rif, _ = self._cancella_da_ospite("2026-09-29", "2026-09-30", "pi_concorrenza")
+        riga = self._riga(self._lista(), rif)
+        self.assertIsNotNone(riga, "setup: la riga dev'essere pronta")
+        self.assertTrue(riga.get("bottone"), "setup: %r" % (riga,))
+        dovuto = riga["dovuto_cents"]
+
+        # Due cancelletti, e servono tutti e due. Il primo fa PARTIRE i fili insieme; il
+        # secondo (dentro il finto Stripe) li fa incontrare DENTRO la creazione del rimborso.
+        # Solo il secondo produce la gara vera: senza, il primo filo finisce tutto il giro
+        # prima che il secondo cominci, e il collaudo diventa un doppio clic lento.
+        STRIPE_FINTO["barriera_rimborso"] = threading.Barrier(2, timeout=30)
+        cancelletto = threading.Barrier(2)
+        esiti = []
+
+        def _premi():
+            cancelletto.wait()          # partono nello STESSO istante, non uno dopo l'altro
+            try:
+                esiti.append(self.g("POST", "/api/admin/rimborsa_dovuto",
+                                    {"riferimento": rif}, {"X-Admin-Key": "ak"}))
+            except Exception as exc:     # pragma: no cover
+                esiti.append(("eccezione", repr(exc)))
+
+        fili = [threading.Thread(target=_premi) for _ in range(2)]
+        for f in fili:
+            f.start()
+        for f in fili:
+            f.join(timeout=60)
+        self.assertEqual(len(esiti), 2, "setup: entrambe le richieste devono aver risposto")
+
+        creazioni = self._rimborsi_inviati()
+        chiavi = {({k.lower(): v for k, v in c["headers"].items()}).get("idempotency-key", "")
+                  for c in creazioni}
+        # (a) LA NOSTRA META' DEL CONTRATTO: una chiave sola, stabile, legata alla
+        #     prenotazione. Se ne generassimo una per richiesta, Stripe non potrebbe
+        #     proteggerci e sarebbero DUE rimborsi veri sul conto dell'ospite.
+        self.assertEqual(len(chiavi), 1,
+                         "le due richieste portano chiavi d'idempotenza DIVERSE (%r): Stripe "
+                         "le vede come due rimborsi distinti e l'ospite riceve il doppio"
+                         % (chiavi,))
+        self.assertIn(rif, list(chiavi)[0],
+                      "la chiave non e' legata alla prenotazione: %r" % (chiavi,))
+        # (b) L'EFFETTO: un solo rimborso ESISTE, e vale quanto dovuto -- non il doppio.
+        creati = STRIPE_FINTO["rimborsi_per_pi"].get("pi_concorrenza", [])
+        self.assertEqual(len(creati), 1,
+                         "sul pagamento dell'ospite risultano %d rimborsi: due operatori "
+                         "nello stesso istante gli hanno restituito i soldi due volte. %r"
+                         % (len(creati), creati))
+        self.assertEqual(creati[0]["amount"], dovuto,
+                         "l'importo restituito non e' quello dovuto: %r" % (creati,))
+        # (c) E la riga esce dalla lista, una volta sola.
+        self.assertIsNone(self._riga(self._lista(), rif),
+                          "rimborsato e ancora in lista")
 
     def test_LA_LISTA_E_CHIUSA_A_CHI_NON_E_ADMIN(self):
         """La lista dice chi ha pagato quanto e chi aspetta dei soldi: e' un elenco di dati
