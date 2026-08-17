@@ -5831,13 +5831,21 @@ class RouterHTTP:
                     esito = fc.storna_prenotazione(riferimento=str(riferimento),
                                                    rimborso_cents=int(importo_cents))
                     if esito.get("parziale"):
+                        # ⛔ `_rif_per_registro`: il riferimento arriva dal CORPO della
+                        # richiesta e finisce nel registro che il Guardiano (fase186) legge
+                        # ogni giorno. Un a-capo qui dentro fabbrica righe di allarme FALSE
+                        # proprio nello strumento con cui si vedono i difetti. Trovato da
+                        # CodeQL sulla richiesta #66 (10 allarmi, 5 gravi) su codice scritto
+                        # da me poche ore prima -- ed era la STESSA classe gia' chiusa sulla
+                        # #59. Il rimedio esisteva e non l'avevo usato.
                         logger.info("RIMBORSO PARZIALE su %s: lo storno della commissione NON "
                                     "e' stato fatto (l'host trattiene una penale). Limite "
-                                    "dichiarato, non una dimenticanza.", riferimento)
+                                    "dichiarato, non una dimenticanza.",
+                                    _rif_per_registro(riferimento))
                 except Exception:
                     # ISOLATO come tutto il giornale: la scatola nera non ferma i soldi veri.
                     logger.warning("storno prenotazione fallito (ISOLATO) su %s",
-                                   riferimento, exc_info=True)
+                                   _rif_per_registro(riferimento), exc_info=True)
             fc.movimento(tipo=tipo, riferimento=str(riferimento),
                          soggetto=str(soggetto), importo_cents=int(importo_cents),
                          valuta=str(valuta or "EUR"), causale=str(causale),
@@ -5864,17 +5872,23 @@ class RouterHTTP:
                 return
             if not hasattr(fc, "costo_gateway"):
                 return
+            # ⛔ TUTTO CIO' CHE ENTRA NEL REGISTRO PASSA DA `_rif_per_registro`: il riferimento
+            # viene dal corpo della richiesta, e il registro e' dove il Guardiano cerca i
+            # guasti sui soldi. Vedi la nota estesa in `_giornale`.
+            _rif = _rif_per_registro(riferimento)
             pi = str((dati_json or {}).get("stripe_pi") or "")
             if not pi:
                 logger.info("costo gateway non registrabile su %s: manca lo stripe_pi sul "
-                            "record (lo stesso che serve al pulsante dei rimborsi)",
-                            riferimento)
+                            "record (lo stesso che serve al pulsante dei rimborsi)", _rif)
                 return
             esito = sp.commissione_effettiva(pi)
             if not (isinstance(esito, dict) and esito.get("ok")):
+                # ⛔ Anche il motivo si ripulisce: arriva da un servizio esterno, quindi non e'
+                # nostro nemmeno lui, e finisce nella stessa riga di registro.
                 logger.warning("costo gateway NON LETTO su %s: %s — il prospetto lo contera' "
-                               "fra gli sconosciuti, non fra i costi",
-                               riferimento, (esito or {}).get("motivo") or "motivo assente")
+                               "fra gli sconosciuti, non fra i costi", _rif,
+                               _rif_per_registro((esito or {}).get("motivo")
+                                                 or "motivo assente"))
                 return
             fee = int(esito.get("fee_cents") or 0)
             fc.costo_gateway(riferimento=str(riferimento), soggetto="host:" + str(host_id),
@@ -5889,7 +5903,8 @@ class RouterHTTP:
             if pp is not None and hasattr(pp, "salva_costo_gateway"):
                 pp.salva_costo_gateway(str(riferimento), fee)
         except Exception:
-            logger.warning("costo gateway fallito (ISOLATO) su %s", riferimento, exc_info=True)
+            logger.warning("costo gateway fallito (ISOLATO) su %s",
+                           _rif_per_registro(riferimento), exc_info=True)
 
     def _dac7_payout_bloccato(self, host_id):
         """ENFORCEMENT DAC7 (art. proc. dovuta diligenza, Dir. UE 2021/514): (bloccato,

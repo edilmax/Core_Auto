@@ -15,14 +15,17 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 > **Stato dei tre posti, misurato adesso (non ricordato):**
 > ```
-> computer master 44b2f43 · GitHub master 44b2f43 · VPS 44b2f43   -> ALLINEATI
-> ramo consegne-foglio-unico 1f3f5f3 (spinto)
-> RICHIESTA #65: state=open  merged=False   <- NON UNITA. Terza volta che un
->                documento la dava per chiusa: si chiede all'API, sempre.
-> CI su 1f3f5f3: 14 job · gate=success · unico rosso CodeQL, e NON e' nostro
->                (`HttpError: No server is currently available`, il 503 di GitHub,
->                tre volte dentro lo stesso job). Basta rilanciarlo.
-> test_pipeline_ci: Ran 215 · 0 rossi (dopo l'aggiornamento di SUITE ATTUALE)
+> computer master 44b2f43 · ramo consegne-foglio-unico 2c96d21 (spinto)
+> GitHub master 394d821  <- la #65 e' stata UNITA (verificata con una SECONDA
+>                           chiamata: state=closed, merged=True, merged_at pieno.
+>                           Era APERTA, e il documento la dava per chiusa: terza
+>                           volta. Si chiede all'API, sempre.)
+> VPS 44b2f43            <- indietro di un'unione: allineare
+> RICHIESTA #66: aperta su 2c96d21 (il lavoro di stanotte)
+> CI su 1f3f5f3: 15 job · gate=success · CodeQL rosso per il 503 di GitHub,
+>                rilanciato e tornato verde: NON era nostro.
+> CI su 2c96d21: 15 job · gate=success · ma CodeQL ROSSO PER DAVVERO —
+>                10 allarmi (5 gravi) su codice scritto da me. Riparato, vedi sotto.
 > ```
 >
 > ### 🔴 IL NUMERO CHE DECIDEVA IL LAVORO ERA FALSO, E LA CAUSA NON ERA «È VECCHIO»
@@ -311,6 +314,29 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > pretende che il server le CHIAMI davvero — appendice 23) + 3 in
 > `test_fase162_hold_pagamento`. Tutte **viste rosse prima**. Batteria dei soldi dopo la
 > riparazione: **126 test, 0 rossi**.
+>
+> ### 🪤 E CODEQL HA BOCCIATO LA RICHIESTA #66 — su codice scritto da me poche ore prima
+> **10 allarmi, 5 gravi** (`py/log-injection` + `py/clear-text-logging-sensitive-data`) su
+> cinque righe nuove di `fase83_server.py`. Il `riferimento` arriva dal **corpo della
+> richiesta** e finiva grezzo nel registro: un a-capo lì dentro **fabbrica righe di allarme
+> false** proprio dove il Guardiano (`fase186`) guarda ogni giorno per sapere se un guasto sui
+> soldi è avvenuto. Non è un difetto qualunque: è un difetto **nello strumento con cui si
+> vedono i difetti**.
+>
+> 🔴 **E la stessa classe era già stata chiusa sulla richiesta #59.** Il rimedio
+> (`_rif_per_registro`) esisteva, era documentato con la sua storia — e io non l'ho usato.
+> **Perché è tornata? Perché nessun test la sorvegliava**: quella riparazione fu applicata a
+> mano, punto per punto. È D20 vista dal lato in cui si rompe — *«la guardia è la memoria del
+> difetto»*. Senza guardia la memoria era la mia, e non ha retto nove giorni.
+>
+> ⚠️ **E misurando si è scoperto che non erano 5: erano 32.** CodeQL segnalava solo le mie
+> perché erano *nuove*; le altre 27 sono anteriori e stavano lì da sempre. ✅ Riparate le
+> cinque mie; per le altre c'è un **cricchetto**: `TestNessunRiferimentoGREZZOEntraNelREGISTRO`
+> fissa il tetto a **32** e pretende che **possa solo scendere** — nessuna riga nuova entra, e
+> chi ne ripara una abbassa il numero nello stesso commit. ⛔ Ripararle tutte e 32 di notte, su
+> codice che muove denaro, sarebbe stato peggio del difetto: è la stessa tecnica che la CI usa
+> già per la copertura («soglia a cricchetto»). Provato nelle due direzioni: verde col tetto
+> vero, **rosso** se ne aggiungi una **e** rosso se il tetto resta più alto del vero.
 >
 > ### 📁 FILE TOCCATI (dichiarati prima di aprirli, regola ferrea 15)
 > Produzione (col via «autorizzato»): `fase177_financial_controller.py` (3 movimenti + `saldi`
@@ -3147,7 +3173,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 44b2f43
+CONSEGNE AGGIORNATE A: 2c96d21
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -4975,7 +5001,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5816 test
+SUITE ATTUALE: Ran 5819 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

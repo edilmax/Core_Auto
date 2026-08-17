@@ -6537,6 +6537,102 @@ class TestLaRaggiungibilitaNONPuoGuardareUnIngressoSOLO(unittest.TestCase):
             % (len(ingressi), len(self.INGRESSI_VERI)))
 
 
+class TestNessunRiferimentoGREZZOEntraNelREGISTRO(unittest.TestCase):
+    """🪤 IL REGISTRO E' LO STRUMENTO CON CUI SI VEDONO I DIFETTI: una riga fabbricata li'
+    dentro non e' un difetto qualunque.
+
+    **Il fatto, 2026-08-18.** CodeQL ha bocciato la richiesta #66 con **10 allarmi, 5 gravi**
+    (`py/log-injection` + `py/clear-text-logging-sensitive-data`) su **codice scritto da me
+    poche ore prima**. Il `riferimento` arriva dal CORPO della richiesta e finiva grezzo nel
+    registro: un a-capo li' dentro fabbrica righe di allarme FALSE proprio dove il Guardiano
+    (fase186) guarda ogni giorno per sapere se un guasto sui soldi e' avvenuto.
+
+    ⛔ **E LA STESSA CLASSE ERA GIA' STATA CHIUSA SULLA #59.** Il rimedio
+    (`_rif_per_registro`) esisteva, era documentato, e io non l'ho usato. Perche' e' tornata?
+    **Perche' nessun test la sorvegliava**: quella riparazione fu applicata a mano, punto per
+    punto. E' D20 vista dal lato in cui si rompe -- *«la guardia e' la memoria del difetto: se
+    qualcuno riscrive quella riga com'era, diventa rossa lo stesso giorno»*. Senza guardia, la
+    memoria era la mia, e non ha retto nove giorni.
+
+    ⛔⛔ **CRICCHETTO, NON CANCELLO — e il perche' e' onesto.** Misurando si e' scoperto che i
+    punti scoperti non erano 5: erano **32**, quasi tutti anteriori a questo lavoro (CodeQL
+    segnalava solo i miei perche' erano *nuovi*). Ripararli tutti in un colpo, di notte, su
+    codice che muove denaro, sarebbe stato peggio del difetto. Quindi il tetto e' fissato a
+    quello che c'e' **oggi** e puo' solo SCENDERE: nessuna riga nuova puo' entrare, e ogni
+    volta che se ne ripara una si abbassa il numero qui sotto. E' la stessa tecnica che la CI
+    usa gia' per la copertura («soglia a cricchetto»).
+    """
+
+    # ⛔ MISURATO IL 2026-08-18, non stimato: `python - <<` con l'albero sintattico su
+    # `fase83_server.py`, dopo aver ripulito le 5 righe nuove della richiesta #66.
+    # ⛔ QUESTO NUMERO PUO' SOLO SCENDERE. Se sale, qualcuno ha aggiunto una riga di registro
+    # con un riferimento grezzo: si ripara la riga, non si alza il tetto.
+    TETTO = 32
+    NOMI_GREZZI = {"riferimento", "rif", "ref", "riferimento_id"}
+
+    def _scoperti(self):
+        import ast
+        with io.open(os.path.join(QUI, "fase83_server.py"), encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+
+        def grezzo(nodo):
+            if isinstance(nodo, ast.Name) and nodo.id in self.NOMI_GREZZI:
+                return nodo.id
+            # `str(rif)` non ripulisce niente: cambia il tipo, non il contenuto.
+            if (isinstance(nodo, ast.Call) and isinstance(nodo.func, ast.Name)
+                    and nodo.func.id == "str" and nodo.args
+                    and isinstance(nodo.args[0], ast.Name)
+                    and nodo.args[0].id in self.NOMI_GREZZI):
+                return "str(%s)" % nodo.args[0].id
+            return None
+
+        fuori = []
+        for n in ast.walk(albero):
+            if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)):
+                continue
+            if not (isinstance(n.func.value, ast.Name) and n.func.value.id == "logger"):
+                continue
+            # il primo argomento e' il modello della riga: quello e' nostro e non e' un dato
+            for a in n.args[1:]:
+                nome = grezzo(a)
+                if nome:
+                    fuori.append("riga %d: logger.%s(... %s ...)" % (n.lineno, n.func.attr,
+                                                                     nome))
+        return sorted(fuori)
+
+    def test_IL_NUMERO_DI_RIGHE_SCOPERTE_PUO_SOLO_SCENDERE(self):
+        scoperti = self._scoperti()
+        self.assertLessEqual(
+            len(scoperti), self.TETTO,
+            "SONO AUMENTATE le righe di registro che scrivono un riferimento GREZZO: %d "
+            "contro un tetto di %d. Il riferimento arriva dal corpo della richiesta, e il "
+            "registro e' dove il Guardiano cerca i guasti sui soldi: un a-capo li' dentro "
+            "fabbrica allarmi falsi. Usa `_rif_per_registro(...)`. ⛔ Non alzare il tetto: "
+            "ripara la riga.\n      %s"
+            % (len(scoperti), self.TETTO, "\n      ".join(scoperti[-8:])))
+
+    def test_IL_TETTO_NON_RESTA_PIU_ALTO_DEL_VERO(self):
+        """⛔ D18 punto 1: il metro si misura prima del muro. Un cricchetto che resta sopra il
+        numero vero smette di stringere -- e allora non e' piu' un cricchetto, e' un commento.
+        Quando si ripara una riga si abbassa il tetto, e questa guardia lo pretende."""
+        scoperti = self._scoperti()
+        self.assertEqual(
+            len(scoperti), self.TETTO,
+            "il tetto dichiarato (%d) non e' piu' quello vero (%d): se hai riparato delle "
+            "righe, abbassa `TETTO` nello stesso commit, o il cricchetto lascia rientrare "
+            "quello che hai appena tolto." % (self.TETTO, len(scoperti)))
+
+    def test_IL_RIMEDIO_ESISTE_ANCORA(self):
+        """Se qualcuno toglie `_rif_per_registro`, le due guardie sopra continuerebbero a
+        contare felici mentre il rimedio non c'e' piu' (sbaglio S2: i nomi si leggono)."""
+        with io.open(os.path.join(QUI, "fase83_server.py"), encoding="utf-8") as f:
+            testo = f.read()
+        self.assertIn(
+            "def _rif_per_registro", testo,
+            "il rimedio contro le righe di registro fabbricate e' sparito: senza di lui il "
+            "cricchetto qui sopra sorveglia una difesa che non esiste piu'")
+
+
 class TestLaSuiteRIFIUTADiGirareDallaShellSBAGLIATA(unittest.TestCase):
     """🚫 LA SHELL FA PARTE DELLA MISURA — e questa guardia nasce da un errore MIO.
 
