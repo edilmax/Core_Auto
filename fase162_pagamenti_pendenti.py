@@ -500,16 +500,26 @@ class PagamentiPendenti:
         return out
 
     def pulisci_vecchi(self, *, eta_sec: int = 93600, ora_ts: Optional[int] = None) -> int:
-        """Elimina i record 'scaduto'/'rimborsato' più vecchi di eta_sec (default 26h: una
-        sessione Stripe può vivere fino a 24h — su-richiesta approvata — e finché il link è
-        vivo il record DEVE esistere, così un pagamento su una prenotazione cancellata/scaduta
-        viene riconosciuto e mai confermato alla cieca). Ritorna quanti rimossi."""
+        """Elimina i record 'scaduto' più vecchi di eta_sec (default 26h: una sessione Stripe
+        può vivere fino a 24h — su-richiesta approvata — e finché il link è vivo il record
+        DEVE esistere, così un pagamento su una prenotazione cancellata/scaduta viene
+        riconosciuto e mai confermato alla cieca). Ritorna quanti rimossi.
+
+        ⛔ 'rimborsato' NON si purga, e non è una dimenticanza (difetto misurato il
+        2026-08-17). Quel record è l'UNICO posto dove vive lo `stripe_pi` del pagamento,
+        cioè l'unico modo di restituire i soldi: senza di lui la riga resta nella lista dei
+        rimborsi dovuti ma dichiara `manca: payment_intent` e il pulsante non c'è più. E la
+        soglia si misura su `creato_ts`, che si scrive alla PRENOTAZIONE e non si aggiorna
+        mai: chi cancellava giorni dopo aver prenotato era GIÀ oltre la soglia e perdeva il
+        pulsante alla PRIMA pulizia — cioè nel caso normale, non in un caso raro. Lo stato
+        gemello 'cancellata_host' non è mai stato purgato: ora i due si comportano uguale.
+        Guardia: `test_LA_PURGA_NON_PUO_PORTARE_VIA_CHI_DEVE_RICEVERE_SOLDI`."""
         ora = ora_ts if isinstance(ora_ts, int) and not isinstance(ora_ts, bool) else self._now()
         con = self._apri()
         try:
             with con:
                 cur = con.execute(
-                    "DELETE FROM pendenti WHERE stato IN ('scaduto','rimborsato') AND creato_ts<?",
+                    "DELETE FROM pendenti WHERE stato='scaduto' AND creato_ts<?",
                     (ora - max(60, int(eta_sec)),))
             return cur.rowcount
         finally:

@@ -165,17 +165,33 @@ class TestCancellazioneMoney(unittest.TestCase):
 
     # ── ritenzione: il record vive più del link Stripe ────────────────────────
     def test_ritenzione_26h(self):
+        """Un record 'scaduto' vive piu' del link Stripe (max 24h): a +25h c'e' ancora, a
+        +27h l'housekeeping puo' portarlo via.
+
+        ⛔ E il record di chi deve ancora RICEVERE dei soldi non si tocca mai, per quanto
+        vecchio sia (2026-08-17): con lui se ne andrebbe lo `stripe_pi`, cioe' l'unico modo
+        di eseguire il rimborso dal pannello. La soglia si misura su `creato_ts`, che si
+        scrive alla PRENOTAZIONE e non si aggiorna mai: chi cancellava giorni dopo aver
+        prenotato era GIA' oltre la soglia, e perdeva il pulsante alla PRIMA pulizia."""
         pp = self.sys.pagamenti_pendenti
         ora = int(time.time())
         pp.registra("REF_OLD", alloggio_id="casa-cm", check_in="2026-10-05",
                     check_out="2026-10-06", stato="in_attesa")
-        pp.marca_da_rimborsare("REF_OLD")
+        pp.scadi("REF_OLD")
         # a +25h (link Stripe max 24h APPENA morto) il record c'è ancora
         pp.pulisci_vecchi(ora_ts=ora + 25 * 3600)
         self.assertIsNotNone(pp.info("REF_OLD"))
         # a +27h è housekeeping legittimo
         pp.pulisci_vecchi(ora_ts=ora + 27 * 3600)
         self.assertIsNone(pp.info("REF_OLD"))
+        # ── e chi aspetta un rimborso resta, per quanto vecchio sia ──
+        pp.registra("REF_DOV", alloggio_id="casa-cm", check_in="2026-10-07",
+                    check_out="2026-10-08", stato="in_attesa")
+        pp.marca_da_rimborsare("REF_DOV")
+        pp.pulisci_vecchi(ora_ts=ora + 200 * 3600)
+        self.assertIsNotNone(pp.info("REF_DOV"),
+                             "la pulizia ha portato via il record di chi aspetta un rimborso: "
+                             "con lui se ne va lo `stripe_pi` e il pulsante sparisce")
 
 
     # ── (3) REPLAY della cancellazione NON conia crediti extra (bug al collaudo) ──
@@ -212,9 +228,11 @@ class TestCancellazioneMoney(unittest.TestCase):
         s, c1 = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
         self.assertEqual(s, 200, c1)
         self.assertGreater(c1["credito_viaggio_cents"], 0, "1a cancellazione: credito atteso")
-        # l'housekeeping purga il pendente (record marca_da_rimborsare -> via a +27h): da qui
-        # `_rec is None` e la vecchia guardia non protegge piu'.
-        self.sys.pagamenti_pendenti.pulisci_vecchi(ora_ts=int(time.time()) + 27 * 3600)
+        # il pendente sparisce: da qui `_rec is None` e la vecchia guardia non protegge piu'.
+        # ⚠️ Prima lo faceva sparire l'housekeeping; dal 2026-08-17 la pulizia non tocca piu'
+        # 'rimborsato' (portava via lo `stripe_pi` di chi aspetta un rimborso), quindi lo
+        # stato che espone il difetto si costruisce con una rimozione diretta.
+        self.assertTrue(self.sys.pagamenti_pendenti.rimuovi(rif))
         self.assertIsNone(self.sys.pagamenti_pendenti.info(rif))
         # REPLAY x2: nessun nuovo credito (prima del fix: 5000 cents ad ogni replay)
         for _ in range(2):

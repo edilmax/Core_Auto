@@ -586,6 +586,7 @@ def main():
         print("  ✅ Il regolamento dice il vero su se stesso, e OGNI regola dichiara come si")
         print("     verifica (conteggi rifatti adesso dai file, non a memoria).")
     stampa_piano()
+    stampa_tecniche()
     stampa_i_blocchi()
     print("=" * 78)
     return 0
@@ -645,6 +646,93 @@ def stampa_piano():
     print("     nell'indice NON basta -- e' l'errore fatto il 2026-08-15):")
     print("       memory/bookinvip-piano-dieci-pezzi.md")
     print("       memory/bookinvip-ricerca-industriale.md")
+
+
+TECNICHE_INIZIO = "<!-- TECNICHE-INIZIO"
+TECNICHE_FINE = "<!-- TECNICHE-FINE"
+
+
+def leggi_tecniche(radice=None):
+    """LA LISTA UNICA DELLE TECNICHE DI VERIFICA, letta da `REGISTRO_INGEGNERIA.md`.
+
+    ⛔ Si LEGGE, non si ricopia, e sta in UN POSTO SOLO. Nasce il 2026-08-17 da un ordine del
+    fondatore: *«va corretto sono 11 e deve rimanere solo quello e nessun altro file cosi'
+    evitiamo che capiti ancora e quello va letto da qualunque chat»*. Il fatto: una SECONDA
+    lista («i sei metodi AWS») viveva in `RIPRENDI_QUI.md`, e una sessione intera ha ragionato
+    sul numero sbagliato -- fino a andare a cercare online tecniche in piu' che il progetto ha
+    gia'. Due liste che dicono cose diverse non sono ridondanza: sono il difetto.
+
+    Ritorna la stringa vuota se il blocco non c'e': chi chiama lo DICE, non tace (S7).
+    """
+    base = radice or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        with io.open(os.path.join(base, "REGISTRO_INGEGNERIA.md"), encoding="utf-8") as f:
+            testo = f.read()
+    except OSError:
+        return ""
+    i = testo.find(TECNICHE_INIZIO)
+    j = testo.find(TECNICHE_FINE)
+    if i < 0 or j <= i:
+        return ""
+    return testo[testo.find("\n", i) + 1:j].strip()
+
+
+def conta_tecniche(blocco=None):
+    """Quante tecniche ci sono DAVVERO, e quante il blocco dichiara di averne.
+
+    ⛔ D18 e D22: il numero non si crede, si CONTA. Il conteggio delle regole ha mentito TRE
+    volte (75 -> 103 -> 104) finche' a scriverlo era una persona invece di una macchina.
+    Ritorna `(contate, dichiarate)`; `dichiarate` e' None se la riga `TOTALE DICHIARATO:`
+    non c'e' -- e allora nessuna macchina puo' accorgersi che la lista e' cambiata.
+    """
+    testo = blocco if blocco is not None else leggi_tecniche()
+    righe = testo.splitlines()
+    contate = sum(1 for r in righe if r.startswith("- **"))
+    dichiarate = None
+    for r in righe:
+        if r.strip().startswith("TOTALE DICHIARATO:"):
+            try:
+                dichiarate = int(r.split(":", 1)[1].strip())
+            except ValueError:
+                dichiarate = None
+            break
+    return contate, dichiarate
+
+
+def stampa_tecniche():
+    """Le tecniche di verifica: UNA lista, UN file, letta da qualunque chat.
+
+    ⛔ Non stampa solo: CONTROLLA. Se il blocco dichiara un numero diverso da quante righe
+    ha davvero, GRIDA -- perche' un elenco che mente su se stesso e' peggio di nessun elenco.
+    Ritorna 0 se tutto torna, 1 se c'e' qualcosa da correggere (il chiamante NON rompe la
+    sessione per questo: la guardia che fa diventare rossa la CI sta in `test_pipeline_ci.py`).
+    """
+    blocco = leggi_tecniche()
+    print()
+    print("=" * 78)
+    print("🔬 LE TECNICHE DI VERIFICA — LA LISTA UNICA (letta da REGISTRO_INGEGNERIA.md)")
+    print("=" * 78)
+    if not blocco:
+        print("  ⛔ IL BLOCCO DELLE TECNICHE NON C'E' PIU' in REGISTRO_INGEGNERIA.md")
+        print("     (cercavo i marcatori TECNICHE-INIZIO / TECNICHE-FINE).")
+        print("     Qualcuno l'ha tolto o rinominato: RIMETTILO prima di decidere cosa fare.")
+        return 1
+    for riga in blocco.splitlines():
+        print("  " + riga)
+    print()
+    contate, dichiarate = conta_tecniche(blocco)
+    if dichiarate is None:
+        print("  ⛔ IL BLOCCO NON DICHIARA IL TOTALE: manca la riga `TOTALE DICHIARATO: N`,")
+        print("     quindi nessuna macchina puo' accorgersi se la lista cambia. RIMETTILA.")
+        return 1
+    if contate != dichiarate:
+        print("  ⛔⛔ IL BLOCCO MENTE SU SE STESSO: dichiara %d tecniche, ne ho contate %d."
+              % (dichiarate, contate))
+        print("      Correggi `TOTALE DICHIARATO:` oppure la lista, PRIMA di lavorare.")
+        return 1
+    print("  ✅ %d dichiarate, %d contate adesso dal file: il blocco dice il vero su se stesso."
+          % (dichiarate, contate))
+    return 0
 
 
 def stampa_i_blocchi():

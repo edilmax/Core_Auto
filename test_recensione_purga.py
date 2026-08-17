@@ -93,9 +93,12 @@ class TestRecensionePurga(unittest.TestCase):
         s, _ = self.g("POST", "/api/recensioni",
                       {"token": b["diritto_recensione"], "voto": 5, "testo": "mai stato"})
         self.assertEqual(s, 402)                       # guardia normale
-        # +30h: l'housekeeping purga il record 'rimborsato'
-        n = self.sis.pagamenti_pendenti.pulisci_vecchi(ora_ts=int(time.time()) + 30 * 3600)
-        self.assertGreaterEqual(n, 1)
+        # Il record pendente sparisce. ⚠️ Dal 2026-08-17 la pulizia di routine NON tocca piu'
+        # lo stato 'rimborsato' (con lui se ne andava lo `stripe_pi` di chi aspetta i soldi):
+        # qui si toglie direttamente, perche' cio' che questo collaudo protegge non e' la
+        # politica di ritenzione, e' che la guardia sulle recensioni non fallisca-aperta
+        # quando il record NON c'e', da qualunque causa venga.
+        self.assertTrue(self.sis.pagamenti_pendenti.rimuovi(b["riferimento"]))
         self.assertIsNone(self.sis.pagamenti_pendenti.info(b["riferimento"]))
         s, o = self.g("POST", "/api/recensioni",
                       {"token": b["diritto_recensione"], "voto": 5, "testo": "mai stato"})

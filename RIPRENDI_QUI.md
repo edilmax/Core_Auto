@@ -11,6 +11,101 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🟢 2026-08-17 (19) — **LE SETTE STRADE SCRIVONO TUTTE NEL GIORNALE — e il pulsante non sparisce più**
+
+> **Via del fondatore:** «autorizzato e test tutti aws». Codice di produzione toccato con quel
+> permesso scritto (B4). ⛔ **Nessun commit**: manca «procedi al commit» (B1).
+>
+> ### 🔴 LA COSA PIÙ IMPORTANTE, ed è quella che nessuno cercava
+> **Il pulsante «Rimborsa» spariva quasi sempre, e non in un caso raro: in quello normale.**
+> `fase162.pulisci_vecchi()` cancellava i record in stato `rimborsato` più vecchi di 26 ore
+> **contate da `creato_ts`, cioè dalla PRENOTAZIONE** (`fase162:119`), non dalla cancellazione.
+> In quel record vive lo `stripe_pi`, **e solo lì**: chi prenotava il 1° settembre e cancellava
+> il 20 era già oltre la soglia, e perdeva il pulsante alla **prima** pulizia utile. La riga
+> restava in lista dichiarando `manca: payment_intent` — visibile e non pagabile, per sempre.
+>
+> 💡 **Perché era invisibile:** tutti i documenti dicevano «chi aspetta da più di 26 ore», dando
+> per scontato che l'orologio partisse dall'attesa. Su quella premessa sbagliata era stata
+> costruita una **rinuncia deliberata** (`assertFalse(riga.get("bottone"))`): un collaudo che
+> passava, che difendeva la cosa giusta (senza `pi_` non si preme, o è un rimborso alla cieca)
+> per una ragione sbagliata. **Non l'ha trovato un test: l'ha trovato contare da dove parte
+> l'orologio.**
+>
+> ✅ **Chiuso:** `rimborsato` non si purga più; `scaduto` sì, come prima. Lo stato gemello
+> `cancellata_host` **non veniva già purgato** — erano due stati di chiusura trattati in modo
+> diverso senza motivo, e si rompeva l'incoerente.
+> Guardia: `test_LA_PURGA_NON_PUO_PORTARE_VIA_CHI_DEVE_RICEVERE_SOLDI` (vista rossa, poi verde).
+> **Sei collaudi** davano per buona la vecchia regola: riportati sul loro vero invariante —
+> costruiscono «il pendente non c'è» con `rimuovi()`, non con la politica di ritenzione.
+>
+> ### ✅ LE QUATTRO STRADE MANCANTI, tutte col metodo D20 (rossa → riparata → verde)
+> | # | strada | dove | pulsante |
+> |---|---|---|---|
+> | 5 | pagamento tardivo su stanza già ripresa | `_conferma_pagamento` | ✅ |
+> | 6 | anticipo tardivo «paga in struttura» | `_conferma_struttura` | ✅ |
+> | 7 | pagamento su prenotazione non confermabile | `_conferma_pagamento` | ✅ |
+> | 4 | controversia risolta | `_admin_controversia_risolvi` | ⚠️ **no, ed è voluto** |
+>
+> 💰 **Sulla 6 la cifra è l'ANTICIPO, non il totale** (`anticipo_online_cents`): online arriva
+> solo quello, il saldo lo incassa l'host di persona. Scrivere il totale avrebbe restituito
+> denaro **mai ricevuto**. La guardia pretende che l'anticipo sia **minore** del totale, o
+> dichiara di non star provando niente.
+>
+> ⚠️ **LIMITE DICHIARATO SULLA 4** (D18 punto 3): la riga compare, il pulsante no. Lì il
+> soggiorno **c'è stato**, quindi le date sono legittimamente occupate e il freno «date
+> liberate» non passa; nello split parziale scatta anche «l'host è già stato pagato», perché la
+> sua quota parte subito. Renderla premibile = **allentare due freni sui soldi**: decisione del
+> fondatore, non lavoro tecnico. Il rimborso resta manuale da Stripe, come dice già la rotta.
+>
+> ### 🔬 E LA LISTA DELLE TECNICHE ADESSO È UNA SOLA (ordine del fondatore, 2026-08-17)
+> *«va corretto sono 11 e deve rimanere solo quello e nessun altro file così evitiamo che
+> capiti ancora e quello va letto da qualunque chat»*.
+>
+> **Il fatto, e riguarda me.** Una tabella dei «metodi AWS» in questo file dichiarava **sei**
+> metodi di verifica. Su quel numero ho ragionato per mezz'ora, sono andato a cercare online le
+> tecniche «mancanti» e sono arrivato a un passo dal proporne tre nuove — in un progetto il cui
+> stesso registro dice *«aggiungere strumenti ALLONTANA dalla fine»*. La lista vera dice **11**,
+> e le tre che volevo aggiungere erano **già in casa**. È stato il fondatore a fermarmi.
+>
+> ✅ **Chiuso così, e non con un promemoria:** la lista sta in **un posto solo**
+> (`REGISTRO_INGEGNERIA.md`, `TECNICHE-INIZIO`/`TECNICHE-FINE`) · `regole_avvio.py` la **legge**
+> (non la ricopia), la **stampa a ogni avvio** e la **conta**, gridando se il blocco mente sul
+> proprio totale — provato nelle due direzioni, e ripristino con impronta identica al byte ·
+> tre guardie in `test_pipeline_ci.py` fanno diventare **rossa la CI** se qualcuno riapre un
+> elenco concorrente in uno qualsiasi dei cinque documenti ufficiali.
+>
+> 🔴 **E la guardia ha trovato subito un posto che io non avevo visto.** In questo stesso file,
+> dal 2026-08-15, c'era già scritto che quell'elenco *«non l'ho trovato alla fonte, non citarlo
+> come lo dice AWS»* — **sessanta righe sotto la tabella che lo citava**. Due giorni, nessuno le
+> ha unite. 💡 **Una smentita messa accanto a ciò che smentisce non serve: va tolto ciò che è
+> smentito.**
+>
+> ⚠️ Da riconfermare: la correzione all'elenco AWS (ne enumerano più di sei, e nominano **Kani**
+> per le prove sul codice) viene da **due riassunti concordi**, non dal PDF — ACM ha risposto
+> 403. Sta scritta nel blocco col suo limite dichiarato. ⛔ E il **TLP** usato per provare l'SQL
+> **non è di AWS**: è ricerca sui database, e non va attribuito ad AWS.
+>
+> ### 📁 FILE TOCCATI (dichiarati prima di aprirli, regola ferrea 15)
+> Produzione: `fase162_pagamenti_pendenti.py` (la riga della purga) · `fase83_server.py`
+> (quattro righe `_giornale(tipo="rimborso", …)`, ognuna con `evento_id` proprio → idempotenti
+> sul retry del webhook).
+> Collaudi: `test_admin_rimborso_money.py` (+5 guardie) · `test_cancellazione_money.py` ·
+> `test_copertura_critica.py` · `test_recensione_purga.py` · `test_property_soldi.py` (la riga
+> SQL provata come SQL) · `test_pipeline_ci.py` (+3 guardie sulla lista unica).
+> Strumenti: `collaudi/regole_avvio.py` (legge, stampa e **conta** le tecniche).
+> Documenti: `REGISTRO_INGEGNERIA.md` (il piano + il blocco unico delle tecniche) ·
+> `RIPRENDI_QUI.md` (questo blocco, la riga delle consegne, e le **due** liste concorrenti
+> rimosse).
+>
+> ### ⏭️ COSA RESTA, in ordine
+> 1. 🎛️ **L'interruttore «a mano / da solo»** — adesso ha senso: tutte e sette le strade sono
+>    davvero in lista, quindi l'interruttore le governa tutte e non tre su sette.
+> 2. ⚖️ **Il pulsante sulla strada 4**, se il fondatore vuole allentare i due freni.
+> 3. 🔒 **23 allarmi CodeQL** mai guardati (elenco e metodo nel blocco (18)).
+> 4. ⚖️ **Le tre cose legali** prima del primo host (blocco (18)).
+> 5. 🔬 **I metodi AWS ancora aperti**: orologi di prova Stripe · relazioni metamorfiche sul
+>    denaro · **invarianti dei soldi verificati sul traffico VERO** (il sesto metodo).
+
 ## 🧭 2026-08-17 (18) — **PASSAGGIO DI CONSEGNE (D21) — contesto letto: 58%**
 
 > ⚠️ **Percentuale letta con `/context` dal fondatore: 58%.** Oltre la soglia dei 50, quindi
@@ -86,17 +181,23 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > bottoni.»* Serve un comando nel pannello che il fondatore gira quando vuole. ⛔ Vale per
 > **tutte e sette** le strade, non per quelle che ci ricordiamo.
 >
-> ### 🔬 LA RICERCA AWS — dove siamo davvero sui SEI metodi
-> AWS non sceglie un metodo, ne usa **sei**. Il nostro stato, rimisurato:
+> ### 🔬 LE TECNICHE DI VERIFICA — ⛔ QUI NON C'È PIÙ NESSUNA LISTA, ED È VOLUTO
+> Qui c'era una tabella dei metodi AWS che ne dichiarava **sei**. **Era una SECONDA lista**, e
+> il 2026-08-17 ha fatto ragionare una sessione intera sul numero sbagliato — fino a cercare
+> online tecniche «mancanti» che il progetto ha **già in casa**, a un passo dall'aggiungere
+> strumenti nuovi a un progetto che ha bisogno del contrario.
 >
-> | metodo AWS | da noi |
-> |---|---|
-> | model checking / prove formali | ✅ `z3` — **e ora gira in CI** (3 job: `ci.yml` 122, 207, 284) |
-> | test a proprietà (`hypothesis`) | 🟡 installato, **acceso su pochi moduli** (pezzo 10) |
-> | fuzzing | ✅ job `atheris` verde in CI |
-> | iniezione di guasti | ✅ è la mutazione — 60 mutanti, 60 uccisi |
-> | simulazione deterministica | 🟡 esiste (semi deterministici, banchi), non censita |
-> | **verifica a tempo di esecuzione (PObserve)** | 🟡 **il pezzo 8 è fatto** (battito + sentinella esterna, `guardiano: ok` nella salute) — ⛔ **ma nessuno ha verificato che gli INVARIANTI dei soldi siano controllati sul traffico vero**: è la casella «invarianti verificati in PRODUZIONE» del Blocco 1, ancora aperta |
+> ✅ **La lista è UNA, dice 11, e sta in `REGISTRO_INGEGNERIA.md`** fra
+> `TECNICHE-INIZIO`/`TECNICHE-FINE`. La **stampa e la conta** `collaudi/regole_avvio.py` a ogni
+> avvio, quindi la vede qualunque chat senza aprire niente; e grida se il blocco mente sul suo
+> totale. Guardia: `TestLaListaDelleTecnicheStaInUnPostoSolo` in `test_pipeline_ci.py`, che
+> diventa **rossa** se qualcuno riapre una lista concorrente qui o in un altro documento.
+>
+> 🔴 **L'unico buco che quella tabella segnalava, e che resta aperto:** nessuno ha verificato
+> che gli **invarianti dei soldi siano controllati sul traffico VERO**. Il battito e la
+> sentinella esterna ci sono (`guardiano: ok` nella salute), ma sorvegliano che la macchina
+> risponda — non che le regole del denaro tengano su ciò che passa davvero. È la casella
+> «invarianti verificati in PRODUZIONE» del Blocco 1.
 >
 > ⛔ **Da rimisurare, non da credere:** la ricerca in memoria diceva «z3 non è in CI» ed era
 > **vecchia di due giorni**. Corretta il 2026-08-17. **Anche la ricerca invecchia.**
@@ -1081,8 +1182,17 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > · Il messaggio giornaliero sta in **`fase83_server.py`**, che era fuori dallo scopo dichiarato.
 >
 > ### 🔬 DUE COSE DELLA RICERCA, verificate alla fonte il 2026-08-15
-> · ⛔ **I «sei metodi AWS» non li ho trovati**: la pagina ufficiale (*Well-Architected, FSI
->   Lens, Payments*) parla di cifratura, tokenizzazione e PCI DSS. Non citarli come «lo dice AWS».
+> · ⛔ **L'elenco «di AWS» che girava nei nostri documenti non l'ho trovato alla fonte**: la
+>   pagina ufficiale (*Well-Architected, FSI Lens, Payments*) parla di cifratura,
+>   tokenizzazione e PCI DSS. Non citarlo come «lo dice AWS».
+>   🔴 **E qui sta la lezione che è costata due giorni:** questa correzione era già scritta
+>   QUI il 2026-08-15, e la tabella che contraddiceva stava **sessanta righe più su, nello
+>   stesso file**. Nessuno ha messo insieme le due righe, e il 2026-08-17 quella tabella ha
+>   ingannato una sessione intera. ✅ Per questo dal 2026-08-17 la lista sta in **un posto
+>   solo** — `REGISTRO_INGEGNERIA.md`, fra `TECNICHE-INIZIO`/`TECNICHE-FINE` — stampata e
+>   **contata** dal gancio d'avvio, con una guardia che rifiuta gli elenchi concorrenti.
+>   💡 Una smentita scritta accanto a ciò che smentisce non serve: **va tolto ciò che è
+>   smentito.**
 > · ✅ **La sostanza della ricerca regge**, ritrovata per strade indipendenti: la cosa utile è
 >   di **Stripe**, che dichiara i `BalanceTransaction` *«possono fare da tuo libro mastro»* —
 >   immutabili, creati da loro. È il **giudice esterno** applicato ai soldi veri.
@@ -2582,7 +2692,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 4fe1748
+CONSEGNE AGGIORNATE A: d781e8d
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -4407,12 +4517,24 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5773 test
+SUITE ATTUALE: Ran 5783 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le 5 guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3.
 COMANDO:  python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"
+MISURATO SU: d781e8d + LE QUATTRO STRADE + LA PURGA + LA LISTA UNICA (2026-08-17, non
+             ancora committato). Due misure successive, entrambe col caricatore da fermo e
+             scritte PRIMA di lanciare (S14):
+             · 5773 -> 5778 (+5): `test_LA_PURGA_NON_PUO_PORTARE_VIA_CHI_DEVE_RICEVERE_SOLDI`
+               + le quattro `test_STRADA_4/5/6/7_..._FINISCE_NELLA_LISTA`.
+             · 5778 -> 5782 (+4): `TestLaPurgaNonPuoPerdereChiAspettaISoldi` (la riga SQL
+               provata come SQL, in `test_property_soldi.py`) + le tre guardie di
+               `TestLaListaDelleTecnicheStaInUnPostoSolo` in `test_pipeline_ci.py`.
+             · 5782 -> 5783 (+1): la guardia sul campo in EURO della controversia.
+               ⛔ Questo +1 me l'ha trovato IL GANCIO, non io: avevo scritto 5782 e poi
+               aggiunto una guardia. È lo sbaglio S14 preso in flagrante da una macchina —
+               la prova che il conteggio non va affidato a chi scrive.
 MISURATO SU: 5d91ca2 + IL RIMBORSO AUTOMATICO del 2026-08-16 (non ancora committato):
              5 guardie in `TestIlRimborsoARRIVADavveroAllOspite`.
              Da 5738 a 5743: **+5**. Caricatore da fermo, scritto PRIMA di lanciare (S14).
