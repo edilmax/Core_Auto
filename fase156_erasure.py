@@ -154,7 +154,18 @@ def cancella_attivita_host(sistema: Any, host_id: Any, *, forza: bool = False) -
         return rep                                  # NON si cancella: prima si sistema
     if obblighi and forza:
         rep["forzato_nonostante"] = obblighi        # tracciato: mai perso in silenzio
-        logger.critical("ERASURE FORZATA su host con obblighi: %s -> %s", host_id, obblighi)
+        # ⛔ `host_id` arriva dal CORPO della richiesta e questa riga finisce nel registro,
+        # cioe' dove il Guardiano (fase186) cerca i guasti sui soldi: un a-capo qui dentro
+        # fabbrica righe di allarme FALSE. E questa e' la riga che documenta la
+        # CANCELLAZIONE FORZATA di un host che aveva obblighi pendenti -- l'ultima al mondo
+        # che ci si puo' permettere di lasciar falsificare.
+        # ⛔ Il rimedio NON si importa da `fase83_server`: questo modulo non lo importa, e
+        # farlo per una riga di registro creerebbe una dipendenza fra un motore e il server
+        # (D19: una difesa non deve dipendere dal comportamento di un altro). Sono due
+        # chiamate, ed e' anche la forma che CodeQL riconosce come barriera
+        # (`ReplaceLineBreaksSanitizer`, in `LogInjectionCustomizations.qll`).
+        _hid = str(host_id).replace("\r\n", "\\n").replace("\n", "\\n")[:64]
+        logger.critical("ERASURE FORZATA su host con obblighi: %s -> %s", _hid, obblighi)
 
     cat = getattr(sistema, "catalogo", None)
     inv = getattr(sistema, "inventario", None)

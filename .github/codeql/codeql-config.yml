@@ -1,0 +1,71 @@
+# ============================================================================
+#  CODEQL — SI ANALIZZA IL CODICE CHE VA IN PRODUZIONE, TUTTO, E SOLO QUELLO
+# ============================================================================
+#
+#  ⛔ PERCHE' ESISTE QUESTO FILE, con i numeri misurati il 2026-08-18 dall'API
+#  di GitHub (analisi 1630965234 su master 394d821, non ricordati):
+#
+#     allarmi aperti su master ............................ 164
+#     di cui py/clear-text-logging-sensitive-data .......... 47
+#          · con almeno una sorgente in PRODUZIONE .......... 2   <- veri, restano
+#          · nati da TRE file di collaudo .................. 45   <- rumore
+#
+#  I 45 nascono tutti e soli da `test_happy_host.py`, `test_dati_reali.py` e
+#  `collaudi/dati_realistici.py`: dentro c'e' la parola `password` con dei dati
+#  FINTI (`PASSWORD_ROMA`, "password1"), CodeQL la classifica come dato sensibile
+#  e la segue fin dentro il server, dove finisce nella stessa riga di registro in
+#  cui scriviamo il riferimento della prenotazione. In produzione quel passaggio
+#  non esiste: la richiesta arriva dalla rete, non da un dizionario di prova.
+#
+#  ⛔ E NON SI PUO' RIPARARE NEL CODICE. Nella versione di regole che gira nella
+#  nostra CI (`codeql/python-all 7.2.3+44a68d3a`, letta al commit esatto e
+#  confrontata per impronta sha256), il file
+#  `CleartextLoggingCustomizations.qll` dichiara
+#      abstract class Sanitizer extends DataFlow::Node { }
+#  e **non ne implementa nessuna**: per quella regola non esiste NESSUNA forma di
+#  pulizia che la spenga. Le uniche due leve sono non analizzare quei file, oppure
+#  archiviare gli allarmi a mano uno per uno — e un allarme archiviato a mano vive
+#  fuori dal repository, dove la Regola Zero non arriva.
+#
+#  ⛔ COSA SI PERDE, detto per intero e non nascosto. Restano fuori dall'analisi
+#  anche 12 allarmi che stanno DENTRO i file di collaudo. Li ho aperti tutti e
+#  dodici prima di scrivere questa riga (2026-08-18): nove sono
+#  `py/incomplete-url-substring-sanitization` su controlli tipo
+#  `url.startswith("https://connect.stripe.com")` scritti nei collaudi, uno e' un
+#  hash debole in un test sulle lingue, uno e' una password FINTA stampata da un
+#  collaudo end-to-end, uno e' `ssl.create_default_context()` in
+#  `verifica_produzione.py`. Nessun segreto vero, nessun codice che gira per gli
+#  ospiti. ⛔ Se un giorno un collaudo dovesse maneggiare una chiave vera, questa
+#  scelta va rifatta: sta scritto qui perche' si possa rileggere.
+#
+#  ⛔ E NON PUO' DIVENTARE UNA SCAPPATOIA. `TestLaListaDeiFileESCLUSIDaCodeQL`
+#  (in `test_pipeline_ci.py`) apre questo file, espande ogni riga sui file veri
+#  del repository e diventa ROSSA se anche uno solo dei file di produzione
+#  (`fase*.py`, `app.py`, `main_casavip.py`) finisce dentro l'elenco, o se una
+#  riga qui sotto non corrisponde piu' a nessun file, o se il workflow smette di
+#  puntare a questo file. Un elenco di esclusioni senza un guardiano e' il modo
+#  piu' comodo che esista per spegnere un allarme scomodo.
+#
+#  Fonti della forma usata (due, non una):
+#   · docs.github.com — "Workflow configuration options for code scanning":
+#     `paths`/`paths-ignore` nel file di configurazione decidono COSA viene
+#     analizzato, e non vanno confusi con `on.<push|pull_request>.paths`, che
+#     decide soltanto SE il workflow parte.
+#   · docs.github.com — "Customizing your advanced setup for code scanning":
+#     funziona sui linguaggi interpretati (Python compreso) e si collega con
+#     `config-file:` nel passo `init`.
+# ============================================================================
+
+name: "Core_Auto — CodeQL su codice di produzione"
+
+paths-ignore:
+  # i collaudi: strumentazione, non prodotto (CLAUDE.md B4 li tiene gia' distinti
+  # dalla produzione). Sono la sorgente dei 45 allarmi finti.
+  - test_*.py
+  - "**/test_*.py"
+  - collaudi/
+# ⛔ QUI C'ERA ANCHE `tests/`, E L'HO TOLTO PERCHE' LA GUARDIA L'HA BOCCIATO: in questo
+# repository quella cartella non esiste, quindi era una riga che non toglieva niente.
+# Sembra un dettaglio e non lo e': una riga morta in un elenco di esclusioni fa credere
+# che una cartella sia coperta da una decisione, quando invece non e' coperta da niente.
+# (`test_OGNI_RIGA_DELL_ELENCO_CORRISPONDE_A_FILE_CHE_ESISTONO`, vista rossa il 2026-08-18.)

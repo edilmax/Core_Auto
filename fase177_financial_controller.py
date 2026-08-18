@@ -46,7 +46,16 @@ TIPI_GIORNALE = ("nota_debito", "nota_credito", "penale_offset", "penale_incassa
                  # al PAGAMENTO cosi' il report DAC7 e' corretto anche se il bonifico e' in hold
                  # (prima il netto DAC7 veniva letto solo dai bonifici COMPLETATI -> host reportabile
                  #  con payout trattenuto -> netto=0 -> commissioni=lordo pieno = misreport al Fisco).
-                 "commissione")
+                 "commissione",
+                 # ── i tre movimenti nati il 2026-08-17, dopo il PRIMO pagamento vero ──
+                 # Su una prova da 1,00 EUR incassata e poi rimborsata, il libro dichiarava
+                 # cassa **0** e un **ricavo** di 30, mentre il saldo Stripe era **-0,27 EUR**
+                 # (un ADDEBITO in arrivo, visto dal fondatore sulla dashboard). La partita
+                 # doppia quadrava a zero -- ed e' per questo che nessuno aveva gridato: era
+                 # formalmente giusta e sostanzialmente falsa. Mancavano tre fatti:
+                 "costo_gateway",       # la fetta che il gestore trattiene: NON torna mai
+                 "debito_all_ospite",   # cancellazione: cio' che dovevamo all'host ora e' dell'ospite
+                 "storno_commissione")  # rimborso totale: la commissione non e' piu' dovuta
 
 # mappatura tipo -> (conto_dare, conto_avere) per i movimenti ordinari: partita doppia
 # leggibile a colpo d'occhio nell'audit (cassa piattaforma vs debiti verso host/ospite/comune).
@@ -58,6 +67,22 @@ _CONTI_MOVIMENTO = {
     "tassa_incassata": ("cassa_piattaforma", "debiti_vs_comune"),    # quota tassa trattenuta
     "tassa_stornata":  ("debiti_vs_comune", "cassa_piattaforma"),    # tassa restituita
     "commissione":     ("debiti_vs_host", "ricavi_commissioni"),     # cio' che tratteniamo all'host
+    # ── 2026-08-17: i tre che mancavano, e senza i quali il libro dice il falso ──
+    # `costo_gateway`: la commissione che il gestore TRATTIENE sull'incasso. Prima l'`incasso`
+    # scriveva il LORDO in cassa mentre in cassa arrivava il netto: la differenza -- soldi veri
+    # -- non stava in nessuna riga. E su un rimborso quella fetta NON torna indietro
+    # (documentazione Stripe, `docs.stripe.com/refunds`, e misurato: `fee: 0` sulla riga di
+    # rimborso), quindi resta un costo sostenuto per sempre.
+    "costo_gateway":      ("costi_gateway", "cassa_piattaforma"),
+    # `debito_all_ospite`: alla cancellazione, cio' che dovevamo all'HOST diventa dovuto
+    # all'OSPITE. Senza questa riga il rimborso addebitava `debiti_vs_ospite` senza che nessuno
+    # l'avesse mai accreditato: restavamo debitori verso l'host per un soggiorno mai avvenuto,
+    # e l'ospite risultava debitore verso di noi. Due assurdita' che quadravano a zero.
+    "debito_all_ospite":  ("debiti_vs_host", "debiti_vs_ospite"),
+    # `storno_commissione`: su un rimborso TOTALE la commissione non e' piu' dovuta. Senza
+    # questa riga restava un RICAVO su una prenotazione annullata -- su 200 EUR sarebbero
+    # 10,25 EUR di guadagno mai avvenuto, dichiarati al commercialista.
+    "storno_commissione": ("ricavi_commissioni", "debiti_vs_ospite"),
 }
 
 
@@ -252,6 +277,113 @@ class FinancialController:
                 (riferimento,))]
         finally:
             con.close()
+
+    # ══════════════════════════════════════════════════════════════════════════════════
+    #  IL LIBRO DEVE DIRE IL VERO, NON SOLO QUADRARE — 2026-08-17
+    # ══════════════════════════════════════════════════════════════════════════════════
+    # Il primo pagamento vero (1,00 EUR, incassato e rimborsato 16 minuti dopo) ha lasciato
+    # nel libro tre righe che quadravano a zero e dicevano tre cose false: cassa **0** mentre
+    # il saldo Stripe era **-0,27 EUR**, un **ricavo** di 30 su una prenotazione annullata, e
+    # un **debito verso l'host** di 70 per un soggiorno mai avvenuto. Nessuno se n'era accorto
+    # perche' qui dentro non esisteva niente che guardasse i SALDI: `verifica_catena` dimostra
+    # che il libro non e' stato MANOMESSO, non che dica il VERO. Sono due cose diverse.
+    def saldi(self) -> Dict[str, int]:
+        """I saldi per conto, dare positivo. La somma di TUTTI deve fare 0 (partita doppia).
+
+        ⛔ Quadrare a zero NON vuol dire essere giusti: le tre righe sbagliate del 2026-08-17
+        quadravano perfettamente. Serve a chi confronta il libro col mondo vero (il saldo del
+        gestore, l'estratto conto), che e' l'unico giudizio che conta.
+        """
+        saldi: Dict[str, int] = {}
+        for m in self.stream_giornale():
+            importo = int(m.get("importo_cents") or 0)
+            for conto, segno in ((m.get("conto_dare"), 1), (m.get("conto_avere"), -1)):
+                if conto:
+                    saldi[conto] = saldi.get(conto, 0) + segno * importo
+        return saldi
+
+    def costo_gateway(self, *, riferimento: str, soggetto: str, fee_cents: int,
+                      valuta: str = "EUR", emittente: str = "sistema"
+                      ) -> Optional[Dict[str, Any]]:
+        """La fetta che il gestore TRATTIENE sull'incasso: un costo vero, che non torna mai.
+
+        ⛔ `fee_cents` deve venire dal GESTORE (`balance_transaction.fee`), mai dalla nostra
+        tariffa: sono due voci contabili diverse -- costo sostenuto contro ricavo. Se non si
+        sa, **non si scrive niente**: una stima messa dove il commercialista legge un costo e'
+        peggio di una casella vuota. Ritorna `None` anche in quel caso, e chi chiama lo dice.
+        Idempotente sull'`evento_id`: il retry del webhook non la raddoppia.
+        """
+        if not (isinstance(fee_cents, int) and not isinstance(fee_cents, bool)
+                and fee_cents > 0 and isinstance(riferimento, str) and riferimento):
+            return None
+        return self.movimento(tipo="costo_gateway", riferimento=riferimento,
+                              soggetto=soggetto, importo_cents=fee_cents, valuta=valuta,
+                              causale="commissione trattenuta dal gestore (non recuperabile)",
+                              evento_id="costo_gateway:" + riferimento, emittente=emittente)
+
+    def storna_prenotazione(self, *, riferimento: str, rimborso_cents: Optional[int] = None,
+                            emittente: str = "sistema") -> Dict[str, Any]:
+        """CANCELLAZIONE: cio' che dovevamo all'host passa all'ospite, e la commissione si
+        storna. Da chiamare PRIMA della riga di `rimborso`.
+
+        ⛔ GLI IMPORTI NON LI PASSA CHI CHIAMA: si LEGGONO dal giornale. E' lo stesso freno del
+        pulsante dei rimborsi (*«una cifra che sceglie chi chiama la rotta e' una cifra scritta
+        a mano su soldi veri»*): qui nessun parametro puo' far uscire un numero diverso da
+        quello che il libro ha registrato davvero.
+
+        Idempotente: gli `evento_id` sono fissi per riferimento, quindi un retry del webhook o
+        un doppio clic non raddoppiano niente.
+        Ritorna `{'debito_all_ospite', 'storno_commissione', 'gia_fatto'}` in cents.
+        """
+        fatto = {"debito_all_ospite": 0, "storno_commissione": 0, "gia_fatto": False,
+                 "parziale": False}
+        if not (isinstance(riferimento, str) and riferimento):
+            return fatto
+        if self.esiste_evento("debito_all_ospite:" + riferimento):
+            fatto["gia_fatto"] = True
+            return fatto
+        incassato = commissione = 0
+        soggetto_host = "host:?"
+        valuta = "EUR"
+        for m in self.movimenti(riferimento):
+            tipo, importo = m.get("tipo"), int(m.get("importo_cents") or 0)
+            if tipo == "incasso":
+                incassato += importo
+                soggetto_host = m.get("soggetto") or soggetto_host
+                valuta = m.get("valuta") or valuta
+            elif tipo == "commissione":
+                commissione += importo
+        if incassato <= 0:
+            return fatto                      # niente e' mai entrato: non c'e' nulla da girare
+        # ⛔ LIMITE DICHIARATO (D18 punto 3): si storna solo il rimborso TOTALE.
+        # Su un rimborso PARZIALE l'host trattiene una penale, quindi una parte della
+        # commissione e' davvero guadagnata e stornarla tutta sarebbe un secondo errore al
+        # posto del primo. Qui si preferisce **non fare** e dirlo, invece di fare la cosa
+        # sbagliata in silenzio: il caso parziale resta aperto e va affrontato a parte.
+        if (isinstance(rimborso_cents, int) and not isinstance(rimborso_cents, bool)
+                and 0 < rimborso_cents < incassato):
+            fatto["parziale"] = True
+            logger.info("storno prenotazione %s NON eseguito: rimborso parziale (%d di %d). "
+                        "La quota trattenuta dall'host resta guadagnata: il caso parziale non "
+                        "e' ancora coperto.", riferimento, rimborso_cents, incassato)
+            return fatto
+        # Il debito residuo verso l'host e' cio' che e' entrato meno cio' che gli abbiamo
+        # gia' trattenuto. Non puo' essere negativo: se la commissione superasse l'incasso
+        # (non deve mai) si gira zero invece di inventare un credito.
+        residuo = max(0, incassato - commissione)
+        if residuo:
+            self.movimento(tipo="debito_all_ospite", riferimento=riferimento,
+                           soggetto=soggetto_host, importo_cents=residuo, valuta=valuta,
+                           causale="cancellazione: il dovuto all'host passa all'ospite",
+                           evento_id="debito_all_ospite:" + riferimento, emittente=emittente)
+            fatto["debito_all_ospite"] = residuo
+        if commissione:
+            self.movimento(tipo="storno_commissione", riferimento=riferimento,
+                           soggetto=soggetto_host, importo_cents=commissione, valuta=valuta,
+                           causale="rimborso: la commissione non e' piu' dovuta",
+                           evento_id="storno_commissione:" + riferimento, emittente=emittente)
+            fatto["storno_commissione"] = commissione
+        return fatto
 
     def aggrega_dac7(self, anno: int) -> Dict[str, Dict[str, Any]]:
         """Aggrega il giornale per host per l'ANNO fiscale (DAC7). Raggruppa i movimenti

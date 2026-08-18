@@ -19,6 +19,180 @@ import unittest
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase57_vetrina import SchedaAlloggio
+from fase177_financial_controller import crea_financial_controller
+
+
+class TestQuandoCANCELLAILCLIENTELaPiattaformaNONDeveRIMETTERCI(unittest.TestCase):
+    """💸 «QUANDO LO FA IL CLIENTE, IO NON CI DEVO PERDERE SOLDI» — fondatore, 2026-08-17.
+
+    ⛔ NON E' UN CASO IPOTETICO: E' IL REPLAY DELL'UNICO PAGAMENTO VERO MAI PASSATO.
+    Il 2026-08-16 e' stata fatta una prova con un alloggio da **1,00 EUR**, poi rimborsata.
+    Letto dal conto Stripe LIVE il 2026-08-17 (sola lettura, `balance_transactions`):
+
+        charge  EUR  importo=100  fee=27  netto=73    ch_3U53IsJMRnB73twq1Vr2rHmz
+                     fee_details: stripe_fee = 27 ("Stripe processing fees")
+        refund  EUR  importo=-100 fee= 0  netto=-100  re_3U53IsJMRnB73twq1QLzUCu9
+
+    Il `fee: 0` sul rimborso e' il punto: **Stripe i 27 centesimi non li restituisce**. Quindi
+    su un rimborso totale abbiamo incassato 73 e restituito 100 -> **-27**. Su 200 EUR la
+    stessa strada costa **~3,25 EUR** a ogni cancellazione.
+
+    E queste sono le righe che il nostro giornale immutabile ha scritto davvero, lette da
+    `/data/finanza.db` in produzione (sola lettura):
+
+        seq 1  incasso      100  cassa_piattaforma / debiti_vs_host
+        seq 2  commissione   30  debiti_vs_host    / ricavi_commissioni
+        seq 3  rimborso     100  debiti_vs_ospite  / cassa_piattaforma
+
+    Saldi che ne escono (dare positivo): cassa **0** · debiti_vs_host **-70** ·
+    ricavi_commissioni **-30** · debiti_vs_ospite **+100**. La partita doppia **quadra a
+    zero**, ed e' proprio per questo che nessuno ha gridato: e' formalmente giusta e
+    sostanzialmente falsa. Su una prenotazione annullata il libro dichiara un **ricavo** di
+    30, un **debito verso l'host** di 70 per un soggiorno mai avvenuto, e una **cassa a zero**
+    mentre siamo sotto di 27.
+
+    ⛔ E NESSUNO POTEVA ACCORGERSENE: in `fase177_financial_controller.py` non esiste **nessuna
+    funzione che calcoli i saldi dei conti**. C'e' `verifica_catena`, che dimostra che il libro
+    non e' stato **manomesso** — non che dica il **vero**. Sono due cose diverse, e finora
+    avevamo solo la prima.
+
+    Le tre guardie qui sotto sono i tre pezzi del difetto, separati apposta: si possono
+    riparare in tre momenti diversi e ognuna dice quale.
+    """
+
+    # I numeri veri, non inventati. Fonte: conto Stripe LIVE + /data/finanza.db, 2026-08-17.
+    PAGATO = 100          # quello che l'ospite ha versato
+    FEE_STRIPE = 27       # quello che Stripe ha trattenuto E NON ha restituito
+    NOSTRA_COMMISSIONE = 30   # la riga `commissione` che il giornale ha scritto
+
+    def _libro(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        fc = crea_financial_controller("%s/finanza.db" % d)
+        fc.inizializza_schema()
+        return fc
+
+    def _incasso_e_commissione(self, fc, rif):
+        """Le due righe che la produzione scrive quando l'ospite paga."""
+        fc.movimento(tipo="incasso", riferimento=rif, soggetto="host:h_test",
+                     importo_cents=self.PAGATO, valuta="EUR",
+                     causale="pagamento ospite ricevuto")
+        fc.movimento(tipo="commissione", riferimento=rif, soggetto="host:h_test",
+                     importo_cents=self.NOSTRA_COMMISSIONE, valuta="EUR",
+                     causale="commissione piattaforma (comm+costo carta-credito)")
+
+    def _replay_della_prova_vera(self, fc, rif="8a448a3a4c003c9ccb0f3583"):
+        """Il giro COMPLETO di una cancellazione dell'ospite, passando dalle stesse chiamate
+        che fa la produzione. ⛔ Fino al 2026-08-17 esistevano solo la prima, la seconda e
+        l'ultima: mancavano il costo del gateway e lo storno, ed e' li' che il libro mentiva.
+        """
+        self._incasso_e_commissione(fc, rif)
+        # la fetta del gestore, letta da lui (`balance_transaction.fee`), mai stimata
+        fc.costo_gateway(riferimento=rif, soggetto="host:h_test",
+                         fee_cents=self.FEE_STRIPE, valuta="EUR")
+        # la cancellazione: il dovuto all'host passa all'ospite e la commissione si storna.
+        # Gli importi NON si passano: li legge il giornale.
+        fc.storna_prenotazione(riferimento=rif)
+        fc.movimento(tipo="rimborso", riferimento=rif, soggetto="ospite:" + rif,
+                     importo_cents=self.PAGATO, valuta="EUR",
+                     causale="cancellazione dell'ospite, rimborso totale")
+        return rif
+
+    @staticmethod
+    def _saldi(fc):
+        """⛔ Si chiedono AL LIBRO (`fc.saldi()`), non si ricalcolano qui. Fino al 2026-08-17
+        quella funzione non esisteva: c'era `verifica_catena`, che dimostra che il libro non e'
+        stato MANOMESSO, non che dica il VERO — ed e' per questo che tre righe false sono
+        rimaste invisibili."""
+        return fc.saldi()
+
+    def test_0_il_SERVER_chiama_davvero_lo_storno_e_il_costo_del_gateway(self):
+        """⛔ COSTRUITO != COLLEGATO (appendice 23). Le tre guardie qui sotto provano che il
+        MODELLO contabile e' giusto; questa prova che la produzione lo USA. Senza, avremmo un
+        libro capace di dire il vero e un server che continua a scriverci dentro il falso —
+        cioe' un verde perfetto su codice che nessuno esegue.
+
+        ⛔ Si guarda l'albero sintattico, non il testo: una parola in un commento non e' una
+        chiamata (sbaglio S6, ricomparso il 2026-08-17 su una guardia scritta poche ore prima).
+        """
+        import ast
+        import io
+        import os
+        percorso = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "fase83_server.py")
+        with io.open(percorso, encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+        chiamate = {n.func.attr for n in ast.walk(albero)
+                    if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
+        for nome, perche in (
+                ("storna_prenotazione",
+                 "senza, a ogni rimborso restano un RICAVO su una prenotazione annullata e un "
+                 "debito verso l'host per un soggiorno mai avvenuto"),
+                ("costo_gateway",
+                 "senza, la fetta che il gestore trattiene non entra in nessuna riga del "
+                 "libro: la cassa dichiara di avere soldi che non ci sono")):
+            # ⛔ NON `assertIn` sul set: stamperebbe le ~900 chiamate del file, e un errore
+            # illeggibile e' un difetto quanto un errore mancato — chi lo legge non capisce
+            # cosa fare.
+            self.assertTrue(
+                nome in chiamate,
+                "`fase83_server.py` non chiama MAI `%s`: %s. Il modello contabile e' giusto e "
+                "nessuno lo usa." % (nome, perche))
+
+    def test_1_il_costo_VERO_del_gateway_deve_ESISTERE_nel_giornale(self):
+        """⛔ Oggi in cassa entrano **100** mentre ne sono arrivati **73**: la fetta di Stripe
+        non compare in nessuna riga del libro. Un costo che non e' scritto da nessuna parte
+        non lo vede il commercialista, non lo vede un allarme e non lo vede il fondatore."""
+        fc = self._libro()
+        self._replay_della_prova_vera(fc)
+        tipi = {m.get("tipo") for m in fc.stream_giornale()}
+        parla_del_gateway = {t for t in tipi if "gateway" in t or "psp" in t or "stripe" in t}
+        self.assertTrue(
+            parla_del_gateway,
+            "il giornale non ha NESSUNA riga per il costo del gateway. Ha registrato un "
+            "incasso di %d mentre sul conto ne sono arrivati %d: mancano %d cents che "
+            "esistono davvero e non stanno da nessuna parte. Tipi presenti: %r"
+            % (self.PAGATO, self.PAGATO - self.FEE_STRIPE, self.FEE_STRIPE, sorted(tipi)))
+
+    def test_2_dopo_un_rimborso_TOTALE_non_restano_ricavi_ne_debiti_verso_l_host(self):
+        """⛔ Il soggiorno non c'e' stato: non abbiamo guadagnato niente e non dobbiamo niente
+        all'host. Oggi il libro dichiara tutt'e due."""
+        fc = self._libro()
+        self._replay_della_prova_vera(fc)
+        s = self._saldi(fc)
+        ricavo = -s.get("ricavi_commissioni", 0)      # avere positivo = ricavo
+        debito_host = -s.get("debiti_vs_host", 0)     # avere positivo = debito verso l'host
+        self.assertEqual(
+            ricavo, 0,
+            "su una prenotazione RIMBORSATA per intero il libro dichiara un ricavo di %d "
+            "cents: la commissione era stata scritta all'incasso e nessuna riga la storna. "
+            "Su 200 EUR sarebbero 10,25 EUR di ricavo mai avvenuto." % ricavo)
+        self.assertEqual(
+            debito_host, 0,
+            "dopo il rimborso totale risultiamo ancora debitori di %d cents verso l'host, per "
+            "un soggiorno che non c'e' stato: quel debito non si azzera mai e resta nel libro "
+            "per sempre." % debito_host)
+
+    def test_3_su_una_cancellazione_dell_OSPITE_la_piattaforma_non_resta_in_perdita(self):
+        """💸 LA DOMANDA DEL FONDATORE, tradotta in un numero. D16: *«ogni scelta che tocca
+        denaro dichiara chi ci perde se va storta»* — e qui, oggi, ci perdiamo noi.
+
+        ⛔ QUESTA GUARDIA NON DECIDE CHI DEVE PAGARE LA FETTA DI STRIPE: e' una scelta di
+        soldi e di contratto, quindi del fondatore. Pretende solo che la perdita **non sia
+        invisibile**: o non c'e', oppure il libro la dichiara.
+        """
+        fc = self._libro()
+        self._replay_della_prova_vera(fc)
+        cassa_secondo_il_libro = self._saldi(fc).get("cassa_piattaforma", 0)
+        cassa_vera = (self.PAGATO - self.FEE_STRIPE) - self.PAGATO      # 73 - 100 = -27
+        self.assertEqual(
+            cassa_secondo_il_libro, cassa_vera,
+            "il libro dice che in cassa il saldo e' %+d, ma il denaro vero e' %+d: abbiamo "
+            "incassato %d (Stripe ne ha trattenuti %d) e restituito %d. La differenza di %d "
+            "cents e' una perdita REALE che il libro non registra — e su 200 EUR la stessa "
+            "strada costa circa 3,25 EUR a ogni cancellazione del cliente."
+            % (cassa_secondo_il_libro, cassa_vera, self.PAGATO - self.FEE_STRIPE,
+               self.FEE_STRIPE, self.PAGATO, abs(cassa_vera - cassa_secondo_il_libro)))
 
 
 class TestConservazioneDenaro(unittest.TestCase):

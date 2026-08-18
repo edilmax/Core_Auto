@@ -309,15 +309,42 @@ class TestCostiTecnici(BaseSala):
         self.assertIn("EUR", d["per_valuta"])
 
     def test_etichetta_fiscale_esplicita(self):
-        """Il commercialista deve leggere la voce e sapere cosa farne, senza interpretare:
-        la quota Stripe non restituita sui rimborsi e' un COSTO IRRECUPERABILE deducibile."""
+        """Il commercialista deve leggere la voce e sapere cosa farne, senza interpretare.
+
+        ⛔ QUESTA PROVA PRETENDEVA L'ETICHETTA SBAGLIATA, E VA DETTO. Fino al 2026-08-17
+        chiedeva che `perdite` si chiamasse «COSTO TECNICO IRRECUPERABILE ... deducibile».
+        Ma `perdite` somma la NOSTRA tariffa tecnica: e' un **ricavo che non abbiamo
+        incassato**, non un costo che abbiamo sostenuto. La prova difendeva il difetto — ed
+        e' per questo che il difetto ha attraversato quattromila test senza che nessuno
+        gridasse. Misurato sul primo pagamento vero: il prospetto dichiarava **30**, il
+        gestore aveva trattenuto **27**; su 200 EUR sarebbero 10,25 contro ~3,25.
+
+        Adesso pretende DI PIU', non di meno: che le due voci siano separate, che quella
+        della nostra tariffa **non** si spacci per un costo, e che esista la casella di chi
+        non lo sa — perche' «non lo so» non e' zero.
+        """
         self.host()
         s, d = self.g("GET", "/api/bunker/costi_tecnici", None, self.bunker())
         self.assertEqual(s, 200, d)
-        self.assertIn("COSTO TECNICO IRRECUPERABILE", d["perdite"]["voce_fiscale"])
-        self.assertIn("deducibile", d["perdite"]["voce_fiscale"])
+        # (1) la NOSTRA tariffa non incassata: ricavo mancato, MAI un costo del gestore
+        perdite = d["perdite"]["voce_fiscale"]
+        self.assertIn("MANCATO", perdite.upper())
+        self.assertNotIn("stripe", perdite.lower(),
+                         "la voce che somma la NOSTRA tariffa attribuisce a Stripe un numero "
+                         "che Stripe non ha mai visto: %r" % perdite)
+        self.assertNotIn("deducibile", perdite.lower(),
+                         "un ricavo mancato portato in deduzione gonfia la voce fiscale")
+        # (2) il costo VERO del gestore: quello si', ed e' deducibile
+        irr = d["costo_stripe_irrecuperabile"]["voce_fiscale"]
+        self.assertIn("COSTO TECNICO IRRECUPERABILE", irr)
+        self.assertIn("deducibile", irr)
+        # (3) e la casella di cio' che non si sa, che non vale zero
+        self.assertIn("NON DETERMINATO", d["costo_stripe_sconosciuto"]["voce_fiscale"])
+        # la nota e la classificazione devono portarsele dietro tutte e tre
         self.assertIn("COSTO TECNICO IRRECUPERABILE", d["nota"])
-        self.assertIn("perdite", d["classificazione_fiscale"])
+        self.assertIn("RICAVO TECNICO MANCATO", d["nota"])
+        for chiave in ("perdite", "costo_stripe_irrecuperabile", "costo_stripe_sconosciuto"):
+            self.assertIn(chiave, d["classificazione_fiscale"])
         self.assertIn("coperto", d["incassate"]["voce_fiscale"].lower())
 
     def test_senza_pagamenti_tutto_zero(self):
@@ -345,7 +372,19 @@ class TestDossierLegale(BaseSala):
         self.assertIn("203.0.113.9", csv)                          # IP reale
         self.assertIn(doc_sha256(), csv)                           # impronta del contratto
         self.assertIn("PROSPETTO TARIFFA TECNICA", csv)
-        self.assertIn("perdita_tecnica_su_rimborsi", csv)
+        # ⛔ QUATTRO RIGHE, NON PIU' UNA. Fino al 2026-08-17 il dossier aveva una sola voce di
+        # perdita — `perdita_tecnica_su_rimborsi` — e ci metteva dentro la NOSTRA tariffa
+        # dichiarandola «costo irrecuperabile deducibile». E' un ricavo mancato, non un costo:
+        # portarlo in deduzione gonfiava la voce (misurato: su 200 EUR 10,25 contro ~3,25).
+        # Adesso il commercialista legge le due cose separate, piu' quella che non si sa.
+        for voce in ("tariffa_tecnica_incassata",
+                     "tariffa_tecnica_non_incassata",
+                     "commissione_gestore_non_restituita",
+                     "commissione_gestore_NON_DETERMINATA"):
+            self.assertIn(voce, csv, "voce mancante nel prospetto fiscale: %s" % voce)
+        self.assertNotIn(
+            "perdita_tecnica_su_rimborsi", csv,
+            "la vecchia voce e' tornata: rimetteva la nostra tariffa fra i costi deducibili")
         self.assertIn("promo", csv)                                # scaglione dell'host
 
     def test_json_strutturato(self):
