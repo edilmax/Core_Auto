@@ -583,10 +583,21 @@ class TestMessaggiErrorePagine(unittest.TestCase):
         for nome, pagina in (("host.html", self.host), ("index.html", self.index)):
             self.assertIn("BV.fraseErrore", pagina,
                           "%s non usa il dizionario: stamperebbe il codice grezzo" % nome)
-        # e fraseErrore consulta davvero ERR_AUTH prima di ripiegare sul codice
+        # ⛔ QUESTA GUARDIA E' STATA RESA PIU' FORTE IL 2026-08-18, non allentata.
+        # Prima pretendeva che `ERR_AUTH` fosse consultato PRIMA di `return String(` -- cioe'
+        # ammetteva che il codice grezzo finisse a schermo, purche' come ultima scelta. Il
+        # percorso col browser (`collaudi/percorso_ospite_host.js`) ha dimostrato che
+        # quell'ultima scelta si avverava davvero: col gateway muto l'ospite leggeva
+        # `pagamento_non_disponibile` MENTRE pagava. Ora il contratto e' che il codice grezzo
+        # non esca MAI, quindi `return String(` non deve piu' esistere e al suo posto ci va
+        # una frase del dizionario. Il nome di questo test lo prometteva gia'.
         fe = self.app[self.app.index("BV.fraseErrore"):]
-        self.assertLess(fe.index("ERR_AUTH"), fe.index("return String("),
-                        "fraseErrore ripiega sul codice grezzo PRIMA di consultare il dizionario")
+        self.assertNotIn("return String(", fe,
+                         "fraseErrore ripiega ANCORA sul codice grezzo: e' cosi' che un "
+                         "ospite legge 'pagamento_non_disponibile' mentre paga")
+        self.assertLess(fe.index("ERR_AUTH"), fe.index("generico"),
+                        "fraseErrore ripiega sulla frase generica PRIMA di consultare il "
+                        "dizionario: i codici tradotti non verrebbero mai usati")
 
     def test_i_tre_moduli_puntano_alle_rotte_vere(self):
         """Cablaggio (modo #2): i moduli delle pagine chiamano le rotte che ho provato."""

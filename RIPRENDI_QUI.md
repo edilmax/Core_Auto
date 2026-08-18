@@ -11,6 +11,45 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🗣️ 2026-08-18 (23) — **IL PERCORSO NUOVO HA SUBITO TROVATO UN DIFETTO VERO, E POI UNO MIO**
+
+> **Il primo lavoro del browser vero non è stato girare: è stato TROVARE.** Col gateway muto
+> l'ospite leggeva `pagamento_non_disponibile` — il nostro codice interno — **mentre pagava**.
+> Via del fondatore: *«autorizzato e fai le cose fatte bene una volta per tutte»*.
+>
+> ### ✅ FATTO (sul computer; il dettaglio con tutte le misure è nel changelog, voce **(9)**)
+> - **la rete che chiude la classe**: un codice sconosciuto non esce **mai più** in chiaro —
+>   frase generica a schermo, il codice nel registro del browser per chi ripara;
+> - **6 codici nuovi in 8 lingue** (32 → **38**, tutte allineate);
+> - **2 guardie nuove**, tutt'e due viste rosse prima: una legge il codice
+>   (`test_app_js.py`), l'altra guarda **cosa appare a schermo nel browser vero**
+>   (`collaudi/percorso_ospite_host.js`) e grida su **qualunque** codice interno, anche uno
+>   che non esiste ancora.
+>
+> ### 🔴 LA LEZIONE DELLA GIORNATA, e vale più del difetto
+> Dieci minuti dopo aver scritto la riparazione, **il percorso col browser ha beccato un
+> difetto MIO**: la nuova ultima spiaggia rispondeva anche quando il codice era **assente**, e
+> così la catena `fraseErrore(motivo)||fraseErrore(errore)` si fermava al primo anello — a
+> schermo compariva una frase umana e sensata, **ma quella sbagliata**.
+> 💡 **Leggendo il codice non si vedeva.** Si vede solo guardando cosa appare davvero: è
+> esattamente il buco che il browser vero è stato costruito per chiudere, e l'ha chiuso lo
+> stesso giorno in cui è nato.
+>
+> ### 🟠 DUE GUARDIE ESISTENTI SONO ANDATE ROSSE — e sono state rese PIÙ FORTI, non allentate
+> La suite intera ha fermato il lavoro con 2 rosse (`test_happy_moduli` e `test_caos_rete`):
+> tutt'e due proteggevano il comportamento **vecchio**, cioè **ammettevano** che il codice
+> grezzo (e perfino una stringa scelta da un attaccante) finisse a schermo purché come ultima
+> scelta o ripulito. ⛔ Qui si bara facilissimo — «aggiorno il test così passa» — quindi la
+> giustificazione sta nel changelog, voce (9), con una tabella *prima/ora/perché è più forte*.
+> 💡 E una delle due dimostrava **due** cose: la seconda (che lo scudo `esc()` ripulisca l'HTML
+> ostile) si sarebbe persa. È nato **accanto** un check nuovo sul titolo di un annuncio, e il
+> denominatore del giro è passato da **20 a 21** perché non possa sparire in silenzio.
+>
+> ⚠️ **E un falso allarme mio, corretto nel LETTORE e non nel prodotto** (regola ferrea 10):
+> la prima guardia accusava l'italiano di non tradurre 3 codici. Erano tradotti eccome —
+> cercavo solo `chiave:'` e l'italiano usa le **virgolette doppie** dove la frase ha un
+> apostrofo. Verificato con un motore JavaScript vero prima di riferirlo.
+
 ## 🌐 2026-08-18 (22) — **IL BROWSER VERO È COLLEGATO — e c'è un percorso che attraversa due persone**
 
 > **Stato dei tre posti, misurato adesso (non ricordato):**
@@ -53,11 +92,11 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > scritti dentro il collaudo: la pagina della carta · il ramo «paga in struttura» (il suo
 > anticipo passa dal gateway) · il bonifico verso l'host.
 >
-> ### ⚠️ DIFETTO VERO TROVATO DAL PERCORSO — NON RIPARATO, serve «autorizzato»
-> Quando il gateway non risponde, l'ospite legge **`❌ pagamento_non_disponibile`**: il
-> **codice interno**, non una frase tradotta. Stessa classe di difetto già corretta per
-> `motivo` in `index.html`, rimasta aperta sul ramo `errore`. Il collaudo **non** pretende la
-> traduzione (sarebbe un rosso permanente): la riparazione è una decisione del fondatore.
+> ### ✅ DIFETTO VERO TROVATO DAL PERCORSO — **RIPARATO lo stesso giorno**, vedi il blocco (23)
+> Quando il gateway non rispondeva, l'ospite leggeva **`❌ pagamento_non_disponibile`**: il
+> **codice interno**, non una frase tradotta. Autorizzato dal fondatore e chiuso come CLASSE
+> (ultima spiaggia + 6 codici in 8 lingue + 2 guardie). ⛔ Questa riga diceva «non riparato,
+> serve autorizzato»: aggiornarla fa parte del lavoro, non viene «dopo» (sbaglio S10).
 >
 > ### 🩹 SBAGLIO DI QUESTA SESSIONE, DICHIARATO: **REGOLA FERREA 4**
 > Ho toccato `ci.yml` e installato il file nuovo **mentre la suite girava**, e
@@ -3385,7 +3424,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: cffa0d9
+CONSEGNE AGGIORNATE A: bdc346b
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -5213,7 +5252,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5845 test
+SUITE ATTUALE: Ran 5849 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

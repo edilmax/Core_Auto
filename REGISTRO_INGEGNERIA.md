@@ -753,6 +753,68 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🗣️ 2026-08-18 (9) — **L'OSPITE LEGGEVA IL NOSTRO GERGO MENTRE PAGAVA** (`deploy/app.js`, +2 guardie)
+
+Difetto **trovato dal percorso col browser** nato poche ore prima (voce 8): col gateway muto,
+l'ospite leggeva a schermo **`pagamento_non_disponibile`** — il codice interno — proprio
+mentre stava pagando. Via del fondatore: *«autorizzato e fai le cose fatte bene una volta per
+tutte»*.
+
+**LA CAUSA NON ERA LA PAROLA MANCANTE, ERA L'ULTIMA SPIAGGIA.** `BV.fraseErrore`, quando il
+codice non era nel vocabolario, restituiva **il codice**. Misurato prima di decidere: il
+percorso di prenotazione può produrre **~24 codici** e **13 non avevano traduzione** — quindi
+tradurne uno sarebbe stata una cura che lascia viva la malattia, e il prossimo codice aggiunto
+sarebbe nato capace di uscire in chiaro (regola ferrea 11: il difetto sta in chi chiama).
+
+**Riparazione, 2 pezzi:**
+1. **la rete che chiude la classe** — codice sconosciuto → frase generica vera, e il codice
+   finisce nel registro del browser (`console.warn`) per chi ripara, non in faccia a chi paga;
+2. **6 codici nuovi in 8 lingue** (32 → **38** per lingua, tutte allineate): `generico` ·
+   `pagamento_non_disponibile` · `preventivo_scaduto` · `prenotazione_annullata` ·
+   `non_quotabile` · `date_non_valide`.
+
+⛔ **COSA RESTA FUORI, DICHIARATO:** gli altri codici non sono tradotti a mano — o sono
+raggiungibili solo manomettendo la richiesta (`payload_non_oggetto`, `quote_corrotta`,
+`party_non_valido`…), o dicono all'ospite la stessa cosa di un codice già presente
+(`not_found`, `catalogo_non_disponibile`). Per tutti loro vale la frase generica, ed è provata.
+
+🔴 **E IL PERCORSO COL BROWSER HA BECCATO UN DIFETTO MIO, DIECI MINUTI DOPO AVERLO SCRITTO.**
+Chi mostra l'errore incatena i tentativi (`fraseErrore(r.motivo)||fraseErrore(r.errore)`).
+Appena l'ultima spiaggia ha cominciato a rispondere con la frase generica, ha risposto **anche
+quando il codice era assente** (`r.motivo` non c'è quasi mai): la catena si fermava al **primo
+anello** e la traduzione buona non veniva mai raggiunta. A schermo compariva una frase umana e
+sensata — solo che era **quella sbagliata**. 💡 Invisibile leggendo il codice: si vede solo
+guardando cosa appare davvero. Corretto con `if(cod==null || cod==='') return '';`.
+
+**GUARDIE (2 nuove, viste ROSSE prima della riparazione):**
+| guardia | dove | cosa impedisce |
+|---|---|---|
+| `TestNessunCodiceInternoInFacciaAllOspite` (4 test) | `test_app_js.py` | l'ultima spiaggia che stampa il codice · i codici che l'ospite incontra senza traduzione · le lingue disallineate · **la catena dei tentativi spezzata** |
+| «l'ospite non legge gergo» | `collaudi/percorso_ospite_host.js` | qualunque codice interno (anche uno che non esiste ancora) che compaia a schermo, misurato **nel browser vero** |
+
+🟠 **DUE GUARDIE ESISTENTI SONO DIVENTATE ROSSE, E ANDAVANO GUARDATE PRIMA DI TOCCARLE.** È il
+punto in cui si bara più facilmente («aggiorno il test così passa»), quindi la giustificazione
+resta scritta. Le due sono state **RESE PIÙ FORTI, non allentate**:
+| guardia | pretendeva PRIMA | pretende ORA | perché è più forte |
+|---|---|---|---|
+| `test_happy_moduli.test_le_pagine_passano_dal_dizionario_e_non_stampano_il_codice` | che `ERR_AUTH` fosse consultato **prima** di `return String(` — cioè **ammetteva** che il codice grezzo finisse a schermo come ultima scelta | che `return String(` **non esista più**, e che il dizionario venga prima della frase generica | quell'ultima scelta si avverava davvero: è il difetto di oggi. Il nome del test lo prometteva già |
+| `test_caos_rete` scenario «codice errore ostile» | di **RITROVARE** nel DOM il codice ostile dell'attaccante, solo ripulito (`&lt;img` presente) | che quella stringa **non arrivi nel DOM in nessuna forma**, né grezza né ripulita, e che compaia la frase giusta | una stringa scelta dall'attaccante che non entra è meglio di una che entra ripulita |
+⛔ **E il secondo check dimostrava DUE cose** (niente HTML ostile **e** lo scudo `esc()`
+applicato): la seconda si sarebbe persa. Perciò **accanto** — mai al posto — è nato un check
+nuovo sul **titolo** di un annuncio, che il DOM echeggia davvero, e il denominatore del giro è
+passato da **20 a 21** perché il check nuovo non possa sparire in silenzio.
+
+⚠️ **FALSO ALLARME MIO, CORRETTO NEL LETTORE E NON NEL PRODOTTO** (regola ferrea 10): la prima
+stesura della guardia accusava l'italiano di non tradurre 3 codici. Verificato caricando
+`app.js` in un motore JavaScript vero: **32 identici in tutte e 8 le lingue**. Il mio lettore
+cercava solo `chiave:'` e l'italiano usa le **virgolette doppie** dove la frase ha un apostrofo
+(`email_non_valida:"L'indirizzo…"`). Riparato il lettore, e il perché è scritto accanto.
+
+**MISURE:** vocabolario 38 × 8 lingue, tutte allineate (verificato con `node`) · click-through
+3 pannelli su `app.js` modificato: 0 errori JS · percorso ATTO conferma e ATTO rifiuto: uscita
+0 · guardia del gergo provata su 7 stringhe in memoria: grida sui 2 codici, tace sulle 5 frasi
+vere.
+
 ### 🌐 2026-08-18 (8) — **IL BROWSER VERO È COLLEGATO — e le 210 righe che girano dal cliente vengono eseguite per la prima volta**
 
 Lavoro deciso col fondatore (*«il lavoro di oggi è il browser vero»*). **Niente di nuovo
