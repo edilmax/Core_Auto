@@ -188,6 +188,26 @@ impedire le cifre scritte a mano.
 commento»: **un commento non nomina la cifra.** Si scrive «la tariffa tecnica», non «il 5%». Un
 commento che non nomina il numero **non può diventare falso** — e un nome di test nemmeno.
 
+**S18. HO LANCIATO LA SUITE E POI HO CONTINUATO A TOCCARE I FILE CHE STAVA LEGGENDO.**
+*(2026-08-18)* Suite partita, e mentre girava ho modificato `.github/workflows/ci.yml` — che
+`test_pipeline_ci.py` **legge**. Quel giro non diceva più niente su nessuna versione: né su
+quella di prima né su quella di dopo. L'ho buttato e rifatto **da fermo**: un'ora persa.
+E l'ho ripetuto in forma diversa più tardi, aprendo lavoro nuovo mentre un giro girava.
+*Si impedisce così:* la regola ferrea 4 esisteva già; quello che mancava era l'**ordine dei
+gesti**. Prima si finisce **tutto** — codice **e documenti** — poi si lancia, poi non si tocca
+niente. Se durante il giro salta fuori qualcosa da cambiare, **il giro si butta subito** invece
+di sperare che non c'entri: un giro che ha letto file cambiati a metà **non è un esito**.
+
+**S19. LO SCOPO L'HO DICHIARATO DOPO, E ME L'HA DETTO UNA MACCHINA.** *(2026-08-18)* Ho aperto
+e modificato cinque file senza aver dichiarato niente: nella traccia c'era ancora lo scopo
+**della sessione del giorno prima**. Non me ne sono accorto io — mi ha fermato
+`collaudi/prima_di_dire_fatto.py` al momento del commit, controllo 9.
+*Si impedisce così:* `python collaudi/prima_di_lanciare.py --scopo <file...>` **prima di aprire
+il primo file**, e si ri-dichiara ogni volta che lo scopo si allarga, scrivendo il perché
+(regola ferrea 15). Costa quattro secondi. 💡 E la lezione vera è un'altra: **la regola ha
+funzionato perché è agganciata a un attrezzo**. Affidata alla mia buona volontà si era rotta,
+come si rompe sempre (D22).
+
 > ⚠️ **E il più testardo di tutti, che non è mio ma del progetto:** il paracadute `:prec`
 > agganciato all'immagine sbagliata — **quattro volte in quattro giorni** (2026-08-05, -07,
 > -08 e -08 sera). Non lo prende la buona volontà: lo prende **D17 punto [1b]**, che lo
