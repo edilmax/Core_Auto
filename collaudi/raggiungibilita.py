@@ -13,11 +13,20 @@ accorgersene perche' era prosa. Regola che ne esce, e vale oltre questo file: *u
 descrive lo stato della macchina non si scrive, si PRODUCE quando lo si legge.*
 
 ⛔⛔ SI PARTE DA TUTTI GLI INGRESSI, NON DA UNO — ed e' il difetto riparato il 2026-08-17.
-Fino a quel giorno il cammino partiva dal solo `main_casavip.py`, mentre sul disco gli
-ingressi sono TRE. Quattro moduli risultavano cadaveri mentre la produzione li accende, e
-due di loro si chiamano `fase17_money` e `fase15_idempotency`: proprio la roba che il piano
-esclude dal lavoro quando la crede morta. Guardia:
-`test_pipeline_ci.TestLaRaggiungibilitaNONPuoGuardareUnIngressoSOLO`, vista rossa prima.
+Fino a quel giorno il cammino partiva dal solo `main_casavip.py`, mentre gli ingressi sono
+piu' d'uno. Guardia: `test_pipeline_ci.TestLaRaggiungibilitaNONPuoGuardareUnIngressoSOLO`,
+vista rossa prima.
+
+⛔⛔ MA «INGRESSO» NON VUOL DIRE «FILE CHE STA SUL DISCO» — correzione del 2026-08-18, e la
+prima versione di questa riparazione ci era cascata dentro. Il 17 agosto fu aggiunto anche
+`app.py`, descritto come «un file da cui la macchina si accende davvero»: la produzione non
+lo contiene nemmeno (nessuna delle due immagini lo copia, e dentro il container che gira sul
+server non esiste). Era l'unico ingresso che raggiungeva quattro moduli, fra cui
+`fase17_money` e `fase15_idempotency`, e per colpa sua il conto dei morti diceva 59 invece
+di 63: due moduli che muovono denaro risultavano ACCESI grazie a un file spento.
+💡 **Un ingresso e' un file che l'artefatto di produzione CONTIENE E AVVIA.** Adesso
+l'elenco qui sotto non ci si puo' discostare: la guardia lo confronta con le `COPY` e il
+`CMD` del Dockerfile, che e' l'unica autorita' su cosa viene spedito.
 
 BIAS DICHIARATO (D18 punto 3), ed e' voluto: **GENEROSO**. Conta un import ovunque compaia
 nel file — anche dentro una funzione (import pigro) e anche dentro un `try/except`. Quindi
@@ -45,11 +54,33 @@ import sys
 RADICE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ⛔ GLI INGRESSI SONO PIU' DI UNO. Si dichiarano qui, in chiaro, perche' una guardia possa
-# pretenderli e perche' il giorno che ne nasce un quarto si veda cosa manca. Sono i file da
-# cui la macchina si accende davvero: il processo di produzione (`main_casavip.py`), il
-# vecchio punto d'ingresso ancora presente (`app.py`) e il server delle rotte
-# (`fase83_server.py`), che ne importa a decine per conto suo.
-INGRESSI = ("main_casavip.py", "app.py", "fase83_server.py")
+# pretenderli e perche' il giorno che ne nasce un terzo si veda cosa manca. Sono i file da
+# cui la macchina si accende davvero: il processo di produzione (`main_casavip.py`, che e' il
+# `CMD` dell'immagine) e il server delle rotte (`fase83_server.py`), che ne importa a decine
+# per conto suo.
+#
+# ⛔⛔ QUI DENTRO C'ERA ANCHE `app.py`, ED ERA UNA BUGIA — tolto il 2026-08-18, misurando
+# invece di leggere il commento che lo dichiarava «un file da cui la macchina si accende
+# davvero». La produzione non lo contiene nemmeno:
+#     Dockerfile.casavip -> COPY main_casavip.py ./ | COPY fase*.py ./ | COPY deploy ./deploy
+#     Dockerfile (generico) -> le stesse tre COPY, stesso CMD
+#     docker exec casavip_app ls app.py  ->  No such file or directory
+#     l'altro prodotto (tavolavip) parte da `fase36_booking_api`, non da qui
+# Non e' un dettaglio di forma: `app.py` era l'UNICO ingresso che raggiungeva quattro moduli
+# (`fase13_protocollo_finale`, `fase15_idempotency`, `fase17_money`, `fase23_datastore`), e
+# per quella riga il conto dei morti diceva 59 invece di 63. Cioe' due moduli che si chiamano
+# `money` e `idempotency` risultavano ACCESI grazie a un file che non gira per nessuno --
+# esattamente il contrario del bias generoso che questo strumento promette.
+# 💡 La regola che ne esce: **un ingresso non e' un file che sta sul disco, e' un file che
+# l'artefatto di produzione contiene e avvia.** La guardia
+# `test_pipeline_ci.TestLaRaggiungibilitaNONPuoGuardareUnIngressoSOLO` non si fida piu' di
+# questo elenco: lo confronta con le `COPY` e il `CMD` del Dockerfile, e diventa rossa se
+# qui dentro compare un file che l'immagine non spedisce.
+INGRESSI = ("main_casavip.py", "fase83_server.py")
+
+# Il Dockerfile che costruisce l'immagine VERA di produzione: e' lui l'autorita' su cosa
+# viene spedito, non un elenco scritto a mano (la guardia lo legge da qui).
+DOCKERFILE_PRODUZIONE = "Dockerfile.casavip"
 
 # Nome storico, tenuto perche' qualcuno potrebbe passarlo a mano a `cammina(partenza=...)`.
 PARTENZA = INGRESSI[0]

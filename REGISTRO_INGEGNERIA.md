@@ -753,6 +753,54 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🚪 2026-08-18 (3) — **«INGRESSO DI PRODUZIONE» ERA UNA BUGIA, E LA RIPARAZIONE DI IERI L'AVEVA INTRODOTTA**
+
+**Come e' saltata fuori.** Stavo per riparare **20 punti** `py/log-injection` dentro `app.py`
+quando nel job `qualita` ho letto, in un commento, *«app.py e' Flask legacy MORTO»*. Un
+commento non e' una misura, quindi sono andato a chiederlo all'artefatto:
+```
+Dockerfile.casavip     -> COPY main_casavip.py ./ | COPY fase*.py ./ | COPY deploy ./deploy
+Dockerfile (generico)  -> le stesse tre COPY, CMD ["python", "main_casavip.py"]
+docker-compose tavolavip -> gunicorn su fase36_booking_api, non app.py
+sul server: casavip_app | casavip-app | "python main_casavip..."
+docker exec casavip_app ls app.py -> No such file or directory
+```
+**`app.py` non entra in nessuna delle due immagini e non esiste dentro il container che
+gira.** Quei 20 punti sono su codice che non gira per nessuno: il fronte vero non e' 88, e'
+**68** (67 in `fase83_server.py` + 1 in `fase156_erasure.py`).
+
+🔴 **E il guaio grosso e' l'altro.** Il 2026-08-17 `app.py` era stato aggiunto agli
+**INGRESSI** di `collaudi/raggiungibilita.py`, descritto come *«uno dei file da cui la
+macchina si accende davvero»*. Misurato adesso, un ingresso alla volta:
+```
+main_casavip.py  -> raggiunge 88 moduli
+fase83_server.py -> raggiunge 50 moduli
+app.py           -> raggiunge  4 moduli, E SONO SOLO SUOI
+```
+Quei quattro sono `fase13_protocollo_finale`, `fase15_idempotency`, `fase17_money`,
+`fase23_datastore`. Per colpa di quella riga il conto dei morti diceva **59 invece di 63**, e
+**due moduli che muovono denaro risultavano ACCESI grazie a un file spento** — l'esatto
+contrario del bias generoso che lo strumento promette («se dice MORTO, e' morto davvero»).
+E' lo **sbaglio S15 ripetuto dentro la sua stessa riparazione**: correggendo un attrezzo che
+sbagliava nel verso brutto, ce l'ho rimesso dentro.
+
+✅ **Riparato legando l'elenco all'ARTEFATTO, non alla prosa.** `INGRESSI` torna a due nomi,
+e due guardie nuove in `test_pipeline_ci.py` impediscono alla bugia di rientrare:
+`test_UN_INGRESSO_E_UN_FILE_CHE_LA_PRODUZIONE_SPEDISCE_DAVVERO` (ogni ingresso dichiarato
+deve corrispondere a una `COPY` del Dockerfile) e
+`test_IL_FILE_CHE_L_IMMAGINE_AVVIA_E_FRA_GLI_INGRESSI` (il `CMD` dev'essere fra gli
+ingressi, altrimenti un elenco vuoto passerebbe la prima a mani basse). **Provate al
+contrario**: rimesso `app.py` nell'elenco, la prima diventa rossa.
+
+💡 **La regola: un ingresso non e' un file che sta sul disco, e' un file che l'artefatto di
+produzione CONTIENE E AVVIA.** E la lezione di metodo: la frase che ha fatto scattare tutto
+era un **commento in un file di CI**, cioe' prosa — quella si va sempre a misurare.
+
+⚠️ **Resta aperto, e non si archivia:** quei quattro moduli non sono raggiungibili
+dall'artefatto spedito. Due si chiamano `money` e `idempotency`. Le uscite valide sono le
+tre di DO-178C (manca un test · manca un requisito · e' codice estraneo e va tolto), e la
+scelta e' del fondatore, non mia.
+
 ### ⏰ 2026-08-18 (2) — **UNA BOMBA A OROLOGERIA DENTRO UNA GUARDIA SUI DATI DELLE CARTE**
 
 **Trovata dalla CI**, non da noi, sul commit `b148675` (CodeQL verde, `full-suite` rossa):

@@ -6472,7 +6472,94 @@ class TestLaRaggiungibilitaNONPuoGuardareUnIngressoSOLO(unittest.TestCase):
     # stesso», che e' il verde piu' vuoto di tutti: cancellando un ingresso resterebbe verde.
     # Il denominatore lo porta la guardia, non il sorvegliato (regola: ogni guardia dichiara
     # il proprio denominatore).
-    INGRESSI_VERI = ("main_casavip.py", "app.py", "fase83_server.py")
+    #
+    # ⛔⛔ QUI DENTRO C'ERA `app.py`, E FU UN ERRORE MIO DEL 2026-08-17. Lo tolgo il
+    # 2026-08-18 dopo averlo MISURATO: nessuna delle due immagini lo copia
+    # (`COPY main_casavip.py` / `COPY fase*.py` / `COPY deploy`), l'avvio e'
+    # `python main_casavip.py`, e dentro il container che gira sul server `ls app.py`
+    # risponde «No such file or directory». Costava 4 moduli dichiarati vivi a torto --
+    # `fase13_protocollo_finale`, `fase15_idempotency`, `fase17_money`, `fase23_datastore` --
+    # e faceva dire 59 morti invece di 63.
+    INGRESSI_VERI = ("main_casavip.py", "fase83_server.py")
+
+    # Il file da cui si legge la verita' su cosa viene spedito. Non e' un dettaglio di questa
+    # guardia: e' il punto in cui l'elenco smette di poter mentire.
+    DOCKERFILE = "Dockerfile.casavip"
+
+    def _copiati_nell_immagine(self):
+        """I modelli di file che l'immagine di produzione copia dentro di se', letti dal
+        Dockerfile. Se un giorno il Dockerfile cambia, questa guardia lo segue da sola."""
+        percorso = os.path.join(QUI, self.DOCKERFILE)
+        self.assertTrue(
+            os.path.isfile(percorso),
+            "manca %s: senza il Dockerfile non c'e' nessuna autorita' su cosa finisce in "
+            "produzione, e l'elenco degli ingressi torna a essere una frase scritta a mano"
+            % self.DOCKERFILE)
+        modelli = []
+        with io.open(percorso, encoding="utf-8") as f:
+            for riga in f:
+                pulita = riga.strip()
+                if not pulita.upper().startswith("COPY "):
+                    continue
+                pezzi = pulita.split()[1:]
+                if len(pezzi) >= 2:
+                    modelli.extend(pezzi[:-1])   # l'ultimo e' la destinazione
+        self.assertTrue(
+            modelli,
+            "%s non ha nessuna riga COPY: o il file e' cambiato forma, o l'immagine non "
+            "contiene niente. In tutt'e due i casi questa guardia non puo' misurare"
+            % self.DOCKERFILE)
+        return modelli
+
+    def test_UN_INGRESSO_E_UN_FILE_CHE_LA_PRODUZIONE_SPEDISCE_DAVVERO(self):
+        """⛔ LA GUARDIA NATA DALLA BUGIA DEL 2026-08-18.
+
+        Il 17 agosto `app.py` e' stato dichiarato «uno dei file da cui la macchina si accende
+        davvero». Non lo era: l'immagine non lo copia e nel container non esiste. Da quella
+        riga dipendeva il conto dei moduli morti, e quel conto decide **su cosa si lavora**.
+
+        Qui l'elenco degli ingressi smette di poter mentire: ogni nome dichiarato deve
+        corrispondere a qualcosa che il Dockerfile **copia davvero** dentro l'immagine. Non
+        e' una regola di stile -- e' la differenza fra «questo file esiste» e «questo file
+        gira», che e' esattamente il punto in cui ci siamo sbagliati.
+        """
+        import fnmatch
+        r = self._modulo()
+        modelli = self._copiati_nell_immagine()
+        non_spediti = []
+        for ingresso in getattr(r, "INGRESSI", ()):
+            if not any(fnmatch.fnmatch(ingresso, m.rstrip("/")) for m in modelli):
+                non_spediti.append(ingresso)
+        self.assertEqual(
+            [], non_spediti,
+            "`raggiungibilita.INGRESSI` dichiara file che l'immagine di produzione NON "
+            "spedisce: %r.\n        Le COPY del %s sono %r.\n        Un file che non entra "
+            "nell'immagine non accende niente: contarlo come ingresso gonfia i moduli "
+            "«vivi» e nasconde i morti, che e' come si sceglie male su cosa lavorare."
+            % (non_spediti, self.DOCKERFILE, modelli))
+
+    def test_IL_FILE_CHE_L_IMMAGINE_AVVIA_E_FRA_GLI_INGRESSI(self):
+        """L'altra meta' dello stesso invariante: non basta che gli ingressi siano spediti,
+        ci dev'essere anche quello che l'immagine **avvia** (il `CMD`). Senza questa, un
+        elenco vuoto passerebbe la guardia qui sopra a mani basse."""
+        r = self._modulo()
+        percorso = os.path.join(QUI, self.DOCKERFILE)
+        with io.open(percorso, encoding="utf-8") as f:
+            testo = f.read()
+        avviati = re.findall(r"([A-Za-z0-9_./-]+\.py)",
+                             "\n".join(l for l in testo.splitlines()
+                                       if l.strip().upper().startswith("CMD")))
+        self.assertTrue(
+            avviati,
+            "il %s non dichiara nessun `.py` nel suo CMD: non so piu' cosa avvia la "
+            "produzione" % self.DOCKERFILE)
+        dichiarati = set(getattr(r, "INGRESSI", ()))
+        mancanti = [a for a in avviati if a not in dichiarati]
+        self.assertEqual(
+            [], mancanti,
+            "il file che l'immagine AVVIA (%r) non e' fra gli ingressi dichiarati (%r): il "
+            "cammino partirebbe da tutt'altro rispetto a cio' che gira davvero"
+            % (avviati, sorted(dichiarati)))
 
     def _modulo(self):
         sys.path.insert(0, os.path.join(QUI, "collaudi"))

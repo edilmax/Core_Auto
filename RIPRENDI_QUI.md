@@ -126,10 +126,25 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 >
 > ### 🔴 IL NUMERO CHE DECIDEVA IL LAVORO ERA FALSO, E LA CAUSA NON ERA «È VECCHIO»
 > `collaudi/raggiungibilita.py` camminava dagli import di **un ingresso solo**
-> (`main_casavip.py`) mentre sul disco ce ne sono **tre** — mancavano `app.py` e
-> `fase83_server.py`. Misurato adesso: da un ingresso **63 morti**, da tutti e tre **59**.
-> I quattro seppelliti vivi sono `fase13_protocollo_finale`, **`fase15_idempotency`**,
-> **`fase17_money`**, `fase23_datastore`.
+> (`main_casavip.py`) mentre ce n'era anche un altro: `fase83_server.py`, che ne importa a
+> decine per conto suo.
+>
+> 🔴🔴 **CORREZIONE DEL 2026-08-18, E QUESTA RIGA ERA SBAGLIATA A SUA VOLTA.** Quel giorno
+> fu aggiunto anche **`app.py`**, e con lui i morti scesero da 63 a 59, «resuscitando»
+> `fase13_protocollo_finale`, **`fase15_idempotency`**, **`fase17_money`**,
+> `fase23_datastore`. ⛔ **Ma `app.py` non va in produzione**: nessuna delle due immagini lo
+> copia (`COPY main_casavip.py` · `COPY fase*.py` · `COPY deploy`), l'avvio è
+> `python main_casavip.py`, l'altro prodotto parte da `fase36_booking_api`, e dentro il
+> container che gira sul server `ls app.py` risponde **«No such file or directory»**.
+> Misurato adesso: `main_casavip.py` raggiunge **88** moduli, `fase83_server.py` **50**,
+> `app.py` **4 — e sono solo suoi**. Quindi il numero vero dell'artefatto spedito è **63**,
+> e quei quattro moduli **non sono raggiungibili dalla produzione**: due si chiamano
+> `money` e `idempotency`, quindi la cosa va guardata, non archiviata.
+> 💡 **La regola che ne esce: un ingresso non è un file che sta sul disco, è un file che
+> l'artefatto di produzione CONTIENE E AVVIA.** Adesso l'elenco non può più discostarsene:
+> `test_UN_INGRESSO_E_UN_FILE_CHE_LA_PRODUZIONE_SPEDISCE_DAVVERO` lo confronta con le `COPY`
+> del Dockerfile, e `test_IL_FILE_CHE_L_IMMAGINE_AVVIA_E_FRA_GLI_INGRESSI` pretende che il
+> `CMD` sia fra gli ingressi. Provata al contrario: rimesso `app.py` nell'elenco, rossa.
 >
 > 💡 **Il verso in cui sbagliava era quello brutto.** Il file prometteva un bias generoso —
 > *«se dice MORTO, e' morto davvero»* — e quella promessa era **falsa**. Un attrezzo che
@@ -5097,7 +5112,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5831 test
+SUITE ATTUALE: Ran 5833 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
@@ -5111,10 +5126,12 @@ MISURATO SU: 13ac1e8 + LA BARRIERA VISIBILE A CODEQL + L'ELENCO DEGLI ESCLUSI (2
              non ancora committato): le 4 guardie di
              `TestLaPuliziaDelRegistroDEVEESSEREVISIBILEACHIANALIZZA` e le 5 di
              `TestLaListaDeiFileESCLUSIDaCodeQL`, tutte in `test_pipeline_ci.py`.
-             Da 5819 a 5823 (+4), poi a 5828 (+5), poi a **5831 (+3)** con
+             Da 5819 a 5823 (+4), poi a 5828 (+5), poi a 5831 (+3) con
              `TestIlRilevatoreDiCarteGUARDANELPOSTOGIUSTO` in
-             `test_integrazione_servizi.py` (la bomba a tempo trovata dalla CI).
-             Gli ultimi due numeri rimisurati col caricatore da fermo PRIMA di
+             `test_integrazione_servizi.py` (la bomba a tempo trovata dalla CI),
+             poi a **5833 (+2)** con le due guardie che legano gli INGRESSI di
+             `raggiungibilita.py` a cio' che il Dockerfile spedisce davvero.
+             Gli ultimi tre numeri rimisurati col caricatore da fermo PRIMA di
              rilanciare (S14).
              ⛔ E QUESTA VOLTA NON L'HO SCRITTO PRIMA: ho lanciato la suite intera con il
              numero vecchio ancora dentro, e i 28 minuti sono finiti su un rosso solo —
