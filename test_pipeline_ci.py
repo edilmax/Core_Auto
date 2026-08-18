@@ -964,7 +964,7 @@ class TestNeedsDelGateCompleto(unittest.TestCase):
                          "lista di proposito, dopo esserti accertato che sia anche "
                          "nei needs del gate: e' il punto in cui la decisione si "
                          "prende invece di scivolare")
-        self.assertEqual(sorted(self.non_bloccanti), ["lint-severo", "zap"],
+        self.assertEqual(sorted(self.non_bloccanti), ["browser", "lint-severo", "zap"],
                          "un job non bloccante in piu' significa un controllo il cui "
                          "rosso non ferma nessuno: deve essere una scelta esplicita")
 
@@ -1003,6 +1003,13 @@ class TestNeedsDelGateCompleto(unittest.TestCase):
         self.assertIn("NON blocca", lint.get("name", ""),
                       "lint-severo deve dichiarare nel proprio nome che non blocca: e' "
                       "cio' che si legge nell'elenco dei check su GitHub")
+        # `browser` (2026-08-18) sta fuori dal gate a termine: finche' ci sta, chi legge
+        # l'elenco dei check su GitHub deve vedere DAL NOME che il suo rosso non ferma
+        # nessuno. Il giorno che entra nel gate, questa riga si toglie insieme al nome.
+        browser = self.doc["jobs"]["browser"]
+        self.assertIn("NON blocca", browser.get("name", ""),
+                      "browser deve dichiarare nel proprio nome che non blocca: un "
+                      "check che sembra bloccante e non lo e' e' peggio che non averlo")
 
     def test_il_gate_gira_sempre_anche_quando_qualcuno_e_rosso(self):
         gate = self.doc["jobs"][GATE]
