@@ -11,6 +11,66 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🚀 2026-08-18 (26) — **TUTTO IN PRODUZIONE: la riparazione è VIVA sul sito vero**
+
+> **Stato dei tre posti, misurato dopo il deploy (non ricordato):**
+> ```
+> computer 6675420 · GitHub 6675420 · VPS 6675420   -> ALLINEATI
+> unioni #69 #70 #71 tutte verificate UNITE con una SECONDA chiamata all'API
+> richieste di unione aperte: 0
+> DEPLOY 2026-08-18 19:26 UTC, procedura D17 di DEPLOY.md letta per intero
+>   paracadute casavip-app:prec = e4d2ccf..., agganciato PRIMA del build e
+>     verificato PER IMPRONTA (non per fiducia); ritorno PRE_DEPLOY_20260818_192546 -> 13f9b2c
+>   contenitori: casavip_app healthy · casavip_backup healthy · casavip_nginx up
+>   avvio pulito: 'avvisi': [], 'money_path_pronto': True, 'valuta': 'EUR'
+>   variabili PAGAMENTO_ sul server: NESSUNA (valgono i default del codice)
+> https://bookinvip.com/ -> 200 · /api/health -> 200
+> ```
+>
+> ### ✅ LA RIPARAZIONE È ARRIVATA DAVVERO — letto dal sito, non dedotto dal deploy
+> ```
+> app.js servito da bookinvip.com: 40.846 byte
+>   frase del pagamento presente ............... SI
+>   frase generica presente .................... SI
+>   vecchio ripiego 'return String(cod' ........ NON C'E' PIU'
+> ```
+> 💡 È il controllo che separa «il deploy è andato» da «la riparazione è arrivata»: sono due
+> cose diverse, e la seconda si misura **scaricando il file dal sito**, non guardando i log.
+>
+> ### 🔬 LE DUE RIGHE DI `host.html` SONO STATE PROVATE UNA PER UNA — dopo una domanda del fondatore
+> *«hai controllato tutta la pagina host e che tutto funziona?»*. **No**, e la distinzione va
+> tenuta: il click-through prova che la pagina **non si rompe**, non che una riparazione
+> **funzioni**. Provate quindi a mano, forzando il server a rispondere con un errore
+> (intercettato nel browser, il server vero non è stato toccato):
+> ```
+> riga  616 (rapporto SEO)   -> "Errore: In questo momento non riusciamo a raggiungere il
+>                               sistema dei pagamenti: non abbiamo confermato nulla..."
+> riga 1198 (apri alloggio)  -> la stessa frase, con la crocetta
+> ```
+> ⚠️ **E due volte lo strumento mi ha fatto dire il falso, non il prodotto:** `#btnSeo` **non è
+> cliccabile** (sta nel cassetto degli strumenti avanzati, chiuso — ecco perché il
+> click-through non l'aveva mai toccato), e `innerText` torna **vuoto** su un elemento
+> nascosto, quindi la prima lettura diceva «la riga non è stata eseguita» mentre lo era
+> eccome. Si legge con `textContent`.
+>
+> ### 🔴 IL NUMERO CHE DICE QUAL È IL PROSSIMO LAVORO
+> ```
+> IL PANNELLO HOST, misurato: 30 bottoni con un nome · 44 gestori di clic
+>                             26 funzioni · 48 rotte /api chiamate
+> QUANTO NE PROVA IL CLICK-THROUGH: 11 bottoni VISIBILI, 10 cliccati
+>   gli altri stanno nei CASSETTI CHIUSI -> non li vede, quindi non li prova
+> ```
+> ⛔ Quindi **~34 azioni del pannello host non le guarda nessuno**: né il click-through (clicca
+> solo cio' che vede), né i 5846 collaudi (parlano col server, non aprono una pagina).
+> **Non sono rotte: non sono mai state guardate**, che è una cosa diversa e va detta così.
+> 💡 **Il prossimo lavoro naturale**: aprire i cassetti e provarle una per una, col metodo di
+> oggi. L'attrezzatura ormai c'è, e ogni cosa provata resta provata per sempre.
+>
+> ### ⛔ LA RIGA CHE DICEVA IL FALSO
+> Il blocco (22) qui sotto dichiara `VPS 13f9b2c`: era vero quando è stato scritto, **non lo è
+> più**. Un documento che resta indietro è lo sbaglio **S10**, e si corregge nello stesso
+> momento in cui cambia la macchina — non «dopo», perché il «dopo» è dove si perde.
+
 ## 🔎 2026-08-18 (25) — **LA CACCIA CHIESTA DAL FONDATORE: 6 PUNTI, E 2 ERANO IN FACCIA A UN CLIENTE**
 
 > Ordine: *«controlla altro che potrebbe uscire in futuro o quando sistemerai altre cose»*.
@@ -3464,7 +3524,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: bdc346b
+CONSEGNE AGGIORNATE A: 6675420
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui

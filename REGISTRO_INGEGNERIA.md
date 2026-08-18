@@ -753,6 +753,58 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🚀 2026-08-18 (12) — **DEPLOY: la riparazione del gergo è VIVA su bookinvip.com**
+
+Via del fondatore (*«autorizzato a tutto e al commit»*). `DEPLOY.md` letto **per intero**
+prima di toccare la macchina: non si improvvisa su un server che muove denaro.
+
+```
+paracadute casavip-app:prec = e4d2ccf..., agganciato PRIMA del build e verificato
+  PER IMPRONTA (test sull'Id, non "sembra agganciato"); ritorno 13f9b2c
+contenitori: casavip_app healthy · casavip_backup healthy · casavip_nginx up
+avvio pulito: 'avvisi': [], 'money_path_pronto': True, 'valuta': 'EUR'
+variabili PAGAMENTO_ sul server: NESSUNA -> valgono i default del codice
+tre posti: computer 6675420 · GitHub 6675420 · VPS 6675420
+https://bookinvip.com/ -> 200 · /api/health -> 200
+```
+
+✅ **E LA VERIFICA CHE CONTA DAVVERO, che non è nei log ma nel file servito:**
+```
+app.js scaricato DA bookinvip.com: 40.846 byte
+  frase del pagamento ................. presente
+  frase generica ...................... presente
+  vecchio ripiego 'return String(cod' . NON C'E' PIU'
+```
+💡 «Il deploy è andato» e «la riparazione è arrivata» sono **due cose diverse**: la seconda si
+misura scaricando il file dal sito vero. Un container `healthy` che serve il file vecchio è
+esattamente il verde falso che questo progetto ha già pagato altre volte.
+
+**E POI IL FONDATORE HA CHIESTO: *«hai controllato tutta la pagina host e che tutto
+funziona?»*.** Risposta: **no**, e la distinzione è quella che conta — il click-through prova
+che la pagina **non si rompe**, non che una riparazione **funzioni**. Le due righe toccate sono
+state quindi provate **una per una**, forzando il server a rispondere con un errore
+(intercettato nel browser: il server vero non è stato toccato):
+```
+riga  616 (rapporto SEO)   -> "Errore: In questo momento non riusciamo a raggiungere il
+                              sistema dei pagamenti: non abbiamo confermato nulla..."
+riga 1198 (apri alloggio)  -> la stessa frase, con la crocetta
+```
+⚠️ **Due volte lo strumento mi ha fatto dire il falso, non il prodotto** (S3): `#btnSeo` non è
+cliccabile perché sta nel **cassetto chiuso** degli strumenti avanzati — ed è anche il motivo
+per cui il click-through non l'aveva mai toccato — e `innerText` torna **vuoto** su un
+elemento nascosto, quindi la prima lettura accusava il prodotto di non aver scritto niente.
+Si legge con `textContent`.
+
+🔴 **IL NUMERO CHE INDICA IL PROSSIMO LAVORO** (misurato, non stimato):
+```
+pannello host: 30 bottoni con un nome · 44 gestori di clic · 26 funzioni · 48 rotte /api
+click-through: 11 bottoni VISIBILI, 10 cliccati (gli altri sono nei cassetti chiusi)
+```
+⛔ **~34 azioni del pannello host non le guarda nessuno**: né il click-through (clicca solo ciò
+che vede), né i 5846 collaudi (parlano col server, non aprono una pagina). **Non sono rotte:
+non sono mai state guardate**, che è una cosa diversa. Il lavoro naturale successivo è aprire
+i cassetti e provarle una per una, col metodo di oggi.
+
 ### 🔎 2026-08-18 (11) — **LA CACCIA: DOVE ALTRO USCIVA IL GERGO — 6 PUNTI, 2 IN FACCIA A UN CLIENTE**
 
 Ordine del fondatore: *«controlla altro che potrebbe uscire in futuro o quando sistemerai
