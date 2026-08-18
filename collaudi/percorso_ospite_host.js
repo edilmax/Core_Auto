@@ -219,6 +219,16 @@ async function prenotaComeOspite(browser, sacco) {
       'camera bloccata, voucher valido, incasso zero.');
     esigi(esito.messaggio.includes('❌'),
       `l'ospite non ha ricevuto un rifiuto leggibile: a schermo c'e' ${JSON.stringify(esito.messaggio.slice(0, 200))}`);
+    // ⛔ E "leggibile" vuol dire in ITALIANO, non in gergo nostro. Il 2026-08-18 qui c'era
+    // scritto `pagamento_non_disponibile` -- il codice interno -- in faccia a chi stava
+    // pagando. I nostri codici hanno tutti la stessa forma (parole minuscole unite da un
+    // trattino basso) e nessuna frase vera ne contiene: percio' basta cercarla. E' una
+    // guardia sulla CLASSE, non su quel codice: vale anche per i codici che non esistono
+    // ancora, ed e' l'unico modo di non riscoprirlo da un cliente.
+    const gergo = esito.messaggio.match(/\b[a-z]+(?:_[a-z]+)+\b/);
+    esigi(!gergo,
+      `L'OSPITE LEGGE UN CODICE INTERNO invece di una frase: "${gergo && gergo[0]}" ` +
+      `(messaggio intero: ${JSON.stringify(esito.messaggio.slice(0, 200))})`);
     esigi(!esito.messaggio.includes('✅'),
       'l\'ospite legge una conferma mentre il pagamento non e\' andato: due messaggi opposti nella stessa schermata');
 

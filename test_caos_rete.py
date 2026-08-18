@@ -145,7 +145,28 @@ async function __main(){
     ? jsonRes(400,{errore:'<img src=x onerror=alert(1)>'}) : jsonRes(200,{}); };
   await cerca();
   ris = document.getElementById('risultati').innerHTML;
-  check('index: FUZZ codice errore ostile ESCAPATO', ris.indexOf('<img')===-1 && ris.indexOf('&lt;img')>=0, ris.slice(0,200));
+  // ⛔ RESO PIU' FORTE IL 2026-08-18, non allentato. Prima questo check pretendeva di
+  // RITROVARE il codice ostile a schermo, solo ripulito (`&lt;img` presente): cioe'
+  // ammetteva che una stringa scelta dall'attaccante arrivasse nel DOM. Da oggi
+  // `BV.fraseErrore` non echeggia piu' i codici sconosciuti, quindi quella stringa non
+  // arriva nel DOM in NESSUNA forma -- ne' grezza ne' ripulita -- ed e' una difesa in piu',
+  // non una in meno. Si pretende anche la frase giusta, confrontata con `BV.esc()` della
+  // frase generica: cosi' resta provato che lo scudo di uscita e' stato applicato.
+  check('index: codice errore ostile NON arriva nel DOM in nessuna forma',
+        ris.indexOf('<img')===-1 && ris.indexOf('&lt;img')===-1
+        && ris.indexOf(BV.esc(BV.ERR_AUTH.it.generico))>=0, ris.slice(0,200));
+
+  // E ACCANTO, non al posto: lo scudo di uscita va provato su un testo che il DOM
+  // echeggia DAVVERO (il titolo di un annuncio, che arriva dal server e finisce nella
+  // card). Senza questo, togliendo il check sopra si perderebbe l'unica prova che
+  // `esc()` ripulisce l'HTML ostile invece di limitarsi a non stamparlo.
+  FETCH = function(u,o){ return u.indexOf('/api/catalogo')===0
+    ? jsonRes(200,{risultati:[{slug:'ostile',titolo:'<img src=x onerror=alert(1)>',prezzo_notte_cents:1000,valuta:'EUR'}]})
+    : jsonRes(200,{}); };
+  await cerca();
+  ris = document.getElementById('risultati').innerHTML;
+  check('index: titolo ostile ECHEGGIATO ma RIPULITO dallo scudo',
+        ris.indexOf('<img')===-1 && ris.indexOf('&lt;img')>=0, ris.slice(0,200));
 
   const alertsPrima = ALERTS.length;
   FETCH = function(u,o){
@@ -390,7 +411,9 @@ class TestCaosRete(unittest.TestCase):
             os.remove(path)
 
     def test_caos_ospite(self):
-        self._esegui('index.html', SCENARI_INDEX, 20)
+        # 21 e non 20 dal 2026-08-18: il check nuovo sul titolo ostile fa parte del
+        # denominatore, altrimenti potrebbe sparire in silenzio e nessuno lo saprebbe.
+        self._esegui('index.html', SCENARI_INDEX, 21)
 
     def test_caos_host(self):
         self._esegui('host.html', SCENARI_HOST, 21)
