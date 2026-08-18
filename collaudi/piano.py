@@ -30,8 +30,15 @@ COSA GARANTISCE MECCANICAMENTE (e cosa no -- D18 punto 3)
 GARANTISCE:
   G1  ogni `fase*.py` del progetto sta in ESATTAMENTE UN blocco: un modulo nuovo che
       nessuno classifica fa diventare ROSSO questo controllo il giorno stesso. E' la
-      difesa contro «costruito e dimenticato», che qui e' gia' costato 59 moduli
+      difesa contro «costruito e dimenticato», che qui e' gia' costato decine di moduli
       dimenticati e una classifica di rischio tarata su numeri gonfiati.
+      ⛔ QUI C'ERA UNA CIFRA (59), ED ERA SMENTITA. Veniva da un conto fatto partendo anche
+      da `app.py`, che in produzione non ci va (misurato il 2026-08-18: nessuna immagine lo
+      copia). Il numero vero lo produce `python collaudi/raggiungibilita.py`, e non si
+      ricopia: un numero che descrive lo stato della macchina non si scrive, si PRODUCE.
+      ⚠️ E notare DOVE si era nascosto: la voce 7 del foglio unico, che esiste apposta per
+      stanare i numeri scritti a mano, legge solo i `.md` -- in un `.py` come questo non
+      poteva vederlo. L'ha trovato una revisione indipendente, non uno strumento nostro.
   G2  nessun blocco nomina un modulo che non esiste (sbaglio S2: i nomi si leggono, non
       si inventano -- `fase186_guardiano_stati.py` fu inventato due volte).
   G3  nessun modulo sta in due blocchi (un modulo con due padroni non ha nessun padrone).

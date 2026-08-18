@@ -6473,14 +6473,17 @@ class TestLaRaggiungibilitaNONPuoGuardareUnIngressoSOLO(unittest.TestCase):
     # Il denominatore lo porta la guardia, non il sorvegliato (regola: ogni guardia dichiara
     # il proprio denominatore).
     #
-    # ⛔⛔ QUI DENTRO C'ERA `app.py`, E FU UN ERRORE MIO DEL 2026-08-17. Lo tolgo il
-    # 2026-08-18 dopo averlo MISURATO: nessuna delle due immagini lo copia
-    # (`COPY main_casavip.py` / `COPY fase*.py` / `COPY deploy`), l'avvio e'
-    # `python main_casavip.py`, e dentro il container che gira sul server `ls app.py`
-    # risponde «No such file or directory». Costava 4 moduli dichiarati vivi a torto --
-    # `fase13_protocollo_finale`, `fase15_idempotency`, `fase17_money`, `fase23_datastore` --
-    # e faceva dire 59 morti invece di 63.
-    INGRESSI_VERI = ("main_casavip.py", "fase83_server.py")
+    # ⛔⛔ QUI DENTRO C'ERA `app.py`, E FU UN ERRORE MIO DEL 2026-08-17. Tolto il 2026-08-18
+    # dopo averlo MISURATO: nessuna delle due immagini lo copia, l'avvio e'
+    # `python main_casavip.py`, e dentro il container `ls app.py` risponde «No such file or
+    # directory». Costava 4 moduli dichiarati vivi a torto -- `fase13_protocollo_finale`,
+    # `fase15_idempotency`, `fase17_money`, `fase23_datastore` -- e faceva dire 59 morti
+    # invece di 63.
+    # ⛔⛔ E POI E' USCITO ANCHE `fase83_server.py`, lo stesso giorno, dopo una revisione
+    # indipendente: misurato, come ingresso aggiunge ZERO moduli (e' gia' raggiunto da
+    # `main`), quindi non era un ingresso ma un modulo elencato due volte. Resta il solo
+    # criterio che non si puo' allargare: il file che l'immagine AVVIA.
+    INGRESSI_VERI = ("main_casavip.py",)
 
     # Il file da cui si legge la verita' su cosa viene spedito. Non e' un dettaglio di questa
     # guardia: e' il punto in cui l'elenco smette di poter mentire.
@@ -6538,10 +6541,22 @@ class TestLaRaggiungibilitaNONPuoGuardareUnIngressoSOLO(unittest.TestCase):
             "«vivi» e nasconde i morti, che e' come si sceglie male su cosa lavorare."
             % (non_spediti, self.DOCKERFILE, modelli))
 
-    def test_IL_FILE_CHE_L_IMMAGINE_AVVIA_E_FRA_GLI_INGRESSI(self):
-        """L'altra meta' dello stesso invariante: non basta che gli ingressi siano spediti,
-        ci dev'essere anche quello che l'immagine **avvia** (il `CMD`). Senza questa, un
-        elenco vuoto passerebbe la guardia qui sopra a mani basse."""
+    def test_GLI_INGRESSI_SONO_ESATTAMENTE_QUELLO_CHE_L_IMMAGINE_AVVIA(self):
+        """⛔ UGUAGLIANZA, NON INCLUSIONE — e la differenza l'ha vista una revisione
+        indipendente, non io.
+
+        La prima stesura pretendeva solo che gli ingressi fossero **spediti** (cioe'
+        comparissero fra le `COPY`). Sembrava stretto e non lo era: il Dockerfile copia
+        `fase*.py`, quindi quel criterio avrebbe accettato come «ingresso di produzione»
+        **151 moduli su 152**. Bastava aggiungerne uno qualsiasi per gonfiare il conto dei
+        vivi -- cioe' il difetto del 2026-08-17 sarebbe rientrato sotto un altro nome, con
+        tutte le guardie verdi.
+
+        Il criterio che non si puo' allargare e' uno solo: **gli ingressi sono ESATTAMENTE i
+        moduli che il `CMD` avvia**. Non «almeno», non «compresi»: uguali. Un processo nuovo
+        (un secondo `CMD`, un lavoratore in coda) fa diventare rossa questa riga il giorno
+        stesso, ed e' giusto cosi': e' un ingresso nuovo e va dichiarato.
+        """
         r = self._modulo()
         percorso = os.path.join(QUI, self.DOCKERFILE)
         with io.open(percorso, encoding="utf-8") as f:
@@ -6554,29 +6569,65 @@ class TestLaRaggiungibilitaNONPuoGuardareUnIngressoSOLO(unittest.TestCase):
             "il %s non dichiara nessun `.py` nel suo CMD: non so piu' cosa avvia la "
             "produzione" % self.DOCKERFILE)
         dichiarati = set(getattr(r, "INGRESSI", ()))
+        in_piu = sorted(dichiarati - set(avviati))
+        self.assertEqual(
+            [], in_piu,
+            "`INGRESSI` dichiara file che l'immagine NON AVVIA: %r (il CMD nomina %r).\n"
+            "        ⛔ Un modulo spedito non e' un ingresso: il Dockerfile copia `fase*.py`, "
+            "quindi con il criterio «basta che sia spedito» si potrebbero dichiarare "
+            "ingresso 151 moduli su 152 e gonfiare il conto dei vivi senza che nessuna "
+            "guardia gridi. Gli ingressi sono ESATTAMENTE cio' che il CMD avvia."
+            % (in_piu, avviati))
         mancanti = [a for a in avviati if a not in dichiarati]
+        # ⛔ NEL MESSAGGIO VA `mancanti`, NON `avviati`. Trovato da una revisione
+        # indipendente il 2026-08-18: scrivendo `avviati` il rosso avrebbe elencato ANCHE i
+        # file gia' dichiarati correttamente, mandando chi legge a «riparare» nomi giusti
+        # mentre il colpevole vero era l'unico dentro `mancanti`. Oggi i due coincidono
+        # perche' il CMD nomina un file solo -- cioe' il difetto e' invisibile finche' non
+        # serve, che e' il modo peggiore in cui un messaggio puo' sbagliare.
         self.assertEqual(
             [], mancanti,
-            "il file che l'immagine AVVIA (%r) non e' fra gli ingressi dichiarati (%r): il "
-            "cammino partirebbe da tutt'altro rispetto a cio' che gira davvero"
-            % (avviati, sorted(dichiarati)))
+            "questi file, che l'immagine AVVIA, non sono fra gli ingressi dichiarati: %r "
+            "(il CMD ne nomina %r, gli ingressi dichiarati sono %r). Il cammino partirebbe "
+            "da tutt'altro rispetto a cio' che gira davvero."
+            % (mancanti, avviati, sorted(dichiarati)))
 
     def _modulo(self):
         sys.path.insert(0, os.path.join(QUI, "collaudi"))
         import raggiungibilita
         return raggiungibilita
 
-    def test_GLI_INGRESSI_DI_QUESTA_GUARDIA_ESISTONO_SUL_DISCO(self):
-        """Il metro si misura prima del muro (D18 punto 1): se questi nomi non esistessero
-        piu', le due guardie sotto girerebbero a vuoto stampando verde. E' lo sbaglio S2 --
-        i nomi si leggono, non si ricordano -- applicato alla guardia stessa."""
+    def test_GLI_INGRESSI_DI_QUESTA_GUARDIA_SONO_SPEDITI_IN_PRODUZIONE(self):
+        """Il metro si misura prima del muro (D18 punto 1): se questi nomi non fossero veri,
+        le guardie sotto girerebbero a vuoto stampando verde. E' lo sbaglio S2 -- i nomi si
+        leggono, non si ricordano -- applicato alla guardia stessa.
+
+        ⛔⛔ **E FINO AL 2026-08-18 QUESTA VERIFICA USAVA IL CRITERIO SBAGLIATO**: chiedeva
+        `os.path.isfile`, cioe' esattamente cio' che quel giorno abbiamo dimostrato non
+        significare niente (`app.py` sta sul disco e non va in produzione). Trovato da una
+        revisione indipendente, ed era la parte piu' insidiosa: con quel criterio bastava
+        rimettere `app.py` **qui dentro** e la guardia relazionale sarebbe diventata rossa
+        accusando `raggiungibilita.py` di dichiarare morti dei vivi -- cioe' il rosso stesso
+        avrebbe **ordinato di rimettere il difetto**. Una guardia che, sbagliando, insegna a
+        reintrodurre il guasto e' peggio di nessuna guardia.
+        """
+        import fnmatch
+        modelli = self._copiati_nell_immagine()
+        non_spediti = [n for n in self.INGRESSI_VERI
+                       if not any(fnmatch.fnmatch(n, m.rstrip("/")) for m in modelli)]
+        self.assertEqual(
+            [], non_spediti,
+            "questa guardia nomina come ingressi dei file che l'immagine di produzione NON "
+            "spedisce (%r). Non e' un dettaglio: e' il criterio sbagliato -- «sta sul disco» "
+            "invece di «l'artefatto lo contiene e lo avvia» -- ed e' esattamente l'errore del "
+            "2026-08-17. Le COPY del Dockerfile sono %r." % (non_spediti, modelli))
         mancanti = [n for n in self.INGRESSI_VERI
                     if not os.path.isfile(os.path.join(QUI, n))]
         self.assertEqual(
-            mancanti, [],
-            "questa guardia nomina ingressi che sul disco non ci sono piu' (%r): finche' e' "
-            "cosi' non sta provando niente, e il suo verde e' un ornamento. Aggiorna l'elenco "
-            "leggendolo dal disco." % (mancanti,))
+            [], mancanti,
+            "questa guardia nomina file che sul disco non ci sono piu' (%r): il Dockerfile "
+            "li spedirebbe, ma non esistono. In tutt'e due i casi non sta provando niente."
+            % (mancanti,))
 
     def test_UN_MODULO_RAGGIUNTO_DA_UN_INGRESSO_VERO_NON_PUO_RISULTARE_MORTO(self):
         """⛔ LA GUARDIA CHE VEDE IL DIFETTO. Non pretende un numero (un numero invecchia,
@@ -6596,8 +6647,11 @@ class TestLaRaggiungibilitaNONPuoGuardareUnIngressoSOLO(unittest.TestCase):
             accusati, {},
             "`raggiungibilita.py` dichiara MORTI dei moduli che un ingresso VERO della "
             "produzione raggiunge, e il file promette il contrario («se dice MORTO, e' morto "
-            "davvero»). Deve partire da TUTTI gli ingressi che esistono, non da uno. "
-            "Accusati a torto: %r" % (accusati,))
+            "davvero»).\n        ⛔ PRIMA DI AGGIUNGERE UN INGRESSO, CONTROLLA CHE SIA "
+            "SPEDITO: deve comparire fra le COPY del Dockerfile e finire dentro l'immagine. "
+            "«Sta sul disco» NON basta, ed e' l'errore del 2026-08-17 (app.py). Se l'ingresso "
+            "e' spedito, allora `raggiungibilita.py` deve partire anche da li'.\n"
+            "        Accusati a torto: %r" % (accusati,))
 
     def test_LO_STRUMENTO_DICHIARA_DA_DOVE_PARTE(self):
         """Un attrezzo che misura dichiara cosa NON ha esaminato (D18 punto 3). Qui la cosa
@@ -6650,11 +6704,16 @@ class TestNessunRiferimentoGREZZOEntraNelREGISTRO(unittest.TestCase):
     usa gia' per la copertura («soglia a cricchetto»).
     """
 
-    # ⛔ MISURATO IL 2026-08-18, non stimato: `python - <<` con l'albero sintattico su
-    # `fase83_server.py`, dopo aver ripulito le 5 righe nuove della richiesta #66.
     # ⛔ QUESTO NUMERO PUO' SOLO SCENDERE. Se sale, qualcuno ha aggiunto una riga di registro
     # con un riferimento grezzo: si ripara la riga, non si alza il tetto.
-    TETTO = 32
+    #
+    # 32 -> 0 il 2026-08-18. Il tetto era nato la notte prima come debito dichiarato:
+    # «ripararli tutti di notte, su codice che muove denaro, sarebbe stato peggio del
+    # difetto». Il giorno dopo sono stati chiusi tutti e trentadue, uno per uno con
+    # l'editor, e il conto e' stato rifatto dalla macchina invece che da me. Da qui in
+    # avanti il cricchetto e' un CANCELLO: nessuna riga di registro puo' piu' scrivere un
+    # riferimento grezzo, e la prima che ci prova diventa rossa.
+    TETTO = 0
     NOMI_GREZZI = {"riferimento", "rif", "ref", "riferimento_id"}
 
     def _scoperti(self):

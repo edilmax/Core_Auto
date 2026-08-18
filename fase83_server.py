@@ -32,6 +32,7 @@ SOPRAVVIVENZA TOTALE: il router NON solleva MAI (eccezione -> 500); body JSON in
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import re
@@ -47,6 +48,12 @@ logger = logging.getLogger("core_auto.server")
 # piu' largo perche' altre strade usano prefissi (`reblock:`, `cancel_`), ma MAI spazi,
 # a-capo o byte di controllo: e' quello il punto.
 _RIFERIMENTO_VALIDO = re.compile(r"\A[A-Za-z0-9:_.-]{1,64}\Z")
+
+
+# ⛔ UN MARCATORE SOLO per tutto cio' che non e' un indirizzo. Il fatto che sia UNO e' la
+# difesa: se ogni spazzatura producesse una chiave diversa, il limite di frequenza
+# resterebbe aggirabile cambiando intestazione a ogni richiesta (vedi `_client_ip`).
+IP_NON_VALIDO = "ip_non_valido"
 
 
 def _rif_per_registro(rif: Any) -> str:
@@ -77,6 +84,32 @@ def _rif_per_registro(rif: Any) -> str:
     # Guardie: `TestLaPuliziaDelRegistroDEVEESSEREVISIBILEACHIANALIZZA` (test_pipeline_ci).
     pulito = pulito.replace("\r\n", "").replace("\n", "")
     return pulito or "riferimento_vuoto_o_illeggibile"
+
+
+def _testo_per_registro(testo: Any, tetto: int = 200) -> str:
+    """Il FRATELLO MORBIDO di `_rif_per_registro`, per il testo scritto da una persona.
+
+    ⛔ PERCHE' NON BASTA QUELLO SEVERO, e serve dirlo perche' la tentazione e' usare uno
+    strumento solo: `_rif_per_registro` tiene **solo** lettere, cifre e quattro segni. Su un
+    identificativo e' perfetto; su una frase (il motivo di un kill-switch, il messaggio di
+    errore che torna da Stripe) cancella spazi e punteggiatura e produce una parola sola,
+    illeggibile **proprio nel momento in cui la si va a leggere** -- cioe' quando i soldi si
+    sono fermati. Una difesa che rende inutile il registro non e' una difesa: e' lo stesso
+    danno con un altro nome.
+
+    Qui invece il testo resta leggibile e gli a-capo diventano VISIBILI (`\\n` scritto come
+    due caratteri): chi legge vede che c'era un a-capo, ma quell'a-capo non puo' piu'
+    fabbricare una riga di registro nuova.
+
+    ⛔ E' la stessa forma gia' in uso in `app.py` (`_sanitize_log`), che CodeQL riconosce
+    come barriera: misurato il 2026-08-18, su quella riga di registro l'analizzatore segnala
+    `_client_ip()` e `request.path` ma **non** l'User-Agent, che e' l'unico che ci passa
+    dentro. La prova che la forma funziona non e' un'opinione, e' un allarme che non c'e'.
+    Guardie: `TestIlTestoLiberoRESTALEGGIBILEMaNonPuoFabbricareRIGHE` (test_fase83_server).
+    """
+    s = str(testo)
+    s = s.replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\r")
+    return s[:tetto] or "testo_vuoto"
 
 
 # Stringhe UI per il frontend (chrome), multilingua. Fallback -> 'en' -> chiave.
@@ -4092,7 +4125,8 @@ class RouterHTTP:
         motivo = str(dati.get("motivo", ""))[:200]
         ok = bg.imposta(attivo, motivo=motivo, chi="super-admin")
         logger.critical("KILL-SWITCH GLOBALE %s | motivo=%s",
-                        "ATTIVATO (freeze soldi)" if attivo else "disattivato", motivo or "-")
+                        "ATTIVATO (freeze soldi)" if attivo else "disattivato",
+                        _testo_per_registro(motivo or "-"))
         st = bg.stato()
         return (200 if ok else 500), {**st, "impostato": ok}
 
@@ -4387,7 +4421,7 @@ class RouterHTTP:
                          "da restituire A MANO dal pannello Stripe")
             _falliti.append("soldi_restituiti")
             logger.error("RIMBORSO: prenotazione %s risulta PAGATA ma senza stripe_pi: i soldi "
-                         "vanno restituiti a mano", rif)
+                         "vanno restituiti a mano", _rif_per_registro(rif))
         elif _falliti:
             _rimborso = ("NON tentato: i passi di sicurezza non sono riusciti (%s), l'host "
                          "potrebbe essere gia' stato pagato" % ", ".join(_falliti))
@@ -4406,19 +4440,21 @@ class RouterHTTP:
                 if isinstance(_es, dict) and _es.get("ok"):
                     _rimborso = "eseguito (%s)" % (_es.get("id") or "")
                     logger.info("RIMBORSO ESEGUITO rif=%s importo=%d %s stripe=%s",
-                                rif, _tot, _valuta, _es.get("id") or "")
+                                _rif_per_registro(rif), _tot, _valuta,
+                                _es.get("id") or "")
                 else:
                     motivo = (_es or {}).get("motivo") if isinstance(_es, dict) else "risposta_non_dict"
                     _rimborso = "NON eseguito (%s): da restituire A MANO" % motivo
                     _falliti.append("soldi_restituiti")
                     logger.error("RIMBORSO FALLITO rif=%s importo=%d %s -> %s",
-                                 rif, _tot, _valuta, motivo)
+                                 _rif_per_registro(rif), _tot, _valuta,
+                                 _testo_per_registro(motivo))
         if _falliti:
             # Le date SONO libere (il rilascio e' riuscito, e' la prima cosa che si fa), ma i
             # passi che mettono in sicurezza i soldi e la PORTA no: va detto, non taciuto.
             logger.error("RIMBORSO ADMIN INCOMPLETO rif=%s passi FALLITI=%r -> rischio PERDITA "
                          "PIENA (host pagato + ospite rimborsato) e/o smart-pass ancora valido",
-                         rif, _falliti)
+                         _rif_per_registro(rif), _falliti)
         return 200, {"stato": "rimborsato", "date_liberate": True,
                      "idempotente": bool(getattr(e, "idempotente", False)),
                      "passi_falliti": _falliti,
@@ -5315,7 +5351,8 @@ class RouterHTTP:
                                                        "prova_firmata": bool(dati.get("quote_token"))}])
             if _neg or _senza_prova:
                 logger.error("INVARIANTE VIOLATO al finalizza %s (negativi=%r, senza_prova=%r) "
-                             "-> BLOCCO scrittura DB", ref, _neg, _senza_prova)
+                             "-> BLOCCO scrittura DB", _rif_per_registro(ref), _neg,
+                             _senza_prova)
                 return {"stato": "rifiutata", "motivo": "invariante_violato", "riferimento": ref}
         except ImportError:
             # `pass` qui rendeva la sparizione INVISIBILE: una rinomina in fase199 spegneva
@@ -5644,7 +5681,8 @@ class RouterHTTP:
                 if not nuovo:
                     # FAIL-SAFE: niente conferma senza un link di pagamento valido. La
                     # richiesta RESTA in_attesa_host: l'host può ricliccare tra poco.
-                    logger.error("approvazione %s: link pagamento NON creato -> riprovare", ref)
+                    logger.error("approvazione %s: link pagamento NON creato -> riprovare",
+                             _rif_per_registro(ref))
                     return 503, {"errore": "pagamento_non_disponibile"}
                 corpo["payment_url"] = nuovo
                 hold_sec = HOLD_APPROVAZIONE_SEC
@@ -5753,7 +5791,8 @@ class RouterHTTP:
             logger.error("HOLD PAGAMENTO NON REGISTRATO per %s: la prenotazione prosegue "
                          "ma senza il record dei pendenti, quindi un'eventuale "
                          "cancellazione NON lascera' traccia del rimborso dovuto -> "
-                         "verificare a mano questa prenotazione", ref, exc_info=True)
+                         "verificare a mano questa prenotazione",
+                         _rif_per_registro(ref), exc_info=True)
 
     def _apri_garanzia(self, ref, netto_host_cents, allog, ci):
         try:
@@ -5775,7 +5814,7 @@ class RouterHTTP:
             # che rende questo guasto visibile invece che invisibile per sempre.
             logger.error("CASSAFORTE NON APERTA per %s: la prenotazione prosegue ma l'ospite "
                          "NON e' protetto e l'host non e' trattenuto -> intervenire a mano",
-                         ref, exc_info=True)
+                         _rif_per_registro(ref), exc_info=True)
 
     def _registra_payout(self, ref, allog, corpo):
         """Registra l'incasso ATTESO dell'host (stato 'maturato') nella dashboard payout
@@ -5901,8 +5940,8 @@ class RouterHTTP:
                 # nostro nemmeno lui, e finisce nella stessa riga di registro.
                 logger.warning("costo gateway NON LETTO su %s: %s — il prospetto lo contera' "
                                "fra gli sconosciuti, non fra i costi", _rif,
-                               _rif_per_registro((esito or {}).get("motivo")
-                                                 or "motivo assente"))
+                               _testo_per_registro((esito or {}).get("motivo")
+                                                   or "motivo assente"))
                 return
             fee = int(esito.get("fee_cents") or 0)
             fc.costo_gateway(riferimento=str(riferimento), soggetto="host:" + str(host_id),
@@ -6112,17 +6151,20 @@ class RouterHTTP:
                 _rp = pd.info(rif)
                 if _rp is None or int(_rp.get("minori") or 0) <= 0:
                     logger.warning("PAYOUT GIA' COMPENSATO/ASSENTE | RIF: %s | HOST_ID: %s"
-                                   " | nessun bonifico da inviare", rif, host_id)
+                                   " | nessun bonifico da inviare",
+                                   _rif_per_registro(rif), host_id)
                     return
                 if int(_rp["minori"]) != int(importo_cents):
                     logger.warning("IMPORTO RIALLINEATO AL LEDGER | RIF: %s | richiesto %d"
-                                   " -> ledger %d cents (offset/riscossione)", rif,
+                                   " -> ledger %d cents (offset/riscossione)",
+                                   _rif_per_registro(rif),
                                    int(importo_cents), int(_rp["minori"]))
                 importo_cents = int(_rp["minori"])
             if self._verifica_payout_bloccato(host_id):
                 import datetime as _dtv
                 logger.warning("PAYOUT_HOLD_TRIGGERED | HOST_ID: %s | RIF: %s | IMPORTO: %d"
-                               " | MOTIVO: VERIFICA_REVOCATA | DATA: %s", host_id, rif,
+                               " | MOTIVO: VERIFICA_REVOCATA | DATA: %s", host_id,
+                               _rif_per_registro(rif),
                                int(importo_cents),
                                _dtv.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%SZ"))
                 return                     # resta 'maturato': si sblocca alla ri-verifica
@@ -6136,7 +6178,8 @@ class RouterHTTP:
                 import datetime as _dt
                 logger.warning("PAYOUT_HOLD_TRIGGERED | HOST_ID: %s | RIF: %s | IMPORTO: %d | "
                                "MOTIVO: MANCANZA_DATI_FISCALI (%s) | DATA: %s",
-                               host_id, rif, int(importo_cents), ",".join(manca),
+                               host_id, _rif_per_registro(rif), int(importo_cents),
+                               ",".join(manca),
                                _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%SZ"))
                 return
             import json as _jt
@@ -6149,7 +6192,7 @@ class RouterHTTP:
                 if pd is not None:
                     pd.aggiorna_stato(rif, "in_transito")     # soldi partiti verso l'host
                 logger.info("Connect: transfer %s -> host %s (%d %s) per %s",
-                            tid, host_id, importo_cents, valuta, rif)
+                            tid, host_id, importo_cents, valuta, _rif_per_registro(rif))
                 # SCATOLA NERA: il bonifico e' partito -> riga immutabile e datata (risponde
                 # per sempre a "ma il bonifico e' stato inviato?", anche dopo N deploy).
                 self._giornale(tipo="payout_host", riferimento=rif,
@@ -6168,7 +6211,7 @@ class RouterHTTP:
             else:
                 logger.error("BONIFICO MANUALE RICHIESTO: transfer Connect fallito per '%s' "
                              "(%d %s a %s). Il payout resta tracciato.",
-                             rif, importo_cents, valuta, acct)
+                             _rif_per_registro(rif), importo_cents, valuta, acct)
                 # ANCHE il fallimento va nel giornale: e' ESATTAMENTE lo scenario "non ho
                 # ricevuto il bonifico" -> resta la prova che si e' tentato e serve il manuale.
                 self._giornale(tipo="payout_manuale", riferimento=rif,
@@ -6242,7 +6285,8 @@ class RouterHTTP:
                 logger.error("HOST CANCELLA BLOCCATA | RIF: %s | escrow '%s' gia' liquidato "
                              "all'host per %d: rimborsare il cliente qui sarebbe una perdita "
                              "a nostro carico. Serve l'assistenza (arbitrato/recupero).",
-                             ref, _st.get("stato"), int(_st.get("host_riceve_cents", 0) or 0))
+                             _rif_per_registro(ref), _st.get("stato"),
+                             int(_st.get("host_riceve_cents", 0) or 0))
                 return 409, {"errore": "escrow_gia_liquidato",
                              "gia_liquidato_cents": int(_st.get("host_riceve_cents", 0) or 0),
                              "nota": "il soggiorno risulta gia' confermato e il pagamento "
@@ -6292,7 +6336,8 @@ class RouterHTTP:
                 payout=getattr(self._sys, "payout", None))
             if esito_fin is None:
                 logger.error("host cancella %s: GIORNALE non scrivibile, 503 (la "
-                             "riasserzione dello sweeper completera')", ref)
+                             "riasserzione dello sweeper completera')",
+                             _rif_per_registro(ref))
                 return 503, {"errore": "registro_contabile_non_disponibile"}
         try:
             self._sys.inventario.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"],
@@ -6316,7 +6361,7 @@ class RouterHTTP:
                            importo_cents=int(guest), valuta=valuta,
                            causale="rimborso 100% per cancellazione host")
         logger.info("HOST ha cancellato %s: cliente rimborso %d, penale host %d %s",
-                    ref, guest if pagata else 0, penale, valuta)
+                    _rif_per_registro(ref), guest if pagata else 0, penale, valuta)
         corpo_ok = {"stato": "cancellata_host", "riferimento": ref,
                     "rimborso_cliente_cents": (guest if pagata else 0),
                     "penale_host_cents": penale, "valuta": valuta,
@@ -6678,7 +6723,8 @@ class RouterHTTP:
             # registro ogni giorno: e' cio' che rende il guasto visibile entro 24h.
             logger.error("CASSAFORTE NON CHIUSA sulla cancellazione di %s: l'escrow resta "
                          "aperto e puo' pagare l'host di una prenotazione cancellata "
-                         "(PERDITA PIENA) -> chiuderlo a mano", rif, exc_info=True)
+                         "(PERDITA PIENA) -> chiuderlo a mano",
+                         _rif_per_registro(rif), exc_info=True)
         # TETTO DI CASSA (bug PROVATO 2026-07-28, test_escrow_gia_liquidato): la cancellazione
         # ricalcolava il rimborso dalla SOLA politica, senza guardare se l'escrow era gia' stato
         # liquidato. Cammino: paga -> preme "tutto ok" (escrow 'rilasciato' + bonifico Connect
@@ -6695,7 +6741,8 @@ class RouterHTTP:
             if int(r.get("rimborso_cents", 0)) > tetto:
                 logger.error("RIMBORSO TAGLIATO AL TETTO DI CASSA | RIF: %s | politica avrebbe "
                              "reso %d | gia' liquidato dall'escrow %d | incassato %d | reso %d",
-                             rif, int(r.get("rimborso_cents", 0)), gia_uscito, pagato, tetto)
+                             _rif_per_registro(rif), int(r.get("rimborso_cents", 0)),
+                             gia_uscito, pagato, tetto)
                 r = dict(r)
                 r["rimborso_cents"] = tetto
                 r["trattenuto_cents"] = pagato - tetto
@@ -6735,7 +6782,8 @@ class RouterHTTP:
             # GIA' CANCELLATA -> soldi incassati per una stanza che abbiamo liberato.
             logger.error("PENDENTE NON INVALIDATO sulla cancellazione di %s: il link di "
                          "pagamento resta VIVO e un pagamento tardivo puo' resuscitare la "
-                         "prenotazione -> invalidarlo a mano", rif, exc_info=True)
+                         "prenotazione -> invalidarlo a mano",
+                         _rif_per_registro(rif), exc_info=True)
         # CREDITO VIAGGIO ANTI-RIMPIANTO: se hai perso qualcosa, una parte torna come credito
         # (non-cashabile, riscattabile su una prossima prenotazione; ci costa solo margine futuro).
         # la tassa di soggiorno (pass-through) si rimborsa SEMPRE per intero: niente soggiorno = niente tassa
@@ -6779,7 +6827,7 @@ class RouterHTTP:
                 logger.error("RIMBORSO DOVUTO NON REGISTRATO NEI CONTI | rif %s | %d "
                              "cents promessi all'ospite via email: registrarlo A MANO dal "
                              "pannello, o quei soldi non risultano dovuti da nessuna parte",
-                             rif, rimborso_totale)
+                             _rif_per_registro(rif), rimborso_totale)
         # il credito nasce dal trattenuto ORIGINALE della politica: il taglio anti-perdita
         # (tetto di cassa) non deve MAI coniare Credito Viaggio nuovo dal nulla.
         cv_cents, cv_token = self._credito_anti_rimpianto(tratt_originale,
@@ -6870,9 +6918,10 @@ class RouterHTTP:
             stato = res.get("stato") if isinstance(res, dict) else "fallito"
             if stato == "riuscito":
                 logger.warning("PENALE STRUTTURA addebitata | rif %s | %d cents (prima notte)",
-                               rif, penale)
+                               _rif_per_registro(rif), penale)
             else:
-                logger.error("PENALE STRUTTURA non riuscita | rif %s | stato=%s", rif, stato)
+                logger.error("PENALE STRUTTURA non riuscita | rif %s | stato=%s",
+                             _rif_per_registro(rif), stato)
             return {"applicata": stato == "riuscito", "importo_cents": penale, "stato": stato,
                     "motivo": (res.get("motivo", "") if isinstance(res, dict) else "")}
         except Exception:
@@ -7671,7 +7720,8 @@ class RouterHTTP:
                     pp_.salva_stripe_session(rif, cs_id, pi_id)
             except Exception:
                 logger.warning("salvataggio cs_ fallito (ISOLATO)", exc_info=True)
-            logger.info("Stripe: pagamento CONFERMATO per riferimento '%s'", rif)
+            logger.info("Stripe: pagamento CONFERMATO per riferimento '%s'",
+                        _rif_per_registro(rif))
             self._conferma_pagamento(rif)
         elif str(tipo).startswith("identity.verification_session."):
             # STRIPE IDENTITY (Incr.11): il webhook porta l'ESITO (mai il documento).
@@ -7888,7 +7938,8 @@ class RouterHTTP:
             # libera le date tra lettura e scrittura -> pagato senza stanza garantita.
             rec = pp.conferma(rif) if pp is not None else None
             if rec is None:
-                logger.warning("pagamento per riferimento sconosciuto '%s' (ignorato)", rif)
+                logger.warning("pagamento per riferimento sconosciuto '%s' (ignorato)",
+                               _rif_per_registro(rif))
                 return
             stato = rec.get("stato", "")
             if stato == "pagato":
@@ -7915,7 +7966,8 @@ class RouterHTTP:
             if stato not in ("in_attesa", "scaduto"):
                 logger.error("RIMBORSARE: pagamento ricevuto per '%s' in stato '%s' (non "
                              "confermabile: prenotazione cancellata/non approvata). Rimborsare "
-                             "manualmente dal dashboard Stripe.", rif, stato)
+                             "manualmente dal dashboard Stripe.",
+                             _rif_per_registro(rif), stato)
                 # SCATOLA NERA DEL RIMBORSO. I soldi sono arrivati per una prenotazione che
                 # non si può onorare: vanno restituiti per intero. Senza questa riga il
                 # cliente non entra nella lista dei rimborsi dovuti (che nasce dal giornale)
@@ -7960,7 +8012,8 @@ class RouterHTTP:
                 if not getattr(esito, "ok", False):
                     logger.error("RIMBORSARE: pagamento tardivo su stanza già presa - rif '%s' "
                                  "(alloggio %s %s->%s). Il cliente va rimborsato.",
-                                 rif, rec.get("alloggio_id"), rec.get("check_in"), rec.get("check_out"))
+                                 _rif_per_registro(rif), rec.get("alloggio_id"),
+                                 rec.get("check_in"), rec.get("check_out"))
                     try:
                         pp.marca_da_rimborsare(rif)
                     except Exception:
@@ -8051,7 +8104,8 @@ class RouterHTTP:
             if not getattr(esito, "ok", False):
                 logger.error("RIMBORSARE anticipo: pagamento tardivo su stanza gia' presa - "
                              "rif '%s' (alloggio %s %s->%s). Rimborsare l'anticipo.",
-                             rif, rec.get("alloggio_id"), rec.get("check_in"), rec.get("check_out"))
+                             _rif_per_registro(rif), rec.get("alloggio_id"),
+                             rec.get("check_in"), rec.get("check_out"))
                 try:
                     pp = getattr(self._sys, "pagamenti_pendenti", None)
                     if pp is not None:
@@ -8119,14 +8173,16 @@ class RouterHTTP:
                     # servono l'host e i centesimi esatti.
                     logger.error("CREDITO REFERRAL PERSO: host %s, %d cent gia' scalati dal suo "
                                  "credito ma NON applicati alla commissione di %s -> "
-                                 "restituirglieli a mano", host_id, used, ref, exc_info=True)
+                                 "restituirglieli a mano", host_id, used,
+                                 _rif_per_registro(ref), exc_info=True)
                     return 0
                 logger.info("Credito referral scalato: host %s -%d di commissione su %s",
-                            host_id, used, ref)
+                            host_id, used, _rif_per_registro(ref))
             return used
         except Exception:
             logger.error("APPLICAZIONE CREDITO HOST FALLITA per %s su %s: l'host potrebbe non "
-                         "aver ricevuto lo sconto che gli spetta", host_id, ref, exc_info=True)
+                         "aver ricevuto lo sconto che gli spetta", host_id,
+                         _rif_per_registro(ref), exc_info=True)
             return 0
 
     def _forse_qualifica_referral(self, host_id, pd):
@@ -8170,12 +8226,55 @@ class RouterHTTP:
     # --- rotte host ---
     @staticmethod
     def _client_ip(headers):
-        """IP reale dell'host dietro nginx (X-Forwarded-For ha priorita', primo hop)."""
+        """IP reale dell'host dietro nginx (X-Forwarded-For ha priorita', primo hop).
+
+        ⛔⛔ UN INDIRIZZO IP E' UNA FORMA, NON TESTO LIBERO — e fino al 2026-08-18 questa
+        funzione restituiva **qualunque cosa** ci fosse nell'intestazione, troncata a 64
+        caratteri. Il punto e' che quel valore **lo sceglie chi chiama**: nginx AGGIUNGE il
+        proprio in coda (`proxy_add_x_forwarded_for`), quindi il primo elemento -- proprio
+        quello che prendiamo qui -- arriva dal client.
+
+        Misurato sui 31 usi di questa funzione, finiva in tre posti, e solo il primo e' un
+        problema di registro:
+          1. una trentina di righe di `logger` (righe di allarme FALSE fabbricate proprio
+             dove il Guardiano `fase186` cerca i guasti sui soldi);
+          2. la **chiave dei limiti di frequenza** (`ip = self._client_ip(headers)`): con un
+             valore diverso a ogni richiesta si finiva in un secchiello nuovo ogni volta,
+             cioe' **il limite si aggirava cambiando intestazione**;
+          3. gli **estratti fiscali e legali** (`genera_estratto_csv(ip=...)`, report DAC7):
+             testo scelto da un estraneo dentro un documento che ha valore legale.
+
+        ✅ Adesso la forma si convalida con `ipaddress` (libreria standard: e' il pezzo che
+        sa davvero cos'e' un indirizzo, IPv4 e IPv6, meglio di qualunque espressione
+        regolare che scriverei io). Cio' che non e' un indirizzo diventa UN MARCATORE SOLO --
+        e il fatto che sia **uno solo** e' proprio cio' che chiude il punto 2: due
+        spazzature diverse non possono piu' produrre due chiavi diverse.
+
+        ⛔ Comportamento invariato per tutto cio' che e' legittimo: un IP vero esce identico,
+        la catena di proxy continua a dare il primo elemento, e «nessuna intestazione»
+        continua a rispondere stringa vuota (assenza di informazione, non attacco).
+        Guardie: `TestLIndirizzoDiChiChiamaEUnaFORMANonTestoLibero` (test_fase83_server.py),
+        viste rosse prima -- 14 rossi, fra cui una riga di registro fabbricata.
+        """
         h = headers or {}
         xff = h.get("X-Forwarded-For") or h.get("x-forwarded-for") or ""
         if xff:
-            return xff.split(",")[0].strip()[:64]
-        return (h.get("X-Real-IP") or h.get("x-real-ip") or "")[:64]
+            grezzo = xff.split(",")[0].strip()[:64]
+        else:
+            grezzo = (h.get("X-Real-IP") or h.get("x-real-ip") or "")[:64]
+        if not grezzo:
+            return ""
+        try:
+            ipaddress.ip_address(grezzo)
+        except ValueError:
+            return IP_NON_VALIDO
+        # ⛔ RIDONDANTE DOPO LA CONVALIDA, NECESSARIA PER CHI SORVEGLIA: un indirizzo che ha
+        # passato `ip_address` non contiene a-capo per costruzione, ma CodeQL riconosce come
+        # barriera UNA SOLA forma (`ReplaceLineBreaksSanitizer`, in
+        # `LogInjectionCustomizations.qll` di `github/codeql`). Senza questa riga le trenta
+        # righe di registro qui sotto restano segnalate a difesa perfetta. Stessa scelta, e
+        # stesso motivo, di `_rif_per_registro`.
+        return grezzo.replace("\r\n", "").replace("\n", "")
 
     @staticmethod
     def _user_agent(headers):
@@ -10239,7 +10338,8 @@ def sweep_hold_una_passata(sistema: Any, router: Any) -> None:
                         riferimento=rif, host_id=str(rec.get("host_id") or ""),
                         penale_cents=pen, valuta=str(dj.get("valuta") or "EUR"),
                         payout=getattr(sistema, "payout", None))
-                    logger.warning("riasserzione penale %s: ND emessa dallo sweeper", rif)
+                    logger.warning("riasserzione penale %s: ND emessa dallo sweeper",
+                                   _rif_per_registro(rif))
         except Exception:
             logger.warning("riasserzione penali fallita (ignorata)", exc_info=True)
     except Exception:

@@ -13,6 +13,7 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import (
     RouterHTTP, crea_router, percorso_statico_sicuro,
     jsonld_alloggio, pagina_alloggio_html, sitemap_xml, robots_txt, _importo,
+    _testo_per_registro,
 )
 
 SEG = b"0123456789abcdef0123456789abcdef"
@@ -967,6 +968,163 @@ class TestRobustezza(unittest.TestCase):
                 r.gestisci(m, p or "/api/x", {}, b)
             except Exception as e:  # pragma: no cover
                 self.fail(f"sollevato su {m} {p}: {e}")
+
+
+class TestLIndirizzoDiChiChiamaEUnaFORMANonTestoLibero(unittest.TestCase):
+    """🕵️ CHI CHIAMA SCEGLIE IL PROPRIO INDIRIZZO, E QUEL VALORE FINISCE NEI DOCUMENTI FISCALI.
+
+    **Il fatto, misurato il 2026-08-18.** `RouterHTTP._client_ip` prende il primo elemento
+    di `X-Forwarded-For` e lo restituisce **cosi' com'e'**, troncato a 64 caratteri. Nessun
+    controllo di forma. Ma nginx **aggiunge in coda** il proprio valore a quello che arriva
+    dal client (`proxy_add_x_forwarded_for`), quindi il PRIMO elemento -- proprio quello che
+    prendiamo noi -- lo scrive **chi chiama**.
+
+    ⛔ E non e' un problema di registro soltanto. Quel valore, misurato sui 31 usi nel file:
+      1. **il registro** (una trentina di righe) -- si fabbricano righe di allarme false
+         proprio dove il Guardiano (fase186) cerca i guasti sui soldi;
+      2. **il conteggio dei limiti di frequenza** (`ip = self._client_ip(headers)`) -- e
+         questo e' il peggiore: cambiando intestazione a ogni richiesta si finisce in un
+         secchiello nuovo ogni volta, cioe' **il limite si aggira**;
+      3. **gli estratti fiscali e legali** (`genera_estratto_csv(ip=...)`, il report DAC7) --
+         testo scelto da un estraneo dentro un documento che ha valore legale.
+
+    💡 **La riparazione giusta e' una sola per tutt'e tre: un indirizzo IP e' una FORMA, non
+    testo libero.** Si convalida con `ipaddress` della libreria standard; se non e' un
+    indirizzo, si restituisce un **marcatore fisso** invece delle parole dell'estraneo. Per
+    ogni indirizzo legittimo il comportamento resta identico: cambia solo sul percorso
+    d'attacco, e nel verso giusto.
+
+    ⛔ E il marcatore dev'essere **UNO SOLO** per tutti i valori inventati: e' quello che
+    chiude il buco n.2. Se due spazzature diverse producessero due chiavi diverse, il limite
+    di frequenza resterebbe aggirabile esattamente come prima.
+    """
+
+    def _ip(self, valore):
+        return RouterHTTP._client_ip({"X-Forwarded-For": valore})
+
+    VERI = ("203.0.113.9", "8.8.8.8", "127.0.0.1", "2001:db8::1", "::1",
+            "::ffff:203.0.113.9", "fe80::1")
+
+    INVENTATI = ("unknown", "203.0.113.9 FALSO", "'; DROP TABLE prenotazioni; --",
+                 "<script>alert(1)</script>", "999.999.999.999", "A" * 300,
+                 "203.0.113.9\nERROR:core_auto.server:RIMBORSO MAI PARTITO",
+                 "203.0.113.9\r\nCRITICAL: cassa a zero", "%s%r{}", "../../etc/passwd")
+
+    def test_UN_INDIRIZZO_VERO_PASSA_INTATTO(self):
+        """Il metro prima del muro: se la convalida storpiasse gli indirizzi buoni, il
+        rimedio sarebbe peggio del male (i registri e i limiti perderebbero senso)."""
+        for buono in self.VERI:
+            with self.subTest(ip=buono):
+                self.assertEqual(
+                    buono, self._ip(buono),
+                    "un indirizzo legittimo non deve cambiare: la convalida serve a togliere "
+                    "il testo inventato, non a riscrivere i dati veri")
+
+    def test_UN_VALORE_INVENTATO_NON_ARRIVA_MAI_INTATTO(self):
+        for finto in self.INVENTATI:
+            with self.subTest(valore=finto[:40]):
+                uscita = self._ip(finto)
+                self.assertNotIn(
+                    finto.strip()[:20], uscita,
+                    "il testo scelto da chi chiama e' arrivato fino in fondo: da li' si "
+                    "fabbricano righe di registro false e si scrive dentro gli estratti "
+                    "fiscali (uscita: %r)" % (uscita,))
+
+    def test_NESSUN_A_CAPO_PUO_USCIRE_DA_QUI(self):
+        """L'invariante che chiude il log-injection alla sorgente, per tutte e trenta le
+        righe di registro in un colpo solo."""
+        for finto in self.INVENTATI + self.VERI:
+            with self.subTest(valore=finto[:40]):
+                uscita = self._ip(finto)
+                self.assertEqual(
+                    len(uscita.splitlines()), 1,
+                    "da un solo indirizzo sono uscite %d righe (%r): il registro si puo' "
+                    "ancora falsificare" % (len(uscita.splitlines()), uscita))
+
+    def test_DUE_SPAZZATURE_DIVERSE_FINISCONO_NELLO_STESSO_SECCHIELLO(self):
+        """⛔ LA GUARDIA DEL BUCO PIU' GRAVE. Il limite di frequenza conta per chiave: se
+        ogni valore inventato producesse una chiave diversa, basterebbe cambiare
+        intestazione a ogni richiesta per non essere mai contati."""
+        chiavi = {self._ip(v) for v in self.INVENTATI}
+        self.assertEqual(
+            1, len(chiavi),
+            "valori inventati diversi producono %d chiavi diverse (%r): il limite di "
+            "frequenza si aggira cambiando intestazione a ogni richiesta"
+            % (len(chiavi), sorted(chiavi)[:5]))
+
+    def test_SENZA_INTESTAZIONE_NON_SI_INVENTA_NIENTE(self):
+        """Nessuna intestazione non e' un attacco: e' assenza di informazione, e va detta
+        com'e'. Cambiare anche questo comportamento allargherebbe la riparazione oltre il
+        difetto (regola ferrea 15)."""
+        self.assertEqual("", RouterHTTP._client_ip({}))
+        self.assertEqual("", RouterHTTP._client_ip(None))
+
+    def test_LA_CATENA_DEI_PROXY_PRENDE_IL_PRIMO_E_LO_CONVALIDA(self):
+        """`X-Forwarded-For` puo' contenere piu' indirizzi separati da virgola: si continua a
+        prendere il primo (comportamento invariato), ma passa dalla stessa convalida."""
+        self.assertEqual("203.0.113.9", self._ip("203.0.113.9, 10.0.0.1, 172.16.0.1"))
+        self.assertNotIn("cattivo", self._ip("cattivo, 10.0.0.1"))
+
+
+class TestIlTestoLiberoRESTALEGGIBILEMaNonPuoFabbricareRIGHE(unittest.TestCase):
+    """✍️ IL SECONDO RIMEDIO, E PERCHE' NON BASTAVA IL PRIMO.
+
+    `_rif_per_registro` tiene **solo** lettere, cifre e quattro segni: perfetto per un
+    identificativo, disastroso per una frase. Il motivo scritto a mano in un kill-switch, o
+    il messaggio che torna da Stripe quando un rimborso fallisce, diventerebbero una parola
+    unica e illeggibile **proprio nel momento in cui li si va a leggere** -- cioe' quando i
+    soldi si sono fermati. Una difesa che rende inutile il registro non e' una difesa.
+
+    Quindi `_testo_per_registro`: il testo resta leggibile, gli a-capo diventano **visibili**
+    (`\\n` scritto come due caratteri). Chi legge vede che c'era un a-capo; quell'a-capo non
+    puo' piu' aprire una riga nuova.
+
+    ⛔ Le due guardie sono complementari e servono tutt'e due: una pretende che il veleno non
+    passi, l'altra che il messaggio resti leggibile. Con la sola prima, il modo piu' semplice
+    di passarla sarebbe restituire sempre stringa vuota.
+    """
+
+    VELENI = ("motivo\nERROR:core_auto.server:RIMBORSO MAI PARTITO",
+              "motivo\r\nCRITICAL: cassa a zero",
+              "riga1\rriga2", "a\n" * 50)
+
+    def test_NESSUN_A_CAPO_SOPRAVVIVE(self):
+        for veleno in self.VELENI:
+            with self.subTest(valore=veleno[:30]):
+                uscita = _testo_per_registro(veleno)
+                self.assertEqual(
+                    1, len(uscita.splitlines()),
+                    "da un solo motivo sono uscite %d righe: il registro si puo' ancora "
+                    "falsificare (%r)" % (len(uscita.splitlines()), uscita))
+
+    def test_IL_MESSAGGIO_RESTA_LEGGIBILE(self):
+        """⛔ La meta' che si dimentica sempre. Senza questa, «restituisci stringa vuota»
+        passerebbe la guardia qui sopra a pieni voti."""
+        vero = "carta rifiutata dall'emittente (insufficient_funds), riprovare piu' tardi"
+        self.assertEqual(
+            vero, _testo_per_registro(vero),
+            "un messaggio innocuo e' stato storpiato: chi legge il registro dopo un guasto "
+            "sui soldi deve poterlo capire")
+        misto = "rimborso fallito\nmotivo: fondi insufficienti"
+        uscita = _testo_per_registro(misto)
+        self.assertIn("fondi insufficienti", uscita,
+                      "il testo dopo l'a-capo e' sparito: si e' persa l'informazione, non "
+                      "solo l'a-capo")
+        self.assertIn("\\n", uscita,
+                      "l'a-capo dev'essere VISIBILE, non cancellato in silenzio: chi legge "
+                      "deve sapere che qualcuno ci aveva messo un a-capo")
+
+    def test_IL_TESTO_LUNGO_VIENE_TRONCATO(self):
+        self.assertEqual(200, len(_testo_per_registro("A" * 5000)))
+        self.assertEqual(20, len(_testo_per_registro("A" * 5000, tetto=20)))
+
+    def test_UN_MOTIVO_VUOTO_NON_PRODUCE_UNA_RIGA_MUTA(self):
+        for vuoto in ("", None):
+            with self.subTest(valore=vuoto):
+                self.assertTrue(
+                    _testo_per_registro(vuoto).strip(),
+                    "da %r e' uscita una riga di registro senza motivo: illeggibile quanto "
+                    "una falsa" % (vuoto,))
 
 
 if __name__ == "__main__":

@@ -76,7 +76,23 @@ RADICE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # `test_pipeline_ci.TestLaRaggiungibilitaNONPuoGuardareUnIngressoSOLO` non si fida piu' di
 # questo elenco: lo confronta con le `COPY` e il `CMD` del Dockerfile, e diventa rossa se
 # qui dentro compare un file che l'immagine non spedisce.
-INGRESSI = ("main_casavip.py", "fase83_server.py")
+INGRESSI = ("main_casavip.py",)
+
+# ⛔⛔ E PERCHE' UNO SOLO, dopo che il 2026-08-17 la lezione era «non partire da uno solo»?
+# Perche' quella lezione era giusta e la sua applicazione no. Misurato il 2026-08-18:
+#     da main_casavip.py da solo : 88 moduli
+#     da main + fase83_server    : 88 moduli   -> fase83_server AGGIUNGE ZERO
+#     fase83_server e' raggiunto da main? True
+# `fase83_server` non era un ingresso: era un modulo gia' raggiunto, elencato due volte. E
+# `app.py` non era un ingresso affatto (non lo spedisce nessuna immagine). Restava una sola
+# cosa vera: **il file che l'immagine AVVIA**, cioe' il `CMD` del Dockerfile.
+# 💡 Il criterio «un file spedito» sembrava stretto e non lo era: il Dockerfile copia
+# `fase*.py`, quindi avrebbe accettato come ingresso **151 moduli su 152** -- bastava
+# aggiungerne uno per gonfiare i vivi senza che nessuna guardia gridasse. L'ha visto una
+# revisione indipendente, non io. Il criterio giusto e' l'unico che non si puo' allargare:
+# gli ingressi sono ESATTAMENTE i moduli nominati dal `CMD`, e la guardia
+# `test_GLI_INGRESSI_SONO_ESATTAMENTE_QUELLO_CHE_L_IMMAGINE_AVVIA` pretende l'uguaglianza,
+# non l'inclusione.
 
 # Il Dockerfile che costruisce l'immagine VERA di produzione: e' lui l'autorita' su cosa
 # viene spedito, non un elenco scritto a mano (la guardia lo legge da qui).
@@ -130,6 +146,20 @@ def cammina(radice=RADICE, partenza=None):
             "moduli sarebbe un numero, non una misura" % (radice, ", ".join(INGRESSI)))
     vivi = set()
     for punto in punti:
+        # ⛔ L'INGRESSO STESSO E' VIVO — PER DEFINIZIONE, NON PER FORTUNA. Trovato da una
+        # revisione indipendente il 2026-08-18, poche ore dopo che questo file era stato
+        # «riparato»: il cammino partiva DAGLI IMPORT del punto di partenza e non contava
+        # mai il punto di partenza. Finche' gli ingressi erano `main_casavip.py` (che non e'
+        # un `fase*.py`, quindi fuori dall'universo misurato) il caso non si poneva. Da
+        # quando fra gli ingressi c'e' `fase83_server.py`, lo strumento poteva dichiarare
+        # MORTO il proprio ingresso dichiarato -- e sbagliare di nuovo nel verso brutto,
+        # rompendo la stessa promessa («se dice MORTO, e' morto davvero») che questo file
+        # aveva appena finito di ristabilire.
+        # ⚠️ Misurato allora: `fase83_server` risultava vivo **soltanto perche' qualcosa
+        # dentro la sua chiusura lo re-importa**; `fase36_booking_api` e `fase17_money`, usati
+        # come partenza, risultavano morti di se' stessi. Un invariante che regge per
+        # coincidenza non e' un invariante.
+        vivi.update({punto[:-3]} & tutti)
         da_visitare = [m for m in moduli_citati(os.path.join(radice, punto)) & tutti
                        if m not in vivi]
         vivi.update(da_visitare)

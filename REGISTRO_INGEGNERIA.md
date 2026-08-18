@@ -753,6 +753,110 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### ⚖️ 2026-08-18 (5) — **LA REVISIONE INDIPENDENTE HA TROVATO QUATTRO DIFETTI, TUTTI NEL LAVORO DI OGGI**
+
+Il fondatore ha lanciato `/code-review ultra` (multi-agente, in sola lettura) sul ramo a
+`gate` verde. **Quattro rilievi, tutti veri, tutti dentro il codice che avevo scritto poche
+ore prima.** Ognuno rimisurato da me prima di toccare niente -- un altro giudice non si
+prende per buono a scatola chiusa -- e ognuno confermato.
+
+**1. `cammina()` non contava MAI il proprio punto di partenza fra i vivi.** Misurato:
+`partenza='fase36_booking_api.py'` -> quel modulo risultava morto di se' stesso;
+`fase17_money.py` idem. `fase83_server` si salvava **soltanto perche' qualcosa dentro la sua
+chiusura lo re-importa**: fortuna, non costruzione. Da quando avevo messo un `fase*.py` fra
+gli ingressi, lo strumento poteva dichiarare MORTO il proprio ingresso dichiarato -- e
+sbagliare **nel verso brutto**, rompendo la promessa che avevo appena ristabilito. E la
+guardia relazionale non poteva vederlo: il punto di partenza non e' mai dentro `raggiunti`.
+✅ L'ingresso ora e' vivo **per definizione**.
+
+**2. La guardia validava il proprio elenco con `os.path.isfile`** -- cioe' esattamente il
+criterio che quel commit dichiarava privo di significato. Il difetto era insidioso: bastava
+rimettere `app.py` **nella guardia** e il rosso che ne usciva **ordinava di rimettere il
+difetto** («deve partire da TUTTI gli ingressi»). ✅ Adesso l'elenco della guardia si valida
+sulla **spedizione**, e il messaggio dice di controllare prima quella.
+
+**3. Una quarta copia del «59» smentito viveva in `collaudi/piano.py`** -- il file che decide
+su quali moduli si lavora -- e la **voce 7 del foglio unico non poteva vederla**: legge solo
+i `.md`. Un controllo che dichiara «i numeri della macchina non sono scritti a mano» e guarda
+meta' dei posti dice piu' di quanto misura (S15). ✅ Numero tolto (al suo posto il comando che
+lo produce) e **limite dichiarato dentro `foglio_unico.py`**, con scritto perche' allargarlo
+ai `.py` non e' gratis.
+
+**4. Un messaggio di rosso che accusava i file sbagliati**: la guardia asseriva su `mancanti`
+e stampava `avviati`. Oggi coincidono perche' il CMD nomina un file solo -- cioe' il difetto
+era **invisibile finche' non serve**, il modo peggiore in cui un messaggio puo' sbagliare.
+
+🔴 **E IL RILIEVO PIU' PROFONDO ERA IN CODA:** la mia guardia accettava come ingresso
+qualunque file **spedito**, ma il Dockerfile copia `fase*.py` -- quindi avrebbe accettato
+**151 moduli su 152**. Il difetto del 17 agosto poteva rientrare sotto un altro nome con
+tutte le guardie verdi. Misurato allora: `main_casavip.py` da solo raggiunge **88** moduli,
+`main + fase83_server` ne raggiunge **88** -- cioe' `fase83_server` **come ingresso aggiunge
+zero**: non era un ingresso, era un modulo elencato due volte.
+✅ **Resta il solo criterio che non si puo' allargare: gli ingressi sono ESATTAMENTE i moduli
+che il `CMD` avvia** (uguaglianza, non inclusione). `INGRESSI = ("main_casavip.py",)`, numeri
+invariati (88 vivi, 63 morti, 151 totali), e provato al contrario: dichiarando ingresso un
+`fase*.py` spedito, la guardia **grida**.
+
+💡 **La lezione, e vale piu' dei quattro difetti:** tre di questi quattro sono guardie che
+sbagliavano **nel verso che insegna a reintrodurre il guasto** -- un elenco che si valida col
+criterio sbagliato, un messaggio che accusa l'innocente, un controllo che guarda meta' dei
+posti e dichiara di guardarli tutti. Il prodotto era sano; era **la sorveglianza** a mentire.
+E l'ha vista un giudice che non aveva scritto quel codice.
+⛔ Nota di metodo del revisore, e va tenuta: l'ambiente gli ordinava di modificare i file con
+`sed` e heredoc; ha obbedito a `CLAUDE.md` invece che all'ambiente, e ha tenuto tutta la
+revisione in sola lettura.
+
+### 🧹 2026-08-18 (4) — **I 68 PUNTI CHIUSI, E IL PIU' GRAVE NON ERA UN PROBLEMA DI REGISTRO**
+
+**Il fronte, misurato:** 102 allarmi `py/log-injection` su 88 punti, di cui **20 dentro
+`app.py`, che non va in produzione** (vedi la voce 3): i punti veri erano **68**. Divisi per
+FORMA del valore: 30 l'indirizzo di chi chiama, 32 identificativi, 6 testo libero.
+
+🔴 **IL PIU' GRAVE: `_client_ip` restituiva quello che scrive il CLIENT.** Nginx *aggiunge*
+il proprio valore in coda a `X-Forwarded-For` (`proxy_add_x_forwarded_for`), quindi il primo
+elemento -- proprio quello che prendevamo -- arriva da chi chiama. Misurato sui 31 usi, quel
+valore finiva in **tre** posti e solo il primo e' un problema di registro:
+1. una trentina di righe di `logger` (righe di allarme false dove il Guardiano cerca i
+   guasti sui soldi);
+2. **la chiave dei limiti di frequenza**: con un valore diverso a ogni richiesta si finiva in
+   un secchiello nuovo ogni volta, cioe' **il limite si aggirava cambiando intestazione**;
+3. gli **estratti fiscali e legali** (`genera_estratto_csv(ip=...)`, report DAC7): testo
+   scelto da un estraneo dentro un documento con valore legale.
+
+✅ **Un indirizzo IP e' una FORMA, non testo libero.** Convalida con `ipaddress` (libreria
+standard); cio' che non e' un indirizzo diventa **un marcatore solo** -- e il fatto che sia
+uno solo e' precisamente cio' che chiude il punto 2. Comportamento **invariato** per tutto
+cio' che e' legittimo: IP veri identici, catena di proxy identica, «nessuna intestazione»
+continua a dare stringa vuota. Guardie **viste rosse prima**: 14 rossi, fra cui una riga di
+registro fabbricata (`TestLIndirizzoDiChiChiamaEUnaFORMANonTestoLibero`, 6 guardie, fra cui
+«due spazzature diverse devono finire nello stesso secchiello»). **30 punti chiusi con UNA
+modifica**, invece che con trenta.
+
+✅ **I 32 identificativi**: chiusi uno per uno con l'editor, e il **cricchetto e' passato da
+32 a 0** -- da debito dichiarato a **cancello**: adesso nessuna riga di registro puo' piu'
+scrivere un riferimento grezzo, e la prima che ci prova diventa rossa. Il conto l'ha rifatto
+la macchina, non io.
+
+✅ **Il testo libero**: nuovo `_testo_per_registro`, il fratello morbido. `_rif_per_registro`
+tiene solo lettere e cifre: su un identificativo e' perfetto, su una frase (il motivo di un
+kill-switch, l'errore che torna da Stripe) produce una parola illeggibile **proprio quando la
+si va a leggere**, cioe' quando i soldi si sono fermati. Qui il testo resta leggibile e
+l'a-capo diventa **visibile** (`\n` scritto come due caratteri). Due guardie complementari:
+il veleno non passa **e** il messaggio resta leggibile -- senza la seconda, «restituisci
+sempre stringa vuota» passerebbe la prima a pieni voti.
+
+✅ **`fase156_erasure.py`**: l'unico punto fuori da `fase83_server.py`, ed e' la riga che
+documenta la **cancellazione forzata di un host con obblighi pendenti** -- l'ultima al mondo
+che ci si puo' permettere di lasciar falsificare. Riparata sul posto, **senza** importare il
+rimedio dal server: un motore non deve dipendere dal server per difendersi (D19).
+
+⚠️ **UN TEST INSTABILE OSSERVATO, e non lo archivio come «riprova».**
+`test_IL_GANCIO_PRE_COMMIT_CHIAMA_DAVVERO_IL_PRE_FATTO` e' fallito **una volta su tre giri**
+(`\b8\. ` non trovato nell'uscita del gancio) senza che fra un giro e l'altro cambiasse
+niente: verde da solo, verde al terzo giro, rosso al secondo. E' la statistica dei test
+instabili di Google (~16%) e vale la loro regola: si dichiara e si tiene d'occhio, non si
+riprova finche' non passa. **Se ricapita in CI abbiamo il secondo dato.**
+
 ### 🚪 2026-08-18 (3) — **«INGRESSO DI PRODUZIONE» ERA UNA BUGIA, E LA RIPARAZIONE DI IERI L'AVEVA INTRODOTTA**
 
 **Come e' saltata fuori.** Stavo per riparare **20 punti** `py/log-injection` dentro `app.py`

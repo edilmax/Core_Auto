@@ -3284,7 +3284,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: b148675
+CONSEGNE AGGIORNATE A: 4eef065
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -5112,7 +5112,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5833 test
+SUITE ATTUALE: Ran 5843 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
@@ -5129,9 +5129,12 @@ MISURATO SU: 13ac1e8 + LA BARRIERA VISIBILE A CODEQL + L'ELENCO DEGLI ESCLUSI (2
              Da 5819 a 5823 (+4), poi a 5828 (+5), poi a 5831 (+3) con
              `TestIlRilevatoreDiCarteGUARDANELPOSTOGIUSTO` in
              `test_integrazione_servizi.py` (la bomba a tempo trovata dalla CI),
-             poi a **5833 (+2)** con le due guardie che legano gli INGRESSI di
-             `raggiungibilita.py` a cio' che il Dockerfile spedisce davvero.
-             Gli ultimi tre numeri rimisurati col caricatore da fermo PRIMA di
+             poi a 5833 (+2) con le due guardie che legano gli INGRESSI di
+             `raggiungibilita.py` a cio' che il Dockerfile spedisce davvero,
+             poi a **5843 (+10)** con `TestLIndirizzoDiChiChiamaEUnaFORMANonTestoLibero`
+             (6) e `TestIlTestoLiberoRESTALEGGIBILEMaNonPuoFabbricareRIGHE` (4) in
+             `test_fase83_server.py`.
+             Gli ultimi quattro numeri rimisurati col caricatore da fermo PRIMA di
              rilanciare (S14).
              ⛔ E QUESTA VOLTA NON L'HO SCRITTO PRIMA: ho lanciato la suite intera con il
              numero vecchio ancora dentro, e i 28 minuti sono finiti su un rosso solo —

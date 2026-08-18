@@ -86,6 +86,18 @@ SEGNO = {FATTO: "✅ FATTO", ROSSO: "🔴 ROSSO", FUORI: "🛰️  FUORI",
          APERTO: "⏳ APERTO", NON_ESEGUITO: "⚠️  NON ESEGUITO"}
 
 # I cinque documenti ufficiali (REGOLA ZERO 1). Si leggono, non si giudicano a memoria.
+#
+# ⛔⛔ LIMITE DICHIARATO DELLA VOCE 7, e non e' una formalita' (D18 punto 3). Qui ci sono
+# solo `.md`: **un numero scritto a mano dentro un `.py` questa voce non lo puo' vedere**.
+# Non e' teoria -- il 2026-08-18 una revisione indipendente ha trovato il numero smentito
+# «59» dentro `collaudi/piano.py`, cioe' nel file che decide su quali moduli si lavora, e
+# la voce 7 era **verde** nello stesso momento. Un controllo che dichiara «i numeri della
+# macchina non sono scritti a mano nei documenti» e guarda solo meta' dei posti dice una
+# cosa piu' forte di quella che misura, ed e' lo sbaglio S15.
+# ⚠️ Allargare l'elenco ai `.py` NON e' gratis: il codice e' pieno di numeri legittimi
+# (soglie, indici, versioni) e produrrebbe falsi allarmi a valanga -- e un falso allarme
+# costa quanto un allarme mancato (regola ferrea 10). Finche' non c'e' un criterio che
+# distingue i due casi, il limite si DICHIARA invece di allargare a caso.
 DOCUMENTI = ("CLAUDE.md", "README.md", "REGISTRO_INGEGNERIA.md", "RIPRENDI_QUI.md",
              "DEPLOY.md")
 
