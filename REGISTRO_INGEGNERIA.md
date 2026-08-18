@@ -753,6 +753,37 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 📄 2026-08-18 (13) — **I DOCUMENTI RIMASTI INDIETRO: 5 buchi, e uno era una procedura ROTTA**
+
+Domanda del fondatore a fine giornata: *«hai aggiornato tutti i file che vanno aggiornati
+riguardo i lavori fatti?»*. Risposta cercata **nei documenti**, non a memoria: **no**, e i buchi
+erano cinque.
+
+| # | dov'era | cosa diceva di falso |
+|---|---|---|
+| 1 | 🔴 `DEPLOY.md:67` | prescriveva **`git push origin master`**, comando che il cancello **BLOCCA** dal 2026-08-16. Chi seguiva la procedura ufficiale sbatteva contro un muro. ⛔ È **lo stesso difetto** che la regola ferrea 3 cita come proprio esempio (*«DEPLOY.md prescriveva un comando rotto»*, un minuto di sito giù) |
+| 2 | `DEPLOY.md` §5 | le variabili `PAGAMENTO_` dichiarate «misurate il 2026-08-17»: rimisurate oggi prima del deploy, stesso esito, ma **la data mentiva** |
+| 3 | `README.md` | la tabella dei collaudi profondi **non nominava nessuno strumento col browser** — né i due preesistenti né quello nuovo. Il README dice «com'è la macchina OGGI», e oggi la macchina ha un browser |
+| 4 | `collaudi/batteria.py` | il percorso nuovo girava **in CI ma non nella batteria di ogni giorno**: collegato a metà |
+| 5 | `CLAUDE.md` | il catalogo degli sbagli non aveva i **due miei di oggi** (regole ferree 4 e 15) |
+
+**Riparati tutti e cinque.** Dettagli che vale la pena ricordare:
+- **`DEPLOY.md` ora descrive il flusso vero**: ramo → richiesta di unione → attesa del `gate` →
+  unione **verificata con una seconda chiamata** all'API (già capitato **tre volte** che una
+  risultasse solo aperta) → allineamento del computer. E dichiara che `gh` non è installato.
+- **`batteria.py`** lancia il percorso in atto **«rifiuto»**, e non è un ripiego: quel banco ha
+  una chiave Stripe **finta**, cioè esattamente il gateway muto in cui il prodotto **deve**
+  rifiutare. L'atto «conferma» vuole un banco senza chiave e resta nella CI, che ne accende due:
+  accenderne un secondo qui allungherebbe la batteria quotidiana per provare una cosa già
+  provata a ogni commit.
+- **`CLAUDE.md`**: nascono **S18** (lanciare la suite e poi toccare i file che sta leggendo) e
+  **S19** (dichiarare lo scopo dopo, e sentirselo dire da una macchina). Il catalogo passa da
+  17 a **19 voci** — e il numero **non è scritto a mano**: lo conta `regole_avvio.py`.
+
+💡 **La lezione:** «ho aggiornato i documenti» è una frase, non una verifica. I buchi si trovano
+**cercandoli nei file**, e il più grave non era una data vecchia: era una **procedura che non
+funziona**, scritta nella pagina che si segue proprio quando si ha fretta.
+
 ### 🚀 2026-08-18 (12) — **DEPLOY: la riparazione del gergo è VIVA su bookinvip.com**
 
 Via del fondatore (*«autorizzato a tutto e al commit»*). `DEPLOY.md` letto **per intero**

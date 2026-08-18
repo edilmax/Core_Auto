@@ -11,6 +11,28 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 📄 2026-08-18 (27) — **«HAI AGGIORNATO TUTTI I FILE?» — NO: cinque buchi, e uno era una PROCEDURA ROTTA**
+
+> Domanda del fondatore a fine giornata. Risposta cercata **nei documenti**, non a memoria.
+> ```
+> 1. 🔴 DEPLOY.md:67 diceva  git push origin master  -> il cancello lo BLOCCA dal
+>    2026-08-16. Chi seguiva la procedura ufficiale sbatteva contro un muro.
+>    ⛔ E' LO STESSO difetto che la regola ferrea 3 cita come proprio esempio.
+> 2. DEPLOY.md §5: variabili PAGAMENTO_ "misurate il 2026-08-17" (rimisurate oggi)
+> 3. README.md: la tabella dei collaudi non nominava NESSUNO strumento col browser
+> 4. collaudi/batteria.py: il percorso girava in CI ma non nella batteria di ogni giorno
+> 5. CLAUDE.md: mancavano i miei due sbagli di oggi -> nascono S18 e S19 (17 -> 19 voci,
+>    e il numero lo conta regole_avvio.py, non è scritto a mano)
+> ```
+> ✅ **Riparati tutti e cinque.** `DEPLOY.md` ora descrive il flusso vero (ramo → richiesta di
+> unione → `gate` verde → unione **verificata con una seconda chiamata** → allineamento) e dice
+> che `gh` non è installato. `batteria.py` lancia il percorso in atto **«rifiuto»**, che è
+> proprio la condizione di quel banco (chiave finta = gateway muto).
+>
+> 💡 **La lezione:** *«ho aggiornato i documenti»* è una frase, non una verifica. E il buco
+> peggiore non era una data vecchia: era **una procedura che non funziona**, scritta nella
+> pagina che si apre proprio quando si ha fretta.
+
 ## 🚀 2026-08-18 (26) — **TUTTO IN PRODUZIONE: la riparazione è VIVA sul sito vero**
 
 > **Stato dei tre posti, misurato dopo il deploy (non ricordato):**

@@ -124,9 +124,19 @@ def main():
                 registra(nome, rc, out, dur)
             # 9: node (a11y + click-through) — solo se node c'è
             if _run(["node", "--version"], timeout=20)[0] == 0:
-                for nome, cmd in (("9. Accessibilità WCAG (axe)", ["node", "collaudi/test_a11y.js"]),
-                                  ("9. Click-through pannelli", ["node", "collaudi/clickthrough_pannelli.js"])):
-                    rc, out, dur = _run(cmd, timeout=400, env=env)
+                # ⛔ Il percorso gira qui in ATTO «rifiuto», e non e' un ripiego: questo banco
+                # ha una chiave Stripe FINTA, cioe' un gateway che non risponde, ed e'
+                # esattamente la condizione in cui il prodotto DEVE rifiutare e all'host non
+                # deve comparire niente («nessun voucher senza incasso»). L'atto «conferma»
+                # vuole un banco SENZA chiave e sta nella CI (job `browser`), che ne accende
+                # due: qui se ne accendesse un secondo si allungherebbe la batteria di ogni
+                # giorno per provare una cosa gia' provata a ogni commit.
+                for nome, cmd, extra in (
+                        ("9. Accessibilità WCAG (axe)", ["node", "collaudi/test_a11y.js"], {}),
+                        ("9. Click-through pannelli", ["node", "collaudi/clickthrough_pannelli.js"], {}),
+                        ("9. Senza incasso non esce niente",
+                         ["node", "collaudi/percorso_ospite_host.js"], {"ATTESO": "rifiuto"})):
+                    rc, out, dur = _run(cmd, timeout=400, env=dict(env, **extra))
                     registra(nome, rc, out, dur, ok_se=lambda rc, o: rc == 0)
             else:
                 esiti.append(("9. a11y+click-through", None, "SALTATO: node assente", 0))

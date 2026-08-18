@@ -61,11 +61,31 @@
 python -m unittest discover -s . -p "test_*.py"
 ```
 
-**Nessun deploy con anche un solo test rosso.** Poi si committa e si spinge su GitHub:
+**Nessun deploy con anche un solo test rosso.** Poi si committa e si spinge su GitHub.
+
+> ### ⛔ SU `master` NON SI SPINGE PIÙ — corretto il 2026-08-18
+> Questa riga diceva `git push origin master`, e **quel comando è bloccato dal cancello**
+> (regola di protezione del ramo su GitHub, attiva dal 2026-08-16). Chi seguiva questa
+> pagina alla lettera sbatteva contro un muro senza capire perché: è **lo stesso difetto**
+> che la regola ferrea 3 cita come proprio esempio — *«`DEPLOY.md` prescriveva un comando
+> rotto»*, costato un minuto di sito irraggiungibile. Trovato mentre si controllava se i
+> documenti fossero rimasti indietro rispetto al lavoro fatto.
 
 ```bash
-git add -A && git commit -m "descrizione del lavoro" && git push origin master
+# 1) un RAMO, mai master
+git checkout -b nome-del-lavoro origin/master
+git add <i file dichiarati> && git commit -m "descrizione del lavoro"
+git push -u origin nome-del-lavoro
 ```
+
+**2) poi la richiesta di unione**, e si aspetta che il job **`gate`** sia verde prima di
+unire. ⛔ `gh` **non è installato** su questa macchina: si usa l'API di GitHub con
+`Invoke-RestMethod`, prendendo le credenziali da `git credential fill` **senza stamparle**
+(D6). ⛔ E dopo l'unione si **verifica con una SECONDA chiamata** che dica
+`merged=True`: è già capitato **tre volte** che una richiesta risultasse solo *aperta*
+mentre la si credeva unita.
+
+**3) infine si allinea il computer**: `git checkout master && git pull --ff-only`.
 
 ## 3. Deploy — procedura "rm-first" (obbligatoria)
 
@@ -169,13 +189,14 @@ deploy riesce, i test sono verdi, il sito **continua a fare come prima** — e n
 accorge nessuno. È il verde falso perfetto: nulla è rotto, semplicemente la riparazione non
 è arrivata.
 
-✅ **RISOLTO — rimisurato il 2026-08-17 prima del deploy** (`docker exec casavip_app env |
-grep -E '^PAGAMENTO_'` → **nessuna riga**): sul VPS non esiste più nessuna `PAGAMENTO_*`,
+✅ **RISOLTO — rimisurato il 2026-08-18 prima del deploy** (`docker exec casavip_app env |
+grep -E '^PAGAMENTO_'` → **nessuna riga**; stessa misura del 2026-08-17, stesso esito): sul
+VPS non esiste più nessuna `PAGAMENTO_*`,
 quindi valgono i **default del codice** — tariffa tecnica **5% + 0,25 €**, **7%** in valuta
 estera. ⚠️ Questa tabella dichiarava una `PAGAMENTO_BPS` con la **percentuale superata** come
 «in attesa al prossimo deploy»: era **il documento** rimasto indietro, non il server (S10).
 
-| variabile sul VPS | stato misurato 2026-08-17 | cosa vale |
+| variabile sul VPS | stato misurato 2026-08-18 | cosa vale |
 |---|---|---|
 | `PAGAMENTO_BPS` | **assente** | il valore del codice |
 | `PAGAMENTO_BPS_ESTERA` | assente | il valore del codice |

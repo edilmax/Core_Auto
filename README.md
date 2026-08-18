@@ -254,6 +254,22 @@ La suite prova il codice **con se stesso**. In `collaudi/` stanno gli strumenti 
 | `campagna_totale.py` | ripete ogni collaudo **5 volte** e pretende che sia **stabile**, non solo verde |
 | `sonda_qtsp.py` | interroga i prestatori europei e verifica quali dichiarano davvero marche qualificate |
 
+**E dal 2026-08-18 c'è una famiglia in più: quelli che aprono un BROWSER VERO.** Servono
+perché `deploy/app.js` sono 210 righe che girano **nel computer del cliente**, e fino a quel
+giorno non le eseguiva nessuno: i collaudi in Python parlano col server, non aprono una
+pagina. Girano **a ogni commit** dentro la CI (job `browser`), e il browser **non entra
+nell'immagine di produzione**.
+
+| Strumento (col browser) | Cosa fa |
+|---|---|
+| `a11y_static.js` | accessibilità WCAG 2.1 A+AA sulle pagine pubbliche; **blocca** su una violazione grave |
+| `clickthrough_pannelli.js` | entra nei **3 pannelli** (host, admin, super-admin) su PC e Mobile e clicca ogni bottone non distruttivo, contando errori JavaScript e risposte HTTP sbagliate |
+| `percorso_ospite_host.js` | **il percorso in due atti**: ① un ospite prenota e l'**host lo vede comparire** nel suo pannello — l'unico collaudo che attraversa il confine fra due persone; ② col gateway muto il prodotto **deve rifiutare**, cioè *nessun voucher senza incasso* |
+| `test_visivo.js` · `test_visivo_ruoli.js` | resa grafica del checkout e dei ruoli su desktop e mobile, in più lingue (avvio manuale) |
+
+⛔ **Cosa NON provano, dichiarato**: il **pagamento** vero. Servirebbe una chiave Stripe
+dentro il giro automatico, e questo repository è **pubblico** (lo è perché serve a CodeQL).
+
 ```bash
 python collaudi/campagna_totale.py        # tutto, 5 ripetizioni ciascuno
 python collaudi/verifica_produzione.py --giri=5
