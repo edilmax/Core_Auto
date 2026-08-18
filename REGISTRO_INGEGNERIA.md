@@ -753,6 +753,67 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🌐 2026-08-18 (8) — **IL BROWSER VERO È COLLEGATO — e le 210 righe che girano dal cliente vengono eseguite per la prima volta**
+
+Lavoro deciso col fondatore (*«il lavoro di oggi è il browser vero»*). **Niente di nuovo
+installato**: `playwright` e `axe-core` erano già in `package.json`, la CI se li scarica a ogni
+giro, e `Dockerfile.casavip` non nomina né node né npm né playwright → **l'immagine di
+produzione non ingrassa di un byte**. Mancava solo il **collegamento** (regola #23, costruito ≠
+collegato): su cinque collaudi col browser già scritti ne girava **uno** (`a11y_static.js`).
+
+**Cosa è stato fatto — 3 file, tutti dichiarati:**
+| file | cosa |
+|---|---|
+| `.github/workflows/ci.yml` | job **`browser`** nuovo, NON bloccante a termine, con la condizione d'ingresso nel gate scritta dentro (5 giri consecutivi verdi su master, senza ritocchi) |
+| `collaudi/percorso_ospite_host.js` | **NUOVO**, 248 righe: il percorso ospite → host, in due atti |
+| `test_pipeline_ci.py` | la mappa dei non-bloccanti aggiornata **di proposito** + la guardia che pretende «NON blocca» anche nel nome del job nuovo |
+
+**Il buco che chiude.** `deploy/app.js` sono 210 righe che girano **nel browser del cliente** e
+avevano **zero** test che le eseguissero (i 5845 parlano col server in Python) e **zero** analisi
+statica (CodeQL è dichiarato sul solo Python). Ora il job esegue `clickthrough_pannelli.js` (3
+pannelli × PC/Mobile) e il percorso nuovo, che attraversa **il confine fra due persone**: un
+ospite prenota in un browser, l'host in una sessione separata la deve vedere comparire.
+
+**I DUE ATTI, e il secondo è quello che protegge i soldi:**
+- `ATTESO=conferma` sul banco **senza gateway** → prenotazione confermata e visibile all'host;
+- `ATTESO=rifiuto` sul banco con **chiave finta** (gateway muto) → il prodotto **deve rifiutare**
+  e all'host **non deve comparire niente**: *nessun voucher senza incasso*. È la proprietà che
+  farà da rete al lavoro successivo (**autorizzazione con acquisizione differita**, dove nasce
+  per la prima volta lo stato «confermata ma non ancora incassata»).
+
+**La prova è in DUE TEMPI** — prima non c'è, dopo c'è — così il verde misura una **differenza**
+e non la presenza di una pagina che mostra sempre qualcosa (modo di rompersi n. 1).
+
+**PROVE AL CONTRARIO, misurate in locale su COPIE di `deploy/` nella cartella temporanea (`git
+status` = 0 righe durante tutte le prove, verificato):**
+```
+click-through  innocente -> uscita 0, difetti 0
+click-through  colpevole -> uscita 1, erroriJS=6 su 6 combinazioni ruolo x viewport
+percorso       innocente -> uscita 0 (provato ANCHE con elenco host gia' non vuoto)
+percorso       colpevole -> uscita 1, QUATTRO accuse, fra cui
+                            "L'OSPITE HA PRENOTATO E L'HOST NON LA VEDE"
+atto conferma  sul banco che rifiuta  -> uscita 1
+atto rifiuto   sul banco che conferma -> uscita 1, "IL GATEWAY NON PUO' INCASSARE
+                            E IL PRODOTTO HA CONFERMATO LO STESSO"
+```
+⛔ **Perché NIENTE chiave Stripe nella CI, ed è una scelta, non una mancanza.** Per digitare una
+carta servirebbe una credenziale dentro il giro automatico di un repository **PUBBLICO** (lo è
+per CodeQL): D6 lo vieta e sarebbe la cosa meno sicura fatta oggi. Restano dichiarati come **non
+provati**: la pagina della carta · il ramo «paga in struttura» (il suo anticipo passa dal
+gateway) · il bonifico verso l'host.
+
+⚠️ **DIFETTO VERO TROVATO DAL PERCORSO, non riparato (serve il via, è codice di produzione):**
+quando il gateway non risponde, l'ospite legge a schermo **`❌ pagamento_non_disponibile`** —
+cioè il **codice interno**, non una frase tradotta. È esattamente la classe di difetto già
+corretta per `motivo` in `index.html` («l'ospite leggeva 'pieno', 'min_notti' così com'erano»),
+rimasta aperta sul ramo `errore`. Il collaudo **non** pretende che sia tradotto: pretenderlo oggi
+sarebbe un rosso permanente.
+
+🩹 **Sbaglio fatto e dichiarato in questa sessione: REGOLA FERREA 4 («mani in tasca durante i
+cicli»).** Ho modificato `ci.yml` e installato il file nuovo **mentre la suite girava**, e
+`test_pipeline_ci.py` legge proprio `ci.yml`. Quel giro è stato **buttato** (file rinominato
+`suite_ANNULLATA_regola4.err`, mai riportato come esito) e rifatto da fermo a modifiche finite.
+
 ### 🚀 2026-08-18 (7) — **DEPLOY IN PRODUZIONE: il lavoro della giornata è sul sito vero**
 
 Via del fondatore (*«porta a termine fino alla vps»*). ⛔ Prima ho letto `DEPLOY.md` **per

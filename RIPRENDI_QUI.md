@@ -11,6 +11,68 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🌐 2026-08-18 (22) — **IL BROWSER VERO È COLLEGATO — e c'è un percorso che attraversa due persone**
+
+> **Stato dei tre posti, misurato adesso (non ricordato):**
+> ```
+> computer HEAD ae3f4dd (ramo consegne-foglio-unico) · GitHub master 13f9b2c · VPS 13f9b2c
+>   Unione #68 verificata dall'API: state=closed, merged=True, merged_at 13:41 UTC
+>   richieste di unione APERTE: 0
+>   CI su 13f9b2c: CodeQL success · BookinVIP CI partita alle 13:41 (9 job su 12 gia'
+>     verdi quando l'ho guardata alle 13:47; copertura/full-suite/full-suite-311 in corso)
+>   VPS: casavip_app healthy · casavip_backup healthy · nginx up
+>     le 11 righe "sporche" sul VPS sono i biglietti PRE_DEPLOY_*, non codice
+> ```
+>
+> ### ✅ FATTO OGGI — SUL COMPUTER, NON COMMITTATO (manca «procedi al commit»)
+> **3 file, dichiarati:** `.github/workflows/ci.yml` (job **`browser`** nuovo) ·
+> `collaudi/percorso_ospite_host.js` (**NUOVO**, 248 righe) · `test_pipeline_ci.py` (mappa dei
+> non-bloccanti aggiornata di proposito + guardia sul nome del job nuovo).
+> Il dettaglio per esteso — con tutte le misure — sta nel changelog di
+> `REGISTRO_INGEGNERIA.md`, voce **2026-08-18 (8)**. Qui solo cio' che serve per riprendere.
+>
+> **I due passi che il fondatore aveva chiesto sono fatti**, il terzo è scritto e a termine:
+> 1. il job di CI che lancia `clickthrough_pannelli.js` ✅
+> 2. **UN percorso solo ma vero**, e gira: ospite cerca → prenota → l'host la vede ✅
+> 3. NON bloccante adesso, con la **condizione d'ingresso nel gate scritta dentro `ci.yml`**
+>    (5 giri consecutivi verdi su master, senza ritocchi al job) — così «provvisorio» non
+>    diventa «per sempre».
+>
+> ### 🔴 LA COSA PIÙ IMPORTANTE DA SAPERE: IL SECONDO ATTO
+> Lo stesso percorso gira **due volte**, sui due banchi:
+> · banco **senza gateway** → la prenotazione si conferma e l'host la vede;
+> · banco con **chiave finta** (gateway muto) → il prodotto **DEVE rifiutare** e all'host
+>   **non deve comparire niente**: *nessun voucher senza incasso*.
+> ⛔ Il secondo atto **non è un extra**: è la rete del lavoro successivo — l'autorizzazione
+> con **acquisizione differita** (`capture_method=manual`), dove nasce per la prima volta lo
+> stato **«confermata ma non ancora incassata»**. Chi riprende quel lavoro ha già la guardia.
+>
+> ### ⛔ NIENTE CHIAVE STRIPE NELLA CI — è una decisione, non una dimenticanza
+> Il repository è **PUBBLICO** (serve a CodeQL) e D6 vieta le credenziali: una chiave dentro
+> il giro automatico sarebbe la cosa meno sicura fatta oggi. Restano **non provati**, e
+> scritti dentro il collaudo: la pagina della carta · il ramo «paga in struttura» (il suo
+> anticipo passa dal gateway) · il bonifico verso l'host.
+>
+> ### ⚠️ DIFETTO VERO TROVATO DAL PERCORSO — NON RIPARATO, serve «autorizzato»
+> Quando il gateway non risponde, l'ospite legge **`❌ pagamento_non_disponibile`**: il
+> **codice interno**, non una frase tradotta. Stessa classe di difetto già corretta per
+> `motivo` in `index.html`, rimasta aperta sul ramo `errore`. Il collaudo **non** pretende la
+> traduzione (sarebbe un rosso permanente): la riparazione è una decisione del fondatore.
+>
+> ### 🩹 SBAGLIO DI QUESTA SESSIONE, DICHIARATO: **REGOLA FERREA 4**
+> Ho toccato `ci.yml` e installato il file nuovo **mentre la suite girava**, e
+> `test_pipeline_ci.py` legge proprio `ci.yml`. Quel giro è stato **buttato** (rinominato
+> `suite_ANNULLATA_regola4.err`, mai riportato come esito) e rifatto **da fermo**, a modifiche
+> finite. 💡 La lezione operativa: il lavoro sui documenti va fatto **prima** di lanciare la
+> suite, non dopo — altrimenti o si mente o si rifà un'ora di giro.
+>
+> ### ⏭️ COSA RESTA, in ordine
+> 1. 🔴🔴 **NON PRENDERE I SOLDI SUBITO** (`capture_method=manual`) — resta il punto 1 di
+>    sempre, e ora ha la sua rete. Vedi il blocco (21) qui sotto e le righe 507-517.
+> 2. Guardare il job `browser` per qualche giro e poi **metterlo nel gate**.
+> 3. Le **tre decisioni del fondatore** ancora aperte (app.py · i quattro moduli
+>    irraggiungibili · i tre dormienti): sono nel blocco (21), non sono state archiviate.
+
 ## 🔬 2026-08-18 (21) — **LA RIPARAZIONE ERA GIUSTA E L'ANALIZZATORE NON LA VEDEVA**
 
 > **Stato dei tre posti, misurato adesso (non ricordato):**

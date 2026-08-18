@@ -37,6 +37,18 @@ permissions:
 #  NON BLOCCANTI (fuori dal "gate", di proposito):
 #    lint-severo  -> lint severo su codice gia' scritto: informativo, si legge il log
 #    zap          -> gira solo a schedule/manuale, non ad ogni commit
+#    browser      -> click-through dei 3 pannelli col browser vero: nuovo, in prova
+#
+#  PERCHE' `browser` STA FUORI, E A TERMINE (aggiunto il 2026-08-18). Sta fuori PER
+#  DECISIONE, non per dimenticanza: e' l'unico controllo che accende un server vero e
+#  pilota un browser vero, quindi e' anche l'unico che puo' diventare rosso per un
+#  motivo che non e' il prodotto (porta occupata sul runner, browser che non si scarica,
+#  attesa scaduta). Prima si guarda che sia STABILE, poi conta per tutti.
+#  >>> CONDIZIONE D'INGRESSO, scritta subito perche' "provvisorio" non diventi "per
+#      sempre": 5 giri consecutivi su master verdi e senza ritocchi al job. Allora lo si
+#      aggiunge ai `needs` del job finale e si sposta questa riga fra i BLOCCANTI --
+#      spostarla e' ANCHE il gesto tecnico, perche' test_pipeline_ci.py legge questa
+#      mappa e pretende che i due elenchi e i `needs` dicano la stessa cosa.
 #
 #  ATTENZIONE, distinzione che va detta e non intuita: "bloccante" qui vuol dire
 #  "il gate lo aspetta e il suo esito conta". Fra i bloccanti, w3c e' l'unico che
@@ -484,6 +496,191 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Audit WCAG statico (blocca su critical/serious)
         run: node collaudi/a11y_static.js
+
+  # ==========================================================================
+  #  BROWSER — le 210 righe di deploy/app.js girano DAVVERO, per la prima volta
+  # ==========================================================================
+  #  Buco chiuso il 2026-08-18. `deploy/app.js` e' la fonte unica del JavaScript
+  #  che gira NEL BROWSER DEL CLIENTE (index, host.html, admin.html, bunker.html)
+  #  e fino a oggi aveva: ZERO test che lo eseguissero -- i 5845 collaudi parlano
+  #  col server in Python e non aprono mai una pagina -- e ZERO analisi statica,
+  #  perche' CodeQL in questo repository e' dichiarato sul solo Python. Un
+  #  `TypeError` in un gestore di click passava il gate VERDE e si scopriva dal
+  #  cliente, sul pannello dell'host, a deploy fatto.
+  #
+  #  Qui il collaudo `collaudi/clickthrough_pannelli.js` (che ESISTEVA GIA' e non
+  #  lo lanciava nessuno fuori da `batteria.py`) viene finalmente COLLEGATO: entra
+  #  con le credenziali vere dei 3 ruoli (host / admin / super-admin col bunker),
+  #  clicca ogni bottone non distruttivo su PC e su Mobile, e conta gli errori
+  #  JavaScript, i `pageerror` e le risposte HTTP >= 400. Uno solo = job rosso.
+  #
+  #  NIENTE DA INSTALLARE IN PRODUZIONE: playwright e axe-core stanno in
+  #  package.json e il browser lo scarica il runner a ogni giro. Verificato che
+  #  Dockerfile.casavip non nomina ne' node ne' npm ne' playwright: l'immagine che
+  #  va sul VPS non ingrassa di un byte e non puo' rompersi per colpa di questo job.
+  #
+  #  E il secondo passo -- `collaudi/percorso_ospite_host.js`, scritto oggi -- attraversa
+  #  il confine che nessun altro collaudo attraversa: UN OSPITE prenota in un browser, e
+  #  L'HOST, in una sessione separata, la deve vedere comparire nel suo pannello. Il
+  #  difetto "l'ospite prenota e all'host non arriva niente" non e' visibile ne' dai 5845
+  #  (parlano col server, non guardano una pagina) ne' dal click-through (guarda un
+  #  pannello alla volta). La prova e' in due tempi -- PRIMA non c'e', DOPO c'e' -- cosi'
+  #  il verde misura una DIFFERENZA e non la presenza di una pagina che mostra sempre
+  #  qualcosa. Cosa NON prova (il pagamento) sta scritto sul passo che lo lancia.
+  #
+  #  E LO STESSO PERCORSO GIRA DUE VOLTE, sui DUE banchi, perche' la seconda volta prova
+  #  la regola dei soldi invece del cablaggio: sul banco con la chiave FINTA il gateway
+  #  non risponde, e allora il prodotto DEVE rifiutare e all'host NON deve comparire
+  #  niente ("nessun voucher senza incasso"). E' la proprieta' che protegge il lavoro
+  #  successivo -- l'autorizzazione con acquisizione differita, dove esiste per la prima
+  #  volta lo stato "confermata ma non ancora incassata".
+  #
+  #  PROVE AL CONTRARIO, fatte prima di scrivere questo job (2026-08-18, in locale, su
+  #  COPIE di deploy/ nella cartella temporanea -- mai sui file del progetto):
+  #    click-through, innocente -> `deploy/app.js` intatto ....... uscita 0, difetti 0
+  #    click-through, colpevole -> una riga in fondo ad app.js che chiama un oggetto
+  #                  inesistente (dopo l'export di window.BV, cosi' il login riesce lo
+  #                  stesso e il rosso NON puo' venire da un effetto collaterale)
+  #                  -> uscita 1, "erroriJS=6" su tutt'e 6 le combinazioni ruolo x
+  #                     viewport, col nome esatto del simbolo rotto.
+  #    percorso, innocente ...... uscita 0, e l'host vede il codice della prenotazione
+  #                  appena fatta (provato ANCHE con l'elenco gia' non vuoto, cioe' nel
+  #                  caso in cui un confronto sciatto avrebbe potuto passare per caso).
+  #    percorso, colpevole ...... `host.html`, nella copia, riscrive l'elenco come
+  #                  "Nessuna prenotazione ancora" -> uscita 1 con QUATTRO accuse
+  #                  distinte, fra cui "L'OSPITE HA PRENOTATO E L'HOST NON LA VEDE".
+  #    E i due atti si fanno da prova al contrario A VICENDA, senza rompere niente a mano:
+  #                  atto "conferma" puntato sul banco che rifiuta -> uscita 1;
+  #                  atto "rifiuto" puntato sul banco che conferma -> uscita 1, con in
+  #                  chiaro «IL GATEWAY NON PUO' INCASSARE E IL PRODOTTO HA CONFERMATO
+  #                  LO STESSO». Due configurazioni vere che si sorvegliano fra loro
+  #                  valgono piu' di un guasto piantato a mano, perche' non si possono
+  #                  dimenticare accese.
+  #  Cioe': le guardie vedono il guasto E non gridano sull'innocente. Senza queste prove
+  #  questo job sarebbe solo un semaforo che non ha mai visto un rosso.
+  #
+  #  ⛔ ANTI-VERDE-FINTO: il modo naturale di fallire in silenzio, qui, e' che il
+  #  server non parta e il collaudo non venga eseguito affatto. Per questo l'attesa
+  #  ha un DENOMINATORE (40 tentativi dichiarati) e, se scade, il passo esce con 1
+  #  e stampa il registro del server: mai un "verde per assenza di prove".
+  browser:
+    name: browser (3 pannelli + percorso ospite-host - NON blocca, vedi mappa in cima)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      # Python 3.9: e' lo stesso del job full-suite e del computer dove la batteria
+      # si lancia a mano. Qui serve solo ad ACCENDERE il server visivo, non a
+      # giudicare il prodotto: il giudizio lo da' il browser.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.9'
+          cache: pip
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          # NIENTE `cache: npm`: questo repo non versiona un lock file e la cache npm
+          # lo PRETENDE -> il job morirebbe prima di installare qualsiasi cosa.
+          # Stesso motivo gia' scritto sul job `accessibilita` (difetto del 2026-07-28).
+      - name: Dipendenze del server (le stesse della produzione)
+        run: pip install -r requirements.txt
+      - name: Dipendenze del browser (playwright, gia' in package.json)
+        run: npm install --no-audit --no-fund
+      - name: Browser Chromium
+        run: npx playwright install --with-deps chromium
+
+      # Il server visivo si spegne DA SOLO dopo VISIVO_TTL secondi: anche se un passo
+      # qui sotto muore, non resta un processo appeso a tenere occupata la porta.
+      - name: Accendi il server visivo (porta 8099, si spegne da solo)
+        run: |
+          VISIVO_TTL=600 python collaudi/avvia_server_visivo.py 8099 > server_visivo.log 2>&1 &
+          echo $! > server.pid
+
+      - name: Aspetta che risponda (40 tentativi, poi ROSSO - mai verde per assenza)
+        run: |
+          for i in $(seq 1 40); do
+            if curl -fsS --max-time 3 http://127.0.0.1:8099/api/health > /dev/null; then
+              echo "server visivo pronto al tentativo $i su 40"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "IL SERVER VISIVO NON HA RISPOSTO IN 40 TENTATIVI - registro:"
+          cat server_visivo.log
+          exit 1
+
+      # Nessun `|| true`: l'esito del browser e' l'esito del job. Che poi il job non
+      # entri nel gate e' una scelta dichiarata in cima, non un disarmo nascosto qui.
+      - name: Click-through dei 3 pannelli (PC + Mobile) col browser vero
+        run: node collaudi/clickthrough_pannelli.js
+
+      # LA REGOLA DEI SOLDI, VISTA DAL BROWSER. Questo primo banco ha una chiave Stripe
+      # FINTA: il gateway c'e' ma non risponde. E' il caso in cui il prodotto DEVE
+      # rifiutare -- fail-safe «Stripe giu' = soggiorno gratis» -- e all'host non deve
+      # comparire niente. Se un giorno qualcuno confermasse lo stesso, qui diventa rosso.
+      - name: Senza incasso non esce niente (gateway muto)
+        env:
+          BASE_VISIVO: http://127.0.0.1:8099
+          ATTESO: rifiuto
+        run: node collaudi/percorso_ospite_host.js
+
+      - name: Spegni il primo banco
+        if: always()
+        run: kill "$(cat server.pid)" 2>/dev/null || true
+
+      # ----------------------------------------------------------------------
+      #  IL PERCORSO: ospite -> prenotazione -> pannello dell'host
+      # ----------------------------------------------------------------------
+      #  Serve un SECONDO banco, su un'altra porta e con una configurazione diversa:
+      #  `STRIPE_SECRET_KEY` VUOTA, cioe' "pagamento non configurato". Non e' una
+      #  scorciatoia, e' l'unico modo onesto di percorrerlo qui:
+      #    · con la chiave FINTA del primo banco la prenotazione viene RIFIUTATA con
+      #      503 `pagamento_non_disponibile` -- ed e' il comportamento GIUSTO (il
+      #      fail-safe "Stripe giu' = soggiorno gratis"): il rosso parlerebbe della
+      #      chiave, non del prodotto;
+      #    · senza chiave il prodotto prevede esplicitamente il modo diretto, e la
+      #      prenotazione si conferma.
+      #  ⛔ Prezzo dichiarato: cosi' il PAGAMENTO non e' provato -- ne' la pagina della
+      #     carta, ne' il ramo "paga in struttura" (il suo anticipo passa dal gateway).
+      #     Per averli serve una chiave Stripe DI PROVA fra i segreti del repository:
+      #     e' il pezzo successivo, e non lo si nasconde dentro questo job.
+      - name: Accendi il secondo banco, senza gateway (porta 8097)
+        run: |
+          STRIPE_SECRET_KEY= VISIVO_TTL=600 python collaudi/avvia_server_visivo.py 8097 > server_percorso.log 2>&1 &
+          echo $! > server_percorso.pid
+
+      - name: Aspetta che risponda (40 tentativi, poi ROSSO)
+        run: |
+          for i in $(seq 1 40); do
+            if curl -fsS --max-time 3 http://127.0.0.1:8097/api/health > /dev/null; then
+              echo "secondo banco pronto al tentativo $i su 40"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "IL SECONDO BANCO NON HA RISPOSTO IN 40 TENTATIVI - registro:"
+          cat server_percorso.log
+          exit 1
+
+      - name: Il percorso intero (l'ospite prenota, l'host la vede)
+        env:
+          BASE_VISIVO: http://127.0.0.1:8097
+          ATTESO: conferma
+        run: node collaudi/percorso_ospite_host.js
+
+      - name: I registri dei due banchi come allegato (quando va storta)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-visivo-log
+          path: |
+            server_visivo.log
+            server_percorso.log
+          retention-days: 14
+
+      - name: Spegni il secondo banco
+        if: always()
+        run: kill "$(cat server_percorso.pid)" 2>/dev/null || true
 
   # ATHERIS: fuzzing coverage-guided sui motori-soldi. Un invariante rotto = job ROSSO
   # (bug vero). Gli invarianti sono gia' provati a mano su 222.400 giri -> niente falsi-rossi.
