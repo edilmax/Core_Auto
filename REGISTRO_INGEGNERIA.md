@@ -753,6 +753,38 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🚀 2026-08-18 (7) — **DEPLOY IN PRODUZIONE: il lavoro della giornata è sul sito vero**
+
+Via del fondatore (*«porta a termine fino alla vps»*). ⛔ Prima ho letto `DEPLOY.md` **per
+intero** — la memoria diceva che non era mai stato letto tutto, e non si improvvisa su una
+macchina che muove denaro.
+
+**Stato di partenza registrato PRIMA di toccare** (è il punto a cui si torna):
+`394d821` · immagine viva `sha256:cd5e1663…` · `docker compose 2.29.7` (v2) · nessuna
+variabile `PAGAMENTO_*`.
+
+**Il paracadute per primo** (§1b, il passo che era mancato quattro volte in quattro giorni):
+`casavip-app:prec` agganciato all'immagine **viva**, e **verificato per impronta** — le due
+sha coincidono — non «sembra agganciato». Poi il commit di partenza scritto su file.
+Poi lo scambio `rm-first` con `docker compose` **v2** in ogni riga (la v1 butta giù nginx).
+
+**Le sei verifiche, tutte passate:**
+```
+contenitori ......... casavip_app healthy · casavip_backup healthy · casavip_nginx up
+avvio pulito ........ 'avvisi': [], 'money_path_pronto': True, 'valuta': 'EUR'
+sito ................ https://bookinvip.com/ -> 200 · /api/health -> 200
+variabili PAGAMENTO_  nessuna (nessuna variabile vecchia che vince sul codice nuovo:
+                      è il «verde falso perfetto» descritto in DEPLOY.md §5)
+i tre posti ......... computer da8d555 · GitHub da8d555 · VPS da8d555
+paracadute .......... cd5e1663…, pronto se fosse servito
+```
+
+💡 **Cosa è cambiato per chi usa il sito, in concreto:** un estraneo non può più fabbricare
+righe nel registro dove il Guardiano cerca i guasti sui soldi; non può più **aggirare il
+limite di frequenza** cambiando intestazione a ogni richiesta; non può più scrivere testo
+scelto da lui dentro un **estratto fiscale**; e le due strade che servono e cancellano file
+hanno la terza cintura, con 18 attacchi diventati guardia permanente.
+
 ### 🛡️ 2026-08-18 (6) — **DOPO L'UNIONE: 164 ALLARMI -> 51, E I SEI GRAVI ERANO UNA DIFESA CHE FUNZIONA**
 
 **L'unione #66 e' passata** (`0ba128b`, verificata con una seconda chiamata: `state=closed`,
