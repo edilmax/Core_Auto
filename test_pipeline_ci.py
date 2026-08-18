@@ -6633,6 +6633,362 @@ class TestNessunRiferimentoGREZZOEntraNelREGISTRO(unittest.TestCase):
             "cricchetto qui sopra sorveglia una difesa che non esiste piu'")
 
 
+class TestLaPuliziaDelRegistroDEVEESSEREVISIBILEACHIANALIZZA(unittest.TestCase):
+    """🔬 UNA DIFESA CHE FUNZIONA MA CHE L'ANALIZZATORE NON VEDE VIENE BOCCIATA LO STESSO.
+
+    **Il fatto, 2026-08-18.** La riparazione della richiesta #66 e' stata scritta, provata e
+    spinta: `_rif_per_registro` ripulisce il riferimento con una `re.sub` che tiene **solo**
+    lettere, cifre e quattro segni. E' piu' severa di qualunque rimedio suggerito. CodeQL ha
+    rifatto l'analisi **sullo stesso identico file** (verificato: il blob di `fase83_server.py`
+    nel commit analizzato `fb42d97` ha la stessa impronta `8a28c8f` di quello sul disco) e ha
+    segnalato **di nuovo le stesse cinque righe**.
+
+    ⛔ **Il motivo non e' un'opinione: sta scritto nel sorgente della regola.** Dal file
+    `python/ql/lib/semmle/python/security/dataflow/LogInjectionCustomizations.qll` del
+    repository `github/codeql`, unica barriera prevista oltre al confronto con una costante:
+
+        class ReplaceLineBreaksSanitizer extends Sanitizer, DataFlow::CallCfgNode {
+          ReplaceLineBreaksSanitizer() {
+            this.getFunction().(DataFlow::AttrRead).getAttributeName() = "replace" and
+            this.getArg(0).asExpr().(StringLiteral).getText() in ["\\r\\n", "\\n"]
+          }
+        }
+
+    Cioe': CodeQL riconosce **una forma sola**, `qualcosa.replace("\\n", ...)`. La nostra
+    `re.sub` toglie molto di piu', ma per l'analisi e' **invisibile**, e il veleno risulta
+    passare. 💡 La lezione, ed e' quella che questa guardia mette in cassaforte: **una difesa
+    ha due destinatari** — il programma, che deve restare sano, e lo strumento che sorveglia,
+    che deve poterlo **dimostrare**. Se il secondo non la vede, l'allarme non si spegne mai e
+    prima o poi qualcuno lo spegne a mano: e quello e' il vero difetto.
+
+    ⛔ Percio' qui si pretendono **due cose diverse**, e servono tutt'e due:
+      1. che la pulizia **funzioni davvero** (nessun a-capo sopravvive, in nessuna delle sue
+         otto forme) — l'invariante del prodotto;
+      2. che la pulizia sia **scritta nella forma che l'analizzatore riconosce**, e che il
+         valore ripulito sia proprio quello che **esce** dalla funzione — l'invariante dello
+         strumento. Una barriera messa su una variabile che nessuno restituisce non protegge
+         niente, e sarebbe verde qui e rossa in CI.
+    """
+
+    # ⛔ COPIATA DAL SORGENTE DELLA REGOLA, non dedotta: sono le due sole stringhe che
+    # `ReplaceLineBreaksSanitizer` accetta come primo argomento di `.replace(...)`.
+    A_CAPO_RICONOSCIUTI = ("\n", "\r\n")
+
+    # Tutti i modi in cui un carattere puo' spezzare una riga di registro. Non e' un elenco
+    # inventato: sono esattamente quelli su cui `str.splitlines()` di Python taglia, ed e' il
+    # secondo giudice usato piu' sotto (un conto scritto DIVERSO, tecnica «oracolo
+    # indipendente»: se i due non concordano, uno dei due sbaglia e si vede).
+    SPEZZARIGHE = ("\n", "\r", "\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x85",
+                   " ", " ")
+
+    def _funzione_rimedio(self):
+        """L'albero sintattico di `_rif_per_registro`, letto dal file di produzione."""
+        import ast
+        with io.open(os.path.join(QUI, "fase83_server.py"), encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+        for n in ast.walk(albero):
+            if isinstance(n, ast.FunctionDef) and n.name == "_rif_per_registro":
+                return n
+        return None
+
+    def _replace_riconosciute(self, funzione):
+        """Le chiamate `.replace("\\n", ...)` che CodeQL conta come barriera. Stessa regola
+        del sorgente citato nella docstring: nome dell'attributo + primo argomento letterale."""
+        import ast
+        trovate = []
+        for n in ast.walk(funzione):
+            if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)):
+                continue
+            if n.func.attr != "replace" or not n.args:
+                continue
+            primo = n.args[0]
+            if isinstance(primo, ast.Constant) and isinstance(primo.value, str) \
+                    and primo.value in self.A_CAPO_RICONOSCIUTI:
+                trovate.append(n)
+        return trovate
+
+    def test_LA_PULIZIA_ESISTE_NELLA_FORMA_CHE_CODEQL_RICONOSCE(self):
+        import ast
+        funzione = self._funzione_rimedio()
+        # ⛔ Non «non e' nullo» (lezione del 2026-08-14: `False` non e' `None`), ma «e' LA
+        # cosa, del tipo giusto»: una definizione di funzione con quel nome esatto.
+        self.assertIsInstance(
+            funzione, ast.FunctionDef,
+            "`_rif_per_registro` non esiste piu' come funzione in fase83_server.py: non "
+            "c'e' nessuna pulizia da rendere visibile, e le guardie qui sotto "
+            "sorveglierebbero il vuoto")
+        chiamate = self._replace_riconosciute(funzione)
+        self.assertTrue(
+            chiamate,
+            "DENTRO `_rif_per_registro` NON C'E' NESSUNA `.replace(\"\\\\n\", ...)`.\n"
+            "        La pulizia con `re.sub` funziona, ma CodeQL NON la vede: l'unica "
+            "barriera che la sua regola riconosce e' `ReplaceLineBreaksSanitizer` "
+            "(github/codeql, LogInjectionCustomizations.qll), cioe' una chiamata "
+            "`.replace(...)` col primo argomento uguale a \"\\\\n\" o \"\\\\r\\\\n\".\n"
+            "        ⛔ Senza quella forma la richiesta resta ROSSA anche a difesa "
+            "perfetta, e l'unico modo per farla passare diventa spegnere l'allarme a mano. "
+            "La `re.sub` NON si toglie: la `.replace` si aggiunge ACCANTO.")
+
+    def test_IL_VALORE_RIPULITO_E_PROPRIO_QUELLO_CHE_ESCE(self):
+        """⛔ Una barriera su una variabile che poi nessuno restituisce e' un ornamento:
+        sarebbe verde in questo file e rossa in CI, che e' il peggiore dei due mondi."""
+        import ast
+        funzione = self._funzione_rimedio()
+        chiamate = self._replace_riconosciute(funzione)
+        # ⛔ NESSUN `skipTest` quando non ce ne sono: un test che si assolve da solo sparisce
+        # dal rapporto come «skipped» e non lo legge piu' nessuno (bocciato due volte da due
+        # guardie indipendenti, il 2026-08-17). Se la barriera manca, questa guardia dev'essere
+        # ROSSA quanto quella qui sopra: l'invariante e' unico e vale in tutt'e due i rami.
+        nomi_resi = set()
+        for n in ast.walk(funzione):
+            if isinstance(n, ast.Return) and n.value is not None:
+                for m in ast.walk(n.value):
+                    if isinstance(m, ast.Name):
+                        nomi_resi.add(m.id)
+
+        nomi_ripuliti = set()
+        for n in ast.walk(funzione):
+            if not isinstance(n, ast.Assign):
+                continue
+            dentro = [x for x in ast.walk(n.value) if any(x is c for c in chiamate)]
+            if not dentro:
+                continue
+            for t in n.targets:
+                for m in ast.walk(t):
+                    if isinstance(m, ast.Name):
+                        nomi_ripuliti.add(m.id)
+
+        # oppure la `.replace` sta direttamente dentro il `return`
+        diretta = any(any(x is c for c in chiamate)
+                      for n in ast.walk(funzione) if isinstance(n, ast.Return)
+                      and n.value is not None
+                      for x in ast.walk(n.value))
+
+        self.assertTrue(
+            diretta or (nomi_resi & nomi_ripuliti),
+            "la `.replace(\"\\\\n\", ...)` c'e', ma il valore che ne esce NON e' quello che "
+            "la funzione restituisce (restituisce %s, ripulisce %s): la barriera non sta "
+            "sulla strada del dato, quindi CodeQL continuera' a vedere il veleno passare."
+            % (sorted(nomi_resi) or "niente", sorted(nomi_ripuliti) or "niente"))
+
+    def test_NESSUN_A_CAPO_SOPRAVVIVE_ALLA_PULIZIA(self):
+        """L'invariante del PRODOTTO, indipendente da come e' scritto il rimedio: qualunque
+        cosa entri, dal registro non puo' uscire piu' di UNA riga."""
+        from fase83_server import _rif_per_registro
+        for spezza in self.SPEZZARIGHE:
+            veleno = "REF-123%sinfo GUASTO SUI SOLDI: rimborso mai partito" % spezza
+            with self.subTest(carattere=repr(spezza)):
+                uscita = _rif_per_registro(veleno)
+                for c in self.SPEZZARIGHE:
+                    self.assertNotIn(
+                        c, uscita,
+                        "il carattere %r e' sopravvissuto alla pulizia: con quello si "
+                        "fabbrica una riga di allarme FALSA nel registro che il Guardiano "
+                        "(fase186) legge ogni giorno" % (c,))
+                # ⛔ SECONDO GIUDICE, scritto diverso dal primo: `splitlines` di Python taglia
+                # su tutti e dieci quei caratteri. Se conta piu' di una riga, la difesa ha un
+                # buco che l'elenco qui sopra non ha visto.
+                self.assertEqual(
+                    len(uscita.splitlines()), 1,
+                    "da un solo riferimento sono uscite %d righe (%r): il registro si puo' "
+                    "ancora falsificare" % (len(uscita.splitlines()), uscita))
+
+    def test_LA_PULIZIA_NON_RESTITUISCE_MAI_UNA_STRINGA_VUOTA(self):
+        """Una riga di registro con un riferimento vuoto e' illeggibile quanto una falsa:
+        chi legge non sa piu' di quale prenotazione si parlava."""
+        from fase83_server import _rif_per_registro
+        for vuoto in ("", "\n\n\n", "   ", None, " "):
+            with self.subTest(ingresso=repr(vuoto)):
+                uscita = _rif_per_registro(vuoto)
+                self.assertTrue(
+                    isinstance(uscita, str) and uscita.strip(),
+                    "da %r e' uscito %r: nel registro finirebbe una riga senza riferimento"
+                    % (vuoto, uscita))
+                self.assertLessEqual(
+                    len(uscita), 64,
+                    "il riferimento ripulito supera i 64 caratteri dichiarati: %r" % (uscita,))
+
+
+class TestLaListaDeiFileESCLUSIDaCodeQL(unittest.TestCase):
+    """🚧 UN ELENCO DI ESCLUSIONI E' LA SCAPPATOIA PIU' COMODA CHE ESISTA: qui c'e' il suo
+    guardiano.
+
+    **Il fatto, 2026-08-18.** Su 164 allarmi aperti, **47** erano `clear-text-logging` e
+    **45 di quei 47 non erano difetti**: nascevano da tre file di collaudo che contengono la
+    parola `password` con dentro dati finti (`PASSWORD_ROMA`, `"password1"`). CodeQL li
+    classifica come dati sensibili e li segue fin dentro il server. In produzione quel
+    passaggio non esiste. E **non si puo' riparare nel codice**: nella versione di regole che
+    gira nella nostra CI (`codeql/python-all 7.2.3+44a68d3a`, scaricata al commit esatto e
+    confrontata per impronta), `CleartextLoggingCustomizations.qll` dichiara
+    `abstract class Sanitizer` e **non ne implementa nemmeno una**.
+
+    Quindi il codice di collaudo esce dall'analisi, e la scelta sta scritta in un file
+    leggibile del repository (`.github/codeql/codeql-config.yml`) invece che in allarmi
+    archiviati a mano su un sito.
+
+    ⛔ **Ma un'esclusione senza guardiano e' un interruttore per spegnere gli allarmi
+    scomodi.** Domani basta aggiungere una riga con `fase83_server.py` e la sorveglianza sul
+    file che muove i soldi sparisce **senza che nulla diventi rosso**. Percio' qui si
+    pretendono cinque cose, e la piu' importante e' la terza:
+
+      1. il file di configurazione esiste e si carica davvero come YAML;
+      2. ogni riga dell'elenco corrisponde a file che esistono (una riga morta e' un
+         elenco che nessuno ha piu' riletto);
+      3. **nessun file di produzione puo' finire escluso** — le righe vengono espanse sui
+         file veri del repository, non lette come testo;
+      4. i tre punti d'ingresso veri (`fase83_server.py`, `app.py`, `main_casavip.py`)
+         restano dentro l'analisi, detti per nome;
+      5. il workflow **punta davvero** a questo file (regola ferrea 23, «costruito ≠
+         collegato»): una configurazione perfetta che nessuno carica e' un ornamento, ed e'
+         il difetto piu' frequente di questo progetto.
+    """
+
+    CONFIG = os.path.join(".github", "codeql", "codeql-config.yml")
+    WORKFLOW = os.path.join(".github", "workflows", "codeql.yml")
+    INGRESSI = ("fase83_server.py", "app.py", "main_casavip.py")
+
+    def _config(self):
+        percorso = os.path.join(QUI, self.CONFIG)
+        self.assertTrue(
+            os.path.isfile(percorso),
+            "manca %s: il workflow lo carica e senza quel file CodeQL parte con la "
+            "configurazione di serie, cioe' torna a inondare di allarmi finti" % self.CONFIG)
+        with io.open(percorso, encoding="utf-8") as f:
+            return yaml.safe_load(f.read())
+
+    def _file_del_repository(self):
+        """Tutti i `.py` versionati, in percorso relativo con le barre di git."""
+        fuori = []
+        for radice, cartelle, nomi in os.walk(QUI):
+            cartelle[:] = [c for c in cartelle
+                           if c not in (".git", "__pycache__", ".venv", "venv", "node_modules",
+                                        ".mypy_cache", ".pytest_cache", "htmlcov")]
+            for n in nomi:
+                if not n.endswith(".py"):
+                    continue
+                rel = os.path.relpath(os.path.join(radice, n), QUI).replace(os.sep, "/")
+                fuori.append(rel)
+        return sorted(fuori)
+
+    @staticmethod
+    def _e_di_collaudo(percorso):
+        base = percorso.split("/")[-1]
+        return (base.startswith("test_")
+                or percorso.startswith("collaudi/")
+                or percorso.startswith("tests/"))
+
+    @staticmethod
+    def _corrisponde(modello, percorso):
+        """Vero se il modello dell'elenco copre quel file.
+
+        ⛔ Volutamente GENEROSO: `fnmatch` lascia che `*` scavalchi anche le barre, quindi
+        questa funzione dichiara «escluso» piu' di quanto CodeQL escluderebbe davvero. E'
+        il verso giusto in cui sbagliare: un modello troppo largo qui diventa ROSSO, non
+        invisibile (lo sbaglio S15 e' stato esattamente il contrario).
+        """
+        import fnmatch
+        m = str(modello).strip().strip('"').strip("'")
+        if not m:
+            return False
+        if m.endswith("/"):
+            return percorso.startswith(m)
+        if m.startswith("**/"):
+            coda = m[3:]
+            return (fnmatch.fnmatch(percorso, coda)
+                    or fnmatch.fnmatch(percorso.split("/")[-1], coda)
+                    or fnmatch.fnmatch(percorso, m))
+        return fnmatch.fnmatch(percorso, m)
+
+    def _esclusi(self):
+        cfg = self._config()
+        modelli = cfg.get("paths-ignore") or []
+        tutti = self._file_del_repository()
+        mappa = {}
+        for m in modelli:
+            mappa[m] = [p for p in tutti if self._corrisponde(m, p)]
+        return modelli, mappa, tutti
+
+    def test_IL_FILE_DI_CONFIGURAZIONE_ESISTE_E_HA_UN_ELENCO(self):
+        cfg = self._config()
+        self.assertIsInstance(
+            cfg, dict, "%s non si carica come YAML: CodeQL fallirebbe l'avvio" % self.CONFIG)
+        modelli = cfg.get("paths-ignore")
+        self.assertTrue(
+            isinstance(modelli, list) and modelli,
+            "`paths-ignore` e' vuoto o non e' un elenco: allora questo file non serve a "
+            "niente e va tolto, invece di restare li' a far credere che qualcosa sia "
+            "configurato (trovato: %r)" % (modelli,))
+
+    def test_NESSUN_FILE_DI_PRODUZIONE_PUO_FINIRE_ESCLUSO(self):
+        """⛔ LA GUARDIA CHE CONTA. Se qualcuno aggiunge `fase*.py` all'elenco per far
+        tacere un allarme, questa riga diventa rossa lo stesso giorno."""
+        _modelli, mappa, _tutti = self._esclusi()
+        colpevoli = {}
+        for m, colpiti in mappa.items():
+            produzione = [p for p in colpiti if not self._e_di_collaudo(p)]
+            if produzione:
+                colpevoli[m] = produzione
+        self.assertEqual(
+            {}, colpevoli,
+            "L'ELENCO DELLE ESCLUSIONI DI CODEQL TOGLIE DALL'ANALISI DEL CODICE DI "
+            "PRODUZIONE.\n        %s\n        ⛔ Il codice che gira per gli ospiti si "
+            "analizza tutto. Se un allarme e' falso si spiega e si archivia quello, non si "
+            "spegne il faro."
+            % "\n        ".join("%r -> %s" % (m, ", ".join(v[:6])) for m, v in colpevoli.items()))
+
+    def test_I_TRE_INGRESSI_VERI_RESTANO_DENTRO_L_ANALISI(self):
+        """La guardia sopra dice «niente produzione»; questa dice i tre nomi. Sono due
+        affermazioni diverse: la prima puo' restare verde su un repository vuoto."""
+        _modelli, mappa, tutti = self._esclusi()
+        esclusi = set()
+        for colpiti in mappa.values():
+            esclusi.update(colpiti)
+        for nome in self.INGRESSI:
+            self.assertIn(nome, tutti, "%s non c'e' piu' sul disco: la guardia sorveglia "
+                                       "un file che non esiste" % nome)
+            self.assertNotIn(
+                nome, esclusi,
+                "%s e' finito FUORI dall'analisi di CodeQL: e' uno dei tre punti d'ingresso "
+                "veri della macchina, e da solo raccoglie la maggior parte degli allarmi "
+                "sui soldi" % nome)
+
+    def test_OGNI_RIGA_DELL_ELENCO_CORRISPONDE_A_FILE_CHE_ESISTONO(self):
+        """Una riga che non prende piu' niente e' un elenco che nessuno ha riletto: o il
+        file e' stato rinominato (e allora non e' piu' escluso davvero, senza che nessuno
+        se ne accorga), o la riga andava tolta."""
+        modelli, mappa, _tutti = self._esclusi()
+        morte = [m for m in modelli if not mappa[m]]
+        self.assertEqual(
+            [], morte,
+            "queste righe di `paths-ignore` non corrispondono a nessun file del "
+            "repository: %s" % ", ".join(repr(m) for m in morte))
+
+    def test_IL_WORKFLOW_PUNTA_DAVVERO_A_QUESTO_FILE(self):
+        """⛔ REGOLA FERREA 23 — COSTRUITO ≠ COLLEGATO. E' il difetto che questo progetto
+        ha gia' fatto piu' volte: l'attrezzo giusto, scritto bene, che nessuno esegue."""
+        percorso = os.path.join(QUI, self.WORKFLOW)
+        with io.open(percorso, encoding="utf-8") as f:
+            testo = f.read()
+        wf = yaml.safe_load(testo)
+        passi = []
+        for job in (wf.get("jobs") or {}).values():
+            passi.extend(job.get("steps") or [])
+        init = [p for p in passi if "codeql-action/init" in str(p.get("uses", ""))]
+        self.assertTrue(init, "il workflow CodeQL non ha piu' un passo `init`")
+        dichiarato = [str((p.get("with") or {}).get("config-file", "")) for p in init]
+        atteso = "./" + self.CONFIG.replace(os.sep, "/")
+        self.assertIn(
+            atteso, dichiarato,
+            "il passo `init` di CodeQL NON carica %s (dichiara %r): la configurazione "
+            "esiste sul disco e non la legge nessuno, quindi l'analisi gira con le "
+            "impostazioni di serie e questo file e' un ornamento." % (atteso, dichiarato))
+        # e il file puntato dev'essere quello che esiste davvero
+        self.assertTrue(
+            os.path.isfile(os.path.join(QUI, atteso[2:].replace("/", os.sep))),
+            "il workflow punta a %r, che sul disco non c'e': l'analisi fallirebbe "
+            "all'avvio" % atteso)
+
+
 class TestLaSuiteRIFIUTADiGirareDallaShellSBAGLIATA(unittest.TestCase):
     """🚫 LA SHELL FA PARTE DELLA MISURA — e questa guardia nasce da un errore MIO.
 

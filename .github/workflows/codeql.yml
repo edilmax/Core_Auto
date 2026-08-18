@@ -77,6 +77,15 @@ jobs:
         with:
           languages: python
           queries: security-extended
+          # ⛔ COSA SI ANALIZZA sta scritto in un file leggibile del repository, non
+          # in un interruttore nascosto: `.github/codeql/codeql-config.yml` toglie
+          # dall'analisi il codice di COLLAUDO (test_*.py, collaudi/), che non va in
+          # produzione e che il 2026-08-18 produceva da solo 45 dei 47 allarmi
+          # `clear-text-logging` — dati finti con la parola «password» dentro. Il
+          # motivo per esteso, i numeri misurati e cio' che si perde stanno in cima a
+          # quel file; la guardia `TestLaListaDeiFileESCLUSIDaCodeQL` impedisce che ci
+          # finisca dentro un file di produzione, e che questa riga sparisca.
+          config-file: ./.github/codeql/codeql-config.yml
 
       # ⛔ NIENTE `autobuild`: Python non si compila. Quel passo qui non farebbe
       # nulla, e un passo che non fa nulla e' un passo che un giorno qualcuno

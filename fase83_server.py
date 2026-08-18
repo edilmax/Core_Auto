@@ -62,6 +62,20 @@ def _rif_per_registro(rif: Any) -> str:
     sapere se un guasto sui soldi e' avvenuto. Una riga FABBRICATA li' dentro non e' un
     difetto qualunque: e' un difetto nello strumento con cui si vedono i difetti."""
     pulito = re.sub(r"[^A-Za-z0-9:_.-]", "", str(rif))[:64]
+    # ⛔ RIDONDANTE PER IL PRODOTTO, NECESSARIA PER CHI SORVEGLIA -- e non e' un vezzo.
+    # La `re.sub` qui sopra ha gia' tolto tutto cio' che non e' lettera, cifra o uno dei
+    # quattro segni ammessi: gli a-capo, in tutte e dieci le loro forme, sono gia' spariti.
+    # Ma CodeQL riconosce UNA SOLA forma di barriera -- `ReplaceLineBreaksSanitizer`, in
+    # `LogInjectionCustomizations.qll` del repository `github/codeql`: una `.replace(...)`
+    # col primo argomento uguale a "\n" o "\r\n". Senza quella forma l'analisi vede il
+    # veleno attraversare una difesa che funziona: misurato il 2026-08-18, la richiesta #66
+    # e' tornata ROSSA (10 allarmi) sul file GIA' riparato, stessa impronta `8a28c8f`.
+    # ⛔ La `re.sub` NON si toglie per tenere solo questa: la prima e' la difesa vera (un
+    # elenco di cio' che si AMMETTE, il piu' severo dei due), la seconda e' la sua
+    # dimostrazione all'analizzatore. Una difesa ha due destinatari: il programma, che deve
+    # restare sano, e lo strumento che sorveglia, che deve poterlo vedere.
+    # Guardie: `TestLaPuliziaDelRegistroDEVEESSEREVISIBILEACHIANALIZZA` (test_pipeline_ci).
+    pulito = pulito.replace("\r\n", "").replace("\n", "")
     return pulito or "riferimento_vuoto_o_illeggibile"
 
 

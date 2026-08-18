@@ -11,22 +11,118 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
-## 🧾 2026-08-17 (20) — **UN FOGLIO SOLO, E TRE NUMERI CHE ADESSO LI PRODUCE UNA MACCHINA**
+## 🔬 2026-08-18 (21) — **LA RIPARAZIONE ERA GIUSTA E L'ANALIZZATORE NON LA VEDEVA**
 
 > **Stato dei tre posti, misurato adesso (non ricordato):**
 > ```
-> computer master 44b2f43 · ramo consegne-foglio-unico 2c96d21 (spinto)
-> GitHub master 394d821  <- la #65 e' stata UNITA (verificata con una SECONDA
->                           chiamata: state=closed, merged=True, merged_at pieno.
->                           Era APERTA, e il documento la dava per chiusa: terza
->                           volta. Si chiede all'API, sempre.)
-> VPS 44b2f43            <- indietro di un'unione: allineare
-> RICHIESTA #66: aperta su 2c96d21 (il lavoro di stanotte)
-> CI su 1f3f5f3: 15 job · gate=success · CodeQL rosso per il 503 di GitHub,
->                rilanciato e tornato verde: NON era nostro.
-> CI su 2c96d21: 15 job · gate=success · ma CodeQL ROSSO PER DAVVERO —
->                10 allarmi (5 gravi) su codice scritto da me. Riparato, vedi sotto.
+> computer  ramo consegne-foglio-unico 13ac1e8 + il lavoro di oggi (6 file)
+> GitHub    master 394d821 · ramo remoto 13ac1e8
+> VPS       394d821  <- ALLINEATO a master. Il documento lo dava «indietro di
+>                      un'unione»: misurato oggi via ssh, non lo e' piu'.
+>                      casavip_app e casavip_backup: healthy da 15 ore.
+> RICHIESTA #66: APERTA su 13ac1e8 (API: state=open, merged=False,
+>                mergeable_state=unstable)
+> CI su 13ac1e8: 15 job · gate=success · CodeQL ROSSO: 10 allarmi (5 gravi)
+>                ⛔ SULLE STESSE CINQUE RIGHE CHE STANOTTE AVEVO GIA' RIPARATO.
 > ```
+>
+> ### 🔴 IL PC SI E' RIAVVIATO DA SOLO, E LA PRIMA DOMANDA DEL FONDATORE ERA GIUSTA
+> *«la mia paura e' che quando stanotte si e' riavviato ha spezzato qualcosa e da' finti
+> rossi o verdi»*. Verificato invece che rassicurato, e la prova non e' un ragionamento:
+> l'analisi gira **sui computer di GitHub**. Chiesto all'API **quale file** ha letto:
+> ```
+> commit analizzato da CodeQL: fb42d97 (genitori: 394d821 + 13ac1e8)
+> blob di fase83_server.py in quel commit : 8a28c8f31e063a619eee8ee13bc2f6eac1969f57
+> blob di fase83_server.py sul disco      : 8a28c8f31e063a619eee8ee13bc2f6eac1969f57
+> ```
+> Stessa impronta: ha letto **il file riparato**. E sul disco, dopo il riavvio:
+> `git status --porcelain` 0 righe · `git diff HEAD --stat` 0 righe · nessun biglietto di
+> mutazione aperto · `guardia_commit.py` uscita 0 · suite intera **Ran 5814, OK**, gli
+> stessi identici numeri di prima del riavvio. **Niente si era spezzato.**
+> 💡 E la paura era ragionevole: l'unica cosa che il riavvio poteva davvero falsare era il
+> «5814 OK» scritto nel messaggio di commit, che era **ricordato** e non rimisurato. Per
+> quello si e' rilanciata la batteria invece di citarla.
+>
+> ### ⛔ PERCHE' UNA DIFESA GIUSTA VENIVA BOCCIATA — sta scritto nel sorgente della regola
+> `_rif_per_registro` ripulisce con `re.sub(r"[^A-Za-z0-9:_.-]", "", ...)`: un elenco di
+> cio' che si **ammette**, il piu' severo dei rimedi possibili. Ma dal file
+> `LogInjectionCustomizations.qll` di `github/codeql` (scaricato **al commit esatto che gira
+> nella nostra CI**, `codeql/python-all 7.2.3+44a68d3a`, e confrontato per sha256 con quello
+> del ramo principale: **identici**):
+> ```
+> class ReplaceLineBreaksSanitizer extends Sanitizer, DataFlow::CallCfgNode {
+>   ReplaceLineBreaksSanitizer() {
+>     this.getFunction().(DataFlow::AttrRead).getAttributeName() = "replace" and
+>     this.getArg(0).asExpr().(StringLiteral).getText() in ["\r\n", "\n"]
+>   }
+> }
+> ```
+> Cioe' CodeQL riconosce **una forma sola**: `qualcosa.replace("\n", ...)`. La `re.sub` toglie
+> molto di piu' e per l'analisi e' **invisibile**.
+> 💡 **La lezione, e vale oltre CodeQL: una difesa ha DUE destinatari** — il programma, che
+> deve restare sano, e lo strumento che sorveglia, che deve poterlo **dimostrare**. Se il
+> secondo non la vede, l'allarme non si spegne mai, e prima o poi qualcuno lo spegne a mano.
+>
+> ✅ **Riparato aggiungendo la forma riconosciuta ACCANTO a quella severa** (mai al posto
+> suo), e dimostrando che la riga non cambia il prodotto — non a parole:
+> ```
+> casi scelti a mano: 33, divergenze: 0
+> hypothesis: 5000 ingressi generati, nessuna divergenza
+> tutti i 65536 caratteri del piano base provati, divergenze: 0
+> caratteri che sopravvivono: 66 (26+26+10 e i quattro segni : _ . -), fuori elenco: []
+> ESITO: le due funzioni sono INDISTINGUIBILI
+> ```
+> Guardie nuove, **le prime due viste rosse prima**:
+> `TestLaPuliziaDelRegistroDEVEESSEREVISIBILEACHIANALIZZA` — la forma che l'analizzatore
+> riconosce · il valore ripulito dev'essere **quello che esce** (una barriera su una
+> variabile che nessuno restituisce e' un ornamento) · nessun a-capo sopravvive, in **dieci**
+> forme, con `splitlines()` come secondo giudice · mai una stringa vuota nel registro.
+>
+> ### 📏 IL FRONTE INTERO, MISURATO INVECE CHE STIMATO (API, analisi 1630965234)
+> ```
+> allarmi aperti su master ....... 164   (99 medi, 65 gravi)
+>   py/log-injection ............. 102 allarmi su 88 PUNTI (67 fase83_server, 20 app.py, 1 fase156)
+>                                  sorgente in produzione: 102 su 102  -> sono VERI
+>   py/clear-text-logging ........  47   di cui 45 nati da TRE file di collaudo, 2 veri
+>   tutto il resto ...............  15
+> ```
+> **135 su 164 sono le due classi maneggiate oggi**, e il rimedio e' **uno solo**, moltiplicato
+> per 88 punti. ⛔ Quegli 88 **non sono stati toccati oggi di proposito**: prima si fa
+> confermare dalla CI che il meccanismo funziona su **5**, poi lo si applica agli 88 (la
+> regola «prova in piccolo prima», che qui e' costata cinque giri lunghi in un giorno solo).
+>
+> ### 🚧 I 45 «GRAVI» NON ERANO DIFETTI, E NON SI POTEVANO RIPARARE NEL CODICE
+> Nascono tutti e soli da `test_happy_host.py`, `test_dati_reali.py` e
+> `collaudi/dati_realistici.py`: dentro c'e' la parola `password` con dati **finti**
+> (`PASSWORD_ROMA`, `"password1"`), CodeQL la classifica come dato sensibile e la segue fin
+> dentro il server. In produzione quel passaggio non esiste. E per quella regola **nessuna
+> pulizia e' prevista**: `CleartextLoggingCustomizations.qll` dichiara
+> `abstract class Sanitizer` e **non ne implementa nessuna** (verificato allo stesso commit).
+> ✅ Quindi il codice di collaudo esce dall'analisi, e la decisione sta in un file
+> **leggibile del repository** (`.github/codeql/codeql-config.yml`) invece che in allarmi
+> archiviati a mano su un sito — con dentro, scritto, **cosa si perde**: 12 allarmi situati
+> nei collaudi, aperti tutti e dodici prima di decidere (nove `url.startswith(...)`, un hash
+> debole in un test sulle lingue, una password finta stampata, un `ssl.create_default_context`).
+> ⛔ **E non puo' diventare una scappatoia**: `TestLaListaDeiFileESCLUSIDaCodeQL` espande
+> l'elenco sui file veri del repository e diventa rossa se ci entra un file di produzione, se
+> una riga non corrisponde piu' a niente, o se il workflow smette di puntarci.
+> **Provata al contrario**: infilato `fase83_server.py` nell'elenco, **due guardie
+> indipendenti** sono diventate rosse; file rimesso com'era, 4340 byte == 4340 byte.
+> 💡 E ha gia' preso un errore mio appena scritta: avevo messo `tests/` nell'elenco, una
+> cartella che **in questo repository non esiste**.
+>
+> ### ⚠️ DUE VOLTE LA STESSA DISTRAZIONE, PRESA DUE VOLTE DA DUE MACCHINE
+> `Ran 5814 -> 5823 -> 5828`: ho lanciato la batteria intera con il numero vecchio ancora
+> scritto, e i 28 minuti sono finiti su **un rosso solo**
+> (`test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO`). Poi il **pre-fatto** ha fermato il
+> commit perche' due file (`.github/codeql/...`) non erano nello **scopo dichiarato**, fermo
+> a `1f3f5f3`. Nessuno dei due era un difetto del prodotto: erano **miei**, e li ha visti la
+> macchina. E' il motivo per cui quelle due guardie esistono.
+
+## 🧾 2026-08-17 (20) — **UN FOGLIO SOLO, E TRE NUMERI CHE ADESSO LI PRODUCE UNA MACCHINA**
+
+> **Lo stato dei tre posti sta nel riquadro della sezione (21) qui sopra**: uno solo, sempre
+> il piu' recente, cosi' non ci sono due riquadri che si contraddicono.
 >
 > ### 🔴 IL NUMERO CHE DECIDEVA IL LAVORO ERA FALSO, E LA CAUSA NON ERA «È VECCHIO»
 > `collaudi/raggiungibilita.py` camminava dagli import di **un ingresso solo**
@@ -5001,7 +5097,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5819 test
+SUITE ATTUALE: Ran 5828 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
@@ -5011,6 +5107,18 @@ AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
             della classe spenta col parser di Python e dice quale shell li sta
             spegnendo. Era lo sbaglio S11, aperto da sette giorni.
 COMANDO:  python -c "import unittest; print(unittest.defaultTestLoader.discover('.', pattern='test_*.py').countTestCases())"
+MISURATO SU: 13ac1e8 + LA BARRIERA VISIBILE A CODEQL + L'ELENCO DEGLI ESCLUSI (2026-08-18,
+             non ancora committato): le 4 guardie di
+             `TestLaPuliziaDelRegistroDEVEESSEREVISIBILEACHIANALIZZA` e le 5 di
+             `TestLaListaDeiFileESCLUSIDaCodeQL`, tutte in `test_pipeline_ci.py`.
+             Da 5819 a 5823 (+4), poi a **5828 (+5)**. Il secondo numero e' stato
+             rimisurato col caricatore da fermo PRIMA di rilanciare (S14).
+             ⛔ E QUESTA VOLTA NON L'HO SCRITTO PRIMA: ho lanciato la suite intera con il
+             numero vecchio ancora dentro, e i 28 minuti sono finiti su un rosso solo —
+             `test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO`, «5819 != 5823». E' lo
+             sbaglio S14 preso in flagrante per la SECONDA volta dalla stessa macchina, e
+             va scritto qui proprio perche' e' mio: la regola dice di rimisurare PRIMA di
+             lanciare, e costa due secondi contro mezz'ora.
 MISURATO SU: d781e8d + LE QUATTRO STRADE + LA PURGA + LA LISTA UNICA (2026-08-17, non
              ancora committato). Due misure successive, entrambe col caricatore da fermo e
              scritte PRIMA di lanciare (S14):

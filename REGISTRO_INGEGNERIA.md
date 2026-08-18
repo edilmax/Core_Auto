@@ -753,6 +753,59 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🔬 2026-08-18 (1) — **LA BARRIERA C'ERA E L'ANALIZZATORE NON LA VEDEVA** (`fase83_server.py`, +9 guardie)
+
+**Il fatto.** La richiesta #66, gia' riparata la notte prima, e' tornata **rossa con gli stessi
+10 allarmi sulle stesse 5 righe**. Verificato che non fosse un effetto del riavvio notturno del
+PC: l'analisi gira sui computer di GitHub, e il commit analizzato (`fb42d97`) porta lo stesso
+blob di `fase83_server.py` che sta sul disco (`8a28c8f31e063a619eee8ee13bc2f6eac1969f57`), cioe'
+**il file riparato**.
+
+**La causa, letta nel sorgente della regola e non dedotta.** `LogInjectionCustomizations.qll`
+(`github/codeql`, scaricato al commit **esatto** che gira nella nostra CI — pacchetto
+`codeql/python-all 7.2.3+44a68d3a47fcbcd6a6a76ec7d1c1b3a1a28b201e` — e confrontato per sha256
+col ramo principale: `1fa1b2c462e50d4e…`, identici) dichiara **una sola** barriera oltre al
+confronto con costante: `ReplaceLineBreaksSanitizer`, cioe' una chiamata `.replace(...)` col
+primo argomento `"\n"` o `"\r\n"`. La nostra `re.sub(r"[^A-Za-z0-9:_.-]", ...)` e' piu' severa
+(elenco di cio' che si ammette) ma **invisibile** all'analisi.
+
+**Riparato:** la forma riconosciuta aggiunta **accanto** alla `re.sub`, mai al posto suo.
+Dimostrato che non cambia il prodotto con un oracolo indipendente (copia della funzione
+precedente): 33 casi a mano + **5000 ingressi hypothesis** + **tutti i 65.536 caratteri del
+piano base**, **zero divergenze**; sopravvivono esattamente **66** caratteri (62 alfanumerici +
+`: _ . -`), nessuno fuori elenco.
+
+**Guardie nuove (9), le prime due viste rosse prima:**
+`TestLaPuliziaDelRegistroDEVEESSEREVISIBILEACHIANALIZZA` (4) — la forma riconosciuta esiste · il
+valore ripulito e' **quello che esce** · nessuno dei **10** caratteri spezzariga sopravvive, con
+`splitlines()` come secondo giudice · mai stringa vuota.
+`TestLaListaDeiFileESCLUSIDaCodeQL` (5) — sorveglia l'elenco delle esclusioni: **provata al
+contrario** infilando `fase83_server.py` nell'elenco, **due guardie indipendenti** rosse, file
+rimesso identico (4340 byte).
+
+**Creato** `.github/codeql/codeql-config.yml` + `config-file:` nel workflow: il codice di
+**collaudo** esce dall'analisi. Misurato (API, analisi 1630965234 su master `394d821`): dei
+**47** allarmi `clear-text-logging`, **45** nascono da tre file di collaudo che contengono
+password **finte** e **2** soli hanno sorgente in produzione; per quella regola
+`CleartextLoggingCustomizations.qll` dichiara `abstract class Sanitizer` e **non ne implementa
+nessuna**, quindi nessuna riga di codice nostro potrebbe spegnerli. Costo dichiarato nel file:
+**12** allarmi situati dentro i collaudi smettono di essere riportati, aperti tutti e dodici
+prima di decidere.
+
+**Il fronte intero, per il lavoro che viene dopo:** 164 allarmi aperti (99 medi, 65 gravi);
+`py/log-injection` **102 allarmi su 88 punti** (67 in `fase83_server.py`, 20 in `app.py`, 1 in
+`fase156_erasure.py`), **tutti con sorgente in produzione**, quindi veri. ⛔ Gli 88 **non sono
+stati toccati oggi**: prima la CI deve confermare il meccanismo sui **5**, poi si applica.
+
+**Misure:** suite intera `Ran 5823 in 1500.617s, OK (skipped=4)`, uscita 0 (5828 raccolti, 5
+spenti da `openssl`). Pre-volo 7 controlli 0 rossi. VPS misurato via ssh: `394d821`, allineato a
+master, contenitori healthy.
+
+**Due distrazioni mie, prese da due macchine diverse:** la batteria e' costata 28 minuti per un
+rosso solo (il conto dei test dichiarato non rimisurato, S14, **seconda volta**), e il pre-fatto
+ha fermato il commit perche' i due file `.github/codeql/…` non erano nello **scopo dichiarato**,
+rimasto fermo a `1f3f5f3`.
+
 ### 🧾 2026-08-17 (5) — **IL FOGLIO UNICO DEI CONTROLLI, e tre numeri che ora li produce una macchina**
 
 **Creato** `collaudi/foglio_unico.py` (nuovo, ~330 righe): **dieci voci**, ognuna dichiara **chi
