@@ -130,6 +130,42 @@ class TestPuliziaMinori(unittest.TestCase):
             self.assertNotIn('await fetch(', html, p)
 
 
+"""───────────────────────────────────────────────────────────────────────────────────
+IL CERCATORE DI GERGO — funzione PURA, cosi' si puo' mettere alla prova da sola.
+
+Trova le righe in cui un codice del server (`.errore`, `.motivo`, `.dettaglio` — tutti e
+tre sono codici: `fase83_server.py:8850` risponde `{"errore": ..., "dettaglio": codice}`)
+finisce in qualcosa che l'utente LEGGE, senza passare da `fraseErrore`, cioe' dal
+vocabolario delle 8 lingue.
+
+⛔ I CONFRONTI NON SONO STAMPE. `d.errore==='bunker_richiesto'` e `!d.errore` decidono, non
+mostrano: contarli sarebbe un falso allarme, e un falso allarme e' un difetto quanto un
+allarme mancato (regola ferrea 10). La prima stesura ne segnalava 12 invece di 6.
+───────────────────────────────────────────────────────────────────────────────────"""
+_CODICE_DEL_SERVER = re.compile(r"\.(motivo|errore|dettaglio)\b")
+_USCITE_VERSO_L_UTENTE = ('innerHTML', 'textContent', 'alert(', 'msg(', 'placeholder')
+
+
+def righe_che_mostrano_un_codice(righe):
+    """[(numero, riga)] delle righe colpevoli. PURA: si prova su testo inventato."""
+    colpevoli = []
+    for n, riga in enumerate(righe, 1):
+        spoglia = riga.strip()
+        if spoglia.startswith('//') or spoglia.startswith('*') or spoglia.startswith('/*'):
+            continue                                   # i commenti non finiscono a schermo
+        senza_confronti = re.sub(
+            r"!?\s*\w+\.(motivo|errore|dettaglio)\s*(===|!==|==|!=)\s*[^\s&|)]+", "", riga)
+        senza_confronti = re.sub(r"!\w+\.(motivo|errore|dettaglio)\b", "", senza_confronti)
+        if not _CODICE_DEL_SERVER.search(senza_confronti):
+            continue
+        if not any(u in riga for u in _USCITE_VERSO_L_UTENTE):
+            continue                                   # il codice c'e', ma non va a schermo
+        if 'fraseErrore' in riga:
+            continue                                   # passa dal vocabolario: e' il modo giusto
+        colpevoli.append((n, spoglia[:160]))
+    return colpevoli
+
+
 class TestNessunCodiceInternoInFacciaAllOspite(unittest.TestCase):
     """Il vocabolario degli errori (`BV.ERR_AUTH`) e l'ultima spiaggia di `BV.fraseErrore`.
 
@@ -281,6 +317,52 @@ class TestNessunCodiceInternoInFacciaAllOspite(unittest.TestCase):
         self.assertIn("fraseErrore(r.motivo)||fraseErrore(r.errore)", _leggi('index.html'),
                       'il checkout non incatena piu\' i due tentativi: se e\' voluto, questa '
                       'guardia va riscritta insieme al cambiamento')
+
+    def test_il_cercatore_di_gergo_VEDE_il_colpevole_e_NON_grida_sull_innocente(self):
+        """D18 punto 1: lo strumento che misura si mette alla prova PRIMA di misurare. Se il
+        cercatore si rompesse e tornasse sempre una lista vuota, la guardia qui sotto
+        passerebbe per sempre senza aver guardato niente -- il verde peggiore di tutti."""
+        colpevoli = [
+            "st.textContent='X '+((d&&d.errore)||r.status);",
+            "box.innerHTML='<b>'+esc(d.errore||r.status)+'</b>';",
+            "m.textContent='X '+((d&&d.dettaglio)||'');",
+            "msg('X '+(r.motivo||res.status), false);",
+        ]
+        innocenti = [
+            "st.textContent='X '+fraseErrore((d&&d.errore)||'');",          # passa dal vocabolario
+            "if(res.status===403 && d && d.errore==='bunker_richiesto'){ m.textContent=T('x'); }",
+            "if(!d.errore && d.url){ o.innerHTML='<a>'+d.url+'</a>'; }",     # solo un confronto
+            "const guasto = q.errore && (q._http>=500);",                   # non va a schermo
+            "// d.errore finiva in innerHTML: corretto il 2026-08-18",       # commento
+        ]
+        for riga in colpevoli:
+            self.assertEqual(len(righe_che_mostrano_un_codice([riga])), 1,
+                             'il cercatore NON vede un colpevole: %r' % riga)
+        for riga in innocenti:
+            self.assertEqual(righe_che_mostrano_un_codice([riga]), [],
+                             'il cercatore grida su un innocente: %r' % riga)
+
+    def test_NESSUNA_pagina_mostra_un_codice_del_server_senza_il_vocabolario(self):
+        """LA CACCIA, su TUTTE le pagine. Nata il 2026-08-18 dall'ordine del fondatore
+        «controlla altro che potrebbe uscire in futuro, o quando sistemerai altre cose».
+
+        Trovati e chiusi quel giorno **6 punti** che nessuno aveva mai guardato: 4 in
+        `admin.html` e -- i piu' gravi, perche' li legge un CLIENTE che paga -- **2 in
+        `host.html`** (il rapporto SEO e il caricamento di un alloggio da modificare).
+        ⛔ Il denominatore e' dichiarato e controllato: se un giorno le pagine sparissero
+        dal conteggio, questa guardia direbbe «zero colpevoli» senza aver aperto niente."""
+        pagine = sorted(x for x in os.listdir(BASE) if x.endswith('.html'))
+        self.assertGreaterEqual(len(pagine), 12,
+                                'trovate solo %d pagine in deploy/: il lettore si e\' rotto, '
+                                'non il prodotto' % len(pagine))
+        accuse = []
+        for nome in pagine:
+            for n, riga in righe_che_mostrano_un_codice(_leggi(nome).splitlines()):
+                accuse.append('%s:%d  %s' % (nome, n, riga))
+        self.assertEqual(accuse, [],
+                         'queste righe mostrano all\'utente un CODICE del server invece di '
+                         'una frase: passale da fraseErrore(...) come tutte le altre.\n      '
+                         + '\n      '.join(accuse))
 
 
 if __name__ == '__main__':

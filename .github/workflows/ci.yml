@@ -492,8 +492,23 @@ jobs:
           # Difetto della pipeline (2026-07-28), non del prodotto: visto solo dalla CI Linux.
       - name: Dipendenze (playwright + axe-core, gia' in package.json)
         run: npm install --no-audit --no-fund
-      - name: Browser Chromium
-        run: npx playwright install --with-deps chromium
+      # ⏱️ IL DOWNLOAD SI PIANTA, E QUESTO JOB E' BLOCCANTE. Misurato il 2026-08-18 sulla
+      # STESSA run, allo stesso minuto, su due runner diversi: qui 1 min 25 s (17:28:58 ->
+      # 17:30:23), nel job `browser` 19 min 42 s e poi ucciso dal tetto. Stesso comando,
+      # stesso momento, esito opposto: e' un intoppo dell'infrastruttura, non del prodotto.
+      # Finche' non c'era un secondo job a fare da testimone quella fragilita' era invisibile
+      # -- e questo job sta DENTRO il gate, quindi un download impallato avrebbe reso rosso
+      # il cancello per un motivo che col codice non c'entra (regola ferrea 10: un falso
+      # rosso insegna a ignorare il rosso, ed e' il danno peggiore).
+      # `timeout` taglia l'attesa a 5 minuti -- il triplo abbondante del tempo vero -- e si
+      # riprova UNA volta. ⛔ Niente `|| true`: se fallisce anche il secondo tentativo il job
+      # e' rosso, ed e' giusto, perche' senza browser non si e' guardato niente.
+      - name: Browser Chromium (attesa limitata + un secondo tentativo)
+        run: |
+          timeout 300 npx playwright install --with-deps chromium || {
+            echo "primo tentativo scaduto o fallito: riprovo una volta"
+            timeout 300 npx playwright install --with-deps chromium
+          }
       - name: Audit WCAG statico (blocca su critical/serious)
         run: node collaudi/a11y_static.js
 
@@ -566,7 +581,10 @@ jobs:
   browser:
     name: browser (3 pannelli + percorso ospite-host - NON blocca, vedi mappa in cima)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 25 e non 20 dal 2026-08-18: il tetto dev'essere piu' largo dei DUE tentativi di
+    # scaricamento del browser (5+5 minuti), se no il secondo tentativo non ha il tempo di
+    # finire e la rete anti-intoppo non serve a niente. Il giro vero costa ~1 min 30 s.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
       # Python 3.9: e' lo stesso del job full-suite e del computer dove la batteria
@@ -586,8 +604,16 @@ jobs:
         run: pip install -r requirements.txt
       - name: Dipendenze del browser (playwright, gia' in package.json)
         run: npm install --no-audit --no-fund
-      - name: Browser Chromium
-        run: npx playwright install --with-deps chromium
+      # Stessa cura del job `accessibilita`, e qui e' nata: il 2026-08-18 questo passo si e'
+      # piantato 19 min 42 s e ha mangiato il tetto di 20 minuti del job, che e' finito
+      # `cancelled` senza aver guardato NIENTE -- mentre l'identico comando nel job vicino
+      # girava in 1 min 25 s. Un giro perso per un download, non per il prodotto.
+      - name: Browser Chromium (attesa limitata + un secondo tentativo)
+        run: |
+          timeout 300 npx playwright install --with-deps chromium || {
+            echo "primo tentativo scaduto o fallito: riprovo una volta"
+            timeout 300 npx playwright install --with-deps chromium
+          }
 
       # Il server visivo si spegne DA SOLO dopo VISIVO_TTL secondi: anche se un passo
       # qui sotto muore, non resta un processo appeso a tenere occupata la porta.

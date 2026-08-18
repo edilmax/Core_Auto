@@ -325,7 +325,7 @@ async function cambiaStatoAdmin(slug,stato){
     let d=null; try{ d=await res.json(); }catch(_){ d=null; }
     if(res.status===200){ msg('✅ '+slug+' → '+stato+' · '+T('agg'), true); caricaAlloggi(); }
     else if(res.status===403 && d && d.errore==='bunker_richiesto'){ msg('🔒 '+T('bk_serve'), false); }
-    else msg('❌ '+slug+': '+((d&&(d.errore||d.dettaglio))||res.status), false);
+    else msg('❌ '+slug+': '+(fraseErrore((d&&(d.errore||d.dettaglio))||'')||res.status), false);
   }catch(e){ msg('❌ '+fraseErrore(codRete(e)), false); }
 }
 async function carica(){
@@ -509,7 +509,7 @@ async function stornaPenale(notaId, rif){
       st.textContent='✅ '+T('au_stornata')+(d.restituito_in_da_pagare>0?' ('+T('au_restit')+' €'+(d.restituito_in_da_pagare/100).toFixed(2)+')':'');
       if(rif) auditApri(rif);                          // ricarica la scheda aggiornata
     } else if(r.status===403){ st.textContent='🏰 '+T('bk_serve'); }
-    else { st.textContent='❌ '+((d&&d.errore)||r.status); }
+    else { st.textContent='❌ '+(fraseErrore((d&&d.errore)||'')||r.status); }
   }catch(e){ st.textContent='❌ '+fraseErrore(codRete(e)); }
 }
 
@@ -549,7 +549,7 @@ async function verDettaglio(hid){
     const r=await fetchTempo(API+'/api/admin/verifiche/dettaglio?host_id='+encodeURIComponent(hid),
                              {headers:{'X-Admin-Key':key()}});
     const d=await r.json();
-    if(!r.ok){ box.innerHTML='<span class="sr-hint">❌ '+esc(d.errore||r.status)+'</span>'; return; }
+    if(!r.ok){ box.innerHTML='<span class="sr-hint">❌ '+esc(fraseErrore(d.errore||'')||r.status)+'</span>'; return; }
     const righe=[];
     righe.push('<div style="font-weight:700;margin-bottom:.3rem">📋 '+esc(d.ragione_sociale||d.email)+' <span class="sr-hint">'+esc(d.host_id)+' · '+esc(d.tipo_soggetto||'privato')+'</span></div>');
     (d.contratto_prove||[]).forEach(p=>righe.push(auRiga('📜 '+T('ky_contr'),
@@ -577,7 +577,7 @@ async function verStato(hid, stato){
     let d=null; try{ d=await r.json(); }catch(_){ console.warn('bookinvip-admin',_); }
     if(r.status===200){ st.textContent='✅ '+T('ky_fatto')+(d&&d.payout_riprovati>0?' ('+d.payout_riprovati+' '+T('ky_pay_rip')+')':''); caricaVerifiche(); }
     else if(r.status===403){ st.textContent='🏰 '+T('bk_serve'); }
-    else { st.textContent='❌ '+((d&&d.errore)||r.status); }
+    else { st.textContent='❌ '+(fraseErrore((d&&d.errore)||'')||r.status); }
   }catch(e){ st.textContent='❌ '+fraseErrore(codRete(e)); }
 }
 async function verFascicolo(hid){
