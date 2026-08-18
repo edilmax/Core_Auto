@@ -687,6 +687,62 @@ class TestPathStatico(unittest.TestCase):
         r = percorso_statico_sicuro("/.git/config", "deploy")
         self.assertTrue(os.path.realpath(r).startswith(os.path.realpath("deploy")))
 
+    # ------------------------------------------------------------------------------
+    # IL BOMBARDAMENTO, e perche' e' diventato una guardia permanente
+    # ------------------------------------------------------------------------------
+    ATTACCHI = (
+        "../fase83_server.py", "../../etc/passwd", "....//....//etc/passwd",
+        "..\\..\\windows\\win.ini", "/etc/passwd", "C:\\Windows\\win.ini",
+        "%2e%2e%2f%2e%2e%2fetc%2fpasswd", "..%2f..%2fetc%2fpasswd",
+        "deploy/../../.env", "index.html/../../../.env.casavip", ".env",
+        "\x00../../.env", "sub/../../../.env", "..%00/../.env",
+        "/proc/self/environ", "..;/..;/etc/passwd", "./../.env",
+        "uploads/../../../../../../etc/shadow",
+    )
+
+    def test_DICIOTTO_ATTACCHI_E_NESSUNO_ESCE_DALLA_CARTELLA(self):
+        """⛔ NASCE DA SEI ALLARMI GRAVI, il 2026-08-18.
+
+        CodeQL segnalava **6 `py/path-injection` gravi** nei due punti che servono i file.
+        Prima di dichiararli falsi ho bombardato la funzione con i modi noti di uscire da una
+        cartella: nessuno esce. Ma una prova fatta **a mano una volta** non protegge niente --
+        domani qualcuno «semplifica» questa funzione e la prova non c'e' piu'. Quindi il
+        bombardamento diventa una guardia che gira a ogni commit.
+
+        💡 E c'e' un motivo in piu' per cui deve stare qui: la via facile per far tacere
+        quell'allarme sarebbe **sostituire `commonpath` con `startswith`**, che CodeQL
+        riconosce ma e' PIU' DEBOLE (`/base` e `/basement` cominciano uguali). Sarebbe
+        appagare l'analizzatore peggiorando la difesa. Questa guardia rende quella scorciatoia
+        impossibile da prendere in silenzio.
+        """
+        import os
+        base = os.path.realpath("deploy")
+        fughe = []
+        for attacco in self.ATTACCHI:
+            esito = percorso_statico_sicuro(attacco, "deploy")
+            if esito is None:
+                continue                      # rifiutato: va benissimo
+            reale = os.path.realpath(esito)
+            if not (reale == base or reale.startswith(base + os.sep)):
+                fughe.append((attacco, reale))
+        self.assertEqual(
+            [], fughe,
+            "QUESTI PERCORSI ESCONO DALLA CARTELLA CONSENTITA: %r.\n        E' un "
+            "path-traversal vero: da li' si leggono file che non devono essere leggibili "
+            "(.env, chiavi, database)." % (fughe,))
+
+    def test_I_FILE_LEGITTIMI_CONTINUANO_A_FUNZIONARE(self):
+        """L'altra meta': una difesa che rifiuta tutto sarebbe verde qui sopra e romperebbe
+        il sito. Senza questa, `return None` sempre passerebbe il bombardamento a pieni voti."""
+        import os
+        for buono in ("/", "", "/index.html", "/app.js", "/host.html", "/manifest.json"):
+            with self.subTest(percorso=buono):
+                esito = percorso_statico_sicuro(buono, "deploy")
+                self.assertIsNotNone(
+                    esito, "%r e' un file legittimo del sito e viene rifiutato: la difesa "
+                           "ha rotto il prodotto" % buono)
+                self.assertTrue(os.path.realpath(esito).startswith(os.path.realpath("deploy")))
+
 
 class TestAdmin(unittest.TestCase):
     def setUp(self):
