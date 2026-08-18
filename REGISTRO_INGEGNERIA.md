@@ -753,6 +753,42 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### ⏰ 2026-08-18 (2) — **UNA BOMBA A OROLOGERIA DENTRO UNA GUARDIA SUI DATI DELLE CARTE**
+
+**Trovata dalla CI**, non da noi, sul commit `b148675` (CodeQL verde, `full-suite` rossa):
+```
+FAIL: test_webhook_setup_salva_gli_id_opachi_nel_registro_host
+AssertionError: '4242' unexpectedly found in '1787042423'
+Ran 5828 tests in 534.642s     FAILED (failures=1, skipped=3)
+```
+`1787042423` e' **l'ora in secondi** di quella mattina. La guardia sorvegliava un fatto
+giusto e serio — *nel nostro database non finisce mai il numero di una carta* — cercando
+pero' `"4242"` **dentro qualunque valore** della riga `host`. Misurato cosa c'e' davvero in
+quella riga (non dedotto): due marche temporali, `salt` a 32 cifre esadecimali, `pw_hash` a
+64, i due id opachi `cus_`/`pm_`.
+
+⛔ **La trappola peggiore non era l'orologio, era l'hash.** `salt` e `pw_hash` sono estratti
+a caso: prima o poi ne esce uno che contiene `4242`, e allora il rosso sarebbe stato
+**casuale invece che a orario** — inattribuibile, cioe' del tipo che si archivia come
+«riprova» e insegna a non guardare i rossi. E' la statistica dei test instabili di Google
+(≈16%), non sfortuna.
+
+✅ **Riparato stringendo la mira, non spegnendo il faro**: `traccia_di_carta(valore)` in
+`test_integrazione_servizi.py` — un PAN intero (13-19 cifre, anche con spazi o trattini) · un
+campo che contiene **solo** le ultime quattro, anche mascherate (`**** 4242`, `xxxx-4242`) ·
+quelle cifre **accanto a una parola che parla di carte**; e **non guarda dentro i digest**,
+dove le cifre non significano niente. `TestIlRilevatoreDiCarteGUARDANELPOSTOGIUSTO` (3
+guardie) lo prova **nelle due direzioni**: vede la carta in **10** forme, resta muto su
+orologio, hash, id casuali che contengono quelle cifre, `cus_1`, `pm_1`, `None`, `0`.
+La terza guardia inchioda **il caso esatto**: `traccia_di_carta("1787042423")` dev'essere
+vuoto, cosi' se qualcuno rimette la ricerca larga il rosso torna subito con la sua storia
+accanto.
+
+💡 **La lezione, e non e' sulle carte:** una guardia che cerca **una sottostringa corta**
+dentro **qualunque valore** non e' una guardia, e' un generatore di rossi futuri. E qui il
+verso in cui sbagliava era doppio: falso allarme sull'innocente, e nessuno aveva mai provato
+il verso opposto — che vedesse davvero una carta.
+
 ### 🔬 2026-08-18 (1) — **LA BARRIERA C'ERA E L'ANALIZZATORE NON LA VEDEVA** (`fase83_server.py`, +9 guardie)
 
 **Il fatto.** La richiesta #66, gia' riparata la notte prima, e' tornata **rossa con gli stessi

@@ -30,6 +30,7 @@ import importlib.util
 import json
 import logging
 import os
+import re
 import shutil
 import sqlite3
 import tempfile
@@ -2275,6 +2276,111 @@ class TestApiDbConnectPayout(_BaseIntegrazione):
         self.assertEqual(pay[0]["stato"], "maturato")
 
 
+# --------------------------------------------------------------------------------------
+# «c'e' traccia di una carta qui dentro?» — il rilevatore, e perche' non basta cercare 4242
+# --------------------------------------------------------------------------------------
+_DIGEST = re.compile(r"^[0-9a-fA-F]{32,}$")
+_GRUPPI_DI_CIFRE = re.compile(r"(?<!\d)\d+(?!\d)")
+_MASCHERE = re.compile(r"[ \t.\-*x•X_]")
+ULTIME4_CARTA_DI_PROVA = "4242"
+_PAROLE_DI_CARTA = ("carta", "card", "pan", "last4", "numero", "****")
+
+
+def traccia_di_carta(valore):
+    """I motivi per cui `valore` sembra contenere il numero di una carta. Vuoto = pulito.
+
+    ⛔ **NASCE DA UN ROSSO VERO, in CI, il 2026-08-18**, con questa riga:
+        AssertionError: '4242' unexpectedly found in '1787042423'
+    `1787042423` e' **l'ora in secondi**, e per caso contiene `4242`. La guardia cercava
+    quelle quattro cifre **dentro qualunque valore**, quindi si accendeva da sola a
+    orologeria: non «sfortuna», statistica: fra i circa 10 milioni di secondi di un anno,
+    quella sequenza ricade nell'orologio a ondate regolari.
+
+    ⛔ E LA TRAPPOLA PEGGIORE ERA L'ALTRA. Nella stessa riga ci sono `salt` (32 cifre
+    esadecimali) e `pw_hash` (64), estratti **a caso**: prima o poi ne esce uno che contiene
+    `4242`, e allora il rosso sarebbe stato **casuale invece che a orario** — cioe'
+    inattribuibile, il tipo di guasto che si archivia come «riprova» e insegna a non
+    guardare i rossi.
+
+    ⛔ **La riparazione NON e' togliere il controllo.** Il fatto sorvegliato — «nel nostro
+    database non finisce mai il numero di una carta» — e' uno di quelli che, se cadono, non
+    si riparano piu': i dati sono gia' scritti. Si stringe la **mira**, non si spegne il
+    faro. Tre regole, e ognuna dice cosa vede:
+      1. un PAN INTERO (13-19 cifre), anche scritto con spazi o trattini;
+      2. un campo che contiene **soltanto** le ultime quattro, anche mascherate
+         (`4242`, `**** 4242`, `xxxx-4242`);
+      3. quelle quattro cifre **insieme a una parola che parla di carte**.
+    Un digest esadecimale non viene guardato dentro: li' le cifre non significano niente, e
+    cercarci dentro produce solo coincidenze.
+    """
+    testo = str(valore)
+    if _DIGEST.match(testo.strip()):
+        return []
+    motivi = []
+
+    compatto = re.sub(r"[ \t.\-]", "", testo)
+    for gruppo in _GRUPPI_DI_CIFRE.findall(compatto):
+        if 13 <= len(gruppo) <= 19:
+            motivi.append("un numero di %d cifre, la lunghezza di un PAN: %s"
+                          % (len(gruppo), gruppo))
+
+    if _MASCHERE.sub("", testo) == ULTIME4_CARTA_DI_PROVA:
+        motivi.append("il campo contiene SOLO le ultime quattro della carta: %r" % testo)
+
+    basso = testo.lower()
+    if ULTIME4_CARTA_DI_PROVA in testo and any(p in basso for p in _PAROLE_DI_CARTA):
+        motivi.append("le ultime quattro accanto a una parola che parla di carte: %r" % testo)
+
+    return motivi
+
+
+class TestIlRilevatoreDiCarteGUARDANELPOSTOGIUSTO(unittest.TestCase):
+    """⛔ IL RILEVATORE SI PROVA NELLE DUE DIREZIONI, o e' una decorazione.
+
+    La guardia di prima si e' rotta perche' nessuno aveva mai provato che cosa faceva sui
+    valori INNOCENTI: vedeva la carta anche dove non c'era. Qui si pretendono tutt'e due i
+    versi, ed e' il motivo per cui questa classe esiste separata dal collaudo che la usa.
+    """
+
+    VELENI = ("4242424242424242", "4242 4242 4242 4242", "4242-4242-4242-4242",
+              "5555555555554444", "carta host: 4242424242424242", "**** 4242", "4242",
+              "xxxx-4242", "last4=4242", "{'card': {'last4': '4242'}}")
+
+    INNOCENTI = ("1787042423",            # l'ora ESATTA che ha fatto fallire la CI
+                 1787042423, 1787042424, "1787042420", "42424",  # 42424: 5 cifre, un id
+                 "7c0b665e2f3bb38f8847bac21a3557b1",             # salt, 32 esadecimali
+                 "9a2fc69efc98b8b95031d0400f8a855a94308cf6126d767cad3f62c7e6bc08bb",
+                 "h_c9f34242deba3d9",     # un id casuale che CONTIENE quelle cifre
+                 "cus_1", "pm_1", "1.0", "", None, 0, "Roma", "host@vip.it")
+
+    def test_VEDE_una_carta_scritta_in_dieci_modi_diversi(self):
+        for veleno in self.VELENI:
+            with self.subTest(valore=veleno):
+                self.assertTrue(
+                    traccia_di_carta(veleno),
+                    "il rilevatore NON vede una carta in %r: allora il collaudo che lo usa "
+                    "sarebbe verde anche col numero scritto nel database" % (veleno,))
+
+    def test_NON_si_accende_sull_orologio_ne_sugli_hash_ne_sugli_id(self):
+        for innocente in self.INNOCENTI:
+            with self.subTest(valore=innocente):
+                self.assertEqual(
+                    [], traccia_di_carta(innocente),
+                    "falso allarme su %r. E' il difetto da cui nasce questo rilevatore: un "
+                    "falso allarme costa quanto un allarme mancato, perche' insegna a "
+                    "ignorare i rossi (regola ferrea 10)" % (innocente,))
+
+    def test_L_ORA_CHE_HA_FATTO_CADERE_LA_CI_NON_PUO_PIU_FARLO(self):
+        """La guardia della guardia: il caso esatto, per nome, cosi' se qualcuno rimette la
+        ricerca larga il rosso torna subito e con la sua storia scritta accanto."""
+        self.assertIn("4242", "1787042423", "l'ora di quel giorno conteneva davvero 4242: "
+                                            "se questo cambia, la storia qui sotto non ha "
+                                            "piu' senso")
+        self.assertEqual([], traccia_di_carta("1787042423"),
+                         "il rilevatore si accende di nuovo sull'orologio: la CI tornera' "
+                         "rossa a orologeria, e per un difetto che non esiste")
+
+
 class TestApiDbCartaHost(_BaseIntegrazione):
     def test_webhook_setup_salva_gli_id_opachi_nel_registro_host(self):
         """Salvataggio carta: nel nostro DB finiscono SOLO cus_/pm_ (mai il numero carta)."""
@@ -2292,9 +2398,16 @@ class TestApiDbCartaHost(_BaseIntegrazione):
         self.assertEqual(righe[0]["stripe_payment_method"], "pm_1")
         # e i due GET a Stripe sono partiti davvero (sessione + setup_intent)
         self.assertEqual([r["metodo"] for r in self.carta.richieste], ["GET", "GET"])
+        # ⛔ NON `assertNotIn("4242", ...)`: quella forma cercava le quattro cifre dentro
+        # QUALUNQUE valore, e il 2026-08-18 e' caduta in CI sull'ORA IN SECONDI
+        # (`'4242' unexpectedly found in '1787042423'`). Vedi `traccia_di_carta` qui sopra:
+        # stesso fatto sorvegliato, mira stretta, e provata nelle due direzioni.
         for riga in self.sql("registro", "SELECT * FROM host WHERE host_id=?", (hid,)):
-            for _k, v in riga.items():
-                self.assertNotIn("4242", str(v), "numero carta nel nostro database")
+            for k, v in riga.items():
+                self.assertEqual(
+                    [], traccia_di_carta(v),
+                    "traccia del numero di una carta nel nostro database, colonna %r = %r"
+                    % (k, v))
 
     def test_link_carta_dal_pannello_host(self):
         hid = self.registra_host()
