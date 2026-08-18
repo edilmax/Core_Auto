@@ -2934,7 +2934,9 @@ class RouterHTTP:
         if not reg.imposta_verifica(hid, stato, note=motivo, da="super-admin@" + ip):
             return 404, {"errore": "host_non_trovato"}
         logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: Verifica->%s | MOTIVO: %s | "
-                       "IP: %s", hid, stato or "non_verificato", motivo or "-", ip)
+                       "IP: %s", _rif_per_registro(hid),
+                       _testo_per_registro(stato or "non_verificato"),
+                       _testo_per_registro(motivo or "-"), ip)
         riprovati = 0
         if stato == "verificato":                # sblocco: i payout in hold ripartono
             pd = getattr(self._sys, "payout", None)
@@ -2945,7 +2947,8 @@ class RouterHTTP:
                         riprovati += 1
                     if riprovati:
                         logger.warning("PAYOUT_HOLD_RELEASED | HOST_ID: %s | RITENTATI: %d"
-                                       " | MOTIVO: VERIFICA_RIPRISTINATA", hid, riprovati)
+                                       " | MOTIVO: VERIFICA_RIPRISTINATA",
+                                       _rif_per_registro(hid), riprovati)
                 except Exception:
                     logger.warning("retry payout post-verifica fallito (ISOLATO)",
                                    exc_info=True)
@@ -4153,18 +4156,21 @@ class RouterHTTP:
         if azione == "crea":
             r = aa.crea(email, dati.get("password", ""), dati.get("ruolo", ""), creato_da="super-admin")
             logger.warning("ADMIN ACCOUNT creato/aggiornato %s ruolo=%s ok=%s",
-                           email, dati.get("ruolo"), r.get("ok"))
+                           _testo_per_registro(email),
+                           _testo_per_registro(dati.get("ruolo")), r.get("ok"))
             return (200 if r.get("ok") else 422), r
         if azione == "revoca":
             ok = aa.revoca(email)
-            logger.warning("ADMIN ACCOUNT revocato %s ok=%s", email, ok)
+            logger.warning("ADMIN ACCOUNT revocato %s ok=%s",
+                           _testo_per_registro(email), ok)
             return (200 if ok else 404), {"ok": ok, "email": email}
         if azione == "riattiva":
             ok = aa.riattiva(email)
             return (200 if ok else 404), {"ok": ok, "email": email}
         if azione == "ruolo":
             ok = aa.imposta_ruolo(email, dati.get("ruolo", ""))
-            logger.warning("ADMIN ACCOUNT ruolo %s -> %s ok=%s", email, dati.get("ruolo"), ok)
+            logger.warning("ADMIN ACCOUNT ruolo %s -> %s ok=%s", _testo_per_registro(email),
+                           _testo_per_registro(dati.get("ruolo")), ok)
             return (200 if ok else 422), {"ok": ok, "email": email, "ruolo": dati.get("ruolo")}
         return 422, {"errore": "azione_non_valida"}
 
@@ -7735,7 +7741,7 @@ class RouterHTTP:
                     if stato_s == "verified":
                         kyc.conferma(hid, "verificato")
                         logger.warning("KYC IDENTITY VERIFICATO | HOST_ID: %s (webhook)",
-                                       hid)
+                                       _rif_per_registro(hid))
                     elif stato_s == "canceled":
                         kyc.conferma(hid, "respinto")
             except Exception:
@@ -7767,7 +7773,8 @@ class RouterHTTP:
                 det = {"customer": cust, "payment_method": pm} if (cust and pm) else None
             if det and det.get("customer") and det.get("payment_method"):
                 reg.imposta_carta(hid, det["customer"], det["payment_method"])
-                logger.warning("CARTA HOST SALVATA | HOST_ID: %s (mandato off-session)", hid)
+                logger.warning("CARTA HOST SALVATA | HOST_ID: %s (mandato off-session)",
+                               _rif_per_registro(hid))
         except Exception:
             logger.warning("salvataggio carta host fallito (ISOLATO)", exc_info=True)
 
@@ -8597,7 +8604,7 @@ class RouterHTTP:
             consentito, attesa = self._rate.consenti(k)
             if not consentito:
                 logger.warning("RATE-LIMIT login BLOCCATO 429: ip=%s email=%r attesa=%ds",
-                               ip, str(email)[:120], attesa)
+                               ip, _testo_per_registro(email, 120), attesa)
                 return 429, {"errore": "troppi_tentativi", "riprova_tra_sec": attesa}
         e = reg.login(email, dati.get("password"))
         if self._rate is not None and k:
@@ -8607,7 +8614,8 @@ class RouterHTTP:
                 bloccato, attesa = self._rate.fallito(k)
                 if bloccato:
                     logger.warning("RATE-LIMIT login: SOGLIA superata, lockout %ds ip=%s "
-                                   "email=%r", attesa, ip, str(email)[:120])
+                                   "email=%r", attesa, ip,
+                                   _testo_per_registro(email, 120))
         corpo = e.as_dict()
         if e.ok:                                    # gatekeeper: emette il cookie di pagina host
             ttl = self._GATE_TTL["host"]
@@ -9159,6 +9167,13 @@ class RouterHTTP:
         try:
             if _os.path.commonpath([percorso, _os.path.abspath(updir)]) != _os.path.abspath(updir):
                 return 422, {"errore": "url_non_valido"}       # fuori dalla cartella: rifiuta
+            # ⛔ TERZA CINTURA, stessa ragione di `percorso_statico_sicuro`: `commonpath` e'
+            # piu' forte di `startswith` ma CodeQL riconosce solo il secondo, e qui si
+            # CANCELLA un file -- il posto dove un allarme ignorato costa di piu'. Con il
+            # separatore in coda la forma e' sana (non confonde `/base` con `/basement`), e
+            # si aggiunge ACCANTO al controllo forte, mai al posto suo.
+            if not percorso.startswith(_os.path.abspath(updir) + _os.sep):
+                return 422, {"errore": "url_non_valido"}
             if _os.path.isfile(percorso):
                 _os.remove(percorso)
             return 200, {"eliminata": True}
@@ -10220,7 +10235,22 @@ def percorso_statico_sicuro(path: str, cartella: str) -> Optional[str]:
             return None                     # doppia cintura: mai fuori dalla radice
     except ValueError:
         return None
-    return candidato
+    # ⛔ TERZA CINTURA — RIDONDANTE PER IL PRODOTTO, NECESSARIA PER CHI SORVEGLIA.
+    # Le due sopra bastano gia': si tiene solo il `basename` e poi si pretende che il
+    # percorso risolto stia dentro la radice. Ma CodeQL, per il traversal, riconosce
+    # **soltanto** `normpath`/`abspath`/`realpath` come normalizzazione e **soltanto**
+    # `.startswith(...)` come controllo di sicurezza (letto il 2026-08-18 in `Stdlib.qll`
+    # del repository `github/codeql`, alla versione ESATTA che gira nella nostra CI):
+    # `commonpath` -- che e' PIU' forte -- gli e' invisibile, e i due punti che servono i
+    # file restavano segnalati come GRAVI a difesa perfetta.
+    # ⛔⛔ E LA SCORCIATOIA VA NOMINATA PERCHE' NON VENGA PRESA: far tacere l'allarme
+    # SOSTITUENDO `commonpath` con `startswith` sarebbe **peggiorare la difesa** -- `/base`
+    # e `/basement` cominciano uguali. Qui `startswith` si aggiunge ACCANTO e col
+    # **separatore**, che e' la forma sana: cosi' la difesa e' doppia e la dimostrazione e'
+    # visibile. Guardia: `TestPathStatico.test_DICIOTTO_ATTACCHI_E_NESSUNO_ESCE_DALLA_CARTELLA`.
+    if not cand_real.startswith(cart_real + os.sep):
+        return None
+    return cand_real
 
 
 def corpo_json_bytes(corpo: Any) -> bytes:

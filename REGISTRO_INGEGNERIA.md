@@ -753,6 +753,49 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🛡️ 2026-08-18 (6) — **DOPO L'UNIONE: 164 ALLARMI -> 51, E I SEI GRAVI ERANO UNA DIFESA CHE FUNZIONA**
+
+**L'unione #66 e' passata** (`0ba128b`, verificata con una seconda chiamata: `state=closed`,
+`merged=True`, `merged_at` pieno) e CodeQL ha rianalizzato `master`. Misura definitiva:
+```
+allarmi aperti su master:  164 -> 51        di cui GRAVI: 65 -> 7
+  py/clear-text-logging ..... 47 -> 0
+  py/log-injection .......... 102 -> 40   (28 in app.py che non gira, 12 in fase83_server)
+CI su master 0ba128b: 14 job, gate=success
+```
+
+🔴 **I SEI GRAVI RIMASTI ERANO `py/path-injection`, e la difesa c'era gia'.** Prima di
+dichiararli falsi ho bombardato `percorso_statico_sicuro` con **18 attacchi** (`../`,
+percorsi assoluti, separatori Windows, doppia codifica, byte NUL, `/proc/self/environ`,
+`..;/`): **zero percorsi escono dalla cartella**. La funzione tiene solo il `basename`,
+rifiuta i dotfile e il NUL, e fa doppia cintura con `realpath` + `commonpath`.
+
+⛔ **E il motivo per cui l'analizzatore non la vedeva e' la stessa storia della mattina**,
+letta nel sorgente alla versione ESATTA della nostra CI (`Stdlib.qll` di `github/codeql`):
+per il traversal CodeQL riconosce **solo** `normpath`/`abspath`/`realpath` come
+normalizzazione e **solo `.startswith(...)`** come controllo di sicurezza. `commonpath`, che
+e' **piu' forte**, gli e' invisibile.
+⛔⛔ **LA SCORCIATOIA CHE NON ABBIAMO PRESO, e va scritta perche' nessuno la prenda domani:**
+far tacere l'allarme *sostituendo* `commonpath` con `startswith` avrebbe **peggiorato la
+difesa** -- `/base` e `/basement` cominciano uguali. Si e' aggiunta **accanto**, col
+separatore in coda (forma sana), in tutt'e due i punti: il servizio dei file e la
+**cancellazione** di una foto, che e' quello dove un allarme ignorato costa di piu'.
+✅ E i 18 attacchi sono diventati una **guardia permanente**
+(`test_DICIOTTO_ATTACCHI_E_NESSUNO_ESCE_DALLA_CARTELLA`), col suo complemento
+(`test_I_FILE_LEGITTIMI_CONTINUANO_A_FUNZIONARE`): senza il secondo, «rifiuta sempre tutto»
+passerebbe il primo a pieni voti.
+
+✅ **Chiusi anche i 12 `log-injection` rimasti in produzione**: erano valori di natura
+diversa da quelli gia' coperti -- `hid`, `email`, `motivo`, `stato` -- e sono andati sul
+rimedio giusto per la loro forma (identificativo o testo leggibile), non sul primo che
+capitava.
+
+⚠️ **RESTA APERTO, E VA DECISO DAL FONDATORE, NON DA ME.** Tutti gli allarmi rimasti stanno
+in file che **la produzione non raggiunge** (misurato): `app.py` (28), `fase197_canale_nostr`
+(1, un `ws://` in chiaro ammesso accanto a `wss://`), `fase200_campagna_persuasiva` (1),
+`fase36_booking_api` (1). Non tocco codice dormiente senza un requisito: le uscite valide
+sono le tre di DO-178C, e la scelta e' sua.
+
 ### ⚖️ 2026-08-18 (5) — **LA REVISIONE INDIPENDENTE HA TROVATO QUATTRO DIFETTI, TUTTI NEL LAVORO DI OGGI**
 
 Il fondatore ha lanciato `/code-review ultra` (multi-agente, in sola lettura) sul ramo a

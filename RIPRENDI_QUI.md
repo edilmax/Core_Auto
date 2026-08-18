@@ -15,15 +15,17 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 > **Stato dei tre posti, misurato adesso (non ricordato):**
 > ```
-> computer  ramo consegne-foglio-unico 13ac1e8 + il lavoro di oggi (6 file)
-> GitHub    master 394d821 · ramo remoto 13ac1e8
-> VPS       394d821  <- ALLINEATO a master. Il documento lo dava «indietro di
->                      un'unione»: misurato oggi via ssh, non lo e' piu'.
->                      casavip_app e casavip_backup: healthy da 15 ore.
-> RICHIESTA #66: APERTA su 13ac1e8 (API: state=open, merged=False,
->                mergeable_state=unstable)
-> CI su 13ac1e8: 15 job · gate=success · CodeQL ROSSO: 10 allarmi (5 gravi)
->                ⛔ SULLE STESSE CINQUE RIGHE CHE STANOTTE AVEVO GIA' RIPARATO.
+> GitHub master 0ba128b  <- la #66 e' UNITA (seconda chiamata all'API: state=closed,
+>                           merged=True, merged_at pieno). CI: 14 job, gate=success.
+> computer master 0ba128b (allineato) · ramo consegne-foglio-unico 95251c1 + il
+>                           lavoro nuovo (traversal + i 12 punti rimasti)
+> VPS 394d821            <- ⛔ INDIETRO DI UN'UNIONE. Il deploy NON e' stato fatto:
+>                           serve il via del fondatore, e' l'unica cosa che tocca
+>                           i soldi veri. Contenitori healthy.
+> ALLARMI CODEQL SU MASTER: 164 -> 51   (gravi 65 -> 7)
+>                           clear-text-logging 47 -> 0 · log-injection 102 -> 40
+> ⛔ TUTTI i 51 rimasti stanno in file che la produzione NON raggiunge (app.py 28,
+>    fase197/fase200/fase36 uno per uno) TRANNE quelli chiusi nel lavoro nuovo.
 > ```
 >
 > ### 🔴 IL PC SI E' RIAVVIATO DA SOLO, E LA PRIMA DOMANDA DEL FONDATORE ERA GIUSTA
@@ -3284,7 +3286,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 4eef065
+CONSEGNE AGGIORNATE A: 95251c1
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -5112,7 +5114,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5843 test
+SUITE ATTUALE: Ran 5845 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
