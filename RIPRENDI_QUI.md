@@ -15,18 +15,55 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 > **Stato dei tre posti, misurato adesso (non ricordato):**
 > ```
-> GitHub master 0ba128b  <- la #66 e' UNITA (seconda chiamata all'API: state=closed,
->                           merged=True, merged_at pieno). CI: 14 job, gate=success.
-> computer master 0ba128b (allineato) · ramo consegne-foglio-unico 95251c1 + il
->                           lavoro nuovo (traversal + i 12 punti rimasti)
-> VPS 394d821            <- ⛔ INDIETRO DI UN'UNIONE. Il deploy NON e' stato fatto:
->                           serve il via del fondatore, e' l'unica cosa che tocca
->                           i soldi veri. Contenitori healthy.
+> computer master da8d555 · GitHub master da8d555 · VPS da8d555   -> ALLINEATI
+> Unioni #66 e #67 UNITE, tutt'e due verificate con una SECONDA chiamata all'API
+>   (state=closed, merged=True, merged_at pieno). CI: 15 job, gate=success.
+> ✅ DEPLOY IN PRODUZIONE FATTO il 2026-08-18 (via del fondatore: «fino alla vps»)
+>   paracadute casavip-app:prec = cd5e1663..., agganciato PRIMA del build e
+>     verificato per impronta (non per fiducia)
+>   contenitori: casavip_app healthy · casavip_backup healthy · casavip_nginx up
+>   avvio pulito: 'avvisi': [], 'money_path_pronto': True, 'valuta': 'EUR'
+>   https://bookinvip.com/ -> 200 · /api/health -> 200
+>   variabili PAGAMENTO_ sul server: NESSUNA (valgono i default del codice)
 > ALLARMI CODEQL SU MASTER: 164 -> 51   (gravi 65 -> 7)
 >                           clear-text-logging 47 -> 0 · log-injection 102 -> 40
-> ⛔ TUTTI i 51 rimasti stanno in file che la produzione NON raggiunge (app.py 28,
->    fase197/fase200/fase36 uno per uno) TRANNE quelli chiusi nel lavoro nuovo.
+> ⛔ E i 51 rimasti stanno TUTTI in file che la produzione NON raggiunge:
+>    app.py 28 · fase197_canale_nostr 1 · fase200 1 · fase36 1.
 > ```
+>
+> ### ▶️ IL PROSSIMO LAVORO, DECISO COL FONDATORE: **IL BROWSER VERO**
+> ⛔ **Non c'e' niente da installare**, ed e' la prima cosa da sapere: `package.json`
+> dichiara gia' `playwright ^1.61.1` e `axe-core ^4.12.1`, la CI se li scarica **a ogni
+> giro** (`npx playwright install --with-deps chromium`) e **il browser NON entra
+> nell'immagine di produzione** (verificato: nessun riscontro di node/npm/playwright in
+> `Dockerfile.casavip`). Quindi non appesantisce il sito e non puo' romperlo.
+>
+> **Quello che manca e' il COLLEGAMENTO** (regola #23, costruito ≠ collegato). Misurato:
+> ```
+> collaudi/a11y_static.js .......... IN CI, blocca sul grave        [OK]
+> collaudi/clickthrough_pannelli.js  solo dentro batteria.py, a mano [scollegato]
+> collaudi/test_a11y.js ............ report-only, «da cablare»       [scollegato]
+> collaudi/test_visivo.js .......... solo avvio manuale              [scollegato]
+> collaudi/test_visivo_ruoli.js .... NON LO LANCIA NESSUNO           [morto]
+> ```
+> **Il buco vero:** `deploy/app.js` sono **210 righe che girano nel browser del cliente**
+> e oggi hanno **zero test che le eseguono** (i nostri 5845 chiamano il server in Python) e
+> **zero analisi statica** (CodeQL guarda solo Python, dichiarato nel workflow).
+> **I tre passi**: 1) un job come quello dell'accessibilita' ma che lancia
+> `clickthrough_pannelli.js`; 2) **UN percorso solo** ma vero — cerca → prenota → paga →
+> l'host la vede nel pannello (un percorso che gira vale piu' di cinque scritti e mai
+> lanciati); 3) prima NON bloccante per un paio di giri, poi diventa gate.
+>
+> ### ⚠️ LE TRE DECISIONI CHE ASPETTANO IL FONDATORE (non archiviarle)
+> 1. **`app.py`** — sta nel repository, **non entra in nessuna immagine**, non gira per
+>    nessuno, e porta **28 dei 51 allarmi** rimasti.
+> 2. **I quattro moduli irraggiungibili dall'artefatto** — `fase13_protocollo_finale`,
+>    **`fase15_idempotency`**, **`fase17_money`**, `fase23_datastore`. Due si chiamano
+>    `money` e `idempotency`: non e' una pratica da archiviare.
+> 3. **I tre moduli dormienti** con un allarme ciascuno, fra cui `fase197_canale_nostr`
+>    che ammette `ws://` in chiaro accanto a `wss://` (l'ultimo GRAVE rimasto).
+> ⛔ Per tutt'e tre le uscite valide sono **le tre della DO-178C**: manca un test · manca
+> un **requisito** · **e' codice estraneo e va tolto**. Non «riparalo e basta».
 >
 > ### 🔴 IL PC SI E' RIAVVIATO DA SOLO, E LA PRIMA DOMANDA DEL FONDATORE ERA GIUSTA
 > *«la mia paura e' che quando stanotte si e' riavviato ha spezzato qualcosa e da' finti
@@ -3286,7 +3323,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 95251c1
+CONSEGNE AGGIORNATE A: cffa0d9
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
