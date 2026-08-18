@@ -753,6 +753,70 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🔎 2026-08-18 (11) — **LA CACCIA: DOVE ALTRO USCIVA IL GERGO — 6 PUNTI, 2 IN FACCIA A UN CLIENTE**
+
+Ordine del fondatore: *«controlla altro che potrebbe uscire in futuro o quando sistemerai
+altre cose, così finiamo»*. La riparazione (9) aveva chiuso il ramo dell'**ospite**; restava da
+sapere **dove altro** un codice del server arriva sullo schermo di una persona.
+
+⛔ **Non l'ho cercato a occhio.** Un attrezzo legge **tutte** le pagine di `deploy/` e segnala
+ogni riga in cui `.errore` / `.motivo` / `.dettaglio` finisce in qualcosa che l'utente legge
+(`innerHTML`, `textContent`, `alert(`, `msg(`) **senza passare da `fraseErrore`**.
+💡 E `dettaglio` è un codice quanto gli altri: `fase83_server.py:8850` risponde
+`{"errore": "scheda_non_valida", "dettaglio": codice}`.
+
+**TROVATI 6 PUNTI, tutti chiusi:**
+| pagina | righe | chi legge |
+|---|---|---|
+| `deploy/host.html` | 616 (rapporto SEO) · 1198 (apertura di un alloggio da modificare) | 🔴 **un HOST vero, cioè un cliente che paga** |
+| `deploy/admin.html` | 328 · 512 · 552 · 580 | noi (e il fondatore, che non è tecnico) |
+
+⚠️ **PRIMA PASSATA: 12 PUNTI, e sei erano innocenti.** `d.errore==='bunker_richiesto'` e
+`!d.errore` **confrontano**, non mostrano. Contarli sarebbe stato un falso allarme, e un falso
+allarme è un difetto quanto un allarme mancato (regola ferrea 10): il cercatore ora toglie i
+confronti prima di giudicare, e **la prova di questo** è un test a sé con 4 righe colpevoli e 5
+innocenti scritte a mano.
+
+✅ **E L'ATTREZZO È DIVENTATO UNA GUARDIA PERMANENTE** (`test_app_js.py`, 2 test nuovi): da oggi
+qualunque riga nuova che mostri un codice a una persona fa **rosso lo stesso giorno**, anche se
+nasce mentre si sistema tutt'altro. È esattamente ciò che il fondatore ha chiesto: *«una volta
+sola per sempre»*. Il denominatore è dichiarato e controllato (≥12 pagine esaminate): se le
+pagine sparissero dal conteggio, la guardia direbbe «zero colpevoli» senza aver aperto niente.
+
+**MISURE:** 14 pagine esaminate · 12 sospetti → 6 veri → **0 dopo la riparazione** ·
+click-through 3 pannelli su `host.html`/`admin.html` modificati: 0 errori JS · percorso ATTO
+conferma e ATTO rifiuto: uscita 0.
+
+### ⏱️ 2026-08-18 (10) — **DUE COMPUTER, LO STESSO COMANDO, LO STESSO MINUTO: 85 SECONDI CONTRO 19 MINUTI**
+
+Al primo giro vero della riparazione (9), il job `browser` non ha guardato **niente**: si è
+piantato allo scaricamento di Chromium ed è stato ucciso dal proprio tetto. Il `gate` è
+rimasto **verde**, cioè la scelta di tenerlo fuori dal cancello ha pagato al primo intoppo.
+
+**LA MISURA CHE CHIUDE LA DIAGNOSI** — stessa run, stesso minuto, due runner diversi:
+```
+job accessibilita  "Browser Chromium"  17:28:58 -> 17:30:23  =  1 min 25 s
+job browser        "Browser Chromium"  17:29:25 -> 17:49:07  = 19 min 42 s -> CANCELLED
+```
+Stesso comando, stesso istante, esito opposto: **intoppo dell'infrastruttura, non del
+prodotto**. Senza un secondo job che facesse da testimone, questa cosa non era misurabile.
+
+🔴 **E LA SCOPERTA PIÙ GRAVE NON RIGUARDA IL JOB NUOVO.** `accessibilita` lancia lo **stesso
+comando** ed è **dentro il gate**: lo stesso impallamento avrebbe reso rosso il cancello per un
+download. La fragilità c'era da sempre; è diventata visibile solo perché adesso c'è un secondo
+job che scarica lo stesso browser. Un falso rosso insegna a ignorare il rosso (regola ferrea
+10), ed è il danno peggiore.
+
+**Riparazione, in tutt'e due i job:** `timeout 300` (il **triplo abbondante** del tempo vero) +
+**un secondo tentativo**. ⛔ Niente `|| true`: se fallisce anche il secondo, il job è rosso — e
+dev'esserlo, perché senza browser non si è guardato niente. Il tetto del job `browser` sale da
+**20 a 25 minuti**, se no il secondo tentativo non avrebbe il tempo di finire e la rete
+anti-intoppo non servirebbe a nulla.
+
+💡 **La lezione, e vale oltre questo caso:** un job che si pianta ogni tanto **non arriverebbe
+mai a 5 giri verdi di fila**, cioè la condizione d'ingresso nel gate scritta ieri sarebbe
+rimasta irraggiungibile per sempre — e nessuno avrebbe capito perché.
+
 ### 🗣️ 2026-08-18 (9) — **L'OSPITE LEGGEVA IL NOSTRO GERGO MENTRE PAGAVA** (`deploy/app.js`, +2 guardie)
 
 Difetto **trovato dal percorso col browser** nato poche ore prima (voce 8): col gateway muto,

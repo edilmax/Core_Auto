@@ -613,7 +613,7 @@ async function caricaSEO(){
   if(!CURRENT_SLUG){ box.innerHTML='<div class="msg err">'+escH(T('seo_scegli'))+'</div>'; return; }
   box.textContent='…';
   const d=await getJson('/api/host/seo_report?alloggio_id='+encodeURIComponent(CURRENT_SLUG),{headers:authHeaders()});
-  if(!d || d.errore){ box.innerHTML='<div class="msg err">'+escH(T('errore'))+' '+escH((d&&d.errore)||'')+'</div>'; return; }
+  if(!d || d.errore){ box.innerHTML='<div class="msg err">'+escH(T('errore'))+' '+escH(fraseErrore((d&&d.errore)||''))+'</div>'; return; }
   const p=Math.max(0,Math.min(100,Number(d.punteggio)||0));
   const col=p>=70?'var(--brand-chiaro)':(p>=40?'var(--arancio)':'var(--rosso)');
   let h='<div style="font-size:2rem;font-weight:800">'+p+'<span style="font-size:1rem;font-weight:400;color:var(--testo-tenue)">/100</span></div>'
@@ -1195,7 +1195,7 @@ async function caricaModifica(slug){
   const m=document.getElementById('msgPub');
   try{
     const d=await getJson('/api/host/alloggio?slug='+encodeURIComponent(slug),{headers:authHeaders()});
-    if(!d || !d.slug){ m.className='msg err'; m.textContent='❌ '+((d&&d.errore)||''); return; }
+    if(!d || !d.slug){ m.className='msg err'; m.textContent='❌ '+fraseErrore((d&&d.errore)||''); return; }
     const val=d.valuta||'EUR';
     document.getElementById('p_titolo').value=d.titolo||'';
     document.getElementById('p_descr').value=d.descrizione||'';

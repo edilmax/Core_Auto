@@ -11,6 +11,46 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🔎 2026-08-18 (25) — **LA CACCIA CHIESTA DAL FONDATORE: 6 PUNTI, E 2 ERANO IN FACCIA A UN CLIENTE**
+
+> Ordine: *«controlla altro che potrebbe uscire in futuro o quando sistemerai altre cose»*.
+> ⛔ **Non cercato a occhio:** un attrezzo legge **tutte** le pagine e segnala ogni riga in cui
+> `.errore` / `.motivo` / `.dettaglio` arriva sullo schermo **senza passare dal vocabolario**.
+> ```
+> 14 pagine esaminate -> 12 sospetti -> 6 veri -> 0 dopo la riparazione
+>   host.html  righe 616, 1198   <- li legge un HOST VERO, un cliente che paga
+>   admin.html righe 328, 512, 552, 580
+> ```
+> ⚠️ **Sei dei dodici erano innocenti** (`d.errore==='bunker_richiesto'` **confronta**, non
+> mostra): il cercatore ora toglie i confronti prima di giudicare, e c'è **un test apposta**
+> con 4 righe colpevoli e 5 innocenti scritte a mano — perché uno strumento che accusa
+> innocenti viene spento.
+> ✅ **L'attrezzo è ora una GUARDIA PERMANENTE**: qualunque riga nuova che mostri un codice a
+> una persona diventa rossa lo stesso giorno, **anche se nasce mentre si sistema tutt'altro**.
+> È il «una volta sola per sempre» che era stato chiesto.
+> 💡 E `dettaglio` è un codice quanto gli altri: `fase83_server.py:8850` risponde
+> `{"errore": "scheda_non_valida", "dettaglio": codice}` — non l'avrei saputo senza guardare.
+
+## ⏱️ 2026-08-18 (24) — **IL JOB NUOVO SI È PIANTATO, E HA FATTO VEDERE UNA CREPA CHE C'ERA GIÀ NEL GATE**
+
+> Al primo giro vero il job `browser` non ha guardato **niente**: si è piantato scaricando
+> Chromium ed è stato ucciso dal proprio tetto. Il `gate` è rimasto **verde** — la scelta di
+> tenerlo fuori dal cancello ha pagato al primo intoppo.
+> ```
+> stessa run, stesso minuto, due computer di GitHub diversi:
+>   job accessibilita  "Browser Chromium"  =  1 min 25 s
+>   job browser        "Browser Chromium"  = 19 min 42 s -> CANCELLED
+> ```
+> 🔴 **La scoperta grossa non è il job nuovo: è che `accessibilita` lancia lo STESSO comando ed
+> è DENTRO il gate.** Lo stesso impallamento avrebbe reso rosso il cancello per un download.
+> La crepa c'era da sempre: è diventata visibile solo perché ora c'è un secondo job che scarica
+> lo stesso browser.
+> **Riparato in tutt'e due:** attesa limitata a 5 minuti + **un secondo tentativo**, e nessun
+> `|| true` (se fallisce anche il secondo il job è rosso, ed è giusto). Tetto del job `browser`
+> da 20 a **25** minuti, se no il secondo tentativo non farebbe in tempo.
+> 💡 E senza questa riparazione la condizione «5 giri verdi di fila per entrare nel gate»
+> sarebbe rimasta **irraggiungibile per sempre**, e nessuno avrebbe capito perché.
+
 ## 🗣️ 2026-08-18 (23) — **IL PERCORSO NUOVO HA SUBITO TROVATO UN DIFETTO VERO, E POI UNO MIO**
 
 > **Il primo lavoro del browser vero non è stato girare: è stato TROVARE.** Col gateway muto
@@ -5252,7 +5292,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5849 test
+SUITE ATTUALE: Ran 5851 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
