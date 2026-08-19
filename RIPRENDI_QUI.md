@@ -61,14 +61,14 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 > **Stato dei tre posti, misurato dopo l'ultimo deploy (non ricordato):**
 > ```
-> computer 746d067 · GitHub 746d067 · VPS 746d067   -> ALLINEATI
-> richieste di unione ancora aperte: 0   (unite oggi: #74 #75 #76 #77, tutte
+> computer 497a882 · GitHub 497a882 · VPS 497a882   -> ALLINEATI
+> richieste di unione ancora aperte: 0   (unite: #74 #75 #76 #77 #78 #79, tutte
 >                                         verificate con una SECONDA chiamata)
-> suite 5875 test OK · batteria 19/19 · piano dei soldi: i tre posti d'accordo
+> suite 5879 test OK · batteria 19/19 · piano dei soldi: i tre posti d'accordo
 > verifica_produzione.py sul sito VERO: 190 controlli · 0 violazioni
 > https://bookinvip.com/ -> 200 · /api/health -> 200 · certificato 35 giorni
-> quattro deploy in giornata, ognuno col paracadute agganciato PRIMA del build
-> e verificato PER IMPRONTA
+> CINQUE deploy, ognuno col paracadute agganciato PRIMA del build e verificato
+> PER IMPRONTA
 > ```
 >
 > ### 🔴 LA COSA PIÙ IMPORTANTE, E NON È UN COLLAUDO
@@ -97,9 +97,9 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 >    **22 difetti veri**, quasi nessuno nell'aritmetica.
 >
 > ### ▶️ COSA FARE DOPO, in ordine
-> - **① Decidere sulla tassa di soggiorno** (è una decisione del fondatore, non tecnica): oggi
->   la tassa **resta nella nostra cassa** come debito verso il Comune, mentre l'idea del
->   fondatore è che passi all'host. Vedi blocco (37).
+> - ✅ ~~**① Decidere sulla tassa di soggiorno**~~ — **DECISA E IN PRODUZIONE** il 2026-08-19:
+>   *«la tassa passa all'host, autorizzato»*. L'host riceve il suo netto **più** la tassa e la
+>   versa al suo Comune; noi restiamo un tubo, non un debitore. Dettaglio nel blocco (39).
 > - **② Blocchi 3-4-5 dei soldi**: `fase65_split_payment` · `fase101_stripe_connect` ·
 >   `fase131_payout_dashboard` · `fase162_pagamenti_pendenti` · `fase85` · `fase87`.
 >   ⚠️ `fase85` e `fase87` sembrano i più coperti (77 e 59 test) **ma quei test li fingono**.
@@ -3933,7 +3933,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: f8840d3
+CONSEGNE AGGIORNATE A: 497a882
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
