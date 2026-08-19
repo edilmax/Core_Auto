@@ -11,6 +11,32 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## ⏱️ 2026-08-19 (32) — **UN JOB APPESO 110 MINUTI PER UN FUZZ CHE DURA DUE**
+
+> Trovato aspettando il cancello della richiesta **#75**. Non ho tirato a indovinare: ho
+> chiesto all'API **su quale passo** fosse fermo.
+> ```
+> job atheris: in corso da 109 minuti   (il fuzz dentro ha un tetto di 2 minuti)
+>   Dipendenze di build (clang) ...... IN CORSO   <- appeso qui, senza attesa limitata
+>   Installa Atheris ................. pending
+> ```
+> Il job non dichiarava `timeout-minutes`, quindi valeva il valore di serie di GitHub: **sei
+> ore**. E il `gate` aspetta lui: un intoppo del mirror **blocca l'unione per una giornata**,
+> e chi guarda legge «in corso», che somiglia moltissimo a «sta lavorando».
+>
+> ⛔ **È la stessa crepa del 18 agosto** (browser appeso 19 minuti su Chromium), riparata
+> allora **in quel posto solo**: **10 job su 14** erano ancora senza tetto, `gate` compreso.
+> ✅ Ora: attesa limitata + secondo tentativo sul passo di `clang` (che è solo una rete di
+> sicurezza; il giudice vero è `pip install atheris`) · **tutti e 14 i job col tetto**,
+> scelto sul tempo **misurato** · e la guardia `TestOgniJobDellaCIHaUnTETTO`, che diventa
+> rossa se un job resta scoperto.
+> ⛔ **E la mia prima riparazione era sbagliata: mi ha preso una guardia.** Avevo usato
+> `continue-on-error: true`, che fa risultare **`success` il job intero** — e `atheris` è
+> bloccante, quindi il cancello avrebbe visto verde un giro che non ha fuzzato niente.
+> Rifatto dentro il comando: due tentativi, e se falliscono si **scrive** cosa non è riuscito.
+> 💡 Un difetto riparato in un posto solo torna: chiude la classe la **guardia**, non la
+> riparazione. E le regole del progetto **hanno preso me** mentre riparavo.
+
 ## 🚀 2026-08-19 (31) — **TUTTO IN PRODUZIONE**, e il pezzo 2 del piano è chiuso
 
 > **Stato dei tre posti, misurato dopo il deploy (non ricordato):**
@@ -3669,7 +3695,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: abf48d8
+CONSEGNE AGGIORNATE A: 11c6553
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -5497,7 +5523,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5865 test
+SUITE ATTUALE: Ran 5866 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

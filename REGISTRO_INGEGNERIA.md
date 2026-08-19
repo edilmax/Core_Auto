@@ -770,6 +770,54 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### ⏱️ 2026-08-19 (6) — **UN JOB APPESO 110 MINUTI PER UN FUZZ CHE DURA DUE, E IL CANCELLO ASPETTAVA LUI**
+
+Trovato aspettando il cancello della richiesta **#75**: `atheris` risultava «in corso» da
+**109 minuti**. Non ho tirato a indovinare — ho chiesto all'API **su quale passo** fosse fermo:
+```
+job atheris: status=in_progress  started=05:01:02Z   (fuzz dichiarato: max 2 minuti)
+  Set up job .......................... success
+  actions/checkout@v5 ................. success
+  actions/setup-python@v6 ............. success
+  Dipendenze di build (clang) ......... IN CORSO   <- appeso qui
+  Installa Atheris .................... pending
+  Fuzz motori-soldi ................... pending
+```
+`sudo apt-get update && sudo apt-get install -y clang`, **senza attesa limitata**. E il job non
+dichiarava `timeout-minutes`, quindi valeva il valore di serie di GitHub: **sei ore**. Il `gate`
+aspetta `atheris`, quindi un intoppo del mirror **blocca l'unione per una giornata** — e chi
+guarda legge solo «in corso», che somiglia moltissimo a «sta lavorando».
+
+⛔ **È LA STESSA CREPA DEL 2026-08-18** (il job del browser appeso 19 minuti a scaricare
+Chromium). Quel giorno fu riparata **lì**, e non cercata altrove: **dieci job su quattordici**
+erano ancora senza tetto, `gate` compreso.
+
+✅ **Riparato in tre mosse.** ① Il passo di `clang` — che è solo una **rete di sicurezza** per
+quando manca la wheel — ha ora attesa limitata e **un secondo tentativo**, e se fallisce anche
+quello il giro prosegue **dichiarandolo** (`continue-on-error`, che lascia il passo *segnato*
+come fallito: ⛔ niente `|| true`, che invece lo nasconderebbe — regola ferrea 12). Il giudice
+vero è il passo dopo, `pip install atheris`, che se non riesce diventa rosso **per il motivo
+giusto**. ② **Tutti e 14 i job** hanno un `timeout-minutes`, scelto sul tempo **misurato** del
+giro precedente (`full-suite-311` 14,6 min · `copertura` 10,9 · `full-suite` 10,2 · `mutazione`
+4 · `accessibilita` 1,3 · `money-smoke` 0,7 …), con abbondanza: un tetto stretto sarebbe un
+falso rosso che aspetta. ③ La guardia `TestOgniJobDellaCIHaUnTETTO` legge `ci.yml` e diventa
+**rossa** se un job qualsiasi resta senza tetto — provata togliendone uno in memoria.
+
+⛔ **E LA MIA PRIMA RIPARAZIONE ERA SBAGLIATA: MI HA PRESO UNA GUARDIA.** Avevo messo
+`continue-on-error: true` sul passo di `clang`, convinto fosse la scelta pulita («il passo
+resta segnato come fallito»). `test_nessun_continue_on_error_nei_job_bloccanti` è andata rossa,
+e aveva ragione: quel flag fa risultare il **job intero `success`**, e `atheris` è **bloccante**
+— il cancello avrebbe visto verde un giro che non ha fuzzato niente. È la stessa famiglia di
+`|| true`, in una forma che sembra più educata. ✅ Rifatto **dentro il comando**: due tentativi,
+e se falliscono entrambi si **scrive nel registro** cosa non è riuscito e si prosegue, perché
+il giudice vero è `pip install atheris` — che, se davvero non riesce a costruire, diventa rosso
+**da solo e per il motivo giusto**.
+
+💡 **Due lezioni, non una.** Un difetto riparato **in un posto solo** torna: ciò che chiude la
+classe è la **guardia**, non la riparazione. E — più scomoda — **le regole di questo progetto
+hanno preso me** mentre riparavo: la differenza fra «il passo è segnato come fallito» e «il job
+risulta riuscito» è esattamente il genere di dettaglio che un verde finto usa per passare.
+
 ### 🧬 2026-08-19 (5) — **PEZZO 2 DEL PIANO: UN «UCCISO» ADESSO SI RI-CONFERMA**
 
 Il modo della CI ri-verifica già i **sopravvissuti** (3 giri) per non gridare a vuoto. Nessuno

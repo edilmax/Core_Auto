@@ -7724,6 +7724,45 @@ class TestIlFoglioUnicoDeiControlli(unittest.TestCase):
             "potuto misurare non e' un verde" % (stato, dettaglio))
 
 
+class TestOgniJobDellaCIHaUnTETTO(unittest.TestCase):
+    """⛔ UN JOB SENZA TETTO PUO' TENERE FERMO IL CANCELLO PER SEI ORE.
+
+    Misurato il 2026-08-19. Il job `atheris` fa un fuzz con un tetto di **due minuti**, ma
+    e' rimasto appeso **110 minuti** su `apt-get install clang`: un intoppo del mirror, un
+    passo senza attesa limitata, e il valore di serie di GitHub per un job e' **sei ore**.
+    Il `gate` aspetta quel job, quindi un intoppo di rete blocca l'unione per una giornata
+    intera -- e chi guarda vede solo «in corso», che somiglia moltissimo a «sta lavorando».
+
+    ⛔ E' LA STESSA CREPA DEL 2026-08-18, quando il job del browser resto' appeso 19 minuti
+    a scaricare Chromium. Quel giorno fu riparata **li'** -- attesa limitata e secondo
+    tentativo -- e non fu cercata altrove: dieci job su quattordici erano ancora senza tetto.
+    💡 Un difetto riparato in un posto solo torna: quello che chiude la classe non e' la
+    riparazione, e' la guardia che la pretende **dappertutto**.
+
+    ⚠️ I tetti sono scelti sul tempo MISURATO di ogni job (dal registro dei job del giro
+    precedente), con abbondanza: un tetto stretto sarebbe un falso rosso che aspetta, e un
+    falso allarme e' un difetto quanto un allarme mancato (regola ferrea 10).
+    """
+    def test_nessun_job_puo_restare_appeso_senza_limite(self):
+        import io
+        import os
+        import yaml
+        percorso = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                ".github", "workflows", "ci.yml")
+        with io.open(percorso, encoding="utf-8") as f:
+            impianto = yaml.safe_load(f)
+        job = impianto.get("jobs") or {}
+        self.assertTrue(job, "non ho trovato nessun job in ci.yml: senza l'elenco questa "
+                             "guardia non sta misurando niente (S1)")
+        senza = sorted(n for n, corpo in job.items() if "timeout-minutes" not in (corpo or {}))
+        self.assertEqual(
+            [], senza,
+            "questi job della CI non dichiarano `timeout-minutes`: se uno si impianta resta "
+            "appeso fino al valore di serie di GitHub (SEI ORE) e il `gate` aspetta lui, "
+            "cioe' un intoppo di rete blocca l'unione per una giornata. Il tetto si sceglie "
+            "sul tempo misurato del job, con abbondanza. Job scoperti: %r" % (senza,))
+
+
 class TestNessunCollaudoPuoPRETENDERE_LaTariffaVECCHIA(unittest.TestCase):
     """⛔ UNA GUARDIA CHE CHIEDE IL DIFETTO E' PEGGIO DI NESSUNA GUARDIA.
 
