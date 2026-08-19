@@ -11,6 +11,36 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🚀 2026-08-19 (31) — **TUTTO IN PRODUZIONE**, e il pezzo 2 del piano è chiuso
+
+> **Stato dei tre posti, misurato dopo il deploy (non ricordato):**
+> ```
+> computer ff62346 · GitHub ff62346 · VPS ff62346   -> ALLINEATI
+> CI su 775d34b: 16 job, gate=success, 0 rossi   (zap skipped: gira il lunedi')
+> unione #74 verificata con una SECONDA chiamata: merged=True, state=closed
+> paracadute: immagine viva sha256:d3c186d8... agganciata PRIMA del build e verificata
+>             PER IMPRONTA; ritorno PRE_DEPLOY_20260819_030522 -> abf48d8
+> contenitori: casavip_app healthy · casavip_backup healthy · casavip_nginx up
+> avvio pulito: 'avvisi': [], 'money_path_pronto': True, 'valuta': 'EUR'
+> variabili PAGAMENTO_ sul server: NESSUNA (valgono i default del codice)
+> https://bookinvip.com/ -> 200 · /api/health -> 200
+> verifica_produzione.py sul sito VERO: 190 controlli · 0 violazioni · certificato 35 giorni
+> suite 5859 OK · batteria 19/19 · master E2E 0 violazioni
+> ```
+>
+> ### 🧬 PEZZO 2 DEL PIANO — un «ucciso» adesso si ri-conferma
+> Il modo della CI ri-verifica già i **sopravvissuti**; nessuno guardava il verso opposto, ed è
+> il più pericoloso: **un falso «ucciso» non grida mai**. Ora ogni «ucciso» del campione viene
+> rieseguito, e se la seconda volta non muore il verdetto diventa **`incerto`** e fa **rosso** —
+> e `--parziale` **non lo condona**. Il giro dichiara sempre *quanti su quanti* ne ha
+> ri-confermati: un campione taciuto è un punteggio che sembra pieno.
+>
+> ### 🕵️ E la guardia degli orfani guardava solo il NOME
+> Bastava che un file con quel nome esistesse nel repository perché una copia **più vecchia**
+> passasse il controllo: è ciò che stanotte mi ha fatto sovrascrivere due riparazioni già fatte.
+> Ora confronta l'**impronta**, ed è **rosso** se il contenuto differisce. 💡 Cancellare la
+> cartella toglieva *quella* copia; la guardia toglie *tutte quelle future*.
+
 ## 🩺 2026-08-19 (30) — **DUE GUARDIE ORDINAVANO DI RIMETTERE IL DIFETTO** (batteria 17/19 → 19/19)
 
 > La batteria lanciata prima del commit è uscita **17 OK · 2 FALLITI**. Nessuno dei due era
@@ -47,7 +77,9 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > 💡 **A prenderlo non è stato il mio occhio: è stata la lettera `M` di `git status`.** È la
 > gemella della lezione della chiavetta, dove la cartella `chiavetta_nuova` contiene la copia
 > **più vecchia**. Una copia fuori dal repository non è un salvataggio: è un **candidato a
-> vincere contro l'originale**. ⚠️ Quella cartella contiene **ancora** la copia vecchia.
+> vincere contro l'originale**. ✅ Cartella **cancellata**, e — che conta di più — il controllo
+> degli artefatti orfani ora confronta l'**impronta**, non solo il nome: una copia sosia col
+> contenuto diverso lo fa diventare **rosso** (visto rosso sul difetto vero).
 >
 > **La correzione vera, che il repository non aveva: nove date cablate nel 2027.** L'E2E dei
 > crediti prenotava fra `2027-03-01` e `2027-06-30`: **il 1° luglio 2027 sarebbe diventato
@@ -5465,7 +5497,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5864 test
+SUITE ATTUALE: Ran 5865 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
