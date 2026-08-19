@@ -104,5 +104,134 @@ class TestRimborso(unittest.TestCase):
                         % (pagato, pol_nome, g, r["rimborso_cents"]))
 
 
+class TestIDueBUCHITrovatiDalGiudice(unittest.TestCase):
+    """I due punti che il Giudice ha trovato SCOPERTI il 2026-08-19 (11 punti, 7 uccisi,
+    4 sopravvissuti). Gli altri due sopravvissuti sono **provati equivalenti**, con la
+    dimostrazione scritta in `EQUIVALENTI_DICHIARATI`: qui ci sono solo i buchi VERI.
+
+    ⛔ Nessuno dei due sta nell'aritmetica del rimborso, che era gia' sorvegliata bene.
+    Stanno tutt'e due **al confine**, dove un valore entra da fuori e viene interpretato --
+    ed e' esattamente la lezione che il primo modulo dei soldi aveva gia' insegnato il
+    2026-08-12: *i difetti veri non stanno nel calcolo, stanno nel passaggio dove un modulo
+    traduce un valore per un altro*.
+    """
+
+    def test_un_BOOLEANO_come_giorni_NON_vale_un_giorno(self):
+        """⛔ IL BUCO CHE COSTA SOLDI VERI.
+
+        In Python `True` **e'** un intero, e vale 1. Il modulo lo sa e lo esclude apposta
+        (`not isinstance(giorni_all_arrivo, bool)`), ma nessun test lo verificava: il Giudice
+        ha rotto quella condizione (`and` -> `or`) e **tutti i test sono rimasti verdi**.
+
+        Col guasto dentro, `True` verrebbe letto come **1 giorno all'arrivo** invece che 0, e
+        sulla politica flessibile (1 giorno = 100%, 0 giorni = 50%) il rimborso RADDOPPIA:
+        su 200,00 EUR si restituirebbero 200,00 invece di 100,00. **Cento euro regalati per
+        un booleano**, su ogni cancellazione che arrivi con quel valore.
+
+        ⚠️ E non e' un caso di laboratorio: `True`/`False` arrivano da JSON, da un campo di
+        modulo, da un confronto scritto male a monte. La regola del progetto e' la stessa da
+        sempre -- **il difetto e' spesso in chi chiama** -- e questo modulo si difende bene:
+        mancava solo chi lo dimostrasse.
+        """
+        for booleano in (True, False):
+            r = calcola_rimborso(20000, booleano, politica="flessibile")
+            self.assertEqual(
+                r["bps"], 5000,
+                "giorni=%r e' stato letto come un numero di giorni: un booleano NON e' un "
+                "giorno, e leggerlo cosi' cambia quanto si restituisce (bps=%d)"
+                % (booleano, r["bps"]))
+            self.assertEqual(
+                r["rimborso_cents"], 10000,
+                "giorni=%r ha prodotto un rimborso di %d cents invece di 10000: su questa "
+                "politica un giorno in piu' vale il DOPPIO del rimborso"
+                % (booleano, r["rimborso_cents"]))
+        # e l'altra direzione, che rende il confronto leggibile: 1 giorno VERO vale il doppio
+        self.assertEqual(calcola_rimborso(20000, 1, politica="flessibile")["rimborso_cents"],
+                         20000, "un giorno vero vale il 100%: se cambia, cambia il senso "
+                                "del controllo qui sopra")
+
+    def test_un_intero_che_MENTE_sul_confronto_non_ottiene_un_rimborso(self):
+        """⛔ IL DIFETTO PIU' CARO DEI TRE, e non l'ha trovato un mutante: l'ha trovato la
+        GUARDIA DELLO SCHEDARIO, bocciando una mia dichiarazione di equivalenza.
+
+        Avevo dichiarato equivalenti due mutanti dimostrandolo con z3 «su tutti gli interi».
+        La guardia e' andata rossa con la ragione scritta dentro di se': *«il risolutore
+        ragiona sugli INTERI, la funzione accetta `Any` -- non ha sbagliato lui, gli era
+        stata fatta la domanda sbagliata»*. Andando a vedere cosa ci fosse in quel pezzo di
+        dominio che la mia prova NON copriva, e' saltato fuori un buco vero.
+
+        `isinstance(v, int)` accetta anche le SOTTOCLASSI di `int`, e una sottoclasse puo'
+        **riscrivere il confronto**. Misurato sul codice di produzione, politica «rigida»
+        (30+ giorni = 100%, 7+ = 50%, altrimenti ZERO):
+            giorni = 0 (intero vero) -> rimborso      0 cents
+            giorni = una sottoclasse che dice sempre «sono >= di tutto»
+                                     -> rimborso 20.000 cents
+        **Duecento euro regalati** su una prenotazione che secondo la politica non ne
+        prevedeva nemmeno uno.
+
+        ⚠️ Il modulo dichiara di essere «BLINDATO: input invalido -> rimborso 0
+        (fail-closed)». Lo era per i tipi sbagliati, non per i tipi **camuffati**. La cura e'
+        pretendere l'intero VERO (`type(x) is int`), che chiude anche i booleani senza
+        bisogno di nominarli: `type(True) is bool`, non `int`.
+        """
+        class Bugiarda(int):
+            """Un intero che mente: a ogni confronto risponde «sono maggiore o uguale»."""
+            def __ge__(self, altro):
+                return True
+
+        class Falsa(int):
+            """Un intero che mente sull'uguaglianza: non e' mai uguale a niente."""
+            def __eq__(self, altro):
+                return False
+
+            def __hash__(self):
+                return 0
+
+        for politica in ("rigida", "moderata", "flessibile", "non_rimborsabile"):
+            atteso = calcola_rimborso(20000, 0, politica=politica)
+            camuffato = calcola_rimborso(20000, Bugiarda(0), politica=politica)
+            self.assertEqual(
+                camuffato["rimborso_cents"], atteso["rimborso_cents"],
+                "politica %r: un valore che MENTE sul confronto ha ottenuto %d cents invece "
+                "di %d. Un tipo camuffato non deve poter scegliere lo scaglione: il modulo "
+                "dichiara fail-closed, e fail-closed vuol dire che l'ignoto vale ZERO"
+                % (politica, camuffato["rimborso_cents"], atteso["rimborso_cents"]))
+
+        # e lo stesso vale per il PREZZO: un importo che mente non deve attraversare la
+        # porta d'ingresso e finire nell'aritmetica del rimborso
+        finto = calcola_rimborso(Falsa(0), 5, politica="moderata")
+        self.assertEqual(
+            (finto["rimborso_cents"], finto["bps"]), (0, 0),
+            "un prezzo che mente sull'uguaglianza e' passato dalla porta: rimborso=%d "
+            "bps=%d. Su un importo zero camuffato il modulo deve restituire zero e "
+            "dichiarare zero" % (finto["rimborso_cents"], finto["bps"]))
+
+    def test_la_politica_di_cancellazione_NON_si_puo_riscrivere_a_caldo(self):
+        """⛔ IL SECONDO BUCO: le politiche erano CONGELATE e nessuno lo pretendeva.
+
+        `PoliticaCancellazione` e' `frozen=True` apposta: sono le regole con cui si decide
+        quanto denaro torna all'ospite, e devono essere **costanti**, non oggetti che
+        chiunque puo' riscrivere mentre il programma gira. Il Giudice ha tolto quel congelo
+        (`frozen=True` -> `False`) e nessun test se n'e' accorto.
+
+        Col guasto dentro, una riga qualsiasi del programma -- o un modulo importato -- puo'
+        fare `POLITICHE["rigida"].scaglioni = ((0, 10000),)` e da quel momento **ogni**
+        cancellazione rimborsa il 100%, senza che nulla risulti rotto e senza lasciare
+        traccia. E' il modo di rompersi n. 4 applicato ai soldi: non un calcolo sbagliato,
+        ma una regola che si puo' cambiare sotto i piedi di chi la usa.
+        """
+        for nome, politica in POLITICHE.items():
+            with self.assertRaises(Exception, msg="la politica %r si lascia riscrivere: "
+                                                  "le regole del rimborso devono essere "
+                                                  "costanti" % nome):
+                politica.scaglioni = ((0, 10000),)
+            with self.assertRaises(Exception, msg="il NOME della politica %r si lascia "
+                                                  "riscrivere" % nome):
+                politica.nome = "inventata"
+        # ...e dopo i tentativi le politiche sono ancora quelle di prima (nessun danno)
+        self.assertEqual(POLITICHE["rigida"].scaglioni, ((30, 10000), (7, 5000), (0, 0)),
+                         "la politica rigida e' cambiata dopo i tentativi di scrittura")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -49,18 +49,27 @@ def calcola_rimborso(prezzo_pagato_cents: Any, giorni_all_arrivo: Any, *,
     sempre sulla politica dell'host. fail-safe: non si applica a soggiorni già iniziati."""
     pol = politica if isinstance(politica, PoliticaCancellazione) \
         else POLITICHE.get(str(politica), POLITICHE["flessibile"])
-    pagato = prezzo_pagato_cents if isinstance(prezzo_pagato_cents, int) and \
-        not isinstance(prezzo_pagato_cents, bool) and prezzo_pagato_cents > 0 else 0
+    # ⛔ L'INTERO DEVE ESSERE VERO, NON SOLO «UN INTERO». `isinstance(v, int)` accetta anche
+    # le SOTTOCLASSI, e una sottoclasse puo' riscrivere i confronti: misurato il 2026-08-19,
+    # un valore che risponde sempre «sono >= di tutto» otteneva il 100% su una politica
+    # «rigida» che prevedeva ZERO -- 200,00 EUR regalati. `type(v) is int` chiude la porta, e
+    # chiude anche i booleani senza doverli nominare (`type(True) is bool`).
+    # Il modulo dichiara «BLINDATO: input invalido -> rimborso 0»: lo era per i tipi
+    # SBAGLIATI, non per i tipi CAMUFFATI. Guardia:
+    # `test_fase111_cancellazione.TestIDueBUCHITrovatiDalGiudice.
+    #  test_un_intero_che_MENTE_sul_confronto_non_ottiene_un_rimborso` (vista rossa prima).
+    pagato = prezzo_pagato_cents if type(prezzo_pagato_cents) is int \
+        and prezzo_pagato_cents > 0 else 0
     if pagato == 0:
         return {"rimborso_cents": 0, "trattenuto_cents": 0, "bps": 0,
                 "politica": pol.nome}
     if entro_ripensamento is True:                          # finestra di ripensamento -> 100%
         return {"rimborso_cents": pagato, "trattenuto_cents": 0, "bps": 10000,
                 "politica": pol.nome, "ripensamento": True}
-    g = giorni_all_arrivo if isinstance(giorni_all_arrivo, int) and \
-        not isinstance(giorni_all_arrivo, bool) and giorni_all_arrivo >= 0 else 0
-    fee = max(0, int(fee_pulizia_cents)) if isinstance(fee_pulizia_cents, int) and \
-        not isinstance(fee_pulizia_cents, bool) else 0
+    # stessa ragione della riga sopra: l'intero dev'essere vero, se no il valore puo'
+    # scegliersi lo scaglione mentendo sul confronto
+    g = giorni_all_arrivo if type(giorni_all_arrivo) is int and giorni_all_arrivo >= 0 else 0
+    fee = max(0, int(fee_pulizia_cents)) if type(fee_pulizia_cents) is int else 0
     fee = min(fee, pagato)
     soggiorno = pagato - fee                                # parte soggetta a penale
     bps = _bps_per_giorni(g, pol.scaglioni)

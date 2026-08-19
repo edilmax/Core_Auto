@@ -11,6 +11,58 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 💸 2026-08-19 (34) — **`fase111_cancellazione`: 3 difetti veri, e il peggiore l'ha trovato una GUARDIA**
+
+> Primo modulo del **gruppo 2 dei soldi**. Tutti e tre i moduli del gruppo sono **vivi**
+> (`raggiungibilita.py`, misurato prima di attaccare).
+> ```
+> Giudice su fase111:  11 punti · 7 uccisi · 4 SOPRAVVISSUTI · 3 ri-conferme tenute
+> dopo le riparazioni: 13 punti · 11 uccisi · 2 sopravvissuti
+> ```
+> **1. Un booleano valeva un giorno.** `True` in Python vale 1: letto come «1 giorno
+> all'arrivo» invece di 0, sulla politica flessibile il rimborso **RADDOPPIA** (200,00 €
+> invece di 100,00). Il modulo si difendeva; **nessun test lo verificava**.
+> **2. Le politiche si potevano riscrivere a caldo**: una riga qualsiasi poteva mettere ogni
+> rimborso al 100%, senza rompere niente e senza lasciare traccia.
+> **3. ⛔ Il più caro, e non l'ha trovato un mutante: l'ha trovato una guardia bocciando ME.**
+> Avevo dichiarato due equivalenze con z3 «su tutti gli interi»; la guardia dello schedario è
+> andata rossa: *«il risolutore ragiona sugli INTERI, la funzione accetta Any»*. Andando a
+> vedere cosa c'era nel dominio non coperto:
+> ```
+> politica RIGIDA (0 giorni = ZERO rimborso), misurato in produzione:
+>   giorni = 0 (intero vero) ............... rimborso      0 cents
+>   giorni = sottoclasse che mente sul confronto ... rimborso 20.000 cents
+> ```
+> `isinstance(v, int)` accetta le **sottoclassi**, e una sottoclasse può riscrivere i
+> confronti. Riparato con `type(x) is int`, che chiude anche i booleani senza nominarli.
+> Guardia vista **rossa prima** (`20000 != 0`).
+>
+> ⚠️ **I 2 sopravvissuti rimasti NON sono dichiarati equivalenti, per scelta.** z3 dice
+> `unsat`, ma la firma accetta `Any` e la regola vieta di dichiarare su un dominio più
+> piccolo. 💡 Meglio due punti segnati scoperti che una dichiarazione che non regge — ed è
+> **proprio quel rigore** ad aver fatto trovare il difetto 3.
+
+## 🚀 2026-08-19 (33) — **SECONDO DEPLOY DELLA NOTTE: anche i tetti della CI sono in produzione**
+
+> **Stato dei tre posti, misurato dopo il deploy (non ricordato):**
+> ```
+> computer ca72f7d · GitHub ca72f7d · VPS ca72f7d   -> ALLINEATI
+> CI su e2b8156: 16 job, gate=success, 0 rossi  ·  ATHERIS VERDE (prima: appeso 110 min)
+> unione #75 verificata con una SECONDA chiamata: merged=True, state=closed
+> richieste di unione ancora aperte: 0
+> paracadute: immagine viva sha256:e580972e... agganciata PRIMA del build e verificata
+>             PER IMPRONTA; ritorno PRE_DEPLOY_20260819_094259 -> ff62346
+> contenitori: casavip_app healthy · casavip_backup healthy · casavip_nginx up
+> avvio pulito: 'avvisi': [], 'money_path_pronto': True, 'valuta': 'EUR'
+> variabili PAGAMENTO_ sul server: NESSUNA (valgono i default del codice)
+> https://bookinvip.com/ -> 200 · /api/health -> 200
+> verifica_produzione.py sul sito VERO: 190 controlli · 0 violazioni · certificato 35 giorni
+> suite 5861 OK · batteria 19/19
+> ```
+> ⚠️ **Una cosa che ho quasi dato per buona:** la riga dell'avvio pulito non era comparsa
+> perché il **mio** filtro non agganciava, non perché mancasse. Riletta con la forma scritta
+> in `DEPLOY.md` — che è il motivo per cui quella forma sta lì.
+
 ## ⏱️ 2026-08-19 (32) — **UN JOB APPESO 110 MINUTI PER UN FUZZ CHE DURA DUE**
 
 > Trovato aspettando il cancello della richiesta **#75**. Non ho tirato a indovinare: ho
@@ -3695,7 +3747,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 11c6553
+CONSEGNE AGGIORNATE A: ca72f7d
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -5523,7 +5575,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5866 test
+SUITE ATTUALE: Ran 5869 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

@@ -770,6 +770,79 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 💸 2026-08-19 (8) — **`fase111_cancellazione` DAL GIUDICE: 3 difetti veri, e il peggiore l'ha trovato una GUARDIA, non un mutante**
+
+Primo modulo del **gruppo 2 dei soldi** (F1). ⛔ Prima di attaccarlo, `raggiungibilita.py`:
+tutti e tre i moduli del gruppo sono **vivi**. Censimento rifatto adesso: `fase111` **11 punti**
+con 4 sorveglianti (`fase147` 29 con 7 · `fase98` 18 con 15).
+
+**Il giro del Giudice: 11 punti · 7 uccisi · 4 SOPRAVVISSUTI · 3 ri-conferme, tutte tenute.**
+
+**① Un booleano valeva un giorno — e raddoppiava il rimborso.** In Python `True` **è** un
+intero e vale 1. Il modulo lo escludeva apposta, ma **nessun test lo verificava**: rotta quella
+condizione, tutta la suite restava verde. Col guasto dentro, `True` come «giorni all'arrivo»
+veniva letto come **1 giorno** invece di 0 e sulla politica flessibile (1 giorno = 100%,
+0 giorni = 50%) il rimborso **raddoppiava**: su 200,00 € se ne restituivano 200,00 invece di
+100,00. E non è un caso di laboratorio: `True`/`False` arrivano da JSON, da un campo di modulo,
+da un confronto scritto male a monte.
+
+**② Le politiche di cancellazione si potevano riscrivere a caldo.** `PoliticaCancellazione` è
+`frozen=True` apposta — sono le regole con cui si decide quanto denaro torna — ma **nessuno lo
+pretendeva**. Col congelo tolto, una riga qualsiasi può fare
+`POLITICHE["rigida"].scaglioni = ((0, 10000),)` e da lì **ogni** cancellazione rimborsa il 100%,
+senza che nulla risulti rotto e senza lasciare traccia. La prova rossa lo ha mostrato dal vivo:
+riscritta una politica, è caduto anche il controllo del punto ①.
+
+**③ ⛔ IL PIÙ CARO, E NON L'HA TROVATO UN MUTANTE: L'HA TROVATO UNA GUARDIA CHE HA BOCCIATO ME.**
+Avevo dichiarato equivalenti due mutanti, con dimostrazione **z3** «su tutti gli interi».
+`TestLoSchedarioDegliEquivalenti_3_DOMINIO_MAGGIORE_DELLA_FIRMA` è andata **rossa**, con la
+ragione scritta dentro di sé: *«il risolutore ragiona sugli INTERI, la funzione accetta `Any`
+— non ha sbagliato lui, gli era stata fatta la domanda sbagliata»*. Andando a vedere **cosa
+c'era nel pezzo di dominio che la mia prova non copriva**, è saltato fuori un difetto vero:
+`isinstance(v, int)` accetta le **sottoclassi**, e una sottoclasse può **riscrivere i confronti**.
+```
+politica RIGIDA (30+ giorni = 100%, 7+ = 50%, altrimenti ZERO), misurato in produzione:
+  giorni = 0 (intero vero) ................ rimborso      0 cents
+  giorni = sottoclasse che dice sempre "sono >= di tutto"
+                          ................ rimborso 20.000 cents
+  differenza: 20.000 cents REGALATI
+```
+Il modulo dichiara *«BLINDATO: input invalido → rimborso 0 (fail-closed)»*: lo era per i tipi
+**sbagliati**, non per i tipi **camuffati**. ✅ Riparato con `type(x) is int` sui tre ingressi
+(prezzo, giorni, fee), che chiude anche i booleani **senza doverli nominare** — `type(True)` è
+`bool`, non `int`. Guardia vista **rossa prima** (`20000 != 0`).
+
+**Esito: da 4 sopravvissuti a 2 · 13 punti · 11 uccisi.**
+⚠️ **E i 2 che restano NON sono dichiarati equivalenti, per scelta.** Sono `> 0` → `>= 0` e
+`>= 0` → `> 0` sulle porte d'ingresso: divergono **solo** in zero, e lì entrambi i rami danno
+zero — z3 dice `unsat` su tutti gli interi. Ma la regola del progetto è che una dimostrazione
+non vale se il dominio della prova è **più piccolo** di quello che la firma accetta, e la firma
+accetta `Any`. ⛔ **Preferisco due punti segnati come scoperti a una dichiarazione che non
+regge**: lo schedario degli equivalenti è l'unico posto dove un errore diventa **cecità
+permanente**. 💡 E la giornata dimostra che la regola è giusta: è **proprio** quel rigore ad
+aver fatto trovare il difetto ③.
+
+### 🚀 2026-08-19 (7) — **SECONDO DEPLOY: i tetti della CI sono in produzione**
+
+```
+CI su e2b8156: 16 job, gate=success, 0 rossi  ·  ATHERIS VERDE (prima: appeso 110 minuti)
+unione #75: merged=True (prima chiamata) -> merged=True, state=closed (SECONDA chiamata)
+richieste di unione ancora aperte: 0
+computer ca72f7d · GitHub ca72f7d · VPS ca72f7d   -> ALLINEATI
+paracadute: immagine viva sha256:e580972e... agganciata PRIMA del build, verificata per
+            impronta; ritorno PRE_DEPLOY_20260819_094259 -> ff62346
+contenitori: casavip_app healthy · casavip_backup healthy · casavip_nginx up
+avvio pulito: 'avvisi': [], 'money_path_pronto': True, 'valuta': 'EUR'
+variabili PAGAMENTO_ sul server: NESSUNA (valgono i default del codice)
+https://bookinvip.com/ -> 200 · /api/health -> 200
+verifica_produzione.py sul sito VERO: 190 controlli, 0 violazioni, certificato 35 giorni
+```
+⚠️ **Una cosa che ho quasi dato per buona:** al primo controllo la riga dell'avvio pulito non
+compariva. Non mancava: **non agganciava il mio filtro**. Riletta con la forma scritta in
+`DEPLOY.md` — ed è esattamente il motivo per cui quella forma sta scritta lì invece che a
+memoria. 💡 «Non l'ho visto» e «non c'è» sono due frasi diverse, e confonderle è il modo più
+rapido per dichiarare un guasto che non esiste — o per non vedere quello che c'è.
+
 ### ⏱️ 2026-08-19 (6) — **UN JOB APPESO 110 MINUTI PER UN FUZZ CHE DURA DUE, E IL CANCELLO ASPETTAVA LUI**
 
 Trovato aspettando il cancello della richiesta **#75**: `atheris` risultava «in corso» da
