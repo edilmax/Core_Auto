@@ -107,18 +107,36 @@ def cartelle_di_transito(radice=RADICE):
     return trovate
 
 
+def _impronta(percorso):
+    """sha256 del file. Serve a distinguere «lo stesso nome» da «la stessa cosa»."""
+    import hashlib
+    impronta = hashlib.sha256()
+    with open(percorso, "rb") as f:
+        for pezzo in iter(lambda: f.read(65536), b""):
+            impronta.update(pezzo)
+    return impronta.hexdigest()
+
+
 def _nomi_python_nel_repo(radice):
-    """I nomi (senza percorso) di tutti i `.py` del repository, tracciati e non. `None`
-    se git non risponde: senza l'elenco non si puo' dire che un file «manca»."""
+    """I `.py` del repository, tracciati e non: **nome -> percorso**. `None` se git non
+    risponde (senza l'elenco non si puo' dire che un file «manca»).
+
+    ⛔ PRIMA ERA UN INSIEME DI SOLI NOMI, e quel dettaglio ha quasi fatto perdere un lavoro
+    il 2026-08-19: sapere che «un file con quel nome esiste» non permette di confrontarne il
+    CONTENUTO, quindi una copia vecchia fuori dal repository passava il controllo indisturbata.
+    Ora si tiene anche il percorso, perche' il confronto vero e' sull'impronta.
+    ⚠️ Se due file del repository hanno lo stesso nome in cartelle diverse, qui ne resta uno:
+    e' dichiarato, e per lo scopo di questo controllo (una cartella di transito accanto al
+    progetto) basta."""
     tracciati = pv._git(radice, "ls-files", "*.py")
     nuovi = pv._git(radice, "ls-files", "--others", "--exclude-standard", "*.py")
     if tracciati is None or nuovi is None:
         return None
-    nomi = set()
+    nomi = {}
     for blocco in (tracciati, nuovi):
         for riga in blocco.splitlines():
             if riga.strip():
-                nomi.add(os.path.basename(riga.strip()))
+                nomi.setdefault(os.path.basename(riga.strip()), riga.strip())
     return nomi
 
 
@@ -133,23 +151,47 @@ def controllo_8_artefatti_fuori(radice=RADICE, cartelle=None):
         return (NON_ESEGUITO, "git non risponde: non so quali file stanno nel "
                               "repository, quindi non posso dire quali sono orfani")
     orfani = []
+    sosia = []
     guardati = 0
     for cartella in esistenti:
         for nome in sorted(os.listdir(cartella)):
             if not nome.endswith(".py"):
                 continue
             guardati += 1
-            if nome in dentro:
-                continue
             percorso = os.path.join(cartella, nome)
-            orfani.append("%s (%d byte)" % (percorso, os.path.getsize(percorso)))
-    if orfani:
-        return (ROSSO, "questi attrezzi stanno FUORI dal repository e nel progetto non "
-                       "esiste nessun file con quel nome: non viaggiano con la "
-                       "chiavetta, non girano in CI, e il giorno che servono non ci "
-                       "sono.\n      " + "\n      ".join(orfani))
-    return (OK, "%d file .py nelle cartelle di transito, tutti presenti nel repository"
-            % guardati)
+            if nome not in dentro:
+                orfani.append("%s (%d byte)" % (percorso, os.path.getsize(percorso)))
+                continue
+            # ⛔ IL NOME NON BASTA, E IL 2026-08-19 E' COSTATO QUASI UN LAVORO INTERO.
+            # Questo controllo diceva OK perche' un file con QUEL NOME esisteva nel
+            # repository -- ma la copia di fuori era **piu' vecchia**, e chi l'ha vista ha
+            # concluso «e' un orfano, lo porto dentro» e ci ha scritto sopra la versione
+            # buona, rimettendo un percorso cablato che qualcuno aveva gia' tolto. A
+            # prenderlo non e' stato l'occhio: e' stata la lettera `M` di `git status`.
+            # E' la regola ferrea 13 (date e nomi non sono prove, si guarda il CONTENUTO) e
+            # la gemella esatta della trappola della chiavetta, dove la cartella che si
+            # chiama «nuova» contiene la copia piu' vecchia.
+            # 💡 Una copia fuori dal repository non e' un salvataggio: e' un **candidato a
+            #    vincere contro l'originale**. O e' identica, o va deciso chi dei due vale.
+            gemello = os.path.join(radice, dentro[nome])
+            if os.path.exists(gemello):
+                if _impronta(percorso) != _impronta(gemello):
+                    sosia.append("%s  (stesso nome di %s, CONTENUTO DIVERSO)"
+                                 % (percorso, dentro[nome]))
+    if orfani or sosia:
+        pezzi = []
+        if orfani:
+            pezzi.append("FUORI dal repository e senza nessun file con quel nome dentro: non "
+                         "viaggiano con la chiavetta, non girano in CI, e il giorno che "
+                         "servono non ci sono.\n      " + "\n      ".join(orfani))
+        if sosia:
+            pezzi.append("stesso NOME di un file del repository ma CONTENUTO DIVERSO: una "
+                         "copia cosi' non e' un salvataggio, e' un candidato a sovrascrivere "
+                         "l'originale. Decidi quale vale e cancella l'altra.\n      "
+                         + "\n      ".join(sosia))
+        return (ROSSO, " · ".join(pezzi))
+    return (OK, "%d file .py nelle cartelle di transito: tutti nel repository e identici "
+                "byte per byte" % guardati)
 
 
 # --------------------------------------------------------------------------------------

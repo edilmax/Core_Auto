@@ -3363,9 +3363,19 @@ class TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA(unittest.TestCase):
                      if ("applica_mutante(sorgente" in r or "replace(orig, mut, 1)" in r)
                      and not r.strip().startswith("#")
                      and not r.strip().startswith("def ")]
-        self.assertEqual(3, len(mutazioni),
+        # I QUATTRO PUNTI, guardati uno per uno il 2026-08-19 (erano tre fino a quel giorno):
+        #   1. modo `--diff`      -- i mutanti sulle righe appena cambiate;
+        #   2. modo `--modulo`    -- il giro su un modulo intero;
+        #   3. modo `--modulo`, LA RI-CONFERMA: un «ucciso» viene rieseguito per vedere se il
+        #      killer lo uccide SEMPRE o solo a volte (pezzo 2 del piano). E' un quarto punto
+        #      vero, che rompe un file di produzione come gli altri tre, e apre la traccia
+        #      come gli altri tre. ⛔ Apre la SUA traccia DOPO che la prima e' stata chiusa
+        #      dal `finally` del primo giro: sequenziale, mai annidata -- la rete
+        #      anti-interruzione ha una casella sola e non e' rientrante;
+        #   4. il modo della CI  -- la lista `MUTANTI` scritta a mano.
+        self.assertEqual(4, len(mutazioni),
                          "denominatore cambiato: %d punti che introducono un mutante invece "
-                         "di 3. Se il motore e' cambiato di proposito questo numero si "
+                         "di 4. Se il motore e' cambiato di proposito questo numero si "
                          "aggiorna GUARDANDO i punti nuovi uno per uno, mai per far tornare "
                          "il verde. Righe: %r" % (len(mutazioni), [n + 1 for n in mutazioni]))
         ciechi = [(n + 1, righe[n].strip()[:60]) for n in mutazioni
@@ -5073,6 +5083,36 @@ class TestIlGiudiceNonPuoUscireVERDESenzaAverMisurato(unittest.TestCase):
             "un giro che ha lasciato punti NON esaminati non puo' uscire verde se non ha "
             "dichiarato di essere parziale: uscita=%d\n%s" % (uscita, testo[-600:]))
 
+    def test_il_giudice_RIESEGUE_gli_uccisi_e_lo_dichiara(self):
+        """PEZZO 2 DEL PIANO — «ri-confermare un ucciso rieseguendolo».
+
+        ⛔ IL DIFETTO CHE CHIUDE. Un test instabile che fallisce per conto suo (il runner
+        sotto carico, una rotta a tempo, una risorsa contesa) fa risultare **UCCISO** un punto
+        che nessuno sorveglia davvero. Il modo della CI ri-verifica gia' i SOPRAVVISSUTI per
+        non gridare a vuoto; nessuno guardava il verso opposto -- ed e' il piu' pericoloso dei
+        due, perche' un falso «ucciso» **non grida mai**: sparisce dentro un punteggio pieno.
+
+        Qui si pretende che il meccanismo ESISTA e sia GOVERNABILE (`--riconferme`), e che il
+        giro **dichiari il denominatore**: quanti «uccisi» ha rieseguito su quanti. Un
+        campione taciuto e' un punteggio che sembra pieno; un campione dichiarato e' una
+        misura (⚠️ ri-confermarli tutti raddoppierebbe un giro da ore: il limite e' scelto,
+        non subito, ed e' scritto in fondo al giro).
+        """
+        import importlib
+        import inspect
+        giudice = importlib.import_module("collaudi.mutazione_prodotto")
+        firma = inspect.signature(giudice.giro_su_moduli)
+        self.assertIn("riconferme", firma.parameters,
+                      "il giro sui moduli non sa piu' ri-confermare un «ucciso»: senza, un "
+                      "killer instabile gonfia il punteggio e nessuno se ne accorge")
+        self.assertGreater(
+            firma.parameters["riconferme"].default, 0,
+            "di serie non si ri-conferma niente: il punteggio nasce gia' senza rete")
+        sorgente = inspect.getsource(giudice.giro_su_moduli)
+        self.assertIn("riconferme_fatte", sorgente,
+                      "il giro non tiene il conto delle ri-conferme: senza denominatore, "
+                      "«0 sopravvissuti» non si sa su cosa regge")
+
     def test_il_verdetto_conta_i_punti_NON_esaminati(self):
         """La stessa regola sul pezzo puro, senza aspettare un giro vero: qui si possono
         costruire a mano i tre modi in cui un punto resta fuori (tetto · tempo · i test che
@@ -5116,6 +5156,19 @@ class TestIlGiudiceNonPuoUscireVERDESenzaAverMisurato(unittest.TestCase):
                                                  dict(vuoto, oltre_il_tetto=7), parziale=True)
         self.assertEqual(uscita, 0,
                          "un giro dichiarato parziale non deve gridare: %r" % (motivi,))
+
+        # (c-bis) PEZZO 2 DEL PIANO: un «ucciso» che alla seconda prova non muore piu' non e'
+        #     un punto sorvegliato, e' un test instabile che gonfia il punteggio. Deve fare
+        #     rosso, e «parziale» NON lo condona: non e' un punto che il giro non ha
+        #     guardato, e' un punto che il giro credeva di aver coperto -- ed e' peggio di un
+        #     sopravvissuto, perche' un falso «ucciso» non grida mai.
+        incerto = [{"file": "f.py", "riga": 3, "verdetto": "incerto",
+                    "danno": "ucciso solo a volte"}]
+        for parziale in (False, True):
+            uscita, motivi = giudice.verdetto_modulo(incerto, dict(vuoto), parziale=parziale)
+            self.assertEqual(uscita, 1,
+                             "un «ucciso» non ri-confermato deve fare rosso anche con "
+                             "parziale=%s: %r" % (parziale, motivi))
 
         # (d) e cio' che era gia' rosso resta rosso anche in un giro parziale: dichiarare
         #     «parziale» copre i punti NON GUARDATI, non i buchi TROVATI.
@@ -5971,16 +6024,38 @@ class TestIlPreFattoVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
                              "nome dentro, deve essere un ROSSO: %s" % dettaglio[:300])
             self.assertIn("attrezzo_mai_portato_dentro.py", dettaglio,
                           "deve dire QUALE file, altrimenti non serve a niente")
-            # l'altra direzione: un nome che nel repository esiste gia' non e' orfano
+            # ── L'ALTRA DIREZIONE, e il 2026-08-19 ha cambiato il requisito ──────────────
+            # Fino a quel giorno qui bastava il NOME: «un nome che esiste gia' nel
+            # repository non e' un orfano». Sembrava prudenza contro i falsi allarmi, ed era
+            # una porta aperta: la copia fuori puo' avere lo stesso nome e contenuto
+            # **VECCHIO**. E' successo davvero -- due attrezzi del Desktop hanno
+            # sovrascritto in `collaudi/` riparazioni gia' fatte, rimettendo un percorso
+            # cablato -- e questo controllo taceva, perche' guardava il nome.
+            # ⛔ Il requisito nuovo separa le due cose, e tiene tutt'e due le direzioni:
+            #     · stesso nome, contenuto IDENTICO  -> OK   (niente falsi allarmi)
+            #     · stesso nome, contenuto DIVERSO   -> ROSSO (candidato a sovrascrivere)
             os.remove(os.path.join(cartella, "attrezzo_mai_portato_dentro.py"))
-            with io.open(os.path.join(cartella, "guardia_commit.py"), "w",
-                         encoding="utf-8") as f:
-                f.write("# copia di lavoro di un file che sta gia' in collaudi/\n")
+            vero = os.path.join(self.RADICE, "collaudi", "guardia_commit.py")
+            with io.open(vero, "rb") as f:
+                identico = f.read()
+            with io.open(os.path.join(cartella, "guardia_commit.py"), "wb") as f:
+                f.write(identico)
             self.assertEqual(
                 pf.OK,
                 pf.controllo_8_artefatti_fuori(radice=self.RADICE, cartelle=[cartella])[0],
-                "un nome che esiste gia' nel repository non e' un orfano: gridare qui "
-                "sarebbe un falso allarme a ogni commit")
+                "una copia IDENTICA byte per byte non e' un pericolo: gridare qui sarebbe "
+                "un falso allarme a ogni commit, e un allarme che grida sempre viene spento")
+            with io.open(os.path.join(cartella, "guardia_commit.py"), "wb") as f:
+                f.write(identico + b"\n# riga in piu': ora la copia NON e' piu' quella\n")
+            stato2, dett2 = pf.controllo_8_artefatti_fuori(radice=self.RADICE,
+                                                           cartelle=[cartella])
+            self.assertEqual(
+                pf.ROSSO, stato2,
+                "una copia con lo STESSO NOME e CONTENUTO DIVERSO deve gridare: e' quella "
+                "che il 2026-08-19 ha sovrascritto due riparazioni gia' fatte. Ha detto: %s"
+                % dett2[:200])
+            self.assertIn("CONTENUTO DIVERSO", dett2,
+                          "deve dire PERCHE' grida, se no chi legge pensa a un orfano")
         finally:
             shutil.rmtree(cartella, ignore_errors=True)
 
@@ -7647,6 +7722,45 @@ class TestIlFoglioUnicoDeiControlli(unittest.TestCase):
             stato, fu.NON_ESEGUITO,
             "senza nessun ingresso la voce 7 e' uscita %r (%s): un controllo che non ha "
             "potuto misurare non e' un verde" % (stato, dettaglio))
+
+
+class TestOgniJobDellaCIHaUnTETTO(unittest.TestCase):
+    """⛔ UN JOB SENZA TETTO PUO' TENERE FERMO IL CANCELLO PER SEI ORE.
+
+    Misurato il 2026-08-19. Il job `atheris` fa un fuzz con un tetto di **due minuti**, ma
+    e' rimasto appeso **110 minuti** su `apt-get install clang`: un intoppo del mirror, un
+    passo senza attesa limitata, e il valore di serie di GitHub per un job e' **sei ore**.
+    Il `gate` aspetta quel job, quindi un intoppo di rete blocca l'unione per una giornata
+    intera -- e chi guarda vede solo «in corso», che somiglia moltissimo a «sta lavorando».
+
+    ⛔ E' LA STESSA CREPA DEL 2026-08-18, quando il job del browser resto' appeso 19 minuti
+    a scaricare Chromium. Quel giorno fu riparata **li'** -- attesa limitata e secondo
+    tentativo -- e non fu cercata altrove: dieci job su quattordici erano ancora senza tetto.
+    💡 Un difetto riparato in un posto solo torna: quello che chiude la classe non e' la
+    riparazione, e' la guardia che la pretende **dappertutto**.
+
+    ⚠️ I tetti sono scelti sul tempo MISURATO di ogni job (dal registro dei job del giro
+    precedente), con abbondanza: un tetto stretto sarebbe un falso rosso che aspetta, e un
+    falso allarme e' un difetto quanto un allarme mancato (regola ferrea 10).
+    """
+    def test_nessun_job_puo_restare_appeso_senza_limite(self):
+        import io
+        import os
+        import yaml
+        percorso = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                ".github", "workflows", "ci.yml")
+        with io.open(percorso, encoding="utf-8") as f:
+            impianto = yaml.safe_load(f)
+        job = impianto.get("jobs") or {}
+        self.assertTrue(job, "non ho trovato nessun job in ci.yml: senza l'elenco questa "
+                             "guardia non sta misurando niente (S1)")
+        senza = sorted(n for n, corpo in job.items() if "timeout-minutes" not in (corpo or {}))
+        self.assertEqual(
+            [], senza,
+            "questi job della CI non dichiarano `timeout-minutes`: se uno si impianta resta "
+            "appeso fino al valore di serie di GitHub (SEI ORE) e il `gate` aspetta lui, "
+            "cioe' un intoppo di rete blocca l'unione per una giornata. Il tetto si sceglie "
+            "sul tempo misurato del job, con abbondanza. Job scoperti: %r" % (senza,))
 
 
 class TestNessunCollaudoPuoPRETENDERE_LaTariffaVECCHIA(unittest.TestCase):

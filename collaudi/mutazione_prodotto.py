@@ -1483,7 +1483,7 @@ def misura_normale(bersaglio, tetto=900):
     return time.time() - t0, verde, uscita
 
 
-def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45, killer=None):
+def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45, killer=None, riconferme=3):
     """La stessa domanda del modo diff, ma su un modulo INTERO scelto per rischio.
 
     DUE LIMITI, ed entrambi DICONO cosa hanno tagliato (mai un taglio silenzioso):
@@ -1493,7 +1493,8 @@ def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45, killer=None):
         sono rimasti fuori -- un giro che si allunga senza fine non lo guarda piu' nessuno.
     """
     esiti, rinunce = [], {"oltre_il_tetto": 0, "senza_sorveglianti": 0, "generatore": {},
-                          "oltre_il_tempo": 0, "normale_sec": {}}
+                          "oltre_il_tempo": 0, "normale_sec": {},
+                          "riconferme_fatte": 0, "riconferme_fallite": 0}
     scadenza = time.time() + minuti * 60
     for nome in nomi:
         percorso = os.path.join(REPO, nome)
@@ -1507,6 +1508,7 @@ def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45, killer=None):
         sorveglianti = test_che_nominano(percorso)
         righe_testo = sorgente.splitlines()
         fatti_qui = 0
+        riconfermati_qui = 0        # quanti «uccisi» sono stati rieseguiti in questo modulo
         # ⛔ UN INSIEME KILLER RIDOTTO VA DICHIARATO, NON SUBITO IN SILENZIO.
         # I sorveglianti si scelgono in ordine ALFABETICO, che non ha niente a che vedere col
         # costo: su fase177 il primo (`test_avvio_e_ripristino`) da solo pesa 76s contro i 32s
@@ -1565,9 +1567,38 @@ def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45, killer=None):
                 _chiudi_traccia(percorso)   # SOLO il proprio biglietto (2026-08-14)
             _v = "non_determinabile" if verde is None else (
                 "sopravvissuto" if verde else "ucciso")
+            _nota = "%s -> %s" % (m["vecchio"], m["nuovo"])
+            # ⛔ PEZZO 2 DEL PIANO: UN «UCCISO» SI RI-CONFERMA, ALTRIMENTI IL PUNTEGGIO E'
+            #    GONFIO. Un test instabile che fallisce per conto suo -- il runner sotto
+            #    carico, una rotta a tempo, una risorsa contesa -- fa risultare UCCISO un
+            #    punto che nessuno sorveglia davvero. Il giro dopo quel punto sopravvive, e
+            #    nel mezzo qualcuno ha creduto di avere una rete dove non c'era niente.
+            #    Il modo della CI ri-verifica gia' i SOPRAVVISSUTI (3 giri) per non gridare
+            #    per un intoppo; qui si guarda il verso opposto, quello che NON grida mai --
+            #    ed e' il piu' pericoloso dei due, perche' un falso «ucciso» tace per sempre.
+            # ⚠️ E SI DICHIARA IL DENOMINATORE: ri-confermarli tutti raddoppierebbe un giro
+            #    da ore, quindi se ne ri-confermano `riconferme` per modulo e si stampa
+            #    quanti su quanti. Un campione dichiarato e' una misura; un campione taciuto
+            #    e' un punteggio che sembra pieno.
+            if _v == "ucciso" and riconfermati_qui < riconferme:
+                riconfermati_qui += 1
+                rinunce["riconferme_fatte"] = rinunce.get("riconferme_fatte", 0) + 1
+                _apri_traccia(percorso, sorgente)
+                _riscrivi_intatto(percorso, applica_mutante(sorgente, m))
+                try:
+                    _di_nuovo, _ = esegui(bersaglio, timeout=tetto_sec)
+                finally:
+                    _riscrivi_intatto(percorso, sorgente)
+                    _chiudi_traccia(percorso)
+                if _di_nuovo is not False:      # non l'ha ucciso la seconda volta
+                    _v = "incerto"
+                    _nota += "  (UCCISO al primo giro, NON al secondo: killer instabile)"
+                    rinunce["riconferme_fallite"] = rinunce.get("riconferme_fallite", 0) + 1
+                    print("::warning title=«Ucciso» NON RI-CONFERMATO in %s::riga %s -- il "
+                          "killer lo uccide solo a volte: quel punto NON e' sorvegliato in "
+                          "modo affidabile" % (nome, m["riga"]))
             esiti.append({"file": nome, "riga": m["riga"], "verdetto": _v,
-                          "danno": m["danno"],
-                          "nota": "%s -> %s" % (m["vecchio"], m["nuovo"])})
+                          "danno": m["danno"], "nota": _nota})
             # ⛔ SI STAMPA SUBITO, non alla fine. Il 2026-08-01 due giri sono stati interrotti
             # e hanno perso TUTTO il lavoro gia' fatto, perche' il risultato usciva solo in
             # fondo: quaranta minuti di calcolo spariti senza lasciare una riga.
@@ -1644,6 +1675,13 @@ def verdetto_modulo(esiti, rinunce, parziale=False):
                       % len(basi_rosse))
     if assenti:
         motivi.append("%d moduli ASSENTI: zero misure, non zero problemi" % len(assenti))
+    # ⛔ UN «UCCISO» CHE NON SI RI-CONFERMA E' ROSSO, E «--parziale» NON LO CONDONA: non e'
+    #    un punto che il giro non ha guardato, e' un punto che il giro credeva di aver
+    #    coperto. Un falso «ucciso» e' peggio di un sopravvissuto, perche' non grida mai.
+    incerti = [e for e in esiti if e["verdetto"] == "incerto"]
+    if incerti:
+        motivi.append("%d punti UCCISI SOLO A VOLTE: il killer li uccide al primo giro e non "
+                      "al secondo, quindi li' non c'e' una rete affidabile" % len(incerti))
     # I punti NON esaminati: rossi quanto gli altri, a meno che il giro si sia dichiarato
     # parziale. Il conto lo tiene gia' `giro_su_moduli`, qui si limita a pretenderlo.
     fuori = (int(rinunce.get("oltre_il_tetto", 0))
@@ -1725,10 +1763,20 @@ if __name__ == "__main__" and "--modulo" in sys.argv:
         _m = sys.argv.index("--minuti")
         _minuti = int(sys.argv[_m + 1])
         _nomi = [n for n in _nomi if n != sys.argv[_m + 1]]
+    # `--riconferme N`: quanti «uccisi» per modulo si rieseguono per essere sicuri che il
+    # killer li uccida SEMPRE e non solo a volte (pezzo 2 del piano). 0 = nessuno, e allora
+    # il giro lo DICHIARA: un punteggio senza ri-conferme e' un punteggio che puo' essere
+    # gonfio, e chi lo legge deve saperlo.
+    _riconferme = 3
+    if "--riconferme" in sys.argv:
+        _r = sys.argv.index("--riconferme")
+        _riconferme = int(sys.argv[_r + 1])
+        _nomi = [n for n in _nomi if n != sys.argv[_r + 1]]
     print("=" * 96)
     print("MUTANTI GENERATI SU MODULI INTERI: %s" % ", ".join(_nomi))
     print("=" * 96)
-    _esiti, _rin = giro_su_moduli(_nomi, tetto=_tetto, minuti=_minuti, killer=_killer)
+    _esiti, _rin = giro_su_moduli(_nomi, tetto=_tetto, minuti=_minuti, killer=_killer,
+                                  riconferme=_riconferme)
     _sopr = [e for e in _esiti if e["verdetto"] == "sopravvissuto"]
     _scop = [e for e in _esiti if e["verdetto"] == "scoperto"]
     for e in _esiti:
@@ -1738,11 +1786,18 @@ if __name__ == "__main__" and "--modulo" in sys.argv:
                                               e.get("nota", ""), e["danno"][:46]))
     print("-" * 96)
     _nd = [e for e in _esiti if e["verdetto"] == "non_determinabile"]
+    _uccisi = sum(1 for e in _esiti if e["verdetto"] == "ucciso")
+    _inc = [e for e in _esiti if e["verdetto"] == "incerto"]
     print("provati: %d · uccisi: %d · SOPRAVVISSUTI: %d · scoperti: %d · equivalenti: %d "
-          "· NON DETERMINABILI: %d"
-          % (len(_esiti), sum(1 for e in _esiti if e["verdetto"] == "ucciso"),
-             len(_sopr), len(_scop),
-             sum(1 for e in _esiti if e["verdetto"] == "equivalente"), len(_nd)))
+          "· NON DETERMINABILI: %d · UCCISI SOLO A VOLTE: %d"
+          % (len(_esiti), _uccisi, len(_sopr), len(_scop),
+             sum(1 for e in _esiti if e["verdetto"] == "equivalente"), len(_nd), len(_inc)))
+    # ⛔ IL DENOMINATORE DELLE RI-CONFERME, sempre stampato: dice su quanti «uccisi» la
+    #    seconda prova e' stata fatta davvero. Senza, «0 sopravvissuti» non si sa se regge.
+    print("ri-conferme: %d «uccisi» rieseguiti su %d (chieste %d per modulo) · non "
+          "ri-confermati: %d"
+          % (_rin.get("riconferme_fatte", 0), _uccisi + len(_inc), _riconferme,
+             _rin.get("riconferme_fallite", 0)))
     for e in _nd:
         # NON fanno rosso il job (un test lento non deve bloccare la produzione) ma non sono
         # nemmeno uccisi: quel punto NON e' stato esaminato, e va detto a voce alta.
