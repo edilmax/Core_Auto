@@ -11,6 +11,67 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🧭 2026-08-19 (38) — **PASSAGGIO DI CONSEGNE — leggere per primo, dopo i SEI DIVIETI**
+
+> **Stato dei tre posti, misurato dopo l'ultimo deploy (non ricordato):**
+> ```
+> computer 746d067 · GitHub 746d067 · VPS 746d067   -> ALLINEATI
+> richieste di unione ancora aperte: 0   (unite oggi: #74 #75 #76 #77, tutte
+>                                         verificate con una SECONDA chiamata)
+> suite 5875 test OK · batteria 19/19 · piano dei soldi: i tre posti d'accordo
+> verifica_produzione.py sul sito VERO: 190 controlli · 0 violazioni
+> https://bookinvip.com/ -> 200 · /api/health -> 200 · certificato 35 giorni
+> quattro deploy in giornata, ognuno col paracadute agganciato PRIMA del build
+> e verificato PER IMPRONTA
+> ```
+>
+> ### 🔴 LA COSA PIÙ IMPORTANTE, E NON È UN COLLAUDO
+> **Il blocco al lancio è un COMMERCIALISTA che manca**, non un test. Chi incassa i canoni
+> delle locazioni brevi in Italia è **sostituto d'imposta**: ritenuta **21%**, comunicazione
+> all'Agenzia delle Entrate, Certificazione Unica. Scatta **col primo host vero che incassa**
+> — che è il prossimo passo di business. Il dettaglio, le fonti e i limiti sono nel blocco
+> (37) qui sotto e nel changelog del registro, voce **(11)**. ⛔ **Leggerlo prima di decidere
+> qualunque cosa sul lancio.**
+>
+> ### ✅ COSA È STATO FATTO OGGI (19 agosto), in ordine
+> 1. **Il Giudice non dà più il verde sui punti che non ha guardato.** Prima dichiarava i
+>    punti tagliati da tetto/tempo e usciva **0** lo stesso (su `fase59`: 84 su 114 fuori).
+>    Ora fanno rosso, salvo giro dichiarato `--parziale` — che **non** condona i buchi trovati.
+> 2. **Un «ucciso» adesso si ri-conferma**: un test instabile faceva risultare ucciso un punto
+>    che non sorveglia nessuno, e **un falso «ucciso» non grida mai**.
+> 3. **Il DENOMINATORE esiste** (`collaudi/denominatore.py`): 155 rotte · 14 pagine · 10 email
+>    · 8 lingue, e dice quante **non le guarda nessuno**. Ha trovato subito **77 coppie
+>    messaggio × lingua su 80** mai generate: chiuse lo stesso giorno.
+> 4. **La guardia degli artefatti orfani guardava solo il NOME**: una copia più vecchia con lo
+>    stesso nome passava — ed è ciò che mi ha fatto sovrascrivere due riparazioni già fatte.
+>    Ora confronta l'**impronta**.
+> 5. **Tutti e 14 i job della CI hanno un tetto**: `atheris` era rimasto appeso **110 minuti**
+>    per un fuzz che ne dura due, e il cancello aspettava lui.
+> 6. **Il gruppo 2 dei soldi è CHIUSO**: `fase98` 18/18 · `fase147` 29/29 · `fase111` 11/13.
+>    **22 difetti veri**, quasi nessuno nell'aritmetica.
+>
+> ### ▶️ COSA FARE DOPO, in ordine
+> - **① Decidere sulla tassa di soggiorno** (è una decisione del fondatore, non tecnica): oggi
+>   la tassa **resta nella nostra cassa** come debito verso il Comune, mentre l'idea del
+>   fondatore è che passi all'host. Vedi blocco (37).
+> - **② Blocchi 3-4-5 dei soldi**: `fase65_split_payment` · `fase101_stripe_connect` ·
+>   `fase131_payout_dashboard` · `fase162_pagamenti_pendenti` · `fase85` · `fase87`.
+>   ⚠️ `fase85` e `fase87` sembrano i più coperti (77 e 59 test) **ma quei test li fingono**.
+> - **③ I 4 lavori obbligatori che restano** (`regole_avvio.py` li rimisura da solo):
+>   CodeQL · libfaketime · orologi di prova Stripe · metamorfico sull'aritmetica del denaro.
+> - **④ Il pannello host**: ~34 azioni nei cassetti chiusi che nessuno ha mai guardato.
+>
+> ### ⚠️ TRE COSE CHE HO IMPARATO A MIE SPESE, OGGI
+> - **Una copia fuori dal repository non è un salvataggio: è un candidato a vincere contro
+>   l'originale.** A prendermi non è stato l'occhio: è stata la lettera `M` di `git status`.
+> - **Le guardie di questo progetto hanno preso ME tre volte** (il `continue-on-error` che
+>   rende verde un job fallito · il denominatore della rete anti-interruzione · i tre posti
+>   del piano dei soldi disallineati). ⛔ Ogni volta la cura è stata **guardare il punto
+>   nuovo**, mai cambiare il test per far tornare il verde.
+> - **Una dimostrazione vale quanto il modello su cui è fatta**: avevo dichiarato due
+>   equivalenze con z3 «su tutti gli interi», la funzione accetta `Any` — e nel pezzo di
+>   dominio che la mia prova non copriva c'era un difetto **da 200 €**.
+
 ## ⚖️🔴 2026-08-19 (37) — **IL VERO BLOCCO AL LANCIO NON È UN TEST: È LA RITENUTA DEL 21%**
 
 > ⛔⛔ **LEGGI QUESTO PRIMA DI DECIDERE COSA FARE.** Non l'ha trovato uno strumento: è nato da
@@ -3826,7 +3887,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 797198e
+CONSEGNE AGGIORNATE A: 746d067
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
