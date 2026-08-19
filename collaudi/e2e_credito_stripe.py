@@ -50,6 +50,20 @@ FILE_CHIAVE = os.environ.get(
     os.path.join(os.path.dirname(PROGETTO), "stripe.com prova.txt"))
 sys.path.insert(0, PROGETTO)
 
+
+def giorno(quanti):
+    """Una data a `quanti` giorni da oggi, in AAAA-MM-GG.
+
+    ⛔ NON SI CABLANO LE DATE. Qui ce n'erano nove, tutte nel 2027 (`2027-03-01` ->
+    `2027-06-30`): il 1° luglio 2027 questo collaudo sarebbe diventato rosso **da solo**,
+    senza che nessuno avesse toccato una riga, e chi l'avesse trovato avrebbe cercato il
+    difetto nel prodotto. E' successo davvero il 2026-08-13 a `test_fase156_erasure`, che
+    cablava una prenotazione dichiarata "futura" e scaduta a mezzanotte. Una data fissa
+    dentro un collaudo e' una bomba a orologeria con la miccia lunga.
+    """
+    return time.strftime("%Y-%m-%d", time.gmtime(time.time() + quanti * 86400))
+
+
 ESITI = []
 
 
@@ -127,7 +141,7 @@ def main():
            "prezzo_notte_cents": 20000, "capacita": 4,
            "politica_cancellazione": "flessibile"}, {"X-Host-Token": tok})
         g("POST", "/api/host/disponibilita_range",
-          {"alloggio_id": "villa-e2e", "da": "2027-03-01", "a": "2027-06-30",
+          {"alloggio_id": "villa-e2e", "da": giorno(150), "a": giorno(330),
            "unita_totali": 5, "prezzo_netto_cents": 20000}, {"X-Host-Token": tok})
 
         NOMINALE = 5000        # credito da 50,00 EUR
@@ -159,8 +173,8 @@ def main():
         COSTO_STRIPE = NETTO * 325 // 10000 + 25       # misurato sull'API vera il 2026-08-09
 
         print("\n--- P1: il credito sconta, ma MAI sotto il costo (pavimento D16) ---")
-        senza = quote("2027-03-05", "2027-03-08", con_credito=False)
-        con = quote("2027-03-05", "2027-03-08", con_credito=True)
+        senza = quote(giorno(200), giorno(203), con_credito=False)
+        con = quote(giorno(200), giorno(203), con_credito=True)
         sconto = con.get("sconto_credito_cents", 0)
         passo("il credito sconta qualcosa, e mai piu' del suo nominale",
               0 < sconto <= NOMINALE, "sconto=%d nominale=%d" % (sconto, NOMINALE))
@@ -196,11 +210,11 @@ def main():
                   "pieno sarebbe stato %d" % senza["totale_cents"])
 
         print("\n--- P3: lo stesso credito non sconta piu' niente ---")
-        dopo = quote("2027-04-05", "2027-04-08", con_credito=True)
+        dopo = quote(giorno(230), giorno(233), con_credito=True)
         passo("secondo preventivo: sconto ZERO",
               dopo.get("sconto_credito_cents", 0) == 0,
               "sconto=%r" % dopo.get("sconto_credito_cents"))
-        terzo = quote("2027-05-05", "2027-05-08", con_credito=True)
+        terzo = quote(giorno(260), giorno(263), con_credito=True)
         passo("terzo preventivo: sconto ZERO",
               terzo.get("sconto_credito_cents", 0) == 0,
               "sconto=%r" % terzo.get("sconto_credito_cents"))
@@ -211,8 +225,8 @@ def main():
             "citta": "roma", "credito_cents": NOMINALE,
             "exp": int(time.time()) + 30 * 86400, "nonce": "e2e-gara"})
         credito = cred2
-        qa = quote("2027-03-15", "2027-03-18")
-        qb = quote("2027-03-25", "2027-03-28")     # generato PRIMA di prenotare qa
+        qa = quote(giorno(210), giorno(213))
+        qb = quote(giorno(220), giorno(223))       # generato PRIMA di prenotare qa
         passo("entrambi i preventivi partono scontati (il credito non e' ancora speso)",
               qa.get("sconto_credito_cents", 0) > 0 and qb.get("sconto_credito_cents", 0) > 0,
               "qa=%r qb=%r" % (qa.get("sconto_credito_cents"), qb.get("sconto_credito_cents")))
@@ -223,7 +237,7 @@ def main():
         passo("e il motivo detto all'ospite e' quello vero",
               isinstance(bb, dict) and bb.get("errore") == "credito_gia_usato",
               "errore=%r" % (bb.get("errore") if isinstance(bb, dict) else bb))
-        libera = quote("2027-03-25", "2027-03-28", con_credito=False)
+        libera = quote(giorno(220), giorno(223), con_credito=False)
         sl, _ = book(libera, "ospite3.e2e@bookinvip.com")
         passo("la stanza del book rifiutato resta prenotabile", sl == 201, "stato=%s" % sl)
     finally:
