@@ -11,6 +11,81 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## ⚖️🔴 2026-08-19 (37) — **IL VERO BLOCCO AL LANCIO NON È UN TEST: È LA RITENUTA DEL 21%**
+
+> ⛔⛔ **LEGGI QUESTO PRIMA DI DECIDERE COSA FARE.** Non l'ha trovato uno strumento: è nato da
+> una frase del fondatore (*«la tassa la dichiara l'host, sono affari suoi»*) e da una ricerca
+> sulle fonti. Tre fatti **misurati**.
+>
+> **1. La legge gli dà ragione su chi dichiara** — Italia, `DL 34/2020 art. 180`: il **gestore**
+> è il responsabile del pagamento dell'imposta di soggiorno, non la piattaforma.
+> **2. Ma il codice oggi fa il contrario:**
+> ```
+> fase59_concierge.py:341  totale = guest + tassa       <- l'ospite la paga a NOI
+> fase83_server.py:8060    all'host va netto_host_cents <- la tassa NON e' dentro
+> fase177:67  "tassa_incassata": ("cassa_piattaforma", "debiti_vs_comune")
+> ```
+> La tassa **resta nella nostra cassa** come debito verso il Comune. ⚠️ Non si vede perché
+> nessun host l'ha impostata: vale **0 centesimi** per tutti (misurato).
+> **3. ⛔ E «gliela giriamo» NON ci tutela.** 🇫🇷 In **Francia** la piattaforma **intermediaria di
+> pagamento** DEVE riscuotere e versare la taxe de séjour al Comune due volte l'anno
+> (`art. L2333-34 CGCT`, sanzioni 750–12.500 €). 🇮🇹 In **Italia** chi **incassa i canoni** delle
+> locazioni brevi è **sostituto d'imposta**: **ritenuta 21%**, comunicazione all'Agenzia delle
+> Entrate entro il 30 giugno, Certificazione Unica (`art. 4 DL 50/2017`).
+>
+> 🔴 **«È legale quello che facciamo?» — oggi sì, perché non facciamo ancora niente**: 0 annunci,
+> 0 host, 0 canoni incassati. **Scatta col primo host vero che incassa**, e ciò che scatta per
+> primo **non è la tassa di soggiorno: è la ritenuta del 21%**.
+> ⛔ **Il blocco al lancio non è un collaudo che manca: è un COMMERCIALISTA che manca**, e serve
+> **prima** del primo host italiano.
+> ⚠️ **Limite dichiarato:** non sono avvocato né commercialista. Qui ci sono le norme e le
+> fonti, non un parere legale.
+
+## 🏁 2026-08-19 (36) — **IL GRUPPO 2 DEI SOLDI È CHIUSO: 3 moduli, 22 difetti veri**
+
+> ```
+> fase111_cancellazione   11 punti ->  7 uccisi,  4 sopravvissuti  -> 13 punti, 11 uccisi, 2 sopr.
+> fase98_policy_commissione 18 punti -> 10 uccisi,  8 sopravvissuti  -> 18 su 18, ZERO sopravvissuti
+> fase147_tassa_comunale  29 punti -> 15 uccisi, 14 sopravvissuti  -> 29 su 29, ZERO sopravvissuti
+> ri-conferme: tutte tenute, nessun «ucciso» smentito al secondo giro
+> ```
+> **`fase98`** — il modulo che dice **quanto paga l'host**: i due confini della regola
+> ordinale erano **invisibili di serie** (fondatori 10% = dopo 10%, quindi uno sbaglio non si
+> vede) · un **booleano regalava la promozione** (0% invece del 10%, per sempre) · e **cinque
+> campi che dichiarano la verità all'host** («promozione attiva?», «anzianità nota?») non li
+> guardava nessuno. 💡 Un numero giusto con una dichiarazione falsa è comunque una bugia.
+>
+> **`fase147`** — la tassa che incassiamo **per conto del Comune**: 14 punti scoperti, **tutti
+> nei rami d'errore**. Il tetto assente **azzerava la tassa** per ogni comune senza massimale ·
+> sei rami `except` dichiaravano **successo** su operazioni fallite (fra cui lo storno, e il
+> commento dice già *«a nostro carico»*) · tre `exc_info` spenti (⚠️ `False`, non `None`) · lo
+> storno accettava identificativi storti e piantava una **lapide permanente** su prenotazioni
+> inesistenti · e il registro in memoria non avrebbe più retto i thread, spegnendo in silenzio
+> le prove di concorrenza.
+>
+> ⚠️ **UNA DOMANDA APERTA, ED È FISCALE:** se **tutti** gli ospiti sono esenti e il comune
+> applica una tassa **a percentuale**, quella quota è ancora dovuta? Oggi il codice dice **sì**.
+> Ho fissato il comportamento con un test **dichiarando che non sto affermando che sia giusto**:
+> la risposta la dà un commercialista, non il codice. Ora almeno, se qualcuno cambia quella
+> riga, **se ne accorge qualcuno**.
+
+## 🚀 2026-08-19 (35) — **TERZO DEPLOY: la riparazione dei rimborsi è sul sito vero**
+
+> ```
+> CI su 3c13c45: 16 job, gate=success, 0 rossi
+> unione #76 verificata con una SECONDA chiamata: merged=True, state=closed
+> richieste di unione ancora aperte: 0
+> computer 797198e · GitHub 797198e · VPS 797198e   -> ALLINEATI
+> paracadute: immagine viva sha256:93185799... agganciata PRIMA del build, verificata
+>             per impronta; ritorno PRE_DEPLOY_20260819_112928 -> ca72f7d
+> contenitori: casavip_app healthy · casavip_backup healthy · casavip_nginx up
+> avvio pulito: 'avvisi': [], 'money_path_pronto': True, 'valuta': 'EUR'
+> variabili PAGAMENTO_ sul server: NESSUNA (valgono i default del codice)
+> https://bookinvip.com/ -> 200 · /api/health -> 200
+> verifica_produzione.py sul sito VERO: 190 controlli · 0 violazioni · certificato 35 giorni
+> suite 5864 OK · batteria 19/19
+> ```
+
 ## 💸 2026-08-19 (34) — **`fase111_cancellazione`: 3 difetti veri, e il peggiore l'ha trovato una GUARDIA**
 
 > Primo modulo del **gruppo 2 dei soldi**. Tutti e tre i moduli del gruppo sono **vivi**
@@ -3528,7 +3603,8 @@ stata tolta** in questo lavoro — non rimetterla.
 moduli**, 364 che il generatore non sa rompere, **0 moduli che nessun test nomina**.
 ⛔ Ma **essere nominato non è essere coperto**: è tutta lì la differenza, e questa tabella la misura.
 
-**Moduli dei SOLDI GIÀ passati dal giudice — 8:**
+**Moduli dei SOLDI GIÀ passati dal giudice — 11** (+3 il 2026-08-19: `fase98` 18/18 ·
+`fase147` 29/29 · `fase111` 11/13)**:**
 ✅ **`fase119_calendario_prezzi`** (17 su 17 uccisi, 2026-08-13, **0 sopravvissuti e 0
 equivalenti dichiarati**, **3 difetti veri chiusi**: l'occupazione che non vedeva le notti
 vendute-e-chiuse −23,1% · i due fattori temporali del motore mai collegati · il «200 muto»
@@ -3544,8 +3620,8 @@ dichiarati, ⛔ **non** equivalenti. **1 difetto vero: memoria senza tetto da ro
 ✅ **`fase66_tassa_soggiorno`** (24 su 24 uccisi, **0 sopravvissuti, 0 equivalenti dichiarati**,
 2026-08-12, **5 difetti veri chiusi**).
 
-**Moduli dei SOLDI CHE RESTANO — 9, per 361 punti.** *(rimisurato col censimento il
-2026-08-13; ⛔ **rimisuralo**, non fidarti di questa tabella: i numeri invecchiano)*
+**Moduli dei SOLDI CHE RESTANO — 6, per 303 punti.** *(i tre del gruppo 2 sono usciti il
+2026-08-19; ⛔ **rimisura il resto**, non fidarti di questa tabella: i numeri invecchiano)*
 
 | modulo | punti | lo nominano | blocco |
 |---|---|---|---|
@@ -3553,11 +3629,14 @@ dichiarati, ⛔ **non** equivalenti. **1 difetto vero: memoria senza tetto da ro
 | `fase131_payout_dashboard` | 62 | 11 | 4 |
 | `fase65_split_payment` | 59 | 4 | 3 |
 | `fase101_stripe_connect` | 50 | 7 | 3 |
-| `fase147_tassa_comunale` | 29 | 6 | 2 |
 | `fase85_pagamenti_stripe` | 26 | 77 | 5 |
-| `fase98_policy_commissione` | 18 | 15 | 2 |
 | `fase87_stripe_webhook` | 15 | 59 | 5 |
-| `fase111_cancellazione` | 11 | 4 | 2 |
+
+✅ **USCITI IL 2026-08-19, gruppo 2 chiuso** (dettaglio nel changelog del registro):
+`fase98_policy_commissione` 18/18 uccisi · `fase147_tassa_comunale` 29/29 uccisi ·
+`fase111_cancellazione` 11/13 uccisi (2 sopravvissuti **non** dichiarati equivalenti, per
+scelta). **22 difetti veri**, quasi nessuno nell'aritmetica: stavano **ai confini** e nei
+**rami d'errore**.
 
 ⛔ **FUORI DALL'ELENCO PERCHÉ SONO CODICE MORTO** (`raggiungibilita.py`, 2026-08-11):
 `fase43_commissione` (31) · `fase44_prezzo` (25) · `fase35_pagamenti` (25) = **81 punti che NON
@@ -3747,7 +3826,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: ca72f7d
+CONSEGNE AGGIORNATE A: 797198e
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -5575,7 +5654,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5869 test
+SUITE ATTUALE: Ran 5880 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
