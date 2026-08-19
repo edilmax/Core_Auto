@@ -113,6 +113,13 @@ def _tecnica(importo):
 
 COSTO_CARTA = _tecnica(TOTALE)               # tariffa tecnica sul totale (a carico host)
 NETTO_HOST = NETTO - COMMISSIONE - COSTO_CARTA
+# ⛔ DUE FATTI DIVERSI, E VANNO TENUTI DIVERSI (decisione del fondatore, 2026-08-19:
+# «la tassa passa all'host»). `NETTO_HOST` e' quello che l'host GUADAGNA dal soggiorno --
+# la cifra su cui si calcolano commissione e report DAC7. `VERSATO_HOST` e' quello che gli
+# BONIFICHIAMO: il suo guadagno piu' la tassa di soggiorno, che e' denaro in transito da
+# girare al suo Comune. Sommarle in una voce sola dichiarerebbe al Fisco un reddito che
+# l'host non ha; tenerle separate e' la ragione per cui esistono due nomi.
+VERSATO_HOST = NETTO_HOST + TASSA
 
 
 def _fake_stripe_fetch(url, body, headers):
@@ -398,13 +405,14 @@ class TestCamminoSoldi(_BaseSoldi):
         self.assertEqual((s, dopo), (200, {"completato": True}))
 
     def test_garanzia_stato_tiene_il_netto_host(self):
-        """GET /api/garanzia/stato (admin) -> 200: l'escrow nasce col netto host ESATTO."""
+        """GET /api/garanzia/stato (admin) -> 200: l'escrow nasce con l'importo ESATTO da
+        versare all'host -- il suo netto PIU' la tassa di soggiorno (2026-08-19)."""
         rif, _vt = self.prenotazione_pagata()
         s, st = self.g("GET", "/api/garanzia/stato", None, self.admin, {"ref": rif})
         self.assertEqual(s, 200, st)
         self.assertEqual(st["prenotazione_id"], rif)
         self.assertEqual(st["stato"], "in_garanzia")
-        self.assertEqual(st["importo_host_cents"], NETTO_HOST)
+        self.assertEqual(st["importo_host_cents"], VERSATO_HOST)
         self.assertEqual(st["host_riceve_cents"], 0)          # ancora in garanzia
         self.assertEqual(st["ospite_rimborso_cents"], 0)
         self.assertEqual(st["money_unit"], "cents_integer")
@@ -412,15 +420,20 @@ class TestCamminoSoldi(_BaseSoldi):
         self.assertGreater(st["sblocco_auto_ts"], st["aperto_ts"])
 
     def test_garanzia_conferma_rilascia_il_netto_host(self):
-        """POST /api/garanzia/conferma -> 200: l'escrow passa a 'rilasciato', importo esatto."""
+        """POST /api/garanzia/conferma -> 200: l'escrow passa a 'rilasciato', importo esatto.
+
+        ⛔ L'importo atteso e' `VERSATO_HOST`, non `NETTO_HOST`: dal 2026-08-19 la cassaforte
+        trattiene anche la **tassa di soggiorno**, perche' e' denaro dell'host in transito che
+        lui deve girare al suo Comune (decisione del fondatore). Prima restava a noi, e il
+        libro contabile dichiarava un debito verso il Comune che non ci compete."""
         rif, vt = self.prenotazione_pagata()
         s, out = self.g("POST", "/api/garanzia/conferma", {"voucher_token": vt})
         self.assertEqual(s, 200, out)
         self.assertEqual(out, {"ok": True, "stato": "rilasciato",
-                               "host_riceve_cents": NETTO_HOST, "ospite_rimborso_cents": 0})
+                               "host_riceve_cents": VERSATO_HOST, "ospite_rimborso_cents": 0})
         s, st = self.g("GET", "/api/garanzia/stato", None, self.admin, {"ref": rif})
         self.assertEqual((s, st["stato"]), (200, "rilasciato"))
-        self.assertEqual(st["host_riceve_cents"], NETTO_HOST)
+        self.assertEqual(st["host_riceve_cents"], VERSATO_HOST)
 
     def test_garanzia_contesta_blocca_il_payout(self):
         """POST /api/garanzia/contesta -> 200 e il payout dell'host va 'trattenuto'."""

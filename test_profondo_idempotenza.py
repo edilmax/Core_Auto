@@ -105,6 +105,15 @@ TOTALE = NETTO + TASSA                            # 41200
 COMMISSIONE = 4000                                # 10% di 40000
 COSTO_CARTA = 1236                                # 3% di 41200
 NETTO_HOST = NETTO - COMMISSIONE - COSTO_CARTA    # 34764
+# ⛔ DUE FATTI DIVERSI, E VANNO TENUTI DIVERSI (decisione del fondatore, 2026-08-19:
+# «la tassa passa all'host»). `NETTO_HOST` e' quello che l'host GUADAGNA dal soggiorno --
+# la base di commissione e del report DAC7 -- mentre `VERSATO_HOST` e' quello che gli
+# BONIFICHIAMO: il guadagno piu' la tassa di soggiorno, denaro in transito che lui deve
+# girare al suo Comune. Sommarle in una voce sola dichiarerebbe al Fisco un reddito che
+# l'host non ha. Prima la tassa restava nella nostra cassa, e il libro contabile
+# dichiarava un debito verso il Comune che non ci compete (DL 34/2020 art. 180: il
+# responsabile del pagamento e' il gestore della struttura).
+VERSATO_HOST = NETTO_HOST + TASSA                 # 35964: quello che gli si bonifica
 
 
 def _fake_stripe_fetch(url, body, headers):
@@ -336,7 +345,7 @@ class TestDoppioClicDenaro(_Base):
         # PAYOUT: una riga sola, maturata all'importo esatto
         self.assertEqual(self.righe("po.db", "SELECT prenotazione_id, minori, stato "
                                              "FROM payout"),
-                         [(rif, NETTO_HOST, "maturato")])
+                         [(rif, VERSATO_HOST, "maturato")])
         # una sola email di conferma pagamento
         conferme = [o for _d, o, _h in self.email_assestate() if "Pagamento" in o
                     or "Payment" in o]
@@ -386,12 +395,12 @@ class TestDoppioClicDenaro(_Base):
         (s1, o1), (s2, o2) = self.due_volte("POST", "/api/garanzia/conferma",
                                             {"voucher_token": b["voucher_token"]})
         self.assertEqual((s1, o1), (200, {"ok": True, "stato": "rilasciato",
-                                          "host_riceve_cents": NETTO_HOST,
+                                          "host_riceve_cents": VERSATO_HOST,
                                           "ospite_rimborso_cents": 0}))
         self.assertEqual((s2, o2), (409, {"ok": False, "motivo": "stato_non_valido",
                                           "stato": "rilasciato"}))
         self.assertEqual(self.righe("g.db", "SELECT stato, host_riceve_cents FROM garanzia"),
-                         [("rilasciato", NETTO_HOST)])
+                         [("rilasciato", VERSATO_HOST)])
         self.assertEqual(self.conta("g.db", "garanzia"), 1)
 
     def test_garanzia_contesta_doppia_una_sola_disputa(self):
@@ -419,12 +428,12 @@ class TestDoppioClicDenaro(_Base):
                                             corpo, self.admin)
         self.assertEqual(s1, 200, o1)
         self.assertEqual(o1["stato"], "risolta")
-        self.assertEqual(o1["rimborso_cliente_cents"], NETTO_HOST // 2)
-        self.assertEqual(o1["va_all_host_cents"], NETTO_HOST - NETTO_HOST // 2)
+        self.assertEqual(o1["rimborso_cliente_cents"], VERSATO_HOST // 2)
+        self.assertEqual(o1["va_all_host_cents"], VERSATO_HOST - VERSATO_HOST // 2)
         self.assertEqual((s2, o2), (409, {"errore": "non_in_controversia",
                                           "stato": "risolto"}))
         self.assertEqual(self.righe("po.db", "SELECT minori, stato FROM payout"),
-                         [(NETTO_HOST - NETTO_HOST // 2, "maturato")])
+                         [(VERSATO_HOST - VERSATO_HOST // 2, "maturato")])
         self.assertEqual(self.conta("g.db", "garanzia"), 1)
 
     def test_split_crea_doppio_un_solo_conto(self):
@@ -492,7 +501,7 @@ class TestDoppioClicNelTempo(_Base):
         self.assertEqual(self.conta("f.db", "libro_giornale"), 3)
         self.assertEqual(self.conta("t.db", "tassa_riscossione"), 1)
         self.assertEqual(self.righe("po.db", "SELECT minori, stato FROM payout"),
-                         [(NETTO_HOST, "maturato")])
+                         [(VERSATO_HOST, "maturato")])
 
     def test_book_dopo_rimborso_rifiutato(self):
         """Ripresentare lo STESSO preventivo DOPO la cancellazione col rimborso: rifiuto
@@ -777,7 +786,7 @@ class TestDoppioClicSuRichiesta(_Base):
         self.assertEqual(self.conta("po.db", "payout"), 1)
         self.assertEqual(self.conta("p.db", "pendenti"), 1)
         self.assertEqual(self.righe("g.db", "SELECT importo_host_cents, stato FROM garanzia"),
-                         [(NETTO_HOST, "in_garanzia")])
+                         [(VERSATO_HOST, "in_garanzia")])
 
     def test_rifiuta_dopo_approva_non_disfa(self):
         """Approvata e poi RIFIUTATA per sbaglio: la decisione presa non si disfa da sola."""

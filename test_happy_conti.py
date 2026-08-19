@@ -808,8 +808,15 @@ class TestContrattoJSON(_Base):
             self.assertIsInstance(importo, int, p)
             self.assertNotIsInstance(importo, bool, p)
             self.assertGreaterEqual(importo, 0, p)
-        self.assertEqual(p["payout"]["EUR"].get("in_attesa"), b["netto_host_cents"],
-                         "il payout atteso dell'host != netto firmato nel preventivo: %r" % (p,))
+        # ⛔ IL PAYOUT E' IL NETTO **PIU' LA TASSA DI SOGGIORNO** (2026-08-19, decisione del
+        # fondatore: «la tassa passa all'host»). Sono due fatti diversi e restano due numeri
+        # diversi: `netto_host_cents` e' quello che l'host GUADAGNA -- la base di commissione
+        # e report DAC7 -- mentre il payout e' quello che gli BONIFICHIAMO, guadagno piu' la
+        # tassa che dovra' girare al suo Comune. Prima la tassa restava nella nostra cassa e
+        # il libro dichiarava un debito verso il Comune che non ci compete.
+        self.assertEqual(p["payout"]["EUR"].get("in_attesa"),
+                         b["netto_host_cents"] + b.get("tassa_soggiorno_cents", 0),
+                         "il payout atteso dell'host != netto firmato + tassa: %r" % (p,))
         self.assertEqual(p["debiti_aperti_cents"], {}, p)
 
     def test_payout_richiede_autenticazione_host(self):

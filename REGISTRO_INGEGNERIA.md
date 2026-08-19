@@ -774,6 +774,50 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 💶 2026-08-19 (12) — **LA TASSA DI SOGGIORNO PASSA ALL'HOST** (decisione del fondatore, autorizzata)
+
+> *«la tassa passa all'host, autorizzato»* — 2026-08-19. Chiude il difetto descritto nella voce
+> **(11)**: l'ospite pagava soggiorno + tassa, all'host andava **solo** il soggiorno meno le
+> trattenute, e la tassa **restava nella nostra cassa**.
+
+**PERCHÉ, ed è legge prima che codice.** In Italia il `DL 34/2020 art. 180` fa del **gestore
+della struttura** il «responsabile del pagamento» dell'imposta di soggiorno. Ma **la
+responsabilità segue i soldi**: tenendo la tassa in cassa, il debitore diventavamo noi — verso
+**ogni** Comune del mondo in cui abbiamo un alloggio. Ora l'host la riceve insieme al resto e la
+versa lui: **restiamo un tubo, non un debitore**.
+
+⚠️ **E NON SI FONDE COL SUO GUADAGNO — è la parte che conta.** `netto_host_cents` resta quello
+che l'host **guadagna** dal soggiorno (base di commissione e report **DAC7**); la tassa è denaro
+**in transito**. Sommarle in una voce sola avrebbe dichiarato al Fisco **un reddito che l'host
+non ha**. Sono due fatti diversi e restano due numeri diversi: si somma solo ciò che gli si
+**bonifica**.
+
+**COSA È CAMBIATO, in un posto solo.** Nasce `fase83_server._da_versare_host(corpo)` = netto +
+tassa, usata nei **quattro** punti che pagano l'host (payout alla conferma · payout dopo il
+webhook · cassaforte alla conferma · cassaforte dopo il webhook). ⛔ Scritta quattro volte, la
+quinta sarebbe rimasta indietro: è la malattia che il progetto ha già pagato sei volte in un
+giorno.
+
+**E IL LIBRO CONTABILE AVEVA DUE DIFETTI IN UNA RIGA SOLA**, tutt'e due invisibili finché la
+tassa vale zero:
+```
+prima:  "tassa_incassata": ("cassa_piattaforma", "debiti_vs_comune")
+dopo:   "tassa_incassata": ("debiti_vs_host",    "debiti_vs_host")
+```
+① dichiarava un **debito verso il Comune** che non ci compete · ② **contava la cassa due volte**:
+la riga `incasso` scrive il **totale** (tassa compresa), e questa la riscriveva in cassa. Su un
+incasso di 100 con 20 di tassa il libro dichiarava **120 in cassa** mentre sul conto ne erano
+arrivati **100**. Ora è un movimento **dentro** ciò che dobbiamo all'host: lascia la traccia
+(quanto di quell'incasso è tassa — proprio ciò che il fondatore chiede di avere registrato)
+senza spostare un centesimo che non si è mosso.
+
+**LE PROVE.** Tre guardie nuove **viste rosse prima** (`TestLaTassaDiSoggiornoVAALLHOST`): quello
+che matura per l'host contiene la tassa · la cassaforte la trattiene fino al check-in · il libro
+non dichiara più un debito verso il Comune né tocca la cassa. Poi **13 asserzioni** in 5 file
+hanno detto che il requisito era cambiato, e sono state aggiornate **con la ragione scritta**,
+mai per far tornare il verde: dove serviva, il test ora distingue `NETTO_HOST` (quello che
+guadagna) da `VERSATO_HOST` (quello che gli bonifichiamo). **188 test del blocco soldi verdi.**
+
 ### ⚖️🔴 2026-08-19 (11) — **IL VERO BLOCCO AL LANCIO NON È UN TEST: È LA RITENUTA DEL 21%**
 
 ⛔⛔ **LA COSA PIÙ IMPORTANTE TROVATA IN TUTTA LA GIORNATA, e non l'ha trovata uno strumento:

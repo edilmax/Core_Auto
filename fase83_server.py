@@ -5514,7 +5514,7 @@ class RouterHTTP:
         # l'anticipo online e' interamente NOSTRO -> nessun escrow di garanzia, nessun payout
         # da maturare. Si salta il denaro-a-valle; restano hold+voucher+email (col saldo).
         if corpo.get("modo_pagamento") != "in_struttura":
-            self._apri_garanzia(ref, corpo.get("netto_host_cents", 0), allog, ci)
+            self._apri_garanzia(ref, corpo, allog, ci)
             self._registra_payout(ref, allog, corpo)
         self._registra_hold(corpo, allog, ref, ci, co, dati.get("quote_token", ""),
                             dati.get("email", ""), hold_sec=hold_sec)
@@ -5800,7 +5800,38 @@ class RouterHTTP:
                          "verificare a mano questa prenotazione",
                          _rif_per_registro(ref), exc_info=True)
 
-    def _apri_garanzia(self, ref, netto_host_cents, allog, ci):
+    @staticmethod
+    def _da_versare_host(corpo):
+        """Quanto si VERSA all'host: il suo netto del soggiorno **piu' la tassa di soggiorno**.
+
+        ⛔ DECISIONE DEL FONDATORE, 2026-08-19: «la tassa passa all'host». Prima restava nella
+        nostra cassa e il libro la registrava come `debiti_vs_comune`, cioe' dichiarava che il
+        debitore verso il Comune eravamo NOI -- verso ogni Comune del mondo in cui abbiamo un
+        alloggio. In Italia il `DL 34/2020 art. 180` fa del **gestore** il «responsabile del
+        pagamento» dell'imposta; ma la responsabilita' segue i soldi, e se la tassa resta qui
+        il debitore diventiamo noi. Facendola passare all'host restiamo un tubo: lui la riceve
+        insieme al resto e la versa al suo Comune.
+
+        ⚠️ E NON SI FONDE COL SUO GUADAGNO. `netto_host_cents` resta quello che l'host
+        **guadagna** dal soggiorno -- e' la cifra su cui si calcolano commissione e report
+        DAC7 -- mentre la tassa e' denaro **in transito**. Sommarle nella stessa voce
+        dichiarerebbe al Fisco un reddito che l'host non ha. Sono due fatti diversi: qui si
+        somma solo cio' che gli si BONIFICA.
+
+        ⛔ E STA IN UN POSTO SOLO. Questa somma serve in quattro punti (payout alla conferma,
+        payout dopo il webhook, cassaforte alla conferma, cassaforte dopo il webhook): scritta
+        quattro volte, la quinta sarebbe rimasta indietro. E' la malattia che questo progetto
+        ha gia' pagato sei volte in un giorno.
+
+        Guardie: `test_conservazione_denaro.TestLaTassaDiSoggiornoVAALLHOST` (viste rosse).
+        """
+        def _c(v):
+            return v if isinstance(v, int) and not isinstance(v, bool) and v > 0 else 0
+        if not isinstance(corpo, dict):
+            return 0
+        return _c(corpo.get("netto_host_cents")) + _c(corpo.get("tassa_soggiorno_cents"))
+
+    def _apri_garanzia(self, ref, corpo, allog, ci):
         try:
             g = getattr(self._sys, "garanzia", None)
             if g is None or not ref:
@@ -5812,7 +5843,7 @@ class RouterHTTP:
                 ts = _istante_checkin(ci, self._fuso_alloggio(allog))
             except Exception:
                 ts = None
-            g.apri(ref, netto_host_cents, alloggio_id=allog, ora_checkin_ts=ts)
+            g.apri(ref, self._da_versare_host(corpo), alloggio_id=allog, ora_checkin_ts=ts)
         except Exception:
             # ERROR, non warning: la prenotazione prosegue CONFERMATA ma l'ospite NON e'
             # protetto, e nessun controllo cerca le prenotazioni SENZA cassaforte. Il
@@ -5830,8 +5861,9 @@ class RouterHTTP:
             pd = getattr(self._sys, "payout", None)
             if pd is None or not (isinstance(ref, str) and ref):
                 return
-            netto = corpo.get("netto_host_cents", 0)
-            if not isinstance(netto, int) or isinstance(netto, bool) or netto <= 0:
+            # quello che gli VERSIAMO = il suo netto + la tassa che dovra' girare al Comune
+            netto = self._da_versare_host(corpo)
+            if netto <= 0:
                 return
             host = ""
             try:
@@ -8056,10 +8088,11 @@ class RouterHTTP:
                 except Exception:
                     dj = {}
                 pd = getattr(self._sys, "payout", None)
-                if pd is not None and dj.get("host_id") and int(dj.get("netto_host_cents", 0)) > 0:
-                    pd.registra_maturato(rif, dj["host_id"], int(dj["netto_host_cents"]),
+                _versare = self._da_versare_host(dj)      # netto host + tassa (2026-08-19)
+                if pd is not None and dj.get("host_id") and _versare > 0:
+                    pd.registra_maturato(rif, dj["host_id"], _versare,
                                          dj.get("valuta", "EUR"))
-                self._apri_garanzia(rif, int(dj.get("netto_host_cents", 0)),
+                self._apri_garanzia(rif, dj,
                                     rec.get("alloggio_id", ""), rec.get("check_in", ""))
             # comune a 'in_attesa' e 'scaduto-ribloccato': 'pagato' è GIÀ scritto dal CAS
             # in cima (acquisizione atomica); qui restano tassa + payout maturato (idempotenti,

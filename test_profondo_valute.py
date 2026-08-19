@@ -544,7 +544,8 @@ class TestPercorsoDeiSoldi(_Banco):
                 # e l'escrow tiene ESATTAMENTE il netto host, nella stessa valuta
                 st = self.sis.garanzia.stato(rif)
                 self.assertEqual(st["stato"], "in_garanzia")
-                self.assertEqual(st["importo_host_cents"], q["netto_host_cents"])
+                self.assertEqual(st["importo_host_cents"],
+                                 q["netto_host_cents"] + q.get("tassa_soggiorno_cents", 0))
 
     def test_il_payout_non_mescola_le_valute(self):
         """Lo STESSO host incassa in sei valute: il riepilogo deve tenerle separate.
@@ -557,7 +558,8 @@ class TestPercorsoDeiSoldi(_Banco):
         attesi = {}
         for i, (valuta, _esp) in enumerate(VALUTE):
             q, _b = self.cammina("p-" + valuta.lower(), 18 + i, notti=1)
-            attesi[valuta] = q["netto_host_cents"]
+            # netto + tassa: e' quello che si VERSA all'host (2026-08-19)
+            attesi[valuta] = q["netto_host_cents"] + q.get("tassa_soggiorno_cents", 0)
         riepilogo = self.sis.payout.riepilogo(self.host_id)
         for valuta, netto in attesi.items():
             with self.subTest(valuta=valuta):
@@ -643,8 +645,10 @@ class TestPercorsoDeiSoldi(_Banco):
                          "non si confondono per valore, ma solo per valuta")
         st_eur = self.sis.garanzia.stato(b_eur["riferimento"])
         st_jpy = self.sis.garanzia.stato(b_jpy["riferimento"])
-        self.assertEqual(st_eur["importo_host_cents"], q_eur["netto_host_cents"])
-        self.assertEqual(st_jpy["importo_host_cents"], q_jpy["netto_host_cents"])
+        self.assertEqual(st_eur["importo_host_cents"],
+                         q_eur["netto_host_cents"] + q_eur.get("tassa_soggiorno_cents", 0))
+        self.assertEqual(st_jpy["importo_host_cents"],
+                         q_jpy["netto_host_cents"] + q_jpy.get("tassa_soggiorno_cents", 0))
         rec_eur = self.sis.pagamenti_pendenti.info(b_eur["riferimento"])
         rec_jpy = self.sis.pagamenti_pendenti.info(b_jpy["riferimento"])
         self.assertEqual(json.loads(rec_eur["corpo_json"])["valuta"], "EUR")
