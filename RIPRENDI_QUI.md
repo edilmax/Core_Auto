@@ -11,6 +11,97 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🩺 2026-08-19 (30) — **DUE GUARDIE ORDINAVANO DI RIMETTERE IL DIFETTO** (batteria 17/19 → 19/19)
+
+> La batteria lanciata prima del commit è uscita **17 OK · 2 FALLITI**. Nessuno dei due era
+> colpa del lavoro di stanotte, e **nessuno dei due era un difetto del prodotto**: erano due
+> sorveglianti rimasti indietro che, per tacere, chiedevano di **peggiorare il prodotto**.
+> ```
+> 1) collaudo_finale_totale.py aveva  PSP = 300  scritto a mano (la tariffa di prima del 9/8):
+>      [VIOLAZIONE] B1-cifra-assente: deploy/host.html: manca <cifra vecchia>
+>      [VIOLAZIONE] B1-cifra-assente: contratto (IT) · contratto (EN)
+>    -> faceva girare la macchina con una tariffa CHE NON ESISTE (e quota fissa ZERO),
+>       e ORDINAVA di rimettere il 3% nel contratto.   Ora legge da main_casavip.py.
+>       VERDETTO dopo: 0 VIOLAZIONI - TUTTO CONFERMATO
+> 2) beh_host.py pretendeva 201+voucher su un banco con chiave Stripe FINTA:
+>    -> dal 18/8 il prodotto RIFIUTA giustamente (503 pagamento_non_disponibile), e quel
+>       rosso chiedeva di emettere il pass PRIMA di aver visto i soldi.
+>       Ora dichiara i due mondi ed e' piu' severo:  14/14 verdi
+> ```
+> 💡 **La lezione, una sola per tutt'e due:** una guardia scritta contro un numero fisso, o
+> contro un banco solo, **diventa falsa il giorno in cui il prodotto migliora**. La cura non è
+> aggiornare il numero: è **toglierlo** e leggerlo da dove vive.
+
+## 🔢 2026-08-19 (29) — **LA COPIA SUL DESKTOP ERA LA VECCHIA, E STAVO PER FARLA VINCERE**
+
+> Domanda del fondatore: *«sono stati scritti in file, directory o altro che non leggete?»*.
+> `Desktop\DA_METTERE_IN_collaudi\` c'era davvero. Ho concluso che fossero due attrezzi **mai
+> portati dentro** e li ho copiati in `collaudi/`. **Era falso: erano già nel repository, e la
+> versione dentro era MIGLIORE.** Copiandoli ho riportato indietro riparazioni già fatte.
+> ```
+> git status --porcelain  ->  M collaudi/sentinella_ci.py   <- MODIFICATO, non nuovo
+>   -CARTELLA = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+>   +CARTELLA = r"C:\Users\MaxDanno\Desktop\Core_Auto"      <- il cablato che rimettevo IO
+> ```
+> ✅ Ripristinati (`git checkout --`) e riapplicata **solo** la correzione davvero nuova.
+> 💡 **A prenderlo non è stato il mio occhio: è stata la lettera `M` di `git status`.** È la
+> gemella della lezione della chiavetta, dove la cartella `chiavetta_nuova` contiene la copia
+> **più vecchia**. Una copia fuori dal repository non è un salvataggio: è un **candidato a
+> vincere contro l'originale**. ⚠️ Quella cartella contiene **ancora** la copia vecchia.
+>
+> **La correzione vera, che il repository non aveva: nove date cablate nel 2027.** L'E2E dei
+> crediti prenotava fra `2027-03-01` e `2027-06-30`: **il 1° luglio 2027 sarebbe diventato
+> rosso da solo**, come `test_fase156_erasure` il 13 agosto. Ora le date si contano da oggi.
+> ```
+> collaudi/e2e_credito_stripe.py -- rilanciato contro Stripe VERO (chiave di prova):
+>   PASSI: 15   OK: 15   ROSSI: 0
+>   l'importo su STRIPE e' quello SCONTATO, letto dalla LORO API: 56175 (pieno: 60000)
+> collaudi/denominatore.py       -- il lavoro obbligatorio n. 5, chiuso
+>   ROTTE 155 · PAGINE 14 · EMAIL 10 · LINGUE 8      -> scoperte: 0
+>   MESSAGGIO x LINGUA: 80 coppie · 3 provate · 77 MAI GENERATE DA NESSUN COLLAUDO
+>   ...e dopo test_email_in_ogni_lingua.py:  80 su 80 provate ·  0 scoperte
+> ```
+> ✅ **Le 77 coppie sono state chiuse lo stesso giorno.** Prima di scrivere la guardia ho
+> misurato: **0 congelate su 70** — le email *erano* tradotte, mancava chi lo controllasse.
+> La guardia genera tutti e 10 i messaggi in tutte e 8 le lingue, pretende che nessuno esca
+> in inglese quando la lingua è un'altra, ed **è stata vista ROSSA** (iniettato un messaggio
+> che ignora la lingua: 7 lingue su 7 segnalate). Dichiara anche il **proprio denominatore**:
+> l'undicesimo messaggio non provato la fa diventare rossa lo stesso giorno.
+>
+> ⚠️ **E un difetto vero trovato strada facendo:** il commento della mail di benvenuto host
+> nominava ancora **la percentuale superata il 9 agosto**. Il **testo spedito** era giusto in
+> tutte e 8 le lingue: a mentire era solo il commento (sbaglio S17).
+> 💡 **Il primo giro del denominatore ha giudicato l'attrezzo, non la macchina:** diceva
+> «0 scoperte» dappertutto, cioè un criterio che **non poteva fallire**. Il secondo ha accusato
+> **tre rotte innocenti**. Solo il terzo misura. Quattro guardie tengono ferme le due direzioni.
+> ⚠️ E «attraversata» vuol dire **nominata**, non **eseguita**: è un tetto, non un voto.
+
+## ⚖️ 2026-08-19 (28) — **IL GIUDICE DAVA IL VERDE DOPO AVER GUARDATO UN QUARTO DELLA MACCHINA**
+
+> **Pezzo 1 del piano, chiuso** (il piano lo stampa il gancio a ogni avvio). Il giudice della
+> mutazione, modo `--modulo`, lasciava fuori i punti tagliati dal tetto o dal tempo, **li
+> dichiarava a schermo** e poi usciva **0**.
+> ```
+> misurato adesso -- giro vero, fase167_credito_single_use.py --minuti 0:
+>   provati: 0 · uccisi: 0 · SOPRAVVISSUTI: 0
+>   NON PROVATI (dichiarati): oltre il TEMPO 11
+>   uscita del processo: 0     <- VERDE dopo aver esaminato ZERO punti su 11
+> ```
+> ⛔ **Perché conta adesso e non fra un mese:** è il metro con cui vanno misurati i **9 moduli
+> dei soldi che restano** (F1). Sul tetto di serie `fase59` ne lasciava fuori **84 su 114** —
+> e quel verde era identico a quello di un giro completo.
+>
+> ✅ **Riparato:** il verdetto è uscito dal blocco `if __name__ == "__main__"` ed è diventato
+> `verdetto_modulo()` — finché stava lì dentro **nessun test poteva toccarlo** senza lanciare
+> un giro da ore. I punti non esaminati fanno rosso; un giro corto resta possibile ma va
+> **dichiarato** (`--parziale`), e la dichiarazione **non condona i buchi trovati**.
+> Due guardie nuove, tutt'e due **viste rosse prima** (D20); la direzione «tace a macchina
+> sana» è provata dalla terza, che gira davvero.
+>
+> 💡 **La lezione:** la riga «NON PROVATI» c'era, scritta a chiare lettere. **Dichiarare non è
+> impedire** — una dichiarazione che non tocca il codice d'uscita finisce in un registro che
+> nessuno rilegge, e il verde vince lo stesso.
+
 ## 📄 2026-08-18 (27) — **«HAI AGGIORNATO TUTTI I FILE?» — NO: cinque buchi, e uno era una PROCEDURA ROTTA**
 
 > Domanda del fondatore a fine giornata. Risposta cercata **nei documenti**, non a memoria.
@@ -3546,7 +3637,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 6675420
+CONSEGNE AGGIORNATE A: abf48d8
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -5374,7 +5465,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5851 test
+SUITE ATTUALE: Ran 5864 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

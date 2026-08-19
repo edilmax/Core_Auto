@@ -727,8 +727,16 @@ def corpo_reset_password_html(link: str, lingua: Any = "en") -> str:
 
 
 def corpo_benvenuto_host_html(pannello_url: str, lingua: Any = "en") -> str:
-    """Email di benvenuto all'host. LOCALIZZATA. La trasparenza sui costi (3% sempre
-    dovuto) e' tradotta in tutte le lingue: e' la PRIMA cosa che un host legge."""
+    """Email di benvenuto all'host. LOCALIZZATA. La trasparenza sulla tariffa tecnica e'
+    tradotta in tutte le lingue: e' la PRIMA cosa che un host legge.
+
+    ⛔ QUI NON SI SCRIVE LA CIFRA. Questo commento diceva «3% sempre dovuto» -- la tariffa
+    di prima, superata il 2026-08-09 quando e' stata misurata SOTTO COSTO. Il testo mandato
+    all'host era gia' quello giusto in tutte e otto le lingue: a mentire era solo il
+    commento, ed e' lo sbaglio S17 (il numero vecchio sopravvive nei commenti che spiegano
+    il nuovo). La regola del fondatore e' piu' forte di «aggiorna il commento»: un commento
+    NOMINA la cosa, non la cifra -- cosi' non puo' diventare falso. La cifra vera vive in
+    `b_commissioni` qui sopra, e la sorveglia `collaudi/audit_coerenza_tariffe.py`."""
     e = _html.escape
     lg = _lingua(lingua)
     passi = ("<ol><li>%s</li><li>%s</li><li>%s</li></ol>"

@@ -51,7 +51,40 @@ from fase163_accettazioni import (CONTRATTO_HOST_VERSIONE, DOCUMENTO_HOST, DOCUM
                                   PRIVACY_VERSIONE, doc_sha256, privacy_sha256)
 
 VIOL = {}
-PSP = 300
+
+
+def _dal_motore(patt, difetto):
+    """La tariffa NON si scrive qui: si legge da `main_casavip.py`, che e' l'unico posto
+    dove vive il valore che la produzione usa davvero.
+
+    ⛔ QUI C'ERA `PSP = 300`, SCRITTO A MANO, ED E' RIMASTO DOPO IL 2026-08-09 -- il giorno
+    in cui la tariffa tecnica e' cambiata, perche' quella di prima era stata misurata SOTTO
+    COSTO. (⛔ E qui la cifra NON si scrive, nemmeno per raccontare: e' lo sbaglio S17, il
+    numero vecchio che sopravvive nei commenti che spiegano il nuovo. La storia sta nel
+    registro, la cifra vera in `main_casavip.py`.) Conseguenze, misurate il 2026-08-19:
+      · il collaudo «totale» faceva girare tutta la macchina con una tariffa CHE NON ESISTE
+        (percentuale vecchia e quota fissa ZERO): non provava la produzione, provava
+        un'altra azienda;
+      · e il controllo B1 pretendeva che il contratto e la pagina host DICHIARASSERO la
+        cifra vecchia, cioe' ORDINAVA di rimettere dentro il numero sbagliato. Una guardia
+        che chiede il difetto e' peggio di nessuna guardia: chi obbedisce peggiora il
+        prodotto.
+    E' lo stesso difetto che la revisione indipendente del 2026-08-18 aveva gia' trovato in
+    un'altra forma («una guardia validava il proprio elenco col criterio che quel commit
+    dichiarava falso»). Un numero che descrive la macchina non si scrive: si legge (D22).
+    """
+    with open(os.path.join(REPO, "main_casavip.py"), encoding="utf-8") as f:
+        sorgente = f.read()
+    trovato = re.search(patt, sorgente)
+    if not trovato:                       # S1: il vuoto non e' un valore
+        raise SystemExit("⛔ non trovo %s in main_casavip.py: non posso misurare niente "
+                         "(era: %s)" % (difetto, patt))
+    return int(trovato.group(1))
+
+
+PSP = _dal_motore(r'PAGAMENTO_BPS["\']\s*,\s*["\'](\d+)["\']', "la tariffa tecnica")
+PSP_FISSO = _dal_motore(r'PAGAMENTO_FISSO_CENTS["\']\s*,\s*["\'](\d+)["\']',
+                        "la quota fissa della tariffa tecnica")
 
 
 def viol(k, n=1, det=""):
@@ -68,7 +101,8 @@ def costruisci(promo=True, bps=1000):
         db_catalogo=d + "/c.db", db_inventario=d + "/i.db", db_registro_host=d + "/r.db",
         db_accettazioni=d + "/a.db", db_pendenti=d + "/p.db", db_messaggi=d + "/m.db",
         db_garanzia=d + "/g.db", db_recensioni=d + "/rec.db",
-        commissione_bps=bps, psp_bps=PSP, promo_lancio_attiva=promo,
+        commissione_bps=bps, psp_bps=PSP, psp_fisso_cents=PSP_FISSO,
+        promo_lancio_attiva=promo,
         stripe_secret_key="sk", stripe_webhook_secret="whsec_x",
         stripe_success_url="https://x/ok", stripe_cancel_url="https://x/no"))
     r = crea_router(sis, host_key="hk", admin_key="ak", base_url="https://bookinvip.com")
@@ -287,10 +321,12 @@ def b1():
         for etichetta, cifra in attesi.items():
             if cifra not in testo:
                 viol("B1-cifra-assente", det="%s: manca %s (%s)" % (nome, cifra, etichetta))
-    # il 3% deve esserci ANCHE nei termini pubblici (testo del motore, non il guscio) e nel tariffario
+    # la tariffa tecnica deve esserci ANCHE nei termini pubblici (testo del motore, non il
+    # guscio) e nel tariffario. ⛔ QUI ERA SCRITTO `"3%"` A MANO: la cifra vecchia, che dal
+    # 2026-08-09 non e' piu' vera. Ora si usa quella calcolata dal motore, come sopra.
     for nome in ("termini (motore IT)", "termini (motore EN)", "deploy/commissioni.html"):
-        if "3%" not in fonti[nome]:
-            viol("B1-tecnica-assente", det=nome)
+        if attesi["tariffa tecnica"] not in fonti[nome]:
+            viol("B1-tecnica-assente", det="%s: manca %s" % (nome, attesi["tariffa tecnica"]))
     print("   verificate %d cifre su %d fonti ufficiali"
           % (len(attesi), len(obbligatori) + 2), flush=True)
 
@@ -329,7 +365,10 @@ def c1():
                      {"alloggio_id": slug, "check_in": (oggi + datetime.timedelta(days=2)).isoformat(),
                       "check_out": (oggi + datetime.timedelta(days=3)).isoformat(), "party": 2})
             comm_attesa = 20000 * bps // 10000
-            tec_attesa = 20000 * PSP // 10000
+            # ⛔ LA TARIFFA TECNICA NON E' SOLO UNA PERCENTUALE: c'e' anche la quota FISSA
+            #    (Stripe prende percentuale + 0,25 EUR). Qui mancava, perche' il collaudo
+            #    girava con `psp_fisso_cents` a zero: una macchina che non e' la nostra.
+            tec_attesa = 20000 * PSP // 10000 + PSP_FISSO
             if q["commissione_cents"] != comm_attesa:
                 viol("C1-commissione", det="%dgg: %d != %d" % (giorni, q["commissione_cents"], comm_attesa))
             if q["costo_pagamento_cents"] != tec_attesa:

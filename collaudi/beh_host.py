@@ -109,15 +109,39 @@ co4 = (oggi + datetime.timedelta(days=92)).isoformat()
 qt = quote(ci4, co4)[1]["quote_token"]
 s, b = call("POST", "/api/concierge/book",
             {"quote_token": qt, "email": "ospite@x.it", "modo_pagamento": "online"})
-check("book confermato (201)", s == 201, "HTTP %s" % s)
 vt = b.get("voucher_token") if isinstance(b, dict) else None
 sp = b.get("smart_pass") if isinstance(b, dict) else None
-check("l'ospite riceve il VOUCHER (voucher_token non vuoto)", bool(vt) and len(str(vt)) > 20)
-check("l'ospite riceve il PIN/pass (smart_pass non vuoto)", bool(sp) and len(str(sp)) > 8,
-      "smart_pass len=%s" % (len(str(sp)) if sp else 0))
-# il voucher firmato porta il riferimento giusto (non falsificabile): stesso rif del book
-check("il voucher e' coerente con la prenotazione (stesso riferimento)",
-      str(b.get("riferimento", "")) != "" )
+# ⛔ DUE BANCHI, DUE COMPORTAMENTI GIUSTI -- e per mesi qui ne era previsto uno solo.
+#
+# Questo banco gira con una chiave Stripe FINTA, cioe' con un gateway che non risponde. Dal
+# 2026-08-18 il prodotto in quella condizione RIFIUTA (503) e non emette niente: e' la regola
+# «senza incasso non esce un voucher», ed e' una riparazione, non un guasto. Ma questo
+# controllo pretendeva ancora il 201 e il voucher, quindi da quel giorno era ROSSO -- e il suo
+# rosso ORDINAVA di rimettere il difetto: emettere il pass prima di aver visto i soldi.
+#
+# 💡 La lezione: una guardia scritta per un banco solo diventa falsa il giorno che il prodotto
+# migliora. Qui si dichiara quale dei due mondi si sta guardando, e si pretende la cosa giusta
+# in tutt'e due -- il che rende questo controllo PIU' severo di prima, non meno: nel mondo
+# «gateway muto» adesso verifica anche che non esca NIENTE, che nessuno controllava.
+if s == 201:
+    check("book confermato (201)", True, "gateway VIVO")
+    check("l'ospite riceve il VOUCHER (voucher_token non vuoto)",
+          bool(vt) and len(str(vt)) > 20)
+    check("l'ospite riceve il PIN/pass (smart_pass non vuoto)", bool(sp) and len(str(sp)) > 8,
+          "smart_pass len=%s" % (len(str(sp)) if sp else 0))
+    # il voucher firmato porta il riferimento giusto (non falsificabile): stesso rif del book
+    check("il voucher e' coerente con la prenotazione (stesso riferimento)",
+          str(b.get("riferimento", "")) != "")
+else:
+    check("gateway muto: la prenotazione viene RIFIUTATA, non confermata a meta'",
+          s in (409, 502, 503), "HTTP %s" % s)
+    check("gateway muto: NESSUN voucher viene emesso", not vt,
+          "voucher_token=%r" % (vt,))
+    check("gateway muto: NESSUN pass di ingresso viene emesso", not sp,
+          "smart_pass len=%s" % (len(str(sp)) if sp else 0))
+    check("gateway muto: all'ospite arriva un motivo, non una pagina muta",
+          isinstance(b, dict) and bool(b.get("errore") or b.get("messaggio")),
+          "risposta=%r" % (str(b)[:80],))
 # notifica host: cablaggio presente (fase152 dispatcher). Telegram e' un canale DORMIENTE (serve il
 # token bot + il chat_id dell'host): qui non si consegna, ma il canale ESISTE ed e' cablato.
 try:

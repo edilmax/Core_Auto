@@ -5032,7 +5032,7 @@ class TestIlGiudiceNonPuoUscireVERDESenzaAverMisurato(unittest.TestCase):
         sempre — e un allarme sempre acceso viene spento. Qui il giudice deve TACERE su un
         modulo che esiste ed e' sorvegliato."""
         uscita, testo = self._esegui("--modulo", "fase167_credito_single_use.py",
-                                     "--tetto", "1", "--minuti", "6",
+                                     "--tetto", "1", "--minuti", "6", "--parziale",
                                      "--killer", "test_credito_single_use")
         self.assertNotIn("assente", testo.lower(),
                          "il modulo esiste: non deve risultare assente: %r" % (testo[-500:],))
@@ -5040,6 +5040,90 @@ class TestIlGiudiceNonPuoUscireVERDESenzaAverMisurato(unittest.TestCase):
             uscita, 0,
             "su un modulo vero e sorvegliato il giudice deve tacere: uscita=%d\n%s"
             % (uscita, testo[-500:]))
+
+    # ----------------------------------------------------------------------------------
+    #  PEZZO 1 DEL PIANO — «il Giudice esce ROSSO se ha saltato punti»
+    # ----------------------------------------------------------------------------------
+    #  IL DIFETTO, misurato il 2026-08-19 leggendo il verdetto (mutazione_prodotto.py, modo
+    #  `--modulo`): i punti lasciati fuori dal TETTO, dal TEMPO o dal timeout dei test
+    #  venivano stampati e poi ignorati dal codice d'uscita. Un giro col tetto di serie su
+    #  `fase59_concierge` ne lasciava fuori **84 su 114** e usciva **0**.
+    #
+    #  Perche' e' grave e non e' un dettaglio di forma: quel verdetto e' cio' che decide se
+    #  un modulo dei soldi puo' dirsi giudicato (D26). Un verde che copre il 26% dei punti
+    #  dice la stessa identica cosa di un verde che li copre tutti — e chi legge non ha modo
+    #  di distinguerli. E' il modo di rompersi n. 4 (un controllo che non controlla) applicato
+    #  allo strumento che dovrebbe scoprirlo negli altri.
+    #
+    #  La riparazione NON e' «vietare i giri parziali»: un giro corto serve per iterare in
+    #  fretta. E' obbligare a DICHIARARLO (`--parziale`), cosi' che il verde di un giro
+    #  incompleto non possa essere scambiato per il verde di un giro completo (D18 punto 3:
+    #  uno strumento dichiara cio' che NON ha esaminato).
+    def test_un_giro_che_ha_lasciato_punti_FUORI_non_esce_verde(self):
+        """Il verso in cui deve GRIDARE: `--minuti 0` fa scadere il giro subito, quindi
+        NESSUN punto viene esaminato. Senza `--parziale` quel verde sarebbe una bugia."""
+        uscita, testo = self._esegui("--modulo", "fase167_credito_single_use.py",
+                                     "--minuti", "0",
+                                     "--killer", "test_credito_single_use")
+        self.assertIn("oltre il TEMPO", testo,
+                      "l'attrezzo deve DIRE quanti punti ha lasciato fuori: %r"
+                      % (testo[-600:],))
+        self.assertNotEqual(
+            uscita, 0,
+            "un giro che ha lasciato punti NON esaminati non puo' uscire verde se non ha "
+            "dichiarato di essere parziale: uscita=%d\n%s" % (uscita, testo[-600:]))
+
+    def test_il_verdetto_conta_i_punti_NON_esaminati(self):
+        """La stessa regola sul pezzo puro, senza aspettare un giro vero: qui si possono
+        costruire a mano i tre modi in cui un punto resta fuori (tetto · tempo · i test che
+        non finiscono) e si controlla uno per uno. Le tre sono state VISTE tutte e tre.
+
+        ⛔ Il pezzo sta in una funzione apposta (`verdetto_modulo`) proprio per questo: finche'
+        il verdetto viveva dentro `if __name__ == "__main__"`, nessun test poteva toccarlo
+        senza lanciare un giro da ore — ed era l'unica parte del giudice che nessuno giudicava.
+        """
+        import importlib
+        giudice = importlib.import_module("collaudi.mutazione_prodotto")
+        vuoto = {"oltre_il_tetto": 0, "oltre_il_tempo": 0, "generatore": {},
+                 "senza_sorveglianti": 0, "normale_sec": {}}
+        tutti_uccisi = [{"file": "f.py", "riga": 1, "verdetto": "ucciso", "danno": "x"}]
+
+        # (a) macchina sana: tutto esaminato, tutto ucciso -> VERDE (regola ferrea 10)
+        uscita, motivi = giudice.verdetto_modulo(tutti_uccisi, dict(vuoto))
+        self.assertEqual((uscita, motivi), (0, []),
+                         "un giro completo e tutto ucciso deve TACERE: %r" % (motivi,))
+
+        # (b) i tre modi di lasciare un punto fuori, uno per uno
+        for chiave, quanti in (("oltre_il_tetto", 7), ("oltre_il_tempo", 3)):
+            rinunce = dict(vuoto)
+            rinunce[chiave] = quanti
+            uscita, motivi = giudice.verdetto_modulo(tutti_uccisi, rinunce)
+            self.assertEqual(uscita, 1,
+                             "%d punti lasciati fuori da `%s` e il giudice esce verde: %r"
+                             % (quanti, chiave, motivi))
+            self.assertTrue(any(str(quanti) in m for m in motivi),
+                            "il motivo deve dire QUANTI punti sono rimasti fuori: %r"
+                            % (motivi,))
+        nd = tutti_uccisi + [{"file": "f.py", "riga": 9,
+                              "verdetto": "non_determinabile", "danno": "y"}]
+        uscita, motivi = giudice.verdetto_modulo(nd, dict(vuoto))
+        self.assertEqual(uscita, 1,
+                         "un punto NON DETERMINABILE non e' un punto ucciso: e' un punto su "
+                         "cui non si sa niente, e non puo' passare per verde: %r" % (motivi,))
+
+        # (c) un giro DICHIARATO parziale resta verde -- ma lo dice
+        uscita, motivi = giudice.verdetto_modulo(tutti_uccisi,
+                                                 dict(vuoto, oltre_il_tetto=7), parziale=True)
+        self.assertEqual(uscita, 0,
+                         "un giro dichiarato parziale non deve gridare: %r" % (motivi,))
+
+        # (d) e cio' che era gia' rosso resta rosso anche in un giro parziale: dichiarare
+        #     «parziale» copre i punti NON GUARDATI, non i buchi TROVATI.
+        sopravvissuto = [{"file": "f.py", "riga": 2, "verdetto": "sopravvissuto",
+                          "danno": "il guasto passa"}]
+        uscita, _ = giudice.verdetto_modulo(sopravvissuto, dict(vuoto), parziale=True)
+        self.assertEqual(uscita, 1,
+                         "«parziale» non e' un condono: un punto SOPRAVVISSUTO resta rosso")
 
 
 class TestIlDeployNonPuoSALTAREIlPassoDiSicurezza(unittest.TestCase):
@@ -7563,6 +7647,168 @@ class TestIlFoglioUnicoDeiControlli(unittest.TestCase):
             stato, fu.NON_ESEGUITO,
             "senza nessun ingresso la voce 7 e' uscita %r (%s): un controllo che non ha "
             "potuto misurare non e' un verde" % (stato, dettaglio))
+
+
+class TestNessunCollaudoPuoPRETENDERE_LaTariffaVECCHIA(unittest.TestCase):
+    """⛔ UNA GUARDIA CHE CHIEDE IL DIFETTO E' PEGGIO DI NESSUNA GUARDIA.
+
+    Misurato il 2026-08-19. `collaudi/collaudo_finale_totale.py` aveva `PSP = 300` scritto a
+    mano: la tariffa tecnica di PRIMA del 2026-08-09, quando quella percentuale fu misurata
+    **sotto costo** e sostituita. (⛔ La cifra non si scrive nemmeno qui: sbaglio S17, il
+    numero vecchio che sopravvive nei commenti che spiegano il nuovo.) Due conseguenze, e la
+    seconda e' la peggiore:
+
+      · il collaudo «totale» faceva girare tutta la macchina con una tariffa **che non esiste
+        in produzione** (e con quota fissa ZERO): non provava noi, provava un'altra azienda;
+      · il suo controllo B1 pretendeva che il **contratto** e la **pagina host** dichiarassero
+        la **cifra vecchia** -- cioe' il suo rosso ORDINAVA di rimettere dentro il numero
+        sbagliato. Chi avesse obbedito avrebbe peggiorato il prodotto per far tacere un
+        collaudo.
+
+    E' la stessa forma che la revisione indipendente aveva gia' trovato il 2026-08-18 («una
+    guardia validava il proprio elenco col criterio che quel commit dichiarava falso»). Il
+    rimedio non e' aggiornare il numero: e' **toglierlo**. Un valore che descrive la macchina
+    si legge dalla macchina (D22), se no il giorno che cambia resta indietro un'altra volta.
+    """
+    def test_la_tariffa_del_collaudo_totale_si_LEGGE_non_si_scrive(self):
+        import ast
+        import io
+        import os
+        radice = os.path.dirname(os.path.abspath(__file__))
+        percorso = os.path.join(radice, "collaudi", "collaudo_finale_totale.py")
+        with io.open(percorso, encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+        assegnazioni = {}
+        for nodo in albero.body:
+            if isinstance(nodo, ast.Assign):
+                for bersaglio in nodo.targets:
+                    if isinstance(bersaglio, ast.Name):
+                        assegnazioni[bersaglio.id] = nodo.value
+        for nome in ("PSP", "PSP_FISSO"):
+            self.assertIn(nome, assegnazioni,
+                          "%s non esiste piu' in collaudo_finale_totale.py: se e' stato "
+                          "rinominato, questa guardia va aggiornata insieme" % nome)
+            valore = assegnazioni[nome]
+            self.assertIsInstance(
+                valore, ast.Call,
+                "%s e' un valore SCRITTO A MANO (%s). La tariffa si legge da "
+                "main_casavip.py: scritta qui, il giorno che cambia questo collaudo prova "
+                "una macchina che non esiste e pretende che i documenti dichiarino la cifra "
+                "vecchia." % (nome, ast.dump(valore)[:60]))
+
+    def test_la_tariffa_letta_e_QUELLA_VERA_del_motore(self):
+        """L'altra meta': non basta che sia letta, deve venire fuori il numero giusto.
+        Un lettore che sbaglia espressione tornerebbe `None` o una cifra a caso, e la guardia
+        di sopra sarebbe contenta lo stesso (D18 punto 1: prima si prova di saper misurare)."""
+        import io
+        import os
+        import re
+        radice = os.path.dirname(os.path.abspath(__file__))
+        with io.open(os.path.join(radice, "main_casavip.py"), encoding="utf-8") as f:
+            motore = f.read()
+        atteso = int(re.search(r'PAGAMENTO_BPS["\']\s*,\s*["\'](\d+)["\']', motore).group(1))
+        atteso_fisso = int(re.search(r'PAGAMENTO_FISSO_CENTS["\']\s*,\s*["\'](\d+)["\']',
+                                     motore).group(1))
+        import importlib
+        collaudo = importlib.import_module("collaudi.collaudo_finale_totale")
+        self.assertEqual(
+            (collaudo.PSP, collaudo.PSP_FISSO), (atteso, atteso_fisso),
+            "il collaudo totale gira con una tariffa diversa da quella del motore: "
+            "collaudo=(%s, %s) motore=(%s, %s)"
+            % (collaudo.PSP, collaudo.PSP_FISSO, atteso, atteso_fisso))
+
+
+class TestIlDenominatoreDEVEPoterDireDiNO(unittest.TestCase):
+    """`collaudi/denominatore.py` trasforma «cosa sto dimenticando?» in un numero. Ma un
+    contatore che dice sempre «tutto coperto» e' peggio di nessun contatore: rassicura.
+
+    ⛔ E' SUCCESSO AL PRIMO GIRO, il 19 agosto 2026. La prima versione cercava il nome nudo
+    («la rotta compare da qualche parte?») e ha stampato **0 scoperte su tutte e quattro le
+    famiglie**. Non era una buona notizia: era un criterio che non poteva fallire -- il modo
+    di rompersi n. 4 dentro l'attrezzo che dovrebbe scoprirlo negli altri. Col criterio
+    forte, la stessa macchina dichiara **77 coppie messaggio x lingua** che nessun collaudo
+    genera.
+
+    ⛔ E il verso opposto vale quanto questo (regola ferrea 10): la SECONDA versione accusava
+    tre rotte innocenti (`/sitemap-host-`, `/stop`, `/host/azione`, dichiarate col prefisso e
+    provate da sette file). Uno strumento che accusa innocenti viene spento.
+    """
+    @staticmethod
+    def _attrezzo():
+        import importlib
+        return importlib.import_module("collaudi.denominatore")
+
+    def test_una_voce_che_nessuno_nomina_viene_DICHIARATA_scoperta(self):
+        """Il verso in cui deve GRIDARE."""
+        d = self._attrezzo()
+        testi = {"finto_test.py": 'g("GET", "/api/host/pubblica")\n'}
+        self.assertFalse(
+            d.attraversa("/api/rotta-che-non-esiste-in-nessun-collaudo", testi,
+                         d._virgolette_o_prefisso("/api/rotta-che-non-esiste-in-nessun-collaudo")),
+            "una rotta che nessuno chiama deve risultare SCOPERTA, se no il contatore "
+            "e' un ornamento")
+
+    def test_una_rotta_PREFISSO_chiamata_col_percorso_intero_NON_e_scoperta(self):
+        """L'altra direzione: il falso allarme che ha gia' colpito una volta."""
+        d = self._attrezzo()
+        testi = {"finto_test.py": 'g("GET", "/sitemap-host-1.xml")\n'}
+        self.assertTrue(
+            d.attraversa("/sitemap-host-", testi, d._virgolette_o_prefisso("/sitemap-host-")),
+            "`/sitemap-host-` e' un PREFISSO e il collaudo la chiama col percorso intero: "
+            "dichiararla scoperta e' un falso allarme, e i falsi allarmi fanno spegnere "
+            "l'attrezzo")
+
+    def test_la_coppia_messaggio_lingua_vuole_la_STESSA_riga(self):
+        """Non basta che un file parli di un messaggio in un punto e di una lingua in un
+        altro: la coppia e' provata solo se quella riga genera QUEL messaggio in QUELLA
+        lingua. E' il modo di rompersi n. 11 (lingua congelata), che nessun test aveva mai
+        trovato -- lo vide il fondatore guardando il sito."""
+        d = self._attrezzo()
+        messaggi, codici = d.email(), d.lingue()
+        self.assertTrue(messaggi and codici,
+                        "senza messaggi o senza lingue non c'e' niente da misurare (S1): "
+                        "messaggi=%r lingue=%r" % (messaggi, codici))
+        m, c = messaggi[0], codici[0]
+        vicine = {"a.py": '%s("x", lingua="%s")\n' % (m, c)}
+        lontane = {"b.py": '%s("x")\nlingua = "%s"\n' % (m, c)}
+        _tutte, mancanti_vicine = d.coppie_messaggio_lingua(vicine)
+        _tutte, mancanti_lontane = d.coppie_messaggio_lingua(lontane)
+        self.assertNotIn((m, c), mancanti_vicine,
+                         "sulla stessa riga la coppia %s/%s e' provata" % (m, c))
+        self.assertIn((m, c), mancanti_lontane,
+                      "in due righe diverse la coppia %s/%s NON e' provata: contarla "
+                      "sarebbe un verde finto" % (m, c))
+
+    def test_il_CICLO_sulle_lingue_vale_quanto_le_otto_righe_scritte_a_mano(self):
+        """⛔ Un contatore che premia il copia-incolla verrebbe ignorato.
+
+        Se la coppia contasse SOLO quando la lingua e' scritta a mano sulla riga, un collaudo
+        che fa `for lingua in LINGUE_SUPPORTATE:` -- cioe' il modo giusto, e quello che prova
+        davvero tutte e otto -- risulterebbe SCOPERTO, e per far calare il numero bisognerebbe
+        scrivere ottanta righe uguali. Un attrezzo che spinge a scrivere codice peggiore viene
+        spento, e un attrezzo spento non protegge niente."""
+        d = self._attrezzo()
+        m = d.email()[0]
+        col_ciclo = {"a.py": "for lingua in LINGUE_SUPPORTATE:\n    %s('x', lingua=lingua)\n" % m}
+        senza = {"b.py": "%s('x', lingua=lingua)\n" % m}
+        _tutte, mancanti_col_ciclo = d.coppie_messaggio_lingua(col_ciclo)
+        _tutte, mancanti_senza = d.coppie_messaggio_lingua(senza)
+        self.assertEqual([c for c in mancanti_col_ciclo if c[0] == m], [],
+                         "il ciclo prova %s in tutte le lingue: dichiararlo scoperto e' un "
+                         "falso allarme" % m)
+        self.assertTrue([c for c in mancanti_senza if c[0] == m],
+                        "senza ciclo e senza lingua scritta, %s NON e' provato in nessuna "
+                        "lingua: contarlo sarebbe un verde finto" % m)
+
+    def test_i_QUATTRO_TOTALI_li_produce_la_macchina_e_non_sono_zero(self):
+        """D18 punto 1: lo strumento prova di essere in condizione di misurare PRIMA di
+        misurare. Un totale a zero non e' «tutto coperto», e' assenza di misura (S1)."""
+        d = self._attrezzo()
+        for nome, quante in (("rotte", len(d.rotte())), ("pagine", len(d.pagine())),
+                             ("email", len(d.email())), ("lingue", len(d.lingue()))):
+            self.assertGreater(quante, 0,
+                               "il denominatore delle %s e' ZERO: o e' cambiato il posto da "
+                               "cui si conta, o l'attrezzo non sta misurando niente" % nome)
 
 
 if __name__ == "__main__":

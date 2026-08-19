@@ -1602,6 +1602,63 @@ def esegui(test_str, timeout=900):
     return p.returncode == 0, p.stdout.decode("utf-8", "replace")
 
 
+# --------------------------------------------------------------------------------------
+#  IL VERDETTO DEL GIRO SU MODULI — una funzione pura, perche' si possa GIUDICARE
+# --------------------------------------------------------------------------------------
+def verdetto_modulo(esiti, rinunce, parziale=False):
+    """Dice se un giro `--modulo` esce verde o rosso, e PERCHE'.
+
+    Sta qui, fuori dal blocco `if __name__ == "__main__"`, per una ragione sola: un pezzo
+    dentro quel blocco non lo puo' provare nessun test senza lanciare un giro vero da ore.
+    Il verdetto del giudice era proprio quel pezzo -- l'unica parte del giudice che nessuno
+    giudicava.
+
+    Restituisce `(uscita, motivi)`: `uscita` e' il codice di uscita del processo, `motivi`
+    l'elenco in chiaro di cio' che lo rende rosso (vuoto se e' verde).
+
+    ⛔ UN PUNTO LASCIATO FUORI NON E' UN PUNTO SANO. Fino al 2026-08-19 i punti tagliati dal
+    tetto, dal tempo o dal timeout dei test venivano stampati e poi IGNORATI dal codice
+    d'uscita: un giro col tetto di serie su `fase59_concierge` ne lasciava fuori 84 su 114 ed
+    usciva 0. Cioe' il verde di un giro che aveva guardato un quarto della macchina era
+    indistinguibile dal verde di un giro completo -- e quel verdetto e' proprio cio' che
+    decide se un modulo dei soldi puo' dirsi giudicato (D26).
+
+    `parziale` non e' una scorciatoia, e' una DICHIARAZIONE: un giro corto serve per iterare
+    in fretta, e chi lo lancia deve dire che lo e' (`--parziale`). ⛔ E non condona niente di
+    cio' che il giro ha TROVATO: un sopravvissuto resta rosso anche in un giro dichiarato
+    parziale. Copre i punti non guardati, mai i buchi visti.
+    """
+    sopravvissuti = [e for e in esiti if e["verdetto"] == "sopravvissuto"]
+    scoperti = [e for e in esiti if e["verdetto"] == "scoperto"]
+    basi_rosse = [e for e in esiti if e["verdetto"] == "base_rossa"]
+    assenti = [e for e in esiti if e["verdetto"] == "assente"]
+    indeterminati = [e for e in esiti if e["verdetto"] == "non_determinabile"]
+    motivi = []
+    if sopravvissuti:
+        motivi.append("%d punti SOPRAVVISSUTI: il guasto passa e i test restano verdi"
+                      % len(sopravvissuti))
+    if scoperti:
+        motivi.append("%d punti SCOPERTI: nessun test nomina quel modulo" % len(scoperti))
+    if basi_rosse:
+        motivi.append("%d moduli con BASE ROSSA: li' nessun punteggio significa niente"
+                      % len(basi_rosse))
+    if assenti:
+        motivi.append("%d moduli ASSENTI: zero misure, non zero problemi" % len(assenti))
+    # I punti NON esaminati: rossi quanto gli altri, a meno che il giro si sia dichiarato
+    # parziale. Il conto lo tiene gia' `giro_su_moduli`, qui si limita a pretenderlo.
+    fuori = (int(rinunce.get("oltre_il_tetto", 0))
+             + int(rinunce.get("oltre_il_tempo", 0))
+             + len(indeterminati))
+    if fuori and not parziale:
+        motivi.append(
+            "%d punti NON ESAMINATI (oltre il tetto %d · oltre il tempo %d · i test non "
+            "hanno finito in tempo %d): un punto lasciato fuori non e' un punto sano, e' un "
+            "punto che nessuno ha guardato. Se il giro doveva essere corto, dichiaralo con "
+            "--parziale" % (fuori, int(rinunce.get("oltre_il_tetto", 0)),
+                            int(rinunce.get("oltre_il_tempo", 0)), len(indeterminati)))
+    return (1 if motivi else 0), motivi
+
+
 if __name__ == "__main__" and "--censimento" in sys.argv:
     recupera_da_interruzione()
     # DOVE LA MACCHINA E' SCOPERTA, senza eseguire un solo test. Serve a decidere dove
@@ -1700,9 +1757,6 @@ if __name__ == "__main__" and "--modulo" in sys.argv:
     for e in _sopr + _scop:
         print("::error title=Punto NON SORVEGLIATO in %s::riga %s -- %s | %s"
               % (e["file"], e["riga"], e["danno"], e.get("nota", "")))
-    # una BASE ROSSA e' rossa quanto un sopravvissuto: senza di essa il punteggio non
-    # significa niente, e un punteggio che non significa niente e' peggio di nessuno.
-    _base = [e for e in _esiti if e["verdetto"] == "base_rossa"]
     # Un modulo ASSENTE non e' "zero problemi": e' ZERO MISURE. Bastava dimenticare il `.py`
     # nel nome e il giro non esaminava niente e usciva VERDE -- il giudizio piu' severo del
     # progetto ridotto a decorazione da un refuso, e in CI sarebbe passato liscio. Il vuoto
@@ -1712,7 +1766,10 @@ if __name__ == "__main__" and "--modulo" in sys.argv:
     for e in _ass:
         print("::error title=NIENTE DA MISURARE in %s::%s -- il nome del modulo vuole il "
               "suffisso .py (i sorveglianti invece NO)" % (e["file"], e["danno"]))
-    sys.exit(1 if (_sopr or _scop or _base or _ass) else 0)
+    _uscita, _motivi = verdetto_modulo(_esiti, _rin, parziale="--parziale" in sys.argv)
+    for _m in _motivi:
+        print("  ROSSO: %s" % _m)
+    sys.exit(_uscita)
 
 
 if __name__ == "__main__" and "--diff" in sys.argv:

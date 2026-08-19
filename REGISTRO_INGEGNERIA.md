@@ -36,7 +36,15 @@
   (08ce8b0 → 2044582) e il registro del job dice `Successfully installed z3-solver-5.0.0.0`.
   Saltavano **due** test, e quei due portano **16 dimostrazioni formali** (3 invarianti + 13
   teoremi sulle transizioni).
-- **1** · il **Giudice esce ROSSO se ha saltato punti** (oggi ne salta 84 su 114 ed esce 0)
+- **1** · ✅ **FATTO 2026-08-19** — il **Giudice esce ROSSO se ha saltato punti**. Prima i punti
+  tagliati dal tetto, dal tempo o dal timeout dei test venivano stampati e poi **ignorati dal
+  codice d'uscita**: un giro col tetto di serie su `fase59` ne lasciava fuori **84 su 114** e
+  usciva **0**. Il verdetto vive ora in `verdetto_modulo()`, **fuori** dal blocco
+  `if __name__ == "__main__"` — era l'unica parte del giudice che nessun test poteva toccare
+  senza lanciare un giro da ore. ⛔ Un giro corto resta possibile ma va **dichiarato**
+  (`--parziale`), e la dichiarazione **non condona i buchi TROVATI**: un sopravvissuto resta
+  rosso. Guardie: `test_un_giro_che_ha_lasciato_punti_FUORI_non_esce_verde` (giro vero, vista
+  ROSSA prima: *11 punti oltre il tempo, uscita 0*) e `test_il_verdetto_conta_i_punti_NON_esaminati`
 - **2** · **ri-confermare un «ucciso»** rieseguendolo (un test instabile gonfia il punteggio)
 - **C** · sgonfiare `CLAUDE.md` in blocchi meccanici — ⛔ e **aggiornare `conta_regole()` nello
   stesso commit**, o la guardia dei numeri diventa rossa
@@ -645,7 +653,13 @@ niente alla lista (guardia: `TestLaPurgaNonPuoPerdereChiAspettaISoldi` in `test_
 - **P1** una notte non si vende **mai** due volte. *Parziale:* `stati_impossibili.py` + test di gara.
 - **P2** un voucher vale **solo dopo il pagamento** e **una volta sola**. *Parziale:* `percorso_e2e.py`.
 - **P3** ogni **comunicazione** (email · Telegram) è partita davvero almeno una volta, nella
-  lingua giusta, e **se non parte qualcuno lo sa**. ⚠️ Il DKIM manca.
+  lingua giusta, e **se non parte qualcuno lo sa**. ✅ Il **DKIM c'è**: acceso dal fondatore il
+  2026-08-09 e verificato dall'esterno (chiave RSA intera, visibile su Google, Cloudflare e
+  Quad9) — questa riga diceva «manca» ed era rimasta indietro di dieci giorni, **corretta il
+  2026-08-19** (sbaglio S10). ✅ E la **lingua giusta** è coperta dal 2026-08-19:
+  `test_email_in_ogni_lingua.py` genera tutti e **10 i messaggi in tutte e 8 le lingue** e
+  pretende che nessuno esca in inglese quando la lingua è un'altra. ⚠️ Resta la metà vera:
+  **«se non parte qualcuno lo sa»**, che non ha ancora una guardia.
 - **P4** ogni **controversia** apribile è apribile davvero e ha un esito. ⚠️ Attenzione a **S7**.
 - **P5** il **calendario** dell'host riflette la realtà, e le modifiche che arrivano da fuori
   (iCal, Telegram, channel manager) **non creano overbooking**.
@@ -671,11 +685,14 @@ niente alla lista (guardia: `TestLaPurgaNonPuoPerdereChiAspettaISoldi` in `test_
 - **CodeQL** → 30 minuti, **gratis finché il repository è pubblico**. Nessun intervento del fondatore.
 - **Orologi di prova Stripe** (test clocks) → 1 sessione: fa passare il tempo davvero (hold,
   maturazione payout, finestre di penale). È il giudice esterno più vicino ai soldi che manca.
-- **Il DENOMINATORE** → 1 sessione, **priorità alta**. Un attrezzo che elenca **dalla macchina**
-  quante rotte, email, pagine e lingue esistono, e per ognuna se un collaudo la attraversa.
-  Trasforma «cosa sto dimenticando?» in un numero. ⛔ **Due strade indipendenti sono arrivate
-  alla stessa conclusione**: la ricerca esterna su Anthropic e il nostro «ogni guardia dichiara
-  il denominatore».
+- ✅ **Il DENOMINATORE — FATTO 2026-08-19**, `collaudi/denominatore.py`, e a dirlo è la macchina
+  (`regole_avvio.py`: *«✅ FATTO — trovato: collaudi/denominatore.py»*). Conta **dalla macchina**
+  rotte · pagine · email · lingue, e per ognuna se un collaudo la attraversa. ⛔ **Due strade
+  indipendenti** ci avevano portato qui: la ricerca esterna su Anthropic e il nostro «ogni
+  guardia dichiara il denominatore». **Prima misura**: 155 rotte · 14 pagine · 10 email ·
+  8 lingue, **0 scoperte** — ma **77 coppie messaggio × lingua su 80** che nessun collaudo
+  generava. ✅ **Chiuse lo stesso giorno**: `test_email_in_ogni_lingua.py` le genera tutte e
+  80, e il denominatore è tornato a misurare **0**.
 - **Il BATTITO in produzione sui cicli dei soldi** → mezza sessione. Oggi i controlli girano
   **quando li lanciamo noi**: se il giro dei pagamenti muore alle 3 di notte **nessuno lo sa
   fino al giorno dopo**.
@@ -752,6 +769,166 @@ un salvataggio di sei giorni prima **credendo di aver fatto quello di oggi**, e 
 giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
+
+### 🩺 2026-08-19 (3) — **DUE GUARDIE ORDINAVANO DI RIMETTERE IL DIFETTO** (batteria: 17/19 → 19/19)
+
+La batteria dei 10 collaudi, lanciata prima del commit (D24), è uscita **17 OK e 2 FALLITI**.
+⛔ Nessuno dei due era colpa del lavoro di stanotte, e **nessuno dei due era un difetto del
+prodotto**: erano due **sorveglianti rimasti indietro**, e tutt'e due, per tacere, chiedevano
+di **peggiorare il prodotto**.
+
+**① `collaudo_finale_totale.py` pretendeva la tariffa vecchia.** Aveva `PSP = 300` scritto a
+mano — la tariffa tecnica di **prima del 2026-08-09**, quando quella percentuale fu misurata
+*sotto costo* e sostituita. Due conseguenze, e la seconda è la peggiore:
+```
+  [VIOLAZIONE] B1-cifra-assente: deploy/host.html: manca <cifra vecchia> (tariffa tecnica)
+  [VIOLAZIONE] B1-cifra-assente: contratto (IT) · contratto (EN)
+  [VIOLAZIONE] B1-tecnica-assente: termini (motore IT) · (motore EN)
+```
+*(la cifra è tolta apposta da questa citazione: scriverla qui la rimetterebbe in circolo, ed è
+lo sbaglio **S17** — il numero vecchio che sopravvive nel testo che spiega il nuovo)*
+· il collaudo **«totale»** faceva girare tutta la macchina con una tariffa **che non esiste in
+produzione**, e con quota fissa **zero**: non provava noi, provava un'altra azienda;
+· il suo rosso **ordinava di rimettere la cifra vecchia** nel contratto e nella pagina host. Chi avesse
+obbedito avrebbe peggiorato il prodotto per far tacere un collaudo.
+✅ Ora la tariffa **si legge da `main_casavip.py`** (percentuale **e** quota fissa), il collaudo
+gira sulla tariffa vera — cosa che non aveva mai fatto — ed esce **0 VIOLAZIONI**. Guardie:
+`TestNessunCollaudoPuoPRETENDERE_LaTariffaVECCHIA` (una legge l'albero sintattico e pretende
+che quel valore sia **letto** e non scritto; l'altra che il numero letto sia **quello vero**).
+
+**② `beh_host.py` pretendeva un voucher senza incasso.** Il banco gira con una chiave Stripe
+**finta**, cioè un gateway muto; dal **2026-08-18** in quella condizione il prodotto **rifiuta**
+(`503 pagamento_non_disponibile`) e non emette niente — è la riparazione *«senza incasso non
+esce un voucher»*. Il controllo pretendeva ancora `201` + voucher + PIN, quindi era rosso da
+quel giorno, **e il suo rosso chiedeva di emettere il pass prima di aver visto i soldi**.
+✅ Ora dichiara **quale dei due mondi** sta guardando e pretende la cosa giusta in tutt'e due —
+e nel mondo «gateway muto» è diventato **più severo di prima**: verifica che non esca **nessun**
+voucher, **nessun** pass, e che all'ospite arrivi un motivo invece di una pagina muta.
+`ESITO COMPORTAMENTALE HOST: 14/14 verdi`.
+
+💡 **La lezione, ed è una sola per tutt'e due:** una guardia scritta contro un numero fisso, o
+contro un banco solo, **diventa falsa il giorno in cui il prodotto migliora** — e a quel punto
+non protegge più niente: chiede indietro il difetto. La cura non è aggiornare il numero: è
+**toglierlo**, e leggerlo da dove vive.
+
+### 🔢 2026-08-19 (2) — **LA COPIA SUL DESKTOP ERA LA VECCHIA, E STAVO PER FARLA VINCERE**
+
+**Nasce da una domanda del fondatore**, non da uno strumento: *«sono stati scritti in file,
+directory o altro che non leggete?»*. La cartella `Desktop\DA_METTERE_IN_collaudi\` c'era
+davvero, con dentro `e2e_credito_stripe.py` e `sentinella_ci.py`, ferma dall'11 agosto. Ho
+concluso che fossero **orfani mai portati dentro** e li ho copiati in `collaudi/`.
+
+⛔ **ERA FALSO, ED È IL DIFETTO PIÙ INTERESSANTE DELLA GIORNATA.** Erano **già nel repository**
+da giorni, e la versione dentro era **migliore**: qualcuno aveva già tolto i percorsi cablati e
+già messo la chiave dietro `STRIPE_TEST_KEY_FILE`. Copiando la cartella del Desktop ho
+**riportato indietro** quelle riparazioni.
+```
+git status --porcelain   ->   M collaudi/sentinella_ci.py      <- MODIFICATO, non nuovo
+                              M collaudi/e2e_credito_stripe.py
+git diff collaudi/sentinella_ci.py:
+  -CARTELLA = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+  +CARTELLA = r"C:\Users\MaxDanno\Desktop\Core_Auto"      <- il cablato che RIMETTEVO io
+```
+✅ **Ripristinati tutt'e due** (`git checkout --`), e riapplicata **solo** la correzione che era
+davvero nuova. **Chi l'ha preso non è stato il mio occhio: è stata la lettera `M` di
+`git status`.** È la regola ferrea 13 in forma pura — *date e nomi non sono prove, si guarda il
+contenuto* — e la gemella esatta della lezione della chiavetta, dove la cartella che si chiama
+`chiavetta_nuova` contiene la copia **più vecchia**. 💡 **Una copia fuori dal repository non è un
+salvataggio: è un candidato a vincere contro l'originale.**
+
+**LA CORREZIONE VERA, quella che il repository non aveva: nove date cablate nel 2027.**
+`e2e_credito_stripe.py` dichiarava la disponibilità dal `2027-03-01` al `2027-06-30` e ci
+prenotava dentro. **Il 1° luglio 2027 sarebbe diventato rosso da solo**, senza che nessuno
+avesse toccato una riga — e chi l'avesse trovato avrebbe cercato il difetto nel prodotto. È
+esattamente ciò che è successo il 2026-08-13 a `test_fase156_erasure`. Ora le date si contano da
+oggi (`giorno(150)` … `giorno(330)`), e l'attrezzo, rilanciato:
+```
+PASSI: 15   OK: 15   ROSSI: 0
+P2  l'importo su STRIPE e' quello scontato (letto dalla LORO API): stripe=56175 nostro=56175 EUR
+    il pieno sarebbe stato 60000  ·  sessione cs_test_a1oxde...
+P1  PAVIMENTO: commissione 6000 - sconto 3825 = 2175 >= costo Stripe 1975
+```
+⚠️ **Resta un fatto da non perdere:** `Desktop\DA_METTERE_IN_collaudi\` contiene ancora la copia
+vecchia, e chiunque la guardi ricadrà nello stesso errore.
+
+**E LE 77 COPPIE SONO STATE CHIUSE LO STESSO GIORNO — `test_email_in_ogni_lingua.py`.**
+La macchina sa spedire **10 messaggi** e dichiara **8 lingue**: 80 combinazioni, e i collaudi
+ne generavano **3**. Ora le genera tutte, e pretende tre cose: che non esplodano · che il testo
+**non sia identico all'inglese** (se lo è, quella lingua non è tradotta: è il ripiego che passa
+per traduzione) · che non resti dentro nessun segnaposto. **Misurato prima di scrivere la
+guardia: 0 congelate su 70** — le email *erano* tradotte, mancava solo chi lo controllasse.
+⛔ **E la guardia è stata vista ROSSA**: iniettato in memoria un `corpo_voucher_html` che ignora
+la lingua, ha segnalato **7 lingue su 7**. Un verde mai visto rosso non vale (regola ferrea 2).
+💡 **La guardia dichiara il proprio denominatore**: confronta il suo elenco con le funzioni
+`corpo_*_html` che esistono davvero, quindi l'undicesimo messaggio non provato la fa diventare
+rossa **lo stesso giorno** — se no fra sei mesi si torna a 77.
+
+**UN DIFETTO VERO TROVATO STRADA FACENDO** (`fase86_email.py`, autorizzato): il commento della
+mail di benvenuto all'host nominava ancora **la percentuale superata il 2026-08-09**, quella
+misurata sotto costo. ⚠️ Il **testo spedito** era giusto in tutte e otto le lingue: a mentire
+era **solo il commento**. È lo sbaglio S17, e la cura è la regola del fondatore: **un commento
+nomina la cosa, non la cifra** — così non può diventare falso.
+
+**IL LAVORO OBBLIGATORIO n° 5 — `collaudi/denominatore.py`, chiuso.** Conta dalla macchina
+quante rotte, pagine, email e lingue esistono, e per ognuna se un collaudo la attraversa.
+```
+ROTTE 155 · PAGINE 14 · EMAIL 10 · LINGUE 8   -> scoperte: 0
+MESSAGGIO x LINGUA:  80 coppie ·  3 provate ·  77 MAI GENERATE DA NESSUN COLLAUDO
+```
+💡 **E il primo giro ha giudicato l'attrezzo, non la macchina.** La prima versione cercava il
+nome nudo e ha stampato **0 scoperte dappertutto**: un criterio che non può fallire, cioè il
+modo di rompersi n° 4 dentro lo strumento che dovrebbe scoprirlo negli altri. La seconda,
+col criterio forte, ha **accusato tre innocenti** (`/sitemap-host-`, `/stop`, `/host/azione`:
+sono prefissi, i collaudi le chiamano col percorso intero, sette file le provano). Solo la
+terza misura davvero — e le **quattro guardie** in `TestIlDenominatoreDEVEPoterDireDiNO`
+tengono ferme tutt'e due le direzioni: deve gridare su ciò che nessuno prova, e **tacere** su
+ciò che è provato.
+
+⚠️ **Limite dichiarato:** «attraversata» vuol dire **nominata**, non **eseguita** — lo stesso
+limite di `piano.py`. Il numero di sinistra è un tetto, non un voto.
+
+### ⚖️ 2026-08-19 (1) — **IL GIUDICE DAVA IL VERDE DOPO AVER GUARDATO UN QUARTO DELLA MACCHINA**
+
+**Pezzo 1 del piano, chiuso.** Il verdetto del modo `--modulo` di `collaudi/mutazione_prodotto.py`
+contava sopravvissuti, scoperti, basi rosse e moduli assenti — e **non** i punti che il giro non
+aveva nemmeno provato. Quelli venivano stampati («NON PROVATI (dichiarati)») e poi **ignorati dal
+codice d'uscita**.
+
+```
+misurato adesso, giro vero su fase167_credito_single_use.py --minuti 0:
+  provati: 0 · uccisi: 0 · SOPRAVVISSUTI: 0 · scoperti: 0
+  NON PROVATI (dichiarati): oltre il tetto 0 · oltre il TEMPO 11
+  uscita del processo: 0        <- VERDE dopo aver esaminato ZERO punti su 11
+```
+
+⛔ **Perché non è un dettaglio di forma.** Quel verdetto è ciò che decide se un modulo dei soldi
+può dirsi giudicato (D26), e i **9 moduli dei soldi che restano** vanno misurati con questo metro.
+Un verde che copre il 26% dei punti (`fase59`: **84 su 114** lasciati fuori dal tetto di serie)
+era **indistinguibile** dal verde di un giro completo. È il modo di rompersi n° 4 — un controllo
+che non controlla — dentro lo strumento che dovrebbe scoprirlo negli altri.
+
+**La riparazione, in due parti.** ① Il verdetto è uscito dal blocco `if __name__ == "__main__"` ed
+è diventato la funzione pura **`verdetto_modulo(esiti, rinunce, parziale)`**: finché viveva lì
+dentro, **nessun test poteva toccarlo** senza lanciare un giro da ore — era l'unica parte del
+giudice che nessuno giudicava. ② I punti non esaminati (tetto · tempo · test che non finiscono)
+ora fanno **rosso**, a meno che il giro non si dichiari **`--parziale`**. ⛔ E «parziale» **non è
+un condono**: copre i punti *non guardati*, mai i buchi *trovati* — un sopravvissuto resta rosso
+anche in un giro dichiarato corto.
+
+**Le due guardie, viste ROSSE prima (D20).**
+```
+test_un_giro_che_ha_lasciato_punti_FUORI_non_esce_verde   (giro VERO, 15s)
+   rosso prima: 11 punti oltre il tempo, uscita 0
+test_il_verdetto_conta_i_punti_NON_esaminati              (pezzo puro, 0.01s)
+   rosso prima: "7 punti lasciati fuori da `oltre_il_tetto` e il giudice esce verde: []"
+```
+E l'altra direzione è obbligatoria quanto la prima (regola ferrea 10): il giro dichiarato parziale
+su un modulo vero e sorvegliato **tace**, uscita 0. Quattro guardie della classe, tutte verdi.
+
+💡 **La lezione, ed è la stessa di sempre in una forma nuova:** lo strumento dichiarava
+onestamente ciò che non aveva guardato — la riga «NON PROVATI» c'era, scritta a chiare lettere.
+**Dichiarare non è impedire.** Una dichiarazione che non tocca il codice d'uscita finisce in un
+registro che nessuno rilegge, e il verde vince lo stesso.
 
 ### 📄 2026-08-18 (13) — **I DOCUMENTI RIMASTI INDIETRO: 5 buchi, e uno era una procedura ROTTA**
 
