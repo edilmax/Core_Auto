@@ -774,6 +774,33 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🌐 2026-08-19 (13) — **UN MIRROR UBUNTU GIÙ TENEVA FERMO IL CANCELLO**
+
+Il cancello della richiesta **#79** è andato **rosso**, e non ho unito. ⛔ Ma il rosso non era
+del lavoro: `money-smoke`, `full-suite`, `mutazione`, `copertura`, l'**immagine di produzione**
+e CodeQL erano tutti `success`. Era fallito `accessibilita`, **due tentativi su due**:
+```
+Failed to install browsers / Installation process exited with code: 100
+Ign: http://azure.archive.ubuntu.com/ubuntu noble InRelease     <- il mirror era GIU'
+```
+Codice **100** è di **apt**. Rilanciato una volta (poteva essere un intoppo); caduto di nuovo →
+**non è un intoppo**, e a quel punto si ripara la causa invece di rilanciare all'infinito.
+
+**LA CAUSA È UNA CONFUSIONE FRA DUE COSE DIVERSE.** Il browser si scarica dalla **CDN di
+Playwright**; `--with-deps` invece reinstalla via **apt** le librerie di sistema di Chromium —
+che nell'immagine dei runner **ci sono già**. Legate in un comando solo, un guasto del mirror
+Ubuntu diventa un guasto del **nostro** prodotto: mezz'ora di cancello rosso su un lavoro sui
+soldi che era interamente verde.
+
+✅ **Riparato in tutt'e due i job che installano il browser** (`accessibilita` e `browser`: un
+difetto riparato in un posto solo torna): due tentativi con apt, e se il mirror non risponde si
+scarica **il solo browser, senza apt**. ⛔ L'ultima riga **non è protetta**: se il browser
+davvero non si scarica il job è rosso — ed è giusto, perché senza browser non si è guardato
+niente. ⛔ E niente `continue-on-error`: questi job stanno **nel gate**, e quel flag li farebbe
+risultare `success` anche falliti — una guardia sorella mi ci aveva già preso poche ore prima.
+
+Guardia: `TestIlBrowserNonDIPENDEDaAPT`, provata togliendo il ripiego (2 job colpevoli su 2).
+
 ### 💶 2026-08-19 (12) — **LA TASSA DI SOGGIORNO PASSA ALL'HOST** (decisione del fondatore, autorizzata)
 
 > *«la tassa passa all'host, autorizzato»* — 2026-08-19. Chiude il difetto descritto nella voce

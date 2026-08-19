@@ -11,6 +11,25 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🌐 2026-08-19 (40) — **UN MIRROR UBUNTU GIÙ TENEVA FERMO IL CANCELLO**
+
+> Il cancello della richiesta **#79** è andato rosso e **non ho unito**. Ma il rosso non era
+> del lavoro: money-smoke, full-suite, mutazione, copertura, immagine e CodeQL tutti verdi.
+> ```
+> accessibilita, DUE tentativi su due:
+>   Failed to install browsers / Installation process exited with code: 100
+>   Ign: http://azure.archive.ubuntu.com/ubuntu noble InRelease   <- mirror GIU'
+> ```
+> ⛔ **Causa:** il browser si scarica dalla CDN di Playwright, `--with-deps` invece passa da
+> **apt** per librerie che nell'immagine dei runner **ci sono già**. Legati in un comando
+> solo, un guasto del mirror Ubuntu diventa un guasto del nostro prodotto.
+> ✅ Riparato in **tutt'e due** i job che installano il browser: due tentativi con apt, poi
+> ripiego che scarica **il solo browser**. L'ultima riga non è protetta (senza browser il job
+> è rosso, ed è giusto) e niente `continue-on-error` — questi job stanno **nel gate**.
+> Guardia: `TestIlBrowserNonDIPENDEDaAPT`, provata togliendo il ripiego.
+> 💡 Rilanciato **una** volta perché poteva essere un intoppo; caduto di nuovo → si ripara la
+> causa, non si rilancia all'infinito.
+
 ## 💶 2026-08-19 (39) — **LA TASSA DI SOGGIORNO PASSA ALL'HOST** (autorizzato dal fondatore)
 
 > Chiude il difetto del blocco (37): prima l'ospite pagava soggiorno + tassa, all'host andava
@@ -3914,7 +3933,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 746d067
+CONSEGNE AGGIORNATE A: f8840d3
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -5742,7 +5761,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5883 test
+SUITE ATTUALE: Ran 5884 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

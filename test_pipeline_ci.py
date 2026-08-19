@@ -7724,6 +7724,58 @@ class TestIlFoglioUnicoDeiControlli(unittest.TestCase):
             "potuto misurare non e' un verde" % (stato, dettaglio))
 
 
+class TestIlBrowserNonDIPENDEDaAPT(unittest.TestCase):
+    """⛔ UN MIRROR UBUNTU GIU' NON DEVE TENERE FERMO IL CANCELLO.
+
+    Misurato il 2026-08-19 sulla richiesta di unione #79. Il job `accessibilita` e' fallito
+    **due volte su due** su questo passo:
+    ```
+    Failed to install browsers / Installation process exited with code: 100
+    Ign: http://azure.archive.ubuntu.com/ubuntu noble InRelease
+    ```
+    Il cancello e' rimasto **rosso per mezz'ora** su un lavoro sui soldi che era tutto verde
+    -- `money-smoke`, `full-suite`, `mutazione`, `copertura`, l'immagine di produzione e
+    CodeQL: tutti `success`. Il prodotto non c'entrava niente.
+
+    **La causa e' una confusione fra due cose diverse.** Il browser si scarica dalla CDN di
+    Playwright; `--with-deps` invece reinstalla via **apt** le librerie di sistema di
+    Chromium -- che nell'immagine dei runner **ci sono gia'**. Legandoli in un comando solo,
+    un guasto del mirror Ubuntu diventa un guasto del nostro prodotto.
+
+    ⛔ E la cura NON puo' essere `continue-on-error`: questi job stanno nel gate, e quel flag
+    li farebbe risultare **success anche falliti** (una guardia sorella mi ci ha gia' preso
+    oggi). Il ripiego sta **dentro** il comando, e l'ultima riga non e' protetta: se il
+    browser davvero non si scarica, il job e' rosso -- ed e' giusto, perche' senza browser
+    non si e' guardato niente.
+    """
+    def test_ogni_passo_che_installa_il_browser_ha_il_ripiego_senza_apt(self):
+        import io
+        import os
+        import yaml
+        percorso = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                ".github", "workflows", "ci.yml")
+        with io.open(percorso, encoding="utf-8") as f:
+            impianto = yaml.safe_load(f)
+        passi = [(nome, p) for nome, corpo in (impianto.get("jobs") or {}).items()
+                 for p in (corpo or {}).get("steps") or []
+                 if isinstance(p.get("run"), str) and "playwright install" in p["run"]]
+        self.assertTrue(passi,
+                        "nessun passo installa il browser: o e' sparito il collaudo col "
+                        "browser vero, o questa guardia sta misurando il nulla (S1)")
+        for nome, p in passi:
+            comando = p["run"]
+            self.assertIn(
+                "playwright install chromium", comando,
+                "il job %r installa il browser SOLO con `--with-deps`, cioe' passando da "
+                "apt: il giorno che il mirror Ubuntu non risponde il cancello si blocca su "
+                "un guasto che col prodotto non c'entra. Serve il ripiego che scarica il "
+                "solo browser (le librerie di sistema sono gia' nell'immagine)." % nome)
+            self.assertNotIn(
+                "|| true", comando,
+                "il job %r nasconde il fallimento con `|| true`: senza browser non si e' "
+                "guardato niente, e deve risultare rosso" % nome)
+
+
 class TestOgniJobDellaCIHaUnTETTO(unittest.TestCase):
     """⛔ UN JOB SENZA TETTO PUO' TENERE FERMO IL CANCELLO PER SEI ORE.
 
