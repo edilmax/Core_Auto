@@ -179,5 +179,123 @@ class TestStatoScaglioneBordi(unittest.TestCase):
                              "lo scatto promesso non corrisponde a quello che accade")
 
 
+class TestGliOTTOPUNTITrovatiDalGiudice(unittest.TestCase):
+    """Gli 8 punti che il Giudice ha trovato SCOPERTI il 2026-08-19 (18 punti, 10 uccisi,
+    8 sopravvissuti). Questo modulo decide **quanto paga l'host**: e' la cifra su cui un host
+    decide se fidarsi di noi.
+
+    ⛔ Nessuno degli otto stava nell'aritmetica -- quella era gia' sorvegliata bene. Stanno
+    tutti in due posti che nessuno guardava: la **regola ordinale** (che con i valori di
+    serie e' neutra, quindi invisibile) e i **campi che dichiarano la verita' all'host**
+    («la promozione e' attiva?», «la tua anzianita' e' nota?»). Un numero giusto accanto a
+    una dichiarazione falsa e' comunque una bugia detta a un host.
+    """
+
+    def test_la_regola_ordinale_riconosce_il_PRIMO_host_e_il_MILLESIMO(self):
+        """⛔ DUE CONFINI CHE NESSUN TEST TOCCAVA, e sono invisibili di serie.
+
+        `commissione_bps_per_host` e' la vecchia regola «i primi N host pagano meno». Con i
+        valori di serie e' **neutra** (fondatori 10% = dopo 10%), quindi qualunque sbaglio ai
+        suoi confini non si vede: i due numeri coincidono. Ma la funzione accetta i valori dal
+        chiamante, e con uno sconto vero i confini contano:
+          · host n.1 -- il primo host in assoluto -- deve avere la tariffa dei fondatori;
+          · host n.1000 -- l'ultimo dentro la soglia -- deve averla ancora.
+        Il Giudice ha spostato tutt'e due i confini di **un passo** e nessun test se n'e'
+        accorto: `n < 1` -> `n <= 1` (il primo host perde lo sconto) e `n <= soglia` ->
+        `n < soglia` (il millesimo lo perde). Un errore di un passo su una tariffa e' denaro
+        vero addebitato a una persona vera.
+        """
+        FONDATORI, DOPO, SOGLIA = 500, 1000, 1000       # sconto VERO, se no il difetto e' cieco
+        def bps(n):
+            return commissione_bps_per_host(n, bps_fondatori=FONDATORI, bps_dopo=DOPO,
+                                            soglia=SOGLIA)
+        self.assertEqual(bps(1), FONDATORI,
+                         "il PRIMO host non ha la tariffa dei fondatori: il confine di sotto "
+                         "e' spostato di un passo")
+        self.assertEqual(bps(SOGLIA), FONDATORI,
+                         "l'host numero %d -- l'ultimo DENTRO la soglia -- non ha la tariffa "
+                         "dei fondatori: il confine di sopra e' spostato di un passo" % SOGLIA)
+        self.assertEqual(bps(SOGLIA + 1), DOPO,
+                         "il primo host FUORI soglia deve pagare la tariffa piena")
+        # e sotto l'uno non esiste nessun host: e' un ordinale, non un conteggio
+        self.assertEqual(bps(0), DOPO, "un ordinale ZERO non e' un host: tariffa piena")
+        self.assertEqual(bps(-5), DOPO, "un ordinale negativo non e' un host: tariffa piena")
+
+    def test_un_BOOLEANO_come_anzianita_non_regala_la_promozione(self):
+        """⛔ IL BUCO CHE COSTA DI PIU', ed e' lo stesso di `fase111`, in un altro modulo.
+
+        In Python `True` **e'** un intero e vale 1. Il modulo lo esclude apposta, ma nessun
+        test lo verificava: rotta quella condizione, tutta la suite restava verde.
+
+        Col guasto dentro, un host la cui anzianita' arriva come `True` verrebbe letto come
+        **1 giorno dalla registrazione**, cioe' dentro la finestra promozionale: commissione
+        **0%** invece del **10% a regime**. Su ogni prenotazione di quell'host, per sempre,
+        finche' qualcuno non se ne accorge guardando i conti.
+
+        ⚠️ E la regola di questo modulo e' scritta nel suo stesso docstring: *«anzianita'
+        ignota -> tariffa a regime, non si regala lo 0% per errore»*. Un booleano E' una
+        anzianita' ignota: non e' un numero di giorni, e' un interruttore.
+        """
+        from fase98_policy_commissione import LANCIO_BPS_REGIME, stato_scaglione
+        for booleano in (True, False):
+            s = stato_scaglione(booleano)
+            self.assertEqual(
+                s["bps"], LANCIO_BPS_REGIME,
+                "anzianita' = %r ha ottenuto la commissione %d invece del regime %d: un "
+                "booleano non e' un numero di giorni, e leggerlo come tale regala la "
+                "promozione a chi non ne ha diritto" % (booleano, s["bps"], LANCIO_BPS_REGIME))
+            self.assertEqual(s["scaglione"], "regime",
+                             "anzianita' = %r ha ottenuto lo scaglione %r" % (booleano,
+                                                                              s["scaglione"]))
+            self.assertIs(s["anzianita_nota"], False,
+                          "anzianita' = %r e' stata dichiarata NOTA: non lo e'" % booleano)
+
+    def test_la_scheda_dice_la_VERITA_su_promozione_e_anzianita(self):
+        """⛔ CINQUE PUNTI IN UNO: i campi che l'host legge non erano sorvegliati.
+
+        `stato_scaglione` non restituisce solo un numero: restituisce anche **cosa dichiara
+        di sapere** -- se la promozione e' attiva e se l'anzianita' e' nota. Sono i campi da
+        cui un pannello decide cosa scrivere all'host. Il Giudice li ha rovesciati uno per
+        uno (cinque mutanti su cinque righe diverse: `promo_attiva` vero al posto di falso e
+        viceversa, `anzianita_nota` vero al posto di falso e viceversa) e **nessun test se
+        n'e' accorto**: guardavamo il numero e mai la dichiarazione che gli sta accanto.
+
+        💡 Un numero giusto con una dichiarazione falsa e' comunque una bugia: l'host legge
+        «promozione attiva» quando non lo e', oppure «anzianita' nota» quando il sistema non
+        sa da quanto e' iscritto -- e su quella riga decide se fidarsi.
+        """
+        from fase98_policy_commissione import LANCIO_BPS_REGIME, stato_scaglione
+
+        # ① promozione SPENTA: si dichiara spenta, e l'anzianita' resta nota se lo e'
+        spenta = stato_scaglione(10, promo_attiva=False)
+        self.assertIs(spenta["promo_attiva"], False,
+                      "la promozione e' spenta ma la scheda dichiara che e' attiva")
+        self.assertEqual(spenta["bps"], LANCIO_BPS_REGIME)
+        self.assertIs(spenta["anzianita_nota"], True,
+                      "l'anzianita' era un numero valido: dichiararla ignota e' falso")
+
+        # ② promozione ACCESA ma anzianita' IGNOTA: si dichiara accesa e l'anzianita' ignota
+        ignota = stato_scaglione("non un numero")
+        self.assertIs(ignota["promo_attiva"], True,
+                      "la promozione e' accesa ma la scheda dichiara che e' spenta")
+        self.assertIs(ignota["anzianita_nota"], False,
+                      "l'anzianita' NON e' nota ma la scheda dichiara di saperla: e' la "
+                      "dichiarazione piu' pericolosa, perche' fa sembrare misurato un "
+                      "valore che e' stato messo di ripiego")
+        self.assertIsNone(ignota["giorni_anzianita"],
+                          "se l'anzianita' e' ignota non si inventa un numero di giorni")
+        self.assertEqual(ignota["bps"], LANCIO_BPS_REGIME,
+                         "anzianita' ignota -> regime: non si regala lo 0% per errore")
+
+        # ③ il caso normale: promozione accesa e anzianita' nota, tutt'e due dichiarate
+        normale = stato_scaglione(10)
+        self.assertIs(normale["promo_attiva"], True,
+                      "promozione accesa dichiarata spenta nel percorso normale")
+        self.assertIs(normale["anzianita_nota"], True,
+                      "anzianita' nota dichiarata ignota nel percorso normale")
+        self.assertEqual(normale["giorni_anzianita"], 10,
+                         "l'anzianita' dichiarata non e' quella ricevuta")
+
+
 if __name__ == "__main__":
     unittest.main()

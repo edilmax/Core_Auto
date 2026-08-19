@@ -494,18 +494,22 @@ ordine* — unitari → integrazione → E2E → **mutazione (il Giudice)**. Un 
 **dentro una sessione sola** (D21: a metà contesto si salva e si riparte).
 
 **L'ordine dei blocchi lo decide `rischio × cecità`, non la dimensione.**
-📊 **DOVE SIAMO, rimisurato col censimento il 2026-08-13** (⛔ rimisuralo, non fidarti):
-**8 moduli dei soldi giudicati** · **9 che restano, per 361 punti**. Erano «16 per 516» il
-2026-08-10: quattro sono stati fatti (`fase167`, `fase66`, `fase133`, `fase119`) e **tre sono usciti perché sono codice
+📊 **DOVE SIAMO, rimisurato col censimento il 2026-08-19** (⛔ rimisuralo, non fidarti):
+**11 moduli dei soldi giudicati** · **6 che restano, per 303 punti**. Erano «16 per 516» il
+2026-08-10: sette sono stati fatti (`fase167`, `fase66`, `fase133`, `fase119`, poi il gruppo 2
+il 2026-08-19 — `fase98`, `fase111`, `fase147`) e **tre sono usciti perché sono codice
 morto** (`fase43` 31 · `fase44` 25 · `fase35` 25 = **81 punti che non vanno fatti**).
 ✅ **Col `fase119` il BLOCCO 1 è chiuso**: era l'ultimo dei quattro ciechi.
+✅ **Col gruppo 2 chiuso il 2026-08-19** restano solo i blocchi **3, 4 e 5** (split, payout,
+Stripe): i più grossi, ma anche i **meno ciechi** — `fase85` lo nominano 77 test, `fase87` 59.
+⚠️ E «nominare non è provare»: proprio su quei due il piano avverte che i test li **fingono**.
 La tabella completa, con quanti test nominano ciascuno e il blocco di appartenenza, sta in
 `RIPRENDI_QUI.md` sezione «QUANTO MANCA SUI SOLDI».
 
 | blocco | moduli | punti | perché in questo ordine |
 |---|---|---|---|
 | **1** | ✅ `fase167_credito_single_use` **FATTO 2026-08-11** (11/11 uccisi, 1 difetto vero) · ✅ `fase66_tassa_soggiorno` **FATTO 2026-08-12** (24/24 uccisi, **0 sopravvissuti e 0 equivalenti**, **5 difetti veri**) · ✅ `fase133_split_quote_uguali` **FATTO 2026-08-12** (15/22 uccisi, **0 sopravvissuti sul codice VIVO**, 7 dichiarati su codice morto, **1 difetto vero: memoria senza tetto da rotta pubblica**) · ✅ `fase119_calendario_prezzi` **FATTO 2026-08-13** (17/17 uccisi, **0 sopravvissuti e 0 equivalenti dichiarati**, **3 difetti veri** + 1 introdotto dalla riparazione e ripreso da un test già esistente) | 74, **BLOCCO 1 CHIUSO** | **i quattro più ciechi**: 1, 2, 2 e 2 test li nominano. `fase167` per primo: un difetto lì è **denaro speso due volte** — e infatti ce n'era uno. Su `fase66` ce n'erano **cinque**, tutti che facevano pagare di più all'ospite |
-| **2** | ⛔ `fase43_commissione` **TOLTO: è CODICE MORTO** · `fase98_policy_commissione` · `fase111_cancellazione` · ✅ `fase147_tassa_comunale` **AGGIUNTO: è VIVO e il piano se lo dimenticava** | **58** (18+11+29) | la catena della commissione e dei rimborsi, dove i numeri si incrociano — più la tassa comunale, che è l'altra metà della coppia di `fase66` |
+| **2** | ⛔ `fase43_commissione` **TOLTO: è CODICE MORTO** · ✅ `fase98_policy_commissione` **FATTO 2026-08-19** (18/18 uccisi, **0 sopravvissuti e 0 equivalenti**, **8 difetti veri**) · ✅ `fase111_cancellazione` **FATTO 2026-08-19** (11/13 uccisi, **3 difetti veri**, ⚠️ 2 sopravvissuti NON dichiarati equivalenti per scelta) · ✅ `fase147_tassa_comunale` **FATTO 2026-08-19** (29/29 uccisi, **0 sopravvissuti e 0 equivalenti**, **14 difetti veri**) | **58** (18+11+29), **BLOCCO 2 CHIUSO** | la catena della commissione e dei rimborsi, dove i numeri si incrociano — più la tassa comunale, che è l'altra metà della coppia di `fase66`. 💡 **22 difetti veri in tre moduli**, e quasi nessuno nell'aritmetica: stavano **ai confini** (un booleano letto come un numero) e nei **rami d'errore** (operazioni fallite che dichiaravano successo) |
 | **3** | `fase65_split_payment` · ✅ `fase133` **FATTO 2026-08-12** (era elencato nel Blocco 1) · `fase101_stripe_connect` | 109 | i soldi che si dividono e quelli che escono verso l'host |
 | **4** | `fase162_pagamenti_pendenti` · `fase131_payout_dashboard` | 153 | i più grossi ma i **meno ciechi** (13 e 11 test): ultimi apposta |
 | **5** | `fase85_pagamenti_stripe` · `fase87_stripe_webhook` | 41 | ⚠️ **sembrano** i più coperti (77 e 59 test) ma quei test li **fingono**: nominare non è provare |
@@ -769,6 +773,138 @@ un salvataggio di sei giorni prima **credendo di aver fatto quello di oggi**, e 
 giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
+
+### ⚖️🔴 2026-08-19 (11) — **IL VERO BLOCCO AL LANCIO NON È UN TEST: È LA RITENUTA DEL 21%**
+
+⛔⛔ **LA COSA PIÙ IMPORTANTE TROVATA IN TUTTA LA GIORNATA, e non l'ha trovata uno strumento:
+è nata da una frase del fondatore.** Discutendo la tassa di soggiorno ha detto: *«noi non
+c'entriamo niente, la dichiara l'host e se dichiara il falso è un problema suo»*. Ricerca fatta
+(D25), e il risultato è **tre fatti misurati, non opinioni**.
+
+**① LA LEGGE GLI DÀ RAGIONE, MA SOLO SU CHI DICHIARA.** Italia, `DL 34/2020 art. 180`: dal
+19-05-2020 il **gestore della struttura è il «responsabile del pagamento»** dell'imposta di
+soggiorno, con rivalsa sull'ospite; e il mancato versamento **non è più peculato** (Cass. VI
+36317/2020, *abolitio criminis*). Non è la piattaforma il debitore.
+
+**② MA IL CODICE OGGI FA IL CONTRARIO — misurato, non dedotto.**
+```
+fase59_concierge.py:341    totale = guest + tassa        <- l'ospite la paga a NOI
+fase83_server.py:8060      all'host si paga netto_host_cents  <- la tassa NON e' dentro
+fase177_financial_controller.py:67
+    "tassa_incassata": ("cassa_piattaforma", "debiti_vs_comune")   # tassa TRATTENUTA
+```
+La tassa **resta nella nostra cassa** come *debito verso il Comune*: la contabilità dichiara che
+il debitore siamo **noi**. ⚠️ Oggi non si vede perché **nessun host l'ha impostata**: vale
+**0 centesimi** per ogni prenotazione (misurato). Il giorno del primo host che la mette,
+comincia a fermarsi denaro pubblico nel nostro conto.
+✅ **Due cose sono già giuste:** la tassa la **dichiara l'host dal pannello** (*«la dichiari TU
+per la tua città»*, `deploy/host.html`), e **la commissione non si calcola mai sulla tassa** —
+prendere una percentuale su un'imposta pubblica sarebbe indifendibile.
+
+**③ ⛔ E «gliela giriamo, sono affari suoi» NON CI TUTELA. Due obblighi tornano su di noi:**
+- 🇫🇷 **Francia:** una piattaforma **intermediaria di pagamento** per locatori non professionisti
+  **deve per legge** riscuotere la *taxe de séjour* e versarla al Comune **due volte l'anno**
+  (30 giugno / 31 dicembre) con dichiarazione — `art. L2333-34 CGCT`. Sanzioni **750–12.500 €**
+  per dichiarazione mancante, **150 € per errore** fino a 12.500 €.
+- 🇮🇹 **Italia, e pesa più della tassa di soggiorno:** chi **incassa i canoni** delle locazioni
+  brevi è **sostituto d'imposta** → **ritenuta del 21%** all'atto del versamento all'host,
+  **comunicazione all'Agenzia delle Entrate** entro il 30 giugno dell'anno successivo,
+  **Certificazione Unica**. Noi incassiamo via Stripe e giriamo all'host: siamo esattamente in
+  quella casella (`art. 4 DL 50/2017`; guida AdE aggiornata ad aprile 2026).
+
+**🔴 LA CONCLUSIONE, ED È UN CAMBIO DI PRIORITÀ.** *«È legale quello che facciamo?»* — **oggi sì,
+perché non facciamo ancora niente**: 0 annunci, 0 host, 0 canoni incassati, nessun obbligo
+scattato. **Scatta col primo host vero che incassa** — che è il prossimo passo di business.
+E ciò che scatta per primo **non è la tassa di soggiorno: è la ritenuta del 21%**.
+⛔ **Quindi il blocco al lancio non è un collaudo che manca: è un commercialista che manca**, e
+serve **prima** del primo host italiano, non dopo. È il punto in cui le regole del progetto
+dicono da sempre che serve un professionista vero.
+
+⚠️ **LIMITE DICHIARATO:** non sono un avvocato né un commercialista. Qui ci sono **le norme e le
+fonti**, non un parere legale — e la differenza va tenuta.
+**Fonti:** `legifrance.gouv.fr` art. L2333-34 CGCT · `agenziaentrate.gov.it`, *Locazioni brevi:
+disciplina fiscale e regole per gli intermediari*, aprile 2026 · `comune.venezia.it`,
+responsabile d'imposta dal 19-05-2020 · `sistemapenale.it`, Cass. VI 36317/2020 ·
+`collectivites-locales.gouv.fr`, taxe de séjour (tariffa proporzionale 1–5% **per persona**).
+
+**E la ricerca ha risposto anche alla domanda fiscale lasciata aperta dal punto (10):** i modelli
+nel mondo sono **due e incompatibili** — **per persona con esenzioni** (Italia: minori, soglia
+diversa per comune, 10/14/18 · Francia: 1–5% **del costo per persona**, minori sempre esenti ·
+Giappone: fisso a persona) contro **percentuale sul prezzo della stanza** (Amsterdam 12,5% ·
+*Transient Occupancy Tax* USA, dove le esenzioni valgono per il **soggiorno**, non per l'ospite).
+⛔ Il nostro codice applica **sempre** il secondo: dove vale il primo, **farebbe pagare la
+percentuale anche ai minori esenti**. Le due formule coincidono solo quando gli esenti sono zero
+— ed è per questo che finora non se n'è accorto nessuno.
+
+### 🏛️ 2026-08-19 (10) — **`fase147_tassa_comunale`: 14 punti scoperti su 29, e sono TUTTI nei rami d'errore**
+
+Il modulo più cieco del gruppo 2. ⛔ **E non è una tassa nostra**: è denaro che incassiamo
+**per conto del Comune** e che gli dobbiamo versare — se lo contiamo male non perdiamo un
+margine, ne dobbiamo di più o di meno a un ente pubblico, e la differenza la mettiamo noi.
+
+**Il giro: 29 punti · 15 uccisi · 14 SOPRAVVISSUTI → dopo le guardie: 29 su 29, 0 sopravvissuti.**
+
+💡 **I 14 dicevano tutti la stessa cosa:** erano scoperti i **rami d'errore** e i **valori
+restituiti**, cioè il codice che risponde *«è andata bene»* o *«è andata male»*. È la **D19** in
+forma pura — *il codice difensivo è indistinguibile da codice morto finché qualcuno non
+costruisce a mano lo stato che lo esegue*. Costruito: un database che fallisce a ogni comando.
+
+**① Il tetto assente azzerava la tassa.** `cap_persona_cents` è **facoltativo** e quasi nessun
+comune lo mette. Col confine spostato di un passo, un comune **senza** tetto finiva in
+`min(tassa, 0 × paganti)` = **zero**: tassa di soggiorno azzerata per tutti i comuni senza
+massimale, e il conto torna — è semplicemente vuoto.
+**② Sei rami `except` dichiaravano successo.** Rovesciati i `return`: `registra_riscossione`
+fallita ma dichiarata riuscita (la tassa non è nel registro e noi crediamo di averla incassata)
+· `storna` fallita ma dichiarata riuscita — e il commento accanto lo dice già:
+*«tassa sovra-contata al Comune (a nostro carico)»* · `imposta_regola` fallita ma dichiarata
+riuscita.
+**③ Tre `exc_info=True` spenti.** È la lezione del 2026-08-04: `exc_info=False` produce **False,
+non None**. Senza traccia, nel registro resta *«errore DB»* e chi ripara alle tre di notte non
+sa quale, dove, perché (regola ferrea 9, applicata dove serve di più: il ramo che si esegue
+**solo** quando qualcosa è già andato storto).
+**④ Lo storno accettava identificativi storti.** Lo storno pianta una **lapide permanente**:
+allentato il controllo, una stringa vuota o un numero passavano e si piantava la lapide su un
+identificativo inesistente — bloccando per sempre la riscossione di qualcos'altro.
+**⑤ Il registro in memoria non avrebbe più retto i thread**: è il banco su cui girano le prove
+di concorrenza, quelle che scoprirono le **107 violazioni** della race webhook/cancellazione.
+Spento quel flag, quelle prove smetterebbero di girare e nessuno lo saprebbe.
+
+⚠️ **UNA DOMANDA APERTA, ED È FISCALE, NON TECNICA.** L'ultimo punto scoperto riguardava questo
+caso: *se **tutti** gli ospiti sono esenti (0 paganti) e il comune applica una tassa a
+**percentuale sull'imponibile**, quella quota è ancora dovuta?* Oggi il codice dice **sì** (il
+tetto è *per persona*, e con zero persone non c'è tetto da applicare). Ho **fissato il
+comportamento attuale con un test**, dichiarando nel test stesso che **non sto affermando che
+sia giusto**: la risposta cambia da comune a comune e va chiesta a un commercialista. Così il
+punto smette di essere cieco, e il giorno in cui qualcuno cambia quella riga **se ne accorge
+qualcuno** invece di scoprirlo dal conto del Comune.
+
+### 💰 2026-08-19 (9) — **`fase98_policy_commissione`: 8 punti scoperti su 18 → 18 su 18 uccisi**
+
+Il modulo che decide **quanto paga l'host**: la cifra su cui un host decide se fidarsi di noi.
+⛔ Nessuno degli otto stava nell'aritmetica — quella era già sorvegliata bene. Stavano in due
+posti che nessuno guardava.
+
+**① I due confini della regola ordinale, invisibili di serie.** «I primi N host pagano meno» è
+**neutra** con i valori di serie (fondatori 10% = dopo 10%), quindi qualunque sbaglio ai suoi
+confini **non si vede**: i due numeri coincidono. Ma la funzione accetta i valori dal chiamante,
+e con uno sconto vero i confini contano: il Giudice ha spostato di **un passo** sia il confine
+di sotto (il **primo** host perde lo sconto) sia quello di sopra (il **millesimo** lo perde), e
+nessun test se n'è accorto.
+**② Un booleano regalava la promozione** — lo stesso difetto di `fase111`, in un altro modulo.
+`True` vale 1: un host la cui anzianità arriva come booleano verrebbe letto come **1 giorno
+dalla registrazione**, cioè dentro la finestra promozionale → commissione **0%** invece del
+**10% a regime**, su ogni sua prenotazione, per sempre. ⚠️ E la regola è scritta nel docstring
+del modulo stesso: *«anzianità ignota → tariffa a regime, non si regala lo 0% per errore»*. Un
+booleano **è** un'anzianità ignota: non è un numero di giorni, è un interruttore.
+**③ Cinque campi che dichiarano la verità all'host non erano sorvegliati.** `stato_scaglione`
+non restituisce solo un numero: restituisce anche **cosa dichiara di sapere** — se la promozione
+è attiva e se l'anzianità è nota. Sono i campi da cui un pannello decide cosa scrivere all'host.
+Rovesciati uno per uno su cinque righe diverse, **nessun test se n'è accorto**: guardavamo il
+numero e mai la dichiarazione accanto. 💡 **Un numero giusto con una dichiarazione falsa è
+comunque una bugia**: l'host legge «promozione attiva» quando non lo è, o «anzianità nota»
+quando il sistema non sa da quanto è iscritto — e su quella riga decide se fidarsi.
+
+🏁 **`fase98`: 18 su 18 uccisi, 0 sopravvissuti, 0 equivalenti dichiarati.**
 
 ### 💸 2026-08-19 (8) — **`fase111_cancellazione` DAL GIUDICE: 3 difetti veri, e il peggiore l'ha trovato una GUARDIA, non un mutante**
 
