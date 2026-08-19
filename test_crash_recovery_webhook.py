@@ -89,6 +89,11 @@ class TestCrashRecoveryWebhook(unittest.TestCase):
         return self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
                                {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
 
+    # ⛔ IL PAYOUT ATTESO E' `netto + tassa` DAL 2026-08-19 (decisione del fondatore: «la
+    # tassa passa all'host»). Prima la tassa restava nella nostra cassa e il libro
+    # contabile dichiarava un debito verso il Comune che non ci compete: in Italia il
+    # responsabile del pagamento e' il gestore della struttura (DL 34/2020 art. 180), e la
+    # responsabilita' segue i soldi. Ora l'host la riceve insieme al resto e la versa lui.
     def test_retry_sana_tassa_e_payout_dopo_crash(self):
         # SIMULA CRASH: il primo handler fa solo il CAS 'pagato' e muore
         self.sis.pagamenti_pendenti.conferma(self.rif)
@@ -101,7 +106,8 @@ class TestCrashRecoveryWebhook(unittest.TestCase):
         self.assertEqual(s, 200)
         self.assertEqual(self.sis.tassa_comunale.totale_riscosso("Roma"), self.tassa,
                          "tassa non sanata dal retry")
-        self.assertEqual(self.sis.payout.riepilogo(self.hid)["EUR"]["maturato"], 32776,
+        self.assertEqual(self.sis.payout.riepilogo(self.hid)["EUR"]["maturato"],
+                         32776 + self.tassa,
                          "payout non maturato dal retry")
 
     def test_webhook_normale_piu_retry_non_raddoppia(self):
@@ -111,7 +117,8 @@ class TestCrashRecoveryWebhook(unittest.TestCase):
         self._webhook(self.rif)
         self.assertEqual(self.sis.tassa_comunale.totale_riscosso("Roma"), self.tassa,
                          "retry ha raddoppiato la tassa")
-        self.assertEqual(self.sis.payout.riepilogo(self.hid)["EUR"]["maturato"], 32776,
+        self.assertEqual(self.sis.payout.riepilogo(self.hid)["EUR"]["maturato"],
+                         32776 + self.tassa,
                          "retry ha alterato il payout")
 
     def test_retry_non_risuscita_una_cancellata(self):

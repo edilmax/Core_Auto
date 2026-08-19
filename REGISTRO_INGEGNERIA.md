@@ -774,6 +774,77 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🌐 2026-08-19 (13) — **UN MIRROR UBUNTU GIÙ TENEVA FERMO IL CANCELLO**
+
+Il cancello della richiesta **#79** è andato **rosso**, e non ho unito. ⛔ Ma il rosso non era
+del lavoro: `money-smoke`, `full-suite`, `mutazione`, `copertura`, l'**immagine di produzione**
+e CodeQL erano tutti `success`. Era fallito `accessibilita`, **due tentativi su due**:
+```
+Failed to install browsers / Installation process exited with code: 100
+Ign: http://azure.archive.ubuntu.com/ubuntu noble InRelease     <- il mirror era GIU'
+```
+Codice **100** è di **apt**. Rilanciato una volta (poteva essere un intoppo); caduto di nuovo →
+**non è un intoppo**, e a quel punto si ripara la causa invece di rilanciare all'infinito.
+
+**LA CAUSA È UNA CONFUSIONE FRA DUE COSE DIVERSE.** Il browser si scarica dalla **CDN di
+Playwright**; `--with-deps` invece reinstalla via **apt** le librerie di sistema di Chromium —
+che nell'immagine dei runner **ci sono già**. Legate in un comando solo, un guasto del mirror
+Ubuntu diventa un guasto del **nostro** prodotto: mezz'ora di cancello rosso su un lavoro sui
+soldi che era interamente verde.
+
+✅ **Riparato in tutt'e due i job che installano il browser** (`accessibilita` e `browser`: un
+difetto riparato in un posto solo torna): due tentativi con apt, e se il mirror non risponde si
+scarica **il solo browser, senza apt**. ⛔ L'ultima riga **non è protetta**: se il browser
+davvero non si scarica il job è rosso — ed è giusto, perché senza browser non si è guardato
+niente. ⛔ E niente `continue-on-error`: questi job stanno **nel gate**, e quel flag li farebbe
+risultare `success` anche falliti — una guardia sorella mi ci aveva già preso poche ore prima.
+
+Guardia: `TestIlBrowserNonDIPENDEDaAPT`, provata togliendo il ripiego (2 job colpevoli su 2).
+
+### 💶 2026-08-19 (12) — **LA TASSA DI SOGGIORNO PASSA ALL'HOST** (decisione del fondatore, autorizzata)
+
+> *«la tassa passa all'host, autorizzato»* — 2026-08-19. Chiude il difetto descritto nella voce
+> **(11)**: l'ospite pagava soggiorno + tassa, all'host andava **solo** il soggiorno meno le
+> trattenute, e la tassa **restava nella nostra cassa**.
+
+**PERCHÉ, ed è legge prima che codice.** In Italia il `DL 34/2020 art. 180` fa del **gestore
+della struttura** il «responsabile del pagamento» dell'imposta di soggiorno. Ma **la
+responsabilità segue i soldi**: tenendo la tassa in cassa, il debitore diventavamo noi — verso
+**ogni** Comune del mondo in cui abbiamo un alloggio. Ora l'host la riceve insieme al resto e la
+versa lui: **restiamo un tubo, non un debitore**.
+
+⚠️ **E NON SI FONDE COL SUO GUADAGNO — è la parte che conta.** `netto_host_cents` resta quello
+che l'host **guadagna** dal soggiorno (base di commissione e report **DAC7**); la tassa è denaro
+**in transito**. Sommarle in una voce sola avrebbe dichiarato al Fisco **un reddito che l'host
+non ha**. Sono due fatti diversi e restano due numeri diversi: si somma solo ciò che gli si
+**bonifica**.
+
+**COSA È CAMBIATO, in un posto solo.** Nasce `fase83_server._da_versare_host(corpo)` = netto +
+tassa, usata nei **quattro** punti che pagano l'host (payout alla conferma · payout dopo il
+webhook · cassaforte alla conferma · cassaforte dopo il webhook). ⛔ Scritta quattro volte, la
+quinta sarebbe rimasta indietro: è la malattia che il progetto ha già pagato sei volte in un
+giorno.
+
+**E IL LIBRO CONTABILE AVEVA DUE DIFETTI IN UNA RIGA SOLA**, tutt'e due invisibili finché la
+tassa vale zero:
+```
+prima:  "tassa_incassata": ("cassa_piattaforma", "debiti_vs_comune")
+dopo:   "tassa_incassata": ("debiti_vs_host",    "debiti_vs_host")
+```
+① dichiarava un **debito verso il Comune** che non ci compete · ② **contava la cassa due volte**:
+la riga `incasso` scrive il **totale** (tassa compresa), e questa la riscriveva in cassa. Su un
+incasso di 100 con 20 di tassa il libro dichiarava **120 in cassa** mentre sul conto ne erano
+arrivati **100**. Ora è un movimento **dentro** ciò che dobbiamo all'host: lascia la traccia
+(quanto di quell'incasso è tassa — proprio ciò che il fondatore chiede di avere registrato)
+senza spostare un centesimo che non si è mosso.
+
+**LE PROVE.** Tre guardie nuove **viste rosse prima** (`TestLaTassaDiSoggiornoVAALLHOST`): quello
+che matura per l'host contiene la tassa · la cassaforte la trattiene fino al check-in · il libro
+non dichiara più un debito verso il Comune né tocca la cassa. Poi **13 asserzioni** in 5 file
+hanno detto che il requisito era cambiato, e sono state aggiornate **con la ragione scritta**,
+mai per far tornare il verde: dove serviva, il test ora distingue `NETTO_HOST` (quello che
+guadagna) da `VERSATO_HOST` (quello che gli bonifichiamo). **188 test del blocco soldi verdi.**
+
 ### ⚖️🔴 2026-08-19 (11) — **IL VERO BLOCCO AL LANCIO NON È UN TEST: È LA RITENUTA DEL 21%**
 
 ⛔⛔ **LA COSA PIÙ IMPORTANTE TROVATA IN TUTTA LA GIORNATA, e non l'ha trovata uno strumento:

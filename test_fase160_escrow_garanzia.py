@@ -157,7 +157,7 @@ class TestCassaforteNonApertaDeveGRIDARE(unittest.TestCase):
         sis.garanzia = _CassaforteRotta()
 
         with self.assertLogs("core_auto", level="ERROR") as reg:
-            r._apri_garanzia("rif-x", 17000, "casa", "2026-11-10")
+            r._apri_garanzia("rif-x", {"netto_host_cents": 17000}, "casa", "2026-11-10")
         unito = " ".join(reg.output).lower()
         self.assertIn("garanzia", unito,
                       "il messaggio non dice che e' la CASSAFORTE a non essersi aperta: %r"
@@ -180,7 +180,7 @@ class TestCassaforteNonApertaDeveGRIDARE(unittest.TestCase):
                 if record.levelno >= logging.ERROR:
                     catturati.append(record.getMessage())
         h = _Spia(); reg.addHandler(h); self.addCleanup(lambda: reg.removeHandler(h))
-        r._apri_garanzia("rif-ok", 17000, "casa", "2026-11-10")
+        r._apri_garanzia("rif-ok", {"netto_host_cents": 17000}, "casa", "2026-11-10")
         self.assertEqual(catturati, [], "grida su un'apertura riuscita: %r" % (catturati,))
         self.assertEqual((sis.garanzia.stato("rif-ok") or {}).get("stato"), "in_garanzia",
                          "setup: la cassaforte doveva aprirsi davvero")

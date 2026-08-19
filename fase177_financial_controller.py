@@ -64,8 +64,29 @@ _CONTI_MOVIMENTO = {
     "payout_host":     ("debiti_vs_host", "cassa_piattaforma"),      # esce verso l'host (auto)
     "payout_manuale":  ("debiti_vs_host", "cassa_piattaforma"),      # transfer fallito -> manuale
     "rimborso":        ("debiti_vs_ospite", "cassa_piattaforma"),    # esce verso l'ospite
-    "tassa_incassata": ("cassa_piattaforma", "debiti_vs_comune"),    # quota tassa trattenuta
-    "tassa_stornata":  ("debiti_vs_comune", "cassa_piattaforma"),    # tassa restituita
+    # ── LA TASSA DI SOGGIORNO PASSA ALL'HOST (decisione del fondatore, 2026-08-19) ──────
+    # Prima erano ("cassa_piattaforma", "debiti_vs_comune") e ("debiti_vs_comune",
+    # "cassa_piattaforma"): DUE difetti in una riga sola, tutt'e due invisibili finche' la
+    # tassa vale zero -- e vale zero perche' nessun host l'ha ancora impostata.
+    #
+    # ⛔ (1) DICHIARAVANO UN DEBITO VERSO IL COMUNE CHE NON E' NOSTRO. In Italia il
+    # `DL 34/2020 art. 180` fa del **gestore della struttura** il «responsabile del
+    # pagamento» dell'imposta di soggiorno. Ma la responsabilita' segue i soldi: tenendo la
+    # tassa in cassa, il debitore diventavamo noi -- verso OGNI Comune del mondo in cui
+    # abbiamo un alloggio. Ora la tassa viene versata all'host insieme al resto
+    # (`fase83_server._da_versare_host`) e la versa lui al suo Comune: restiamo un tubo.
+    #
+    # ⛔ (2) CONTAVANO LA CASSA DUE VOLTE. La riga `incasso` scrive il **totale**, tassa
+    # compresa; questa la riscriveva in cassa una seconda volta. Su un incasso di 100 con 20
+    # di tassa il libro dichiarava **120 in cassa** mentre sul conto ne erano arrivati 100.
+    #
+    # Ora sono un movimento DENTRO cio' che dobbiamo all'host: lasciano la traccia -- quanto
+    # di quell'incasso e' tassa, che e' esattamente cio' che il fondatore chiede di avere
+    # registrato -- senza spostare un centesimo che non si e' mosso. Il prospetto fiscale
+    # continua a funzionare: legge il TIPO del movimento (`tassa_incassata`) per togliere la
+    # tassa dai nostri ricavi, non i conti.
+    "tassa_incassata": ("debiti_vs_host", "debiti_vs_host"),   # memoria: e' denaro dell'host
+    "tassa_stornata":  ("debiti_vs_host", "debiti_vs_host"),   # memoria: rimborsata con lui
     "commissione":     ("debiti_vs_host", "ricavi_commissioni"),     # cio' che tratteniamo all'host
     # ── 2026-08-17: i tre che mancavano, e senza i quali il libro dice il falso ──
     # `costo_gateway`: la commissione che il gestore TRATTIENE sull'incasso. Prima l'`incasso`

@@ -514,11 +514,30 @@ jobs:
       # `timeout` taglia l'attesa a 5 minuti -- il triplo abbondante del tempo vero -- e si
       # riprova UNA volta. ⛔ Niente `|| true`: se fallisce anche il secondo tentativo il job
       # e' rosso, ed e' giusto, perche' senza browser non si e' guardato niente.
-      - name: Browser Chromium (attesa limitata + un secondo tentativo)
+      # ⛔ IL BROWSER SI SCARICA DALLA CDN DI PLAYWRIGHT; `--with-deps` PASSA DA APT.
+      # Sono due cose diverse e vanno separate, perche' falliscono per motivi diversi:
+      #   · il BROWSER e' il requisito vero -- senza, non si e' guardato niente -> ROSSO;
+      #   · `--with-deps` reinstalla le librerie di sistema di Chromium, che nell'immagine
+      #     dei runner ci sono GIA'. Quando il mirror Ubuntu non risponde, quel passo
+      #     trascina giu' un job che col prodotto non c'entra.
+      # Misurato il 2026-08-19 sulla richiesta #79: DUE tentativi su due falliti con
+      # `Failed to install browsers / exited with code: 100`, e nel registro
+      # `Ign: http://azure.archive.ubuntu.com/ubuntu noble InRelease` -- il mirror era giu'.
+      # Il cancello e' rimasto rosso per mezz'ora su un lavoro sui soldi che era tutto verde
+      # (money-smoke, full-suite, mutazione, copertura, immagine: tutti success).
+      # ⛔ NIENTE `continue-on-error`: questo job STA NEL GATE, e quel flag lo farebbe
+      # risultare `success` anche fallito (mi ci ha gia' preso una guardia oggi). Il ripiego
+      # e' DENTRO il comando, e l'ultima riga NON e' protetta: se il browser non si scarica
+      # il passo muore, il job e' rosso, ed e' giusto.
+      - name: Browser Chromium (attesa limitata, secondo tentativo, ripiego senza apt)
         run: |
           timeout 300 npx playwright install --with-deps chromium || {
-            echo "primo tentativo scaduto o fallito: riprovo una volta"
+            echo "primo tentativo fallito: riprovo una volta"
             timeout 300 npx playwright install --with-deps chromium
+          } || {
+            echo "ATTENZIONE: apt non risponde (mirror Ubuntu giu'). Le librerie di sistema"
+            echo "sono gia' nell'immagine del runner: scarico il SOLO browser, senza apt."
+            timeout 300 npx playwright install chromium
           }
       - name: Audit WCAG statico (blocca su critical/serious)
         run: node collaudi/a11y_static.js
@@ -619,11 +638,30 @@ jobs:
       # piantato 19 min 42 s e ha mangiato il tetto di 20 minuti del job, che e' finito
       # `cancelled` senza aver guardato NIENTE -- mentre l'identico comando nel job vicino
       # girava in 1 min 25 s. Un giro perso per un download, non per il prodotto.
-      - name: Browser Chromium (attesa limitata + un secondo tentativo)
+      # ⛔ IL BROWSER SI SCARICA DALLA CDN DI PLAYWRIGHT; `--with-deps` PASSA DA APT.
+      # Sono due cose diverse e vanno separate, perche' falliscono per motivi diversi:
+      #   · il BROWSER e' il requisito vero -- senza, non si e' guardato niente -> ROSSO;
+      #   · `--with-deps` reinstalla le librerie di sistema di Chromium, che nell'immagine
+      #     dei runner ci sono GIA'. Quando il mirror Ubuntu non risponde, quel passo
+      #     trascina giu' un job che col prodotto non c'entra.
+      # Misurato il 2026-08-19 sulla richiesta #79: DUE tentativi su due falliti con
+      # `Failed to install browsers / exited with code: 100`, e nel registro
+      # `Ign: http://azure.archive.ubuntu.com/ubuntu noble InRelease` -- il mirror era giu'.
+      # Il cancello e' rimasto rosso per mezz'ora su un lavoro sui soldi che era tutto verde
+      # (money-smoke, full-suite, mutazione, copertura, immagine: tutti success).
+      # ⛔ NIENTE `continue-on-error`: questo job STA NEL GATE, e quel flag lo farebbe
+      # risultare `success` anche fallito (mi ci ha gia' preso una guardia oggi). Il ripiego
+      # e' DENTRO il comando, e l'ultima riga NON e' protetta: se il browser non si scarica
+      # il passo muore, il job e' rosso, ed e' giusto.
+      - name: Browser Chromium (attesa limitata, secondo tentativo, ripiego senza apt)
         run: |
           timeout 300 npx playwright install --with-deps chromium || {
-            echo "primo tentativo scaduto o fallito: riprovo una volta"
+            echo "primo tentativo fallito: riprovo una volta"
             timeout 300 npx playwright install --with-deps chromium
+          } || {
+            echo "ATTENZIONE: apt non risponde (mirror Ubuntu giu'). Le librerie di sistema"
+            echo "sono gia' nell'immagine del runner: scarico il SOLO browser, senza apt."
+            timeout 300 npx playwright install chromium
           }
 
       # Il server visivo si spegne DA SOLO dopo VISIVO_TTL secondi: anche se un passo

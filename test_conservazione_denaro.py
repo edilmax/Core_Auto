@@ -307,5 +307,118 @@ class TestConservazioneDenaro(unittest.TestCase):
                              "escrow: cent perso su importo %d" % imp)
 
 
+class TestLaTassaDiSoggiornoVAALLHOST(unittest.TestCase):
+    """💸 DECISIONE DEL FONDATORE, 2026-08-19: **«la tassa passa all'host, autorizzato»**.
+
+    ⛔ PRIMA DI QUESTA DECISIONE LA MACCHINA FACEVA IL CONTRARIO, ed era misurabile:
+    l'ospite pagava `soggiorno + tassa`, all'host andava **solo** il soggiorno meno le
+    trattenute, e la tassa **restava nella nostra cassa** -- il libro contabile la
+    registrava come `debiti_vs_comune`, cioe' dichiarava che **il debitore verso il Comune
+    eravamo noi**.
+
+    **Perche' e' sbagliato, ed e' una questione di legge prima che di codice.** In Italia il
+    `DL 34/2020 art. 180` fa del **gestore della struttura** il «responsabile del pagamento»
+    dell'imposta di soggiorno: non la piattaforma. Ma la responsabilita' segue i soldi: se la
+    tassa resta nella nostra cassa, il debitore diventiamo noi -- verso **ogni** Comune del
+    mondo in cui abbiamo un alloggio. Facendola passare all'host restiamo un **tubo**, non un
+    debitore: lui la riceve insieme al resto e la versa al suo Comune.
+
+    ⚠️ **E NON SI FONDE COL SUO GUADAGNO.** `netto_host_cents` resta quello che l'host
+    **guadagna** dal soggiorno -- e' la cifra su cui si calcolano commissione e report DAC7 --
+    mentre la tassa e' denaro **in transito** che lui deve girare al Comune. Sommarle
+    farebbe dichiarare al Fisco un reddito che l'host non ha. Sono due fatti diversi e
+    restano due numeri diversi: qui si controlla solo che **quello che gli VERSIAMO** li
+    contenga tutti e due.
+    """
+
+    class _Recorder:
+        """Finto registro dei payout: annota quanto gli viene chiesto di maturare."""
+        def __init__(self):
+            self.maturati = []
+            self.in_attesa = []
+
+        def registra_maturato(self, rif, host, importo, valuta):
+            self.maturati.append(importo)
+            return True
+
+        def registra_in_attesa(self, rif, host, importo, valuta):
+            self.in_attesa.append(importo)
+            return True
+
+    class _Cassaforte:
+        """Finta cassaforte di garanzia: annota l'importo trattenuto fino al check-in."""
+        def __init__(self):
+            self.aperti = []
+
+        def apri(self, ref, importo, alloggio_id=None, ora_checkin_ts=None):
+            self.aperti.append(importo)
+            return True
+
+    def _router(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"S" * 32,
+            db_catalogo=d + "/c.db", db_inventario=d + "/i.db"))
+        return sis, crea_router(sis)
+
+    def test_all_host_versiamo_il_suo_netto_PIU_la_tassa(self):
+        """⛔ IL CUORE. Quello che maturiamo per l'host deve contenere anche la tassa: e'
+        denaro suo in transito, non nostro."""
+        sis, r = self._router()
+        registro = self._Recorder()
+        sis.payout = registro
+        sis.catalogo.host_di_alloggio = lambda a: "host-1"
+        corpo = {"netto_host_cents": 8000, "tassa_soggiorno_cents": 2000,
+                 "valuta": "EUR", "commissione_cents": 1000}
+        r._registra_payout("REF-TASSA", "villa", corpo)
+        self.assertEqual(
+            registro.maturati, [10000],
+            "all'host stiamo versando %r invece di 10000 (8000 suoi + 2000 di tassa da "
+            "girare al Comune). Se la tassa non gli arriva, resta nella NOSTRA cassa e il "
+            "debitore verso il Comune diventiamo noi" % (registro.maturati,))
+
+    def test_anche_la_CASSAFORTE_trattiene_la_tassa_fino_al_check_in(self):
+        """La cassaforte di garanzia trattiene i soldi dell'host fino al check-in, e poi li
+        libera. Se la tassa non entra li' dentro, all'host non arrivera' mai: la cassaforte
+        e' il posto da cui il payout esce davvero."""
+        sis, r = self._router()
+        cassaforte = self._Cassaforte()
+        sis.garanzia = cassaforte
+        r._apri_garanzia("REF-TASSA", {"netto_host_cents": 8000,
+                                       "tassa_soggiorno_cents": 2000}, "villa", "2099-03-05")
+        self.assertEqual(
+            cassaforte.aperti, [10000],
+            "nella cassaforte sono entrati %r invece di 10000: la tassa non e' trattenuta "
+            "insieme al resto, quindi non uscira' mai verso l'host" % (cassaforte.aperti,))
+
+    def test_il_LIBRO_non_dichiara_piu_un_debito_verso_il_COMUNE(self):
+        """⛔ E il libro contabile deve dire la stessa cosa del denaro, se no la contabilita'
+        racconta un'altra azienda.
+
+        Due difetti in una riga sola, tutt'e due invisibili finche' la tassa vale zero:
+          · dichiarava un **debito verso il Comune** che dopo questa decisione non esiste
+            piu' (la tassa la deve l'host, e noi gliela abbiamo girata);
+          · e la registrava di nuovo in **cassa**, che era gia' stata accreditata dalla riga
+            `incasso` -- quella scrive il **totale**, tassa compresa. Su un incasso di 100
+            con 20 di tassa il libro dichiarava **120 in cassa** mentre sul conto ne erano
+            arrivati 100.
+        Ora e' un movimento **dentro** cio' che dobbiamo all'host: lascia la traccia (quanto
+        di quell'incasso e' tassa) senza spostare un centesimo che non si e' mosso.
+        """
+        from fase177_financial_controller import _CONTI_MOVIMENTO
+        for tipo in ("tassa_incassata", "tassa_stornata"):
+            dare, avere = _CONTI_MOVIMENTO[tipo]
+            self.assertNotIn(
+                "debiti_vs_comune", (dare, avere),
+                "%s dichiara ancora un debito verso il Comune: dopo la decisione del "
+                "2026-08-19 la tassa la versa l'host, non noi" % tipo)
+            self.assertNotIn(
+                "cassa_piattaforma", (dare, avere),
+                "%s tocca la cassa, ma quel denaro e' gia' stato contato dalla riga "
+                "`incasso` (che scrive il TOTALE, tassa compresa): cosi' la cassa risulta "
+                "piu' piena di quanto sia davvero" % tipo)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

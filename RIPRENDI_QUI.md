@@ -11,6 +11,52 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🌐 2026-08-19 (40) — **UN MIRROR UBUNTU GIÙ TENEVA FERMO IL CANCELLO**
+
+> Il cancello della richiesta **#79** è andato rosso e **non ho unito**. Ma il rosso non era
+> del lavoro: money-smoke, full-suite, mutazione, copertura, immagine e CodeQL tutti verdi.
+> ```
+> accessibilita, DUE tentativi su due:
+>   Failed to install browsers / Installation process exited with code: 100
+>   Ign: http://azure.archive.ubuntu.com/ubuntu noble InRelease   <- mirror GIU'
+> ```
+> ⛔ **Causa:** il browser si scarica dalla CDN di Playwright, `--with-deps` invece passa da
+> **apt** per librerie che nell'immagine dei runner **ci sono già**. Legati in un comando
+> solo, un guasto del mirror Ubuntu diventa un guasto del nostro prodotto.
+> ✅ Riparato in **tutt'e due** i job che installano il browser: due tentativi con apt, poi
+> ripiego che scarica **il solo browser**. L'ultima riga non è protetta (senza browser il job
+> è rosso, ed è giusto) e niente `continue-on-error` — questi job stanno **nel gate**.
+> Guardia: `TestIlBrowserNonDIPENDEDaAPT`, provata togliendo il ripiego.
+> 💡 Rilanciato **una** volta perché poteva essere un intoppo; caduto di nuovo → si ripara la
+> causa, non si rilancia all'infinito.
+
+## 💶 2026-08-19 (39) — **LA TASSA DI SOGGIORNO PASSA ALL'HOST** (autorizzato dal fondatore)
+
+> Chiude il difetto del blocco (37): prima l'ospite pagava soggiorno + tassa, all'host andava
+> **solo** il soggiorno meno le trattenute, e la tassa **restava nella nostra cassa**.
+> ```
+> nasce  fase83_server._da_versare_host(corpo) = netto_host + tassa
+>        usata nei QUATTRO punti che pagano l'host (payout x2, cassaforte x2)
+> libro  "tassa_incassata": ("cassa_piattaforma","debiti_vs_comune")   <- prima
+>        "tassa_incassata": ("debiti_vs_host",   "debiti_vs_host")     <- ora
+> ```
+> **Perché:** in Italia il responsabile del pagamento è il **gestore** (`DL 34/2020 art. 180`),
+> ma **la responsabilità segue i soldi**: tenendoli in cassa il debitore diventavamo noi, verso
+> ogni Comune del mondo. Ora l'host la riceve e la versa lui: restiamo un tubo.
+>
+> ⚠️ **E NON si fonde col suo guadagno:** `netto_host_cents` è quello che l'host **guadagna**
+> (base di commissione e DAC7), la tassa è denaro **in transito**. Sommarle avrebbe dichiarato
+> al Fisco **un reddito che l'host non ha**.
+>
+> ⛔ **E il libro contabile aveva due difetti in una riga sola:** dichiarava un debito verso il
+> Comune che non ci compete, **e contava la cassa due volte** — la riga `incasso` scrive già il
+> totale, tassa compresa. Su 100 con 20 di tassa il libro diceva **120 in cassa** e ne erano
+> arrivati **100**.
+>
+> **Prove:** 3 guardie nuove viste **rosse prima**; poi 13 asserzioni in 5 file hanno detto che
+> il requisito era cambiato e sono state aggiornate **con la ragione scritta** (dove serviva, il
+> test distingue `NETTO_HOST` da `VERSATO_HOST`). 188 test del blocco soldi verdi.
+
 ## 🧭 2026-08-19 (38) — **PASSAGGIO DI CONSEGNE — leggere per primo, dopo i SEI DIVIETI**
 
 > **Stato dei tre posti, misurato dopo l'ultimo deploy (non ricordato):**
@@ -3887,7 +3933,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 746d067
+CONSEGNE AGGIORNATE A: f8840d3
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -5715,7 +5761,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5880 test
+SUITE ATTUALE: Ran 5884 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
