@@ -199,5 +199,76 @@ class TestSegretiEScript(unittest.TestCase):
         self.assertIn(".env", g)
 
 
+class TestIlDeployNONLASCIAILSITOAPPESO(unittest.TestCase):
+    """⏱️ IL SITO NON DEVE RESTARE APPESO QUANDO L'APPLICAZIONE NON C'E'.
+
+    **Il fatto, misurato il 2026-08-20.** Il 19/08 alle 21:45:43 UTC la sentinella esterna e'
+    andata rossa con `curl: (28) Connection timed out after 20001 ms` su `/api/health`.
+    Il rosso era **vero**: `casavip_app` era ripartito 56 secondi prima (`StartedAt
+    2026-08-19T21:44:47Z`, letto da `docker inspect`). Ma il difetto non e' che l'applicazione
+    riparta — quello dura pochi secondi: e' che **nginx resta appeso**. L'upstream e' uno solo
+    e su `location /` non c'era `proxy_connect_timeout`: il valore di serie di nginx e'
+    **60 secondi**. Chi apriva il sito durante il deploy vedeva una pagina bianca per un
+    minuto, senza sapere se stesse caricando o se fosse rotto.
+
+    Qui si pretendono le tre cose che trasformano un'attesa cieca in una risposta onesta:
+      1. **ogni** porta che inoltra all'applicazione dichiara un tetto all'attesa di
+         connessione (non «almeno una»: le location con `proxy_pass` sono due);
+      2. c'e' una via d'uscita per gli errori che genera **nginx** quando l'applicazione non
+         risponde (`502`/`504`), che risponde subito invece di far aspettare;
+      3. ⛔ e `proxy_intercept_errors` resta **spento**, dichiarato per iscritto: se si
+         accendesse, nginx si mangerebbe anche i `503` che manda l'APPLICAZIONE — cioe' il
+         fail-safe «gateway giu' = non si conferma niente», che e' la regola dei soldi vista
+         dal browser. Un rimedio che spegne una difesa non e' un rimedio.
+
+    ⛔ COSA QUESTA GUARDIA NON FA (D18 punto 3): non rende il deploy senza interruzione. Per
+    quello servono due contenitori vivi insieme, ed e' un lavoro a se'. Qui la finestra resta,
+    ma smette di essere un'attesa muta di un minuto.
+    """
+
+    def setUp(self):
+        self.n = _leggi("deploy/nginx.casavip.ssl.conf")
+
+    def _blocchi_con_proxy(self):
+        """I pezzi di configurazione che inoltrano all'applicazione, uno per uno."""
+        pezzi = []
+        for blocco in self.n.split("location "):
+            if "proxy_pass" in blocco:
+                pezzi.append(blocco)
+        return pezzi
+
+    def test_ogni_porta_verso_l_applicazione_ha_un_tetto_all_attesa(self):
+        blocchi = self._blocchi_con_proxy()
+        self.assertGreaterEqual(len(blocchi), 2,
+                                "mi aspettavo almeno due location con proxy_pass: se sono "
+                                "cambiate, questa guardia sta contando la cosa sbagliata")
+        for b in blocchi:
+            prima_riga = b.strip().splitlines()[0]
+            self.assertIn("proxy_connect_timeout", b,
+                          "la location `%s` inoltra all'applicazione senza tetto all'attesa "
+                          "di connessione: di serie nginx aspetta 60 secondi, e durante il "
+                          "deploy il sito resta appeso" % prima_riga)
+
+    def test_c_e_una_risposta_pronta_quando_l_applicazione_non_risponde(self):
+        self.assertRegex(self.n, r"error_page\s+502\s+504",
+                         "nessuna via d'uscita per 502/504: quando l'applicazione non c'e', "
+                         "chi apre il sito non riceve niente finche' non scade l'attesa")
+        self.assertIn("@manutenzione", self.n,
+                      "manca la location con la risposta di cortesia")
+        self.assertRegex(self.n, r"return\s+503",
+                         "la pagina di attesa deve rispondere 503, non 200: il sito e' "
+                         "davvero indisponibile, e dire 200 mentirebbe alla sentinella")
+
+    def test_il_503_DELL_APPLICAZIONE_arriva_intatto_al_browser(self):
+        """La riga che protegge il fail-safe dei soldi: `proxy_intercept_errors` spento e
+        detto. Di serie e' gia' spento, ma un valore di serie non e' una decisione."""
+        for b in self._blocchi_con_proxy():
+            self.assertRegex(
+                b, r"proxy_intercept_errors\s+off",
+                "questa location non dichiara `proxy_intercept_errors off`: senza quella "
+                "riga nessuno sa se il 503 «pagamento non disponibile» dell'applicazione "
+                "arriva all'ospite o viene sostituito dalla pagina di attesa")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

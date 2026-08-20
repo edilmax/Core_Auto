@@ -156,13 +156,33 @@ def _contaminato_italiano(testo: str, lingua: str) -> bool:
 
 # Pulizia di SICUREZZA della didascalia: GARANTISCE niente emoji e niente premesse/spiegazioni,
 # a prescindere da cosa scrive il modello (il fondatore non vuole emoji; il modello a volte sbroda).
+# ⛔ STESSO IDENTICO INSIEME DI PRIMA, SCRITTO IN MODO LEGGIBILE (2026-08-20).
+# Prima c'era un intervallo solo, `U+1F000-U+1FAFF`, che attraversa **undici blocchi Unicode**:
+# CodeQL apre `py/overly-large-range` proprio su quello, e ha ragione per un motivo che non e'
+# formale — un intervallo cosi' largo di solito e' uno sbaglio di battitura, e chi legge non
+# puo' piu' dire cosa ci sia dentro. Qui e' spezzato blocco per blocco e scritto coi NUMERI
+# invece che coi disegni: i disegni in un sorgente sono invisibili a chi rilegge, e due emoji
+# diverse sembrano uguali. ⛔ L'insieme filtrato NON cambia di un carattere: lo dimostra
+# `test_le_classi_di_emoji_non_sono_intervalli_giganti_a_caso` e i collaudi che gia' c'erano.
 _EMOJI = re.compile(
-    "[🀀-🫿"    # emoji, simboli e pittogrammi
-    "☀-➿"     # simboli vari + dingbats
-    "🇦-🇿"     # bandiere
-    "⬀-⯿"     # simboli e frecce emoji
-    "︀-️"     # selettori di variazione
-    "Ⓜ⃣]", flags=re.UNICODE)
+    "["
+    "\U0001F000-\U0001F0FF"   # mahjong, domino, carte
+    "\U0001F100-\U0001F1FF"   # alfanumerici racchiusi — qui dentro ci sono le BANDIERE
+    "\U0001F200-\U0001F2FF"   # ideogrammi racchiusi
+    "\U0001F300-\U0001F3FF"   # simboli e pittogrammi vari
+    "\U0001F400-\U0001F4FF"   # animali, natura, oggetti
+    "\U0001F500-\U0001F5FF"   # simboli vari
+    "\U0001F600-\U0001F6FF"   # faccine, trasporti e mappe
+    "\U0001F700-\U0001F7FF"   # simboli alchemici e geometrici
+    "\U0001F800-\U0001F8FF"   # frecce supplementari
+    "\U0001F900-\U0001F9FF"   # simboli e pittogrammi supplementari
+    "\U0001FA00-\U0001FAFF"   # scacchi e simboli estesi-A
+    "☀-⛿"           # simboli vari
+    "✀-➿"           # dingbats
+    "⬀-⯿"           # simboli e frecce emoji
+    "︀-️"           # selettori di variazione
+    "Ⓜ⃣"            # Ⓜ e il tastierino combinante
+    "]", flags=re.UNICODE)
 _PREAMBOLO = re.compile(
     r"^\s*(ecco\b[^:\n]{0,60}:|didascalia\s*:|caption\s*:|post\s*:|testo\s*:)\s*", re.IGNORECASE)
 

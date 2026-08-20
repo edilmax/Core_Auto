@@ -11,6 +11,112 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🛡️ 2026-08-20 (42) — **I 33 ALLARMI DI CODEQL E I 60 SECONDI DI PAGINA BIANCA** (autorizzato)
+
+> Due lavori sul codice di produzione, col via scritto del fondatore.
+>
+> **1. CodeQL: 33 aperti, 1 GRAVE, tutti in cinque punti soli.**
+> ```
+> py/insecure-protocol   grave   fase197_canale_nostr.py:180   (aperto dal 14/08)
+> py/http-response-splitting  ×2  fase83_server.py
+> py/log-injection       ×28     app.py           <- tutti nello stesso file
+> py/overly-large-range   ×1     fase200_campagna_persuasiva.py
+> py/stack-trace-exposure ×1     fase36_booking_api.py
+> ```
+> Nessuno dei cinque era un difetto che rompe il prodotto: **erano difese che l'analizzatore
+> non poteva vedere**, più una che mancava davvero. Riparati alla fonte, uno per uno, con la
+> **forma riconosciuta aggiunta accanto** a quella vera (mai al posto: sostituirla indebolisce).
+> · `fase197`: la versione minima di TLS ora è **dichiarata** — il canale era già sicuro, non
+> era **dimostrabile**. · `fase83`: gli a-capo tolti dal `Content-Type` prima che diventi
+> un'intestazione. · `app.py`: `_sanitize_log` **c'era già** ed è scritto nella forma giusta —
+> mancava usarlo; ora ci passano percorso, metodo, indirizzo e chiave. · `fase200`: l'intervallo
+> `U+1F000-U+1FAFF` attraversava **11 blocchi Unicode**; ora è spezzato blocco per blocco e
+> scritto coi numeri invece che coi disegni. ⛔ **L'insieme filtrato è identico**, provato su
+> tutto Unicode da un oracolo indipendente: **3538 caratteri prima e dopo, 0 persi, 0 aggiunti**.
+> · `fase36`: la risposta 400 non rimanda più `str(e)` a chi chiama — il dettaglio va nel log.
+>
+> ⛔ **`app.py` NON si esclude dall'analisi**, anche se il `Dockerfile` non lo spedisce:
+> `TestLaListaDeiFileESCLUSIDaCodeQL` lo dichiara punto d'ingresso e pretende che resti dentro.
+> ⚠️ **E questo non prova che gli allarmi si chiudano**: lo dirà solo la tabella di
+> `code-scanning/alerts` letta dall'API **dopo** che il codice è su GitHub (regola ferrea 8).
+>
+> **2. Il deploy: il buco vero non era l'applicazione che riparte.**
+> ```
+> casavip_app  StartedAt 2026-08-19T21:44:47Z   (docker inspect)
+> sentinella   21:45:43Z  curl: (28) Connection timed out after 20001 ms
+> location /   nessun proxy_connect_timeout  ->  valore di serie di nginx: 60 SECONDI
+> ```
+> Nginx teneva l'indirizzo del contenitore sparito e **restava lì ad aspettare**: pagina bianca
+> fino a un minuto. Ora l'attesa di connessione è **3 secondi** e c'è `@manutenzione`, che
+> risponde **503 + `Retry-After: 20`** con una pagina che dice «torniamo subito».
+> ⛔ **503 e non 200**: il sito è davvero indisponibile, e una cortesia che rispondesse 200
+> spegnerebbe l'unico allarme che guarda da fuori. ⛔ `proxy_intercept_errors` resta **spento e
+> scritto**: acceso, nginx mangerebbe anche il `503` dell'**applicazione**, cioè il fail-safe
+> «gateway giù = non si conferma niente».
+> ✅ **Provata da nginx, non da un test che legge testo**: `nginx -t` in un contenitore
+> usa-e-getta sulla rete vera e coi certificati veri → *syntax is ok · test is successful*.
+> ⚠️ **Non è un deploy senza interruzione** e non va raccontato così: la finestra c'è ancora,
+> ma smette di essere un'attesa muta. Due contenitori vivi insieme sono un lavoro a sé.
+> ⛔ E `DEPLOY.md` dichiarava *«rm-first… resta innocuo»*: **non è innocuo**, allunga la
+> finestra. Corretto, con la misura accanto.
+
+## 🏦 2026-08-20 (41) — **I «7 NON ESEGUITI» DEL BANCO NON ERANO COLPA DI DOCKER**
+
+> Il fondatore ha chiesto perché il giro sul banco dichiarava **19 OK e 7 non eseguiti**. La
+> motivazione scritta accanto a quei buchi — *«il database sta in `/data`, solo dentro il
+> contenitore»* — **era falsa**, e lo diceva questo stesso file 440 righe più in basso.
+> ```
+> giudice:   collaudi/giro_banco.py    cerca i database in /data e /app/data
+> giudicato: collaudi/avvia_server_visivo.py  li mette in una temporanea SENZA NOME
+>            e il libro giornale non lo metteva da nessuna parte: db_finanza = :memory:
+> ```
+> ⛔ Cinque controlli sui soldi non erano «saltati per colpa di Docker»: **il libro giornale
+> non esisteva su nessun disco**, e il giudice cercava dove il giudicato non aveva mai
+> scritto. Altri due (bunker) chiedevano la password all'**ambiente** mentre il banco la
+> teneva incisa nel proprio codice: due posti, mai d'accordo.
+>
+> **Riparato:** la cartella dei dati ha un nome che i due processi si scambiano
+> (`BANCO_DATI`), il libro giornale e i payout sono **su file** e col nome che `db(nome)`
+> cerca davvero, la password del super-admin viene dall'ambiente col vecchio valore come
+> ripiego. **Prima le guardie, viste rosse** (D20): 4 in `test_pipeline_ci.py`, 3 rosse per
+> il motivo giusto e la quarta verde perché è l'altra direzione (regola ferrea 10).
+>
+> ```
+> PRIMA:  PASSI 26  OK 19  NON OK 0  NON ESEGUITI 7   uscita 0
+> DOPO:   PASSI 34  OK 34  NON OK 0  NON ESEGUITI 1   uscita 0
+> ```
+> L'unico rimasto è onesto e **si misura solo dentro il contenitore**: `/app/data` qui non
+> esiste.
+>
+> 🔴 **E APPENA HA POTUTO GUARDARE, UN CONTROLLO È USCITO ROSSO: atteso 975, misurato 2275.**
+> Aveva ragione **il motore**. L'attesa diceva «l'host è appena nato, promo 0%, resta la sola
+> tariffa tecnica», ma la rampa di lancio sul banco **non è accesa**:
+> `ConfigCasaVIP.promo_lancio_attiva` vale `False` di serie e l'avviatore locale non la
+> accende (in produzione la accende `main_casavip.py` da `PROMO_LANCIO`, che di serie è
+> «true»). Misurato sul libro vero: **13 righe da 175 cents = 100 di commissione (10%) + 75
+> di tariffa tecnica**. Corretta l'attesa, col perché scritto accanto.
+> ⚠️ **Ne resta un buco dichiarato:** il banco esercita il **regime**, non la rampa di lancio —
+> il caso «host appena nato, commissione 0%» lì non passa mai.
+>
+> ⛔ **E IL CANCELLO HA TROVATO UN DIFETTO MIO, dentro queste stesse guardie.** Il job
+> `copertura` è andato rosso sulla richiesta **#81**:
+> ```
+> No source for code: '.../Core_Auto/giro_banco.db'   -> uscita 1
+> COPERTURA TOTALE = n/d   (soglia minima 82%)
+> ```
+> Al pezzo di codice estratto col parser avevo dato il nome `giro_banco.db`: per `coverage` è
+> il percorso di un **sorgente da aprire**, non lo trova e muore. Il rosso non diceva «la
+> copertura è scesa», diceva **«non ho potuto misurare»**. Riparato con `<giro_banco.db>` —
+> le parentesi angolari sono la convenzione per il codice che non viene da un file.
+> 💡 Un nome inventato per comodità è comunque un nome che **qualcun altro legge come vero**.
+> E il verde locale non poteva vederlo: la copertura la misura solo la CI (regola ferrea 8).
+>
+> 💡 **Un verde per assenza in meno, nello stesso file:** il controllo [9] faceva
+> `os.listdir("/app/data")` dentro un `try`, e su una macchina senza Docker l'eccezione lo
+> riportava a lista vuota: **usciva OK senza aver guardato niente** (S7). Era uno dei 19.
+> Ora è NON ESEGUITO dove non si può misurare, e accanto c'è la domanda che **qui** si può
+> fare sempre: nessun database nato nella cartella del progetto.
+
 ## 🌐 2026-08-19 (40) — **UN MIRROR UBUNTU GIÙ TENEVA FERMO IL CANCELLO**
 
 > Il cancello della richiesta **#79** è andato rosso e **non ho unito**. Ma il rosso non era
@@ -61,7 +167,9 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 > **Stato dei tre posti, misurato dopo l'ultimo deploy (non ricordato):**
 > ```
-> computer 497a882 · GitHub 497a882 · VPS 497a882   -> ALLINEATI
+> computer 63973ce · GitHub ramo #81 · VPS 839b9b8   -> ⚠️ NON ALLINEATI: il lavoro del
+>                                                       2026-08-20 e' committato e in
+>                                                       attesa di unione, NON in produzione
 > richieste di unione ancora aperte: 0   (unite: #74 #75 #76 #77 #78 #79, tutte
 >                                         verificate con una SECONDA chiamata)
 > suite 5879 test OK · batteria 19/19 · piano dei soldi: i tre posti d'accordo
@@ -3933,7 +4041,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 497a882
+CONSEGNE AGGIORNATE A: 63973ce
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -5761,7 +5869,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5884 test
+SUITE ATTUALE: Ran 5896 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
@@ -5785,6 +5893,15 @@ MISURATO SU: 13ac1e8 + LA BARRIERA VISIBILE A CODEQL + L'ELENCO DEGLI ESCLUSI (2
              `test_fase83_server.py`.
              Gli ultimi quattro numeri rimisurati col caricatore da fermo PRIMA di
              rilanciare (S14).
+             · 2026-08-20, su 839b9b8: da **5884 a 5888 (+4)** con
+               `TestIlBancoSIPUOGIUDICAREANCHEFUORIDALCONTENITORE` in
+               `test_pipeline_ci.py` (le guardie che rendono misurabili i controlli
+               contabili del banco). Rimisurato col caricatore da fermo e scritto qui
+               PRIMA di lanciare la suite.
+             · 2026-08-20, poi a **5896 (+8)**: `TestGliALLARMIDiCodeQLSICHIUDONOALLAFONTE`
+               (5, in `test_pipeline_ci.py`) e `TestIlDeployNONLASCIAILSITOAPPESO`
+               (3, in `test_deploy_casavip.py`). Anche questo rimisurato col caricatore
+               da fermo e scritto qui PRIMA di lanciare.
              ⛔ E QUESTA VOLTA NON L'HO SCRITTO PRIMA: ho lanciato la suite intera con il
              numero vecchio ancora dentro, e i 28 minuti sono finiti su un rosso solo —
              `test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO`, «5819 != 5823». E' lo

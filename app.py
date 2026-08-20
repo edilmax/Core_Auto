@@ -264,17 +264,17 @@ def fortress(func: Callable) -> Callable:
         allowed, headers = get_rate_limiter().is_allowed(ip)
         if not allowed:
             logger.warning("Rate limit superato (fortress) ip=%s path=%s",
-                           ip, request.path)
+                           _sanitize_log(ip), _sanitize_log(request.path))
             return _error(429, "rate_limited", headers)
         try:
             ok, code = _verifica_fortress()
         except Exception:  # pragma: no cover - difensivo
             logger.critical("Errore interno autenticazione fortress path=%s",
-                            request.path, exc_info=True)
+                            _sanitize_log(request.path), exc_info=True)
             return _error(500, "internal_error")
         if not ok:
             logger.warning("Auth fortress fallita (%s) ip=%s path=%s",
-                           code, ip, request.path)
+                           code, _sanitize_log(ip), _sanitize_log(request.path))
             return _error(code, "unauthorized" if code == 401 else "forbidden")
         return func(*args, **kwargs)
     return wrapper
@@ -291,7 +291,7 @@ def fortress_readonly(func: Callable) -> Callable:
         allowed, headers = get_rate_limiter().is_allowed(ip)
         if not allowed:
             logger.warning("Rate limit superato (readonly) ip=%s path=%s",
-                           ip, request.path)
+                           _sanitize_log(ip), _sanitize_log(request.path))
             return _error(429, "rate_limited", headers)
         try:
             sm = get_security_manager()
@@ -301,10 +301,11 @@ def fortress_readonly(func: Callable) -> Callable:
             autorizzato = sm.verify_api_key(api_key) or sm.verify_bearer_token(token)
         except Exception:  # pragma: no cover - difensivo
             logger.critical("Errore interno auth readonly path=%s",
-                            request.path, exc_info=True)
+                            _sanitize_log(request.path), exc_info=True)
             return _error(500, "internal_error")
         if not autorizzato:
-            logger.warning("Auth readonly fallita ip=%s path=%s", ip, request.path)
+            logger.warning("Auth readonly fallita ip=%s path=%s",
+                           _sanitize_log(ip), _sanitize_log(request.path))
             return _error(401, "unauthorized")
         return func(*args, **kwargs)
     return wrapper
@@ -326,7 +327,7 @@ def require_admin(func: Callable) -> Callable:
         atteso = Config.ADMIN_TOKEN
         if not atteso or not _hmac.compare_digest(str(token), str(atteso)):
             logger.warning("Privilegio admin negato ip=%s path=%s",
-                           _client_ip(), request.path)
+                           _sanitize_log(_client_ip()), _sanitize_log(request.path))
             return _error(403, "forbidden")
         return func(*args, **kwargs)
     return wrapper
@@ -388,11 +389,11 @@ def with_circuit_breaker(func: Callable) -> Callable:
         if stato == DBCircuitBreaker.State.OPEN and not scaduto:
             retry = int(cb.timeout - (time.time() - cb.last_failure)) + 1
             logger.warning("Circuit breaker OPEN path=%s retry=%ss",
-                           request.path, retry)
+                           _sanitize_log(request.path), retry)
             return _error(503, "service_unavailable", {"Retry-After": str(retry)})
         if stato == DBCircuitBreaker.State.HALF_OPEN and request.method not in _SAFE_METHODS:
             logger.warning("Circuit breaker HALF_OPEN: scrittura rifiutata path=%s",
-                           request.path)
+                           _sanitize_log(request.path))
             return _error(503, "service_unavailable", {"Retry-After": "5"})
         if stato == DBCircuitBreaker.State.OPEN and scaduto:
             with cb._lock:  # finestra di test di recupero
@@ -400,19 +401,21 @@ def with_circuit_breaker(func: Callable) -> Callable:
         try:
             result = func(*args, **kwargs)
         except DB_CLIENT_ERRORS:
-            logger.warning("Errore DB client path=%s", request.path)
+            logger.warning("Errore DB client path=%s", _sanitize_log(request.path))
             return _error(400, "bad_request")
         except DB_INFRA_ERRORS as exc:
             if _is_db_infra_error(exc):
                 _cb_record_failure(cb)
                 logger.error("Errore DB infra (breaker++) path=%s",
-                             request.path, exc_info=True)
+                             _sanitize_log(request.path), exc_info=True)
                 return _error(503, "service_unavailable",
                               {"Retry-After": str(cb.timeout)})
-            logger.critical("Errore DB non-infra path=%s", request.path, exc_info=True)
+            logger.critical("Errore DB non-infra path=%s",
+                            _sanitize_log(request.path), exc_info=True)
             return _error(500, "internal_error")
         except Exception:
-            logger.critical("Errore route path=%s", request.path, exc_info=True)
+            logger.critical("Errore route path=%s",
+                            _sanitize_log(request.path), exc_info=True)
             return _error(500, "internal_error")
         _cb_record_success(cb)
         return result
@@ -530,7 +533,8 @@ def idempotent(func: Callable) -> Callable:
         res = mgr.acquire(key, fp, corr)
 
         if res.esito == EsitoAcquisizione.CONFLITTO:
-            logger.warning("Idempotency-Key riusata con body diverso key=%s", key)
+            logger.warning("Idempotency-Key riusata con body diverso key=%s",
+                           _sanitize_log(key))
             return _error(422, "idempotency_key_reused")
         if res.esito == EsitoAcquisizione.IN_CORSO:
             return _error(409, "request_in_progress",
@@ -797,12 +801,13 @@ def _registra_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(404)
     def _not_found(_e: Exception) -> Any:
-        logger.info("404 path=%s", request.path)
+        logger.info("404 path=%s", _sanitize_log(request.path))
         return _error(404, "not_found")
 
     @app.errorhandler(413)
     def _payload_too_large(_e: Exception) -> Any:
-        logger.warning("413 path=%s ip=%s", request.path, _client_ip())
+        logger.warning("413 path=%s ip=%s",
+                       _sanitize_log(request.path), _sanitize_log(_client_ip()))
         return _error(413, "payload_too_large")
 
     @app.errorhandler(429)
@@ -811,12 +816,12 @@ def _registra_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(503)
     def _unavailable(_e: Exception) -> Any:
-        logger.warning("503 path=%s", request.path)
+        logger.warning("503 path=%s", _sanitize_log(request.path))
         return _error(503, "service_unavailable", {"Retry-After": "5"})
 
     @app.errorhandler(500)
     def _server_error(_e: Exception) -> Any:
-        logger.critical("500 path=%s", request.path, exc_info=True)
+        logger.critical("500 path=%s", _sanitize_log(request.path), exc_info=True)
         return _error(500, "internal_error")
 
 
@@ -833,9 +838,11 @@ def _registra_middleware_logging(app: Flask) -> None:
         duration_ms = round((time.time() - getattr(g, "start_time", time.time())) * 1000, 2)
         logger.info(
             "request cid=%s method=%s path=%s status=%s duration_ms=%s ip=%s ua=%s",
-            getattr(g, "correlation_id", "-"), request.method, request.path,
+            _sanitize_log(getattr(g, "correlation_id", "-")),
+            _sanitize_log(request.method), _sanitize_log(request.path),
             response.status_code, duration_ms,
-            _client_ip(), _sanitize_log(request.headers.get("User-Agent", "-")))
+            _sanitize_log(_client_ip()),
+            _sanitize_log(request.headers.get("User-Agent", "-")))
         return response
 
     @app.after_request

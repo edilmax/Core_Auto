@@ -10506,6 +10506,12 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 dati = f.read()
             import mimetypes
             ctype = mimetypes.guess_type(fpath)[0] or "application/octet-stream"
+            # ⛔ `py/http-response-splitting`: il percorso arriva dall'utente e finisce, via
+            # `guess_type`, dentro un'intestazione. In pratica quella funzione risponde con un
+            # tipo preso da una tabella e un a-capo non ci puo' entrare -- ma e' un
+            # ragionamento che l'analizzatore non puo' verificare, e ha ragione a non fidarsi.
+            # Gli a-capo si tolgono nella forma che riconosce, e non cambia niente d'altro.
+            ctype = ctype.replace("\r", "").replace("\n", "")
             self.send_response(200)
             self.send_header("Content-Type", ctype)
             self.send_header("Cache-Control", "public, max-age=31536000")
@@ -10530,6 +10536,10 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 dati = f.read()
             import mimetypes
             ctype = mimetypes.guess_type(fpath)[0] or "application/octet-stream"
+            # stesso motivo della gemella qui sopra (`py/http-response-splitting`): l'a-capo
+            # si toglie PRIMA di aggiungere il charset, cosi' la barriera copre il valore
+            # intero che poi esce nell'intestazione.
+            ctype = ctype.replace("\r", "").replace("\n", "")
             if ctype.startswith("text/") or ctype in ("application/json",
                                                        "application/javascript",
                                                        "image/svg+xml"):
