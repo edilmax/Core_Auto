@@ -218,16 +218,21 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 > **Stato dei tre posti, misurato dopo l'ultimo deploy (non ricordato):**
 > ```
-> computer 63973ce · GitHub ramo #81 · VPS 839b9b8   -> ⚠️ NON ALLINEATI: il lavoro del
->                                                       2026-08-20 e' committato e in
->                                                       attesa di unione, NON in produzione
-> richieste di unione ancora aperte: 0   (unite: #74 #75 #76 #77 #78 #79, tutte
+> computer 598a942 · GitHub 598a942 · VPS 598a942   -> ALLINEATI (2026-08-20, dopo il deploy)
+> richieste di unione ancora aperte: 0   (unite: #74 #75 #76 #77 #78 #79 #81 #82, tutte
 >                                         verificate con una SECONDA chiamata)
-> suite 5879 test OK · batteria 19/19 · piano dei soldi: i tre posti d'accordo
+> suite 5892 test OK uscita 0 · mutazione 60/60 uccisi · banco 34/34 (era 19 con 7 buchi)
+> browser 3 percorsi su 3 · piano dei soldi: i tre posti d'accordo
 > verifica_produzione.py sul sito VERO: 190 controlli · 0 violazioni
-> https://bookinvip.com/ -> 200 · /api/health -> 200 · certificato 35 giorni
-> CINQUE deploy, ognuno col paracadute agganciato PRIMA del build e verificato
-> PER IMPRONTA
+> https://bookinvip.com/ -> 200 · /api/health -> 200 · guardiano: ok · certificato 34 giorni
+> allarmi CodeQL: da 33 (1 GRAVE) a 1 — MISURATO dall'API sul commit 598a942, non dedotto
+>                 (le analisi: 839b9b8 -> 33 · 4090555 -> 10 · 598a942 -> 1)
+> il Bunker NON mente piu': stato e integrita' dicono 25 db, 0 allarmi, gli stessi numeri
+> i deploy lasciano una traccia: 19 file PRE_DEPLOY_*.commit sul VPS (contati, non
+> ricordati); i DUE del 2026-08-20 col paracadute agganciato PRIMA del build e
+> verificato per impronta
+> finestra del deploy misurata DENTRO il buco vero, due volte: 503 in 3,0 secondi con la
+> pagina "torniamo subito" (prima: pagina bianca fino a 60 secondi)
 > ```
 >
 > ### 🔴 LA COSA PIÙ IMPORTANTE, E NON È UN COLLAUDO
@@ -4092,7 +4097,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 63973ce
+CONSEGNE AGGIORNATE A: 598a942
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
