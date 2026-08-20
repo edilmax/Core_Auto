@@ -11,6 +11,57 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🚨 2026-08-20 (43) — **DUE MOTORI DEI SOLDI SULLO STESSO SERVER, E UN ALLARME CHE MENTIVA**
+
+> Cercando la causa di due allarmi critici del Bunker sono usciti **due difetti veri**, e
+> nessuno dei due c'entrava col lavoro di oggi.
+>
+> **1. UNA SECONDA COPIA DELL'APPLICAZIONE GIRAVA SUL SERVER DA VENTI GIORNI.**
+> ```
+> /etc/systemd/system/bookinvip.service   enabled + active dal 31 luglio 06:52
+> ExecStart=/usr/bin/python3 /var/www/bookinvip/main_casavip.py   (come ROOT)
+> EnvironmentFile=.env.casavip  ->  STRIPE_SECRET_KEY = sk_LIVE
+> Restart=always                ->  al primo riavvio caricherebbe il codice di OGGI
+> ```
+> È il **modo di far girare il sito di prima di Docker**, rimasto acceso in parallelo e
+> dimenticato. ✅ Misurato prima di allarmarsi: **non** era raggiungibile da internet
+> (ascoltava su `127.0.0.1`, l'nginx dell'host è `disabled+inactive`, le porte pubbliche le
+> tiene il container) e **non** scriveva sul libro dei soldi della produzione — il suo
+> `/data` è una cartella dell'host, quello della produzione è un **volume Docker**
+> (`/var/lib/docker/volumes/bookinvip_casavip_data/_data`). Ma aveva la **chiave dei soldi
+> veri** e girava senza sorveglianza.
+> ⛔ **Spento e disabilitato**, col via del fondatore, dopo aver verificato che **nulla di
+> vivo** ci si appoggiasse (nessuna connessione aperta, nessun cron, nessun nginx attivo) e
+> dopo aver **salvato e riaperto** l'archivio: `/root/bookinvip_servizio_host_20260820-105711.tar.gz`,
+> 45 elementi, letto per prova.
+> 💡 Ecco perché le prime misure non tornavano: **stavo interrogando la porta sbagliata.**
+> `127.0.0.1:8080` sull'host era LUI, non la produzione. Quando una misura è assurda il primo
+> sospetto va allo strumento (sbaglio S3) — e questa volta lo strumento ero io.
+>
+> **2. E LA SALA DI CONTROLLO DEL BUNKER MENTIVA DAVVERO, ANCHE IN PRODUZIONE.**
+> ```
+> dentro il contenitore VERO:
+>   /api/bunker/stato      database visti: 0    -> 2 ALLARMI CRITICI (falsi)
+>   /api/bunker/integrita  database visti: 25   -> NESSUN ALLARME (vero)
+> ```
+> Una riga: `_bunker_stato` chiedeva `environ.get("DATA_DIR", "data")`, e nel contenitore la
+> cartella corrente è `/app`, dove `data` non esiste. Diceva **«NESSUN backup trovato»** e
+> **«il Guardiano dei soldi non batte più»** su una macchina con 25 database, backup di
+> mezz'ora prima e battito regolare.
+> ⛔ **E la riparazione esisteva già**, in un altro punto dello stesso file, col suo commento
+> accanto: *«nel container DATA_DIR esiste ma è VUOTA… Fix: stesso fallback robusto di
+> `_data_dir()`»*. La copia era rimasta indietro. Ora quel fatto ha **un padrone solo**, e lo
+> pretende `test_DOVE_SONO_I_DATI_si_risponde_in_UN_POSTO_SOLO`.
+> ⚠️ Un falso allarme sui soldi non è meno grave di un allarme mancato: è il modo in cui si
+> insegna a ignorare i rossi.
+>
+> **3. E LE EMOJI TORNANO COM'ERANO.** Spezzare l'intervallo aveva portato
+> `py/overly-large-range` **da 1 allarme a 10**. Il conto degli allarmi non è il punteggio da
+> inseguire, ma dieci righe di rumore su una regola di leggibilità sporcano la lista dove un
+> giorno dovrà spiccare una cosa vera. 💡 Al posto della guardia sullo **stile** ne è nata una
+> sul **fatto**: il filtro provato su **tutto** lo spazio Unicode, 3538 caratteri, carattere
+> per carattere.
+
 ## 🛡️ 2026-08-20 (42) — **I 33 ALLARMI DI CODEQL E I 60 SECONDI DI PAGINA BIANCA** (autorizzato)
 
 > Due lavori sul codice di produzione, col via scritto del fondatore.
@@ -5869,7 +5920,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5896 test
+SUITE ATTUALE: Ran 5897 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
@@ -5902,6 +5953,10 @@ MISURATO SU: 13ac1e8 + LA BARRIERA VISIBILE A CODEQL + L'ELENCO DEGLI ESCLUSI (2
                (5, in `test_pipeline_ci.py`) e `TestIlDeployNONLASCIAILSITOAPPESO`
                (3, in `test_deploy_casavip.py`). Anche questo rimisurato col caricatore
                da fermo e scritto qui PRIMA di lanciare.
+             · 2026-08-20, poi a **5897 (+1)**: una guardia sullo stile TOLTA e DUE messe
+               al suo posto — il filtro delle emoji provato su tutto Unicode, e «dove sono
+               i dati si risponde in un posto solo». Rimisurato col caricatore, scritto
+               PRIMA di lanciare.
              ⛔ E QUESTA VOLTA NON L'HO SCRITTO PRIMA: ho lanciato la suite intera con il
              numero vecchio ancora dentro, e i 28 minuti sono finiti su un rosso solo —
              `test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO`, «5819 != 5823». E' lo

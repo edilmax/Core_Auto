@@ -3805,8 +3805,20 @@ class RouterHTTP:
         try:
             import os as _os
             from fase178_watchdog import diagnosi
-            dati = _os.environ.get("DATA_DIR", "data")
-            bkp = _os.environ.get("BACKUP_DIR", _os.path.join(dati, "backup"))
+            # ⛔ QUESTE DUE RIGHE ERANO RIMASTE INDIETRO, E LA RIPARAZIONE ESISTEVA GIA'
+            # ALTROVE (`_admin_diagnosi`, col suo commento: «nel container DATA_DIR esiste ma
+            # e' VUOTA... Fix: stesso fallback robusto di _data_dir()»). Qui era rimasto
+            # `environ.get("DATA_DIR", "data")`: nel contenitore la cartella corrente e'
+            # `/app`, `data` NON esiste, e la sala di controllo del Bunker rispondeva due
+            # allarmi CRITICI FALSI -- «NESSUN backup trovato» e «il Guardiano dei soldi non
+            # batte piu'» -- su una macchina con 25 database, backup di mezz'ora prima e
+            # battito regolare. Misurato dentro il contenitore di produzione il 2026-08-20:
+            # `stato` vedeva 0 database, `integrita` ne vedeva 25.
+            # ⚠️ Un falso allarme sui soldi non e' meno grave di un allarme mancato: e' il
+            # modo in cui si insegna a ignorare i rossi (regola ferrea 10).
+            dati = self._data_dir()
+            bkp = (_os.environ.get("BACKUP_DIR", "").strip()
+                   or _os.path.join(dati, "backup"))
             rep["diagnosi"] = diagnosi(dir_dati=dati, dir_backup=bkp, uptime_ok=None)
         except Exception:
             logger.error("bunker stato: diagnosi fallita (ISOLATA)", exc_info=True)
