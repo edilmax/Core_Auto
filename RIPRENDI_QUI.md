@@ -11,6 +11,141 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 📌 2026-08-20 (46) — **COSA RESTA APERTO, MISURATO — non riscoprirlo da capo**
+
+> Elenco prodotto dalla macchina il 2026-08-20 a fine giornata (`regole_avvio.py`,
+> `piano_dei_soldi.py`, `prima_di_dire_fatto.py`), più le cose trovate durante il lavoro.
+> ⛔ **Non è una lista di opinioni: ogni riga ha la sua misura.**
+>
+> **Lavori obbligatori** (il pre-fatto tiene la voce 8 = ⏳ APERTO):
+> · **libfaketime in CI** — ⏳ nessun job nomina `faketime`: la prova da 5 minuti non è mai
+>   stata fatta. ⛔ Il primo passo è quella prova: può CHIUDERE la strada (vDSO del kernel).
+> · **orologi di prova Stripe** — ⏳ hold, payout e penale **non sono mai stati visti scadere
+>   davvero**. È il giudice esterno più vicino ai soldi che manca.
+> · **collaudi metamorfici sull'aritmetica del denaro** — ⚠️ a metà: `TestRelazioniMetamorfiche`
+>   esiste ma copre il **calendario**, non tassa/commissione/ordine degli sconti.
+> · CodeQL — ⚠️ lo strumento dice «metà» perché il verde lo può leggere solo l'API. Letto il
+>   2026-08-20 su `598a942`: **1 allarme aperto** (`py/overly-large-range` in `fase200`),
+>   dichiarato e accettato, è una regola di leggibilità non di sicurezza.
+>
+> **Piano dei soldi:** **6 moduli DA FARE** (`fase65 fase85 fase87 fase101 fase131 fase162`)
+> e **3 dichiarati CODICE MORTO** (`fase35 fase43 fase44`).
+>
+> **Trovate il 2026-08-20 e NON riparate, col motivo:**
+> · 🔴 **La FAQ delle landing dice il falso, dal vivo.** `fase173._POLITICA_IT` risponde
+>   *«La tariffa non è rimborsabile»* mentre il motore rimborsa il 100% entro 48 ore.
+>   ⚠️ **La guardia è già scritta** (`TestLaFAQNONPUOPROMETTEREQUELLOCHEILMOTORESMENTISCE` in
+>   `test_fase173_motore_seo.py`) e **il testo giusto è pronto qui sotto**: manca solo
+>   scriverlo, perché tocca produzione e serviva la parola.
+>   ```
+>   flessibile        Entro 48 ore dalla prenotazione (se l'arrivo e' ad almeno 3 giorni) il
+>                     rimborso e' totale. Dopo, la politica e' flessibile: rimborso pieno fino
+>                     al giorno prima dell'arrivo, meta' nel giorno stesso.
+>   moderata          ...Dopo, la politica e' moderata: rimborso pieno fino a 5 giorni prima,
+>                     meta' da 1 a 4 giorni, niente nel giorno stesso.
+>   rigida            ...Dopo, la politica e' rigida: rimborso pieno fino a 30 giorni prima,
+>                     meta' fino a 7 giorni prima, niente sotto i 7 giorni.
+>   non_rimborsabile  Entro 48 ore ... il rimborso e' totale. Dopo, la tariffa non e'
+>                     rimborsabile.
+>   ```
+>   ⛔ Numeri **ricavati dagli scaglioni veri di `fase111.POLITICHE`**, non inventati. Lasciate
+>   fuori di proposito le spese di pulizia (il motore le rende sempre): in una FAQ da due righe
+>   appesantiscono, **nel contratto invece ci vanno**.
+> · **Il contratto host non dichiara la finestra** — 8 file da aggiornare, e **3 posti dove
+>   manca del tutto**: `deploy/termini.html`, `deploy/contratto-host.html`, `README.md`.
+> · **Il piano dei dieci pezzi è rimasto indietro su sé stesso**: dichiara aperto il **pezzo 2**
+>   («ri-confermare un ucciso») che è FATTO — il meccanismo `--riconferme` è in
+>   `collaudi/mutazione_prodotto.py`, commit `11c6553`. È la malattia per cui quel piano è nato.
+> · **Il deploy non è senza interruzione**: 3 secondi con la pagina di cortesia. Per azzerarli
+>   servono due contenitori vivi insieme — lavoro a sé.
+> · **Il checkout di gruppo VERO non esiste**: `/api/split/paga` è un *tracker fra amici*, non
+>   muove denaro (lo dichiara il registro da luglio). Parcheggiato dal fondatore.
+
+## ⚖️ 2026-08-20 (45) — **LA RICERCA LEGALE SUL RIPENSAMENTO: LE 48 ORE SONO SBAGLIATE IN TRE MODI**
+
+> ⛔ **QUESTO BLOCCO VALE PIÙ DI TUTTO IL RESTO DELLA GIORNATA. Leggerlo PRIMA di toccare la
+> cancellazione.** Fatta su fonti dirette, non su ricordi, perché il codice dichiarava una
+> cosa che nessuno aveva verificato.
+>
+> **Cosa dice il motore oggi:** `entro_ripensamento=True → RIMBORSO 100% a prescindere dalla
+> politica` (`fase111.calcola_rimborso`), finestra **48 ore** dall'acquisto **se l'arrivo è ad
+> almeno 3 giorni** (`fase83._entro_ripensamento`, 172.800 secondi + `giorni >= 3`). La
+> docstring dichiara che «copre e supera California SB 644 e l'art. 49 brasiliano». **Quella
+> frase non era stata verificata.**
+>
+> ```
+> 🇪🇺 EUROPA        Dir. 2011/83/UE art. 16 lettera (l), testo letto su EUR-Lex:
+>                   esclusi dal recesso "the provision of accommodation other than for
+>                   residential purpose ... if the contract provides for a specific date
+>                   or period of performance"   ->  NON DOBBIAMO NIENTE.
+>                   Le 48 ore in Europa sono un REGALO COMMERCIALE, non un obbligo.
+>
+> 🇺🇸 CALIFORNIA    SB 644, in vigore dal 1 luglio 2024: 24 ORE dalla conferma, SOLO se la
+>                   prenotazione e' fatta 72+ ore prima del check-in, rimborso sul mezzo
+>                   originale entro 30 giorni.
+>                   ⛔ La legge nomina "hotel, third-party booking service, HOSTING
+>                   PLATFORM, or short-term rental" -> OBBLIGA NOI, non solo l'host.
+>
+> 🇧🇷 BRASILE       art. 49 CDC: 7 giorni sugli acquisti a distanza. CONTROVERSO
+>                   sull'alloggio con data fissa: alcune fonti lo considerano escluso
+>                   come in UE, altre sostengono che i 7 giorni prevalgono sulla politica.
+>                   -> E' L'UNICA DOMANDA CHE RESTA PER L'AVVOCATO.
+> ```
+> **Fonti:** EUR-Lex `CELEX:32011L0083` art. 16 · `leginfo.legislature.ca.gov` SB 644
+> (2023-2024) · California Hotel & Lodging Association, guida alla conformità · IDEC e
+> dottrina brasiliana sull'art. 49.
+>
+> 💡 **La conclusione che cambia il piano:** un numero unico per il mondo è sbagliato **tre
+> volte** — è di troppo in Europa, è il **doppio** del necessario in California, ed è **forse
+> troppo poco** in Brasile. La finestra deve dipendere **da dove sta l'alloggio**.
+>
+> ⚠️ **E in Europa non è un obbligo: è merce.** Lì le 48 ore diventano un'arma commerciale da
+> vendere, non un costo da subire.
+
+## 💔 2026-08-20 (44-bis) — **CHI PAGA IL RIPENSAMENTO: L'HOST, E NON GLIELO ABBIAMO DETTO**
+
+> Nato da una domanda del fondatore che il progetto non si era mai posto: *«tu prenoti, l'host
+> ti dà la data sul calendario, ci ripensi e cancelli — l'host cosa dice?»*
+>
+> **Misurato nel codice, non supposto:**
+> ```
+> il calendario si blocca AL PASSO 7-8 del cammino E2E (prenota), il pagamento arriva al 10
+>   -> le date si bloccano PRIMA ancora che l'ospite paghi
+> fase131: il payout matura A CHECK-IN   ·   fase160: "host mai pagato in automatico"
+>   -> nelle prime 48 ore l'host non ha MAI preso un centesimo, nemmeno oggi
+> fase163 (contratto host): NON nomina il ripensamento. deploy/termini.html: 0 righe.
+> deploy/contratto-host.html: 0 righe. README.md: 0 righe.
+> ```
+> ⛔ **Quindi l'host che sceglie `non_rimborsabile` rimborsa comunque il 100% nelle prime 48
+> ore, e non gliel'ha detto nessuno.** Il contratto gli promette l'opposto: fra i suoi doveri
+> c'è *«applicare in modo leale la politica di cancellazione dichiarata»*.
+> 💡 **Ma quello che l'host mette davvero sul piatto non sono soldi — sono due giorni di
+> calendario.** Detto così è una condizione normale; scoperto dopo una cancellazione è un
+> tradimento. **È la frase da mettere nel contratto prima del primo host vero**, e adesso
+> costa zero perché **in produzione ci sono zero host firmati**.
+>
+> ### 🎯 LA STRATEGIA PROPOSTA (decisa col fondatore, da eseguire)
+> > **«Entro 48 ore cambi idea e non paga nessuno. Dopo, valgono le regole dell'host.»**
+>
+> 1. **I soldi non si prendono subito**: `capture_method=manual` sulla sessione di Checkout.
+> 2. **Entro la finestra** l'autorizzazione si annulla: nessun addebito, nessun rimborso,
+>    **nessuna fetta a Stripe**. Zero per tutti e tre.
+> 3. **Dopo la finestra comanda SOLO la politica dell'host.** Sparisce l'eccezione che oggi la
+>    scavalca — è la parte che l'host non sa e non accetterebbe.
+> 4. Quello che l'host trattiene, **l'host lo incassa** (già così: `host_tiene` → payout).
+> 5. Il **Credito Viaggio** resta dov'è: `min(5000, trattenuto//2)`, e **solo se c'è una
+>    penale**. Nella finestra non esiste, perché nessuno ha perso niente.
+> 6. **Scritta in UN POSTO SOLO**, e gli altri la leggono da lì, con una guardia che diventa
+>    rossa se uno si stacca.
+>
+> **Perché ci differenzia:** Booking e Airbnb incassano e poi rimborsano — a loro il gateway
+> la fetta la trattiene comunque. Noi **non incassiamo affatto**, quindi possiamo dire «non
+> paga nessuno» senza rimetterci. Non è copiabile senza rifare il sistema di pagamento.
+>
+> **QUANTO CI COSTA OGGI, MISURATO SUL CONTO VERO:** `charge 100 → fee 27` e `refund → fee 0`,
+> netto **−27 cent**. Cioè **1,5% + 0,25 €** per ogni «ci ho ripensato»: 1,75 € su 100, 6,25 €
+> su 400, 15,25 € su 1.000. **Lo paghiamo interamente noi.**
+
 ## 🔓 2026-08-20 (44) — **DUE ROTTE PUBBLICHE SCRIVEVANO SUI SOLDI SENZA CHIEDERE CHI SEI** (pezzo B, autorizzato)
 
 > Il fondatore ha chiesto il **pezzo 8** del piano. ⛔ **Era già fatto** (15/08), e il piano
@@ -253,7 +388,7 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 > **Stato dei tre posti, misurato dopo l'ultimo deploy (non ricordato):**
 > ```
-> computer 598a942 · GitHub 598a942 · VPS 598a942   -> ALLINEATI (2026-08-20, dopo il deploy)
+> computer 57addb4 · GitHub 57addb4 · VPS 57addb4   -> ALLINEATI (2026-08-20, dopo il deploy)
 > richieste di unione ancora aperte: 0   (unite: #74 #75 #76 #77 #78 #79 #81 #82, tutte
 >                                         verificate con una SECONDA chiamata)
 > suite 5892 test OK uscita 0 · mutazione 60/60 uccisi · banco 34/34 (era 19 con 7 buchi)
@@ -4132,7 +4267,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 598a942
+CONSEGNE AGGIORNATE A: 57addb4
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
