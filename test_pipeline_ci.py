@@ -7977,5 +7977,274 @@ class TestIlDenominatoreDEVEPoterDireDiNO(unittest.TestCase):
                                "cui si conta, o l'attrezzo non sta misurando niente" % nome)
 
 
+class TestIlBancoSIPUOGIUDICAREANCHEFUORIDALCONTENITORE(unittest.TestCase):
+    """⛔ IL BANCO DICHIARAVA SETTE BUCHI, E CINQUE AVEVANO LA MOTIVAZIONE SBAGLIATA.
+
+    Misurato il 2026-08-20. `collaudi/giro_banco.py` cerca i database SOLO in `/data` e
+    `/app/data`, cioe' dentro il contenitore, e accanto ai controlli saltati scriveva «il
+    database sta in /data». Ma il banco che quei controlli devono giudicare e'
+    `collaudi/avvia_server_visivo.py`, che i database li mette in una cartella temporanea
+    senza nome — e il libro giornale non lo metteva da nessuna parte: `db_finanza` restava
+    `:memory:` per omissione, cioe' non esisteva su nessun disco. Quindi non era «colpa di
+    Docker»: era il giudice che cercava dove il giudicato non aveva mai scritto.
+
+    Le tre cose che rendono quei controlli MISURABILI, piu' la quarta che toglie un verde
+    per assenza dallo stesso file.
+
+    ⛔ COSA QUESTE GUARDIE NON FANNO (D18 punto 3): non eseguono il giro del banco — servono
+    un server sulla 8080 e una chiave Stripe di prova — quindi NON dicono che i conti
+    tornano. Dicono che si possono guardare. Il verdetto sui conti lo da' solo il giro.
+    """
+
+    def _funzione_del_banco(self, nome):
+        """Prende una funzione VERA da `collaudi/giro_banco.py` e la rende chiamabile da
+        sola. Il file non si puo' importare: appena importato ESEGUE il giro intero, che
+        parla con un server sulla 8080. Quindi si estrae il nodo col parser di Python e lo
+        si esegue: cosi' la guardia prova CIO' CHE LA FUNZIONE FA, non che nel testo
+        compaia una parola — che e' lo sbaglio S6."""
+        import ast
+        import sqlite3
+        with io.open(os.path.join(QUI, "collaudi", "giro_banco.py"),
+                     encoding="utf-8") as f:
+            sorgente = f.read()
+        nodo = None
+        for n in ast.parse(sorgente).body:
+            if isinstance(n, ast.FunctionDef) and n.name == nome:
+                nodo = n
+        self.assertIsNotNone(nodo, "collaudi/giro_banco.py non ha piu' la funzione %s(): "
+                                   "o e' stata rinominata, o qualcuno l'ha tolta" % nome)
+        spazio = {"os": os, "sqlite3": sqlite3}
+        exec(compile(ast.Module(body=[nodo], type_ignores=[]),
+                     "giro_banco.%s" % nome, "exec"), spazio)
+        return spazio[nome]
+
+    def _con_cartella_dichiarata(self, cartella, azione):
+        """Esegue `azione` con `BANCO_DATI` impostata, e rimette l'ambiente com'era: una
+        guardia che sporca l'ambiente del processo fa cadere i test che vengono dopo, e il
+        rosso finirebbe addosso a chi non c'entra."""
+        prima = os.environ.get("BANCO_DATI")
+        os.environ["BANCO_DATI"] = cartella
+        try:
+            return azione()
+        finally:
+            if prima is None:
+                os.environ.pop("BANCO_DATI", None)
+            else:
+                os.environ["BANCO_DATI"] = prima
+
+    def test_il_banco_LEGGE_i_database_dalla_cartella_che_il_server_DICHIARA(self):
+        import sqlite3
+        cartella = tempfile.mkdtemp(prefix="banco_dati_")
+        c = sqlite3.connect(os.path.join(cartella, "finanza.db"))
+        c.execute("CREATE TABLE libro_giornale (seq INTEGER)")
+        c.commit()
+        c.close()
+        db = self._funzione_del_banco("db")
+        conn = self._con_cartella_dichiarata(cartella, lambda: db("finanza"))
+        self.assertIsNotNone(
+            conn, "il banco non guarda nella cartella che il server dichiara (BANCO_DATI): "
+                  "fuori da Docker i cinque controlli sui soldi non sono misurabili affatto, "
+                  "e il motivo scritto accanto a loro dice il falso")
+        conn.close()
+
+    def test_dove_non_c_e_niente_il_banco_dice_NON_SO_e_non_esplode(self):
+        """L'altra direzione (regola ferrea 10): un allarme provato in un verso solo
+        potrebbe gridare sempre. Qui si pretende il silenzio quando non c'e' niente da
+        leggere — `None`, cioe' «non misurabile», mai una connessione finta."""
+        db = self._funzione_del_banco("db")
+        vuota = os.path.join(tempfile.mkdtemp(prefix="banco_vuoto_"), "che_non_esiste")
+        self.assertIsNone(self._con_cartella_dichiarata(vuota, lambda: db("finanza")),
+                          "senza database il banco deve dire «non misurabile», non "
+                          "restituire qualcosa su cui poi si conterebbero righe inesistenti")
+
+    def test_il_banco_scrive_il_LIBRO_GIORNALE_su_file_e_non_in_memoria(self):
+        """`db_finanza` non era dichiarato affatto e il valore predefinito e' `:memory:`:
+        il libro dei soldi del banco viveva nella RAM del server e moriva con lui. E' il
+        modo di rompersi n. 1 (dati effimeri) dentro lo strumento che deve scoprirlo."""
+        import ast
+        with io.open(os.path.join(QUI, "collaudi", "avvia_server_visivo.py"),
+                     encoding="utf-8") as f:
+            sorgente = f.read()
+        chiamata = None
+        for n in ast.walk(ast.parse(sorgente)):
+            if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "ConfigCasaVIP":
+                chiamata = n
+        self.assertIsNotNone(chiamata, "il banco non costruisce piu' ConfigCasaVIP")
+        detti = dict((k.arg, k.value) for k in chiamata.keywords if k.arg)
+        for campo, chi in (("db_finanza", "il libro giornale"),
+                           ("db_payout", "i soldi in attesa dell'host")):
+            self.assertIn(campo, detti,
+                          "%s del banco non e' dichiarato: resta `:memory:` per omissione, "
+                          "e da fuori non lo legge nessuno" % chi)
+            pezzi = [p.value for p in ast.walk(detti[campo])
+                     if isinstance(p, ast.Constant) and isinstance(p.value, str)]
+            self.assertNotIn(":memory:", pezzi,
+                             "%s del banco sta in RAM: nessun processo esterno puo' "
+                             "guardarlo, quindi i controlli contabili non si misurano" % chi)
+            atteso = campo[3:] + ".db"     # db_finanza -> finanza.db, come cerca `db(nome)`
+            self.assertTrue(any(p.endswith(atteso) for p in pezzi),
+                            "il file di %s non si chiama %s: `db(nome)` cerca `nome + .db`, "
+                            "e con un altro nome non lo trova mai" % (chi, atteso))
+
+    def test_i_database_fuori_posto_NON_si_dichiarano_puliti_senza_aver_guardato(self):
+        """Il controllo [9] del banco faceva `os.listdir("/app/data")`: su una macchina
+        senza Docker sollevava `FileNotFoundError`, la lista restava vuota e il verdetto
+        usciva OK **senza aver guardato niente**. E' lo sbaglio S7 — premessa mancante non
+        e' un verde — lo stesso che era gia' stato tolto alla catena di impronte in questo
+        stesso file, e che li' era rimasto."""
+        fuori = self._funzione_del_banco("db_fuori_posto")
+        assente = os.path.join(tempfile.mkdtemp(prefix="assente_"), "non_esiste")
+        self.assertIsNone(fuori(assente),
+                          "una cartella che non esiste non e' «nessun database fuori "
+                          "posto»: e' una misura che non si e' potuta fare")
+        sporca = tempfile.mkdtemp(prefix="sporca_")
+        with io.open(os.path.join(sporca, "intruso.db"), "w", encoding="utf-8") as f:
+            f.write("x")
+        self.assertEqual(fuori(sporca), ["intruso.db"],
+                         "un database nato nel posto sbagliato deve VEDERSI: e' l'unica "
+                         "cosa che questo controllo esiste per trovare")
+
+
+class TestGliALLARMIDiCodeQLSICHIUDONOALLAFONTE(unittest.TestCase):
+    """🔬 I 33 ALLARMI APERTI, CHIUSI DOVE NASCONO — e ognuno nella forma che si VEDE.
+
+    Misurati dall'API il 2026-08-20 su `839b9b8`: **1 grave** (`py/insecure-protocol`) e 32
+    medi, tutti in cinque punti soli. Questa classe non ripete l'analisi di CodeQL — non
+    potrebbe — : mette in cassaforte **la forma della difesa**, cioe' la sola cosa che qui si
+    puo' controllare senza aspettare la CI. E' la stessa lezione di
+    `TestLaPuliziaDelRegistroDEVEESSEREVISIBILEACHIANALIZZA`: *una difesa ha due destinatari,
+    il programma e chi sorveglia*.
+
+    ⛔ COSA QUESTA CLASSE NON FA (D18 punto 3): **non dimostra che gli allarmi si chiudano.**
+    Quello lo dice solo la tabella di `code-scanning/alerts` letta dall'API dopo che il
+    codice e' su GitHub (regola ferrea 8). Qui si dimostra che la difesa **c'e' e ha la forma
+    giusta**; che a CodeQL basti, lo dira' CodeQL.
+    """
+
+    def _albero(self, nome_file):
+        import ast
+        with io.open(os.path.join(QUI, nome_file), encoding="utf-8") as f:
+            return ast.parse(f.read())
+
+    def _funzioni_che_chiamano(self, albero, attributo):
+        """Le funzioni che contengono una chiamata `qualcosa.<attributo>(...)`."""
+        import ast
+        trovate = []
+        for n in ast.walk(albero):
+            if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for c in ast.walk(n):
+                if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute) \
+                        and c.func.attr == attributo:
+                    trovate.append(n)
+                    break
+        return trovate
+
+    def test_il_canale_nostr_DICHIARA_la_versione_minima_di_TLS(self):
+        """⛔ `py/insecure-protocol`, GRAVE, aperto dal 2026-08-14 su
+        `fase197_canale_nostr.py`. Il codice usa `ssl.create_default_context()`, che **e' gia'
+        sicuro** (verifica il certificato e non parla TLS vecchio): l'allarme e' un falso
+        positivo. Ma un falso allarme che non si spegne costa quanto un allarme mancato
+        (regola ferrea 10), e la forma riconosciuta si aggiunge **accanto**, mai al posto: la
+        versione minima si dichiara esplicitamente, e la difesa vera resta dov'era."""
+        import ast
+        albero = self._albero("fase197_canale_nostr.py")
+        funzioni = self._funzioni_che_chiamano(albero, "wrap_socket")
+        self.assertTrue(funzioni, "nessun `wrap_socket` in fase197_canale_nostr.py: o il "
+                                  "canale non parla piu' TLS, o questa guardia cerca male")
+        for f in funzioni:
+            dichiarata = False
+            for n in ast.walk(f):
+                if isinstance(n, ast.Attribute) and n.attr == "minimum_version":
+                    dichiarata = True
+            self.assertTrue(dichiarata,
+                            "`%s` avvolge il socket in TLS senza dichiarare "
+                            "`minimum_version`: e' sicuro e CodeQL non puo' vederlo" % f.name)
+
+    def test_il_tipo_di_contenuto_non_puo_portare_un_a_capo_nelle_intestazioni(self):
+        """⛔ `py/http-response-splitting` ×2 in `fase83_server.py`: il `Content-Type` esce da
+        `mimetypes.guess_type()` su un percorso che arriva dall'utente. In pratica quella
+        funzione restituisce un tipo da tabella e un a-capo non ci puo' entrare — ma
+        l'analizzatore vede solo il percorso non fidato che finisce in un'intestazione, e ha
+        ragione a non fidarsi di un ragionamento che non puo' verificare."""
+        import ast
+        albero = self._albero("fase83_server.py")
+        funzioni = self._funzioni_che_chiamano(albero, "guess_type")
+        self.assertTrue(funzioni, "nessun `guess_type` in fase83_server.py")
+        for f in funzioni:
+            pulito = False
+            for n in ast.walk(f):
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) \
+                        and n.func.attr == "replace" and n.args \
+                        and isinstance(n.args[0], ast.Constant) \
+                        and n.args[0].value in ("\n", "\r\n", "\r"):
+                    pulito = True
+            self.assertTrue(pulito,
+                            "`%s` mette in un'intestazione un tipo ricavato da un percorso "
+                            "non fidato senza togliere gli a-capo nella forma che CodeQL "
+                            "riconosce (`.replace(\"\\n\", ...)`)" % f.name)
+
+    def test_il_dettaglio_dell_errore_NON_torna_a_chi_ha_sbagliato_la_richiesta(self):
+        """⛔ `py/stack-trace-exposure` in `fase36_booking_api.py`: la risposta 400 conteneva
+        `str(e)`, cioe' il testo dell'eccezione. Non e' pignoleria: quel testo racconta a chi
+        prova a forzare la porta **come e' fatto dentro**, ed e' il primo passo di chi cerca
+        un varco. Il dettaglio si registra nel log del server, dove serve a noi."""
+        import ast
+        albero = self._albero("fase36_booking_api.py")
+        for n in ast.walk(albero):
+            if not (isinstance(n, ast.Call) and getattr(n.func, "id", "") == "jsonify"):
+                continue
+            for dentro in ast.walk(n):
+                if isinstance(dentro, ast.Call) and getattr(dentro.func, "id", "") == "str" \
+                        and dentro.args and getattr(dentro.args[0], "id", "") == "e":
+                    self.fail("una risposta di `fase36_booking_api.py` rimanda al chiamante "
+                              "il testo dell'eccezione (`str(e)`): il dettaglio va nel log, "
+                              "non nella risposta")
+
+    def test_le_classi_di_emoji_non_sono_intervalli_giganti_a_caso(self):
+        """⛔ `py/overly-large-range` in `fase200_campagna_persuasiva.py`: un intervallo solo
+        che attraversa **11 blocchi Unicode diversi**. La regola esiste perche' un intervallo
+        cosi' largo di solito e' uno sbaglio di battitura, e nessuno riesce piu' a dire cosa
+        ci sia dentro. Qui non cambia cosa viene filtrato: lo stesso identico insieme, scritto
+        blocco per blocco — e nessun intervallo attraversa il confine di un blocco."""
+        import re as _re
+        import fase200_campagna_persuasiva as C
+        for a, b in _re.findall(r"(.)-(.)", C._EMOJI.pattern):
+            ampiezza = ord(b) - ord(a) + 1
+            self.assertLessEqual(
+                ampiezza, 256,
+                "l'intervallo U+%04X-U+%04X copre %d caratteri: attraversa piu' blocchi "
+                "Unicode, e chi legge non puo' piu' sapere cosa filtra"
+                % (ord(a), ord(b), ampiezza))
+
+    def test_ogni_valore_non_fidato_nei_log_di_app_passa_dal_ripulitore(self):
+        """⛔ `py/log-injection` ×28, **tutti in `app.py`**: il percorso della richiesta, il
+        metodo e l'indirizzo di chi chiama finiscono nel registro senza passare da
+        `_sanitize_log`, che in quel file c'e' gia' ed e' scritto **nella forma riconosciuta**
+        (`.replace("\\r", ...).replace("\\n", ...)`). Non mancava il rimedio: mancava usarlo.
+
+        ⛔ E `app.py` NON si esclude dall'analisi, anche se il `Dockerfile` non lo spedisce:
+        `TestLaListaDeiFileESCLUSIDaCodeQL` lo dichiara punto d'ingresso e pretende che resti
+        dentro. Un'esclusione qui sarebbe l'interruttore per spegnere gli allarmi scomodi."""
+        import ast
+        albero = self._albero("app.py")
+        sporchi = {"path", "method", "full_path", "query_string"}
+        colpevoli = []
+        for n in ast.walk(albero):
+            if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)):
+                continue
+            if getattr(n.func.value, "id", "") != "logger":
+                continue
+            for arg in n.args:
+                if isinstance(arg, ast.Attribute) and arg.attr in sporchi \
+                        and getattr(arg.value, "id", "") == "request":
+                    colpevoli.append((n.lineno, "request." + arg.attr))
+                if isinstance(arg, ast.Call) and getattr(arg.func, "id", "") == "_client_ip":
+                    colpevoli.append((n.lineno, "_client_ip()"))
+        self.assertEqual(colpevoli, [],
+                         "in app.py questi valori non fidati entrano nel registro senza "
+                         "`_sanitize_log(...)`: %s" % colpevoli)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

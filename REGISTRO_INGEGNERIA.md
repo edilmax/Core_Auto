@@ -774,6 +774,127 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🛡️ 2026-08-20 (15) — **I 33 ALLARMI DI CODEQL, E I 60 SECONDI DI PAGINA BIANCA AL DEPLOY**
+
+**Cosa è cambiato:** `fase197_canale_nostr.py`, `fase83_server.py`, `app.py`,
+`fase200_campagna_persuasiva.py`, `fase36_booking_api.py`, `deploy/nginx.casavip.ssl.conf`,
+`DEPLOY.md` — codice di **produzione**, col «autorizzato» scritto dal fondatore (B4). Più 8
+guardie nuove: `TestGliALLARMIDiCodeQLSICHIUDONOALLAFONTE` (5, in `test_pipeline_ci.py`) e
+`TestIlDeployNONLASCIAILSITOAPPESO` (3, in `test_deploy_casavip.py`).
+
+**Perché (CodeQL).** Misurati dall'API su `839b9b8`: 33 aperti, **1 grave**, concentrati in
+cinque punti. Nessuno rompeva il prodotto: quattro erano **difese che l'analizzatore non poteva
+vedere**, uno era un rimedio che c'era e non veniva usato. È la lezione già pagata il
+2026-08-18: *una difesa ha due destinatari, il programma e chi sorveglia*; e la forma
+riconosciuta si aggiunge **accanto**, mai al posto.
+
+| punto | cos'era | cosa si è aggiunto |
+|---|---|---|
+| `fase197_canale_nostr.py` | `create_default_context()` è già sicuro, CodeQL non può dedurlo | `ctx.minimum_version = ssl.TLSVersion.TLSv1_2`, dichiarata |
+| `fase83_server.py` ×2 | il `Content-Type` nasce da un percorso non fidato | a-capo tolti nella forma riconosciuta, prima del charset |
+| `app.py` ×28 | `_sanitize_log` **esisteva già** e nessuno lo usava | percorso, metodo, indirizzo e chiave ci passano |
+| `fase200_campagna_persuasiva.py` | un intervallo che attraversa **11 blocchi Unicode** | spezzato blocco per blocco, scritto coi numeri |
+| `fase36_booking_api.py` | la risposta 400 rimandava `str(e)` al chiamante | il dettaglio va nel log del server |
+
+⛔ **`app.py` non si esclude dall'analisi**, benché il `Dockerfile` non lo spedisca:
+`TestLaListaDeiFileESCLUSIDaCodeQL` lo dichiara punto d'ingresso e pretende che resti dentro.
+Un'esclusione sarebbe l'interruttore per spegnere gli allarmi scomodi.
+
+✅ **La modifica alle emoji non cambia cosa viene filtrato, ed è dimostrato, non affermato.**
+Un oracolo indipendente ha attraversato **tutto** lo spazio Unicode e confrontato i due insiemi:
+**3538 caratteri prima, 3538 dopo, 0 spariti, 0 aggiunti.**
+
+⚠️ **Limite dichiarato (D18 punto 3):** queste 8 guardie **non dimostrano che gli allarmi si
+chiudano** — non potrebbero. Dimostrano che la difesa c'è e ha la forma giusta. Che a CodeQL
+basti lo dice solo la tabella `code-scanning/alerts` letta dall'API dopo il push (ferrea 8).
+
+**Perché (deploy).** Il rosso della sentinella del 19/08 non era un capriccio, ed era peggio di
+come sembrava:
+```
+casavip_app  StartedAt 2026-08-19T21:44:47Z        (docker inspect)
+sentinella   21:45:43Z  curl: (28) Connection timed out after 20001 ms
+location /   nessun proxy_connect_timeout  ->  valore di serie di nginx: 60 secondi
+```
+Il difetto non è l'applicazione che riparte — dura pochi secondi — è **nginx che resta appeso**
+sull'indirizzo di un contenitore che non esiste più. Ora: `proxy_connect_timeout 3s` su
+entrambe le location che inoltrano, e `@manutenzione` che risponde **503 + `Retry-After: 20`**.
+
+⛔ **503 e non 200**, di proposito: il sito è davvero indisponibile e la sentinella **deve**
+continuare a vederlo (regola ferrea 10). ⛔ `proxy_intercept_errors off` scritto per iscritto:
+acceso, nginx sostituirebbe anche il `503` dell'**applicazione**, cioè il fail-safe «gateway giù
+= non si conferma niente». Un rimedio che spegne una difesa non è un rimedio.
+⛔ **Non si mette `503` fra gli `error_page`**: quel codice lo produce anche `limit_req` quando
+ferma un abuso, e rispondere «siamo in manutenzione» a chi martella sarebbe una bugia.
+
+✅ **Provata da nginx, non da un test che legge testo:** `nginx -t` in un contenitore
+usa-e-getta, sulla rete `bookinvip_interna` e coi certificati veri → *syntax is ok · test is
+successful*. Il file di prova è stato rimosso dal server.
+
+⚠️ **NON è un deploy senza interruzione**, e `DEPLOY.md` ora lo dice: la finestra resta, smette
+di essere un'attesa muta. Due contenitori vivi insieme sono un lavoro a sé.
+⛔ E `DEPLOY.md` dichiarava *«rm-first… resta innocuo»*: **non è innocuo**, allunga la finestra.
+Corretto con la misura accanto.
+⛔ **Quando si porta su:** la conf nginx è montata **per inode**, quindi `git pull` +
+`nginx -s reload` **non basta e fallisce in silenzio**. Serve
+`docker rm -f casavip_nginx && docker compose -f docker-compose.casavip.yml up -d` (DEPLOY.md §3).
+
+### 🏦 2026-08-20 (14) — **I «7 NON ESEGUITI» DEL BANCO AVEVANO LA MOTIVAZIONE SBAGLIATA**
+
+**Cosa è cambiato:** `collaudi/giro_banco.py` e `collaudi/avvia_server_visivo.py` (strumentazione
+di collaudo, non produzione — B4 lo dichiara esplicitamente), più 4 guardie nuove in
+`test_pipeline_ci.py` (classe `TestIlBancoSIPUOGIUDICAREANCHEFUORIDALCONTENITORE`).
+
+**Perché.** Il giro sul banco chiudeva con **19 OK e 7 NON ESEGUITI**, e accanto a cinque di
+quei buchi c'era scritto *«il database sta in `/data`, solo dentro il contenitore»*. **Non era
+vero.** Il banco che quei controlli devono giudicare è `avvia_server_visivo.py`, che i database
+li metteva in una cartella temporanea **senza nome**, e il libro giornale non lo metteva da
+nessuna parte: `db_finanza` non era nemmeno dichiarato, quindi restava `:memory:` per omissione
+— **modo di rompersi n. 1 (dati effimeri) dentro lo strumento che esiste per scoprirlo**. Gli
+altri due (bunker) chiedevano la password all'**ambiente** mentre il banco la teneva incisa nel
+proprio codice: due posti, mai d'accordo. Non era Docker: era il giudice che cercava dove il
+giudicato non aveva mai scritto.
+
+**Logica.** Una sola cartella dichiarata, `BANCO_DATI`, che i due processi si scambiano:
+l'avviatore la usa se c'è (altrimenti resta la temporanea di prima, quindi la CI non cambia
+comportamento) e la **stampa** all'avvio; `db(nome)` la consulta per prima e tiene `/data` e
+`/app/data` dopo, perché dentro il contenitore quella è la cartella vera. Il libro giornale e i
+payout diventano **file**, e col nome che `db(nome)` cerca davvero (`finanza.db`, `payout.db`:
+con `pay.db` il file c'era e non lo trovava nessuno). La password del super-admin viene da
+`BUNKER_PASSWORD` col valore di prima come ripiego dichiarato.
+
+**Dipendenze/env:** `BANCO_DATI` (nuova, letta da `collaudi/avvia_server_visivo.py` e
+`collaudi/giro_banco.py`) · `BUNKER_PASSWORD` (già esistente, ora letta anche dall'avviatore).
+**STATO:** acceso, è strumentazione locale; senza le due variabili tutto si comporta come prima.
+
+**D20 rispettata:** prima le 4 guardie, **viste rosse** — «db_fuori_posto() non esiste»,
+«unexpectedly None» sulla cartella dichiarata, «'db_finanza' not found» fra i parametri di
+`ConfigCasaVIP» — poi la riparazione, poi le stesse 4 verdi.
+
+**Misurato (stesso comando, stessa macchina, prima e dopo):**
+```
+PRIMA:  PASSI 26  OK 19  NON OK 0  NON ESEGUITI 7   uscita 0
+DOPO:   PASSI 34  OK 34  NON OK 0  NON ESEGUITI 1   uscita 0
+```
+L'unico non eseguito rimasto è onesto: `/app/data` **non esiste** fuori dal contenitore.
+
+🔴 **E APPENA IL CONTROLLO HA POTUTO GUARDARE, È USCITO ROSSO: atteso 975, misurato 2275.**
+Aveva ragione il motore. L'attesa diceva *«l'host è appena nato (promo, commissione 0%), quindi
+resta la sola tariffa tecnica»*, ma la rampa di lancio sul banco **non è accesa**:
+`ConfigCasaVIP.promo_lancio_attiva` vale `False` di serie e l'avviatore locale non la accende
+(in produzione la accende `main_casavip.py` leggendo `PROMO_LANCIO`, che di serie è «true»).
+Lo diceva già `giro_banco.py` stesso, nella docstring di `_commissione_bps_del_banco()` — due
+frasi opposte a 440 righe di distanza, e quella giusta era usata **solo** dal controllo dei
+rimborsi. Verificato sul libro vero prima di toccare l'attesa: **13 righe da 175 cents = 100 di
+commissione (10%) + 75 di tariffa tecnica**.
+⚠️ **Limite dichiarato (D18 punto 3):** il banco esercita il **regime**, non la rampa di lancio.
+Il caso «host appena nato, commissione 0%» lì non passa mai.
+
+💡 **Un verde per assenza in meno, nello stesso file.** Il controllo [9] faceva
+`os.listdir("/app/data")` dentro un `try`: fuori dal contenitore l'eccezione lo riportava a
+lista vuota e il verdetto usciva **OK senza aver guardato niente** (sbaglio S7) — ed era uno dei
+19. Ora è `NON ESEGUITO` dove non si può misurare, e accanto c'è la domanda che **qui** si può
+fare sempre: nessun database nato nella cartella del progetto.
+
 ### 🌐 2026-08-19 (13) — **UN MIRROR UBUNTU GIÙ TENEVA FERMO IL CANCELLO**
 
 Il cancello della richiesta **#79** è andato **rosso**, e non ho unito. ⛔ Ma il rosso non era

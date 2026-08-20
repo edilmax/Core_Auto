@@ -68,7 +68,14 @@ def registra_rotte(target: Any, motore: Any, servizio: Any, *,
                 importo_totale_cents=parse_cent(d["importo_totale_cents"], "importo_totale_cents"),
                 commissione_cents=parse_cent(d["commissione_cents"], "commissione_cents"))
         except (KeyError, ValueError, TypeError) as e:
-            return jsonify({"error": "invalid_payload", "dettaglio": str(e)}), 400
+            # ⛔ `py/stack-trace-exposure`: qui tornava `str(e)` a chi aveva chiamato. Il testo
+            # di un'eccezione racconta com'e' fatto il dentro -- nomi di campi, tipi attesi,
+            # a volte il percorso di un file -- e chi cerca un varco comincia proprio da li'.
+            # Il dettaglio serve a NOI: va nel registro del server, non nella risposta. Chi
+            # chiama continua a ricevere `invalid_payload` e lo stesso 400 di prima.
+            logger.warning("payload non valido su /prenotazioni: %s",
+                           str(e).replace("\r", " ").replace("\n", " "))
+            return jsonify({"error": "invalid_payload"}), 400
         esito = motore.crea(req)
         if not esito.ok:
             return jsonify({"error": esito.motivo}), (409 if esito.motivo == "non_disponibile" else 400)

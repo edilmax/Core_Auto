@@ -136,9 +136,35 @@ docker compose -f docker-compose.casavip.yml up -d
 
 **Perché "rm-first":** con Compose v1 un `up -d` su container esistenti dopo un `build`
 falliva con `KeyError: ContainerConfig`, e fermare+rimuovere prima di ricreare era l'unica
-sequenza che funzionasse. **Con la v2 non è più necessario, ma resta innocuo e lo si tiene**:
+sequenza che funzionasse. Con la v2 non è più necessario, e **si tiene perché è provato**:
 il volume dei dati non viene toccato — `rm -f` rimuove i container, non i dati.
+⛔ **CORREZIONE 2026-08-20: qui c'era scritto «resta innocuo». Non è innocuo.** Fra lo `stop`
+e l'applicazione di nuovo in piedi il sito **non c'è**, e quella finestra è più lunga di
+quanto serva: sono due passi (ferma, rimuovi) prima di ricominciare. Misurato il 19/08:
+`casavip_app` è ripartito alle `21:44:47Z`, e la sentinella esterna alle `21:45:43Z` è morta
+con `curl: (28) Connection timed out after 20001 ms`. Il rosso era **vero**.
 ⛔ Usare **`docker compose`** (v2) in ogni riga: la v1 col trattino butta giù nginx (vedi §1).
+
+### ⏱️ COSA VEDE UN UTENTE DURANTE LO SCAMBIO (e cosa vedeva prima)
+
+**Prima:** una pagina bianca **fino a un minuto**. Non per colpa dell'applicazione che
+riparte — quello dura pochi secondi — ma perché `location /` non dichiarava
+`proxy_connect_timeout` e il valore di serie di nginx è **60 secondi**: nginx teneva
+l'indirizzo del contenitore sparito e restava lì ad aspettare. Era anche il motivo per cui la
+sentinella vedeva un *timeout* invece di un errore.
+
+**Ora** (2026-08-20, `deploy/nginx.casavip.ssl.conf`): l'attesa di connessione è **3 secondi**
+e c'è `@manutenzione`, che risponde **503 + `Retry-After: 20`** con una pagina che dice
+«torniamo subito». La finestra **c'è ancora**, ma smette di essere un'attesa muta.
+⚠️ **Non è un deploy senza interruzione**, e non va raccontato come tale: per quello servono
+due contenitori vivi insieme e nginx che passa dall'uno all'altro. È un lavoro a sé.
+⛔ E la sentinella **deve continuare** ad andare rossa durante il deploy: il sito è davvero
+indisponibile, e una pagina di cortesia che rispondesse `200` spegnerebbe l'unico allarme che
+guarda da fuori (regola ferrea 10).
+⛔ `proxy_intercept_errors` resta **spento e scritto**: se si accendesse, nginx sostituirebbe
+anche i `503` che manda l'**applicazione** — cioè il fail-safe «gateway giù = non si conferma
+niente». Un rimedio che spegne una difesa non è un rimedio. Lo sorveglia
+`TestIlDeployNONLASCIAILSITOAPPESO` in `test_deploy_casavip.py`.
 
 > Se la modifica riguarda **solo i documenti** (`.md`), basta `git pull`: niente rebuild.
 >

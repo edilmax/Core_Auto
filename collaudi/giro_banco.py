@@ -113,11 +113,32 @@ def saltato(nome, perche):
 
 
 def db(nome):
-    for cartella in ("/data", "/app/data"):
+    # ⛔ `BANCO_DATI` PER PRIMA: e' la cartella che `avvia_server_visivo.py` dichiara all'avvio.
+    # Prima qui c'erano solo le due di dentro il contenitore, e su una macchina senza Docker
+    # questa funzione tornava SEMPRE `None`: cinque controlli sui soldi non erano misurabili
+    # affatto, e la riga scritta accanto a loro («sta in /data») spiegava il buco col motivo
+    # sbagliato. Restano dopo, perche' dentro il contenitore la cartella vera e' quella.
+    for cartella in (os.environ.get("BANCO_DATI", ""), "/data", "/app/data"):
+        if not cartella:
+            continue
         p = os.path.join(cartella, nome + ".db")
         if os.path.exists(p):
             return sqlite3.connect("file:%s?mode=ro" % p, uri=True)
     return None
+
+
+def db_fuori_posto(cartella):
+    """I `.db` nati in una cartella dove non dovrebbero esserci — oppure `None` se quella
+    cartella non esiste, cioe' se la domanda non si e' potuta nemmeno porre.
+
+    ⛔ La distinzione fra «nessuno» e `None` e' tutto il punto. Prima il controllo [9]
+    faceva `os.listdir("/app/data")` dentro un `try`, e su una macchina senza Docker
+    l'eccezione lo riportava a lista vuota: il verdetto usciva OK **senza aver guardato
+    niente**. E' lo sbaglio S7 — premessa mancante non e' un verde — lo stesso gia' tolto
+    alla catena di impronte in questo stesso file, che li' era rimasto."""
+    if not os.path.isdir(cartella):
+        return None
+    return sorted(n for n in os.listdir(cartella) if n.endswith(".db"))
 
 
 def giornale():
@@ -362,12 +383,12 @@ if contesa:
     passo("l'ospite apre la contestazione", s == 200, 200, "%s %s" % (s, out))
     c = db("payout")
     if c is None:
-        # Stesso caso del libro giornale: il database sta in /data, cioe' SOLO dentro il
-        # contenitore. Senza, questo controllo non e' rosso -- e' NON ESEGUITO. Segnarlo
-        # rosso insegnerebbe a ignorare i rossi, che e' il modo di perdere quello vero.
+        # Stesso caso del libro giornale: senza il database, questo controllo non e' rosso
+        # -- e' NON ESEGUITO. Segnarlo rosso insegnerebbe a ignorare i rossi, che e' il modo
+        # di perdere quello vero.
         saltato("i soldi dell'host si FERMANO (payout trattenuto)",
-                "il database payout sta in /data (solo dentro il contenitore): "
-                "su questa macchina non e' leggibile, quindi NON si misura")
+                "nessun payout.db in BANCO_DATI (la cartella che il banco dichiara "
+                "all'avvio) ne' in /data: non c'e' niente da leggere, quindi NON si misura")
     else:
         stato = None
         try:
@@ -462,32 +483,45 @@ elif CHIAVE:
 print("\n-- [8] I CONTI, E QUESTA VOLTA HOST PER HOST --")
 print("     (con UN host solo questo controllo non esisterebbe nemmeno)")
 g = giornale()
-# ⛔ IL GIORNALE SI LEGGE DA `/data` o `/app/data`, cioe' SOLO dentro il contenitore.
-# Su una macchina senza Docker `giornale()` torna sempre vuoto, e prima di questa riga i
-# tre controlli qui sotto finivano ROSSI: il banco dichiarava guasto cio' che non poteva
-# nemmeno guardare. E' l'errore opposto al salto silenzioso, ma costa uguale -- un falso
-# allarme insegna a ignorare i rossi (regola ferrea 10). Ora, se il libro non e'
-# leggibile, i tre controlli sono NON ESEGUITI: un buco dichiarato, non un guasto finto.
+# ⛔ SE IL LIBRO NON SI LEGGE, I TRE CONTROLLI QUI SOTTO SONO NON ESEGUITI, NON ROSSI:
+# dichiarare guasto cio' che non si e' potuto guardare e' un falso allarme, e un falso
+# allarme insegna a ignorare i rossi (regola ferrea 10).
+# ⚠️ E FINO AL 2026-08-20 QUI C'ERA SCRITTO IL MOTIVO SBAGLIATO: «il giornale sta in /data,
+# solo dentro il contenitore». Non era vero. Il banco (`avvia_server_visivo.py`) lasciava
+# `db_finanza` a `:memory:`, cioe' il libro non esisteva su NESSUN disco -- e questa riga
+# faceva sembrare Docker la causa di un buco che era nostro. Ora il banco lo scrive in
+# `BANCO_DATI` e questi tre si misurano anche fuori dal contenitore.
 _libro_leggibile = db("finanza") is not None
 if not _libro_leggibile:
     for _n in ("somma degli incassi = pagate x prezzo",
                "tariffa tecnica su ogni incasso",
                "ogni cancellazione pagata lascia la sua riga di rimborso nel giornale"):
-        saltato(_n, "il libro giornale sta in /data (solo dentro il contenitore): "
-                    "su questa macchina non e' leggibile, quindi NON si misura")
+        saltato(_n, "nessun finanza.db in BANCO_DATI (la cartella che il banco dichiara "
+                    "all'avvio) ne' in /data: non c'e' niente da leggere, quindi NON si misura")
 inc = sum(i for _, t, _, _, i, _, _ in g if t == "incasso")
 com = sum(i for _, t, _, _, i, _, _ in g if t == "commissione")
 if _libro_leggibile:
     passo("somma degli incassi = pagate x prezzo", inc == pagate * PREZZO * NOTTI,
           "%d (%d x %d)" % (pagate * PREZZO * NOTTI, pagate, PREZZO * NOTTI), inc)
-# La riga del giornale "commissione" contiene commissione + tariffa tecnica. Qui l'host e'
-# appena nato (promo, commissione 0%), quindi resta la sola tariffa tecnica.
+# La riga del giornale "commissione" contiene commissione + tariffa tecnica.
 # ⛔ La cifra si RICAVA dal motore: era scritta a mano (`pagate * 30`, cioe' il 3% di 10 EUR)
 # e il 2026-08-10, passando al 5% + 0,25, avrebbe dichiarato rotto un banco sano.
+# ⛔ E IL 2026-08-20, LA PRIMA VOLTA CHE QUESTO CONTROLLO HA POTUTO GUARDARE DAVVERO, E'
+# USCITO ROSSO: atteso 975, misurato 2275. Il motore aveva ragione. Qui c'era scritto «l'host
+# e' appena nato (promo, commissione 0%), quindi resta la sola tariffa tecnica», ma la rampa
+# di lancio NON e' accesa sul banco: `ConfigCasaVIP.promo_lancio_attiva` vale `False` di
+# serie e `avvia_server_visivo.py` non la accende (in produzione la accende `main_casavip.py`
+# leggendo `PROMO_LANCIO`, che di serie e' «true»). Lo diceva gia' questo stesso file, nella
+# docstring di `_commissione_bps_del_banco()` -- due frasi opposte a 440 righe di distanza,
+# e quella giusta era usata solo dal controllo dei rimborsi. Misurato sul libro vero:
+# 13 righe da 175 cents = 100 di commissione (10%) + 75 di tariffa tecnica.
+# ⚠️ COSA QUESTO CONTROLLO NON GUARDA (D18 punto 3): il banco esercita il REGIME, non la
+# rampa di lancio. Il caso «host appena nato, commissione 0%» qui non passa mai.
 _atteso_tec = (PREZZO * NOTTI * _psp_bps_del_motore()) // 10000 + _psp_fisso_del_motore()
+_atteso_riga = (PREZZO * NOTTI * _commissione_bps_del_banco()) // 10000 + _atteso_tec
 if _libro_leggibile:
-    passo("tariffa tecnica = %d cents su ogni incasso" % _atteso_tec,
-          com == pagate * _atteso_tec, pagate * _atteso_tec, com)
+    passo("commissione + tariffa tecnica = %d cents su ogni incasso" % _atteso_riga,
+          com == pagate * _atteso_riga, pagate * _atteso_riga, com)
 
 # I SOLDI DI UN HOST NON FINISCONO A UN ALTRO. E' il controllo che con un host solo non
 # si puo' fare, e sostituisce quello vecchio ("dovuto = incassi - commissioni"), che era
@@ -537,8 +571,8 @@ for seq, _, _, _, _, ph, h in g:
 # leggono il giornale lo dichiaravano gia'. Questo era rimasto indietro da solo.
 if not _libro_leggibile or not g:
     saltato("catena di impronte del libro giornale",
-            "il libro giornale sta in /data (solo dentro il contenitore) oppure e' vuoto: "
-            "senza righe la catena non si puo' verificare, quindi NON si misura")
+            "il libro giornale non e' leggibile (nessun finanza.db in BANCO_DATI ne' in "
+            "/data) oppure e' vuoto: senza righe la catena non si verifica, quindi NON si misura")
 else:
     passo("catena di impronte del libro giornale", rotta is None, "integra",
           "rotta alla riga %s" % rotta if rotta is not None else "integra")
@@ -549,13 +583,25 @@ else:
 print("\n-- [9] E DOPO TUTTO QUESTO, I DATABASE SONO ANCORA AL POSTO GIUSTO? --")
 print("     (il controllo di fedelta' gira all'ACCENSIONE, quando i database creati alla")
 print("      prima occorrenza non esistono ancora: questo chiude quel buco)")
-fuori = []
-try:
-    fuori = sorted(n for n in os.listdir("/app/data") if n.endswith(".db"))
-except FileNotFoundError:
-    fuori = []
-passo("nessun database dentro il contenitore (muore col contenitore)", not fuori,
-      "nessuno", fuori)
+# ⛔ QUESTO CONTROLLO ERA VERDE PER ASSENZA, e stava fra i 19 «OK». `os.listdir("/app/data")`
+# su una macchina senza Docker solleva FileNotFoundError: la lista restava vuota e il
+# verdetto usciva OK **senza aver guardato niente** (sbaglio S7, lo stesso gia' tolto alla
+# catena di impronte poche righe sopra). Ora le domande sono DUE, e ognuna dice se ha
+# guardato: dentro il contenitore si misura solo se quella cartella esiste davvero, e qui
+# -- dove il banco sta girando -- si misura SEMPRE, perche' e' il caso che puo' capitare
+# su questa macchina: un database nato nella cartella del progetto invece che in BANCO_DATI.
+_RADICE_PROGETTO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+fuori = db_fuori_posto("/app/data")
+if fuori is None:
+    saltato("nessun database dentro il contenitore (muore col contenitore)",
+            "/app/data non esiste su questa macchina: non c'e' niente da guardare, e "
+            "dichiararlo verde sarebbe un verde per assenza")
+else:
+    passo("nessun database dentro il contenitore (muore col contenitore)", not fuori,
+          "nessuno", fuori)
+_in_casa = db_fuori_posto(_RADICE_PROGETTO)
+passo("nessun database nato nella cartella del progetto", not _in_casa,
+      "nessuno", _in_casa)
 
 # ---------------------------------------------------------------------------
 print("\n" + "=" * 80)

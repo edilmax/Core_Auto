@@ -177,6 +177,13 @@ def _invia_ws_reale(relay_url: str, messaggio: str) -> bool:  # pragma: no cover
         sock = socket.create_connection((u.hostname, porta), timeout=10)
         if u.scheme == "wss":
             ctx = ssl.create_default_context()
+            # ⛔ QUESTA RIGA NON RENDE IL CANALE PIU' SICURO: LO RENDE DIMOSTRABILE.
+            # `create_default_context()` verifica gia' il certificato e rifiuta i protocolli
+            # vecchi, ma CodeQL non puo' dedurlo e apre `py/insecure-protocol` -- l'unico
+            # allarme GRAVE del repository, aperto dal 2026-08-14. Una difesa ha due
+            # destinatari, il programma e chi sorveglia: la forma riconosciuta si aggiunge
+            # ACCANTO a quella vera, mai al posto (sostituirla indebolirebbe).
+            ctx.minimum_version = ssl.TLSVersion.TLSv1_2
             sock = ctx.wrap_socket(sock, server_hostname=u.hostname)
         chiave = base64.b64encode(os.urandom(16)).decode()
         handshake = (

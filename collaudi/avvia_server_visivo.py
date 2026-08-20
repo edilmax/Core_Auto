@@ -27,13 +27,34 @@ from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256       # noq
 
 
 def _prepara(porta):
-    d = tempfile.mkdtemp(prefix="visivo_")
+    # ⛔ DOVE STANNO I DATABASE E' UNA COSA CHE IL BANCO DEVE POTER DIRE A CHI LO GIUDICA.
+    # Fino al 2026-08-20 questa cartella era temporanea e senza nome, e `collaudi/giro_banco.py`
+    # cercava i database solo in `/data` e `/app/data`, cioe' dentro il contenitore: su
+    # qualunque macchina senza Docker CINQUE controlli sui soldi finivano «NON ESEGUITI» con
+    # scritto accanto «il database sta in /data» -- una motivazione falsa, perche' il problema
+    # era che il giudice cercava dove il giudicato non aveva mai scritto. Con `BANCO_DATI` la
+    # cartella ha un nome che i due processi si scambiano, e quei controlli si MISURANO.
+    d = os.environ.get("BANCO_DATI") or tempfile.mkdtemp(prefix="visivo_")
+    os.makedirs(d, exist_ok=True)
+    print("BANCO_DATI: %s" % d, flush=True)
     sistema = crea_sistema(ConfigCasaVIP(
         abilitato=True, segreto_hmac=b"V" * 32, con_registrazione_host=True,
         db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db", db_registro_host=f"{d}/r.db",
-        db_accettazioni=f"{d}/acc.db", db_pendenti=f"{d}/p.db", db_payout=f"{d}/pay.db",
+        db_accettazioni=f"{d}/acc.db", db_pendenti=f"{d}/p.db",
+        # ⛔ I NOMI DI QUESTI DUE NON SONO LIBERI: `giro_banco.db(nome)` apre `nome + ".db"`,
+        # quindi `payout.db` e `finanza.db`. Con `pay.db` il file c'era e non lo trovava nessuno.
+        db_payout=f"{d}/payout.db",
+        # ⛔ ERA `:memory:` PER OMISSIONE, ed e' il difetto piu' grosso dei due: il libro
+        # giornale del banco viveva nella RAM del server e moriva con lui. I quattro controlli
+        # contabili non erano «saltati per colpa di Docker»: non avevano niente da leggere,
+        # da nessuna parte. E' il modo di rompersi n. 1 (dati effimeri) dentro lo strumento
+        # che esiste per scoprirlo.
+        db_finanza=f"{d}/finanza.db",
         db_garanzia=f"{d}/g.db", db_tassa_comunale=f"{d}/t.db",
-        bunker_password="SuperPw@1",   # accende il SUPER-ADMIN (bunker) per il collaudo dei 3 ruoli
+        # la password del super-admin viene dall'ambiente, cosi' chi giudica il banco puo'
+        # usare LA STESSA senza ricopiarla in un secondo posto (una copia resta indietro il
+        # giorno che cambia); il valore di prima resta come ripiego dichiarato.
+        bunker_password=os.environ.get("BUNKER_PASSWORD", "SuperPw@1"),
         commissione_bps=1000,
         # ⛔ PILOTABILI DALL'AMBIENTE (2026-08-10), con gli stessi valori di prima come
         # ripiego: erano incisi qui dentro, e `collaudi/giro_banco.py` — che parla con
