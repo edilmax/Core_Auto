@@ -102,8 +102,13 @@ class TestVarianti(_Base):
         self.assertEqual(self.book(q2["quote_token"], "d@x.it")[0], 201)
 
     def test_split_gruppo_conservazione(self):
+        # ⛔ 2026-08-20: la rotta ora vuole il VOUCHER firmato e prende da li' la prenotazione
+        # (era pubblica e scriveva senza identita' — pezzo B del piano). Qui si prova la
+        # CONSERVAZIONE al centesimo, che non cambia: cambia che si arriva con l'identita'.
+        tk = self.sis.firma.codifica({"tipo": "voucher", "riferimento": "P9",
+                                      "alloggio_id": "casa"})
         s, _ = self.g("POST", "/api/split/crea",
-                      {"prenotazione_id": "P9", "alloggio_id": "casa",
+                      {"voucher_token": tk,
                        "totale_cents": 10000, "partecipanti": ["a", "b", "c"]})
         self.assertIn(s, (200, 201))
         ss, cs = self.g("GET", "/api/split/stato", q={"conto_id": "P9"})

@@ -319,7 +319,10 @@ class TestMarketing(unittest.TestCase):
 
 class TestMotori(unittest.TestCase):
     def setUp(self):
-        self.r = crea_router(_sistema())
+        # il sistema si TIENE: serve `firma` per coniare il voucher che le rotte dello
+        # split ora pretendono (vedi la nota sopra i due collaudi dello split)
+        self.sis = _sistema()
+        self.r = crea_router(self.sis)
 
     def test_tassa_zero_default(self):
         s, c = self.r.gestisci("GET", "/api/tassa",
@@ -328,34 +331,48 @@ class TestMotori(unittest.TestCase):
         self.assertEqual(c["tassa_cents"], 0)          # nessuna regola env -> 0
         self.assertEqual(c["money_unit"], "cents_integer")
 
+    # ⛔ AGGIORNATI IL 2026-08-20 PERCHE' E' CAMBIATO IL REQUISITO, NON PERCHE' ERANO SBAGLIATI.
+    # `/api/split/crea` e `/api/split/paga` erano rotte pubbliche che SCRIVEVANO senza chiedere
+    # chi fosse chi chiama (pezzo B del piano). Ora vogliono il voucher firmato, e la
+    # prenotazione la prendono DA LI'. Questi collaudi provano il motore attraverso le rotte:
+    # quello che cambia e' che ora si presentano con l'identita', come fara' l'ospite vero.
+    # La serratura in se' la sorveglia `TestLoSPLITNONSIMUOVESENZAIDENTITA`, in fondo al file.
+    def _voucher(self, rif="p1", allog="casa"):
+        return self.sis.firma.codifica({"tipo": "voucher", "riferimento": rif,
+                                        "alloggio_id": allog})
+
     def test_split_crea_paga_completa(self):
         # conto da 9000 diviso fra 3 -> 3000 ciascuno
+        tk = self._voucher()
         s, c = self.r.gestisci("POST", "/api/split/crea", body=json.dumps(
-            {"prenotazione_id": "p1", "alloggio_id": "casa", "totale_cents": 9000,
+            {"voucher_token": tk, "totale_cents": 9000,
              "partecipanti": ["a", "b", "c"]}))
         self.assertEqual(s, 201)
         cid = c["conto_id"]
         # a e b pagano
         for p in ("a", "b"):
             sp, cp = self.r.gestisci("POST", "/api/split/paga", body=json.dumps(
-                {"conto_id": cid, "partecipante_id": p}))
+                {"conto_id": cid, "partecipante_id": p, "voucher_token": tk}))
             self.assertEqual(sp, 200)
             self.assertFalse(cp["completato"])
         # c paga -> completato
         sp, cp = self.r.gestisci("POST", "/api/split/paga", body=json.dumps(
-            {"conto_id": cid, "partecipante_id": "c"}))
+            {"conto_id": cid, "partecipante_id": "c", "voucher_token": tk}))
         self.assertTrue(cp["completato"])
         # replay idempotente
         sp2, cp2 = self.r.gestisci("POST", "/api/split/paga", body=json.dumps(
-            {"conto_id": cid, "partecipante_id": "c"}))
+            {"conto_id": cid, "partecipante_id": "c", "voucher_token": tk}))
         self.assertTrue(cp2["idempotente"])
         # stato
         ss, st = self.r.gestisci("GET", "/api/split/stato", {"conto_id": cid})
         self.assertEqual(st["totale_cents"], 9000)
 
     def test_split_conto_invalido(self):
+        """Con l'identita' AL POSTO GIUSTO: il 422 deve arrivare per il conto senza
+        partecipanti, non per il voucher mancante — altrimenti questo collaudo direbbe verde
+        per il motivo sbagliato."""
         s, _ = self.r.gestisci("POST", "/api/split/crea", body=json.dumps(
-            {"prenotazione_id": "p", "alloggio_id": "c", "totale_cents": 1000,
+            {"voucher_token": self._voucher(), "totale_cents": 1000,
              "partecipanti": []}))
         self.assertEqual(s, 422)
 
@@ -1181,6 +1198,102 @@ class TestIlTestoLiberoRESTALEGGIBILEMaNonPuoFabbricareRIGHE(unittest.TestCase):
                     _testo_per_registro(vuoto).strip(),
                     "da %r e' uscita una riga di registro senza motivo: illeggibile quanto "
                     "una falsa" % (vuoto,))
+
+
+class TestLoSPLITNONSIMUOVESENZAIDENTITA(unittest.TestCase):
+    """🔓 DUE ROTTE PUBBLICHE SCRIVEVANO SENZA CHIEDERE CHI FOSSE CHI CHIAMA.
+
+    **Il fatto, misurato il 2026-08-20 sul sito VERO.** `POST /api/split/crea` e
+    `POST /api/split/paga` erano cablate cosi': `self._split_crea(body)` — **ricevono solo il
+    corpo, nemmeno le intestazioni**, quindi non potevano controllare l'identita' neanche
+    volendo. E il motore era ACCESO in produzione (`GET /api/split/stato?conto_id=prova`
+    rispondeva `404 conto_inesistente`, non `503`). Chiunque su internet poteva:
+      · creare conti di gruppo sulla prenotazione di un altro;
+      · e, la parte che conta, chiamare `/api/split/paga` per segnare **«pagata»** la quota
+        di un partecipante **senza che fosse passato un centesimo**.
+    ⚠️ Onesta' sulla portata: oggi nessuno a valle consuma `pronto_per_escrow`, quindi il buco
+    non regalava ancora stanze. Ma era una scrittura pubblica su un motore dei soldi, ed e' il
+    pezzo **B** del piano — quello che il piano stesso segnava «tocca produzione: serve
+    autorizzato».
+
+    L'identita' e' quella che il resto del prodotto usa gia' per l'ospite: il **voucher
+    firmato**. ⛔ E non basta chiederlo: la prenotazione su cui si opera si prende **DAL
+    VOUCHER**, non dal corpo — altrimenti chi ha un voucher qualunque potrebbe intestarsi il
+    conto di un altro semplicemente dichiarandolo.
+    """
+
+    def setUp(self):
+        self.sis = _sistema()
+        self.r = crea_router(self.sis)
+        self.tk = self.sis.firma.codifica({"tipo": "voucher", "riferimento": "pren-mia",
+                                           "alloggio_id": "casa"})
+        self.tk_altrui = self.sis.firma.codifica({"tipo": "voucher",
+                                                  "riferimento": "pren-di-un-altro",
+                                                  "alloggio_id": "casa"})
+
+    def _post(self, path, corpo):
+        return self.r.gestisci("POST", path, body=json.dumps(corpo))
+
+    def test_creare_un_conto_SENZA_voucher_non_si_puo(self):
+        s, c = self._post("/api/split/crea",
+                          {"prenotazione_id": "pren-mia", "alloggio_id": "casa",
+                           "totale_cents": 9000, "partecipanti": ["a", "b", "c"]})
+        self.assertEqual(s, 401, "una rotta che SCRIVE non puo' accettare un anonimo: %s" % c)
+        self.assertNotIn("conto_id", c or {}, "non deve essere nato nessun conto")
+
+    def test_pagare_una_quota_SENZA_voucher_non_si_puo(self):
+        """La piu' grave delle due: questa chiamata scrive «ha pagato» nel motore dei soldi."""
+        s, c = self._post("/api/split/crea",
+                          {"voucher_token": self.tk, "totale_cents": 9000,
+                           "partecipanti": ["a", "b", "c"]})
+        self.assertEqual(s, 201, c)
+        s2, c2 = self._post("/api/split/paga",
+                            {"conto_id": c["conto_id"], "partecipante_id": "a"})
+        self.assertEqual(s2, 401,
+                         "un anonimo ha appena dichiarato pagata una quota: %s" % c2)
+        ss, st = self.r.gestisci("GET", "/api/split/stato", {"conto_id": c["conto_id"]})
+        self.assertEqual(st["raccolto_cents"], 0,
+                         "il rifiuto deve valere anche nei FATTI: non un centesimo raccolto")
+
+    def test_col_voucher_di_un_ALTRA_prenotazione_non_si_paga(self):
+        s, c = self._post("/api/split/crea",
+                          {"voucher_token": self.tk, "totale_cents": 9000,
+                           "partecipanti": ["a", "b", "c"]})
+        self.assertEqual(s, 201, c)
+        s2, c2 = self._post("/api/split/paga",
+                            {"conto_id": c["conto_id"], "partecipante_id": "a",
+                             "voucher_token": self.tk_altrui})
+        self.assertEqual(s2, 403, "un voucher valido ma di un'ALTRA prenotazione: %s" % c2)
+
+    def test_il_conto_nasce_sulla_prenotazione_DEL_VOUCHER_non_su_quella_dichiarata(self):
+        """⛔ La parte che rende inutile mentire: chi chiama puo' scrivere quello che vuole nel
+        corpo, ma il conto nasce sulla prenotazione che il voucher FIRMATO dichiara."""
+        s, c = self._post("/api/split/crea",
+                          {"voucher_token": self.tk,
+                           "prenotazione_id": "pren-di-un-altro",   # <- bugia
+                           "alloggio_id": "villa-altrui",           # <- bugia
+                           "totale_cents": 9000, "partecipanti": ["a", "b", "c"]})
+        self.assertEqual(s, 201, c)
+        ss, st = self.r.gestisci("GET", "/api/split/stato", {"conto_id": c["conto_id"]})
+        self.assertEqual(st["prenotazione_id"], "pren-mia",
+                         "il conto si e' intestato alla prenotazione DICHIARATA invece che a "
+                         "quella del voucher: cosi' chiunque puo' operare su chiunque")
+        self.assertEqual(st["alloggio_id"], "casa")
+
+    def test_e_col_voucher_GIUSTO_tutto_funziona_come_prima(self):
+        """L'altra direzione (regola ferrea 10): la serratura non deve chiudere fuori chi ha
+        la chiave. Il giro completo — crea, tre quote, completato — con l'identita' al posto."""
+        s, c = self._post("/api/split/crea",
+                          {"voucher_token": self.tk, "totale_cents": 9000,
+                           "partecipanti": ["a", "b", "c"]})
+        self.assertEqual(s, 201, c)
+        cid = c["conto_id"]
+        for chi in ("a", "b", "c"):
+            sp, cp = self._post("/api/split/paga",
+                                {"conto_id": cid, "partecipante_id": chi,
+                                 "voucher_token": self.tk})
+            self.assertEqual(sp, 200, cp)
+        self.assertTrue(cp["completato"], "col voucher giusto il conto deve completarsi")
 
 
 if __name__ == "__main__":

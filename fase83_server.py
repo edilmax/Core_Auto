@@ -7691,9 +7691,24 @@ class RouterHTTP:
         d = self._json(body)
         if d is None:
             return 400, {"errore": "json_non_valido"}
+        # ⛔ IDENTITA' OBBLIGATORIA (pezzo B del piano, chiuso il 2026-08-20 col via del
+        # fondatore). Questa rotta SCRIVE su un motore dei soldi ed era PUBBLICA: chiunque
+        # poteva creare conti di gruppo sulla prenotazione di un altro. Misurato sul sito
+        # vero: il motore era acceso (`/api/split/stato` rispondeva 404, non 503).
+        # ⛔ E LA PRENOTAZIONE SI PRENDE DAL VOUCHER, NON DAL CORPO: chiedere l'identita' e
+        # poi fidarsi di cio' che il chiamante DICHIARA lascerebbe il buco aperto -- basterebbe
+        # un voucher qualunque per intestarsi il conto di chiunque. Il corpo puo' mentire, il
+        # voucher e' firmato.
+        v = self._voucher_valido(d.get("voucher_token"))
+        if v is None:
+            return 401, {"errore": "voucher_richiesto"}
+        _rif = str(v.get("riferimento") or "")
+        _allog = str(v.get("alloggio_id") or "")
+        if not (_rif and _allog):
+            return 422, {"errore": "voucher_incompleto"}
         try:
             cid = eng.crea_conto(
-                str(d.get("prenotazione_id", "")), str(d.get("alloggio_id", "")),
+                _rif, _allog,
                 d.get("totale_cents"), d.get("partecipanti") or [],
                 metodo=str(d.get("metodo", "equo")), importi=d.get("importi"))
         except Exception:
@@ -7712,6 +7727,24 @@ class RouterHTTP:
             return 400, {"errore": "json_non_valido"}
         conto = str(d.get("conto_id", ""))
         part = str(d.get("partecipante_id", ""))
+        # ⛔ LA PIU' GRAVE DELLE DUE, ED ERA PUBBLICA: questa chiamata scrive «ha pagato» nel
+        # motore dei soldi SENZA che sia passato un centesimo. Chiunque, con un conto_id e un
+        # partecipante_id, poteva dichiarare saldata la quota di un altro. Ora serve il
+        # voucher firmato della prenotazione a cui il conto appartiene: un voucher valido ma
+        # di un'ALTRA prenotazione non basta (403), altrimenti chi ha prenotato una volta
+        # potrebbe operare sui conti di tutti.
+        v = self._voucher_valido(d.get("voucher_token"))
+        if v is None:
+            return 401, {"errore": "voucher_richiesto"}
+        try:
+            _st = eng.stato_conto(conto)
+        except Exception:
+            logger.error("split paga: stato del conto non leggibile (ISOLATA)", exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        if _st is None:
+            return 404, {"errore": "conto_inesistente"}
+        if str(_st.get("prenotazione_id") or "") != str(v.get("riferimento") or ""):
+            return 403, {"errore": "conto_non_tuo"}
         idem = d.get("idem_key") or (conto + ":" + part)   # idempotente per partecipante
         try:
             e = eng.registra_pagamento(conto, part, idem_key=str(idem))

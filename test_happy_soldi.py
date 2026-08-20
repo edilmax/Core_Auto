@@ -578,9 +578,12 @@ class TestRotteSoldi(_BaseSoldi):
 
     def test_split_crea_quote_esatte(self):
         """POST /api/split/crea -> 201 col conto aperto e le quote che tornano al centesimo."""
-        rif, _vt = self.prenotazione_pagata()
+        # ⛔ 2026-08-20: la rotta vuole il VOUCHER firmato e prende da li' prenotazione e
+        # alloggio (era pubblica e scriveva senza identita' — pezzo B del piano). Il voucher
+        # questo collaudo lo aveva GIA' e lo buttava via: ora lo usa, come l'ospite vero.
+        rif, vt = self.prenotazione_pagata()
         s, c = self.g("POST", "/api/split/crea",
-                      {"prenotazione_id": rif, "alloggio_id": SLUG,
+                      {"voucher_token": vt,
                        "totale_cents": TOTALE,
                        "partecipanti": ["anna", "bruno", "carla"]})
         self.assertEqual(s, 201, c)
@@ -599,19 +602,24 @@ class TestRotteSoldi(_BaseSoldi):
 
     def test_split_paga_e_stato(self):
         """POST /api/split/paga -> 200 (idempotente) · GET /api/split/stato -> 200 col raccolto."""
-        rif, _vt = self.prenotazione_pagata()
+        # ⛔ 2026-08-20: identita' obbligatoria anche per PAGARE — e quella e' la rotta piu'
+        # grave delle due, perche' scrive «ha pagato» senza che passi un centesimo. Il
+        # voucher lo aveva gia' questo collaudo. L'idempotenza, che e' cio' che prova, non
+        # cambia di una virgola.
+        rif, vt = self.prenotazione_pagata()
         s, c = self.g("POST", "/api/split/crea",
-                      {"prenotazione_id": rif, "alloggio_id": SLUG, "totale_cents": TOTALE,
+                      {"voucher_token": vt, "totale_cents": TOTALE,
                        "metodo": "importi", "partecipanti": ["anna", "bruno"],
                        "importi": {"anna": 20000, "bruno": 21200}})
         self.assertEqual(s, 201, c)
         cid = c["conto_id"]
         s, p1 = self.g("POST", "/api/split/paga",
-                       {"conto_id": cid, "partecipante_id": "anna"})
+                       {"conto_id": cid, "partecipante_id": "anna", "voucher_token": vt})
         self.assertEqual((s, p1), (200, {"stato": "pagato", "completato": False,
                                          "idempotente": False}))
         s, replay = self.g("POST", "/api/split/paga",
-                           {"conto_id": cid, "partecipante_id": "anna"})
+                           {"conto_id": cid, "partecipante_id": "anna",
+                            "voucher_token": vt})
         self.assertEqual((s, replay), (200, {"stato": "pagato", "completato": False,
                                              "idempotente": True}))
         s, meta = self.g("GET", "/api/split/stato", None, None, {"conto_id": cid})
@@ -620,7 +628,7 @@ class TestRotteSoldi(_BaseSoldi):
         self.assertEqual(meta["mancante_cents"], TOTALE - 20000)
         self.assertEqual(meta["stato"], "aperto")
         s, p2 = self.g("POST", "/api/split/paga",
-                       {"conto_id": cid, "partecipante_id": "bruno"})
+                       {"conto_id": cid, "partecipante_id": "bruno", "voucher_token": vt})
         self.assertEqual((s, p2), (200, {"stato": "pagato", "completato": True,
                                          "idempotente": False}))
         s, fine = self.g("GET", "/api/split/stato", None, None, {"conto_id": cid})

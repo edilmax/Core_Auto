@@ -384,8 +384,11 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
                     [("quote", list), ("totale_cents", int)],
                     body={"totale_cents": 30000, "n": 3},
                     valore={"n": 3, "totale_cents": 30000})
+        # ⛔ 2026-08-20: lo split ora vuole il VOUCHER firmato e prende da li' prenotazione e
+        # alloggio (era pubblico e scriveva senza identita' — pezzo B del piano). Il voucher
+        # in questo giro c'e' gia' ed e' lo stesso che usano le rotte dell'ospite qui sotto.
         sc = self.chiama("POST", "/api/split/crea", 201, [("conto_id", str), ("stato", dict)],
-                         body={"prenotazione_id": rif, "alloggio_id": slug,
+                         body={"voucher_token": vt,
                                "totale_cents": 30000,
                                "partecipanti": ["anna", "bruno", "carla"]})
         conto = sc["conto_id"]
@@ -397,7 +400,8 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
         self.assertEqual(sum(q["dovuto_cents"] for q in st["quote"]), 30000,
                          "le quote non sommano al totale: centesimi persi")
         self.chiama("POST", "/api/split/paga", 200, [("stato", str), ("completato", bool)],
-                    body={"conto_id": conto, "partecipante_id": "anna"},
+                    body={"conto_id": conto, "partecipante_id": "anna",
+                          "voucher_token": vt},
                     valore={"stato": "pagato", "completato": False})
 
         # ── CHAT, PROVE, CHECK-IN, GARANZIA ──────────────────────────────────────────
