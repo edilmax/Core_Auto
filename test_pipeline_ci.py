@@ -8014,8 +8014,15 @@ class TestIlBancoSIPUOGIUDICAREANCHEFUORIDALCONTENITORE(unittest.TestCase):
         self.assertIsNotNone(nodo, "collaudi/giro_banco.py non ha piu' la funzione %s(): "
                                    "o e' stata rinominata, o qualcuno l'ha tolta" % nome)
         spazio = {"os": os, "sqlite3": sqlite3}
+        # ⛔ IL NOME FRA PARENTESI ANGOLARI NON E' ORNAMENTO. Qui c'era `"giro_banco.%s"`,
+        # che con `nome="db"` diventava **`giro_banco.db`**: per `coverage` e' il percorso di
+        # un sorgente da aprire, non lo trova e **muore** -- `No source for code`, uscita 1.
+        # Il job `copertura` della CI e' andato rosso cosi' il 2026-08-20, e la copertura non
+        # e' stata nemmeno calcolata (`COPERTURA TOTALE = n/d`). Le parentesi angolari sono la
+        # convenzione di Python per il codice che NON viene da un file (`<string>`, `<stdin>`),
+        # e gli strumenti la rispettano.
         exec(compile(ast.Module(body=[nodo], type_ignores=[]),
-                     "giro_banco.%s" % nome, "exec"), spazio)
+                     "<giro_banco.%s>" % nome, "exec"), spazio)
         return spazio[nome]
 
     def _con_cartella_dichiarata(self, cartella, azione):

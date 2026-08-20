@@ -98,6 +98,19 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > ⚠️ **Ne resta un buco dichiarato:** il banco esercita il **regime**, non la rampa di lancio —
 > il caso «host appena nato, commissione 0%» lì non passa mai.
 >
+> ⛔ **E IL CANCELLO HA TROVATO UN DIFETTO MIO, dentro queste stesse guardie.** Il job
+> `copertura` è andato rosso sulla richiesta **#81**:
+> ```
+> No source for code: '.../Core_Auto/giro_banco.db'   -> uscita 1
+> COPERTURA TOTALE = n/d   (soglia minima 82%)
+> ```
+> Al pezzo di codice estratto col parser avevo dato il nome `giro_banco.db`: per `coverage` è
+> il percorso di un **sorgente da aprire**, non lo trova e muore. Il rosso non diceva «la
+> copertura è scesa», diceva **«non ho potuto misurare»**. Riparato con `<giro_banco.db>` —
+> le parentesi angolari sono la convenzione per il codice che non viene da un file.
+> 💡 Un nome inventato per comodità è comunque un nome che **qualcun altro legge come vero**.
+> E il verde locale non poteva vederlo: la copertura la misura solo la CI (regola ferrea 8).
+>
 > 💡 **Un verde per assenza in meno, nello stesso file:** il controllo [9] faceva
 > `os.listdir("/app/data")` dentro un `try`, e su una macchina senza Docker l'eccezione lo
 > riportava a lista vuota: **usciva OK senza aver guardato niente** (S7). Era uno dei 19.
@@ -154,7 +167,9 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 
 > **Stato dei tre posti, misurato dopo l'ultimo deploy (non ricordato):**
 > ```
-> computer 497a882 · GitHub 497a882 · VPS 497a882   -> ALLINEATI
+> computer 63973ce · GitHub ramo #81 · VPS 839b9b8   -> ⚠️ NON ALLINEATI: il lavoro del
+>                                                       2026-08-20 e' committato e in
+>                                                       attesa di unione, NON in produzione
 > richieste di unione ancora aperte: 0   (unite: #74 #75 #76 #77 #78 #79, tutte
 >                                         verificate con una SECONDA chiamata)
 > suite 5879 test OK · batteria 19/19 · piano dei soldi: i tre posti d'accordo
@@ -4026,7 +4041,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 497a882
+CONSEGNE AGGIORNATE A: 63973ce
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui

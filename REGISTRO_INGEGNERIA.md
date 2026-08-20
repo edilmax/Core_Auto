@@ -889,6 +889,26 @@ commissione (10%) + 75 di tariffa tecnica**.
 ⚠️ **Limite dichiarato (D18 punto 3):** il banco esercita il **regime**, non la rampa di lancio.
 Il caso «host appena nato, commissione 0%» lì non passa mai.
 
+⛔ **E IL GATE HA TROVATO UN DIFETTO MIO, IN QUESTE STESSE GUARDIE.** Il job `copertura` è
+andato **rosso** sulla richiesta #81:
+```
+No source for code: '/home/runner/work/Core_Auto/Core_Auto/giro_banco.db'
+##[error]Process completed with exit code 1
+##[notice]COPERTURA TOTALE = n/d   (soglia minima 82%)
+```
+Al pezzo di codice estratto col parser avevo dato il nome `"giro_banco.%s" % nome`: con
+`nome="db"` diventa **`giro_banco.db`**, che per `coverage` è il percorso di un sorgente da
+aprire. Non lo trova, esce 1, e **la copertura non viene nemmeno calcolata** — il rosso non
+diceva «copertura scesa», diceva «non ho potuto misurare». Riparato con le parentesi angolari
+(`<giro_banco.db>`), che sono la convenzione di Python per il codice che non viene da un file
+(`<string>`, `<stdin>`) e che gli strumenti rispettano. **Riprodotto in piccolo prima di
+toccare** (`coverage run` sulla sola classe → stesso errore, uscita 1) e riverificato dopo
+(uscita 0).
+💡 La lezione, che non è sul nome ma sul metodo: **un nome inventato per comodità è comunque
+un nome che qualcun altro leggerà come vero.** E il verde locale non l'aveva visto, perché la
+copertura la misura solo la CI: è la regola ferrea 8 in forma pura — *il verde locale è un
+indizio, il giudice è la tabella*.
+
 💡 **Un verde per assenza in meno, nello stesso file.** Il controllo [9] faceva
 `os.listdir("/app/data")` dentro un `try`: fuori dal contenitore l'eccezione lo riportava a
 lista vuota e il verdetto usciva **OK senza aver guardato niente** (sbaglio S7) — ed era uno dei
