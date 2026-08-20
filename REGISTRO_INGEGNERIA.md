@@ -774,6 +774,65 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🚨 2026-08-20 (16) — **DUE MOTORI DEI SOLDI SULLO STESSO SERVER, E UN ALLARME CHE MENTIVA**
+
+**Cosa è cambiato:** `fase83_server.py` (una riga in `_bunker_stato`),
+`fase200_campagna_persuasiva.py` (ritorno all'intervallo unico), `test_pipeline_ci.py` (una
+guardia sullo stile tolta, due sui fatti aggiunte). Sul VPS: il servizio systemd `bookinvip`
+**fermato e disabilitato**. Tutto col «autorizzato» scritto del fondatore.
+
+**Come è cominciata.** I controlli di integrità sul sito vero rispondevano due allarmi
+CRITICI — «NESSUN backup trovato» e «il Guardiano dei soldi non batte più». Inseguendoli sono
+usciti due difetti veri, e il primo sospetto è caduto sullo strumento giusto solo al terzo
+tentativo.
+
+**① IO STAVO INTERROGANDO LA PORTA SBAGLIATA (sbaglio S3).** `127.0.0.1:8080` sull'host non è
+la produzione: il compose espone solo nginx, e su quella porta rispondeva **un'altra
+applicazione**. Era `/etc/systemd/system/bookinvip.service`, `enabled` e `active` **dal 31
+luglio 06:52** — il modo di far girare il sito **di prima di Docker**, rimasto acceso in
+parallelo per venti giorni, come `root`, con `Restart=always` e la chiave **`sk_live`** nel
+suo `EnvironmentFile`.
+
+Misurato **prima** di allarmarsi, perché il pericolo va dimensionato e non gonfiato:
+- ascoltava su `127.0.0.1` → **non raggiungibile da internet**;
+- l'nginx di sistema dell'host è `disabled` + `inactive`, le porte 80/443 le tiene
+  `docker-proxy` → il sito pubblico lo serve **solo** il contenitore;
+- il suo `/data` è una **cartella dell'host** (7 db), quello della produzione è un **volume
+  Docker** (`/var/lib/docker/volumes/bookinvip_casavip_data/_data`, 25 db) → **non condivideva
+  il libro dei soldi**;
+- nessuna connessione aperta, nessun cron che lo usasse, nessun nginx attivo che lo puntasse.
+
+Resta il fatto che era **una seconda copia del motore dei soldi con la chiave vera, senza
+nessuno che la guardasse** — e che al primo riavvio avrebbe caricato il codice di oggi.
+**Fermato e disabilitato**, dopo aver salvato i suoi dati e il file del servizio in
+`/root/bookinvip_servizio_host_20260820-105711.tar.gz` e **averlo riaperto per prova** (45
+elementi, regola ferrea 13: un salvataggio non verificato leggibile non è un salvataggio).
+Verifica nelle due direzioni: 0 processi, 0 in ascolto sulla 8080, container `healthy`, sito
+`200`, `guardiano: ok`.
+
+**② MA LA SALA DI CONTROLLO MENTIVA ANCHE IN PRODUZIONE.** Interrogato il Bunker **dentro il
+contenitore vero**:
+```
+/api/bunker/stato      db visti: 0    -> ALLARME critico "backup" + critico "guardiano_muto"
+/api/bunker/integrita  db visti: 25   -> NESSUN ALLARME
+```
+Causa: `_bunker_stato` chiedeva `environ.get("DATA_DIR", "data")`; nel contenitore la cartella
+corrente è `/app` e `data` non esiste. ⛔ **La riparazione era già scritta trenta righe più in
+là**, in `_admin_diagnosi`, col suo commento: *«nel container DATA_DIR esiste ma è VUOTA…
+Fix: stesso fallback robusto di `_data_dir()`»*. Una copia rimasta indietro — la stessa
+malattia che il commento accanto descriveva. Ora `_bunker_stato` usa `self._data_dir()` come
+tutti, e `test_DOVE_SONO_I_DATI_si_risponde_in_UN_POSTO_SOLO` **vieta** che qualcuno chieda
+`DATA_DIR` fuori da quell'unica funzione. Vista rossa prima: `['_bunker_stato (riga 3808)']`.
+
+**③ LE EMOJI TORNANO COM'ERANO, ED È UNA DECISIONE MISURATA.** Spezzare l'intervallo per far
+tacere `py/overly-large-range` ha portato quella regola **da 1 allarme a 10** (CodeQL li conta
+uno per uno). Il conto degli allarmi non è il punteggio da inseguire, ma dieci righe di rumore
+su una regola di **leggibilità** sporcano la lista dove un giorno dovrà spiccare una cosa vera.
+💡 E al posto della guardia sullo **stile** ne è nata una sul **fatto**, che è ciò che nessuno
+stava controllando: il filtro provato su **tutto** lo spazio Unicode, **3538 caratteri**,
+confrontati uno per uno con l'insieme misurato prima di toccare il file. Se qualcuno riscrive
+quella classe per qualunque motivo e cambia anche un solo carattere, diventa rossa.
+
 ### 🛡️ 2026-08-20 (15) — **I 33 ALLARMI DI CODEQL, E I 60 SECONDI DI PAGINA BIANCA AL DEPLOY**
 
 **Cosa è cambiato:** `fase197_canale_nostr.py`, `fase83_server.py`, `app.py`,

@@ -8208,21 +8208,83 @@ class TestGliALLARMIDiCodeQLSICHIUDONOALLAFONTE(unittest.TestCase):
                               "il testo dell'eccezione (`str(e)`): il dettaglio va nel log, "
                               "non nella risposta")
 
-    def test_le_classi_di_emoji_non_sono_intervalli_giganti_a_caso(self):
-        """⛔ `py/overly-large-range` in `fase200_campagna_persuasiva.py`: un intervallo solo
-        che attraversa **11 blocchi Unicode diversi**. La regola esiste perche' un intervallo
-        cosi' largo di solito e' uno sbaglio di battitura, e nessuno riesce piu' a dire cosa
-        ci sia dentro. Qui non cambia cosa viene filtrato: lo stesso identico insieme, scritto
-        blocco per blocco — e nessun intervallo attraversa il confine di un blocco."""
-        import re as _re
+    # ⛔ QUI C'ERA UNA GUARDIA SULLO STILE, ED E' STATA TOLTA PERCHE' GUARDAVA LA COSA
+    # SBAGLIATA. Pretendeva che nessun intervallo di `_EMOJI` superasse i 256 caratteri, per
+    # far tacere `py/overly-large-range`. Misurato il 2026-08-20 sul commit vero: spezzare
+    # l'intervallo in undici blocchi ha portato quella regola **da 1 allarme a 10** — CodeQL
+    # li conta uno per uno. Il conto degli allarmi non e' il punteggio da inseguire, ma dieci
+    # righe di rumore su una regola di leggibilita' sporcano la lista dove un giorno dovra'
+    # spiccare una cosa vera. Al suo posto c'e' la guardia qui sotto, che pretende la cosa che
+    # conta davvero e che nessuno stava controllando: **quali caratteri vengono filtrati**.
+
+    def test_il_filtro_delle_emoji_copre_ESATTAMENTE_gli_stessi_caratteri(self):
+        """L'insieme filtrato da `_EMOJI`, misurato attraversando TUTTO lo spazio Unicode e
+        confrontato con quello dichiarato carattere per carattere. Non e' una guardia sullo
+        stile: se qualcuno riscrive quella classe — per far tacere un analizzatore, per
+        leggibilita', per sbaglio — e cambia anche un solo carattere, qui diventa rossa.
+
+        ⛔ I confini NON sono ricopiati dal sorgente: sono i code point misurati sul file
+        originale il 2026-08-20, prima di toccarlo. Ricopiarli dal codice attuale farebbe una
+        guardia che approva se stessa (baseline compiacente, sbaglio F5)."""
         import fase200_campagna_persuasiva as C
-        for a, b in _re.findall(r"(.)-(.)", C._EMOJI.pattern):
-            ampiezza = ord(b) - ord(a) + 1
-            self.assertLessEqual(
-                ampiezza, 256,
-                "l'intervallo U+%04X-U+%04X copre %d caratteri: attraversa piu' blocchi "
-                "Unicode, e chi legge non puo' piu' sapere cosa filtra"
-                % (ord(a), ord(b), ampiezza))
+        atteso = set()
+        for a, b in ((0x1F000, 0x1FAFF), (0x2600, 0x27BF), (0x1F1E6, 0x1F1FF),
+                     (0x2B00, 0x2BFF), (0xFE00, 0xFE0F), (0x24C2, 0x24C2), (0x20E3, 0x20E3)):
+            atteso.update(range(a, b + 1))
+        trovato = set()
+        for cp in range(0x0, 0x110000):
+            if 0xD800 <= cp <= 0xDFFF:        # i surrogati non sono caratteri
+                continue
+            if C._EMOJI.match(chr(cp)):
+                trovato.add(cp)
+        persi = sorted(atteso - trovato)
+        nuovi = sorted(trovato - atteso)
+        self.assertEqual(
+            (len(persi), len(nuovi)), (0, 0),
+            "il filtro delle emoji non copre piu' lo stesso insieme: %d spariti (%s...) e "
+            "%d aggiunti (%s...). Erano %d caratteri."
+            % (len(persi), ", ".join("U+%04X" % c for c in persi[:5]),
+               len(nuovi), ", ".join("U+%04X" % c for c in nuovi[:5]), len(atteso)))
+
+    def test_DOVE_SONO_I_DATI_si_risponde_in_UN_POSTO_SOLO(self):
+        """⛔ IL DIFETTO ERA GIA' STATO TROVATO E RIPARATO IN UN PUNTO, E UN ALTRO E' RIMASTO
+        INDIETRO. In `fase83_server.py` la cartella dei dati si ricava in due modi diversi:
+        `_data_dir()` (che parte da `DB_FINANZA` quando `DATA_DIR` manca o e' vuota) e, dentro
+        `_bunker_stato`, un `os.environ.get("DATA_DIR", "data")` scritto a mano. Nel
+        contenitore la cartella corrente e' `/app`, `data` non esiste, e la sala di controllo
+        del bunker rispondeva **due allarmi CRITICI falsi**: «NESSUN backup trovato» e «il
+        Guardiano dei soldi non batte piu'» — su una macchina con 25 database, backup di
+        mezz'ora prima e battito regolare. Misurato dentro il contenitore di produzione il
+        2026-08-20: `stato` vedeva **0** database, `integrita` ne vedeva **25**.
+
+        💡 E la parte che fa male: accanto all'altro punto, riparato prima, c'era gia' scritto
+        il perche' (*«nel container DATA_DIR esiste ma e' VUOTA... Fix: stesso fallback
+        robusto di _data_dir()»*). La riparazione c'era, la copia no. Questa guardia pretende
+        che quel fatto abbia **un padrone solo**.
+
+        ⚠️ Un falso allarme sui soldi non e' meno grave di un allarme mancato: e' il modo in
+        cui si insegna a ignorare i rossi (regola ferrea 10)."""
+        import ast
+        albero = self._albero("fase83_server.py")
+        fuori = []
+        for f in ast.walk(albero):
+            if not isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if f.name == "_data_dir":
+                continue
+            for n in ast.walk(f):
+                if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)):
+                    continue
+                if n.func.attr != "get" or not n.args:
+                    continue
+                primo = n.args[0]
+                if isinstance(primo, ast.Constant) and primo.value == "DATA_DIR":
+                    fuori.append("%s (riga %d)" % (f.name, n.lineno))
+        self.assertEqual(fuori, [],
+                         "questi punti chiedono `DATA_DIR` per conto loro invece di passare "
+                         "da `_data_dir()`: %s. Due modi di rispondere alla stessa domanda "
+                         "sono due risposte che prima o poi divergono, ed e' gia' successo"
+                         % fuori)
 
     def test_ogni_valore_non_fidato_nei_log_di_app_passa_dal_ripulitore(self):
         """⛔ `py/log-injection` ×28, **tutti in `app.py`**: il percorso della richiesta, il
