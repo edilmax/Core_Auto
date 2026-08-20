@@ -774,6 +774,48 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### ⚖️ 2026-08-20 (18) — **RICERCA LEGALE SUL RIPENSAMENTO, E CHI PAGA IL CALENDARIO DELL'HOST**
+
+**Cosa è cambiato:** niente nel codice. È una **ricerca** (D25) e una **decisione di strategia**,
+scritte perché la prossima sessione non le rifaccia da zero. Il dettaglio operativo, la
+strategia proposta e il testo già pronto della FAQ stanno nei blocchi **(44-bis)**, **(45)** e
+**(46)** di `RIPRENDI_QUI.md`.
+
+**Perché è nata.** Il fondatore ha ricordato che «Stripe entro 7 giorni non prende la
+percentuale sui rimborsi». **Misurato sul conto vero, è falso in quella forma**: `charge 100 →
+fee 27`, `refund → fee 0`, netto **−27 cent**, con un rimborso arrivato **16 minuti** dopo
+l'addebito. Ma il meccanismo che ricordava **esiste ed è un altro**: l'**autorizzazione non
+catturata** (`capture_method=manual`), che su carta online tiene **7 giorni** — e se si annulla
+prima dell'acquisizione **non paga nessuno**. Le due cose non si contraddicono: sono due strade.
+
+**La ricerca, su fonti dirette (D25: più di una, citate).**
+| dove | cosa dice | conseguenza |
+|---|---|---|
+| 🇪🇺 UE | Dir. 2011/83/UE **art. 16 (l)**: escluso *«accommodation … if the contract provides for a specific date or period of performance»* | **non dobbiamo niente**: le 48 ore sono merce, non obbligo |
+| 🇺🇸 California | **SB 644** (dal 1/7/2024): **24h** dalla conferma, solo se prenotato **72h+** prima; e la legge nomina *«hosting platform»* | **obbliga NOI**, non solo l'host |
+| 🇧🇷 Brasile | **art. 49 CDC**: 7 giorni a distanza; sull'alloggio con data fissa la dottrina **si divide** | **unica domanda rimasta per l'avvocato** |
+
+⛔ **Le nostre 48 ore universali sono sbagliate in tre modi contemporaneamente**: di troppo in
+Europa, il **doppio** del necessario in California, **forse troppo poche** in Brasile. La
+finestra deve dipendere **dal luogo dell'alloggio**, non essere un numero unico globale.
+
+**E il difetto che nessuno aveva visto, trovato da una domanda del fondatore.** *«L'host cosa
+dice?»* — misurato: il calendario si blocca **al momento della prenotazione**, prima ancora del
+pagamento (passi 7-8 del cammino E2E contro il passo 10); il payout matura **a check-in**
+(`fase131`) e l'escrow dichiara *«host mai pagato in automatico»* (`fase160`). Quindi nella
+finestra l'host **non perde denaro — non ne aveva ancora — perde CALENDARIO**. Ma
+`fase163_accettazioni` **non nomina la finestra**, e `deploy/termini.html`,
+`deploy/contratto-host.html` e `README.md` hanno **zero righe** sull'argomento: l'host che
+sceglie `non_rimborsabile` rimborsa comunque il 100% nelle prime 48 ore **e non gliel'ha detto
+nessuno**, mentre il contratto gli promette *«applicare in modo leale la politica dichiarata»*.
+💡 Va scritto **prima del primo host vero**, e oggi costa zero: in produzione ci sono **zero
+host firmati**. Con dieci firmati significa **ri-accettazione uno per uno**.
+
+**Il denominatore della promessa** (per poter dire «non ho lasciato indietro niente» con un
+numero): la cancellazione è raccontata in **8 file** (~87 righe di testi che qualcuno legge) e
+**manca del tutto in 3 posti**. Il motore e i registri storici non si riscrivono: uno decide,
+gli altri sono memoria.
+
 ### 🔓 2026-08-20 (17) — **PEZZO B: DUE ROTTE PUBBLICHE SCRIVEVANO SUI SOLDI SENZA IDENTITÀ**
 
 **Cosa è cambiato:** `fase83_server.py` (`_split_crea`, `_split_paga`), col «autorizzato»
