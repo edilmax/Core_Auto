@@ -774,6 +774,55 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🔓 2026-08-20 (17) — **PEZZO B: DUE ROTTE PUBBLICHE SCRIVEVANO SUI SOLDI SENZA IDENTITÀ**
+
+**Cosa è cambiato:** `fase83_server.py` (`_split_crea`, `_split_paga`), col «autorizzato»
+scritto del fondatore. Più 5 guardie nuove (`TestLoSPLITNONSIMUOVESENZAIDENTITA` in
+`test_fase83_server.py`) e **10 collaudi aggiornati in 6 file**, ognuno col motivo accanto.
+
+**Come ci siamo arrivati.** Il fondatore ha chiesto il **pezzo 8** del piano. Era **già fatto
+il 2026-08-15** e il piano lo dichiara — ma cercandolo è emerso che il piano è rimasto
+indietro **anche sul pezzo 2** («ri-confermare un ucciso»), fatto da giorni (il meccanismo
+`--riconferme` è in `collaudi/mutazione_prodotto.py`, commit `11c6553`). ⛔ È esattamente la
+malattia per cui quel piano è nato: *teneva CodeQL fra i lavori da fare mentre era già verde
+su master*. Il pezzo davvero aperto era **B**, e il piano stesso gli scriveva accanto «tocca
+produzione: serve autorizzato».
+
+**Il difetto, misurato.**
+```
+POST /api/split/crea -> self._split_crea(body)    <- riceve SOLO il corpo: non ha nemmeno le
+POST /api/split/paga -> self._split_paga(body)       intestazioni, quindi non PUO' controllare
+                                                     l'identita' neanche volendo
+sonda in sola lettura sul sito VERO:
+  GET /api/split/stato?conto_id=prova -> 404 "conto_inesistente"   (non 503: motore ACCESO)
+```
+Chiunque su internet poteva creare conti di gruppo su prenotazioni altrui e chiamare
+`/api/split/paga` per segnare **«pagata»** una quota **senza che passasse un centesimo**.
+⚠️ **Portata dichiarata, non gonfiata:** nessuno a valle consuma oggi `pronto_per_escrow`
+(verificato con `grep` fuori da `fase65`), quindi il buco non regalava stanze; ma era una
+scrittura pubblica sul motore dei soldi. E il sito non chiama mai quelle due rotte (usa solo
+`/api/split/preview`, un calcolo): chiuderle non toglie niente al prodotto.
+
+**La riparazione, e perché in questa forma.** L'identità è quella che il prodotto usa già per
+l'ospite: il **voucher firmato** (`self._voucher_valido`, la stessa strada di
+`_checkin_pre_registra`). ⛔ **La prenotazione si prende DAL VOUCHER, non dal corpo**: chiedere
+l'identità e poi fidarsi di ciò che il chiamante dichiara lascerebbe il buco aperto — un
+voucher qualunque basterebbe per intestarsi il conto di chiunque. Il corpo può mentire, il
+voucher è firmato. Su `paga` si confronta la prenotazione del conto con quella del voucher:
+diversa → **403 `conto_non_tuo`**; assente o non valido → **401 `voucher_richiesto`**.
+
+**D20 rispettata:** 5 guardie scritte prima e viste rosse. La seconda **è** la dimostrazione
+del buco — `AssertionError: 201 != 401 : una rotta che SCRIVE non puo' accettare un anonimo` —
+e la quarta dimostra l'altra metà: il conto nasceva sulla prenotazione **dichiarata**
+(`'pren-di-un-altro' != 'pren-mia'`). C'è anche la direzione opposta (regola ferrea 10): col
+voucher giusto il giro completo — crea, tre quote, completato — funziona come prima.
+
+⛔ **E 10 collaudi in 6 file si aspettavano il vecchio requisito.** Non erano sbagliati: erano
+scritti quando la rotta era pubblica. Aggiornati uno per uno **col motivo scritto accanto**, e
+in tre casi (`test_happy_soldi`, `test_profondo_idempotenza`, `test_rotte_ostile`) il voucher
+**ce l'avevano già in mano** e lo buttavano via. Nessuna asserzione sul comportamento del
+motore è stata toccata: cambia chi bussa, non cosa succede dentro.
+
 ### 🚨 2026-08-20 (16) — **DUE MOTORI DEI SOLDI SULLO STESSO SERVER, E UN ALLARME CHE MENTIVA**
 
 **Cosa è cambiato:** `fase83_server.py` (una riga in `_bunker_stato`),

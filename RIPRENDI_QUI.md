@@ -11,6 +11,41 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🔓 2026-08-20 (44) — **DUE ROTTE PUBBLICHE SCRIVEVANO SUI SOLDI SENZA CHIEDERE CHI SEI** (pezzo B, autorizzato)
+
+> Il fondatore ha chiesto il **pezzo 8** del piano. ⛔ **Era già fatto** (15/08), e il piano
+> lo dichiara — ma nel cercarlo è venuto fuori che il piano è rimasto indietro **anche sul
+> pezzo 2** («ri-confermare un ucciso»), che è fatto da giorni (`--riconferme`, `11c6553`).
+> È la stessa malattia per cui quel piano è nato: *teneva CodeQL fra i lavori da fare mentre
+> era già verde*.
+>
+> **Il pezzo aperto vero era B, ed era un buco in produzione.**
+> ```
+> POST /api/split/crea -> _split_crea(body)     <- riceve SOLO il corpo: non ha nemmeno
+> POST /api/split/paga -> _split_paga(body)        le intestazioni, quindi non PUO' sapere
+>                                                  chi sta chiamando
+> sonda in sola lettura sul sito VERO:
+>   GET /api/split/stato?conto_id=prova -> 404 "conto_inesistente"   <- il motore e' ACCESO
+> ```
+> Chiunque poteva creare conti di gruppo sulla prenotazione di un altro e — la parte che
+> conta — chiamare `/api/split/paga` per segnare **«pagata»** la quota di un partecipante
+> **senza che fosse passato un centesimo**.
+> ⚠️ **Onestà sulla portata**: oggi nessuno a valle consuma `pronto_per_escrow`, quindi non
+> regalava ancora stanze. Ma era una **scrittura pubblica su un motore dei soldi**.
+>
+> **Chiuso con l'identità che il prodotto già usa per l'ospite: il voucher firmato.**
+> ⛔ E la prenotazione si prende **DAL VOUCHER, non dal corpo**: chiedere l'identità e poi
+> fidarsi di ciò che il chiamante *dichiara* lascerebbe il buco aperto — basterebbe un
+> voucher qualunque per intestarsi il conto di chiunque. Il corpo può mentire, il voucher è
+> firmato. Voucher di un'**altra** prenotazione → `403 conto_non_tuo`.
+>
+> **D20 rispettata:** 5 guardie scritte prima e **viste rosse**, e la seconda è la
+> dimostrazione del buco: *«201 != 401 — un anonimo ha appena creato il conto»*.
+>
+> ⛔ **E dieci collaudi in sei file si aspettavano il vecchio requisito.** Non erano
+> sbagliati: erano scritti quando la rotta era pubblica. Aggiornati **uno per uno col motivo
+> scritto** — e in tre casi il voucher **ce l'avevano già** e lo buttavano via.
+
 ## 🚨 2026-08-20 (43) — **DUE MOTORI DEI SOLDI SULLO STESSO SERVER, E UN ALLARME CHE MENTIVA**
 
 > Cercando la causa di due allarmi critici del Bunker sono usciti **due difetti veri**, e
@@ -5925,7 +5960,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5897 test
+SUITE ATTUALE: Ran 5902 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
@@ -5961,6 +5996,10 @@ MISURATO SU: 13ac1e8 + LA BARRIERA VISIBILE A CODEQL + L'ELENCO DEGLI ESCLUSI (2
              · 2026-08-20, poi a **5897 (+1)**: una guardia sullo stile TOLTA e DUE messe
                al suo posto — il filtro delle emoji provato su tutto Unicode, e «dove sono
                i dati si risponde in un posto solo». Rimisurato col caricatore, scritto
+               PRIMA di lanciare.
+             · 2026-08-20, poi a **5902 (+5)**: `TestLoSPLITNONSIMUOVESENZAIDENTITA` in
+               `test_fase83_server.py` — la serratura sulle due rotte pubbliche che
+               scrivevano senza identita' (pezzo B). Rimisurato col caricatore, scritto
                PRIMA di lanciare.
              ⛔ E QUESTA VOLTA NON L'HO SCRITTO PRIMA: ho lanciato la suite intera con il
              numero vecchio ancora dentro, e i 28 minuti sono finiti su un rosso solo —

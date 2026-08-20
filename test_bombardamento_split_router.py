@@ -27,11 +27,20 @@ from fase83_server import crea_router
 
 
 class TestBombardamentoSplitRouter(unittest.TestCase):
+    # ⛔ 2026-08-20: le rotte dello split ora vogliono il VOUCHER FIRMATO, e prendono da li'
+    # la prenotazione (erano pubbliche e scrivevano senza identita' — pezzo B del piano).
+    # La tempesta resta identica: cambia solo che ogni conto si presenta col suo voucher,
+    # come fara' l'ospite vero. Il sistema si tiene perche' serve `firma` per coniarlo.
     def _sistema(self, d):
         sis = crea_sistema(ConfigCasaVIP(
             abilitato=True, segreto_hmac=b"S" * 32, db_catalogo=f"{d}/c.db",
             db_inventario=f"{d}/i.db", db_split=f"{d}/s.db"))
+        self._sis = sis
         return crea_router(sis, host_key="hk")
+
+    def _voucher(self, rif, allog="casa"):
+        return self._sis.firma.codifica({"tipo": "voucher", "riferimento": rif,
+                                         "alloggio_id": allog})
 
     def _g(self, r, m, p, b=None, q=None):
         return r.gestisci(m, p, q or {}, json.dumps(b) if b is not None else None, {})
@@ -44,33 +53,35 @@ class TestBombardamentoSplitRouter(unittest.TestCase):
             conti = []
             for i in range(n_conti):
                 membri = ["m%d_%d" % (i, j) for j in range(n_membri)]
+                tk = self._voucher("pren%d" % i)
                 s, c = self._g(r, "POST", "/api/split/crea",
-                               {"prenotazione_id": "pren%d" % i, "alloggio_id": "casa",
+                               {"voucher_token": tk,
                                 "totale_cents": 100003 + i, "partecipanti": membri})
                 self.assertEqual(s, 201, c)
-                conti.append((c["conto_id"], membri, 100003 + i))
+                conti.append((c["conto_id"], membri, 100003 + i, tk))
 
             errs, lock = [], threading.Lock()
             barrier = threading.Barrier(n_conti * n_membri * 2)
 
-            def paga(cid, m):
+            def paga(cid, m, tk):
                 barrier.wait()
                 for _ in range(2):                          # replay incluso
                     s, o = self._g(r, "POST", "/api/split/paga",
-                                   {"conto_id": cid, "partecipante_id": m})
+                                   {"conto_id": cid, "partecipante_id": m,
+                                    "voucher_token": tk})
                     if s != 200:
                         with lock:
                             errs.append(("PAGA_KO", s, o))
 
-            ths = [threading.Thread(target=paga, args=(cid, m))
-                   for cid, membri, _ in conti for m in membri for _ in range(2)]
+            ths = [threading.Thread(target=paga, args=(cid, m, tk))
+                   for cid, membri, _, tk in conti for m in membri for _ in range(2)]
             rnd.shuffle(ths)
             for t in ths:
                 t.start()
             for t in ths:
                 t.join(120)
 
-            for cid, membri, tot in conti:
+            for cid, membri, tot, _tk in conti:
                 s, st = self._g(r, "GET", "/api/split/stato", q={"conto_id": cid})
                 self.assertEqual(s, 200)
                 somma = sum(q["dovuto_cents"] for q in st["quote"])
@@ -110,13 +121,14 @@ class TestBombardamentoSplitRouter(unittest.TestCase):
         d = tempfile.mkdtemp()
         try:
             r = self._sistema(d)
+            tk = self._voucher("p1")
             s, c = self._g(r, "POST", "/api/split/crea",
-                           {"prenotazione_id": "p1", "alloggio_id": "casa",
+                           {"voucher_token": tk,
                             "totale_cents": 9001, "partecipanti": ["a", "b", "c"]})
             self.assertEqual(s, 201)
             cid = c["conto_id"]
             self._g(r, "POST", "/api/split/paga",
-                    {"conto_id": cid, "partecipante_id": "a"})
+                    {"conto_id": cid, "partecipante_id": "a", "voucher_token": tk})
             r2 = self._sistema(d)                     # riavvio simulato: stesso d
             s, st = self._g(r2, "GET", "/api/split/stato", q={"conto_id": cid})
             self.assertEqual(s, 200, st)

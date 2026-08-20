@@ -438,8 +438,11 @@ class TestDoppioClicDenaro(_Base):
 
     def test_split_crea_doppio_un_solo_conto(self):
         """POST /api/split/crea ×2: UN conto per prenotazione, quote NON duplicate."""
+        # ⛔ 2026-08-20: la rotta vuole il VOUCHER firmato e prende da li' la prenotazione
+        # (era pubblica e scriveva senza identita' — pezzo B del piano). L'idempotenza, che
+        # e' cio' che questo collaudo prova, non cambia: cambia chi bussa.
         b = self.prenotazione_pagata()
-        corpo = {"prenotazione_id": b["riferimento"], "alloggio_id": SLUG,
+        corpo = {"voucher_token": b["voucher_token"],
                  "totale_cents": TOTALE, "partecipanti": ["anna", "bruno", "carla"]}
         (s1, c1), (s2, c2) = self.due_volte("POST", "/api/split/crea", corpo)
         self.assertEqual((s1, s2), (201, 201), (c1, c2))
@@ -453,16 +456,21 @@ class TestDoppioClicDenaro(_Base):
 
     def test_split_paga_doppio_non_raccoglie_due_volte(self):
         """POST /api/split/paga ×2: il 2o e' idempotente, il raccolto non raddoppia."""
+        # ⛔ 2026-08-20: identita' obbligatoria anche per PAGARE (la piu' grave delle due:
+        # scrive «ha pagato» senza che passi un centesimo). Il doppio clic resta il soggetto
+        # del collaudo, e il secondo deve restare idempotente anche con l'identita' dentro.
         b = self.prenotazione_pagata()
+        vt = b["voucher_token"]
         s, c = self.g("POST", "/api/split/crea",
-                      {"prenotazione_id": b["riferimento"], "alloggio_id": SLUG,
+                      {"voucher_token": vt,
                        "totale_cents": TOTALE, "metodo": "importi",
                        "partecipanti": ["anna", "bruno"],
                        "importi": {"anna": 20000, "bruno": 21200}})
         self.assertEqual(s, 201, c)
         cid = c["conto_id"]
         (s1, p1), (s2, p2) = self.due_volte("POST", "/api/split/paga",
-                                            {"conto_id": cid, "partecipante_id": "anna"})
+                                            {"conto_id": cid, "partecipante_id": "anna",
+                                             "voucher_token": vt})
         self.assertEqual((s1, p1), (200, {"stato": "pagato", "completato": False,
                                           "idempotente": False}))
         self.assertEqual((s2, p2), (200, {"stato": "pagato", "completato": False,
