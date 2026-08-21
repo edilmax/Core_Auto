@@ -11,6 +11,94 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🎯 2026-08-21 (47) — **IL CANCELLO ERA ROSSO PER UNA GUARDIA CHE SI ACCENDE DA SOLA, 1 GIRO SU 211**
+
+> Giro di collaudo completo chiesto dal fondatore: *«rifalli da capo e dammi quelli nuovi
+> senza leggere quelli dichiarati»*. Tutto misurato la notte del 2026-08-21 su `c13f725`.
+> **Tre difetti trovati: due riparati, il terzo è questo stesso documento che dichiarava
+> il falso.**
+>
+> ### ① IL TEST INSTABILE — riparato (D20 rispettata: guardie viste rosse, poi verdi)
+> ```
+> FAIL: test_webhook_setup_salva_gli_id_opachi_nel_registro_host
+> AssertionError: [] != ['un numero di 13 cifre, la lunghezza di un PAN: 5369477666965']
+>   : colonna 'host_id' = 'h_a8a5369477666965'
+> ```
+> `host_id` nasce da `"h_" + secrets.token_hex(8)` (`fase88_registro_host.py:363`): sedici
+> caratteri esadecimali, e quella volta **tredici di fila erano cifre**. Il filtro dei digest
+> (`^[0-9a-fA-F]{32,}$`) non lo copriva: pretende trentadue caratteri **e nessun prefisso**.
+> ⛔ **Quanto spesso, per due strade indipendenti che concordano:** Monte Carlo su 2.000.000
+> di identificatori **0,4708%** · conto esatto (automa sulle corse di cifre) **0,4718%** →
+> **un giro di CI ogni 211**. Non sfortuna: statistica.
+> 💡 **Ed è dimostrato che è il caso e non il codice**, senza doverlo dedurre: sullo stesso
+> commit `full-suite` è uscita **rossa** in un giro di CI e **verde** in quello dopo, la suite
+> locale era verde, e `full-suite-311` — che esegue lo stesso modulo (riga 274 di
+> `moduli_311.txt`) — era **verde nello stesso minuto del rosso**.
+> ⛔ **Perché nessuno l'aveva visto:** fra i valori innocenti c'era `"h_c9f34242deba3d9"`,
+> scelto **a mano** per la trappola precedente (contiene `4242`) — quindici caratteri invece
+> dei sedici veri, e senza tredici cifre di fila. **Un esempio scritto a mano copre il caso a
+> cui pensava chi lo ha scritto, non quello che il generatore produce davvero.**
+>
+> **La riparazione ha due metà, e servono tutt'e due** (misurato, non supposto):
+> · **`noti`** — il collaudo non chiede «sembra una carta?» sui valori di cui conosce
+>   l'origine. Serve perché il caso peggiore del generatore (`"h_" + "0"*16`) **supera perfino
+>   Luhn**, quindi nessuna regola sulla forma potrebbe escluderlo.
+> · **Luhn** (ISO/IEC 7812) — la forma di un PAN comprende il suo checksum. ⛔ Messo **solo
+>   dopo aver misurato che non indebolisce**: tutte e nove le carte di prova pubbliche dei
+>   circuiti (Visa, Mastercard, Amex, Discover, Diners, UnionPay) lo superano, mentre l'ora in
+>   millisecondi e un telefono lungo **no**.
+>
+> ✅ **Provato sul generatore VERO con la funzione VERA: 0 falsi allarmi su 200.000** (con la
+> sola forma del numero sarebbero 86), e il rilevatore vede ancora ogni carta.
+> 🔴 **E le guardie nuove hanno trovato DUE difetti in più di quello caduto:** anche un'**ora
+> in millisecondi** e un **telefono lungo** venivano scambiati per numeri di carta. Il buco
+> era più largo di `host_id`, e le altre colonne a rischio della tabella `host` erano già lì.
+>
+> ### ② IL BANCO DAVA VERDE SU DENOMINATORE ZERO — riparato, e aveva DUE facce
+> Con un giro su dati puliti il libro giornale **esisteva ma era vuoto** (zero righe), e
+> quattro controlli sui soldi uscivano **OK senza aver letto una riga**. La guardia che c'era
+> copriva «il file non c'è», non «c'è ed è vuoto» — mentre sessanta righe più sotto, nello
+> **stesso file**, il controllo della catena di impronte il caso vuoto lo dichiarava già.
+> ⛔ **La seconda faccia non si vedeva dal giornale:** *«ogni host vede SOLO i propri soldi»*
+> — il controllo che esiste per scoprire i soldi di un host finiti a un altro — legge l'**API
+> dei payout**, e con zero prenotazioni pagate confrontava **zero contro zero**. Ora è
+> dichiarato anche lui, ⚠️ **ma un payout ILLEGGIBILE resta rosso** anche senza traffico:
+> quello è un guasto vero, e nasconderlo sarebbe stato peggio del difetto.
+> ```
+> PRIMA:  PASSI 38   OK 23   NON OK 15   NON ESEGUITI 6
+> DOPO:   PASSI 34   OK 19   NON OK 15   NON ESEGUITI 10
+> ```
+>
+> ### ③ ⛔ QUESTO DOCUMENTO DICHIARAVA UNA GUARDIA CHE NON ESISTE
+> Il blocco (46) qui sotto diceva *«La guardia è già scritta
+> (`TestLaFAQNONPUOPROMETTEREQUELLOCHEILMOTORESMENTISCE` in `test_fase173_motore_seo.py`)»*.
+> **Non esiste**: `grep` su tutto il progetto, zero occorrenze. È lo sbaglio **S10** — il
+> documento che dichiara il falso — e sarebbe costato alla prossima sessione il tempo di
+> cercarla prima di accorgersene. Corretto nel blocco (46).
+>
+> ### 📊 IL GIRO COMPLETO, TUTTO MISURATO QUELLA NOTTE (nessun numero letto dai documenti)
+> | cosa | esito |
+> |---|---|
+> | suite locale | `Ran 5901 tests` · **OK (skipped=4)** · uscita **0** |
+> | CI giro 1 (push) | `gate` **rosso** — solo per il test instabile |
+> | CI giro 2 (manuale, lanciato per far girare ZAP) | **tutto verde, `gate` success** |
+> | copertura (CI) | **85,1%** su 24.178 righe (soglia 82%) |
+> | mutazione locale | **60 provati · 60 uccisi · 0 sopravvissuti** · 9,9 min |
+> | CodeQL | 1 allarme aperto, *medium*, `py/overly-large-range` (`fase200:171`) |
+> | ZAP sul sito vivo | `FAIL-NEW 0 · WARN-NEW 9 · PASS 61` |
+> | audit millimetrico | **0 discrepanze** fra i 5 documenti e il motore |
+> | denominatore | 155 rotte · 14 pagine · 10 email · 8 lingue · 80 coppie → **0 scoperte** |
+> | piano dei soldi | 11 FATTO · 6 DA FARE · 3 CODICE MORTO, i tre posti d'accordo |
+> | produzione | `200` · `guardiano: ok` · le due rotte chiuse ieri rispondono **401** |
+>
+> ⚠️ **COSA NON SI È POTUTO MISURARE, dichiarato (D18 punto 3):** il banco con **pagamenti
+> veri**. Tutti e 15 i suoi rossi hanno **una sola causa**: `503 pagamento_non_disponibile`,
+> cioè manca una chiave `sk_test` (non si chiede, D6) e su questo computer **non c'è Docker**.
+> È esattamente il metodo che l'industria ha e noi no — *verificare le regole dei soldi sul
+> traffico vero* — e stanotte lo si è toccato con mano.
+> ⚠️ **Playwright non è installato in locale**: il collaudo col browser vero è girato **in CI,
+> verde due volte** su questo commit.
+
 ## 📌 2026-08-20 (46) — **COSA RESTA APERTO, MISURATO — non riscoprirlo da capo**
 
 > Elenco prodotto dalla macchina il 2026-08-20 a fine giornata (`regole_avvio.py`,
@@ -34,9 +122,13 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > **Trovate il 2026-08-20 e NON riparate, col motivo:**
 > · 🔴 **La FAQ delle landing dice il falso, dal vivo.** `fase173._POLITICA_IT` risponde
 >   *«La tariffa non è rimborsabile»* mentre il motore rimborsa il 100% entro 48 ore.
->   ⚠️ **La guardia è già scritta** (`TestLaFAQNONPUOPROMETTEREQUELLOCHEILMOTORESMENTISCE` in
->   `test_fase173_motore_seo.py`) e **il testo giusto è pronto qui sotto**: manca solo
->   scriverlo, perché tocca produzione e serviva la parola.
+>   ⛔ **CORRETTO IL 2026-08-21: la guardia NON è mai stata scritta.** Qui c'era *«la guardia
+>   è già scritta (`TestLaFAQNONPUOPROMETTEREQUELLOCHEILMOTORESMENTISCE` in
+>   `test_fase173_motore_seo.py`)»*: `grep` su tutto il progetto, **zero occorrenze**. Era lo
+>   sbaglio **S10** (il documento dichiara il falso) e sarebbe costato alla sessione dopo il
+>   tempo di cercarla. Va **scritta**, e va vista rossa prima di toccare il testo (D20).
+>   **Il testo giusto è pronto qui sotto**, e il 2026-08-21 è stato **riverificato contro il
+>   motore** (`fase111.POLITICHE` e `SECONDI_RIPENSAMENTO`), non contro questo documento.
 >   ```
 >   flessibile        Entro 48 ore dalla prenotazione (se l'arrivo e' ad almeno 3 giorni) il
 >                     rimborso e' totale. Dopo, la politica e' flessibile: rimborso pieno fino
@@ -4267,7 +4359,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 57addb4
+CONSEGNE AGGIORNATE A: c13f725
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -6095,7 +6187,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5902 test
+SUITE ATTUALE: Ran 5906 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

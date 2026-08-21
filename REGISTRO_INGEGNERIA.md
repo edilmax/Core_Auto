@@ -774,6 +774,86 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🎯 2026-08-21 (19) — **UNA GUARDIA CHE SI ACCENDEVA DA SOLA 1 GIRO SU 211, E UN BANCO CHE DAVA VERDE SU ZERO RIGHE**
+
+**Cosa è cambiato:** `test_integrazione_servizi.py` (il rilevatore di carte + 3 guardie
+nuove), `collaudi/giro_banco.py` (strumentazione di collaudo, non produzione — B4 lo dichiara
+esplicitamente) e `test_pipeline_ci.py` (+1 guardia). **Nessun file di produzione toccato.**
+
+**Perché.** Il fondatore ha chiesto di rifare l'intero collaudo da zero senza leggere i
+risultati dichiarati. Il primo dato misurato è stato un **rosso vero che nessun documento
+riportava**: il `gate` della CI era rosso su `master`.
+
+**① IL DIFETTO, e la misura che lo inchioda.**
+```
+FAIL: test_webhook_setup_salva_gli_id_opachi_nel_registro_host
+AssertionError: [] != ['un numero di 13 cifre, la lunghezza di un PAN: 5369477666965']
+  : traccia del numero di una carta nel nostro database, colonna 'host_id' = 'h_a8a5369477666965'
+```
+`host_id` = `"h_" + secrets.token_hex(8)` (`fase88_registro_host.py:363`): sedici caratteri
+esadecimali, e quella volta **tredici di fila erano cifre**. Il filtro dei digest
+(`^[0-9a-fA-F]{32,}$`) non lo riconosce, perché pretende trentadue caratteri **e nessun
+prefisso**. Due strade indipendenti danno lo stesso numero: **Monte Carlo su 2.000.000 di
+identificatori → 0,4708%**; **conto esatto (automa sulle corse di cifre) → 0,4718%**. Cioè
+**un giro di CI ogni 211**, a caso — il tipo di rosso che si archivia come «riprova» e
+insegna a ignorare i rossi (regola ferrea 10).
+
+**La prova che è il caso e non il codice**, senza dedurla: sullo **stesso commit**,
+`full-suite` è uscita **rossa** in un giro di CI e **verde** nel giro dopo; la suite locale
+era verde; e `full-suite-311`, che esegue lo **stesso modulo** (riga 274 di `moduli_311.txt`),
+era **verde nello stesso minuto del rosso**.
+
+**Perché nessuno l'aveva visto.** La classe che prova il rilevatore **nelle due direzioni**
+aveva fra i valori innocenti `"h_c9f34242deba3d9"`, scelto **a mano** per la trappola
+precedente (contiene `4242`): quindici caratteri invece dei sedici veri, e senza tredici
+cifre di fila. 💡 **Un esempio scritto a mano copre il caso a cui pensava chi lo ha scritto,
+non quello che il generatore produce davvero.**
+
+**La riparazione, e perché in DUE metà** — ognuna misurata prima di metterla:
+| metà | cosa fa | perché non basta l'altra |
+|---|---|---|
+| `noti=()` | i valori di cui il collaudo conosce l'origine non si guardano dentro | il caso peggiore del generatore (`"h_" + "0"*16`) **supera Luhn**: nessuna regola sulla forma potrebbe escluderlo |
+| `_luhn_ok` (ISO/IEC 7812) | la forma di un PAN comprende il suo checksum | `noti` copre `host_id`, non le altre colonne a rischio (ora in ms, telefono, IBAN) |
+
+⛔ **Luhn è stato messo solo DOPO aver misurato che non indebolisce**: le nove carte di prova
+pubbliche dei circuiti (Visa, Mastercard, Amex, Discover, Diners, UnionPay) lo superano tutte,
+mentre l'ora in millisecondi e un telefono lungo no. ✅ Provato sul generatore vero con la
+funzione vera: **0 falsi allarmi su 200.000** (con la sola forma sarebbero 86).
+⚠️ **Limite dichiarato (D18 punto 3):** un PAN **trascritto male** (una cifra sbagliata) non
+supera Luhn e da lì non si vede più. Le altre due regole — «solo le ultime quattro» e «le
+ultime quattro accanto a una parola che parla di carte» — restano **senza** Luhn.
+
+🔴 **E le guardie nuove hanno trovato due difetti in più di quello caduto:** anche un'**ora in
+millisecondi** e un **telefono lungo** venivano dichiarati carte. Il buco era più largo di
+`host_id`, e le colonne a rischio della tabella `host` erano già tutte lì.
+
+**② IL BANCO DAVA VERDE SU DENOMINATORE ZERO, e aveva due facce.** Con un giro su dati puliti
+il libro giornale **esisteva ma era vuoto**: `inc == pagate * PREZZO * NOTTI` diventava
+`0 == 0` e quattro controlli sui soldi uscivano **OK senza aver letto una riga** (sbaglio S7).
+La guardia `_libro_leggibile` copriva «il file non c'è», non «c'è ed è vuoto» — mentre
+sessanta righe più sotto, nello stesso file, il controllo della catena di impronte il caso
+vuoto lo dichiarava **già**: due risposte diverse alla stessa domanda, a poche righe di
+distanza. ⛔ **La seconda faccia non passava dal giornale**: *«ogni host vede SOLO i propri
+soldi»* legge l'**API dei payout**, e con zero prenotazioni pagate confrontava zero contro
+zero — proprio il controllo che esiste per scoprire i soldi di un host finiti a un altro.
+⚠️ Un payout **illeggibile** resta rosso anche senza traffico: saltarlo insieme al resto
+nasconderebbe un'API rotta.
+```
+PRIMA:  PASSI 38   OK 23   NON OK 15   NON ESEGUITI 6
+DOPO:   PASSI 34   OK 19   NON OK 15   NON ESEGUITI 10
+```
+
+**D20 rispettata su tutt'e due.** Guardie scritte **prima** e viste rosse: `TypeError:
+traccia_di_carta() got an unexpected keyword argument 'noti'` (×3) più tre `AssertionError`
+coi valori veri; e per il banco *«collaudi/giro_banco.py non ha più la funzione
+`_perche_i_conti_non_si_misurano()`»*. Poi riparate, poi riviste **verdi**.
+
+**Dipendenze/env:** nessuna nuova. **STATO:** acceso, sono collaudi.
+
+**③ E UN DOCUMENTO DICHIARAVA IL FALSO.** `RIPRENDI_QUI.md` blocco (46) dava per **già
+scritta** la guardia `TestLaFAQNONPUOPROMETTEREQUELLOCHEILMOTORESMENTISCE`: `grep` su tutto il
+progetto, **zero occorrenze**. Sbaglio S10, corretto nello stesso giro.
+
 ### ⚖️ 2026-08-20 (18) — **RICERCA LEGALE SUL RIPENSAMENTO, E CHI PAGA IL CALENDARIO DELL'HOST**
 
 **Cosa è cambiato:** niente nel codice. È una **ricerca** (D25) e una **decisione di strategia**,

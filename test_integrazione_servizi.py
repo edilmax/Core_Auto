@@ -2286,7 +2286,33 @@ ULTIME4_CARTA_DI_PROVA = "4242"
 _PAROLE_DI_CARTA = ("carta", "card", "pan", "last4", "numero", "****")
 
 
-def traccia_di_carta(valore):
+def _luhn_ok(cifre):
+    """Il checksum che OGNI numero di carta vero soddisfa (ISO/IEC 7812, algoritmo di Luhn).
+
+    ⛔ Non e' un'invenzione nostra: e' il modo in cui il mondo distingue un numero di carta
+    da una fila di cifre qualunque, ed e' il primo filtro di qualunque rilevatore serio.
+    Qui serve a stringere la mira SENZA spostarla: misurato prima di metterlo, tutte e nove
+    le carte di prova pubbliche dei circuiti lo superano (Visa, Mastercard, Amex, Discover,
+    Diners, UnionPay), mentre l'ora in millisecondi, un telefono lungo e l'identificatore
+    che ha fatto cadere il cancello NON lo superano.
+    ⚠️ COSA NON FA (D18 punto 3): un numero di carta TRASCRITTO MALE (una cifra sbagliata)
+    non supera Luhn e da qui non si vede piu'. E' un prezzo accettato in cambio del falso
+    allarme che si toglie, e comunque le altre due regole -- «solo le ultime quattro» e «le
+    ultime quattro accanto a una parola che parla di carte» -- restano SENZA Luhn.
+    """
+    totale, doppia = 0, False
+    for carattere in reversed(cifre):
+        valore = ord(carattere) - 48
+        if doppia:
+            valore *= 2
+            if valore > 9:
+                valore -= 9
+        totale += valore
+        doppia = not doppia
+    return totale % 10 == 0
+
+
+def traccia_di_carta(valore, noti=()):
     """I motivi per cui `valore` sembra contenere il numero di una carta. Vuoto = pulito.
 
     ⛔ **NASCE DA UN ROSSO VERO, in CI, il 2026-08-18**, con questa riga:
@@ -2314,13 +2340,25 @@ def traccia_di_carta(valore):
     cercarci dentro produce solo coincidenze.
     """
     testo = str(valore)
+    # ⛔ 2026-08-21 — I VALORI DI CUI CHI CHIAMA CONOSCE L'ORIGINE NON SI GUARDANO DENTRO.
+    # Non e' un allargamento della mira: e' il collaudo che smette di chiedere «sembra una
+    # carta?» su una stringa che ha generato lui. Serve perche' il caso PEGGIORE del
+    # generatore di `host_id` -- `"h_" + "0"*16` -- supera perfino Luhn, quindi nessuna
+    # regola sulla FORMA del numero potrebbe mai escluderlo.
+    if testo in noti:
+        return []
     if _DIGEST.match(testo.strip()):
         return []
     motivi = []
 
     compatto = re.sub(r"[ \t.\-]", "", testo)
     for gruppo in _GRUPPI_DI_CIFRE.findall(compatto):
-        if 13 <= len(gruppo) <= 19:
+        # ⛔ `_luhn_ok` E' LA META' CHE MANCAVA, ed e' nata da un rosso vero in CI il
+        # 2026-08-21: `h_a8a5369477666965` (un nostro identificatore) conteneva tredici
+        # cifre di fila e veniva dichiarato carta. Misurato su due strade indipendenti che
+        # concordano -- Monte Carlo su 2.000.000 di identificatori (0,4708%) e conto esatto
+        # (0,4718%) -- capitava UNA VOLTA OGNI 211 GIRI: non sfortuna, statistica.
+        if 13 <= len(gruppo) <= 19 and _luhn_ok(gruppo):
             motivi.append("un numero di %d cifre, la lunghezza di un PAN: %s"
                           % (len(gruppo), gruppo))
 
@@ -2380,6 +2418,91 @@ class TestIlRilevatoreDiCarteGUARDANELPOSTOGIUSTO(unittest.TestCase):
                          "il rilevatore si accende di nuovo sull'orologio: la CI tornera' "
                          "rossa a orologeria, e per un difetto che non esiste")
 
+    # ─────────────────────────────────────────────────────────────────────────────────
+    # 2026-08-21 — LA STESSA TRAPPOLA E' TORNATA, SPOSTATA DALL'OROLOGIO ALL'IDENTIFICATORE
+    # ─────────────────────────────────────────────────────────────────────────────────
+    # Il cancello e' andato ROSSO su `master` con questa riga:
+    #     Lists differ: [] != ['un numero di 13 cifre, la lunghezza di un PAN: 5369477666965']
+    #     : traccia del numero di una carta nel nostro database,
+    #       colonna 'host_id' = 'h_a8a5369477666965'
+    # `host_id` nasce da `"h_" + secrets.token_hex(8)` (fase88_registro_host.py): sedici
+    # caratteri esadecimali, e quella volta tredici di fila erano cifre. Il filtro dei
+    # digest non lo copriva perche' pretende trentadue caratteri E nessun prefisso.
+    # ⛔ MISURATO, non stimato — due strade indipendenti che concordano:
+    #     Monte Carlo su 2.000.000 di identificatori veri .... 0,4708%
+    #     conto esatto (automa sulle corse di cifre) ......... 0,4718%   -> 1 giro su 211
+    # E la prova che e' il CASO e non il codice: sullo stesso commit `full-suite` e' uscita
+    # rossa in un giro di CI e VERDE in quello dopo, mentre `full-suite-311` -- che esegue
+    # questo stesso modulo -- era verde nello stesso minuto del rosso.
+    # ⛔ Perche' nessuno l'aveva visto: fra i valori innocenti qui sopra c'e'
+    # `"h_c9f34242deba3d9"`, scelto A MANO per la trappola PRECEDENTE (contiene 4242) --
+    # quindici caratteri invece dei sedici veri, e senza tredici cifre di fila. Un esempio
+    # scritto a mano copre il caso a cui pensava chi lo ha scritto, non quello che il
+    # generatore produce davvero.
+    def test_UN_IDENTIFICATORE_CHE_IL_COLLAUDO_HA_GENERATO_LUI_NON_E_UNA_CARTA(self):
+        """Un valore di cui il collaudo CONOSCE L'ORIGINE non si guarda dentro.
+
+        ⛔ Non e' un allargamento della mira: e' il collaudo che smette di chiedere «sembra
+        una carta?» su una stringa che ha generato lui. Serve perche' il caso PEGGIORE del
+        generatore -- sedici zeri -- supera anche il controllo di Luhn, quindi la sola
+        forma del numero non basterebbe mai a escluderlo.
+        """
+        caduto = "h_a8a5369477666965"        # il valore VERO del 2026-08-21
+        peggio = "h_" + "0" * 16             # il peggio che quel generatore possa produrre
+        for valore in (caduto, peggio):
+            with self.subTest(valore=valore):
+                self.assertEqual(
+                    [], traccia_di_carta(valore, noti={valore}),
+                    "il collaudo sa di aver generato %r e lo tratta lo stesso come una "
+                    "carta: il cancello tornera' rosso da solo" % (valore,))
+
+    def test_LA_FORMA_DI_UN_PAN_COMPRENDE_IL_SUO_CHECKSUM(self):
+        """Un numero di carta VERO soddisfa Luhn (ISO/IEC 7812); sedici cifre a caso no.
+
+        E' la regola che usa tutto il mondo per non annegare nei falsi allarmi. Qui serve a
+        stringere la mira senza toccarla: i tre valori qui sotto sono quelli che si trovano
+        DAVVERO nelle colonne della tabella `host` (identificatore, ora in millisecondi,
+        telefono lungo), e nessuno dei tre e' una carta.
+        """
+        for nome, valore in (("l'identificatore del 2026-08-21", "h_a8a5369477666965"),
+                             ("l'ora in millisecondi", "1787266178000"),
+                             ("un telefono lungo", "+39 333 123 4567 890")):
+            with self.subTest(caso=nome):
+                self.assertEqual(
+                    [], traccia_di_carta(valore),
+                    "%s viene scambiato per una carta: e' un falso allarme, e un falso "
+                    "allarme costa quanto un allarme mancato (regola ferrea 10)" % nome)
+
+    def test_STRINGERE_LA_MIRA_NON_L_HA_SPOSTATA_DI_UN_MILLIMETRO(self):
+        """L'altra direzione, e senza questa la riparazione qui sopra sarebbe un cieco.
+
+        ⛔ Le carte di prova PUBBLICHE dei circuiti, non solo le nostre due: se un giorno
+        qualcuno stringesse ancora la mira e ne perdesse una, questo diventa rosso.
+        """
+        CARTE_DI_PROVA_DEI_CIRCUITI = (
+            "4242424242424242",      # Visa
+            "4111111111111111",      # Visa
+            "4000056655665556",      # Visa debito
+            "5555555555554444",      # Mastercard
+            "5200828282828210",      # Mastercard debito
+            "378282246310005",       # American Express (15 cifre)
+            "6011111111111117",      # Discover
+            "3056930009020004",      # Diners Club (14 cifre)
+            "6200000000000005",      # UnionPay
+        )
+        for pan in CARTE_DI_PROVA_DEI_CIRCUITI:
+            with self.subTest(pan=pan):
+                self.assertTrue(
+                    traccia_di_carta(pan),
+                    "il rilevatore NON vede piu' %r: la mira e' stata stretta troppo, e il "
+                    "collaudo che la usa sarebbe verde col numero scritto nel database"
+                    % (pan,))
+        # e un valore NOTO non puo' diventare un buco: se contiene una carta, si vede
+        self.assertTrue(
+            traccia_di_carta("4242424242424242", noti={"h_a8a5369477666965"}),
+            "dichiarare noto un identificatore ha reso cieco il rilevatore su TUTTO: "
+            "l'elenco dei noti deve valere solo per i valori che ci sono dentro")
+
 
 class TestApiDbCartaHost(_BaseIntegrazione):
     def test_webhook_setup_salva_gli_id_opachi_nel_registro_host(self):
@@ -2402,10 +2525,16 @@ class TestApiDbCartaHost(_BaseIntegrazione):
         # QUALUNQUE valore, e il 2026-08-18 e' caduta in CI sull'ORA IN SECONDI
         # (`'4242' unexpectedly found in '1787042423'`). Vedi `traccia_di_carta` qui sopra:
         # stesso fatto sorvegliato, mira stretta, e provata nelle due direzioni.
+        # ⛔ `noti={hid}`: l'identificatore l'ha generato QUESTO collaudo due righe fa, e il
+        # 2026-08-21 ha fatto cadere il cancello su master perche' sedici caratteri
+        # esadecimali possono uscire tutti cifre (misurato: 1 giro su 211). Dichiararlo
+        # NON allarga la mira di un millimetro su tutto il resto della riga: lo dimostra
+        # `test_STRINGERE_LA_MIRA_NON_L_HA_SPOSTATA_DI_UN_MILLIMETRO`, che pretende di
+        # vedere un numero di carta anche mentre questo identificatore e' fra i noti.
         for riga in self.sql("registro", "SELECT * FROM host WHERE host_id=?", (hid,)):
             for k, v in riga.items():
                 self.assertEqual(
-                    [], traccia_di_carta(v),
+                    [], traccia_di_carta(v, noti={hid}),
                     "traccia del numero di una carta nel nostro database, colonna %r = %r"
                     % (k, v))
 
