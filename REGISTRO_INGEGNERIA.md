@@ -62,8 +62,18 @@
   esattamente un blocco, con gli strumenti d'ingegneria e le condizioni d'arrivo), e i **5
   lavori in sospeso** portano ognuno la sua **prova meccanica** — lo stato lo rifà la macchina
   a ogni avvio. ⛔ Nasce perché quella lista **mentiva**: teneva CodeQL fra i lavori da fare
-  mentre era verde su master. Resta aperto il pezzo **5** (gli strumenti scrivono da sé la
-  scheda): finché non c'è, **nessun blocco può risultare FINITO**, e il file lo dice.
+  mentre era verde su master.
+  - **5** · ⚠️ **A METÀ dal 2026-08-21** — «gli strumenti scrivono da sé la scheda». ✅ **La
+    scheda c'è**: `collaudi/scheda.py`. Un blocco risulta finito solo quando **un attrezzo** ha
+    spuntato tutte le sue caselle — misurandole, su **questo commit**, avendo guardato **più di
+    zero** cose; e riscrivere una condizione **invalida** la misura. ⛔ Prima di quel giorno la
+    casella era una **costante** (`print("☐ %s")`) e in tutto il progetto non esisteva nessun
+    `☑`: nessun blocco poteva risultare finito **per costruzione**, ed è il motivo per cui il
+    fondatore chiedeva da settimane «il Blocco 1 è finito?» senza ottenere risposta.
+    ⚠️ **Resta la seconda metà:** nessun attrezzo scrive ancora la scheda — **Blocco 1 = 0 su
+    6** (`python collaudi/scheda.py --blocco 1`), e ogni casella dice da sé perché è vuota.
+    Delle sei, **tre sono «collegare quello che c'è»** e **tre sono lavoro nuovo** (orologi di
+    prova Stripe, che non esistono; relazioni metamorfiche sui soldi, a metà).
 - **8** · ✅ **FATTO 2026-08-15** — il battito dei soldi in produzione + sentinella esterna
 - **9** · un **revisore indipendente** sulle modifiche
 - **10** · usare davvero **`hypothesis`** e **`z3`** (già installati e quasi mai accesi)
@@ -773,6 +783,59 @@ un salvataggio di sei giorni prima **credendo di aver fatto quello di oggi**, e 
 giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
+
+### 🗂️ 2026-08-21 (24) — **NESSUN BLOCCO POTEVA RISULTARE FINITO. MAI. PER COSTRUZIONE.**
+
+**Cosa è cambiato:** `collaudi/scheda.py` (nuovo), `collaudi/piano.py` (la casella smette di
+essere una costante) e `test_pipeline_ci.py` (+4 guardie). **Nessun file di produzione toccato.**
+
+**Il difetto, e non è un'opinione.** Il fondatore chiedeva da settimane *«il Blocco 1 è finito,
+sì o no?»*. Nessuno gli ha mai risposto — e non per pigrizia:
+```
+collaudi/piano.py:523      print("       ☐ %s" % c)
+
+caselle VUOTE nel codice ......... 1   (una riga sola, e stampava sempre quella)
+caselle SPUNTATE nel progetto .... 0   (nessun file .py contiene ☑)
+```
+La casella **non era un risultato: era una costante**. Qualunque cosa si facesse, ogni blocco
+avrebbe mostrato per sempre quadratini vuoti. 💡 Il fondatore ha passato settimane a interrogare
+una macchina **costruita per non rispondere**, e la sua frustrazione aveva una causa meccanica.
+
+**La ricerca, prima di progettare (D25).** Quattro fonti indipendenti — *fitness function*
+(Ford/Parsons/Kua, Thoughtworks), *attestation* (in-toto/SLSA), *spec drift*, *configuration
+drift* — dicono la stessa cosa da quattro lati:
+> **Un'affermazione sul sistema non esiste se non porta con sé CHI l'ha prodotta, su QUALE
+> COMMIT, e SU QUANTE COSE ha guardato.**
+⛔ Metodo preso per buono, **numeri di chi lo vende dimezzati**: nessuna percentuale riportata.
+
+**La scheda, e le quattro regole che la rendono onesta** — ognuna nata da un danno di oggi:
+| regola | il danno che chiude |
+|---|---|
+| «mai misurata» **non è verde** | il vuoto non è un valore (sbaglio S1) |
+| misurata su un **altro commit** → la casella **si svuota da sola** | «i file dicono cose vecchie»: nessuno deve ricordarsi di aggiornarle |
+| **denominatore zero non è verde** | `plausibilita.py` dice «tutto a posto» dopo **una riga**; il banco dava OK su zero contro zero |
+| esito falso resta rosso | — |
+
+💡 **La chiave è l'impronta del TESTO della condizione**, ed è una scelta: se qualcuno riscrive
+una condizione sta chiedendo **un'altra cosa**, e la misura vecchia non risponde più a quella
+domanda — la casella torna vuota **da sola**.
+
+**Lo stato onesto, il primo che esista su questa domanda: Blocco 1 → `0 su 6`**, e ogni casella
+dice **perché** è vuota. ⛔ **E non ho spuntato niente per far bella figura**: `verifica_produzione.py`
+interroga il sito vero, ma la condizione parla di **invarianti** (`fase199`), che è un'altra
+cosa — spuntarla con quell'attrezzo avrebbe avvelenato lo strumento che serve a smettere di
+mentire. Le sei restano vuote finché un attrezzo non le misura **davvero**.
+
+**Quattro guardie, viste rosse prima (D20):** la casella non è più una costante e il piano
+**consulta** la scheda · le quattro direzioni di `stato()` (mai misurata · commit diverso ·
+denominatore zero · esito falso) · **riscrivere la condizione invalida la misura** · il giro di
+**scrittura** rifiuta una misura senza il comando che la produce.
+⚠️ E la prima versione della prima guardia era un **falso allarme**: cercava la riga vecchia nel
+testo grezzo e scattava sul **commento** che quella riga la cita per spiegare il difetto. Riparata
+con `tokenize`, che i commenti li butta via: **chi legge il codice deve sapere cos'è codice e
+cos'è prosa.**
+
+**Dipendenze/env:** nessuna. **STATO:** acceso, è strumentazione di collaudo.
 
 ### 🧨 2026-08-21 (23) — **LA BATTERIA SI SPARAVA SUI PIEDI, E POI GIUDICAVA IL FORO**
 

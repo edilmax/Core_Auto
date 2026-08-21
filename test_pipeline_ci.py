@@ -7977,6 +7977,158 @@ class TestIlDenominatoreDEVEPoterDireDiNO(unittest.TestCase):
                                "cui si conta, o l'attrezzo non sta misurando niente" % nome)
 
 
+class TestLaSchedaNonSiScriveAMano(unittest.TestCase):
+    """⛔ NESSUN BLOCCO POTEVA RISULTARE FINITO, MAI, PER COSTRUZIONE.
+
+    Misurato il 2026-08-21: `collaudi/piano.py` stampava le condizioni di arrivo con `☐`,
+    e quel `☐` era una **costante** (una sola riga, `print("       ☐ %s" % c)`); in tutto il
+    progetto non esisteva **nessun `☑`**. Il fondatore ha passato settimane a chiedere «il
+    Blocco 1 e' finito?» a una macchina costruita per non rispondere mai.
+
+    💡 LA CURA, dalla ricerca (fitness function · attestation in-toto/SLSA · spec drift ·
+    configuration drift), e' una sola frase: **un'affermazione sul sistema non esiste se non
+    porta con se' chi l'ha prodotta, su quale commit, e su quante cose ha guardato.**
+    Da cui la SCHEDA: nessuno la scrive a mano, e ogni riga porta le sue tre cose.
+
+    ⛔ E LE QUATTRO REGOLE CHE LA RENDONO ONESTA, ognuna nata da un danno di oggi:
+      · **mai misurata** non e' verde -- e' l'assenza di misura (sbaglio S1)
+      · **misurata su un ALTRO commit** non vale piu': il codice e' cambiato sotto. E' la
+        stessa regola dello schedario delle bombe («oltre quell'eta' non e' una misura, e'
+        un ricordo»), ma sul COMMIT invece che sui giorni -- piu' stretta e piu' vera
+      · **denominatore zero** non e' verde: `plausibilita.py` dice «ogni numero sta in una
+        banda che il mondo consente» dopo averne guardato **uno**
+      · **esito falso** resta rosso, ovviamente
+    """
+
+    def _scheda(self):
+        percorso = os.path.join(QUI, "collaudi", "scheda.py")
+        self.assertTrue(
+            os.path.isfile(percorso),
+            "collaudi/scheda.py non esiste: senza, nessuna casella potra' mai essere "
+            "spuntata da una macchina, e «il Blocco 1 e' finito?» resta senza risposta")
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("_scheda_prova", percorso)
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+        return modulo
+
+    def test_IL_PIANO_NON_STAMPA_PIU_UNA_CASELLA_COSTANTE(self):
+        """La casella dev'essere un RISULTATO, non una lettera scritta nel codice."""
+        percorso = os.path.join(QUI, "collaudi", "piano.py")
+        with io.open(percorso, encoding="utf-8") as f:
+            sorgente = f.read()
+        # ⛔ SI GUARDA IL CODICE, NON LA PROSA. La prima versione di questa guardia cercava la
+        # riga vecchia dentro il testo grezzo, e il 2026-08-21 e' scattata sul COMMENTO che
+        # quella riga la cita per spiegare il difetto: un falso allarme, e un falso allarme
+        # costa quanto un allarme mancato (ferrea 10). `tokenize` butta via i commenti.
+        import tokenize
+        codice = []
+        with open(percorso, "rb") as grezzo:
+            for pezzo in tokenize.tokenize(grezzo.readline):
+                if pezzo.type != tokenize.COMMENT:
+                    codice.append(pezzo.string)
+        solo_codice = " ".join(codice)
+        # ⛔ `assertFalse(... in ...)` e NON `assertNotIn`: il secondo riverserebbe l'INTERO
+        # file dentro il messaggio d'errore, e un rosso illeggibile non aiuta nessuno.
+        self.assertFalse(
+            "☐ %s" in solo_codice and "_scheda_stato" not in solo_codice,
+            "collaudi/piano.py stampa ancora la casella VUOTA come costante, senza chiedere "
+            "niente a nessuno: qualunque cosa facciamo, ogni blocco mostrera' per sempre "
+            "quadratini vuoti")
+        self.assertIn(
+            "scheda", sorgente,
+            "collaudi/piano.py non consulta la scheda: la casella non puo' venire da "
+            "nessuna parte se non da una misura registrata")
+
+    def test_LA_CASELLA_SI_SPUNTA_SOLO_CON_UNA_MISURA_VALIDA_SU_QUESTO_COMMIT(self):
+        """Le quattro direzioni. Un giudizio che dice sempre di si' non e' un giudizio."""
+        scheda = self._scheda()
+        testo = "una condizione di prova, che nessuno misura davvero"
+        vuoto = {}
+        spuntata, motivo = scheda.stato(testo, vuoto, commit="aaaaaaa")
+        self.assertFalse(spuntata, "una condizione MAI MISURATA non puo' risultare fatta")
+        self.assertIn("mai misurata", motivo.lower(),
+                      "il motivo deve dire che non e' stata misurata, non tacere: %r" % motivo)
+
+        buona = {scheda.chiave(testo): {"esito": True, "denominatore": 12,
+                                        "comando": "python collaudi/finto.py",
+                                        "commit": "aaaaaaa", "quando": "2026-08-21T00:00:00"}}
+        spuntata, motivo = scheda.stato(testo, buona, commit="aaaaaaa")
+        self.assertTrue(spuntata,
+                        "una misura VERA, sul commit giusto e con un denominatore, deve "
+                        "spuntare la casella -- se no la scheda non serve a niente: %r" % motivo)
+
+        for guasto, atteso, perche in (
+                ({"esito": True, "denominatore": 12, "comando": "x",
+                  "commit": "bbbbbbb", "quando": "2026-08-21T00:00:00"},
+                 "commit",
+                 "misurata su un ALTRO commit: il codice e' cambiato sotto, quella misura "
+                 "non parla piu' di questo codice"),
+                ({"esito": True, "denominatore": 0, "comando": "x",
+                  "commit": "aaaaaaa", "quando": "2026-08-21T00:00:00"},
+                 "denominatore",
+                 "denominatore ZERO: un OK senza aver guardato niente e' il verde peggiore "
+                 "di tutti (sbaglio S7)"),
+                ({"esito": False, "denominatore": 12, "comando": "x",
+                  "commit": "aaaaaaa", "quando": "2026-08-21T00:00:00"},
+                 "",
+                 "esito falso: resta rossa")):
+            with self.subTest(perche=perche):
+                s, m = scheda.stato(testo, {scheda.chiave(testo): guasto}, commit="aaaaaaa")
+                self.assertFalse(s, perche)
+                if atteso:
+                    self.assertIn(atteso, m.lower(),
+                                  "il motivo non nomina la causa (%s): %r" % (atteso, m))
+
+    def test_UNA_MISURA_SENZA_IL_COMANDO_CHE_LA_PRODUCE_NON_SI_REGISTRA(self):
+        """Il giro completo di SCRITTURA, che senza questa guardia non provava nessuno.
+
+        ⛔ E il comando non e' un ornamento: senza, chi legge la scheda fra sei mesi ha una
+        casella verde e nessun modo di rifare la misura -- cioe' di nuovo un documento da
+        credere sulla parola, che e' precisamente cio' che questa scheda esiste per abolire.
+        """
+        import shutil
+        import tempfile
+        scheda = self._scheda()
+        culla = tempfile.mkdtemp(prefix="prova_scheda_")
+        try:
+            dove = os.path.join(culla, "scheda.json")
+            testo = "una condizione di prova che qualcuno misura davvero"
+            scheda.registra(testo, esito=True, denominatore=41,
+                            comando="python collaudi/finto.py", percorso=dove,
+                            commit="ccccccc")
+            riletta = scheda.leggi(dove)
+            spuntata, motivo = scheda.stato(testo, riletta, commit="ccccccc")
+            self.assertTrue(spuntata,
+                            "scritta e riletta, la misura non spunta la casella: la scheda "
+                            "non conserva quello che le si dice (%r)" % motivo)
+            self.assertIn("41", motivo,
+                          "il motivo non dice SU QUANTE COSE ha guardato: %r" % motivo)
+            self.assertIn("finto.py", motivo,
+                          "il motivo non dice CON QUALE COMANDO rifare la misura: %r" % motivo)
+            with self.assertRaises(ValueError):
+                scheda.registra(testo, esito=True, denominatore=1, comando="  ",
+                                percorso=dove, commit="ccccccc")
+        finally:
+            shutil.rmtree(culla, ignore_errors=True)
+
+    def test_CAMBIARE_IL_TESTO_DELLA_CONDIZIONE_INVALIDA_LA_MISURA(self):
+        """⛔ La chiave e' l'IMPRONTA DEL TESTO, e non e' un dettaglio tecnico: se qualcuno
+        riscrive la condizione, sta chiedendo un'altra cosa -- e la vecchia misura non
+        risponde piu' a quella domanda. La casella deve tornare vuota DA SOLA."""
+        scheda = self._scheda()
+        prima = "i soldi tornano all'ospite da OGNI strada"
+        dopo = "i soldi tornano all'ospite da ogni strada, ENTRO 24 ORE"
+        registro = {scheda.chiave(prima): {"esito": True, "denominatore": 7, "comando": "x",
+                                           "commit": "aaaaaaa", "quando": "2026-08-21"}}
+        self.assertTrue(scheda.stato(prima, registro, commit="aaaaaaa")[0])
+        spuntata, motivo = scheda.stato(dopo, registro, commit="aaaaaaa")
+        self.assertFalse(
+            spuntata,
+            "la condizione e' stata RISCRITTA e la vecchia misura la spunta lo stesso: "
+            "cosi' si dichiara fatta una cosa che nessuno ha mai verificato (%r)" % motivo)
+
+
 class TestIlBancoSIPUOGIUDICAREANCHEFUORIDALCONTENITORE(unittest.TestCase):
     """⛔ IL BANCO DICHIARAVA SETTE BUCHI, E CINQUE AVEVANO LA MOTIVAZIONE SBAGLIATA.
 
