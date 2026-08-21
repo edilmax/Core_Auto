@@ -774,6 +774,78 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 💸 2026-08-21 (22) — **LA PAGINA DOVE SI PAGA PROMETTEVA 14 GIORNI, IL MOTORE NE FA 30**
+
+**Cosa è cambiato:** `fase83_server.py` e `deploy/host.html` — **produzione**, col «autorizzato»
+scritto del fondatore (B4) — più `collaudi/giro_banco.py` e `collaudi/batteria.py`
+(strumentazione), e **6 guardie nuove** in `test_fase83_server.py` e `test_pipeline_ci.py`.
+
+**① IL DIFETTO, misurato sul sito VIVO.** `ETICHETTE_UI["pol_rigida"]`, servita da
+`/api/i18n` e mostrata accanto al prezzo, diceva in **otto lingue**: *«Cancellazione gratuita
+fino a 14 giorni prima (poi 50%)»*. Ma `fase111.POLITICHE["rigida"] = ((30,10000),(7,5000),(0,0))`:
+il 100% comincia a **30** giorni.
+```
+cancella a 20 giorni -> la pagina promette 100%, il motore rende 50% (5000 su 10000)
+cancella a  6 giorni -> la pagina promette  50%, il motore rende  0%
+```
+Su una prenotazione da 400 EUR sono **200 EUR** di differenza, promessi **nell'istante del
+pagamento**. E il «(poi 50%)» era falso una seconda volta: sotto i 7 giorni il motore rende
+**zero**, ed è proprio la finestra in cui la gente cancella.
+💡 **Lo stesso numero era scritto GIUSTO nella tendina dell'host** (`deploy/host.html`: «30
+giorni»): due copie a mano dello stesso fatto, e a sbagliare era **quella lontana dal motore**.
+L'host firmava per una regola e l'ospite ne leggeva un'altra.
+⛔ **E la sessione precedente aveva dichiarato il contrario:** *«grep su tutto il prodotto,
+nessun altro posto promette il contrario di quello che il motore fa»*. Falso — sbaglio **S10**,
+lo stesso che quella sessione aveva appena corretto a sé stessa.
+
+**Tre guardie, viste ROSSE su 8 lingue su 8 (D20)**, in `test_fase83_server.py`:
+la soglia promessa **si ricava** dagli scaglioni invece di ricopiarla · le **due copie** (host e
+ospite) devono dire gli stessi numeri · una **quota parziale** non si promette senza dire da che
+giorno vale. ⚠️ Limite dichiarato: guardano i **numeri**, non il senso della frase.
+
+**② E IL BANCO ACCUSAVA I SOLDI PER UN SEGRETO SCRITTO IN DUE MODI.** La fase 8c usciva
+`NON OK 13`: **ogni** pagamento riceveva `400`. Non era il prodotto.
+```
+avvia_server_visivo.py:70   STRIPE_WEBHOOK_SECRET  ripiego = "whsec_v"
+giro_banco.py:184           STRIPE_WEBHOOK_SECRET  ripiego = ""        -> firma non valida
+```
+Identico su `ADMIN_KEY` e `BUNKER_PASSWORD`; e la batteria non passava ai due processi la
+**stessa cartella dati**, quindi cinque controlli contabili non giravano **mai**. Misurato, con
+le **sole** variabili documentate:
+```
+prima:  PASSI 19  OK  6  NON OK 13  NON ESEGUITI 11   uscita 1
+dopo:   PASSI 34  OK 34  NON OK  0  NON ESEGUITI  1   uscita 0
+```
+💡 **Tredici fallimenti identici sono UN problema di configurazione, non tredici difetti dei
+soldi.** Un falso allarme costa quanto un allarme mancato (ferrea 10): quel rosso mandava a
+cercare per una giornata un guasto che non esiste. Ora `non_sto_misurando()` riconosce
+`400 firma_non_valida` e **dichiara il buco col motivo**, come già si fa per la chiave mancante.
+
+**Tre guardie**, viste rosse prima: i ripieghi condivisi devono **coincidere** e ogni variabile
+condivisa va **classificata** (stretta di mano, oppure diversa col motivo scritto) · una firma
+rifiutata **si dichiara** e non si conta come guasto · la batteria dà a server e banco la
+**stessa** cartella, nuova a ogni giro.
+
+**🔴 ③ DIFETTO APERTO, TROVATO OGGI E NON RIPARATO: LA BATTERIA SI SPARA SUI PIEDI.**
+La fase 3 (mutazione) ha un tetto di **900s**; quel giorno ha sforato (primo giro 687s, secondo
+oltre 900) ed è stata **uccisa**. La mutazione rompe i file di **produzione** e li ripara alla
+fine: uccisa a metà, **non ripara**. Sul disco è rimasto, fra gli altri:
+```
+fase111_cancellazione.py
+-    rimborso = fee + (soggiorno * bps // 10000)
++    rimborso = pagato          <- rimborsa il 100% a chiunque, sempre
+```
+Le fasi successive (`6c`, `2c`) hanno girato **su un motore dei soldi mutato**: le loro rosse
+**non sono giudicabili**, e per un'ora sono sembrate difetti veri.
+✅ **Ripristinato** dai file di sicurezza della mutazione stessa (`mutazione_*` in TEMP),
+**byte-identici**, e verificato: albero uguale ai soli file dichiarati, `rigida` a 20 giorni di
+nuovo **50%**. ⛔ **Non con `git checkout HEAD`**, che le istruzioni di `guardia_commit.py`
+prescrivono: avrebbe **cancellato la riparazione non ancora committata** dentro lo stesso file.
+Quel buco nelle istruzioni resta da chiudere, insieme al ripristino automatico dopo il tetto.
+
+**Dipendenze/env:** nessuna nuova; anzi, **quattro variabili in meno** da ricordarsi.
+**STATO:** acceso. **Suite: 5920 test, verde in 1671s.**
+
 ### 🧰 2026-08-21 (21) — **IL COMANDO CHE SI CHIAMA «BATTERIA COMPLETA» SALTAVA I COLLAUDI SUI SOLDI**
 
 **Cosa è cambiato:** `collaudi/batteria.py` (8 fasi nuove), `collaudi/giro_banco.py` (la porta

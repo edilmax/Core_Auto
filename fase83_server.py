@@ -199,7 +199,20 @@ ETICHETTE_UI: Dict[str, Dict[str, str]] = {
     # --- politiche di cancellazione ---
     "pol_flessibile": {"it": "✓ Cancellazione gratuita fino a 24h prima", "en": "✓ Free cancellation up to 24h before", "es": "✓ Cancelación gratuita hasta 24 h antes", "fr": "✓ Annulation gratuite jusqu'à 24 h avant", "de": "✓ Kostenlose Stornierung bis 24 Std. vorher", "pt": "✓ Cancelamento grátis até 24h antes", "ja": "✓ 24時間前まで無料キャンセル", "zh": "✓ 入住前24小时可免费取消"},
     "pol_moderata": {"it": "✓ Cancellazione gratuita fino a 5 giorni prima", "en": "✓ Free cancellation up to 5 days before", "es": "✓ Cancelación gratuita hasta 5 días antes", "fr": "✓ Annulation gratuite jusqu'à 5 jours avant", "de": "✓ Kostenlose Stornierung bis 5 Tage vorher", "pt": "✓ Cancelamento grátis até 5 dias antes", "ja": "✓ 5日前まで無料キャンセル", "zh": "✓ 入住前5天可免费取消"},
-    "pol_rigida": {"it": "Cancellazione gratuita fino a 14 giorni prima (poi 50%)", "en": "Free cancellation up to 14 days before (then 50%)", "es": "Cancelación gratuita hasta 14 días antes (luego 50%)", "fr": "Annulation gratuite jusqu'à 14 jours avant (puis 50 %)", "de": "Kostenlose Stornierung bis 14 Tage vorher (danach 50%)", "pt": "Cancelamento grátis até 14 dias antes (depois 50%)", "ja": "14日前まで無料キャンセル（以降50%）", "zh": "入住前14天可免费取消（之后收取50%）"},
+    # ⛔ 2026-08-21: QUESTA RIGA DICEVA IL FALSO A CHI STAVA PER PAGARE, IN OTTO LINGUE.
+    # Prometteva «gratuita fino a 14 giorni prima» mentre `fase111.POLITICHE["rigida"]`
+    # rende il 100% solo da 30 giorni: chi cancellava a 20 giorni leggeva «gratis» e
+    # riceveva META' (su 400 EUR, 200 EUR di differenza). E il «(poi 50%)» era falso una
+    # seconda volta, perche' sotto i 7 giorni il motore rende ZERO -- proprio la finestra
+    # in cui la gente cancella. Lo stesso numero era scritto GIUSTO nella tendina dell'host
+    # (deploy/host.html: «30 giorni»): due copie a mano dello stesso fatto, e a sbagliare
+    # era quella lontana dal motore.
+    # ⛔ I numeri qui sotto sono gli scaglioni VERI ((30, 10000), (7, 5000), (0, 0)) e li
+    # sorveglia `TestLEtichettaDellaCancellazioneNONPuoSmentireIlMotore` in
+    # test_fase83_server.py: ricava soglia e quota dal motore, confronta tutte e 8 le
+    # lingue e confronta anche le due copie fra loro. Sposta uno scaglione e diventa rossa
+    # lo stesso giorno.
+    "pol_rigida": {"it": "Cancellazione gratuita fino a 30 giorni prima (poi 50%, niente sotto i 7 giorni)", "en": "Free cancellation up to 30 days before (then 50%, nothing under 7 days)", "es": "Cancelación gratuita hasta 30 días antes (luego 50%, nada con menos de 7 días)", "fr": "Annulation gratuite jusqu'à 30 jours avant (puis 50 %, rien à moins de 7 jours)", "de": "Kostenlose Stornierung bis 30 Tage vorher (danach 50%, nichts unter 7 Tagen)", "pt": "Cancelamento grátis até 30 dias antes (depois 50%, nada com menos de 7 dias)", "ja": "30日前まで無料キャンセル（以降50%、7日未満は返金なし）", "zh": "入住前30天可免费取消（之后退款50%，不足7天不退款）"},
     "pol_non_rimborsabile": {"it": "Tariffa non rimborsabile", "en": "Non-refundable rate", "es": "Tarifa no reembolsable", "fr": "Tarif non remboursable", "de": "Nicht erstattbarer Tarif", "pt": "Tarifa não reembolsável", "ja": "返金不可の料金", "zh": "不可退款价格"},
     # --- host ---
     "pannello_host": {"it": "Pannello Host", "en": "Host Panel", "es": "Panel Anfitrión", "fr": "Espace Hôte", "de": "Gastgeber-Panel", "pt": "Painel do Anfitrião", "ja": "ホストパネル", "zh": "房东面板"},

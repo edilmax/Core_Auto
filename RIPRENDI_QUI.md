@@ -11,6 +11,64 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 💸 2026-08-21 (51) — **RIPARTI DA QUI** (pomeriggio: una bugia da 200 EUR e una mina nella batteria)
+
+> ⛔ **Si CONTROLLA, non si crede.** Primo gesto: `git rev-parse --short HEAD` su computer,
+> GitHub e VPS, e la **tabella dei job dall'API**.
+>
+> ### 🔴 IL SITO SERVE ANCORA IL TESTO FALSO, se questo lavoro non è stato ancora messo online
+> `/api/i18n?lang=it` → `pol_rigida`. Se dice **«14 giorni»**, il deploy **non** è stato fatto e
+> chi paga sta leggendo una promessa che il motore non mantiene. Se dice **«30 giorni»**, è a
+> posto. **Si guarda, non si suppone.**
+>
+> **COSA È STATO FATTO, in una riga per lavoro** (per esteso: registro, voce **(22)**):
+> 1. **La pagina dove si paga prometteva 14 giorni, il motore ne fa 30** — in **8 lingue**, sul
+>    sito vivo. Chi cancellava a 20 giorni leggeva «gratis» e riceveva **metà**: su 400 EUR sono
+>    **200 EUR**. Riparato in produzione (autorizzato), 3 guardie viste rosse su 8/8.
+>    💡 Lo stesso numero era **giusto** nel pannello host: due copie a mano, sbagliava la lontana.
+> 2. **Il banco accusava i soldi per un segreto scritto in due modi.** `NON OK 13` → **`OK 34 /
+>    NON OK 0`**, con le **sole** variabili documentate. Le quattro variabili «segrete» che
+>    servivano prima **non servono più a nessuno**.
+> 3. **Aggiunta alla ferrea 2**: il guasto di prova si inietta **con l'editor**, mai con una
+>    sostituzione testuale. Non è un'eccezione a B2: la ferrea 2 dice *cosa*, B2 dice *come*.
+>
+> ### 🔴🔴 LA COSA PIÙ IMPORTANTE DA SAPERE PRIMA DI LANCIARE LA BATTERIA
+> **`python collaudi/batteria.py` può lasciarti il motore dei soldi ROTTO sul disco.**
+> La fase 3 (mutazione) ha un tetto di **900s**. Se lo sfora viene **uccisa**, e la mutazione —
+> che rompe i file di **produzione** apposta e li ripara alla fine — **non ripara più niente**.
+> Oggi ha lasciato `rimborso = pagato` dentro `fase111_cancellazione.py`: **rimborso del 100% a
+> chiunque**. Le fasi dopo hanno girato su quel codice e sono uscite rosse: **non giudicabili**.
+> ```
+> primo giro:  [OK  ] 3. Mutazione 687s      secondo giro: [FAIL] 3. Mutazione 900s (= il tetto)
+> ```
+> **Se ti succede:** ⛔ **NON** usare `git checkout HEAD -- <file>` come dicono le istruzioni di
+> `guardia_commit.py`: se in quel file hai lavoro non ancora committato, **lo cancella** (oggi
+> avrebbe cancellato la riparazione della politica). Si ripristina dai **file di sicurezza della
+> mutazione stessa** — la cartella `mutazione_*` in `%TEMP%`, quella con la data del giro — e si
+> confrontano gli **sha256**. Poi si toglie a mano la traccia `bookinvip_mutazione_in_corso`.
+> ⚠️ **È IL PRIMO LAVORO IN CODA**, e ha due metà: la batteria deve **ripristinare da sola** dopo
+> il tetto e dichiararsi rossa col motivo vero; e le istruzioni di `guardia_commit.py` vanno
+> corrette. Finché non è fatto, **la batteria è una mina**.
+>
+> ### ⚠️ ALTRI RILIEVI MISURATI OGGI, non riparati (D1, per non allargare lo scopo)
+> · **`plausibilita.py` esamina UNA riga** e conclude «ogni numero sta in una banda che il mondo
+>   consente»: nella batteria appare come un `[OK]` come tutti gli altri.
+> · **Una fase rossa perde il proprio motivo**: `batteria.py` conserva solo le **ultime 3 righe**
+>   (`_coda(out, n=3)`), quindi per sapere perché 8c è caduta bisogna rifare tutto il giro.
+> · **Dei 14 attrezzi «troppo veloci» ne ho verificati 6**: cinque lavorano davvero (audit
+>   millimetrico, denominatore, piano dei soldi, copertura pannelli, estremo), **uno no**
+>   (plausibilità). **Otto restano da guardare.**
+>
+> ### 🗂️ E LA COSA DECISA COL FONDATORE, DA COSTRUIRE: **LA SCHEDA**
+> `collaudi/piano.py` stampa le condizioni di arrivo con `☐` — ma **`☐` è una costante**
+> (`riga 523`), e in tutto il progetto **non esiste nessun `☑`**: nessun blocco potrà **mai**
+> risultare finito. Ricerca fatta (fitness function · attestation in-toto/SLSA · spec drift ·
+> configuration drift): la cura è **una scheda che nessuno scrive a mano** — *affermazione ·
+> attrezzo che l'ha prodotta · commit · denominatore · esito* — dove la casella **scade da sola**
+> quando il codice cambia, e **denominatore zero non è verde**. Si comincia dal **Blocco 1**,
+> sei caselle, e da nient'altro. ⚠️ Aspettarsi **3 o 4 su 6**, non 6: gli orologi di prova Stripe
+> non ci sono e le relazioni metamorfiche sono a metà (misurato oggi).
+
 ## 🧭 2026-08-21 (50) — **RIPARTI DA QUI** (notte del 21 agosto, quattro lavori chiusi)
 
 > ⛔ **Quello che leggi qui sotto è di stanotte: si CONTROLLA, non si crede.** Primo gesto:
@@ -6355,7 +6413,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5914 test
+SUITE ATTUALE: Ran 5920 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

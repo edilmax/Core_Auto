@@ -320,9 +320,20 @@ Vietate le guardie e le frasi **ornamentali**, che rassicurano senza controllare
 *Tre casi in un giorno: una guardia che **pretendeva** il comando che spegne il sito; un log che
 scriveva «blocco temporaneo, riprovo» mentre l'app era murata; una mia prova rossa che non
 riscriveva il file e passava «senza vedere niente».*
+⛔ **E il guasto si inietta CON L'EDITOR, mai con `sed` o una sostituzione testuale.** Questa
+regola dice **cosa** (vedere il rosso sul guasto vero); il divieto **B2** dice **come**: si legge
+il file, si scrive la versione rotta, si legge il rosso, si riscrive l'originale **da una copia
+tenuta in mano** — non «al contrario» della sostituzione. Non è un'eccezione a B2, e B2 non ne ha
+bisogno: le due regole non si sono mai scontrate davvero.
+*Nato il 2026-08-21: il guasto di prova su `collaudi/regole_avvio.py` era stato iniettato con una
+sostituzione testuale, e dichiarato. Il ripristino tenne — sha256 uguale prima e dopo — ma se la
+sessione fosse morta fra iniezione e ripristino il file rotto sarebbe rimasto: è un rischio che
+B2 non copre e che l'editor toglie a costo zero.*
 **Si verifica:** per ogni guardia nuova, nella sessione esistono i tre pezzi — il guasto
 iniettato, l'esito **rosso** letto diretto, e l'impronta **sha256 identica** dopo il ripristino.
-Se manca anche uno solo, quella guardia non vale ancora.
+Se manca anche uno solo, quella guardia non vale ancora. ⛔ E il guasto dev'essere stato iniettato
+**con l'editor**: nella sessione nessun `sed -i` né `.replace()` su un file del progetto — è il
+criterio di **B2**, e qui vale identico.
 
 **3. ALLINEAMENTO TOTALE DELLE FONTI DI VERITÀ.** Ogni modifica reale sulla macchina (pacchetti
 rimossi, pin, configurazione) va **subito** riflessa nei documenti, con la verità **verificata sul
