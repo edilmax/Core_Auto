@@ -8111,6 +8111,44 @@ class TestIlBancoSIPUOGIUDICAREANCHEFUORIDALCONTENITORE(unittest.TestCase):
                          "un database nato nel posto sbagliato deve VEDERSI: e' l'unica "
                          "cosa che questo controllo esiste per trovare")
 
+    def test_I_CONTI_NON_SI_DICHIARANO_QUADRATI_SU_UN_LIBRO_GIORNALE_VUOTO(self):
+        """⛔ 2026-08-21 — LO STESSO S7 DEL CONTROLLO [9], TROVATO ANCHE NEL [8].
+
+        Misurato con un giro vero del banco su dati puliti: il libro giornale ESISTEVA su
+        disco ma aveva ZERO righe (senza chiave Stripe nessuna prenotazione paga), e quattro
+        controlli contabili sono usciti **OK** senza aver esaminato una sola riga:
+            OK  somma degli incassi = pagate x prezzo   (atteso 0 (0 x 1000) / ottenuto 0)
+            OK  commissione + tariffa tecnica su ogni incasso
+            OK  ogni host vede SOLO i propri soldi
+            OK  ogni cancellazione pagata lascia la sua riga di rimborso nel giornale
+        La guardia che c'era copriva il caso «il file non c'e'», non il caso «c'e' ed e'
+        vuoto» — e sessanta righe piu' sotto, nello STESSO file, il controllo della catena
+        di impronte il caso vuoto lo dichiarava gia': *«oppure e' vuoto: senza righe la
+        catena non si verifica, quindi NON si misura»*. Due controlli vicini, due risposte
+        diverse alla stessa domanda: e' la copia rimasta indietro, di nuovo.
+
+        ⚠️ Portata dichiarata (D18 punto 3): in quel giro il VERDETTO complessivo non ha
+        mentito (il banco e' uscito 1 per altri rossi). Il difetto e' che quei quattro OK
+        sarebbero sopravvissuti a un giro senza rossi, dichiarando quadrati dei conti che
+        nessuno aveva guardato.
+        """
+        perche = self._funzione_del_banco("_perche_i_conti_non_si_misurano")
+        self.assertIsNotNone(
+            perche(False, 0),
+            "senza libro giornale i conti non si possono misurare, e il banco deve dirlo")
+        self.assertIsNotNone(
+            perche(True, 0),
+            "IL CASO DEL 2026-08-21: il libro c'e' ma e' VUOTO, e il banco dichiara OK "
+            "quattro controlli sui soldi senza aver letto una riga (sbaglio S7). Zero righe "
+            "non e' «i conti tornano»: e' «non ho guardato»")
+        # l'altra direzione (regola ferrea 10): con righe vere si DEVE misurare, o questa
+        # guardia avrebbe solo spento quattro controlli invece di renderli onesti
+        self.assertIsNone(
+            perche(True, 13),
+            "con un libro giornale pieno i conti si misurano eccome: se qui esce un motivo, "
+            "i quattro controlli contabili non girerebbero MAI e il banco sarebbe cieco "
+            "proprio dove serve")
+
 
 class TestGliALLARMIDiCodeQLSICHIUDONOALLAFONTE(unittest.TestCase):
     """🔬 I 33 ALLARMI APERTI, CHIUSI DOVE NASCONO — e ognuno nella forma che si VEDE.

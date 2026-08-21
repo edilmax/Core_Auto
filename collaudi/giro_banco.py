@@ -491,16 +491,44 @@ g = giornale()
 # `db_finanza` a `:memory:`, cioe' il libro non esisteva su NESSUN disco -- e questa riga
 # faceva sembrare Docker la causa di un buco che era nostro. Ora il banco lo scrive in
 # `BANCO_DATI` e questi tre si misurano anche fuori dal contenitore.
+
+
+
+def _perche_i_conti_non_si_misurano(libro_leggibile, righe_giornale):
+    """Il motivo per cui i controlli contabili NON si possono misurare, o `None` se si puo'.
+
+    ⛔ NASCE DA UN VERDE PER ASSENZA TROVATO IL 2026-08-21, e la guardia che c'era copriva
+    meta' del problema. Con un giro su dati puliti e senza chiave Stripe il libro giornale
+    ESISTE su disco ma ha ZERO righe: `inc == pagate * PREZZO * NOTTI` diventa `0 == 0` e
+    quattro controlli sui soldi escono **OK senza aver letto una riga**. Zero righe non e'
+    «i conti tornano»: e' «non ho guardato» — lo sbaglio S7, lo stesso gia' tolto al
+    controllo [9] e rimasto qui.
+    💡 Che il caso vuoto andasse dichiarato lo sapeva gia' questo file: il controllo della
+    catena di impronte, sessanta righe piu' sotto, dice da sempre *«oppure e' vuoto: senza
+    righe la catena non si verifica, quindi NON si misura»*. Era la stessa domanda con due
+    risposte diverse a poche righe di distanza.
+    """
+    if not libro_leggibile:
+        return ("nessun finanza.db in BANCO_DATI (la cartella che il banco dichiara "
+                "all'avvio) ne' in /data: non c'e' niente da leggere, quindi NON si misura")
+    if righe_giornale == 0:
+        return ("il libro giornale c'e' ma e' VUOTO (zero righe): un OK su zero righe non "
+                "direbbe «i conti tornano», direbbe «non ho guardato» -- e sarebbe il verde "
+                "peggiore di tutti (sbaglio S7). Di solito significa che nessuna "
+                "prenotazione ha pagato: senza chiave Stripe di prova il motore rifiuta")
+    return None
+
+
 _libro_leggibile = db("finanza") is not None
-if not _libro_leggibile:
+_non_misurabile = _perche_i_conti_non_si_misurano(_libro_leggibile, len(g))
+if _non_misurabile:
     for _n in ("somma degli incassi = pagate x prezzo",
                "tariffa tecnica su ogni incasso",
                "ogni cancellazione pagata lascia la sua riga di rimborso nel giornale"):
-        saltato(_n, "nessun finanza.db in BANCO_DATI (la cartella che il banco dichiara "
-                    "all'avvio) ne' in /data: non c'e' niente da leggere, quindi NON si misura")
+        saltato(_n, _non_misurabile)
 inc = sum(i for _, t, _, _, i, _, _ in g if t == "incasso")
 com = sum(i for _, t, _, _, i, _, _ in g if t == "commissione")
-if _libro_leggibile:
+if not _non_misurabile:
     passo("somma degli incassi = pagate x prezzo", inc == pagate * PREZZO * NOTTI,
           "%d (%d x %d)" % (pagate * PREZZO * NOTTI, pagate, PREZZO * NOTTI), inc)
 # La riga del giornale "commissione" contiene commissione + tariffa tecnica.
@@ -519,7 +547,7 @@ if _libro_leggibile:
 # rampa di lancio. Il caso «host appena nato, commissione 0%» qui non passa mai.
 _atteso_tec = (PREZZO * NOTTI * _psp_bps_del_motore()) // 10000 + _psp_fisso_del_motore()
 _atteso_riga = (PREZZO * NOTTI * _commissione_bps_del_banco()) // 10000 + _atteso_tec
-if _libro_leggibile:
+if not _non_misurabile:
     passo("commissione + tariffa tecnica = %d cents su ogni incasso" % _atteso_riga,
           com == pagate * _atteso_riga, pagate * _atteso_riga, com)
 
@@ -545,8 +573,22 @@ for _hid, tok, slug in host:
             atteso += PREZZO * NOTTI - _comm - _tec
     if mio != atteso:
         sballati.append((slug, "vede %d, gli spetta %d" % (mio, atteso)))
-passo("ogni host vede SOLO i propri soldi", not sballati, "nessuno sballato",
-      sballati[:4] if sballati else "nessuno")
+# ⛔ L'ALTRA FACCIA DEL VERDE PER ASSENZA (2026-08-21). Questo controllo non legge il
+# giornale ma l'API dei payout, quindi `_perche_i_conti_non_si_misurano` non lo copre: il
+# suo denominatore sono le prenotazioni PAGATE. Con zero pagate ogni host vede 0 e gli
+# spetta 0, e il confronto usciva OK **senza aver confrontato un solo importo** -- proprio
+# il controllo che esiste per scoprire i soldi di un host finiti a un altro.
+# 💡 Ma un payout ILLEGGIBILE resta rosso anche senza traffico: quello e' un guasto vero, e
+# saltarlo insieme al resto nasconderebbe un'API rotta.
+_letture_rotte = [s for s in sballati if "payout non leggibile" in s[1]]
+if _letture_rotte or pagate:
+    passo("ogni host vede SOLO i propri soldi", not sballati, "nessuno sballato",
+          sballati[:4] if sballati else "nessuno")
+else:
+    saltato("ogni host vede SOLO i propri soldi",
+            "nessuna prenotazione ha pagato: ogni host vede 0 e gli spetta 0, quindi il "
+            "confronto non ha esaminato NIENTE. Un OK qui direbbe che i soldi di un host "
+            "non finiscono a un altro senza aver visto muovere un centesimo (sbaglio S7)")
 
 # LA TRACCIA DEL RIMBORSO (difetto chiuso il 2026-08-08): ogni cancellazione pagata deve
 # lasciare la sua riga `rimborso` nel giornale — la STESSA che scrivono gia' il rimborso
@@ -554,7 +596,7 @@ passo("ogni host vede SOLO i propri soldi", not sballati, "nessuno sballato",
 # non lo sapevano, e la stessa cancellazione finiva nel report fiscale solo se la faceva
 # l'host. `-1` = la lettura e' fallita, che non e' «zero».
 righe_rimborso = sum(1 for _, t, _, _, _, _, _ in g if t == "rimborso")
-if _libro_leggibile:
+if not _non_misurabile:
     passo("ogni cancellazione pagata lascia la sua riga di rimborso nel giornale",
           righe_rimborso == cancellate, cancellate, righe_rimborso)
 
