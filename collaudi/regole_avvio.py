@@ -893,8 +893,9 @@ def stampa_i_blocchi():
         print("  %2d. %-34s %3d moduli · %d mai nominati da un test"
               % (b["ordine"], b["nome"], s["moduli"], len(s["scoperti"])))
     print("  ⛔ «nominato da un test» NON vuol dire eseguito: e' il limite dichiarato N1.")
-    print("     Nessun blocco puo' dirsi FINITO finche' gli strumenti non scrivono da soli")
-    print("     la loro scheda (pezzo 5 del piano). Il dettaglio: python collaudi/piano.py")
+    print("     Un blocco risulta FINITO solo quando UN ATTREZZO ha spuntato tutte le sue")
+    print("     caselle. ✅ La scheda c'e' dal 2026-08-21, ma nessuno la scrive ancora:")
+    print("     Blocco 1 = 0 su 6.  ->  python collaudi/scheda.py --blocco 1")
     if problemi:
         print("  🔴 IL PIANO E LA MACCHINA NON COINCIDONO — %d contraddizioni:" % len(problemi))
         for p in problemi:

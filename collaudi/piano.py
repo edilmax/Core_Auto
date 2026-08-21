@@ -52,9 +52,14 @@ nessuno ha guardato):
       dire che quel test lo esegua, ne' che lo esegua bene. E' un limite reale: un modulo
       puo' essere nominato e morto al 94% dentro (misurato su `fase133`).
   N2  non misura la mutazione, la copertura di riga, ne' gli esiti degli strumenti: quelli
-      li scriveranno gli strumenti stessi (il pezzo 5 del piano, «la scheda la scrive il
-      Giudice»). Finche' non esiste quella scheda, NESSUN blocco puo' risultare FINITO --
-      e questo file lo dice a voce alta invece di dare un verde comodo.
+      li scrivono gli strumenti stessi nella SCHEDA (il pezzo 5 del piano, «la scheda la
+      scrive il Giudice»).
+      ✅ DAL 2026-08-21 LA SCHEDA C'E': `collaudi/scheda.py`. Un blocco risulta finito solo
+      quando **un attrezzo** ha spuntato tutte le sue caselle -- misurandole, su QUESTO
+      commit, avendo guardato piu' di zero cose.
+      ⚠️ Ma nessun attrezzo la scrive ancora: **Blocco 1 = 0 su 6**, e ogni casella dice da
+      se' perche' e' vuota (`python collaudi/scheda.py --blocco 1`). Prima del 21/08 la
+      casella era una COSTANTE e nessun blocco poteva risultare finito **per costruzione**.
   N3  non legge i 5 documenti e non li giudica: quello lo fa `audit_millimetrico.py`.
 
 ==============================================================================
@@ -515,8 +520,9 @@ def stampa(breve=False):
           % (len(BLOCCHI), len(sul_disco)))
     print("=" * 78)
     print("  I blocchi si lavorano IN ORDINE. Non decide la grandezza: decide il danno")
-    print("  che fa un guasto li' dentro. ⛔ Nessun blocco puo' dirsi FINITO finche' gli")
-    print("  strumenti non scrivono da soli la loro scheda (pezzo 5 del piano).")
+    print("  che fa un guasto li' dentro. ⛔ Un blocco risulta FINITO solo quando UN")
+    print("  ATTREZZO ha spuntato tutte le sue caselle: la scheda c'e' dal 2026-08-21")
+    print("  (`python collaudi/scheda.py`), ma nessuno la scrive ancora.")
     print("")
 
     for b in sorted(BLOCCHI, key=lambda x: x["ordine"]):

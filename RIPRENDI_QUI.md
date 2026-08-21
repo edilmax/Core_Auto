@@ -46,9 +46,14 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > avrebbe cancellato la riparazione della politica). Si ripristina dai **file di sicurezza della
 > mutazione stessa** — la cartella `mutazione_*` in `%TEMP%`, quella con la data del giro — e si
 > confrontano gli **sha256**. Poi si toglie a mano la traccia `bookinvip_mutazione_in_corso`.
-> ⚠️ **È IL PRIMO LAVORO IN CODA**, e ha due metà: la batteria deve **ripristinare da sola** dopo
-> il tetto e dichiararsi rossa col motivo vero; e le istruzioni di `guardia_commit.py` vanno
-> corrette. Finché non è fatto, **la batteria è una mina**.
+> ✅ **RIPARATA LO STESSO GIORNO — la batteria NON è più una mina.** `collaudi/batteria.py`
+> chiama la rete **subito dopo** la fase di mutazione: se trova biglietti aperti rimette a posto
+> i file e **grida i nomi**. La rete aveva già due strati (ripristino al riavvio · blocco al
+> commit): mancava **quello di mezzo**, e nel frattempo tutto giudicava codice rotto.
+> ⛔ **Il tetto NON è stato alzato**: alzarlo per far smettere un rosso è spegnere un allarme.
+> ⚠️ **Restano aperte due cose:** *perché* la mutazione sfori il tetto in locale (in CI **passa**:
+> la loro macchina fa la suite in **677s**, la nostra in **1736s**), e le **istruzioni** di
+> `guardia_commit.py`, che dicono `git checkout HEAD` — cioè cancellano il lavoro non committato.
 >
 > ### ⚠️ ALTRI RILIEVI MISURATI OGGI, non riparati (D1, per non allargare lo scopo)
 > · **`plausibilita.py` esamina UNA riga** e conclude «ogni numero sta in una banda che il mondo
@@ -4613,7 +4618,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: a8de7ad
+CONSEGNE AGGIORNATE A: 1f78075
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui

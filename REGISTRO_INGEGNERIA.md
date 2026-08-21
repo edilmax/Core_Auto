@@ -62,8 +62,18 @@
   esattamente un blocco, con gli strumenti d'ingegneria e le condizioni d'arrivo), e i **5
   lavori in sospeso** portano ognuno la sua **prova meccanica** — lo stato lo rifà la macchina
   a ogni avvio. ⛔ Nasce perché quella lista **mentiva**: teneva CodeQL fra i lavori da fare
-  mentre era verde su master. Resta aperto il pezzo **5** (gli strumenti scrivono da sé la
-  scheda): finché non c'è, **nessun blocco può risultare FINITO**, e il file lo dice.
+  mentre era verde su master.
+  - **5** · ⚠️ **A METÀ dal 2026-08-21** — «gli strumenti scrivono da sé la scheda». ✅ **La
+    scheda c'è**: `collaudi/scheda.py`. Un blocco risulta finito solo quando **un attrezzo** ha
+    spuntato tutte le sue caselle — misurandole, su **questo commit**, avendo guardato **più di
+    zero** cose; e riscrivere una condizione **invalida** la misura. ⛔ Prima di quel giorno la
+    casella era una **costante** (`print("☐ %s")`) e in tutto il progetto non esisteva nessun
+    `☑`: nessun blocco poteva risultare finito **per costruzione**, ed è il motivo per cui il
+    fondatore chiedeva da settimane «il Blocco 1 è finito?» senza ottenere risposta.
+    ⚠️ **Resta la seconda metà:** nessun attrezzo scrive ancora la scheda — **Blocco 1 = 0 su
+    6** (`python collaudi/scheda.py --blocco 1`), e ogni casella dice da sé perché è vuota.
+    Delle sei, **tre sono «collegare quello che c'è»** e **tre sono lavoro nuovo** (orologi di
+    prova Stripe, che non esistono; relazioni metamorfiche sui soldi, a metà).
 - **8** · ✅ **FATTO 2026-08-15** — il battito dei soldi in produzione + sentinella esterna
 - **9** · un **revisore indipendente** sulle modifiche
 - **10** · usare davvero **`hypothesis`** e **`z3`** (già installati e quasi mai accesi)
