@@ -32,7 +32,17 @@ import time
 import urllib.error
 import urllib.request
 
-BASE = "http://127.0.0.1:8080"
+# ⛔ LA PORTA NON SI INCIDE NEL CODICE. Qui c'era `http://127.0.0.1:8080` scritto dentro, ed
+# era l'unico strumento del banco a non leggere `BASE_VISIVO` — la stessa variabile che usano
+# gia' `vicoli_ciechi.py` e `percorso_ospite_host.js`. Il danno di una porta che non si puo'
+# spostare sta nel catalogo degli sbagli alla voce S12: un banco interrogato sulla porta
+# sbagliata stampo' 21 rossi finti, che per un istante sembravano un disastro.
+# 💡 E serve per una ragione concreta: `collaudi/batteria.py` accende il suo server sulla
+# 8099, quindi con la porta incisa il banco non poteva entrare nel comando che lancia
+# «tutti i test». Il valore storico resta come ripiego dichiarato: chi lo lancia a mano come
+# ha sempre fatto non cambia niente.
+# Guardia: `test_IL_BANCO_SI_PUO_PUNTARE_DOVE_IL_SERVER_STA_DAVVERO` (vista rossa prima).
+BASE = os.environ.get("BASE_VISIVO", "http://127.0.0.1:8080")
 PREZZO = 500                 # 5,00 EUR a notte
 NOTTI = 2
 

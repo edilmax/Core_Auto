@@ -8111,6 +8111,90 @@ class TestIlBancoSIPUOGIUDICAREANCHEFUORIDALCONTENITORE(unittest.TestCase):
                          "un database nato nel posto sbagliato deve VEDERSI: e' l'unica "
                          "cosa che questo controllo esiste per trovare")
 
+    def test_IL_CONTO_DEGLI_STRUMENTI_QUADRA_E_OGNI_ESCLUSIONE_HA_IL_SUO_MOTIVO(self):
+        """⛔ «HO LANCIATO LA BATTERIA» NON PUO' VOLER DIRE «HO GUARDATO TUTTO».
+
+        Nasce il 2026-08-21 da un ordine del fondatore — *ogni lavoro deve passare da tutti
+        questi test* — e da cio' che si e' trovato cercando (D10): `collaudi/batteria.py`, il
+        comando che si chiama «batteria COMPLETA», **saltava proprio i collaudi sui soldi**.
+        Ora `regole_avvio.py` stampa a ogni avvio quanti collaudi restano FUORI, e qui si
+        pretendono le due cose che rendono quel numero degno di fiducia:
+          1. il conto QUADRA (lanciati + fuori = collaudi): un totale che non torna e' un
+             numero che ha gia' cominciato a mentire;
+          2. ogni attrezzo escluso dal conto porta un MOTIVO scritto -- altrimenti si potrebbe
+             far sparire un collaudo dai «fuori» semplicemente dichiarandolo «non un collaudo».
+        """
+        import importlib.util
+        percorso = os.path.join(QUI, "collaudi", "regole_avvio.py")
+        spec = importlib.util.spec_from_file_location("_regole_avvio_guardia", percorso)
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+
+        collaudi, lanciati, fuori = modulo.strumenti_e_batteria()
+        self.assertEqual(
+            len(collaudi), len(lanciati) + len(fuori),
+            "il conto degli strumenti NON quadra: %d collaudi, %d lanciati, %d fuori. Un "
+            "totale che non torna e' un numero che ha gia' cominciato a mentire (D22)"
+            % (len(collaudi), len(lanciati), len(fuori)))
+        self.assertTrue(collaudi, "nessun collaudo trovato: lo strumento non sta guardando "
+                                  "la cartella giusta, e allora il suo numero non vale niente")
+
+        for nome, motivo in modulo.NON_SONO_COLLAUDI.items():
+            with self.subTest(escluso=nome):
+                self.assertTrue(
+                    motivo and motivo.strip(),
+                    "l'attrezzo %r e' escluso dal conto dei collaudi SENZA un motivo scritto: "
+                    "cosi' chiunque puo' far sparire un collaudo dai «fuori» dichiarandolo "
+                    "«non un collaudo», ed e' proprio il buco che questo conto deve chiudere"
+                    % nome)
+                self.assertTrue(
+                    os.path.exists(os.path.join(QUI, "collaudi", nome + ".py")),
+                    "l'elenco delle esclusioni nomina %r, che non esiste piu' in collaudi/: "
+                    "un'esclusione orfana e' un elenco rimasto indietro" % nome)
+
+    def test_IL_BANCO_SI_PUO_PUNTARE_DOVE_IL_SERVER_STA_DAVVERO(self):
+        """⛔ LA PORTA DEL BANCO ERA L'UNICA CABLATA, E UNA PORTA CABLATA HA GIA' MENTITO.
+
+        `collaudi/giro_banco.py` aveva `BASE = "http://127.0.0.1:8080"` scritto dentro, mentre
+        ogni altro strumento che parla col banco (`vicoli_ciechi.py`,
+        `percorso_ospite_host.js`) legge `BASE_VISIVO`. Il danno di una porta che non si puo'
+        spostare e' gia' nel catalogo degli sbagli, alla voce **S12**: un banco interrogato
+        sulla porta sbagliata stampo' **21 rossi finti**, che per un istante sembravano un
+        disastro.
+        💡 E il motivo per cui si ripara adesso e' concreto: `collaudi/batteria.py` accende il
+        suo server sulla **8099**, quindi finche' la porta resta incisa il banco non puo'
+        entrare nella batteria — cioe' resta fuori dal comando che lancia «tutti i test».
+
+        Si prova il FATTO, non la parola: si esegue l'assegnazione vera estratta dal file, con
+        e senza la variabile, e si guarda cosa ne esce (regola ferrea 10, le due direzioni).
+        """
+        import ast
+        with io.open(os.path.join(QUI, "collaudi", "giro_banco.py"),
+                     encoding="utf-8") as f:
+            sorgente = f.read()
+        nodo = None
+        for n in ast.parse(sorgente).body:
+            if isinstance(n, ast.Assign) and any(
+                    getattr(t, "id", "") == "BASE" for t in n.targets):
+                nodo = n
+        self.assertIsNotNone(nodo, "collaudi/giro_banco.py non assegna piu' BASE")
+
+        def _valuta(ambiente):
+            spazio = {"os": type("_", (), {"environ": ambiente})()}
+            exec(compile(ast.Module(body=[nodo], type_ignores=[]),
+                         "<giro_banco.BASE>", "exec"), spazio)
+            return spazio["BASE"]
+
+        self.assertEqual(
+            "http://127.0.0.1:9911", _valuta({"BASE_VISIVO": "http://127.0.0.1:9911"}),
+            "il banco NON guarda dove gli si dice: la porta e' incisa nel codice, e allora "
+            "interrogherebbe una porta vuota stampando rossi che non esistono (sbaglio S12)")
+        self.assertEqual(
+            "http://127.0.0.1:8080", _valuta({}),
+            "senza la variabile il banco deve comportarsi ESATTAMENTE come prima: il ripiego "
+            "e' il valore storico, altrimenti questa riparazione romperebbe chi lo lancia a "
+            "mano come ha sempre fatto")
+
     def test_I_CONTI_NON_SI_DICHIARANO_QUADRATI_SU_UN_LIBRO_GIORNALE_VUOTO(self):
         """⛔ 2026-08-21 — LO STESSO S7 DEL CONTROLLO [9], TROVATO ANCHE NEL [8].
 
