@@ -169,7 +169,16 @@ def main():
             # stessa lezione dei verdi per assenza riparati quel giorno (sbaglio S7).
             _chiave = os.environ.get("STRIPE_SECRET_KEY", "")
             if _chiave.startswith("sk_test"):
-                rc, out, dur = _run([PY, "collaudi/giro_banco.py"], timeout=900, env=env)
+                # ⛔ `PYTHONPATH=RADICE` NON E' ORNAMENTO: senza, `python collaudi/giro_banco.py`
+                # mette in cammino la cartella dello SCRIPT e muore al primo
+                # `from fase163_accettazioni import ...` con ModuleNotFoundError, **prima di
+                # esaminare un solo euro**. Misurato il 2026-08-21: la fase 8c e' fallita in
+                # 0 secondi, e il rosso parlava della cartella invece che dei soldi. A mano il
+                # banco si lancia su stdin (`python - < collaudi/giro_banco.py`), e li' il
+                # cammino parte dalla cartella corrente: per questo il difetto si vedeva solo
+                # da qui. E' D23 in forma pura — l'ambiente con cui lanci fa parte della misura.
+                rc, out, dur = _run([PY, "collaudi/giro_banco.py"], timeout=900,
+                                    env=dict(env, PYTHONPATH=RADICE))
                 registra("8c. Banco dei soldi (15 host, 15 prenotazioni che PAGANO)",
                          rc, out, dur)
             else:
@@ -189,11 +198,33 @@ def main():
                 # giorno per provare una cosa gia' provata a ogni commit.
                 for nome, cmd, extra in (
                         ("9. Accessibilità WCAG (axe)", ["node", "collaudi/test_a11y.js"], {}),
-                        ("9. Click-through pannelli", ["node", "collaudi/clickthrough_pannelli.js"], {}),
-                        ("9. Senza incasso non esce niente",
-                         ["node", "collaudi/percorso_ospite_host.js"], {"ATTESO": "rifiuto"})):
+                        ("9. Click-through pannelli", ["node", "collaudi/clickthrough_pannelli.js"], {})):
                     rc, out, dur = _run(cmd, timeout=400, env=dict(env, **extra))
                     registra(nome, rc, out, dur, ok_se=lambda rc, o: rc == 0)
+
+                # ── «SENZA INCASSO NON ESCE NIENTE» VUOLE UN GATEWAY MUTO ────────────────
+                # ⛔ E QUESTA PROVA NON PUO' GIRARE SU UN BANCO CHE INCASSA. Il 2026-08-21,
+                # lanciando la batteria CON la chiave di prova, e' andata in TIMEOUT dopo 400
+                # secondi: aspettava un rifiuto che non poteva arrivare, perche' il gateway
+                # era vivo e il pagamento riusciva. Il suo presupposto — «Stripe non risponde»
+                # — l'avevo tolto io passando la chiave a tutta la batteria.
+                # 💡 Percio' e' NON ESEGUITA col motivo, mai fallita: un rosso qui direbbe «il
+                # prodotto conferma senza incassare», che e' l'esatto contrario del vero.
+                # ⚠️ L'altro caso resta coperto: la CI (job `browser`) accende DUE banchi, uno
+                # con chiave finta e uno senza, e prova tutt'e due gli atti a ogni commit.
+                if _chiave.startswith("sk_test"):
+                    esiti.append(("9. Senza incasso non esce niente", None,
+                                  "NON ESEGUITA: il banco ha una chiave di PROVA vera, quindi "
+                                  "il gateway RISPONDE e il pagamento riesce. Questa prova "
+                                  "vuole il contrario (gateway muto): la copre la CI, job "
+                                  "`browser`, che accende un banco senza chiave", 0))
+                    print("  [~   ] 9. Senza incasso non esce niente "
+                          "(gateway VIVO: la prova vuole il contrario)")
+                else:
+                    rc, out, dur = _run(["node", "collaudi/percorso_ospite_host.js"],
+                                        timeout=400, env=dict(env, ATTESO="rifiuto"))
+                    registra("9. Senza incasso non esce niente", rc, out, dur,
+                             ok_se=lambda rc, o: rc == 0)
             else:
                 esiti.append(("9. a11y+click-through", None, "SALTATO: node assente", 0))
                 print("  [SKIP] 9. a11y + click-through (node assente)")

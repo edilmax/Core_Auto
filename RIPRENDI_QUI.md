@@ -55,6 +55,25 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > `occhio_del_fondatore` · `fedelta_banco`. Restano un lavoro aperto, **ma adesso si vedono
 > ogni volta che si apre una sessione**, invece di essere dimenticati in silenzio.
 >
+> ### 🔴 E LA BATTERIA COMPLETA HA TROVATO SUBITO TRE DIFETTI — TUTTI E TRE MIEI
+> Lanciata per intero con la chiave di prova (`25 OK`), ha bocciato **il lavoro che l'aveva
+> appena estesa**. È la prova che serviva: un comando che non trova mai niente non sta
+> guardando.
+> · **`8c` falliva in 0 secondi**: `ModuleNotFoundError: No module named 'fase163_accettazioni'`.
+>   `python collaudi/giro_banco.py` mette in cammino la cartella dello **script**, non la
+>   radice — a mano il banco si lancia su **stdin** e lì il cammino parte dalla cartella
+>   corrente, per questo il difetto si vedeva **solo da dentro la batteria**. È **D23** in
+>   forma pura: *l'ambiente con cui lanci fa parte della misura*. Riparato con `PYTHONPATH`.
+>   ✅ Ora gira in **83 secondi e passa**.
+> · **`9. Senza incasso non esce niente` andava in TIMEOUT a 400 secondi**: quella prova vuole
+>   un **gateway muto**, e passando la chiave vera a tutta la batteria le avevo tolto il
+>   presupposto — aspettava un rifiuto che non poteva arrivare. ⛔ Ora è **NON ESEGUITA col
+>   motivo**, mai fallita: un rosso lì direbbe *«il prodotto conferma senza incassare»*, cioè
+>   l'esatto contrario del vero. L'altro caso lo copre la **CI** (job `browser`, due banchi).
+> · **La suite dentro la batteria è caduta su `5912 != 5914`**: avevo aggiunto due guardie e
+>   **non avevo rimisurato il conto** — è lo sbaglio **S14**, per nome. 💡 La guardia D22 ha
+>   funzionato: mi ha preso lo stesso giorno in cui l'ho commesso.
+>
 > **Due guardie, e la seconda è stata provata iniettando il guasto:**
 > · `test_IL_BANCO_SI_PUO_PUNTARE_DOVE_IL_SERVER_STA_DAVVERO` — esegue l'assegnazione vera
 >   estratta dal file, con e senza la variabile (le due direzioni)
@@ -6290,7 +6309,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5912 test
+SUITE ATTUALE: Ran 5914 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
