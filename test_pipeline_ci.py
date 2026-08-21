@@ -8249,6 +8249,176 @@ class TestIlBancoSIPUOGIUDICAREANCHEFUORIDALCONTENITORE(unittest.TestCase):
             "e' il valore storico, altrimenti questa riparazione romperebbe chi lo lancia a "
             "mano come ha sempre fatto")
 
+    # ⛔ I ripieghi che DEVONO coincidere: sono strette di mano: un processo si autentica
+    # all'altro, e se i due valori differiscono la porta si chiude in silenzio.
+    STRETTA_DI_MANO = {
+        "STRIPE_WEBHOOK_SECRET": "il banco FIRMA il webhook, il server ne VERIFICA la firma",
+        "ADMIN_KEY": "il banco entra nel pannello che il server protegge",
+        "BUNKER_PASSWORD": "il banco supera il secondo muro del server",
+    }
+    # ...e quelli che possono legittimamente differire, OGNUNO COL SUO MOTIVO SCRITTO.
+    RIPIEGHI_DIVERSI_A_RAGIONE = {
+        "STRIPE_SECRET_KEY": "il server accetta una chiave finta pur di accendersi (e' un "
+                             "banco di prova); il banco ne vuole una VERA di prova, se no "
+                             "misurerebbe se stesso invece del prodotto",
+    }
+
+    def _ripieghi_letti_dal_file(self, nome_file):
+        """I valori di ripiego VERI, estratti dal sorgente: `os.environ.get(NOME, "VAL")`
+        e `os.environ.setdefault(NOME, "VAL")`. Solo quelli con un valore scritto."""
+        import re as _re
+        with io.open(os.path.join(QUI, "collaudi", nome_file), encoding="utf-8") as f:
+            testo = f.read()
+        trovati = {}
+        for nome, valore in _re.findall(
+                r"\b_?os\.environ\.(?:get|setdefault)\(\s*[\"'](\w+)[\"']\s*,\s*[\"']([^\"']*)[\"']",
+                testo):
+            trovati.setdefault(nome, valore)
+        return trovati
+
+    def test_IL_BANCO_E_IL_SERVER_NON_POSSONO_AVERE_RIPIEGHI_DIVERSI(self):
+        """⛔ 2026-08-21 — TREDICI PAGAMENTI ROSSI PER DUE VALORI PREDEFINITI DIVERSI.
+
+        Misurato lanciando la batteria per intero: la fase 8c usciva `NON OK 13` e OGNI
+        pagamento rispondeva `400`. **Non era il prodotto.** Il server verifica la firma del
+        webhook col suo ripiego `whsec_v` (`avvia_server_visivo.py`), il banco la firmava col
+        proprio, che era la **stringa vuota** (`giro_banco.py`): due processi, lo stesso
+        segreto, due valori diversi -> `400 firma_non_valida` -> nessuna prenotazione paga ->
+        undici controlli contabili senza piu' niente da leggere. Identico su `ADMIN_KEY` e
+        `BUNKER_PASSWORD`. Allineandoli: `PASSI 34 · OK 34 · NON OK 0`.
+
+        💡 E il danno vero non era il rosso: era che il rosso **accusava i soldi**. Un falso
+        allarme e' un difetto quanto un allarme mancato (regola ferrea 10) -- e costava una
+        giornata a cercare un guasto che non esiste.
+
+        ⛔ Non si confronta una lista scritta a mano: si estraggono i ripieghi VERI dai due
+        file, e ogni variabile che i due condividono deve stare in ESATTAMENTE una delle due
+        categorie. Cosi' una variabile nuova non puo' entrare di nascosto: o e' una stretta
+        di mano e i valori devono coincidere, o e' diversa a ragione e la ragione e' scritta.
+        """
+        banco = self._ripieghi_letti_dal_file("giro_banco.py")
+        server = self._ripieghi_letti_dal_file("avvia_server_visivo.py")
+        comuni = sorted(set(banco) & set(server))
+        self.assertTrue(
+            comuni,
+            "nessuna variabile in comune fra banco e server: l'estrazione non ha trovato "
+            "niente, quindi questa guardia non sta provando nulla (denominatore zero)")
+
+        non_classificate = [n for n in comuni
+                            if n not in self.STRETTA_DI_MANO
+                            and n not in self.RIPIEGHI_DIVERSI_A_RAGIONE]
+        self.assertEqual(
+            [], non_classificate,
+            "queste variabili le leggono TUTTI E DUE e nessuno ha detto se devono "
+            "coincidere: %s. O e' una stretta di mano, o la differenza porta il suo motivo "
+            "scritto -- altrimenti la prossima divergenza passa in silenzio come quella del "
+            "2026-08-21" % non_classificate)
+
+        divergenti = ["%s: il server ripiega su %r, il banco su %r (%s)"
+                      % (n, server[n], banco[n], self.STRETTA_DI_MANO[n])
+                      for n in comuni
+                      if n in self.STRETTA_DI_MANO and server[n] != banco[n]]
+        self.assertEqual(
+            [], divergenti,
+            "BANCO E SERVER NON SI RICONOSCONO, E IL BANCO ACCUSERA' I SOLDI:\n"
+            + "\n".join(divergenti))
+
+    def test_UNA_FIRMA_RIFIUTATA_NON_SI_CONTA_COME_UN_GUASTO_DEI_SOLDI(self):
+        """⛔ TREDICI FALLIMENTI IDENTICI SONO **UN** PROBLEMA, NON TREDICI DIFETTI.
+
+        Col segreto disallineato il banco stampava tredici volte `pagamento del giro N
+        (atteso 200 / ottenuto 400)` e li contava come tredici rossi sui soldi. Ma
+        `400 {"errore": "firma_non_valida"}` e' l'unica risposta che il webhook da' quando
+        chi firma e chi verifica non concordano (`fase83_server._webhook_stripe`): non dice
+        niente sul prodotto, dice che **il banco non lo sta misurando**.
+
+        E' la stessa forma gia' usata per la chiave mancante: si DICHIARA il buco col motivo
+        (`saltato`), non si da' un giudizio. Un giudizio senza premessa e' lo sbaglio S7.
+
+        ⛔ Si prova la funzione VERA estratta dal file (il modulo non si puo' importare: e'
+        uno script che al primo import parte e prenota davvero), nelle DUE direzioni, e si
+        pretende che qualcuno la CHIAMI: una funzione giusta che non chiama nessuno e' la
+        regola #23, COSTRUITO != COLLEGATO.
+        """
+        import ast
+        with io.open(os.path.join(QUI, "collaudi", "giro_banco.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        nodo = None
+        for n in ast.parse(sorgente).body:
+            if isinstance(n, ast.FunctionDef) and n.name == "non_sto_misurando":
+                nodo = n
+        self.assertIsNotNone(
+            nodo,
+            "collaudi/giro_banco.py non ha una funzione `non_sto_misurando`: senza, un "
+            "disallineamento di configurazione torna a presentarsi come tredici guasti dei "
+            "soldi, ed e' il falso allarme che ha fatto perdere il giro del 2026-08-21")
+        spazio = {}
+        exec(compile(ast.Module(body=[nodo], type_ignores=[]), "<giro_banco>", "exec"), spazio)
+        giudizio = spazio["non_sto_misurando"]
+
+        self.assertTrue(
+            giudizio(400, {"errore": "firma_non_valida"}),
+            "la firma rifiutata NON viene riconosciuta: il banco continuerebbe a contarla "
+            "come un guasto dei soldi")
+        for stato, corpo, perche in (
+                (400, {"errore": "prenotazione_inesistente"},
+                 "un 400 per un ALTRO motivo e' un difetto vero e va contato"),
+                (500, {"errore": "firma_non_valida"},
+                 "un 500 e' il server che si rompe, non una configurazione disallineata"),
+                (200, {}, "un pagamento riuscito non e' un buco"),
+                (400, None, "un corpo illeggibile non autorizza a scusare il rosso")):
+            with self.subTest(stato=stato, corpo=corpo):
+                self.assertFalse(
+                    giudizio(stato, corpo),
+                    "%s: cosi' la scusa diventerebbe un tappeto sotto cui nascondere i "
+                    "rossi veri" % perche)
+
+        self.assertGreaterEqual(
+            sorgente.count("non_sto_misurando("), 2,
+            "la funzione esiste ma non la chiama nessuno: e' COSTRUITO != COLLEGATO "
+            "(regola #23), e il banco continuerebbe ad accusare i soldi come prima")
+
+    def test_LA_BATTERIA_DA_AL_SERVER_E_AL_BANCO_LA_STESSA_CARTELLA_DEI_DATI(self):
+        """⛔ CINQUE CONTROLLI CONTABILI CHE NON GIRANO MAI, E NESSUNO SE NE ACCORGE.
+
+        Misurato il 2026-08-21 con un giro vero: dentro `collaudi/batteria.py` il server si
+        accende SENZA `BANCO_DATI`, quindi si sceglie da solo una cartella temporanea con un
+        nome a caso -- e il banco, che e' un altro processo, non sa dove sia. Risultato:
+        `somma degli incassi`, `tariffa tecnica su ogni incasso`, `ogni cancellazione lascia
+        la sua riga di rimborso`, `catena di impronte del libro giornale` e `i soldi
+        dell'host si FERMANO` escono **NON ESEGUITI** a ogni singola batteria.
+
+        💡 Sono dichiarati, quindi non e' un verde falso -- ma sono **cinque controlli sui
+        soldi che nessuno esegue mai**, e la dichiarazione scorre via in mezzo alle altre
+        righe. `BANCO_DATI` esiste apposta perche' i due processi si scambino il nome della
+        cartella: chi accende il server deve passarglielo, o quel meccanismo non serve a
+        niente. Misurato: con la cartella condivisa i passi vanno da **29 a 34**.
+        """
+        import ast
+        with io.open(os.path.join(QUI, "collaudi", "batteria.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        popen_server = []
+        for nodo in ast.walk(ast.parse(sorgente)):
+            if not isinstance(nodo, ast.Call):
+                continue
+            testo = ast.dump(nodo)
+            if "avvia_server_visivo.py" in testo and "Popen" in ast.dump(nodo.func):
+                popen_server.append(nodo)
+        self.assertEqual(
+            1, len(popen_server),
+            "in collaudi/batteria.py non si trova (o si trova piu' di una volta) l'accensione "
+            "di avvia_server_visivo.py: questa guardia non sa piu' cosa sta guardando")
+        chiavi = [k.arg for k in popen_server[0].keywords]
+        self.assertIn(
+            "env", chiavi,
+            "la batteria accende il server SENZA passargli un ambiente: allora il server si "
+            "sceglie una cartella dati a caso e i controlli contabili del banco non la "
+            "troveranno mai -- cinque prove sui soldi che non girano a ogni giro")
+        self.assertIn(
+            "BANCO_DATI", sorgente,
+            "collaudi/batteria.py non nomina BANCO_DATI: e' la cartella che i due processi "
+            "si scambiano, e senza quella il libro giornale resta illeggibile al banco")
+
     def test_I_CONTI_NON_SI_DICHIARANO_QUADRATI_SU_UN_LIBRO_GIORNALE_VUOTO(self):
         """⛔ 2026-08-21 — LO STESSO S7 DEL CONTROLLO [9], TROVATO ANCHE NEL [8].
 

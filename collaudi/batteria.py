@@ -40,6 +40,7 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 
 try:                                                 # console Windows (cp1252): evita crash su UTF-8
@@ -147,10 +148,22 @@ def main():
     # 8-9: fasi che richiedono un server locale (best-effort)
     srv = None
     try:
+        # ⛔ LA CARTELLA DEI DATI DEV'ESSERE LA STESSA PER I DUE PROCESSI, E DEV'ESSERE
+        # NUOVA. Senza `BANCO_DATI` il server se ne sceglie una col nome a caso (`mkdtemp`) e
+        # il banco -- che e' un altro processo -- non sa dove sia: `somma degli incassi`,
+        # `tariffa tecnica`, `riga di rimborso`, `catena di impronte` e `payout trattenuto`
+        # uscivano NON ESEGUITI a OGNI batteria. Dichiarati, quindi non un verde falso, ma
+        # cinque controlli sui soldi che non girava mai nessuno. Misurato il 2026-08-21:
+        # con la cartella condivisa i passi del banco vanno da 29 a 34.
+        # ⛔ E NUOVA a ogni giro, non riusata: una cartella con dentro il giro precedente fa
+        # morire l'avviatore con `KeyError: 'token'`.
+        # Guardia: `test_pipeline_ci.test_LA_BATTERIA_DA_AL_SERVER_E_AL_BANCO_LA_STESSA_CARTELLA_DEI_DATI`
+        env = dict(os.environ, BASE_VISIVO="http://127.0.0.1:%d" % PORTA,
+                   BANCO_DATI=tempfile.mkdtemp(prefix="batteria_banco_"))
         srv = subprocess.Popen([PY, "collaudi/avvia_server_visivo.py", str(PORTA)],
-                               cwd=RADICE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                               cwd=RADICE, env=env,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if _porta_su(PORTA):
-            env = dict(os.environ, BASE_VISIVO="http://127.0.0.1:%d" % PORTA)
             for nome, cmd in (("8. Behavioral host DAL VIVO", [PY, "collaudi/beh_host.py"]),
                               ("8. Behavioral pannelli DAL VIVO", [PY, "collaudi/beh_pannelli.py"]),
                               ("8b. Vicoli ciechi (link/form/API morti)", [PY, "collaudi/vicoli_ciechi.py"])):

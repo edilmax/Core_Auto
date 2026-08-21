@@ -1296,5 +1296,183 @@ class TestLoSPLITNONSIMUOVESENZAIDENTITA(unittest.TestCase):
         self.assertTrue(cp["completato"], "col voucher giusto il conto deve completarsi")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ⛔ L'ETICHETTA CHE LEGGE CHI STA PER PAGARE — e che diceva il falso in 8 lingue
+# ─────────────────────────────────────────────────────────────────────────────
+_LINGUE_ETICHETTE = ("it", "en", "es", "fr", "de", "pt", "ja", "zh")
+
+# LO STESSO FATTO SCRITTO A MANO IN DUE POSTI: l'etichetta che vede l'OSPITE
+# (`ETICHETTE_UI`, servita da /api/i18n e mostrata da deploy/index.html accanto al
+# prezzo) e quella che vede l'HOST mentre SCEGLIE la politica (la tendina di
+# deploy/host.html). Il motore che poi paga, invece, e' uno solo: fase111.POLITICHE.
+_POL_OSPITE = (("flessibile", "pol_flessibile"), ("moderata", "pol_moderata"),
+               ("rigida", "pol_rigida"), ("non_rimborsabile", "pol_non_rimborsabile"))
+_POL_HOST = {"flessibile": "pol_fles", "moderata": "pol_mod",
+             "rigida": "pol_rig", "non_rimborsabile": "pol_nr"}
+
+
+def _soglia_rimborso_pieno(scaglioni):
+    """I GIORNI da cui il motore rende il 100%, RICAVATI dagli scaglioni veri.
+
+    None quando quella politica non ha nessuno scaglione al 100% (`non_rimborsabile`):
+    li' non c'e' nessuna soglia da promettere, e la guardia lo dichiara invece di
+    inventarsene una."""
+    pieni = [giorni for giorni, bps in scaglioni if bps == 10000]
+    return min(pieni) if pieni else None
+
+
+def _cifre(testo):
+    """Le cifre scritte nell'etichetta, come insieme.
+
+    Funziona in tutte e 8 le lingue perche' il numero resta in cifre arabe anche in
+    giapponese e in cinese (`14日前まで`, `入住前14天`): misurato, non supposto."""
+    import re
+    return set(int(x) for x in re.findall(r"\d+", testo))
+
+
+def _percentuali(testo):
+    """Le PERCENTUALI scritte nell'etichetta: un numero attaccato al segno di percento.
+
+    ⛔ Serve perche' le sole cifre non bastano a distinguerle: in «fino a 14 giorni (poi
+    50%)» sia 14 sia 50 sono numeri, ma uno e' un GIORNO e l'altro una QUOTA, e confonderli
+    farebbe gridare la guardia a vuoto. Tutte e 8 le lingue usano il segno `%` (`％` e'
+    la sua forma larga, quella che si scrive in giapponese e in cinese)."""
+    import re
+    return set(int(x) for x in re.findall(r"(\d+)\s*[%％]", testo))
+
+
+def _etichette_host():
+    """Le etichette della tendina dell'host, lette DAL FILE che va in produzione.
+
+    ⛔ Se il file non c'e' o le etichette non si trovano, chi chiama deve diventare
+    ROSSO e non saltare: un controllo che non riesce a misurare non e' un successo
+    (sbaglio S7, e D18 punto 1)."""
+    import io
+    import os
+    import re
+    percorso = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "deploy", "host.html")
+    with io.open(percorso, encoding="utf-8") as f:
+        html_host = f.read()
+    return dict((chiave, re.findall(chiave + r':"([^"]*)"', html_host))
+                for chiave in _POL_HOST.values())
+
+
+class TestLEtichettaDellaCancellazioneNONPuoSmentireIlMotore(unittest.TestCase):
+    """⛔ E' LA RIGA CHE LEGGE CHI STA PER PAGARE, ED E' IN OTTO LINGUE.
+
+    Trovato sul sito VIVO il 2026-08-21: `pol_rigida` prometteva «Cancellazione gratuita
+    fino a 14 giorni prima (poi 50%)» mentre `fase111.POLITICHE["rigida"]` rende il 100%
+    solo da **30** giorni. Chi cancellava a 20 giorni dall'arrivo leggeva 100% e riceveva
+    50%: su una prenotazione da 400 EUR sono 200 EUR di differenza, promessi nell'istante
+    del pagamento e in tutte e otto le lingue.
+
+    💡 E lo stesso numero era scritto GIUSTO nella tendina dell'host (`deploy/host.html`:
+    «30 giorni»). Due copie a mano dello stesso fatto, e a essere sbagliata era quella
+    lontana dal motore -- la malattia di sempre. Percio' le guardie sono due: una confronta
+    la pagina col MOTORE, l'altra confronta le DUE COPIE fra loro.
+
+    ⛔ I giorni non si ricopiano: si RICAVANO dagli scaglioni, come gia' fa la guardia
+    della FAQ in `test_fase173_motore_seo.py`. Sposta uno scaglione e questa diventa rossa
+    lo stesso giorno.
+
+    ⚠️ LIMITE DICHIARATO (D18 punto 3): si guardano i NUMERI, non il senso della frase.
+    «niente sotto i 7 giorni» e «tutto sotto i 7 giorni» contengono lo stesso 7, e da qui
+    sono indistinguibili: questa guardia impedisce che la pagina TACCIA una soglia o ne
+    dica una sbagliata, non che qualcuno scriva una frase rovesciata.
+    """
+
+    def test_la_soglia_promessa_all_OSPITE_e_QUELLA_CHE_IL_MOTORE_APPLICA(self):
+        from fase111_cancellazione import POLITICHE
+        from fase83_server import ETICHETTE_UI
+        bugie = []
+        provate = 0
+        for politica, chiave in _POL_OSPITE:
+            self.assertIn(chiave, ETICHETTE_UI,
+                          "l'etichetta '%s' non esiste piu': la pagina tacerebbe su una "
+                          "politica che il motore tratta" % chiave)
+            soglia = _soglia_rimborso_pieno(POLITICHE[politica].scaglioni)
+            if soglia is None:
+                continue        # non_rimborsabile: nessuno scaglione al 100%, niente da promettere
+            for lingua in _LINGUE_ETICHETTE:
+                testo = ETICHETTE_UI[chiave][lingua]
+                provate += 1
+                # Una soglia si puo' scrivere in GIORNI o in ORE: «1 giorno» e «24h» sono
+                # lo stesso fatto, ed e' cosi' che e' scritta oggi la politica flessibile.
+                if not ({soglia, soglia * 24} & _cifre(testo)):
+                    bugie.append(
+                        "%s/%s: il motore rende il 100%% da %d giorni dall'arrivo, "
+                        "la pagina promette %r" % (chiave, lingua, soglia, testo))
+        self.assertGreater(provate, 0,
+                           "nessuna etichetta esaminata: questa guardia non sta provando "
+                           "niente, e un denominatore zero non e' un verde")
+        self.assertEqual([], bugie,
+                         "LA PAGINA DOVE SI PAGA PROMETTE UN RIMBORSO CHE IL MOTORE NON DA':"
+                         "\n" + "\n".join(bugie))
+
+    def test_HOST_e_OSPITE_non_possono_leggere_DUE_NUMERI_DIVERSI(self):
+        """L'altra faccia, e si vede anche SENZA il motore: l'host firma per una regola e
+        l'ospite ne legge un'altra. Nessuno confrontava le due copie."""
+        from fase83_server import ETICHETTE_UI
+        host = _etichette_host()
+        scarti = []
+        for politica, chiave_ospite in _POL_OSPITE:
+            chiave_host = _POL_HOST[politica]
+            trovate = host.get(chiave_host) or []
+            self.assertEqual(len(trovate), len(_LINGUE_ETICHETTE),
+                             "in deploy/host.html l'etichetta '%s' compare %d volte invece "
+                             "di %d: il confronto non si puo' fare, e un controllo che non "
+                             "riesce a misurare non e' un successo"
+                             % (chiave_host, len(trovate), len(_LINGUE_ETICHETTE)))
+            per_lingua = set(frozenset(_cifre(t)) for t in trovate)
+            self.assertEqual(len(per_lingua), 1,
+                             "le 8 lingue di '%s' non dicono gli stessi numeri: %s"
+                             % (chiave_host, sorted(sorted(x) for x in per_lingua)))
+            numeri_host = set().union(*[_cifre(t) for t in trovate])
+            numeri_ospite = set().union(
+                *[_cifre(ETICHETTE_UI[chiave_ospite][l]) for l in _LINGUE_ETICHETTE])
+            if numeri_host != numeri_ospite:
+                scarti.append("%s: l'host legge %s, l'ospite legge %s"
+                              % (politica, sorted(numeri_host), sorted(numeri_ospite)))
+        self.assertEqual([], scarti,
+                         "LO STESSO FATTO SCRITTO IN DUE POSTI, E I DUE NON CONCORDANO:\n"
+                         + "\n".join(scarti))
+
+    def test_una_QUOTA_PARZIALE_non_si_promette_SENZA_DIRE_DA_QUANDO_VALE(self):
+        """La seconda faccia del difetto, e viveva nella stessa riga.
+
+        «(poi 50%)» dice il vero fra 7 e 29 giorni e il FALSO sotto i 7, dove il motore
+        rende ZERO -- ed e' proprio la finestra in cui la gente cancella. Una quota scritta
+        senza il giorno da cui vale e' una promessa a tempo indeterminato: sotto quella
+        soglia l'ospite legge «meta'» e riceve niente."""
+        from fase111_cancellazione import POLITICHE
+        from fase83_server import ETICHETTE_UI
+        muti = []
+        for politica, chiave in _POL_OSPITE:
+            # gli scaglioni che rendono una quota PARZIALE: ne' tutto ne' niente
+            parziali = sorted((giorni, bps) for giorni, bps
+                              in POLITICHE[politica].scaglioni if 0 < bps < 10000)
+            for lingua in _LINGUE_ETICHETTE:
+                testo = ETICHETTE_UI[chiave][lingua]
+                promesse = _percentuali(testo)
+                if not promesse:
+                    continue    # la pagina non promette nessuna quota parziale: niente da dire
+                self.assertTrue(parziali,
+                                "%s/%s: la pagina promette %s%% ma il motore non ha nessuno "
+                                "scaglione parziale su questa politica: %r"
+                                % (chiave, lingua, sorted(promesse), testo))
+                da_quando, bps = parziali[0]
+                if bps // 100 not in promesse:
+                    muti.append("%s/%s: la pagina promette %s%%, il motore rende %d%%: %r"
+                                % (chiave, lingua, sorted(promesse), bps // 100, testo))
+                elif da_quando not in _cifre(testo):
+                    muti.append("%s/%s: la pagina promette %d%% senza dire che vale solo da "
+                                "%d giorni -- sotto quella soglia il motore rende ZERO: %r"
+                                % (chiave, lingua, bps // 100, da_quando, testo))
+        self.assertEqual([], muti,
+                         "UNA QUOTA PROMESSA SENZA IL GIORNO DA CUI VALE E' UNA PROMESSA CHE "
+                         "SOTTO QUELLA SOGLIA NON VIENE MANTENUTA:\n" + "\n".join(muti))
+
+
 if __name__ == "__main__":
     unittest.main()

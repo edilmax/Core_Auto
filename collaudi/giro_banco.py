@@ -164,8 +164,33 @@ def giornale():
         c.close()
 
 
+def non_sto_misurando(stato, corpo):
+    """Vero quando il rifiuto parla della NOSTRA configurazione, non del prodotto.
+
+    ⛔ NASCE DA UN GIRO VERO, il 2026-08-21: la fase 8c della batteria usciva `NON OK 13`
+    perche' OGNI pagamento riceveva `400`. Non era il prodotto: il server verifica la firma
+    del webhook col suo ripiego (`whsec_v`) e il banco la firmava con la stringa vuota. Due
+    processi, lo stesso segreto, due valori -- e tredici accuse ai soldi.
+    💡 Tredici fallimenti identici sono UN problema, non tredici difetti. Un falso allarme
+    costa quanto un allarme mancato (regola ferrea 10): insegna a non fidarsi del banco.
+
+    `400 {"errore": "firma_non_valida"}` e' l'UNICA risposta che `_webhook_stripe` da'
+    quando chi firma e chi verifica non concordano: e' un segnale preciso, e va trattato
+    come la chiave mancante -- si DICHIARA il buco col motivo, non si emette un giudizio.
+    ⚠️ Stretto apposta: un `400` per un altro motivo, o un `500`, restano rossi veri. Una
+    scusa larga diventerebbe il tappeto sotto cui spariscono i difetti.
+    """
+    return (stato == 400 and isinstance(corpo, dict)
+            and corpo.get("errore") == "firma_non_valida")
+
+
 def paga(rif):
-    """Consegna il webhook di pagamento, costruito coi dati VERI della sessione Stripe."""
+    """Consegna il webhook di pagamento, costruito coi dati VERI della sessione Stripe.
+
+    Torna `(stato, corpo_della_risposta)`. ⛔ Prima tornava la SESSIONE Stripe, che nessuno
+    guardava (`st, _ = paga(rif)`): il corpo della risposta -- cioe' il MOTIVO del rifiuto --
+    veniva buttato via, e un rosso che non dice perche' costringe a rifare tutto il giro.
+    """
     k = os.environ.get("STRIPE_SECRET_KEY", "")
     req = urllib.request.Request("https://api.stripe.com/v1/checkout/sessions?limit=1",
                                  headers={"Authorization": "Bearer %s" % k,
@@ -181,10 +206,15 @@ def paga(rif):
           "client_reference_id": sess.get("client_reference_id"),
           "payment_intent": sess.get("payment_intent") or ("pi_test_" + rif[:12])}
     carico = json.dumps({"type": "checkout.session.completed", "data": {"object": og}})
-    f = firma_di_test(carico, os.environ.get("STRIPE_WEBHOOK_SECRET", ""), int(time.time()))
-    s, _ = chiama("POST", "/api/payments/webhook", grezzo=carico,
-                  testate={"Stripe-Signature": f})
-    return s, sess
+    # ⛔ IL RIPIEGO E' QUELLO DEL SERVER, NON UNO NOSTRO. `avvia_server_visivo.py` verifica
+    # con "whsec_v": firmare con "" faceva rifiutare OGNI pagamento (400 firma_non_valida) e
+    # il banco lo contava come tredici guasti dei soldi. Guardia:
+    # `test_pipeline_ci.test_IL_BANCO_E_IL_SERVER_NON_POSSONO_AVERE_RIPIEGHI_DIVERSI`.
+    f = firma_di_test(carico, os.environ.get("STRIPE_WEBHOOK_SECRET", "whsec_v"),
+                      int(time.time()))
+    s, corpo = chiama("POST", "/api/payments/webhook", grezzo=carico,
+                      testate={"Stripe-Signature": f})
+    return s, corpo
 
 
 print("=" * 80)
@@ -287,9 +317,20 @@ for i in range(QUANTE):
         print("  %2d  %s  %s  prenotata, LASCIATA NON PAGATA -- voluto" % (i + 1, slug, ci))
         fatte.append((i, rif, vt, slug, False, False))
         continue
-    st, _ = paga(rif)
+    st, corpo = paga(rif)
+    if non_sto_misurando(st, corpo):
+        # ⛔ NON e' un rosso dei soldi: e' il banco che non sta misurando il prodotto. Si
+        # dichiara UNA volta col motivo e si smette, invece di stampare quindici accuse
+        # identiche -- che il 2026-08-21 hanno fatto sembrare un disastro finanziario un
+        # segreto scritto in due modi diversi.
+        saltato("i pagamenti del giro",
+                "il server ha rifiutato la FIRMA del webhook (400 firma_non_valida): il "
+                "banco e il server non concordano su STRIPE_WEBHOOK_SECRET, quindi da qui "
+                "in poi NON si sta misurando il prodotto. Allinea quella variabile nei due "
+                "processi e rilancia")
+        break
     if st != 200:
-        passo("pagamento del giro %d" % (i + 1), False, 200, st)
+        passo("pagamento del giro %d" % (i + 1), False, 200, "%s %s" % (st, corpo))
         fatte.append((i, rif, vt, slug, False, False))
         continue
     pagate += 1
@@ -416,7 +457,10 @@ else:
 # [6] IL PANNELLO ADMIN
 # ---------------------------------------------------------------------------
 print("\n-- [6] IL PANNELLO ADMIN --")
-CHIAVE = os.environ.get("ADMIN_KEY", "")       # letta dall'ambiente, MAI stampata
+# ⛔ Ripiego ALLINEATO al server (`avvia_server_visivo.py` fa `setdefault("ADMIN_KEY","ak")`
+# dentro il PROPRIO processo, che al banco non arriva): senza, i due controlli sui pannelli
+# si dichiaravano non eseguiti pur essendoci tutto per farli. MAI stampata (D6).
+CHIAVE = os.environ.get("ADMIN_KEY", "ak")
 if not CHIAVE:
     saltato("pannello admin", "ADMIN_KEY non presente nell'ambiente del banco")
     admin = {}
@@ -459,7 +503,8 @@ else:
         except Exception as e:
             print("     (codice TOTP non calcolabile: %r)" % (e,))
     if not codice:
-        codice = os.environ.get("BUNKER_PASSWORD", "").strip()
+        # ripiego allineato al server, stessa ragione dell'ADMIN_KEY qui sopra
+        codice = os.environ.get("BUNKER_PASSWORD", "SuperPw@1").strip()
     if not codice:
         saltato("bunker", "ne' TOTP ne' password super-admin presenti nell'ambiente")
     else:
