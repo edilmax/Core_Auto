@@ -781,6 +781,36 @@ def test_che_nominano(percorso):
 #    Sotto guardia in `test_pipeline_ci.py`, classi `TestLoSchedarioDegliEquivalenti_*`:
 #    ancoraggio al sorgente vivo, presenza dei campi, e dominio >= firma. Chi aggiunge una
 #    voce senza campi diventa rosso lo stesso giorno (D18 punto 4).
+# ⛔⛔ NON DICHIARATI, E VOLUTAMENTE — `fase188_paga_struttura.calcola`, righe 118 e 120
+#     (`if comm + fee + gateway > anticipo:`, `>` -> `>=`), trovati SOPRAVVISSUTI da un giro
+#     vero il 2026-08-21.
+#
+#     Sono **dimostrati equivalenti con z3** (`unsat` su ogni comm>=0, fee>=0, gateway>=0 e
+#     qualunque anticipo; controprova: togliendo `fee >= 0` il controesempio salta fuori
+#     subito, comm=1 fee=-2 gateway=0 anticipo=-1, quindi il modello e' vivo). La ragione:
+#     `>` e `>=` differiscono solo quando la somma **eguaglia** l'anticipo, e li'
+#     l'assegnamento diventa `fee = max(0, fee)` -- identita', perche' fee >= 0 per
+#     costruzione. Idem per `comm`.
+#
+#     ⛔ E TUTTAVIA NON SI DICHIARANO, perche' DUE guardie di questo schedario li rifiutano,
+#     ed hanno ragione tutt'e due:
+#       1. `TestLoSchedarioDegliEquivalenti_5`: le righe 118 e 120 hanno **testo identico**
+#          nella **stessa funzione**, quindi la chiave (file/funzione/riga/vecchio/nuovo)
+#          non le distingue: **una prova spegnerebbe due punti**. La guardia lo chiama «la
+#          stessa famiglia del difetto del 2026-08-01, un passo piu' in fondo».
+#       2. `TestLoSchedarioDegliEquivalenti_3`: la firma e' `calcola(prezzo_cents: Any, ...)`,
+#          e un dominio dichiarato su interi e' **piu' piccolo** di cio' che la funzione
+#          accetta (per esempio una sottoclasse di `int`).
+#
+#     💡 Quindi restano SOPRAVVISSUTI, che e' esattamente cio' che B6 prescrive quando la
+#     dimostrazione non e' dichiarabile: «o c'e' una dimostrazione, o quel mutante resta
+#     sopravvissuto». **Restare sopravvissuti e' la scelta sicura**; forzare la voce avrebbe
+#     richiesto di cambiare la CHIAVE (farle portare la posizione) e il criterio del dominio
+#     -- due lavori veri, e questo e' l'unico posto del progetto dove un errore diventa
+#     cecita' permanente.
+#     📌 IL LAVORO CHE SERVE, per chi riprende: **far portare alla chiave la POSIZIONE** del
+#     punto (riga+colonna), non solo il testo. Chiude questa famiglia di difetti per
+#     costruzione, come la chiave della scheda il 2026-08-21.
 EQUIVALENTI_DICHIARATI = {
     ("fase184_marca_temporale.py", "_der_intero", "if valore < 0:", "<", "<="): {
         "metodo": "esaustiva",
@@ -1431,6 +1461,84 @@ def moduli_di_produzione():
                   and (n.startswith("fase") or n == "main_casavip.py"))
 
 
+# ═══════════════════════════════════════════════════════════════════════════════════════
+#  PEZZO 3 DEL PIANO — LA PRODUZIONE DECIDE COSA VALE LA PENA ROMPERE
+# ═══════════════════════════════════════════════════════════════════════════════════════
+#  ⛔ PERCHE' ESISTE, misurato su QUESTO commit e non ereditato da nessuno:
+#     su 7542 punti di mutazione di tutta la macchina, 1443 (19,13%) stanno in moduli che
+#     la produzione NON raggiunge. Non sono punti «difficili da uccidere»: sono punti
+#     IMPOSSIBILI da uccidere, e la letteratura lo dice in una riga sola --
+#       «Such mutants are unreachable and are unable to infect the program state, thus
+#        they can never be killed»   (Mutation Testing Optimisations using the Clang
+#        Front-end, arXiv 2210.17215). Stesso criterio in Petrovic & Ivankovic, TSE 2021:
+#       «an AST node is eligible for mutation if it is covered by at least one test and if
+#        it is not arid».
+#     Cioe' un quinto della fatica di ogni giro andava li' dentro a produrre rossi che
+#     nessuno puo' chiudere -- e un allarme che non si puo' chiudere si impara a ignorare
+#     (regola ferrea 10).
+#
+#  ⚠️ IL LIMITE, DICHIARATO (D18 punto 3). «Non raggiungibile» NON vuol dire «morto»: un
+#     modulo puo' essere SPENTO e accendersi con un gettone. Per questo qui non si cancella
+#     niente -- i punti lasciati fuori si CONTANO, si stampano col nome del modulo, e il
+#     verdetto li dichiara. Un taglio silenzioso sarebbe esattamente il difetto che questo
+#     strumento esiste per trovare.
+#
+#  ⛔ E «coperto» NON vuol dire «sano»: la stessa fonte avverte che «even when a line of
+#     code is covered, it may still conceal faults». Questo filtro sceglie DOVE NON
+#     SPRECARE; non dichiara a posto cio' che resta.
+#
+#  ⚠️⚠️ DOVE QUESTO FILTRO **NON** ARRIVA, misurato il 2026-08-21 e dichiarato invece che
+#     taciuto (D18 punto 3) -- perche' «costruito» non vuol dire «collegato» (regola #23):
+#       · `giro_su_moduli` (modo `--modulo`) ........... ✅ filtro ATTIVO
+#       · modo DI SERIE (`mutazione_prodotto.py` senza argomenti, quello che lancia la
+#         batteria) ..................................... ⚪ filtro NON applicato, e NON
+#         serve: usa i 60 mutanti scritti a mano di `MUTANTI`, su 17 file, e **zero** di
+#         quei file e' fuori produzione (misurato). Ecco perche' la fase 3 della batteria
+#         ha impiegato 602s con il filtro e 600s senza: non c'era niente da togliere.
+#         ⛔ Quel tempo uguale era la RISPOSTA GIUSTA, non un sintomo -- ed e' stato
+#         verificato invece che dato per scontato.
+#       · `giro_sul_diff` (modo `--diff`) .............. ⚪ filtro NON applicato, ed e' una
+#         SCELTA: nel modo diff si lavora su righe appena scritte, e un modulo che stai
+#         scrivendo lo stai accendendo proprio adesso. Filtrarlo direbbe «non ti sorveglio»
+#         esattamente mentre lo costruisci. ⚠️ Se un domani si volesse cambiare idea, il
+#         posto e' `giro_sul_diff`, e la stessa regola vale: contare e nominare, mai tagliare
+#         in silenzio.
+def moduli_che_la_produzione_esegue(radice=REPO):
+    """(insieme dei moduli vivi, motivo) — chi la produzione raggiunge davvero.
+
+    Si appoggia a `collaudi/raggiungibilita.py`, che cammina sugli import partendo dai
+    moduli nominati dal `CMD` del Dockerfile di produzione -- non da un elenco scritto a
+    mano (e' la riparazione del 2026-08-18: un ingresso non e' un file sul disco, e' un
+    file che l'artefatto CONTIENE e AVVIA).
+
+    ⛔ Se quello strumento non risponde si torna `(None, motivo)` e NON si filtra niente:
+    l'assenza di misura non e' mai un permesso a sopprimere. E' lo sbaglio S1 -- il vuoto
+    non e' un valore, e' l'assenza di misura.
+    """
+    percorso = os.path.join(os.path.dirname(os.path.abspath(__file__)), "raggiungibilita.py")
+    try:
+        spec = importlib.util.spec_from_file_location("_raggiungibilita_per_mutazione",
+                                                      percorso)
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+        vivi, _morti, _tutti = modulo.cammina(radice)
+    except Exception as e:
+        return None, ("raggiungibilita.py non risponde (%s): NON filtro niente, si muta "
+                      "tutto" % e)
+    if not vivi:
+        return None, ("raggiungibilita.py non ha trovato NESSUN modulo vivo: e' l'assenza "
+                      "di misura, non un risultato -- NON filtro niente")
+    # ⛔⛔ GLI INGRESSI SONO VIVI PER DEFINIZIONE, E QUI SI SAREBBE ROTTO TUTTO.
+    #  `cammina()` elenca i moduli `fase*` RAGGIUNTI dagli import: `main_casavip.py` non e'
+    #  fra loro, perche' e' il punto di PARTENZA, non una destinazione. Senza questa riga il
+    #  filtro avrebbe saltato in silenzio il file da cui la produzione si accende -- il
+    #  modulo piu' vivo che esista -- contandolo fra i «non eseguiti dalla produzione»,
+    #  cioe' l'esatto contrario del vero. Trovato scrivendo, prima di innestare. Guardia:
+    #  `test_IL_FILTRO_DELLA_PRODUZIONE_NON_PUO_SCARTARE_UN_INGRESSO`.
+    vivi = set(vivi) | {n[:-3] for n in modulo.ingressi_veri(radice)}
+    return vivi, "raggiungibilita.py: %d moduli vivi (ingressi compresi)" % len(vivi)
+
+
 def censimento():
     """DOVE LA MACCHINA E' SCOPERTA — senza eseguire un solo test.
 
@@ -1494,7 +1602,15 @@ def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45, killer=None, riconfe
     """
     esiti, rinunce = [], {"oltre_il_tetto": 0, "senza_sorveglianti": 0, "generatore": {},
                           "oltre_il_tempo": 0, "normale_sec": {},
-                          "riconferme_fatte": 0, "riconferme_fallite": 0}
+                          "riconferme_fatte": 0, "riconferme_fallite": 0,
+                          # PEZZO 3: punti NON mutati perche' la produzione non li esegue.
+                          # ⛔ Si contano E si nominano: un numero senza nomi non si puo'
+                          #    verificare, e «19% di punti in meno» diventerebbe
+                          #    indistinguibile da «19% che nessuno ha guardato».
+                          "fuori_produzione": 0, "moduli_fuori_produzione": []}
+    vivi, perche_vivi = moduli_che_la_produzione_esegue(REPO)
+    if vivi is None:
+        print("  ⚠️  filtro della produzione SPENTO: %s" % perche_vivi)
     scadenza = time.time() + minuti * 60
     for nome in nomi:
         percorso = os.path.join(REPO, nome)
@@ -1505,6 +1621,16 @@ def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45, killer=None, riconfe
         mutanti, saltati = genera_mutanti(sorgente)
         for k, v in saltati.items():
             rinunce["generatore"][k] = rinunce["generatore"].get(k, 0) + v
+        # ⛔ PEZZO 3: se la produzione non esegue questo modulo, i suoi punti non sono
+        #    difficili da uccidere -- sono IMPOSSIBILI da uccidere (un mutante su codice
+        #    mai eseguito non puo' infettare lo stato del programma). Non si mutano, e si
+        #    DICHIARANO: il verdetto li conta a parte, non spariscono.
+        if vivi is not None and nome[:-3] not in vivi:
+            rinunce["fuori_produzione"] += len(mutanti)
+            rinunce["moduli_fuori_produzione"].append("%s (%d punti)" % (nome, len(mutanti)))
+            print("  ~~~~ %-34s %4d punti NON mutati: la produzione non esegue questo modulo"
+                  % (nome, len(mutanti)))
+            continue
         sorveglianti = test_che_nominano(percorso)
         righe_testo = sorgente.splitlines()
         fatti_qui = 0
@@ -1684,6 +1810,19 @@ def verdetto_modulo(esiti, rinunce, parziale=False):
                       "al secondo, quindi li' non c'e' una rete affidabile" % len(incerti))
     # I punti NON esaminati: rossi quanto gli altri, a meno che il giro si sia dichiarato
     # parziale. Il conto lo tiene gia' `giro_su_moduli`, qui si limita a pretenderlo.
+    # ⛔ PEZZO 3 — I PUNTI FUORI PRODUZIONE NON SONO ROSSI, MA UN GIRO CHE HA SALTATO
+    #    **TUTTO** NON E' VERDE. Saltare codice che la produzione non esegue e' una scelta
+    #    del piano, non un buco: quei mutanti non si possono uccidere per costruzione. Ma
+    #    un giro lanciato SOLO su moduli morti non ha misurato niente, e uscire 0 li'
+    #    sarebbe il verde per assenza -- lo stesso di «modulo ASSENTE» due righe sopra.
+    esaminati = len([e for e in esiti if e["verdetto"] in
+                     ("ucciso", "sopravvissuto", "incerto", "non_determinabile")])
+    saltati_prod = int(rinunce.get("fuori_produzione", 0))
+    if saltati_prod and not esaminati:
+        motivi.append(
+            "%d punti saltati perche' la produzione non li esegue, e NESSUN punto "
+            "esaminato: questo giro non ha misurato niente. Moduli: %s"
+            % (saltati_prod, ", ".join(rinunce.get("moduli_fuori_produzione") or ["?"])))
     fuori = (int(rinunce.get("oltre_il_tetto", 0))
              + int(rinunce.get("oltre_il_tempo", 0))
              + len(indeterminati))
@@ -1695,6 +1834,144 @@ def verdetto_modulo(esiti, rinunce, parziale=False):
             "--parziale" % (fuori, int(rinunce.get("oltre_il_tetto", 0)),
                             int(rinunce.get("oltre_il_tempo", 0)), len(indeterminati)))
     return (1 if motivi else 0), motivi
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════
+#  PEZZO 5 DEL PIANO — IL GIUDICE SCRIVE DA SE' LA SUA CASELLA
+# ═══════════════════════════════════════════════════════════════════════════════════════
+#  Fino al 2026-08-21 la casella era una COSTANTE (`print("☐ %s")`) e in tutto il progetto
+#  non esisteva nessun `☑`: nessun blocco poteva risultare finito PER COSTRUZIONE, ed e' il
+#  motivo per cui «il Blocco 1 e' finito?» restava senza risposta da settimane. Quel giorno
+#  e' nata `collaudi/scheda.py`, che sa leggere e sa registrare -- ma NESSUN attrezzo la
+#  scriveva. E' la regola #23 in forma pura: COSTRUITO != COLLEGATO.
+def blocco_dei_moduli(nomi, radice=REPO):
+    """(ordine del blocco, motivo) per i moduli su cui un giro ha lavorato.
+
+    ⛔ UNA MISURA VALE SOLO PER CIO' CHE HA MISURATO. Le caselle sulla mutazione sono DUE
+    (Blocco 1 «soldi» e Blocco 2 «prenotazioni»), e scrivere sempre quella del Blocco 1
+    vorrebbe dire dichiarare misurati i soldi dopo un giro fatto sulle prenotazioni.
+
+    ⛔ Se i moduli stanno in blocchi DIVERSI si torna `None`: non si sceglie a maggioranza.
+    Un giro misto non ha finito nessuno dei due blocchi, e dirlo e' l'unica cosa vera.
+    """
+    percorso = os.path.join(os.path.dirname(os.path.abspath(__file__)), "piano.py")
+    spec = importlib.util.spec_from_file_location("_piano_blocco", percorso)
+    piano = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(piano)
+    puliti = {n[:-3] if str(n).endswith(".py") else n for n in nomi if n}
+    if not puliti:
+        return None, "nessun modulo: non c'e' niente da dichiarare"
+    trovati = set()
+    for b in piano.BLOCCHI:
+        if puliti & set(b.get("moduli") or ()):
+            trovati.add(b["ordine"])
+    if len(trovati) != 1:
+        return None, ("questi moduli stanno in %d blocchi (%s): un giro misto non ha finito "
+                      "nessun blocco, e non si sceglie a maggioranza"
+                      % (len(trovati), sorted(trovati) or "nessuno"))
+    return sorted(trovati)[0], "blocco %d" % sorted(trovati)[0]
+
+
+def condizione_della_mutazione(radice=REPO, ordine=1):
+    """Il TESTO ESATTO della casella che questo strumento puo' spuntare, LETTO dal piano.
+
+    ⛔ NON SI RICOPIA, e non e' pignoleria: la chiave della scheda e' lo sha256 del testo
+    normalizzato, quindi una copia con UN carattere diverso non spunterebbe MAI quella
+    casella -- e nessuno se ne accorgerebbe, perche' resterebbe «mai misurata», che e'
+    indistinguibile dal non aver mai lanciato lo strumento. E' un ROSSO finto: fa rifare
+    un lavoro gia' fatto.
+
+    ⛔ E se le candidate non sono ESATTAMENTE una si alza un'eccezione invece di indovinare:
+    zero significa che il piano e' cambiato sotto, due che non si sa quale si sta
+    misurando. In tutti e due i casi la risposta giusta e' fermarsi.
+    """
+    percorso = os.path.join(os.path.dirname(os.path.abspath(__file__)), "piano.py")
+    spec = importlib.util.spec_from_file_location("_piano_per_mutazione", percorso)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    blocchi = [b for b in modulo.BLOCCHI if b["ordine"] == ordine]
+    if len(blocchi) != 1:
+        raise ValueError("il piano non ha esattamente un blocco %r: ne ha %d"
+                         % (ordine, len(blocchi)))
+    candidate = [c for c in blocchi[0]["finito_quando"]
+                 if "mutazione" in " ".join(str(c).split()).lower()]
+    if len(candidate) != 1:
+        raise ValueError(
+            "nel blocco %r le condizioni che parlano di mutazione sono %d, non una: non si "
+            "indovina quale spuntare. Candidate: %r" % (ordine, len(candidate), candidate))
+    return candidate[0]
+
+
+def scrivi_la_scheda(esiti, rinunce, comando, radice=REPO, percorso=None):
+    """Registra nella scheda cio' che QUESTO giro ha misurato. Torna (riga, motivo).
+
+    ⛔ IL DENOMINATORE E' IL CUORE, e qui e' *quanti punti sono stati davvero esaminati* --
+    non quanti ne esistono. Un giro che ne ha guardati zero scrive `denominatore=0`, e la
+    scheda per costruzione NON lo conta come verde («l'attrezzo non ha esaminato NIENTE,
+    quindi il suo esito non e' un giudizio»).
+
+    ⛔ E L'ESITO NON E' «zero sopravvissuti»: e' il VERDETTO INTERO, lo stesso che decide il
+    codice d'uscita del giudice. Ricalcolarlo qui con una regola mia farebbe dire verde
+    alla scheda mentre il giudice esce rosso -- due giudizi sullo stesso fatto, che e'
+    esattamente il difetto che `piano_dei_soldi.py` esiste per trovare.
+
+    ⛔ `percorso` esiste perche' UN COLLAUDO NON USA MAI L'ATTREZZO VERO: senza, le guardie
+    scriverebbero dentro `collaudi/scheda.json` e spunterebbero caselle VERE girando dentro
+    la suite -- verde perche' un test l'ha scritto, non perche' qualcuno abbia misurato.
+    """
+    # ⛔ PRIMA si stabilisce DI QUALE BLOCCO parla questo giro, e solo dopo si cerca la sua
+    #    casella: le caselle sulla mutazione sono due, e scriverne una a caso vorrebbe dire
+    #    dichiarare misurati i soldi dopo un giro fatto sulle prenotazioni.
+    ordine, motivo_blocco = blocco_dei_moduli(
+        [e.get("file") for e in esiti if e.get("file")], radice)
+    if ordine is None:
+        return None, "non so a quale blocco appartiene questo giro (%s)" % motivo_blocco
+    try:
+        testo = condizione_della_mutazione(radice, ordine)
+    except Exception as e:
+        return None, "non so QUALE casella spuntare (%s): non scrivo niente" % e
+    # ⛔⛔ UN GIRO SU UN MODULO NON DICHIARA FINITI VENTIQUATTRO MODULI.
+    #  La casella dice «zero punti di mutazione scoperti sul codice che la produzione
+    #  ESEGUE» -- cioe' su TUTTO il blocco. Spuntarla dopo un giro su `fase188` (4 punti)
+    #  significherebbe dichiarare misurati anche gli altri 23 moduli dei soldi, che nessuno
+    #  ha guardato. E' la stessa malattia della chiave condivisa, un piano piu' su.
+    #  ⛔ E NON si scrive `esito=False`: direbbe «misurata e non passa», mentre la verita' e'
+    #     «non l'ho misurata affatto». Un rosso falso manda a caccia di un guasto che non
+    #     esiste, e costa quanto un verde falso (ferrea 10). Non si scrive, e si dice perche'.
+    #  ⚠️ I moduli FUORI PRODUZIONE non contano come mancanti: saltarli e' il pezzo 3, cioe'
+    #     una scelta dichiarata, non una dimenticanza.
+    percorso_piano = os.path.join(os.path.dirname(os.path.abspath(__file__)), "piano.py")
+    spec_p = importlib.util.spec_from_file_location("_piano_copertura", percorso_piano)
+    piano = importlib.util.module_from_spec(spec_p)
+    spec_p.loader.exec_module(piano)
+    del_blocco = set([b for b in piano.BLOCCHI if b["ordine"] == ordine][0].get("moduli") or ())
+    visti = {str(e.get("file", ""))[:-3] for e in esiti if e.get("file")}
+    saltati_prod = {str(v).split(" ")[0][:-3]
+                    for v in (rinunce.get("moduli_fuori_produzione") or [])}
+    mancanti = del_blocco - visti - saltati_prod
+    if mancanti:
+        return None, ("questo giro ha guardato %d moduli su %d del blocco %d: una casella e' "
+                      "una dichiarazione su TUTTO il blocco, e %d moduli non li ha aperti "
+                      "nessuno (%s%s). NON scrivo: «non misurata» e' vero, «misurata e non "
+                      "passa» sarebbe falso"
+                      % (len(del_blocco) - len(mancanti), len(del_blocco), ordine,
+                         len(mancanti), ", ".join(sorted(mancanti)[:5]),
+                         " ..." if len(mancanti) > 5 else ""))
+    dove = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scheda.py")
+    try:
+        spec = importlib.util.spec_from_file_location("_scheda_per_mutazione", dove)
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+    except Exception as e:
+        return None, "la scheda non si carica (%s): non scrivo niente" % e
+    uscita, _motivi = verdetto_modulo(esiti, rinunce)
+    esaminati = len([e for e in esiti if e.get("verdetto") in
+                     ("ucciso", "sopravvissuto", "incerto", "non_determinabile")])
+    riga = modulo.registra(testo, esito=(uscita == 0), denominatore=esaminati,
+                           comando=comando, ordine=ordine,
+                           percorso=percorso if percorso else modulo.SCHEDA)
+    return riga, ("casella del blocco %d scritta: esito=%s, %d punti esaminati"
+                  % (ordine, riga["esito"], riga["denominatore"]))
 
 
 if __name__ == "__main__" and "--censimento" in sys.argv:
@@ -1821,9 +2098,27 @@ if __name__ == "__main__" and "--modulo" in sys.argv:
     for e in _ass:
         print("::error title=NIENTE DA MISURARE in %s::%s -- il nome del modulo vuole il "
               "suffisso .py (i sorveglianti invece NO)" % (e["file"], e["danno"]))
+    # ⛔ PEZZO 3 — I PUNTI SALTATI SI STAMPANO. Un filtro che toglie un quinto del lavoro e
+    #    non lo dice e' indistinguibile da un attrezzo che non ha guardato.
+    if _rin.get("fuori_produzione"):
+        print("  ~~~~ %d punti NON mutati perche' la produzione non esegue quei moduli: %s"
+              % (_rin["fuori_produzione"],
+                 ", ".join(_rin.get("moduli_fuori_produzione") or [])))
     _uscita, _motivi = verdetto_modulo(_esiti, _rin, parziale="--parziale" in sys.argv)
     for _m in _motivi:
         print("  ROSSO: %s" % _m)
+    # ⛔ PEZZO 5 — IL GIUDICE SCRIVE DA SE' LA SUA CASELLA, e lo fa DOPO il verdetto perche'
+    #    e' il verdetto che scrive: due giudizi sullo stesso fatto sarebbero il difetto.
+    #    ⚠️ Un giro `--parziale` NON scrive: ha guardato una parte per scelta, e una casella
+    #    e' una dichiarazione su TUTTO il blocco. Dichiararla da un giro corto sarebbe la
+    #    bugia piu' comoda che questo strumento possa raccontare.
+    if "--parziale" in sys.argv:
+        print("  🗂️  scheda NON scritta: giro dichiarato --parziale, non giudica il blocco")
+    else:
+        _riga, _perche = scrivi_la_scheda(
+            _esiti, _rin, comando="python collaudi/mutazione_prodotto.py " +
+            " ".join(a for a in sys.argv[1:] if a))
+        print("  🗂️  %s" % _perche)
     sys.exit(_uscita)
 
 

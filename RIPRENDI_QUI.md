@@ -11,6 +11,73 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🧬 2026-08-21 (52) — **RIPARTI DA QUI** (sera: i pezzi 3-4-5, e una casella che ne spuntava due)
+
+> ⛔ **Si CONTROLLA, non si crede.** Primo gesto: `git rev-parse --short HEAD` su computer,
+> GitHub e VPS, la **tabella dei job dall'API**, e:
+> ```
+> curl -s "https://bookinvip.com/api/i18n?lang=it" | findstr pol_rigida     -> "30 giorni"
+> ```
+>
+> **DOV'ERAVAMO:** tre posti su `87b52a5`, CI **16 job verdi** (`gate` success), 0 richieste
+> aperte, sito `200`, `guardiano: ok`. Batteria completa col banco che paga: **26 OK · 0
+> FALLITI · 1 saltato dichiarato**, uscita 0.
+>
+> ### ✅ COSA È STATO FATTO (per esteso: registro, voce **(25)**)
+> I **pezzi 3, 4 e 5** del piano dei dieci. ⛔ Erano aperti davvero: misurato nel codice, non
+> letto dai documenti (`grep "arid|sopprim"` → **0 occorrenze**, `scheda.json` **non esisteva**).
+> 1. **Pezzo 3 — la produzione decide cosa vale la pena rompere.** Su **7542** punti di tutta la
+>    macchina, **1443 (19,13%)** stanno in moduli che la produzione non esegue: non difficili da
+>    uccidere, **impossibili** («such mutants are unreachable … can never be killed»).
+> 2. **Pezzo 4 — chiuso con LA MISURA, non costruito** (deciso dal fondatore). Sopprimerebbe
+>    **1 punto su 7542 = 0,01%**. Google dichiara ~85% perché il suo C++ è pieno di `reserve` e
+>    `Wait` gRPC; il nostro Python dei soldi no. I **log restano** (403 punti): la falsa
+>    equivalenza fu tolta perché **falsa**, e il 14/08 quei mutanti hanno trovato **7 guardie finte**.
+> 3. **Pezzo 5 — il Giudice scrive da sé la scheda**, col testo **letto da `piano.py`**.
+>
+> ### 🔴 IL DIFETTO CHE QUESTO LAVORO AVREBBE ACCESO — trovato prima di scriverci sopra
+> ```
+> caselle nel piano 30 · chiavi distinte 29 · CONDIVISE da piu' blocchi: 1
+>   2x blocchi [1,2] -> «zero punti di mutazione ... che la produzione ESEGUE»  41d41915359a
+> ```
+> **Spuntare i SOLDI avrebbe spuntato le PRENOTAZIONI.** Latente perché nessuno scriveva — e il
+> pezzo 5 è esattamente ciò che comincia a scrivere. È lo **stesso** difetto riparato il
+> 2026-08-01 nello schedario degli equivalenti (la chiave non portava la **funzione**): *una
+> dichiarazione vale SOLO dove è stata dimostrata*. ⛔ Riparata **la chiave**, non il testo: il
+> criterio giusto è l'unico che non si può allargare.
+>
+> ### 🧪 DUE SOPRAVVISSUTI SU `fase188` — NON sono buchi, e non cercare di ucciderli
+> ```
+> fase188_paga_struttura.py:118 e :120   > -> >=   SOPRAVVISSUTI
+> ```
+> ⛔ **Sono DIMOSTRATI EQUIVALENTI con z3** (`unsat` su ogni `comm,fee,gateway >= 0` e qualunque
+> anticipo; controprova: togliendo `fee >= 0` il controesempio salta fuori subito → il modello è
+> vivo). `>` e `>=` differiscono solo quando la somma **eguaglia** l'anticipo, e lì l'assegnamento
+> è `fee = max(0, fee)` — identità, perché `fee >= 0` per costruzione.
+> 💡 **Nessun test può ucciderli: scriverne uno sarebbe lavoro inutile con l'aria di lavoro utile.**
+> ⛔ **E non sono dichiarabili nello schedario**, perché due guardie lo vietano *con ragione*: le
+> due righe hanno **testo identico nella stessa funzione** (una prova ne spegnerebbe due) e la
+> firma accetta `Any` (dominio della prova più piccolo della firma). Restano **sopravvissuti**, che
+> è ciò che B6 prescrive.
+> 📌 **IL LAVORO VERO che ne esce: far portare alla chiave dello schedario la POSIZIONE**
+> (riga+colonna), non solo il testo. **Quarta istanza in un giorno** della stessa forma —
+> `memory/bookinvip-chiave-porta-ambito.md`.
+>
+> ### 🗂️ IL BLOCCO 1 È ANCORA **0 su 6** — e adesso si sa PERCHÉ
+> Il pezzo 5 costruisce *lo strumento* che sa spuntare la casella 5. **La casella si spunta solo
+> con un giro vero sui 24 moduli dei soldi che esca pulito** — e oggi non uscirebbe pulito, per i
+> due sopravvissuti qui sopra. ⛔ **COSTRUITO ≠ MISURATO.** Le altre cinque:
+> 1 (tabella CI dall'API) · 2 (le 7 strade) · **3 orologi Stripe: non esistono** · 4 metamorfiche
+> a metà · 6 (`fase199` sul sito vero).
+>
+> ### ⚠️ COSA RESTA APERTO DA PRIMA, non ritrovarlo da capo
+> · **UNA COPIA SOLA DI TUTTO**: le copie girano ogni 6 ore **dentro lo stesso volume dei dati
+>   veri**. È il solo rischio che cancella tutto. Poche ore di lavoro.
+> · **IL CONTRATTO HOST non nomina la finestra di ripensamento** — 8 file, 3 dove manca del tutto.
+>   Costa zero adesso (0 host firmati), con host firmati è una ri-accettazione uno per uno.
+> · `plausibilita.py` guarda **una riga** · 8 attrezzi «troppo veloci» non ancora verificati ·
+>   `guardia_commit.py` prescrive `git checkout HEAD`, che **cancella** il lavoro non committato.
+
 ## 💸 2026-08-21 (51) — **RIPARTI DA QUI** (pomeriggio: una bugia da 200 EUR e una mina nella batteria)
 
 > ⛔ **Si CONTROLLA, non si crede.** Primo gesto: `git rev-parse --short HEAD` su computer,
@@ -6466,7 +6533,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5926 test
+SUITE ATTUALE: Ran 5939 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

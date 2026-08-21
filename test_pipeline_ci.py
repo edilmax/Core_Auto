@@ -8045,15 +8045,16 @@ class TestLaSchedaNonSiScriveAMano(unittest.TestCase):
         scheda = self._scheda()
         testo = "una condizione di prova, che nessuno misura davvero"
         vuoto = {}
-        spuntata, motivo = scheda.stato(testo, vuoto, commit="aaaaaaa")
+        spuntata, motivo = scheda.stato(testo, 1, vuoto, commit="aaaaaaa")
         self.assertFalse(spuntata, "una condizione MAI MISURATA non puo' risultare fatta")
         self.assertIn("mai misurata", motivo.lower(),
                       "il motivo deve dire che non e' stata misurata, non tacere: %r" % motivo)
 
-        buona = {scheda.chiave(testo): {"esito": True, "denominatore": 12,
-                                        "comando": "python collaudi/finto.py",
-                                        "commit": "aaaaaaa", "quando": "2026-08-21T00:00:00"}}
-        spuntata, motivo = scheda.stato(testo, buona, commit="aaaaaaa")
+        buona = {scheda.chiave(testo, 1): {"esito": True, "denominatore": 12,
+                                           "comando": "python collaudi/finto.py",
+                                           "commit": "aaaaaaa",
+                                           "quando": "2026-08-21T00:00:00"}}
+        spuntata, motivo = scheda.stato(testo, 1, buona, commit="aaaaaaa")
         self.assertTrue(spuntata,
                         "una misura VERA, sul commit giusto e con un denominatore, deve "
                         "spuntare la casella -- se no la scheda non serve a niente: %r" % motivo)
@@ -8074,7 +8075,8 @@ class TestLaSchedaNonSiScriveAMano(unittest.TestCase):
                  "",
                  "esito falso: resta rossa")):
             with self.subTest(perche=perche):
-                s, m = scheda.stato(testo, {scheda.chiave(testo): guasto}, commit="aaaaaaa")
+                s, m = scheda.stato(testo, 1, {scheda.chiave(testo, 1): guasto},
+                                    commit="aaaaaaa")
                 self.assertFalse(s, perche)
                 if atteso:
                     self.assertIn(atteso, m.lower(),
@@ -8095,10 +8097,10 @@ class TestLaSchedaNonSiScriveAMano(unittest.TestCase):
             dove = os.path.join(culla, "scheda.json")
             testo = "una condizione di prova che qualcuno misura davvero"
             scheda.registra(testo, esito=True, denominatore=41,
-                            comando="python collaudi/finto.py", percorso=dove,
+                            comando="python collaudi/finto.py", ordine=1, percorso=dove,
                             commit="ccccccc")
             riletta = scheda.leggi(dove)
-            spuntata, motivo = scheda.stato(testo, riletta, commit="ccccccc")
+            spuntata, motivo = scheda.stato(testo, 1, riletta, commit="ccccccc")
             self.assertTrue(spuntata,
                             "scritta e riletta, la misura non spunta la casella: la scheda "
                             "non conserva quello che le si dice (%r)" % motivo)
@@ -8108,7 +8110,7 @@ class TestLaSchedaNonSiScriveAMano(unittest.TestCase):
                           "il motivo non dice CON QUALE COMANDO rifare la misura: %r" % motivo)
             with self.assertRaises(ValueError):
                 scheda.registra(testo, esito=True, denominatore=1, comando="  ",
-                                percorso=dove, commit="ccccccc")
+                                ordine=1, percorso=dove, commit="ccccccc")
         finally:
             shutil.rmtree(culla, ignore_errors=True)
 
@@ -8119,14 +8121,403 @@ class TestLaSchedaNonSiScriveAMano(unittest.TestCase):
         scheda = self._scheda()
         prima = "i soldi tornano all'ospite da OGNI strada"
         dopo = "i soldi tornano all'ospite da ogni strada, ENTRO 24 ORE"
-        registro = {scheda.chiave(prima): {"esito": True, "denominatore": 7, "comando": "x",
-                                           "commit": "aaaaaaa", "quando": "2026-08-21"}}
-        self.assertTrue(scheda.stato(prima, registro, commit="aaaaaaa")[0])
-        spuntata, motivo = scheda.stato(dopo, registro, commit="aaaaaaa")
+        registro = {scheda.chiave(prima, 1): {"esito": True, "denominatore": 7,
+                                              "comando": "x", "commit": "aaaaaaa",
+                                              "quando": "2026-08-21"}}
+        self.assertTrue(scheda.stato(prima, 1, registro, commit="aaaaaaa")[0])
+        spuntata, motivo = scheda.stato(dopo, 1, registro, commit="aaaaaaa")
         self.assertFalse(
             spuntata,
             "la condizione e' stata RISCRITTA e la vecchia misura la spunta lo stesso: "
             "cosi' si dichiara fatta una cosa che nessuno ha mai verificato (%r)" % motivo)
+
+
+class TestDueBlocchiNonPossonoCondividereUnaCasella(unittest.TestCase):
+    """⛔ SPUNTARE I SOLDI AVREBBE SPUNTATO ANCHE LE PRENOTAZIONI.
+
+    Misurato il 2026-08-21, prima di scriverci sopra:
+        caselle totali nel piano ........... 30
+        chiavi distinte .................... 29
+        chiavi CONDIVISE da piu' blocchi ....  1
+          2x  blocchi [1, 2]  ->  «zero punti di mutazione scoperti sul codice che la
+                                   produzione ESEGUE»        chiave 41d41915359a
+    La chiave della scheda era lo sha256 del solo TESTO, e quella frase compare identica
+    nel Blocco 1 (soldi) e nel Blocco 2 (prenotazioni). Un giro di mutazione sui soldi
+    avrebbe dichiarato finito anche un blocco che nessuno aveva misurato.
+
+    ⛔ NON E' UN DIFETTO NUOVO: e' lo stesso, identico, gia' trovato e riparato il
+       2026-08-01 nello schedario degli equivalenti, dove la chiave non portava il nome
+       della FUNZIONE e una dichiarazione si estendeva a tutte le righe identiche del file
+       (`if residuo <= 0:` in due funzioni di fase177). La regola scritta li' vale qui
+       parola per parola: **una dichiarazione vale SOLO dove e' stata dimostrata.**
+
+    ⚠️ Era LATENTE per un motivo preciso: `scheda.json` non esiste e nessuno scrive. Il
+       pezzo 5 del piano e' esattamente cio' che comincia a scrivere -- sarebbe stato quel
+       lavoro ad accenderlo. Riparato prima, costa zero: nessuna misura da rifare.
+
+    ⛔ E SI RIPARA LA CHIAVE, NON IL TESTO NEL PIANO. Riscrivere una delle due condizioni
+       chiuderebbe QUESTO caso e lascerebbe la porta aperta: domani due blocchi fanno la
+       stessa domanda con le stesse parole e il difetto torna, in silenzio. La chiave che
+       porta il blocco lo chiude PER COSTRUZIONE -- e' la stessa lezione di
+       `raggiungibilita.py`: il criterio giusto e' l'unico che non si puo' allargare.
+    """
+
+    def _scheda(self):
+        import importlib.util
+        percorso = os.path.join(QUI, "collaudi", "scheda.py")
+        spec = importlib.util.spec_from_file_location("_scheda_chiave", percorso)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def _piano(self):
+        import importlib.util
+        percorso = os.path.join(QUI, "collaudi", "piano.py")
+        spec = importlib.util.spec_from_file_location("_piano_chiave", percorso)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_OGNI_CASELLA_DEL_PIANO_HA_UNA_CHIAVE_TUTTA_SUA(self):
+        """La direzione «oggi non ci sono doppioni», sul piano VERO."""
+        import collections
+        piano = self._piano()
+        scheda = self._scheda()
+        dove = collections.defaultdict(list)
+        totale = 0
+        for b in piano.BLOCCHI:
+            for c in b["finito_quando"]:
+                dove[scheda.chiave(c, b["ordine"])].append(b["ordine"])
+                totale += 1
+        # ⛔ IL DENOMINATORE SI DICHIARA: senza, «zero doppioni» su zero caselle sarebbe un
+        #    verde per assenza -- la forma di bugia che questo progetto conosce meglio.
+        self.assertGreater(totale, 0,
+                           "nessuna casella nel piano: e' assenza di misura, non un verde")
+        doppie = {k: v for k, v in dove.items() if len(v) > 1}
+        self.assertFalse(
+            doppie,
+            "queste caselle sono LA STESSA per la scheda pur stando in blocchi diversi: "
+            "spuntarne una spunterebbe l'altra, e un blocco risulterebbe finito senza che "
+            "nessuno l'abbia misurato -- %r (su %d caselle esaminate)" % (doppie, totale))
+
+    def test_LA_STESSA_DOMANDA_IN_DUE_BLOCCHI_DA_DUE_CHIAVI_DIVERSE(self):
+        """L'altra direzione (ferrea 10): non basta che oggi non ci siano doppioni -- la
+        scheda deve SAPER distinguere due blocchi che fanno la stessa domanda."""
+        scheda = self._scheda()
+        testo = "zero punti di mutazione scoperti sul codice che la produzione ESEGUE"
+        self.assertNotEqual(
+            scheda.chiave(testo, 1), scheda.chiave(testo, 2),
+            "la stessa frase in due blocchi da' la STESSA chiave: la scheda non sa "
+            "distinguere i soldi dalle prenotazioni")
+        self.assertEqual(
+            scheda.chiave(testo, 1), scheda.chiave("\n  ".join(testo.split()), 1),
+            "normalizzare gli spazi cambia la chiave: mandare a capo una frase non cambia "
+            "la domanda, e la casella non deve svuotarsi per una riformattazione")
+
+
+class TestLaProduzioneDecideCosaValeLaPenaRompere(unittest.TestCase):
+    """PEZZO 3 DEL PIANO — «la copertura decide cosa mutare».
+
+    MISURATO il 2026-08-21 sull'AST, su tutti e 151 i moduli: su **7542** punti di
+    mutazione, **1443 (19,13%)** stanno in moduli che la produzione NON raggiunge. Non sono
+    punti difficili da uccidere: sono punti **impossibili** da uccidere --
+      «Such mutants are unreachable and are unable to infect the program state, thus they
+       can never be killed»  (arXiv 2210.17215)
+    Un quinto della fatica di ogni giro andava li' dentro a produrre rossi che nessuno puo'
+    chiudere, e un allarme che non si puo' chiudere si impara a ignorare (ferrea 10).
+
+    ⚠️ Queste guardie non pretendono che il filtro esista: pretendono che, quando c'e', non
+    menta in nessuna delle tre direzioni in cui puo' mentire.
+    """
+
+    def _mut(self):
+        import importlib.util
+        percorso = os.path.join(QUI, "collaudi", "mutazione_prodotto.py")
+        spec = importlib.util.spec_from_file_location("_mut_guardia", percorso)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_IL_FILTRO_DELLA_PRODUZIONE_NON_PUO_SCARTARE_UN_INGRESSO(self):
+        """⛔ `cammina()` elenca i `fase*` RAGGIUNTI dagli import: l'ingresso non e' fra
+        loro, perche' e' il punto di PARTENZA. Senza correzione il filtro salterebbe in
+        silenzio `main_casavip.py` -- il file da cui la produzione si accende -- contandolo
+        fra i «non eseguiti dalla produzione», cioe' l'esatto contrario del vero.
+        Trovato scrivendo il codice, prima di innestarlo."""
+        import importlib.util
+        m = self._mut()
+        vivi, motivo = m.moduli_che_la_produzione_esegue(QUI)
+        self.assertIsNotNone(vivi, "la raggiungibilita' non risponde: %s" % motivo)
+        spec = importlib.util.spec_from_file_location(
+            "_rag_guardia", os.path.join(QUI, "collaudi", "raggiungibilita.py"))
+        rag = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(rag)
+        ingressi = rag.ingressi_veri(QUI)
+        self.assertTrue(ingressi,
+                        "nessun ingresso dichiarato esiste sul disco: misura non valida, "
+                        "non un risultato (sbaglio S1)")
+        for nome in ingressi:
+            self.assertIn(nome[:-3], vivi,
+                          "l'ingresso %s risulta NON eseguito dalla produzione: e' proprio "
+                          "il file che la produzione AVVIA" % nome)
+
+    def test_SENZA_LA_RAGGIUNGIBILITA_NON_SI_FILTRA_NIENTE(self):
+        """⛔ L'assenza di misura non e' mai un permesso a sopprimere (sbaglio S1: il vuoto
+        non e' un valore). Se lo strumento che dice «chi e' vivo» non risponde, si deve
+        mutare TUTTO, non zero -- e si deve DIRE perche'."""
+        m = self._mut()
+        vivi, motivo = m.moduli_che_la_produzione_esegue(
+            os.path.join(QUI, "_cartella_che_non_esiste_mai"))
+        self.assertIsNone(
+            vivi,
+            "su una radice inesistente ha risposto un insieme (%r): starebbe filtrando su "
+            "una misura che non c'e'" % (vivi,))
+        self.assertTrue(str(motivo).strip(),
+                        "ha rinunciato a filtrare SENZA dire perche': una rinuncia muta e' "
+                        "indistinguibile da un filtro che funziona")
+
+    def test_I_PUNTI_LASCIATI_FUORI_SONO_CONTATI_E_NOMINATI(self):
+        """⛔ Un taglio silenzioso e' il difetto che questo strumento esiste per trovare.
+        Il giro deve tenere il CONTO e i NOMI: un numero senza nomi non si puo' verificare,
+        e «19% di punti in meno» diventerebbe indistinguibile da «19% che nessuno ha
+        guardato»."""
+        m = self._mut()
+        _esiti, rinunce = m.giro_su_moduli([], minuti=0)
+        self.assertIn("fuori_produzione", rinunce,
+                      "il giro non tiene il conto dei punti lasciati fuori dalla produzione")
+        self.assertIn("moduli_fuori_produzione", rinunce,
+                      "il giro conta i punti ma non dice su QUALI moduli")
+
+    def test_UN_GIRO_CHE_HA_SALTATO_TUTTO_NON_ESCE_VERDE(self):
+        """⛔ Saltare codice che la produzione non esegue e' una SCELTA del piano, non un
+        buco -- ma un giro lanciato solo su moduli morti non ha misurato niente, e uscire 0
+        li' sarebbe il verde per assenza. Le due direzioni, con e senza punti esaminati."""
+        m = self._mut()
+        rinunce = {"fuori_produzione": 42, "moduli_fuori_produzione": ["fase17_money.py"]}
+        uscita, motivi = m.verdetto_modulo([], rinunce)
+        self.assertEqual(uscita, 1,
+                         "ha saltato 42 punti, non ne ha esaminato nessuno, ed esce VERDE: "
+                         "e' il verde per assenza (%r)" % motivi)
+        # ...e con almeno un punto davvero esaminato, i saltati NON lo fanno rosso.
+        esiti = [{"file": "fase85_pagamenti_stripe.py", "riga": 1, "verdetto": "ucciso",
+                  "danno": "finto"}]
+        uscita2, motivi2 = m.verdetto_modulo(esiti, rinunce)
+        self.assertEqual(uscita2, 0,
+                         "un punto esaminato e ucciso, piu' dei saltati DICHIARATI, deve "
+                         "restare verde: altrimenti il filtro rende impossibile il verde "
+                         "(%r)" % motivi2)
+
+
+class TestIlGiudiceScriveDaSeLaScheda(unittest.TestCase):
+    """PEZZO 5 DEL PIANO — «il Giudice scrive da se' la scheda, il guardiano la pretende».
+
+    La scheda sa registrare dal 2026-08-21, ma NESSUN attrezzo la scriveva: Blocco 1 = 0 su
+    6, e `piano.py` lo diceva da solo («ma nessuno la scrive ancora»). E' la regola #23 in
+    forma pura: COSTRUITO != COLLEGATO.
+    """
+
+    def _mut(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_mut_scheda", os.path.join(QUI, "collaudi", "mutazione_prodotto.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_IL_TESTO_DELLA_CASELLA_SI_LEGGE_DAL_PIANO_E_NON_SI_RICOPIA(self):
+        """⛔ LA TRAPPOLA VERA DI QUESTO PEZZO. La chiave della scheda e' lo sha256 del
+        testo: una copia con UN carattere diverso non spunterebbe mai quella casella, e
+        resterebbe «mai misurata» -- indistinguibile dal non aver lanciato lo strumento.
+        Un ROSSO finto, che fa rifare un lavoro gia' fatto."""
+        import importlib.util
+        m = self._mut()
+        spec = importlib.util.spec_from_file_location(
+            "_piano_g", os.path.join(QUI, "collaudi", "piano.py"))
+        piano = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(piano)
+        for ordine in (1, 2):
+            testo = m.condizione_della_mutazione(QUI, ordine)
+            blocco = [b for b in piano.BLOCCHI if b["ordine"] == ordine][0]
+            self.assertIn(
+                testo, list(blocco["finito_quando"]),
+                "per il blocco %d il giudice usa un testo che nel piano NON c'e': quella "
+                "casella non si spuntera' mai, e nessuno se ne accorgera'" % ordine)
+
+    def test_SE_LE_CASELLE_CANDIDATE_NON_SONO_UNA_SI_FERMA_INVECE_DI_INDOVINARE(self):
+        """⛔ Zero candidate = il piano e' cambiato sotto. Due = non si sa quale si sta
+        misurando. In tutti e due i casi la risposta giusta e' un'eccezione: spuntare la
+        casella sbagliata avvelenerebbe lo strumento nato per smettere di mentire."""
+        m = self._mut()
+        with self.assertRaises(ValueError):
+            m.condizione_della_mutazione(QUI, ordine=3)   # il blocco 3 non ha quella casella
+
+    def test_UN_GIRO_MISTO_NON_DICHIARA_FINITO_NESSUN_BLOCCO(self):
+        """⛔ Le caselle sulla mutazione sono DUE. Un giro su moduli di blocchi diversi non
+        ha finito nessuno dei due, e non si sceglie a maggioranza."""
+        m = self._mut()
+        ordine, motivo = m.blocco_dei_moduli(["fase85_pagamenti_stripe.py",
+                                              "fase111_cancellazione.py"])
+        self.assertIsNone(ordine,
+                          "un giro su soldi E prenotazioni ha scelto il blocco %r: cosi' "
+                          "si dichiara misurato un blocco che nessuno ha guardato (%s)"
+                          % (ordine, motivo))
+        solo_soldi, _ = m.blocco_dei_moduli(["fase85_pagamenti_stripe.py"])
+        self.assertEqual(solo_soldi, 1,
+                         "un giro sui soli moduli dei soldi deve riconoscere il Blocco 1")
+
+    def test_UN_GIRO_SU_UN_MODULO_NON_DICHIARA_FINITI_VENTIQUATTRO(self):
+        """⛔ IL BUCO PIU' GROSSO CHE QUESTO PEZZO POTEVA LASCIARE.
+
+        La casella dice «zero punti di mutazione scoperti sul codice che la produzione
+        ESEGUE» -- cioe' su TUTTO il blocco. Spuntarla dopo un giro su `fase188` (4 punti)
+        dichiarerebbe misurati anche gli altri 23 moduli dei soldi, che nessuno ha aperto.
+        E' la stessa malattia della chiave condivisa, un piano piu' su.
+
+        ⛔ E non basta scrivere `esito=False`: direbbe «misurata e non passa», mentre la
+        verita' e' «non l'ho misurata affatto». Un rosso falso manda a caccia di un guasto
+        che non esiste e costa quanto un verde falso (ferrea 10). Non si scrive.
+        """
+        import shutil
+        import tempfile
+        m = self._mut()
+        culla = tempfile.mkdtemp(prefix="scheda_parziale_")
+        try:
+            finta = os.path.join(culla, "scheda.json")
+            esiti = [{"file": "fase188_paga_struttura.py", "riga": 1, "verdetto": "ucciso",
+                      "danno": "finto"}]
+            riga, motivo = m.scrivi_la_scheda(esiti, {}, comando="prova", radice=QUI,
+                                              percorso=finta)
+            self.assertIsNone(
+                riga,
+                "un giro su UN modulo ha spuntato la casella di tutto il blocco: cosi' si "
+                "dichiara finito un blocco che nessuno ha misurato (%s)" % motivo)
+            self.assertIn("blocco", str(motivo).lower(),
+                          "non dice che il giro era incompleto: %r" % motivo)
+            self.assertFalse(
+                os.path.isfile(finta),
+                "ha comunque creato la scheda: una casella che non si puo' dichiarare non "
+                "deve lasciare traccia, o al giro dopo sembrera' misurata")
+        finally:
+            shutil.rmtree(culla, ignore_errors=True)
+
+    def test_UN_GIRO_CHE_NON_HA_ESAMINATO_NIENTE_NON_SPUNTA_LA_CASELLA(self):
+        """⛔ Denominatore zero non e' verde. La scheda gia' lo applica: qui si pretende che
+        il COLLEGAMENTO lo rispetti, cioe' che il giudice le passi i punti VERAMENTE
+        esaminati e non una costante."""
+        import importlib.util
+        import shutil
+        import tempfile
+        m = self._mut()
+        # ⛔ SU UNA SCHEDA FINTA: un collaudo non usa mai l'attrezzo vero. Scrivendo su
+        #    `collaudi/scheda.json` questa guardia spunterebbe una casella VERA girando
+        #    dentro la suite -- verde perche' un test l'ha scritto, non perche' qualcuno
+        #    abbia misurato. Il verde finto piu' velenoso che ci sia.
+        culla = tempfile.mkdtemp(prefix="scheda_guardia_")
+        try:
+            finta = os.path.join(culla, "scheda.json")
+            # ⛔ TUTTI i moduli del blocco, o il giro risulta incompleto e (giustamente)
+            #    non scrive affatto -- vedi la guardia sul giro parziale qui sotto. Qui si
+            #    misura l'ALTRA cosa: giro completo, ma nessun punto esaminato.
+            spec = importlib.util.spec_from_file_location(
+                "_piano_den", os.path.join(QUI, "collaudi", "piano.py"))
+            piano = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(piano)
+            del_blocco = [b for b in piano.BLOCCHI if b["ordine"] == 1][0]["moduli"]
+            esiti = [{"file": n + ".py", "riga": 0, "verdetto": "assente",
+                      "danno": "finto, per la guardia"} for n in del_blocco]
+            riga, motivo = m.scrivi_la_scheda(esiti, {}, comando="prova finta", radice=QUI,
+                                              percorso=finta)
+            self.assertIsNotNone(riga, "non ha scritto niente: %s" % motivo)
+            self.assertEqual(riga["denominatore"], 0,
+                             "un giro senza punti esaminati dichiara di averne guardati %r"
+                             % riga["denominatore"])
+            spec = importlib.util.spec_from_file_location(
+                "_scheda_g", os.path.join(QUI, "collaudi", "scheda.py"))
+            sch = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(sch)
+            ok, perche = sch.stato(riga["condizione"], riga["blocco"], sch.leggi(finta),
+                                   riga["commit"])
+            self.assertFalse(ok,
+                             "denominatore ZERO e la casella risulta SPUNTATA: %s" % perche)
+        finally:
+            shutil.rmtree(culla, ignore_errors=True)
+
+
+class TestIMutantiSuiLogNonSiSopprimonoMai(unittest.TestCase):
+    """PEZZO 4 DEL PIANO — e la ragione, MISURATA, per cui non si costruisce come Google.
+
+    Misurato il 2026-08-21 sull'AST, su tutti e 151 i moduli, denominatore **7542** punti:
+        attese/memoria/print/assiomatici (sopprimibili) ...     1 punto  (0,01%)
+        LOG ...............................................   403 punti (5,34%)
+    Google dichiara ~85% di mutanti improduttivi tolti dai nodi aridi: il loro C++ e' pieno
+    di `std::vector::reserve`, `Wait` gRPC e cache lookup. Il nostro Python dei soldi non ne
+    ha. Costruire quel meccanismo qui toglierebbe UN punto su 7542 e lascerebbe in casa un
+    interruttore che un domani qualcuno allarga fino ai mutanti veri sui soldi -- rischio
+    che Google stessa dichiara: «the proposed heuristic **may suppress mutation in relevant
+    nodes** as a side-effect».
+
+    ⛔ Quindi il pezzo 4 si chiude con LA MISURA SOTTO GUARDIA, non con un meccanismo --
+    deciso dal fondatore il 2026-08-21. Se un domani il codice cambia (arrivano attese,
+    cache, code), questo numero cambia e la decisione si rivede: con un dato, non con un
+    ricordo.
+    """
+
+    def test_NESSUNA_SOPPRESSIONE_SUI_LOG_E_ENTRATA_NEL_GENERATORE(self):
+        """La falsa equivalenza sui log fu tolta il 2026-08-01 perche' FALSA (`exc_info` e'
+        osservabile), e il 14/08 quei mutanti hanno scoperto SETTE guardie finte. Se
+        qualcuno la rimettesse, sette bugie tornerebbero invisibili."""
+        percorso = os.path.join(QUI, "collaudi", "mutazione_prodotto.py")
+        # ⛔ I COMMENTI SI BUTTANO VIA: una guardia identica, il 2026-08-21, era un FALSO
+        #    ALLARME perche' scattava sul COMMENTO che cita la riga vecchia. Chi legge del
+        #    codice deve sapere cos'e' codice e cos'e' prosa (ferrea 10).
+        import tokenize
+        codice = []
+        with open(percorso, "rb") as grezzo:
+            for pezzo in tokenize.tokenize(grezzo.readline):
+                if pezzo.type != tokenize.COMMENT:
+                    codice.append(pezzo.string)
+        solo_codice = " ".join(codice)
+        for spia in ("nodo_arido", "sopprimi_log", "_e_arido", "NODI_ARIDI"):
+            # ⛔ `assertFalse(... in ...)` e NON `assertNotIn`: il secondo riverserebbe
+            #    l'INTERO file nel messaggio d'errore, e un rosso illeggibile non aiuta.
+            self.assertFalse(
+                spia in solo_codice,
+                "nel CODICE di mutazione_prodotto.py compare %r: se e' una soppressione sui "
+                "log, sta rimettendo la falsa equivalenza tolta il 2026-08-01 perche' FALSA "
+                "-- e il 14/08 quei mutanti hanno scoperto SETTE guardie finte" % spia)
+
+    def test_I_PUNTI_SUI_LOG_ESISTONO_ANCORA_E_SONO_TANTI(self):
+        """⛔ L'altra direzione, e senza di lei la guardia sopra sarebbe vuota: si puo'
+        smettere di sopprimere i log anche solo smettendo di GENERARE mutanti li' sopra.
+        Qui si pretende il fatto positivo, con il suo denominatore: su un modulo dei soldi
+        che contiene log, i punti su quelle righe devono esserci."""
+        import importlib.util
+        import re
+        spec = importlib.util.spec_from_file_location(
+            "_mut_log", os.path.join(QUI, "collaudi", "mutazione_prodotto.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        LOG = re.compile(r"\b(?:logger|logging|log)\s*\.\s*(?:debug|info|warning|error|"
+                         r"critical|exception)\b")
+        esaminati = su_log = 0
+        for nome in ("fase177_financial_controller.py", "fase131_payout_dashboard.py"):
+            percorso = os.path.join(QUI, nome)
+            if not os.path.isfile(percorso):
+                continue
+            with io.open(percorso, encoding="utf-8", errors="replace") as f:
+                sorgente = f.read()
+            mutanti, _ = m.genera_mutanti(sorgente)
+            righe = sorgente.splitlines()
+            esaminati += len(mutanti)
+            su_log += sum(1 for mu in mutanti
+                          if mu["riga"] <= len(righe) and LOG.search(righe[mu["riga"] - 1]))
+        self.assertGreater(esaminati, 0,
+                           "nessun punto esaminato: misura non valida, non un verde (S1)")
+        self.assertGreater(
+            su_log, 0,
+            "su %d punti esaminati in due moduli dei soldi che CONTENGONO log, nemmeno uno "
+            "cade su una riga di log: qualcuno ha smesso di generarli, che e' sopprimerli "
+            "senza chiamarlo cosi'" % esaminati)
 
 
 class TestIlBancoSIPUOGIUDICAREANCHEFUORIDALCONTENITORE(unittest.TestCase):

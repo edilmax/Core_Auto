@@ -50,11 +50,44 @@
   stesso commit**, o la guardia dei numeri diventa rossa
 - **B** · chiudere le due rotte pubbliche che **scrivono senza identità** (`_split_crea`,
   `_split_paga`) — ⛔ tocca produzione: serve **«autorizzato»**
-- **3** · la **copertura decide cosa mutare** (non si lavora su codice che la produzione non esegue)
-- **4** · niente mutanti sui **nodi aridi**, uno per riga — ⛔ **MA I LOG NON SI SOPPRIMONO**:
-  la falsa equivalenza fu tolta il 2026-08-01 perché **falsa**, e il 14/08 quei mutanti hanno
-  scoperto **sette guardie finte**
-- **5** · il Giudice **scrive da sé la scheda**, il guardiano la pretende
+- **3** · ✅ **FATTO 2026-08-21** — la **produzione decide cosa vale la pena rompere**.
+  `giro_su_moduli` chiede a `raggiungibilita.py` chi la produzione esegue davvero e **non muta**
+  i moduli che non raggiunge, **contandoli e nominandoli** (`rinunce["fuori_produzione"]`).
+  🔬 **Misurato prima di scriverlo, sull'AST, su tutti e 151 i moduli: 1443 punti su 7542
+  (19,13%)** stanno in moduli fuori produzione — e non sono difficili da uccidere, sono
+  **impossibili**: *«such mutants are unreachable and are unable to infect the program state,
+  thus they can never be killed»* (arXiv 2210.17215; stesso criterio in Petrović & Ivanković,
+  TSE 2021). ⛔ **Nessun taglio silenzioso:** i punti saltati si stampano col nome del modulo, e
+  un giro che ha saltato **tutto** esce **rosso** — saltare è una scelta, non misurare è un buco.
+  ⛔ **L'assenza di misura non sopprime**: se `raggiungibilita` non risponde si muta tutto.
+  ⚠️ **Limite dichiarato:** «non raggiungibile» ≠ «morto» (spento ≠ morto), e «coperto» ≠ «sano»
+  — *«even when a line of code is covered, it may still conceal faults»*.
+  💡 E scrivendolo è saltato fuori che il filtro avrebbe scartato **`main_casavip.py`**, cioè
+  l'ingresso stesso: `cammina()` elenca i moduli *raggiunti*, e il punto di partenza non è fra
+  loro. Guardia: `test_IL_FILTRO_DELLA_PRODUZIONE_NON_PUO_SCARTARE_UN_INGRESSO`.
+- **4** · ✅ **CHIUSO 2026-08-21 CON LA MISURA** (deciso dal fondatore) — **non si costruisce**.
+  🔬 Misurato sull'AST su 151 moduli, denominatore **7542 punti**: i nodi aridi sopprimibili
+  (attese, memoria, `print`, assiomatici) sono **1 punto, lo 0,01%**. I **log** sono 403 (5,34%)
+  e **da noi non si sopprimono** — la falsa equivalenza fu tolta il 2026-08-01 perché **falsa**, e
+  il 14/08 quei mutanti hanno scoperto **sette guardie finte**. Google dichiara ~85% perché il suo
+  C++ è pieno di `reserve`, `Wait` gRPC e cache lookup; il nostro Python dei soldi non ne ha.
+  ⛔ Costruirlo qui toglierebbe **un punto su 7542** e lascerebbe in casa un interruttore che un
+  domani qualcuno allarga fino ai mutanti veri sui soldi — rischio che Google **dichiara**:
+  *«the proposed heuristic may suppress mutation in relevant nodes as a side-effect»*.
+  ✅ Quindi il pezzo vive come **misura sotto guardia**, non come meccanismo:
+  `TestIMutantiSuiLogNonSiSopprimonoMai`, due direzioni — nessuna soppressione entra nel
+  generatore **e** i punti sui log continuano a esistere (si sopprime anche solo smettendo di
+  generarli). Se un domani il codice cambia, il numero cambia e la decisione si rivede.
+- **5** · ✅ **FATTO 2026-08-21** — il Giudice **scrive da sé la scheda**. A fine giro
+  `scrivi_la_scheda()` registra la casella del blocco **a cui appartengono i moduli girati**,
+  col testo **letto da `piano.py`** (mai ricopiato: la chiave è lo sha256, e una copia con un
+  carattere diverso non spunterebbe mai quella casella, restando «mai misurata» — un **rosso**
+  finto). ⛔ **Tre rifiuti, tutti e tre provati:** un giro **misto** fra blocchi non dichiara
+  niente · un giro **`--parziale`** non scrive · un giro che ha guardato **1 modulo su 24 non
+  dichiara finiti 24** — e in quel caso **non scrive affatto**, perché `esito=False` direbbe
+  «misurata e non passa» mentre la verità è «non misurata».
+  🔴 **E il difetto latente che questo pezzo avrebbe ACCESO** — vedi voce (25): due blocchi
+  condividevano la casella, quindi spuntare i soldi avrebbe spuntato le prenotazioni.
 - **6** · le **tre uscite** di DO-178C per ogni punto scoperto (manca un test · manca un
   requisito · il codice è estraneo e si toglie)
 - **7** · ✅ **FATTO 2026-08-15** — la coda dei lavori è un **elenco misurato**, non un racconto:
@@ -783,6 +816,116 @@ un salvataggio di sei giorni prima **credendo di aver fatto quello di oggi**, e 
 giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
+
+### 🧬 2026-08-21 (25) — **I PEZZI 3, 4 E 5 — e una casella che ne spuntava DUE**
+
+**Cosa è cambiato:** `collaudi/mutazione_prodotto.py`, `collaudi/scheda.py`, `collaudi/piano.py`
+e `test_pipeline_ci.py` (**+13 guardie**). **Nessun file di produzione toccato.**
+
+**La ricerca, prima di progettare (D25), su due fonti lette per intero — non su riassunti.**
+Petrović & Ivanković, *State of Mutation Testing at Google* (ICSE-SEIP 2018) e *Practical
+Mutation Testing at Scale* (TSE 2021). Il criterio, verbatim:
+> *«An AST node is eligible for mutation if it is **covered by at least one test** and if it is
+> **not arid**»* · `arid(N) = expert(N)` se semplice, `1` se **tutti** i figli sono aridi (eq. 1)
+
+E il loro limite, dichiarato da loro: *«the proposed heuristic **may suppress mutation in
+relevant nodes** as a side-effect»* — Google lo accetta perché a 24.000 sviluppatori la risorsa
+scarsa è l'attenzione umana. **Da noi no.**
+
+**⛔ E IL NUMERO DI CHI VENDE IL METODO SI DIMEZZA — qui si è azzerato.** Misurato **sull'AST**,
+su tutti e 151 i moduli, denominatore **7542 punti**:
+```
+codice normale (si muta) ..................  7138   94,64%
+LOG -> ⛔ da noi NON si sopprimono ........   403    5,34%
+attese/print/assiomatici (sopprimibili) ...     1    0,01%   <- il pezzo 4, tutto qui
+punti su moduli che la produzione NON esegue   1443   19,13%   <- il pezzo 3
+```
+💡 **Il metodo era giusto e il numero era loro.** Google toglie ~85% coi nodi aridi perché il suo
+C++ è pieno di `std::vector::reserve`, `Wait` gRPC e cache lookup; il nostro Python dei soldi non
+ne ha. **Costruire il pezzo 4 qui avrebbe tolto UN punto su 7542** e lasciato in casa un
+interruttore di soppressione che un domani qualcuno allarga fino ai mutanti veri sui soldi.
+✅ **Deciso dal fondatore: il pezzo 4 si chiude con la MISURA SOTTO GUARDIA**, non con un
+meccanismo — e la guardia ha **due direzioni**, perché si sopprime anche solo smettendo di
+*generare*: nessuna soppressione entra nel generatore **e** i punti sui log devono continuare a
+esistere.
+
+**🔴 IL DIFETTO CHE QUESTO STESSO LAVORO AVREBBE ACCESO.** La chiave della scheda era lo sha256
+del **solo testo**, e quella frase è identica in due blocchi:
+```
+caselle totali nel piano ........... 30
+chiavi distinte .................... 29
+chiavi condivise da piu' blocchi ....  1
+  2x  blocchi [1, 2]  ->  «zero punti di mutazione scoperti sul codice che la produzione
+                           ESEGUE»                                  chiave 41d41915359a
+```
+**Spuntare i SOLDI avrebbe spuntato anche le PRENOTAZIONI.** Era **latente** perché nessuno
+scriveva: il pezzo 5 è esattamente ciò che comincia a scrivere. ⛔ **È lo stesso identico difetto
+riparato il 2026-08-01 nello schedario degli equivalenti**, dove la chiave non portava il nome
+della **funzione** e una dichiarazione si estendeva a tutte le righe identiche del file. La regola
+scritta lì vale qui parola per parola: **una dichiarazione vale SOLO dove è stata dimostrata.**
+💡 **Si è riparata la CHIAVE, non il testo nel piano:** riscrivere una condizione avrebbe chiuso
+*questo* caso lasciando la porta aperta al prossimo. Il criterio giusto è l'unico che non si può
+allargare (stessa lezione di `raggiungibilita.py`). Vista **ROSSA sul guasto vero**:
+`{'41d41915359a': [1, 2]} is not false ... (su 30 caselle esaminate)`, ripristino **byte-identico**
+(sha256 `72D32F61...3C3C` prima e dopo).
+
+**⛔ E IL BUCO PIÙ GROSSO CHE IL PEZZO 5 POTEVA LASCIARE: un giro su UN modulo dichiarava finiti
+VENTIQUATTRO.** La casella parla di **tutto** il blocco. Ora un giro incompleto **non scrive
+affatto** — e non scrive nemmeno `esito=False`, che direbbe «misurata e non passa» mentre la
+verità è «non misurata»: un rosso falso manda a caccia di un guasto che non esiste, e costa
+quanto un verde falso. Provato **dal vivo** su `fase188_paga_struttura`:
+> *«questo giro ha guardato 1 moduli su 24 del blocco 1 … NON scrivo»*
+
+**Tre difetti trovati SCRIVENDO, non dopo** (e tutti e tre silenziosi):
+· il filtro della produzione avrebbe scartato **`main_casavip.py`**, l'ingresso stesso —
+  `cammina()` elenca i moduli *raggiunti*, e il punto di partenza non è fra loro
+· le guardie avrebbero scritto dentro `collaudi/scheda.json` **vero**, spuntando caselle vere
+  girando dentro la suite (un collaudo non usa mai l'attrezzo vero)
+· `piano.py` chiamava la vecchia firma dentro un `except Exception` che **la inghiottiva**:
+  niente errore, solo caselle vuote per sempre col motivo sbagliato
+
+**🧪 E IL GIRO VERO HA TROVATO DUE SOPRAVVISSUTI — che NON erano buchi. Dimostrato, non creduto.**
+```
+fase188_paga_struttura.py:118   > -> >=   SOPRAVVISSUTO
+fase188_paga_struttura.py:120   > -> >=   SOPRAVVISSUTO
+```
+Chiesto dal fondatore di ripararli. ⛔ **La riparazione giusta non era né toccare la produzione né
+scrivere un test: era capire *perché* sopravvivono** (DO-178C, la domanda che non ci facciamo mai).
+```
+if comm + fee + gateway > anticipo:          # 118
+    fee = max(0, anticipo - comm - gateway)
+```
+`>` e `>=` differiscono **in un solo punto**: quando la somma **eguaglia** l'anticipo. Lì
+l'assegnamento diventa `fee = max(0, fee)` — **identità**, perché `fee >= 0` per costruzione
+(`fee = max(0, _intero(...)) * n`, con `n >= 1`). Idem per `comm` alla 120.
+✅ **DIMOSTRATO CON z3**, non dedotto: `unsat` per entrambi i mutanti su ogni `comm,fee,gateway >= 0`
+e **qualunque** anticipo intero — un dominio **più ampio** di quello reale. ⛔ E con la
+**controprova** (ferrea 10): togliendo la sola premessa `fee >= 0`, il risolutore trova subito un
+controesempio (`comm=1 fee=-2 gateway=0 anticipo=-1`), quindi **il modello è vivo** e non dice
+«equivalente» a qualunque cosa.
+💡 **Quindi scrivere un test lì sarebbe stato lavoro inutile con l'aria di lavoro utile:** nessun
+test può uccidere un mutante equivalente, per definizione.
+
+**⛔ E TUTTAVIA NON SONO STATI DICHIARATI NELLO SCHEDARIO — due guardie del progetto hanno fermato
+me, e hanno ragione tutt'e due.**
+1. `TestLoSchedarioDegliEquivalenti_5`: le righe 118 e 120 hanno **testo identico** nella **stessa
+   funzione**, quindi la chiave *(file·funzione·riga·vecchio·nuovo)* non le distingue e **una prova
+   spegnerebbe due punti**. La guardia lo chiama da sé *«la stessa famiglia del difetto del
+   2026-08-01, un passo più in fondo»*.
+2. `TestLoSchedarioDegliEquivalenti_3`: la firma è `calcola(prezzo_cents: Any, …)`, e un dominio
+   dichiarato sugli interi è **più piccolo** di ciò che la funzione accetta.
+
+✅ **Restano quindi SOPRAVVISSUTI, ed è esattamente ciò che B6 prescrive:** *«o c'è una
+dimostrazione, o quel mutante resta sopravvissuto»*. Restare sopravvissuti è la scelta **sicura**;
+forzare la voce avrebbe richiesto di cambiare **la chiave** e **il criterio del dominio** — due
+lavori veri, nell'unico posto del progetto dove un errore diventa **cecità permanente**.
+📌 **IL LAVORO CHE SERVE, per chi riprende: far portare alla chiave dello schedario la POSIZIONE**
+(riga+colonna), non solo il testo. Chiude questa famiglia per costruzione, come la chiave della
+scheda oggi. 💡 **È la quarta volta in un giorno che si presenta la stessa forma** — vedi
+`memory/bookinvip-chiave-porta-ambito.md`.
+
+**Dipendenze/env:** nessuna. **STATO:** acceso, è strumentazione di collaudo.
+**Suite: 5939 test** (13 guardie nuove, conto rimisurato col caricatore prima di lanciare — S14).
 
 ### 🗂️ 2026-08-21 (24) — **NESSUN BLOCCO POTEVA RISULTARE FINITO. MAI. PER COSTRUZIONE.**
 

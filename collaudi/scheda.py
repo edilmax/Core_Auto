@@ -89,16 +89,37 @@ RADICE = os.path.dirname(QUI)
 SCHEDA = os.path.join(QUI, "scheda.json")
 
 
-def chiave(testo):
-    """L'impronta del TESTO della condizione, ed e' una scelta, non una comodita'.
+def chiave(testo, ordine):
+    """L'impronta della condizione: il suo TESTO **e il blocco in cui vive**.
 
-    ⛔ Se qualcuno RISCRIVE una condizione sta chiedendo un'altra cosa, e la misura vecchia
-    non risponde piu' a quella domanda: la casella deve tornare vuota DA SOLA. Con una chiave
-    scritta a mano, invece, un testo cambiato terrebbe la sua vecchia spunta -- cioe' si
-    dichiarerebbe fatta una cosa che nessuno ha mai verificato.
+    ⛔ IL TESTO, perche' se qualcuno RISCRIVE una condizione sta chiedendo un'altra cosa, e
+    la misura vecchia non risponde piu' a quella domanda: la casella deve tornare vuota DA
+    SOLA. Con una chiave scritta a mano, invece, un testo cambiato terrebbe la sua vecchia
+    spunta -- cioe' si dichiarerebbe fatta una cosa che nessuno ha mai verificato.
     ⚠️ Gli spazi si normalizzano: mandare a capo una frase non cambia la domanda.
+
+    ⛔⛔ E IL BLOCCO, dal 2026-08-21, perche' senza di lui due blocchi che fanno la stessa
+    domanda con le stesse parole CONDIVIDONO la casella. Misurato prima di ripararlo:
+        caselle totali nel piano ........... 30
+        chiavi distinte .................... 29
+        chiavi condivise da piu' blocchi ....  1
+          2x  blocchi [1, 2]  ->  «zero punti di mutazione scoperti sul codice che la
+                                   produzione ESEGUE»       chiave 41d41915359a
+    Cioe' un giro di mutazione sui SOLDI avrebbe dichiarato finite anche le PRENOTAZIONI.
+    💡 Non e' «lo stesso testo, quindi la stessa domanda»: nel Blocco 1 quella frase parla
+    dei moduli dei soldi, nel Blocco 2 di quelli delle prenotazioni. Due domande diverse
+    scritte uguali -- e la chiave deve saperlo.
+
+    ⛔ E' lo STESSO difetto gia' riparato il 2026-08-01 nello schedario degli equivalenti,
+    dove la chiave non portava il nome della FUNZIONE e una dichiarazione si estendeva a
+    tutte le righe identiche del file. La regola scritta li' vale qui parola per parola:
+    **una dichiarazione vale SOLO dove e' stata dimostrata.**
+    ⚠️ Era LATENTE: `scheda.json` non esisteva e nessuno scriveva. Il pezzo 5 del piano e'
+    esattamente cio' che comincia a scrivere -- sarebbe stato quel lavoro ad accenderlo.
+    Guardia: `test_pipeline_ci.TestDueBlocchiNonPossonoCondividereUnaCasella`.
     """
-    return hashlib.sha256(" ".join(str(testo).split()).encode("utf-8")).hexdigest()[:12]
+    normale = " ".join(str(testo).split())
+    return hashlib.sha256(("%s|%s" % (ordine, normale)).encode("utf-8")).hexdigest()[:12]
 
 
 def commit_attuale(radice=RADICE):
@@ -123,11 +144,16 @@ def leggi(percorso=SCHEDA):
         return {}
 
 
-def registra(testo, esito, denominatore, comando, percorso=SCHEDA, commit=None, quando=None):
+def registra(testo, esito, denominatore, comando, ordine, percorso=SCHEDA, commit=None,
+             quando=None):
     """Un attrezzo dichiara cosa ha misurato. Torna la riga scritta.
 
     ⛔ `denominatore` NON e' facoltativo ed e' il cuore: e' *su quante cose* l'attrezzo ha
     guardato. Zero significa «non ho esaminato niente», e allora l'esito non vale.
+    ⛔ `ordine` NON e' facoltativo ed e' il BLOCCO a cui la casella appartiene: senza, due
+    blocchi che fanno la stessa domanda si spuntano a vicenda (vedi `chiave`). E' scritto
+    anche dentro la riga, cosi' chi apre `scheda.json` vede DI CHE COSA parla ogni misura
+    senza doverla dedurre dalla chiave.
     """
     if not comando or not str(comando).strip():
         raise ValueError("una misura senza il COMANDO che la produce non e' verificabile: "
@@ -135,6 +161,7 @@ def registra(testo, esito, denominatore, comando, percorso=SCHEDA, commit=None, 
     import datetime
     riga = {
         "condizione": " ".join(str(testo).split()),
+        "blocco": int(ordine),
         "esito": bool(esito),
         "denominatore": int(denominatore),
         "comando": str(comando).strip(),
@@ -142,22 +169,26 @@ def registra(testo, esito, denominatore, comando, percorso=SCHEDA, commit=None, 
         "quando": quando or datetime.datetime.now().isoformat(timespec="seconds"),
     }
     dati = leggi(percorso)
-    dati[chiave(testo)] = riga
+    dati[chiave(testo, ordine)] = riga
     with io.open(percorso, "w", encoding="utf-8") as f:
         json.dump(dati, f, indent=1, ensure_ascii=False, sort_keys=True)
     return riga
 
 
-def stato(testo, schedario=None, commit=None):
-    """(spuntata, motivo) per UNA condizione. E' qui che vivono le quattro regole.
+def stato(testo, ordine, schedario=None, commit=None):
+    """(spuntata, motivo) per UNA condizione DI UN BLOCCO. Qui vivono le quattro regole.
 
     ⛔ `schedario is None` e non `schedario or ...`: un dizionario VUOTO e' un dato legittimo
     («la scheda non ha niente»), e trattarlo come «non me l'hai passato» farebbe leggere il
     file vero durante un collaudo -- cioe' giudicare una cosa diversa da quella che si voleva.
+
+    ⛔ `ordine` e' obbligatorio e sta PRIMA dello schedario apposta: chi chiede lo stato di
+    una casella deve dire di quale blocco parla, e non deve poterlo dimenticare. La stessa
+    frase in due blocchi e' due domande diverse (vedi `chiave`).
     """
     dati = leggi() if schedario is None else schedario
     ora = commit_attuale() if commit is None else commit
-    riga = dati.get(chiave(testo))
+    riga = dati.get(chiave(testo, ordine))
     if not isinstance(riga, dict):
         return (False, "mai misurata: nessun attrezzo ha ancora scritto questa casella")
     if not ora:
@@ -208,7 +239,7 @@ def stampa(solo=None):
         print("-" * 78)
         print(" %2d. %s" % (b["ordine"], b["nome"]))
         for c in condizioni:
-            ok, motivo = stato(c, dati, ora)
+            ok, motivo = stato(c, b["ordine"], dati, ora)
             if ok:
                 spuntate += 1
             testo = " ".join(str(c).split())
