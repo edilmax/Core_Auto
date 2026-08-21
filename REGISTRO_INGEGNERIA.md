@@ -774,6 +774,49 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🧨 2026-08-21 (23) — **LA BATTERIA SI SPARAVA SUI PIEDI, E POI GIUDICAVA IL FORO**
+
+**Cosa è cambiato:** `collaudi/batteria.py` (la rete e il suo aggancio) e `test_pipeline_ci.py`
+(+2 guardie). **Nessun file di produzione toccato.**
+
+**Il danno, misurato lo stesso giorno.** La fase 3 (mutazione) ha un tetto di **900s**. L'ha
+sforato (primo giro 687s, secondo oltre 900) ed è stata **uccisa**: `subprocess.run` ammazza il
+processo, e il `finally` del Giudice protegge da un'**eccezione**, non da un processo **ucciso**.
+Sul disco è rimasto, dentro il motore dei soldi:
+```
+fase111_cancellazione.py
+-    rimborso = fee + (soggiorno * bps // 10000)
++    rimborso = pagato          <- il 100% a chiunque, sempre
+```
+Le **quindici fasi successive** hanno girato su quel codice: `6c` e `2c` sono uscite rosse e per
+un'ora sono sembrate difetti veri. ⛔ E il guasto è rimasto lì, dove **chiunque poteva
+committarlo** — che è il peggior danno che questo strumento possa fare, ed è scritto nel suo
+stesso commento dal 2026-08-01.
+
+**💡 LA RETE C'ERA, E MANCAVA L'ANELLO DI MEZZO.** Il Giudice ha due strati e funzionano
+entrambi: ripristina **all'avvio successivo** (`recupera_da_interruzione`, un biglietto per file
+con dentro l'originale) e `guardia_commit.py` **blocca il commit** — quel giorno ha bloccato
+davvero. Ma fra il colpo e il riavvio **non rimette a posto nessuno**, e tutto quello che gira
+nel frattempo giudica codice rotto. Ora `batteria.py` chiama la rete **subito dopo** la fase di
+mutazione, rimette a posto e **grida** i nomi dei file.
+
+⚠️ **IL TETTO NON È STATO ALZATO, ed è una scelta.** Alzare un tetto per far smettere un rosso è
+spegnere un allarme (ferrea 10). Il tetto resta e l'interruzione smette di fare danno; **perché
+la mutazione sfori** resta una domanda aperta — ⚠️ e in CI la stessa fase **passa**, quindi il
+problema è del tetto locale, non dell'attrezzo.
+
+**Le due guardie, viste rosse prima (D20):** la rete dev'essere **chiamata**, e **dopo** la
+mutazione (COSTRUITO ≠ COLLEGATO, regola #23) · la rete **rimette a posto davvero** un file
+mutato e **tace** a macchina sana — le due direzioni, su un guasto vero costruito apposta.
+
+**⛔ E UN BUCO NELLE ISTRUZIONI, trovato usandole.** `guardia_commit.py` prescrive
+`git checkout HEAD -- <file>`: se in quel file c'è lavoro **non ancora committato**, lo
+**cancella**. Quel giorno avrebbe cancellato la riparazione della politica di cancellazione. Si
+ripristina dai **file di sicurezza della mutazione**, confrontando gli sha256. **Resta da
+correggere in quelle istruzioni.**
+
+**Dipendenze/env:** nessuna. **STATO:** acceso, è strumentazione di collaudo.
+
 ### 💸 2026-08-21 (22) — **LA PAGINA DOVE SI PAGA PROMETTEVA 14 GIORNI, IL MOTORE NE FA 30**
 
 **Cosa è cambiato:** `fase83_server.py` e `deploy/host.html` — **produzione**, col «autorizzato»

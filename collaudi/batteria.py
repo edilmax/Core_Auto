@@ -36,6 +36,8 @@ Ogni fase è isolata: se una fallisce, le altre proseguono; alla fine un RIEPILO
 Le fasi 8-10 sono BEST-EFFORT (saltate con nota se manca server/node/rete). Extra:
   python collaudi/estremo.py --ore 48   → soak di durata reale (24-48h).
 """
+import importlib.util
+import io
 import os
 import socket
 import subprocess
@@ -63,6 +65,48 @@ def _run(cmd, timeout=1800, env=None):
         return 124, "TIMEOUT", time.time() - t0
     except Exception as e:
         return 125, "ERRORE LANCIO: %r" % e, time.time() - t0
+
+
+def _rete_mutazione(traccia=None):
+    """Se il giro di mutazione e' stato INTERROTTO, rimette a posto la produzione e LO DICE.
+
+    ⛔ NASCE DA UN DANNO VERO, IL 2026-08-21. La fase 3 ha sforato il tetto di 900s ed e'
+    stata **uccisa**: `subprocess.run` ammazza il processo, e il `finally` del Giudice
+    protegge da un'eccezione, non da un processo ucciso. Sul disco e' rimasto, dentro il
+    motore dei soldi:
+        fase111_cancellazione.py:  rimborso = pagato      <- il 100% a chiunque, sempre
+    Le QUINDICI fasi successive hanno girato su quel codice: due sono uscite rosse e per
+    un'ora sono sembrate difetti veri. E il guasto e' rimasto li', dove chiunque poteva
+    committarlo.
+
+    💡 LA RETE C'ERA GIA', E AVEVA DUE STRATI -- il Giudice ripristina all'AVVIO SUCCESSIVO,
+    e `guardia_commit.py` BLOCCA il commit. Mancava quello DI MEZZO: fra il colpo e il
+    riavvio non rimette a posto nessuno. Questo e' l'anello mancante, e non sostituisce gli
+    altri due: li completa.
+
+    ⚠️ NON alza il tetto. Un tetto che si alza per far smettere il rosso e' un allarme
+    spento (ferrea 10): il tetto resta, e l'interruzione smette di fare danno.
+
+    `traccia` serve ai collaudi per puntare la rete su una cartella usa-e-getta.
+    Torna i NOMI dei file rimessi a posto; lista vuota = non c'era niente da fare.
+    """
+    percorso = os.path.join(RADICE, "collaudi", "mutazione_prodotto.py")
+    spec = importlib.util.spec_from_file_location("_mutazione_rete", percorso)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    if traccia:
+        modulo._TRACCIA = traccia
+    nomi = []
+    for _cartella, quale, _originale in modulo.biglietti_aperti(traccia):
+        try:
+            with io.open(quale, encoding="utf-8") as f:
+                nomi.append(os.path.basename(f.read().strip()) or "(non indicato)")
+        except OSError:
+            nomi.append("(non indicato)")
+    if not nomi:
+        return []
+    modulo.recupera_da_interruzione()
+    return nomi
 
 
 def _coda(testo, n=3):
@@ -131,6 +175,18 @@ def main():
     for nome, cmd, to, _ok in fasi:
         rc, out, dur = _run(cmd, timeout=to)
         registra(nome, rc, out, dur)
+        # ⛔ SUBITO DOPO LA MUTAZIONE, NON A FINE GIRO. Se e' stata uccisa (tetto, Ctrl-C,
+        # riavvio) ha lasciato un guasto DENTRO un file di produzione: senza questo, tutte
+        # le fasi qui sotto giudicherebbero codice deliberatamente rotto -- successo il
+        # 2026-08-21, e due fasi sono sembrate difetti veri per un'ora.
+        if "Mutazione" in nome:
+            rimessi = _rete_mutazione()
+            if rimessi:
+                print("  ⛔ LA MUTAZIONE E' STATA INTERROTTA e aveva lasciato %d file di "
+                      "PRODUZIONE mutati: %s" % (len(rimessi), ", ".join(rimessi)))
+                print("     Rimessi a posto ADESSO. Senza, tutto quello che gira qui sotto "
+                      "giudicherebbe codice rotto -- e quel guasto poteva finire in un "
+                      "commit. Il tetto NON e' stato alzato: guarda perche' ha sforato.")
 
     # 7: Bandit — gate su 0 High
     rc, out, dur = _run([PY, "-m", "bandit", "-r", ".", "-x",

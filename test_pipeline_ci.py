@@ -8419,6 +8419,108 @@ class TestIlBancoSIPUOGIUDICAREANCHEFUORIDALCONTENITORE(unittest.TestCase):
             "collaudi/batteria.py non nomina BANCO_DATI: e' la cartella che i due processi "
             "si scambiano, e senza quella il libro giornale resta illeggibile al banco")
 
+    def _rete_dalla_batteria(self):
+        """La funzione VERA estratta da `collaudi/batteria.py`, senza importare il modulo
+        (importarlo lancerebbe la batteria intera)."""
+        import ast
+        with io.open(os.path.join(QUI, "collaudi", "batteria.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        nodo = None
+        for n in ast.parse(sorgente).body:
+            if isinstance(n, ast.FunctionDef) and n.name == "_rete_mutazione":
+                nodo = n
+        return sorgente, nodo
+
+    def test_LA_BATTERIA_NON_PUO_LASCIARE_MUTANTI_DENTRO_LA_PRODUZIONE(self):
+        """⛔ 2026-08-21 — LA BATTERIA SI E' SPARATA SUI PIEDI, E POI HA GIUDICATO IL FORO.
+
+        La fase 3 (mutazione) ha un tetto di 900s. Quel giorno l'ha sforato ed e' stata
+        **uccisa**: `subprocess.run` ammazza il processo, e il `finally` del Giudice non
+        protegge da un processo ucciso. Sul disco e' rimasto, dentro il motore dei soldi:
+            fase111_cancellazione.py:  rimborso = pagato     <- il 100% a chiunque, sempre
+        Le **quindici fasi successive** hanno girato su quel codice: due sono uscite rosse e
+        per un'ora sono sembrate difetti veri. E quel guasto e' rimasto li', dove chiunque
+        poteva committarlo.
+
+        💡 LA RETE C'ERA GIA', E AVEVA DUE STRATI: il Giudice ripristina **all'avvio
+        successivo**, e `guardia_commit.py` **blocca il commit**. Mancava quello **di
+        mezzo**: fra il colpo e il riavvio non rimette a posto nessuno, e tutto cio' che
+        gira nel frattempo giudica codice rotto. Questa guardia pretende l'anello mancante.
+
+        ⚠️ Non alza il tetto: un tetto che si alza per far smettere il rosso e' un allarme
+        spento. Il tetto resta, e l'interruzione smette di fare danno.
+        """
+        sorgente, nodo = self._rete_dalla_batteria()
+        self.assertIsNotNone(
+            nodo,
+            "collaudi/batteria.py non ha `_rete_mutazione`: se la mutazione viene uccisa, "
+            "i mutanti restano dentro i file di produzione e le fasi dopo giudicano codice "
+            "deliberatamente rotto")
+        # ⛔ COSTRUITO != COLLEGATO (regola #23): deve chiamarla, e DOPO la mutazione.
+        self.assertGreaterEqual(
+            sorgente.count("_rete_mutazione("), 2,
+            "la rete esiste ma non la chiama nessuno: e' esattamente il difetto #23")
+        dopo_mutazione = sorgente.split("3. Mutazione")[-1]
+        self.assertIn(
+            "_rete_mutazione(", dopo_mutazione,
+            "la rete viene chiamata PRIMA della fase di mutazione: li' non c'e' ancora "
+            "niente da rimettere a posto, e dopo il colpo non interverrebbe nessuno")
+
+    def test_LA_RETE_RIMETTE_A_POSTO_DAVVERO_E_TACE_A_MACCHINA_SANA(self):
+        """Le DUE DIREZIONI (ferrea 10): col guasto dentro deve rimettere a posto e dirlo,
+        a macchina sana deve tacere. Un allarme provato in un verso solo non e' provato."""
+        import ast
+        import shutil
+        import tempfile
+        _sorgente, nodo = self._rete_dalla_batteria()
+        if nodo is None:
+            self.fail("`_rete_mutazione` non esiste: niente da provare")
+        import importlib
+        import importlib.util          # perche' `importlib.util` sia un attributo raggiungibile
+        spazio = {"os": os, "io": io, "importlib": importlib, "RADICE": QUI}
+        exec(compile(ast.Module(body=[nodo], type_ignores=[]), "<batteria>", "exec"), spazio)
+        rete = spazio["_rete_mutazione"]
+
+        culla = tempfile.mkdtemp(prefix="prova_rete_")
+        try:
+            # un finto file di PRODUZIONE, sano, poi mutato a mano
+            vittima = os.path.join(culla, "finto_fase_soldi.py")
+            sano = "def rimborso(p, bps):\n    return p * bps // 10000\n"
+            with io.open(vittima, "w", encoding="utf-8", newline="") as f:
+                f.write(sano)
+            with io.open(vittima, "w", encoding="utf-8", newline="") as f:
+                f.write("def rimborso(p, bps):\n    return p\n")      # <- il mutante
+
+            # il biglietto, nella forma vera: una cartella con quale.txt e originale.txt
+            traccia = os.path.join(culla, "traccia")
+            biglietto = os.path.join(traccia, "giro_prova")
+            os.makedirs(biglietto)
+            with io.open(os.path.join(biglietto, "quale.txt"), "w", encoding="utf-8") as f:
+                f.write(vittima)
+            with io.open(os.path.join(biglietto, "originale.txt"), "w",
+                         encoding="utf-8", newline="") as f:
+                f.write(sano)
+
+            # ① col guasto dentro: deve gridare E rimettere a posto
+            rimessi = rete(traccia)
+            self.assertTrue(
+                rimessi,
+                "la rete non ha dichiarato NIENTE mentre un file era rimasto mutato: un "
+                "ripristino silenzioso nasconde proprio il motivo per cui il giro e' morto")
+            with io.open(vittima, encoding="utf-8", newline="") as f:
+                self.assertEqual(
+                    sano, f.read(),
+                    "il file NON e' tornato quello di prima: la rete dichiara di aver "
+                    "rimesso a posto senza averlo fatto, che e' peggio di non fare nulla")
+
+            # ② a macchina sana: deve tacere, e non esplodere
+            self.assertEqual(
+                [], rete(os.path.join(culla, "traccia_che_non_esiste")),
+                "la rete grida senza che ci sia niente da rimettere a posto: un falso "
+                "allarme costa quanto un allarme mancato (ferrea 10)")
+        finally:
+            shutil.rmtree(culla, ignore_errors=True)
+
     def test_I_CONTI_NON_SI_DICHIARANO_QUADRATI_SU_UN_LIBRO_GIORNALE_VUOTO(self):
         """⛔ 2026-08-21 — LO STESSO S7 DEL CONTROLLO [9], TROVATO ANCHE NEL [8].
 
