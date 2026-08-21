@@ -825,6 +825,22 @@ e il ripristino è **byte-identico**, sha256 uguale prima e dopo
 **Dipendenze/env:** `BASE_VISIVO` (già in uso altrove, ora letta anche dal banco) ·
 `STRIPE_SECRET_KEY` di prova per la fase 8c. **STATO:** acceso, è strumentazione di collaudo.
 
+**🔴 E LA BATTERIA, LANCIATA PER INTERO, HA BOCCIATO IL LAVORO CHE L'AVEVA APPENA ESTESA.**
+Tre difetti, tutti e tre miei — ed è la prova che serviva, perché un comando che non trova mai
+niente non sta guardando:
+| # | cosa faceva | causa vera | riparazione |
+|---|---|---|---|
+| `8c` | falliva in **0 secondi** | `python collaudi/giro_banco.py` mette in cammino la cartella dello **script**, non la radice → `ModuleNotFoundError`. A mano il banco si lancia su **stdin**, e lì il cammino parte dalla cartella corrente: per questo si vedeva **solo da dentro la batteria** (**D23**) | `PYTHONPATH=RADICE` → ora **83s e passa** |
+| `9` | **TIMEOUT a 400s** | la prova vuole un **gateway muto**, e la chiave passata a tutta la batteria le aveva tolto il presupposto | **NON ESEGUITA col motivo**: un rosso lì direbbe «il prodotto conferma senza incassare», l'opposto del vero. L'altro caso lo copre la CI (job `browser`) |
+| suite | `5912 != 5914` | avevo aggiunto due guardie **senza rimisurare** il conto — sbaglio **S14**, per nome | riga rimisurata col caricatore |
+💡 La terza riga è la più istruttiva: la guardia **D22** ha preso il mio errore **lo stesso
+giorno in cui l'ho commesso**, ed è esattamente ciò per cui era stata scritta.
+⛔ Due guardie nuove lo impediscono d'ora in poi:
+`test_UNO_STRUMENTO_DI_collaudi_NON_VEDE_I_MODULI_DELLA_RADICE_DA_SOLO` (prova il fatto: senza
+la radice nel cammino l'import muore, con la radice passa — le due direzioni) e
+`test_LA_BATTERIA_DA_AL_BANCO_LA_RADICE_NEL_CAMMINO` (vista rossa prima, con la chiamata
+sbagliata stampata per intero nell'errore).
+
 ### 📄 2026-08-21 (20) — **LA FAQ DELLE LANDING PROMETTEVA IL CONTRARIO DI QUELLO CHE FA IL MOTORE**
 
 **Cosa è cambiato:** `fase173_motore_seo.py` — **codice di PRODUZIONE**, col «autorizzato»

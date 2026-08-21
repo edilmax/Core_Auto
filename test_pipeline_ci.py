@@ -8111,6 +8111,60 @@ class TestIlBancoSIPUOGIUDICAREANCHEFUORIDALCONTENITORE(unittest.TestCase):
                          "un database nato nel posto sbagliato deve VEDERSI: e' l'unica "
                          "cosa che questo controllo esiste per trovare")
 
+    def test_UNO_STRUMENTO_DI_collaudi_NON_VEDE_I_MODULI_DELLA_RADICE_DA_SOLO(self):
+        """⛔ IL FATTO CHE HA FATTO FALLIRE IL BANCO DENTRO LA BATTERIA, IL 2026-08-21.
+
+        `python collaudi/giro_banco.py` mette in cammino la cartella dello SCRIPT
+        (`collaudi/`), non la radice: al primo `from fase163_accettazioni import ...` muore con
+        `ModuleNotFoundError`. Fuori dalla batteria non si vedeva, perche' a mano il banco si
+        lancia su stdin (`python - < collaudi/giro_banco.py`, la forma di
+        `collaudi/banco_prova.sh:151`) e li' il cammino parte dalla cartella corrente.
+        💡 La lezione non e' sul banco: **e' che l'ambiente con cui lanci fa parte della
+        misura** (D23). La batteria lo lanciava «come si lancia uno script» e otteneva un rosso
+        che non parlava del prodotto.
+
+        Qui si prova il FATTO, su un modulo qualunque della cartella, senza avviare niente:
+        con la radice nel cammino l'import passa, senza no.
+        """
+        import subprocess
+        radice = QUI
+        codice = "import fase163_accettazioni"
+        senza = subprocess.run([sys.executable, "-c", codice], cwd=os.path.join(radice, "collaudi"),
+                               capture_output=True, text=True, timeout=60,
+                               env=dict(os.environ, PYTHONPATH=""))
+        self.assertIn(
+            "ModuleNotFoundError", (senza.stderr or ""),
+            "premessa cambiata: da dentro `collaudi/` i moduli della radice si importano gia'. "
+            "Allora e' questa guardia a dover cambiare, non la batteria")
+        con = subprocess.run([sys.executable, "-c", codice], cwd=os.path.join(radice, "collaudi"),
+                             capture_output=True, text=True, timeout=60,
+                             env=dict(os.environ, PYTHONPATH=radice))
+        self.assertEqual(
+            0, con.returncode,
+            "con la radice in PYTHONPATH l'import DEVE passare, altrimenti la riparazione "
+            "della batteria non serve a niente: %s" % (con.stderr or "")[-300:])
+
+    def test_LA_BATTERIA_DA_AL_BANCO_LA_RADICE_NEL_CAMMINO(self):
+        """La riparazione, dal lato di chi lancia: senza questo il banco muore prima di
+        guardare un solo euro, e il rosso parla della cartella invece che dei soldi."""
+        import ast
+        with io.open(os.path.join(QUI, "collaudi", "batteria.py"), encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+        trovata = False
+        for nodo in ast.walk(albero):
+            if not isinstance(nodo, ast.Call):
+                continue
+            testo = ast.dump(nodo)
+            if "giro_banco.py" in testo:
+                trovata = True
+                self.assertIn(
+                    "PYTHONPATH", testo,
+                    "la batteria lancia il banco SENZA dargli la radice nel cammino: morira' "
+                    "con ModuleNotFoundError prima di esaminare un solo euro (misurato il "
+                    "2026-08-21, fase 8c fallita in 0 secondi)")
+        self.assertTrue(trovata, "la batteria non lancia piu' il banco: la fase 8c e' sparita, "
+                                 "e con lei l'unico collaudo in cui i soldi si muovono davvero")
+
     def test_IL_CONTO_DEGLI_STRUMENTI_QUADRA_E_OGNI_ESCLUSIONE_HA_IL_SUO_MOTIVO(self):
         """⛔ «HO LANCIATO LA BATTERIA» NON PUO' VOLER DIRE «HO GUARDATO TUTTO».
 
