@@ -59,7 +59,35 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 >   millimetrico, denominatore, piano dei soldi, copertura pannelli, estremo), **uno no**
 >   (plausibilità). **Otto restano da guardare.**
 >
-> ### 🗂️ E LA COSA DECISA COL FONDATORE, DA COSTRUIRE: **LA SCHEDA**
+> ### 🗂️ ✅ **LA SCHEDA C'È — e il Blocco 1 risponde `0 su 6`, con il perché accanto**
+> ```
+> python collaudi/scheda.py --blocco 1
+> ```
+> ⛔ **`0 su 6` non è un fallimento: è la prima risposta VERA** a una domanda che per settimane
+> non ne ha avuta nessuna. Prima la casella era una **costante** (`print("☐ %s")`, una riga
+> sola) e in tutto il progetto non esisteva **nessun `☑`**: nessun blocco poteva risultare
+> finito **per costruzione**.
+> **Le regole:** mai misurata ≠ verde · misurata su un **altro commit** → la casella **si
+> svuota da sola** · **denominatore zero non è verde** · esito falso resta rosso.
+> ⛔ **Non spuntare una casella con un attrezzo che misura un'altra cosa.** Il 21/08 era
+> tentante usare `verifica_produzione.py` per «gli invarianti in produzione»: interroga il sito
+> vero, ma gli **invarianti** sono `fase199` — è un'altra cosa, e spuntarla avrebbe avvelenato
+> lo strumento che serve a smettere di mentire.
+>
+> **COSA MANCA A OGNUNA DELLE SEI** (questo è il lavoro, ed è misurato):
+> | # | condizione | cosa serve per spuntarla |
+> |---|---|---|
+> | 1 | z3 gira in CI e i test non sono saltati | un attrezzo che legga la **tabella dei job dall'API** e il conto dei saltati, e scriva la scheda |
+> | 2 | i soldi tornano da **ogni** strada di rimborso | un giro che le percorra tutte e **sette** e dichiari il denominatore |
+> | 3 | **orologi di prova Stripe** | ⛔ **non esistono**: è lavoro vero, ~1 sessione |
+> | 4 | **relazioni metamorfiche sui soldi** | ⚠️ a metà: quelle che ci sono coprono il **calendario**, non tassa/commissione/sconti |
+> | 5 | zero punti di mutazione sul codice **che la produzione esegue** | incrociare `mutazione_prodotto` con `raggiungibilita` e scrivere la scheda |
+> | 6 | invarianti verificati **in produzione** | un attrezzo che interroghi `fase199` **sul sito vero**, non i test |
+>
+> 💡 **Tre delle sei sono «collegare quello che c'è», tre sono lavoro nuovo.** Questa è la prima
+> volta che quella distinzione è un dato invece di un'impressione.
+>
+> ### 🔬 LA RICERCA CHE HA DECISO LA FORMA (fonti nel registro, voce 24)
 > `collaudi/piano.py` stampa le condizioni di arrivo con `☐` — ma **`☐` è una costante**
 > (`riga 523`), e in tutto il progetto **non esiste nessun `☑`**: nessun blocco potrà **mai**
 > risultare finito. Ricerca fatta (fitness function · attestation in-toto/SLSA · spec drift ·
@@ -6413,7 +6441,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5922 test
+SUITE ATTUALE: Ran 5926 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

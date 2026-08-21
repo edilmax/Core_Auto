@@ -489,6 +489,23 @@ def contraddizioni(sul_disco=None):
 # ==============================================================================
 # LA STAMPA — il racconto lo scrive la macchina, non la chat
 # ==============================================================================
+def _scheda_stato(condizione):
+    """Lo stato di UNA casella, chiesto alla scheda (`collaudi/scheda.py`).
+
+    ⛔ Se la scheda non c'e' o non si carica, la casella resta VUOTA e lo dice: un piano che
+    desse per buona una casella senza saper leggere la scheda sarebbe un verde per assenza,
+    cioe' il peggiore di tutti (sbaglio S7)."""
+    import importlib.util
+    try:
+        percorso = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scheda.py")
+        spec = importlib.util.spec_from_file_location("_scheda_dal_piano", percorso)
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+        return modulo.stato(condizione)
+    except Exception as errore:
+        return (False, "la scheda non si legge (%r): senza, nessuna casella vale" % (errore,))
+
+
 def stampa(breve=False):
     sul_disco = moduli_sul_disco()
     nominati = moduli_nominati_dai_test()
@@ -519,8 +536,17 @@ def stampa(breve=False):
                 percorso, scopo = ATTREZZI[a]
                 print("       · %-18s %s" % (a, scopo))
             print("     e' FINITO quando:")
+            # ⛔ LA CASELLA NON E' PIU' UNA COSTANTE. Fino al 2026-08-21 qui c'era
+            # `print("       ☐ %s" % c)`: un quadratino VUOTO scritto nel codice, e in tutto
+            # il progetto non esisteva nessun `☑`. Cioe' nessun blocco poteva risultare
+            # finito **per costruzione**, e il fondatore ha passato settimane a chiedere «il
+            # Blocco 1 e' finito?» a una macchina incapace di rispondere.
+            # Adesso la spunta la SCHEDA, e solo se: qualcuno l'ha misurata · su QUESTO
+            # commit · avendo esaminato piu' di zero cose. Il perche' e' stampato accanto.
             for c in b["finito_quando"]:
-                print("       ☐ %s" % c)
+                ok, motivo = _scheda_stato(c)
+                print("       %s %s" % ("☑" if ok else "☐", c))
+                print("         (%s)" % motivo)
         print("")
 
     print("=" * 78)
