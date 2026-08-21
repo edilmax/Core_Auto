@@ -180,12 +180,29 @@ _SERVIZIO_IT = {
     "parcheggio_disabili": "parcheggio per disabili", "check_in_24h": "check-in 24h",
     "riscaldamento": "riscaldamento",
 }
+# ⛔ QUESTE QUATTRO RISPOSTE LE LEGGE UN CLIENTE PRIMA DI PAGARE, E FINO AL 2026-08-21
+# DICEVANO IL FALSO. `non_rimborsabile` rispondeva «La tariffa non è rimborsabile» mentre il
+# motore, entro la finestra di ripensamento, restituisce il 100% a prescindere dalla politica
+# (`fase111.calcola_rimborso`, `entro_ripensamento=True`). Le altre tre non erano false ma
+# erano VUOTE — «entro i termini indicati», «secondo i termini» — cioè non dicevano niente a
+# chi le legge, ed è lo stesso difetto visto dall'altro lato.
+# ⛔ I GIORNI QUI SOTTO NON SONO SCRITTI A MANO: sono gli scaglioni veri di
+# `fase111.POLITICHE`, e una guardia li ricava dal motore e pretende che compaiano
+# (`TestLaFAQNONPUOPROMETTEREQUELLOCHEILMOTORESMENTISCE` in test_fase173_motore_seo.py).
+# Se domani qualcuno sposta uno scaglione e dimentica questa pagina, diventa rossa lo stesso
+# giorno — è il modo di rompersi n. 3 (i testi che mentono) messo sotto sorveglianza.
+# ⚠️ Lasciata fuori di proposito la spesa di pulizia, che il motore rende SEMPRE: in una
+# risposta da due righe appesantisce, e nel contratto invece ci va.
+_RIPENSAMENTO_IT = ("Entro 48 ore dalla prenotazione (se l'arrivo è ad almeno 3 giorni) "
+                    "il rimborso è totale. Dopo, ")
 _POLITICA_IT = {
-    "flessibile": "La cancellazione è flessibile: puoi cancellare senza penali entro i "
-                  "termini indicati.",
-    "moderata": "La politica di cancellazione è moderata: rimborso parziale secondo i termini.",
-    "rigida": "La politica di cancellazione è rigida: sono previste penali.",
-    "non_rimborsabile": "La tariffa non è rimborsabile.",
+    "flessibile": _RIPENSAMENTO_IT + "la politica è flessibile: rimborso pieno fino a "
+                  "1 giorno prima dell'arrivo, metà nel giorno stesso.",
+    "moderata": _RIPENSAMENTO_IT + "la politica è moderata: rimborso pieno fino a 5 giorni "
+                "prima dell'arrivo, metà da 1 a 4 giorni prima, niente nel giorno stesso.",
+    "rigida": _RIPENSAMENTO_IT + "la politica è rigida: rimborso pieno fino a 30 giorni "
+              "prima dell'arrivo, metà fino a 7 giorni prima, niente sotto i 7 giorni.",
+    "non_rimborsabile": _RIPENSAMENTO_IT + "la tariffa non è rimborsabile.",
 }
 
 

@@ -774,6 +774,52 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 📄 2026-08-21 (20) — **LA FAQ DELLE LANDING PROMETTEVA IL CONTRARIO DI QUELLO CHE FA IL MOTORE**
+
+**Cosa è cambiato:** `fase173_motore_seo.py` — **codice di PRODUZIONE**, col «autorizzato»
+scritto del fondatore (B4) — più una classe di guardie nuova
+(`TestLaFAQNONPUOPROMETTEREQUELLOCHEILMOTORESMENTISCE`, 4 prove) in
+`test_fase173_motore_seo.py`.
+
+**Perché.** `_POLITICA_IT["non_rimborsabile"]` rispondeva *«La tariffa non è rimborsabile»* a
+chi leggeva la landing **prima di pagare**, mentre `fase111.calcola_rimborso` con
+`entro_ripensamento=True` **rende il 100%** a prescindere dalla politica. Le altre tre
+risposte non erano false ma **vuote** (*«entro i termini indicati»*, *«secondo i termini»*):
+nessun numero, nessuna finestra, niente su cui decidere. È il modo di rompersi **n. 3** — i
+testi che mentono — sulla pagina che il cliente legge per ultima prima di pagare.
+
+**Logica della riparazione.** Un unico prefisso `_RIPENSAMENTO_IT` dichiara la finestra, e le
+quattro risposte lo riusano: il fatto sta in **un posto solo**. I giorni citati **non sono
+scritti a mano**: sono gli scaglioni veri di `fase111.POLITICHE`, e una guardia li **ricava
+dal motore** e pretende che compaiano in pagina.
+
+**Le quattro guardie, e perché sono quattro cose diverse:**
+| guardia | cosa impedisce |
+|---|---|
+| ogni politica ha la sua risposta | una politica nuova senza risposta: la FAQ tacerebbe su un caso che il motore tratta (il **denominatore**) |
+| nessuna risposta tace la finestra | il difetto vero: la pagina che dice il contrario del motore |
+| i giorni sono quelli degli scaglioni | qualcuno sposta uno scaglione e dimentica la pagina |
+| la FAQ **generata** mostra quel testo | il cablaggio (modo n. 2): un testo giusto che non arriva in pagina |
+
+⛔ **E la seconda guardia verifica prima la propria premessa**: se un giorno il motore
+smettesse di rendere il 100% entro la finestra, a dover cambiare sarebbe **la guardia**, non
+la pagina — altrimenti resterebbe a pretendere una cosa non più vera.
+
+**D20 rispettata.** Guardie scritte prima e **viste rosse**, 7 fallimenti:
+```
+AssertionError: '48 ore' not found in 'La tariffa non è rimborsabile.'
+AssertionError: 30 not found in set()   (politica 'rigida': 30 giorni non compare in pagina)
+```
+Poi la riparazione, poi le stesse **verdi** (`Ran 4 tests, OK`), e il modulo intero verde
+(`Ran 22 tests, OK`).
+
+**Dipendenze/env:** nessuna nuova. **STATO:** acceso, è la FAQ delle 2990 landing.
+⚠️ **Limite dichiarato (D18 punto 3):** la **spesa di pulizia**, che il motore rende sempre, è
+lasciata fuori di proposito — in una risposta da due righe appesantisce. **Nel contratto ci
+va**, e quello resta aperto.
+✅ **Cercato se il falso fosse anche altrove**: `grep` su tutto il prodotto, nessun altro posto
+promette il contrario del motore.
+
 ### 🎯 2026-08-21 (19) — **UNA GUARDIA CHE SI ACCENDEVA DA SOLA 1 GIRO SU 211, E UN BANCO CHE DAVA VERDE SU ZERO RIGHE**
 
 **Cosa è cambiato:** `test_integrazione_servizi.py` (il rilevatore di carte + 3 guardie
