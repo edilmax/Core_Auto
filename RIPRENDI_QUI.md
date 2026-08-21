@@ -11,6 +11,52 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🧭 2026-08-21 (50) — **RIPARTI DA QUI** (notte del 21 agosto, quattro lavori chiusi)
+
+> ⛔ **Quello che leggi qui sotto è di stanotte: si CONTROLLA, non si crede.** Primo gesto:
+> `git rev-parse --short HEAD` su **computer, GitHub e VPS**, e la **tabella dei job dall'API**.
+>
+> **DOV'ERAVAMO:** tre posti allineati su **`c25e1bf`**, sito `200`, `guardiano: ok`, zero
+> richieste di unione aperte, albero pulito. Quattro unioni stanotte: **#86 #87 #88 #89**,
+> ognuna verificata `merged=True` dall'API (è già capitato tre volte che una fosse solo aperta).
+>
+> **COSA È CAMBIATO, in una riga per lavoro:**
+> 1. **(47)** Il cancello era rosso per una guardia che si accende **da sola 1 giro su 211**:
+>    `host_id` scambiato per un numero di carta. Riparata con `noti` + **Luhn**.
+> 2. **(48)** La **FAQ delle landing diceva il falso** a chi sta per pagare — riparata **in
+>    produzione** e verificata viva dentro il container.
+> 3. **(49)** Il comando «batteria COMPLETA» **saltava i collaudi sui soldi**: ora ci sono, e
+>    `regole_avvio.py` stampa a ogni avvio **quanti ne restano fuori**.
+> 4. **(49, in coda)** La batteria, lanciata per intero, **ha bocciato il lavoro che l'aveva
+>    appena estesa**: tre difetti, tutti miei. È la prova che serviva.
+>
+> **⚠️ COSA RESTA APERTO, misurato — non riscoprirlo da capo:**
+> · **17 collaudi restano FUORI dalla batteria**, e sono quelli che pesano: `conti_stripe` ·
+>   `e2e_rimborso_stripe` · `e2e_credito_stripe` · `prova_bonifico_host` · `oracolo_tassa` ·
+>   `fuzz_soldi` · `occhio_del_fondatore` · `fedelta_banco`. Il numero **te lo stampa il gancio
+>   a ogni avvio**: si legge, non si ignora.
+> · **Il contratto host non nomina ancora la finestra di ripensamento** — 8 file, e **3 posti
+>   dove manca del tutto** (`deploy/termini.html`, `deploy/contratto-host.html`, `README.md`).
+>   ⛔ Va scritto **prima del primo host vero**: oggi costa zero, con host firmati significa
+>   ri-accettazione uno per uno. **È il lavoro numero 1 in coda.**
+> · **Una domanda per l'avvocato, una sola**: l'art. 49 del CDC brasiliano si applica a un
+>   alloggio con date fisse? (Europa e California sono già risolte, blocco (45).)
+> · **Il motore che non cattura subito** (`capture_method=manual`) — 2-3 sessioni.
+> · **Tre rilievi minori annotati e non riparati** (D1, per non allargare lo scopo):
+>   `vicoli_ciechi.py` non distingue «server spento» da «pagina morta» ed esce **0** con 17
+>   difetti a schermo · `plausibilita.py` conta un archivio **assente** come «assurdità» ·
+>   `avvia_server_visivo.py` muore con `KeyError: 'token'` invece di dire che la cartella dati
+>   è già usata.
+>
+> **💰 E LA COSA CHE CAMBIA IL MODO DI LAVORARE:** il banco **può pagare davvero**. C'è una
+> chiave Stripe di **PROVA** sul Desktop del fondatore (`stripe.com prova.txt`, nessuna
+> `sk_live` dentro). Senza, il banco misura **se stesso** invece del prodotto e finisce «0
+> pagate». ⛔ Servono anche `PAGAMENTO_BPS=500`, `PAGAMENTO_FISSO_CENTS=25`,
+> `COMMISSIONE_BPS=1000`, `PROMO_LANCIO=false`, e la **cartella dati pulita a ogni giro**.
+> ```
+> STRIPE_SECRET_KEY=sk_test_... python collaudi/batteria.py
+> ```
+
 ## 🧰 2026-08-21 (49) — **«BATTERIA COMPLETA» SALTAVA PROPRIO I COLLAUDI SUI SOLDI**
 
 > Ordine del fondatore: *«abbiamo strumenti e test per i soldi e le prove pannelli, abbiamo
@@ -4481,7 +4527,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 3fdaa6f
+CONSEGNE AGGIORNATE A: c25e1bf
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
