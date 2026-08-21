@@ -11,6 +11,59 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 🧰 2026-08-21 (49) — **«BATTERIA COMPLETA» SALTAVA PROPRIO I COLLAUDI SUI SOLDI**
+
+> Ordine del fondatore: *«abbiamo strumenti e test per i soldi e le prove pannelli, abbiamo
+> tutto per un lavoro ingegneristico studiato: fallo sempre, e fai in modo che tutte le chat
+> se lo ricordino»*. ⛔ La risposta giusta **non era costruire niente** (D10): il comando
+> esisteva già, `python collaudi/batteria.py`. **Era incompleto.**
+>
+> ### COSA MANCAVA, misurato
+> Il comando che si chiama «batteria COMPLETA» non lanciava: il **banco dei soldi**, la
+> **coerenza delle percentuali**, la **rampa delle commissioni**, gli **incroci dell'ospite**,
+> l'**audit dei 5 documenti**, il **denominatore**, il **piano dei soldi** e la **copertura
+> dei pannelli** (i tasti morti). 💡 *Un elenco che dice «tutto» ed è incompleto è peggio di
+> nessun elenco: chi lo lancia crede di aver guardato.*
+>
+> ### ⛔ E IL BANCO NON POTEVA ENTRARCI, PER UNA PORTA INCISA NEL CODICE
+> `giro_banco.py` aveva `BASE = "http://127.0.0.1:8080"` scritto dentro, ed era **l'unico**
+> strumento del banco a non leggere `BASE_VISIVO` come tutti gli altri. La batteria accende il
+> suo server sulla **8099**, quindi finché la porta restava incisa il banco era **fuori dal
+> comando che lancia tutto**. È la stessa porta cablata che il catalogo degli sbagli ricorda
+> alla voce **S12** (21 rossi finti). Ora legge l'ambiente, col valore storico come ripiego.
+>
+> ### ⛔ E SENZA CHIAVE IL BANCO NON SI DICHIARA VERDE
+> Senza `STRIPE_SECRET_KEY` di prova il motore rifiuta ogni pagamento (fail-safe giusto) e il
+> giro misurerebbe **la configurazione del banco invece del prodotto**. La batteria lo dichiara
+> **NON ESEGUITO col motivo**, mai OK — è la stessa lezione dei verdi per assenza del blocco (47).
+> ```
+> python collaudi/batteria.py                                    <- tutto tranne il banco
+> STRIPE_SECRET_KEY=sk_test_... python collaudi/batteria.py      <- ...e il banco PAGA DAVVERO
+> ```
+>
+> ### 🧭 E PERCHÉ NESSUNA CHAT POSSA PIÙ DIMENTICARLO
+> `collaudi/regole_avvio.py` — che gira **dal gancio, a ogni avvio di sessione** — adesso
+> stampa il **denominatore degli strumenti**, contato dalla cartella e non scritto a mano:
+> ```
+> COLLAUDI: 39  ·  lanciati dalla batteria: 22  ·  FUORI: 17
+>                  (+25 attrezzi che non sono collaudi, ognuno col motivo)
+> ⛔ i 17 FUORI non sono «coperti da qualcos'altro»: nessuno li lancia da solo,
+>    quindi «ho lanciato la batteria» NON vuol dire che sono stati eseguiti.
+> ```
+> ⚠️ **E i 17 fuori sono quelli che pesano**: `conti_stripe` · `e2e_rimborso_stripe` ·
+> `e2e_credito_stripe` · `prova_bonifico_host` · `oracolo_tassa` · `fuzz_soldi` ·
+> `occhio_del_fondatore` · `fedelta_banco`. Restano un lavoro aperto, **ma adesso si vedono
+> ogni volta che si apre una sessione**, invece di essere dimenticati in silenzio.
+>
+> **Due guardie, e la seconda è stata provata iniettando il guasto:**
+> · `test_IL_BANCO_SI_PUO_PUNTARE_DOVE_IL_SERVER_STA_DAVVERO` — esegue l'assegnazione vera
+>   estratta dal file, con e senza la variabile (le due direzioni)
+> · `test_IL_CONTO_DEGLI_STRUMENTI_QUADRA_E_OGNI_ESCLUSIONE_HA_IL_SUO_MOTIVO` — pretende che
+>   *lanciati + fuori = collaudi* e che **ogni esclusione porti un motivo scritto**, altrimenti
+>   basterebbe dichiarare «non è un collaudo» per far sparire un collaudo dai fuori.
+>   ✅ **Vista rossa sul guasto vero** (`'' is not true : l'attrezzo 'logiche' è escluso SENZA
+>   un motivo scritto`) e ripristino **byte-identico**, sha256 uguale prima e dopo.
+
 ## 📄 2026-08-21 (48) — **LA FAQ DELLE LANDING DICEVA IL FALSO A CHI STAVA PER PAGARE** (autorizzato)
 
 > ⛔ **Tocca la produzione** (`fase173_motore_seo.py`), col «autorizzato» scritto del
@@ -4409,7 +4462,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: c13f725
+CONSEGNE AGGIORNATE A: 3fdaa6f
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -6237,7 +6290,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5910 test
+SUITE ATTUALE: Ran 5912 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

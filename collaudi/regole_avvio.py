@@ -498,6 +498,101 @@ def stampa_i_lavori_in_sospeso():
     print()
 
 
+# ⛔ NON SONO COLLAUDI, E OGNUNO DICE PERCHE'. Senza questo elenco il conto dei «fuori dalla
+# batteria» mescolava i ganci di git e gli attrezzi di marketing coi collaudi veri, e dava un
+# numero che allarma senza dire niente: un falso allarme e' un difetto quanto un allarme
+# mancato (regola ferrea 10). ⛔ Un motivo VUOTO non e' ammesso: lo pretende una guardia in
+# test_pipeline_ci.py, cosi' nessuno puo' far sparire un collaudo da qui senza spiegarsi.
+NON_SONO_COLLAUDI = {
+    "regole_avvio": "e' questo strumento: gira dal gancio a ogni avvio di sessione",
+    "prima_di_lanciare": "gancio: si lancia PRIMA di un'operazione lunga, non dentro la batteria",
+    "prima_di_dire_fatto": "gancio del commit: lo esegue git, non la batteria",
+    "guardia_commit": "gancio di git",
+    "batteria": "e' la batteria stessa",
+    "sentinella_ci": "guarda i job della CI su GitHub, non il prodotto in locale",
+    "avvia_server_visivo": "non giudica niente: accende il banco perche' altri lo giudichino",
+    "_srv_caos": "avviatore di servizio per il collaudo del caos",
+    "dati_realistici": "e' un corpus di dati, non un giudice",
+    "capitolato": "documento generato: dice cosa c'e', non se funziona",
+    "piano": "elenca i dieci blocchi; il suo esito lo legge gia' `piano_dei_soldi`",
+    "cronometro_suite": "misura QUANTO COSTA la suite, non se passa",
+    "foglio_unico": "riepilogo dei controlli, gia' stampato dal pre-fatto",
+    "bombe_a_tempo": "costa ~25 minuti e ha il suo schedario: lo legge il pre-volo",
+    "mappa_scoperta": "censimento del costruito-e-dimenticato, non un giudice",
+    "raggiungibilita": "censimento dei moduli vivi, non un giudice",
+    "piramide": "descrive il sistema di sorveglianza, non lo esercita",
+    "logiche": "ragionamenti a catena, si legge",
+    "anteprima_campagna": "marketing: chiama un'AI vera, non e' un collaudo",
+    "campagna_totale": "ripete OGNI collaudo 5 volte: e' la batteria x5, si lancia a parte",
+    "drip_facebook": "pubblica su Facebook: strumento di marketing",
+    "giro_video": "produce video: strumento di marketing",
+    "pubblica_video": "pubblica video: strumento di marketing",
+    "video_render": "produce video: strumento di marketing",
+    "sonda_qtsp": "sonda autorita' esterne europee: dipende da terzi, non da noi",
+}
+
+
+def strumenti_e_batteria(radice=None):
+    """Quanti COLLAUDI esistono, quanti ne lancia `collaudi/batteria.py`, e quali restano fuori.
+
+    ⛔ NON E' UN ELENCO SCRITTO A MANO: gli strumenti si contano dalla cartella e i lanciati
+    si leggono dentro la batteria. Un elenco scritto a mano rimane indietro il giorno che
+    qualcuno aggiunge un attrezzo, e allora dice il falso proprio su «li ho lanciati tutti».
+    Gli esclusi invece SONO scritti a mano, ma ognuno col motivo, e una guardia lo pretende.
+    """
+    base = radice or os.path.dirname(os.path.abspath(__file__))
+    tutti = sorted(f[:-3] for f in os.listdir(base)
+                   if f.endswith(".py") and not f.startswith("__"))
+    collaudi = [s for s in tutti if s not in NON_SONO_COLLAUDI]
+    try:
+        with io.open(os.path.join(base, "batteria.py"), encoding="utf-8") as f:
+            testo = f.read()
+    except OSError:
+        return collaudi, [], collaudi
+    citati = set(re.findall(r"collaudi/([a-z0-9_]+)\.py", testo))
+    # ⛔ «lanciati» conta SOLO i collaudi: la batteria nomina anche `avvia_server_visivo`, che
+    # non giudica niente (accende il banco). Contarlo fra i lanciati gonfierebbe il numero
+    # che deve rassicurare -- ed e' esattamente il modo in cui un conto si mette a mentire.
+    lanciati = sorted(s for s in citati if s in collaudi)
+    fuori = [s for s in collaudi if s not in citati]
+    return collaudi, lanciati, fuori
+
+
+def stampa_gli_strumenti():
+    """⛔ «TUTTI I TEST» DEVE ESSERE UN COMANDO SOLO, E DEVE DIRE COSA NON HA GUARDATO.
+
+    Nasce il 2026-08-21 da un ordine del fondatore: *ogni lavoro deve passare da tutti questi
+    test*. Cercando cosa esisteva gia' (D10) e' venuto fuori che `collaudi/batteria.py` — il
+    comando che si chiama «batteria COMPLETA» — saltava proprio i collaudi sui soldi: il
+    banco, le percentuali, gli incroci dell'ospite e i quattro guardiani dei documenti.
+    💡 Un elenco che dice «tutto» ed e' incompleto e' peggio di nessun elenco, perche' chi lo
+    lancia crede di aver guardato. Percio' qui il numero di quelli FUORI si stampa sempre:
+    e' il denominatore degli strumenti, e deve poter dare fastidio.
+    """
+    esistono, lanciati, fuori = strumenti_e_batteria()
+    print("=" * 78)
+    print("🧰 GLI STRUMENTI — «tutti i test» e' UN COMANDO SOLO")
+    print("=" * 78)
+    print("     python collaudi/batteria.py        <- li lancia in fila, uno dopo l'altro")
+    print("     STRIPE_SECRET_KEY=sk_test_... python collaudi/batteria.py")
+    print("                                        <- ...e cosi' PAGA DAVVERO (banco dei soldi)")
+    print()
+    print("  COLLAUDI: %d   ·   lanciati dalla batteria: %d   ·   FUORI: %d"
+          "   (+%d attrezzi che non sono collaudi, ognuno col motivo)"
+          % (len(esistono), len(lanciati), len(fuori), len(NON_SONO_COLLAUDI)))
+    if fuori:
+        print("  ⛔ i %d FUORI non sono «coperti da qualcos'altro»: nessuno li lancia da solo,"
+              % len(fuori))
+        print("     quindi «ho lanciato la batteria» NON vuol dire che sono stati eseguiti.")
+        for i in range(0, len(fuori), 4):
+            print("     " + "  ".join("%-19s" % s for s in fuori[i:i + 4]))
+    else:
+        print("  ✅ nessun collaudo resta fuori dalla batteria.")
+    print("  ⚠️ E la batteria NON sostituisce la CI (regola ferrea 8): il verde locale e' un")
+    print("     indizio, il giudice e' la tabella dei job letta dall'API.")
+    print()
+
+
 def main():
     n = conta_regole()
     ricerca = n["appendice"]                       # le 44: 15 in CLAUDE.md + 29 in appendice
@@ -508,6 +603,7 @@ def main():
 
     stampa_i_divieti(n)
     stampa_i_lavori_in_sospeso()
+    stampa_gli_strumenti()
     print("=" * 78)
     print("⛔ REGOLE DEL PROGETTO — si leggono PRIMA di fare qualunque cosa")
     print("=" * 78)

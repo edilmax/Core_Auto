@@ -16,8 +16,21 @@ Lancia, in sequenza e in modo autosufficiente (ZERO servizi cloud), tutta la dif
   7. Sicurezza statica (Bandit)                     — gate: 0 vulnerabilità High
   8. [server] Behavioral host + pannelli DAL VIVO   — avvia server locale, prova, chiude
   8b.[server] Vicoli ciechi                         — cammina link/form/API, nessun 404/rotta-morta
+  8c.[server+chiave] BANCO DEI SOLDI                — 15 host, 15 prenotazioni che PAGANO
   9. [server+node] Accessibilità WCAG + click-through
  10. [internet] Verifica produzione (sito VERO)     — salta se offline
+ 11. I 5 documenti contro il motore · denominatore · piano dei soldi · tasti morti
+
+⛔ LE FASI 2c, 5b, 5c, 8c e 11 SONO STATE AGGIUNTE IL 2026-08-21, e mancavano proprio quelle
+sui soldi: il banco, le percentuali, gli incroci dell'ospite e i quattro guardiani dei
+documenti. Un comando che si chiama «batteria COMPLETA» ed è incompleto è peggio di nessun
+comando, perché chi lo lancia crede di aver guardato.
+
+⛔ LA FASE 8c NON SI DICHIARA VERDE SENZA LA CHIAVE. Serve `STRIPE_SECRET_KEY` di PROVA
+(`sk_test_...`): senza, il motore rifiuta ogni pagamento — fail-safe giusto — e il giro
+misurerebbe la configurazione del banco invece del prodotto. In quel caso la fase è NON
+ESEGUITA col motivo scritto, mai un OK (sbaglio S7).
+   Uso con la chiave:  STRIPE_SECRET_KEY=sk_test_... python collaudi/batteria.py
 
 Ogni fase è isolata: se una fallisce, le altre proseguono; alla fine un RIEPILOGO + exit-code.
 Le fasi 8-10 sono BEST-EFFORT (saltate con nota se manca server/node/rete). Extra:
@@ -92,6 +105,27 @@ def main():
         ("6c. Multi-vettore (rete+pannelli+tamper+finanza)", [PY, "collaudi/multivettore.py"], 700, None),
         ("6d. Stati impossibili (guardiano + transizioni)", [PY, "collaudi/stati_impossibili.py"], 300, None),
         ("6e. Caos (SIGKILL+fd+manomissione+deadlock)", [PY, "collaudi/caos.py"], 400, None),
+        # ── AGGIUNTE IL 2026-08-21 ────────────────────────────────────────────────────
+        # ⛔ NON ERANO QUI, E SONO PROPRIO QUELLE SUI SOLDI. Il fondatore ha chiesto che
+        # OGNI lavoro passi da tutti i collaudi; cercando cosa esisteva gia' (D10) e'
+        # venuto fuori che questo comando — quello che dice «tutto» — saltava il banco,
+        # le percentuali, gli incroci dell'ospite e i quattro guardiani dei documenti.
+        # Un elenco che dice «tutto» ed e' incompleto e' peggio di nessun elenco: chi lo
+        # lancia crede di aver guardato.
+        ("2c. Incroci dell'ospite (pagamento x conferma x politica x finestra)",
+         [PY, "collaudi/incroci_ospite.py"], 300, None),
+        ("5b. Coerenza delle percentuali in TUTTO il progetto",
+         [PY, "collaudi/audit_coerenza_tariffe.py"], 300, None),
+        ("5c. Rampa commissioni (differenziale + concorrenza + catena soldi)",
+         [PY, "collaudi/collaudo_rampa_totale.py"], 600, None),
+        ("11. I 5 documenti contro il motore (audit millimetrico)",
+         [PY, "collaudi/audit_millimetrico.py"], 300, None),
+        ("11b. Denominatore (rotte/pagine/email/lingue non attraversate)",
+         [PY, "collaudi/denominatore.py"], 300, None),
+        ("11c. Piano dei soldi (i tre posti dicono la stessa cosa)",
+         [PY, "collaudi/piano_dei_soldi.py"], 300, None),
+        ("11d. Copertura dei 3 pannelli (tasti morti)",
+         [PY, "collaudi/coverage_pannelli.py"], 300, None),
     ]
     for nome, cmd, to, _ok in fasi:
         rc, out, dur = _run(cmd, timeout=to)
@@ -122,6 +156,28 @@ def main():
                               ("8b. Vicoli ciechi (link/form/API morti)", [PY, "collaudi/vicoli_ciechi.py"])):
                 rc, out, dur = _run(cmd, timeout=400, env=env)
                 registra(nome, rc, out, dur)
+
+            # ── 8c. IL BANCO DEI SOLDI — aggiunto il 2026-08-21 ──────────────────────
+            # ⛔ E QUI SI DICHIARA, NON SI DA' VERDE. Senza una chiave Stripe di PROVA il
+            # motore rifiuta ogni pagamento (fail-safe giusto: «gateway giu' = non si
+            # conferma niente»), il giro finisce «0 pagate» e misura la CONFIGURAZIONE del
+            # banco invece del prodotto. Misurato il 2026-08-21: con la chiave di prova il
+            # banco passa da «OK 19 / NON OK 15» a «OK 34 / NON OK 0», e i quattro controlli
+            # contabili — che senza traffico non hanno nulla da leggere — trovano finalmente
+            # 41 righe di libro giornale su cui pronunciarsi.
+            # 💡 Percio' l'assenza della chiave e' un BUCO DICHIARATO, mai un OK: e' la
+            # stessa lezione dei verdi per assenza riparati quel giorno (sbaglio S7).
+            _chiave = os.environ.get("STRIPE_SECRET_KEY", "")
+            if _chiave.startswith("sk_test"):
+                rc, out, dur = _run([PY, "collaudi/giro_banco.py"], timeout=900, env=env)
+                registra("8c. Banco dei soldi (15 host, 15 prenotazioni che PAGANO)",
+                         rc, out, dur)
+            else:
+                esiti.append(("8c. Banco dei soldi", None,
+                              "NON ESEGUITO: serve STRIPE_SECRET_KEY di PROVA (sk_test_...). "
+                              "Senza, il motore rifiuta ogni pagamento e il giro misurerebbe "
+                              "la configurazione del banco, non il prodotto", 0))
+                print("  [~   ] 8c. Banco dei soldi (manca la chiave di PROVA: NON eseguito)")
             # 9: node (a11y + click-through) — solo se node c'è
             if _run(["node", "--version"], timeout=20)[0] == 0:
                 # ⛔ Il percorso gira qui in ATTO «rifiuto», e non e' un ripiego: questo banco

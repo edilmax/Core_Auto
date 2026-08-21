@@ -774,6 +774,57 @@ giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
 
+### 🧰 2026-08-21 (21) — **IL COMANDO CHE SI CHIAMA «BATTERIA COMPLETA» SALTAVA I COLLAUDI SUI SOLDI**
+
+**Cosa è cambiato:** `collaudi/batteria.py` (8 fasi nuove), `collaudi/giro_banco.py` (la porta
+si legge dall'ambiente), `collaudi/regole_avvio.py` (stampa il denominatore degli strumenti a
+ogni avvio) e `test_pipeline_ci.py` (+2 guardie). **Nessun file di produzione toccato.**
+
+**Perché.** Ordine del fondatore: *ogni lavoro deve passare da tutti questi test, e tutte le
+chat devono ricordarselo*. Cercando cosa esistesse già (**D10**) è emerso che il comando c'era
+— `python collaudi/batteria.py` — ma **saltava proprio i collaudi sui soldi**: banco,
+percentuali, rampa delle commissioni, incroci dell'ospite, audit dei 5 documenti,
+denominatore, piano dei soldi e copertura dei pannelli. 💡 *Un elenco che dice «tutto» ed è
+incompleto è peggio di nessun elenco, perché chi lo lancia crede di aver guardato.*
+
+**Il blocco alla radice: una porta incisa nel codice.** `giro_banco.py` aveva
+`BASE = "http://127.0.0.1:8080"` scritto dentro ed era **l'unico** strumento del banco a non
+leggere `BASE_VISIVO` (lo leggono già `vicoli_ciechi.py` e `percorso_ospite_host.js`). La
+batteria accende il suo server sulla **8099**: finché la porta restava incisa, il banco non
+poteva entrare nel comando che lancia tutto. È la porta cablata della voce **S12** del
+catalogo (21 rossi finti). Ora `os.environ.get("BASE_VISIVO", "http://127.0.0.1:8080")`, col
+valore storico come ripiego dichiarato: chi lo lancia a mano non cambia nulla.
+
+**Il banco senza chiave NON è un OK.** Senza `STRIPE_SECRET_KEY` di prova il motore rifiuta
+ogni pagamento (fail-safe giusto) e il giro misurerebbe la **configurazione del banco** invece
+del prodotto — lo dichiara il modulo stesso. La batteria lo segna **NON ESEGUITO col motivo**.
+Misurato lo stesso giorno: con la chiave di prova il banco passa da `OK 19 / NON OK 15` a
+**`OK 34 / NON OK 0`**, con **13 prenotazioni pagate, 5 cancellate e 41 righe di libro
+giornale** su cui i controlli contabili possono finalmente pronunciarsi.
+
+**E la parte che dura: il denominatore degli strumenti.** `regole_avvio.py` gira dal gancio a
+ogni avvio e ora stampa, **contando dalla cartella**, quanti collaudi esistono, quanti ne
+lancia la batteria e **quali restano fuori**: `39 collaudi · 22 lanciati · 17 FUORI`, più 25
+attrezzi che non sono collaudi, **ognuno col motivo scritto**. ⚠️ I 17 fuori sono quelli che
+pesano — `conti_stripe`, `e2e_rimborso_stripe`, `e2e_credito_stripe`, `prova_bonifico_host`,
+`oracolo_tassa`, `fuzz_soldi`, `occhio_del_fondatore`, `fedelta_banco` — e restano un lavoro
+aperto, ma **si vedono a ogni sessione** invece di essere dimenticati in silenzio.
+⛔ Il conto è scritto perché **debba dare fastidio**: è la forma «un numero, non un'opinione»
+già usata per il denominatore delle rotte.
+
+**Le due guardie.** `test_IL_BANCO_SI_PUO_PUNTARE_DOVE_IL_SERVER_STA_DAVVERO` esegue
+l'assegnazione vera estratta col parser, con e senza la variabile (le due direzioni, ferrea
+10). `test_IL_CONTO_DEGLI_STRUMENTI_QUADRA_E_OGNI_ESCLUSIONE_HA_IL_SUO_MOTIVO` pretende che
+*lanciati + fuori = collaudi* e che ogni esclusione porti un motivo — altrimenti basterebbe
+dichiarare «non è un collaudo» per far sparire un collaudo dai fuori.
+✅ **Provata iniettando il guasto** (regola ferrea 2): con un motivo vuoto è uscita
+`AssertionError: '' is not true : l'attrezzo 'logiche' e' escluso ... SENZA un motivo scritto`,
+e il ripristino è **byte-identico**, sha256 uguale prima e dopo
+(`E2A91F158B06766613A7A00F9EC88518E163F5B372535CA9075898E95D1B97D9`).
+
+**Dipendenze/env:** `BASE_VISIVO` (già in uso altrove, ora letta anche dal banco) ·
+`STRIPE_SECRET_KEY` di prova per la fase 8c. **STATO:** acceso, è strumentazione di collaudo.
+
 ### 📄 2026-08-21 (20) — **LA FAQ DELLE LANDING PROMETTEVA IL CONTRARIO DI QUELLO CHE FA IL MOTORE**
 
 **Cosa è cambiato:** `fase173_motore_seo.py` — **codice di PRODUZIONE**, col «autorizzato»
