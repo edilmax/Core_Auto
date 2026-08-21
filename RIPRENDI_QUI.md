@@ -11,6 +11,54 @@ posto dei dati grezzi** · **mai passare al passo dopo se il precedente non è v
 e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 **Si rileggono prima di iniziare un'operazione E dopo averla finita.**
 
+## 📄 2026-08-21 (48) — **LA FAQ DELLE LANDING DICEVA IL FALSO A CHI STAVA PER PAGARE** (autorizzato)
+
+> ⛔ **Tocca la produzione** (`fase173_motore_seo.py`), col «autorizzato» scritto del
+> fondatore. È il lavoro che il blocco (46) teneva in cima alla lista.
+>
+> **Il difetto, in faccia a un cliente:** `_POLITICA_IT["non_rimborsabile"]` rispondeva
+> *«La tariffa non è rimborsabile»* mentre il motore, entro la finestra di ripensamento,
+> **restituisce il 100%** a prescindere dalla politica. E le altre tre non erano false ma
+> **vuote**: *«entro i termini indicati»*, *«secondo i termini»* — nessun numero, nessuna
+> finestra, niente che chi legge possa usare per decidere.
+>
+> **La guardia che il blocco (46) dava per GIÀ SCRITTA non esisteva** (sbaglio S10). Ora c'è,
+> e non confronta un testo con un altro testo: **interroga il motore**. Quattro prove:
+> · ogni politica del motore ha la sua risposta (il **denominatore**: una politica nuova senza
+>   risposta si vede subito)
+> · nessuna risposta può tacere la finestra mentre `calcola_rimborso(entro_ripensamento=True)`
+>   rende tutto — ⛔ e la prova **verifica prima la propria premessa**: se un giorno il motore
+>   smettesse di rendere il 100%, a dover cambiare è la guardia, non la pagina
+> · **i giorni scritti in pagina si RICAVANO dagli scaglioni veri** di `fase111.POLITICHE`:
+>   sposta uno scaglione e la pagina diventa rossa lo stesso giorno
+> · il **cablaggio** (modo di rompersi n. 2): si guarda la FAQ vera prodotta da `genera_faq`,
+>   perché un testo giusto che non arriva in pagina non serve a niente
+>
+> **Vista rossa prima (D20), 7 fallimenti:**
+> ```
+> AssertionError: '48 ore' not found in 'La tariffa non è rimborsabile.'
+>   : la pagina dice il falso a chi sta per pagare
+> AssertionError: 30 not found in set()
+>   : la politica 'rigida' rende qualcosa fino a 30 giorni prima, ma quel numero non
+>     compare nella risposta pubblica
+> ```
+>
+> **Cosa legge un cliente adesso** (i numeri sono quelli veri del motore, non ricopiati):
+> ```
+> flessibile        Entro 48 ore dalla prenotazione (se l'arrivo è ad almeno 3 giorni) il
+>                   rimborso è totale. Dopo, la politica è flessibile: rimborso pieno fino a
+>                   1 giorno prima dell'arrivo, metà nel giorno stesso.
+> moderata          ... la politica è moderata: rimborso pieno fino a 5 giorni prima
+>                   dell'arrivo, metà da 1 a 4 giorni prima, niente nel giorno stesso.
+> rigida            ... la politica è rigida: rimborso pieno fino a 30 giorni prima
+>                   dell'arrivo, metà fino a 7 giorni prima, niente sotto i 7 giorni.
+> non_rimborsabile  ... la tariffa non è rimborsabile.
+> ```
+> ⚠️ Lasciata fuori di proposito la **spesa di pulizia**, che il motore rende sempre: in una
+> risposta da due righe appesantisce, **nel contratto invece ci va**.
+> ✅ Cercato se lo stesso falso stesse anche altrove: `grep` su tutto il prodotto, **nessun
+> altro posto** promette il contrario di quello che il motore fa.
+
 ## 🎯 2026-08-21 (47) — **IL CANCELLO ERA ROSSO PER UNA GUARDIA CHE SI ACCENDE DA SOLA, 1 GIRO SU 211**
 
 > Giro di collaudo completo chiesto dal fondatore: *«rifalli da capo e dammi quelli nuovi
@@ -120,8 +168,10 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > e **3 dichiarati CODICE MORTO** (`fase35 fase43 fase44`).
 >
 > **Trovate il 2026-08-20 e NON riparate, col motivo:**
-> · 🔴 **La FAQ delle landing dice il falso, dal vivo.** `fase173._POLITICA_IT` risponde
->   *«La tariffa non è rimborsabile»* mentre il motore rimborsa il 100% entro 48 ore.
+> · ✅ **CHIUSA IL 2026-08-21 — vedi blocco (48).** ~~La FAQ delle landing dice il falso, dal
+>   vivo: `fase173._POLITICA_IT` risponde «La tariffa non è rimborsabile» mentre il motore
+>   rimborsa il 100% entro 48 ore.~~ Riparata in produzione con la guardia che interroga il
+>   motore. ⛔ Resta invece aperto il **contratto host**, qui sotto.
 >   ⛔ **CORRETTO IL 2026-08-21: la guardia NON è mai stata scritta.** Qui c'era *«la guardia
 >   è già scritta (`TestLaFAQNONPUOPROMETTEREQUELLOCHEILMOTORESMENTISCE` in
 >   `test_fase173_motore_seo.py`)»*: `grep` su tutto il progetto, **zero occorrenze**. Era lo
@@ -6187,7 +6237,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5906 test
+SUITE ATTUALE: Ran 5910 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

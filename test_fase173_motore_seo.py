@@ -291,5 +291,105 @@ class TestRottaEPublish(unittest.TestCase):
         self.assertNotIn("quartiere", m.contesto(det))
 
 
+class TestLaFAQNONPUOPROMETTEREQUELLOCHEILMOTORESMENTISCE(unittest.TestCase):
+    """⛔ LA FAQ DELLE LANDING DICEVA IL FALSO A CHI STAVA PER PAGARE.
+
+    Misurato il 2026-08-20 e riparato il 2026-08-21: `_POLITICA_IT["non_rimborsabile"]`
+    rispondeva *«La tariffa non e' rimborsabile»* mentre il motore, entro la finestra di
+    ripensamento, **restituisce il 100%**. Le altre tre risposte non erano false ma erano
+    VAGHE -- «entro i termini indicati», «secondo i termini» -- cioe' non dicevano NIENTE
+    a chi le legge, e la finestra non la nominava nessuna.
+
+    ⛔ QUESTE GUARDIE NON CONFRONTANO IL TESTO CON UN ALTRO TESTO: interrogano il MOTORE
+    (`fase111.calcola_rimborso` e i suoi scaglioni) e pretendono che la pagina pubblica non
+    lo contraddica. E' la differenza fra un collaudo e una fotocopia: se domani qualcuno
+    cambia uno scaglione, questa diventa rossa da sola.
+
+    💡 E la ragione per cui esiste ora: fino al 2026-08-21 `RIPRENDI_QUI.md` la dava per
+    GIA' SCRITTA, con questo nome esatto. Non esisteva (sbaglio S10).
+    """
+
+    def _politiche(self):
+        from fase111_cancellazione import POLITICHE
+        from fase173_motore_seo import _POLITICA_IT
+        return POLITICHE, _POLITICA_IT
+
+    def test_OGNI_politica_ha_la_sua_risposta_nella_FAQ(self):
+        """Il denominatore: se nasce una politica nuova e nessuno scrive la sua risposta,
+        la FAQ tace su un caso che il motore invece tratta."""
+        POLITICHE, _POLITICA_IT = self._politiche()
+        self.assertEqual(
+            sorted(POLITICHE), sorted(_POLITICA_IT),
+            "le politiche del motore e le risposte della FAQ non coincidono: o una politica "
+            "non ha risposta, o una risposta parla di una politica che non esiste piu'")
+
+    def test_NESSUNA_risposta_puo_dire_che_NON_si_rimborsa_quando_il_motore_RIMBORSA(self):
+        """Il difetto vero del 2026-08-20, per nome.
+
+        Entro la finestra il motore rende TUTTO a prescindere dalla politica: qualunque
+        risposta che parli di rimborso senza nominare quella finestra sta mentendo a chi
+        legge la pagina prima di pagare.
+        """
+        from fase111_cancellazione import calcola_rimborso
+        POLITICHE, _POLITICA_IT = self._politiche()
+        for nome in sorted(POLITICHE):
+            with self.subTest(politica=nome):
+                r = calcola_rimborso(10000, 10, politica=nome, entro_ripensamento=True)
+                self.assertEqual(
+                    10000, r["rimborso_cents"],
+                    "premessa cambiata: entro la finestra il motore NON rende piu' tutto "
+                    "sulla politica %r. Allora e' questa guardia a dover cambiare, non la "
+                    "FAQ" % nome)
+                testo = _POLITICA_IT[nome]
+                self.assertIn(
+                    "48 ore", testo,
+                    "la risposta pubblica per %r non nomina la finestra di ripensamento, "
+                    "mentre il motore entro quella finestra restituisce il 100%%: la pagina "
+                    "dice il falso a chi sta per pagare. Testo: %r" % (nome, testo))
+
+    def test_I_GIORNI_scritti_nella_FAQ_sono_quelli_VERI_degli_scaglioni(self):
+        """⛔ I numeri della pagina si RICAVANO dal motore, non si ricopiano.
+
+        Ogni soglia in giorni che il motore usa per rendere il 100% o la meta' deve
+        comparire nella risposta pubblica. Se qualcuno sposta uno scaglione e dimentica la
+        pagina, questa diventa rossa lo stesso giorno.
+        """
+        import re
+        POLITICHE, _POLITICA_IT = self._politiche()
+        for nome in sorted(POLITICHE):
+            with self.subTest(politica=nome):
+                soglie = [s for s, bps in POLITICHE[nome].scaglioni if bps > 0 and s > 0]
+                if not soglie:
+                    continue           # `non_rimborsabile`: nessuna soglia da dichiarare
+                testo = _POLITICA_IT[nome]
+                numeri = set(int(n) for n in re.findall(r"\d+", testo))
+                for s in soglie:
+                    self.assertIn(
+                        s, numeri,
+                        "la politica %r rende qualcosa fino a %d giorni prima dell'arrivo, "
+                        "ma quel numero non compare nella risposta pubblica: chi legge non "
+                        "puo' sapere entro quando cancellare. Testo: %r"
+                        % (nome, s, testo))
+
+    def test_la_FAQ_generata_MOSTRA_la_risposta_giusta_alla_domanda_giusta(self):
+        """Il cablaggio (modo di rompersi n. 2): il testo puo' essere giusto e non arrivare
+        mai in pagina. Qui si guarda la FAQ VERA prodotta da `genera_faq`."""
+        POLITICHE, _POLITICA_IT = self._politiche()
+        for nome in sorted(POLITICHE):
+            with self.subTest(politica=nome):
+                det = dict(DETTAGLIO)
+                det["politica_cancellazione"] = nome
+                rap = valuta_annuncio(det)
+                voci = [v for v in genera_faq(rap, det)
+                        if "cancellare" in v.get("q", "").lower()]
+                self.assertTrue(
+                    voci, "la FAQ non contiene piu' la domanda sulla cancellazione per %r: "
+                          "il testo giusto non serve a niente se non arriva in pagina" % nome)
+                self.assertEqual(
+                    _POLITICA_IT[nome], voci[0]["a"],
+                    "in pagina finisce una risposta diversa da quella dichiarata per %r"
+                    % nome)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
