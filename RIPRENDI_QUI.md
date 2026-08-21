@@ -55,6 +55,26 @@ e si dice «REGOLA VIOLATA: [nome]. MI SONO FERMATO. Aspetto istruzioni.»
 > la loro macchina fa la suite in **677s**, la nostra in **1736s**), e le **istruzioni** di
 > `guardia_commit.py`, che dicono `git checkout HEAD` — cioè cancellano il lavoro non committato.
 >
+> ### 🔴🔴 IL RISCHIO PIÙ GRANDE CHE RESTA: **una copia sola di tutto, in un posto solo**
+> Misurato sul VPS il 2026-08-21. Le copie di sicurezza **ci sono e girano ogni 6 ore**
+> (`casavip_backup`: `while true; do sh deploy/backup_casavip.sh; sleep 21600; done`). Ma:
+> ```
+> container casavip_backup -> monta  bookinvip_casavip_data/_data -> /data
+> le copie finiscono in     .../bookinvip_casavip_data/_data/backup/finanza-2026....db.gz
+> ```
+> **Le copie stanno DENTRO lo stesso volume dei dati veri, sulla stessa macchina.** Proteggono
+> da un errore *logico* (una tabella rovinata: recuperi quella di ieri). **Non proteggono dal
+> perdere la macchina**: guasto del disco, incidente del fornitore, un `docker volume rm` di
+> troppo, un account sospeso. Non c'è **nessuna copia fuori** (`/root`, `/var/backups`: niente).
+> ⚠️ E la ferrea 13 dice *«un backup non verificato leggibile non è un backup»*: **i backup veri
+> del server non li ha mai riaperti nessuno.**
+> 🟢 Parziale buona notizia, misurata: le **5 guardie** che provano il *meccanismo* di ripristino
+> (`test_backup_completo.py::TestRipristinoAPezziNonPassa`) **girano a ogni commit in CI** — in
+> locale no, perché a Windows manca `openssl` (è lo scarto fra **5926 raccolti** e **5921
+> eseguiti**). È il **meccanismo** a essere verificato, non i backup del server.
+> ⛔ **Costa poche ore e toglie l'unico rischio che ci può cancellare tutto.** E non è una
+> questione di fornitore: su AWS, se scrivi le copie sullo stesso disco, il difetto è identico.
+>
 > ### ⚠️ ALTRI RILIEVI MISURATI OGGI, non riparati (D1, per non allargare lo scopo)
 > · **`plausibilita.py` esamina UNA riga** e conclude «ogni numero sta in una banda che il mondo
 >   consente»: nella batteria appare come un `[OK]` come tutti gli altri.
