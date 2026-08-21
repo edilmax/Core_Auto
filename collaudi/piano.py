@@ -494,19 +494,27 @@ def contraddizioni(sul_disco=None):
 # ==============================================================================
 # LA STAMPA — il racconto lo scrive la macchina, non la chat
 # ==============================================================================
-def _scheda_stato(condizione):
-    """Lo stato di UNA casella, chiesto alla scheda (`collaudi/scheda.py`).
+def _scheda_stato(condizione, ordine):
+    """Lo stato di UNA casella DI UN BLOCCO, chiesto alla scheda (`collaudi/scheda.py`).
 
     ⛔ Se la scheda non c'e' o non si carica, la casella resta VUOTA e lo dice: un piano che
     desse per buona una casella senza saper leggere la scheda sarebbe un verde per assenza,
-    cioe' il peggiore di tutti (sbaglio S7)."""
+    cioe' il peggiore di tutti (sbaglio S7).
+
+    ⛔ `ordine` e' obbligatorio dal 2026-08-21: la stessa frase in due blocchi e' due
+    domande diverse, e chiedere lo stato senza dire di quale blocco si parla faceva
+    condividere la casella (misurato: «zero punti di mutazione scoperti sul codice che la
+    produzione ESEGUE» era la STESSA casella per i soldi e per le prenotazioni).
+    ⚠️ E l'`except` qui sotto lo avrebbe NASCOSTO: chiamando la vecchia firma non si
+    sarebbe visto un errore, si sarebbero viste caselle vuote per sempre col motivo
+    sbagliato. Un'eccezione inghiottita e' un difetto che non grida mai."""
     import importlib.util
     try:
         percorso = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scheda.py")
         spec = importlib.util.spec_from_file_location("_scheda_dal_piano", percorso)
         modulo = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(modulo)
-        return modulo.stato(condizione)
+        return modulo.stato(condizione, ordine)
     except Exception as errore:
         return (False, "la scheda non si legge (%r): senza, nessuna casella vale" % (errore,))
 
@@ -550,7 +558,7 @@ def stampa(breve=False):
             # Adesso la spunta la SCHEDA, e solo se: qualcuno l'ha misurata · su QUESTO
             # commit · avendo esaminato piu' di zero cose. Il perche' e' stampato accanto.
             for c in b["finito_quando"]:
-                ok, motivo = _scheda_stato(c)
+                ok, motivo = _scheda_stato(c, b["ordine"])
                 print("       %s %s" % ("☑" if ok else "☐", c))
                 print("         (%s)" % motivo)
         print("")
