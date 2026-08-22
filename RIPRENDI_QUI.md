@@ -28,7 +28,7 @@
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 0d09189
+CONSEGNE AGGIORNATE A: a8007d6
 
 SUITE ATTUALE: Ran 5943 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
@@ -201,6 +201,23 @@ lista dei desideri, chatbot, notifiche sul telefono, traduzione recensioni.
 ⚠️ Fra questi c'è **`fase15_idempotency`**, che serve a non addebitare due volte la stessa
 carta: costruito, non collegato.
 
+### 🔴 IL PARACADUTE LO AGGANCIA UNA PERSONA, E QUATTRO VOLTE LO HA AGGANCIATO STORTO
+Il paracadute `:prec` lo aggancia una persona a mano ed è stato agganciato all'immagine
+sbagliata **4 volte in 4 giorni** (stasera era giusto, ma **per caso**). Va fatto dallo script
+di deploy: legge l'immagine viva, ci aggancia `:prec`, verifica che coincida, e **se non
+coincide SI FERMA invece di deployare**.
+
+> **La prova che stasera era giusto, e come si rifà** — misurata il 2026-08-22 sul *contenuto*,
+> non sulla data (la data ingannava: l'immagine viva risultava costruita ore prima del commit):
+> ```
+> casavip-app:latest -> fase83_server.py sha256 db50cd07fe1bb95b  = 28c35c6 (master)
+> casavip-app:prec   -> fase83_server.py sha256 a925e5fc2fd9503a  = 4e31d32 (il precedente)
+> ```
+> ⛔ **Un paracadute agganciato all'immagine sbagliata è peggio di nessun paracadute**: ci si
+> salta convinti di tornare all'ultimo stato buono. Ed è l'obbligo che si è rotto più volte di
+> ogni altro in questo progetto — la prova che un obbligo affidato alla memoria si rompe, e
+> uno affidato a un attrezzo no.
+
 ### Cose minori, con la loro prova
 - **DMARC è `p=none`**: la firma della posta c'è ma non blocca chi ti imita. Va alzato a
   `quarantine` in due passi, mai a `reject` in uno solo.
@@ -211,6 +228,46 @@ carta: costruito, non collegato.
   crontab. Può sbloccarla **solo il fondatore**, su `developers.facebook.com`.
 - **La chiavetta fisica** è ferma al 13 agosto (121 commit indietro). Per decisione del
   fondatore la copia fisica si fa **alla fine**, quando la macchina è dichiarata sicura.
+
+---
+
+# 🧭 PASSAGGIO DI CONSEGNE — 2026-08-22 sera
+
+**DA DOVE SI RIPARTE DOMANI, in quest'ordine.** Non serve leggere altro: la prima riga di
+questo file dice già il comando che produce la lista.
+
+**1. Il guardiano dei soldi deve MISURARE, non leggere.** `collaudi/piano_dei_soldi.py` ricava
+lo stato dei moduli da **tre frasi in italiano** dentro questo documento (tre espressioni
+regolari su prosa scritta a mano). È l'ultimo posto dove è rimasta la malattia del 22 agosto,
+ed è proprio quello che sorveglia i soldi. **Due o tre ore**, e ogni giudizio va rivisto nelle
+due direzioni perché è il guardiano che ferma il commit.
+
+**2. Poi la sezione B**, che ha quattro voci e una sola blocca davvero: **i due prezzi che non
+si parlano** (`p_prezzo` → vetrina, `d_prezzo` → cassa, nessuna guardia).
+
+**COSA È SUCCESSO OGGI, in tre righe.** Il fondatore ricordava «5 fasi, il Blocco 1 era
+finito»; lo strumento rispondeva «0 su 6». **Nessuno dei due sbagliava: contavano cose
+diverse**, e c'erano due liste con lo stesso nome. Da lì: una lista sola, la guardia che lo
+impedisce, e questo file da 10.178 righe a 250.
+
+**IL NUMERO CHE CONTA, e prima di oggi non esisteva:** 246 punti del percorso del denaro
+giudicati coi test giusti → **101 uccisi, 140 SOPRAVVISSUTI**. Il prodotto funziona (un euro
+vero è tornato indietro); quello che manca è **la rete che se ne accorge quando si rompe**.
+Sono test da scrivere, non prodotto da rifare.
+
+**⚠️ TRE COSE CHE HO SBAGLIATO OGGI, scritte perché non si ripetano.**
+- **Ho lanciato la suite da Git Bash due volte** (sbaglio S11/D23): da lì `openssl` c'è e da
+  PowerShell no, quindi il giro non misura la stessa macchina. Costo: 28 minuti. Una guardia
+  esisteva già e mi ha preso — `test_la_suite_non_gira_da_GIT_BASH`.
+- **Ho misurato `openssl` lanciando PowerShell da dentro Bash**, e ha ereditato il PATH di
+  Bash: risposta «PRESENTE», falsa. Dalla shell vera è **ASSENTE**. La stessa domanda dà due
+  risposte a seconda di chi la fa.
+- **Ho scritto il numero della suite prendendolo dall'output** (`Ran 5938`) invece che dal
+  caricatore (**5943**). Sono due cose diverse: la differenza sono le 5 guardie messe da parte
+  senza `openssl`. È la D22, e la guardia mi ha preso.
+
+💡 Tutte e tre le volte **mi ha fermato una macchina, non la mia attenzione.** È l'unico
+motivo per cui i numeri di questo progetto valgono qualcosa.
 
 ---
 
