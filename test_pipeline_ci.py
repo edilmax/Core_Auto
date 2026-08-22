@@ -8484,6 +8484,69 @@ class TestIlGiudiceScriveDaSeLaScheda(unittest.TestCase):
         finally:
             shutil.rmtree(culla, ignore_errors=True)
 
+    def test_LA_CASELLA_DELLA_MUTAZIONE_SI_MISURA_DOVE_PASSA_IL_DENARO(self):
+        """⛔ DECISIONE DEL FONDATORE, 2026-08-22 — e nasce da una misura, non da una comodita'.
+
+        La casella pretendeva zero punti scoperti su TUTTI i 24 moduli del blocco: misurati
+        col censimento sono **1.097 punti**, e a 84 secondi a punto (misurato su `fase87` il
+        2026-08-22: 15 punti in 21 minuti) fanno **~25 ore di solo calcolo**, prima ancora di
+        scrivere i test che mancheranno. Peggio: quel numero **cresce** quando si migliora il
+        generatore -- da 6.012 a 7.566 punti in due settimane, a codice fermo. Un traguardo
+        che si allontana mentre cammini non e' severo: e' irraggiungibile, ed e' il motivo per
+        cui il Blocco 1 e' rimasto aperto dal 20 luglio al 22 agosto.
+
+        💡 E lo dice anche la ricerca gia' in casa (appendice, Google): l'85% dei mutanti e'
+        inutile e **il punteggio di mutazione non e' il numero da inseguire**. Noi lo stavamo
+        inseguendo su tutto il blocco.
+
+        La riga d'arrivo diventa il **percorso del denaro**: i moduli che un euro attraversa
+        davvero quando entra, si divide e esce. Restano dichiarati in `piano.py`, non qui:
+        una copia potrebbe mentire il giorno che il piano cambia.
+
+        ⛔ E si prova nelle DUE direzioni (D18 punto 2): un giro che li copre TUTTI scrive,
+        un giro che ne salta anche UNO SOLO non scrive. Senza la seconda meta', "raggiungibile"
+        si otterrebbe semplicemente non pretendendo piu' niente.
+        """
+        import importlib.util
+        import shutil
+        import tempfile
+        spec = importlib.util.spec_from_file_location(
+            "_piano_denaro", os.path.join(QUI, "collaudi", "piano.py"))
+        piano = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(piano)
+        blocco = [b for b in piano.BLOCCHI if b["ordine"] == 1][0]
+        moduli_mut = tuple(blocco.get("moduli_mutazione") or ())
+        self.assertTrue(
+            moduli_mut,
+            "il blocco 1 non dichiara su QUALI moduli si misura la mutazione: senza, la "
+            "casella torna a pretendere tutti i %d moduli del blocco (1.097 punti, ~25 ore) "
+            "e il blocco non finisce mai" % len(blocco["moduli"]))
+        self.assertTrue(
+            set(moduli_mut) <= set(blocco["moduli"]),
+            "i moduli della mutazione non sono un sottoinsieme del blocco: %r"
+            % (sorted(set(moduli_mut) - set(blocco["moduli"])),))
+        m = self._mut()
+        culla = tempfile.mkdtemp(prefix="scheda_denaro_")
+        try:
+            esiti = [{"file": n + ".py", "riga": 1, "verdetto": "ucciso",
+                      "danno": "finto, per la guardia"} for n in moduli_mut]
+            riga, motivo = m.scrivi_la_scheda(
+                esiti, {}, comando="prova", radice=QUI,
+                percorso=os.path.join(culla, "tutti.json"))
+            self.assertIsNotNone(
+                riga,
+                "un giro che copre TUTTO il percorso del denaro non spunta la casella: il "
+                "traguardo resta irraggiungibile (%s)" % motivo)
+            riga2, motivo2 = m.scrivi_la_scheda(
+                esiti[:-1], {}, comando="prova", radice=QUI,
+                percorso=os.path.join(culla, "meno_uno.json"))
+            self.assertIsNone(
+                riga2,
+                "ha spuntato la casella saltando %r: cosi' 'raggiungibile' si otterrebbe "
+                "non pretendendo piu' niente (%s)" % (moduli_mut[-1], motivo2))
+        finally:
+            shutil.rmtree(culla, ignore_errors=True)
+
     def test_UN_GIRO_CHE_NON_HA_ESAMINATO_NIENTE_NON_SPUNTA_LA_CASELLA(self):
         """⛔ Denominatore zero non e' verde. La scheda gia' lo applica: qui si pretende che
         il COLLEGAMENTO lo rispetti, cioe' che il giudice le passi i punti VERAMENTE
@@ -9388,6 +9451,90 @@ class TestGliALLARMIDiCodeQLSICHIUDONOALLAFONTE(unittest.TestCase):
         self.assertEqual(colpevoli, [],
                          "in app.py questi valori non fidati entrano nel registro senza "
                          "`_sanitize_log(...)`: %s" % colpevoli)
+
+
+class TestUnaSolaListaDiCoseDaFare(unittest.TestCase):
+    """⛔ REGOLA ZERO 3, riscritta dal fondatore il 2026-08-22: le cose da fare stanno in UN
+    SOLO posto, `RIPRENDI_QUI.md`. Nessun altro file puo' aprire un elenco di lavori.
+
+    ⛔ PERCHE' ESISTE, e non e' un'opinione. Quel giorno abbiamo misurato:
+        - DUE liste chiamate «Blocco 1»: una con 4 fasi dichiarata CHIUSA il 13 agosto,
+          una con 24 moduli e 6 caselle a `0 su 6`. Il fondatore ricordava «5 fasi, era
+          finito», lo strumento rispondeva «0 su 6»: nessuno dei due sbagliava, contavano
+          COSE DIVERSE, e nessuno poteva accorgersene leggendo.
+        - 111 righe «APERTO», in gran parte gia' chiuse.
+        - 4 lavori «da fare» finiti da settimane.
+    Il vecchio divieto («non creare nuovi .md») non impediva niente di tutto questo: il
+    danno era DENTRO i file che c'erano gia'.
+
+    ⛔ E LA DIRETTIVA FINALE 4 ERA L'UNICA SENZA UN «si verifica cosi'» -- ed e' esattamente
+    quella che si e' rotta, pretendendo una seconda lista dentro il registro. Questa guardia
+    e' la macchina che le mancava: un obbligo affidato alla buona volonta' si rompe di nuovo.
+
+    ⚠️ COSA QUESTA GUARDIA NON FA (D18 punto 3):
+      - non sa se una lista dice il VERO: sa che ne esiste una dove non dovrebbe stare;
+      - guarda solo le APERTURE (titoli di sezione e commenti `# TODO:`), non le frasi che
+        NOMINANO quelle parole -- se no il testo della regola stessa la farebbe fallire, e
+        una guardia che punisce chi la descrive verrebbe spenta il giorno dopo (ferrea 10);
+      - non entra in `_archivio/` (dichiarato storico dalla REGOLA ZERO 2).
+    """
+
+    #  I due posti dove una lista di lavori PUO' stare. `piano.py` e' l'eccezione dichiarata
+    #  in REGOLA ZERO 3: quella lista la PRODUCE una macchina misurando il codice, e se le
+    #  due si contraddicono vince lei.
+    ESENTI = ("RIPRENDI_QUI.md", os.path.join("collaudi", "piano.py"))
+
+    #  ⛔ Costruite per pezzi, di proposito: scritte per esteso, questo file conterrebbe le
+    #     aperture che vieta e si accuserebbe da solo al primo giro.
+    APERTURE = ("DA " + "FARE", "PROSSIMI " + "PASSI", "RIPARTI " + "DA QUI",
+                "COSA " + "MANCA", "TO" + "DO", "FIX" + "ME")
+
+    def _file_del_progetto(self):
+        radice = QUI
+        for cartella, sotto, nomi in os.walk(radice):
+            sotto[:] = [s for s in sotto
+                        if s not in (".git", "__pycache__", "_archivio", "node_modules",
+                                     ".hypothesis", "data", "deploy_backup")]
+            for n in nomi:
+                if n.endswith(".md") or n.endswith(".py"):
+                    yield os.path.join(cartella, n)
+
+    def _apre_un_elenco(self, riga, e_python):
+        """Vero solo se la riga APRE un elenco di lavori, non se lo nomina."""
+        secca = riga.strip()
+        su = secca.upper()
+        contiene = any(a in su for a in self.APERTURE)
+        if not contiene:
+            return False
+        if e_python:
+            #  Solo i commenti-segnaposto veri: `# TODO: ...` / `# FIXME: ...`
+            return bool(re.match(r"^#\s*(TO" + r"DO|FIX" + r"ME)\b", secca))
+        #  Nei documenti: solo i TITOLI di sezione (righe che cominciano con #).
+        return bool(re.match(r"^#{1,6}\s", secca))
+
+    def test_UNA_SOLA_LISTA_DI_COSE_DA_FARE(self):
+        colpevoli = []
+        for percorso in self._file_del_progetto():
+            rel = os.path.relpath(percorso, QUI)
+            if any(rel.replace("/", os.sep).endswith(e) for e in self.ESENTI):
+                continue
+            e_python = rel.endswith(".py")
+            try:
+                with io.open(percorso, encoding="utf-8", errors="replace") as f:
+                    for n, riga in enumerate(f, 1):
+                        if self._apre_un_elenco(riga, e_python):
+                            colpevoli.append("%s:%d  %s"
+                                             % (rel, n, " ".join(riga.split())[:90]))
+            except OSError:
+                continue
+        self.assertEqual(
+            colpevoli, [],
+            "TROVATE %d APERTURE DI ELENCHI DI LAVORI FUORI DAI DUE POSTI AMMESSI.\n"
+            "  Ammessi: %s\n"
+            "  Le cose da fare stanno in UN SOLO posto (REGOLA ZERO 3). Ogni riga qui sotto\n"
+            "  e' una lista che vive per conto suo e che un giorno dira' il falso senza che\n"
+            "  nessuno se ne accorga:\n    %s"
+            % (len(colpevoli), " e ".join(self.ESENTI), "\n    ".join(colpevoli)))
 
 
 if __name__ == "__main__":

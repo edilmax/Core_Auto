@@ -166,6 +166,27 @@ BLOCCHI = (
             "fase182_riconciliazione", "fase183_carta_offsession", "fase186_guardiano",
             "fase188_paga_struttura", "fase191_blocco_globale", "fase199_invarianti",
         ),
+        # ⛔ IL PERCORSO DEL DENARO — decisione del fondatore del 2026-08-22, e nasce da una
+        #    misura. La casella della mutazione pretendeva zero punti scoperti su TUTTI i 24
+        #    moduli qui sopra: col censimento sono **1.097 punti**, e a 84 secondi a punto
+        #    (misurato su `fase87` il 2026-08-22: 15 punti in 21 minuti, commit 28c35c6) fanno
+        #    **~25 ore di solo calcolo**, prima ancora di scrivere i test che mancheranno.
+        #    Peggio: quel numero CRESCE quando si migliora il generatore -- da 6.012 a 7.566
+        #    punti in due settimane, a codice fermo. Un traguardo che si allontana mentre
+        #    cammini non e' severo: e' irraggiungibile, ed e' il motivo per cui questo blocco
+        #    e' rimasto aperto dal 20 luglio al 22 agosto.
+        # 💡 Lo dice anche la ricerca gia' in casa (appendice, Google): l'85% dei mutanti e'
+        #    inutile e il punteggio di mutazione NON e' il numero da inseguire.
+        # ⛔ NON e' un ammorbidimento: e' un bersaglio. Questi cinque sono i moduli che un
+        #    euro attraversa DAVVERO -- entra (85), viene confermato (87), va sul conto
+        #    dell'host (101), si divide fra ospiti (65), esce col bonifico (131). 246 punti,
+        #    ~6 ore: una notte, non settimane. Gli altri 19 restano sorvegliati dalla guardia
+        #    di mutazione in CI (60 mutanti scritti a mano su 17 file, a ogni push) e dal
+        #    resto delle caselle di questo blocco.
+        "moduli_mutazione": (
+            "fase65_split_payment", "fase85_pagamenti_stripe", "fase87_stripe_webhook",
+            "fase101_stripe_connect", "fase131_payout_dashboard",
+        ),
         "attrezzi": ("z3", "hypothesis", "mutazione", "oracolo", "orologio", "conti",
                      "produzione", "stati_impossibili", "e2e"),
         "finito_quando": (
@@ -185,7 +206,13 @@ BLOCCHI = (
             "guadagna la fiducia, poi si toglie il dito",
             "gli orologi di prova Stripe hanno visto scadere hold, payout e penale davvero",
             "esistono le relazioni metamorfiche sull'aritmetica del denaro",
-            "zero punti di mutazione scoperti sul codice che la produzione ESEGUE",
+            # ⛔ RISTRETTA IL 2026-08-22, e il testo dice ORA su cosa si misura: una riga
+            #    d'arrivo che nomina un insieme diverso da quello che l'attrezzo guarda e'
+            #    una bugia scritta nel posto peggiore. I moduli stanno in `moduli_mutazione`
+            #    qui sopra, col perche' e i numeri che l'hanno deciso.
+            "zero punti di mutazione scoperti sul PERCORSO DEL DENARO -- i cinque moduli che "
+            "un euro attraversa davvero: entra, viene confermato, va sul conto dell'host, si "
+            "divide fra ospiti, esce col bonifico -- sul codice che la produzione ESEGUE",
             "gli invarianti sono verificati in PRODUZIONE, non solo nei test",
         ),
     },

@@ -395,7 +395,13 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 ## 🧪 SUPER-TEST VISIVO PANNELLO HOST (2026-07-14, sul VERO account del fondatore, via HTTPS)
 **Fatto e verificato in produzione:** login reale · **10 alloggi creati** (Roma/Milano/Venezia/Barcellona/Parigi/Londra/Tokyo/Dubai/Bali/NY — valute EUR/GBP/JPY/AED/USD, sconti settimana/mese, indirizzi→geocode preciso, foto, 60gg di date) · foto caricata e CANCELLATA · annuncio "SBAGLIATO" creato ed **ELIMINATO col nuovo 🗑** · **2 richieste su-richiesta** da clienti demo (visibili in "Richieste da approvare" + avviso Telegram al fondatore) · link invito OK · **STRESS 100 host + 100 annunci in 8.2s (~1467 op/min), health OK sotto carico** · pulizia completa (0 residui, i 10 del fondatore intatti). **Nota collaudo:** raffiche di admin-delete → nginx risponde 503 (protezione anti-burst, NON un bug: retry risolve). Novità di questo giro: 🗑 elimina annuncio con DOPPIA conferma (bloccato se prenotazioni future, 409) + card in ORDINE D'USO (guida→alloggio→pubblica→i miei→periodo→calendario→richieste→prenotazioni→telegram→stripe→incassi).
 
-## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
+## 2-bis) 📖 QUELLO CHE ABBIAMO SCOPERTO STRADA FACENDO — diario, non lista
+
+> ⛔ **Questo titolo diceva «DA FARE / PROSSIMI PASSI» fino al 2026-08-22.** Era la seconda
+> lista di lavori del progetto, e la pretendeva la direttiva finale 4 — l'unica direttiva
+> senza un «si verifica così». Da qui nasceva metà del disordine: due liste, e nessuno che
+> sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
+> Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
 ### 🔴 «FATTO» NEL PIANO DEI SOLDI COPRE **DUE COSE DIVERSE** — trovato dal fondatore, 2026-08-13
 
@@ -535,7 +541,11 @@ ordine* — unitari → integrazione → E2E → **mutazione (il Giudice)**. Un 
 
 **L'ordine dei blocchi lo decide `rischio × cecità`, non la dimensione.**
 📊 **DOVE SIAMO, rimisurato col censimento il 2026-08-19** (⛔ rimisuralo, non fidarti):
-**11 moduli dei soldi giudicati** · **6 che restano, per 303 punti**. Erano «16 per 516» il
+**11 moduli dei soldi giudicati** · **6 che restano, per 360 punti** *(rimisurati col
+censimento il 2026-08-22: erano **303**, e nessuno aveva toccato quel codice — a cambiare è
+stato il generatore di mutanti. È il motivo per cui una tabella di numeri si rifà e non si
+ricopia, ed è lo stesso motivo per cui il traguardo del Blocco 1 si allontanava da solo)*.
+Erano «16 per 516» il
 2026-08-10: sette sono stati fatti (`fase167`, `fase66`, `fase133`, `fase119`, poi il gruppo 2
 il 2026-08-19 — `fase98`, `fase111`, `fase147`) e **tre sono usciti perché sono codice
 morto** (`fase43` 31 · `fase44` 25 · `fase35` 25 = **81 punti che non vanno fatti**).
@@ -3295,7 +3305,9 @@ rimasto «rimborsato» a schermo con zero sul conto dell'ospite.
 
 ---
 
-#### 🔴 DA FARE 1 — **SUL RIMBORSO PIENO CI RIMETTIAMO NOI LA COMMISSIONE STRIPE**
+#### 🔴 TROVATO ① — **SUL RIMBORSO PIENO CI RIMETTIAMO NOI LA COMMISSIONE STRIPE**
+> ▶️ **Ancora aperto il 2026-08-22** (`calcola_rimborso` non sottrae il costo Stripe, verificato
+> nel codice). Il lavoro sta in `RIPRENDI_QUI.md`, voce **B4**.
 *(ordine del fondatore 2026-08-16: «da sistemare, io non devo rimetterci»)*
 
 **Misurato su Stripe, non dedotto:**
@@ -3328,7 +3340,10 @@ emergere: **tutti verificano che il calcolo sia giusto, nessuno chiede «e chi c
 È il buco **F6** già dichiarato nella riga d'arrivo dei soldi, trovato non da uno strumento ma
 da una persona che ha pagato un euro e ha detto *«c'è qualcosa che non torna»*.
 
-#### 🔴 DA FARE 2 — **IL PREZZO VIVE IN DUE POSTI E POSSONO DIVERGERE IN SILENZIO**
+#### 🔴 TROVATO ② — **IL PREZZO VIVE IN DUE POSTI E POSSONO DIVERGERE IN SILENZIO**
+> ▶️ **Ancora aperto il 2026-08-22, e RISALITO alla causa**: sono due caselle del pannello
+> (`deploy/host.html:378` → vetrina, `:425` → cassa) che nessuno collega — non un errore di
+> chi inserisce. Il lavoro sta in `RIPRENDI_QUI.md`, voce **B1**: **blocca l'apertura**.
 ```
 alloggi.prezzo_notte_cents     =  100  (1 EUR)   -> vetrina, scheda, dati strutturati per Google
 inventario.prezzo_netto_cents  = 9000  (90 EUR)  -> preventivo e pagamento
@@ -3341,7 +3356,9 @@ correzione di un giorno, **29 su 30** erano ancora a 90 €).
 la macchina da sola**. In UE esporre un prezzo e addebitarne un altro è materia di tutela del
 consumatore, non solo un difetto tecnico.
 
-#### ⚠️ DA FARE 3 (minore) — **IL PERCORSO DEL BUNKER FA PERDERE IL POSTO E LA CHIAVE**
+#### ⚠️ TROVATO ③ (minore) — **IL PERCORSO DEL BUNKER FA PERDERE IL POSTO E LA CHIAVE**
+> ▶️ **Non verificabile da un comando** (è un difetto di navigazione: va provato cliccando).
+> Sta in `RIPRENDI_QUI.md`, sezione **C**, fra le cose minori.
 «Rimborsa» chiede lo sblocco super-admin; lo sblocco porta **dentro il bunker**, dove quella
 operazione non esiste, e tornando indietro **il campo della chiave admin è vuoto**. Il
 collegamento è sano (sessione 15 min in `sessionStorage`, sopravvive alla navigazione
@@ -7475,7 +7492,9 @@ guardia. ⚠️ Va scritta **fail-open come le due funzioni vicine** (catalogo i
 passare): bloccare TUTTE le prenotazioni per un errore transitorio del catalogo sarebbe un danno
 molto peggiore del difetto che si chiude.
 
-### 🔴 DA FARE SUBITO — CAMBIARE LA CHIAVE DELL'AMMINISTRATORE (`ADMIN_KEY`)
+### 🔴 TROVATO — LA CHIAVE DELL'AMMINISTRATORE (`ADMIN_KEY`) È CORTA
+> ▶️ **Ancora aperto il 2026-08-22**: misurata nel contenitore che gira, **11 caratteri**.
+> Il lavoro sta in `RIPRENDI_QUI.md`, voce **B2**. Qui resta il racconto.
 
 **Cos'è, in parole semplici.** È la parola d'ordine che apre il tuo pannello di
 amministratore: da lì si vedono le prenotazioni, i dati degli host e **si fanno i
