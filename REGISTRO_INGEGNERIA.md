@@ -96,17 +96,14 @@
   lavori in sospeso** portano ognuno la sua **prova meccanica** — lo stato lo rifà la macchina
   a ogni avvio. ⛔ Nasce perché quella lista **mentiva**: teneva CodeQL fra i lavori da fare
   mentre era verde su master.
-  - **5** · ⚠️ **A METÀ dal 2026-08-21** — «gli strumenti scrivono da sé la scheda». ✅ **La
-    scheda c'è**: `collaudi/scheda.py`. Un blocco risulta finito solo quando **un attrezzo** ha
-    spuntato tutte le sue caselle — misurandole, su **questo commit**, avendo guardato **più di
-    zero** cose; e riscrivere una condizione **invalida** la misura. ⛔ Prima di quel giorno la
-    casella era una **costante** (`print("☐ %s")`) e in tutto il progetto non esisteva nessun
-    `☑`: nessun blocco poteva risultare finito **per costruzione**, ed è il motivo per cui il
-    fondatore chiedeva da settimane «il Blocco 1 è finito?» senza ottenere risposta.
-    ⚠️ **Resta la seconda metà:** nessun attrezzo scrive ancora la scheda — **Blocco 1 = 0 su
-    6** (`python collaudi/scheda.py --blocco 1`), e ogni casella dice da sé perché è vuota.
-    Delle sei, **tre sono «collegare quello che c'è»** e **tre sono lavoro nuovo** (orologi di
-    prova Stripe, che non esistono; relazioni metamorfiche sui soldi, a metà).
+  - *(la voce **5** annidata qui sotto è stata **RIMOSSA il 2026-08-21 sera**: diceva «A METÀ»
+    e stava **18 righe sotto** la voce 5 di primo livello che dichiara ✅ FATTO, dentro lo
+    stesso blocco che `regole_avvio.py` stampa a ogni sessione. Due stati opposti per lo stesso
+    pezzo, e chi leggeva il secondo andava a **ricostruire una cosa costruita quella sera**.
+    L'ho creata io aggiungendo lo stato nuovo senza togliere il vecchio — cioè **lo stesso
+    meccanismo** che questo documento denuncia. ⛔ La regola che ne esce: **quando si aggiorna
+    uno stato, la riga vecchia si TOGLIE, non si affianca.** Lo stato del pezzo 5 sta ora in un
+    posto solo, alla voce **5** di primo livello.)*
 - **8** · ✅ **FATTO 2026-08-15** — il battito dei soldi in produzione + sentinella esterna
 - **9** · un **revisore indipendente** sulle modifiche
 - **10** · usare davvero **`hypothesis`** e **`z3`** (già installati e quasi mai accesi)
@@ -398,7 +395,13 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 ## 🧪 SUPER-TEST VISIVO PANNELLO HOST (2026-07-14, sul VERO account del fondatore, via HTTPS)
 **Fatto e verificato in produzione:** login reale · **10 alloggi creati** (Roma/Milano/Venezia/Barcellona/Parigi/Londra/Tokyo/Dubai/Bali/NY — valute EUR/GBP/JPY/AED/USD, sconti settimana/mese, indirizzi→geocode preciso, foto, 60gg di date) · foto caricata e CANCELLATA · annuncio "SBAGLIATO" creato ed **ELIMINATO col nuovo 🗑** · **2 richieste su-richiesta** da clienti demo (visibili in "Richieste da approvare" + avviso Telegram al fondatore) · link invito OK · **STRESS 100 host + 100 annunci in 8.2s (~1467 op/min), health OK sotto carico** · pulizia completa (0 residui, i 10 del fondatore intatti). **Nota collaudo:** raffiche di admin-delete → nginx risponde 503 (protezione anti-burst, NON un bug: retry risolve). Novità di questo giro: 🗑 elimina annuncio con DOPPIA conferma (bloccato se prenotazioni future, 409) + card in ORDINE D'USO (guida→alloggio→pubblica→i miei→periodo→calendario→richieste→prenotazioni→telegram→stripe→incassi).
 
-## 2-bis) ⏳ DA FARE / PROSSIMI PASSI (aggiornare a OGNI completamento)
+## 2-bis) 📖 QUELLO CHE ABBIAMO SCOPERTO STRADA FACENDO — diario, non lista
+
+> ⛔ **Questo titolo diceva «DA FARE / PROSSIMI PASSI» fino al 2026-08-22.** Era la seconda
+> lista di lavori del progetto, e la pretendeva la direttiva finale 4 — l'unica direttiva
+> senza un «si verifica così». Da qui nasceva metà del disordine: due liste, e nessuno che
+> sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
+> Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
 ### 🔴 «FATTO» NEL PIANO DEI SOLDI COPRE **DUE COSE DIVERSE** — trovato dal fondatore, 2026-08-13
 
@@ -538,7 +541,11 @@ ordine* — unitari → integrazione → E2E → **mutazione (il Giudice)**. Un 
 
 **L'ordine dei blocchi lo decide `rischio × cecità`, non la dimensione.**
 📊 **DOVE SIAMO, rimisurato col censimento il 2026-08-19** (⛔ rimisuralo, non fidarti):
-**11 moduli dei soldi giudicati** · **6 che restano, per 303 punti**. Erano «16 per 516» il
+**11 moduli dei soldi giudicati** · **6 che restano, per 360 punti** *(rimisurati col
+censimento il 2026-08-22: erano **303**, e nessuno aveva toccato quel codice — a cambiare è
+stato il generatore di mutanti. È il motivo per cui una tabella di numeri si rifà e non si
+ricopia, ed è lo stesso motivo per cui il traguardo del Blocco 1 si allontanava da solo)*.
+Erano «16 per 516» il
 2026-08-10: sette sono stati fatti (`fase167`, `fase66`, `fase133`, `fase119`, poi il gruppo 2
 il 2026-08-19 — `fase98`, `fase111`, `fase147`) e **tre sono usciti perché sono codice
 morto** (`fase43` 31 · `fase44` 25 · `fase35` 25 = **81 punti che non vanno fatti**).
@@ -816,6 +823,62 @@ un salvataggio di sei giorni prima **credendo di aver fatto quello di oggi**, e 
 giorno del disastro — quando è troppo tardi per rimediare.
 💡 **Regola operativa:** si scarica **solo da `/root/`**, e si confrontano **byte E sha256** con
 quelli che `impacchetta.sh` stampa. Due comandi, e la questione è chiusa.
+
+### 🧭 2026-08-21 (26) — **IL TRAGUARDO ERA IRRAGGIUNGIBILE, E LE LISTE ERANO SETTE**
+
+**Cosa è cambiato:** `collaudi/scheda.py`, `collaudi/regole_avvio.py`, `test_pipeline_ci.py`
+(+2 guardie), `RIPRENDI_QUI.md`, `MEMORY.md`. **Nessun file di produzione toccato.**
+
+**⛔ ① IL BLOCCO 1 NON POTEVA ARRIVARE A 6 SU 6. MAI. PER COSTRUZIONE.**
+Trovato **dal fondatore**, con una domanda in italiano: *«se non è finito il Blocco 1 devi
+ricominciare da capo?»*. **Sì — ogni volta.** Dimostrato prima di ripararlo:
+```
+Lunedi'  passo l'esame 1 (commit A)   -> esame 1 passato?  SI
+Martedi' passo l'esame 2 (commit B)   -> esame 2 passato?  SI
+                                         esame 1 passato?  NO
+   "misurata sul commit aaaaaaa, adesso siamo su bbbbbbb"
+RISULTATO: 1 su 2, per sempre.
+```
+La casella scadeva sul **commit**, e per passare sei esami servono sei sessioni — ognuna con
+il suo commit. Ogni esame nuovo **svuotava tutti i precedenti**.
+⛔ **È lo stesso difetto della casella-costante del giorno prima**, tornato in forma nuova — e
+questa volta era stato **collegato da me**, poche ore prima, senza verificare che il traguardo
+fosse raggiungibile. 💡 Costruire lo strumento e non chiedersi *«con questo si può arrivare in
+fondo?»* è la forma più silenziosa di verde finto: tutto funziona, e la fine non arriva mai.
+
+✅ **La cura, ed è l'unica che non si può allargare:** la casella scade quando cambia **il
+codice che quella casella misura** — l'impronta dei 24 moduli del blocco — non quando cambia
+un commit qualunque. Correggo un documento? La casella dei soldi **resta**. Tocco `fase85`?
+**Scade**, ed è giusto.
+**Due guardie, viste ROSSE sul comportamento vecchio** (`passati 0 su 6: gli esami dati in
+momenti diversi si svuotano a vicenda`), ripristino **byte-identico** (sha256 `0C525B8B…C840`):
+`test_SEI_ESAMI_PASSATI_IN_SEI_MOMENTI_DIVERSI_RESTANO_PASSATI` e — l'altra direzione, senza
+la quale «raggiungibile» si otterrebbe non scadendo mai —
+`test_MA_SE_CAMBIA_IL_CODICE_DEL_BLOCCO_LA_CASELLA_SCADE_LO_STESSO`.
+
+**⛔ ② «OGNI CHAT DICE COSE DIVERSE»: LA CAUSA ERA MECCANICA, ED È MISURATA.**
+Osservazione del fondatore: *«siamo bloccati dallo stesso punto da fine luglio»*. Misurato:
+```
+righe che ogni chat leggeva prima di toccare qualcosa ....... 20.411
+liste diverse di «cosa fare» che ci trovava dentro ..........      7
+
+dal 31 luglio al 21 agosto -- 232 commit, 56.190 righe cambiate:
+  guardie 39,7% · documenti 31,3% · strumenti 21,1% · PRODOTTO 6,5%
+  fasi nuove create: 0        file piu' toccato: RIPRENDI_QUI.md, 127 volte
+```
+**Sette liste: ogni chat ne sceglieva una e ripartiva da un punto diverso.** Non è
+indisciplina, è matematica. E per tre settimane il 92% del lavoro è finito in strumenti,
+guardie e documenti mentre il prodotto ne prendeva il 6,5%.
+💡 **La cura non è un'altra regola — ce ne sono 106.** È che la lista sia **UNA** e la produca
+una **macchina**: `collaudi/piano.py` faceva già esattamente questo (cosa fa la macchina + cosa
+manca punto per punto), **era sepolto sotto le altre sei**. Tre modifiche, zero attrezzi nuovi:
+la prima riga di `RIPRENDI_QUI.md` rimanda lì · `regole_avvio.py` chiude **con quella e basta**,
+col conteggio **misurato** (prima era la costante `«Blocco 1 = 0 su 6»` — il difetto che D22
+vieta, dentro lo strumento nato per impedirlo) · `MEMORY.md` dichiara sé stessa **storia**.
+⛔ **E la regola che ne esce:** *se trovi un difetto per strada, scrivilo e VAI AVANTI* — è il
+fermarsi a ripararlo che ha prodotto quel 6,5%, e ogni singola riparazione era giustificata.
+
+**Dipendenze/env:** nessuna. **STATO:** acceso, è strumentazione di collaudo.
 
 ### 🧬 2026-08-21 (25) — **I PEZZI 3, 4 E 5 — e una casella che ne spuntava DUE**
 
@@ -3242,7 +3305,9 @@ rimasto «rimborsato» a schermo con zero sul conto dell'ospite.
 
 ---
 
-#### 🔴 DA FARE 1 — **SUL RIMBORSO PIENO CI RIMETTIAMO NOI LA COMMISSIONE STRIPE**
+#### 🔴 TROVATO ① — **SUL RIMBORSO PIENO CI RIMETTIAMO NOI LA COMMISSIONE STRIPE**
+> ▶️ **Ancora aperto il 2026-08-22** (`calcola_rimborso` non sottrae il costo Stripe, verificato
+> nel codice). Il lavoro sta in `RIPRENDI_QUI.md`, voce **B4**.
 *(ordine del fondatore 2026-08-16: «da sistemare, io non devo rimetterci»)*
 
 **Misurato su Stripe, non dedotto:**
@@ -3275,7 +3340,10 @@ emergere: **tutti verificano che il calcolo sia giusto, nessuno chiede «e chi c
 È il buco **F6** già dichiarato nella riga d'arrivo dei soldi, trovato non da uno strumento ma
 da una persona che ha pagato un euro e ha detto *«c'è qualcosa che non torna»*.
 
-#### 🔴 DA FARE 2 — **IL PREZZO VIVE IN DUE POSTI E POSSONO DIVERGERE IN SILENZIO**
+#### 🔴 TROVATO ② — **IL PREZZO VIVE IN DUE POSTI E POSSONO DIVERGERE IN SILENZIO**
+> ▶️ **Ancora aperto il 2026-08-22, e RISALITO alla causa**: sono due caselle del pannello
+> (`deploy/host.html:378` → vetrina, `:425` → cassa) che nessuno collega — non un errore di
+> chi inserisce. Il lavoro sta in `RIPRENDI_QUI.md`, voce **B1**: **blocca l'apertura**.
 ```
 alloggi.prezzo_notte_cents     =  100  (1 EUR)   -> vetrina, scheda, dati strutturati per Google
 inventario.prezzo_netto_cents  = 9000  (90 EUR)  -> preventivo e pagamento
@@ -3288,7 +3356,9 @@ correzione di un giorno, **29 su 30** erano ancora a 90 €).
 la macchina da sola**. In UE esporre un prezzo e addebitarne un altro è materia di tutela del
 consumatore, non solo un difetto tecnico.
 
-#### ⚠️ DA FARE 3 (minore) — **IL PERCORSO DEL BUNKER FA PERDERE IL POSTO E LA CHIAVE**
+#### ⚠️ TROVATO ③ (minore) — **IL PERCORSO DEL BUNKER FA PERDERE IL POSTO E LA CHIAVE**
+> ▶️ **Non verificabile da un comando** (è un difetto di navigazione: va provato cliccando).
+> Sta in `RIPRENDI_QUI.md`, sezione **C**, fra le cose minori.
 «Rimborsa» chiede lo sblocco super-admin; lo sblocco porta **dentro il bunker**, dove quella
 operazione non esiste, e tornando indietro **il campo della chiave admin è vuoto**. Il
 collegamento è sano (sessione 15 min in `sessionStorage`, sopravvive alla navigazione
@@ -7422,7 +7492,9 @@ guardia. ⚠️ Va scritta **fail-open come le due funzioni vicine** (catalogo i
 passare): bloccare TUTTE le prenotazioni per un errore transitorio del catalogo sarebbe un danno
 molto peggiore del difetto che si chiude.
 
-### 🔴 DA FARE SUBITO — CAMBIARE LA CHIAVE DELL'AMMINISTRATORE (`ADMIN_KEY`)
+### 🔴 TROVATO — LA CHIAVE DELL'AMMINISTRATORE (`ADMIN_KEY`) È CORTA
+> ▶️ **Ancora aperto il 2026-08-22**: misurata nel contenitore che gira, **11 caratteri**.
+> Il lavoro sta in `RIPRENDI_QUI.md`, voce **B2**. Qui resta il racconto.
 
 **Cos'è, in parole semplici.** È la parola d'ordine che apre il tuo pannello di
 amministratore: da lì si vedono le prenotazioni, i dati degli host e **si fanno i

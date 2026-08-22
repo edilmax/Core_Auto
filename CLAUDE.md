@@ -238,11 +238,28 @@ Va letto **almeno `README.md` + `RIPRENDI_QUI.md`** prima di proporre o scrivere
 leggere per capire il passato, **mai** per decidere il presente. In caso di conflitto vince
 sempre il documento ufficiale.
 
-**3. ⛔ È VIETATO CREARE NUOVI FILE `.md`.** Niente nuovi documenti di strategia, niente report
-duplicati, niente note storiche sparse, niente `RIASSUNTO_*.md` o `ANALISI_*.md`. Qualunque
-aggiornamento **modifica uno dei 5 file ufficiali**. Se sembra servire un file nuovo, la
-risposta giusta è quasi sempre una **sezione in più** in `README.md` o una **riga in più** in
-`REGISTRO_INGEGNERIA.md`.
+**3. ⛔ LE COSE DA FARE STANNO IN UN SOLO POSTO: `RIPRENDI_QUI.md`.**
+**Nessun altro file — `.md`, `.py` o commento nel codice — può contenere elenchi di cose da
+fare.** E resta **VIETATO CREARE NUOVI FILE `.md`**: niente documenti di strategia, report
+duplicati, note storiche sparse, `RIASSUNTO_*.md` o `ANALISI_*.md`. Qualunque aggiornamento
+**modifica uno dei 5 file ufficiali**.
+
+⛔ **PERCHÉ NON BASTAVA «vietato creare nuovi `.md`», misurato il 2026-08-22.** Il danno non
+l'ha fatto un file nuovo. L'hanno fatto **DUE liste chiamate «Blocco 1» dentro gli stessi
+cinque file** — una con **4 fasi**, dichiarata CHIUSA il 13 agosto (`fase167 fase66 fase133
+fase119`), l'altra con **24 moduli e 6 caselle** a `0 su 6` in `collaudi/piano.py` — più
+**111 righe «APERTO»** in gran parte già chiuse e **4 cose «da fare» fatte da settimane**.
+Il fondatore ricordava «5 fasi, era finito», lo strumento rispondeva «0 su 6»: **nessuno dei
+due sbagliava, contavano cose diverse.** Il vecchio divieto permetteva tutto questo.
+
+⚠️ **L'UNICA ECCEZIONE, ed è dichiarata: `collaudi/piano.py`** (campo `finito_quando`).
+Quella lista non la scrive una persona: la **produce una macchina** misurando il codice, e
+per costruzione non può invecchiare.
+
+🔑 **E SE LE DUE SI CONTRADDICONO, VINCE `piano.py`: quello lo misura una macchina,
+l'altro lo scrive una persona.** *(regola del fondatore, 2026-08-22 — senza questa riga
+restano due liste e nessuno che sappia quale credere, che è esattamente il problema di quel
+giorno.)*
 
 **4. I numeri non si inventano e non si ricordano a memoria: si verificano nel codice.**
 Verità corrente (se cambia nel codice, va aggiornata anche nel `README.md`, e una guardia
@@ -925,4 +942,8 @@ Non accettare mai la prima soluzione. Componi, testa, distruggi, ricomponi. Crea
 SOTTOPONI LE VARIANTI A UN BENCHMARK SOTTO CARICO ESTREMO. IL CODICE CHE INTEGRERAI NEL NUCLEO (SIA NUOVO CHE VECCHIO) DEVE ESSERE RIGOROSAMENTE E UNICAMENTE LA **VINCITRICE DEL BENCHMARK**, QUELLA CHE SOPRAVVIVE A TUTTI I 10 TEST. NESSUN COMPROMESSO.
 
 **4. [REGISTRO D'INGEGNERIA — OBBLIGATORIO]**
-Ogni volta che crei o modifichi una funzione/modulo, AGGIORNA `REGISTRO_INGEGNERIA.md` (creazione · scopo · logica · dipendenze/env · STATO acceso/spento · come si attiva) **E la sezione "DA FARE / PROSSIMI PASSI"** (togli ciò che hai completato, aggiungi ciò che resta): così "cosa è fatto" e "cosa manca" stanno SEMPRE insieme e aggiornati. Niente resta "costruito e dimenticato": se una cosa è costruita ma NON attivata, va scritta nella sezione "COSTRUITO ma SPENTO" con come accenderla. Regola del fondatore: questo va fatto a OGNI completamento, da CHIUNQUE tocchi il codice — **incluso il collaudatore (Fable 5)**: anche ogni bug corretto in collaudo va scritto nel registro (cosa era rotto, come l'hai sistemato, test aggiunto). Non si perde la logica di NULLA. Il test `test_registro_ingegneria.py` è la guardia auto-applicante (una nuova `faseNN_*.py` non registrata fa fallire la suite). Il collaudatore (Fable 5) legge il registro per sapere cosa esiste e cosa testare.
+Ogni volta che crei o modifichi una funzione/modulo, AGGIORNA `REGISTRO_INGEGNERIA.md` (creazione · scopo · logica · dipendenze/env · STATO acceso/spento · come si attiva). Niente resta "costruito e dimenticato": se una cosa è costruita ma NON attivata, va scritta nella sezione "COSTRUITO ma SPENTO" con come accenderla.
+
+⛔ **E NON PIÙ UNA SEZIONE «DA FARE» QUI DENTRO.** Il registro è un **DIARIO**: racconta cosa è successo e perché. **Cosa MANCA sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3). Fino al 2026-08-22 questa direttiva ne pretendeva una **anche qui**, ed è così che il progetto si è ritrovato con due liste che si contraddicevano: era **l'unica direttiva senza un «si verifica così»**, ed è esattamente quella che si è rotta.
+
+*Si verifica:* `test_UNA_SOLA_LISTA_DI_COSE_DA_FARE` in `test_pipeline_ci.py` cerca in **tutti** i file del progetto le intestazioni che aprono un elenco di lavori (`DA FARE`, `PROSSIMI PASSI`, `RIPARTI DA QUI`, `COSA MANCA`, `TODO:`, `FIXME:`) e diventa **ROSSO** se ne trova anche una sola fuori da `RIPRENDI_QUI.md` e da `collaudi/piano.py`. ⛔ Il numero non si scrive a mano: lo conta la guardia. Regola del fondatore: questo va fatto a OGNI completamento, da CHIUNQUE tocchi il codice — **incluso il collaudatore (Fable 5)**: anche ogni bug corretto in collaudo va scritto nel registro (cosa era rotto, come l'hai sistemato, test aggiunto). Non si perde la logica di NULLA. Il test `test_registro_ingegneria.py` è la guardia auto-applicante (una nuova `faseNN_*.py` non registrata fa fallire la suite). Il collaudatore (Fable 5) legge il registro per sapere cosa esiste e cosa testare.

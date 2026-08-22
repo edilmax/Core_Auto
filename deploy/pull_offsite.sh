@@ -108,7 +108,38 @@ ls -1t "$DEST"/bookinvip-*.tar.gz.enc 2>/dev/null | tail -n +"$((RETENTION_OFFSI
   rm -f "$v" "$v.sha256"
 done
 
-verde "OK — copia offsite cifrata:"
+# ── 5) LA PROVA CHE IL PACCHETTO ESISTE E SI APRE ─────────────────────────────
+# ⛔ PERCHE' ESISTE QUESTO PEZZO, dimostrato il 2026-08-22 col metodo D20.
+#    Fino a oggi lo script stampava "OK — copia offsite cifrata" e usciva 0 SENZA MAI
+#    controllare che `$OUT` esistesse. Messo un file da ZERO BYTE al suo posto, diceva
+#    «OK, 25 database, 51 checksum verificati» ed usciva 0: un rendiconto VERO attaccato
+#    a un file che non c'era. Un salvataggio che si dichiara riuscito a vuoto e' peggio
+#    di nessun salvataggio, perche' ci si conta sopra.
+# 💡 E la regola vale oltre questo caso: i numeri stampati (`$N`, `$verificati`) vengono
+#    dai passi PRECEDENTI. Erano giusti. Il difetto non era nei numeri: era che nessuno
+#    chiedeva al PRODOTTO FINALE di esistere (ferrea 13, D18 punto 1).
+verde "[5/5] verifico il pacchetto appena scritto…"
+
+_rovina(){ rosso "$*"; rm -f "$OUT" "$OUT.sha256"
+           rosso "     pacchetto rotto RIMOSSO: se restasse, domani qualcuno vedrebbe la"
+           rosso "     data fresca e ci conterebbe sopra."; exit 1; }
+
+[ -f "$OUT" ] || _rovina "ROSSO: il pacchetto NON esiste: $OUT"
+
+_byte=$(wc -c < "$OUT" | tr -d ' ')
+[ "${_byte:-0}" -gt 1024 ] || _rovina "ROSSO: il pacchetto e' vuoto o troncato ($_byte byte): $OUT"
+
+# ⛔ E QUI LA PROVA VERA: si RIAPRE. Un file grande e cifrato male e' indistinguibile da
+#    uno buono finche' non provi a decifrarlo -- e il giorno in cui provi e' il giorno
+#    del disastro. Si decifra in memoria (niente scritto su disco) e si conta cosa c'e'
+#    dentro: se il conto e' zero, il pacchetto non serve a niente.
+_dentro=$(openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 \
+            -in "$OUT" -pass env:BV_PASS 2>/dev/null | tar -tz 2>/dev/null | wc -l | tr -d ' ')
+[ "${_dentro:-0}" -gt 0 ] || _rovina "ROSSO: il pacchetto NON si riapre (0 file dentro): $OUT"
+
+verde "      riaperto: $_dentro file dentro, $_byte byte."
+
+verde "OK — copia offsite cifrata, ESISTENTE e RIAPERTA:"
 verde "     $OUT"
-verde "     ($N database, $verificati checksum verificati)"
-echo  "Per il ripristino: vedi 'RESTORE DA ZERO' in RIPRENDI_QUI.md"
+verde "     ($N database, $verificati checksum verificati, $_dentro file nel pacchetto)"
+echo  "Per il ripristino: vedi 'SE IL SERVER MUORE' in DEPLOY.md"

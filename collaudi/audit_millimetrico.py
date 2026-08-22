@@ -3,6 +3,7 @@ Ogni affermazione verificabile del README (e dei fratelli) viene confrontata con
 conteggi, percorsi, moduli, rotte, variabili d'ambiente, tariffe, logica dei consensi.
 Una sola discrepanza = STOP.
 """
+import datetime
 import io
 import os
 import re
@@ -191,7 +192,21 @@ ok("CLAUDE.md riporta le stesse tariffe del README",
    and ("**%d**" % gratis) in CL or ("%d giorni" % gratis) in CL)
 ok("CLAUDE.md dice che _archivio non si segue", "_archivio" in CL and "non si segue" in CL.lower())
 RQ = leggi("RIPRENDI_QUI.md")
-ok("RIPRENDI_QUI cita il lavoro di oggi", "2026-07-20" in RQ)
+# ⛔ RIPARATA IL 2026-08-22, e il difetto era nel CONTROLLO, non nel documento.
+#    Diceva:  ok("RIPRENDI_QUI cita il lavoro di oggi", "2026-07-20" in RQ)
+#    Si chiamava «di oggi» e cercava una data FISSA del 20 luglio: sarebbe rimasta verde per
+#    sempre mentre il documento invecchiava, ed era esattamente la malattia che questo audit
+#    esiste per trovare -- dentro l'audit stesso. Adesso guarda la data PIU' RECENTE citata
+#    e pretende che non sia vecchia di piu' di 30 giorni: non c'e' niente da aggiornare a
+#    mano, e il controllo non puo' diventare falso restando fermo.
+_date = sorted(re.findall(r"20\d\d-\d\d-\d\d", RQ))
+if _date:
+    _ultima = datetime.datetime.strptime(_date[-1], "%Y-%m-%d").date()
+    _giorni = (datetime.date.today() - _ultima).days
+    ok("RIPRENDI_QUI cita lavoro recente (data piu' recente: %s, %d giorni fa)"
+       % (_date[-1], _giorni), -1 <= _giorni <= 30)
+else:
+    ok("RIPRENDI_QUI cita lavoro recente (nessuna data nel documento)", False)
 DP = leggi("DEPLOY.md")
 ok("DEPLOY.md descrive il deploy rm-first", "rm -f" in DP or "rm-first" in DP)
 

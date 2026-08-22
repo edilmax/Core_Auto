@@ -685,8 +685,71 @@ def main():
     stampa_tecniche()
     stampa_i_blocchi()
     stampa_il_foglio()
-    print("=" * 78)
+    # ⛔ PER ULTIMA, ED E' UNA SCELTA: e' l'unica cosa che chi apre una sessione deve
+    #    portarsi via. Tutto quello sopra spiega COM'E' fatta la macchina; questa dice
+    #    COSA FARE, e se stesse in mezzo verrebbe sepolta come le altre sei liste.
+    stampa_cosa_fare_adesso()
     return 0
+
+
+def stampa_cosa_fare_adesso():
+    """LA LISTA E' UNA SOLA, e la produce una macchina.
+
+    ⛔ PERCHE' ESISTE, misurato il 2026-08-21 e non un'opinione: ogni chat leggeva **20.411
+    righe** di documenti e ci trovava dentro **SETTE** liste diverse di «cosa fare» (i 10
+    blocchi · le 6 caselle · il piano dei 10 pezzi · il foglio unico · i lavori obbligatori ·
+    i blocchi scritti a mano in RIPRENDI_QUI · la memoria). Ne sceglieva una e ripartiva da
+    un punto diverso -- non per indisciplina: per **matematica**.
+    Il risultato, su tre settimane (232 commit, 56.190 righe cambiate):
+        guardie 39,7% · documenti 31,3% · strumenti 21,1% · **PRODOTTO 6,5%** · fasi nuove: 0
+    L'ha visto il fondatore prima di chiunque: *«ogni chat dice cose diverse... il progetto
+    si finisce, se si finisce, fra 10 anni»*.
+
+    💡 La cura non e' un'altra regola -- ce ne sono gia' **106**. E' che la lista sia **UNA**
+    e la produca una **macchina**. `collaudi/piano.py` faceva gia' esattamente questo: era
+    sepolto sotto le altre sei.
+
+    ⛔ E IL NUMERO NON SI SCRIVE A MANO. Fino a oggi qui c'era «Blocco 1 = 0 su 6» come
+    **costante**: il difetto che D22 vieta, dentro lo strumento nato per impedirlo.
+    """
+    print("")
+    print("=" * 78)
+    print("🧭 COSA FARE ADESSO — LA LISTA E' UNA SOLA, e la produce una macchina")
+    print("=" * 78)
+    print("     python collaudi/piano.py               <- la macchina, e cosa manca, punto")
+    print("                                               per punto, fino alla fine")
+    print("     python collaudi/scheda.py --blocco 1   <- il blocco su cui si lavora ADESSO")
+    try:
+        import importlib.util as _iu
+        _sp = _iu.spec_from_file_location(
+            "_scheda_avvio", os.path.join(RADICE, "collaudi", "scheda.py"))
+        _sc = _iu.module_from_spec(_sp)
+        _sp.loader.exec_module(_sc)
+        _pi = _iu.spec_from_file_location(
+            "_piano_avvio", os.path.join(RADICE, "collaudi", "piano.py"))
+        _pm = _iu.module_from_spec(_pi)
+        _pi.loader.exec_module(_pm)
+        _b1 = [b for b in _pm.BLOCCHI if b["ordine"] == 1][0]
+        _dati, _imp = _sc.leggi(), _sc.impronta_del_blocco(1)
+        _fatte = sum(1 for c in _b1["finito_quando"] if _sc.stato(c, 1, _dati, _imp)[0])
+        print("")
+        print("     BLOCCO 1 (SOLDI E PAGAMENTI): %d su %d caselle"
+              % (_fatte, len(_b1["finito_quando"])))
+        print("     ^ misurato ADESSO, non ricordato")
+    except Exception as _e:
+        # ⛔ Si dichiara invece di tacere: un conteggio che non si puo' fare non e' uno zero.
+        print("")
+        print("     ⚠️  non riesco a contare le caselle (%s: %s): lancia la scheda a mano"
+              % (type(_e).__name__, _e))
+    print("")
+    print("  ⛔ Prendi la prima casella vuota. Passala. FERMATI.")
+    print("  ⛔ Non cercare «cosa sarebbe meglio fare»: e' gia' stato cercato, sta li' dentro.")
+    print("  ⛔ Se trovi un difetto per strada: SCRIVILO E VAI AVANTI. Fermarsi a ripararlo e'")
+    print("     il meccanismo che ha prodotto quel 6,5%: ogni singola riparazione era")
+    print("     giustificata, e il lavoro chiesto e' rimasto li' per tre settimane.")
+    print("  ⚠️  Tutto il resto (RIPRENDI_QUI, il registro, la memoria) e' STORIA GIA'")
+    print("     SUCCESSA: dice PERCHE' una cosa e' com'e', mai COSA fare adesso.")
+    print("=" * 78)
 
 
 def stampa_il_foglio():
@@ -894,12 +957,13 @@ def stampa_i_blocchi():
               % (b["ordine"], b["nome"], s["moduli"], len(s["scoperti"])))
     print("  ⛔ «nominato da un test» NON vuol dire eseguito: e' il limite dichiarato N1.")
     print("     Un blocco risulta FINITO solo quando UN ATTREZZO ha spuntato tutte le sue")
-    print("     caselle. ✅ La scheda c'e' dal 2026-08-21, ma nessuno la scrive ancora:")
-    print("     Blocco 1 = 0 su 6.  ->  python collaudi/scheda.py --blocco 1")
+    print("     caselle.")
     if problemi:
         print("  🔴 IL PIANO E LA MACCHINA NON COINCIDONO — %d contraddizioni:" % len(problemi))
         for p in problemi:
             print("     · %s" % p)
+
+    print("     ->  python collaudi/scheda.py --blocco 1")
 
 
 if __name__ == "__main__":

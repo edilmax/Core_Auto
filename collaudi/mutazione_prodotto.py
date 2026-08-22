@@ -1944,7 +1944,15 @@ def scrivi_la_scheda(esiti, rinunce, comando, radice=REPO, percorso=None):
     spec_p = importlib.util.spec_from_file_location("_piano_copertura", percorso_piano)
     piano = importlib.util.module_from_spec(spec_p)
     spec_p.loader.exec_module(piano)
-    del_blocco = set([b for b in piano.BLOCCHI if b["ordine"] == ordine][0].get("moduli") or ())
+    # ⛔ SU QUALI MODULI SI MISURA QUESTA CASELLA. Un blocco puo' dichiarare un bersaglio
+    #    piu' stretto per la mutazione (`moduli_mutazione`): non e' uno sconto, e' il fatto
+    #    che la casella parla di QUELLI e il suo testo lo dice. Se non lo dichiara si torna
+    #    all'intero blocco, che resta il comportamento severo di serie.
+    #    ⚠️ E il bersaglio si legge SEMPRE dal piano, mai da una copia qui dentro: una copia
+    #       direbbe il falso il giorno che il piano cambia, ed e' esattamente la malattia che
+    #       `condizione_della_mutazione` esiste per impedire sul testo della casella.
+    _blocco = [b for b in piano.BLOCCHI if b["ordine"] == ordine][0]
+    del_blocco = set(_blocco.get("moduli_mutazione") or _blocco.get("moduli") or ())
     visti = {str(e.get("file", ""))[:-3] for e in esiti if e.get("file")}
     saltati_prod = {str(v).split(" ")[0][:-3]
                     for v in (rinunce.get("moduli_fuori_produzione") or [])}

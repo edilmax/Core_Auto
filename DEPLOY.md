@@ -317,3 +317,155 @@ echo prova > certbot/www/_t && docker exec casavip_nginx cat /var/www/certbot/_t
 La procedura dell'impianto **precedente** (server e tecnologie ora dismessi) è conservata nei
 documenti in `_archivio/`: **non si applica al prodotto attuale** e i suoi comandi **non vanno
 eseguiti** su questa macchina.
+
+---
+
+# 💾 SE IL SERVER MUORE — copia fuori dal server e ripristino da zero
+
+> **Spostato qui da `RIPRENDI_QUI.md` il 2026-08-22.** Non è racconto: è la procedura che
+> serve nel giorno peggiore, e `RIPRENDI_QUI.md` da oggi contiene **solo** cosa manca
+> (REGOLA ZERO 3). Il posto giusto è qui, accanto a come si mette online: mettere su e
+> rimettere in piedi sono la stessa operazione vista dai due lati.
+
+## 💾 BACKUP OFFSITE + RESTORE DA ZERO (contro il data-loss catastrofico) — 2026-07-18
+> **Perché**: i backup di bordo (container `casavip_backup`, ogni 6h, 14 per DB) vivono sul
+> disco del VPS. Se il disco muore / ransomware / cancello il volume: dati E backup spariscono
+> insieme. Difesa: una copia **CIFRATA fuori macchina**, tirata dal PC (mai il VPS che spinge).
+> **Scoperto quel giorno**: il backup aveva una LISTA FISSA e NON salvava `finanza.db` (il
+> giornale contabile) + checkin/coda/split/geocache/poicache → ora fa **glob `*.db`** (salva
+> tutto, sempre). Guardia: `test_backup_completo.py`.
+
+### 1) FARE una copia offsite (dal PC, quando vuoi — ideale: ogni sera)
+```bash
+cd ~/Desktop/Core_Auto
+BV_PASS='UNA-PASSPHRASE-LUNGA-E-SEGRETA' bash deploy/pull_offsite.sh
+# -> crea ~/bookinvip-offsite/bookinvip-<data>.tar.gz.enc  (AES-256, verificato coi checksum)
+```
+> La **passphrase** è l'unica cosa che NON deve stare nel repo né sul VPS: scrivila dove tieni
+> le password. Senza, la copia non si può decifrare (è il punto: nemmeno un ladro può).
+> Requisiti PC: `ssh`, `openssl`, `tar` (rsync NON serve: c'è il ripiego tar-su-ssh).
+
+### 2) RESTORE DA ZERO (server nuovo, disco morto — procedura idiota-proof)
+**A. Ricostruisci i dati dalla copia offsite (sul PC):**
+```bash
+cd ~/Desktop/Core_Auto
+BV_PASS='LA-STESSA-PASSPHRASE' bash deploy/restore_offsite.sh ~/bookinvip-offsite/bookinvip-<data>.tar.gz.enc ~/RESTORE
+# verifica OGNI db (PRAGMA integrity_check) + la CATENA HASH del giornale.
+# Se dice "GIORNALE MANOMESSO" o "RESTORE con N problemi": NON usare, prova un pacchetto più vecchio.
+# Se dice "RESTORE OK": in ~/RESTORE hai tutti i .db pronti.
+```
+**B. Rimetti in piedi il server (su un VPS Ubuntu pulito):**
+```bash
+# 1. installa docker + docker compose e git
+apt update && apt install -y docker.io git
+# 2. prendi il codice (è su GitHub, mai perso)
+git clone https://github.com/edilmax/Core_Auto.git /var/www/bookinvip && cd /var/www/bookinvip
+# 3. ricrea il file dei segreti .env.casavip (chiavi Stripe da dashboard.stripe.com)
+#    e le env DB_* (DB_FINANZA=/data/finanza.db, DB_CHECKIN=..., ecc. — vedi main_casavip.py)
+# 4. crea il volume dati e COPIA DENTRO i .db restaurati
+docker volume create bookinvip_casavip_data
+VOL=$(docker volume inspect --format '{{.Mountpoint}}' bookinvip_casavip_data)
+scp ~/RESTORE/*.db root@<nuovo-vps>:$VOL/      # dal PC; oppure cp se già sul server
+# 5. avvia (HTTPS: serve /etc/letsencrypt — rigenera con certbot se il dominio punta qui)
+docker compose -f docker-compose.casavip.yml build app
+docker compose -f docker-compose.casavip.yml up -d
+# 6. verifica: curl -sS -o /dev/null -w "%{http_code}\n" https://bookinvip.com/api/health  -> 200
+```
+> ⛔ **`docker compose` (due parole, v2).** Il testo originale del 18 luglio diceva
+> `docker-compose` col trattino: quella è la v1 e **butta giù nginx** (D17). Corretto nello
+> spostamento del 2026-08-22.
+> **Obiettivo < 1 ora**: i passi 1-2 sono ~10 min, il 4 (copia dati) è secondi (i DB sono piccoli).
+> Il collo di bottiglia vero è il DNS/certificato HTTPS. **Esercitazione fatta 2026-07-18**: pull
+> reale (172 archivi, 51 checksum ok) + restore su ambiente isolato (17 DB integri) + prova col
+> dente (giornale manomesso → beccato a `seq=2`, restore rifiutato). ⚠️ **DA provare col fondatore**
+> su un VPS di staging vero, cronometro alla mano (bus-factor: che funzioni anche per un tecnico
+> che non conosce il progetto).
+
+## 🧯 ZERO-KNOWLEDGE — per un tecnico che NON ha mai visto questo progetto
+> Leggi questo se devi rimettere in piedi BookinVIP e non sai nulla del codice.
+> **Cos'è**: un sito (Python stdlib dietro nginx, in Docker) su UN server Hostinger
+> `76.13.44.167`, dominio `bookinvip.com`. I dati sono **file SQLite** in un volume Docker.
+> Il codice è su GitHub (`edilmax/Core_Auto`, mai perso). I dati stanno **solo** nel volume
+> + nelle **copie offsite cifrate** sul PC del proprietario.
+
+### (a) DOVE stanno i dati — percorsi esatti (scoperta automatica di OGNI .db)
+- Nel server, volume Docker montato come `/data` dentro i container. Sul disco del VPS:
+  `/var/lib/docker/volumes/bookinvip_casavip_data/_data/`
+  (trovalo sempre con: `docker volume inspect --format '{{.Mountpoint}}' bookinvip_casavip_data`)
+- Lì dentro: **tutti i `*.db`** (misurati **25** il 2026-08-22; erano 17 a luglio: catalogo,
+  inventario, registro_host, accettazioni, payout, **finanza** = giornale contabile, garanzia,
+  pendenti, tassa_comunale, viral, messaggi, domanda, checkin, coda, split, geocache, poicache,
+  admin_accounts, credito_usati, deposito, kyc, marche, partner, poi, recensioni)
+  + la cartella `backup/` (snapshot .db.gz + .sha256).
+  Il backup li scopre da solo (`*.db`): **non c'è una lista da aggiornare**, ed è per questo
+  che il numero può crescere senza che nessuno tocchi niente.
+
+### (b) DECIFRARE una copia offsite (sul PC)
+```bash
+# le copie sono ~/bookinvip-offsite/bookinvip-<data>.tar.gz.enc (AES-256).
+# serve SOLO la passphrase scelta a suo tempo (NON è nel repo né sul server: chiedila al proprietario).
+BV_PASS='LA-PASSPHRASE' bash deploy/restore_offsite.sh ~/bookinvip-offsite/bookinvip-<data>.tar.gz.enc ~/RESTORE
+# -> verifica ogni checksum + PRAGMA integrity_check + CATENA HASH del giornale.
+#    Se dice "GIORNALE MANOMESSO"/"RESTORE con N problemi" -> usa un pacchetto più vecchio.
+#    Se dice "RESTORE OK" -> in ~/RESTORE ci sono tutti i .db pronti.
+# (decrypt "a mano" senza lo script, se serve:)
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -in <pacchetto>.enc -out backup.tar.gz -pass env:BV_PASS
+```
+
+### (c) RIPRISTINO CRONOMETRATO (server nuovo Ubuntu, obiettivo < 1 ora)
+```bash
+# [~10 min] 1. strumenti
+apt update && apt install -y docker.io git python3
+# [~2 min]  2. codice (da GitHub, mai perso)
+git clone https://github.com/edilmax/Core_Auto.git /var/www/bookinvip && cd /var/www/bookinvip
+# [~3 min]  3. segreti: ricrea /var/www/bookinvip/.env.casavip (chiavi Stripe da dashboard.stripe.com;
+#            TELEGRAM_BOT_TOKEN/CHAT_ID; e le env DB_* -> vedi main_casavip.py). Vedi anche la sez. 🔑 ACCESSO.
+# [~1 min]  4. volume + dati restaurati (dal punto b, dal PC):
+docker volume create bookinvip_casavip_data
+VOL=$(docker volume inspect --format '{{.Mountpoint}}' bookinvip_casavip_data)
+scp ~/RESTORE/*.db root@<NUOVO-VPS>:$VOL/            # copia i .db nel volume
+# [~15 min] 5. HTTPS: punta il DNS di bookinvip.com al nuovo IP, poi certbot
+# [~5 min]  6. avvia
+docker compose -f docker-compose.casavip.yml build app
+docker compose -f docker-compose.casavip.yml up -d
+# 7. VERIFICA: curl -sS -o /dev/null -w "%{http_code}\n" https://bookinvip.com/api/health   # -> 200
+#    e la catena del giornale: python3 fase178_watchdog.py --dati $VOL --backup $VOL/backup --uptime skip
+```
+> Collo di bottiglia reale = DNS+certificato (passo 5). ⚠️ **DA provare col fondatore** davvero
+> su uno staging, cronometro alla mano (bus-factor: che funzioni per un estraneo, non solo sulla carta).
+
+## 🩺 WATCHDOG (sistema nervoso) — installazione e uso
+> Sorveglia salute e AVVISA su Telegram. Read-only, non tocca dati. **Due teste** (l'allarme non muore col server):
+```bash
+# SUL VPS (auto-diagnosi: catena hash + backup fresco + disco + uptime) — cron ogni 10 min:
+( crontab -l 2>/dev/null; echo "*/10 * * * * cd /var/www/bookinvip && sh deploy/watchdog.sh >/dev/null 2>&1" ) | crontab -
+# DAL PC (l'unico che vede "il server è morto") — quando il PC è acceso, o via Task Scheduler:
+REMOTO=1 bash deploy/watchdog.sh    # legge Telegram da deploy/.watchdog.env (gitignored)
+```
+> Log persistente in `/data/watchdog.log`. Diagnosi on-demand: `GET /api/admin/diagnosi` (admin-key).
+> ✅ **Verificato attivo il 2026-08-22**: il cron c'è, e la copia di bordo più fresca era delle 07:38
+> dello stesso giorno. Consigliato in più (gratis): un uptime-monitor esterno su `/api/health`.
+
+## 📌 CONTROLLI RAPIDI (dal proprio PC)
+```bash
+curl -sS -o /dev/null -w "HTTP %{http_code} cert=%{ssl_verify_result}\n" https://bookinvip.com/   # atteso: HTTP 200 cert=0
+curl -sS -X POST https://bookinvip.com/api/domanda -H 'Content-Type: application/json' -d '{"email":"a@b.com","citta":"roma"}'  # atteso: {"ok": true,...}
+```
+
+## 🔑 ACCESSO
+- VPS: `ssh root@76.13.44.167` (Hostinger, Ubuntu 24.04). La chiave pubblica `edilmax` (id_ed25519) è
+  installata in `/root/.ssh/authorized_keys`. Fallback sempre disponibile: **hPanel Hostinger → VPS →
+  Terminale del browser** (root, senza password).
+- ⛔ **Nota del 2026-08-22:** la riga originale rimandava a `STATO_FINALE.md` e `COSE_DA_FARE.md`.
+  **Quei due file non esistono più.** Cosa fa la macchina: `README.md`. Cosa manca: `RIPRENDI_QUI.md`
+  e `python collaudi/piano.py` — e se i due si contraddicono, **vince `piano.py`**.
+
+## 🧹 COSE MINORI (non urgenti)
+- Container `casavip_backup`: healthcheck vero (ultimo backup in `/data/backup/*.gz` più fresco di
+  7 ore). In produzione risulta **healthy**; se torna rosso, i backup sono DAVVERO fermi.
+- ⛔ *Qui c'era una riga su un vecchio server dismesso, spostata insieme al resto il
+  2026-08-22 e **tolta subito dopo**: `test_deploy_md` vieta in questo documento ogni nome
+  del vecchio impianto, e ha ragione. Chi ripristina di fretta non deve trovare qui niente
+  di copiabile per errore. Il fatto storico resta in `REGISTRO_INGEGNERIA.md`, che è il
+  diario. È la seconda volta oggi che quella guardia mi prende: la prima sul nome della
+  vecchia tecnologia, la seconda sul nome del vecchio fornitore.*

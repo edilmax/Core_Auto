@@ -8045,38 +8045,38 @@ class TestLaSchedaNonSiScriveAMano(unittest.TestCase):
         scheda = self._scheda()
         testo = "una condizione di prova, che nessuno misura davvero"
         vuoto = {}
-        spuntata, motivo = scheda.stato(testo, 1, vuoto, commit="aaaaaaa")
+        spuntata, motivo = scheda.stato(testo, 1, vuoto, impronta="aaaaaaa")
         self.assertFalse(spuntata, "una condizione MAI MISURATA non puo' risultare fatta")
         self.assertIn("mai misurata", motivo.lower(),
                       "il motivo deve dire che non e' stata misurata, non tacere: %r" % motivo)
 
         buona = {scheda.chiave(testo, 1): {"esito": True, "denominatore": 12,
                                            "comando": "python collaudi/finto.py",
-                                           "commit": "aaaaaaa",
+                                           "impronta": "aaaaaaa", "commit": "c0ffee0",
                                            "quando": "2026-08-21T00:00:00"}}
-        spuntata, motivo = scheda.stato(testo, 1, buona, commit="aaaaaaa")
+        spuntata, motivo = scheda.stato(testo, 1, buona, impronta="aaaaaaa")
         self.assertTrue(spuntata,
                         "una misura VERA, sul commit giusto e con un denominatore, deve "
                         "spuntare la casella -- se no la scheda non serve a niente: %r" % motivo)
 
         for guasto, atteso, perche in (
                 ({"esito": True, "denominatore": 12, "comando": "x",
-                  "commit": "bbbbbbb", "quando": "2026-08-21T00:00:00"},
-                 "commit",
-                 "misurata su un ALTRO commit: il codice e' cambiato sotto, quella misura "
-                 "non parla piu' di questo codice"),
+                  "impronta": "bbbbbbb", "quando": "2026-08-21T00:00:00"},
+                 "impronta",
+                 "misurata su un ALTRO codice: i moduli del blocco sono cambiati sotto, "
+                 "quella misura non parla piu' di questo codice"),
                 ({"esito": True, "denominatore": 0, "comando": "x",
-                  "commit": "aaaaaaa", "quando": "2026-08-21T00:00:00"},
+                  "impronta": "aaaaaaa", "quando": "2026-08-21T00:00:00"},
                  "denominatore",
                  "denominatore ZERO: un OK senza aver guardato niente e' il verde peggiore "
                  "di tutti (sbaglio S7)"),
                 ({"esito": False, "denominatore": 12, "comando": "x",
-                  "commit": "aaaaaaa", "quando": "2026-08-21T00:00:00"},
+                  "impronta": "aaaaaaa", "quando": "2026-08-21T00:00:00"},
                  "",
                  "esito falso: resta rossa")):
             with self.subTest(perche=perche):
                 s, m = scheda.stato(testo, 1, {scheda.chiave(testo, 1): guasto},
-                                    commit="aaaaaaa")
+                                    impronta="aaaaaaa")
                 self.assertFalse(s, perche)
                 if atteso:
                     self.assertIn(atteso, m.lower(),
@@ -8100,7 +8100,9 @@ class TestLaSchedaNonSiScriveAMano(unittest.TestCase):
                             comando="python collaudi/finto.py", ordine=1, percorso=dove,
                             commit="ccccccc")
             riletta = scheda.leggi(dove)
-            spuntata, motivo = scheda.stato(testo, 1, riletta, commit="ccccccc")
+            # ⛔ Nessuna impronta passata a mano: la calcola lei sul progetto vero, la
+            #    stessa che `registra` ha appena scritto. E' il giro completo.
+            spuntata, motivo = scheda.stato(testo, 1, riletta)
             self.assertTrue(spuntata,
                             "scritta e riletta, la misura non spunta la casella: la scheda "
                             "non conserva quello che le si dice (%r)" % motivo)
@@ -8122,14 +8124,96 @@ class TestLaSchedaNonSiScriveAMano(unittest.TestCase):
         prima = "i soldi tornano all'ospite da OGNI strada"
         dopo = "i soldi tornano all'ospite da ogni strada, ENTRO 24 ORE"
         registro = {scheda.chiave(prima, 1): {"esito": True, "denominatore": 7,
-                                              "comando": "x", "commit": "aaaaaaa",
+                                              "comando": "x", "impronta": "aaaaaaa",
                                               "quando": "2026-08-21"}}
-        self.assertTrue(scheda.stato(prima, 1, registro, commit="aaaaaaa")[0])
-        spuntata, motivo = scheda.stato(dopo, 1, registro, commit="aaaaaaa")
+        self.assertTrue(scheda.stato(prima, 1, registro, impronta="aaaaaaa")[0])
+        spuntata, motivo = scheda.stato(dopo, 1, registro, impronta="aaaaaaa")
         self.assertFalse(
             spuntata,
             "la condizione e' stata RISCRITTA e la vecchia misura la spunta lo stesso: "
             "cosi' si dichiara fatta una cosa che nessuno ha mai verificato (%r)" % motivo)
+
+
+class TestIlTraguardoDeveEssereRAGGIUNGIBILE(unittest.TestCase):
+    """⛔⛔ SEI ESAMI IN SEI SESSIONI NON POTEVANO MAI STARE SPUNTATI INSIEME.
+
+    Trovato il 2026-08-21 **dal fondatore**, con una domanda in italiano: *«se non è finito
+    il Blocco 1 devi ricominciare da capo?»*. Sì — ogni volta. Dimostrato:
+        lunedi'  passo l'esame 1 (commit A)  -> 1 su 2
+        martedi' passo l'esame 2 (commit B)  -> l'esame 1 SI SVUOTA -> ancora 1 su 2
+    La casella scadeva sul **commit**, e ogni sessione fa un commit: il traguardo era
+    **impossibile per costruzione**. E' lo stesso difetto della casella-costante del giorno
+    prima, tornato in una forma nuova -- e questa volta era stato COLLEGATO da me.
+
+    ✅ LA CURA: la casella scade quando cambia **il codice che quella casella misura**
+    (l'impronta dei moduli del blocco), non quando cambia un commit qualunque. Correggo un
+    documento? La casella dei soldi resta. Tocco `fase85`? Scade, ed e' giusto.
+
+    ⛔ Queste due guardie sono la ragione per cui il difetto non puo' tornare: la prima
+    pretende che il traguardo si POSSA raggiungere, la seconda che la casella scada davvero
+    quando deve. Senza la seconda, «raggiungibile» si otterrebbe non scadendo mai.
+    """
+
+    def _scheda(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_scheda_tragu", os.path.join(QUI, "collaudi", "scheda.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_SEI_ESAMI_PASSATI_IN_SEI_MOMENTI_DIVERSI_RESTANO_PASSATI(self):
+        """La direzione che mancava: si passano uno alla volta e restano spuntati."""
+        import shutil
+        import tempfile
+        scheda = self._scheda()
+        culla = tempfile.mkdtemp(prefix="traguardo_")
+        try:
+            dove = os.path.join(culla, "scheda.json")
+            esami = ["esame numero %d, finto" % i for i in range(1, 7)]
+            # Si passano UNO ALLA VOLTA, come succede davvero: sei sessioni, sei momenti.
+            for e in esami:
+                scheda.registra(e, esito=True, denominatore=10, comando="prova finta",
+                                ordine=1, percorso=dove)
+            dati = scheda.leggi(dove)
+            imp = scheda.impronta_del_blocco(1)
+            self.assertTrue(imp, "impronta del blocco 1 non calcolabile: misura non valida")
+            passati = [e for e in esami if scheda.stato(e, 1, dati, imp)[0]]
+            self.assertEqual(
+                len(passati), 6,
+                "passati %d su 6: gli esami dati in momenti diversi si svuotano a vicenda, "
+                "quindi il blocco non potra' MAI risultare finito -- e' lo stesso difetto "
+                "della casella-costante, in forma nuova. Motivo del primo: %r"
+                % (len(passati), scheda.stato(esami[0], 1, dati, imp)[1]))
+        finally:
+            shutil.rmtree(culla, ignore_errors=True)
+
+    def test_MA_SE_CAMBIA_IL_CODICE_DEL_BLOCCO_LA_CASELLA_SCADE_LO_STESSO(self):
+        """⛔ L'ALTRA DIREZIONE (ferrea 10), e senza di lei la prima sarebbe pericolosa:
+        «raggiungibile» si otterrebbe benissimo non facendo scadere MAI niente -- cioe'
+        dichiarando finito un blocco il cui codice e' cambiato sotto."""
+        import shutil
+        import tempfile
+        scheda = self._scheda()
+        culla = tempfile.mkdtemp(prefix="traguardo2_")
+        try:
+            dove = os.path.join(culla, "scheda.json")
+            testo = "una condizione finta del blocco 1"
+            scheda.registra(testo, esito=True, denominatore=10, comando="prova", ordine=1,
+                            percorso=dove)
+            dati = scheda.leggi(dove)
+            self.assertTrue(scheda.stato(testo, 1, dati)[0],
+                            "appena scritta e gia' non vale: la scheda non conserva niente")
+            # Ora si finge che il codice del blocco sia cambiato.
+            ok, motivo = scheda.stato(testo, 1, dati, impronta="cambiata0000")
+            self.assertFalse(
+                ok,
+                "il codice del blocco e' cambiato e la casella resta SPUNTATA: cosi' si "
+                "dichiara finito un blocco che nessuno ha piu' misurato (%r)" % motivo)
+            self.assertIn("impronta", motivo.lower(),
+                          "il motivo non dice che a cambiare e' stato il codice: %r" % motivo)
+        finally:
+            shutil.rmtree(culla, ignore_errors=True)
 
 
 class TestDueBlocchiNonPossonoCondividereUnaCasella(unittest.TestCase):
@@ -8400,6 +8484,69 @@ class TestIlGiudiceScriveDaSeLaScheda(unittest.TestCase):
         finally:
             shutil.rmtree(culla, ignore_errors=True)
 
+    def test_LA_CASELLA_DELLA_MUTAZIONE_SI_MISURA_DOVE_PASSA_IL_DENARO(self):
+        """⛔ DECISIONE DEL FONDATORE, 2026-08-22 — e nasce da una misura, non da una comodita'.
+
+        La casella pretendeva zero punti scoperti su TUTTI i 24 moduli del blocco: misurati
+        col censimento sono **1.097 punti**, e a 84 secondi a punto (misurato su `fase87` il
+        2026-08-22: 15 punti in 21 minuti) fanno **~25 ore di solo calcolo**, prima ancora di
+        scrivere i test che mancheranno. Peggio: quel numero **cresce** quando si migliora il
+        generatore -- da 6.012 a 7.566 punti in due settimane, a codice fermo. Un traguardo
+        che si allontana mentre cammini non e' severo: e' irraggiungibile, ed e' il motivo per
+        cui il Blocco 1 e' rimasto aperto dal 20 luglio al 22 agosto.
+
+        💡 E lo dice anche la ricerca gia' in casa (appendice, Google): l'85% dei mutanti e'
+        inutile e **il punteggio di mutazione non e' il numero da inseguire**. Noi lo stavamo
+        inseguendo su tutto il blocco.
+
+        La riga d'arrivo diventa il **percorso del denaro**: i moduli che un euro attraversa
+        davvero quando entra, si divide e esce. Restano dichiarati in `piano.py`, non qui:
+        una copia potrebbe mentire il giorno che il piano cambia.
+
+        ⛔ E si prova nelle DUE direzioni (D18 punto 2): un giro che li copre TUTTI scrive,
+        un giro che ne salta anche UNO SOLO non scrive. Senza la seconda meta', "raggiungibile"
+        si otterrebbe semplicemente non pretendendo piu' niente.
+        """
+        import importlib.util
+        import shutil
+        import tempfile
+        spec = importlib.util.spec_from_file_location(
+            "_piano_denaro", os.path.join(QUI, "collaudi", "piano.py"))
+        piano = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(piano)
+        blocco = [b for b in piano.BLOCCHI if b["ordine"] == 1][0]
+        moduli_mut = tuple(blocco.get("moduli_mutazione") or ())
+        self.assertTrue(
+            moduli_mut,
+            "il blocco 1 non dichiara su QUALI moduli si misura la mutazione: senza, la "
+            "casella torna a pretendere tutti i %d moduli del blocco (1.097 punti, ~25 ore) "
+            "e il blocco non finisce mai" % len(blocco["moduli"]))
+        self.assertTrue(
+            set(moduli_mut) <= set(blocco["moduli"]),
+            "i moduli della mutazione non sono un sottoinsieme del blocco: %r"
+            % (sorted(set(moduli_mut) - set(blocco["moduli"])),))
+        m = self._mut()
+        culla = tempfile.mkdtemp(prefix="scheda_denaro_")
+        try:
+            esiti = [{"file": n + ".py", "riga": 1, "verdetto": "ucciso",
+                      "danno": "finto, per la guardia"} for n in moduli_mut]
+            riga, motivo = m.scrivi_la_scheda(
+                esiti, {}, comando="prova", radice=QUI,
+                percorso=os.path.join(culla, "tutti.json"))
+            self.assertIsNotNone(
+                riga,
+                "un giro che copre TUTTO il percorso del denaro non spunta la casella: il "
+                "traguardo resta irraggiungibile (%s)" % motivo)
+            riga2, motivo2 = m.scrivi_la_scheda(
+                esiti[:-1], {}, comando="prova", radice=QUI,
+                percorso=os.path.join(culla, "meno_uno.json"))
+            self.assertIsNone(
+                riga2,
+                "ha spuntato la casella saltando %r: cosi' 'raggiungibile' si otterrebbe "
+                "non pretendendo piu' niente (%s)" % (moduli_mut[-1], motivo2))
+        finally:
+            shutil.rmtree(culla, ignore_errors=True)
+
     def test_UN_GIRO_CHE_NON_HA_ESAMINATO_NIENTE_NON_SPUNTA_LA_CASELLA(self):
         """⛔ Denominatore zero non e' verde. La scheda gia' lo applica: qui si pretende che
         il COLLEGAMENTO lo rispetti, cioe' che il giudice le passi i punti VERAMENTE
@@ -8436,7 +8583,7 @@ class TestIlGiudiceScriveDaSeLaScheda(unittest.TestCase):
             sch = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(sch)
             ok, perche = sch.stato(riga["condizione"], riga["blocco"], sch.leggi(finta),
-                                   riga["commit"])
+                                   riga["impronta"])
             self.assertFalse(ok,
                              "denominatore ZERO e la casella risulta SPUNTATA: %s" % perche)
         finally:
@@ -9304,6 +9451,90 @@ class TestGliALLARMIDiCodeQLSICHIUDONOALLAFONTE(unittest.TestCase):
         self.assertEqual(colpevoli, [],
                          "in app.py questi valori non fidati entrano nel registro senza "
                          "`_sanitize_log(...)`: %s" % colpevoli)
+
+
+class TestUnaSolaListaDiCoseDaFare(unittest.TestCase):
+    """⛔ REGOLA ZERO 3, riscritta dal fondatore il 2026-08-22: le cose da fare stanno in UN
+    SOLO posto, `RIPRENDI_QUI.md`. Nessun altro file puo' aprire un elenco di lavori.
+
+    ⛔ PERCHE' ESISTE, e non e' un'opinione. Quel giorno abbiamo misurato:
+        - DUE liste chiamate «Blocco 1»: una con 4 fasi dichiarata CHIUSA il 13 agosto,
+          una con 24 moduli e 6 caselle a `0 su 6`. Il fondatore ricordava «5 fasi, era
+          finito», lo strumento rispondeva «0 su 6»: nessuno dei due sbagliava, contavano
+          COSE DIVERSE, e nessuno poteva accorgersene leggendo.
+        - 111 righe «APERTO», in gran parte gia' chiuse.
+        - 4 lavori «da fare» finiti da settimane.
+    Il vecchio divieto («non creare nuovi .md») non impediva niente di tutto questo: il
+    danno era DENTRO i file che c'erano gia'.
+
+    ⛔ E LA DIRETTIVA FINALE 4 ERA L'UNICA SENZA UN «si verifica cosi'» -- ed e' esattamente
+    quella che si e' rotta, pretendendo una seconda lista dentro il registro. Questa guardia
+    e' la macchina che le mancava: un obbligo affidato alla buona volonta' si rompe di nuovo.
+
+    ⚠️ COSA QUESTA GUARDIA NON FA (D18 punto 3):
+      - non sa se una lista dice il VERO: sa che ne esiste una dove non dovrebbe stare;
+      - guarda solo le APERTURE (titoli di sezione e commenti `# TODO:`), non le frasi che
+        NOMINANO quelle parole -- se no il testo della regola stessa la farebbe fallire, e
+        una guardia che punisce chi la descrive verrebbe spenta il giorno dopo (ferrea 10);
+      - non entra in `_archivio/` (dichiarato storico dalla REGOLA ZERO 2).
+    """
+
+    #  I due posti dove una lista di lavori PUO' stare. `piano.py` e' l'eccezione dichiarata
+    #  in REGOLA ZERO 3: quella lista la PRODUCE una macchina misurando il codice, e se le
+    #  due si contraddicono vince lei.
+    ESENTI = ("RIPRENDI_QUI.md", os.path.join("collaudi", "piano.py"))
+
+    #  ⛔ Costruite per pezzi, di proposito: scritte per esteso, questo file conterrebbe le
+    #     aperture che vieta e si accuserebbe da solo al primo giro.
+    APERTURE = ("DA " + "FARE", "PROSSIMI " + "PASSI", "RIPARTI " + "DA QUI",
+                "COSA " + "MANCA", "TO" + "DO", "FIX" + "ME")
+
+    def _file_del_progetto(self):
+        radice = QUI
+        for cartella, sotto, nomi in os.walk(radice):
+            sotto[:] = [s for s in sotto
+                        if s not in (".git", "__pycache__", "_archivio", "node_modules",
+                                     ".hypothesis", "data", "deploy_backup")]
+            for n in nomi:
+                if n.endswith(".md") or n.endswith(".py"):
+                    yield os.path.join(cartella, n)
+
+    def _apre_un_elenco(self, riga, e_python):
+        """Vero solo se la riga APRE un elenco di lavori, non se lo nomina."""
+        secca = riga.strip()
+        su = secca.upper()
+        contiene = any(a in su for a in self.APERTURE)
+        if not contiene:
+            return False
+        if e_python:
+            #  Solo i commenti-segnaposto veri: `# TODO: ...` / `# FIXME: ...`
+            return bool(re.match(r"^#\s*(TO" + r"DO|FIX" + r"ME)\b", secca))
+        #  Nei documenti: solo i TITOLI di sezione (righe che cominciano con #).
+        return bool(re.match(r"^#{1,6}\s", secca))
+
+    def test_UNA_SOLA_LISTA_DI_COSE_DA_FARE(self):
+        colpevoli = []
+        for percorso in self._file_del_progetto():
+            rel = os.path.relpath(percorso, QUI)
+            if any(rel.replace("/", os.sep).endswith(e) for e in self.ESENTI):
+                continue
+            e_python = rel.endswith(".py")
+            try:
+                with io.open(percorso, encoding="utf-8", errors="replace") as f:
+                    for n, riga in enumerate(f, 1):
+                        if self._apre_un_elenco(riga, e_python):
+                            colpevoli.append("%s:%d  %s"
+                                             % (rel, n, " ".join(riga.split())[:90]))
+            except OSError:
+                continue
+        self.assertEqual(
+            colpevoli, [],
+            "TROVATE %d APERTURE DI ELENCHI DI LAVORI FUORI DAI DUE POSTI AMMESSI.\n"
+            "  Ammessi: %s\n"
+            "  Le cose da fare stanno in UN SOLO posto (REGOLA ZERO 3). Ogni riga qui sotto\n"
+            "  e' una lista che vive per conto suo e che un giorno dira' il falso senza che\n"
+            "  nessuno se ne accorga:\n    %s"
+            % (len(colpevoli), " e ".join(self.ESENTI), "\n    ".join(colpevoli)))
 
 
 if __name__ == "__main__":
