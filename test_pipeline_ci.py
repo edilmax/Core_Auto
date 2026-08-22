@@ -8045,38 +8045,38 @@ class TestLaSchedaNonSiScriveAMano(unittest.TestCase):
         scheda = self._scheda()
         testo = "una condizione di prova, che nessuno misura davvero"
         vuoto = {}
-        spuntata, motivo = scheda.stato(testo, 1, vuoto, commit="aaaaaaa")
+        spuntata, motivo = scheda.stato(testo, 1, vuoto, impronta="aaaaaaa")
         self.assertFalse(spuntata, "una condizione MAI MISURATA non puo' risultare fatta")
         self.assertIn("mai misurata", motivo.lower(),
                       "il motivo deve dire che non e' stata misurata, non tacere: %r" % motivo)
 
         buona = {scheda.chiave(testo, 1): {"esito": True, "denominatore": 12,
                                            "comando": "python collaudi/finto.py",
-                                           "commit": "aaaaaaa",
+                                           "impronta": "aaaaaaa", "commit": "c0ffee0",
                                            "quando": "2026-08-21T00:00:00"}}
-        spuntata, motivo = scheda.stato(testo, 1, buona, commit="aaaaaaa")
+        spuntata, motivo = scheda.stato(testo, 1, buona, impronta="aaaaaaa")
         self.assertTrue(spuntata,
                         "una misura VERA, sul commit giusto e con un denominatore, deve "
                         "spuntare la casella -- se no la scheda non serve a niente: %r" % motivo)
 
         for guasto, atteso, perche in (
                 ({"esito": True, "denominatore": 12, "comando": "x",
-                  "commit": "bbbbbbb", "quando": "2026-08-21T00:00:00"},
-                 "commit",
-                 "misurata su un ALTRO commit: il codice e' cambiato sotto, quella misura "
-                 "non parla piu' di questo codice"),
+                  "impronta": "bbbbbbb", "quando": "2026-08-21T00:00:00"},
+                 "impronta",
+                 "misurata su un ALTRO codice: i moduli del blocco sono cambiati sotto, "
+                 "quella misura non parla piu' di questo codice"),
                 ({"esito": True, "denominatore": 0, "comando": "x",
-                  "commit": "aaaaaaa", "quando": "2026-08-21T00:00:00"},
+                  "impronta": "aaaaaaa", "quando": "2026-08-21T00:00:00"},
                  "denominatore",
                  "denominatore ZERO: un OK senza aver guardato niente e' il verde peggiore "
                  "di tutti (sbaglio S7)"),
                 ({"esito": False, "denominatore": 12, "comando": "x",
-                  "commit": "aaaaaaa", "quando": "2026-08-21T00:00:00"},
+                  "impronta": "aaaaaaa", "quando": "2026-08-21T00:00:00"},
                  "",
                  "esito falso: resta rossa")):
             with self.subTest(perche=perche):
                 s, m = scheda.stato(testo, 1, {scheda.chiave(testo, 1): guasto},
-                                    commit="aaaaaaa")
+                                    impronta="aaaaaaa")
                 self.assertFalse(s, perche)
                 if atteso:
                     self.assertIn(atteso, m.lower(),
@@ -8100,7 +8100,9 @@ class TestLaSchedaNonSiScriveAMano(unittest.TestCase):
                             comando="python collaudi/finto.py", ordine=1, percorso=dove,
                             commit="ccccccc")
             riletta = scheda.leggi(dove)
-            spuntata, motivo = scheda.stato(testo, 1, riletta, commit="ccccccc")
+            # ⛔ Nessuna impronta passata a mano: la calcola lei sul progetto vero, la
+            #    stessa che `registra` ha appena scritto. E' il giro completo.
+            spuntata, motivo = scheda.stato(testo, 1, riletta)
             self.assertTrue(spuntata,
                             "scritta e riletta, la misura non spunta la casella: la scheda "
                             "non conserva quello che le si dice (%r)" % motivo)
@@ -8122,14 +8124,96 @@ class TestLaSchedaNonSiScriveAMano(unittest.TestCase):
         prima = "i soldi tornano all'ospite da OGNI strada"
         dopo = "i soldi tornano all'ospite da ogni strada, ENTRO 24 ORE"
         registro = {scheda.chiave(prima, 1): {"esito": True, "denominatore": 7,
-                                              "comando": "x", "commit": "aaaaaaa",
+                                              "comando": "x", "impronta": "aaaaaaa",
                                               "quando": "2026-08-21"}}
-        self.assertTrue(scheda.stato(prima, 1, registro, commit="aaaaaaa")[0])
-        spuntata, motivo = scheda.stato(dopo, 1, registro, commit="aaaaaaa")
+        self.assertTrue(scheda.stato(prima, 1, registro, impronta="aaaaaaa")[0])
+        spuntata, motivo = scheda.stato(dopo, 1, registro, impronta="aaaaaaa")
         self.assertFalse(
             spuntata,
             "la condizione e' stata RISCRITTA e la vecchia misura la spunta lo stesso: "
             "cosi' si dichiara fatta una cosa che nessuno ha mai verificato (%r)" % motivo)
+
+
+class TestIlTraguardoDeveEssereRAGGIUNGIBILE(unittest.TestCase):
+    """⛔⛔ SEI ESAMI IN SEI SESSIONI NON POTEVANO MAI STARE SPUNTATI INSIEME.
+
+    Trovato il 2026-08-21 **dal fondatore**, con una domanda in italiano: *«se non è finito
+    il Blocco 1 devi ricominciare da capo?»*. Sì — ogni volta. Dimostrato:
+        lunedi'  passo l'esame 1 (commit A)  -> 1 su 2
+        martedi' passo l'esame 2 (commit B)  -> l'esame 1 SI SVUOTA -> ancora 1 su 2
+    La casella scadeva sul **commit**, e ogni sessione fa un commit: il traguardo era
+    **impossibile per costruzione**. E' lo stesso difetto della casella-costante del giorno
+    prima, tornato in una forma nuova -- e questa volta era stato COLLEGATO da me.
+
+    ✅ LA CURA: la casella scade quando cambia **il codice che quella casella misura**
+    (l'impronta dei moduli del blocco), non quando cambia un commit qualunque. Correggo un
+    documento? La casella dei soldi resta. Tocco `fase85`? Scade, ed e' giusto.
+
+    ⛔ Queste due guardie sono la ragione per cui il difetto non puo' tornare: la prima
+    pretende che il traguardo si POSSA raggiungere, la seconda che la casella scada davvero
+    quando deve. Senza la seconda, «raggiungibile» si otterrebbe non scadendo mai.
+    """
+
+    def _scheda(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_scheda_tragu", os.path.join(QUI, "collaudi", "scheda.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_SEI_ESAMI_PASSATI_IN_SEI_MOMENTI_DIVERSI_RESTANO_PASSATI(self):
+        """La direzione che mancava: si passano uno alla volta e restano spuntati."""
+        import shutil
+        import tempfile
+        scheda = self._scheda()
+        culla = tempfile.mkdtemp(prefix="traguardo_")
+        try:
+            dove = os.path.join(culla, "scheda.json")
+            esami = ["esame numero %d, finto" % i for i in range(1, 7)]
+            # Si passano UNO ALLA VOLTA, come succede davvero: sei sessioni, sei momenti.
+            for e in esami:
+                scheda.registra(e, esito=True, denominatore=10, comando="prova finta",
+                                ordine=1, percorso=dove)
+            dati = scheda.leggi(dove)
+            imp = scheda.impronta_del_blocco(1)
+            self.assertTrue(imp, "impronta del blocco 1 non calcolabile: misura non valida")
+            passati = [e for e in esami if scheda.stato(e, 1, dati, imp)[0]]
+            self.assertEqual(
+                len(passati), 6,
+                "passati %d su 6: gli esami dati in momenti diversi si svuotano a vicenda, "
+                "quindi il blocco non potra' MAI risultare finito -- e' lo stesso difetto "
+                "della casella-costante, in forma nuova. Motivo del primo: %r"
+                % (len(passati), scheda.stato(esami[0], 1, dati, imp)[1]))
+        finally:
+            shutil.rmtree(culla, ignore_errors=True)
+
+    def test_MA_SE_CAMBIA_IL_CODICE_DEL_BLOCCO_LA_CASELLA_SCADE_LO_STESSO(self):
+        """⛔ L'ALTRA DIREZIONE (ferrea 10), e senza di lei la prima sarebbe pericolosa:
+        «raggiungibile» si otterrebbe benissimo non facendo scadere MAI niente -- cioe'
+        dichiarando finito un blocco il cui codice e' cambiato sotto."""
+        import shutil
+        import tempfile
+        scheda = self._scheda()
+        culla = tempfile.mkdtemp(prefix="traguardo2_")
+        try:
+            dove = os.path.join(culla, "scheda.json")
+            testo = "una condizione finta del blocco 1"
+            scheda.registra(testo, esito=True, denominatore=10, comando="prova", ordine=1,
+                            percorso=dove)
+            dati = scheda.leggi(dove)
+            self.assertTrue(scheda.stato(testo, 1, dati)[0],
+                            "appena scritta e gia' non vale: la scheda non conserva niente")
+            # Ora si finge che il codice del blocco sia cambiato.
+            ok, motivo = scheda.stato(testo, 1, dati, impronta="cambiata0000")
+            self.assertFalse(
+                ok,
+                "il codice del blocco e' cambiato e la casella resta SPUNTATA: cosi' si "
+                "dichiara finito un blocco che nessuno ha piu' misurato (%r)" % motivo)
+            self.assertIn("impronta", motivo.lower(),
+                          "il motivo non dice che a cambiare e' stato il codice: %r" % motivo)
+        finally:
+            shutil.rmtree(culla, ignore_errors=True)
 
 
 class TestDueBlocchiNonPossonoCondividereUnaCasella(unittest.TestCase):
@@ -8436,7 +8520,7 @@ class TestIlGiudiceScriveDaSeLaScheda(unittest.TestCase):
             sch = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(sch)
             ok, perche = sch.stato(riga["condizione"], riga["blocco"], sch.leggi(finta),
-                                   riga["commit"])
+                                   riga["impronta"])
             self.assertFalse(ok,
                              "denominatore ZERO e la casella risulta SPUNTATA: %s" % perche)
         finally:

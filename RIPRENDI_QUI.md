@@ -1,3 +1,49 @@
+# 🧭 SE APRI QUESTO FILE PER SAPERE **COSA FARE**: FERMATI. LA LISTA È UNA SOLA.
+
+```
+python collaudi/piano.py          <- cosa fa la macchina e cosa manca, punto per punto
+python collaudi/scheda.py --blocco 1   <- il blocco su cui si lavora ADESSO
+```
+
+**Prendi la prima casella `☐`. Passala. Fermati.** Non cercare altro da fare: **è già stato
+cercato**, e sta lì dentro.
+
+> ### ⛔ PERCHÉ QUESTA RIGA ESISTE — misurato il 2026-08-21, non è un'opinione
+> ```
+> righe che ogni chat leggeva prima di toccare qualcosa ....... 20.411
+> liste diverse di «cosa fare» che ci trovava dentro ..........      7
+>
+> e dal 31 luglio al 21 agosto -- 232 commit, 56.190 righe cambiate:
+>   guardie 39,7% · documenti 31,3% · strumenti 21,1% · PRODOTTO 6,5%
+>   fasi nuove create: 0
+> ```
+> **Sette liste diverse: ogni chat ne sceglieva una e ripartiva da un punto diverso.** Non era
+> indisciplina, era matematica — e per tre settimane il 92% del lavoro è finito in strumenti,
+> guardie e documenti mentre il prodotto ne prendeva il 6,5%. L'ha visto il fondatore:
+> *«ogni chat dice cose diverse… il progetto si finisce, se si finisce, fra 10 anni»*.
+>
+> **La cura non è un'altra regola (ce ne sono già 106): è che la lista sia UNA e la produca
+> una macchina.** `collaudi/piano.py` esisteva già e faceva esattamente questo — era sepolto
+> sotto le altre sei.
+>
+> ⛔ **Tutto il resto di questo file è STORIA GIÀ SUCCESSA**, non lavoro da fare. Serve a
+> capire *perché* una cosa è com'è, mai a decidere *cosa* fare adesso.
+>
+> ⚠️ **E VALE ALLA LETTERA, perché questo file contiene SETTE blocchi «RIPARTI DA QUI»** (tre
+> datati 2026-08-21) e **diciassette** righe che dicono «il prossimo lavoro». Misurato il
+> 2026-08-21 sera. **Sono tutti scaduti tranne quello immediatamente qui sotto**, e nemmeno
+> quello decide: decide `piano.py`. ⛔ Un blocco «RIPARTI DA QUI» vecchio **non è una lista di
+> lavori**: è la fotografia di una giornata finita.
+> 💡 Esempio di quanto costa, misurato: `RIPRENDI_QUI.md` righe 4560 e 4577 dichiarano
+> `fase119_calendario_prezzi` come **«l'ultimo modulo che manca alla chiusura»** — ed è finito
+> dal **13 agosto**. Quelle righe hanno mentito per **otto giorni** e nessuno strumento le ha
+> viste, perché il guardiano anti-contraddizione legge fino alla riga **4558**: due righe prima.
+> ⛔ **E se trovi un difetto per strada: scrivilo e VAI AVANTI.** Fermarsi a ripararlo è
+> esattamente il meccanismo che ha prodotto quel 6,5% — ogni singola riparazione era
+> giustificata, e il lavoro chiesto è rimasto lì per tre settimane.
+
+---
+
 ## ⛔ 2026-08-03 — LEGGI PRIMA I SEI DIVIETI IN CIMA A `CLAUDE.md`
 
 Il fondatore ha dettato un **BLOCCO di 6 divieti assoluti** dopo una sessione in cui ho
@@ -4705,7 +4751,7 @@ un'uscita**. Era stato proposto di tagliarlo: sarebbe stato un errore.
 
 ## 🧭 PASSAGGIO DI CONSEGNE — 2026-08-07 · LEGGERE PER PRIMO, DOPO I SEI DIVIETI
 
-CONSEGNE AGGIORNATE A: 1f78075
+CONSEGNE AGGIORNATE A: 28c35c6
 
 *Questa riga non è decorativa: la legge la guardia
 `test_IL_PASSAGGIO_DI_CONSEGNE_NON_RESTA_INDIETRO` in `test_pipeline_ci.py`. Se dal commit qui
@@ -6533,7 +6579,7 @@ confermato sul campo: nei 802 test di `fase177` quella suite c'era, e **non** ha
 
 ### ✅ LA SUITE INTERA, dopo tutto (regola ferrea 6: vale anche per una virgola in un `.md`)
 ```
-SUITE ATTUALE: Ran 5939 test
+SUITE ATTUALE: Ran 5941 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH in questa sessione (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non

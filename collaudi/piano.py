@@ -57,9 +57,14 @@ nessuno ha guardato):
       ✅ DAL 2026-08-21 LA SCHEDA C'E': `collaudi/scheda.py`. Un blocco risulta finito solo
       quando **un attrezzo** ha spuntato tutte le sue caselle -- misurandole, su QUESTO
       commit, avendo guardato piu' di zero cose.
-      ⚠️ Ma nessun attrezzo la scrive ancora: **Blocco 1 = 0 su 6**, e ogni casella dice da
-      se' perche' e' vuota (`python collaudi/scheda.py --blocco 1`). Prima del 21/08 la
-      casella era una COSTANTE e nessun blocco poteva risultare finito **per costruzione**.
+      ✅ E DAL 2026-08-21 SERA UN ATTREZZO LA SCRIVE: `mutazione_prodotto.scrivi_la_scheda`,
+      chiamata a fine giro. ⚠️ Ma **scritta non vuol dire spuntata**: la casella si spunta
+      solo se quel giro ha coperto TUTTO il blocco ed e' uscito pulito. Lo stato vero non si
+      legge qui, si chiede: `python collaudi/scheda.py --blocco 1`.
+      ⛔ Prima del 21/08 la casella era una COSTANTE e nessun blocco poteva risultare finito
+      **per costruzione**; la mattina del 21/08 scadeva sul COMMIT, quindi sei esami passati
+      in sei sessioni si svuotavano a vicenda -- irraggiungibile in un altro modo. Adesso
+      scade sull'impronta del CODICE del blocco, che e' la sola cosa che quella misura guarda.
   N3  non legge i 5 documenti e non li giudica: quello lo fa `audit_millimetrico.py`.
 
 ==============================================================================
@@ -529,8 +534,9 @@ def stampa(breve=False):
     print("=" * 78)
     print("  I blocchi si lavorano IN ORDINE. Non decide la grandezza: decide il danno")
     print("  che fa un guasto li' dentro. ⛔ Un blocco risulta FINITO solo quando UN")
-    print("  ATTREZZO ha spuntato tutte le sue caselle: la scheda c'e' dal 2026-08-21")
-    print("  (`python collaudi/scheda.py`), ma nessuno la scrive ancora.")
+    print("  ATTREZZO ha spuntato tutte le sue caselle. La scheda c'e' dal 2026-08-21 e un")
+    print("  attrezzo la scrive (`mutazione_prodotto`), ma SCRITTA non vuol dire SPUNTATA:")
+    print("  lo stato vero -> python collaudi/scheda.py --blocco 1")
     print("")
 
     for b in sorted(BLOCCHI, key=lambda x: x["ordine"]):

@@ -122,6 +122,57 @@ def chiave(testo, ordine):
     return hashlib.sha256(("%s|%s" % (ordine, normale)).encode("utf-8")).hexdigest()[:12]
 
 
+def impronta_del_blocco(ordine, radice=RADICE):
+    """L'impronta del CODICE che questo blocco misura. `None` se non si puo' sapere.
+
+    ⛔⛔ PERCHE' NON IL COMMIT, e non e' un dettaglio: e' la differenza fra un traguardo
+    raggiungibile e uno impossibile. Fino al 2026-08-21 la casella scadeva quando cambiava
+    il **commit**, qualunque cosa fosse cambiata. Ma per passare sei esami servono sei
+    sessioni, e ogni sessione fa un commit -- quindi:
+        lunedi'  passo l'esame 1 (commit A)  -> 1 su 6
+        martedi' passo l'esame 2 (commit B)  -> l'esame 1 SI SVUOTA -> di nuovo 1 su 6
+    Il blocco non poteva **MAI** arrivare a 6 su 6: era impossibile PER COSTRUZIONE, lo
+    stesso difetto della casella-costante di ieri, in una forma nuova. L'ha trovato il
+    fondatore con una domanda: «se non e' finito devi ricominciare da capo?». Si', ogni volta.
+
+    ✅ Il criterio giusto e' l'unico che non si puo' allargare: **la misura scade quando
+    cambia il codice CHE QUELLA MISURA GUARDA.** Correggo una virgola in un documento, o
+    aggiungo un collaudo? La casella dei soldi resta valida, perche' i soldi non sono
+    cambiati. Tocco `fase85_pagamenti_stripe.py`? Scade, ed e' giusto.
+
+    ⛔ E se il piano non si legge si torna `None`: senza sapere QUALE codice la casella
+    guarda, quella misura non e' ancorata a niente -- e una casella non ancorata non e'
+    verde (sbaglio S1: il vuoto non e' un valore).
+    """
+    percorso = os.path.join(QUI, "piano.py")
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("_piano_impronta", percorso)
+        piano = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(piano)
+        blocchi = [b for b in piano.BLOCCHI if b["ordine"] == ordine]
+        if len(blocchi) != 1:
+            return None
+        moduli = sorted(blocchi[0].get("moduli") or ())
+    except Exception:
+        return None
+    if not moduli:
+        return None
+    h = hashlib.sha256()
+    for nome in moduli:
+        h.update(nome.encode("utf-8"))
+        h.update(b"\0")
+        try:
+            with io.open(os.path.join(radice, nome + ".py"), "rb") as f:
+                h.update(f.read())
+        except OSError:
+            # ⛔ Un modulo che sparisce CAMBIA l'impronta, e deve: la casella diceva
+            #    qualcosa su un insieme di file, e quell'insieme non e' piu' lo stesso.
+            h.update(b"(assente)")
+        h.update(b"\0")
+    return h.hexdigest()[:12]
+
+
 def commit_attuale(radice=RADICE):
     """Il commit su cui stiamo. Stringa vuota se git non risponde -- e allora nessuna
     casella si spunta, perche' senza sapere DOVE siamo una misura non e' ancorata a niente."""
@@ -165,6 +216,13 @@ def registra(testo, esito, denominatore, comando, ordine, percorso=SCHEDA, commi
         "esito": bool(esito),
         "denominatore": int(denominatore),
         "comando": str(comando).strip(),
+        # ⛔ L'IMPRONTA E' CIO' CHE DECIDE se la misura vale ancora (vedi
+        #    `impronta_del_blocco`): e' il codice che questa casella guarda, non il commit
+        #    del repository. Col commit, sei esami in sei sessioni non potevano MAI stare
+        #    spuntati insieme.
+        "impronta": impronta_del_blocco(int(ordine)),
+        # Il commit resta scritto perche' serve a CHI LEGGE (ritrovare il giro, rifarlo),
+        # ma NON e' piu' lui a decidere: e' informazione, non giudizio.
         "commit": commit if commit is not None else commit_attuale(),
         "quando": quando or datetime.datetime.now().isoformat(timespec="seconds"),
     }
@@ -175,7 +233,7 @@ def registra(testo, esito, denominatore, comando, ordine, percorso=SCHEDA, commi
     return riga
 
 
-def stato(testo, ordine, schedario=None, commit=None):
+def stato(testo, ordine, schedario=None, impronta=None):
     """(spuntata, motivo) per UNA condizione DI UN BLOCCO. Qui vivono le quattro regole.
 
     ⛔ `schedario is None` e non `schedario or ...`: un dizionario VUOTO e' un dato legittimo
@@ -185,20 +243,25 @@ def stato(testo, ordine, schedario=None, commit=None):
     ⛔ `ordine` e' obbligatorio e sta PRIMA dello schedario apposta: chi chiede lo stato di
     una casella deve dire di quale blocco parla, e non deve poterlo dimenticare. La stessa
     frase in due blocchi e' due domande diverse (vedi `chiave`).
+
+    ⛔⛔ E LA SCADENZA GUARDA IL CODICE DEL BLOCCO, NON IL COMMIT (2026-08-21). Col commit,
+    sei esami in sei sessioni non potevano MAI stare spuntati insieme: ogni sessione fa un
+    commit, e ogni commit svuotava i cinque passati prima. Il traguardo era irraggiungibile
+    per costruzione. Vedi `impronta_del_blocco` per il perche' per esteso.
     """
     dati = leggi() if schedario is None else schedario
-    ora = commit_attuale() if commit is None else commit
+    ora = impronta_del_blocco(ordine) if impronta is None else impronta
     riga = dati.get(chiave(testo, ordine))
     if not isinstance(riga, dict):
         return (False, "mai misurata: nessun attrezzo ha ancora scritto questa casella")
     if not ora:
-        return (False, "non so su quale commit siamo (git non risponde): una misura senza "
-                       "ancoraggio non vale")
-    suo = str(riga.get("commit") or "")
+        return (False, "non so QUALE codice guarda questa casella (il piano non si legge): "
+                       "una misura senza ancoraggio non vale")
+    suo = str(riga.get("impronta") or "")
     if suo != ora:
-        return (False, "misurata sul commit %s, adesso siamo su %s: il codice e' cambiato "
-                       "sotto, quella misura non parla piu' di questo codice"
-                % (suo or "(non indicato)", ora))
+        return (False, "misurata quando il codice del blocco aveva impronta %s, adesso e' "
+                       "%s: quei moduli sono cambiati sotto, e quella misura non parla piu' "
+                       "di questo codice" % (suo or "(non indicata)", ora))
     denominatore = riga.get("denominatore")
     if not isinstance(denominatore, int) or denominatore <= 0:
         return (False, "denominatore %r: l'attrezzo non ha esaminato NIENTE, quindi il suo "
@@ -238,8 +301,11 @@ def stampa(solo=None):
         spuntate = 0
         print("-" * 78)
         print(" %2d. %s" % (b["ordine"], b["nome"]))
+        # L'impronta si calcola UNA volta per blocco, non per ogni casella: e' la stessa,
+        # e ricalcolarla sei volte vorrebbe dire rileggere ventiquattro file sei volte.
+        imp = impronta_del_blocco(b["ordine"])
         for c in condizioni:
-            ok, motivo = stato(c, b["ordine"], dati, ora)
+            ok, motivo = stato(c, b["ordine"], dati, imp)
             if ok:
                 spuntate += 1
             testo = " ".join(str(c).split())
