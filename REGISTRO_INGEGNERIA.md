@@ -403,6 +403,51 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🎁 DUE REGALI DALLA STESSA COMMISSIONE — riparato il 2026-08-23
+
+**Funzione nuova:** `fase83_server.RouterHTTP._commissione_regalabile(corpo)` — `@staticmethod`,
+pura, nessuna dipendenza. **Scopo:** dire quanto della commissione resta da poter regalare
+all'host, cioè il lordo **meno** lo sconto che quella stessa commissione ha già finanziato
+all'ospite. **Stato: ACCESA**, si esegue a ogni conferma di pagamento; non ha interruttori.
+
+**Chi la usa, e sono DUE punti — è la parte che conta:**
+`fase83_server.py:5910` (conferma immediata, senza pagamento online) e `fase83_server.py:8170`
+(webhook Stripe). Prima ognuno dei due passava `commissione_cents` **lorda** a
+`_applica_credito_host`.
+
+**Cos'era rotto.** I due regali di una prenotazione avevano due tetti calcolati separatamente,
+tutti e due sulla commissione piena: `fase59_concierge._sconto_credito:503` tagliava lo sconto
+dell'ospite al margine, e qui arrivava di nuovo il lordo. Su una prenotazione da 300,00 con
+host a regime uscivano **18,00 + 30,00 = 48,00 da una commissione di 30,00**, e il saldo della
+piattaforma andava **negativo**: −8,13 su carta europea, −13,06 su internazionale. Cercato su
+tutta la banda, il fondo era **−23,31 su una prenotazione da 500,00**, e la zona negativa
+andava da 45,00 a 970,00. Dopo: peggio **+0,02**, mai negativo.
+
+**Come si è visto.** Non da uno strumento: da una domanda del fondatore — *«voglio il conto
+totale di quello che regaliamo»*. Nessuno l'aveva mai sommato, ed è tutta lì la ragione per cui
+è durato: ogni regalo aveva già il suo tetto, e nessuno guardava la somma.
+
+**La guardia:** `test_regali_non_superano_la_commissione.py`, 5 collaudi. **Vista rossa prima**
+su tutt'e due i cammini (`3000 not less than or equal to 1200`); il secondo cammino provato
+iniettando il guasto **con l'editor** e ripristinando con **sha256 identico** (`8e525d20…`
+prima e dopo). Sta su **chi chiama**, non su `_applica_credito_host`: quel metodo faceva
+esattamente ciò che gli si chiedeva, era il numero che riceveva a essere sbagliato (regola
+ferrea 11). E asserisce un **effetto** — i centesimi davvero consumati dal registro dei crediti
+— non l'assenza di eccezioni, perché `_conferma_pagamento` isola i guasti in un `except` e un
+collaudo che si accontentasse di «non ha sollevato» sarebbe verde anche col flusso morto alla
+prima riga (S7). Un quinto collaudo prova **l'altra direzione**: senza sconto all'ospite il
+tetto resta la commissione piena, così la guardia non stringe dove non serve.
+
+> 💡 **La lezione, e non è l'aritmetica.** Il difetto vero non era il tetto sbagliato: era che
+> la **stessa regola sui soldi viveva in due punti di chiamata**, e ripararne uno solo l'avrebbe
+> lasciata viva sull'altro senza che nessun collaudo se ne accorgesse. Il secondo punto è
+> saltato fuori da un `grep`, non dalla memoria. È la forma in cui la tariffa tecnica è finita
+> in sei posti con sei valori diversi.
+>
+> ⚠️ **E resta aperto ciò che conta di più** (`RIPRENDI_QUI.md`, B11): il tetto vive nei due
+> punti che regalano **oggi**. Continua a non esistere un posto che **somma**: il giorno che
+> qualcuno collega `fase137`, `fase78` o i crediti di `fase109`, la somma torna fuori controllo.
+
 ### 🔴 «FATTO» NEL PIANO DEI SOLDI COPRE **DUE COSE DIVERSE** — trovato dal fondatore, 2026-08-13
 
 **Non l'ha trovato uno strumento: l'ha trovato lui**, dicendo *«altre fasi le avevamo già

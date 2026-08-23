@@ -5907,7 +5907,7 @@ class RouterHTTP:
             else:
                 pd.registra_maturato(ref, host, netto, valuta)
                 # conferma immediata (no Stripe): scala subito il credito referral dell'host
-                self._applica_credito_host(ref, host, corpo.get("commissione_cents", 0))
+                self._applica_credito_host(ref, host, self._commissione_regalabile(corpo))
                 self._forse_qualifica_referral(host, pd)
         except Exception:
             logger.warning("registra payout fallito (ignorato)", exc_info=True)
@@ -8167,7 +8167,7 @@ class RouterHTTP:
                 dj = _jc.loads(rec.get("corpo_json") or "{}") if isinstance(rec, dict) else {}
             except Exception:
                 dj = {}
-            self._applica_credito_host(rif, hid_pag, dj.get("commissione_cents", 0))
+            self._applica_credito_host(rif, hid_pag, self._commissione_regalabile(dj))
             self._forse_qualifica_referral(hid_pag, pd)
         except Exception:
             logger.warning("conferma pagamento/ledger tassa fallita (ignorata)", exc_info=True)
@@ -8234,6 +8234,34 @@ class RouterHTTP:
                                exc_info=True)
         # niente tassa/payout/garanzia: il saldo (tassa inclusa) lo gestisce l'host in loco.
         self._email_pagamento_confermato(rec)
+
+    @staticmethod
+    def _commissione_regalabile(corpo):
+        """Quanto della commissione RESTA da poter regalare all'host: il LORDO meno lo
+        sconto che la STESSA commissione ha gia' finanziato all'ospite.
+
+        ⛔ NASCE DA UN BUCO MISURATO (B11, 2026-08-23). I due regali di una prenotazione
+        avevano due tetti calcolati separatamente e tutti e due sulla commissione PIENA:
+        `fase59_concierge._sconto_credito` (riga 503) tagliava lo sconto dell'ospite al
+        margine, e qui arrivava di nuovo il lordo. Su 300,00 con host a regime uscivano
+        18,00 + 30,00 = 48,00 da una commissione di 30,00, e il saldo della piattaforma
+        andava NEGATIVO (misurato: -8,13 su carta europea, -13,06 su internazionale; il
+        fondo di tutta la banda era -23,31 su una prenotazione da 500,00).
+
+        ⛔ ESISTE PERCHE' I PUNTI DI CHIAMATA SONO DUE, non uno: la conferma dal webhook
+        Stripe e la conferma immediata senza pagamento online. La stessa regola scritta a
+        mano in due posti e' il modo in cui un difetto ne sopravvive alla riparazione --
+        e' successo con la tariffa tecnica, finita in sei posti con sei valori.
+
+        La sottrazione non e' nuova: `_riasserisci_incasso` la fa gia' identica per il
+        giornale (`_comm + _costo - _sconto`). Qui mancava, ed era l'unico posto che
+        decideva quanto REGALARE. Isolato: dubbio -> 0 (mai regalare al buio)."""
+        try:
+            comm = int(corpo.get("commissione_cents", 0) or 0)
+            gia_dato = int(corpo.get("sconto_credito_cents", 0) or 0)
+        except (AttributeError, TypeError, ValueError):
+            return 0
+        return max(0, comm - gia_dato)
 
     def _applica_credito_host(self, ref, host_id, commissione_cents):
         """Scala il credito referral dell'host sulla commissione di questa prenotazione:
