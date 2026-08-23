@@ -28,7 +28,7 @@
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: a8007d6
+CONSEGNE AGGIORNATE A: 4144f40
 
 SUITE ATTUALE: Ran 5980 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
@@ -86,7 +86,13 @@ documento ne dava una per chiusa mentre era ancora aperta.
 
 ---
 
-# B) COSA MANCA PER APRIRE AL PUBBLICO — quattro cose, non una di più
+# B) COSA MANCA PER APRIRE AL PUBBLICO — sette cose, non una di più
+
+> ⚠️ **Erano quattro fino al 2026-08-23.** Le tre nuove (B5, B6, B7) vengono dalla **mappa dei
+> 39 pezzi** misurata quel giorno: non sono lavori inventati, sono i tre punti in cui un pezzo
+> che tocca i soldi ha test verdi e **non ha addosso la tecnica che quel tipo di codice
+> richiede**. Il resto della mappa — 15 pezzi «solo unitari» che non bloccano l'apertura — sta
+> in sezione C.
 
 ### 🔴 B1 — I DUE PREZZI CHE NON SI PARLANO
 Il pannello host ha due caselle prezzo (`p_prezzo` → vetrina, `d_prezzo` → cassa) che nessuno
@@ -128,14 +134,43 @@ dati veri, che è l'unica prova che stia guardando la cosa giusta:
 > giorno che nessuno può più prenotare. Lo impedisce `test_LA_NOTTE_PASSATA_NON_ASSOLVE`;
 > stesso trattamento per le notti chiuse, piene e a prezzo zero.
 
-**RESTA DA FARE, in quest'ordine:**
-- **Pezzo 2 — la vetrina DERIVA il prezzo dal calendario** *(tocca la produzione)*.
-  `alloggi.prezzo_notte_cents` smette di essere un numero indipendente e si ricalcola da solo
-  quando l'host salva la disponibilità. Ricerca, filtri, Google e mappa continuano a leggere
-  la stessa colonna di prima — ma quella colonna non può più mentire.
+**✅ PEZZO 2a FATTO — la vetrina DERIVA il prezzo dal calendario.** `alloggi.prezzo_notte_cents`
+non è più un numero indipendente: `fase57_vetrina.rispecchia_prezzo()` lo ricalcola dalla notte
+**prenotabile** più economica dell'inventario. Ricerca, filtri, Google e mappa leggono la stessa
+colonna di prima — ma quella colonna non può più mentire.
+> **Dove è agganciato, e perché lì.** L'avviso parte dal **confine dei dati**
+> (`fase58_channel_manager`), non dai pulsanti del pannello: i posti che scrivono l'inventario
+> sono **cinque**, e agganciarlo a quelli visibili avrebbe lasciato scoperto il più pericoloso —
+> l'**iCal, che scrive da solo**. I due versi si cablano in `fase81_bootstrap_casavip`, l'unico
+> punto in cui esistono tutt'e due, e il nome entra nel rendiconto di composizione
+> (`specchio-prezzo(58->57)`): costruito e non collegato non esiste (regola #23).
+> Se non c'è niente di prenotabile **non inventa un prezzo**: lascia la vetrina com'è e torna
+> `None`. La coppia leggi-minimo → scrivi-vetrina tocca due archivi e non sta in una sola
+> transazione: un `threading.Lock` la rende atomica.
+>
+> **Provato il 2026-08-23** — commit `4144f40`, unito in `master` con `a35f1e9` (PR #96,
+> `merged: true` **riletto dall'API**, non dedotto dal comando):
+> ```
+> test_prezzo_vetrina_e_cassa.py ..... 37 test OK
+> batteria completa (con le modifiche dentro) ..... 5980 test OK, banco dei soldi OK
+> CI su Linux ..... 16 job su 16, 0 rossi (gate, full-suite, full-suite-311, money-smoke,
+>                   CodeQL, atheris, copertura, mutazione, immagine, browser, w3c, ...)
+> ```
+
+⛔ **MA IN PRODUZIONE IL SITO MENTE ANCORA, e questo B1 resta 🔴 per quello.** Lo specchio è in
+`master`, **non è deployato**: sul server `collaudi/prezzi_coerenti.py` direbbe tuttora **ROSSO
+su 2 annunci su 2**. Finché non si deploya, il codice giusto non protegge nessun ospite — ed è
+la differenza fra «scritto» e «vero» che questo progetto ha già pagato altrove (regola #23).
+Il deploy si fa con `DEPLOY.md` alla mano, paracadute `:prec` agganciato **prima** del build.
+
+**RESTA DA FARE:**
 - **Pezzo 3 — il pannello ha una casella sola** *(tocca la produzione)*: prezzo base, più
   un'eccezione per certi giorni dichiarata come tale e già riempita col prezzo base.
   Toglie la causa invece di inseguire l'effetto.
+  > 🔑 **Rimandato per decisione del fondatore, 2026-08-23: «il pezzo 3 lo lasciamo».** Non è
+  > stato dimenticato e non è stato chiuso: il 2a toglie l'**effetto** (la vetrina non può più
+  > dire un numero che la cassa non addebita), il 3 toglierebbe la **causa** (due caselle quasi
+  > identiche in due schermate). Con 0 host firmati è la finestra in cui costa meno rifarlo.
 
 ### 🔴 B2 — CAMBIARE TUTTE LE CHIAVI PROVVISORIE E ACCENDERE LA GUARDIA SULLA LUNGHEZZA
 **Ultimo lavoro prima di aprire.** *(deciso dal fondatore il 2026-08-22: le chiavi di adesso
@@ -187,9 +222,102 @@ prenotazione da 300 € cancellata a rimborso pieno sono **~4,75 € persi, ogni
 condizioni · assorbirlo solo dentro la finestra legale dei 48h e trattenerlo fuori.
 ⛔ La finestra di ripensamento **non si tocca**: quel 100% copre obblighi di legge.
 
+### 🔴 B5 — `fase59_concierge` NON È MAI STATO GIUDICATO, ED È QUELLO CHE CALCOLA IL PREZZO
+*(dalla mappa dei 39 pezzi, 2026-08-23.)* Il catalogo dei punti di mutazione in
+`collaudi/mutazione_prodotto.py` copre **21 moduli su 151**, e `fase59_concierge` **non c'è**.
+È il modulo che somma il conto del soggiorno: ogni preventivo e ogni prenotazione ci passano
+dentro. Ha cinque file di test, tutti verdi, e una gara vera (`test_race_hold_conferma`) — ma
+nessuno ha mai rotto quel codice di proposito per vedere se un test se ne accorge.
+> ⛔ **Verde non vuol dire guardato.** Su `fase59` è già successo: il 2026-08-14 risultava
+> «FATTO» nel piano dei soldi mentre aveva **42 punti scoperti**, 39 su codice che la
+> produzione esegue a ogni preventivo. È la direttiva **D26**, ed è nata proprio qui.
+
+### 🔴 B6 — IL PAYOUT ALL'HOST NON HA UN SECONDO CONTO CHE LO RICALCOLI
+*(dalla mappa dei 39 pezzi, 2026-08-23.)* Sei file di test sul bonifico all'host
+(`test_fase131_payout_dashboard`, `test_payout_in_attesa`, `test_payout_valuta_storica`,
+`test_split_penale_payout`, `test_dac7_blocco_payout`, `test_fase101_stripe_connect`) e
+**nessun oracolo indipendente**: quanto spetta all'host viene riletto, mai ricalcolato da zero
+da un secondo conto scritto diverso. È la tecnica **04**, ed esiste già in casa in due punti
+(`collaudi/prezzi_coerenti.py` sul prezzo, `collaudi/oracolo_tassa.py` sulla tassa): manca qui.
+> ⛔ **È il primo numero che un host vero controlla.** Se sbaglia, non lo scopriamo noi: lo
+> scopre lui, e lo scopre sul suo conto corrente.
+
+### 🔴 B7 — LA RICONCILIAZIONE CHIUDE CONTRO SE STESSA, NON CONTRO STRIPE
+*(dalla mappa dei 39 pezzi, 2026-08-23.)* `fase182_riconciliazione` è provata da
+`test_riconciliazione`, `test_riconciliazione_interlibro` e `test_movimenti_giornale`: il libro
+torna **contro il libro**. Il confronto col **traffico vero di Stripe** — il terzo che tiene i
+soldi davvero — non esiste.
+> 💡 **È esattamente il metodo che ci manca secondo la ricerca industriale** (AWS: verificare
+> le regole dei soldi sul traffico VERO). Finché il conto chiude solo contro se stesso, un
+> errore sistematico nostro è invisibile per costruzione: sbaglia due volte allo stesso modo e
+> il confronto torna.
+
 ---
 
 # C) DOPO L'APERTURA — tutto il resto
+
+### 🗺️ LA MAPPA DEI 39 PEZZI — i 15 «solo unitari» che restano
+*(misurata il 2026-08-23 sul commit `4144f40`. **Non è un elenco di lavori urgenti**: è
+l'inventario di dove una tecnica esiste in casa e non è ancora puntata addosso. I tre casi che
+bloccano l'apertura sono già in sezione B; il pezzo che non esiste ha un blocco suo qui sotto.)*
+
+⛔ **«Solo unitario» non vuol dire rotto.** Vuol dire: il test esiste, è verde, e prova il pezzo
+con **gli esempi che abbiamo scelto noi**. La tecnica accanto è quella che quel pezzo
+richiederebbe per come si rompe — e non c'è.
+
+**Percorso cliente**
+
+| Pezzo | Modulo | Tecnica che manca | Perché proprio quella |
+|---|---|---|---|
+| Ricerca | `fase26_ricerca` · `fase121_geo_ricerca` | **07 · proprietà** | una ricerca sbaglia sui casi che non ci vengono in mente |
+| Mappa e dintorni | `fase166_geocoder` · `fase175_poi_osm` | **04 · oracolo** | una coordinata sbagliata è formalmente valida |
+| Pagamento con carta | `fase85_pagamenti_stripe` | **03 · replay** | lo stesso webhook due volte non deve addebitare due volte |
+| Carta rifiutata | `fase183_carta_offsession` | **05 · caos** | il rifiuto arriva quando il resto è già in moto |
+| Voucher | `fase59_concierge` · `fase83_server` | **10 · fuzzing** | un codice che vale soldi è la prima cosa che si prova a forzare |
+| PIN d'ingresso | `fase59_codice_pin` | **10 · fuzzing** | è una serratura: va attaccata, non solo usata |
+| Promemoria | `fase152_notifiche_prenotazione` | **02 · seed** | dipende tutto dall'orologio, e l'orologio finto ha già ingannato cinque volte |
+| Deposito cauzionale | `fase149_deposito_cauzionale` | **04 · oracolo** | trattenere e restituire sono due conti che devono chiudere |
+| Valuta e conversione | `fase99_multicurrency` | **11 · metamorfico** | convertire e riconvertire deve tornare al punto di partenza |
+
+**Percorso host**
+
+| Pezzo | Modulo | Tecnica che manca | Perché proprio quella |
+|---|---|---|---|
+| Identità e KYC | `fase143_kyc_host` · `fase105_identity_gate` | **05 · caos** | il fornitore d'identità è un terzo che può morire a metà |
+| Pubblicazione annuncio | `fase141_onboarding_wizard` | **10 · fuzzing** | è dove un estraneo carica file e testo |
+| Escrow e garanzia | `fase160_escrow_garanzia` | **08 · model-based** | trattenuto → liberato → liquidato è una macchina a stati |
+| Split fra co-host | `fase133_split_quote_uguali` · `fase65_split_payment` | **11 · metamorfico** | la divisione intera non si distribuisce, ed è lo stesso caso in cui il metamorfico ha già trovato un errore |
+| iCal bidirezionale | `fase82_ical_sync` · `fase135_ical_bidirezionale` | **05 · caos** | è l'unico pezzo che scrive nell'inventario **da solo** |
+
+**Trasversale**
+
+| Pezzo | Modulo | Tecnica che manca | Perché proprio quella |
+|---|---|---|---|
+| Backup e ripristino | `fase38_backup` | **04 · oracolo** | ⚠️ le guardie sul ripristino **si spengono in blocco su Windows** (`openssl` fuori dal PATH): girano solo in CI. E le copie stanno **nello stesso volume dei dati veri** |
+
+💡 **Cosa dice la mappa guardata tutta insieme:** il collo di bottiglia non è la profondità, è
+la **larghezza**. Le 11 tecniche funzionano tutte, ma **z3, model-based e metamorfico sono
+accesi su un modulo ciascuno**, il fuzzing su tre, il caos su tre, la mutazione su **21 su
+151**. La domanda giusta non è «quale tecnica ci manca»: è «a quali pezzi non è ancora puntata
+addosso».
+
+⛔ **Limite dichiarato di questa mappa (D18 punto 3):** «la tecnica è applicata» è misurata sui
+**segni**, non sul senso — concorrenza = il file usa i thread; proprietà = c'è `@given`;
+mutazione = il modulo è nel catalogo. Un file può usare i thread e non provare nessuna gara
+vera, e la mappa non lo distingue.
+
+### ⚖️ DECISIONE DEL FONDATORE ANCORA DA PRENDERE — il cambio data
+
+> **Il cambio data non esiste come funzione. Non è un difetto di collaudo: è una scelta di
+> prodotto mai presa. Oggi l'ospite può solo cancellare e riprenotare. Decidere se serve prima
+> di aprire.**
+
+*Misurato il 2026-08-23:* cercato in tutti i 151 moduli, l'unico riscontro è in
+`test_fase56_gateway_tavoli` — il **vecchio impianto dei ristoranti**, non il prodotto. Non
+esiste rotta, non esiste modulo, non esiste test. Conseguenza concreta per chi prenota: chi
+deve spostare il soggiorno **cancella e riprenota al prezzo del giorno**, con la politica di
+cancellazione che scatta.
+⛔ Non è un lavoro in coda: è una domanda. Finché non ha risposta non va in nessuna lista.
 
 ### La sorveglianza sui soldi (il lavoro più grosso che resta)
 **140 punti su 246 non sono sorvegliati.** Misurato il 2026-08-22 coi test giusti, modulo per
@@ -283,6 +411,11 @@ identico a una prova che ha trovato un guasto. La batteria ha già la forma gius
 `[~]` con il motivo scritto, come fa la fase 9 saltata. Le due fasi scadute vanno in quella
 colonna, con **quanto mancava** accanto.
 
+✅ **E il giudice esterno l'ha confermato lo stesso giorno**: nella CI della PR #96, su Linux, il
+job **`mutazione` è verde**. Stesso codice, macchina diversa, nessun tetto sforato — il rosso
+locale era il **cronometro**, non il prodotto. È esattamente ciò per cui la regola ferrea 8 dice
+che il verde locale è un indizio: qui è servito **al contrario**, per assolvere un rosso locale.
+
 ⛔ **E il tetto non si alza per far tornare il verde** — lo dice la batteria stessa quando
 recupera: *«Il tetto NON e' stato alzato: guarda perche' ha sforato.»* Alzarlo è la cura che
 nasconde la domanda; la domanda è **perché la stessa fase ha preso 247s in più**.
@@ -294,6 +427,16 @@ differenze di contenuto sono i 5 file del lavoro in corso; altri 10 file risulta
 sono **byte per byte identici a git**). Ma quella rete di recupero è **una casella sola, non
 rientrante**: ha salvato questo colpo perché i giri erano in fila. Due giri insieme e non salva
 più niente.
+
+⚠️ **E quei 10 file restano sporchi in `git status` per un motivo che non è il contenuto:
+l'attrezzo di mutazione li riscrive con i fine-riga cambiati.** Misurato il 2026-08-23:
+```
+fase83_server.py     (toccato dalla mutazione)  CR=0     LF=11217
+fase59_concierge.py  (non toccato)              CR=675   LF=675
+```
+`git diff` non mostra niente perché normalizza, ma `git status` li segna `M` per sempre. Il
+danno non è il carattere: è che **dieci file di produzione risultano modificati a ogni giro**, e
+in quel rumore un mutante vero rimasto lì in mezzo non si distingue da un fine-riga.
 
 ### 🔴 DUE MACCHINE MISURANO LO STESSO LAVORO, E GIÀ NON SONO D'ACCORDO
 *(trovato il 2026-08-22 mentre si cercava dove fossero «gli 11 test presi da AWS».)*
