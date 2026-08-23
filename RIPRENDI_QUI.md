@@ -405,6 +405,50 @@ Le **due fasi fallite sono cadute sul proprio tetto di tempo**, non su una prova
 da fuori a 55 minuti, la fase 3 sullo **stesso codice e sulla stessa macchina** aveva chiuso
 `[OK  ] 3. Mutazione (653s)`. **247 secondi in più e diventa rossa.**
 
+### 🎯 E POI L'ABBIAMO MISURATO: LA FASE 3 VARIA DEL 27% DA SOLA
+*(prova fatta il 2026-08-23 alle 16:38-17:03, per ordine del fondatore: la fase 3 **due volte di
+fila**, partenza pulita, **niente toccato in mezzo**.)*
+
+```
+                       GIRO 1        GIRO 2
+durata                 858s          625s          <- scarto -27,2%
+mutanti provati        60            60
+uccisi / sopravvissuti 60 / 0        60 / 0
+uscita                 0             0
+sha256 dei 12 bersagli tutti identici (nessun mutante lasciato, in nessuno dei due)
+traccia dopo           pulita        pulita
+```
+
+⛔ **Stesso identico lavoro, 233 secondi di differenza.** Con le quattro misure che abbiamo —
+**653s · >900s · 858s · 625s** — questa fase gira fra i **10 e i 15 minuti** senza che cambi
+niente. Quindi:
+
+🎯 **IL TETTO DI 900s STA DENTRO LA VARIABILITÀ NATURALE DELLA FASE: non misura il prodotto,
+tira a sorte.** Il `[FAIL]` del pomeriggio non era un segnale, era il lato sbagliato di una
+moneta. ⛔ E questo **non autorizza ad alzarlo**: autorizza a smettere di chiamarlo `[FAIL]`.
+
+❌ **Le due spiegazioni comode sono cadute tutt'e due, e con la misura in mano:**
+· **il recupero non c'entra** — nessuno dei due giri ne ha fatto uno, e differiscono lo stesso;
+· **il calore non c'entra**, e in direzione **opposta**: il giro 1 è partito su una macchina
+appena uscita da 5 minuti di carico su tutti e 16 i thread ed è il **più lento**; il giro 2 è
+partito dopo altri 14 minuti di carico ininterrotto ed è il **più veloce**.
+> **La prova del calore, fatta a parte lo stesso giorno.** Sotto carico su tutti i core la CPU
+> scende da **145% a 107%** della frequenza base in 5 minuti (−26%, la ventola singola non
+> tiene): **è vero e va saputo**. Ma su lavoro a **un processo solo** — cioè il nostro — lo
+> stesso compito a freddo e subito dopo il carico costa **1,808s contro 1,813s: +0,3%**. E nei
+> due giri veri della batteria la **fase 1** (30 minuti di suite) è passata da 1775s a 1802s,
+> **+1,5%**: se fosse la macchina, sarebbero rallentate tutte le fasi, non una.
+> ⚠️ Il primo tentativo di questa prova usava un'unità di lavoro da **19 millisecondi** e ha
+> stampato «ripresa +404%», che è impossibile: a quella scala misurava su quale core Windows
+> ti mette (**6 veloci e 4 lenti**), non la frequenza. Buttato e rifatto con un'unità da 1,8s.
+
+✅ **E una cosa che non cercavamo:** quando la fase arriva in fondo, arriva **60 uccisi su 60,
+zero sopravvissuti, uscita 0**. Il rosso del pomeriggio non nascondeva nessun difetto.
+
+⚠️ **Resta senza risposta il *perché* vari del 27%**: 233 secondi su 60 mutanti sono ~4 secondi
+a mutante, e il sospetto è l'avvio dei processi più l'antivirus che ispeziona ogni python nuovo.
+**Non è misurato**, quindi resta un sospetto e non un fatto.
+
 Il difetto **non è che sfora**: è che **`[FAIL]` dice due cose diverse con la stessa parola.**
 Un tetto scaduto è un **NON ESEGUITO** — non sappiamo cosa avrebbe detto quella fase — ma esce
 identico a una prova che ha trovato un guasto. La batteria ha già la forma giusta per dirlo:
