@@ -30,7 +30,7 @@
 ```
 CONSEGNE AGGIORNATE A: f47612a
 
-SUITE ATTUALE: Ran 5980 test
+SUITE ATTUALE: Ran 5985 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH da PowerShell (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
@@ -82,7 +82,7 @@ documento ne dava una per chiusa mentre era ancora aperta.
 | **La posta è firmata** | SPF ✅ · DKIM ✅ (`hostingermail1`) · DMARC ✅ presente |
 | **Il server è chiuso bene** | SSH **solo con chiave** (niente password) · firewall attivo, aperte solo 80, 443, 22 |
 | **I tre posti sono allineati** | computer = GitHub = VPS · CI verde su `28c35c6` (BookinVIP CI + CodeQL) |
-| **La macchina è sorvegliata** | 151 moduli · 404 file di test · **5.980 test** · 0 moduli che nessun test nomina |
+| **La macchina è sorvegliata** | 151 moduli · 405 file di test · **5.985 test** · 0 moduli che nessun test nomina |
 
 ---
 
@@ -292,10 +292,51 @@ Nessun attrezzo controlla, oggi:
 > finché non li legge una persona. **Prima di riparare B8/B9/B10 va scritta la guardia**,
 > altrimenti si riparano tre testi e il quarto nascerà uguale.
 
-### 🔴 B11 — I REGALI SI SOMMANO E IL SALDO VA IN NEGATIVO: NESSUNO LI CONTA INSIEME
+### 🟠 B11 — I REGALI SI SOMMANO: IL SALDO NEGATIVO È CHIUSO, IL «NESSUNO SOMMA» NO
+
+> ✅ **RIPARATO IL 2026-08-23 (idea C del fondatore, autorizzata).** Il saldo per
+> prenotazione non può più andare negativo: la somma dei due regali è tagliata alla
+> commissione. **Declassato da 🔴 a 🟠 — non è chiuso**, perché la riparazione toglie
+> *questo* incrocio, non la causa: **continua a non esistere un posto che somma.**
+>
+> **Cosa è stato fatto, e sono DUE righe, non una.** `fase83_server._commissione_regalabile`
+> sottrae dalla commissione lo sconto già finanziato all'ospite, ed è usata **in tutti e due**
+> i punti che regalano: `fase83_server.py:5910` (conferma immediata, senza pagamento online)
+> e `fase83_server.py:8170` (webhook Stripe). ⛔ **Il secondo punto l'ho trovato leggendo, non
+> ricordando**: ripararne uno solo avrebbe lasciato il difetto vivo sull'altra strada, e
+> nessun collaudo se ne sarebbe accorto.
+>
+> **La guardia:** `test_regali_non_superano_la_commissione.py`, 5 collaudi, **vista rossa
+> prima** su tutt'e due i cammini (`3000 not less than or equal to 1200`), e il secondo
+> cammino provato **iniettando il guasto con l'editor** e ripristinando con **sha256
+> identico** (`8e525d20…` prima e dopo). Sta su **chi chiama**, non su
+> `_applica_credito_host`: quel metodo faceva esattamente ciò che gli si chiedeva, era il
+> numero che riceveva a essere sbagliato (regola ferrea 11). E asserisce un **effetto** — i
+> centesimi davvero consumati dal registro — non l'assenza di eccezioni, perché
+> `_conferma_pagamento` isola i guasti in un `except` e un collaudo che si accontentasse di
+> «non ha sollevato» sarebbe verde anche col flusso morto alla prima riga (S7).
+>
+> **Il pavimento, dopo:** peggio su tutta la banda **+0,02** invece di **−23,31**. Su 300,00 a
+> regime: **+9,87** su carta europea, **+4,94** su internazionale.
+>
+> 🔴 **COSA RESTA APERTO, ed è la parte che conta:**
+> 1. **Nessuno somma ancora.** Il tetto vive nei due punti che regalano oggi. Il giorno che
+>    qualcuno collega `fase137` (fedeltà ospite), `fase78` (rimborso money-back) o i crediti
+>    di `fase109`, la somma torna fuori controllo — è l'**idea A** del fondatore, stimata
+>    5-8 giorni, e si sovrappone a B6 e B7.
+> 2. **Il referral non si autofinanzia nei primi 90 giorni**: con la commissione a zero
+>    l'invitato non produce niente e noi paghiamo il premio lo stesso. Serve **quanta
+>    commissione ha prodotto**, non **quante prenotazioni ha fatto** (`fase81:58`) — è
+>    l'**idea B**, 2-3 giorni, ed è una decisione economica, non la riparazione di un difetto.
+> 3. **Il conio senza freno** della rotta pubblica della lista d'attesa resta (vedi in fondo).
+>    Adesso è innocuo per prenotazione, non per numero di token in giro.
+> 4. **Il pavimento è sottile:** +0,02 su una prenotazione da 1,00. Regge solo finché la
+>    tariffa tecnica sta sopra il costo Stripe. Se un giorno scendesse sotto, tutto questo
+>    torna negativo **in silenzio**, e nessuna guardia lo direbbe.
 
 *(misurato il 2026-08-23, per ordine del fondatore: «voglio il conto totale di quello che
-regaliamo». Nessuno l'aveva mai sommato.)*
+regaliamo». Nessuno l'aveva mai sommato. Quello che segue è com'era **prima** della
+riparazione: si legge per capire perché la guardia esiste.)*
 
 **Sei cose regalano, e ognuna ha una guardia che protegge SE STESSA. Nessuna guarda le altre.**
 
