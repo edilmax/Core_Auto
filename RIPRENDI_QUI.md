@@ -28,7 +28,7 @@
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 211aa79
+CONSEGNE AGGIORNATE A: f47612a
 
 SUITE ATTUALE: Ran 5980 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
@@ -86,7 +86,7 @@ documento ne dava una per chiusa mentre era ancora aperta.
 
 ---
 
-# B) COSA MANCA PER APRIRE AL PUBBLICO — nove cose, non una di più
+# B) COSA MANCA PER APRIRE AL PUBBLICO — dieci cose, non una di più
 
 > ⚠️ **Erano quattro la mattina del 2026-08-23, sono diventate sette, a fine giornata sei, e
 > con lo studio dell'Anti-Rimpianto sono NOVE.** Le tre della mappa (B5, B6, B7) vengono dalla
@@ -291,6 +291,74 @@ Nessun attrezzo controlla, oggi:
 > i difetti si vedono il giorno che nascono; dove non guarda nessuno, invecchiano in silenzio
 > finché non li legge una persona. **Prima di riparare B8/B9/B10 va scritta la guardia**,
 > altrimenti si riparano tre testi e il quarto nascerà uguale.
+
+### 🔴 B11 — I REGALI SI SOMMANO E IL SALDO VA IN NEGATIVO: NESSUNO LI CONTA INSIEME
+
+*(misurato il 2026-08-23, per ordine del fondatore: «voglio il conto totale di quello che
+regaliamo». Nessuno l'aveva mai sommato.)*
+
+**Sei cose regalano, e ognuna ha una guardia che protegge SE STESSA. Nessuna guarda le altre.**
+
+| # | Cosa | Quanto | Chi paga | Dove |
+|---|---|---|---|---|
+| 1 | Rampa di lancio: primi 90 giorni a commissione zero | tutta la commissione | **noi** | `fase98_policy_commissione.py:75-78` |
+| 2 | Credito Anti-Rimpianto | metà della penale, tetto 5000 unità minori, 365 gg | **noi** | `fase83_server.py:7089`, `:7098` |
+| 3 | Credito benvenuto lista d'attesa | 500 unità minori, 180 gg | **noi** | `fase158_domanda.py:22-23` |
+| 4 | Viral: benvenuto al nuovo host | 1000 cents | **noi** | `fase81_bootstrap_casavip.py:56` |
+| 5 | Viral: premio a chi invita (3ª prenotazione pagata) | 4000 cents | **noi** | `fase81_bootstrap_casavip.py:57`, `fase83_server.py:8294` |
+| 6 | Sconto soggiorno lungo · sconto non rimborsabile | li sceglie l'host | **l'host** | `fase59_concierge.py:294-311` |
+
+⛔ **IL PUNTO DI ROTTURA STA IN UNA RIGA SOLA: `fase83_server.py:8170`.**
+```python
+self._applica_credito_host(rif, hid_pag, dj.get("commissione_cents", 0))
+```
+Passa la commissione **LORDA**. Ma da quella stessa commissione abbiamo **già** finanziato lo
+sconto dell'ospite (`fase59_concierge.py:503`). I due crediti attingono allo stesso pozzo e
+**nessuno dei due sa dell'altro**: la guardia di margine del concierge protegge il credito
+dell'ospite, il tetto di `usa_credito` protegge quello dell'host, e la somma non la controlla
+nessuno.
+
+**IL CASO PEGGIORE, prodotto dalle formule vere** (ospite col credito pieno + host con
+benvenuto e premio, prenotazione da 300,00, tassa di soggiorno zero):
+
+| età host | carta europea | carta internazionale |
+|---|---|---|
+| promo (primi 90 gg) | **+10,50** | **+5,25** |
+| dal 4º mese a un anno | **−1,92** | **−6,96** |
+| a regime | **−8,13** | **−13,06** |
+
+⛔ **E il peggio non è a 300.** Cercata al centesimo, la perdita è una **banda**, non una
+soglia: da **45,00** a **970,00** di prenotazione, col fondo a **−23,31 su una da 500,00**
+(carta internazionale, host a regime). Sopra e sotto quella banda il saldo torna positivo.
+
+> 💡 **La cosa contro-intuitiva, ed è quella da ricordare:** durante la promo **NON si perde**.
+> Con la commissione a zero il pozzo è vuoto, e tutti e due i crediti valgono zero
+> (`fase59_concierge.py:503` e `fase83_server.py:8249`). **La rampa ci sta proteggendo per
+> caso.** Il buco si apre il giorno che il primo host esce dai 90 giorni — cioè fra tre mesi
+> dal primo host vero, non oggi.
+
+**Controprova, stesso giro senza i due crediti:** +10,50 (promo) e +40,50 (regime) su carta
+europea. Il difetto è **tutto** nella somma, non nelle singole regole.
+
+**E ci sono quattro promesse costruite e mai collegate** (regola #23, «costruito ≠ collegato»):
+`fase109_referral_host` ha una rotta admin che assegna un bonus a scaglioni, ma **quei crediti
+non si spendono da nessuna parte** — è un debito che nessuno può riscuotere;
+`fase137_fedelta_guest`, `fase78_sleep_guarantee` (rimborso money-back) e `fase71_commitment`
+sono costruiti e **non cablati**. Oggi non costano niente. Il giorno che qualcuno li collega
+entrano nella stessa somma che nessuno controlla.
+
+⚠️ **E un punto di conio senza freno**: `POST /api/domanda` è **pubblico, senza
+autenticazione**, ed emette un credito firmato **a ogni chiamata** — `registra` fa
+`ON CONFLICT DO UPDATE` e torna `True` anche sul doppione (`fase158_domanda.py:109-114`),
+mentre il token esce comunque (`fase83_server.py:7195`) con un `nonce` nuovo, quindi per
+`fase167` è un credito **diverso**. Stessa email, quanti token vuole. Il danno per singola
+prenotazione resta limitato (un token per preventivo, più il tetto di margine), ma **il numero
+di token in giro non ha tetto**.
+
+> ⛔ **NON È UN TETTO CHE MANCA: È CHE NESSUNO SOMMA.** Aggiungere un limite a ciascun regalo
+> non chiude niente — ognuno ha già il suo. Serve **un posto solo** che, prima di versare,
+> guardi quanto è uscito in totale su quella prenotazione. Finché non c'è, ogni regalo nuovo
+> allarga la banda senza che nessuno se ne accorga.
 
 ---
 
