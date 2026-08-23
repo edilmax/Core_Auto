@@ -28,7 +28,7 @@
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 4144f40
+CONSEGNE AGGIORNATE A: 743dda2
 
 SUITE ATTUALE: Ran 5980 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
@@ -86,91 +86,14 @@ documento ne dava una per chiusa mentre era ancora aperta.
 
 ---
 
-# B) COSA MANCA PER APRIRE AL PUBBLICO — sette cose, non una di più
+# B) COSA MANCA PER APRIRE AL PUBBLICO — sei cose, non una di più
 
-> ⚠️ **Erano quattro fino al 2026-08-23.** Le tre nuove (B5, B6, B7) vengono dalla **mappa dei
-> 39 pezzi** misurata quel giorno: non sono lavori inventati, sono i tre punti in cui un pezzo
-> che tocca i soldi ha test verdi e **non ha addosso la tecnica che quel tipo di codice
-> richiede**. Il resto della mappa — 15 pezzi «solo unitari» che non bloccano l'apertura — sta
-> in sezione C.
-
-### 🔴 B1 — I DUE PREZZI CHE NON SI PARLANO
-Il pannello host ha due caselle prezzo (`p_prezzo` → vetrina, `d_prezzo` → cassa) che nessuno
-collega. Il sito mostra un prezzo e la cassa ne addebita un altro.
-**BLOCCA L'APERTURA: rischio pubblicità ingannevole.**
-
-> ⚠️ **NESSUN OSPITE HA MAI PAGATO IL PREZZO SBAGLIATO — e va letto prima del resto.**
-> *(precisazione del fondatore, 2026-08-22.)* I due annunci che compaiono qui sotto,
-> `filippine-makati` e `filippine-makati-2`, sono **annunci di PROVA del fondatore**, non
-> host veri: in produzione ci sono **0 host firmati e 0 annunci veri**. E il rimborso di
-> 1 € del 16 agosto è partito **dal pannello admin**, non dal lato cliente.
-> ⛔ **Il difetto però è vero, ed è per questo che resta qui e blocca:** sono due caselle
-> quasi identiche in due schermate diverse, tutte e due chiamate «Prezzo/notte», tutte e
-> due che partono da `value="95"`. **Un host vero sbaglierebbe uguale.** Il difetto sta nel
-> pannello, non in chi lo compila.
-
-> *Misurato il 2026-08-22:* `deploy/host.html:378` («Prezzo/notte che vede l'ospite») scrive
-> `prezzo_notte_cents`; `deploy/host.html:425` («Prezzo/notte») scrive `prezzo_netto_cents`,
-> e i due numeri non compaiono insieme in **nessun punto del codice**. Dove va ciascuno:
-> · `prezzo_notte_cents` → pagina dell'annuncio, **Google** (`"price"` in JSON-LD), anteprima
->   sui social, feed RSS, schede dei risultati, filtri e ordinamento per prezzo, mappa;
-> · `prezzo_netto_cents` → **quello che si paga davvero**: `fase59_concierge.py:283` somma
->   notte per notte questo, e solo questo.
-
-**🔑 DECISO IL 2026-08-22 (scelta B del fondatore): «il numero visto dev'essere il numero
-pagato».** Con le date scelte, la scheda mostra il prezzo **di quelle date**, preso dal
-calendario; senza date, «da X», dove X è la notte prenotabile più economica.
-
-**✅ PEZZO 1 FATTO — la guardia esiste, e non c'era.** `collaudi/prezzi_coerenti.py` (sola
-lettura, `mode=ro`) più 19 guardie in `test_prezzo_vetrina_e_cassa.py`. È **nata rossa** sui
-dati veri, che è l'unica prova che stia guardando la cosa giusta:
-> ```
-> docker exec -i casavip_app python3 - --cartella /data --oggi 2026-08-22 < collaudi/prezzi_coerenti.py
-> ROSSO filippine-makati · ROSSO filippine-makati-2 · 2 annunci su 2 dicono il falso · esce 1
-> ```
-> ⛔ **La trappola gliel'hanno insegnata i dati veri, non la fantasia:** `filippine-makati`
-> ha una notte a 100 cents datata **16/08, già passata**. Un controllo che guardasse tutti i
-> giorni troverebbe minimo 100, direbbe «coincide» e **assolverebbe il difetto** con un
-> giorno che nessuno può più prenotare. Lo impedisce `test_LA_NOTTE_PASSATA_NON_ASSOLVE`;
-> stesso trattamento per le notti chiuse, piene e a prezzo zero.
-
-**✅ PEZZO 2a FATTO — la vetrina DERIVA il prezzo dal calendario.** `alloggi.prezzo_notte_cents`
-non è più un numero indipendente: `fase57_vetrina.rispecchia_prezzo()` lo ricalcola dalla notte
-**prenotabile** più economica dell'inventario. Ricerca, filtri, Google e mappa leggono la stessa
-colonna di prima — ma quella colonna non può più mentire.
-> **Dove è agganciato, e perché lì.** L'avviso parte dal **confine dei dati**
-> (`fase58_channel_manager`), non dai pulsanti del pannello: i posti che scrivono l'inventario
-> sono **cinque**, e agganciarlo a quelli visibili avrebbe lasciato scoperto il più pericoloso —
-> l'**iCal, che scrive da solo**. I due versi si cablano in `fase81_bootstrap_casavip`, l'unico
-> punto in cui esistono tutt'e due, e il nome entra nel rendiconto di composizione
-> (`specchio-prezzo(58->57)`): costruito e non collegato non esiste (regola #23).
-> Se non c'è niente di prenotabile **non inventa un prezzo**: lascia la vetrina com'è e torna
-> `None`. La coppia leggi-minimo → scrivi-vetrina tocca due archivi e non sta in una sola
-> transazione: un `threading.Lock` la rende atomica.
->
-> **Provato il 2026-08-23** — commit `4144f40`, unito in `master` con `a35f1e9` (PR #96,
-> `merged: true` **riletto dall'API**, non dedotto dal comando):
-> ```
-> test_prezzo_vetrina_e_cassa.py ..... 37 test OK
-> batteria completa (con le modifiche dentro) ..... 5980 test OK, banco dei soldi OK
-> CI su Linux ..... 16 job su 16, 0 rossi (gate, full-suite, full-suite-311, money-smoke,
->                   CodeQL, atheris, copertura, mutazione, immagine, browser, w3c, ...)
-> ```
-
-⛔ **MA IN PRODUZIONE IL SITO MENTE ANCORA, e questo B1 resta 🔴 per quello.** Lo specchio è in
-`master`, **non è deployato**: sul server `collaudi/prezzi_coerenti.py` direbbe tuttora **ROSSO
-su 2 annunci su 2**. Finché non si deploya, il codice giusto non protegge nessun ospite — ed è
-la differenza fra «scritto» e «vero» che questo progetto ha già pagato altrove (regola #23).
-Il deploy si fa con `DEPLOY.md` alla mano, paracadute `:prec` agganciato **prima** del build.
-
-**RESTA DA FARE:**
-- **Pezzo 3 — il pannello ha una casella sola** *(tocca la produzione)*: prezzo base, più
-  un'eccezione per certi giorni dichiarata come tale e già riempita col prezzo base.
-  Toglie la causa invece di inseguire l'effetto.
-  > 🔑 **Rimandato per decisione del fondatore, 2026-08-23: «il pezzo 3 lo lasciamo».** Non è
-  > stato dimenticato e non è stato chiuso: il 2a toglie l'**effetto** (la vetrina non può più
-  > dire un numero che la cassa non addebita), il 3 toglierebbe la **causa** (due caselle quasi
-  > identiche in due schermate). Con 0 host firmati è la finestra in cui costa meno rifarlo.
+> ⚠️ **Erano quattro la mattina del 2026-08-23, sono diventate sette, e a fine giornata sono
+> sei.** Le tre nuove (B5, B6, B7) vengono dalla **mappa dei 39 pezzi** misurata quel giorno:
+> non sono lavori inventati, sono i tre punti in cui un pezzo che tocca i soldi ha test verdi e
+> **non ha addosso la tecnica che quel tipo di codice richiede**. **B1 è uscito**: declassato ad
+> 🟠 e spostato in sezione C la sera stessa, dopo il deploy e la prova sui dati veri.
+> Il resto della mappa — 15 pezzi «solo unitari» che non bloccano l'apertura — sta in sezione C.
 
 ### 🔴 B2 — CAMBIARE TUTTE LE CHIAVI PROVVISORIE E ACCENDERE LA GUARDIA SULLA LUNGHEZZA
 **Ultimo lavoro prima di aprire.** *(deciso dal fondatore il 2026-08-22: le chiavi di adesso
@@ -305,6 +228,125 @@ addosso».
 **segni**, non sul senso — concorrenza = il file usa i thread; proprietà = c'è `@given`;
 mutazione = il modulo è nel catalogo. Un file può usare i thread e non provare nessuna gara
 vera, e la mappa non lo distingue.
+
+### 🟠 B1 — I DUE PREZZI, COM'È FINITA *(era in sezione B, declassato e spostato qui il 2026-08-23)*
+
+> **B1 non blocca più l'apertura: la bugia non può nascere (specchio cablato) e le due già
+> scritte sono riparate. Restano due cose PRIMA DEL PRIMO HOST VERO: il pezzo 3 (una casella
+> prezzo sola nel pannello, invece di due quasi identiche) e il comando che ricalcola tutti gli
+> annunci in una volta.**
+> *(fondatore, 2026-08-23.)*
+
+**Cos'era.** Il pannello host aveva due caselle prezzo (`p_prezzo` → vetrina, `d_prezzo` →
+cassa) che nessuno collegava: il sito mostrava un prezzo e la cassa ne addebitava un altro.
+Rischio pubblicità ingannevole.
+
+> ⚠️ **NESSUN OSPITE HA MAI PAGATO IL PREZZO SBAGLIATO.** *(precisazione del fondatore,
+> 2026-08-22.)* I due annunci coinvolti, `filippine-makati` e `filippine-makati-2`, erano
+> **annunci di PROVA del fondatore**: in produzione ci sono **0 host firmati e 0 annunci veri**.
+> ⛔ **Il difetto però era vero:** due caselle quasi identiche in due schermate diverse, tutte e
+> due chiamate «Prezzo/notte», tutte e due con `value="95"` di partenza. **Un host vero
+> sbaglierebbe uguale.** Il difetto stava nel pannello, non in chi lo compila — ed è la ragione
+> per cui il **pezzo 3 resta**.
+
+> *Misurato il 2026-08-22:* `deploy/host.html:378` («Prezzo/notte che vede l'ospite») scriveva
+> `prezzo_notte_cents`; `deploy/host.html:425` («Prezzo/notte») scriveva `prezzo_netto_cents`,
+> e i due numeri non comparivano insieme in **nessun punto del codice**. Dove va ciascuno:
+> · `prezzo_notte_cents` → pagina dell'annuncio, **Google** (`"price"` in JSON-LD), anteprima
+>   sui social, feed RSS, schede dei risultati, filtri e ordinamento per prezzo, mappa;
+> · `prezzo_netto_cents` → **quello che si paga davvero**: `fase59_concierge.py:283` somma
+>   notte per notte questo, e solo questo.
+
+**🔑 DECISO IL 2026-08-22 (scelta B del fondatore): «il numero visto dev'essere il numero
+pagato».** Con le date scelte, la scheda mostra il prezzo **di quelle date**, preso dal
+calendario; senza date, «da X», dove X è la notte prenotabile più economica.
+
+**✅ PEZZO 1 — la guardia, che non c'era.** `collaudi/prezzi_coerenti.py` (sola lettura,
+`mode=ro`) più le guardie in `test_prezzo_vetrina_e_cassa.py`. È **nata rossa** sui dati veri,
+che è l'unica prova che stesse guardando la cosa giusta.
+> ⛔ **La trappola gliel'hanno insegnata i dati veri, non la fantasia:** `filippine-makati`
+> aveva una notte a 100 cents datata **16/08, già passata**. Un controllo che guardasse tutti i
+> giorni troverebbe minimo 100, direbbe «coincide» e **assolverebbe il difetto** con un giorno
+> che nessuno può più prenotare. Lo impedisce `test_LA_NOTTE_PASSATA_NON_ASSOLVE`; stesso
+> trattamento per le notti chiuse, piene e a prezzo zero.
+
+**✅ PEZZO 2a — la vetrina DERIVA il prezzo dal calendario.** `alloggi.prezzo_notte_cents` non è
+più un numero indipendente: `fase57_vetrina.rispecchia_prezzo()` lo ricalcola dalla notte
+**prenotabile** più economica dell'inventario. Ricerca, filtri, Google e mappa leggono la stessa
+colonna di prima — ma quella colonna non può più mentire.
+> **Dove è agganciato, e perché lì.** L'avviso parte dal **confine dei dati**
+> (`fase58_channel_manager`), non dai pulsanti del pannello: i posti che scrivono l'inventario
+> sono **cinque**, e agganciarlo a quelli visibili avrebbe lasciato scoperto il più pericoloso —
+> l'**iCal, che scrive da solo**. I due versi si cablano in `fase81_bootstrap_casavip`, l'unico
+> punto in cui esistono tutt'e due, e il nome entra nel rendiconto di composizione
+> (`specchio-prezzo(58->57)`): costruito e non collegato non esiste (regola #23).
+> Se non c'è niente di prenotabile **non inventa un prezzo**: lascia la vetrina com'è e torna
+> `None`. La coppia leggi-minimo → scrivi-vetrina tocca due archivi e non sta in una sola
+> transazione: un `threading.Lock` la rende atomica.
+>
+> **Provato il 2026-08-23** — commit `4144f40`, unito in `master` con `a35f1e9` (PR #96,
+> `merged: true` **riletto dall'API**):
+> ```
+> test_prezzo_vetrina_e_cassa.py ..... 37 test OK
+> batteria completa (con le modifiche dentro) ..... 5980 test OK, banco dei soldi OK
+> CI su Linux ..... 16 job su 16, 0 rossi
+> ```
+
+**✅ DEPLOYATO E PROVATO SUI DATI VERI IL 2026-08-23.** Paracadute `:prec` ri-agganciato
+all'immagine viva **prima** del build e verificato per contenuto; deploy `a8007d6 -> b797d46`
+chiuso con uscita 0 in **35 secondi**; `money_path_pronto: True`, `avvisi: []`, e
+**`specchio-prezzo(58->57)` nel rendiconto d'avvio in produzione**. L'immagine viva contiene
+esattamente il codice di `b797d46`, verificato confrontando l'impronta dei suoi **152 file** con
+la stessa impronta ricostruita dall'albero di git: `538b419096a5cf21…` da tutt'e due le strade.
+`collaudi/verifica_produzione.py`: **190 controlli, 0 violazioni**.
+> **La riga d'arrivo, misurata dall'oracolo indipendente sui dati veri:**
+> ```
+> prima:  2 annunci pubblicati · 2 dicono il falso   (uscita 1)
+> dopo:   2 annunci pubblicati · 0 dicono il falso   (uscita 0)
+> ```
+> ⚠️ **Fra «prima» e «dopo» non c'è il deploy: c'è il RICALCOLO.** Il deploy da solo aveva
+> lasciato l'oracolo rosso — ed è il motivo per cui esiste la voce qui sotto.
+
+**RESTA DA FARE — pezzo 3: il pannello ha una casella sola** *(tocca la produzione)*: prezzo
+base, più un'eccezione per certi giorni dichiarata come tale e già riempita col prezzo base.
+Toglie la causa invece di inseguire l'effetto.
+> 🔑 **Rimandato per decisione del fondatore, 2026-08-23: «il pezzo 3 lo lasciamo».** Non è
+> stato dimenticato e non è stato chiuso: il 2a toglie l'**effetto** (la vetrina non può più
+> dire un numero che la cassa non addebita), il 3 toglierebbe la **causa** (due caselle quasi
+> identiche in due schermate). Con 0 host firmati è la finestra in cui costa meno rifarlo.
+
+### 🔁 IL COMANDO CHE RICALCOLA TUTTI GLI ANNUNCI IN UNA VOLTA — da fare prima del primo host vero
+
+> **Uno specchio impedisce alla bugia di nascere, non ripara quelle già scritte. Serve un
+> comando che ricalcoli TUTTI gli annunci pubblicati in una volta. Con 2 annunci basta farlo a
+> mano; con 500 serve il comando. Da fare prima del primo host vero.**
+> *(fondatore, 2026-08-23.)*
+
+**Com'è venuto fuori, misurato il 2026-08-23 subito dopo il deploy.** Lo specchio era in
+produzione e **cablato** (`specchio-prezzo(58->57)` nel rendiconto d'avvio), eppure l'oracolo
+sui dati veri diceva ancora **`2 annunci pubblicati · 2 dicono il falso`**: in archivio i due
+annunci avevano ancora `prezzo_notte_cents = 100` contro una notte prenotabile da **9000**.
+Lo specchio si accende **quando qualcuno scrive** — alla pubblicazione (`fase57_vetrina.py:611`)
+e dopo ogni scrittura dell'inventario (`fase58_channel_manager.py:255`) — e dal deploy in poi
+nessuno aveva scritto.
+
+⛔ **Un deploy non è una migrazione dei dati.** Qui erano due annunci di prova e nessun ospite
+ha mai pagato; con 500 annunci veri, dopo quel deploy **starebbero mentendo tutti e 500** — e la
+mappa dei 39 pezzi avrebbe detto «coperto», perché il codice giusto c'era.
+
+✅ **Ricalcolo fatto a mano il 2026-08-23** (autorizzato dal fondatore), con copia di sicurezza
+del catalogo presa prima e verificata per sha256:
+```
+PRIMA  filippine-makati 100 cents · filippine-makati-2 100 cents
+DOPO   filippine-makati 9000      · filippine-makati-2 9000        (2 su 2 cambiati)
+oracolo sui dati veri -> 2 annunci pubblicati · 0 dicono il falso · uscita 0
+```
+> 💡 **Tre trappole trovate scrivendo quel ricalcolo a mano**, e il comando dovrà evitarle tutte:
+> `docker exec` **non eredita l'ambiente** del processo vivo; `ConfigCasaVIP` **non legge
+> l'ambiente** (lo fa `main_casavip.main()`, righe 92-95), quindi chiamare `crea_sistema()` senza
+> configurazione costruisce un sistema **spento su `:memory:`** e stamperebbe un successo che non
+> ha toccato niente — **il verde peggiore**. Il ricalcolo si è fermato da solo due volte grazie a
+> due guardie scritte prima («non tocco niente»): il comando definitivo deve portarsele dietro.
 
 ### ⚖️ DECISIONE DEL FONDATORE ANCORA DA PRENDERE — il cambio data
 
