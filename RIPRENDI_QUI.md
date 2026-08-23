@@ -28,7 +28,7 @@
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: f47612a
+CONSEGNE AGGIORNATE A: 04f2ecd
 
 SUITE ATTUALE: Ran 5985 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
@@ -813,6 +813,101 @@ coincide SI FERMA invece di deployare**.
   crontab. Può sbloccarla **solo il fondatore**, su `developers.facebook.com`.
 - **La chiavetta fisica** è ferma al 13 agosto (121 commit indietro). Per decisione del
   fondatore la copia fisica si fa **alla fine**, quando la macchina è dichiarata sicura.
+
+---
+
+# 🧭 PASSAGGIO DI CONSEGNE — 2026-08-24 notte
+
+## 📍 DOVE SIAMO — misurato adesso, non ricordato
+
+| Posto | Valore | Come si ricontrolla |
+|---|---|---|
+| **Computer** | `04f2ecd`, ramo `tetto-regali-2026-08-24` | `git rev-parse --short HEAD` |
+| **GitHub** (`origin/master`) | `8d1f233` | `git ls-remote origin refs/heads/master` |
+| **VPS** (`git HEAD`) | `8d1f233` | `ssh … 'cd /var/www/bookinvip && git rev-parse --short HEAD'` |
+| **Immagine viva** | `sha256:80f21d8…` (codice di **`b797d46`**) | `docker inspect --format='{{.Image}}' casavip_app` |
+
+🔴 **E QUI C'È UNA COSA NUOVA, che ieri non c'era.** Fino a ieri avevo toccato **solo `.md`**,
+che nell'immagine non entrano: «immagine indietro» era normale e dichiarato. **Da stanotte no.**
+`fase83_server.py` è cambiato: l'immagine viva **non contiene la riparazione**, e per portarcela
+serve un **deploy vero con rebuild** (D17, paracadute `:prec` ri-agganciato **prima** del build e
+verificato per contenuto).
+
+> 🛑 **IL DEPLOY È RIMANDATO A DOMANI PER DECISIONE DEL FONDATORE (2026-08-24 notte):**
+> *«il deploy lo facciamo domani, non stasera: tocca il codice e voglio la testa fresca».*
+> ⛔ Non è una dimenticanza e non va «recuperato» da chi legge: è una scelta. Il difetto che
+> resta in produzione un giorno in più è **B11**, e in produzione ci sono **0 host firmati e 0
+> annunci veri** — quindi il costo dell'attesa è zero.
+
+## ✅ COS'È SUCCESSO — quattro difetti scritti, uno riparato
+
+**Unita in `master`: PR #101** (`8d1f233`) — B8, B9, B10, B11 in sezione B. Solo documenti.
+**Verificata UNITA dall'API**, non da un documento: `merged: True`, `merged_at 2026-08-23 20:57`.
+
+**Aperta e NON unita: PR #102** (`04f2ecd`) — la riparazione di B11 (idea C).
+```
+https://github.com/edilmax/Core_Auto/pull/102     open · merged: False
+CI al momento della scrittura: 15 job · 10 successo · 1 saltato · 4 IN CORSO · 0 falliti
+```
+⛔ **«4 in corso» non è «verde»**: la tabella si rilegge dall'API prima di unire (regola ferrea 8).
+
+**La riparazione, in una riga:** `fase83_server._commissione_regalabile()` sottrae dalla
+commissione lo sconto già finanziato all'ospite, **nei due punti** che regalano
+(`fase83_server.py:5910` e `:8170`). Il saldo per prenotazione non può più andare negativo:
+peggio **+0,02** invece di **−23,31**.
+
+**Guardia:** `test_regali_non_superano_la_commissione.py`, 5 collaudi, **vista rossa prima** su
+tutt'e due i cammini; il secondo provato iniettando il guasto **con l'editor** e ripristinando
+con **sha256 identico** (`8e525d20…`).
+
+## 🧾 LE MISURE DI STANOTTE, col comando che le ha prodotte
+
+```
+python -m unittest discover -s . -p "test_*.py"        (da PowerShell)
+Ran 5980 tests in 2286.486s
+OK (skipped=4)
+CODICE USCITA: 0          <- letto DAL FILE, senza tubi (regola ferrea 7)
+
+python collaudi/audit_millimetrico.py
+VERDETTO: 0 DISCREPANZE — i 5 documenti rispecchiano il motore al millimetro   exit 0
+
+caricatore: 5985 raccolti · 5980 eseguiti
+scarto 5: le guardie openssl, che PowerShell non ha (D23 punto 3)
+```
+
+## 📋 COSA RESTA — dieci voci in sezione B, e l'ordine è tuo
+
+**Domani, per prima cosa:** rileggere la CI della **#102** dall'API, unirla, **poi il deploy con
+rebuild** (D17). È l'unico lavoro che ha già tutto pronto e aspetta solo una testa riposata.
+
+**Bloccano l'apertura:** B2 chiavi provvisorie · B3 rimborso mai provato con soldi veri ·
+B4 la commissione sul rimborso pieno *(tua decisione)* · B5 `fase59` mai giudicato ·
+B6 nessun oracolo sul payout · B7 riconciliazione contro se stessa · B8 la homepage dice il
+falso in 8 lingue · B9 il credito vale zero per gli host in promo · B10 credito al portatore
+*(tua decisione)* · **B11 🟠** saldo chiuso, **«nessuno somma» aperto**.
+
+**Tre decisioni tue, e sono legate:** B4, B10 e l'**idea A** di B11 (il posto unico che somma,
+5-8 giorni). Finché nessuno somma, ogni scelta sui crediti si fa alla cieca.
+
+## ⚠️ COSA NON È COMMITTATO
+
+**Questo blocco di consegne è scritto sul disco ma NON è committato.** Serve un «procedi al
+commit» — e siccome tocca un `.md`, prima serve la **suite intera** un'altra volta (regola
+ferrea 6, nessuna eccezione per i documenti).
+
+## 🩹 GLI SBAGLI DI STANOTTE — due, e tutti e due presi da una guardia scritta prima
+
+1. **Ho aggiornato il numero dei TEST e non quello dei FILE di test.** La suite è uscita **1**.
+   L'ha preso `test_L_AUDIT_MILLIMETRICO_VIENE_ESEGUITO_DAVVERO` (`atteso=405, trovato=404`).
+2. **E l'ho cercato nel posto sbagliato:** ho riparato `RIPRENDI_QUI.md` dando per scontato che
+   fosse quella la riga, e l'audit è rimasto rosso. Il numero lo legge da **`README.md`**
+   (`collaudi/audit_millimetrico.py:47`). È la **S2** — indovinare invece di leggere — e stavolta
+   l'ho fatta *mentre riparavo un'altra svista dello stesso tipo*.
+
+> 💡 **La lezione di stanotte è una sola, e vale più della riparazione:** il difetto di B11 non
+> era il tetto sbagliato. Era che **la stessa regola sui soldi viveva in due punti di chiamata**,
+> e ripararne uno solo l'avrebbe lasciata viva sull'altro **senza che nessun collaudo se ne
+> accorgesse**. Il secondo punto è saltato fuori da un `grep`, non dalla memoria.
 
 ---
 
