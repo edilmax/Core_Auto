@@ -193,8 +193,24 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
 
     # 2) vetrina, CABLATA sulla disponibilita' reale dell'inventario
     from fase57_vetrina import crea_catalogo
-    catalogo = crea_catalogo(cfg.db_catalogo, disponibilita=inventario.disponibile)
+    catalogo = crea_catalogo(cfg.db_catalogo,
+                             disponibilita=inventario.disponibile,
+                             prezzo_minimo=inventario.prezzo_minimo_prenotabile)
     componenti.append("vetrina(57)<-inventario")
+    # LO SPECCHIO DEL PREZZO (B1, 2026-08-22): il prezzo in vetrina smette di essere un
+    # numero a se' e diventa lo specchio del calendario, cioe' di cio' che la cassa
+    # addebita. I due versi si cablano QUI perche' e' l'unico punto in cui esistono
+    # tutt'e due: la vetrina chiede all'inventario il minimo prenotabile, l'inventario
+    # avvisa la vetrina dopo ogni scrittura (iCal compresa, che scrive da sola).
+    # ⛔ Il collegamento e' il pezzo che conta, non il codice: in questo progetto decine
+    # di moduli sono COSTRUITI e mai COLLEGATI (regola #23), e un meccanismo che non
+    # viene cablato qui semplicemente non esiste per chi usa il sito. Per questo il nome
+    # entra nel rendiconto di composizione, dove si vede a ogni avvio.
+    # (⚠️ Qui NON si nominano i moduli del vecchio stack, nemmeno per fare un esempio:
+    #  `test_il_vecchio_stack_escluso_e_davvero_morto` cerca i NOMI, non le intenzioni,
+    #  e per lei un nome in un commento oggi e' un import domani. Mi ci ha preso.)
+    inventario.collega_specchio(catalogo.rispecchia_prezzo)
+    componenti.append("specchio-prezzo(58->57)")
 
     # 3) concierge: prezzo firmato HMAC, sopra catalogo+inventario
     from fase59_concierge import FirmaQuote, crea_protocollo

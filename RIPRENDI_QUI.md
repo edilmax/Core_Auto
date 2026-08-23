@@ -30,7 +30,7 @@
 ```
 CONSEGNE AGGIORNATE A: a8007d6
 
-SUITE ATTUALE: Ran 5943 test
+SUITE ATTUALE: Ran 5980 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH da PowerShell (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
@@ -82,7 +82,7 @@ documento ne dava una per chiusa mentre era ancora aperta.
 | **La posta è firmata** | SPF ✅ · DKIM ✅ (`hostingermail1`) · DMARC ✅ presente |
 | **Il server è chiuso bene** | SSH **solo con chiave** (niente password) · firewall attivo, aperte solo 80, 443, 22 |
 | **I tre posti sono allineati** | computer = GitHub = VPS · CI verde su `28c35c6` (BookinVIP CI + CodeQL) |
-| **La macchina è sorvegliata** | 151 moduli · 403 file di test · **5.942 test** · 0 moduli che nessun test nomina |
+| **La macchina è sorvegliata** | 151 moduli · 404 file di test · **5.980 test** · 0 moduli che nessun test nomina |
 
 ---
 
@@ -90,19 +90,88 @@ documento ne dava una per chiusa mentre era ancora aperta.
 
 ### 🔴 B1 — I DUE PREZZI CHE NON SI PARLANO
 Il pannello host ha due caselle prezzo (`p_prezzo` → vetrina, `d_prezzo` → cassa) che nessuno
-collega. Il sito mostra un prezzo e la cassa ne addebita un altro. Nessuna guardia esiste.
+collega. Il sito mostra un prezzo e la cassa ne addebita un altro.
 **BLOCCA L'APERTURA: rischio pubblicità ingannevole.**
 
-> *Misurato il 2026-08-22:* `deploy/host.html:378` («Prezzo/notte che vede l'ospite») scrive
-> `prezzo_notte_cents`; `deploy/host.html:425` («Prezzo/notte») scrive `prezzo_netto_cents`.
-> Sui dati veri: vetrina **100 centesimi**, inventario **9000**. Non è un errore di chi
-> inserisce: sono due caselle in due schermate, ed è il pannello a indurre lo sbaglio.
-> Il prezzo va anche a Google (`"price"` nella scheda pubblica).
+> ⚠️ **NESSUN OSPITE HA MAI PAGATO IL PREZZO SBAGLIATO — e va letto prima del resto.**
+> *(precisazione del fondatore, 2026-08-22.)* I due annunci che compaiono qui sotto,
+> `filippine-makati` e `filippine-makati-2`, sono **annunci di PROVA del fondatore**, non
+> host veri: in produzione ci sono **0 host firmati e 0 annunci veri**. E il rimborso di
+> 1 € del 16 agosto è partito **dal pannello admin**, non dal lato cliente.
+> ⛔ **Il difetto però è vero, ed è per questo che resta qui e blocca:** sono due caselle
+> quasi identiche in due schermate diverse, tutte e due chiamate «Prezzo/notte», tutte e
+> due che partono da `value="95"`. **Un host vero sbaglierebbe uguale.** Il difetto sta nel
+> pannello, non in chi lo compila.
 
-### 🔴 B2 — LA CHIAVE DEL PANNELLO AMMINISTRATORE È CORTA
-`ADMIN_KEY` = **11 caratteri**, misurata nel contenitore che gira. Tutte le altre sono lunghe
-(`HOST_KEY` 64 · `CASAVIP_SEGRETO` 64 · `STRIPE_WEBHOOK_SECRET` 38 · `BUNKER_PASSWORD` 23).
-È l'unica corta, ed è quella che apre il pannello **da cui si fanno i rimborsi**.
+> *Misurato il 2026-08-22:* `deploy/host.html:378` («Prezzo/notte che vede l'ospite») scrive
+> `prezzo_notte_cents`; `deploy/host.html:425` («Prezzo/notte») scrive `prezzo_netto_cents`,
+> e i due numeri non compaiono insieme in **nessun punto del codice**. Dove va ciascuno:
+> · `prezzo_notte_cents` → pagina dell'annuncio, **Google** (`"price"` in JSON-LD), anteprima
+>   sui social, feed RSS, schede dei risultati, filtri e ordinamento per prezzo, mappa;
+> · `prezzo_netto_cents` → **quello che si paga davvero**: `fase59_concierge.py:283` somma
+>   notte per notte questo, e solo questo.
+
+**🔑 DECISO IL 2026-08-22 (scelta B del fondatore): «il numero visto dev'essere il numero
+pagato».** Con le date scelte, la scheda mostra il prezzo **di quelle date**, preso dal
+calendario; senza date, «da X», dove X è la notte prenotabile più economica.
+
+**✅ PEZZO 1 FATTO — la guardia esiste, e non c'era.** `collaudi/prezzi_coerenti.py` (sola
+lettura, `mode=ro`) più 19 guardie in `test_prezzo_vetrina_e_cassa.py`. È **nata rossa** sui
+dati veri, che è l'unica prova che stia guardando la cosa giusta:
+> ```
+> docker exec -i casavip_app python3 - --cartella /data --oggi 2026-08-22 < collaudi/prezzi_coerenti.py
+> ROSSO filippine-makati · ROSSO filippine-makati-2 · 2 annunci su 2 dicono il falso · esce 1
+> ```
+> ⛔ **La trappola gliel'hanno insegnata i dati veri, non la fantasia:** `filippine-makati`
+> ha una notte a 100 cents datata **16/08, già passata**. Un controllo che guardasse tutti i
+> giorni troverebbe minimo 100, direbbe «coincide» e **assolverebbe il difetto** con un
+> giorno che nessuno può più prenotare. Lo impedisce `test_LA_NOTTE_PASSATA_NON_ASSOLVE`;
+> stesso trattamento per le notti chiuse, piene e a prezzo zero.
+
+**RESTA DA FARE, in quest'ordine:**
+- **Pezzo 2 — la vetrina DERIVA il prezzo dal calendario** *(tocca la produzione)*.
+  `alloggi.prezzo_notte_cents` smette di essere un numero indipendente e si ricalcola da solo
+  quando l'host salva la disponibilità. Ricerca, filtri, Google e mappa continuano a leggere
+  la stessa colonna di prima — ma quella colonna non può più mentire.
+- **Pezzo 3 — il pannello ha una casella sola** *(tocca la produzione)*: prezzo base, più
+  un'eccezione per certi giorni dichiarata come tale e già riempita col prezzo base.
+  Toglie la causa invece di inseguire l'effetto.
+
+### 🔴 B2 — CAMBIARE TUTTE LE CHIAVI PROVVISORIE E ACCENDERE LA GUARDIA SULLA LUNGHEZZA
+**Ultimo lavoro prima di aprire.** *(deciso dal fondatore il 2026-08-22: le chiavi di adesso
+sono provvisorie e non c'è ancora nessun cliente vero, quindi si cambiano **tutte insieme**
+l'ultimo giorno — non una alla volta adesso.)*
+
+> *Misurato il 2026-08-22 sul contenitore vivo, senza mai stampare i valori:*
+> ```
+> ssh root@76.13.44.167 "docker exec casavip_app printenv ADMIN_KEY | wc -c"
+> ADMIN_KEY 11 · HOST_KEY 64 · CASAVIP_SEGRETO 64 · BUNKER_PASSWORD 23
+> ```
+> `ADMIN_KEY` è l'unica corta, ed è quella che apre il pannello **da cui si fanno i rimborsi**.
+
+**Perché era corta** — è la parte che conta, perché si ripeterebbe: `deploy/genera_segreti.sh`
+genera `CASAVIP_SEGRETO` e `HOST_KEY`, **`ADMIN_KEY` no**. Ma `main_casavip.py:229`, quando
+rifiuta di partire, dice «Genera le chiavi vere con: `sh deploy/genera_segreti.sh`». La
+macchina non l'ha mai prodotta, quindi l'ha scritta a mano una persona. `DEPLOY.md` non la
+nomina mai.
+
+**La guardia sulla lunghezza è COSTRUITA e SPENTA di proposito.** All'avvio il prodotto già
+rifiuta la chiave mancante, vuota, di soli spazi e uguale al segnaposto pubblico — ma
+**nessuno guardava quanto è lunga** (nei test `ADMIN_KEY="x"` è una chiave valida). Ora il
+giudizio si esegue a **ogni** avvio e finisce nei log: è solo la conseguenza — rifiutare di
+partire — a essere spenta. Si accende **senza toccare il codice**, mettendo
+`CHIAVI_LUNGHEZZA_MINIMA=32` in `.env.casavip`.
+⛔ **Non accenderla prima di aver cambiato le chiavi:** con `ADMIN_KEY` a 11 caratteri il
+contenitore **rifiuta di partire e il sito va giù**. Prima le chiavi, poi l'interruttore.
+
+⚠️ **Cambiare la chiave NON chiude le sessioni già aperte:** il cookie `bv_admin` è firmato
+con `CASAVIP_SEGRETO`, non con la chiave admin, e dura **12 ore**
+(`fase83_server.py:9491`-`9506`). Chi è dentro resta dentro fino a scadenza.
+
+**Due cose viste per strada il 2026-08-22, da chiudere in quello stesso giorno:** la chiave di
+adesso è in chiaro in `/root/.bash_history` e in ~20 copie di riserva di `.env.casavip`; e
+`/var/www/bookinvip/.env` è **leggibile da chiunque** (`-rw-r--r--`) con 6 righe che sembrano
+segreti.
 
 ### 🔴 B3 — IL RIMBORSO CHIESTO DALL'OSPITE NON È MAI STATO PROVATO CON SOLDI VERI
 Quello dal **pannello** sì (l'euro del 16 agosto). Quello che parte **dall'ospite** no, mai.
@@ -193,6 +262,67 @@ vedere scadere hold, payout e penale senza aspettare giorni veri.
 Cinque giri separati non scrivono la scheda, perché ognuno copre un modulo su cinque. Finché
 non impara ad accumulare, la casella della mutazione resta vuota anche a lavoro fatto.
 Mezz'ora di lavoro.
+
+### 🔴 UN TIMEOUT ESCE COME `[FAIL]`, E UN «NON LO SO» TRAVESTITO DA «È ROTTO» FA PERDERE UN'ORA
+*(misurato il 2026-08-23, giro completo della batteria: avvio 12:54:07, fine 13:56:53, `RIEPILOGO: 24 OK · 2 FALLITI · 1 saltati`, uscita 1.)*
+
+Le **due fasi fallite sono cadute sul proprio tetto di tempo**, non su una prova che ha detto no:
+```
+[FAIL] 3. Mutazione                                        (900s)  <- tetto 900  (batteria.py:145)
+[FAIL] 6c. Multi-vettore (rete+pannelli+tamper+finanza)    (700s)  <- tetto 700  (batteria.py:150)
+   [X] 3. Mutazione -> TIMEOUT
+   [X] 6c. Multi-vettore -> TIMEOUT
+```
+⛔ **La prova che è il tetto e non il prodotto**: lo **stesso giorno**, nel giro precedente ucciso
+da fuori a 55 minuti, la fase 3 sullo **stesso codice e sulla stessa macchina** aveva chiuso
+`[OK  ] 3. Mutazione (653s)`. **247 secondi in più e diventa rossa.**
+
+Il difetto **non è che sfora**: è che **`[FAIL]` dice due cose diverse con la stessa parola.**
+Un tetto scaduto è un **NON ESEGUITO** — non sappiamo cosa avrebbe detto quella fase — ma esce
+identico a una prova che ha trovato un guasto. La batteria ha già la forma giusta per dirlo:
+`[~]` con il motivo scritto, come fa la fase 9 saltata. Le due fasi scadute vanno in quella
+colonna, con **quanto mancava** accanto.
+
+⛔ **E il tetto non si alza per far tornare il verde** — lo dice la batteria stessa quando
+recupera: *«Il tetto NON e' stato alzato: guarda perche' ha sforato.»* Alzarlo è la cura che
+nasconde la domanda; la domanda è **perché la stessa fase ha preso 247s in più**.
+
+⚠️ **Costo già pagato, e non è teorico**: il giro ucciso aveva lasciato **`fase83_server.py`
+MUTATO** sul disco. L'ha ripristinato la batteria all'avvio successivo, da sola e alzando
+l'allarme — controllato dopo il giro, in produzione **nessun mutante rimasto** (le uniche
+differenze di contenuto sono i 5 file del lavoro in corso; altri 10 file risultano toccati ma
+sono **byte per byte identici a git**). Ma quella rete di recupero è **una casella sola, non
+rientrante**: ha salvato questo colpo perché i giri erano in fila. Due giri insieme e non salva
+più niente.
+
+### 🔴 DUE MACCHINE MISURANO LO STESSO LAVORO, E GIÀ NON SONO D'ACCORDO
+*(trovato il 2026-08-22 mentre si cercava dove fossero «gli 11 test presi da AWS».)*
+
+Due delle **6 caselle del Blocco 1** (`collaudi/piano.py`) e due dei **5 LAVORI OBBLIGATORI**
+(`collaudi/regole_avvio.py`, `LAVORI_IN_SOSPESO`) sono **lo stesso lavoro scritto in due file**:
+
+| il lavoro | in `piano.py` | in `regole_avvio.py` |
+|---|---|---|
+| orologi di prova Stripe | casella 3 | lavoro 3 |
+| metamorfici sull'aritmetica dei soldi | casella 4 | lavoro 4 |
+
+⛔ **E sul secondo si contraddicono già**, misurato lo stesso giorno:
+```
+python collaudi/regole_avvio.py       -> ⚠️ META' — trovato: test_property_soldi.py,
+                                          test_fase119_calendario_prezzi.py
+python collaudi/scheda.py --blocco 1  -> ☐ mai misurata: nessun attrezzo ha ancora
+                                          scritto questa casella
+```
+Due macchine, la stessa domanda, **due risposte**. Non è la malattia delle sette liste — questi
+elenchi hanno **scopi diversi e legittimi** — ma è **due misuratori dello stesso fatto**, che è
+il modo in cui quella malattia comincia. La cura non è cancellare un elenco: è che **uno solo
+misuri**, e l'altro vada a leggere da lui.
+
+⚠️ **Da non confondere, e la confusione è già costata una sessione il 2026-08-17.** Le **11
+tecniche di verifica** stanno in `REGISTRO_INGEGNERIA.md` fra `TECNICHE-INIZIO` e
+`TECNICHE-FINE`: dichiarate 11, **contate 11**, e sono **nostre — AWS non c'entra**, lo dice il
+documento in maiuscolo. Un terzo elenco ancora sono i **14 «attrezzi obbligatori»** di
+`piano.py`, dove `gare` e `concorrenza` sono **la stessa tecnica con due nomi**.
 
 ### 63 moduli costruiti e mai collegati
 `python collaudi/raggiungibilita.py` → 88 raggiungibili su 151. Trentaquattro sono il vecchio

@@ -121,6 +121,9 @@ class ChannelManager:
                  notificatore: Optional[Callable[[Dict[str, Any]], None]] = None) -> None:
         self._conn_factory = conn_factory
         self._notifica = notificatore
+        # Chi mostra il prezzo va avvisato quando il calendario cambia (vedi
+        # `collega_specchio`). Nasce SPENTO: un inventario senza vetrina resta valido.
+        self._specchio: Optional[Callable[[str], None]] = None
         self.inizializza_schema()
 
     def _apri(self) -> sqlite3.Connection:
@@ -228,7 +231,6 @@ class ChannelManager:
                 (alloggio_id, giorno, unita_totali, occupate, prezzo_netto_cents,
                  int(bool(chiuso)), min_notti, ora))
             con.execute("COMMIT")
-            return True
         except Exception:
             try:
                 con.execute("ROLLBACK")
@@ -237,6 +239,84 @@ class ChannelManager:
             raise
         finally:
             con.close()
+        # ⛔ QUI, E NON SUI PULSANTI DEL PANNELLO. Misurato il 2026-08-22: i posti che
+        # scrivono l'inventario sono CINQUE (fase83 x3, fase82_ical_sync, fase62,
+        # fase77_portability), e agganciare l'avviso a quelli visibili avrebbe lasciato
+        # scoperto proprio il piu' pericoloso -- l'iCal, che scrive DA SOLO.
+        # Lo scenario, con numeri: l'host ha la notte piu' economica a 80 EUR; un
+        # calendario esterno gliela occupa; l'iCal la blocca (`unita_totali=0`); la notte
+        # prenotabile piu' economica diventa 120 -- e la vetrina continuerebbe a dire 80.
+        # La bugia tornerebbe DA SOLA, senza che nessuno abbia sbagliato niente. Sul
+        # confine dei dati non si puo' dimenticare, nemmeno da chi scrivera' il sesto.
+        # ⛔ E sta DOPO il `finally`, fuori dalla transazione: un avviso dentro il `try`
+        # verrebbe intercettato dall'`except` qui sopra, che tenterebbe un ROLLBACK su una
+        # transazione gia' COMMITtata e rilancerebbe -- l'host si vedrebbe fallire un
+        # salvataggio che invece era riuscito.
+        self._avvisa_lo_specchio(alloggio_id)
+        return True
+
+    def collega_specchio(self, callback: Optional[Callable[[str], None]]) -> None:
+        """Collega CHI MOSTRA IL PREZZO, avvisato dopo ogni scrittura andata a buon fine.
+
+        Sta qui e non nel costruttore per una ragione precisa: la vetrina ha bisogno
+        dell'inventario (per sapere il prezzo minimo) e l'inventario ha bisogno della
+        vetrina (per aggiornarla). Nel costruttore sarebbe un uovo-e-gallina; cablato
+        dopo, in `fase81`, ognuno dei due esiste gia' quando serve all'altro.
+        """
+        self._specchio = callback
+
+    def _avvisa_lo_specchio(self, alloggio_id: str) -> None:
+        """⛔ ISOLATO, e la scelta e' deliberata: se il ricalcolo del prezzo esplode, la
+        scrittura del calendario resta BUONA. Meglio una vetrina con un prezzo vecchio --
+        che la guardia `collaudi/prezzi_coerenti.py` trovera' e dira' -- che un host
+        che non riesce piu' a salvare le sue date.
+
+        ⛔ MA NON TACE: `error`, non `warning`. Un ricalcolo che fallisce in silenzio
+        riporta la vetrina a mentire senza che nessuno lo sappia.
+        """
+        if self._specchio is None:
+            return
+        try:
+            self._specchio(str(alloggio_id))
+        except Exception:
+            # `alloggio_id` arriva dall'esterno: le andate a capo si tolgono PRIMA di
+            # scrivere nel registro, se no una riga sola puo' fingersene due (CodeQL
+            # log-injection: e' la forma che riconosce).
+            logger.error(
+                "specchio del prezzo fallito per l'alloggio %s: la vetrina puo' essere "
+                "rimasta a un prezzo vecchio (scrittura del calendario INVARIATA)",
+                str(alloggio_id).replace("\n", " ").replace("\r", " "), exc_info=True)
+
+    def prezzo_minimo_prenotabile(self, alloggio_id: Any, da: Any, a: Any) -> Optional[int]:
+        """Il prezzo della notte PRENOTABILE piu' economica in [da, a], estremi inclusi.
+        `None` se non ce n'e' NEMMENO UNA -- e `None` non e' zero: vuol dire «non ho un
+        numero onesto da mostrare», e chi chiama deve lasciare le cose come stanno invece
+        di inventarne uno.
+
+        ⛔ PRENOTABILE, non «presente»: si scartano i giorni chiusi dall'host, quelli
+        senza unita' libere e quelli a prezzo zero (che `fase59_concierge` rifiuta con
+        `non_quotabile`). Un giorno che l'ospite non puo' comprare non puo' fare da
+        prezzo in vetrina -- e' la trappola vista sui dati veri il 2026-08-22, dove una
+        notte a 1,00 EUR gia' PASSATA avrebbe fatto sembrare onesta una vetrina che
+        mentiva di 90 volte.
+
+        ⚠️ Il soggiorno minimo (`min_notti`) NON entra: una notte puo' risultare
+        prenotabile da sola e non esserlo davvero se l'host chiede almeno 3 notti. Il
+        numero e' quindi una stima OTTIMISTA, e la cassa puo' solo costare di piu'. Sta
+        scritto anche in `collaudi/prezzi_coerenti.py`, che misura la stessa cosa per
+        conto suo.
+        """
+        prezzi = []
+        for g in self.stato_range(str(alloggio_id), str(da), str(a)).values():
+            if int(g.get("chiuso", 0) or 0):
+                continue
+            if int(g.get("unita_totali", 0) or 0) - int(g.get("unita_occupate", 0) or 0) <= 0:
+                continue
+            p = g.get("prezzo_netto_cents")
+            if not _intero(p) or p <= 0:
+                continue
+            prezzi.append(int(p))
+        return min(prezzi) if prezzi else None
 
     def _muta_giorno(self, alloggio_id: str, giorno: str, **campi: Any) -> bool:
         """Aggiornamento parziale (per i comandi). Crea la riga se assente."""

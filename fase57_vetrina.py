@@ -50,6 +50,7 @@ import datetime
 import logging
 import re
 import sqlite3
+import threading
 import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
@@ -403,10 +404,23 @@ class CatalogoVetrina:
     -> Optional[bool]; se manca o solleva, la scheda degrada a 'ignoto'."""
 
     def __init__(self, conn_factory: Callable[[], sqlite3.Connection], *,
-                 disponibilita: Optional[Callable[[int, str, str], Optional[bool]]] = None
+                 disponibilita: Optional[Callable[[int, str, str], Optional[bool]]] = None,
+                 prezzo_minimo: Optional[Callable[[str, str, str], Optional[int]]] = None,
+                 orizzonte_giorni: int = 365
                  ) -> None:
         self._conn_factory = conn_factory
         self._disp = disponibilita
+        # `prezzo_minimo(slug, da, a) -> Optional[int]`: la notte prenotabile piu'
+        # economica secondo l'INVENTARIO, cioe' secondo cio' che la cassa addebita.
+        # Iniettabile e isolato come `disponibilita`: se manca, lo specchio non gira e la
+        # vetrina si comporta esattamente come prima.
+        self._prezzo_min = prezzo_minimo
+        self._orizzonte = int(orizzonte_giorni)
+        # ⛔ LA SERRATURA DELLO SPECCHIO. Rende ATOMICA la coppia leggi-minimo →
+        # scrivi-vetrina, che sono due archivi diversi e quindi non stanno in una
+        # transazione sola. Senza, una lettura vecchia puo' sovrascrivere una fresca --
+        # DIMOSTRATO, non temuto: vedi `rispecchia_prezzo`.
+        self._serratura_specchio = threading.Lock()
         self.inizializza_schema()
 
     def _apri(self) -> sqlite3.Connection:
@@ -582,13 +596,97 @@ class CatalogoVetrina:
                     "VALUES (?,?,?,?)",
                     [(alloggio_id, im.url, im.ordine, im.alt) for im in imgs])
             con.execute("COMMIT")
-            return alloggio_id
         except Exception:
             try:
                 con.execute("ROLLBACK")
             except sqlite3.Error:
                 pass
             raise
+        finally:
+            con.close()
+        # Il prezzo scritto qui viene dalla casella `p_prezzo` del pannello, che l'host
+        # compila a mano in una schermata diversa da quella del calendario. Se il
+        # calendario esiste gia', e' LUI la verita': si rispecchia subito, se no
+        # l'annuncio resterebbe a mentire fino al prossimo salvataggio delle date.
+        self.rispecchia_prezzo(scheda.slug)
+        return alloggio_id
+
+    def rispecchia_prezzo(self, slug: Any) -> Optional[int]:
+        """IL PREZZO IN VETRINA NON E' PIU' UN NUMERO A SE': E' LO SPECCHIO DEL CALENDARIO.
+
+        ⛔ IL DIFETTO CHE CHIUDE (B1), misurato sui dati veri il 2026-08-22: il sito
+        diceva 1,00 EURO a notte e la cassa ne addebitava 90,00. NOVANTA VOLTE. Erano due
+        numeri in due archivi, scritti da due caselle quasi identiche in due schermate del
+        pannello, e nel codice non esisteva UN SOLO punto in cui comparissero insieme.
+
+        🔑 LA REGOLA, decisa dal fondatore quel giorno: «il numero visto dev'essere il
+        numero pagato». Senza date scelte la vetrina puo' dire solo «da X», e X e' la
+        notte PRENOTABILE piu' economica -- quella che la cassa addebiterebbe davvero.
+
+        ⛔ SE NON C'E' NIENTE DI PRENOTABILE NON INVENTA UN PREZZO: lascia la vetrina
+        com'e' e ritorna None. Un annuncio pubblicato senza calendario promette una cosa
+        che la cassa non sa vendere (`fase59` risponde 422 `non_quotabile`), ed e' un
+        difetto VERO -- ma un prezzo inventato lo nasconderebbe invece di mostrarlo. Chi
+        lo mostra e' `collaudi/prezzi_coerenti.py`, che lo chiama per nome.
+
+        💡 E QUELLA GUARDIA NON CONDIVIDE UNA RIGA CON QUESTO CODICE, di proposito: e'
+        l'ORACOLO INDIPENDENTE (tecnica n.4 delle 11). Se leggesse il minimo da qui,
+        confermerebbe se stessa e un errore in questa funzione sarebbe invisibile a
+        tutt'e due.
+
+        Ritorna il prezzo scritto, oppure None se non c'era niente da scrivere.
+        """
+        if self._prezzo_min is None:
+            return None
+        oggi = datetime.date.today()
+        fino = oggi + datetime.timedelta(days=self._orizzonte)
+        # ⛔ LEGGI-E-SCRIVI SOTTO SERRATURA, e non e' prudenza teorica: la gara e' stata
+        # COSTRUITA E VISTA il 2026-08-23. Senza serratura:
+        #     il filo A scrive il giorno a 90 EUR, il suo specchio LEGGE (vede solo 90)
+        #     gli altri fili scrivono giorni a 40 e 20, i loro specchi scrivono 20
+        #     A riprende e scrive la sua lettura VECCHIA -> in vetrina resta 90
+        #   Misurato: «vetrina finale 9000 · la cassa addebiterebbe 2000». Cioe' il
+        #   difetto B1 rientrato dalla porta di servizio, DENTRO la sua riparazione.
+        # ⚠️ Col tempismo naturale non si apriva mai: 150 giri di sonda, zero divergenze.
+        #   Si e' vista solo COSTRUENDO l'incastro a mano. «Non si e' vista» non voleva
+        #   dire «non c'e'»: voleva dire che non stavo facendo l'esperimento giusto.
+        # ⚠️ LIMITE DICHIARATO: una serratura vale dentro UN processo. Il sito gira in un
+        #   processo solo (`ThreadingHTTPServer`), quindi qui basta; ma se un domani i
+        #   lavoratori diventassero due, questa riga non li coprirebbe piu' e servirebbe
+        #   una guardia nell'archivio (un contrassegno di freschezza sulla riga).
+        with self._serratura_specchio:
+            minimo = self._prezzo_min(str(slug), oggi.isoformat(), fino.isoformat())
+            if not _intero(minimo) or minimo <= 0:
+                return None
+            # ⛔ Il valore di ritorno NON e' l'esito della scrittura: e' «il numero onesto
+            # e' questo». Se la vetrina lo diceva gia', `aggiorna_prezzo_vetrina` non
+            # scrive niente e torna False -- ma la vetrina e' comunque a posto, e
+            # confondere le due cose farebbe leggere «non ho un prezzo» proprio nel caso
+            # in cui va tutto bene.
+            self.aggiorna_prezzo_vetrina(slug, minimo)
+            return minimo
+
+    def aggiorna_prezzo_vetrina(self, slug: Any, prezzo_notte_cents: int) -> bool:
+        """Scrive SOLO il prezzo (e la data di aggiornamento). Fail-closed su input
+        invalidi. Stretta apposta: una scrittura larga qui potrebbe riportare indietro
+        campi che nel frattempo qualcun altro ha cambiato.
+
+        Ritorna True se ha CAMBIATO qualcosa. False vuol dire «non serviva» (il prezzo era
+        gia' quello, e il `WHERE ... <> ?` evita di sporcare `aggiornato_ts` a ogni giro)
+        oppure «slug inesistente»: non e' un errore."""
+        if not _intero(prezzo_notte_cents) or prezzo_notte_cents <= 0:
+            return False
+        if not isinstance(slug, str) or not slug.strip():
+            return False
+        ora = datetime.datetime.now().isoformat(timespec="seconds")
+        con = self._apri()
+        try:
+            cur = con.execute(
+                "UPDATE alloggi SET prezzo_notte_cents=?, aggiornato_ts=? "
+                "WHERE slug=? AND prezzo_notte_cents<>?",
+                (int(prezzo_notte_cents), ora, slug, int(prezzo_notte_cents)))
+            con.commit()
+            return cur.rowcount > 0
         finally:
             con.close()
 
@@ -1088,13 +1186,17 @@ class _ConnCondivisa:
 
 
 def crea_catalogo(percorso: str = ":memory:", *,
-                  disponibilita: Optional[Callable[[int, str, str], Optional[bool]]] = None
+                  disponibilita: Optional[Callable[[int, str, str], Optional[bool]]] = None,
+                  prezzo_minimo: Optional[Callable[[str, str, str], Optional[int]]] = None,
+                  orizzonte_giorni: int = 365
                   ) -> CatalogoVetrina:
     """Factory: catalogo su file (o :memory:). Per :memory: connessione condivisa."""
+    extra = {"disponibilita": disponibilita, "prezzo_minimo": prezzo_minimo,
+             "orizzonte_giorni": orizzonte_giorni}
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
-        return CatalogoVetrina(lambda: _ConnCondivisa(con), disponibilita=disponibilita)
-    return CatalogoVetrina(lambda: sqlite3.connect(percorso, timeout=30), disponibilita=disponibilita)
+        return CatalogoVetrina(lambda: _ConnCondivisa(con), **extra)
+    return CatalogoVetrina(lambda: sqlite3.connect(percorso, timeout=30), **extra)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
