@@ -590,6 +590,108 @@ coincide SI FERMA invece di deployare**.
 
 ---
 
+# 🧭 PASSAGGIO DI CONSEGNE — 2026-08-23 sera
+
+## 📍 DOVE SIAMO — quattro numeri, misurati stasera
+
+| Posto | Valore | Come si ricontrolla |
+|---|---|---|
+| **GitHub** (`origin/master`) | `d11cab5` | `git ls-remote origin refs/heads/master` |
+| **VPS** (`git HEAD`) | `d11cab5` | `ssh … 'cd /var/www/bookinvip && git rev-parse HEAD'` |
+| **Immagine viva** | codice di **`b797d46`** | l'impronta dei suoi 152 file = quella ricostruita da git |
+| **Computer** | `ceac080`, ramo `consegne-2026-08-22` | albero identico a master (`620f3d92…`) |
+
+⚠️ **L'immagine viva è a `b797d46` e NON è un ritardo:** `d11cab5` aggiunge solo questo
+documento, che nell'immagine non entra. `DEPLOY.md` lo dice: modifiche ai soli `.md` → `git
+pull`, **niente rebuild**. Il sito non è ripartito: `casavip_app` è su da ore, healthy.
+
+⛔ **Questi numeri invecchiano. Il primo gesto di domani è rimisurarli, non rileggerli qui.**
+
+## ✅ COS'È SUCCESSO OGGI — B1 chiuso, e provato sui dati veri
+
+**La vetrina non mente più.** Oracolo indipendente sui dati **veri** di produzione:
+```
+prima:  2 annunci pubblicati · 2 dicono il falso   (uscita 1)
+dopo:   2 annunci pubblicati · 0 dicono il falso   (uscita 0)
+```
+`filippine-makati` e `filippine-makati-2`: da **100** a **9000 cents**, cioè la notte
+prenotabile più economica. Il numero visto è il numero pagato.
+
+⛔ **E la cosa da ricordare non è il verde: è che fra «prima» e «dopo» NON c'è il deploy, c'è
+il RICALCOLO.** Dopo il deploy lo specchio era già cablato (`specchio-prezzo(58->57)` nel
+rendiconto d'avvio) e l'oracolo era **ancora rosso 2 su 2**. **Un deploy non è una migrazione
+dei dati.** Con 500 annunci veri starebbero mentendo tutti e 500 — ed è per questo che il
+**comando di ricalcolo** è in sezione C, prima del primo host vero.
+
+Il resto della giornata, in breve: quattro richieste unite (**#96** lo specchio del prezzo,
+**#97** la mappa dei 39 pezzi, **#98** la misura sulla fase 3, **#99** la chiusura di B1), tutte
+con **16 job su 16 verdi**; deploy `a8007d6 → b797d46` in **35 secondi**, paracadute
+ri-agganciato **prima** del build e verificato per contenuto; `verifica_produzione.py` **190
+controlli, 0 violazioni**.
+
+## 📋 COSA RESTA
+
+**Bloccano l'apertura (sezione B, sei voci):** B2 chiavi provvisorie · B3 rimborso mai provato
+con soldi veri · B4 la commissione sul rimborso pieno *(decisione tua)* · **B5** `fase59_concierge`
+mai giudicato dalla mutazione · **B6** nessun oracolo sul payout · **B7** la riconciliazione
+chiude contro se stessa. Stima onesta per gli ultimi tre: **B5 3-5 giorni · B6 2-3 · B7 4-7**.
+
+**Prima del primo host vero (sezione C):** il **pezzo 3** (una casella prezzo sola nel pannello
+invece di due quasi identiche) e il **comando che ricalcola tutti gli annunci in una volta**.
+
+**Una domanda aperta, non un lavoro:** il **cambio data** non esiste come funzione. Decisione
+del fondatore, da prendere prima di aprire.
+
+## 🌅 IL PRIMO LAVORO DI DOMANI
+
+⛔ **Prima di tutto: rimisurare.** `git rev-parse --short HEAD` · `git status --porcelain` ·
+`git ls-remote origin refs/heads/master` · lo stesso sul VPS · `python collaudi/regole_avvio.py`
+· `python collaudi/piano.py` e `python collaudi/scheda.py --blocco 1`.
+
+Poi: **B5 — `fase59_concierge` sotto mutazione.** È il primo dei tre nell'ordine che hai dato, è
+il modulo che **calcola il prezzo del soggiorno**, e si sovrappone alla casella della mutazione
+del Blocco 1: un lavoro solo che ne chiude due.
+> ⚠️ **B5 vuole la macchina tutta per sé.** La traccia della mutazione è **una casella sola** in
+> `%TEMP%`, e il gancio `pre-commit` la legge: mentre gira un giro di mutazione **nessun altro
+> può committare**. Con un giro completo da 4 ore va saputo prima, non scoperto alla fine.
+> 💡 Se preferisci partire da **B6** (l'oracolo del payout) è più contenuto e non blocca la
+> macchina: si può fare accanto a B5 in un worktree separato. L'ordine resta tuo.
+
+## 🩹 GLI SBAGLI DI OGGI — otto, e sette sono due sbagli soli
+
+Scritti perché non si ripetano, non per contrizione. **Nessuno è arrivato in produzione**: li ha
+fermati tutti o una guardia o un controllo, e questo è il punto.
+
+**Famiglia 1 — ho inventato un nome invece di leggerlo (è la S2, tre volte in un giorno).**
+1. Sonda negativa su `/api/admin/stato`: **indirizzo inventato**, risponde 404, e un 404 come
+   prova di sicurezza vale zero (D17). Rifatta con `collaudi/verifica_produzione.py`.
+2. Colonna `pubblicato` in una query SQL: **non esiste**, la colonna è `stato`. Letto lo schema.
+3. Attributo `catalogo` dato per buono senza guardare: quello era giusto, ma non lo sapevo.
+
+**Famiglia 2 — ho misurato con lo strumento sbagliato (è la S3/S15, tre volte).**
+4. Prova del calore con unità di lavoro da **19 millisecondi**: ha stampato «ripresa **+404%**»,
+   che è impossibile. A quella scala misurava su quale core Windows ti mette (**6 veloci e 4
+   lenti**), non la frequenza. Rifatta con un'unità da 1,8s, **provata in piccolo prima**.
+5. Impronte immagine-contro-git confrontando **561 file da git** contro i **152** che
+   l'immagine contiene: zero riscontri su tutt'e due. Il Dockerfile lo diceva («i test NON
+   entrano»).
+6. Un **solo file** per inchiodare un commit: `fase83_server.py` è identico in **13 commit di
+   fila**. Serve l'impronta di tutti i 152.
+
+**Famiglia 3 — le due che hanno funzionato come dovevano.**
+7. `crea_sistema()` senza configurazione costruisce un sistema **spento su `:memory:`**: avrebbe
+   stampato un successo **senza toccare niente**. L'ha fermato una guardia scritta prima
+   («MISURA NON VALIDA, non tocco niente»), due volte di fila.
+8. Riga `CONSEGNE AGGIORNATE A:` lasciata indietro **due volte**: l'ha beccata il **pre-volo**
+   (controllo 2 rosso), non io.
+
+> 💡 **La lezione unica dietro tutti e otto:** ogni volta che ho preso un nome o un numero
+> **dalla memoria invece che da un comando**, ho sbagliato. Ogni volta che l'ho preso da un
+> `ls`, un `grep`, uno schema o un contatore, no. E le uniche due volte in cui uno sbaglio
+> **non è costato niente** sono quelle in cui c'era una guardia scritta **prima**.
+
+---
+
 # 🧭 PASSAGGIO DI CONSEGNE — 2026-08-22 sera
 
 **DA DOVE SI RIPARTE DOMANI, in quest'ordine.** Non serve leggere altro: la prima riga di
