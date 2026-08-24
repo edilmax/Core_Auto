@@ -28,7 +28,7 @@
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 04f2ecd
+CONSEGNE AGGIORNATE A: df5951a
 
 SUITE ATTUALE: Ran 5985 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
@@ -86,7 +86,7 @@ documento ne dava una per chiusa mentre era ancora aperta.
 
 ---
 
-# B) COSA MANCA PER APRIRE AL PUBBLICO — dieci cose, non una di più
+# B) COSA MANCA PER APRIRE AL PUBBLICO — undici cose, non una di più
 
 > ⚠️ **Erano quattro la mattina del 2026-08-23, sono diventate sette, a fine giornata sei, e
 > con lo studio dell'Anti-Rimpianto sono NOVE.** Le tre della mappa (B5, B6, B7) vengono dalla
@@ -400,6 +400,73 @@ di token in giro non ha tetto**.
 > non chiude niente — ognuno ha già il suo. Serve **un posto solo** che, prima di versare,
 > guardi quanto è uscito in totale su quella prenotazione. Finché non c'è, ogni regalo nuovo
 > allarga la banda senza che nessuno se ne accorga.
+
+### 🔴 B12 — LA GIUSTIFICAZIONE FISCALE DESCRIVE UN FLUSSO CHE NON USIAMO
+
+*(misurato il 2026-08-24 leggendo il codice, per ordine del fondatore: «è una questione
+fiscale».)*
+
+⛔ **NON È UN LAVORO TECNICO E NON VA RIPARATO DA CHI LEGGE.** È una domanda per un
+**commercialista**, e la decisione la prende il fondatore **dopo averci parlato**. Qui c'è solo
+la misura, perché senza i numeri quella conversazione non si può fare.
+
+**Tre affermazioni che non stanno insieme.**
+
+| # | Cosa dice | Dove |
+|---|---|---|
+| 1 | Il denaro dell'host è **partita di giro**; fatturiamo **solo la commissione** | `fase177_financial_controller.py:62-90` · `fase98_policy_commissione.py:180-186` |
+| 2 | Incassiamo il **100% sul nostro conto**, lo teniamo per giorni, e lo giriamo noi | `fase85_pagamenti_stripe.py:61` · `fase101_stripe_connect.py:105-107` · `fase83_server.py:6163` |
+| 3 | Il contratto **non dice** che incassiamo in nome e per conto dell'host | `fase163_accettazioni.py` · `fase185_testi_legali.py` — cercato, non c'è |
+
+**Il punto 1 regge solo se siamo mandatari CON RAPPRESENTANZA. Il punto 3 dice che non
+l'abbiamo mai scritto. Il punto 2 dice che di fatto siamo merchant of record.**
+
+**Il flusso vero, misurato.** Usiamo **separate charges and transfers**, non un destination
+charge: il pagamento nasce da `fase85:61` (Checkout **senza** `transfer_data` e **senza**
+`application_fee`), l'incasso è sulla piattaforma, e il bonifico all'host parte da
+`/v1/transfers` (`fase101:114`) **solo allo sblocco dell'escrow** (`fase83:6163-6171`). Durante
+l'escrow i soldi stanno **sul nostro saldo Stripe**. Se l'host non ha collegato Stripe, restano
+lì e il bonifico si fa a mano.
+
+⛔ **E IL PEZZO CHE FA PIÙ MALE.** In cima a `fase101_stripe_connect.py:4-6` c'è scritta la
+giustificazione fiscale del progetto:
+> *«il 90% (netto host) va DIRETTO al conto connesso dell'host (destination charge) […]
+> legalmente solo il 10% è nostro fatturato (intermediario puro, soglia 85k tutelata)»*
+
+**Quel ramo è MORTO.** `ProviderStripeConnect` e `costruisci_params` (`fase101:26-49`) li usa
+solo `fase104_gateway_asia.py`, che **non è cablato** da nessuna parte; e la fabbrica
+`crea_provider_connect` (`fase101:253-258`) restituisce l'**altra** classe. Il modello vivo fa
+l'opposto di quel commento.
+
+**Nessuno emette un documento fiscale all'ospite.** `fase83_server.py:274` produce una
+«Ricevuta di pagamento» che a `fase83_server.py:299` dichiara, in otto lingue: *«Questa
+ricevuta attesta il pagamento e non costituisce fattura fiscale.»* La ricevuta nomina
+**«Gestore della piattaforma: BookinVIP»** (`fase83_server.py:298`) e **non nomina l'host come
+venditore**. Cercato `fattura|ricevuta|invoice|corrispettiv` in tutto il prodotto: non esiste
+alcun modulo che emetta un documento fiscale al cliente per il soggiorno.
+
+**Cosa dicono i contratti, frase esatta:**
+- `fase163_accettazioni.py:44` — *«"Commissione": il corrispettivo dovuto a BookinVIP per il
+  servizio di intermediazione.»*
+- `fase163_accettazioni.py:48-50` (ART. 2) — *«…per pubblicare annunci, ricevere prenotazioni e
+  incassare i relativi importi tramite gli strumenti di BookinVIP.»*
+- `fase163_accettazioni.py:81-83` (ART. 6) — *«la Commissione è trattenuta dal Payout
+  dell'Host.»*
+- `fase185_testi_legali.py:106-107` — *«Il contratto di soggiorno è concluso DIRETTAMENTE tra
+  Host e Ospite; BookinVIP fornisce gli strumenti.»*
+
+«Incassare **tramite** i nostri strumenti» e «incassare **in nome e per conto** dell'host» sono
+due cose diverse. Il contratto dice la prima.
+
+> 🔑 **PERCHÉ ADESSO E NON DOPO.** In produzione ci sono **0 host firmati e 0 annunci veri**:
+> cambiare il contratto, o il flusso, o tutti e due, **oggi costa zero**. Al primo host firmato
+> il contratto è firmato, e cambiarlo diventa un'altra cosa.
+>
+> ⚠️ **Le tre righe della tabella sono ciò che va messo davanti al commercialista**, più la
+> frase di `fase101:4-6` che dichiara un flusso che non usiamo. Non serve altro, e soprattutto
+> **non serve una nostra opinione**: la contabilità è corretta e coerente con sé stessa, il
+> flusso è corretto e coerente con sé stesso, ed è il **legame fra i due** che nessuno ha
+> stabilito per iscritto.
 
 ---
 
@@ -822,22 +889,35 @@ coincide SI FERMA invece di deployare**.
 
 | Posto | Valore | Come si ricontrolla |
 |---|---|---|
-| **Computer** | `04f2ecd`, ramo `tetto-regali-2026-08-24` | `git rev-parse --short HEAD` |
-| **GitHub** (`origin/master`) | `8d1f233` | `git ls-remote origin refs/heads/master` |
-| **VPS** (`git HEAD`) | `8d1f233` | `ssh … 'cd /var/www/bookinvip && git rev-parse --short HEAD'` |
-| **Immagine viva** | `sha256:80f21d8…` (codice di **`b797d46`**) | `docker inspect --format='{{.Image}}' casavip_app` |
+| **Computer** | `df5951a`, ramo `master` | `git rev-parse --short HEAD` |
+| **GitHub** (`origin/master`) | `df5951a` | `git ls-remote origin refs/heads/master` |
+| **VPS** (`git HEAD`) | `df5951a` | `ssh … 'cd /var/www/bookinvip && git rev-parse --short HEAD'` |
+| **Immagine viva** | `sha256:859f637a…` = codice di **`df5951a`** | `docker inspect --format='{{.Image}}' casavip_app` |
 
-🔴 **E QUI C'È UNA COSA NUOVA, che ieri non c'era.** Fino a ieri avevo toccato **solo `.md`**,
-che nell'immagine non entrano: «immagine indietro» era normale e dichiarato. **Da stanotte no.**
-`fase83_server.py` è cambiato: l'immagine viva **non contiene la riparazione**, e per portarcela
-serve un **deploy vero con rebuild** (D17, paracadute `:prec` ri-agganciato **prima** del build e
-verificato per contenuto).
+✅ **TUTTI E QUATTRO ALLINEATI.** È la prima volta dopo tre giorni.
 
-> 🛑 **IL DEPLOY È RIMANDATO A DOMANI PER DECISIONE DEL FONDATORE (2026-08-24 notte):**
-> *«il deploy lo facciamo domani, non stasera: tocca il codice e voglio la testa fresca».*
-> ⛔ Non è una dimenticanza e non va «recuperato» da chi legge: è una scelta. Il difetto che
-> resta in produzione un giorno in più è **B11**, e in produzione ci sono **0 host firmati e 0
-> annunci veri** — quindi il costo dell'attesa è zero.
+> ✅ **IL DEPLOY È STATO FATTO — 2026-08-24, 00:15-00:17.** Era stato rimandato di qualche ora
+> per decisione del fondatore (*«tocca il codice e voglio la testa fresca»*), e si è fatto
+> subito dopo, un passo alla volta col suo OK fra uno e l'altro.
+>
+> ⛔ **E IL PARACADUTE ERA AGGANCIATO ALL'IMMAGINE SBAGLIATA — la quinta volta.**
+> Prima del passo 1: `:prec` → `sha256:6bb0933f`, immagine viva → `sha256:80f21d84`. **Due cose
+> diverse.** Se il deploy fosse andato male, saltare col paracadute ci avrebbe riportati a
+> un'immagine di giorni prima, **non** all'ultimo stato buono. Non l'ha evitato la memoria:
+> l'ha evitato il fatto che `DEPLOY.md` §[1b] lo prescrive e la verifica **confronta l'Id**.
+>
+> **La prova che la riparazione è viva, misurata sul CONTENUTO e non sulla data:**
+> ```
+> sha256 di fase83_server.py dentro il contenitore : 8e525d20f0fb56d8
+> sha256 dello stesso file ricostruito da git      : 8e525d20f0fb56d8
+> `_commissione_regalabile` nel contenitore        : 3 volte  (prima: 0)
+> ```
+> **Numeri del deploy:** finestra senza sito **29 secondi**, totale **40 secondi**, catena con
+> esito 0. Log d'avvio: **0** righe con traceback o critical.
+> **Dopo:** `verifica_produzione.py` **190 controlli, 0 violazioni** · `https://bookinvip.com/`
+> **HTTP 200 in 0,564 s** misurato dal computer del fondatore, non dal server.
+> **Il ritorno indietro è pronto:** `:prec` → `sha256:80f21d84`, cioè l'immagine di prima.
+> ⚠️ Il certificato è valido ancora **30 giorni** (rinnovo automatico, ma il numero è questo).
 
 ## ✅ COS'È SUCCESSO — quattro difetti scritti, uno riparato
 
