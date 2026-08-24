@@ -28,19 +28,46 @@
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: b4b47b9
+CONSEGNE AGGIORNATE A: 584f0e9
 
 SUITE ATTUALE: Ran 6012 test
+   ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
+   la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
+   (test_pipeline_ci.py:2054, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
+   numero col CARICATORE. Quindi 6012 e' il numero del caricatore, NON quanti ne ha eseguiti
+   un giro: e' il difetto B14, e non si chiude qui -- si chiude cambiando quella regex, che
+   sta in un file di test e non e' questo lavoro. Le due voci vere sono qui sotto.
+
+CARICATORE (RACCOLTI):  6012  <- rimisurato il 2026-08-25 col caricatore, da PowerShell,
+                                 PRIMA di qualunque giro (S14): stesso valore di 2026-08-24.
+ESEGUITI (ultimo giro): 6007  <- NON rimisurato: richiede la suite, e non e' stata lanciata.
+                                 Con questo albero resta valido perche' il caricatore non e'
+                                 cambiato (6012 prima, 6012 adesso) e da allora sono stati
+                                 toccati SOLO file .md, che non aggiungono test.
+SCARTO:                    5  <- le guardie openssl, vedi AMBIENTE
+
+FILE DI TEST: 406             <- Get-ChildItem -Filter 'test_*.py' -File (radice; identico
+                                 con -Recurse: nessun test in sottocartelle)
+MODULI fase*.py: 151          <- Get-ChildItem -Filter 'fase*.py' -File
+
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH da PowerShell (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3, ed e' la
             ragione dello scarto fra RACCOLTI e ESEGUITI (5 di scarto: le guardie openssl).
-MISURATO:  2026-08-24 su b4b47b9 + il lavoro non committato delle due corsie (B5 e B6), col
-           caricatore e PRIMA di lanciare (S14):
+MISURATO:  2026-08-25 su 584f0e9 + il lavoro non committato (CLAUDE.md, RIPRENDI_QUI.md,
+           deploy/index.html, i nove referti di collaudi/audit/), col caricatore, da
+           PowerShell, e PRIMA di lanciare (S14):
            python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"
+           -> 6012
 COMANDO:  python -m unittest discover -s . -p "test_*.py"
 ```
+
+> 🔎 **PERCHE' IL NUMERO NON E' CAMBIATO, ed e' la risposta giusta e non una pigrizia.** Il
+> 2026-08-24 sono state aggiunte ~280 righe a `RIPRENDI_QUI.md` (B16, B17, B18) e **zero test**:
+> il caricatore conta test, non righe, quindi 6012 prima e 6012 adesso è ciò che deve succedere.
+> ⛔ La misura andava rifatta lo stesso: «non dovrebbe essere cambiato» è un ricordo, `6012` è
+> una misura (D22). Costa due secondi e toglie l'unico modo in cui questa riga può mentire.
 
 ⛔ **Il numero della suite si misura PRIMA di lanciarla, non dopo** (sbaglio S14, costato tre
 giri da un'ora). Due secondi, dal caricatore, senza eseguire niente:
@@ -89,7 +116,24 @@ documento ne dava una per chiusa mentre era ancora aperta.
 
 ---
 
-# B) COSA MANCA PER APRIRE AL PUBBLICO — undici cose, non una di più
+# B) COSA MANCA PER APRIRE AL PUBBLICO — tredici cose, non una di più
+
+> 🆕 **B16 e B17 aggiunte il 2026-08-24** (erano undici: B2, B3, B4, B5, B6, B7, B8, B9, B10, B11,
+> B12). Vengono da una lettura in sola lettura chiesta dal fondatore, non da uno strumento —
+> **come B8, B9 e B10, e per la stessa ragione: su queste cose non guarda nessuno.**
+>
+> ## 🗂️ I LAVORI SUI TESTI SI FANNO TUTTI IN **UN GIRO SOLO**
+> *(decisione del fondatore, 2026-08-24.)* **B8+B9+B10 (Anti-Rimpianto) · B16 · i nomi dei
+> concorrenti** sono lo stesso lavoro: parole che il cliente legge e che il codice non onora. Si
+> aprono insieme, si portano online insieme.
+> 💰 **Perché.** Ogni giro costa **suite ~35 min + CI ~26 min + deploy ~6-10 min ≈ 1h 10m**, con
+> **~1 minuto di sito giù** (misurato il 2026-08-24). Farne tre invece di uno costa tre volte
+> tanto e non ripara niente in più.
+> ⛔ **E non è solo risparmio: è correttezza.** Spiegare il credito senza dirne il valore reale
+> sarebbe un altro B8; dire «3%» in una pagina e «5% + 0,25 €» in quella accanto è già B16.
+> **Il testo per il cliente si scrive una volta sola, o si creano contraddizioni nuove.**
+> ⛔ `deploy/`, `fase86_email.py` e `fase89_jurisdiction_outreach.py` sono produzione: serve
+> **«autorizzato»**.
 
 > ⚠️ **Erano quattro la mattina del 2026-08-23, sono diventate sette, a fine giornata sei, e
 > con lo studio dell'Anti-Rimpianto sono NOVE.** Le tre della mappa (B5, B6, B7) vengono dalla
@@ -279,6 +323,49 @@ soldi davvero — non esiste.
 > errore sistematico nostro è invisibile per costruzione: sbaglia due volte allo stesso modo e
 > il confronto torna.
 
+## 🔴 B8+B9+B10 — ANTI-RIMPIANTO: badge, valore reale, trasferibilità — SI FANNO INSIEME IN UN GIRO
+
+> **Unite in una voce sola il 2026-08-24, per decisione del fondatore.** Non sono tre difetti:
+> sono **lo stesso meccanismo guardato da tre lati** — cosa promettiamo (B8), quanto vale
+> davvero (B9), a chi appartiene (B10). Il testo per il cliente va scritto **una volta sola**:
+> spiegare il credito senza dirne il valore reale sarebbe un altro B8, e dirne il valore senza
+> dire di chi è sarebbe un altro B10.
+>
+> 💰 **E costa una volta sola invece di tre.** Misurato il 2026-08-24: portare online anche
+> una sola riga di `deploy/index.html` costa **suite completa ~35 min + CI ~26 min + deploy
+> ~6-10 min**, con **~1 minuto di sito giù** (`stop`/`rm` prima di `up -d`, DEPLOY.md §3,
+> misurato il 19/08: `curl: (28) Connection timed out`). Circa **1h 10m** a giro.
+>
+> 🆕 **E DAL 2026-08-24 IL GIRO È PIÙ GRANDE: dentro ci sono ANCHE B16 e i nomi dei concorrenti.**
+> Non è un allargamento di comodo: sono la stessa materia — parole che il cliente legge e che il
+> codice non onora. Il riquadro che lo stabilisce sta in cima alla sezione B
+> («I LAVORI SUI TESTI SI FANNO TUTTI IN UN GIRO SOLO»).
+
+### ✅ GIÀ FATTO, e non è online — la toppa da 5 minuti
+Il badge è **già tolto** da `deploy/index.html` (era riga 175, `class="star"`): la frase falsa
+non è più nel file. ⛔ **MA NON È ONLINE.** `Dockerfile.casavip:27` fa `COPY deploy ./deploy`
+e `docker-compose.casavip.yml` **non monta** `./deploy` come volume: la cartella vive **dentro
+l'immagine**. Un `git pull` sul VPS aggiorna il disco e **non cambia niente** per il
+visitatore, che continua a leggere la promessa dall'immagine `sha256:859f637a882e`. Serve il
+**rebuild**. L'eccezione di `DEPLOY.md:169` («solo `.md` → basta `git pull`») **non vale**:
+`index.html` non è un `.md`.
+
+> ⚠️ Nel frattempo **la frase falsa è ancora viva sul sito**, in otto lingue. È una scelta
+> presa sapendola: si paga un giro solo, non due.
+> 💡 Cosa cambia visivamente quando andrà online: la fascia resta a due badge
+> (`0% commissioni all'ospite` · `Pagamenti sicuri`), si **ricentra da sola**
+> (`display:flex; justify-content:center; flex-wrap:wrap`), **nessun buco nel layout**. Si
+> perde l'unico elemento in evidenza: il badge era l'unico `.star` della pagina (sfondo
+> giallo). Le due regole CSS `.hbadges .star` (righe 77-78) sono state **lasciate apposta**:
+> servono quando il badge tornerà col testo giusto.
+
+### 🚪 E DA ADESSO `deploy/` È PRODUZIONE — serve «autorizzato»
+*(deciso dal fondatore il 2026-08-24, scritto in `CLAUDE.md` dentro il divieto B4.)* Fino a
+quel giorno il «si verifica» di B4 nominava solo `fase*.py` e `main_casavip.py`, e `deploy/`
+cadeva nella fessura — **eppure è ciò che il browser serve**. Il caso che l'ha deciso è
+proprio questo: un file che nessun divieto proteggeva mentiva a **ogni visitatore**, mentre i
+`fase*.py` che si comportavano bene erano blindati.
+
 ### 🔴 B8 — LA HOMEPAGE DICE IL FALSO IN 8 LINGUE
 *(misurato il 2026-08-23 leggendo il codice.)* `deploy/index.html:175` porta un badge in
 **otto lingue** (i testi stanno in `fase83_server.py:172`):
@@ -340,6 +427,52 @@ l'importo può ridursi o azzerarsi.**
 > («mai in perdita»). Il difetto non è il tetto: è che **il numero promesso e il numero
 > pagabile sono due numeri diversi e solo uno dei due viene detto al cliente.** È la stessa
 > forma di B1 — un valore mostrato che la cassa non onora.
+
+#### 🎯 MISURATO IL 2026-08-24 — IL DIFETTO È VERSO L'**OSPITE**, NON VERSO L'HOST
+*(sei fatti, ognuno col conto o col file che lo regge. Scritti perché senza, la prossima
+sessione rifà questa misura: il lato host sembra sospetto e invece è sano.)*
+
+1. **La promessa all'host in promo è VERA, al centesimo.** Su un annuncio EUR da €100/notte,
+   host nei primi 90 giorni: `netto = 10000` · `comm = 0` ·
+   `costo_pagamento = 10000*500//10000 + 25 = 525` · **`netto_host = 9475` = 94,75 €**.
+   La promessa dice `100 − 0% − (5% + 0,25)` = **94,75 €**. Coincide. Nessun difetto qui.
+2. **Il pavimento è 550, e la tabella dice tutto.** `fase59_concierge.py:501-504`:
+   `costo = netto*325//10000 + 25 + 200` (3,25% + 0,25 € + 2 € di cuscinetto) = **550** su
+   €100; `margine_disponibile = max(0, comm − costo)`. Quanto vale davvero un credito:
+
+   | host | commissione | pavimento | margine | **credito pagato** |
+   |---|---|---|---|---|
+   | **promo 0%** | 0 | 550 | 0 | **0,00 €** |
+   | 8% | 800 | 550 | 250 | 2,50 € |
+   | 10% | 1000 | 550 | 450 | 4,50 € |
+
+3. **L'host non paga MAI il credito, e si vede dall'ordine delle righe.**
+   `fase59_concierge.py:323` calcola `netto_host = netto − comm` **prima** che lo sconto
+   esista; `fase59_concierge.py:328` fa `guest = netto − sconto`. Lo sconto tocca **solo**
+   il prezzo dell'ospite. Lo paghiamo **noi**, e solo fin dove arriva la nostra commissione.
+4. **Dove sta la promessa dei 90 giorni:** `deploy/host.html:150` (`co_p`, il testo lungo) e
+   `deploy/host.html:152` (`co_r1`, «Primi 90 giorni: commissione BookinVIP 0% + tariffa
+   tecnica 5% + 0,25 €»). La rampa che la implementa: `fase98_policy_commissione.py:73-76`.
+5. **Non è mai arrivata a un host vero.** Misurato sul VPS in sola lettura:
+   `/data/pendenti.db` → **0 righe**; `/data/payout.db` → **1 riga sola**,
+   `('8a448a3a4c003c9ccb0f3583', 'h_a42409370062f6fb', 70, 'EUR', 'trattenuto')` — è la prova
+   da 1 € del 2026-08-17, non un host. **Nessun Credito Viaggio è mai stato coniato né
+   riscattato in produzione.**
+6. **Le quattro strade, e cosa tocca ognuna:**
+   - **A — dire il vero nell'email**: importo nominale **+ la condizione**. Tocca
+     `fase86_email.py` (chiave `c_credito`, 8 lingue) e la nota in `fase83_server.py:6928`.
+     Nessuna logica cambia, nessun euro cambia mano. ⛔ `fase*.py` → «autorizzato».
+   - **B — non coniare il credito quando non può valere niente**: tocca
+     `fase83_server.py:7080-7100`. ⚠️ **Non è calcolabile**: il valore dipende dalla
+     prenotazione **futura**, e al momento del conio non si sa su quale host verrà speso.
+   - **C — togliere il pavimento e pagarlo comunque**: tocca `fase59_concierge.py:501-504`.
+     ⛔ **Viola «mai in perdita»**: su un host in promo pagheremmo 50 € avendo incassato 0 di
+     commissione. Non è una riparazione, è una **decisione commerciale nuova**: solo il fondatore.
+   - **D — dentro il giro unico B8+B9+B10** *(già scelto)*: A è il pezzo B9 di quel testo.
+     Tocca `fase86_email.py` + `fase83_server.py` + `deploy/` (la pagina delle regole).
+
+> ⛔ **NESSUNA delle quattro tocca `fase98_policy_commissione.py`: la rampa è giusta.** E
+> nessuna tocca la promessa all'host: è vera, il punto 1 la misura.
 
 ### 🔴 B10 — IL CREDITO È UN TITOLO AL PORTATORE
 *(misurato il 2026-08-23.)* Il token si conia con il campo email **vuoto**
@@ -565,9 +698,288 @@ due cose diverse. Il contratto dice la prima.
 > flusso è corretto e coerente con sé stesso, ed è il **legame fra i due** che nessuno ha
 > stabilito per iscritto.
 
+### 🔴 B16 — LE NOSTRE PROMESSE NON COINCIDONO COL CODICE — sette punti, tutti misurati leggendo
+
+*(misurato il 2026-08-24 leggendo i file, in sola lettura. Non è un difetto trovato da uno
+strumento: **non esiste nessuno strumento che guardi lì**. È la stessa famiglia di B1 e di B8 —
+un valore mostrato che la cassa non onora — ma qui i punti sono sette e stanno su pagine
+diverse, quindi si riparano **una volta sola, insieme**.)*
+
+**a) SETTE LINGUE PROMETTONO UNA TARIFFA TECNICA PIÙ BASSA DI QUELLA CHE PRENDIAMO.**
+`deploy/diventa-host.html:99` (EN), `:101` (FR), `:104` (JA), `:105` (ZH) ·
+`deploy/bunker.html:215` (EN), `:217` (FR), `:220` (JA), `:221` (ZH) ·
+`deploy/kit-marketing.html:128-134` (EN, ES, FR, DE, PT, JA, ZH) dicono **«tariffa tecnica 3%»**.
+L'italiano nelle stesse pagine dice **5% + 0,25 €** (`deploy/diventa-host.html:92, 98`,
+`deploy/kit-marketing.html:127`, `deploy/host.html:150, 152-154`), e il motore addebita
+**5% + 0,25 €** (`main_casavip.py:150-152`).
+⛔ **È la direzione peggiore: promettono MENO di quello che prendiamo.** Il 3% è la vecchia
+tariffa, quella misurata **sotto costo** il 2026-08-09 (`collaudi/conti_stripe.py`) e sostituita
+proprio per quello. È rimasta viva in sette lingue mentre l'italiano veniva aggiornato.
+
+**b) L'EMAIL DI RECLUTAMENTO PROMETTE UN SITO IN 13 LINGUE. IL SITO NE HA 8.**
+`fase89_jurisdiction_outreach.py:219` — *«sito in 13 lingue»* — e la frase è in **tutte e otto**
+le versioni del template. Le lingue vere sono otto: `fase61_localizzazione.py:41`,
+`fase86_email.py:126`, `fase185_testi_legali.py:35`. Il 13 esiste, ma è il numero della **SEO**
+(`fase97_inbound_seo.py:28`): serve a farsi trovare, non a farsi capire.
+
+**c) LA STESSA EMAIL PROMETTE IL 5% E NON NOMINA MAI IL 7%.**
+`fase89_jurisdiction_outreach.py:219` dice *«una tariffa tecnica del {tecnica}% sempre dovuta»*,
+riempito con `PAGAMENTO_BPS` = 500. Sugli annunci **non in euro** si addebita **7%**
+(`main_casavip.py:151`, applicato a `fase59_concierge.py:348-350`). **Nessuna riga, in nessuna
+lingua, lo dice.** È la promessa che va all'host straniero — cioè proprio a chi lo pagherà.
+
+**d) IL CAMPO IBAN DICE «DOVE RICEVI I BONIFICI», MA L'IBAN NON PAGA NESSUNO.**
+`deploy/host.html:206` — `placeholder="IBAN (dove ricevi i bonifici)"`. Tutte le sue occorrenze
+nel codice: salvato (`fase88_registro_host.py:123, 447, 466, 475, 511, 523`), letto mascherato
+(`fase83_server.py:2871`), messo nel fascicolo (`:2909`), esportato in CSV (`:3269, 3314`),
+controllato come **presente/assente** per DAC7 (`:3104`). **Zero chiamate di pagamento**, e
+nessuna validazione di formato né di paese. È un dato di conformità fiscale che il pannello
+presenta come un metodo di incasso.
+
+**e) «SENZA IL COLLEGAMENTO IL PAGAMENTO ARRIVA CON BONIFICO MANUALE»: quel bonifico non è una
+funzione.** `deploy/host.html:503` (IT) e nelle altre 7 lingue (`:504-510`). Il bonifico manuale
+non esiste in nessun modulo. Cosa succede davvero sta in **B17**.
+
+**f) «DASHBOARD PAYOUT, COME SEMPRE»: quella dashboard non esiste.**
+`deploy/bunker.html:119` e le traduzioni a `:214-221` dicono al fondatore, in 8 lingue, di pagare
+a mano dalla dashboard payout. Non c'è nessuna pagina in `deploy/` e nessun endpoint
+amministratore: l'unico è `/api/host/payout` (`fase83_server.py:2059`), che serve **all'host**
+per vedere i propri.
+
+**g) LE PERCENTUALI DEI CONCORRENTI NON COINCIDONO NEMMENO FRA LORO.**
+La tabella pubblica dice Booking **«10–25% (media 15%)»** (`deploy/commissioni.html:58`) e Airbnb
+**15,5%** (`:57`); il motore che fa il confronto all'host usa Booking **18%** e Airbnb **15%**
+(`fase69_trasparenza.py:44-49`). Due numeri diversi per la stessa azienda, nella stessa
+applicazione. E **nessuna delle percentuali attribuite a terzi ha una fonte citata**: la nota a
+`deploy/commissioni.html:66` dice *«Fonti: pagine ufficiali e portali di settore»* senza nominarne
+nessuna.
+
+> ⚖️ **DECISIONE DEL FONDATORE (2026-08-24): TOGLIERE TUTTI I NOMI DEI CONCORRENTI E METTERE
+> «i grandi portali».** Vale ovunque compaiano: `deploy/commissioni.html` (righe 9, 56-64, 66, 79,
+> 84, 96-103) · `deploy/diventa-host.html` (63, 75, 98-105) · `deploy/host.html` (189, 331-335,
+> 413, 445, 454, 503-510, 1248) · `deploy/kit-marketing.html` (49, 61, 69, 81, 84, 127-134) ·
+> `fase89_jurisdiction_outreach.py:219`. **Non è una riparazione tecnica: è una scelta.** Toglie in
+> un colpo il rischio di affermazioni comparative sui prezzi di aziende nominate, su pagine
+> indicizzabili, in 8 lingue, **senza una sola fonte citata** — e fa decadere il punto (g), perché
+> senza nomi non c'è più niente da far coincidere.
+> ⛔ `deploy/` è produzione (divieto B4, esteso il 2026-08-24): serve **«autorizzato»**.
+
+### 🔴 B17 — SE L'HOST NON COLLEGA STRIPE I SOLDI RESTANO FERMI E NESSUNO LO SA
+
+*(misurato il 2026-08-24 leggendo il codice.)*
+
+`fase83_server.py:6191-6192`, dentro `_trasferisci_all_host`:
+
+```python
+acct = (info or {}).get("stripe_account_id", "")
+if not acct:
+    return                  # host non collegato -> bonifico manuale
+```
+
+**Ritorna in silenzio.** Nessun log, nessuna riga nel giornale, nessuna email, nessun avviso. Il
+payout resta `maturato` nel registro e lì si ferma, per sempre, senza che nessuno lo sappia.
+
+⛔ **E il confronto è la parte che fa male: il caso GUASTO grida.** Quando Stripe c'è ma il
+trasferimento fallisce, `fase83_server.py:6275-6282` scrive
+`logger.error("BONIFICO MANUALE RICHIESTO: transfer Connect fallito...")` **e** una riga
+`payout_manuale` nel giornale immutabile. **L'assenza è più silenziosa del guasto.** Il difetto
+non è che manchi la strada manuale: è che l'unico caso in cui l'host non verrà mai pagato è anche
+l'unico che non lascia traccia.
+
+⛔ **E il fondatore non ha modo di sapere chi sta aspettando.**
+`fase131_payout_dashboard.py:332` `da_pagare(host_id, valuta)` **non è chiamata da nessuna parte**:
+zero chiamanti in tutto il progetto. È il metodo che `fase177_financial_controller.py:1048` e
+`deploy/bunker.html:119` danno per esistente e in uso.
+
+**Non esiste nessun bonifico nostro, in nessun modulo.** La strada automatica passa **sempre e solo**
+da Stripe: `fase83_server.py:6253` → `fase101_stripe_connect.py:226-243`. Non c'è una seconda strada,
+e il pannello ne promette una (**B16 punto e**).
+
 ---
 
 # C) DOPO L'APERTURA — tutto il resto
+
+### 🔵 B19 — AUDIT COMPLETO DELLE INCONGRUENZE — nove passaggi, **uno per chat**
+
+*(deciso dal fondatore il 2026-08-24, dopo che tre letture in sola lettura in una sola sessione
+hanno prodotto B16, B17 e B18.)*
+
+⛔ **PERCHÉ ESISTE, e non è «facciamo un controllo generale».** B16, B17 e B18 non li ha trovati
+uno strumento: li ha trovati **una persona che leggeva**. Dove uno strumento guarda, i difetti si
+vedono il giorno che nascono; dove non guarda nessuno, invecchiano in silenzio. Questi nove
+passaggi sono **le nove direzioni in cui nessuno ha mai guardato**, e ognuno è del tipo che ha
+già prodotto un difetto vero in questa giornata.
+
+> 🔑 **LA REGOLA CHE FA FUNZIONARE TUTTO: UN PASSAGGIO = UNA CHAT NUOVA, DA SOLO.**
+> Non due insieme, non «già che ci sono». Il motivo è misurato, non teorico: è la **D21** — oltre
+> metà contesto l'IA non smette di rispondere, continua **con lo stesso tono sicuro** mettendoci
+> dentro numeri mai misurati. Un audit che produce numeri inventati è **peggio di nessun audit**,
+> perché quei numeri finiscono nei documenti e ci restano.
+> **Si chiede così:** «*B19 passaggio N, sola lettura, scrivi il risultato in
+> `collaudi/audit/<nome>.md`*». Poi `/clear`, e il passaggio dopo.
+
+> 📄 **IL RISULTATO VA IN UN FILE, NON A SCHERMO — e questa non è una preferenza.**
+> A schermo un elenco di 200 righe è illeggibile, non si può rileggere fra un mese, e **occupa il
+> contesto proprio mentre serve per misurare**. Ogni passaggio scrive in **`collaudi/audit/`**,
+> una riga per incongruenza, con **file:riga · cosa dice · cosa fa il codice · la lingua**.
+> ⛔ La cartella **non esiste ancora**: la crea il primo passaggio. Sta sotto `collaudi/`, che è
+> strumentazione di collaudo e non produzione (vale D20, non serve «autorizzato»).
+> ⛔ **E i file di `collaudi/audit/` NON sono liste di cose da fare** (REGOLA ZERO 3): sono
+> **referti di misura**. Quello che ne esce e va fatto si scrive **qui**, come voce nuova.
+
+| # | Passaggio | File del referto |
+|---|---|---|
+| 1 | **Tutte le percentuali e i numeri promessi nei testi contro i valori veri nel codice, in tutte e 8 le lingue** | `collaudi/audit/1_numeri_promessi.md` |
+| 2 | **Tutte le promesse funzionali nei testi contro cosa il codice fa davvero** | `collaudi/audit/2_promesse_funzionali.md` |
+| 3 | **Tutti i punti dove i soldi possono fermarsi in silenzio, come B17** | `collaudi/audit/3_soldi_fermi_in_silenzio.md` |
+| 4 | **Tutte le funzioni scritte e mai chiamate da nessuno** | `collaudi/audit/4_mai_chiamate.md` |
+| 5 | **Tutte le regole cablate su un solo paese** | `collaudi/audit/5_regole_un_solo_paese.md` |
+| 6 | **Tutti i testi che esistono in italiano e non nelle altre 7 lingue, o viceversa** | `collaudi/audit/6_lingue_mancanti.md` |
+| 7 | **Tutti i valori scritti a mano nel codice che dovrebbero stare in un posto solo** | `collaudi/audit/7_valori_sparsi.md` |
+| 8 | **Tutti i punti dove due file dicono numeri diversi per la stessa cosa** | `collaudi/audit/8_numeri_discordi.md` |
+| 9 | **Tutto quello che il fondatore vede nel pannello e che non corrisponde a un endpoint vero** | `collaudi/audit/9_pannello_senza_endpoint.md` |
+
+✅ **PASSAGGIO 1 FATTO (2026-08-24, su `584f0e9`): 15 incongruenze** in `collaudi/audit/1_numeri_promessi.md`. Le tre che pesano: l'**email di reclutamento promette 4%** mentre il motore prende 5% + 0,25 € (ripiego `fase89:189` = 400 contro `main_casavip.py:150` = 500, e in produzione `PAGAMENTO_BPS` è **assente**) · `deploy/diventa-host.html` dice **«3%» in tutte e 8 le lingue, italiano compreso** (`:60`, `:98-105`) — quindi **B16 punto (a) va corretto: sono 8 lingue, non 7** · la guardia `collaudi/audit_coerenza_tariffe.py` **esenta 40 righe-dizionario su 40** e i test chiedono *«c'è la cifra giusta?»* invece di *«manca quella sbagliata?»*.
+
+✅ **PASSAGGIO 2 FATTO (2026-08-24, su `584f0e9`): 15 promesse senza codice** in `collaudi/audit/2_promesse_funzionali.md`, su 364 stringhe italiane esaminate. Le tre che pesano: **«Alloggi certificati»** in cima alla homepage in 8 lingue e **nessuna certificazione esiste** · **«classe fondatrice · tariffa bloccata»** senza una riga di codice (misurato: host n.1 e n.5000 pagano identico, e la tariffa **sale** 0→8→10%) · **«il cliente viene rimborsato al 100%»** detto al presente mentre nessun rimborso parte da solo (il manuale è una **decisione**, `fase83:4611`: il difetto è la promessa che non lo dice). Dentro anche il **Credito Fondatore promesso in homepage che vale 0,00 €** con ogni host nei primi 90 giorni, e le **candidature partner** che finiscono dove **nessun pannello guarda**.
+
+✅ **PASSAGGIO 3 FATTO (2026-08-24, su `584f0e9`): 22 punti muti** in `collaudi/audit/3_soldi_fermi_in_silenzio.md` — 🔴 8 gravi · 🟠 11 medi · 🟡 3 minori, su **152 moduli di produzione** passati a uno scanner AST (534 candidati grezzi) e **~60 funzioni lette a mano** in 16 moduli dei soldi; più **7 sospetti verificati e scartati**, scritti apposta perché non si riaprano. Le tre che pesano: **il webhook risponde `200` a ogni evento che non sia un pagamento** (`fase83_server.py:7839`) — quindi `payout.failed` entra, dice che il bonifico all'host **non è arrivato**, e sparisce senza una riga · **nessuno scrive mai lo stato `pagato`** (misurato: `grep aggiorna_stato(` → 6 righe, zero con `"pagato"`), e il guardiano cerca i bonifici fermi **solo** fra i `maturato` (`fase186_guardiano.py:141`), quindi `in_attesa`, `trattenuto` e `in_transito` sono tre stanze senza sorveglianza · **collegare Stripe è l'unico sblocco senza riprova** (`fase83_server.py:6301-6305`, mentre dati fiscali `:3134` e verifica `:2958` ritentano da soli): è l'aggravante di **B17**. 🔑 La forma di famiglia: **il guardiano vede solo ciò che è già scritto nel registro** — le 8 voci gravi sono tutte punti in cui il registro **non viene scritto**, o viene scritto e **nessuno lo rilegge più**, e in 5 di esse il silenzio **non ha scadenza**.
+
+✅ **PASSAGGIO 4 FATTO (2026-08-24, su `584f0e9`): 112 funzioni mai chiamate** in `collaudi/audit/4_mai_chiamate.md` — 🔴 22 gravi · 🟠 68 medie · 🟡 16 minori · 🔵 6 rotte Flask, su **2.092 definizioni** in **152 moduli** passate a uno scanner AST e a una **controprova testuale indipendente** (10 discordanze su 254, tutte e 10 aperte a mano e tutte e 10 in docstring); **5 falsi positivi tolti** (li chiama `BaseHTTPRequestHandler`, non noi) e **34 funzioni lette riga per riga** (34 conferme su 34). Le tre che pesano: **`fase199_invarianti.py:146` `guardia_prenotazione()`** — la guardia pre-scrittura che solleva su I1/I2/I3 non la chiama nessuno, e il server importa **due invarianti su quattro** (`fase83_server.py:5375`), quindi **la doppia conferma sulla stessa unità non è controllata prima di scrivere** · **la cauzione ha un archivio durevole che resterà sempre vuoto** (`fase149:72` `autorizza()`, unico scrittore della tabella, zero chiamanti; `grep -ic cauzion` su `fase83_server.py` = **0**) · **`fase98:149` `e_fondatore()` e `fase98:182` `fattura_startup_cents()`** senza un chiamante: la classe fondatrice non viene applicata da nessuna riga (conferma dal codice di quanto il passaggio 2 aveva misurato sui testi) e **il consumo della soglia 85k non lo calcola nessuno**. 🔑 La forma di famiglia: **costruito e collegato ≠ chiamato** — coda, turnover, digital twin e deposito cauzionale nascono in `fase81_bootstrap_casavip.py:533-535` e `:383-386` e l'unico ingresso non li nomina mai (`turnover`/`twin`/`cauzion` → **0 occorrenze** in 11.245 righe di server). ⚫ E accanto ai 112: **59 moduli interi mai raggiunti** da `main_casavip.py` = **12.055 righe, 651 funzioni, il 23,7% del codice di produzione** (dentro ci sono `fase17_money`, `fase15_idempotency`, `fase103_reverse_charge`, `fase151_alloggiati_web`).
+
+✅ **PASSAGGIO 5 FATTO (2026-08-24, su `584f0e9`): 17 regole di un paese solo applicate senza guardare il paese** in `collaudi/audit/5_regole_un_solo_paese.md` — 🔴 6 gravi · 🟠 8 medie · 🟡 3 minori, trovate con **due setacci indipendenti** (24 marcatori grep sui 152 moduli, aperti riga per riga; più un setaccio sui **punti di decisione**, che è quello che ha stanato i difetti che *non nominano nessun paese*) e col grafo di raggiungibilità (**59 moduli mai raggiunti**, riprodotti oggi con uno scanner nuovo: coincide col passaggio 4). Più **5 moduli morti** a tema paese, **11 sospetti verificati e scartati** e **4 voci al confine col passaggio 6**, segnalate e non contate. 🔑 La forma di famiglia: **in tutto il server c'è UN SOLO punto che guarda il paese** (`fase83_server.py:8975`, il CIN) — su 95 righe che nominano `paese`, quelle che decidono qualcosa sono **una** nel server e cinque in moduli mai raggiunti. Le tre che pesano: **il campo `paese` dell'annuncio si azzera da solo** — è testo libero non obbligatorio (`fase57_vetrina.py:252-254`) e l'UPDATE lo sovrascrive con `""` (`fase57_vetrina.py:575-576`) mentre `valuta` e `stato` hanno la loro guardia (`fase83_server.py:8870`, `:8899`) e **`_blinda_paese` non esiste**: chi risalva dal pannello un annuncio il cui paese non è uno dei **15 codici della tendina** (`deploy/host.html:355-364`, `:1203`, `:1066`) perde il paese, e con esso l'obbligo del CIN da 500-5.000 € a annuncio · **il gate di giurisdizione DAC7 esiste e l'unico punto che blocca i soldi non lo consulta** (`fase100_dac7.py:23` `attivo=False`, ma `fase83_server.py:6053` legge `deve_segnalare`, cioè `legale` a `fase100_dac7.py:46`, che `attivo` non lo guarda) — ⚠️ **questo corregge B18 punto 3: il modulo è spento, il blocco payout no**, e la soglia è in euro su una somma che mescola le valute (`fase177_financial_controller.py:409-470`, zero occorrenze di `valuta`) · **la quota fissa della tariffa tecnica è un numero in EURO sommato alle unità minori di qualunque valuta** (`main_casavip.py:152` → `fase59_concierge.py:350`; `fase59:501-502`; `fase188_paga_struttura.py:41-42`, che a `:36` dichiara da sé il denominatore sbagliato), mentre i testi legali in **8 lingue** promettono «EUR 0,25» (`fase185_testi_legali.py:133,207,281,357,433,508,567,609`). ⛔ Dentro anche: **l'autorità privacy scelta per LINGUA e non per paese** (5 risposte diverse: en→Garante italiano, es→AEPD, fr→CNIL, pt→CNPD, de/ja/zh→nessuna) · le **clausole vessatorie ex artt. 1341-1342 c.c. bloccanti per registrarsi in tutto il mondo** · il gate outreach cablato su **`("US",)`** (`fase89_jurisdiction_outreach.py:37`) mentre il database mondiale che risponderebbe (`fase154_giurisdizioni_marketing.py`) ha **zero chiamanti**. ✅ Riconfermati in modo indipendente **B18 punti 1, 2 e 3**; e **verificati e scartati**: il CIN è agganciato bene al paese, la tassa di soggiorno è davvero jurisdiction-agnostic, nessuna ritenuta/cedolare esiste, date tutte ISO 8601, nessun CAP/ZIP, nessun formato telefono nazionale, SCA trattata come esito generico, cookie solo tecnici, il ripensamento 48h è uniforme **apposta**.
+
+✅ **PASSAGGIO 6 FATTO (2026-08-25, su `584f0e9`): 19 scompagnamenti di lingua** in `collaudi/audit/6_lingue_mancanti.md` — 🔴 7 gravi · 🟠 8 medi · 🟡 4 minori, su **8.428 coppie (lingua, chiave)** confrontate una per una in **26 dizionari** di 12 moduli Python, 13 pagine HTML e `deploy/app.js`, con quattro sonde deterministiche (chiavi mancanti · lingue assenti · **segnaposto** · **numeri dentro lo stesso slot**); più **11 sospetti verificati e scartati**. 🔑 La forma di famiglia: **il confine fra traduzione completa e traduzione a metà coincide esattamente con il confine di dove arriva una guardia** — dove si misura (dizionario del server 165×8, email 62×8, legali 8/8 con lo stesso numero di articoli, `app.js` 42×8) non c'è **un** buco; dove non si misura — i **due pannelli** — **239 chiavi su 468 esistono solo in italiano e inglese**. Le tre che pesano: **il pannello host è per il 47% in inglese** in de/es/fr/pt/ja/zh (`deploy/host.html:502`, 148 chiavi su 316, **146 rese davvero a schermo**, ripiego inglese a `:512`) e dentro ci sono **tutte e 7 le chiavi di commissione e tariffa tecnica**, l'avviso «penale del **15%**» (`hc_conferma`) e **l'approvazione specifica delle clausole ex artt. 1341-1342 c.c.** (`clausole_appr`) · **la tariffa tecnica dice «3%» in 7 lingue e «5% + 0,25 €» in italiano in DUE posti nuovi**: la sala di controllo (`deploy/bunker.html:213` `ct_h`) e il kit di reclutamento (`deploy/kit-marketing.html:118` `box2`/`msg1`/`msg2`/`msg3`, dove le 7 lingue aggiungono anche *«su quella riga non guadagniamo nulla»*, **falso** con 5% + 0,25 €) — quindi il canale di reclutamento dice oggi **tre cifre diverse** (4% email · 3% kit in 7 lingue · 5%+0,25 kit in italiano) · **il contratto ripiega su due lingue diverse a seconda di chi risponde**: il server sull'**inglese** (`fase163_accettazioni.py:345-355`), la pagina sull'**italiano** (`deploy/contratto-host.html:46-48`), e `deploy/host.html:97`/`:136` linkano il contratto **senza `?lang=`** mentre `:976` lo chiede all'API **con** la lingua → **la prova firmata registra una lingua, l'host ne ha letta un'altra**. ⚠️ E la guardia che dovrebbe vederlo è verde: `collaudi/occhio_del_fondatore.py` promuove `host.html` **773/776** perché conta i **marcatori** nell'HTML e **non apre nemmeno un dizionario** (zero codici lingua in tutto il file); l'unico test sulle pagine di `deploy/` (`test_profondo_lingue.py:534-546`) copre **`grazie.html` e `annullato.html`** — 5 chiavi l'una — e verifica solo che il **blocco** della lingua esista, mai che le chiavi combacino: **5.798 delle 5.830 coppie HTML sono fuori da ogni denominatore**. Dentro anche: **la pagina che Google indicizza per ogni annuncio del mondo è congelata** (`fase83_server.py:672` `lang="it"`, «Prezzo… / notte», «Prenota su BookinVIP», e i servizi stampati come **codici grezzi** senza passare da `ETICHETTE_SERVIZI`, che esiste in 8 lingue a `fase61:78-89`) · `deploy/host.html` è **l'unica pagina con 22 `placeholder=` e 0 marcatori** di traduzione · il **motore marketing parla 5 lingue su 8** e a `fase90_marketing.py:272` **scarta ja/pt/zh in silenzio** (mentre `:141` prova che le 8 erano sotto gli occhi), col commento di `fase83_server.py:10521` che dice «default del motore (**tutte**)» · **l'imbuto SEO promette 13 lingue** (`fase97_inbound_seo.py:28`) che il prodotto non sa servire (8). ✅ Riconfermati e **contati qui** i tre punti che il passaggio 5 aveva segnalato e non contato; ✅ **verde pieno** su una sola cosa, e va detto: **0 segnaposto scompagnati su 8.428 coppie**.
+
+✅ **PASSAGGIO 7 FATTO (2026-08-25, su `584f0e9`): 20 valori sparsi** in `collaudi/audit/7_valori_sparsi.md` — 🔴 6 gravi · 🟠 11 medi · 🟡 3 minori, su **152 moduli di produzione** (50.915 righe) passati a uno scanner AST che ha censito **5.119 letterali numerici** (281 distinti) e **24.175 letterali stringa** (8.993 distinti), di cui **86 numeri** e **1.134 stringhe** presenti in ≥2 file; più **6 sospetti verificati e scartati** e **3 voci al confine col passaggio 8**, segnalate e non contate. 🔑 La forma di famiglia, e non era quella attesa: **l'unico posto quasi sempre ESISTE GIÀ** — su 20 voci, in **17** la fonte unica è scritta, commentata e funzionante (`ConfigCasaVIP` per i soldi, `fase98` per la rampa, `fase99.esponente()` per le valute, `fase61.LINGUE_SUPPORTATE` per le lingue, `BV.money` in `deploy/app.js`). **Il difetto non è l'assenza della fonte: è che la fonte non è quella che la produzione raggiunge**, e si rompe in tre modi contati (**2** fonti complete in moduli mai raggiunti · **13** fonti vive che i consumatori riscrivono invece di chiedere · **5** fonti vive la cui guardia copre solo una parte). Le tre che pesano: **la tariffa tecnica ha quattro ripieghi scritti a mano in quattro file con tre valori diversi** (`main_casavip.py:150-152` = 500/700/25 · `fase185:71,75-76` che rilegge `PAGAMENTO_BPS` da sé · `fase185:83-84` = 5/7/«0,25» nel ramo `except` · `fase89:189` = 400 · **`fase188:64` e `:87` = 300, che nessuno aveva contato**), e quel 300 **disattiva una garanzia scritta nel file**: `_gw()` a `fase188:98-100` non fa mai scattare il ramo `per_psp` perché 3% è sempre minore di 3,25% + 0,55, mentre col valore vero (500) scatterebbe sopra un anticipo di **31,43 €** · **la ricetta di apertura di SQLite è copiata 62 volte nei moduli vivi** e la copia completa sta in `fase23_datastore.py:146-152`, **mai raggiunta dalla produzione** · **`deploy/app.js` si dichiara «FONTE UNICA» a `:1` e 4 pagine riscrivono a mano la formattazione del denaro 37 volte**. 💡 Il corollario: **queste 20 voci non si riparano scrivendo una costante — la costante c'è. Si riparano COLLEGANDO** (regola #23 «COSTRUITO ≠ COLLEGATO», alla seconda comparsa in tre passaggi).
+
+✅ **PASSAGGIO 8 FATTO (2026-08-25, su `584f0e9`): 17 coppie discordi** in `collaudi/audit/8_numeri_discordi.md` — 🔴 6 gravi · 🟠 9 medie · 🟡 2 minori, su **169 file di produzione** (152 `.py` + 14 pagine + `app.js`/`sw.js`/`manifest.json`) **più le 28 configurazioni di deploy**, perimetro che ho aggiunto perché `nginx.conf` e `docker-compose.yml` decidono numeri che il prodotto subisce — ed è proprio lì che è nata la voce più grave. Quattro attrezzi: scanner per concetto (16 famiglie di parole chiave → **13.417** occorrenze numeriche indicizzate), scanner AST delle costanti per **nome** (3 nomi e 2 campi discordi su ~1.100), grafo di raggiungibilità (**93 vivi / 59 mai raggiunti**, che riproduce i passaggi 4, 5 e 7) e **41 punti letti a mano**; più **13 sospetti verificati e scartati** e **3 conferme indipendenti** di difetti già contati dai passaggi 1 e 6, non risommate. 🔑 La forma di famiglia: **cercavo «il numero vecchio rimasto in un posto» e ne ho trovato uno solo** — le altre 16 sono **9 casi in cui il numero e la sua ETICHETTA vivono in file diversi** e **7 in cui due motori vivi rispondono alla stessa domanda con numeri diversi**. Le tre che pesano: **`deploy/commissioni.html` si contraddice a schermo in tutte e 8 le lingue** — il riquadro dice `€84,75` (`:75`, e quadra: 100 − 10 − 5,25) mentre il paragrafo accanto dice `€87` (`:96-103`, i numeri del vecchio 3%), e l'applicatore a `:108` fa `el.textContent = d[k]` **sempre, anche in italiano**, quindi la riga statica giusta viene sovrascritta da quella sbagliata a ogni caricamento · **due motori di referral vivi con premi e soglie diversi** — €40 alla 3ª prenotazione (`fase81:56-58` via `fase76`, cablato a `:356-361`) contro €10/€15/€20 alla 1ª (`fase109:23,85`, cablato a `:504-506`), entrambi con rotta viva (`/api/host/referral` e `/api/host/invito`) e **lo stesso identico link `?ref=`**, ma la registrazione (`fase83:8695-8705`) riconosce solo i codici del primo → chi ha invitato non prende niente, in silenzio · **la prova fotografica dell'ospite muore a ~700 KB** mentre app e testo in 8 lingue dicono 5 MB (`fase83:2327`, `:288`): `/api/voucher/prova` cade sotto `client_max_body_size 1m` (`nginx.casavip.ssl.conf:43`) perché l'eccezione a **8m** esiste solo per `/api/host/upload_foto` (`:80-83`) — ed è la prova su cui si decide **a chi vanno i soldi in garanzia**. Dentro anche: **su «paga in struttura» l'host paga 3,25% + 0,55 € (`fase188:41-43`) mentre il contratto che ha firmato dice 5% + 0,25 € (`fase163:215-221`)**, e la docstring di `fase188:18-19` nomina proprio la cifra del contratto · **la tabella dei concorrenti discorda su cinque portali su cinque** fra `fase69:44-48` (che il pannello host mostra via `/api/trasparenza`) e `deploy/commissioni.html:57-63` (TripAdvisor: **15% contro ~3%**) · **`/api/split/preview` accetta 1000 partecipanti e `/api/split/crea` ne rifiuta più di 50** (`fase133:32` contro `fase65:45`). ⚠️ **Due voci dipendono dall'ambiente del VPS, che NON ho misurato**: `PAGAMENTO_BPS` (decide se l'email che dice 4% concorda col motore che addebita 5%) e `PAGA_STRUTTURA_ATTIVO` (nel codice il default è `"0"`, `fase83:5320`). 💡 E il corollario scomodo: **dieci di queste diciassette non si riparano cambiando un numero** — prima va deciso **quale dei due motori vive** (referral, split, benchmark OTA, gateway paga-in-struttura), e quella è una decisione del fondatore, non una correzione.
+
+✅ **PASSAGGIO 9 FATTO (2026-08-25, su `584f0e9`): 10 porte chiuse promesse dal pannello** in `collaudi/audit/9_pannello_senza_endpoint.md` — 🔴 3 gravi · 🟠 6 medie · 🟡 1 minore, più **14 rotte vive che nessun pannello apre** (contate a parte), **15 sospetti verificati e scartati** e **3 conferme** dei passaggi 2, 6 e 8 non risommate. Perimetro: i 3 pannelli (**3.099 righe**, 53 sezioni, 97 bottoni, **671 voci di dizionario italiane lette una per una**, 8 lingue), **più** la pagina di ingresso costruita in Python (`fase83_server.py:1540-1700`, dove l'host si registra davvero) e `deploy/guida-operativa.html`; contro le **164 rotte** del server, ricostruite con uno scanner perché `@app.route` qui trova **10 rotte morte e zero di quelle vere**. 🔑 La forma di famiglia, e non era quella attesa: **dove il pannello CHIAMA torna tutto — 0 bottoni scollegati su 97, 0 campi, 0 chiavi, 0 metodi sbagliati su 89 chiamate — e tutte e 10 le voci stanno in un TESTO**, perché le chiamate hanno una guardia (un endpoint sbagliato dà 404 e il collaudo cade) e i testi non li confronta nessuno col codice. Le tre che pesano: **la «dashboard payout» non esiste e ci mandano TRE testi in 8 lingue su 8** (`deploy/bunker.html:119` · `deploy/guida-operativa.html:96` · `host.html` `sc_p` «arriva con bonifico manuale») — su 135 rotte l'unica con `payout` è `/api/host/payout`, **host-auth**, e `fase131:332 da_pagare()` non ha chiamanti (passaggio 4): **il gesto che fa uscire i soldi verso l'host non ha né schermo né endpoint** · **al gate di registrazione la casella «Accetto il Contratto Host» apre i TERMINI** (`fase83_server.py:1617` linka `/termini.html`, che a `deploy/termini.html:31` dichiara `DOC='termini'`) mentre la registrazione spedisce il `doc_sha256` **del contratto** preso da `fase163` (`:1606-1607`, `:1631-1634`): **la prova firmata registra un documento che l'host non ha visto**, e `host.html:97`/`:136` linkano invece quello giusto · **«Cancella attività host — da OGNI archivio, e verifica che non resti nulla»** (`admin.html` `del_p`) ne cancella e verifica **5** (`fase156_erasure.py:206-215`, `:218-232`) mentre l'host resta in **payout, kyc, accettazioni (IP e firma), pendenti, debiti, wizard** — e il pannello stampa «Verifica residui (**tutti 0**)» a chi sta rispondendo a una richiesta GDPR. Dentro anche: **il kill-switch dice «tutti i movimenti» e tre gestori non lo guardano** (`riscuoti_debiti_carta:7916` addebita carte off-session, oggi dormiente per `SCATTO3_ATTIVO=0`) · **badge «Host Verificato+» e «bonifici prioritari» non esistono** (il badge sta solo nel pannello dell'host stesso, i payout escono `ORDER BY ts`) · **il pannello marketing offre 5 lingue su 8** (difetto *a monte* di quello che il passaggio 6 aveva misurato nel motore). 🔵 E l'immagine speculare: **`/api/bunker/guardiano`, `/api/bunker/invarianti`, `/api/bunker/stato` e `/api/admin/diagnosi` sono vive e le interroga SOLO la cartella `collaudi/`** — la Sala di controllo ha 15 schede e **nessuna per il guardiano dei soldi**. ⚠️ **NON misurato: l'ambiente del VPS** — 5 variabili (`PAGA_STRUTTURA_ATTIVO`, `CAMPAGNA_AUTO_GIORNI`, `CAMPAGNA_LINGUE`, `SCATTO3_ATTIVO`, Bunker configurato) cambiano 4 delle 10 voci.
+
+**Cosa cerca ognuno, detto in modo che non si possa fraintendere:**
+
+1. **I NUMERI.** Ogni cifra che una pagina, un'email o un contratto mostra al cliente, confrontata
+   con la costante che la produce. Il difetto tipo l'ha già dato: **«3%» in sette lingue contro
+   `5% + 0,25 €` nel motore** (B16 punto a). ⛔ Le 8 lingue si guardano **tutte**: il difetto stava
+   nelle sette che nessuno rilegge, non nell'italiano.
+2. **LE PROMESSE.** Non i numeri: i **verbi**. «i soldi tornano», «ricevi i bonifici», «arriva con
+   bonifico manuale», «sito in 13 lingue». Per ognuna: **esiste il codice che la mantiene?** Ha già
+   dato B8, B16 punti b/d/e.
+3. **I SOLDI CHE SI FERMANO ZITTI.** Ogni `return` anticipato, `except` che ingoia, o ramo che
+   salta un pagamento **senza scrivere niente** — né log, né giornale, né email. Il modello è
+   `fase83_server.py:6191-6192` (B17). ⛔ Il criterio è **il silenzio**, non il fallimento: un
+   guasto che grida è già sorvegliato.
+4. **LE FUNZIONI MAI CHIAMATE.** Metodi definiti e senza un solo chiamante fuori da sé e dai test.
+   Ha già dato `fase131_payout_dashboard.py:332` `da_pagare()`, che **due file danno per in uso**.
+   ⛔ Attenzione a chi è chiamato **per nome dinamico** (rotte, `getattr`): quello non è morto.
+5. **LE REGOLE DI UN PAESE SOLO.** Costanti, formati e obblighi che valgono solo per l'Italia o
+   solo per l'UE, e il punto dove si decide se applicarli. ⛔ **Averle non è il difetto**: il CIN è
+   agganciato bene al paese (`fase83_server.py:8973-8976`). Il difetto è **applicarle senza
+   guardare il paese**, o **chiedere un dato che altrove non esiste** (l'IBAN, B18 punto 3).
+6. **LE LINGUE SCOMPAGNATE.** Chiavi di traduzione presenti in una lingua e assenti in un'altra,
+   in `deploy/*.html` e nei dizionari `fase*.py`. ⚠️ E il caso più insidioso non è la chiave
+   mancante: è la chiave **presente con il contenuto vecchio** (di nuovo B16 punto a). Il contratto
+   host è il caso limite: esiste in **due** lingue sole (`fase163_accettazioni.py:281-282`).
+7. **I VALORI SPARSI.** Lo stesso numero scritto a mano in più posti. È già costato: la tariffa
+   tecnica viveva in **sei** posti, il prodotto era giusto ed **era cieca la sorveglianza**.
+   ⛔ Il referto dice **dove dovrebbe stare l'unico posto**, non solo dove sono le copie.
+8. **I NUMERI DISCORDI.** Due file che dicono cose diverse della stessa cosa. Ha già dato
+   `deploy/commissioni.html:58` (Booking 15%) contro `fase69_trasparenza.py:45` (18%). ⚠️ Non
+   confondere «discordi» con «diversi a ragione»: 5% e 7% sono due casi veri, non un conflitto —
+   il referto deve dire **quale delle due**.
+9. **IL PANNELLO CHE PROMETTE PORTE CHIUSE.** Ogni bottone, link e istruzione nei pannelli
+   (`admin.html`, `bunker.html`, `host.html`) confrontato con le rotte che il server espone
+   davvero. Ha già dato **«dashboard payout, come sempre»** in 8 lingue per una dashboard che non
+   esiste (`deploy/bunker.html:119`, B16 punto f).
+
+> ⛔ **REGOLE PER TUTTI E NOVE, senza eccezioni.**
+> · **SOLA LETTURA.** Nessuna riparazione per strada, nemmeno «una riga». Trovato un difetto: **si
+>   scrive e si va avanti** — fermarsi a ripararlo è il meccanismo che ha prodotto il 6,5% di
+>   prodotto in tre settimane.
+> · **NESSUNA SUITE, NESSUN COMMIT** durante un passaggio: sono misure, non lavori.
+> · **OGNI RIGA DEL REFERTO PORTA `file:riga`** e come è stata trovata (D22). Una riga senza la
+>   sua misura è un ricordo.
+> · **SI DICHIARA COSA È RIMASTO FUORI** (D18 punto 3): tetti, cartelle saltate, casi non
+>   guardati. Un taglio silenzioso fa sembrare «coperto» ciò che nessuno ha visto.
+> · **QUANDO IL PASSAGGIO FINISCE**, il referto esiste su disco e qui si aggiunge **una riga sola**
+>   che dice quante incongruenze ha trovato e dove sta il file.
+
+⚠️ **QUESTO AUDIT NON RIPARA NIENTE, E NON DEVE.** Produce nove referti. Le riparazioni diventano
+voci nuove in sezione B o C, si mettono in fila, e **quelle sui testi entrano tutte nel giro unico**
+già stabilito in cima alla sezione B.
+
+### 🟠 B18 — HOST FUORI ITALIA: SI PUÒ PUBBLICARE, NON SI PUÒ PAGARE
+
+*(misurato il 2026-08-24 leggendo il codice, in sola lettura. Sta in sezione C e non in B perché
+non blocca l'apertura: **blocca il secondo paese**, non il primo.)*
+
+Il motore è più globale di quanto sembri: la tassa di soggiorno è **jurisdiction-agnostic** con
+default ZERO (`fase66_tassa_soggiorno.py:1-30`, registro per comune a `fase147_tassa_comunale.py:79`,
+ignoto → 0 a `:124`), **non esiste nessuna ritenuta del 21%** né altra regola fiscale italiana
+applicata ai conti (cercato in tutti i moduli: zero occorrenze di `ritenuta`/`cedolare` come
+calcolo), e l'unica regola italiana cablata — il **CIN** — è agganciata correttamente al paese
+(`fase83_server.py:8973-8976`, scatta solo se `paese` ∈ IT/ITA/ITALIA/ITALY).
+
+**Quello che manca sta tutto a valle della pubblicazione:**
+
+1. 🔴 **Il paese è dichiarato e poi buttato via proprio dove serve.** L'host lo scrive nei dati
+   fiscali (`fase88_registro_host.py:447`, letto a `fase83_server.py:3104`). Quando apriamo il suo
+   conto, `fase83_server.py:6302` chiama `crea_account(email)` e
+   `fase101_stripe_connect.py:181-190` invia **solo `type=standard` e l'email**: **`country` non
+   parte mai.** Il dato c'è già: va solo passato.
+2. 🔴 **Il contratto esiste in due lingue sole**, `it` e `en` (`fase163_accettazioni.py:281-282`),
+   con **legge italiana e foro della nostra sede** (`:155-157` IT, `:267` EN), e cita **CIN, SCIA,
+   cedolare secca, Comune** — istituzioni che a un host fuori Italia non dicono niente.
+3. 🟠 **L'IBAN è obbligatorio nei dati fiscali e non è mai validato** (`fase83_server.py:3104`;
+   nessun controllo di formato né di paese in nessun modulo). Vietnam e Filippine **non usano
+   l'IBAN**. Non blocca subito: ferma il pagamento solo sopra la soglia DAC7
+   (`fase83_server.py:6045-6054`), e DAC7 è spento di serie (`fase100_dac7.py:24`).
+4. 🟠 **Gli costa il 7% invece del 5%** sugli annunci non in euro (`main_casavip.py:151`,
+   `fase59_concierge.py:348-350`), perché il nostro conto è italiano e tiene solo euro
+   (`fase188_paga_struttura.py:45-47`). È corretto per i nostri conti — ed è **il doppio di quello
+   che l'email gli ha promesso** (B16 punto c).
+5. ⚠️ **Non sappiamo, e non è scritto da nessuna parte, dove Stripe Connect operi davvero.** Non
+   esiste **nessuna tabella per paese sui soldi**: l'unica per nazione riguarda il marketing
+   (`fase154_giurisdizioni_marketing.py`), non i pagamenti.
+
+> ⚖️ **DECISIONE DEL FONDATORE (2026-08-24): APRIRE UN PAESE ALLA VOLTA, NON IL MONDO.** Il
+> prodotto non si blocca per diventare globale: si aggiunge un paese quando quel paese ha le sue
+> quattro cose — Stripe che paga lì, il contratto nella sua lingua con la sua legge, il dato
+> bancario giusto (non per forza IBAN), e la tariffa detta com'è. ⛔ Finché non è così, quel paese
+> non si recluta.
+
+### 🟠 B15 — `--scopo` MEMORIZZA I FILE MA NON IL **PERCHÉ**, E ACCETTA OPZIONI CHE NON ESISTONO
+*(2026-08-24.)* La regola ferrea 15 pretende due cose: **quali** file si toccheranno e, se
+l'elenco si allarga, **perché**. `collaudi/prima_di_lanciare.py --scopo` sa memorizzare solo
+la prima. `scrivi_scopo` (riga 518-528) scrive un'intestazione col commit e poi **l'elenco dei
+file, e basta**: non c'è nessun campo dove mettere la motivazione. La metà della regola che
+spiega *perché* si è allargato lo scopo non ha un posto dove vivere, quindi muore con la
+sessione.
+
+⛔ **E il secondo pezzo è peggio del primo: le opzioni inesistenti passano in silenzio.**
+`prima_di_lanciare.py:655-656` fa `scopo = argv[argv.index("--scopo") + 1:]`, cioè prende
+**tutto** ciò che segue come nomi di file. Lanciando `--scopo <file> --perche "<testo>"` —
+un'opzione che **non esiste** — lo strumento non protesta: si mette in elenco anche
+`--perche` e la frase intera, come se fossero due file.
+
+> 🔴 **È già successo, oggi, sul commit `ab52d0d`** (unito in `584f0e9`): la traccia
+> conteneva **10 voci invece di 8**. Non ha prodotto falsi rossi — il controllo 9 del
+> pre-fatto verifica che i file *toccati* stiano **dentro** l'elenco, e voci in più non lo
+> fanno fallire — ma quel commit è passato con una dichiarazione sporca, e nessuno se ne
+> sarebbe accorto. È la famiglia degli sbagli **S2/S12**: inventare un nome invece di
+> leggerlo, e uno strumento che tace invece di gridare.
+
+**Da estendere**, e sono due lavori distinti: (a) un posto dove scrivere il perché (una riga
+`# perche: …` nella traccia, letta e ristampata dal pre-fatto); (b) `--scopo` deve **rifiutare**
+un argomento che comincia con `--` invece di prenderlo per un file.
+
+#### 📌 IL PERCHÉ DEI TRE FILE NON COMMITTATI DI OGGI — scritto qui perché la traccia non può tenerlo
+`CLAUDE.md` · `RIPRENDI_QUI.md` · `deploy/index.html` restano **non committati** sul disco.
+**Lavoro parziale su B8+B9+B10 (Anti-Rimpianto): deciso il 2026-08-24 di portarli via nel giro
+unico invece di pagare due volte suite e CI** (~35 min di suite + ~26 min di CI + ~6-10 min di
+deploy a giro). Lo scopo è dichiarato sulla traccia in `%TEMP%`, ma quella tiene solo i tre
+nomi: la ragione è questa riga.
 
 ### 🟠 B14 — L'ETICHETTA «Ran» DEL RIQUADRO PORTA IL NUMERO SBAGLIATO
 *(2026-08-24.)* Il riquadro STATO MISURATO scrive `SUITE ATTUALE: Ran 6012 test`, ma **6012 è
@@ -576,6 +988,24 @@ il numero del caricatore**: il giro vero ne esegue **6007** (i 5 di scarto sono 
 e resta verde: è **l'etichetta** a dire una cosa per un'altra, ed era già così prima
 (`Ran 5985` con 5938 eseguiti). Si corregge al prossimo giro che tocca i `.md` — da sola
 costerebbe una suite intera per una parola (regola ferrea 6).
+
+> 🟡 **2026-08-24, secondo passaggio: METÀ FATTA, e la metà che manca NON è una parola.**
+> Il riquadro ora porta **due voci separate e misurate** — `CARICATORE (RACCOLTI): 6012` e
+> `ESEGUITI (ultimo giro): 6007` — più `SCARTO: 5`, e dice a chiare lettere che la riga
+> `SUITE ATTUALE: Ran 6012 test` è **un aggancio per la guardia**, non un'affermazione su
+> quanti test siano stati eseguiti. Chi legge non può più sbagliarsi.
+>
+> ⛔ **Ma la riga con la parola «Ran» è ancora lì, e deve restarci.** La pretende alla lettera
+> `test_pipeline_ci.py:2054` (`SUITE ATTUALE: Ran (\d+) test`) e la ri-pretende la meta-guardia
+> a `:5636` e `:5652`, che inietta un conteggio sbagliato su quella stessa forma per verificare
+> che la guardia se ne accorga. **Toglierla o rinominarla manda rossa la CI.**
+>
+> 🔑 **Quindi B14 non si chiude in un `.md`: si chiude cambiando quella regex** perché legga
+> un'etichetta onesta (es. `CARICATORE (RACCOLTI): N`), **e insieme a lei la meta-guardia che
+> la mette alla prova** — altrimenti la prova inietta su una forma che non esiste più e diventa
+> un ornamento. È lavoro su file di test, non su un documento: **va chiesto a parte**, e da solo
+> costerebbe una suite intera (regola ferrea 6). Resta 🟠, e adesso si sa esattamente cosa
+> costa: due punti in un file, non una parola in un altro.
 
 ### 🟠 B13 — I QUATTRO CLAMP DIFENSIVI DI `fase59` SONO CODICE CHE NON FA NIENTE
 *(dal giro di mutazione del 2026-08-24, B5.)* Le righe **318, 320, 338, 494** di
@@ -1003,6 +1433,9 @@ coincide SI FERMA invece di deployare**.
   crontab. Può sbloccarla **solo il fondatore**, su `developers.facebook.com`.
 - **La chiavetta fisica** è ferma al 13 agosto (121 commit indietro). Per decisione del
   fondatore la copia fisica si fa **alla fine**, quando la macchina è dichiarata sicura.
+- 2026-08-24, passaggio 5 di B19: regola B2 violata, cinque correzioni al referto fatte con
+  heredoc invece che con l'editor. Il risultato è corretto, il file non è troncato. Segnato
+  per memoria.
 
 ---
 
