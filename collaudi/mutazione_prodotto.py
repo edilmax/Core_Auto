@@ -813,6 +813,8 @@ def test_che_nominano(percorso):
 #     costruzione, come la chiave della scheda il 2026-08-21.
 EQUIVALENTI_DICHIARATI = {
     ("fase184_marca_temporale.py", "_der_intero", "if valore < 0:", "<", "<="): {
+        "ancore": ["if valore < 0:"],
+        "impronta": "047e9643f6d6c25eba35f57816c8f34750e6565cba43b0ebe7407ad685f5b365",
         "metodo": "esaustiva",
         "dominio": "tutti gli interi. La firma e' `_der_intero(valore: int)`: nessun "
                    "argomento senza tipo, quindi il dominio della prova coincide con "
@@ -836,6 +838,8 @@ EQUIVALENTI_DICHIARATI = {
     },
     ("fase199_invarianti.py", "dimostra_formalmente",
      "mx = z3.If(a1 > b1, a1, b1)", ">", ">="): {
+        "ancore": ["mx = z3.If(a1 > b1, a1, b1)"],
+        "impronta": "be81af356e54e93367c79ec225b3d63b5ad0acff7f67afa9709628bf44e6c2ed",
         "metodo": "z3",
         "dominio": "ogni coppia di interi z3. `a1` e `b1` sono `z3.Int` dichiarati DENTRO "
                    "la funzione, e `dimostra_formalmente()` non prende argomenti: non c'e' "
@@ -848,6 +852,8 @@ EQUIVALENTI_DICHIARATI = {
     },
     ("fase199_invarianti.py", "dimostra_formalmente",
      "mn = z3.If(a2 < b2, a2, b2)", "<", "<="): {
+        "ancore": ["mn = z3.If(a2 < b2, a2, b2)"],
+        "impronta": "bc5c197bf2c854bd178f2a6c10f3a8d104e3b5502898cb964c24bffd626eda4b",
         "metodo": "z3",
         "dominio": "ogni coppia di interi z3, come la voce del massimo qui sopra: `a2` e "
                    "`b2` sono `z3.Int` locali e la funzione non prende argomenti.",
@@ -919,6 +925,8 @@ EQUIVALENTI_DICHIARATI = {
     # dichiarato con la FIRMA, ed e' il controllo 3 della guardia sullo schedario.
     ("fase177_financial_controller.py", "riscuoti_debiti",
      "if residuo <= 0:", "<=", "<"): {
+        "ancore": ["if residuo <= 0:"],
+        "impronta": "9e4a0c032966425e8db1641806eb078707559545993a7d5ad098c20eec98dfdf",
         "metodo": "traccia",
         "dominio": "il solo caso che differisce, `residuo == 0`, seguito lungo il codice "
                    "fino allo stato finale.",
@@ -940,6 +948,8 @@ EQUIVALENTI_DICHIARATI = {
     },
     ("fase177_financial_controller.py", "riscuoti_debiti",
      "if not pid or pid == rif_deb or disp <= 0:", "<=", "<"): {
+        "ancore": ["if not pid or pid == rif_deb or disp <= 0:"],
+        "impronta": "2656e6b7159039721402e46ed06f5a7e413166ae770e128b409ce8209cafbb83",
         "metodo": "traccia",
         "dominio": "il solo caso che differisce, `disp == 0`, seguito lungo il codice fino "
                    "allo stato finale (`disp` viene da `_cent`, che non e' mai negativo).",
@@ -968,6 +978,8 @@ EQUIVALENTI_DICHIARATI = {
     #    rifatte da capo. Non sono dispense permanenti: sono conclusioni con una premessa.
     ("fase177_financial_controller.py", "esporta_tutti",
      "and offset >= 0) else 0", ">=", ">"): {
+        "ancore": ["and offset >= 0) else 0"],
+        "impronta": "143d9e6e93494a8ef70df7f88f7a20c5d931e763f9c702c89f7cb1bf9ff9571d",
         "metodo": "traccia",
         "dominio": "il solo valore che differisce, `offset == 0`, piu' i due rami per "
                    "offset negativo o non intero.",
@@ -981,6 +993,8 @@ EQUIVALENTI_DICHIARATI = {
     ("fase177_financial_controller.py", "emetti_nota",
      "if tipo not in (\"credito\", \"debito\") or imp <= 0 or not (riferimento and soggetto",
      "<=", "<"): {
+        "ancore": ["if tipo not in (\"credito\", \"debito\") or imp <= 0 or not (riferimento and soggetto"],
+        "impronta": "c12186ee6d1e898621535ece534acf10637f5fdde552e53fcc7737ac4553a155",
         "metodo": "traccia",
         "dominio": "il solo caso che differisce, `imp == 0`, seguito fino al valore di "
                    "ritorno.",
@@ -1013,6 +1027,8 @@ EQUIVALENTI_DICHIARATI = {
     # chiave, adesso manca la COLONNA. Ora c'e' una guardia che conta -- controllo 5.
     ("fase177_financial_controller.py", "processa_penale",
      "if imp <= 0 or not (riferimento and host_id):", "<=", "<"): {
+        "ancore": ["if imp <= 0 or not (riferimento and host_id):"],
+        "impronta": "0b406b29cc13b0d20f036baff706760d57cbc39fafa78d01cff6cb50e6d8c1a6",
         "metodo": "traccia",
         "dominio": "il solo caso che differisce, `imp == 0`, seguito fino al valore di "
                    "ritorno.",
@@ -1024,6 +1040,8 @@ EQUIVALENTI_DICHIARATI = {
     },
     ("fase177_financial_controller.py", "processa_penale",
      "if residuo <= 0:", "<=", "<"): {
+        "ancore": ["if residuo <= 0:"],
+        "impronta": "9e4a0c032966425e8db1641806eb078707559545993a7d5ad098c20eec98dfdf",
         "metodo": "traccia",
         "dominio": "il solo caso che differisce, `residuo == 0`, seguito lungo il giro "
                    "sulle righe di payout fino allo stato finale.",
@@ -1038,6 +1056,8 @@ EQUIVALENTI_DICHIARATI = {
     },
     ("fase179_rate_limit.py", "_sfratta_se_serve",
      "if len(self._m) <= self._max_chiavi:", "<=", "<"): {
+        "ancore": ["if len(self._m) <= self._max_chiavi:"],
+        "impronta": "2db19ba265b9fecd22091aed2052deeda5d104272df71afec9eaeab568f603cf",
         "metodo": "traccia",
         "dominio": "il solo caso che differisce, `len(self._m) == self._max_chiavi`, "
                    "seguito fino alla riga che calcola quante chiavi sfrattare.",
@@ -1053,6 +1073,8 @@ EQUIVALENTI_DICHIARATI = {
     },
     ("fase178_watchdog.py", "eta_backup_sec",
      "if piu_recente is None or m > piu_recente:", ">", ">="): {
+        "ancore": ["if piu_recente is None or m > piu_recente:"],
+        "impronta": "1dfc39597bb39465387cccd65400eabc161f44e72d34ce6cebd7c0f5d3337c1e",
         "metodo": "traccia",
         "dominio": "il solo caso che differisce, `m == piu_recente`, seguito fino al "
                    "risultato finale del massimo.",
@@ -1069,6 +1091,8 @@ EQUIVALENTI_DICHIARATI = {
     # voce, e il mutante resta -- giustamente -- fra i sopravvissuti.
     ("fase178_watchdog.py", "",
      "print(json.dumps(r, ensure_ascii=False))", "False", "True"): {
+        "ancore": ["print(json.dumps(r, ensure_ascii=False))"],
+        "impronta": "84181110a44db49241ee1107277ba2a8ae39907f5930de7948a0eab00a154346",
         "metodo": "traccia",
         "dominio": "l'uscita della riga, seguita fino a chi la consuma (il bash del server, "
                    "che la interpreta come JSON).",
@@ -1085,6 +1109,8 @@ EQUIVALENTI_DICHIARATI = {
     },
     ("fase177_financial_controller.py", "processa_penale",
      "if not pid or pid == riferimento or disp <= 0:", "<=", "<"): {
+        "ancore": ["if not pid or pid == riferimento or disp <= 0:"],
+        "impronta": "10307fab9d6d6858d9e4f4bf28dbe00d3cfc897b7b0e48b93db02e1cc0289e77",
         "metodo": "traccia",
         "dominio": "il solo caso che differisce, `disp == 0`, seguito fino allo stato "
                    "finale (`disp` viene da `_cent`, che non e' mai negativo).",
@@ -1093,6 +1119,171 @@ EQUIVALENTI_DICHIARATI = {
         "`disp = _cent(r.get('minori'))` non e' mai negativo, quindi `disp < 0` e' sempre "
         "falso e l'unico caso che differisce e' disp == 0: si prosegue con quota = 0 e si "
         "arriva allo stesso `registra` che rifiuta pulito. Nessuna differenza osservabile.",
+    },
+
+    # ══════════════════════════════════════════════════════════════════════════════
+    # fase59_concierge — i SOPRAVVISSUTI del giro del 2026-08-24 (B5)
+    # ──────────────────────────────────────────────────────────────────────────────
+    # Giro veloce sui 114 punti del motore che calcola OGNI prezzo: 106 uccisi, 8 vivi.
+    # Nessuno dei 7 qui sotto e' un buco: sono operatori che differiscono in UN SOLO
+    # punto, e in quel punto lo stato osservabile e' IDENTICO. Il giro completo da 4 ore
+    # non li avrebbe uccisi -- un mutante equivalente non lo uccide nessuno.
+    #
+    # ⛔ L'OTTAVO NON E' QUI, ED E' LA COSA PIU' IMPORTANTE DI QUESTO BLOCCO.
+    # Il sopravvissuto di riga 299 (`_ss > 0` -> `>=`) e' equivalente quanto gli altri, ma
+    # la sua chiave e' INDISTINGUIBILE da quella dell'altro `>` della STESSA riga:
+    #     _bps = _sm if (_nn >= 28 and _sm > 0) else (_ss if (_nn >= 7 and _ss > 0) else 0)
+    # Due operatori, stesso file, stessa funzione, stesso testo di riga, stesso `>`->`>=`:
+    # una sola voce li dichiarerebbe CIECHI TUTTI E DUE. E il primo (`_sm > 0`) NON e'
+    # equivalente -- e' un difetto vero sui soldi (un soggiorno da 28+ notti perderebbe lo
+    # sconto settimana quando l'host non ha dichiarato quello mese), ucciso oggi da
+    # `test_fase59_concierge.TestSogliaSoggiornoLungo.
+    # test_a_VENTOTTO_notti_senza_sconto_mese_vale_quello_settimana`.
+    # E' la stessa famiglia del difetto del 2026-08-01 (la chiave che non portava la
+    # funzione): una chiave che non distingue due punti li dichiara insieme. Quel
+    # sopravvissuto resta VIVO e il giro resta rosso finche' la chiave non sa dire QUALE
+    # operatore della riga. Meglio un rosso che una cecita'.
+
+    ("fase59_concierge.py", "quota", "if _bps > 0:", ">", ">="): {
+        "ancore": ["netto_listino = netto",
+                   "_bps = _sm if (_nn >= 28 and _sm > 0) else (_ss if (_nn >= 7 and _ss > 0)"
+                   " else 0)\nif _bps > 0:\nsconto_lungo = netto_listino * _bps // 10000\n"
+                   "netto = netto_listino - sconto_lungo"],
+        "impronta": "a7d3aa2b3279dc9c6ff4aa8c126cbece653fdfac7454f44bf05faba446e797f0",
+        # `traccia` e non `esaustiva`: la prova non e' sui PARAMETRI di `quota` (che accetta
+        # qualunque cosa), e' sul valore di una variabile LOCALE seguito da dove nasce a dove
+        # si usa. E' la stessa forma delle voci di fase177. Lo pretende il controllo 3.
+        "metodo": "traccia",
+        "dominio": "tutti gli interi che `_bps` puo' assumere. La riga sopra lo assegna "
+                   "SOLO da `_sm`/`_ss` quando sono > 0, oppure 0: quindi `_bps >= 0` "
+                   "sempre, e il dominio residuo e' {0} piu' i positivi.",
+        "data": "2026-08-24",
+        "prova":
+        "DIMOSTRATO PER ESAURIMENTO. `>` e `>=` sugli interi differiscono in UN SOLO punto: "
+        "_bps == 0. In quel punto la versione mutata entra nel corpo ed esegue "
+        "`sconto_lungo = netto_listino * 0 // 10000` (= 0) e `netto = netto_listino - 0`. Ma "
+        "`netto_listino = netto` (ancora 1) e `netto` non e' riassegnato in mezzo: la riga "
+        "rimette in `netto` il valore che gia' aveva, e `sconto_lungo` era gia' 0 dalla sua "
+        "inizializzazione. Stato finale identico su entrambe le variabili osservabili "
+        "(`prezzo_netto_cents`, `sconto_soggiorno_lungo_cents`). Nessun ingresso puo' "
+        "distinguerle.",
+    },
+
+    ("fase59_concierge.py", "quota", "if not _intero(comm) or comm < 0:", "<", "<="): {
+        "ancore": ["if not _intero(comm) or comm < 0:\ncomm = 0"],
+        "impronta": "178e4c87509e3b4b345a1b7d3b588dbcc259187b777b6e8b495ccab64c3fb0a2",
+        "metodo": "traccia",
+        "dominio": "tutti gli interi che `comm` puo' assumere a quella riga (il ramo "
+                   "`not _intero(comm)` e' invariato: la mutazione tocca solo il secondo "
+                   "operando dell'`or`).",
+        "data": "2026-08-24",
+        "prova":
+        "DIMOSTRATO PER ESAURIMENTO. `<` e `<=` differiscono solo per comm == 0. In quel "
+        "punto il corpo esegue `comm = 0` su una variabile che vale gia' 0: assegnazione "
+        "idempotente, stato invariato. Per ogni altro intero le due condizioni coincidono. "
+        "Non c'e' niente da distinguere.",
+    },
+
+    ("fase59_concierge.py", "quota", "if comm > netto:", ">", ">="): {
+        "ancore": ["if comm > netto:\ncomm = netto"],
+        "impronta": "7995ee8a4fa2f54a8185c616ef20ade52374654a36613fe184ae910e793dec34",
+        "metodo": "traccia",
+        "dominio": "ogni coppia di interi (comm, netto) che arriva a questa riga.",
+        "data": "2026-08-24",
+        "prova":
+        "DIMOSTRATO PER ESAURIMENTO. Le due condizioni differiscono solo per comm == netto. "
+        "In quel punto il corpo esegue `comm = netto`, cioe' riassegna a `comm` il valore "
+        "che ha gia'. Assegnazione idempotente: stato identico. Per comm > netto e "
+        "comm < netto le due condizioni danno lo stesso esito.",
+    },
+
+    ("fase59_concierge.py", "quota", "tassa = t if (_intero(t) and t >= 0) else 0", ">=", ">"): {
+        "ancore": ["tassa = t if (_intero(t) and t >= 0) else 0"],
+        "impronta": "7500f33b81264b1b7021b02862cea9348a12d20d928ed5465d8743e3366fab33",
+        "metodo": "traccia",
+        "dominio": "tutti i valori che `self._tassa_all(...)` puo' restituire; il ramo "
+                   "`_intero(t)` e' invariato, quindi il dominio residuo sono gli interi.",
+        "data": "2026-08-24",
+        "prova":
+        "DIMOSTRATO PER ESAURIMENTO. `>=` e `>` differiscono solo per t == 0. In quel punto "
+        "l'originale assegna `tassa = t`, cioe' 0; la versione mutata prende il ramo `else` "
+        "e assegna `tassa = 0`. Stesso valore, stesso tipo (int). Nessun ingresso puo' "
+        "distinguerle. ⚠️ Vale perche' l'oggetto e' un int: se un domani `t` potesse essere "
+        "un numero con identita' osservabile (Decimal, un bool, un intero con sottoclasse), "
+        "questa dichiarazione andrebbe rifatta -- ed e' per questo che l'ancora tiene la "
+        "riga intera, `_intero(t)` compreso.",
+    },
+
+    ("fase59_concierge.py", "quota",
+     "costo_pagamento = (totale * _psp) // 10000 + (self._psp_fisso if totale > 0 else 0)",
+     ">", ">="): {
+        "ancore": ["guest = netto - sconto\nif guest <= 0 or guest > MAX_CENTS:\n"
+                   "return RispostaConcierge(422, {\"errore\": \"prezzo_fuori_banda\"})",
+                   "totale = guest + tassa",
+                   "costo_pagamento = (totale * _psp) // 10000 + "
+                   "(self._psp_fisso if totale > 0 else 0)"],
+        "impronta": "126b86f75de2ade43a11552bb8b2ffe52919df067f7ecb46cda4d509f289a1ad",
+        "metodo": "traccia",
+        "dominio": "tutti i valori che `totale` puo' assumere a questa riga, ricavati dalle "
+                   "due righe che lo costruiscono, NON supposti.",
+        "data": "2026-08-24",
+        "prova":
+        "DIMOSTRATO PER ESAURIMENTO SUL DOMINIO RESIDUO. `>` e `>=` differiscono solo per "
+        "totale == 0, e a questa riga totale == 0 e' IRRAGGIUNGIBILE: `guest <= 0` esce con "
+        "422 `prezzo_fuori_banda` (ancora 1), quindi guest >= 1; `tassa` e' un intero >= 0 "
+        "per la riga sopra; `totale = guest + tassa` >= 1. Sul dominio residuo le due "
+        "condizioni coincidono. "
+        "⚠️ NON e' un «oggi non si raggiunge» alla D19: la premessa sta nella STESSA "
+        "funzione, venti righe sopra, ed e' inchiodata da due guardie esistenti che "
+        "pretendono quel 422 (`test_fase59_concierge.py` TestBandeDelPrezzo e "
+        "`test_copertura_critica.py` test_prezzo_fuori_banda_e_rifiutato). Se qualcuno "
+        "togliesse quel rifiuto, quelle due diventerebbero rosse lo stesso giorno -- e "
+        "l'ancora 1 sparirebbe, facendo decadere questa dichiarazione da sola.",
+    },
+
+    ("fase59_concierge.py", "_sconto_credito",
+     "if not (isinstance(token, str) and token):", "and", "or"): {
+        "ancore": ["if not (isinstance(token, str) and token):\nreturn 0, \"\"",
+                   "v = self._firma.decodifica(token)\n"
+                   "if not isinstance(v, dict) or v.get(\"tipo\") != \"credito_fondatore\":\n"
+                   "return 0, \"\"",
+                   "if not isinstance(token, str) or token.count(\".\") != 1:\nreturn None"],
+        "impronta": "5303e803add23bca14bd7ac1d3f09a6092c35875af4c90eeeb6e9e16e0f8aac4",
+        "metodo": "traccia",
+        "dominio": "qualunque oggetto Python possa arrivare come `token` "
+                   "(`richiesta.get(\"credito_token\")`, cioe' JSON dell'ospite: nessun "
+                   "tipo garantito). Si divide in quattro classi sui due predicati.",
+        "data": "2026-08-24",
+        "prova":
+        "DIMOSTRATO PER CASI, sulle quattro combinazioni di A = isinstance(token, str) e "
+        "B = bool(token). Con A e B veri, o con tutti e due falsi, `and` e `or` danno lo "
+        "stesso esito: le due versioni sono la stessa riga. Restano le due classi che "
+        "divergono, e in tutte e due la versione mutata PROSEGUE invece di uscire subito: "
+        "(1) token == \"\" (stringa ma falsa) e (2) token non-stringa ma vero (123, [1], "
+        "un oggetto). In tutte e due arriva a `v = self._firma.decodifica(token)`. E "
+        "`FirmaQuote.decodifica` e' TOTALE (ancora 3): la sua prima riga e' "
+        "`if not isinstance(token, str) or token.count(\".\") != 1: return None` -- per un "
+        "non-stringa torna None, e per \"\" torna None perche' \"\".count(\".\") == 0 != 1. "
+        "Quindi v is None, la riga dopo trova `not isinstance(v, dict)` vero e fa "
+        "`return 0, \"\"`: ESATTAMENTE il valore di ritorno dell'originale. Nessuna "
+        "eccezione, nessuno stato toccato in mezzo (decodifica non scrive niente), nessun "
+        "ingresso puo' distinguere le due versioni.",
+    },
+
+    ("fase59_concierge.py", "_sconto_credito",
+     "cr = cr if (_intero(cr) and cr > 0) else 0", ">", ">="): {
+        "ancore": ["cr = cr if (_intero(cr) and cr > 0) else 0"],
+        "impronta": "54201e4c436a921c27005fa49caf6fc5a9d68f0f8f01bfcdbc44b6be016627d1",
+        "metodo": "traccia",
+        "dominio": "tutti i valori di `cr = v.get(\"credito_cents\", 0)`; il ramo "
+                   "`_intero(cr)` e' invariato, quindi il dominio residuo sono gli interi.",
+        "data": "2026-08-24",
+        "prova":
+        "DIMOSTRATO PER ESAURIMENTO. `>` e `>=` differiscono solo per cr == 0. In quel punto "
+        "l'originale prende il ramo `else` e assegna 0; la versione mutata assegna `cr`, che "
+        "vale 0. Stesso valore, stesso tipo. E il valore prosegue in "
+        "`min(cr, margine_disponibile)`, che su 0 da' 0 in entrambe: nessuna differenza "
+        "osservabile nemmeno a valle.",
     },
 }
 
@@ -1126,11 +1317,70 @@ def funzione_di(righe, numero):
     return dentro[-1][2] if dentro else ""
 
 
+def impronta_di(ancore):
+    """L'impronta di una dimostrazione: sha256 dei BLOCCHI di codice su cui poggia.
+
+    Ogni `ancora` e' un blocco di righe del sorgente, gia' ripulite dei margini e unite da
+    `\\n`. Un blocco, non una riga sola: `comm = 0` da sola comparirebbe in mezzo file e la
+    presenza non direbbe niente, mentre `if not _intero(comm) or comm < 0:\\ncomm = 0` sta
+    in un posto solo.
+    """
+    return hashlib.sha256("\n\n".join(ancore).encode("utf-8")).hexdigest()
+
+
+def ancore_intatte(voce, righe):
+    """La dimostrazione poggia ANCORA sul codice su cui e' stata fatta? (ok, motivo)
+
+    ⛔ ORDINE DEL FONDATORE, 2026-08-24, ed e' la condizione con cui questo schedario e'
+    stato riaperto: *«ogni voce deve portare l'impronta esatta della riga a cui si
+    riferisce: se quella riga cambia, la dichiarazione di equivalenza decade DA SOLA e il
+    mutante torna da uccidere»*.
+
+    Il perche' e' il difetto peggiore che questo schedario possa avere. Una dimostrazione
+    non parla mai della sola riga mutata: parla anche delle righe che la circondano. Il
+    mutante di `costo_pagamento` e' equivalente **perche' venti righe sopra un `422`
+    impedisce a `totale` di valere 0**. Togli quel `422` e la dimostrazione crolla -- ma la
+    chiave dello schedario (file, funzione, testo della riga, vecchio, nuovo) resta identica,
+    quindi il mutante continuerebbe a essere saltato **per sempre e in silenzio**. E' la
+    cecita' permanente che questo posto puo' produrre, e la chiave da sola non la ferma.
+
+    Due controlli, e servono tutti e due:
+      1. ogni ancora e' ANCORA nel file, alla lettera (se una riga cambia, sparisce);
+      2. l'impronta dichiarata coincide con quella calcolata sulle ancore (se qualcuno
+         allarga l'elenco delle ancore senza rifare la prova, il conto non torna).
+
+    ⛔ E il fallimento e' SICURO NELLA DIREZIONE GIUSTA: la voce decade, il mutante torna
+    da uccidere. Mai il contrario.
+    """
+    ancore = voce.get("ancore")
+    if not (isinstance(ancore, (list, tuple)) and ancore
+            and all(isinstance(a, str) and a for a in ancore)):
+        return False, "voce senza ancore: nessuna impronta da verificare"
+    if voce.get("impronta") != impronta_di(ancore):
+        return (False, "impronta dichiarata %r, calcolata %r: le ancore sono state "
+                       "cambiate senza rifare la dimostrazione"
+                % (voce.get("impronta"), impronta_di(ancore)))
+    testo = "\n".join(r.strip() for r in righe)
+    for ancora in ancore:
+        if ancora not in testo:
+            return False, "il codice su cui poggia la prova non c'e' piu': %r" % (
+                ancora.splitlines()[0][:70],)
+    return True, ""
+
+
 def _e_equivalente(percorso, righe, mutante):
     riga = righe[mutante["riga"] - 1].strip() if mutante["riga"] <= len(righe) else ""
     voce = EQUIVALENTI_DICHIARATI.get(
         (os.path.basename(percorso), funzione_di(righe, mutante["riga"]), riga,
          mutante["vecchio"], mutante["nuovo"]))
+    # ⛔ L'IMPRONTA SI CONTROLLA PRIMA DI FIDARSI (ordine del fondatore, 2026-08-24).
+    if isinstance(voce, dict):
+        _ok, _perche = ancore_intatte(voce, righe)
+        if not _ok:
+            print("::warning title=EQUIVALENZA DECADUTA in %s::riga %s -- %s. Il mutante "
+                  "torna da uccidere: la dichiarazione non vale piu'."
+                  % (os.path.basename(percorso), mutante["riga"], _perche))
+            return None
     # ⛔ DI QUI ESCE SEMPRE TESTO, MAI IL DIZIONARIO. I due soli consumatori tagliano il
     # risultato (`motivo[:70]` e `motivo[:60]`): restituire la voce intera farebbe morire il
     # giro con un TypeError DOPO aver gia' rotto un file di produzione. I campi `metodo`,

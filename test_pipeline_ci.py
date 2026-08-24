@@ -3947,7 +3947,13 @@ class TestLoSchedarioDegliEquivalenti_2_CAMPI_STRUTTURATI(unittest.TestCase):
     TypeError **dopo** aver gia' rotto un file di produzione. C'e' una prova apposta.
     """
 
-    CAMPI = ("metodo", "dominio", "data", "prova")
+    # ⛔ `ancore` e `impronta` aggiunti il 2026-08-24 per ORDINE DEL FONDATORE, ed e' la
+    #    condizione con cui lo schedario e' stato riaperto: «se quella riga cambia, la
+    #    dichiarazione di equivalenza decade DA SOLA e il mutante torna da uccidere».
+    #    Una prova non parla mai della sola riga mutata: parla anche del codice intorno.
+    #    Senza impronta, cambiare quel codice lascia la voce in piedi -- e quel punto non
+    #    lo guarda piu' nessuno, per sempre e in silenzio.
+    CAMPI = ("ancore", "impronta", "metodo", "dominio", "data", "prova")
     # Insieme CHIUSO, ed e' chiuso apposta: «non e' raggiungibile» e «non e' osservabile»
     # non sono metodi di dimostrazione (divieto B6, direttiva D19). Se non rientra in uno
     # di questi tre, quel mutante resta un sopravvissuto dichiarato.
@@ -3978,7 +3984,15 @@ class TestLoSchedarioDegliEquivalenti_2_CAMPI_STRUTTURATI(unittest.TestCase):
         extra = [c for c in sorted(voce) if c not in cls.CAMPI]
         if mancanti or extra:
             return "campi mancanti %r, campi non previsti %r" % (mancanti, extra)
-        vuoti = [c for c in cls.CAMPI if not isinstance(voce[c], str) or not voce[c].strip()]
+        # `ancore` e' l'unico campo che NON e' testo: e' l'elenco dei blocchi di sorgente su
+        # cui poggia la prova. Un blocco, non una riga sola -- `comm = 0` da sola comparirebbe
+        # in mezzo file, e allora la verifica di presenza non direbbe niente.
+        if not (isinstance(voce["ancore"], (list, tuple)) and voce["ancore"]
+                and all(isinstance(a, str) and a.strip() for a in voce["ancore"])):
+            return "`ancore` non e' un elenco non vuoto di blocchi di sorgente: %r" % (
+                voce["ancore"],)
+        vuoti = [c for c in cls.CAMPI if c != "ancore"
+                 and (not isinstance(voce[c], str) or not voce[c].strip())]
         if vuoti:
             return "campi vuoti o non testuali: %r" % (vuoti,)
         if voce["metodo"] not in cls.METODI:
@@ -4053,6 +4067,114 @@ class TestLoSchedarioDegliEquivalenti_2_CAMPI_STRUTTURATI(unittest.TestCase):
             "una voce in PROSA fa esplodere il lettore invece di non perdonare niente: lo "
             "strumento avrebbe un modo di morire che prima non aveva, e morirebbe nel punto "
             "peggiore")
+
+
+class TestLoSchedarioDegliEquivalenti_2b_L_IMPRONTA_FA_DECADERE(unittest.TestCase):
+    """⛔ CONTROLLO 2b: SE IL CODICE SOTTO LA PROVA CAMBIA, LA VOCE DECADE DA SOLA.
+
+    ORDINE DEL FONDATORE, 2026-08-24, ed e' la condizione con cui lo schedario e' stato
+    riaperto per i sopravvissuti di `fase59`: *«ogni voce deve portare l'impronta esatta
+    della riga a cui si riferisce: se quella riga cambia, la dichiarazione di equivalenza
+    decade da sola e il mutante torna da uccidere»*.
+
+    💡 IL BUCO CHE CHIUDE, ed e' quello che rende questo posto pericoloso. Una dimostrazione
+    non parla mai della sola riga mutata: parla anche delle righe intorno. Il mutante di
+    `costo_pagamento` e' equivalente **perche' venti righe sopra un 422 impedisce a `totale`
+    di valere 0**. Togli quel 422 e la dimostrazione crolla -- ma la chiave dello schedario
+    (file, funzione, testo della riga, vecchio, nuovo) resta IDENTICA, quindi il mutante
+    continuerebbe a essere saltato per sempre, in silenzio, su un codice che nessuno ha piu'
+    dimostrato. E' la cecita' permanente che questo schedario puo' produrre, e la chiave da
+    sola non la ferma.
+
+    ⛔ E SI PROVA NELLE DUE DIREZIONI: che le voci vere passino non dimostra niente da solo
+    (`return True, ""` passerebbe uguale). Serve anche che una voce con un'ancora sparita, e
+    una con l'impronta rifatta a mano, DECADANO.
+    """
+
+    @staticmethod
+    def _motore():
+        import importlib.util
+        p = os.path.join(QUI, "collaudi", "mutazione_prodotto.py")
+        spec = importlib.util.spec_from_file_location("_schedario_impronte", p)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_OGNI_VOCE_POGGIA_ANCORA_SUL_CODICE_CHE_HA_DIMOSTRATO(self):
+        mp = self._motore()
+        decadute = []
+        for chiave, voce in mp.EQUIVALENTI_DICHIARATI.items():
+            percorso = os.path.join(QUI, chiave[0])
+            self.assertTrue(os.path.isfile(percorso),
+                            "lo schedario nomina un file che non esiste: %s" % chiave[0])
+            with io.open(percorso, encoding="utf-8") as f:
+                righe = f.read().splitlines()
+            ok, perche = mp.ancore_intatte(voce, righe)
+            if not ok:
+                decadute.append("%s · %s · %s -> %s"
+                                % (chiave[0], chiave[1] or "(modulo)", chiave[2][:50], perche))
+        self.assertEqual(
+            [], decadute,
+            "queste dichiarazioni di equivalenza NON poggiano piu' sul codice su cui sono "
+            "state fatte. Vanno RIFATTE o TOLTE: finche' restano, quei punti non li guarda "
+            "piu' nessuno.\n  " + "\n  ".join(decadute))
+
+    def test_UN_ANCORA_SPARITA_FA_DECADERE_LA_VOCE(self):
+        """La prima direzione: il codice cambia -> il mutante torna da uccidere."""
+        mp = self._motore()
+        voce = {"ancore": ["if guest <= 0:\nreturn 422"],
+                "impronta": mp.impronta_di(["if guest <= 0:\nreturn 422"])}
+        ok, _ = mp.ancore_intatte(voce, ["if guest <= 0:", "return 422"])
+        self.assertTrue(ok, "una voce sana viene rifiutata: la guardia grida sempre")
+        ok, perche = mp.ancore_intatte(voce, ["if guest < 0:", "return 422"])
+        self.assertFalse(ok, "l'ancora e' cambiata e la voce e' rimasta in piedi: e' "
+                             "esattamente la cecita' permanente che questa guardia esiste "
+                             "per impedire")
+        self.assertIn("non c'e' piu'", perche)
+
+    def test_UN_IMPRONTA_RIFATTA_A_MANO_FA_DECADERE_LA_VOCE(self):
+        """La seconda direzione: qualcuno allarga le ancore senza rifare la prova."""
+        mp = self._motore()
+        righe = ["if guest <= 0:", "return 422", "altro = 1"]
+        voce = {"ancore": ["if guest <= 0:\nreturn 422"],
+                "impronta": mp.impronta_di(["if guest <= 0:\nreturn 422"])}
+        voce["ancore"] = ["if guest <= 0:\nreturn 422", "altro = 1"]   # allargate, non rifatte
+        ok, perche = mp.ancore_intatte(voce, righe)
+        self.assertFalse(ok, "le ancore sono state cambiate senza rifare l'impronta e la "
+                             "voce e' rimasta valida")
+        self.assertIn("impronta", perche)
+
+    def test_UNA_VOCE_SENZA_ANCORE_NON_VALE(self):
+        """Il formato vecchio non deve valere per omissione: senza impronta, niente sconto."""
+        mp = self._motore()
+        for voce in ({}, {"ancore": []}, {"ancore": "una stringa"},
+                     {"ancore": ["x"], "impronta": None}):
+            ok, _ = mp.ancore_intatte(voce, ["x"])
+            self.assertFalse(ok, "voce accettata senza impronta valida: %r" % (voce,))
+
+    def test_IL_LETTORE_RIFIUTA_LA_VOCE_SCADUTA_E_IL_MUTANTE_TORNA_DA_UCCIDERE(self):
+        """⛔ COSTRUITO != COLLEGATO (#23). `ancore_intatte` puo' essere giusta e non
+        essere chiamata da nessuno: qui si prova che e' `_e_equivalente` -- quello che il
+        giro di mutazione interroga davvero -- a restituire None su una voce scaduta."""
+        mp = self._motore()
+        chiave, voce = next(iter(mp.EQUIVALENTI_DICHIARATI.items()))
+        nome, _funz, riga, vecchio, nuovo = chiave
+        with io.open(os.path.join(QUI, nome), encoding="utf-8") as f:
+            righe = f.read().splitlines()
+        numero = next(i + 1 for i, r in enumerate(righe) if r.strip() == riga)
+        mutante = {"riga": numero, "vecchio": vecchio, "nuovo": nuovo}
+        self.assertIsInstance(
+            mp._e_equivalente(os.path.join(QUI, nome), righe, mutante), str,
+            "sul codice VERO la voce non viene riconosciuta: la prova non misura niente")
+        originale = dict(voce)
+        try:
+            mp.EQUIVALENTI_DICHIARATI[chiave] = dict(voce, impronta="0" * 64)
+            self.assertIsNone(
+                mp._e_equivalente(os.path.join(QUI, nome), righe, mutante),
+                "con l'impronta rotta il lettore dichiara ANCORA equivalente: il mutante "
+                "resterebbe saltato su una dimostrazione che non vale piu'")
+        finally:
+            mp.EQUIVALENTI_DICHIARATI[chiave] = originale
 
 
 class TestLoSchedarioDegliEquivalenti_3_DOMINIO_MAGGIORE_DELLA_FIRMA(unittest.TestCase):
@@ -4298,7 +4420,17 @@ class TestLoSchedarioDegliEquivalenti_3_DOMINIO_MAGGIORE_DELLA_FIRMA(unittest.Te
     # blocca il controllo 4) ma scrivere `traccia` al posto di `esaustiva`: la dimostrazione
     # tolta il 2026-08-05 da `_n` era LETTERALMENTE una traccia, e chi la riscrivesse in buona
     # fede la classificherebbe cosi' uscendo dal controllo senza accorgersene.
-    TRACCE_SU_FIRMA_LARGA = 5
+    # ⛔ 5 -> 12 il 2026-08-24, e il numero si alza SOLO scrivendo qui perche'. Le 7 nuove
+    #    sono i sopravvissuti di `fase59_concierge` (B5): `quota(self, richiesta)` prende un
+    #    dizionario JSON dell'ospite e `_sconto_credito(..., token, ...)` un token qualunque,
+    #    quindi la firma e' larga per costruzione e il controllo 3 non le puo' esaminare.
+    # ⚠️ MA NON SONO LO STESSO DEBITO DELLE 5 DI fase177. Quelle si appoggiano al
+    #    comportamento di un'ALTRA funzione (cio' che la D19 vieta) e restano da rileggere.
+    #    Queste 7 tracciano una variabile LOCALE dal punto in cui nasce a quello in cui si
+    #    usa, dentro la stessa funzione, e ognuna porta l'IMPRONTA del codice che ha
+    #    dimostrato: se quel codice cambia, la voce decade da sola (controllo 2b). E' la
+    #    differenza fra un debito e una dichiarazione con una scadenza automatica.
+    TRACCE_SU_FIRMA_LARGA = 12
 
     def test_LA_SCAPPATOIA_DEL_METODO_TRACCIA_E_CONTATA_E_INCHIODATA(self):
         """⛔ IL BUCO CHE RESTA, misurato invece che raccontato (D18 punto 3 + punto 4).
@@ -4433,15 +4565,20 @@ class TestLoSchedarioDegliEquivalenti_4_NIENTE_FRASI_AL_POSTO_DI_UNA_PROVA(unitt
         """LE DUE DIREZIONI, sulla regola vera (non su una copia): le frasi vietate messe nel
         campo `metodo` vengono respinte una per una, e una voce onesta passa."""
         regola = TestLoSchedarioDegliEquivalenti_2_CAMPI_STRUTTURATI._guasto_della_voce
+        _ancore = ["if x <= 0:\nreturn 0"]
+        _impronta = TestLoSchedarioDegliEquivalenti_2b_L_IMPRONTA_FA_DECADERE._motore(
+        ).impronta_di(_ancore)
         for frase in self.VIETATI:
-            voce = {"metodo": frase, "dominio": "tutto", "data": "2026-08-05",
+            voce = {"ancore": _ancore, "impronta": _impronta,
+                    "metodo": frase, "dominio": "tutto", "data": "2026-08-05",
                     "prova": "sembra una spiegazione e non e' una dimostrazione"}
             motivo = regola(voce)
             self.assertIsNotNone(motivo,
                                  "%r passa come metodo di dimostrazione: e' esattamente cio' "
                                  "che il divieto B6 vieta" % frase)
             self.assertIn("B6", motivo)
-        buona = {"metodo": "traccia", "dominio": "il caso `x == 0`", "data": "2026-08-05",
+        buona = {"ancore": _ancore, "impronta": _impronta,
+                 "metodo": "traccia", "dominio": "il caso `x == 0`", "data": "2026-08-05",
                  "prova": "seguito il codice fino allo stato finale: identico."}
         self.assertIsNone(regola(buona),
                           "respinge una voce ONESTA: un falso allarme qui insegna a "
@@ -5414,6 +5551,51 @@ class TestIlPreVoloVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
             testo.index("B1."), testo.index("PRE-VOLO"),
             "i divieti vanno stampati PRIMA dei controlli: si leggono prima di iniziare "
             "un'operazione, non dopo averla gia' fatta")
+
+    def test_UN_WORKTREE_E_UN_REPOSITORY_GIT(self):
+        """⛔ IL ROSSO FINTO E' PEGGIO DEL VERDE FINTO, e il 2026-08-24 e' costato mezz'ora.
+
+        `.git` NON e' sempre una cartella: in un **worktree** (`git worktree add`) e' un FILE
+        di una riga che punta al repository principale. `_precondizioni` lo cercava con
+        `os.path.isdir`, quindi dentro un worktree il pre-volo si dichiarava «non in
+        condizione di misurare» e **OTTO guardie di questo file uscivano rosse senza che
+        niente fosse rotto**. E il worktree separato non e' un caso di frontiera: e'
+        esattamente il modo di lavorare che il piano delle due corsie PRESCRIVE alla Corsia B.
+
+        💡 Un verde finto lo si va a cercare; un rosso finto insegna a ignorare i rossi, ed
+        e' la stessa malattia dell'allarme sempre acceso (regola ferrea 10).
+
+        ⛔ E SI PROVA NELLE DUE DIREZIONI: che il worktree passi NON dimostra niente da solo
+        (`return []` passerebbe uguale). Serve anche che su una cartella che repository non
+        e' lo strumento continui a fermarsi.
+        """
+        pdl = self.pv()
+
+        finta = tempfile.mkdtemp(prefix="finto_worktree_")
+        self.addCleanup(shutil.rmtree, finta, True)
+        for nome in ("RIPRENDI_QUI.md", "CLAUDE.md", "test_pipeline_ci.py"):
+            with io.open(os.path.join(finta, nome), "w", encoding="utf-8") as f:
+                f.write("segnaposto")
+        # ── com'e' fatto un worktree VERO: `.git` e' un FILE, non una cartella ──
+        with io.open(os.path.join(finta, ".git"), "w", encoding="utf-8") as f:
+            f.write("gitdir: %s\n"
+                    % os.path.join(self.RADICE, ".git", "worktrees", "finto"))
+        self.assertEqual(
+            [], pdl._precondizioni(finta),
+            "in un worktree (.git e' un FILE) il pre-volo si dichiara incapace di "
+            "misurare, e otto guardie di questo file diventano rosse per finta")
+
+        # ── l'altra direzione: dove un repository NON c'e', deve continuare a fermarsi ──
+        nuda = tempfile.mkdtemp(prefix="niente_repo_")
+        self.addCleanup(shutil.rmtree, nuda, True)
+        for nome in ("RIPRENDI_QUI.md", "CLAUDE.md", "test_pipeline_ci.py"):
+            with io.open(os.path.join(nuda, nome), "w", encoding="utf-8") as f:
+                f.write("segnaposto")
+        impedimenti = pdl._precondizioni(nuda)
+        self.assertTrue(
+            any("repository git" in m for m in impedimenti),
+            "senza nessun .git il pre-volo NON si ferma piu': la precondizione e' stata "
+            "allargata fino a non controllare piu' niente (D18 punto 1)")
 
     def _togli_la_riga(self, pagina, riconoscitore, schema):
         """Toglie una riga di dati e PRETENDE che sia sparita davvero, chiedendolo allo

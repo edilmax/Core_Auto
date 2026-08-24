@@ -600,7 +600,16 @@ def _precondizioni(radice):
     """D18 punto 1: prima di misurare, si prova di essere in condizione di misurare. Un
     metro storto va scoperto dal metro, non dal muro."""
     mancanti = []
-    if not os.path.isdir(os.path.join(radice, ".git")):
+    # ⛔ `.git` NON E' SEMPRE UNA CARTELLA. In un **worktree** (`git worktree add`) e' un
+    # FILE di una riga che punta alla cartella vera del repository principale. Qui c'era
+    # `os.path.isdir`, e dentro un worktree il pre-volo si dichiarava «non in condizione di
+    # misurare»: 11 guardie di `test_pipeline_ci` uscivano ROSSE senza che niente fosse
+    # rotto. Un rosso finto e' peggio di un verde finto -- il verde finto lo cerchi, il
+    # rosso finto ti insegna a ignorare i rossi (regola ferrea 10: un allarme sempre acceso
+    # viene spento). Trovato il 2026-08-24 lavorando la Corsia B in un worktree separato,
+    # che e' esattamente il modo di lavorare prescritto dal piano delle due corsie.
+    _git = os.path.join(radice, ".git")
+    if not (os.path.isdir(_git) or os.path.isfile(_git)):
         mancanti.append("%s non e' un repository git (.git assente)" % radice)
     for atteso in ("RIPRENDI_QUI.md", "CLAUDE.md", "test_pipeline_ci.py"):
         if not os.path.isfile(os.path.join(radice, atteso)):

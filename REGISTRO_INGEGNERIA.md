@@ -403,6 +403,51 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🛣️ LE DUE CORSIE, B5 E B6 — 2026-08-24
+
+**Misurato:** 406 file di test · 151 moduli · **6012 test** dal caricatore, su `b4b47b9` più il
+lavoro non committato delle due corsie.
+```
+python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"
+```
+
+**Moduli nuovi.** `collaudi/oracolo_payout.py` — **ACCESO**, nessun interruttore: lo esegue
+`test_oracolo_payout.py` a ogni giro della suite, e si lancia anche da solo
+(`python collaudi/oracolo_payout.py`). Ricalcola quanto spetta all'host **dal lato
+dell'ospite** (`totale − commissione + sconto_credito − costo_pagamento`), senza mai leggere
+`netto_host_cents`: due letture che non condividono nessun campo. `contro_il_ledger` è il
+pezzo che mancava davvero — confronta quel numero con la riga del **registro payout**
+(fase131), quella da cui parte il bonifico. Dipende da `fase131_payout_dashboard` e, per il
+testimone, da `fase83_server.RouterHTTP._da_versare_host`.
+
+**Funzioni nuove in `collaudi/mutazione_prodotto.py`.** `impronta_di(ancore)` e
+`ancore_intatte(voce, righe)` — **ACCESE**, le chiama `_e_equivalente` a ogni mutante. Nascono
+da una condizione posta dal fondatore quando ha riaperto lo schedario: *«ogni voce deve portare
+l'impronta esatta della riga a cui si riferisce: se quella riga cambia, la dichiarazione decade
+da sola»*. **Il buco che chiudono** è il peggiore che quello schedario possa avere: una
+dimostrazione non parla mai della sola riga mutata, parla anche del codice intorno — il mutante
+di `costo_pagamento` è equivalente **perché venti righe sopra un 422 impedisce a `totale` di
+valere 0**. Togli quel 422 e la prova crolla, ma la chiave (file, funzione, testo, vecchio,
+nuovo) resta identica: il mutante continuerebbe a essere saltato per sempre, in silenzio. Lo
+schedario è passato da 13 a **20 voci**, tutte con `ancore` + `impronta`.
+
+**Funzione modificata:** `collaudi/prima_di_lanciare.py::_precondizioni` — una riga.
+`os.path.isdir(".git")` non riconosce un **worktree**, dove `.git` è un FILE: il pre-volo si
+dichiarava incapace di misurare e **8 guardie di `test_pipeline_ci` uscivano rosse per finta**.
+E non era un caso di frontiera: il worktree separato è il modo di lavorare che il piano delle
+due corsie prescrive alla Corsia B. 💡 La lezione è che **un rosso finto è peggio di un verde
+finto**: il verde finto lo vai a cercare, il rosso finto insegna a ignorare i rossi.
+
+**Guardie nuove:** `TestLoSchedarioDegliEquivalenti_2b_L_IMPRONTA_FA_DECADERE` (5 prove, le due
+direzioni: ancora sparita → decade, impronta rifatta a mano → decade, e `_e_equivalente` —
+non solo l'aiutante — restituisce `None` su voce scaduta) · `test_UN_WORKTREE_E_UN_REPOSITORY_GIT`.
+`TRACCE_SU_FIRMA_LARGA` alzato da 5 a 12, col perché scritto accanto: le 7 nuove tracciano una
+variabile **locale** dentro la stessa funzione e portano l'impronta, quelle di `fase177` si
+appoggiano al comportamento di un'**altra** funzione e restano un debito.
+
+⛔ **`fase59_concierge.py` NON è stato toccato** (`git diff` vuoto a fine giro): B5 era un
+lavoro di **misura**, non di modifica. Cosa resta aperto sta in `RIPRENDI_QUI.md` (B13).
+
 ### 🎁 DUE REGALI DALLA STESSA COMMISSIONE — riparato il 2026-08-23
 
 **Funzione nuova:** `fase83_server.RouterHTTP._commissione_regalabile(corpo)` — `@staticmethod`,

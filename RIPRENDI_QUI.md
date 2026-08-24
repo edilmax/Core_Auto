@@ -28,14 +28,17 @@
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: df5951a
+CONSEGNE AGGIORNATE A: b4b47b9
 
-SUITE ATTUALE: Ran 5985 test
+SUITE ATTUALE: Ran 6012 test
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
           · ⛔ openssl NON nel PATH da PowerShell (`Get-Command openssl` -> ASSENTE):
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3, ed e' la
-            ragione dello scarto fra RACCOLTI (5943) ed ESEGUITI (5938).
+            ragione dello scarto fra RACCOLTI e ESEGUITI (5 di scarto: le guardie openssl).
+MISURATO:  2026-08-24 su b4b47b9 + il lavoro non committato delle due corsie (B5 e B6), col
+           caricatore e PRIMA di lanciare (S14):
+           python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"
 COMANDO:  python -m unittest discover -s . -p "test_*.py"
 ```
 
@@ -82,7 +85,7 @@ documento ne dava una per chiusa mentre era ancora aperta.
 | **La posta è firmata** | SPF ✅ · DKIM ✅ (`hostingermail1`) · DMARC ✅ presente |
 | **Il server è chiuso bene** | SSH **solo con chiave** (niente password) · firewall attivo, aperte solo 80, 443, 22 |
 | **I tre posti sono allineati** | computer = GitHub = VPS · CI verde su `28c35c6` (BookinVIP CI + CodeQL) |
-| **La macchina è sorvegliata** | 151 moduli · 405 file di test · **5.985 test** · 0 moduli che nessun test nomina |
+| **La macchina è sorvegliata** | 151 moduli · 406 file di test · **6.012 test** · 0 moduli che nessun test nomina |
 
 ---
 
@@ -152,6 +155,35 @@ prenotazione da 300 € cancellata a rimborso pieno sono **~4,75 € persi, ogni
 condizioni · assorbirlo solo dentro la finestra legale dei 48h e trattenerlo fuori.
 ⛔ La finestra di ripensamento **non si tocca**: quel 100% copre obblighi di legge.
 
+### ✅ B5 — CHIUSO il 2026-08-24: `fase59_concierge` È STATO GIUDICATO
+**Giro veloce, 5 sorveglianti scelti a mano, `normale 16,8 s`, tetto per mutante 60 s.**
+```
+provati 114 · UCCISI 106 · SOPRAVVISSUTI 8 · scoperti 0 · non determinabili 0
+ri-conferme 3 su 106, non ri-confermati 0 · oltre il tetto 0 · oltre il tempo 0
+rinunce del generatore: a_cavallo 4 · catena 6
+```
+Le 4 ore **non** si sono fatte: un mutante equivalente non lo uccide nessuno, quindi il giro
+completo avrebbe trovato gli stessi 8 (ed è quello che era già successo il 2026-08-14).
+
+**7 degli 8 sono dichiarati equivalenti** in `EQUIVALENTI_DICHIARATI` (righe 300, 318, 320,
+338, 350, 467, 494), ognuno con la sua dimostrazione. ⛔ **E con una condizione nuova, posta
+dal fondatore:** ogni voce porta l'**impronta sha256** dei blocchi di sorgente su cui poggia
+la prova. Se quel codice cambia, la dichiarazione **decade da sola** e il mutante torna da
+uccidere (`ancore_intatte` in `collaudi/mutazione_prodotto.py`, guardia
+`TestLoSchedarioDegliEquivalenti_2b_L_IMPRONTA_FA_DECADERE`). Le 13 voci vecchie sono state
+allineate allo stesso formato.
+
+> ⛔ **L'OTTAVO RESTA VIVO, ED È VOLUTO.** Il sopravvissuto di riga 299 è equivalente quanto
+> gli altri, ma la sua chiave è **indistinguibile** da quella dell'altro `>` della stessa
+> riga — e quel primo `>` NON è equivalente: è un difetto vero sui soldi (un soggiorno da
+> 28+ notti perderebbe lo sconto settimana se l'host non ha dichiarato quello mese), oggi
+> ucciso da `test_a_VENTOTTO_notti_senza_sconto_mese_vale_quello_settimana`. Una sola voce
+> li dichiarerebbe ciechi tutti e due. **Meglio un rosso che una cecità.** Si chiude quando
+> la chiave sa dire QUALE operatore della riga — è la stessa famiglia del difetto del
+> 2026-08-01, quando la chiave non portava la funzione.
+
+<details><summary>com'era scritto prima</summary>
+
 ### 🔴 B5 — `fase59_concierge` NON È MAI STATO GIUDICATO, ED È QUELLO CHE CALCOLA IL PREZZO
 *(dalla mappa dei 39 pezzi, 2026-08-23.)* Il catalogo dei punti di mutazione in
 `collaudi/mutazione_prodotto.py` copre **21 moduli su 151**, e `fase59_concierge` **non c'è**.
@@ -161,6 +193,28 @@ nessuno ha mai rotto quel codice di proposito per vedere se un test se ne accorg
 > ⛔ **Verde non vuol dire guardato.** Su `fase59` è già successo: il 2026-08-14 risultava
 > «FATTO» nel piano dei soldi mentre aveva **42 punti scoperti**, 39 su codice che la
 > produzione esegue a ogni preventivo. È la direttiva **D26**, ed è nata proprio qui.
+
+</details>
+
+### ✅ B6 — CHIUSO il 2026-08-24: IL PAYOUT ALL'HOST HA UN SECONDO CONTO
+`collaudi/oracolo_payout.py` ricalcola quanto spetta all'host **dal lato dell'ospite** —
+`totale − commissione + sconto_credito − costo_pagamento` — senza mai leggere
+`netto_host_cents`. Due letture che **non condividono nessun campo**: se uno solo dei sei
+numeri di un preventivo si sposta, divergono.
+
+`test_oracolo_payout.py`: **21 test**, di cui 5 sulla **catena vera** (annuncio → preventivo
+→ prenotazione → la riga payout scritta dalla produzione in fase131). Paracadute provato
+prima di saltare: togliendo **1 cent** all'oracolo, quei 5 diventano **5 rossi su 5**.
+Griglia: 786 combinazioni, zero differenze, zero cent senza padrone.
+
+> ⚠️ **Onestà su cosa NON era nuovo**, e va detto qui: sul **preventivo** un secondo conto
+> c'era già (`oracolo_preventivo` e `identita_conto` in `test_happy_conti.py`). Quello che
+> mancava — ed è ciò che B6 chiedeva — è il pezzo dopo: **nessuno confrontava quei numeri
+> con la riga del REGISTRO payout**, quella da cui parte il bonifico. Il conto era
+> sorvegliato fino alla pagina che l'ospite legge, e da lì in poi la cifra viaggiava sulla
+> fiducia. Il pezzo nuovo è `contro_il_ledger`.
+
+<details><summary>com'era scritto prima</summary>
 
 ### 🔴 B6 — IL PAYOUT ALL'HOST NON HA UN SECONDO CONTO CHE LO RICALCOLI
 *(dalla mappa dei 39 pezzi, 2026-08-23.)* Sei file di test sul bonifico all'host
@@ -172,7 +226,14 @@ da un secondo conto scritto diverso. È la tecnica **04**, ed esiste già in cas
 > ⛔ **È il primo numero che un host vero controlla.** Se sbaglia, non lo scopriamo noi: lo
 > scopre lui, e lo scopre sul suo conto corrente.
 
+</details>
+
 ### 🛣️ COME SI LAVORANO B5 E B6 IN PARALLELO — chi possiede cosa, e in che ordine si riuniscono
+> ✅ **APPLICATO il 2026-08-24, e ha retto.** Due corsie, mai tre. Le due si sono incontrate
+> in un solo file (`test_pipeline_ci.py`), su regioni distanti **973 righe** e in classi
+> diverse: nessuna sovrapposizione. ⚠️ E il worktree separato ha stanato un difetto suo:
+> `prima_di_lanciare.py` cercava `.git` con `isdir`, ma in un worktree `.git` è un **file** —
+> **8 guardie rosse per finta**. Riparato, con la guardia `test_UN_WORKTREE_E_UN_REPOSITORY_GIT`.
 
 *(deciso col fondatore il 2026-08-24. ⛔ **Non è un lavoro in più: è il modo di fare i due qui
 sopra.** Sta scritto perché senza, due sessioni diverse aprono gli stessi file e si pestano i
@@ -507,6 +568,32 @@ due cose diverse. Il contratto dice la prima.
 ---
 
 # C) DOPO L'APERTURA — tutto il resto
+
+### 🟠 B14 — L'ETICHETTA «Ran» DEL RIQUADRO PORTA IL NUMERO SBAGLIATO
+*(2026-08-24.)* Il riquadro STATO MISURATO scrive `SUITE ATTUALE: Ran 6012 test`, ma **6012 è
+il numero del caricatore**: il giro vero ne esegue **6007** (i 5 di scarto sono le guardie
+`openssl`, già spiegate due righe sotto). La guardia confronta col caricatore, quindi è verde
+e resta verde: è **l'etichetta** a dire una cosa per un'altra, ed era già così prima
+(`Ran 5985` con 5938 eseguiti). Si corregge al prossimo giro che tocca i `.md` — da sola
+costerebbe una suite intera per una parola (regola ferrea 6).
+
+### 🟠 B13 — I QUATTRO CLAMP DIFENSIVI DI `fase59` SONO CODICE CHE NON FA NIENTE
+*(dal giro di mutazione del 2026-08-24, B5.)* Le righe **318, 320, 338, 494** di
+`fase59_concierge.py` sono controlli il cui confine **non è osservabile**: dimostrato, e le
+dimostrazioni stanno nello schedario degli equivalenti con la loro impronta.
+
+> `if not _intero(comm) or comm < 0: comm = 0`   → a `comm == 0` assegna 0 a chi vale già 0
+> `if comm > netto: comm = netto`                → a `comm == netto` riassegna `netto`
+> `tassa = t if (_intero(t) and t >= 0) else 0`  → a `t == 0` i due rami danno lo stesso 0
+> `cr = cr if (_intero(cr) and cr > 0) else 0`   → a `cr == 0` i due rami danno lo stesso 0
+
+**È la terza uscita della DO-178C**: non manca un test e non manca un requisito — il codice è
+estraneo e va tolto. È la strada già scelta il 2026-08-12 sulla tassa, con l'oracolo prudente
+a fare da testimone (`collaudi/oracolo_tassa.py`).
+
+⛔ **È il motore che calcola OGNI prezzo: serve «autorizzato».** Non toccato il 2026-08-24 per
+decisione del fondatore. Se si toglie, le quattro voci dello schedario vanno tolte con lui — e
+decadrebbero comunque da sole, perché la loro impronta non troverebbe più il codice.
 
 ### 🗺️ LA MAPPA DEI 39 PEZZI — i 15 «solo unitari» che restano
 *(misurata il 2026-08-23 sul commit `4144f40`. **Non è un elenco di lavori urgenti**: è
