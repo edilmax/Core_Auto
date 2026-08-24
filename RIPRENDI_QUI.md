@@ -172,6 +172,42 @@ da un secondo conto scritto diverso. È la tecnica **04**, ed esiste già in cas
 > ⛔ **È il primo numero che un host vero controlla.** Se sbaglia, non lo scopriamo noi: lo
 > scopre lui, e lo scopre sul suo conto corrente.
 
+### 🛣️ COME SI LAVORANO B5 E B6 IN PARALLELO — chi possiede cosa, e in che ordine si riuniscono
+
+*(deciso col fondatore il 2026-08-24. ⛔ **Non è un lavoro in più: è il modo di fare i due qui
+sopra.** Sta scritto perché senza, due sessioni diverse aprono gli stessi file e si pestano i
+piedi — e questo piano finora è esistito solo dentro una conversazione, cioè in un posto che
+sparisce.)*
+
+| | **Corsia A — B5** | **Corsia B — B6** |
+|---|---|---|
+| Dove | worktree **principale**, **DA SOLA** | **worktree separato** |
+| Possiede | `fase59_concierge.py` · i suoi 5 file di test · il catalogo in `collaudi/mutazione_prodotto.py` · lo schedario degli equivalenti | `collaudi/oracolo_payout.py` (nuovo) · il suo test nuovo · legge `fase131_payout_dashboard.py` |
+| ⛔ Non tocca | niente del payout | **niente di `fase59`**, e **nessun giro di mutazione, mai** |
+
+⛔ **PERCHÉ A DEVE STARE DA SOLA, e non è solo per i commit.** L'attrezzo di mutazione
+**riscrive `fase59_concierge.py` sul disco** per iniettare i guasti: un'altra corsia che leggesse
+quel file nello stesso istante leggerebbe un file rotto a metà. E la traccia anti-interruzione è
+**una casella sola** in `%TEMP%` — due giri insieme si sovrascrivono, ed è un difetto già
+dichiarato e ancora aperto. Finché il giro di A gira, **B lavora ma non può committare**: il
+gancio `pre-commit` legge quella traccia.
+
+**I DUE PUNTI DOVE SI SCONTREREBBERO, tolti in partenza:**
+1. **`RIPRENDI_QUI.md` e `REGISTRO_INGEGNERIA.md`** — le vorrebbero toccare tutte e due. **Nessuna
+   delle due li tocca durante il lavoro**: si scrivono **alla fine, in un commit solo**, quando
+   sono unite entrambe. Toglie l'unico conflitto garantito.
+2. **Il numero della suite** — lo alzano tutte e due. Si misura **una volta sola, alla fine**, col
+   caricatore e prima di lanciare (S14).
+
+**ORDINE DI RIUNIONE:** **A prima** (è lei che blocca i commit) → **B ribasata** sul risultato di
+A → **poi i documenti** in un commit unico, col conteggio della suite rifatto.
+
+💡 **E il giro di mutazione si fa in due passi** (`bookinvip-mutazione-due-passi`): prima quello
+**veloce da ~10 minuti**; se arriva a zero sopravvissuti **ci si ferma lì** e le 4 ore non
+servono. Il giro completo solo se restano sopravvissuti.
+⚠️ **Due corsie, mai tre**: il computer del fondatore ha **16 GB**, e il giro di mutazione se ne
+prende una parte grossa.
+
 ### 🔴 B7 — LA RICONCILIAZIONE CHIUDE CONTRO SE STESSA, NON CONTRO STRIPE
 *(dalla mappa dei 39 pezzi, 2026-08-23.)* `fase182_riconciliazione` è provata da
 `test_riconciliazione`, `test_riconciliazione_interlibro` e `test_movimenti_giornale`: il libro
