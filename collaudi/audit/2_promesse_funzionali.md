@@ -242,7 +242,7 @@ comportamento verificabile** sono state seguite fino al codice.
 
 ---
 
-## 3. LIMITI DEL METODO — dichiarati
+## 3. LIMITI DEL MODO DI LAVORARE — dichiarati
 
 1. **Ho seguito le promesse fino al codice, non fino al comportamento.** Dove il codice esiste,
    ho verificato che sia **raggiungibile e chiamato**, non che funzioni sotto carico: quello è

@@ -28,7 +28,7 @@
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 584f0e9
+CONSEGNE AGGIORNATE A: 4d4a044
 
 SUITE ATTUALE: Ran 6012 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
@@ -798,6 +798,45 @@ e il pannello ne promette una (**B16 punto e**).
 ---
 
 # C) DOPO L'APERTURA — tutto il resto
+
+### 🟠 B20 — LA GUARDIA DEGLI ELENCHI CERCA `TODO` COME SOTTOSTRINGA E INCIAMPA SULLA PAROLA «METODO»
+
+*(misurato il 2026-08-25: ha mandato rossa la CI della richiesta di unione 106 — tre job,
+`full-suite`, `full-suite-311` e `copertura`, tutti sullo stesso test.)*
+
+`test_pipeline_ci.py:9672` (`TestUnaSolaListaDiCoseDaFare`) vieta che un elenco di lavori
+nasca fuori da `RIPRENDI_QUI.md` e `collaudi/piano.py`. Cerca sei aperture — `DA FARE`,
+`PROSSIMI PASSI`, `RIPARTI DA QUI`, `COSA MANCA`, `TODO`, `FIXME` — **come sottostringa, in
+maiuscolo, dentro i titoli** (`:9695`, `re.match(r"^#{1,6}\s", ...)`).
+
+🔴 **In italiano `METODO` contiene `TODO`.** Quindi qualunque titolo che contenga «metodo»
+viene accusato di aprire un elenco di lavori. È successo su due titoli che dichiaravano i
+**limiti di una misura**, cioè l'opposto di una lista di cose da fare:
+
+```
+collaudi/audit/2_promesse_funzionali.md:245  ## 3. LIMITI DEL METODO — dichiarati
+collaudi/audit/9_pannello_senza_endpoint.md:444  ## 📌 NOTA DI METODO (regola B2)
+```
+
+**Riparato per ora rinominando i due titoli** (`METODO` → `MODO DI LAVORARE`): la CI torna
+verde, ma il difetto resta nella guardia e ripartirà al primo titolo italiano che contiene
+quella parola. ⛔ **La riparazione vera è nella guardia, non nei documenti**: `TODO` e
+`FIXME` vanno cercati come **parola intera** (`\bTODO\b`), non come sottostringa — e insieme
+va aggiornata la meta-guardia che la mette alla prova, altrimenti la prova inietta su una
+forma che non esiste più. È lavoro su `test_*.py` e **va chiesto a parte** (regola ferrea 6).
+
+> ⚠️ **E accanto c'è un secondo punto cieco, misurato lo stesso giorno sulla stessa CI.**
+> `collaudi/audit_coerenza_tariffe.py` ha chiesto di esaminare **18 cifre nuove**: erano
+> **tutte e 18 citazioni** che i referti fanno *per denunciarle*, nessuna una pretesa nuova
+> del prodotto. Ma **17 su 18 sono cifre che l'audit non vede nella loro fonte vera**: nel
+> suo elenco di anomalie non compaiono `deploy/bunker.html`, `deploy/diventa-host.html`,
+> `deploy/kit-marketing.html:128-134` né `fase89_jurisdiction_outreach.py` — cioè **i quattro
+> posti dove i passaggi 1, 6 e 8 hanno trovato il «3%» e il «4%»**. Una sola delle 18 (il 2%
+> di `fase98_policy_commissione.py:34-35`) coincide con un'anomalia già iscritta. 🔑 **Il
+> «3%» è sopravvissuto in 7 lingue anche perché la guardia che doveva vederlo non guarda
+> lì**: sono righe di dizionario i18n lunghe migliaia di caratteri, dove decine di
+> percentuali stanno sulla stessa riga. Le 18 sono state iscritte in
+> `collaudi/baseline_tariffe.txt` (66 → 84) **dopo averle lette una per una**.
 
 ### 🔵 B19 — AUDIT COMPLETO DELLE INCONGRUENZE — nove passaggi, **uno per chat**
 

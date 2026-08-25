@@ -441,7 +441,7 @@ Scritti perché nessuno li riapra.
 
 ---
 
-## 📌 NOTA DI METODO (regola B2)
+## 📌 NOTA SUL MODO DI LAVORARE (regola B2)
 
 Sette script di sonda scritti per questo passaggio stanno nella cartella temporanea di
 sessione, **non** in `collaudi/`: sono attrezzi usa-e-getta, e questo passaggio è una misura,
