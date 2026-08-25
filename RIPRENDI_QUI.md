@@ -799,7 +799,11 @@ e il pannello ne promette una (**B16 punto e**).
 
 # C) DOPO L'APERTURA — tutto il resto
 
-### 🟠 B20 — LA GUARDIA DEGLI ELENCHI CERCA `TODO` COME SOTTOSTRINGA E INCIAMPA SULLA PAROLA «METODO»
+`collaudi/METODO_v4.md` è la guida di riferimento per la verifica. PARTE 12 = la porta prima di
+aprire ai clienti. PARTE 13 = registro delle famiglie chiuse, si aggiorna a ogni famiglia
+chiusa. PARTE 15 = cosa fanno i grandi.
+
+### ✅ B20 — CHIUSO il 2026-08-25 — LA GUARDIA DEGLI ELENCHI CERCAVA `TODO` COME SOTTOSTRINGA E INCIAMPAVA SULLA PAROLA «METODO»
 
 *(misurato il 2026-08-25: ha mandato rossa la CI della richiesta di unione 106 — tre job,
 `full-suite`, `full-suite-311` e `copertura`, tutti sullo stesso test.)*
@@ -818,12 +822,26 @@ collaudi/audit/2_promesse_funzionali.md:245  ## 3. LIMITI DEL METODO — dichiar
 collaudi/audit/9_pannello_senza_endpoint.md:444  ## 📌 NOTA DI METODO (regola B2)
 ```
 
-**Riparato per ora rinominando i due titoli** (`METODO` → `MODO DI LAVORARE`): la CI torna
-verde, ma il difetto resta nella guardia e ripartirà al primo titolo italiano che contiene
-quella parola. ⛔ **La riparazione vera è nella guardia, non nei documenti**: `TODO` e
-`FIXME` vanno cercati come **parola intera** (`\bTODO\b`), non come sottostringa — e insieme
-va aggiornata la meta-guardia che la mette alla prova, altrimenti la prova inietta su una
-forma che non esiste più. È lavoro su `test_*.py` e **va chiesto a parte** (regola ferrea 6).
+**Prima riparato rinominando i due titoli** (`METODO` → `MODO DI LAVORARE`): la CI tornava
+verde, ma il difetto restava nella guardia e sarebbe ripartito al primo titolo italiano che
+contiene quella parola. Infatti è ripartito: il 2026-08-25 il documento del metodo (oggi
+`collaudi/METODO_v4.md`), messo per prova nella radice, è stato accusato dal suo stesso titolo
+di riga 1 — e spostarlo in `collaudi/` non è servito, perché la guardia cammina su **tutto**
+l'albero e salta solo sette cartelle (`:9680-9685`), fra cui `collaudi/` **non** c'è.
+⛔ E la radice non era comunque la sua casa: `test_trasparenza_costi.py:248`
+(`test_radice_solo_cinque_documenti_ufficiali`) pretende che in radice stiano **solo i cinque
+documenti ufficiali**, e quella regola **non si tocca**. La guida sta in `collaudi/`.
+
+✅ **Riparato nella guardia, che è dove stava il difetto** (`test_pipeline_ci.py:9690-9698`):
+le sei aperture si cercano come **parole intere** (`re.search(r"\b" + re.escape(a) + r"\b")`),
+non più come sottostringa. `\b` è più **stretto** della sottostringa: può solo togliere accuse,
+mai aggiungerne — nessun file prima pulito diventa colpevole. Provata nelle due direzioni prima
+di saltare: iniettato un file con `# TO`+`DO` da solo → **ROSSA** (`PROVA_B20_paracadute.md:1`,
+`FAILED (failures=1)`); tolto il guasto, con la guida del metodo nell'albero → **VERDE**
+(`Ran 1 test`, `OK`). Più dieci casi sul metodo: `# TO`+`DO`, `# DA `+`FARE`, `# COSA `+`MANCA`
+e `## FIX`+`ME` restano accusati; `# METODO`, `## Il metodo chirurgico` e `# METODOLOGIA`
+passano. ⛔ **Nessuna meta-guardia da aggiornare**: cercata (`grep` su `_apre_un_elenco` in
+tutti i `.py`), non esiste — la prova della guardia vive solo qui.
 
 > ⚠️ **E accanto c'è un secondo punto cieco, misurato lo stesso giorno sulla stessa CI.**
 > `collaudi/audit_coerenza_tariffe.py` ha chiesto di esaminare **18 cifre nuove**: erano

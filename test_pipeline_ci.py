@@ -9685,7 +9685,14 @@ class TestUnaSolaListaDiCoseDaFare(unittest.TestCase):
         """Vero solo se la riga APRE un elenco di lavori, non se lo nomina."""
         secca = riga.strip()
         su = secca.upper()
-        contiene = any(a in su for a in self.APERTURE)
+        #  B20 (2026-08-25): le aperture si cercano come PAROLE INTERE, non come
+        #  sottostringhe. Cercando `TO`+`DO` dentro qualunque testo, la parola italiana
+        #  «METODO» lo contiene: un titolo che parla di metodo veniva letto come
+        #  l'apertura di un elenco di lavori, e ha mandato rossa la CI della richiesta
+        #  106 su tre job. `\b` e' piu' STRETTO della sottostringa: puo' solo togliere
+        #  accuse, mai aggiungerne -- nessun file prima pulito diventa colpevole.
+        contiene = any(re.search(r"\b" + re.escape(a) + r"\b", su)
+                       for a in self.APERTURE)
         if not contiene:
             return False
         if e_python:
