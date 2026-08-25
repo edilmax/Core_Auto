@@ -18,6 +18,38 @@
 
 ---
 
+## 📍 DOVE SIAMO — 2026-08-26, letto dall'API e dai tre posti
+
+```
+computer      f7faa5b
+GitHub master f7faa5b
+VPS           3ceb4c5   <- FERMO DI PROPOSITO: il `git pull` sul server lo autorizza
+                           il fondatore a voce, e non e' ancora arrivato.
+```
+
+Unito con la richiesta **108**, riletta dall'API dopo l'unione (non la risposta del merge):
+`merged=True · merge_commit_sha=f7faa5b626b47f6db2e93cf3a03ab15be5880081 · state=closed`.
+CI: **16 job, 0 in corso, 15 `success`**; l'unico non-success e' `zap`, **saltato per
+costruzione** (`.github/workflows/ci.yml:929` lo fa girare solo su `schedule` o
+`workflow_dispatch`, mai su una richiesta di unione).
+
+**Chiuso in quel commit:**
+- **A1** — la firma del contratto host registrava un documento che l'host non aveva letto:
+  il gate linkava `/termini.html` sotto l'etichetta «Contratto Host» mentre spediva
+  l'impronta del Contratto Host. Ora etichetta, link e impronta escono tutti e tre da
+  `fase163`, la prova registra la lingua REALMENTE servita, e il ripiego di
+  `deploy/contratto-host.html` e' passato da italiano a inglese come il server. Guardia
+  nuova `collaudi/guardia_contratto_firmato.py`, agganciata alla batteria.
+- **B20** — la guardia degli elenchi cercava `TODO` come sottostringa e la parola italiana
+  «METODO» lo contiene. Ora le sei aperture si cercano come **parole intere**.
+- **I quattro referti d'audit** 11 (accessi), 12 (dati personali), 13 (soldi) e 14
+  (commissione) sono **committati**, non piu' solo sul disco.
+- **La guida della verifica sta in `collaudi/METODO_v4.md`** — committata anche lei. In
+  radice non puo' stare: `test_trasparenza_costi.py:248` ammette solo i cinque documenti
+  ufficiali, e quella regola non si tocca.
+
+---
+
 ## 📏 STATO MISURATO — numeri, non ricordi
 
 > ⛔ **Questo riquadro NON è una lista di lavori** (REGOLA ZERO 3 non lo vieta): sono i numeri
@@ -28,7 +60,7 @@
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: cb45c80
+CONSEGNE AGGIORNATE A: f7faa5b
 
 SUITE ATTUALE: Ran 6012 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
@@ -40,10 +72,9 @@ SUITE ATTUALE: Ran 6012 test
 
 CARICATORE (RACCOLTI):  6012  <- rimisurato il 2026-08-25 col caricatore, da PowerShell,
                                  PRIMA di qualunque giro (S14): stesso valore di 2026-08-24.
-ESEGUITI (ultimo giro): 6007  <- NON rimisurato: richiede la suite, e non e' stata lanciata.
-                                 Con questo albero resta valido perche' il caricatore non e'
-                                 cambiato (6012 prima, 6012 adesso) e da allora sono stati
-                                 toccati SOLO file .md, che non aggiungono test.
+ESEGUITI (ultimo giro): 6007  <- MISURATO il 2026-08-25 da PowerShell sull'albero poi unito
+                                 in f7faa5b: `Ran 6007 tests in 2048.434s -- OK (skipped=4)`,
+                                 codice d'uscita letto diretto, EXIT=0.
 SCARTO:                    5  <- le guardie openssl, vedi AMBIENTE
 
 FILE DI TEST: 406             <- Get-ChildItem -Filter 'test_*.py' -File (radice; identico
@@ -55,9 +86,8 @@ AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3, ed e' la
             ragione dello scarto fra RACCOLTI e ESEGUITI (5 di scarto: le guardie openssl).
-MISURATO:  2026-08-25 su 584f0e9 + il lavoro non committato (CLAUDE.md, RIPRENDI_QUI.md,
-           deploy/index.html, i nove referti di collaudi/audit/), col caricatore, da
-           PowerShell, e PRIMA di lanciare (S14):
+MISURATO:  2026-08-26 su f7faa5b (albero pulito), col caricatore, da PowerShell, e PRIMA
+           di lanciare (S14):
            python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"
            -> 6012
 COMANDO:  python -m unittest discover -s . -p "test_*.py"
