@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -44,9 +44,12 @@
 <script>
 const API = location.origin.startsWith('http') ? '' : 'http://127.0.0.1:8080';
 const L = {it:{back:'Torna',print:'🖨️ Stampa / Salva PDF'},en:{back:'Back',print:'🖨️ Print / Save PDF'}};
-function pickLang(){ const u=new URLSearchParams(location.search).get('lang');
-  const b=(navigator.language||'it').slice(0,2).toLowerCase();
-  return (u==='en'||u==='it')?u:(b==='en'?'en':'it'); }
+// A1/referto 6·5: il ripiego DEVE essere l'inglese, come fase163.lingua_contratto_servita().
+// Prima la pagina ripiegava su 'it' e il server su 'en': un host tedesco leggeva italiano
+// mentre la prova registrava 'en'. Il testo che FA FEDE resta l'italiano (dichiarato in .meta).
+function pickLang(){ const u=(new URLSearchParams(location.search).get('lang')||'').slice(0,2).toLowerCase();
+  const b=(navigator.language||'en').slice(0,2).toLowerCase();
+  return (u==='en'||u==='it')?u:(b==='it'?'it':'en'); }
 let lang = pickLang();
 async function carica(l){
   lang=l;

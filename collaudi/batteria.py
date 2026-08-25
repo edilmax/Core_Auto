@@ -171,6 +171,8 @@ def main():
          [PY, "collaudi/piano_dei_soldi.py"], 300, None),
         ("11d. Copertura dei 3 pannelli (tasti morti)",
          [PY, "collaudi/coverage_pannelli.py"], 300, None),
+        ("11e. Etichetta = link = documento firmato (A1)",
+         [PY, "collaudi/guardia_contratto_firmato.py"], 300, None),
     ]
     for nome, cmd, to, _ok in fasi:
         rc, out, dur = _run(cmd, timeout=to)

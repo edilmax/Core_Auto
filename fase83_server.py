@@ -1558,7 +1558,7 @@ def pagina_azione_html(esito: Dict[str, Any]) -> str:
     ) % (h1, bg, col, ic, h1, p1, p2, pannello)
 
 
-def pagina_login_gate(livello: str, base_url: str = "") -> str:
+def pagina_login_gate(livello: str, base_url: str = "", lang: str = "it") -> str:
     """PAGINA DI LOGIN pubblica del gatekeeper (server-rendered). Contiene SOLO il form del
     ruolo: nessun bottone/struttura della dashboard finisce nel sorgente per chi non è loggato.
     Al successo salva la credenziale dove la dashboard la cerca (localStorage/sessionStorage) e
@@ -1603,8 +1603,16 @@ def pagina_login_gate(livello: str, base_url: str = "") -> str:
         # /host.html (gated) → /entra-host: LOOP infinito, e il form di registrazione (dentro host.html
         # gated) era IRRAGGIUNGIBILE. Ora la registrazione avviene QUI. doc_sha256/versione del
         # contratto sono iniettati dal server (la firma d'accettazione resta verificabile).
-        from fase163_accettazioni import CONTRATTO_HOST_VERSIONE as _CV, doc_sha256 as _ds
+        # ⛔ A1: etichetta, link e impronta escono TUTTI E TRE da fase163. Il link puntava a
+        # /termini.html (Termini di servizio) mentre si firmava l'impronta del Contratto Host:
+        # ogni host registrato da qui fabbricava una prova legale che nomina un documento
+        # che non gli è stato mostrato.
+        from fase163_accettazioni import (CONTRATTO_HOST_VERSIONE as _CV, doc_sha256 as _ds,
+                                          etichetta_contratto as _et, link_contratto as _lk,
+                                          lingua_contratto_servita as _lcs)
         _dsha, _cver = _ds(), str(_CV)
+        _clang = _lcs(lang)
+        _clink, _cet = _lk(lang), _et(lang)
         titolo, sub = "Area host", "Accedi o registrati"
         campi = ('<input id="em" type="email" placeholder="Email" autocomplete="username" '
                  'aria-label="Email"><input id="pw" type="password" placeholder="Password (min 8)" '
@@ -1614,7 +1622,7 @@ def pagina_login_gate(livello: str, base_url: str = "") -> str:
                  'aria-label="Nome struttura">'
                  '<label style="display:block;text-align:left;font-size:.8rem;color:#9aa7bd;'
                  'margin:.35rem 0"><input type="checkbox" id="c1"> Accetto il '
-                 '<a href="/termini.html" target="_blank" style="color:#c8a24a">Contratto Host</a></label>'
+                 '<a href="' + _clink + '" target="_blank" style="color:#c8a24a">' + _cet + '</a></label>'
                  '<label style="display:block;text-align:left;font-size:.8rem;color:#9aa7bd;'
                  'margin:.35rem 0"><input type="checkbox" id="c2"> Approvo le clausole ex '
                  'artt. 1341-1342 c.c. (trattenute, penali, foro)</label>'
@@ -1632,7 +1640,7 @@ def pagina_login_gate(livello: str, base_url: str = "") -> str:
               "{'Content-Type':'application/json'},body:JSON.stringify({email:em,password:pw,"
               "ragione_sociale:document.getElementById('rs').value,accetta_termini:true,"
               "accetta_clausole:true,accetta_privacy:true,doc_sha256:'%s',versione:'%s',"
-              "codice_referral:(new URLSearchParams(location.search).get('ref')||'')})});"
+              "lang:'%s',codice_referral:(new URLSearchParams(location.search).get('ref')||'')})});"
               "var dd=null;try{dd=await rr.json();}catch(_){}"
               "if(rr.status===201&&dd&&dd.token){try{localStorage.setItem('bookinvip_host_token',dd.token);"
               "localStorage.setItem('bookinvip_host_email',em);}catch(e){}location.replace('/host.html');}"
@@ -1646,7 +1654,7 @@ def pagina_login_gate(livello: str, base_url: str = "") -> str:
               "localStorage.setItem('bookinvip_host_email',em);}catch(e){}location.replace('/host.html');}"
               "else if(r.status===429){msg('Troppi tentativi, riprova tra poco.');btn(false);}"
               "else{msg('Email o password errata.');btn(false);}"
-              "}catch(e){msg('Errore di rete.');btn(false);}") % (_dsha, _cver)
+              "}catch(e){msg('Errore di rete.');btn(false);}") % (_dsha, _cver, _clang)
         # Toggle registrazione + recupero password (niente più link che rimandano ad altre pagine).
         sotto = ('<div style="margin-top:1.1rem;text-align:center;font-size:.92rem">'
                  '<a href="#" id="toreg" style="color:#c8a24a;font-weight:600;'
@@ -8445,10 +8453,16 @@ class RouterHTTP:
         documento SEPARATO (consenso specifico). Ogni riga porta versione + impronta del
         testo + IP + dispositivo + data/ora, sigillata con HMAC-SHA256."""
         from fase163_accettazioni import (DOCUMENTO_PRIVACY, PRIVACY_VERSIONE,
-                                          privacy_sha256)
+                                          privacy_sha256, lingua_contratto_servita)
         ip = self._client_ip(headers)
         ua = self._user_agent(headers)
-        r1 = acc.registra(host_id, lang=lang, ip=ip, user_agent=ua, vessatorie=True)
+        # A1: la prova del CONTRATTO registra la lingua REALMENTE servita (it/en), non
+        # quella dichiarata dal client. Prima un host 'de' firmava 'de' e leggeva 'en':
+        # la prova diceva una lingua, l'occhio ne aveva vista un'altra.
+        # ⛔ La normalizzazione vale SOLO per il contratto: la privacy esiste in 8 lingue
+        # e passarla da lingua_contratto_servita() la ridurrebbe a due.
+        r1 = acc.registra(host_id, lang=lingua_contratto_servita(lang), ip=ip,
+                          user_agent=ua, vessatorie=True)
         r2 = acc.registra(host_id, documento=DOCUMENTO_PRIVACY, versione=PRIVACY_VERSIONE,
                           doc_sha256_=privacy_sha256(), lang=lang, ip=ip, user_agent=ua)
         if not (r1.get("ok") and r2.get("ok")):
@@ -11002,7 +11016,9 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             elif u.path in ("/entra-admin", "/entra-host", "/entra-bunker"):
                 # PAGINA DI LOGIN pubblica: SOLO il form del ruolo, zero struttura dashboard.
                 self._testo(200, "text/html",
-                            pagina_login_gate(u.path[len("/entra-"):], base_url),
+                            pagina_login_gate(u.path[len("/entra-"):], base_url,
+                                              _lingua({k: v[0] for k, v in
+                                                       parse_qs(u.query).items()})),
                             no_store=True)
             elif u.path in ("/grazie", "/annullato"):
                 # PAGINE POST-PAGAMENTO Stripe (STRIPE_SUCCESS_URL/CANCEL_URL): senza estensione,

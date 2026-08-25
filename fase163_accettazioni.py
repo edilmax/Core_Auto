@@ -284,6 +284,32 @@ CONTRATTO_HOST: Dict[str, str] = {
 LINGUE_CONTRATTO = tuple(CONTRATTO_HOST.keys())
 DOCUMENTO_HOST = "contratto_host"
 
+# ── FONTE UNICA DEL LEGAME ETICHETTA ↔ LINK ↔ DOCUMENTO FIRMATO (A1) ─────────
+# Il gate di registrazione mostrava "Contratto Host" su un link a /termini.html
+# (documento DIVERSO da quello di cui si firmava l'impronta), e host.html faceva
+# l'errore speculare: etichetta i18n "Termini" su un link a /contratto-host.html.
+# Da qui in avanti chi disegna una casella d'accettazione prende ETICHETTA e LINK
+# dallo stesso posto da cui esce doc_sha256(): tre cose, una sola fonte.
+PAGINA_CONTRATTO = "/contratto-host.html"
+ETICHETTA_CONTRATTO: Dict[str, str] = {
+    "it": "Contratto Host", "en": "Host Agreement", "es": "Contrato de Anfitrion",
+    "fr": "Contrat Hote", "de": "Gastgeber-Vertrag", "pt": "Contrato de Anfitriao",
+    "ja": "ホスト契約", "zh": "房东合同",
+}
+
+
+def etichetta_contratto(lang: Any = "it") -> str:
+    """Il NOME del documento che si sta firmando, nella lingua dell'utente."""
+    scelta = str(lang or "").lower().replace("_", "-").split("-", 1)[0][:2]
+    return ETICHETTA_CONTRATTO.get(scelta, ETICHETTA_CONTRATTO["en"])
+
+
+def link_contratto(lang: Any = "it") -> str:
+    """L'indirizzo del documento la cui impronta viene firmata, con la lingua
+    REALMENTE servita gia' dentro: cosi' il testo letto e la lingua registrata
+    nella prova non possono divergere (referto 6, voce 6)."""
+    return "%s?lang=%s" % (PAGINA_CONTRATTO, lingua_contratto_servita(lang))
+
 # ── CONSENSO PRIVACY/GDPR come DOCUMENTO DISTINTO (2026-07-20) ────────────────
 # Il GDPR vuole un consenso SPECIFICO e separato: prima stava nella stessa spunta del
 # contratto. Si registra come RIGA A PARTE (documento diverso) e NON come colonna nuova:

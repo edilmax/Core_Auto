@@ -21,6 +21,16 @@ except Exception:
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ESCLUDI_DIR = {".git", "__pycache__", "data", "node_modules", "venv", ".venv",
                "certbot", "uploads", "backup"}
+# I REFERTI D'AUDIT non si scansionano, ed e' la stessa ragione dei rapporti prodotti da
+# qui sotto (`_MIE_USCITE`): un referto CITA le cifre per DENUNCIARLE. Ogni percentuale
+# che ci sta dentro e' gia' stata guardata da chi ha scritto il referto, con `file:riga`
+# accanto; ritrovarla qui come "cifra nuova" fa esaminare due volte la stessa cosa e
+# manda rossa la CI per un documento che non pretende niente. Misurato il 2026-08-25:
+# `collaudi/audit/14_commissione.md` ha portato 3 cifre nuove, tutte e tre citazioni di
+# difetti che quel referto sta denunciando. ⛔ Si esclude per PERCORSO, non per nome:
+# una cartella qualsiasi chiamata "audit" resta sotto controllo. Il resto del progetto
+# — `fase*.py`, `deploy/`, i 5 documenti — continua a essere scansionato per intero.
+ESCLUDI_PERCORSI = {os.path.join("collaudi", "audit")}
 ESTENSIONI = (".py", ".html", ".md", ".txt", ".json", ".conf", ".yml", ".yaml", ".js")
 
 # ── 1) LA VERITA', letta dal codice ──────────────────────────────────────────
@@ -82,7 +92,10 @@ righe_rilevanti = 0
 
 def file_da_scansionare():
     for radice, dirs, files in os.walk(REPO):
-        dirs[:] = [d for d in dirs if d not in ESCLUDI_DIR]
+        dirs[:] = [d for d in dirs
+                   if d not in ESCLUDI_DIR
+                   and os.path.relpath(os.path.join(radice, d), REPO)
+                   not in ESCLUDI_PERCORSI]
         for f in files:
             if f.endswith(ESTENSIONI):
                 yield os.path.join(radice, f)
