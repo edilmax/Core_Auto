@@ -31,8 +31,17 @@ letterale. Una tabella al posto dell'output è una violazione, anche se i numeri
 «Sistemale» non è un via. «Ok» non è un via. Solo **«autorizzato»** è un via. (Per
 `collaudi/` — strumentazione di collaudo, non produzione — il fondatore ha stabilito il
 2026-08-03 che questo divieto non vale allo stesso modo: vale D20.)
-*Si verifica:* per ogni riga cambiata in un `fase*.py` o in `main_casavip.py`, nel registro
-della sessione compare la parola «autorizzato» scritta dal fondatore **prima** della modifica.
+⛔ **E `deploy/` È PRODUZIONE ANCHE LUI** — deciso dal fondatore il **2026-08-24**. Fino a
+quel giorno il «si verifica» qui sotto nominava solo `fase*.py` e `main_casavip.py`, e
+`deploy/` cadeva nella fessura: eppure è **ciò che il browser serve**, cioè l'unica parte del
+prodotto che un cliente legge davvero. Il caso che l'ha deciso: B8, un badge sulla homepage
+che prometteva in **otto lingue** una cosa che il codice non fa. Un file che nessun divieto
+proteggeva mentiva a **ogni visitatore**, mentre i `fase*.py` che si comportavano bene erano
+blindati. La regola guardava dove il danno è più facile da vedere, non dove è più grande.
+
+*Si verifica:* per ogni riga cambiata in un `fase*.py`, in `main_casavip.py` o sotto
+`deploy/`, nel registro della sessione compare la parola «autorizzato» scritta dal fondatore
+**prima** della modifica.
 
 **B5. NON PROCEDERE MAI al passo successivo se il precedente non è verificato.** Se vengono
 chieste quattro cose e se ne mostrano tre, ci si ferma. Mai «procedo con quello che ho».
