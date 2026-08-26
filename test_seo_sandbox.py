@@ -20,6 +20,7 @@ lingua), ricostruisce il grafo dei link interni e controlla:
     permette la scansione e dichiara le sitemap; sitemap XML ben formate con <lastmod>.
 """
 import json
+import os
 import re
 import types
 import unittest
@@ -328,6 +329,60 @@ class TestSEOSandbox(unittest.TestCase):
         self.assertIn("<loc>%s/alloggio/casa-mare</loc>" % BASE, xml)
         self.assertRegex(xml, r"<lastmod>\d{4}-\d{2}-\d{2}</lastmod>")
         minidom.parseString(xml)                    # ben formata
+
+
+class TestHomepageDotazioneSEO(unittest.TestCase):
+    """La HOMEPAGE e' l'unica pagina che i crawler raggiungono per prima, ed era l'unica
+    senza dotazione: `deploy/index.html` aveva SOLO <title>. Misurato il 2026-08-26:
+    0 description, 0 canonical, 0 og:*. Le landing di fase97 e gli articoli di fase198 le
+    hanno tutte -- il pezzo piu' visitato era quello scoperto.
+
+    ⛔ QUI NON SI CONTROLLA L'HREFLANG, ed e' una scelta: la homepage NON onora `?lang=`
+    (`deploy/app.js` -> BV.linguaIniziale legge solo localStorage e navigator.languages),
+    quindi ogni URL alternativo servirebbe la STESSA pagina = contenuto duplicato. Resta
+    una decisione aperta (D16), non una dimenticanza.
+
+    La "/" e' servita da quel file al byte (`fase83_server.py`: nome = "index.html" if
+    path in ("/", "")): nessuna iniezione server-side puo' rimediare a un head monco."""
+
+    HOME = os.path.join(os.path.dirname(os.path.abspath(__file__)), "deploy", "index.html")
+
+    def setUp(self):
+        with open(self.HOME, encoding="utf-8") as f:
+            self.h = f.read()
+        self.head = self.h.split("</head>")[0]
+
+    def _og(self, prop):
+        m = re.search(r'<meta property="%s" content="([^"]*)"' % re.escape(prop), self.head)
+        return m.group(1) if m else None
+
+    def test_homepage_ha_la_meta_description(self):
+        d = _meta(self.head, "description")
+        self.assertIsNotNone(d, "deploy/index.html non ha <meta name=\"description\">")
+        self.assertTrue(50 <= len(d) <= 160,
+                        "description fuori dai limiti utili (50-160): %d caratteri" % len(d))
+
+    def test_homepage_ha_canonical_assoluto_e_self_referente(self):
+        c = _canonical(self.head)
+        self.assertIsNotNone(c, "deploy/index.html non ha <link rel=\"canonical\">")
+        self.assertTrue(c.startswith("https://"), "canonical non ASSOLUTO: %r" % c)
+        self.assertEqual(c, BASE + "/", "canonical non SELF-REFERENTE sulla radice: %r" % c)
+
+    def test_homepage_ha_le_quattro_open_graph(self):
+        for prop in ("og:title", "og:type", "og:url", "og:locale"):
+            self.assertIsNotNone(self._og(prop), "manca <meta property=\"%s\">" % prop)
+        self.assertTrue(self._og("og:title").strip(), "og:title vuoto")
+        self.assertEqual(self._og("og:type"), "website")
+
+    def test_homepage_open_graph_COERENTE_con_canonical_e_html_lang(self):
+        # un og:url che punta altrove, o un og:locale che smentisce <html lang>, e' peggio
+        # di niente: dice al social una cosa e al crawler un'altra.
+        self.assertEqual(self._og("og:url"), _canonical(self.head),
+                         "og:url e canonical non coincidono")
+        lang = re.search(r'<html lang="([^"]*)"', self.h).group(1)
+        self.assertEqual(self._og("og:locale"), "it_IT")
+        self.assertEqual(self._og("og:locale").split("_")[0], lang,
+                         "og:locale smentisce <html lang=\"%s\">" % lang)
 
 
 if __name__ == "__main__":
