@@ -148,16 +148,17 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 ```
 CONSEGNE AGGIORNATE A: a8b68a0
 
-SUITE ATTUALE: Ran 6012 test
+SUITE ATTUALE: Ran 6028 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (test_pipeline_ci.py:2054, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
-   numero col CARICATORE. Quindi 6012 e' il numero del caricatore, NON quanti ne ha eseguiti
+   numero col CARICATORE. Quindi 6028 e' il numero del caricatore, NON quanti ne ha eseguiti
    un giro: e' il difetto B14, e non si chiude qui -- si chiude cambiando quella regex, che
    sta in un file di test e non e' questo lavoro. Le due voci vere sono qui sotto.
 
-CARICATORE (RACCOLTI):  6012  <- rimisurato il 2026-08-26 col caricatore, da PowerShell,
-                                 PRIMA di qualunque giro (S14): stesso valore di 2026-08-25.
+CARICATORE (RACCOLTI):  6028  <- rimisurato il 2026-08-26 col caricatore, da PowerShell,
+                                 PRIMA di qualunque giro (S14). Erano 6012: i 16 in piu'
+                                 sono le guardie di `test_email_tracciata.py`.
 ESEGUITI (ultimo giro): 6007  <- MISURATO il 2026-08-26 da PowerShell sull'albero di QUESTE
                                  consegne (consegne su a8b68a0, dopo il deploy): `Ran 6007
                                  tests in 2874.693s -- OK (skipped=4)`, codice d'uscita
@@ -170,7 +171,7 @@ ESEGUITI (ultimo giro): 6007  <- MISURATO il 2026-08-26 da PowerShell sull'alber
                                  senza la sua misura non si scrive (D22), si rimisura.
 SCARTO:                    5  <- le guardie openssl, vedi AMBIENTE
 
-FILE DI TEST: 406             <- Get-ChildItem -Filter 'test_*.py' -File (radice; identico
+FILE DI TEST: 407             <- Get-ChildItem -Filter 'test_*.py' -File (radice; identico
                                  con -Recurse: nessun test in sottocartelle)
 MODULI fase*.py: 151          <- Get-ChildItem -Filter 'fase*.py' -File
 
@@ -182,16 +183,21 @@ AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
 MISURATO:  2026-08-26 su a8b68a0 (albero pulito), col caricatore, da PowerShell, e PRIMA
            di lanciare (S14):
            python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"
-           -> 6012
+           -> 6028
 COMANDO:  python -m unittest discover -s . -p "test_*.py"
 ```
 
-> 🔎 **PERCHE' IL NUMERO NON E' CAMBIATO, ed e' la risposta giusta e non una pigrizia.** In
-> `ce3cfe8` sono entrati **3.364 righe** fra referti d'audit, fotografie del cricchetto e un
-> attrezzo nuovo in `collaudi/` — e **zero file `test_*.py`**: il caricatore conta test, non
-> righe, e `collaudi/` non e' nel suo perimetro. Quindi 6012 prima e 6012 adesso è ciò che
-> deve succedere. (Era lo stesso ragionamento il 2026-08-24, con le ~280 righe di B16/B17/B18.)
-> ⛔ La misura andava rifatta lo stesso: «non dovrebbe essere cambiato» è un ricordo, `6012` è
+> 🔎 **PERCHE' IL NUMERO E' SALITO DI 16, ed e' esattamente quanto doveva salire.** Sono le
+> guardie di `test_email_tracciata.py`, scritte **prima** della riparazione delle email perse
+> in silenzio (D20) e **viste rosse** sul codice di allora: 14 su 15 fallivano. La
+> quindicesima era verde apposta — prova che il reset password **non** si lamenta per
+> un'email che non doveva partire — e doveva restare verde anche dopo, come e' stata.
+> La sedicesima e' arrivata **dopo**, ed e' la piu' istruttiva: `il_percorso_sano_non_scrive
+> _neanche_un_ERROR`. La prima riparazione scriveva `logger.error` anche per «provider
+> spento», e la suite l'ha bocciata — `test_cancellazione_money` pretende ZERO `ERROR` sul
+> percorso sano e ne trovava uno per OGNI prenotazione. Aveva ragione (ferrea 10), il livello
+> e' sceso a `warning`, e quella guardia adesso vive anche accanto al codice che ha corretto.
+> ⛔ La misura si rifa' comunque, sempre: «dovrebbero essere sedici» è un ricordo, `6028` è
 > una misura (D22). Costa due secondi e toglie l'unico modo in cui questa riga può mentire.
 
 ⛔ **Il numero della suite si misura PRIMA di lanciarla, non dopo** (sbaglio S14, costato tre

@@ -146,10 +146,16 @@ class TestHappyAltroRouter(unittest.TestCase):
         # I campi stabili restano fissati esatti; `guardiano` (2026-08-15) varia col battito
         # del Guardiano dei soldi, quindi si fissa l'INSIEME dei valori ammessi -- contratto
         # piu' STRETTO, non piu' largo: un valore inventato fa rosso.
-        self.assertEqual({k: v for k, v in c.items() if k != "guardiano"},
+        # `email_ko` (2026-08-26): stesso motivo del battito -- e' un numero che varia,
+        # quindi contratto di TIPO invece che di valore. ⛔ Ma deve ESSERCI.
+        self.assertEqual({k: v for k, v in c.items()
+                          if k not in ("guardiano", "email_ko")},
                          {"status": "ok", "money_unit": "cents_integer"})
         self.assertIn(c.get("guardiano"), ("ok", "muto", "sconosciuto"),
                       "stato del Guardiano non riconoscibile dalla salute: %r" % (c,))
+        self.assertIsInstance(c.get("email_ko"), int,
+                              "la salute non dice piu' quante email si sono perse: %r"
+                              % (c,))
 
     # ── 2) GET /api/health/live ───────────────────────────────────────────────
     def test_health_live(self):

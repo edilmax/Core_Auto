@@ -36,11 +36,118 @@ import ipaddress
 import json
 import logging
 import re
+import threading
 from typing import Any, Dict, List, Optional, Tuple
 
 from fase61_localizzazione import Localizzatore, LINGUE_SUPPORTATE
 
 logger = logging.getLogger("core_auto.server")
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  LE EMAIL CHE SI PERDEVANO IN SILENZIO
+# ─────────────────────────────────────────────────────────────────────────────
+#  `ProviderEmail.invia()` restituisce un bool onesto, e fino al 2026-08-26 NESSUNO
+#  lo leggeva: ogni invio partiva puntando dritto a `.invia` come bersaglio, thread
+#  demone, valore di ritorno scartato. Quando l'SMTP e' giu' sparivano il voucher e
+#  il PIN di check-in dell'ospite, la conferma di pagamento, il link di reset
+#  password, la ricevuta -- e l'allarme del Guardiano dei soldi, che esce per email.
+#  Misurato nei referti 15 (§ «LE TRE CHE PERDONO IL MESSAGGIO IN SILENZIO») e 20
+#  (§3.1, §3.3) di `collaudi/audit/`.
+#
+#  ⛔ IL LIVELLO E' LA RIPARAZIONE, non lo stile. `fase186_guardiano.py:275` guarda
+#  SOLO gli `ERROR` del registro (i `warning` sono ~130 e comprendono cose innocue,
+#  tipo una miniatura non salvata). Questi fallimenti stavano in `logger.warning`:
+#  non solo si perdevano, **non li contava nessuno**. Con `logger.error` il
+#  sorvegliante dei guasti isolati li vede entro 24 ore.
+#
+#  ⚠️ COSA QUESTO NON FA (D18 punto 3), dichiarato perche' non sembri di piu':
+#    · non ritenta e non mette in coda: un'email persa resta persa. Una coda durevole
+#      con secondo tentativo e' una decisione a parte, non presa qui;
+#    · il contatore vive nel processo: un riavvio lo azzera. Dice «da quando sono in
+#      piedi», non «da sempre»;
+#    · non scrive nel libro giornale, e non deve: quello e' partita doppia e ogni
+#      riga muove denaro fra due conti (`fase177:205` pretende `imp > 0` e un `tipo`
+#      fra quelli ammessi). Un'email fallita non ha un importo.
+_EMAIL_KO_LOCK = threading.Lock()
+_EMAIL_KO = {"totale": 0, "per_template": {}}
+
+
+def _riga_registro(valore: Any, massimo: int = 80) -> str:
+    """Un valore che finisce in una riga di registro non puo' contenere a-capo.
+
+    `template` e `riferimento` arrivano da dati di richiesta: un a-capo dentro uno
+    di loro scriverebbe una riga FINTA nel registro che il Guardiano legge -- cioe'
+    si potrebbe fabbricare un allarme, o nasconderne uno vero spingendolo fuori."""
+    return str(valore).replace("\n", " ").replace("\r", " ")[:massimo]
+
+
+def _conta_email_ko(template: Any) -> None:
+    """Il contatore, sotto lucchetto: gli invii partono da thread diversi e
+    `d[k] += 1` non e' atomico."""
+    t = _riga_registro(template or "sconosciuto", 40)
+    with _EMAIL_KO_LOCK:
+        _EMAIL_KO["totale"] = int(_EMAIL_KO["totale"]) + 1
+        _EMAIL_KO["per_template"][t] = int(_EMAIL_KO["per_template"].get(t, 0)) + 1
+
+
+def email_ko_totale() -> int:
+    """Quante email il provider ha dichiarato NON consegnate da quando il processo
+    e' in piedi. Esposto su `/api/health` perche' lo legga una sentinella ESTERNA:
+    da fuori il volume Docker non si vede, si puo' solo fare una richiesta HTTP."""
+    with _EMAIL_KO_LOCK:
+        return int(_EMAIL_KO["totale"])
+
+
+def _email_provider_spento(template: str, riferimento: str = "") -> None:
+    """L'email era DOVUTA e il provider e' spento: si conta e si registra.
+
+    ⛔ QUI SI SCRIVE `warning`, NON `error`, ed e' una correzione fatta dopo aver visto
+    il rosso. Il primo tentativo usava `logger.error` anche qui, e la suite l'ha
+    bocciato: `test_cancellazione_money.test_una_cancellazione_RIUSCITA_non_scrive_errori`
+    pretende ZERO `ERROR` sul percorso SANO, e ne ha trovato uno per ogni prenotazione.
+    Aveva ragione (regola ferrea 10: un falso allarme e' un difetto quanto un allarme
+    mancato). La differenza che conta e' questa:
+
+      · «l'invio e' FALLITO»   -> un EVENTO, raro  -> `logger.error` in `_invia_tracciato`,
+                                                      cosi' il Guardiano lo vede in 24h;
+      · «il provider e' SPENTO» -> uno STATO di configurazione, permanente -> una riga di
+                                   `warning` per non inondare il registro, **piu' il
+                                   conteggio**, che e' il canale che lo rende visibile:
+                                   `email_ko` su `/api/health` lo legge una sentinella
+                                   ESTERNA, e un numero che sale non si puo' ignorare.
+
+    Contare sempre e gridare una volta sola: se si contasse senza registrare, chi legge
+    il log non saprebbe QUALE email manca; se si gridasse a ogni prenotazione, il rosso
+    diventerebbe rumore e verrebbe spento -- che e' come si perde una sorveglianza."""
+    logger.warning("EMAIL NON INVIATA: template=%s riferimento=%s -- provider email "
+                   "SPENTO (contata in email_ko, vedi /api/health)",
+                   _riga_registro(template), _riga_registro(riferimento))
+    _conta_email_ko(template)
+
+
+def _invia_tracciato(prov: Any, destinatario: Any, oggetto: Any, corpo_html: Any,
+                     template: str = "", riferimento: str = "") -> bool:
+    """IL PUNTO OBBLIGATO: manda l'email e **legge la risposta**.
+
+    E' il `target` di ogni thread di invio. Non solleva mai -- gira dentro un thread
+    demone, e un'eccezione morirebbe li' riportandoci al silenzio di prima, con in
+    piu' un thread che esplode.
+
+    ⛔ Non registra MAI il destinatario: e' un dato personale e finirebbe in chiaro
+    nel registro (referto 12). Bastano il template e il riferimento della pratica."""
+    try:
+        esito = bool(prov.invia(destinatario, oggetto, corpo_html))
+    except Exception:
+        logger.error("EMAIL NON CONSEGNATA (eccezione ISOLATA): template=%s riferimento=%s",
+                     _riga_registro(template), _riga_registro(riferimento), exc_info=True)
+        _conta_email_ko(template)
+        return False
+    if not esito:
+        logger.error("EMAIL NON CONSEGNATA: template=%s riferimento=%s -- il provider ha "
+                     "risposto NO dopo i suoi tentativi",
+                     _riga_registro(template), _riga_registro(riferimento))
+        _conta_email_ko(template)
+    return esito
 
 # La FORMA di un riferimento di prenotazione. MISURATA, non supposta: su 300 riferimenti
 # generati dal vero (`fase59:547`, `idem[:24]` della firma) l'esito e' sempre
@@ -1922,8 +2029,18 @@ class RouterHTTP:
         if not self._sys.attivo:
             return 503, {"errore": "sistema_spento"}
         if metodo == "GET" and path == "/api/health":
+            # `email_ko`: quante email il provider ha dichiarato NON consegnate da
+            # quando il processo e' in piedi. Sta qui accanto a `guardiano` per la
+            # stessa ragione: una sentinella ESTERNA non vede il volume Docker, puo'
+            # solo fare una richiesta HTTP -- e cosi' una sola richiesta dice tre
+            # cose (il sito risponde, il guardiano dei soldi e' vivo, e le email
+            # stanno arrivando).
+            # ⛔ NON tocca `status`: un'email persa non e' un sito giu', e far credere
+            # il contrario a nginx e a watchdog.sh spegnerebbe un sito SANO dentro i
+            # monitoraggi (regola ferrea 10, stessa scelta del battito).
             return 200, {"status": "ok", "money_unit": "cents_integer",
-                         "guardiano": self._stato_battito_guardiano()}
+                         "guardiano": self._stato_battito_guardiano(),
+                         "email_ko": email_ko_totale()}
         if metodo == "GET" and path == "/api/lingue":
             return 200, {"lingue": list(LINGUE_SUPPORTATE)}
         if metodo == "GET" and path == "/api/i18n":
@@ -5536,11 +5653,18 @@ class RouterHTTP:
                 # Il provider e' gia' fail-safe (non solleva); il thread e' daemon (isolato).
                 import threading
                 threading.Thread(
-                    target=self._sys.email_provider.invia,
-                    args=(email, _ogg, html),
+                    target=_invia_tracciato,
+                    args=(self._sys.email_provider, email, _ogg, html, "voucher", ref),
                     daemon=True).start()
             except Exception:
                 logger.warning("invio email voucher fallito (ignorato)", exc_info=True)
+        elif isinstance(email, str) and "@" in email:
+            # ⛔ IL RAMO CHE MANCAVA. Col provider spento il blocco sopra veniva
+            # saltato e non restava traccia di NIENTE: l'ospite paga e non riceve
+            # ne' voucher ne' PIN di check-in, e nessuno lo sa. Si registra solo se
+            # c'era davvero un'email da mandare (indirizzo valido): lamentarsi per
+            # una prenotazione senza email sarebbe un falso allarme (ferrea 10).
+            _email_provider_spento("voucher", ref)
         self._avvisa_host_prenotazione(allog, ref, ci, co, corpo.get("fonte", ""),
                                        pagamento_pendente=bool(corpo.get("payment_url")))
         # PAGA IN STRUTTURA: il saldo lo incassa l'host DI PERSONA (non passa da noi) e
@@ -6083,13 +6207,14 @@ class RouterHTTP:
 
     # ── EMAIL DI CICLO (C3 2026-07-20): prima il cliente pagava/cancellava/contestava
     #    nel SILENZIO. Tutte best-effort in background: mai bloccare i soldi. ──────────
-    def _email_bg(self, dest, oggetto, html):
+    def _email_bg(self, dest, oggetto, html, template="ciclo", riferimento=""):
         try:
             prov = getattr(self._sys, "email_provider", None)
             if prov is None or not (isinstance(dest, str) and "@" in dest):
                 return
             import threading
-            threading.Thread(target=prov.invia, args=(dest, oggetto, html),
+            threading.Thread(target=_invia_tracciato,
+                             args=(prov, dest, oggetto, html, template, riferimento),
                              daemon=True).start()
         except Exception:
             logger.warning("email background fallita (ignorata)", exc_info=True)
@@ -8591,10 +8716,18 @@ class RouterHTTP:
                 link = ((self._base_url or "https://bookinvip.com")
                         + "/entra-host#reset=" + tok)
                 import threading
-                threading.Thread(target=self._sys.email_provider.invia,
-                                 args=(k, oggetto("rp_ogg", lang),
-                                       corpo_reset_password_html(link, lingua=lang)),
+                threading.Thread(target=_invia_tracciato,
+                                 args=(self._sys.email_provider, k,
+                                       oggetto("rp_ogg", lang),
+                                       corpo_reset_password_html(link, lingua=lang),
+                                       "reset_password", ""),
                                  daemon=True).start()
+            elif tok:
+                # ⛔ IL RAMO CHE MANCAVA. `tok` c'e' -> l'email era DOVUTA, ma il
+                # provider e' spento: chi ha chiesto il reset aspettera' per sempre.
+                # Si guarda `tok` e non solo il provider: senza gettone non c'era
+                # nessuna email da mandare, e registrarlo sarebbe un falso allarme.
+                _email_provider_spento("reset_password", "")
         except Exception:
             logger.warning("password dimenticata: invio fallito (ISOLATO)", exc_info=True)
         return 200, {"ok": True}
@@ -8686,15 +8819,23 @@ class RouterHTTP:
                 lang = dati.get("lang", "en")     # lingua scelta in fase di registrazione
                 import threading
                 threading.Thread(
-                    target=self._sys.email_provider.invia,
-                    args=(str(dati.get("email", "")).strip().lower(),
+                    target=_invia_tracciato,
+                    args=(self._sys.email_provider,
+                          str(dati.get("email", "")).strip().lower(),
                           oggetto("b_ogg", lang),
                           corpo_benvenuto_host_html(
                               (self._base_url or "https://bookinvip.com") + "/host.html",
-                              lingua=lang)),
+                              lingua=lang),
+                          "benvenuto_host", ""),
                     daemon=True).start()
             except Exception:
                 logger.warning("email benvenuto host fallita (ignorata)", exc_info=True)
+        elif e.ok:
+            # ⛔ IL RAMO CHE MANCAVA. L'account e' stato creato (`e.ok`) ma il
+            # provider e' spento: l'host non riceve la conferma, e il refuso
+            # nell'indirizzo -- che questa email serve proprio a far emergere --
+            # si scoprira' al primo reset password, cioe' troppo tardi.
+            _email_provider_spento("benvenuto_host", "")
         # PROVA D'ACCETTAZIONE firmata (best-effort MA loggata: l'account e' gia' creato con
         # versione+ts nel registro host; qui aggiungiamo la prova forte hash+IP+dispositivo).
         if e.ok:
@@ -10082,7 +10223,9 @@ class RouterHTTP:
                           _h.escape(rec.get("check_in", "")),
                           _h.escape(rec.get("check_out", "")), _h.escape(base + "/"))
             import threading
-            threading.Thread(target=ep.invia, args=(email, ogg, corpo),
+            threading.Thread(target=_invia_tracciato,
+                             args=(ep, email, ogg, corpo, "esito_richiesta",
+                                   str(rec.get("riferimento", ""))),
                              daemon=True).start()
         except Exception:
             logger.warning("email esito richiesta fallita (ISOLATA)", exc_info=True)
@@ -10123,8 +10266,10 @@ class RouterHTTP:
                      ) % (_h.escape(titolo), _h.escape(rec.get("check_in", "")),
                           _h.escape(rec.get("check_out", "")), _h.escape(url))
             import threading
-            threading.Thread(target=ep.invia,
-                             args=(email, "BookinVIP - Le tue date sono di nuovo libere", corpo),
+            threading.Thread(target=_invia_tracciato,
+                             args=(ep, email,
+                                   "BookinVIP - Le tue date sono di nuovo libere", corpo,
+                                   "recupero_hold", str(rec.get("riferimento", ""))),
                              daemon=True).start()
         except Exception:
             logger.warning("email recupero hold fallita (ISOLATA)", exc_info=True)
@@ -11119,9 +11264,16 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                                 or "info@bookinvip.com")
                         prov = getattr(sistema, "email_provider", None)
                         if prov is not None and dest:
-                            _thg.Thread(target=prov.invia,
-                                        args=(dest, "BookinVIP - ALLARME Guardiano: stato "
-                                              "anomalo rilevato", riassunto_html(rep)),
+                            # ⛔ L'allarme sui SOLDI e' quello che meno di tutti puo'
+                            # sparire in silenzio: se questa email non parte, nessuno
+                            # sa ne' del buco nei conti ne' dell'email persa
+                            # (referto 20, §3.1). Da qui in poi almeno la seconda
+                            # meta' di quel giro si vede.
+                            _thg.Thread(target=_invia_tracciato,
+                                        args=(prov, dest,
+                                              "BookinVIP - ALLARME Guardiano: stato "
+                                              "anomalo rilevato", riassunto_html(rep),
+                                              "allarme_guardiano", ""),
                                         daemon=True).start()
                     else:
                         logger.info("GUARDIANO: nessuno stato anomalo (tutto quadra)")
