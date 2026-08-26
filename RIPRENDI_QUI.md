@@ -21,12 +21,16 @@
 ## 📍 DOVE SIAMO — 2026-08-26, letto dall'API e dai QUATTRO posti
 
 ```
-computer            d7f60c7
-GitHub master       d7f60c7
-VPS (git sul disco) d7f60c7
+computer            efe35b5
+GitHub master       efe35b5
+VPS (git sul disco) efe35b5
 IMMAGINE VIVA       sha256:8def0ea3...  <- costruita da d7f60c7 il 2026-08-26 17:06:22Z
                                            running - health=healthy
-IN PRODUZIONE       curl https://bookinvip.com/api/health  ->  HTTP 200 in 0,496 s
+                    ⚠️ L'IMMAGINE E' INDIETRO DI PROPOSITO: da d7f60c7 in poi sono stati
+                    uniti SOLO documenti (#114, #115 e il listino ufficiale), e il fondatore
+                    ha detto «niente deploy». I tre git sono allineati, il browser serve
+                    ancora d7f60c7 - ed e' corretto cosi', perche' nessun codice e' cambiato.
+IN PRODUZIONE       curl https://bookinvip.com/api/health  ->  HTTP 200 in 0,301 s
                     {"status":"ok","money_unit":"cents_integer","guardiano":"ok","email_ko":0}
 ```
 
@@ -229,7 +233,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: d7f60c7
+CONSEGNE AGGIORNATE A: efe35b5
 
 SUITE ATTUALE: Ran 6028 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
