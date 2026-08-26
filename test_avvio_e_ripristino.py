@@ -466,10 +466,19 @@ class TestAvvioDaZero(unittest.TestCase):
         # e' un contratto piu' STRETTO di prima, non piu' largo -- un valore inventato fa
         # rosso. Lo legge la sentinella esterna su GitHub, che il volume non lo vede e da
         # fuori puo' solo fare una richiesta HTTP.
-        self.assertEqual({k: v for k, v in salute.items() if k != "guardiano"},
+        # `email_ko` (2026-08-26) e' l'altro campo che VARIA: conta le email che il
+        # provider ha dichiarato non consegnate. Stesso trattamento del battito -- fuori
+        # dall'insieme esatto, dentro un contratto di TIPO, che resta piu' stretto di
+        # «c'e' qualcosa». ⛔ E deve ESSERCI: se sparisse, la sentinella esterna
+        # smetterebbe di accorgersi che le email si stanno perdendo, in silenzio.
+        self.assertEqual({k: v for k, v in salute.items()
+                          if k not in ("guardiano", "email_ko")},
                          {"status": "ok", "money_unit": "cents_integer"})
         self.assertIn(salute.get("guardiano"), ("ok", "muto", "sconosciuto"),
                       "stato del Guardiano non riconoscibile dalla salute: %r" % (salute,))
+        self.assertIsInstance(salute.get("email_ko"), int,
+                              "la salute non dice piu' quante email si sono perse: %r"
+                              % (salute,))
 
     def test_il_sito_funziona_senza_nessun_dato(self):
         """Vetrina vuota, non rotta: la prima persona che arriva vede un sito, non un 500."""
