@@ -21,56 +21,139 @@
 ## 📍 DOVE SIAMO — 2026-08-26, letto dall'API e dai QUATTRO posti
 
 ```
-computer            a8b68a0
-GitHub master       a8b68a0
-VPS (git sul disco) a8b68a0
-IMMAGINE VIVA       sha256:d6b2eefd...  <- costruita da a8b68a0 il 2026-08-26 12:02:45Z
+computer            d7f60c7
+GitHub master       d7f60c7
+VPS (git sul disco) d7f60c7
+IMMAGINE VIVA       sha256:8def0ea3...  <- costruita da d7f60c7 il 2026-08-26 17:06:22Z
+                                           running - health=healthy
+IN PRODUZIONE       curl https://bookinvip.com/api/health  ->  HTTP 200 in 0,496 s
+                    {"status":"ok","money_unit":"cents_integer","guardiano":"ok","email_ko":0}
 ```
 
-⛔ **I POSTI SONO QUATTRO, NON TRE, E IL QUARTO E' QUELLO CHE MENTE.** Alle 11:55 di oggi
-i tre `git rev-parse` dicevano tutti `a8b68a0` e sarebbe stato vero scrivere «allineati» —
-mentre il sito **serviva ancora `3ceb4c5`**. Il `git pull` aggiorna il disco; il contenitore
-continua a girare l'immagine con cui e' partito. `deploy/` **non e' montato** (entra
-nell'immagine con `COPY`, `STATIC_DIR=/app/deploy`), quindi nemmeno le pagine cambiano.
-E' la trappola del **2026-08-07**, ed e' tornata: si vede solo col quarto comando,
+> 📏 **Contesto letto quando questo blocco e' stato scritto: 54%** (D21). Il blocco esiste
+> perche' oltre meta' contesto l'IA non smette di rispondere: continua **con lo stesso tono
+> sicuro**, mettendoci dentro numeri mai misurati. Da qui in poi: `/clear`, e si riparte da
+> questo file.
+
+⛔ **I POSTI SONO QUATTRO, NON TRE, E IL QUARTO E' QUELLO CHE MENTE.** Alle 11:55 del
+2026-08-26 i tre `git rev-parse` dicevano tutti `a8b68a0` e sarebbe stato vero scrivere
+«allineati» — mentre il sito **serviva ancora `3ceb4c5`**. Il `git pull` aggiorna il disco;
+il contenitore continua a girare l'immagine con cui e' partito. `deploy/` **non e' montato**
+(entra nell'immagine con `COPY`, `STATIC_DIR=/app/deploy`), quindi nemmeno le pagine
+cambiano. E' la trappola del **2026-08-07**, ed e' tornata: si vede solo col quarto comando,
 `docker inspect --format '{{.Image}}' casavip_app`.
 
-**Il deploy del 2026-08-26, autorizzato a voce, passo per passo:**
+---
+
+## ✅ CHIUSO: «LE EMAIL PERSE IN SILENZIO» — in produzione da `d7f60c7`
+
+**Il difetto**, misurato nei referti `collaudi/audit/15_dipendenze_esterne.md` (sez. «LE TRE
+CHE PERDONO IL MESSAGGIO IN SILENZIO») e `20_sorveglianza.md` (sez. 3.1 e 3.3):
+`ProviderEmail.invia()` restituiva un bool onesto e **nessuno lo leggeva**. Ogni invio
+partiva come thread demone col valore di ritorno scartato. Con l'SMTP giu' sparivano il
+voucher e il PIN di check-in dell'ospite, la conferma di pagamento, il link di reset
+password, la ricevuta — e **l'allarme del Guardiano dei soldi**, che esce per email. E il
+pezzo che rendeva tutto invisibile invece che solo grave: quei fallimenti finivano in
+`logger.warning`, mentre `fase186_guardiano.py:275` guarda **solo gli `ERROR`**. Non solo si
+perdevano: **non li contava nessuno**.
+
+**Cos'e' entrato**, in `fase83_server.py`:
+- `_invia_tracciato(prov, dest, oggetto, html, template, riferimento)` — il punto obbligato
+  che **legge** il bool. Su `False`: `logger.error` + contatore. Non solleva mai (gira dentro
+  un thread demone). ⛔ Non registra mai il destinatario: e' un dato personale (referto 12);
+- e' il `target` di **tutti e sette** i thread di invio (erano 5539, 6092, 8594, 8689, 10085,
+  10126, 11122);
+- i tre cancelli **5505 / 8586 / 8685** avevano un `if ... email_provider is not None`
+  **senza `else`**: col provider spento il ramo veniva saltato e non restava traccia di
+  niente. Ora c'e' il ramo, e guarda che l'email fosse **DOVUTA** (indirizzo valido, gettone
+  presente, account creato): lamentarsi quando non c'era niente da mandare sarebbe un falso
+  allarme;
+- **`email_ko` su `/api/health`**, accanto a `guardiano`. Stessa ragione: da fuori il volume
+  Docker non si vede, una sentinella puo' solo fare una richiesta HTTP. ⛔ Non tocca `status`:
+  un'email persa non e' un sito giu'.
+
+🔑 **LA LEZIONE, ed e' costata un giro di suite intero.** La prima riparazione usava
+`logger.error` **anche** per «provider spento», e la suite l'ha bocciata:
+`test_cancellazione_money.test_una_cancellazione_RIUSCITA_non_scrive_errori` pretende **zero
+`ERROR` sul percorso SANO** e ne trovava uno per **ogni prenotazione**. Aveva ragione (regola
+ferrea 10). Le due cose sono diverse e adesso lo dicono:
+
+| | cos'e' | dove finisce | chi lo legge |
+|---|---|---|---|
+| `invia()` risponde NO | un **EVENTO**, raro | `logger.error` | il Guardiano, entro 24 h |
+| provider **SPENTO** | uno **STATO** di configurazione, permanente | `logger.warning` **+ il conteggio** | `email_ko` su `/api/health`, dalla sentinella esterna |
+
+Contare sempre e gridare una volta sola: contare senza registrare non dice **quale** email
+manca; gridare a ogni prenotazione trasforma il rosso in rumore, e un rosso che diventa
+rumore viene spento — che e' il modo in cui si perde una sorveglianza.
+
+**Le guardie: `test_email_tracciata.py`, 16, scritte PRIMA e viste ROSSE** (D20). Sul codice
+di allora: `Ran 15 -- FAILED (failures=7, errors=7)`, cioe' 14 su 15. La quindicesima era
+verde apposta (il reset password **non** si lamenta per un'email che non doveva partire) e
+doveva restare verde. La sedicesima e' nata **dopo**, dal rosso qui sopra, e vive accanto al
+codice che ha corretto.
+
+⚠️ **COSA NON FA, dichiarato** (D18 punto 3): non ritenta e non mette in coda — un'email persa
+resta persa, ma da adesso qualcuno lo sa entro 24 ore; il contatore vive **nel processo**, un
+riavvio lo azzera («da quando sono in piedi», non «da sempre»); **nessuna riga nel libro
+giornale**, ed e' voluto — quello e' partita doppia, `fase177:205` pretende `imp > 0` e un
+`tipo` fra quelli ammessi, e un'email fallita non ha un importo (scelta 1 del fondatore).
+
+💡 **Il valore che conta:** `email_ko` in produzione e' **0**, ed e' il numero giusto — il
+provider e' configurato e nessuna email risulta non consegnata da quando il processo e' in
+piedi. **Se comincia a salire, non e' il contatore che sbaglia: e' l'SMTP.**
+
+---
+
+**Il deploy delle 17:06 del 2026-08-26, autorizzato a voce, passo per passo:**
 
 | passo | esito misurato |
 |---|---|
-| 1. paracadute `:prec` agganciato **prima** del build | `859f637a...` == immagine viva: **i due sha256 coincidono** |
-| 2. `docker compose ... build app` | nuova immagine `d6b2eefd...`, **diversa** da `:prec` |
-| 3-4. `stop app backup` -> `rm -f app backup` -> `up -d` | fuori servizio **dalle 12:02:23Z alle 12:02:52Z = 29 s** |
-| 5. `docker inspect` | immagine viva == `casavip-app:latest` == `d6b2eefd...`, `running health=healthy` |
-| 6. il sito risponde | `HTTP 200 in 0,416 s` · `/api/health` -> `{"status":"ok","money_unit":"cents_integer","guardiano":"ok"}` |
-| 7. **A1 e' davvero SERVITA**, non solo presente sul disco | vedi qui sotto |
+| 1. paracadute `:prec` agganciato **prima** del build | `d6b2eefd...` == immagine viva: **i due sha256 coincidono** |
+| 2. `docker compose ... build app` | nuova immagine `8def0ea3...`, **diversa** da `:prec` |
+| 3-4. `stop app backup` -> `rm -f app backup` -> `up -d` | fuori servizio **dalle 17:06:00Z alle 17:06:28Z = 28 s** |
+| 5. `docker inspect` | immagine viva == `casavip-app:latest` == `8def0ea3...`, `running health=healthy` |
+| 6. il sito risponde | `HTTP 200 in 0,496 s` |
+| 7. il campo nuovo e' davvero SERVITO | `/api/health` -> `"email_ko":0` |
 
-**La prova del passo 7, nei due versi.** Il cancello pubblico `/entra-host` e' il punto che
-A1 ripara. La stessa riga, chiesta all'immagine vecchia (il paracadute) e al sito vivo:
+⚠️ **LA CI E' STATA IN AVARIA, e il doppione che ne e' nato va saputo leggere.** Actions e'
+andata in `major_outage` alle 15:11Z: la richiesta **113**, aperta alle 16:22, non ha fatto
+partire **niente** — zero `check_suites`, zero run in coda, e anche la sentinella programmata
+si e' fermata (l'ultima delle 16:03, poi il buco). Non si e' unito niente al buio: **il
+giudice e' la tabella dei job letta dall'API**, e il verde locale e' un indizio (ferrea 8).
+Chiudendo e riaprendo la richiesta la CI e' ripartita alle 16:37 — e poi l'evento originale,
+rimasto in coda durante l'avaria, e' arrivato **in ritardo** e ne ha lanciata una **seconda**
+alle 16:49. Sulla stessa impronta risultano cosi' **31 check-run e due run**:
 
 ```
-:prec  (prima)  Accetto il <a href="/termini.html" ...>Contratto Host</a>
-vivo   (adesso) Accetto il <a href="/contratto-host.html?lang=en" ...>Host Agreement</a>
+id=32989458333  BookinVIP CI  cancelled   creata 16:37:46   <- annullata dalla concorrenza
+id=32990638411  BookinVIP CI  success     creata 16:49:53   <- 14 job: 13 success + zap skipped
 ```
 
-Etichetta, link e lingua escono ora tutti e tre da `fase163`. In piu':
-`https://bookinvip.com/contratto-host.html` serve `<html lang="en">` col marcatore `A1/referto`
-(prima: `lang="it"`, marcatore assente). E la catena dei byte e' chiusa da capo a fondo —
-`git show a8b68a0:deploy/host.html`, il file sul disco del VPS e quello **dentro il
-contenitore** hanno lo stesso `sha256 98b3f642...`.
+⛔ La prima risulta `cancelled` e il suo `gate` `failure`, **e non e' un rosso del codice**:
+l'ha annullata `cancel-in-progress: true` quando e' partita la seconda, e il `gate` e' caduto
+solo perche' due dei suoi `needs` erano stati annullati. Si giudica **la run**, job per job,
+non la somma delle due: sommandole si legge «3 non verdi» su un lavoro che e' verde.
 
 ⚠️ **`/host.html` non si controlla con `curl` da fuori**: risponde **302 -> /entra-host**, e'
-un cancello. Il primo confronto «prima/dopo» che avevo fatto su quella pagina misurava
-**zero contro zero**, cioe' niente: la redirezione non consegna mai il file. Il controllo che
-vale su una pagina protetta e' il `sha256` dentro il contenitore, non il `grep` sull'HTTP.
+un cancello. Il primo confronto «prima/dopo» fatto su quella pagina misurava **zero contro
+zero**, cioe' niente: la redirezione non consegna mai il file. Il controllo che vale su una
+pagina protetta e' il `sha256` **dentro il contenitore**, non il `grep` sull'HTTP.
 
-✅ **Il paracadute ADESSO e' agganciato bene**: `casavip-app:prec` = `859f637a...`, che e'
-l'ultima immagine buona **prima** di questo deploy. Prima del deploy era `80f21d84...`, cioe'
-**un'immagine che non stava girando da giorni** — saltare col paracadute avrebbe riportato a
-uno stato che non era l'ultimo buono. Si riaggancia a **ogni** deploy, prima del build.
+✅ **Il paracadute ADESSO e' agganciato bene**: `casavip-app:prec` = `d6b2eefd...`, l'ultima
+immagine buona **prima** di questo deploy. Il 26/08 alle 12:00, prima del deploy precedente,
+puntava invece a `80f21d84...`, cioe' **un'immagine che non girava da giorni** — saltare col
+paracadute avrebbe riportato a uno stato che non era l'ultimo buono. Si riaggancia a **ogni**
+deploy, **prima** del build, e si verifica che i due sha256 coincidano.
 
-**Il commit precedente (`ce3cfe8`) e come ci si e' arrivati:**
+**I commit precedenti, e come ci si e' arrivati:**
+
+Unito con la richiesta **113**, riletta dall'API dopo l'unione (non la risposta del merge):
+`merged=True · merge_commit_sha=d7f60c705264426ddd890431b7794b2deb067673 · state=closed ·
+merged_at=2026-08-26 17:05:12`.
+
+Prima ancora, la richiesta **112** (`1e9c5a4`, consegne) e la **111** (`a8b68a0`, consegne).
+E la **110** (`ce3cfe8`):
 
 Unito con la richiesta **110**, riletta dall'API dopo l'unione (non la risposta del merge):
 `merged=True · merge_commit_sha=ce3cfe82ab6915d4e5d5dc1794dd2d480cdffc52 · state=closed ·
@@ -146,7 +229,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: a8b68a0
+CONSEGNE AGGIORNATE A: d7f60c7
 
 SUITE ATTUALE: Ran 6028 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
@@ -159,16 +242,21 @@ SUITE ATTUALE: Ran 6028 test
 CARICATORE (RACCOLTI):  6028  <- rimisurato il 2026-08-26 col caricatore, da PowerShell,
                                  PRIMA di qualunque giro (S14). Erano 6012: i 16 in piu'
                                  sono le guardie di `test_email_tracciata.py`.
-ESEGUITI (ultimo giro): 6007  <- MISURATO il 2026-08-26 da PowerShell sull'albero di QUESTE
-                                 consegne (consegne su a8b68a0, dopo il deploy): `Ran 6007
-                                 tests in 2874.693s -- OK (skipped=4)`, codice d'uscita
-                                 letto diretto, EXIT=0. I due giri precedenti della stessa
-                                 notte avevano dato lo stesso 6007 (2244.352s e 1731.102s):
-                                 il numero non si muove, il tempo si', ed e' la macchina.
-                                 ⛔ Un giro prima era stato buttato: avevo tagliato l'uscita
-                                 con `Select-Object -Last 40` e la riga `Ran` era finita
-                                 fuori. EXIT=0 dice che e' passata, non QUANTI: un numero
-                                 senza la sua misura non si scrive (D22), si rimisura.
+ESEGUITI (ultimo giro): 6023  <- MISURATO il 2026-08-26 da PowerShell sull'albero poi unito
+                                 in d7f60c7: `Ran 6023 tests in 1828.933s -- OK (skipped=4)`,
+                                 codice d'uscita letto diretto, EXIT=0. Torna col caricatore:
+                                 6028 - 5 (le guardie openssl) = 6023, esatto.
+                                 Prima delle 16 guardie nuove il numero era 6007, misurato
+                                 tre volte nella stessa notte (2874.693s, 2244.352s,
+                                 1731.102s): il numero non si muoveva, il tempo si', ed e'
+                                 la macchina.
+                                 ⛔ Un giro era stato buttato: avevo tagliato l'uscita con
+                                 `Select-Object -Last 40` e la riga `Ran` era finita fuori.
+                                 EXIT=0 dice che e' passata, non QUANTI: un numero senza la
+                                 sua misura non si scrive (D22), si rimisura.
+                                 ⛔ E un altro giro era finito ROSSO (`Ran 6022 -- FAILED
+                                 failures=5`) sulla PRIMA versione della riparazione delle
+                                 email: aveva ragione la suite, vedi il riquadro in cima.
 SCARTO:                    5  <- le guardie openssl, vedi AMBIENTE
 
 FILE DI TEST: 407             <- Get-ChildItem -Filter 'test_*.py' -File (radice; identico
@@ -180,7 +268,7 @@ AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3, ed e' la
             ragione dello scarto fra RACCOLTI e ESEGUITI (5 di scarto: le guardie openssl).
-MISURATO:  2026-08-26 su a8b68a0 (albero pulito), col caricatore, da PowerShell, e PRIMA
+MISURATO:  2026-08-26 su d7f60c7 (albero pulito), col caricatore, da PowerShell, e PRIMA
            di lanciare (S14):
            python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"
            -> 6028
