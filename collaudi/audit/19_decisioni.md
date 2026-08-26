@@ -1170,3 +1170,135 @@ non ha **né `description`, né `canonical`, né `hreflang`** — cercati su tut
 di `deploy/index.html`: **0, 0, 0**. Le landing generate da `fase97` ce li hanno tutti
 (`:542`, `:620`, `:659`). **La pagina più importante è quella messa peggio**, e questo vale a
 prescindere da quale numero di lingue si sceglie.
+
+---
+
+# PARTE 7 — CONTRASTI RILEVATI
+
+> **Cos'è un contrasto e perché ha una parte sua.** Non è un difetto e non è una decisione in
+> più: è il punto in cui **una scheda di questo file e qualcosa di già deciso — o un'altra
+> scheda — non possono valere insieme**. Se non stanno scritti, si scoprono il giorno in cui
+> si applica la prima e la seconda diventa impossibile: e a quel punto la prima è già in
+> produzione.
+>
+> ⛔ **Anche qui non scelgo.** Ogni voce dice: **cosa si contraddice**, **cosa ho misurato**,
+> e **quale ordine toglie il contrasto** — l'ordine è un fatto (A prima di B, o B prima di A),
+> non un consiglio su cosa rispondere.
+>
+> Misurato il **2026-08-26 su `ccf3544`**, riga per riga, non ereditato dalle parti 1 e 2.
+
+---
+
+## C1 — D7 contro «il numero visto dev'essere il numero pagato» (deciso il 2026-08-22)
+
+**Cosa si contraddice.** Il 2026-08-22 è stato deciso che **il numero visto dev'essere il
+numero pagato**. Su «paga in struttura» oggi non lo è, e non per un errore di calcolo: il
+motore lavora su una cifra **di ripiego**, e il contratto che l'host ha firmato ne dichiara
+un'altra ancora. Sono **tre numeri per la stessa cosa** — quello mostrato, quello applicato,
+quello firmato — e D7 chiede quale vale.
+
+**Cosa ho misurato (su `ccf3544`, aprendo le righe):**
+- `fase188_paga_struttura.py:63-64` — `def calcola(..., psp_bps: int = 300, ...)`: la tariffa
+  tecnica arriva come **parametro con un valore di serie**, riletto a `:87`
+  (`bps = max(0, _intero(psp_bps, 300))`).
+- ⛔ **I due punti che la chiamano NON glielo passano mai.** Verificato aprendo tutte e due:
+  `fase83_server.py:5466-5467` (`_ps.calcola(totale, notti, comm, valuta_estera=...)`) e
+  `:7669-7671` (idem). Nessuno dei due nomina `psp_bps`: vale il ripiego.
+- La **fonte unica** sta altrove ed è **più alta** del ripiego: `main_casavip.py:150`
+  (`PAGAMENTO_BPS`), `:151` (valuta estera), `:152` (quota fissa).
+- **Conseguenza dentro il motore**, non teorica: `_gw()` (`fase188:95-100`) sceglie il
+  **massimo** fra la copertura Stripe e la tariffa tecnica (`per_psp = bps * addebito //
+  10000`). Con la cifra di ripiego, più bassa, **il ramo della tariffa tecnica non vince mai**
+  — cioè la garanzia scritta lì dentro («mai sotto la tariffa tecnica psp») non può scattare.
+- **Il contratto dice un'altra cifra ancora**: `fase163_accettazioni.py:88` (italiano) e
+  `:216` (inglese), ART. 6-BIS, «tariffa tecnica sempre dovuta».
+- ⚠️ **È acceso a comando, e il comando è fuori dal codice**: `fase83_server.py:5445` e
+  `:7074` leggono `PAGA_STRUTTURA_ATTIVO` col valore di serie `"0"`, ma sul VPS la variabile
+  d'ambiente **vince sul codice** — il passaggio 16 l'ha misurata a `1`. Il codice sembra
+  spento e il prodotto è acceso.
+
+**Quale ordine toglie il contrasto.** D7 **prima** di qualunque lavoro sul motore dei prezzi:
+finché i tre numeri non diventano uno, ogni misura su «paga in struttura» misura il ripiego,
+non la tariffa. E la scelta A di D7 (vale il contratto) è l'unica che chiude anche la promessa
+del 22/08; le altre due la lasciano aperta e vanno dichiarate come tali.
+
+⚠️ **Cosa questo contrasto NON dice:** non dice che qualcuno abbia pagato la cifra sbagliata.
+Quanti abbiano usato «paga in struttura» in produzione **non l'ho misurato** — il comando è in
+PARTE 4, voce 3. Se sono zero, il contrasto costa zero e la scelta è libera.
+
+---
+
+## C2 — E1 opzione B contro il ripensamento 48 ore (già deciso, non ridiscutibile)
+
+**Cosa si contraddice.** E1 opzione **B** dice «il costo della carta lo **tratteniamo** e lo
+dichiariamo nelle condizioni». Ma dentro la finestra di ripensamento il rimborso **pieno** non
+è una politica commerciale: è un obbligo, e la decisione è **chiusa** («entro 48 ore non paga
+nessuno»). Applicata alla lettera, B toglierebbe qualcosa proprio dove non si può togliere.
+
+**Cosa ho misurato (su `ccf3544`):**
+- La finestra esiste ed è **un ramo con la precedenza**: `fase111_cancellazione.py:66`
+  (`if entro_ripensamento is True:` → rimborso pieno), dichiarato a `:46` come «a prescindere
+  dalla politica». Il modulo è **84 righe**.
+- Chi decide se ci siamo dentro: `fase83_server.py:582` (`_entro_ripensamento(voucher)`), usato
+  a `:6865` (`ripensamento = _entro_ripensamento(v) and (giorni >= 3)`) e passato a
+  `calcola_rimborso` a `:6867-6869`. **Un solo chiamante di produzione.**
+- 🔑 **Il parametro che separa i due casi ESISTE GIÀ**: `fase111_cancellazione.py:39-42`,
+  `calcola_rimborso(..., entro_ripensamento: bool = False)`. Non va inventato niente.
+
+**Quale ordine toglie il contrasto.** Nessun ordine: **B come è scritta non è applicabile
+dentro la finestra**, e il file lo dice già in fondo alla scheda E1 («⛔ un vincolo che non è
+una scelta»). Ciò che resta scegliibile è **fuori** dalla finestra — e quella è già l'opzione
+**C** («lo paghiamo noi dentro il ripensamento, lo tratteniamo fuori»). Quindi E1 ha **due**
+opzioni vive, non tre: **A** e **C**. B va letta come C, oppure va tolta dalla scheda.
+
+⚠️ **Cosa questo contrasto NON dice:** non dice quanto costi. In produzione risulta **un solo**
+rimborso (1 euro, 2026-08-16), quindi la differenza fra A e C oggi vale su un caso solo.
+
+---
+
+## C3 — E5 (tetto ai regali) contro D4 ed E2: l'ordine cambia il risultato
+
+**Cosa si contraddice.** E5 chiede se serve **un posto solo che sommi** i regali su una
+prenotazione. D4 e E2 decidono **quanto vale** e **chi può spendere** due di quei regali. Se si
+rispondono D4 ed E2 **prima** di E5, si possono aggiungere o sbloccare regali che il tetto di
+oggi **non vede** — e il tetto di oggi non è generico: è una sottrazione fra **due** voci
+precise.
+
+**Cosa ho misurato (su `ccf3544`, leggendo il corpo della funzione):**
+- Il tetto è `_commissione_regalabile` (`fase83_server.py:8372`), e il suo corpo è **tre
+  righe** (`:8392-8396`): prende `commissione_cents`, sottrae **`sconto_credito_cents`** e
+  restituisce la differenza. **Sottrae UNA voce sola, per nome.**
+- I chiamanti sono **due, e sono ancora due**: `fase83_server.py:6042` (conferma immediata
+  senza pagamento online) e `:8303` (conferma dal webhook Stripe). Verificato oggi: nessun
+  terzo.
+- L'altra metà del tetto sta in un modulo diverso: `fase59_concierge._sconto_credito`
+  (`:458`), col pavimento a `:503-504` — `margine_disponibile = max(0, comm - costo)`, e
+  `return max(0, min(cr, margine_disponibile))`. **È quel `comm - costo` che tiene limitato
+  il valore che poi `_commissione_regalabile` sottrae.**
+- **D4 tocca proprio quel pavimento**: l'opzione B di D4 («garantiamo il valore del credito
+  anche quando la commissione è zero») è, in codice, la rimozione di `margine_disponibile` a
+  `fase59:503`. Tolto quello, `sconto_credito_cents` non è più limitato dal margine, e la
+  sottrazione a valle sottrae un numero che può superare la commissione.
+- **E2 tocca quante volte si spende**: chi legge il credito è **uno solo** (`fase59:458-504`)
+  e **l'email non la guarda mai**; chi lo conia sono **due e si comportano in modo diverso** —
+  `fase83_server.py:7228` scrive `"email": ""`, `fase158_domanda.py:163` scrive l'email vera.
+  L'opzione A di E2 (al portatore) non alza il valore del singolo credito, ma alza **quanti
+  crediti diversi** possono atterrare sulla stessa prenotazione.
+- ⛔ **E che questo faccia danno vero non è un'ipotesi: è già successo.** La docstring della
+  funzione (`fase83_server.py:8376-8382`) porta i numeri del difetto B11 (2026-08-23), quando
+  i due regali avevano due tetti calcolati separatamente sulla commissione piena: saldo della
+  piattaforma **negativo**, misurato a **-8,13** su carta europea, **-13,06** su
+  internazionale, **-23,31** nel caso peggiore su una prenotazione da 500,00.
+
+**Quale ordine toglie il contrasto.** **E5 prima di D4 e di E2** — oppure D4 ed E2 solo nelle
+opzioni che non aggiungono e non sbloccano regali. Detto in una riga: oggi il tetto regge
+perché i regali sono **due e nominati**; D4 e E2 sono le due decisioni che possono cambiare
+quel numero, e sono le uniche che lo possono fare **senza toccare la funzione che li somma**.
+
+💡 **Il corollario, che vale oltre queste tre schede.** In tutti e tre i contrasti la parte
+fragile non è il calcolo: è che **la stessa regola vive in due posti** — la tariffa in
+`fase188` e nel contratto, il rimborso in `fase111` e nella decisione del ripensamento, il
+tetto in `fase83:8372` e il pavimento in `fase59:503`. È la stessa forma di famiglia dei
+referti 8 e 15, e la stessa che la docstring di `_commissione_regalabile` chiama per nome:
+*«la stessa regola scritta a mano in due posti è il modo in cui un difetto sopravvive alla
+propria riparazione»*.
