@@ -329,6 +329,10 @@ avvocato, non una macchina).
 
 ## D7 — Su «paga in struttura» vale la tariffa del contratto o quella del gateway?
 
+> ✅ **DECISA dal fondatore il 2026-08-26 — opzione A, «vale il contratto».** La scheda resta
+> qui per il conto di ciò che costa; la decisione e il listino che ne discende stanno in
+> **PARTE 8**, e con essa si chiude anche il contrasto **C1**, che dipendeva da questa.
+
 **La domanda:** l'host che accetta «paga in struttura» paga una copertura carta che **il contratto
 che ha firmato non prevede**: quale delle due cifre vale?
 
@@ -1191,6 +1195,15 @@ prescindere da quale numero di lingue si sceglie.
 
 ## C1 — D7 contro «il numero visto dev'essere il numero pagato» (deciso il 2026-08-22)
 
+> ✅ **CHIUSO il 2026-08-26 dalla decisione di PARTE 8.** Il contrasto era «quale dei numeri
+> vale»: adesso vale il contratto, e la fonte unica è `main_casavip.py:150-152`. Ciò che
+> resta non è più un contrasto ma un elenco di punti non allineati, ed è in PARTE 8.
+> ⚠️ **Una rettifica di misura, fatta il 2026-08-26 riaprendo le righe:** questa scheda diceva
+> che il contratto dichiara «un'altra cifra ancora». **Non è vero:** `fase163_accettazioni.py:88`
+> e `:216` dichiarano **la stessa** cifra della fonte unica. I numeri divergenti erano **due**,
+> non tre; il terzo scarto è di forma — `fase188.calcola` non ha nessun parametro per la quota
+> fissa, quindi quella parte del contratto non è rappresentabile lì dentro.
+
 **Cosa si contraddice.** Il 2026-08-22 è stato deciso che **il numero visto dev'essere il
 numero pagato**. Su «paga in struttura» oggi non lo è, e non per un errore di calcolo: il
 motore lavora su una cifra **di ripiego**, e il contratto che l'host ha firmato ne dichiara
@@ -1302,3 +1315,96 @@ tetto in `fase83:8372` e il pavimento in `fase59:503`. È la stessa forma di fam
 referti 8 e 15, e la stessa che la docstring di `_commissione_regalabile` chiama per nome:
 *«la stessa regola scritta a mano in due posti è il modo in cui un difetto sopravvive alla
 propria riparazione»*.
+
+---
+
+# PARTE 8 — IL LISTINO UFFICIALE, DECISO DAL FONDATORE IL 2026-08-26
+
+> Questa parte è **diversa da tutte le altre di questo file**: le prime sette sono referti di
+> misura e non scelgono niente. Questa **è una scelta già fatta**, dettata dal fondatore il
+> **2026-08-26**. Da qui in avanti non è più una delle opzioni: è **il listino**.
+>
+> Chiude **D7** (opzione A, «vale il contratto») e con essa il contrasto **C1**.
+
+## Il listino
+
+| Voce | Cifra | A chi si applica |
+|---|---|---|
+| commissione, primi **90 giorni** | **0%** | host |
+| commissione, fino a **365 giorni** | **8%** | host |
+| commissione, oltre 365 giorni | **10%** | host |
+| prenotazione **diretta** dell'host | **5%** | host |
+| commissione ospite | **0%** | ospite |
+| **tariffa tecnica**, annuncio in euro | **5%** più **0,25 EUR** a transazione | host |
+| **tariffa tecnica**, annuncio non in euro | **7%** più **0,25 EUR** a transazione | host |
+
+**La tariffa tecnica è SEMPRE dovuta, anche quando la commissione è 0%.** Non ha scaglioni nel
+tempo: l'unica cosa che la fa cambiare è la valuta dell'annuncio.
+
+## La fonte unica
+
+> ⛔ **La fonte unica è `main_casavip.py:150-152`** — `PAGAMENTO_BPS`, `PAGAMENTO_BPS_ESTERA`,
+> `PAGAMENTO_FISSO_CENTS`. **Ogni altro numero di tariffa tecnica scritto nel progetto è un
+> difetto da allineare**, in qualunque file stia: modulo, pagina, email o documento.
+
+La rampa della commissione ha la sua fonte in `fase98_policy_commissione.py:74-77`
+(`LANCIO_GIORNI_GRATIS`, `LANCIO_BPS_FASE1`, `LANCIO_GIORNI_FASE1`, `LANCIO_BPS_REGIME`) e il
+canale diretto in `fase98_policy_commissione.py:37` (`BPS_DIRETTO`). Il contratto che l'host
+firma dichiara la tariffa tecnica in `fase163_accettazioni.py:88` (italiano) e `:216` (inglese),
+ART. 6-BIS, e **coincide con la fonte unica**: misurato il 2026-08-26 riaprendo le due righe.
+
+## I punti che oggi NON rispettano questo listino
+
+> Misurati il **2026-08-26 su `efe35b5`**, aprendo le righe una per una. **Non è una lista di
+> lavori** (REGOLA ZERO 3): è il referto di dove il listino non è ancora rispettato. Il lavoro
+> che ne nasce si scrive in `RIPRENDI_QUI.md`.
+>
+> ⚠️ **Le cifre fuori listino sono scritte in bps, non in percentuale, e di proposito:**
+> `collaudi/audit_coerenza_tariffe.py` conta come «cifra nuova» ogni percentuale accanto a una
+> parola di costo, e scriverle per esteso qui manderebbe rossa la CI. `500 bps` = la tariffa
+> tecnica del listino; `300 bps` e `400 bps` sono le due cifre superate che si trovano ancora
+> in giro.
+
+### Tariffa tecnica diversa dalla fonte unica
+
+| # | Dove | Cosa dichiara | A chi |
+|---|---|---|---|
+| 1 | `fase188_paga_struttura.py:64` (`psp_bps: int = 300`), riletto `:87` | **300 bps** invece di 500. I due punti che chiamano — `fase83_server.py:5466` e `:7669` — non passano mai il parametro, quindi vale il ripiego | host |
+| 2 | `fase188_paga_struttura.py:95-100` (`_gw()`) | il ramo «mai sotto la tariffa tecnica» sceglie il massimo fra copertura Stripe e tariffa tecnica: con 300 bps **non vince mai**, verificato per esaustione su addebiti da 0 a 2.000.000 di centesimi. Con la fonte unica vincerebbe da 3160 centesimi di anticipo in su | host |
+| 3 | `fase188_paga_struttura.py:63-70` (firma di `calcola`) | **nessun parametro per la quota fissa**: `per_psp = bps * addebito // 10000` a `:98`. I 25 centesimi del contratto non sono rappresentabili in quel modulo | host |
+| 4 | `fase89_jurisdiction_outreach.py:189` | **400 bps** come ripiego, e la docstring `:184` dichiara che «400 è il default di `main_casavip.py`» — main dichiara 500. È il modulo delle email che vanno a host veri | host |
+| 5 | `fase59_concierge.py:158-160` (`psp_bps=0`, `psp_bps_valuta_estera=0`, `psp_fisso_cents=0`) | ripieghi a **zero**: chi costruisce il concierge senza passare la configurazione di `main` non addebita nessuna tariffa tecnica | host |
+| 6 | `fase81_bootstrap_casavip.py:52-54` | stessi tre ripieghi a **zero** nella configurazione del bootstrap | host |
+| 7 | `deploy/diventa-host.html:60` (statico) e dizionario `:98` it · `:99` en · `:100` es · `:101` fr · `:102` de · `:103` pt · `:104` ja · `:105` zh | **300 bps** in tutte e otto le lingue, con la frase «in ogni periodo, anche a 0%». La stessa pagina, alla chiave `copy`, dichiara invece la cifra del listino: due numeri diversi nello stesso file | host |
+| 8 | `deploy/bunker.html:215` (inglese) | **300 bps** nella riga «technical fee», mentre `:183` e `:214` (italiano) dichiarano la cifra del listino | host |
+
+### Testi che negano la tariffa tecnica o mostrano un netto che non la include
+
+| # | Dove | Cosa succede | A chi |
+|---|---|---|---|
+| 9 | `deploy/commissioni.html:76` contro il dizionario `:96-103`, chiave `sim5` | lo statico dice «tariffa tecnica» con la cifra del listino, il dizionario lo **sovrascrive** con «costo carta (a te, 0 nostro margine)». `apply()` a `:107` gira a ogni caricamento su ogni `[data-i18n]`, quindi **lo statico non si vede mai** | host |
+| 10 | `deploy/commissioni.html:79` contro il dizionario `:96-103`, chiave `sim_p` | lo statico calcola il netto host **includendo** la tariffa tecnica; il dizionario lo sovrascrive con un netto più alto che **non la include**, in tutte le lingue del dizionario | host |
+
+### Commissioni diverse dal listino
+
+| # | Dove | Cosa dichiara | A chi |
+|---|---|---|---|
+| 11 | `fase97_inbound_seo.py:613` e `:740-741` (`commissione_bps: int = 1500`) | **1500 bps** come ripiego di landing di città e `llms.txt`. In produzione `fase83_server.py:11057` e `:11097` passano `COMMISSIONE_BPS`, quindi il ripiego si vede solo se qualcuno chiama quelle funzioni senza parametro | host |
+| 12 | `fase98_policy_commissione.py:34-35` (`HOST_BPS = 200`, `GUEST_BPS = 800`) | uno split che mette **800 bps a carico dell'ospite**, contro «ospite 0%». La docstring `:5` dichiara che non è mai stato cablato nel prodotto: il codice però c'è, ed è esportato | ospite |
+| 13 | `fase98_policy_commissione.py:31-33` (`SOGLIA_FONDATORI`, `BPS_FONDATORI`, `BPS_DOPO`) | la vecchia regola ordinale «primi 1000 host», tenuta neutra a 1000 bps. Non contraddice il listino nei numeri, ma è **una seconda regola di commissione** accanto alla rampa | host |
+| 14 | `fase40_agente_booking.py:103` (`commissione_bps: int = 1000`) | modulo legacy con la sua cifra di commissione, non collegato alla rampa | host |
+
+### Cosa questo elenco NON dice (D18 punto 3)
+
+- **Non dice che qualcuno abbia pagato la cifra sbagliata.** Quanti host siano passati da
+  «paga in struttura» in produzione **non è misurato**: il comando è in PARTE 4, voce 3.
+- **Non è un elenco di riparazioni, e nessuna di queste righe è stata toccata.** Il documento è
+  stato scritto in sola lettura sul codice: l'unico file di prodotto aperto in scrittura in
+  questa sessione è **nessuno**.
+- **Non copre i numeri che non sono tariffe né commissioni** — penali, depositi, voucher,
+  sconti, crediti, tassa di soggiorno, benchmark dei concorrenti. Esistono, sono stati censiti
+  il 2026-08-26, e **il listino non li nomina**: restano fuori da questa parte perché il
+  fondatore ha deciso il listino di commissione e tariffa tecnica, non quegli altri.
+- **Non giudica il percorso online**, che è stato misurato **conforme**: sul preventivo vivo di
+  `filippine-makati` (3 notti, 27000 centesimi) l'API di produzione ha risposto
+  `costo_pagamento_cents: 1375`, cioè esattamente la fonte unica applicata al totale.
