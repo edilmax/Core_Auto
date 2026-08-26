@@ -1026,6 +1026,78 @@ e il pannello ne promette una (**B16 punto e**).
 aprire ai clienti. PARTE 13 = registro delle famiglie chiuse, si aggiorna a ogni famiglia
 chiusa. PARTE 15 = cosa fanno i grandi.
 
+### 🟠 B21 — LA WHITELIST DEGLI STATI CONFERMABILI È SCRITTA A MANO IN DUE POSTI, E NESSUNO DEI DUE DERIVA DAL MODELLO
+
+*(misurato il 2026-08-27 su `a77651a`, aprendo le righe una per una)*
+
+La regola «un pagamento si può confermare SOLO da `in_attesa` o `scaduto`» esiste **due volte**,
+scritta a mano, in due file diversi:
+
+```
+fase162_pagamenti_pendenti.py:324   if r["stato"] not in ("in_attesa", "scaduto"):
+fase83_server.py:8196               if stato not in ("in_attesa", "scaduto"):   <- percorso del webhook Stripe
+```
+
+Il modello vero sta altrove ed è **derivato**, non scritto a mano: `fase199_invarianti.py:331`,
+`transizioni_prenotazione()`, che costruisce la tabella `{stato: {successori}}` **dagli eventi**
+— la sua docstring dice «una sola fonte di verità nel modello».
+
+⛔ **Nessuno dei due punti la usa.** Misurato:
+- `grep -n "fase199\|transizioni_prenotazione" fase162_pagamenti_pendenti.py` → **vuoto**: quel
+  modulo non importa fase199 in nessuna forma;
+- `grep -n "fase199\|transizioni_prenotazione" fase83_server.py` → fase199 c'è, ma **solo** per
+  `scansiona_db` (`:3528`) e per `i3_prova_prima_del_commit` / `i4_denaro_non_negativo`
+  (`:5500`). **`transizioni_prenotazione` non compare mai.**
+
+**Perché è un difetto e non uno stile.** Se domani il modello degli stati cambia — un evento
+nuovo, uno stato che diventa confermabile — `fase199` lo sa e queste due righe no. Non si
+rompe niente: **restano indietro in silenzio**, che è il modo peggiore. È la stessa forma che
+la docstring di `_commissione_regalabile` chiama per nome: *«la stessa regola scritta a mano in
+due posti è il modo in cui un difetto sopravvive alla propria riparazione»*.
+
+⚠️ **Una rettifica, misurata: l'aggancio in `fase162` NON esiste ancora.** Questa voce nasce
+dall'idea di fare in `fase83:8196` «come si sta facendo in `fase162`» — ma oggi `fase162` la
+whitelist **ce l'ha scritta a mano** a `:324` esattamente come `fase83`, e non è fra i file
+modificati nell'albero di lavoro. Quindi i posti da agganciare sono **due, non uno**, e
+`fase162` non è il modello da copiare: è il primo dei due da riparare.
+
+⛔ **Il punto che nessun mutante tocca.** `test_fase162_hold_pagamento.py:130` dichiara che il
+generatore di mutanti **rinuncia** su `not in` (9 punti su quel modulo): quel cancello non è
+coperto dalla mutazione, e la sua unica difesa è la guardia scritta a mano a `:437`. Una
+seconda copia della stessa regola in `fase83` **non ha nemmeno quella**.
+
+---
+
+### 🟠 B22 — DUE DOCSTRING DESCRIVONO UNA RIGA CHE NON ESISTE PIÙ («riga 263»)
+
+*(misurato il 2026-08-27 su `a77651a` con `grep -nEi "riga ?263|riga263" test_fase162_hold_pagamento.py`)*
+
+```
+test_fase162_hold_pagamento.py:130   ... Fra questi ultimi c'e' la riga 263,
+test_fase162_hold_pagamento.py:435   # ── LA RIGA 263: IL CANCELLO CHE LO STRUMENTO NON SA ROMPERE ──
+test_fase162_hold_pagamento.py:437   def test_riga263_il_cancello_degli_stati_confermabili_e_CHIUSO(self):
+```
+
+La riga che descrivono oggi è la **324** (`fase162_pagamenti_pendenti.py:324`): la prosa è
+indietro di **61 righe**, e il **nome del test** porta il numero vecchio insieme a lei.
+
+⚠️ **I punti sono tre, non due, e i numeri non sono quelli a mente.** Cercandoli si trovano a
+`:130`, `:435` e `:437` — non a `:131` e `:440`. È esattamente il motivo per cui questa voce
+esiste: **un numero di riga dentro la prosa invecchia da solo**, e nessuna guardia se ne
+accorge perché il test resta verde.
+
+💡 **La forma che chiude la famiglia, non l'esemplare** (METODO, regola sopra tutte): un
+commento **non nomina il numero di riga**, come già non nomina la cifra della tariffa (S17). Si
+scrive «il cancello degli stati confermabili», non «la riga 263» — così non può diventare
+falso. ⛔ Il nome del test è la parte che costa: rinominarlo tocca anche gli schedari della
+mutazione che lo citano, e va guardato prima (`grep -rn "riga263"`).
+
+⚠️ **Da non confondere:** `test_promo_lancio_e2e.py:429` cita anch'esso «riga 263», ma parla di
+un'altra cosa (`fase186._guasti_isolati`, che guarda solo gli ERROR). **Non è la stessa riga** e
+non fa parte di questa voce.
+
+---
+
 ### ✅ B20 — CHIUSO il 2026-08-25 — LA GUARDIA DEGLI ELENCHI CERCAVA `TODO` COME SOTTOSTRINGA E INCIAMPAVA SULLA PAROLA «METODO»
 
 *(misurato il 2026-08-25: ha mandato rossa la CI della richiesta di unione 106 — tre job,
