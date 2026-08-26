@@ -360,16 +360,30 @@ jobs:
   #  codice gia' scritto (sarebbe un falso allarme quotidiano). Il lint severo
   #  vive nel job "lint-severo", che NON blocca ed e' dichiarato tale.
   qualita:
-    # misurato 0,8 min il 2026-08-19
-    timeout-minutes: 15
+    # misurato 0,8 min il 2026-08-19, prima del cricchetto. Semgrep da solo ha
+    # impiegato ~13 minuti su questo repository (misurato il 2026-08-26 su
+    # Windows, 632 file): il tetto sale a 45 perche' un job ucciso dal tetto e'
+    # indistinguibile da un guasto.
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 = TUTTA la storia. Serve a gitleaks, che non guarda solo
+      # l'ultimo commit: una chiave revocata resta pubblica in ogni commit in cui
+      # e' passata. Con la copia superficiale di serie (depth 1) lo strumento
+      # girerebbe su 1 commit su 926 e direbbe "pulito".
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: '3.9'
           cache: pip
-      - run: pip install ruff mypy pip-audit bandit
+      # VERSIONI INCHIODATE, non "l'ultima che passa di qui". Le fotografie del
+      # cricchetto (collaudi/baseline/*.json) sono state fatte con QUESTE: uno
+      # strumento che si aggiorna da solo cambia i propri rilievi e farebbe
+      # comparire "segnalazioni nuove" senza che nessuno abbia toccato il codice.
+      # Si alzano di proposito, rifacendo la fotografia e leggendo cosa e' cambiato.
+      - run: pip install ruff==0.15.22 bandit==1.8.6 pip-audit==2.9.0 semgrep==1.136.0 mypy
       # --- GATE VERO 1 -------------------------------------------------------
       # Selezione STRETTA: solo regole da "bug certo" o "buco di sicurezza certo".
       # Oggi vale ZERO rilievi su tutto il prodotto -> se si accende, e' un difetto
@@ -391,14 +405,40 @@ jobs:
         run: ruff check fase*.py main_casavip.py --statistics || true
       - name: Mypy sui motori-soldi (report-only)
         run: mypy fase188_paga_struttura.py fase98_policy_commissione.py fase111_cancellazione.py --ignore-missing-imports || true
-      - name: pip-audit (dipendenze)
-        run: pip-audit || true
+      # ⛔ `pip-audit` SENZA `-r` guarda l'ambiente in cui gira: qui dentro c'e'
+      #    ruff, bandit, mypy e semgrep, cioe' gli ATTREZZI, non il prodotto.
+      #    Misurato il 2026-08-26: 136 falle in 31 pacchetti dell'ambiente contro
+      #    10 in 6 pacchetti di requirements.txt. Il primo numero non parla di noi.
+      #    Il gate vero su questo numero e' nel cricchetto, qui resta il quadro.
+      - name: pip-audit sulle dipendenze DICHIARATE (report-only)
+        run: pip-audit -r requirements.txt || true
       # --- GATE VERO 2 -------------------------------------------------------
       # Bandit (security scanner). Un finding HIGH fa fallire la build.
       # Escluso ./collaudi (strumenti di test) e ./_archivio (storia). app.py e' Flask
       # legacy MORTO (produzione = fase83 stdlib) -> le sue voci non contano. Oggi: 0 HIGH.
       - name: Bandit (sicurezza - blocca sul grave)
         run: bandit -r . -x ./collaudi,./_archivio,./app.py --severity-level high --confidence-level high
+      # --- GATE VERO 3: IL CRICCHETTO ---------------------------------------
+      # I due gate qui sopra bloccano su una LISTA CHIUSA di regole (quelle che
+      # oggi valgono zero). Restano fuori le altre 686 segnalazioni di ruff, le
+      # 548 di bandit, le 10 falle di libreria, le 8 impronte di gitleaks e i 6
+      # rilievi di semgrep: debito gia' scritto, che NON deve rendere la CI rossa
+      # ogni giorno (e' cosi' che si smette di guardare il rosso).
+      # Il cricchetto li congela in collaudi/baseline/*.json e blocca su TUTTO
+      # cio' che compare in piu'. Il numero puo' solo scendere.
+      # ⛔ La fotografia si rifa' per DIMINUIRE il debito, mai per assorbire un
+      #    rilievo appena creato: e' la sola regola che tiene in piedi il meccanismo.
+      # VISTO ROSSO: `--autoprova` inietta una segnalazione finta e pretende di
+      # vederla; provato anche con un file guasto vero (F401), esce 1.
+      - name: Gitleaks - installazione inchiodata e verificata
+        run: |
+          curl -sSfL -o /tmp/gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz" | sha256sum -c -
+          sudo tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+          gitleaks version
+      - name: Cricchetto degli strumenti statici (BLOCCA sul NUOVO)
+        run: python collaudi/cricchetto_statico.py tutti
 
   # ==========================================================================
   #  LINT SEVERO — INFORMATIVO, **NON BLOCCA** (dichiarazione esplicita)
@@ -422,9 +462,14 @@ jobs:
         with:
           python-version: '3.9'
           cache: pip
-      - run: pip install ruff mypy
+      - run: pip install ruff==0.15.22 bandit==1.8.6 mypy
       - name: Ruff severo E,F,B,S su tutto il repo (conteggio per regola)
         run: ruff check . --statistics || true
+      # Il quadro completo di bandit: il gate del job "qualita" blocca solo sui
+      # HIGH (oggi 0) e sul NUOVO; qui si vede il resto — 548 rilievi, 90 MEDIUM,
+      # nessuno HIGH (misurato il 2026-08-26). Serve a decidere COSA promuovere.
+      - name: Bandit quadro completo per gravita (report-only)
+        run: bandit -r . -x ./collaudi,./_archivio,./app.py -f screen || true
       - name: Ruff severo sul prodotto vivo (elenco puntuale)
         run: ruff check fase*.py main_casavip.py --output-format=concise || true
       # Mypy con le viti strette SOLO sui moduli che muovono soldi: sono i tre punti

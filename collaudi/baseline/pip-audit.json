@@ -1,0 +1,17 @@
+{
+ "chiavi": 10,
+ "strumento": "pip-audit",
+ "totale": 10,
+ "voci": {
+  "click|PYSEC-2026-2132": 1,
+  "flask|PYSEC-2026-2151": 1,
+  "gunicorn|PYSEC-2026-1433": 1,
+  "gunicorn|PYSEC-2026-1434": 1,
+  "python-dotenv|PYSEC-2026-2270": 1,
+  "requests|PYSEC-2026-1872": 1,
+  "requests|PYSEC-2026-1873": 1,
+  "requests|PYSEC-2026-2275": 1,
+  "urllib3|PYSEC-2026-141": 1,
+  "urllib3|PYSEC-2026-142": 1
+ }
+}

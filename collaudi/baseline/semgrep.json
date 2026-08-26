@@ -1,0 +1,12 @@
+{
+ "chiavi": 5,
+ "strumento": "semgrep",
+ "totale": 6,
+ "voci": {
+  "collaudi/audit_coerenza_tariffe.py|insecure-hash-algorithm-sha1": 1,
+  "collaudi/video_render.py|insecure-hash-algorithm-md5": 2,
+  "fase13_protocollo_finale.py|avoid_app_run_with_bad_host": 1,
+  "fase83_server.py|insecure-hash-algorithm-sha1": 1,
+  "fase83_server.py|python-logger-credential-disclosure": 1
+ }
+}
