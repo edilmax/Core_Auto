@@ -21,32 +21,73 @@
 ## 📍 DOVE SIAMO — 2026-08-26, letto dall'API e dai tre posti
 
 ```
-computer      f7faa5b
-GitHub master f7faa5b
+computer      ce3cfe8
+GitHub master ce3cfe8
 VPS           3ceb4c5   <- FERMO DI PROPOSITO: il `git pull` sul server lo autorizza
                            il fondatore a voce, e non e' ancora arrivato.
 ```
 
-Unito con la richiesta **108**, riletta dall'API dopo l'unione (non la risposta del merge):
-`merged=True · merge_commit_sha=f7faa5b626b47f6db2e93cf3a03ab15be5880081 · state=closed`.
+Unito con la richiesta **110**, riletta dall'API dopo l'unione (non la risposta del merge):
+`merged=True · merge_commit_sha=ce3cfe82ab6915d4e5d5dc1794dd2d480cdffc52 · state=closed ·
+merged_at=2026-08-26 09:50:19`.
 CI: **16 job, 0 in corso, 15 `success`**; l'unico non-success e' `zap`, **saltato per
-costruzione** (`.github/workflows/ci.yml:929` lo fa girare solo su `schedule` o
+costruzione** (`.github/workflows/ci.yml` lo fa girare solo su `schedule` o
 `workflow_dispatch`, mai su una richiesta di unione).
 
-**Chiuso in quel commit:**
-- **A1** — la firma del contratto host registrava un documento che l'host non aveva letto:
-  il gate linkava `/termini.html` sotto l'etichetta «Contratto Host» mentre spediva
-  l'impronta del Contratto Host. Ora etichetta, link e impronta escono tutti e tre da
-  `fase163`, la prova registra la lingua REALMENTE servita, e il ripiego di
-  `deploy/contratto-host.html` e' passato da italiano a inglese come il server. Guardia
-  nuova `collaudi/guardia_contratto_firmato.py`, agganciata alla batteria.
-- **B20** — la guardia degli elenchi cercava `TODO` come sottostringa e la parola italiana
-  «METODO» lo contiene. Ora le sei aperture si cercano come **parole intere**.
-- **I quattro referti d'audit** 11 (accessi), 12 (dati personali), 13 (soldi) e 14
-  (commissione) sono **committati**, non piu' solo sul disco.
-- **La guida della verifica sta in `collaudi/METODO_v4.md`** — committata anche lei. In
-  radice non puo' stare: `test_trasparenza_costi.py:248` ammette solo i cinque documenti
-  ufficiali, e quella regola non si tocca.
+**Chiuso in quel commit — i cinque strumenti di analisi statica sono ACCESI:**
+
+`ruff` · `bandit` · `gitleaks` · `pip-audit` · `semgrep` girano nella CI dentro il job
+**`qualita`**, che e' gia' bloccante e gia' dentro il gate. Nessuna riga di produzione e'
+stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuovo.
+
+- **Il meccanismo e' il CRICCHETTO** (`collaudi/cricchetto_statico.py`). Le **1.258**
+  segnalazioni di oggi sono congelate in `collaudi/baseline/*.json` e **non bloccano**;
+  blocca tutto cio' che compare **in piu'**. Il numero puo' solo scendere. La chiave della
+  fotografia e' **(file, regola) -> quante volte**, mai il numero di riga: un commento in
+  piu' sposta le righe e una fotografia appesa alla riga diventerebbe rossa senza motivo.
+  ⛔ **La fotografia si rifa' per DIMINUIRE il debito, mai per assorbire un rilievo appena
+  creato**: e' la sola regola che tiene in piedi il meccanismo.
+- **Visto rosso in due modi**, non solo in verde: `--autoprova` inietta una segnalazione
+  finta e il confronto la vede (uscita 1); provato anche con un guasto vero (un import
+  inutilizzato in un file nuovo) -> `+1 ...|F401`, uscita 1; tolto il file, verde da solo.
+- **Le fotografie combaciano su Windows e su Linux**: nel job `qualita` di questa unione il
+  log stampa `686 / 548 / 8 / 10 / 6`, gli stessi numeri misurati sul computer, e nessuna
+  riga di punti ciechi. Non e' un verde muto: i numeri si leggono nel log.
+- **Tre cose vere trovate misurando** (dettaglio in `collaudi/audit/18_strumenti.md`):
+  1. `pip-audit` nella CI misurava **se stesso** — senza `-r` guardava l'ambiente del job
+     (ruff, mypy, bandit), non il prodotto: 136 falle «dell'ambiente» contro **10** vere in
+     `requirements.txt`. Ora usa `-r requirements.txt`.
+  2. `semgrep` col timeout di serie (5 s) andava in **timeout su 12 regole** proprio sui
+     file piu' grossi, `fase83_server.py` compreso: stampava «4 rilievi» mentre due non li
+     aveva mai cercati. A 120 s ne escono **6**, i due nascosti entrambi in produzione
+     (guardati uno per uno: falsi positivi). Il cricchetto ora **dichiara ogni timeout**.
+  3. `gitleaks`: `dir` da **35** rilievi contro `git` da **8**. I 27 di scarto stanno tutti
+     in file esclusi da `.gitignore` e **mai versionati**. Si usa `git`, e il motivo sta
+     scritto in `.gitleaks.toml`.
+- **Rumore misurato e non nascosto**: gitleaks **8 su 8** falsi, semgrep **6 su 6**. La
+  regola del 10% direbbe di spegnerli; non sono stati spenti perche' quei 100% stanno tutti
+  nella storia gia' scritta, che la fotografia congela una volta per sempre — da qui il
+  denominatore riparte da zero. Se fra un mese di lavoro vero il tasso resta sopra il 10%,
+  **si spegne misurandolo**, non a sensazione.
+- **`.gitignore`, sbaglio S13 per la terza volta**: la riga `*.json` avrebbe escluso le
+  cinque fotografie **in silenzio**, e in CI il gate avrebbe risposto «NESSUNA FOTOGRAFIA»,
+  cioe' rosso per finta a ogni giro. Preso con `git add --dry-run`, non a occhio. Il verso
+  opposto e' altrettanto voluto: `collaudi/baseline/_ultimo_giro/` — dove finisce l'uscita
+  grezza, **compresi i valori che gitleaks trova** — resta fuori dal repository.
+- **I referti d'audit 15, 17, 18, 19 e 20 sono committati**, non piu' solo sul disco:
+  15 dipendenze esterne quando cadono · 17 il tempo (orologi, fusi, scadenze) ·
+  18 gli strumenti statici · 19 le decisioni che aspettano il fondatore · 20 chi si accorge,
+  chi grida, chi legge. I primi due e gli ultimi due sono di **altre due sessioni** della
+  stessa notte, prodotti in sola lettura.
+
+⚠️ **Due fatti trovati passando, non riparati e non archiviati:**
+- `_SEGRETI_casavip_copia-locale.txt.bak` e `_SEGRETI_vecchio-stack_ex-env.txt.bak` sul
+  disco del fondatore contengono **2 token Stripe e 1 Telegram in chiaro**. **Su GitHub non
+  ci sono mai arrivati** — verificato: `git ls-files` non li conosce, `git check-ignore` li
+  attribuisce alla riga `*.bak`, e `git log --all` non li trova in nessuno dei 926 commit.
+  Il repository e' pubblico: decide il fondatore.
+- Sul remoto ci sono **~95 rami** di lavori gia' uniti. Il fondatore ha detto di **non
+  cancellarli adesso**: si fa un altro giorno.
 
 ---
 
@@ -60,7 +101,7 @@ costruzione** (`.github/workflows/ci.yml:929` lo fa girare solo su `schedule` o
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: f7faa5b
+CONSEGNE AGGIORNATE A: ce3cfe8
 
 SUITE ATTUALE: Ran 6012 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
@@ -70,11 +111,17 @@ SUITE ATTUALE: Ran 6012 test
    un giro: e' il difetto B14, e non si chiude qui -- si chiude cambiando quella regex, che
    sta in un file di test e non e' questo lavoro. Le due voci vere sono qui sotto.
 
-CARICATORE (RACCOLTI):  6012  <- rimisurato il 2026-08-25 col caricatore, da PowerShell,
-                                 PRIMA di qualunque giro (S14): stesso valore di 2026-08-24.
-ESEGUITI (ultimo giro): 6007  <- MISURATO il 2026-08-25 da PowerShell sull'albero poi unito
-                                 in f7faa5b: `Ran 6007 tests in 2048.434s -- OK (skipped=4)`,
-                                 codice d'uscita letto diretto, EXIT=0.
+CARICATORE (RACCOLTI):  6012  <- rimisurato il 2026-08-26 col caricatore, da PowerShell,
+                                 PRIMA di qualunque giro (S14): stesso valore di 2026-08-25.
+ESEGUITI (ultimo giro): 6007  <- MISURATO il 2026-08-26 da PowerShell sull'albero di QUESTE
+                                 consegne (consegne su ce3cfe8): `Ran 6007 tests in
+                                 2244.352s -- OK (skipped=4)`, codice d'uscita letto
+                                 diretto, EXIT=0. Il giro precedente, sull'albero poi unito
+                                 in ce3cfe8, aveva dato lo stesso 6007 in 1731.102s.
+                                 ⛔ Un giro prima era stato buttato: avevo tagliato l'uscita
+                                 con `Select-Object -Last 40` e la riga `Ran` era finita
+                                 fuori. EXIT=0 dice che e' passata, non QUANTI: un numero
+                                 senza la sua misura non si scrive (D22), si rimisura.
 SCARTO:                    5  <- le guardie openssl, vedi AMBIENTE
 
 FILE DI TEST: 406             <- Get-ChildItem -Filter 'test_*.py' -File (radice; identico
@@ -86,16 +133,18 @@ AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3, ed e' la
             ragione dello scarto fra RACCOLTI e ESEGUITI (5 di scarto: le guardie openssl).
-MISURATO:  2026-08-26 su f7faa5b (albero pulito), col caricatore, da PowerShell, e PRIMA
+MISURATO:  2026-08-26 su ce3cfe8 (albero pulito), col caricatore, da PowerShell, e PRIMA
            di lanciare (S14):
            python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"
            -> 6012
 COMANDO:  python -m unittest discover -s . -p "test_*.py"
 ```
 
-> 🔎 **PERCHE' IL NUMERO NON E' CAMBIATO, ed e' la risposta giusta e non una pigrizia.** Il
-> 2026-08-24 sono state aggiunte ~280 righe a `RIPRENDI_QUI.md` (B16, B17, B18) e **zero test**:
-> il caricatore conta test, non righe, quindi 6012 prima e 6012 adesso è ciò che deve succedere.
+> 🔎 **PERCHE' IL NUMERO NON E' CAMBIATO, ed e' la risposta giusta e non una pigrizia.** In
+> `ce3cfe8` sono entrati **3.364 righe** fra referti d'audit, fotografie del cricchetto e un
+> attrezzo nuovo in `collaudi/` — e **zero file `test_*.py`**: il caricatore conta test, non
+> righe, e `collaudi/` non e' nel suo perimetro. Quindi 6012 prima e 6012 adesso è ciò che
+> deve succedere. (Era lo stesso ragionamento il 2026-08-24, con le ~280 righe di B16/B17/B18.)
 > ⛔ La misura andava rifatta lo stesso: «non dovrebbe essere cambiato» è un ricordo, `6012` è
 > una misura (D22). Costa due secondi e toglie l'unico modo in cui questa riga può mentire.
 
