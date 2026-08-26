@@ -18,14 +18,59 @@
 
 ---
 
-## 📍 DOVE SIAMO — 2026-08-26, letto dall'API e dai tre posti
+## 📍 DOVE SIAMO — 2026-08-26, letto dall'API e dai QUATTRO posti
 
 ```
-computer      ce3cfe8
-GitHub master ce3cfe8
-VPS           3ceb4c5   <- FERMO DI PROPOSITO: il `git pull` sul server lo autorizza
-                           il fondatore a voce, e non e' ancora arrivato.
+computer            a8b68a0
+GitHub master       a8b68a0
+VPS (git sul disco) a8b68a0
+IMMAGINE VIVA       sha256:d6b2eefd...  <- costruita da a8b68a0 il 2026-08-26 12:02:45Z
 ```
+
+⛔ **I POSTI SONO QUATTRO, NON TRE, E IL QUARTO E' QUELLO CHE MENTE.** Alle 11:55 di oggi
+i tre `git rev-parse` dicevano tutti `a8b68a0` e sarebbe stato vero scrivere «allineati» —
+mentre il sito **serviva ancora `3ceb4c5`**. Il `git pull` aggiorna il disco; il contenitore
+continua a girare l'immagine con cui e' partito. `deploy/` **non e' montato** (entra
+nell'immagine con `COPY`, `STATIC_DIR=/app/deploy`), quindi nemmeno le pagine cambiano.
+E' la trappola del **2026-08-07**, ed e' tornata: si vede solo col quarto comando,
+`docker inspect --format '{{.Image}}' casavip_app`.
+
+**Il deploy del 2026-08-26, autorizzato a voce, passo per passo:**
+
+| passo | esito misurato |
+|---|---|
+| 1. paracadute `:prec` agganciato **prima** del build | `859f637a...` == immagine viva: **i due sha256 coincidono** |
+| 2. `docker compose ... build app` | nuova immagine `d6b2eefd...`, **diversa** da `:prec` |
+| 3-4. `stop app backup` -> `rm -f app backup` -> `up -d` | fuori servizio **dalle 12:02:23Z alle 12:02:52Z = 29 s** |
+| 5. `docker inspect` | immagine viva == `casavip-app:latest` == `d6b2eefd...`, `running health=healthy` |
+| 6. il sito risponde | `HTTP 200 in 0,416 s` · `/api/health` -> `{"status":"ok","money_unit":"cents_integer","guardiano":"ok"}` |
+| 7. **A1 e' davvero SERVITA**, non solo presente sul disco | vedi qui sotto |
+
+**La prova del passo 7, nei due versi.** Il cancello pubblico `/entra-host` e' il punto che
+A1 ripara. La stessa riga, chiesta all'immagine vecchia (il paracadute) e al sito vivo:
+
+```
+:prec  (prima)  Accetto il <a href="/termini.html" ...>Contratto Host</a>
+vivo   (adesso) Accetto il <a href="/contratto-host.html?lang=en" ...>Host Agreement</a>
+```
+
+Etichetta, link e lingua escono ora tutti e tre da `fase163`. In piu':
+`https://bookinvip.com/contratto-host.html` serve `<html lang="en">` col marcatore `A1/referto`
+(prima: `lang="it"`, marcatore assente). E la catena dei byte e' chiusa da capo a fondo —
+`git show a8b68a0:deploy/host.html`, il file sul disco del VPS e quello **dentro il
+contenitore** hanno lo stesso `sha256 98b3f642...`.
+
+⚠️ **`/host.html` non si controlla con `curl` da fuori**: risponde **302 -> /entra-host**, e'
+un cancello. Il primo confronto «prima/dopo» che avevo fatto su quella pagina misurava
+**zero contro zero**, cioe' niente: la redirezione non consegna mai il file. Il controllo che
+vale su una pagina protetta e' il `sha256` dentro il contenitore, non il `grep` sull'HTTP.
+
+✅ **Il paracadute ADESSO e' agganciato bene**: `casavip-app:prec` = `859f637a...`, che e'
+l'ultima immagine buona **prima** di questo deploy. Prima del deploy era `80f21d84...`, cioe'
+**un'immagine che non stava girando da giorni** — saltare col paracadute avrebbe riportato a
+uno stato che non era l'ultimo buono. Si riaggancia a **ogni** deploy, prima del build.
+
+**Il commit precedente (`ce3cfe8`) e come ci si e' arrivati:**
 
 Unito con la richiesta **110**, riletta dall'API dopo l'unione (non la risposta del merge):
 `merged=True · merge_commit_sha=ce3cfe82ab6915d4e5d5dc1794dd2d480cdffc52 · state=closed ·
@@ -101,7 +146,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: ce3cfe8
+CONSEGNE AGGIORNATE A: a8b68a0
 
 SUITE ATTUALE: Ran 6012 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
@@ -114,10 +159,11 @@ SUITE ATTUALE: Ran 6012 test
 CARICATORE (RACCOLTI):  6012  <- rimisurato il 2026-08-26 col caricatore, da PowerShell,
                                  PRIMA di qualunque giro (S14): stesso valore di 2026-08-25.
 ESEGUITI (ultimo giro): 6007  <- MISURATO il 2026-08-26 da PowerShell sull'albero di QUESTE
-                                 consegne (consegne su ce3cfe8): `Ran 6007 tests in
-                                 2244.352s -- OK (skipped=4)`, codice d'uscita letto
-                                 diretto, EXIT=0. Il giro precedente, sull'albero poi unito
-                                 in ce3cfe8, aveva dato lo stesso 6007 in 1731.102s.
+                                 consegne (consegne su a8b68a0, dopo il deploy): `Ran 6007
+                                 tests in 2874.693s -- OK (skipped=4)`, codice d'uscita
+                                 letto diretto, EXIT=0. I due giri precedenti della stessa
+                                 notte avevano dato lo stesso 6007 (2244.352s e 1731.102s):
+                                 il numero non si muove, il tempo si', ed e' la macchina.
                                  ⛔ Un giro prima era stato buttato: avevo tagliato l'uscita
                                  con `Select-Object -Last 40` e la riga `Ran` era finita
                                  fuori. EXIT=0 dice che e' passata, non QUANTI: un numero
@@ -133,7 +179,7 @@ AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3, ed e' la
             ragione dello scarto fra RACCOLTI e ESEGUITI (5 di scarto: le guardie openssl).
-MISURATO:  2026-08-26 su ce3cfe8 (albero pulito), col caricatore, da PowerShell, e PRIMA
+MISURATO:  2026-08-26 su a8b68a0 (albero pulito), col caricatore, da PowerShell, e PRIMA
            di lanciare (S14):
            python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"
            -> 6012
