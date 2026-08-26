@@ -126,3 +126,14 @@ collaudi/rapporto_coerenza.txt
 # l'audit sarebbe partito senza schedario -- cioe' rosso per finta, ogni volta.
 # Qui l'eccezione, di proposito, come per `.claude/settings.json`.
 !collaudi/baseline_tariffe.txt
+
+# ⛔ LE FOTOGRAFIE DEL CRICCHETTO DEVONO VIAGGIARE COL PROGETTO — S13 di nuovo.
+# `collaudi/baseline/*.json` e' il debito statico congelato (ruff, bandit, gitleaks,
+# pip-audit, semgrep): senza di esse la CI non ha con cosa confrontare e il gate
+# risponde "NESSUNA FOTOGRAFIA", cioe' rosso per finta a ogni giro. La riga `*.json`
+# molto piu' sopra le escluderebbe **in silenzio**: e' esattamente lo sbaglio che ha
+# gia' fatto sparire `collaudi/bombe_a_tempo.json` e `baseline_tariffe.txt`.
+!collaudi/baseline/*.json
+# ...ma NON l'uscita grezza dell'ultimo giro: quella contiene i valori che gitleaks
+# ha trovato, cioe' i segreti in chiaro. Non entra nel repository per nessun motivo.
+collaudi/baseline/_ultimo_giro/

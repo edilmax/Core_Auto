@@ -1,0 +1,15 @@
+{
+ "chiavi": 8,
+ "strumento": "gitleaks",
+ "totale": 8,
+ "voci": {
+  "02579beb367081d5dc686ef0a60480a19046726a:test_fase162_hold_pagamento.py:generic-api-key:198": 1,
+  "41002ab500c2f0cb9e99332b7f025361c8dacfeb:test_auth_host_ux.py:generic-api-key:62": 1,
+  "63038446fdfeb5523c8aa389c7e6abbad30c0f0e:test_contratto_persistenza.py:generic-api-key:1049": 1,
+  "63038446fdfeb5523c8aa389c7e6abbad30c0f0e:test_contratto_persistenza.py:generic-api-key:759": 1,
+  "7b41b10c380867fd7c84ac0cbe21be28e964adb4:test_integrazione_esterni.py:generic-api-key:565": 1,
+  "7b41b10c380867fd7c84ac0cbe21be28e964adb4:test_integrazione_esterni.py:generic-api-key:652": 1,
+  "e7beaead59d426c88e19af97cc3f15a771176922:test_happy_altro.py:generic-api-key:323": 1,
+  "e7beaead59d426c88e19af97cc3f15a771176922:test_happy_altro.py:generic-api-key:354": 1
+ }
+}

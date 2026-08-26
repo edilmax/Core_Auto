@@ -1,0 +1,58 @@
+# =============================================================================
+#  GITLEAKS — configurazione unica del progetto (chiavi finite nel codice)
+# =============================================================================
+#  A cosa serve: il repository e' PUBBLICO (serve per CodeQL). Una chiave che
+#  entra qui dentro e' pubblicata nel momento stesso in cui viene spinta, e la
+#  storia di git non si cancella: va revocata, non nascosta. Questo strumento
+#  guarda la storia intera, non solo l'ultimo commit.
+#
+#  COME LO USA LA CI (.github/workflows/ci.yml, job "qualita"):
+#      python collaudi/cricchetto_statico.py gitleaks
+#  che lancia `gitleaks git .` (STORIA + contenuto tracciato) e blocca solo su
+#  cio' che NON e' nella fotografia `collaudi/baseline/gitleaks.json`.
+#
+#  ⛔ PERCHE' `git` E NON `dir` — misurato il 2026-08-26 su questo repository:
+#       gitleaks dir .   -> 35 rilievi
+#       gitleaks git .   ->  8 rilievi
+#     I 27 di scarto stanno TUTTI in file esclusi da .gitignore e mai versionati
+#     (`_SEGRETI_*.txt.bak` sul disco del fondatore, `data/app.log.1`, la cache
+#     `.hypothesis/`, i report `*.json`). Accusare quelli sarebbe accusare di una
+#     fuga che su GitHub non e' mai avvenuta: rumore puro, e il rumore spegne lo
+#     strumento. Le due chiavi Stripe e il token Telegram trovati da `dir` stanno
+#     in quei file NON versionati -- non sono su GitHub, ma sono in chiaro sul
+#     disco: e' una cosa vera, ed e' scritta in collaudi/audit/18_strumenti.md.
+#
+#  RUMORE MISURATO (regola del 10%, PARTE 17 di collaudi/METODO_v4.md):
+#     8 rilievi su 8 sono FALSI (valori finti di collaudo: "chiavecollaudo...",
+#     "idem_2f7c9a11", "aBc12345token"). Il tasso storico e' 100%, e la regola
+#     direbbe di spegnere lo strumento. NON lo si spegne, e il motivo e' scritto
+#     per esteso nel referto: quei 100% sono TUTTI nella storia gia' scritta e la
+#     fotografia li congela; da qui in avanti il denominatore riparte da zero e
+#     il primo rilievo nuovo sara' l'unico rilievo. Se dopo un mese di lavoro
+#     vero il tasso restasse sopra il 10%, si spegne -- misurandolo, non a
+#     sensazione.
+# =============================================================================
+
+# Si parte dalle regole predefinite di gitleaks (oltre 150 fornitori conosciuti:
+# Stripe, AWS, GitHub, Telegram...). Non si riscrivono: si estendono.
+[extend]
+useDefault = true
+
+# ---------------------------------------------------------------------------
+#  ALLOWLIST — cio' che NON e' una fuga, con il motivo accanto.
+#  ⛔ Nessuna voce qui dentro puo' essere un percorso di codice di prodotto:
+#     spegnerebbe lo strumento proprio dove serve.
+# ---------------------------------------------------------------------------
+[[allowlists]]
+description = """Roba che non e' versionata e non lo sara' mai (le stesse voci di
+.gitignore). Serve solo a chi lancia `gitleaks dir` a mano sul proprio disco:
+allinea quel comando a cio' che la CI giudica davvero con `gitleaks git`."""
+paths = [
+  '''^_archivio/''',          # storia dichiarata, REGOLA ZERO 2
+  '''^data/''',               # dati e log di esecuzione, mai versionati
+  '''^\.hypothesis/''',       # cache del generatore di casi
+  '''^deploy_backup/''',
+  '''\.bak$''',               # i _SEGRETI_*.txt.bak locali del fondatore
+  '''^processing_report\.json$''',
+  '''^system_optimization_report\.json$''',
+]
