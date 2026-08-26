@@ -66,9 +66,17 @@ Un file aperto due volte conta come un file, ma ogni sua riga conta come un punt
 | **E7** | Il canale diretto segue la rampa di lancio o no? | il prezzo per l'host | sì, le prenotazioni già fatte |
 | **E8** | I quattro moduli che l'artefatto spedito non raggiunge: quale delle tre uscite? | due moduli dei soldi | sì, se si cancella |
 | **E9** | I quattro controlli inerti di `fase59`: si tolgono o restano? | il motore dei prezzi | no |
+| **D13** | Si può spegnere il servizio in una zona? | niente oggi | sì, se si sceglie C |
+| **D14** | Il banner di homepage dice un numero vero o nessun numero? | la homepage | no nel codice |
+| **D15** | Il payoff diventa «Il VIP sei tu»? | la homepage | sì, dov'è già uscito |
+| **D16** | La SEO dichiara 13 lingue e il prodotto ne parla 8: quale vale? | l'indicizzazione | sì, gli URL già presi |
 
 ⚠️ **Quattro toccano soldi di qualcuno che sta già usando il prodotto**: **D5**, **D7**, **D11**
 e **E2**. Le altre possono aspettare senza che nessuno ci perda un euro.
+
+⚠️ **D13-D16 sono state aggiunte il 2026-08-26 e stanno nella PARTE 6, in fondo**: sono
+contate su `d7f60c7`, mentre le parti 1 e 2 sono contate su `663eab3`. Il motivo sta scritto
+in testa a quella parte.
 
 ---
 
@@ -996,3 +1004,169 @@ e il comando è scritto accanto quando non è ovvio. Dove non ho potuto contare,
 6. **Non ho scelto e non ho consigliato**, ed è la parte che vale: se domattina una di queste
    schede sembra avere una risposta ovvia, quella è **la risposta del fondatore**, non la mia
    che si è travestita da misura.
+
+---
+
+# PARTE 6 — QUATTRO DECISIONI AGGIUNTE IL 2026-08-26
+
+> ⚠️ **Contate su `d7f60c7`, non su `663eab3` come il resto del file.** In mezzo c'è la
+> riparazione delle email perse in silenzio, che ha aggiunto ~90 righe **in cima** a
+> `fase83_server.py`: tutti i numeri di riga di quel modulo si sono spostati. Le citazioni
+> qui sotto sono state **rimisurate**, quelle delle parti 1 e 2 no.
+> ⛔ Vale come sempre: **il nome del punto regge, il numero di riga no.**
+
+---
+
+## D13 — Si può spegnere il servizio in una zona?
+
+**La domanda:** oggi si può spegnere **un alloggio alla volta** (`fase57_vetrina.py:66`,
+`STATI_VALIDI = ("bozza", "pubblicato", "sospeso")`) oppure **i soldi in blocco** (il
+kill-switch globale, `fase83_server.py:4261` stato e `:4268` accensione, applicato da
+`_transazioni_bloccate` a `:5298`). In mezzo non c'è niente: serve un interruttore per
+**zona**?
+
+**Le opzioni:**
+- **A — nessun codice nuovo**: l'admin mette `sospeso` a mano su ogni alloggio della zona.
+- **B — elenco di città ammesse** da variabile d'ambiente, filtrato in ricerca.
+- **C — tabella delle zone con stato + rotta admin**, sullo stesso schema del kill-switch.
+
+**Cosa cambia nel codice (contato oggi su `d7f60c7`):**
+- **Opzione A** → **0 file**, N azioni a mano: una per alloggio, ogni volta, e nessuna
+  traccia di «perché quella zona è spenta».
+- **Opzione B** → **2 file, 3 punti**: il `WHERE` della ricerca
+  (`fase57_vetrina.py:890`, `where = ["a.stato = 'pubblicato'"]`), l'elenco delle città
+  (`citta_pubblicate()`, `fase57_vetrina.py:962`, SQL a `:971-972`) e la lettura della
+  variabile in `fase81_bootstrap_casavip.py:195-196`, dove il catalogo viene costruito.
+- **Opzione C** → **4 file**: `fase57_vetrina.py` (tabella + migrazione; il modulo è **1239
+  righe**), `fase83_server.py` (rotta admin + filtro in ricerca + filtro in prenotazione),
+  `fase81_bootstrap_casavip.py` (cablaggio) e `deploy/admin.html` (**812 righe**, una scheda
+  nuova). **Punti non misurabili** finché non si sa se la zona è la città o il paese: cambia
+  la chiave della tabella.
+
+*Comando: `grep -n "STATI_VALIDI" fase57_vetrina.py` · `grep -n "KILL-SWITCH\|_transazioni_bloccate" fase83_server.py` · `grep -n "def cerca\|def citta_pubblicate" fase57_vetrina.py`.*
+
+**Cosa è irreversibile:** **niente** con A e B. Con **C** resta aperto cosa succede alle
+**prenotazioni già accettate** in una zona che poi si spegne: oggi nessuna regola le tocca,
+e chi ha pagato ha un contratto. Va deciso **prima** di accendere l'interruttore, non dopo.
+
+**Cosa serve sapere:** **se la zona è la città o il paese.** Il campo `citta` è **testo
+libero** (`fase57_vetrina.py:117` lo dichiara `str`, `:226` lo prende con `_stringa(...)`) e
+**non è normalizzato**: «Roma», «roma » e «ROMA» sono tre zone diverse per il database. Finché
+non c'è una risposta, B e C poggiano su una chiave che non tiene — e A non ha questo problema
+perché non usa nessuna chiave.
+
+---
+
+## D14 — Il banner della homepage dice un numero vero, o nessun numero?
+
+**La domanda:** il banner (`deploy/index.html:206-208`) oggi dice «siamo in fase di test» e
+**non contiene nessun numero**: si sostituisce con un contatore vero, e vero di che cosa?
+
+**Le opzioni:**
+- **A — resta senza numeri.**
+- **B — contatore di alloggi pubblicati.**
+- **C — contatore di città coperte** (`citta_pubblicate()`, che il codice stesso dichiara
+  «inventario REALE» a `fase57_vetrina.py:963`).
+
+**Cosa cambia nel codice (contato oggi su `d7f60c7`):**
+- **Opzione A** → **0 file**.
+- **Opzioni B e C** → **3 file**. ⛔ **Nessuna rotta di conteggio esiste**: cercate
+  `/api/citta`, `/api/conteggi`, `/api/inventario` in `fase83_server.py` → **0 riscontri**.
+  Servono quindi: 1 gestore nuovo in `fase83_server.py`, 1 metodo in `fase57_vetrina.py` (la
+  SQL c'è già — `COUNT(*)` a `:871` e `:927`, città distinte a `:971-972`), e la chiamata nel
+  banner a `deploy/index.html:206-208`.
+- ⚠️ **In più, se cambia la FORMA del testo**: le tre chiavi del banner vivono in **8 lingue**
+  a `fase83_server.py:226` (`b1`), `:227` (`b2`), `:228` (`b3`) → **fino a 24 punti di testo**
+  in più.
+
+*Comando: `grep -n 'data-t="b1"' deploy/index.html` · `grep -n '^    "b1"' fase83_server.py` · `grep -c 'path == "/api/citta"' fase83_server.py`.*
+
+**Cosa è irreversibile:** **niente nel codice.** Fuori dal codice sì: un numero **basso**
+pubblicato resta negli screenshot di chi passa e nelle cache dei motori di ricerca, e quello
+non si ritira con un deploy.
+
+**Cosa serve sapere:** **sotto quale numero il contatore non si mostra.** Un contatore vero
+che dice «1» dice una cosa peggiore del banner di oggi, che non dice niente. La soglia è una
+scelta di marketing, non tecnica, e senza di essa B e C non si possono accendere.
+
+---
+
+## D15 — Il payoff diventa «Il VIP sei tu»?
+
+**La domanda:** il payoff attuale è «Il tuo viaggio, senza sorprese.» con sotto «Alloggi
+certificati · paghi il prezzo pulito · cancellazione gratuita» (`deploy/index.html:169-170`):
+si sostituisce con «Il VIP sei tu»?
+
+**Le opzioni:**
+- **A — resta com'è.**
+- **B — sostituzione piena**: cambiano titolo e sottotitolo.
+- **C — solo la seconda riga**: «Il VIP sei tu» al posto di «senza sorprese.» nello `<span
+  class="l2">`, tenendo la prima riga attuale.
+
+**Cosa cambia nel codice (contato oggi su `d7f60c7`):**
+- **Opzione A** → **0 file**.
+- **Opzione B** → **2 file, 26 punti**: **3 chiavi × 8 lingue** nel dizionario —
+  `hero_titolo` (`fase83_server.py:273`), `hero_titolo2` (`:274`), `hero_sub` (`:275`) — più
+  i **2 ripieghi italiani** scritti dentro `deploy/index.html:169` e `:170`.
+- **Opzione C** → **2 file, 9 punti**: solo `hero_titolo2` (`fase83_server.py:274`) × 8
+  lingue, più il ripiego a `deploy/index.html:169`.
+- ⚠️ **Il CSS assume DUE parti.** `deploy/index.html:61` (`.claim h1 .l2`) rende la seconda
+  riga in corsivo oro: un payoff su una riga sola porta con sé anche quel punto.
+
+*Comando: `grep -n "hero_titolo\|hero_sub" fase83_server.py deploy/index.html` · `grep -n '.claim h1 .l2' deploy/index.html`.*
+
+**Cosa è irreversibile:** **niente sul sito.** Sì dove il payoff **è già uscito**: il claim
+attuale è scritto in `fase200_campagna_persuasiva.py:264`, in `collaudi/video_render.py`
+(`:208`, `:244`, `:311`, `:380`, `:666`) e in `collaudi/pubblica_video.py:167`. **Il materiale
+già generato e pubblicato non si ritira**, e va guardato prima di scegliere, non dopo.
+
+**Cosa serve sapere:** **se «VIP» resta il nome o diventa la promessa.** Il marchio è già
+`Bookin`**`VIP`**: con B la stessa parola farebbe due lavori nella stessa schermata, e va
+deciso se è un rafforzamento o un'ambiguità. ⚠️ E si incrocia con **D12**: «Alloggi
+certificati» è la frase che quella decisione può togliere — se D12 la toglie, il sottotitolo
+cambia comunque, e allora conviene aprirlo una volta sola.
+
+---
+
+## D16 — La SEO dichiara 13 lingue e il prodotto ne parla 8: quale numero è quello vero?
+
+**La domanda:** il motore SEO è **costruito e servito** e dichiara **13 lingue**
+(`fase97_inbound_seo.py:28`), mentre il prodotto ne parla **8**
+(`fase61_localizzazione.py:41`, `fase86_email.py:126`, `fase185_testi_legali.py:35`): chi
+arriva da una delle 5 in più trova pagine che il prodotto non sa servire.
+
+**Le opzioni:**
+- **A — la SEO scende a 8**, allineata al prodotto.
+- **B — il prodotto sale a 13.**
+- **C — restano 13 in vetrina e 8 nel prodotto**, e lo si dichiara.
+
+**Cosa cambia nel codice (contato oggi su `d7f60c7`):**
+- Il motore **è vivo, non dormiente**: le rotte servite sono `/sitemap.xml`
+  (`fase83_server.py:10982`), `/robots.txt` (`:10986`), `/blog` (`:11077`),
+  `/sitemap-blog.xml` (`:11092`), `/sitemap-index.xml` (`:11112`), e le landing per città
+  passano da `:11044-11062`.
+- **Opzione A** → **1 file, 1 punto**: `fase97_inbound_seo.py:28`. ⚠️ Ma la lista delle
+  lingue **non è la lista degli URL**: `locali_hreflang()` (`:580`) ne produce **25**, perché
+  aggiunge le varianti lingua+paese. Il conto degli indirizzi da spegnere si fa su 25, non su
+  13. E `fase97:750` scrive la cifra «13 lingue» **dentro un testo pubblico**: va toccato
+  anche quello.
+- **Opzione B** → **non misurabile oggi**: ~1034 parole non tradotte (voce già aperta in
+  `RIPRENDI_QUI.md`), il dizionario di `fase83_server.py` che parte da `:226`, i template
+  email e i testi legali. Non è un numero, è un progetto.
+- **Opzione C** → **0 file di prodotto**, 1 riga di documento.
+
+*Comando: `grep -n "^LINGUE" fase97_inbound_seo.py fase61_localizzazione.py fase86_email.py fase185_testi_legali.py` · `python -c "from fase97_inbound_seo import locali_hreflang; print(len(locali_hreflang()))"`.*
+
+**Cosa è irreversibile:** **sì, in parte.** Gli URL **già indicizzati** non si tolgono a
+comando: o si reindirizzano, o restano nell'indice come pagine morte, e le pagine morte
+pesano sul dominio intero, non solo su sé stesse.
+
+**Cosa serve sapere:** **quante di quelle 13 lingue Google ha già indicizzato.** È l'unico
+numero che decide fra A e C, e **non sta nel codice**: sta in Search Console. La lista nel
+codice dice cosa **generiamo**, non cosa è **stato preso**.
+
+🔴 **E una cosa misurata mentre contavo, che non è una decisione ma la cambia:** la homepage
+non ha **né `description`, né `canonical`, né `hreflang`** — cercati su tutte le **837 righe**
+di `deploy/index.html`: **0, 0, 0**. Le landing generate da `fase97` ce li hanno tutti
+(`:542`, `:620`, `:659`). **La pagina più importante è quella messa peggio**, e questo vale a
+prescindere da quale numero di lingue si sceglie.
