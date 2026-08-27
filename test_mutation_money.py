@@ -46,10 +46,17 @@ MUTANTI = [
      "host=rimb, rimborso=imp - rimb",
      ["test_fase160_escrow_garanzia"]),
 
+    # RI-ANCORATO il 2026-08-26: la whitelist non e' piu' scritta a mano dentro fase162,
+    # viene da `_AMMESSI`, che deriva dalla macchina a stati di fase199 (la stessa su cui
+    # sono dimostrati i teoremi Z3). Il mutante fa esattamente quello di prima — allarga il
+    # cancello fino ad accettare stati non confermabili — solo sull'espressione nuova.
+    # ⛔ Perche' l'ancora era saltata: il catalogo cercava il TESTO della vecchia riga, e
+    # una riparazione legittima l'ha fatto sparire. Un mutante che non trova il bersaglio
+    # qui diventa ROSSO (`count != 1`), non muto: e' la S2 presa da uno strumento.
     ("hold: whitelist stato ALLENTATA (accetta qualsiasi stato)",
      "fase162_pagamenti_pendenti.py",
-     'if r["stato"] not in ("in_attesa", "scaduto"):',
-     'if r["stato"] not in ("in_attesa", "scaduto", "pagato", "cancellato", "rimborsato"):',
+     'if r["stato"] not in _AMMESSI["pagato"]:',
+     'if r["stato"] not in _AMMESSI["pagato"] + ("pagato", "cancellata_host", "rimborsato"):',
      ["test_race_hold_conferma", "test_cancellazione_money"]),
 
     ("concierge: netto host = netto + comm invece di - comm (host gonfiato)",

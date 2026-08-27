@@ -467,6 +467,67 @@ e verde dopo (`python -m unittest test_seo_sandbox -v` → `Ran 20 tests ... OK`
 motivo per cui la guardia esiste è la seconda metà di D20: fra sei mesi qualcuno che
 «semplifica» quel `<head>` diventa rosso lo stesso giorno.
 
+### 🧮 LA MACCHINA A STATI DEI SOLDI ERA COSTRUITA E NON COLLEGATA — 2026-08-26
+
+**Modificato** `fase162_pagamenti_pendenti.py` (produzione, con «autorizzato» del fondatore) e
+`test_fase199_transizioni.py` (guardie). Punti 1 e 2 dell'ordine; il punto 3
+(`guardia_prenotazione` al finalizza) **non è stato fatto**, aspetta un suo via separato.
+
+**Cosa era rotto.** `fase199_invarianti.py:303-336` dichiara la macchina a stati della
+prenotazione — 6 stati, 4 eventi — e ci dimostra sopra quattro teoremi con Z3
+(`PREN_terminale_assorbente`, `PREN_mai_pagato_da_terminale`, `PREN_pagato_solo_da_pagabili`,
+`PREN_monotona_senza_cicli`). **Misurato:** fuori da `fase199` quei simboli comparivano in
+**15 righe, tutte nei file di test** — zero in `fase83_server.py`, zero in `fase162`, zero in
+`main_casavip.py`, zero sotto `deploy/`. A decidere in produzione erano **quattro stringhe SQL
+scritte a mano** dentro `fase162`, una per metodo, e **due erano BLACKLIST**:
+`marca_da_rimborsare` e `marca_cancellata_host` filtravano con
+`stato NOT IN ('cancellata_host','rimborsato')`. Una blacklist **ammette di default ogni stato
+nuovo**: bastava allargare il dominio (`contestata`, `parzialmente_rimborsato`…) perché rimborso
+e cancellazione-host lo accettassero come sorgente legale, senza che un solo test diventasse
+rosso — i teoremi continuavano a passare, ma **sul modello, non sul prodotto**. È il modo di
+rompersi **2** (cablaggio mancante) con sopra il **4** (controllo che non controlla): il pezzo
+c'era, era dimostrato, e non era collegato a niente.
+
+**Perché nessun test lo vedeva.** `test_relazione_osservata_uguale_al_modello` esisteva già e
+pilota il DB vero — ma prova **solo i 6 stati del modello**, e su quei 6 whitelist e blacklist
+danno lo stesso identico risultato. Le due cose diventano distinguibili **solo** su uno stato
+fuori dal modello. Sbaglio della stessa famiglia della **S7**: la premessa mancante non rendeva
+il controllo rosso, lo rendeva **cieco**.
+
+**Ordine D20 rispettato.** (a) due guardie scritte prima; (b) **viste rosse sul codice di
+produzione**, `EXIT=1`, `FAILED (failures=2)` — `'marca_da_rimborsare' ha accettato come
+sorgente lo stato 'contestata'` e `il codice vero si muove da ['contestata', 'in_attesa',
+'in_attesa_host', 'pagato', 'scaduto'], il modello dichiara ['in_attesa', 'in_attesa_host',
+'pagato', 'scaduto']`; (c) riparazione; (d) stesse guardie **verdi**, `EXIT=0`.
+
+**La riparazione.** `fase162` non ha più liste proprie: `_sorgenti_ammesse()` gira al contrario
+la relazione di `fase199.transizioni_prenotazione()` e produce `_AMMESSI`, misurato:
+`{'pagato': ('in_attesa','scaduto'), 'scaduto': ('in_attesa','in_attesa_host'), 'rimborsato':
+('in_attesa','in_attesa_host','pagato','scaduto'), 'cancellata_host': (idem)}`. I quattro punti
+la leggono: `conferma` (il filtro Python davanti al CAS), `scadi`, `marca_da_rimborsare`,
+`marca_cancellata_host` — questi ultimi tre costruiscono i segnaposto `?` con l'idioma già usato
+nel file (`attivi_multi`) e in `fase34`. **Il CAS resta CAS**: nessuna transazione, nessun
+`BEGIN IMMEDIATE`, nessuna gara è stata toccata — cambia solo *da dove viene l'elenco degli
+stati*. Diff di produzione: 4 punti d'uso + 1 import + 1 funzione derivata.
+
+**Guardia permanente.** `test_le_sorgenti_ammesse_dal_codice_sono_quelle_del_modello` pretende
+che, per **ogni** evento, l'insieme delle sorgenti da cui il codice vero si muove davvero sia
+**esattamente** quello dichiarato in `EVENTI_PRENOTAZIONE`, provando anche uno stato fuori dal
+modello. Se domani qualcuno riscrive una di quelle liste a mano, o allarga il dominio senza
+passare da `fase199`, diventa rossa **lo stesso giorno**.
+
+**Cosa NON è stato fatto, ed è dichiarato** (D18 punto 3). Il punto 3 dell'ordine —
+`guardia_prenotazione()` (I1 doppia conferma, I2 bilancio, I3 prova) attiva al finalizza — resta
+**scollegato**: oggi `fase83_server.py:5499` chiama solo `i3` e `i4`, su un dict **sintetico**,
+in **fail-open**. I1 richiede la lista delle prenotazioni sovrapposte sull'unità, che in quel
+punto non è caricata: costa una query in più sul money-path e una decisione sul fail-open.
+Non è chirurgico come i punti 1 e 2, e aspetta un via separato del fondatore.
+
+**Rilievi del linter, dichiarati.** Il gate vero della CI (`--select E9,F63,F7,F82,B002,…`) è
+**pulito** sui due file. Il job informativo segnala 3 `S608` nuovi (SQL costruito a stringa),
+identici ai 3 già presenti nello stesso file: i pezzi interpolati sono **solo segnaposto `?`**,
+i valori viaggiano come parametri.
+
 ### 🛣️ LE DUE CORSIE, B5 E B6 — 2026-08-24
 
 **Misurato:** 406 file di test · 151 moduli · **6012 test** dal caricatore, su `b4b47b9` più il

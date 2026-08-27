@@ -240,9 +240,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: bfd227d
+CONSEGNE AGGIORNATE A: 604991e
 
-SUITE ATTUALE: Ran 6034 test
+SUITE ATTUALE: Ran 6036 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (test_pipeline_ci.py:2054, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -250,24 +250,27 @@ SUITE ATTUALE: Ran 6034 test
    un giro: e' il difetto B14, e non si chiude qui -- si chiude cambiando quella regex, che
    sta in un file di test e non e' questo lavoro. Le due voci vere sono qui sotto.
 
-CARICATORE (RACCOLTI):  6034  <- rimisurato il 2026-08-27 col caricatore, da PowerShell,
-                                 PRIMA di qualunque giro (S14), DOPO l'unione delle due
-                                 corsie. Erano 6028: i 6 in piu' sono le 4 guardie di
-                                 `test_seo_sandbox.TestHomepageDotazioneSEO` (corsia C) e le
+CARICATORE (RACCOLTI):  6036  <- rimisurato il 2026-08-27 col caricatore, da PowerShell,
+                                 PRIMA di qualunque giro (S14), DOPO l'unione di TUTTE E TRE
+                                 le corsie. Erano 6028: gli 8 in piu' sono le 4 guardie di
+                                 `test_seo_sandbox.TestHomepageDotazioneSEO` (corsia C), le
                                  2 sulle risorse per worktree (corsia A),
                                  `test_LE_TRE_TRACCE_IN_TEMP_SONO_DISTINTE_PER_WORKTREE` e
-                                 `test_LE_RISORSE_CONDIVISE_FUORI_DAL_REPOSITORY_SONO_PER_WORKTREE`.
+                                 `test_LE_RISORSE_CONDIVISE_FUORI_DAL_REPOSITORY_SONO_PER_WORKTREE`,
+                                 e le 2 di `test_fase199_transizioni.py` sulla macchina a
+                                 stati dei soldi (corsia B).
                                  ⛔ NON e' 6030+6032 ne' una somma di nessun tipo: le due
                                  corsie partivano dalla stessa base 6028, quindi sommare i
                                  due totali avrebbe contato la base due volte. Il numero qui
                                  sopra e' USCITO DAL CARICATORE dopo il merge (D22: un numero
                                  ottenuto sommandone altri non e' misurato).
-ESEGUITI (ultimo giro): 6029  <- MISURATO il 2026-08-27 da PowerShell sull'albero UNITO
-                                 (corsia A piu' corsia C), dopo la correzione del B009:
-                                 `Ran 6029 tests in 1709.644s -- OK (skipped=4)`, codice
-                                 d'uscita letto diretto (nessun tubo), EXIT=0, zero falliti.
-                                 Il giro prima della correzione: 1741.568s, stesso numero e
-                                 stesso esito. Torna col caricatore:
+ESEGUITI (ultimo giro): 6031  <- MISURATO il 2026-08-27 da PowerShell sull'albero con TUTTE
+                                 E TRE le corsie dentro (A, B e C): `Ran 6031 tests in
+                                 1739.764s -- OK (skipped=4)`, codice d'uscita letto diretto
+                                 (nessun tubo), EXIT=0, zero falliti.
+                                 I giri precedenti della stessa giornata: 6029 in 1709.644s
+                                 (A piu' C, dopo la correzione del B009) e 6029 in 1741.568s
+                                 (A piu' C, prima). Torna col caricatore:
                                  6034 - 5 (le guardie openssl) = 6029, esatto.
                                  ⛔ Questa riga e' l'UNICA scritta DOPO il giro, e non puo'
                                  essere altrimenti: il numero degli ESEGUITI non esiste prima
