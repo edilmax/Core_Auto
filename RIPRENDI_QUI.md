@@ -30,6 +30,13 @@ IMMAGINE VIVA       sha256:8def0ea3...  <- costruita da d7f60c7 il 2026-08-26 17
                     uniti SOLO documenti (#114, #115 e il listino ufficiale), e il fondatore
                     ha detto «niente deploy». I tre git sono allineati, il browser serve
                     ancora d7f60c7 - ed e' corretto cosi', perche' nessun codice e' cambiato.
+                    ⛔ E DA QUI IN POI NON E' PIU' VERO CHE «nessun codice e' cambiato»:
+                    la dotazione SEO della homepage tocca `deploy/index.html`, che e'
+                    PRODUZIONE (B4, 2026-08-24) -- e' cio' che il browser serve davvero.
+                    I sei tag nuovi (description, canonical, og:*) sono nel repository e
+                    NON sono online: finche' non si deploya, chi apre bookinvip.com legge
+                    ancora un <head> con il solo <title>. Non e' un guasto, e' uno scarto
+                    dichiarato: il deploy resta fermo al «niente deploy» del fondatore.
 IN PRODUZIONE       curl https://bookinvip.com/api/health  ->  HTTP 200 in 0,301 s
                     {"status":"ok","money_unit":"cents_integer","guardiano":"ok","email_ko":0}
 ```
@@ -233,9 +240,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 18c78d4
+CONSEGNE AGGIORNATE A: bcf9411
 
-SUITE ATTUALE: Ran 6030 test
+SUITE ATTUALE: Ran 6034 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (test_pipeline_ci.py:2054, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -243,14 +250,35 @@ SUITE ATTUALE: Ran 6030 test
    un giro: e' il difetto B14, e non si chiude qui -- si chiude cambiando quella regex, che
    sta in un file di test e non e' questo lavoro. Le due voci vere sono qui sotto.
 
-CARICATORE (RACCOLTI):  6030  <- rimisurato il 2026-08-27 col caricatore, da PowerShell,
-                                 PRIMA di qualunque giro (S14). Erano 6028: i due in piu'
-                                 sono `test_LE_TRE_TRACCE_IN_TEMP_SONO_DISTINTE_PER_WORKTREE`
-                                 e `test_LE_RISORSE_CONDIVISE_FUORI_DAL_REPOSITORY_SONO_PER_WORKTREE`.
-ESEGUITI (ultimo giro): 6023  <- MISURATO il 2026-08-26 da PowerShell sull'albero poi unito
-                                 in d7f60c7: `Ran 6023 tests in 1828.933s -- OK (skipped=4)`,
-                                 codice d'uscita letto diretto, EXIT=0. Torna col caricatore:
-                                 6028 - 5 (le guardie openssl) = 6023, esatto.
+CARICATORE (RACCOLTI):  6034  <- rimisurato il 2026-08-27 col caricatore, da PowerShell,
+                                 PRIMA di qualunque giro (S14), DOPO l'unione delle due
+                                 corsie. Erano 6028: i 6 in piu' sono le 4 guardie di
+                                 `test_seo_sandbox.TestHomepageDotazioneSEO` (corsia C) e le
+                                 2 sulle risorse per worktree (corsia A),
+                                 `test_LE_TRE_TRACCE_IN_TEMP_SONO_DISTINTE_PER_WORKTREE` e
+                                 `test_LE_RISORSE_CONDIVISE_FUORI_DAL_REPOSITORY_SONO_PER_WORKTREE`.
+                                 ⛔ NON e' 6030+6032 ne' una somma di nessun tipo: le due
+                                 corsie partivano dalla stessa base 6028, quindi sommare i
+                                 due totali avrebbe contato la base due volte. Il numero qui
+                                 sopra e' USCITO DAL CARICATORE dopo il merge (D22: un numero
+                                 ottenuto sommandone altri non e' misurato).
+ESEGUITI (ultimo giro): 6025  <- MISURATO il 2026-08-27 da PowerShell sul ramo della corsia A
+                                 PRIMA dell'unione con master: `Ran 6025 tests in 2314.061s
+                                 -- OK (skipped=4)`, codice d'uscita letto diretto (nessun
+                                 tubo), EXIT=0. Tornava col caricatore di allora:
+                                 6030 - 5 (le guardie openssl) = 6025, esatto.
+                                 ⛔ SULL'ALBERO UNITO IL GIRO NON E' ANCORA STATO FATTO, e
+                                 questa riga non lo finge: il numero atteso sarebbe 6029
+                                 (6034 - 5), ma finche' non esce dal terminale e' una
+                                 previsione, non una misura. Si riscrive dopo il giro.
+                                 ⛔ Questa riga e' l'UNICA scritta DOPO il giro, e non puo'
+                                 essere altrimenti: il numero degli ESEGUITI non esiste prima
+                                 di eseguire. Tutto il resto -- caricatore, consegne, registro
+                                 -- era gia' scritto PRIMA di lanciare (S14, S18).
+                                 I giri precedenti, per confronto: `Ran 6027 in 4412.954s`
+                                 (corsia C su efe35b5) e `Ran 6025 in 2314.061s` (corsia A,
+                                 in parallelo con C). Il numero non si muove per il carico,
+                                 il tempo si'.
                                  Prima delle 16 guardie nuove il numero era 6007, misurato
                                  tre volte nella stessa notte (2874.693s, 2244.352s,
                                  1731.102s): il numero non si muoveva, il tempo si', ed e'
@@ -273,8 +301,8 @@ AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3, ed e' la
             ragione dello scarto fra RACCOLTI e ESEGUITI (5 di scarto: le guardie openssl).
-MISURATO:  2026-08-26 su d7f60c7 (albero pulito), col caricatore, da PowerShell, e PRIMA
-           di lanciare (S14):
+MISURATO:  2026-08-26 su efe35b5 (albero con le 4 modifiche della dotazione SEO homepage,
+           non committate), col caricatore, da PowerShell, e PRIMA di lanciare (S14):
            python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"
            -> 6028
 COMANDO:  python -m unittest discover -s . -p "test_*.py"
@@ -1305,6 +1333,36 @@ calcolo), e l'unica regola italiana cablata — il **CIN** — è agganciata cor
 > quattro cose — Stripe che paga lì, il contratto nella sua lingua con la sua legge, il dato
 > bancario giusto (non per forza IBAN), e la tariffa detta com'è. ⛔ Finché non è così, quel paese
 > non si recluta.
+
+### 🟠 B21 — L'HREFLANG DELLA HOMEPAGE: UNA DECISIONE DA PRENDERE (D16), NON UN LAVORO DA FARE
+*(2026-08-26, aperto insieme alla dotazione SEO della homepage.)* La homepage ha ora
+description, canonical assoluto self-referente e le quattro `og:` — e **non** ha hreflang, per
+scelta del fondatore. Le tre misure che tengono aperta la decisione:
+
+```
+python -c "import fase97_inbound_seo as f; print(len(f.locali_hreflang()))"   -> 25
+grep -n "SUPP *=" deploy/index.html    -> 277:const SUPP = ['it','en','es','fr','de','pt','ja','zh']   (8)
+grep -n "BV.linguaIniziale" -A 6 deploy/app.js   -> 97: legge localStorage e navigator.languages, MAI location.search
+```
+
+**Il nodo:** l'hreflang ha senso solo se ogni locale ha un **URL distinto**. La homepage non
+onora `?lang=`, quindi oggi `https://bookinvip.com/?lang=de` servirebbe **la stessa identica
+pagina** di `/` — 25 URL, un contenuto solo: duplicato, cioè peggio del niente che c'era prima.
+
+**Le due strade, e costano cose diverse:**
+- **(a) onorare `?lang=`** — si tocca `deploy/app.js` (`BV.linguaIniziale` legge anche
+  `location.search`) e `deploy/index.html` (25 `<link rel="alternate">` + x-default). Entrambi
+  sono `deploy/`, cioè **produzione**: serve «autorizzato». E resta uno scarto da sanare: la
+  homepage parla **8** lingue, `locali_hreflang()` ne dichiara **25**. Un hreflang che promette
+  una lingua che il selettore non ha è la stessa famiglia di B8.
+- **(b) restare a un URL solo** — niente hreflang sulla homepage, e si scrive **perché**, così
+  fra sei mesi nessuno lo rimette per abitudine. Costo zero, targeting per-paese perso.
+
+⚠️ **Contrasto trovato per strada, da chiudere con la decisione:** fase97 dichiara **tre** cifre
+diverse sulle proprie lingue — docstring riga 17 «Multilingua (**5 lingue**)», `LINGUE` riga 28
+= **13**, testo **pubblico** `llms_txt()` riga 750 (servito su `/llms.txt`) «230+ città in **13
+lingue**» — mentre `locali_hreflang()` ne produce **25** e la homepage ne serve **8**. Cinque,
+tredici, venticinque, otto: quattro numeri per la stessa domanda. Nessuno è stato toccato.
 
 ### 🟠 B15 — `--scopo` MEMORIZZA I FILE MA NON IL **PERCHÉ**, E ACCETTA OPZIONI CHE NON ESISTONO
 *(2026-08-24.)* La regola ferrea 15 pretende due cose: **quali** file si toccheranno e, se
