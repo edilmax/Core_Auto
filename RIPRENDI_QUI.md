@@ -21,11 +21,12 @@
 ## 📍 DOVE SIAMO — 2026-08-26, letto dall'API e dai QUATTRO posti
 
 ```
-computer            efe35b5
-GitHub master       efe35b5
-VPS (git sul disco) efe35b5
+computer            f937fd6   <- git rev-parse --short master, 2026-08-27 22:2xZ
+GitHub master       f937fd6   <- le tre corsie unite: #117 (C), #118 (A), #119 (B)
+VPS (git sul disco) efe35b5   <- ⛔ INDIETRO DI 3 UNIONI, misurato adesso via ssh
 IMMAGINE VIVA       sha256:8def0ea3...  <- costruita da d7f60c7 il 2026-08-26 17:06:22Z
-                                           running - health=healthy
+                                           running - health=healthy (misurato adesso)
+                    HTTP 200 in 0,228 s · {"status":"ok","guardiano":"ok","email_ko":0}
                     ⚠️ L'IMMAGINE E' INDIETRO DI PROPOSITO: da d7f60c7 in poi sono stati
                     uniti SOLO documenti (#114, #115 e il listino ufficiale), e il fondatore
                     ha detto «niente deploy». I tre git sono allineati, il browser serve
@@ -306,7 +307,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 20e94f4
+CONSEGNE AGGIORNATE A: f937fd6
 
 SUITE ATTUALE: Ran 6036 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
@@ -330,18 +331,44 @@ CARICATORE (RACCOLTI):  6036  <- rimisurato il 2026-08-27 col caricatore, da Pow
                                  due totali avrebbe contato la base due volte. Il numero qui
                                  sopra e' USCITO DAL CARICATORE dopo il merge (D22: un numero
                                  ottenuto sommandone altri non e' misurato).
-ESEGUITI (ultimo giro): 6031  <- MISURATO il 2026-08-27 in Core_Auto_B, PRIMO GIRO PULITO di
-                                 quella cartella (macchina verificata vuota prima di partire):
-                                 `Ran 6031 tests in 2341.676s -- OK (skipped=4)`, codice
-                                 d'uscita letto diretto (nessun tubo), EXIT=0, zero falliti.
-                                 INIZIO=21:00:32 FINE=21:39:37, cioe' 39 minuti tondi di
-                                 orologio, che tornano coi 2341.676s.
-                                 ⛔ 39 MINUTI CONTRO I 28-31 DELLE ALTRE CARTELLE, e non si sa
-                                 ancora perche'. Sospetto DA VERIFICARE, non diagnosi: in TEMP
-                                 ci sono 48.575 cartelle piu' vecchie di questo giro, e una
-                                 cartella con decine di migliaia di sottocartelle rallenta ogni
-                                 singola operazione su file. Si misura DOPO questo commit, per
-                                 prefisso (chi), poi date e dimensione del prefisso dominante.
+ESEGUITI (ultimo giro): 6031  <- MISURATO il 2026-08-28 in Core_Auto, sull'albero che porta
+                                 questa mappa: `Ran 6031 tests in 1907.329s -- OK (skipped=4)`,
+                                 codice d'uscita letto diretto (nessun tubo), EXIT=0, zero
+                                 falliti. INIZIO 23:29:44, FINE 00:01:31: 32 minuti, che
+                                 tornano coi 1907.329s.
+                                 ⛔ E QUI C'E' STATO UNO SBAGLIO, scritto perche' non si
+                                 ripeta: mentre il giro girava era stato detto al fondatore
+                                 che «ci sta mettendo un'ora e mezza», con tanto di
+                                 spiegazione sul carico delle tre corsie. Falso: la durata
+                                 era stata DEDOTTA dall'ora in cui si RICORDAVA di aver
+                                 lanciato, invece che misurata. Il giro e' durato 32 minuti
+                                 normalissimi. Una spiegazione elaborata di un fenomeno che
+                                 non esiste e' peggio di nessuna spiegazione, perche' sembra
+                                 competente (D22: un numero si scrive solo con la misura che
+                                 lo regge -- e vale anche per un numero detto a voce).
+                                 Il giro precedente in Core_Auto_B, primo pulito di quella
+                                 cartella: `Ran 6031 in 2341.676s`, INIZIO 21:00:32
+                                 FINE 21:39:37.
+                                 ✅ 39 MINUTI CONTRO I 28-31 DELLE ALTRE: DOMANDA CHIUSA la
+                                 notte del 27, e NON era la cartella. Le tre cartelle sono
+                                 state cronometrate sullo stesso identico lavoro:
+                                   Core_Auto    test singolo 1,03s   caricatore 1,55s
+                                   Core_Auto_B  test singolo 1,62s   caricatore 1,29s
+                                   Core_Auto_C  test singolo 0,97s   caricatore 1,43s
+                                 Identiche: le differenze sono rumore, e sul caricatore B e'
+                                 la piu' veloce. Anche il contenuto e' stato confrontato
+                                 (Core_Auto_B 37 MB / 1.646 file contro Core_Auto_C 33 MB /
+                                 1.569): gemelle. E `Core_Auto`, che ha 181 MB e 24 database
+                                 di prova, e' la PIU' VELOCE delle tre -- quindi neanche i
+                                 residui spiegano niente.
+                                 La causa e' IL CARICO DELLA MACCHINA, e i tempi in fondo a
+                                 questa voce lo mostrano in fila. Il giro delle 21:00 non era
+                                 «da fermo» come si credeva: altre due sessioni stavano
+                                 leggendo file e interrogando l'API in quei minuti.
+                                 ⛔ QUINDI IL TEMPO NON E' UN SEGNALE, e non va inseguito:
+                                 l'unica cosa che conta di una suite e' verde o rossa, e
+                                 quella non si muove col carico -- il conteggio dei test e'
+                                 tornato esatto in tutti e sette i giri della giornata.
                                  ⛔ E IL NUMERO SPORCO DA CANCELLARE E' 2885.735s: era il giro
                                  delle 20:40 di questa cartella, CONTAMINATO (due suite sugli
                                  stessi database dalle 20:04 alle 20:52). Era gia' finito in
@@ -447,6 +474,67 @@ davvero il **2026-08-07**. `docker inspect` è l'unico che guarda cosa sta giran
 
 ⚠️ E le richieste di unione **si chiedono all'API, non ai documenti**: già tre volte un
 documento ne dava una per chiusa mentre era ancora aperta.
+
+---
+
+# 🗺️ LE QUATTRO POSTAZIONI — chi sta dove, e cosa fa
+
+> **Scritta il 2026-08-27**, dopo la giornata in cui tre corsie hanno lavorato insieme per la
+> prima volta. Serve a chi apre una sessione nuova: le chat perdono la memoria, i file no.
+> ⛔ Misurata con `git worktree list`, non ricordata.
+
+| dove | ramo | chi | cosa fa |
+|---|---|---|---|
+| `Desktop\Core_Auto` | `master` | **D** — coordina | legge, misura, assegna, verifica. **Non scrive codice.** |
+| `Desktop\Core_Auto_A` | `lavoro-a` | **A** | una riparazione alla volta, fino in fondo |
+| `Desktop\Core_Auto_B` | `lavoro-b` | **B** | idem |
+| `Desktop\Core_Auto_C` | `lavoro-c` | **C** | idem |
+
+**Perché quattro cartelle e non una.** Sono copie di lavoro dello stesso repository
+(`git worktree`), una per ramo. Servono a scrivere e riparare in parallelo senza aspettarsi.
+⛔ **Non** servono a lanciare quattro suite insieme: vedi la regola qui sotto.
+
+**Cosa NON è più condiviso** *(riparato il 2026-08-27, corsia A)*. Tre cose vivevano fuori
+dalle cartelle ed erano in comune, quindi chi arrivava secondo sovrascriveva il primo: la
+traccia dello scopo, la traccia del giro di mutazione, la cartella degli artefatti orfani, e
+le due porte di rete cablate. Adesso ognuna porta il nome della sua cartella, e due guardie lo
+pretendono (`test_LE_TRE_TRACCE_IN_TEMP_SONO_DISTINTE_PER_WORKTREE` e
+`test_LE_RISORSE_CONDIVISE_FUORI_DAL_REPOSITORY_SONO_PER_WORKTREE`). Verificato sul campo:
+due suite intere insieme in due cartelle, entrambe verdi, nessuna si è presa la porta
+dell'altra.
+
+**LA REGOLA CHE COSTA DI PIÙ: una suite alla volta.** Il computer è uno solo. I tempi
+misurati il 2026-08-27, e la progressione parla da sé:
+
+```
+1709s · 1741s   macchina davvero libera
+2290s · 2314s   due suite in parallelo
+2341s           una suite, ma con due sessioni che leggevano
+2885s           due suite NELLA STESSA cartella  <- giro buttato, non era un esito
+```
+
+⚠️ **«Da fermo» vuol dire che le altre non fanno NIENTE, nemmeno leggere.** Anche un `grep` su
+file grossi o un'interrogazione all'API carica la macchina. In pratica non conviene quasi mai:
+mezz'ora di tre corsie ferme costa più di otto minuti di suite in più. **Quindi il tempo non è
+un segnale**: l'unica cosa che conta di una suite è verde o rossa, e quella non si muove col
+carico — il conteggio dei test è tornato esatto in tutti e sei i giri della giornata.
+
+⛔ **Due suite nella STESSA cartella si pestano sugli stessi database di prova.** È successo
+il 2026-08-27 dalle 20:04 alle 20:52, e quel giro è stato buttato **senza leggerlo**: un giro
+contaminato non è un esito né se esce verde né se esce rosso, e leggerlo lascia un numero da
+difendere.
+
+**Le regole di convivenza, tutte imparate rompendole:**
+1. **nessuno tocca la cartella di un altro.** Violata il 2026-08-27 dalla corsia che
+   coordina, che è entrata in `Core_Auto_B` e ha modificato un file di produzione senza dirlo.
+   L'ha scoperto la corsia B, che ha fatto la cosa giusta: **ha dichiarato i file che non
+   riconosceva invece di committarli alla cieca**;
+2. **la suite si prenota**: la corsia chiede, D controlla che la macchina sia libera, D dà il via;
+3. **se serve qualcosa dalla cartella di un'altra**, si legge; se serve che *cambi*, lo si dice
+   a D;
+4. **il commit vuole la frase esatta** «procedi al commit» scritta dal fondatore **in quella
+   sessione**, non riferita da un'altra corsia;
+5. **il merge lo decide il fondatore**, sempre.
 
 ---
 
@@ -665,15 +753,50 @@ servono. Il giro completo solo se restano sopravvissuti.
 ⚠️ **Due corsie, mai tre**: il computer del fondatore ha **16 GB**, e il giro di mutazione se ne
 prende una parte grossa.
 
-### 🔴 B7 — LA RICONCILIAZIONE CHIUDE CONTRO SE STESSA, NON CONTRO STRIPE
-*(dalla mappa dei 39 pezzi, 2026-08-23.)* `fase182_riconciliazione` è provata da
-`test_riconciliazione`, `test_riconciliazione_interlibro` e `test_movimenti_giornale`: il libro
-torna **contro il libro**. Il confronto col **traffico vero di Stripe** — il terzo che tiene i
-soldi davvero — non esiste.
-> 💡 **È esattamente il metodo che ci manca secondo la ricerca industriale** (AWS: verificare
-> le regole dei soldi sul traffico VERO). Finché il conto chiude solo contro se stesso, un
-> errore sistematico nostro è invisibile per costruzione: sbaglia due volte allo stesso modo e
-> il confronto torna.
+### 🟠 B7 — IL PONTE VERSO STRIPE C'È: QUELLO CHE MANCA È CHI CONTROLLA LE NOSTRE ASSUNZIONI
+
+> ⛔ **RISCRITTA IL 2026-08-27, perché la versione precedente DICEVA IL FALSO.** Diceva: «il
+> confronto col traffico vero di Stripe non esiste». **Esiste.** Trovato dalla corsia C
+> aprendo il file, e verificato una seconda volta dalla corsia che coordina:
+> ```
+> fase182_riconciliazione.py:32   url = "https://api.stripe.com/v1/" + percorso
+>                           :62   def stripe_sessioni_pagate(...)
+>                           :78   def stripe_somme_balance(...)
+>                           :14   READ-ONLY totale. GATED dalla chiave.
+> chiamato da fase186_guardiano, fase177_financial_controller, fase83_server
+> ```
+> Il ponte è in **sola lettura**, acceso dalla chiave, e gira **ogni giorno** dentro il
+> Guardiano. Per giorni questa voce ha mandato chiunque la leggesse a ricostruire una cosa
+> già fatta — ed è il difetto che il progetto combatte da sempre: una riga di documento che
+> invecchia e che nessuno riapre. **Costo evitato per un soffio: un lavoro intero.**
+
+**Cosa manca DAVVERO, e non è un secondo riconciliatore.** Il ponte confronta i nostri numeri
+con quelli di Stripe, ma **entrambi i lati sono letti col nostro codice, secondo le nostre
+assunzioni sulla forma dei dati**. Se un'assunzione è sbagliata, il confronto torna lo stesso —
+e il finto usato nei test è sbagliato insieme a noi, quindi resta verde per sempre. Le quattro
+assunzioni da verificare contro la documentazione vera (censite dalla corsia C il 2026-08-27):
+
+1. **valute a zero decimali**: in JPY `amount_total` è in yen interi, non in centesimi.
+   `fase182` confronta cents contro cents e `test_riconciliazione_interlibro` usa proprio JPY.
+   Se sbagliamo qui, sbagliamo **di cento volte** e nessun test lo vede;
+2. **`reporting_category` contro `type`** (`fase182:86`): due tassonomie diverse, e l'`or` fra
+   le due può far cadere movimenti nella categoria sbagliata;
+3. **`charge` è lordo o netto** delle commissioni Stripe, e il nostro «incasso» cos'è? Se non
+   sono la stessa cosa, il delta non è zero per costruzione;
+4. **cosa finisce dentro l'`abs()`** a `:89` oltre a charge/refund/transfer — contestazioni,
+   aggiustamenti, payout verso il nostro conto.
+
+**La forma della riparazione** (proposta dalla corsia C, non ancora autorizzata): non un altro
+confronto dei conti, ma un **verificatore di contratto** in `collaudi/` — spento di serie, che
+senza chiave dichiara **NON ESEGUITO** e mai «verde», in sola lettura, che scarica poche
+sessioni vere e verifica **solo la forma dei campi**, senza mai stampare importi o
+identificativi (regola ferrea 14). Gira sul VPS, dove la chiave c'è.
+
+⚠️ **E c'è un difetto vivo già individuato nello stesso file**: `fase182` ha un tetto alle
+pagine scaricate, e quando lo raggiunge **il rapporto dichiara ok/fantasmi come se avesse
+guardato tutto**. È un risultato parziale spacciato per completo, cioè la forma peggiore di
+verde finto. Si ripara con una riga — portare fuori la bandiera di parzialità — ma vale D20:
+prima la guardia, vista rossa, e solo dopo la riparazione.
 
 ## 🔴 B8+B9+B10 — ANTI-RIMPIANTO: badge, valore reale, trasferibilità — SI FANNO INSIEME IN UN GIRO
 
@@ -1155,7 +1278,23 @@ e il pannello ne promette una (**B16 punto e**).
 aprire ai clienti. PARTE 13 = registro delle famiglie chiuse, si aggiorna a ogni famiglia
 chiusa. PARTE 15 = cosa fanno i grandi.
 
-### 🟠 B21 — LA WHITELIST DEGLI STATI CONFERMABILI È SCRITTA A MANO IN DUE POSTI, E NESSUNO DEI DUE DERIVA DAL MODELLO
+### 🟠 B21 — LA WHITELIST DEGLI STATI CONFERMABILI: METÀ CHIUSA, RESTA `fase83_server.py:8196`
+
+> ✅ **CHIUSA LA METÀ PIÙ GRANDE il 2026-08-27 dalla corsia B** (in `master` con la richiesta
+> di unione #119). `fase162_pagamenti_pendenti.py` adesso **deriva** gli stati ammessi da
+> `fase199_invarianti.transizioni_prenotazione()` invece di scriverli a mano in quattro punti.
+> Verificato a **comportamento invariato**, stato per stato: nessuno tolto, nessuno aggiunto.
+>
+> ⛔ **E la corsia B ha trovato una cosa che questo referto non aveva visto: due di quelle
+> quattro liste erano scritte AL CONTRARIO** — `stato NOT IN (...)`, cioè una blacklist. Una
+> blacklist **ammette di default ogni stato nuovo**: bastava aggiungere uno stato al dominio
+> perché rimborso e cancellazione-host lo accettassero come sorgente legale, **senza che
+> nessun test diventasse rosso**. È un difetto peggiore della copia: la copia resta ferma,
+> questa si allargava da sola.
+>
+> **RESTA APERTA la seconda copia**, `fase83_server.py:8196`, nel percorso del webhook Stripe.
+> Non è un difetto vivo — oggi dice la stessa cosa del modello — ma è una regola scritta a
+> mano che il modello non conosce. Tocca codice di produzione: **aspetta «autorizzato»**.
 
 *(misurato il 2026-08-27 su `a77651a`, aprendo le righe una per una)*
 
@@ -1197,9 +1336,47 @@ seconda copia della stessa regola in `fase83` **non ha nemmeno quella**.
 
 ---
 
-### 🟠 B22 — DUE DOCSTRING DESCRIVONO UNA RIGA CHE NON ESISTE PIÙ («riga 263»)
+### 🟢 B23 — 47.000 CARTELLE TEMPORANEE MAI RIMOSSE, TRE MESI E MEZZO DI RESIDUI
 
-*(misurato il 2026-08-27 su `a77651a` con `grep -nEi "riga ?263|riga263" test_fase162_hold_pagamento.py`)*
+*(trovato dalla corsia B il 2026-08-27, guardando dove nessuno guardava)*
+
+In `TEMP` ci sono circa **47.000 cartelle `tmp*`**, la più vecchia di tre mesi e mezzo fa, per
+un totale stimato di **~1,4 GB**. Sono residui: qualcosa le crea a ogni giro e non le toglie.
+
+⚠️ **NON è la causa dei giri lenti**, e l'ipotesi è già stata smontata dalla corsia B con un
+argomento che regge: `TEMP` è **una sola per tutta la macchina**, quindi rallenterebbe tutte e
+quattro le cartelle allo stesso modo — invece i tempi diversi si spiegano col carico (vedi la
+mappa delle postazioni in cima). Resta un difetto di pulizia, non di velocità.
+
+**Come si misura, in quest'ordine — CHI prima di QUANDO e QUANTO:**
+1. conta per **prefisso** guardando **solo i nomi**, senza chiedere data e dimensione: è una
+   lettura sola invece di 47.000. Se un prefisso fa il 90%, quello è il nome dell'attrezzo che
+   non pulisce, e la riparazione è una riga;
+2. **le date solo del prefisso dominante**: se la più vecchia è di oggi, il difetto è recente;
+3. **la dimensione solo di quello**.
+
+💡 **Un posto dove guardare, non una diagnosi:** `collaudi/batteria.py` crea
+`tempfile.mkdtemp(prefix="batteria_banco_")` a ogni giro, e nell'intorno non si vede niente che
+la rimuova. Il commento accanto dice che dev'essere **nuova** a ogni giro, e quello è giusto;
+la domanda è se qualcuno la tolga **dopo**. Se il prefisso dominante non è quello, il bersaglio
+era sbagliato.
+
+⛔ **Non cancellare niente prima di aver guardato cosa c'è e chi lo usa** (regola ferrea 5):
+una cartella temporanea può essere il biglietto di un giro di mutazione aperto, cioè l'unica
+copia sana di un file di produzione mutato.
+
+---
+
+### ✅ B22 — CHIUSA il 2026-08-27 dalla corsia B — LE DOCSTRING CHE CITAVANO «la riga 263»
+
+Tre punti di `test_fase162_hold_pagamento.py` descrivevano una riga che si era spostata di 61
+posizioni. **Riparata nel modo giusto: non aggiornando il numero, togliendolo.** Adesso le
+docstring nominano *il cancello di `conferma`*, non le sue coordinate — un riferimento che
+porta una cifra prima o poi mente (S17). Chiusa anche la terza occorrenza, quella nel **nome
+del test**, che era la più costosa perché la citavano gli schedari della mutazione.
+
+*(il referto originale, per la storia: misurato il 2026-08-27 su `a77651a` con
+`grep -nEi "riga ?263|riga263" test_fase162_hold_pagamento.py`)*
 
 ```
 test_fase162_hold_pagamento.py:130   ... Fra questi ultimi c'e' la riga 263,
