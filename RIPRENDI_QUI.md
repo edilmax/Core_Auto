@@ -235,7 +235,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 ```
 CONSEGNE AGGIORNATE A: f3c3b6b
 
-SUITE ATTUALE: Ran 6028 test
+SUITE ATTUALE: Ran 6029 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (test_pipeline_ci.py:2054, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -243,9 +243,9 @@ SUITE ATTUALE: Ran 6028 test
    un giro: e' il difetto B14, e non si chiude qui -- si chiude cambiando quella regex, che
    sta in un file di test e non e' questo lavoro. Le due voci vere sono qui sotto.
 
-CARICATORE (RACCOLTI):  6028  <- rimisurato il 2026-08-26 col caricatore, da PowerShell,
-                                 PRIMA di qualunque giro (S14). Erano 6012: i 16 in piu'
-                                 sono le guardie di `test_email_tracciata.py`.
+CARICATORE (RACCOLTI):  6029  <- rimisurato il 2026-08-27 col caricatore, da PowerShell,
+                                 PRIMA di qualunque giro (S14). Erano 6028: l'uno in piu' e'
+                                 `test_LE_TRE_TRACCE_IN_TEMP_SONO_DISTINTE_PER_WORKTREE`.
 ESEGUITI (ultimo giro): 6023  <- MISURATO il 2026-08-26 da PowerShell sull'albero poi unito
                                  in d7f60c7: `Ran 6023 tests in 1828.933s -- OK (skipped=4)`,
                                  codice d'uscita letto diretto, EXIT=0. Torna col caricatore:

@@ -36,7 +36,17 @@ except Exception:
 
 # La stessa cartella che il giudice apre prima di rompere un file (vedi `_TRACCIA` in
 # `collaudi/mutazione_prodotto.py`). Se esiste, un giro e' aperto O e' stato interrotto.
-TRACCIA = os.path.join(tempfile.gettempdir(), "bookinvip_mutazione_in_corso")
+# ⛔ UNA CASELLA PER WORKTREE, non una per macchina. TEMP e' condiviso: con un nome fisso, un
+# giro di mutazione aperto nella Corsia A bloccava il commit anche nella Corsia B, e il
+# ripristino di un worktree cancellava il biglietto dell'altro -- cioe' lasciava un file di
+# produzione rotto senza piu' nessuno che lo recuperasse.
+# ⛔ QUESTA FORMULA DEVE RESTARE IDENTICA a quella di `mutazione_prodotto.py`: chi scrive il
+# biglietto e chi lo legge devono guardare nella stessa cartella, altrimenti questa guardia
+# dice «via libera» su un giro davvero aperto -- un silenzio scambiato per pace.
+_RADICE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_SUFFISSO_WORKTREE = "".join(c if c.isalnum() else "_" for c in os.path.basename(_RADICE))
+TRACCIA = os.path.join(tempfile.gettempdir(),
+                       "bookinvip_mutazione_in_corso_%s" % _SUFFISSO_WORKTREE)
 
 
 def _legge(percorso):

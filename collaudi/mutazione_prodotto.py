@@ -1406,7 +1406,19 @@ def _e_equivalente(percorso, righe, mutante):
 #  se la traccia c'e' ancora, vuol dire che il giro precedente e' stato interrotto: si
 #  rimette a posto il file e si GRIDA. Mai in silenzio: un ripristino silenzioso nasconde
 #  proprio l'informazione che serve a capire perche' il giro e' morto.
-_TRACCIA = os.path.join(tempfile.gettempdir(), "bookinvip_mutazione_in_corso")
+#  ⛔ UNA CASELLA PER WORKTREE, non una per macchina. TEMP e' condiviso da tutti i worktree
+#  della stessa macchina: con un nome fisso, `recupera_da_interruzione` di un worktree
+#  vedeva i biglietti dell'ALTRO e provava a rimettere a posto file che nel suo albero non
+#  erano nemmeno stati toccati, e `rmtree(_TRACCIA)` spegneva la rete del giro del vicino.
+#  ⛔ QUESTA FORMULA DEVE RESTARE IDENTICA a quella di `guardia_commit.py`: chi scrive il
+#  biglietto e chi lo legge devono guardare nella stessa cartella.
+#  ⚠️ Resta un valore di partenza, NON un valore congelato: `_biglietto()` lo rilegge al
+#  momento, e i collaudi continuano a sostituirlo (`_traccia_isolata`) come prima.
+_RADICE_WORKTREE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_SUFFISSO_WORKTREE = "".join(c if c.isalnum() else "_"
+                             for c in os.path.basename(_RADICE_WORKTREE))
+_TRACCIA = os.path.join(tempfile.gettempdir(),
+                        "bookinvip_mutazione_in_corso_%s" % _SUFFISSO_WORKTREE)
 
 
 def _biglietto(percorso):

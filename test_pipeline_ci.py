@@ -2886,6 +2886,77 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
         fallisce, _ = m.esegui("modulo_che_non_esiste_affatto")
         self.assertIs(False, fallisce, "un test che fallisce deve dare False (mutante ucciso)")
 
+    def test_LE_TRE_TRACCE_IN_TEMP_SONO_DISTINTE_PER_WORKTREE(self):
+        """⛔ UNA CASELLA PER WORKTREE, non una per macchina.
+
+        `tempfile.gettempdir()` e' lo STESSO per tutti i worktree della stessa macchina: con
+        un nome fisso le tre tracce erano una casella sola, condivisa da tutti. Misurato il
+        2026-08-27: 3 su 3 coincidevano. Cosa faceva, in concreto: lo scopo dichiarato dalla
+        Corsia B sovrascriveva quello della Corsia A; un giro di mutazione aperto in A
+        bloccava il commit in B; e il ripristino di un worktree stracciava il biglietto
+        dell'altro, cioe' lasciava un file di produzione rotto senza piu' nessuno che lo
+        recuperasse. Il piano delle due corsie prescrive proprio di lavorare in worktree
+        separati, quindi non e' un caso di scuola.
+
+        ⛔ PERCHE' SERVE QUESTA GUARDIA e non basta la prova fatta a mano quel giorno. Il
+        difetto e' stato chiuso con una formula ripetuta in tre file: senza qualcosa che la
+        pretenda, domani una «semplificazione» rimette il nome fisso e nessuno se ne
+        accorge. Il test del gancio pre-commit ormai CHIEDE il nome allo strumento, quindi
+        seguirebbe il nome sbagliato restando verde: sarebbe un verde che non ha guardato.
+
+        ⚠️ COSA NON PROVA (D18 punto 3): il suffisso viene dal NOME della cartella radice,
+        quindi due worktree omonimi in percorsi diversi collidono ancora. Qui il worktree
+        finto ha un nome diverso, che e' il caso del piano delle due corsie.
+        """
+        import importlib.util
+        import os
+        import shutil
+        import tempfile
+
+        def carica(radice, nome_file, etichetta):
+            percorso = os.path.join(radice, "collaudi", nome_file)
+            spec = importlib.util.spec_from_file_location(etichetta, percorso)
+            modulo = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(modulo)
+            return modulo
+
+        TRE = (("prima_di_lanciare.py", "TRACCIA_SCOPO"),
+               ("guardia_commit.py", "TRACCIA"),
+               ("mutazione_prodotto.py", "_TRACCIA"))
+        a_radice = os.path.dirname(os.path.abspath(__file__))
+        b_radice = tempfile.mkdtemp(prefix="worktree_finto_")
+        self.addCleanup(shutil.rmtree, b_radice, True)
+        os.makedirs(os.path.join(b_radice, "collaudi"))
+        for nome, _attr in TRE:
+            shutil.copy2(os.path.join(a_radice, "collaudi", nome),
+                         os.path.join(b_radice, "collaudi", nome))
+
+        condivise = []
+        for i, (nome, attr) in enumerate(TRE):
+            da_a = getattr(carica(a_radice, nome, "_wt_a_%d" % i), attr)
+            da_b = getattr(carica(b_radice, nome, "_wt_b_%d" % i), attr)
+            if da_a == da_b:
+                condivise.append("%s.%s -> %s" % (nome, attr, da_a))
+        self.assertEqual(
+            condivise, [],
+            "%d tracce su %d sono la STESSA casella in TEMP per due worktree diversi: due "
+            "corsie che lavorano insieme si sovrascrivono a vicenda, e il ripristino "
+            "dell'una straccia il biglietto dell'altra. Il nome deve portare il suffisso "
+            "della cartella radice.\n    %s"
+            % (len(condivise), len(TRE), "\n    ".join(condivise)))
+
+        # ⛔ E L'INVARIANTE OPPOSTO, altrettanto facile da rompere: chi SCRIVE il biglietto e
+        # chi lo LEGGE devono guardare nella stessa cartella. Se le due formule divergessero,
+        # `guardia_commit` direbbe «via libera» su un giro davvero aperto -- un silenzio
+        # scambiato per pace, che e' peggio di un blocco di troppo.
+        scrive = getattr(carica(a_radice, "mutazione_prodotto.py", "_wt_scrive"), "_TRACCIA")
+        legge = getattr(carica(a_radice, "guardia_commit.py", "_wt_legge"), "TRACCIA")
+        self.assertEqual(
+            scrive, legge,
+            "il giudice scrive il biglietto in %r e la guardia del commit lo cerca in %r: "
+            "un giro di mutazione aperto non verrebbe piu' visto, e un file di produzione "
+            "mutato passerebbe il commit." % (scrive, legge))
+
     def _traccia_isolata(self, m):
         """⛔ LA TRACCIA E' UNA SOLA PER TUTTA LA MACCHINA: chi la cancella spegne la rete
         di una campagna in corso, e da quel momento un file di produzione mutato non e'
@@ -6579,7 +6650,15 @@ class TestIGanciDiGitCHIAMANODavveroGliAttrezzi(_GuardieSugliAttrezziDelLavoro):
             return self._senza_sh("pre-commit", "guardia_commit.py")
         cartella = tempfile.mkdtemp()
         try:
-            os.makedirs(os.path.join(cartella, "bookinvip_mutazione_in_corso"))
+            # ⛔ IL NOME LO CHIEDE ALLO STRUMENTO, non lo scrive a mano. Scritto qui era una
+            # QUARTA copia della stessa regola: il 2026-08-27, rendendo le tracce distinte
+            # per worktree, `guardia_commit` ha smesso di trovare questa cartella e il
+            # controllo 5 ha detto «nessun giro aperto» su un giro APERTO. Il gancio si
+            # fermava lo stesso, ma per un altro motivo -- cioe' sembrava protetto senza
+            # aver guardato niente. Chiedendo il nome, il test segue la formula da solo.
+            nome_traccia = os.path.basename(
+                self._carica("guardia_commit.py", "_gc_nome_traccia").TRACCIA)
+            os.makedirs(os.path.join(cartella, nome_traccia))
             amb = dict(os.environ)
             amb["TMP"] = amb["TEMP"] = amb["TMPDIR"] = cartella
             e = subprocess.run([self.sh, "deploy/hooks/pre-commit"], cwd=self.RADICE,
