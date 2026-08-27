@@ -2957,6 +2957,85 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
             "un giro di mutazione aperto non verrebbe piu' visto, e un file di produzione "
             "mutato passerebbe il commit." % (scrive, legge))
 
+    def test_LE_RISORSE_CONDIVISE_FUORI_DAL_REPOSITORY_SONO_PER_WORKTREE(self):
+        """⛔ LA STESSA FAMIGLIA DELLE TRACCE IN TEMP, negli altri due posti dove il progetto
+        esce dal proprio albero: la cartella di transito e le porte di rete.
+
+        Misurato il 2026-08-27. `cartelle_di_transito()` cercava gli artefatti orfani in
+        `os.path.dirname(radice)`, cioe' la cartella che CONTIENE il progetto -- la stessa
+        per tutti i worktree affiancati: il pre-fatto di una corsia accusava la corsia
+        vicina, o peggio diceva «nessuna cartella da esaminare» credendo di aver guardato la
+        propria. Le porte erano cablate (batteria 8099, stress recensioni 8911): due worktree
+        che lanciavano insieme si contendevano la porta, e il secondo interrogava il server
+        del PRIMO -- misurando l'albero sbagliato senza che niente lo dicesse. E' il caso
+        peggiore: non un errore, una misura pulita della cosa sbagliata.
+
+        ⚠️ COSA NON PROVA (D18 punto 3): la porta di `stress_test_recensioni` e' una
+        variabile LOCALE dentro una funzione lunga, quindi qui la si guarda nel SORGENTE e
+        non nel comportamento -- un controllo piu' debole degli altri due, e va detto. E il
+        suffisso della cartella viene dal NOME della radice: due worktree omonimi in posti
+        diversi collidono ancora.
+        """
+        import importlib.util
+        import io as _io
+        import os
+        import re as _re
+        import socket
+
+        def carica(nome_file, etichetta):
+            percorso = os.path.join(QUI, "collaudi", nome_file)
+            spec = importlib.util.spec_from_file_location(etichetta, percorso)
+            modulo = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(modulo)
+            return modulo
+
+        # (1) LA CARTELLA DI TRANSITO. La funzione prende la radice come argomento: si
+        #     interroga con due radici diverse, senza copiare niente sul disco.
+        pdf = carica("prima_di_dire_fatto.py", "_wt_prefatto")
+        una = pdf.cartelle_di_transito(os.path.join("/finto", "Core_Auto_A"))[0]
+        altra = pdf.cartelle_di_transito(os.path.join("/finto", "Core_Auto_B"))[0]
+        self.assertNotEqual(
+            una, altra,
+            "due worktree affiancati cercano gli artefatti orfani nella STESSA cartella "
+            "(%s): il pre-fatto di una corsia accusa l'altra, e nessuna delle due guarda "
+            "davvero la propria. Il nome deve portare il suffisso della cartella radice."
+            % una)
+
+        # (2) LA PORTA DELLA BATTERIA, provata sul COMPORTAMENTO e in modo deterministico:
+        #     si occupa la porta che il modulo ha appena scelto e lo si ricarica. Se la
+        #     porta e' davvero effimera il sistema operativo non puo' ridarla; se e' cablata
+        #     resta identica. Niente scommesse sul caso: la prima socket resta APERTA.
+        prima = carica("batteria.py", "_wt_batteria_1").PORTA
+        occupata = socket.socket()
+        try:
+            occupata.bind(("127.0.0.1", prima))
+            dopo = carica("batteria.py", "_wt_batteria_2").PORTA
+        finally:
+            occupata.close()
+        self.assertNotEqual(
+            prima, dopo,
+            "`collaudi/batteria.py` sceglie sempre la porta %d anche quando e' gia' "
+            "occupata: due batterie in parallelo si contendono la stessa porta e la seconda "
+            "misura il server della prima." % prima)
+
+        # (3) LA PORTA DELLO STRESS SULLE RECENSIONI. ⚠️ Qui il controllo e' sul SORGENTE,
+        #     non sul comportamento: la porta e' una variabile locale dentro una funzione
+        #     lunga e non e' raggiungibile da fuori. Si pretende che non sia un numero
+        #     scritto a mano e che ci sia il bind effimero.
+        with _io.open(os.path.join(QUI, "collaudi", "stress_test_recensioni.py"),
+                      encoding="utf-8") as f:
+            sorgente = f.read()
+        cablate = _re.findall(r"^\s*porta\s*=\s*(\d+)\s*$", sorgente, _re.M)
+        self.assertEqual(
+            cablate, [],
+            "`collaudi/stress_test_recensioni.py` cabla ancora la porta %s: due worktree che "
+            "stressano insieme si contendono quella porta, e il secondo conta le recensioni "
+            "dell'albero sbagliato." % cablate)
+        self.assertIn(
+            'bind(("127.0.0.1", 0))', sorgente,
+            "`collaudi/stress_test_recensioni.py` non chiede piu' una porta effimera al "
+            "sistema operativo: senza quel bind la porta torna a essere una scelta a mano")
+
     def _traccia_isolata(self, m):
         """⛔ LA TRACCIA E' UNA SOLA PER TUTTA LA MACCHINA: chi la cancella spegne la rete
         di una campagna in corso, e da quel momento un file di produzione mutato non e'

@@ -75,8 +75,9 @@ FIRMA = "Co-Authored-By:"
 INIZI_DI_FUSIONE = ("Merge pull request", "Merge branch", "Merge remote-tracking")
 
 COSA_NON_GUARDA = pv.COSA_NON_GUARDA + (
-    "gli artefatti orfani li cerca in `%s` accanto al progetto (piu' quelle elencate in "
-    "%s): un file lasciato in una cartella qualsiasi del disco non lo vede nessuno"
+    "gli artefatti orfani li cerca in `%s_<nome della radice>` accanto al progetto (piu' "
+    "quelle elencate in %s): un file lasciato in una cartella qualsiasi del disco non lo "
+    "vede nessuno, e la cartella di un ALTRO worktree non e' sua e non la guarda"
     % (CARTELLA_DI_TRANSITO, VARIABILE_CARTELLE),
     "il confronto con lo scopo e' sui NOMI dei file, non su quante righe hai cambiato "
     "dentro ognuno",
@@ -99,8 +100,18 @@ COSA_NON_GUARDA = pv.COSA_NON_GUARDA + (
 # --------------------------------------------------------------------------------------
 def cartelle_di_transito(radice=RADICE):
     """Dove cercare. La cartella accanto al progetto si ricava, non si caccia dentro il
-    codice un percorso che vale su un computer solo."""
-    trovate = [os.path.join(os.path.dirname(radice), CARTELLA_DI_TRANSITO)]
+    codice un percorso che vale su un computer solo.
+
+    ⛔ UNA PER WORKTREE, non una per macchina. `os.path.dirname(radice)` e' la cartella che
+    CONTIENE il progetto -- la stessa per tutti i worktree affiancati: con un nome fisso, il
+    pre-fatto di una corsia accusava la corsia vicina di aver lasciato artefatti orfani, e
+    peggio, dichiarava «nessuna cartella da esaminare» convinto di aver guardato la propria.
+    Stesso rimedio delle tracce in TEMP: il nome porta il suffisso della cartella radice.
+    ⚠️ Il suffisso viene dal NOME della radice: due worktree omonimi in posti diversi
+    collidono ancora (D18 punto 3)."""
+    suffisso = "".join(c if c.isalnum() else "_" for c in os.path.basename(radice))
+    trovate = [os.path.join(os.path.dirname(radice),
+                            "%s_%s" % (CARTELLA_DI_TRANSITO, suffisso))]
     for extra in os.environ.get(VARIABILE_CARTELLE, "").split(os.pathsep):
         if extra.strip():
             trovate.append(extra.strip())

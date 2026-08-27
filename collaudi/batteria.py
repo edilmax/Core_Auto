@@ -52,7 +52,24 @@ except Exception:
 
 RADICE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PY = sys.executable
-PORTA = 8099
+
+
+def _porta_libera():
+    """Una porta EFFIMERA, chiesta al sistema operativo. ⛔ Prima era cablata a 8099: due
+    worktree che lanciavano la batteria insieme si contendevano la stessa porta, e il
+    secondo trovava il server del PRIMO -- cioe' misurava l'albero sbagliato senza che
+    niente lo dicesse. Stesso idioma di `collaudi/caos.py:50-55` e dei test.
+    ⚠️ Fra il `close()` e l'avvio del server c'e' una finestra in cui la porta e' libera per
+    tutti (D18 punto 3): e' il limite noto di questo modo, e resta enormemente piu' stretta
+    della certezza di collidere che aveva il numero fisso."""
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    p = s.getsockname()[1]
+    s.close()
+    return p
+
+
+PORTA = _porta_libera()
 
 
 def _run(cmd, timeout=1800, env=None):
