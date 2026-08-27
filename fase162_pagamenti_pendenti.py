@@ -16,11 +16,31 @@ import sqlite3
 import time
 from typing import Any, Callable, Dict, List, Optional
 
+from fase199_invarianti import transizioni_prenotazione as _transizioni_prenotazione
+
 # BUG trovato da ruff (F821) 2026-07-23: i gestori `except` usavano `logger` senza definirlo ->
 # in produzione un fail-safe che scatta andava in NameError invece di loggare-e-proseguire.
 logger = logging.getLogger("core_auto.pagamenti_pendenti")
 
 HOLD_SECONDI_DEFAULT = 120           # 2 minuti per pagare, poi la stanza si libera (urgenza tipo Agoda: chi paga prima se la prende)
+
+# Gli stati da cui ogni evento puo' partire NON si scrivono a mano qui: si DERIVANO dalla
+# macchina a stati di fase199, la stessa su cui i teoremi Z3 sono dimostrati. Prima erano
+# quattro liste scritte a mano, e due di esse erano BLACKLIST (`stato NOT IN (...)`): una
+# blacklist ammette di DEFAULT ogni stato nuovo, quindi bastava aggiungere uno stato al
+# dominio perche' rimborso e cancellazione-host lo accettassero come sorgente legale, senza
+# che nessun test diventasse rosso (i teoremi continuavano a passare, ma sul solo modello).
+
+
+def _sorgenti_ammesse() -> Dict[str, tuple]:
+    """{stato_target: (sorgenti ammesse, ...)} — la relazione di fase199 girata al contrario."""
+    inv: Dict[str, set] = {}
+    for sorgente, target in ((s, t) for s, ts in _transizioni_prenotazione().items() for t in ts):
+        inv.setdefault(target, set()).add(sorgente)
+    return {t: tuple(sorted(s)) for t, s in inv.items()}
+
+
+_AMMESSI = _sorgenti_ammesse()
 
 
 class _ConnCondivisa:
@@ -321,7 +341,7 @@ class PagamentiPendenti:
                                 (riferimento,)).fetchone()
                 if r is None:
                     return None
-                if r["stato"] not in ("in_attesa", "scaduto"):
+                if r["stato"] not in _AMMESSI["pagato"]:
                     return self._riga(r)      # pagato/cancellata/...: nessuna scrittura
                 with con:
                     cur = con.execute(
@@ -417,8 +437,14 @@ class PagamentiPendenti:
         try:
             with con:
                 cur = con.execute(
-                    "UPDATE pendenti SET stato='scaduto' WHERE riferimento=? AND "
-                    "stato IN ('in_attesa','in_attesa_host')", (riferimento,))
+                    # noqa qui sotto: cio' che si interpola sono SOLO segnaposto `?,?`,
+                    # generati da `len()` di una tupla del modello -- nessun dato dell'utente
+                    # entra nel testo della query, i valori viaggiano come parametri nella
+                    # riga dopo. `ruff.toml` prescrive di guardare gli S608 uno per uno
+                    # invece di ignorarli in blocco: questo e' stato guardato.
+                    "UPDATE pendenti SET stato='scaduto' WHERE riferimento=? AND "  # nosec B608  # noqa: S608
+                    "stato IN (%s)" % ",".join("?" * len(_AMMESSI["scaduto"])),
+                    (riferimento,) + _AMMESSI["scaduto"])
             return bool(cur.rowcount)
         finally:
             con.close()
@@ -436,8 +462,10 @@ class PagamentiPendenti:
         try:
             with con:
                 cur = con.execute(
-                    "UPDATE pendenti SET stato='rimborsato' WHERE riferimento=? "
-                    "AND stato NOT IN ('cancellata_host','rimborsato')", (riferimento,))
+                    # noqa: vedi la nota su `scaduto` -- si interpolano solo segnaposto `?`
+                    "UPDATE pendenti SET stato='rimborsato' WHERE riferimento=? "  # nosec B608  # noqa: S608
+                    "AND stato IN (%s)" % ",".join("?" * len(_AMMESSI["rimborsato"])),
+                    (riferimento,) + _AMMESSI["rimborsato"])
             return bool(cur.rowcount)
         finally:
             con.close()
@@ -464,9 +492,11 @@ class PagamentiPendenti:
                 cj["penale_host_cents"] = int(penale_cents) if isinstance(penale_cents, int) else 0
                 import json as _j2
                 cur = con.execute(
-                    "UPDATE pendenti SET stato='cancellata_host', corpo_json=? "
-                    "WHERE riferimento=? AND stato NOT IN ('cancellata_host','rimborsato')",
-                    (_j2.dumps(cj), riferimento))
+                    # noqa: vedi la nota su `scaduto` -- si interpolano solo segnaposto `?`
+                    "UPDATE pendenti SET stato='cancellata_host', corpo_json=? "  # nosec B608  # noqa: S608
+                    "WHERE riferimento=? AND stato IN (%s)"
+                    % ",".join("?" * len(_AMMESSI["cancellata_host"])),
+                    (_j2.dumps(cj), riferimento) + _AMMESSI["cancellata_host"])
             return bool(cur.rowcount)
         finally:
             con.close()
