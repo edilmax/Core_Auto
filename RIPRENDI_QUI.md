@@ -41,6 +41,72 @@ IN PRODUZIONE       curl https://bookinvip.com/api/health  ->  HTTP 200 in 0,301
                     {"status":"ok","money_unit":"cents_integer","guardiano":"ok","email_ko":0}
 ```
 
+### 🔄 STATO DELLA CORSIA B — 2026-08-27, aggiornato alle 20:59
+
+> ⛔ **Il riquadro qui sopra e' VECCHIO: dice `efe35b5`, e non e' piu' vero.** Misurato alle
+> 20:59 coi comandi, non ricordato:
+> ```
+> git branch --show-current              -> lavoro-b
+> git rev-parse --short HEAD             -> 20e94f4
+> git rev-parse --short origin/lavoro-b  -> 20e94f4
+> git log --oneline origin/lavoro-b..HEAD -> vuoto
+> git ls-remote --heads origin master    -> 604991e
+> ```
+> **I DUE COMMIT SONO PUBBLICATI.** `f632e93` (gli stati confermabili si derivano dal modello)
+> e `20e94f4` (i tre S608 dichiarati) sono su GitHub dalle 20:15, sul ramo `lavoro-b`, con la
+> richiesta di unione **#119 aperta e `mergeable=True`**. `master` resta a `604991e` finche'
+> non si unisce: e' corretto cosi', non e' uno scarto da riparare.
+> ⛔ **Alle 20:03 questa riga diceva il contrario** («esistono solo su questo computer»): era
+> vera quando e' stata scritta e ha smesso di esserlo dodici minuti dopo. E' il motivo per cui
+> una consegna porta l'ora e il comando: senza, sarebbe rimasta li' a spaventare qualcuno.
+>
+> **SUL DISCO CI SONO TRE FILE NON COMMITTATI, DI DUE MANI DIVERSE** (`git status --porcelain`):
+> ```
+>  M fase162_pagamenti_pendenti.py    3 righe `# nosec B608` accanto ai `# noqa: S608` gia'
+>                                     presenti. NON le ha scritte la corsia B: le ha scritte
+>                                     la corsia che coordina, alle 19:39:31, e alle 20:5x ha
+>                                     detto perche'. SERVONO: la CI ha bocciato la #119 sul
+>                                     job "qualita" DUE volte -- prima il cricchetto ruff
+>                                     (+3 S608), poi, messi i `# noqa`, il cricchetto bandit
+>                                     (+3 B608). `# noqa` parla solo a ruff; bandit ha la sua
+>                                     regola per lo stesso identico problema e vuole `# nosec`.
+>                                     Non sono falle: si interpolano solo segnaposto `?,?`
+>                                     generati da `len()` di una tupla del modello, e i valori
+>                                     viaggiano come parametri nella riga dopo.
+>                                     Ricontato dopo averle messe: ruff 686=686, bandit
+>                                     548=548, semgrep 6=6, pip-audit 10=10, nessuna nuova.
+>                                     ⛔ Toglierle rimette la #119 rossa.
+>  M test_fase162_hold_pagamento.py   2 docstring che citavano la riga vecchia
+>                                     (`not in ("in_attesa","scaduto")`, «la riga 263») e ora
+>                                     nominano il cancello invece delle sue coordinate (S17).
+>                                     Corsia B. Chiude la voce B22.
+>  M RIPRENDI_QUI.md                  questo blocco.
+> ```
+> **NESSUN GIRO DI SUITE VALIDO ESISTE SU QUESTO ALBERO.** L'ultimo verde
+> (`Ran 6025 -- OK, EXIT=0`) e' di **prima** che master entrasse: adesso il caricatore dice
+> **6036**. E il giro lanciato alle **20:40:47 e' stato BUTTATO senza nemmeno leggerlo**: dalle
+> 20:04 alle 20:52 girava una **seconda suite** della corsia che coordina, **nella stessa
+> cartella e sugli stessi database di prova** -- dodici minuti di contesa. Un giro che divide
+> la macchina con un altro giro non e' un esito, ne' se esce verde ne' se esce rosso (ferrea 4,
+> sbaglio S18): non si interpreta, si rifa' da fermo. Fermato alle 20:59, macchina verificata
+> vuota (`Get-Process python` -> nessuno). Quindi: prima di qualunque commit, **suite intera**
+> da fermo (ferrea 6, nessuna eccezione per i `.md`).
+>
+> **L'UNICA COSA APERTA E MISURATA — e va ridimensionata rispetto a come l'avevo detta:**
+> `fase83_server.py:8196` -> `if stato not in ("in_attesa", "scaduto"):` nel percorso del
+> **webhook Stripe**. L'avevo chiamata «copia gemella, stesso difetto»: **non e' cosi', e la
+> differenza conta.** Letto il codice intorno (`_conferma_pagamento`, `:8154`): la scrittura
+> e' gia' impedita **prima**, da `pp.conferma()` che e' il CAS governato da `_AMMESSI`. Quel
+> `not in` non e' un secondo cancello sulla scrittura: riceve lo stato **PRECEDENTE** e decide
+> solo il **ramo dopo** (registrare «RIMBORSARE» e la riga del rimborso).
+> Quindi: **non e' un difetto vivo**, ed e' una whitelist, non una blacklist. Resta una
+> **duplicazione**: il giorno che il modello di `fase199` ammettesse una sorgente in piu',
+> `fase162` confermerebbe (giusto) e `fase83` marcherebbe lo stesso pagamento come da
+> rimborsare (sbagliato). Vale la pena chiuderla, **non e' urgente**, e serve
+> «**autorizzato**» (B4) perche' e' produzione.
+> Resta fuori anche il **punto 3** (`guardia_prenotazione()` attiva al finalizza): rimandato
+> dal fondatore, aspetta un via suo separato.
+
 > 📏 **Contesto letto quando questo blocco e' stato scritto: 54%** (D21). Il blocco esiste
 > perche' oltre meta' contesto l'IA non smette di rispondere: continua **con lo stesso tono
 > sicuro**, mettendoci dentro numeri mai misurati. Da qui in poi: `/clear`, e si riparte da
@@ -240,7 +306,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 604991e
+CONSEGNE AGGIORNATE A: 20e94f4
 
 SUITE ATTUALE: Ran 6036 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
@@ -264,10 +330,27 @@ CARICATORE (RACCOLTI):  6036  <- rimisurato il 2026-08-27 col caricatore, da Pow
                                  due totali avrebbe contato la base due volte. Il numero qui
                                  sopra e' USCITO DAL CARICATORE dopo il merge (D22: un numero
                                  ottenuto sommandone altri non e' misurato).
-ESEGUITI (ultimo giro): 6031  <- MISURATO il 2026-08-27 da PowerShell sull'albero con TUTTE
-                                 E TRE le corsie dentro (A, B e C): `Ran 6031 tests in
-                                 1739.764s -- OK (skipped=4)`, codice d'uscita letto diretto
-                                 (nessun tubo), EXIT=0, zero falliti.
+ESEGUITI (ultimo giro): 6031  <- MISURATO il 2026-08-27 in Core_Auto_B, PRIMO GIRO PULITO di
+                                 quella cartella (macchina verificata vuota prima di partire):
+                                 `Ran 6031 tests in 2341.676s -- OK (skipped=4)`, codice
+                                 d'uscita letto diretto (nessun tubo), EXIT=0, zero falliti.
+                                 INIZIO=21:00:32 FINE=21:39:37, cioe' 39 minuti tondi di
+                                 orologio, che tornano coi 2341.676s.
+                                 ⛔ 39 MINUTI CONTRO I 28-31 DELLE ALTRE CARTELLE, e non si sa
+                                 ancora perche'. Sospetto DA VERIFICARE, non diagnosi: in TEMP
+                                 ci sono 48.575 cartelle piu' vecchie di questo giro, e una
+                                 cartella con decine di migliaia di sottocartelle rallenta ogni
+                                 singola operazione su file. Si misura DOPO questo commit, per
+                                 prefisso (chi), poi date e dimensione del prefisso dominante.
+                                 ⛔ E IL NUMERO SPORCO DA CANCELLARE E' 2885.735s: era il giro
+                                 delle 20:40 di questa cartella, CONTAMINATO (due suite sugli
+                                 stessi database dalle 20:04 alle 20:52). Era gia' finito in
+                                 questo file come «il tempo di quella cartella» e stava gia'
+                                 orientando le stime. Un dato sporco che nessuno marca diventa
+                                 un riferimento, e un riferimento sbagliato costa piu' di un
+                                 errore dichiarato.
+                                 Il giro precedente sull'albero con TUTTE E TRE le corsie
+                                 dentro (A, B e C) aveva dato `Ran 6031 in 1739.764s`.
                                  I giri precedenti della stessa giornata: 6029 in 1709.644s
                                  (A piu' C, dopo la correzione del B009) e 6029 in 1741.568s
                                  (A piu' C, prima). Torna col caricatore:

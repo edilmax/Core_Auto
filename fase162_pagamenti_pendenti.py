@@ -442,7 +442,7 @@ class PagamentiPendenti:
                     # entra nel testo della query, i valori viaggiano come parametri nella
                     # riga dopo. `ruff.toml` prescrive di guardare gli S608 uno per uno
                     # invece di ignorarli in blocco: questo e' stato guardato.
-                    "UPDATE pendenti SET stato='scaduto' WHERE riferimento=? AND "  # noqa: S608
+                    "UPDATE pendenti SET stato='scaduto' WHERE riferimento=? AND "  # nosec B608  # noqa: S608
                     "stato IN (%s)" % ",".join("?" * len(_AMMESSI["scaduto"])),
                     (riferimento,) + _AMMESSI["scaduto"])
             return bool(cur.rowcount)
@@ -463,7 +463,7 @@ class PagamentiPendenti:
             with con:
                 cur = con.execute(
                     # noqa: vedi la nota su `scaduto` -- si interpolano solo segnaposto `?`
-                    "UPDATE pendenti SET stato='rimborsato' WHERE riferimento=? "  # noqa: S608
+                    "UPDATE pendenti SET stato='rimborsato' WHERE riferimento=? "  # nosec B608  # noqa: S608
                     "AND stato IN (%s)" % ",".join("?" * len(_AMMESSI["rimborsato"])),
                     (riferimento,) + _AMMESSI["rimborsato"])
             return bool(cur.rowcount)
@@ -493,7 +493,7 @@ class PagamentiPendenti:
                 import json as _j2
                 cur = con.execute(
                     # noqa: vedi la nota su `scaduto` -- si interpolano solo segnaposto `?`
-                    "UPDATE pendenti SET stato='cancellata_host', corpo_json=? "  # noqa: S608
+                    "UPDATE pendenti SET stato='cancellata_host', corpo_json=? "  # nosec B608  # noqa: S608
                     "WHERE riferimento=? AND stato IN (%s)"
                     % ",".join("?" * len(_AMMESSI["cancellata_host"])),
                     (_j2.dumps(cj), riferimento) + _AMMESSI["cancellata_host"])

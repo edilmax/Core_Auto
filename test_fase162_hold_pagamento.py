@@ -127,10 +127,13 @@ class TestBuchiDiMutazione(unittest.TestCase):
 
     ⛔ IL DENOMINATORE VERO E' 113, NON 82. Lo strumento rinuncia su 31 punti e da oggi lo
     DICHIARA: 8 operatori a cavallo di due righe, 14 dentro confronti a catena, 9 che non sa
-    rompere (`is`, `is not`, `in`, `not in`). Fra questi ultimi c'e' la riga 263,
-    `r["stato"] not in ("in_attesa", "scaduto")`: **il cancello che decide se un pagamento
-    puo' essere scritto**. Nessun mutante lo tocchera' mai, quindi la sua guardia e' scritta
-    a mano, col guasto iniettato (in fondo a questa classe).
+    rompere (`is`, `is not`, `in`, `not in`). Fra questi ultimi c'e' il cancello di
+    `conferma`, `r["stato"] not in _AMMESSI["pagato"]`: **il cancello che decide se un
+    pagamento puo' essere scritto**. Nessun mutante lo tocchera' mai, quindi la sua guardia
+    e' scritta a mano, col guasto iniettato (in fondo a questa classe).
+    ⛔ Il numero di riga non si scrive piu' qui: era «la riga 263», ed e' invecchiato il
+    2026-08-26 quando la whitelist e' passata a derivare da fase199. Si nomina il cancello,
+    non le sue coordinate — un riferimento che porta una cifra prima o poi mente (S17).
 
     Ogni guardia dichiara nel nome la riga che sorveglia.
     """
@@ -437,8 +440,10 @@ class TestBuchiDiMutazione(unittest.TestCase):
     def test_riga263_il_cancello_degli_stati_confermabili_e_CHIUSO(self):
         """⛔ GUARDIA SCRITTA A MANO, col guasto iniettato a mano.
 
-        `if r["stato"] not in ("in_attesa", "scaduto")` decide se una conferma di pagamento
-        puo' SCRIVERE. Il generatore di mutanti non sa rompere `not in` — lo dichiara fra le
+        `if r["stato"] not in _AMMESSI["pagato"]` decide se una conferma di pagamento
+        puo' SCRIVERE — e dal 2026-08-26 quell'elenco non e' piu' scritto a mano: viene
+        dalla macchina a stati di fase199, dove vale ('in_attesa', 'scaduto').
+        Il generatore di mutanti non sa rompere `not in` — lo dichiara fra le
         rinunce (9 punti su questo modulo), ma non lo prova mai. Un punto che lo strumento
         non esamina non e' un punto sicuro: e' un punto che nessuno ha mai guardato.
 
