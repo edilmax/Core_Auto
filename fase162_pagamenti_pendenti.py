@@ -437,7 +437,12 @@ class PagamentiPendenti:
         try:
             with con:
                 cur = con.execute(
-                    "UPDATE pendenti SET stato='scaduto' WHERE riferimento=? AND "
+                    # noqa qui sotto: cio' che si interpola sono SOLO segnaposto `?,?`,
+                    # generati da `len()` di una tupla del modello -- nessun dato dell'utente
+                    # entra nel testo della query, i valori viaggiano come parametri nella
+                    # riga dopo. `ruff.toml` prescrive di guardare gli S608 uno per uno
+                    # invece di ignorarli in blocco: questo e' stato guardato.
+                    "UPDATE pendenti SET stato='scaduto' WHERE riferimento=? AND "  # noqa: S608
                     "stato IN (%s)" % ",".join("?" * len(_AMMESSI["scaduto"])),
                     (riferimento,) + _AMMESSI["scaduto"])
             return bool(cur.rowcount)
@@ -457,7 +462,8 @@ class PagamentiPendenti:
         try:
             with con:
                 cur = con.execute(
-                    "UPDATE pendenti SET stato='rimborsato' WHERE riferimento=? "
+                    # noqa: vedi la nota su `scaduto` -- si interpolano solo segnaposto `?`
+                    "UPDATE pendenti SET stato='rimborsato' WHERE riferimento=? "  # noqa: S608
                     "AND stato IN (%s)" % ",".join("?" * len(_AMMESSI["rimborsato"])),
                     (riferimento,) + _AMMESSI["rimborsato"])
             return bool(cur.rowcount)
@@ -486,7 +492,8 @@ class PagamentiPendenti:
                 cj["penale_host_cents"] = int(penale_cents) if isinstance(penale_cents, int) else 0
                 import json as _j2
                 cur = con.execute(
-                    "UPDATE pendenti SET stato='cancellata_host', corpo_json=? "
+                    # noqa: vedi la nota su `scaduto` -- si interpolano solo segnaposto `?`
+                    "UPDATE pendenti SET stato='cancellata_host', corpo_json=? "  # noqa: S608
                     "WHERE riferimento=? AND stato IN (%s)"
                     % ",".join("?" * len(_AMMESSI["cancellata_host"])),
                     (_j2.dumps(cj), riferimento) + _AMMESSI["cancellata_host"])
