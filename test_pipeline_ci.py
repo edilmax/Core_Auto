@@ -2949,8 +2949,8 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
         # chi lo LEGGE devono guardare nella stessa cartella. Se le due formule divergessero,
         # `guardia_commit` direbbe «via libera» su un giro davvero aperto -- un silenzio
         # scambiato per pace, che e' peggio di un blocco di troppo.
-        scrive = getattr(carica(a_radice, "mutazione_prodotto.py", "_wt_scrive"), "_TRACCIA")
-        legge = getattr(carica(a_radice, "guardia_commit.py", "_wt_legge"), "TRACCIA")
+        scrive = carica(a_radice, "mutazione_prodotto.py", "_wt_scrive")._TRACCIA
+        legge = carica(a_radice, "guardia_commit.py", "_wt_legge").TRACCIA
         self.assertEqual(
             scrive, legge,
             "il giudice scrive il biglietto in %r e la guardia del commit lo cerca in %r: "

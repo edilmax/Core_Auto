@@ -263,9 +263,11 @@ CARICATORE (RACCOLTI):  6034  <- rimisurato il 2026-08-27 col caricatore, da Pow
                                  sopra e' USCITO DAL CARICATORE dopo il merge (D22: un numero
                                  ottenuto sommandone altri non e' misurato).
 ESEGUITI (ultimo giro): 6029  <- MISURATO il 2026-08-27 da PowerShell sull'albero UNITO
-                                 (bfd227d, corsia A piu' corsia C): `Ran 6029 tests in
-                                 1741.568s -- OK (skipped=4)`, codice d'uscita letto diretto
-                                 (nessun tubo), EXIT=0, zero falliti. Torna col caricatore:
+                                 (corsia A piu' corsia C), dopo la correzione del B009:
+                                 `Ran 6029 tests in 1709.644s -- OK (skipped=4)`, codice
+                                 d'uscita letto diretto (nessun tubo), EXIT=0, zero falliti.
+                                 Il giro prima della correzione: 1741.568s, stesso numero e
+                                 stesso esito. Torna col caricatore:
                                  6034 - 5 (le guardie openssl) = 6029, esatto.
                                  ⛔ Questa riga e' l'UNICA scritta DOPO il giro, e non puo'
                                  essere altrimenti: il numero degli ESEGUITI non esiste prima
