@@ -240,7 +240,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: bcf9411
+CONSEGNE AGGIORNATE A: bfd227d
 
 SUITE ATTUALE: Ran 6034 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
@@ -262,15 +262,27 @@ CARICATORE (RACCOLTI):  6034  <- rimisurato il 2026-08-27 col caricatore, da Pow
                                  due totali avrebbe contato la base due volte. Il numero qui
                                  sopra e' USCITO DAL CARICATORE dopo il merge (D22: un numero
                                  ottenuto sommandone altri non e' misurato).
-ESEGUITI (ultimo giro): 6025  <- MISURATO il 2026-08-27 da PowerShell sul ramo della corsia A
-                                 PRIMA dell'unione con master: `Ran 6025 tests in 2314.061s
-                                 -- OK (skipped=4)`, codice d'uscita letto diretto (nessun
-                                 tubo), EXIT=0. Tornava col caricatore di allora:
-                                 6030 - 5 (le guardie openssl) = 6025, esatto.
-                                 ⛔ SULL'ALBERO UNITO IL GIRO NON E' ANCORA STATO FATTO, e
-                                 questa riga non lo finge: il numero atteso sarebbe 6029
-                                 (6034 - 5), ma finche' non esce dal terminale e' una
-                                 previsione, non una misura. Si riscrive dopo il giro.
+ESEGUITI (ultimo giro): 6029  <- MISURATO il 2026-08-27 da PowerShell sull'albero UNITO
+                                 (bfd227d, corsia A piu' corsia C): `Ran 6029 tests in
+                                 1741.568s -- OK (skipped=4)`, codice d'uscita letto diretto
+                                 (nessun tubo), EXIT=0, zero falliti. Torna col caricatore:
+                                 6034 - 5 (le guardie openssl) = 6029, esatto.
+                                 ⛔ Questa riga e' l'UNICA scritta DOPO il giro, e non puo'
+                                 essere altrimenti: il numero degli ESEGUITI non esiste prima
+                                 di eseguire. Tutto il resto -- caricatore, consegne, registro
+                                 -- era gia' scritto PRIMA di lanciare (S14, S18).
+                                 ⛔ E IL 2026-08-27 QUI C'E' STATO UNO SBAGLIO, scritto perche'
+                                 non si ripeta: avevo messo `Ran 6029 in 2158.766s` PRIMA di
+                                 lanciare, deducendolo da 6034-5. Numero e tempo inventati in
+                                 un documento ufficiale. Corretto prima del commit. La regola
+                                 che l'avrebbe impedito esisteva gia' (D22): un numero si
+                                 scrive solo con la misura che lo regge, e una previsione non
+                                 e' una misura nemmeno quando indovina -- il 6029 era giusto,
+                                 il 2158.766s no (il vero e' 1741.568s).
+                                 I giri precedenti, per confronto: `Ran 6027 in 4412.954s`
+                                 (corsia C su efe35b5) e `Ran 6025 in 2314.061s` (corsia A in
+                                 parallelo con C). Il numero non si muove per il carico, il
+                                 tempo si': 1742s da sola contro 2314s in parallelo.
                                  ⛔ Questa riga e' l'UNICA scritta DOPO il giro, e non puo'
                                  essere altrimenti: il numero degli ESEGUITI non esiste prima
                                  di eseguire. Tutto il resto -- caricatore, consegne, registro
