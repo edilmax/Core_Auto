@@ -2886,6 +2886,156 @@ class TestGeneratoreDiMutanti(unittest.TestCase):
         fallisce, _ = m.esegui("modulo_che_non_esiste_affatto")
         self.assertIs(False, fallisce, "un test che fallisce deve dare False (mutante ucciso)")
 
+    def test_LE_TRE_TRACCE_IN_TEMP_SONO_DISTINTE_PER_WORKTREE(self):
+        """⛔ UNA CASELLA PER WORKTREE, non una per macchina.
+
+        `tempfile.gettempdir()` e' lo STESSO per tutti i worktree della stessa macchina: con
+        un nome fisso le tre tracce erano una casella sola, condivisa da tutti. Misurato il
+        2026-08-27: 3 su 3 coincidevano. Cosa faceva, in concreto: lo scopo dichiarato dalla
+        Corsia B sovrascriveva quello della Corsia A; un giro di mutazione aperto in A
+        bloccava il commit in B; e il ripristino di un worktree stracciava il biglietto
+        dell'altro, cioe' lasciava un file di produzione rotto senza piu' nessuno che lo
+        recuperasse. Il piano delle due corsie prescrive proprio di lavorare in worktree
+        separati, quindi non e' un caso di scuola.
+
+        ⛔ PERCHE' SERVE QUESTA GUARDIA e non basta la prova fatta a mano quel giorno. Il
+        difetto e' stato chiuso con una formula ripetuta in tre file: senza qualcosa che la
+        pretenda, domani una «semplificazione» rimette il nome fisso e nessuno se ne
+        accorge. Il test del gancio pre-commit ormai CHIEDE il nome allo strumento, quindi
+        seguirebbe il nome sbagliato restando verde: sarebbe un verde che non ha guardato.
+
+        ⚠️ COSA NON PROVA (D18 punto 3): il suffisso viene dal NOME della cartella radice,
+        quindi due worktree omonimi in percorsi diversi collidono ancora. Qui il worktree
+        finto ha un nome diverso, che e' il caso del piano delle due corsie.
+        """
+        import importlib.util
+        import os
+        import shutil
+        import tempfile
+
+        def carica(radice, nome_file, etichetta):
+            percorso = os.path.join(radice, "collaudi", nome_file)
+            spec = importlib.util.spec_from_file_location(etichetta, percorso)
+            modulo = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(modulo)
+            return modulo
+
+        TRE = (("prima_di_lanciare.py", "TRACCIA_SCOPO"),
+               ("guardia_commit.py", "TRACCIA"),
+               ("mutazione_prodotto.py", "_TRACCIA"))
+        a_radice = os.path.dirname(os.path.abspath(__file__))
+        b_radice = tempfile.mkdtemp(prefix="worktree_finto_")
+        self.addCleanup(shutil.rmtree, b_radice, True)
+        os.makedirs(os.path.join(b_radice, "collaudi"))
+        for nome, _attr in TRE:
+            shutil.copy2(os.path.join(a_radice, "collaudi", nome),
+                         os.path.join(b_radice, "collaudi", nome))
+
+        condivise = []
+        for i, (nome, attr) in enumerate(TRE):
+            da_a = getattr(carica(a_radice, nome, "_wt_a_%d" % i), attr)
+            da_b = getattr(carica(b_radice, nome, "_wt_b_%d" % i), attr)
+            if da_a == da_b:
+                condivise.append("%s.%s -> %s" % (nome, attr, da_a))
+        self.assertEqual(
+            condivise, [],
+            "%d tracce su %d sono la STESSA casella in TEMP per due worktree diversi: due "
+            "corsie che lavorano insieme si sovrascrivono a vicenda, e il ripristino "
+            "dell'una straccia il biglietto dell'altra. Il nome deve portare il suffisso "
+            "della cartella radice.\n    %s"
+            % (len(condivise), len(TRE), "\n    ".join(condivise)))
+
+        # ⛔ E L'INVARIANTE OPPOSTO, altrettanto facile da rompere: chi SCRIVE il biglietto e
+        # chi lo LEGGE devono guardare nella stessa cartella. Se le due formule divergessero,
+        # `guardia_commit` direbbe «via libera» su un giro davvero aperto -- un silenzio
+        # scambiato per pace, che e' peggio di un blocco di troppo.
+        scrive = carica(a_radice, "mutazione_prodotto.py", "_wt_scrive")._TRACCIA
+        legge = carica(a_radice, "guardia_commit.py", "_wt_legge").TRACCIA
+        self.assertEqual(
+            scrive, legge,
+            "il giudice scrive il biglietto in %r e la guardia del commit lo cerca in %r: "
+            "un giro di mutazione aperto non verrebbe piu' visto, e un file di produzione "
+            "mutato passerebbe il commit." % (scrive, legge))
+
+    def test_LE_RISORSE_CONDIVISE_FUORI_DAL_REPOSITORY_SONO_PER_WORKTREE(self):
+        """⛔ LA STESSA FAMIGLIA DELLE TRACCE IN TEMP, negli altri due posti dove il progetto
+        esce dal proprio albero: la cartella di transito e le porte di rete.
+
+        Misurato il 2026-08-27. `cartelle_di_transito()` cercava gli artefatti orfani in
+        `os.path.dirname(radice)`, cioe' la cartella che CONTIENE il progetto -- la stessa
+        per tutti i worktree affiancati: il pre-fatto di una corsia accusava la corsia
+        vicina, o peggio diceva «nessuna cartella da esaminare» credendo di aver guardato la
+        propria. Le porte erano cablate (batteria 8099, stress recensioni 8911): due worktree
+        che lanciavano insieme si contendevano la porta, e il secondo interrogava il server
+        del PRIMO -- misurando l'albero sbagliato senza che niente lo dicesse. E' il caso
+        peggiore: non un errore, una misura pulita della cosa sbagliata.
+
+        ⚠️ COSA NON PROVA (D18 punto 3): la porta di `stress_test_recensioni` e' una
+        variabile LOCALE dentro una funzione lunga, quindi qui la si guarda nel SORGENTE e
+        non nel comportamento -- un controllo piu' debole degli altri due, e va detto. E il
+        suffisso della cartella viene dal NOME della radice: due worktree omonimi in posti
+        diversi collidono ancora.
+        """
+        import importlib.util
+        import io as _io
+        import os
+        import re as _re
+        import socket
+
+        def carica(nome_file, etichetta):
+            percorso = os.path.join(QUI, "collaudi", nome_file)
+            spec = importlib.util.spec_from_file_location(etichetta, percorso)
+            modulo = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(modulo)
+            return modulo
+
+        # (1) LA CARTELLA DI TRANSITO. La funzione prende la radice come argomento: si
+        #     interroga con due radici diverse, senza copiare niente sul disco.
+        pdf = carica("prima_di_dire_fatto.py", "_wt_prefatto")
+        una = pdf.cartelle_di_transito(os.path.join("/finto", "Core_Auto_A"))[0]
+        altra = pdf.cartelle_di_transito(os.path.join("/finto", "Core_Auto_B"))[0]
+        self.assertNotEqual(
+            una, altra,
+            "due worktree affiancati cercano gli artefatti orfani nella STESSA cartella "
+            "(%s): il pre-fatto di una corsia accusa l'altra, e nessuna delle due guarda "
+            "davvero la propria. Il nome deve portare il suffisso della cartella radice."
+            % una)
+
+        # (2) LA PORTA DELLA BATTERIA, provata sul COMPORTAMENTO e in modo deterministico:
+        #     si occupa la porta che il modulo ha appena scelto e lo si ricarica. Se la
+        #     porta e' davvero effimera il sistema operativo non puo' ridarla; se e' cablata
+        #     resta identica. Niente scommesse sul caso: la prima socket resta APERTA.
+        prima = carica("batteria.py", "_wt_batteria_1").PORTA
+        occupata = socket.socket()
+        try:
+            occupata.bind(("127.0.0.1", prima))
+            dopo = carica("batteria.py", "_wt_batteria_2").PORTA
+        finally:
+            occupata.close()
+        self.assertNotEqual(
+            prima, dopo,
+            "`collaudi/batteria.py` sceglie sempre la porta %d anche quando e' gia' "
+            "occupata: due batterie in parallelo si contendono la stessa porta e la seconda "
+            "misura il server della prima." % prima)
+
+        # (3) LA PORTA DELLO STRESS SULLE RECENSIONI. ⚠️ Qui il controllo e' sul SORGENTE,
+        #     non sul comportamento: la porta e' una variabile locale dentro una funzione
+        #     lunga e non e' raggiungibile da fuori. Si pretende che non sia un numero
+        #     scritto a mano e che ci sia il bind effimero.
+        with _io.open(os.path.join(QUI, "collaudi", "stress_test_recensioni.py"),
+                      encoding="utf-8") as f:
+            sorgente = f.read()
+        cablate = _re.findall(r"^\s*porta\s*=\s*(\d+)\s*$", sorgente, _re.M)
+        self.assertEqual(
+            cablate, [],
+            "`collaudi/stress_test_recensioni.py` cabla ancora la porta %s: due worktree che "
+            "stressano insieme si contendono quella porta, e il secondo conta le recensioni "
+            "dell'albero sbagliato." % cablate)
+        self.assertIn(
+            'bind(("127.0.0.1", 0))', sorgente,
+            "`collaudi/stress_test_recensioni.py` non chiede piu' una porta effimera al "
+            "sistema operativo: senza quel bind la porta torna a essere una scelta a mano")
+
     def _traccia_isolata(self, m):
         """⛔ LA TRACCIA E' UNA SOLA PER TUTTA LA MACCHINA: chi la cancella spegne la rete
         di una campagna in corso, e da quel momento un file di produzione mutato non e'
@@ -6579,7 +6729,15 @@ class TestIGanciDiGitCHIAMANODavveroGliAttrezzi(_GuardieSugliAttrezziDelLavoro):
             return self._senza_sh("pre-commit", "guardia_commit.py")
         cartella = tempfile.mkdtemp()
         try:
-            os.makedirs(os.path.join(cartella, "bookinvip_mutazione_in_corso"))
+            # ⛔ IL NOME LO CHIEDE ALLO STRUMENTO, non lo scrive a mano. Scritto qui era una
+            # QUARTA copia della stessa regola: il 2026-08-27, rendendo le tracce distinte
+            # per worktree, `guardia_commit` ha smesso di trovare questa cartella e il
+            # controllo 5 ha detto «nessun giro aperto» su un giro APERTO. Il gancio si
+            # fermava lo stesso, ma per un altro motivo -- cioe' sembrava protetto senza
+            # aver guardato niente. Chiedendo il nome, il test segue la formula da solo.
+            nome_traccia = os.path.basename(
+                self._carica("guardia_commit.py", "_gc_nome_traccia").TRACCIA)
+            os.makedirs(os.path.join(cartella, nome_traccia))
             amb = dict(os.environ)
             amb["TMP"] = amb["TEMP"] = amb["TMPDIR"] = cartella
             e = subprocess.run([self.sh, "deploy/hooks/pre-commit"], cwd=self.RADICE,

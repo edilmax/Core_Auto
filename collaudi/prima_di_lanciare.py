@@ -78,7 +78,16 @@ TETTO_SECONDI = 10.0
 
 # La traccia dello scopo dichiarato. Stesso posto e stessa logica della traccia di
 # mutazione: vive fuori dal repository, cosi' non finisce mai in un commit.
-TRACCIA_SCOPO = os.path.join(tempfile.gettempdir(), "bookinvip_scopo_dichiarato.txt")
+# ⛔ UNA CASELLA PER WORKTREE, non una per macchina. TEMP e' condiviso da tutti i worktree
+# della stessa macchina: con un nome fisso, la Corsia B che dichiara il suo scopo
+# SOVRASCRIVE quello della Corsia A, e il pre-fatto di A rilegge i file di B. E' lo stesso
+# difetto che il 2026-08-24 aveva gia' fatto uscire 11 guardie rosse per finta da dentro un
+# worktree -- li' fu riparato il controllo su `.git`, non queste caselle.
+# ⚠️ Il suffisso viene dal NOME della cartella radice: due worktree con lo stesso nome in
+# posti diversi collidono ancora (D18 punto 3). Il piano delle due corsie usa nomi diversi.
+_SUFFISSO_WORKTREE = "".join(c if c.isalnum() else "_" for c in os.path.basename(RADICE))
+TRACCIA_SCOPO = os.path.join(tempfile.gettempdir(),
+                             "bookinvip_scopo_dichiarato_%s.txt" % _SUFFISSO_WORKTREE)
 
 OK = "OK"
 ROSSO = "ROSSO"

@@ -14,6 +14,7 @@ import os
 import random
 import re
 import shutil
+import socket
 import sys
 
 try:  # Windows: console cp1252 non regge box-drawing/emoji -> uscita UTF-8 tollerante
@@ -365,7 +366,13 @@ def audit_recensione_readonly(saturation, target):
         readonly_ok = (after == base)
 
         # ── campione a livello ROTTA HTTP (server vero in un thread) ──
-        porta = 8911
+        # ⛔ EFFIMERA, non cablata. Era 8911: due worktree che stressavano insieme si
+        # contendevano la porta, e il secondo interrogava il server del PRIMO -- cioe'
+        # contava le recensioni dell'albero sbagliato. Idioma di `collaudi/caos.py:50-55`.
+        _s = socket.socket()
+        _s.bind(("127.0.0.1", 0))
+        porta = _s.getsockname()[1]
+        _s.close()
         threading.Thread(target=lambda: servi(
             sis, host="127.0.0.1", porta=porta, host_key="hk", admin_key="ak",
             base_url="http://localhost:%d" % porta), daemon=True).start()

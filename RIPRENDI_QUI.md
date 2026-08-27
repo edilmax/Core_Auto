@@ -240,9 +240,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: b559863
+CONSEGNE AGGIORNATE A: bfd227d
 
-SUITE ATTUALE: Ran 6032 test
+SUITE ATTUALE: Ran 6034 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (test_pipeline_ci.py:2054, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -250,24 +250,49 @@ SUITE ATTUALE: Ran 6032 test
    un giro: e' il difetto B14, e non si chiude qui -- si chiude cambiando quella regex, che
    sta in un file di test e non e' questo lavoro. Le due voci vere sono qui sotto.
 
-CARICATORE (RACCOLTI):  6032  <- rimisurato il 2026-08-26 col caricatore, da PowerShell,
-                                 PRIMA di lanciare (S14). Erano 6028: i 4 in piu' sono le
-                                 guardie di `test_seo_sandbox.TestHomepageDotazioneSEO`
-                                 (dotazione SEO della homepage). Prima ancora 6012: quei
-                                 16 erano le guardie di `test_email_tracciata.py`.
-ESEGUITI (ultimo giro): 6027  <- MISURATO il 2026-08-27 da PowerShell su `efe35b5` piu' le
-                                 4 modifiche NON committate della dotazione SEO homepage:
-                                 `Ran 6027 tests in 4412.954s -- OK (skipped=4)`, codice
-                                 d'uscita letto diretto (nessun tubo), EXIT=0. Torna col
-                                 caricatore: 6032 - 5 (le guardie openssl) = 6027, esatto.
+CARICATORE (RACCOLTI):  6034  <- rimisurato il 2026-08-27 col caricatore, da PowerShell,
+                                 PRIMA di qualunque giro (S14), DOPO l'unione delle due
+                                 corsie. Erano 6028: i 6 in piu' sono le 4 guardie di
+                                 `test_seo_sandbox.TestHomepageDotazioneSEO` (corsia C) e le
+                                 2 sulle risorse per worktree (corsia A),
+                                 `test_LE_TRE_TRACCE_IN_TEMP_SONO_DISTINTE_PER_WORKTREE` e
+                                 `test_LE_RISORSE_CONDIVISE_FUORI_DAL_REPOSITORY_SONO_PER_WORKTREE`.
+                                 ⛔ NON e' 6030+6032 ne' una somma di nessun tipo: le due
+                                 corsie partivano dalla stessa base 6028, quindi sommare i
+                                 due totali avrebbe contato la base due volte. Il numero qui
+                                 sopra e' USCITO DAL CARICATORE dopo il merge (D22: un numero
+                                 ottenuto sommandone altri non e' misurato).
+ESEGUITI (ultimo giro): 6029  <- MISURATO il 2026-08-27 da PowerShell sull'albero UNITO
+                                 (corsia A piu' corsia C), dopo la correzione del B009:
+                                 `Ran 6029 tests in 1709.644s -- OK (skipped=4)`, codice
+                                 d'uscita letto diretto (nessun tubo), EXIT=0, zero falliti.
+                                 Il giro prima della correzione: 1741.568s, stesso numero e
+                                 stesso esito. Torna col caricatore:
+                                 6034 - 5 (le guardie openssl) = 6029, esatto.
                                  ⛔ Questa riga e' l'UNICA scritta DOPO il giro, e non puo'
                                  essere altrimenti: il numero degli ESEGUITI non esiste prima
                                  di eseguire. Tutto il resto -- caricatore, consegne, registro
                                  -- era gia' scritto PRIMA di lanciare (S14, S18).
-                                 Il giro precedente: `Ran 6023 tests in 1828.933s -- OK
-                                 (skipped=4)` il 2026-08-26 sull'albero poi unito in d7f60c7
-                                 (6028 - 5 = 6023). Il tempo e' salito da 1829s a 4413s con
-                                 la macchina occupata: il numero non si muove, il tempo si'.
+                                 ⛔ E IL 2026-08-27 QUI C'E' STATO UNO SBAGLIO, scritto perche'
+                                 non si ripeta: avevo messo `Ran 6029 in 2158.766s` PRIMA di
+                                 lanciare, deducendolo da 6034-5. Numero e tempo inventati in
+                                 un documento ufficiale. Corretto prima del commit. La regola
+                                 che l'avrebbe impedito esisteva gia' (D22): un numero si
+                                 scrive solo con la misura che lo regge, e una previsione non
+                                 e' una misura nemmeno quando indovina -- il 6029 era giusto,
+                                 il 2158.766s no (il vero e' 1741.568s).
+                                 I giri precedenti, per confronto: `Ran 6027 in 4412.954s`
+                                 (corsia C su efe35b5) e `Ran 6025 in 2314.061s` (corsia A in
+                                 parallelo con C). Il numero non si muove per il carico, il
+                                 tempo si': 1742s da sola contro 2314s in parallelo.
+                                 ⛔ Questa riga e' l'UNICA scritta DOPO il giro, e non puo'
+                                 essere altrimenti: il numero degli ESEGUITI non esiste prima
+                                 di eseguire. Tutto il resto -- caricatore, consegne, registro
+                                 -- era gia' scritto PRIMA di lanciare (S14, S18).
+                                 I giri precedenti, per confronto: `Ran 6027 in 4412.954s`
+                                 (corsia C su efe35b5) e `Ran 6025 in 2314.061s` (corsia A,
+                                 in parallelo con C). Il numero non si muove per il carico,
+                                 il tempo si'.
                                  Prima delle 16 guardie nuove il numero era 6007, misurato
                                  tre volte nella stessa notte (2874.693s, 2244.352s,
                                  1731.102s): il numero non si muoveva, il tempo si', ed e'
@@ -1043,6 +1068,78 @@ e il pannello ne promette una (**B16 punto e**).
 `collaudi/METODO_v4.md` è la guida di riferimento per la verifica. PARTE 12 = la porta prima di
 aprire ai clienti. PARTE 13 = registro delle famiglie chiuse, si aggiorna a ogni famiglia
 chiusa. PARTE 15 = cosa fanno i grandi.
+
+### 🟠 B21 — LA WHITELIST DEGLI STATI CONFERMABILI È SCRITTA A MANO IN DUE POSTI, E NESSUNO DEI DUE DERIVA DAL MODELLO
+
+*(misurato il 2026-08-27 su `a77651a`, aprendo le righe una per una)*
+
+La regola «un pagamento si può confermare SOLO da `in_attesa` o `scaduto`» esiste **due volte**,
+scritta a mano, in due file diversi:
+
+```
+fase162_pagamenti_pendenti.py:324   if r["stato"] not in ("in_attesa", "scaduto"):
+fase83_server.py:8196               if stato not in ("in_attesa", "scaduto"):   <- percorso del webhook Stripe
+```
+
+Il modello vero sta altrove ed è **derivato**, non scritto a mano: `fase199_invarianti.py:331`,
+`transizioni_prenotazione()`, che costruisce la tabella `{stato: {successori}}` **dagli eventi**
+— la sua docstring dice «una sola fonte di verità nel modello».
+
+⛔ **Nessuno dei due punti la usa.** Misurato:
+- `grep -n "fase199\|transizioni_prenotazione" fase162_pagamenti_pendenti.py` → **vuoto**: quel
+  modulo non importa fase199 in nessuna forma;
+- `grep -n "fase199\|transizioni_prenotazione" fase83_server.py` → fase199 c'è, ma **solo** per
+  `scansiona_db` (`:3528`) e per `i3_prova_prima_del_commit` / `i4_denaro_non_negativo`
+  (`:5500`). **`transizioni_prenotazione` non compare mai.**
+
+**Perché è un difetto e non uno stile.** Se domani il modello degli stati cambia — un evento
+nuovo, uno stato che diventa confermabile — `fase199` lo sa e queste due righe no. Non si
+rompe niente: **restano indietro in silenzio**, che è il modo peggiore. È la stessa forma che
+la docstring di `_commissione_regalabile` chiama per nome: *«la stessa regola scritta a mano in
+due posti è il modo in cui un difetto sopravvive alla propria riparazione»*.
+
+⚠️ **Una rettifica, misurata: l'aggancio in `fase162` NON esiste ancora.** Questa voce nasce
+dall'idea di fare in `fase83:8196` «come si sta facendo in `fase162`» — ma oggi `fase162` la
+whitelist **ce l'ha scritta a mano** a `:324` esattamente come `fase83`, e non è fra i file
+modificati nell'albero di lavoro. Quindi i posti da agganciare sono **due, non uno**, e
+`fase162` non è il modello da copiare: è il primo dei due da riparare.
+
+⛔ **Il punto che nessun mutante tocca.** `test_fase162_hold_pagamento.py:130` dichiara che il
+generatore di mutanti **rinuncia** su `not in` (9 punti su quel modulo): quel cancello non è
+coperto dalla mutazione, e la sua unica difesa è la guardia scritta a mano a `:437`. Una
+seconda copia della stessa regola in `fase83` **non ha nemmeno quella**.
+
+---
+
+### 🟠 B22 — DUE DOCSTRING DESCRIVONO UNA RIGA CHE NON ESISTE PIÙ («riga 263»)
+
+*(misurato il 2026-08-27 su `a77651a` con `grep -nEi "riga ?263|riga263" test_fase162_hold_pagamento.py`)*
+
+```
+test_fase162_hold_pagamento.py:130   ... Fra questi ultimi c'e' la riga 263,
+test_fase162_hold_pagamento.py:435   # ── LA RIGA 263: IL CANCELLO CHE LO STRUMENTO NON SA ROMPERE ──
+test_fase162_hold_pagamento.py:437   def test_riga263_il_cancello_degli_stati_confermabili_e_CHIUSO(self):
+```
+
+La riga che descrivono oggi è la **324** (`fase162_pagamenti_pendenti.py:324`): la prosa è
+indietro di **61 righe**, e il **nome del test** porta il numero vecchio insieme a lei.
+
+⚠️ **I punti sono tre, non due, e i numeri non sono quelli a mente.** Cercandoli si trovano a
+`:130`, `:435` e `:437` — non a `:131` e `:440`. È esattamente il motivo per cui questa voce
+esiste: **un numero di riga dentro la prosa invecchia da solo**, e nessuna guardia se ne
+accorge perché il test resta verde.
+
+💡 **La forma che chiude la famiglia, non l'esemplare** (METODO, regola sopra tutte): un
+commento **non nomina il numero di riga**, come già non nomina la cifra della tariffa (S17). Si
+scrive «il cancello degli stati confermabili», non «la riga 263» — così non può diventare
+falso. ⛔ Il nome del test è la parte che costa: rinominarlo tocca anche gli schedari della
+mutazione che lo citano, e va guardato prima (`grep -rn "riga263"`).
+
+⚠️ **Da non confondere:** `test_promo_lancio_e2e.py:429` cita anch'esso «riga 263», ma parla di
+un'altra cosa (`fase186._guasti_isolati`, che guarda solo gli ERROR). **Non è la stessa riga** e
+non fa parte di questa voce.
+
+---
 
 ### ✅ B20 — CHIUSO il 2026-08-25 — LA GUARDIA DEGLI ELENCHI CERCAVA `TODO` COME SOTTOSTRINGA E INCIAMPAVA SULLA PAROLA «METODO»
 
