@@ -403,6 +403,70 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🔎 LA HOMEPAGE ERA L'UNICA PAGINA SENZA DOTAZIONE SEO — 2026-08-26
+
+**Come si è visto.** Un referto di misura sulla SEO della homepage, chiesto dal fondatore. Il
+comando che l'ha prodotto, e la sua uscita intera:
+
+```
+grep -n -iE 'description|canonical|hreflang|og:|ld\+json' deploy/index.html
+11:<title>Bookin VIP</title>
+```
+
+Una riga sola. Il `<head>` di `deploy/index.html` (837 righe) aveva charset · viewport ·
+theme-color · google-site-verification · manifest · icon · apple-touch-icon · title, e **zero**
+description, **zero** canonical, **zero** `og:*`, **zero** JSON-LD. Nessuna iniezione
+server-side poteva rimediare: `fase83_server.py:10504` è `nome = "index.html" if path in
+("/", "")` — la "/" serve quel file **al byte**.
+
+Il confronto che rende il buco visibile: `genera_landing_host('Roma')` (fase97) produce un head
+di 5250 byte con `1 description · 1 canonical assoluto self-referente · 26 link alternate (25
+hreflang + x-default) · og:title · og:type · og:url · og:locale · 12 og:locale:alternate · 2
+JSON-LD (FAQPage + BreadcrumbList)`; `fase198_blog.py:335-339` fa lo stesso per gli articoli.
+**Le pagine generate erano irreprensibili e la porta d'ingresso era scoperta** — cioè l'unica
+pagina che un crawler raggiunge per prima, e l'unica che nessuna guardia guardava.
+
+**Cosa è cambiato** (autorizzato dal fondatore, `deploy/` è produzione). In `deploy/index.html`,
+subito sotto il `<title>`: `meta description` (138 caratteri) · `link canonical` assoluto e
+self-referente su `https://bookinvip.com/` · `og:title` · `og:type=website` · `og:url` (uguale al
+canonical) · `og:locale=it_IT` (coerente con `<html lang="it">`). Sei tag, nessuna riga di
+JavaScript toccata, nessuna dipendenza.
+
+⛔ **Niente hreflang, ed è una scelta misurata, non una dimenticanza.**
+`python -c "import fase97_inbound_seo as f; print(len(f.locali_hreflang()))"` → **25** codici su
+13 lingue base. Ma la homepage **non onora `?lang=`**: `deploy/app.js:97` `BV.linguaIniziale`
+sceglie da `localStorage` e da `navigator.languages`, e `deploy/index.html:277` dichiara
+`SUPP = ['it','en','es','fr','de','pt','ja','zh']`, cioè **8**. Dichiarare 25 URL alternativi
+che servono tutti la **stessa** pagina è contenuto duplicato, non targeting: peggio del niente
+che c'era prima. La decisione (onorare `?lang=` oppure restare a un URL solo) è **D16**, e sta
+in `RIPRENDI_QUI.md` come **B21**, l'unico posto dove vivono le cose da fare.
+
+📌 **E un contrasto trovato per strada, che resta aperto**: fase97 dichiara tre cifre diverse
+sulle proprie lingue — docstring riga 17 «Multilingua (**5 lingue**)», `LINGUE` riga 28 = **13**,
+e il testo **pubblico** di `llms_txt()` riga 750 (servito su `/llms.txt`) «230+ città in **13
+lingue**», mentre `locali_hreflang()` ne produce **25** e la homepage ne serve **8**. Nessuna di
+queste è stata toccata: è misura, non riparazione.
+
+**Guardia nuova** — `test_seo_sandbox.TestHomepageDotazioneSEO`, **ACCESA** (la esegue la suite,
+nessun interruttore), 4 test. Legge `deploy/index.html` dal disco e pretende: description
+presente e fra 50 e 160 caratteri · canonical assoluto **e** self-referente sulla radice · le
+quattro `og:` presenti con `og:type=website` · `og:url` uguale al canonical e `og:locale`
+coerente con `<html lang>`. **Vista ROSSA prima della riparazione** (D20), sul codice di
+produzione vero:
+
+```
+python -m unittest test_seo_sandbox.TestHomepageDotazioneSEO -v     EXIT=1
+Ran 4 tests -- FAILED (failures=4)
+AssertionError: unexpectedly None : deploy/index.html non ha <meta name="description">
+AssertionError: unexpectedly None : deploy/index.html non ha <link rel="canonical">
+AssertionError: unexpectedly None : manca <meta property="og:title">
+AssertionError: None != 'it_IT'
+```
+
+e verde dopo (`python -m unittest test_seo_sandbox -v` → `Ran 20 tests ... OK`, EXIT=0). Il
+motivo per cui la guardia esiste è la seconda metà di D20: fra sei mesi qualcuno che
+«semplifica» quel `<head>` diventa rosso lo stesso giorno.
+
 ### 🛣️ LE DUE CORSIE, B5 E B6 — 2026-08-24
 
 **Misurato:** 406 file di test · 151 moduli · **6012 test** dal caricatore, su `b4b47b9` più il

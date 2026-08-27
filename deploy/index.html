@@ -9,6 +9,18 @@
 <link rel="icon" href="/icon.svg">
 <link rel="apple-touch-icon" href="/icon.svg">
 <title>Bookin VIP</title>
+<!-- DOTAZIONE SEO della homepage (2026-08-26): fino a oggi qui c'era SOLO il <title>, mentre
+     ogni landing di fase97 e ogni articolo di fase198 avevano description+canonical+og.
+     La "/" e' servita da questo file al byte, quindi il head monco non lo rimediava nessuno.
+     ⛔ NIENTE hreflang: questa pagina non onora ?lang= (app.js sceglie da localStorage e dal
+     browser), quindi ogni URL alternativo servirebbe la stessa pagina = duplicato. Decisione
+     aperta, non dimenticanza. Guardia: test_seo_sandbox.TestHomepageDotazioneSEO. -->
+<meta name="description" content="Prenota il tuo alloggio direttamente dall'host su BookinVIP: calendario in tempo reale, pagamento sicuro, voucher firmato e self check-in.">
+<link rel="canonical" href="https://bookinvip.com/">
+<meta property="og:title" content="Bookin VIP">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://bookinvip.com/">
+<meta property="og:locale" content="it_IT">
 <style>
 :root{
   /* DESIGN TOKENS (FASE 2 carrozzeria): la palette sta QUI, un posto solo.
