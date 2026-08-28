@@ -799,6 +799,42 @@ class TestArrotondamentiPuri(unittest.TestCase):
         self.assertEqual(Denaro(12345, "EUR").maggiore(), Decimal("123.45"))
         self.assertEqual(Denaro(12345, "BHD").maggiore(), Decimal("12.345"))
 
+    def test_ISK_e_UGX_si_addebitano_come_valute_a_DUE_decimali(self):
+        """Stripe le dichiara alla lettera: «ISK transitioned to a zero-decimal currency,
+        BUT backward compatibility requires you to represent it as a two-decimal value,
+        where the decimal amount is always 00. For example, to charge 5 ISK, provide an
+        `amount` value of 500» — e la stessa identica frase per UGX
+        (docs.stripe.com/currencies, sezione «Casi particolari», letta il 2026-08-28 in
+        italiano e in inglese: due letture, stessa frase).
+        ⛔ Questa guardia NON guarda in quale tabella stanno: guarda cosa il MONDO pretende,
+        cioe' a quanto corrisponde un importo verso Stripe. Cosi' resta vera comunque
+        decidiamo di rappresentarle domani.
+        ⚠️ E questo difetto e' INVISIBILE alla riconciliazione (fase182): lo stesso numero
+        sbagliato lo mandiamo a Stripe E lo scriviamo a giornale, quindi il confronto torna
+        a zero lo stesso. Questo e' l'unico posto dove si puo' vedere."""
+        from fase99_multicurrency import Denaro
+        for valuta in ("ISK", "UGX"):
+            with self.subTest(valuta=valuta):
+                self.assertEqual(
+                    Denaro(500, valuta).maggiore(), Decimal(5),
+                    "la fonte dice «to charge 5 %s, provide an amount value of 500»: se da "
+                    "noi 500 unita' minori valgono 500 %s, addebitiamo un centesimo del "
+                    "dovuto e ci perde l'host" % (valuta, valuta))
+
+    def test_le_valute_DAVVERO_senza_decimali_non_diventano_a_due(self):
+        """L'ALTRA direzione (regola ferrea 10, D18 punto 2): sistemare ISK e UGX non deve
+        trascinarsi dietro le valute che Stripe tratta davvero senza decimali. Per quelle la
+        fonte dice l'opposto: «to charge 500 JPY, provide an `amount` value of 500». Senza
+        questa meta', la riparazione potrebbe spostare TUTTO a due decimali e far addebitare
+        cento volte troppo — un allarme che grida sempre e' gia' spento."""
+        from fase99_multicurrency import Denaro
+        for valuta in ("JPY", "KRW"):
+            with self.subTest(valuta=valuta):
+                self.assertEqual(
+                    Denaro(500, valuta).maggiore(), Decimal(500),
+                    "500 unita' minori SONO 500 %s: trattarle come centesimi farebbe "
+                    "addebitare cento volte troppo all'ospite" % valuta)
+
     def test_entrambe_le_porte_del_payout_conservano_la_valuta(self):
         """Nel payout si entra da DUE porte: `registra_in_attesa` (pagamento online da
         confermare) e `registra_maturato` (conferma immediata, su-richiesta approvata,

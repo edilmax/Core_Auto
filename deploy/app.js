@@ -62,7 +62,14 @@
 
   /* ── VALUTE (tabella unica: simbolo, esponente, nome) ──────────────────────────
      L'host prezza nella SUA moneta; l'ospite paga in quella (like-for-like).
-     Esponente 0 per JPY/KRW/VND/CLP/ISK (niente decimali). */
+     Esponente 0 per JPY/KRW/VND/CLP (niente decimali).
+     ⛔ ISK sta a 2 e NON e' una svista: Stripe la dichiara «transitioned to a zero-decimal
+     currency, BUT backward compatibility requires you to represent it as a two-decimal
+     value, where the decimal amount is always 00 — to charge 5 ISK, provide an amount value
+     of 500» (docs.stripe.com/currencies, «Casi particolari», 2026-08-28). Qui l'esponente
+     decide cosa LEGGE l'ospite: se non coincide col motore (fase99), il prezzo mostrato e
+     quello addebitato differiscono di cento volte. Il numero mandato a Stripe non passa da
+     qui — lo firma il server (fase59:513) — ma il prezzo sullo schermo si'. */
   BV.VALUTE = {
     EUR:{s:'€',e:2,n:'Euro'}, USD:{s:'$',e:2,n:'US Dollar'}, GBP:{s:'£',e:2,n:'British Pound'},
     CHF:{s:'CHF',e:2,n:'Swiss Franc'}, THB:{s:'฿',e:2,n:'Thai Baht'}, JPY:{s:'¥',e:0,n:'Japanese Yen'},
@@ -76,7 +83,7 @@
     NOK:{s:'kr',e:2,n:'Norwegian Krone'}, DKK:{s:'kr',e:2,n:'Danish Krone'},
     PLN:{s:'zł',e:2,n:'Polish Zloty'}, TRY:{s:'₺',e:2,n:'Turkish Lira'},
     VND:{s:'₫',e:0,n:'Vietnamese Dong'}, CLP:{s:'CLP$',e:0,n:'Chilean Peso'},
-    ISK:{s:'kr',e:0,n:'Icelandic Krona'}
+    ISK:{s:'kr',e:2,n:'Icelandic Krona'}
   };
   BV.valExp = function(v){ return (BV.VALUTE[v] && BV.VALUTE[v].e!=null) ? BV.VALUTE[v].e : 2; };
   BV.valSym = function(v){ return (BV.VALUTE[v] && BV.VALUTE[v].s) || v || ''; };

@@ -28,7 +28,15 @@ from typing import Any, Callable, Dict, Optional
 import fase98_policy_commissione as policy
 
 # Valute con esponente diverso da 2 (unità minori). Default = 2.
-_ESP0 = {"JPY", "KRW", "VND", "CLP", "ISK", "XAF", "XOF", "PYG", "UGX", "RWF",
+# ⛔ ISK e UGX NON stanno qui, e non è una dimenticanza: Stripe le dichiara «transitioned to
+# a zero-decimal currency, BUT backward compatibility requires you to represent it as a
+# two-decimal value, where the decimal amount is always 00 — to charge 5 ISK, provide an
+# amount value of 500» (docs.stripe.com/currencies, «Casi particolari», letta il 2026-08-28
+# in italiano e in inglese). Trattandole a zero decimali si addebita un CENTESIMO del dovuto,
+# e la riconciliazione (fase182) non può vederlo: lo stesso numero sbagliato va a Stripe E a
+# giornale, quindi il confronto torna. Chi le rimette qui trova rosso
+# `test_ISK_e_UGX_si_addebitano_come_valute_a_DUE_decimali` lo stesso giorno.
+_ESP0 = {"JPY", "KRW", "VND", "CLP", "XAF", "XOF", "PYG", "RWF",
          "GNF", "KMF", "DJF", "VUV", "XPF", "BIF"}
 _ESP3 = {"BHD", "KWD", "OMR", "TND", "JOD", "IQD", "LYD"}
 
