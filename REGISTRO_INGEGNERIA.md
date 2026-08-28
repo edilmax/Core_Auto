@@ -403,6 +403,85 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🔵 IL JOB `money-smoke` ERA CIECO SUL TEOREMA DEI SOLDI — 2026-08-28
+
+*(corsia B, unito con la richiesta **#121**, `c5783ff` → `58d20cb`. Scritto qui il 2026-08-28
+dalla corsia che coordina: la riparazione era stata unita **senza** la sua riga di diario, e
+la direttiva finale 4 la pretende. Il buco l'ha trovato chi rilegge, non chi ripara.)*
+
+**Cosa era rotto.** Il job `money-smoke` installava solo `hypothesis` (`ci.yml:108`) ed
+eseguiva `test_property_soldi`, che contiene **due prove z3** protette da `self.skipTest` se z3
+manca (`test_property_soldi.py:230-234`). Il teorema «**nessun centesimo si crea o si perde**»
+**si saltava in silenzio, dentro il job che porta il nome «money»**, e il job restava verde.
+
+**Perché la guardia esistente non poteva vederlo.** `_job_esegue_le_prove_z3` riconosceva un
+job solo se conteneva `discover`, `$(` o `test_fase199` — un **elenco di nomi scritto a mano**.
+E il suo docstring affermava il falso: «money-smoke non tocca fase199: obbligarlo a installare
+z3 sarebbe spreco». Vero su `fase199` e **irrilevante**, perché le prove z3 stanno in **tre**
+file. Una guardia costruita su un elenco di nomi non sorveglia un insieme: sorveglia l'elenco.
+
+⚠️ **Ridimensionamento, e va tenuto.** Il teorema **era comunque dimostrato in CI**, da
+`full-suite` e `copertura`, che z3 lo installano. **Non c'era un buco nei soldi: c'era un buco
+nella guardia.** Raccontarlo al contrario sarebbe stato più drammatico e falso.
+
+**La riparazione**, con D20 rispettato — rosso letto **prima**:
+```
+rosso:  AssertionError: Lists differ: [] != ['money-smoke']   EXIT=1
+fix:    ci.yml:108   pip install hypothesis  ->  pip install hypothesis z3-solver
+verde:  Ran 5, OK, EXIT=0
+```
+
+**Cosa è cambiato nella logica, ed è la parte che dura.** Il criterio nuovo **non nomina più i
+job a mano: li DERIVA dall'albero sintattico** (`ast`). Un modulo «porta prove z3» se (a)
+importa z3, oppure (b) nomina una funzione di produzione che importa z3. Il ramo (b) chiude la
+catena test→produzione→z3 **prima** che qualcuno la apra: oggi è vuoto, e lo dichiara.
+La trappola **S6** (una guardia che un commento può soddisfare) è esclusa **per costruzione**:
+`test_pipeline_ci.py:1551` contiene la **stringa** `"import z3"` dentro un'asserzione, e una
+stringa non è un nodo `Import` — un `grep` ci sarebbe cascato, l'albero sintattico no.
+
+**Dipendenze/env:** `z3-solver` ora installato anche nel job `money-smoke`.
+**STATO: acceso**, gira a ogni richiesta di unione dentro il gate.
+
+⚠️ **Limite dichiarato dalla corsia B stessa** (D18 punto 3): il criterio guarda **un solo
+salto**; una catena più lunga non la vede. Oggi il ramo indiretto è vuoto (misurato) e
+allargarlo costerebbe falsi allarmi. **È un buco noto, non nascosto.**
+
+---
+
+### 🟢 PARTE 12 «LA PORTA»: 34 CASELLE CON L'ESITO E IL COMANDO CHE LO DIMOSTRA — 2026-08-28
+
+*(corsia A, unito con la richiesta **#122**, `aaf9b59` → `8131bc7`. Scritto qui il 2026-08-28
+dalla corsia che coordina, per la stessa ragione della voce sopra.)*
+
+**Cos'era prima.** `collaudi/METODO_v4.md` PARTE 12 — la lista di controllo «prima di prendere
+soldi veri di sconosciuti» — era una **lista di caselle vuote**. Un documento che elenca cosa
+bisognerebbe verificare, senza dire se è stato verificato, **somiglia a una verifica** e non
+ne è una.
+
+**Cos'è adesso.** 34 caselle, ognuna con l'esito **e il comando che lo dimostra**, più cosa
+manca e cosa c'è già. Ricontate dalla corsia che coordina il 2026-08-28 — non riferite:
+```
+sed -n '499,666p' collaudi/METODO_v4.md | grep -o "\[SI'\]"          | wc -l  -> 13
+sed -n '499,666p' collaudi/METODO_v4.md | grep -o "\[NO\]"           | wc -l  -> 10
+sed -n '499,666p' collaudi/METODO_v4.md | grep -o "\[NON MISURATO\]" | wc -l  -> 11
+                                                                      totale  -> 34
+```
+
+⭐ **La consegna più scomoda non è una casella: su 13 `[SI']`, DODICI non sono mai state viste
+rosse.** Non è la qualità di una casella: è la qualità di **tutte le altre**. Un `[SI']`
+appoggiato a una guardia che non ha mai fallito davanti al guasto che dovrebbe vedere è il
+**verde finto** della regola ferrea 2, scritto dentro un documento ufficiale — dove pesa di
+più, perché lì sembra un verdetto.
+
+⛔ **E il censimento non è protetto da niente**: `collaudi/METODO_v4.md` **non è letto da nessun
+`.py`**, quindi il giorno che un `[SI']` smette di essere vero non se ne accorge nessuno.
+Aperto come **B27** in `RIPRENDI_QUI.md`.
+
+**STATO: acceso** come documento di riferimento, **scoperto** come guardia — non esiste nessun
+test che lo interroghi.
+
+---
+
 ### 💴 ISK E UGX: DUE VALUTE CHE STRIPE VUOLE A DUE DECIMALI, E NOI NO — 2026-08-28
 
 **Cosa era rotto.** `fase99_multicurrency._ESP0` elencava **ISK** e **UGX** fra le valute a

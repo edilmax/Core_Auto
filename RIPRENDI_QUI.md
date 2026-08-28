@@ -18,100 +18,301 @@
 
 ---
 
-## 📍 DOVE SIAMO — 2026-08-26, letto dall'API e dai QUATTRO posti
+## 📍 DOVE SIAMO — 2026-08-28 mattina, misurato dai QUATTRO posti
 
 ```
-computer            f937fd6   <- git rev-parse --short master, 2026-08-27 22:2xZ
-GitHub master       f937fd6   <- le tre corsie unite: #117 (C), #118 (A), #119 (B)
-VPS (git sul disco) efe35b5   <- ⛔ INDIETRO DI 3 UNIONI, misurato adesso via ssh
-IMMAGINE VIVA       sha256:8def0ea3...  <- costruita da d7f60c7 il 2026-08-26 17:06:22Z
-                                           running - health=healthy (misurato adesso)
-                    HTTP 200 in 0,228 s · {"status":"ok","guardiano":"ok","email_ko":0}
-                    ⚠️ L'IMMAGINE E' INDIETRO DI PROPOSITO: da d7f60c7 in poi sono stati
-                    uniti SOLO documenti (#114, #115 e il listino ufficiale), e il fondatore
-                    ha detto «niente deploy». I tre git sono allineati, il browser serve
-                    ancora d7f60c7 - ed e' corretto cosi', perche' nessun codice e' cambiato.
-                    ⛔ E DA QUI IN POI NON E' PIU' VERO CHE «nessun codice e' cambiato»:
-                    la dotazione SEO della homepage tocca `deploy/index.html`, che e'
-                    PRODUZIONE (B4, 2026-08-24) -- e' cio' che il browser serve davvero.
-                    I sei tag nuovi (description, canonical, og:*) sono nel repository e
-                    NON sono online: finche' non si deploya, chi apre bookinvip.com legge
-                    ancora un <head> con il solo <title>. Non e' un guasto, e' uno scarto
-                    dichiarato: il deploy resta fermo al «niente deploy» del fondatore.
-IN PRODUZIONE       curl https://bookinvip.com/api/health  ->  HTTP 200 in 0,301 s
-                    {"status":"ok","money_unit":"cents_integer","guardiano":"ok","email_ko":0}
+computer            5d6e0b3   <- git rev-parse --short master, da PowerShell vera
+GitHub master       5d6e0b3   <- git ls-remote --heads origin master
+                                 5d6e0b307279e24d22da6c06f846d2edd834b9b3
+albero              pulito    <- git status --porcelain, uscita vuota
+CARICATORE          6042      <- misurato PRIMA di qualunque giro (S14), da PowerShell,
+                                 DOPO l'unione di tutte e tre le corsie. EXIT=0
+VPS (git sul disco) efe35b5   <- ssh in sola lettura, misurato adesso, non ricordato
+IMMAGINE VIVA       sha256:8def0ea3d9f2b0c1ab74385bf45f6bd152105b03ac87f1bdd02e06bf198b2676
+                              <- docker inspect --format='{{.Image}}' casavip_app
+IN PRODUZIONE       curl https://bookinvip.com/api/health -> HTTP 200 in 0,523 s
+                    {"status": "ok", "money_unit": "cents_integer",
+                     "guardiano": "ok", "email_ko": 0}
+                    curl https://bookinvip.com/           -> HTTP 200 in 0,432 s
 ```
 
-### 🔄 STATO DELLA CORSIA B — 2026-08-27, aggiornato alle 20:59
+⛔ **IL VPS È INDIETRO DI NOVE UNIONI E VENTISEI COMMIT, E QUESTA VOLTA NON È UNO SCARTO
+INNOCUO.** Misurato, non dedotto:
+```
+git rev-list --count efe35b5..master           -> 26
+git rev-list --count --merges efe35b5..master  ->  9
+```
 
-> ⛔ **Il riquadro qui sopra e' VECCHIO: dice `efe35b5`, e non e' piu' vero.** Misurato alle
-> 20:59 coi comandi, non ricordato:
-> ```
-> git branch --show-current              -> lavoro-b
-> git rev-parse --short HEAD             -> 20e94f4
-> git rev-parse --short origin/lavoro-b  -> 20e94f4
-> git log --oneline origin/lavoro-b..HEAD -> vuoto
-> git ls-remote --heads origin master    -> 604991e
-> ```
-> **I DUE COMMIT SONO PUBBLICATI.** `f632e93` (gli stati confermabili si derivano dal modello)
-> e `20e94f4` (i tre S608 dichiarati) sono su GitHub dalle 20:15, sul ramo `lavoro-b`, con la
-> richiesta di unione **#119 aperta e `mergeable=True`**. `master` resta a `604991e` finche'
-> non si unisce: e' corretto cosi', non e' uno scarto da riparare.
-> ⛔ **Alle 20:03 questa riga diceva il contrario** («esistono solo su questo computer»): era
-> vera quando e' stata scritta e ha smesso di esserlo dodici minuti dopo. E' il motivo per cui
-> una consegna porta l'ora e il comando: senza, sarebbe rimasta li' a spaventare qualcuno.
->
-> **SUL DISCO CI SONO TRE FILE NON COMMITTATI, DI DUE MANI DIVERSE** (`git status --porcelain`):
-> ```
->  M fase162_pagamenti_pendenti.py    3 righe `# nosec B608` accanto ai `# noqa: S608` gia'
->                                     presenti. NON le ha scritte la corsia B: le ha scritte
->                                     la corsia che coordina, alle 19:39:31, e alle 20:5x ha
->                                     detto perche'. SERVONO: la CI ha bocciato la #119 sul
->                                     job "qualita" DUE volte -- prima il cricchetto ruff
->                                     (+3 S608), poi, messi i `# noqa`, il cricchetto bandit
->                                     (+3 B608). `# noqa` parla solo a ruff; bandit ha la sua
->                                     regola per lo stesso identico problema e vuole `# nosec`.
->                                     Non sono falle: si interpolano solo segnaposto `?,?`
->                                     generati da `len()` di una tupla del modello, e i valori
->                                     viaggiano come parametri nella riga dopo.
->                                     Ricontato dopo averle messe: ruff 686=686, bandit
->                                     548=548, semgrep 6=6, pip-audit 10=10, nessuna nuova.
->                                     ⛔ Toglierle rimette la #119 rossa.
->  M test_fase162_hold_pagamento.py   2 docstring che citavano la riga vecchia
->                                     (`not in ("in_attesa","scaduto")`, «la riga 263») e ora
->                                     nominano il cancello invece delle sue coordinate (S17).
->                                     Corsia B. Chiude la voce B22.
->  M RIPRENDI_QUI.md                  questo blocco.
-> ```
-> **NESSUN GIRO DI SUITE VALIDO ESISTE SU QUESTO ALBERO.** L'ultimo verde
-> (`Ran 6025 -- OK, EXIT=0`) e' di **prima** che master entrasse: adesso il caricatore dice
-> **6036**. E il giro lanciato alle **20:40:47 e' stato BUTTATO senza nemmeno leggerlo**: dalle
-> 20:04 alle 20:52 girava una **seconda suite** della corsia che coordina, **nella stessa
-> cartella e sugli stessi database di prova** -- dodici minuti di contesa. Un giro che divide
-> la macchina con un altro giro non e' un esito, ne' se esce verde ne' se esce rosso (ferrea 4,
-> sbaglio S18): non si interpreta, si rifa' da fermo. Fermato alle 20:59, macchina verificata
-> vuota (`Get-Process python` -> nessuno). Quindi: prima di qualunque commit, **suite intera**
-> da fermo (ferrea 6, nessuna eccezione per i `.md`).
->
-> **L'UNICA COSA APERTA E MISURATA — e va ridimensionata rispetto a come l'avevo detta:**
-> `fase83_server.py:8196` -> `if stato not in ("in_attesa", "scaduto"):` nel percorso del
-> **webhook Stripe**. L'avevo chiamata «copia gemella, stesso difetto»: **non e' cosi', e la
-> differenza conta.** Letto il codice intorno (`_conferma_pagamento`, `:8154`): la scrittura
-> e' gia' impedita **prima**, da `pp.conferma()` che e' il CAS governato da `_AMMESSI`. Quel
-> `not in` non e' un secondo cancello sulla scrittura: riceve lo stato **PRECEDENTE** e decide
-> solo il **ramo dopo** (registrare «RIMBORSARE» e la riga del rimborso).
-> Quindi: **non e' un difetto vivo**, ed e' una whitelist, non una blacklist. Resta una
-> **duplicazione**: il giorno che il modello di `fase199` ammettesse una sorgente in piu',
-> `fase162` confermerebbe (giusto) e `fase83` marcherebbe lo stesso pagamento come da
-> rimborsare (sbagliato). Vale la pena chiuderla, **non e' urgente**, e serve
-> «**autorizzato**» (B4) perche' e' produzione.
-> Resta fuori anche il **punto 3** (`guardia_prenotazione()` attiva al finalizza): rimandato
-> dal fondatore, aspetta un via suo separato.
+Fino al 26 agosto la frase che giustificava lo scarto era «sono stati uniti solo documenti,
+nessun codice è cambiato». **Da quel momento non è più vera, e va detto per esteso** — questo
+è il diff fra ciò che il browser serve adesso e ciò che c'è nel repository:
 
-> 📏 **Contesto letto quando questo blocco e' stato scritto: 54%** (D21). Il blocco esiste
-> perche' oltre meta' contesto l'IA non smette di rispondere: continua **con lo stesso tono
-> sicuro**, mettendoci dentro numeri mai misurati. Da qui in poi: `/clear`, e si riparte da
-> questo file.
+```
+git diff --stat efe35b5..master -- deploy/
+  deploy/app.js      | 11 +++++++++--
+  deploy/index.html  | 12 ++++++++++++
+
+git diff --stat efe35b5..master -- 'fase*.py' main_casavip.py
+  fase162_pagamenti_pendenti.py | 46 ++++++++++++++++++++++--------
+  fase182_riconciliazione.py    | 44 ++++++++++++++++++++++-----------
+  fase99_multicurrency.py       | 10 +++++++++-
+```
+
+🔴 **La riga che pesa più di tutte è `fase99_multicurrency.py`:** è la riparazione di ISK e
+UGX, due valute che Stripe vuole a **due** decimali e che noi trattavamo a **zero** — cioè su
+un annuncio in corone islandesi si incassava **un centesimo del dovuto**. Quella riparazione è
+nel repository e **non è in produzione**. Non è un rischio teorico: è un difetto sui soldi già
+capito, già provato e ancora vivo per chi apre il sito.
+
+⛔ **E `git pull` sul server NON basta.** `deploy/` non è montato: entra nell'immagine con
+`COPY` (`STATIC_DIR=/app/deploy`). Finché non si **ricostruisce l'immagine**, il disco del
+server può essere aggiornato e il browser continuare a servire il vecchio. È la trappola del
+2026-08-07, ed è il motivo per cui i posti sono **quattro** e non tre.
+
+### 🌙 LA NOTTE FRA IL 27 E IL 28 AGOSTO — tre corsie, tre unioni, tutte con CI verde
+
+> **Scritto il 2026-08-28 dalla corsia che coordina, e sostituisce il blocco della corsia B
+> del 27 sera.** Quel blocco descriveva due commit non ancora uniti, tre file non committati e
+> `master` a `604991e`: **niente di tutto ciò esiste più.** È unito, l'albero è pulito,
+> `master` è a `5d6e0b3`. Un blocco che descrive uno stato morto non è storia: è una trappola
+> per chi lo legge domani (sbaglio **S10**). L'unica cosa di quel blocco ancora viva — la
+> seconda copia della whitelist in `fase83_server.py:8196` — sta dove deve stare, nella voce
+> **B21** in sezione C, e non serve ripeterla qui.
+
+| unione | commit | corsia | cosa ha chiuso |
+|---|---|---|---|
+| **#121** | `c5783ff` → `58d20cb` | **B** | il job `money-smoke` era **cieco sul teorema dei soldi** |
+| **#122** | `aaf9b59` → `8131bc7` | **A** | **PARTE 12 «LA PORTA»**: 34 caselle misurate, non più vuote |
+| **#123** | `1adc67e` + `8354e10` → `5d6e0b3` | **C** | due difetti sui soldi: riconciliazione e ISK/UGX |
+
+#### 🔵 #121 — il job che porta il nome «money» saltava le prove sui soldi, in silenzio
+
+`money-smoke` installava solo `hypothesis` (`ci.yml:108`) ed eseguiva `test_property_soldi`,
+che contiene **due prove z3** protette da `self.skipTest` se z3 manca
+(`test_property_soldi.py:230-234`). Il teorema «nessun centesimo si crea o si perde» **si
+saltava senza dirlo**, e il job restava verde.
+
+E la guardia che avrebbe dovuto accorgersene **non poteva, per costruzione**:
+`_job_esegue_le_prove_z3` riconosceva un job solo se conteneva `discover`, `$(` o
+`test_fase199` — un **elenco di nomi scritto a mano**. Il suo stesso docstring affermava il
+falso: «money-smoke non tocca fase199: obbligarlo a installare z3 sarebbe spreco». Vero su
+`fase199`, e irrilevante, perché le prove z3 stanno in **tre** file.
+
+⚠️ **RIDIMENSIONAMENTO, e va tenuto perché è la parte onesta:** il teorema **era comunque
+dimostrato in CI**, da `full-suite` e `copertura`, che z3 lo installano. **Non c'era un buco
+nei soldi: c'era un buco nella guardia.** Raccontarlo al contrario sarebbe più drammatico e
+falso.
+
+Riparato con **D20** rispettato, rosso letto **prima**:
+```
+rosso:  AssertionError: Lists differ: [] != ['money-smoke']   EXIT=1
+fix:    ci.yml:108   pip install hypothesis  ->  pip install hypothesis z3-solver
+verde:  Ran 5, OK, EXIT=0
+```
+
+🔑 **E la parte che vale più della riparazione:** il criterio nuovo **non nomina più i job a
+mano, li DERIVA dall'albero sintattico**. Un modulo «porta prove z3» se (a) importa z3, oppure
+(b) nomina una funzione di produzione che importa z3. Il ramo (b) chiude la catena
+test→produzione→z3 **prima** che qualcuno la apra: oggi è vuoto, ed è dichiarato vuoto.
+E la trappola **S6** (una guardia che un commento può soddisfare) è esclusa **per
+costruzione**: `test_pipeline_ci.py:1551` contiene la **stringa** `"import z3"` dentro
+un'asserzione, e una stringa non è un nodo `Import`.
+
+⚠️ **Limite dichiarato dalla corsia B stessa** (D18 punto 3): il criterio guarda **un solo
+salto**. Una catena più lunga non la vede. Oggi il ramo indiretto è vuoto (misurato) e
+allargarlo costerebbe falsi allarmi: è un buco **noto**, non nascosto.
+
+#### 🟢 #122 — PARTE 12 «LA PORTA» non è più una lista di caselle vuote
+
+34 caselle, ognuna con l'esito **e il comando che lo dimostra**. Ricontate dalla corsia che
+coordina il 2026-08-28 — non riferite dalla corsia A, ricontate:
+```
+sed -n '499,666p' collaudi/METODO_v4.md | grep -o "\[SI'\]"          | wc -l  -> 13
+sed -n '499,666p' collaudi/METODO_v4.md | grep -o "\[NO\]"           | wc -l  -> 10
+sed -n '499,666p' collaudi/METODO_v4.md | grep -o "\[NON MISURATO\]" | wc -l  -> 11
+                                                                      totale  -> 34
+```
+
+⭐ **La consegna più scomoda della corsia A non è una casella: su 13 [SI'], DODICI non sono
+mai state viste rosse.** Non è la qualità di una casella, è la qualità di **tutte le altre**.
+Un [SI'] appoggiato a una guardia che non ha mai fallito davanti al guasto che dovrebbe vedere
+è esattamente il **verde finto** della regola ferrea 2 — scritto dentro un documento ufficiale,
+dove pesa di più.
+
+#### 🔴 #123 — due difetti sui soldi, e il primo era vivo
+
+**(a) La riconciliazione accusava prenotazioni SANE.** `_pagina` ha un tetto di 20 pagine e
+scrive `logger.warning(… "risultato PARZIALE, indicato nel report")`. **Nel report non c'è**:
+il dizionario di `riconcilia()` ha nove chiavi e **nessuna dichiara la parzialità**.
+
+⛔ **La direzione è MISURATA, non dedotta** — scenario costruito dalla corsia C:
+```
+sessioni Stripe 2100 · lette 2000 · incassi a giornale 100
+  ->  ok=False · solo_giornale mostrati 50 (veri 100) · delta EUR -100.000
+```
+**Cento prenotazioni in regola accusate, e un ammanco INVENTATO di 1.000,00 EUR.** Con quel
+referto il Guardiano dei soldi **manda l'email d'allarme**.
+
+⛔ **E QUI VA CORRETTA UNA FRASE SCRITTA DALLA CORSIA CHE COORDINA, non dalla corsia C.**
+La voce **B7** diceva «il rapporto dichiara ok/fantasmi come se avesse guardato tutto», cioè
+descriveva un **falso ok**. È il contrario: `ok` non diventa **mai** falsamente positivo — è un
+**falso allarme**. La corsia C aveva ragione dal primo referto. La differenza non è una
+sfumatura: «tace quando dovrebbe gridare» e «grida quando dovrebbe tacere» hanno **rimedi
+opposti**, e un falso allarme insegna a ignorare i segnali (regola ferrea 10).
+
+**Secondo difetto, sovrapposto:** gli elenchi sono tagliati a 50 (`solo_stripe[:50]` e simili)
+ma `fantasmi` e `ok` sono calcolati **prima** del taglio. Quindi il taglio **non falsa il
+verdetto: nasconde la grandezza.** Chi legge vede 50 dove i veri sono 100.
+
+**(b) ISK e UGX trattate a zero decimali.** Stripe le vuole a **due**: su un annuncio in corone
+islandesi si incassava **un centesimo del dovuto**.
+✅ Verificato che **nessun dato reale** in ISK o UGX esiste nei 25 archivi veri (186 righe in
+tutto): **non è stato perso nessun soldo davvero.**
+⛔ **Ma la riparazione NON è online** — vedi il riquadro in cima.
+
+#### ⭐ LA LEZIONE PIÙ NUOVA DELLA NOTTE, e nasce da un giro di suite buttato dopo 2h19m
+
+> **«Un NON ESEGUITO non si sostituisce con una misura presa nello stesso posto che lo rende
+> non eseguibile.»** *(corsia C, 2026-08-28)*
+
+Il pre-volo dava `NON ESEGUITO` sul controllo 4 («l'ambiente è quello dichiarato») perché
+vedeva `MSYSTEM=MINGW64`. La corsia C ha considerato quel non-eseguito un falso allarme del
+proprio ambiente e l'ha **scavalcato misurando a mano la cosa che il controllo protegge**:
+`openssl` c'è o no? Ha misurato «c'è in tutt'e due le shell» e ha lanciato.
+
+⛔ Ma quella misura girava in un `powershell.exe` **lanciato da Git Bash**, che eredita
+`MSYSTEM` **e il PATH**. Non era PowerShell: era **Git Bash travestito**. Da una PowerShell
+ripulita (`Remove-Item Env:MSYSTEM` + PATH ricostruito dal registro) `openssl` **non c'è**.
+Il giro è morto dopo **2h19m** su quattro guardie, e la prima lo dichiarava da sé:
+```
+AssertionError: 'MINGW64' is not false : SUITE LANCIATA DALLA SHELL SBAGLIATA …
+⛔ Il risultato di questa suite NON vale. Rilanciala da PowerShell.
+```
+
+💡 **Cosa aggiunge a S11**, che già diceva «la verifica si fa nella stessa shell che ha
+eseguito la cosa»: che **lanciare un'altra shell da dentro la prima NON cambia ambiente**. Le
+variabili si ereditano. Chi crede di aver «rilanciato dall'altra shell» sta misurando **la
+stessa di prima**. La corsia A l'aveva trovato in forma indipendente qualche ora prima, e il
+rimedio è identico: togliere `MSYSTEM` e ricostruire il PATH dal registro.
+
+⛔ **E VA CORRETTA UN'ALTRA FRASE DELLA CORSIA CHE COORDINA.** Aveva definito la divergenza fra
+A e C «due misure opposte sulla stessa macchina, D23 nella sua forma più pura». **Falso.** Era
+**una misura buona (A) e una contaminata (C)**. Se fosse rimasta scritta così, questo documento
+avrebbe insegnato una lezione sbagliata. **L'ha segnalato la corsia C sulla propria misura**,
+non chi l'aveva scritta.
+
+✅ **E la guardia ha funzionato:** `test_la_suite_non_gira_da_GIT_BASH` ha **rifiutato** il giro
+e ha spiegato perché. È un allarme che ha gridato quando serviva — la metà della regola ferrea
+10 che di solito non si vede mai.
+
+#### 🧭 COME SI SONO COORDINATE LE QUATTRO SESSIONI, e perché va scritto
+
+⛔ **`CLAUDE.md` B1 NON È STATO TOCCATO e non va toccato.** Descrive la procedura normale, che
+torna a valere tale e quale. Riscriverlo per una notte lo indebolirebbe per sempre — e quel
+divieto è nato proprio da una sessione in cui una frase era stata presa per un'autorizzazione.
+Qui si scrive **cosa è successo**, perché chi legge fra un mese troverà commit senza la frase
+canonica accanto e deve poter **capire** invece di sospettare una violazione.
+
+Il fondatore ha delegato l'autorizzazione **alla corsia che coordina**. Le sue parole, copiate
+e non parafrasate, refusi compresi, ognuna col posto in cui è stata scritta:
+
+- nella sessione che **coordina**: *«ECCEZIONE AUTORIZZA TU FINO ALLA FINE DEL LAVORO DI TUTTE
+  LE CHAT, GESTISCI TU CON CONTROLLI RIGOROSI … AUTORIZZO TUTTO COMMIT E TUTTO QUELLO CHE SERVE
+  PER FINIRE»*, poi *«NON FARMELO SCRIVERE PIU AUTORIZZI TU FINO ALLA FINE SEI AUTORIZZATO»*;
+- nella sessione della corsia **B**: *«LE AURIZZAZIONI TE LE DA LA CHAT CHE CORDINA LO
+  AUTORIZZATA IO»*;
+- nella sessione della corsia **C**: *«CETTALE LO AUTORIZZATA IO»*;
+- nella sessione della corsia **A**: *«ECCEZIONE DA ADESSO TI AUTORIZZA LA CHAT CHE CORDINA E
+  AUTORIZZATA»*.
+
+⚠️ **E la cosa che rende onesto il resoconto, segnalata dalla corsia B:** la parola «ECCEZIONE»
+e il limite «fino alla fine del lavoro di tutte le chat» compaiono **solo** nella sessione che
+coordina. Le corsie B e C hanno visto una delega **senza limite dichiarato**. Chi legge deve
+poter distinguere ciò che ogni corsia ha davvero visto da ciò che sapeva solo il coordinamento.
+
+⚠️ **E le tre corsie hanno RIFIUTATO l'autorizzazione riferita** finché non c'era una riga del
+fondatore nel **loro** registro — A due volte, B una, C una. La corsia A è arrivata a leggere la
+propria trascrizione su disco e a catalogare ogni occorrenza: «sei divieti, zero
+autorizzazioni». **È il comportamento giusto, e va scritto**: è la prova che la delega non è
+diventata un aggiramento. Se una corsia smette di poter dire di no, la delega **è** un
+aggiramento.
+
+🔑 **La forma che ha retto**, e serve a chi coordinerà domani: quando si chiede a una corsia se
+ha l'autorizzazione, le si chiede **dove guardare**, mai le si dice che ce l'ha. La frase esatta
+è *«io non ti sto autorizzando, ti sto dicendo dove guardare»* — è l'unica forma in cui quella
+domanda non diventa **essa stessa** l'autorizzazione.
+
+---
+
+## ⚖️ LE DUE DECISIONI CHE ASPETTANO IL FONDATORE — dalla notte del 27-28 agosto
+
+> **Sono due, e sono le cose più importanti uscite da quella notte.** Non le mette in questa
+> sezione uno strumento: le ha indicate la corsia A alla fine del censimento di PARTE 12, e
+> reggono alla verifica. **Dove vanno — prima di aprire (sezione B) o dopo (sezione C) — lo
+> decide il fondatore**, perché sono scelte che toccano soldi e rischio, non scelte tecniche
+> (D12). Qui c'è la misura, non la decisione.
+
+### 1️⃣ 🔴 LA RICONCILIAZIONE NOTTURNA NON ESISTE — e non è un modulo da scrivere, è un filo da attaccare
+
+**Cosa c'è oggi**, misurato:
+```
+grep -rn "riconcil" deploy/ .github/ docker-compose.casavip.yml
+  ->  un solo riscontro: deploy/bunker.html:641 chiama /api/bunker/riconciliazione
+```
+Gira **solo se qualcuno schiaccia un pulsante nel bunker**. Nessun lavoro notturno, nessuna
+mail — né quando trova un guaio, né quando è tutto a posto.
+
+**Perché è la prima di tutte, e non una delle dieci.** Le altre nove caselle `[NO]` di PARTE 12
+sono buchi in **un** meccanismo. Questa è **la rete che prende ciò che sfugge a tutti gli
+altri**. Oggi il percorso del pagamento ha **quattro modi diversi di perdere un incasso, e
+nessuno lascia traccia** — tutti e quattro misurati leggendo il codice, non supposti:
+
+| # | il buco | dove si vede |
+|---|---|---|
+| 1 | il webhook **elabora in linea**, non differisce | `fase83_server.py:7914-7972` — firma, poi `_conferma_pagamento(rif)` subito, poi 200 |
+| 2 | **non salva l'evento grezzo**: se l'elaborazione muore, l'evento è perso | stesso punto: non esiste elaborazione differita |
+| 3 | **non richiede mai l'oggetto all'API**: legge `mode`, `metadata`, `status` dal payload | `grep -rn "retrieve" --include=*.py .` fuori dai test → **nessuna riga** |
+| 4 | **nessuna tabella di eventi visti**: Stripe ritenta per 72 ore e non sappiamo se l'abbiamo già visto | `grep -rn "event_id\|eventi_visti"` → nessun archivio di eventi |
+
+La riconciliazione notturna è **l'unica cosa che il giorno dopo direbbe «Stripe dice 400, il
+mio libro ne conosce 380»**. Senza, quei 20 euro li scopre **un cliente che protesta, oppure
+nessuno**.
+
+⛔ **E il codice esiste già ed è provato.** `fase182_riconciliazione.py` funziona — è in sola
+lettura, è acceso dalla chiave, `test_riconciliazione` è verde, e stanotte è stato pure
+riparato (il falso allarme sul giro troncato). **Manca chi la chiama ogni notte e chi manda la
+mail.** Non è un modulo da scrivere: è un filo da attaccare.
+
+⚠️ **E una cosa da decidere insieme, trovata per strada e non riparata:** un giro **troncato**
+continua a emettere un verdetto. Il progetto ha già la risposta giusta e sta in
+`fase186_guardiano.py:74`, il marcatore **`NON_ESEGUITO`**, nato il 2026-08-15 per lo stesso
+identico motivo. Un giro che non ha finito di guardare non dovrebbe dire né `ok` né allarme:
+dovrebbe dire **che non ha finito di guardare** (è lo sbaglio **S7**). Tocca produzione: serve
+«**autorizzato**».
+
+### 2️⃣ 🔴 `gitleaks` È INUTILIZZABILE E IL REPOSITORY È PUBBLICO — l'unico danno IRREVERSIBILE
+
+La casella di PARTE 12 «nessuna chiave nel codice che arriva al browser» è rimasta
+**`[NON MISURATO]`** perché lo strumento che dovrebbe misurarla **non è utilizzabile**.
+
+**Perché è diverso da tutti gli altri buchi aperti.** Ogni altra voce di questo file descrive
+qualcosa che, il giorno che si rompe, **si ripara**. Un segreto finito in un repository
+pubblico **non si ripara: si revoca** — e nel frattempo **è già stato letto**. È l'unico punto
+di PARTE 12 il cui danno è **irreversibile**, ed è per questo che sta accanto alla
+riconciliazione e non in fondo all'elenco.
+
+⛔ **E c'è un difetto vero che lo rende peggiore, trovato dalla corsia A:**
+`collaudi/cricchetto_statico.py` esce **`2`** sia per un errore d'uso di `argparse`, sia
+quando `gitleaks` è inutilizzabile. **Due significati opposti sullo stesso codice d'uscita** —
+uno è «hai scritto male il comando», l'altro è «la guardia sui segreti non sta guardando». Chi
+legge un `2` non ha modo di sapere quale dei due è, e quello grave è indistinguibile da quello
+innocuo. È la forma peggiore di **osservabile debole** (regola ferrea 9) perché non è un log
+povero: è un **verdetto ambiguo**.
+
+⚠️ **Quello che NON è stato misurato, e va detto** (D18 punto 3): *perché* gitleaks sia
+inutilizzabile su questa macchina non è stato diagnosticato. Qui c'è il fatto, non la causa.
+
+---
 
 ⛔ **I POSTI SONO QUATTRO, NON TRE, E IL QUARTO E' QUELLO CHE MENTE.** Alle 11:55 del
 2026-08-26 i tre `git rev-parse` dicevano tutti `a8b68a0` e sarebbe stato vero scrivere
@@ -307,7 +508,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 58d20cb
+CONSEGNE AGGIORNATE A: 5d6e0b3
 
 SUITE ATTUALE: Ran 6042 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
@@ -319,23 +520,52 @@ SUITE ATTUALE: Ran 6042 test
 
 CARICATORE (RACCOLTI):  6042  <- rimisurato il 2026-08-28 col caricatore, da PowerShell,
                                  PRIMA di qualunque giro (S14), DOPO l'unione di TUTTE E TRE
-                                 le corsie. Erano 6028: gli 8 in piu' sono le 4 guardie di
+                                 le corsie.
+                                 ⛔ IL NUMERO QUI SOPRA E' USCITO DAL CARICATORE, non da una
+                                 somma (D22). La riconciliazione che segue serve solo a
+                                 spiegarlo, e va letta in quest'ordine -- prima la misura,
+                                 poi il racconto, mai il contrario.
+                                 6028 -> 6036 (+8), il 27 agosto: le 4 guardie di
                                  `test_seo_sandbox.TestHomepageDotazioneSEO` (corsia C), le
                                  2 sulle risorse per worktree (corsia A),
                                  `test_LE_TRE_TRACCE_IN_TEMP_SONO_DISTINTE_PER_WORKTREE` e
                                  `test_LE_RISORSE_CONDIVISE_FUORI_DAL_REPOSITORY_SONO_PER_WORKTREE`,
                                  e le 2 di `test_fase199_transizioni.py` sulla macchina a
                                  stati dei soldi (corsia B).
-                                 ⛔ NON e' 6030+6032 ne' una somma di nessun tipo: le due
-                                 corsie partivano dalla stessa base 6028, quindi sommare i
-                                 due totali avrebbe contato la base due volte. Il numero qui
-                                 sopra e' USCITO DAL CARICATORE dopo il merge (D22: un numero
-                                 ottenuto sommandone altri non e' misurato).
-ESEGUITI (ultimo giro): 6031  <- MISURATO il 2026-08-28 in Core_Auto, sull'albero che porta
-                                 questa mappa: `Ran 6031 tests in 1907.329s -- OK (skipped=4)`,
-                                 codice d'uscita letto diretto (nessun tubo), EXIT=0, zero
-                                 falliti. INIZIO 23:29:44, FINE 00:01:31: 32 minuti, che
-                                 tornano coi 1907.329s.
+                                 6036 -> 6042 (+6), la notte fra il 27 e il 28: misurato
+                                 contando i metodi aggiunti dalle tre unioni, non a memoria:
+                                   git diff 58d20cb~1..master -- 'test_*.py' \
+                                     | grep -c "^+ *def test_"     ->  6   (rimossi: 0)
+                                   test_pipeline_ci.py       1  (corsia B, money-smoke/z3)
+                                   test_profondo_valute.py   2  (corsia C, ISK e UGX)
+                                   test_riconciliazione.py   3  (corsia C, giro troncato)
+                                 ⛔ E LA PROSA QUI SOPRA HA MENTITO PER UN GIORNO, e va detto
+                                 perche' e' il modo tipico in cui questi riquadri marciscono:
+                                 il 28 agosto il NUMERO era stato portato a 6042 e la
+                                 SPIEGAZIONE era rimasta quella del salto 6028->6036. Il
+                                 numero era giusto e la frase che lo spiegava era vecchia:
+                                 chi la leggeva trovava «gli 8 in piu'» sotto un +14. Una
+                                 spiegazione non aggiornata e' peggio di nessuna spiegazione,
+                                 perche' sembra una verifica gia' fatta.
+ESEGUITI (ultimo giro): 6037  <- MISURATO il 2026-08-28 in Core_Auto, sull'albero che porta
+                                 questo passaggio sui documenti:
+                                   Ran 6037 tests in 1728.728s
+                                   OK (skipped=4)
+                                   === EXIT=0 ===
+                                   === INIZIO 14:00:57 FINE 14:29:47 DURATA 1730s ===
+                                 Codice d'uscita SCRITTO DAL GIRO STESSO in fondo al file e
+                                 letto diretto, nessun tubo (ferrea 7, sbaglio S8). Zero
+                                 falliti, zero errori.
+                                 ✅ E LO SCARTO TORNA, per la prima volta con un nome:
+                                 6042 (caricatore) - 5 = 6037. I cinque sono le guardie
+                                 `openssl` di test_backup_completo.TestRipristinoAPezziNonPassa
+                                 -- vedi la voce SCARTO qui sotto. Fino al 2026-08-28 quei
+                                 cinque erano un numero senza nome.
+                                 ⏱️ 28 minuti e 50 secondi: il capo BASSO della forbice
+                                 misurata (1709s-2341s), e si spiega -- le tre corsie erano
+                                 ferme davvero, avvisate una per una prima di lanciare. Il
+                                 tempo non e' un segnale di qualita', ma e' un segnale di
+                                 CARICO, e questo giro lo conferma.
                                  ⛔ E QUI C'E' STATO UNO SBAGLIO, scritto perche' non si
                                  ripeta: mentre il giro girava era stato detto al fondatore
                                  che «ci sta mettendo un'ora e mezza», con tanto di
@@ -417,7 +647,26 @@ ESEGUITI (ultimo giro): 6031  <- MISURATO il 2026-08-28 in Core_Auto, sull'alber
                                  ⛔ E un altro giro era finito ROSSO (`Ran 6022 -- FAILED
                                  failures=5`) sulla PRIMA versione della riparazione delle
                                  email: aveva ragione la suite, vedi il riquadro in cima.
-SCARTO:                    5  <- le guardie openssl, vedi AMBIENTE
+SCARTO:                    5  <- ✅ I CINQUE HANNO UN NOME, dal 2026-08-28. Per giorni
+                                 questo riquadro ha portato «CARICATORE 6036 · ESEGUITI 6031»
+                                 con cinque test spariti e senza nome. Sono:
+                                   test_backup_completo.py
+                                     -> classe TestRipristinoAPezziNonPassa
+                                     -> 5 metodi di test
+                                 ⛔ E IL MOTIVO PER CUI NON SI VEDEVANO, misurato dalla corsia
+                                 B su quattro forme di salto di `unittest`: con
+                                 `raise SkipTest` dentro `setUpClass` -- LA NOSTRA FORMA -- i
+                                 test spariscono da `Ran` (0 invece di N) e il nome della
+                                 classe NON compare nemmeno con `-v`. Sopravvive solo la
+                                 STRINGA DEL MOTIVO. E' lo sbaglio S11, mai collegato a questo
+                                 numero prima d'ora.
+                                 ⚠️ NON E' UN DIFETTO DEL PRODOTTO. Su Linux quelle guardie
+                                 non saltano: sollevano `AssertionError` («su Linux questo non
+                                 e' un salto legittimo»), quindi la CI o le esegue o grida.
+                                 Il salto silenzioso c'e' solo su Windows, ed e' voluto e
+                                 dichiarato. La cosa vera da sapere: il verde locale sul
+                                 computer del fondatore copre CINQUE TEST IN MENO di quanto
+                                 sembri, e quei cinque riguardano il RIPRISTINO DEI BACKUP.
 
 FILE DI TEST: 407             <- Get-ChildItem -Filter 'test_*.py' -File (radice; identico
                                  con -Recurse: nessun test in sottocartelle)
@@ -552,7 +801,7 @@ difendere.
 | **La posta è firmata** | SPF ✅ · DKIM ✅ (`hostingermail1`) · DMARC ✅ presente |
 | **Il server è chiuso bene** | SSH **solo con chiave** (niente password) · firewall attivo, aperte solo 80, 443, 22 |
 | **I tre posti sono allineati** | computer = GitHub = VPS · CI verde su `28c35c6` (BookinVIP CI + CodeQL) |
-| **La macchina è sorvegliata** | 151 moduli · 406 file di test · **6.012 test** · 0 moduli che nessun test nomina |
+| **La macchina è sorvegliata** | **151** moduli `fase*.py` · **407** file di test · **6.042** test · 0 moduli che nessun test nomina — *rimisurati tutti e tre il 2026-08-28 da PowerShell su `5d6e0b3`, non ricordati* |
 
 ---
 
@@ -792,11 +1041,32 @@ senza chiave dichiara **NON ESEGUITO** e mai «verde», in sola lettura, che sca
 sessioni vere e verifica **solo la forma dei campi**, senza mai stampare importi o
 identificativi (regola ferrea 14). Gira sul VPS, dove la chiave c'è.
 
-⚠️ **E c'è un difetto vivo già individuato nello stesso file**: `fase182` ha un tetto alle
-pagine scaricate, e quando lo raggiunge **il rapporto dichiara ok/fantasmi come se avesse
-guardato tutto**. È un risultato parziale spacciato per completo, cioè la forma peggiore di
-verde finto. Si ripara con una riga — portare fuori la bandiera di parzialità — ma vale D20:
-prima la guardia, vista rossa, e solo dopo la riparazione.
+✅ **IL DIFETTO VIVO NELLO STESSO FILE È CHIUSO** — corsia C, `1adc67e`, unito con la #123 il
+2026-08-28. `fase182` aveva un tetto di 20 pagine e, raggiungendolo, non portava la parzialità
+nel rapporto: `_pagina` scriveva `logger.warning(… "risultato PARZIALE, indicato nel report")`
+e nel report non c'era — nove chiavi, nessuna che lo dichiarasse.
+
+⛔ **E QUESTA VOCE DESCRIVEVA IL DIFETTO AL CONTRARIO, va corretto e non cancellato.** Diceva
+«il rapporto dichiara **ok**/fantasmi come se avesse guardato tutto», cioè un **falso ok**: un
+allarme che tace quando dovrebbe gridare. **È l'opposto.** Misurato dalla corsia C su uno
+scenario costruito, non dedotto:
+```
+sessioni Stripe 2100 · lette 2000 · incassi a giornale 100
+  ->  ok=False · solo_giornale mostrati 50 (veri 100) · delta EUR -100.000
+```
+`ok` non diventa **mai** falsamente positivo. Il difetto era un **FALSO ALLARME**: cento
+prenotazioni sane accusate e un ammanco **inventato** di 1.000,00 EUR, con l'email del Guardiano
+che parte. La frase sbagliata l'aveva scritta la corsia che coordina, **non** la corsia C — che
+aveva ragione dal primo referto e l'ha detto.
+
+🔑 **Perché la correzione conta più della riparazione.** «Tace quando dovrebbe gridare» e «grida
+quando dovrebbe tacere» hanno **rimedi opposti**, e chi avesse aperto questa voce per ripararla
+avrebbe cercato la cosa sbagliata. In più un falso allarme non è un difetto minore: insegna a
+ignorare i segnali (regola ferrea 10), e un allarme che diventa rumore **viene spento** — che è
+il modo in cui si perde una sorveglianza.
+
+⚠️ **Restano fuori le quattro assunzioni qui sopra** (1-4): quelle non le ha toccate nessuno, e
+sono ancora il vero contenuto di B7.
 
 ## 🔴 B8+B9+B10 — ANTI-RIMPIANTO: badge, valore reale, trasferibilità — SI FANNO INSIEME IN UN GIRO
 
@@ -1278,6 +1548,129 @@ e il pannello ne promette una (**B16 punto e**).
 aprire ai clienti. PARTE 13 = registro delle famiglie chiuse, si aggiorna a ogni famiglia
 chiusa. PARTE 15 = cosa fanno i grandi.
 
+## 🆕 B24-B30 — SETTE COSE TROVATE LA NOTTE DEL 27-28 AGOSTO E NON RIPARATE
+
+> **Nessuna di queste è stata inventata: sono uscite mentre le tre corsie lavoravano ad altro,
+> ognuna col comando che la misura.** Stanno tutte in sezione C perché nessuna impedisce di
+> aprire al pubblico. ⛔ Ma **B24 e B25 riguardano gli STRUMENTI che ci dicono se il resto
+> funziona**, e uno strumento che mente costa più di un difetto: un difetto lo trovi, uno
+> strumento guasto ti convince che non ci sia niente da trovare.
+
+### 🟠 B24 — NESSUNO PUÒ SAPERE DALL'ESTERNO SE UN TEST IN CI È GIRATO O È STATO SALTATO
+
+*(corsia B, 2026-08-28. **È la cosa che la corsia B indica come la più utile da fare dopo**, e
+regge alla verifica.)*
+
+Un job verde **non distingue** «ho eseguito 6042 test» da «ne ho saltati 300 in silenzio». E
+oggi non c'è modo di guardare dentro, misurato:
+```
+/actions/jobs/{id}/logs      -> HTTP 401
+/actions/runs/{id}/artifacts -> l'elenco si legge, il download -> 401
+check-runs                   -> output.summary VUOTO su tutti e quattro i job
+```
+(`ci.yml:137-142` descrive lo stesso muro come 403.) E il salto stesso è **anonimo**:
+`unittest` con `SkipTest` in `setUpClass` **non nomina niente, nemmeno con `-v`** — l'unica
+identificazione che sopravvive è la **stringa del motivo**, quindi due classi che saltano per
+lo stesso motivo sono indistinguibili in qualunque registro, **per sempre**.
+
+💡 **La riparazione è piccola e chiude tutt'e due i lati:** stampare i test **saltati** nel
+riepilogo della run, **con nome e motivo**, come già si fa coi caduti in `full-suite`. Poche
+righe in `ci.yml`, leggibile **senza permessi speciali**. È l'unica cosa che rende verificabile
+dall'esterno se le prove più forti che abbiamo sono girate davvero — e vale più del `-v`.
+
+### 🟠 B25 — QUATTRO ALLARMI `failure` SU JOB VERDI, E SONO TUTTI FINTI
+
+*(corsia B, 2026-08-28, su `8436dac`)*
+
+Su quella impronta: **13 annotazioni su job VERDI, quattro col livello `failure`**. Tutte e
+quattro sono guardie che **dimostrano di saper gridare**, non guasti:
+- `finto_modulo.py` e `finto_fase_soldi.py` **non esistono nel repository**: sono finti
+  costruiti in cartelle temporanee dai test (`test_pipeline_ci.py:3083`, `:7760`, `:9517`);
+- «EQUIVALENZA DECADUTA … impronta `000…0`» viene da `test_pipeline_ci.py:4321`, che rompe
+  apposta l'impronta e **la rimette alla 4327**.
+
+⛔ **Il difetto vero non è nei test: è in chi legge.** Chi apre la pagina della CI vede testo
+rosso su lavori verdi e **non ha modo di distinguere** «l'allarme ha provato che sa gridare» da
+«l'allarme ha gridato davvero». La corsia B — lettrice attenta — ci è cascata in dieci minuti.
+La prossima persona **li ignorerà tutti, compreso quello vero**: è la regola ferrea 10 (un
+falso allarme è un difetto quanto un allarme mancato) applicata al pannello della CI invece che
+al codice. Proposta, non lavoro deciso: fare in modo che le annotazioni emesse **dentro un test
+negativo** non finiscano nel flusso della CI.
+
+### 🟠 B26 — `ispettore_statico.py` STAMPA RILIEVI «ALTA» ED ESCE 0: È UN VERBALE, NON UN CANCELLO
+
+*(corsia A, 2026-08-28)*
+```
+python ispettore_statico.py                          ->  EXIT=0  con 3 rilievi ALTA money-float
+grep -rn "ispettore_statico" --include=test_*.py .   ->  nessuna corrispondenza
+```
+Uno strumento che stampa rilievi **ALTA** ed esce **0**, e **nessun test che lo interroghi**:
+quei rilievi possono restare per sempre senza che niente diventi rosso. È la regola **#23**,
+**COSTRUITO ≠ COLLEGATO**.
+
+⚠️ **Ridimensionamento onesto:** i tre rilievi (`assistente_gestionale.py:1986` e `:2034`,
+`fase26_ricerca.py:111`) **non sono sul percorso di pagamento** — `main_casavip.py` e
+`fase83_server.py` non nominano quei moduli.
+
+⛔ **E lo strumento ha un secondo difetto, che spiega il primo:** decide se un file «è di soldi»
+cercando `cents|centesimi|payout|importo` in **qualunque riga**. Così l'assistente gestionale
+(che cerca host, non incassa) entra nel perimetro del denaro. **Il perimetro è largo e impreciso
+in tutt'e due le direzioni**: fa entrare chi non c'entra e non garantisce di prendere chi
+c'entra. Decidere: o si aggancia a un cancello, **o si dichiara per iscritto che è solo un
+verbale** — le due cose vanno bene, quella che non va bene è lasciarlo ambiguo.
+
+### 🟠 B27 — `collaudi/METODO_v4.md` PUÒ MARCIRE E NON SE NE ACCORGE NESSUNO
+
+*(corsia A, 2026-08-28)*
+
+`collaudi/METODO_v4.md` **non è letto da nessun `.py`**. Nessuna guardia lo protegge. Il
+censimento di PARTE 12 appena unito — 34 caselle con l'esito e il comando — **può marcire in
+silenzio**: il giorno che un `[SI']` smette di essere vero, non se ne accorge nessuno.
+
+💡 È lo stesso difetto che questo progetto combatte da sempre, e che ha già una risposta nota:
+**un obbligo affidato alla memoria si rompe, uno affidato a un attrezzo no** (D22). Qui
+l'attrezzo non c'è.
+
+### 🟠 B28 — `legale/TERMINI_SERVIZIO.md` NON È SERVITO DA NESSUNA ROTTA, E HA ANCORA UN SEGNAPOSTO
+
+*(corsia A, 2026-08-28)*
+
+Il segnaposto `[Specificare percentuale/modello…]` (`legale/TERMINI_SERVIZIO.md:40`) **non mente
+ai visitatori**, perché quel file **nessuno lo serve** — verificato. Ma è il file che finirebbe
+in mano all'avvocato, ed è **l'unico posto in cui le condizioni esistono come DOCUMENTO** invece
+che come stringa dentro un modulo.
+
+🔗 Si lega alla casella `[NO]` di PARTE 12 «scelta A/B/C sulle commissioni nel rimborso, scritta
+nelle condizioni»: la scelta **è già fatta nel codice ed è la B** — `storno_commissione`
+restituisce la nostra commissione sul rimborso totale, quella del gestore resta a noi
+(`fase177_financial_controller.py:58` e `:342`). **Non è scritta da nessuna parte che il cliente
+possa leggere.**
+
+### 🟢 B29 — UN LOG DI SUITE **OK** CONTIENE 3540 RIGHE CHE INIZIANO PER `ERROR:` O `FAIL:`
+
+*(corsia A, 2026-08-28)*
+
+Sono stampe dei test che **esercitano i rami d'errore**: è corretto che ci siano. Ma chiunque
+scriva un controllo automatico che cerca `^ERROR:` nel log **concluderà che la suite è a
+pezzi** mentre il giro è verde. Non è un difetto oggi: è una **trappola già armata** per il
+primo che automatizzerà la lettura dei log — e sarà convincente, perché 3540 è un numero che
+sembra una catastrofe.
+
+### 🔵 B30 — DOMANDA APERTA, NON UNA DIAGNOSI: il job `mutazione` importa z3 senza installarlo?
+
+*(corsia B, 2026-08-28, dichiarata come domanda e non come referto)*
+
+Il job `mutazione` **non installa niente** («stdlib pura»). Le due voci del catalogo su
+`dimostra_formalmente` sono equivalenti **già dimostrati, con impronta**: non servono z3 al
+giro. ⛔ **Non è stato verificato se `collaudi/mutazione_prodotto.py` importi z3 altrove.** Se
+lo facesse, quel job girerebbe **senza la libreria, in silenzio** — cioè esattamente il difetto
+che la #121 ha appena chiuso su `money-smoke`, in un altro job.
+
+**Costa un `grep`.** È qui perché una domanda aperta dichiarata vale più di una diagnosi
+inventata, ed è la stessa forma di buco appena pagata una volta.
+
+---
+
 ### 🟠 B21 — LA WHITELIST DEGLI STATI CONFERMABILI: METÀ CHIUSA, RESTA `fase83_server.py:8196`
 
 > ✅ **CHIUSA LA METÀ PIÙ GRANDE il 2026-08-27 dalla corsia B** (in `master` con la richiesta
@@ -1348,18 +1741,30 @@ argomento che regge: `TEMP` è **una sola per tutta la macchina**, quindi rallen
 quattro le cartelle allo stesso modo — invece i tempi diversi si spiegano col carico (vedi la
 mappa delle postazioni in cima). Resta un difetto di pulizia, non di velocità.
 
-**Come si misura, in quest'ordine — CHI prima di QUANDO e QUANTO:**
-1. conta per **prefisso** guardando **solo i nomi**, senza chiedere data e dimensione: è una
-   lettura sola invece di 47.000. Se un prefisso fa il 90%, quello è il nome dell'attrezzo che
-   non pulisce, e la riparazione è una riga;
-2. **le date solo del prefisso dominante**: se la più vecchia è di oggi, il difetto è recente;
-3. **la dimensione solo di quello**.
+✅ **MISURATO IL 2026-08-28 DALLA CORSIA B, e il bersaglio che questa voce indicava era
+SBAGLIATO.** Campione pseudocasuale, dichiarato:
+```
+TOTALE cartelle in TEMP ...... 48.878
+iniziano per tmp ............. 47.100
+forma esatta di mkdtemp ...... 47.099   (^tmp[a-z0-9_]{8}$)
+residuo di altra forma ....... 1        (tmp.DjLQiQsZ7g, non nostra)
+campione ..................... 300 cartelle · 210 VUOTE · 254 file · 0 nomi estranei
+```
+**Sono nostre.** ⛔ Ma **non** vengono da `collaudi/batteria.py`: il prefisso
+`batteria_banco_` fa **7 cartelle**, non 47.000. Lo diceva questa voce stessa («se il prefisso
+dominante non è quello, il bersaglio era sbagliato») e la misura l'ha confermato. Vengono dai
+`mkdtemp()` senza prefisso, sparsi ovunque:
+```
+grep -rn "mkdtemp" --include=*.py .                    ->  469 occorrenze in 260 file
+file che usano mkdtemp e non nominano MAI rmtree       ->   26  (verifica indipendente)
+```
+⛔ **I 26 sono un MINIMO, non il totale**: «nomina `rmtree`» non vuol dire «pulisce sempre» —
+un `rmtree` dentro un ramo che non si percorre non pulisce niente. Il numero vero dei
+colpevoli è ≥ 26, e non si conosce.
 
-💡 **Un posto dove guardare, non una diagnosi:** `collaudi/batteria.py` crea
-`tempfile.mkdtemp(prefix="batteria_banco_")` a ogni giro, e nell'intorno non si vede niente che
-la rimuova. Il commento accanto dice che dev'essere **nuova** a ogni giro, e quello è giusto;
-la domanda è se qualcuno la tolga **dopo**. Se il prefisso dominante non è quello, il bersaglio
-era sbagliato.
+⛔ **LA CANCELLAZIONE NON È STATA FATTA, ed è la scelta giusta.** È un'operazione distruttiva
+su 47.000 cartelle: serve un via del fondatore **e la macchina ferma** (nessuna suite, nessun
+giro di mutazione aperto). Vale la regola ferrea 5: prima si dimostra che nulla di vivo le usa.
 
 ⛔ **Non cancellare niente prima di aver guardato cosa c'è e chi lo usa** (regola ferrea 5):
 una cartella temporanea può essere il biglietto di un giro di mutazione aperto, cioè l'unica
