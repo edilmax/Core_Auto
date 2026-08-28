@@ -1444,16 +1444,92 @@ class TestNienteScappatoie(unittest.TestCase):
                     "'skipped'" % nome)
 
 
+def _funzioni_di_produzione_che_importano_z3():
+    """{nome funzione: file} delle funzioni del PRODOTTO che importano z3 al loro interno.
+    Derivate dai file con l'albero sintattico, mai scritte a mano."""
+    import ast
+    fuori = {}
+    for nome in sorted(os.listdir(QUI)):
+        if not (nome.startswith("fase") and nome.endswith(".py")):
+            continue
+        try:
+            with io.open(os.path.join(QUI, nome), encoding="utf-8") as f:
+                albero = ast.parse(f.read(), filename=nome)
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        for nodo in ast.walk(albero):
+            if not isinstance(nodo, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for dentro in ast.walk(nodo):
+                if isinstance(dentro, ast.Import) and any(
+                        a.name.split(".")[0] == "z3" for a in dentro.names):
+                    fuori.setdefault(nodo.name, nome)
+    return fuori
+
+
+def _moduli_di_test_con_prove_z3():
+    """I moduli di test che portano prove z3, DERIVATI dai file. Mai un elenco a mano:
+    un elenco di nomi invecchia, e il giorno che invecchia dice il falso senza avvisare.
+
+    Due modi di dipendere da z3, e li guarda tutti e due:
+      (a) il modulo importa z3 lui stesso;
+      (b) il modulo NOMINA una funzione di produzione che importa z3 (oggi
+          `dimostra_formalmente` e `dimostra_transizioni`): li' z3 serve lo stesso, anche
+          se il modulo non lo importa mai.
+
+    ⛔ SI GUARDA L'ALBERO, NON IL TESTO, ed e' il punto di tutta la funzione. `test_pipeline_ci`
+    contiene la stringa `import z3` dentro un'asserzione che PARLA di quella riga: nel testo si
+    conta, nell'albero no, perche' una stringa non e' un nodo `Import`. E' lo sbaglio S6 -- una
+    guardia che conta nel sorgente conta anche le righe che parlano di codice invece di esserlo.
+
+    ⛔ COSA NON GUARDA (D18 punto 3): la catena lunga. Un modulo che chiama una funzione che
+    ne chiama un'altra che importa z3 non viene visto: si fermano a un salto. Oggi non esiste
+    un caso simile (misurato: la lista (b) e' vuota), e allargare la ricerca costerebbe falsi
+    allarmi -- che sono un difetto quanto un allarme mancato (regola ferrea 10)."""
+    import ast
+    prod = set(_funzioni_di_produzione_che_importano_z3())
+    fuori = []
+    for nome in sorted(os.listdir(QUI)):
+        if not (nome.startswith("test_") and nome.endswith(".py")):
+            continue
+        try:
+            with io.open(os.path.join(QUI, nome), encoding="utf-8") as f:
+                albero = ast.parse(f.read(), filename=nome)
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        usa = False
+        for n in ast.walk(albero):
+            if isinstance(n, ast.Import) and any(a.name.split(".")[0] == "z3"
+                                                 for a in n.names):
+                usa = True
+            elif isinstance(n, ast.ImportFrom) and (n.module or "").split(".")[0] == "z3":
+                usa = True
+            elif isinstance(n, ast.Name) and n.id in prod:
+                usa = True
+            elif isinstance(n, ast.Attribute) and n.attr in prod:
+                usa = True
+            elif isinstance(n, ast.ImportFrom) and any(a.name in prod for a in n.names):
+                usa = True
+            if usa:
+                break
+        if usa:
+            fuori.append(nome[:-3])
+    return fuori
+
+
 class TestLeDIMOSTRAZIONIMatematicheGIRANODavveroInCI(unittest.TestCase):
     """LE PROVE PIU' FORTI CHE ABBIAMO ERANO VERDI PERCHE' NON VENIVANO ESEGUITE.
 
     ⛔ Misurato il 2026-08-15, ed e' il pezzo **A** del piano. `z3-solver` non e' fra le
     dipendenze installate dalla CI (`pip install -r requirements.txt hypothesis pyyaml
     coverage`), quindi in CI `test_fase199_invarianti` e `test_fase199_transizioni` fanno
-    `skipTest("z3 non installato")`: **35 test** che dimostrano matematicamente le leggi dei
-    soldi e le transizioni delle prenotazioni **si saltano puliti**, e la tabella dei job
+    `skipTest("z3 non installato")`: i test che portano le prove matematiche sulle leggi dei
+    soldi e sulle transizioni delle prenotazioni **si saltano puliti**, e la tabella dei job
     resta VERDE. Sul computer del fondatore girano (z3 c'e'), quindi il buco era invisibile
     proprio dove si guarda di piu'.
+    ⛔ Qui c'era il numero di quei test, e il numero e' invecchiato: un commento non nomina
+    la cifra, perche' una cifra scritta a mano prima o poi diventa falsa (sbaglio S17). Chi
+    li vuole contare li conta col caricatore, che li misura invece di ricordarli.
 
     E' la forma peggiore di verde finto: non un test debole, ma un test forte **che non
     viene eseguito**. Un guasto nel nucleo degli invarianti passerebbe il cancello.
@@ -1466,17 +1542,26 @@ class TestLeDIMOSTRAZIONIMatematicheGIRANODavveroInCI(unittest.TestCase):
     """
 
     @staticmethod
-    def _job_esegue_le_prove_z3(passi):
-        """Il job arriva a `test_fase199_*`? Due modi, e servono tutt'e due.
+    def _job_esegue_le_prove_z3(passi, moduli=None):
+        """Il job arriva a un modulo che porta prove z3? Tre modi, e servono tutti e tre.
 
         ⚠️ La prima versione di questa guardia cercava solo `unittest discover` e si e'
         lasciata sfuggire `full-suite-311`, che lancia la stessa suite con un elenco
         generato (`python -m unittest $(cat moduli_311.txt)`). Un job invisibile a una
         guardia e' peggio di nessuna guardia: da' la sensazione di essere coperti.
-        ⛔ Al contrario `money-smoke` elenca a mano dodici moduli dei soldi e NON tocca
-        `fase199`: obbligarlo a installare z3 sarebbe spreco, e un falso allarme e' un
-        difetto quanto un allarme mancato (regola ferrea 10).
+
+        ⛔ E LA SECONDA VERSIONE CERCAVA LA STRINGA `test_fase199`, che e' lo stesso difetto
+        in forma piu' piccola. Qui c'era scritto che `money-smoke` «NON tocca fase199, quindi
+        obbligarlo a installare z3 sarebbe spreco»: la frase era vera su `fase199` e
+        IRRILEVANTE, perche' le prove z3 non stanno solo li'. `money-smoke` elenca a mano
+        `test_property_soldi`, che porta il teorema «nessun centesimo si crea o si perde», e
+        quel teorema li' si saltava in silenzio con il job verde. Un criterio che nomina due
+        file e' un elenco scritto a mano travestito da ragionamento.
+        Adesso i moduli si DERIVANO dai file (`_moduli_di_test_con_prove_z3`), e questo
+        criterio non sa quanti sono ne' come si chiamano.
         """
+        if moduli is None:
+            moduli = _moduli_di_test_con_prove_z3()
         for p in passi:
             run = p.get("run")
             if not isinstance(run, str) or "-m unittest" not in run:
@@ -1484,9 +1569,11 @@ class TestLeDIMOSTRAZIONIMatematicheGIRANODavveroInCI(unittest.TestCase):
             # (a) tutta la suite: `discover`, oppure un elenco GENERATO -> ci passa dentro
             if "discover" in run or "$(" in run:
                 return True
-            # (b) elenco scritto a mano che nomina proprio quei test
-            if "test_fase199" in run:
-                return True
+            # (b) elenco scritto a mano che nomina un modulo con prove z3 (parola intera:
+            #     `test_property_soldi` non deve accendersi per `test_property_soldi_altro`)
+            for m in moduli:
+                if re.search(r"(?<![\w.])%s(?![\w.])" % re.escape(m), run):
+                    return True
         return False
 
     def test_OGNI_job_che_esegue_le_prove_z3_LE_INSTALLA(self):
@@ -1494,10 +1581,13 @@ class TestLeDIMOSTRAZIONIMatematicheGIRANODavveroInCI(unittest.TestCase):
         quei test installa la libreria». Cosi' la guardia sopravvive a una rinomina, e un
         job aggiunto domani senza z3 diventa rosso da solo."""
         doc = _doc_ci()
+        moduli = _moduli_di_test_con_prove_z3()      # derivati UNA volta, non per ogni job
+        self.assertTrue(moduli, "nessun modulo di test con prove z3 trovato: il criterio "
+                                "e' cieco, e una guardia cieca dice sempre di si'")
         senza = []
         for nome, job in doc["jobs"].items():
             passi = _passi(job)
-            if not self._job_esegue_le_prove_z3(passi):
+            if not self._job_esegue_le_prove_z3(passi, moduli):
                 continue
             installa = any(isinstance(p.get("run"), str)
                            and "z3-solver" in p["run"] for p in passi)
@@ -1513,16 +1603,51 @@ class TestLeDIMOSTRAZIONIMatematicheGIRANODavveroInCI(unittest.TestCase):
     def test_LA_GUARDIA_VEDE_ANCHE_IL_JOB_CHE_NON_USA_discover(self):
         """Prova del METODO, non dello stato: e' il buco vero che avevo lasciato il
         2026-08-15. Se qualcuno restringesse il riconoscimento a `discover`, `full-suite-311`
-        tornerebbe invisibile e nessuno se ne accorgerebbe."""
-        finto = [{"run": "python -m unittest $(cat moduli_311.txt)"}]
-        self.assertTrue(self._job_esegue_le_prove_z3(finto),
+        tornerebbe invisibile e nessuno se ne accorgerebbe.
+
+        Il criterio si prova su moduli FINTI passati a mano: cosi' misura il metodo e non
+        lo stato del repository di oggi."""
+        finti = ["test_con_z3_uno", "test_con_z3_due"]
+        generato = [{"run": "python -m unittest $(cat moduli_311.txt)"}]
+        self.assertTrue(self._job_esegue_le_prove_z3(generato, finti),
                         "un job che lancia la suite con un elenco GENERATO non viene "
                         "riconosciuto: resterebbe senza z3 e senza allarme")
+        nominato = [{"run": "python -m unittest test_paga_struttura test_con_z3_due"}]
+        self.assertTrue(self._job_esegue_le_prove_z3(nominato, finti),
+                        "un job che NOMINA a mano un modulo con prove z3 non viene "
+                        "riconosciuto: e' il buco di money-smoke")
         a_mano = [{"run": "python -m unittest test_paga_struttura test_conservazione_denaro"}]
-        self.assertFalse(self._job_esegue_le_prove_z3(a_mano),
-                         "un job che elenca a mano moduli che NON toccano fase199 viene "
-                         "obbligato a installare z3: e' un falso allarme, e i falsi "
-                         "allarmi insegnano a ignorare i segnali (regola ferrea 10)")
+        self.assertFalse(self._job_esegue_le_prove_z3(a_mano, finti),
+                         "un job che elenca a mano moduli SENZA prove z3 viene obbligato a "
+                         "installare z3: e' un falso allarme, e i falsi allarmi insegnano a "
+                         "ignorare i segnali (regola ferrea 10)")
+        somiglia = [{"run": "python -m unittest test_con_z3_unoDUE"}]
+        self.assertFalse(self._job_esegue_le_prove_z3(somiglia, finti),
+                         "un nome che CONTIENE quello di un modulo con prove z3 accende la "
+                         "guardia: si confronta la parola intera, non il pezzo di stringa")
+
+    def test_IL_CRITERIO_NON_CONFONDE_UNA_STRINGA_CON_UN_IMPORT(self):
+        """LA CONTROPROVA DELLO SBAGLIO S6, ed e' la ragione per cui il criterio guarda
+        l'albero sintattico e non il testo.
+
+        `test_pipeline_ci.py` -- questo file -- contiene la stringa `import z3` dentro
+        un'asserzione che PARLA di quella riga (vedi
+        `test_le_prove_z3_si_saltano_SOLO_per_la_libreria_mancante`). Un criterio che cerca
+        nel testo lo conterebbe fra i moduli con prove z3, e da li' in poi pretenderebbe
+        `z3-solver` in OGNI job che esegue questo file: un falso allarme permanente.
+        Nell'albero quella stringa e' una costante, non un nodo `Import`, e sparisce da sola."""
+        moduli = _moduli_di_test_con_prove_z3()
+        with io.open(os.path.join(QUI, "test_pipeline_ci.py"), encoding="utf-8") as f:
+            testo = f.read()
+        self.assertIn("import z3", testo,
+                      "la controprova non ha piu' il suo bersaglio: in questo file non "
+                      "compare piu' la stringa `import z3`, quindi non dimostra niente")
+        self.assertNotIn("test_pipeline_ci", moduli,
+                         "il criterio ha scambiato una stringa per un import: conta nel "
+                         "testo invece che nell'albero (sbaglio S6)")
+        self.assertIn("test_property_soldi", moduli,
+                      "il criterio non vede il modulo che porta il teorema dei soldi: "
+                      "e' proprio il caso che money-smoke saltava in silenzio")
 
     def test_z3_NON_entra_nell_immagine_di_produzione(self):
         """L'altra meta', e non e' pignoleria: la scorciatoia comoda sarebbe metterlo in

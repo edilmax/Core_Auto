@@ -308,7 +308,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 ```
 CONSEGNE AGGIORNATE A: 20e94f4
 
-SUITE ATTUALE: Ran 6036 test
+SUITE ATTUALE: Ran 6037 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (test_pipeline_ci.py:2054, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -316,7 +316,7 @@ SUITE ATTUALE: Ran 6036 test
    un giro: e' il difetto B14, e non si chiude qui -- si chiude cambiando quella regex, che
    sta in un file di test e non e' questo lavoro. Le due voci vere sono qui sotto.
 
-CARICATORE (RACCOLTI):  6036  <- rimisurato il 2026-08-27 col caricatore, da PowerShell,
+CARICATORE (RACCOLTI):  6037  <- rimisurato il 2026-08-27 col caricatore, da PowerShell,
                                  PRIMA di qualunque giro (S14), DOPO l'unione di TUTTE E TRE
                                  le corsie. Erano 6028: gli 8 in piu' sono le 4 guardie di
                                  `test_seo_sandbox.TestHomepageDotazioneSEO` (corsia C), le
