@@ -625,6 +625,88 @@ gia' in `fase186_guardiano.NON_ESEGUITO` — «non ho guardato» non e' «tutto 
 S7): un giro troncato non dovrebbe dare ne' `ok` ne' allarme, dovrebbe dire che non ha finito
 di guardare. Cambia il comportamento del Guardiano, quindi non si decide da soli.
 
+### 🔢 LO STESSO NUMERO PER QUATTRO GUASTI DIVERSI — `collaudi/cricchetto_statico.py`, 2026-08-28
+
+**Da dove è saltato fuori.** Non lo cercava nessuno: è uscito diagnosticando *perché*
+`gitleaks` fosse inutilizzabile su questo computer. La risposta a quella domanda è corta e
+sta qui perché spiega il resto:
+
+```
+$ python -c "import shutil;[print('%-12s %s' % (t, shutil.which(t) or 'ASSENTE')) for t in ['ruff','bandit','gitleaks','pip-audit','semgrep']]"
+ruff         C:\Users\MaxDanno\AppData\Local\Programs\Python\Python39\Scripts\ruff.EXE
+bandit       C:\Users\MaxDanno\AppData\Local\Programs\Python\Python39\Scripts\bandit.EXE
+gitleaks     ASSENTE
+pip-audit    C:\Users\MaxDanno\AppData\Local\Programs\Python\Python39\Scripts\pip-audit.EXE
+semgrep      C:\Users\MaxDanno\AppData\Local\Programs\Python\Python39\Scripts\semgrep.EXE
+```
+
+Quattro su cinque sono **pacchetti Python** e `pip` li ha messi tutti nella stessa cartella.
+`gitleaks` è un **binario Go**: su pip non esiste, era l'unico che richiedeva un gesto
+diverso, e quel gesto non fu fatto. Non è una dimenticanza casuale: è l'unico dei cinque che
+poteva essere dimenticato. (Nessuno dei cinque sta in `requirements.txt`: sono attrezzi della
+macchina, non dipendenze del prodotto.) L'unica copia sul disco stava in
+`AppData\Local\Temp\claude\...\scratchpad\gl\gitleaks.exe` — il residuo usa-e-getta della
+sessione che il 2026-08-26 lo scaricò per misurare «`dir` 35 contro `git` 8» e non lo installò.
+
+**Il difetto vero, che è un'altra cosa e più grave.** Chiedendo al cricchetto cosa succedeva,
+tre domande diverse hanno dato lo stesso numero:
+
+```
+$ python collaudi/cricchetto_statico.py gitleaks   ->  EXIT=2   (l'attrezzo non c'è)
+$ python collaudi/cricchetto_statico.py gitleeks   ->  EXIT=2   (refuso: argparse)
+$ python collaudi/cricchetto_statico.py            ->  EXIT=2   (argomento mancante)
+```
+
+e dentro `giudica()` il `2` ne copriva **tre da solo** — attrezzo assente, lettura fallita,
+fotografia mancante — più quello di `argparse`, che è di `argparse` e non nostro. **Quattro
+significati, un numero.** Chi legge un `2` non poteva sapere se aveva sbattuto sui tasti o se
+*nessuno stava più cercando le chiavi finite nel codice*, su un repository **pubblico**, dove
+una chiave che entra non si ripara: si revoca, e intanto è già stata letta. È la regola ferrea
+9 nella sua forma peggiore — non un log povero, un **verdetto ambiguo**, in cui il caso grave è
+indistinguibile da quello innocuo.
+
+⛔ **E la metà peggiore non era il numero.** La tabella finale mappava `2` sull'unica etichetta
+`ATTREZZO NON USABILE`: quando mancava la **fotografia**, lo strumento annunciava un guasto che
+non era il suo e mandava a cercare un attrezzo rotto che stava benissimo. Un numero ambiguo
+confonde; un'etichetta falsa **mente** — è il modo di rompersi n. 3 applicato a chi fa da
+giudice. La docstring, per giunta, dichiarava **due** significati mentre il codice ne produceva
+**tre**: il terzo non era scritto da nessuna parte.
+
+**Cosa è cambiato.** Cinque costanti con un nome (`OK` 0 · `SEGNALAZIONI_NUOVE` 1 ·
+`ATTREZZO_ASSENTE` 3 · `LETTURA_FALLITA` 4 · `FOTOGRAFIA_MANCANTE` 5), il **2 lasciato ad
+argparse** perché è la convenzione della libreria standard e prenderselo significherebbe
+litigarci per sempre, e una mappa `ETICHETTE` che copre **tutti** i codici — con un ripiego che
+stampa il numero nudo se un giorno ne nascesse uno senza etichetta, invece di pescare una
+descrizione sbagliata. Nessuna riga di produzione toccata: `collaudi/` è strumentazione (B4),
+quindi vale **D20**.
+
+**D20 nell'ordine, e le quattro misure.** Guardia scritta per prima
+(`TestIlCricchettoDiceQUALEGuastoHaAvuto`, `test_pipeline_ci.py`, 4 metodi) →
+`EXIT_GUARDIA_PRIMA=1`, `Ran 4 -- FAILED (failures=3)`, con
+`misurati adesso: {'attrezzo assente': 2, 'lettura fallita': 2, 'fotografia mancante': 2}` e
+sei coppie che collidono → riparazione → `EXIT_GUARDIA_DOPO=0`, `Ran 4 -- OK`. Sul campo:
+`gitleaks` → `EXIT=3` con `ATTREZZO ASSENTE (installalo)`, il refuso resta `2`.
+
+⛔ **Il guasto si inietta nel LETTORE, non nell'ambiente.** Su questo PC `gitleaks` manca e in
+CI c'è: una prova appoggiata a quella differenza direbbe due cose diverse nei due posti (modo
+di rompersi n. 8). E la ricostruzione a mano dello stato «attrezzo assente» è provata, così
+resta producibile anche dopo l'installazione (**D19**): `PATH="/usr/bin:/bin"` → `EXIT=3`,
+`PATH` con il binario → `EXIT=0`.
+
+💡 **Il cricchetto ha bloccato chi lo stava riparando, ed è la prova che funziona.** La prima
+versione della guardia misurava il `2` di argparse con un `subprocess`, e il giro ha risposto
+`segnalazioni adesso 687 / congelate 686 · +1 test_pipeline_ci.py|S603`. La fotografia **non**
+è stata rifatta — si rifà per diminuire il debito, mai per assorbire un rilievo appena creato:
+il sottoprocesso è stato tolto, perché `argparse` esce con `SystemExit` e
+`principale(["gitleeks"])` in-processo dà la stessa cifra senza lanciare niente (0.087s →
+0.007s).
+
+⚠️ **Tre righe di `collaudi/METODO_v4.md` vanno rilette, e non sono state toccate.** La PARTE
+12 registra `EXIT=2` per il cricchetto in tre punti (righe 590 · 623 · 631), misure storiche
+timbrate `su 8436dac`. Sono corrette per quel commit e non si correggono di nascosto — ma **da
+questa riparazione in poi chi rifà quei comandi ottiene `3`, non `2`**, e va scritto dove
+qualcuno lo rilegge invece di restare l'osservazione di una chat.
+
 ### 🔎 LA HOMEPAGE ERA L'UNICA PAGINA SENZA DOTAZIONE SEO — 2026-08-26
 
 **Come si è visto.** Un referto di misura sulla SEO della homepage, chiesto dal fondatore. Il
