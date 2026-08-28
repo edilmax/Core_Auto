@@ -104,8 +104,15 @@ jobs:
         with:
           python-version: '3.9'
           cache: pip                      # riusa i pacchetti gia' scaricati
+      # `z3-solver` serve QUI, e non e' uno strascico degli altri job: l'elenco qui sotto
+      # nomina `test_property_soldi`, che porta il teorema «nessun centesimo si crea o si
+      # perde». Senza la libreria quel teorema faceva `skipTest` e questo job usciva VERDE
+      # senza averlo mai eseguito -- il job che si chiama «money» era cieco proprio sulla
+      # prova dei soldi. Lo pretende `test_pipeline_ci.
+      # TestLeDIMOSTRAZIONIMatematicheGIRANODavveroInCI`, che i moduli con prove z3 non li
+      # ha scritti a mano: li deriva dai file.
       - name: Dipendenze di test
-        run: pip install hypothesis
+        run: pip install hypothesis z3-solver
       - name: Test money-path + Paga in Struttura
         run: |
           python -m unittest \
