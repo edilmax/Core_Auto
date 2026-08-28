@@ -13,6 +13,7 @@ Stati messi alla prova:
   · e su tutto pulito -> nessun allarme (mai gridare al lupo per un ritardo normale).
 """
 
+import dataclasses
 import shutil
 import tempfile
 import time
@@ -177,6 +178,141 @@ class TestControlloCiecoSILENZIOSO(_Base):
         self.assertIn("non eseguit", html,
                       "l'email non dice che un controllo non ha potuto girare, quindi chi la "
                       "legge crede che sia stato guardato tutto: %s" % html[:400])
+
+
+class TestGiroTroncatoNonEUnVerdetto(_Base):
+    """UN GIRO CHE NON HA FINITO DI GUARDARE NON DEVE DIRE NE' «ok» NE' «allarme».
+
+    La classe qui sopra copre la premessa MANCANTE: non ho guardato perche' non potevo
+    (niente chiave Stripe). Questa copre il caso opposto e piu' insidioso -- la premessa
+    C'E', il giro PARTE, e si ferma a meta'.
+
+    Perche' non e' un dettaglio. `fase182` legge Stripe a pagine e si ferma a un tetto
+    anti-runaway (`_MAX_PAGINE`); il giornale invece lo legge INTERO. Quindi un giro
+    troncato non perde fantasmi: ne INVENTA. Le sessioni che non ha fatto in tempo a
+    leggere diventano «solo_giornale», cioe' prenotazioni sanissime che risultano
+    incassate da noi e sconosciute a Stripe. `fase182` lo sa, lo dichiara (`parziale`,
+    `troncati`) e lo dichiara proprio perche' chi legge non scambi quel referto per un
+    verdetto -- il suo commento lo scrive per esteso.
+
+    MISURATO il 2026-08-28 su 8354e10: quei due campi non li legge NESSUNO.
+        grep -rn "parziale\\|troncati" --include=*.py .    (fuori da fase182 e collaudi/)
+        -> zero righe
+    `_riconciliazione` guarda solo `rep["ok"]` e ricostruisce le anomalie dagli elenchi.
+    Quindi oggi un giro troncato manda un'email di ALLARME CRITICO che elenca
+    prenotazioni sane. E' un falso allarme sui soldi, e la regola ferrea 10 lo considera
+    grave quanto un allarme mancato: insegna a ignorare i segnali.
+    E capita proprio quando i movimenti sono tanti -- cioe' quando i soldi sono tanti.
+
+    Lo strumento giusto il progetto ce l'ha gia' e lo usa un ramo piu' in la':
+    `NON_ESEGUITO` e il canale `non_eseguiti`. Un giro troncato appartiene li': non e'
+    «qualcosa non va», e' «non ho finito di guardare» (sbaglio S7).
+
+    ⛔ COSA QUESTA GUARDIA NON COPRE (D18 punto 3), perche' non sembri chiuso di piu':
+    la GIUNTURA fra `fase83_server._tick_guardiano` e questo referto resta scoperta.
+    L'email parte solo `if not rep.get("pulito")`, quindi un non eseguito su una macchina
+    per il resto sana non raggiunge nessuno. Quello dipende da una decisione del fondatore
+    (la mail anche quando tutto quadra) e qui NON si asserisce: una guardia che pretende
+    una decisione non ancora presa nasce rossa per finta, e verrebbe spenta invece che
+    ascoltata. E il pezzo a monte non e' comunque raggiungibile da un test: e' una
+    funzione annidata, avviata come thread demone con un ciclo infinito.
+    """
+
+    # Non e' una chiave e non deve somigliarne a una: `_riconciliazione` guarda solo se
+    # la stringa e' vuota o piena (`if not sk`), quindi qui basta che sia piena.
+    _NON_UNA_CHIAVE = "banco-di-prova-nessuna-chiave-vera"
+
+    def _banco_col_giro_troncato(self):
+        """Stripe CONFIGURATO (se no si ricade nella classe sopra) e `riconcilia`
+        sostituita da un referto TRONCATO: nessuna rete, nessuno Stripe vero."""
+        import fase182_riconciliazione as R
+        # Il banco SENZA chiave si tiene da parte: serve al confronto del secondo test.
+        self.sys_senza_chiave = self.sys
+        self.sys = crea_sistema(dataclasses.replace(
+            self.sys.config, stripe_secret_key=self._NON_UNA_CHIAVE))
+        self.addCleanup(setattr, R, "riconcilia", R.riconcilia)
+        R.riconcilia = lambda *a, **k: {
+            "ok": False, "giorni": 30, "da_ts": self.now - 30 * 86400,
+            "parziale": True, "troncati": ["checkout/sessions"],
+            "fantasmi": 2, "sessioni_pagate": 2, "incassi_giornale": 4,
+            "solo_stripe": [],
+            # I DUE FANTASMI INVENTATI DAL TRONCAMENTO: prenotazioni sane, incassate
+            # davvero, che Stripe conosce benissimo -- solo, non siamo arrivati a leggerle.
+            "solo_giornale": [{"riferimento": "prova-una", "cents": 12000, "valuta": "EUR"},
+                              {"riferimento": "prova-due", "cents": 9500, "valuta": "EUR"}],
+            "importo_diverso": [],
+            "confronti": {"incassi": {"stripe": {}, "giornale": {}, "delta": {}},
+                          "rimborsi": {"stripe": {}, "giornale": {}, "delta": {}},
+                          "transfer": {"stripe": {}, "giornale": {}, "delta": {}}}}
+
+    def _pretendi_che_il_confronto_SIA_PARTITO(self):
+        """La premessa, verificata e non supposta.
+
+        Senza questo controllo i due test qui sotto passerebbero per il motivo sbagliato:
+        `_riconciliazione` uscirebbe con `NON_ESEGUITO` gia' alla prima riga (manca la
+        chiave), e la guardia direbbe verde senza aver mai toccato il codice del
+        troncamento -- proverebbe la classe sopra, non questa. E' lo sbaglio S7 applicato
+        alla guardia stessa: un controllo che da' OK quando la premessa manca."""
+        self.assertTrue(
+            getattr(self.sys.config, "stripe_secret_key", "") or "",
+            "premessa non valida: senza chiave il confronto non parte nemmeno, e questi "
+            "test proverebbero la premessa mancante invece del giro troncato")
+        self.assertIsNotNone(
+            getattr(self.sys, "finanza", None),
+            "premessa non valida: senza giornale il confronto non parte nemmeno")
+
+    def test_un_giro_TRONCATO_non_grida_su_prenotazioni_sane(self):
+        """Prima meta': niente falso allarme. I fantasmi li ha inventati il tetto."""
+        self._banco_col_giro_troncato()
+        self._pretendi_che_il_confronto_SIA_PARTITO()
+        rep = G.scansiona(self.sys, ora=lambda: self.now)
+        self.assertNotIn(
+            "riconciliazione_stripe", rep["anomalie"],
+            "il giro si e' fermato al tetto (`parziale` vero, `troncati` non vuoto) e il "
+            "Guardiano lo tratta come un verdetto: grida su prenotazioni SANE, che "
+            "risultano fantasmi solo perche' Stripe non e' stato letto fino in fondo. "
+            "Un falso allarme sui soldi si impara a ignorare (ferrea 10). Rapporto: %r"
+            % (rep["anomalie"],))
+        self.assertTrue(rep["pulito"],
+                        "un giro non finito non e' un'anomalia: e' un controllo a meta'")
+        self.assertEqual(rep["conta"], 0, "un giro troncato non si conta fra le anomalie")
+
+    def test_e_DICHIARA_di_non_aver_finito_di_guardare(self):
+        """Seconda meta', ed e' quella che impedisce di 'riparare' col silenzio.
+
+        Se un giro troncato smettesse di gridare e basta, avremmo scambiato un allarme
+        falso con un punto cieco muto -- e sul percorso dei soldi il secondo e' peggio,
+        perche' un allarme fastidioso lo noti e un silenzio no. Deve finire fra i non
+        eseguiti. Come si chiami la riga lo decide la riparazione: qui si pretende che
+        ci sia."""
+        self._banco_col_giro_troncato()
+        self._pretendi_che_il_confronto_SIA_PARTITO()
+        rep = G.scansiona(self.sys, ora=lambda: self.now)
+        self.assertTrue(
+            any("riconcili" in str(c) for c in (rep.get("non_eseguiti") or [])),
+            "il confronto con Stripe si e' fermato a meta' e il rapporto non lo dichiara "
+            "da nessuna parte: chi legge non ha modo di sapere che il controllo piu' "
+            "importante ha guardato solo un pezzo. non_eseguiti: %r"
+            % (rep.get("non_eseguiti"),))
+        # ⛔ E NON DEVE DIRLO CON LA BUGIA COMODA. La riparazione piu' economica che
+        # soddisfa l'asserzione qui sopra e' un `return NON_ESEGUITO` secco sul giro
+        # troncato: verde qui, e nel referto ci finirebbe «manca la chiave Stripe o il
+        # giornale» MENTRE LA CHIAVE C'E' e il giro e' partito. Sarebbe una riga falsa in
+        # un rapporto operativo, cioe' il difetto che questa guardia nasce per impedire,
+        # travestito da riparazione. Le due situazioni devono restare DISTINGUIBILI da chi
+        # legge -- lo stesso principio per cui `NON_ESEGUITO` e `None` restano
+        # distinguibili da chi chiama (il commento a `_riconciliazione` lo dice).
+        # Il testo non lo detta questa guardia: pretende solo che i due non coincidano.
+        mio = [c for c in (rep.get("non_eseguiti") or []) if "riconcili" in str(c)]
+        rep_senza_chiave = G.scansiona(self.sys_senza_chiave, ora=lambda: self.now)
+        suo = [c for c in (rep_senza_chiave.get("non_eseguiti") or [])
+               if "riconcili" in str(c)]
+        self.assertNotEqual(
+            mio, suo,
+            "un giro TRONCATO e una chiave MANCANTE dichiarano la stessa identica riga, "
+            "quindi il rapporto dice «manca la chiave» a chiave presente: chi legge "
+            "cerchera' una chiave che c'e' invece di guardare il tetto delle pagine. "
+            "troncato=%r · senza chiave=%r" % (mio, suo))
 
 
 class TestGuastiIsolatiNelRegistro(_Base):
