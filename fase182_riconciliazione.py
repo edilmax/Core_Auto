@@ -12,7 +12,8 @@ Segnala i FANTASMI:
   - importo_diverso: stessa prenotazione, cifre diverse (al centesimo).
 
 READ-ONLY totale (mai una scrittura, né da noi né su Stripe). GATED dalla chiave.
-`fetch` iniettabile per i test; paginazione con tetto anti-runaway.
+`fetch` iniettabile per i test; paginazione con tetto anti-runaway — e se il tetto scatta
+il report lo DICHIARA (`parziale`): un giro incompleto non e' un giro.
 """
 from __future__ import annotations
 
@@ -38,8 +39,12 @@ def _fetch_reale(percorso: str, params: Dict[str, Any], chiave: str) -> Dict[str
 
 
 def _pagina(percorso: str, chiave: str, da_ts: int, fetch: Callable,
-            extra: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-    """Scarica TUTTE le pagine (tetto _MAX_PAGINE) di una lista Stripe dal ts dato."""
+            extra: Optional[Dict[str, Any]] = None,
+            tronchi: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    """Scarica TUTTE le pagine (tetto _MAX_PAGINE) di una lista Stripe dal ts dato.
+    Se il tetto scatta il giro e' INCOMPLETO e il percorso finisce in `tronchi`: prima
+    quel canale non esisteva, la parzialita' restava nei log e chi legge il report non
+    poteva saperlo."""
     out: List[Dict[str, Any]] = []
     dopo = None
     for _ in range(_MAX_PAGINE):
@@ -56,16 +61,19 @@ def _pagina(percorso: str, chiave: str, da_ts: int, fetch: Callable,
         dopo = dati[-1].get("id")
     logger.warning("riconciliazione: tetto pagine raggiunto su %s (%d record: "
                    "risultato PARZIALE, indicato nel report)", percorso, len(out))
+    if tronchi is not None:
+        tronchi.append(percorso)
     return out
 
 
-def stripe_sessioni_pagate(chiave: str, da_ts: int, *, fetch: Any = None
+def stripe_sessioni_pagate(chiave: str, da_ts: int, *, fetch: Any = None,
+                           tronchi: Optional[List[str]] = None
                            ) -> List[Dict[str, Any]]:
     """Le checkout session PAGATE del periodo: [{riferimento, cents, valuta, id}].
     Le non pagate (link creati e abbandonati) NON sono incassi: filtrate."""
     f = fetch or _fetch_reale
     out = []
-    for s in _pagina("checkout/sessions", chiave, da_ts, f):
+    for s in _pagina("checkout/sessions", chiave, da_ts, f, tronchi=tronchi):
         if s.get("payment_status") != "paid":
             continue
         rif = ((s.get("metadata") or {}).get("riferimento") or "").strip()
@@ -75,14 +83,15 @@ def stripe_sessioni_pagate(chiave: str, da_ts: int, *, fetch: Any = None
     return out
 
 
-def stripe_somme_balance(chiave: str, da_ts: int, *, fetch: Any = None
+def stripe_somme_balance(chiave: str, da_ts: int, *, fetch: Any = None,
+                         tronchi: Optional[List[str]] = None
                          ) -> Dict[str, Dict[str, int]]:
     """Somme delle balance transaction per categoria e valuta:
     {'charge': {'EUR': cents}, 'refund': {...}, 'transfer': {...}}.
     refund/transfer arrivano NEGATIVI da Stripe: qui in valore assoluto."""
     f = fetch or _fetch_reale
     out: Dict[str, Dict[str, int]] = {}
-    for t in _pagina("balance_transactions", chiave, da_ts, f):
+    for t in _pagina("balance_transactions", chiave, da_ts, f, tronchi=tronchi):
         cat = str(t.get("reporting_category") or t.get("type") or "")
         val = str(t.get("currency") or "").upper()
         out.setdefault(cat, {})
@@ -92,13 +101,16 @@ def stripe_somme_balance(chiave: str, da_ts: int, *, fetch: Any = None
 
 def riconcilia(fc: Any, chiave: str, *, giorni: int = 30, fetch: Any = None,
                ora: Any = None) -> Dict[str, Any]:
-    """Il confronto completo. Ritorna il report col verdetto:
-    ok = nessun fantasma e delta zero sui totali confrontabili."""
+    """Il confronto del periodo. Ritorna il report col verdetto:
+    ok = nessun fantasma e delta zero sui totali confrontabili.
+    `parziale` dice se il tetto delle pagine ha fermato la lettura di Stripe: in quel caso
+    il verdetto e' costruito su una parte sola, e i fantasmi possono essere inventati."""
     adesso = int((ora or time.time)())
     g = giorni if isinstance(giorni, int) and 0 < giorni <= 365 else 30
     da_ts = adesso - g * 86400
-    sessioni = stripe_sessioni_pagate(chiave, da_ts, fetch=fetch)
-    balance = stripe_somme_balance(chiave, da_ts, fetch=fetch)
+    tronchi: List[str] = []
+    sessioni = stripe_sessioni_pagate(chiave, da_ts, fetch=fetch, tronchi=tronchi)
+    balance = stripe_somme_balance(chiave, da_ts, fetch=fetch, tronchi=tronchi)
     incassi = fc.incassi_periodo(da_ts) if fc is not None else {}
     somme = fc.somme_periodo(da_ts) if fc is not None else {}
     # ── match per riferimento (al centesimo) ─────────────────────────────────
@@ -139,6 +151,16 @@ def riconcilia(fc: Any, chiave: str, *, giorni: int = 30, fetch: Any = None,
     ok = (fantasmi == 0
           and all(d == 0 for c in confronti.values() for d in c["delta"].values()))
     return {"ok": ok, "giorni": g, "da_ts": da_ts,
+            # ⛔ Il tetto ferma SOLO il lato Stripe: il giornale si legge intero. Quindi un
+            # giro troncato fa CRESCERE i fantasmi (le sessioni mai lette diventano
+            # 'solo_giornale') e grida su prenotazioni sane. Chi legge deve saperlo dal
+            # report, non dai log: un allarme falso si impara a ignorare (ferrea 10).
+            "parziale": bool(tronchi),
+            "troncati": sorted(set(tronchi)),
+            # il totale VERO dei fantasmi: gli elenchi qui sotto escono TAGLIATI, e chi
+            # conta le righe rimaste (il registro del server, l'email del Guardiano)
+            # sottostima il guaio senza avere modo di accorgersene (ferrea 9).
+            "fantasmi": fantasmi,
             "sessioni_pagate": len(sessioni),
             "incassi_giornale": len(incassi),
             "solo_stripe": solo_stripe[:50],

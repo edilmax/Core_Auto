@@ -8,7 +8,10 @@ Invarianti:
   5. le sessioni NON pagate (link abbandonati) sono FILTRATE (non sono incassi);
   6. PAGINAZIONE Stripe (has_more) percorsa fino in fondo;
   7. valute mai mischiate (EUR e USD confrontati separatamente);
-  8. endpoint: 403 senza Bunker; 503 senza chiave Stripe; READ-ONLY (giornale intatto).
+  8. endpoint: 403 senza Bunker; 503 senza chiave Stripe; READ-ONLY (giornale intatto);
+  9. TETTO PAGINE: un giro TRONCATO si dichiara parziale a chi legge, e tace se completo;
+ 10. elenchi tagliati: il TOTALE dei fantasmi resta leggibile (chi conta le righe rimaste
+     sottostima il disastro, ed e' quello che fanno il server e il Guardiano).
 """
 import json
 import shutil
@@ -19,7 +22,7 @@ import unittest
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase177_financial_controller import crea_financial_controller
-from fase182_riconciliazione import riconcilia, stripe_sessioni_pagate
+from fase182_riconciliazione import _MAX_PAGINE, riconcilia, stripe_sessioni_pagate
 
 ORA = 1_800_000_000            # orologio finto e fermo: test deterministici
 
@@ -136,6 +139,59 @@ class TestRiconciliazione(unittest.TestCase):
         self.assertTrue(rep["ok"], rep)
         self.assertEqual(rep["confronti"]["incassi"]["delta"],
                          {"EUR": 0, "USD": 0})
+
+    def test_tetto_pagine_il_report_dichiara_di_essere_parziale(self):
+        """Quando il tetto anti-runaway scatta, il giro NON ha visto tutto Stripe: chi
+        legge il report deve poterlo sapere SENZA andare a cercare nei log. Il lato
+        giornale non ha nessun tetto, quindi le sessioni mai lette diventano fantasmi
+        'solo_giornale': un giro incompleto scambiato per completo produce un ALLARME
+        FALSO sui soldi -- e un allarme falso si impara a ignorare (regola ferrea 10)."""
+        sessioni = [_sessione("R%04d" % i, 1000, sid="cs_%04d" % i)
+                    for i in range((_MAX_PAGINE + 1) * 100)]   # una pagina oltre il tetto
+        st = _StripeFinto(sessioni=sessioni)
+        rep = self._ric(st)
+        pagine = [p for p in st.chiamate if p[0].startswith("checkout")]
+        # PRECONDIZIONE: senza questa, la guardia sarebbe verde per il motivo sbagliato,
+        # cioe' perche' il tetto non e' scattato affatto (D18 punto 1).
+        self.assertEqual(len(pagine), _MAX_PAGINE,
+                         "il tetto NON e' scattato: questa guardia non sta misurando "
+                         "il difetto che dice di misurare")
+        self.assertTrue(rep.get("parziale"),
+                        "giro TRONCATO consegnato come se fosse completo: nel report non "
+                        "c'e' nessun segno di parzialita' -> chiavi=%r" % (sorted(rep),))
+
+    def test_giro_completo_il_report_non_si_dichiara_parziale(self):
+        """L'ALTRA direzione (regola ferrea 10, D18 punto 2): a giro finito il segno di
+        parzialita' deve TACERE. Un segnale sempre acceso e' un segnale gia' spento."""
+        self._incasso("R1", 25000)
+        st = _StripeFinto(sessioni=[_sessione("R1", 25000)],
+                          balance=[{"id": "t1", "reporting_category": "charge",
+                                    "currency": "eur", "amount": 25000}])
+        rep = self._ric(st)
+        self.assertTrue(rep["ok"], rep)
+        self.assertFalse(rep.get("parziale"),
+                         "giro COMPLETO dichiarato parziale: e' un falso allarme")
+
+    def test_elenchi_tagliati_il_totale_dei_fantasmi_resta_leggibile(self):
+        """Gli elenchi dei fantasmi escono TAGLIATI, e chi li riceve conta le righe: il
+        server scrive nel registro `len(rep["solo_stripe"])` (fase83) e il Guardiano ci
+        costruisce l'email d'allarme (fase186). Con l'elenco tagliato quel conto
+        SOTTOSTIMA il disastro, e il report non porta nessun totale con cui accorgersene
+        (regola ferrea 9: osservabile debole).
+        ⚠️ Difetto DIVERSO dal tetto delle pagine: qui il verdetto `ok` resta giusto --
+        e' misurato prima del taglio -- e a perdersi e' la GRANDEZZA, non il giudizio."""
+        attesi = 60                       # piu' del taglio applicato agli elenchi
+        for i in range(attesi):
+            self._incasso("G%03d" % i, 1000)
+        rep = self._ric(_StripeFinto())
+        self.assertFalse(rep["ok"])
+        # PRECONDIZIONE: se un giorno il taglio sparisse, questa guardia non avrebbe piu'
+        # niente da sorvegliare e deve dirlo, invece di restare verde (D18 punto 1).
+        self.assertLess(len(rep["solo_giornale"]), attesi,
+                        "gli elenchi non sono piu' tagliati: guardia da rivedere")
+        self.assertEqual(rep.get("fantasmi"), attesi,
+                         "elenco TAGLIATO e nessun totale nel report: chi legge conta le "
+                         "righe rimaste e sottostima -> chiavi=%r" % (sorted(rep),))
 
 
 class TestEndpointRiconciliazione(unittest.TestCase):
