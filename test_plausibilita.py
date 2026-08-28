@@ -39,7 +39,12 @@ class TestConversioneValute(unittest.TestCase):
     """Il cuore: quante cifre decimali ha davvero ogni valuta."""
 
     def test_le_valute_senza_decimali_sono_riconosciute(self):
-        for valuta in ("JPY", "KRW", "VND", "CLP", "ISK"):
+        """⛔ ISK non e' nell'elenco: Stripe la vuole a DUE decimali per retrocompatibilita'
+        («to charge 5 ISK, provide an amount value of 500», docs.stripe.com/currencies,
+        2026-08-28); la sua guardia sta in `test_profondo_valute`.
+        ⚠️ Terza copia della stessa lista (le altre: `test_importi_scritti.SENZA_DECIMALI`,
+        `test_valute_coerenti`). Restano tre, e si scrive invece di nasconderlo."""
+        for valuta in ("JPY", "KRW", "VND", "CLP"):
             self.assertEqual(pl._esponente(valuta), 0,
                              "%s ha decimali secondo noi: e' la trappola del x100"
                              % valuta)

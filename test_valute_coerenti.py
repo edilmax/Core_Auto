@@ -71,23 +71,40 @@ class TestBrowserEMotoreConcordano(unittest.TestCase):
             e_motore = esponente(valuta)
             if e_browser != e_motore:
                 disaccordi.append(
-                    "%s: browser %d decimali, motore %d -> l'addebito sarebbe "
-                    "sbagliato di %d volte"
+                    "%s: browser %d decimali, motore %d -> il prezzo LETTO e quello "
+                    "ADDEBITATO differiscono di %d volte"
                     % (valuta, e_browser, e_motore, 10 ** abs(e_browser - e_motore)))
         self.assertEqual(
             disaccordi, [],
-            "Browser e motore non concordano. Il numero mandato a Stripe lo calcola il "
-            "BROWSER: un disaccordo qui e' un addebito sbagliato, non un dettaglio.\n  - "
+            # ⛔ Qui c'era scritto «il numero mandato a Stripe lo calcola il BROWSER».
+            # E' FALSO, e ha fermato una riparazione il 2026-08-28 facendola sembrare
+            # incompleta. Il prezzo lo calcola e lo FIRMA il server, e al pagamento si
+            # rilegge dal token firmato (`fase59_concierge.py:513`,
+            # `dati = self._firma.decodifica(token)` -> 400 se la firma e' rotta): dal
+            # browser non passa nessun importo. Una guardia che si giustifica con
+            # un'affermazione falsa e' peggio di una guardia assente, perche' manda a
+            # cercare il difetto dove non e'.
+            "Browser e motore non concordano: l'ospite LEGGE un prezzo e ne PAGA un "
+            "altro. L'addebito resta quello firmato dal server -- il danno e' il prezzo "
+            "mostrato, ed e' quello su cui il cliente decide.\n  - "
             + "\n  - ".join(disaccordi))
 
     def test_le_valute_senza_decimali_sono_marcate_nel_browser(self):
-        """Le tre trappole: se il browser le credesse normali, moltiplicherebbe x100."""
-        for valuta in ("JPY", "KRW", "VND", "CLP", "ISK"):
+        """Le trappole del x100: se il browser le credesse normali, MOSTREREBBE un prezzo
+        cento volte diverso da quello che l'ospite si vede addebitare.
+        ⛔ ISK non e' in questo elenco, e non e' una dimenticanza: Stripe la vuole
+        rappresentata a DUE decimali per retrocompatibilita' («to charge 5 ISK, provide an
+        amount value of 500», docs.stripe.com/currencies, 2026-08-28). La sua guardia sta
+        in `test_profondo_valute.test_ISK_e_UGX_si_addebitano_come_valute_a_DUE_decimali`.
+        ⚠️ Questo elenco e' una delle TRE copie della stessa conoscenza (le altre due:
+        `test_importi_scritti.SENZA_DECIMALI` e `test_plausibilita`). Non si fanno derivare
+        da `fase99.esponente()`: l'atteso preso dal codice sotto esame non prova niente."""
+        for valuta in ("JPY", "KRW", "VND", "CLP"):
             if valuta in self.browser:
                 self.assertEqual(
                     self.browser[valuta], 0,
-                    "%s NON ha decimali: il browser che crede il contrario manda a "
-                    "Stripe cento volte l'importo" % valuta)
+                    "%s NON ha decimali: il browser che crede il contrario MOSTRA cento "
+                    "volte l'importo vero" % valuta)
 
     def test_nessuna_valuta_offerta_e_sconosciuta(self):
         """Tutto cio' che l'host puo' scegliere dev'essere una sigla ISO di 3 lettere:

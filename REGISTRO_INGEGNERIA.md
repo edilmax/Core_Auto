@@ -403,6 +403,149 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 💴 ISK E UGX: DUE VALUTE CHE STRIPE VUOLE A DUE DECIMALI, E NOI NO — 2026-08-28
+
+**Cosa era rotto.** `fase99_multicurrency._ESP0` elencava **ISK** e **UGX** fra le valute a
+zero decimali. Stripe le dichiara il contrario, alla lettera: «ISK transitioned to a
+zero-decimal currency, **BUT backward compatibility requires you to represent it as a
+two-decimal value**, where the decimal amount is always 00. For example, to charge 5 ISK,
+provide an `amount` value of `500`» — frase identica per UGX (docs.stripe.com/currencies,
+sezione «Casi particolari», letta il 2026-08-28 **in italiano e in inglese**: due letture,
+stessa frase). Con esponente 0 un annuncio da 5.000 ISK partiva come `amount=5000`, che
+Stripe legge **50,00 ISK**: si incassava **un centesimo del dovuto**, e a perderci erano
+l'host e la nostra tariffa tecnica.
+
+⛔ **E il motivo per cui questo difetto contava piu' della sua taglia: e' INVISIBILE alla
+riconciliazione.** Il numero e' uno solo — lo mandiamo a Stripe **e** lo scriviamo a
+giornale — quindi sbagliando si sbaglia identico sui due lati e il delta di `fase182` torna
+a zero lo stesso. Nessun tetto di pagine, nessuna categoria, nessuna guardia dei conti puo'
+vederlo: e' B7 nella forma pura, «sbaglia due volte allo stesso modo e il confronto torna».
+L'unico giudice sarebbe l'estratto conto vero o un cliente che si lamenta.
+
+**Com'e' saltato fuori.** Non da un test: leggendo la documentazione di Stripe per un altro
+lavoro (le quattro assunzioni di `fase182`) e confrontando la lista ufficiale con la nostra.
+Il confronto e' stato fatto **da una macchina, non a mente**: `sorted(_ESP0 - lista_Stripe)`
+-> `['ISK']`, `sorted(lista_Stripe - _ESP0)` -> `['MGA']`.
+
+**Cosa NON e' stato toccato, e perche'.** **MGA** (ariary malgascio) risulta zero-decimale
+per Stripe e da noi no — ma quella lista non e' stata **letta**: la tabella delle
+zero-decimali non compare nel contenuto di `docs.stripe.com/currencies` in nessuna delle tre
+versioni provate (italiana, inglese, `.md`), e il dato veniva da una sintesi di ricerca.
+Dichiarata **NON CONFERMATA** e lasciata com'era. Due valute provate battono tre di cui una
+inventata.
+
+**Che nessun dato andasse migrato** l'ha misurato la corsia di coordinamento **sul VPS**, in
+sola lettura forzata (`mode=ro`) dentro il contenitore vivo: 25 archivi, 186 righe, unico
+riscontro `marche.db . marche . token_b64 -> UGX` = tre lettere dentro un gettone base64 di
+marca temporale, non una valuta. ⚠️ Misura **non nostra**: attribuita, non spacciata per
+verificata qui.
+
+**La riparazione, e perche' non era «una riga» come sembrava.** Il difetto stava in **quattro
+posti**, non uno, e l'ha rivelato l'esecuzione dei test a valle invece della speranza:
+1. `fase99_multicurrency.py:30-40` — ISK e UGX fuori da `_ESP0` (che scende a **14** valute,
+   misurato), col commento che porta la frase della fonte e il nome della guardia;
+2. `deploy/app.js:63-72` e `:86` — **la seconda tabella degli esponenti sta nel browser**, e
+   dichiarava ISK a zero. Li' l'esponente decide **cosa legge l'ospite**: in disaccordo col
+   motore, il prezzo mostrato e quello addebitato differiscono di cento volte;
+3. le **tre copie** della stessa lista nei test: `test_importi_scritti.py:57`,
+   `test_plausibilita.py:42`, `test_valute_coerenti.py:85`. ⚠️ Restano **tre copie**, ed e'
+   scritto in tutte e tre invece di nasconderlo: non sono state fatte derivare da
+   `fase99.esponente()` di proposito — un atteso preso dal codice sotto esame non prova
+   niente, ed e' lo stesso difetto di B7 applicato ai test;
+4. `test_valute_coerenti.py` — **un docstring che diceva il falso**, vedi sotto.
+
+⛔ **IL DOCSTRING CHE MENTIVA, ed e' la parte che vale piu' della riparazione.**
+`test_valute_coerenti` giustificava se stesso cosi': *«Il numero mandato a Stripe lo calcola
+il BROWSER: un disaccordo qui e' un addebito sbagliato, non un dettaglio»*, e un secondo
+messaggio diceva *«il browser che crede il contrario manda a Stripe cento volte l'importo»*.
+**Sono falsi tutti e due.** Il prezzo lo calcola e lo **firma** il server, e al pagamento si
+rilegge dal token firmato: `fase59_concierge.py:513`, `dati = self._firma.decodifica(token)`
+-> `400 quote_non_valida` se la firma e' rotta. Dal browser non passa nessun importo.
+Quella frase e' nel repository **dal 2026-07-22** (commit `fe9270b`, «Audit valuta + fusi
+orari + input»), e il 2026-08-28 ha fatto credere che la riparazione fosse incompleta e che
+servisse un deploy urgente: ha fermato il lavoro e ha quasi ingannato due corsie. Riscritta
+con cio' che il disaccordo produce **davvero** — un prezzo **mostrato** diverso da quello
+addebitato — e col perche' della correzione accanto, cosi' non torna.
+💡 La lezione, che vale oltre questo caso: **una guardia che si giustifica con
+un'affermazione falsa e' peggio di una guardia assente**, perche' manda a cercare il difetto
+dove non e'. E' il modo di rompersi n.3 («testi che mentono») applicato non al prodotto ma
+agli strumenti.
+
+**Guardie** (`test_profondo_valute.py`, ordine D20 — scritte PRIMA, viste rosse su ISK **e**
+UGX separatamente col `subTest`, poi verdi):
+- `test_ISK_e_UGX_si_addebitano_come_valute_a_DUE_decimali` — dice cosa pretende la **fonte**
+  (500 unita' minori = 5 ISK), non cosa deve fare il nostro codice: resta vera comunque
+  decidiamo di rappresentarle;
+- `test_le_valute_DAVVERO_senza_decimali_non_diventano_a_due` — l'ALTRA direzione (ferrea 10,
+  D18 punto 2): senza, una riparazione fatta male avrebbe spostato **tutte** le zero-decimali
+  e fatto addebitare cento volte troppo all'ospite.
+
+**STATO: nel repository, e NON online.** `deploy/` vive **dentro l'immagine**
+(`Dockerfile.casavip:27`, `COPY deploy ./deploy`, nessun volume montato): serve il **rebuild**,
+non un `git pull`. E' uno scarto **dichiarato**, non un guasto — la stessa situazione gia'
+scritta per i tag SEO. Il motore (`fase99`) invece e' Python e va con il codice.
+Verificato: `test_importi_scritti` + `test_valute_coerenti` + `test_plausibilita` = 35 test,
+uscita 0; `test_profondo_valute` = 22 test, uscita 0.
+
+### 🚨 LA RICONCILIAZIONE GRIDAVA SU PRENOTAZIONI SANE — 2026-08-28
+
+**Cosa era rotto.** `fase182_riconciliazione` legge Stripe a pagine, con un tetto
+anti-runaway (`_MAX_PAGINE`). Quando il tetto scattava, il modulo scriveva nei log
+«risultato PARZIALE, **indicato nel report**» — e nel report non c'era niente: `_pagina`
+restituiva una lista semplice e non aveva **nessun canale** verso `riconcilia`. Il tetto
+ferma **solo il lato Stripe**: il giornale (`fc.incassi_periodo`) si legge intero. Quindi le
+sessioni mai lette diventavano fantasmi `solo_giornale`, e il giro **accusava prenotazioni
+sane**.
+
+**Misurato, non dedotto.** Scenario costruito a mano (giornale con i soli incassi che il
+tetto taglia via, cioe' prenotazioni pagate e registrate in regola):
+
+    sessioni Stripe esistenti ..... 2100
+    sessioni LETTE (tetto) ........ 2000
+    incassi nel giornale .......... 100
+    verdetto ok ................... False
+    solo_giornale (mostrati) ...... 50
+    delta totali incassi .......... {'EUR': -100000}
+
+Cento prenotazioni sane accusate, e un **ammanco inventato di 1.000,00 EUR**. Con quel
+referto il Guardiano (`fase186`) manda l'email d'allarme sui soldi — ed e' la regola ferrea
+10: un allarme falso si impara a ignorare, e allora il grido vero non lo guarda piu' nessuno.
+
+**Secondo difetto, stesso giro, sintomo opposto.** Gli elenchi escono tagliati
+(`solo_stripe[:50]` e fratelli) mentre `fantasmi` e `ok` sono calcolati **prima** del taglio:
+il verdetto resta giusto, ma chi conta le righe rimaste — `fase83` nel registro, `fase186`
+nell'email — **sottostima il guaio** e non ha modo di accorgersene (regola ferrea 9,
+osservabile debole). Per questo sono due guardie e non una: una sola avrebbe fallito senza
+dire quale dei due.
+
+**Come e' stato sistemato.** Un quaderno opzionale `tronchi` che `_pagina` riempie quando il
+tetto scatta, passato dalle due funzioni pubbliche; nel report tre chiavi nuove: `parziale`,
+`troncati` e `fantasmi` (il totale vero). Nessuna firma pubblica rotta, nessun file nuovo,
+nessuna dipendenza: **9 righe di codice**.
+
+**Test aggiunti** (`test_riconciliazione.py`, ordine D20 — guardia PRIMA, vista ROSSA sul
+codice di produzione, riparazione DOPO):
+- `test_tetto_pagine_il_report_dichiara_di_essere_parziale`, con una **precondizione** che
+  pretende che il tetto sia scattato davvero (senza, sarebbe verde per il motivo sbagliato);
+- `test_giro_completo_il_report_non_si_dichiara_parziale` — l'ALTRA direzione (ferrea 10,
+  D18 punto 2): il segnale deve **tacere** a giro completo, o e' un allarme sempre acceso;
+- `test_elenchi_tagliati_il_totale_dei_fantasmi_resta_leggibile`.
+Nessuna cifra cablata: il tetto si importa dal modulo (`_MAX_PAGINE`), cosi' se cambia il
+test non mente (sbaglio S17). Dopo la riparazione il difetto e' stato **rimesso dentro con
+l'editor**: le due guardie sono tornate rosse, la terza e' rimasta verde, e il ripristino e'
+**byte-identico** (sha256 `a8f8352f…` prima e dopo).
+
+**STATO: acceso, e non c'e' niente da accendere.** `fase182` era gia' collegato in due punti
+— la rotta bunker `/api/bunker/riconciliazione` (`fase83`) e il giro giornaliero del
+Guardiano (`fase186`): la riparazione e' viva dove il modulo era gia' vivo. Verificato a
+valle: `test_riconciliazione` + `test_guardiano` + `test_audit_console` = 36 test, uscita 0.
+
+⚠️ **Resta aperto, e non e' stato toccato** (decisione del fondatore, non una riparazione):
+un giro parziale continua a **emettere un verdetto**. La risposta giusta il progetto ce l'ha
+gia' in `fase186_guardiano.NON_ESEGUITO` — «non ho guardato» non e' «tutto a posto» (sbaglio
+S7): un giro troncato non dovrebbe dare ne' `ok` ne' allarme, dovrebbe dire che non ha finito
+di guardare. Cambia il comportamento del Guardiano, quindi non si decide da soli.
+
 ### 🔎 LA HOMEPAGE ERA L'UNICA PAGINA SENZA DOTAZIONE SEO — 2026-08-26
 
 **Come si è visto.** Un referto di misura sulla SEO della homepage, chiesto dal fondatore. Il

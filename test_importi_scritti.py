@@ -54,7 +54,11 @@ CASI = [
     ("BHD", 1234, "1.234 BHD"),
 ]
 
-SENZA_DECIMALI = ("JPY", "KRW", "VND", "CLP", "ISK")
+# ⛔ ISK NON e' qui: Stripe la vuole a DUE decimali per retrocompatibilita' («to charge 5 ISK,
+# provide an amount value of 500», docs.stripe.com/currencies, 2026-08-28). La sua guardia sta
+# in `test_profondo_valute.test_ISK_e_UGX_si_addebitano_come_valute_a_DUE_decimali`.
+# ⚠️ Una delle TRE copie di questa lista (le altre: `test_plausibilita`, `test_valute_coerenti`).
+SENZA_DECIMALI = ("JPY", "KRW", "VND", "CLP")
 CON_TRE = ("KWD", "BHD", "OMR", "TND", "JOD")
 
 
