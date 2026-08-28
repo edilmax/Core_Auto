@@ -1684,6 +1684,250 @@ class TestLeDIMOSTRAZIONIMatematicheGIRANODavveroInCI(unittest.TestCase):
                                   "dall'ambiente sparisce dal rapporto" % (nome, riga.strip()))
 
 
+class TestLaCIDiceCosaHaSALTATO(unittest.TestCase):
+    """UN JOB VERDE NON DISTINGUE «HO ESEGUITO TUTTO» DA «NE HO SALTATO UN PEZZO».
+
+    ⛔ Misurato il 2026-08-28 (voce B24). Da fuori nella CI non si puo' guardare dentro:
+    `/actions/jobs/{id}/logs` risponde **401**, il download degli allegati **401**, e
+    `output.summary` delle check-run e' **vuoto** su tutti i job. L'unica finestra che si
+    legge senza diritti da amministratore e' il RIEPILOGO della run -- quello dove il job
+    che lancia la suite gia' scrive i nomi dei test CADUTI. I saltati no: li' non c'erano.
+
+    ⛔ E il salto e' ANONIMO PER COSTRUZIONE. Misurato con `python -m unittest -v` su un
+    modulo costruito apposta: un `SkipTest` sollevato in `setUpClass` stampa
+
+        skipped 'MOTIVO'
+
+    e basta -- senza nome di classe, senza nome di modulo, **nemmeno con `-v`**. Sopravvive
+    solo la STRINGA DEL MOTIVO, quindi due classi che saltano per lo stesso motivo sono
+    indistinguibili in qualunque registro, per sempre. E peggio: quei test non entrano
+    nemmeno nel totale `Ran`, quindi spariscono due volte (misurato: cinque metodi nel
+    file, `Ran 3 tests`, `OK (skipped=3)`). E' la stessa forma del guasto di D23 punto 3,
+    dove cinque guardie sul ripristino dei backup si mettono da parte in blocco e
+    `unittest` registra un salto solo, senza nome.
+
+    ⛔ PERCHE' IL PASSO DI RIEPILOGO DA SOLO SAREBBE UN ORNAMENTO. Senza `-v` il registro
+    non contiene NESSUN motivo: solo `sss.` e `OK (skipped=3)`. Un passo che pubblica
+    leggendo un registro che non puo' contenere l'informazione rassicura senza controllare
+    niente -- ed e' precisamente cio' che la regola ferrea 2 vieta. Percio' questa guardia
+    pretende le DUE cose insieme: il passo che pubblica, **e** il comando abbastanza
+    loquace da dargli qualcosa da pubblicare.
+
+    ⚠️ PREZZO DICHIARATO (D18 punto 3): `-v` allunga il registro di una riga per test. Il
+    registro a schermo era gia' dichiarato inaffidabile -- GitHub lo tronca, e' scritto nel
+    commento del passo «Suite completa» -- mentre le due vie che contano davvero, il
+    riepilogo e l'allegato, migliorano. Il prezzo si paga dove era gia' rotto.
+    """
+
+    # Due moduli finti, non il repository di oggi: cosi' la prova misura il METODO e non
+    # lo stato. Il primo porta le TRE forme di salto che unittest tratta in modo diverso.
+    CON_SALTI = '''import unittest
+
+
+class ClasseA(unittest.TestCase):
+    @unittest.skip("SALTO-A deciso dal decoratore")
+    def test_a(self):
+        self.fail("non deve girare")
+
+
+class ClasseB(unittest.TestCase):
+    def test_b(self):
+        self.skipTest("SALTO-B deciso dentro il corpo")
+
+
+class ClasseC(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        raise unittest.SkipTest("SALTO-C deciso in setUpClass")
+
+    def test_c(self):
+        self.fail("non deve girare")
+
+
+class ClasseD(unittest.TestCase):
+    def test_d(self):
+        self.assertTrue(True)
+'''
+
+    SENZA_SALTI = '''import unittest
+
+
+class ClasseSana(unittest.TestCase):
+    def test_uno(self):
+        self.assertTrue(True)
+
+    def test_due(self):
+        self.assertEqual(2, 1 + 1)
+'''
+
+    @staticmethod
+    def _comando_di_tutta_la_suite(passi):
+        """Il comando con cui un job lancia la SUITE INTERA, oppure None.
+
+        Stesso criterio della guardia z3 qui sopra, e per la stessa ragione: `discover`
+        oppure un elenco GENERATO (`$(...)`), mai il nome di un job. Un criterio che
+        nomina «full-suite» sarebbe un elenco scritto a mano travestito da ragionamento --
+        e il giorno che il job cambia nome la guardia tacerebbe."""
+        for p in passi:
+            run = p.get("run")
+            if not isinstance(run, str) or "-m unittest" not in run:
+                continue
+            if "discover" in run or "$(" in run:
+                return run
+        return None
+
+    @staticmethod
+    def _passo_che_pubblica_i_saltati(passi):
+        """Il passo che scrive i test SALTATI nel riepilogo della run, oppure None."""
+        for p in passi:
+            run = p.get("run")
+            if isinstance(run, str) and "GITHUB_STEP_SUMMARY" in run and "skipped" in run:
+                return p
+        return None
+
+    @staticmethod
+    def _uscita_vera_di_unittest(sorgente):
+        """L'uscita VERA di `unittest -v`, non una sua imitazione scritta a mano.
+
+        Imitarla sarebbe il verde finto in forma pura: si proverebbe il filtro contro
+        cio' che credo stampi unittest, invece che contro cio' che stampa."""
+        cartella = tempfile.mkdtemp(prefix="b24_saltati_")
+        try:
+            with io.open(os.path.join(cartella, "test_finto_b24.py"), "w",
+                         encoding="utf-8") as f:
+                f.write(sorgente)
+            p = subprocess.run(
+                [sys.executable, "-m", "unittest", "discover", "-v",
+                 "-s", cartella, "-p", "test_*.py"],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            return p.stdout.decode("utf-8", "replace")
+        finally:
+            shutil.rmtree(cartella, ignore_errors=True)
+
+    def _filtro_scritto_in_ci(self):
+        """Il modello di ricerca PRESO da `ci.yml`, mai ricopiato qui.
+
+        Ricopiarlo proverebbe una copia: il giorno che qualcuno cambia il `grep` nel
+        workflow, un modello ricopiato resterebbe verde su se stesso mentre la CI
+        pubblica il vuoto."""
+        doc = _doc_ci()
+        for nome in sorted(doc["jobs"]):
+            passo = self._passo_che_pubblica_i_saltati(_passi(doc["jobs"][nome]))
+            if passo is None:
+                continue
+            trovato = (re.search(r"grep\s+-E\s+'([^']+)'", passo["run"])
+                       or re.search(r'grep\s+-E\s+"([^"]+)"', passo["run"]))
+            self.assertIsNotNone(
+                trovato,
+                "il passo che pubblica i saltati nel job `%s` non usa piu' un "
+                "`grep -E '<modello>'`: questa prova non sa piu' che cosa provare, e un "
+                "controllo che non trova il proprio bersaglio e' ROSSO, non muto "
+                "(sbaglio S2)" % nome)
+            return nome, trovato.group(1)
+        self.fail(
+            "nessun job pubblica i test saltati nel riepilogo della run: da fuori una run "
+            "verde che ha saltato meta' suite e' indistinguibile da una che le ha eseguite "
+            "tutte, perche' i log via API rispondono 401 e `output.summary` e' vuoto")
+
+    def test_UN_JOB_CHE_LANCIA_TUTTA_LA_SUITE_PUBBLICA_I_SALTATI(self):
+        """La formulazione conta, ed e' la stessa della guardia z3: non «la riga N contiene
+        skipped», ma «un job che esegue la suite intera lo dice a chi legge da fuori»."""
+        doc = _doc_ci()
+        lanciano = {}
+        for nome, job in doc["jobs"].items():
+            comando = self._comando_di_tutta_la_suite(_passi(job))
+            if comando:
+                lanciano[nome] = (job, comando)
+        self.assertTrue(
+            lanciano,
+            "nessun job risulta lanciare la suite intera: il criterio e' cieco, e un "
+            "criterio cieco dice sempre di si'")
+
+        pubblicano = []
+        for nome in sorted(lanciano):
+            job, comando = lanciano[nome]
+            passo = self._passo_che_pubblica_i_saltati(_passi(job))
+            if passo is None:
+                continue
+            self.assertTrue(
+                re.search(r"(?<![\w-])(-v|--verbose)(?![\w-])", comando),
+                "il job `%s` pubblica i test saltati ma lancia la suite SENZA `-v`: senza "
+                "quello il registro non contiene nessun motivo (misurato: solo `sss.` e "
+                "`OK (skipped=3)`), quindi quel passo pubblicherebbe il vuoto rassicurando "
+                "chi lo legge. Comando: %r" % (nome, comando))
+            condizione = str(passo.get("if", "always()")).strip()
+            self.assertNotIn(
+                "failure()", condizione,
+                "il job `%s` pubblica i saltati SOLO quando e' gia' rosso (`if: %s`): ma il "
+                "caso da scoprire e' proprio la run VERDE che ha saltato un pezzo di suite "
+                "in silenzio" % (nome, condizione))
+            pubblicano.append(nome)
+
+        self.assertTrue(
+            pubblicano,
+            "NESSUNO dei job che lanciano la suite intera (%s) pubblica i test SALTATI nel "
+            "riepilogo della run. Da fuori un verde con meta' suite saltata e' identico a "
+            "un verde che ha eseguito tutto: `/actions/jobs/{id}/logs` -> 401, il download "
+            "degli allegati -> 401, `output.summary` delle check-run -> vuoto"
+            % ", ".join(sorted(lanciano)))
+
+    def test_IL_FILTRO_VEDE_ANCHE_IL_SALTO_ANONIMO_DI_setUpClass(self):
+        """PRIMA DIREZIONE (regola ferrea 10): quando ci sono salti, li stampa TUTTI.
+
+        E la controprova che rende questa guardia diversa da un ornamento: il filtro
+        ovvio -- quello che cerca `... skipped` -- ne prende DUE su tre. Il terzo, quello
+        deciso in `setUpClass`, non ha il pezzo `nome ... ` davanti, ed e' proprio la
+        forma con cui in questo progetto spariscono le guardie sui backup."""
+        nome_job, modello = self._filtro_scritto_in_ci()
+        uscita = self._uscita_vera_di_unittest(self.CON_SALTI)
+        for marca in ("SALTO-A", "SALTO-B", "SALTO-C"):
+            self.assertIn(
+                marca, uscita,
+                "il modulo finto non ha prodotto %s: la prova sta misurando un'altra cosa "
+                "e il suo verde non varrebbe niente (uscita: %r)" % (marca, uscita[:400]))
+
+        prese = [r for r in uscita.splitlines() if re.search(modello, r)]
+        testo = "\n".join(prese)
+        for marca in ("SALTO-A", "SALTO-B", "SALTO-C"):
+            self.assertIn(
+                marca, testo,
+                "il filtro scritto nel job `%s` (%r) NON prende il salto %s: quel salto "
+                "resterebbe invisibile nel riepilogo della run, che e' l'unico posto "
+                "leggibile da fuori. Righe prese: %r"
+                % (nome_job, modello, marca, prese))
+
+        ingenuo = [r for r in uscita.splitlines() if re.search(r"\.\.\. skipped ", r)]
+        self.assertLess(
+            len(ingenuo), len(prese),
+            "il filtro ovvio `... skipped` prende quanto quello scritto in `%s`: o unittest "
+            "ha cambiato il modo di stampare il salto di `setUpClass`, o il modello e' stato "
+            "ristretto a quella forma -- e in tutt'e due i casi il salto anonimo torna "
+            "invisibile senza che niente diventi rosso" % nome_job)
+
+    def test_IL_FILTRO_NON_INVENTA_RIGHE_QUANDO_NON_C_E_NIENTE_DA_DIRE(self):
+        """SECONDA DIREZIONE (regola ferrea 10): a macchina sana, TACE.
+
+        Un falso allarme e' un difetto quanto un allarme mancato: un riepilogo che elenca
+        salti immaginari a ogni run insegna a non leggerlo piu', e il giorno che i salti
+        sono veri nessuno guarda."""
+        nome_job, modello = self._filtro_scritto_in_ci()
+        uscita = self._uscita_vera_di_unittest(self.SENZA_SALTI)
+        self.assertNotIn(
+            "skipped", uscita,
+            "il modulo finto SENZA salti ne ha prodotto uno: la seconda direzione non ha "
+            "il bersaglio che le serve (uscita: %r)" % uscita[:400])
+        self.assertIn(
+            "OK", uscita,
+            "il modulo finto senza salti non e' nemmeno girato: %r" % uscita[:400])
+        prese = [r for r in uscita.splitlines() if re.search(modello, r)]
+        self.assertEqual(
+            [], prese,
+            "il filtro del job `%s` (%r) prende righe da una run SENZA nessun salto: il "
+            "riepilogo mostrerebbe salti immaginari, e un falso allarme insegna a ignorare "
+            "i segnali (regola ferrea 10). Righe inventate: %r"
+            % (nome_job, modello, prese))
+
+
 class TestSogliaProvataSulCampo(unittest.TestCase):
     """PUNTO 3: il comando del cricchetto viene ESEGUITO, non letto.
 

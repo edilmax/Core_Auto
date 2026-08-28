@@ -508,19 +508,54 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: b1e216e
+CONSEGNE AGGIORNATE A: e4996c2
 
-SUITE ATTUALE: Ran 6046 test
+SUITE ATTUALE: Ran 6049 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
-   (test_pipeline_ci.py:2054, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
-   numero col CARICATORE. Quindi 6028 e' il numero del caricatore, NON quanti ne ha eseguiti
-   un giro: e' il difetto B14, e non si chiude qui -- si chiude cambiando quella regex, che
-   sta in un file di test e non e' questo lavoro. Le due voci vere sono qui sotto.
+   (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
+   numero col CARICATORE. Quindi la cifra qui sopra e' il numero del CARICATORE, NON quanti
+   test ne ha eseguiti un giro: e' il difetto B14, e non si chiude qui -- si chiude cambiando
+   quella regex, che sta in un file di test e non e' questo lavoro. Le due voci vere sono
+   qui sotto.
+   ⛔ QUESTA SPIEGAZIONE NON NOMINA PIU' LA CIFRA, ed e' voluto. Fino al 2026-08-28 diceva
+   «Quindi 6028 e' il numero del caricatore» sotto una riga che ne dichiarava un altro: e' la
+   stessa marcescenza che questo riquadro si autodenuncia piu' sotto, ripetuta due paragrafi
+   SOPRA la denuncia. Una frase che non nomina il numero non puo' diventare falsa (S17).
+   ⛔ E il «6028» qui sopra resta apposta, fra virgolette: e' la CITAZIONE dell'errore, non
+   una cifra dichiarata. La differenza si vede da questo, ed e' il criterio da usare in
+   futuro: una citazione non va aggiornata mai piu', una dichiarazione invecchia a ogni giro.
+   ⛔ E LA GUARDIA SI CERCA PER NOME, non per riga. Qui c'era scritto «:2054», e in quel file
+   quel giorno la regex stava altrove: le righe si spostano a ogni modifica, quindi un
+   riferimento per numero nasce gia' con la data di scadenza.
 
-CARICATORE (RACCOLTI):  6046  <- rimisurato il 2026-08-28 col caricatore, da PowerShell,
-                                 PRIMA di qualunque giro (S14), DOPO l'unione di TUTTE E TRE
-                                 le corsie.
+CARICATORE (RACCOLTI):  6049  <- rimisurato il 2026-08-28 col caricatore, da PowerShell,
+                                 PRIMA di qualunque giro (S14), sul ramo `lavoro-b` DOPO aver
+                                 assorbito `origin/master` a `e4996c2` (l'unione di A, #125):
+                                   CODICE_USCITA_DIRETTO=0
+                                   CARICATORE=6049
+                                   MODULI_NON_IMPORTABILI=0
+                                 ⛔ La seconda riga NON e' decorazione: `discover()` non
+                                 esplode su un modulo che non si importa, ci mette dentro un
+                                 finto test che CONTA. Un modulo rotto ALZA il totale invece
+                                 di abbassarlo, e il numero sembra sano. Senza quel controllo
+                                 «6049» sarebbe una cifra di cui non si sa cosa contiene.
+                                 6042 -> 6049 (+7): le tre guardie di
+                                 `test_pipeline_ci.TestLaCIDiceCosaHaSALTATO` (corsia B, B24
+                                 -- la CI adesso pubblica i test SALTATI nel riepilogo) e le
+                                 quattro di `TestIlCricchettoDiceQUALEGuastoHaAvuto` (corsia
+                                 A, unita con la #125).
+                                 ⛔ Il +7 e' un RACCONTO, non la misura: il 6049 e' uscito
+                                 dal caricatore. 6042+3+4 sarebbe stata una somma, e una
+                                 somma non e' una misura (D22, nata proprio da `Ran 5429`).
+                                 ⚠️ E qui il racconto e' stato aggiornato INSIEME al numero,
+                                 non «dopo»: fondendo i due rami, sia la versione di A (6046,
+                                 con la prosa del giorno prima) sia la mia (6045) portavano
+                                 una spiegazione che non descriveva piu' la cifra accanto.
+                                 E' la lezione scritta in fondo a questo stesso riquadro, e
+                                 si e' ripresentata nel merge -- il posto dove due prose
+                                 giuste separatamente diventano una prosa falsa insieme.
+                                 --- storia del 27-28 agosto, DOPO l'unione delle tre corsie:
                                  ⛔ IL NUMERO QUI SOPRA E' USCITO DAL CARICATORE, non da una
                                  somma (D22). La riconciliazione che segue serve solo a
                                  spiegarlo, e va letta in quest'ordine -- prima la misura,
@@ -1563,18 +1598,101 @@ e il pannello ne promette una (**B16 punto e**).
 aprire ai clienti. PARTE 13 = registro delle famiglie chiuse, si aggiorna a ogni famiglia
 chiusa. PARTE 15 = cosa fanno i grandi.
 
-## 🆕 B24-B30 — SETTE COSE TROVATE LA NOTTE DEL 27-28 AGOSTO E NON RIPARATE
+## 🆕 B24-B31 — OTTO COSE TROVATE FRA IL 27 E IL 28 AGOSTO · **due chiuse il 28, sei aperte**
 
 > **Nessuna di queste è stata inventata: sono uscite mentre le tre corsie lavoravano ad altro,
 > ognuna col comando che la misura.** Stanno tutte in sezione C perché nessuna impedisce di
 > aprire al pubblico. ⛔ Ma **B24 e B25 riguardano gli STRUMENTI che ci dicono se il resto
 > funziona**, e uno strumento che mente costa più di un difetto: un difetto lo trovi, uno
 > strumento guasto ti convince che non ci sia niente da trovare.
+>
+> ⛔ **Il titolo diceva «SETTE … E NON RIPARATE» fino al 2026-08-28.** Chiuse **B24**
+> (riparata: la CI adesso pubblica i test saltati) e **B30** (misurata: il buco non c'era). Ed
+> è nata **B31**, trovata *mentre* si misurava B30 — che è il motivo per cui il conto sale
+> anche quando si lavora bene. Il titolo si aggiorna **nello stesso momento** in cui cambia la
+> macchina, non «dopo»: il «dopo» è dove si perde (sbaglio **S10**, un blocco che dichiarava
+> «NON COMMITTATO» mentre il lavoro era già in produzione).
 
-### 🟠 B24 — NESSUNO PUÒ SAPERE DALL'ESTERNO SE UN TEST IN CI È GIRATO O È STATO SALTATO
+### ✅ B24 — CHIUSA il 2026-08-28 dalla corsia B: la CI dice cosa ha saltato
+
+> **La riparazione, misurata su `b1e216e`.** Due cose insieme in `.github/workflows/ci.yml`,
+> perché una sola sarebbe stata un ornamento:
+> - `python -m unittest discover **-v** -s . -p "test_*.py"` — **senza `-v` il registro non
+>   contiene NESSUN motivo**: a voce bassa `unittest` stampa `sss.` e `OK (skipped=3)`, cioè il
+>   conto e basta. Un passo che pubblica leggendo un registro incapace di contenere la risposta
+>   rassicura senza controllare niente (regola ferrea 2);
+> - un passo nuovo **`if: always()`** — e non `failure()`, perché **il caso da scoprire è
+>   proprio la run VERDE** — che scrive i saltati nel riepilogo della run, dove già finiscono i
+>   caduti, leggibile **senza permessi speciali**.
+>
+> **Il filtro prende TUTT'E TRE le forme di salto, e la terza è quella che conta.** Misurato su
+> un modulo costruito apposta, con `unittest` eseguito **davvero**:
+> ```
+> $ python -m unittest -v test_saltati_prova
+> test_uno (…TestA_decoratore) ... skipped 'MOTIVO-A: decoratore sul metodo'
+> test_due (…TestB_dentro_il_corpo) ... skipped 'MOTIVO-B: skipTest nel corpo'
+> skipped 'MOTIVO-C: SkipTest in setUpClass'          <- ANONIMO, nemmeno con -v
+> $ grep -cE '\.\.\. skipped '          con_v.txt  -> 2   (il filtro ovvio ne PERDE uno)
+> $ grep -cE '^(.* \.\.\. )?skipped '   con_v.txt  -> 3   (quello scritto in ci.yml)
+> ```
+> ⛔ **E una cosa che questo referto non aveva visto:** i due metodi della classe saltata in
+> `setUpClass` **non entrano nemmeno nel totale `Ran`**. Cinque metodi nel file, `Ran 3 tests`.
+> Spariscono **due volte**: una dal riepilogo e una dal conteggio.
+>
+> **La guardia**, `TestLaCIDiceCosaHaSALTATO` in `test_pipeline_ci.py`, con **D20 nell'ordine**:
+> ```
+> rosso: AssertionError: [] is not true : NESSUNO dei job che lanciano la suite intera
+>        (copertura, full-suite, full-suite-311) pubblica i test SALTATI …     EXIT=1
+> fix:   ci.yml — `discover -v` + il passo «I test saltati, nel riepilogo»
+> verde: Ran 3 tests in 0.341s — OK                                            EXIT=0
+> ```
+> Il criterio **non nomina nessun job**: li deriva da `-m unittest` + (`discover` oppure `$(`),
+> come la guardia z3. I tre nomi qui sopra li ha trovati lei, non li ho scritti io.
+>
+> **Provata nelle DUE direzioni** (regola ferrea 10), su uscita **vera** di `unittest`, non su
+> un'imitazione scritta a mano, e col modello di ricerca **preso da `ci.yml`** invece che
+> ricopiato — una copia resterebbe verde su se stessa il giorno che il workflow cambia:
+> `…VEDE_ANCHE_IL_SALTO_ANONIMO_DI_setUpClass` (con salti: li prende tutti) ·
+> `…NON_INVENTA_RIGHE_QUANDO_NON_C_E_NIENTE_DA_DIRE` (senza salti: zero righe).
+>
+> **E i tre rami difensivi visti rossi uno per uno** (D19: un ramo difensivo mai eseguito è
+> indistinguibile da codice morto). Guasto iniettato **con l'editor**, mai con una sostituzione
+> testuale (B2), ripristino da copia in mano e **impronta verificata**:
+> ```
+> (a) tolto `-v`            -> «pubblica i test saltati ma lancia la suite SENZA -v»   EXIT=1
+> (b) always() -> failure() -> «pubblica i saltati SOLO quando è già rosso»            EXIT=1
+> (c) filtro ristretto      -> «NON prende il salto SALTO-C»                           EXIT=1
+> sha256 ci.yml PRIMA: 46f597fc516711a834aaef4a052595e134a21a80a90350c3bbcdaec28e6f936e
+> sha256 ci.yml DOPO : 46f597fc516711a834aaef4a052595e134a21a80a90350c3bbcdaec28e6f936e
+> ```
+>
+> ⚠️ **PREZZO DICHIARATO** (D18 punto 3): `-v` allunga il registro **a schermo** di una riga per
+> test. Quel registro era **già** dichiarato inaffidabile — GitHub lo tronca, ed è scritto nel
+> commento del passo «Suite completa». Le due vie che contano, il **riepilogo** e l'**allegato**,
+> migliorano. Il prezzo si paga dove era già rotto.
+>
+> ⚠️ **IL CASO VIVO DELL'ANONIMATO — e attenzione, NON è un caso che la CI mostrerà.** Dalla
+> shell da cui parte davvero la suite `openssl` **non c'è** (`Get-Command openssl` da PowerShell
+> → **vuoto**; da Git Bash c'è: è la S11 misurata di nuovo). Lì scatta
+> `test_backup_completo.py:122`, `raise unittest.SkipTest(...)` **dentro `setUpClass`**
+> (righe 105-106) della classe `TestRipristinoAPezziNonPassa` (`:84`, **5 metodi contati adesso
+> nel file**): **un salto solo, senza nome, per cinque guardie sul ripristino dei dati** — e
+> quei cinque non entrano nemmeno nel totale `Ran`. È la forma esatta che questa riparazione
+> rende leggibile.
+>
+> ⛔ **Ma la riga sopra quel salto va letta, ed è la ragione per cui la CI NON lo vedrà:**
+> ```
+> if sys.platform.startswith("linux"):
+>     raise AssertionError("mancano %s: la guardia del restore NON e' stata eseguita, e su
+>                           Linux questo non e' un salto legittimo")
+> ```
+> Su Linux — cioè **in CI** — quei cinque **diventano ROSSI, non saltati**. Chi ha scritto quel
+> file l'aveva già capito e ha chiuso il buco lì. Quindi questo caso dimostra che
+> **l'anonimato è reale e attivo nel progetto**, non che la CI lo stia subendo oggi. Scriverlo
+> al contrario sarebbe stato più convincente e falso.
 
 *(corsia B, 2026-08-28. **È la cosa che la corsia B indica come la più utile da fare dopo**, e
-regge alla verifica.)*
+regge alla verifica. Il referto originale resta qui sotto: dice perché la riparazione è quella.)*
 
 Un job verde **non distingue** «ho eseguito 6042 test» da «ne ho saltati 300 in silenzio». E
 oggi non c'è modo di guardare dentro, misurato:
@@ -1671,18 +1789,98 @@ pezzi** mentre il giro è verde. Non è un difetto oggi: è una **trappola già 
 primo che automatizzerà la lettura dei log — e sarà convincente, perché 3540 è un numero che
 sembra una catastrofe.
 
-### 🔵 B30 — DOMANDA APERTA, NON UNA DIAGNOSI: il job `mutazione` importa z3 senza installarlo?
+### ✅ B30 — CHIUSA il 2026-08-28: il buco **non c'è**, e due metodi diversi concordano
 
-*(corsia B, 2026-08-28, dichiarata come domanda e non come referto)*
+*(corsia B, misurata su `b1e216e`. Era una domanda dichiarata; adesso ha una risposta.)*
 
-Il job `mutazione` **non installa niente** («stdlib pura»). Le due voci del catalogo su
-`dimostra_formalmente` sono equivalenti **già dimostrati, con impronta**: non servono z3 al
-giro. ⛔ **Non è stato verificato se `collaudi/mutazione_prodotto.py` importi z3 altrove.** Se
-lo facesse, quel job girerebbe **senza la libreria, in silenzio** — cioè esattamente il difetto
-che la #121 ha appena chiuso su `money-smoke`, in un altro job.
+**LA RISPOSTA È NO.** Il job `mutazione` non esegue nessun modulo che porti prove z3, quindi
+lì non si salta niente in silenzio.
 
-**Costa un `grep`.** È qui perché una domanda aperta dichiarata vale più di una diagnosi
-inventata, ed è la stessa forma di buco appena pagata una volta.
+⚠️ **E la prima misura diceva il contrario.** Sul grafo dei file — 128 file raggiunti
+dall'ingresso del job — z3 **compare**, con una catena che sembra convincente:
+```
+collaudi/mutazione_prodotto.py
+  -> sottoprocesso `python -m unittest test_admin_accounts`
+  -> fase83_server.py -> fase199_invarianti.py -> import z3
+```
+⛔ **È una sovrastima, ed è stata dichiarata tale invece che riferita.** Raggiungere un *file*
+non vuol dire *eseguire* quella funzione. Misurato:
+```
+$ sed -n '219,224p' fase199_invarianti.py
+    try:
+        import z3
+    except Exception:
+        return {"disponibile": "z3 assente"}
+```
+L'import sta **dentro** `dimostra_formalmente()` ed è **protetto**: non esplode, degrada.
+Quindi non conta chi raggiunge il file — conta **chi chiama la funzione**.
+
+**La misura decisiva, col criterio DEL PROGETTO e non con uno inventato** —
+`_moduli_di_test_con_prove_z3()` in `test_pipeline_ci.py`, che è già sotto guardia:
+```
+[1] funzioni di produzione che importano z3 (derivate dai file):
+      dimostra_formalmente · dimostra_transizioni   (tutt'e due in fase199_invarianti.py)
+[2] moduli di test che PORTANO PROVE z3: 3
+      test_fase199_invarianti · test_fase199_transizioni · test_property_soldi
+[3] moduli lanciati in sottoprocesso dal Giudice (campo 4 di MUTANTI, letto dall'ALBERO):
+      38 moduli — righe di MUTANTI lette 60, righe saltate NESSUNA
+[4] INCROCIO [2] ∩ [3]  ->  0
+```
+**Corroborazione con un metodo diverso**, non ripetendo la stessa misura due volte:
+```
+$ grep -n "test_property_soldi\|test_fase199" collaudi/mutazione_prodotto.py
+$ echo $?
+1        (nessuna occorrenza)
+```
+Albero sintattico e `grep` grezzo **concordano**. E le due voci del catalogo su
+`dimostra_formalmente` (righe 839 e 853) stanno in `EQUIVALENTI_DICHIARATI`, **non** in
+`MUTANTI`: sono dimostrazioni del 2026-07-31 archiviate con impronta `sha256`, e verificarle
+costa stdlib, non z3.
+
+⛔ **IL LIMITE RESTA SCRITTO, e non si toglie per far sembrare la risposta più netta.** Il
+criterio [2] guarda **UN SOLO SALTO** — lo dichiara da sé nella propria docstring: un test che
+chiama una funzione che ne chiama un'altra che importa z3 non lo vede. **Non è stato
+allargato**: allargarlo produce falsi allarmi, che sono un difetto quanto un allarme mancato
+(regola ferrea 10), e quella decisione non spettava a chi misurava. Restano fuori anche gli
+import costruiti a runtime con nomi non letterali, le dipendenze native dei pacchetti esterni,
+e ciò che il runner `ubuntu-latest` ha già preinstallato.
+
+---
+
+### 🟠 B31 — LA GUARDIA DELLA #121 NON VEDE IL JOB `mutazione`: la porta è chiusa, la finestra accanto no
+
+*(corsia B, 2026-08-28 su `b1e216e`. **Trovata per strada mentre si misurava B30**, e vale più
+della risposta a B30.)*
+
+**Il difetto.** La guardia `test_OGNI_job_che_esegue_le_prove_z3_LE_INSTALLA` cerca `-m
+unittest` **dentro `ci.yml`**. Il job `mutazione` non lo contiene:
+```
+$ grep -n "run: python collaudi/" .github/workflows/ci.yml
+361:  mutazione_prodotto.py      <- questo LANCIA test
+448:  cricchetto_statico.py      (analisi statica, non lancia test)
+859:  fuzz_soldi.py              (fuzzing, non lancia test)
+```
+Lancia `unittest` **da dentro Python**, in sottoprocesso
+(`collaudi/mutazione_prodotto.py:2016`). Per quella guardia quel job **non esiste**. È la
+stessa forma di buco che la #121 ha chiuso, **uno strato più sotto**: la #121 ha chiuso la
+porta e ha lasciato aperta la finestra accanto.
+
+⚠️ **E QUI VA L'ALTRA METÀ, perché senza spaventa per niente.** Oggi **non costa nulla**, ed è
+misurato: l'incrocio di B30 è **vuoto**, quindi nessun modulo con prove z3 passa da lì. In più
+il Giudice ha il suo paracadute meccanico — **BASE ROSSA**, `collaudi/mutazione_prodotto.py:1912-1922`
+e `:2478-2480`: se i test killer non sono verdi sul codice sano, **grida e salta il giro**
+invece di stampare un punteggio. Con una dipendenza mancante quel job **fa rumore, non
+silenzio**. Il rischio è **futuro, non vivo**.
+
+**Quando diventerebbe vivo.** Il giorno che qualcuno mette nel campo 4 di `MUTANTI` un modulo
+che porta prove z3: quelle prove si salterebbero in silenzio dentro un giro che nessuna guardia
+sorveglia — e la BASE ROSSA non se ne accorgerebbe, perché uno `skipTest` **non è un rosso**.
+
+💡 **La forma della riparazione, non decisa:** il criterio della #121 riconosce un job dal
+`run:` scritto nel `.yml`. Un job che lancia test da dentro uno strumento resta invisibile per
+costruzione. Chi la chiude deve derivare i moduli lanciati **anche** dagli strumenti, non solo
+dal workflow. ⛔ Tocca una guardia della CI, non produzione: vale D20, la guardia **prima** e
+vista **rossa**.
 
 ---
 

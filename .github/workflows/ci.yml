@@ -152,9 +152,19 @@ jobs:
       # python: niente `| tee` (un tubo restituisce l'esito dell'ULTIMO comando, ed e'
       # gia' costato una volta a questo progetto) e niente `|| true`, che disarmerebbe il
       # gate. Il `cat` serve perche' il log resti anche a schermo, come prima.
+      #
+      # ⛔ `-v` NON E' VERBOSITA' PER GUSTO: senza, il registro non contiene NESSUN test
+      # saltato. A voce bassa `unittest` stampa `sss.` e `OK (skipped=3)` -- il conto, mai
+      # i nomi ne' i motivi (misurato il 2026-08-28, voce B24). Con `-v` ogni salto lascia
+      # la sua riga, e il passo qui sotto la puo' pubblicare; senza, quel passo sarebbe un
+      # ornamento che guarda un registro incapace di contenere la risposta.
+      # Prezzo dichiarato: una riga per test in piu' nel registro A SCHERMO, che era gia'
+      # dichiarato inaffidabile qui sopra (GitHub lo tronca). Le due vie che contano -- il
+      # riepilogo e l'allegato -- migliorano, quindi il prezzo si paga dove era gia' rotto.
+      # `discover` resta attaccato a `unittest`: il gate cerca quella coppia di parole.
       - name: Suite completa
         run: |
-          python -m unittest discover -s . -p "test_*.py" > suite.log 2>&1 || ESITO=$?
+          python -m unittest discover -v -s . -p "test_*.py" > suite.log 2>&1 || ESITO=$?
           cat suite.log
           exit ${ESITO:-0}
 
@@ -172,6 +182,34 @@ jobs:
             echo '```'
             echo ""
             echo "_Registro completo: allegato \`suite-log-full-suite\` di questa run._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # I test SALTATI. ⛔ `if: always()` NON e' una svista ed e' il punto di tutto il
+      # passo: il caso da scoprire e' la run VERDE. Un job verde non distingue «ho eseguito
+      # tutta la suite» da «ne ho saltato un pezzo in silenzio», e da fuori non c'e' modo
+      # di guardare dentro -- misurato: `/actions/jobs/{id}/logs` -> 401, il download degli
+      # allegati -> 401, `output.summary` delle check-run -> VUOTO su tutti i job. Il
+      # riepilogo e' l'unica finestra che si legge senza diritti da amministratore.
+      #
+      # Il modello prende TUTT'E TRE le forme di salto, e la terza e' quella che conta:
+      #   nome (modulo.Classe) ... skipped 'motivo'   <- decoratore, o skipTest nel corpo
+      #   skipped 'motivo'                            <- deciso in setUpClass: ANONIMO
+      # Il filtro ovvio (`... skipped`) prende solo le prime due. Un salto deciso in
+      # `setUpClass` non porta nome di classe ne' di modulo nemmeno con `-v`: e' un limite
+      # di unittest, ed e' esattamente la forma con cui qui spariscono in blocco le guardie
+      # sul ripristino dei backup quando manca `openssl` (D23 punto 3). Sopravvive solo il
+      # MOTIVO, quindi il riepilogo lo dichiara invece di lasciar credere a una riga persa.
+      - name: I test saltati, nel riepilogo (si legge senza permessi)
+        if: always()
+        run: |
+          {
+            echo "## Test saltati in \`full-suite\`"
+            echo ""
+            echo '```'
+            grep -E '^(.* \.\.\. )?skipped ' suite.log || echo "(nessun test saltato in questa run)"
+            echo '```'
+            echo ""
+            echo "_Un salto deciso in \`setUpClass\` non porta il nome della classe: \`unittest\` stampa il solo motivo, nemmeno con \`-v\`. Non e' una riga persa qui._"
           } >> "$GITHUB_STEP_SUMMARY"
 
       # E il registro INTERO come allegato, per quando il riepilogo non basta.

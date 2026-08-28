@@ -403,6 +403,112 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🔵 UN JOB VERDE NON DICEVA COSA AVEVA SALTATO — 2026-08-28
+
+*(corsia B, ramo `lavoro-b` su `b1e216e`. Chiude **B24**, chiude **B30**, apre **B31**. Scritta
+nello STESSO lavoro della riparazione: la volta prima la voce era mancata, e la frase che lo
+riassume era «il messaggio di commit non è il registro, e vive in un posto che nessuno rilegge
+per capire cosa esiste».)*
+
+**Cosa era rotto (B24).** Un job verde **non distingue** «ho eseguito tutta la suite» da «ne ho
+saltato un pezzo in silenzio», e dall'esterno non c'è modo di guardare dentro: i log via API
+rispondono **401**, il download degli allegati **401**, e `output.summary` delle check-run è
+**vuoto** su tutti i job. L'unica finestra leggibile senza diritti da amministratore è il
+**riepilogo della run** — dove i test **caduti** finivano già, e i **saltati** no.
+
+**Il fatto tecnico, misurato e non riferito.** Costruito un modulo con le tre forme di salto ed
+eseguito `unittest` davvero:
+
+```
+$ python -m unittest test_saltati_prova        ->  sss.   Ran 3 tests   OK (skipped=3)
+$ python -m unittest -v test_saltati_prova
+test_uno (…TestA_decoratore)     ... skipped 'MOTIVO-A: decoratore sul metodo'
+test_due (…TestB_dentro_il_corpo) ... skipped 'MOTIVO-B: skipTest nel corpo'
+skipped 'MOTIVO-C: SkipTest in setUpClass'      <- ANONIMO: nessun nome, nemmeno con -v
+```
+
+Due scoperte oltre il referto: **senza `-v` non esiste nessun motivo** nel registro (solo il
+conto), e i metodi della classe saltata in `setUpClass` **non entrano nel totale `Ran`** —
+cinque metodi nel file, `Ran 3 tests`. **Spariscono due volte.**
+
+**La riparazione**, con **D20** rispettato — rosso letto **prima**:
+
+```
+rosso:  AssertionError: [] is not true : NESSUNO dei job che lanciano la suite intera
+        (copertura, full-suite, full-suite-311) pubblica i test SALTATI …        EXIT=1
+fix:    ci.yml  ·  `discover -v`  +  passo «I test saltati, nel riepilogo», `if: always()`
+verde:  Ran 3 tests in 0.341s — OK                                               EXIT=0
+```
+
+**Cosa è cambiato nella logica, ed è la parte che dura.** Due scelte, e nessuna è cosmetica:
+- **`-v` e il passo vanno insieme.** Un passo che pubblica leggendo un registro incapace di
+  contenere la risposta è un **ornamento** (regola ferrea 2). La guardia pretende tutt'e due, e
+  diventa rossa se qualcuno toglie solo il `-v`.
+- **`if: always()`, non `failure()`.** Il caso da scoprire è **la run verde**. Su `failure()` il
+  passo esisterebbe e non guarderebbe mai il caso per cui è stato scritto.
+
+Il criterio **non nomina nessun job**: li deriva da `-m unittest` + (`discover` oppure `$(`),
+come la guardia z3 della #121. I tre nomi nel messaggio d'errore li ha trovati lei.
+
+**Provata nelle DUE direzioni** (regola ferrea 10) su uscita **vera** di `unittest`, e col
+modello di ricerca **preso da `ci.yml`** invece che ricopiato — una copia resterebbe verde su
+se stessa il giorno che il workflow cambia. **E i tre rami difensivi visti rossi uno per uno**
+(D19), guasto iniettato **con l'editor** (B2), `sha256` di `ci.yml` **identico** prima e dopo:
+`46f597fc…6f936e` → `46f597fc…6f936e`.
+
+**Cosa NON era rotto (B30), e la prima misura diceva il contrario.** Il grafo dei file dice che
+il job `mutazione` raggiunge `import z3`. **È una sovrastima, dichiarata invece che riferita**:
+l'import sta dentro `dimostra_formalmente()` ed è protetto, quindi conta chi **chiama**, non chi
+raggiunge. Col criterio del progetto (`_moduli_di_test_con_prove_z3`): **incrocio ZERO** fra i 3
+moduli con prove z3 e i 38 lanciati dal Giudice. Corroborato con un metodo **diverso** (`grep`
+grezzo, uscita 1). ⚠️ Limite dichiarato e non tolto: quel criterio guarda **un solo salto**.
+
+**Cosa è emerso per strada (B31).** La guardia della #121 cerca `-m unittest` **dentro
+`ci.yml`**; il job `mutazione` lancia unittest **da dentro Python**, in sottoprocesso: per
+quella guardia **è invisibile**. La #121 ha chiuso la porta e lasciato aperta la finestra
+accanto. ⚠️ Oggi **non costa niente** — incrocio vuoto — e il Giudice ha il paracadute
+**BASE ROSSA** (`collaudi/mutazione_prodotto.py:1912-1922`) che **grida invece di tacere**: il
+rischio è **futuro, non vivo**. Diventa vivo il giorno che un modulo con prove z3 entra nel
+campo 4 di `MUTANTI`.
+
+**Dipendenze/env:** nessuna nuova. `-v` è un'opzione di `unittest`, il passo nuovo usa solo
+`grep` e `$GITHUB_STEP_SUMMARY`. **Prezzo dichiarato:** `-v` allunga il registro **a schermo**,
+che era già dichiarato inaffidabile (GitHub lo tronca); riepilogo e allegato migliorano.
+**STATO: acceso**, gira a ogni richiesta di unione dentro il gate.
+
+🩹 **E uno sbaglio mio, che è costato quaranta minuti e va scritto.** Per lanciare da PowerShell
+vera avevo costruito un lanciatore che leggeva i due tubi così: `StandardOutput.ReadToEnd()` e
+**poi** `StandardError.ReadToEnd()`. È l'incastro classico — il figlio si blocca a riempire
+stderr, il padre è fermo su stdout, si aspettano a vicenda — e `unittest` scrive proprio su
+stderr. Il giro è rimasto appeso 40 minuti e **l'ho buttato**. Quello che l'ha smascherato non è
+il cronometro ma la **CPU**: `0,86 secondi consumati in 40 minuti` — un processo lento brucia
+CPU, uno bloccato no. È la **S3** in forma pura: *quando una misura è assurda, il primo sospetto
+va allo strumento, non al codice*. Riparato con la redirezione su file fatta dal sistema
+operativo, e **provato sul guasto vero** (200 KB su stderr, uscita 7) invece di supporlo a
+posto. Per strada altri due difetti silenziosi nello stesso attrezzo: `Start-Process -PassThru`
+**senza `-Wait`** restituisce `ExitCode` **vuoto** (una riga che *sembra* un esito e non lo è), e
+`Set-Content -Encoding UTF8` di PS 5.1 scrive un **BOM** che rompe ogni `grep '^…'` sulla prima
+riga.
+
+🩹 **E una frase falsa nel riquadro dei numeri, trovata rimisurando e corretta nello stesso
+lavoro.** Il riquadro `STATO MISURATO` di `RIPRENDI_QUI.md` spiegava la riga `SUITE ATTUALE:`
+dicendo «Quindi 6028 è il numero del caricatore» — sotto una riga che ne dichiarava **6045**.
+Non l'ha introdotta questa corsia: su `master` la riga diceva `Ran 6042` e la prosa diceva
+**già** 6028, cioè la spiegazione era rimasta indietro di **due** aggiornamenti del numero. È
+esattamente la marcescenza che quel riquadro **si autodenuncia** poche righe più sotto («la
+prosa qui sopra ha mentito per un giorno… una spiegazione non aggiornata è peggio di nessuna
+spiegazione, perché sembra una verifica già fatta») — ripetuta due paragrafi **sopra** la
+denuncia. Riparata nel modo che detta la **S17**: la spiegazione **non nomina più la cifra**,
+perché una frase che non contiene il numero non può diventare falsa. Nella stessa riga c'era un
+secondo riferimento scaduto, `test_pipeline_ci.py:2054`: tolto, perché le righe si spostano a
+ogni modifica del file e una guardia **si cerca per nome**. Il numero `6045` invece **regge**,
+rimisurato col caricatore da PowerShell vera prima di qualunque giro: `CARICATORE=6045`,
+`MODULI_NON_IMPORTABILI=0` — e quel secondo conto c'è perché `discover()` non esplode su un
+modulo che non si importa, ci mette dentro un finto test che **conta**, cioè un modulo rotto
+*alza* il totale invece di abbassarlo.
+
+---
+
 ### 🔵 IL JOB `money-smoke` ERA CIECO SUL TEOREMA DEI SOLDI — 2026-08-28
 
 *(corsia B, unito con la richiesta **#121**, `c5783ff` → `58d20cb`. Scritto qui il 2026-08-28
