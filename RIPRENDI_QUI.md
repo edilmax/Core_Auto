@@ -508,9 +508,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 5d6e0b3
+CONSEGNE AGGIORNATE A: b1e216e
 
-SUITE ATTUALE: Ran 6042 test
+SUITE ATTUALE: Ran 6046 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (test_pipeline_ci.py:2054, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -518,7 +518,7 @@ SUITE ATTUALE: Ran 6042 test
    un giro: e' il difetto B14, e non si chiude qui -- si chiude cambiando quella regex, che
    sta in un file di test e non e' questo lavoro. Le due voci vere sono qui sotto.
 
-CARICATORE (RACCOLTI):  6042  <- rimisurato il 2026-08-28 col caricatore, da PowerShell,
+CARICATORE (RACCOLTI):  6046  <- rimisurato il 2026-08-28 col caricatore, da PowerShell,
                                  PRIMA di qualunque giro (S14), DOPO l'unione di TUTTE E TRE
                                  le corsie.
                                  ⛔ IL NUMERO QUI SOPRA E' USCITO DAL CARICATORE, non da una
@@ -547,6 +547,21 @@ CARICATORE (RACCOLTI):  6042  <- rimisurato il 2026-08-28 col caricatore, da Pow
                                  chi la leggeva trovava «gli 8 in piu'» sotto un +14. Una
                                  spiegazione non aggiornata e' peggio di nessuna spiegazione,
                                  perche' sembra una verifica gia' fatta.
+                                 6042 -> 6046 (+4), il 28 agosto pomeriggio: le 4 guardie di
+                                 `TestIlCricchettoDiceQUALEGuastoHaAvuto` in
+                                 `test_pipeline_ci.py` (corsia A). Pretendono che il
+                                 cricchetto degli strumenti statici dica QUALE guasto ha
+                                 avuto, invece di rispondere `2` a quattro domande diverse --
+                                 fra cui «gitleaks non c'e'», cioe' «nessuno sta cercando le
+                                 chiavi», e «hai scritto male il comando».
+                                 ⛔ NON e' `6042 + 4`: quella sarebbe un'aritmetica, non una
+                                 misura, ed e' esattamente da dove viene la D22. Il numero
+                                 esce dal caricatore, da PowerShell vera, sull'albero gia'
+                                 allineato a b1e216e e PRIMA di qualunque giro (S14):
+                                   python -c "import unittest; print(unittest.TestLoader()
+                                     .discover('.', pattern='test_*.py').countTestCases())"
+                                   -> CARICATORE: 6046   EXIT=0
+                                 Il `+4` e' il racconto; il 6046 e' la misura.
 ESEGUITI (ultimo giro): 6037  <- MISURATO il 2026-08-28 in Core_Auto, sull'albero che porta
                                  questo passaggio sui documenti:
                                    Ran 6037 tests in 1728.728s

@@ -43,11 +43,34 @@ COME SI USA
     python collaudi/cricchetto_statico.py tutti
     python collaudi/cricchetto_statico.py ruff --azzera     <- rifa' la fotografia
 
-CODICI DI USCITA
+CODICI DI USCITA — uno per esito, e il perche' e' costato una casella cieca
     0 = nessuna segnalazione nuova rispetto alla fotografia
     1 = segnalazioni NUOVE (elencate)          -> il gate blocca
-    2 = lo strumento non c'e' o e' esploso     -> il gate blocca lo stesso, ma
-        il messaggio dice che il problema e' l'attrezzo, non il codice.
+    2 = NON E' NOSTRO: e' l'errore d'uso di argparse (comando scritto male)
+    3 = l'attrezzo non c'e'                    -> installalo
+    4 = l'attrezzo e' esploso mentre leggeva   -> guarda perche'
+    5 = manca la FOTOGRAFIA                    -> rifalla con `--azzera`
+    Da 1 a 5 il gate blocca: cambia solo cosa devi andare a fare.
+
+⛔ PERCHE' NON BASTAVA UN 2 PER TUTTI, misurato il 2026-08-28 su `aaf9b59`. Fino a
+quel giorno i tre guasti qui sopra uscivano TUTTI `2`, cioe' lo stesso numero con
+cui argparse annuncia un refuso nel comando. Chi leggeva un `2` non poteva sapere
+se aveva sbagliato a scrivere la riga o se NESSUNO stava piu' cercando le chiavi
+finite nel codice — su un repository PUBBLICO, dove una chiave che entra non si
+ripara: si revoca, e intanto e' gia' stata letta. Il caso grave era
+indistinguibile da quello innocuo, che e' la forma peggiore dell'osservabile
+debole (regola ferrea 9): non un log povero, un VERDETTO AMBIGUO.
+E la meta' peggiore non era il numero: la tabella finale mappava `2` sull'unica
+etichetta «ATTREZZO NON USABILE», quindi quando mancava la fotografia lo
+strumento ANNUNCIAVA UN GUASTO CHE NON ERA IL SUO, e mandava a cercare un
+attrezzo rotto che stava benissimo (modo di rompersi n. 3, testi che mentono).
+Guardia: `TestIlCricchettoDiceQUALEGuastoHaAvuto` in `test_pipeline_ci.py`.
+
+⚠️ COSA IL CODICE D'USCITA COMPLESSIVO NON DICE (D18 punto 3). Con `tutti`, il
+verdetto finale e' il PIU' ALTO dei cinque: se un attrezzo manca (3) mentre un
+altro ha segnalazioni nuove (1), esce 3 e l'1 non si vede nel numero. Non si
+perde niente lo stesso, perche' la tabella in fondo stampa l'esito di OGNI
+strumento riga per riga: il numero e' un riassunto, la tabella e' la misura.
 
 ⛔ VISTO ROSSO: `--autoprova` inietta una segnalazione finta nella lettura e
 pretende che il confronto la veda. Un cricchetto che non e' mai stato visto
@@ -119,6 +142,32 @@ def _temporaneo(nome):
     if not os.path.isdir(cartella):
         os.makedirs(cartella)
     return os.path.join(cartella, nome)
+
+
+#  ---------------------------------------------------------------------------
+#   I CODICI D'USCITA, con un nome ciascuno.
+#   Perche' un nome e non il numero scritto a mano dentro le funzioni: un numero
+#   ripetuto in tre punti si separa in due e nessuno se ne accorge. Il 2 NON
+#   compare qui, e non e' una dimenticanza: appartiene ad argparse, che lo usa
+#   per l'errore d'uso. Prenderselo significherebbe litigare per sempre con la
+#   libreria standard, e riaprire l'ambiguita' che questi nomi chiudono.
+#  ---------------------------------------------------------------------------
+OK = 0
+SEGNALAZIONI_NUOVE = 1
+ATTREZZO_ASSENTE = 3
+LETTURA_FALLITA = 4
+FOTOGRAFIA_MANCANTE = 5
+
+#  L'etichetta che la tabella finale stampa accanto a ogni strumento. Sta qui e
+#  non dentro `principale()` perche' la guardia la legge, e perche' una mappa che
+#  copre TUTTI i codici non puo' piu' annunciare il guasto sbagliato.
+ETICHETTE = {
+    OK: "ok",
+    SEGNALAZIONI_NUOVE: "SEGNALAZIONI NUOVE",
+    ATTREZZO_ASSENTE: "ATTREZZO ASSENTE (installalo)",
+    LETTURA_FALLITA: "ATTREZZO ESPLOSO (guarda perche')",
+    FOTOGRAFIA_MANCANTE: "MANCA LA FOTOGRAFIA (--azzera)",
+}
 
 
 class AttrezzoAssente(Exception):
@@ -342,12 +391,14 @@ def giudica(nome, azzera=False, autoprova=False):
     try:
         voci = LETTORI[nome]()
     except AttrezzoAssente as e:
-        print("  ⛔ ATTREZZO NON UTILIZZABILE: %s" % e)
+        print("  ⛔ ATTREZZO ASSENTE: %s" % e)
         print("     Non e' un giudizio sul codice: e' lo strumento che manca.")
-        return 2
+        print("     Finche' manca, qui NON STA GUARDANDO NESSUNO: non e' un verde.")
+        return ATTREZZO_ASSENTE
     except (ValueError, OSError) as e:
         print("  ⛔ LETTURA FALLITA: %s: %s" % (type(e).__name__, e))
-        return 2
+        print("     L'attrezzo c'e' ed e' partito: si e' rotto mentre leggeva.")
+        return LETTURA_FALLITA
 
     if autoprova:
         #  ⛔ VISTO ROSSO: una segnalazione finta, in un file che non esiste.
@@ -363,14 +414,16 @@ def giudica(nome, azzera=False, autoprova=False):
         print("     scritta in %s" % _rel(percorso))
         print("     Da adesso questo e' il debito che NON blocca. Tutto cio' che")
         print("     compare in piu' blocca.")
-        return 0
+        return OK
 
     baseline = carica_baseline(nome)
     if baseline is None:
-        print("  ⛔ NESSUNA FOTOGRAFIA: manca %s" % _rel(percorso_baseline(nome)))
+        print("  ⛔ MANCA LA FOTOGRAFIA: non c'e' %s"
+              % _rel(percorso_baseline(nome)))
+        print("     L'attrezzo sta benissimo: e' il metro di paragone che non c'e'.")
         print("     Falla con:  python collaudi/cricchetto_statico.py %s --azzera"
               % nome)
-        return 2
+        return FOTOGRAFIA_MANCANTE
 
     nuove, sparite = confronta(nome, voci, baseline)
     print("  segnalazioni adesso ....... %d" % len(voci))
@@ -378,7 +431,7 @@ def giudica(nome, azzera=False, autoprova=False):
     print("  chiavi sparite (debito -) . %d" % len(sparite))
     if not nuove:
         print("  ✅ NESSUNA SEGNALAZIONE NUOVA.")
-        return 0
+        return OK
     print("  🔴 SEGNALAZIONI NUOVE: %d" % sum(d for _c, d, _e in nuove))
     for chiave, delta, esempio in nuove:
         print("     +%d  %s" % (delta, chiave))
@@ -388,7 +441,7 @@ def giudica(nome, azzera=False, autoprova=False):
     print("  Queste NON sono debito vecchio: sono comparse adesso.")
     print("  Si chiudono nel codice nuovo. La fotografia si rifa' solo per")
     print("  DIMINUIRE il debito, mai per assorbire un rilievo appena creato.")
-    return 1
+    return SEGNALAZIONI_NUOVE
 
 
 def _console_utf8():
@@ -424,10 +477,23 @@ def principale(argomenti=None):
     print("")
     print("=" * 78)
     for nome in nomi:
-        etichetta = {0: "ok", 1: "SEGNALAZIONI NUOVE", 2: "ATTREZZO NON USABILE"}
-        print("  %-12s %s" % (nome, etichetta[esiti[nome]]))
+        #  ⛔ `ETICHETTE` copre TUTTI i codici, e si legge da li'. La mappa scritta
+        #  a mano qui dentro ne conosceva tre e i codici erano cinque: «manca la
+        #  fotografia» veniva annunciato come «ATTREZZO NON USABILE», cioe' una
+        #  frase falsa che mandava a cercare il guasto dalla parte opposta.
+        #  Il `%r` del ripiego non e' ornamentale: se un giorno nascesse un codice
+        #  nuovo senza etichetta, qui si vedrebbe il numero nudo invece di una
+        #  descrizione sbagliata presa a caso.
+        print("  %-12s %s" % (nome, ETICHETTE.get(esiti[nome],
+                                                  "codice %r senza etichetta"
+                                                  % esiti[nome])))
     print("=" * 78)
-    return max(esiti.values()) if esiti else 2
+    #  Il piu' alto vince: un attrezzo che manca (3/4/5) copre nel NUMERO delle
+    #  segnalazioni nuove (1), e la tabella qui sopra e' il posto dove si vedono
+    #  tutte e due. `esiti` vuoto non puo' succedere (`choices` di argparse lo
+    #  impedisce): se succedesse, non abbiamo giudicato niente, e «niente
+    #  giudicato» e' una lettura fallita, non un refuso nel comando.
+    return max(esiti.values()) if esiti else LETTURA_FALLITA
 
 
 if __name__ == "__main__":

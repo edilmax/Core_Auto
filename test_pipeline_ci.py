@@ -10009,5 +10009,190 @@ class TestUnaSolaListaDiCoseDaFare(unittest.TestCase):
             % (len(colpevoli), " e ".join(self.ESENTI), "\n    ".join(colpevoli)))
 
 
+class TestIlCricchettoDiceQUALEGuastoHaAvuto(unittest.TestCase):
+    """⛔ IL DIFETTO, misurato il 2026-08-28 su `aaf9b59`: `collaudi/cricchetto_statico.py`
+    rispondeva **2** a quattro domande diverse, e tre di quei 2 li decideva lui.
+
+        python collaudi/cricchetto_statico.py gitleaks   -> EXIT=2   l'attrezzo non c'e'
+        python collaudi/cricchetto_statico.py gitleeks   -> EXIT=2   refuso (argparse)
+        python collaudi/cricchetto_statico.py            -> EXIT=2   argomento mancante
+
+    piu' «lettura fallita» e «manca la fotografia», che uscivano 2 anche loro. Chi legge
+    un 2 non ha modo di sapere se ha sbagliato a scrivere il comando o se LA GUARDIA SUI
+    SEGRETI NON STA GUARDANDO — su un repository PUBBLICO, dove una chiave che entra non
+    si ripara: si revoca, e intanto e' gia' stata letta. E' la regola ferrea 9
+    (osservabile debole) nella sua forma peggiore: non un log povero, un VERDETTO
+    AMBIGUO, in cui il caso grave e' indistinguibile da quello innocuo.
+
+    ⛔ E la meta' peggiore non era il numero. La tabella finale mappava `2` sull'unica
+    etichetta «ATTREZZO NON USABILE»: quando mancava la FOTOGRAFIA, lo strumento
+    annunciava un guasto che non era il suo. Un numero ambiguo confonde; un'etichetta
+    falsa MENTE, ed e' il modo di rompersi n. 3 (testi che mentono) applicato a chi
+    dovrebbe fare da giudice.
+
+    ⛔ IL GUASTO SI INIETTA NEL LETTORE, NON NELL'AMBIENTE. Su questo computer
+    `gitleaks` manca davvero e in CI c'e': una prova appoggiata a quella differenza
+    direbbe due cose diverse nei due posti (modo di rompersi n. 8). Qui il guasto lo
+    costruisce il test, quindi la prova vale identica ovunque.
+
+    D20: vista ROSSA sul codice di prima — «l'attrezzo non c'e' e un refuso escono
+    TUTTI E DUE con 2» — e VERDE dopo la separazione 3/4/5. Ferrea 10: grida col guasto
+    dentro (i tre metodi qui sotto) e tace a macchina sana (l'ultimo, che pretende 0 e 1
+    intatti: separare i guasti non deve spostare gli esiti BUONI)."""
+
+    #  I due esiti che NON si toccano: sono il contratto con `ci.yml:441`, che guarda
+    #  solo «diverso da zero». Se un giorno cambiassero, il gate cambierebbe significato.
+    OK = 0
+    SEGNALAZIONI_NUOVE = 1
+    #  Il 2 resta di argparse, e non e' una scelta nostra: e' la convenzione della
+    #  libreria standard. Prendersi il 2 significherebbe litigare con lei per sempre.
+    ERRORE_D_USO = 2
+
+    @staticmethod
+    def _cricchetto():
+        """Il modulo caricato da zero a ogni prova: i metodi lo sporcano apposta."""
+        import importlib.util
+        p = os.path.join(QUI, "collaudi", "cricchetto_statico.py")
+        spec = importlib.util.spec_from_file_location("_cricchetto_statico", p)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    @staticmethod
+    def _muto(chiamata):
+        """Esegue `chiamata` senza stampare, e restituisce (esito, cio' che ha stampato)."""
+        vero = sys.stdout
+        sys.stdout = io.StringIO()
+        try:
+            return chiamata(), sys.stdout.getvalue()
+        finally:
+            sys.stdout = vero
+
+    def _codice_col_lettore_rotto(self, fabbrica):
+        """Il codice d'uscita quando il LETTORE di uno strumento alza il guasto che
+        `fabbrica(modulo)` costruisce.
+
+        ⛔ Il guasto si costruisce DENTRO lo stesso modulo che poi lo deve catturare, e
+        non e' un dettaglio di stile: `importlib` caricato due volte da' due moduli
+        DIVERSI, quindi `A.AttrezzoAssente` non e' `B.AttrezzoAssente` e l'`except` non
+        scatta. L'eccezione sfuggirebbe, il test direbbe ERROR, e sembrerebbe un difetto
+        del prodotto mentre e' il banco di prova a essere montato male (sbaglio S3)."""
+        m = self._cricchetto()
+
+        def _rotto():
+            raise fabbrica(m)
+        m.LETTORI["ruff"] = _rotto
+        esito, _stampato = self._muto(lambda: m.giudica("ruff"))
+        return esito
+
+    def _codice_senza_fotografia(self):
+        """Il codice d'uscita quando lo strumento gira ma la fotografia non c'e'."""
+        m = self._cricchetto()
+        m.LETTORI["ruff"] = lambda: []
+        m.carica_baseline = lambda _nome: None
+        esito, _stampato = self._muto(lambda: m.giudica("ruff"))
+        return esito
+
+    def _codice_di_argparse(self):
+        """Il 2 di argparse MISURATO, non ricordato: e' una convenzione altrui, e
+        una convenzione altrui e' esattamente il genere di numero che non si scrive
+        a memoria (D22).
+
+        Si chiama `principale()` in-processo e si legge il `SystemExit`, che e' da
+        dove argparse esce. Un sottoprocesso darebbe la stessa cifra, ma accenderebbe
+        `S603` su una riga che non ha nessun ingresso non fidato — e la fotografia del
+        cricchetto NON si rifa' per assorbire un rilievo appena creato: si chiude nel
+        codice nuovo. Qui si chiude togliendo il sottoprocesso, che non serviva."""
+        m = self._cricchetto()
+        vero_out, vero_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = io.StringIO(), io.StringIO()
+        try:
+            m.principale(["gitleeks"])
+        except SystemExit as uscita:
+            return uscita.code
+        finally:
+            sys.stdout, sys.stderr = vero_out, vero_err
+        self.fail("argparse NON e' uscito su un nome di strumento sbagliato: la "
+                  "premessa di questa prova non regge, e un controllo senza la sua "
+                  "premessa non e' verde, e' NON ESEGUITO (sbaglio S7)")
+
+    def test_L_ATTREZZO_ASSENTE_NON_SI_CONFONDE_CON_UN_REFUSO(self):
+        """La casella che conta: «la guardia non guarda» non puo' avere il numero di
+        «hai sbattuto sui tasti»."""
+        assente = self._codice_col_lettore_rotto(
+            lambda m: m.AttrezzoAssente("prova"))
+        refuso = self._codice_di_argparse()
+        self.assertNotEqual(
+            assente, refuso,
+            "VERDETTO AMBIGUO: «l'attrezzo non c'e'» e «hai scritto male il comando» "
+            "escono tutti e due con %d.\n"
+            "  Uno vuol dire che hai fatto un refuso e riscrivi la riga.\n"
+            "  L'altro vuol dire che NESSUNO sta cercando le chiavi finite nel codice, su "
+            "un repository PUBBLICO — e una chiave pubblicata non si ripara, si revoca.\n"
+            "  Chi legge il numero non puo' distinguerli, e il caso grave e' proprio quello "
+            "che sparisce dentro l'innocuo (regola ferrea 9)." % assente)
+
+    def test_I_TRE_GUASTI_DEL_CRICCHETTO_HANNO_TRE_NUMERI_DIVERSI(self):
+        """Tre guasti con rimedi diversi: installa un attrezzo · guarda perche' e' esploso
+        · rifai la fotografia. Un numero solo per tutti e tre non dice quale fare."""
+        misurati = {
+            "attrezzo assente": self._codice_col_lettore_rotto(
+                lambda m: m.AttrezzoAssente("prova")),
+            "lettura fallita": self._codice_col_lettore_rotto(
+                lambda _m: ValueError("json rotto")),
+            "fotografia mancante": self._codice_senza_fotografia(),
+        }
+        riservati = {"ok": self.OK, "segnalazioni nuove": self.SEGNALAZIONI_NUOVE,
+                     "errore d'uso (argparse)": self.ERRORE_D_USO}
+        tutti = dict(misurati)
+        tutti.update(riservati)
+        doppioni = [(a, b) for a in sorted(tutti) for b in sorted(tutti)
+                    if a < b and tutti[a] == tutti[b]]
+        self.assertEqual(
+            doppioni, [],
+            "DUE SIGNIFICATI SULLO STESSO NUMERO.\n"
+            "  misurati adesso: %s\n"
+            "  riservati:       %s\n"
+            "  coppie che collidono: %s\n"
+            "  Ogni esito che il cricchetto sa produrre deve avere il suo numero: e' "
+            "l'unica cosa che chi legge un codice d'uscita ha in mano."
+            % (misurati, riservati,
+               ", ".join("%s == %s" % (a, b) for a, b in doppioni)))
+
+    def test_L_ETICHETTA_NON_ANNUNCIA_UN_ATTREZZO_ROTTO_SE_MANCA_LA_FOTOGRAFIA(self):
+        """Il numero puo' essere ambiguo per pigrizia; l'etichetta e' una FRASE, e una
+        frase sbagliata manda a cercare il guasto dalla parte opposta."""
+        m = self._cricchetto()
+        m.LETTORI["ruff"] = lambda: []
+        m.carica_baseline = lambda _nome: None
+        _esito, stampato = self._muto(lambda: m.principale(["ruff"]))
+        self.assertNotIn(
+            "ATTREZZO NON USABILE", stampato,
+            "LA TABELLA DICE IL FALSO: manca la FOTOGRAFIA, e lo strumento annuncia "
+            "«ATTREZZO NON USABILE».\n"
+            "  Chi legge va a cercare un attrezzo rotto che sta benissimo, mentre il "
+            "rimedio vero e' una riga (`--azzera`).\n"
+            "  Ecco cosa ha stampato:\n%s" % stampato)
+
+    def test_A_MACCHINA_SANA_GLI_ESITI_BUONI_NON_SI_SPOSTANO(self):
+        """L'altra direzione (ferrea 10): un allarme che grida sempre viene spento.
+        Separare i guasti non deve toccare i due esiti che la CI legge davvero."""
+        m = self._cricchetto()
+        m.LETTORI["ruff"] = lambda: []
+        m.carica_baseline = lambda _nome: {"totale": 0, "chiavi": 0, "voci": {}}
+        pulito, _s = self._muto(lambda: m.giudica("ruff"))
+        self.assertEqual(pulito, self.OK,
+                         "una lettura pulita contro una fotografia che la contiene deve "
+                         "restare 0: e' il verde su cui si appoggia `ci.yml:441`")
+
+        m2 = self._cricchetto()
+        m2.LETTORI["ruff"] = lambda: [("file_nuovo.py|F401", "import inutilizzato")]
+        m2.carica_baseline = lambda _nome: {"totale": 0, "chiavi": 0, "voci": {}}
+        nuovo, _s2 = self._muto(lambda: m2.giudica("ruff"))
+        self.assertEqual(nuovo, self.SEGNALAZIONI_NUOVE,
+                         "una segnalazione NUOVA deve restare 1: se cambiasse, il gate "
+                         "smetterebbe di dire cio' che ha sempre detto")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
