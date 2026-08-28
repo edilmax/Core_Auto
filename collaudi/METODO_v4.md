@@ -501,52 +501,164 @@ Poi conto per famiglia. **La famiglia con più difetti è quella dove mi manca u
 Prima di prendere soldi veri di sconosciuti. Nessuna percentuale: tutte sì o no.
 
 **Soldi**
-- [ ] Nessun numero con la virgola tocca il denaro
-- [ ] La divisione delle commissioni somma sempre al totale
-- [ ] Partita doppia attiva, addebiti = accrediti
-- [ ] Chiavi di idempotenza con vincolo unico
-- [ ] Deduplicazione webhook che dura almeno 3 giorni
-- [ ] Il gestore webhook fa firma → salva → 200 → elabora dopo
-- [ ] L'elaborazione fallita **non** risponde 200
-- [ ] Lo stato si legge dall'API, non dal contenuto dell'evento
-- [ ] Casella d'uscita con tabella dei morti e allarme
-- [ ] Riconciliazione notturna con mail, anche quando è tutto a posto
-- [ ] Scelta A/B/C sulle commissioni nel rimborso, scritta nelle condizioni
-- [ ] Un giro completo con soldi veri miei, rimborso compreso
+- [NO] Nessun numero con la virgola tocca il denaro
+      `python ispettore_statico.py` · 3 rilievi ALTA `money-float` · su 8436dac
+      manca: `assistente_gestionale.py:1986` e `:2034`, `fase26_ricerca.py:111` usano `float`
+             su `prezzo` — fuori dal percorso di pagamento, ma la casella dice «il denaro».
+             ⛔ E l'ispettore esce **0 lo stesso**: nessun test lo interroga, quindi non è un
+             cancello ed è un buco che non diventerà rosso da solo.
+      c'è già: `python -m unittest test_contratto_persistenza` · EXIT=0 · Ran 275 — 17 archivi,
+             colonne di denaro INTEGER, nessuna affinità a virgola mobile, valori scritti `integer`
+      c'è già: `python -m unittest test_fase17_money` · EXIT=0 · Ran 21 — il confine d'ingresso
+             rifiuta float, bool e stringhe decimali
+- [SI'] La divisione delle commissioni somma sempre al totale
+      `python -m unittest test_arrotondamenti_totale` · EXIT=0 · Ran 6 · su 8436dac · guardia mai vista rossa
+      `python -m unittest test_property_soldi` · EXIT=0 · Ran 12 · su 8436dac · guardia mai vista rossa (regge il «sempre»: ingressi generati)
+- [SI'] Partita doppia attiva, addebiti = accrediti
+      `python -m unittest test_movimenti_giornale` · EXIT=0 · Ran 5 · su 8436dac · guardia mai vista rossa
+- [SI'] Chiavi di idempotenza con vincolo unico
+      `python -m unittest test_fase15_idempotency` · EXIT=0 · Ran 40 · su 8436dac · guardia mai vista rossa
+      (il vincolo è `idempotency_key TEXT PRIMARY KEY`, `fase15_idempotency.py:133`)
+- [NO] Deduplicazione webhook che dura almeno 3 giorni
+      `grep -rn "event_id\|eventi_visti" --include=*.py .` · nessuna tabella di eventi Stripe · su 8436dac
+      manca: la deduplicazione c'è ma è sul **fatto**, non sull'**evento** — `evento_id` nel giornale
+             ("commissione:<rif>", "rimborso:<rif>"). Nessun archivio di eventi visti, quindi nessuna
+             finestra di ritenzione: Stripe ritenta per 72 ore e noi non sappiamo se l'abbiamo già visto.
+      c'è già: `python -m unittest test_fase15_idempotency` · EXIT=0 · Ran 40 — le chiavi di idempotenza
+      c'è già: `python -m unittest test_movimenti_giornale` · EXIT=0 · Ran 5 — l'`evento_id` non raddoppia le righe
+- [NO] Il gestore webhook fa firma → salva → 200 → elabora dopo
+      lettura di `fase83_server.py:7914-7972` · dei quattro passi c'è solo il primo · su 8436dac
+      manca: verifica la firma, poi **elabora subito** (`_conferma_pagamento(rif)`) e solo dopo risponde 200.
+             L'evento grezzo non viene salvato e non esiste elaborazione differita.
+      c'è già: `python -m unittest test_fase87_stripe_webhook` · EXIT=0 · Ran 10 — la firma sul corpo grezzo
+      c'è già: `python -m unittest test_crash_recovery_webhook` · EXIT=0 · Ran 3 — un crash a metà non lascia i conti a metà
+- [NO] L'elaborazione fallita **non** risponde 200
+      lettura di `fase83_server.py:7955-7971` · un ramo risponde 200 anche quando fallisce · su 8436dac
+      manca: sul ramo **identity** l'errore è inghiottito di proposito («ISOLATO») e la risposta resta 200:
+             un esito KYC perso non fa ritentare Stripe. Sul ramo **pagamento** invece l'eccezione arriva
+             al router e diventa 500 (`:1985-1986`), quindi lì la regola è rispettata.
+      c'è già: `python -m unittest test_crash_recovery_webhook` · EXIT=0 · Ran 3 — il percorso dei soldi regge al crash
+- [NO] Lo stato si legge dall'API, non dal contenuto dell'evento
+      `grep -rn "retrieve" --include=*.py .` (fuori dai test) · nessuna riga · su 8436dac
+      manca: il gestore legge `mode`, `metadata` e `status` **dal payload dell'evento**. In tutto il
+             progetto non esiste una sola richiesta dell'oggetto all'API di Stripe, quindi l'ordine di
+             arrivo degli eventi conta — ed è la cosa che Stripe dichiara di non garantire.
+      c'è già: `python -m unittest test_fase87_stripe_webhook` · EXIT=0 · Ran 10 — la firma garantisce che il
+               payload sia autentico (non che sia attuale: sono due cose diverse)
+- [SI'] Casella d'uscita con tabella dei morti e allarme
+      `python -m unittest test_fase16_outbox` · EXIT=0 · Ran 39 · su 8436dac · guardia mai vista rossa
+      (`pending → processing → completed | failed | dead_letter`, `logger.critical("DLQ: …")`, allarme con soglia)
+- [NO] Riconciliazione notturna con mail, anche quando è tutto a posto
+      `grep -rn "riconcil" deploy/ .github/ docker-compose.casavip.yml` · solo un pulsante · su 8436dac
+      manca: gira **solo a mano** — `deploy/bunker.html:641` chiama `/api/bunker/riconciliazione`. Nessun
+             lavoro notturno, nessuna mail. È il punto che la PARTE 3.7 dichiara valere «più di tutto il
+             resto della PARTE 3», ed è quello che copre gli eventi che Stripe non consegna mai.
+      c'è già: `python -m unittest test_riconciliazione` · EXIT=0 · Ran 8 — il confronto con Stripe funziona quando lo si lancia
+- [NO] Scelta A/B/C sulle commissioni nel rimborso, scritta nelle condizioni
+      `grep -n -i "rimbors" fase185_testi_legali.py` · la scelta non compare nelle condizioni · su 8436dac
+      manca: la scelta **è già fatta nel codice** ed è la **B** — `storno_commissione` restituisce la nostra
+             commissione sul rimborso totale, quella del gestore resta a noi (`fase177_financial_controller.py:58`
+             e `:342`, «commissione trattenuta dal gestore (non recuperabile)»). Ma non è **scritta**: il testo
+             vivo non la nomina, e la bozza `legale/TERMINI_SERVIZIO.md:40` ha ancora il segnaposto
+             `[Specificare percentuale/modello…]` (quel file non è servito da nessuno — verificato).
+      c'è già: `python -m unittest test_movimenti_giornale` · EXIT=0 · Ran 5 — la riga contabile della commissione persa esiste
+- [NON MISURATO] Un giro completo con soldi veri miei, rimborso compreso
+      perché: non è misurabile da qui — serve la chiave `sk_live_`, che sta solo sul VPS, e i soldi del fondatore.
 
 **Calendario**
-- [ ] Vincolo di non sovrapposizione nel database
-- [ ] Blocco date allo stato "in corso", con scadenza
-- [ ] Cinquanta prenotazioni insieme sulla stessa casa: nessuna doppia
+- [NO] Vincolo di non sovrapposizione nel database
+      `grep -n "UNIQUE\|INDEX" fase58_channel_manager.py` · l'unico indice non è UNIQUE (`:166`) · su 8436dac
+      manca: nel **database** non c'è nessun vincolo. La garanzia è transazionale — `BEGIN IMMEDIATE` +
+             ri-controllo + chiave di idempotenza su un inventario per-notte (`fase58_channel_manager.py:30`,
+             `:214`). Regge finché ogni scrittura passa da lì: una scrittura che scavalca il modulo non trova
+             nessuno che la fermi, ed è esattamente ciò che un vincolo nel database renderebbe impossibile.
+      c'è già: `python -m unittest test_bombardamento_calendario_tutti` · EXIT=0 · Ran 2 — scritture concorrenti sulla stessa casa
+      c'è già: `python -m unittest test_race_hold_conferma` · EXIT=0 · Ran 8 — la gara fra blocco e conferma
+- [SI'] Blocco date allo stato "in corso", con scadenza
+      `python -m unittest test_race_hold_conferma` · EXIT=0 · Ran 8 · su 8436dac · guardia mai vista rossa
+- [SI'] Cinquanta prenotazioni insieme sulla stessa casa: nessuna doppia
+      `python -m unittest test_bombardamento_calendario_tutti` · EXIT=0 · Ran 2 · su 8436dac · guardia mai vista rossa
+      (thread sincronizzati da una `threading.Barrier`; il numero non è cinquanta ed è il test a deciderlo)
 
 **Accessi**
-- [ ] Prove "non puoi vedere la roba di un altro": ___ su ___
-- [ ] Nessuna chiave nel codice che arriva al browser
-- [ ] Il prezzo si decide sul server: lo cambio nella pagina e il sistema rifiuta
+- [NON MISURATO] Prove "non puoi vedere la roba di un altro": ___ su ___
+      perché: il numeratore c'è — 8 prove verdi (`test_idor_richieste` 3 · `test_rbac_scrittura_cross_host` 3 ·
+      `test_isolamento_multi_host` 2, tutte EXIT=0 su 8436dac) — ma il **denominatore no**: nessuno ha contato
+      quante superfici possono far vedere a un host la roba di un altro. Un numero senza il suo totale non è
+      una misura (D22), e qui il totale non lo produce nessuno strumento.
+- [NON MISURATO] Nessuna chiave nel codice che arriva al browser
+      perché: lo scanner del progetto è fuori uso — `python collaudi/cricchetto_statico.py gitleaks` → EXIT=2,
+      «ATTREZZO NON USABILE … non è un giudizio sul codice: è lo strumento che manca». Un `grep` sui formati
+      noti (`sk_live`, `pk_live`, `api_key=…`) dentro `deploy/` non trova nulla, ma cerca cinque forme e
+      gitleaks ne cerca centocinquanta: non è un sostituto, ed è per questo che non scrivo SI'.
+- [SI'] Il prezzo si decide sul server: lo cambio nella pagina e il sistema rifiuta
+      `python -m unittest test_prezzo_vetrina_e_cassa` · EXIT=0 · Ran 37 · su 8436dac · guardia mai vista rossa
+      ⚠️ serve `PYTHONIOENCODING=utf-8`: con la console a codepage 850 sei test esplodono per l'encoding, non
+      per il prodotto — un rosso finto, e un rosso finto è un difetto quanto un allarme mancato (ferrea 10)
 
 **Dati**
-- [ ] Numero archivi nell'elenco = numero conferme di cancellazione
-- [ ] Esportazione dati funzionante
+- [SI'] Numero archivi nell'elenco = numero conferme di cancellazione
+      `python collaudi/prova_copertura_archivi.py` · EXIT=0 · su 8436dac · **guardia VISTA ROSSA**
+      (l'attrezzo aggiunge un archivio finto e pretende che la sorveglianza cada: «la guardia è CADUTA su
+      'db_fantasma' (1 test rossi)». È l'unica casella di tutta la PARTE 12 la cui prova sa dimostrare
+      da sola di saper fallire)
+- [SI'] Esportazione dati funzionante
+      `python -m unittest test_fase77_portability` · EXIT=0 · Ran 21 · su 8436dac · guardia mai vista rossa
 
 **Coerenza**
-- [ ] Una sola fonte per numeri e promesse
-- [ ] Tracciabilità nei due versi, entrambe verdi
-- [ ] Tutte le lingue complete, nessuna cifra tradotta
+- [SI'] Una sola fonte per numeri e promesse
+      `python -m unittest test_trasparenza_costi` · EXIT=0 · Ran 25 · su 8436dac · guardia mai vista rossa
+      (il README è l'unica fonte testuale sulle tariffe e deve dichiararle tutte)
+- [SI'] Tracciabilità nei due versi, entrambe verdi
+      `python -m unittest test_guardie_collegamenti` · EXIT=0 · Ran 5 · su 8436dac · guardia mai vista rossa (promessa → codice)
+      `python -m unittest test_registro_ingegneria` · EXIT=0 · Ran 3 · su 8436dac · guardia mai vista rossa (codice → promessa)
+- [SI'] Tutte le lingue complete, nessuna cifra tradotta
+      `python -m unittest test_profondo_lingue` · EXIT=0 · Ran 59 · su 8436dac · guardia mai vista rossa
 
 **Robustezza**
-- [ ] Punteggio del mutation testing sul codice dei soldi: ___ %
-- [ ] Analisi statica verde su ogni modifica, senza avvisi ignorati
-- [ ] Nessuna libreria con falle note
-- [ ] Ogni funzione nuova ha un interruttore che la spegne in dieci secondi
-- [ ] Prova con guasto: ammazzo il sistema a metà di un pagamento e guardo cosa resta a metà
+- [NON MISURATO] Punteggio del mutation testing sul codice dei soldi: ___ %
+      perché: il giro costa ore, riscrive `fase59_concierge.py` sul disco mentre gira, e la macchina è una
+      sola. Va prenotato un turno: non l'ho lanciato, e un punteggio non misurato non si scrive.
+- [NO] Analisi statica verde su ogni modifica, senza avvisi ignorati
+      `python collaudi/cricchetto_statico.py tutti` · EXIT=2 · su 8436dac
+      manca: `gitleaks` è **ATTREZZO NON USABILE** — quindi il segreto che finisce nel codice oggi non lo
+             cerca nessuno. E «senza avvisi ignorati» non è vero per costruzione: il cricchetto **congela**
+             il debito vecchio (semgrep 6 su 6 congelate, pip-audit 10 su 10) e fa passare tutto ciò che era
+             già lì. È una scelta dichiarata, non un difetto — ma la casella chiede un'altra cosa.
+      c'è già: `ruff` · `bandit` · `semgrep` · `pip-audit` → «NESSUNA SEGNALAZIONE NUOVA»: da qui in avanti
+               una segnalazione nuova ferma la modifica
+- [NO] Nessuna libreria con falle note
+      `python collaudi/cricchetto_statico.py pip-audit` · EXIT=0 ma «segnalazioni adesso 10, congelate 10» · su 8436dac
+      manca: dieci librerie con falle note, congelate come debito. L'uscita 0 dice «nessuna **nuova**», non
+             «nessuna»: è il caso in cui leggere solo il codice d'uscita farebbe scrivere un SI' falso.
+      c'è già: il cricchetto impedisce che il numero salga
+- [NON MISURATO] Ogni funzione nuova ha un interruttore che la spegne in dieci secondi
+      perché: il numeratore si conta (13 moduli `fase*.py` leggono un interruttore da `os.environ`) ma il
+      denominatore — quante funzioni dovrebbero averlo — non esiste e nessuno strumento lo produce. Come per
+      gli accessi: un numero senza il suo totale non è una misura.
+- [SI'] Prova con guasto: ammazzo il sistema a metà di un pagamento e guardo cosa resta a metà
+      `python -m unittest test_crash_recovery_webhook` · EXIT=0 · Ran 3 · su 8436dac · guardia mai vista rossa
 
 **Il mondo reale**
-- [ ] Tutti i percorsi provati a mano: ___ su ___
-- [ ] Ripristino del backup provato davvero, cronometrato
-- [ ] **Un umano che fa audit di mestiere ha guardato dove entrano i soldi**
-- [ ] Il commercialista ha scritto nero su bianco cosa sono, fiscalmente
-- [ ] Le condizioni per host e per ospite le ha lette un avvocato
-- [ ] La busta chiusa esiste ed è fuori dal mio computer (PARTE 19.4)
+- [NON MISURATO] Tutti i percorsi provati a mano: ___ su ___
+      perché: il denominatore c'è — `python collaudi/denominatore.py` → EXIT=0: 155 rotte, 14 pagine, 10 email,
+      8 lingue, 80 coppie messaggio×lingua, **0 scoperte**. Ma quelle sono attraversate da un **collaudo**, non
+      da una persona: quante siano state provate a mano non lo sa nessun comando, e non è il numero che chiede
+      questa riga.
+- [NON MISURATO] Ripristino del backup provato davvero, cronometrato
+      perché: la guardia si mette da parte **da sola** su questa macchina — `python -m unittest test_backup_completo -v`
+      → `skipped 'servono bash e openssl per provare deploy/restore_offsite.sh (mancano: openssl)'`. Il ripristino
+      dell'**applicazione** è provato (`test_avvio_e_ripristino` · EXIT=0 · Ran 31), quello dell'**archivio fuori
+      sede** no — e non è cronometrato. È il caso D23 punto 3: un controllo spento in silenzio dall'ambiente.
+- [NON MISURATO] **Un umano che fa audit di mestiere ha guardato dove entrano i soldi**
+      perché: non è misurabile da qui — è una cosa del mondo, non del codice.
+- [NON MISURATO] Il commercialista ha scritto nero su bianco cosa sono, fiscalmente
+      perché: non è misurabile da qui — è una cosa del mondo, non del codice.
+- [NON MISURATO] Le condizioni per host e per ospite le ha lette un avvocato
+      perché: non è misurabile da qui — è una cosa del mondo, non del codice.
+      (⚠️ e quando le leggerà: `legale/TERMINI_SERVIZIO.md:40` ha ancora `[Specificare percentuale/modello…]`)
+- [NON MISURATO] La busta chiusa esiste ed è fuori dal mio computer (PARTE 19.4)
+      perché: non è misurabile da qui — è una cosa del mondo, non del codice.
 
 L'unica riga che non posso spuntare da solo è quella dell'umano. **È anche la più importante.**
 
