@@ -33,6 +33,10 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+# Il ripiego della tariffa tecnica ha una fonte sola: il perche' sta nel commento
+# accanto a GATEWAY_BPS, qui sotto. L'import sta in cima perche' e' il suo posto.
+from fase98_policy_commissione import PAGAMENTO_BPS_DEFAULT as _PSP_BPS_DEFAULT
+
 # Soglie (unita' minori intere della valuta dell'alloggio).
 FEE_PER_NOTTE_CENTS = 150          # sovrapprezzo OSPITE per il paga-in-struttura: 1.50/notte
 # La copertura carta che l'host assorbe DEVE coprire il costo Stripe del CASO PEGGIORE (carta
@@ -45,7 +49,7 @@ GATEWAY_BPS = 325                  # 3.25%: il caso peggiore extra-UE
 # ripiego era rimasto a 300 (il 3% secco, misurato SOTTO COSTO il 2026-08-09), cioe' un
 # pavimento piu' basso del vero. Non si vedeva quasi mai -- di solito vince il costo Stripe
 # stimato qui sopra -- e per questo nessuno l'avrebbe corretto da solo (giro B1, 2026-08-29).
-from fase98_policy_commissione import PAGAMENTO_BPS_DEFAULT as _PSP_BPS_DEFAULT
+#
 # +2% quando l'annuncio NON e' nella valuta in cui incassiamo: Stripe deve CONVERTIRE.
 # Il conto e' italiano e tiene SOLO euro (misurato il 2026-08-09 sul conto vero:
 # country IT, default_currency eur, nessun altro saldo), quindi la conversione non e'
