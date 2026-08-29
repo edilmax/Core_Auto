@@ -18,22 +18,25 @@
 
 ---
 
-## 📍 DOVE SIAMO — **2026-08-29 ore 03:00**, misurato dai QUATTRO posti
+## 📍 DOVE SIAMO — **2026-08-29 ore 19:45**, misurato dai QUATTRO posti
 
 ```
-computer            e4996c2   <- git rev-parse --short HEAD
-GitHub master       e4996c2   <- git ls-remote --heads origin master
-albero              8 file in lavorazione (giro B1, scopo dichiarato di 9)
-CARICATORE          6049      <- da PowerShell vera, in QUESTO albero, con B1 dentro
-                                 (master ne dichiara 6046: NON si sommano, D22)
-VPS (git sul disco) b1e216e   <- ssh in sola lettura
-IMMAGINE VIVA       sha256:56f716d0438b17b262a88d600a02fde20c82799b778b1131a2bf5ef23c706bbf
+computer            40a9c8c   <- git rev-parse --short HEAD
+GitHub master       40a9c8c   <- git rev-parse --short origin/master, dopo git fetch
+albero              PULITO    <- git status --porcelain vuoto
+CARICATORE          6059      <- da PowerShell vera (MSYSTEM vuoto), da fermo
+VPS (git sul disco) 40a9c8c   <- ssh, misurato: NON piu' riferito da un foglio
+IMMAGINE VIVA       sha256:6035f6ab0b31660e1f7a83cb337e4d235e3beed3c468573439c83f1bf5f87729
                               <- docker inspect --format='{{.Image}}' casavip_app
-                                 costruita 2026-08-28T12:54:44Z, avviata 12:55:29Z
-IN PRODUZIONE       curl https://bookinvip.com/api/health -> HTTP 200 in 0,494 s
-                    {"status": "ok", "money_unit": "cents_integer",
-                     "guardiano": "ok", "email_ko": 0}
+PARACADUTE :prec    sha256:56f716d0438b1...  = l'immagine di PRIMA del deploy, corretta
+IN PRODUZIONE       curl https://bookinvip.com/api/health -> HTTP 200
+                    /api/bunker/invarianti -> 403 (sonda NEGATIVA su un indirizzo che ESISTE)
+                    collaudi/verifica_produzione.py -> 190 controlli, VIOLAZIONI 0, USCITA 0
 ```
+
+🔑 **I QUATTRO POSTI SONO ALLINEATI**, per la prima volta da giorni. Non c'e' lavoro finito
+fuori dalla produzione: i tre alberi di lavoro (`_A`, `_B`, `_C`) hanno **zero** file non
+committati e **zero** commit fuori da master.
 
 > ⛔ **I valori di prima erano FALSI in cinque punti su cinque** (dicevano computer/GitHub
 > `5d6e0b3`, VPS `efe35b5`, immagine `sha256:8def0ea3`) e su quei valori era costruito un
@@ -41,11 +44,149 @@ IN PRODUZIONE       curl https://bookinvip.com/api/health -> HTTP 200 in 0,494 s
 > più rimisurato, sotto un titolo che non portava l'ora. **Questi numeri invecchiano entro la
 > giornata: se leggi questo riquadro e la data non è di oggi, rimisura prima di agire.**
 
-### ✅ IL VPS È INDIETRO DI **UNA** UNIONE E **DUE** COMMIT, E NON TOCCA IL PRODOTTO
+---
 
-*(Rimisurato il 2026-08-29. Qui c'era scritto «indietro di NOVE unioni e VENTISEI commit, e
-questa volta non è uno scarto innocuo». Era falso, e lo era perché il conto partiva da
-`efe35b5` — un valore del VPS **vecchio**, mai rimisurato.)*
+## 🤝 PASSAGGIO DI CONSEGNE — **2026-08-29 sera** (contesto letto dal fondatore: **57%**)
+
+> Scritto **dopo** che tutto era chiuso: due commit uniti, deploy fatto, quattro posti
+> allineati. È il punto naturale, non una fuga a metà lavoro.
+
+### COSA È ENTRATO IN PRODUZIONE OGGI
+
+**1. La tariffa tecnica aveva QUATTRO ripieghi con TRE numeri diversi** (`4ef2e40`, #128).
+In produzione `PAGAMENTO_BPS` **non è impostata** (misurato il 25/08), quindi valevano i
+ripieghi — e divergevano: `main_casavip` e `fase185` dicevano uno, `fase89` (l'email che va
+agli host **veri**) uno più basso, `fase188` quello vecchio, misurato **sotto costo** il 09/08.
+Ora il ripiego vive in **un posto solo**, `fase98_policy_commissione`. Più 14 testi di
+reclutamento riscritti: dicevano «su quella non guadagniamo nulla», la frase che il contratto
+aveva **tolto**.
+🔑 *Perché nessuno l'aveva visto in quattro mesi:* la docstring di `fase89._tecnica_bps`
+giurava di prendere il numero da `main_casavip.py` e ne conteneva uno che lì non c'è. **Il
+commento scritto per impedire l'errore era la cosa che lo nascondeva.**
+
+**2. Quattro pagine pubbliche dicevano il 3%** (`af481b8`, #129, corsia A). `diventa-host`,
+`kit-marketing`, `commissioni`, `bunker` — in **otto lingue** — promettevano una tariffa
+misurata sotto costo e la frase che il contratto nega. Più una guardia che ora legge la
+cartella e copre **14 pagine invece di 4**.
+*Vista rossa sul codice guasto: **26 frasi false + 37 cifre sbagliate = 63 rilievi**. Sul
+codice riparato: 0. Provata nelle **due direzioni**.*
+
+**3. Due rilievi statici** (`93532c7`): un import inutile e uno fuori posto, che avevano fatto
+**bocciare la richiesta in CI**. Vedi B35 qui sotto: li avevo visti e archiviati come «non
+bloccano», per un `grep` col perimetro sbagliato.
+
+### ⛔ COSA RESTA APERTO, in ordine di quanto pesa
+
+1. **FASCIA A del piano d'audit — cinque voci su sei aperte, e A2 non l'ha mai guardata
+   nessuno.** «I soldi si fermano SENZA lasciare una riga»: 17 voci, e in **5** il silenzio
+   non ha scadenza — nessuno riprova, nessuno se ne accorge. È il lavoro che l'ordine del
+   fondatore delle 12:40 («IO VOGLIO RIPARAZIONI SERIE») indica.
+   ⚠️ La corsia A ha cominciato la mappa in sola lettura e ha già trovato che **il piano e la
+   macchina non dicono la stessa cosa sul conto delle voci**. Il referto non è ancora arrivato.
+2. **Il paracadute non ha una guardia** (proposta, non fatta). Il protocollo D17 lo ripara
+   quando lo si usa, ma **nulla obbliga a passarci**: un deploy a mano lo scavalca, e un
+   paracadute scaduto **non fa rumore** — lo scopri il giorno che ti serve. Il `watchdog.sh`
+   gira già ogni 10 minuti da cron (verificato: `*/10 * * * *`, file di stato vivo) e non
+   controlla il paracadute. ⛔ **Tocca `fase178_watchdog.py`, che è produzione**: serve
+   «autorizzato», e la guardia va vista **rossa** prima.
+3. **Gli 11 rami vecchi vanno cancellati.** Sono tutti **già dentro master, byte per byte**
+   (verificato con l'impronta dell'albero completo, 11 su 11), ma le unioni a **schiacciamento**
+   fanno sì che `git branch --no-merged` li elencherà **per sempre**. Oggi sono costati
+   un'indagine intera a due corsie. Vanno tolti, locali e su `origin`.
+4. **Le caselle `[NO]` della PARTE 12 di `METODO_v4.md` non sono affidabili.** Due su cinque
+   hanno la **prova falsa**: quella sull'API di Stripe cercava la parola `retrieve` (che questo
+   codice, essendo stdlib pura, non può contenere — le richieste vere sono **cinque**), e quella
+   sulla riconciliazione notturna diceva «gira solo a mano, nessun lavoro notturno, nessuna
+   mail»: **sbagliata su tutt'e tre** (`fase186_guardiano.py:103` la chiama, gira in un thread
+   giornaliero, e manda l'email quando il referto è sporco). Il **verdetto** di quelle caselle
+   può restare giusto; la prova che lo sostiene no.
+5. **10 falle note nelle dipendenze** (`pip-audit`), congelate come debito. ⚠️ Ma sono su
+   `requirements.txt`, **che l'immagine non installa**: `Dockerfile.casavip` non ha nessun
+   `pip install` (l'unica riga con «install» è un commento) e la produzione è stdlib pura.
+   Sono vere per chi sviluppa, non sono esposizione del prodotto servito.
+
+### 📏 I NUMERI MISURATI OGGI, con la provenienza
+
+```
+suite (albero PRINCIPALE)  Ran 6052 · OK(skipped=4) · 1762s · EXIT=0   (lavoro D)
+                           Ran 6054 · OK(skipped=4) · 1681s · EXIT=0   (lavoro A, girato da CE)
+caricatore                 6059      (PowerShell vera, da fermo)
+CI su master 40a9c8c       16 controlli · 15 success + 1 skipped · gate SUCCESS
+```
+
+🔑 **E LA SCOPERTA CHE CAMBIA IL RITMO DEL LAVORO: la suite costa 29-34 minuti, non 130.**
+Dieci giri misurati, e si dividono da soli **senza eccezioni**:
+```
+albero PRINCIPALE (Core_Auto)   1681 · 1730 · 1762 · 1988 · 2067 s   (28-34 min, 5 giri)
+worktree collegati (_A _B _C)   6125 · 7814 · 7818 · 8006 · 8335 · 8336 s  (102-139 min, 6)
+```
+⛔ **L'ipotesi del CARICO è REFUTATA dalla misura**: gli orari coprono tutta la giornata, e i
+due giri **notturni** (01:34 e 04:54, macchina certamente libera) sono fra i **lenti**. Non è
+quando lo lanci: è **dove**. Unica differenza strutturale misurata: nell'albero principale
+`.git` è una **cartella**, nei worktree è un **file**. ⚠️ **Causa NON accertata** — l'ipotesi
+ancora in piedi è l'antivirus (protezione in tempo reale attiva; le esclusioni non si leggono
+senza privilegi di amministratore).
+⇒ **Conseguenza pratica:** la decisione in sospeso del fondatore («attacco A2 subito pagando
+130 minuti a riparazione, o prima riduco i 130?») **è chiusa**: si lanciano i giri nell'albero
+principale e costano 30 minuti. La strada (2) non serve più.
+
+### 🩹 LO SBAGLIO DELLA GIORNATA, e non è uno solo: è **quattro volte lo stesso**
+
+**Uno strumento che smette di guardare senza dirlo, e il vuoto che restituisce ha la forma di
+una risposta.** Quattro volte in un giorno, in quattro forme diverse:
+- `grep 'collaudi/baseline'` → vuoto → «nessuna guardia usa la fotografia». **Il percorso non
+  esiste come stringa: nasce da un `os.path.join`.** La guardia c'era, ed è quella che ha
+  **bocciato la richiesta in CI**;
+- `grep '[^\x00-\x7F]'` → GNU grep non interpreta quegli escape: marcava come non-ASCII righe
+  palesemente ASCII. *Rimedio buono:* `LC_ALL=C tr -d '\11\12\15\40-\176'` e contare i byte,
+  **provato nelle due direzioni**;
+- `grep 'riconcil'` limitato a `.yml/.sh/.conf` → vuoto → riferii «la riconciliazione notturna
+  non ha innesco automatico». **Falso**;
+- `| head -5` → tagliava in silenzio la riga che cercavo, e avevo già scritto la conclusione
+  sbagliata.
+🔑 **La forma che regge**, data dalla corsia A: non «cerco il nome», ma **«cosa contiene il
+perimetro?»** — se dentro l'insieme guardato ci sono altri elementi della stessa zona, la zona
+è coperta e lo zero significa davvero «nessun rilievo».
+📌 E la sua gemella, che vale contro il riassunto (B3): **due resoconti vaghi non si
+contraddicono mai.** Due misure precise che confliggono fanno uscire un errore; due impressioni
+si accordano su qualcosa di vago e nessuno scopre niente.
+📌 E la terza, sulla provenienza: **«B 8003» non era falso perché sbagliato di 189 secondi —
+era falso perché l'ho riportato come MISURA mentre era un RIFERITO**, copiato da un foglio che
+in cima avvisa da solo «ogni numero qui è riferito, rimisuralo». *La provenienza di un fatto è
+parte del fatto.*
+
+---
+
+### ✅ CHIUSO IL 2026-08-29 ORE 17:35: **IL VPS NON È PIÙ INDIETRO DI NIENTE**
+
+*Deploy fatto col protocollo D17 intero, tre fasi, ognuna con l'esito letto senza tubi. Il
+divario era di **11 commit / 6 di lavoro / 5 unioni** da `b1e216e`, di cui sul prodotto: sei
+`fase*.py` più `main_casavip.py`, più le quattro pagine di `deploy/`.*
+
+```
+[1a] punto di ritorno   scritto E RILETTO dal disco: b1e216e
+[1b] paracadute :prec   PRIMA 8def0ea3 (3 giorni fa) -> DOPO 56f716d0 (l'immagine VIVA)
+[1c] salvataggio        verificato APRENDOLO: gzip -t integro, primi byte «SQLite format 3»
+[2b] costruzione        :latest 6035f6ab != :prec 56f716d0 -> il paracadute e' un paracadute
+[2d] ritorno sano       healthy dopo 0s   ·   sito irraggiungibile ~40s (17:34:52-17:35:30)
+[2e] avvio              money_path_pronto: True · avvisi: []
+[3a] sonde positive     / -> 200 · /api/health -> 200
+[3b] sonda NEGATIVA     /api/bunker/invarianti -> 403   (NON un 404: un 404 non prova nulla)
+[3c] giudice            190 controlli · VIOLAZIONI 0 · USCITA 0
+[3d] dentro il container commit 40a9c8c
+```
+
+⛔ **E il paracadute era agganciato all'immagine sbagliata, per la SESTA volta in sei giorni.**
+Puntava a un'immagine di **tre giorni** mentre ne girava una di 29 ore: tirando la maniglia si
+sarebbe tornati **oltre** l'ultimo stato buono. L'ha corretto il passo `[1b]`, che non fa
+scegliere l'immagine: la **misura**. È la prova che un obbligo agganciato a un attrezzo regge
+dove la buona volontà si era rotta cinque volte.
+
+### ✅ E IL BADGE FALSO (B8) È FINALMENTE SPARITO **DAVVERO**
+
+Era «già tolto dal file, MA NON È ONLINE»: aspettava una ricostruzione dell'immagine che
+nessuno faceva. Misurato dopo il deploy, sulla pagina viva:
+`curl https://bookinvip.com/ | grep -c badge_antirimpianto` → **0**.
 
 ```
 git rev-list --count b1e216e..origin/master           -> 2
@@ -575,7 +716,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 954fb8d
+CONSEGNE AGGIORNATE A: 40a9c8c
 
 SUITE ATTUALE: Ran 6059 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
