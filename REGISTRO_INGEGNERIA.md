@@ -403,6 +403,36 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🚀 DEPLOY DEL 2026-08-29 ore 17:35 — il primo dopo cinque giorni, e ha chiuso B8
+
+*(protocollo D17 intero, tre fasi. `b1e216e` → `40a9c8c`. Sito irraggiungibile ~40 secondi.)*
+
+**Cosa è arrivato al pubblico.** Sei `fase*.py` più `main_casavip.py` (la tariffa tecnica a
+fonte unica, le email di reclutamento riscritte, il Guardiano che non dichiara più un verdetto
+su un giro troncato) e le quattro pagine di `deploy/` che dicevano il **3%** in otto lingue.
+Prima di questo deploy il sito serviva ancora la cifra misurata **sotto costo il 09/08**.
+
+⛔ **Il paracadute `:prec` era agganciato all'immagine sbagliata — la sesta volta in sei
+giorni.** Puntava a `8def0ea3`, di **tre giorni** prima, mentre girava `56f716d0` di 29 ore:
+tirando la maniglia si sarebbe tornati **oltre** l'ultimo stato buono, convinti del contrario.
+L'ha corretto il passo `[1b]`, che non fa *scegliere* l'immagine: la **misura** (`docker
+inspect --format={{.Image}} casavip_app`, poi `docker tag`, poi confronta e si ferma se non
+coincide).
+🔑 **È la dimostrazione pulita di D22**: lo stesso obbligo, affidato alla buona volontà, si era
+rotto **cinque volte**; agganciato a un attrezzo ha retto alla prima.
+
+**Verifiche, tutte con l'uscita letta senza tubi:** backup verificato **aprendolo** (`gzip -t`
+integro, primi byte «SQLite format 3» — non guardando la data); `:latest` ≠ `:prec` prima dello
+scambio; `healthy` dopo 0s; `money_path_pronto: True`, `avvisi: []`; sonde `/` → 200,
+`/api/health` → 200, e la **negativa** su `/api/bunker/invarianti` → **403** (non un 404, che
+non prova mai che qualcosa sia protetto); `collaudi/verifica_produzione.py` → 190 controlli,
+**VIOLAZIONI 0**, uscita 0.
+
+**Effetto collaterale misurato, ed è la chiusura di B8.** Il badge `badge_antirimpianto` era
+«già tolto dal file **ma non online**» perché `Dockerfile.casavip` copia `deploy/` **dentro**
+l'immagine e il compose non la monta a volume: serviva una ricostruzione, che nessuno faceva.
+Dopo il deploy: `curl https://bookinvip.com/ | grep -c badge_antirimpianto` → **0**.
+
 ### 🔴 LA TARIFFA TECNICA AVEVA QUATTRO RIPIEGHI E TRE NUMERI DIVERSI — 2026-08-29
 
 *(giro **B1** del piano d'audit, ramo `lavoro-d` su `2ff4b2e`. Difetto **vivo in produzione**,
