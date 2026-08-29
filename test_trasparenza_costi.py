@@ -42,6 +42,18 @@ def _psp_bps_default():
     return int(m.group(1))
 
 
+def _psp_bps_estera_default():
+    """Idem, sugli annunci prezzati fuori euro: li' il gateway deve CONVERTIRE e la
+    tariffa e' piu' alta. Serve perche' una pagina che la nomina dichiara una cifra
+    diversa da quella in euro, ed e' corretta: senza questa, una guardia sulla cifra
+    accuserebbe come falsa una riga vera a ogni giro (regola ferrea 10)."""
+    src = _leggi("main_casavip.py")
+    m = re.search(r'PAGAMENTO_BPS_ESTERA["\']\s*,\s*["\'](\d+)["\']', src)
+    if not m:
+        raise AssertionError("default PAGAMENTO_BPS_ESTERA non trovato in main_casavip.py")
+    return int(m.group(1))
+
+
 # La cifra della tariffa tecnica si scrive UNA VOLTA SOLA e si prende DAL MOTORE.
 # Il 2026-08-09, quando e' passata dal 3% al 4% + 0,25 EUR, questo file aveva TECNICA
 # scritto a mano in una quindicina di punti ed e' diventato lui il documento che
@@ -303,10 +315,21 @@ class TestTerminiPubblici(unittest.TestCase):
         self.assertEqual(mute, [], "lingue che non dichiarano il 3%%: %s" % mute)
 
     def test_pagina_commissioni_resta_coerente(self):
-        """La pagina Commissioni era gia' onesta: non deve perdere la tariffa tecnica."""
+        """La pagina Commissioni era gia' onesta: non deve perdere la tariffa tecnica.
+
+        ⛔ QUI C'ERA `assertIn("costo carta")`, e il 2026-08-29 e' stato cambiato in
+        «tariffa tecnica». NON e' uno sconto fatto per far passare una modifica, ed e'
+        importante che chi legge fra sei mesi lo sappia distinguere: «costo carta» era
+        la formula di UN'ETICHETTA che diceva anche «0 nostro margine» — cioe' la
+        stringa cercata viveva dentro la bugia che quel giorno e' stata tolta. Tenerla
+        avrebbe voluto dire conservare la formulazione sbagliata per compiacere una
+        guardia. «Tariffa tecnica» e' il termine che usano il CONTRATTO (fase185) e
+        tutti gli altri strumenti del progetto, e sulla pagina compare piu' volte, non
+        una: la pretesa e' piu' forte di prima, non piu' debole.
+        """
         c = _leggi("deploy/commissioni.html")
         self.assertIn(TECNICA, c)
-        self.assertIn("costo carta", c)
+        self.assertIn("tariffa tecnica", c)
 
 
 class TestPagineCheReclutanoHost(unittest.TestCase):
@@ -442,6 +465,186 @@ class TestEmailAgliHost(unittest.TestCase):
         for bps in (LANCIO_BPS_FASE1, LANCIO_BPS_REGIME, BPS_DIRETTO):
             self.assertRegex(corpo, r"(?<![0-9])%d\s?%%" % (bps // 100),
                              "manca %d%% dichiarato dal motore" % (bps // 100))
+
+
+class TestNessunaPromessaDiMargineZero(unittest.TestCase):
+    """GUARDIA — nessun testo che l'host legge PRIMA di firmare puo' affermare che la
+    tariffa tecnica non ci lascia margine, ne' dichiararne una diversa da quella del
+    motore: il contratto che poi firma dice il contrario.
+
+    NATA IL 2026-08-29. Le pagine pubbliche dicevano, in OTTO lingue, «una tariffa
+    tecnica del 3% che copre il costo della carta: su quella riga non guadagniamo
+    nulla». Due affermazioni false in una frase sola:
+      · la CIFRA — il motore ne addebita un'altra dal 2026-08-10, quando la vecchia fu
+        misurata SOTTO COSTO (`collaudi/conti_stripe.py`);
+      · il MARGINE — lo stesso strumento misura «copre a QUALUNQUE importo» su tutte e
+        cinque le carte e «Nessun caso in perdita piena». Nei primi giorni di promo,
+        quando la commissione e' zero, quella tariffa e' l'UNICO ricavo e non e' nullo.
+    Il contratto, `fase185_testi_legali.py` righe 137-139, dichiarava gia' il vero:
+    «il costo effettivamente sostenuto dalla Piattaforma puo' risultare INFERIORE O
+    SUPERIORE alla tariffa». Il parlato smentiva il firmato — e lo faceva dentro la
+    frase che rivendicava trasparenza («preferiamo dirtelo adesso, non dopo la firma»).
+
+    PERCHE' NON BASTAVANO LE GUARDIE GIA' PRESENTI. Le altre di questo file erano tutte
+    VERDI mentre le pagine dicevano quelle cose, e non per un difetto: pretendono che la
+    cifra giusta SIA PRESENTE, e lo era (nel pie' di pagina). Una pagina puo' dichiarare
+    due tariffe diverse e soddisfarle tutte. Qui si pretende l'ASSENZA di quella
+    sbagliata — che e' una domanda diversa, non una piu' severa.
+
+    ⛔ LIMITE DICHIARATO (sbaglio S6), e va letto PRIMA di fidarsi di questo verde:
+    il primo test cerca delle FORME, cioe' un elenco di frasi nelle lingue in cui
+    esistono oggi. Una riscrittura con parole diverse lo evade. E' una guardia contro la
+    REGRESSIONE di quell'affermazione, NON contro ogni bugia possibile: il suo verde dice
+    «quella frase non e' tornata», mai «le pagine dicono il vero».
+
+    ⛔ E OGNI VOLTA CHE SI STRINGE UNA DI QUESTE REGEX, VA RIFATTA LA PROVA CHE VEDE
+    ANCORA — riapplicandola ai file presi da `git show HEAD:` e pretendendo che li
+    segnali. Il motivo non e' pignoleria: le regex qui sotto sono state strette piu'
+    volte per togliere falsi allarmi, e ogni stretta puo' rendere cieca la guardia
+    invece che precisa. Le due cose si assomigliano moltissimo — un verde. La prima
+    volta che e' stata fatta, quella prova ha rivelato che un verde precedente era
+    **vero per fortuna, non per costruzione**: le forme che mancavano all'elenco
+    (francese al singolare, tedesco con una parola in mezzo, inglese con la cifra dopo)
+    su quelle pagine non c'erano, ma nessuno l'aveva misurato. Fra «giusto per fortuna»
+    e «giusto per costruzione» non c'e' differenza mentre li guardi, e c'e' tutta la
+    differenza la volta dopo.
+
+    ⛔ E PERCHE' NON PUO' FARLO L'AUDIT AL POSTO SUO: `collaudi/audit_coerenza_tariffe.py`
+    confronta CIFRE, non AFFERMAZIONI, e per giunta non gira in CI (solo dentro
+    `collaudi/batteria.py`, che si lancia a mano). Misurato il 2026-08-29:
+    `commissioni.html` non compare in nessuno dei suoi giri e l'affermazione ce l'ha.
+    Sono due difetti diversi e vogliono due guardie diverse.
+    """
+
+    @staticmethod
+    def _pagine():
+        """TUTTE le pagine di `deploy/`, LETTE DALLA CARTELLA — non un elenco scritto a mano.
+
+        ⛔ QUI C'ERA UN ELENCO DI QUATTRO NOMI, e il 2026-08-29 ha nascosto un difetto vero:
+        `deploy/bunker.html` dichiarava la tariffa superata in SETTE lingue su otto e questa
+        guardia non poteva vederlo, perche' quel nome non era nell'elenco. Non era una svista:
+        era **cecita' di progetto**. Una guardia con una lista chiusa non dice «non ho trovato
+        niente», dice «non ho guardato altrove» — e le due cose arrivano identiche a chi legge
+        il verde. Un elenco scritto a mano e' un obbligo affidato alla buona volonta' di chi,
+        fra sei mesi, dovra' RICORDARSI di aggiungerci la pagina nuova.
+        ⇒ Cosi' una pagina creata domani entra sotto guardia da sola. Costo misurato in
+        rumore: ZERO — allargando, l'unica pagina che si accendeva era quella col difetto.
+        """
+        cartella = os.path.join(BASE, "deploy")
+        nomi = sorted(n for n in os.listdir(cartella) if n.endswith(".html"))
+        #  ASSENZA NON E' CONFORMITA': se la cartella sparisse o si svuotasse, i due test
+        #  qui sotto passerebbero senza aver guardato NIENTE -- il verde peggiore di tutti.
+        if len(nomi) < 4:
+            raise AssertionError("deploy/ ha %d pagine: la guardia non sta guardando" % len(nomi))
+        return nomi
+
+    #  L'affermazione, nelle lingue in cui le pagine esistono. Le forme sono state
+    #  RACCOLTE DAI FILE, non immaginate: una guardia scritta a memoria cerca frasi
+    #  che nessuno ha mai scritto e tace su quelle che ci sono (sbaglio S2).
+    #  ⛔ E LE FORME SONO DUE FAMIGLIE, non una. La prima e' la frase distesa («non
+    #  guadagniamo nulla»); la seconda e' la stessa cosa detta in due parole dentro
+    #  un'etichetta («0 nostro margine»). Cercando solo la prima famiglia questa guardia
+    #  ha visto UNA occorrenza su commissioni.html e ne mancava SETTE — le traduzioni
+    #  della seconda. Misurato il 2026-08-29, e trovato solo perche' si e' aperto il file
+    #  invece di fidarsi del verde: e' il motivo per cui il limite qui sotto va letto.
+    MARGINE_ZERO = re.compile(
+        r"non guadagniamo nulla|we (?:make|earn) nothing|no ganamos nada|"
+        r"ne gagnons rien|verdienen wir nichts|n[aã]o ganhamos nada|"
+        r"不赚取[^，。]*利润|利益はありません|"
+        r"0\s*nostro margine|nessun (?:nostro )?margine|"
+        r"0\s*margin for us|0\s*margen para nosotros|0\s*marge pour nous|"
+        r"0\s*Marge für uns|0\s*margem para n[oó]s|当社利益0|我们0\s?利润", re.I)
+
+    #  ⛔ LA DIVISIONE NON E' PER ALFABETO, E' PER LINGUA — misurata sui file, non deduttta:
+    #    · il numero VIENE DOPO in it/es/fr/de/pt  («tariffa tecnica del ...%»)
+    #    · il numero VIENE PRIMA in en/ja/zh       («...% technical fee»)
+    #  Mescolarle produce tutt'e due gli errori insieme: cercando «prima» anche nelle
+    #  lingue latine, il francese «meme a 0%, des frais techniques» faceva scattare un
+    #  falso allarme sulla commissione promozionale; cercando solo «dopo» si PERDEVA
+    #  l'inglese — che e' la lingua di ripiego per ogni visitatore con lingua non
+    #  prevista, cioe' il caso piu' comune di tutti.
+    #  ⛔ E IL CINESE E IL GIAPPONESE VOGLIONO LE DUE DIREZIONI, non una.
+    #  In quelle lingue la cifra puo' stare prima della parola o dopo, e la scelta
+    #  dipende da come e' girata la frase (⛔ e qui NON si scrive un esempio con la
+    #  cifra dentro: un commento che nomina un numero puo' diventare falso, e questo
+    #  file esiste apposta per impedire i numeri scritti a mano — S17). Cercarne una
+    #  sola vuol dire che riscrivendo il testo la guardia SMETTE DI GUARDARE senza dirlo
+    #  — e nessuno se ne accorge, perche' sono le due lingue che nessuno di noi rilegge.
+    #  La finestra resta STRETTA: con 25 caratteri, in ideogrammi, prendeva lo 0% della
+    #  promozione che sta nella stessa frase (misurato: 4 falsi allarmi su kit-marketing).
+    #  ⛔ E LE FORME VANNO PRESE DAI FILE, NON DALLA GRAMMATICA CHE UNO SI RICORDA.
+    #  Scritte a memoria, tre varianti vere sfuggivano — trovate il 2026-08-29
+    #  scandendo TUTTO `deploy/` invece delle sole pagine di questo elenco:
+    #    · francese al SINGOLARE («frais technique»), non solo plurale;
+    #    · tedesco con una parola IN MEZZO («Technische Stripe-Gebühr»);
+    #    · inglese con la cifra DOPO («technical fee (…%)»), non solo prima.
+    #  Nessuna delle tre era immaginabile: si vedono solo aprendo i file.
+    _KW_DOPO = (r"tariffa tecnica|tarifa t[eé]cnica|frais techniques?|"
+                r"technische[\w\s-]{0,12}Geb[uü]hr|taxa t[eé]cnica|technical fee")
+    _KW_PRIMA = r"technical fee"
+    _KW_CJK = r"技術手数料|技术费"
+    #  Niente formattazione con `%` in queste: il carattere cercato E' `%`, e
+    #  `"...%[^%%]..." % KW` esplode con «unsupported format character». Si concatena.
+    #  ⛔ IL BUCO FRA LA CIFRA E LA PAROLA NON PUO' SCAVALCARE UN A CAPO NE' UN PUNTO
+    #  ELENCO. Senza questo, in cinese «...delle OTA 18-25%\n• tariffa tecnica...» faceva
+    #  scattare l'allarme sul 25% del CONCORRENTE, che sta nel punto elenco PRECEDENTE:
+    #  in ideogrammi quattro caratteri bastano ad attraversare il divisorio. Il `\\`
+    #  serve perche' negli attributi JavaScript l'a capo e' scritto come DUE caratteri.
+    _BUCO = r"[^%\\\n•]"
+    RX_CIFRA_DOPO = re.compile(r"(?:" + _KW_DOPO + r")" + _BUCO + r"{0,25}?(\d{1,3})\s?%",
+                               re.I)
+    RX_CIFRA_PRIMA = re.compile(r"(\d{1,3})\s?%" + _BUCO + r"{0,4}?(?:" + _KW_PRIMA + r")",
+                                re.I)
+    RX_CIFRA_CJK = re.compile(r"(\d{1,3})\s?%" + _BUCO + r"{0,4}?(?:" + _KW_CJK + r")"
+                              r"|(?:" + _KW_CJK + r")" + _BUCO + r"{0,4}?(\d{1,3})\s?%")
+
+    def _leggi(self, nome):
+        p = os.path.join(BASE, "deploy", nome)
+        # ASSENZA NON E' CONFORMITA': una pagina che sparisce non assolve la regola,
+        # la rende impossibile da verificare.
+        self.assertTrue(os.path.exists(p), "pagina per host sparita: %s" % nome)
+        with open(p, encoding="utf-8", errors="replace") as f:
+            return f.read()
+
+    def test_nessuna_pagina_afferma_di_non_guadagnare_sulla_tariffa_tecnica(self):
+        colpevoli = []
+        for nome in self._pagine():
+            trovate = self.MARGINE_ZERO.findall(self._leggi(nome))
+            if trovate:
+                colpevoli.append("%s: %d occorrenze" % (nome, len(trovate)))
+        self.assertEqual(
+            [], colpevoli,
+            "queste pagine affermano che non guadagniamo sulla tariffa tecnica, ma il "
+            "CONTRATTO che l'host firma dice il contrario (fase185_testi_legali.py "
+            "righe 137-139: «il costo effettivamente sostenuto dalla Piattaforma puo' "
+            "risultare INFERIORE O SUPERIORE alla tariffa»). Non e' una regola di stile: "
+            "e' una contraddizione con un documento firmato. Occorrenze (non righe): %s"
+            % "; ".join(colpevoli))
+
+    def test_la_tariffa_tecnica_scritta_nelle_pagine_e_quella_del_motore(self):
+        """La cifra attaccata alle parole «tariffa tecnica» dev'essere quella che il
+        motore addebita davvero — quella in euro o quella in valuta estera, non altre.
+        ⛔ Si guarda solo la percentuale ATTACCATA a quelle parole, non tutte quelle
+        della riga: le pagine nominano legittimamente le percentuali dei CONCORRENTI,
+        e pretenderle uguali alle nostre sarebbe un falso allarme a ogni giro."""
+        ammesse = {_psp_bps_default() // 100, _psp_bps_estera_default() // 100}
+        sbagliate = []
+        for nome in self._pagine():
+            testo = self._leggi(nome)
+            for rx in (self.RX_CIFRA_DOPO, self.RX_CIFRA_PRIMA, self.RX_CIFRA_CJK):
+                for m in rx.finditer(testo):
+                    #  la regex CJK ha DUE gruppi (cifra prima / cifra dopo): quello
+                    #  che non ha corrisposto e' None, e si prende l'altro.
+                    cifra = next(g for g in m.groups() if g is not None)
+                    if int(cifra) not in ammesse:
+                        sbagliate.append("%s: «%s»"
+                                         % (nome, " ".join(m.group(0).split())[:60]))
+        self.assertEqual(
+            [], sbagliate,
+            "queste pagine dichiarano una tariffa tecnica che il motore NON addebita "
+            "(ammesse dal codice: %s). Un host reclutato con una cifra e addebitato con "
+            "un'altra la scopre dopo aver firmato. Casi: %s"
+            % (sorted(ammesse), "; ".join(sbagliate)))
 
 
 if __name__ == "__main__":

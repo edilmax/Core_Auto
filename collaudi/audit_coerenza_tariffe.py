@@ -123,6 +123,31 @@ for percorso in file_da_scansionare():
         if not (tec or com):
             continue
         righe_rilevanti += 1
+        #  ⛔ QUESTO SALTO HA UN BUCO NOTO, E NON SI CHIUDE QUI. Una riga che dichiara
+        #  la NOSTRA tariffa tecnica e cita i concorrenti nella STESSA frase viene
+        #  scartata intera — ed e' cosi' che una cifra superata e' rimasta su una pagina
+        #  PUBBLICA, in otto lingue, mentre questo audit usciva verde (2026-08-29).
+        #
+        #  ⚠️ IL RIMEDIO OVVIO E' STATO PROVATO E MISURATO, E NON VA BENE. Provando a
+        #  NON saltare le righe che nominano la tariffa («and not tec»), quelle righe
+        #  entrano intere — e con loro le percentuali dei CONCORRENTI che stanno sulla
+        #  stessa frase, che sono legittime. Misurato in copia usa-e-getta: le pagine
+        #  gia' RIPARATE continuavano a risultare anomale per la percentuale altrui.
+        #  Un allarme che grida su righe corrette e' il difetto che questo filtro esiste
+        #  per impedire (righe 60-65), quindi la strada e' chiusa.
+        #  E togliere `KW_ALTRUI` del tutto e' peggio: +19 segnalazioni di cui 14 sono
+        #  percentuali dei concorrenti, cioe' quasi tutto rumore.
+        #
+        #  🔑 IL PUNTO VERO: qui si confrontano le cifre di una RIGA, e una riga di
+        #  marketing ne contiene di nostre e di altrui insieme. Distinguerle vuole la
+        #  VICINANZA fra la cifra e la parola, non l'appartenenza alla stessa riga.
+        #  Quella misura esiste gia' e sta in UN SOLO POSTO:
+        #      test_trasparenza_costi.TestNessunaPromessaDiMargineZero
+        #  che guarda la percentuale ATTACCATA alle parole della tariffa, gira dentro la
+        #  suite (quindi in CI, mentre questo audit no: solo `collaudi/batteria.py`), e
+        #  copre le otto lingue. ⛔ Non si duplica qui: lo stesso criterio scritto due
+        #  volte e' la malattia che questo progetto ha gia' pagato piu' volte — la
+        #  seconda copia resta indietro e nessuno se ne accorge.
         if KW_ALTRUI.search(riga):            # parla dei concorrenti: qualsiasi cifra ok
             continue
         cifre = {int(x) for x in PERC.findall(riga)}
