@@ -72,6 +72,18 @@ _STATI_PAYOUT_VERSO_HOST = ("maturato", "in_transito")
 # VERO dentro `if ric:` e finirebbe fra le anomalie, cioe' diventerebbe un falso allarme
 # (regola ferrea 10: grave quanto un allarme mancato, perche' insegna a ignorare i segnali).
 NON_ESEGUITO = "__non_eseguito__"
+# ...e «HO GUARDATO SOLO UN PEZZO» e' una TERZA cosa, e vuole un marcatore SUO. `fase182`
+# legge Stripe a pagine, con un tetto anti-runaway, e il giornale INTERO: quando il tetto
+# scatta, le sessioni non lette diventano `solo_giornale` -- il giro non PERDE fantasmi, li
+# INVENTA, e grida su prenotazioni sane proprio quando i movimenti sono tanti, cioe' quando
+# i soldi sono tanti. `fase182` lo dichiara apposta (`parziale`, `troncati`) perche' chi
+# legge non scambi quel referto per un verdetto: fino a oggi non lo leggeva nessuno.
+# ⛔ E NON si riusa NON_ESEGUITO: `scansiona` ha UNA riga sola per quel marcatore, e
+# scriverebbe «manca la chiave Stripe» su un giro in cui la chiave C'ERA ED E' STATA USATA.
+# Verde nei test e FALSO nel rapporto operativo: chi legge andrebbe a cercare una chiave che
+# c'e' invece del tetto delle pagine. Le due situazioni restano distinguibili da chi LEGGE,
+# come NON_ESEGUITO e None restano distinguibili da chi CHIAMA.
+NON_FINITO = "__non_finito__"
 
 
 def _ora(ora: Any) -> int:
@@ -81,7 +93,8 @@ def _ora(ora: Any) -> int:
 def _riconciliazione(sistema: Any, giorni: int) -> Optional[Dict[str, Any]]:
     """Confronto con Stripe (fase182), solo se Stripe e il giornale sono configurati.
     `NON_ESEGUITO` se manca la premessa -- e NON None, perche' None qui sotto significa gia'
-    «ho guardato e tutto quadra»: i due casi devono restare distinguibili da chi chiama."""
+    «ho guardato e tutto quadra»: i due casi devono restare distinguibili da chi chiama.
+    `NON_FINITO` se il tetto delle pagine ha fermato la lettura di Stripe a meta'."""
     sk = getattr(getattr(sistema, "config", None), "stripe_secret_key", "") or ""
     fc = getattr(sistema, "finanza", None)
     if not sk or fc is None:
@@ -92,6 +105,10 @@ def _riconciliazione(sistema: Any, giorni: int) -> Optional[Dict[str, Any]]:
     except Exception:
         logger.error("guardiano: riconciliazione fallita (ISOLATA)", exc_info=True)
         return {"errore": "riconciliazione_non_eseguita"}
+    if rep.get("parziale"):
+        # PRIMA di `ok`, e non e' un dettaglio: anche un «tutto quadra» costruito su meta'
+        # Stripe non e' un verdetto. Un giro incompleto non e' un giro (fase182).
+        return NON_FINITO
     if rep.get("ok"):
         return None                                  # tutto quadra: niente da segnalare
     # si tiene solo cio' che NON torna
@@ -345,6 +362,11 @@ def scansiona(sistema: Any, *, ora: Any = None,
     if ric is NON_ESEGUITO:                    # `is`, e PRIMA di `if ric:` (vedi NON_ESEGUITO)
         non_eseguiti.append("riconciliazione_stripe: manca la chiave Stripe o il giornale, "
                             "i conti NON sono stati confrontati con la banca")
+        ric = None
+    elif ric is NON_FINITO:                    # stesso motivo, situazione diversa: la riga
+        non_eseguiti.append(                   # che dichiara il perche' non puo' coincidere
+            "riconciliazione_stripe: il tetto delle pagine ha fermato la lettura di Stripe, "
+            "il confronto e' rimasto A META' e i fantasmi sarebbero inventati da lui")
         ric = None
     if ric:
         anomalie["riconciliazione_stripe"] = ric
