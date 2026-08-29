@@ -588,6 +588,92 @@ test che lo interroghi.
 
 ---
 
+### 🕳️ UN GIRO CHE NON AVEVA FINITO DI GUARDARE DAVA UN VERDETTO — 2026-08-28
+
+**Modulo di produzione toccato: `fase186_guardiano.py`** — col «autorizzato» del fondatore,
+scritto nella sessione della corsia C il 2026-08-28 (B4). Guardie in `test_guardiano.py`.
+Chiude il «resta aperto» della voce qui sotto (*La riconciliazione gridava su prenotazioni
+sane*), che era stato lasciato in sospeso apposta: cambia il comportamento del Guardiano.
+
+**Cosa era rotto.** Il giro prima aveva insegnato a `fase182` a **dichiarare** quando il tetto
+delle pagine lo ferma a metà (`parziale`, `troncati`). Nessuno leggeva quella dichiarazione.
+Misurato sul commit `8354e10`:
+
+    $ grep -rn "parziale\|troncati" --include=*.py .    (fuori da fase182 e collaudi/)
+    -> nessuna riga in alcun fase*.py
+
+`fase186._riconciliazione` guardava solo `rep["ok"]` e ricostruiva le anomalie dagli elenchi.
+Siccome il tetto ferma **solo il lato Stripe** — il giornale si legge intero — le sessioni mai
+lette diventano fantasmi `solo_giornale`: il giro troncato non **perde** fantasmi, li
+**inventa**. Effetto reale: email di ALLARME CRITICO sui soldi che elenca **prenotazioni
+sane**, e capita proprio quando i movimenti sono tanti, cioè quando i soldi sono tanti.
+
+**Il difetto non stava dentro un modulo: stava nella cucitura fra due.** `fase182` dichiarava
+la parzialità e scriveva nel proprio commento per chi la dichiarava; `fase186` leggeva il
+verdetto, ed era ragionevole da solo. Due file corretti, e il difetto vivo nella giuntura —
+per questo nessuna lettura di **un** file lo trovava.
+
+**Come è stato sistemato.** Un **secondo marcatore** `NON_FINITO` accanto a `NON_ESEGUITO`,
+il controllo `if rep.get("parziale")` dentro `_riconciliazione` e il suo ramo `elif` in
+`scansiona`, con una riga di testo **diversa** da quella della chiave mancante. **7 righe
+eseguibili**, nessun file nuovo, nessuna dipendenza, nessuna firma pubblica rotta.
+
+⛔ **Due scelte che sembrano dettagli e non lo sono.**
+1. Il controllo su `parziale` sta **PRIMA** di `if rep.get("ok")`: anche un «tutto quadra»
+   costruito su metà Stripe non è un verdetto. Lo scrive `fase182` da sé: *«un giro incompleto
+   non è un giro»*.
+2. **Non si è riusato `NON_ESEGUITO`**, che sarebbe stata la riparazione da una riga.
+   `scansiona` ha **una** riga sola per quel marcatore, e avrebbe scritto «manca la chiave
+   Stripe» su un giro in cui la chiave **c'era ed è stata usata**: verde nei test e **falso nel
+   rapporto operativo**, con chi legge mandato a cercare una chiave presente invece del tetto
+   delle pagine. Dimostrato, non supposto — vedi l'iniezione 2 qui sotto.
+
+**Test aggiunti** (`test_guardiano.TestGiroTroncatoNonEUnVerdetto`, 2, ordine D20 — guardia
+PRIMA, vista **ROSSA** sul codice di produzione, riparazione DOPO):
+- `test_un_giro_TRONCATO_non_grida_su_prenotazioni_sane` — niente falso allarme;
+- `test_e_DICHIARA_di_non_aver_finito_di_guardare` — e non lo dice **con la bugia comoda**:
+  pretende che la riga del troncamento **non coincida** con quella della chiave mancante. Non
+  vincola le parole (una guardia sulla cosmetica diventa rossa il giorno che qualcuno migliora
+  una frase): pretende che le due situazioni restino **distinguibili da chi legge**, lo stesso
+  principio per cui `NON_ESEGUITO` e `None` restano distinguibili da chi chiama.
+- **Precondizione** `_pretendi_che_il_confronto_SIA_PARTITO`: senza, i due test passerebbero
+  per il motivo sbagliato — `_riconciliazione` uscirebbe con `NON_ESEGUITO` alla prima riga e
+  proverebbero la classe sopra invece di questa (sbaglio S7).
+
+**Le due direzioni, con l'editor e mai con `sed`** (ferrea 2, B2). sha256 di partenza
+`ead3a243…f2998`. *Iniezione 1* (riparazione tolta): `FAILED (failures=2)`, uscita **1** letta
+diretta. *Iniezione 2* (la riparazione furba, riga riusata): `FAILED (failures=1)` — la prima
+metà passa, la **seconda la prende**. Ripristino **byte-identico** dopo entrambe, sha256
+uguale. Modulo intero dopo: `Ran 20 tests ... OK`, uscita 0.
+
+**STATO: acceso, e non c'è niente da accendere.** `fase186` era già vivo nel giro giornaliero
+di `fase83_server._tick_guardiano`: la riparazione è viva dove il modulo era già vivo.
+
+#### ⚠️ Cosa NON è coperto (D18 punto 3) — e il primo punto è il più importante
+
+· **La riparazione da sola sposta il difetto, non lo chiude.** Un giro troncato adesso esce
+  `pulito=True`; il server manda l'email **solo** `if not rep.get("pulito")`, e nel ramo `else`
+  scrive `logger.info("GUARDIANO: nessuno stato anomalo (tutto quadra)")`. Cioè: **prima
+  gridava il falso, adesso rassicura il falso**. Quanto alla riga «non ho finito di guardare»,
+  la formulazione esatta conta: **non è invisibile, è solo da TIRARE e mai da SPINGERE.** Chi
+  interroga `/api/bunker/guardiano` la vede — quella rotta restituisce `scansiona()` intera —
+  ma niente la porta a una persona: `riassunto_html` la mostra e viene chiamata solo se il
+  referto **non** è pulito. Una notizia che arriva solo a chi la va a chiedere è una notizia
+  che arriva a chi già sospettava. È «costruito ≠ collegato». La seconda metà (la mail anche
+  quando tutto quadra) tocca `fase83_server.py`, è una **decisione del fondatore** e non è
+  stata presa qui;
+· **il giro troncato adesso mette da parte anche i segnali VERI.** Il tetto ferma solo Stripe,
+  quindi `solo_stripe` e `importo_diverso` un troncamento non può inventarli: restano veri, e
+  vengono scartati insieme agli altri. È un compromesso **voluto** — un verdetto a metà non è
+  un verdetto — ma il prezzo va scritto, non lasciato scoprire a qualcuno fra sei mesi;
+· **la giuntura `fase83` → `fase186` resta non collaudabile** senza cambiare la forma del
+  codice di produzione: `_tick_guardiano` è una funzione annidata, avviata come thread demone
+  con un ciclo infinito. La guardia copre il lato `fase186`. Misurato:
+  `grep -rn "_tick_guardiano" --include=test_*.py .` → **nessuna riga**;
+· **il giro non è notturno**: `sleep(86400)` conta dall'**avvio del processo**, quindi l'ora la
+  decide l'ultimo riavvio, e se l'app si riavvia più spesso di una volta al giorno quello sleep
+  non scade mai. Non toccato: dipende dalla stessa decisione del punto uno.
+
 ### 💴 ISK E UGX: DUE VALUTE CHE STRIPE VUOLE A DUE DECIMALI, E NOI NO — 2026-08-28
 
 **Cosa era rotto.** `fase99_multicurrency._ESP0` elencava **ISK** e **UGX** fra le valute a
@@ -730,6 +816,10 @@ un giro parziale continua a **emettere un verdetto**. La risposta giusta il prog
 gia' in `fase186_guardiano.NON_ESEGUITO` — «non ho guardato» non e' «tutto a posto» (sbaglio
 S7): un giro troncato non dovrebbe dare ne' `ok` ne' allarme, dovrebbe dire che non ha finito
 di guardare. Cambia il comportamento del Guardiano, quindi non si decide da soli.
+✅ **CHIUSO il 2026-08-28**, col «autorizzato» del fondatore: vedi la voce *«Un giro che non
+aveva finito di guardare dava un verdetto»* in cima. ⛔ Chiuso **a metà**, e la voce nuova dice
+quale metà: il Guardiano adesso lo dichiara, ma quella dichiarazione non raggiunge ancora
+nessuno.
 
 ### 🔢 LO STESSO NUMERO PER QUATTRO GUASTI DIVERSI — `collaudi/cricchetto_statico.py`, 2026-08-28
 
