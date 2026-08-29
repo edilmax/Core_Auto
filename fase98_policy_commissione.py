@@ -37,6 +37,59 @@ GUEST_BPS = 800                  # 8% aggiunto all'ospite  (2% + 8% = 10%)
 BPS_DIRETTO = 500                # 5% sulle prenotazioni DIRETTE dell'host (no-loss: copre Stripe)
 BPS_MARKETPLACE = 1000           # 10% a regime sulle prenotazioni portate da BookinVIP (vetrina/SEO)
 
+# ----------------------------------------------------------------------------------
+# LA TARIFFA TECNICA — il ripiego vive QUI, e in nessun altro posto del prodotto
+# ----------------------------------------------------------------------------------
+#  Fino al 2026-08-29 quattro file se lo scrivevano da soli, con TRE numeri diversi:
+#  `main_casavip` e `fase185_testi_legali` dicevano uno, `fase89_jurisdiction_outreach`
+#  (l'email che va agli host VERI) ne diceva uno piu' basso, `fase188_paga_struttura`
+#  teneva ancora quello vecchio, misurato SOTTO COSTO il 2026-08-09.
+#  ⛔ Non era teoria: `collaudi/audit/16_ambiente_vps.md` ha misurato il 2026-08-25 che in
+#  produzione la variabile d'ambiente NON e' impostata. Quindi valeva il ripiego, e
+#  l'email prometteva una cifra che la cassa non pratica.
+#  🔑 Il ripiego e' il posto dove un numero muore in silenzio: se la variabile c'e',
+#  nessuno lo esegue mai -- e nessuno si accorge che e' sbagliato finche' la variabile
+#  sparisce, cioe' esattamente quando conta.
+#  Guardie: `test_LA_TARIFFA_TECNICA_NON_HA_RIPIEGHI_SPARSI` e le tre sorelle in
+#  `test_fase59_costo_pagamento.py`. Diventano rosse se qualcuno ne riscrive uno da
+#  un'altra parte.
+PAGAMENTO_BPS_DEFAULT = 500         # copre il caso peggiore della carta, non la media
+PAGAMENTO_BPS_ESTERA_DEFAULT = 700  # il caso peggiore PIU' la conversione del gateway
+PAGAMENTO_FISSO_CENTS_DEFAULT = 25  # quota fissa che il gateway prende a OGNI transazione
+
+
+def tariffa_tecnica_bps(valuta_estera: Any = False) -> int:
+    """La tariffa tecnica in bps: dall'ambiente se c'e', altrimenti l'UNICO ripiego.
+
+    ⛔ Nessun chiamante deve rileggersi la variabile d'ambiente per conto suo: e' cosi'
+    che sono nati i tre numeri diversi. Chi la vuole, chiama questa."""
+    import os
+    nome = "PAGAMENTO_BPS_ESTERA" if valuta_estera else "PAGAMENTO_BPS"
+    ripiego = PAGAMENTO_BPS_ESTERA_DEFAULT if valuta_estera else PAGAMENTO_BPS_DEFAULT
+    return _intero_bps_env(os.environ.get(nome), ripiego)
+
+
+def tariffa_tecnica_fisso_cents() -> int:
+    """La quota fissa per transazione in centesimi, dalla stessa unica fonte."""
+    import os
+    return _intero_bps_env(os.environ.get("PAGAMENTO_FISSO_CENTS"),
+                           PAGAMENTO_FISSO_CENTS_DEFAULT)
+
+
+def _intero_bps_env(grezzo: Any, ripiego: int) -> int:
+    """Un valore d'ambiente illeggibile NON diventa zero: torna il ripiego.
+
+    Zero sarebbe il guasto peggiore possibile -- tariffa a zero vuol dire incassare
+    sotto costo su ogni pagamento -- e arriverebbe in silenzio da una variabile scritta
+    male sul server."""
+    if grezzo is None:
+        return ripiego
+    try:
+        v = int(str(grezzo).strip())
+    except (TypeError, ValueError):
+        return ripiego
+    return v if v >= 0 else ripiego
+
 
 def _intero(v: Any, default: int = 0) -> int:
     return v if isinstance(v, int) and not isinstance(v, bool) else default

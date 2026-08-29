@@ -68,12 +68,18 @@ def _percentuali() -> Dict[str, int]:
         # il 4% mentre il motore addebitava il 5%. Un documento legale che dice una cifra
         # diversa da quella addebitata. Ora lo sorveglia
         # `test_trasparenza_costi.test_i_ripieghi_di_fase185_combaciano_con_main`.
-        tecnica = int(os.environ.get("PAGAMENTO_BPS", "500") or 500)
+        # ⛔ 2026-08-29 (giro B1): QUESTA COPIA NON ESISTE PIU'. Il commento qui sopra
+        # descriveva il rimedio scelto il 2026-08-10 -- tenere due copie e sorvegliarle --
+        # e quel rimedio ha retto QUI e ha lasciato scoperto `fase89`, che aveva una terza
+        # copia con un numero ancora diverso. Adesso il numero e' uno solo per tutti.
+        from fase98_policy_commissione import (tariffa_tecnica_bps,
+                                               tariffa_tecnica_fisso_cents)
+        tecnica = tariffa_tecnica_bps()
         # Stripe non prende una percentuale pura: prende percentuale + QUOTA FISSA, e in
         # piu' il 2% quando deve CONVERTIRE la valuta (il conto e' italiano e tiene solo
         # euro). Misurato il 2026-08-09: `collaudi/conti_stripe.py`.
-        estera = int(os.environ.get("PAGAMENTO_BPS_ESTERA", "700") or 700)
-        fisso = int(os.environ.get("PAGAMENTO_FISSO_CENTS", "25") or 25)
+        estera = tariffa_tecnica_bps(valuta_estera=True)
+        fisso = tariffa_tecnica_fisso_cents()
         return {"promo": 0, "giorni_promo": LANCIO_GIORNI_GRATIS,
                 "fase1": LANCIO_BPS_FASE1 // 100, "regime": LANCIO_BPS_REGIME // 100,
                 "diretto": BPS_DIRETTO // 100, "tecnica": tecnica // 100,

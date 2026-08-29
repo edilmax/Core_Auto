@@ -41,6 +41,11 @@ FEE_PER_NOTTE_CENTS = 150          # sovrapprezzo OSPITE per il paga-in-struttur
 GATEWAY_MINIMO_CENTS = 50          # 0.50: pavimento su addebiti piccoli
 GATEWAY_FISSO_CENTS = 55           # 0.55 = 0.25 fisso Stripe + 0.30 sicurezza
 GATEWAY_BPS = 325                  # 3.25%: il caso peggiore extra-UE
+# ⛔ Il PAVIMENTO della copertura e' la tariffa tecnica, e viene dalla FONTE UNICA: qui il
+# ripiego era rimasto a 300 (il 3% secco, misurato SOTTO COSTO il 2026-08-09), cioe' un
+# pavimento piu' basso del vero. Non si vedeva quasi mai -- di solito vince il costo Stripe
+# stimato qui sopra -- e per questo nessuno l'avrebbe corretto da solo (giro B1, 2026-08-29).
+from fase98_policy_commissione import PAGAMENTO_BPS_DEFAULT as _PSP_BPS_DEFAULT
 # +2% quando l'annuncio NON e' nella valuta in cui incassiamo: Stripe deve CONVERTIRE.
 # Il conto e' italiano e tiene SOLO euro (misurato il 2026-08-09 sul conto vero:
 # country IT, default_currency eur, nessun altro saldo), quindi la conversione non e'
@@ -61,7 +66,7 @@ def _intero(v: Any, default: int = 0) -> int:
 
 
 def calcola(prezzo_cents: Any, notti: Any, commissione_cents: Any, *,
-            psp_bps: int = 300,
+            psp_bps: int = _PSP_BPS_DEFAULT,
             valuta_estera: bool = False,
             fee_per_notte_cents: int = FEE_PER_NOTTE_CENTS,
             gateway_minimo_cents: int = GATEWAY_MINIMO_CENTS,
@@ -84,7 +89,7 @@ def calcola(prezzo_cents: Any, notti: Any, commissione_cents: Any, *,
     prezzo = max(0, _intero(prezzo_cents))
     n = max(1, _intero(notti, 1))
     comm = min(prezzo, max(0, _intero(commissione_cents)))       # la commissione non supera il prezzo
-    bps = max(0, _intero(psp_bps, 300))
+    bps = max(0, _intero(psp_bps, _PSP_BPS_DEFAULT))
     fee = max(0, _intero(fee_per_notte_cents, 0)) * n            # a carico OSPITE
     ospite_totale = prezzo + fee
 
