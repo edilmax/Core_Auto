@@ -508,9 +508,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: e4996c2
+CONSEGNE AGGIORNATE A: 39cd84d
 
-SUITE ATTUALE: Ran 6051 test
+SUITE ATTUALE: Ran 6053 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -529,25 +529,34 @@ SUITE ATTUALE: Ran 6051 test
    quel giorno la regex stava altrove: le righe si spostano a ogni modifica, quindi un
    riferimento per numero nasce gia' con la data di scadenza.
 
-CARICATORE (RACCOLTI):  6049  <- rimisurato il 2026-08-28 col caricatore, da PowerShell,
+CARICATORE (RACCOLTI):  6053  <- rimisurato il 2026-08-29 col caricatore, da PowerShell,
                                  PRIMA di qualunque giro (S14), sul ramo `lavoro-b` DOPO aver
-                                 assorbito `origin/master` a `e4996c2` (l'unione di A, #125):
+                                 assorbito `origin/master` a `9f51a0a` (l'unione di C, #127):
                                    CODICE_USCITA_DIRETTO=0
-                                   CARICATORE=6049
+                                   CARICATORE=6053
                                    MODULI_NON_IMPORTABILI=0
+                                   ERRORI_DEL_CARICATORE=0
                                  ⛔ La seconda riga NON e' decorazione: `discover()` non
                                  esplode su un modulo che non si importa, ci mette dentro un
                                  finto test che CONTA. Un modulo rotto ALZA il totale invece
                                  di abbassarlo, e il numero sembra sano. Senza quel controllo
-                                 «6049» sarebbe una cifra di cui non si sa cosa contiene.
-                                 6042 -> 6049 (+7): le tre guardie di
-                                 `test_pipeline_ci.TestLaCIDiceCosaHaSALTATO` (corsia B, B24
-                                 -- la CI adesso pubblica i test SALTATI nel riepilogo) e le
-                                 quattro di `TestIlCricchettoDiceQUALEGuastoHaAvuto` (corsia
-                                 A, unita con la #125).
-                                 ⛔ Il +7 e' un RACCONTO, non la misura: il 6049 e' uscito
-                                 dal caricatore. 6042+3+4 sarebbe stata una somma, e una
-                                 somma non e' una misura (D22, nata proprio da `Ran 5429`).
+                                 la cifra qui sopra sarebbe un numero di cui non si sa cosa
+                                 contiene.
+                                 Da dove viene lo scarto rispetto alla misura precedente:
+                                 le due guardie arrivate con l'unione di C (#127, il
+                                 cricchetto che dice QUALE giro non ha finito di guardare) e
+                                 le due aggiunte qui dalla corsia B
+                                 (`TestLaCIDiceCosaHaSALTATO`: il modello interrogato sulla
+                                 forma anonima, e l'isolamento dell'aiutante provato con due
+                                 sorgenti nello stesso processo).
+                                 ⛔ Quello scarto e' un RACCONTO, non la misura: la cifra e'
+                                 uscita dal caricatore. Sommare le voci sarebbe stata una
+                                 somma, e una somma non e' una misura (D22, nata proprio da
+                                 `Ran 5429`).
+                                 🔑 E QUESTA SPIEGAZIONE NON NOMINA PIU' NESSUNA CIFRA, ed e'
+                                 voluto (S17): una prosa che non contiene il numero non puo'
+                                 diventare falsa quando il numero cambia -- che e' esattamente
+                                 come si era rotta due volte di fila.
                                  ⚠️ E qui il racconto e' stato aggiornato INSIEME al numero,
                                  non «dopo»: fondendo i due rami, sia la versione di A (6046,
                                  con la prosa del giorno prima) sia la mia (6045) portavano

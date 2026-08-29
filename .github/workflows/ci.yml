@@ -191,14 +191,23 @@ jobs:
       # allegati -> 401, `output.summary` delle check-run -> VUOTO su tutti i job. Il
       # riepilogo e' l'unica finestra che si legge senza diritti da amministratore.
       #
-      # Il modello prende TUTT'E TRE le forme di salto, e la terza e' quella che conta:
+      # Il modello e' un SOVRAINSIEME apposta: prende tutte le forme con cui unittest
+      # annuncia un salto, e il gruppo iniziale e' opzionale perche' una di quelle forme
+      # non ha niente davanti:
       #   nome (modulo.Classe) ... skipped 'motivo'   <- decoratore, o skipTest nel corpo
-      #   skipped 'motivo'                            <- deciso in setUpClass: ANONIMO
-      # Il filtro ovvio (`... skipped`) prende solo le prime due. Un salto deciso in
-      # `setUpClass` non porta nome di classe ne' di modulo nemmeno con `-v`: e' un limite
-      # di unittest, ed e' esattamente la forma con cui qui spariscono in blocco le guardie
-      # sul ripristino dei backup quando manca `openssl` (D23 punto 3). Sopravvive solo il
-      # MOTIVO, quindi il riepilogo lo dichiara invece di lasciar credere a una riga persa.
+      #   skipped 'motivo'                            <- deciso in setUpClass, SENZA nome
+      # Il filtro ovvio (`... skipped`) perde la seconda, ed e' esattamente la forma con
+      # cui qui spariscono in blocco le guardie sul ripristino dei backup quando manca
+      # `openssl` (D23 punto 3): sopravvive solo il MOTIVO.
+      #
+      # ⛔ QUALE FORMA ESCA DIPENDE DALL'INTERPRETE, e il commento lo dice perche' senza
+      # sarebbe falso: fino a Python 3.10 il salto di `setUpClass` e' senza nome, da 3.11
+      # unittest ci mette davanti `setUpClass (modulo.Classe) ... `. Il modello non va
+      # toccato per questo -- le prende tutt'e due, ed e' il motivo per cui ha retto il
+      # cambio invece di subirlo. ⛔ Chi passasse di qui a «semplificarlo» togliendo il
+      # gruppo opzionale non vedrebbe niente diventare rosso su 3.11+, e rimetterebbe il
+      # salto anonimo nell'invisibilita' su 3.9: lo impedisce, da sola, la guardia
+      # test_IL_MODELLO_PRENDE_ANCHE_LA_FORMA_ANONIMA in `test_pipeline_ci.py`.
       - name: I test saltati, nel riepilogo (si legge senza permessi)
         if: always()
         run: |

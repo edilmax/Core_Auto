@@ -403,6 +403,62 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🔴 LA GUARDIA DI IERI HA SCOPERTO CHE PYTHON ERA CAMBIATO — 2026-08-29
+
+*(corsia B, ramo `lavoro-b` su `39cd84d`. Ripara la richiesta **#126**, che era ROSSA in CI e
+nessuno l'aveva guardata.)*
+
+**Il fatto, e non è una sconfitta della guardia: è il suo lavoro.** Il commit `52db4d1` era
+stato dichiarato a posto e spinto, ma sulla CI tre job erano rossi — `gate`, `qualita`,
+`full-suite-311` — mentre su `master` gli stessi tre erano verdi. Non debito vecchio: rossi
+**creati dal ramo**. Nessuno se n'era accorto perché la regola ferrea 8 («guarda la tabella»)
+era stata chiusa per settimane con «non misurabile», visto che `gh` non è installato. Si
+misura invece in due comandi con `curl` sull'API pubblica, e il repository è pubblico.
+
+**La causa profonda era UNA SOLA, e sta in una frase che avevo scritto io.** La docstring
+diceva che il salto deciso in `setUpClass` è anonimo **«per costruzione»**. Misurato adesso
+sullo stesso modulo finto: **3.9.10 → anonimo**, **3.11.9 e 3.13.3 → col nome**
+(`setUpClass (mod.Classe) ... skipped '...'`). Avevo scritto un **universale** ricavato da un
+interprete solo. Il test lo ha beccato con il suo stesso messaggio d'errore, che diceva già
+«*o unittest ha cambiato il modo di stampare il salto di setUpClass…*».
+🔑 È la **S17 in forma nuova**: non una cifra dentro un commento, una **proprietà senza la sua
+versione**. Una cifra si vede che invecchia; una proprietà no.
+
+**Le due riparazioni, e perché non sono quelle che sembravano ovvie.**
+· `_uscita_vera_di_unittest` **non lancia più un sottoprocesso**: gira in-processo con
+  `TextTestRunner(verbosity=2)`. Misurato che le righe sono **identiche** al sottoprocesso su
+  3.9.10, 3.11.9 e 3.13.3 — è lo stesso `TextTestResult` dello stesso interprete, quindi non
+  si è scesi a un'imitazione. Sparisce la chiamata che gli strumenti statici contavano come
+  nuova (`S603`/`B603`), cioè il rosso di `qualita`, **senza** un `nosec` permanente.
+  ⛔ Il nome del modulo è ora **unico per chiamata**, con `sys.path`/`sys.modules` ripristinati:
+  non è un contorno. Col nome fisso la seconda chiamata solleva `ImportError` — `unittest`
+  confronta il `__file__` già in `sys.modules` con quello atteso — e i tre test che usano
+  l'aiutante smetterebbero di funzionare in blocco. Visto rosso su tutti e tre gli interpreti
+  **prima** di scrivere la cura.
+· la controprova si è **spezzata sulla giuntura giusta**: `assertLessEqual` sull'uscita viva
+  («il filtro ovvio non è mai meglio del nostro», vero ovunque), più una guardia nuova che
+  interroga **il modello** con la forma anonima letterale. Lì il soggetto non è `unittest` ma
+  un'espressione regolare, cioè una funzione pura di una stringa — e la stringa è uscita
+  misurata di 3.9.10, non inventata. Serve perché su 3.11+ l'uscita viva non produce più quella
+  forma: senza, chi «semplificasse» il modello togliendo il gruppo opzionale non vedrebbe
+  niente diventare rosso, e il salto anonimo tornerebbe invisibile su 3.9.
+
+**Quello che invece NON dipendeva dalla versione, verificato invece che supposto:** i test
+saltati in `setUpClass` non entrano nel totale `Ran` — `Ran 3 tests` / `OK (skipped=3)` su un
+modulo che di metodi ne dichiara quattro, identico su 3.9.10, 3.11.9 e 3.13.3. Delle due
+affermazioni della docstring una era locale alla versione e una universale: separarle è servito.
+
+**Il filtro in `ci.yml` non è stato toccato**, ed è la parte che merita di essere ricordata:
+è un **sovrainsieme**, prende tutt'e due le forme, e per questo ha **retto** il cambio di
+versione invece di subirlo. È cambiato solo il commento, che dichiarava universale ciò che
+non lo è.
+
+**Trovato di striscio, e vale per tutte le corsie:** il gancio `pre-commit` (controllo 9,
+«i file cambiati sono quelli dichiarati») **non ha nozione dei commit di fusione**. Chi assorbe
+`master` dopo avere già un commit proprio si vede rosso sui file dell'altra corsia, che non ha
+toccato. Si sblocca allargando la dichiarazione col perché (regola ferrea 15) e restringendola
+subito dopo — ma il primo che ci finisce dentro perde tempo a capire cosa sta guardando.
+
 ### 🔵 UN JOB VERDE NON DICEVA COSA AVEVA SALTATO — 2026-08-28
 
 *(corsia B, ramo `lavoro-b` su `b1e216e`. Chiude **B24**, chiude **B30**, apre **B31**. Scritta
