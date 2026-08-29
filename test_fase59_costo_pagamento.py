@@ -177,6 +177,153 @@ class TestCostoPagamento(unittest.TestCase):
         self.assertEqual(r.status, 422)
         self.assertEqual(r.corpo["errore"], "prezzo_non_sostenibile")
 
+    # ==================================================================
+    # B1 — LA TARIFFA TECNICA NON PUO' AVERE PIU' DI UN RIPIEGO
+    # ==================================================================
+    #  Trovato il 2026-08-29 rimisurando il piano d'audit contro il codice. QUATTRO file si
+    #  scrivevano da soli un valore predefinito per la STESSA tariffa, con TRE numeri
+    #  diversi. Non era teoria: `collaudi/audit/16_ambiente_vps.md` ha misurato il
+    #  2026-08-25 che in produzione la variabile d'ambiente NON e' impostata, quindi i
+    #  ripieghi valgono davvero -- e l'email di reclutamento (`fase89`) prometteva agli host
+    #  una cifra che la cassa (`main_casavip`) non pratica.
+    #  ⛔ Il ripiego e' il posto dove un numero muore in silenzio: se la variabile c'e',
+    #  nessuno lo esegue mai, e nessuno si accorge che e' sbagliato finche' la variabile
+    #  sparisce -- cioe' esattamente quando conta.
+
+    NOMI_TARIFFA = ("PAGAMENTO_BPS", "PAGAMENTO_BPS_ESTERA", "PAGAMENTO_FISSO_CENTS")
+
+    @staticmethod
+    def _ripieghi_nel_sorgente(nome):
+        """Ogni file di PRODUZIONE che si scrive da solo un ripiego per `nome`.
+
+        Legge il sorgente e non l'ambiente, perche' la domanda non e' «quanto vale oggi»
+        (l'ambiente potrebbe impostarla) ma «quanti numeri diversi sono scritti dentro».
+        ⚠️ Limite dichiarato (D18 punto 3): e' una lettura TESTUALE, quindi conterebbe anche
+        un `environ.get(...)` scritto dentro un commento (sbaglio S6). Oggi non ce ne sono,
+        e la seconda guardia qui sotto non dipende da questa: legge una firma, non un testo.
+        """
+        radice = os.path.dirname(os.path.abspath(__file__))
+        trovati = {}
+        for f in sorted(os.listdir(radice)):
+            if not f.endswith(".py"):
+                continue
+            if not (f.startswith("fase") or f == "main_casavip.py"):
+                continue
+            with io.open(os.path.join(radice, f), encoding="utf-8", errors="replace") as fh:
+                src = fh.read()
+            m = re.search(r'environ\.get\(\s*["\']' + nome + r'["\']\s*,\s*["\']?(\d+)', src)
+            if m:
+                trovati[f] = int(m.group(1))
+        return trovati
+
+    #  ⚠️ PERCHE' I POSTI AMMESSI SONO DUE E NON UNO, e la ragione e' misurata.
+    #  La riparazione «pulita» sarebbe togliere il numero anche da `main_casavip.py` e
+    #  lasciarlo solo in `fase98`. Misurato prima di provarci: OTTO file di prova leggono
+    #  `main_casavip.py` COME SORGENTE per sapere cosa parte in produzione (e uno di loro,
+    #  `test_pipeline_ci.py`, lo fa 13 volte). Toglierlo di li' avrebbe voluto dire
+    #  riscrivere nove strumenti per riparare una divergenza in un file: e' l'opposto della
+    #  regola ferrea 1. Quindi i posti restano DUE, e sono SALDATI da una guardia: `fase98`
+    #  e' la fonte, `main_casavip` e' la dichiarazione di cio' che parte, e se si separano
+    #  qualcosa diventa rosso lo stesso giorno.
+    POSTI_AMMESSI = ("fase98_policy_commissione.py", "main_casavip.py")
+
+    def test_LA_TARIFFA_TECNICA_NON_HA_RIPIEGHI_SPARSI(self):
+        """LA CAUSA. Ogni file che si scrive un ripiego suo e' un numero che puo' separarsi
+        dagli altri senza che nessuno lo esegua mai -- il ripiego lo esegue solo la macchina
+        che NON ha la variabile d'ambiente, cioe' la produzione."""
+        for nome in self.NOMI_TARIFFA:
+            trovati = self._ripieghi_nel_sorgente(nome)
+            self.assertTrue(
+                trovati,
+                "nessun ripiego trovato per %s: questa prova non e' in condizione di "
+                "misurare niente, quindi si ferma invece di dare verde (sbaglio S7)" % nome)
+            sparsi = {f: v for f, v in trovati.items() if f not in self.POSTI_AMMESSI}
+            self.assertEqual(
+                {}, sparsi,
+                "%s ha un ripiego SUO in %s. I soli posti ammessi sono %s: chiunque altro "
+                "lo voglia chiama `fase98.tariffa_tecnica_bps()`."
+                % (nome, sparsi, list(self.POSTI_AMMESSI)))
+
+    def test_IL_RIPIEGO_DI_MAIN_E_SALDATO_ALLA_FONTE_UNICA(self):
+        """LA SALDATURA. Due posti sono ammessi solo perche' una macchina li tiene uguali.
+        Senza questa prova, «due posti» tornerebbe a essere il difetto di partenza --
+        successo davvero il 2026-08-10, quando la tariffa passo' da 4 a 5, `main` fu
+        aggiornato e la copia in `fase185_testi_legali` no."""
+        import fase98_policy_commissione as _p98
+        atteso = {"PAGAMENTO_BPS": _p98.PAGAMENTO_BPS_DEFAULT,
+                  "PAGAMENTO_BPS_ESTERA": _p98.PAGAMENTO_BPS_ESTERA_DEFAULT,
+                  "PAGAMENTO_FISSO_CENTS": _p98.PAGAMENTO_FISSO_CENTS_DEFAULT}
+        for nome, valore_fonte in atteso.items():
+            trovati = self._ripieghi_nel_sorgente(nome)
+            self.assertIn(
+                "main_casavip.py", trovati,
+                "%s non e' piu' dichiarato in main_casavip.py: otto strumenti lo leggono "
+                "di li', quindi questa prova si ferma invece di dare verde" % nome)
+            self.assertEqual(
+                valore_fonte, trovati["main_casavip.py"],
+                "%s: la fonte unica (fase98) dice %s, main_casavip dichiara %s. Uno dei due "
+                "e' stato cambiato senza l'altro -- ed e' il difetto che questa saldatura "
+                "esiste per rendere impossibile."
+                % (nome, valore_fonte, trovati["main_casavip.py"]))
+
+    def test_UNA_VARIABILE_D_AMBIENTE_ILLEGGIBILE_NON_AZZERA_LA_TARIFFA(self):
+        """IL RAMO DIFENSIVO, ESEGUITO INVECE CHE ASSUNTO (D19).
+
+        `tariffa_tecnica_bps()` legge una variabile scritta a mano su un server. Se quel
+        valore e' illeggibile la risposta NON deve essere `0`: una tariffa a zero vuol dire
+        incassare **sotto costo su ogni pagamento**, e arriverebbe **in silenzio** da un
+        refuso in un file di ambiente -- nessuna eccezione, nessun log, solo soldi che non
+        rientrano.
+        ⛔ Perche' questa prova esiste anche se «oggi la variabile e' scritta bene»: e'
+        codice difensivo, quindi in condizioni normali **non lo esegue nessuno**, ed e'
+        indistinguibile da codice morto finche' qualcuno non lo prova. Il giorno che serve
+        e' il giorno in cui qualcosa ha gia' ceduto, cioe' il peggiore per scoprire che la
+        rete era rotta (D19 punto 3)."""
+        import fase98_policy_commissione as _p98
+        atteso = _p98.PAGAMENTO_BPS_DEFAULT
+        rotti = ("abc", "", "   ", "-5", "5,0", "None", "0x1F4")
+        vecchio = os.environ.pop("PAGAMENTO_BPS", None)
+        try:
+            for valore in rotti:
+                os.environ["PAGAMENTO_BPS"] = valore
+                self.assertEqual(
+                    atteso, _p98.tariffa_tecnica_bps(),
+                    "con PAGAMENTO_BPS=%r la tariffa non torna al ripiego %s: un valore "
+                    "d'ambiente illeggibile non deve diventare una tariffa diversa, e "
+                    "MENO CHE MAI zero" % (valore, atteso))
+            # e la seconda direzione: un valore BUONO deve vincere sul ripiego, altrimenti
+            # la difesa avrebbe reso la variabile inutile (ferrea 10: si prova nei due sensi)
+            os.environ["PAGAMENTO_BPS"] = "  650 "
+            self.assertEqual(
+                650, _p98.tariffa_tecnica_bps(),
+                "un valore valido (anche con spazi) deve vincere sul ripiego: se non vince, "
+                "la variabile d'ambiente non serve piu' a niente e il server non e' piu' "
+                "configurabile")
+        finally:
+            os.environ.pop("PAGAMENTO_BPS", None)
+            if vecchio is not None:
+                os.environ["PAGAMENTO_BPS"] = vecchio
+
+    def test_IL_PAGA_STRUTTURA_NON_HA_UNA_TARIFFA_TECNICA_TUTTA_SUA(self):
+        """`fase188.calcola` usa `psp_bps` come PAVIMENTO della copertura carta
+        (`per_psp = bps * addebito // 10000`). Il suo predefinito era 300, cioe' il 3%
+        misurato SOTTO COSTO il 2026-08-09: un pavimento piu' basso del vero non si vede
+        quasi mai -- perche' di solito vince il costo Stripe stimato -- e proprio per questo
+        nessuno lo correggerebbe mai da solo.
+        Legge la FIRMA, non il testo: una guardia che non si puo' soddisfare con un
+        commento (sbaglio S6)."""
+        import inspect
+        import fase188_paga_struttura as _f188
+        import fase98_policy_commissione as _p98
+        vero = _p98.PAGAMENTO_BPS_DEFAULT
+        firma = inspect.signature(_f188.calcola).parameters["psp_bps"].default
+        self.assertEqual(
+            vero, firma,
+            "il pavimento della copertura carta in `fase188.calcola` e' %s mentre la "
+            "tariffa tecnica della produzione e' %s: sullo stesso incasso il prodotto "
+            "userebbe due tariffe diverse a seconda di che strada prende il pagamento."
+            % (firma, vero))
+
 
 class TestPavimentoDelCredito(unittest.TestCase):
     """Il credito si finanzia dalla NOSTRA commissione, e `_sconto_credito` tiene un

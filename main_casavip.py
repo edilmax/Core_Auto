@@ -147,6 +147,11 @@ def main() -> None:  # pragma: no cover
         #   estera -> 7% contro 5,25% = 1,75 punti di margine
         # ⛔ Serve soprattutto NEI PRIMI 90 GIORNI: li' la commissione e' 0% e questa tariffa
         # e' l'UNICA cosa che paga Stripe. Se scende, in promozione si perde su ogni incasso.
+        # ⛔ Questi tre numeri sono SALDATI a `fase98_policy_commissione` (B1, 2026-08-29):
+        # li' vive la fonte unica che leggono l'email di reclutamento, i testi legali e il
+        # gateway del paga-in-struttura. Restano scritti qui perche' `main_casavip.py` e' la
+        # dichiarazione di cio' che parte in produzione, e otto strumenti la leggono di li'.
+        # Se divergono, `test_IL_RIPIEGO_DI_MAIN_E_SALDATO_ALLA_FONTE_UNICA` va rossa.
         psp_bps=int(os.environ.get("PAGAMENTO_BPS", "500")),
         psp_bps_valuta_estera=int(os.environ.get("PAGAMENTO_BPS_ESTERA", "700")),
         psp_fisso_cents=int(os.environ.get("PAGAMENTO_FISSO_CENTS", "25")),

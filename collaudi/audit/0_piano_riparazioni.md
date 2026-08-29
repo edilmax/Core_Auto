@@ -22,6 +22,55 @@
 che non sono riparazioni**. Costo misurato: **19 giri × (26 min di suite + 11,9 min di CI)** =
 **circa 12 ore di sola verifica**, senza contare il tempo di scrittura del codice.
 
+---
+
+## ⛔ RIMISURATO CONTRO IL CODICE IL **2026-08-28** — leggere questo PRIMA di aprire un giro
+
+> **Perché esiste questo blocco.** Questo piano è stato costruito il **2026-08-25 in sola
+> lettura**, e da allora il codice è andato avanti. Il 28 agosto una sessione ha preso il primo
+> giro di questa lista e stava per ripararlo: **era già stato fatto due giorni prima.** Un piano
+> è un **artefatto**; il codice è il **meccanismo**. Quando i due dicono cose diverse, **vince il
+> codice**, e questa lista va rimisurata prima di spenderci sopra un'ora.
+
+**16 giri sondati su 19, uno per uno, contro il codice di `e4996c2`. Uno solo era chiuso.**
+
+| giro | esito della rimisura | la prova, misurata |
+|---|---|---|
+| **A1** | ✅ **CHIUSO** 26/08 | `guardia_contratto_firmato.py` → `VERDE · EXIT=0` |
+| **A3** | 🔴 aperto | tre tetti diversi sull'upload in due configurazioni `nginx` |
+| **A4** | 🔴 aperto | zero occorrenze di «conservato»/«per legge» in `fase156_erasure.py` |
+| **A5** | 🔴 aperto | `data.get("paese","")` seguito da `UPDATE … paese=?` incondizionato |
+| **A2** | 🔴 aperto | in `fase131_payout_dashboard.py` lo stato `pagato` è **terminale e nessuno ci entra** |
+| **B1** | 🔴 **aperto E VIVO IN PRODUZIONE** ⬇️ | vedi il riquadro qui sotto |
+| **B2** | 🔴 aperto | `fase188_paga_struttura.py`: `GATEWAY_BPS` e `GATEWAY_FISSO_CENTS` ancora discordi dal contratto |
+| **B4** | 🔴 aperto | `_transazioni_bloccate` compare **0 volte** nei tre gestori nominati |
+| **C1** | 🔴 aperto | «certificat…» in `index.html` e `bunker.html`, «cancellazione gratuita» in `index.html`, «zero attese» in `diventa-host.html` |
+| **C4** | 🔴 aperto | il pannello marketing offre **5** caselle lingua su 8 (`pt ja zh` non ci sono) |
+| **C5** | 🔴 aperto | «in Italia, il Garante» compare **anche nella versione inglese** della privacy |
+| **D2** | 🔴 aperto | **44** moduli aprono il database per conto loro invece di usare `fase23_datastore` |
+| **D1** | 🟡 **in parte chiuso** | `f7faa5b` ha chiuso B20 (`TODO` come sottostringa) e ha escluso `collaudi/audit` da `audit_coerenza_tariffe.py` (riga `ESCLUDI_PERCORSI`). Il resto del giro è aperto |
+| **D3** | 🔴 aperto | nessuna rotta `/bunker` senza estensione nel server |
+
+⛔ **NON rimisurati, e non si scrivono come chiusi:** **B3** · **C2** · **C3** · **D4-D6**.
+
+### 🔴 IL PRIMO LAVORO ADESSO È **B1**, e il motivo è che è già falso verso una persona vera
+
+```
+main_casavip.py                       os.environ.get("PAGAMENTO_BPS", "500")
+fase185_testi_legali.py               os.environ.get("PAGAMENTO_BPS", "500")
+fase89_jurisdiction_outreach.py       os.environ.get("PAGAMENTO_BPS", "400")   <- l'EMAIL agli host
+```
+
+e il moltiplicatore sta nel referto **16** di questa stessa cartella, l'unico passaggio che è
+andato a guardare la macchina vera: **`PAGAMENTO_BPS` non è impostata in produzione**, quindi
+valgono i ripieghi del codice — **e divergono**. L'email di reclutamento promette la cifra del
+suo ripiego, il motore addebita quella del suo.
+
+⇒ È l'unico difetto aperto che ha la proprietà per cui A1 stava in cima: **il costo cresce col
+tempo.** Ogni host reclutato da adesso è un host a cui è stato scritto un prezzo che non
+pratichiamo. E la riparazione è la più pulita del piano — la fonte unica **esiste già**
+(`ConfigCasaVIP`): non si scrive una costante, **si cancellano i ripieghi**.
+
 ⚠️ **E il numero che conta non è 247.** Le voci del passaggio 4 (112 funzioni mai chiamate) e
 quelle del passaggio 7 (20 valori sparsi, di cui 17 con la fonte unica **già scritta**) **non si
 riparano scrivendo codice nuovo**: si riparano **collegando** ciò che esiste, o **togliendo** ciò
@@ -62,7 +111,33 @@ solo sarebbe peggio — un giro che tocca 11.245 righe in una volta è irreversi
 # 🩸 FASCIA A — QUI UN CLIENTE VERO PUÒ FARSI MALE
 
 ## GIRO A1 — La firma che registra un documento diverso da quello mostrato
-**5 voci** · 🔴 la più grave di tutto l'audit
+### ✅ **FATTO il 2026-08-26** — commit `f7faa5b`, richiesta di unione **#108**
+
+> ⛔ **E per due giorni nessuno lo sapeva.** La riparazione è entrata in `master` il 26 agosto e
+> **nessun documento è stato aggiornato**: `grep -c "A1" RIPRENDI_QUI.md` → **0**, e questa riga
+> qui sotto ha continuato a dire «è la più grave di tutto l'audit, ogni host che si registra da
+> oggi fabbrica una prova falsa». Il 28 agosto quella frase è stata letta da una sessione, messa
+> in cima a un passaggio di consegne come **unica cosa urgente**, e si era a un passo dal
+> riparare una cosa già riparata. È lo **sbaglio S10** di `CLAUDE.md`: *il documento si aggiorna
+> nello stesso momento in cui cambia la macchina — non «dopo», perché il «dopo» è dove si perde.*
+>
+> **Come è stato verificato il 2026-08-28** (tre prove, tre lati diversi):
+> 1. **il codice** — etichetta, link e impronta escono tutti e tre da `fase163_accettazioni`
+>    (`etichetta_contratto`, `link_contratto`, `lingua_contratto_servita`); il link scritto a
+>    mano a `/termini.html` non c'è più;
+> 2. **il commit** — `git log -1 -S "etichetta_contratto" -- fase83_server.py` → `f7faa5b`;
+>    copre tutte e cinque le voci, comprese le due sulle lingue e il ripiego opposto fra server
+>    e pagina. Suite verde quel giorno: `Ran 6007 tests — OK — EXIT=0`;
+> 3. **la guardia che quella riparazione si è lasciata dietro**, eseguita di nuovo:
+>    `python collaudi/guardia_contratto_firmato.py` → `caselle d'accettazione trovate: 3
+>    (attese 3) · VERDE: etichetta, link e documento firmato coincidono · EXIT=0`.
+>
+> **Resta aperta solo la voce 🟡 minore** (referto 1 · N12): le cifre del contratto scritte a
+> mano invece che dalla fonte, e il contratto in due lingue sole. Il referto stesso dice «le
+> cifre **giuste**, ma scritte a mano»: è un rischio di manutenzione, **non** una prova falsa.
+
+**5 voci** · 🔴 era la più grave di tutto l'audit — *testo originale del 2026-08-25 qui sotto,
+conservato perché dice perché aveva la precedenza*
 
 | voce | referto |
 |---|---|

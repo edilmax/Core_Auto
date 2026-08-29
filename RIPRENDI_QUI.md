@@ -18,51 +18,70 @@
 
 ---
 
-## 📍 DOVE SIAMO — 2026-08-28 mattina, misurato dai QUATTRO posti
+## 📍 DOVE SIAMO — **2026-08-29 ore 03:00**, misurato dai QUATTRO posti
 
 ```
-computer            5d6e0b3   <- git rev-parse --short master, da PowerShell vera
-GitHub master       5d6e0b3   <- git ls-remote --heads origin master
-                                 5d6e0b307279e24d22da6c06f846d2edd834b9b3
-albero              pulito    <- git status --porcelain, uscita vuota
-CARICATORE          6042      <- misurato PRIMA di qualunque giro (S14), da PowerShell,
-                                 DOPO l'unione di tutte e tre le corsie. EXIT=0
-VPS (git sul disco) efe35b5   <- ssh in sola lettura, misurato adesso, non ricordato
-IMMAGINE VIVA       sha256:8def0ea3d9f2b0c1ab74385bf45f6bd152105b03ac87f1bdd02e06bf198b2676
+computer            e4996c2   <- git rev-parse --short HEAD
+GitHub master       e4996c2   <- git ls-remote --heads origin master
+albero              8 file in lavorazione (giro B1, scopo dichiarato di 9)
+CARICATORE          6049      <- da PowerShell vera, in QUESTO albero, con B1 dentro
+                                 (master ne dichiara 6046: NON si sommano, D22)
+VPS (git sul disco) b1e216e   <- ssh in sola lettura
+IMMAGINE VIVA       sha256:56f716d0438b17b262a88d600a02fde20c82799b778b1131a2bf5ef23c706bbf
                               <- docker inspect --format='{{.Image}}' casavip_app
-IN PRODUZIONE       curl https://bookinvip.com/api/health -> HTTP 200 in 0,523 s
+                                 costruita 2026-08-28T12:54:44Z, avviata 12:55:29Z
+IN PRODUZIONE       curl https://bookinvip.com/api/health -> HTTP 200 in 0,494 s
                     {"status": "ok", "money_unit": "cents_integer",
                      "guardiano": "ok", "email_ko": 0}
-                    curl https://bookinvip.com/           -> HTTP 200 in 0,432 s
 ```
 
-⛔ **IL VPS È INDIETRO DI NOVE UNIONI E VENTISEI COMMIT, E QUESTA VOLTA NON È UNO SCARTO
-INNOCUO.** Misurato, non dedotto:
-```
-git rev-list --count efe35b5..master           -> 26
-git rev-list --count --merges efe35b5..master  ->  9
-```
+> ⛔ **I valori di prima erano FALSI in cinque punti su cinque** (dicevano computer/GitHub
+> `5d6e0b3`, VPS `efe35b5`, immagine `sha256:8def0ea3`) e su quei valori era costruito un
+> allarme che non esisteva. Non era una bugia: era un riquadro scritto il 28 mattina e mai
+> più rimisurato, sotto un titolo che non portava l'ora. **Questi numeri invecchiano entro la
+> giornata: se leggi questo riquadro e la data non è di oggi, rimisura prima di agire.**
 
-Fino al 26 agosto la frase che giustificava lo scarto era «sono stati uniti solo documenti,
-nessun codice è cambiato». **Da quel momento non è più vera, e va detto per esteso** — questo
-è il diff fra ciò che il browser serve adesso e ciò che c'è nel repository:
+### ✅ IL VPS È INDIETRO DI **UNA** UNIONE E **DUE** COMMIT, E NON TOCCA IL PRODOTTO
+
+*(Rimisurato il 2026-08-29. Qui c'era scritto «indietro di NOVE unioni e VENTISEI commit, e
+questa volta non è uno scarto innocuo». Era falso, e lo era perché il conto partiva da
+`efe35b5` — un valore del VPS **vecchio**, mai rimisurato.)*
 
 ```
-git diff --stat efe35b5..master -- deploy/
-  deploy/app.js      | 11 +++++++++--
-  deploy/index.html  | 12 ++++++++++++
+git rev-list --count b1e216e..origin/master           -> 2
+git rev-list --count --merges b1e216e..origin/master  -> 1
 
-git diff --stat efe35b5..master -- 'fase*.py' main_casavip.py
-  fase162_pagamenti_pendenti.py | 46 ++++++++++++++++++++++--------
-  fase182_riconciliazione.py    | 44 ++++++++++++++++++++++-----------
-  fase99_multicurrency.py       | 10 +++++++++-
+git diff --stat b1e216e..origin/master -- deploy/ 'fase*.py' main_casavip.py
+  -> VUOTO
 ```
 
-🔴 **La riga che pesa più di tutte è `fase99_multicurrency.py`:** è la riparazione di ISK e
-UGX, due valute che Stripe vuole a **due** decimali e che noi trattavamo a **zero** — cioè su
-un annuncio in corone islandesi si incassava **un centesimo del dovuto**. Quella riparazione è
-nel repository e **non è in produzione**. Non è un rischio teorico: è un difetto sui soldi già
-capito, già provato e ancora vivo per chi apre il sito.
+⇒ **Il browser serve esattamente lo stesso codice che c'è in `master`.** Lo scarto è tutto in
+`collaudi/cricchetto_statico.py`, `test_pipeline_ci.py` e due documenti: strumenti e prove,
+niente che un cliente veda.
+
+### 🔴 E LA VOCE PIÙ GRAVE CHE C'ERA QUI — ISK e UGX — **È GIÀ IN PRODUZIONE**
+
+Qui era scritto che la riparazione di ISK e UGX (due valute che il gateway vuole a **due**
+decimali e che trattavamo a **zero**: su un annuncio in corone islandesi si sarebbe incassato
+un centesimo del dovuto) era *«nel repository e non in produzione… ancora viva per chi apre il
+sito»*. **Non è vero.** Misurato **dentro il contenitore che gira**, non dal checkout git —
+che è l'errore in cui questo stesso riquadro avverte di non cadere, due paragrafi più sotto:
+
+```
+docker exec casavip_app grep -n "_ESP0 = {" /app/fase99_multicurrency.py
+  39:_ESP0 = {"JPY", "KRW", "VND", "CLP", "XAF", "XOF", "PYG", "RWF", …}
+docker exec casavip_app python -c "… import fase99_multicurrency as m; …"
+  ISK in ESP0: False | UGX in ESP0: False
+```
+
+⇒ ISK e UGX **non sono più** fra le valute a zero decimali nel codice che sta girando adesso.
+Il commit (`8354e10`, 28 agosto ore 10:14) è nel VPS **e** l'immagine viva è stata costruita
+alle **12:54** dello stesso giorno, quindi lo contiene — e il controllo dentro il contenitore
+lo conferma senza doverlo dedurre dagli orari.
+
+🔑 **La lezione, che è la stessa di `A1` nel piano d'audit:** un documento che dichiara
+**urgente** una cosa **già riparata** non è un errore innocuo. Dirige le priorità di chi legge,
+e stanotte questo riquadro era la voce numero 1.
 
 ⛔ **E `git pull` sul server NON basta.** `deploy/` non è montato: entra nell'immagine con
 `COPY` (`STATIC_DIR=/app/deploy`). Finché non si **ricostruisce l'immagine**, il disco del
@@ -252,15 +271,63 @@ domanda non diventa **essa stessa** l'autorizzazione.
 > decide il fondatore**, perché sono scelte che toccano soldi e rischio, non scelte tecniche
 > (D12). Qui c'è la misura, non la decisione.
 
-### 1️⃣ 🔴 LA RICONCILIAZIONE NOTTURNA NON ESISTE — e non è un modulo da scrivere, è un filo da attaccare
+### 1️⃣ ~~LA RICONCILIAZIONE NOTTURNA NON ESISTE~~ — ⛔ **ERA FALSO. ESISTE, ED È COLLEGATA.**
 
-**Cosa c'è oggi**, misurato:
-```
-grep -rn "riconcil" deploy/ .github/ docker-compose.casavip.yml
-  ->  un solo riscontro: deploy/bunker.html:641 chiama /api/bunker/riconciliazione
-```
-Gira **solo se qualcuno schiaccia un pulsante nel bunker**. Nessun lavoro notturno, nessuna
-mail — né quando trova un guaio, né quando è tutto a posto.
+> **Corretto il 2026-08-29, misurando il codice invece dei contorni.** Il giro notturno c'è,
+> parte da solo, chiama la riconciliazione e manda l'email:
+> ```
+> fase83_server.py:11244   def _tick_guardiano():
+> fase83_server.py:11300   _thg.Thread(target=_tick_guardiano, daemon=True).start()
+> fase83_server.py:11248     from fase186_guardiano import scansiona, riassunto_html
+> fase186_guardiano.py:90      from fase182_riconciliazione import riconcilia
+> fase186_guardiano.py:420   """Corpo dell'email di allarme. Solo se il report NON è pulito."""
+> ```
+>
+> ⛔ **PERCHÉ LA MISURA DI PRIMA DICEVA IL CONTRARIO, ed è la lezione che vale più del fatto.**
+> Il comando era:
+> ```
+> grep -rn "riconcil" deploy/ .github/ docker-compose.casavip.yml
+> ```
+> Cerca nelle pagine, nella CI e nel compose — **e non dentro i file `.py`**, cioè l'unico
+> posto dove quel filo poteva essere. Non ha trovato niente perché **non ha guardato dove la
+> cosa sta**, e «non trovato» è stato letto come «non esiste».
+> 🔑 È **D23**: *il comando e l'ambiente con cui guardi fanno parte della misura.* Un `grep`
+> col perimetro sbagliato non dà un risultato debole: ne dà uno **rovesciato**. E questo è
+> finito in cima all'elenco dei lavori come voce numero 1, cioè ha diretto delle priorità.
+>
+> ### ⛔ E LA FORMA GENERALE, misurata QUATTRO volte nella notte fra il 28 e il 29 agosto
+>
+> **Prima di riportare un risultato, chiediti se stai misurando LA MACCHINA o IL TUO
+> STRUMENTO.** Per un `grep` la domanda concreta è: **«quali cartelle NON ho incluso?»**
+>
+> | il numero riportato | cosa misurava davvero |
+> |---|---|
+> | «la riconciliazione notturna NON ESISTE» | **dove aveva guardato il grep** (non nei `.py`) |
+> | «19 frasi false» → erano **26** | l'espressione di ricerca, che vedeva **una lingua su otto** |
+> | «6 virgole e 2 punti: sbilanciato» | il conteggio piatto, cieco all'inglese che scrive `€0.25` |
+> | «4 pagine pulite» | **la lista di 4 nomi scritta a mano** dentro la guardia |
+>
+> 🔑 Tutti e quattro avevano **la forma di un fatto sulla macchina** ed erano **fatti sullo
+> strumento**. Ed è la specie più pericolosa, perché il risultato è *plausibile*: nessuno va a
+> ricontrollare un numero che torna. Si scoprono in un modo solo — **aprendo il file invece di
+> fidarsi del proprio verde.** *(Formulazione della corsia A, che ne ha trovati tre su quattro,
+> tutti sul proprio lavoro.)*
+>
+> ⚠️ **Limite dichiarato:** ho misurato che la catena **esiste ed è collegata** leggendo il
+> codice. **Non** ho misurato oggi che giri davvero sul VPS né che l'email arrivi: quello si
+> vede dal battito del guardiano e dal registro del server, non da qui.
+
+**COSA MANCA DAVVERO** — e non è il giro, è **cosa il giro fa quando non ha potuto guardare**.
+Un controllo che non è riuscito a girare finisce in `non_eseguiti`, che **non sporca `pulito`**
+(quindi niente email) e **lascia il battito** (quindi niente Telegram): è **muto per tutti e
+due i sorveglianti**. Il rimedio è un allarme **gemello** in `fase178_watchdog.valuta`, sul
+canale già misurato sano, che scatti sul **cambiamento** — il primo giorno in cui un controllo
+passa da ESEGUITO a NON ESEGUITO è una notizia, il secondo no. **Zero email nuove.**
+*(È un giro suo e una sua autorizzazione. La riparazione del 2026-08-29 su `fase186` ha messo
+il giro troncato dentro quella categoria: prima gridava il falso, adesso rassicura il falso.)*
+
+⚠️ **Le quattro voci qui sotto restano in piedi e NON le ho rimisurate io**: parlano del
+**percorso del pagamento**, non del giro notturno. Vanno riverificate da chi le apre.
 
 **Perché è la prima di tutte, e non una delle dieci.** Le altre nove caselle `[NO]` di PARTE 12
 sono buchi in **un** meccanismo. Questa è **la rete che prende ciò che sfugge a tutti gli
@@ -508,9 +575,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 39cd84d
+CONSEGNE AGGIORNATE A: 4ef2e40
 
-SUITE ATTUALE: Ran 6053 test
+SUITE ATTUALE: Ran 6057 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -529,9 +596,14 @@ SUITE ATTUALE: Ran 6053 test
    quel giorno la regex stava altrove: le righe si spostano a ogni modifica, quindi un
    riferimento per numero nasce gia' con la data di scadenza.
 
-CARICATORE (RACCOLTI):  6053  <- rimisurato il 2026-08-29 col caricatore, da PowerShell,
-                                 PRIMA di qualunque giro (S14), sul ramo `lavoro-b` DOPO aver
-                                 assorbito `origin/master` a `9f51a0a` (l'unione di C, #127):
+CARICATORE (RACCOLTI):  6057  <- rimisurato il 2026-08-29 col caricatore, da PowerShell,
+                                 PRIMA di qualunque giro (S14), sul ramo `lavoro-d` DOPO aver
+                                 assorbito `origin/master` a `2ff4b2e` (l'unione di B, #126):
+                                   CARICATORE=6057
+                                   MODULI_NON_IMPORTABILI=0
+                                   ERRORI_DEL_CARICATORE=0
+                                 --- la misura precedente, sul ramo `lavoro-b` a `9f51a0a`
+                                     (l'unione di C, #127), che questa sostituisce:
                                    CODICE_USCITA_DIRETTO=0
                                    CARICATORE=6053
                                    MODULI_NON_IMPORTABILI=0
@@ -1606,6 +1678,108 @@ e il pannello ne promette una (**B16 punto e**).
 `collaudi/METODO_v4.md` è la guida di riferimento per la verifica. PARTE 12 = la porta prima di
 aprire ai clienti. PARTE 13 = registro delle famiglie chiuse, si aggiorna a ogni famiglia
 chiusa. PARTE 15 = cosa fanno i grandi.
+
+## 🆕 B32-B35 — QUATTRO COSE TROVATE FRA IL 28 E IL 29 AGOSTO E NON RIPARATE
+
+> Stessa regola delle sette qui sotto: nessuna inventata, tutte uscite **mentre si lavorava
+> ad altro**, ognuna col comando che la misura. ⛔ E tutte e tre hanno la stessa forma —
+> **uno strumento che tace dove non ha guardato** — che è la specie che costa di più.
+
+### 🔴 B32 — IL GUARDIANO DEI SOLDI HA UNA CATEGORIA MUTA PER TUTTI I SORVEGLIANTI
+
+Le tre categorie del referto notturno sono: *è morto* (lo prende il watchdog su Telegram),
+*è esploso* (sporca `pulito` → parte l'email), e ***non ha potuto guardare*** → finisce in
+`non_eseguiti`, che **non** sporca `pulito` (niente email) e **lascia** il battito (niente
+Telegram). ⇒ **Muta per tutti e due.**
+
+La scelta di non sporcare `pulito` è **deliberata e giusta** (`fase186_guardiano.py:395-398`):
+altrimenti una macchina senza Stripe configurato griderebbe ogni giorno, e un allarme che
+grida sempre viene spento. Il difetto non è quella scelta: è che **nessun altro canale
+raccoglie quel caso**.
+
+⛔ **E la riparazione del 2026-08-29 (`f2088fc`) ha reso la cosa più urgente, non meno:** ha
+messo il giro troncato dentro quella categoria. *Prima gridava il falso, adesso rassicura il
+falso* — che è meglio (un falso allarme sui soldi è peggio, ferrea 10), ma non è chiuso.
+
+**Il rimedio, e NON è una mail:** un allarme **gemello** dentro `fase178_watchdog.valuta` —
+cioè sul canale **già misurato sano** — che scatti sul **CAMBIAMENTO**: il primo giorno in cui
+un controllo passa da ESEGUITO a NON ESEGUITO è una notizia, il secondo no. **Zero email
+nuove.** Perché non la mail quotidiana: parte dal VPS (muore con lui, cioè non copre il caso
+peggiore), chiede a una persona di accorgersi di un'**assenza**, e arriva sullo stesso canale
+dell'allarme vero — un filtro nella casella se li porta via tutti e due.
+· **File:** `fase178_watchdog.py`, `fase83_server.py` · **serve «autorizzato»** · 1 giro.
+
+### 🟠 B33 — LA GIUNTURA `fase83` ↔ `fase186` NON È COLLAUDATA DA NESSUNO
+
+```
+grep -rn "_tick_guardiano" --include=test_*.py .   ->   nessuna riga
+```
+`riassunto_html` ha 8 test, `scansiona` è coperta, ma **il punto in cui il server chiama il
+guardiano non lo attraversa nessun test**. È il modo di rompersi **n. 2**: due file entrambi
+corretti e il difetto che vive nella cucitura. *(Dichiarato dalla corsia C nel proprio
+atterraggio, insieme ai collaudi 5, 6, 7 e 10 non eseguiti su quella modifica.)*
+
+### 🟡 B34 — UNA GUARDIA CON UNA LISTA SCRITTA A MANO È CIECA PER COSTRUZIONE
+
+`TestPagineCheReclutanoHost` (in `test_trasparenza_costi.py`) controlla **quattro** pagine
+elencate a mano. Una pagina scritta domani è invisibile per costruzione — ed è esattamente
+così che il **3%** è sopravvissuto in `deploy/bunker.html` finché qualcuno non ha chiesto
+*«cosa NON sta guardando questa guardia?»*.
+
+⛔ **NON si allarga a occhi chiusi, e il motivo è la differenza fra due tipi di affermazione:**
+· *«nessuna pagina afferma X»* è un **divieto** → allargarlo costa **zero** (un file che non
+  parla dell'argomento ha zero occorrenze). È stato fatto: quella guardia ora legge la
+  cartella e copre **14** pagine invece di 4;
+· *«le pagine di tipo T devono dire X»* è un **obbligo** → allargato a 14 pretenderebbe
+  contenuto di reclutamento da `privacy`, `grazie`, `annullato` → **allarme su file corretti**,
+  cioè il difetto che fa spegnere gli allarmi (ferrea 10).
+
+**Passo 0 obbligatorio prima di toccarla:** allargarla in una **copia usa-e-getta fuori dal
+progetto** e contare **quante pagine si accendono E quante di quelle sono difetti veri**.
+Rumore zero → si allarga. Altrimenti serve prima un criterio di «pagina di reclutamento», ed è
+un lavoro suo. *(È lo stesso passo che il 2026-08-29 ha impedito di allargare il filtro
+dell'audit: 19 anomalie in più, di cui **14 falsi allarmi**.)*
+
+### 🔴 B35 — OGNI CANCELLO LEGGE L'ALBERO DI LAVORO, MA `git commit` SCRIVE L'INDICE
+
+Trovata il **2026-08-29** ricontrollando il lavoro della corsia D prima del commit: sette file
+erano pronti e **due no** — e nessuno strumento lo diceva.
+
+```
+$ git status --porcelain
+ M REGISTRO_INGEGNERIA.md     <- non indicizzato per niente
+MM RIPRENDI_QUI.md            <- indicizzato a metà
+
+$ git show :RIPRENDI_QUI.md | grep "^SUITE ATTUALE"    SUITE ATTUALE: Ran 6053 test
+$ grep "^SUITE ATTUALE" RIPRENDI_QUI.md                SUITE ATTUALE: Ran 6057 test
+  caricatore, misurato da fermo                        6057
+```
+
+Le due righe rimaste fuori erano **i due agganci**: il conto dei test e la riga delle consegne.
+Committare l'indice avrebbe messo sul ramo `Ran 6053` contro un caricatore da 6057
+(`assertEqual` → rossa) e `CONSEGNE AGGIORNATE A: 39cd84d`, cioè **due** commit di lavoro dopo
+— e il giudice vero, interrogato, risponde `consegne_troppo_indietro(2) = True`.
+
+⛔ **E tutti e tre i cancelli davano verde**, perché leggono il **disco**, dove il lavoro era
+giusto:
+```
+prima_di_lanciare.py     ✅ 7 controlli, 0 rossi    EXIT=0   (controllo 1: 6057 == 6057)
+prima_di_dire_fatto.py   ✅ 10 controlli, 0 rossi   EXIT=0   <- è il gancio `pre-commit`
+la suite intera          ✅ Ran 6052 · OK · EXIT=0
+```
+Non è un errore di chi ha lavorato: sul disco il lavoro era **corretto e collaudato**. È che
+**nessuno misura la differenza fra ciò che è stato provato e ciò che verrebbe committato** —
+e un `git add` dimenticato non lascia nessuna traccia rossa.
+
+**Il rimedio, ed è una riga:** in `collaudi/prima_di_dire_fatto.py`, prima del verde,
+pretendere che `git diff --name-only` (le modifiche **non** indicizzate) sia **vuoto** sui file
+dello scopo dichiarato. Se non lo è, ciò che finisce nel commit non è ciò che la suite ha
+letto, e quel giro non vale.
+⚠️ **Limite dichiarato:** non copre il caso opposto (un file indicizzato e poi rimesso a posto
+sul disco) né i file fuori dallo scopo. Prende il caso visto, che è quello capitato davvero.
+· **File:** `collaudi/prima_di_dire_fatto.py` · **serve «autorizzato»** · 1 giro.
+
+---
 
 ## 🆕 B24-B31 — OTTO COSE TROVATE FRA IL 27 E IL 28 AGOSTO · **due chiuse il 28, sei aperte**
 
@@ -2760,7 +2934,13 @@ coincide SI FERMA invece di deployare**.
 
 # 🧭 PASSAGGIO DI CONSEGNE — 2026-08-24 notte
 
-## 📍 DOVE SIAMO — misurato adesso, non ricordato
+## 📍 DOVE SIAMO — **com'era il 2026-08-24** (cronaca, non stato attuale)
+
+> ⛔ **Diceva «misurato adesso» e non era più vero.** I numeri qui sotto sono di `df5951a`,
+> del **24 agosto alle 01:33** (misurato: `git log -1 --format=%ad df5951a`). Un riquadro che
+> dice «adesso» senza data diventa falso da solo, e resta falso in silenzio: chi lo legge
+> crede di guardare lo stato di oggi. Lo stato vero sta **solo nel primo riquadro** di questo
+> file. Questo si tiene perché racconta un passaggio, non perché descriva la macchina.
 
 | Posto | Valore | Come si ricontrolla |
 |---|---|---|
@@ -2868,7 +3048,14 @@ ferrea 6, nessuna eccezione per i documenti).
 
 # 🧭 PASSAGGIO DI CONSEGNE — 2026-08-23 sera
 
-## 📍 DOVE SIAMO — quattro numeri, misurati stasera
+## 📍 DOVE SIAMO — **com'era la sera del 2026-08-23** (cronaca, non stato attuale)
+
+> ⛔ **Diceva «misurati stasera».** Quale sera non lo diceva: sono di `d11cab5`, del
+> **23 agosto alle 20:08** (misurato). È il terzo riquadro «dove siamo» dello stesso file, ed
+> è quello che si autodenunciava in fondo — *«questi numeri invecchiano, il primo gesto di
+> domani è rimisurarli, non rileggerli qui»* — ed è rimasto lì lo stesso per sei giorni.
+> 🔑 Una riga che dice «io invecchio» **non è una guardia**: nessuno diventa rosso quando
+> succede. La data nel titolo sì: trasforma un'affermazione falsa in una cronaca vera.
 
 | Posto | Valore | Come si ricontrolla |
 |---|---|---|

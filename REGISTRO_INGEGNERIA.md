@@ -403,6 +403,66 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🔴 LA TARIFFA TECNICA AVEVA QUATTRO RIPIEGHI E TRE NUMERI DIVERSI — 2026-08-29
+
+*(giro **B1** del piano d'audit, ramo `lavoro-d` su `2ff4b2e`. Difetto **vivo in produzione**,
+non di manutenzione.)*
+
+**Il fatto.** Quattro file di produzione si scrivevano da soli un valore predefinito per la
+**stessa** tariffa, con **tre numeri diversi**: `main_casavip.py` e `fase185_testi_legali.py`
+uno, `fase89_jurisdiction_outreach.py` — cioè **l'email che va agli host veri** — uno più
+basso, e `fase188_paga_struttura.py` quello vecchio, misurato **sotto costo** il 2026-08-09.
+
+⛔ **E non era teoria.** `collaudi/audit/16_ambiente_vps.md` aveva misurato il 2026-08-25 che
+in produzione la variabile d'ambiente **non è impostata**: valevano i ripieghi, e divergevano
+davvero. L'email di reclutamento prometteva una cifra che la cassa non pratica.
+
+🔑 **Perché nessuno l'aveva visto in quattro mesi.** La docstring di `fase89._tecnica_bps`
+dichiarava di prendere il numero **da `main_casavip.py`** — e ne conteneva uno che lì non c'è.
+**Il commento scritto per impedire l'errore era la cosa che lo nascondeva:** chi passava di lì
+leggeva «lo prende da main» e non andava a controllare.
+
+**Cosa cambia.** Il ripiego vive ora **in un posto solo**, `fase98_policy_commissione`
+(`tariffa_tecnica_bps`, `tariffa_tecnica_fisso_cents`). Gli altri tre sono **cancellati**: qui
+non si è aggiunta una costante, se ne sono tolte tre. Un valore d'ambiente illeggibile **non
+diventa zero** ma torna al ripiego — zero significherebbe incassare sotto costo su ogni
+pagamento, in silenzio, per un refuso sul server.
+
+⚠️ **Perché i posti ammessi sono DUE e non uno, ed è una misura non un compromesso.** Togliere
+il numero anche da `main_casavip.py` avrebbe voluto dire riscrivere **otto** file di prova che
+lo leggono come sorgente (`test_pipeline_ci.py` da solo 13 volte). I due posti sono **saldati**
+da una guardia: se si separano, qualcosa diventa rosso lo stesso giorno.
+
+**Dipendenze:** nessuna nuova. `fase188` importa `fase98`, che non importa nulla oltre
+`typing` — zero rischio di ciclo, verificato caricando anche `main_casavip`.
+**STATO: acceso**, senza interruttori: è la via normale.
+
+**Guardie** (in `test_fase59_costo_pagamento.py`), **tutte viste ROSSE prima**:
+`test_LA_TARIFFA_TECNICA_NON_HA_RIPIEGHI_SPARSI` ·
+`test_IL_RIPIEGO_DI_MAIN_E_SALDATO_ALLA_FONTE_UNICA` ·
+`test_IL_PAGA_STRUTTURA_NON_HA_UNA_TARIFFA_TECNICA_TUTTA_SUA` (legge la **firma**, non il
+testo: una guardia che un commento non può soddisfare) ·
+`test_UNA_VARIABILE_D_AMBIENTE_ILLEGGIBILE_NON_AZZERA_LA_TARIFFA` — quest'ultima è il ramo
+**difensivo** provato **iniettando il guasto con l'editor** (`ripiego → 0`), vista rossa
+(`500 != 0`), ripristinata, impronta `sha256` identica prima e dopo.
+
+### 🔴 I 14 TESTI DI RECLUTAMENTO DICEVANO UNA COSA CHE IL CONTRATTO NEGA — 2026-08-29
+
+Le email dicevano **«su quella non guadagniamo nulla»** in sei lingue: **la stessa frase che il
+progetto aveva TOLTO dal contratto** perché non più vera (`README` §5). Riscritti tutti e 14 i
+modelli (6 al plurale, 8 al singolare). Ora nominano il gateway, la **quota fissa** e la
+tariffa maggiorata sulla valuta estera, e dicono la stessa cosa che l'host **firma**
+(`fase185`: il costo effettivo può risultare *inferiore o superiore* alla tariffa).
+
+⛔ **La prima riscrittura è stata scartata, e va scritto perché.** Diceva «non la prendo io: la
+prende il gateway» e due virgole dopo «a volte avanza qualcosa»: **si contraddiceva da sola**,
+e la prima metà era falsa alla misura (chiediamo cinque punti, il gateway ne prende uno e
+mezzo su carta europea). L'ha vista un'altra corsia **prima** che uscisse. Una frase che
+rivendica trasparenza e si smentisce da sola è peggio di una cifra sbagliata.
+
+I decimali seguono la **lingua** (virgola in it/es/fr/de/pt, punto in en/ja/zh): scriverli
+sempre con la virgola sarebbe stata una convenzione sola applicata al mondo intero.
+
 ### 🔴 LA GUARDIA DI IERI HA SCOPERTO CHE PYTHON ERA CAMBIATO — 2026-08-29
 
 *(corsia B, ramo `lavoro-b` su `39cd84d`. Ripara la richiesta **#126**, che era ROSSA in CI e
