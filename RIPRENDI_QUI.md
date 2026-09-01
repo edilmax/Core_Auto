@@ -8,6 +8,14 @@
 > ⛔ **REGOLA ZERO 3:** nessun altro file — `.md`, `.py` o commento nel codice — può
 > contenere elenchi di cose da fare. Lo sorveglia `test_UNA_SOLA_LISTA_DI_COSE_DA_FARE`.
 >
+> ⛔ **E QUI DENTRO NON SI SCRIVONO DATE `AAAA-MM-GG` NEL FUTURO.** `collaudi/audit_millimetrico.py`
+> prende la data ISO **più recente** del file e pretende `-1 ≤ giorni ≤ 30`: una sola data futura
+> — anche dentro un esempio, una tabella o l'uscita di una prova — **fa fallire la suite**
+> (`test_L_AUDIT_MILLIMETRICO_VIENE_ESEGUITO_DAVVERO`). È costata un giro intero il 2026-08-30.
+> 🔑 **Le date che parlano del futuro si scrivono in prosa o in forma relativa** («fra due
+> giorni», «a distanza 0 dall'arrivo»): così passano la guardia **e** non invecchiano. È la
+> stessa regola che vale per i test — relativo invece che assoluto.
+>
 > 🔑 **E se questo file e `collaudi/piano.py` si contraddicono, VINCE `piano.py`:**
 > quello lo misura una macchina, questo lo scrive una persona.
 >
@@ -18,31 +26,278 @@
 
 ---
 
-## 📍 DOVE SIAMO — **2026-08-29 ore 19:45**, misurato dai QUATTRO posti
+## 📍 DOVE SIAMO — **2026-08-30 ore 01:17**, rimisurato dalla corsia di coordinamento
 
 ```
-computer            40a9c8c   <- git rev-parse --short HEAD
-GitHub master       40a9c8c   <- git rev-parse --short origin/master, dopo git fetch
-albero              PULITO    <- git status --porcelain vuoto
-CARICATORE          6059      <- da PowerShell vera (MSYSTEM vuoto), da fermo
-VPS (git sul disco) 40a9c8c   <- ssh, misurato: NON piu' riferito da un foglio
-IMMAGINE VIVA       sha256:6035f6ab0b31660e1f7a83cb337e4d235e3beed3c468573439c83f1bf5f87729
-                              <- docker inspect --format='{{.Image}}' casavip_app
-PARACADUTE :prec    sha256:56f716d0438b1...  = l'immagine di PRIMA del deploy, corretta
-IN PRODUZIONE       curl https://bookinvip.com/api/health -> HTTP 200
-                    /api/bunker/invarianti -> 403 (sonda NEGATIVA su un indirizzo che ESISTE)
-                    collaudi/verifica_produzione.py -> 190 controlli, VIOLAZIONI 0, USCITA 0
+computer (lavoro-d) 0279f63   <- git rev-parse --short HEAD
+GitHub master       dc7c25b   <- git rev-parse --short origin/master
+                                 = «Merge PR #130 from lavoro-d», e CONTIENE 0279f63:
+                                 stessa impronta d'albero 90ed122e su tutti e due
+albero              PULITO    <- git status --porcelain E git diff --name-only, tutti e due vuoti
+CARICATORE          6059      <- da PowerShell vera (MSYSTEM vuoto), da fermo, 1,38s, USCITA 0
+le altre 3 corsie   dc7c25b   <- _A, _B, _C: allineate e pulite
+CI su dc7c25b       16 controlli · 15 success + 1 skipped (zap) · gate SUCCESS
+                    e sono su QUESTO commit: /actions/runs -> event=push per CodeQL e
+                    BookinVIP CI. ⚠️ c'e' anche una «Sentinella esterna» con event=schedule,
+                    agganciata alla punta per coincidenza d'orario: NON e' un controllo su
+                    questo commit (trappola nota).
+VPS                 ⛔ NON MISURATO in questa sessione — serve un «autorizzato» per entrare,
+                    e la versione NON e' leggibile da fuori (/api/version -> 404).
+                    L'unico commit che gli manca e' 0279f63, che tocca DUE DOCUMENTI e
+                    nessun file servito: dedotto dal contenuto del commit, NON misurato.
 ```
 
-🔑 **I QUATTRO POSTI SONO ALLINEATI**, per la prima volta da giorni. Non c'e' lavoro finito
-fuori dalla produzione: i tre alberi di lavoro (`_A`, `_B`, `_C`) hanno **zero** file non
-committati e **zero** commit fuori da master.
+🔑 **Le quattro corsie sono allineate e non c'e' lavoro finito fuori da GitHub.** La richiesta
+di unione **#130 e' stata unita dal fondatore**: la voce «unire lavoro-d» e' **chiusa**.
 
-> ⛔ **I valori di prima erano FALSI in cinque punti su cinque** (dicevano computer/GitHub
-> `5d6e0b3`, VPS `efe35b5`, immagine `sha256:8def0ea3`) e su quei valori era costruito un
-> allarme che non esisteva. Non era una bugia: era un riquadro scritto il 28 mattina e mai
-> più rimisurato, sotto un titolo che non portava l'ora. **Questi numeri invecchiano entro la
-> giornata: se leggi questo riquadro e la data non è di oggi, rimisura prima di agire.**
+> ⛔ **QUESTI NUMERI NON INVECCHIANO IN GIORNI: INVECCHIANO IN MINUTI.** Il `.git` e'
+> **condiviso** fra i quattro alberi — quando una corsia fa `fetch`, `origin/master` si muove
+> **sotto** le altre senza che nessuna abbia fatto niente. Il riquadro di ieri sera (`40a9c8c`
+> su tutti e quattro i posti) era gia' falso stanotte alle 00:53. **Se leggi questo riquadro e
+> l'ora non e' di adesso, rimisura prima di agire** — e la prova che un ramo e' dentro master
+> non e' `git branch --no-merged` (che con le unioni a schiacciamento mente **per sempre**):
+> e' l'**impronta dell'albero**, `git rev-parse "<ramo>^{tree}"` cercata fra i `%T` di master.
+
+---
+
+## ✅ LA BOMBA A TEMPO — **RIPARATA il 2026-08-30**, e cosa ha scoperchiato *(una cosa resta APERTA)*
+
+> Il rosso: suite intera, `0279f63`, **2026-08-30 ore 02:0x** —
+> `Ran 6054 · FAILED (failures=2, skipped=4) · USCITA_DIRETTA=1 · 1910 s`
+> ```
+> FAIL: test_occupazione_reale_muove_il_dinamico       (TestCalendarioPrezzi)
+> FAIL: test_tutto_venduto_e_chiuso_non_ripiega_...    (TestChiudereNonSvuotaLOccupazione)
+> tutti e due:   AssertionError: 12155 != 14300
+> ```
+> **La riparazione**, stesso giorno, in `test_calendario_prezzi.py`: le date del soggiorno non
+> sono più cablate, si calcolano **relative a oggi** (`_ANTICIPO_GIORNI = 40`, banda neutra
+> 3…59 giorni) e `_OGGI` si legge **una volta sola all'importazione**, così una suite che
+> attraversa la mezzanotte non usa due giorni diversi nello stesso test.
+> `python -m unittest test_calendario_prezzi` → **Ran 11 · OK · USCITA_DIRETTA=0**
+>
+> ⛔ **E porta la sua guardia**, perché una riparazione senza guardia è una riga di cui fra sei
+> mesi qualcuno chiederà «perché è scritta così»:
+> **`test_LE_DATE_DI_PROVA_STANNO_NELLA_BANDA_NEUTRA`** non confronta la costante con due numeri
+> ricopiati a mano — **interroga il motore vero** e pretende il fattore temporale neutro, così
+> regge anche se domani il motore sposta le sue soglie.
+> *Vista rossa sul guasto vero* (`_ANTICIPO_GIORNI` portato a 1, **con l'editor**, non con una
+> sostituzione testuale): `AssertionError: 8500 != 10000 : _giorno(0) cade a 1 giorni da oggi…`,
+> USCITA_DIRETTA=1. Ripristino **byte-identico**, sha256 `CA834166…34DEB7AF` prima e dopo, e
+> verde di nuovo. 📌 Il suo messaggio dice **cosa ha osservato**, non di chi è la colpa — è la
+> regola nata da questo caso, qui sotto.
+
+**Perché era rossa.** Le date erano cablate al **primo giorno di settembre** e quel giorno ne
+mancavano **2**.
+Il motore applica lo sconto last-minute sotto i 2 giorni (`fase106_dynamic_pricing.py:80`,
+`last_minute_bps = 8500`, −15%) e il server gli passa la distanza **da oggi**
+(`fase119_calendario_prezzi.py:104-105`); **l'oracolo del test non la passava affatto** e usava
+il default 30 (`grep giorni_all_arrivo test_calendario_prezzi.py` → **EXIT 1, mai nominato**).
+Finché mancavano 3+ giorni i due lati coincidevano **per caso**.
+```
+oracolo del test (default 30)        -> 14300   anticipo=10000
+server a 3 giorni  (29 agosto)       -> 14300   anticipo=10000   <- verde per mesi
+server a 2 giorni  (30 agosto)       -> 12155   anticipo= 8500   <- rosso
+```
+🔑 **La prova che non ha bisogno della macchina:** `14300 × 8500 / 10000 = 12155`, esatto.
+
+**🔑 IL PRODOTTO È SANO: applica lo sconto last-minute, che è corretto.** L'osservato era **il
+prezzo a piena occupazione moltiplicato per lo sconto dichiarato**, e questo da solo uccideva
+l'accusa del messaggio: se l'occupazione fosse davvero ripiegata su «mezzo pieno» il risultato
+avrebbe avuto **un'altra base**, non un multiplo esatto 0,85 di quella giusta.
+
+**⛔ E ASPETTARE SAREBBE STATA LA SCELTA PEGGIORE — è la ragione per cui si è riparato subito.**
+```
+fase119_calendario_prezzi.py:64    return d if d >= 0 else 30    <- data PASSATA -> default NEUTRO
+misurato, per distanza dall'arrivo (non per data, cosi' non invecchia):
+   a 2 giorni -> 12155 ROSSO      a 0 giorni  -> 12155 ROSSO
+   arrivo GIA' PASSATO -> distanza torna 30 (default) -> 14300 VERDE
+```
+Il rosso **si sarebbe richiuso da solo** — test 1 dal 2 settembre, test 2 dal 5 — senza che
+nessuno toccasse niente. 🔑 **Ma da quel giorno quelle date sarebbero state MORTE:** nel passato
+per sempre, `_distanza` a 30 per sempre, e **il fattore temporale mai più esercitato** da quelle
+due guardie, che per giunta non lo conoscono e non potrebbero accorgersene. **Aspettare non
+riparava il difetto: lo spegneva** — due guardie verdi e *strutturalmente incapaci di fallire*.
+Il **verde finto** del collaudo 9, prodotto dal calendario invece che da una mano.
+⚠️ *Qui era scritto «la condizione resta vera per sempre, da oggi ogni giro è rosso finché
+qualcuno non tocca quel test»: **falso**, e nel verso che contava — faceva sembrare che aspettare
+non fosse nemmeno un'opzione, invece di mostrare perché era la peggiore.*
+
+✅ **E LA RIPARAZIONE NON COSTA COPERTURA: il fattore temporale è già guardato ALTROVE.**
+```
+test_fase106_dynamic_pricing.py     giorni_all_arrivo = 1 (:40) · 90 (:46) · 5 (:64)
+test_fase119_calendario_prezzi.py   una CLASSE INTERA, con date RELATIVE (`_fra(n)`, :106):
+   :143 last_minute_abbassa_il_suggerito   ·  :151 anticipo_alza_il_suggerito
+   :159 un_giorno_gia_passato_non_prende_lo_sconto  <- guarda proprio il `d>=0 else 30`
+   :182 tre_distanze_diverse_ognuna_col_suo_fattore
+```
+⇒ Quei due test non parlavano del tempo — parlano dell'**occupazione** — e il fattore temporale
+ci era finito dentro **per caso**. Riportarli al loro mestiere **non perde niente**, perché il
+tempo lo guarda già chi di dovere. E quella classe usa **date relative**: è immune al calendario
+per costruzione, ed è il modello che questa riparazione ha seguito.
+⚠️ *Qui era scritto «il fattore temporale non ha una guardia»: **falso**, e pericoloso — se fosse
+entrato come buco aperto, fra un mese qualcuno avrebbe costruito test **che esistono già** (D10).
+L'errore era sul perimetro: «questi due non lo guardano» non è «nessuno lo guarda».*
+
+⛔ **MA UNA PRECISAZIONE CHE NON VA PERSA: l'oracolo NON è diventato completo.** Continua a non
+passare `giorni_all_arrivo` e a prendersi il default 30 — è **esattamente l'omissione** che ha
+prodotto il rosso. La riparazione **non lo corregge: lo tiene fuori dalla banda dove sbaglia**,
+dove il default e la distanza vera cadono nello stesso scaglione. È la scelta giusta per un test
+del *calendario* (i numeri del motore li prova `test_fase106`; qui si prova il **cablaggio**), ma
+va scritta, o fra un mese qualcuno leggerà che l'oracolo modella l'anticipo. Non lo modella.
+🔑 ⇒ **La guardia non è un accessorio: è la ragione per cui l'oracolo può permettersi di essere
+incompleto.** Se un giorno quell'offset si sposta per un altro motivo, **è la guardia a dirlo —
+non il caso.**
+
+**❓ LA CI OGGI È ROSSA? NON È MISURATO — ma si misura in un clic, senza committare niente.**
+L'ultima esecuzione vera della suite in CI è delle **2026-08-29 20:07 UTC** (`BookinVIP CI`,
+`event=push`, su `dc7c25b`), quando mancavano **3** giorni: quel verde era vero ieri e **non
+dice niente su oggi**. I giri di stanotte (01:37 UTC) sono solo «Sentinella esterna» a
+`schedule`, che sonda il sito vivo e **non esegue i test**.
+⛔ *Qui era scritto che l'unico modo di misurarlo fosse un push su `master`, quindi che servisse
+il «procedi al commit»: **falso**, e il perimetro degli inneschi stava scritto in dodici righe.*
+```
+.github/workflows/ci.yml:5-12   on: push · pull_request · schedule · workflow_dispatch  <- QUATTRO
+                     :1028      zap        if: event_name == 'schedule' || 'workflow_dispatch'
+                     :1062      gate       if: always()
+                     :130       full-suite NESSUN `if:`  -> gira su QUALUNQUE innesco
+```
+⇒ **Un avvio manuale su `master` (Actions → «BookinVIP CI» → Run workflow) risponde oggi, senza
+un commit, senza una riga, senza rischio.**
+⛔ **MA NESSUNA CORSIA PUÒ PREMERLO**, misurato: `gh auth status` → *«You are not logged into any
+GitHub hosts»*. Serve un'identità autenticata — il fondatore dal sito, oppure un gettone, e un
+gettone **non si chiede e non si stampa** (D6, ferrea 14). ⇒ La capacità sta **nel flusso**, non
+**nelle nostre mani**: stessa forma delle richieste di unione, che esistono e le apre solo lui.
+🔑 Quindi la richiesta si accorcia ma **non sparisce**: non è più *«dammi il "procedi al commit"
+per sapere se il cancello è verde»*, è *«apri Actions e premi Run workflow su `master`»* —
+nessun codice, niente da unire, niente di irreversibile, risposta in pochi minuti. **Resta un
+gesto suo.** ⚠️ E finché nessuno lo preme, per qualunque lavoro in corso il **collaudo 7** e la
+**regola ferrea 8** sono **NON ESEGUITI**, non «presumibilmente verdi».
+⚠️ **Differenza dichiarata:** un avvio manuale fa girare **anche `zap`**, che su un push normale
+è saltato — la tabella avrà **un lavoro in più** del solito. Per la domanda che conta («i due
+test del calendario vanno rossi su master oggi?») risponde `full-suite`, e non cambia niente; ma
+se poi si confrontano due tabelle, il conto dei lavori non torna e **non è un'anomalia**.
+*(Misurato dalla corsia A, verificato dalla corsia di coordinamento. 🔑 «L'unico modo» era
+un'affermazione sul **perimetro degli inneschi**: due visti, quattro esistenti — la stessa forma
+dei sei punti muti di B36.)*
+
+**⛔ IL MESSAGGIO DEL TEST ACCUSA L'INNOCENTE.** `test_calendario_prezzi.py:208-209` dice *«ha
+ripiegato sul default "mezzo pieno"»*, ma il docstring alle righe **149-152 dello stesso file**
+dichiara che quel ripiego vale **11000** — e nell'osservato `occupazione=13000`, cioè il 100% è
+visto perfettamente. Il messaggio nomina **una** causa possibile e la stampa come **la** causa.
+📌 **Regola che ne esce, per ogni guardia nuova: un messaggio d'errore dice COSA HA OSSERVATO,
+non DI CHI È LA COLPA.** La colpa è un'ipotesi; il valore osservato è un fatto. Una guardia muta
+ti lascia ignorante; una che nomina il colpevole sbagliato ti manda a riparare codice sano — e
+quando scoprirai che era sano, crederai meno anche ai suoi rossi veri.
+
+⛔ **IL RILEVATORE DI BOMBE NON L'HA VISTA, ED È IL RILIEVO PIÙ GRAVE DEI TRE — non è evidenza
+scaduta, è una misura VALIDA e SBAGLIATA.** Lo schedario, letto per intero:
+```
+collaudi/bombe_a_tempo.json   "bombe": []   "candidati": 143   "misurato_il": "2026-08-13"
+                              "orizzonte_giorni": 400   "commit": "bf2e1b6"
+                              "non_giudicabili": ["…TestIlDeployNonPuoSALTARE…gettone_FRESCO…"]
+collaudi/bombe_a_tempo.py:66  ORIZZONTE = 400                <- quanto lontano GUARDA
+                        :68   GIORNI_SCHEDARIO_VECCHIO = 30  <- oltre, «è un ricordo, non una misura»
+```
+⛔ *Qui era scritto «la bomba era a 19 giorni, dentro l'orizzonte di 30 che lo strumento
+dichiara»: **sbagliato, e le due costanti erano state confuse.** L'orizzonte è **400**; il 30 è
+la tolleranza sull'**età dello schedario**. Con i numeri giusti l'accusa non si ammorbidisce —
+peggiora.*
+
+**Il conto che chiude il caso:** lo schedario ha **17 giorni**, cioè **dentro** la sua
+tolleranza di 30 → il pre-volo non aveva **nessun motivo** di avvisare, e il suo «0 bombe note»
+era, secondo le sue stesse regole, **un rapporto corretto**. Ma il rilevatore guarda **400
+giorni avanti** e ha scritto `"bombe": []`. **Ha guardato quattrocento giorni e ne ha persa una
+a diciassette.**
+📌 E la spiegazione comoda è **falsa, misurata**: l'unico «non giudicabile» è un test sul
+**gettone del deploy**, non il nostro. Non l'aveva visto e parcheggiato: non l'ha visto.
+⚠️ Il suo cancello (`:321`) è «verde oggi **e** rosso a +orizzonte», poi bisezione. A +400
+giorni l'arrivo cablato sarebbe un anno **nel passato**, quindi `g <= 2` vera e il test
+rosso: **il cancello sarebbe stato soddisfatto e la caccia doveva partire.**
+**✅ LA SELEZIONE NON È IL DIFETTO — misurato, non dedotto.** `file_di_test()` (`:204`) legge la
+cartella senza **nessuna** esclusione, e `candidati()` (`:209`) prende ogni file con una data
+cablata entro **±400 giorni**: il 1° settembre, dalla misura del 13 agosto, era a **19**.
+⇒ **`test_calendario_prezzi.py` ERA fra i 143 candidati.** L'attrezzo l'ha guardato e ha detto
+zero.
+
+⛔ **PERCHÉ NON L'ABBIA VISTA RESTA NON DETERMINATO — e due spiegazioni ovvie sono già MORTE**,
+scritte qui perché nessuno le rifaccia:
+```
+✗ «l'orologio finto non arriva a date.today()»  -> FALSO, misurato: sostituendo solo time.time e
+     spostandolo avanti di 400 giorni, `date.today()` SEGUE l'orologio finto -- ed e' il cammino
+     vero (`fase119:57` usa proprio quella); `datetime.now()` invece NON lo segue, resta a oggi.
+     ⚠️ La data che usciva da quell'esperimento NON e' scritta qui apposta: vedi qui sotto.
+✗ «il buco è datetime.now(), punto cieco non dichiarato» -> FALSO: l'attrezzo lo SA, lo dichiara
+     e lo gestisce -- collaudi/bombe_a_tempo.py:109 · :118 (utcnow) · :186 («e perché sono DUE»)
+```
+⛔ **E QUI DENTRO NON SI SCRIVE LA DATA CHE USCIVA DA QUELL'ESPERIMENTO.** C'era, ed è costata un
+giro di suite intero: `collaudi/audit_millimetrico.py` cerca **la data più recente** di questo
+documento per verificare che citi lavoro recente, e ha trovato una data **400 giorni nel futuro**
+— l'uscita di una prova con l'orologio spostato, non un lavoro. `VERDETTO: 1 DISCREPANZE — STOP`,
+suite rossa (`test_L_AUDIT_MILLIMETRICO_VIENE_ESEGUITO_DAVVERO`). **La guardia aveva ragione:**
+un documento di stato non può contenere una data futura, qualunque ne sia il motivo.
+🔑 **La lezione, piccola e non ovvia: l'uscita di un esperimento sul TEMPO non si incolla in un
+documento che qualcuno legge come una cronologia.** Si descrive («spostato avanti di 400 giorni,
+`date.today()` lo segue»); non si trascrive. È la stessa famiglia della bomba che questa voce
+racconta — una data messa dove non doveva stare — solo che stavolta a esplodere è stato il
+documento invece del test.
+🔑 **E questo rende il caso più interessante, non meno.** Non è un attrezzo sciatto: sui punti
+guardati è fatto **bene** — conosce la trappola classica del *clock mocking*, la misura e la
+dichiara. **Un attrezzo sciatto che sbaglia non insegna niente; uno curato che sbaglia dice che
+manca qualcosa che nessuno ha ancora capito.**
+
+⛔ **E I DUE LAVORI HANNO UN ORDINE OBBLIGATO, non sono paralleli.** Il cancello del rilevatore
+è `if e_rosso(0) or not e_rosso(orizzonte): scarta` (`:321`): pretende **verde oggi** e rosso
+più avanti. Ma `test_calendario_prezzi` **oggi è già rosso**, quindi verrebbe scartato e
+finirebbe in `rossi_a_orologio_fermo` — **un terzo esito che non risponde alla domanda**. ⇒
+**Prima si ripara il test; solo quando torna verde-oggi la domanda «il rilevatore lo vede?»
+diventa rispondibile.** Invertirli fa perdere la risposta.
+⚠️ **E lo schedario NON va rilanciato prima:** `collaudi/bombe_a_tempo.json` è **la prova del
+difetto** — 343 byte che lo dimostrano a chiunque — e un giro lo **sovrascrive**. Un rilevatore
+di bombe, per costruzione, **è cieco su una bomba già esplosa**: rilanciarlo adesso non
+misurerebbe niente e cancellerebbe l'unica evidenza. *(Misurato dalla corsia B, che ha ucciso
+due proprie ipotesi prima di consegnarle, e verificato qui.)*
+
+🔑 **E QUESTO SPOSTA IL BERSAGLIO.** Riparare `test_calendario_prezzi` **non chiude niente**:
+ci sono **143-148 file** con date assolute cablate *(sovrainsieme dichiarato: una data cablata
+è innocua finché nessuno la confronta con adesso — sono file con date, non bombe; il numero
+delle bombe non lo sa nessuno)*, e **l'unico attrezzo che li sorveglia ha appena dimostrato di
+poter rispondere zero mentre una esplode**. Riparato l'esemplare e lasciato il rilevatore com'è,
+la prossima si scopre di nuovo con la suite rossa, un'altra notte.
+⇒ **Il bersaglio non è `test_calendario_prezzi`: è `collaudi/bombe_a_tempo.py`.**
+*(Misurato dalla corsia B, verificato dalla corsia di coordinamento.)*
+🔑 **E la coppia con B37 è l'argomento migliore che abbiamo:** il difetto non è «i documenti
+marciscono», è **«le prove non dicono cosa hanno guardato»** — identico in un `.md` (la casella
+dell'overbooking), in un `.py` di prova (questo messaggio) e in un attrezzo di sorveglianza (il
+rilevatore che risponde zero). **Tre supporti diversi, un difetto solo.**
+
+### ⛔ COSA RESTA APERTO DI QUESTA STORIA — l'esemplare è chiuso, la famiglia no
+
+**1. `collaudi/bombe_a_tempo.py` — il bersaglio vero, e nessuno l'ha ancora toccato.** Restano
+**143-148 file** con date assolute cablate, sorvegliati da un attrezzo che ha risposto **zero**
+mentre una bomba esplodeva **dentro il proprio orizzonte**. Riparato l'esemplare, la famiglia è
+esattamente dov'era.
+🔑 **E adesso la domanda è finalmente rispondibile, mentre stanotte non lo era:** il cancello
+del rilevatore pretende **verde oggi** e rosso più avanti, e `test_calendario_prezzi` oggi è
+**verde**. ⇒ un giro di `collaudi/bombe_a_tempo.py` (~25 min, locale, nessuna rete) direbbe se
+**vedrebbe** la bomba che sappiamo esserci stata — cioè è una **prova nelle due direzioni**
+sull'attrezzo, non un aggiornamento della fotografia.
+⚠️ Prima di lanciarlo: **`collaudi/bombe_a_tempo.json` va copiato fuori dal progetto.** Quei
+343 byte (`"bombe": []`, orizzonte 400, misurato il 13 agosto) sono **la prova del difetto**, e
+il giro li **sovrascrive**.
+
+**2. Il fattore temporale non ha una guardia** (vedi sopra): nessun test verifica che una data
+vicina prenda davvero lo sconto. Serve un test suo.
+
+**3. Il messaggio che accusa l'innocente è ANCORA LÌ.** `test_calendario_prezzi.py` continua a
+dire *«ha ripiegato sul default "mezzo pieno"»* quando fallisce. Adesso è meno pericoloso — col
+fattore temporale neutralizzato, se quel test fallisce è davvero l'occupazione — ma **asserisce
+ancora una causa invece di riportare l'osservato**, ed è la regola nata da questo caso.
+⛔ **Non è stato cambiato di proposito:** è una «correzione di passaggio» su un file già aperto,
+e la ferrea 15 le vieta nello stesso intervento anche quando migliorano. Va fatto **con il suo
+via**, non «già che c'ero».
+📌 Perimetro di ciò che potrebbe seguire: **12 file di test** toccano il calendario o `fase106`.
+Quanti altri marciranno nei prossimi giorni **NON è misurato** — servirebbe muovere l'orologio,
+e `freezegun`/`time-machine` non si possono aggiungere da soli (D25, confine 2).
 
 ---
 
@@ -77,29 +332,64 @@ bloccano», per un `grep` col perimetro sbagliato.
 
 ### ⛔ COSA RESTA APERTO, in ordine di quanto pesa
 
-1. **FASCIA A del piano d'audit — cinque voci su sei aperte, e A2 non l'ha mai guardata
-   nessuno.** «I soldi si fermano SENZA lasciare una riga»: 17 voci, e in **5** il silenzio
-   non ha scadenza — nessuno riprova, nessuno se ne accorge. È il lavoro che l'ordine del
-   fondatore delle 12:40 («IO VOGLIO RIPARAZIONI SERIE») indica.
-   ⚠️ La corsia A ha cominciato la mappa in sola lettura e ha già trovato che **il piano e la
-   macchina non dicono la stessa cosa sul conto delle voci**. Il referto non è ancora arrivato.
+1. **FASCIA A del piano d'audit.** ⛔ **AGGIORNATO IL 2026-08-30: due cifre di questa riga erano
+   sbagliate, e il referto È ARRIVATO.**
+   · *«cinque voci su sei aperte»* → i giri di Fascia A sono **cinque** (A1…A5) e **A1 è FATTO**
+     dal 2026-08-26 (`f7faa5b`, #108): sono **quattro aperte su cinque**;
+   · *«17 voci»* → **A2 ne ha 18**, misurate una per una dalla corsia A contro `dc7c25b`;
+   · *«in 5 il silenzio non ha scadenza»* → **col criterio dichiarato sono 13 su 18.**
+     ⚠️ Il referto **dice cinque e non li nomina mai**, quindi quel cinque **non è verificabile**:
+     si può solo affiancare il tredici col suo metro. *(Criterio usato: «qualcosa riprova da solo»
+     OPPURE «qualcuno se ne accorge entro un tempo limitato». Se l'unica strada è che un umano
+     vada a guardare senza essere avvisato, non è una scadenza.)*
+   ```
+   A2 — 18 voci verificate contro dc7c25b (corsia A, 2026-08-30, sola lettura)
+     esistono e sono mute oggi ......... 15      di chi sono i soldi:
+     residuo dopo riparazione parziale .  2        HOST 8 · OSPITE 5 · NOSTRI 4 · misti 1
+     esiste ma LATENTE (nessun chiamante) 1
+     con una scadenza (7 giorni) ....... 2        SENZA NESSUNA SCADENZA ..... 13
+   ```
+   🔑 **Non è che i soldi si perdono: è che quando si fermano non parte niente e non scade
+   niente**, quindi il tempo non li fa emergere. È il lavoro che l'ordine del fondatore delle
+   12:40 («IO VOGLIO RIPARAZIONI SERIE») indica.
+   ⚠️ **E il piano invecchia:** due voci **si sono mosse, e nessuna delle due è CHIUSA** —
+   · **S11**, riparata in gran parte da `19c7143` (2026-08-26): le email che il provider rifiuta
+     adesso si vedono. **Residuo: la porta «nessun provider», che tace ancora** → **B36**;
+   · **S13**, parziale: quando la penale ci prova l'esito si registra, ma **i cinque motivi per
+     cui NON parte restano muti**, e il chiamante mette il risultato solo nella risposta HTTP.
+   ⛔ Si scrivono **parziali col residuo nominato**, mai «chiuse»: un «chiuso» di troppo è quello
+   che ha fatto perdere tempo con **A1** (risultava aperta ed era fatta dal 26 agosto). Chi
+   avesse aperto il piano senza rimisurare sarebbe andato a riparare cose già riparate.
+   ⛔ **E due voci del referto non hanno NESSUN giro nel piano: S17 e S20.** Non sono «aperte»:
+   sono **invisibili** — e un difetto invisibile non aspetta, sparisce.
+   ⛔ **Nove domande di A2 hanno una sola fonte: il VPS**, e servono un «autorizzato» in sola
+   lettura. Le due che cambiano di più: *l'email è configurata in produzione?* (se no, l'allarme
+   di **B36** è muto e `email_ko: 0` mente alla sentinella) e *la chiave di firma dei pagamenti
+   è impostata?* (se c'è, una delle otto gravi è innocua; se manca, è la peggiore delle otto).
 2. **Il paracadute non ha una guardia** (proposta, non fatta). Il protocollo D17 lo ripara
    quando lo si usa, ma **nulla obbliga a passarci**: un deploy a mano lo scavalca, e un
    paracadute scaduto **non fa rumore** — lo scopri il giorno che ti serve. Il `watchdog.sh`
    gira già ogni 10 minuti da cron (verificato: `*/10 * * * *`, file di stato vivo) e non
    controlla il paracadute. ⛔ **Tocca `fase178_watchdog.py`, che è produzione**: serve
    «autorizzato», e la guardia va vista **rossa** prima.
-3. **Gli 11 rami vecchi vanno cancellati.** Sono tutti **già dentro master, byte per byte**
-   (verificato con l'impronta dell'albero completo, 11 su 11), ma le unioni a **schiacciamento**
-   fanno sì che `git branch --no-merged` li elencherà **per sempre**. Oggi sono costati
-   un'indagine intera a due corsie. Vanno tolti, locali e su `origin`.
-4. **Le caselle `[NO]` della PARTE 12 di `METODO_v4.md` non sono affidabili.** Due su cinque
-   hanno la **prova falsa**: quella sull'API di Stripe cercava la parola `retrieve` (che questo
-   codice, essendo stdlib pura, non può contenere — le richieste vere sono **cinque**), e quella
-   sulla riconciliazione notturna diceva «gira solo a mano, nessun lavoro notturno, nessuna
-   mail»: **sbagliata su tutt'e tre** (`fase186_guardiano.py:103` la chiama, gira in un thread
-   giornaliero, e manda l'email quando il referto è sporco). Il **verdetto** di quelle caselle
-   può restare giusto; la prova che lo sostiene no.
+3. ✅ **CHIUSO il 2026-08-30 — gli 11 rami vecchi non ci sono più.** Misurato: `git branch` → **5
+   locali** (`lavoro-a/b/c/d` + `master`), `git branch -r` → **5 su origin**. Erano già tutti
+   dentro master byte per byte, verificati con l'impronta dell'albero completo.
+   📌 Resta la lezione, che vale ogni volta: **`git branch --no-merged` NON dimostra che un ramo
+   sia fuori.** Le unioni sono a schiacciamento, quindi la punta del ramo non diventa mai antenata
+   di master e quella lista li elencherà **per sempre**; `git cherry` mente **peggio**, perché
+   mente a metà. La prova che regge è
+   `T=$(git rev-parse "<ramo>^{tree}"); git log origin/master --format='%h %T' | grep " $T"`.
+4. **Le caselle della PARTE 12 di `METODO_v4.md` non sono affidabili** — ⛔ **rimisurate TUTTE E 21
+   il 2026-08-30 dalla corsia B, e il quadro è più grande e diverso da come diceva questa riga.**
+   Non «due su cinque»: **5 prove su 10 non reggono** fra le `[NO]`, e **3 delle 11
+   `[NON MISURATO]` hanno la premessa FALSA** — fra cui la più grave di tutte. **I dettagli, le
+   cifre e il caso che dimostra perché una prova sbagliata è peggio di un verdetto sbagliato
+   stanno in B37**, insieme alla decisione (aperta) su dove debbano vivere gli esiti.
+   📌 Una correzione a questa riga stessa: *«le richieste vere sono cinque»* non è verificabile —
+   misurato, `api.stripe.com` sta in **6 file di produzione** con **14 occorrenze**, e
+   `fase85_pagamenti_stripe.py` da solo ne ha **5**. È la riconciliazione **plausibile** del
+   «cinque», non accertata: chi lo scrisse non mise per iscritto cosa contava.
 5. **10 falle note nelle dipendenze** (`pip-audit`), congelate come debito. ⚠️ Ma sono su
    `requirements.txt`, **che l'immagine non installa**: `Dockerfile.casavip` non ha nessun
    `pip install` (l'unica riga con «install» è un commento) e la produzione è stdlib pura.
@@ -716,9 +1006,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 40a9c8c
+CONSEGNE AGGIORNATE A: 94a1399
 
-SUITE ATTUALE: Ran 6059 test
+SUITE ATTUALE: Ran 6060 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -1820,6 +2110,132 @@ e il pannello ne promette una (**B16 punto e**).
 aprire ai clienti. PARTE 13 = registro delle famiglie chiuse, si aggiorna a ogni famiglia
 chiusa. PARTE 15 = cosa fanno i grandi.
 
+## 🆕 B36-B37 — DUE COSE TROVATE LA NOTTE FRA IL 29 E IL 30 AGOSTO
+
+> Uscite da un giro in **sola lettura** di tre corsie (A: le 18 falle di A2 · B: le 21 caselle
+> di `METODO_v4` PARTE 12 · C: la giuntura del Guardiano). **Nessun file di produzione toccato,
+> nessuna riparazione proposta.** Ogni cifra qui sotto porta il comando che l'ha prodotta.
+
+### 🔴 B36 — LA PROTEZIONE «PROVIDER EMAIL SPENTO» ESISTE ED È COLLEGATA IN 3 PUNTI SU 10 — **non sull'allarme dei soldi**
+
+**Non manca un meccanismo: manca il cablaggio.** È il modo di rompersi **n. 2**.
+
+`fase83_server.py:101` — **`_email_provider_spento(template, riferimento)`** — è scritto apposta
+per questo caso, e la sua docstring distingue con cura due cose che noi confondevamo:
+```
+· «l'invio è FALLITO»    -> un EVENTO, raro      -> logger.error in _invia_tracciato
+· «il provider è SPENTO» -> uno STATO permanente -> logger.warning UNA volta + IL CONTEGGIO
+                            (email_ko su /api/health, che legge una sentinella ESTERNA)
+```
+Porta scritto anche **perché non è `error`**: il primo tentativo lo era, e
+`test_cancellazione_money` l'ha bocciato pretendendo zero `ERROR` sul percorso sano (ferrea 10).
+⇒ Qualcuno ci è già passato, ha visto il rosso, e ha corretto.
+
+**IL PERIMETRO — `git grep -n "email_provider" -- 'fase*.py' 'main_casavip.py'` — 10 punti di
+guardia in `fase83_server.py`, 4 gestiti e 6 muti:**
+```
+GESTITI (4)
+  :5619 voucher         -> _email_provider_spento("voucher", ref)       :5667
+  :8709 reset_password  -> _email_provider_spento("reset_password")     :8730
+  :8816 benvenuto_host  -> _email_provider_spento("benvenuto_host")     :8838
+  :7718 richiesta info  -> 503 {"errore":"email_non_disponibile"}  <- lo dice al chiamante
+MUTI (6)
+  :6212 _email_bg  ·  :7418 notifica città  ·  :10192 · :10243 promemoria
+  :11265 ⛔ TICK DEL GUARDIANO = L'ALLARME CHE I CONTI NON TORNANO
+  :11319 tick promemoria (il thread non parte proprio)
+```
+⚠️ **Limite dichiarato:** per **4** dei 6 muti (`:7418`, `:10192`, `:10243`, `:11319`) **non è
+stato classificato** se l'email fosse *dovuta* o facoltativa. La classificazione è **APERTA**.
+⛔ E i «2 siti» di cui si è parlato in chat **non sono un secondo censimento**: sono il
+**sottoinsieme** dei 6 in cui l'email era certamente dovuta. *Una lista non è un perimetro: un
+perimetro può contenere zero rilievi, una lista solo ciò che qualcuno ci ha già messo dentro.*
+
+**🔑 IL LAVORO È PICCOLO E LA RESA È GRANDE — `_email_bg` È UN IMBUTO.**
+`git grep -n "_email_bg(" -- 'fase*.py'` → 1 definizione + **4 chiamanti**:
+```
+:6242 pagamento confermato   OSPITE      :6288 esito controversia   OSPITE
+:6265 cancellazione          OSPITE      :6401 bonifico all'host    HOST
+```
+⇒ **Due righe (`:6213` e `:11265`) coprono CINQUE percorsi, e tutti e cinque sono soldi.**
+«Due siti» fa pensare a un lavoro di poco conto: non lo è.
+
+⛔ **E QUELLE DUE RIGHE NON CHIUDONO `_email_bg`: LO CHIUDONO A METÀ.** La guardia a `:6213` ha
+**due** porte nella stessa condizione — `prov is None` **oppure** un `dest` che non contiene `@`.
+Il rimedio qui sopra copre **solo la prima**. Il destinatario malformato è un caso **diverso**
+(non è uno stato di configurazione: è un dato sbagliato su una singola pratica) e forse vuole un
+rimedio diverso — **non è stato classificato se qualcuno dei 4 chiamanti possa passare un `dest`
+senza `@`**. ⚠️ Resta **APERTO**, ed è scritto qui perché «due righe e cinque percorsi» non
+faccia sembrare finito ciò che finito non è.
+
+**⛔ PERCHÉ PESA PIÙ DI UN'EMAIL PERSA.** Con `prov is None` la catena muore prima di partire —
+niente thread → `_invia_tracciato` non gira → `_conta_email_ko` non si tocca → **`/api/health`
+continua a dire `email_ko: 0`**. E **zero significa due cose opposte e indistinguibili:**
+*«nessuna email è fallita»* e *«nessuna email è mai stata tentata»*. Il silenzio non si ferma
+in casa: arriva fino alla **sentinella esterna**, l'ultimo sorvegliante che sopravvive alla
+morte del VPS. *(Stessa malattia riparata il 28 sul Guardiano: prima gridava il falso, adesso
+rassicura il falso.)*
+
+**⚠️ E QUESTO RILIEVO SI RIGENERA — quindi non è «6 righe».** Un cablaggio si ripara in N punti,
+e il punto **N+1** che qualcuno scriverà fra due mesi **nasce di nuovo scollegato**: D22 in
+purezza. 🔑 Ma il «qualcosa che impedisce a N+1» **non è da costruire, è da allargare**: la
+guardia esiste già — `test_email_tracciata.py:285-300` sorveglia **esattamente questo schema** e
+lo fa bene (cerca il ramo e la chiamata, non una frase, *«un commento che dice "qui gestiamo il
+provider spento" non gestisce niente»*) — ma vive dentro `testo[inizio:inizio+4000]` a partire dal
+voucher, quindi **vede un sito su cinque**. Non manca la guardia: manca **il suo perimetro**.
+
+⛔ **Tocca `fase83_server.py`, che è produzione: serve «autorizzato»**, e la guardia va vista
+**rossa** prima (D20). · *(Misurato dalle corsie A e C, verificato dalla corsia di coordinamento,
+2026-08-30.)*
+
+### 🔴 B37 — `METODO_v4` DICE «NON MISURATO» DOVE QUESTO FILE HA IL NUMERO — e il numero è brutto
+
+**Non è una prova sbagliata: è un'etichetta onesta che copre una misura già fatta.** È la specie
+peggiore, perché una prova sbagliata si scopre leggendola e un buco fra due documenti no.
+
+```
+collaudi/METODO_v4.md:619   - [NON MISURATO] Punteggio del mutation testing sui soldi: ___ %
+collaudi/METODO_v4.md:951   - [ ] Sui soldi punto a **zero mutanti sopravvissuti**.
+RIPRENDI_QUI.md (qui)       **140 punti su 246 non sono sorvegliati**, misurato il 2026-08-22
+                            fase85_pagamenti_stripe   60 provati · 17 uccisi · 43 SOPRAVVISSUTI
+                            fase131_payout_dashboard  62 · 19 · 43     fase65_split  59 · 40 · 19
+                            fase101_stripe_connect    50 · 16 · 29 (+5 non determinabili)
+                            fase87_stripe_webhook     15 ·  9 ·  6
+```
+**Aritmetica ricontrollata** (un totale che nessuno rifà è come non averlo): provati
+60+62+59+50+15 = **246** ✓ · sopravvissuti 43+43+19+29+6 = **140** ✓ · uccisi 101 + 140 + 5 non
+determinabili = **246** ✓. Il riquadro è internamente coerente.
+⚠️ **Quei numeri sono del 22 agosto e NON sono stati rifatti** stanotte (costano ore e l'attrezzo
+riscrive file sul disco).
+
+⇒ Lo stesso documento **si pone l'obiettivo «zero sopravvissuti sui soldi» e dichiara di non
+sapere il punteggio**, mentre il punteggio esiste ed è **43 sopravvissuti su 60** proprio sul
+modulo dei pagamenti. Nessuno ha mentito: sono **due fogli che non si parlano**.
+
+**E non è un caso isolato — è la forma di famiglia delle 21 caselle, misurata tutta:**
+```
+le 10 caselle [NO]            prove che NON reggono 5 · a metà 3 · reggono 2
+                              ma i VERDETTI reggono 9 su 10 (una non determinata)
+le 11 [NON MISURATO]          reggono 5 · premessa FALSA 3 · incompleta 1 · numero senza criterio 2
+```
+🔑 **Il documento sbaglia molto meno di quanto sembri: sbagliano le PROVE, non le conclusioni.**
+E la conseguenza pratica è peggiore di un verdetto sbagliato: **chi apre una casella per
+ripararla parte dal motivo scritto.** Il caso che lo dimostra è la casella sull'overbooking, che
+dice «nel database non c'è nessun vincolo»: ce ne sono **due**
+(`fase58_channel_manager.py:152` `PRIMARY KEY (alloggio_id, giorno)` e `:155` `idem_key TEXT
+PRIMARY KEY`), e **zero `CHECK (`**. Il verdetto regge — l'invariante `occupate <= totali` non è
+nello schema — ma chi seguisse il motivo scritto aggiungerebbe **un vincolo già presente in altra
+forma**, vedrebbe verde, e il buco vero resterebbe. *(Le altre quattro prove che non reggono
+cercano tutte **un nome invece di una cosa**: `retrieve` — parola di un SDK che non usiamo, il
+codice è stdlib pura — `event_id` in un codice italiano che scrive `evento_id`, `riconcil` in tre
+cartelle mentre l'innesco è in un thread Python, `rimbors` in un file mentre i posti sono otto.)*
+
+⛔ **DOVE VANNO GLI ESITI È UNA DECISIONE DEL FONDATORE, ANCORA APERTA.** La proposta della corsia
+B: **le 34 domande restano il modello trasferibile** (è ciò a cui il fondatore teneva), **gli
+esiti vivono qui**, dove sta lo stato vivo e dove la REGOLA ZERO 3 permette una lista. Così questo
+errore **non è più possibile per costruzione**, che è meglio di essere corretto. ⚠️ Finché non
+decide, **non si riscrive niente**: riscrivere le prove dentro un documento che poi va svuotato è
+lavoro fatto due volte. · *(Misurato dalla corsia B, verificato dalla corsia di coordinamento.)*
+
 ## 🆕 B32-B35 — QUATTRO COSE TROVATE FRA IL 28 E IL 29 AGOSTO E NON RIPARATE
 
 > Stessa regola delle sette qui sotto: nessuna inventata, tutte uscite **mentre si lavorava
@@ -1850,15 +2266,59 @@ peggiore), chiede a una persona di accorgersi di un'**assenza**, e arriva sullo 
 dell'allarme vero — un filtro nella casella se li porta via tutti e due.
 · **File:** `fase178_watchdog.py`, `fase83_server.py` · **serve «autorizzato»** · 1 giro.
 
-### 🟠 B33 — LA GIUNTURA `fase83` ↔ `fase186` NON È COLLAUDATA DA NESSUNO
+### 🟠 B33 — ~~LA GIUNTURA `fase83` ↔ `fase186` NON È COLLAUDATA DA NESSUNO~~ → ⛔ **RISCRITTA il 2026-08-30: era in parte FALSA. Metà è collaudata; scoperta è la metà dell'ALLARME**
 
+> ⛔ **La misura che reggeva questa voce cercava un nome che nessun test può contenere.**
+> `_tick_guardiano` è una funzione **annidata dentro `servi()`** (`fase83_server.py:11244`,
+> avviata a `:11300` come thread demone): **non è importabile e non è chiamabile per nome** —
+> l'unico modo di raggiungerla è chiamare `servi()`. Quel `grep` **non poteva che dare zero**, e
+> lo zero non significava «nessuno la attraversa»: significava **«non è cercabile così»**.
+> *(Trovato dalla corsia C il 2026-08-30, rimisurando invece di fidarsi della voce scritta.)*
+
+**MISURATO, `git grep` sui soli file versionati (perimetro: 635 file `.py`):**
 ```
-grep -rn "_tick_guardiano" --include=test_*.py .   ->   nessuna riga
+_tick_guardiano    fase83_server.py:11244 (def, ANNIDATA) · :11300 (Thread start)
+                   test_guardiano.py:212  <- un LIMITE DICHIARATO, non un test
+allarme_guardiano  fase83_server.py:11276  ·  nei test: 0
+_invia_tracciato   nei test: 18  ·  in tutto: 27
 ```
-`riassunto_html` ha 8 test, `scansiona` è coperta, ma **il punto in cui il server chiama il
-guardiano non lo attraversa nessun test**. È il modo di rompersi **n. 2**: due file entrambi
-corretti e il difetto che vive nella cucitura. *(Dichiarato dalla corsia C nel proprio
-atterraggio, insieme ai collaudi 5, 6, 7 e 10 non eseguiti su quella modifica.)*
+🔑 **Lo zero su `allarme_guardiano` è un vero zero**, non un «non ho guardato»: il perimetro dei
+test contiene **18** riferimenti a `_invia_tracciato`, quindi la zona è coperta — è **questo
+punto di chiamata** che non lo è.
+
+**✅ LA METÀ DEL BATTITO È GIÀ COLLAUDATA, e bene.** `test_watchdog.py:154`
+`test_IL_TICK_LASCIA_DAVVERO_IL_BATTITO` costruisce un sistema vero, **verifica la premessa**
+(protegge da S7), avvia **`servi()` vero** in un thread demone, e aspetta che il battito compaia
+**sul disco** — e dichiara di non usare `inspect.getsource` apposta, perché quella è una guardia
+che un **commento** soddisferebbe (S6). Quindi `servi()` → `_tick_guardiano` → `scansiona` →
+`segna_battito_guardiano` **gira davvero**.
+
+**⛔ QUELLO CHE RESTA SCOPERTO — due rami, non «un test generico»:**
+· **(a) referto sporco → l'email parte davvero.** Nessun test tocca `if not rep.get("pulito")`
+  (`fase83_server.py:11258`). È l'allarme **sui soldi**, quello che il codice stesso dichiara
+  «meno di tutti può sparire in silenzio»;
+· **(b) `scansiona` esplode → il thread resta vivo E il battito NON viene lasciato.** È il
+  contratto del dead man's switch, ed è **D19 in purezza**: un ramo difensivo è indistinguibile
+  da codice morto finché nessuno gli costruisce a mano lo stato impossibile.
+  ⚠️ **La (b) asserisce un'ASSENZA**, che non distingue «non è successo» da «non è partito
+  niente». Va scritta **col controllo positivo nello stesso test e la stessa finestra d'attesa**
+  (sano → il battito compare entro N; rotto → non compare entro lo stesso N, e il thread è vivo),
+  altrimenti nasce verde per il motivo sbagliato. *(Il precedente è in casa: il rosso finto di
+  `crea_router()` nasceva da questa identica famiglia.)*
+
+**Come si raggiunge senza toccare produzione:** l'import
+`from fase186_guardiano import scansiona, riassunto_html` sta **dentro il `while True`**
+(`:11248`), quindi gli attributi del modulo si rileggono a ogni giro: basta sostituire
+`fase186_guardiano.scansiona` **prima** di avviare il thread. **Nessuna riga di produzione cambia.**
+⛔ **Cosa NON si asserisce:** che l'email parta quando il referto è *pulito ma con
+`non_eseguiti`*. Dipende da **B32**, che è una decisione non presa — e una guardia che pretende
+una decisione non presa nasce rossa per finta e viene spenta.
+
+📌 **In coda, e non è nel perimetro di chi scrive le guardie:** la docstring di
+`test_IL_TICK_LASCIA_DAVVERO_IL_BATTITO` cita `fase83_server.py:9598`, `:10116`, `:10335` e
+`:10164`. **Sono tutti spostati** (oggi `servi()` è a `:10657`, il tick a `:11244`). Il test
+funziona lo stesso — non legge quei numeri — ma un ottimo test con quattro riferimenti sbagliati
+è un test di cui il prossimo lettore dubita. È la stessa specie di **B22**, già chiusa una volta.
 
 ### 🟡 B34 — UNA GUARDIA CON UNA LISTA SCRITTA A MANO È CIECA PER COSTRUZIONE
 
