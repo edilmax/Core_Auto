@@ -938,6 +938,250 @@ class TestTrigger(unittest.TestCase):
                          "il token della CI deve poter solo LEGGERE il repository")
 
 
+def _giorni_del_cron(espressione):
+    """I giorni della settimana coperti da un'espressione cron, come insieme 0-6.
+
+    ⛔ Il 7 e lo 0 sono la STESSA domenica: cron ammette tutte e due le scritture, e
+    contarli come giorni diversi farebbe risultare «sette giorni coperti» a un'espressione
+    che ne copre sei. E' il modo piu' facile di scrivere una guardia che si dichiara
+    soddisfatta da sola.
+    """
+    campi = str(espressione).split()
+    if len(campi) != 5:
+        raise AssertionError(
+            "cron malformato, attesi 5 campi e ne ho contati %d: %r"
+            % (len(campi), espressione))
+    dow = campi[4]
+    if dow == "*":
+        return set(range(7))
+    def _numero(testo):
+        """⛔ Cron ammette anche i NOMI (`MON`, `SUN`, `MON-FRI`) e questo lettore no.
+
+        Trovato provando l'espansione a mano sui casi limite, non da un ragionamento:
+        `'0 0 * * lun'` faceva esplodere `int()` con un `ValueError`, cioe' un rosso che
+        NON dice cosa ha osservato -- e un messaggio oscuro manda a cercare il difetto nel
+        posto sbagliato, che e' peggio di un messaggio assente perche' fa perdere tempo con
+        l'aria di aiutare. Il rosso ci vuole; deve solo dire di che si tratta.
+        """
+        testo = testo.strip()
+        if not testo.isdigit():
+            raise AssertionError(
+                "giorno %r non numerico nel campo dei giorni: cron ammette i nomi "
+                "(MON, SUN, MON-FRI), ma questo lettore sa leggere solo le cifre e quindi "
+                "NON PUO' dire se la settimana e' coperta. O si scrive il cron a numeri, "
+                "o gli si insegna a leggere i nomi: non si lascia rispondere «va bene» a "
+                "chi non ha capito la domanda" % (testo,))
+        return int(testo)
+
+    giorni = set()
+    for pezzo in dow.split(","):
+        pezzo = pezzo.strip()
+        if "/" in pezzo:
+            # ⛔ LIMITE DICHIARATO (D18 punto 3), e non e' pigrizia: questo lettore non
+            # espande il passo `*/N`. Un lettore che NON SA non deve rispondere «va bene»
+            # -- sarebbe il verde peggiore, quello che non ha guardato niente (S1: il
+            # vuoto non e' un valore, e' assenza di misura). Quindi si ferma e lo dice.
+            raise AssertionError(
+                "passo `/` nel campo dei giorni (%r): questo lettore non lo espande, "
+                "quindi non puo' dire se la copertura settimanale e' completa. Se serve "
+                "davvero, si insegna a espanderlo -- non si allarga il perdono" % (pezzo,))
+        if "-" in pezzo:
+            da, a = pezzo.split("-", 1)
+            for n in range(_numero(da), _numero(a) + 1):
+                giorni.add(n % 7)
+        else:
+            giorni.add(_numero(pezzo) % 7)
+    return giorni
+
+
+class TestLaSuiteSuMasterGiraOGNIGIORNO(unittest.TestCase):
+    """⛔ SU `master` NON GIRA NIENTE CHE ESEGUA I TEST, SEI GIORNI SU SETTE.
+
+    Misurato il 2026-09-01: `origin/master` (dc7c25b) era ROSSA dal 31 agosto e nessuno
+    se n'era accorto per ~37 ore. Il punto non e' il ritardo, e' PERCHE' l'abbiamo saputo:
+    l'unica cosa che esegue la suite su `master` e' il giro programmato, e girava
+    **il lunedi'**. La stessa rottura capitata di martedi' avrebbe aspettato fino a 7 giorni.
+    `collaudi/METODO_v4.md` mette fra le due regole supreme: *«Non punto a "non sbaglia
+    mai". Punto a "qualunque cosa sbagli, lo so entro 24 ore"»* -- e quella regola era
+    violata **per costruzione**, non per sfortuna.
+
+    ⛔ PERCHE' NON BASTAVA CAMBIARE UNA RIGA. Il giro programmato trascina con se' la
+    scansione OWASP ZAP, che gira **sul sito vivo**: alzarlo a giornaliero senza toccare
+    altro avrebbe messo un crawl quotidiano sulla produzione. I due mestieri si separano
+    con due `cron` distinti e la condizione del job `zap` agganciata a `github.event.schedule`
+    -- che e' il meccanismo documentato da GitHub proprio per questo caso.
+
+    ⚠️ E QUESTA GUARDIA NON PROVA CHE IL GIRO AVVENGA. GitHub dichiara i lavori
+    programmati «best-effort»: possono essere ritardati o saltati sotto carico, e in un
+    repository pubblico vengono **disabilitati dopo 60 giorni senza attivita'**, in
+    silenzio, con lo YAML che continua a sembrare giusto. Questa guardia legge cosa il
+    file CHIEDE, non cosa il servizio FA: e' un controllo sull'intenzione dichiarata.
+    L'unica prova che il giro sia avvenuto e' la tabella dei giri letta dall'API.
+    """
+
+    def setUp(self):
+        self.doc = _doc_ci()
+        trig = _trigger(self.doc) or {}
+        self.schedule = trig.get("schedule") or []
+        self.assertTrue(self.schedule,
+                        "in ci.yml non c'e' nessun `schedule`: su master non gira piu' "
+                        "niente da solo, e un guasto si scopre quando qualcuno passa di li'")
+
+    def test_i_giri_programmati_coprono_TUTTI_E_SETTE_i_giorni(self):
+        coperti = set()
+        for voce in self.schedule:
+            coperti |= _giorni_del_cron(voce.get("cron", ""))
+        mancanti = sorted(set(range(7)) - coperti)
+        self.assertEqual(
+            mancanti, [],
+            "i giri programmati NON coprono tutta la settimana: restano scoperti i giorni "
+            "%r (0=domenica). Un guasto introdotto in un giorno scoperto resta invisibile "
+            "fino al primo giorno coperto, e la regola delle 24 ore e' violata per "
+            "costruzione. Espressioni dichiarate: %r"
+            % (mancanti, [v.get("cron") for v in self.schedule]))
+
+    def test_la_ZAP_resta_SETTIMANALE_anche_col_giro_giornaliero(self):
+        """La ZAP e' l'unico job che tocca la PRODUZIONE: alzarla a ogni notte sarebbe un
+        crawl quotidiano sul sito vivo, che nessuno ha chiesto e che si paga in traffico."""
+        cond = self.doc["jobs"]["zap"].get("if", "")
+        self.assertIn(
+            "github.event.schedule", cond,
+            "il job `zap` gira su QUALUNQUE giro programmato: con piu' di un `cron` "
+            "vuol dire scansionare il sito vivo ogni notte. La condizione deve dire "
+            "QUALE cron la accende. Condizione letta: %r" % (cond,))
+        citati = re.findall(r"github\.event\.schedule\s*==\s*'([^']*)'", cond)
+        self.assertTrue(
+            citati,
+            "la condizione nomina `github.event.schedule` ma non lo confronta con nessuna "
+            "espressione fra apici: cosi' non seleziona niente. Condizione letta: %r"
+            % (cond,))
+        giorni = set()
+        for espressione in citati:
+            giorni |= _giorni_del_cron(espressione)
+        self.assertEqual(
+            len(giorni), 1,
+            "il job `zap` e' agganciato a giri programmati che coprono %d giorni (%r): "
+            "doveva restare settimanale" % (len(giorni), sorted(giorni)))
+
+    def test_il_cron_citato_dalla_ZAP_ESISTE_DAVVERO_fra_quelli_dichiarati(self):
+        """⛔ LA GUARDIA CHE SERVE FRA SEI MESI, non oggi.
+
+        La condizione del job `zap` cita una stringa cron **alla lettera**. Il giorno che
+        qualcuno cambia l'orario del giro del lunedi' e non aggiorna la condizione, i due
+        smettono di combaciare e la ZAP **non gira piu'** -- senza nessun rosso, perche' un
+        job che non parte non fallisce. E' il modo di rompersi n. 2 (cablaggio mancante)
+        nella sua forma peggiore: silenziosa. Qui diventa rosso lo stesso giorno.
+        """
+        cond = self.doc["jobs"]["zap"].get("if", "")
+        dichiarati = [str(v.get("cron", "")) for v in self.schedule]
+        citati = re.findall(r"github\.event\.schedule\s*==\s*'([^']*)'", cond)
+        # ⛔ LA PREMESSA, e non e' una formalita': senza nemmeno una citazione il ciclo qui
+        # sotto non gira e questo test passerebbe SENZA AVER GUARDATO NIENTE (sbaglio S7).
+        # Verde per premessa mancante e' il verde peggiore. E non ci si appoggia al test
+        # fratello che pretende la citazione: una difesa non deve dipendere dal
+        # comportamento di un'altra (D19) -- il giorno che quello cambia, questo tace.
+        self.assertTrue(
+            citati,
+            "PREMESSA MANCANTE, controllo NON ESEGUITO: la condizione del job `zap` non "
+            "cita nessun `github.event.schedule == '...'`, quindi non c'e' niente da "
+            "confrontare coi cron dichiarati %r. Condizione letta: %r"
+            % (dichiarati, cond))
+        for espressione in citati:
+            self.assertIn(
+                espressione, dichiarati,
+                "la condizione del job `zap` aspetta il giro %r, che NON e' fra i cron "
+                "dichiarati %r: quel job non si accendera' mai piu', e non lo dira' "
+                "nessuno perche' un job saltato non e' un job rosso"
+                % (espressione, dichiarati))
+
+    def test_i_MINUTI_non_sono_nell_ora_di_punta_COME_GIA_PRETESO_dalla_sentinella(self):
+        """⛔ LA STESSA REGOLA CHE IL PROGETTO APPLICAVA A UN FILE SU DUE.
+
+        `test_i_MINUTI_sono_dispari_e_non_e_una_superstizione` pretende gia' questo, ma
+        **solo su `sentinella.yml`**: `ci.yml` era rimasto fuori, e infatti stava al minuto
+        0 -- l'ora di punta, dove GitHub accoda e a volte salta. Finche' il giro era
+        settimanale contava poco; moltiplicato per sette diventa il momento sbagliato
+        ripetuto ogni notte. La protezione esisteva, era collegata a meta' dei posti.
+        """
+        for voce in self.schedule:
+            minuti = str(voce.get("cron", "")).split(" ")[0]
+            self.assertNotIn(
+                minuti, ("0", "30", "0,30"),
+                "giro programmato al minuto %r, l'ora di punta di GitHub: e' li' che i "
+                "giri vengono ritardati o saltati, ed e' esattamente cio' che "
+                "`sentinella.yml` evita gia' da mesi" % (minuti,))
+
+
+class TestIlLettoreDeiGiorniNonRISPONDEQuandoNonSA(unittest.TestCase):
+    """⛔ LA GUARDIA DELL'ATTREZZO, non del file che l'attrezzo legge.
+
+    D18 punto 4: uno strumento che misura dev'essere a sua volta sotto guardia, o fra sei
+    mesi sparisce in una «semplificazione» e non se ne accorge nessuno lo stesso giorno.
+
+    Queste righe non sono state pensate a tavolino: sono la prova a mano che il 2026-09-01
+    ha trovato un difetto VERO in `_giorni_del_cron`. Il campo dei giorni ammette anche i
+    NOMI (`MON`, `SUN`, `MON-FRI`) -- e' sintassi valida, GitHub la accetta -- e il lettore
+    sapeva leggere solo le cifre: su `'0 0 * * lun'` lasciava esplodere `int()` con
+    `ValueError: invalid literal for int()`.
+
+    ⚠️ E LA PARTE CHE VALE PIU' DEL DIFETTO: non era un falso verde. Sarebbe stato ROSSO.
+    Era un rosso che **non dice cosa ha osservato**, e che manda a cercare il guasto dentro
+    il parser invece di far leggere «questo lettore non sa i nomi dei giorni». Un rosso
+    oscuro non e' meta' di un rosso buono: e' un rosso che costa tempo **con l'aria di
+    aiutare**. Da qui in poi quel difetto non puo' tornare in silenzio.
+    """
+
+    def test_espande_i_giorni_COMPRESA_la_domenica_scritta_nei_DUE_modi(self):
+        for espressione, atteso in (
+                ("17 3 * * 1", {1}),
+                ("17 3 * * 0,2,3,4,5,6", {0, 2, 3, 4, 5, 6}),
+                ("0 0 * * *", set(range(7))),
+                ("0 0 * * 1-5", {1, 2, 3, 4, 5}),
+                # ⛔ 7 e 0 sono la STESSA domenica. Contarli come due giorni diversi farebbe
+                # risultare «coperta» una settimana che ha un buco -- cioe' un verde su una
+                # domanda a cui non si e' risposto.
+                ("0 0 * * 7", {0}),
+                ("0 0 * * 5-7", {5, 6, 0}),
+                ("0 0 * * 0,0,0", {0}),
+        ):
+            self.assertEqual(
+                _giorni_del_cron(espressione), atteso,
+                "espansione sbagliata di %r: se questo lettore sbaglia, la guardia sulla "
+                "copertura settimanale sbaglia con lui e nessuno dei due lo dice"
+                % (espressione,))
+
+    def test_QUANDO_NON_SA_si_ferma_E_DICE_COSA_HA_VISTO(self):
+        """Le quattro forme che questo lettore NON sa espandere. Per ognuna pretende due
+        cose distinte: che si **fermi** (S1: non-misura non e' un verde) e che il messaggio
+        **nomini cio' che ha osservato**, non una colpa generica (regola A)."""
+        for espressione, atteso_nel_messaggio in (
+                ("0 0 * * */2", "passo `/`"),
+                ("0 0 * *", "5 campi"),
+                ("0 0 * * lun", "non numerico"),
+                ("0 0 * * MON-FRI", "non numerico"),
+        ):
+            try:
+                risposta = _giorni_del_cron(espressione)
+            except AssertionError as errore:
+                self.assertIn(
+                    atteso_nel_messaggio, str(errore),
+                    "su %r si ferma, ma il messaggio non nomina %r: un rosso che non dice "
+                    "cosa ha osservato manda a riparare la cosa sbagliata. Messaggio: %s"
+                    % (espressione, atteso_nel_messaggio, errore))
+            except Exception as errore:
+                self.fail(
+                    "su %r si ferma con %s invece che con un AssertionError che spiega: "
+                    "e' il difetto trovato il 2026-09-01, ed e' tornato. Un `ValueError` "
+                    "manda a cercare il guasto nel parser invece di dire che questo "
+                    "lettore non sa i nomi dei giorni" % (espressione, type(errore).__name__))
+            else:
+                self.fail(
+                    "su %r NON si e' fermato: ha risposto %r come se avesse capito la "
+                    "domanda. Un lettore che non sa e risponde lo stesso fa passare per "
+                    "«settimana coperta» una settimana mai guardata"
+                    % (espressione, sorted(risposta)))
+
+
 class TestNeedsDelGateCompleto(unittest.TestCase):
     """Nessun job bloccante puo' restare fuori dai `needs` del gate."""
 

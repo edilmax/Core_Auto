@@ -1,14 +1,26 @@
 name: BookinVIP CI
 
-# Gira ad ogni push/PR su master. In piu': la scansione OWASP ZAP del sito live gira
-# SOLO su schedule settimanale o avvio manuale (non ad ogni commit).
+# Gira ad ogni push/PR su master, e OGNI NOTTE da sola. Il giro notturno non e' un lusso:
+# un push non arriva mai su un repository fermo, ma un guasto che matura DA SOLO si', e su
+# master niente lo eseguirebbe. Misurato il 2026-09-01: il giro del 31 agosto e' andato
+# rosso e la causa era un test che marcisce con la data -- nessun commit l'aveva toccato.
+# Con un solo giro settimanale la stessa rottura, capitata di martedi', avrebbe aspettato
+# fino a sette giorni.
+# La scansione OWASP ZAP del sito vivo resta SETTIMANALE: la accende solo il cron del
+# lunedi', non gli altri sei (vedi la condizione del job `zap`), perche' un crawl
+# quotidiano sulla produzione nessuno l'ha chiesto.
 on:
   push:
     branches: [ master ]
   pull_request:
     branches: [ master ]
   schedule:
-    - cron: '0 3 * * 1'      # ogni lunedi' 03:00 UTC -> scansione ZAP del sito live
+    # I MINUTI NON SONO 0 APPOSTA. GitHub esegue i giri programmati "best-effort" e li
+    # accoda -- a volte li salta -- nell'ora di punta, che e' il minuto 0 e il minuto 30,
+    # dove programmano tutti. E' la stessa ragione per cui `sentinella.yml` gira ai minuti
+    # 7/22/37/52, ed e' gia' pretesa da una guardia: qui il file era rimasto fuori.
+    - cron: '17 3 * * 1'            # lunedi' 03:17 UTC -> suite intera + scansione ZAP
+    - cron: '17 3 * * 0,2,3,4,5,6'  # gli altri sei giorni -> solo la suite, niente ZAP
   workflow_dispatch: {}       # avvio manuale (utile per lanciare la ZAP a richiesta)
 
 # ============================================================================
@@ -1016,8 +1028,9 @@ jobs:
         if: always()
         run: docker rm -f casavip_ci || true
 
-  # OWASP ZAP: scansione DAST BASELINE (passiva, NON attacca) del sito live. Gira solo su
-  # schedule settimanale o avvio manuale -> niente crawl della produzione ad ogni commit.
+  # OWASP ZAP: scansione DAST BASELINE (passiva, NON attacca) del sito live. Gira solo sul
+  # giro programmato del LUNEDI' o su avvio manuale -> niente crawl della produzione ad ogni
+  # commit, e niente crawl quotidiano da quando i giri programmati sono diventati sette.
   # Report-only (|| true): i rilievi restano nel log del job.
   # FUORI dal "gate" di proposito: su push/PR questo job non gira proprio, e un job saltato
   # non puo' essere una condizione per far passare o bocciare un commit.
@@ -1025,7 +1038,12 @@ jobs:
     # gira il lunedi' sul sito vivo: piu' lungo degli altri, ma non infinito
     timeout-minutes: 40
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # `github.event.schedule` porta l'espressione cron CHE HA FATTO SCATTARE il giro: e' il
+    # modo documentato da GitHub per distinguere piu' `cron` nello stesso file. Attenzione:
+    # la stringa qui sotto deve combaciare ALLA LETTERA con quella dichiarata in `on:`,
+    # altrimenti questo job non si accende mai piu' e non lo dice nessuno (un job che non
+    # parte non fallisce). Contro questo c'e' una guardia in `test_pipeline_ci.py`.
+    if: (github.event_name == 'schedule' && github.event.schedule == '17 3 * * 1') || github.event_name == 'workflow_dispatch'
     steps:
       # STRICT sul GRAVE: -I fa si' che gli AVVISI non blocchino (al primo giro: 0 FAIL,
       # 59 PASS, 11 avvisi = header di hardening mancanti, non buchi). Esce non-zero SOLO
