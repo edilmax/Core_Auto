@@ -18,8 +18,34 @@ suo apparecchio di preparazione.
 
 ✅ QUINDI SI MISURA IL COMPORTAMENTO, NON IL TESTO: si sposta l'orologio e si guarda chi
 diventa rosso. **Verde a orologio fermo + rosso a orologio spostato = BOMBA, dimostrata.**
-Poi, per dimezzamenti, si trova **il giorno esatto** in cui esplode -- e quel giorno si
-verifica nelle due direzioni (verde il giorno prima, rosso quel giorno), mai dedotto.
+Poi si cerca **il giorno esatto** in cui esplode, e quel giorno si verifica nelle due
+direzioni (verde il giorno prima, rosso quel giorno), mai dedotto.
+
+⛔ E LA SECONDA VOLTA, IL 2026-09-01, LA BOMBA L'HA PERSA QUESTO ATTREZZO. `test_calendario_
+prezzi` e' esploso da solo -- stesso commit `dc7c25b`, `gate=success` il 29 agosto e
+`gate=failure` il 31 nella tabella della CI, senza che nessuno avesse toccato una riga --
+mentre lo schedario diceva `"bombe": []`. Non era vecchio (17 giorni su 30 di tolleranza) e
+l'orologio finto funzionava benissimo: **a sbagliare era DOVE si guardava.**
+Il giro campionava DUE punti, il giorno 0 e l'orizzonte a 400 giorni. Ma quel test era rosso
+solo in una **finestra di 6 giorni** e poi **guariva da solo**, perche' passata la data il
+motore ripiega su un valore neutro (`fase119_calendario_prezzi.py:62`, `return d if d >= 0
+else 30`). Misurato sull'artefatto vero, con l'attrezzo di allora:
+      scarto -19 (il 13 agosto, il suo «giorno 0»)   -> verde
+      scarto -2 .. +3                                 -> ROSSO   <- la finestra
+      scarto +381 (13 agosto + 400, il suo orizzonte) -> verde
+⛔ E NON E' SFORTUNA, E' IMPOSSIBILITA': una bomba che guarisce da sola e' verde a QUALUNQUE
+distanza oltre la sua finestra, quindi **e' certamente verde all'orizzonte, per qualunque
+orizzonte**. Il secondo campione era verde per costruzione. ⇒ **allungare `ORIZZONTE`
+peggiora**: e' il punto in cui tutto e' piu' sicuramente guarito. Non e' un numero da tarare.
+
+✅ LA RIPARAZIONE: NON PIU' DUE PUNTI SCELTI SENZA GUARDARE, MA UN PIANO RICAVATO DALLE DATE.
+Per ogni data cablata futura si prova lo scarto che la porta esattamente su OGGI: e' li' che
+le soglie di calendario cambiano parere. Vedi `piano_di_campionamento`.
+⛔ E LA STRADA CHE SEMBRA OVVIA E' MISURATA E SBAGLIATA: una **griglia fissa** di 11 punti --
+cioe' «campioniamo di piu'», la riparazione che verra' in mente a chiunque -- costa QUATTRO
+volte questo giro e trova ESATTAMENTE quanto i due punti di prima (banco del 2026-09-01, 9
+forme a verita' nota: 3 su 6 per tutt'e due). **La griglia non sa dove guardare; le date lo
+sanno.**
 
 📚 FONTI (D25, lette il 2026-08-13 -- per esteso in REGISTRO_INGEGNERIA.md, appendice R1):
    · Luo, Hariri, Eloussi, Marinov, *An empirical analysis of flaky tests*, FSE 2014:
@@ -33,9 +59,12 @@ verifica nelle due direzioni (verde il giorno prima, rosso quel giorno), mai ded
    1. **misura prima se stesso**: se a orologio FERMO qualcosa e' gia' rosso, il verdetto sul
       futuro non vale -- non si saprebbe se il rosso l'ha causato il tempo o l'attrezzo. In
       quel caso esce NON ESEGUITO, che non e' mai un successo (sbaglio S7);
-   2. **provato nelle DUE direzioni**: `--autoprova` costruisce due test gemelli -- uno con la
-      data CABLATA, uno con la stessa intenzione calcolata da oggi -- e pretende di vedere il
-      primo rosso e il secondo verde. Se non li vede, esce 1;
+   2. **provato nelle DUE direzioni**: `--autoprova` costruisce dei test gemelli -- con la
+      data CABLATA, con la stessa intenzione calcolata da oggi, e una bomba che GUARISCE DA
+      SOLA -- e pretende due cose diverse: che l'OROLOGIO faccia diventare rossa la bomba e
+      lasci verde il sano, e che la CACCIA se ne ACCORGA. La seconda meta' e' nata il
+      2026-09-01: le prove di allora guardavano solo l'orologio, che funzionava, e non
+      potevano vedere che a sbagliare era il modo di cercare. Se non le vede, esce 1;
    3. **dichiara cosa NON ha esaminato**: `NON_GUARDA`, stampato a ogni giro;
    4. **e' a sua volta sotto guardia**: `test_pipeline_ci.TestLeBombeATempo`.
 """
@@ -80,6 +109,14 @@ NON_GUARDA = (
     "candidati, quindi non sono stati eseguiti a orologio spostato",
     "il MOTIVO del rosso: questo attrezzo dimostra CHE una data lo provoca, non QUALE riga "
     "va cambiata. Quello si legge aprendo il test",
+    "le soglie LONTANE dall'attraversamento. Si prova lo scarto che porta ogni data cablata "
+    "esattamente su OGGI, quindi una regola che cambia parere a 60 giorni di distanza -- "
+    "l'anticipo di `fase106:28` -- non viene esercitata. Misurato sul banco del 2026-09-01: "
+    "e' la forma 3, ed e' PERSA. Prenderla costerebbe otto volte questo giro",
+    "le date scritte in forma NUMERICA: `datetime.date(2026, 9, 21)` non e' vista, solo "
+    "\"2026-09-21\". Misurato il 2026-09-01 su due file gemelli (`candidati` ne restituisce "
+    "uno solo). Quanti file veri usino quella forma NON e' stato misurato: e' un rilievo "
+    "aperto, non un buco quantificato",
 )
 
 
@@ -206,31 +243,80 @@ def file_di_test(radice=RADICE):
                   if n.startswith("test_") and n.endswith(".py"))
 
 
+def date_cablate(nome, radice=RADICE, orizzonte=ORIZZONTE, oggi=None):
+    """Le date cablate in un file, misurate in GIORNI DA OGGI.
+
+    ⛔ PRIMA QUESTA INFORMAZIONE VENIVA ESTRATTA E BUTTATA VIA. `candidati()` faceva
+    esattamente questo lavoro e teneva soltanto il NOME del file: l'unica cosa che l'attrezzo
+    sapesse su DOVE guardare la perdeva per strada, e poi campionava due punti su
+    quattrocento -- il giorno 0 e l'orizzonte -- scelti senza guardare niente.
+    ⚠️ LIMITE DICHIARATO: vede solo le date scritte come STRINGA ISO. La forma
+    `datetime.date(2026, 9, 21)` e' invisibile. Misurato il 2026-09-01 su due file gemelli,
+    uno per forma:  file_di_test ['test_numerica.py', 'test_stringa.py']  ->  candidati
+    ['test_stringa.py']."""
+    oggi = oggi or _vera_dt.fromtimestamp(_vero_time()).date()
+    fuori = set()
+    try:
+        with io.open(os.path.join(radice, nome), encoding="utf-8", errors="replace") as f:
+            albero = ast.parse(f.read())
+    except Exception:
+        return fuori
+    for n in ast.walk(albero):
+        if not (isinstance(n, ast.Constant) and isinstance(n.value, str)):
+            continue
+        m = _DATA_ISO.match(n.value.strip())
+        if not m:
+            continue
+        try:
+            d = _dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            continue
+        if abs((d - oggi).days) <= orizzonte:
+            fuori.add((d - oggi).days)
+    return fuori
+
+
 def candidati(radice=RADICE, orizzonte=ORIZZONTE, oggi=None):
     """I file che contengono almeno una data cablata entro l'orizzonte. Non e' un giudizio:
     e' solo il modo di non rieseguire tutta la suite due volte per niente."""
-    oggi = oggi or _vera_dt.fromtimestamp(_vero_time()).date()
-    fuori = []
-    for nome in file_di_test(radice):
-        try:
-            with io.open(os.path.join(radice, nome), encoding="utf-8", errors="replace") as f:
-                albero = ast.parse(f.read())
-        except Exception:
+    return [nome for nome in file_di_test(radice)
+            if date_cablate(nome, radice, orizzonte, oggi)]
+
+
+def piano_di_campionamento(radice=RADICE, orizzonte=ORIZZONTE, oggi=None, cand=None):
+    """DOVE guardare. Ritorna ({scarto: [file...]}, dettaglio).
+
+    Per ogni data cablata FUTURA si prova lo scarto d'orologio che la porta esattamente su
+    OGGI. E' li' che quasi tutte le soglie di calendario cambiano parere -- «e' ancora
+    futura?», «e' scaduta?», «manca poco?» -- e una sola passata mette tutte le date del
+    file a distanze diverse in un colpo solo.
+
+    ⛔ PERCHE' NON UNA GRIGLIA FISSA DI PUNTI, e non e' un'opinione. Misurato il 2026-09-01
+    su un banco di 9 forme a verita' nota e sui 147 candidati veri: una griglia di 11 punti
+    costa QUATTRO volte questo giro e trova ESATTAMENTE quanto i due punti di prima -- 3
+    forme su 6. **La griglia non sa dove guardare; le date lo sanno.** Chi vorra' riparare
+    questo attrezzo aggiungendo punti alla cieca ha gia' la misura che dice che non funziona.
+
+    ⚠️ NON SI SALTANO i file con sole date passate. Sembrerebbe gratis -- sono 50 su 147, il
+    39 per cento del giro -- e sarebbe un buco nuovo: la forma 9 del banco cabla una data
+    PASSATA e resta una bomba, perche' la sua soglia guarda INDIETRO («non piu' vecchia di
+    60 giorni») e allontanandosi diventa rossa. Quei file non hanno scarti mirati (non ne
+    servono), ma la passata all'orizzonte la ricevono come tutti gli altri."""
+    cand = candidati(radice, orizzonte, oggi) if cand is None else cand
+    piano, quante_date, senza_future = {}, 0, 0
+    for nome in cand:
+        distanze = date_cablate(nome, radice, orizzonte, oggi)
+        quante_date += len(distanze)
+        future = [d for d in distanze if d >= 0]
+        if not future:
+            senza_future += 1
             continue
-        for n in ast.walk(albero):
-            if not (isinstance(n, ast.Constant) and isinstance(n.value, str)):
-                continue
-            m = _DATA_ISO.match(n.value.strip())
-            if not m:
-                continue
-            try:
-                d = _dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-            except ValueError:
-                continue
-            if abs((d - oggi).days) <= orizzonte:
-                fuori.append(nome)
-                break
-    return fuori
+        for d in future:
+            if 1 <= d <= orizzonte:
+                piano.setdefault(d, []).append(nome)
+    return piano, {"date_esaminate": quante_date,
+                   "file_senza_date_future": senza_future,
+                   "scarti_provati": sorted(piano)}
 
 
 def avvia_processi(modulo, classe, radice=RADICE):
@@ -309,59 +395,107 @@ def esegui(nomi, giorni):
     return esito.testsRun, rossi
 
 
-def giorno_di_esplosione(nome, orizzonte=ORIZZONTE):
-    """Il primo giorno in cui il test diventa rosso, per dimezzamenti.
+def giorno_di_esplosione(nome, orizzonte=ORIZZONTE, percorso_extra=None, radice=RADICE,
+                         primo_rosso=None):
+    """Il primo giorno in cui il test diventa rosso.
 
-    ⛔ NON si assume che «una volta rossa resti rossa»: trovato il confine, si VERIFICA che
-    il giorno prima sia verde e quel giorno sia rosso. Un confine dedotto non e' misurato.
+    ⛔ DUE STRADE, PERCHE' LE BOMBE NON SONO TUTTE DELLA STESSA SPECIE. Prima ce n'era una
+    sola, e la sua docstring diceva «NON si assume che una volta rossa resti rossa» -- ma il
+    suo cancello lo assumeva eccome: `if ... not e_rosso(orizzonte): return None`. La
+    verifica riguardava il CONFINE, non il RITROVAMENTO. E' lo stesso difetto di `caccia()`,
+    un piano piu' giu'.
+    · Rossa ANCHE all'orizzonte -> famiglia a GRADINO (una volta rossa resta rossa): si
+      dimezza, ed e' esatto.
+    · Rossa solo dentro una FINESTRA e gia' guarita all'orizzonte -> dimezzare NON vale: la
+      ricerca per dimezzamenti pretende che il rosso non torni verde, e qui torna. Si prende
+      allora il primo scarto in cui il PIANO l'ha vista rossa e si guarda il giorno prima.
+      Se anche quello e' rosso, il confine vero e' ancora piu' indietro e nessuno l'ha
+      campionato: si dichiara NON confermato invece di inventarlo.
     Ritorna (giorni, confermato) oppure (None, False)."""
     def e_rosso(g):
-        return bool(esegui_fuori([nome], g)[1])
+        return bool(esegui_fuori([nome], g, percorso_extra=percorso_extra,
+                                 radice=radice)[1])
 
-    if e_rosso(0) or not e_rosso(orizzonte):
+    if e_rosso(0):
         return None, False
-    basso, alto = 0, orizzonte
-    while alto - basso > 1:
-        mezzo = (basso + alto) // 2
-        if e_rosso(mezzo):
-            alto = mezzo
-        else:
-            basso = mezzo
-    confermato = (not e_rosso(basso)) and e_rosso(alto)
-    return alto, confermato
+    if e_rosso(orizzonte):
+        basso, alto = 0, orizzonte
+        while alto - basso > 1:
+            mezzo = (basso + alto) // 2
+            if e_rosso(mezzo):
+                alto = mezzo
+            else:
+                basso = mezzo
+        confermato = (not e_rosso(basso)) and e_rosso(alto)
+        return alto, confermato
+    if primo_rosso is None or primo_rosso < 1:
+        return None, False
+    return primo_rosso, not e_rosso(primo_rosso - 1)
 
 
-def caccia(radice=RADICE, orizzonte=ORIZZONTE, cerca_il_giorno=True):
-    """Il giro completo. Ritorna un dizionario pronto per lo schedario."""
+def caccia(radice=RADICE, orizzonte=ORIZZONTE, cerca_il_giorno=True,
+           percorso_extra=None):
+    """Il giro completo. Ritorna un dizionario pronto per lo schedario.
+
+    ⛔ `percorso_extra` E' LA CUCITURA CHE RENDE QUESTO ATTREZZO COLLAUDABILE DA SOLO, e non
+    e' un vezzo: senza, `radice` NON arriva al processo figlio (che si rimette sempre su
+    RADICE), i moduli di un albero finto non si importano, e `unittest` trasforma ogni
+    fallimento d'import in un `_FailedTest` che conta come un test ROSSO.
+    Misurato il 2026-09-01 su un albero finto con un solo test:
+        esito NON ESEGUITO · eseguiti 1 · rossi_a_orologio_fermo
+        ['unittest.loader._FailedTest.test_sempre_rosso']
+    cioe' un rosso FINTO, che coprirebbe qualunque difetto vero si stesse provando.
+    ⚠️ Il giro vero non la usa (gira sulla radice del progetto): la usa la GUARDIA. E non
+    ripara niente -- il campionamento resta quello di prima."""
     if radice not in sys.path:
         sys.path.insert(0, radice)
     os.chdir(radice)
     cand = candidati(radice, orizzonte)
     # ⛔ OGNI PASSATA IN UN PROCESSO NUOVO: vedi `esegui_fuori`. Nello stesso processo, i
     # test che calcolano le date all'import vengono accusati da innocenti.
-    quanti, base = esegui_fuori(cand, 0, radice=radice)
+    quanti, base = esegui_fuori(cand, 0, percorso_extra=percorso_extra, radice=radice)
     if base:
         return {"esito": "NON ESEGUITO", "rossi_a_orologio_fermo": sorted(base),
                 "candidati": len(cand), "file_di_test": len(file_di_test(radice)),
                 "eseguiti": quanti, "bombe": [], "non_giudicabili": []}
-    _, dopo = esegui_fuori(cand, orizzonte, radice=radice)
+    # [1] la passata all'ORIZZONTE, su TUTTI: prende la famiglia a GRADINO, quella che una
+    #     volta rossa resta rossa. E' l'unica che l'attrezzo sapesse vedere.
+    _, dopo = esegui_fuori(cand, orizzonte, percorso_extra=percorso_extra, radice=radice)
+    trovati = dict((t, orizzonte) for t in (dopo - base))
+
+    # [2] il PIANO: per ogni data cablata futura, lo scarto che la porta su oggi. Prende la
+    #     famiglia a FINESTRA -- quella che guarisce da sola e che all'orizzonte e' verde
+    #     per costruzione, quindi al passo [1] e' invisibile per quanto lontano si guardi.
+    piano, dettaglio = piano_di_campionamento(radice, orizzonte, cand=cand)
+    for g in sorted(piano):
+        _, rossi = esegui_fuori(piano[g], g, percorso_extra=percorso_extra, radice=radice)
+        for t in (rossi - base):
+            if g < trovati.get(t, orizzonte + 1):
+                trovati[t] = g
+
     bombe, non_giudicabili = [], []
-    for pieno in sorted(dopo - base):
+    for pieno in sorted(trovati):
         pezzi = pieno.split(".")
         modulo, classe = pezzi[0], (pezzi[1] if len(pezzi) > 2 else "")
         if avvia_processi(modulo, classe, radice):
             non_giudicabili.append(pieno)
             continue
-        giorni, confermato = (giorno_di_esplosione(pieno, orizzonte)
-                              if cerca_il_giorno else (None, False))
+        giorni, confermato = (giorno_di_esplosione(pieno, orizzonte, percorso_extra,
+                                                   radice, trovati[pieno])
+                              if cerca_il_giorno else (trovati[pieno], False))
         voce = {"test": pieno, "giorni": giorni, "confine_confermato": confermato}
         if giorni is not None:
             voce["esplode_il"] = str(oggi_vero() + _dt.timedelta(days=giorni))
         bombe.append(voce)
     vai_a(0)
-    return {"esito": "OK", "rossi_a_orologio_fermo": [], "candidati": len(cand),
-            "file_di_test": len(file_di_test(radice)), "eseguiti": quanti,
-            "bombe": bombe, "non_giudicabili": non_giudicabili}
+    esito = {"esito": "OK", "rossi_a_orologio_fermo": [], "candidati": len(cand),
+             "file_di_test": len(file_di_test(radice)), "eseguiti": quanti,
+             "bombe": bombe, "non_giudicabili": non_giudicabili}
+    # ⛔ IL PIANO VA NELLO SCHEDARIO, e non e' un ornamento: senza, `"bombe": []` e' un vuoto
+    # che non dice se non c'era niente o se non si e' guardato. Con questi campi quel vuoto
+    # diventa «nessuna bomba FRA GLI SCARTI ELENCATI», che e' una misura e si puo' contestare.
+    esito.update(dettaglio)
+    return esito
 
 
 # --------------------------------------------------------------------------------------
@@ -450,17 +584,37 @@ def giudizio_dallo_schedario(schedario, oggi=None, giorni_allarme=GIORNI_ALLARME
                 % (len(vicine), giorni_allarme, "\n      ".join(righe)))
     quante = len(schedario.get("bombe") or [])
     ng = len(schedario.get("non_giudicabili") or [])
+    scarti = schedario.get("scarti_provati")
+    if scarti is None:
+        # ⛔ UNO SCHEDARIO CHE NON DICE DOVE HA GUARDATO NON E' UNA MISURA. Gli schedari
+        # scritti prima del 2026-09-01 vengono da un giro che campionava DUE punti, il
+        # giorno 0 e l'orizzonte, e che per costruzione non poteva vedere le bombe che
+        # guariscono da sole: il suo `"bombe": []` non significa «nessuna bomba», significa
+        # «nessun test rosso esattamente fra 400 giorni». Trattarlo come un OK sarebbe
+        # ripetere l'errore che questo attrezzo e' stato riparato per non fare piu'.
+        return ("ROSSO",
+                "lo schedario non dichiara DOVE ha guardato (manca `scarti_provati`): viene "
+                "da un giro col campionamento vecchio a due punti, che non poteva vedere le "
+                "bombe che guariscono da sole. Il suo «%d bombe» non e' un verdetto. "
+                "Rifallo:\n      python collaudi/bombe_a_tempo.py --caccia" % quante)
     return ("OK", "%d bombe note, nessuna entro %d giorni · %d non giudicabili · misurato %d "
-                  "giorni fa su %d file candidati (di %d file di test, %d test eseguiti)"
+                  "giorni fa su %d file candidati (di %d file di test, %d test eseguiti) · "
+                  "guardati %d scarti d'orologio su %d date cablate, piu' il giorno 0 e "
+                  "l'orizzonte a %d giorni (%d file non avevano date future)"
             % (quante, giorni_allarme, ng, eta, schedario.get("candidati", 0),
-               schedario.get("file_di_test", 0), schedario.get("eseguiti", 0)))
+               schedario.get("file_di_test", 0), schedario.get("eseguiti", 0),
+               len(scarti), schedario.get("date_esaminate", 0),
+               schedario.get("orizzonte_giorni", 0),
+               schedario.get("file_senza_date_future", 0)))
 
 
 # --------------------------------------------------------------------------------------
 # D18 punto 2: la prova nelle DUE direzioni, che si puo' rifare quando si vuole
 # --------------------------------------------------------------------------------------
 _GEMELLI = '''# -*- coding: utf-8 -*-
-"""Tre test con la STESSA intenzione, scritta in tre modi diversi."""
+"""Cinque test: tre con la STESSA intenzione scritta in tre modi diversi, piu' due bombe di
+famiglie che il campionamento a due punti non sapeva vedere -- quella che GUARISCE DA SOLA e
+quella che INVECCHIA."""
 import datetime
 import unittest
 
@@ -483,12 +637,57 @@ class TestGemelli(unittest.TestCase):
 
     def test_IL_SANO_2_stessa_intenzione_calcolata_ALL_IMPORT(self):
         self.assertGreater(_ALL_IMPORT, datetime.date.today())
+
+    def test_LA_BOMBA_A_FINESTRA_che_guarisce_da_sola(self):
+        # ⛔ LA FAMIGLIA CHE NESSUN ORIZZONTE PUO' VEDERE, e non e' teoria: modella
+        # `fase119_calendario_prezzi.py:62` (`return d if d >= 0 else 30`). Passata la data,
+        # il codice RIPIEGA su un valore neutro e il test torna VERDE DA SOLO: e' rosso solo
+        # dentro una finestra stretta, e verde prima E dopo -- cioe' verde a QUALUNQUE
+        # orizzonte, per costruzione.
+        # Misurata sul vero il 2026-09-01 (`test_calendario_prezzi`, quattro date cablate):
+        # finestra di 6 giorni su 400, scarti -2..+3. I due campioni di `caccia()` -- il
+        # giorno 0 e l'orizzonte -- cadono tutti e due FUORI, e non per sfortuna: quello
+        # all'orizzonte e' verde sempre, perche' e' li' che tutto e' certamente guarito.
+        # ⚠️ LA DATA SI CABLA COME STRINGA APPOSTA, e non e' uno stile: `candidati()` (:209)
+        # riconosce solo le date scritte come stringa ISO ed e' CIECO su
+        # `datetime.date(2026, 9, 21)`. Misurato il 2026-09-01 su due file gemelli, uno per
+        # forma: `candidati` ne ha restituito uno solo, quello con la stringa. Con la forma
+        # numerica questo file non sarebbe nemmeno CANDIDATO, e la guardia diventerebbe rossa
+        # per il motivo sbagliato (0 candidati) invece che per il campionamento -- un rosso
+        # finto, che vale quanto un verde finto.
+        arrivo = "%(iso)s"
+        y, m, g = (int(x) for x in arrivo.split("-"))
+        d = (datetime.date(y, m, g) - datetime.date.today()).days
+        distanza = d if d >= 0 else 30
+        # ⚠️ Il messaggio dice COSA HA OSSERVATO, non di chi e' la colpa: una guardia che
+        # nomina il colpevole sbagliato manda a riparare codice sano.
+        self.assertFalse(0 <= distanza <= 2,
+                         "distanza osservata dal motore: " + str(distanza))
+
+    def test_LA_BOMBA_CHE_INVECCHIA_data_gia_passata(self):
+        # ⛔ LA CONTROPROVA DEL TAGLIO CHE SEMBRA GRATIS, e sta qui per impedirlo.
+        # Il 2026-09-01 era stato proposto -- e approvato -- di saltare i file che hanno SOLO
+        # date passate: sono 50 su 147, il 39 per cento del giro, e «non possono esplodere
+        # andando avanti». E' FALSO, ed e' vero solo per le soglie dal lato FUTURO: qui la
+        # data e' gia' passata e la soglia guarda INDIETRO, quindi allontanandosi diventa
+        # rossa.
+        # Il piano non le assegna nessuno scarto mirato, perche' non ha date future: la
+        # prende SOLO il campione all'orizzonte. ⇒ se qualcuno toglie quel campione per
+        # risparmiare quel 39 per cento, questa riga diventa rossa LO STESSO GIORNO. E' D18
+        # punto 4, e senza di lei il risparmio si rifa' fra sei mesi.
+        scritto = "%(iso_vecchio)s"
+        y, m, g = (int(x) for x in scritto.split("-"))
+        eta = (datetime.date.today() - datetime.date(y, m, g)).days
+        self.assertLess(eta, 60, "eta' osservata: " + str(eta))
 '''
 
 
 def autoprova(radice=RADICE):
-    """Costruisce i due gemelli in una cartella temporanea e PRETENDE di vedere la bomba
-    rossa e il sano verde. Ritorna (riuscita, righe di rapporto)."""
+    """Costruisce i gemelli in una cartella temporanea e PRETENDE due cose diverse:
+    (1) che l'OROLOGIO faccia diventare rossa la bomba e lasci verde il sano;
+    (2) che la CACCIA se ne accorga -- di tutte e due le famiglie di bomba, non solo di
+        quella che resta rossa per sempre.
+    Ritorna (riuscita, righe di rapporto)."""
     import shutil
     import tempfile
     fra = 20
@@ -499,7 +698,10 @@ def autoprova(radice=RADICE):
         with io.open(os.path.join(cartella, "test_gemelli_bombe.py"), "w",
                      encoding="utf-8") as f:
             f.write(_GEMELLI % {"anno": bersaglio.year, "mese": bersaglio.month,
-                                "giorno": bersaglio.day, "fra": fra})
+                                "giorno": bersaglio.day, "fra": fra,
+                                "iso": bersaglio.isoformat(),
+                                "iso_vecchio": (oggi_vero()
+                                                - _dt.timedelta(days=10)).isoformat()})
         try:
             for giorni, attesa_bomba in ((0, False), (fra + 5, True)):
                 # ⛔ NELLO STESSO MODO IN CUI GIRA IL GIRO VERO (processi separati): se
@@ -522,6 +724,51 @@ def autoprova(radice=RADICE):
                                 "ROSSA" if attesa_bomba else "verde",
                                 "ROSSO" if sano_rosso else "verde",
                                 "ROSSO" if import_rosso else "verde"))
+
+            # ⛔ FIN QUI SI E' PROVATO L'OROLOGIO. ADESSO SI PROVA LA DECISIONE, ed e' una
+            # domanda diversa: le righe sopra chiedono «i gemelli diventano rossi quando
+            # devono?», questa chiede «e l'attrezzo SE NE ACCORGE?». Il 2026-09-01
+            # `test_calendario_prezzi` e' esploso davvero -- stesso commit verde il 29 e
+            # rosso il 31 nella tabella della CI -- mentre lo schedario diceva `"bombe": []`.
+            # L'orologio non c'entrava niente: funzionava benissimo. A sbagliare era il modo
+            # di CERCARE, e nessuna delle prove qui sopra poteva vederlo.
+            # ⚠️ Si chiama `caccia()` VERA, non una sua copia: una guardia che rifa' il
+            # calcolo per conto proprio resta verde il giorno che `caccia()` cambia, ed e'
+            # esattamente il genere di ornamento che questo progetto ha gia' pagato.
+            vecchia_cwd = os.getcwd()
+            try:
+                esito = caccia(radice=cartella, cerca_il_giorno=False,
+                               percorso_extra=cartella)
+            finally:
+                # ⛔ `caccia()` fa `os.chdir(radice)` e non torna indietro: senza questa
+                # riga la cartella temporanea resta la cartella corrente e su Windows non
+                # si puo' cancellare.
+                os.chdir(vecchia_cwd)
+            viste = set(b["test"].split(".")[-1] for b in (esito.get("bombe") or []))
+            gradino = "test_LA_BOMBA_data_cablata_dichiarata_futura" in viste
+            finestra = "test_LA_BOMBA_A_FINESTRA_che_guarisce_da_sola" in viste
+            invecchia = "test_LA_BOMBA_CHE_INVECCHIA_data_gia_passata" in viste
+            ok = ((esito.get("esito") == "OK") and gradino and finestra and invecchia)
+            riuscita = riuscita and ok
+            righe.append("  %-6s la CACCIA vede:  gradino %s  ·  finestra %s  ·  invecchia "
+                         "%s   (esito %s, %d candidati)"
+                         % ("OK" if ok else "ROSSO",
+                            "SI" if gradino else "NO",
+                            "SI" if finestra else "NO",
+                            "SI" if invecchia else "NO",
+                            esito.get("esito"), esito.get("candidati", 0)))
+            if not finestra:
+                righe.append(
+                    "         ⛔ la bomba a FINESTRA non e' stata vista. E' verde il giorno "
+                    "0 ed e' verde all'orizzonte, e chi guarda SOLO quei due punti non puo' "
+                    "vederla: guarisce da sola molto prima di arrivare la'.")
+            if not invecchia:
+                righe.append(
+                    "         ⛔ la bomba che INVECCHIA non e' stata vista. La sua data e' "
+                    "gia' passata, quindi il piano non le assegna nessuno scarto mirato: la "
+                    "prende SOLO il campione all'orizzonte. Se quello e' stato tolto per "
+                    "risparmiare il 39 per cento del giro, questa riga e' il motivo per cui "
+                    "non si poteva.")
         finally:
             vai_a(0)
     finally:
@@ -611,7 +858,14 @@ def main(argv=None):
 
     if "--caccia" not in argv:
         print(__doc__)
-        print("USO:  python collaudi/bombe_a_tempo.py --caccia      (lungo: ~25 minuti)")
+        # ⛔ IL COSTO E' MISURATO, NON STIMATO -- e la stima che c'era qui era falsa di sei
+        # volte. Diceva «~25 minuti», provenienza ignota, e ci si era costruita sopra una
+        # seconda stima («66 minuti») che ne ereditava l'errore. Il numero qui sotto porta
+        # la sua provenienza, come pretende D22: chi lo legge sa DOVE e QUANDO e' stato preso.
+        # ⚠️ E non e' un dato dello strumento: e' lo strumento PIU' il carico della macchina.
+        print("USO:  python collaudi/bombe_a_tempo.py --caccia"
+              "      (lungo: 156 minuti misurati il 2026-09-01, albero principale,"
+              " 147 candidati, 123 scarti su 703 date)")
         print("      python collaudi/bombe_a_tempo.py --autoprova   (secondi)")
         print("      python collaudi/bombe_a_tempo.py --giudizio    (millisecondi)")
         return 0
@@ -639,6 +893,10 @@ def main(argv=None):
         return 1
     print("  candidati: %d file su %d di test  ·  %d test eseguiti a orologio fermo, 0 rossi"
           % (esito["candidati"], esito["file_di_test"], esito["eseguiti"]))
+    print("  piano: %d scarti d'orologio ricavati da %d date cablate, piu' il giorno 0 e "
+          "l'orizzonte a %d  ·  %d file non hanno date future"
+          % (len(esito.get("scarti_provati") or []), esito.get("date_esaminate", 0),
+             ORIZZONTE, esito.get("file_senza_date_future", 0)))
     print("-" * 86)
     print("💣 BOMBE DIMOSTRATE: %d" % len(esito["bombe"]))
     for b in sorted(esito["bombe"], key=lambda x: (x["giorni"] is None, x["giorni"])):
