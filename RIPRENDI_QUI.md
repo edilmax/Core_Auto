@@ -34,7 +34,7 @@ GitHub master       dc7c25b   <- git rev-parse --short origin/master
                                  = «Merge PR #130 from lavoro-d», e CONTIENE 0279f63:
                                  stessa impronta d'albero 90ed122e su tutti e due
 albero              PULITO    <- git status --porcelain E git diff --name-only, tutti e due vuoti
-CARICATORE          6059      <- da PowerShell vera (MSYSTEM vuoto), da fermo, 1,38s, USCITA 0
+CARICATORE          6066      <- da PowerShell vera (MSYSTEM vuoto), da fermo, 1,29s, USCITA 0
 le altre 3 corsie   dc7c25b   <- _A, _B, _C: allineate e pulite
 CI su dc7c25b       16 controlli · 15 success + 1 skipped (zap) · gate SUCCESS
                     e sono su QUESTO commit: /actions/runs -> event=push per CodeQL e
@@ -1006,9 +1006,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 94a1399
+CONSEGNE AGGIORNATE A: 01180a9
 
-SUITE ATTUALE: Ran 6060 test
+SUITE ATTUALE: Ran 6066 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
