@@ -6,10 +6,44 @@ import json
 import shutil
 import tempfile
 import unittest
+from datetime import date as _date, timedelta as _timedelta
 
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase163_accettazioni import doc_sha256, CONTRATTO_HOST_VERSIONE
+
+# ==========================================================================================
+# ⛔ LE DATE DEL SOGGIORNO SONO RELATIVE A OGGI, MAI CABLATE — e il perche' e' costato una notte
+# ==========================================================================================
+# Il 2026-08-30 questo file e' andato ROSSO da solo, senza che nessuno toccasse una riga:
+# le date erano fisse al `2026-09-01`, e quel giorno mancavano **2 giorni**. Il motore applica
+# lo sconto last-minute sotto i 2 giorni (`fase106_dynamic_pricing.py:80`, `last_minute_bps`
+# 8500 = -15%) e il server gli passa la distanza da OGGI
+# (`fase119_calendario_prezzi.py:104-105`); l'oracolo qui sotto NON la passa e usa il default
+# di 30. Finche' mancavano 3+ giorni i due lati coincidevano per caso; a 2 giorni no:
+# 14300 -> 12155, cioe' esattamente 14300 x 0,85. E' il modo di rompersi n. 7.
+#
+# ⚠️ E aspettare NON sarebbe stata una riparazione: passata la data, `_distanza` torna 30
+#    (`fase119:64`, `return d if d >= 0 else 30`) e i test sarebbero tornati verdi **ciechi**,
+#    su date morte che non esercitano piu' niente. Verde per scadenza, non per correttezza.
+#
+# 🔑 L'ANTICIPO tiene le date nella banda NEUTRA del motore (3..59 giorni): sotto scatta il
+#    last-minute, da 60 in su l'anticipo (+5%). Questi test NON parlano del tempo -- parlano
+#    dell'OCCUPAZIONE -- quindi il fattore temporale dev'essere neutro e costante, non un
+#    ingrediente a sorpresa.
+# ⚠️ `_OGGI` si legge UNA VOLTA SOLA, all'importazione: se lo si rileggesse a ogni chiamata,
+#    una suite che attraversa la mezzanotte userebbe due giorni diversi nello stesso test.
+# ⛔ E le date di `TestNienteDuecentoMuto` restano ASSOLUTE apposta: quei test provano la
+#    LUNGHEZZA del range (il tetto dei 366 giorni, e il confine misurato a 366/367 celle),
+#    non la distanza da oggi. Non marciscono, e renderle relative rischierebbe di spostare
+#    proprio l'aritmetica del confine che sorvegliano. Non convertirle "per coerenza".
+_ANTICIPO_GIORNI = 40
+_OGGI = _date.today()
+
+
+def _giorno(n: int) -> str:
+    """La `n`-esima notte del soggiorno di prova, in ISO. Sempre a 40+n giorni da oggi."""
+    return (_OGGI + _timedelta(days=_ANTICIPO_GIORNI + n)).isoformat()
 
 
 class TestCalendarioPrezzi(unittest.TestCase):
@@ -29,7 +63,7 @@ class TestCalendarioPrezzi(unittest.TestCase):
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa", "titolo": "Casa", "citta": "Roma",
                 "prezzo_notte_cents": 10000, "capacita": 2}, {"X-Host-Token": self.tok})
-        for g in ("2026-09-01", "2026-09-02"):
+        for g in (_giorno(0), _giorno(1)):
             self.sys.inventario.imposta_disponibilita("casa", g, unita_totali=1,
                                                       prezzo_netto_cents=10000)
 
@@ -41,57 +75,61 @@ class TestCalendarioPrezzi(unittest.TestCase):
 
     def test_calendario_prezzi(self):
         s, d = self.g("GET", "/api/host/calendario_prezzi", h={"X-Host-Token": self.tok},
-                      q={"alloggio": "casa", "da": "2026-09-01", "a": "2026-09-04"})
+                      q={"alloggio": "casa", "da": _giorno(0), "a": _giorno(3)})
         self.assertEqual(s, 200, d)
         celle = {c["giorno"]: c for c in d["celle"]}
-        self.assertEqual(celle["2026-09-01"]["prezzo_cents"], 10000)
-        self.assertIn("prezzo_dinamico_cents", celle["2026-09-01"])
-        self.assertEqual(celle["2026-09-01"]["stato"], "libero")
-        self.assertEqual(celle["2026-09-03"]["stato"], "non_aperto")   # non caricato
+        self.assertEqual(celle[_giorno(0)]["prezzo_cents"], 10000)
+        self.assertIn("prezzo_dinamico_cents", celle[_giorno(0)])
+        self.assertEqual(celle[_giorno(0)]["stato"], "libero")
+        self.assertEqual(celle[_giorno(2)]["stato"], "non_aperto")   # non caricato
 
     def test_prenotato_e_chiuso_visibili(self):
         """Bug #33 (provato live): giorno PIENO appariva 'libero' (chiavi
         venduto/occupati inesistenti nella riga fase58) e CHIUSO era ignorato."""
-        e = self.sys.inventario.blocca("casa", "2026-09-01", "2026-09-02",
+        e = self.sys.inventario.blocca("casa", _giorno(0), _giorno(1),
                                        idem_key="t33")
         self.assertTrue(e.ok, e)
         self.sys.inventario.imposta_disponibilita(
-            "casa", "2026-09-02", unita_totali=1, prezzo_netto_cents=10000,
+            "casa", _giorno(1), unita_totali=1, prezzo_netto_cents=10000,
             chiuso=True)
         s, d = self.g("GET", "/api/host/calendario_prezzi", h={"X-Host-Token": self.tok},
-                      q={"alloggio": "casa", "da": "2026-09-01", "a": "2026-09-04"})
+                      q={"alloggio": "casa", "da": _giorno(0), "a": _giorno(3)})
         self.assertEqual(s, 200, d)
         celle = {c["giorno"]: c for c in d["celle"]}
-        self.assertEqual(celle["2026-09-01"]["stato"], "prenotato")
-        self.assertEqual(celle["2026-09-02"]["stato"], "chiuso")
+        self.assertEqual(celle[_giorno(0)]["stato"], "prenotato")
+        self.assertEqual(celle[_giorno(1)]["stato"], "chiuso")
 
     def test_occupazione_reale_muove_il_dinamico(self):
         """Il fattore occupazione (fase106) ora usa l'occupazione REALE del range
         (prima era fisso a 5000 bps: non scattava mai)."""
         import fase106_dynamic_pricing as dyn
-        e = self.sys.inventario.blocca("casa", "2026-09-01", "2026-09-03",
+        e = self.sys.inventario.blocca("casa", _giorno(0), _giorno(2),
                                        idem_key="t-occ")           # 2/2 notti: 100%
         self.assertTrue(e.ok, e)
         s, d = self.g("GET", "/api/host/calendario_prezzi", h={"X-Host-Token": self.tok},
-                      q={"alloggio": "casa", "da": "2026-09-01", "a": "2026-09-04"})
+                      q={"alloggio": "casa", "da": _giorno(0), "a": _giorno(3)})
         self.assertEqual(s, 200, d)
         celle = {c["giorno"]: c for c in d["celle"]}
+        # ⛔ L'oracolo NON passa `giorni_all_arrivo` e usa il default (30, neutro): regge solo
+        #    perche' `_ANTICIPO_GIORNI` tiene la data nella banda neutra, dove anche il server
+        #    calcola 10000. Non e' una svista -- e' la premessa, e la sorveglia
+        #    `test_LE_DATE_DI_PROVA_STANNO_NELLA_BANDA_NEUTRA`.
         atteso = dyn.calcola_prezzo(10000, occupazione_bps=10000,
-                                    data="2026-09-01")["prezzo_cents"]
-        self.assertEqual(celle["2026-09-01"]["prezzo_dinamico_cents"], atteso)
+                                    data=_giorno(0))["prezzo_cents"]
+        self.assertEqual(celle[_giorno(0)]["prezzo_dinamico_cents"], atteso)
 
     def test_stato_range_equivale_a_stato_giorno(self):
         """La vincitrice del benchmark (query unica) deve restituire ESATTAMENTE
         le stesse righe del percorso per-giorno."""
         inv = self.sys.inventario
-        per_range = inv.stato_range("casa", "2026-09-01", "2026-09-04")
-        for g in ("2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04"):
+        per_range = inv.stato_range("casa", _giorno(0), _giorno(3))
+        for g in (_giorno(0), _giorno(1), _giorno(2), _giorno(3)):
             self.assertEqual(per_range.get(g), inv.stato_giorno("casa", g))
-        self.assertEqual(inv.stato_range("casa", "js;drop", "2026-09-04"), {})
+        self.assertEqual(inv.stato_range("casa", "js;drop", _giorno(3)), {})
 
     def test_auth_proprieta_date(self):
         s, _ = self.g("GET", "/api/host/calendario_prezzi",
-                      q={"alloggio": "casa", "da": "2026-09-01", "a": "2026-09-04"})
+                      q={"alloggio": "casa", "da": _giorno(0), "a": _giorno(3)})
         self.assertEqual(s, 401)                                        # senza auth
         s, _ = self.g("GET", "/api/host/calendario_prezzi", h={"X-Host-Token": self.tok},
                       q={"alloggio": "casa"})
@@ -101,8 +139,36 @@ class TestCalendarioPrezzi(unittest.TestCase):
                         "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
                         "versione": CONTRATTO_HOST_VERSIONE})[1]["token"]
         s, _ = self.g("GET", "/api/host/calendario_prezzi", h={"X-Host-Token": altro},
-                      q={"alloggio": "casa", "da": "2026-09-01", "a": "2026-09-04"})
+                      q={"alloggio": "casa", "da": _giorno(0), "a": _giorno(3)})
         self.assertEqual(s, 403)                                        # non è tuo
+
+    def test_LE_DATE_DI_PROVA_STANNO_NELLA_BANDA_NEUTRA(self):
+        """⛔ LA PREMESSA DI QUESTO FILE, SORVEGLIATA INVECE CHE SPERATA.
+
+        Gli oracoli qui dentro chiamano `fase106.calcola_prezzo` SENZA passare
+        `giorni_all_arrivo`, quindi prendono il default (30, neutro). Il server invece gli
+        passa la distanza vera da oggi (`fase119_calendario_prezzi.py:104`). I due lati
+        coincidono **solo** se le date di prova cadono dove il motore non applica nessun
+        fattore temporale. Il 2026-08-30 hanno smesso di caderci e due test sono andati
+        rossi **da soli**, senza che nessuno toccasse una riga.
+
+        ⚠️ NON si confronta `_ANTICIPO_GIORNI` con due numeri ricopiati a mano: quella
+        sarebbe una guardia che ripete la stessa convinzione da cui nasce il difetto. Si
+        interroga **il motore vero** e si pretende il fattore neutro. Cosi' regge anche se
+        domani il motore sposta le sue soglie -- che e' esattamente il caso in cui serve.
+        """
+        import fase106_dynamic_pricing as dyn
+        for n in range(5):                    # _giorno(0)..._giorno(4): tutte quelle usate qui
+            distanza = (_date.fromisoformat(_giorno(n)) - _OGGI).days
+            fattori = dyn.calcola_prezzo(10000, occupazione_bps=10000, data=_giorno(n),
+                                         giorni_all_arrivo=distanza)["fattori"]
+            self.assertEqual(
+                fattori["anticipo"], 10000,
+                "_giorno(%d) cade a %d giorni da oggi e il motore gli applica un fattore "
+                "temporale (%d invece di 10000): da qui in avanti gli oracoli di questo file "
+                "NON coincidono piu' col server, e i test diventano rossi senza che nessuno "
+                "abbia cambiato il prodotto. Riporta _ANTICIPO_GIORNI nella banda neutra."
+                % (n, distanza, fattori["anticipo"]))
 
 
 class _Apparecchio:
@@ -156,7 +222,7 @@ class TestChiudereNonSvuotaLOccupazione(_Apparecchio, unittest.TestCase):
     DENOMINATORE (appendice #15): i 4 giorni del range, confrontati uno per uno
     prima e dopo la chiusura. Nessun `assertIn` su un totale."""
 
-    GIORNI = ("2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04")
+    GIORNI = tuple(_giorno(i) for i in range(4))
 
     def _suggeriti(self):
         s, d = self.g("GET", "/api/host/calendario_prezzi",
@@ -172,7 +238,7 @@ class TestChiudereNonSvuotaLOccupazione(_Apparecchio, unittest.TestCase):
 
     def test_chiudere_date_vendute_non_abbassa_il_suggerito(self):
         self._carica_le_quattro_notti()
-        e = self.sys.inventario.blocca("casa", self.GIORNI[0], "2026-09-05",
+        e = self.sys.inventario.blocca("casa", self.GIORNI[0], _giorno(4),
                                        idem_key="pieno")
         self.assertTrue(e.ok, e)
         prima = self._suggeriti()
@@ -196,7 +262,7 @@ class TestChiudereNonSvuotaLOccupazione(_Apparecchio, unittest.TestCase):
         import fase106_dynamic_pricing as dyn
         self._carica_le_quattro_notti()
         self.assertTrue(self.sys.inventario.blocca(
-            "casa", self.GIORNI[0], "2026-09-05", idem_key="tutto").ok)
+            "casa", self.GIORNI[0], _giorno(4), idem_key="tutto").ok)
         self._carica_le_quattro_notti(chiuso=True)
         celle = self._suggeriti()
         for g in self.GIORNI:

@@ -403,6 +403,86 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🌙 LA NOTTE FRA IL 29 E IL 30 AGOSTO — quattro corsie in SOLA LETTURA, e nessuno ha avuto ragione da solo
+
+*(Nessun file di produzione toccato, nessun commit, nessuna suite. Le uniche scritture sono in
+`RIPRENDI_QUI.md` e in questa riga.)*
+
+**Cosa è successo.** Tre corsie hanno passato al setaccio tre zone diverse senza toccarle: la
+corsia A le **18 falle di A2** («i soldi si fermano senza lasciare una riga»), la corsia B le
+**21 caselle non spuntate** della PARTE 12 di `collaudi/METODO_v4.md`, la corsia C la **giuntura
+fra il server e il Guardiano**. La corsia di coordinamento ha **rimisurato ogni referto invece di
+avallarlo**, ed è lì che è uscito quasi tutto quello che conta.
+
+**Il risultato in una riga: nessuna delle tre zone era come il documento la descriveva** — e in
+tutti e tre i casi il documento sbagliava **la prova**, non la conclusione.
+· **B33 era in parte falsa.** La misura che la reggeva cercava `_tick_guardiano`, che è una
+  funzione **annidata dentro `servi()`**: non importabile, non chiamabile per nome. Quel `grep`
+  non poteva che dare zero. Metà di quella giuntura era **già collaudata** da
+  `test_watchdog.py:154`; scoperta è la metà dell'**allarme**.
+· **B36 è nata da un errore della corsia di coordinamento.** Aveva detto «una forma che si ripete
+  in due posti»; contando l'insieme sono risultati **6 muti su 10 punti di guardia** — e
+  soprattutto è cambiato **che cosa era la voce**: non «manca una protezione» ma «la protezione
+  esiste (`_email_provider_spento`, `fase83_server.py:101`) ed è collegata in 3 punti su 10, e
+  non sull'allarme dei soldi». Sono due lavori diversi.
+· **B37 è la peggiore, e non è un difetto di codice.** `METODO_v4` dichiara «non misurato» il
+  punteggio di mutazione sui soldi, si pone l'obiettivo «zero sopravvissuti», e il numero
+  **esiste in `RIPRENDI_QUI.md` dal 22 agosto**: 140 punti su 246 scoperti. Nessuno ha mentito:
+  sono **due fogli che non si parlano**, e *un'etichetta onesta ha coperto un numero brutto*.
+
+**⛔ E lo sbaglio che ha colpito TUTTE E QUATTRO le corsie nella stessa notte**, ognuna in una
+forma diversa: **misurare il proprio strumento e credere di aver misurato la macchina.**
+`grep` su una cartella intera che conta i `.pyc` (34 invece di 27) · `| cat` che restituisce
+l'uscita del filtro invece che quella della ricerca, cioè la **regola ferrea 7 violata poche ore
+dopo averla riletta** · `| head -12` che taglia in silenzio · un `grep` da Git Bash quando lo
+strumento gira da PowerShell, che su questa macchina **hanno PATH diversi**. Nessuna era
+distrazione: un vuoto e un numero **non portano con sé** l'informazione su cosa è stato guardato.
+
+**🔑 Le tre regole di metodo che ne sono uscite, e che valgono oltre stanotte:**
+1. **Una LISTA non è un PERIMETRO.** Un perimetro può contenere zero rilievi; una lista contiene
+   solo ciò che qualcuno ci ha già messo dentro, quindi **non può scoprire niente di nuovo**.
+   Affiancarli come «due misure» fa sembrare *più stretta* quella che è **una misura in meno**.
+   ⇒ Prima di affiancare due numeri, si guarda **come sono stati prodotti**.
+2. **Una forma non si dichiara finché non si è contato l'insieme in cui vive.** Due punti non
+   sono un perimetro: sono due punti. Contare il perimetro non serve a essere precisi — serve a
+   **capire di che difetto si tratta**.
+3. **Quando una conferma conta, si cita il comando, non il mittente.** Un comando si rifà; un
+   mittente no. Il nome di una corsia è un **indirizzo**, non un **testimone**: il nome è stabile,
+   la sessione no.
+
+**E una cosa sulle corsie che parlano alla stessa persona.** «Chi ha detto una cosa la corregge
+dove l'ha detta» ha funzionato; quella che mancava è **«chi sta per dirla controlla se è già
+stata detta altrove»** — e due corsie l'hanno violata **nello stesso minuto**, ognuna mentre
+scriveva la regola all'altra: la stessa correzione è arrivata al fondatore due volte. È il
+difetto che stiamo togliendo dai documenti, riprodotto dal vivo in chat.
+
+#### 🔧 `test_calendario_prezzi.py` — le date del soggiorno non sono più cablate *(2026-08-30, col via del fondatore)*
+
+**Cosa è cambiato.** Le date di prova erano fisse al `2026-09-01`; ora si calcolano **relative a
+oggi** (`_ANTICIPO_GIORNI = 40`, dentro la banda neutra 3…59 giorni del motore). `_OGGI` si legge
+**una volta sola all'importazione**: rileggerlo a ogni chiamata farebbe usare due giorni diversi
+nello stesso test a una suite che attraversa la mezzanotte.
+⛔ Le date di `TestNienteDuecentoMuto` restano **assolute apposta** — provano la *lunghezza* del
+range (il confine misurato a 366/367 celle), non la distanza da oggi: non marciscono, e
+convertirle «per coerenza» rischierebbe di spostare proprio l'aritmetica che sorvegliano. Sta
+scritto nel file, perché il prossimo non lo faccia con le migliori intenzioni.
+
+**La guardia nuova, che è la parte che dura.** `test_LE_DATE_DI_PROVA_STANNO_NELLA_BANDA_NEUTRA`
+**non confronta la costante con due numeri ricopiati a mano** — quella sarebbe una guardia che
+ripete la stessa convinzione da cui nasce il difetto. **Interroga il motore vero** e pretende il
+fattore temporale neutro su tutti e cinque i giorni usati, così regge anche se domani il motore
+sposta le sue soglie: che è esattamente il caso in cui serve.
+*Vista rossa sul guasto vero* (`_ANTICIPO_GIORNI` portato a 1 **con l'editor**, mai con una
+sostituzione testuale): `AssertionError: 8500 != 10000 : _giorno(0) cade a 1 giorni da oggi…`,
+uscita 1. Ripristino **byte-identico** — sha256 `CA834166…34DEB7AF` prima e dopo — e verde di
+nuovo: `Ran 11 · OK · uscita 0`. Caricatore da 6059 a **6060**.
+
+🔑 **E la regola che nasce da qui, perché il messaggio del vecchio test ci ha fatto perdere ore:**
+**un messaggio d'errore dice COSA HA OSSERVATO, non DI CHI È LA COLPA.** La colpa è un'ipotesi;
+il valore osservato è un fatto. Una guardia muta ti lascia ignorante; una che nomina il colpevole
+sbagliato ti manda a riparare codice sano — e quando scoprirai che era sano, crederai meno anche
+ai suoi rossi veri.
+
 ### 🚀 DEPLOY DEL 2026-08-29 ore 17:35 — il primo dopo cinque giorni, e ha chiuso B8
 
 *(protocollo D17 intero, tre fasi. `b1e216e` → `40a9c8c`. Sito irraggiungibile ~40 secondi.)*
