@@ -403,6 +403,54 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🕐 IL 1° SETTEMBRE — la guardia che si dava ragione da sola, e l'assegnazione costruita su una riga già ritrattata
+
+**Cosa è stato creato.** `TestFattoreTemporale` in `test_fase106_dynamic_pricing.py` (+110
+righe, 0 cancellate, nessun file di produzione toccato): tre guardie sui due fattori temporali
+del prezzo dinamico — lo sconto per l'arrivo vicino e il premio per la prenotazione lontana.
+**STATO: acceso**, gira dentro la suite, non ha interruttori e non chiede configurazione.
+**Dipendenze: nessuna** — `fase106_dynamic_pricing` è puro e deterministico, aritmetica intera
+in bps, niente database, niente rete.
+
+**Perché serviva, misurato prima di scrivere.** Il fattore temporale era già guardato in **sei**
+posti, e le distanze dall'arrivo che esercitavano erano **0 · 1 · 5 · 30 · 90 · 200**. Il motore
+cambia fascia a **2** e a **60** giorni (`fase106_dynamic_pricing.py:78-85`): nessuna delle sei
+toccava un confine, quindi uno spostamento di **un solo giorno** sopravviveva a tutte e sei. La
+logica delle nuove: la prima prende i confini **sui confini** (D4, sette distanze a cavallo dei
+due salti); la seconda pretende la **relazione** — attraversando il confine il prezzo salta, e
+salta nel verso giusto — senza nominare nessun moltiplicatore, così resta vera se domani le
+cifre cambiano; la terza è l'anti-ornamento e prova le **due direzioni** dentro la suite.
+
+🔴 **IL DIFETTO TROVATO, ed era nella guardia, non nel prodotto.** Iniettato il primo guasto —
+i due moltiplicatori neutralizzati — la guardia dei confini è uscita **`ok`**. Verde col guasto
+dentro. Il motivo: chiedeva i valori attesi **alla stessa politica** che il guasto azzera,
+quindi confrontava il neutro col neutro e **si autoconfermava**. Non è «la guardia è debole»:
+è **la guardia che coincide con l'ipotesi che dovrebbe controllare**, ed è il collaudo 4 nella
+forma più difficile da vedere, perché la guardia esiste, è scritta bene e passa.
+⛔ Il rimedio ovvio («allora ricopia le cifre») reintroduce il difetto di partenza. La forma che
+regge è **due guardie con due mestieri**, più la **matrice guasto × guardia scritta nel file**,
+che dice quale è cieca a quale — senza, fra sei mesi una sparisce in una «semplificazione»:
+```
+guasto                          confini        relazione
+moltiplicatori spenti           non lo vede    ROSSO
+confine spostato (g<=2 -> <=1)  ROSSO          ROSSO
+```
+💡 **E il metodo che ne esce, riusabile:** il guasto si è iniettato **senza toccare un
+`fase*.py`** — sostituendo la politica da una sottoclasse (attributo di classe, non variabile
+locale) e avvolgendo la funzione nel modulo di test. Quindi niente «autorizzato» del fondatore
+(B4) e **niente da ripristinare byte-identico** se la sessione muore fra iniezione e ripristino,
+che è il rischio che la ferrea 2 accetta e che questo metodo toglie a costo zero.
+
+🩹 **E LO SBAGLIO DI PROCESSO, che è costato più del lavoro.** L'assegnazione era *«il fattore
+temporale non ha una guardia, serve un test suo»*, citando una riga di `RIPRENDI_QUI.md`. Quella
+riga era **già ritrattata 151 righe più su, nello stesso file**, con scritto testualmente
+«falso, e pericoloso — fra un mese qualcuno costruirà test **che esistono già** (D10)». La
+previsione diceva «fra un mese»: è successo **il giorno dopo**, e per una strada che nessuno
+aveva previsto — un'assegnazione fra corsie. ⛔ La regola non è nuova ed è la stessa che il
+progetto ha già pagato col pezzo 5 del piano: **quando si aggiorna uno stato, la riga vecchia si
+TOGLIE, non si affianca.** Due righe opposte nello stesso documento non sono ridondanza: sono il
+difetto, e chi legge ne trova una sola.
+
 ### 🌙 LA NOTTE FRA IL 29 E IL 30 AGOSTO — quattro corsie in SOLA LETTURA, e nessuno ha avuto ragione da solo
 
 *(Nessun file di produzione toccato, nessun commit, nessuna suite. Le uniche scritture sono in

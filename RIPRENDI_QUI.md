@@ -285,8 +285,35 @@ sull'attrezzo, non un aggiornamento della fotografia.
 343 byte (`"bombe": []`, orizzonte 400, misurato il 13 agosto) sono **la prova del difetto**, e
 il giro li **sovrascrive**.
 
-**2. Il fattore temporale non ha una guardia** (vedi sopra): nessun test verifica che una data
-vicina prenda davvero lo sconto. Serve un test suo.
+**2. ~~Il fattore temporale non ha una guardia~~ — ERA FALSO, e adesso c'è la misura.**
+La riga qui sopra diceva «nessun test verifica che una data vicina prenda davvero lo sconto».
+Era **già ritrattata 151 righe più su**, in questo stesso file, e nessuno l'aveva tolta: il
+2026-09-01 ci è stata costruita sopra un'assegnazione di lavoro, cioè è successo **il giorno
+dopo** ciò che la ritrattazione prevedeva «fra un mese». ⛔ *Quando si aggiorna uno stato, la
+riga vecchia si TOGLIE, non si affianca.*
+
+**Misurato il 2026-09-01 su `936c2a8`, in sola lettura, prima di scrivere una riga:** le
+guardie sul fattore temporale erano **sei** — `test_fase106_dynamic_pricing.py` (2) e
+`test_fase119_calendario_prezzi.py` (4), quest'ultima con date **relative**, quindi immune al
+calendario. Le distanze dall'arrivo che esercitavano: **0 · 1 · 5 · 30 · 90 · 200**. Il motore
+cambia fascia a **2** e a **60** giorni (`fase106_dynamic_pricing.py:78-85`): **nessuna delle
+sei toccava un confine**, quindi uno spostamento di **un solo giorno** sopravviveva a tutte.
+
+✅ **Chiuso il 2026-09-01**: `TestFattoreTemporale` in `test_fase106_dynamic_pricing.py` prende
+i confini **sui confini** (D4) e pretende la **relazione** — attraversando il confine il prezzo
+salta, e salta nel verso giusto — invece di ricopiare i moltiplicatori.
+🔴 **E scrivendola è saltato fuori un finto verde di specie sottile:** la prima guardia dei
+confini chiedeva i valori attesi **alla stessa politica** che il guasto neutralizza, quindi
+confrontava il neutro col neutro e **usciva `ok` col guasto dentro**. L'ha scoperto
+l'iniezione, non il ragionamento. Rimedio: **due guardie con due mestieri**, e la matrice
+guasto × guardia scritta nel file, perché ognuna è **cieca al guasto dell'altra**.
+
+⛔ **COSA RESTA APERTO qui:** **cinque asserzioni su sei ricopiano i moltiplicatori a mano**
+(`test_fase106:41,42,47` · `test_fase119:149,157,193`, più la docstring `test_fase119:116`).
+Una sola interroga il motore (`test_fase119:250`). Il giorno che un moltiplicatore cambia,
+quelle cinque diventano rosse parlando d'altro, e chi le ripara allinea la copia senza
+accorgersi di niente. **Non è stato toccato di proposito:** è una «correzione di passaggio» su
+file già aperti, e la ferrea 15 le vieta nello stesso intervento anche quando migliorano.
 
 **3. Il messaggio che accusa l'innocente è ANCORA LÌ.** `test_calendario_prezzi.py` continua a
 dire *«ha ripiegato sul default "mezzo pieno"»* quando fallisce. Adesso è meno pericoloso — col
@@ -1006,9 +1033,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 01180a9
+CONSEGNE AGGIORNATE A: 936c2a8
 
-SUITE ATTUALE: Ran 6066 test
+SUITE ATTUALE: Ran 6069 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -1239,10 +1266,11 @@ AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3, ed e' la
             ragione dello scarto fra RACCOLTI e ESEGUITI (5 di scarto: le guardie openssl).
-MISURATO:  2026-08-26 su efe35b5 (albero con le 4 modifiche della dotazione SEO homepage,
-           non committate), col caricatore, da PowerShell, e PRIMA di lanciare (S14):
+MISURATO:  2026-09-01 su 936c2a8 (albero con la guardia nuova sui confini del fattore
+           temporale, non committata), col caricatore, da PowerShell VERA (MSYSTEM vuota
+           e PATH ricostruito dal registro), e PRIMA di lanciare (S14):
            python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"
-           -> 6028
+           -> 6069
 COMANDO:  python -m unittest discover -s . -p "test_*.py"
 ```
 
@@ -1256,8 +1284,10 @@ COMANDO:  python -m unittest discover -s . -p "test_*.py"
 > spento», e la suite l'ha bocciata — `test_cancellazione_money` pretende ZERO `ERROR` sul
 > percorso sano e ne trovava uno per OGNI prenotazione. Aveva ragione (ferrea 10), il livello
 > e' sceso a `warning`, e quella guardia adesso vive anche accanto al codice che ha corretto.
-> ⛔ La misura si rifa' comunque, sempre: «dovrebbero essere sedici» è un ricordo, `6028` è
-> una misura (D22). Costa due secondi e toglie l'unico modo in cui questa riga può mentire.
+> ⛔ La misura si rifa' comunque, sempre: «dovrebbero essere sedici» è un ricordo, il `6028`
+> **di quel giorno** era una misura (D22). Costa due secondi e toglie l'unico modo in cui
+> questa riga può mentire. ⚠️ Quel numero è **storia**: la cifra viva è quella del riquadro
+> qui sopra, e questa spiegazione racconta perché salì allora, non quanti test ci sono adesso.
 
 ⛔ **Il numero della suite si misura PRIMA di lanciarla, non dopo** (sbaglio S14, costato tre
 giri da un'ora). Due secondi, dal caricatore, senza eseguire niente:
