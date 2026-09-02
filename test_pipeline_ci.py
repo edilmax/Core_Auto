@@ -6934,6 +6934,9 @@ class TestLeBombeATempo(_GuardieSugliAttrezziDelLavoro):
                     "misurato_il": str(oggi - datetime.timedelta(days=misurato)),
                     "commit": "abc1234", "candidati": 150, "file_di_test": 402,
                     "eseguiti": 2670, "non_giudicabili": [],
+                    # il piano di campionamento: senza, lo schedario non e' una misura
+                    "scarti_provati": [7, 19, 40], "date_esaminate": 706,
+                    "file_senza_date_future": 50,
                     "bombe": [{"test": "test_finto.TestFinto.test_scade",
                                "giorni": giorni, "confine_confermato": True,
                                "esplode_il": str(oggi + datetime.timedelta(days=giorni))}]}
@@ -6982,6 +6985,8 @@ class TestLeBombeATempo(_GuardieSugliAttrezziDelLavoro):
         oggi = datetime.date.today()
         vecchio = {"esito": "OK", "commit": "abc1234", "bombe": [], "non_giudicabili": [],
                    "candidati": 150, "file_di_test": 402, "eseguiti": 2670,
+                   "scarti_provati": [7, 19, 40], "date_esaminate": 706,
+                   "file_senza_date_future": 50,
                    "misurato_il": str(oggi - datetime.timedelta(
                        days=bt.GIORNI_SCHEDARIO_VECCHIO + 1))}
         stato, dettaglio = bt.giudizio_dallo_schedario(vecchio, oggi=oggi)
@@ -7004,6 +7009,22 @@ class TestLeBombeATempo(_GuardieSugliAttrezziDelLavoro):
                          "se a orologio FERMO qualcosa era gia' rosso, il verdetto sul "
                          "tempo non vale: non si saprebbe chi ha causato il rosso")
 
+        # ⛔ LA TERZA PORTA, aperta il 2026-09-01. Uno schedario che non dichiara DOVE ha
+        # guardato non e' una misura: quelli scritti prima di quel giorno vengono da un
+        # campionamento a DUE punti (il giorno 0 e l'orizzonte) che per costruzione non
+        # poteva vedere le bombe che guariscono da sole, e il loro «0 bombe» significava
+        # soltanto «nessun test rosso esattamente fra 400 giorni». Con quel vuoto in mano
+        # il pre-volo ha detto OK mentre `test_calendario_prezzi` era gia' esploso.
+        senza_piano = dict(fresco)
+        senza_piano.pop("scarti_provati")
+        stato, dettaglio = bt.giudizio_dallo_schedario(senza_piano, oggi=oggi)
+        self.assertEqual("ROSSO", stato,
+                         "uno schedario che non dichiara gli scarti provati e' passato per "
+                         "verde: e' il vuoto ambiguo che il 2026-09-01 ha lasciato "
+                         "rassicurare il pre-volo mentre una bomba era gia' esplosa")
+        self.assertIn("scarti_provati", dettaglio,
+                      "deve dire COSA manca, non soltanto che qualcosa non va")
+
     def test_IL_CONTROLLO_7_DEL_PREVOLO_CHIEDE_IL_GIUDIZIO_A_QUESTO_ATTREZZO(self):
         """⛔ REGOLA #23, «COSTRUITO ≠ COLLEGATO». Il pezzo che conta non e' l'attrezzo: e'
         che il pre-volo lo CHIAMI. E deve chiamarlo, non ricopiarne il criterio -- una
@@ -7016,6 +7037,7 @@ class TestLeBombeATempo(_GuardieSugliAttrezziDelLavoro):
         oggi = datetime.date.today()
         finto = {"esito": "OK", "misurato_il": str(oggi), "commit": "abc1234",
                  "candidati": 1, "file_di_test": 1, "eseguiti": 1, "non_giudicabili": [],
+                 "scarti_provati": [1], "date_esaminate": 1, "file_senza_date_future": 0,
                  "bombe": [{"test": "test_iniettato.T.test_scade", "giorni": 1,
                             "confine_confermato": True,
                             "esplode_il": str(oggi + datetime.timedelta(days=1))}]}

@@ -26,26 +26,36 @@
 
 ---
 
-## 📍 DOVE SIAMO — **2026-08-30 ore 01:17**, rimisurato dalla corsia di coordinamento
+## 📍 DOVE SIAMO — **2026-09-01, a fine giornata**, rimisurato dalla corsia di coordinamento
 
 ```
-computer (lavoro-d) 0279f63   <- git rev-parse --short HEAD
-GitHub master       dc7c25b   <- git rev-parse --short origin/master
-                                 = «Merge PR #130 from lavoro-d», e CONTIENE 0279f63:
-                                 stessa impronta d'albero 90ed122e su tutti e due
-albero              PULITO    <- git status --porcelain E git diff --name-only, tutti e due vuoti
-CARICATORE          6066      <- da PowerShell vera (MSYSTEM vuoto), da fermo, 1,29s, USCITA 0
-le altre 3 corsie   dc7c25b   <- _A, _B, _C: allineate e pulite
-CI su dc7c25b       16 controlli · 15 success + 1 skipped (zap) · gate SUCCESS
-                    e sono su QUESTO commit: /actions/runs -> event=push per CodeQL e
-                    BookinVIP CI. ⚠️ c'e' anche una «Sentinella esterna» con event=schedule,
-                    agganciata alla punta per coincidenza d'orario: NON e' un controllo su
-                    questo commit (trappola nota).
-VPS                 ⛔ NON MISURATO in questa sessione — serve un «autorizzato» per entrare,
-                    e la versione NON e' leggibile da fuori (/api/version -> 404).
-                    L'unico commit che gli manca e' 0279f63, che tocca DUE DOCUMENTI e
-                    nessun file servito: dedotto dal contenuto del commit, NON misurato.
+GitHub master       5ba642a   <- "Merge PR #133 from lavoro-a"; genitori 936c2a8 + 91ca57c
+                                 TRE unioni in questa giornata: #131 (lavoro-d), #132
+                                 (lavoro-c), #133 (lavoro-a). Nessuna richiesta aperta.
+rami                lavoro-a/b/c/d: TUTTI dentro master (0 commit fuori)
+CARICATORE          6069      <- PowerShell vera (MSYSTEM vuoto, PATH dal registro), da
+                                 fermo, 1,42s, USCITA 0
+CI su 936c2a8       15 controlli · 14 success + 1 skipped (zap) · gate SUCCESS
+                    ⚠️ La CI su 5ba642a NON e' stata riletta prima di scrivere questa riga:
+                    e' NON MISURATA, non "presumibilmente verde" (ferrea 8).
+VPS                 40a9c8c, misurato entrando in sola lettura il 2026-09-01 col
+                    «autorizzato» del fondatore. E' INDIETRO rispetto a master.
+                    ⚠️ Il watchdog gira dal CHECKOUT git sull'host, non dall'immagine:
+                    si aggiorna con un `git pull`, senza deploy. Le pagine di `deploy/`
+                    no: quelle stanno DENTRO l'immagine e vogliono la ricostruzione.
 ```
+
+⛔ **DUE COSE MISURATE OGGI CHE VALGONO PIU' DEI COMMIT.**
+**1) `master` e' rimasta ROSSA 37 ore e non lo sapeva nessuno.** Lo stesso commit `dc7c25b`
+ha dato `gate=success` il 29 agosto (evento `push`) e `gate=FAILURE` il 31 (evento
+`schedule`), **senza che nessuno toccasse una riga**: un test cablava le date del soggiorno
+ed e' marcito da solo. Il prodotto era **sano**. A rompersi era il test.
+**2) L'allarme non ha un destinatario.** Le email di GitHub **non arrivano al fondatore**
+(confermato da lui). Il canale che funziona e' **Telegram**, provato nelle due direzioni il
+2026-09-01 (`ok: True` **e** conferma umana: sono due cose diverse). Il `watchdog.sh` sul
+VPS gira ogni 10 minuti, manda su Telegram, ha l'anti-spam sul CAMBIO di stato — ma **non
+guarda la CI**, e in tutta la sua vita **non aveva mai gridato** (258 KB di log, 0 allarmi).
+⇒ Sapevamo che tace a macchina sana; **non sapevamo se sa gridare.** Adesso si'.
 
 🔑 **Le quattro corsie sono allineate e non c'e' lavoro finito fuori da GitHub.** La richiesta
 di unione **#130 e' stata unita dal fondatore**: la voce «unire lavoro-d» e' **chiusa**.
@@ -60,7 +70,7 @@ di unione **#130 e' stata unita dal fondatore**: la voce «unire lavoro-d» e' *
 
 ---
 
-## ✅ LA BOMBA A TEMPO — **RIPARATA il 2026-08-30**, e cosa ha scoperchiato *(una cosa resta APERTA)*
+## ✅ LA BOMBA A TEMPO — **RIPARATA il 2026-08-30**, e cosa ha scoperchiato *(rilevatore riparato il 2026-09-01; restano DUE rilievi)*
 
 > Il rosso: suite intera, `0279f63`, **2026-08-30 ore 02:0x** —
 > `Ran 6054 · FAILED (failures=2, skipped=4) · USCITA_DIRETTA=1 · 1910 s`
@@ -272,18 +282,81 @@ rilevatore che risponde zero). **Tre supporti diversi, un difetto solo.**
 
 ### ⛔ COSA RESTA APERTO DI QUESTA STORIA — l'esemplare è chiuso, la famiglia no
 
-**1. `collaudi/bombe_a_tempo.py` — il bersaglio vero, e nessuno l'ha ancora toccato.** Restano
-**143-148 file** con date assolute cablate, sorvegliati da un attrezzo che ha risposto **zero**
-mentre una bomba esplodeva **dentro il proprio orizzonte**. Riparato l'esemplare, la famiglia è
-esattamente dov'era.
-🔑 **E adesso la domanda è finalmente rispondibile, mentre stanotte non lo era:** il cancello
-del rilevatore pretende **verde oggi** e rosso più avanti, e `test_calendario_prezzi` oggi è
-**verde**. ⇒ un giro di `collaudi/bombe_a_tempo.py` (~25 min, locale, nessuna rete) direbbe se
-**vedrebbe** la bomba che sappiamo esserci stata — cioè è una **prova nelle due direzioni**
-sull'attrezzo, non un aggiornamento della fotografia.
-⚠️ Prima di lanciarlo: **`collaudi/bombe_a_tempo.json` va copiato fuori dal progetto.** Quei
-343 byte (`"bombe": []`, orizzonte 400, misurato il 13 agosto) sono **la prova del difetto**, e
-il giro li **sovrascrive**.
+**1. ✅ CHIUSO il 2026-09-01: `collaudi/bombe_a_tempo.py` NON CERCAVA DOVE SERVIVA.**
+Campionava **due punti** — il giorno 0 e l'orizzonte a 400 — su un predicato che **non è
+monotòno**. Una bomba che **guarisce da sola** (`fase119_calendario_prezzi.py:62`,
+`return d if d >= 0 else 30`: passata la data il motore ripiega sul neutro) è verde oltre la sua
+finestra, quindi **certamente verde all'orizzonte, per qualunque orizzonte**.
+⇒ **Non è sfortuna, è impossibilità: allungare `ORIZZONTE` PEGGIORA.** Non è un numero da tarare.
+*Misurato sulla bomba vera, con l'attrezzo di allora:* finestra `-2..+3` (**6 giorni su 400**);
+i due campioni del 13 agosto (scarti −19 e +381) **tutti e due verdi**.
+
+⛔ **Il risultato del banco che va letto per primo, perché è quello che impedisce la riparazione
+sbagliata:** una **griglia fissa** di 11 punti — «campioniamo di più» — costa **quattro volte** e
+trova **esattamente quanto i due punti di prima** (3 forme su 6, identico). *La griglia non sa
+dove guardare; le date lo sanno.* La riparazione ricava il piano **dalle date che i test cablano
+davvero** — informazione che `candidati()` già estraeva con `ast` e **buttava via**.
+🔑 *E una lezione di metodo, pagata:* **un banco sintetico misura la resa, non il costo.** La
+variante che vinceva sul banco (soglie scritte nel file) è la **peggiore** sul corpo vero,
+**9,99×** — i file finti hanno pochi interi, quelli veri sono pieni di importi.
+
+⛔ **Il difetto più fine, e vale oltre questo attrezzo.** `giorno_di_esplosione()` prometteva
+nella docstring «NON si assume che una volta rossa resti rossa» mentre il suo cancello lo
+assumeva (`if e_rosso(0) or not e_rosso(orizzonte): return None`). **Una promessa scritta che
+valeva per metà della funzione, e la metà scoperta era proprio quella dove serviva:** la cautela
+stava sul **confine**, non sul **ritrovamento**. Un commento che dichiara una cautela che il
+codice non ha è peggio di nessun commento, perché chi legge smette di controllare.
+
+⛔ **E una difesa che non sorvegliava nessuno (D19).** Mettendo la controprova nel banco
+permanente è emerso che **il campione all'orizzonte non aveva guardie**: il gemello a gradino sta
+nello stesso file di quello a finestra, quindi il piano gli assegna comunque uno scarto e lo
+prende **senza** l'orizzonte. Chi lo togliesse per guadagnare il 39 per cento del giro non
+avrebbe visto diventare rosso niente. Ora c'è `test_LA_BOMBA_CHE_INVECCHIA_data_gia_passata` —
+data **già passata**, soglia che guarda **indietro** — che solo l'orizzonte può prendere.
+🔑 *La sequenza è la parte istruttiva:* taglio proposto → approvato → ritrattato con un caso
+costruito → e **solo scrivendo la guardia** è emerso che quel taglio non l'avrebbe fermato
+nessuno. Il difetto vero stava nel terzo passaggio.
+
+**Il ciclo D20, con gli esiti letti diretto:** guardia scritta → vista **ROSSA** (`gradino SI ·
+finestra NO`, uscita 1; e `test_pipeline_ci.TestLeBombeATempo` → `FAILED`, uscita 1) →
+riparazione → stessa guardia **VERDE** (`gradino SI · finestra SI · invecchia SI`, uscita 0;
+`Ran 8 tests · OK`).
+📌 «gradino SI» nel rosso è la riga che conta: dimostra che il rosso veniva dal **campionamento**
+e non dalla cucitura che l'aveva reso collaudabile.
+
+💣 **E IL GIRO VERO HA TROVATO DUE BOMBE CHE IL VECCHIO ATTREZZO NON POTEVA VEDERE.**
+```
+2026-09-01 21:07 -> 23:43   USCITA_DIRETTA=0   DURATA 155,7 minuti   albero PRINCIPALE
+147 candidati su 407 file · 3029 test a orologio fermo, 0 rossi
+piano: 123 scarti ricavati da 703 date cablate, piu' il giorno 0 e l'orizzonte a 400
+50 file non hanno date future · 1 non giudicabile (avvia processi esterni)
+
+BOMBE DIMOSTRATE: 2 — esplodono fra 120 giorni dal giro (fine dicembre), confine NON confermato
+   ⛔ la data esatta NON si scrive qui in forma ISO: `audit_millimetrico:203` prende la data
+      ISO piu' recente del file e pretende -1 <= giorni <= 30. Una sola data futura fa
+      fallire la suite. La data precisa sta nello schedario, `collaudi/bombe_a_tempo.json`.
+   test_dac7_notti.TestReportConNotti.test_report_mostra_notti_per_immobile
+   test_dac7_notti.TestReportConNotti.test_rimborsata_non_conta_nel_report
+```
+⛔ **NON sono state riparate: sono lavoro nuovo, non questo.** Stanno nel rendiconto fiscale
+(DAC7). Il confine non è confermato, quindi la data è il primo giorno visto rosso, non
+necessariamente il primo in assoluto.
+⚠️ **E la durata smentisce due stime in una volta:** l'attrezzo dichiarava di sé «~25 minuti»
+(provenienza ignota) e su quel numero era stata costruita una seconda stima di 66. Il vero è
+**156**. La riga dell'uso adesso porta la misura **con la sua provenienza**; le stesse parole
+sono rimaste in `collaudi/prima_di_lanciare.py:131` e `collaudi/regole_avvio.py:520` e **non
+sono state toccate di proposito** (sarebbero correzioni di passaggio, ferrea 15): è un rilievo
+aperto, con la misura già in mano a chi lo riaprirà.
+
+**1-bis. 🟠 APERTO — `candidati()` è cieco sulle date scritte in forma NUMERICA.** Vede solo le
+stringhe ISO. Due file gemelli, uno per forma:
+`file_di_test ['test_numerica.py','test_stringa.py']` → `candidati ['test_stringa.py']`.
+⚠️ **Quante date vere siano scritte così NON è misurato:** è un rilievo aperto, non un buco
+quantificato. Non riparato di proposito — allargava lo scopo (ferrea 15).
+
+**1-ter. 🟡 APERTO — `eseguiti` conta anche i `_FailedTest`.** Un modulo che non si importa
+produce un segnaposto che vale **un test rosso**: dentro `rossi_a_orologio_fermo` è
+indistinguibile da un rosso genuino, e gonfia il conto degli eseguiti.
 
 **2. ~~Il fattore temporale non ha una guardia~~ — ERA FALSO, e adesso c'è la misura.**
 La riga qui sopra diceva «nessun test verifica che una data vicina prenda davvero lo sconto».
@@ -1033,7 +1106,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 936c2a8
+CONSEGNE AGGIORNATE A: 5ba642a
 
 SUITE ATTUALE: Ran 6069 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»

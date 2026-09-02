@@ -141,8 +141,42 @@ jobs:
   # `full-suite-311` qui sotto: vedi la dichiarazione PARITA' DI AMBIENTE in testa.
   full-suite:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # ⛔ 45 -> 75 il 2026-09-02, e il numero e' MISURATO, non scelto. Il 45 era nato qui
+    # (3fdb7e4) e `full-suite-311` l'aveva EREDITATO (59bd540) senza che nessuno lo
+    # misurasse per quel job: il 2026-09-01 il gemello e' stato annullato a 46,7 minuti e
+    # il `gate` della richiesta #134 e' andato rosso con il codice perfettamente sano.
+    #   LA MISURA -- 29 giri dei due job, durate da started_at/completed_at via API:
+    #     modo veloce  18 giri fra  9,0 e 11,6 min
+    #     modo lento    9 giri fra 20,0 e 43,4 min      (fra i due modi: NIENTE)
+    #   Non e' un gradiente, e' un INTERRUTTORE: nello stesso giro i due job partono nello
+    #   stesso secondo su runner DIVERSI e uno fa 11,2 min mentre l'altro ne fa 46,7. Non
+    #   e' l'interprete, non e' il commit, non e' il nostro codice: e' QUALE MACCHINA di
+    #   GitHub ti tocca in sorte.
+    #   ⚠️ Il massimo COMPLETO osservato e' 43,4 min. Il 46,7 e' un dato CENSURATO -- quel
+    #   giro e' stato fermato dal tetto, non e' finito, e dove sarebbe arrivato non lo sa
+    #   nessuno. 75 sta il 74% sopra il massimo completo. Margini prima di oggi:
+    #   full-suite 13% (max 39,8), full-suite-311 3,7% (max 43,4).
+    #   Regola applicata: `test_pipeline_ci.py:8848` -- «i tetti sono scelti sul tempo
+    #   MISURATO di ogni job, con abbondanza: un tetto stretto sarebbe un falso rosso che
+    #   aspetta, e un falso allarme e' un difetto quanto un allarme mancato» (ferrea 10).
+    # ⛔ E IL PREZZO, dichiarato: un tetto piu' alto PERDE segnale su un job che si impianta
+    #   (`atheris` resto' 110 minuti su apt). Il passo «Che macchina ci e' toccata» qui
+    #   sotto e' cio' che restituisce quel segnale. Vanno insieme: da soli, alzare il tetto
+    #   nasconde il problema invece di ripararlo.
+    timeout-minutes: 75
     steps:
+      # ⛔ NON E' DIAGNOSTICA ORNAMENTALE: e' la meta' che rende onesto il tetto qui sopra.
+      # Il modo lento lo assegna il runner, e finora un giro lento era inspiegabile perche'
+      # nessuno sapeva su che macchina fosse finito. Da adesso il registro lo dice da se',
+      # e il confronto fra un giro da 11 minuti e uno da 40 e' una misura, non un sospetto.
+      # Costa meno di un secondo e non puo' far fallire il job.
+      - name: Che macchina ci e' toccata (diagnosi del tetto)
+        run: |
+          echo "cpu_modello:  $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2-)"
+          echo "cpu_core:     $(nproc)"
+          echo "memoria:      $(free -h | awk '/^Mem:/{print $2}')"
+          echo "disco_libero: $(df -h / | awk 'NR==2{print $4}')"
+          echo "carico:       $(cat /proc/loadavg)"
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
@@ -276,8 +310,25 @@ jobs:
   full-suite-311:
     name: full-suite-311 (Python di PRODUZIONE, debito dichiarato)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # ⛔ 45 -> 75 il 2026-09-02. E' QUESTO il job che il 2026-09-01 e' stato annullato a
+    # 46,7 minuti, mandando rosso il `gate` della #134 con il codice sano. Il suo 45 non
+    # era mai stato misurato per lui: l'aveva ereditato da `full-suite` (vedi la misura per
+    # esteso li' sopra, non la ricopio -- una copia puo' diventare falsa da sola).
+    # ⚠️ Il tetto e' stato alzato su ENTRAMBI i job apposta. Il modo lento lo assegna il
+    #   runner, non il job: `full-suite` ha gia' toccato 39,8 minuti e non era protetto da
+    #   niente, solo fortunato. Riparare solo quello che e' capitato di veder fallire
+    #   ripara il job, non la condizione -- e fra una settimana salta l'altro e sembra un
+    #   problema nuovo.
+    timeout-minutes: 75
     steps:
+      # Vedi la nota sul gemello: e' la meta' che rende onesto il tetto alzato.
+      - name: Che macchina ci e' toccata (diagnosi del tetto)
+        run: |
+          echo "cpu_modello:  $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2-)"
+          echo "cpu_core:     $(nproc)"
+          echo "memoria:      $(free -h | awk '/^Mem:/{print $2}')"
+          echo "disco_libero: $(df -h / | awk 'NR==2{print $4}')"
+          echo "carico:       $(cat /proc/loadavg)"
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:

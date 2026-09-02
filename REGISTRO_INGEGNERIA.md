@@ -451,6 +451,60 @@ progetto ha già pagato col pezzo 5 del piano: **quando si aggiorna uno stato, l
 TOGLIE, non si affianca.** Due righe opposte nello stesso documento non sono ridondanza: sono il
 difetto, e chi legge ne trova una sola.
 
+### 🔧 `collaudi/bombe_a_tempo.py` — il rilevatore cercava dove la cosa cercata non poteva esserci *(1 settembre, corsia B; giro e chiusura dalla corsia di coordinamento)*
+
+**Cos'era.** L'attrezzo decideva «è una bomba?» campionando **due punti soli**: il giorno 0 e
+l'orizzonte a 400 giorni. È corretto solo se «rosso» è **monotòno** — una volta rosso, resta
+rosso. Qui non lo è: `fase119_calendario_prezzi.py:62` fa `return d if d >= 0 else 30`, quindi
+passata la data il motore ripiega sul neutro e **il test guarisce da solo**. Una bomba che
+guarisce è verde a qualunque distanza oltre la sua finestra, quindi **certamente verde
+all'orizzonte, per qualunque orizzonte**. ⇒ Non era sfortuna: era impossibilità, e **allungare
+l'orizzonte peggiora**.
+
+**Come si ripara, e come NON si ripara.** Il piano di campionamento si ricava **dalle date che
+i test cablano davvero** — informazione che `candidati()` già estraeva con `ast` e poi buttava
+via, tenendo solo il nome del file. ⛔ La riparazione che viene in mente per prima — «campioniamo
+più punti» — è **misurata e non funziona**: una griglia fissa di 11 punti costa **quattro volte**
+e trova **esattamente quanto i due punti di prima**. *La griglia non sa dove guardare; le date lo
+sanno.*
+
+**Il ciclo D20.** Guardia scritta → vista **ROSSA** (`gradino SI · finestra NO`, uscita 1) →
+riparazione → stessa guardia **VERDE** (`gradino SI · finestra SI · invecchia SI`, uscita 0,
+`Ran 8 tests · OK`). Il «gradino SI» nel rosso è la riga che conta: dimostra che il rosso veniva
+dal **campionamento**, non dalla cucitura che aveva reso l'attrezzo collaudabile in isolamento.
+
+**Il giro vero, e ha trovato due bombe che il vecchio attrezzo non poteva vedere.**
+`USCITA_DIRETTA=0`, **155,7 minuti**, albero principale, 147 candidati su 407 file, 3029 test a
+orologio fermo con 0 rossi, piano di 123 scarti ricavati da 703 date cablate più il giorno 0 e
+l'orizzonte, 50 file senza date future, 1 non giudicabile. **Due bombe dimostrate** in
+`test_dac7_notti` (il rendiconto fiscale), che esplodono fra 120 giorni. ⛔ **Non riparate: sono
+lavoro nuovo.**
+
+**Tre cose che questo lavoro ha insegnato oltre l'attrezzo.**
+· `giorno_di_esplosione()` prometteva nella docstring «NON si assume che una volta rossa resti
+  rossa» mentre il suo cancello lo assumeva. **Una promessa scritta che valeva per metà della
+  funzione, e la metà scoperta era proprio quella dove serviva.** Un commento che dichiara una
+  cautela che il codice non ha è peggio di nessun commento: chi legge smette di controllare.
+· **Il campione all'orizzonte non era sorvegliato da nessuno.** Chi l'avesse tolto per guadagnare
+  il 39% del giro non avrebbe visto diventare rosso niente (D19). Adesso c'è
+  `test_LA_BOMBA_CHE_INVECCHIA_data_gia_passata`, che solo l'orizzonte può prendere.
+· **Un banco sintetico misura la resa, non il costo.** La variante che vinceva sul banco è la
+  **peggiore** sul corpo vero (9,99×): i file finti hanno pochi interi, quelli veri sono pieni di
+  importi.
+
+**E un numero falso dentro l'attrezzo stesso, scoperto dal giro che lo misurava.** La riga d'uso
+dichiarava «~25 minuti», provenienza ignota, e su quella stima ne era stata costruita una seconda
+(66) che ne ereditava l'errore. Il vero è **156**. Corretta con la sua provenienza (D22). ⚠️ Le
+stesse parole restano in `collaudi/prima_di_lanciare.py:131` e `collaudi/regole_avvio.py:520`:
+**non toccate di proposito**, sarebbero correzioni di passaggio (ferrea 15). Rilievo aperto, con
+la misura già in mano a chi lo riaprirà.
+
+**Restano aperti** due punti ciechi, misurati e non riparati: `candidati()` vede solo le date
+scritte come **stringa ISO** (è cieco su `datetime.date(2026, 9, 21)`), e `eseguiti` conta anche
+i `_FailedTest`, quindi un modulo che non si importa è indistinguibile da un rosso genuino.
+
+---
+
 ### 🌙 LA NOTTE FRA IL 29 E IL 30 AGOSTO — quattro corsie in SOLA LETTURA, e nessuno ha avuto ragione da solo
 
 *(Nessun file di produzione toccato, nessun commit, nessuna suite. Le uniche scritture sono in
