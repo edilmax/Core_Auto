@@ -88,6 +88,38 @@ class TestNottiPerAlloggio(unittest.TestCase):
         self.assertEqual(self.pp.notti_per_alloggio("sconosciuto", 2026), {})
 
 
+def _banda(oggi):
+    """Le date dei DUE soggiorni di prova, ancorate a `oggi` e mai cablate.
+
+    Ritorna (check_in, check_out, check_in_2, check_out_2). Il secondo soggiorno e'
+    quello che verra' cancellato: dura cinque notti, cosi' il totale PRIMA della
+    cancellazione (sette) e' distinguibile da quello DOPO (due), e l'asserzione che
+    pretende l'assenza delle sette notti ha qualcosa da distinguere invece di essere
+    vera per caso.
+
+    ⛔ TUTTE le notti devono cadere nell'anno CORRENTE, ed e' l'unico vincolo che conta.
+    Il volume che rende l'host DICHIARABILE lo scrive il giornale, che si data da se'
+    (`movimento()` non accetta un istante) e viene attribuito all'anno dell'incasso:
+    percio' sta sempre nell'anno corrente. Una notte che cade nell'anno dopo non puo'
+    comparire nel report chiesto qui, e il test marcirebbe da solo.
+    Finche' l'ultima notte ci sta dentro si guarda AVANTI come sempre; nelle ultime
+    settimane dell'anno, quando non ci sta piu', si guarda INDIETRO della stessa
+    distanza. Un soggiorno gia' avvenuto attraversa lo stesso money-path -- preventivo,
+    prenotazione, webhook, cancellazione con rimborso e nota di debito: misurato il
+    2026-09-02 a orologio spostato, non supposto.
+    """
+    def _quattro(inizio):
+        return (inizio, inizio + dt.timedelta(days=2),
+                inizio + dt.timedelta(days=10), inizio + dt.timedelta(days=15))
+
+    date = _quattro(oggi + dt.timedelta(days=20))
+    # l'ultima notte e' il giorno prima del secondo check-out: si ricava dalle date
+    # appena calcolate, cosi' nessun numero scritto due volte puo' diventare falso.
+    if (date[3] - dt.timedelta(days=1)).year != oggi.year:
+        date = _quattro(oggi - dt.timedelta(days=36))
+    return date
+
+
 class TestReportConNotti(unittest.TestCase):
     """Integrazione: il report DAC7 mostra notti_anno + dettaglio per immobile,
     con una prenotazione VERA pagata via webhook (money-path completo)."""
@@ -113,22 +145,32 @@ class TestReportConNotti(unittest.TestCase):
                                                    accetta_termini=True).host_id
         hk = {"X-Host-Key": "hk"}
         # soggiorno FUTURO ma dentro l'anno corrente (oggi+20 .. oggi+22 = 2 notti)
-        self.ci = (dt.date.today() + dt.timedelta(days=20)).isoformat()
-        self.co = (dt.date.today() + dt.timedelta(days=22)).isoformat()
+        _ci, _co, _ci2, _co2 = _banda(dt.date.today())
+        self.ci, self.co = _ci.isoformat(), _co.isoformat()
+        self.ci2, self.co2 = _ci2.isoformat(), _co2.isoformat()
         self.anno = int(self.ci[:4])
-        # NIENTE SALTO A FINE DICEMBRE. Prima, se `oggi+20` finiva nell'anno dopo, il
-        # test si spegneva da solo — cioe' per una ventina di giorni all'anno la
-        # verifica sul conteggio DAC7 (un obbligo fiscale) semplicemente non girava, e
-        # nel rapporto compariva come «skipped». Non serviva: le asserzioni qui sotto
-        # interrogano gia' `genera_dac7_csv(anno=self.anno)`, cioe' l'anno DELLA
-        # PRENOTAZIONE, non quello corrente. Il salto copriva un problema che non c'era.
+        # NIENTE SALTO A FINE DICEMBRE, e quella decisione resta giusta: un test che si
+        # spegne da solo per qualche settimana all'anno su un obbligo fiscale compare nel
+        # rapporto come «skipped» e non protegge piu' niente.
+        # ⛔ MA LA MOTIVAZIONE CHE STAVA SCRITTA QUI ERA FALSA, e va detta perche' e' la
+        # ragione per cui il difetto e' rimasto. Diceva che il salto «copriva un problema
+        # che non c'era», visto che le asserzioni interrogano gia' l'anno DELLA
+        # PRENOTAZIONE. Il problema c'era, ed e' esattamente quello: l'anno della
+        # prenotazione e' l'anno in cui stanno le NOTTI, ma il volume che rende l'host
+        # dichiarabile lo data il giornale, cioe' l'anno CORRENTE. Quando i due anni si
+        # separano il report non puo' mostrare le notti in nessuno dei due.
+        # Misurato il 2026-09-02 a orologio spostato: ROSSO dall'11 al 31 dicembre, e
+        # MUTO -- verde senza verificare niente -- dal 28 novembre al 10 dicembre.
+        # La risposta non e' il salto: e' `_banda`, che i due anni non li separa mai.
         g = lambda m, p, b: self.r.gestisci(m, p, {}, json.dumps(b), hk)
         g("POST", "/api/host/pubblica", {"host_id": self.hid, "slug": "casa", "titolo": "Villa",
           "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
           "servizi": [], "immagini": []})
+        # la finestra copre la banda ANCHE quando guarda indietro, altrimenti a dicembre
+        # il preventivo non troverebbe le date e il rosso sarebbe dell'apparecchio
         g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa",
-          "da": (dt.date.today() + dt.timedelta(days=1)).isoformat(),
-          "a": (dt.date.today() + dt.timedelta(days=60)).isoformat(),
+          "da": min(_ci, dt.date.today() + dt.timedelta(days=1)).isoformat(),
+          "a": max(_co2, dt.date.today() + dt.timedelta(days=60)).isoformat(),
           "unita_totali": 5, "prezzo_netto_cents": 10000})
         # sopra soglia DAC7 nell'anno corrente (incassi nel giornale)
         for i in range(3):
@@ -166,9 +208,7 @@ class TestReportConNotti(unittest.TestCase):
     def test_rimborsata_non_conta_nel_report(self):
         self._prenota_paga(self.ci, self.co)                     # 2 notti valide
         # seconda prenotazione pagata poi CANCELLATA dall'host -> rimborso: notti escluse
-        ci2 = (dt.date.today() + dt.timedelta(days=30)).isoformat()
-        co2 = (dt.date.today() + dt.timedelta(days=35)).isoformat()
-        rif2 = self._prenota_paga(ci2, co2)
+        rif2 = self._prenota_paga(self.ci2, self.co2)
         s, _ = self.r.gestisci("POST", "/api/host/cancella", {},
                                json.dumps({"riferimento": rif2, "host_id": self.hid}),
                                {"X-Host-Key": "hk"})
@@ -176,6 +216,50 @@ class TestReportConNotti(unittest.TestCase):
         csv_txt = "".join(self.r.genera_dac7_csv(anno=self.anno, ip="t"))
         self.assertIn("Villa (Roma) - 2 notti/1 pren", csv_txt)  # SOLO le 2 valide
         self.assertNotIn("7 notti", csv_txt)
+
+
+class TestLaBandaDelleProve(unittest.TestCase):
+    """La guardia della riparazione: le date di prova qui sopra non devono marcire.
+
+    ⛔ IL DIFETTO CHE IMPEDISCE, misurato e non ipotizzato. `finanza.movimento()` non
+    accetta un istante (il giornale e' hash-incatenato e si data da se'), e
+    `aggrega_dac7` attribuisce all'anno dell'INCASSO: il volume che rende l'host
+    DICHIARABILE finisce percio' sempre nell'anno CORRENTE. Se una notte di prova cade
+    nell'anno dopo, il report chiesto per l'anno del check-in non puo' mostrarla, e
+    succede in DUE modi diversi, tutti e due letti nell'uscita vera:
+      · soggiorno a cavallo del capodanno -> le notti si dividono fra i due anni
+        (l'invariante 2, quella che `test_cavallo_anno_si_divide` pretende), e nell'anno
+        chiesto ne resta una sola: «Villa (Roma) - 1 notti/1 pren»;
+      · soggiorno tutto nell'anno dopo -> in quell'anno l'host non ha volume, quindi non
+        e' dichiarabile e la sua riga non esiste affatto: «# host_reportabili,0».
+
+    ⛔ E SI PROVA SU TUTTI I GIORNI DELL'ANNO, NON SU OGGI. Una guardia che puo' fallire
+    soltanto in tre settimane di dicembre resta spenta per undici mesi, ed e' proprio la
+    forma del difetto che stiamo chiudendo: lo stato scomodo si costruisce adesso, non si
+    aspetta il giorno in cui capita da solo (D19).
+    """
+
+    def test_LE_NOTTI_DI_PROVA_STANNO_NELL_ANNO_CHE_IL_GIORNALE_DATA(self):
+        for anno in (2026, 2027, 2028):                      # 2028 e' bisestile
+            giorno, fine = dt.date(anno, 1, 1), dt.date(anno, 12, 31)
+            while giorno <= fine:
+                ci, co, ci2, co2 = _banda(giorno)
+                notti = ([ci + dt.timedelta(days=i) for i in range((co - ci).days)] +
+                         [ci2 + dt.timedelta(days=i) for i in range((co2 - ci2).days)])
+                fuori = [n.isoformat() for n in notti if n.year != giorno.year]
+                self.assertEqual(
+                    fuori, [],
+                    "con oggi=%s il report viene chiesto per l'anno %d, ma queste notti "
+                    "cadono in un altro anno: %s. Il volume che rende l'host "
+                    "dichiarabile lo data il giornale, quindi sta SEMPRE nell'anno "
+                    "corrente: una notte fuori da quell'anno non puo' comparire nel "
+                    "report." % (giorno.isoformat(), giorno.year, fuori))
+                # i due soggiorni non si sovrappongono e il secondo pesa davvero:
+                # senza questo, «7 notti prima / 2 dopo» smetterebbe di distinguere
+                # qualcosa e l'asserzione che le esclude sarebbe vera per caso (S7).
+                self.assertGreaterEqual(ci2, co, "i due soggiorni si sovrappongono")
+                self.assertGreater((co2 - ci2).days, 0, "il secondo soggiorno e' vuoto")
+                giorno += dt.timedelta(days=1)
 
 
 if __name__ == "__main__":
