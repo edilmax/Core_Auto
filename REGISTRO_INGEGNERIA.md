@@ -578,6 +578,20 @@ test pretende zero WARNING.
   cosa sbagliata — qui aveva ragione il pre-volo.
 · **Il pre-volo non copre l'audit millimetrico** né il numero dei **file** di test: dice «si può
   lanciare» senza guardare una cosa che la suite prende in quaranta minuti.
+· ⛔ **E non esegue nemmeno il cricchetto statico — secondo buco della stessa forma, trovato
+  dalla CI dopo il commit.** `bandit` **B106** (`hardcoded_password_funcarg`) ha segnalato
+  `stripe_secret_key="sk"` nel banco della guardia: un argomento il cui **nome** contiene
+  «secret» con un valore scritto sul posto. Nel merito è un falso positivo — «sk» non è una
+  chiave e il banco non chiama mai Stripe — **ma il cricchetto ha ragione lo stesso**, e lo
+  dichiara da sé: *«la fotografia si rifà solo per DIMINUIRE il debito, mai per assorbire un
+  rilievo appena creato»*. ⇒ **Chiuso nel codice, non nella baseline**: il valore sta in una
+  costante e si passa per variabile, che è **la forma già usata nello stesso file** per il
+  segreto del webhook — e infatti quello non era mai stato segnalato. Le righe identiche negli
+  altri collaudi non gridano perché sono **debito già congelato**, non perché siano più sane.
+  ⚠️ E la scelta non è stata «nascondere il token che l'attrezzo cerca» (sarebbe stata una
+  soppressione muta): dare un nome a quel valore **migliora** il banco, perché dice a chi legge
+  che è finto e perché. Esito: `cricchetto_statico.py bandit` → **EXIT=0**, «NESSUNA
+  SEGNALAZIONE NUOVA», 548 = 548.
 · **`fase162_pagamenti_pendenti.py` `salva_stripe_session` cade in fondo all'`except` senza
   `return`**, restituendo `None`: stesso filo dei quattro, altro file, **non toccato**.
 
