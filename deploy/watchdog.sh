@@ -29,6 +29,7 @@ DATA_DIR="${DATA_DIR:-/var/lib/docker/volumes/bookinvip_casavip_data/_data}"
 BACKUP_DIR="${BACKUP_DIR:-$DATA_DIR/backup}"
 MAX_ETA_H="${MAX_ETA_H:-8}"          # backup piu' vecchio di N ore = avviso
 MAX_DISCO="${MAX_DISCO:-85}"         # disco oltre N% = allarme
+CI_REPO="${CI_REPO:-edilmax/Core_Auto}"   # di chi si guarda la CI (ramo master)
 REMINDER_H="${REMINDER_H:-6}"        # se resta rotto, ri-avvisa ogni N ore
 STATO_FILE="${STATO_FILE:-$DATA_DIR/.watchdog_stato}"
 LOG="${WATCHDOG_LOG:-$DATA_DIR/watchdog.log}"
@@ -60,6 +61,44 @@ telegram(){  # $1 = testo
 code="$(curl -sS -m 12 -o /dev/null -w '%{http_code}' "$URL" 2>/dev/null || echo 000)"
 if [ "$code" = "200" ]; then UPTIME=ok; else UPTIME=ko; fi
 
+# ── com'e' messa la CI su master ─────────────────────────────────────────────
+# Nato dal 31 agosto: `master` e' rimasta ROSSA e nessuno se n'e' accorto per 37 ore. Il
+# canale d'allarme c'era gia' e funzionava; mancava la DOMANDA.
+# ⛔ NIENTE TOKEN: il repository e' pubblico e questo endpoint non chiede autenticazione.
+#    (`git credential fill` dentro cron non ha un gestore e fallirebbe sempre, in silenzio.)
+# ⛔ QUOTA: 60 chiamate/ora **PER INDIRIZZO IP, CONDIVISA** con qualunque altra cosa
+#    interroghi GitHub da questa macchina. Un giro ogni 10 minuti = 6/ora = 10%. Chi
+#    aggiunge un secondo strumento che chiama GitHub da qui deve rifare questo conto:
+#    superata la quota si riceve 403 e il guardiano diventa CIECO, non rosso -- e il
+#    silenzio somiglia alla salute. La cecita' prolungata la sorveglia `ci_cieca`.
+# 🔑 Il riferimento e' il NOME DEL RAMO, non uno sha: cosi' si chiede «master com'e' messa
+#    ADESSO», invece della CI del commit che per caso sta sul disco di questa macchina --
+#    che qui e' quasi sempre indietro, e risponderebbe alla domanda sbagliata.
+CI=skip
+if [ "$REMOTO" != "1" ]; then
+  CI=cieco                              # finche' non si dimostra di aver letto, si e' ciechi
+  J="$(curl -sS -m 15 -H 'Accept: application/vnd.github+json' \
+        "https://api.github.com/repos/$CI_REPO/commits/master/check-runs?per_page=100" \
+        2>/dev/null)"
+  if printf '%s' "$J" | grep -q '"check_runs"'; then
+    tot="$(printf '%s' "$J" | grep -c '"status":')"
+    aperti="$(printf '%s' "$J" | grep -o '"status": "[a-z_]*"' | grep -cv '"completed"')"
+    if [ "$tot" -eq 0 ]; then
+      CI=cieco                          # risposta valida ma senza job: non si giudica
+    elif [ "$aperti" -gt 0 ]; then
+      CI=in_corso                       # GitHub ha risposto: letto SI', verdetto NO
+    else
+      # ⛔ `cancelled` NON e' fra i buoni. Un job SCADUTO (tetto di tempo superato) si
+      #    presenta cosi', non come `failure`: e' il caso vero del 1 settembre. Giudicare
+      #    solo su `failure` avrebbe reso questo allarme muto proprio sull'incidente che
+      #    lo motiva. `skipped` e `neutral` invece non sono rossi (zap gira a settimana).
+      rossi="$(printf '%s' "$J" | grep -o '"conclusion": "[a-z_]*"' \
+               | grep -cvE '"(success|skipped|neutral)"')"
+      if [ "$rossi" -gt 0 ]; then CI=ko; else CI=ok; fi
+    fi
+  fi
+fi
+
 # ── raccogli gli ALLARMI ATTIVI (uno per riga: "cod|grav|msg") ───────────────
 attivi=""
 add(){ attivi="$attivi$1
@@ -70,7 +109,8 @@ if [ "$REMOTO" != "1" ]; then
   # diagnosi locale (catena/backup/disco/db) via il modulo puro
   if [ -n "$PY" ]; then
     JSON="$("$PY" "$REPO/fase178_watchdog.py" --dati "$DATA_DIR" --backup "$BACKUP_DIR" \
-              --uptime skip --max-eta-h "$MAX_ETA_H" --max-disco "$MAX_DISCO" 2>/dev/null)"
+              --uptime skip --ci "$CI" \
+              --max-eta-h "$MAX_ETA_H" --max-disco "$MAX_DISCO" 2>/dev/null)"
     # estrai gli allarmi dal JSON senza dipendenze (con lo stesso Python)
     ALL="$(printf '%s' "$JSON" | "$PY" -c 'import sys,json
 try: d=json.load(sys.stdin)

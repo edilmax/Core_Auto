@@ -403,6 +403,84 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🔔 IL 2 SETTEMBRE — il guardiano aveva la voce, il canale e l'orologio: gli mancava la DOMANDA
+
+**Moduli di PRODUZIONE toccati: `fase178_watchdog.py` e `deploy/watchdog.sh`** — con
+l'«AUTORIZZATO» del fondatore scritto **nella finestra della corsia C**, 2026-09-02. Guardie
+in `test_watchdog.py` (6 nuove, da 31 a 37). Corsia C, coordinamento dalla corsia CE.
+
+#### Il buco: il 31 agosto `master` è rimasta ROSSA per 37 ore e non lo sapeva nessuno
+
+Non mancava un allarme: mancava **una domanda**. Il watchdog gira sul VPS ogni 10 minuti da
+cron, ha Telegram provato nelle due direzioni, il log persistente e l'anti-spam sul cambio di
+stato — e guarda **uptime, catena del giornale, backup, disco, db**. Cioè la *macchina*.
+**Nessuno guardava la CI**, che è l'unico posto dove si vede che il *codice* è rotto.
+⛔ E `collaudi/sentinella_ci.py` **esisteva già** e legge i job — con **zero chiamanti**
+(l'unica riga che la nomina è una descrizione in un elenco, `collaudi/regole_avvio.py:512`).
+È «COSTRUITO ≠ COLLEGATO» in forma pura.
+
+#### Perché non è stata riusata, misurato invece che supposto
+
+Quattro difetti, tutti fatali per un uso da cron: ① è **sincrona** (fino a 90 minuti di attesa
+in `for _ in range(180)`, e il cron gira ogni 10); ② guarda **`git rev-parse HEAD`**, cioè il
+checkout locale — sul VPS è indietro, quindi risponderebbe sulla CI di un commit vecchio: *un
+comando giusto sulla domanda sbagliata*; ③ pretende una credenziale da `git credential fill`,
+che dentro cron **fallisce sempre** — e non serve, il repository è pubblico; ④ **non distingue
+«rossa» da «sta ancora girando»**, le fonde in `ROSSO O INCOMPLETO`.
+
+#### Cosa è stato fatto, e le tre scelte che contano
+
+`valuta()` riceve due misure nuove; la rete la fa il bash, come già per l'uptime.
+1. **`ci_ok` è TRI-STATO** (`True`/`False`/`None`), copiato da `uptime_ok` invece di
+   inventarne uno: solo `is False` grida. Un giro in corso o GitHub irraggiungibile non sono
+   un guasto del prodotto, e un allarme che grida per quelli **viene spento**.
+2. **La cecità PROLUNGATA è un allarme a sé, `ci_cieca`, con codice DIVERSO da `ci`.** «Non
+   riesco a leggere la CI» e «la CI è rossa» hanno **rimedi opposti**: fonderli manda a
+   cercare nel posto sbagliato (ferrea 9). Senza questo, quota finita o rete giù rendevano il
+   guardiano muto **e il silenzio si legge come «tutto bene»** — la cecità indistinguibile
+   dalla salute, che è il difetto del certificato morto in silenzio.
+3. ⛔ **Si timbra sulla LETTURA riuscita, non sul verde**: leggere «rossa» *è* una lettura
+   riuscita. Timbrando sul verde, una CI rossa per giorni si presenterebbe **anche** come
+   cieca — due allarmi per un fatto solo, cioè rumore, e il rumore insegna a ignorare proprio
+   il rosso che si voleva far vedere. Meccanica ricalcata dal battito del Guardiano dei soldi
+   (D10) invece di inventare un contatore.
+4. 🔑 **Il quinto valore `in_corso` — e non era progettato: è saltato fuori PROVANDO.** «Giro
+   ancora in corso» **non è cecità**: GitHub ha risposto benissimo, manca solo il verdetto.
+   Trattarlo come cecità avrebbe accumulato buio per dieci minuti **a ogni normale giro di
+   CI** — cioè l'allarme avrebbe gridato «sono cieco» **più spesso da sano che da malato**, e
+   sarebbe stato spento entro una settimana. Il timbro misura **«ho RAGGIUNTO GitHub»**, non
+   «ho un verdetto»: è la stessa distinzione del punto 3, vista dall'altro lato.
+   ⚠️ E la lezione di metodo, che vale oltre questo caso: il difetto non l'ha trovato una
+   rilettura del progetto, l'ha trovato **il provare i valori uno per uno**. Su carta
+   `ok/ko/cieco/skip` sembrava completo — mancava lo stato in cui il mondo funziona e la
+   risposta non c'è ancora, che è proprio quello che capita di più.
+
+**E il caso vero su cui è stato disegnato:** un job **scaduto** GitHub lo marca `cancelled`,
+non `failure` — è quello che ha bocciato la richiesta #134. Giudicare solo su `failure` avrebbe
+reso questo allarme muto **proprio sull'incidente che lo motiva**.
+
+#### Le prove
+
+Guardia scritta **prima** e vista ROSSA (D20): `'ci' not found in []` e `'ci_cieca' not found
+in []`, `Ran 6 · FAILED (failures=2)`, uscita 1. Poi la riparazione, e `Ran 37 · OK · uscita 0`.
+Il meccanismo di rete provato **prima di toccare produzione**, in sei direzioni, con uno script
+usa-e-getta: master vero → `ok`; `failure` → `ko`; **`cancelled` → `ko`**; job in corso →
+`skip`; risposta illeggibile → `skip`; risposta vuota → `skip`.
+🔑 **E il passo che rende vere le guardie invece che ornamenti:** guasto reinietto **con
+l'editor** (soglia confrontata al contrario, `>` → `<`) e riletto il rosso —
+`'ci_cieca' unexpectedly found in ['ci_cieca']` — che è **esattamente** la prova che prima
+passava a vuoto. Ripristino **byte-identico**, sha256 `ebba4b64…f591ea7f` prima e dopo.
+
+**Limiti dichiarati (D18 punto 3), cioè cosa questo allarme NON copre:** la quota GitHub è di
+**60 chiamate l'ora per indirizzo IP, condivisa** — chi aggiunge un secondo strumento che
+interroga GitHub da quel VPS deve rifare il conto (6/ora = 10%); `valuta()` è pura e **non
+prova la rete**; ⛔ e soprattutto **un watchdog che non gira più non timbra e non grida** — un
+processo morto non può accorgersi di essere morto, e quel caso lo vede solo la testa REMOTA da
+fuori. Questo allarme protegge dalla CI rossa, **non** dal guardiano morto.
+🔴 **Il VPS non è stato aggiornato**: la riparazione è nel repository. Il file lì gira dal
+checkout git dell'host, quindi si aggiorna con un `git pull` — ma è comunque produzione e vuole
+il suo momento, non la coda di una giornata così.
+
 ### 🧾 IL 2 SETTEMBRE — le due bombe del rendiconto fiscale erano il TEST, e sotto c'erano 13 giorni in cui il test passava a vuoto
 
 **Cosa è cambiato.** Solo `test_dac7_notti.py` (+97/−13, **nessun file di produzione toccato**,

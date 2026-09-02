@@ -668,5 +668,133 @@ class TestWatchdogTrediciBuchiTrovatiDallaMutazione(unittest.TestCase):
                          "il codice d'uscita non corrisponde al verdetto: %r" % (r,))
 
 
+class TestIlGuardianoDEVEGuardareANCHELaCI(unittest.TestCase):
+    """La CI puo' restare ROSSA per giorni senza che nessuno lo sappia.
+
+    Successo davvero: `master` e' rimasta rossa da lunedi' 31 agosto, e il rosso e'
+    stato visto solo 37 ore dopo. Il guardiano gira ogni 10 minuti sul VPS e ha gia'
+    il canale che funziona (Telegram, provato nelle due direzioni il 2026-09-01), ma
+    guarda solo la MACCHINA: uptime, giornale, backup, disco, db. Non guarda la CI,
+    che e' l'unico posto dove si vede che il CODICE e' rotto. Il canale c'era, la
+    domanda no.
+
+    Questa guardia pretende TRE direzioni, non due (ferrea 10, D18 punto 2):
+      · CI rossa  -> GRIDA
+      · CI verde  -> TACE
+      · CI ignota -> TACE. E' quella che conta davvero: un giro ancora in corso, o
+        GitHub irraggiungibile, non sono un guasto del prodotto. Un allarme che grida
+        per quelli e' un falso allarme, e un falso allarme e' un difetto quanto un
+        allarme mancato -- perche' insegna a ignorare i segnali, e finisce spento.
+
+    Il tri-stato non e' inventato qui: `uptime_ok` lo usa gia' (True/False/None), e
+    `--uptime skip` esiste apposta. Questa guardia ricalca quel precedente.
+
+    ⛔ MA «IGNOTA» PUO' DURARE, E ALLORA IL SILENZIO MENTE. Un solo giro senza
+    risposta e' normale e si tace. Venti giri di fila no: la quota di GitHub e' 60
+    chiamate l'ora **per indirizzo IP, condivisa** con qualunque altra cosa chiami
+    GitHub da quel server, quindi basta un secondo strumento per mandare il watchdog
+    in 403 a ogni giro. Rete giu', endpoint cambiato, repository reso privato: tutti
+    finiscono in «ignota». E in tutti questi casi il guardiano tace, **e il suo
+    silenzio si legge come «tutto bene»**: la cecita' diventa indistinguibile dalla
+    salute. E' lo stesso difetto del rinnovo del certificato morto in silenzio.
+    ⇒ Quindi la cecita' PROLUNGATA e' un allarme di suo, con un codice DIVERSO: «non
+    riesco a leggere la CI da X ore» e' una notizia vera, e non e' «la CI e' rossa».
+
+    Non serve un meccanismo nuovo: e' lo stesso schema del battito del Guardiano dei
+    soldi, che questo modulo ha gia' (`segna_battito_guardiano` timbra quando il giro
+    RIESCE, `eta_battito_guardiano_sec` misura l'eta', e `valuta` grida se manca o e'
+    vecchio). Qui si timbra quando la CI si e' riuscita a LEGGERE, **non quando e'
+    verde**: leggere «rossa» E' una lettura riuscita.
+    ⛔ E la differenza non e' un dettaglio, e' il motivo per cui va scritta qui: se si
+    timbrasse sul verde, una CI rossa per giorni si presenterebbe **anche** come
+    «cieca» -- due allarmi per un fatto solo. Cioe' rumore, e il rumore insegna a
+    ignorare proprio il rosso che si voleva far vedere. E' il difetto che questo
+    progetto teme di piu', ed e' facile da reintrodurre «semplificando».
+
+    ⚠️ LIMITI DICHIARATI (D18 punto 3), cioe' cosa questa guardia NON copre:
+      · non prova la RETE: `valuta()` e' pura e riceve misure gia' prese. Che il
+        `curl` funzioni davvero e' provato altrove, fuori dalla suite;
+      · non sorveglia il caso in cui il watchdog stesso non gira piu': un processo
+        morto non timbra niente e non grida niente. Quello lo vede solo la testa
+        REMOTA, da fuori;
+      · la soglia delle ore e' una scelta, non una misura.
+    """
+
+    def test_ci_rossa_GRIDA(self):
+        r = wd.valuta({"ci_ok": False})
+        self.assertIn("ci", [a["cod"] for a in r["allarmi"]],
+                      "la CI e' ROSSA e il guardiano non produce nessun allarme con "
+                      "codice `ci`: il rosso resta invisibile, che e' esattamente il "
+                      "caso delle 37 ore. Allarmi visti: %r" % (r["allarmi"],))
+        grav = [a["grav"] for a in r["allarmi"] if a["cod"] == "ci"][0]
+        self.assertEqual("critico", grav,
+                         "un `master` rotto e' critico, non un avviso")
+        self.assertFalse(r["ok"], "CI rossa e il verdetto complessivo dice che va "
+                                  "tutto bene: il bash guarda QUESTO")
+
+    def test_ci_verde_TACE(self):
+        r = wd.valuta({"ci_ok": True})
+        self.assertNotIn("ci", [a["cod"] for a in r["allarmi"]],
+                         "la CI e' VERDE e il guardiano grida lo stesso: un allarme "
+                         "che suona sempre viene spento (ferrea 10)")
+
+    def test_ci_ignota_TACE(self):
+        """Giro ancora in corso, o GitHub irraggiungibile: non e' un guasto nostro.
+
+        Due forme della stessa cosa: la domanda posta senza risposta (`None`) e la
+        domanda mai posta (chiave assente, come nel giro REMOTO=1 dal PC).
+        """
+        for misure in ({"ci_ok": None}, {}):
+            r = wd.valuta(misure)
+            self.assertNotIn("ci", [a["cod"] for a in r["allarmi"]],
+                             "senza risposta da GitHub il guardiano si inventa un "
+                             "rosso e sveglia qualcuno per niente (misure=%r)"
+                             % (misure,))
+
+    def test_ci_CIECA_da_troppo_tempo_GRIDA(self):
+        """Il terzo stato. Un giro cieco si tace; venti di fila sono una notizia.
+
+        Codice DIVERSO da `ci`: «non riesco a leggere la CI» e «la CI e' rossa» hanno
+        rimedi opposti, e un allarme che li confonde manda a cercare nel posto
+        sbagliato (e' l'osservabile debole della ferrea 9).
+
+        ⛔ Nessuna soglia passata di proposito: TRENTA GIORNI devono far gridare
+        qualunque soglia sensata. Cosi' questa prova non fissa un numero che non e'
+        stato misurato, e soprattutto **non puo' diventare verde da sola** il giorno
+        che il parametro esiste: passera' solo se `valuta` GIUDICA davvero l'eta'.
+        Una prova che diventa verde perche' e' comparso un parametro non ha visto
+        niente, ed e' la definizione di verde finto.
+        """
+        vecchia = wd.valuta({"eta_lettura_ci_sec": 30 * 24 * 3600})
+        self.assertIn("ci_cieca", [a["cod"] for a in vecchia["allarmi"]],
+                      "la CI non si riesce a leggere da TRENTA GIORNI e il guardiano tace: "
+                      "il silenzio si legge come «tutto bene» mentre nessuno sta piu' "
+                      "guardando niente. Allarmi visti: %r" % (vecchia["allarmi"],))
+        self.assertFalse(vecchia["ok"])
+
+        mai = wd.valuta({"eta_lettura_ci_sec": None})
+        self.assertIn("ci_cieca", [a["cod"] for a in mai["allarmi"]],
+                      "non e' MAI riuscito a leggere la CI e non lo dice a nessuno: "
+                      "e' il caso peggiore, perche' sembra identico a un impianto sano")
+
+    def test_ci_letta_da_POCO_tace(self):
+        r = wd.valuta({"eta_lettura_ci_sec": 600})
+        self.assertNotIn("ci_cieca", [a["cod"] for a in r["allarmi"]],
+                         "la CI e' stata letta dieci minuti fa e il guardiano grida "
+                         "«cieco»: un allarme che suona sempre viene spento")
+
+    def test_cecita_non_giudicata_se_non_e_stata_MISURATA(self):
+        """Stessa disciplina di `eta_backup_sec` e del battito: la chiave ASSENTE vuol
+        dire «non l'ho guardato», e non si giudica cio' che non si e' guardato.
+
+        Senza questo, la testa REMOTA (`REMOTO=1` dal PC, che la CI non la interroga)
+        griderebbe «cieco» a ogni giro: un falso allarme perenne.
+        """
+        r = wd.valuta({"uptime_ok": True})
+        self.assertNotIn("ci_cieca", [a["cod"] for a in r["allarmi"]],
+                         "nessuno ha misurato la lettura della CI e il guardiano "
+                         "grida lo stesso: %r" % (r["allarmi"],))
+
+
 if __name__ == "__main__":
     unittest.main()
