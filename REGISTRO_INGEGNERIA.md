@@ -403,6 +403,198 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 💸 IL WEBHOOK DICEVA «GESTITO» QUATTRO VOLTE MENTRE PERDEVA L'ESITO — 2 settembre, corsia B
+
+**Cosa è stato creato.** `test_webhook_stripe_esiti_persi.py` (file nuovo, 4 guardie): sorveglia
+il gestore del webhook Stripe (`fase83_server.py`, `_webhook_stripe`, rotta
+`POST /api/payments/webhook`). **Dipendenze: nessuna nuova** — usa il sistema vero via
+`crea_sistema` + `crea_router`, archivi su cartella temporanea, e la firma di prova di
+`fase87_stripe_webhook.firma_di_test`.
+**STATO: acceso** — le quattro guardie sono **verdi** sulla riparazione, ed entrano nella suite
+insieme a essa. ⛔ Non potevano entrare da sole: una guardia rossa su un difetto vivo manda
+rossa la **suite intera**, quindi guardia e riparazione si consegnano **insieme** — che è il
+rovescio pratico di D20, e va detto a chi aspetta **prima** che si metta ad aspettare.
+**Riparazione: `fase83_server.py`, +52 −6**, tutta dentro `_webhook_stripe`, con
+l'«autorizzato» del fondatore scritto nella sessione prima della modifica (B4).
+
+**Perché un 200 sbagliato costa più di un 500.** Stripe legge `200` come «ricevuto e gestito» e
+**non riprova mai più**; un non-2xx lo fa ritentare per giorni. Rispondere 200 su un esito
+perso non è un errore di forma: è **ciò che rende quella perdita definitiva**.
+
+🔴 **QUATTRO PUNTI, E UNA CAUSA SOLA.** Il rilievo di partenza (`collaudi/METODO_v4.md` PARTE
+12, casella «l'elaborazione fallita non risponde 200») ne nominava **uno**; misurando ne sono
+usciti **quattro**, e **due sono sui soldi**:
+[1] il salvataggio di `payment_intent` esplode → l'`except` la inghiotte («ISOLATO») → 200.
+    Senza quell'identificativo la scheda del rimborso dichiara `manca: payment_intent` e il
+    pulsante non compare (`manca.append("payment_intent")`; il rimborso vero passa da
+    `sp.rimborsa(riga["payment_intent"], …)`): restituire i soldi a quell'ospite torna un
+    lavoro a mano dal pannello, **per sempre**.
+[2] il salvataggio **non** esplode: restituisce `False` — e il chiamante **non guarda il valore
+    di ritorno**. «Non salvato» diventa indistinguibile da «salvato». Qui non serve nessun
+    guasto.
+[3] `kyc.conferma` esplode → `except` → 200 → esito della verifica d'identità perso.
+[4] ⛔ **il peggiore, e accade sul codice sano.** `KYCHost.conferma` è una macchina a stati:
+    `fase143_kyc_host.py` → `_TRANS = {"non_avviata": {"in_corso"}, …}`. Da «non_avviata» la
+    conferma **non è ammessa**: torna `False` e fa ROLLBACK. Il chiamante ignora quel `False`,
+    scrive a registro **«KYC IDENTITY VERIFICATO»** e risponde 200. Misurato, tre consegne dello
+    stesso evento: stato prima `non_avviata`, **tre** righe «VERIFICATO» nel registro, stato dopo
+    `non_avviata`. **Il registro dichiara una cosa mai avvenuta**, ed è peggio di un registro
+    vuoto, perché il vuoto si vede. Succede ogni volta che il webhook arriva prima che l'avvio
+    della sessione sia registrato — Stripe consegna in millisecondi, quella gara è normale.
+🔑 **Il filo è uno:** un metodo dichiarato `-> bool` viene chiamato e la sua risposta **non
+viene guardata**. Tre volte su quattro. *Un booleano che nessuno legge non è un esito: è un
+commento.*
+
+🧪 **Come è stato iniettato il guasto, e perché così.** Il guasto sta nel **collaboratore**
+(l'attributo `salva_stripe_session` / `conferma` sostituito sull'istanza di prova), **mai** nel
+codice sotto esame. Nessun `fase*.py` toccato per vedere il rosso ⇒ nessun ripristino
+byte-identico da dimostrare, e **nessuna finestra** in cui un file di produzione resti rotto se
+la sessione muore a metà. È la tecnica da riusare ogni volta che serve vedere rossa una guardia
+su codice protetto da B4. E ogni guardia **verifica la premessa prima del verdetto** (sbaglio
+S7): se un giorno l'esito non si perdesse più, dicono «PREMESSA NON VALIDA» invece di accusare
+a vuoto.
+
+✅ **IL SECONDO RILIEVO È STATO MISURATO E NON FA DANNO — niente guardia, ed è una conclusione,
+non una rinuncia.** «Non c'è un elenco degli eventi già visti»: stesso evento consegnato **tre
+volte** → tassa riscossa **800** una sola volta, incasso host **33576** una sola volta, **nessun
+raddoppio**. La difesa esiste già: `fase177_financial_controller.py` →
+`evento_id TEXT NOT NULL UNIQUE` («un replay ritorna la riga già scritta»), più il CAS di
+`pp.conferma`, che di proposito non ri-esegue credito e referral perché non idempotenti.
+⛔ **E il confine, che è la parte che non deve perdersi:** la deduplicazione è sul **FATTO**, non
+sull'**EVENTO**, e **non protegge dall'ORDINE** di arrivo — che Stripe dichiara di non garantire.
+Una guardia sul doppio accredito sorveglierebbe un danno che non esiste, e le guardie ornamentali
+insegnano a ignorare il rosso (ferrea 2).
+
+⚠️ **DUE COSE OSSERVATE E NON SORVEGLIATE, DI PROPOSITO.** Un evento su un riferimento
+**sconosciuto** risponde 200 (`pagamento per riferimento sconosciuto '…' (ignorato)`): sembra lo
+stesso difetto, ma pretendere un non-2xx lì farebbe ritentare Stripe per 72 ore su eventi che
+potrebbero non riguardarci — è una **scelta di progetto**, e una guardia che pretende un
+comportamento discutibile è peggio di nessuna guardia. E `fase162_pagamenti_pendenti.py`
+`salva_stripe_session` cade in fondo all'`except` **senza `return`**, restituendo `None`: stesso
+filo dei quattro, altro file, non toccato (ferrea 15).
+
+📏 **PERCHÉ IL PREVENTIVO È STATO CORRETTO PRIMA DELL'AUTORIZZAZIONE, non dopo.** La riparazione
+ovvia — «guarda il booleano, se `False` rispondi non-2xx» — farebbe diventare rossi molti punti
+**oggi verdi**, e non perché il prodotto sia rotto: `salva_stripe_session` torna `False` **anche
+quando il dato non c'era nell'evento** (`cs_id.startswith("cs_")`), e i test mandano quasi tutti
+payload semplificati. Prova certa, da un file letto per intero — `test_crash_recovery_webhook.py`
+manda `{"metadata": {"riferimento": rif}}`, **senza** id sessione. Ordine di grandezza, ⚠️ e
+l'etichetta conta quanto la cifra (S4): delle **107 righe** che costruiscono quell'evento nei
+`test_*.py`, solo **27** hanno un `cs_` entro le due righe successive — sono **righe di ricerca
+testuale, NON test falliti**; quel numero lo dà solo l'esecuzione. ⇒ La riparazione deve
+distinguere **due casi con rimedi opposti** (è l'osservabile debole, ferrea 9): (a) non ho
+salvato perché il dato non c'era nell'evento — un evento Stripe vero ha sempre `id`, quindi è
+malformato: merita una riga di registro con codice, sottocodice e messaggio, **non** un
+ritentabile; (b) non ho salvato perché è andato storto — **ritentabile**. Prima non si
+distingueva niente, perché il ritorno non lo guardava nessuno.
+
+🔍 **E sotto quella misura c'è un rilievo più grande, lasciato aperto di proposito:** se la gran
+parte dei punti costruisce un `checkout.session.completed` **senza id di sessione**, quei punti
+non attraversano il percorso vero — provano un webhook che nella realtà non esiste. Non è un
+difetto del prodotto: è una **debolezza delle prove**, e spiega come quattro difetti veri siano
+sopravvissuti sotto una suite verde. Fuori dallo scopo dichiarato, segnato al coordinamento.
+
+✅ **Innocente dichiarato innocente, con la prova.** `test_stripe_identity.py` era sospettabile di
+essere verde per il motivo sbagliato: **non lo è**. Chiama `/api/host/kyc_avvia` **prima** del
+webhook (stato `in_corso`, transizione ammessa) e non si ferma al codice di risposta — controlla
+**l'effetto**: `assertEqual(self.sis.kyc.stato(self.hid), "respinto")`. Il punto [4] riguarda il
+percorso in cui l'avvio non è stato registrato, che quel test non copre e non pretendeva di
+coprire.
+
+🔧 **LA RIPARAZIONE, e la parte che l'ha resa possibile è la DISTINZIONE.** Il ritorno di
+`salva_stripe_session` e di `kyc.conferma` adesso **si guarda**, e il registro dell'identità si
+scrive **dopo** averlo visto (così la riga non può più dichiarare il falso). I due casi hanno
+rimedi opposti: **(a)** il dato non c'era nell'evento — un evento Stripe vero porta sempre l'id
+di sessione, quindi è **malformato**: riga di registro con codice e sottocodice (ferrea 9) e
+**nessun** ritentabile, perché ripetere per giorni un evento rotto non lo aggiusta; **(b)** è
+andato storto da noi — **503**, perché il retry è l'unica cosa che può ancora salvare l'esito.
+⚠️ **Una trappola evitata, e sarebbe stato un difetto introdotto dalla riparazione:** «verificato»
+è uno stato **terminale** (`_TRANS["verificato"] = set()`), quindi il retry di un evento **già
+applicato** fa tornare `False` a `conferma` — e senza altro avrebbe prodotto un **503 in
+risposta a un successo**, cioè Stripe a ribussare per 72 ore su qualcosa di già fatto. Il
+confronto con `kyc.stato(...)` distingue «non applicato» da «applicato da un giro precedente».
+
+**Misure, coi comandi che le reggono (D22).** Guardia **prima** della riparazione:
+`PYTHONIOENCODING=utf-8 python -m unittest test_webhook_stripe_esiti_persi -v` → **EXIT=1** letto
+diretto senza tubi, `Ran 4 tests in 4.441s`, `FAILED (failures=4)`, misurata su `b507210`. La
+**stessa** guardia dopo la riparazione: **EXIT=0**, `Ran 4 tests in 2.731s`, `OK`. Impatto sui
+test esistenti, misurato **prima** di dichiarare che la riparazione regge — sui file che
+martellano il webhook: `test_crash_recovery_webhook test_stripe_identity
+test_fase87_stripe_webhook` → **EXIT=0**, `Ran 20 tests`, OK; `test_admin_rimborso_money
+test_audit_console test_fase162_hold_pagamento` → **EXIT=0**, `Ran 87 tests in 119.790s`, OK.
+⛔ **E i 107 test mirati NON BASTAVANO: l'ha dimostrato la suite intera, con due rossi che
+nessuno di quei 107 aveva preso** (vedi sotto). È il motivo per cui la ferrea 6 pretende la
+suite intera **anche quando «i test attinenti» sono verdi**.
+**Ricomposto poi sulla base `61e251d`** (il lavoro delle corsie A e C, che non tocca
+`fase83_server.py`): impronte del file di produzione e della guardia **identiche** prima e dopo
+lo spostamento. Conteggio del caricatore, misurato da PowerShell vera e non da Git Bash (S11):
+**6080**. **SUITE INTERA VERDE**: `Ran 6075 tests in 1729.826s`, `OK (skipped=4)`,
+`CODICE_USCITA_DIRETTO=0`. ⚠️ I 5 fra raccolti (6080) ed eseguiti (6075) hanno un nome:
+`openssl` non è nel PATH di PowerShell e le guardie sul ripristino dei backup si mettono da
+parte da sole (D23 punto 3) — **quel calo non è un difetto da inseguire**. Byte di controllo
+nei file toccati: **0**.
+
+🔴 **I DUE ROSSI CHE HA TROVATO SOLO LA SUITE INTERA.**
+**[R1] Una cifra invecchiata da me.** Aggiungendo un file di test ho reso falsa una riga del
+`README`, sorvegliata da `audit_millimetrico` (`atteso=408 · trovato=407`). ⚠️ E il pre-volo
+era **7 su 7, «SI PUÒ LANCIARE»**: il suo controllo conta i **test**, non i **file di test**, e
+non esegue quell'audit. Quaranta minuti di suite per una cifra che un attrezzo da due secondi
+avrebbe potuto prendere prima.
+**[R2] La riparazione di un osservabile debole aveva prodotto un osservabile RUMOROSO** — i due
+difetti opposti della stessa famiglia. La riga del caso (a) era scritta **ERROR**, e
+`test_cancellazione_money.py` pretende **zero ERROR sul percorso sano** perché *«l'email del
+Guardiano diventerebbe rumore quotidiano»*: gli ERROR fanno partire l'avviso, e quella riga
+sarebbe suonata a **ogni** evento senza id di sessione — che nei test è la normalità. Un falso
+allarme è un difetto quanto un allarme mancato (ferrea 10).
+🔧 **Cura: WARNING, e il livello è parte della riparazione.** La ferrea 9 pretende **codice,
+sottocodice e messaggio**; **non** pretende che sia un ERROR. Il contenuto resta identico.
+⛔ **Il test NON è stato toccato**: è vecchio, sano e dice il vero — addomesticare una guardia
+per far passare una propria riga è il contrario del mestiere.
+📏 **Misurato prima di scegliere, non dopo:** `test_cancellazione_money.py:321` →
+`if record.levelno >= logging.ERROR` ⇒ cattura ERROR e CRITICAL, **non** WARNING (se avesse
+catturato i WARNING la cura sarebbe fallita, e sarebbe costata un altro giro). E **chi altro
+grida**: 5 file catturano ERROR *e* toccano il webhook, ma **solo quello** pretende la lista
+vuota — gli altri usano `assertLogs`, che pretende *almeno* un log, cioè il contrario. Nessun
+test pretende zero WARNING.
+
+⛔ **LIMITI DICHIARATI (D18 punto 3) — la parte che nessuno scrive, e che vale quanto il resto.**
+· **Collaudo 6 (fuzzing, concorrenza, estremi) NON ESEGUITO su un punto d'ingresso pubblico.**
+  Il webhook è esposto su internet ed è stato provato **solo con eventi ben formati**. La
+  riparazione *riduce* la superficie (prima un fallimento veniva ingoiato e si rispondeva 200,
+  ora viene visto), ma il fuzzing è un lavoro a sé, con il suo scopo e il suo giro.
+· **Collaudo 5 (oracolo indipendente): non si applica** — non c'è un calcolo da ricontrollare,
+  qui si decide un codice di risposta. **Collaudo 7 (giudice esterno): non eseguibile da qui** —
+  serve la CI su Linux, che non parte sui rami. **Collaudo 10 (mutazione): non eseguito** — va
+  per ultimo e costa ore. **Collaudo 3: parziale** — archivi su file (nessun `:memory:`), ma
+  `main_casavip.py` non eseguito in questo lavoro.
+· ⛔ **`collaudi/caccia_finti_verdi.py:66` fa `if "skipTest" in sorgente`: ricerca TESTUALE, non
+  `ast`, quindi conta i commenti.** Ha segnalato due guardie di questo file perché i loro
+  commenti dicevano di *non* usare quel costrutto — un attrezzo che accusa un file **perché
+  dichiara di non fare la cosa**. È lo sbaglio **S6** dentro un attrezzo del progetto. Non
+  riparato: fuori scopo (ferrea 15). Aggirato riformulando i commenti, da cui la regola
+  generale: **un commento non nomina il token che gli attrezzi cercano**, come non nomina la
+  cifra (S17). ⚠️ Due strumenti davano risposte **opposte** sullo stesso file (pre-volo
+  controllo 3 «OK», caccia F1 «segnala»): quando due misure divergono, una sta misurando la
+  cosa sbagliata — qui aveva ragione il pre-volo.
+· **Il pre-volo non copre l'audit millimetrico** né il numero dei **file** di test: dice «si può
+  lanciare» senza guardare una cosa che la suite prende in quaranta minuti.
+· ⛔ **E non esegue nemmeno il cricchetto statico — secondo buco della stessa forma, trovato
+  dalla CI dopo il commit.** `bandit` **B106** (`hardcoded_password_funcarg`) ha segnalato
+  `stripe_secret_key="sk"` nel banco della guardia: un argomento il cui **nome** contiene
+  «secret» con un valore scritto sul posto. Nel merito è un falso positivo — «sk» non è una
+  chiave e il banco non chiama mai Stripe — **ma il cricchetto ha ragione lo stesso**, e lo
+  dichiara da sé: *«la fotografia si rifà solo per DIMINUIRE il debito, mai per assorbire un
+  rilievo appena creato»*. ⇒ **Chiuso nel codice, non nella baseline**: il valore sta in una
+  costante e si passa per variabile, che è **la forma già usata nello stesso file** per il
+  segreto del webhook — e infatti quello non era mai stato segnalato. Le righe identiche negli
+  altri collaudi non gridano perché sono **debito già congelato**, non perché siano più sane.
+  ⚠️ E la scelta non è stata «nascondere il token che l'attrezzo cerca» (sarebbe stata una
+  soppressione muta): dare un nome a quel valore **migliora** il banco, perché dice a chi legge
+  che è finto e perché. Esito: `cricchetto_statico.py bandit` → **EXIT=0**, «NESSUNA
+  SEGNALAZIONE NUOVA», 548 = 548.
+· **`fase162_pagamenti_pendenti.py` `salva_stripe_session` cade in fondo all'`except` senza
+  `return`**, restituendo `None`: stesso filo dei quattro, altro file, **non toccato**.
+
 ### 🔔 IL 2 SETTEMBRE — il guardiano aveva la voce, il canale e l'orologio: gli mancava la DOMANDA
 
 **Moduli di PRODUZIONE toccati: `fase178_watchdog.py` e `deploy/watchdog.sh`** — con
