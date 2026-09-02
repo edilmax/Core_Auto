@@ -44,6 +44,13 @@ NOME_BATTITO = "guardiano_ultimo_giro"
 # spento da chi lo riceve (regola ferrea 10, che lo considera grave quanto uno mancato).
 MAX_ETA_BATTITO_SEC = 25 * 3600
 
+NOME_LETTURA_CI = "ci_ultima_lettura"
+# Il guardiano interroga GitHub a ogni giro (ogni 10 minuti da cron): tre ore sono DICIOTTO
+# giri a vuoto di fila, che non e' piu' un inciampo di rete ma una cecita'. La soglia e' una
+# scelta, non una misura -- ma sta lontana da entrambi gli errori: non grida per un blocco
+# passeggero, e non lascia passare mezza giornata in cui nessuno sa niente della CI.
+MAX_ETA_LETTURA_CI_SEC = 3 * 3600
+
 
 # ── verifiche read-only ─────────────────────────────────────────────────────
 def verifica_catena_file(percorso: str) -> Dict[str, Any]:
@@ -154,6 +161,47 @@ def eta_battito_guardiano_sec(dir_dati: str, *, ora: Optional[int] = None) -> Op
     return max(0, ora - m)
 
 
+def segna_lettura_ci(dir_dati: str, *, ora: Optional[int] = None) -> bool:
+    """Timbra che la CI si e' RIUSCITA A LEGGERE. Coppia gemella del battito qui sopra.
+
+    ⛔ Si timbra sulla LETTURA riuscita, **non sul verde**: leggere «rossa» e' una lettura
+    riuscita. Se si timbrasse sul verde, una CI rossa per giorni si presenterebbe **anche**
+    come «cieca» -- due allarmi per un fatto solo, cioe' rumore, e il rumore insegna a
+    ignorare proprio il rosso che si voleva far vedere. E' facile da rompere «semplificando»:
+    chi cambia questa riga tolga prima il test `test_ci_letta_da_POCO_tace`.
+
+    Deliberatamente NON riusa `segna_battito_guardiano`: quella e' codice di produzione gia'
+    collaudato e riscriverla per farci passare un nome sarebbe una correzione di passaggio
+    (regola ferrea 15). Le due non condividono nessun numero, solo la meccanica del file,
+    quindi non c'e' una verita' che possa restare indietro in una delle due copie.
+    """
+    if not dir_dati or not os.path.isdir(dir_dati):
+        return False
+    ora = ora if isinstance(ora, int) else int(time.time())
+    try:
+        percorso = os.path.join(dir_dati, NOME_LETTURA_CI)
+        with open(percorso, "w") as f:
+            f.write("%d\n" % ora)
+        os.utime(percorso, (ora, ora))     # l'eta' si legge dall'mtime, non dal contenuto
+        return True
+    except OSError:
+        return False
+
+
+def eta_lettura_ci_sec(dir_dati: str, *, ora: Optional[int] = None) -> Optional[int]:
+    """Eta' (secondi) dell'ultima lettura RIUSCITA della CI. None se non c'e': o non e' mai
+    riuscita, o il segnale e' sparito -- e le due si trattano uguale, perche' in tutti e due
+    i casi NON SAPPIAMO da quanto nessuno guarda la CI."""
+    ora = ora if isinstance(ora, int) else int(time.time())
+    if not dir_dati:
+        return None
+    try:
+        m = int(os.path.getmtime(os.path.join(dir_dati, NOME_LETTURA_CI)))
+    except OSError:
+        return None
+    return max(0, ora - m)
+
+
 def db_presenti(dir_dati: str) -> List[str]:
     """Prefissi dei .db presenti nella cartella dati (per notare un DB sparito)."""
     if not os.path.isdir(dir_dati):
@@ -174,16 +222,48 @@ def spazio_disco_pct(percorso: str) -> Optional[int]:
 # ── decisione PURA (misure -> verdetto): testabile senza I/O ─────────────────
 def valuta(misure: Dict[str, Any], *, max_eta_backup_sec: int = 8 * 3600,
            max_disco_pct: int = 85, db_attesi: Optional[List[str]] = None,
-           max_eta_battito_sec: int = MAX_ETA_BATTITO_SEC
+           max_eta_battito_sec: int = MAX_ETA_BATTITO_SEC,
+           max_eta_lettura_ci_sec: int = MAX_ETA_LETTURA_CI_SEC
            ) -> Dict[str, Any]:
     """misure: {catena:{ok,..}, eta_backup_sec:int|None, disco_pct:int|None,
-    db_presenti:[...], uptime_ok:bool|None}. Ritorna {ok, allarmi:[...], dettagli}."""
+    db_presenti:[...], uptime_ok:bool|None, ci_ok:bool|None, eta_lettura_ci_sec:int|None}.
+    Ritorna {ok, allarmi:[...], dettagli}."""
     allarmi: List[Dict[str, str]] = []
 
     up = misure.get("uptime_ok")
     if up is False:
         allarmi.append({"cod": "uptime", "grav": "critico",
                         "msg": "il sito NON risponde (health check fallito)"})
+
+    # `ci_ok` e' TRI-STATO come `uptime_ok`, e per lo stesso motivo: True verde, False rossa,
+    # None (o chiave assente) «non lo so». Solo `is False` grida. Un giro ancora in corso o
+    # GitHub irraggiungibile NON sono un guasto del prodotto, e un allarme che grida per
+    # quelli viene spento da chi lo riceve (ferrea 10, che lo considera grave quanto uno
+    # mancato). Nasce dal 31 agosto: master rossa, e nessuno se n'e' accorto per 37 ore.
+    if misure.get("ci_ok") is False:
+        allarmi.append({"cod": "ci", "grav": "critico",
+                        "msg": "la CI su master e' ROSSA: c'e' un difetto che nessuno sta "
+                               "vedendo, e restera' li' finche' qualcuno non guarda"})
+
+    # Stessa disciplina del backup e del battito: la chiave ASSENTE vuol dire «non l'ho
+    # guardato». Senza, la testa REMOTA (dal PC, che la CI non la interroga) griderebbe
+    # «cieco» a ogni giro.
+    # ⛔ CODICE DIVERSO da `ci`, e non e' pignoleria: «non riesco a leggere la CI» e «la CI
+    # e' rossa» hanno rimedi OPPOSTI, e un allarme che li fonde manda a cercare nel posto
+    # sbagliato -- e' l'osservabile debole della ferrea 9. Un solo giro cieco si tace; una
+    # cecita' che DURA e' una notizia, perche' il silenzio si legge come «tutto bene».
+    if "eta_lettura_ci_sec" in misure:
+        ec = misure.get("eta_lettura_ci_sec")
+        if ec is None:
+            allarmi.append({"cod": "ci_cieca", "grav": "critico",
+                            "msg": "la CI non e' MAI stata letta: nessuno sa dire se il "
+                                   "codice sia sano, e questo silenzio sembra salute"})
+        elif ec > max_eta_lettura_ci_sec:
+            allarmi.append({"cod": "ci_cieca", "grav": "critico",
+                            "msg": "la CI non si riesce a leggere da %dh (soglia %dh): "
+                                   "quota GitHub finita, rete, o indirizzo cambiato -- il "
+                                   "guardiano e' CIECO, non sereno"
+                                   % (ec // 3600, max_eta_lettura_ci_sec // 3600)})
 
     cat = misure.get("catena") or {}
     if cat.get("ok") is False:
@@ -236,23 +316,49 @@ def valuta(misure: Dict[str, Any], *, max_eta_backup_sec: int = 8 * 3600,
 
 
 def diagnosi(*, dir_dati: str, dir_backup: str, uptime_ok: Optional[bool] = None,
+             ci: str = "skip",
              max_eta_backup_sec: int = 8 * 3600, max_disco_pct: int = 85,
              db_attesi: Optional[List[str]] = None,
-             max_eta_battito_sec: int = MAX_ETA_BATTITO_SEC) -> Dict[str, Any]:
+             max_eta_battito_sec: int = MAX_ETA_BATTITO_SEC,
+             max_eta_lettura_ci_sec: int = MAX_ETA_LETTURA_CI_SEC) -> Dict[str, Any]:
     """Raccoglie le misure reali (read-only) e le valuta. `uptime_ok` lo passa il
     chiamante (il bash lo misura da FUORI: un processo interno non puo' dire di essere
-    morto)."""
+    morto). Stessa divisione per la CI: la rete la fa il bash, qui si decide soltanto.
+
+    `ci` ha CINQUE valori, e i tre di mezzo sono il motivo per cui non e' un booleano:
+      "ok"       la CI si e' letta ed e' verde
+      "ko"       la CI si e' letta ed e' rossa        <- LETTURA RIUSCITA anche questa
+      "in_corso" la CI si e' letta, i job non hanno ancora finito: nessun verdetto, ma
+                 GitHub ha risposto, quindi NON siamo ciechi
+      "cieco"    si e' provato a leggerla e NON si e' riusciti (rete, quota finita, 403)
+      "skip"     non si e' nemmeno guardata (testa REMOTA dal PC)
+    ⛔ «cieco» e «skip» sembrano uguali e non lo sono: col primo la cecita' ACCUMULA e prima
+    o poi grida, col secondo non si giudica cio' che non si e' guardato. Fonderli
+    significherebbe o gridare «cieco» a ogni giro remoto (falso allarme perenne), o non
+    accorgersi mai che da mezza giornata nessuno riesce a leggere la CI.
+    ⛔ E «in_corso» non e' «cieco»: durante ogni normale giro di CI i job sono in corso per
+    dieci minuti, e contarli come cecita' vorrebbe dire accumulare buio proprio mentre la
+    macchina risponde benissimo. Il timbro misura «ho RAGGIUNTO GitHub», non «ho un verdetto».
+    """
+    # Si timbra su "ok", "ko" E "in_corso": tutte e tre sono letture RIUSCITE. Vedi
+    # `segna_lettura_ci` per cosa si rompe se qualcuno «semplifica» timbrando solo il verde.
+    if ci in ("ok", "ko", "in_corso"):
+        segna_lettura_ci(dir_dati)
     misure = {
         "uptime_ok": uptime_ok,
+        "ci_ok": True if ci == "ok" else False if ci == "ko" else None,
         "catena": verifica_catena_file(os.path.join(dir_dati, DB_GIORNALE + ".db")),
         "eta_backup_sec": eta_backup_sec(dir_backup),
         "eta_battito_guardiano_sec": eta_battito_guardiano_sec(dir_dati),
         "disco_pct": spazio_disco_pct(dir_dati),
         "db_presenti": db_presenti(dir_dati),
     }
+    if ci != "skip":
+        misure["eta_lettura_ci_sec"] = eta_lettura_ci_sec(dir_dati)
     return valuta(misure, max_eta_backup_sec=max_eta_backup_sec,
                   max_disco_pct=max_disco_pct, db_attesi=db_attesi,
-                  max_eta_battito_sec=max_eta_battito_sec)
+                  max_eta_battito_sec=max_eta_battito_sec,
+                  max_eta_lettura_ci_sec=max_eta_lettura_ci_sec)
 
 
 if __name__ == "__main__":   # pragma: no cover — CLI per il bash
@@ -261,11 +367,13 @@ if __name__ == "__main__":   # pragma: no cover — CLI per il bash
     p.add_argument("--dati", default=os.environ.get("DATA_DIR", "/data"))
     p.add_argument("--backup", default=os.environ.get("BACKUP_DIR", "/data/backup"))
     p.add_argument("--uptime", choices=["ok", "ko", "skip"], default="skip")
+    p.add_argument("--ci", choices=["ok", "ko", "in_corso", "cieco", "skip"],
+                   default="skip")
     p.add_argument("--max-eta-h", type=int, default=8)
     p.add_argument("--max-disco", type=int, default=85)
     a = p.parse_args()
     up = True if a.uptime == "ok" else False if a.uptime == "ko" else None
-    r = diagnosi(dir_dati=a.dati, dir_backup=a.backup, uptime_ok=up,
+    r = diagnosi(dir_dati=a.dati, dir_backup=a.backup, uptime_ok=up, ci=a.ci,
                  max_eta_backup_sec=a.max_eta_h * 3600, max_disco_pct=a.max_disco)
     print(json.dumps(r, ensure_ascii=False))
     raise SystemExit(0 if r["ok"] else 1)
