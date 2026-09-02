@@ -1910,22 +1910,49 @@ class TestLeDIMOSTRAZIONIMatematicheGIRANODavveroInCI(unittest.TestCase):
 
     def test_le_prove_z3_si_saltano_SOLO_per_la_libreria_mancante(self):
         """S7 e D23: un salto e' ammesso solo se dipende dall'AMBIENTE, mai da cio' che il
-        test dovrebbe verificare. Se domani qualcuno allargasse quella condizione, i 35 test
-        potrebbero assolversi da soli per un altro motivo e nessuno se ne accorgerebbe."""
+        test dovrebbe verificare. Se domani qualcuno allargasse quella condizione, i test che
+        portano le prove potrebbero assolversi da soli per un altro motivo e nessuno se ne
+        accorgerebbe.
+
+        ⛔ RIPARATA IL 2026-09-02: I MODULI SI DERIVANO, NON SI NOMINANO. Qui c'erano due nomi
+        scritti a mano, mentre l'altra meta' di questa stessa classe li deriva dall'albero
+        proprio perche' -- parole sue, poche righe piu' su -- «un criterio che nomina due file
+        e' un elenco scritto a mano travestito da ragionamento». La lezione era stata applicata
+        a una meta' e non all'altra, e fuori restava `test_property_soldi`: cioe' il modulo che
+        porta il teorema «nessun centesimo si crea o si perde».
+        MISURATO: `_moduli_di_test_con_prove_z3()` ne trova TRE, questa guardia ne guardava DUE.
+        Guasto iniettato con l'editor (uno `skipTest` che non nomina z3 in `test_property_soldi`):
+        la guardia vecchia usciva `Ran 5 · OK · uscita 0`, questa esce ROSSA.
+
+        ⚠️ E il buco non era totale, il che conta per capire quanto vale questa riga: il gancio
+        `deploy/hooks/pre-commit` lancia il pre-fatto, e il suo controllo 3 quel guasto lo
+        prendeva. Ma la CI **non esegue** ne' il pre-volo ne' il pre-fatto (misurato: nessuna
+        occorrenza in `ci.yml`), e quel gancio in questo progetto e' gia' stato trovato SPENTO
+        una volta. Un controllo che vive solo in un gancio locale e' costruito, non collegato.
+        """
         import io as _io
         radice = os.path.dirname(os.path.abspath(__file__))
-        for nome in ("test_fase199_invarianti.py", "test_fase199_transizioni.py"):
+        moduli = _moduli_di_test_con_prove_z3()
+        # ⛔ Il vuoto non e' un valore (sbaglio S1): se la derivazione smette di trovare
+        #    qualcosa, questa guardia passerebbe senza aver guardato NIENTE.
+        self.assertTrue(moduli,
+                        "nessun modulo con prove z3: o sono spariti, o la derivazione si e' "
+                        "rotta. In tutt'e due i casi questa guardia non sta guardando niente")
+        for modulo in sorted(moduli):
+            nome = modulo + ".py"
             with _io.open(os.path.join(radice, nome), encoding="utf-8") as f:
                 testo = f.read()
-            self.assertIn("import z3", testo,
-                          "%s non prova piu' a importare z3: il salto non e' piu' legato "
-                          "alla libreria" % nome)
-            for riga in testo.splitlines():
-                if "skipTest(" in riga:
-                    self.assertIn("z3", riga,
-                                  "%s ha uno skipTest che NON parla di z3 (%r): un test "
-                                  "che si assolve da solo per un motivo diverso "
-                                  "dall'ambiente sparisce dal rapporto" % (nome, riga.strip()))
+            righe_di_salto = [r for r in testo.splitlines() if "skipTest(" in r]
+            if righe_di_salto:
+                # chi si salta DEVE farlo per la libreria, quindi deve anche provare a importarla
+                self.assertIn("import z3", testo,
+                              "%s si salta ma non prova piu' a importare z3: il salto non e' "
+                              "piu' legato alla libreria" % nome)
+            for riga in righe_di_salto:
+                self.assertIn("z3", riga,
+                              "%s ha uno skipTest che NON parla di z3 (%r): un test che si "
+                              "assolve da solo per un motivo diverso dall'ambiente sparisce "
+                              "dal rapporto" % (nome, riga.strip()))
 
 
 class TestLaCIDiceCosaHaSALTATO(unittest.TestCase):
@@ -10781,6 +10808,143 @@ class TestIlCricchettoDiceQUALEGuastoHaAvuto(unittest.TestCase):
         self.assertEqual(nuovo, self.SEGNALAZIONI_NUOVE,
                          "una segnalazione NUOVA deve restare 1: se cambiasse, il gate "
                          "smetterebbe di dire cio' che ha sempre detto")
+
+
+class TestLEsameDeiSoldiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_soldi.py`: se qualcuno gli toglie il controllo
+    delle precondizioni, qualcosa diventa rosso LO STESSO GIORNO -- altrimenti fra sei mesi
+    sparisce in una «semplificazione» e nessuno se ne accorge.
+
+    Quell'esame SPUNTA due caselle del blocco dei soldi. Uno strumento che spunta caselle e'
+    esattamente quello che il fondatore ha preteso non potesse barare: la domanda non e' «ha
+    barato?», che si fa dopo, ma «PUO' barare?», che si fa prima.
+
+    ⛔ E NON LEGGE IL SORGENTE, LO ESEGUE. Una guardia che cercasse la stringa
+    «precondizioni» la soddisferebbe anche un commento (sbaglio S6). Qui si rompe una
+    precondizione vera e si pretende che l'esame SI FERMI senza produrre un numero.
+    """
+
+    def _esame(self):
+        return self._carica("esame_soldi.py", "_esame_soldi_sotto_guardia")
+
+    def test_CON_UNA_PRECONDIZIONE_ROTTA_L_ESAME_SI_FERMA_E_NON_SCRIVE(self):
+        """Il cuore: un metro storto deve essere scoperto DAL METRO. Se la derivazione dei
+        moduli con prove z3 non trova piu' niente, l'esame non deve dire «verde» e nemmeno
+        «rosso»: deve dire che non puo' misurare, e non scrivere NIENTE nella scheda."""
+        esame = self._esame()
+        io_stesso = sys.modules[__name__]
+        vera_derivazione = io_stesso._moduli_di_test_con_prove_z3
+        vera_registra = esame.scheda.registra
+        scritture = []
+
+        def _registra_spia(*a, **k):
+            scritture.append((a, k))
+            raise AssertionError("l'esame ha scritto nella scheda con una precondizione "
+                                 "rotta: e' esattamente il barare che D18 vieta")
+        try:
+            io_stesso._moduli_di_test_con_prove_z3 = lambda: []      # il metro si storce
+            esame.scheda.registra = _registra_spia
+            tutte_ok, righe = esame.precondizioni()
+            self.assertFalse(tutte_ok,
+                             "con la derivazione a vuoto le precondizioni si dichiarano "
+                             "sane: il metro non si accorge di essere storto (sbaglio S1, "
+                             "il vuoto non e' un valore)")
+            uscita = esame.main(["--scrivi"])
+            self.assertEqual(uscita, 2,
+                             "l'esame doveva FERMARSI (uscita 2) e invece ha risposto %r: "
+                             "un numero prodotto da un metro storto sembra una risposta, "
+                             "ed e' peggio di nessun numero" % (uscita,))
+            self.assertEqual(scritture, [],
+                             "l'esame ha scritto nella scheda pur non potendo misurare")
+        finally:
+            io_stesso._moduli_di_test_con_prove_z3 = vera_derivazione
+            esame.scheda.registra = vera_registra
+
+    def test_L_ESAME_DICHIARA_COSA_NON_HA_GUARDATO(self):
+        """D18 punto 3. Un taglio silenzioso fa sembrare «coperto» cio' che non e' stato
+        nemmeno guardato: l'elenco dev'esserci e non puo' essere vuoto."""
+        esame = self._esame()
+        self.assertTrue(getattr(esame, "NON_GUARDA", ()),
+                        "l'esame non dichiara piu' cosa NON ha esaminato")
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+
+    def test_L_ESAME_SA_PROVARSI_NELLE_DUE_DIREZIONI(self):
+        """D18 punto 2: deve ESISTERE ed essere eseguibile il modo che lo fa gridare col
+        guasto dentro. Qui si controlla che il meccanismo ci sia e sia collegato -- non lo
+        si esegue, perche' l'autoprova avvia due processi figli e costa minuti."""
+        esame = self._esame()
+        for pezzo in ("autoprova", "inietta_il_guasto"):
+            self.assertTrue(callable(getattr(esame, pezzo, None)),
+                            "manca `%s`: senza, l'esame non si e' mai visto gridare" % pezzo)
+
+    def test_L_AUTOPROVA_NON_PUO_ESSERE_SVUOTATA(self):
+        """⛔ La guardia qui sopra protegge `autoprova` contro chi la CANCELLA, non contro chi
+        la SVUOTA: una che tornasse sempre `riuscita=True` passerebbe. E' il verde finto nella
+        sua forma piu' pura -- la difesa c'e', ha il nome giusto, e non puo' fallire. Trovato
+        dalla revisione incrociata della corsia C il 2026-09-03; io l'avevo solo DICHIARATO
+        come limite, e dichiarare un buco non lo chiude.
+
+        🔑 SI PROVA LA LOGICA SENZA AVVIARE I DUE PROCESSI VERI, e la mossa e' quella che rende
+        possibile un controllo che sembrava impossibile: il costo che tiene l'autoprova fuori
+        dalla suite e' l'AVVIO dei due figli (misurato: oltre 120 secondi), non il suo
+        ragionamento. Sostituendo `subprocess.run` con un finto, l'autoprova riceve gli esiti
+        che decidiamo noi e deve giudicarli -- in millisecondi. Quando un controllo costa
+        troppo, quasi sempre il costo sta in una parte che non era quella da provare.
+
+        ⚠️ DENOMINATORE DICHIARATO (D18 punto 3): qui si prova che l'autoprova RAGIONA BENE
+        sugli esiti che riceve. NON si prova che avvii davvero i due processi giusti coi
+        parametri giusti: se qualcuno rompesse il comando che lancia, questa guardia
+        resterebbe VERDE. Quella meta' vive fuori dalla suite e costa due minuti.
+        """
+        import subprocess
+        esame = self._esame()
+
+        class _EsitoFinto(object):
+            def __init__(self, codice):
+                self.returncode = codice
+                self.stdout = b""
+
+        vero_run = subprocess.run
+        try:
+            # (a) i figli rispondono SEMPRE 0: la passata «col guasto» esce VERDE quando
+            #     doveva uscire ROSSA -> l'autoprova deve dichiararsi NON affidabile.
+            subprocess.run = lambda *a, **k: _EsitoFinto(0)
+            riuscita, righe = esame.autoprova()
+            self.assertFalse(
+                riuscita,
+                "l'autoprova ha detto «affidabile» pur avendo visto la passata COL GUASTO "
+                "uscire VERDE. Non sta giudicando niente: e' stata svuotata, o non confronta "
+                "piu' l'esito con quello atteso. Righe: %r" % (righe,))
+
+            # (b) prima ROSSA col guasto, poi VERDE sana: e' esattamente cio' che deve vedere.
+            codici = [1, 0]
+            subprocess.run = lambda *a, **k: _EsitoFinto(codici.pop(0))
+            riuscita, righe = esame.autoprova()
+            self.assertTrue(
+                riuscita,
+                "l'autoprova ha detto «NON affidabile» pur avendo visto esattamente quello "
+                "che doveva vedere (rossa col guasto, verde a macchina sana): allora grida "
+                "sempre, e un allarme sempre acceso viene spento. Righe: %r" % (righe,))
+        finally:
+            subprocess.run = vero_run
+
+    def test_IL_TESTO_DELLE_CASELLE_NON_E_RICOPIATO_A_MANO(self):
+        """Se il testo fosse una copia, il giorno che il piano cambia una virgola l'esame
+        spunterebbe una casella DIVERSA -- e la scheda direbbe il falso senza avvisare,
+        perche' la chiave e' il testo."""
+        esame = self._esame()
+        blocco = [b for b in esame.BLOCCHI if b["ordine"] == esame.BLOCCO_SOLDI]
+        self.assertEqual(len(blocco), 1, "il blocco dei soldi non si legge dal piano")
+        condizioni = blocco[0]["finito_quando"]
+        self.assertGreaterEqual(len(condizioni), 4,
+                                "il blocco dei soldi ha meno caselle di quante l'esame ne "
+                                "spunta: gli indici che usa non sono piu' quelli")
+        with io.open(os.path.join(QUI, "collaudi", "esame_soldi.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        for testo in (condizioni[0], condizioni[3]):
+            self.assertNotIn(testo, sorgente,
+                             "il testo della casella e' RICOPIATO dentro l'esame: va letto "
+                             "da `collaudi/piano.py`, se no le due copie divergono")
 
 
 if __name__ == "__main__":

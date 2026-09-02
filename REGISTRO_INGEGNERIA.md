@@ -481,6 +481,169 @@ fuori. Questo allarme protegge dalla CI rossa, **non** dal guardiano morto.
 checkout git dell'host, quindi si aggiorna con un `git pull` — ma è comunque produzione e vuole
 il suo momento, non la coda di una giornata così.
 
+### 💶 IL 2 SETTEMBRE, SERA — il blocco SOLDI passa da 0 a 2 su 6, e la matrice ha bocciato due mie relazioni prima che entrassero
+
+**Cosa è stato creato.** `collaudi/esame_soldi.py` (l'attrezzo che misura e spunta le caselle
+1 e 4 del blocco SOLDI) e **19 guardie nuove**: 12 relazioni metamorfiche in
+`test_property_soldi.py`, 3 che dimostrano che quelle 12 sanno diventare rosse, 4 in
+`test_pipeline_ci.py` che impediscono all'esame di barare. **STATO: acceso**, tutto dentro la
+suite. **Nessun file di produzione toccato** — quindi nessun «autorizzato» necessario.
+Caricatore da 6076 a **6095**.
+
+**⛔ PRIMA HO LETTO COME L'HA RISOLTO IL MONDO (D25), e ha cambiato il disegno.**
+· *Segura et al., «A Survey on Metamorphic Testing», IEEE TSE 2016* — le sei famiglie di
+trasformazione dell'ingresso: additiva, moltiplicativa, permutativa, invertiva, inclusiva,
+esclusiva. Ogni relazione qui sotto dichiara la sua, invece di essere inventata.
+· *Chen et al., ACM Computing Surveys 51(1), 2018* — una relazione metamorfica lega **più
+ingressi e le loro uscite**. È la differenza fra ciò che il file già aveva (invarianti su UNA
+chiamata) e ciò che la casella chiedeva.
+· *Potter, «Metamorphic Relations for Backtests»* — **le componenti a costo FISSO non
+scalano**, e l'aritmetica intera rompe le relazioni moltiplicative ingenue. Questo ha
+**escluso a priori** la relazione «raddoppio il prezzo, raddoppia tutto»: il nostro motore ha
+una fee fissa per notte, un gateway con minimo e parte fissa, e un punto fisso iterativo.
+Scriverla sarebbe stato un falso allarme — e un allarme che accusa innocenti viene spento.
+
+**🔑 LA MATRICE GUASTO × RELAZIONE, ed è la parte che vale.** Dodici relazioni che reggono su
+2823 casi non dimostrano niente: una relazione che regge è inutile se reggerebbe anche col
+motore rotto. Ho costruito **10 guasti × 12 relazioni** iniettando i guasti **a runtime**
+(nessun `fase*.py` toccato, B4) e guardando chi vede cosa. Ha bocciato **due mie relazioni**
+prima che entrassero nella suite:
+
+```
+rimborso: ripensamento ignorato    -> NESSUNA relazione lo vedeva
+paga: valuta estera ignorata       -> NESSUNA relazione lo vedeva
+```
+
+In tutt'e due i casi avevo scritto `>=` dove serviva `>`: **ignorare la conversione produce
+l'UGUALE, non il minore**, e una finestra di ripensamento ignorata dà lo stesso numero della
+politica. Due relazioni che non sapevano distinguere «fatto» da «non fatto». La condizione
+stretta si legge dall'**uscita** (l'anticipo ha toccato il totale? la politica rende già
+tutto?), non dalle viscere dei moduli. Dopo la correzione: ogni relazione si accende su almeno
+un guasto, ogni guasto è visto da almeno una relazione, e a macchina sana tacciono tutte.
+⛔ E la matrice **sta dentro la suite**, non in una sonda usa-e-getta: `TestLeRelazioni`
+`MetamorficheSANNODiventareROSSE`. *Vista rossa* indebolendo una sola relazione: dà **due
+diagnosi diverse** dallo stesso guasto — `["MR3 valuta estera costa di piu'"]` (ornamento) e
+`['paga: valuta estera ignorata']` (buco di copertura). Sono cose diverse e servono tutt'e due.
+Ripristino byte-identico, sha256 `8e270638…21f3b7`.
+
+**⛔ LA CASELLA 1 AVEVA UN BUCO VERO, e l'ha scoperchiato una domanda sola: chi controlla?**
+`test_le_prove_z3_si_saltano_SOLO_per_la_libreria_mancante` nominava **due file scritti a
+mano**, mentre l'altra metà della stessa classe deriva i moduli dall'albero proprio perché —
+parole sue, poche righe più su — *«un criterio che nomina due file è un elenco scritto a mano
+travestito da ragionamento»*. La lezione era applicata a una metà e non all'altra. Misurato:
+`_moduli_di_test_con_prove_z3()` ne trova **tre**, la guardia ne guardava **due**, e fuori
+restava `test_property_soldi` — cioè il modulo che porta il teorema «nessun centesimo si crea o
+si perde».
+*Vista rossa sul guasto vero* (uno `skipTest("ambiente non pronto")` iniettato **con
+l'editor**): la guardia vecchia usciva `Ran 5 · OK · uscita 0`, quella riparata esce rossa
+nominando il file. Ripristino byte-identico, sha256 `c70be99b…adad51`.
+⚠️ **E il buco non era totale, il che conta per non gonfiare il risultato:** il gancio
+`deploy/hooks/pre-commit` lancia il pre-fatto, e il suo controllo 3 quel guasto lo prendeva.
+Ma la CI **non esegue** né il pre-volo né il pre-fatto (misurato: nessuna occorrenza in
+`ci.yml`), e quel gancio in questo progetto è già stato trovato **spento** una volta. La
+riparazione sposta il controllo da un gancio locale alla suite che gira a ogni unione.
+
+**🩹 UN DIFETTO CHE HO MESSO IO E CHE VALE COME LEZIONE (sbaglio S3).** Al primo giro l'esame
+ha dichiarato **12 relazioni rosse su 12** — mentre lanciate a mano erano tutte verdi. Dodici
+su dodici è un numero sospetto, e il colpevole era lo **strumento**: l'esame eseguiva
+`test_property_soldi` due volte nello stesso processo (una per ogni casella), e Hypothesis
+alza `FailedHealthCheck: differing_executors`. Riparato con **un giro solo** smistato fra le
+due caselle. *Quando la misura è assurda, il primo sospetto va allo strumento, non al codice.*
+
+**🛡️ L'ESAME NON PUÒ BARARE (D18), e la sua guardia ha preso ME.** Le quattro condizioni:
+(1) `precondizioni()` **ferma** il giro invece di stampare un numero — se z3 non è
+importabile, la domanda della casella non è misurabile lì e l'esame esce **2**, senza
+scrivere; (2) `--autoprova` lo vede gridare col guasto e tacere sano, in **processi nuovi**
+(stessa ragione di Hypothesis); (3) `NON_GUARDA` stampato a ogni giro; (4)
+`TestLEsameDeiSoldiNonPuoBARARE`, che **esegue** l'esame invece di leggerne il sorgente (una
+guardia che cerca parole la soddisferebbe un commento, sbaglio S6).
+*Vista rossa* neutralizzando il cancello delle precondizioni: «l'esame ha scritto nella scheda
+con una precondizione rotta». Ripristino byte-identico, sha256 `cc3b9215…71f6f9`.
+💡 E la guardia `test_IL_TESTO_DELLE_CASELLE_NON_E_RICOPIATO_A_MANO` **mi ha bocciato al primo
+giro**: nel docstring dell'esame avevo ricopiato il testo di una casella. Una delle due copie
+sfuggiva solo perché un a-capo la spezzava — **una copia che coincide QUASI è peggio di una che
+coincide**, perché nessuno la trova. Tolta la copia, non ammorbidita la guardia.
+
+**📌 UN RILIEVO TROVATO PER STRADA, non riparato (regola di corsia: si scrive e si va avanti).**
+`collaudi/scheda.json` — il posto dove vivono le caselle spuntate — **è escluso da git**, e non
+per una decisione: lo prende la riga `*.json` del `.gitignore`, scritta per tutt'altro. Quindi
+**la scheda non viaggia col progetto**: chi clona, e la CI, vedono sempre «0 su 6», e ogni
+misura vale solo sulla macchina che l'ha fatta. È l'esclusione silenziosa dello sbaglio S13, ed
+è la stessa malattia che `CLAUDE.md` racconta di sé sulle direttive tenute in memoria di
+sessione: *«per sempre significava finché dura quella memoria»*.
+
+**Dove siamo.** Blocco SOLDI: **2 su 6** (caselle 1 e 4), misurate su impronta `4218eaec4034`.
+Le altre quattro restano vuote **col loro motivo**, che è la verità su cosa sappiamo.
+
+#### 🔍 LA REVISIONE INCROCIATA — quattro difetti nel mio stesso attrezzo, e uno l'ho trovato verificando quello di un altro
+
+*(stessa notte, ordine del fondatore: «più menti, più logica e prove».)* La corsia C ha
+rivisto `collaudi/esame_soldi.py` in sola lettura. **Si è ripagata al primo giro**, e non nel
+modo previsto.
+
+**R1 — un commento al posto di un cancello.** `--con-guasto` e `--scrivi` erano due `if`
+indipendenti, e l'unico `return` in mezzo guarda le precondizioni, che non sanno niente del
+modulo dove il guasto viene iniettato. Quindi `--con-guasto --scrivi` **registrava nella scheda
+la misura di una macchina rotta di proposito**. Il file diceva «non si usa a mano»: ⛔ **un
+commento è una dichiarazione, un `if` è un controllo**, e D18 punto 1 chiede il secondo — la
+domanda non è «ha barato?» ma «può barare?». *Riparato e provato:* uscita **2**, e l'impronta
+di `scheda.json` identica prima e dopo.
+⚠️ E la scheda è **fuori da git**: una riga falsa lì non viaggia, ma **nessun `checkout` la
+ripara e nessun `diff` la mostra**. Non una bugia che si propaga: una che **resta**, dove i tre
+attrezzi con cui scopriamo le bugie — diff, checkout, revisione — non arrivano, perché sono
+tutti e tre basati su git e hanno lo stesso punto cieco.
+
+**R2 (loro) e R4 (mio) sono lo stesso difetto dai due lati.** C ha misurato che il
+**denominatore era più stretto del verdetto**: contava i moduli con prove z3 ma non la guardia
+sul cablaggio, che il verdetto giudicava. Verificando il suo rilievo ho trovato il gemello
+rovesciato: il **filtro era più largo della frase della casella** — confrontava il *prefisso*
+del modulo, quindi la casella 1, che parla di dimostrazioni z3, si prendeva **qualunque** rosso
+di `test_property_soldi`, comprese le relazioni sul denaro. *In tutt'e due i casi il perimetro
+non era quello che la frase dichiarava.*
+🔑 **E il modo in cui R4 è uscito vale quanto il difetto:** avevo un'ipotesi *peggiore* — che
+`--con-guasto --scrivi` scrivesse una riga **mista**, casella vera accanto a casella falsa, con
+la vera a fare da garante. **L'ho misurata invece di scriverla, era sbagliata, e il motivo per
+cui era sbagliata era il difetto.** Un'ipotesi falsificata che partorisce un difetto vero è il
+modo più economico di trovarne uno.
+*Riparato con una mossa sola:* il perimetro si scrive **una volta**, esplicito, e il
+denominatore **è** la sua cardinalità. Due cifre che nascono dalla stessa espressione non
+possono divergere.
+
+**⚠️ IL DENOMINATORE DELLA CASELLA 1 SCENDE DA 64 A 54, E NON È UN ALLENTAMENTO.** Chi legge un
+numero di sorveglianza che cala pensa «hanno abbassato l'asticella». È il contrario, e
+l'attrezzo adesso **stampa la composizione** invece di lasciarla dedurre:
+`64 test nei moduli con prove z3, MENO 15 che sono la casella 4, PIÙ 5 della guardia sul
+cablaggio = 54`. E la casella 4 passa da 12 a **15** per la stessa ragione: riparare la 1 e
+lasciare lo stesso difetto nella 4 avrebbe fatto *sembrare* il problema chiuso.
+📌 Regola che ne esce: **un numero di sorveglianza che scende porta la sua spiegazione, o non
+scende.**
+
+**✅ E una cosa scomoda che va detta perché è vera: il verde di prima NON era sbagliato.** Un
+filtro troppo largo si prende *più* rossi del dovuto, quindi essere verde su un insieme più
+grande implica esserlo su quello giusto: il verde era **conservativo**, non gonfiato. Il danno
+di R4 era sulla **diagnosi futura** — il giorno che una relazione sul denaro fosse diventata
+rossa, la scheda avrebbe detto «le dimostrazioni z3 non girano», mandando qualcuno a cercare
+dove non c'era niente. Dirlo così fa sembrare la riparazione meno importante, ed è il motivo
+per cui va detto così.
+
+**R3 — una manopola che nessuno poteva girare:** `giro_unico(forza=False)` non veniva mai
+chiamata con `True`. Un parametro morto promette una capacità che non c'è: tolto.
+
+**🛡️ E IL BUCO CHE C HA LASCIATO APERTO, chiuso.** La guardia sull'autoprova proteggeva contro
+chi la **cancella**, non contro chi la **svuota**: una che tornasse sempre «affidabile» sarebbe
+passata. È il verde finto nella forma più pura — la difesa c'è, ha il nome giusto, e non può
+fallire. Sembrava impossibile da provare perché l'autoprova avvia due processi e costa **oltre
+120 secondi misurati**.
+🔑 **Ma il costo stava nell'avvio, non nel ragionamento.** Sostituendo `subprocess.run` con un
+finto, la logica si esercita nelle due direzioni in **millisecondi**: figli che rispondono
+sempre 0 → l'autoprova *deve* dichiararsi non affidabile; figli che rispondono 1 e poi 0 →
+*deve* dichiararsi affidabile. *Vista rossa* svuotando l'autoprova per davvero, ripristino
+byte-identico (`320b3e40…`). **Quando un controllo costa troppo, quasi sempre il costo sta in
+una parte che non era quella da provare.**
+⚠️ Limite dichiarato dentro la guardia stessa: prova che l'autoprova **ragiona bene sugli esiti
+che riceve**, non che avvii i due processi giusti coi parametri giusti. Quella metà vive fuori
+dalla suite.
+
 ### 🧾 IL 2 SETTEMBRE — le due bombe del rendiconto fiscale erano il TEST, e sotto c'erano 13 giorni in cui il test passava a vuoto
 
 **Cosa è cambiato.** Solo `test_dac7_notti.py` (+97/−13, **nessun file di produzione toccato**,
