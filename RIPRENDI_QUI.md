@@ -33,8 +33,11 @@ GitHub master       5ba642a   <- "Merge PR #133 from lavoro-a"; genitori 936c2a8
                                  TRE unioni in questa giornata: #131 (lavoro-d), #132
                                  (lavoro-c), #133 (lavoro-a). Nessuna richiesta aperta.
 rami                lavoro-a/b/c/d: TUTTI dentro master (0 commit fuori)
-CARICATORE          6069      <- PowerShell vera (MSYSTEM vuoto, PATH dal registro), da
-                                 fermo, 1,42s, USCITA 0
+CARICATORE          6070      <- PowerShell vera (MSYSTEM vuoto, PATH dal registro), da
+                                 fermo, USCITA 0. Era 6069: il +1 e' la guardia nuova in
+                                 test_dac7_notti.py, misurata il 2026-09-02 su b507210
+                                 PRIMA di lanciare (S14), e rifatta anche da Git Bash con
+                                 lo stesso risultato: le due shell concordano.
 CI su 936c2a8       15 controlli · 14 success + 1 skipped (zap) · gate SUCCESS
                     ⚠️ La CI su 5ba642a NON e' stata riletta prima di scrivere questa riga:
                     e' NON MISURATA, non "presumibilmente verde" (ferrea 8).
@@ -1106,9 +1109,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 5ba642a
+CONSEGNE AGGIORNATE A: b507210
 
-SUITE ATTUALE: Ran 6069 test
+SUITE ATTUALE: Ran 6070 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -1339,11 +1342,14 @@ AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3, ed e' la
             ragione dello scarto fra RACCOLTI e ESEGUITI (5 di scarto: le guardie openssl).
-MISURATO:  2026-09-01 su 936c2a8 (albero con la guardia nuova sui confini del fattore
-           temporale, non committata), col caricatore, da PowerShell VERA (MSYSTEM vuota
-           e PATH ricostruito dal registro), e PRIMA di lanciare (S14):
+MISURATO:  2026-09-02 su b507210 (albero con la guardia nuova di test_dac7_notti.py, non
+           committata), col caricatore, da PowerShell VERA (MSYSTEM svuotato e PATH
+           ricostruito dal registro), e PRIMA di lanciare (S14):
            python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"
-           -> 6069
+           -> 6070
+           ⛔ La stessa domanda rifatta da Git Bash da' 6070 anche li'. Le due shell
+           concordano, quindi qui lo scarto di PATH non c'entra -- e valeva la pena
+           chiederlo, perche' e' proprio dove S11 ci ha gia' fatto perdere due ore.
 COMANDO:  python -m unittest discover -s . -p "test_*.py"
 ```
 

@@ -403,6 +403,107 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🧾 IL 2 SETTEMBRE — le due bombe del rendiconto fiscale erano il TEST, e sotto c'erano 13 giorni in cui il test passava a vuoto
+
+**Cosa è cambiato.** Solo `test_dac7_notti.py` (+97/−13, **nessun file di produzione toccato**,
+nessun «autorizzato» necessario). Le date dei due soggiorni di prova non stanno più scritte
+dentro `setUp`: le sceglie `_banda(oggi)`, che tiene **tutte** le notti dentro l'anno corrente.
+**STATO: acceso**, gira dentro la suite, nessun interruttore e nessuna configurazione.
+**Dipendenze: nessuna nuova.**
+
+**Il difetto, e perché il prodotto era sano.** `finanza.movimento()` non accetta un istante
+(`fase177_financial_controller.py:242-245`: il giornale è hash-incatenato e si data da sé), e
+`aggrega_dac7` attribuisce «all'anno/trimestre dell'**INCASSO**» (`:412`). Il volume che rende
+l'host **dichiarabile** finisce quindi sempre nell'anno **corrente**. Ma il report veniva chiesto
+per `self.anno = int(self.ci[:4])`, cioè l'anno del **check-in**. Sonda a orologio spostato sul
+30 dicembre, senza toccare nessun `fase*.py`:
+
+```
+ANNO 2027 (l'anno del check-in)   notti_per_alloggio -> {'casa': {'notti': 2, 'pren': 1}}
+                                  aggrega_dac7       -> None      -> "# host_reportabili,0"
+ANNO 2026 (l'anno corrente)       notti_per_alloggio -> {}
+                                  aggrega_dac7       -> n=4, lordo=320000, segnala=True
+```
+
+Il motore delle notti **conta giusto**. A escludere l'host è solo la soglia di legge, che il
+report dichiara nella propria intestazione (`reportabili = >=30 prenotazioni O >=2000 EUR`).
+Nessuno dei due anni ha insieme i soldi **e** le notti. E all'11 dicembre il meccanismo è un
+altro ancora: il soggiorno scavalca il capodanno, le notti si dividono fra i due anni e il CSV
+mostra `Villa (Roma) - 1 notti/1 pren` — cioè il prodotto sta obbedendo all'**invariante 2**,
+quella che `test_cavallo_anno_si_divide` pretende **nello stesso file**.
+
+⛔ **E il commento che stava in `setUp` dichiarava il falso**, il che è la ragione per cui il
+difetto è rimasto: diceva che il salto a fine dicembre «copriva un problema che non c'era»,
+visto che le asserzioni interrogano già l'anno **della prenotazione**. Il problema c'era, ed è
+esattamente quello. La decisione di togliere il salto resta giusta — un test che si spegne da
+solo su un obbligo fiscale non protegge più niente — ma la motivazione era sbagliata, e una
+motivazione sbagliata scritta in un posto ufficiale vale meno di nessuna motivazione.
+
+**🔑 LA SCOPERTA VERA, ed è più grande delle due bombe.** Dal **28 novembre** le notti della
+prenotazione **cancellata** escono dall'anno chiesto, quindi `assertNotIn("7 notti")` diventa
+vera **da sola**. Misurato *senza cancellare niente*:
+
+```
+2 settembre    5 notti su 5 dentro l'anno   CSV: "7 notti/2 pren"   l'asserzione distingue
+28 novembre    4 su 5                       CSV: "6 notti/2 pren"   INERTE
+10 dicembre    0 su 5                       CSV: "2 notti/1 pren"   INERTE, e anche l'altra
+```
+
+Il **10 dicembre** quel test sarebbe verde **anche se la cancellazione del rimborso non facesse
+assolutamente niente**. Sono **13 giorni muti** prima dei **21 rossi**: 34 giorni l'anno in cui
+il controllo sulle notti DAC7 non fa il suo lavoro — e sono di **calendario**, quindi **tornano
+ogni anno**. Il rilevatore di bombe non poteva trovarli **per costruzione**, non per una svista:
+lui cerca i rossi, e **un test che passa a vuoto è verde**.
+
+**Il confine, che nessuno aveva misurato.** Lo schedario diceva `esplode_il: 2026-12-30` con
+`confine_confermato: FALSE`, e quel campo aveva ragione: il 30 dicembre era solo **il primo
+giorno in cui l'attrezzo aveva guardato**. Il piano di campionamento prova ogni scarto **solo
+sui file che contengono quella data**, e per questo file gli scarti erano nove (3, 9, 14, 30,
+34, 91, 92, 120, 123): fra il 92 e il 120 ci sono **27 giorni mai campionati**. Misurato giorno
+per giorno, processo nuovo per ogni scarto: rosso dall'**11 al 31 dicembre**, verde di nuovo il
+**1° gennaio**. Quando l'allarme sarebbe scattato, la finestra era già aperta da 19 giorni.
+
+**La guardia, che è la parte che dura.** `TestLaBandaDelleProve.`
+`test_LE_NOTTI_DI_PROVA_STANNO_NELL_ANNO_CHE_IL_GIORNALE_DATA` non ricopia le date a mano:
+verifica la **proprietà** — ogni notte dei due soggiorni cade nell'anno di `oggi` — su **tutti i
+giorni di 2026, 2027 e 2028** (uno bisestile), non su oggi. Una guardia che può fallire soltanto
+in tre settimane di dicembre resta spenta per undici mesi, ed è la forma stessa del difetto che
+chiude: lo stato scomodo si costruisce adesso (D19).
+*Vista rossa sul guasto vero* — il codice che girava davvero, prima della riparazione:
+`AssertionError: Lists differ: ['2027-01-01'] != [] : con oggi=2026-11-28 il report viene chiesto
+per l'anno 2026, ma queste notti cadono in un altro anno`, uscita 1. **Ed è stata lei a trovare i
+13 giorni muti**, 13 giorni prima del rosso visibile. Poi verde: `Ran 8 · OK · uscita 0`.
+Caricatore da 6069 a **6070**.
+
+**Cosa è stato misurato e non supposto.** Che un soggiorno **già avvenuto** attraversa lo stesso
+money-path: preventivo `200`, prenotazione `201`, pagamento via webhook, e cancellazione `200`
+con rimborso al cliente e nota di debito. Il ramo «avanti» produce **esattamente** le date di
+prima, quindi il diff aggiunge solo il ramo di dicembre.
+
+**Il giro di verifica sul file riparato**, un processo nuovo per ogni scarto, fino all'orizzonte
+dichiarato dell'attrezzo:
+
+```
+400 scarti su 400  ·  8 test ciascuno  ·  ZERO rossi  ·  nessun cambio di stato
+```
+
+🔑 **E la riga che trasforma «ho guardato 400 punti» in «ho guardato ogni giorno dell'anno»,
+che sono due affermazioni molto diverse:** gli scarti **1..365 toccano ogni giorno del
+calendario esattamente una volta**; dal 366 in poi si ripassano gli stessi giorni. Solo la
+seconda formulazione chiude la domanda — senza questa riga il 400 resterebbe un numero grande
+senza un significato.
+
+⛔ **COSA NON È STATO FATTO, dichiarato (D18 punto 3).** `collaudi/bombe_a_tempo.json` continua a
+elencare queste due voci finché non si rilancia l'attrezzo, che costa **156 minuti misurati** —
+non i «~25» che stampano `collaudi/prima_di_lanciare.py:131` e `collaudi/regole_avvio.py:520`,
+cifra di provenienza ignota e rilievo aperto della corsia di coordinamento. Lo schedario non è
+scaduto (vale 30 giorni), quindi non è urgente. E il terzo test dello schedario,
+`test_un_gettone_FRESCO_lascia_passare`, resta **non giudicabile** da quell'attrezzo perché avvia
+un processo figlio, che vede l'ora vera mentre il padre la vede spostata: letto a mano, il ramo
+che esercita calcola `ETA = $(date +%s) - EPOCA` e non contiene **nessun valore di calendario**,
+quindi non può marcire col tempo. Verificato leggendo, non a orologio spostato — quella strada
+l'attrezzo la dichiara chiusa, ed è vero.
+
 ### 🕐 IL 1° SETTEMBRE — la guardia che si dava ragione da sola, e l'assegnazione costruita su una riga già ritrattata
 
 **Cosa è stato creato.** `TestFattoreTemporale` in `test_fase106_dynamic_pricing.py` (+110
