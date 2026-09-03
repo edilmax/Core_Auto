@@ -594,6 +594,222 @@ test pretende zero WARNING.
   SEGNALAZIONE NUOVA», 548 = 548.
 · **`fase162_pagamenti_pendenti.py` `salva_stripe_session` cade in fondo all'`except` senza
   `return`**, restituendo `None`: stesso filo dei quattro, altro file, **non toccato**.
+### 🧬 LA NOTTE DEL 2 SETTEMBRE — il modulo che divide i soldi aveva 59 punti di logica e 4 test
+
+**Nessun file di produzione toccato.** Solo `test_fase65_split_payment.py`, +13 guardie
+(da 18 a 31 prove nel file). Corsia C, blocco 1 «SOLDI», casella 5 — ⛔ **la casella NON è
+chiusa**: parla di **cinque** moduli e questo lavoro ne tocca **uno**.
+
+#### Dove attaccare non lo dice il totale, lo dice il rapporto
+
+Il censimento (nessun test eseguito) dà 246 punti di mutazione sui cinque moduli del
+percorso del denaro. Ma il numero che conta è un altro:
+
+| modulo | punti | sorveglianti |
+|---|---|---|
+| `fase65_split_payment.py` | **59** | **4** |
+| `fase101_stripe_connect.py` | 50 | 7 |
+| `fase131_payout_dashboard.py` | 62 | 13 |
+| `fase87_stripe_webhook.py` | 15 | 59 |
+| `fase85_pagamenti_stripe.py` | 60 | 80 |
+
+Previsione fatta **prima** di misurare: i buchi stanno nel primo. Il giro l'ha confermata —
+**15 sopravvissuti su 42 punti provati**, il 36%.
+⛔ **15 su 42, non 15 su 59.** Il giro è stato ucciso a 42: i 17 restanti non sono sicuri,
+**non sono stati guardati**. È scritto anche nel docstring della classe nuova.
+
+#### I due buchi che non sembravano gravi, e lo erano
+
+`EsitoQuota` ha due valori di partenza a `False`. Rovesciati:
+- **`idempotente`** — ogni primo pagamento si annuncia come replay. Chi legge quel campo per
+  decidere se saltare il lavoro **salta un pagamento vero**;
+- **`completato`** — i cinque rami di fallimento lasciano quel campo al valore di partenza,
+  quindi **un pagamento FALLITO dichiara il conto completato**. È il campo su cui si decide
+  se i soldi escono dall'escrow. Nessun test lo guardava: si controllava il *motivo*, che è
+  giusto e non basta.
+
+Le guardie non asseriscono il campo — asseriscono che **i soldi si muovano quando l'esito
+dice che si sono mossi, e non si muovano quando dice di no**. Asserire il valore avrebbe
+ucciso il mutante lasciando la macchina scoperta: si sorveglia il comportamento, non la
+costante.
+
+#### 🔑 Le tre lezioni di metodo, che valgono oltre questo modulo
+
+**1. Prima di scrivere la guardia per un sopravvissuto, si ESEGUE il codice sano.**
+L'indicazione ricevuta per la riga 55 era *«prova che dividere zero venga respinto»*.
+Eseguito: `riparti_equo(0, 3) -> [0, 0, 0]` — il sano **divide** lo zero, è il **mutante** a
+respingerlo. Quella guardia sarebbe stata **rossa sul codice buono e verde sul guasto**, e il
+passo dopo è «ripariamo il codice». L'errore nasce dal ragionare sulla *descrizione* della
+mutazione (`<` diventa `<=`) invece che sul comportamento: dice cosa cambia, non cosa fa.
+⇒ Regola: **eseguire → scrivere → verificare nei DUE VERSI, e scrivere entrambe le celle.**
+
+**2. Un invariante che regge anche sul vuoto non distingue il vuoto.** La guardia della riga
+55 asserisce il contratto (`len == n`, `sum == totale`, `max-min <= 1`). ⛔ Ma `sum` da solo
+**non uccide**: col totale a zero il mutante restituisce `[]` e `sum([]) == 0 == totale`
+torna lo stesso. È `len` che uccide. Un invariante si sceglie controllando che **fallisca sul
+caso degenere**.
+
+**3. Un banco che sporca le proprie misure ACCUSA GUARDIE INNOCENTI.** La prima matrice
+diceva **3 celle verdi col guasto dentro** (righe 62, 147, 149) e stavo per riscrivere tre
+guardie che funzionavano. Rifatta **una cella a mano** invece di credere all'attrezzo:
+`KeyError: 'b' … FAILED (errors=1) … USCITA: 1` — era rossa. Il difetto era nel banco, che
+riusava la stessa cartella fra un mutante e l'altro e serviva un `.pyc` vecchio. Rifatto da
+zero a ogni cella: **10 su 10**.
+⇒ È peggio di nessun banco, perché il verdetto è credibile e sbagliato **nel verso che fa
+lavorare di più**. La seconda misura di forma diversa è stata girare una cella a mano.
+
+**4. La frase comoda si scrive da sola, e costa nulla finché nessuno la controlla.** Due
+volte nella stessa sera ho *scritto* in un documento ufficiale «la stessa domanda rifatta da
+Git Bash dà lo stesso numero» **prima di averla eseguita**. Tutte e due le volte poi era vera
+— ma era vera per fortuna, non per misura, e una delle due l'avevo scritta subito dopo aver
+corretto qualcun altro per lo stesso errore.
+⛔ Non è distrazione: è che quella frase **è comoda da scrivere, suona come una misura e non
+costa niente** finché nessuno la verifica. È la stessa forza che produce «presumibilmente
+verde» e «immagino sia passato». L'unica difesa che ha funzionato è stata rileggere quello che
+avevo appena scritto **cercando i verbi al passato senza un comando sotto**.
+📌 E il modo di scoprirlo in due secondi invece che dopo 30-80 minuti di suite:
+`python collaudi/prima_di_lanciare.py` — il controllo 1 confronta il numero dichiarato col
+caricatore e, se è sbagliato, **dice quale sarebbe quello vero**. La guardia dentro la suite lo
+prende comunque, ma dopo. È la S14, già pagata tre volte.
+
+#### L'iniezione fuori dal progetto, che da stanotte è il metodo
+
+Per vedere le guardie rosse serviva mutare `fase65_split_payment.py`, che è **produzione**
+(B4) e per questo lavoro non c'era il via. Non serve: si copiano modulo e prove in una
+cartella di lavoro **fuori dal repository** e si muta lì. `git status` durante tutto il
+lavoro: un solo file, ed è un test.
+🔑 E non è una scorciatoia, è un **miglioramento**: se la sessione muore fra iniezione e
+ripristino non resta **niente** da rimettere a posto. Toglie a costo zero il rischio che la
+regola ferrea 2 si limita ad accettare.
+
+#### Le prove
+
+`Ran 27 · OK · uscita 0` (erano 18). Matrice guasto × guardia **10 celle su 10 ROSSE**, e la
+classe intera **VERDE** sul banco sano — scritta dentro il file, non solo nel registro, perché
+una matrice che vive in una sessione non esiste il giorno dopo.
+Caricatore: 6076 → **6085**, rimisurato da PowerShell vera e da Git Bash (concordano),
+uscita 0. Pre-volo 7 su 7.
+
+#### Chiusi tutti e 15 i sopravvissuti VISTI
+
+Le ultime cinque righe (83, 199, 200, 216, 222) sono state chiuse subito dopo, con lo stesso
+metodo. Due meritano una riga:
+- **83** (`orologio or …` → `and`): col guasto l'orologio iniettato dal chiamante **viene
+  buttato** e si usa l'ora vera. Era sopravvissuto perché `self._now()` si esegue **solo se
+  il conto ha una scadenza**, e quasi nessuna prova ne metteva una. 🔑 *La copertura del FILE
+  non dice niente sulla copertura del RAMO*: un file con molti test può avere rami che
+  nessuno attraversa mai.
+- **200** (`EsitoQuota(False, …)` → `True`): un pagamento **rifiutato** si annuncia come
+  riuscito. Per questo la guardia non guarda solo `motivo` ma `ok` **e** che i soldi non si
+  siano mossi: il motivo giusto con l'esito sbagliato è peggio di nessun motivo.
+
+Matrice finale: **15 celle su 15 ROSSE**, classe intera **VERDE** sul banco sano, e la
+matrice intera costa **2,8 secondi** — perché gira **una prova per cella**, non i quattro
+sorveglianti (che costano 27 s l'uno). La stima di partenza era ~200 volte più alta: anche il
+costo di un attrezzo si misura invece di stimarlo.
+
+#### Il giro definitivo, e cosa c'era nei 17 punti «mai guardati»
+
+```
+provati 59 su 59 · uccisi 55 · SOPRAVVISSUTI 4 · scoperti 0 · equivalenti 0
+NON DETERMINABILI 0 · UCCISI SOLO A VOLTE 0
+ri-conferme: 3 chieste, 55 rieseguiti, non ri-confermati 0
+NON PROVATI: oltre il tetto 0 · oltre il tempo 0 · rinunce del generatore {'catena': 2}
+18 minuti · EXIT=1
+```
+
+Due cose che questo giro ha stabilito:
+1. **Le 15 guardie scritte a mano hanno retto sotto il Giudice**: nessuno dei punti già
+   chiusi è tornato vivo, e nessun «ucciso» è caduto alle ri-conferme. La matrice non era
+   più stretta del generatore — non era garantito, ed è per questo che era stato dichiarato
+   prima di vedere l'esito.
+2. ⛔ **Dei 17 punti che il giro precedente non aveva mai raggiunto, QUATTRO erano abitati**
+   (278 ×2, 294, 325). Non erano «probabilmente a posto»: erano **non guardati**. Ora sono
+   chiusi tutti e quattro, e la matrice è a **19 celle su 19**.
+
+🔑 **E il primo dei quattro l'ha trovato una persona, non la macchina.** La corsia B, in
+revisione incrociata, ha letto il codice e ha detto: *«il compare-and-swap di `annulla` non è
+sorvegliato nel suo caso vero»* — il secondo annullamento, quello che deve fallire. Il Giudice
+non c'era ancora arrivato; ci è arrivato dopo e ha detto la stessa identica cosa.
+> **La lettura umana e il generatore non si sostituiscono: si coprono i buchi a vicenda.**
+> Qui non è un principio, è un caso misurato: due strumenti diversi, lo stesso difetto, e
+> quello lento è arrivato prima.
+
+⛔ **E un mutante che sembrava equivalente e non lo era** (riga 278, `<= 0` → `< 0`). Il
+ragionamento comodo: `mancante_cents` vale zero solo quando il conto è completato, e quella
+condizione l'ha già intercettata la riga prima — quindi i due operatori sarebbero
+indistinguibili. **È una conclusione con una premessa**: vale *per merito di*
+`registra_pagamento`. D19 punto 1 vieta esattamente questo, e B6 vieta di dichiarare
+equivalente senza dimostrazione. ⇒ Lo stato «impossibile» è stato **costruito a mano** (un
+conto pagato per intero a cui si rimette lo stato «aperto»), e lì i due operatori si separano:
+il sano dice «niente da ridistribuire», il mutante ridistribuisce **zero** fra chi ha già
+pagato. Tre righe di test, e un mutante in meno da dichiarare.
+
+⛔ **COSA RESTA APERTO**, perché nessuno legga «19 su 19» come «coperto»: le **2 rinunce del
+generatore** (`{'catena': 2}`) — punti che il generatore non sa rompere e non prova, e *un
+punto che nessuno sa rompere non è sicuro, è mai guardato*; e soprattutto questo è **UN modulo
+su cinque**. L'attrezzo del Giudice si è rifiutato da solo di spuntare la casella: *«questo
+giro ha guardato 1 modulo su 5 … "non misurata" è vero, "misurata e non passa" sarebbe
+falso»*. Un modulo passato sotto il Giudice si scrive **«giudicato»**, mai «fatto» (D26).
+
+#### 🔑 LA REGOLA DELLA NOTTE: lo strumento che sporca la propria misura
+
+Due corsie, due attrezzi diversi, la stessa sera, **lo stesso difetto** — e nessuno dei due
+l'aveva cercato:
+
+| | il verdetto sbagliato | la causa vera |
+|---|---|---|
+| corsia A, `esame_soldi.py` | **12 relazioni rosse su 12** | eseguiva `test_property_soldi` **due volte nello stesso processo**, e Hypothesis alzava `differing_executors` |
+| corsia C, matrice guasto × guardia | **3 guardie verdi col guasto dentro** | il banco riusava la stessa cartella e Python serviva un `.pyc` vecchio |
+
+In tutti e due i casi il verdetto era **credibile e sbagliato nel verso che fa lavorare di
+più**: accusava il codice innocente. E in tutti e due la cura non è stata rileggere lo
+strumento — è stata **una seconda misura di forma diversa**: lei ha eseguito il modulo una
+volta sola e ha visto le 12 tornare verdi; io ho girato **una cella a mano** (`KeyError: 'b'
+… FAILED … USCITA: 1`) e ho visto che la guardia era rossa davvero.
+
+> ⛔ **Uno strumento che sporca la propria misura è peggio di nessuno strumento**, perché il
+> suo verdetto è credibile. E rileggerlo non basta: il codice sembra giusto proprio a chi
+> l'ha scritto. **Serve una misura di forma diversa** — un'altra via allo stesso fatto.
+
+**E il gemello rovesciato, trovato dalla revisione incrociata la stessa notte.** Rivedendo
+`esame_soldi.py` è uscito un difetto (il **denominatore** dichiarato è più **stretto** del
+perimetro del verdetto: 64 contro 69), e cercandone la conferma la corsia A ne ha trovato un
+altro (il **filtro** della casella 1 è più **largo** della frase della casella: si prende
+qualunque rosso di `test_property_soldi`, comprese le relazioni metamorfiche, che con z3 non
+c'entrano). Sono lo stesso difetto dai due lati:
+
+> **Il perimetro non è quello che la frase dichiara** — una volta più stretto, una volta più
+> largo. E si chiude in un modo solo: **il perimetro si scrive una volta, esplicito, e il
+> denominatore si calcola da QUELLO.** Due cifre che vengono dalla stessa fonte non possono
+> divergere; due espressioni diverse divergono il giorno che una cambia.
+
+📌 *E la revisione incrociata si è ripagata al primo giro:* un rilievo scritto da chi non
+aveva costruito l'attrezzo ha fatto trovare a chi l'aveva costruito un difetto che nessuno dei
+due stava cercando.
+
+#### 🔑 E il corollario che ha chiuso il caso: SI SEPARA IL COSTO DAL CRITERIO
+
+Nella stessa revisione era emersa una guardia protetta a metà: controllava che il meccanismo
+dell'autoprova **esistesse** (`callable(...)`), non che funzionasse. Cioè protetta contro chi
+lo **cancella**, non contro chi lo **svuota** — un `autoprova` che restituisse sempre «tutto
+bene» sarebbe passata. Il motivo dichiarato era il costo: eseguirla avvia due processi figli,
+**oltre 120 secondi misurati**.
+
+La cura è costata millesimi, e sta tutta in una domanda: **dov'è il costo?** Non nel
+*criterio* (decidere se una passata rossa e una verde sono quelle attese), ma nel
+*meccanismo* (avviare i figli). Sostituendo l'avvio con un finto — uno che risponde sempre
+«verde», e uno che risponde «rosso poi verde» — il criterio si prova **nelle due direzioni,
+con zero processi**, e un'autoprova svuotata cade sul primo caso.
+
+> Quando qualcosa è «troppo caro da provare», la domanda giusta non è *quanto costa* ma
+> **quale parte costa**. Quasi sempre il prezzo sta nel meccanismo e il giudizio è gratis:
+> separarli trasforma un limite dichiarato in una guardia vera.
+
+⚠️ Ed è la stessa lezione dei costi di stanotte, vista da un altro lato: la matrice
+guasto × guardia sembrava costare 27 s a cella (il prezzo dei *sorveglianti*) e ne costava
+**0,13** (il prezzo di *una prova*). In tutt'e due i casi un numero vero era stato attaccato
+alla cosa sbagliata, e in tutt'e due bastava misurare invece di stimare.
 
 ### 🔔 IL 2 SETTEMBRE — il guardiano aveva la voce, il canale e l'orologio: gli mancava la DOMANDA
 
