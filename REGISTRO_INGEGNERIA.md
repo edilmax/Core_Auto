@@ -403,6 +403,205 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 💸 SONO USCITI 408,00 E IL LIBRO NE HA REGISTRATI 208,00 — 2 settembre, corsia B (casella 2 del Blocco 1)
+
+**Cosa è stato creato.** `test_rimborso_ogni_strada.py` (4 guardie, censimento delle strade) e
+`test_rimborso_coppie_stessa_chiave.py` (2 guardie, le coppie che oggi non fanno danno).
+**STATO: accesi**, verdi, nessuna dipendenza nuova. Più `test_rimborso_collisione_importi.py`
+— ⛔ **rosso di proposito**: descrive il comportamento corretto di un difetto **vivo**, quindi
+entra **insieme** alla riparazione, mai da solo.
+
+**IL DENOMINATORE ERA GIÀ SCRITTO IN PRODUZIONE, e non l'ho inventato.** `_giornale` in
+`fase83_server.py` dichiara: *«Le strade che portano a un rimborso sono SETTE, e questo
+progetto le ha già dimenticate due volte»*. Rimisurato — un commento invecchia, un conteggio
+no — e sono **7**. ⚠️ Il primo `grep` ne dava **8**: l'ottavo era **un commento** che nomina
+`tipo="rimborso"` per spiegare le strade. ⇒ Il conteggio lo fa **`ast`**, dove i commenti non
+esistono.
+
+🔴 **IL DIFETTO, e il numero è la parte che conta.** **Tre strade su sette** scrivono con la
+chiave di default `rimborso:<rif>`, e `_giornale` è idempotente sull'evento: **la prima che
+arriva scrive, le altre sono no-op**. E muovono importi diversi per costruzione. Misurato sul
+banco: prenotazione da **40800**, l'ospite cancella il giorno dell'arrivo (scaglione 50% →
+registra **20800**), poi l'admin dispone il rimborso che muove il **totale** → la riga resta
+**20800**. ⇒ **Escono 40800, il libro ne dichiara 20800: 20000 cents non registrati.**
+⛔ E non è contabilità interna: `fase177.aggrega_dac7` somma per host **proprio quelle righe**,
+quindi il numero sbagliato finisce nel **rendiconto fiscale**. Un prodotto che paga giusto e
+rendiconta falso si scopre da fuori, e tardi.
+
+🔑 **UNA COLLISIONE STRUTTURALE NON È ANCORA UN DANNO — ed è la lezione che vale oltre questo
+caso.** Il primo tentativo aveva l'arrivo a **+2 giorni**: la collisione si vedeva (seconda
+scrittura no-op) ma i due importi **coincidevano**, 40800 = 40800, **differenza zero**. Era una
+prova che *sembrava* una prova. La condizione in cui i numeri divergono è
+`fase111_cancellazione.POLITICHE["flessibile"]` = `((1, 10000), (0, 5000))`: con **almeno un
+giorno** all'arrivo il rimborso è pieno, **il giorno stesso** è metà. ⇒ Trovare la condizione
+in cui la collisione fa male **è il lavoro**, non un dettaglio.
+
+✅ **LE ALTRE DUE COPPIE: MISURATE, NON DEDOTTE — e due terzi del caso si chiudono da soli.**
+· **ospite → host: FRENATA dal prodotto** (409 `gia_cancellata`). E i freni sono **due in
+  cascata**: neutralizzato il primo, la respinge il controllo sull'escrow già liquidato. Più
+  robusto di quanto sembrasse leggendo il codice.
+· **host → admin: collide ma gli importi COINCIDONO** (entrambe muovono il totale) → danno
+  **zero**. ⚠️ Coincidono **per valore, non per costruzione**: c'è una guardia che se ne accorge
+  il giorno in cui smettono. *Un'assoluzione senza data di scadenza è una speranza.*
+⇒ La richiesta al fondatore è **una riga su una coppia sola**, con le altre due escluse **con
+la misura e non col ragionamento**.
+
+⛔ **DUE VOLTE HO AVUTO IN MANO UN RISULTATO FALSO CHE SEMBRAVA PULITO.** (a) tre `409` su tre
+coppie — *«nessun difetto, tutte frenate»* — prodotti dal **mio parametro sbagliato**: passavo
+il riferimento dove serviva l'`idem_key`, e `rilascia()` rifiutava **prima** di arrivare al
+giornale. (b) La guardia sul freno che restava verde: non era cieca, c'era **un secondo freno**
+che io non sapevo esistesse.
+🔑 **Non mi ha salvata l'attenzione: mi hanno salvata due misure che non tornavano, e il non
+aver scelto la più comoda.** È la forma che stasera è comparsa **quattro volte** in quattro
+posti diversi (un `| head` troncato, un `grep` che contava un commento, un file vuoto, questo
+409): **il vuoto e il pieno si scrivono uguale**, quindi rileggere lo stesso strumento non
+aiuta — serve una seconda misura **di forma diversa**.
+
+🗣️ **«ME L'HA DETTO IL COORDINAMENTO» NON È UNA FONTE — e l'ho imparato sbagliando due volte
+di fila, la seconda mentre scrivevo la regola contro quell'errore.**
+Quella notte le corsie di coordinamento erano **due**: `core-auto-ce` (di sei giorni prima,
+rimasta viva) e `maxdanno-a5` (nuova). Ho attribuito alla seconda **due cose dette dalla
+prima**: (a) la conferma che «COMMIT» non basta per B1, (b) l'episodio in cui un «0
+discrepanze» della corsia A era stato attribuito al mio albero. Entrambe vere, **entrambe di
+un'altra voce**. La seconda l'ho commessa **nel messaggio in cui formulavo la regola**, usandola
+come esempio.
+🔑 È la stessa forma di *«una misura senza il suo soggetto e il suo momento non è una misura»*,
+applicata alle **frasi** invece che ai numeri: quando gli interlocutori sono più d'uno, «me
+l'hanno detto» non identifica nessuno. ⇒ Si cita **chi** e **quando**, come per un comando si
+cita la macchina e l'ora.
+⚠️ E il modo in cui è venuta fuori vale quanto la regola: **l'ha trovata la parte accusata**,
+che ha detto «non trovo questa cosa nei miei messaggi» invece di lasciar correre una lode
+sbagliata. Una correzione che *toglie* meriti a chi la fa è la più affidabile che esista.
+
+✅ **AGGIORNAMENTO 3 settembre — DUE COSE CHIUSE, e una era un limite che avevo dichiarato io.**
+
+**[A] IL LIMITE SUL FRENO `ospite → host` È CHIUSO: LA GUARDIA CADE, e i freni erano TRE.**
+Contati **togliendoli uno per uno**, non leggendo il codice — leggendo ne avevo visti due:
+```
+macchina sana ................................ tace
+tolto F1 (stato del pendente, `pp.info`) ..... tace   <- respinge l'ESCROW
+tolto F2 (escrow, `garanzia.stato`) .......... tace   <- respinge lo STATO
+tolti F1+F2 .................................. tace   <- respinge il CAS
+tolti F1+F2+F3 (`marca_cancellata_host`) ..... ROSSA
+```
+🔑 **UN CAS NON SI NEUTRALIZZA SOSTITUENDO UNA LETTURA**, ed è la lezione riutilizzabile:
+`gia_cancellata` esce da **due** punti diversi (`:6465`, lo stato *letto* prima; `:6519`,
+l'esito del **compare-and-swap**), e il secondo non legge — **scrive o non scrive**. ⇒ Se una
+guardia non cade e sotto c'è una scrittura atomica, il guasto va messo **lì**; altrimenti si
+conclude «guardia cieca» quando la verità è «difesa profonda». Le due diagnosi portano a lavori
+opposti: riscrivere una guardia sana, oppure documentarla. La differenza **non era deducibile**:
+solo la misura poteva sceglierla.
+
+**[B] LA CASELLA 2 SI MUOVE: da «0 su 7 provate fino ai soldi» a «2 su 7».**
+`test_rimborso_arriva_al_gateway.py` (3 guardie) non guarda il codice di risposta né la riga nel
+giornale: mette una **spia all'ultimo anello prima dei soldi veri** e verifica **cosa riceve il
+gateway**. Strade percorse per intero: *rimborso disposto da admin* (arriva il **totale**) e *il
+pulsante dei rimborsi dovuti* (arriva il **dovuto** dichiarato in lista), entrambe **sul
+pagamento giusto**.
+⛔ **E ci ho trovato un freno che non conoscevo: il prodotto NON SI FIDA DEL PROPRIO DATABASE.**
+Prima di offrire il pulsante il pannello chiede a Stripe cosa risulta su quel pagamento
+(*«LA VERITÀ LA DICE STRIPE»*); se la fonte non conferma, la riga compare **senza pulsante** e
+dichiara `manca: verifica_stripe`. ✅ E **non è un freno solo grafico**: chiamando la rotta
+direttamente, rifiuta lo stesso. Senza una guardia sarebbe stato **codice difensivo mai
+eseguito** (D19) — ora ce l'ha.
+**Matrice guasto × guardia:** sano **0 cadute** · i soldi non partono **2** · importo dimezzato
+**2** · il freno conferma sempre **1**.
+
+🔑 **E IL DENOMINATORE «2 SU 7» ERA SBAGLIATO — la misura giusta è «2 SU 2».** Confondeva due
+domande diverse: **7** sono le strade che **registrano** un rimborso dovuto, **2** sono i punti
+che possono **farlo partire** verso il gateway — e sono **entrambi provati**. Misurato con
+`ast`: nel prodotto vivo le chiamate a `.rimborsa(` sono esattamente `_admin_rimborso` e
+`_admin_rimborsa_dovuto`; il terzo punto del progetto (`fase35_pagamenti.py`) è importato
+**solo** dal **vecchio stack** (`fase36`, `fase41`), non dal percorso vivo. ⚠️ Un `grep` ne
+avrebbe contati **tre**: a `fase83_server.py:6795` c'è un **commento** che nomina
+`fase85.rimborsa()` — S6 di nuovo, terzo attrezzo in una notte.
+⇒ **Il modello è: le sette strade mettono in lista, i soldi partono solo col pulsante di una
+persona.** Il pannello lo dichiara (*«i soldi NON partono da soli»*) ed è una **scelta**, non un
+limite — quindi ora è **sorvegliata**: `test_NESSUNA_strada_fa_partire_i_soldi_DA_SOLA` grida il
+giorno in cui compare un rimborso automatico, o in cui uno dei due punti smette di chiamare il
+gateway (allora le righe resterebbero in lista e **i soldi non tornerebbero più**, con la lista
+che continua a compilarsi).
+📈 **AGGIORNATO: da 1 su 7 a 5 SU 7** (`test_rimborso_in_lista_col_dovuto.py`, 4 guardie).
+Provate che arrivino in lista **con l'importo giusto**: cancellazione **ospite** (lo scaglione) ·
+cancellazione **host** → il **totale**, perché la colpa è dell'host · pagamento **non
+confermabile** → il **totale**, perché soldi arrivati su una prenotazione morta non comprano
+niente · **rimborso admin** → il **totale** · **controversia** → **l'importo deciso
+dall'arbitro**. Restano **2 su 7**: pagamento tardivo, anticipo tardivo.
+**Matrice**: sano → tacciono · importo **riscritto** → **4 cadute** · riga **mai scritta** →
+**4 cadute**.
+🔑 **Le ultime due scelte non erano «le più facili», ed è il criterio che le rende utili: sono
+le due dove l'importo NON lo calcola una regola — lo digita una persona (admin) o lo decide un
+arbitro (controversia).** Nelle altre cinque, se la regola è giusta il numero è giusto; qui un
+numero arbitrario deve attraversare tutta la catena **senza che nessuno lo riscriva**. Se
+qualcosa lo ricalcolasse, l'arbitrato verrebbe **scavalcato in silenzio**: la decisione
+resterebbe nel verbale e i soldi seguirebbero un'altra cifra.
+✅ **E due comportamenti sani, misurati e ora sorvegliati:** (a) se il gateway rifiuta, il
+rimborso admin **grida** (`passi FALLITI=['soldi_restituiti'] → rischio PERDITA PIENA`) e la
+riga **resta in lista col pulsante**, così una persona può ritentare — un rimborso che fallisse
+in silenzio sarebbe un ospite che aspetta per sempre; (b) la controversia mette in lista
+l'importo giusto **senza pulsante** (`manca: date_liberate`), ed è **voluto**: il soggiorno c'è
+stato, le date sono legittimamente occupate, e il rimborso resta manuale.
+⛔ **E la prima stesura della seconda guardia era DEBOLE: diceva `>= 1` invece del totale**,
+perché non avevo ancora misurato il valore vero — sarebbe passata **anche con l'importo
+sbagliato**, cioè proprio col difetto che deve prendere. Misurato (totale 40800 → in lista
+40800) e sostituita con l'uguaglianza. *Una guardia scritta prima della misura tende al verde:
+non perché si bari, ma perché l'unica soglia che si sa scrivere è quella che non può fallire.*
+⚠️ Nota misurata di passaggio: una cancellazione avvenuta **prima** del pagamento dichiara
+rimborso **0** e non scrive nessuna riga — lì la collisione di chiavi non si presenta.
+
+⛔ **IL PEZZO CHE RESTA HA UN NOME E UNA CIFRA: 2 SU 7 NON PROVATE** — pagamento tardivo e
+anticipo tardivo. La domanda aperta è *«ogni strada arriva in lista con il dovuto GIUSTO?»* —
+diversa da quella chiusa («dal pannello i soldi partono davvero», 2 su 2).
+⚠️ **Denominatore 7 e non 6, dichiarato:** non ho misurato quali delle sette debbano comparire
+in lista — `_admin_rimborso` scrive *e* fa partire, quindi potrebbe legittimamente non aspettare
+nessun pulsante. **Meglio un 1/7 che dichiara di non sapere, di un 1/6 che assume.**
+📌 **E il difetto dei 200 euro vive esattamente lì**: è una strada che arriva in lista con
+l'importo **sbagliato**. ⇒ Il lavoro che resta e la riparazione che aspetta la parola del
+fondatore sono **la stessa cosa vista da due lati** — chiudere l'uno chiude metà dell'altro.
+
+🔑 **E UNA RIGA SOLA PER TRE EPISODI, perché la forma vale più dei casi: IL TESTO MENTE SUL
+CODICE.** In una notte, con **tre attrezzi diversi**, un conteggio testuale ha contato come
+codice ciò che era **commento**: (a) il mio primo `grep` sulle strade di rimborso → **8** invece
+di 7; (b) `collaudi/caccia_finti_verdi.py:66` (`if "skipTest" in sorgente`) che ha accusato due
+guardie **perché i loro commenti dicevano di non usarlo**; (c) il conteggio dei punti che
+chiamano il gateway → **3** invece di 2, per un commento a `fase83_server.py:6795`. ⇒ **Chi conta
+il codice leggendo il testo conta anche le frasi che parlano del codice.** Si conta sull'AST,
+dove i commenti non esistono.
+
+⛔ **LIMITI DICHIARATI (D18 punto 3).**
+· ⚠️ **La casella 2 resta NON spuntata: 2 su 7, non 7 su 7.** Le altre cinque non sono state
+  percorse fino ai soldi. E un fatto misurato che spiega perché non basterà ripetere lo stesso
+  lavoro: i punti che chiamano il **gateway** sono **tre**, contro **sette** strade che scrivono
+  nel giornale — ⇒ alcune strade registrano il dovuto e lasciano che i soldi partano **da
+  un'altra parte, o da una persona**. Quali, è il lavoro che resta.
+· Il gateway di queste prove è **finto**: dimostrano che la richiesta parte con l'importo e il
+  riferimento giusti, **non** che Stripe la esegua né che il denaro arrivi all'ospite.
+· **La casella 2 NON è spuntata**, e i due numeri restano separati: **7 su 7 strade censite e
+  sorvegliate**, **0 su 7 provate fino ai soldi che tornano**. Questo lavoro dimostra un
+  **difetto**, che è un'altra cosa e non chiude la riga d'arrivo.
+· La guardia sul freno `ospite → host` **non è stata vista rossa**: con un solo freno
+  neutralizzato resta verde **per ridondanza, non per cecità** — distinzione possibile solo
+  perché il guasto è stato iniettato invece che ragionato. Per vederla cadere servirebbe
+  toglierli entrambi.
+· La riparazione tocca `fase83_server.py`, cioè **produzione**: non fatta, parola non chiesta.
+
+📍 **DOV'È LA GUARDIA DEL DIFETTO, e perché non è qui dentro.**
+`test_rimborso_collisione_importi.py` è **rosso di proposito**: descrive il comportamento
+corretto di un difetto **vivo**, quindi nell'albero renderebbe rossa la suite intera e nulla
+sarebbe consegnabile. Sta in
+`C:\Users\MaxDanno\Desktop\Core_Auto_GUARDIE_PRONTE\test_rimborso_collisione_importi.py`
+(sha256 `fc920e9459d99db5f1b72341b3d381161558e96716d6d3487a0f2769583f4bf8`), **fuori dalla
+cartella temporanea** perché una dimostrazione che vive in `/tmp` sparisce con la sessione e
+smette di essere una dimostrazione.
+⛔ **Non è nella cartella di transito `DA_METTERE_IN_collaudi_*`**, ed è una scelta: quella
+serve a segnalare gli artefatti **orfani da sistemare**, e un file che sta fuori *di proposito*
+ci diventerebbe un falso allarme a ogni giro — un falso allarme è un difetto quanto un allarme
+mancato (ferrea 10).
+⚠️ **Il posto giusto sarebbe un ramo git suo** (versionata, su GitHub, senza richiesta di
+unione: `ci.yml` parte solo su `master`, quindi non accenderebbe nessun giro). Non fatto:
+committare pretende «procedi al commit» (B1), e quella frase non è stata detta. Fino ad allora
+la cartella durevole è il ripiego dichiarato, non la soluzione.
+
 ### 💸 IL WEBHOOK DICEVA «GESTITO» QUATTRO VOLTE MENTRE PERDEVA L'ESITO — 2 settembre, corsia B
 
 **Cosa è stato creato.** `test_webhook_stripe_esiti_persi.py` (file nuovo, 4 guardie): sorveglia

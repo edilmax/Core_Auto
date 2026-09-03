@@ -33,22 +33,38 @@ GitHub master       5ba642a   <- "Merge PR #133 from lavoro-a"; genitori 936c2a8
                                  TRE unioni in questa giornata: #131 (lavoro-d), #132
                                  (lavoro-c), #133 (lavoro-a). Nessuna richiesta aperta.
 rami                lavoro-a/b/c/d: TUTTI dentro master (0 commit fuori)
-CARICATORE          6117      <- PowerShell vera (MSYSTEM vuoto, PATH dal registro), da
-                                 fermo, USCITA 0, misurato il 2026-09-03 su f9d5365
-                                 (master con la #138 dentro) piu' le 17 guardie della
-                                 corsia C su test_fase65_split_payment.py, PRIMA di
-                                 lanciare (S14).
-                                 ⛔ RIMISURATO A OGNI PASSAGGIO, MAI SOMMATO. In una
-                                 notte la cifra si e' mossa OTTO volte (6069 · 6070 ·
-                                 6076 · 6080 · 6085/6089/6093 nell'albero C · 6097 ·
-                                 6100 · 6117), e ogni volta il numero di un'ora prima
-                                 era gia' falso.
-                                 ⚠️ E dopo un merge non e' MAI la somma dei due in
-                                 conflitto: le corsie partono da basi diverse. I due
-                                 lati di QUESTO conflitto dicevano 6100 (corsia A) e
-                                 6097 (corsia C); il vero e' 6117, che non e' nessuno
-                                 dei due. Chi risolve prendendo «il piu' grande» sta
-                                 indovinando (D22).
+CARICATORE          6133      <- PowerShell vera (MSYSTEM vuoto, PATH dal registro), da
+                                 fermo, USCITA 0, misurato il 2026-09-03 su a602f8e
+                                 (master con la #138 della corsia A e la #139 della
+                                 corsia C dentro) piu' le 16 guardie dei rimborsi della
+                                 corsia B, PRIMA di lanciare (S14).
+                                 ⛔ E QUESTA RIGA E' LA PROVA DELLA REGOLA CHE PORTA, non
+                                 solo un numero. In una notte la cifra si e' mossa NOVE
+                                 volte (6069 · 6070 · 6076 · 6080 · 6085/6089/6093
+                                 nell'albero C · 6097 · 6100 · 6116 · 6117 · 6133), e
+                                 ogni volta il numero di un'ora prima era gia' falso.
+                                 ⚠️ TRE conflitti su questa cifra, TRE volte nessuno dei
+                                 due lati aveva ragione:
+                                   #138  lati 6096 e 6080  ->  vero **6100**
+                                   #139  lati 6100 e 6097  ->  vero **6117**
+                                   #140  lati 6117 e 6116  ->  vero **6133**
+                                 Un conflitto su una cifra NON si risolve scegliendo un
+                                 lato: git mette a confronto due numeri entrambi veri
+                                 *nel loro albero* e nessuno dei due vero qui. Si
+                                 rimisura col caricatore (D22). La regola non e'
+                                 un'impressione: e' stata verificata tre volte su numeri
+                                 diversi.
+                                 ⚠️ E nemmeno si eredita da un'altra corsia: nello stesso
+                                 momento alberi diversi misuravano 6116 e 6117, perche'
+                                 sono **perimetri diversi**. I conteggi sono per albero e
+                                 non viaggiano.
+                                 Le 16 guardie della corsia B sono: censimento delle 7
+                                 strade (6) · coppie sulla stessa chiave (2) · arrivo al
+                                 gateway (4) · dovuto in lista (4).
+                                 ⛔ NON comprende `test_rimborso_collisione_importi.py`,
+                                 ROSSO di proposito (difetto vivo, fuori dall'albero
+                                 finche' non c'e' la riparazione): se un domani entra,
+                                 questa cifra sale e va **rimisurata**, non sommata.
                               ⚠️ IN ESECUZIONE NE RISULTERANNO MENO, e non e' un difetto:
                                  `openssl` non e' nel PATH di PowerShell (verificato: la
                                  riga esce vuota), quindi le guardie sul ripristino dei
@@ -1126,9 +1142,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: f9d5365
+CONSEGNE AGGIORNATE A: a602f8e
 
-SUITE ATTUALE: Ran 6117 test
+SUITE ATTUALE: Ran 6133 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -1350,7 +1366,7 @@ SCARTO:                    5  <- ✅ I CINQUE HANNO UN NOME, dal 2026-08-28. Per
                                  computer del fondatore copre CINQUE TEST IN MENO di quanto
                                  sembri, e quei cinque riguardano il RIPRISTINO DEI BACKUP.
 
-FILE DI TEST: 408             <- Get-ChildItem -Filter 'test_*.py' -File (radice; identico
+FILE DI TEST: 412             <- Get-ChildItem -Filter 'test_*.py' -File (radice; identico
                                  con -Recurse: nessun test in sottocartelle). Era 407: il
                                  file in piu' e' test_webhook_stripe_esiti_persi.py.
                                  ⛔ Questa cifra la sorveglia `audit_millimetrico` SOLO
@@ -1363,31 +1379,42 @@ AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3, ed e' la
             ragione dello scarto fra RACCOLTI e ESEGUITI (5 di scarto: le guardie openssl).
-MISURATO:  2026-09-03 su f9d5365 (master con la #138 della corsia A dentro) piu' le 17
-           guardie della corsia C su test_fase65_split_payment.py non ancora committate,
+MISURATO:  2026-09-03 su a602f8e (master con la #138 della corsia A e la #139 della corsia
+           C dentro) piu' le 16 guardie dei rimborsi della corsia B non ancora committate,
            col caricatore, da PowerShell VERA (MSYSTEM svuotato e PATH ricostruito dal
            registro), e PRIMA di lanciare (S14):
            python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"
-           -> 6117   (USCITA 0)
-           ⛔ RIMISURATO dopo l'unione, non sommato e non scelto fra i due numeri in
-           conflitto. Le tre corsie avevano scritto cifre diverse (+20 / +6 / +17) su
-           BASI DIVERSE: dopo il merge la cifra vera non e' nessuna delle loro ne' la
-           loro somma, e chi risolve prendendo «la piu' grande» sta indovinando (D22).
+           -> 6133   (USCITA 0)
+           ⚠️ AGGIORNATO ANCHE QUI, e non e' pignoleria: fino al 2026-09-03 questo blocco
+           diceva «su 402ae87 -> 6096» sotto una riga che dichiarava 6100. Quel 6096 era un
+           fatto **vero** (misurato dalla corsia A sul suo albero, prima del commit), ma
+           dopo l'unione non era piu' la **provenienza** del numero dichiarato. Rilievo
+           della corsia C: e' S10 nella versione mite — il documento non mente sul
+           risultato, mente su **da dove viene**, che e' proprio cio' che D22 chiede di
+           scrivere accanto a una cifra. ⇒ Chi cambia `CARICATORE` cambia **anche** questo
+           blocco: se no la distanza si ricrea a ogni giro, e ogni volta e' piu' vecchia.
+           ⛔ La guardia non lo prende: `test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO`
+           controlla che `Ran N` coincida col caricatore e che le **etichette** esistano,
+           **non** che il numero dentro `MISURATO:` coincida. Resta verde comunque: e' un
+           documento un po' falso, non un cancello rotto.
+           ⛔ RIMISURATO, non sommato e non scelto fra i due numeri in conflitto (6117 e
+           6116): un conto che torna resta un conto, non una misura (D22).
 SUITE GIRATA (corsia A):  Ran 6090 · OK (skipped=4) · USCITA_DIRETTA=0 · 38,1 minuti,
-           nell'albero PRINCIPALE sui byte della corsia A. Il 6090 era stato DICHIARATO
-           prima di vederlo, e il patto era «qualunque altro numero si insegue finche' non
-           ha un nome». Non e' servito. ⚠️ Quel giro NON copre le riparazioni fatte dopo
-           dalla revisione incrociata.
+           nell'albero PRINCIPALE sui byte della corsia A. Dichiarato prima di vederlo.
 SUITE GIRATA (corsia C):  Ran 6092 · OK (skipped=4) · USCITA_DIRETTA=0 · 29,6 minuti,
            nell'albero PRINCIPALE su 95b9526 piu' i byte della corsia C (impronta del diff
-           verificata identica dalle due parti: 757f7dc4…df66). Anche il 6092 era stato
-           DICHIARATO prima di vederlo, ed e' coinciso.
-           ⚠️ NESSUNO DEI DUE GIRI copre i byte di QUESTO commit, che li unisce entrambi.
+           verificata identica dalle due parti: 757f7dc4…df66). Dichiarato prima di vederlo.
+SUITE GIRATA (corsia B):  Ran 6111 · OK (skipped=4) · USCITA_DIRETTA=0 · 29,0 minuti,
+           nell'albero PRINCIPALE su f9d5365 piu' i byte della corsia B (impronta del diff
+           verificata identica dalle due parti: 02bd91e6…b370c).
+           ⚠️ NESSUNO DEI TRE GIRI copre i byte di QUESTO commit, che li unisce tutti.
            Il giudice su quei byte e' la CI sulla richiesta di unione, non questi numeri.
            ⛔ E lo scarto raccolti-eseguiti ha sempre lo stesso nome: le 5 guardie sul
            ripristino dei backup, che si mettono da parte da sole quando `openssl` non e'
            nel PATH di PowerShell. Un calo con un nome non si insegue e non si arrotonda
-           (D23 punto 3).
+           (D23 punto 3). La relazione ESEGUITI = RACCOLTI - 5 e' stata verificata TRE
+           volte in una notte, su tre alberi diversi: 6095-5=6090 (corsia A),
+           6097-5=6092 (corsia C), 6116-5=6111 (corsia B).
 COMANDO:  python -m unittest discover -s . -p "test_*.py"
 ```
 
