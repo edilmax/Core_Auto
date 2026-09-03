@@ -403,6 +403,116 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🔧 SEI DIFETTI NEGLI ATTREZZI, NON NEL PRODOTTO — 2/3 settembre, corsia di coordinamento
+
+**Cosa è stato creato.** Niente: nessun modulo, nessuna guardia, nessuna riparazione. Questa
+voce è **solo un censimento**, e sta qui perché sei misure fatte durante la notte vivevano
+unicamente in una conversazione — cioè da nessuna parte. ⛔ Ognuna riguarda un **attrezzo del
+progetto**, non il prodotto: sono gli strumenti che ci dicono se stiamo bene ad avere un
+difetto, ed è la categoria che il progetto raccoglie apposta (D18).
+
+**① IL PRE-VOLO DICE «SI PUÒ LANCIARE» E NON GUARDA DUE COSE CHE POI BOCCIANO. Prezzo
+misurato: due giri di suite intera, ~80 minuti in tutto.**
+· Il suo controllo 1 conta i **TEST** (`6080 == 6080`, giusto) ma **non i FILE di test**, e
+  **non esegue `collaudi/audit_millimetrico.py`**. Aggiungendo un file di collaudo, la riga
+  `README.md:46` (`407 file di test`) è invecchiata: il pre-volo è uscito **7 su 7 verde** e la
+  suite ha bocciato 40 minuti dopo con `atteso=408 | trovato=407`.
+  ⚠️ E si legge al contrario di come viene naturale: l'audit chiama «atteso» il valore
+  **calcolato dal codice** e «trovato» quello **scritto nel documento**.
+· **Non esegue nemmeno il cricchetto statico**, quindi il `B106` di `bandit` su
+  `stripe_secret_key="sk"` **non poteva uscire prima della CI**: secondo giro da 40 minuti.
+⇒ Un attrezzo che promette «puoi partire» e non copre ciò che boccia dopo promette più di
+quanto mantenga. Non è rotto: è **incompleto in modo non dichiarato**, ed è peggio, perché chi
+lo vede verde smette di guardare.
+
+**② `collaudi/caccia_finti_verdi.py:66` CONTA I COMMENTI — è S6 dentro un nostro attrezzo.**
+La riga è `if "skipTest" in sorgente:` — **ricerca testuale, non `ast`**. Risultato misurato:
+ha segnalato due prove di `test_webhook_stripe_esiti_persi.py` in F1 («TEST SALTATI») quando
+gli `skipTest` erano già stati **tolti**, e le uniche occorrenze rimaste erano **due commenti
+che dicevano di non farlo**. ⇒ **Accusa un file perché dichiara di non fare la cosa.** Il `-> ?`
+accanto al rilievo lo confermava: il criterio cerca `skipTest(` **con la parentesi**, il
+commento non ce l'ha, quindi non sa nemmeno dire il motivo.
+🔑 E il fatto più utile è che **due attrezzi davano risposte opposte sullo stesso file** —
+pre-volo controllo 3 **OK**, caccia F1 **segnala**. Quando due misure divergono, una delle due
+sta misurando la cosa sbagliata: qui aveva ragione il pre-volo. La cura è `ast`, come già fa
+per le altre famiglie. Rimedio provvisorio adottato: **un commento non nomina il costrutto che
+gli attrezzi cercano** — è S17 generalizzata (come non nomina la cifra).
+
+**③ `collaudi/prima_di_dire_fatto.py` SEGNA «FATTO» SULLA BATTERIA QUANDO L'ELENCO È STATO
+RILETTO, NON QUANDO I DIECI HANNO UN ESITO.** La voce 2 del foglio unico dice «✅ FATTO» per
+D24, ma quel FATTO significa *l'elenco è stato stampato e riletto*. Le risposte le deve dare
+chi lavora, e la notte del 2 settembre la batteria **non era stata passata**: rifatta, ha dato
+**4 collaudi non eseguiti** (oracolo · fuzzing/estremi · giudice esterno · mutazione) e 1
+parziale. ⇒ È la distinzione **COSTRUITO ≠ COLLEGATO** applicata all'attrezzo che dovrebbe
+sorvegliarla, e il modo in cui S7 sopravvive dentro un controllo che sembra chiuderla.
+
+**④ LO STATO DEL VPS, misurato in sola lettura, e l'avvertenza sul paracadute.**
+`ssh root@76.13.44.167`, nessuna scrittura, nessun deploy. Misure: il checkout dell'host gira
+**`40a9c8c`** (richiesta #129), cioè **indietro di sei unioni** al momento della misura; sonde
+**positiva** `https://bookinvip.com/` → **200** e **negativa** `/api/bunker/invarianti` → **403**
+(non un 404, che non proverebbe nulla); disco al **17%**; container `app`, `nginx`, `backup`
+tutti sani.
+⛔ **E il passo D17 [1b] va rifatto PRIMA dello scambio.** Misurato: gira `sha256:6035f6ab…`
+(= `casavip-app:latest`, 29 agosto) mentre **`:prec` = `sha256:56f716d0…`** (28 agosto). Oggi
+`:prec` punta alla versione *precedente* a quella viva — che è giusto **finché non si
+deploya**; nel momento in cui si scambia, va ri-agganciato all'immagine che gira **davvero**,
+altrimenti un ritorno indietro salta **due** versioni invece di una. Sbagliato sei volte in
+sei giorni: non lo prende la buona volontà, lo prende il passo che **misura invece di
+scegliere**.
+
+**⑤ LA CHIAVE STRIPE DI PROVA C'È — ma la memoria diceva il posto sbagliato, e la prima
+ricerca aveva concluso il falso.** *(misura della corsia di coordinamento `maxdanno-a5`, con
+il suo errore dentro perché è la parte che vale)*
+La memoria del progetto la dava in `Desktop\stripe.com prova.txt`. È stata **spostata**: sta in
+`Desktop\TXT_VECCHI\stripe.com prova.txt`, 1070 byte, `grep -c sk_test` → **1** (verificato due
+volte, da due sessioni, **senza aprire il file e senza stampare niente** — ferrea 14 rispettata
+mentre si cerca proprio una chiave).
+🔑 **Come la prima ricerca aveva concluso che non esistesse:** un `find` chiuso da `| head -20`.
+La lista si è fermata a venti righe e il file stava più in basso. ⇒ **Una lista troncata è stata
+letta come una risposta negativa.** Non è un errore di ricerca: è un errore di **lettura dello
+strumento** — `head` non dice «non c'è altro», dice **«non ti mostro altro»**.
+📌 Perché la cosa conta: senza quella chiave il banco dei soldi **misura sé stesso**. Coi
+numeri della memoria: con la chiave **OK 34 / NON OK 0**; senza, **OK 19 / NON OK 15**.
+Diciannove verdi che non hanno guardato niente.
+
+**⑥ LA SUITE MUTA I `fase*.py` VERI, E LO DICHIARA IN CINQUE POSTI CHE NESSUNO LEGGE INSIEME.**
+Durante un giro è stato visto, in sola lettura dall'albero principale, un `fase167_credito_single_use.py`
+**modificato**: `self._now = orologio or (…)` → `orologio and (…)`. Una riga, un operatore: la
+forma di un mutante. Ricontrollato due minuti dopo: **ripristinato da solo**, `git diff` vuoto.
+⇒ Era una mutazione **viva**, e il ripristino ha funzionato.
+⛔ **Ma la conseguenza resta intera: mentre la suite gira, i file di produzione sul disco NON
+sono il codice.** Chi ne legge uno in quella finestra legge una versione guasta di proposito, e
+se il giro viene ucciso nell'istante sbagliato **il mutante resta**.
+Cercata la dichiarazione: **c'è, cinque volte** — `test_profondo_pagine_api.py:27`,
+`test_registro_regressioni.py:42`, `test_migrazioni_schema.py:47`,
+`test_fase106_dynamic_pricing.py:157` — tutte con la disciplina giusta (*ripristinato byte per
+byte, sha256 confrontato prima e dopo*). 🔑 **Quindi la forma esatta del rilievo non è «lo fa
+senza dirlo», è: lo dice ogni test per conto suo, e non lo dice nessuno per la suite.** Un
+docstring lo legge chi apre quel test; l'informazione serve a chi **lancia**, e serve **prima**
+di aprire un file da quell'albero.
+📌 E `test_fase106:157` scrive *«da ripristinare byte per byte **se la sessione muore a metà**»*:
+il caso peggiore era già previsto per iscritto. Non è una svista — è un **rischio noto e
+accettato**, e la differenza cambia chi decide: non è una riparazione da fare, è una scelta da
+confermare o rivedere, e la conferma il fondatore.
+
+**⑦ LE QUATTRO FORME DELLO STESSO DIFETTO, incontrate tutte in una notte.** Non è una teoria:
+sono quattro istanze misurate, e il valore sta nel fatto che **una sola si è chiusa da sola**.
+| forma | istanza misurata | cosa chiede |
+|---|---|---|
+| comando giusto sulla **domanda sbagliata** | `git diff` che non vede la parte già in staging (32 righe invece di 304, e l'elenco dei file sembrava completo) · `\|\| ` dopo un tubo che legge l'esito di `tail` e non fa mai partire il ripiego · `grep '\.\.\. ERROR'` che conta le righe di **log** | passare **anche la domanda** a cui il comando deve rispondere |
+| previsione con la **grammatica di un fatto** | «la corsia A non tocca il registro» — dedotto, mai misurato: erano **+101 righe** | dire «non l'ho misurato» invece di affermarlo |
+| il **vuoto** che si scrive come il pieno | una lista troncata da `head` letta come «non c'è» · un registro che non cresce in **8 secondi** letto come «bloccato» (cresceva: la finestra era troppo stretta) | allargare la finestra, e non far dire a uno zero più di quello che dice |
+| numero vero con l'**etichetta di un altro** | `46,7 min` contato come durata quando era un giro **fermato** dal tetto: è un limite inferiore, non un tempo | ⭐ **si è chiusa da sola**: l'etichetta deriva dal bersaglio, non da chi scrive |
+🔑 L'ultima riga è quella che indica la strada: **le prime tre chiedono ancora qualcosa a chi
+lavora, la quarta no.** Un rimedio che non dipende dalla buona volontà vale più di tre che ci
+dipendono — ed è il motivo per cui vale la pena cercarne altre come quella (D22).
+
+**Come si verifica questa voce.** Ogni misura qui sopra porta il comando che l'ha prodotta o il
+file e la riga. Nessuna riparazione è stata fatta: i difetti sono **censiti**, non chiusi, e
+questo è deliberato — ripararli mentre si scrivono è il meccanismo che allarga lo scopo e
+consuma le notti. ⛔ Nessuna riga di questa voce va letta come un elenco di lavori: **cosa
+manca sta in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
+
 ### 💸 SONO USCITI 408,00 E IL LIBRO NE HA REGISTRATI 208,00 — 2 settembre, corsia B (casella 2 del Blocco 1)
 
 **Cosa è stato creato.** `test_rimborso_ogni_strada.py` (4 guardie, censimento delle strade) e
