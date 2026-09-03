@@ -52,7 +52,6 @@ from __future__ import unicode_literals
 import ast
 import io
 import os
-import subprocess
 import unittest
 
 QUI = os.path.dirname(os.path.abspath(__file__))
@@ -132,33 +131,59 @@ def schedari_dichiarati(cartella=CARTELLA_COLLAUDI):
 #  LA DOMANDA A GIT
 # ----------------------------------------------------------------------------------
 
-def _git(*argomenti):
-    """(codice_uscita, uscita). `None` SOLO se il comando `git` non esiste proprio."""
-    try:
-        esito = subprocess.run(["git"] + list(argomenti), cwd=QUI,
-                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               timeout=30)
-    except OSError:
-        return None
-    return (esito.returncode, esito.stdout.decode("utf-8", "replace"))
+_PRE_VOLO = []          # cache: il modulo si carica una volta sola
+
+
+def _pre_volo():
+    """`collaudi/prima_di_lanciare.py`, caricato una volta sola: la SUA `_git`.
+
+    ⛔ QUI NON SI APRE UN SOTTOPROCESSO NUOVO, ed e' una lezione pagata da questo stesso
+    file. La prima versione aveva un suo `subprocess.run(["git", ...])`, e il **cricchetto
+    degli strumenti statici** l'ha bocciata in CI con TRE segnalazioni nuove -- ruff `S603`,
+    bandit `B404` e `B603` -- che si sarebbero potute chiudere solo con un `nosec`
+    permanente. `test_pipeline_ci.py` aveva gia' scritto la regola, parola per parola: *«il
+    sottoprocesso non comprava niente e costava una chiamata che gli strumenti statici
+    contano come nuova (S603/B603), cioe' un `nosec` permanente per nulla»*. Qui il
+    sottoprocesso comprerebbe **zero**: la chiamata a git esiste gia', collaudata, in
+    `collaudi/`, e il criterio non deve stare scritto in due posti (e' la malattia che
+    questo progetto ha gia' pagato sei volte in un giorno).
+    """
+    if not _PRE_VOLO:
+        import importlib.util
+        p = os.path.join(QUI, "collaudi", "prima_di_lanciare.py")
+        spec = importlib.util.spec_from_file_location("_pv_schedari", p)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        _PRE_VOLO.append(m)
+    return _PRE_VOLO[0]
+
+
+def git_risponde():
+    """C'e' git, e siamo dentro un repository? Si chiede PRIMA di tutto il resto.
+
+    Serve perche' la `_git` di casa restituisce `None` in DUE casi diversi -- git assente e
+    comando uscito diverso da zero -- e per `check-ignore` il secondo caso e' proprio la
+    risposta buona («non e' ignorato»). Senza questa domanda preliminare, un computer senza
+    git direbbe «tutti gli schedari viaggiano», che e' il verde peggiore di tutti.
+    """
+    return _pre_volo()._git(QUI, "rev-parse", "--git-dir") is not None
 
 
 def puo_viaggiare(percorso_relativo):
-    """Questo file puo' finire in un commit? `None` se git non c'e'.
+    """Questo file finirebbe in un commit? Da chiamare solo se `git_risponde()`.
 
     Due strade, e ne basta una: o e' gia' **tracciato** (allora viaggia comunque, anche se
     una riga di `.gitignore` lo nomina), oppure **non e' ignorato** (allora un `git add` lo
     prende). Chiedere una sola delle due direbbe il falso in un caso vero.
+
+    `check-ignore` stampa il percorso ed esce **zero** quando il file E' ignorato: quindi
+    qui «viaggia» corrisponde a `None`, cioe' all'uscita diversa da zero. E' il contrario
+    di quello che sembra leggendo in fretta, ed e' scritto apposta.
     """
-    tracciato = _git("ls-files", "--error-unmatch", percorso_relativo)
-    if tracciato is None:
-        return None
-    if tracciato[0] == 0:
+    pv = _pre_volo()
+    if pv._git(QUI, "ls-files", "--error-unmatch", percorso_relativo) is not None:
         return True
-    ignorato = _git("check-ignore", "-q", percorso_relativo)
-    if ignorato is None:
-        return None
-    return ignorato[0] != 0
+    return pv._git(QUI, "check-ignore", percorso_relativo) is None
 
 
 def eccezione_esplicita_nel_gitignore(percorso_relativo, testo_gitignore):
@@ -212,14 +237,14 @@ class TestGliSchedariViaggianoConIlProgetto(unittest.TestCase):
         asserire (l'eccezione esplicita in `.gitignore`), dicendo a chiare lettere che e'
         il ripiego."""
         schedari, letti = schedari_dichiarati()
-        git_risponde = _git("rev-parse", "--git-dir") is not None
-        if not git_risponde:
+        con_git = git_risponde()
+        if not con_git:
             with io.open(os.path.join(QUI, ".gitignore"), encoding="utf-8") as f:
                 gitignore = f.read()
         prigionieri = []
         esaminati = 0
         for percorso, modulo in sorted(schedari.items()):
-            if git_risponde:
+            if con_git:
                 esito = puo_viaggiare(percorso)
             else:
                 esito = eccezione_esplicita_nel_gitignore(percorso, gitignore)
@@ -238,7 +263,7 @@ class TestGliSchedariViaggianoConIlProgetto(unittest.TestCase):
             "`collaudi/bombe_a_tempo.json`, col motivo scritto di fianco "
             "(denominatore: %d schedari su %d moduli letti · misurato %s)"
             % (", ".join(prigionieri), esaminati, letti,
-               "chiedendolo a git" if git_risponde
+               "chiedendolo a git" if con_git
                else "SENZA git: solo l'eccezione scritta in .gitignore, che e' il "
                     "ripiego debole e non prova l'ordine delle righe"))
 

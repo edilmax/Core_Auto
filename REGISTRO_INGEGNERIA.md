@@ -424,16 +424,49 @@ $ git log --all -- collaudi/scheda.json    ->  (vuoto, in tutta la storia del pr
 ```
 
 `.gitignore` riga 25 dice `*.json` e si prendeva anche **lo schedario dove una macchina
-scrive se un blocco è finito**. Quindi: ogni sessione rimisurava, spuntava, e buttava. Il
-traguardo «6 su 6» era irraggiungibile **per costruzione** — la stessa forma del difetto del
-21 agosto (la scadenza legata al commit invece che all'impronta), in un punto nuovo.
+scrive se un blocco è finito**.
 
-⛔ **È lo sbaglio S13 per la QUINTA volta**, e le prime quattro sono scritte dentro lo stesso
-`.gitignore`: `bombe_a_tempo.json`, `.claude/settings.json`, `baseline_tariffe.txt`,
-`baseline/*.json` — una di esse annota testualmente *«S13 di nuovo»*. Quattro riparazioni
-singole su quattro file, **e nessun criterio**: perciò il difetto è tornato su un file nuovo
-senza che nessuno se ne accorgesse. Un'eccezione scritta a mano protegge il file di oggi,
-mai quello di domani.
+⛔ **CORREZIONE, e la devo a un'altra corsia che me l'ha contestata con una misura.** Qui e
+nel messaggio del commit `b714b94` c'era scritto *«ogni sessione rimisurava, spuntava e
+buttava»*. **È falso**, e manderebbe chi legge a cercare la cosa sbagliata: dentro una
+cartella la scheda **resta**. Rimisurato alle 13:22 del 2026-09-03 su cinque copie di
+lavoro, con l'impronta del blocco **identica** in quelle che ce l'hanno (`4218eaec4034`),
+cioè sullo stesso identico codice dei soldi:
+
+```
+Core_Auto      nessuna scheda        ->  0 su 6
+Core_Auto_A    2 righe, 2 spuntate       (scritta alle 01:15, ancora li' 12 ore dopo)
+Core_Auto_B    nessuna scheda        ->  0 su 6
+Core_Auto_C    nessuna scheda        ->  0 su 6
+Core_Auto_B2   2 righe, 2 spuntate
+```
+
+Il difetto non è che la misura si perda: è che **non viaggia**. Cinque cartelle, lo stesso
+codice, **due risposte diverse** alla domanda «è finito?» — e la CI, un clone o un altro
+computer ne vedono sempre e solo una: **nessuna**. Quindi ciò che era irraggiungibile per
+costruzione non era «6 su 6 su una macchina»: era che due copie dessero la **stessa**
+risposta, e che il giudice (la CI, regola ferrea 8) ne vedesse una qualunque.
+
+⚠️ **E come ci sono arrivato sbagliando, perché è la parte istruttiva.** Alle 00:53 avevo
+misurato «nessuna scheda in nessuna delle quattro cartelle», ed era **vero in quel
+momento**: quella di `Core_Auto_A` è nata alle 01:15, *dopo*. Due misure entrambe vere in due
+istanti diversi, e una conclusione sul **meccanismo** tirata da un'unica fotografia. Una
+fotografia dice cosa c'era, mai perché.
+
+⛔ **È lo sbaglio S13 per la quinta volta — e dichiaro il denominatore, se no è
+un'impressione con le cifre (S4).** Le eccezioni `!` già scritte in `.gitignore` sono
+**quattro**: `!collaudi/bombe_a_tempo.json`, `!.claude/settings.json`,
+`!collaudi/baseline_tariffe.txt`, `!collaudi/baseline/*.json` — e una di esse annota
+testualmente *«S13 di nuovo»*. La scheda è la **quinta**, contando questa. Quattro
+riparazioni singole su quattro file, **e nessun criterio**: perciò il difetto è tornato su un
+file nuovo senza che nessuno se ne accorgesse. Un'eccezione scritta a mano protegge il file
+di oggi, mai quello di domani.
+
+⚖️ **IL ROVESCIO, dichiarato perché esiste davvero.** Da adesso una riga **falsa** nella
+scheda si propaga a chiunque cloni, mentre prima restava prigioniera di una cartella. Il
+prezzo è reale, ed è il prezzo giusto: una riga falsa ora è **visibile** — a un `diff`, a un
+`checkout`, a una revisione — mentre prima era invisibile *e* sbagliata lo stesso. E la
+scadenza sull'impronta la scarta da sola appena il codice dei soldi cambia.
 
 **Cosa è stato creato.** `test_schedari_viaggiano_con_git.py` — 11 guardie, **STATO: acceso**,
 nessuna dipendenza nuova. Non nomina nessun file: **deriva** gli schedari dall'albero
@@ -462,6 +495,25 @@ assolvono da soli»*. Era la guardia contro le memorie che spariscono, **sparita
 — lo stesso difetto un piano più su. Riscritta con un'asserzione in **entrambi** i rami: senza
 git si asserisce l'eccezione esplicita in `.gitignore`, dichiarando nel messaggio che è il
 ripiego debole.
+
+🔧 **E LA CI HA BOCCIATO LA GUARDIA UNA SECONDA VOLTA, sul job `qualita`.** Tutti gli altri
+14 job verdi (`full-suite`, `full-suite-311`, `money-smoke`, `copertura`, `mutazione`,
+`immagine`, `atheris`, `w3c`, `accessibilita`, CodeQL): rosso solo il **cricchetto degli
+strumenti statici**, con **tre segnalazioni nuove**, tutte da questo file e tutte sullo stesso
+punto — `ruff S603`, `bandit B404` e `B603`: aveva un `subprocess.run(["git", ...])` suo.
+
+⛔ **La cura NON era un `nosec`**, e la regola era già scritta in `test_pipeline_ci.py`
+riga 2081, parola per parola: *«il sottoprocesso non comprava niente e costava una chiamata
+che gli strumenti statici contano come nuova (S603/B603), cioè un `nosec` permanente per
+nulla»*. Qui comprava zero: la chiamata a git **esiste già**, collaudata, in
+`collaudi/prima_di_lanciare.py` (`_git`), e `test_pipeline_ci.py` la carica già così. Ora la
+carica anche questa guardia — un criterio scritto in due posti è la malattia che questo
+progetto ha già pagato sei volte in un giorno. Misurato dopo: cricchetto **ruff 686 = 686**,
+**bandit 548 = 548**, zero nuove, e la fotografia **non** è stata rifatta.
+⚠️ Il prezzo dichiarato: la `_git` di casa risponde `None` in **due** casi diversi (git
+assente, e comando uscito diverso da zero) e per `check-ignore` il secondo è la risposta
+*buona*. Perciò si chiede prima `git_risponde()`: senza, un computer senza git direbbe «tutti
+gli schedari viaggiano», che è il verde peggiore di tutti.
 
 📝 **Un buco nel pre-volo, annotato e non riparato qui.** Il controllo 1 confronta il numero
 di **test** dichiarato in `RIPRENDI_QUI.md` col caricatore (S14) e mi ha fermato in tempo.
