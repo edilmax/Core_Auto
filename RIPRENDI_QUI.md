@@ -33,15 +33,17 @@ GitHub master       5ba642a   <- "Merge PR #133 from lavoro-a"; genitori 936c2a8
                                  TRE unioni in questa giornata: #131 (lavoro-d), #132
                                  (lavoro-c), #133 (lavoro-a). Nessuna richiesta aperta.
 rami                lavoro-a/b/c/d: TUTTI dentro master (0 commit fuori)
-CARICATORE          6080      <- PowerShell vera (MSYSTEM vuoto, PATH dal registro), da
-                                 fermo, USCITA 0, misurato il 2026-09-02 sulla base
-                                 61e251d con la toppa della corsia B applicata, PRIMA di
-                                 lanciare (S14). Le 4 in piu' sono le guardie del webhook
-                                 Stripe in test_webhook_stripe_esiti_persi.py. Prima era
-                                 6076 (corsia A +1 in test_dac7_notti.py, corsia C +6
-                                 sull'allarme CI). ⛔ Rimisurato, non sommato: 6076+4 e'
-                                 un conto a mente, e un conto a mente non e' una misura
-                                 (D22).
+CARICATORE          6100      <- PowerShell vera (MSYSTEM vuoto, PATH dal registro), da
+                                 fermo, USCITA 0, misurato DOPO l'unione di origin/master
+                                 (95b9526) dentro il lavoro della corsia A, PRIMA di
+                                 lanciare (S14).
+                                 ⛔ Rimisurato, non sommato, ed e' il punto: i due lati
+                                 del conflitto dicevano 6096 (corsia A: +20 sul blocco
+                                 SOLDI) e 6080 (master: +4 guardie del webhook Stripe).
+                                 Nessuno dei due era il numero vero dopo l'unione, e
+                                 nemmeno la loro somma sarebbe stata una misura. Il
+                                 conflitto su questa riga si risolve col caricatore, mai
+                                 scegliendo uno dei due lati (D22).
                               ⚠️ IN ESECUZIONE NE RISULTERANNO MENO, e non e' un difetto:
                                  `openssl` non e' nel PATH di PowerShell (verificato: la
                                  riga esce vuota), quindi le guardie sul ripristino dei
@@ -1119,9 +1121,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 61e251d
+CONSEGNE AGGIORNATE A: 549056a
 
-SUITE ATTUALE: Ran 6080 test
+SUITE ATTUALE: Ran 6100 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -1356,18 +1358,25 @@ AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3, ed e' la
             ragione dello scarto fra RACCOLTI e ESEGUITI (5 di scarto: le guardie openssl).
-MISURATO:  2026-09-02 su 2469c17 (albero della corsia C, allineato al commit della corsia
-           A, con le 6 guardie dell'allarme CI non ancora committate), col caricatore, da
-           PowerShell VERA (MSYSTEM svuotato e PATH ricostruito dal registro), e PRIMA di
-           lanciare (S14):
+MISURATO:  su 402ae87 (albero della corsia A, con le 20 guardie nuove sul blocco SOLDI non
+           ancora committate), col caricatore, da PowerShell VERA (MSYSTEM svuotato e PATH
+           ricostruito dal registro), e PRIMA di lanciare (S14):
            python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"
-           -> 6076   (USCITA 0, 1,57s)
-           ⛔ RIMISURATO dopo l'allineamento, non ereditato: la corsia di coordinamento
-           aveva previsto 6076 e il numero coincide, ma una previsione che torna resta
-           una previsione. Qui i numeri si misurano (D22).
-           ⛔ La stessa domanda rifatta da Git Bash da' 6076 anche li'. Le due shell
+           -> 6096   (USCITA 0)
+           ⛔ RIMISURATO, non sommato: un conto che torna resta un conto, non una misura (D22).
+           ⛔ La stessa domanda rifatta da Git Bash da' lo stesso numero. Le due shell
            concordano, quindi qui lo scarto di PATH non c'entra -- e valeva la pena
            chiederlo, perche' e' proprio dove S11 ci ha gia' fatto perdere due ore.
+SUITE GIRATA:  Ran 6090 · OK (skipped=4) · USCITA_DIRETTA=0 · 38,1 minuti, nell'albero
+           PRINCIPALE sui byte della corsia A (impronta del diff verificata identica dalle due
+           parti). ⛔ Il 6090 era stato DICHIARATO prima di vederlo -- 6096 raccolti meno i 5
+           delle guardie sui backup che spariscono senza `openssl`, piu' il conto fatto quando
+           i raccolti erano 6095 -- e il patto era «qualunque altro numero si insegue finche'
+           non ha un nome». Non e' servito.
+           ⚠️ Quel giro NON copre le riparazioni fatte dopo (revisione incrociata: il cancello
+           su `--con-guasto --scrivi`, i perimetri espliciti, la guardia sull'autoprova
+           svuotata). Il giudice su quei byte e' la CI sulla richiesta di unione, non questo
+           numero.
 COMANDO:  python -m unittest discover -s . -p "test_*.py"
 ```
 

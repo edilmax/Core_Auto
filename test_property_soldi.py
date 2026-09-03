@@ -341,5 +341,473 @@ class TestRelazioniMetamorficheSullaControversia(unittest.TestCase):
                          "la stessa decisione detta in due modi da' due split diversi")
 
 
+# ═════════════════════════════════════════════════════════════════════════════════════════
+# RELAZIONI METAMORFICHE SULL'ARITMETICA DEL DENARO  (blocco SOLDI, riga d'arrivo n.4)
+# ═════════════════════════════════════════════════════════════════════════════════════════
+# ⛔ RELAZIONI, NON ESEMPI, ed e' la differenza che rende questa sezione diversa da tutto
+#    quello che sta sopra. Un invariante guarda UNA chiamata («il totale non e' mai
+#    negativo»); una relazione metamorfica lega DUE chiamate imparentate e la loro uscita
+#    («se raddoppio le notti la fee raddoppia»). Serve dove non esiste un oracolo: non
+#    sappiamo dire quanto DEVE venire, ma sappiamo come devono stare fra loro due conti.
+#    Fonte: Chen et al., ACM Computing Surveys 51(1), 2018; le sei famiglie di
+#    trasformazione (additiva, moltiplicativa, permutativa, invertiva, inclusiva,
+#    esclusiva) sono di Segura et al., IEEE TSE 2016 -- si pescano da li' invece di
+#    inventarle, e ogni relazione qui sotto dichiara la sua famiglia.
+#
+# ⛔ E L'AVVERTIMENTO CHE HA CAMBIATO IL DISEGNO (Potter, «Metamorphic Relations for
+#    Backtests»): LE COMPONENTI A COSTO FISSO NON SCALANO. Qui la fee e' fissa per notte e
+#    il gateway ha un minimo, una parte fissa e un punto fisso iterativo: una relazione
+#    «raddoppio il prezzo, raddoppia tutto» sarebbe FALSA, e un allarme che accusa innocenti
+#    viene spento. Percio' qui non c'e' nessuna relazione moltiplicativa sul prezzo: quella
+#    sulle notti c'e' perche' la fee e' l'unica parte davvero lineare, ed e' stato misurato.
+#
+# 🔑 OGNI RELAZIONE E' SCRITTA UNA VOLTA SOLA, come predicato sugli ingressi concreti. La
+#    usano sia i test con `hypothesis` (che generano gli ingressi) sia la matrice qui sotto
+#    (che li fissa e rompe il motore). Due formulazioni della stessa relazione potrebbero
+#    divergere, e allora una delle due direbbe il falso senza avvisare.
+
+import fase133_split_quote_uguali as SPLIT  # noqa: E402
+
+
+def _mr_prezzo_monotono(p1, p2, notti):
+    """ADDITIVA — pagare di piu' non puo' far scendere il totale dell'ospite."""
+    lo, hi = min(p1, p2), max(p1, p2)
+    return (PS.calcola(lo, notti, 0)["ospite_paga_totale_cents"]
+            <= PS.calcola(hi, notti, 0)["ospite_paga_totale_cents"])
+
+
+def _mr_commissione_non_premia(prezzo, notti, c1, c2):
+    """ADDITIVA — alzare la nostra commissione non puo' far incassare di PIU' all'host.
+    E' la «fee monotonicity» della fonte: prende i segni sbagliati, che sono il difetto
+    piu' banale e piu' caro del percorso del denaro."""
+    lo, hi = min(c1, c2), max(c1, c2)
+    return (PS.calcola(prezzo, notti, lo)["host_incassa_cents"]
+            >= PS.calcola(prezzo, notti, hi)["host_incassa_cents"])
+
+
+def _mr_valuta_estera_costa_di_piu(prezzo, notti, comm):
+    """INCLUSIVA — aggiungere la conversione non puo' costare MENO, e dove l'anticipo non
+    e' compresso deve costare STRETTAMENTE di piu'.
+    ⛔ Il `>=` da solo era un ORNAMENTO, misurato: ignorando la conversione i due conti
+    escono UGUALI, quindi la relazione taceva proprio sul difetto che doveva vedere. La
+    condizione «non compresso» si legge dall'uscita (l'anticipo ha toccato il totale), non
+    dalle viscere del modulo."""
+    euro = PS.calcola(prezzo, notti, comm)
+    estera = PS.calcola(prezzo, notti, comm, valuta_estera=True)
+    if estera["gateway_cents"] < euro["gateway_cents"]:
+        return False
+    compresso = euro["anticipo_online_cents"] >= euro["ospite_paga_totale_cents"]
+    return compresso or estera["gateway_cents"] > euro["gateway_cents"]
+
+
+def _mr_fee_lineare_nelle_notti(prezzo, notti, k):
+    """MOLTIPLICATIVA — k volte le notti, k volte la fee. E' l'unica parte lineare del
+    motore: tutto il resto ha componenti fisse e non scala (vedi il cappello)."""
+    return (PS.calcola(prezzo, notti * k, 0)["fee_cents"]
+            == k * PS.calcola(prezzo, notti, 0)["fee_cents"])
+
+
+def _mr_anticipo_piu_saldo(prezzo, notti, comm):
+    """ADDITIVA — quello che l'ospite paga subito piu' quello che paga in struttura fa
+    esattamente il totale. Nessun centesimo puo' nascere o sparire nel mezzo."""
+    r = PS.calcola(prezzo, notti, comm)
+    return (r["anticipo_online_cents"] + r["saldo_in_loco_cents"]
+            == r["ospite_paga_totale_cents"])
+
+
+def _mr_rimborso_monotono_nei_giorni(pagato, g1, g2, politica):
+    """ADDITIVA — cancellare con piu' anticipo non puo' rendere MENO soldi."""
+    lo, hi = min(g1, g2), max(g1, g2)
+    return (CANC.calcola_rimborso(pagato, lo, politica=politica)["rimborso_cents"]
+            <= CANC.calcola_rimborso(pagato, hi, politica=politica)["rimborso_cents"])
+
+
+def _mr_ripensamento_rende_tutto(pagato, giorni, politica):
+    """INVERTIVA — la finestra di ripensamento rende il 100% a prescindere dalla politica,
+    e dove la politica renderebbe meno deve rendere STRETTAMENTE di piu'.
+    ⛔ Anche qui il `>=` da solo era un ornamento: una finestra IGNORATA da' lo stesso
+    numero della politica, e la relazione taceva. Misurato."""
+    normale = CANC.calcola_rimborso(pagato, giorni, politica=politica)["rimborso_cents"]
+    con = CANC.calcola_rimborso(pagato, giorni, politica=politica,
+                                entro_ripensamento=True)["rimborso_cents"]
+    if con != pagato:
+        return False
+    return not (normale < pagato and con <= normale)
+
+
+def _mr_pulizia_si_scorpora(pagato, giorni, pulizia, politica):
+    """ESCLUSIVA — la pulizia e' sempre resa, quindi togliere la pulizia dal pagato e
+    chiedere il rimborso del resto deve dare lo stesso conto. Se le due strade divergono,
+    l'esito dipende da COME si formula la stessa domanda."""
+    if pulizia >= pagato:
+        return True
+    con = CANC.calcola_rimborso(pagato, giorni, politica=politica,
+                                fee_pulizia_cents=pulizia)["rimborso_cents"]
+    senza = CANC.calcola_rimborso(pagato - pulizia, giorni, politica=politica)["rimborso_cents"]
+    return con == pulizia + senza
+
+
+def _mr_quote_sommano_al_totale(totale, n):
+    """ADDITIVA — dividere fra N ospiti non crea e non perde centesimi."""
+    return sum(SPLIT.riparti_uguale(totale, n)) == totale
+
+
+def _mr_scarto_massimo_un_centesimo(totale, n):
+    """PERMUTATIVA — nessuno paga piu' di un centesimo in piu' di un altro: e' l'unica
+    definizione di «uguale» che regge sugli interi."""
+    quote = SPLIT.riparti_uguale(totale, n)
+    return (not quote) or (max(quote) - min(quote) <= 1)
+
+
+def _mr_piu_partecipanti_quota_minore(totale, n):
+    """INCLUSIVA — aggiungere un partecipante non puo' far salire la quota di chi paga di
+    piu'. Prende il caso in cui il resto viene distribuito storto."""
+    if n <= 1:
+        return True
+    piu, meno = SPLIT.riparti_uguale(totale, n), SPLIT.riparti_uguale(totale, n - 1)
+    return (not piu) or (not meno) or max(piu) <= max(meno)
+
+
+def _mr_doppio_riparto_conserva(totale, n, m):
+    """COMPOSIZIONE — ripartire, e poi ripartire ancora ogni quota, conserva il totale.
+    E' la relazione che prende gli arrotondamenti che si accumulano a ogni passaggio."""
+    return sum(sum(SPLIT.riparti_uguale(q, m))
+               for q in SPLIT.riparti_uguale(totale, n)) == totale
+
+
+class TestRelazioniMetamorficheSulDenaro(unittest.TestCase):
+    """Le dodici relazioni, con gli ingressi generati da Hypothesis invece che scelti da noi."""
+
+    _P = st.integers(min_value=0, max_value=5_000_000)
+    _N = st.integers(min_value=1, max_value=90)
+    _C = st.integers(min_value=0, max_value=6_000_000)
+
+    @_S
+    @given(p1=_P, p2=_P, notti=_N)
+    def test_MR1_pagare_di_piu_non_abbassa_il_totale(self, p1, p2, notti):
+        self.assertTrue(_mr_prezzo_monotono(p1, p2, notti),
+                        "totale non monotono fra %d e %d su %d notti" % (p1, p2, notti))
+
+    @_S
+    @given(prezzo=_P, notti=_N, c1=_C, c2=_C)
+    def test_MR2_piu_commissione_non_fa_incassare_di_piu_all_host(self, prezzo, notti, c1, c2):
+        self.assertTrue(_mr_commissione_non_premia(prezzo, notti, c1, c2),
+                        "commissione piu' alta -> host incassa di PIU' (prezzo=%d notti=%d "
+                        "comm=%d/%d)" % (prezzo, notti, c1, c2))
+
+    @_S
+    @given(prezzo=_P, notti=_N, comm=_C)
+    def test_MR3_la_valuta_estera_non_e_mai_piu_economica(self, prezzo, notti, comm):
+        self.assertTrue(_mr_valuta_estera_costa_di_piu(prezzo, notti, comm),
+                        "la conversione non e' addebitata (prezzo=%d notti=%d comm=%d)"
+                        % (prezzo, notti, comm))
+
+    @_S
+    @given(prezzo=_P, notti=st.integers(min_value=1, max_value=18),
+           k=st.integers(min_value=2, max_value=5))
+    def test_MR4_la_fee_e_lineare_nelle_notti(self, prezzo, notti, k):
+        self.assertTrue(_mr_fee_lineare_nelle_notti(prezzo, notti, k),
+                        "fee non lineare (prezzo=%d notti=%d k=%d)" % (prezzo, notti, k))
+
+    @_S
+    @given(prezzo=_P, notti=_N, comm=_C)
+    def test_MR5_anticipo_piu_saldo_fa_il_totale(self, prezzo, notti, comm):
+        self.assertTrue(_mr_anticipo_piu_saldo(prezzo, notti, comm),
+                        "anticipo+saldo != totale (prezzo=%d notti=%d comm=%d)"
+                        % (prezzo, notti, comm))
+
+    @_S
+    @given(pagato=st.integers(min_value=1, max_value=5_000_000),
+           g1=st.integers(min_value=0, max_value=400),
+           g2=st.integers(min_value=0, max_value=400),
+           politica=st.sampled_from(["flessibile", "moderata", "rigida"]))
+    def test_MR6_cancellare_prima_non_rende_meno(self, pagato, g1, g2, politica):
+        self.assertTrue(_mr_rimborso_monotono_nei_giorni(pagato, g1, g2, politica),
+                        "rimborso non monotono (pagato=%d giorni=%d/%d %s)"
+                        % (pagato, g1, g2, politica))
+
+    @_S
+    @given(pagato=st.integers(min_value=1, max_value=5_000_000),
+           giorni=st.integers(min_value=0, max_value=400),
+           politica=st.sampled_from(["flessibile", "moderata", "rigida", "non_rimborsabile"]))
+    def test_MR7_il_ripensamento_rende_tutto_e_domina_la_politica(self, pagato, giorni, politica):
+        self.assertTrue(_mr_ripensamento_rende_tutto(pagato, giorni, politica),
+                        "il ripensamento non domina (pagato=%d giorni=%d %s)"
+                        % (pagato, giorni, politica))
+
+    @_S
+    @given(pagato=st.integers(min_value=1, max_value=5_000_000),
+           giorni=st.integers(min_value=0, max_value=400),
+           pulizia=st.integers(min_value=0, max_value=200_000),
+           politica=st.sampled_from(["flessibile", "moderata", "rigida"]))
+    def test_MR8_la_pulizia_si_scorpora(self, pagato, giorni, pulizia, politica):
+        self.assertTrue(_mr_pulizia_si_scorpora(pagato, giorni, pulizia, politica),
+                        "la pulizia non si scorpora (pagato=%d giorni=%d pulizia=%d %s)"
+                        % (pagato, giorni, pulizia, politica))
+
+    @_S
+    @given(totale=st.integers(min_value=0, max_value=5_000_000),
+           n=st.integers(min_value=1, max_value=12))
+    def test_MR9_le_quote_sommano_al_totale(self, totale, n):
+        self.assertTrue(_mr_quote_sommano_al_totale(totale, n),
+                        "il riparto non conserva (totale=%d n=%d)" % (totale, n))
+
+    @_S
+    @given(totale=st.integers(min_value=0, max_value=5_000_000),
+           n=st.integers(min_value=1, max_value=12))
+    def test_MR10_nessuno_paga_piu_di_un_centesimo_in_piu(self, totale, n):
+        self.assertTrue(_mr_scarto_massimo_un_centesimo(totale, n),
+                        "riparto non equo (totale=%d n=%d)" % (totale, n))
+
+    @_S
+    @given(totale=st.integers(min_value=0, max_value=5_000_000),
+           n=st.integers(min_value=2, max_value=12))
+    def test_MR11_un_partecipante_in_piu_non_alza_la_quota(self, totale, n):
+        self.assertTrue(_mr_piu_partecipanti_quota_minore(totale, n),
+                        "aggiungere un ospite alza la quota massima (totale=%d n=%d)"
+                        % (totale, n))
+
+    @_S
+    @given(totale=st.integers(min_value=0, max_value=5_000_000),
+           n=st.integers(min_value=1, max_value=8),
+           m=st.integers(min_value=1, max_value=8))
+    def test_MR12_ripartire_due_volte_conserva_il_totale(self, totale, n, m):
+        self.assertTrue(_mr_doppio_riparto_conserva(totale, n, m),
+                        "il doppio riparto perde centesimi (totale=%d n=%d m=%d)"
+                        % (totale, n, m))
+
+
+# ── e adesso la meta' che decide se le dodici qui sopra valgono qualcosa ──────────────────
+_VERO_PS, _VERO_CANC, _VERO_SPLIT = PS.calcola, CANC.calcola_rimborso, SPLIT.riparti_uguale
+
+
+def _guasto_split_butta_il_resto():
+    PS.calcola, CANC.calcola_rimborso = _VERO_PS, _VERO_CANC
+    SPLIT.riparti_uguale = lambda t, n: (lambda q: [min(q)] * len(q) if q else q)(
+        _VERO_SPLIT(t, n))
+
+
+def _guasto_split_tutto_al_primo():
+    def rotto(t, n):
+        q = _VERO_SPLIT(t, n)
+        if not q or len(q) == 1:
+            return q
+        return [sum(q) - min(q) * (len(q) - 1)] + [min(q)] * (len(q) - 1)
+    SPLIT.riparti_uguale = rotto
+
+
+def _guasto_rimborso_scala_rovesciata():
+    def rotto(pagato, giorni, **kw):
+        r = dict(_VERO_CANC(pagato, giorni, **kw))
+        if not kw.get("entro_ripensamento") and type(pagato) is int and pagato > 0:
+            r["rimborso_cents"] = pagato - r["rimborso_cents"]
+        return r
+    CANC.calcola_rimborso = rotto
+
+
+def _guasto_pulizia_non_resa():
+    def rotto(pagato, giorni, **kw):
+        f = kw.get("fee_pulizia_cents", 0) or 0
+        r = dict(_VERO_CANC(pagato, giorni, **kw))
+        if f and type(pagato) is int and pagato > 0 and not kw.get("entro_ripensamento"):
+            r["rimborso_cents"] = max(0, r["rimborso_cents"] - f)
+        return r
+    CANC.calcola_rimborso = rotto
+
+
+def _guasto_ripensamento_ignorato():
+    def rotto(pagato, giorni, **kw):
+        kw = dict(kw)
+        kw["entro_ripensamento"] = False
+        return _VERO_CANC(pagato, giorni, **kw)
+    CANC.calcola_rimborso = rotto
+
+
+def _guasto_commissione_col_segno_piu():
+    def rotto(prezzo, notti, comm, **kw):
+        r = dict(_VERO_PS(prezzo, notti, comm, **kw))
+        r["host_incassa_cents"] += 2 * r["commissione_cents"]
+        return r
+    PS.calcola = rotto
+
+
+def _guasto_valuta_estera_ignorata():
+    def rotto(prezzo, notti, comm, **kw):
+        kw = dict(kw)
+        kw.pop("valuta_estera", None)
+        return _VERO_PS(prezzo, notti, comm, **kw)
+    PS.calcola = rotto
+
+
+def _guasto_fee_forfettaria():
+    def rotto(prezzo, notti, comm, **kw):
+        r = dict(_VERO_PS(prezzo, notti, comm, **kw))
+        r["fee_cents"] = 150
+        return r
+    PS.calcola = rotto
+
+
+def _guasto_un_centesimo_sparisce():
+    def rotto(prezzo, notti, comm, **kw):
+        r = dict(_VERO_PS(prezzo, notti, comm, **kw))
+        if r["saldo_in_loco_cents"] > 0:
+            r["saldo_in_loco_cents"] -= 1
+        return r
+    PS.calcola = rotto
+
+
+def _guasto_tetto_silenzioso_sul_totale():
+    def rotto(prezzo, notti, comm, **kw):
+        r = dict(_VERO_PS(prezzo, notti, comm, **kw))
+        if prezzo > 100_000:
+            r["ospite_paga_totale_cents"] = 0
+        return r
+    PS.calcola = rotto
+
+
+# Griglie piccole e FISSE: qui non si cerca un controesempio (lo fa Hypothesis qui sopra),
+# si chiede a ogni relazione di accendersi. Deterministico e veloce.
+_PREZZI = (0, 1, 100, 1234, 99_999, 1_000_000)
+_NOTTI = (1, 2, 7, 30)
+_COMM = (0, 500, 10_000, 250_000)
+_GIORNI = (0, 1, 5, 14, 60, 365)
+_POLS = ("flessibile", "moderata", "rigida")
+_PAGATI = (1, 100, 10_000, 1_000_000)
+_TOTALI = (0, 1, 7, 101, 999, 1_000_000)
+_ENNE = (1, 2, 3, 5, 12)
+
+
+def _tutte_le_relazioni():
+    """(nome, funzione-che-torna-True-se-la-relazione-REGGE-su-tutta-la-griglia)."""
+    import itertools as _it
+    return (
+        ("MR1 prezzo monotono",
+         lambda: all(_mr_prezzo_monotono(a, b, n)
+                     for a, b in _it.combinations(_PREZZI, 2) for n in _NOTTI)),
+        ("MR2 commissione non premia",
+         lambda: all(_mr_commissione_non_premia(p, n, a, b)
+                     for p in _PREZZI for n in _NOTTI for a, b in _it.combinations(_COMM, 2))),
+        ("MR3 valuta estera costa di piu'",
+         lambda: all(_mr_valuta_estera_costa_di_piu(p, n, c)
+                     for p in _PREZZI for n in _NOTTI for c in _COMM)),
+        ("MR4 fee lineare nelle notti",
+         lambda: all(_mr_fee_lineare_nelle_notti(p, n, k)
+                     for p in _PREZZI for n in (1, 2, 7) for k in (2, 3, 5))),
+        ("MR5 anticipo+saldo = totale",
+         lambda: all(_mr_anticipo_piu_saldo(p, n, c)
+                     for p in _PREZZI for n in _NOTTI for c in _COMM)),
+        ("MR6 rimborso monotono nei giorni",
+         lambda: all(_mr_rimborso_monotono_nei_giorni(p, a, b, pol)
+                     for p in _PAGATI for a, b in _it.combinations(_GIORNI, 2)
+                     for pol in _POLS)),
+        ("MR7 ripensamento rende tutto",
+         lambda: all(_mr_ripensamento_rende_tutto(p, g, pol)
+                     for p in _PAGATI for g in _GIORNI for pol in _POLS)),
+        ("MR8 la pulizia si scorpora",
+         lambda: all(_mr_pulizia_si_scorpora(p, g, f, pol)
+                     for p in _PAGATI for g in _GIORNI for f in (0, 1, 500) for pol in _POLS)),
+        ("MR9 le quote sommano",
+         lambda: all(_mr_quote_sommano_al_totale(t, k) for t in _TOTALI for k in _ENNE)),
+        ("MR10 scarto un centesimo",
+         lambda: all(_mr_scarto_massimo_un_centesimo(t, k) for t in _TOTALI for k in _ENNE)),
+        ("MR11 piu' partecipanti, quota giu'",
+         lambda: all(_mr_piu_partecipanti_quota_minore(t, k) for t in _TOTALI for k in _ENNE)),
+        ("MR12 doppio riparto conserva",
+         lambda: all(_mr_doppio_riparto_conserva(t, k, m)
+                     for t in _TOTALI for k in (2, 3, 5) for m in (2, 3))),
+    )
+
+
+_GUASTI = (
+    ("split: butta il resto", _guasto_split_butta_il_resto),
+    ("split: tutto al primo", _guasto_split_tutto_al_primo),
+    ("rimborso: scala rovesciata", _guasto_rimborso_scala_rovesciata),
+    ("rimborso: pulizia non resa", _guasto_pulizia_non_resa),
+    ("rimborso: ripensamento ignorato", _guasto_ripensamento_ignorato),
+    ("paga: commissione col segno +", _guasto_commissione_col_segno_piu),
+    ("paga: valuta estera ignorata", _guasto_valuta_estera_ignorata),
+    ("paga: fee forfettaria", _guasto_fee_forfettaria),
+    ("paga: un centesimo sparisce", _guasto_un_centesimo_sparisce),
+    ("paga: tetto silenzioso sul totale", _guasto_tetto_silenzioso_sul_totale),
+)
+
+
+class TestLeRelazioniMetamorficheSANNODiventareROSSE(unittest.TestCase):
+    """⛔ SENZA QUESTA CLASSE, LE DODICI RELAZIONI QUI SOPRA NON VALGONO NIENTE.
+
+    Una relazione che regge e' inutile se reggerebbe anche col motore rotto: e' un
+    ornamento, cioe' il verde peggiore -- quello che non ha guardato niente. Regola ferrea
+    2 e D18 punto 2: si prova nelle DUE direzioni.
+
+    ⛔ E UN SOLO GUASTO ASSOLVE. Provando una relazione con un guasto solo non si sa se e'
+    lei a vederlo o se quel guasto rompeva tutto. Serve la MATRICE: dieci guasti per dodici
+    relazioni, e si guarda chi vede cosa. Misurata il 2026-09-02, ha trovato DUE miei
+    ornamenti prima che entrassero nella suite -- MR3 e MR7 erano scritte col `>=`, e un
+    `>=` non distingue «fatto» da «non fatto» quando ignorare la cosa produce l'UGUALE.
+
+    ⛔ B4: nessun `fase*.py` viene toccato. I guasti sostituiscono la funzione nel modulo
+    importato, dentro questo processo, e si ripristinano in `tearDown` anche se il test
+    fallisce.
+    ⚠️ LIMITE DICHIARATO (D18 punto 3): l'iniezione e' al CONFINE OSSERVABILE -- l'uscita
+    della funzione -- non dentro il corpo. Dimostra quindi che la relazione vede QUELLA
+    deviazione osservabile, che e' tutto cio' che un oracolo sull'uscita puo' promettere;
+    non che veda ogni possibile difetto interno.
+    """
+
+    def tearDown(self):
+        PS.calcola = _VERO_PS
+        CANC.calcola_rimborso = _VERO_CANC
+        SPLIT.riparti_uguale = _VERO_SPLIT
+
+    def test_A_MACCHINA_SANA_tacciono_tutte(self):
+        """L'altra direzione, obbligatoria: un allarme che grida sempre viene spento."""
+        for nome, regge in _tutte_le_relazioni():
+            self.assertTrue(regge(), "%s e' rossa a MACCHINA SANA: o la relazione e' "
+                                     "sbagliata, o c'e' un difetto vero" % nome)
+
+    def test_OGNI_relazione_si_accende_su_almeno_un_guasto(self):
+        """Nessun ornamento fra le dodici."""
+        viste = {n: 0 for n, _ in _tutte_le_relazioni()}
+        for _, applica in _GUASTI:
+            self.tearDown()
+            applica()
+            for nome, regge in _tutte_le_relazioni():
+                try:
+                    rossa = not regge()
+                except Exception:
+                    rossa = True
+                if rossa:
+                    viste[nome] += 1
+        self.tearDown()
+        mute = sorted(n for n, v in viste.items() if v == 0)
+        self.assertEqual(mute, [],
+                         "queste relazioni non si accendono su NESSUNO dei %d guasti: sono "
+                         "ornamenti, non guardie" % len(_GUASTI))
+
+    def test_OGNI_guasto_e_visto_da_almeno_una_relazione(self):
+        """L'altra faccia, e non e' la stessa cosa: un guasto che nessuno vede e' un buco
+        di copertura, mentre una relazione muta e' una guardia inutile. Cercare solo gli
+        ornamenti lascerebbe passare i buchi."""
+        ciechi = []
+        for gnome, applica in _GUASTI:
+            self.tearDown()
+            applica()
+            visto = False
+            for _, regge in _tutte_le_relazioni():
+                try:
+                    if not regge():
+                        visto = True
+                        break
+                except Exception:
+                    visto = True
+                    break
+            if not visto:
+                ciechi.append(gnome)
+        self.tearDown()
+        self.assertEqual(ciechi, [],
+                         "nessuna delle %d relazioni vede questi guasti: sono buchi di "
+                         "copertura" % len(_tutte_le_relazioni()))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
