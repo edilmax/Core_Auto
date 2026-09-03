@@ -33,11 +33,16 @@ GitHub master       5ba642a   <- "Merge PR #133 from lavoro-a"; genitori 936c2a8
                                  TRE unioni in questa giornata: #131 (lavoro-d), #132
                                  (lavoro-c), #133 (lavoro-a). Nessuna richiesta aperta.
 rami                lavoro-a/b/c/d: TUTTI dentro master (0 commit fuori)
-CARICATORE          6133      <- PowerShell vera (MSYSTEM vuoto, PATH dal registro), da
-                                 fermo, USCITA 0, misurato il 2026-09-03 su a602f8e
-                                 (master con la #138 della corsia A e la #139 della
-                                 corsia C dentro) piu' le 16 guardie dei rimborsi della
-                                 corsia B, PRIMA di lanciare (S14).
+CARICATORE          6134      <- PowerShell vera (MSYSTEM vuoto, PATH dal registro), da
+                                 fermo, misurato il 2026-09-03 su 463384a nell'albero B,
+                                 PRIMA di lanciare (S14). Era 6133 su a602f8e (master con
+                                 la #138 della corsia A e la #139 della corsia C dentro,
+                                 piu' le 16 guardie dei rimborsi della corsia B): +1 e'
+                                 la guardia della TERZA coppia di rimborso
+                                 (`test_ospite_poi_admin_e_FRENATA_e_il_movimento_si_MISURA`).
+                                 ⛔ Nessun +1 per la guardia dei «200 euro»: era sbagliata
+                                 e non e' mai entrata nel conto (vedi il diario del
+                                 2026-09-03 nel REGISTRO).
                                  ⛔ E QUESTA RIGA E' LA PROVA DELLA REGOLA CHE PORTA, non
                                  solo un numero. In una notte la cifra si e' mossa NOVE
                                  volte (6069 · 6070 · 6076 · 6080 · 6085/6089/6093
@@ -58,13 +63,16 @@ CARICATORE          6133      <- PowerShell vera (MSYSTEM vuoto, PATH dal regist
                                  momento alberi diversi misuravano 6116 e 6117, perche'
                                  sono **perimetri diversi**. I conteggi sono per albero e
                                  non viaggiano.
-                                 Le 16 guardie della corsia B sono: censimento delle 7
-                                 strade (6) · coppie sulla stessa chiave (2) · arrivo al
+                                 Le 17 guardie della corsia B sono: censimento delle 7
+                                 strade (6) · coppie sulla stessa chiave (3) · arrivo al
                                  gateway (4) · dovuto in lista (4).
-                                 ⛔ NON comprende `test_rimborso_collisione_importi.py`,
-                                 ROSSO di proposito (difetto vivo, fuori dall'albero
-                                 finche' non c'e' la riparazione): se un domani entra,
-                                 questa cifra sale e va **rimisurata**, non sommata.
+                                 ⛔ `test_rimborso_collisione_importi.py` NON ESISTE PIU'.
+                                 Accusava un difetto misurato INESISTENTE il 2026-09-03:
+                                 `/api/admin/rimborso` su una prenotazione gia' rimborsata
+                                 non muove un centesimo (risponde `idempotente`), quindi
+                                 il libro che dichiara il dovuto ha ragione. Cancellato.
+                                 Quel che valeva -- il danno SE il freno cadesse -- e' la
+                                 terza guardia sulle coppie, vista rossa sul guasto vero.
                               ⚠️ IN ESECUZIONE NE RISULTERANNO MENO, e non e' un difetto:
                                  `openssl` non e' nel PATH di PowerShell (verificato: la
                                  riga esce vuota), quindi le guardie sul ripristino dei
@@ -1144,7 +1152,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 ```
 CONSEGNE AGGIORNATE A: a602f8e
 
-SUITE ATTUALE: Ran 6133 test
+SUITE ATTUALE: Ran 6134 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -1379,12 +1387,12 @@ AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3, ed e' la
             ragione dello scarto fra RACCOLTI e ESEGUITI (5 di scarto: le guardie openssl).
-MISURATO:  2026-09-03 su a602f8e (master con la #138 della corsia A e la #139 della corsia
-           C dentro) piu' le 16 guardie dei rimborsi della corsia B non ancora committate,
-           col caricatore, da PowerShell VERA (MSYSTEM svuotato e PATH ricostruito dal
-           registro), e PRIMA di lanciare (S14):
+MISURATO:  2026-09-03 su 463384a (albero B; `git rev-parse` dice che coincide con
+           origin/master) piu' le 17 guardie dei rimborsi della corsia B non ancora
+           committate, col caricatore, da PowerShell VERA (MSYSTEM svuotato e PATH
+           ricostruito dal registro), e PRIMA di lanciare (S14):
            python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"
-           -> 6133   (USCITA 0)
+           -> 6134   (USCITA 0)
            ⚠️ AGGIORNATO ANCHE QUI, e non e' pignoleria: fino al 2026-09-03 questo blocco
            diceva «su 402ae87 -> 6096» sotto una riga che dichiarava 6100. Quel 6096 era un
            fatto **vero** (misurato dalla corsia A sul suo albero, prima del commit), ma
@@ -3274,6 +3282,26 @@ costerebbe una suite intera per una parola (regola ferrea 6).
 > un ornamento. È lavoro su file di test, non su un documento: **va chiesto a parte**, e da solo
 > costerebbe una suite intera (regola ferrea 6). Resta 🟠, e adesso si sa esattamente cosa
 > costa: due punti in un file, non una parola in un altro.
+
+> 🔴 **2026-09-03, corsia B — LA CAUSA VERA È PIÙ PICCOLA E PIÙ RIPETIBILE: quel numero si
+> scrive A MANO IN DUE POSTI.** Aggiornando il conteggio ho corretto la riga `CARICATORE` e
+> **non** `SUITE ATTUALE: Ran N test`, che è quella che la guardia legge davvero. Rosso
+> `6133 != 6134` su un lavoro in cui il numero era stato **misurato bene** — caricatore, da
+> PowerShell vera, uscita letta. ⚠️ E non è una svista isolata: **la corsia C mi aveva fatto lo
+> stesso rilievo il giorno prima, sulla stessa riga.** Ripetere un errore già segnalato è il
+> segno che a mancare non è l'attenzione, è la struttura.
+>
+> 🔑 **Finché quel numero si scrive a mano in due posti, tornerà**: chi aggiorna corregge il
+> posto che ha in mente, non quello che la guardia legge. Due riparazioni possibili, da valutare
+> **insieme** a B14 perché toccano la stessa regex:
+> · **(a)** la guardia legge **lo stesso posto** in cui scrive l'uomo — una riga sola, e le
+>   altre la citano invece di ripeterla;
+> · **(b)** il numero non lo scrive più l'uomo: lo produce un **attrezzo**, in un posto solo.
+>
+> ⚠️ **Solo (b) chiude anche la causa**, ed è la lezione di D22 e del paracadute `:prec`: un
+> obbligo affidato alla buona volontà si rompe di nuovo. (a) rende l'errore più difficile, (b)
+> lo rende **non rappresentabile**. ⛔ È lavoro su file di test e attrezzi, **non in un `.md`**:
+> va chiesto a parte come B14, e da solo costa una suite intera (ferrea 6).
 
 ### 🟠 B13 — I QUATTRO CLAMP DIFENSIVI DI `fase59` SONO CODICE CHE NON FA NIENTE
 *(dal giro di mutazione del 2026-08-24, B5.)* Le righe **318, 320, 338, 494** di
