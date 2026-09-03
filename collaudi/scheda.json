@@ -1,0 +1,22 @@
+{
+ "50691c557e6e": {
+  "blocco": 1,
+  "comando": "python collaudi/esame_soldi.py --scrivi",
+  "commit": "463384a",
+  "condizione": "le dimostrazioni z3 sugli invarianti GIRANO in CI, e i test che le portano NON risultano saltati",
+  "denominatore": 54,
+  "esito": true,
+  "impronta": "4218eaec4034",
+  "quando": "2026-09-03T10:58:54"
+ },
+ "c3cf3da4543f": {
+  "blocco": 1,
+  "comando": "python collaudi/esame_soldi.py --scrivi",
+  "commit": "463384a",
+  "condizione": "esistono le relazioni metamorfiche sull'aritmetica del denaro",
+  "denominatore": 15,
+  "esito": true,
+  "impronta": "4218eaec4034",
+  "quando": "2026-09-03T10:58:54"
+ }
+}

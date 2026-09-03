@@ -403,6 +403,75 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🗂️ LA SCHEDA SPUNTAVA LE CASELLE E GIT LE BUTTAVA VIA — 3 settembre, corsia B2
+
+**Il sintomo che ha fatto aprire l'indagine.** Tre giorni di lavoro e il Blocco 1 (SOLDI)
+continuava a rispondere **0 su 6** a chiunque lo aprisse, mentre il commit `85aea8b` della
+notte prima dichiara nel suo messaggio *«Il Blocco 1 passa da 0 su 6 a 2 su 6»*. Non
+sbagliava nessuno dei due: sono **due computer diversi**.
+
+**LA CAUSA, misurata su `463384a` (master pulito), non dedotta.**
+
+```
+$ python collaudi/scheda.py --blocco 1     ->  righe nella scheda: 0   ·  0 su 6
+$ python collaudi/esame_soldi.py --scrivi  ->  scritta: blocco 1 · esito True · denominatore 54
+                                               scritta: blocco 1 · esito True · denominatore 15
+$ python collaudi/scheda.py --blocco 1     ->  righe nella scheda: 2   ·  2 su 6
+$ git status --porcelain                   ->  (NIENTE)
+$ git add --dry-run collaudi/scheda.json   ->  The following paths are ignored by one of
+                                               your .gitignore files: collaudi/scheda.json
+$ git log --all -- collaudi/scheda.json    ->  (vuoto, in tutta la storia del progetto)
+```
+
+`.gitignore` riga 25 dice `*.json` e si prendeva anche **lo schedario dove una macchina
+scrive se un blocco è finito**. Quindi: ogni sessione rimisurava, spuntava, e buttava. Il
+traguardo «6 su 6» era irraggiungibile **per costruzione** — la stessa forma del difetto del
+21 agosto (la scadenza legata al commit invece che all'impronta), in un punto nuovo.
+
+⛔ **È lo sbaglio S13 per la QUINTA volta**, e le prime quattro sono scritte dentro lo stesso
+`.gitignore`: `bombe_a_tempo.json`, `.claude/settings.json`, `baseline_tariffe.txt`,
+`baseline/*.json` — una di esse annota testualmente *«S13 di nuovo»*. Quattro riparazioni
+singole su quattro file, **e nessun criterio**: perciò il difetto è tornato su un file nuovo
+senza che nessuno se ne accorgesse. Un'eccezione scritta a mano protegge il file di oggi,
+mai quello di domani.
+
+**Cosa è stato creato.** `test_schedari_viaggiano_con_git.py` — 11 guardie, **STATO: acceso**,
+nessuna dipendenza nuova. Non nomina nessun file: **deriva** gli schedari dall'albero
+sintattico di `collaudi/*.py` (una costante di modulo costruita con `os.path.join(...)` su un
+nome che finisce in `.json`) e pretende che ognuno **finisca in un commit** — chiedendolo a
+git con `ls-files` **oppure** `check-ignore`, non leggendo il `.gitignore` e concludendo, che
+è proprio il ragionamento vietato da S13. Denominatore dichiarato a ogni giro: **2 schedari
+su 70 moduli letti**.
+
+**Vista ROSSA prima della riparazione (D20), col messaggio per intero:**
+`AssertionError: Lists differ: [] != ['collaudi/scheda.json (dichiarato da collaudi/scheda.py)']`
+— e verde dopo l'eccezione `!collaudi/scheda.json`, con `git add --dry-run` che risponde
+`add 'collaudi/scheda.json'`. Le altre 10 guardie provano il **metodo** su sorgenti finte, e
+tre di esse sono falsi allarmi veri incontrati costruendola: `STATO = "/root/drip_facebook.json"`
+(file del VPS, non del progetto), la stringa `".json"` dentro le tuple `ESTENSIONI`/`TESTUALI`
+(un'estensione non è un file), e un percorso costruito dentro una funzione.
+
+⚠️ **E versionare la scheda NON congela un verde vecchio.** `scheda.stato()` scarta da sola
+una riga la cui `impronta` non corrisponde più al codice del blocco che quella casella
+guarda: l'impronta è lo sha dei **24 moduli dei soldi**, non il commit. La scadenza resta
+meccanica; cambia solo che la misura **viaggia**.
+
+🩹 **Un difetto in questa stessa guardia, trovato dal pre-volo e non da me.** La prima
+versione faceva `skipTest` quando git non risponde. Il controllo 3 l'ha bocciata: *«2 test si
+assolvono da soli»*. Era la guardia contro le memorie che spariscono, **sparita in silenzio**
+— lo stesso difetto un piano più su. Riscritta con un'asserzione in **entrambi** i rami: senza
+git si asserisce l'eccezione esplicita in `.gitignore`, dichiarando nel messaggio che è il
+ripiego debole.
+
+📝 **Un buco nel pre-volo, annotato e non riparato qui.** Il controllo 1 confronta il numero
+di **test** dichiarato in `RIPRENDI_QUI.md` col caricatore (S14) e mi ha fermato in tempo.
+Ma il `README.md` dichiara anche il numero di **file** di test, e quello **nessun controllo
+del pre-volo lo guarda**: lo prende solo `collaudi/audit_millimetrico.py`, che gira **dentro**
+la suite. Costo misurato oggi: un giro intero di suite (34 minuti) per una cifra — `atteso=413
+file di test · trovato=412` — cioè esattamente il danno che S14 descrive, in una variante che
+la cura di S14 non copre. La cura sarebbe estendere il controllo 1 alle due cifre invece che a
+una; non si fa in questo intervento perché lo scopo dichiarato è un altro (regola ferrea 15).
+
 ### 💸 SONO USCITI 408,00 E IL LIBRO NE HA REGISTRATI 208,00 — 2 settembre, corsia B (casella 2 del Blocco 1)
 
 **Cosa è stato creato.** `test_rimborso_ogni_strada.py` (4 guardie, censimento delle strade) e
