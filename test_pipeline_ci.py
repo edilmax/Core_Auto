@@ -10896,7 +10896,10 @@ class TestLEsameDeiSoldiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         parametri giusti: se qualcuno rompesse il comando che lancia, questa guardia
         resterebbe VERDE. Quella meta' vive fuori dalla suite e costa due minuti.
         """
-        import subprocess
+        # `subprocess` e' gia' importato a livello di modulo (riga 70): un secondo import
+        # qui dentro era un doppione, e il cricchetto l'ha contato come segnalazione B404
+        # NUOVA facendo cadere `qualita` in CI. Il rilievo si chiude nel CODICE, non
+        # rifacendo la fotografia: era davvero un doppione, non un falso allarme.
         esame = self._esame()
 
         class _EsitoFinto(object):
