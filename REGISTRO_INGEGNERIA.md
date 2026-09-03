@@ -873,6 +873,170 @@ file di test · trovato=412` — cioè esattamente il danno che S14 descrive, in
 la cura di S14 non copre. La cura sarebbe estendere il controllo 1 alle due cifre invece che a
 una; non si fa in questo intervento perché lo scopo dichiarato è un altro (regola ferrea 15).
 
+### 📐 IL 3 SETTEMBRE — la casella 5 non si chiude perché il GIUDICE costa più del tetto, e abbiamo misurato quanto
+
+**Nessun file di produzione toccato, nessuna guardia scritta.** Questa voce non racconta un
+difetto riparato: racconta una **misura di fattibilità**, che è un risultato e non l'assenza di
+uno. Corsia C, blocco 1 «SOLDI», casella 5 (zero punti scoperti sul percorso del denaro).
+⛔ La casella **resta aperta**, e adesso si sa *perché* e *quanto costerebbe chiuderla*.
+
+#### 1. Il Giudice accende SEI occhi su N, in ordine alfabetico — e su due moduli esclude il test del modulo
+
+`collaudi/mutazione_prodotto.py:1907` → `scelti = sorveglianti[:tetto_test]`, con
+`tetto_test=6` (riga 1856) e i sorveglianti raccolti in **ordine alfabetico del nome file**.
+
+| modulo | punti | sorveglianti | USA | fuori | il suo test DEDICATO |
+|---|---|---|---|---|---|
+| `fase65_split_payment` | 59 | 4 | 4 | 0 | ✅ dentro |
+| `fase101_stripe_connect` | 50 | 7 | 6 | 1 | ✅ dentro (2°) |
+| `fase131_payout_dashboard` | 62 | 13 | 6 | 7 | ✅ dentro (4°) |
+| `fase87_stripe_webhook` | 15 | **63** | 6 | **57** | ⛔ **FUORI, 24° su 63** |
+| `fase85_pagamenti_stripe` | 60 | **84** | 6 | **78** | ⛔ **FUORI, 29° su 84** |
+
+I sei che verrebbero usati su `fase87` sono `admin_rimborso_money, audit_console,
+benchmark_sqlite, bombardamento_calendario_tu, bombardamento_chat_prove,
+bombardamento_concorrente`: un banco di prova, una console d'audit, un bombardamento sul
+calendario — **e non il test del modulo**.
+🔑 Il commento dell'attrezzo avverte che l'ordine alfabetico *«non ha niente a che vedere col
+COSTO»*. È vero e incompleto: **non ha niente a che vedere nemmeno con la PERTINENZA.** Un giro
+di serie su quei due produrrebbe sopravvissuti **credibili e senza significato** — la forma
+peggiore di numero sbagliato.
+⚠️ E il rapporto punti/sorveglianti del censimento **mente** per lo stesso motivo: quello che
+predice i sopravvissuti è `punti / min(sorveglianti, 6)`, e ordinare i moduli col primo dà un
+ordine diverso — e sbagliato.
+
+#### 2. Il terzo occhio uccide ZERO
+
+```
+2 occhi:  50 provati · 13 uccisi · 37 sopravvissuti
+3 occhi:  50 provati · 13 uccisi · 37 sopravvissuti      IDENTICO
+```
+`test_copertura_onesta` non ha ucciso **nemmeno un mutante in più**. Non è un occhio in più: è
+**un occhio chiuso che costa come se fosse aperto**.
+⇒ Conseguenza sul metodo: **la scala degli occhi non si sale per costo crescente, si sale per
+potere di uccisione** — e il potere non si conosce prima, si scopre un gradino alla volta. Il
+gradino da 2 occhi è costato **dieci secondi** ed è stato l'investimento migliore della giornata.
+
+#### 3. 🔑 «Quanto costa» non è una domanda finché non dici CHI PAGA
+
+Lo stesso «costo di un punto» ha dato **tre valori diversi**, tutti miei, tutti misurati:
+```
+20,3 s   sei processi separati (uno per modulo), sommati
+12,2 s   un processo solo, `python -m unittest a b c`, lanciato da fuori
+ 4,5 s   quello che l'attrezzo DICHIARA e paga davvero
+```
+⛔ E la parte che un lettore non ricostruirebbe da solo: **il secondo non era più vicino al vero
+del primo — era sbagliato in un altro modo.** Il primo paga sei avvii dell'interprete, il
+secondo uno, l'attrezzo nessuno (è già dentro un processo Python). ⇒ Non esiste un fattore di
+conversione fra le tre misure, e infatti **con 7 occhi l'attrezzo paga di PIÙ di me**
+(205,6 contro 181,8), non di meno: l'ipotesi «l'attrezzo costa sempre meno» è **falsa, misurata**.
+👉 Da qui la regola dell'etichetta: un costo non si chiama «Ns», si chiama **«Ns come lo paga
+l'attrezzo, N sorveglianti in un processo»** — così il nome stesso impedisce di confrontarlo col
+numero sbagliato.
+
+#### 4. ⛔ Un sondaggio non si fa uccidendo il processo: si fa con `--tetto 1`
+
+Per conoscere il costo vero si legge la riga di testa che l'attrezzo stampa **prima** di provare
+il primo mutante. Il modo sbagliato è leggerla e poi **uccidere il processo da fuori**: così
+l'attrezzo muore in mezzo a una mutazione e **non fa in tempo a ripristinare**.
+```
+tre giri fermati DA FUORI      ->  tre mutanti lasciati dentro (sempre lo stesso, riga 23)
+un giro fermato DAI SUOI FRENI ->  albero pulito, impronta identica, zero tracce
+```
+Il guasto rimasto due volte su due, in un file del **percorso del denaro**:
+```
+- return isinstance(v, int) and not isinstance(v, bool) and v > 0
++ return isinstance(v, int) or  not isinstance(v, bool) and v > 0
+```
+È `_intero_pos`, il validatore che protegge gli importi di `costruisci_params`: con quell'`or`
+**qualunque intero passa, negativi compresi**, nel modulo che manda i soldi sul conto dell'host.
+🔑 **La scoperta non è che la mutazione sia pericolosa: è che il SONDAGGIO PER UCCISIONE lo è.**
+`--tetto 1` fa mutare un punto solo e fermare l'attrezzo **da solo**: stampa lo stesso numero,
+costa circa il doppio di una misura, e toglie **completamente** il rischio. *Non si uccide il
+processo: si dice al processo di fare meno.*
+⚠️ E il mutante lasciato è **sempre il primo della lista**, perché l'attrezzo muore sempre nello
+stesso punto: il controllo è facile **e** per questo facile da saltare.
+📌 Le prime due volte il controllo dopo il giro era uscito pulito **perché i giri erano finiti**,
+non perché il rischio non ci fosse. Un controllo che passa due volte facili è quello che viene
+voglia di saltare la terza.
+
+#### 5. La mappa dei costi, e perché la casella non si chiude
+
+Tutti i numeri sotto sono il `normale` **dichiarato dall'attrezzo**, moltiplicato per i punti
+del modulo. Tetto di riferimento: **45 minuti** (il giro deve stare sotto), cioè **54,0 s/punto**
+su 50 punti — una divisione, non un arrotondamento.
+```
+modulo                     occhi accesi              normale     costo stimato   sotto il tetto?
+fase101_stripe_connect     2 (dedicato+indirizzi)      0,1 s        ~0,1 min      SI  -> 37 candidati
+fase101_stripe_connect     3                            4,5 s        3,8 min      SI  -> 37, zero uccisi in più
+fase101_stripe_connect     6 (senza happy_host)       102,6 s       85,5 min      NO
+fase101_stripe_connect     7 (tutti)                  205,6 s      171,3 min      NO
+fase131_payout_dashboard   6 di serie (dedicato dentro) 61,0 s      63,1 min      NO, ma vicino
+fase87_stripe_webhook      1 (solo il dedicato)         0,1 s        ~0,03 min    SI  (pavimento)
+fase85_pagamenti_stripe    1 (solo il dedicato)         0,1 s        ~0,1 min     SI  (pavimento)
+```
+🔑 **`test_happy_host` da solo vale il 50% esatto del costo di `fase101`**: 205,6 → 102,6
+togliendo lui e nient'altro. Una variabile sola cambiata: non è un sospetto, è una misura.
+🔑 **E i test DEDICATI costano quasi nulla (0,1 s).** Tutto il costo viene dagli *altri*
+sorveglianti — quelli d'integrazione e di bombardamento, che nominano il modulo senza essere
+scritti per lui. ⇒ Esiste quasi certamente una configurazione **valida e abbordabile**
+(dedicato + pochi pertinenti): non è stata cercata, ed è il lavoro che resta.
+👉 Sul metodo dei due pavimenti: per `fase85`/`fase87` non è stata sondata la configurazione di
+serie, perché lì è **invalida** (dedicato fuori) e il suo costo sarebbe un numero accademico. È
+stato sondato il **pavimento** di una configurazione valida. **Un pavimento misurato dice più di
+un soffitto inventato.**
+
+⛔ **LA FRASE ONESTA SU `fase101`, e va usata così:** *«37 candidati su 50 punti con 3 occhi su
+7; con tutti e 7 il giro costerebbe 171 minuti, oltre il tetto — quindi quanti dei 37 siano
+buchi veri NON è misurato.»* Non «37 buchi»: sarebbe falso.
+⇒ E il dato che serve a chi decide: **63 minuti** separano il blocco dall'avere un secondo
+modulo (`fase131`) **giudicato per intero e con un giro valido**, contro i 171 di `fase101` che
+produrrebbero comunque solo candidati. Se c'è un'ora di macchina da spendere, rende più `fase131`.
+
+#### 6. Il giudice esterno su Stripe esiste già — e nessuno lo interroga
+
+*(emerso da un'altra corsia e riportato qui perché non si perda; il coordinamento stesso l'aveva
+prima riferito in forma sbagliata — «il giudice esterno manca» — e poi corretto misurando.)*
+Esistono **cinque collaudi contro l'API Stripe vera** (`e2e_rimborso_stripe.py` si dichiara «il
+collaudo n. 7»), e **nessuno dei cinque gira nella CI**: cercati negli 8 file di workflow, zero
+riscontri. ⇒ **Non manca il giudice esterno: manca che qualcuno lo interroghi.** È la stessa
+famiglia di `collaudi/sentinella_ci.py` — costruito e non collegato.
+
+#### 7. La suite intera su questa voce: UN rosso, ed era in questo testo — più un difetto della guardia, scritto e non riparato
+
+Suite intera su `Core_Auto_C` a `463384a` + questi due `.md`, PowerShell vera, 2026-09-03
+19:30:13 → 21:03:10 (`DURATA_SECONDI=5.572,6`, 92,9 min a macchina libera):
+```
+Ran 6128 tests in 5569.687s      <- atteso 6128 (caricatore 6133 - 5 openssl), scarto 5 esatto
+FAILED (failures=1, skipped=4)
+CODICE_USCITA_DIRETTO=1
+FAIL: test_NESSUN_ALTRO_FILE_TIENE_UNA_SECONDA_LISTA (test_pipeline_ci.TestLaListaDelleTecnicheStaInUnPostoSolo)
+```
+**Il rosso era mio, misurato e non dedotto:** la frase che la guardia denuncia — la cifra 6
+seguita dalla parola «metodi», in *«un file di test con 6 [metodi] `def test_`»* — stava in una
+riga aggiunta a `RIPRENDI_QUI.md`; in `HEAD` non c'è (l'unica occorrenza in `HEAD` è dentro il
+blocco `TECNICHE-INIZIO/FINE`, che la guardia esclude). Cura: una parola, «metodi» → «funzioni»,
+cioè «6 funzioni `def test_`». ⛔ Fatta **dopo** la fine del giro, non durante: l'esito di un
+giro vale solo per i byte che ha letto. ⛔ E questa nota **non ricopia la frase vietata**
+(le parentesi quadre sono volute): la guardia legge anche questo file, e una nota che spiega
+un rosso non deve produrne un altro.
+⚠️ **Difetto della guardia, dichiarato qui e NON riparato** (il metro non si cambia mentre lo si
+usa, e un test è produzione della sorveglianza — B4): la regex `(?:\b6\b|sei|SEI)\s+metodi` vuole
+prendere la seconda lista del 17 agosto (quella dei metodi AWS) e prende **qualunque** cifra 6
+o parola «sei» seguita da «metodi», compreso un conteggio di funzioni di test. È un falso allarme con un nome, non un verde finto: sbaglia nel verso che ferma. Chi la
+stringe lo faccia **vedendola rossa prima** sulla frase del 17 agosto.
+📌 Regola di lettura confermata: i rossi si contano con `^(FAIL|ERROR): test_`, non con
+`^FAIL:|^ERROR:` (che conta anche i log): qui **1 su 1**, e l'elenco completo è quello sopra.
+**I 4 saltati, uno per uno** (saltato non è verde): tre di `test_postgres_live` — *«Postgres non
+raggiungibile (DATABASE_URL assente/spento)»* — e uno **anonimo**, senza nome di test nemmeno con
+`-v` (la terza forma, `SkipTest` in `setUpClass`, B24): *«servono bash e openssl per provare
+deploy/restore_offsite.sh (mancano: openssl)»*, riga 1703 del registro.
+🕳️ **DOMANDA APERTA, scritta e non inseguita:** i tre collaudi di Postgres **qui non girano mai**.
+**Girano nella CI?** Non è stato verificato. Se no, sono la **quarta** occorrenza della stessa
+famiglia — collaudi che esistono, sono verdi per definizione e non dicono niente a nessuno —
+dopo i 22 fuori dalla batteria, i 5 sull'API Stripe vera e `sentinella_ci.py`. Chi la chiude
+ci mette l'esito letto dalla tabella dei job (ferrea 8), non una supposizione.
+
 ### 💸 «SONO USCITI 408,00 E IL LIBRO NE HA REGISTRATI 208,00» — 2 settembre, corsia B (casella 2 del Blocco 1) — ⛔ **LA PREMESSA DI QUESTO TITOLO È STATA SMENTITA IL 3 SETTEMBRE: vedi la voce «IL DIFETTO DEI 200 EURO NON ESISTEVA», più sopra in questo diario**
 
 **Cosa è stato creato.** `test_rimborso_ogni_strada.py` (4 guardie, censimento delle strade) e
