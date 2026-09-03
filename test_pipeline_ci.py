@@ -10950,5 +10950,248 @@ class TestLEsameDeiSoldiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
                              "da `collaudi/piano.py`, se no le due copie divergono")
 
 
+class TestIlGiudiceSceglieGliOcchiConUnCriterio(unittest.TestCase):
+    """⛔ I SEI OCCHI DEL GIUDICE ERANO I PRIMI SEI IN ORDINE ALFABETICO.
+
+    MISURATO il 2026-09-03 (corsia B, albero B2, su d58cd83) sui cinque moduli del percorso
+    del denaro, con le funzioni del Giudice stesso e nessun test eseguito:
+        fase85_pagamenti_stripe   84 sorveglianti, il test dedicato e' il 29o  -> FUORI dai sei
+        fase87_stripe_webhook     63 sorveglianti, il test dedicato e' il 24o  -> FUORI dai sei
+        fase101_stripe_connect     7 sorveglianti, 2 dei sei scelti NON importano il modulo
+    `test_che_nominano` elenca in ordine alfabetico chi contiene il NOME del modulo
+    (sottostringa: basta un commento) e `giro_su_moduli` prendeva `sorveglianti[:6]`. Su 85 e
+    87 i sei erano test di bombardamento e benchmark: un giro cosi' produce sopravvissuti
+    CREDIBILI E SENZA SIGNIFICATO, cioe' lavoro che sembra lavoro.
+
+    Il criterio (`scegli_sorveglianti`): PRIMA il test dedicato `test_<modulo>`, POI chi IMPORTA
+    il modulo (albero sintattico, non sottostringa), POI chi lo nomina soltanto; alfabetico
+    dentro ogni gruppo; tetto invariato. E se il dedicato NON esiste il Giudice non passa in
+    silenzio: il modulo e' NON GIUDICABILE (D18) e la casella della scheda non si scrive.
+
+    D20: queste guardie sono state viste ROSSE contro il Giudice di prima, nell'ordine scritto
+    nel REGISTRO (3 settembre), e solo dopo e' cambiato il criterio.
+    ⚠️ Limite dichiarato (D18 punto 3): «importa» e' l'import diretto (`import X`,
+    `from X import`). Un test che carica il modulo con importlib o lo esercita attraverso un
+    altro modulo finisce nel terzo gruppo: non e' escluso, e' dopo.
+    """
+
+    def _giudice(self):
+        import importlib.util
+        p = os.path.join(QUI, "collaudi", "mutazione_prodotto.py")
+        spec = importlib.util.spec_from_file_location("_mut_occhi", p)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def _piano(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_piano_occhi", os.path.join(QUI, "collaudi", "piano.py"))
+        piano = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(piano)
+        return piano
+
+    def _albero_finto(self, con_dedicato=True):
+        """Un modulo finto e cinque test finti: due lo nominano soltanto (un commento, una
+        stringa), due lo importano (`import`, `from ... import`), uno e' il dedicato, uno non
+        si analizza nemmeno. Torna (radice, modulo, sorveglianti in ordine alfabetico), cioe'
+        esattamente cio' che `test_che_nominano` darebbe al Giudice."""
+        import shutil
+        import tempfile
+        radice = tempfile.mkdtemp(prefix="occhi_finti_")
+        self.addCleanup(shutil.rmtree, radice, True)
+        mod = "fasezz_prova"
+        finti = {
+            mod + ".py": "def f():\n    return 1\n",
+            "test_aaa_commento.py": "# parla di fasezz_prova, ma non lo tocca\nimport unittest\n",
+            "test_bbb_stringa.py": "PERCORSO = 'fasezz_prova.py'\n",
+            "test_ccc_rotto.py": "def (:  fasezz_prova\n",
+            "test_yyy_from.py": "from fasezz_prova import f\n",
+            "test_zzz_import.py": "import os, fasezz_prova\n",
+        }
+        if con_dedicato:
+            finti["test_" + mod + ".py"] = "import fasezz_prova\n"
+        for nome, testo in finti.items():
+            with io.open(os.path.join(radice, nome), "w", encoding="utf-8") as f:
+                f.write(testo)
+        sorveglianti = sorted(n[:-3] for n in finti if n.startswith("test_"))
+        return radice, mod, sorveglianti
+
+    def test_LE_DUE_PORTE_DEL_GIUDICE_SCELGONO_GLI_OCCHI_CON_LO_STESSO_CRITERIO(self):
+        """`giro_su_moduli` (tetto 6) e `giro_sul_diff` (tetto 8) sono due porte sullo stesso
+        strumento: un criterio che vive in una sola e' il modo in cui due misure dello stesso
+        attrezzo divergono senza che nessuno se ne accorga. Si guarda l'albero sintattico, non
+        il testo: una chiamata commentata non esiste, e un taglio `sorveglianti[...]` fatto a
+        mano e' il criterio vecchio che rientra dalla finestra."""
+        import ast
+        with io.open(os.path.join(QUI, "collaudi", "mutazione_prodotto.py"),
+                     encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+        porte = {n.name: n for n in albero.body
+                 if isinstance(n, ast.FunctionDef)
+                 and n.name in ("giro_su_moduli", "giro_sul_diff")}
+        self.assertEqual({"giro_sul_diff", "giro_su_moduli"}, set(porte),
+                         "una porta del giudice non esiste piu'")
+
+        def costanti(nodo):
+            return {n.value for n in ast.walk(nodo)
+                    if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+
+        for nome, porta in sorted(porte.items()):
+            chiamate = {n.func.id for n in ast.walk(porta)
+                        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+            self.assertIn("scegli_sorveglianti", chiamate,
+                          "%s NON chiama `scegli_sorveglianti`: sceglie gli occhi per conto "
+                          "suo. Chiamate trovate: %s" % (nome, sorted(chiamate)))
+            fette = [n for n in ast.walk(porta) if isinstance(n, ast.Subscript)
+                     and isinstance(n.value, ast.Name) and n.value.id == "sorveglianti"]
+            self.assertEqual([], fette, "%s taglia ancora `sorveglianti[...]` a mano: il "
+                                        "criterio sta in due posti" % nome)
+        # D18: la porta che giudica MODULI deve saper dire «non giudicabile», non solo verde/rosso
+        self.assertIn("non_giudicabile", costanti(porte["giro_su_moduli"]),
+                      "`giro_su_moduli` non dichiara mai un modulo NON GIUDICABILE: senza test "
+                      "dedicato passerebbe in silenzio con occhi scelti a caso")
+        # ...e dichiara nell'USCITA DEL GIRO quanti occhi importano il modulo (veri) e quanti lo
+        #    nominano soltanto (di carta): un numero che vive solo in un confronto fatto una
+        #    volta e' un numero che nessuno rilegge.
+        self.assertTrue(any("occhi veri" in c for c in costanti(porte["giro_su_moduli"])),
+                        "il giro non stampa quanti dei suoi occhi sono veri e quanti di carta")
+        # ...e la porta che giudica RIGHE lo DICHIARA in un posto che una macchina puo' contare
+        #    (`rinunce`), non solo a stampa: un numero stampato e basta fra tre settimane passa
+        #    da 1 a 9 senza che niente protesti.
+        self.assertIn("senza_dedicato", costanti(porte["giro_sul_diff"]),
+                      "`giro_sul_diff` non conta in `rinunce` i moduli senza test dedicato")
+        modo_diff = [n for n in albero.body if isinstance(n, ast.If)
+                     and "--diff" in costanti(n.test)]
+        self.assertEqual(1, len(modo_diff), "il modo --diff del giudice non si trova piu'")
+        self.assertIn("senza_dedicato", costanti(modo_diff[0]),
+                      "il modo --diff non stampa il NUMERO dei moduli senza test dedicato")
+        # UN GIUDIZIO, UN POSTO SOLO: il «non giudicabile» decide in `verdetto_modulo`, e la
+        # scheda lo eredita da li'. Una seconda regola dentro `scrivi_la_scheda` sarebbero due
+        # giudizi sullo stesso fatto: il difetto che `piano_dei_soldi.py` esiste per stanare.
+        scheda = [n for n in albero.body
+                  if isinstance(n, ast.FunctionDef) and n.name == "scrivi_la_scheda"]
+        self.assertEqual(1, len(scheda), "`scrivi_la_scheda` non esiste piu'")
+        self.assertNotIn("non_giudicabile", costanti(scheda[0]),
+                         "`scrivi_la_scheda` giudica per conto suo il «non giudicabile»: il "
+                         "giudizio sta in `verdetto_modulo`, in un posto solo")
+
+    def test_IL_TEST_DEDICATO_STA_FRA_GLI_OCCHI_SUI_CINQUE_MODULI_DEL_DENARO(self):
+        """Sul repository VERO, sui moduli che `collaudi/piano.py` dichiara bersaglio della
+        mutazione del Blocco 1 (letti dal piano, mai ricopiati): col tetto di serie del Giudice,
+        il test dedicato dev'essere fra gli occhi scelti. VISTA ROSSA prima della cura su
+        fase85 (dedicato 29o su 84) e fase87 (24o su 63)."""
+        import inspect
+        m = self._giudice()
+        tetto = inspect.signature(m.giro_su_moduli).parameters["tetto_test"].default
+        blocco = [b for b in self._piano().BLOCCHI if b["ordine"] == 1]
+        self.assertEqual(1, len(blocco), "il Blocco 1 non si legge dal piano")
+        moduli = blocco[0].get("moduli_mutazione") or ()
+        self.assertGreaterEqual(len(moduli), 5,
+                                "il piano non dichiara piu' i moduli della mutazione del Blocco 1")
+        fuori = []
+        for mod in moduli:
+            sorveglianti = m.test_che_nominano(os.path.join(QUI, mod + ".py"))
+            dedicato = "test_" + mod
+            self.assertIn(dedicato, sorveglianti,
+                          "%s non ha un test dedicato che lo nomini: qui e' un prerequisito "
+                          "della guardia, non un esito" % mod)
+            scelti, ancora = m.scegli_sorveglianti(sorveglianti, tetto, mod, radice=QUI)
+            self.assertEqual(min(tetto, len(sorveglianti)), len(scelti),
+                             "%s: il tetto non e' rispettato (%d scelti su %d, tetto %d)"
+                             % (mod, len(scelti), len(sorveglianti), tetto))
+            if ancora != dedicato or dedicato not in scelti:
+                fuori.append("%s: dedicato al posto %d su %d, scelti %s"
+                             % (mod, sorveglianti.index(dedicato) + 1, len(sorveglianti),
+                                scelti))
+        self.assertEqual([], fuori,
+                         "il test dedicato NON e' fra gli occhi (tetto %d) su %d moduli su %d:\n  %s"
+                         % (tetto, len(fuori), len(moduli), "\n  ".join(fuori)))
+
+    def test_chi_IMPORTA_il_modulo_viene_prima_di_chi_lo_NOMINA_soltanto(self):
+        """Su un albero finto (un collaudo non usa mai l'attrezzo vero): dedicato, poi chi
+        importa, poi chi nomina; alfabetico dentro ogni gruppo; un file che non si analizza
+        finisce ultimo e non fa esplodere niente. In ordine alfabetico puro il dedicato
+        sarebbe al quarto posto e con tetto 3 resterebbe FUORI: e' il rosso visto prima."""
+        m = self._giudice()
+        radice, mod, sorveglianti = self._albero_finto()
+        self.assertEqual(["test_aaa_commento", "test_bbb_stringa", "test_ccc_rotto",
+                          "test_fasezz_prova", "test_yyy_from", "test_zzz_import"], sorveglianti)
+        scelti, dedicato = m.scegli_sorveglianti(sorveglianti, 3, mod, radice=radice)
+        self.assertEqual("test_fasezz_prova", dedicato)
+        self.assertEqual(["test_fasezz_prova", "test_yyy_from", "test_zzz_import"], scelti,
+                         "con tetto 3 gli occhi non sono dedicato + chi importa")
+        scelti, _ = m.scegli_sorveglianti(sorveglianti, 6, mod, radice=radice)
+        self.assertEqual(["test_fasezz_prova", "test_yyy_from", "test_zzz_import",
+                          "test_aaa_commento", "test_bbb_stringa", "test_ccc_rotto"], scelti,
+                         "l'ordine dei gruppi non e' dedicato / importa / nomina soltanto")
+        # senza dedicato: nessuna ancora, e lo si dice; gli occhi restano chi importa per primo
+        radice2, mod2, sorv2 = self._albero_finto(con_dedicato=False)
+        scelti2, dedicato2 = m.scegli_sorveglianti(sorv2, 6, mod2, radice=radice2)
+        self.assertIsNone(dedicato2, "dichiara un dedicato che non esiste")
+        self.assertEqual(["test_yyy_from", "test_zzz_import"], scelti2[:2])
+
+    def test_SENZA_test_dedicato_il_modulo_e_NON_GIUDICABILE_e_la_casella_NON_passa(self):
+        """D18: se un modulo non ha il test dedicato la scelta automatica degli occhi non ha
+        un'ancora. Il Giudice non lo passa in silenzio: il verdetto e' ROSSO col motivo, e la
+        scheda -- che eredita il verdetto INTERO da `verdetto_modulo`, come per la base rossa
+        -- registra la casella come NON passata, mai come passata.
+        ⛔ IL DANNO CHE QUESTA GUARDIA CHIUDE, misurato nel codice il 2026-09-03: prima della
+        cura `verdetto_modulo` contava cinque categorie e nessuna sapeva che il dedicato non era
+        fra gli occhi, quindi un modulo sorvegliato dai sei test sbagliati usciva pulito e
+        `scrivi_la_scheda` lo registrava «misurato e passato» (esito=True). Un verde finto
+        LATENTE nella scheda, cioe' nell'attrezzo che risponde a «e' finito?». Visto rosso qui."""
+        import shutil
+        import tempfile
+        m = self._giudice()
+        moduli = list([b for b in self._piano().BLOCCHI if b["ordine"] == 1][0]["moduli_mutazione"])
+        vuoto = {"oltre_il_tetto": 0, "oltre_il_tempo": 0, "generatore": {},
+                 "senza_sorveglianti": 0, "normale_sec": {},
+                 "fuori_produzione": 0, "moduli_fuori_produzione": []}
+        senza = {"file": moduli[0] + ".py", "riga": 0, "verdetto": "non_giudicabile",
+                 "danno": "nessun test dedicato test_%s" % moduli[0]}
+        uscita, motivi = m.verdetto_modulo([senza], vuoto)
+        self.assertEqual(1, uscita, "un modulo NON GIUDICABILE esce verde: e' il verde che non "
+                                    "ha guardato (motivi: %s)" % motivi)
+        self.assertTrue(any("GIUDICABIL" in x.upper() for x in motivi), motivi)
+        cartella = tempfile.mkdtemp(prefix="scheda_occhi_")
+        self.addCleanup(shutil.rmtree, cartella, True)
+        percorso = os.path.join(cartella, "scheda.json")
+        altri = [{"file": f + ".py", "riga": 1, "verdetto": "ucciso", "danno": "x"}
+                 for f in moduli[1:]]
+        riga, motivo = m.scrivi_la_scheda(altri + [senza], vuoto, comando="prova",
+                                          percorso=percorso)
+        self.assertIsNotNone(riga, "tutti i moduli del blocco erano nel giro e la scheda non "
+                                   "ha scritto niente: %s" % motivo)
+        self.assertIs(False, riga["esito"],
+                      "la casella e' PASSATA con dentro un modulo non giudicabile: e' il "
+                      "verde finto latente nella scheda (%s)" % motivo)
+        self.assertEqual(len(altri), riga["denominatore"],
+                         "il denominatore conta anche i punti del modulo NON giudicato")
+        self.assertTrue(os.path.exists(percorso), "la scheda finta non e' stata scritta")
+        # ...e il PERCHE' sta nella riga, in un campo che una macchina legge: un False muto
+        #    manderebbe a caccia di un guasto nei soldi che non esiste (ferrea 10).
+        self.assertIn(moduli[0], riga.get("motivo", ""),
+                      "la riga della scheda non dice PERCHE' non passa: %r" % riga.get("motivo"))
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_scheda_occhi", os.path.join(QUI, "collaudi", "scheda.py"))
+        sch = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sch)
+        dati = sch.leggi(percorso)
+        spuntata, perche = sch.stato(riga["condizione"], 1, schedario=dati)
+        self.assertFalse(spuntata, "la casella risulta spuntata: %s" % perche)
+        self.assertIn(moduli[0], perche,
+                      "chi apre la scheda legge un False MUTO, senza il modulo: %s" % perche)
+        # E IL MOTIVO STA NELLA RIGA DELLA CASELLA, NON ADDOSSO AL GIRO: una chiave sola, quella
+        # della casella della mutazione del blocco 1. Il 21 agosto la scheda aveva 30 caselle e
+        # 29 chiavi, e spuntare i soldi spuntava le prenotazioni: qui la stessa forma non
+        # rientra un piano sotto.
+        self.assertEqual([sch.chiave(riga["condizione"], 1)], list(dati),
+                         "il giro ha scritto righe che non sono la casella della mutazione del "
+                         "blocco 1: %s" % list(dati))
+        self.assertEqual(1, dati[sch.chiave(riga["condizione"], 1)]["blocco"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

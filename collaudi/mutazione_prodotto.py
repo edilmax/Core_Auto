@@ -755,6 +755,84 @@ def test_che_nominano(percorso):
     return trovati
 
 
+_IMPORTA_CACHE = {}
+
+
+def _importa_il_modulo(percorso_test, modulo):
+    """Il file di test IMPORTA il modulo (`import X`, `import X as Y`, `from X import ...`)?
+
+    Albero sintattico, non sottostringa: un commento, una stringa o un docstring non contano.
+    Un file che non si legge o non si analizza risponde False: non e' un errore, e' «non lo
+    importa, che io sappia», e finisce nel gruppo di chi lo nomina soltanto. La cache e' per
+    percorso e impronta del file (dimensione, ora), perche' il Giudice fa la stessa domanda
+    molte volte nello stesso giro.
+    """
+    try:
+        st = os.stat(percorso_test)
+        chiave_cache = (percorso_test, modulo, st.st_size, st.st_mtime_ns)
+    except OSError:
+        return False
+    if chiave_cache in _IMPORTA_CACHE:
+        return _IMPORTA_CACHE[chiave_cache]
+    risposta = False
+    try:
+        with io.open(percorso_test, encoding="utf-8", errors="replace") as f:
+            albero = ast.parse(f.read())
+    except (OSError, SyntaxError, ValueError):
+        albero = None
+    for nodo in ast.walk(albero) if albero is not None else ():
+        if isinstance(nodo, ast.Import):
+            if any(a.name == modulo or a.name.startswith(modulo + ".") for a in nodo.names):
+                risposta = True
+                break
+        elif isinstance(nodo, ast.ImportFrom):
+            if nodo.module == modulo or (nodo.module or "").startswith(modulo + "."):
+                risposta = True
+                break
+    _IMPORTA_CACHE[chiave_cache] = risposta
+    return risposta
+
+
+def scegli_sorveglianti(sorveglianti, tetto, modulo, radice=None):
+    """Quali occhi accendere fra i sorveglianti, e in che ordine: (scelti, dedicato).
+
+    ⛔ FINO AL 2026-09-03 ERANO I PRIMI `tetto` IN ORDINE ALFABETICO. `test_che_nominano` elenca
+    chi contiene il NOME del modulo (sottostringa: basta un commento), in ordine alfabetico, e
+    le due porte del Giudice ne prendevano i primi sei (`--modulo`) o otto (`--diff`). Misurato
+    sui cinque moduli del percorso del denaro: su `fase85_pagamenti_stripe` il test dedicato
+    era il 29o su 84, su `fase87_stripe_webhook` il 24o su 63 -- FUORI dai sei -- e i sei
+    accesi erano test di bombardamento e benchmark. Un giro cosi' produce sopravvissuti
+    credibili e senza significato; e, peggio, un verdetto verde che la scheda registrava come
+    «misurato e passato».
+
+    IL CRITERIO, in tre gruppi, alfabetico dentro ognuno, tetto invariato:
+      1. il test DEDICATO `test_<modulo>`, se e' fra i sorveglianti: e' l'ancora;
+      2. chi IMPORTA il modulo (albero sintattico, `_importa_il_modulo`): puo' vederne il guasto;
+      3. chi lo NOMINA soltanto (commento, stringa, docstring, o un file che non si analizza).
+    `dedicato` e' il nome del test dedicato se c'e', altrimenti None: chi chiama decide cosa
+    farne (`giro_su_moduli` dichiara il modulo NON GIUDICABILE; `giro_sul_diff` lo conta in
+    `rinunce["senza_dedicato"]`). Con `--killer` questa funzione non decide niente: gli occhi
+    li ha scelti una persona, e il giro lo stampa (SCELTI A MANO).
+
+    ⚠️ Limite dichiarato (D18 punto 3): «importa» e' l'import diretto. Un test che carica il
+    modulo con importlib, o lo esercita attraverso un altro modulo, sta nel gruppo 3: non e'
+    escluso, viene dopo. E l'ordine dentro un gruppo resta alfabetico, cioe' non guarda il
+    costo: quello lo misura `misura_normale`, e si governa con `--killer`.
+    """
+    radice = radice or REPO
+    dedicato = "test_" + modulo
+    ancora = [t for t in sorveglianti if t == dedicato]
+    importano, nominano = [], []
+    for t in sorveglianti:
+        if t == dedicato:
+            continue
+        if _importa_il_modulo(os.path.join(radice, t + ".py"), modulo):
+            importano.append(t)
+        else:
+            nominano.append(t)
+    return (ancora + importano + nominano)[:tetto], (dedicato if ancora else None)
+
+
 # ── MUTANTI EQUIVALENTI, DICHIARATI CON LA PROVA ────────────────────────────────
 #  Un mutante EQUIVALENTE non e' un buco: e' una mutazione che NON cambia il comportamento,
 #  quindi nessun test potrebbe ucciderlo. Segnalarlo per sempre insegna a ignorare gli
@@ -1660,7 +1738,8 @@ def giro_sul_diff(base="HEAD~1", tetto=40, tetto_test=8):
     non far durare un giro mezz'ora, e quando tagliano lo DICONO: un tetto silenzioso fa
     sembrare «coperto» cio' che non e' stato nemmeno provato.
     """
-    esiti, rinunce = [], {"oltre_il_tetto": 0, "senza_sorveglianti": 0, "generatore": {}}
+    esiti, rinunce = [], {"oltre_il_tetto": 0, "senza_sorveglianti": 0, "generatore": {},
+                          "senza_dedicato": []}
     for percorso, righe in sorted(righe_toccate(base).items()):
         pieno = os.path.join(REPO, percorso)
         sorgente = _leggi_intatto(pieno)
@@ -1673,6 +1752,15 @@ def giro_sul_diff(base="HEAD~1", tetto=40, tetto_test=8):
         for k, v in saltati.items():
             rinunce["generatore"][k] = rinunce["generatore"].get(k, 0) + v
         sorveglianti = test_che_nominano(percorso)
+        scelti, _dedicato = scegli_sorveglianti(sorveglianti, tetto_test,
+                                                os.path.basename(percorso)[:-3])
+        if sorveglianti and _dedicato is None:
+            # Qui si giudicano RIGHE, non moduli: un test dedicato che manca e' una condizione
+            # preesistente e non fa rosso il diff. Ma si CONTA, in un posto che una macchina
+            # legge, e il modo --diff ne stampa il numero: una dichiarazione che vive solo in
+            # una riga di stampa e' una dichiarazione che nessuno rilegge.
+            rinunce["senza_dedicato"].append(percorso)
+        bersaglio = " ".join(scelti)
         righe_testo = sorgente.splitlines()
         for m in mutanti:
             motivo = _e_equivalente(percorso, righe_testo, m)
@@ -1690,7 +1778,6 @@ def giro_sul_diff(base="HEAD~1", tetto=40, tetto_test=8):
                               "danno": m["danno"],
                               "nota": "nessun file di test nomina questo modulo"})
                 continue
-            bersaglio = " ".join(sorveglianti[:tetto_test])
             _sano, _uscita = base_e_verde(bersaglio)
             if _sano is not True:
                 esiti.append({"file": percorso, "riga": m["riga"], "verdetto": "base_rossa",
@@ -1897,14 +1984,35 @@ def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45, killer=None, riconfe
         righe_testo = sorgente.splitlines()
         fatti_qui = 0
         riconfermati_qui = 0        # quanti «uccisi» sono stati rieseguiti in questo modulo
-        # ⛔ UN INSIEME KILLER RIDOTTO VA DICHIARATO, NON SUBITO IN SILENZIO.
-        # I sorveglianti si scelgono in ordine ALFABETICO, che non ha niente a che vedere col
-        # costo: su fase177 il primo (`test_avvio_e_ripristino`) da solo pesa 76s contro i 32s
-        # di tutti gli altri sette insieme, e il tetto dei 45 minuti scadeva senza giudicare
-        # un mutante. Con `killer` si punta ai test che davvero esercitano quel modulo.
-        # ⚠️ Meno test = piu' FACILE sopravvivere: cio' che esce di qui sono CANDIDATI, da
+        # ⛔ GLI OCCHI SI SCELGONO CON UN CRITERIO, NON PER ALFABETO (dal 2026-09-03): prima il
+        # test dedicato, poi chi importa il modulo, poi chi lo nomina soltanto -- vedi
+        # `scegli_sorveglianti`. Prima erano i primi sei in ordine alfabetico, e su fase85 e
+        # fase87 il dedicato restava fuori: sopravvissuti credibili e senza significato.
+        # L'ordine dentro un gruppo resta alfabetico e non guarda il COSTO: su fase177 il primo
+        # (`test_avvio_e_ripristino`) da solo pesa 76s contro i 32s di tutti gli altri sette
+        # insieme. Con `killer` si punta a mano ai test che davvero esercitano quel modulo.
+        # ⚠️ UN INSIEME KILLER RIDOTTO VA DICHIARATO, NON SUBITO IN SILENZIO. Meno test = piu'
+        #    FACILE sopravvivere: cio' che esce da un insieme ridotto sono CANDIDATI, da
         #    ri-provare contro TUTTI i sorveglianti prima di chiamarlo buco.
-        scelti = list(killer) if killer else sorveglianti[:tetto_test]
+        scelti, dedicato = scegli_sorveglianti(sorveglianti, tetto_test, nome[:-3])
+        if killer:
+            scelti = list(killer)
+        elif sorveglianti and dedicato is None:
+            # ⛔ D18: SENZA TEST DEDICATO LA SCELTA AUTOMATICA NON HA UN'ANCORA, e il Giudice
+            #    non passa in silenzio con occhi presi a caso: il modulo e' NON GIUDICABILE,
+            #    col nome e i punti che restano fuori. Chi vuole giudicarlo sceglie gli occhi
+            #    con --killer, o scrive test_<modulo>. (Zero sorveglianti e' un'altra cosa:
+            #    li' ogni punto e' SCOPERTO, e lo dice il ciclo qui sotto.)
+            esiti.append({"file": nome, "riga": 0, "verdetto": "non_giudicabile",
+                          "danno": "nessun test dedicato test_%s: gli occhi automatici non "
+                                   "hanno un'ancora" % nome[:-3],
+                          "nota": "%d sorveglianti, %d punti NON esaminati; --killer o il "
+                                  "test dedicato" % (len(sorveglianti), len(mutanti)),
+                          "punti": len(mutanti)})
+            print("\n%s: NON GIUDICABILE -- nessun test dedicato test_%s fra %d sorveglianti; "
+                  "%d punti NON esaminati. Scegli gli occhi con --killer o scrivi il test."
+                  % (nome, nome[:-3], len(sorveglianti), len(mutanti)))
+            continue
         bersaglio = " ".join(scelti)
         # si misura il NORMALE prima di rompere qualcosa: cosi' il tetto e' scelto, non subito
         normale, sano, uscita = misura_normale(bersaglio) if sorveglianti else (0.0, True, "")
@@ -1923,9 +2031,15 @@ def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45, killer=None, riconfe
             continue
         rinunce["normale_sec"][nome] = round(normale, 1)
         tetto_sec = max(60, int(3 * normale))
-        print("\n%s: %d punti mutabili · sorveglianti %d, usati %d%s · normale %.1fs · "
-              "tetto %ds" % (nome, len(mutanti), len(sorveglianti), len(scelti),
-                             " (SCELTI A MANO)" if killer else "", normale, tetto_sec))
+        # Quanti degli occhi accesi IMPORTANO il modulo (veri) e quanti lo nominano soltanto
+        # (di carta): dichiarato nell'uscita del giro, non in un confronto fatto una volta.
+        occhi_veri = sum(1 for t in scelti
+                         if _importa_il_modulo(os.path.join(REPO, t + ".py"), nome[:-3]))
+        print("\n%s: %d punti mutabili · sorveglianti %d, usati %d%s (occhi veri %d, di carta "
+              "%d) · normale %.1fs · tetto %ds"
+              % (nome, len(mutanti), len(sorveglianti), len(scelti),
+                 " (SCELTI A MANO)" if killer else "", occhi_veri, len(scelti) - occhi_veri,
+                 normale, tetto_sec))
         print("  killer: %s" % (bersaglio or "NESSUNO"))
         for m in mutanti:
             motivo = _e_equivalente(nome, righe_testo, m)
@@ -2070,6 +2184,19 @@ def verdetto_modulo(esiti, rinunce, parziale=False):
     if incerti:
         motivi.append("%d punti UCCISI SOLO A VOLTE: il killer li uccide al primo giro e non "
                       "al secondo, quindi li' non c'e' una rete affidabile" % len(incerti))
+    # ⛔ D18 (2026-09-03): UN MODULO SENZA TEST DEDICATO NON E' GIUDICATO, E NON PASSA IN
+    #    SILENZIO. Prima di queste righe il verdetto contava cinque categorie e nessuna sapeva
+    #    che il dedicato non era fra gli occhi: un modulo sorvegliato dai sei test sbagliati
+    #    usciva pulito e la scheda lo registrava «misurato e passato». Il motivo porta nome e
+    #    punti, perche' la scheda lo eredita da qui e chi la apre deve leggere PERCHE'.
+    non_giudicabili = [e for e in esiti if e["verdetto"] == "non_giudicabile"]
+    if non_giudicabili:
+        motivi.append("%d moduli NON GIUDICABILI (%s): senza test dedicato la scelta "
+                      "automatica degli occhi non ha un'ancora; sceglili con --killer o "
+                      "scrivi test_<modulo>"
+                      % (len(non_giudicabili),
+                         ", ".join("%s: %s punti fuori" % (e["file"], e.get("punti", "?"))
+                                   for e in non_giudicabili)))
     # I punti NON esaminati: rossi quanto gli altri, a meno che il giro si sia dichiarato
     # parziale. Il conto lo tiene gia' `giro_su_moduli`, qui si limita a pretenderlo.
     # ⛔ PEZZO 3 — I PUNTI FUORI PRODUZIONE NON SONO ROSSI, MA UN GIRO CHE HA SALTATO
@@ -2237,9 +2364,12 @@ def scrivi_la_scheda(esiti, rinunce, comando, radice=REPO, percorso=None):
     uscita, _motivi = verdetto_modulo(esiti, rinunce)
     esaminati = len([e for e in esiti if e.get("verdetto") in
                      ("ucciso", "sopravvissuto", "incerto", "non_determinabile")])
+    # Il PERCHE' viaggia con l'esito: e' lo stesso elenco di motivi che decide l'uscita del
+    # giudice, non una regola ricalcolata qui (un giudizio, un posto solo).
     riga = modulo.registra(testo, esito=(uscita == 0), denominatore=esaminati,
                            comando=comando, ordine=ordine,
-                           percorso=percorso if percorso else modulo.SCHEDA)
+                           percorso=percorso if percorso else modulo.SCHEDA,
+                           motivo="; ".join(_motivi))
     return riga, ("casella del blocco %d scritta: esito=%s, %d punti esaminati"
                   % (ordine, riga["esito"], riga["denominatore"]))
 
@@ -2328,7 +2458,7 @@ if __name__ == "__main__" and "--modulo" in sys.argv:
     _scop = [e for e in _esiti if e["verdetto"] == "scoperto"]
     for e in _esiti:
         if e["verdetto"] in ("sopravvissuto", "scoperto", "assente", "non_determinabile",
-                             "base_rossa"):
+                             "base_rossa", "non_giudicabile"):
             print("  %-9s %s:%s  %s  (%s)" % (e["verdetto"].upper(), e["file"], e["riga"],
                                               e.get("nota", ""), e["danno"][:46]))
     print("-" * 96)
@@ -2416,6 +2546,12 @@ if __name__ == "__main__" and "--diff" in sys.argv:
     for e in _nd:
         print("::warning title=Punto NON ESAMINATO in %s::riga %s -- i test non hanno finito "
               "in tempo: %s" % (e["file"], e["riga"], e["danno"]))
+    if _rinunce.get("senza_dedicato"):
+        # Dichiarato col NUMERO, non solo coi nomi: fra tre settimane un conteggio che passa da
+        # 1 a 9 si vede, un elenco che si allunga no.
+        print("  moduli SENZA test dedicato (occhi scelti fra chi li importa, dichiarati): "
+              "%d -- %s" % (len(_rinunce["senza_dedicato"]),
+                            ", ".join(_rinunce["senza_dedicato"])))
     if any(_rinunce["generatore"].values()) or _rinunce["oltre_il_tetto"]:
         # NIENTE TETTI SILENZIOSI: cio' che non e' stato provato si dice, sempre.
         print("NON PROVATI (dichiarati): oltre il tetto %d · rinunce del generatore %s"

@@ -196,7 +196,7 @@ def leggi(percorso=SCHEDA):
 
 
 def registra(testo, esito, denominatore, comando, ordine, percorso=SCHEDA, commit=None,
-             quando=None):
+             quando=None, motivo=None):
     """Un attrezzo dichiara cosa ha misurato. Torna la riga scritta.
 
     ⛔ `denominatore` NON e' facoltativo ed e' il cuore: e' *su quante cose* l'attrezzo ha
@@ -205,6 +205,11 @@ def registra(testo, esito, denominatore, comando, ordine, percorso=SCHEDA, commi
     blocchi che fanno la stessa domanda si spuntano a vicenda (vedi `chiave`). E' scritto
     anche dentro la riga, cosi' chi apre `scheda.json` vede DI CHE COSA parla ogni misura
     senza doverla dedurre dalla chiave.
+    `motivo` (dal 2026-09-03) e' il PERCHE' di un esito falso, nelle parole dell'attrezzo:
+    un `False` muto manda a caccia di un guasto che puo' non esistere («un quinto del blocco
+    non era giudicabile» non e' «c'e' un guasto nei soldi»), e costa quanto un verde falso
+    (ferrea 10). Sta in un campo che una macchina legge, non lasciato a dedurre dal
+    denominatore.
     """
     if not comando or not str(comando).strip():
         raise ValueError("una misura senza il COMANDO che la produce non e' verificabile: "
@@ -225,6 +230,7 @@ def registra(testo, esito, denominatore, comando, ordine, percorso=SCHEDA, commi
         # ma NON e' piu' lui a decidere: e' informazione, non giudizio.
         "commit": commit if commit is not None else commit_attuale(),
         "quando": quando or datetime.datetime.now().isoformat(timespec="seconds"),
+        "motivo": " ".join(str(motivo).split()) if motivo else "",
     }
     dati = leggi(percorso)
     dati[chiave(testo, ordine)] = riga
@@ -267,8 +273,10 @@ def stato(testo, ordine, schedario=None, impronta=None):
         return (False, "denominatore %r: l'attrezzo non ha esaminato NIENTE, quindi il suo "
                        "esito non e' un giudizio (sbaglio S7)" % (denominatore,))
     if not riga.get("esito"):
-        return (False, "ROSSA: l'attrezzo l'ha misurata e non passa (%s)"
-                % riga.get("comando", "comando non indicato"))
+        perche = riga.get("motivo") or ""
+        return (False, "ROSSA: l'attrezzo l'ha misurata e non passa (%s)%s"
+                % (riga.get("comando", "comando non indicato"),
+                   (" -- perche': %s" % perche) if perche else ""))
     return (True, "misurata su %s, %d cose esaminate, da `%s`"
             % (suo, denominatore, riga.get("comando", "?")))
 

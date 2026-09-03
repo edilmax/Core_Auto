@@ -33,16 +33,24 @@ GitHub master       5ba642a   <- "Merge PR #133 from lavoro-a"; genitori 936c2a8
                                  TRE unioni in questa giornata: #131 (lavoro-d), #132
                                  (lavoro-c), #133 (lavoro-a). Nessuna richiesta aperta.
 rami                lavoro-a/b/c/d: TUTTI dentro master (0 commit fuori)
-CARICATORE          6134      <- PowerShell vera (MSYSTEM vuoto, PATH dal registro), da
-                                 fermo, misurato il 2026-09-03 su 463384a nell'albero B,
-                                 PRIMA di lanciare (S14). Era 6133 su a602f8e (master con
-                                 la #138 della corsia A e la #139 della corsia C dentro,
-                                 piu' le 16 guardie dei rimborsi della corsia B): +1 e'
-                                 la guardia della TERZA coppia di rimborso
-                                 (`test_ospite_poi_admin_e_FRENATA_e_il_movimento_si_MISURA`).
-                                 ⛔ Nessun +1 per la guardia dei «200 euro»: era sbagliata
-                                 e non e' mai entrata nel conto (vedi il diario del
-                                 2026-09-03 nel REGISTRO).
+CARICATORE          6149      <- PowerShell vera (MSYSTEM vuoto, openssl assente), da fermo,
+                                 misurato il 2026-09-04 sull'albero UNITO dell'integrazione
+                                 (`Core_Auto_INT` = master + #143 + #142 + #141) su 6922fed,
+                                 PRIMA di lanciare (S14). Registro del giro:
+                                 `caricatore_20260904_004939.log`, CODICE_USCITA_DIRETTO=0.
+                                 ⛔ E NON E' NESSUNO DEI DUE NUMERI CHE L'UNIONE METTEVA A
+                                 CONFRONTO: il lato #142 dichiarava 6134 (misurato
+                                 nell'albero B) e il lato #141 dichiarava 6148 (misurato in
+                                 B2 su d58cd83). Nessuno dei due era vero QUI, perche' i due
+                                 alberi non contengono lo stesso insieme di guardie:
+                                 6149 = 6148 + la guardia della TERZA coppia di rimborso
+                                 (`test_ospite_poi_admin_e_FRENATA_e_il_movimento_si_MISURA`)
+                                 che arriva dalla #142.
+                                 🔑 E' la QUARTA volta che un conflitto su questa cifra si
+                                 risolve RIMISURANDO invece che scegliendo un lato:
+                                 #138 6096/6080 -> 6100 · #139 6100/6097 -> 6117 ·
+                                 #140 6117/6116 -> 6133 · qui 6134/6148 -> 6149.
+                                 Quattro volte su quattro il vero non era nessuno dei due.
                                  ⛔ E QUESTA RIGA E' LA PROVA DELLA REGOLA CHE PORTA, non
                                  solo un numero. In una notte la cifra si e' mossa NOVE
                                  volte (6069 · 6070 · 6076 · 6080 · 6085/6089/6093
@@ -1150,9 +1158,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 0417944
+CONSEGNE AGGIORNATE A: 6922fed
 
-SUITE ATTUALE: Ran 6134 test
+SUITE ATTUALE: Ran 6149 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
