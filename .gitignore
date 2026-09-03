@@ -137,3 +137,21 @@ collaudi/rapporto_coerenza.txt
 # ...ma NON l'uscita grezza dell'ultimo giro: quella contiene i valori che gitleaks
 # ha trovato, cioe' i segreti in chiaro. Non entra nel repository per nessun motivo.
 collaudi/baseline/_ultimo_giro/
+
+# ⛔ LA SCHEDA DEVE VIAGGIARE COL PROGETTO — S13 per la QUINTA volta, e questa e' la
+# piu' costosa perche' il file che sparisce e' quello che risponde «e' finito?».
+# `collaudi/scheda.json` non e' un'uscita da rigenerare: e' il posto dove un ATTREZZO
+# scrive di aver misurato una casella, con denominatore, comando e impronta del codice
+# guardato. La riga `*.json` molto piu' sopra lo escludeva **in silenzio**, e il costo
+# misurato il 2026-09-03 su `463384a` e' questo: `esame_soldi.py --scrivi` porta il
+# Blocco 1 da 0 su 6 a 2 su 6, `git status --porcelain` non stampa NIENTE, e
+# `git log --all -- collaudi/scheda.json` e' vuoto in tutta la storia del progetto.
+# Cioe': ogni sessione rifaceva la misura e la buttava, e chiunque aprisse la scheda
+# altrove leggeva «mai misurata» qualunque lavoro fosse stato fatto.
+# ⚠️ E versionarla NON congela un verde vecchio: `scheda.stato()` scarta da sola una
+# riga la cui `impronta` non corrisponde piu' al codice del blocco che quella casella
+# guarda. La scadenza resta meccanica; qui cambia solo il fatto che la misura viaggi.
+# Da oggi lo pretende una guardia che i file NON li nomina: li deriva dall'albero
+# sintattico di `collaudi/*.py` (`test_schedari_viaggiano_con_git.py`) — le quattro
+# eccezioni qui sopra erano quattro riparazioni singole, e infatti S13 e' tornato.
+!collaudi/scheda.json

@@ -26,6 +26,243 @@
 
 ---
 
+## 🔄 CORSIA C — PASSAGGIO DI CONSEGNE del 2026-09-03, lavoro NON COMMITTATO in `Core_Auto_C`
+
+> Scritto prima di un `/clear` col contesto al 98%. **I file restano sul disco; quello che si
+> perde è sapere a che punto sono.** Misurato, non ricordato.
+
+**STATO:** albero `Core_Auto_C` su `lavoro-c` a **463384a** (= `origin/master`, la mia #139 è
+dentro). **Modificati e NON committati: `REGISTRO_INGEGNERIA.md` e `RIPRENDI_QUI.md`** — nessun
+file di produzione, nessun test nuovo, quindi **il caricatore non cambia**.
+
+**COSA C'È DENTRO:** una voce di registro *«IL 3 SETTEMBRE — la casella 5 non si chiude perché
+il GIUDICE costa più del tetto»*, sei punti tutti misurati oggi: il Giudice accende **6 occhi in
+ordine alfabetico** ed esclude il test dedicato su `fase85`/`fase87` · il **terzo occhio uccide
+zero** · *«quanto costa» non è una domanda finché non dici chi paga* (tre valori per la stessa
+frase) · ⛔ **un sondaggio non si fa uccidendo il processo, si fa con `--tetto 1`** (tre giri
+uccisi = tre mutanti lasciati in un file dei soldi) · la **mappa dei costi** dei cinque moduli ·
+e il **giudice esterno Stripe che esiste e nessuno interroga**.
+
+**COSA MANCA PER COMMITTARE, in ordine:**
+1. `CONSEGNE AGGIORNATE A:` → **463384a** (fatto qui sotto; senza, dopo il commit il conto fa 2
+   e il pre-volo è ROSSO — la riga invecchia *fra* il controllo e il commit, quindi il pre-volo
+   si rifà **dopo**);
+2. **suite intera** (ferrea 6: vale anche per una virgola in un `.md`) — ⚠️ nel proprio albero
+   con la macchina libera costa **~92 min**, non i 102-139 della ricetta, che furono presi su
+   macchina carica;
+3. la frase **«procedi al commit»** dal fondatore **nella finestra di chi committa**. ⛔ Quella
+   detta oggi fu spesa su un albero **vuoto**: non è un credito aperto, si richiede.
+
+**IL LAVORO CHE RESTA sulla casella 5** (quattro moduli su cinque non aperti): il dato per
+decidere è nella voce di registro. In breve: **63 minuti** darebbero `fase131` **giudicato per
+intero con un giro valido**; **171** darebbero `fase101` con soli **candidati**. E i test
+*dedicati* costano **0,1 s**: tutto il costo viene dai sorveglianti d'integrazione, quindi una
+configurazione valida e abbordabile quasi certamente esiste e **non è stata cercata**.
+
+---
+
+## 🧹 RACCOLTA PRIMA DEL `/clear` — 2026-09-03, ore 18:32-18:40, fatta dalla corsia C
+
+> Il fondatore ha messo la corsia C a coordinare prima di un `/clear` a **tutte** le sessioni.
+> Qui c'è **solo ciò che viveva nelle conversazioni e sarebbe morto**. Ogni riga porta il
+> comando che l'ha prodotta (D22). Le altre corsie non potevano scriverlo da sé: i loro alberi
+> erano **puliti**, e sporcarli avrebbe fatto scattare la ferrea 6 (suite intera anche per una
+> virgola in un `.md`) lasciandoli non committabili proprio mentre arriva il `/clear`. Il mio
+> era già sporco su questo file: non è un privilegio, è che a me non costava niente in più.
+
+### ⛔ LE COSE CHE DECIDE IL FONDATORE, non noi
+
+**1. LA CASELLA 6 È ROSSA, e per farla verde serve «autorizzato».** Censita da `core-auto-a-d9`
+in `Desktop\Core_Auto_GUARDIE_PRONTE\CASELLA_6_censimento_invarianti.md` (4541 byte), accanto
+alla sonda che la rigenera `sonda_censimento_invarianti.py`
+(sha256 `2fa52b778570c3f8f7b57cf03ab7d9c0729420bcd777b380e34fae4d4fda1463`, riverificato).
+**2 invarianti su 5** sono verificati in produzione (`i3`, `i4`, bloccanti sulla finalizzazione);
+`i2` e `i5` **mai**; `i1` **solo se una persona chiama la rotta bunker**. `guardia_prenotazione`
+**non ha nessun chiamante in produzione** (costruita e mai collegata, modo di rompersi n° 2).
+`scansiona_db` si chiama AUDITOR e promette «gli invarianti»: **ne verifica uno**.
+🔑 **La trappola, e vale più del censimento:** il primo criterio dava «5 su 5» perché contava
+le chiamate che `fase199` fa **a se stessa**. Un perimetro sbagliato dà il numero comodo.
+⛔ **Perché blocca:** per far diventare verde la casella servono **chiamate nuove dentro un
+`fase*.py`**, cioè **produzione**, cioè la parola «autorizzato» (B4). **Ogni altra strada passa
+dall'indebolire il criterio finché non passa** — ed è esattamente ciò che questo progetto chiama
+verde finto. Non si decide da soli.
+
+**2. IL SETTIMO DIFETTO CENSITO NON È UNA RIPARAZIONE, è un rischio accettato.** Il n° **6** (la
+suite muta i `fase*.py` **veri**) è già previsto per iscritto in `test_fase106:157`. Tenerlo o
+toglierlo è una decisione del fondatore, non di chi legge il censimento.
+
+**3. LA PAROLA PER UNIRE — è la più vecchia e non l'ha ancora avuta nessuno.** **#142** e
+**#143** sono **verdi** (`gate` letto per nome dall'API) da più di un'ora e **aspettano solo
+quella**. La **#141** è rossa e la sua cura **esiste già, scritta e misurata** (cricchetto
+686=686 e 548=548): aspetta che qualcuno la committi, e **nessuno la rivendica**.
+⛔ Nessuna di queste tre cose si sblocca da sola, e nessuna si sblocca fra noi: servono le
+parole del fondatore **nella finestra di chi agisce** — «procedi al commit» per la cura della
+#141 (B1), «autorizzato» per la casella 6 (B4).
+
+**4. CHI COORDINA.** Il 3 settembre due sessioni dicevano di coordinare; la corsia interpellata
+si è fermata, ed era la cosa giusta. Nessuna delle due rivendica. **Lo decide il fondatore, e
+non è deducibile da un file** — vedi più sotto perché un nome di sessione non sopravvive a un
+`/clear`.
+
+### 🕳️ UNA COSA APERTA E MAI MISURATA — non inventarne l'esito
+
+**Nessuno ha mai misurato se le email dell'APPLICAZIONE arrivino al fondatore.** Quelle di
+GitHub risulta che **non** arrivino, ma sono **due canali diversi** e non si deduce l'uno
+dall'altro. Se non arrivassero, il `logger.critical` del guardiano **griderebbe in una stanza
+vuota** — cioè la catena dell'allarme sarebbe interrotta all'ultimo anello, quello che nessun
+test guarda. **Costo della prova: due minuti.** ⛔ Sta scritta **APERTA**: chi la chiude ci
+mette l'esito misurato, non una supposizione.
+
+### ⚠️ SUI SETTE DIFETTI CENSITI: nessun ordine fra loro, ma una trappola sì
+
+I difetti **1** (il pre-volo non guarda i FILE di test né il cricchetto statico) e **2**
+(`caccia_finti_verdi.py:66` che conta i commenti) stanno **dentro attrezzi che girano prima di
+ogni commit**. ⛔ **Toccarli significa cambiare il metro mentre lo si sta usando: prima si
+misura cosa dichiarano OGGI, poi si cambia** — altrimenti non si saprà se un rosso nuovo viene
+dal codice o dal metro. È la stessa forma dello sbaglio S3 e della S15.
+
+### 🚨 UN RAMO SPINTO NON È VERDE: È **NON MISURATO**
+
+Misurato da `maxdanno-a5` leggendo la tabella dei job dall'API: **la CI non gira sui push di
+ramo** — solo su `master` e su `pull_request`. ⛔ Quindi «ho spinto il ramo e non è rosso» **non
+è un'informazione**: è l'assenza di misura, e va detta con quel nome (è lo sbaglio **S1**, «il
+vuoto non è un valore», applicato alla CI). L'unica lettura che vale è la tabella dei job del
+**commit**, presa dall'API per nome del `gate` (ferrea 8).
+📌 **Esito misurato il 2026-09-03:** **#142** e **#143** verdi · **#141 ROSSA**, e la sua cura
+esiste già ma **nessuno la rivendica** (cricchetto 686=686 e 548=548).
+
+### 📌 DUE COSE CHE CAMBIANO IL PIANO, non solo la cronaca
+
+**La casella 3 è IMPOSSIBILE COM'È SCRITTA** (misurato, non supposto) — quindi non è lavoro
+rimasto indietro: è una casella da **riscrivere**, e riscriverla è una decisione, non un compito.
+**Il giudice esterno su Stripe ESISTE** — cinque collaudi contro l'API vera — e **nessuno dei
+cinque gira nella CI**. ⛔ Non manca il giudice: manca che qualcuno lo interroghi. *(E questa
+riga nasce da un errore dichiarato da `maxdanno-a5`: aveva riferito al fondatore «il giudice
+esterno manca» **prima** di verificarlo. È la S15 — riferire il verdetto di uno strumento senza
+leggere le premesse che dichiara su di sé.)*
+
+📖 **La cronaca completa di quella corsia sta in
+`Desktop\Core_Auto_GUARDIE_PRONTE\RIPARTI_DA_QUI_coordinamento.md`** (riscritto da zero il 3
+settembre). ⛔ **Qui NON è ricopiata di proposito:** due elenchi con lo stesso contenuto in due
+posti sono la malattia del 22 agosto, quella che produsse due «Blocco 1» che si contraddicevano.
+Qui stanno solo i fatti che **cambiano una decisione**; là la cronaca. Se i due divergono, si
+rimisura — non si sceglie il più comodo.
+
+### 📋 LE TRE RICHIESTE APERTE — l'unica dipendenza conosciuta
+
+**#143** (`note-coordinamento-ce`) **non dipende da niente e niente dipende da lei**: un file
+solo, `REGISTRO_INGEGNERIA.md`, +110/-0, **nessun file di codice**, base `463384a`. Si unisce in
+qualunque ordine. ⚠️ Di **#141** e **#142** **non è noto l'ordine** e non lo si inventa: chi
+decide legge la tabella dei job **dall'API** (ferrea 8).
+📌 **L'unico attrito prevedibile fra tutte e tre: toccano tutte `REGISTRO_INGEGNERIA.md`** (le
+voci si inseriscono in cima). Non è un conflitto di merito — sono inserimenti puri — ma la
+seconda e la terza a entrare dovranno **ricomporsi sopra la prima**.
+
+### 🌳 GLI ALBERI SONO SEI, NON QUATTRO — e due fogli dicevano quattro
+
+Misurato con `git worktree list` il 2026-09-03 alle 18:23:
+
+```
+Core_Auto      note-coordinamento-ce  0417944  pulito      su GitHub (#143)
+Core_Auto_A    lavoro-a               8f9d191  6 file      ⚠️ PADRONE IGNOTO (vedi sotto)
+Core_Auto_A2   lavoro-a2              463384a  pulito      = master
+Core_Auto_B    lavoro-b               d739751  pulito      su GitHub (#142)
+Core_Auto_B2   lavoro-b2              b714b94  2 file      + patch e copia in GUARDIE_PRONTE
+Core_Auto_C    lavoro-c               463384a  2 file      questo albero
+```
+
+⛔ **ZERO file di produzione modificati in TUTTI E SEI** (nessun `fase*.py`, nessun
+`main_casavip.py`, niente sotto `deploy/`) — cioè **nessun albero ha un mutante dentro un file
+dei soldi**, che era il rischio vero, visto che è già successo tre volte in un giorno.
+⛔ **I tre rami con lavoro fuori da master sono su GitHub con commit IDENTICO** (`lavoro-b`
+d739751 · `lavoro-b2` b714b94 · `note-coordinamento-ce` 0417944): un `/clear` non li tocca.
+
+### 🔒 IL LAVORO NON COMMITTATO ORA ESISTE IN DUE POSTI
+
+Prima esisteva in **una copia sola** per `Core_Auto_A` e per questo albero: un `git checkout .`
+di domani lo avrebbe cancellato senza lasciare traccia. In `GUARDIE_PRONTE`:
+
+```
+lavoro-a-non-committato.patch    16342 byte   6 file  (+142/-25)
+lavoro-b2-non-committato.patch   11703 byte   2 file  (+110/-33)   c'era gia'
+lavoro-c-non-committato.patch    12333 byte   2 file               questo albero
+```
+
+⛔ **Fatte con `git diff HEAD --binary`, non con `git diff`**: quest'ultimo **non vede i file
+già in indice e li perde in silenzio** — e `collaudi/scheda.json` di `Core_Auto_A` è STAGED,
+quindi sarebbe sparito. ⛔ **E verificate, perché un salvataggio non verificato leggibile non è
+un salvataggio** (ferrea 13): `git apply --check --reverse` eseguito **dentro l'albero di
+provenienza**, uscita **0** letta **diretta, senza tubi**, per tutte e tre.
+
+### ⛔ `git diff HEAD` È CIECO AI FILE NUOVI — e il vuoto sembra «niente da salvare»
+
+Trovato il 2026-09-03 alle 18:43 rimisurando **dopo** aver già scritto il rapporto. In
+`Core_Auto_A2`:
+
+```
+git status --porcelain   ->  ?? collaudi/esame_invarianti_produzione.py
+                             ?? test_invarianti_in_produzione.py
+git diff HEAD --stat     ->  (vuoto)
+```
+
+⛔ **I file non tracciati non compaiono in un diff.** Una toppa di salvataggio fatta con
+`git diff HEAD` — cioè il metodo con cui sono state fatte le altre tre — **non li avrebbe
+contenuti, e sarebbe sembrata a posto**: un salvataggio che non salva, indistinguibile da uno
+buono. *Si impedisce così:* per il lavoro non committato si guarda **`git status --porcelain`**,
+che vede tutto; i file nuovi si mettono in toppa con **`git add -N` PRIMA** del diff, oppure si
+salvano **per copia**. Qui sono stati salvati per copia, con sha256 riverificato identico
+(`lavoro-a2--*` in `GUARDIE_PRONTE`).
+⚠️ **E uno dei due è un file di test con 6 funzioni `def test_`**: il caricatore li scopre da
+disco anche se non sono committati, quindi **in quell'albero il conto dei test è cambiato**. Si
+rimisura col caricatore, non si somma a mente (S14/D22).
+🔑 È la **S1** in una forma nuova: il vuoto non è un valore. Qui l'assenza di misura si
+travestiva da «niente da salvare».
+
+### 🔍 FEDELTÀ VERIFICATA NON È RIDONDANZA — due nomi, un oggetto solo
+
+Avevo scritto che il lavoro orfano di `Core_Auto_A` era **in due copie**: la toppa in
+`GUARDIE_PRONTE` e una nello scratchpad citata dal passaggio di consegne del mattino. **Falso.**
+Le due hanno lo **stesso identico sha256** (`4d66501e34ca2472a936f0cb98b19751f20ff12782f897b04c74f80182567cf3`,
+misurato da due sessioni con strumenti diversi, indipendentemente). Non sono due copie: **sono
+gli stessi byte**. E una delle due vive in uno **scratchpad sotto `%TEMP%`**, cioè in un posto
+che muore con la sessione (sbaglio **S3**).
+💡 La coincidenza resta preziosa, ma dice un'altra cosa: due strumenti diversi hanno prodotto la
+stessa toppa byte per byte, quindi ne è confermata la **fedeltà**. ⛔ **Una controprova non è una
+copia**, e due nomi diversi fanno contare due volte un oggetto solo.
+
+### 🧭 DUE ERRORI DI MISURA FATTI OGGI DA ME, scritti perché costano poco e insegnano
+
+1. **Ho lanciato `git diff HEAD` senza `cd`, ed è girato nell'albero precedente**: ha stampato
+   il diff di `Core_Auto_B2` facendolo sembrare quello di `Core_Auto_C`. Due alberi diversi con
+   lo **stesso identico numero di righe** — un risultato plausibile e falso. *Si impedisce così:*
+   **`git -C <albero>`**, che porta l'albero dentro il comando invece di dipendere da dove sei.
+2. **Ho verificato una patch nell'albero sbagliato e ho letto il codice d'uscita dopo un tubo**
+   (`| head`), quindi leggevo l'esito di `head`. Stampava «uscita 0» sotto tre righe di `error:`.
+   Avrei concluso che la patch era rotta: era rotto il controllo. È la ferrea 7 e la D23 punto 1,
+   **fatte tutte e due nello stesso comando**.
+🔑 **La forma comune, ed è la stessa che ha corretto `core-auto-a-d9` su di me:** una misura
+giusta **attribuita al soggetto sbagliato**. Le ho scritto «non devi misurarti, l'ho già fatto
+io» e le ho passato i numeri di un albero **che non era il suo**. *Si impedisce così:* fra corsie
+**si mandano i comandi, non i risultati**.
+
+### ⚠️ DUE COSE RIMASTE APERTE AL MOMENTO DEL `/clear`
+
+**a) I 6 file non committati di `Core_Auto_A` non hanno un padrone dichiarato.** `core-auto-a-d9`
+dice che quell'albero le è stato **tolto e congelato per un'altra sessione**, e lei sta in
+`Core_Auto_A2` (riverificato da me: `lavoro-a2`, `463384a`, `git status --porcelain` = **0
+righe**). Dentro c'è fra l'altro il caricatore riportato **da 6100 a 6101** e la guardia
+`test_LA_SCHEDA_VIAGGIA_col_progetto`. Il lavoro è **al sicuro** (patch qui sopra) ma **nessuno
+lo rivendica**: chi riparte da `Core_Auto_A` legga la patch prima di fare qualunque cosa.
+
+**b) DUE SESSIONI DICEVANO DI COORDINARE.** `maxdanno-a5` aveva scritto a `core-auto-a-d9`
+«una sola voce comanda e resta questa» e le aveva approvato un piano; un'ora dopo il fondatore
+ha messo la corsia C. `core-auto-a-d9` **si è fermata**, ed era la cosa giusta.
+🔑 **La lezione strutturale, che vale oltre oggi:** i fogli `PROMPT_*.txt` nominavano il
+coordinamento **per nome di sessione** (`maxdanno-a5`). **Un nome di sessione muore col
+`/clear`**: dopo, quel foglio manda una corsia ad aspettare qualcuno che non esiste. I fogli
+sono stati corretti — il primo gesto è `ListAgents`, e chi coordina **si concorda fra le
+sessioni vive**, non si eredita da un file.
+
 ## 📍 DOVE SIAMO — **2026-09-01, a fine giornata**, rimisurato dalla corsia di coordinamento
 
 ```
@@ -33,11 +270,24 @@ GitHub master       5ba642a   <- "Merge PR #133 from lavoro-a"; genitori 936c2a8
                                  TRE unioni in questa giornata: #131 (lavoro-d), #132
                                  (lavoro-c), #133 (lavoro-a). Nessuna richiesta aperta.
 rami                lavoro-a/b/c/d: TUTTI dentro master (0 commit fuori)
-CARICATORE          6133      <- PowerShell vera (MSYSTEM vuoto, PATH dal registro), da
-                                 fermo, USCITA 0, misurato il 2026-09-03 su a602f8e
-                                 (master con la #138 della corsia A e la #139 della
-                                 corsia C dentro) piu' le 16 guardie dei rimborsi della
-                                 corsia B, PRIMA di lanciare (S14).
+CARICATORE          6149      <- PowerShell vera (MSYSTEM vuoto, openssl assente), da fermo,
+                                 misurato il 2026-09-04 sull'albero UNITO dell'integrazione
+                                 (`Core_Auto_INT` = master + #143 + #142 + #141) su 6922fed,
+                                 PRIMA di lanciare (S14). Registro del giro:
+                                 `caricatore_20260904_004939.log`, CODICE_USCITA_DIRETTO=0.
+                                 ⛔ E NON E' NESSUNO DEI DUE NUMERI CHE L'UNIONE METTEVA A
+                                 CONFRONTO: il lato #142 dichiarava 6134 (misurato
+                                 nell'albero B) e il lato #141 dichiarava 6148 (misurato in
+                                 B2 su d58cd83). Nessuno dei due era vero QUI, perche' i due
+                                 alberi non contengono lo stesso insieme di guardie:
+                                 6149 = 6148 + la guardia della TERZA coppia di rimborso
+                                 (`test_ospite_poi_admin_e_FRENATA_e_il_movimento_si_MISURA`)
+                                 che arriva dalla #142.
+                                 🔑 E' la QUARTA volta che un conflitto su questa cifra si
+                                 risolve RIMISURANDO invece che scegliendo un lato:
+                                 #138 6096/6080 -> 6100 · #139 6100/6097 -> 6117 ·
+                                 #140 6117/6116 -> 6133 · qui 6134/6148 -> 6149.
+                                 Quattro volte su quattro il vero non era nessuno dei due.
                                  ⛔ E QUESTA RIGA E' LA PROVA DELLA REGOLA CHE PORTA, non
                                  solo un numero. In una notte la cifra si e' mossa NOVE
                                  volte (6069 · 6070 · 6076 · 6080 · 6085/6089/6093
@@ -58,13 +308,16 @@ CARICATORE          6133      <- PowerShell vera (MSYSTEM vuoto, PATH dal regist
                                  momento alberi diversi misuravano 6116 e 6117, perche'
                                  sono **perimetri diversi**. I conteggi sono per albero e
                                  non viaggiano.
-                                 Le 16 guardie della corsia B sono: censimento delle 7
-                                 strade (6) · coppie sulla stessa chiave (2) · arrivo al
+                                 Le 17 guardie della corsia B sono: censimento delle 7
+                                 strade (6) · coppie sulla stessa chiave (3) · arrivo al
                                  gateway (4) · dovuto in lista (4).
-                                 ⛔ NON comprende `test_rimborso_collisione_importi.py`,
-                                 ROSSO di proposito (difetto vivo, fuori dall'albero
-                                 finche' non c'e' la riparazione): se un domani entra,
-                                 questa cifra sale e va **rimisurata**, non sommata.
+                                 ⛔ `test_rimborso_collisione_importi.py` NON ESISTE PIU'.
+                                 Accusava un difetto misurato INESISTENTE il 2026-09-03:
+                                 `/api/admin/rimborso` su una prenotazione gia' rimborsata
+                                 non muove un centesimo (risponde `idempotente`), quindi
+                                 il libro che dichiara il dovuto ha ragione. Cancellato.
+                                 Quel che valeva -- il danno SE il freno cadesse -- e' la
+                                 terza guardia sulle coppie, vista rossa sul guasto vero.
                               ⚠️ IN ESECUZIONE NE RISULTERANNO MENO, e non e' un difetto:
                                  `openssl` non e' nel PATH di PowerShell (verificato: la
                                  riga esce vuota), quindi le guardie sul ripristino dei
@@ -1142,9 +1395,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: a602f8e
+CONSEGNE AGGIORNATE A: 7b016f4
 
-SUITE ATTUALE: Ran 6133 test
+SUITE ATTUALE: Ran 6149 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -1379,12 +1632,12 @@ AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
             le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
             entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3, ed e' la
             ragione dello scarto fra RACCOLTI e ESEGUITI (5 di scarto: le guardie openssl).
-MISURATO:  2026-09-03 su a602f8e (master con la #138 della corsia A e la #139 della corsia
-           C dentro) piu' le 16 guardie dei rimborsi della corsia B non ancora committate,
-           col caricatore, da PowerShell VERA (MSYSTEM svuotato e PATH ricostruito dal
-           registro), e PRIMA di lanciare (S14):
+MISURATO:  2026-09-03 su 463384a (albero B; `git rev-parse` dice che coincide con
+           origin/master) piu' le 17 guardie dei rimborsi della corsia B non ancora
+           committate, col caricatore, da PowerShell VERA (MSYSTEM svuotato e PATH
+           ricostruito dal registro), e PRIMA di lanciare (S14):
            python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"
-           -> 6133   (USCITA 0)
+           -> 6134   (USCITA 0)
            ⚠️ AGGIORNATO ANCHE QUI, e non e' pignoleria: fino al 2026-09-03 questo blocco
            diceva «su 402ae87 -> 6096» sotto una riga che dichiarava 6100. Quel 6096 era un
            fatto **vero** (misurato dalla corsia A sul suo albero, prima del commit), ma
@@ -3274,6 +3527,26 @@ costerebbe una suite intera per una parola (regola ferrea 6).
 > un ornamento. È lavoro su file di test, non su un documento: **va chiesto a parte**, e da solo
 > costerebbe una suite intera (regola ferrea 6). Resta 🟠, e adesso si sa esattamente cosa
 > costa: due punti in un file, non una parola in un altro.
+
+> 🔴 **2026-09-03, corsia B — LA CAUSA VERA È PIÙ PICCOLA E PIÙ RIPETIBILE: quel numero si
+> scrive A MANO IN DUE POSTI.** Aggiornando il conteggio ho corretto la riga `CARICATORE` e
+> **non** `SUITE ATTUALE: Ran N test`, che è quella che la guardia legge davvero. Rosso
+> `6133 != 6134` su un lavoro in cui il numero era stato **misurato bene** — caricatore, da
+> PowerShell vera, uscita letta. ⚠️ E non è una svista isolata: **la corsia C mi aveva fatto lo
+> stesso rilievo il giorno prima, sulla stessa riga.** Ripetere un errore già segnalato è il
+> segno che a mancare non è l'attenzione, è la struttura.
+>
+> 🔑 **Finché quel numero si scrive a mano in due posti, tornerà**: chi aggiorna corregge il
+> posto che ha in mente, non quello che la guardia legge. Due riparazioni possibili, da valutare
+> **insieme** a B14 perché toccano la stessa regex:
+> · **(a)** la guardia legge **lo stesso posto** in cui scrive l'uomo — una riga sola, e le
+>   altre la citano invece di ripeterla;
+> · **(b)** il numero non lo scrive più l'uomo: lo produce un **attrezzo**, in un posto solo.
+>
+> ⚠️ **Solo (b) chiude anche la causa**, ed è la lezione di D22 e del paracadute `:prec`: un
+> obbligo affidato alla buona volontà si rompe di nuovo. (a) rende l'errore più difficile, (b)
+> lo rende **non rappresentabile**. ⛔ È lavoro su file di test e attrezzi, **non in un `.md`**:
+> va chiesto a parte come B14, e da solo costa una suite intera (ferrea 6).
 
 ### 🟠 B13 — I QUATTRO CLAMP DIFENSIVI DI `fase59` SONO CODICE CHE NON FA NIENTE
 *(dal giro di mutazione del 2026-08-24, B5.)* Le righe **318, 320, 338, 494** di
