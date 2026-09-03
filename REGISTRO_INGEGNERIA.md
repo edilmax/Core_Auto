@@ -403,6 +403,204 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 👁️ I SEI OCCHI DEL GIUDICE ERANO I PRIMI SEI IN ORDINE ALFABETICO — 3 settembre sera, corsia B (albero B2, su `d58cd83`)
+
+**Da dove nasce.** La casella 5 del Blocco 1 chiede zero punti di mutazione scoperti sui cinque
+moduli del percorso del denaro (`moduli_mutazione` in `collaudi/piano.py`). La corsia C aveva
+misurato che su `fase85` e `fase87` il test dedicato del modulo **restava fuori** dai sei
+sorveglianti accesi dal Giudice: un giro di serie lì produceva sopravvissuti *credibili e
+senza significato*. Il fondatore, per delega al coordinamento, ha assegnato alla corsia B il
+lavoro duro; il coordinamento ha approvato la strada A con quattro condizioni (D20 · D18 ·
+confronto vecchi/nuovi · solo `collaudi/`, con decisione esplicita sulle due porte).
+
+**Il meccanismo, letto nel codice (non dedotto).**
+- `test_che_nominano(percorso)` (`collaudi/mutazione_prodotto.py`): tutti i `test_*.py` della
+  radice, in `sorted(os.listdir)`, il cui **testo contiene il nome del modulo** — sottostringa:
+  basta un commento.
+- `giro_su_moduli(..., tetto_test=6)`: `scelti = list(killer) if killer else
+  sorveglianti[:tetto_test]`; `giro_sul_diff(..., tetto_test=8)`: `sorveglianti[:tetto_test]`.
+  La riga di comando `--modulo` **non espone `tetto_test`**: gli unici interruttori sono
+  `--tetto`, `--minuti`, `--riconferme`, `--killer`, `--parziale`.
+- `--killer` è **una lista sola per l'intera invocazione**, uguale per ogni modulo di `--modulo`.
+- `scrivi_la_scheda` scrive la casella **solo** se lo stesso giro ha visto tutti i
+  `moduli_mutazione`, non è `--parziale`, e `verdetto_modulo` esce 0.
+
+**Misurato staticamente sui cinque moduli, con le funzioni del Giudice (nessun test eseguito):**
+```
+modulo                     punti  sorveglianti  importano  test dedicato
+fase65_split_payment          59        4            4      posto  4/4   DENTRO i sei
+fase85_pagamenti_stripe       60       84           80      posto 29/84  FUORI
+fase87_stripe_webhook         15       63           63      posto 24/63  FUORI
+fase101_stripe_connect        50        7            5      posto  2/7   dentro, ma 2 dei sei NON lo importano
+fase131_payout_dashboard      62       13           12      posto  4/13  DENTRO
+totale                       246   (= il numero scritto in piano.py accanto alla decisione del 22 agosto)
+```
+I sei di serie su `fase85`: `test_admin_rimborso_money, test_arrotondamenti_totale,
+test_audit_console, test_benchmark_sqlite, test_bombardamento_calendario_tutti,
+test_bombardamento_chat_prove`. Su `fase87` gli stessi meno uno, più
+`test_bombardamento_concorrente`. Il difetto **non è «il dedicato è escluso»**: è che il
+criterio è **alfabetico su una lista costruita a sottostringa**.
+
+**Una prova della sottostringa fatta senza volerlo.** Il docstring della classe di guardie
+scritta per questo lavoro nomina `fase87_stripe_webhook` e `fase101_stripe_connect`: da quel
+momento `test_pipeline_ci` risulta *sorvegliante* di entrambi (`fase87`: 63 → 64; `fase101`:
+7 → 8). Un occhio di carta nato da un commento. Col criterio nuovo finisce nel terzo gruppo e
+non entra fra i sei.
+
+**D20 — i tre giri, uscita letta diretta su file
+(`python -m unittest test_pipeline_ci.TestIlGiudiceSceglieGliOcchiConUnCriterio -v`).**
+1. *Rosso 1, contro il Giudice di prima* (`EXIT=1`, `FAILED (failures=2, errors=2)`):
+   `AssertionError: 'scegli_sorveglianti' not found in {...} : giro_su_moduli NON chiama
+   'scegli_sorveglianti': sceglie gli occhi per conto suo. Chiamate trovate: ['_apri_traccia',
+   '_chiudi_traccia', '_e_equivalente', '_leggi_intatto', '_riscrivi_intatto', 'applica_mutante',
+   'esegui', 'genera_mutanti', 'int', 'len', 'list', 'max', 'min', 'misura_normale',
+   'moduli_che_la_produzione_esegue', 'print', 'round', 'test_che_nominano']`
+   `AssertionError: 1 != 0 : un modulo NON GIUDICABILE esce verde: e' il verde che non ha
+   guardato (motivi: [])`
+   (le due guardie sul criterio: `AttributeError: module '_mut_occhi' has no attribute
+   'scegli_sorveglianti'` — non ancora il rosso che conta.)
+2. *Rosso 2, dopo la sola ESTRAZIONE della scelta in `scegli_sorveglianti`, criterio invariato*
+   (`FAILED (failures=4)`), stavolta **sul criterio**:
+   `fase85_pagamenti_stripe: dedicato al posto 29 su 84, scelti ['test_admin_rimborso_money',
+   'test_arrotondamenti_totale', 'test_audit_console', 'test_benchmark_sqlite',
+   'test_bombardamento_calendario_tutti', 'test_bombardamento_chat_prove']`
+   `fase87_stripe_webhook: dedicato al posto 24 su 64, scelti ['test_admin_rimborso_money',
+   'test_audit_console', 'test_benchmark_sqlite', 'test_bombardamento_calendario_tutti',
+   'test_bombardamento_chat_prove', 'test_bombardamento_concorrente']`
+   `Lists differ: ['test_fasezz_prova', 'test_yyy_from', 'test_zzz_import'] !=
+   ['test_aaa_commento', 'test_bbb_stringa', 'test_ccc_rotto'] : con tetto 3 gli occhi non sono
+   dedicato + chi importa`
+   Le 18 guardie già esistenti sul Giudice (`TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA`,
+   `TestIlGiudiceNonPuoUscireVERDESenzaAverMisurato`, `TestLaProduzioneDecideCosaValeLaPenaRompere`)
+   dopo l'estrazione: `Ran 18 tests in 86.819s — OK`, `EXIT=0`: l'estrazione non ha cambiato niente.
+3. *Verde, dopo la cura*: `Ran 4 tests in 1.125s — OK`, `EXIT=0`.
+
+**La cura (solo `collaudi/`, nessuna riga di produzione).**
+- `scegli_sorveglianti(sorveglianti, tetto, modulo, radice=None) -> (scelti, dedicato)`: tre
+  gruppi — il test dedicato `test_<modulo>`; chi **importa** il modulo (`_importa_il_modulo`:
+  albero sintattico, `import X` / `from X import`, cache per percorso e impronta del file); chi
+  lo nomina soltanto. Alfabetico dentro ogni gruppo, tetto invariato.
+- **Due porte, un criterio**: `giro_su_moduli` e `giro_sul_diff` chiamano la stessa funzione e
+  nessuna taglia più `sorveglianti[...]` a mano (lo pretende la guardia, sull'AST).
+- **D18 — senza test dedicato il modulo è NON GIUDICABILE**, non «giudicato con occhi a caso»:
+  `giro_su_moduli` lo dichiara con nome e punti fuori e salta il giro; `verdetto_modulo` lo
+  rende rosso col motivo (`N moduli NON GIUDICABILI (fase..: 15 punti fuori): ...`); `--killer`
+  lo scavalca, perché lì gli occhi li ha scelti una persona. `giro_sul_diff` (giudica righe, non
+  moduli) **non** fa rosso: conta i moduli senza dedicato in `rinunce["senza_dedicato"]` e il
+  modo `--diff` ne stampa il **numero**.
+- **La scheda eredita il verdetto intero** (un giudizio, un posto solo): `scrivi_la_scheda` non
+  ha regole nuove, passa i motivi di `verdetto_modulo` a `scheda.registra(..., motivo=)`; la
+  riga porta il campo `motivo` e `stato()` lo mostra: `ROSSA: l'attrezzo l'ha misurata e non
+  passa (...) -- perche': ...`. Precedente coerente: `base_rossa` faceva già così, senza il perché.
+- Scopo allargato a `collaudi/scheda.py`, ridichiarato (`prima_di_lanciare.py --scopo`, 5 file):
+  il campo `motivo` l'ha chiesto il coordinamento, e senza toccare `registra` non esiste.
+
+**Il confronto vecchi sei → nuovi sei (statico, tetto 6, `confronto_occhi.py` fuori dal repository):**
+```
+fase65    IDENTICO (4 sorveglianti, tutti dentro; cambia solo l'ordine, che per unittest non conta)
+fase131   IDENTICO (13 sorveglianti; i sei sono gli stessi)
+fase85    entra test_fase85_pagamenti_stripe · esce test_bombardamento_chat_prove · occhi veri 6 -> 6 · dedicato dentro False -> True
+fase87    entra test_fase87_stripe_webhook   · esce test_bombardamento_concorrente  · dedicato dentro False -> True
+fase101   entrano test_stripe_connect_escrow, test_valuta_end_to_end · escono test_indirizzi_di_ritorno, test_pipeline_ci · occhi veri 3 -> 5, di carta 3 -> 1
+```
+Sui due moduli già validi (65, 131) il nuovo ordine **non è peggiore: è lo stesso insieme**. Su
+`fase101` il sesto occhio resta uno di carta (`test_copertura_onesta`): scelta dichiarata — il
+tetto si riempie anche con chi nomina soltanto, perché più occhi non abbassano mai gli uccisi;
+il costo si governa con `--killer`.
+
+**Cosa questo lavoro NON dimostra (D18 punto 3).** Il potere di uccidere dei nuovi sei **non è
+misurato**: nessun giro di mutazione è stato lanciato (la macchina era di un'altra corsia). Il
+costo per punto di `fase85`/`fase87` coi nuovi occhi nemmeno. «Importa» è l'import diretto: un
+test che carica il modulo con `importlib` o lo esercita tramite un altro modulo sta nel terzo
+gruppo. `--killer` resta una lista sola per tutto il giro, e la casella 5 continua a volere **un
+giro unico sui cinque moduli**: questo lavoro rende quel giro *valido per costruzione*, non più
+corto. ⛔ **E il limite va detto nella stessa riga del merito: valido, NON economico.** Su
+`fase85` e `fase87` i sei di serie diventano il dedicato **più cinque test pesanti** (gli stessi
+bombardamenti e benchmark di prima, meno uno): un giro di serie lì è giudicabile, ma costa
+quanto prima. La misura che lo dice sta nella prova in piccolo qui sotto — **84 s/punto** il 22
+agosto con i sei alfabetici, **0,1 s di normale** col solo dedicato — e la leva sul costo resta
+`--killer`, cioè una persona che sceglie gli occhi e lo dichiara.
+
+**La prova in piccolo su `fase87`, la stessa sera (21:05, albero `Core_Auto_B` pulito a
+`d739751`, macchina libera, col «vai» del coordinamento).** Comando:
+`python collaudi/mutazione_prodotto.py --modulo fase87_stripe_webhook.py --tetto 1 --minuti 10
+--parziale --killer test_fase87_stripe_webhook` (il Giudice **di prima**: in quell'albero il
+criterio nuovo non c'è, e `--killer` lo scavalca comunque). Durata: **2 secondi**. I tre
+controlli, letti *prima* dell'esito e scritti dallo script nel suo registro: `git status` vuoto
+prima e dopo · impronta del modulo su disco identica prima e dopo (`44bd3695…a350`) · biglietti
+di mutazione 0 prima e dopo. ⚠️ L'impronta su disco **non** coincide con quella di `git show
+HEAD:fase87_stripe_webhook.py` (`d597…21aa`), né prima né dopo: è il CRLF di Windows
+(`core.autocrlf=true`), non il giro. Il controllo giusto è `git hash-object <file>` contro
+`git rev-parse HEAD:<file>`: `3f1a267e7d836f26577b76c53ac0d1412c571051` tutt'e due.
+Esito: *«15 punti mutabili · sorveglianti 63, usati 1 (SCELTI A MANO) · normale 0.1s · tetto
+60s»* · *«1/1 riga 42 and -> or SOPRAVVISSUTO»* · *«NON PROVATI (dichiarati): oltre il tetto 14
+· rinunce del generatore {'a_cavallo': 1}»* · scheda NON scritta (`--parziale`) · uscita 1, come
+dichiarato prima (un sopravvissuto resta rosso anche in un giro parziale). Tutti e sei gli attesi
+dichiarati prima del lancio sono tornati.
+🔎 **«Normale 0,1 s» sembrava un guasto dello strumento (S3): guardato lo strumento prima del
+codice.** `python -m unittest test_fase87_stripe_webhook -v` → *«Ran 10 tests in 0.001s — OK»*:
+dieci test veri (TestFirma 6, TestGestisci 4), 76 righe, zero skip, zero rete. Il numero è vero:
+il dedicato è un occhio quasi gratis. Conseguenza sul costo: gli **84 s/punto** misurati il 22
+agosto erano il prezzo dei sei occhi *alfabetici* (bombardamenti e benchmark), non del modulo; col
+solo dedicato i 15 punti costano secondi. Il criterio nuovo rimette accanto al dedicato cinque di
+quei test pesanti: **valido per costruzione, ma caro** — la leva sul costo resta `--killer`.
+🎯 **Il candidato: riga 42, `and → or` in `verifica_firma_stripe`**, nella guardia d'ingresso
+`isinstance(payload, str) and isinstance(header, str) and isinstance(secret, str) and secret`.
+È un **candidato, non un buco**: sopravvive a *un* occhio, e va riprovato contro tutti i 63 o
+contro un `--killer` mirato (dedicato + `test_webhook_guarigione`, `test_crash_recovery_webhook`,
+`test_webhook_stripe_esiti_persi`, che importano il modulo). ⚠️ E potrebbe essere equivalente
+per *comportamento*: la funzione è blindata da un `try` che ritorna `False` su qualunque
+eccezione, quindi un `payload` non stringa finirebbe rifiutato lo stesso, per un'altra strada.
+**Non si dichiara** (B6): o si dimostra con una traccia sui percorsi che portano allo stesso
+stato osservabile, o resta sopravvissuto.
+
+**Una lezione di comando pagata a metà prezzo (D23), la stessa sera.** Lanciando le guardie sui
+documenti con `python -m unittest test_pipeline_ci -k <nome> -k <nome>`,
+`test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO` è uscita rossa: *«6148 != 7: il caricatore
+ne trova 7»*. Il documento era giusto e la guardia pure: il `-k` imposta il filtro dei nomi sul
+`defaultTestLoader`, che la guardia riusa nella sua `discover()`, quindi «raccoglieva» solo i
+sette test che combaciavano col mio filtro. Rilanciata da sola per nome, senza `-k`: `Ran 1 test
+— OK`, `6148 == 6148`, lo stesso numero del pre-fatto. Un rosso è l'inizio della diagnosi, non
+la conclusione: qui a mentire era **il comando con cui guardavo**, e dentro la suite intera il
+problema non esiste. Due righe distinte, perché sono due cose:
+- *Lezione di comando:* `-k` non si usa su quella guardia, né su nessuna guardia che chiami
+  `discover()` da sola; si lancia per nome.
+- *Difetto latente della guardia, scritto e NON riparato stasera:* riusa il
+  `defaultTestLoader`, cioè **eredita uno stato globale che chi la chiama può cambiare da
+  fuori**; un `TestLoader()` suo lo chiuderebbe. Gravità dichiarata: dentro la suite intera
+  (il modo in cui la CI e il pre-volo la eseguono) non si presenta; da sola con `-k` produce un
+  **falso allarme**, che per la ferrea 10 è un difetto quanto un allarme mancato — il prossimo
+  che legge «6148 != 7» perde mezz'ora a cercare un guasto che non c'è. Non si ripara di
+  passaggio: fermarsi a ogni ritrovamento è il meccanismo che ha mandato il 6,5% del lavoro nel
+  prodotto.
+
+**Due righe di metodo, la stessa sera, scritte dalla corsia B dopo l'azzeramento (D21).**
+- *Un messaggio di commit si verifica contro la toppa che descrive, non si rilegge.* Fatto da
+  contesto vuoto su `commit_msg_occhi.txt` (versione `22ff55e7…298b`) contro la toppa v2
+  (`05e046ed…c3f1`, identica a `git diff HEAD`): ogni nome che il messaggio cita si **conta nelle
+  righe aggiunte** (`scegli_sorveglianti` 16 · `_importa_il_modulo` 5 · `senza_dedicato` 9 ·
+  `NON GIUDICABIL` 11 · `motivo=` 3) e ciò che dice di aver tolto si cerca **nelle righe tolte**
+  (`sorveglianti[:`: 2 tolte in `mutazione_prodotto.py`, le 2 aggiunte sono prosa). «Si capisce»
+  è un'opinione; «compare nelle righe aggiunte» è una misura, e la fa `grep '^+' toppa | grep -c`.
+- *Un'ambiguità che torna in ogni commit fatto sopra un lavoro non committato:* «misurato su
+  questo albero (B2 = master 463384a + b714b94 + d58cd83)» — lì `d58cd83` è il **padre**, non il
+  commit che si sta leggendo, e chi legge `git log` ci mette un attimo. Quando un messaggio cita
+  lo sha dell'albero dice «padre» o «HEAD al momento della misura», mai «questo albero» da solo.
+
+### 🗂️ RITROVAMENTO A SÉ — LA SCHEDA POTEVA REGISTRARE «MISURATO E PASSATO» UN MODULO GIUDICATO DAGLI OCCHI SBAGLIATI — 3 settembre, corsia B
+
+`verdetto_modulo` contava cinque categorie (sopravvissuti, scoperti, basi rosse, assenti,
+indeterminati) e **nessuna sapeva se il test dedicato era fra gli occhi**. Quindi un modulo
+sorvegliato dai sei test sbagliati usciva pulito, `scrivi_la_scheda` ereditava quell'uscita 0 e
+scriveva `esito=True`: la casella «zero punti scoperti sul percorso del denaro» poteva spuntarsi
+**senza che il test del modulo avesse mai girato**. Un verde finto **latente nell'attrezzo che
+risponde a «è finito?»**. Vista rossa: `1 != 0 : un modulo NON GIUDICABILE esce verde (motivi:
+[])`. Oggi il verdetto è 1 col motivo, la riga della scheda porta `motivo`, il denominatore
+conta solo i punti esaminati — e i tre numeri si dichiarano insieme (punti che esistono ·
+esaminati · esclusi, col perché), perché un denominatore che si accorcia in silenzio è il modo
+in cui una copertura sale senza che nessuno abbia lavorato. Guardia:
+`test_SENZA_test_dedicato_il_modulo_e_NON_GIUDICABILE_e_la_casella_NON_passa`.
+
 ### 🗂️ LA SCHEDA SPUNTAVA LE CASELLE E GIT LE BUTTAVA VIA — 3 settembre, corsia B2
 
 **Il sintomo che ha fatto aprire l'indagine.** Tre giorni di lavoro e il Blocco 1 (SOLDI)

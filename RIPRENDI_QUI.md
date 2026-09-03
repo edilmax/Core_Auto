@@ -33,11 +33,15 @@ GitHub master       5ba642a   <- "Merge PR #133 from lavoro-a"; genitori 936c2a8
                                  TRE unioni in questa giornata: #131 (lavoro-d), #132
                                  (lavoro-c), #133 (lavoro-a). Nessuna richiesta aperta.
 rami                lavoro-a/b/c/d: TUTTI dentro master (0 commit fuori)
-CARICATORE          6133      <- PowerShell vera (MSYSTEM vuoto, PATH dal registro), da
-                                 fermo, USCITA 0, misurato il 2026-09-03 su a602f8e
-                                 (master con la #138 della corsia A e la #139 della
-                                 corsia C dentro) piu' le 16 guardie dei rimborsi della
-                                 corsia B, PRIMA di lanciare (S14).
+CARICATORE          6148      <- da fermo, misurato il 2026-09-03 nell'albero B2 su d58cd83
+                                 piu' le 4 guardie sui sei occhi del Giudice
+                                 (test_pipeline_ci.py), PRIMA di lanciare (S14), col
+                                 comando della S14 da Git Bash. Il pre-volo da PowerShell
+                                 vera lo riconferma prima della suite: e' la shell che
+                                 lancia a decidere quante guardie si spengono (openssl,
+                                 D23 punto 3), il caricatore raccoglie e non esegue.
+                                 Era 6144 su b714b94 (+11 guardie degli schedari, la
+                                 #141) e 6133 su a602f8e (PowerShell vera, corsia B).
                                  ⛔ E QUESTA RIGA E' LA PROVA DELLA REGOLA CHE PORTA, non
                                  solo un numero. In una notte la cifra si e' mossa NOVE
                                  volte (6069 · 6070 · 6076 · 6080 · 6085/6089/6093
@@ -1142,9 +1146,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 463384a
+CONSEGNE AGGIORNATE A: d58cd83
 
-SUITE ATTUALE: Ran 6144 test
+SUITE ATTUALE: Ran 6148 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
