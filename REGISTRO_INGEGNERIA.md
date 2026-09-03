@@ -513,13 +513,58 @@ questo è deliberato — ripararli mentre si scrivono è il meccanismo che allar
 consuma le notti. ⛔ Nessuna riga di questa voce va letta come un elenco di lavori: **cosa
 manca sta in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 
-### 💸 SONO USCITI 408,00 E IL LIBRO NE HA REGISTRATI 208,00 — 2 settembre, corsia B (casella 2 del Blocco 1)
+### ⛔ IL DIFETTO DEI «200 EURO» NON ESISTEVA — 3 settembre, corsia B (rettifica della voce qui sotto)
+
+**Cosa è stato fatto.** Cancellata `test_rimborso_collisione_importi.py` (accusava un difetto
+inesistente). Aggiunta al suo posto, in `test_rimborso_coppie_stessa_chiave.py`, la guardia
+della **terza coppia**: `test_ospite_poi_admin_e_FRENATA_e_il_movimento_si_MISURA`.
+**STATO: accesa**, verde, **vista ROSSA** sul guasto vero (`[40800] != []`), ripristino
+byte-identico verificato (`sha256` uguale prima e dopo). Nessuna dipendenza nuova.
+⛔ **La riparazione di `fase83_server.py` è stata ANNULLATA** (`git checkout`, `git status`
+pulito): il codice di produzione di oggi è quello di ieri, byte per byte.
+
+**IL FATTO.** La voce qui sotto dichiarava che da `/api/admin/rimborso` uscivano 408,00 mentre
+il libro ne registrava 208,00. **Misurato il 3 settembre: da quella rotta non esce un
+centesimo.** La risposta lo dice per esteso — `'rimborso_stripe': 'nessun incasso da restituire
+(la prenotazione non risulta pagata)'`, `'idempotente': True` — perché la cancellazione ospite
+ha già marcato il record `rimborsato`, e il ramo contabile **non viene nemmeno attraversato**.
+Il libro che dichiara 208,00 **ha ragione**: è il rimborso dovuto, ed è esattamente quello che
+parte dall'**altra** rotta, `/api/admin/rimborsa_dovuto` (`fase83:4891`), che manda
+`dovuto_cents`. La guardia usava la rotta sbagliata per lo scenario che descriveva.
+
+**COME È NATO L'ERRORE, ed è il pezzo che vale.** La guardia scriveva *«soldi mossi
+dall'admin: il totale»* prendendo quel numero **dal preventivo**, senza mai guardare se un
+movimento fosse avvenuto. È il difetto n° 2 del catalogo dei quattro modi in cui un'uscita
+somiglia a una misura: **una previsione con la grammatica di un fatto**. Il rosso era vero, e
+sembrava la conferma del difetto.
+
+> 🔑 **UN ROSSO NON DIMOSTRA CHE IL DIFETTO ESISTA: dimostra che la guardia e il codice non
+> sono d'accordo. Poi si guarda CHI DEI DUE HA RAGIONE.** Qui aveva ragione il codice.
+> D20 pretende il rosso *prima* della riparazione, e va benissimo — ma il rosso è l'inizio
+> della diagnosi, non la sua conclusione.
+
+**COSA L'HA FERMATO** (e non è stata la prudenza): aver **eseguito** invece di dedurre. La
+riparazione era già scritta in produzione e la guardia restava rossa; solo stampando i
+movimenti veri è venuto fuori che la riga admin non c'era mai stata — né prima né dopo. Una
+diagnosi che si spiega tutto e non torna sui numeri va **misurata**, non raffinata.
+
+**COSA RESTA, e perché non è tempo perso.** Il danno descritto è **reale se il freno cade**: la
+guardia nuova inietta la caduta del freno (il record che non risulta più rimborsato) e vede il
+gateway muovere il totale contro un libro che dichiara il dovuto — `fase177.aggrega_dac7` somma
+proprio quelle righe nel rendiconto fiscale. Le **tre** coppie ordinate che condividono la
+chiave contabile sono ora **tutte e tre** misurate e sorvegliate, e nessuna fa danno oggi.
+
+### 💸 «SONO USCITI 408,00 E IL LIBRO NE HA REGISTRATI 208,00» — 2 settembre, corsia B (casella 2 del Blocco 1) — ⛔ **LA PREMESSA DI QUESTO TITOLO È STATA SMENTITA IL 3 SETTEMBRE, vedi la voce qui sopra**
 
 **Cosa è stato creato.** `test_rimborso_ogni_strada.py` (4 guardie, censimento delle strade) e
 `test_rimborso_coppie_stessa_chiave.py` (2 guardie, le coppie che oggi non fanno danno).
 **STATO: accesi**, verdi, nessuna dipendenza nuova. Più `test_rimborso_collisione_importi.py`
 — ⛔ **rosso di proposito**: descrive il comportamento corretto di un difetto **vivo**, quindi
 entra **insieme** alla riparazione, mai da solo.
+⛔ **AGGIORNAMENTO 3 settembre: quel file è stato CANCELLATO e non esiste più.** Il difetto che
+descriveva non c'era: era rosso perché sbagliava lui, non perché il codice fosse guasto (voce
+qui sopra). Quel che c'era di buono — il danno *se il freno cadesse* — è stato riscritto come
+guardia della terza coppia dentro `test_rimborso_coppie_stessa_chiave.py`.
 
 **IL DENOMINATORE ERA GIÀ SCRITTO IN PRODUZIONE, e non l'ho inventato.** `_giornale` in
 `fase83_server.py` dichiara: *«Le strade che portano a un rimborso sono SETTE, e questo

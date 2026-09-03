@@ -258,9 +258,83 @@ class TestLeCoppieCheOggiNonFannoDanno(_BancoRimborsi):
             "la chiave `rimborso:<rif>` e la scrittura e' idempotente: la seconda e' un "
             "no-op. Finora non faceva danno perche' muovevano lo STESSO importo (il totale). "
             "Adesso il libro dichiara %s mentre il totale mosso e' %s: la coincidenza di "
-            "valore su cui poggiava l'assoluzione non c'e' piu', e questa coppia e' diventata "
-            "il secondo caso del difetto gia' noto sulla coppia ospite->admin."
+            "valore su cui poggiava l'assoluzione non c'e' piu', e questa coppia sarebbe la "
+            "PRIMA a far mentire il giornale davvero (la coppia ospite->admin, misurata il "
+            "2026-09-03, e' frenata dal prodotto: vedi il metodo qui sotto)."
             % (dopo_admin[0], totale))
+
+    def test_ospite_poi_admin_e_FRENATA_e_il_movimento_si_MISURA(self):
+        """⛔ LA TERZA COPPIA — e il 2026-09-02 l'avevo classificata come L'UNICA CHE FA
+        DANNO, con tanto di guardia rossa e di cifra in euro. **Misurata il 2026-09-03: il
+        danno non esiste.**
+
+        La guardia che l'accusava (`test_rimborso_collisione_importi.py`, cancellata) diceva
+        «soldi mossi dall'admin: il totale» prendendo quel numero **dal preventivo**, senza
+        mai guardare se un movimento fosse avvenuto: una previsione scritta con la grammatica
+        di un fatto. Il rosso era vero, ma era il rosso della guardia sbagliata.
+        🔑 **Un rosso non dimostra che il difetto esista: dimostra che guardia e codice non
+        sono d'accordo. Poi si guarda chi dei due ha ragione** -- e qui aveva ragione il codice.
+
+        Cosa succede davvero, misurato:
+        · l'ospite cancella -> il libro registra il DOVUTO (al netto della penale) e la
+          prenotazione entra nella lista dei rimborsi da fare;
+        · `/api/admin/rimborso` su quella prenotazione risponde 200 `idempotente`, con
+          «nessun incasso da restituire»: **non chiama il gateway e non scrive in giornale**.
+          Non e' una collisione di chiavi -- il record e' gia' marcato 'rimborsato' e il ramo
+          contabile non viene nemmeno attraversato (`fase83`, `_admin_rimborso`).
+        · i soldi partono dall'ALTRA rotta, `/api/admin/rimborsa_dovuto` (`fase83:4891`), che
+          manda `dovuto_cents`: **lo stesso importo che il libro dichiara.**
+
+        ⚠️ QUI IL MOVIMENTO SI MISURA, spiando `stripe.rimborsa`, invece di dedurlo dallo
+        stato: e' l'unico modo di non ripetere l'errore che questa guardia sostituisce.
+        ⛔ COSA NON COPRE (D18 punto 3): non prova la PARTENZA dei soldi dall'altra rotta --
+        quella e' provata in `test_rimborso_arriva_al_gateway.py`, che copre 2 punti su 2.
+        Qui si sorveglia il FRENO: se un domani `/api/admin/rimborso` ricominciasse a muovere
+        denaro su una prenotazione gia' rimborsata, uscirebbe il TOTALE mentre il libro
+        dichiara il DOVUTO, e questa diventerebbe rossa lo stesso giorno."""
+        rif, voucher, totale, ci, co = self.prenota_e_paga("terza.coppia@ci.it")
+        sp = getattr(self.sis, "stripe", None)
+        self.assertIsNotNone(sp, "BANCO ROTTO: nessun gateway da spiare, si ripara il banco.")
+        mossi, vero = [], sp.rimborsa
+
+        def _spia(pi, cents, chiave, *a, **k):
+            mossi.append(int(cents))
+            return vero(pi, cents, chiave, *a, **k)
+
+        sp.rimborsa = _spia
+        try:
+            s1, _ = self.g("POST", "/api/concierge/cancella", {"voucher_token": voucher})
+            self.assertEqual(s1, 200,
+                             "PREMESSA NON VALIDA: la cancellazione ospite non riesce.")
+            dovuto = self.riga_rimborso(rif)
+            self.assertIsNotNone(dovuto, "PREMESSA NON VALIDA: nessuna riga di rimborso.")
+            self.assertLess(
+                dovuto[0], totale,
+                "PREMESSA NON VALIDA: la cancellazione ospite ha registrato il TOTALE (%s), "
+                "non un parziale. Senza due importi diversi non c'e' niente da confondere e "
+                "questa prova non misura cio' che dice: controlla lo scaglione." % (dovuto[0],))
+            idem = self.idem_key_vera(rif)
+            self.assertIsNotNone(
+                idem, "PREMESSA NON VALIDA: idem_key non trovata nel pannello. Passare il "
+                      "riferimento al posto suo fa rispondere 409, che somiglia a un freno.")
+            mossi.clear()          # da qui in poi si misura SOLO la rotta admin
+            s2, o2 = self.g("POST", "/api/admin/rimborso",
+                            {"alloggio_id": "casa", "check_in": ci, "check_out": co,
+                             "idem_key": idem}, {"X-Admin-Key": "ak"})
+            self.assertEqual(s2, 200, "PREMESSA NON VALIDA: la rotta admin non risponde "
+                                      "200 (%s): %r" % (s2, o2))
+            self.assertEqual(
+                mossi, [],
+                "IL FRENO E' CADUTO. `/api/admin/rimborso` ha mosso %s al gateway su una "
+                "prenotazione GIA' rimborsata, mentre il libro dichiara il dovuto (%s). Da "
+                "qui in poi i due numeri divergono, e `fase177.aggrega_dac7` somma proprio "
+                "queste righe nel rendiconto fiscale." % (mossi, dovuto[0]))
+            self.assertEqual(
+                self.riga_rimborso(rif)[0], dovuto[0],
+                "la rotta idempotente ha scritto in giornale pur non muovendo denaro: il "
+                "libro non deve cambiare se nessun centesimo si sposta.")
+        finally:
+            sp.rimborsa = vero
 
 
 if __name__ == "__main__":
