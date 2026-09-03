@@ -7922,6 +7922,12 @@ class RouterHTTP:
         ok, tipo, dati = gestisci_webhook(body or "", sig, secret)
         if not ok:
             return 400, {"errore": "firma_non_valida"}
+        # ⛔ QUI SI RACCOGLIE IL MOTIVO PER CUI UN ESITO NON E' STATO APPLICATO. Stripe legge
+        # 2xx come «gestito» e non riprova MAI piu': un 2xx su un esito perso non e' un
+        # errore di forma, e' cio' che rende la perdita DEFINITIVA. Resta "" quando non c'e'
+        # niente da salvare, perche' un evento malformato non e' un nostro guasto e
+        # ritentarlo per giorni non lo aggiusta.
+        esito_perso = ""
         if tipo == "checkout.session.completed":
             obj0 = (dati or {}).get("object", {}) or {}
             meta0 = obj0.get("metadata", {}) or {}
@@ -7936,7 +7942,9 @@ class RouterHTTP:
             except Exception:
                 rif = ""
             # AUDIT CONSOLE: salva l'id sessione (cs_...) -> shadow-check Stripe possibile
-            # per sempre su questa prenotazione. ISOLATO: mai bloccare la conferma.
+            # per sempre su questa prenotazione. ISOLATO dalla CONFERMA, che avviene
+            # comunque qui sotto -- ma NON piu' dalla RISPOSTA: se il salvataggio non
+            # riesce, Stripe deve ritentare, perche' senza `pi_` il rimborso non parte.
             try:
                 cs_id = (dati or {}).get("object", {}).get("id", "")
                 # E l'identificativo del PAGAMENTO (pi_...), che viaggia nello stesso evento
@@ -7946,9 +7954,36 @@ class RouterHTTP:
                 pi_id = (dati or {}).get("object", {}).get("payment_intent", "")
                 pp_ = getattr(self._sys, "pagamenti_pendenti", None)
                 if pp_ is not None and rif and hasattr(pp_, "salva_stripe_session"):
-                    pp_.salva_stripe_session(rif, cs_id, pi_id)
+                    # ⛔ IL RITORNO SI GUARDA. E' dichiarato `-> bool` e dice False anche
+                    # quando non ha salvato niente: ignorarlo rendeva «non salvato»
+                    # indistinguibile da «salvato». Due casi, con rimedi OPPOSTI.
+                    if not pp_.salva_stripe_session(rif, cs_id, pi_id):
+                        if not (isinstance(cs_id, str) and cs_id.startswith("cs_")):
+                            # (a) IL DATO NON C'ERA NELL'EVENTO. Un evento vero porta sempre
+                            # l'id di sessione: questo e' malformato, non un nostro guasto.
+                            # Si registra con codice e sottocodice (ferrea 9) e NON si fa
+                            # ritentare: ripetere per giorni un evento rotto non lo aggiusta.
+                            # ⛔ WARNING E NON ERROR, E IL LIVELLO E' PARTE DELLA RIPARAZIONE.
+                            # Gli ERROR fanno partire l'email del Guardiano: qui scatterebbe
+                            # su ogni evento senza `cs_`, cioe' diventerebbe posta quotidiana
+                            # che nessuno legge piu'. Un falso allarme e' un difetto quanto un
+                            # allarme mancato (ferrea 10). La ferrea 9 pretende **codice,
+                            # sottocodice e messaggio** -- non pretende che sia un ERROR.
+                            # Lo sorveglia `test_una_cancellazione_RIUSCITA_non_scrive_errori`
+                            # in `test_cancellazione_money.py`, che esige ZERO ERROR sul
+                            # percorso sano: se qualcuno rialza questo livello, torna rosso.
+                            logger.warning(
+                                "webhook | codice: evento_malformato | sottocodice: "
+                                "id_sessione_assente | messaggio: nessun 'cs_' nell'evento, "
+                                "payment_intent non conservabile per riferimento '%s'",
+                                _rif_per_registro(rif))
+                        else:
+                            # (b) E' ANDATO STORTO DA NOI (record non ancora presente, o
+                            # scrittura non riuscita): l'unico rimedio e' il retry.
+                            esito_perso = "payment_intent_non_salvato"
             except Exception:
                 logger.warning("salvataggio cs_ fallito (ISOLATO)", exc_info=True)
+                esito_perso = "salvataggio_sessione_fallito"
             logger.info("Stripe: pagamento CONFERMATO per riferimento '%s'",
                         _rif_per_registro(rif))
             self._conferma_pagamento(rif)
@@ -7961,14 +7996,34 @@ class RouterHTTP:
                 stato_s = str(obj.get("status") or "")
                 kyc = getattr(self._sys, "kyc", None)
                 if kyc is not None and hid:
+                    # ⛔ IL RITORNO SI GUARDA, E IL REGISTRO SI SCRIVE DOPO AVERLO VISTO.
+                    # `conferma` e' una macchina a stati (fase143 `_TRANS`): da «non_avviata»
+                    # rifiuta e torna False. Prima si scriveva «VERIFICATO» comunque -- una
+                    # riga di registro che dichiarava il falso -- e si rispondeva 2xx, cioe'
+                    # si impediva a Stripe di riprovare. Il confronto con `stato(...)` copre
+                    # il RETRY su uno stato gia' terminale: li' la conferma torna False ma
+                    # non e' perso niente, ed e' cio' che evita di ritentare all'infinito.
                     if stato_s == "verified":
-                        kyc.conferma(hid, "verificato")
-                        logger.warning("KYC IDENTITY VERIFICATO | HOST_ID: %s (webhook)",
-                                       _rif_per_registro(hid))
+                        if (kyc.conferma(hid, "verificato")
+                                or kyc.stato(hid) == "verificato"):
+                            logger.warning("KYC IDENTITY VERIFICATO | HOST_ID: %s (webhook)",
+                                           _rif_per_registro(hid))
+                        else:
+                            esito_perso = "kyc_verificato_non_applicato"
                     elif stato_s == "canceled":
-                        kyc.conferma(hid, "respinto")
+                        if not (kyc.conferma(hid, "respinto")
+                                or kyc.stato(hid) == "respinto"):
+                            esito_perso = "kyc_respinto_non_applicato"
             except Exception:
                 logger.warning("webhook identity: errore ISOLATO", exc_info=True)
+                esito_perso = "kyc_non_applicato"
+        if esito_perso:
+            # RITENTABILE. 2xx significa «gestito, non rimandarlo»: qui l'esito NON e' stato
+            # applicato, quindi il retry di Stripe e' l'unica cosa che puo' ancora salvarlo.
+            logger.error("webhook | codice: esito_non_applicato | sottocodice: %s | "
+                         "messaggio: rispondo 503 perche' Stripe ritenti (evento '%s')",
+                         esito_perso, tipo)
+            return 503, {"errore": "esito_non_applicato", "sottocodice": esito_perso}
         return 200, {"ricevuto": True, "tipo": tipo}
 
     # ── SCATTO ③: carta host off-session (fase183) ──────────────────────────

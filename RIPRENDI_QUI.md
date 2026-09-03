@@ -33,15 +33,23 @@ GitHub master       5ba642a   <- "Merge PR #133 from lavoro-a"; genitori 936c2a8
                                  TRE unioni in questa giornata: #131 (lavoro-d), #132
                                  (lavoro-c), #133 (lavoro-a). Nessuna richiesta aperta.
 rami                lavoro-a/b/c/d: TUTTI dentro master (0 commit fuori)
-CARICATORE          6096      <- PowerShell vera (MSYSTEM vuoto, PATH dal registro), da
-                                 fermo, USCITA 0. Era 6076; le 20 nuove sono della corsia
-                                 A sul blocco SOLDI: 12 relazioni metamorfiche, 3 che
-                                 provano che quelle 12 sanno diventare rosse, 5 che
-                                 impediscono all'esame delle caselle di barare (l'ultima
-                                 nata dalla revisione incrociata della corsia C).
-                                 ⛔ Rimisurato, non sommato: un conto a mente non e' una
-                                 misura (D22), e stanotte un mio conto a mente su un
-                                 denominatore atteso era gia' sbagliato di 15.
+CARICATORE          6100      <- PowerShell vera (MSYSTEM vuoto, PATH dal registro), da
+                                 fermo, USCITA 0, misurato DOPO l'unione di origin/master
+                                 (95b9526) dentro il lavoro della corsia A, PRIMA di
+                                 lanciare (S14).
+                                 ⛔ Rimisurato, non sommato, ed e' il punto: i due lati
+                                 del conflitto dicevano 6096 (corsia A: +20 sul blocco
+                                 SOLDI) e 6080 (master: +4 guardie del webhook Stripe).
+                                 Nessuno dei due era il numero vero dopo l'unione, e
+                                 nemmeno la loro somma sarebbe stata una misura. Il
+                                 conflitto su questa riga si risolve col caricatore, mai
+                                 scegliendo uno dei due lati (D22).
+                              ⚠️ IN ESECUZIONE NE RISULTERANNO MENO, e non e' un difetto:
+                                 `openssl` non e' nel PATH di PowerShell (verificato: la
+                                 riga esce vuota), quindi le guardie sul ripristino dei
+                                 backup si mettono da parte DA SOLE e unittest registra
+                                 un salto solo, senza il nome della classe. E' D23 punto
+                                 3: il calo ha un nome, non si insegue e non si arrotonda.
 CI su 936c2a8       15 controlli · 14 success + 1 skipped (zap) · gate SUCCESS
                     ⚠️ La CI su 5ba642a NON e' stata riletta prima di scrivere questa riga:
                     e' NON MISURATA, non "presumibilmente verde" (ferrea 8).
@@ -1113,9 +1121,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 402ae87
+CONSEGNE AGGIORNATE A: 85aea8b
 
-SUITE ATTUALE: Ran 6096 test
+SUITE ATTUALE: Ran 6100 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -1337,8 +1345,12 @@ SCARTO:                    5  <- ✅ I CINQUE HANNO UN NOME, dal 2026-08-28. Per
                                  computer del fondatore copre CINQUE TEST IN MENO di quanto
                                  sembri, e quei cinque riguardano il RIPRISTINO DEI BACKUP.
 
-FILE DI TEST: 407             <- Get-ChildItem -Filter 'test_*.py' -File (radice; identico
-                                 con -Recurse: nessun test in sottocartelle)
+FILE DI TEST: 408             <- Get-ChildItem -Filter 'test_*.py' -File (radice; identico
+                                 con -Recurse: nessun test in sottocartelle). Era 407: il
+                                 file in piu' e' test_webhook_stripe_esiti_persi.py.
+                                 ⛔ Questa cifra la sorveglia `audit_millimetrico` SOLO
+                                 attraverso il README: qui non la guarda nessun test, e
+                                 lasciarla indietro non farebbe diventare rosso niente.
 MODULI fase*.py: 151          <- Get-ChildItem -Filter 'fase*.py' -File
 
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati

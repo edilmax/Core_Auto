@@ -298,6 +298,19 @@ REGISTRO = [
         "test": "test_freeze_blocca_book_e_rimborso",
         "gravita": "alta", "area": "soldi",
     },
+    {
+        "codice": "MONEY-27",
+        "descrizione": "Il webhook Stripe rispondeva 200 anche quando l'esito era andato "
+                       "perso: il ritorno di `salva_stripe_session` (dichiarato -> bool) non "
+                       "veniva guardato, quindi 'non salvato' era indistinguibile da "
+                       "'salvato'. Senza `payment_intent` la scheda del rimborso dichiara "
+                       "'manca: payment_intent', il pulsante non compare e restituire i "
+                       "soldi all'ospite torna un lavoro a mano sul pannello -- per sempre, "
+                       "perche' un 200 dice a Stripe di non riprovare mai piu'.",
+        "file": "test_webhook_stripe_esiti_persi.py",
+        "test": "test_se_il_salvataggio_dice_di_non_aver_salvato_non_si_risponde_2xx",
+        "gravita": "critica", "area": "soldi",
+    },
 
     # ---------------------------- SICUREZZA --------------------------------
     {
