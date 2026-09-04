@@ -270,11 +270,13 @@ GitHub master       5ba642a   <- "Merge PR #133 from lavoro-a"; genitori 936c2a8
                                  TRE unioni in questa giornata: #131 (lavoro-d), #132
                                  (lavoro-c), #133 (lavoro-a). Nessuna richiesta aperta.
 rami                lavoro-a/b/c/d: TUTTI dentro master (0 commit fuori)
-CARICATORE          6149      <- PowerShell vera (MSYSTEM vuoto, openssl assente), da fermo,
-                                 misurato il 2026-09-04 sull'albero UNITO dell'integrazione
-                                 (`Core_Auto_INT` = master + #143 + #142 + #141) su 6922fed,
-                                 PRIMA di lanciare (S14). Registro del giro:
-                                 `caricatore_20260904_004939.log`, CODICE_USCITA_DIRETTO=0.
+CARICATORE          6181      <- PowerShell vera (MSYSTEM vuoto, openssl assente), da fermo,
+                                 misurato il 2026-09-04 alle 14:07 nell'albero `Core_Auto_B2`
+                                 (ramo `casella5` su 6bf37a5e = master + le 32 guardie della
+                                 casella 5: fase87 7 · fase85 8 · fase101 8 · fase131 8 ·
+                                 fase65 1), PRIMA di lanciare (S14). Registro del giro:
+                                 `caricatore_20260904_140739.log`, CODICE_USCITA_DIRETTO=0.
+                                 (Era 6149 su master alle 00:49, `caricatore_20260904_004939.log`.)
                                  ⛔ E NON E' NESSUNO DEI DUE NUMERI CHE L'UNIONE METTEVA A
                                  CONFRONTO: il lato #142 dichiarava 6134 (misurato
                                  nell'albero B) e il lato #141 dichiarava 6148 (misurato in
@@ -1397,7 +1399,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 ```
 CONSEGNE AGGIORNATE A: 7b016f4
 
-SUITE ATTUALE: Ran 6149 test
+SUITE ATTUALE: Ran 6181 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

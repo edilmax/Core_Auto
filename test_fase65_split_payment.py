@@ -601,5 +601,28 @@ class TestIBuchiTrovatiDallaMutazione(unittest.TestCase):
                          "il pagamento dall'altro thread non ha lasciato traccia")
 
 
+class TestIBuchiDelGiudice(unittest.TestCase):
+    """Una guardia, per l'unico mutante SOPRAVVISSUTO al giro del Giudice del 2026-09-04 col SOLO
+    test dedicato (59 punti: 58 uccisi). Vista ROSSA contro il mutante prima che verde (D20).
+    Con questa il dedicato basta da solo a sorvegliare il modulo."""
+
+    def test_riga218_un_replay_e_un_successo_ok_True_non_un_fallimento_travestito(self):
+        # Col mutante (True -> False) il replay risponde ok=False con motivo vuoto: chi legge `ok`
+        # per decidere se ritentare ritenta un pagamento gia' fatto, e chi mostra l'esito
+        # all'ospite gli dice «fallito» su una quota gia' pagata.
+        g = crea_gestore_split()
+        cid = g.crea_conto("pren1", "casa", 9000, ["a", "b", "c"])
+        self.assertIs(g.registra_pagamento(cid, "a", idem_key="k1").ok, True)
+        e = g.registra_pagamento(cid, "a", idem_key="k2")            # replay
+        self.assertIs(e.ok, True)
+        self.assertEqual(e.motivo, "")
+        self.assertIs(e.idempotente, True)
+        self.assertIs(e.completato, False)
+        g.registra_pagamento(cid, "b", idem_key="kb")
+        g.registra_pagamento(cid, "c", idem_key="kc")
+        e3 = g.registra_pagamento(cid, "c", idem_key="kc2")          # replay su conto completato
+        self.assertEqual((e3.ok, e3.idempotente, e3.completato), (True, True, True))
+
+
 if __name__ == "__main__":
     unittest.main()

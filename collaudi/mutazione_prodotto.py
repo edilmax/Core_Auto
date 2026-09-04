@@ -1363,6 +1363,33 @@ EQUIVALENTI_DICHIARATI = {
         "`min(cr, margine_disponibile)`, che su 0 da' 0 in entrambe: nessuna differenza "
         "osservabile nemmeno a valle.",
     },
+
+    ("fase85_pagamenti_stripe.py", "crea_link_anticipo",
+     "and saldo >= 0) else 0", ">=", ">"): {
+        "ancore": ["saldo = dati.get(\"saldo_cents\")\n"
+                   "saldo = saldo if (isinstance(saldo, int) and not isinstance(saldo, bool)\n"
+                   "and saldo >= 0) else 0",
+                   "(\"metadata[saldo_cents]\", str(int(saldo))),"],
+        "impronta": "39234f7d8340f748160390037f186285232d94867b0629f46e66b959b022eae1",
+        "metodo": "esaustiva",
+        "dominio": "qualunque valore di `saldo = dati.get(\"saldo_cents\")` (dati del chiamante, "
+                   "nessun tipo garantito). I due rami `isinstance` sono invariati e scartano "
+                   "tutto cio' che non e' un intero non-bool; il dominio residuo sono gli interi, "
+                   "e su di essi `>=` e `>` differiscono in UN SOLO punto: saldo == 0.",
+        "data": "2026-09-04",
+        "prova":
+        "DIMOSTRATO PER ESAURIMENTO il 2026-09-04 (giro col solo test dedicato: 60 punti, 59 "
+        "uccisi, questo il solo vivo). Lo specchio della voce di `_sconto_credito` in fase59. "
+        "Per saldo == 0 l'originale prende il ramo `if` e assegna `saldo`, cioe' 0; la versione "
+        "mutata prende il ramo `else` e assegna 0. Stesso valore, stesso tipo (int). Per ogni "
+        "altro intero le due condizioni coincidono. Il valore prosegue solo in "
+        "`str(int(saldo))` nei metadata (ancora 2), che su 0 da' \"0\" in entrambe: nessuna "
+        "differenza osservabile nemmeno a valle, nessuna eccezione, nessuno stato toccato. "
+        "La guardia `test_riga292_296_313_319_327_...` di test_fase85_pagamenti_stripe pretende "
+        "gia' `saldo_cents=0` per None, stringa, float, negativo e bool: se qualcuno cambiasse "
+        "il ramo `else` o l'uso a valle, quella guardia o queste ancore decadrebbero lo stesso "
+        "giorno e questa dichiarazione andrebbe rifatta.",
+    },
 }
 
 
