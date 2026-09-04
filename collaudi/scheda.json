@@ -64,5 +64,16 @@
   "impronta": "e94151bd5a8b",
   "motivo": "",
   "quando": "2026-09-05T00:25:42"
+ },
+ "ec84faaea398": {
+  "blocco": 2,
+  "comando": "python collaudi/esame_prenotazioni.py --scrivi",
+  "commit": "d548c3f",
+  "condizione": "la macchina a stati copre cancellazioni, modifiche, no-show e sovra-affitto",
+  "denominatore": 34,
+  "esito": true,
+  "impronta": "7ef3c7708bee",
+  "motivo": "",
+  "quando": "2026-09-05T00:47:22"
  }
 }

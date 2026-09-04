@@ -28,6 +28,19 @@
 
 ## 🏁 CHAT B (la sola) — 2026-09-04 notte: IL BLOCCO 1 SOLDI È 6 SU 6, SCRITTO DALLE MACCHINE — casella 6 (fase202 in produzione, deploy `201d723`) e casella 3 (esame degli orologi contro Stripe di prova); ramo `casella3` (PR #151) sopra la #150 unita
 
+**🗓️ 5 SETTEMBRE, NOTTE — BLOCCO 2, CASELLA 1 VERDE (ramo `blocco2-macchina-stati` su `d548c3f`, sopra la cura
+dell'I3):** «vai avanti con il prossimo blocco che dice piano.py» → `collaudi/esame_prenotazioni.py` misura che la
+macchina a stati (`fase199`, specchio dei CAS di `fase162`) copre le quattro situazioni: 13 teoremi Z3 dimostrati,
+concordanza modello↔codice (9 collaudi), solo `fase162` scrive lo stato e scrive solo stati del modello; scenari
+dalle rotte vere con lo Stripe finto: cancellazione ospite → 'rimborsato', host → 'cancellata_host' (notti libere);
+modifica = cancella + riprenota (nel prodotto non esiste una rotta di modifica: censimento AST); no-show = resta
+'pagato', la garanzia matura e va all'host (fase62 non tocca i pendenti); sovra-affitto = una unità, hold che scade
+sull'orologio nostro, il secondo prende, il pagamento tardivo del primo → 'rimborsato', auditor I1 pulito.
+**34 passi**; `--con-guasto` ROSSO (4 passi) senza scrittura; `--scrivi` VERDE → **Blocco 2: 1 su 4** (impronta
+`7ef3c7708bee`). Guardie `TestLEsameDellePrenotazioniNonPuoBARARE` (5). Caricatore **6260**. Voce di registro:
+*«BLOCCO 2, CASELLA 1»*. Prossima casella (la 2): «il blocco atomico regge sotto gara (10 giri × 24 agenti, 1
+conferma)» — l'attrezzo delle gare esiste già (`collaudi/gare_estreme.py`, A1): serve l'esame che lo esegue e scrive.
+
 **🧯 5 SETTEMBRE, NOTTE — UN DIFETTO MIO NELLA `fase202` DEL 4/9, CURATO (ramo `fase202-prova-firmata` su `c06a382`):**
 la prenotazione istantanea salva `idem_key` e il `voucher_token` nel corpo, **non** la colonna `quote_token`
 (solo la richiesta 'in_attesa_host' la salva): l'I3 del giro quotidiano avrebbe gridato «senza prova» al
@@ -398,14 +411,15 @@ GitHub master       5ba642a   <- "Merge PR #133 from lavoro-a"; genitori 936c2a8
                                  TRE unioni in questa giornata: #131 (lavoro-d), #132
                                  (lavoro-c), #133 (lavoro-a). Nessuna richiesta aperta.
 rami                lavoro-a/b/c/d: TUTTI dentro master (0 commit fuori)
-CARICATORE          6255      <- PowerShell vera (MSYSTEM vuoto, openssl assente), da fermo,
-                                 misurato il 2026-09-05 alle 00:26 nell'albero `Core_Auto_B2`
-                                 (ramo `fase202-prova-firmata` su c06a382 = master + le 3 guardie
-                                 sull'I3 in `test_fase202_invarianti_archivi`), PRIMA di lanciare (S14).
-                                 Registro: `caricatore_20260905_002609.log`, CODICE_USCITA_DIRETTO=0.
-                                 (Era 6252 il 4/9 alle 22:34 con le 6 guardie dell'esame degli orologi,
-                                 `caricatore_20260904_223450.log`; 6246 alle 22:03 con le 43 della
-                                 casella 6; 6203 alle 19:14 col pulsante della controversia.)
+CARICATORE          6260      <- PowerShell vera (MSYSTEM vuoto, openssl assente), da fermo,
+                                 misurato il 2026-09-05 alle 00:49 nell'albero `Core_Auto_B2`
+                                 (ramo `blocco2-macchina-stati` su d548c3f = la cura dell'I3 + le 5
+                                 guardie `test_pipeline_ci.TestLEsameDellePrenotazioniNonPuoBARARE`),
+                                 PRIMA di lanciare (S14).
+                                 Registro: `caricatore_20260905_004919.log`, CODICE_USCITA_DIRETTO=0.
+                                 (Era 6255 alle 00:26 con le 3 guardie sull'I3, `caricatore_20260905_002609.log`;
+                                 6252 il 4/9 con le 6 dell'esame degli orologi; 6246 con le 43 della
+                                 casella 6; 6203 col pulsante della controversia.)
                                  (Era 6181 alle 14:07 con le 32 guardie della casella 5,
                                  `caricatore_20260904_140739.log`; 6149 su master alle 00:49.)
                                  ⛔ E NON E' NESSUNO DEI DUE NUMERI CHE L'UNIONE METTEVA A
@@ -1528,9 +1542,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: c06a382
+CONSEGNE AGGIORNATE A: d548c3f
 
-SUITE ATTUALE: Ran 6255 test
+SUITE ATTUALE: Ran 6260 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
