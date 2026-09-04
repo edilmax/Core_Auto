@@ -21,20 +21,19 @@ percorsa intera, dentro UN solo collaudo, e si pretendono tutti gli anelli in or
    fonte (la risposta della cancellazione, il preventivo, l'anticipo del `book`), mai `> 0`.
    Un `> 0` passa anche con l'importo sbagliato, cioe' col difetto che qui si deve prendere.
 
-⛔ LA SETTIMA STRADA NON HA UN PULSANTE, E QUI LO SI MISURA INVECE DI TACERLO. La controversia
-   scrive la cifra dell'arbitro nel giornale e la riga compare SENZA pulsante: il freno «date
-   liberate» non passa perche' il soggiorno c'e' stato, e `_admin_controversia_risolvi` lo
-   dichiara di proposito («il rimborso Stripe resta manuale»). Qui si prova che il freno regge
-   (la rotta rifiuta, il gateway non riceve niente) e che il prodotto NON dimentica la promessa:
-   la riga resta finche' Stripe non mostra un rimborso, e sparisce quando una persona l'ha
-   fatto dal pannello Stripe. E' un'USCITA MANUALE DICHIARATA, non «i soldi tornano da soli»:
-   `collaudi/esame_rimborsi.py` la classifica cosi', e la casella non si spunta finche' e' cosi'.
+⛔ LA SETTIMA STRADA (la controversia) AVEVA UN'USCITA MANUALE, E ORA HA IL PULSANTE. Fino al
+   4 settembre 2026 la riga compariva SENZA pulsante (`manca: date_liberate`: il soggiorno c'e'
+   stato) e la cifra decisa nel pannello andava riscritta a mano su Stripe. Ordine del fondatore
+   («le cifre le metto io … avere il pulsante da cliccare», «autorizzato»): `_rimborso_dovuto_
+   scheda` riconosce la controversia risolta (garanzia «risolto» con ESATTAMENTE la cifra in
+   lista) e al posto delle date pretende l'aritmetica «quota host + rimborso <= pagato». Qui la
+   catena e' intera come per le altre sei, e il freno nuovo e' provato nelle DUE direzioni:
+   cifra diversa in garanzia -> niente pulsante; host + ospite oltre il pagato -> niente pulsante.
 
 ⚠️ COSA QUESTO FILE NON DIMOSTRA (D18 punto 3): che Stripe esegua davvero (per quello c'e'
-   `collaudi/e2e_rimborso_stripe.py`, con la chiave di prova); che la cifra sia giusta in
-   valuta diversa dall'euro (`test_admin_rimborso_money` ne copre una parte); che la persona
-   che rimborsa a mano la controversia digiti la cifra decisa: quel gesto avviene fuori dal
-   prodotto, e nessuna guardia puo' vederlo.
+   `collaudi/e2e_rimborso_stripe.py`, con la chiave di prova, che dal 4 settembre preme anche
+   il pulsante della controversia); che la cifra sia giusta in valuta diversa dall'euro
+   (`test_admin_rimborso_money` ne copre una parte).
 """
 import datetime
 import json
@@ -369,14 +368,17 @@ class TestISoldiTornanoDaOgniStrada(_BancoDelleStrade):
             "STRIPE HA GIA' IL RIMBORSO E LA RIGA E' IN LISTA: chi la vede premerebbe, e il "
             "freno «gia' rimborsato» sarebbe l'unica cosa fra l'ospite e un doppio rimborso.")
 
-    def test_STRADA_CONTROVERSIA_uscita_MANUALE_dichiarata_e_promessa_non_dimenticata(self):
-        """«rimborso deciso dall'arbitro»: la riga c'e' con la cifra ESATTA, il pulsante NO.
+    def test_STRADA_CONTROVERSIA_da_capo_a_fondo_con_la_cifra_dell_ARBITRO(self):
+        """«rimborso deciso dall'arbitro»: la cifra la mette una persona, e il pulsante la
+        esegue ESATTA. Il resto va all'host da solo; all'ospite torna quanto deciso, ne'
+        un centesimo in piu' ne' uno in meno, e la riga esce perche' Stripe lo conferma.
 
-        E' l'unica strada senza uscita automatica, e il prodotto lo dichiara dove scrive la
-        riga. Qui si misurano le tre cose che rendono onesta un'uscita manuale: il freno
-        regge davvero (la rotta rifiuta e il gateway non riceve niente), la riga dichiara
-        PERCHE' manca il pulsante, e la promessa non si dimentica — resta finche' Stripe non
-        mostra un rimborso, e sparisce solo allora."""
+        Fino al 4 settembre 2026 questa riga compariva SENZA pulsante (`manca: date_liberate`:
+        il soggiorno c'e' stato) e la cifra andava riscritta a mano su Stripe. Ordine del
+        fondatore, «autorizzato» quel giorno: *le cifre le metto io … avere il pulsante da
+        cliccare*. Questa guardia e' stata vista ROSSA sul prodotto di prima
+        (`corsia_B_2026-09-04\\guardia_rossa_controversia_pulsante_ROSSO_1.log`) e VERDE dopo
+        la riga in `_rimborso_dovuto_scheda` che riconosce la controversia risolta."""
         ci, co = self.date(22)
         b, totale = self.prenota(ci, co, "ctr@os.it")
         rif, pi = b["riferimento"], "pi_ctr"
@@ -393,37 +395,91 @@ class TestISoldiTornanoDaOgniStrada(_BancoDelleStrade):
         self.assertEqual(s, 200, "PREMESSA NON VALIDA: l'arbitrato non riesce: %r" % (out,))
         self.assertEqual(int(out.get("rimborso_cliente_cents") or -1), deciso,
                          "la rotta ha registrato una cifra diversa da quella scritta: %r" % (out,))
-
+        self.assertEqual(int(out.get("va_all_host_cents") or -1), in_garanzia - deciso,
+                         "all'host non resta il resto al centesimo: %r" % (out,))
         riga = self.riga(rif)
-        self.assertIsNotNone(riga, "LA DECISIONE DELL'ARBITRO NON ARRIVA IN LISTA: la promessa "
-                                   "esiste solo nella memoria di chi ha arbitrato")
-        self.assertEqual(riga.get("dovuto_cents"), deciso,
-                         "L'ARBITRATO E' STATO SCAVALCATO: in lista %s invece di %s"
-                         % (riga.get("dovuto_cents"), deciso))
-        self.assertFalse(riga.get("bottone"),
-                         "IL FRENO E' CADUTO: la controversia ha il pulsante, ma il soggiorno "
-                         "c'e' stato e il prodotto dichiara questa uscita MANUALE. Se e' voluto, "
-                         "va deciso e scritto in produzione, non scoperto qui. Riga: %r" % (riga,))
-        self.assertIn("date_liberate", riga.get("manca") or [],
-                      "la riga non dichiara PERCHE' manca il pulsante: chi guarda il pannello "
-                      "non sa se aspettare o intervenire. Riga: %r" % (riga,))
+        self.assertIsNotNone(riga, "LA DECISIONE DELL'ARBITRO NON ARRIVA IN LISTA")
+        self.assertTrue(riga.get("arbitrato"),
+                        "la riga non dice di nascere da un arbitrato: chi guarda il pannello "
+                        "non sa che le date occupate sono legittime. Riga: %r" % (riga,))
+        self.catena_dal_pulsante("controversia (cifra dell'arbitro)", rif, pi, deciso)
 
-        s, o = self.premi(rif)
-        self.assertEqual(s, 409, "PEGGIO DEL PULSANTE: la rotta esegue anche quando il pannello "
-                                 "lo vieta (HTTP %s): il freno sarebbe solo grafico. %r" % (s, o))
-        self.assertEqual(self.stripe.creazioni, [],
-                         "I SOLDI SONO PARTITI LO STESSO dalla rotta rifiutata: %r"
-                         % (self.stripe.creazioni,))
-        self.assertIsNotNone(self.riga(rif),
-                             "LA PROMESSA E' SPARITA senza che nessuno abbia rimborsato: "
-                             "l'ospite aspetta e nessuno lo sa piu'")
+    def test_STRADA_CONTROVERSIA_il_pulsante_NON_c_e_se_la_cifra_in_lista_non_e_quella_decisa(self):
+        """⛔ Il freno nuovo si prova nelle DUE direzioni (D20). Il pulsante della controversia
+        esiste SOLO perche' la garanzia dice «risolto» con ESATTAMENTE la cifra in lista: se la
+        garanzia dice un'altra cifra (qualcuno ha toccato il giornale, o la garanzia), il
+        pulsante non deve comparire, e la riga deve dire che mancano le date — come prima."""
+        ci, co = self.date(24)
+        b, _totale = self.prenota(ci, co, "ctr2@os.it")
+        rif, pi = b["riferimento"], "pi_ctr2"
+        self.paga(rif, pi)
+        s, _c = self.g("POST", "/api/garanzia/contesta", {"voucher_token": b["voucher_token"]})
+        self.assertEqual(s, 200)
+        in_garanzia = int((self.sis.garanzia.stato(rif) or {}).get("importo_host_cents") or 0)
+        deciso = in_garanzia // 4 + 3
+        s, out = self.g("POST", "/api/admin/controversia/risolvi",
+                        {"riferimento": rif, "rimborso_ospite_cents": deciso},
+                        {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, out)
+        self.assertTrue(self.riga(rif).get("bottone"), "PREMESSA NON VALIDA: prima il pulsante c'e'")
+        # la garanzia non dice piu' quella cifra: e' il caso «qualcosa non torna»
+        vero_stato = self.sis.garanzia.stato
 
-        # La persona rimborsa dal pannello di Stripe: alla prossima domanda Stripe lo dice,
-        # e solo allora la riga esce. La cifra la digita lei: questo collaudo non puo' vederla.
-        self.stripe.rimborso_fatto_a_mano(pi, deciso)
-        self.assertIsNone(self.riga(rif),
-                          "STRIPE MOSTRA IL RIMBORSO E LA RIGA E' ANCORA IN LISTA: chi la vede "
-                          "cercherebbe di rimborsare una seconda volta")
+        def stato_diverso(prenotazione_id):
+            st = vero_stato(prenotazione_id)
+            if st and prenotazione_id == rif:
+                st = dict(st, ospite_rimborso_cents=int(st["ospite_rimborso_cents"]) + 1)
+            return st
+        self.sis.garanzia.stato = stato_diverso
+        try:
+            riga = self.riga(rif)
+            self.assertFalse(riga.get("bottone"),
+                             "IL PULSANTE C'E' ANCHE SE LA GARANZIA DICE UN'ALTRA CIFRA: il freno "
+                             "nuovo non guarda la cifra. Riga: %r" % (riga,))
+            self.assertFalse(riga.get("arbitrato"))
+            self.assertIn("date_liberate", riga.get("manca") or [])
+            s, o = self.premi(rif)
+            self.assertEqual(s, 409, "la rotta esegue anche quando il pannello lo vieta: %r" % (o,))
+            self.assertEqual(self.stripe.creazioni, [], "I SOLDI SONO PARTITI LO STESSO")
+        finally:
+            self.sis.garanzia.stato = vero_stato
+
+    def test_STRADA_CONTROVERSIA_il_pulsante_NON_c_e_se_quota_host_piu_rimborso_superano_il_pagato(self):
+        """⛔ D16, mai in perdita: se quota dell'host + rimborso all'ospite superassero quanto
+        l'ospite ha pagato, la differenza la metteremmo noi. Il freno aritmetico deve fermare
+        il pulsante e dirlo (`arbitrato_supera_il_pagato`)."""
+        ci, co = self.date(26)
+        b, _totale = self.prenota(ci, co, "ctr3@os.it")
+        rif, pi = b["riferimento"], "pi_ctr3"
+        self.paga(rif, pi)
+        s, _c = self.g("POST", "/api/garanzia/contesta", {"voucher_token": b["voucher_token"]})
+        self.assertEqual(s, 200)
+        in_garanzia = int((self.sis.garanzia.stato(rif) or {}).get("importo_host_cents") or 0)
+        deciso = in_garanzia // 2
+        s, out = self.g("POST", "/api/admin/controversia/risolvi",
+                        {"riferimento": rif, "rimborso_ospite_cents": deciso},
+                        {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, out)
+        self.assertTrue(self.riga(rif).get("bottone"), "PREMESSA NON VALIDA: prima il pulsante c'e'")
+        vero_stato = self.sis.garanzia.stato
+
+        def host_gonfiato(prenotazione_id):
+            st = vero_stato(prenotazione_id)
+            if st and prenotazione_id == rif:
+                st = dict(st, host_riceve_cents=10 ** 9)     # una quota host impossibile
+            return st
+        self.sis.garanzia.stato = host_gonfiato
+        try:
+            riga = self.riga(rif)
+            self.assertFalse(riga.get("bottone"),
+                             "IL PULSANTE C'E' ANCHE SE HOST + OSPITE SUPERANO IL PAGATO: la "
+                             "differenza la metteremmo noi. Riga: %r" % (riga,))
+            self.assertIn("arbitrato_supera_il_pagato", riga.get("manca") or [])
+            s, o = self.premi(rif)
+            self.assertEqual(s, 409, "%r" % (o,))
+            self.assertEqual(self.stripe.creazioni, [], "I SOLDI SONO PARTITI LO STESSO")
+        finally:
+            self.sis.garanzia.stato = vero_stato
 
 
 if __name__ == "__main__":

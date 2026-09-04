@@ -4683,11 +4683,34 @@ class RouterHTTP:
             # Il rilascio delle date e' la PRIMA cosa che fa la cancellazione, e senza di
             # esso non si arriva mai a questi stati: se lo stato c'e', le date sono libere.
             date_liberate = rec.get("stato") in ("rimborsato", "cancellata_host")
+        # ── LA CONTROVERSIA: la cifra l'ha decisa una persona, dopo aver sentito le parti ──
+        # Il soggiorno c'e' stato, quindi le date NON sono libere per costruzione, e non devono
+        # esserlo: il freno «date liberate» protegge dal rimborsare chi ha dormito, ma qui chi
+        # ha dormito ha un giudizio a favore. Il freno giusto e' un altro: la garanzia dice
+        # «risolto» con ESATTAMENTE questa cifra all'ospite, e all'host la sua quota. Fino al
+        # 2026-09-04 questa riga compariva SENZA pulsante e il rimborso restava «manuale»: la
+        # cifra decisa nel pannello andava riscritta a mano su Stripe, e la riga si chiudeva a
+        # qualunque rimborso visto la'. Ordine del fondatore («le cifre le metto io … avere il
+        # pulsante da cliccare», «autorizzato» il 4 settembre): la cifra la mette lui, il
+        # pulsante la esegue esatta. Nel dubbio (garanzia illeggibile, cifra diversa) la riga
+        # resta senza pulsante: decide una persona.
+        arbitrato = None
+        try:
+            gz = getattr(self._sys, "garanzia", None)
+            st_g = gz.stato(str(rif)) if gz is not None else None
+            # (`dovuto > 0` qui sarebbe ridondante: un movimento «rimborso» nel giornale ha
+            #  sempre importo > 0, perche' `_giornale` rifiuta gli importi non positivi. Il
+            #  Giudice della mutazione l'ha mostrato: un `>=` al suo posto sopravviveva.)
+            if (isinstance(st_g, dict) and st_g.get("stato") == "risolto"
+                    and int(st_g.get("ospite_rimborso_cents") or 0) == dovuto):
+                arbitrato = {"host_riceve_cents": int(st_g.get("host_riceve_cents") or 0)}
+        except Exception:
+            arbitrato = None
         if not pi_:
             manca.append("payment_intent")
         if pagato <= 0:
             manca.append("importo_pagato")
-        if not date_liberate:
+        if not date_liberate and arbitrato is None:
             manca.append("date_liberate")
         if dovuto <= 0:
             manca.append("importo_dovuto")
@@ -4700,11 +4723,20 @@ class RouterHTTP:
         # ── FRENO 3: se l'host e' gia' stato pagato, rimborsare paga DUE volte (D16) ──
         passi_ok = False
         try:
-            pd = getattr(self._sys, "payout", None)
-            stato_payout = str(pd.stato_di(str(rif)) or "") if pd is not None else ""
-            passi_ok = stato_payout != "pagato"
-            if not passi_ok:
-                manca.append("payout_gia_pagato")
+            if arbitrato is not None:
+                # Nella controversia la quota dell'host parte DA SOLA alla risoluzione, quindi
+                # il suo payout risulta legittimamente pagato: non e' «pagato due volte», e'
+                # «pagato la SUA parte». Il freno che vale qui e' l'aritmetica: quota host +
+                # rimborso all'ospite non possono superare quanto l'ospite ha pagato (D16).
+                passi_ok = (dovuto + int(arbitrato["host_riceve_cents"])) <= pagato
+                if not passi_ok:
+                    manca.append("arbitrato_supera_il_pagato")
+            else:
+                pd = getattr(self._sys, "payout", None)
+                stato_payout = str(pd.stato_di(str(rif)) or "") if pd is not None else ""
+                passi_ok = stato_payout != "pagato"
+                if not passi_ok:
+                    manca.append("payout_gia_pagato")
         except Exception:
             # Non sapere in che stato e' il payout NON e' un dettaglio: nel dubbio i soldi
             # non partono da soli, si grida e decide una persona.
@@ -4726,6 +4758,7 @@ class RouterHTTP:
                 "valuta": str(mov.get("valuta") or "EUR"),
                 "attesa_ore": max(0, (int(_t.time()) - int(mov.get("ts") or 0)) // 3600),
                 "date_liberate": date_liberate, "passi_sicurezza_ok": passi_ok,
+                "arbitrato": arbitrato is not None,
                 "payment_intent": pi_, "gia_rimborsato": gia, "manca": manca,
                 "motivo_stripe": motivo_stripe,
                 # ⛔ «Se manca uno di questi il bottone NON c'e'» — non «c'e' ma sconsigliato»:
@@ -4994,11 +5027,11 @@ class RouterHTTP:
         # SCATOLA NERA DEL RIMBORSO. Senza questa riga la decisione dell'arbitro vive solo
         # nella risposta HTTP di questo istante, e il cliente non entra nella lista di chi
         # aspetta i suoi soldi: esiste solo nella memoria di chi ha arbitrato.
-        # ⚠️ LIMITE DICHIARATO: la riga comparirà SENZA pulsante. Qui il soggiorno c'è stato
-        # davvero, quindi le date sono legittimamente occupate e il freno «date liberate» non
-        # passa; nello split parziale scatta anche «l'host è già stato pagato», perché la sua
-        # quota parte subito qui sopra. È voluto: si chiude la cecità, non si allenta un freno
-        # sui soldi. Il rimborso Stripe resta manuale, come dice già la `nota` qui sotto.
+        # Dal 2026-09-04 la riga compare CON il pulsante: `_rimborso_dovuto_scheda` riconosce
+        # la controversia risolta (garanzia «risolto» con questa stessa cifra) e sostituisce il
+        # freno «date liberate» — che qui non puo' passare, il soggiorno c'e' stato — con
+        # l'aritmetica «quota host + rimborso <= pagato». Fino a quel giorno la riga era senza
+        # pulsante e la cifra andava riscritta a mano su Stripe (limite dichiarato allora).
         try:
             _pp = getattr(self._sys, "pagamenti_pendenti", None)
             _dj = json.loads(((_pp.info(rif) if _pp is not None else None) or {})
@@ -5014,8 +5047,9 @@ class RouterHTTP:
         return 200, {"stato": "risolta", "riferimento": rif,
                      "rimborso_cliente_cents": out.get("ospite_rimborso_cents", rimborso),
                      "va_all_host_cents": out.get("host_riceve_cents", importo - rimborso),
-                     "nota": "decisione registrata + garanzia sbloccata; esegui il rimborso "
-                             "Stripe di questo importo (manuale, controllato)"}
+                     "nota": "decisione registrata + garanzia sbloccata; la quota dell'host "
+                             "parte da sola; il rimborso all'ospite si esegue dalla lista "
+                             "«Rimborsi da eseguire», col pulsante, per questa cifra esatta"}
 
     def _traduci_servizi(self, item: Dict[str, Any], lingua: str) -> Dict[str, Any]:
         if isinstance(item.get("servizi"), list):
