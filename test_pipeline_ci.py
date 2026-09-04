@@ -10950,6 +10950,212 @@ class TestLEsameDeiSoldiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
                              "da `collaudi/piano.py`, se no le due copie divergono")
 
 
+class TestLEsameDeiRimborsiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_rimborsi.py`, l'attrezzo che scrive la casella 2 del
+    blocco dei soldi («i soldi tornano DAVVERO da OGNI strada»).
+
+    Stesso principio della guardia sull'esame delle caselle 1 e 4: la domanda non e' «ha
+    barato?» ma «PUO' barare?», e si fa PRIMA. Qui in piu' c'e' un pezzo che quell'esame non
+    ha: un classificatore che legge gli EVENTI osservati mentre girano le guardie (scrittura
+    nel giornale -> riga in lista col pulsante -> gateway -> riga uscita) e decide se una strada
+    «torna». Un classificatore che dicesse «torna» con un anello mancante sarebbe il verde
+    finto nella sua forma piu' pura: percio' lo si prova nelle DUE direzioni con eventi
+    costruiti a mano, senza avviare nessun collaudo vero (millisecondi, non minuti).
+    """
+
+    def _esame(self):
+        return self._carica("esame_rimborsi.py", "_esame_rimborsi_sotto_guardia")
+
+    def test_CON_UNA_PRECONDIZIONE_ROTTA_L_ESAME_SI_FERMA_E_NON_SCRIVE(self):
+        """Se il censimento delle strade non trova piu' niente, l'esame non deve dire ne'
+        «verde» ne' «rosso»: deve dire che non puo' misurare, e non scrivere NIENTE."""
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        vero_censimento = esame.strade_censite
+        scritture = []
+
+        def _registra_spia(*a, **k):
+            scritture.append((a, k))
+            raise AssertionError("l'esame ha scritto nella scheda con una precondizione "
+                                 "rotta: e' esattamente il barare che D18 vieta")
+        try:
+            esame.strade_censite = lambda: ([], [])          # il metro si storce
+            esame.scheda.registra = _registra_spia
+            tutte_ok, _righe = esame.precondizioni()
+            self.assertFalse(tutte_ok,
+                             "col censimento a vuoto le precondizioni si dichiarano sane: il "
+                             "metro non si accorge di essere storto (sbaglio S1)")
+            uscita = esame.main(["--scrivi", "--senza-e2e"])
+            self.assertEqual(uscita, 2,
+                             "l'esame doveva FERMARSI (uscita 2) e invece ha risposto %r"
+                             % (uscita,))
+            self.assertEqual(scritture, [], "l'esame ha scritto pur non potendo misurare")
+        finally:
+            esame.strade_censite = vero_censimento
+            esame.scheda.registra = vera_registra
+
+    def test_CON_IL_GUASTO_DENTRO_NON_SCRIVE_MAI(self):
+        """`--con-guasto --scrivi` registrerebbe la misura di una macchina rotta apposta.
+        Il cancello e' un `if`, non un commento, e qui lo si spinge."""
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_L_ESAME_DICHIARA_COSA_NON_HA_GUARDATO(self):
+        esame = self._esame()
+        self.assertTrue(getattr(esame, "NON_GUARDA", ()),
+                        "l'esame non dichiara piu' cosa NON ha esaminato")
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+
+    def test_L_ESAME_SA_PROVARSI_NELLE_DUE_DIREZIONI(self):
+        esame = self._esame()
+        for pezzo in ("autoprova", "inietta_il_guasto"):
+            self.assertTrue(callable(getattr(esame, pezzo, None)),
+                            "manca `%s`: senza, l'esame non si e' mai visto gridare" % pezzo)
+
+    def test_L_AUTOPROVA_NON_PUO_ESSERE_SVUOTATA(self):
+        """L'autoprova RAGIONA sugli esiti dei due figli: qui riceve esiti decisi da noi
+        (senza avviare processi) e deve giudicarli bene in tutte e tre le forme."""
+        esame = self._esame()
+        strade = list(esame.strade())
+        self.assertIn(esame.STRADA_DEL_GUASTO, strade,
+                      "la strada del guasto non e' fra quelle censite: l'autoprova non "
+                      "potrebbe vederla sparire")
+
+        def _uscita(stati):
+            class _Esito(object):
+                returncode = 1
+                stdout = "".join("STRADA|%s|%s\n" % (c, s) for c, s in stati.items()).encode("utf-8")
+            return _Esito()
+
+        sano = {c: esame.TORNA_PULSANTE for c in strade}
+        guasto = dict(sano)
+        guasto[esame.STRADA_DEL_GUASTO] = esame.NON_MISURATA
+        vero_run = subprocess.run
+        try:
+            # (a) i due figli rispondono UGUALE: la strada non e' sparita col guasto
+            subprocess.run = lambda *a, **k: _uscita(sano)
+            riuscita, righe = esame.autoprova()
+            self.assertFalse(riuscita, "l'autoprova ha detto «affidabile» senza aver visto "
+                                       "la strada sparire col guasto: %r" % (righe,))
+            # (b) col guasto sparisce SOLO quella, sana torna: e' cio' che deve vedere
+            esiti = [_uscita(guasto), _uscita(sano)]
+            subprocess.run = lambda *a, **k: esiti.pop(0)
+            riuscita, righe = esame.autoprova()
+            self.assertTrue(riuscita, "l'autoprova ha detto «NON affidabile» davanti a "
+                                      "esattamente cio' che doveva vedere: %r" % (righe,))
+            # (c) il guasto su una strada ne cambia un'altra: l'esame non isola, e va detto
+            largo = dict(guasto)
+            altra = [c for c in strade if c != esame.STRADA_DEL_GUASTO][0]
+            largo[altra] = esame.NON_ESCE
+            esiti = [_uscita(largo), _uscita(sano)]
+            subprocess.run = lambda *a, **k: esiti.pop(0)
+            riuscita, righe = esame.autoprova()
+            self.assertFalse(riuscita, "un guasto su UNA strada ha cambiato un'altra e "
+                                       "l'autoprova non l'ha detto: %r" % (righe,))
+        finally:
+            subprocess.run = vero_run
+
+    def test_IL_TESTO_DELLA_CASELLA_NON_E_RICOPIATO_A_MANO(self):
+        esame = self._esame()
+        blocco = [b for b in esame.BLOCCHI if b["ordine"] == esame.BLOCCO_SOLDI]
+        self.assertEqual(len(blocco), 1, "il blocco dei soldi non si legge dal piano")
+        condizioni = blocco[0]["finito_quando"]
+        self.assertGreater(len(condizioni), esame.INDICE_CASELLA)
+        with io.open(os.path.join(QUI, "collaudi", "esame_rimborsi.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        self.assertNotIn(condizioni[esame.INDICE_CASELLA], sorgente,
+                         "il testo della casella e' RICOPIATO dentro l'esame: va letto da "
+                         "`collaudi/piano.py`, se no le due copie divergono")
+        self.assertIn("OGNI strada", condizioni[esame.INDICE_CASELLA],
+                      "l'indice della casella non punta piu' a quella dei rimborsi")
+
+    def test_LE_GUARDIE_SI_SCELGONO_PER_NOME_E_PER_IMPORT_NON_PER_SOTTOSTRINGA(self):
+        """Il primo giro con `--scrivi` ha acceso anche QUESTO file, perche' la guardia qui sopra
+        nomina il pulsante in una stringa: 325 collaudi estranei e 6 rossi finiti nel motivo
+        scritto nella scheda. Un modulo che non importa il server non puo' percorrere una strada,
+        e non si accende -- e questo file e' la prova vivente, perche' il nome lo contiene."""
+        esame = self._esame()
+        scelte = esame.guardie()
+        self.assertIn("test_rimborso_torna_da_ogni_strada", scelte,
+                      "la guardia delle catene non viene accesa: l'esame non vedrebbe "
+                      "nessuna strada intera")
+        self.assertNotIn("test_pipeline_ci", scelte,
+                         "un modulo che nomina il pulsante senza importare il server e' stato "
+                         "acceso: la scelta e' tornata alla sottostringa (sbaglio S6)")
+        self.assertTrue(esame._importa("import fase83_server\n", "fase83_server"))
+        self.assertTrue(esame._importa("from fase83_server import crea_router\n", "fase83_server"))
+        self.assertFalse(esame._importa("# import fase83_server\nx = 'fase83_server'\n",
+                                        "fase83_server"),
+                         "un commento o una stringa contano come import")
+        self.assertFalse(esame._importa("def f():\n    from fase83_server import x\n",
+                                        "fase83_server"),
+                         "un import dentro una funzione conta come banco del server: e' il "
+                         "caso di questo file, e riaccenderebbe 325 collaudi estranei")
+
+    def test_LE_STRADE_DELL_ESAME_SONO_QUELLE_DEL_CENSIMENTO(self):
+        """Il denominatore non e' un elenco a mano: e' lo stesso del censimento, e le causali
+        con `%s` riconoscono la forma che prendono a RUNTIME."""
+        import test_rimborso_ogni_strada as censimento
+        esame = self._esame()
+        mappa = esame.strade()
+        self.assertEqual(set(mappa), set(censimento.STRADE_CENSITE),
+                         "le strade dell'esame e quelle censite divergono")
+        for causale in mappa:
+            runtime = causale.replace("%s", "rimborsato")
+            self.assertEqual(esame._quale_strada(runtime, mappa), causale,
+                             "la causale a runtime %r non torna alla sua strada" % (runtime,))
+        self.assertIsNone(esame._quale_strada("rimborso inventato", mappa),
+                          "una causale sconosciuta e' stata attribuita a una strada")
+
+    def test_LA_CATENA_SI_LEGGE_DAGLI_EVENTI_E_OGNI_ANELLO_CONTA(self):
+        """Il classificatore con eventi costruiti a mano: intero = torna; togli un anello
+        qualsiasi = non torna, e dice quale."""
+        esame = self._esame()
+        scrittura = {"tipo": "scrittura", "test": "t", "handler": None, "rif": "R",
+                     "importo": 100, "causale": "x", "funzione": "f", "riga": 1}
+        riga_ok = {"rif": "R", "importo": 100, "pi": "pi_1", "bottone": True, "manca": []}
+        riga_no = {"rif": "R", "importo": 100, "pi": "pi_1", "bottone": False,
+                   "manca": ["date_liberate"]}
+        lettura_con = {"tipo": "lettura", "test": "t", "rifs": ["R"], "righe": [riga_ok]}
+        lettura_senza = {"tipo": "lettura", "test": "t", "rifs": [], "righe": []}
+        gateway = {"tipo": "gateway", "test": "t", "handler": ("_admin_rimborsa_dovuto", 1),
+                   "pi": "pi_1", "importo": 100}
+        intera = [scrittura, lettura_con, gateway, lettura_senza]
+        self.assertEqual(esame._catena("t", scrittura, intera)[0], esame.TORNA_PULSANTE)
+        self.assertEqual(esame._catena("t", scrittura, [scrittura])[0], esame.NON_IN_LISTA)
+        senza_pulsante = [scrittura, {"tipo": "lettura", "test": "t", "rifs": ["R"],
+                                      "righe": [riga_no]}]
+        self.assertEqual(esame._catena("t", scrittura, senza_pulsante)[0], esame.MANUALE)
+        self.assertEqual(esame._catena("t", scrittura, [scrittura, lettura_con])[0],
+                         esame.NON_ESCE, "senza gateway non puo' tornare")
+        self.assertEqual(esame._catena("t", scrittura, [scrittura, lettura_con, gateway])[0],
+                         esame.NON_ESCE, "se la riga non esce, Stripe non ha confermato")
+        sbagliato = dict(gateway, importo=99)
+        self.assertEqual(esame._catena("t", scrittura, [scrittura, lettura_con, sbagliato,
+                                                        lettura_senza])[0],
+                         esame.NON_ESCE, "il gateway ha ricevuto un'altra cifra")
+        # eventi di un ALTRO collaudo non contano
+        altrui = [scrittura, dict(lettura_con, test="u"), dict(gateway, test="u"),
+                  dict(lettura_senza, test="u")]
+        self.assertEqual(esame._catena("t", scrittura, altrui)[0], esame.NON_IN_LISTA)
+        # la strada diretta: scrive e, nella stessa chiamata, il gateway riceve la cifra
+        diretta = dict(scrittura, handler=("_admin_rimborso", 7))
+        g_diretto = {"tipo": "gateway", "test": "t", "handler": ("_admin_rimborso", 7),
+                     "pi": "pi_2", "importo": 100}
+        self.assertEqual(esame._catena("t", diretta, [diretta, g_diretto])[0],
+                         esame.TORNA_DIRETTA)
+        self.assertEqual(esame._catena("t", diretta, [diretta])[0], esame.NON_ESCE)
+        self.assertEqual(esame._catena("t", diretta, [diretta, dict(g_diretto, importo=1)])[0],
+                         esame.NON_ESCE)
+
+
 class TestIlGiudiceSceglieGliOcchiConUnCriterio(unittest.TestCase):
     """⛔ I SEI OCCHI DEL GIUDICE ERANO I PRIMI SEI IN ORDINE ALFABETICO.
 
