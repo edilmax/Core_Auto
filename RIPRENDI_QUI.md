@@ -26,7 +26,7 @@
 
 ---
 
-## 💸 CORSIA B — 2026-09-04 sera: LA CASELLA 2 È MISURATA DA UNA MACCHINA — 6 strade su 7 tornano, la 7ª è manuale per scelta del prodotto (ramo `casella2` su `59a068b`)
+## 💸 CORSIA B — 2026-09-04 sera: LA CASELLA 2 È MISURATA DA UNA MACCHINA — 6 strade su 7 tornano, la 7ª è manuale per scelta del prodotto (commit `9f88ff5` su `casella2`, PR #146 **unita a master alle 17:33**: merge `f650203`, CI di master verde 15 controlli)
 
 **STATO (misurato, si rimisura con `python collaudi/esame_rimborsi.py`):** le sette strade che
 scrivono un rimborso nel giornale (censite dall'albero sintattico di `fase83_server.py`) sono
@@ -50,10 +50,11 @@ TORNANO DA SEI STRADE SU SETTE, E LA SETTIMA È MANUALE PER SCELTA»*.
    dall'arbitro; e il freno «host già pagato» va distinto da «host pagato della SUA quota»), oppure
    la riscrittura della casella accettando l'uscita manuale. Finché non decide, la casella resta
    rossa e dice perché: è la verità, non un rimprovero;
-2. il **controllo incrociato a SEI OCCHI automatici** sui cinque moduli della casella 5: lanciato il
-   4/9 alle 14:15 in `Core_Auto_B`; l'esito si legge in
-   `Core_Auto_GUARDIE_PRONTE\corsia_B_2026-09-04\giudice_moduli_5_*.log` (SOLO la riga
-   `CODICE_USCITA_DIRETTO`). Se lascia un vivo, quel punto è un buco da chiudere con una guardia;
+2. ✅ **FATTO alle 17:59** — il controllo incrociato a SEI OCCHI automatici sui cinque moduli della
+   casella 5 (`giudice_moduli_5_20260904_141526.log`, `CODICE_USCITA_DIRETTO=0`, 3 h 43 min): 246
+   provati, 245 uccisi, **0 sopravvissuti**, 1 equivalente, 0 non determinabili = l'atteso scritto
+   prima. La casella 5 ha anche la prova «automatica» (voce di registro della casella 5, in cima).
+   `Core_Auto_B` è tornato pulito su `origin/master`;
 3. ⛔ un limite del prodotto scritto e NON riparato (produzione): la riga di un rimborso dovuto
    si chiude a QUALUNQUE rimborso > 0 visto su Stripe (`_rimborso_dovuto_scheda`, `gia`): un
    rimborso manuale minore del dovuto chiude la promessa lo stesso. Con il pulsante (punto 1) il
@@ -1434,7 +1435,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 59a068b
+CONSEGNE AGGIORNATE A: f650203
 
 SUITE ATTUALE: Ran 6197 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»

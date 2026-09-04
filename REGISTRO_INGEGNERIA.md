@@ -521,6 +521,28 @@ Stripe citata in `fase85` e nei banchi.
 
 ### 💰 LA CASELLA 5: I CINQUE MODULI DEL DENARO REGGONO COL SOLO TEST DEDICATO — 4 settembre, corsia B (albero B2, ramo `casella5` su `6bf37a5e`)
 
+**⏱️ ESITO DEL CONTROLLO INCROCIATO A SEI OCCHI AUTOMATICI — scritto la sera del 4 settembre, letto
+dal registro `Core_Auto_GUARDIE_PRONTE\corsia_B_2026-09-04\giudice_moduli_5_20260904_141526.log`
+(riga `CODICE_USCITA_DIRETTO=0`, `DURATA_SECONDI=13.360,9`, cioè 3 h 43 min, dalle 14:15 alle 17:59).**
+Lanciato in `Core_Auto_B` (`lavoro-b3` su `6bf37a5e` + la toppa della casella 5, poi unita a master)
+con `python collaudi/mutazione_prodotto.py --modulo fase65_split_payment.py fase85_pagamenti_stripe.py
+fase87_stripe_webhook.py fase101_stripe_connect.py fase131_payout_dashboard.py --tetto 62 --minuti 400`:
+**nessun `--killer`, gli occhi li ha scelti il Giudice da solo** col criterio riparato il 3 settembre
+(dedicato → chi importa → chi nomina). Atteso dichiarato PRIMA in `atteso_casella5_sei_occhi.txt`:
+246 provati, 0 sopravvissuti, 1 equivalente. **Misurato: provati 246 · uccisi 245 · SOPRAVVISSUTI 0 ·
+scoperti 0 · equivalenti 1 (`fase85:293`, riconosciuto dallo schedario) · NON DETERMINABILI 0 · uccisi
+solo a volte 0 · oltre il tetto 0 · oltre il tempo 0** (rinunce del generatore, dichiarate: 6 «a
+cavallo», 6 «catena»). Occhi per modulo: `fase65` 4 sorveglianti/4 usati (normale 19,1 s) · `fase85`
+84/6 (196,7 s) · `fase87` 64/6 (59,9 s) · `fase101` 8/6, 5 veri e 1 di carta (79,9 s) · `fase131` 13/6
+(17,6 s). Prima di leggere l'esito, i tre controlli: i cinque moduli identici a `HEAD` (`git
+hash-object` = `git rev-parse HEAD:`), 0 biglietti aperti, `status` = i 9 file della toppa. **La
+casella 5 ha quindi anche la prova «automatica»**: la scheda di `Core_Auto_B` l'ha scritta da sé
+(«esito=True, 245 punti esaminati», copia in `scheda_json_di_Core_Auto_B_dopo_sei_occhi.json`); quella
+riga NON è portata in git (l'atteso lo diceva: solo se il fondatore lo chiede), la scheda di master
+resta quella scritta dal giro unico coi cinque dedicati. Il costo: **13.361 s a sei occhi contro
+~60 s col solo dedicato** per lo stesso verdetto — è la misura che il 3 settembre aveva fatto
+scegliere il metodo. `Core_Auto_B` è tornato pulito su `origin/master` (`f650203`).
+
 **Da dove nasce.** Ordine del fondatore del 4 settembre, dopo cinque ore di macchina della notte
 prima senza un modulo dei soldi toccato: *la macchina ai moduli dei soldi dal primo minuto, nessuna
 riparazione di attrezzi, il criterio della giornata è UN NUMERO — i moduli chiusi della casella 5*.
