@@ -208,7 +208,22 @@ BLOCCHI = (
             "erano due e ne funzionava una). ⛔ L'AUTOMATICO NON e' la riga d'arrivo di "
             "questo blocco: e' una decisione del fondatore, e si accende dopo -- prima si "
             "guadagna la fiducia, poi si toglie il dito",
-            "gli orologi di prova Stripe hanno visto scadere hold, payout e penale davvero",
+            # ⛔ RISCRITTA IL 2026-09-04 col «fai la cosa giusta» del fondatore. Diceva: «gli
+            #    orologi di prova Stripe hanno visto scadere hold, payout e penale davvero».
+            #    Era IMPOSSIBILE come scritta, misurato sulla documentazione (3 e 4 settembre,
+            #    7 pagine di docs.stripe.com): i test clock di Stripe si agganciano SOLO a
+            #    Customer, abbonamenti, fatture e preventivi; nessun test helper fa scadere
+            #    un'autorizzazione, maturare un bonifico o spostare un PaymentIntent/Transfer/
+            #    Payout; in prova «le transazioni vengono regolate immediatamente». Le nostre
+            #    tre scadenze sono timer NOSTRI (fase162 `scadenza_ts`, fase160
+            #    `sblocco_auto_ts`, fase111 sui giorni all'arrivo). La riga d'arrivo tiene
+            #    cio' che contava -- le tre finestre scadono DAVVERO e il giudice e' esterno --
+            #    e cambia il meccanismo: l'orologio e' il nostro, Stripe di PROVA rilegge.
+            #    Chiave = testo: la casella e' tornata vuota da sola, e la scrive solo
+            #    `collaudi/esame_orologi.py`.
+            "hold, payout e penale scadono davvero in un giro contro Stripe di PROVA con "
+            "l'orologio NOSTRO spostato, e i tre esiti si rileggono da Stripe (rimborso "
+            "dell'hold, bonifico all'host, penale addebitata)",
             "esistono le relazioni metamorfiche sull'aritmetica del denaro",
             # ⛔ RISTRETTA IL 2026-08-22, e il testo dice ORA su cosa si misura: una riga
             #    d'arrivo che nomina un insieme diverso da quello che l'attrezzo guarda e'

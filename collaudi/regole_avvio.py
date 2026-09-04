@@ -295,20 +295,29 @@ LAVORI_IN_SOSPESO = (
         },
     },
     {
-        "nome": "orologi di prova Stripe (test clocks)",
+        # ⛔ RISCRITTA IL 2026-09-04 (era «orologi di prova Stripe (test clocks)», con la prova
+        #    testuale `test_clock`): i test clock di Stripe valgono SOLO per Customer,
+        #    abbonamenti, fatture e preventivi -- noi vendiamo soggiorni -- e nessun test
+        #    helper fa scadere un'autorizzazione o maturare un bonifico (docs.stripe.com,
+        #    letto il 3 e il 4 settembre). L'orologio da spostare e' il NOSTRO; il giudice
+        #    resta esterno: Stripe di PROVA rilegge rimborso, bonifico e penale.
+        "nome": "l'orologio NOSTRO spostato contro Stripe di prova (hold, payout, penale)",
         "costo": "1 sessione",
         "priorita": "ALTA: e' il giudice esterno piu' vicino ai soldi che manca",
-        "perche": "fanno passare il TEMPO davvero: oggi hold, maturazione dei bonifici e "
-                  "finestre di penale non sono mai stati visti scadere sul serio",
-        "fatto_quando": "un collaudo crea un test clock, avanza il tempo e verifica ALMENO "
-                        "tre cose: l'hold che scade · il payout che matura a 24h · una "
-                        "finestra di penale — con identificativi Stripe VERI nel registro",
+        "perche": "fanno passare il TEMPO davvero: hold, maturazione dei bonifici e finestre "
+                  "di penale sono timer nostri, e vanno visti scadere con Stripe che rilegge",
+        "fatto_quando": "un attrezzo sposta l'orologio iniettato di fase162/fase160 (e per la "
+                        "penale prenota a due giorni dall'arrivo) e verifica TRE cose contro "
+                        "Stripe di PROVA: l'hold che scade e il pagamento tardivo che torna "
+                        "intero · il payout che matura a check-in + 24h e il bonifico tr_ "
+                        "che parte · la penale trattenuta e il 50% restituito -- con "
+                        "identificativi Stripe VERI (pi_, re_, tr_) nel registro",
         "prova": {
             "tipo": "testo",
             "dove": (("", "test_", ".py"), ("collaudi", "", ".py")),
-            "cerca": "test_clock",
-            "se_manca": "nessun collaudo crea un orologio di prova Stripe: hold, payout e "
-                        "penale non sono mai stati visti scadere davvero",
+            "cerca": "esame_orologi",
+            "se_manca": "nessun attrezzo sposta l'orologio nostro contro Stripe di prova: "
+                        "hold, payout e penale non sono mai stati visti scadere davvero",
         },
     },
     {

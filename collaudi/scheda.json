@@ -10,6 +10,17 @@
   "motivo": "",
   "quando": "2026-09-04T22:26:55"
  },
+ "224ae0884a0b": {
+  "blocco": 1,
+  "comando": "python collaudi/esame_orologi.py --scrivi",
+  "commit": "c28fb77",
+  "condizione": "hold, payout e penale scadono davvero in un giro contro Stripe di PROVA con l'orologio NOSTRO spostato, e i tre esiti si rileggono da Stripe (rimborso dell'hold, bonifico all'host, penale addebitata)",
+  "denominatore": 34,
+  "esito": true,
+  "impronta": "b72543b884e1",
+  "motivo": "",
+  "quando": "2026-09-04T22:34:25"
+ },
  "50691c557e6e": {
   "blocco": 1,
   "comando": "python collaudi/esame_soldi.py --scrivi",
@@ -24,13 +35,13 @@
  "813b9082642c": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --scrivi",
-  "commit": "9829aa5",
+  "commit": "d13d2d9",
   "condizione": "gli invarianti sono verificati in PRODUZIONE, non solo nei test",
   "denominatore": 14,
-  "esito": false,
+  "esito": true,
   "impronta": "b72543b884e1",
-  "motivo": "il registro del server ha la riga INVARIANTI ARCHIVI, piu' giovane di 25 h (nessuna riga INVARIANTI ARCHIVI nelle ultime 26h del registro); il giro ha verificato TUTTI e cinque gli invarianti (I1,I2,I3,I4,I5) (verificati=); violazioni=0 (violazioni=-1); non_eseguiti=0 (nessun invariante saltato) (non_eseguiti=-1); ciechi=0 (ogni archivio si e' letto) (ciechi=-1); il giro del Guardiano che la contiene e' finito pulito (GUARDIANO: nessuno stato anomalo) (nessuna riga GUARDIANO dopo quella)",
-  "quando": "2026-09-04T22:13:20"
+  "motivo": "",
+  "quando": "2026-09-04T23:10:17"
  },
  "c3cf3da4543f": {
   "blocco": 1,
