@@ -403,6 +403,37 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🧯 IL DIFETTO DELL'I3 SUGLI ARCHIVI VERI: LA PROVA FIRMATA NON STA (SOLO) IN `quote_token` — 5 settembre, notte, chat B (albero B2, ramo `fase202-prova-firmata` su `c06a382`)
+
+**Trovato leggendo, non da un allarme** (latente: 0 pendenti in produzione al censimento del 4/9),
+mentre preparavo la prima casella del Blocco 2. `fase83._registra_hold` — la prenotazione istantanea —
+salva nel pendente `idem_key` (la firma del `quote_token` presentato: `qt.split(".")[-1]`) e il
+`voucher_token` firmato nel `corpo_json`, ma **non** la colonna `quote_token`; solo la richiesta
+'in_attesa_host' (`_registra_richiesta`, riga ~5734) la salva. Il giro quotidiano di `fase202`, in
+produzione dal 4/9 sera, giudicava I3 con `prova_firmata = bool(quote_token)`: **al primo pagamento
+vero ogni prenotazione pagata sarebbe risultata «senza prova»** → I3 violato → anomalia del Guardiano →
+email quotidiana falsa, e la casella 6 rossa. Un allarme che grida sul sano si spegne (ferrea 10): era
+esattamente il difetto che la casella 6 doveva evitare.
+
+**La cura (una funzione in `fase202`, `_prova_firmata`):** la prova è `quote_token` **oppure** `idem_key`
+**oppure** il `voucher_token` firmato nel corpo — dove il prodotto la scrive davvero; una riga senza
+nessuno dei tre resta una violazione. `leggi_archivi` legge ora anche `idem_key`. **D20 nell'ordine:**
+guardia nuova `TestI3SullaProvaFirmataVera` in cui la prenotazione la fanno le **rotte vere** (registrazione
+host, pubblica, disponibilità, quote, book, webhook firmato, con la rete di Stripe sostituita) — vista
+**ROSSA** sul modulo del 4/9 (`corsia_B_2026-09-05\fase202_i3_giro1_ROSSO_atteso.log`: `'I3' unexpectedly
+found … quote_token=''`) e verde dopo; una riga confermata senza nessuna prova resta violazione; le due
+guardie di prima che dicevano «senza prova» col solo `quote_token` vuoto tolgono anche l'`idem_key`.
+Giudice col solo dedicato: giro 3 = 61 provati, 60 uccisi, **1 vivo** (`or → and`: le prove erano sempre
+provate insieme) → guardia «ognuna delle tre prove basta da sola» → giro 4 = **61/61, 0 vivi**. Dedicato
+39/39; ruff 686 = 686, bandit 548 = 548 (due valori finti passati come argomento, messi in variabili col
+commento). **Lezione:** la guardia buona per un auditor che legge gli archivi è una riga scritta dalle
+rotte vere, non un INSERT che ripete la mia idea di come dovrebbe essere la riga.
+
+**La rimisura.** `fase202` sta nell'impronta del Blocco 1 (`b72543b884e1` → `e94151bd5a8b`): le sei caselle
+sono scadute da sole e si rimisurano coi loro attrezzi, nell'ordine (`atteso_rimisure_dopo_cura_i3.txt`);
+la casella 6 si scrive verde solo dopo il deploy della cura. Numeri nel riquadro di `RIPRENDI_QUI.md` e
+nei registri `*_dopo_cura_i3.log`.
+
 ### ⏰ LA CASELLA 3, RISCRITTA E MISURATA: HOLD, PAYOUT E PENALE SCADONO DAVVERO CON L'OROLOGIO NOSTRO, E STRIPE DI PROVA RILEGGE — 4 settembre, notte, chat B (albero B2, ramo `casella3` su `c28fb777`)
 
 **La premessa era falsa, e la riga d'arrivo teneva.** La casella diceva «gli orologi di prova Stripe
