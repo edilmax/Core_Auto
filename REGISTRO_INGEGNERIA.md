@@ -403,6 +403,122 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 💸 LA CASELLA 2: I SOLDI TORNANO DA SEI STRADE SU SETTE, E LA SETTIMA È MANUALE PER SCELTA — 4 settembre sera, corsia B (albero B2, ramo `casella2` su `59a068b`)
+
+**Da dove nasce.** Alle 15:20 del 4 settembre, nella finestra della corsia B, il fondatore ha scritto:
+*«fai la cosa giusta fine alla fine non mi chiedere piu nulla voglio la ferfezzione o piu vicino
+possibile»*. Le due decisioni che il foglio di ripartenza gli riservava — cosa conta come «strada», e
+se il giudice esterno contro Stripe di prova è obbligatorio per la spunta — le ho prese io con quel
+mandato, e stanno scritte qui perché si possano rovesciare: **strada = ogni chiamata
+`_giornale(tipo="rimborso", ...)` in `fase83_server.py`** (il censimento di
+`test_rimborso_ogni_strada`, letto dall'albero sintattico: sette); i due flussi che rimborsano
+senza passare dal giornale non sono strade di questo prodotto (`fase35` via `fase36`/`fase41`:
+nessun modulo di produzione li importa, `grep -l` vuoto; `fase78` garanzia sonno: creata in
+`fase81:514`, `valuta_garanzia` mai chiamata fuori da fase78) e restano dichiarati nell'esame;
+**l'E2E contro Stripe di prova è obbligatorio**, perché la casella dice *DAVVERO* e un gateway finto
+prova il nostro codice, mai che un centesimo sia uscito.
+
+**Cosa c'era, misurato prima di costruire.** Tre file provavano tre pezzi: il censimento delle
+sette strade (`test_rimborso_ogni_strada`), l'importo in lista per cinque strade
+(`test_rimborso_in_lista_col_dovuto`, `test_admin_rimborso_money`), la partenza dal pannello per i
+due punti che chiamano il gateway (`test_rimborso_arriva_al_gateway`). **Nessun collaudo percorreva
+una strada intera** — scrittura, lista, pulsante, gateway, riga che esce — e la casella era «mai
+misurata: nessun attrezzo ha ancora scritto questa casella».
+
+**Cosa è stato costruito (solo `collaudi/` e guardie, zero righe di produzione).**
+1. `test_rimborso_torna_da_ogni_strada.py` — **7 collaudi, uno per strada, la catena intera** con il
+   provider VERO (`fase85.rimborsa`/`rimborsi_di` girano davvero) e la sola rete finta, uno Stripe
+   che RICORDA i rimborsi che crea e deduplica sull'`Idempotency-Key`. Per ogni strada: la cifra
+   attesa è quella dichiarata alla fonte (scaglione della politica, 100 %, totale, anticipo), mai
+   `> 0`; il gateway riceve QUELLA cifra su QUEL pagamento; la riga esce perché Stripe la mostra;
+   premere due volte non restituisce due volte. La settima (controversia) è misurata per quello che
+   è: riga con la cifra esatta dell'arbitro, **senza pulsante** (`manca: date_liberate`), rotta che
+   rifiuta (409) e gateway che non riceve niente, promessa che resta finché Stripe non mostra un
+   rimborso fatto a mano. Verdi al primo giro (10,6 s); il rosso visto dopo, con i guasti
+   iniettati dall'esame (D20 rovesciata, ma vista).
+2. `collaudi/esame_rimborsi.py` — l'attrezzo che scrive la casella. Enumera le strade dal
+   censimento; accende le guardie che nominano la lista o il pulsante **e importano il server in
+   cima** (sei moduli, 64 collaudi); mentre girano, un osservatore sulla classe `RouterHTTP` annota
+   per ogni collaudo le scritture di rimborso nel giornale (strada, riferimento, importo, funzione e
+   riga), le righe mostrate dalla lista (dovuto, pulsante, cosa manca) e le richieste al gateway
+   (pagamento, importo) — **177 eventi**; per ogni strada cerca UN collaudo verde con la catena
+   intera e classifica: `TORNA` (dal pulsante o da sé), `USCITA MANUALE DICHIARATA`, `IN LISTA MA
+   NON PARTE`, `SCRITTA MA NON IN LISTA`, `NON MISURATA`. Poi esegue l'E2E in un processo a sé e
+   scrive la scheda **anche se rosso, col motivo** (una casella vuota senza motivo manda a caccia di
+   un guasto che può non esistere). `--autoprova`: col guasto dentro (la cancellazione host non
+   scrive nel giornale, il difetto del 16 agosto rifatto a runtime) la strada dell'host sparisce e le
+   altre sei non cambiano; sana, torna. `--con-guasto --scrivi` è un `if` che rifiuta, non un
+   commento.
+3. Nove guardie in `test_pipeline_ci.TestLEsameDeiRimborsiNonPuoBARARE` (D18 punto 4): con il
+   censimento a vuoto l'esame si ferma (uscita 2) e non scrive; col guasto non scrive mai; il
+   classificatore provato con eventi costruiti a mano, anello per anello (togli il gateway, la riga
+   che esce, la cifra giusta, il pulsante: non torna, e dice quale manca); l'autoprova non può essere
+   svuotata; il testo della casella non è ricopiato; le strade dell'esame sono quelle del censimento;
+   le guardie si scelgono per nome E per import di modulo, non per sottostringa.
+
+**Misurato (`python collaudi/esame_rimborsi.py --scrivi`, registro
+`corsia_B_2026-09-04\esame_rimborsi_scrivi_giro3.log` fuori repository):**
+```
+rimborso disposto da admin ........................ TORNA (da sé: gateway pi=pi_test_ospite 150000)
+rimborso dovuto per cancellazione ospite .......... TORNA (pulsante; la riga esce)
+rimborso 100% per cancellazione host .............. TORNA (pulsante; gateway 100000; la riga esce)
+pagamento su prenotazione non confermabile ........ TORNA (pulsante; gateway 100000; la riga esce)
+pagamento tardivo su stanza presa ................. TORNA (pulsante; gateway 100000; la riga esce)
+anticipo su stanza già presa (paga in struttura) .. TORNA (pulsante; gateway 10842 = l'anticipo)
+rimborso deciso dall'arbitro (controversia) ....... USCITA MANUALE DICHIARATA (manca: date_liberate)
+STRADE_TORNANO=6/7 · E2E contro Stripe di prova VERDE (25 passi, 0 rossi: un pagamento vero di
+60000 rimborsato per 60000 e riletto da Stripe; la cifra dell'arbitro 17007 intatta in lista) ·
+denominatore 32 (7 strade + 25 passi) · VERDETTO ROSSO, casella scritta ROSSA col motivo
+```
+`scheda.py --blocco 1`: la casella 2 dice ora *«ROSSA: l'attrezzo l'ha misurata e non passa —
+perché: «rimborso deciso dall'arbitro (controversia risolta)»: USCITA MANUALE DICHIARATA»*. Blocco 1
+resta **3 su 6**: il numero non è cambiato, la conoscenza sì.
+
+**Il ritrovamento, scritto e NON riparato (è produzione, serve «autorizzato»).** Per la settima
+strada il prodotto non ha un'uscita che una macchina possa percorrere: `_admin_controversia_risolvi`
+lo dichiara (*«il rimborso Stripe resta manuale»*) e `_rimborso_dovuto_scheda` lo esegue con
+`date_liberate = stato in ("rimborsato", "cancellata_host")`, che dopo un soggiorno avvenuto è
+falso per costruzione; nello split parziale scatta anche «host già pagato», perché la sua quota parte
+subito. Né `_admin_rimborso` è una via d'uscita: restituisce il **totale** e libera le date, non la
+cifra dell'arbitro. **E c'è un secondo limite, più sottile:** la riga si chiude a QUALUNQUE rimborso
+`> 0` visto su Stripe (`gia = rimborsato_cents > 0`): un rimborso manuale minore del dovuto chiude
+la promessa lo stesso, e nessuno lo vede. Due modi per chiudere la casella, tutti e due del
+fondatore: **una riga di produzione** che dia alla riga della controversia il suo pulsante coi suoi
+freni (consigliata: con il pulsante la cifra è esatta per costruzione e il secondo limite sparisce),
+oppure la riscrittura della casella accettando l'uscita manuale.
+
+**Due sbagli miei, presi dalle prove e non dalla rilettura.** (1) `_quale_strada` confrontava
+l'espressione regolare con la propria chiave invece che con la causale letta a runtime: ogni
+scrittura finiva nella prima strada della mappa, 7 strade e una sola «misurata». L'ha preso uno
+script di prova sulla mappa, prima della guardia; ora una guardia lo copre. (2) Le guardie da
+accendere scelte per sola sottostringa hanno acceso `test_pipeline_ci.py`, che nomina il pulsante in
+una stringa della guardia su questo stesso esame: 389 collaudi invece di 64, sei rossi estranei
+(shell, pre-volo, conto della suite) e **un motivo sbagliato scritto nella scheda** dal primo
+`--scrivi`. Prima cura: pretendere l'import del server — e `test_pipeline_ci` lo importa lo stesso,
+dentro due metodi (`_rif_per_registro`). Cura vera: l'import **a livello di modulo**. Ogni cura ha
+la sua guardia. È lo sbaglio S6 in una forma nuova: un criterio che un commento o una stringa
+poteva soddisfare.
+
+**Trovato per strada, scritto e non toccato:** `test_admin_rimborso_money.TestLaListaDeiRimborsiDovuti`
+prenota con date cablate nel settembre di quest'anno (disponibilità fino al 30): fra poche settimane
+saranno nel passato e il banco smetterà di prenotare. Il pre-volo dichiara «2 bombe note, nessuna
+entro 30 giorni», misurato tre giorni fa: da rifare con `collaudi/bombe_a_tempo.py`. Le catene nuove
+usano date relative a oggi.
+
+**Verifiche da fermo:** cricchetto ruff 686 = 686 e bandit 548 = 548 (una segnalazione nuova B106
+sulla chiave finta, chiusa nel codice con la costante `CHIAVE_FINTA` come negli altri banchi);
+caricatore **6197** dalla PowerShell vera (`caricatore_20260904_170322.log`, 6181 + 7 catene + 9
+guardie); pre-volo e pre-fatto dai ganci. Il controllo incrociato a sei occhi della casella 5
+girava intanto in `Core_Auto_B` (alle 16:47: modulo 4 di 5, 142 provati, 0 sopravvissuti).
+
+**Fonti accanto alla scelta.** L'idea di attribuire a OGNI collaudo ciò che ha esercitato è quella
+dei «measurement contexts» di coverage.py (coverage.readthedocs.io, *Measurement contexts*):
+qui applicata agli EVENTI del denaro invece che alle righe, perché una riga eseguita non dice con
+quale cifra. Che ogni requisito abbia un collaudo che lo esercita e che il codice non esercitato sia
+un ritrovamento da spiegare, non da tacere, è l'analisi di copertura strutturale di DO-178C
+(§6.4.4.2), già citata in questo registro. Idempotenza e lettura dei rimborsi: la documentazione
+Stripe citata in `fase85` e nei banchi.
+
 ### 💰 LA CASELLA 5: I CINQUE MODULI DEL DENARO REGGONO COL SOLO TEST DEDICATO — 4 settembre, corsia B (albero B2, ramo `casella5` su `6bf37a5e`)
 
 **Da dove nasce.** Ordine del fondatore del 4 settembre, dopo cinque ore di macchina della notte
