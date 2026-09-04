@@ -54,13 +54,14 @@ DELLA CONTROVERSIA»*.
 1. ✅ il **Giudice della mutazione** sulle righe toccate: giro 2 `--diff HEAD` = 14 provati, 14
    uccisi, 0 sopravvissuti (`corsia_B_2026-09-04\giudice_diff_pulsante_giro2.log`); poi commit, CI
    verde, unione a master;
-2. il **deploy**: è cambiata una riga di produzione (`fase83_server.py`, `deploy/admin.html`), quindi
-   il pannello vivo avrà il pulsante solo dopo il deploy — **«autorizzato, metti il pulsante alla
-   controversia»** del fondatore alle 19:0x: si fa con `DEPLOY.md` (paracadute `:prec` PRIMA del
-   build, scambio rm-first, verifica `money_path_pronto`, tre sha allineati). ⚠️ Il deploy porta
-   master intero: con il pulsante vanno in produzione anche le due modifiche del 2 settembre mai
-   deployate (`fase83` webhook: 503 quando un esito non è applicato, così Stripe ritenta;
-   `fase178`/`deploy/watchdog.sh`: allarme se la CI resta rossa);
+2. ✅ il **deploy**, FATTO alle 19:35 del 4/9 con l'«autorizzato, metti il pulsante alla
+   controversia» del fondatore: PR #148 unita (merge `33151bf`), paracadute `:prec` agganciato
+   all'immagine viva, scambio rm-first in 41 s, app e backup healthy, `money_path_pronto: True,
+   avvisi: []`, `/` e `/api/health` 200, tre sha `33151bf` allineati (voce di registro *«IL PULSANTE
+   DELLA CONTROVERSIA»*, paragrafo «Unione e DEPLOY»). ⚠️ Il deploy ha portato master intero: con il
+   pulsante sono andate in produzione anche le due modifiche del 2 settembre mai deployate (`fase83`
+   webhook: 503 quando un esito non è applicato, così Stripe ritenta; `fase178`/`deploy/watchdog.sh`:
+   allarme se la CI resta rossa). Il server era fermo a `40a9c8c` dal 28 agosto;
 3. ⛔ un limite del prodotto scritto e NON riparato (produzione, fuori dall'«autorizzato» di oggi):
    la riga di un rimborso dovuto si chiude a QUALUNQUE rimborso > 0 visto su Stripe
    (`_rimborso_dovuto_scheda`, `gia`): un rimborso manuale minore del dovuto chiude la promessa lo
@@ -1445,7 +1446,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 0887247
+CONSEGNE AGGIORNATE A: 33151bf
 
 SUITE ATTUALE: Ran 6203 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»

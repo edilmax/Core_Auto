@@ -469,9 +469,29 @@ equivalente, e un equivalente si toglie dal codice, non si dichiara (B6). Giro 2
 quattro guardie nel dedicato: caricatore **6203** (`caricatore_20260904_191441.log`); cricchetti ruff
 686 = 686 e bandit 548 = 548; audit 0 discrepanze.
 
-**Resta (dichiarato):** il deploy — è cambiata una riga di produzione, e il pannello vivo avrà il
-pulsante solo dopo, col suo «autorizzato»; e il limite `gia = rimborsato_cents > 0` (una riga si
-chiude a qualunque rimborso visto su Stripe), fuori dall'autorizzazione di oggi.
+**Unione e DEPLOY (la stessa sera).** Commit `348696375361753a850bfecef32edb3bbd84508d` su
+`pulsante-controversia` (8 file, +410/−106, ganci 10/10); PR #148 unita con la CI verde (16
+controlli, gate success; seconda lettura `merged=True`) → merge **`33151bf4e59d42f545fe935f7926751eb4923d6b`**.
+Il fondatore alle 19:0x: *«autorizzato, metti il pulsante alla controversia»* — cioè anche in
+produzione. Deploy con `DEPLOY.md` §3, a tappe da uno script copiato sul VPS (`/root/deploy_pulsante.sh`,
+registri `corsia_B_2026-09-04\deploy_1..4_*.log`): **[1b] paracadute** `casavip-app:prec` agganciato
+all'immagine che girava (`6035f6ab…`, verificato uguale), `PRE_DEPLOY_20260904_*.commit` con `40a9c8c`
+(il server era fermo lì dal 28 agosto); **scambio** alle 17:35:23–17:36:04Z: `git pull --ff-only` fermato
+sullo sha atteso (`33151bf`), `build app`, `stop`/`rm -f app backup`, `up -d`; **verifica**: `casavip_app`
+e `casavip_backup` healthy, avvio `money_path_pronto: True, avvisi: []`, nessuna `PAGAMENTO_*` sul
+server (valgono i default del codice), immagine viva nuova `17c87009…` col paracadute intatto; dal
+computer `/` 200 (certificato 0) e `/api/health` 200 (`status ok`, `guardiano ok`); **tre sha
+`33151bf`** (computer, GitHub, VPS). Ritorno indietro, se mai servisse: `sh /root/deploy_pulsante.sh
+indietro` (= `docker tag casavip-app:prec casavip-app:latest && up -d --force-recreate app`).
+⚠️ **Il deploy porta master intero**: con il pulsante sono andate in produzione anche le due modifiche
+del 2 settembre mai deployate — `fase83` webhook che risponde 503 quando un esito non è stato
+applicato (così Stripe ritenta; commit `901c840`) e `fase178`/`deploy/watchdog.sh` (allarme se la CI
+resta rossa; `61e251d`). Dichiarato qui perché nessuno le cerchi in questo lavoro.
+
+**Resta (dichiarato):** il limite `gia = rimborsato_cents > 0` (una riga si chiude a qualunque rimborso
+visto su Stripe), fuori dall'autorizzazione di oggi; e il testo `it` della sezione «Controversie» del
+pannello parla ancora di «% al cliente» come scorciatoia (giusto) ma non nomina il pulsante nuovo:
+si aggiorna con la prossima parola sulla produzione, non è un difetto di funzionamento.
 
 ### 💸 LA CASELLA 2: I SOLDI TORNANO DA SEI STRADE SU SETTE, E LA SETTIMA È MANUALE PER SCELTA — 4 settembre sera, corsia B (albero B2, ramo `casella2` su `59a068b`)
 
