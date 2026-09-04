@@ -18,8 +18,10 @@ funzioni pure dimostrate con Z3 e Hypothesis nei test, NON una copia riscritta q
       unita' si contano le prenotazioni per notte contro `unita_totali` di quella notte);
   I2  bilancio dei pagamenti: per ogni prenotazione la somma degli INCASSI nel giornale non
       supera il totale dovuto (`corpo_json.totale_cents`), e se e' PAGATA la eguaglia;
-  I3  prova prima del commit: nessuna prenotazione PAGATA senza `quote_token` -- la STESSA
-      definizione della guardia a runtime di `fase83` (`prova_firmata = bool(quote_token)`);
+  I3  prova prima del commit: nessuna prenotazione PAGATA senza prova firmata, DOVE il prodotto
+      la scrive davvero: `quote_token` (richiesta 'in_attesa_host') oppure `idem_key` (la firma
+      del quote_token, prenotazione istantanea) oppure il `voucher_token` firmato nel corpo_json
+      (misurato sulle rotte vere il 2026-09-05: la prima stesura guardava il solo `quote_token`);
   I4  denaro mai negativo: ogni colonna `*_cents` (e `minori` dei payout) di ogni tabella di
       ogni archivio e' >= 0;
   I5  escrow coerente: una garanzia `rilasciato` ha una prenotazione che lo giustifica.
@@ -161,6 +163,7 @@ def leggi_archivi(dir_dati: str) -> Dict[str, Any]:
                                 "check_in": r["check_in"], "check_out": r["check_out"],
                                 "stato": r["stato"],
                                 "quote_token": (r["quote_token"] if "quote_token" in k else ""),
+                                "idem_key": (r["idem_key"] if "idem_key" in k else ""),
                                 "corpo_json": (r["corpo_json"] if "corpo_json" in k else "")})
                     elif t == "inventario" and {"alloggio_id", "giorno", "unita_totali",
                                                 "unita_occupate"} <= set(cols):
@@ -279,9 +282,23 @@ def _giudica_i2(prenotazioni: List[Dict[str, Any]], giornale: List[Dict[str, Any
     return i2_bilancio_pagamenti(astratte), note
 
 
+def _prova_firmata(p: Dict[str, Any]) -> bool:
+    """DOVE IL PRODOTTO SCRIVE LA PROVA, misurato il 2026-09-05 sulle rotte vere (non dedotto).
+    La prenotazione istantanea (`fase83._registra_hold`) NON salva la colonna `quote_token`:
+    salva `idem_key`, che e' la firma del quote_token presentato (`qt.split(".")[-1]`), e il
+    `voucher_token` firmato nel corpo_json. La richiesta 'in_attesa_host' salva `quote_token`.
+    La prima stesura guardava il solo `quote_token` e avrebbe gridato «senza prova» su OGNI
+    prenotazione pagata: vista ROSSA con una prenotazione fatta dalle rotte vere
+    (`test_fase202_invarianti_archivi.TestI3SullaProvaFirmataVera`). Una riga senza nessuno
+    dei tre resta una violazione."""
+    if p.get("quote_token") or p.get("idem_key"):
+        return True
+    return bool(_corpo(p).get("voucher_token"))
+
+
 def _giudica_i3(prenotazioni: List[Dict[str, Any]]) -> List[Any]:
     return i3_prova_prima_del_commit([{"rif": p.get("rif"), "stato": p.get("stato"),
-                                       "prova_firmata": bool(p.get("quote_token"))}
+                                       "prova_firmata": _prova_firmata(p)}
                                       for p in prenotazioni])
 
 

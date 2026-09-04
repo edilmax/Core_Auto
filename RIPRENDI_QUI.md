@@ -28,6 +28,23 @@
 
 ## 🏁 CHAT B (la sola) — 2026-09-04 notte: IL BLOCCO 1 SOLDI È 6 SU 6, SCRITTO DALLE MACCHINE — casella 6 (fase202 in produzione, deploy `201d723`) e casella 3 (esame degli orologi contro Stripe di prova); ramo `casella3` (PR #151) sopra la #150 unita
 
+**🧯 5 SETTEMBRE, NOTTE — UN DIFETTO MIO NELLA `fase202` DEL 4/9, CURATO (ramo `fase202-prova-firmata` su `c06a382`):**
+la prenotazione istantanea salva `idem_key` e il `voucher_token` nel corpo, **non** la colonna `quote_token`
+(solo la richiesta 'in_attesa_host' la salva): l'I3 del giro quotidiano avrebbe gridato «senza prova» al
+primo pagamento vero (email falsa; latente: 0 pendenti in produzione). Cura: la prova è `quote_token`
+**o** `idem_key` **o** il voucher nel corpo. Guardia con la prenotazione fatta dalle **rotte vere** vista
+ROSSA prima e verde dopo; Giudice col solo dedicato: giro 3 = 61/60/1 vivo (`or→and`) → guardia «ognuna
+delle tre prove basta da sola» → giro 4 = **61/61, 0 vivi**; dedicato 39/39; ruff/bandit 0 nuove.
+L'impronta del Blocco 1 è cambiata (`b72543b884e1` → `e94151bd5a8b`): rimisurate esame_soldi (54/15),
+esame_rimborsi (7/7 + E2E 31 = 38), esame_orologi (34) → verdi; il giro unico della casella 5 e la casella 6
+(solo DOPO il deploy della cura: il server gira ancora la fase202 del 4/9) sono nel «cosa manca». Voce di
+registro: *«IL DIFETTO DELL'I3 SUGLI ARCHIVI VERI»*. Caricatore **6255**.
+**COSA MANCA, in ordine:** giro unico casella 5 → commit (msg `commit_msg_fase202_i3.txt`) → PR → CI verde →
+unione → **deploy** (perimetro dell'«autorizzato» della casella 6) → `esame_produzione.py --scrivi` verde →
+commit della scheda → PR → unione → VPS `pull --ff-only` → **6 su 6** → poi il Blocco 2 (prima casella:
+la macchina a stati; misurato: nel prodotto non esiste una «modifica», il no-show lascia 'pagato', solo
+fase162 scrive lo stato dei pendenti).
+
 **LE DUE DECISIONI DEL FONDATORE, nella finestra di B:** casella 3 → *«fai la cosa giusta non ce niente che
 possiamo istallare che serve per risolvere»* (= sì alla riscrittura: orologio NOSTRO spostato + Stripe di
 PROVA che rilegge; la ricerca su docs.stripe.com — 7 pagine — ha confermato che i test clock valgono solo
@@ -381,16 +398,14 @@ GitHub master       5ba642a   <- "Merge PR #133 from lavoro-a"; genitori 936c2a8
                                  TRE unioni in questa giornata: #131 (lavoro-d), #132
                                  (lavoro-c), #133 (lavoro-a). Nessuna richiesta aperta.
 rami                lavoro-a/b/c/d: TUTTI dentro master (0 commit fuori)
-CARICATORE          6252      <- PowerShell vera (MSYSTEM vuoto, openssl assente), da fermo,
-                                 misurato il 2026-09-04 alle 22:34 nell'albero `Core_Auto_B2`
-                                 (ramo `casella3` su c28fb77 = la casella 6 + le 6 guardie
-                                 `test_pipeline_ci.TestLEsameDegliOrologiNonPuoBARARE`),
-                                 PRIMA di lanciare (S14).
-                                 Registro: `caricatore_20260904_223450.log`, CODICE_USCITA_DIRETTO=0.
-                                 (Era 6246 alle 22:03 con le 43 guardie della casella 6 — 36 nel
-                                 dedicato `test_fase202_invarianti_archivi` + 7 in
-                                 `TestLEsameDellaProduzioneNonPuoBARARE`, `caricatore_20260904_220343.log`;
-                                 e 6203 alle 19:14 col pulsante della controversia.)
+CARICATORE          6255      <- PowerShell vera (MSYSTEM vuoto, openssl assente), da fermo,
+                                 misurato il 2026-09-05 alle 00:26 nell'albero `Core_Auto_B2`
+                                 (ramo `fase202-prova-firmata` su c06a382 = master + le 3 guardie
+                                 sull'I3 in `test_fase202_invarianti_archivi`), PRIMA di lanciare (S14).
+                                 Registro: `caricatore_20260905_002609.log`, CODICE_USCITA_DIRETTO=0.
+                                 (Era 6252 il 4/9 alle 22:34 con le 6 guardie dell'esame degli orologi,
+                                 `caricatore_20260904_223450.log`; 6246 alle 22:03 con le 43 della
+                                 casella 6; 6203 alle 19:14 col pulsante della controversia.)
                                  (Era 6181 alle 14:07 con le 32 guardie della casella 5,
                                  `caricatore_20260904_140739.log`; 6149 su master alle 00:49.)
                                  ⛔ E NON E' NESSUNO DEI DUE NUMERI CHE L'UNIONE METTEVA A
@@ -1513,9 +1528,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: d13d2d9
+CONSEGNE AGGIORNATE A: c06a382
 
-SUITE ATTUALE: Ran 6252 test
+SUITE ATTUALE: Ran 6255 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

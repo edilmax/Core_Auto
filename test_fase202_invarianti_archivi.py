@@ -50,14 +50,15 @@ class _Archivi(unittest.TestCase):
                 alloggio, g, unita_totali=totali, prezzo_netto_cents=10000))
 
     def _pagata(self, rif, alloggio="villa", ci="2027-05-01", co="2027-05-03", totale=30000,
-                firma="quote-firmato", extra=None):
-        # `firma` e' il quote_token (la prova firmata di I3): vuoto = prenotazione senza prova
+                firma="quote-firmato", idem=None, extra=None):
+        # `firma` e' il quote_token e `idem` l'idem_key (la firma del quote_token): la prova di I3
+        # e' l'uno O l'altro (o il voucher nel corpo). Tutti e tre vuoti = prenotazione senza prova.
         corpo = {"totale_cents": totale, "host_id": "h1", "valuta": "EUR"}
         corpo.update(extra or {})
         pp = self.sys.pagamenti_pendenti
         self.assertTrue(pp.registra(rif, alloggio_id=alloggio, check_in=ci, check_out=co,
-                                    idem_key="idem-" + rif, quote_token=firma,
-                                    corpo_json=json.dumps(corpo)))
+                                    idem_key=("idem-" + rif) if idem is None else idem,
+                                    quote_token=firma, corpo_json=json.dumps(corpo)))
         self.assertIsNotNone(pp.conferma(rif))
         self.assertEqual(pp.info(rif)["stato"], "pagato")
 
@@ -191,9 +192,22 @@ class TestOgniInvarianteVedeIlSuoGuasto(_Archivi):
         self.assertNotIn("I2", r["verificati"])
         self.assertTrue(any(m.startswith("I2") for m in r["non_eseguiti"]), r["non_eseguiti"])
 
+    def test_I3_ognuna_delle_tre_prove_BASTA_da_sola(self):
+        """Il sopravvissuto del giro 3 del Giudice (`or -> and` in `_prova_firmata`): ogni
+        prova va provata DA SOLA, senza le altre due, o l'`and` passa inosservato."""
+        self._notti("villa", ["2027-05-01", "2027-05-02", "2027-05-03"], totali=3)
+        self._pagata("SOLO_QUOTE", co="2027-05-02", firma="quote-firmato", idem="")
+        self._pagata("SOLO_IDEM", ci="2027-05-02", co="2027-05-03", firma="", idem="firma-del-quote")
+        self._pagata("SOLO_VOUCHER", ci="2027-05-03", co="2027-05-04", firma="", idem="",
+                     extra={"voucher_token": "voucher-firmato"})
+        for rif in ("SOLO_QUOTE", "SOLO_IDEM", "SOLO_VOUCHER"):
+            self._incasso(rif, 30000)
+        r = self._giro()
+        self.assertNotIn("I3", r["violazioni"], r)
+
     def test_I3_una_pagata_senza_PROVA_FIRMATA(self):
         self._notti("villa", ["2027-05-01"])
-        self._pagata("R1", co="2027-05-02", firma="")
+        self._pagata("R1", co="2027-05-02", firma="", idem="")
         self._incasso("R1", 30000)
         r = self._giro()
         self.assertIn("I3", r["violazioni"], r)
@@ -249,7 +263,7 @@ class TestIlRapportoDelGuardiano(_Archivi):
 
     def test_con_una_violazione_il_rapporto_NON_e_piu_pulito_e_conta_cresce(self):
         self._notti("villa", ["2027-05-01"])
-        self._pagata("R1", co="2027-05-02", firma="")
+        self._pagata("R1", co="2027-05-02", firma="", idem="")
         self._incasso("R1", 30000)
         rap = A.con_invarianti(self._rapporto_pulito(), self.d)
         self.assertFalse(rap["pulito"])
@@ -488,6 +502,99 @@ class TestGliErroriPortanoLaTraccia(unittest.TestCase):
         self.assertIn("anomalie", rap)
         self.assertTrue(any("il giro e' fallito" in m for m in rap["non_eseguiti"]),
                         rap["non_eseguiti"])
+
+
+class TestI3SullaProvaFirmataVera(unittest.TestCase):
+    """⛔ DIFETTO TROVATO LEGGENDO IL 2026-09-05 (latente: 0 pendenti in produzione). La
+    prenotazione istantanea (`fase83._registra_hold`) salva `idem_key` (derivata dal quote_token
+    firmato) e il `voucher_token` firmato nel corpo_json, ma NON la colonna `quote_token`; solo la
+    richiesta 'in_attesa_host' la salva. Il primo giro di fase202 giudicava I3 col solo
+    `quote_token`: ogni prenotazione PAGATA dalle rotte vere sarebbe risultata «senza prova» ->
+    email quotidiana falsa sul Guardiano dei soldi. VISTA ROSSA sulla prima stesura.
+
+    Qui la prenotazione la fanno le ROTTE VERE (quote -> book -> webhook), non un INSERT: e' l'unico
+    modo di sapere cosa il prodotto scrive davvero nel record."""
+
+    def setUp(self):
+        import fase85_pagamenti_stripe as _stripe
+        self.d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.d, True)
+        self._fetch_vero = _stripe.ProviderStripe._fetch_reale
+        _stripe.ProviderStripe._fetch_reale = staticmethod(
+            lambda url, body, headers: {"url": "https://x/y", "id": "cs_prova202"})
+        self.addCleanup(setattr, _stripe.ProviderStripe, "_fetch_reale", self._fetch_vero)
+        d = self.d
+        # valori FINTI che accendono il provider (la rete e' sostituita sopra): non sono segreti
+        chiave_finta, firma_webhook_finta = "sk", "whsec_x"
+        self.sys = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"P" * 32, con_registrazione_host=True,
+            db_catalogo="%s/c.db" % d, db_inventario="%s/i.db" % d,
+            db_registro_host="%s/r.db" % d, db_garanzia="%s/g.db" % d,
+            db_payout="%s/y.db" % d, db_pendenti="%s/p.db" % d,
+            db_accettazioni="%s/a.db" % d, db_tassa_comunale="%s/t.db" % d,
+            db_finanza="%s/finanza.db" % d,
+            stripe_secret_key=chiave_finta, stripe_webhook_secret=firma_webhook_finta,
+            stripe_success_url="https://x/ok", stripe_cancel_url="https://x/no"))
+        from fase83_server import crea_router
+        self.router = crea_router(self.sys, host_key="hk", admin_key="ak",
+                                  base_url="https://bookinvip.com")
+
+    def _g(self, metodo, path, body=None, headers=None):
+        return self.router.gestisci(metodo, path, {},
+                                    json.dumps(body) if body is not None else None, headers or {})
+
+    def _prenotazione_pagata_dalle_rotte(self):
+        import time
+        from fase87_stripe_webhook import firma_di_test
+        from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+        s, c = self._g("POST", "/api/host/registrazione",
+                       {"email": "h202@x.it", "password": "password1", "accetta_termini": True,
+                        "accetta_clausole": True, "accetta_privacy": True,
+                        "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
+        self.assertEqual(s, 201)
+        h = {"X-Host-Token": c["token"]}
+        s, _ = self._g("POST", "/api/host/pubblica",
+                       {"slug": "villa-202", "titolo": "Villa 202", "citta": "Roma",
+                        "prezzo_notte_cents": 10000, "capacita": 2}, h)
+        self.assertIn(s, (200, 201))
+        s, _ = self._g("POST", "/api/host/disponibilita_range",
+                       {"alloggio_id": "villa-202", "da": "2027-05-01", "a": "2027-05-10",
+                        "unita_totali": 1, "prezzo_netto_cents": 10000}, h)
+        self.assertIn(s, (200, 201))
+        s, q = self._g("POST", "/api/concierge/quote",
+                       {"alloggio_id": "villa-202", "check_in": "2027-05-02",
+                        "check_out": "2027-05-04", "party": 2})
+        self.assertEqual(s, 200)
+        s, b = self._g("POST", "/api/concierge/book",
+                       {"quote_token": q["quote_token"], "email": "o202@x.it"})
+        self.assertEqual(s, 201, b)
+        rif = b["riferimento"]
+        pl = json.dumps({"type": "checkout.session.completed",
+                         "data": {"object": {"metadata": {"riferimento": rif}}}})
+        s, _ = self.router.gestisci("POST", "/api/payments/webhook", {}, pl,
+                                    {"Stripe-Signature": firma_di_test(pl, "whsec_x",
+                                                                       int(time.time()))})
+        self.assertEqual(s, 200)
+        rec = self.sys.pagamenti_pendenti.info(rif)
+        self.assertEqual(rec["stato"], "pagato")
+        return rif, rec
+
+    def test_una_prenotazione_PAGATA_dalle_rotte_vere_ha_la_prova_firmata(self):
+        rif, rec = self._prenotazione_pagata_dalle_rotte()
+        r = A.scansiona_archivi(self.d, ora=lambda: 1_800_000_000)
+        self.assertNotIn("I3", r["violazioni"],
+                         "una prenotazione pagata dalle rotte vere risulta SENZA prova: il giudizio "
+                         "I3 non guarda dove il prodotto scrive la prova (record: quote_token=%r "
+                         "idem_key=%r)" % (rec.get("quote_token"), rec.get("idem_key")))
+        self.assertIn("I3", r["verificati"])
+
+    def test_una_riga_senza_NESSUNA_prova_e_una_violazione(self):
+        pp = self.sys.pagamenti_pendenti
+        self.assertTrue(pp.registra("NUDA", alloggio_id="villa-202", check_in="2027-05-06",
+                                    check_out="2027-05-07", corpo_json=json.dumps({"totale_cents": 1})))
+        self.assertIsNotNone(pp.conferma("NUDA"))
+        r = A.scansiona_archivi(self.d, ora=lambda: 1_800_000_000)
+        self.assertEqual(r["violazioni"].get("I3"), ["NUDA"])
 
 
 class TestIlTickDiFase83ChiamaIlGiro(unittest.TestCase):

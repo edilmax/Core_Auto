@@ -2,35 +2,35 @@
  "16d2c823889f": {
   "blocco": 1,
   "comando": "python collaudi/mutazione_prodotto.py --modulo fase65_split_payment.py fase85_pagamenti_stripe.py fase87_stripe_webhook.py fase101_stripe_connect.py fase131_payout_dashboard.py --tetto 62 --minuti 60 --killer test_fase65_split_payment test_fase85_pagamenti_stripe test_fase87_stripe_webhook test_fase101_stripe_connect test_fase131_payout_dashboard",
-  "commit": "9829aa5",
+  "commit": "c06a382",
   "condizione": "zero punti di mutazione scoperti sul PERCORSO DEL DENARO -- i cinque moduli che un euro attraversa davvero: entra, viene confermato, va sul conto dell'host, si divide fra ospiti, esce col bonifico -- sul codice che la produzione ESEGUE",
   "denominatore": 245,
   "esito": true,
-  "impronta": "b72543b884e1",
+  "impronta": "e94151bd5a8b",
   "motivo": "",
-  "quando": "2026-09-04T22:26:55"
+  "quando": "2026-09-05T00:40:13"
  },
  "224ae0884a0b": {
   "blocco": 1,
   "comando": "python collaudi/esame_orologi.py --scrivi",
-  "commit": "c28fb77",
+  "commit": "c06a382",
   "condizione": "hold, payout e penale scadono davvero in un giro contro Stripe di PROVA con l'orologio NOSTRO spostato, e i tre esiti si rileggono da Stripe (rimborso dell'hold, bonifico all'host, penale addebitata)",
   "denominatore": 34,
   "esito": true,
-  "impronta": "b72543b884e1",
+  "impronta": "e94151bd5a8b",
   "motivo": "",
-  "quando": "2026-09-04T22:34:25"
+  "quando": "2026-09-05T00:26:07"
  },
  "50691c557e6e": {
   "blocco": 1,
   "comando": "python collaudi/esame_soldi.py --scrivi",
-  "commit": "9829aa5",
+  "commit": "c06a382",
   "condizione": "le dimostrazioni z3 sugli invarianti GIRANO in CI, e i test che le portano NON risultano saltati",
   "denominatore": 54,
   "esito": true,
-  "impronta": "b72543b884e1",
+  "impronta": "e94151bd5a8b",
   "motivo": "",
-  "quando": "2026-09-04T22:11:53"
+  "quando": "2026-09-05T00:24:35"
  },
  "813b9082642c": {
   "blocco": 1,
@@ -46,23 +46,23 @@
  "c3cf3da4543f": {
   "blocco": 1,
   "comando": "python collaudi/esame_soldi.py --scrivi",
-  "commit": "9829aa5",
+  "commit": "c06a382",
   "condizione": "esistono le relazioni metamorfiche sull'aritmetica del denaro",
   "denominatore": 15,
   "esito": true,
-  "impronta": "b72543b884e1",
+  "impronta": "e94151bd5a8b",
   "motivo": "",
-  "quando": "2026-09-04T22:11:54"
+  "quando": "2026-09-05T00:24:35"
  },
  "d70ecb7a31cc": {
   "blocco": 1,
   "comando": "python collaudi/esame_rimborsi.py --scrivi",
-  "commit": "9829aa5",
+  "commit": "c06a382",
   "condizione": "i soldi tornano DAVVERO all'ospite da OGNI strada che porta a un rimborso, non solo da quella che qualcuno si e' ricordato di provare (il 2026-08-16 le strade erano due e ne funzionava una). ⛔ L'AUTOMATICO NON e' la riga d'arrivo di questo blocco: e' una decisione del fondatore, e si accende dopo -- prima si guadagna la fiducia, poi si toglie il dito",
   "denominatore": 38,
   "esito": true,
-  "impronta": "b72543b884e1",
+  "impronta": "e94151bd5a8b",
   "motivo": "",
-  "quando": "2026-09-04T22:13:19"
+  "quando": "2026-09-05T00:25:42"
  }
 }
