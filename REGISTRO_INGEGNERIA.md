@@ -403,6 +403,69 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🏁 BLOCCO 2, CASELLA 2: IL BLOCCO ATOMICO REGGE SOTTO GARA — 10 GIRI × 24 AGENTI, 1 CONFERMA — 5 settembre, notte, chat B (albero B2, ramo `blocco2-macchina-stati`)
+
+**Cosa misura `collaudi/esame_gare.py`:** un alloggio con una unità; a ogni giro 24 agenti chiedono 24
+preventivi **distinti** (chiavi idempotenti diverse) sulle stesse notti e prenotano **nello stesso istante**
+(barriera di thread): deve passare **esattamente una** prenotazione (201), le altre 23 rifiutate in modo
+controllato (409/422); poi il **giudice esterno alla gara** — l'auditor `fase202` sugli archivi dello scenario
+— non deve vedere una notte con `unita_occupate > unita_totali` né due pagate sovrapposte (I1), e la notte
+contesa deve dire 1 su 1. Dieci giri su notti diverse. **I numeri 10 e 24 li legge dal testo della casella**
+(`numeri_della_casella`): una gara più piccola (`--giri`/`--agenti`) serve a provare in piccolo e **non
+scrive**; col guasto dentro non scrive. Perché il giudice è esterno: contare i 201 dice cosa ha *risposto*
+il server, l'inventario dice cosa ha *scritto* — la casella chiede la seconda.
+
+**D20, nell'ordine** (attesi in `atteso_esame_gare_giro1.txt`): `--autoprova` 4 casi; prova in piccolo
+`--giri 2 --agenti 6` **verde** (11 passi); `--con-guasto --giri 2 --agenti 24` con un `blocca` **non
+atomico** (controlla, aspetta 20 ms, scrive — la forma che `BEGIN IMMEDIATE` + ricontrollo esiste per
+impedire): **ROSSO**, 24 conferme su 24, la notte a `occupate=24 su 1`, l'auditor I1 grida «notte
+sovraprenotata», nessuna scrittura; poi `--scrivi` a **10 × 24: 51 passi, 0 rossi, 10 conferme in tutto**,
+casella scritta sull'impronta `7ef3c7708bee` → **Blocco 2: 2 su 4**. Guardie
+`test_pipeline_ci.TestLEsameDelleGareNonPuoBARARE` (5: i numeri si leggono dalla casella e il testo non
+è ricopiato; verde solo con tutti i giri interi; gara più piccola o col guasto non scrive mai; il guasto
+è davvero un blocco non atomico — due chiamate insieme passano entrambe, mentre il blocco vero non ne fa
+passare nessuna dopo; dichiara e sa provarsi). **Cosa non guarda:** thread nello stesso processo, non
+processi su macchine diverse (in produzione c'è un processo solo: stessa forma); le gare cancellazione↔
+prenotazione e blocco-data↔prenotazione stanno in `gare_estreme.py` A3/A4.
+
+### 🗓️ BLOCCO 2, CASELLA 1: LA MACCHINA A STATI COPRE CANCELLAZIONI, MODIFICHE, NO-SHOW E SOVRA-AFFITTO — 5 settembre, notte, chat B (albero B2, ramo `blocco2-macchina-stati` su `d548c3f`)
+
+**Il fondatore:** *«vai avanti con il prossimo blocco che dice piano.py»*. `piano.py` dice il Blocco 2,
+PRENOTAZIONI E INVENTARIO; la prima casella vuota è questa. **Cosa vuol dire «copre», deciso e dichiarato
+(rovesciabile):** la macchina a stati (`fase199.STATI_PRENOTAZIONE`/`EVENTI_PRENOTAZIONE`, lo specchio dei
+CAS di `fase162`) copre una situazione quando (a) i suoi teoremi Z3 sono dimostrati e il modello coincide col
+codice vero (la guardia `test_fase199_transizioni` eseguita, non riletta); (b) lo stato di una prenotazione
+lo scrive solo `fase162` con gli eventi del modello (censimento sul sorgente); (c) uno scenario guidato dalle
+**rotte vere** finisce nello stato che il modello prescrive e l'inventario resta coerente (I1 dell'auditor
+`fase202` sugli archivi dello scenario).
+
+**Misurato nel prodotto prima di scrivere l'attrezzo:** `EVENTI_PRENOTAZIONE` = conferma, scadi,
+marca_da_rimborsare, marca_cancellata_host; **nessuna «modifica»** di prenotazione esiste nel prodotto
+(nessuna rotta in `fase83`, nessuna pagina; `fase34/36` sono lo stack vecchio non importato dalla produzione):
+modificare = cancellare e riprenotare; il **no-show** non è una transizione (la prenotazione resta 'pagato',
+la garanzia matura a check-in + 24 h e l'host è pagato; la penale sulla carta è solo «paga in struttura»,
+`_forse_penale_struttura`; la statistica è `fase62`, che non tocca i pendenti); il **sovra-affitto** è uno
+stato impossibile impedito dall'inventario atomico (`fase58`) e dalla regola «`conferma` solo da
+in_attesa/scaduto» col re-blocco (un pagamento tardivo su stanza presa finisce 'rimborsato'); **solo `fase162`
+scrive lo stato dei pendenti** (nessun `UPDATE/INSERT pendenti` altrove; i letterali scritti sono
+pagato/scaduto/rimborsato/cancellata_host, tutti nel modello).
+
+**L'attrezzo `collaudi/esame_prenotazioni.py`** (tutto in-process, Stripe finto, orologio NOSTRO sui pendenti):
+MODELLO — 13 teoremi Z3 `DIMOSTRATO`, concordanza verde (9 collaudi), 0 scrittori fuori da fase162, stati
+scritti ⊆ modello; CANCELLAZIONI — ospite → 'rimborsato' + notti libere, host → 'cancellata_host' + notti
+libere; MODIFICHE — 0 funzioni «modific*» in fase83 che tocchino pendenti o date (AST), cancella + riprenota →
+'rimborsato'/'pagato' con le notti giuste; NO-SHOW — fase62 non tocca i pendenti, garanzia aperta, allo
+sblocco va all'host, la prenotazione resta 'pagato'; SOVRA-AFFITTO — una unità, hold A, B rifiutato
+dall'inventario, l'hold scade sull'orologio nostro (`sweep_hold_una_passata`), B prende, il webhook tardivo
+di A finisce 'rimborsato', l'auditor I1 non vede notti sovraprenotate. **34 passi, denominatore 34.**
+D20: `--con-guasto` (la cancellazione non marca il rimborso) = ROSSO con 4 passi (e l'auditor I1 vede la
+doppia prenotazione che il guasto produce), nessuna scrittura; `--autoprova` 12 casi; `--scrivi` = VERDE,
+casella scritta sull'impronta `7ef3c7708bee` → **Blocco 2: 1 su 4**. Guardie
+`test_pipeline_ci.TestLEsameDellePrenotazioniNonPuoBARARE` (5: giudizio nelle due direzioni, col guasto non
+scrive, i censimenti vedono un sorgente storto, testo non ricopiato, dichiara e sa provarsi). Registri
+`corsia_B_2026-09-05\esame_prenotazioni_*.log`. **Cosa non guarda:** la gara vera (casella 2), i soldi
+(Blocco 1), una rotta che cambiasse le date senza toccare lo stato.
+
 ### 🧯 IL DIFETTO DELL'I3 SUGLI ARCHIVI VERI: LA PROVA FIRMATA NON STA (SOLO) IN `quote_token` — 5 settembre, notte, chat B (albero B2, ramo `fase202-prova-firmata` su `c06a382`)
 
 **Trovato leggendo, non da un allarme** (latente: 0 pendenti in produzione al censimento del 4/9),
@@ -430,9 +493,19 @@ commento). **Lezione:** la guardia buona per un auditor che legge gli archivi è
 rotte vere, non un INSERT che ripete la mia idea di come dovrebbe essere la riga.
 
 **La rimisura.** `fase202` sta nell'impronta del Blocco 1 (`b72543b884e1` → `e94151bd5a8b`): le sei caselle
-sono scadute da sole e si rimisurano coi loro attrezzi, nell'ordine (`atteso_rimisure_dopo_cura_i3.txt`);
-la casella 6 si scrive verde solo dopo il deploy della cura. Numeri nel riquadro di `RIPRENDI_QUI.md` e
-nei registri `*_dopo_cura_i3.log`.
+sono scadute da sole e si rimisurano coi loro attrezzi, nell'ordine (`atteso_rimisure_dopo_cura_i3.txt`):
+esame_soldi 54/15 · esame_rimborsi 7/7 + E2E 31 (38) · esame_orologi 34 · giro unico del Giudice sui cinque
+moduli 246/245/0 + 1 equivalente (`giudice_casella5_giro_unico_dopo_cura_i3.log`) → 5 su 6 prima del deploy.
+**Unione e deploy (5 settembre, 00:5x–01:0x):** PR #152 unita con la CI verde (16 controlli, `gate` success)
+→ master **`d0907428764e651ec79a5526d5b8161bbcff5e72`**; fra `c06a382` e master l'unico file di produzione
+cambiato è `fase202` (+20/−3). Deploy a tappe (`atteso_deploy_cura_i3.txt`, registri `deploy_i3_*.log`):
+paracadute `:prec` = immagine viva `083637e3…` (Id uguale), HEAD prima `c06a382`; scambio alle 23:00:13Z;
+verifica: app healthy in 7 s, backup healthy, `money_path_pronto: True, avvisi: []`, nessuna `PAGAMENTO_*`, sha
+`d090742`, immagine viva nuova `7139adbd…` ≠ `:prec`; dal computer `/` 200 e `/api/health` 200 (`guardiano ok`).
+Primo giro vivo alle 23:00:09Z: `INVARIANTI ARCHIVI | verificati=I1,I2,I3,I4,I5 | letti=archivi:25 garanzie:2
+giornale:3 importi:75 notti:61 payout:1 prenotazioni:0 | violazioni=0 | non_eseguiti=0 | ciechi=0`, poi
+«GUARDIANO: nessuno stato anomalo». Poi `esame_produzione.py --scrivi` → casella 6 sull'impronta nuova
+(esito nel riquadro di `RIPRENDI_QUI.md`).
 
 ### ⏰ LA CASELLA 3, RISCRITTA E MISURATA: HOLD, PAYOUT E PENALE SCADONO DAVVERO CON L'OROLOGIO NOSTRO, E STRIPE DI PROVA RILEGGE — 4 settembre, notte, chat B (albero B2, ramo `casella3` su `c28fb777`)
 

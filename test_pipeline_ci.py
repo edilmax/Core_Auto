@@ -11615,5 +11615,184 @@ class TestLEsameDegliOrologiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         self.assertTrue(os.path.isfile(os.path.join(QUI, "collaudi", "esame_orologi.py")))
 
 
+class TestLEsameDellePrenotazioniNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_prenotazioni.py`, l'attrezzo che scrive la casella 1 del
+    blocco PRENOTAZIONI («la macchina a stati copre cancellazioni, modifiche, no-show e
+    sovra-affitto»). Qui non si avvia il banco: si mette il GIUDIZIO davanti a passi costruiti
+    (le cinque situazioni intere, un rosso per situazione, una situazione mancante) e si
+    pretende che dica verde solo con tutte e cinque intere; che col guasto dentro non scriva
+    mai; che i censimenti sul sorgente vedano davvero (un modulo che scrive i pendenti fuori da
+    fase162, uno stato fuori dal modello)."""
+
+    def _esame(self):
+        return self._carica("esame_prenotazioni.py", "_esame_prenotazioni_sotto_guardia")
+
+    def test_IL_GIUDIZIO_DICE_VERDE_SOLO_CON_LE_CINQUE_SITUAZIONI_INTERE(self):
+        esame = self._esame()
+        verde, motivi, den = esame.giudica(esame.passi_finti())
+        self.assertTrue(verde, motivi)
+        self.assertEqual(den, 10)
+        for s in esame.SITUAZIONI:
+            verde, motivi, _d = esame.giudica(esame.passi_finti(rossi=(s,)))
+            self.assertFalse(verde, "con un rosso in «%s» ha detto VERDE" % s)
+            self.assertTrue(motivi)
+            verde, motivi, _d = esame.giudica(esame.passi_finti(senza=(s,)))
+            self.assertFalse(verde, "con «%s» non misurata ha detto VERDE" % s)
+        self.assertFalse(esame.giudica([])[0])
+        self.assertFalse(esame.giudica(esame.passi_finti() + [("altro", "x", True, "")])[0])
+
+    def test_COL_GUASTO_DENTRO_NON_SCRIVE_MAI(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_I_CENSIMENTI_SUL_SORGENTE_VEDONO_DAVVERO(self):
+        """Il censimento non e' un elenco a mano: qui gli si mette davanti un sorgente storto."""
+        esame = self._esame()
+        vera = esame._sorgente
+        # righe di SORGENTE finte (testo, non query eseguite): il censimento deve vederle
+        riga_scrittore = "con.execute(\"UPDATE pendenti SET stato='x'\")"
+        riga_stato_ignoto = "\"UPDATE pendenti SET stato='marziano' WHERE 1\""
+        riga_modifica = "def _modifica_prenotazione(self, body):\n    return self._sys.pagamenti_pendenti\n"
+
+        def _storto(nome_storto, aggiunta, al_posto=False):
+            def _s(nome):
+                if nome != nome_storto:
+                    return vera(nome)
+                return aggiunta if al_posto else "\n".join([vera(nome), aggiunta])
+            return _s
+        try:
+            # (a) un modulo fuori da fase162 che scrive i pendenti -> deve comparire
+            esame._sorgente = _storto("fase999_finto.py", riga_scrittore, al_posto=True)
+            vero_listdir = os.listdir
+            os.listdir = lambda p: sorted(vero_listdir(p) + ["fase999_finto.py"])
+            try:
+                self.assertIn("fase999_finto.py", esame.scrittori_dello_stato_fuori_da_fase162())
+            finally:
+                os.listdir = vero_listdir
+            # (b) a sorgente vero: nessuno scrive i pendenti fuori da fase162
+            esame._sorgente = vera
+            self.assertEqual(esame.scrittori_dello_stato_fuori_da_fase162(), [])
+            # (c) uno stato scritto da fase162 che il modello non conosce -> deve comparire
+            esame._sorgente = _storto("fase162_pagamenti_pendenti.py", riga_stato_ignoto)
+            self.assertIn("marziano", esame.stati_scritti_da_fase162())
+            esame._sorgente = vera
+            from fase199_invarianti import STATI_PRENOTAZIONE
+            self.assertTrue(set(esame.stati_scritti_da_fase162()) <= set(STATI_PRENOTAZIONE))
+            # (d) una funzione di modifica che tocca i pendenti -> deve comparire
+            esame._sorgente = _storto("fase83_server.py", riga_modifica)
+            self.assertIn("_modifica_prenotazione", esame.rotte_di_modifica_in_fase83())
+            esame._sorgente = vera
+            self.assertEqual(esame.rotte_di_modifica_in_fase83(), [])
+        finally:
+            esame._sorgente = vera
+
+    def test_IL_TESTO_DELLA_CASELLA_NON_E_RICOPIATO_A_MANO(self):
+        esame = self._esame()
+        blocco = [b for b in esame.BLOCCHI if b["ordine"] == esame.BLOCCO]
+        self.assertEqual(len(blocco), 1)
+        condizioni = blocco[0]["finito_quando"]
+        self.assertIn("macchina a stati", condizioni[esame.INDICE_CASELLA])
+        with io.open(os.path.join(QUI, "collaudi", "esame_prenotazioni.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        self.assertNotIn(condizioni[esame.INDICE_CASELLA], sorgente)
+
+    def test_L_ESAME_DICHIARA_COSA_NON_HA_GUARDATO_E_SA_PROVARSI(self):
+        esame = self._esame()
+        self.assertTrue(getattr(esame, "NON_GUARDA", ()))
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, righe)
+
+
+class TestLEsameDelleGareNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_gare.py`, l'attrezzo che scrive la casella 2 del blocco
+    PRENOTAZIONI («il blocco atomico regge sotto gara (misurato: 10 giri x 24 agenti, 1
+    conferma)»). I numeri 10 e 24 l'esame li legge dal testo della casella: qui si pretende che
+    li legga davvero, che una gara piu' piccola o col guasto dentro NON scriva mai, e che il
+    giudizio dica verde solo con tutti i giri interi e nessun rosso."""
+
+    def _esame(self):
+        return self._carica("esame_gare.py", "_esame_gare_sotto_guardia")
+
+    def test_I_NUMERI_DELLA_GARA_SI_LEGGONO_DALLA_CASELLA_NON_DA_UNA_COSTANTE(self):
+        esame = self._esame()
+        blocco = [b for b in esame.BLOCCHI if b["ordine"] == esame.BLOCCO]
+        self.assertEqual(len(blocco), 1)
+        testo = blocco[0]["finito_quando"][esame.INDICE_CASELLA]
+        self.assertEqual(esame.numeri_della_casella(testo), (10, 24))
+        self.assertIsNone(esame.numeri_della_casella("una casella senza numeri"))
+        self.assertEqual(esame.numeri_della_casella("regge (misurato: 3 giri x 7 agenti)"), (3, 7))
+        with io.open(os.path.join(QUI, "collaudi", "esame_gare.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        self.assertNotIn(testo, sorgente, "il testo della casella e' ricopiato nell'esame")
+
+    def test_IL_GIUDIZIO_DICE_VERDE_SOLO_CON_TUTTI_I_GIRI_INTERI(self):
+        esame = self._esame()
+        verde, motivi, den = esame.giudica(esame.passi_finti(10), 10)
+        self.assertTrue(verde, motivi)
+        self.assertEqual(den, 30)
+        self.assertFalse(esame.giudica(esame.passi_finti(10, rossi=(0,)), 10)[0])
+        self.assertFalse(esame.giudica(esame.passi_finti(10, rossi=(9,)), 10)[0])
+        self.assertFalse(esame.giudica(esame.passi_finti(9), 10)[0])
+        self.assertFalse(esame.giudica([], 10)[0])
+        self.assertTrue(esame.giudica(esame.passi_finti(9), 9)[0])
+
+    def test_UNA_GARA_PIU_PICCOLA_O_COL_GUASTO_NON_SCRIVE_MAI(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+            self.assertEqual(esame.main(["--scrivi", "--giri", "1"]), 2)
+            self.assertEqual(esame.main(["--scrivi", "--agenti", "2"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_IL_GUASTO_E_UN_BLOCCO_CHE_NON_E_ATOMICO(self):
+        """Il guasto iniettato deve essere davvero un blocco senza transazione: due chiamate
+        sulla stessa notte a una unita' devono passare ENTRAMBE (a mano, senza gara: la finestra
+        fra controllo e scrittura e' esplicita)."""
+        import threading
+        esame = self._esame()
+        from fase58_channel_manager import crea_channel_manager
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        inv = crea_channel_manager(os.path.join(d, "i.db"))
+        self.assertTrue(inv.imposta_disponibilita("v", "2027-05-01", unita_totali=1,
+                                                  prezzo_netto_cents=100))
+        rotto = esame.blocco_NON_atomico(inv)
+        esiti = []
+        barriera = threading.Barrier(2)
+
+        def corri(k):
+            barriera.wait()
+            esiti.append(rotto("v", "2027-05-01", "2027-05-02", idem_key="k%d" % k).ok)
+        fili = [threading.Thread(target=corri, args=(k,)) for k in range(2)]
+        for f in fili:
+            f.start()
+        for f in fili:
+            f.join()
+        self.assertEqual(esiti, [True, True], "il guasto non e' abbastanza guasto: %r" % (esiti,))
+        # ...mentre il blocco VERO ne fa passare una sola
+        veri = [inv.blocca("v", "2027-05-01", "2027-05-02", idem_key="w%d" % k).ok for k in range(2)]
+        self.assertEqual(sorted(veri), [False, False], "dopo il guasto la notte e' gia' piena: %r" % (veri,))
+
+    def test_L_ESAME_DICHIARA_COSA_NON_HA_GUARDATO_E_SA_PROVARSI(self):
+        esame = self._esame()
+        self.assertTrue(getattr(esame, "NON_GUARDA", ()))
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, righe)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

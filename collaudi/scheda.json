@@ -35,13 +35,13 @@
  "813b9082642c": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --scrivi",
-  "commit": "d13d2d9",
+  "commit": "ac51e6e",
   "condizione": "gli invarianti sono verificati in PRODUZIONE, non solo nei test",
   "denominatore": 14,
   "esito": true,
-  "impronta": "b72543b884e1",
+  "impronta": "e94151bd5a8b",
   "motivo": "",
-  "quando": "2026-09-04T23:10:17"
+  "quando": "2026-09-05T01:00:36"
  },
  "c3cf3da4543f": {
   "blocco": 1,
@@ -64,5 +64,27 @@
   "impronta": "e94151bd5a8b",
   "motivo": "",
   "quando": "2026-09-05T00:25:42"
+ },
+ "ec84faaea398": {
+  "blocco": 2,
+  "comando": "python collaudi/esame_prenotazioni.py --scrivi",
+  "commit": "d548c3f",
+  "condizione": "la macchina a stati copre cancellazioni, modifiche, no-show e sovra-affitto",
+  "denominatore": 34,
+  "esito": true,
+  "impronta": "7ef3c7708bee",
+  "motivo": "",
+  "quando": "2026-09-05T00:47:22"
+ },
+ "f5d22a937896": {
+  "blocco": 2,
+  "comando": "python collaudi/esame_gare.py --scrivi",
+  "commit": "ac51e6e",
+  "condizione": "il blocco atomico regge sotto gara (misurato: 10 giri x 24 agenti, 1 conferma)",
+  "denominatore": 51,
+  "esito": true,
+  "impronta": "7ef3c7708bee",
+  "motivo": "",
+  "quando": "2026-09-05T00:57:24"
  }
 }
