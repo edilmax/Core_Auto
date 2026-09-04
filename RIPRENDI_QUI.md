@@ -26,7 +26,7 @@
 
 ---
 
-## 🛡️ CHAT B (la sola) — 2026-09-04 notte: LA CASELLA 6 HA IL SUO ATTREZZO E LA PRODUZIONE HA IL GIRO DEI CINQUE INVARIANTI (ramo `casella6` su `9829aa5`), rossa PRIMA del deploy per costruzione
+## 🏁 CHAT B (la sola) — 2026-09-04 notte: IL BLOCCO 1 SOLDI È 6 SU 6, SCRITTO DALLE MACCHINE — casella 6 (fase202 in produzione, deploy `201d723`) e casella 3 (esame degli orologi contro Stripe di prova); ramo `casella3` (PR #151) sopra la #150 unita
 
 **LE DUE DECISIONI DEL FONDATORE, nella finestra di B:** casella 3 → *«fai la cosa giusta non ce niente che
 possiamo istallare che serve per risolvere»* (= sì alla riscrittura: orologio NOSTRO spostato + Stripe di
@@ -70,11 +70,25 @@ sweeper di produzione sull'orologio spostato, stanza al secondo ospite, webhook 
 rossi, nessuna scrittura), poi `--scrivi` **VERDE 34 passi** → **Blocco 1 SOLDI 5 su 6**. Guardie
 `TestLEsameDegliOrologiNonPuoBARARE` (6). Caricatore **6252**. Registri `esame_orologi_*.log`.
 
-**COSA MANCA, in ordine:** 1. PR #150 (casella 6, `c28fb777`) unita a master con la CI verde per nome del
-`gate`; 2. **deploy** con l'«autorizzato» già dato (paracadute `:prec` prima del build,
-`sh /root/deploy_pulsante.sh paracadute|scambio <sha>|verifica`), poi `esame_produzione.py --scrivi`
-**VERDE**; 3. commit di `casella3` (con le parole del fondatore nel messaggio) + la scheda a **6 su 6**,
-PR, CI verde, unione.
+**IL BLOCCO 1 SOLDI È 6 SU 6 (4 settembre, 23:1x), TUTTO SCRITTO DALLE MACCHINE.** La PR #150 (casella 6)
+è **unita** con la CI verde (16 controlli, 15 success + 1 skipped, `gate` success) → master `201d723f…`;
+**deploy fatto alle 21:09:55Z** con l'«autorizzato» del fondatore e il suo «vai avanti fino a 6 su 6
+senza chiedermi nulla» (`deploy_casella6_1_paracadute.log` · `_2_scambio.log` · `_3_verifica.log`):
+paracadute `:prec` = immagine viva `17c87009…`, HEAD prima `9829aa5`, pull ff-only a `201d723`, build,
+rm-first, app e backup healthy, `money_path_pronto: True, avvisi: []`, immagine nuova `083637e3…`, `/` e
+`/api/health` 200 (`guardiano ok`). Al primo giro il server vivo ha scritto `INVARIANTI ARCHIVI |
+verificati=I1,I2,I3,I4,I5 | letti=archivi:25 garanzie:2 giornale:3 importi:75 notti:61 payout:1
+prenotazioni:0 | violazioni=0 | non_eseguiti=0 | ciechi=0` e poi «GUARDIANO: nessuno stato anomalo».
+`python collaudi/esame_produzione.py --scrivi` → **VERDE, 9 passi su 9, denominatore 14** (riga di 25 s)
+→ casella 6 scritta → `python collaudi/scheda.py --blocco 1` = **6 su 6** sull'impronta `b72543b884e1`
+(`esame_produzione_scrivi_VERDE_dopo_deploy.log`, letture in `letture_produzione_VERDE.json`).
+Ritorno indietro se servisse: `sh /root/deploy_pulsante.sh indietro`.
+
+**COSA MANCA, in ordine:** 1. la PR #151 (`casella3`, CI già verde su `d13d2d9`) aggiornata con questo
+commit (la scheda a 6 su 6) → CI verde → **unione a master**; 2. sul VPS `git pull --ff-only` (solo
+`collaudi/`, test e documenti: niente rebuild, come la #149) per tenere i tre sha allineati; 3. la
+copia fisica alla fine (memoria: non chiederla). ⛔ Le caselle restano verdi finché l'impronta del Blocco 1
+non cambia; la 6 scade da sola se il server smette di scrivere la riga per più di 25 ore.
 
 ---
 
@@ -1499,7 +1513,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: c28fb77
+CONSEGNE AGGIORNATE A: d13d2d9
 
 SUITE ATTUALE: Ran 6252 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»

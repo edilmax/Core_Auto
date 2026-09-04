@@ -548,6 +548,26 @@ riga 293, già nello schedario), 15 ri-conferme, moduli identici a HEAD, scheda 
 un nome nuovo non entra finché non viene nominato in `fase202`; `letti=` non è una condizione (zero
 prenotazioni = invarianti verificati su zero righe, ed è la verità di un prodotto con zero host).
 
+**Unione, DEPLOY e il verde — 4 settembre, 23:0x–23:1x.** PR #150 (`c28fb777`) unita a master con la CI
+verde per nome del `gate` (16 controlli, 15 success + 1 skipped; `richiesta_unione.py unisci 150`,
+seconda lettura `merged=True`) → merge **`201d723f49c482412d67461c0f2d2134c7d39468`**. Deploy con
+l'«autorizzato» del fondatore (e il suo «vai avanti fino a 6 su 6 senza chiedermi nulla»), a tappe con lo
+stesso script del pomeriggio (`/root/deploy_pulsante.sh`, DEPLOY.md §3–4): **paracadute** `:prec` =
+immagine viva `17c87009…` (Id uguale), HEAD prima `9829aa5`, `PRE_DEPLOY_20260904_*.commit`; **scambio**
+alle 21:09:55Z (fetch, `origin/master` = sha atteso, pull ff-only a `201d723`, build, stop/rm app+backup,
+up); **verifica**: app healthy in 7 s, backup healthy, `money_path_pronto: True, avvisi: []`, nessuna
+`PAGAMENTO_*`, sha `201d723`, immagine viva nuova `083637e3…` ≠ `:prec`; dal computer `/` 200 e
+`/api/health` 200 (`status ok`, `guardiano ok`). **Il primo giro del Guardiano nuovo, sul server vivo,
+alle 21:09:52Z:** `INVARIANTI ARCHIVI | verificati=I1,I2,I3,I4,I5 | letti=archivi:25 garanzie:2 giornale:3
+importi:75 notti:61 payout:1 prenotazioni:0 | violazioni=0 | non_eseguiti=0 | ciechi=0`, seguita da
+«GUARDIANO: nessuno stato anomalo (tutto quadra)». Poi `python collaudi/esame_produzione.py --scrivi
+--salva letture_produzione_VERDE.json` → **VERDE, 9 passi su 9, denominatore 14** (riga di 25 s, cinque su
+cinque, zero violazioni, VPS = `origin/master`) → casella 6 scritta sull'impronta `b72543b884e1` →
+**`scheda.py --blocco 1` = 6 su 6**. Registri: `deploy_casella6_{1_paracadute,2_scambio,3_verifica}.log`,
+`esame_produzione_scrivi_VERDE_dopo_deploy.log`. Tre sha: computer (B2 su `casella3` = master + la
+casella 3), GitHub `201d723`, VPS `201d723`; dopo l'unione della #151 il VPS fa `git pull --ff-only` (solo
+collaudi, test e documenti: niente rebuild).
+
 ### 🔘 IL PULSANTE DELLA CONTROVERSIA: LA SETTIMA STRADA TORNA, E LA CASELLA 2 È VERDE — 4 settembre, tarda sera, corsia B (albero B2, ramo `pulsante-controversia` su `0887247`)
 
 **Da dove nasce.** Letta la voce qui sotto (sei strade su sette, la controversia «uscita manuale
