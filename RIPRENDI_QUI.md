@@ -26,6 +26,49 @@
 
 ---
 
+## 🛡️ CHAT B (la sola) — 2026-09-04 notte: LA CASELLA 6 HA IL SUO ATTREZZO E LA PRODUZIONE HA IL GIRO DEI CINQUE INVARIANTI (ramo `casella6` su `9829aa5`), rossa PRIMA del deploy per costruzione
+
+**LE DUE DECISIONI DEL FONDATORE, nella finestra di B:** casella 3 → *«fai la cosa giusta non ce niente che
+possiamo istallare che serve per risolvere»* (= sì alla riscrittura: orologio NOSTRO spostato + Stripe di
+PROVA che rilegge; la ricerca su docs.stripe.com — 7 pagine — ha confermato che i test clock valgono solo
+per Customer/abbonamenti/fatture/preventivi e che nessun test helper fa scadere un'autorizzazione o
+maturare un bonifico: niente da installare); casella 6 → *«autorizzato fai la cosa giusta»* (modifica di
+produzione + deploy).
+
+**STATO (misurato):** `fase202_invarianti_archivi.py` NUOVO — ogni giorno, dentro il tick del Guardiano,
+legge gli archivi veri in sola lettura e verifica **I1..I5 con le funzioni pure di `fase199`**; scrive la
+riga `INVARIANTI ARCHIVI | verificati=I1,I2,I3,I4,I5 | letti=… | violazioni=0 | non_eseguiti=0 | ciechi=0`
+e riempie il rapporto del Guardiano (violazioni = anomalia = email). `fase83_server.py`: il tick chiama
+`giro_quotidiano` (due righe). **Perché un modulo nuovo:** `fase186` e `fase199` stanno nell'IMPRONTA del
+Blocco 1 e toccarli avrebbe svuotato le 4 caselle verdi. L'attrezzo `collaudi/esame_produzione.py` legge il
+server vivo (`/api/health`, `docker logs` via SSH, HEAD del VPS = `origin/master`), denominatore 14
+(5 invarianti + 9 passi): **ROSSO visto prima del deploy** (`corsia_B_2026-09-04\esame_produzione_ROSSO_1_prima_del_deploy.log`,
+3 passi su 9: il server non ha ancora la riga) e scritto nella scheda col motivo → **Blocco 1 resta 4 su 6
+finché il deploy non porta la riga sul server**; poi `python collaudi/esame_produzione.py --scrivi` la fa verde.
+Guardie: `test_fase202_invarianti_archivi` **36** (l'AST del tick vista ROSSA prima delle due righe) +
+`TestLEsameDellaProduzioneNonPuoBARARE` **7**; occhi vicini 103 verdi; Giudice sul modulo col solo dedicato:
+giro 1 59/36/**23 vivi** → 13 guardie (confini di `_notti`, `_intero`, tabelle per nome E colonne minime,
+`exc_info` preteso come tupla, conteggio che si somma, cartella inesistente) + un equivalente per costruzione
+tolto riscrivendo la riga, giro 2 **58/58, 0 vivi**; `--diff HEAD` su fase83: 0 punti. Caricatore **6246**.
+Sul VPS il 4/9 (sola lettura): 0 pendenti, 2 garanzie annullate, 1 payout trattenuto, 3 righe di giornale, 61 notti.
+**`fase202` sta nel Blocco 1** (lo pretende `test_ogni_modulo_del_progetto_sta_in_ESATTAMENTE_un_blocco`):
+l'impronta del blocco è cambiata (`4218eaec4034` → `b72543b884e1`), le 4 caselle verdi sono scadute da sole
+e sono state **rimisurate coi loro attrezzi**: esame_soldi 54/15 verdi · esame_rimborsi 7/7 + E2E 31 verde
+· giro unico del Giudice 246/245/0 + 1 equivalente (`giudice_casella5_giro_unico_dopo_fase202.log`) ·
+casella 6 rossa col motivo → **4 su 6 sull'impronta nuova**. ⛔ `test_pipeline_ci` si lancia dalla
+PowerShell vera: da Git Bash 4 guardie d'ambiente sono rosse per costruzione (misurato stasera).
+
+**COSA MANCA, in ordine:** 1. commit (con le parole del fondatore nel messaggio), push, PR, CI verde per nome
+del `gate`, unione a master; 2. **deploy** con l'«autorizzato» già dato (paracadute `:prec` prima del build,
+`sh /root/deploy_pulsante.sh paracadute|scambio <sha>|verifica`), poi `esame_produzione.py --scrivi` **VERDE**
+e la scheda a 5 su 6 (da committare col lavoro della casella 3); 3. **la casella 3**: riscrivere il testo in
+`collaudi/piano.py` e la prova in `regole_avvio.py` (`cerca: test_clock` → `esame_orologi`), costruire
+`collaudi/esame_orologi.py` (tre rami contro Stripe di PROVA: hold che scade → rimborso pieno riletto da
+Stripe; payout che matura a check-in + 24 h → `tr_` riletto; penale della politica «moderata» a 2 giorni
+dall'arrivo → rimborso al 50 % riletto), rosso prima e verde dopo → **6 su 6**.
+
+---
+
 ## 💸 CORSIA B — 2026-09-04 sera: LA CASELLA 2 È VERDE, SCRITTA DALLA MACCHINA — 7 strade su 7 tornano, la controversia ha il pulsante (ramo `pulsante-controversia` su `0887247`; prima: PR #146 `f650203` con 6/7, PR #147 `0887247` col registro dei sei occhi)
 
 **STATO (misurato, si rimisura con `python collaudi/esame_rimborsi.py --scrivi`):** le sette strade
@@ -315,15 +358,15 @@ GitHub master       5ba642a   <- "Merge PR #133 from lavoro-a"; genitori 936c2a8
                                  TRE unioni in questa giornata: #131 (lavoro-d), #132
                                  (lavoro-c), #133 (lavoro-a). Nessuna richiesta aperta.
 rami                lavoro-a/b/c/d: TUTTI dentro master (0 commit fuori)
-CARICATORE          6203      <- PowerShell vera (MSYSTEM vuoto, openssl assente), da fermo,
-                                 misurato il 2026-09-04 alle 19:14 nell'albero `Core_Auto_B2`
-                                 (ramo `pulsante-controversia` su 0887247 = master + le 6 guardie
-                                 sul freno nuovo della controversia: 2 in
-                                 `test_rimborso_torna_da_ogni_strada` + 4 nel dedicato
-                                 `test_fase83_server`), PRIMA di lanciare (S14).
-                                 Registro: `caricatore_20260904_191441.log`, CODICE_USCITA_DIRETTO=0.
-                                 (Era 6197 alle 17:03 con le 16 guardie della casella 2,
-                                 `caricatore_20260904_170322.log`.)
+CARICATORE          6246      <- PowerShell vera (MSYSTEM vuoto, openssl assente), da fermo,
+                                 misurato il 2026-09-04 alle 22:03 nell'albero `Core_Auto_B2`
+                                 (ramo `casella6` su 9829aa5 = master + le 43 guardie della
+                                 casella 6: 36 nel dedicato nuovo `test_fase202_invarianti_archivi`
+                                 + 7 in `test_pipeline_ci.TestLEsameDellaProduzioneNonPuoBARARE`),
+                                 PRIMA di lanciare (S14).
+                                 Registro: `caricatore_20260904_220343.log`, CODICE_USCITA_DIRETTO=0.
+                                 (Era 6203 alle 19:14 col pulsante della controversia,
+                                 `caricatore_20260904_191441.log`.)
                                  (Era 6181 alle 14:07 con le 32 guardie della casella 5,
                                  `caricatore_20260904_140739.log`; 6149 su master alle 00:49.)
                                  ⛔ E NON E' NESSUNO DEI DUE NUMERI CHE L'UNIONE METTEVA A
@@ -1446,9 +1489,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 33151bf
+CONSEGNE AGGIORNATE A: 9829aa5
 
-SUITE ATTUALE: Ran 6203 test
+SUITE ATTUALE: Ran 6246 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

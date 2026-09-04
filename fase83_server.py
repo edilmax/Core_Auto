@@ -11328,13 +11328,17 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
         # tornano con Stripe, escrow bloccati, bonifici fermi o orfani) e, se ne trova,
         # GRIDA con un'email all'amministratore. E' il paracadute che l'audit del
         # 2026-07-22 ha trovato mancante: fase182 esisteva ma era un bottone manuale.
+        # Dal 2026-09-04 (casella 6 del blocco SOLDI, «autorizzato» del fondatore) lo stesso
+        # giro verifica anche i CINQUE invarianti di fase199 sugli archivi veri (fase202):
+        # prima I2 e I5 non li guardava nessuno in produzione, I1 solo il bottone del bunker.
         import threading as _thg
 
         def _tick_guardiano():
             import time as _tg
             while True:
                 try:
-                    from fase186_guardiano import scansiona, riassunto_html
+                    from fase186_guardiano import riassunto_html
+                    from fase202_invarianti_archivi import giro_quotidiano
                     # sonda OXR 1 volta/giorno (lo scan è read-only): così un tasso vecchio da
                     # traffico scarso non viene scambiato per "OXR giù". Isolato: mai rompe il giro.
                     try:
@@ -11343,7 +11347,7 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                             _t.aggiorna()
                     except Exception:
                         pass
-                    rep = scansiona(sistema)
+                    rep = giro_quotidiano(sistema)     # fase186 + gli invarianti (fase202)
                     if not rep.get("pulito"):
                         logger.critical("GUARDIANO: %d stato/i anomalo/i -> %s",
                                         rep.get("conta"), rep.get("anomalie"))
