@@ -11711,5 +11711,88 @@ class TestLEsameDellePrenotazioniNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         self.assertTrue(riuscita, righe)
 
 
+class TestLEsameDelleGareNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_gare.py`, l'attrezzo che scrive la casella 2 del blocco
+    PRENOTAZIONI («il blocco atomico regge sotto gara (misurato: 10 giri x 24 agenti, 1
+    conferma)»). I numeri 10 e 24 l'esame li legge dal testo della casella: qui si pretende che
+    li legga davvero, che una gara piu' piccola o col guasto dentro NON scriva mai, e che il
+    giudizio dica verde solo con tutti i giri interi e nessun rosso."""
+
+    def _esame(self):
+        return self._carica("esame_gare.py", "_esame_gare_sotto_guardia")
+
+    def test_I_NUMERI_DELLA_GARA_SI_LEGGONO_DALLA_CASELLA_NON_DA_UNA_COSTANTE(self):
+        esame = self._esame()
+        blocco = [b for b in esame.BLOCCHI if b["ordine"] == esame.BLOCCO]
+        self.assertEqual(len(blocco), 1)
+        testo = blocco[0]["finito_quando"][esame.INDICE_CASELLA]
+        self.assertEqual(esame.numeri_della_casella(testo), (10, 24))
+        self.assertIsNone(esame.numeri_della_casella("una casella senza numeri"))
+        self.assertEqual(esame.numeri_della_casella("regge (misurato: 3 giri x 7 agenti)"), (3, 7))
+        with io.open(os.path.join(QUI, "collaudi", "esame_gare.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        self.assertNotIn(testo, sorgente, "il testo della casella e' ricopiato nell'esame")
+
+    def test_IL_GIUDIZIO_DICE_VERDE_SOLO_CON_TUTTI_I_GIRI_INTERI(self):
+        esame = self._esame()
+        verde, motivi, den = esame.giudica(esame.passi_finti(10), 10)
+        self.assertTrue(verde, motivi)
+        self.assertEqual(den, 30)
+        self.assertFalse(esame.giudica(esame.passi_finti(10, rossi=(0,)), 10)[0])
+        self.assertFalse(esame.giudica(esame.passi_finti(10, rossi=(9,)), 10)[0])
+        self.assertFalse(esame.giudica(esame.passi_finti(9), 10)[0])
+        self.assertFalse(esame.giudica([], 10)[0])
+        self.assertTrue(esame.giudica(esame.passi_finti(9), 9)[0])
+
+    def test_UNA_GARA_PIU_PICCOLA_O_COL_GUASTO_NON_SCRIVE_MAI(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+            self.assertEqual(esame.main(["--scrivi", "--giri", "1"]), 2)
+            self.assertEqual(esame.main(["--scrivi", "--agenti", "2"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_IL_GUASTO_E_UN_BLOCCO_CHE_NON_E_ATOMICO(self):
+        """Il guasto iniettato deve essere davvero un blocco senza transazione: due chiamate
+        sulla stessa notte a una unita' devono passare ENTRAMBE (a mano, senza gara: la finestra
+        fra controllo e scrittura e' esplicita)."""
+        import threading
+        esame = self._esame()
+        from fase58_channel_manager import crea_channel_manager
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        inv = crea_channel_manager(os.path.join(d, "i.db"))
+        self.assertTrue(inv.imposta_disponibilita("v", "2027-05-01", unita_totali=1,
+                                                  prezzo_netto_cents=100))
+        rotto = esame.blocco_NON_atomico(inv)
+        esiti = []
+        barriera = threading.Barrier(2)
+
+        def corri(k):
+            barriera.wait()
+            esiti.append(rotto("v", "2027-05-01", "2027-05-02", idem_key="k%d" % k).ok)
+        fili = [threading.Thread(target=corri, args=(k,)) for k in range(2)]
+        for f in fili:
+            f.start()
+        for f in fili:
+            f.join()
+        self.assertEqual(esiti, [True, True], "il guasto non e' abbastanza guasto: %r" % (esiti,))
+        # ...mentre il blocco VERO ne fa passare una sola
+        veri = [inv.blocca("v", "2027-05-01", "2027-05-02", idem_key="w%d" % k).ok for k in range(2)]
+        self.assertEqual(sorted(veri), [False, False], "dopo il guasto la notte e' gia' piena: %r" % (veri,))
+
+    def test_L_ESAME_DICHIARA_COSA_NON_HA_GUARDATO_E_SA_PROVARSI(self):
+        esame = self._esame()
+        self.assertTrue(getattr(esame, "NON_GUARDA", ()))
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, righe)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
