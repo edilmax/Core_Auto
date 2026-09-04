@@ -403,6 +403,72 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 💰 LA CASELLA 5: I CINQUE MODULI DEL DENARO REGGONO COL SOLO TEST DEDICATO — 4 settembre, corsia B (albero B2, ramo `casella5` su `6bf37a5e`)
+
+**Da dove nasce.** Ordine del fondatore del 4 settembre, dopo cinque ore di macchina della notte
+prima senza un modulo dei soldi toccato: *la macchina ai moduli dei soldi dal primo minuto, nessuna
+riparazione di attrezzi, il criterio della giornata è UN NUMERO — i moduli chiusi della casella 5*.
+La casella stava a **1 modulo su 5** (`fase65`) da cinque giorni.
+
+**Il metodo, misurato prima di sceglierlo.** La prova in piccolo su `fase131` (1 mutante, 196 s)
+ha detto che i **sei occhi automatici costano 68 s a giro** (dedicato + cinque che importano il
+modulo, tutti veri); il **solo test dedicato costa 0,1 s**. Un modulo intero a sei occhi = 42 min;
+col solo dedicato = 20 secondi. Da qui: (1) un giro per modulo col solo dedicato come `--killer`
+per **trovare** i buchi; (2) per ogni sopravvissuto una guardia nel file dedicato, col numero di
+riga nel nome, vista ROSSA prima che VERDE (D20); (3) il giro unico sui cinque moduli coi cinque
+dedicati come `--killer`, che scrive la scheda; (4) il giro a **sei occhi automatici** come
+controllo incrociato, staccato, dopo il commit. Attesi su file PRIMA di ogni lancio
+(`Core_Auto_GUARDIE_PRONTE\corsia_B_2026-09-04\atteso_*.txt`), registri `giudice_*.log` con i tre
+controlli (albero pulito · modulo identico a HEAD · biglietti 0) PRIMA e DOPO.
+
+**I numeri (col solo dedicato; «prima» = sopravvissuti trovati):**
+```
+modulo                    punti  prima                          dopo                    guardie
+fase131_payout_dashboard   62    24 (sei occhi) + 11 (dedicato) 62/62 uccisi              8
+fase87_stripe_webhook      15     7                             15/15 uccisi              7
+fase85_pagamenti_stripe    60    49                             59/60 + 1 EQUIVALENTE     8
+fase101_stripe_connect     50    37                             50/50 uccisi              8
+fase65_split_payment       59     1                             59/59 uccisi              1
+totale                    246   129 buchi                      245 uccisi · 1 equivalente · 0 sopravvissuti · 32 guardie
+```
+Il dedicato di `fase85` non toccava **`rimborsa`, `rimborsi_di`, `commissione_effettiva`** — le
+funzioni che fanno uscire o contano denaro vero: 49 punti su 60 senza sorveglianza. Quello di
+`fase101` non toccava **`trasferisci`** (il bonifico all'host): bonificava anche a un conto che non
+è un `acct_`, con importo zero o decimale, con la chiave di idempotenza dell'account invece del
+riferimento. Quello di `fase131` non registrava mai uno **zero** e non guardava nessuno dei dodici
+`exc_info`. Quello di `fase87` non provava mai un body in `bytes` con un header valido (col mutante
+esplodeva a metà HMAC) né un segreto vuoto firmato col segreto vuoto (col mutante passava).
+
+**Il giro unico che scrive la casella** (`giudice_casella5_giro_unico.log`, 13:52 → 14:05, 13 min):
+*«provati: 246 · uccisi: 245 · SOPRAVVISSUTI: 0 · scoperti: 0 · equivalenti: 1 · NON DETERMINABILI: 0
+· UCCISI SOLO A VOLTE: 0»*, ri-conferme 15 su 245, rinunce del generatore dichiarate
+(`a_cavallo` 6, `catena` 6), `CODICE_USCITA_DIRETTO=0`, i cinque moduli identici a HEAD prima e
+dopo. La scheda: *«casella del blocco 1 scritta: esito=True, 245 punti esaminati»* — il Blocco 1
+SOLDI passa da **2 su 6 a 3 su 6**, e la riga porta il comando per esteso: gli occhi sono i cinque
+dedicati scelti a mano (ogni modulo ha il suo dentro: D18 rispettata per costruzione). ⚠️ Nessun
+criterio allargato: cambia chi guarda, non cosa deve essere vero.
+
+**L'equivalente, dimostrato (B6).** `fase85:293`, `>=` → `>` sul saldo in `crea_link_anticipo`:
+i due operatori differiscono solo in `saldo == 0`, e lì i due rami assegnano entrambi 0. Voce in
+`EQUIVALENTI_DICHIARATI` con due ancore e impronta `39234f7d…`; 19 guardie dello schedario verdi;
+il Giudice lo riconosce (60 provati · 59 uccisi · 1 equivalente · uscita 0). Specchio della voce di
+`_sconto_credito` in `fase59`.
+
+**Ritrovamenti scritti e NON riparati (ordine: nessuna riparazione di attrezzi).**
+- `test_fase101.test_gated_senza_key` chiama `crea_link` **senza fetch iniettato**: sul mutante
+  della riga 68 arrivava a `_fetch_reale`, cioè a una HTTPS vera verso Stripe, e passava perché la
+  rete falliva. Un test che può toccare la rete è un difetto latente; coperto dalla guardia nuova
+  con spy, il vecchio resta com'è.
+- `giro_giudice.ps1` (lanciatore staccato, fuori repository) rifiuta un albero sporco: per i giri
+  leggeri con test non committati si è usato Bash in sottofondo coi controlli a mano.
+- `tutti(limit=True)`/`elenca(limit=True)` in `fase131` accettano un bool come 1: non guardato, non toccato.
+
+**Cosa questo lavoro NON dimostra (D18 punto 3).** Il potere di uccidere dei sei occhi automatici
+in un giro unico sui cinque moduli non è ancora misurato (solo `fase131` li ha avuti, e con loro
+24 sopravvissuti che il dedicato ora uccide): è il controllo incrociato in coda (~5 h staccate),
+che riscriverà la casella col suo verdetto. Le guardie inchiodano i contratti **come sono scritti
+oggi** (`imposta_importo` rifiuta 0 mentre `registra_maturato` lo accetta): non li correggono.
+
 ### 🔧 SEI DIFETTI NEGLI ATTREZZI, NON NEL PRODOTTO — 2/3 settembre, corsia di coordinamento
 
 **Cosa è stato creato.** Niente: nessun modulo, nessuna guardia, nessuna riparazione. Questa

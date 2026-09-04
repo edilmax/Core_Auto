@@ -1,4 +1,15 @@
 {
+ "16d2c823889f": {
+  "blocco": 1,
+  "comando": "python collaudi/mutazione_prodotto.py --modulo fase65_split_payment.py fase85_pagamenti_stripe.py fase87_stripe_webhook.py fase101_stripe_connect.py fase131_payout_dashboard.py --tetto 62 --minuti 60 --killer test_fase65_split_payment test_fase85_pagamenti_stripe test_fase87_stripe_webhook test_fase101_stripe_connect test_fase131_payout_dashboard",
+  "commit": "6bf37a5",
+  "condizione": "zero punti di mutazione scoperti sul PERCORSO DEL DENARO -- i cinque moduli che un euro attraversa davvero: entra, viene confermato, va sul conto dell'host, si divide fra ospiti, esce col bonifico -- sul codice che la produzione ESEGUE",
+  "denominatore": 245,
+  "esito": true,
+  "impronta": "4218eaec4034",
+  "motivo": "",
+  "quando": "2026-09-04T14:05:22"
+ },
  "50691c557e6e": {
   "blocco": 1,
   "comando": "python collaudi/esame_soldi.py --scrivi",
