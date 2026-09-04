@@ -11524,5 +11524,96 @@ class TestLEsameDellaProduzioneNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         self.assertTrue(riuscita, righe)
 
 
+class TestLEsameDegliOrologiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_orologi.py`, l'attrezzo che scrive la casella 3 del
+    blocco dei soldi («hold, payout e penale scadono davvero ... con l'orologio NOSTRO spostato,
+    e i tre esiti si rileggono da Stripe»).
+
+    Quell'esame muove denaro di PROVA contro Stripe: qui NON si tocca la rete. Si mettono
+    davanti al GIUDIZIO passi costruiti (tre rami interi, un rosso per ramo, un ramo mancante) e
+    si pretende che dica verde solo coi tre rami interi; e che senza chiave, col guasto dentro o
+    su un ramo solo NON scriva mai nella scheda.
+    """
+
+    def _esame(self):
+        return self._carica("esame_orologi.py", "_esame_orologi_sotto_guardia")
+
+    def test_IL_GIUDIZIO_DICE_VERDE_SOLO_CON_TRE_RAMI_INTERI(self):
+        esame = self._esame()
+        verde, motivi, den = esame.giudica(esame.passi_finti())
+        self.assertTrue(verde, motivi)
+        self.assertEqual(den, 9)
+        for nome, passi in (("hold rosso", esame.passi_finti(rossi=("hold",))),
+                            ("payout rosso", esame.passi_finti(rossi=("payout",))),
+                            ("penale rossa", esame.passi_finti(rossi=("penale",))),
+                            ("payout mancante", esame.passi_finti(senza=("payout",))),
+                            ("hold mancante", esame.passi_finti(senza=("hold",))),
+                            ("niente", [])):
+            verde, motivi, _d = esame.giudica(passi)
+            self.assertFalse(verde, "con «%s» il giudizio ha detto VERDE" % nome)
+            self.assertTrue(motivi, "con «%s» il rosso e' MUTO" % nome)
+        # un passo fuori dai tre rami non e' un verde in piu': e' un errore dichiarato
+        verde, motivi, _d = esame.giudica(esame.passi_finti() + [("altro", "x", True, "")])
+        self.assertFalse(verde)
+
+    def test_COL_GUASTO_O_SU_UN_RAMO_SOLO_NON_SCRIVE_MAI(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+            self.assertEqual(esame.main(["--ramo", "hold", "--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_SENZA_CHIAVE_DI_PROVA_SI_FERMA_PRIMA_DELLA_RETE_E_NON_SCRIVE(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        vero_file = esame.FILE_CHIAVE
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            esame.FILE_CHIAVE = os.path.join(self.RADICE, "collaudi", "chiave_che_non_esiste.txt")
+            self.assertEqual(esame.main(["--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.FILE_CHIAVE = vero_file
+            esame.scheda.registra = vera_registra
+
+    def test_IL_TESTO_DELLA_CASELLA_NON_E_RICOPIATO_E_PARLA_DELL_OROLOGIO_NOSTRO(self):
+        esame = self._esame()
+        blocco = [b for b in esame.BLOCCHI if b["ordine"] == esame.BLOCCO_SOLDI]
+        self.assertEqual(len(blocco), 1)
+        condizioni = blocco[0]["finito_quando"]
+        self.assertGreater(len(condizioni), esame.INDICE_CASELLA)
+        testo = " ".join(condizioni[esame.INDICE_CASELLA].split())
+        self.assertIn("orologio NOSTRO", testo)
+        self.assertNotIn("orologi di prova Stripe", testo,
+                         "la casella dice ancora «orologi di prova Stripe»: quel meccanismo non "
+                         "esiste per pagamenti e bonifici (docs.stripe.com, 2026-09-04)")
+        with io.open(os.path.join(QUI, "collaudi", "esame_orologi.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        self.assertNotIn(condizioni[esame.INDICE_CASELLA], sorgente)
+
+    def test_L_ESAME_DICHIARA_COSA_NON_HA_GUARDATO_E_SA_PROVARSI(self):
+        esame = self._esame()
+        self.assertTrue(getattr(esame, "NON_GUARDA", ()))
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, righe)
+
+    def test_LA_PROVA_DI_regole_avvio_CERCA_L_ATTREZZO_E_NON_PIU_test_clock(self):
+        """La prova testuale di `regole_avvio.py` per questa casella cercava `test_clock`: una
+        parola in un commento l'avrebbe soddisfatta, e nessun collaudo poteva onestamente
+        contenerla. Ora cerca l'attrezzo che esiste, e l'attrezzo la soddisfa."""
+        with io.open(os.path.join(QUI, "collaudi", "regole_avvio.py"), encoding="utf-8") as f:
+            regole = f.read()
+        self.assertIn('"cerca": "esame_orologi"', regole)
+        self.assertNotIn('"cerca": "test_clock"', regole)
+        self.assertTrue(os.path.isfile(os.path.join(QUI, "collaudi", "esame_orologi.py")))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

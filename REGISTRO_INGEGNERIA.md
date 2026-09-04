@@ -403,6 +403,61 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### ⏰ LA CASELLA 3, RISCRITTA E MISURATA: HOLD, PAYOUT E PENALE SCADONO DAVVERO CON L'OROLOGIO NOSTRO, E STRIPE DI PROVA RILEGGE — 4 settembre, notte, chat B (albero B2, ramo `casella3` su `c28fb777`)
+
+**La premessa era falsa, e la riga d'arrivo teneva.** La casella diceva «gli orologi di prova Stripe
+hanno visto scadere hold, payout e penale davvero». Sulla documentazione (3 e 4 settembre, sette pagine
+di docs.stripe.com, lette alla fonte): le Simulazioni/test clock si agganciano **solo** a Customer,
+abbonamenti, fatture e preventivi (tre clienti, tre abbonamenti per cliente, dieci preventivi, «only
+available in sandboxes»); i test helper esistono per Issuing, Treasury, Terminal, saldo contanti e
+confirmation token, **nessuno** fa scadere un'autorizzazione, maturare un bonifico o spostare un
+PaymentIntent/Transfer/Payout; le sandbox aggiuntive e `stripe sandbox create` non aggiungono niente; in
+prova «le transazioni vengono regolate immediatamente» e «i payout di test simulano un pagamento reale ma
+non vengono elaborati dalla banca». Il fondatore, alla proposta in tre righe: *«fai la cosa giusta non ce
+niente che possiamo istallare che serve per risolvere o qualunque altra cosa»*, e poi *«fai una ricerca su
+tripe.com se a altre chiavi prova adatta al nostro scopo»*. Niente da installare. Le nostre tre scadenze
+sono timer **nostri**: `fase162.scadenza_ts` (hold), `fase160.sblocco_auto_ts` (payout, check-in + 24 h),
+`fase111` sui giorni all'arrivo (penale). Quindi la riga d'arrivo cambia meccanismo e tiene ciò che
+contava: le tre finestre scadono **davvero**, e il giudice resta **esterno**.
+
+**Cosa è cambiato (nessuna riga di produzione).** `collaudi/piano.py`: il testo della casella («hold,
+payout e penale scadono davvero in un giro contro Stripe di PROVA con l'orologio NOSTRO spostato, e i tre
+esiti si rileggono da Stripe») — chiave = testo, la casella era vuota e la scrive solo l'attrezzo nuovo.
+`collaudi/regole_avvio.py`: la prova di quel lavoro cercava la parola `test_clock` (una parola in un
+commento l'avrebbe soddisfatta, e nessun collaudo poteva contenerla onestamente): ora cerca
+`esame_orologi` e dice cosa deve verificare. `collaudi/esame_orologi.py` (nuovo): un sistema vero in una
+cartella temporanea, la chiave `sk_test` del Desktop (la legge `e2e_rimborso_stripe.leggi_chiave`, che si
+rifiuta con una chiave viva), e **gli orologi iniettati** di `fase162` e `fase160` sugli stessi archivi
+(`crea_pagamenti_pendenti(orologio=)`, `crea_escrow_garanzia(orologio=)`). Tre rami:
+**HOLD** — alloggio a una unità, hold di 2 minuti, pagamento vero di prova (`pi_`); l'orologio del pendente
+avanza di un'ora → `sweep_hold_una_passata` (lo sweeper di produzione) fa scadere l'hold e libera la
+stanza → un secondo ospite la prende → il webhook tardivo del primo pagamento non può ribloccare →
+'rimborsato', riga in lista con l'intero e il pulsante → premuto → Stripe vede **esattamente un** rimborso
+dell'intero, riuscito → la riga esce (13 passi). **PAYOUT** — conto Connect «custom» di prova già
+abilitato (la ricetta di `prova_bonifico_host`, passo 4) agganciato all'host con
+`registro_host.imposta_stripe_account`; prenotazione pagata con check-in domani; la garanzia nasce con lo
+sblocco a check-in + 24 h; l'orologio della garanzia avanza oltre → `auto_rilascia(dettagli=True,
+salta_se=)` + `router._trasferisci_all_host` (le due righe del tick) → payout 'in_transito', `tr_` nel
+giornale → Stripe vede il Transfer con l'importo dell'host, il suo conto, in euro (10 passi). **PENALE** —
+politica «moderata», arrivo fra due giorni (fuori dal ripensamento 48 h, che vale con arrivo ≥ 3 giorni);
+l'ospite cancella → il 50 % (la stessa cifra di `fase111.calcola_rimborso`) → lista col pulsante → premuto
+→ Stripe vede un rimborso del 50 % e il PaymentIntent ha incassato l'intero: la penale è il resto (11
+passi). Verde **solo** coi tre rami interi; `--ramo X` prova in piccolo e non scrive; `--con-guasto`
+(l'orologio dell'hold fermo) deve gridare e non scrive; `--autoprova` senza rete; `NON_GUARDA` dichiara i
+limiti (la scadenza dell'autorizzazione **di Stripe** a 7 giorni non è un nostro timer; la modalità viva;
+il modulo Connect dell'host; la penale dell'host; paga in struttura e valute non EUR; per la penale
+l'orologio non si sposta perché `fase83` conta i giorni dal calendario).
+
+**Misurato, prova in piccolo prima** (registri `corsia_B_2026-09-04\esame_orologi_*.log`, attesi scritti
+prima): autoprova 6 casi; **hold 13/13** al primo giro vero (`pi_3UC3mZ…`, 60000; `re_3UC3mZ…` di 60000
+esatti) — il primo lancio si era **fermato da solo** alla precondizione «la casella parla dell'orologio
+NOSTRO» perché il piano aveva ancora il testo vecchio, giusto così; **payout 10/10** (`acct_1UC3muJm…`
+transfers=active, sblocco fra 40,5 h, maturato 17000, `tr_1UC3n2…` di 17000 verso quel conto);
+**penale 11/11** (dovuto 10000 su 20000, `re_3UC3n5…`, ricevuto 20000, trattenuto 10000). **D20:**
+`--con-guasto` = ROSSO, 25 passi, 2 rossi, uscita 1, nessuna scrittura; `--scrivi` = **VERDE, 34 passi**,
+casella 3 scritta sull'impronta `b72543b884e1` → **Blocco 1 SOLDI 5 su 6** (la 6 aspetta il deploy della
+PR #150). Guardie `test_pipeline_ci.TestLEsameDegliOrologiNonPuoBARARE` (6). Caricatore **6252**.
+
 ### 🛡️ LA CASELLA 6: I CINQUE INVARIANTI VERIFICATI OGNI GIORNO SUGLI ARCHIVI VERI — 4 settembre, notte, chat B (albero B2, ramo `casella6` su `9829aa5`)
 
 **Il numero della giornata era uno solo:** il Blocco 1 SOLDI da 4 su 6 a 6 su 6. Le due caselle che

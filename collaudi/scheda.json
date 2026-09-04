@@ -10,6 +10,17 @@
   "motivo": "",
   "quando": "2026-09-04T22:26:55"
  },
+ "224ae0884a0b": {
+  "blocco": 1,
+  "comando": "python collaudi/esame_orologi.py --scrivi",
+  "commit": "c28fb77",
+  "condizione": "hold, payout e penale scadono davvero in un giro contro Stripe di PROVA con l'orologio NOSTRO spostato, e i tre esiti si rileggono da Stripe (rimborso dell'hold, bonifico all'host, penale addebitata)",
+  "denominatore": 34,
+  "esito": true,
+  "impronta": "b72543b884e1",
+  "motivo": "",
+  "quando": "2026-09-04T22:34:25"
+ },
  "50691c557e6e": {
   "blocco": 1,
   "comando": "python collaudi/esame_soldi.py --scrivi",
