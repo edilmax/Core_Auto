@@ -312,7 +312,10 @@ class TestIBuchiDelGiudice(unittest.TestCase):
         for chiave, account in (("", "acct_1"), ("sk", ""), ("sk", None), ("sk", 123), ("sk", b"acct_1")):  # 206, 207
             with self.subTest(chiave=chiave, account=account):
                 chiamate = []
-                p2 = ProviderConnect(chiave, fetch_get=lambda u, h: chiamate.append(u) or {"payouts_enabled": True})
+                # `chiamate=chiamate`: la lambda LEGA la lista di questo giro (ruff B023: una chiusura
+                # in un ciclo prenderebbe per riferimento la variabile dell'ultimo giro)
+                p2 = ProviderConnect(chiave, fetch_get=lambda u, h, chiamate=chiamate:
+                                     chiamate.append(u) or {"payouts_enabled": True})
                 self.assertEqual(p2.stato_account(account), {"pronto": False})
                 self.assertEqual(chiamate, [])
         for r in ("str", None, [], 42):                                                            # 212

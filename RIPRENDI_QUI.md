@@ -26,6 +26,30 @@
 
 ---
 
+## 💰 CORSIA B — 2026-09-04: LA CASELLA 5 È CHIUSA E COMMITTATA (`6bc87d2` su `casella5`, richiesta di unione #145)
+
+**STATO (misurato, si rimisura):** i cinque moduli del denaro reggono col **solo test dedicato**:
+giro unico di 246 punti → 245 uccisi · 1 equivalente dimostrato (`fase85:293`, nello schedario con
+ancore e impronta) · 0 sopravvissuti. La scheda ha scritto la casella 5 da sola (245 punti, il
+comando nella riga): **Blocco 1 SOLDI 3 su 6**. 32 guardie nei cinque test dedicati, zero righe di
+produzione, nessun attrezzo riparato. Caricatore **6181**. Il racconto e i numeri per modulo stanno
+nella voce di registro *«LA CASELLA 5: I CINQUE MODULI DEL DENARO REGGONO COL SOLO TEST DEDICATO»*.
+
+**COSA MANCA, in ordine:**
+1. il **controllo incrociato a SEI OCCHI automatici** (il Giudice che sceglie da sé: dedicato + chi
+   importa) sui cinque moduli in un giro unico: lanciato il 4/9 alle 14:15 in `Core_Auto_B`, ~4-6 h;
+   l'esito si legge in `Core_Auto_GUARDIE_PRONTE\corsia_B_2026-09-04\giudice_moduli_5_*.log`
+   (riga `CODICE_USCITA_DIRETTO`). Se uccide tutto, la casella ha anche la prova «automatica»;
+   se lascia un vivo, quel punto è un buco da chiudere con una guardia, non un criterio da allargare;
+2. la CI verde per nome del `gate` sulla #145, e l'unione a master, che decide il fondatore;
+3. poi la **casella 2** (*i soldi tornano DAVVERO all'ospite da OGNI strada*): la mappa delle strade
+   letta dal codice e cosa serve per spuntarla stanno nel foglio fuori repository
+   `RIPARTI_DA_QUI_corsia_B.md`; prima di costruire l'esame, il fondatore decide **cosa conta come
+   «strada»** e se il giudice esterno contro Stripe di prova (`collaudi/e2e_rimborso_stripe.py`) è
+   obbligatorio per la spunta. ⛔ Le caselle 3 e 6 restano del fondatore.
+
+---
+
 ## 🔄 CORSIA C — PASSAGGIO DI CONSEGNE del 2026-09-03, lavoro NON COMMITTATO in `Core_Auto_C`
 
 > Scritto prima di un `/clear` col contesto al 98%. **I file restano sul disco; quello che si
@@ -53,8 +77,9 @@ e il **giudice esterno Stripe che esiste e nessuno interroga**.
 3. la frase **«procedi al commit»** dal fondatore **nella finestra di chi committa**. ⛔ Quella
    detta oggi fu spesa su un albero **vuoto**: non è un credito aperto, si richiede.
 
-**IL LAVORO CHE RESTA sulla casella 5** (quattro moduli su cinque non aperti): il dato per
-decidere è nella voce di registro. In breve: **63 minuti** darebbero `fase131` **giudicato per
+**IL LAVORO CHE RESTA sulla casella 5** (quattro moduli su cinque non aperti) — ⚠️ **SUPERATO il
+2026-09-04: la casella 5 è chiusa dalla corsia B, vedi il riquadro qui sopra.** Il dato per
+decidere era nella voce di registro, ed era giusto: il costo era degli occhi, non dei moduli. In breve: **63 minuti** darebbero `fase131` **giudicato per
 intero con un giro valido**; **171** darebbero `fase101` con soli **candidati**. E i test
 *dedicati* costano **0,1 s**: tutto il costo viene dai sorveglianti d'integrazione, quindi una
 configurazione valida e abbordabile quasi certamente esiste e **non è stata cercata**.
@@ -1397,7 +1422,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 7b016f4
+CONSEGNE AGGIORNATE A: 6bc87d2
 
 SUITE ATTUALE: Ran 6181 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
